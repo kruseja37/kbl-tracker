@@ -17,6 +17,7 @@ import {
   addDecisionToSeasonStats,
   recalculateSeasonStats,
 } from '../engines/mwarCalculator';
+import { syncEngine } from './syncEngine';
 
 const DB_NAME = 'kbl-manager';
 const DB_VERSION = 1;
@@ -92,7 +93,12 @@ export async function saveManagerProfile(profile: ManagerProfile): Promise<void>
     const tx = db.transaction(STORES.MANAGER_PROFILES, 'readwrite');
     const store = tx.objectStore(STORES.MANAGER_PROFILES);
     const request = store.put(profile);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) {
+        syncEngine.upsert(DB_NAME, STORES.MANAGER_PROFILES, profile.id, profile);
+      }
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -138,7 +144,12 @@ export async function saveManagerDecision(decision: ManagerDecision): Promise<vo
     const tx = db.transaction(STORES.MANAGER_DECISIONS, 'readwrite');
     const store = tx.objectStore(STORES.MANAGER_DECISIONS);
     const request = store.put(decision);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) {
+        syncEngine.upsert(DB_NAME, STORES.MANAGER_DECISIONS, decision.decisionId, decision);
+      }
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -155,7 +166,14 @@ export async function saveGameDecisions(decisions: ManagerDecision[]): Promise<v
     for (const decision of decisions) {
       store.put(decision);
     }
-    tx.oncomplete = () => resolve();
+    tx.oncomplete = () => {
+      if (!syncEngine.isSuppressed()) {
+        for (const decision of decisions) {
+          syncEngine.upsert(DB_NAME, STORES.MANAGER_DECISIONS, decision.decisionId, decision);
+        }
+      }
+      resolve();
+    };
     tx.onerror = () => reject(tx.error);
   });
 }
@@ -203,7 +221,12 @@ export async function saveManagerSeasonStats(stats: ManagerSeasonStats): Promise
     const tx = db.transaction(STORES.MANAGER_SEASON_STATS, 'readwrite');
     const store = tx.objectStore(STORES.MANAGER_SEASON_STATS);
     const request = store.put(stats);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) {
+        syncEngine.upsert(DB_NAME, STORES.MANAGER_SEASON_STATS, [stats.seasonId, stats.managerId], stats);
+      }
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 }

@@ -288,6 +288,8 @@ describe("syncEngine dynamic elimination copied DBs", () => {
       deleteDatabase("kbl-elimination-elim-cloud"),
       deleteDatabase("kbl-elimination-elim-stale"),
       deleteDatabase("kbl-franchise-franchise-cloud"),
+      deleteDatabase("kbl-manager-identity"),
+      deleteDatabase("kbl-event-log"),
     ]);
   });
 
@@ -302,6 +304,8 @@ describe("syncEngine dynamic elimination copied DBs", () => {
       deleteDatabase("kbl-elimination-elim-cloud"),
       deleteDatabase("kbl-elimination-elim-stale"),
       deleteDatabase("kbl-franchise-franchise-cloud"),
+      deleteDatabase("kbl-manager-identity"),
+      deleteDatabase("kbl-event-log"),
     ]);
   });
 
@@ -500,5 +504,106 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     await expect(getAllRecords<Player>("kbl-franchise-franchise-cloud", "players")).resolves.toEqual([
       expect.objectContaining({ id: "franchise-player" }),
     ]);
+  });
+
+  test("replaceLocalWithCloud recreates manager identity stores in an empty local environment", async () => {
+    mockState.cloudRows = [
+      {
+        id: "remote-manager-profile",
+        user_id: "user-1",
+        db_name: "kbl-manager-identity",
+        store_name: "managerProfiles",
+        record_key: JSON.stringify("manager-cloud"),
+        data: {
+          managerId: "manager-cloud",
+          displayName: "Casey Cloud",
+          createdByUser: true,
+          defaultManager: false,
+        },
+        changed_at: 10,
+        deleted: false,
+      },
+      {
+        id: "remote-manager-assignment",
+        user_id: "user-1",
+        db_name: "kbl-manager-identity",
+        store_name: "managerAssignments",
+        record_key: JSON.stringify(["exhibition", "sml", "beewolves"]),
+        data: {
+          managerId: "manager-cloud",
+          teamId: "beewolves",
+          mode: "exhibition",
+          instanceId: "sml",
+        },
+        changed_at: 11,
+        deleted: false,
+      },
+    ];
+    const syncEngine = await loadFreshSyncEngine();
+
+    await syncEngine.replaceLocalWithCloud();
+
+    await expect(
+      getAllRecords<Record<string, unknown>>("kbl-manager-identity", "managerProfiles"),
+    ).resolves.toEqual([
+      expect.objectContaining({ managerId: "manager-cloud", displayName: "Casey Cloud" }),
+    ]);
+    await expect(
+      getAllRecords<Record<string, unknown>>("kbl-manager-identity", "managerAssignments"),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        managerId: "manager-cloud",
+        teamId: "beewolves",
+        mode: "exhibition",
+        instanceId: "sml",
+      }),
+    ]);
+  });
+
+  test("replaceLocalWithCloud recreates static schemas with required indexes", async () => {
+    mockState.cloudRows = [
+      {
+        id: "remote-game-header",
+        user_id: "user-1",
+        db_name: "kbl-event-log",
+        store_name: "gameHeaders",
+        record_key: JSON.stringify("game-1"),
+        data: {
+          gameId: "game-1",
+          date: 1,
+          awayTeamId: "away",
+          awayTeamName: "Away",
+          homeTeamId: "home",
+          homeTeamName: "Home",
+          finalScore: null,
+          finalInning: 1,
+          isComplete: false,
+          aggregated: false,
+          aggregatedAt: null,
+          aggregationError: null,
+          eventCount: 0,
+          checksum: "",
+        },
+        changed_at: 10,
+        deleted: false,
+      },
+    ];
+    const syncEngine = await loadFreshSyncEngine();
+
+    await syncEngine.replaceLocalWithCloud();
+
+    await expect(getAllRecords<Record<string, unknown>>("kbl-event-log", "gameHeaders")).resolves.toEqual([
+      expect.objectContaining({ gameId: "game-1", awayTeamId: "away" }),
+    ]);
+
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("kbl-event-log");
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const tx = db.transaction("gameHeaders", "readonly");
+    const indexNames = Array.from(tx.objectStore("gameHeaders").indexNames);
+    db.close();
+    expect(indexNames).toEqual(expect.arrayContaining(["seasonId", "date", "aggregated", "seasonId_aggregated"]));
   });
 });

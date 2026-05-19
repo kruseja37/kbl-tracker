@@ -24,6 +24,7 @@ import {
   getFanState,
   getRiskLevel,
 } from '../engines/fanMoraleEngine';
+import { syncEngine } from '../utils/syncEngine';
 
 // ============================================
 // TYPES
@@ -74,7 +75,11 @@ function loadMoraleFromStorage(teamId: string): FanMorale | null {
 
 function saveMoraleToStorage(teamId: string, morale: FanMorale): void {
   try {
-    localStorage.setItem(`${MORALE_STORAGE_KEY}-${teamId}`, JSON.stringify(morale));
+    const key = `${MORALE_STORAGE_KEY}-${teamId}`;
+    localStorage.setItem(key, JSON.stringify(morale));
+    if (!syncEngine.isSuppressed()) {
+      syncEngine.upsertLocal(key, morale);
+    }
   } catch (e) {
     console.warn('[useFanMorale] Failed to save to storage:', e);
   }
@@ -122,7 +127,7 @@ export function useFanMorale(options: UseFanMoraleOptions = {}): UseFanMoraleRet
   }, [teamId, seasonNumber]);
 
   // Simple manual adjustment (for testing/debugging)
-  const adjustMorale = useCallback((amount: number, _reason?: string) => {
+  const adjustMorale = useCallback((amount: number) => {
     setMorale(prev => {
       const newMorale = Math.max(0, Math.min(99, prev.current + amount));
       const updated: FanMorale = {

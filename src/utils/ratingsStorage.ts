@@ -6,6 +6,8 @@
  * Supports CRUD operations for batter and pitcher ratings.
  */
 
+import { syncEngine } from './syncEngine';
+
 // ============================================
 // DATABASE SETUP
 // ============================================
@@ -161,7 +163,12 @@ export async function savePlayerRatings(input: PlayerRatingsInput): Promise<Play
     const request = store.put(entry);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(entry);
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) {
+        syncEngine.upsert(DB_NAME, STORES.PLAYER_RATINGS, entry.playerId, entry);
+      }
+      resolve(entry);
+    };
   });
 }
 
@@ -209,7 +216,12 @@ export async function deletePlayerRatings(playerId: string): Promise<boolean> {
     const request = store.delete(playerId);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(true);
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) {
+        syncEngine.remove(DB_NAME, STORES.PLAYER_RATINGS, playerId);
+      }
+      resolve(true);
+    };
   });
 }
 
@@ -242,6 +254,7 @@ export async function getBatterRatings(): Promise<PlayerRatings[]> {
  */
 export async function clearAllRatings(): Promise<void> {
   const db = await initRatingsDB();
+  const ratings = await getAllPlayerRatings();
 
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORES.PLAYER_RATINGS, 'readwrite');
@@ -249,7 +262,14 @@ export async function clearAllRatings(): Promise<void> {
     const request = store.clear();
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) {
+        for (const rating of ratings) {
+          syncEngine.remove(DB_NAME, STORES.PLAYER_RATINGS, rating.playerId);
+        }
+      }
+      resolve();
+    };
   });
 }
 

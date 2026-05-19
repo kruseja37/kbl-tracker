@@ -11,6 +11,8 @@
  * - Retired jerseys
  */
 
+import { syncEngine } from './syncEngine';
+
 const DB_NAME = 'kbl-museum';
 const DB_VERSION = 1;
 
@@ -27,6 +29,33 @@ const STORES = {
   RETIRED_JERSEYS: 'retiredJerseys',
   STADIUMS: 'stadiums',
 } as const;
+
+function syncMuseumUpsert(storeName: string, recordKey: unknown, data: unknown): void {
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.upsert(DB_NAME, storeName, recordKey, data);
+  }
+}
+
+function syncMuseumRemove(storeName: string, recordKey: unknown): void {
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.remove(DB_NAME, storeName, recordKey);
+  }
+}
+
+function getMuseumRecordKey(storeName: string, record: Record<string, unknown>): unknown {
+  switch (storeName) {
+    case STORES.CHAMPIONSHIPS:
+      return record.year;
+    case STORES.SEASON_STANDINGS:
+      return [record.year, record.teamId];
+    case STORES.TEAM_RECORDS:
+      return record.teamId;
+    case STORES.AWARD_WINNERS:
+      return [record.year, record.awardType];
+    default:
+      return record.id;
+  }
+}
 
 // ============================================
 // TYPES
@@ -298,7 +327,10 @@ export async function saveChampionship(record: ChampionshipRecord): Promise<void
     const store = tx.objectStore(STORES.CHAMPIONSHIPS);
     const request = store.put(record);
 
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      syncMuseumUpsert(STORES.CHAMPIONSHIPS, record.year, record);
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -352,7 +384,10 @@ export async function saveSeasonStanding(standing: SeasonStanding): Promise<void
     const store = tx.objectStore(STORES.SEASON_STANDINGS);
     const request = store.put(standing);
 
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      syncMuseumUpsert(STORES.SEASON_STANDINGS, [standing.year, standing.teamId], standing);
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -393,9 +428,13 @@ export async function saveTeamRecord(record: TeamAllTimeRecord): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORES.TEAM_RECORDS, 'readwrite');
     const store = tx.objectStore(STORES.TEAM_RECORDS);
-    const request = store.put({ ...record, lastUpdated: Date.now() });
+    const storedRecord = { ...record, lastUpdated: Date.now() };
+    const request = store.put(storedRecord);
 
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      syncMuseumUpsert(STORES.TEAM_RECORDS, storedRecord.teamId, storedRecord);
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -449,7 +488,10 @@ export async function saveAwardWinner(award: AwardWinner): Promise<void> {
     const store = tx.objectStore(STORES.AWARD_WINNERS);
     const request = store.put(award);
 
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      syncMuseumUpsert(STORES.AWARD_WINNERS, [award.year, award.awardType], award);
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -480,7 +522,10 @@ export async function saveHallOfFamer(member: HallOfFamer): Promise<void> {
     const store = tx.objectStore(STORES.HALL_OF_FAME);
     const request = store.put(member);
 
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      syncMuseumUpsert(STORES.HALL_OF_FAME, member.id, member);
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -492,7 +537,10 @@ export async function removeHallOfFamer(id: string): Promise<void> {
     const store = tx.objectStore(STORES.HALL_OF_FAME);
     const request = store.delete(id);
 
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      syncMuseumRemove(STORES.HALL_OF_FAME, id);
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -531,9 +579,13 @@ export async function saveAllTimeLeader(leader: AllTimeLeader): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORES.ALL_TIME_LEADERS, 'readwrite');
     const store = tx.objectStore(STORES.ALL_TIME_LEADERS);
-    const request = store.put({ ...leader, lastUpdated: Date.now() });
+    const storedLeader = { ...leader, lastUpdated: Date.now() };
+    const request = store.put(storedLeader);
 
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      syncMuseumUpsert(STORES.ALL_TIME_LEADERS, storedLeader.id, storedLeader);
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -568,7 +620,10 @@ export async function saveRecord(record: LeagueRecord): Promise<void> {
     const store = tx.objectStore(STORES.RECORDS);
     const request = store.put(record);
 
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      syncMuseumUpsert(STORES.RECORDS, record.id, record);
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -599,7 +654,10 @@ export async function saveMoment(moment: LegendaryMoment): Promise<void> {
     const store = tx.objectStore(STORES.MOMENTS);
     const request = store.put(moment);
 
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      syncMuseumUpsert(STORES.MOMENTS, moment.id, moment);
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -611,7 +669,10 @@ export async function removeMoment(id: string): Promise<void> {
     const store = tx.objectStore(STORES.MOMENTS);
     const request = store.delete(id);
 
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      syncMuseumRemove(STORES.MOMENTS, id);
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -652,7 +713,10 @@ export async function saveRetiredJersey(jersey: RetiredJersey): Promise<void> {
     const store = tx.objectStore(STORES.RETIRED_JERSEYS);
     const request = store.put(jersey);
 
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      syncMuseumUpsert(STORES.RETIRED_JERSEYS, jersey.id, jersey);
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -664,7 +728,10 @@ export async function removeRetiredJersey(id: string): Promise<void> {
     const store = tx.objectStore(STORES.RETIRED_JERSEYS);
     const request = store.delete(id);
 
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      syncMuseumRemove(STORES.RETIRED_JERSEYS, id);
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -695,7 +762,10 @@ export async function saveStadium(stadium: StadiumData): Promise<void> {
     const store = tx.objectStore(STORES.STADIUMS);
     const request = store.put(stadium);
 
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      syncMuseumUpsert(STORES.STADIUMS, stadium.id, stadium);
+      resolve();
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -725,12 +795,26 @@ export async function clearAllMuseumData(): Promise<void> {
   const storeNames = Object.values(STORES);
 
   for (const storeName of storeNames) {
+    const records = await new Promise<Record<string, unknown>[]>((resolve, reject) => {
+      const tx = db.transaction(storeName, 'readonly');
+      const store = tx.objectStore(storeName);
+      const request = store.getAll();
+
+      request.onsuccess = () => resolve(request.result as Record<string, unknown>[]);
+      request.onerror = () => reject(request.error);
+    });
+
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(storeName, 'readwrite');
       const store = tx.objectStore(storeName);
       const request = store.clear();
 
-      request.onsuccess = () => resolve();
+      request.onsuccess = () => {
+        for (const record of records) {
+          syncMuseumRemove(storeName, getMuseumRecordKey(storeName, record));
+        }
+        resolve();
+      };
       request.onerror = () => reject(request.error);
     });
   }

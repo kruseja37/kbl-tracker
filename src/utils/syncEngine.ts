@@ -23,8 +23,10 @@ import {
   DYNAMIC_ELIMINATION_DB_PREFIX,
   DYNAMIC_ELIMINATION_DB_STORES,
   SYNCED_LOCAL_STORAGE_KEYS,
+  shouldSyncLocalStorageKey,
   serializeKey,
 } from './syncConfig';
+import { STATIC_DATABASE_SCHEMAS, openDatabaseWithSchema } from './backupRestore';
 
 // ============================================================
 // Types
@@ -289,7 +291,7 @@ class SyncEngine {
       }
 
       // Clear synced localStorage keys
-      for (const key of SYNCED_LOCAL_STORAGE_KEYS) {
+      for (const key of this.getSyncedLocalStorageKeys()) {
         localStorage.removeItem(key);
       }
 
@@ -366,7 +368,7 @@ class SyncEngine {
       }
 
       // Upload synced localStorage keys
-      const localRows = SYNCED_LOCAL_STORAGE_KEYS
+      const localRows = this.getSyncedLocalStorageKeys()
         .map(key => {
           const raw = localStorage.getItem(key);
           if (!raw) return null;
@@ -652,12 +654,15 @@ class SyncEngine {
     this._suppressSync = true;
     try {
       for (const row of data ?? []) {
-        if (!SYNCED_LOCAL_STORAGE_KEYS.includes(row.key)) continue;
+        if (!shouldSyncLocalStorageKey(row.key)) continue;
 
         if (row.deleted) {
           localStorage.removeItem(row.key);
         } else {
-          localStorage.setItem(row.key, JSON.stringify(row.data));
+          localStorage.setItem(
+            row.key,
+            typeof row.data === 'string' ? row.data : JSON.stringify(row.data),
+          );
         }
       }
     } finally {
@@ -911,6 +916,11 @@ class SyncEngine {
   }
 
   private openDatabase(dbName: string): Promise<IDBDatabase> {
+    const staticSchema = STATIC_DATABASE_SCHEMAS[dbName];
+    if (staticSchema) {
+      return openDatabaseWithSchema(dbName, staticSchema);
+    }
+
     return new Promise((resolve, reject) => {
       const dynamicStores = this.getDynamicStoresForDb(dbName);
       const request = dynamicStores
@@ -940,6 +950,17 @@ class SyncEngine {
       return DYNAMIC_ELIMINATION_DB_STORES;
     }
     return null;
+  }
+
+  private getSyncedLocalStorageKeys(): string[] {
+    const keys = new Set(SYNCED_LOCAL_STORAGE_KEYS);
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (key && shouldSyncLocalStorageKey(key)) {
+        keys.add(key);
+      }
+    }
+    return Array.from(keys);
   }
 
   private deleteDatabase(dbName: string): Promise<void> {

@@ -7,6 +7,8 @@
  * Per STORIES_FREE_AGENCY.md S-FA006
  */
 
+import { syncEngine } from '../utils/syncEngine';
+
 export interface H2HRecord {
   teamA: string;
   teamB: string;
@@ -58,6 +60,9 @@ export function recordGameResult(winner: string, loser: string): void {
   }
 
   localStorage.setItem(H2H_STORAGE_KEY, JSON.stringify(records));
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.upsertLocal(H2H_STORAGE_KEY, records);
+  }
 }
 
 /**
@@ -85,4 +90,7 @@ export function findRival(teamId: string): { rivalTeam: string; record: string }
 /** Clear all H2H records (e.g., for new franchise) */
 export function clearH2HRecords(): void {
   localStorage.removeItem(H2H_STORAGE_KEY);
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.removeLocal(H2H_STORAGE_KEY);
+  }
 }

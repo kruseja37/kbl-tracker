@@ -8,6 +8,8 @@
  * - Per-player adjustments for unusual ranges
  */
 
+import { syncEngine } from '../utils/syncEngine';
+
 export interface FieldingEvent {
   eventId: string;
   gameId: string;
@@ -79,7 +81,11 @@ export function getZoneProbabilities(): Record<string, ZoneProbability> {
 
 function saveZoneProbabilities(probs: Record<string, ZoneProbability>): void {
   try {
-    localStorage.setItem(STORAGE_KEY + '_zones', JSON.stringify(probs));
+    const key = STORAGE_KEY + '_zones';
+    localStorage.setItem(key, JSON.stringify(probs));
+    if (!syncEngine.isSuppressed()) {
+      syncEngine.upsertLocal(key, probs);
+    }
   } catch (e) {
     console.error('Error saving zone probabilities:', e);
   }
@@ -99,7 +105,11 @@ export function getPlayerAdjustments(): PlayerZoneAdjustment[] {
 
 function savePlayerAdjustments(adjustments: PlayerZoneAdjustment[]): void {
   try {
-    localStorage.setItem(STORAGE_KEY + '_players', JSON.stringify(adjustments));
+    const key = STORAGE_KEY + '_players';
+    localStorage.setItem(key, JSON.stringify(adjustments));
+    if (!syncEngine.isSuppressed()) {
+      syncEngine.upsertLocal(key, adjustments);
+    }
   } catch (e) {
     console.error('Error saving player adjustments:', e);
   }
@@ -116,7 +126,11 @@ export function recordFieldingEvent(event: FieldingEvent): void {
   }
 
   try {
-    localStorage.setItem(STORAGE_KEY + '_events', JSON.stringify(events));
+    const key = STORAGE_KEY + '_events';
+    localStorage.setItem(key, JSON.stringify(events));
+    if (!syncEngine.isSuppressed()) {
+      syncEngine.upsertLocal(key, events);
+    }
   } catch (e) {
     console.error('Error saving fielding event:', e);
   }
@@ -288,7 +302,11 @@ export function getInferenceAccuracy(): { correct: number; total: number; rate: 
 }
 
 export function clearLearningData(): void {
-  localStorage.removeItem(STORAGE_KEY + '_zones');
-  localStorage.removeItem(STORAGE_KEY + '_players');
-  localStorage.removeItem(STORAGE_KEY + '_events');
+  const keys = [STORAGE_KEY + '_zones', STORAGE_KEY + '_players', STORAGE_KEY + '_events'];
+  for (const key of keys) {
+    localStorage.removeItem(key);
+    if (!syncEngine.isSuppressed()) {
+      syncEngine.removeLocal(key);
+    }
+  }
 }

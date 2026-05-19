@@ -14,6 +14,7 @@ import type { Player as RosterPlayer, Pitcher as RosterPitcher } from './TeamRos
 import type { MojoLevel } from '../../../engines/mojoEngine';
 import type { FitnessState } from '../../../engines/fitnessEngine';
 import chalkBgImg from '../../../assets/chalk-bg.png';
+import { useTouchInputAvailable } from '../utils/inputMode';
 
 const MOJO_LABELS: Record<MojoLevel, { label: string; color: string }> = {
   [-2]: { label: 'RTL', color: '#7a2f2f' },
@@ -79,7 +80,6 @@ export function LineupPreview({
   benchPitchers = [],
   startingPitcher,
   teamColor,
-  teamBorderColor = '#E8E8D8',
   isAway = false,
   onReorder,
   onPositionSwap,
@@ -91,12 +91,8 @@ export function LineupPreview({
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
   const [selection, setSelection] = useState<Selection>(null);
-  const [isTouch, setIsTouch] = useState(false);
+  const isTouch = useTouchInputAvailable();
   const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setIsTouch(window.matchMedia('(pointer: coarse)').matches);
-  }, []);
 
   const sortedLineup = [...lineup].sort(
     (a, b) => (a.battingOrder || 0) - (b.battingOrder || 0)
@@ -153,6 +149,20 @@ export function LineupPreview({
     } else {
       setSelection({ mode: 'reorder', battingOrder: player.battingOrder });
     }
+  };
+
+  const handleMovePlayer = (player: RosterPlayer, direction: -1 | 1) => {
+    if (!onReorder || !player.battingOrder) return;
+
+    const sorted = [...sortedLineup];
+    const fromIdx = sorted.findIndex((p) => p.battingOrder === player.battingOrder);
+    const toIdx = fromIdx + direction;
+    if (fromIdx < 0 || toIdx < 0 || toIdx >= sorted.length) return;
+
+    const [moved] = sorted.splice(fromIdx, 1);
+    sorted.splice(toIdx, 0, moved);
+    onReorder(sorted.map((p, idx) => ({ ...p, battingOrder: idx + 1 })));
+    setSelection(null);
   };
 
   const handlePositionTap = (player: RosterPlayer) => {
@@ -232,7 +242,7 @@ export function LineupPreview({
   const isBenchSubMode = selection?.mode === 'benchSub';
   const isPitcherSubMode = selection?.mode === 'pitcherSub';
 
-  const hintText = selection?.mode === 'reorder' ? 'Tap another # to swap batting order'
+  const hintText = selection?.mode === 'reorder' ? 'Tap another # to move this hitter'
     : selection?.mode === 'position' ? 'Tap another position to swap'
     : selection?.mode === 'benchSub' ? 'Tap a bench player to substitute'
     : selection?.mode === 'pitcherSub' ? 'Tap a bullpen pitcher to start'
@@ -299,17 +309,38 @@ export function LineupPreview({
               <div className="flex items-center gap-2 flex-1 min-w-0">
                 {/* Batting order number */}
                 {isTouch && onReorder ? (
-                  <button
-                    type="button"
-                    onClick={() => handleBattingOrderTap(player)}
-                    className={`text-[10px] font-bold w-6 h-6 flex items-center justify-center rounded transition-all shrink-0 ${
-                      isRowReorderSelected
-                        ? 'bg-[#F2C041] text-[#1f2b21]'
-                        : isReorderTarget ? 'bg-[#C4A853]/30 text-[#C4A853]' : 'text-[#C4A853]'
-                    }`}
-                  >
-                    #{player.battingOrder}
-                  </button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      aria-label={`Move ${player.name} in batting order`}
+                      onClick={() => handleBattingOrderTap(player)}
+                      className={`text-[10px] font-bold w-6 h-6 flex items-center justify-center rounded transition-all shrink-0 ${
+                        isRowReorderSelected
+                          ? 'bg-[#F2C041] text-[#1f2b21]'
+                          : isReorderTarget ? 'bg-[#C4A853]/30 text-[#C4A853]' : 'text-[#C4A853]'
+                      }`}
+                    >
+                      #{player.battingOrder}
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Move ${player.name} up in batting order`}
+                      disabled={player.battingOrder === 1}
+                      onClick={() => handleMovePlayer(player, -1)}
+                      className="w-5 h-5 rounded border border-[#556B55] bg-[#253126] text-[9px] font-bold leading-none text-[#C4A853] disabled:opacity-30 disabled:text-[#7a7a68] active:bg-[#3d4a42]"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Move ${player.name} down in batting order`}
+                      disabled={player.battingOrder === sortedLineup.length}
+                      onClick={() => handleMovePlayer(player, 1)}
+                      className="w-5 h-5 rounded border border-[#556B55] bg-[#253126] text-[9px] font-bold leading-none text-[#C4A853] disabled:opacity-30 disabled:text-[#7a7a68] active:bg-[#3d4a42]"
+                    >
+                      ▼
+                    </button>
+                  </div>
                 ) : (
                   <>
                     <span className="text-[10px] font-bold text-[#C4A853] w-4">

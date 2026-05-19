@@ -10,21 +10,21 @@
 // TYPES
 // ============================================
 
-type KeyPath = string | string[];
+export type KeyPath = string | string[];
 
-interface IndexSchema {
+export interface IndexSchema {
   name: string;
   keyPath: KeyPath;
   options?: IDBIndexParameters;
 }
 
-interface StoreSchema {
+export interface StoreSchema {
   keyPath: KeyPath;
   indexes?: IndexSchema[];
   optional?: boolean;
 }
 
-interface DatabaseSchema {
+export interface DatabaseSchema {
   version: number;
   stores: Record<string, StoreSchema>;
   includedStores?: string[];
@@ -257,7 +257,7 @@ const trackerStores: Record<string, StoreSchema> = {
   },
 };
 
-const STATIC_DATABASE_SCHEMAS: Record<string, DatabaseSchema> = {
+export const STATIC_DATABASE_SCHEMAS: Record<string, DatabaseSchema> = {
   'kbl-tracker': {
     version: 11,
     stores: trackerStores,
@@ -353,7 +353,7 @@ const STATIC_DATABASE_SCHEMAS: Record<string, DatabaseSchema> = {
     includedStores: ['eliminationList'],
   },
   'kbl-manager-identity': {
-    version: 1,
+    version: 2,
     stores: {
       managerProfiles: {
         keyPath: 'managerId',
@@ -370,6 +370,192 @@ const STATIC_DATABASE_SCHEMAS: Record<string, DatabaseSchema> = {
           { name: 'mode_instanceId', keyPath: ['mode', 'instanceId'] },
         ],
       },
+    },
+  },
+  'kbl-schedule': {
+    version: 2,
+    stores: {
+      scheduledGames: {
+        keyPath: 'id',
+        indexes: [
+          { name: 'seasonNumber', keyPath: 'seasonNumber' },
+          { name: 'gameNumber', keyPath: 'gameNumber' },
+          { name: 'status', keyPath: 'status' },
+          { name: 'awayTeamId', keyPath: 'awayTeamId' },
+          { name: 'homeTeamId', keyPath: 'homeTeamId' },
+          { name: 'franchiseId', keyPath: 'franchiseId' },
+        ],
+      },
+      scheduleMetadata: { keyPath: 'seasonNumber' },
+    },
+  },
+  'kbl-player-data': {
+    version: 2,
+    stores: {
+      playerRatings: {
+        keyPath: 'playerId',
+        indexes: [
+          { name: 'by_updated', keyPath: 'updatedAt' },
+          { name: 'by_pitcher', keyPath: 'isPitcher' },
+        ],
+      },
+      players: {
+        keyPath: 'id',
+        indexes: [
+          { name: 'by_team', keyPath: 'teamId' },
+          { name: 'by_position', keyPath: 'position' },
+          { name: 'by_custom', keyPath: 'isCustom' },
+          { name: 'by_name', keyPath: 'name' },
+        ],
+      },
+    },
+  },
+  'kbl-manager': {
+    version: 1,
+    stores: {
+      managerProfiles: {
+        keyPath: 'id',
+        indexes: [{ name: 'teamId', keyPath: 'teamId' }],
+      },
+      managerDecisions: {
+        keyPath: 'decisionId',
+        indexes: [
+          { name: 'gameId', keyPath: 'gameId' },
+          { name: 'managerId', keyPath: 'managerId' },
+        ],
+      },
+      managerSeasonStats: {
+        keyPath: ['seasonId', 'managerId'],
+        indexes: [
+          { name: 'seasonId', keyPath: 'seasonId' },
+          { name: 'managerId', keyPath: 'managerId' },
+        ],
+      },
+    },
+  },
+  'kbl-relationships': {
+    version: 1,
+    stores: {
+      relationships: {
+        keyPath: 'relationshipId',
+        indexes: [
+          { name: 'by_player1', keyPath: 'player1Id' },
+          { name: 'by_player2', keyPath: 'player2Id' },
+          { name: 'by_type', keyPath: 'type' },
+          { name: 'by_active', keyPath: 'isActive' },
+        ],
+      },
+    },
+  },
+  'kbl-museum': {
+    version: 1,
+    stores: {
+      championships: {
+        keyPath: 'year',
+        indexes: [{ name: 'champion', keyPath: 'championId' }],
+      },
+      seasonStandings: {
+        keyPath: ['year', 'teamId'],
+        indexes: [
+          { name: 'year', keyPath: 'year' },
+          { name: 'teamId', keyPath: 'teamId' },
+        ],
+      },
+      teamRecords: { keyPath: 'teamId' },
+      awardWinners: {
+        keyPath: ['year', 'awardType'],
+        indexes: [
+          { name: 'year', keyPath: 'year' },
+          { name: 'playerId', keyPath: 'playerId' },
+          { name: 'awardType', keyPath: 'awardType' },
+        ],
+      },
+      hallOfFame: {
+        keyPath: 'id',
+        indexes: [
+          { name: 'playerId', keyPath: 'playerId' },
+          { name: 'inductedYear', keyPath: 'inductedYear' },
+        ],
+      },
+      allTimeLeaders: {
+        keyPath: 'id',
+        indexes: [
+          { name: 'playerId', keyPath: 'playerId' },
+          { name: 'category', keyPath: 'category' },
+          { name: 'war', keyPath: 'war' },
+        ],
+      },
+      records: {
+        keyPath: 'id',
+        indexes: [
+          { name: 'category', keyPath: 'category' },
+          { name: 'recordName', keyPath: 'recordName' },
+        ],
+      },
+      moments: {
+        keyPath: 'id',
+        indexes: [
+          { name: 'year', keyPath: 'year' },
+          { name: 'playerId', keyPath: 'playerId' },
+        ],
+      },
+      retiredJerseys: {
+        keyPath: 'id',
+        indexes: [
+          { name: 'teamId', keyPath: 'teamId' },
+          { name: 'playerId', keyPath: 'playerId' },
+        ],
+      },
+      stadiums: {
+        keyPath: 'id',
+        indexes: [{ name: 'teamId', keyPath: 'teamId' }],
+      },
+    },
+  },
+  'kbl-offseason': {
+    version: 1,
+    stores: {
+      offseasonState: { keyPath: 'id' },
+      awards: { keyPath: 'id' },
+      ratings: { keyPath: 'id' },
+      retirements: { keyPath: 'id' },
+      freeAgency: { keyPath: 'id' },
+      draft: { keyPath: 'id' },
+      trades: { keyPath: 'id' },
+    },
+  },
+  'kbl-farm': {
+    version: 1,
+    stores: {
+      farmPlayers: {
+        keyPath: 'playerId',
+        indexes: [
+          { name: 'by_team', keyPath: 'teamId' },
+          { name: 'by_level', keyPath: 'level' },
+        ],
+      },
+    },
+  },
+  'kbl-transactions': {
+    version: 1,
+    stores: {
+      transactions: {
+        keyPath: 'id',
+        indexes: [
+          { name: 'by_timestamp', keyPath: 'timestamp' },
+          { name: 'by_season', keyPath: 'season' },
+          { name: 'by_type', keyPath: 'type' },
+          { name: 'by_phase', keyPath: 'phase' },
+          { name: 'by_actor', keyPath: 'actor' },
+          { name: 'by_season_game', keyPath: ['season', 'gameNumber'] },
+        ],
+      },
+    },
+  },
+  'kbl-adaptive-standards': {
+    version: 1,
+    stores: {
+      engineState: { keyPath: 'id' },
     },
   },
   'kbl-league-builder': {
@@ -601,7 +787,7 @@ async function recreateDatabaseWithSchema(
   });
 }
 
-function openDatabaseWithSchema(
+export function openDatabaseWithSchema(
   dbName: string,
   schema: DatabaseSchema,
   options: OpenDatabaseWithSchemaOptions = {},

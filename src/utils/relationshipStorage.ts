@@ -13,6 +13,7 @@ import {
   canCreateRelationship,
   type RelationshipType,
 } from '../engines/relationshipEngine';
+import { syncEngine } from './syncEngine';
 
 // ============================================
 // DATABASE SETUP
@@ -24,6 +25,18 @@ const DB_VERSION = 1;
 const STORES = {
   RELATIONSHIPS: 'relationships',
 } as const;
+
+function syncUpsertRelationship(relationship: unknown, relationshipId: string): void {
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.upsert(DB_NAME, STORES.RELATIONSHIPS, relationshipId, relationship);
+  }
+}
+
+function syncRemoveRelationship(relationshipId: string): void {
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.remove(DB_NAME, STORES.RELATIONSHIPS, relationshipId);
+  }
+}
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -91,7 +104,10 @@ export async function saveRelationship(relationship: Relationship): Promise<Rela
     const request = store.put(stored);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(relationship);
+    request.onsuccess = () => {
+      syncUpsertRelationship(stored, relationship.relationshipId);
+      resolve(relationship);
+    };
   });
 }
 
@@ -213,7 +229,10 @@ export async function deleteRelationship(relationshipId: string): Promise<boolea
     const request = store.delete(relationshipId);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(true);
+    request.onsuccess = () => {
+      syncRemoveRelationship(relationshipId);
+      resolve(true);
+    };
   });
 }
 
@@ -222,6 +241,7 @@ export async function deleteRelationship(relationshipId: string): Promise<boolea
  */
 export async function clearAllRelationships(): Promise<void> {
   const db = await initRelationshipDB();
+  const relationships = await getAllRelationships();
 
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORES.RELATIONSHIPS, 'readwrite');
@@ -229,7 +249,12 @@ export async function clearAllRelationships(): Promise<void> {
     const request = store.clear();
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      for (const relationship of relationships) {
+        syncRemoveRelationship(relationship.relationshipId);
+      }
+      resolve();
+    };
   });
 }
 

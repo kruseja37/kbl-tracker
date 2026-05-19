@@ -40,6 +40,7 @@ import {
   findExistingManagerProfileByDisplayName,
   formatManagerOptionLabel,
 } from "../utils/exhibitionManagerOptions";
+import { useTouchInputAvailable } from "../utils/inputMode";
 import chalkBgImg from '../../../assets/chalk-bg.png';
 import chalkBgFaintImg from '../../../assets/chalk-bg-faint.png';
 
@@ -63,6 +64,7 @@ export function ExhibitionGame() {
   const navigate = useNavigate();
   const { leagues, teams, players, isLoading, error, getRoster, updateRoster } = useLeagueBuilderData();
   const [step, setStep] = useState<"league" | "select" | "lineups">("league");
+  const isTouchLineupEditing = useTouchInputAvailable();
 
   // League and team selection state
   const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(null);
@@ -1019,8 +1021,12 @@ export function ExhibitionGame() {
               <div className="text-sm text-[#C4A853] mb-2 font-bold tracking-[0.2em]" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.6)' }}>STARTING LINEUPS</div>
               <div className="text-xs text-[#a0a898]">
                 {awayHasStoredLineup || homeHasStoredLineup
-                  ? "Lineups loaded from League Builder. Drag to reorder batting order."
-                  : "Default lineups. Drag to reorder batting order."}
+                  ? isTouchLineupEditing
+                    ? "Lineups loaded from League Builder. Tap an order number, then another order number to move that hitter."
+                    : "Lineups loaded from League Builder. Drag to reorder batting order."
+                  : isTouchLineupEditing
+                    ? "Default lineups. Tap an order number, then another order number to move that hitter."
+                    : "Default lineups. Drag to reorder batting order."}
               </div>
               <PregameBenchmarkChecklist
                 rows={benchmarkRows}

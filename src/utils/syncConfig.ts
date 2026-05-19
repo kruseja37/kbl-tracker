@@ -44,6 +44,59 @@ export const SYNC_REGISTRY: Record<string, Record<string, string | string[]>> = 
     rulesPresets: 'id',
     teamRosters: 'teamId',
   },
+  'kbl-event-log': {
+    gameHeaders: 'gameId',
+    atBatEvents: 'eventId',
+    pitchingAppearances: 'appearanceId',
+    fieldingEvents: 'fieldingEventId',
+    betweenPlayEvents: 'eventId',
+  },
+  'kbl-manager-identity': {
+    managerProfiles: 'managerId',
+    managerAssignments: ['mode', 'instanceId', 'teamId'],
+  },
+  'kbl-player-data': {
+    playerRatings: 'playerId',
+    players: 'id',
+  },
+  'kbl-manager': {
+    managerProfiles: 'id',
+    managerDecisions: 'decisionId',
+    managerSeasonStats: ['seasonId', 'managerId'],
+  },
+  'kbl-relationships': {
+    relationships: 'relationshipId',
+  },
+  'kbl-museum': {
+    championships: 'year',
+    seasonStandings: ['year', 'teamId'],
+    teamRecords: 'teamId',
+    awardWinners: ['year', 'awardType'],
+    hallOfFame: 'id',
+    allTimeLeaders: 'id',
+    records: 'id',
+    moments: 'id',
+    retiredJerseys: 'id',
+    stadiums: 'id',
+  },
+  'kbl-offseason': {
+    offseasonState: 'id',
+    awards: 'id',
+    ratings: 'id',
+    retirements: 'id',
+    freeAgency: 'id',
+    draft: 'id',
+    trades: 'id',
+  },
+  'kbl-farm': {
+    farmPlayers: 'playerId',
+  },
+  'kbl-transactions': {
+    transactions: 'id',
+  },
+  'kbl-adaptive-standards': {
+    engineState: 'id',
+  },
   'kbl-schedule': {
     scheduledGames: 'id',
     scheduleMetadata: 'seasonNumber',
@@ -81,7 +134,31 @@ export const SYNCED_LOCAL_STORAGE_KEYS = [
   'kbl-leagues',           // LeagueConfig[] from leagueStorage.ts
   'kbl-season-dh-config',  // SeasonDHConfig from leagueConfig.ts
   'kbl-league-dh-config',  // LeagueData[] from leagueConfig.ts (migrated key)
+  'kbl-app-state',         // App preferences and selected team/season
+  'kbl-current-season',    // Current franchise/season number
+  'kbl_last_transition',   // Last completed season transition marker
+  'kbl_years_of_service',
+  'kbl-player-ratings',    // Legacy manual ratings override store
+  'kbl-custom-players',    // Legacy custom player store
+  'kbl_h2h_records',       // Legacy head-to-head records
+  'kbl_adaptive_learning_zones',
+  'kbl_adaptive_learning_players',
+  'kbl_adaptive_learning_events',
 ];
+
+export const SYNCED_LOCAL_STORAGE_PREFIXES = [
+  'kbl-fan-morale-',
+  'kbl_season_',
+  'kbl_rookie_',
+  'kbl-season_',
+];
+
+export function shouldSyncLocalStorageKey(key: string): boolean {
+  return (
+    SYNCED_LOCAL_STORAGE_KEYS.includes(key) ||
+    SYNCED_LOCAL_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
+  );
+}
 
 /**
  * Serialize an IDB key (simple or composite) to a string for use as record_key in Supabase.

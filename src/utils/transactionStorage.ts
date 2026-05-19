@@ -13,6 +13,8 @@
  * Supports rollback capability via previousState snapshots.
  */
 
+import { syncEngine } from './syncEngine';
+
 // ============================================
 // DATABASE SETUP
 // ============================================
@@ -23,6 +25,12 @@ const DB_VERSION = 1;
 const STORES = {
   TRANSACTIONS: 'transactions',
 } as const;
+
+function syncTransactionUpsert(entry: TransactionLogEntry): void {
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.upsert(DB_NAME, STORES.TRANSACTIONS, entry.id, entry);
+  }
+}
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -211,7 +219,10 @@ export async function logTransaction(input: TransactionInput): Promise<Transacti
     const request = store.add(entry);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(entry);
+    request.onsuccess = () => {
+      syncTransactionUpsert(entry);
+      resolve(entry);
+    };
   });
 }
 
@@ -375,6 +386,7 @@ export async function undoTransaction(
 
     request.onerror = () => reject(request.error);
     request.onsuccess = () => {
+      syncTransactionUpsert(updated);
       // Log the undo action as its own transaction
       logTransaction({
         type: 'UNDO_ACTION',

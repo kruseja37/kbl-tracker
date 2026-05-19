@@ -1,4 +1,6 @@
 // Storage key for app state in localStorage (simpler than IndexedDB for preferences)
+import { syncEngine } from '../utils/syncEngine';
+
 const STORAGE_KEY = 'kbl-app-state';
 
 export interface PersistedAppState {
@@ -55,6 +57,9 @@ export function loadAppState(): PersistedAppState {
 export function saveAppState(state: PersistedAppState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (!syncEngine.isSuppressed()) {
+      syncEngine.upsertLocal(STORAGE_KEY, state);
+    }
   } catch (err) {
     console.warn('[appStateStorage] Failed to save state:', err);
   }
@@ -66,6 +71,9 @@ export function saveAppState(state: PersistedAppState): void {
 export function clearAppState(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
+    if (!syncEngine.isSuppressed()) {
+      syncEngine.removeLocal(STORAGE_KEY);
+    }
   } catch (err) {
     console.warn('[appStateStorage] Failed to clear state:', err);
   }

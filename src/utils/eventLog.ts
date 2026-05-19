@@ -38,6 +38,7 @@ import type {
 } from '../types/managerWpa';
 import type { ParkFactors } from '../types/war';
 import type { CompetitionType } from './gameStorage';
+import { syncEngine } from './syncEngine';
 
 // ============================================
 // DATABASE SETUP
@@ -53,6 +54,24 @@ const STORES = {
   FIELDING_EVENTS: 'fieldingEvents', // Fielding plays for FWAR
   BETWEEN_PLAY_EVENTS: 'betweenPlayEvents', // Between-play events (SB, WP, subs, etc.)
 };
+
+function syncUpsert(storeName: string, recordKey: unknown, data: unknown): void {
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.upsert(DB_NAME, storeName, recordKey, data);
+  }
+}
+
+function syncRemove(storeName: string, recordKey: unknown): void {
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.remove(DB_NAME, storeName, recordKey);
+  }
+}
+
+function withoutTeamId<T extends { teamId: string }>(value: T): Omit<T, 'teamId'> {
+  const next: Partial<T> = { ...value };
+  delete next.teamId;
+  return next as Omit<T, 'teamId'>;
+}
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -727,7 +746,10 @@ export async function createGameHeader(header: Omit<GameHeader, 'aggregated' | '
     const request = store.put(fullHeader);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      syncUpsert(STORES.GAME_HEADERS, fullHeader.gameId, fullHeader);
+      resolve();
+    };
   });
 }
 
@@ -755,6 +777,8 @@ export async function deleteCompetitionEventLogData(
     return;
   }
 
+  const deletedKeys: Array<{ storeName: string; key: string }> = [];
+
   await new Promise<void>((resolve, reject) => {
     const transaction = db.transaction(
       [
@@ -769,6 +793,7 @@ export async function deleteCompetitionEventLogData(
 
     for (const gameId of gameIds) {
       transaction.objectStore(STORES.GAME_HEADERS).delete(gameId);
+      deletedKeys.push({ storeName: STORES.GAME_HEADERS, key: gameId });
 
       for (const storeName of [
         STORES.AT_BAT_EVENTS,
@@ -782,6 +807,7 @@ export async function deleteCompetitionEventLogData(
         request.onsuccess = () => {
           const cursor = request.result;
           if (cursor) {
+            deletedKeys.push({ storeName, key: cursor.primaryKey as string });
             cursor.delete();
             cursor.continue();
           }
@@ -794,6 +820,10 @@ export async function deleteCompetitionEventLogData(
     transaction.onerror = () => reject(transaction.error);
     transaction.onabort = () => reject(transaction.error);
   });
+
+  for (const { storeName, key } of deletedKeys) {
+    syncRemove(storeName, key);
+  }
 }
 
 /**
@@ -805,14 +835,16 @@ export async function logAtBatEvent(event: AtBatEvent): Promise<void> {
 
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORES.AT_BAT_EVENTS, STORES.GAME_HEADERS], 'readwrite');
-
-    // Add the event
-    const eventStore = transaction.objectStore(STORES.AT_BAT_EVENTS);
-    eventStore.put({
+    const storedEvent = {
       ...event,
       version: event.version ?? 1,
       editHistory: event.editHistory ?? [],
-    });
+    };
+    let updatedHeader: GameHeader | null = null;
+
+    // Add the event
+    const eventStore = transaction.objectStore(STORES.AT_BAT_EVENTS);
+    eventStore.put(storedEvent);
 
     // Increment event count in header
     const headerStore = transaction.objectStore(STORES.GAME_HEADERS);
@@ -823,10 +855,17 @@ export async function logAtBatEvent(event: AtBatEvent): Promise<void> {
       if (header) {
         header.eventCount += 1;
         headerStore.put(header);
+        updatedHeader = header;
       }
     };
 
-    transaction.oncomplete = () => resolve();
+    transaction.oncomplete = () => {
+      syncUpsert(STORES.AT_BAT_EVENTS, storedEvent.eventId, storedEvent);
+      if (updatedHeader) {
+        syncUpsert(STORES.GAME_HEADERS, updatedHeader.gameId, updatedHeader);
+      }
+      resolve();
+    };
     transaction.onerror = () => reject(transaction.error);
   });
 }
@@ -843,7 +882,10 @@ export async function logPitchingAppearance(appearance: PitchingAppearance): Pro
     const request = store.put(appearance);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      syncUpsert(STORES.PITCHING_APPEARANCES, appearance.appearanceId, appearance);
+      resolve();
+    };
   });
 }
 
@@ -859,7 +901,10 @@ export async function logFieldingEvent(event: FieldingEvent): Promise<void> {
     const request = store.put(event);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      syncUpsert(STORES.FIELDING_EVENTS, event.fieldingEventId, event);
+      resolve();
+    };
   });
 }
 
@@ -872,14 +917,18 @@ export async function logBetweenPlayEvent(event: BetweenPlayEvent): Promise<void
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORES.BETWEEN_PLAY_EVENTS, 'readwrite');
     const store = transaction.objectStore(STORES.BETWEEN_PLAY_EVENTS);
-    const request = store.put({
+    const storedEvent = {
       ...event,
       version: event.version ?? 1,
       editHistory: event.editHistory ?? [],
-    });
+    };
+    const request = store.put(storedEvent);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      syncUpsert(STORES.BETWEEN_PLAY_EVENTS, storedEvent.eventId, storedEvent);
+      resolve();
+    };
   });
 }
 
@@ -1100,6 +1149,7 @@ export async function updateAtBatEvent(
     const transaction = db.transaction(STORES.AT_BAT_EVENTS, 'readwrite');
     const store = transaction.objectStore(STORES.AT_BAT_EVENTS);
     const getRequest = store.get(eventId);
+    let updatedEvent: AtBatEvent | null = null;
 
     getRequest.onsuccess = () => {
       const existing = getRequest.result as AtBatEvent | undefined;
@@ -1108,11 +1158,17 @@ export async function updateAtBatEvent(
         return;
       }
 
-      store.put(applyAtBatEventUpdates(existing, updates));
+      updatedEvent = applyAtBatEventUpdates(existing, updates);
+      store.put(updatedEvent);
     };
 
     getRequest.onerror = () => reject(getRequest.error);
-    transaction.oncomplete = () => resolve();
+    transaction.oncomplete = () => {
+      if (updatedEvent) {
+        syncUpsert(STORES.AT_BAT_EVENTS, updatedEvent.eventId, updatedEvent);
+      }
+      resolve();
+    };
     transaction.onerror = () => reject(transaction.error);
   });
 }
@@ -1162,6 +1218,8 @@ export async function updateAtBatEventWithFieldingSync(
     const fieldingIndex = fieldingStore.index('atBatEventId');
     const atBatRequest = atBatStore.get(eventId);
     const fieldingRequest = fieldingIndex.getAll(eventId);
+    let updatedAtBatEvent: AtBatEvent | null = null;
+    let removedFieldingEventIds: string[] = [];
 
     atBatRequest.onerror = () => reject(atBatRequest.error);
     fieldingRequest.onerror = () => reject(fieldingRequest.error);
@@ -1173,11 +1231,13 @@ export async function updateAtBatEventWithFieldingSync(
         return;
       }
 
-      atBatStore.put(applyAtBatEventUpdates(existing, updates));
+      updatedAtBatEvent = applyAtBatEventUpdates(existing, updates);
+      atBatStore.put(updatedAtBatEvent);
     };
 
     fieldingRequest.onsuccess = () => {
       const existingFieldingEvents = fieldingRequest.result as FieldingEvent[];
+      removedFieldingEventIds = existingFieldingEvents.map((event) => event.fieldingEventId);
       existingFieldingEvents.forEach((event) => {
         fieldingStore.delete(event.fieldingEventId);
       });
@@ -1186,7 +1246,18 @@ export async function updateAtBatEventWithFieldingSync(
       });
     };
 
-    transaction.oncomplete = () => resolve();
+    transaction.oncomplete = () => {
+      if (updatedAtBatEvent) {
+        syncUpsert(STORES.AT_BAT_EVENTS, updatedAtBatEvent.eventId, updatedAtBatEvent);
+      }
+      for (const fieldingEventId of removedFieldingEventIds) {
+        syncRemove(STORES.FIELDING_EVENTS, fieldingEventId);
+      }
+      for (const event of nextFieldingEvents) {
+        syncUpsert(STORES.FIELDING_EVENTS, event.fieldingEventId, event);
+      }
+      resolve();
+    };
     transaction.onerror = () => reject(transaction.error);
   });
 }
@@ -1201,6 +1272,7 @@ export async function updateBetweenPlayEvent(
     const transaction = db.transaction(STORES.BETWEEN_PLAY_EVENTS, 'readwrite');
     const store = transaction.objectStore(STORES.BETWEEN_PLAY_EVENTS);
     const getRequest = store.get(eventId);
+    let updatedEvent: BetweenPlayEvent | null = null;
 
     getRequest.onerror = () => reject(getRequest.error);
     getRequest.onsuccess = () => {
@@ -1210,10 +1282,16 @@ export async function updateBetweenPlayEvent(
         return;
       }
 
-      store.put(applyBetweenPlayEventUpdates(existing, updates));
+      updatedEvent = applyBetweenPlayEventUpdates(existing, updates);
+      store.put(updatedEvent);
     };
 
-    transaction.oncomplete = () => resolve();
+    transaction.oncomplete = () => {
+      if (updatedEvent) {
+        syncUpsert(STORES.BETWEEN_PLAY_EVENTS, updatedEvent.eventId, updatedEvent);
+      }
+      resolve();
+    };
     transaction.onerror = () => reject(transaction.error);
   });
 }
@@ -1232,6 +1310,7 @@ export async function completeGame(
     const transaction = db.transaction(STORES.GAME_HEADERS, 'readwrite');
     const store = transaction.objectStore(STORES.GAME_HEADERS);
     const request = store.get(gameId);
+    let updatedHeader: GameHeader | null = null;
 
     request.onsuccess = () => {
       const header = request.result as GameHeader;
@@ -1240,10 +1319,16 @@ export async function completeGame(
         header.finalInning = finalInning;
         header.isComplete = true;
         store.put(header);
+        updatedHeader = header;
       }
     };
 
-    transaction.oncomplete = () => resolve();
+    transaction.oncomplete = () => {
+      if (updatedHeader) {
+        syncUpsert(STORES.GAME_HEADERS, updatedHeader.gameId, updatedHeader);
+      }
+      resolve();
+    };
     transaction.onerror = () => reject(transaction.error);
   });
 }
@@ -1258,6 +1343,7 @@ export async function markGameAggregated(gameId: string): Promise<void> {
     const transaction = db.transaction(STORES.GAME_HEADERS, 'readwrite');
     const store = transaction.objectStore(STORES.GAME_HEADERS);
     const request = store.get(gameId);
+    let updatedHeader: GameHeader | null = null;
 
     request.onsuccess = () => {
       const header = request.result as GameHeader;
@@ -1266,10 +1352,16 @@ export async function markGameAggregated(gameId: string): Promise<void> {
         header.aggregatedAt = Date.now();
         header.aggregationError = null;
         store.put(header);
+        updatedHeader = header;
       }
     };
 
-    transaction.oncomplete = () => resolve();
+    transaction.oncomplete = () => {
+      if (updatedHeader) {
+        syncUpsert(STORES.GAME_HEADERS, updatedHeader.gameId, updatedHeader);
+      }
+      resolve();
+    };
     transaction.onerror = () => reject(transaction.error);
   });
 }
@@ -1284,16 +1376,23 @@ export async function markAggregationFailed(gameId: string, error: string): Prom
     const transaction = db.transaction(STORES.GAME_HEADERS, 'readwrite');
     const store = transaction.objectStore(STORES.GAME_HEADERS);
     const request = store.get(gameId);
+    let updatedHeader: GameHeader | null = null;
 
     request.onsuccess = () => {
       const header = request.result as GameHeader;
       if (header) {
         header.aggregationError = error;
         store.put(header);
+        updatedHeader = header;
       }
     };
 
-    transaction.oncomplete = () => resolve();
+    transaction.oncomplete = () => {
+      if (updatedHeader) {
+        syncUpsert(STORES.GAME_HEADERS, updatedHeader.gameId, updatedHeader);
+      }
+      resolve();
+    };
     transaction.onerror = () => reject(transaction.error);
   });
 }
@@ -1538,6 +1637,8 @@ export async function undoMostRecentGameAction(gameId: string): Promise<UndoneGa
     );
     const actionRequest = actionStore.get(target.eventId);
     let undoneAction: UndoneGameAction | null = null;
+    let updatedAction: AtBatEvent | BetweenPlayEvent | null = null;
+    let updatedHeader: GameHeader | null = null;
 
     actionRequest.onerror = () => reject(actionRequest.error);
     actionRequest.onsuccess = () => {
@@ -1548,6 +1649,7 @@ export async function undoMostRecentGameAction(gameId: string): Promise<UndoneGa
 
       existing.undoneAt = Date.now();
       actionStore.put(existing);
+      updatedAction = existing;
       undoneAction = {
         kind: target.kind,
         eventId: target.eventId,
@@ -1565,10 +1667,23 @@ export async function undoMostRecentGameAction(gameId: string): Promise<UndoneGa
         if (!header) return;
         header.eventCount = Math.max(0, header.eventCount - 1);
         headerStore.put(header);
+        updatedHeader = header;
       };
     };
 
-    transaction.oncomplete = () => resolve(undoneAction);
+    transaction.oncomplete = () => {
+      if (updatedAction) {
+        syncUpsert(
+          target.kind === 'atBat' ? STORES.AT_BAT_EVENTS : STORES.BETWEEN_PLAY_EVENTS,
+          updatedAction.eventId,
+          updatedAction,
+        );
+      }
+      if (updatedHeader) {
+        syncUpsert(STORES.GAME_HEADERS, updatedHeader.gameId, updatedHeader);
+      }
+      resolve(undoneAction);
+    };
     transaction.onerror = () => reject(transaction.error);
   });
 }
@@ -1828,10 +1943,10 @@ export async function generateBoxScore(gameId: string): Promise<BoxScore | null>
   // Split batters and pitchers by team
   const awayBatters = Array.from(batterStats.values())
     .filter(b => b.teamId === header.awayTeamId)
-    .map(({ teamId, ...rest }) => rest);
+    .map(withoutTeamId);
   const homeBatters = Array.from(batterStats.values())
     .filter(b => b.teamId === header.homeTeamId)
-    .map(({ teamId, ...rest }) => rest);
+    .map(withoutTeamId);
 
   const awayPitchers = pitchingAppearances
     .filter(p => p.teamId === header.awayTeamId)

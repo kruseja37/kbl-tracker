@@ -1,5 +1,5 @@
-import { generateRandomName } from "../data/smb4NameDatabase";
-import { generateHometown } from "../data/usCities";
+import { SMB4_FIRST_NAMES, SMB4_LAST_NAMES } from "../data/smb4NameDatabase";
+import { US_CITIES } from "../data/usCities";
 import type {
   ManagerAssignment,
   ManagerMode,
@@ -7,9 +7,10 @@ import type {
   ManagerStyleSnapshot,
 } from "../types/managerWpa";
 import { getDefaultManagerIdForTeam } from "./managerWpaDerivation";
+import { syncEngine } from "./syncEngine";
 
 const DB_NAME = "kbl-manager-identity";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const STORES = {
   PROFILES: "managerProfiles",
@@ -45,6 +46,36 @@ export interface ResolvedTeamManager {
 }
 
 let dbInstance: IDBDatabase | null = null;
+
+function hashStringToUint32(value: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function pickBySeed<T>(items: T[], seed: string): T {
+  return items[hashStringToUint32(seed) % items.length];
+}
+
+function getDeterministicHometown(seed: string): { city: string; state: string } {
+  const totalWeight = US_CITIES.reduce((sum, city) => sum + city.weight, 0);
+  let roll = hashStringToUint32(seed) % totalWeight;
+  for (const entry of US_CITIES) {
+    roll -= entry.weight;
+    if (roll < 0) {
+      return { city: entry.city, state: entry.state };
+    }
+  }
+  const last = US_CITIES[US_CITIES.length - 1];
+  return { city: last.city, state: last.state };
+}
+
+function managerAssignmentKey(assignment: Pick<ManagerAssignment, "mode" | "instanceId" | "teamId">): [ManagerMode, string, string] {
+  return [assignment.mode, assignment.instanceId, assignment.teamId];
+}
 
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -137,12 +168,14 @@ export function formatManagerHometown(
 }
 
 export function buildDefaultManagerProfile(team: ManagerTeamIdentity): ManagerProfile {
-  const name = generateRandomName();
-  const hometown = generateHometown();
+  const seed = `${team.id}:${team.name}`;
+  const firstName = pickBySeed(SMB4_FIRST_NAMES, `${seed}:first`);
+  const lastName = pickBySeed(SMB4_LAST_NAMES, `${seed}:last`);
+  const hometown = getDeterministicHometown(`${seed}:hometown`);
 
   return {
     managerId: getDefaultManagerIdForTeam(team.id),
-    displayName: `${name.firstName} ${name.lastName}`,
+    displayName: `${firstName} ${lastName}`,
     gender: "Male",
     hometown: formatManagerHometown(hometown),
     createdByUser: false,
@@ -176,6 +209,9 @@ export async function saveManagerProfile(
   const tx = db.transaction(STORES.PROFILES, "readwrite");
   await requestToPromise(tx.objectStore(STORES.PROFILES).put(profile));
   await transactionToPromise(tx);
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.upsert(DB_NAME, STORES.PROFILES, profile.managerId, profile);
+  }
   return profile;
 }
 
@@ -268,6 +304,9 @@ export async function saveManagerAssignment(
 
   await requestToPromise(tx.objectStore(STORES.ASSIGNMENTS).put(normalized));
   await transactionToPromise(tx);
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.upsert(DB_NAME, STORES.ASSIGNMENTS, managerAssignmentKey(normalized), normalized);
+  }
   return normalized;
 }
 
@@ -335,6 +374,9 @@ export async function deleteManagerAssignmentsForInstance(params: {
 
   for (const assignment of assignments) {
     store.delete([assignment.mode, assignment.instanceId, assignment.teamId]);
+    if (!syncEngine.isSuppressed()) {
+      syncEngine.remove(DB_NAME, STORES.ASSIGNMENTS, managerAssignmentKey(assignment));
+    }
   }
 
   await transactionToPromise(tx);
