@@ -215,7 +215,7 @@ function formatManagerDecisionWpa(decision: ManagerDecisionRecord): string {
     return "WPA pending";
   }
 
-  return `${decision.managerWpa >= 0 ? "+" : ""}${decision.managerWpa.toFixed(3)} WPA`;
+  return `${formatWpaPoints(decision.managerWpa)} WPA`;
 }
 
 function titleCaseManagerIdentifier(value: string): string {
@@ -480,6 +480,24 @@ const crossesRunnerOutcomeBoundary = (
   previousToBase: RunnerSubEntry["toBase"],
   nextToBase: RunnerSubEntry["toBase"],
 ) => isRunnerOutcomeOut(previousToBase) !== isRunnerOutcomeOut(nextToBase);
+
+type AtBatWpaEditPolicy = Required<
+  Pick<AtBatEvent, "totalInnings" | "extraInningRunner" | "extraInningRunnerDelay">
+>;
+
+const getAtBatWpaEditPolicy = (
+  atBatEvent: Pick<
+    AtBatEvent,
+    "totalInnings" | "extraInningRunner" | "extraInningRunnerDelay"
+  >,
+  fallback: AtBatWpaEditPolicy,
+): AtBatWpaEditPolicy => ({
+  totalInnings: atBatEvent.totalInnings ?? fallback.totalInnings,
+  extraInningRunner:
+    atBatEvent.extraInningRunner ?? fallback.extraInningRunner,
+  extraInningRunnerDelay:
+    atBatEvent.extraInningRunnerDelay ?? fallback.extraInningRunnerDelay,
+});
 
 function sameRosterEntity(
   entity: { playerId?: string; name: string } | null | undefined,
@@ -1011,6 +1029,7 @@ import {
   runnerDefaultsToAdvancement,
   type PendingRunnerCorrectionAction,
 } from "../utils/gameTrackerRunnerCorrection";
+import { formatWpaPoints } from "../../../utils/wpaDisplay";
 import type { FielderCredit } from "../components/modals/FielderCreditModal";
 
 // Note: Using GameState from useGameState hook instead of local interface
@@ -4443,6 +4462,8 @@ export function GameTracker() {
             getCanonicalRosterName(homePitcher) || "Pitcher",
           // T0-01: Pass total innings for auto game-end detection (default 9 for exhibition)
           totalInnings: navigationState?.totalInnings || 9,
+          extraInningRunner: navigationState?.extraInningRunner ?? false,
+          extraInningRunnerDelay: navigationState?.extraInningRunnerDelay ?? 1,
           seasonNumber: navigationState?.seasonNumber || 1,
           stadiumName: resolvedStadiumName,
           // Layer 1B: Context snapshot config
@@ -9162,11 +9183,16 @@ export function GameTracker() {
               : currentBatterOutcome.errorChargedTo,
           };
 
+          const wpaEditPolicy = getAtBatWpaEditPolicy(existingAtBat, {
+            totalInnings: hookTotalInningsRef.current,
+            extraInningRunner: hookExtraInningRunnerRef.current,
+            extraInningRunnerDelay: hookExtraInningRunnerDelayRef.current,
+          });
           const derivedAtBatState = deriveEnrichedAtBatState({
             existingAtBat,
             runnerOutcomes: nextRunnerOutcomes,
             result: existingAtBat.result,
-            totalInnings: hookTotalInningsRef.current,
+            totalInnings: wpaEditPolicy.totalInnings,
           });
           const nextRunnersAfter = derivedAtBatState.runnersAfter;
           const nextOutsAfter = derivedAtBatState.outsAfter;
@@ -9191,7 +9217,7 @@ export function GameTracker() {
             awayScoreAfter: derivedAtBatState.awayScoreAfter,
             homeScoreAfter: derivedAtBatState.homeScoreAfter,
             isWalkOff: derivedAtBatState.isWalkOff,
-            totalInnings: hookTotalInningsRef.current,
+            ...wpaEditPolicy,
             version: (existingAtBat.version ?? 1) + 1,
             editHistory: [
               {
@@ -9287,6 +9313,11 @@ export function GameTracker() {
           typeof deriveEnrichedAtBatState
         > | null = null;
         if (isFieldingSyncField) {
+          const wpaEditPolicy = getAtBatWpaEditPolicy(existingAtBat, {
+            totalInnings: hookTotalInningsRef.current,
+            extraInningRunner: hookExtraInningRunnerRef.current,
+            extraInningRunnerDelay: hookExtraInningRunnerDelayRef.current,
+          });
           const hasExplicitRunnerOutcomes =
             Array.isArray(existingAtBat.runnerOutcomes) &&
             existingAtBat.runnerOutcomes.length > 0;
@@ -9300,7 +9331,7 @@ export function GameTracker() {
               existingAtBat,
               runnerOutcomes: completedOutcomesForDerivation,
               result: existingAtBat.result,
-              totalInnings: hookTotalInningsRef.current,
+              totalInnings: wpaEditPolicy.totalInnings,
             });
           }
 
@@ -9350,7 +9381,7 @@ export function GameTracker() {
                     awayScoreAfter: fieldingDerivedAtBatState.awayScoreAfter,
                     homeScoreAfter: fieldingDerivedAtBatState.homeScoreAfter,
                     isWalkOff: fieldingDerivedAtBatState.isWalkOff,
-                    totalInnings: hookTotalInningsRef.current,
+                    ...wpaEditPolicy,
                   }
                 : {}),
               version: nextVersion,
@@ -9603,6 +9634,13 @@ export function GameTracker() {
       const timestamp = Date.now();
       await updateAtBatEvent(entry.eventId, {
         result: newResult as import("../../../types/game").AtBatResult,
+        totalInnings: existingAtBat.totalInnings ?? hookTotalInningsRef.current,
+        extraInningRunner:
+          existingAtBat.extraInningRunner ??
+          hookExtraInningRunnerRef.current,
+        extraInningRunnerDelay:
+          existingAtBat.extraInningRunnerDelay ??
+          hookExtraInningRunnerDelayRef.current,
         version: (existingAtBat.version ?? 1) + 1,
         editHistory: [
           {
@@ -10496,11 +10534,16 @@ export function GameTracker() {
             correctedResult = "GO";
           }
         }
+        const wpaEditPolicy = getAtBatWpaEditPolicy(existingAtBat, {
+          totalInnings: hookTotalInningsRef.current,
+          extraInningRunner: hookExtraInningRunnerRef.current,
+          extraInningRunnerDelay: hookExtraInningRunnerDelayRef.current,
+        });
         const derivedAtBatState = deriveEnrichedAtBatState({
           existingAtBat,
           runnerOutcomes: completedOutcomesForDerivation,
           result: correctedResult ?? existingAtBat.result,
-          totalInnings: hookTotalInningsRef.current,
+          totalInnings: wpaEditPolicy.totalInnings,
         });
         const nextRecordedResult = derivedAtBatState.result;
         const nextRunsScored = derivedAtBatState.runsScored;
@@ -10669,7 +10712,7 @@ export function GameTracker() {
             homeScoreAfter: nextHomeScoreAfter,
             isWalkOff: nextIsWalkOff,
             outsRecorded: nextOutsRecorded,
-            totalInnings: hookTotalInningsRef.current,
+            ...wpaEditPolicy,
             result: nextRecordedResult,
             version: nextVersion,
             editHistory,

@@ -662,8 +662,8 @@ describe('PostGameSummary Component', () => {
       const overlay = await screen.findByTestId('manager-wpa-overlay');
       expect(within(overlay).getByText('MANAGER WPA OVERLAY')).toBeInTheDocument();
       expect(within(overlay).getByText('Sox Skipper')).toBeInTheDocument();
-      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+0.184');
-      expect(screen.getByTestId('manager-wpa-total-tigers')).toHaveTextContent('-0.052');
+      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+18.4 pp');
+      expect(screen.getByTestId('manager-wpa-total-tigers')).toHaveTextContent('-5.2 pp');
       expect(within(screen.getByTestId('manager-wpa-card-sox')).getByText('2 (1 pending)')).toBeInTheDocument();
       fireEvent.click(
         within(screen.getByTestId('manager-tactical-trace-details-sox')).getByRole(
@@ -676,9 +676,9 @@ describe('PostGameSummary Component', () => {
       expect(dialog).toHaveTextContent('Tactical');
       expect(dialog).toHaveTextContent('Pinch Hitter');
       expect(dialog).toHaveTextContent('Raw WPA');
-      expect(dialog).toHaveTextContent('+0.184');
+      expect(dialog).toHaveTextContent('+18.4 pp');
       expect(dialog).toHaveTextContent('Final Manager Value');
-      expect(dialog).toHaveTextContent('+0.184');
+      expect(dialog).toHaveTextContent('+18.4 pp');
     });
 
     test('renders deployment stint recap details from committed manager records', async () => {
@@ -712,8 +712,8 @@ describe('PostGameSummary Component', () => {
       render(<PostGameSummary />);
 
       const details = await screen.findByTestId('manager-deployment-stint-details-sox');
-      expect(screen.getByTestId('manager-deployment-wpa-sox')).toHaveTextContent('+0.080');
-      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+0.080');
+      expect(screen.getByTestId('manager-deployment-wpa-sox')).toHaveTextContent('+8.0 pp');
+      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+8.0 pp');
       expect(details).toHaveTextContent(
         "Pinch runner Home Speed's remaining baserunning and fielding outcomes stay with the deployment choice.",
       );
@@ -728,13 +728,13 @@ describe('PostGameSummary Component', () => {
       expect(dialog).toHaveTextContent('Linked Events');
       expect(dialog).toHaveTextContent('ab-10, ab-11');
       expect(dialog).toHaveTextContent('Raw WPA');
-      expect(dialog).toHaveTextContent('+0.400');
+      expect(dialog).toHaveTextContent('+40.0 pp');
       expect(dialog).toHaveTextContent('Share');
       expect(dialog).toHaveTextContent('20%');
       expect(dialog).toHaveTextContent('Cap');
       expect(dialog).toHaveTextContent('+/-0.125');
       expect(dialog).toHaveTextContent('Final Manager Value');
-      expect(dialog).toHaveTextContent('+0.080');
+      expect(dialog).toHaveTextContent('+8.0 pp');
     });
 
     test('uses only committed managerDecisions and leaves player WPA display unchanged', async () => {
@@ -752,8 +752,8 @@ describe('PostGameSummary Component', () => {
 
       render(<PostGameSummary />);
 
-      expect(await screen.findByText('+0.300 KBL WPA')).toBeInTheDocument();
-      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+9.999');
+      expect(await screen.findByText('+30.0 pp KBL WPA')).toBeInTheDocument();
+      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+999.9 pp');
     });
 
     test('does not derive manager overlay rows from event-log data when completed game has no committed managerDecisions', async () => {
@@ -766,7 +766,7 @@ describe('PostGameSummary Component', () => {
       render(<PostGameSummary />);
 
       const overlay = await screen.findByTestId('manager-wpa-overlay');
-      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+0.000');
+      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+0.0 pp');
       expect(within(overlay).getAllByText('0')).toHaveLength(2);
     });
   });
@@ -837,7 +837,7 @@ describe('PostGameSummary Component', () => {
       expect(card).toBeTruthy();
       const withinCard = within(card!);
       expect(withinCard.getByText('J Martinez')).toBeInTheDocument();
-      expect(withinCard.getByText('+0.300 KBL WPA')).toBeInTheDocument();
+      expect(withinCard.getByText('+30.0 pp KBL WPA')).toBeInTheDocument();
     });
 
     test('renders secondary award player name', async () => {

@@ -16,6 +16,7 @@ import {
   getBaseOutRunExpectancy,
   getHomeWinExpectancyV2,
   WPA_MODEL_VERSION,
+  type WinExpectancyResultV2,
 } from "./winExpectancyModelV2";
 
 export interface WEGameState {
@@ -27,6 +28,15 @@ export interface WEGameState {
   awayScore: number;
   totalInnings?: number;
   runEnvironment?: number;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
+}
+
+export interface WinExpectancyLookupOptions {
+  totalInnings?: number;
+  runEnvironment?: number;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
 }
 
 export function buildWEGameState(
@@ -36,8 +46,9 @@ export function buildWEGameState(
   bases: { first: boolean; second: boolean; third: boolean },
   homeScore: number,
   awayScore: number,
-  totalInnings?: number,
+  totalInningsOrOptions?: number | WinExpectancyLookupOptions,
 ): WEGameState {
+  const options = normalizeLookupOptions(totalInningsOrOptions);
   return {
     inning,
     isTop,
@@ -45,7 +56,10 @@ export function buildWEGameState(
     baseState: encodeBaseState(bases),
     homeScore,
     awayScore,
-    totalInnings,
+    totalInnings: options.totalInnings,
+    runEnvironment: options.runEnvironment,
+    extraInningRunner: options.extraInningRunner,
+    extraInningRunnerDelay: options.extraInningRunnerDelay,
   };
 }
 
@@ -54,6 +68,10 @@ export const MAX_DIFF = 15;
 export const DIFF_RANGE = MAX_DIFF - MIN_DIFF + 1;
 
 export function getWinExpectancy(state: WEGameState): number {
+  return getWinExpectancyWithTrace(state).homeWinProbability;
+}
+
+export function getWinExpectancyWithTrace(state: WEGameState): WinExpectancyResultV2 {
   return getHomeWinExpectancyV2({
     inning: state.inning,
     halfInning: state.isTop ? "TOP" : "BOTTOM",
@@ -63,7 +81,9 @@ export function getWinExpectancy(state: WEGameState): number {
     awayScore: state.awayScore,
     scheduledInnings: state.totalInnings ?? 9,
     runEnvironment: state.runEnvironment,
-  }).homeWinProbability;
+    extraInningRunner: state.extraInningRunner,
+    extraInningRunnerDelay: state.extraInningRunnerDelay,
+  });
 }
 
 export function lookupWinExpectancy(
@@ -73,8 +93,9 @@ export function lookupWinExpectancy(
   runners: RunnersOnBase,
   homeScore: number,
   awayScore: number,
-  totalInnings?: number,
+  totalInningsOrOptions?: number | WinExpectancyLookupOptions,
 ): number {
+  const options = normalizeLookupOptions(totalInningsOrOptions);
   return getWinExpectancy({
     inning,
     isTop,
@@ -82,7 +103,10 @@ export function lookupWinExpectancy(
     baseState: encodeBaseState(runners),
     homeScore,
     awayScore,
-    totalInnings,
+    totalInnings: options.totalInnings,
+    runEnvironment: options.runEnvironment,
+    extraInningRunner: options.extraInningRunner,
+    extraInningRunnerDelay: options.extraInningRunnerDelay,
   });
 }
 
@@ -91,23 +115,53 @@ export function getHalfInningStartWE(
   isTop: boolean,
   homeScore: number,
   awayScore: number,
-  totalInnings: number = 9,
+  totalInningsOrOptions: number | WinExpectancyLookupOptions = 9,
 ): number {
+  const options = normalizeLookupOptions(totalInningsOrOptions);
   return getWinExpectancy({
     inning,
     isTop,
     outs: 0,
-    baseState: BaseState.EMPTY,
+    baseState: getHalfInningStartBaseState(inning, options),
     homeScore,
     awayScore,
-    totalInnings,
+    totalInnings: options.totalInnings,
+    runEnvironment: options.runEnvironment,
+    extraInningRunner: options.extraInningRunner,
+    extraInningRunnerDelay: options.extraInningRunnerDelay,
   });
+}
+
+function normalizeLookupOptions(
+  totalInningsOrOptions?: number | WinExpectancyLookupOptions,
+): WinExpectancyLookupOptions {
+  if (typeof totalInningsOrOptions === "number") {
+    return { totalInnings: totalInningsOrOptions };
+  }
+
+  return totalInningsOrOptions ?? {};
+}
+
+function getHalfInningStartBaseState(
+  inning: number,
+  options: WinExpectancyLookupOptions,
+): BaseState {
+  const totalInnings = options.totalInnings ?? 9;
+  const delay = options.extraInningRunnerDelay ?? 1;
+  if (
+    options.extraInningRunner === true &&
+    inning >= totalInnings + delay
+  ) {
+    return BaseState.SECOND;
+  }
+
+  return BaseState.EMPTY;
 }
 
 export const INNING_PARAMS = {
   modelVersion: WPA_MODEL_VERSION,
   scoreDifferentialRange: [MIN_DIFF, MAX_DIFF] as const,
-  source: "continuous-v2",
+  source: "mlb-savant-wpa-2016-2025-v1-with-kbl-v3-fallback",
 } as const;
 
 export const RUNNER_BOOST: Record<number, number> = {

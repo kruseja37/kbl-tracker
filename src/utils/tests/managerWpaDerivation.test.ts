@@ -242,7 +242,12 @@ function derive(
   atBatEvents: AtBatEvent[] = [],
   betweenPlayEvents: BetweenPlayEvent[] = [],
   fieldingEvents: FieldingEvent[] = [],
-  options: { gameEnded?: boolean; totalInnings?: number } = {},
+  options: {
+    gameEnded?: boolean;
+    totalInnings?: number;
+    extraInningRunner?: boolean;
+    extraInningRunnerDelay?: 1 | 2;
+  } = {},
 ) {
   return deriveManagerDecisionRecords({
     gameId: "game-1",
@@ -1459,7 +1464,10 @@ describe("manager WPA derivation", () => {
       teamWinProbabilityAfter: metadata.actualTeamWinProbability,
     });
     expect(decision.rawWindowWpa).toBeLessThan(0);
-    expect(decision.managerWpa).toBeCloseTo((decision.rawWindowWpa ?? 0) * 0.35, 4);
+    expect(decision.managerWpa).toBeCloseTo(
+      Math.round(((decision.rawWindowWpa ?? 0) * 0.35) * 10000) / 10000,
+      4,
+    );
     expect(metadata).toMatchObject({
       inferredHoldBase: "second",
       holdBaseSource: "batter_safe_at_second",
@@ -2103,6 +2111,137 @@ describe("manager WPA derivation", () => {
       },
     });
     expect(decision.linkedEventIds).toEqual(["game-1_bp_keep_pitcher"]);
+  });
+
+  test("between-play manager WPA uses event snapshot total innings before caller fallback", () => {
+    const caughtStealing = createBetweenPlay({
+      eventId: "game-1_bp_cs_snapshot_total",
+      eventIndex: 1,
+      type: "caught_stealing",
+      pitcherChange: undefined,
+      gameState: {
+        inning: 8,
+        halfInning: "TOP",
+        outs: 0,
+        totalInnings: 7,
+        score: { away: 5, home: 5 },
+        extraInningRunner: true,
+        extraInningRunnerDelay: 1,
+        runnersOn: { second: "away-runner" },
+      },
+      runnerAction: {
+        runnerId: "away-runner",
+        runnerName: "Away Runner",
+        fromBase: 2,
+        toBase: 3,
+        outcome: "out",
+        reason: "caught_stealing",
+      },
+    });
+
+    const [decision] = derive([], [caughtStealing], [], {
+      totalInnings: 9,
+      extraInningRunner: true,
+      extraInningRunnerDelay: 1,
+    });
+    const expectedSnapshotWpa = calculateWPA(
+      {
+        inning: 8,
+        isTop: true,
+        outs: 0,
+        bases: { first: false, second: true, third: false },
+        homeScore: 5,
+        awayScore: 5,
+        totalInnings: 7,
+        extraInningRunner: true,
+        extraInningRunnerDelay: 1,
+      },
+      {
+        outs: 1,
+        bases: { first: false, second: false, third: false },
+        homeScore: 5,
+        awayScore: 5,
+      },
+    ).battingTeamDelta;
+    const fallbackNineInningWpa = calculateWPA(
+      {
+        inning: 8,
+        isTop: true,
+        outs: 0,
+        bases: { first: false, second: true, third: false },
+        homeScore: 5,
+        awayScore: 5,
+        totalInnings: 9,
+        extraInningRunner: true,
+        extraInningRunnerDelay: 1,
+      },
+      {
+        outs: 1,
+        bases: { first: false, second: false, third: false },
+        homeScore: 5,
+        awayScore: 5,
+      },
+    ).battingTeamDelta;
+
+    expect(decision.decisionType).toBe("steal_send");
+    expect(decision.rawWindowWpa).toBeCloseTo(expectedSnapshotWpa, 4);
+    expect(decision.rawWindowWpa).not.toBeCloseTo(fallbackNineInningWpa, 4);
+    expect(decision.managerWpa).toBeCloseTo(expectedSnapshotWpa * 0.35, 4);
+  });
+
+  test("old between-play manager WPA uses caller total innings fallback", () => {
+    const caughtStealing = createBetweenPlay({
+      eventId: "game-1_bp_cs_fallback_total",
+      eventIndex: 1,
+      type: "caught_stealing",
+      pitcherChange: undefined,
+      gameState: {
+        inning: 8,
+        halfInning: "TOP",
+        outs: 0,
+        score: { away: 5, home: 5 },
+        extraInningRunner: true,
+        extraInningRunnerDelay: 1,
+        runnersOn: { second: "away-runner" },
+      },
+      runnerAction: {
+        runnerId: "away-runner",
+        runnerName: "Away Runner",
+        fromBase: 2,
+        toBase: 3,
+        outcome: "out",
+        reason: "caught_stealing",
+      },
+    });
+
+    const [decision] = derive([], [caughtStealing], [], {
+      totalInnings: 7,
+      extraInningRunner: true,
+      extraInningRunnerDelay: 1,
+    });
+    const expectedFallbackWpa = calculateWPA(
+      {
+        inning: 8,
+        isTop: true,
+        outs: 0,
+        bases: { first: false, second: true, third: false },
+        homeScore: 5,
+        awayScore: 5,
+        totalInnings: 7,
+        extraInningRunner: true,
+        extraInningRunnerDelay: 1,
+      },
+      {
+        outs: 1,
+        bases: { first: false, second: false, third: false },
+        homeScore: 5,
+        awayScore: 5,
+      },
+    ).battingTeamDelta;
+
+    expect(decision.decisionType).toBe("steal_send");
+    expect(decision.rawWindowWpa).toBeCloseTo(expectedFallbackWpa, 4);
+    expect(decision.managerWpa).toBeCloseTo(expectedFallbackWpa * 0.35, 4);
   });
 
   test("derives prompted let-batter-hit decisions and waits for that batter's PA", () => {
@@ -2872,7 +3011,7 @@ describe("manager WPA derivation", () => {
       teamId: "home",
       resolved: true,
       resolvedAtEventId: "game-1_11",
-      wpaModelVersion: "kbl-wpa-v2",
+      wpaModelVersion: WPA_MODEL_VERSION,
     });
     expect(decision.rawWindowWpa).toBeGreaterThan(0);
     expect(decision.managerWpa).toBeGreaterThan(0);

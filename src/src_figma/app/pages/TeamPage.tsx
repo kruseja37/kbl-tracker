@@ -20,6 +20,7 @@ import {
   type TeamImpactMode,
   type TeamImpactSummary,
 } from "../../../utils/teamImpact";
+import { formatWpaPoints } from "../../../utils/wpaDisplay";
 
 interface RosterEntry {
   playerId: string;
@@ -42,9 +43,7 @@ function isTeamImpactMode(mode: AlmanacInstanceMode): mode is TeamImpactMode {
 }
 
 function formatWpa(value: number): string {
-  if (!Number.isFinite(value)) return "N/A";
-  const rounded = value.toFixed(3);
-  return value > 0 ? `+${rounded}` : rounded;
+  return formatWpaPoints(value);
 }
 
 function formatPoints(value: number): string {
@@ -371,7 +370,7 @@ export function TeamPage() {
   const stadium = team?.stadium ?? "Unknown Stadium";
   const primaryColor = team?.colors?.primary ?? "#3366FF";
   const secondaryColor = team?.colors?.secondary ?? "#DD0000";
-  const formatSigned = (value: number) => `${value >= 0 ? "+" : ""}${value.toFixed(3)}`;
+  const formatSigned = formatWpa;
   const backLink =
     instanceMode === "elimination"
       ? "/almanac/elimination"

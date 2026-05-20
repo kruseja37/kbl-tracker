@@ -7,6 +7,7 @@ import type {
   ManagerDeploymentStintRecord,
   ManagerLineupDeltaRecord,
 } from "../../types/managerWpa";
+import { WPA_MODEL_VERSION } from "../../engines/wpaV2";
 
 const {
   mockGetInstanceGames,
@@ -1110,7 +1111,7 @@ function atBat(
     winProbabilityBefore: 0.5,
     winProbabilityAfter: 0.5,
     wpa: 0,
-    wpaModelVersion: "kbl-wpa-v2",
+    wpaModelVersion: WPA_MODEL_VERSION,
     ballInPlay: null,
     fameEvents: [],
     isLeadoff: false,

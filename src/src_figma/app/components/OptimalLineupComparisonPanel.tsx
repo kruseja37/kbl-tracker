@@ -3,6 +3,7 @@ import {
   formatLineupSnapshotSlot,
   type LineupSnapshotComparison,
 } from "../../../utils/optimalLineup";
+import { formatWpaPoints } from "../../../utils/wpaDisplay";
 
 interface OptimalLineupComparisonPanelProps {
   hand: OpposingPitcherHand;
@@ -13,8 +14,7 @@ interface OptimalLineupComparisonPanelProps {
 }
 
 function formatSignedWpa(value: number): string {
-  const sign = value > 0 ? "+" : "";
-  return `${sign}${value.toFixed(3)} WPA`;
+  return `${formatWpaPoints(value)} WPA`;
 }
 
 export function OptimalLineupComparisonPanel({

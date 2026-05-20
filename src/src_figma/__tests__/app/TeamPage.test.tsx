@@ -434,16 +434,16 @@ describe("TeamPage almanac identity", () => {
     expect(await screen.findByText("LINEUP CARRIED THEM")).toBeInTheDocument();
     expect(mockGetTeamImpactSummary).toHaveBeenCalledWith("exhibition", "league-1", "team-a");
     expect(screen.getByText("TEAM WPA")).toBeInTheDocument();
-    expect(screen.getByText("+0.350")).toBeInTheDocument();
+    expect(screen.getByText("+35.0 pp")).toBeInTheDocument();
     expect(screen.getAllByText(/2ND OF 4/)).toHaveLength(2);
-    expect(screen.getByText(/INSTANCE AVG \+0\.100/)).toBeInTheDocument();
+    expect(screen.getByText(/INSTANCE AVG \+10\.0 pp/)).toBeInTheDocument();
     expect(screen.getByText("POG POINTS")).toBeInTheDocument();
     expect(screen.getByText("6 PTS")).toBeInTheDocument();
     expect(screen.getByText(/MOST DECORATED: DANA DUNN, 4 PTS/)).toBeInTheDocument();
     expect(screen.getByText("Dana Dunn")).toBeInTheDocument();
-    expect(screen.getByText(/TOTAL \+0\.280/)).toBeInTheDocument();
-    expect(screen.getByText(/BEST PLAY: \+0\.180/)).toBeInTheDocument();
-    expect(screen.getByText(/HIGH LEVERAGE WPA \+0\.110/)).toBeInTheDocument();
+    expect(screen.getByText(/TOTAL \+28\.0 pp/)).toBeInTheDocument();
+    expect(screen.getByText(/BEST PLAY: \+18\.0 pp/)).toBeInTheDocument();
+    expect(screen.getByText(/HIGH LEVERAGE WPA \+11\.0 pp/)).toBeInTheDocument();
   });
 
   test("archived elimination TeamPage renders Team Impact from the shared helper", async () => {
@@ -459,7 +459,7 @@ describe("TeamPage almanac identity", () => {
     renderTeamPage("elim-run-1", "team-a");
 
     expect(await screen.findByRole("heading", { name: "TEAM IMPACT" })).toBeInTheDocument();
-    expect(await screen.findByText("+0.350")).toBeInTheDocument();
+    expect(await screen.findByText("+35.0 pp")).toBeInTheDocument();
     expect(mockGetTeamImpactSummary).toHaveBeenCalledWith("elimination", "elim-run-1", "team-a");
   });
 
@@ -495,8 +495,8 @@ describe("TeamPage almanac identity", () => {
     renderTeamPage("league-1", "team-a");
 
     expect(await screen.findByText("Dana Dunn")).toBeInTheDocument();
-    expect(screen.getByText(/BEST PLAY: \+0\.180/)).toBeInTheDocument();
-    expect(screen.getByText(/COSTLIEST: -0\.050/)).toBeInTheDocument();
+    expect(screen.getByText(/BEST PLAY: \+18\.0 pp/)).toBeInTheDocument();
+    expect(screen.getByText(/COSTLIEST: -5\.0 pp/)).toBeInTheDocument();
     expect(screen.getByText("Quiet Contributor")).toBeInTheDocument();
     expect(screen.getAllByText(/BEST PLAY:/)).toHaveLength(1);
     expect(screen.getAllByText(/HIGH LEVERAGE WPA/)).toHaveLength(1);
@@ -567,7 +567,7 @@ describe("TeamPage almanac identity", () => {
 
     expect(await screen.findByText("Casey Skipper")).toBeInTheDocument();
     expect(screen.getByText("2-0")).toBeInTheDocument();
-    expect(screen.getByText("+0.190")).toBeInTheDocument();
+    expect(screen.getByText("+19.0 pp")).toBeInTheDocument();
     expect(screen.getByText("Maya Vega")).toBeInTheDocument();
     expect(screen.getByText("ROSTER")).toBeInTheDocument();
   });

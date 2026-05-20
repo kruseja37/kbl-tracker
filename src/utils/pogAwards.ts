@@ -10,6 +10,7 @@ import {
 } from "./kblWpaAttribution";
 import { isActiveScoringManagerDecision } from "./managerValueTrace";
 import type { StoredPlayersOfTheGame } from "./playersOfTheGame";
+import { formatWpaPoints } from "./wpaDisplay";
 
 export const MIN_POSITIVE_WPA = 0.005;
 
@@ -748,8 +749,7 @@ function isMeaningfulPositive(value: number): boolean {
 }
 
 function formatSignedWpa(value: number): string {
-  const rounded = roundWpa(value);
-  return `${rounded >= 0 ? "+" : ""}${rounded.toFixed(3)}`;
+  return formatWpaPoints(roundWpa(value));
 }
 
 function roundWpa(value: number): number {

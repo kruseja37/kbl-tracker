@@ -4,6 +4,7 @@ import type {
   ManagerValueTraceComponent,
   ManagerValueTraceRow,
 } from "../../../utils/managerValueTrace";
+import { formatWpaPoints } from "../../../utils/wpaDisplay";
 
 export interface ManagerMomentDetailContext {
   trace: ManagerValueTraceRow;
@@ -20,7 +21,7 @@ interface ManagerMomentDetailDialogProps {
 }
 
 export function formatSignedManagerMomentValue(value: number): string {
-  return `${value >= 0 ? "+" : ""}${value.toFixed(3)}`;
+  return formatWpaPoints(value);
 }
 
 export function formatManagerMomentFinalValue(

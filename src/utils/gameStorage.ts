@@ -570,6 +570,8 @@ export interface CompletedGameRecord {
   finalScore: { away: number; home: number };
   innings: number;
   totalInnings?: number;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
   fameEvents: PersistedGameState["fameEvents"];
   playerStats: PersistedGameState["playerStats"];
   pitcherGameStats: PersistedGameState["pitcherGameStats"];
@@ -714,6 +716,8 @@ export async function archiveCompletedGame(
     isClinchGame?: boolean;
     leagueId?: string;
     totalInnings?: number;
+    extraInningRunner?: boolean;
+    extraInningRunnerDelay?: 1 | 2;
     pogPlayerId?: string;
     playersOfTheGame?: {
       first?: string;
@@ -757,7 +761,11 @@ export async function archiveCompletedGame(
     homeTeamName: gameState.homeTeamName,
     finalScore,
     innings: gameState.inning,
-    totalInnings: context?.totalInnings,
+    totalInnings: context?.totalInnings ?? gameState.totalInnings,
+    extraInningRunner:
+      context?.extraInningRunner ?? gameState.extraInningRunner,
+    extraInningRunnerDelay:
+      context?.extraInningRunnerDelay ?? gameState.extraInningRunnerDelay,
     fameEvents: gameState.fameEvents,
     playerStats: gameState.playerStats,
     pitcherGameStats: gameState.pitcherGameStats,

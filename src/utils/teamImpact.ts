@@ -574,6 +574,7 @@ async function loadTeamImpactGameInput(
         getBetweenPlayEvents(game.gameId),
         getGameHeader(game.gameId),
       ]);
+    const totalInnings = game.totalInnings ?? gameHeader?.totalInnings;
 
     return {
       game,
@@ -582,7 +583,10 @@ async function loadTeamImpactGameInput(
         atBatEvents,
         fieldingEvents,
         betweenPlayEvents,
-        totalInnings: game.totalInnings,
+        totalInnings,
+        extraInningRunner: game.extraInningRunner ?? gameHeader?.extraInningRunner,
+        extraInningRunnerDelay:
+          game.extraInningRunnerDelay ?? gameHeader?.extraInningRunnerDelay,
         awayTeamId: game.awayTeamId,
         homeTeamId: game.homeTeamId,
         startingLineups: gameHeader?.startingLineups,

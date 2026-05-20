@@ -33,6 +33,8 @@ export interface KblWpaDerivationInput {
   fieldingEvents?: FieldingEvent[];
   betweenPlayEvents?: BetweenPlayEvent[];
   totalInnings?: number;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
   awayTeamId?: string;
   homeTeamId?: string;
   startingLineups?: KblWpaStartingLineups;
@@ -91,10 +93,17 @@ interface AfterState {
 
 interface DerivationContext {
   totalInnings?: number;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
   awayTeamId?: string;
   homeTeamId?: string;
   startingLineups?: KblWpaStartingLineups;
   includeManagerOverlays?: boolean;
+}
+
+interface ExtraInningRunnerPolicy {
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
 }
 
 type RunnerOutcomeEntry = NonNullable<AtBatEvent["runnerOutcomes"]>[number];
@@ -179,6 +188,8 @@ export function deriveKblWpaCredits(input: KblWpaDerivationInput): KblWpaCredit[
     credits.push(
       ...deriveBetweenPlayCredits(event, {
         totalInnings: input.totalInnings,
+        extraInningRunner: input.extraInningRunner,
+        extraInningRunnerDelay: input.extraInningRunnerDelay,
         awayTeamId: input.awayTeamId,
         homeTeamId: input.homeTeamId,
       }),
@@ -285,11 +296,19 @@ export function aggregateKblWpaCredits(
     .sort((left, right) => right.totalWpa - left.totalWpa || left.playerName.localeCompare(right.playerName));
 }
 
-export function deriveActualAtBatWpa(event: AtBatEvent, totalInnings?: number): WPAResult {
+export function deriveActualAtBatWpa(
+  event: AtBatEvent,
+  totalInnings?: number,
+  extraPolicy?: ExtraInningRunnerPolicy,
+): WPAResult {
   if (isLegacyStoredAtBatWpa(event)) {
     return storedAtBatWpaResult(event);
   }
 
+  const resolvedExtraPolicy = resolveAtBatExtraInningRunnerPolicy(
+    event,
+    extraPolicy,
+  );
   return calculateWPA(
     {
       inning: event.inning,
@@ -299,6 +318,7 @@ export function deriveActualAtBatWpa(event: AtBatEvent, totalInnings?: number): 
       homeScore: event.homeScore,
       awayScore: event.awayScore,
       totalInnings: event.totalInnings ?? totalInnings,
+      ...resolvedExtraPolicy,
     },
     {
       outs: event.outsAfter,
@@ -314,20 +334,26 @@ function deriveAtBatCredits(
   fieldingEvents: FieldingEvent[],
   context: DerivationContext,
 ): KblWpaCredit[] {
-  if (isSparseArchivedAtBatEvent(event) || isLegacyStoredAtBatWpa(event)) {
+  if (isSparseArchivedAtBatEvent(event)) {
     const fallbackCredits = deriveArchivedAtBatFallbackCredits(event, context);
     if (fallbackCredits.length > 0) {
       return fallbackCredits;
     }
   }
 
-  const actual = deriveActualAtBatWpa(event, context.totalInnings);
+  const actual = deriveActualAtBatWpa(event, context.totalInnings, context);
   const battingWpa = actual.battingTeamDelta;
   const defensiveWpa = actual.fieldingTeamDelta;
 
   return [
     ...normalizeCreditsToBudget(
-      deriveOffensiveAtBatCredits(event, battingWpa, context.totalInnings, context.includeManagerOverlays),
+      deriveOffensiveAtBatCredits(
+        event,
+        battingWpa,
+        context.totalInnings,
+        context,
+        context.includeManagerOverlays,
+      ),
       battingWpa,
     ),
     ...normalizeCreditsToBudget(
@@ -364,10 +390,23 @@ function storedAtBatWpaResult(event: AtBatEvent): WPAResult {
   };
 }
 
+function resolveAtBatExtraInningRunnerPolicy(
+  event: AtBatEvent,
+  fallback?: ExtraInningRunnerPolicy,
+): ExtraInningRunnerPolicy {
+  return {
+    extraInningRunner:
+      event.extraInningRunner ?? fallback?.extraInningRunner,
+    extraInningRunnerDelay:
+      event.extraInningRunnerDelay ?? fallback?.extraInningRunnerDelay,
+  };
+}
+
 function deriveOffensiveAtBatCredits(
   event: AtBatEvent,
   battingWpa: number,
   totalInnings?: number,
+  extraPolicy?: ExtraInningRunnerPolicy,
   includeManagerOverlays = false,
 ): KblWpaCredit[] {
   if (Math.abs(battingWpa) < EPSILON) return [];
@@ -410,7 +449,12 @@ function deriveOffensiveAtBatCredits(
     }
   }
 
-  const runnerDelta = calculateRunnerDelta(event, battingWpa, totalInnings);
+  const runnerDelta = calculateRunnerDelta(
+    event,
+    battingWpa,
+    totalInnings,
+    extraPolicy,
+  );
   if (!runnerDelta || Math.abs(runnerDelta.delta) < EPSILON) {
     return [makeCredit(event.eventId, "at_bat", batter, "batting", battingWpa, "high", "Batter owns offensive play budget")];
   }
@@ -579,7 +623,14 @@ function deriveDefensiveAtBatCredits(
 
   const attempt = getFieldingAttempt(event, fieldingEvents);
   if (attempt === "robbed_hr") {
-    return buildRobbedHrCredits(event, fieldingEvents, defensiveWpa, context.totalInnings, pitcher);
+    return buildRobbedHrCredits(
+      event,
+      fieldingEvents,
+      defensiveWpa,
+      context.totalInnings,
+      context,
+      pitcher,
+    );
   }
 
   const rescueUnits = buildBadThrowRescueRawUnits(event, fieldingEvents, pitcher);
@@ -594,7 +645,14 @@ function deriveDefensiveAtBatCredits(
   if (HIT_RESULTS.has(event.result)) {
     const baseSave = fieldingEvents.find((row) => row.playType === "base_save");
     if (baseSave) {
-      return buildSavedBaseCounterfactualCredits(event, baseSave, defensiveWpa, context.totalInnings, pitcher);
+      return buildSavedBaseCounterfactualCredits(
+        event,
+        baseSave,
+        defensiveWpa,
+        context.totalInnings,
+        context,
+        pitcher,
+      );
     }
     return [makeCredit(event.eventId, "at_bat", pitcher, "pitching", defensiveWpa, "high", "Clean hit pitcher share")];
   }
@@ -703,6 +761,7 @@ function buildRobbedHrCredits(
   fieldingEvents: FieldingEvent[],
   defensiveWpa: number,
   totalInnings: number | undefined,
+  extraPolicy: ExtraInningRunnerPolicy | undefined,
   pitcher: PlayerRef,
 ): KblWpaCredit[] {
   const fielder =
@@ -715,6 +774,10 @@ function buildRobbedHrCredits(
 
   const runners = runnerStateToBases(event.runners);
   const runsScored = 1 + Number(runners.first) + Number(runners.second) + Number(runners.third);
+  const resolvedExtraPolicy = resolveAtBatExtraInningRunnerPolicy(
+    event,
+    extraPolicy,
+  );
   const counterfactual = calculateWPA(
     {
       inning: event.inning,
@@ -724,6 +787,7 @@ function buildRobbedHrCredits(
       homeScore: event.homeScore,
       awayScore: event.awayScore,
       totalInnings: event.totalInnings ?? totalInnings,
+      ...resolvedExtraPolicy,
     },
     {
       outs: event.outs,
@@ -746,6 +810,7 @@ function buildSavedBaseCounterfactualCredits(
   baseSave: FieldingEvent,
   defensiveWpa: number,
   totalInnings: number | undefined,
+  extraPolicy: ExtraInningRunnerPolicy | undefined,
   pitcher: PlayerRef,
 ): KblWpaCredit[] {
   const counterfactualAfter = buildSavedBaseCounterfactualAfterState(event, baseSave);
@@ -756,6 +821,10 @@ function buildSavedBaseCounterfactualCredits(
     ]);
   }
 
+  const resolvedExtraPolicy = resolveAtBatExtraInningRunnerPolicy(
+    event,
+    extraPolicy,
+  );
   const counterfactual = calculateWPA(
     {
       inning: event.inning,
@@ -765,6 +834,7 @@ function buildSavedBaseCounterfactualCredits(
       homeScore: event.homeScore,
       awayScore: event.awayScore,
       totalInnings: event.totalInnings ?? totalInnings,
+      ...resolvedExtraPolicy,
     },
     counterfactualAfter,
   );
@@ -995,11 +1065,16 @@ function calculateRunnerDelta(
   event: AtBatEvent,
   actualBattingWpa: number,
   totalInnings?: number,
+  extraPolicy?: ExtraInningRunnerPolicy,
 ): { delta: number; impactedRunners: NonNullable<AtBatEvent["runnerOutcomes"]> } | null {
   if (!event.runnerOutcomes || event.runnerOutcomes.length === 0) return null;
   const defaultAfter = buildDefaultAfterState(event);
   if (!defaultAfter) return null;
 
+  const resolvedExtraPolicy = resolveAtBatExtraInningRunnerPolicy(
+    event,
+    extraPolicy,
+  );
   const defaultWpa = calculateWPA(
     {
       inning: event.inning,
@@ -1009,6 +1084,7 @@ function calculateRunnerDelta(
       homeScore: event.homeScore,
       awayScore: event.awayScore,
       totalInnings: event.totalInnings ?? totalInnings,
+      ...resolvedExtraPolicy,
     },
     defaultAfter,
   ).battingTeamDelta;
@@ -1156,7 +1232,13 @@ function defaultDestinationForRunner(event: AtBatEvent, fromBase: "batter" | "fi
 
 function deriveBetweenPlayCredits(
   event: BetweenPlayEvent,
-  context: { totalInnings?: number; awayTeamId?: string; homeTeamId?: string },
+  context: {
+    totalInnings?: number;
+    extraInningRunner?: boolean;
+    extraInningRunnerDelay?: 1 | 2;
+    awayTeamId?: string;
+    homeTeamId?: string;
+  },
 ): KblWpaCredit[] {
   if (!event.gameState || !event.runnerAction) return [];
 
@@ -1233,7 +1315,12 @@ function deriveBetweenPlayCredits(
       bases: actualBeforeBases,
       homeScore: homeScoreBefore,
       awayScore: awayScoreBefore,
-      totalInnings: context.totalInnings,
+      totalInnings: event.gameState.totalInnings ?? context.totalInnings,
+      extraInningRunner:
+        event.gameState.extraInningRunner ?? context.extraInningRunner,
+      extraInningRunnerDelay:
+        event.gameState.extraInningRunnerDelay ??
+        context.extraInningRunnerDelay,
     },
     {
       outs: outsAfter,

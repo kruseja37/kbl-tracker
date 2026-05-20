@@ -61,7 +61,14 @@ export interface DeriveManagerDecisionRecordsInput
   betweenPlayEvents?: BetweenPlayEvent[];
   fieldingEvents?: FieldingEvent[];
   totalInnings?: number;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
   gameEnded?: boolean;
+}
+
+interface ExtraInningRunnerPolicy {
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
 }
 
 interface DecisionWindow {
@@ -323,6 +330,8 @@ export function deriveManagerDecisionRecords(
     fieldingEvents,
     homeTeamId: input.homeTeamId,
     totalInnings: input.totalInnings,
+    extraInningRunner: input.extraInningRunner,
+    extraInningRunnerDelay: input.extraInningRunnerDelay,
     gameEnded: input.gameEnded ?? false,
   });
 
@@ -847,7 +856,7 @@ function buildInferredNoChangeDecisionFromWatch(input: {
   const { watch, sourceEvent, decisionType } = input;
   const halfInning = sourceEvent.gameState?.halfInning ?? "TOP";
   const score = sourceEvent.gameState?.score ?? { away: 0, home: 0 };
-  const wpa = calculateBetweenPlayWindow(sourceEvent, input.input.totalInnings);
+  const wpa = calculateBetweenPlayWindow(sourceEvent, input.input.totalInnings, input.input);
   const window = buildDecisionWindow({
     teamId: watch.teamId,
     homeTeamId: input.input.homeTeamId,
@@ -1154,7 +1163,9 @@ function deriveAtBatManagerDecisions(
 
 function buildAtBatDecision(params: {
   event: AtBatEvent;
-  input: ManagerAssignmentResolutionInput & { totalInnings?: number };
+  input: ManagerAssignmentResolutionInput & {
+    totalInnings?: number;
+  } & ExtraInningRunnerPolicy;
   gameId: string;
   decisionType: ManagerDecisionType;
   decisionSource: ManagerDecisionSource;
@@ -1179,13 +1190,15 @@ function buildAtBatDecision(params: {
           teamId: attribution.teamId,
           homeTeamId: input.homeTeamId,
           totalInnings: input.totalInnings,
+          extraInningRunner: input.extraInningRunner,
+          extraInningRunnerDelay: input.extraInningRunnerDelay,
         })
       : undefined;
   const resolvesSameEvent =
     expectedEndpoint === "same_event" &&
     (decisionType !== "out_advancing_send" ||
       outAdvancingWindow?.scored === true);
-  const wpa = calculateAtBatWindow(event, input.totalInnings);
+  const wpa = calculateAtBatWindow(event, input.totalInnings, input);
   const window =
     decisionType === "out_advancing_send" && outAdvancingWindow?.scored
       ? outAdvancingWindow.window
@@ -1253,6 +1266,8 @@ function buildAtBatDecision(params: {
             teamId: attribution.teamId,
             homeTeamId: input.homeTeamId,
             totalInnings: input.totalInnings,
+            extraInningRunner: input.extraInningRunner,
+            extraInningRunnerDelay: input.extraInningRunnerDelay,
           })
         : decisionType === "out_advancing_send"
           ? { outAdvancingSend: outAdvancingWindow?.metadata }
@@ -1448,7 +1463,7 @@ function buildPromptedBetweenPlayDecision(params: {
   );
   const expectedEndpoint =
     prompted.resolution?.expectedEndpoint ?? getExpectedEndpoint(prompted.decisionType);
-  const wpa = calculateBetweenPlayWindow(event, input.totalInnings);
+  const wpa = calculateBetweenPlayWindow(event, input.totalInnings, input);
   const window = buildDecisionWindow({
     teamId: attribution.teamId,
     homeTeamId: input.homeTeamId,
@@ -1527,7 +1542,9 @@ function promptedTrackedPlayerIds(
 
 function buildBetweenPlayDecision(params: {
   event: BetweenPlayEvent;
-  input: ManagerAssignmentResolutionInput & { totalInnings?: number };
+  input: ManagerAssignmentResolutionInput & {
+    totalInnings?: number;
+  } & ExtraInningRunnerPolicy;
   gameId: string;
   decisionType: ManagerDecisionType;
   decisionSource: ManagerDecisionSource;
@@ -1559,7 +1576,7 @@ function buildBetweenPlayDecision(params: {
     event,
     involvedPlayerIds,
   );
-  const wpa = calculateBetweenPlayWindow(event, input.totalInnings);
+  const wpa = calculateBetweenPlayWindow(event, input.totalInnings, input);
   const window = buildDecisionWindow({
     teamId: attribution.teamId,
     homeTeamId: input.homeTeamId,
@@ -1629,6 +1646,8 @@ interface ResolveDecisionWindowsContext {
   fieldingEvents: FieldingEvent[];
   homeTeamId: string;
   totalInnings?: number;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
   gameEnded: boolean;
 }
 
@@ -1751,10 +1770,14 @@ function markDecisionPending(
       ? uniqueStrings([decision.decisionEventId, nextBatterPa?.eventId])
       : uniqueStrings([decision.decisionEventId]);
   const explanationMetadata = nextBatterPa
-    ? buildIntentionalWalkExplanationMetadata({
-        decision,
-        nextBatterPa,
-      })
+      ? buildIntentionalWalkExplanationMetadata({
+          decision,
+          nextBatterPa,
+          homeTeamId: context.homeTeamId,
+          totalInnings: context.totalInnings,
+          extraInningRunner: context.extraInningRunner,
+          extraInningRunnerDelay: context.extraInningRunnerDelay,
+        })
     : decision.explanationMetadata;
 
   return {
@@ -1924,7 +1947,7 @@ function findNextPlateAppearanceEndpoint(
     return true;
   });
 
-  return endpoint ? endpointFromAtBat(endpoint, context.totalInnings) : null;
+  return endpoint ? endpointFromAtBat(endpoint, context.totalInnings, context) : null;
 }
 
 function findRunnerTerminalEndpoint(
@@ -2068,6 +2091,9 @@ function endpointFromIntentionalWalkEntry(input: {
     explanationMetadata: buildIntentionalWalkExplanationMetadata({
       decision: input.decision,
       homeTeamId: input.context.homeTeamId,
+      totalInnings: input.context.totalInnings,
+      extraInningRunner: input.context.extraInningRunner,
+      extraInningRunnerDelay: input.context.extraInningRunnerDelay,
       nextBatterPa,
       finalConsequenceEventId: endpoint.eventId,
       finalHomeWinProbabilityAfter: endpoint.homeWinProbabilityAfter,
@@ -2202,7 +2228,7 @@ function findFirstFieldingEndpoint(
   const match = candidates[0];
   if (!match) return null;
 
-  const endpoint = endpointFromAtBat(match.atBat, context.totalInnings);
+  const endpoint = endpointFromAtBat(match.atBat, context.totalInnings, context);
   return {
     ...endpoint,
     eventId: match.fieldingEvent.fieldingEventId,
@@ -2253,7 +2279,7 @@ function buildTimeline(context: ResolveDecisionWindowsContext): TimelineEntry[] 
     ...context.atBatEvents
       .filter(isCompleteAtBatWindowEvent)
       .map((event) => {
-        const wpa = calculateAtBatWindow(event, context.totalInnings);
+        const wpa = calculateAtBatWindow(event, context.totalInnings, context);
         return {
           kind: "at_bat" as const,
           eventId: event.eventId,
@@ -2266,7 +2292,7 @@ function buildTimeline(context: ResolveDecisionWindowsContext): TimelineEntry[] 
         };
       }),
     ...context.betweenPlayEvents.map((event) => {
-      const wpa = calculateBetweenPlayWindow(event, context.totalInnings);
+      const wpa = calculateBetweenPlayWindow(event, context.totalInnings, context);
       return {
         kind: "between_play" as const,
         eventId: event.eventId,
@@ -2302,8 +2328,9 @@ function isCompleteAtBatWindowEvent(event: AtBatEvent): boolean {
 function endpointFromAtBat(
   event: AtBatEvent,
   totalInnings?: number,
+  extraPolicy?: ExtraInningRunnerPolicy,
 ): ResolutionEndpoint {
-  const wpa = calculateAtBatWindow(event, totalInnings);
+  const wpa = calculateAtBatWindow(event, totalInnings, extraPolicy);
   return {
     eventId: event.eventId,
     eventIds: [event.eventId],
@@ -2356,6 +2383,8 @@ function buildIntentionalWalkExplanationMetadata(input: {
   teamId?: string;
   homeTeamId?: string;
   totalInnings?: number;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
   nextBatterPa?: AtBatEvent;
   finalConsequenceEventId?: string;
   finalHomeWinProbabilityAfter?: number;
@@ -2410,6 +2439,8 @@ function buildIntentionalWalkExplanationMetadata(input: {
         teamId: input.teamId,
         homeTeamId: input.homeTeamId,
         totalInnings: input.totalInnings,
+        extraInningRunner: input.extraInningRunner,
+        extraInningRunnerDelay: input.extraInningRunnerDelay,
         finalHomeWinProbabilityAfter: input.finalHomeWinProbabilityAfter,
       }),
     },
@@ -2425,6 +2456,8 @@ function buildIntentionalWalkWpaComponents(input: {
   teamId?: string;
   homeTeamId?: string;
   totalInnings?: number;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
   finalHomeWinProbabilityAfter?: number;
 }): NonNullable<
   NonNullable<
@@ -2441,6 +2474,8 @@ function buildIntentionalWalkWpaComponents(input: {
       teamId,
       homeTeamId: input.homeTeamId,
       totalInnings: input.totalInnings,
+      extraInningRunner: input.extraInningRunner,
+      extraInningRunnerDelay: input.extraInningRunnerDelay,
       field: "winProbabilityBefore",
     });
   const afterIbbTeamWinProbability =
@@ -2450,6 +2485,8 @@ function buildIntentionalWalkWpaComponents(input: {
       teamId,
       homeTeamId: input.homeTeamId,
       totalInnings: input.totalInnings,
+      extraInningRunner: input.extraInningRunner,
+      extraInningRunnerDelay: input.extraInningRunnerDelay,
       field: "winProbabilityAfter",
     });
 
@@ -2503,13 +2540,15 @@ function teamWinProbabilityFromAtBatWindow(input: {
   teamId?: string;
   homeTeamId?: string;
   totalInnings?: number;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
   field: "winProbabilityBefore" | "winProbabilityAfter";
 }): number | undefined {
   if (!input.event || !input.teamId || !input.homeTeamId) {
     return undefined;
   }
 
-  const wpa = calculateAtBatWindow(input.event, input.totalInnings);
+  const wpa = calculateAtBatWindow(input.event, input.totalInnings, input);
   return roundProbability(
     teamWinProbability(wpa[input.field], input.teamId, input.homeTeamId),
   );
@@ -2709,6 +2748,8 @@ function buildOutAdvancingSendCounterfactualWindow(input: {
   teamId: string;
   homeTeamId: string;
   totalInnings?: number;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
 }): OutAdvancingCounterfactualWindowResult {
   const { event } = input;
   const outcome =
@@ -2756,8 +2797,9 @@ function buildOutAdvancingSendCounterfactualWindow(input: {
     homeScore: event.homeScore,
     awayScore: event.awayScore,
     totalInnings: event.totalInnings ?? input.totalInnings,
+    ...resolveAtBatExtraInningRunnerPolicy(event, input),
   };
-  const actualWpa = calculateAtBatWindow(event, input.totalInnings);
+  const actualWpa = calculateAtBatWindow(event, input.totalInnings, input);
   const counterfactualWpa = calculateWPA(original, {
     outs: counterfactualState.state.outs,
     bases: counterfactualState.state.bases,
@@ -3063,7 +3105,15 @@ function baseOutAdvancingMetadata(
   };
 }
 
-function calculateAtBatWindow(event: AtBatEvent, totalInnings?: number) {
+function calculateAtBatWindow(
+  event: AtBatEvent,
+  totalInnings?: number,
+  extraPolicy?: ExtraInningRunnerPolicy,
+) {
+  const resolvedExtraPolicy = resolveAtBatExtraInningRunnerPolicy(
+    event,
+    extraPolicy,
+  );
   const result = calculateWPA(
     {
       inning: event.inning,
@@ -3073,6 +3123,7 @@ function calculateAtBatWindow(event: AtBatEvent, totalInnings?: number) {
       homeScore: event.homeScore,
       awayScore: event.awayScore,
       totalInnings: event.totalInnings ?? totalInnings,
+      ...resolvedExtraPolicy,
     },
     {
       outs: event.outsAfter,
@@ -3088,6 +3139,7 @@ function calculateAtBatWindow(event: AtBatEvent, totalInnings?: number) {
 function calculateBetweenPlayWindow(
   event: BetweenPlayEvent,
   totalInnings?: number,
+  extraPolicy?: ExtraInningRunnerPolicy,
 ) {
   const gameState = event.gameState;
   if (!gameState) {
@@ -3138,7 +3190,12 @@ function calculateBetweenPlayWindow(
       bases: beforeBases,
       homeScore: gameState.score.home,
       awayScore: gameState.score.away,
-      totalInnings,
+      totalInnings: gameState.totalInnings ?? totalInnings,
+      extraInningRunner:
+        gameState.extraInningRunner ?? extraPolicy?.extraInningRunner,
+      extraInningRunnerDelay:
+        gameState.extraInningRunnerDelay ??
+        extraPolicy?.extraInningRunnerDelay,
     },
     {
       outs: outsAfter,
@@ -3147,6 +3204,18 @@ function calculateBetweenPlayWindow(
       awayScore: awayScoreAfter,
     },
   );
+}
+
+function resolveAtBatExtraInningRunnerPolicy(
+  event: AtBatEvent,
+  fallback?: ExtraInningRunnerPolicy,
+): ExtraInningRunnerPolicy {
+  return {
+    extraInningRunner:
+      event.extraInningRunner ?? fallback?.extraInningRunner,
+    extraInningRunnerDelay:
+      event.extraInningRunnerDelay ?? fallback?.extraInningRunnerDelay,
+  };
 }
 
 function inferBuntDecisionType(

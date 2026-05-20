@@ -2,12 +2,18 @@ import {
   getHomeWinExpectancyV2,
   normalizeScheduledInnings,
   WPA_MODEL_VERSION,
+  type WinExpectancyTraceV2,
   type WpaBases,
   type WpaGameState,
   type WpaModelVersion,
 } from "./winExpectancyModelV2";
 
-export type { WpaBases, WpaGameState, WpaModelVersion };
+export type {
+  WinExpectancyTraceV2,
+  WpaBases,
+  WpaGameState,
+  WpaModelVersion,
+};
 export { WPA_MODEL_VERSION };
 
 export interface WpaPlayAfterState {
@@ -27,6 +33,8 @@ export interface WpaResultV2 {
   battingTeamId?: string;
   fieldingTeamId?: string;
   validationWarnings: string[];
+  winExpectancyTraceBefore: WinExpectancyTraceV2;
+  winExpectancyTraceAfter: WinExpectancyTraceV2;
 }
 
 export interface WpaCalculationOptions {
@@ -66,6 +74,8 @@ export function calculateWpaV2(
     fieldingTeamDelta: -battingTeamDelta,
     battingTeamId: options.battingTeamId,
     fieldingTeamId: options.fieldingTeamId,
+    winExpectancyTraceBefore: beforeResult.trace,
+    winExpectancyTraceAfter: afterResult.trace,
     validationWarnings: [
       ...validationWarnings,
       ...beforeResult.validationWarnings,
@@ -78,18 +88,22 @@ function resolveAfterHomeWinProbability(
   before: WpaGameState,
   after: WpaPlayAfterState,
   scheduledInnings: number,
-): { homeWinProbability: number; validationWarnings: string[] } {
+): {
+  homeWinProbability: number;
+  validationWarnings: string[];
+  trace: WinExpectancyTraceV2;
+} {
   const isHomeBatting = before.halfInning === "BOTTOM";
   const isFinalOrExtras = before.inning >= scheduledInnings;
 
   if (isHomeBatting && isFinalOrExtras && after.homeScore > after.awayScore) {
-    return { homeWinProbability: 1, validationWarnings: [] };
+    return terminalAfterResult(1);
   }
 
   if (after.outs >= 3) {
     if (before.halfInning === "TOP") {
       if (isFinalOrExtras && after.homeScore > after.awayScore) {
-        return { homeWinProbability: 1, validationWarnings: [] };
+        return terminalAfterResult(1);
       }
 
       const nextState = normalizeBeforeState(
@@ -97,7 +111,7 @@ function resolveAfterHomeWinProbability(
           ...before,
           halfInning: "BOTTOM",
           outs: 0,
-          bases: emptyBases(),
+          bases: startNextHalfInningBases(before.inning, before, scheduledInnings),
           homeScore: after.homeScore,
           awayScore: after.awayScore,
         },
@@ -107,11 +121,11 @@ function resolveAfterHomeWinProbability(
     }
 
     if (isFinalOrExtras && after.awayScore > after.homeScore) {
-      return { homeWinProbability: 0, validationWarnings: [] };
+      return terminalAfterResult(0);
     }
 
     if (isFinalOrExtras && after.homeScore > after.awayScore) {
-      return { homeWinProbability: 1, validationWarnings: [] };
+      return terminalAfterResult(1);
     }
 
     const nextState = normalizeBeforeState(
@@ -120,7 +134,11 @@ function resolveAfterHomeWinProbability(
         inning: before.inning + 1,
         halfInning: "TOP",
         outs: 0,
-        bases: emptyBases(),
+        bases: startNextHalfInningBases(
+          before.inning + 1,
+          before,
+          scheduledInnings,
+        ),
         homeScore: after.homeScore,
         awayScore: after.awayScore,
       },
@@ -140,6 +158,23 @@ function resolveAfterHomeWinProbability(
     scheduledInnings,
   );
   return getHomeWinExpectancyV2(afterState);
+}
+
+function terminalAfterResult(homeWinProbability: number): {
+  homeWinProbability: number;
+  validationWarnings: string[];
+  trace: WinExpectancyTraceV2;
+} {
+  return {
+    homeWinProbability,
+    validationWarnings: [],
+    trace: {
+      modelVersion: WPA_MODEL_VERSION,
+      source: "KBL terminal state",
+      homeWinProbability,
+      terminal: true,
+    },
+  };
 }
 
 function normalizeBeforeState(
@@ -163,4 +198,18 @@ function normalizeBeforeState(
 
 function emptyBases(): WpaBases {
   return { first: false, second: false, third: false };
+}
+
+function startNextHalfInningBases(
+  nextInning: number,
+  before: WpaGameState,
+  scheduledInnings: number,
+): WpaBases {
+  const runnerDelay = before.extraInningRunnerDelay === 2 ? 2 : 1;
+  const runnerStartInning = scheduledInnings + runnerDelay;
+  if (before.extraInningRunner === true && nextInning >= runnerStartInning) {
+    return { first: false, second: true, third: false };
+  }
+
+  return emptyBases();
 }

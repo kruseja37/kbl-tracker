@@ -153,6 +153,8 @@ export interface DeriveCommittedManagerDecisionStateInput
   optimalLineupSnapshots?: GameLockLineupSnapshots;
   chosenLineupSnapshots?: GameLockLineupSnapshots;
   totalInnings?: number;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
   gameEnded?: boolean;
 }
 
@@ -164,6 +166,8 @@ export interface RefreshCommittedManagerDecisionStateInput
   optimalLineupSnapshots?: GameLockLineupSnapshots;
   chosenLineupSnapshots?: GameLockLineupSnapshots;
   totalInnings?: number;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
   gameEnded?: boolean;
 }
 
@@ -192,6 +196,8 @@ export function deriveManagerLineupDeltaRecords(
     betweenPlayEvents: input.betweenPlayEvents,
     fieldingEvents: input.fieldingEvents,
     totalInnings: input.totalInnings,
+    extraInningRunner: input.extraInningRunner,
+    extraInningRunnerDelay: input.extraInningRunnerDelay,
     awayTeamId: input.awayTeamId,
     homeTeamId: input.homeTeamId,
     startingLineups: normalizeStartingLineupsForKbl(input.startingLineups),
@@ -403,6 +409,8 @@ export function deriveManagerDeploymentStintRecords(
     betweenPlayEvents: input.betweenPlayEvents,
     fieldingEvents: input.fieldingEvents,
     totalInnings: input.totalInnings,
+    extraInningRunner: input.extraInningRunner,
+    extraInningRunnerDelay: input.extraInningRunnerDelay,
     awayTeamId: input.awayTeamId,
     homeTeamId: input.homeTeamId,
     startingLineups: input.startingLineups
@@ -1522,6 +1530,11 @@ export async function deriveCommittedManagerDecisionStateForGame(
       input.optimalLineupSnapshots ?? gameHeader?.optimalLineupSnapshots,
     chosenLineupSnapshots:
       input.chosenLineupSnapshots ?? gameHeader?.chosenLineupSnapshots,
+    totalInnings: input.totalInnings ?? gameHeader?.totalInnings,
+    extraInningRunner:
+      input.extraInningRunner ?? gameHeader?.extraInningRunner,
+    extraInningRunnerDelay:
+      input.extraInningRunnerDelay ?? gameHeader?.extraInningRunnerDelay,
   });
 }
 

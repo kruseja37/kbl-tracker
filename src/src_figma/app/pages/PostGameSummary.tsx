@@ -654,12 +654,16 @@ export function PostGameSummary({
   // Determine winner
   const homeWon = gameData.finalScore.home > gameData.finalScore.away;
   const winnerName = homeWon ? homeTeamName : awayTeamName;
+  const totalInnings = gameData.totalInnings ?? gameHeader?.totalInnings;
 
   const kblWpaCredits: KblWpaCredit[] = deriveKblWpaCredits({
     atBatEvents,
     fieldingEvents,
     betweenPlayEvents,
-    totalInnings: gameData.totalInnings,
+    totalInnings,
+    extraInningRunner: gameData.extraInningRunner ?? gameHeader?.extraInningRunner,
+    extraInningRunnerDelay:
+      gameData.extraInningRunnerDelay ?? gameHeader?.extraInningRunnerDelay,
     awayTeamId,
     homeTeamId,
     startingLineups: gameHeader?.startingLineups,

@@ -187,6 +187,9 @@ export interface GameHeader {
   // Final state
   finalScore: { away: number; home: number } | null;  // null if game in progress
   finalInning: number;
+  totalInnings?: number;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
   isComplete: boolean;
 
   // Aggregation tracking
@@ -244,6 +247,8 @@ export interface AtBatEvent {
   battingTeamDelta?: number;     // Batting-team WPA delta from the official model
   fieldingTeamDelta?: number;    // Fielding-team WPA delta from the official model
   totalInnings?: number;         // Regulation length used for win-probability recalculation
+  extraInningRunner?: boolean;   // Whether automatic runner rules were enabled for this game
+  extraInningRunnerDelay?: 1 | 2; // Extra inning number where automatic runner starts
 
   // Ball in play data (for fielding)
   ballInPlay: BallInPlayData | null;
@@ -510,7 +515,10 @@ export interface BetweenPlayEvent {
     inning: number;
     halfInning: 'TOP' | 'BOTTOM';
     outs: number;
+    totalInnings?: number;
     score: { away: number; home: number };
+    extraInningRunner?: boolean;
+    extraInningRunnerDelay?: 1 | 2;
     runnersOn?: {
       first?: string;
       second?: string;
@@ -980,9 +988,12 @@ function applyAtBatEventUpdates(
     | 'battingTeamDelta'
     | 'fieldingTeamDelta'
     | 'totalInnings'
+    | 'extraInningRunner'
+    | 'extraInningRunnerDelay'
     | 'outsRecorded'
     | 'isWalkOff'
   >>,
+  fallbackPolicy?: WpaPolicyFallback,
 ): AtBatEvent {
   const next = { ...existing };
 
@@ -1011,6 +1022,8 @@ function applyAtBatEventUpdates(
   if (updates.battingTeamDelta !== undefined) next.battingTeamDelta = updates.battingTeamDelta;
   if (updates.fieldingTeamDelta !== undefined) next.fieldingTeamDelta = updates.fieldingTeamDelta;
   if (updates.totalInnings !== undefined) next.totalInnings = updates.totalInnings;
+  if (updates.extraInningRunner !== undefined) next.extraInningRunner = updates.extraInningRunner;
+  if (updates.extraInningRunnerDelay !== undefined) next.extraInningRunnerDelay = updates.extraInningRunnerDelay;
   if (updates.outsRecorded !== undefined) next.outsRecorded = updates.outsRecorded;
   if (updates.isWalkOff !== undefined) next.isWalkOff = updates.isWalkOff;
   if (updates.version !== undefined) next.version = updates.version;
@@ -1019,11 +1032,18 @@ function applyAtBatEventUpdates(
   }
 
   if (shouldRefreshStoredWpa(updates)) {
-    return refreshStoredWpa(next);
+    return refreshStoredWpa(next, fallbackPolicy);
   }
 
   return next;
 }
+
+type WpaPolicyFallback = Partial<
+  Pick<
+    AtBatEvent,
+    'totalInnings' | 'extraInningRunner' | 'extraInningRunnerDelay'
+  >
+>;
 
 function runnerStateToBaseBooleans(runners: RunnerState): { first: boolean; second: boolean; third: boolean } {
   return {
@@ -1047,7 +1067,16 @@ function shouldRefreshStoredWpa(
     | 'runnersAfter'
     | 'awayScoreAfter'
     | 'homeScoreAfter'
+    | 'winProbabilityBefore'
+    | 'winProbabilityAfter'
+    | 'wpa'
+    | 'wpaModelVersion'
+    | 'homeDelta'
+    | 'battingTeamDelta'
+    | 'fieldingTeamDelta'
     | 'totalInnings'
+    | 'extraInningRunner'
+    | 'extraInningRunnerDelay'
     | 'outsRecorded'
     | 'isWalkOff'
   >>,
@@ -1064,13 +1093,63 @@ function shouldRefreshStoredWpa(
     updates.runnersAfter !== undefined ||
     updates.awayScoreAfter !== undefined ||
     updates.homeScoreAfter !== undefined ||
+    updates.winProbabilityBefore !== undefined ||
+    updates.winProbabilityAfter !== undefined ||
+    updates.wpa !== undefined ||
+    updates.wpaModelVersion !== undefined ||
+    updates.homeDelta !== undefined ||
+    updates.battingTeamDelta !== undefined ||
+    updates.fieldingTeamDelta !== undefined ||
     updates.totalInnings !== undefined ||
+    updates.extraInningRunner !== undefined ||
+    updates.extraInningRunnerDelay !== undefined ||
     updates.outsRecorded !== undefined ||
     updates.isWalkOff !== undefined
   );
 }
 
-function refreshStoredWpa(event: AtBatEvent): AtBatEvent {
+function shouldHydrateWpaPolicy(
+  existing: AtBatEvent,
+  updates: Partial<
+    Pick<
+      AtBatEvent,
+      'totalInnings' | 'extraInningRunner' | 'extraInningRunnerDelay'
+    >
+  >,
+): boolean {
+  return (
+    updates.totalInnings === undefined &&
+    existing.totalInnings === undefined
+  ) || (
+    updates.extraInningRunner === undefined &&
+    existing.extraInningRunner === undefined
+  ) || (
+    updates.extraInningRunnerDelay === undefined &&
+    existing.extraInningRunnerDelay === undefined
+  );
+}
+
+function wpaPolicyFallbackFromHeader(
+  header: GameHeader | undefined,
+): WpaPolicyFallback | undefined {
+  if (!header) return undefined;
+
+  return {
+    totalInnings: header.totalInnings,
+    extraInningRunner: header.extraInningRunner,
+    extraInningRunnerDelay: header.extraInningRunnerDelay,
+  };
+}
+
+function refreshStoredWpa(
+  event: AtBatEvent,
+  fallbackPolicy?: WpaPolicyFallback,
+): AtBatEvent {
+  const totalInnings = event.totalInnings ?? fallbackPolicy?.totalInnings;
+  const extraInningRunner =
+    event.extraInningRunner ?? fallbackPolicy?.extraInningRunner;
+  const extraInningRunnerDelay =
+    event.extraInningRunnerDelay ?? fallbackPolicy?.extraInningRunnerDelay;
   const wpaResult = calculateWPA(
     {
       inning: event.inning,
@@ -1079,7 +1158,9 @@ function refreshStoredWpa(event: AtBatEvent): AtBatEvent {
       bases: runnerStateToBaseBooleans(event.runners),
       homeScore: event.homeScore,
       awayScore: event.awayScore,
-      totalInnings: event.totalInnings,
+      totalInnings,
+      extraInningRunner,
+      extraInningRunnerDelay,
     },
     {
       outs: event.outsAfter,
@@ -1095,11 +1176,20 @@ function refreshStoredWpa(event: AtBatEvent): AtBatEvent {
     runners: runnerStateToBaseBooleans(event.runners),
     homeScore: event.homeScore,
     awayScore: event.awayScore,
-    totalInnings: event.totalInnings,
+    totalInnings,
   });
+  const resolvedPolicyFields: WpaPolicyFallback = {};
+  if (totalInnings !== undefined) resolvedPolicyFields.totalInnings = totalInnings;
+  if (extraInningRunner !== undefined) {
+    resolvedPolicyFields.extraInningRunner = extraInningRunner;
+  }
+  if (extraInningRunnerDelay !== undefined) {
+    resolvedPolicyFields.extraInningRunnerDelay = extraInningRunnerDelay;
+  }
 
   return {
     ...event,
+    ...resolvedPolicyFields,
     ...wpaResult,
     leverageIndex: leverageResult.leverageIndex,
     isClutch: leverageResult.leverageIndex >= 1.5,
@@ -1139,6 +1229,8 @@ export async function updateAtBatEvent(
     | 'battingTeamDelta'
     | 'fieldingTeamDelta'
     | 'totalInnings'
+    | 'extraInningRunner'
+    | 'extraInningRunnerDelay'
     | 'outsRecorded'
     | 'isWalkOff'
   >>
@@ -1146,8 +1238,12 @@ export async function updateAtBatEvent(
   const db = await initEventLogDB();
 
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.AT_BAT_EVENTS, 'readwrite');
+    const transaction = db.transaction(
+      [STORES.AT_BAT_EVENTS, STORES.GAME_HEADERS],
+      'readwrite',
+    );
     const store = transaction.objectStore(STORES.AT_BAT_EVENTS);
+    const headerStore = transaction.objectStore(STORES.GAME_HEADERS);
     const getRequest = store.get(eventId);
     let updatedEvent: AtBatEvent | null = null;
 
@@ -1158,8 +1254,23 @@ export async function updateAtBatEvent(
         return;
       }
 
-      updatedEvent = applyAtBatEventUpdates(existing, updates);
-      store.put(updatedEvent);
+      const applyAndPersist = (fallbackPolicy?: WpaPolicyFallback) => {
+        updatedEvent = applyAtBatEventUpdates(existing, updates, fallbackPolicy);
+        store.put(updatedEvent);
+      };
+
+      if (shouldRefreshStoredWpa(updates) && shouldHydrateWpaPolicy(existing, updates)) {
+        const headerRequest = headerStore.get(existing.gameId);
+        headerRequest.onsuccess = () => {
+          applyAndPersist(
+            wpaPolicyFallbackFromHeader(headerRequest.result as GameHeader | undefined),
+          );
+        };
+        headerRequest.onerror = () => reject(headerRequest.error);
+        return;
+      }
+
+      applyAndPersist();
     };
 
     getRequest.onerror = () => reject(getRequest.error);
@@ -1201,6 +1312,8 @@ export async function updateAtBatEventWithFieldingSync(
       | 'battingTeamDelta'
       | 'fieldingTeamDelta'
       | 'totalInnings'
+      | 'extraInningRunner'
+      | 'extraInningRunnerDelay'
       | 'isWalkOff'
       | 'outsRecorded'
       | 'version'
@@ -1212,9 +1325,13 @@ export async function updateAtBatEventWithFieldingSync(
   const db = await initEventLogDB();
 
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction([STORES.AT_BAT_EVENTS, STORES.FIELDING_EVENTS], 'readwrite');
+    const transaction = db.transaction(
+      [STORES.AT_BAT_EVENTS, STORES.FIELDING_EVENTS, STORES.GAME_HEADERS],
+      'readwrite',
+    );
     const atBatStore = transaction.objectStore(STORES.AT_BAT_EVENTS);
     const fieldingStore = transaction.objectStore(STORES.FIELDING_EVENTS);
+    const headerStore = transaction.objectStore(STORES.GAME_HEADERS);
     const fieldingIndex = fieldingStore.index('atBatEventId');
     const atBatRequest = atBatStore.get(eventId);
     const fieldingRequest = fieldingIndex.getAll(eventId);
@@ -1231,8 +1348,27 @@ export async function updateAtBatEventWithFieldingSync(
         return;
       }
 
-      updatedAtBatEvent = applyAtBatEventUpdates(existing, updates);
-      atBatStore.put(updatedAtBatEvent);
+      const applyAndPersist = (fallbackPolicy?: WpaPolicyFallback) => {
+        updatedAtBatEvent = applyAtBatEventUpdates(
+          existing,
+          updates,
+          fallbackPolicy,
+        );
+        atBatStore.put(updatedAtBatEvent);
+      };
+
+      if (shouldRefreshStoredWpa(updates) && shouldHydrateWpaPolicy(existing, updates)) {
+        const headerRequest = headerStore.get(existing.gameId);
+        headerRequest.onsuccess = () => {
+          applyAndPersist(
+            wpaPolicyFallbackFromHeader(headerRequest.result as GameHeader | undefined),
+          );
+        };
+        headerRequest.onerror = () => reject(headerRequest.error);
+        return;
+      }
+
+      applyAndPersist();
     };
 
     fieldingRequest.onsuccess = () => {
