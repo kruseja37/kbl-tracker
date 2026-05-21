@@ -3,11 +3,73 @@ import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
+import { execSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import type { Plugin } from 'vite'
+
+const packageJson = JSON.parse(
+  readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
+) as { version?: string };
+
+function readGitSha(): string {
+  try {
+    return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+  } catch {
+    return 'unknown';
+  }
+}
+
+function firstEnvValue(names: string[]): string | undefined {
+  return names.map((name) => process.env[name]).find((value): value is string => Boolean(value));
+}
+
+const appVersion = process.env.VITE_APP_VERSION || packageJson.version || 'unknown';
+const buildSha = process.env.VITE_BUILD_SHA || firstEnvValue([
+  'GITHUB_SHA',
+  'VERCEL_GIT_COMMIT_SHA',
+  'CF_PAGES_COMMIT_SHA',
+  'RENDER_GIT_COMMIT',
+  'COMMIT_SHA',
+])?.slice(0, 12) || readGitSha();
+const buildTime = process.env.VITE_BUILD_TIME || new Date().toISOString();
+const buildId = process.env.VITE_BUILD_ID || firstEnvValue([
+  'VERCEL_DEPLOYMENT_ID',
+  'CF_PAGES_COMMIT_SHA',
+  'RENDER_GIT_COMMIT',
+  'GITHUB_RUN_ID',
+]) || `${buildSha}-${buildTime}`;
+
+const buildMetadata = {
+  id: buildId,
+  version: appVersion,
+  sha: buildSha,
+  builtAt: buildTime,
+};
+
+function buildMetadataPlugin(): Plugin {
+  return {
+    name: 'kbl-build-metadata',
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'build-meta.json',
+        source: `${JSON.stringify(buildMetadata, null, 2)}\n`,
+      });
+    },
+  };
+}
 
 // https://vite.dev/config/
 export default defineConfig({
+  define: {
+    'import.meta.env.VITE_APP_VERSION': JSON.stringify(appVersion),
+    'import.meta.env.VITE_BUILD_SHA': JSON.stringify(buildSha),
+    'import.meta.env.VITE_BUILD_TIME': JSON.stringify(buildTime),
+    'import.meta.env.VITE_BUILD_ID': JSON.stringify(buildId),
+  },
   plugins: [
     react(),
+    buildMetadataPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icon-192.png', 'icon-512.png', 'apple-touch-icon.png'],
