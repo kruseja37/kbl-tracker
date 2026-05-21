@@ -108,7 +108,7 @@ describe("MatchupDramaBar", () => {
     expect(screen.getByText("Medium Drama")).toBeInTheDocument();
     expect(screen.getByText("2.40")).toBeInTheDocument();
     expect(screen.getByText("Top 4, 1 out")).toBeInTheDocument();
-    expect(screen.getByText("+0.090 WPA")).toBeInTheDocument();
+    expect(screen.getByText("+9.0 pp WPA")).toBeInTheDocument();
   });
 
   test("renders high drama for marquee fame and weight", () => {
@@ -146,6 +146,6 @@ describe("MatchupDramaBar", () => {
     expect(screen.getByText("Superstar 5/5")).toBeInTheDocument();
     expect(screen.getByText("Captain 4/5")).toBeInTheDocument();
     expect(screen.getByText("Bot 9, 2 out")).toBeInTheDocument();
-    expect(screen.getByText("-0.120 WPA")).toBeInTheDocument();
+    expect(screen.getByText("-12.0 pp WPA")).toBeInTheDocument();
   });
 });

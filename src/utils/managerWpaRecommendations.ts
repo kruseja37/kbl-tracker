@@ -3,6 +3,7 @@ import type {
   PromptedManagerDecisionEvent,
   PromptedManagerDecisionType,
 } from "./eventLog";
+import type { ManagerRecommendationWatchEvent } from "../types/managerWpa";
 
 export type ManagerRecommendationType =
   | "consider_pitching_change"
@@ -142,6 +143,7 @@ export function getPromptedDecisionTypeForRecommendationAction(
 ): PromptedManagerDecisionType | null {
   if (action === "keep_pitcher") return "leave_pitcher_in";
   if (action === "let_batter_hit") return "let_batter_hit";
+  if (action === "decline_defensive_sub") return "keep_defender_in";
   return null;
 }
 
@@ -155,10 +157,17 @@ export function buildPromptedManagerDecisionFromRecommendation(input: {
 
   const primaryPlayerId = input.recommendation.trackedPlayerIds[0];
   if (!primaryPlayerId) return null;
+  const expectedEndpoint =
+    decisionType === "keep_defender_in" ? "first_fielding_event" : "next_pa";
 
   return {
     decisionType,
-    action: input.action === "keep_pitcher" ? "keep_pitcher" : "let_batter_hit",
+    action:
+      input.action === "keep_pitcher"
+        ? "keep_pitcher"
+        : input.action === "decline_defensive_sub"
+          ? "decline_defensive_sub"
+          : "let_batter_hit",
     source: "recommendation",
     decisionSource: "situational_prompt",
     confidence: input.recommendation.confidence,
@@ -173,8 +182,30 @@ export function buildPromptedManagerDecisionFromRecommendation(input: {
     provenanceKey: input.recommendation.suppressKey,
     resolution: {
       status: "pending",
-      expectedEndpoint: "next_pa",
+      expectedEndpoint,
     },
+  };
+}
+
+export function buildManagerRecommendationWatchEvent(input: {
+  recommendation: ManagerRecommendation;
+  opponentTeamId: string;
+}): ManagerRecommendationWatchEvent {
+  return {
+    recommendationId: input.recommendation.recommendationId,
+    type: input.recommendation.type,
+    managerId: input.recommendation.managerId,
+    teamId: input.recommendation.teamId,
+    opponentTeamId: input.opponentTeamId,
+    confidence: input.recommendation.confidence,
+    surface: input.recommendation.surface,
+    trackedPlayerIds: input.recommendation.trackedPlayerIds,
+    primaryAction: input.recommendation.primaryAction,
+    noChangeAction: input.recommendation.noChangeAction,
+    suppressKey: input.recommendation.suppressKey,
+    title: input.recommendation.title,
+    rationale: input.recommendation.rationale,
+    leverageIndex: input.recommendation.leverageIndex,
   };
 }
 

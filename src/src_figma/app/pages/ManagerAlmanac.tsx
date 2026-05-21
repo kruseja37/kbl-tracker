@@ -14,6 +14,7 @@ import {
   type ManagerLeaderboardEntry,
   type ManagerTeamTenureAggregate,
 } from "../../../utils/almanacQueries";
+import { formatWpaPoints } from "../../../utils/wpaDisplay";
 
 const MODE_OPTIONS: Array<{ value: ManagerAlmanacModeFilter; label: string }> = [
   { value: "all", label: "All modes" },
@@ -40,7 +41,7 @@ const emptyOptions: ManagerAlmanacFilterOptions = {
 };
 
 function formatSigned(value: number): string {
-  return `${value >= 0 ? "+" : ""}${value.toFixed(3)}`;
+  return formatWpaPoints(value);
 }
 
 function formatRate(value: number): string {

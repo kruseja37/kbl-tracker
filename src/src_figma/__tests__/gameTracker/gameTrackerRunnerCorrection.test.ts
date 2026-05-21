@@ -114,6 +114,74 @@ describe('gameTrackerRunnerCorrection', () => {
     expect(correction?.defaults.first?.to).toBe('out');
   });
 
+  test('keeps an initial zero-out FC safe-at-home path representable', () => {
+    const correction = buildRunnerCorrectionForQuickBarOutcome('FC', {
+      first: false,
+      second: false,
+      third: true,
+    }, 0);
+
+    expect(correction?.action).toEqual({ type: 'out', outType: 'FC' });
+    expect(correction?.defaults.batter.to).toBe('first');
+    expect(correction?.defaults.third?.to).toBe('home');
+    expect(runnerDefaultsToAdvancement(correction!.defaults)).toEqual({
+      fromThird: 'home',
+    });
+    expect(resolveBatterOutcomeResult({
+      currentResult: 'FC',
+      nextOutcome: { toBase: 'first' },
+      nextOutsRecorded: 0,
+    })).toBe('FC');
+  });
+
+  test('defaults FC with R1/R3 to a home out while keeping batter safe', () => {
+    const correction = buildRunnerCorrectionForQuickBarOutcome('FC', {
+      first: true,
+      second: false,
+      third: true,
+    }, 0);
+
+    expect(correction?.defaults.batter.to).toBe('first');
+    expect(correction?.defaults.third?.to).toBe('out');
+    expect(correction?.defaults.first?.to).toBe('second');
+    expect(runnerDefaultsToAdvancement(correction!.defaults)).toEqual({
+      fromFirst: 'second',
+      fromThird: 'out',
+    });
+  });
+
+  test('defaults bases-loaded DP to home-to-first shape', () => {
+    const correction = buildRunnerCorrectionForQuickBarOutcome('DP', {
+      first: true,
+      second: true,
+      third: true,
+    }, 0);
+
+    expect(correction?.defaults.batter.to).toBe('out');
+    expect(correction?.defaults.third?.to).toBe('out');
+    expect(correction?.defaults.second?.to).toBe('third');
+    expect(correction?.defaults.first?.to).toBe('second');
+    expect(runnerDefaultsToAdvancement(correction!.defaults)).toEqual({
+      fromFirst: 'second',
+      fromSecond: 'third',
+      fromThird: 'out',
+    });
+  });
+
+  test('keeps ordinary runner-on-first DP defaults', () => {
+    const correction = buildRunnerCorrectionForQuickBarOutcome('DP', {
+      first: true,
+      second: false,
+      third: false,
+    }, 0);
+
+    expect(correction?.defaults.batter.to).toBe('out');
+    expect(correction?.defaults.first?.to).toBe('out');
+    expect(runnerDefaultsToAdvancement(correction!.defaults)).toEqual({
+      fromFirst: 'out',
+    });
+  });
+
   test('builds score correction prompts only for the batting team side', () => {
     expect(buildRunnerScoreCorrectionPrompt({
       inning: 1,

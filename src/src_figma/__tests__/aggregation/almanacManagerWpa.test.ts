@@ -4,10 +4,12 @@ const {
   mockGetAllCanonicalPlayers,
   mockGetAllCompletedGames,
   mockGetGameEvents,
+  mockListManagerProfiles,
 } = vi.hoisted(() => ({
   mockGetAllCanonicalPlayers: vi.fn().mockResolvedValue([]),
   mockGetAllCompletedGames: vi.fn(),
   mockGetGameEvents: vi.fn().mockResolvedValue([]),
+  mockListManagerProfiles: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("../../../utils/gameStorage", () => ({
@@ -29,6 +31,10 @@ vi.mock("../../../utils/almanacStorage", () => ({
 
 vi.mock("../../../utils/eventLog", () => ({
   getGameEvents: mockGetGameEvents,
+}));
+
+vi.mock("../../../utils/managerIdentityStorage", () => ({
+  listManagerProfiles: mockListManagerProfiles,
 }));
 
 import type { CompletedGameRecord } from "../../../utils/gameStorage";
@@ -207,6 +213,7 @@ describe("Almanac Manager WPA aggregation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetAllCanonicalPlayers.mockResolvedValue([]);
+    mockListManagerProfiles.mockResolvedValue([]);
   });
 
   test("aggregates committed manager decisions and lineup deltas", () => {
@@ -287,6 +294,83 @@ describe("Almanac Manager WPA aggregation", () => {
     });
   });
 
+  test("aggregates one manager across multiple exhibition teams and preserves tenure splits", () => {
+    const sharedProfile: ManagerProfile = {
+      managerId: "manager-casey-neutral",
+      displayName: "Casey Neutral",
+      createdByUser: true,
+      defaultManager: false,
+    };
+
+    const [aggregate] = aggregateCommittedManagerAlmanac(
+      [
+        createGame({
+          gameId: "exh-sirloins",
+          awayTeamId: "sirloins",
+          awayTeamName: "Sirloins",
+          homeTeamId: "moose",
+          homeTeamName: "Moose",
+          finalScore: { away: 5, home: 3 },
+          managerDecisions: [
+            createDecision({
+              decisionId: "exh-sirloins:sirloins:steal",
+              gameId: "exh-sirloins",
+              managerId: sharedProfile.managerId,
+              teamId: "sirloins",
+              opponentTeamId: "moose",
+              managerWpa: 0.1,
+            }),
+          ],
+        }),
+        createGame({
+          gameId: "exh-beewolves",
+          awayTeamId: "crocs",
+          awayTeamName: "Crocodons",
+          homeTeamId: "beewolves",
+          homeTeamName: "Beewolves",
+          finalScore: { away: 4, home: 6 },
+          managerDecisions: [
+            createDecision({
+              decisionId: "exh-beewolves:beewolves:ph",
+              gameId: "exh-beewolves",
+              managerId: sharedProfile.managerId,
+              teamId: "beewolves",
+              opponentTeamId: "crocs",
+              half: "bottom",
+              decisionType: "pinch_hitter",
+              displayTitle: "Pinch hitter",
+              managerWpa: 0.3,
+            }),
+          ],
+        }),
+      ],
+      {},
+      [sharedProfile],
+    );
+
+    expect(aggregate).toMatchObject({
+      managerId: sharedProfile.managerId,
+      managerName: "Casey Neutral",
+      gamesManaged: 2,
+      wins: 2,
+      losses: 0,
+      tacticalManagerWpa: 0.4,
+      managerValue: 0.4,
+    });
+    expect([...aggregate.teamIds].sort()).toEqual(["beewolves", "sirloins"]);
+    expect(aggregate.tenures).toHaveLength(2);
+    expect(
+      aggregate.tenures.map((tenure) => ({
+        teamId: tenure.teamId,
+        gamesManaged: tenure.gamesManaged,
+        managerValue: tenure.managerValue,
+      })).sort((left, right) => left.teamId.localeCompare(right.teamId)),
+    ).toEqual([
+      { teamId: "beewolves", gamesManaged: 1, managerValue: 0.3 },
+      { teamId: "sirloins", gamesManaged: 1, managerValue: 0.1 },
+    ]);
+  });
+
   test("does not lazily derive Manager WPA from games without committed manager records", async () => {
     mockGetAllCompletedGames.mockResolvedValue([
       createGame({
@@ -327,6 +411,67 @@ describe("Almanac Manager WPA aggregation", () => {
         (entry) => entry.managerId === "player-one",
       ),
     ).toBe(false);
+  });
+
+  test("hydrates async manager leaderboards with stored profile names across assigned teams", async () => {
+    mockListManagerProfiles.mockResolvedValue([
+      {
+        managerId: "crocodons-manager",
+        displayName: "Braxton Chombo",
+        createdByUser: false,
+        defaultManager: true,
+      },
+      {
+        managerId: "manager-bob-mcnugget-a33f5b61",
+        displayName: "Bob Mcnugget",
+        createdByUser: true,
+        defaultManager: false,
+      },
+    ]);
+    mockGetAllCompletedGames.mockResolvedValue([
+      createGame({
+        gameId: "cleveland-braxton",
+        awayTeamId: "indians",
+        awayTeamName: "Cleveland Indians",
+        homeTeamId: "crocodons",
+        homeTeamName: "Crocodons",
+        managerDecisions: [
+          createDecision({
+            decisionId: "cleveland-braxton:indians:steal",
+            gameId: "cleveland-braxton",
+            managerId: "crocodons-manager",
+            teamId: "indians",
+            opponentTeamId: "crocodons",
+            managerWpa: 0.085,
+          }),
+          createDecision({
+            decisionId: "cleveland-braxton:crocodons:ph",
+            gameId: "cleveland-braxton",
+            managerId: "manager-bob-mcnugget-a33f5b61",
+            teamId: "crocodons",
+            opponentTeamId: "indians",
+            decisionType: "pinch_hitter",
+            displayTitle: "Pinch hitter",
+            managerWpa: 0.001,
+          }),
+        ],
+      }),
+    ]);
+
+    const leaderboards = await getManagerAlmanacLeaderboards({}, 5);
+
+    expect(leaderboards.tacticalManagerWpa[0]).toMatchObject({
+      managerId: "crocodons-manager",
+      managerName: "Braxton Chombo",
+      teamNames: ["Cleveland Indians"],
+      value: 0.085,
+    });
+    expect(leaderboards.tacticalManagerWpa[1]).toMatchObject({
+      managerId: "manager-bob-mcnugget-a33f5b61",
+      managerName: "Bob Mcnugget",
+      teamNames: ["Crocodons"],
+      value: 0.001,
+    });
   });
 
   test("keeps Tactical WPA, Deployment WPA, Lineup Delta, and Manager Value distinct", () => {

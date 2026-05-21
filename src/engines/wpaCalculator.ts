@@ -17,7 +17,11 @@
  * Reference: https://www.fangraphs.com/library/misc/wpa/
  */
 
-import { calculateWpaV2, WPA_MODEL_VERSION } from "./wpaV2";
+import {
+  calculateWpaV2,
+  WPA_MODEL_VERSION,
+  type WinExpectancyTraceV2,
+} from "./wpaV2";
 
 // ============================================
 // TYPES
@@ -34,6 +38,8 @@ export interface WPAStateBefore {
   homeScore: number;
   awayScore: number;
   totalInnings?: number;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
 }
 
 /**
@@ -44,6 +50,11 @@ export interface WPAStateAfter {
   bases: { first: boolean; second: boolean; third: boolean };
   homeScore: number;
   awayScore: number;
+}
+
+export interface WPAExtraInningRunnerOptions {
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
 }
 
 /**
@@ -64,6 +75,10 @@ export interface WPAResult {
   battingTeamDelta: number;
   /** Explicit fielding-team delta before storage/display rounding. */
   fieldingTeamDelta: number;
+  /** Lookup/audit trace for the before state. */
+  winExpectancyTraceBefore?: WinExpectancyTraceV2;
+  /** Lookup/audit trace for the after state. */
+  winExpectancyTraceAfter?: WinExpectancyTraceV2;
 }
 
 // ============================================
@@ -91,6 +106,8 @@ export function calculateWPA(
       homeScore: before.homeScore,
       awayScore: before.awayScore,
       scheduledInnings: totalInnings,
+      extraInningRunner: before.extraInningRunner,
+      extraInningRunnerDelay: before.extraInningRunnerDelay,
     },
     after,
   );
@@ -103,6 +120,8 @@ export function calculateWPA(
     homeDelta: roundWpa(result.homeDelta),
     battingTeamDelta: roundWpa(result.battingTeamDelta),
     fieldingTeamDelta: roundWpa(result.fieldingTeamDelta),
+    winExpectancyTraceBefore: result.winExpectancyTraceBefore,
+    winExpectancyTraceAfter: result.winExpectancyTraceAfter,
   };
 }
 
@@ -123,10 +142,20 @@ export function calculateHitWPA(
   homeScore: number,
   awayScore: number,
   runsScored: number,
-  totalInnings?: number
+  totalInnings?: number,
+  options: WPAExtraInningRunnerOptions = {},
 ): WPAResult {
   return calculateWPA(
-    { inning, isTop, outs, bases: basesBefore, homeScore, awayScore, totalInnings },
+    {
+      inning,
+      isTop,
+      outs,
+      bases: basesBefore,
+      homeScore,
+      awayScore,
+      totalInnings,
+      ...options,
+    },
     {
       outs,
       bases: basesAfter,
@@ -150,10 +179,20 @@ export function calculateOutWPA(
   homeScore: number,
   awayScore: number,
   runsScored: number,
-  totalInnings?: number
+  totalInnings?: number,
+  options: WPAExtraInningRunnerOptions = {},
 ): WPAResult {
   return calculateWPA(
-    { inning, isTop, outs: outsBefore, bases: basesBefore, homeScore, awayScore, totalInnings },
+    {
+      inning,
+      isTop,
+      outs: outsBefore,
+      bases: basesBefore,
+      homeScore,
+      awayScore,
+      totalInnings,
+      ...options,
+    },
     {
       outs: outsAfter,
       bases: basesAfter,
@@ -176,10 +215,20 @@ export function calculateWalkWPA(
   homeScore: number,
   awayScore: number,
   runsScored: number,
-  totalInnings?: number
+  totalInnings?: number,
+  options: WPAExtraInningRunnerOptions = {},
 ): WPAResult {
   return calculateWPA(
-    { inning, isTop, outs, bases: basesBefore, homeScore, awayScore, totalInnings },
+    {
+      inning,
+      isTop,
+      outs,
+      bases: basesBefore,
+      homeScore,
+      awayScore,
+      totalInnings,
+      ...options,
+    },
     {
       outs,
       bases: basesAfter,

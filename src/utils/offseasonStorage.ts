@@ -18,6 +18,8 @@
  * 11. Spring Training / Finalize
  */
 
+import { syncEngine } from './syncEngine';
+
 // ============================================
 // TYPES
 // ============================================
@@ -226,6 +228,12 @@ const STORES = {
   trades: 'trades',
 };
 
+function syncOffseasonUpsert(storeName: string, recordKey: string, data: unknown): void {
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.upsert(DB_NAME, storeName, recordKey, data);
+  }
+}
+
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 export async function initOffseasonDatabase(): Promise<IDBDatabase> {
@@ -310,7 +318,10 @@ export async function startOffseason(
     const request = store.put(state);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(state);
+    request.onsuccess = () => {
+      syncOffseasonUpsert(STORES.offseasonState, state.id, state);
+      resolve(state);
+    };
   });
 }
 
@@ -396,7 +407,10 @@ export async function advanceOffseasonPhase(
     const request = store.put(state);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(state);
+    request.onsuccess = () => {
+      syncOffseasonUpsert(STORES.offseasonState, state.id, state);
+      resolve(state);
+    };
   });
 }
 
@@ -466,7 +480,10 @@ export async function saveSeasonAwards(
     const request = store.put(data);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(data);
+    request.onsuccess = () => {
+      syncOffseasonUpsert(STORES.awards, data.id, data);
+      resolve(data);
+    };
   });
 }
 
@@ -514,7 +531,10 @@ export async function saveRetirements(
     const request = store.put(data);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(data);
+    request.onsuccess = () => {
+      syncOffseasonUpsert(STORES.retirements, data.id, data);
+      resolve(data);
+    };
   });
 }
 
@@ -564,7 +584,10 @@ export async function saveRatingsAdjustments(
     const request = store.put(data);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(data);
+    request.onsuccess = () => {
+      syncOffseasonUpsert(STORES.ratings, data.id, data);
+      resolve(data);
+    };
   });
 }
 
@@ -614,7 +637,10 @@ export async function saveFreeAgencySignings(
     const request = store.put(data);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(data);
+    request.onsuccess = () => {
+      syncOffseasonUpsert(STORES.freeAgency, data.id, data);
+      resolve(data);
+    };
   });
 }
 
@@ -666,7 +692,10 @@ export async function saveDraftResults(
     const request = store.put(data);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(data);
+    request.onsuccess = () => {
+      syncOffseasonUpsert(STORES.draft, data.id, data);
+      resolve(data);
+    };
   });
 }
 
@@ -714,7 +743,10 @@ export async function saveTrades(
     const request = store.put(data);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(data);
+    request.onsuccess = () => {
+      syncOffseasonUpsert(STORES.trades, data.id, data);
+      resolve(data);
+    };
   });
 }
 

@@ -42,6 +42,7 @@ import {
 import { updateFranchiseMetadata } from "../../../utils/franchiseManager";
 import { getTeam } from "../../../utils/leagueBuilderStorage";
 import { getFranchiseTeam, saveFranchiseTeam } from "../../../utils/franchisePlayerStorage";
+import { syncEngine } from "../../../utils/syncEngine";
 import { getRecentGames } from "../../utils/gameStorage";
 import { generateGameRecap } from "../engines/narrativeIntegration";
 import type { Player as TeamRosterPlayer, Pitcher as TeamRosterPitcher } from "@/app/components/TeamRoster";
@@ -127,6 +128,14 @@ function getFranchiseStarterHand(
 
 export function resolveFranchiseGameUseDH(franchiseConfig: UseFranchiseDataReturn["franchiseConfig"]): boolean {
   return franchiseConfig?.season?.useDH ?? false;
+}
+
+function saveCurrentSeasonNumber(season: number): void {
+  const value = String(season);
+  localStorage.setItem('kbl-current-season', value);
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.upsertLocal('kbl-current-season', value);
+  }
 }
 
 export function FranchiseHome() {
@@ -359,7 +368,7 @@ export function FranchiseHome() {
 
     // 4. Update React state and localStorage
     setCurrentSeason(newSeason);
-    localStorage.setItem('kbl-current-season', String(newSeason));
+    saveCurrentSeasonNumber(newSeason);
     setSeasonPhase("regular");
     setActiveTab("todays-game");
   };
@@ -2383,7 +2392,7 @@ export function FranchiseHome() {
                   // Increment season number and persist to localStorage
                   const newSeason = currentSeason + 1;
                   setCurrentSeason(newSeason);
-                  localStorage.setItem('kbl-current-season', String(newSeason));
+                  saveCurrentSeasonNumber(newSeason);
 
                   // Reset to regular season
                   setSeasonPhase("regular");

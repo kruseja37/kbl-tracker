@@ -18,6 +18,7 @@ import type {
   ManagerDecisionRecord,
   GameLockLineupSnapshots,
   ManagerLineupDeltaRecord,
+  ManagerRecommendationWatchRecord,
 } from "../types/managerWpa";
 import { getTrackerDb } from "./trackerDb";
 import { syncEngine } from "./syncEngine";
@@ -188,6 +189,7 @@ export interface PersistedGameState {
   managerDecisions?: ManagerDecisionRecord[];
   managerDeploymentStints?: ManagerDeploymentStintRecord[];
   managerLineupDeltas?: ManagerLineupDeltaRecord[];
+  managerRecommendationWatches?: ManagerRecommendationWatchRecord[];
   optimalLineupSnapshots?: GameLockLineupSnapshots;
   chosenLineupSnapshots?: GameLockLineupSnapshots;
 
@@ -568,6 +570,8 @@ export interface CompletedGameRecord {
   finalScore: { away: number; home: number };
   innings: number;
   totalInnings?: number;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
   fameEvents: PersistedGameState["fameEvents"];
   playerStats: PersistedGameState["playerStats"];
   pitcherGameStats: PersistedGameState["pitcherGameStats"];
@@ -583,6 +587,7 @@ export interface CompletedGameRecord {
   managerDecisions?: PersistedGameState["managerDecisions"];
   managerDeploymentStints?: PersistedGameState["managerDeploymentStints"];
   managerLineupDeltas?: PersistedGameState["managerLineupDeltas"];
+  managerRecommendationWatches?: PersistedGameState["managerRecommendationWatches"];
   optimalLineupSnapshots?: PersistedGameState["optimalLineupSnapshots"];
   chosenLineupSnapshots?: PersistedGameState["chosenLineupSnapshots"];
   legacyManagerDecisions?: PersistedGameState["legacyManagerDecisions"];
@@ -711,6 +716,8 @@ export async function archiveCompletedGame(
     isClinchGame?: boolean;
     leagueId?: string;
     totalInnings?: number;
+    extraInningRunner?: boolean;
+    extraInningRunnerDelay?: 1 | 2;
     pogPlayerId?: string;
     playersOfTheGame?: {
       first?: string;
@@ -754,7 +761,11 @@ export async function archiveCompletedGame(
     homeTeamName: gameState.homeTeamName,
     finalScore,
     innings: gameState.inning,
-    totalInnings: context?.totalInnings,
+    totalInnings: context?.totalInnings ?? gameState.totalInnings,
+    extraInningRunner:
+      context?.extraInningRunner ?? gameState.extraInningRunner,
+    extraInningRunnerDelay:
+      context?.extraInningRunnerDelay ?? gameState.extraInningRunnerDelay,
     fameEvents: gameState.fameEvents,
     playerStats: gameState.playerStats,
     pitcherGameStats: gameState.pitcherGameStats,
@@ -766,6 +777,7 @@ export async function archiveCompletedGame(
     managerDecisions: gameState.managerDecisions || [],
     managerDeploymentStints: gameState.managerDeploymentStints || [],
     managerLineupDeltas: gameState.managerLineupDeltas || [],
+    managerRecommendationWatches: gameState.managerRecommendationWatches || [],
     optimalLineupSnapshots: gameState.optimalLineupSnapshots,
     chosenLineupSnapshots: gameState.chosenLineupSnapshots,
     legacyManagerDecisions: gameState.legacyManagerDecisions || [],

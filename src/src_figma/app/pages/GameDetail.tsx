@@ -22,10 +22,18 @@ import {
   deriveKblWpaCredits,
   type KblWpaCredit,
 } from "../../../utils/kblWpaAttribution";
-import { rankPlayersOfTheGame } from "../../../utils/playersOfTheGame";
+import {
+  getGamePogAwardSet,
+  getPogAwardDisplayLabel,
+  getPogAwardPointsLabel,
+  type PogAward,
+  type PogAwardSet,
+} from "../../../utils/pogAwards";
 import { ManagerWpaOverlay } from "../components/ManagerWpaOverlay";
 import { WinProbChart } from "../components/WinProbChart";
 import type { ManagerProfile } from "../../../types/managerWpa";
+import { formatWpaPoints } from "../../../utils/wpaDisplay";
+import type { WinExpectancyTraceV2 } from "../../../engines/wpaV2";
 
 type CanonicalLookup = Record<string, string>;
 
@@ -73,13 +81,12 @@ function formatERA(earnedRuns: number, outsRecorded: number): string {
   return ((earnedRuns * 27) / outsRecorded).toFixed(2);
 }
 
-function formatSignedDecimal(value: number, digits: number = 3): string {
-  const sign = value >= 0 ? "+" : "";
-  return `${sign}${value.toFixed(digits)}`;
-}
-
 function formatLI(value: number): string {
   return value.toFixed(2);
+}
+
+function formatWinProbability(value: number): string {
+  return `${(value * 100).toFixed(1)}%`;
 }
 
 function humanizeToken(value: string | undefined | null): string {
@@ -90,6 +97,46 @@ function humanizeToken(value: string | undefined | null): string {
   return value
     .replace(/_/g, " ")
     .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function formatWinExpectancyTrace(
+  label: string,
+  trace: WinExpectancyTraceV2 | undefined,
+): string | null {
+  if (!trace) return null;
+
+  const parts = [label];
+  if ("rowKey" in trace) {
+    parts.push(trace.rowKey);
+  } else {
+    parts.push(trace.source);
+  }
+  if ("battingWinProbability" in trace && typeof trace.battingWinProbability === "number") {
+    parts.push(`Bat WP ${formatWinProbability(trace.battingWinProbability)}`);
+  }
+  if ("leverageIndex" in trace && typeof trace.leverageIndex === "number") {
+    parts.push(`LI ${trace.leverageIndex.toFixed(2)}`);
+  }
+  if ("fallback" in trace && trace.fallback) {
+    parts.push(`Fallback ${humanizeToken(trace.fallback)}`);
+  }
+
+  return parts.join(" ");
+}
+
+function formatWpaAuditDiagnostic(
+  actual: ReturnType<typeof deriveActualAtBatWpa>,
+  event: AtBatEvent,
+): string {
+  const traceSummary = [
+    formatWinExpectancyTrace("Before", actual.winExpectancyTraceBefore),
+    formatWinExpectancyTrace("After", actual.winExpectancyTraceAfter),
+  ]
+    .filter(Boolean)
+    .join(" | ");
+  const traceSuffix = traceSummary ? ` | ${traceSummary}` : "";
+
+  return `Model ${actual.wpaModelVersion} | Home WP ${formatWinProbability(actual.winProbabilityBefore)} -> ${formatWinProbability(actual.winProbabilityAfter)}${traceSuffix} | Stored ${event.wpaModelVersion ?? "legacy/missing"} ${formatWpaPoints(event.wpa, 2)}`;
 }
 
 function formatAllocationMode(mode: KblWpaCredit["allocationMode"]): string {
@@ -111,6 +158,14 @@ function formatBaseNumber(base: number | undefined): string {
   if (base === 3) return "3B";
   if (base === 4) return "Home";
   return "Base";
+}
+
+function getVisiblePogAwards(awardSet: PogAwardSet): PogAward[] {
+  return [
+    ...((awardSet.overall ? [awardSet.overall] : []) as PogAward[]),
+    ...awardSet.playerRoleAwards,
+    ...((awardSet.managerAward ? [awardSet.managerAward] : []) as PogAward[]),
+  ];
 }
 
 function buildBaseStateLabel(runners: AtBatEvent["runners"]): string {
@@ -340,11 +395,18 @@ export function GameDetail() {
       }
     });
 
+    const totalInnings = game.totalInnings ?? gameHeader?.totalInnings;
+    const extraInningRunner =
+      game.extraInningRunner ?? gameHeader?.extraInningRunner;
+    const extraInningRunnerDelay =
+      game.extraInningRunnerDelay ?? gameHeader?.extraInningRunnerDelay;
     const kblWpaCredits: KblWpaCredit[] = deriveKblWpaCredits({
       atBatEvents,
       fieldingEvents,
       betweenPlayEvents,
-      totalInnings: game.totalInnings,
+      totalInnings,
+      extraInningRunner,
+      extraInningRunnerDelay,
       awayTeamId: game.awayTeamId,
       homeTeamId: game.homeTeamId,
       startingLineups: gameHeader?.startingLineups,
@@ -387,7 +449,10 @@ export function GameDetail() {
     const kblWpaAuditRows = [
       ...atBatEvents.map((event) => {
         const credits = kblCreditsByEvent.get(event.eventId) ?? [];
-        const actual = deriveActualAtBatWpa(event, game.totalInnings);
+        const actual = deriveActualAtBatWpa(event, totalInnings, {
+          extraInningRunner,
+          extraInningRunnerDelay,
+        });
         const battingBudget = actual.wpa;
         const defensiveBudget = -actual.wpa;
         const nonOverlayCredits = credits.filter((credit) => !credit.isOverlay);
@@ -405,6 +470,7 @@ export function GameDetail() {
           label: `${event.batterName} vs ${event.pitcherName}`,
           result: humanizeToken(event.result),
           situation: `${event.halfInning === "TOP" ? "T" : "B"}${event.inning} | ${event.outs} out${event.outs === 1 ? "" : "s"} | ${event.awayScore}-${event.homeScore}`,
+          diagnostic: formatWpaAuditDiagnostic(actual, event),
           battingBudget,
           defensiveBudget,
           battingTotal,
@@ -438,6 +504,7 @@ export function GameDetail() {
           situation: event.gameState
             ? `${event.gameState.halfInning === "TOP" ? "T" : "B"}${event.gameState.inning} | ${event.gameState.outs} out${event.gameState.outs === 1 ? "" : "s"} | ${event.gameState.score.away}-${event.gameState.score.home}`
             : "No game state",
+          diagnostic: "Between-play window attribution",
           battingBudget: battingTotal,
           defensiveBudget: defensiveTotal,
           battingTotal,
@@ -463,7 +530,23 @@ export function GameDetail() {
       ].filter(Boolean).join(" / "),
     }));
 
-    const playersOfGame = rankPlayersOfTheGame(game, atBatEvents, kblWpaCredits);
+    const pogAwardSet = getGamePogAwardSet({
+      kblWpaCredits,
+      playersOfTheGame: game.playersOfTheGame,
+      pogPlayerId: game.pogPlayerId,
+      playerStats: game.playerStats,
+      pitcherGameStats: game.pitcherGameStats,
+      managerProfiles: data.managerProfiles,
+      managerDecisions: game.managerDecisions,
+      managerDeploymentStints: game.managerDeploymentStints,
+      managerLineupDeltas: game.managerLineupDeltas,
+      eventLogAvailable:
+        atBatEvents.length > 0 ||
+        fieldingEvents.length > 0 ||
+        betweenPlayEvents.length > 0,
+    });
+    const pogAwards = getVisiblePogAwards(pogAwardSet);
+    const teamStandouts = pogAwardSet.teamStandouts;
 
     const battingLines = Object.entries(game.playerStats)
       .filter(([, stats]) => {
@@ -532,7 +615,7 @@ export function GameDetail() {
       rbi: event.rbiCount,
       runners: buildBaseStateLabel(event.runners),
       wpa: event.wpa,
-      detail: `${buildBaseStateLabel(event.runnersAfter)} | Score ${event.awayScoreAfter}-${event.homeScoreAfter}`,
+      detail: `${buildBaseStateLabel(event.runnersAfter)} | Score ${event.awayScoreAfter}-${event.homeScoreAfter} | Home WP ${formatWinProbability(event.winProbabilityBefore)} -> ${formatWinProbability(event.winProbabilityAfter)} | Batter WPA ${formatWpaPoints(event.wpa)}`,
     }));
 
     const clutchMoments = atBatEvents
@@ -551,7 +634,8 @@ export function GameDetail() {
     };
 
     return {
-      playersOfGame,
+      pogAwards,
+      teamStandouts,
       wpaLeaderboard,
       battingLines,
       pitchingLines,
@@ -596,8 +680,10 @@ export function GameDetail() {
   }
 
   const { game, atBatEvents, canonicalLookup } = data;
+  const eventLogMissing = game.finalScore && atBatEvents.length === 0;
   const {
-    playersOfGame,
+    pogAwards,
+    teamStandouts,
     wpaLeaderboard,
     battingLines,
     pitchingLines,
@@ -696,45 +782,121 @@ export function GameDetail() {
           </div>
         </section>
 
+        {eventLogMissing && (
+          <div className="border-[5px] border-[#D8A84A] bg-[#2a1f08] p-4 text-[9px] leading-5 text-[#F8D789]">
+            Completed game header found, but this device has no at-bat event log for it. Run Cloud Sync diagnostics, then download from the device/cloud source that has the event log before trusting WPA, play log, or audit sections.
+          </div>
+        )}
+
         <SectionFrame
-          title="Players Of The Game"
-          subtitle="Archived rankings are preferred when present, with the saved game file breaking ties against live WPA recalculation."
+          title="POG Awards"
+          subtitle="Canonical per-game awards derived from KBL WPA first, with legacy stored POG used only when WPA awards are unavailable."
         >
-          {playersOfGame.length === 0 ? (
-            <EmptyState label="No players of the game available." />
+          {pogAwards.length === 0 ? (
+            <EmptyState label="No POG awards available." />
           ) : (
             <div className="grid gap-4 md:grid-cols-3">
-              {playersOfGame.map((player, index) => (
-                <div
-                  key={player.playerId}
-                  className="border-[4px] border-[#32394B] bg-[#0B0E14] p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.45)]"
-                >
-                  <div className="flex items-center gap-3 text-[#D8A84A]">
-                    <Trophy className="h-5 w-5" />
-                    <span className="text-[9px] uppercase tracking-[0.25em]">{index + 1}{index === 0 ? "st" : index === 1 ? "nd" : "rd"}</span>
+              {pogAwards.map((award) => {
+                const displayName =
+                  award.playerName ??
+                  award.managerName ??
+                  award.playerId ??
+                  award.managerId ??
+                  "Unknown";
+                return (
+                  <div
+                    key={`${award.awardType}-${award.playerId ?? award.managerId}`}
+                    className="border-[4px] border-[#32394B] bg-[#0B0E14] p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.45)]"
+                  >
+                    <div className="flex items-center gap-3 text-[#D8A84A]">
+                      <Trophy className="h-5 w-5" />
+                      <span className="text-[9px] uppercase tracking-[0.25em]">
+                        {getPogAwardDisplayLabel(award.awardType)}
+                      </span>
+                    </div>
+                    <div className="mt-3 text-[8px] uppercase tracking-[0.24em] text-[#98A1B3]">
+                      {getPogAwardPointsLabel(award)}
+                    </div>
+                    <div className="mt-4 text-[10px] leading-6 text-white">
+                      {award.playerId ? (
+                        <PlayerNameLink
+                          playerId={award.playerId}
+                          playerName={displayName}
+                          canonicalLookup={canonicalLookup}
+                        />
+                      ) : (
+                        displayName
+                      )}
+                    </div>
+                    <div className="mt-3 text-[8px] uppercase tracking-[0.24em] text-[#98A1B3]">
+                      {award.teamId
+                        ? normalizeTeamId(award.teamId) === normalizeTeamId(game.awayTeamId)
+                          ? game.awayTeamName
+                          : game.homeTeamName
+                        : "Archived Award"}
+                    </div>
+                    <div className="mt-4 text-[12px] text-[#E7E9F1]">
+                      {award.valueLabel}
+                    </div>
                   </div>
-                  <div className="mt-4 text-[10px] leading-6 text-white">
-                    <PlayerNameLink
-                      playerId={player.playerId}
-                      playerName={player.name}
-                      canonicalLookup={canonicalLookup}
-                    />
-                  </div>
-                  <div className="mt-3 text-[8px] uppercase tracking-[0.24em] text-[#98A1B3]">
-                    {player.teamId
-                      ? normalizeTeamId(player.teamId) === normalizeTeamId(game.awayTeamId)
-                        ? game.awayTeamName
-                        : game.homeTeamName
-                      : "Archived Player"}
-                  </div>
-                  <div className="mt-4 text-[12px] text-[#E7E9F1]">
-                    {"wpa" in player && typeof player.wpa === "number" ? formatSignedDecimal(player.wpa) : "Stored POG"}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </SectionFrame>
+
+        {teamStandouts.length > 0 ? (
+          <SectionFrame
+            title="Team Standouts"
+            subtitle="Display-only recognition for each team's top positive player WPA; these do not add POG points."
+          >
+            <div className="grid gap-4 md:grid-cols-2">
+              {teamStandouts.map((award) => {
+                const displayName =
+                  award.playerName ??
+                  award.playerId ??
+                  "Unknown";
+                return (
+                  <div
+                    key={`${award.awardType}-${award.teamId}-${award.playerId}`}
+                    className="border-[4px] border-[#32394B] bg-[#0B0E14] p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.45)]"
+                  >
+                    <div className="flex items-center gap-3 text-[#D8A84A]">
+                      <Trophy className="h-5 w-5" />
+                      <span className="text-[9px] uppercase tracking-[0.25em]">
+                        {getPogAwardDisplayLabel(award.awardType)}
+                      </span>
+                    </div>
+                    <div className="mt-3 text-[8px] uppercase tracking-[0.24em] text-[#98A1B3]">
+                      {getPogAwardPointsLabel(award)}
+                    </div>
+                    <div className="mt-4 text-[10px] leading-6 text-white">
+                      {award.playerId ? (
+                        <PlayerNameLink
+                          playerId={award.playerId}
+                          playerName={displayName}
+                          canonicalLookup={canonicalLookup}
+                        />
+                      ) : (
+                        displayName
+                      )}
+                    </div>
+                    <div className="mt-3 text-[8px] uppercase tracking-[0.24em] text-[#98A1B3]">
+                      {award.teamId
+                        ? normalizeTeamId(award.teamId) === normalizeTeamId(game.awayTeamId)
+                          ? game.awayTeamName
+                          : game.homeTeamName
+                        : "Archived Recognition"}
+                    </div>
+                    <div className="mt-4 text-[12px] text-[#E7E9F1]">
+                      {award.valueLabel} · Recognition only
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </SectionFrame>
+        ) : null}
 
         <ManagerWpaOverlay game={game} managerProfiles={data.managerProfiles} />
 
@@ -920,7 +1082,7 @@ export function GameDetail() {
                       </td>
                       <td className="py-3 pr-3 text-[#9FA7B8]">{entry.roles || "KBL"}</td>
                       <td className={`py-3 ${entry.wpa >= 0 ? "text-[#7EF0A8]" : "text-[#FF9E9E]"}`}>
-                        {formatSignedDecimal(entry.wpa)}
+                        {formatWpaPoints(entry.wpa)}
                       </td>
                     </tr>
                   ))}
@@ -945,30 +1107,31 @@ export function GameDetail() {
                         </div>
                         <div className="mt-2 text-[9px] leading-5 text-[#E7E9F1]">{row.label}</div>
                         <div className="mt-1 text-[8px] leading-5 text-[#7F8798]">{row.situation}</div>
+                        <div className="mt-1 text-[8px] leading-5 text-[#6F778A]">{row.diagnostic}</div>
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-[8px] xl:min-w-[360px]">
                         <div className="border border-[#32394B] bg-black/30 p-2">
                           <div className="text-[#8C94A6]">Batting Budget</div>
                           <div className={row.battingBudget >= 0 ? "text-[#7EF0A8]" : "text-[#FF9E9E]"}>
-                            {formatSignedDecimal(row.battingBudget, 4)}
+                            {formatWpaPoints(row.battingBudget, 2)}
                           </div>
                         </div>
                         <div className="border border-[#32394B] bg-black/30 p-2">
                           <div className="text-[#8C94A6]">Defense Budget</div>
                           <div className={row.defensiveBudget >= 0 ? "text-[#7EF0A8]" : "text-[#FF9E9E]"}>
-                            {formatSignedDecimal(row.defensiveBudget, 4)}
+                            {formatWpaPoints(row.defensiveBudget, 2)}
                           </div>
                         </div>
                         <div className="border border-[#32394B] bg-black/30 p-2">
                           <div className="text-[#8C94A6]">Batting Total</div>
                           <div className={row.battingTotal >= 0 ? "text-[#7EF0A8]" : "text-[#FF9E9E]"}>
-                            {formatSignedDecimal(row.battingTotal, 4)}
+                            {formatWpaPoints(row.battingTotal, 2)}
                           </div>
                         </div>
                         <div className="border border-[#32394B] bg-black/30 p-2">
                           <div className="text-[#8C94A6]">Defense Total</div>
                           <div className={row.defensiveTotal >= 0 ? "text-[#7EF0A8]" : "text-[#FF9E9E]"}>
-                            {formatSignedDecimal(row.defensiveTotal, 4)}
+                            {formatWpaPoints(row.defensiveTotal, 2)}
                           </div>
                         </div>
                       </div>
@@ -1002,7 +1165,7 @@ export function GameDetail() {
                               <td className="py-2 pr-3 text-[#B0B8CA]">{formatAllocationMode(credit.allocationMode)}</td>
                               <td className="py-2 pr-3 text-[#B0B8CA]">{humanizeToken(credit.confidence)}</td>
                               <td className={`py-2 pr-3 ${credit.wpa >= 0 ? "text-[#7EF0A8]" : "text-[#FF9E9E]"}`}>
-                                {formatSignedDecimal(credit.wpa, 4)}
+                                {formatWpaPoints(credit.wpa, 2)}
                               </td>
                               <td className="py-2 leading-5 text-[#9FA7B8]">{credit.basis}</td>
                             </tr>
@@ -1028,7 +1191,7 @@ export function GameDetail() {
                     <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                       <div className="text-[8px] uppercase tracking-[0.26em] text-[#D8A84A]">{entry.inning}</div>
                       <div className={`text-[8px] ${entry.wpa >= 0 ? "text-[#7EF0A8]" : "text-[#FF9E9E]"}`}>
-                        {formatSignedDecimal(entry.wpa)}
+                        {formatWpaPoints(entry.wpa)}
                       </div>
                     </div>
                     <div className="mt-3 text-[9px] leading-5 text-[#E7E9F1]">{entry.matchup}</div>
@@ -1092,7 +1255,7 @@ export function GameDetail() {
                     </div>
                     <div className="flex gap-4 text-[8px] uppercase tracking-[0.22em] text-[#B0B8CA]">
                       <span>LI {formatLI(event.leverageIndex)}</span>
-                      <span className={event.wpa >= 0 ? "text-[#7EF0A8]" : "text-[#FF9E9E]"}>{formatSignedDecimal(event.wpa)}</span>
+                      <span className={event.wpa >= 0 ? "text-[#7EF0A8]" : "text-[#FF9E9E]"}>{formatWpaPoints(event.wpa)}</span>
                     </div>
                   </div>
                   <div className="mt-3 text-[8px] leading-5 text-[#B0B8CA]">{buildSituationLabel(event)}</div>
@@ -1120,7 +1283,7 @@ export function GameDetail() {
                     </div>
                     <div className="flex gap-4 text-[8px] uppercase tracking-[0.22em] text-[#B0B8CA]">
                       <span>LI {formatLI(event.leverageIndex)}</span>
-                      <span className={event.wpa >= 0 ? "text-[#7EF0A8]" : "text-[#FF9E9E]"}>{formatSignedDecimal(event.wpa)}</span>
+                      <span className={event.wpa >= 0 ? "text-[#7EF0A8]" : "text-[#FF9E9E]"}>{formatWpaPoints(event.wpa)}</span>
                     </div>
                   </div>
                   <div className="mt-3 text-[8px] leading-5 text-[#B0B8CA]">{buildSituationLabel(event)}</div>

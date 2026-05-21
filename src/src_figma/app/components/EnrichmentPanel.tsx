@@ -1,8 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getAtBatEvent, type AtBatEvent } from '../../../utils/eventLog';
 import {
-  inferFielder,
-  type AtBatResult,
   type Direction,
   type Position,
 } from '../../../types/game';
@@ -26,6 +24,7 @@ import {
 } from '../utils/gameTrackerRunnerCorrection';
 import {
   inferAssistChain,
+  inferPrimaryFielderPositionFromSpray,
   type BaseOccupancy,
 } from '../utils/gameTrackerFieldTypes';
 
@@ -269,6 +268,8 @@ export interface SprayRegion {
   storedZone?: string;
   direction: Direction | null;
   kind: 'fair' | 'foul-left' | 'foul-right' | 'behind-plate';
+  depthIndex?: number;
+  depthCount?: number;
 }
 
 interface SpraySelection {
@@ -276,6 +277,8 @@ interface SpraySelection {
   y: number;
   zone?: string;
   direction?: Direction | null;
+  depthIndex?: number;
+  depthCount?: number;
 }
 
 const FAIR_SPRAY_DIRECTIONS: Direction[] = [
@@ -442,6 +445,8 @@ function createSprayRegion(
   storedZone: string | undefined,
   direction: Direction | null,
   kind: SprayRegion['kind'],
+  depthIndex?: number,
+  depthCount?: number,
 ): SprayRegion {
   return {
     id,
@@ -451,6 +456,8 @@ function createSprayRegion(
     storedZone,
     direction,
     kind,
+    depthIndex,
+    depthCount,
   };
 }
 
@@ -478,6 +485,8 @@ function generateFairRegions(layout: SprayZoneLayout): SprayRegion[] {
           direction,
           direction,
           'fair',
+          depthIndex,
+          layout.fairDepths,
         ),
       );
     }
@@ -612,11 +621,6 @@ export function resolveSprayRegionForPoint(
   return findNearestSprayRegion(point, regions);
 }
 
-function getPositionNumber(position: Position | null): number | null {
-  if (!position) return null;
-  return FIELDER_POSITIONS.find((fielder) => fielder.label === position)?.num ?? null;
-}
-
 function areSequencesEqual(a: number[], b: number[]): boolean {
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
@@ -694,6 +698,8 @@ function SprayGraphic({
       y,
       zone: mappedRegion?.storedZone,
       direction: mappedRegion?.direction ?? null,
+      depthIndex: mappedRegion?.depthIndex,
+      depthCount: mappedRegion?.depthCount,
     });
   }, [result, onTap]);
 
@@ -873,7 +879,14 @@ export function EnrichmentPanel({
   } | null>(null);
 
   useEffect(() => {
-    setLocalFieldingSeq(currentEnrichment?.fieldingSequence || []);
+    const nextFieldingSeq = currentEnrichment?.fieldingSequence || [];
+    setLocalFieldingSeq(nextFieldingSeq);
+
+    const lastAutoInferred = lastAutoInferredSeqRef.current;
+    if (lastAutoInferred && areSequencesEqual(nextFieldingSeq, lastAutoInferred.sequence)) {
+      return;
+    }
+
     lastAutoInferredSeqRef.current = null;
   }, [currentEnrichment?.fieldingSequence]);
 
@@ -961,17 +974,24 @@ export function EnrichmentPanel({
     onUpdate('fieldingSequence', seq);
   }, [onUpdate]);
 
-  const applyInferredAssistChain = useCallback((primaryFielder: number) => {
+  const applyInferredAssistChain = useCallback((
+    primaryFielder: number,
+    options: { trackAsAuto?: boolean } = {},
+  ) => {
     const inferredSequence = inferAssistChain(
       entry.result,
       primaryFielder,
       baseOccupancy
     );
 
-    lastAutoInferredSeqRef.current = {
-      primary: primaryFielder,
-      sequence: inferredSequence,
-    };
+    if (options.trackAsAuto ?? true) {
+      lastAutoInferredSeqRef.current = {
+        primary: primaryFielder,
+        sequence: inferredSequence,
+      };
+    } else {
+      lastAutoInferredSeqRef.current = null;
+    }
 
     console.log('[M2-3-fix] Inferred assist chain', {
       eventId: entry.eventId,
@@ -990,7 +1010,7 @@ export function EnrichmentPanel({
   }, [applyFieldingSequenceChange]);
 
   const handlePrimaryFielderChange = useCallback((positionNumber: number) => {
-    applyInferredAssistChain(positionNumber);
+    applyInferredAssistChain(positionNumber, { trackAsAuto: false });
   }, [applyInferredAssistChain]);
 
   useEffect(() => {
@@ -1045,17 +1065,28 @@ export function EnrichmentPanel({
 
     if (!selection.direction) return;
 
-    const inferredPrimaryFielder = inferFielder(
-      entry.result as AtBatResult,
-      selection.direction
-    );
-    const inferredPrimaryNumber = getPositionNumber(inferredPrimaryFielder);
+    const inferredPrimaryNumber = inferPrimaryFielderPositionFromSpray({
+      result: entry.result,
+      direction: selection.direction,
+      depthIndex: selection.depthIndex,
+      depthCount: selection.depthCount,
+    });
 
-    if (!inferredPrimaryFielder || !inferredPrimaryNumber) return;
+    if (!inferredPrimaryNumber) return;
 
-    console.log(`[M2-3-fix] Inferred fielder: ${inferredPrimaryFielder}`);
-    applyInferredAssistChain(inferredPrimaryNumber);
-  }, [applyInferredAssistChain, entry.result, onUpdate]);
+    const lastAutoInferred = lastAutoInferredSeqRef.current;
+    const canApplySprayInference =
+      localFieldingSeq.length === 0 ||
+      (lastAutoInferred !== null &&
+        areSequencesEqual(localFieldingSeq, lastAutoInferred.sequence));
+
+    if (!canApplySprayInference) {
+      return;
+    }
+
+    console.log(`[M2-3-fix] Inferred fielder: ${positionLabel(inferredPrimaryNumber)}`);
+    applyInferredAssistChain(inferredPrimaryNumber, { trackAsAuto: true });
+  }, [applyInferredAssistChain, entry.result, localFieldingSeq, onUpdate]);
 
   const handleAttemptTypeChange = useCallback((type: FieldingAttemptType) => {
     setAttemptType(type);

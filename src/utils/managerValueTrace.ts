@@ -7,6 +7,8 @@ import type {
   ManagerDeploymentRole,
   ManagerDeploymentStintRecord,
   ManagerLineupDeltaRecord,
+  ManagerOutAdvancingSendStateMetadata,
+  ManagerOutAdvancingSendUnscoredReason,
 } from "../types/managerWpa";
 
 export type ManagerValueTraceLayer = "tactical" | "deployment" | "lineup";
@@ -18,6 +20,14 @@ export interface ManagerValueTraceLinkedOutcome {
   rawWpa: number;
   weight: number;
   weightedWpa: number;
+}
+
+export interface ManagerValueTraceComponent {
+  key: string;
+  label: string;
+  value?: number;
+  valueLabel?: string;
+  description?: string;
 }
 
 export interface ManagerValueTraceRow {
@@ -32,6 +42,7 @@ export interface ManagerValueTraceRow {
   endpointEventId?: string;
   linkedEventIds: string[];
   linkedOutcomes: ManagerValueTraceLinkedOutcome[];
+  components: ManagerValueTraceComponent[];
   rawWpa?: number;
   share?: number;
   cap?: number;
@@ -84,6 +95,7 @@ function traceRowForDecision(decision: ManagerDecisionRecord): ManagerValueTrace
   const compatibilityOnly = isCompatibilityOnlyManagerDecision(decision);
   const scoring = isActiveScoringManagerDecision(decision);
   const pending = !compatibilityOnly && !scoring;
+  const components = traceComponentsForDecision(decision);
 
   return {
     recordId: decision.decisionId,
@@ -96,6 +108,7 @@ function traceRowForDecision(decision: ManagerDecisionRecord): ManagerValueTrace
     endpointEventId: decision.resolvedAtEventId,
     linkedEventIds: uniqueSortedStrings(decision.linkedEventIds),
     linkedOutcomes: [],
+    components,
     rawWpa: compatibilityOnly ? undefined : decision.rawWindowWpa,
     share: compatibilityOnly ? undefined : decision.managerShare,
     cap: undefined,
@@ -127,6 +140,7 @@ function traceRowForDeploymentStint(
     endpointEventId: stint.closedAtEventId,
     linkedEventIds: uniqueSortedStrings(stint.linkedEventIds),
     linkedOutcomes,
+    components: [],
     rawWpa: stint.rawLinkedWpa,
     share: stint.managerShare,
     cap: stint.cap,
@@ -150,6 +164,7 @@ function traceRowForLineupDelta(
     decisionType: delta.decisionType,
     linkedEventIds: [],
     linkedOutcomes: [],
+    components: [],
     rawWpa: delta.actualVsOptimalProjection ?? delta.rawPerformanceDelta,
     share: delta.managerShare,
     cap: delta.capApplied,
@@ -170,12 +185,21 @@ function describeDecision(
   }
 
   if (state.pending) {
+    if (decision.decisionType === "out_advancing_send") {
+      const reason = decision.explanationMetadata?.outAdvancingSend?.unscoredReason;
+      if (reason) {
+        return `Runner send not scored: ${formatOutAdvancingUnscoredReason(reason)}.`;
+      }
+    }
+
     return `Pending ${decision.displayTitle || titleCase(decision.decisionType)}: waiting for ${formatEndpointWait(decision.resolutionWindow?.expectedEndpoint)} before Manager Value is scored.`;
   }
 
   switch (decision.decisionType) {
     case "intentional_walk":
       return describeIntentionalWalkDecision(decision);
+    case "out_advancing_send":
+      return describeOutAdvancingSendDecision(decision);
     case "leave_pitcher_in":
       return "Stayed with the pitcher for the next plate appearance.";
     case "let_batter_hit":
@@ -195,6 +219,171 @@ function describeDecision(
   }
 }
 
+function traceComponentsForDecision(
+  decision: ManagerDecisionRecord,
+): ManagerValueTraceComponent[] {
+  if (decision.decisionType === "intentional_walk") {
+    return traceComponentsForIntentionalWalk(decision);
+  }
+
+  if (decision.decisionType === "out_advancing_send") {
+    return traceComponentsForOutAdvancingSend(decision);
+  }
+
+  return [];
+}
+
+function traceComponentsForIntentionalWalk(
+  decision: ManagerDecisionRecord,
+): ManagerValueTraceComponent[] {
+  const metadata = decision.explanationMetadata?.intentionalWalk;
+  const components = metadata?.wpaComponents;
+  if (!components) return [];
+
+  const outcomeText = metadata.finalConsequence
+    ? formatIntentionalWalkConsequence(metadata.finalConsequence)
+    : undefined;
+  const nextBatterText = metadata.nextBatterResult
+    ? `Next batter: ${metadata.nextBatterResult}.`
+    : undefined;
+
+  const rows: ManagerValueTraceComponent[] = [
+    {
+      key: "ibb_immediate_cost",
+      label: "Immediate IBB cost",
+      value: components.immediateRawWpa,
+      description: `Before IBB ${formatTraceProbability(components.beforeIbbTeamWinProbability)} -> after IBB ${formatTraceProbability(components.afterIbbTeamWinProbability)}.`,
+    },
+  ];
+
+  if (
+    typeof components.consequenceRawWpa === "number" &&
+    typeof components.finalTeamWinProbability === "number"
+  ) {
+    rows.push({
+      key: "ibb_consequence_payoff",
+      label: "Consequence payoff",
+      value: components.consequenceRawWpa,
+      description: [
+        `After IBB ${formatTraceProbability(components.afterIbbTeamWinProbability)} -> final ${formatTraceProbability(components.finalTeamWinProbability)}.`,
+        nextBatterText,
+        outcomeText,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    });
+  }
+
+  if (
+    typeof components.netRawWpa === "number" &&
+    typeof components.finalTeamWinProbability === "number"
+  ) {
+    rows.push({
+      key: "ibb_official_net",
+      label: "Official net",
+      value: components.netRawWpa,
+      description: [
+        `Before IBB ${formatTraceProbability(components.beforeIbbTeamWinProbability)} -> final ${formatTraceProbability(components.finalTeamWinProbability)}.`,
+        outcomeText,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    });
+  }
+
+  return rows;
+}
+
+function traceComponentsForOutAdvancingSend(
+  decision: ManagerDecisionRecord,
+): ManagerValueTraceComponent[] {
+  const metadata = decision.explanationMetadata?.outAdvancingSend;
+  if (!metadata) return [];
+
+  if (metadata.unscoredReason) {
+    return [
+      {
+        key: "runner_send_unscored_reason",
+        label: "Unscored runner-send reason",
+        description: `Counterfactual unavailable: ${formatOutAdvancingUnscoredReason(metadata.unscoredReason)}.`,
+      },
+    ];
+  }
+
+  const rows: ManagerValueTraceComponent[] = [];
+
+  if (metadata.actualState) {
+    rows.push({
+      key: "runner_send_actual_state",
+      label: "Actual after-state",
+      valueLabel:
+        typeof metadata.actualTeamWinProbability === "number"
+          ? formatTraceProbability(metadata.actualTeamWinProbability)
+          : undefined,
+      description: formatOutAdvancingState(metadata.actualState),
+    });
+  }
+
+  if (metadata.counterfactualState) {
+    rows.push({
+      key: "runner_send_counterfactual_state",
+      label: "Counterfactual hold/stop state",
+      valueLabel:
+        typeof metadata.counterfactualTeamWinProbability === "number"
+          ? formatTraceProbability(metadata.counterfactualTeamWinProbability)
+          : undefined,
+      description: [
+        metadata.inferredHoldBase
+          ? `Compared with holding at ${formatBase(metadata.inferredHoldBase)}.`
+          : undefined,
+        formatOutAdvancingState(metadata.counterfactualState),
+      ]
+        .filter(Boolean)
+        .join(" "),
+    });
+  }
+
+  if (typeof metadata.actualTeamWinProbability === "number") {
+    rows.push({
+      key: "runner_send_actual_team_wp",
+      label: "Actual team WP",
+      valueLabel: formatTraceProbability(metadata.actualTeamWinProbability),
+    });
+  }
+
+  if (typeof metadata.counterfactualTeamWinProbability === "number") {
+    rows.push({
+      key: "runner_send_counterfactual_team_wp",
+      label: "Counterfactual team WP",
+      valueLabel: formatTraceProbability(metadata.counterfactualTeamWinProbability),
+    });
+  }
+
+  if (typeof metadata.rawCounterfactualWpa === "number") {
+    rows.push({
+      key: "runner_send_raw_counterfactual_wpa",
+      label: "Raw counterfactual WPA",
+      value: metadata.rawCounterfactualWpa,
+      description: metadata.holdBaseSource
+        ? `Hold inference: ${formatHoldBaseSource(metadata.holdBaseSource)}.`
+        : undefined,
+    });
+  }
+
+  if (metadata.inferredHoldBase) {
+    rows.push({
+      key: "runner_send_hold_base",
+      label: "Inferred hold base",
+      valueLabel: formatBase(metadata.inferredHoldBase),
+      description: metadata.holdBaseSource
+        ? formatHoldBaseSource(metadata.holdBaseSource)
+        : undefined,
+    });
+  }
+
+  return rows;
+}
+
 function describeIntentionalWalkDecision(decision: ManagerDecisionRecord): string {
   const metadata = decision.explanationMetadata?.intentionalWalk;
   const walkedRunner = metadata?.walkedRunnerName ?? "the walked batter";
@@ -209,6 +398,15 @@ function describeIntentionalWalkDecision(decision: ManagerDecisionRecord): strin
     : ".";
 
   return `IBB put ${walkedRunner} on base${nextBatter}${nextResult}${consequence}`;
+}
+
+function describeOutAdvancingSendDecision(decision: ManagerDecisionRecord): string {
+  const metadata = decision.explanationMetadata?.outAdvancingSend;
+  if (metadata?.inferredHoldBase) {
+    return `Runner send compared the actual out with holding at ${formatBase(metadata.inferredHoldBase)}.`;
+  }
+
+  return "Runner send credited from the isolated send decision.";
 }
 
 function formatIntentionalWalkConsequence(
@@ -226,6 +424,64 @@ function formatIntentionalWalkConsequence(
   }
 }
 
+function formatOutAdvancingUnscoredReason(
+  reason: ManagerOutAdvancingSendUnscoredReason,
+): string {
+  switch (reason) {
+    case "missing_runner_outcome":
+      return "runner outcome data was missing";
+    case "unsupported_between_play_counterfactual":
+      return "between-play runner advancement does not yet have a provable hold state";
+    case "missing_hit_context":
+      return "the hit context was not enough to infer a safe hold base";
+    case "missing_hold_base":
+      return "the safe hold base could not be inferred";
+    case "base_conflict":
+      return "the inferred hold state conflicted with another runner";
+    case "invalid_out_count":
+      return "the inferred out count was invalid";
+  }
+}
+
+function formatOutAdvancingState(
+  state: ManagerOutAdvancingSendStateMetadata,
+): string {
+  return `${formatOutCount(state.outs)}, ${formatBases(state.bases)}, score ${state.awayScore}-${state.homeScore}.`;
+}
+
+function formatOutCount(outs: number): string {
+  return `${outs} ${outs === 1 ? "out" : "outs"}`;
+}
+
+function formatBases(bases: ManagerOutAdvancingSendStateMetadata["bases"]): string {
+  const occupied = [
+    bases.first ? "1B" : undefined,
+    bases.second ? "2B" : undefined,
+    bases.third ? "3B" : undefined,
+  ].filter(Boolean);
+
+  return occupied.length ? `${occupied.join("/")} occupied` : "bases empty";
+}
+
+function formatBase(base: "first" | "second" | "third"): string {
+  switch (base) {
+    case "first":
+      return "1B";
+    case "second":
+      return "2B";
+    case "third":
+      return "3B";
+  }
+}
+
+function formatHoldBaseSource(source: string): string {
+  return source.replace(/_/g, " ");
+}
+
+function formatTraceProbability(value: number): string {
+  return `${(value * 100).toFixed(1)}% WP`;
+}
+
 function describeDeploymentStint(
   stint: ManagerDeploymentStintRecord,
   linkedOutcomes: ManagerValueTraceLinkedOutcome[],
@@ -235,6 +491,7 @@ function describeDeploymentStint(
 
   switch (stint.deploymentRole) {
     case "kept_position_player_in":
+    case "kept_defender_in":
     case "kept_pitcher_in":
     case "kept_in":
       return `Kept ${player} in after the prompt; later ${weightedSummary || "linked"} outcomes carry deployment weights.`;
@@ -299,6 +556,8 @@ function formatDeploymentRole(role: ManagerDeploymentRole): string {
       return "Pitcher";
     case "kept_position_player_in":
       return "Kept position player in";
+    case "kept_defender_in":
+      return "Kept defender in";
     case "kept_pitcher_in":
       return "Kept pitcher in";
     case "kept_in":

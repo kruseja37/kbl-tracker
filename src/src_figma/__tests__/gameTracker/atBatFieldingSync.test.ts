@@ -13,6 +13,10 @@ import {
   type AtBatEvent,
   type FieldingEvent,
 } from '../../../utils/eventLog';
+import {
+  completeRunnerOutcomesForDerivation,
+  deriveEnrichedAtBatState,
+} from '../../app/utils/enrichedAtBatStateDerivation';
 
 const deleteEventLogDB = () => new Promise<void>((resolve) => {
   const request = indexedDB.deleteDatabase('kbl-event-log');
@@ -185,6 +189,153 @@ describe('updateAtBatEventWithFieldingSync', () => {
   expect(atBat?.editHistory).toHaveLength(1);
   expect(fieldingEvents.map((event) => event.position)).toEqual(['3B', '1B']);
   expect(fieldingEvents[0].ballInPlay.fielderIds).toEqual(['home-3b-5', 'home-1b-3']);
+  });
+
+  test('updates requested fielding sequence while preserving derived runner state', async () => {
+    await createGameHeader({
+      gameId: 'game-sync',
+      seasonId: 'season-1',
+      date: Date.now(),
+      awayTeamId: 'away-team',
+      awayTeamName: 'Away Team',
+      homeTeamId: 'home-team',
+      homeTeamName: 'Home Team',
+      finalScore: null,
+      finalInning: 1,
+      isComplete: false,
+    });
+
+    await logAtBatEvent(createAtBatEvent({
+      result: 'DP',
+      isLeadoff: false,
+      runners: {
+        first: {
+          runnerId: 'away-runner-1',
+          runnerName: 'Away Runner 1',
+          responsiblePitcherId: 'home-pitcher-1',
+        },
+        second: {
+          runnerId: 'away-runner-2',
+          runnerName: 'Away Runner 2',
+          responsiblePitcherId: 'home-pitcher-1',
+        },
+        third: {
+          runnerId: 'away-runner-3',
+          runnerName: 'Away Runner 3',
+          responsiblePitcherId: 'home-pitcher-1',
+        },
+      },
+      runnerOutcomes: [
+        {
+          runnerId: 'away-runner-3',
+          runnerName: 'Away Runner 3',
+          fromBase: 'third',
+          toBase: 'out',
+        },
+        {
+          runnerId: 'away-batter-1',
+          runnerName: 'Away Batter',
+          fromBase: 'batter',
+          toBase: 'out',
+        },
+        {
+          runnerId: 'away-runner-2',
+          runnerName: 'Away Runner 2',
+          fromBase: 'second',
+          toBase: 'third',
+        },
+        {
+          runnerId: 'away-runner-1',
+          runnerName: 'Away Runner 1',
+          fromBase: 'first',
+          toBase: 'second',
+        },
+      ],
+      outsRecorded: 3,
+      outsAfter: 3,
+      runnersAfter: { first: null, second: null, third: null },
+      enrichment: {
+        fieldingSequence: [6, 4, 3],
+      },
+    }));
+
+    const existingAtBat = await getAtBatEvent('game-sync_1');
+    expect(existingAtBat).not.toBeNull();
+    const completed = completeRunnerOutcomesForDerivation(
+      existingAtBat!,
+      existingAtBat!.runnerOutcomes || [],
+    );
+    const derived = deriveEnrichedAtBatState({
+      existingAtBat: existingAtBat!,
+      runnerOutcomes: completed.runnerOutcomes,
+      result: existingAtBat!.result,
+    });
+
+    await updateAtBatEventWithFieldingSync(
+      'game-sync_1',
+      {
+        enrichment: { fieldingSequence: [2, 3] },
+        runnerOutcomes: derived.runnerOutcomes,
+        result: derived.result,
+        rbiCount: derived.rbiCount,
+        runsScored: derived.runsScored,
+        outsRecorded: derived.outsRecorded,
+        outsAfter: derived.outsAfter,
+        runnersAfter: derived.runnersAfter,
+        awayScoreAfter: derived.awayScoreAfter,
+        homeScoreAfter: derived.homeScoreAfter,
+        isWalkOff: derived.isWalkOff,
+        version: 2,
+        editHistory: [{
+          field: 'enrichment.fieldingSequence',
+          oldValue: [6, 4, 3],
+          newValue: [2, 3],
+          timestamp: 30,
+        }],
+      },
+      [
+        createFieldingEvent({
+          fieldingEventId: 'game-sync_1_fe_0',
+          sequence: 0,
+          playerId: 'home-c-2',
+          playerName: 'Home Catcher',
+          position: 'C',
+          playType: 'assist',
+          ballInPlay: {
+            trajectory: 'ground',
+            zone: 2,
+            velocity: 'medium',
+            fielderIds: ['home-c-2', 'home-1b-3'],
+            primaryFielderId: 'home-c-2',
+          },
+        }),
+        createFieldingEvent({
+          fieldingEventId: 'game-sync_1_fe_1',
+          sequence: 1,
+          playerId: 'home-1b-3',
+          playerName: 'Home First',
+          position: '1B',
+          playType: 'putout',
+          ballInPlay: {
+            trajectory: 'ground',
+            zone: 2,
+            velocity: 'medium',
+            fielderIds: ['home-c-2', 'home-1b-3'],
+            primaryFielderId: 'home-c-2',
+          },
+        }),
+      ],
+    );
+
+    const atBat = await getAtBatEvent('game-sync_1');
+    const fieldingEvents = await getFieldingEventsForAtBat('game-sync_1');
+
+    expect(atBat?.enrichment?.fieldingSequence).toEqual([2, 3]);
+    expect(fieldingEvents.map((event) => event.position)).toEqual(['C', '1B']);
+    expect(atBat?.outsRecorded).toBe(2);
+    expect(atBat?.outsAfter).toBe(2);
+    expect(atBat?.runnersAfter.second?.runnerId).toBe('away-runner-1');
+    expect(atBat?.runnersAfter.third?.runnerId).toBe('away-runner-2');
   });
 
   test('refreshes cached WPA fields when a state-changing edit is saved', async () => {

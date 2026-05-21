@@ -1,7 +1,7 @@
 import type { AtBatEvent } from "./eventLog";
 import { aggregateKblWpaCredits, type KblWpaCredit } from "./kblWpaAttribution";
 
-type StoredPlayersOfTheGame = {
+export type StoredPlayersOfTheGame = {
   first?: string;
   second?: string;
   third?: string;

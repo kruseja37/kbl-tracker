@@ -112,6 +112,102 @@ const DP_PIVOT_BY_PRIMARY: Partial<Record<number, number>> = {
   6: 4,
 };
 
+const INFIELD_FIELDER_BY_DIRECTION: Partial<Record<string, number>> = {
+  Left: 5,
+  'Left-Center': 6,
+  Center: 1,
+  'Right-Center': 4,
+  Right: 3,
+  'Foul-Left': 5,
+  'Foul-Right': 3,
+};
+
+const OUTFIELD_FIELDER_BY_DIRECTION: Partial<Record<string, number>> = {
+  Left: 7,
+  'Left-Center': 8,
+  Center: 8,
+  'Right-Center': 8,
+  Right: 9,
+  'Foul-Left': 7,
+  'Foul-Right': 9,
+};
+
+const POPUP_FIELDER_BY_DIRECTION: Partial<Record<string, number>> = {
+  Left: 5,
+  'Left-Center': 6,
+  Center: 6,
+  'Right-Center': 4,
+  Right: 3,
+  'Foul-Left': 5,
+  'Foul-Right': 3,
+};
+
+const GROUND_RESULTS = new Set(['GO', 'DP', 'TP', 'FC', 'SAC']);
+const FLY_RESULTS = new Set(['FO', 'FLO', 'SF']);
+const HIT_OR_ERROR_RESULTS = new Set(['1B', '2B', '3B', 'GRD', 'ITPHR', 'E']);
+
+export interface SprayFielderInferenceInput {
+  result: string;
+  direction?: string | null;
+  depthIndex?: number;
+  depthCount?: number;
+}
+
+function isOutfieldSprayDepth(depthIndex?: number, depthCount?: number): boolean {
+  if (typeof depthIndex !== 'number' || typeof depthCount !== 'number') {
+    return false;
+  }
+
+  // The hit/error spray layout is intentionally 3 infield bands + 4 outfield bands.
+  if (depthCount === 7) {
+    return depthIndex >= 3;
+  }
+
+  // For 3-band line-drive charts, the innermost band behaves like the infield.
+  return depthIndex >= Math.ceil(depthCount / 3);
+}
+
+export function inferPrimaryFielderPositionFromSpray({
+  result,
+  direction,
+  depthIndex,
+  depthCount,
+}: SprayFielderInferenceInput): number | null {
+  if (!direction) {
+    return null;
+  }
+
+  if (result === 'HR') {
+    return null;
+  }
+
+  if (GROUND_RESULTS.has(result)) {
+    return INFIELD_FIELDER_BY_DIRECTION[direction] ?? null;
+  }
+
+  if (FLY_RESULTS.has(result)) {
+    return OUTFIELD_FIELDER_BY_DIRECTION[direction] ?? null;
+  }
+
+  if (result === 'PO') {
+    return POPUP_FIELDER_BY_DIRECTION[direction] ?? null;
+  }
+
+  if (result === 'LO') {
+    return isOutfieldSprayDepth(depthIndex, depthCount)
+      ? OUTFIELD_FIELDER_BY_DIRECTION[direction] ?? null
+      : INFIELD_FIELDER_BY_DIRECTION[direction] ?? null;
+  }
+
+  if (HIT_OR_ERROR_RESULTS.has(result)) {
+    return isOutfieldSprayDepth(depthIndex, depthCount)
+      ? OUTFIELD_FIELDER_BY_DIRECTION[direction] ?? null
+      : INFIELD_FIELDER_BY_DIRECTION[direction] ?? null;
+  }
+
+  return null;
+}
+
 export function inferAssistChain(
   result: string,
   primaryFielderPosition: number,

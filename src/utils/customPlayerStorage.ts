@@ -7,6 +7,7 @@
 
 import type { Position, BatterHand } from '../types/game';
 import type { Gender, PlayerRole, PitcherRole, PlayerTraits } from '../data/playerDatabase';
+import { syncEngine } from './syncEngine';
 
 const STORAGE_KEY = 'kbl-custom-players';
 
@@ -99,6 +100,9 @@ export function saveCustomPlayer(player: CustomPlayer): void {
     }
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(players));
+    if (!syncEngine.isSuppressed()) {
+      syncEngine.upsertLocal(STORAGE_KEY, players);
+    }
   } catch (err) {
     console.warn('[customPlayerStorage] Failed to save player:', err);
   }
@@ -111,6 +115,9 @@ export function deleteCustomPlayer(playerId: string): void {
   try {
     const players = getAllCustomPlayers().filter(p => p.id !== playerId);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(players));
+    if (!syncEngine.isSuppressed()) {
+      syncEngine.upsertLocal(STORAGE_KEY, players);
+    }
   } catch (err) {
     console.warn('[customPlayerStorage] Failed to delete player:', err);
   }

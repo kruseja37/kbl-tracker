@@ -6,6 +6,8 @@
  * Tracks players assigned to farm system separate from MLB roster.
  */
 
+import { syncEngine } from './syncEngine';
+
 // ============================================
 // TYPES
 // ============================================
@@ -37,6 +39,18 @@ const DB_VERSION = 1;
 const STORES = {
   FARM_PLAYERS: 'farmPlayers',
 } as const;
+
+function syncFarmUpsert(playerId: string, data: unknown): void {
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.upsert(DB_NAME, STORES.FARM_PLAYERS, playerId, data);
+  }
+}
+
+function syncFarmRemove(playerId: string): void {
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.remove(DB_NAME, STORES.FARM_PLAYERS, playerId);
+  }
+}
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -110,7 +124,10 @@ export async function assignToFarm(
     const request = store.put(stored);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(farmPlayer);
+    request.onsuccess = () => {
+      syncFarmUpsert(stored.playerId, stored);
+      resolve(farmPlayer);
+    };
   });
 }
 
@@ -212,7 +229,10 @@ export async function callUpPlayer(playerId: string): Promise<boolean> {
     const request = store.delete(playerId);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(true);
+    request.onsuccess = () => {
+      syncFarmRemove(playerId);
+      resolve(true);
+    };
   });
 }
 
@@ -240,7 +260,10 @@ export async function updateFarmLevel(
     const request = store.put(stored);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(updated);
+    request.onsuccess = () => {
+      syncFarmUpsert(stored.playerId, stored);
+      resolve(updated);
+    };
   });
 }
 
@@ -268,7 +291,10 @@ export async function updateDevelopmentNotes(
     const request = store.put(stored);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(updated);
+    request.onsuccess = () => {
+      syncFarmUpsert(stored.playerId, stored);
+      resolve(updated);
+    };
   });
 }
 
@@ -277,6 +303,7 @@ export async function updateDevelopmentNotes(
  */
 export async function clearAllFarmData(): Promise<void> {
   const db = await initFarmDB();
+  const players = await getAllFarmPlayers();
 
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORES.FARM_PLAYERS, 'readwrite');
@@ -284,7 +311,12 @@ export async function clearAllFarmData(): Promise<void> {
     const request = store.clear();
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      for (const player of players) {
+        syncFarmRemove(player.playerId);
+      }
+      resolve();
+    };
   });
 }
 

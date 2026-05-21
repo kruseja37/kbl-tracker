@@ -1,10 +1,29 @@
 import { describe, expect, test } from "vitest";
 
-import { calculateWpaV2, type WpaGameState } from "../wpaV2";
+import savantArtifact from "../data/mlbSavantWpa2016_2025.json";
+import { calculateWpaV2, WPA_MODEL_VERSION, type WpaGameState } from "../wpaV2";
 import { getHomeWinExpectancyV2 } from "../winExpectancyModelV2";
+import {
+  getMlbSavantWpaArtifactMetadata,
+  mapKblInningToSavant,
+} from "../mlbSavantWinExpectancy";
 
 const EMPTY = { first: false, second: false, third: false };
+const SECOND = { first: false, second: true, third: false };
 const LOADED = { first: true, second: true, third: true };
+const SAVANT_DIFF_SUFFIXES = [
+  "minus_5",
+  "minus_4",
+  "minus_3",
+  "minus_2",
+  "minus_1",
+  "0",
+  "1",
+  "2",
+  "3",
+  "4",
+  "5",
+] as const;
 
 function state(overrides: Partial<WpaGameState> = {}): WpaGameState {
   return {
@@ -20,6 +39,74 @@ function state(overrides: Partial<WpaGameState> = {}): WpaGameState {
 }
 
 describe("WPA v2 engine", () => {
+  test("uses the versioned MLB Savant WPA model", () => {
+    expect(WPA_MODEL_VERSION).toBe("mlb-savant-wpa-2016-2025-v1");
+  });
+
+  test("loads a complete vendored Savant matrix", () => {
+    expect(getMlbSavantWpaArtifactMetadata()).toMatchObject({
+      modelVersion: WPA_MODEL_VERSION,
+      rowCount: 480,
+      endpointTypes: ["winexp"],
+      regularSeasonYears: [2016, 2025],
+    });
+  });
+
+  test("vendored Savant matrix has complete finite WP and LI cells", () => {
+    const rows = savantArtifact.rows;
+    const keys = new Set<string>();
+
+    for (const row of rows) {
+      keys.add(`${row.inning}|${row.bottom_top}|${row.outs}|${row.bases_cd}`);
+      for (const suffix of SAVANT_DIFF_SUFFIXES) {
+        const winProbability = row[`bat_wins_${suffix}`];
+        const leverageIndex = row[`leverage_index_${suffix}`];
+
+        expect(Number.isFinite(winProbability)).toBe(true);
+        expect(winProbability).toBeGreaterThanOrEqual(0);
+        expect(winProbability).toBeLessThanOrEqual(1);
+        expect(Number.isFinite(leverageIndex)).toBe(true);
+        expect(leverageIndex).toBeGreaterThanOrEqual(0);
+        if (leverageIndex === 0) {
+          expect(winProbability === 0 || winProbability === 1).toBe(true);
+        }
+      }
+    }
+
+    expect(rows).toHaveLength(480);
+    expect(keys.size).toBe(480);
+    for (const inning of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+      for (const half of ["Bottom", "Top"]) {
+        for (const outs of [0, 1, 2]) {
+          for (const basesCd of [0, 1, 2, 3, 4, 5, 6, 7]) {
+            expect(keys.has(`${inning}|${half}|${outs}|${basesCd}`)).toBe(
+              true,
+            );
+          }
+        }
+      }
+    }
+  });
+
+  test("matches the published Savant runner-on-third example", () => {
+    const result = getHomeWinExpectancyV2(
+      state({
+        inning: 7,
+        halfInning: "BOTTOM",
+        outs: 2,
+        bases: { first: false, second: false, third: true },
+        homeScore: 4,
+        awayScore: 0,
+      }),
+    );
+
+    expect(result.homeWinProbability).toBeCloseTo(0.97, 3);
+    expect(result.trace.modelVersion).toBe(WPA_MODEL_VERSION);
+    expect("rowKey" in result.trace ? result.trace.rowKey : "").toBe(
+      "7|Bottom|2|4|batDiff=4",
+    );
+  });
+
   test("HR down 9 to down 6 is positive for the batting team", () => {
     const result = calculateWpaV2(
       state({
@@ -38,7 +125,7 @@ describe("WPA v2 engine", () => {
       },
     );
 
-    expect(result.modelVersion).toBe("kbl-wpa-v2");
+    expect(result.modelVersion).toBe(WPA_MODEL_VERSION);
     expect(result.battingTeamDelta).toBeGreaterThan(0);
   });
 
@@ -102,6 +189,50 @@ describe("WPA v2 engine", () => {
     expect(tiedBottomFinal.homeWinProbabilityAfter).toBeLessThan(1);
   });
 
+  test("comfortable final-inning leads do not create oversized routine pitching credit", () => {
+    const firstOut = calculateWpaV2(
+      state({ inning: 9, halfInning: "TOP", outs: 0, bases: EMPTY, homeScore: 4, awayScore: 0 }),
+      { outs: 1, bases: EMPTY, homeScore: 4, awayScore: 0 },
+    );
+    const secondOut = calculateWpaV2(
+      state({ inning: 9, halfInning: "TOP", outs: 1, bases: EMPTY, homeScore: 4, awayScore: 0 }),
+      { outs: 2, bases: EMPTY, homeScore: 4, awayScore: 0 },
+    );
+    const finalOut = calculateWpaV2(
+      state({ inning: 9, halfInning: "TOP", outs: 2, bases: EMPTY, homeScore: 4, awayScore: 0 }),
+      { outs: 3, bases: EMPTY, homeScore: 4, awayScore: 0 },
+    );
+
+    expect(firstOut.homeWinProbabilityBefore).toBeGreaterThan(0.98);
+    expect(firstOut.fieldingTeamDelta).toBeLessThan(0.01);
+    expect(secondOut.fieldingTeamDelta).toBeLessThan(0.006);
+    expect(finalOut.fieldingTeamDelta).toBeLessThan(0.002);
+    expect(
+      firstOut.fieldingTeamDelta +
+        secondOut.fieldingTeamDelta +
+        finalOut.fieldingTeamDelta,
+    ).toBeLessThan(0.02);
+  });
+
+  test("one-run final-inning save with bases loaded remains high leverage", () => {
+    const result = getHomeWinExpectancyV2(
+      state({
+        inning: 9,
+        halfInning: "TOP",
+        outs: 1,
+        bases: LOADED,
+        homeScore: 5,
+        awayScore: 4,
+      }),
+    );
+
+    expect(result.homeWinProbability).toBeGreaterThan(0.5);
+    expect(result.homeWinProbability).toBeLessThan(0.6);
+    expect(
+      "leverageIndex" in result.trace ? result.trace.leverageIndex : 0,
+    ).toBeGreaterThan(5);
+  });
+
   test("home/away team deltas conserve to zero", () => {
     const result = calculateWpaV2(
       state({ halfInning: "TOP", homeScore: 4, awayScore: 3, bases: { first: false, second: true, third: false } }),
@@ -113,6 +244,46 @@ describe("WPA v2 engine", () => {
       result.homeWinProbabilityAfter - result.homeWinProbabilityBefore,
       10,
     );
+  });
+
+  test("directional batting WPA follows home WP movement", () => {
+    const awayHit = calculateWpaV2(
+      state({
+        inning: 6,
+        halfInning: "TOP",
+        outs: 1,
+        bases: { first: false, second: true, third: false },
+        homeScore: 3,
+        awayScore: 3,
+      }),
+      {
+        outs: 1,
+        bases: { first: true, second: false, third: false },
+        homeScore: 3,
+        awayScore: 4,
+      },
+    );
+    const homeHit = calculateWpaV2(
+      state({
+        inning: 6,
+        halfInning: "BOTTOM",
+        outs: 1,
+        bases: { first: false, second: true, third: false },
+        homeScore: 3,
+        awayScore: 3,
+      }),
+      {
+        outs: 1,
+        bases: { first: true, second: false, third: false },
+        homeScore: 4,
+        awayScore: 3,
+      },
+    );
+
+    expect(awayHit.homeDelta).toBeLessThan(0);
+    expect(awayHit.battingTeamDelta).toBeGreaterThan(0);
+    expect(homeHit.homeDelta).toBeGreaterThan(0);
+    expect(homeHit.battingTeamDelta).toBeGreaterThan(0);
   });
 
   test("home win expectancy is monotonic by score differential from -15 through +15", () => {
@@ -174,16 +345,211 @@ describe("WPA v2 engine", () => {
     }
   });
 
-  test("extra innings use stable final-inning behavior", () => {
-    const tiedTopExtra = getHomeWinExpectancyV2(
+  test("short scheduled games map their final inning to Savant 9th inning logic", () => {
+    expect(mapKblInningToSavant(5, 5)).toBe(9);
+    expect(mapKblInningToSavant(7, 7)).toBe(9);
+
+    const fiveInningFinal = getHomeWinExpectancyV2(
+      state({
+        inning: 5,
+        halfInning: "TOP",
+        outs: 0,
+        scheduledInnings: 5,
+        homeScore: 4,
+        awayScore: 3,
+      }),
+    );
+    const sevenInningFinal = getHomeWinExpectancyV2(
+      state({
+        inning: 7,
+        halfInning: "TOP",
+        outs: 0,
+        scheduledInnings: 7,
+        homeScore: 4,
+        awayScore: 3,
+      }),
+    );
+
+    expect(
+      "savantInning" in fiveInningFinal.trace
+        ? fiveInningFinal.trace.savantInning
+        : 0,
+    ).toBe(9);
+    expect(
+      "savantInning" in sevenInningFinal.trace
+        ? sevenInningFinal.trace.savantInning
+        : 0,
+    ).toBe(9);
+  });
+
+  test("score differentials beyond Savant range use explicit fallback trace", () => {
+    const result = getHomeWinExpectancyV2(
+      state({
+        inning: 5,
+        halfInning: "TOP",
+        outs: 1,
+        bases: EMPTY,
+        homeScore: 8,
+        awayScore: 1,
+      }),
+    );
+
+    expect("fallback" in result.trace ? result.trace.fallback : undefined).toBe(
+      "score-diff-out-of-savant-range",
+    );
+    expect(
+      "fallbackModelVersion" in result.trace
+        ? result.trace.fallbackModelVersion
+        : undefined,
+    ).toBe("kbl-wpa-v3");
+    expect("rowKey" in result.trace ? result.trace.rowKey : "").toContain(
+      "batDiff=-7",
+    );
+  });
+
+  test("extra innings use Savant 9th inning logic when the automatic runner is inactive", () => {
+    const tiedTopExtraNoRunner = getHomeWinExpectancyV2(
       state({
         inning: 10,
         halfInning: "TOP",
         outs: 0,
         homeScore: 5,
         awayScore: 5,
+        extraInningRunner: false,
       }),
-    ).homeWinProbability;
+    );
+    const tiedTopExtraDelayedRunner = getHomeWinExpectancyV2(
+      state({
+        inning: 10,
+        halfInning: "TOP",
+        outs: 0,
+        homeScore: 5,
+        awayScore: 5,
+        extraInningRunner: true,
+        extraInningRunnerDelay: 2,
+      }),
+    );
+
+    expect(mapKblInningToSavant(10, 9)).toBe(9);
+    expect(tiedTopExtraNoRunner.homeWinProbability).toBeCloseTo(0.5, 3);
+    expect(
+      "savantInningMappingReason" in tiedTopExtraNoRunner.trace
+        ? tiedTopExtraNoRunner.trace.savantInningMappingReason
+        : "",
+    ).toBe("extra-inning-no-automatic-runner");
+    expect(tiedTopExtraDelayedRunner.homeWinProbability).toBeCloseTo(0.5, 3);
+  });
+
+  test("extra innings use Savant 10th inning logic when the automatic runner is active", () => {
+    const tiedTopExtraWithRunner = getHomeWinExpectancyV2(
+      state({
+        inning: 10,
+        halfInning: "TOP",
+        outs: 0,
+        bases: EMPTY,
+        homeScore: 5,
+        awayScore: 5,
+        extraInningRunner: true,
+        extraInningRunnerDelay: 1,
+      }),
+    );
+
+    expect(mapKblInningToSavant(10, 9, { extraInningRunner: true })).toBe(10);
+    expect(tiedTopExtraWithRunner.homeWinProbability).toBeCloseTo(0.667, 3);
+    expect(
+      "savantInningMappingReason" in tiedTopExtraWithRunner.trace
+        ? tiedTopExtraWithRunner.trace.savantInningMappingReason
+        : "",
+    ).toBe("extra-inning-automatic-runner");
+  });
+
+  test("third out into automatic-runner extras starts the next half with runner on second", () => {
+    const bottomFinalThirdOut = calculateWpaV2(
+      state({
+        inning: 9,
+        halfInning: "BOTTOM",
+        outs: 2,
+        bases: EMPTY,
+        homeScore: 5,
+        awayScore: 5,
+        extraInningRunner: true,
+        extraInningRunnerDelay: 1,
+      }),
+      { outs: 3, bases: EMPTY, homeScore: 5, awayScore: 5 },
+    );
+
+    expect(bottomFinalThirdOut.homeWinProbabilityAfter).toBeCloseTo(0.5, 3);
+    expect(bottomFinalThirdOut.battingTeamDelta).toBeLessThan(0);
+    expect(
+      "rowKey" in bottomFinalThirdOut.winExpectancyTraceAfter
+        ? bottomFinalThirdOut.winExpectancyTraceAfter.rowKey
+        : "",
+    ).toBe("10|Top|0|2|batDiff=0");
+  });
+
+  test("top extra third out gives the home half its automatic runner", () => {
+    const topExtraThirdOut = calculateWpaV2(
+      state({
+        inning: 10,
+        halfInning: "TOP",
+        outs: 2,
+        bases: SECOND,
+        homeScore: 5,
+        awayScore: 5,
+        extraInningRunner: true,
+        extraInningRunnerDelay: 1,
+      }),
+      { outs: 3, bases: EMPTY, homeScore: 5, awayScore: 5 },
+    );
+
+    expect(topExtraThirdOut.homeWinProbabilityAfter).toBeCloseTo(0.805, 3);
+    expect(topExtraThirdOut.battingTeamDelta).toBeLessThan(0);
+    expect(
+      "rowKey" in topExtraThirdOut.winExpectancyTraceAfter
+        ? topExtraThirdOut.winExpectancyTraceAfter.rowKey
+        : "",
+    ).toBe("10|Bottom|0|2|batDiff=0");
+  });
+
+  test("delayed automatic runner starts on the configured extra inning", () => {
+    const firstExtra = calculateWpaV2(
+      state({
+        inning: 9,
+        halfInning: "BOTTOM",
+        outs: 2,
+        homeScore: 5,
+        awayScore: 5,
+        extraInningRunner: true,
+        extraInningRunnerDelay: 2,
+      }),
+      { outs: 3, bases: EMPTY, homeScore: 5, awayScore: 5 },
+    );
+    const secondExtra = calculateWpaV2(
+      state({
+        inning: 10,
+        halfInning: "BOTTOM",
+        outs: 2,
+        homeScore: 5,
+        awayScore: 5,
+        extraInningRunner: true,
+        extraInningRunnerDelay: 2,
+      }),
+      { outs: 3, bases: EMPTY, homeScore: 5, awayScore: 5 },
+    );
+
+    expect(
+      "rowKey" in firstExtra.winExpectancyTraceAfter
+        ? firstExtra.winExpectancyTraceAfter.rowKey
+        : "",
+    ).toBe("9|Top|0|0|batDiff=0");
+    expect(
+      "rowKey" in secondExtra.winExpectancyTraceAfter
+        ? secondExtra.winExpectancyTraceAfter.rowKey
+        : "",
+    ).toBe("10|Top|0|2|batDiff=0");
+  });
+
+  test("extra innings keep terminal behavior", () => {
     const walkOffExtra = calculateWpaV2(
       state({ inning: 10, halfInning: "BOTTOM", outs: 1, homeScore: 5, awayScore: 5 }),
       { outs: 1, bases: EMPTY, homeScore: 6, awayScore: 5 },
@@ -193,8 +559,6 @@ describe("WPA v2 engine", () => {
       { outs: 3, bases: EMPTY, homeScore: 5, awayScore: 5 },
     );
 
-    expect(tiedTopExtra).toBeGreaterThan(0);
-    expect(tiedTopExtra).toBeLessThan(1);
     expect(walkOffExtra.homeWinProbabilityAfter).toBe(1);
     expect(tiedBottomExtraThirdOut.homeWinProbabilityAfter).toBeGreaterThan(0);
     expect(tiedBottomExtraThirdOut.homeWinProbabilityAfter).toBeLessThan(1);

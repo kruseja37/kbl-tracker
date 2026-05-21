@@ -92,6 +92,7 @@ export type ManagerDecisionType =
   | "leave_pitcher_in"
   | "pinch_hitter"
   | "let_batter_hit"
+  | "keep_defender_in"
   | "pinch_runner"
   | "defensive_sub"
   | "position_change"
@@ -111,6 +112,42 @@ export type ManagerDecisionHorizon =
   | "inning_consequence"
   | "personnel_stint"
   | "lineup_baseline";
+
+export type ManagerDecisionScope =
+  | "whole_event"
+  | "sub_event"
+  | "inning_consequence"
+  | "stint"
+  | "lineup_baseline"
+  | "non_scoring_note";
+
+export type ManagerDecisionScoringModel =
+  | "whole_event_window"
+  | "sub_event_counterfactual"
+  | "inning_consequence_components"
+  | "deployment_stint"
+  | "lineup_delta"
+  | "non_scoring";
+
+export type ManagerDecisionCounterfactualReadiness =
+  | "not_required"
+  | "not_available"
+  | "partial"
+  | "available";
+
+export type ManagerDecisionTraceComponent =
+  | "official_net"
+  | "raw_window_wpa"
+  | "manager_share"
+  | "cap"
+  | "final_value"
+  | "immediate_cost"
+  | "consequence_payoff"
+  | "counterfactual_state"
+  | "excluded_batter_value"
+  | "deployment_exclusion"
+  | "lineup_baseline"
+  | "non_scoring_note";
 
 export type ManagerInferenceMethod =
   | "automatic"
@@ -164,6 +201,15 @@ export type IntentionalWalkConsequenceStatus =
   | "removed"
   | "stranded";
 
+export interface IntentionalWalkWpaComponentMetadata {
+  beforeIbbTeamWinProbability: number;
+  afterIbbTeamWinProbability: number;
+  finalTeamWinProbability?: number;
+  immediateRawWpa: number;
+  consequenceRawWpa?: number;
+  netRawWpa?: number;
+}
+
 export interface IntentionalWalkExplanationMetadata {
   ibbEventId: string;
   walkedRunnerId: string;
@@ -176,10 +222,128 @@ export interface IntentionalWalkExplanationMetadata {
   finalConsequenceEventId?: string;
   finalConsequence?: IntentionalWalkConsequenceStatus;
   inningEnded?: boolean;
+  wpaComponents?: IntentionalWalkWpaComponentMetadata;
+}
+
+export type ManagerOutAdvancingSendUnscoredReason =
+  | "missing_runner_outcome"
+  | "unsupported_between_play_counterfactual"
+  | "missing_hit_context"
+  | "missing_hold_base"
+  | "base_conflict"
+  | "invalid_out_count";
+
+export interface ManagerOutAdvancingSendStateMetadata {
+  outs: number;
+  awayScore: number;
+  homeScore: number;
+  bases: {
+    first: boolean;
+    second: boolean;
+    third: boolean;
+  };
+}
+
+export interface ManagerOutAdvancingSendExplanationMetadata {
+  runnerId?: string;
+  runnerName?: string;
+  fromBase?: "batter" | "first" | "second" | "third";
+  actualToBase?: "first" | "second" | "third" | "home" | "out" | "end";
+  inferredHoldBase?: "first" | "second" | "third";
+  holdBaseSource?: string;
+  actualState?: ManagerOutAdvancingSendStateMetadata;
+  counterfactualState?: ManagerOutAdvancingSendStateMetadata;
+  actualTeamWinProbability?: number;
+  counterfactualTeamWinProbability?: number;
+  originalPlateAppearanceTeamWinProbabilityBefore?: number;
+  rawCounterfactualWpa?: number;
+  unscoredReason?: ManagerOutAdvancingSendUnscoredReason;
 }
 
 export interface ManagerDecisionExplanationMetadata {
   intentionalWalk?: IntentionalWalkExplanationMetadata;
+  outAdvancingSend?: ManagerOutAdvancingSendExplanationMetadata;
+  recommendation?: ManagerRecommendationProvenanceMetadata;
+}
+
+export type ManagerRecommendationWatchType =
+  | "consider_pitching_change"
+  | "consider_pinch_hitter"
+  | "consider_defensive_replacement";
+
+export type ManagerRecommendationWatchConfidence = "high" | "medium" | "low";
+
+export type ManagerRecommendationWatchSurface =
+  | "recommendation_card"
+  | "feed_quick_action"
+  | "feed_passive";
+
+export type ManagerRecommendationWatchPrimaryAction =
+  | "open_pitching_change"
+  | "open_pinch_hit"
+  | "open_defensive_sub";
+
+export type ManagerRecommendationWatchNoChangeAction =
+  | "keep_pitcher"
+  | "let_batter_hit"
+  | "decline_defensive_sub";
+
+export type ManagerRecommendationWatchResolutionStatus =
+  | "pending"
+  | "action_taken"
+  | "action_taken_alternative"
+  | "explicit_no_change"
+  | "inferred_no_change";
+
+export interface ManagerRecommendationWatchEvent {
+  recommendationId: string;
+  type: ManagerRecommendationWatchType;
+  managerId: string;
+  teamId: string;
+  opponentTeamId: string;
+  confidence: ManagerRecommendationWatchConfidence;
+  surface: ManagerRecommendationWatchSurface;
+  trackedPlayerIds: string[];
+  primaryAction: ManagerRecommendationWatchPrimaryAction;
+  noChangeAction?: ManagerRecommendationWatchNoChangeAction;
+  suppressKey: string;
+  title?: string;
+  rationale?: string;
+  leverageIndex?: number;
+}
+
+export interface ManagerRecommendationProvenanceMetadata {
+  recommendationId: string;
+  recommendationType: ManagerRecommendationWatchType;
+  suppressKey: string;
+  sourceEventId: string;
+  response: Exclude<ManagerRecommendationWatchResolutionStatus, "pending">;
+  confidence: ManagerRecommendationWatchConfidence;
+  surface: ManagerRecommendationWatchSurface;
+  recommendedPlayerId?: string;
+  suggestedPlayerId?: string;
+  actualPlayerId?: string;
+  alternativePlayerId?: string;
+}
+
+export interface ManagerRecommendationWatchRecord
+  extends ManagerRecommendationWatchEvent {
+  watchId: string;
+  gameId: string;
+  sourceEventId: string;
+  openedAtEventIndex: number;
+  inning: number;
+  half: "top" | "bottom";
+  outs: number;
+  targetPlayerId?: string;
+  suggestedPlayerId?: string;
+  status: ManagerRecommendationWatchResolutionStatus;
+  resolvedAtEventId?: string;
+  resolvedDecisionId?: string;
+  resolutionDecisionType?: ManagerDecisionType;
+  actualPlayerId?: string;
+  alternativePlayerId?: string;
+  linkedEventIds: string[];
 }
 
 export interface ManagerDecisionResolutionWindow {
@@ -285,6 +449,7 @@ export type ManagerDeploymentRole =
   | "defensive_position"
   | "pitcher"
   | "kept_position_player_in"
+  | "kept_defender_in"
   | "kept_pitcher_in"
   | "kept_in"
   | "manual_deployment";

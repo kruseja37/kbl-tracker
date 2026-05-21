@@ -8,6 +8,7 @@
 
 import type { Position, BatterHand } from '../types/game';
 import type { Gender, PlayerRole, PitcherRole, PlayerTraits } from '../data/playerDatabase';
+import { syncEngine } from './syncEngine';
 
 // ============================================
 // DATABASE SETUP
@@ -198,6 +199,9 @@ async function migrateFromLocalStorage(): Promise<void> {
 
     // Clear legacy storage after successful migration
     localStorage.removeItem(LEGACY_STORAGE_KEY);
+    if (!syncEngine.isSuppressed()) {
+      syncEngine.removeLocal(LEGACY_STORAGE_KEY);
+    }
     console.log('[UnifiedPlayerStorage] Migration complete, localStorage cleared');
   } catch (err) {
     console.error('[UnifiedPlayerStorage] Migration failed:', err);
@@ -225,7 +229,12 @@ export async function savePlayer(player: UnifiedPlayer, skipInit = false): Promi
     const request = store.put(entry);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(entry);
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) {
+        syncEngine.upsert(DB_NAME, STORES.PLAYERS, entry.id, entry);
+      }
+      resolve(entry);
+    };
   });
 }
 
@@ -315,7 +324,12 @@ export async function deletePlayer(playerId: string): Promise<boolean> {
     const request = store.delete(playerId);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(true);
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) {
+        syncEngine.remove(DB_NAME, STORES.PLAYERS, playerId);
+      }
+      resolve(true);
+    };
   });
 }
 
@@ -348,6 +362,7 @@ export async function getPlayerCount(): Promise<number> {
  */
 export async function clearAllPlayers(): Promise<void> {
   const db = await initUnifiedPlayerDB();
+  const players = await getAllPlayers();
 
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORES.PLAYERS, 'readwrite');
@@ -355,7 +370,14 @@ export async function clearAllPlayers(): Promise<void> {
     const request = store.clear();
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) {
+        for (const player of players) {
+          syncEngine.remove(DB_NAME, STORES.PLAYERS, player.id);
+        }
+      }
+      resolve();
+    };
   });
 }
 

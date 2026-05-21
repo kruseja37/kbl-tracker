@@ -2,7 +2,6 @@ import type {
   AtBatFlowState,
   AtBatResult,
   Bases,
-  HalfInning,
   RunnerOutcome,
 } from '../../types/game';
 import { isOut } from '../../types/game';
@@ -319,42 +318,6 @@ export const updatePitcherStats = ({
   }
 
   return updated;
-};
-
-export const calculateSimpleWinProbability = (
-  inn: number,
-  half: HalfInning,
-  away: number,
-  home: number,
-  outs: number
-): number => {
-  const diff = home - away;
-
-  let halfInningsRemaining: number;
-  if (half === 'TOP') {
-    halfInningsRemaining = Math.max(0, (9 - inn) * 2 + 1);
-  } else {
-    halfInningsRemaining = Math.max(0, (9 - inn) * 2);
-  }
-
-  const runsPerWinPct = halfInningsRemaining > 0
-    ? 0.15 / Math.sqrt(halfInningsRemaining / 2 + 1)
-    : 0.35;
-
-  let prob = 0.5 + (diff * runsPerWinPct);
-
-  if (half === 'BOTTOM' && inn >= 9 && diff <= 0) {
-    prob += 0.05;
-  }
-
-  if (inn >= 9 && half === 'BOTTOM' && home > away) {
-    return 1.0;
-  }
-  if (inn >= 9 && half === 'TOP' && away > home && outs === 3) {
-    return 0.0;
-  }
-
-  return Math.max(0.01, Math.min(0.99, Math.round(prob * 100) / 100));
 };
 
 export const calculateLOB = (bases: Bases): number => {

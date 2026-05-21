@@ -6,7 +6,7 @@
  */
 
 import { describe, test, expect } from 'vitest';
-import { getWinExpectancy, lookupWinExpectancy, buildWEGameState } from '../winExpectancyTable';
+import { getHalfInningStartWE, getWinExpectancy, lookupWinExpectancy, buildWEGameState } from '../winExpectancyTable';
 import { calculateWPA, calculateHitWPA, calculateOutWPA, calculateWalkWPA, formatWPA, formatWP } from '../wpaCalculator';
 import { BaseState } from '../leverageCalculator';
 
@@ -15,7 +15,7 @@ import { BaseState } from '../leverageCalculator';
 // ============================================
 
 describe('Win Expectancy Table', () => {
-  test('tied game at start should favor home team slightly (~0.54)', () => {
+  test('tied game at start should match Savant neutral baseline', () => {
     const we = getWinExpectancy({
       inning: 1,
       isTop: true,
@@ -24,9 +24,7 @@ describe('Win Expectancy Table', () => {
       homeScore: 0,
       awayScore: 0,
     });
-    // Home field advantage: ~0.52-0.56
-    expect(we).toBeGreaterThan(0.50);
-    expect(we).toBeLessThan(0.58);
+    expect(we).toBeCloseTo(0.50, 3);
   });
 
   test('leading team should have higher WE than trailing team', () => {
@@ -49,7 +47,7 @@ describe('Win Expectancy Table', () => {
     expect(weLeading).toBeGreaterThan(weTrailing);
   });
 
-  test('WE should be bounded [0.01, 0.99]', () => {
+  test('non-terminal WE should stay bounded short of certainty', () => {
     // Extreme blowout scenarios
     const weBlowout = getWinExpectancy({
       inning: 9,
@@ -59,8 +57,8 @@ describe('Win Expectancy Table', () => {
       homeScore: 15,
       awayScore: 0,
     });
-    expect(weBlowout).toBeLessThanOrEqual(0.99);
-    expect(weBlowout).toBeGreaterThanOrEqual(0.01);
+    expect(weBlowout).toBeLessThan(1);
+    expect(weBlowout).toBeGreaterThanOrEqual(0.001);
 
     const weDeficit = getWinExpectancy({
       inning: 9,
@@ -70,8 +68,8 @@ describe('Win Expectancy Table', () => {
       homeScore: 0,
       awayScore: 15,
     });
-    expect(weDeficit).toBeLessThanOrEqual(0.99);
-    expect(weDeficit).toBeGreaterThanOrEqual(0.01);
+    expect(weDeficit).toBeLessThanOrEqual(0.999);
+    expect(weDeficit).toBeGreaterThan(0);
   });
 
   test('more outs should reduce WE for batting team', () => {
@@ -162,6 +160,52 @@ describe('Win Expectancy Table', () => {
     );
     expect(we1).toBe(we2);
   });
+
+  test('lookupWinExpectancy accepts extra-inning runner policy options', () => {
+    const noRunner = lookupWinExpectancy(
+      10,
+      true,
+      0,
+      { first: false, second: false, third: false },
+      5,
+      5,
+      { totalInnings: 9, extraInningRunner: false },
+    );
+    const automaticRunner = lookupWinExpectancy(
+      10,
+      true,
+      0,
+      { first: false, second: false, third: false },
+      5,
+      5,
+      { totalInnings: 9, extraInningRunner: true, extraInningRunnerDelay: 1 },
+    );
+
+    expect(noRunner).toBeCloseTo(0.5, 3);
+    expect(automaticRunner).toBeCloseTo(0.667, 3);
+  });
+
+  test('getHalfInningStartWE starts active automatic-runner extras on second base', () => {
+    const topExtraWithRunner = getHalfInningStartWE(10, true, 5, 5, {
+      totalInnings: 9,
+      extraInningRunner: true,
+      extraInningRunnerDelay: 1,
+    });
+    const topExtraDelayed = getHalfInningStartWE(10, true, 5, 5, {
+      totalInnings: 9,
+      extraInningRunner: true,
+      extraInningRunnerDelay: 2,
+    });
+    const bottomExtraWithRunner = getHalfInningStartWE(10, false, 5, 5, {
+      totalInnings: 9,
+      extraInningRunner: true,
+      extraInningRunnerDelay: 1,
+    });
+
+    expect(topExtraWithRunner).toBeCloseTo(0.5, 3);
+    expect(topExtraDelayed).toBeCloseTo(0.5, 3);
+    expect(bottomExtraWithRunner).toBeCloseTo(0.805, 3);
+  });
 });
 
 // ============================================
@@ -207,6 +251,25 @@ describe('WPA Calculator', () => {
     expect(result.wpa).toBeLessThan(0);
     // Home WP should increase (good for home = bad for away batter)
     expect(result.winProbabilityAfter).toBeGreaterThan(result.winProbabilityBefore);
+  });
+
+  test('calculateOutWPA can carry automatic-runner policy through inning-ending outs', () => {
+    const result = calculateOutWPA(
+      9,
+      false,
+      2,
+      3,
+      { first: false, second: false, third: false },
+      { first: false, second: false, third: false },
+      5,
+      5,
+      0,
+      9,
+      { extraInningRunner: true, extraInningRunnerDelay: 1 },
+    );
+
+    expect(result.winProbabilityAfter).toBeCloseTo(0.5, 3);
+    expect(result.wpa).toBeLessThan(0);
   });
 
   test('walk-off home run gives large positive WPA', () => {
@@ -330,6 +393,26 @@ describe('WPA Convenience Functions', () => {
     expect(result.wpa).toBeGreaterThan(0);
   });
 
+  test('calculateHitWPA carries automatic-runner policy options', () => {
+    const result = calculateHitWPA(
+      10,
+      true,
+      0,
+      { first: false, second: true, third: false },
+      { first: true, second: false, third: false },
+      5,
+      5,
+      1,
+      9,
+      { extraInningRunner: true, extraInningRunnerDelay: 1 },
+    );
+
+    expect(result.winExpectancyTraceBefore?.rowKey).toBe(
+      '10|Top|0|2|batDiff=0',
+    );
+    expect(result.wpa).toBeGreaterThan(0);
+  });
+
   test('calculateOutWPA returns negative WPA for batter', () => {
     const result = calculateOutWPA(
       5, true, 1, 2,  // inning 5, top, 1→2 outs
@@ -348,6 +431,29 @@ describe('WPA Convenience Functions', () => {
       { first: true, second: true, third: true },   // still loaded
       4, 5,  // home trailing by 1
       1      // 1 run scores (ties game)
+    );
+    expect(result.wpa).toBeGreaterThan(0);
+  });
+
+  test('calculateWalkWPA carries automatic-runner policy options', () => {
+    const result = calculateWalkWPA(
+      10,
+      true,
+      0,
+      { first: true, second: true, third: true },
+      { first: true, second: true, third: true },
+      5,
+      5,
+      1,
+      9,
+      { extraInningRunner: true, extraInningRunnerDelay: 1 },
+    );
+
+    expect(result.winExpectancyTraceBefore?.rowKey).toBe(
+      '10|Top|0|7|batDiff=0',
+    );
+    expect(result.winExpectancyTraceAfter?.rowKey).toBe(
+      '10|Top|0|7|batDiff=1',
     );
     expect(result.wpa).toBeGreaterThan(0);
   });

@@ -25,6 +25,7 @@ import {
   getFranchisePlayer,
   saveFranchisePlayer,
 } from '../utils/franchisePlayerStorage';
+import { syncEngine } from '../utils/syncEngine';
 import { calculateSalary } from './salaryCalculator';
 import type { PlayerForSalary } from './salaryCalculator';
 
@@ -64,6 +65,20 @@ export const leagueBuilderPlayerStorageAdapter: PlayerStorageAdapter = {
   save: savePlayer,
 };
 
+function setSyncedLocalStorage(key: string, value: unknown): void {
+  localStorage.setItem(key, JSON.stringify(value));
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.upsertLocal(key, value);
+  }
+}
+
+function removeSyncedLocalStorage(key: string): void {
+  localStorage.removeItem(key);
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.removeLocal(key);
+  }
+}
+
 export function createFranchisePlayerStorageAdapter(franchiseId: string): PlayerStorageAdapter {
   return {
     getAll: () => getAllFranchisePlayers(franchiseId),
@@ -82,7 +97,7 @@ export function archiveSeasonData(seasonNumber: number): { archived: boolean; ke
     archivedAt: new Date().toISOString(),
     // In a full implementation, this would include season stats, standings, etc.
   };
-  localStorage.setItem(key, JSON.stringify(archiveData));
+  setSyncedLocalStorage(key, archiveData);
   return { archived: true, key };
 }
 
@@ -184,7 +199,7 @@ export function clearSeasonalStats(seasonNumber: number): { cleared: boolean } {
       keysToRemove.push(key);
     }
   }
-  keysToRemove.forEach(key => localStorage.removeItem(key));
+  keysToRemove.forEach((key) => removeSyncedLocalStorage(key));
   return { cleared: true };
 }
 
@@ -201,11 +216,11 @@ export async function applyRookieDesignations(
     if (player.leagueAssignments?.some((assignment) => assignment.rosterStatus === 'MLB') && player.age <= 23) {
       const rookieKey = `kbl_rookie_${player.id}`;
       if (!localStorage.getItem(rookieKey)) {
-        localStorage.setItem(rookieKey, JSON.stringify({
+        setSyncedLocalStorage(rookieKey, {
           playerId: player.id,
           name: `${player.firstName} ${player.lastName}`,
           designatedAt: new Date().toISOString(),
-        }));
+        });
         rookies.push(`${player.firstName} ${player.lastName}`);
       }
     }
@@ -226,7 +241,7 @@ export function incrementYearsOfService(): { count: number } {
     count++;
   }
 
-  localStorage.setItem(serviceKey, JSON.stringify(existing));
+  setSyncedLocalStorage(serviceKey, existing);
   return { count };
 }
 
@@ -234,11 +249,14 @@ export function incrementYearsOfService(): { count: number } {
 export function finalizeSeasonTransition(currentSeason: number): { newSeason: number } {
   const newSeason = currentSeason + 1;
   localStorage.setItem('kbl-current-season', String(newSeason));
-  localStorage.setItem('kbl_last_transition', JSON.stringify({
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.upsertLocal('kbl-current-season', String(newSeason));
+  }
+  setSyncedLocalStorage('kbl_last_transition', {
     fromSeason: currentSeason,
     toSeason: newSeason,
     completedAt: new Date().toISOString(),
-  }));
+  });
   return { newSeason };
 }
 

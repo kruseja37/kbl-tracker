@@ -190,19 +190,11 @@ function calculateOutDefaults(
   const isLikelyDP = (
     outType === 'DP' ||
     outType === 'TP' ||
-    (bases.first && outs < 2 && fieldingSequence.length >= 2 && (outType === 'GO' || outType === 'FC' || outType === undefined))
+    (bases.first && outs < 2 && fieldingSequence.length >= 2 && (outType === 'GO' || outType === undefined))
   );
 
   if (isLikelyDP) {
-    return {
-      batter: { from: 'batter', to: 'out', isDefault: true, reason: outType === 'TP' ? 'Triple play' : 'Ground into DP' },
-      first: { from: 'first', to: 'out', isDefault: true, reason: 'Force out at 2B' },
-      // R2 may advance if not also out on TP
-      ...(bases.second && outType !== 'TP' && { second: { from: 'second', to: 'third', isDefault: true, reason: 'Advances on DP' } }),
-      ...(bases.second && outType === 'TP' && { second: { from: 'second', to: 'out', isDefault: true, reason: 'Out on TP' } }),
-      // R3 may score on DP (run counts if scored before 3rd out)
-      ...(bases.third && { third: { from: 'third', to: 'home', isDefault: true, reason: 'Scores on DP' } }),
-    };
+    return calculateDoublePlayDefaults(outType, bases, outs);
   }
 
   // Ground out (non-DP) - batter out, runners may advance
@@ -222,16 +214,36 @@ function calculateOutDefaults(
 
   // Fielder's Choice (non-DP) - batter reaches, lead runner is out
   if (outType === 'FC') {
-    return {
+    const result: RunnerDefaults = {
       batter: { from: 'batter', to: 'first', isDefault: true, reason: "Fielder's choice" },
-      // R1 is out on FC (most common)
-      ...(bases.first && { first: { from: 'first', to: 'out', isDefault: true, reason: 'Out on FC' } }),
-      // R2 advances or may be out
-      ...(bases.second && !bases.first && { second: { from: 'second', to: 'out', isDefault: true, reason: 'Out on FC' } }),
-      ...(bases.second && bases.first && { second: { from: 'second', to: 'third', isDefault: true, reason: 'Advances on FC' } }),
-      // R3 scores
-      ...(bases.third && { third: { from: 'third', to: 'home', isDefault: true, reason: 'Scores on FC' } }),
     };
+
+    if (bases.third && (bases.first || bases.second)) {
+      result.third = { from: 'third', to: 'out', isDefault: true, reason: 'Out at home on FC' };
+      if (bases.second) {
+        result.second = { from: 'second', to: 'third', isDefault: true, reason: 'Advances on FC' };
+      }
+      if (bases.first) {
+        result.first = { from: 'first', to: 'second', isDefault: true, reason: 'Advances on FC' };
+      }
+      return result;
+    }
+
+    if (bases.first) {
+      result.first = { from: 'first', to: 'out', isDefault: true, reason: 'Force out at 2B' };
+      return result;
+    }
+
+    if (bases.second) {
+      result.second = { from: 'second', to: 'out', isDefault: true, reason: 'Out at 3B on FC' };
+      return result;
+    }
+
+    if (bases.third) {
+      result.third = { from: 'third', to: 'home', isDefault: true, reason: 'Safe at home on FC' };
+    }
+
+    return result;
   }
 
   // Sacrifice fly — R3 scores, all other runners hold (GAP-GT-6-E)
@@ -283,6 +295,57 @@ function calculateOutDefaults(
     ...(bases.second && { second: { from: 'second', to: 'second', isDefault: true, reason: 'Holds' } }),
     ...(bases.third && { third: { from: 'third', to: 'third', isDefault: true, reason: 'Holds' } }),
   };
+}
+
+function calculateDoublePlayDefaults(
+  outType: PlayData['outType'],
+  bases: GameBases,
+  outs: number,
+): RunnerDefaults {
+  if (outType === 'TP') {
+    return {
+      batter: { from: 'batter', to: 'out', isDefault: true, reason: 'Triple play' },
+      ...(bases.first && { first: { from: 'first', to: 'out', isDefault: true, reason: 'Out on TP' } }),
+      ...(bases.second && { second: { from: 'second', to: 'out', isDefault: true, reason: 'Out on TP' } }),
+      ...(bases.third && { third: { from: 'third', to: 'out', isDefault: true, reason: 'Out on TP' } }),
+    };
+  }
+
+  const result: RunnerDefaults = {
+    batter: { from: 'batter', to: 'out', isDefault: true, reason: 'Ground into DP' },
+  };
+
+  if (bases.first && bases.second && bases.third && outs < 2) {
+    result.third = { from: 'third', to: 'out', isDefault: true, reason: 'Force out at home' };
+    result.second = { from: 'second', to: 'third', isDefault: true, reason: 'Advances on DP' };
+    result.first = { from: 'first', to: 'second', isDefault: true, reason: 'Advances on DP' };
+    return result;
+  }
+
+  if (bases.first) {
+    result.first = { from: 'first', to: 'out', isDefault: true, reason: 'Force out at 2B' };
+    if (bases.second) {
+      result.second = { from: 'second', to: 'third', isDefault: true, reason: 'Advances on DP' };
+    }
+    if (bases.third) {
+      result.third = { from: 'third', to: 'home', isDefault: true, reason: 'Scores on DP' };
+    }
+    return result;
+  }
+
+  if (bases.third) {
+    result.third = { from: 'third', to: 'out', isDefault: true, reason: 'Out at home on DP' };
+    if (bases.second) {
+      result.second = { from: 'second', to: 'third', isDefault: true, reason: 'Advances on DP' };
+    }
+    return result;
+  }
+
+  if (bases.second) {
+    result.second = { from: 'second', to: 'out', isDefault: true, reason: 'Out at 3B on DP' };
+  }
+
+  return result;
 }
 
 // ============================================

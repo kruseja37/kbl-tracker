@@ -1,4 +1,6 @@
 import { defineConfig } from '@playwright/test';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 export default defineConfig({
   testDir: './test-utils/elimination-journeys',
@@ -18,6 +20,6 @@ export default defineConfig({
   },
   reporter: [
     ['list'],
-    ['json', { outputFile: 'test-utils/elimination-journey-results.json' }],
+    ['json', { outputFile: join(tmpdir(), 'kbl-tracker-elimination-journey-results.json') }],
   ],
 });

@@ -19,6 +19,13 @@ import type {
   ManagerDecisionStandards,
   ManagerDecisionType,
   ManagerInferenceMethod,
+  ManagerRecommendationProvenanceMetadata,
+  ManagerRecommendationWatchEvent,
+  ManagerRecommendationWatchRecord,
+  ManagerRecommendationWatchResolutionStatus,
+  ManagerRecommendationWatchType,
+  ManagerOutAdvancingSendExplanationMetadata,
+  ManagerOutAdvancingSendUnscoredReason,
 } from "../types/managerWpa";
 import {
   DECISION_HORIZON_BY_DECISION_TYPE,
@@ -54,7 +61,14 @@ export interface DeriveManagerDecisionRecordsInput
   betweenPlayEvents?: BetweenPlayEvent[];
   fieldingEvents?: FieldingEvent[];
   totalInnings?: number;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
   gameEnded?: boolean;
+}
+
+interface ExtraInningRunnerPolicy {
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
 }
 
 interface DecisionWindow {
@@ -286,13 +300,25 @@ export function deriveManagerDecisionRecords(
       left.fieldingEventId.localeCompare(right.fieldingEventId),
   );
 
-  const decisions = [
+  const baseDecisions = [
     ...atBatEvents.flatMap((event) =>
       deriveAtBatManagerDecisions(event, input, gameId),
     ),
     ...managerBetweenPlayEvents.flatMap((event) =>
       deriveBetweenPlayManagerDecisions(event, input, gameId),
     ),
+  ];
+  const recommendationWatchResolution = resolveRecommendationWatches({
+    input,
+    gameId,
+    atBatEvents,
+    betweenPlayEvents,
+    fieldingEvents,
+    baseDecisions,
+  });
+  const decisions = [
+    ...recommendationWatchResolution.decisions,
+    ...recommendationWatchResolution.inferredNoChangeDecisions,
   ];
   if (decisions.length === 0) {
     return [];
@@ -304,6 +330,8 @@ export function deriveManagerDecisionRecords(
     fieldingEvents,
     homeTeamId: input.homeTeamId,
     totalInnings: input.totalInnings,
+    extraInningRunner: input.extraInningRunner,
+    extraInningRunnerDelay: input.extraInningRunnerDelay,
     gameEnded: input.gameEnded ?? false,
   });
 
@@ -317,6 +345,647 @@ export function deriveManagerDecisionRecords(
 
 export const deriveManagerDecisionsFromEventLog =
   deriveManagerDecisionRecords;
+
+export function deriveManagerRecommendationWatchRecords(
+  input: DeriveManagerDecisionRecordsInput,
+): ManagerRecommendationWatchRecord[] {
+  const gameId =
+    input.gameId ??
+    input.atBatEvents[0]?.gameId ??
+    input.betweenPlayEvents?.[0]?.gameId;
+  if (!gameId) return [];
+
+  const atBatEvents = [...input.atBatEvents]
+    .filter((event) => !event.undoneAt)
+    .sort((left, right) => left.eventIndex - right.eventIndex);
+  const betweenPlayEvents = [...(input.betweenPlayEvents ?? [])]
+    .filter((event) => !event.undoneAt)
+    .sort((left, right) => left.eventIndex - right.eventIndex);
+  const managerBetweenPlayEvents =
+    dedupePromptedManagerDecisionEvents(betweenPlayEvents);
+  const fieldingEvents = [...(input.fieldingEvents ?? [])].sort(
+    (left, right) =>
+      left.atBatEventId.localeCompare(right.atBatEventId) ||
+      left.sequence - right.sequence ||
+      left.fieldingEventId.localeCompare(right.fieldingEventId),
+  );
+  const baseDecisions = [
+    ...atBatEvents.flatMap((event) =>
+      deriveAtBatManagerDecisions(event, input, gameId),
+    ),
+    ...managerBetweenPlayEvents.flatMap((event) =>
+      deriveBetweenPlayManagerDecisions(event, input, gameId),
+    ),
+  ];
+
+  return resolveRecommendationWatches({
+    input,
+    gameId,
+    atBatEvents,
+    betweenPlayEvents,
+    fieldingEvents,
+    baseDecisions,
+  }).watches;
+}
+
+interface RecommendationWatchResolutionInput {
+  input: DeriveManagerDecisionRecordsInput;
+  gameId: string;
+  atBatEvents: AtBatEvent[];
+  betweenPlayEvents: BetweenPlayEvent[];
+  fieldingEvents: FieldingEvent[];
+  baseDecisions: ManagerDecisionRecord[];
+}
+
+interface RecommendationWatchResolutionResult {
+  watches: ManagerRecommendationWatchRecord[];
+  decisions: ManagerDecisionRecord[];
+  inferredNoChangeDecisions: ManagerDecisionRecord[];
+}
+
+interface WatchActionResolution {
+  status: Extract<
+    ManagerRecommendationWatchResolutionStatus,
+    "action_taken" | "action_taken_alternative"
+  >;
+  actualPlayerId?: string;
+  alternativePlayerId?: string;
+}
+
+interface WatchResolution {
+  status: Exclude<ManagerRecommendationWatchResolutionStatus, "pending">;
+  resolvedAtEventId: string;
+  resolutionDecisionType: ManagerDecisionType;
+  decision?: ManagerDecisionRecord;
+  actualPlayerId?: string;
+  alternativePlayerId?: string;
+}
+
+type RecommendationWatchTimelineEntry =
+  | {
+      kind: "between_play";
+      eventId: string;
+      eventIndex: number;
+      betweenPlay: BetweenPlayEvent;
+    }
+  | {
+      kind: "at_bat";
+      eventId: string;
+      eventIndex: number;
+      atBat: AtBatEvent;
+    };
+
+function resolveRecommendationWatches(
+  params: RecommendationWatchResolutionInput,
+): RecommendationWatchResolutionResult {
+  const watchEvents = getRecommendationWatchEvents(params.betweenPlayEvents);
+  if (watchEvents.length === 0) {
+    return {
+      watches: [],
+      decisions: params.baseDecisions,
+      inferredNoChangeDecisions: [],
+    };
+  }
+
+  const watchRecords = watchEvents.map(({ event, watch }) =>
+    createRecommendationWatchRecord(event, watch, params.gameId),
+  );
+  const eventById = new Map(
+    params.betweenPlayEvents.map((event) => [event.eventId, event] as const),
+  );
+  const decisionsByEventId = groupDecisionsByEventId(params.baseDecisions);
+  const fieldingEventsByAtBat = groupFieldingEventsByAtBat(params.fieldingEvents);
+  const timeline = buildRecommendationWatchTimeline(params);
+  const nextWatches = [...watchRecords];
+  const provenanceByDecisionId = new Map<
+    string,
+    {
+      watch: ManagerRecommendationWatchRecord;
+      resolution: WatchResolution;
+    }
+  >();
+  const inferredNoChangeDecisions: ManagerDecisionRecord[] = [];
+
+  for (const watch of nextWatches) {
+    const resolution = findEarliestWatchResolution({
+      watch,
+      decisionsByEventId,
+      fieldingEventsByAtBat,
+      timeline,
+    });
+    if (!resolution) continue;
+
+    let resolvedDecisionId = resolution.decision?.decisionId;
+    if (resolution.status === "inferred_no_change") {
+      const decisionType = noChangeDecisionTypeForRecommendation(watch.type);
+      const sourceEvent = eventById.get(watch.sourceEventId);
+      if (!decisionType || !sourceEvent) continue;
+
+      const inferredDecision = buildInferredNoChangeDecisionFromWatch({
+        input: params.input,
+        gameId: params.gameId,
+        watch,
+        sourceEvent,
+        decisionType,
+      });
+      inferredNoChangeDecisions.push(inferredDecision);
+      resolvedDecisionId = inferredDecision.decisionId;
+    } else if (
+      resolution.decision &&
+      !provenanceByDecisionId.has(resolution.decision.decisionId)
+    ) {
+      provenanceByDecisionId.set(resolution.decision.decisionId, {
+        watch,
+        resolution,
+      });
+    }
+
+    updateWatchResolution(nextWatches, watch.watchId, {
+      status: resolution.status,
+      resolvedAtEventId: resolution.resolvedAtEventId,
+      resolvedDecisionId,
+      resolutionDecisionType: resolution.resolutionDecisionType,
+      actualPlayerId: resolution.actualPlayerId,
+      alternativePlayerId: resolution.alternativePlayerId,
+    });
+  }
+
+  const decoratedDecisions = params.baseDecisions.map((decision) => {
+    const provenance = provenanceByDecisionId.get(decision.decisionId);
+    if (!provenance) return decision;
+
+    return attachRecommendationProvenance(
+      decision,
+      provenance.watch,
+      provenance.resolution.status,
+      {
+        actualPlayerId: provenance.resolution.actualPlayerId,
+        alternativePlayerId: provenance.resolution.alternativePlayerId,
+      },
+    );
+  });
+
+  return {
+    watches: nextWatches,
+    decisions: decoratedDecisions,
+    inferredNoChangeDecisions,
+  };
+}
+
+function getRecommendationWatchEvents(
+  betweenPlayEvents: BetweenPlayEvent[],
+): Array<{ event: BetweenPlayEvent; watch: ManagerRecommendationWatchEvent }> {
+  const seen = new Set<string>();
+  return betweenPlayEvents.flatMap((event) => {
+    const watch = event.managerRecommendationWatch;
+    if (event.type !== "manager_recommendation" || !watch || !event.gameState) {
+      return [];
+    }
+
+    const key = [
+      watch.recommendationId,
+      watch.suppressKey,
+      promptedManagerDecisionSnapshotKey(event),
+    ].join(":");
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [{ event, watch }];
+  });
+}
+
+function createRecommendationWatchRecord(
+  event: BetweenPlayEvent,
+  watch: ManagerRecommendationWatchEvent,
+  gameId: string,
+): ManagerRecommendationWatchRecord {
+  const gameState = event.gameState!;
+  const targetPlayerId = watch.trackedPlayerIds[0];
+  const suggestedPlayerId = watch.trackedPlayerIds[1];
+  return {
+    ...watch,
+    watchId: `${gameId}:${event.eventId}:watch:${watch.recommendationId}`,
+    gameId,
+    sourceEventId: event.eventId,
+    openedAtEventIndex: event.eventIndex,
+    inning: gameState.inning,
+    half: gameState.halfInning === "TOP" ? "top" : "bottom",
+    outs: gameState.outs,
+    targetPlayerId,
+    suggestedPlayerId,
+    status: "pending",
+    linkedEventIds: [event.eventId],
+  };
+}
+
+function groupDecisionsByEventId(
+  decisions: ManagerDecisionRecord[],
+): Map<string, ManagerDecisionRecord[]> {
+  const grouped = new Map<string, ManagerDecisionRecord[]>();
+  for (const decision of decisions) {
+    if (!decision.decisionEventId) continue;
+    const decisionsForEvent = grouped.get(decision.decisionEventId) ?? [];
+    decisionsForEvent.push(decision);
+    grouped.set(decision.decisionEventId, decisionsForEvent);
+  }
+  return grouped;
+}
+
+function groupFieldingEventsByAtBat(
+  fieldingEvents: FieldingEvent[],
+): Map<string, FieldingEvent[]> {
+  const grouped = new Map<string, FieldingEvent[]>();
+  for (const event of fieldingEvents) {
+    const eventsForAtBat = grouped.get(event.atBatEventId) ?? [];
+    eventsForAtBat.push(event);
+    grouped.set(event.atBatEventId, eventsForAtBat);
+  }
+
+  for (const events of grouped.values()) {
+    events.sort(
+      (left, right) =>
+        left.sequence - right.sequence ||
+        left.fieldingEventId.localeCompare(right.fieldingEventId),
+    );
+  }
+
+  return grouped;
+}
+
+function buildRecommendationWatchTimeline(
+  params: RecommendationWatchResolutionInput,
+): RecommendationWatchTimelineEntry[] {
+  return [
+    ...params.betweenPlayEvents.map((event) => ({
+      kind: "between_play" as const,
+      eventId: event.eventId,
+      eventIndex: event.eventIndex,
+      betweenPlay: event,
+    })),
+    ...params.atBatEvents.map((event) => ({
+      kind: "at_bat" as const,
+      eventId: event.eventId,
+      eventIndex: event.eventIndex,
+      atBat: event,
+    })),
+  ].sort(
+    (left, right) =>
+      left.eventIndex - right.eventIndex ||
+      (left.kind === right.kind ? 0 : left.kind === "between_play" ? -1 : 1) ||
+      left.eventId.localeCompare(right.eventId),
+  );
+}
+
+function findEarliestWatchResolution(input: {
+  watch: ManagerRecommendationWatchRecord;
+  decisionsByEventId: Map<string, ManagerDecisionRecord[]>;
+  fieldingEventsByAtBat: Map<string, FieldingEvent[]>;
+  timeline: RecommendationWatchTimelineEntry[];
+}): WatchResolution | null {
+  for (const entry of input.timeline) {
+    if (entry.eventIndex <= input.watch.openedAtEventIndex) continue;
+
+    if (entry.kind === "between_play") {
+      const event = entry.betweenPlay;
+      if (
+        event.gameState &&
+        !isSameHalf(input.watch, event.gameState.inning, event.gameState.halfInning)
+      ) {
+        return null;
+      }
+
+      const decisions = input.decisionsByEventId.get(event.eventId) ?? [];
+      const explicitNoChangeDecision = findExplicitNoChangeDecisionForWatch(
+        input.watch,
+        event,
+        decisions,
+      );
+      if (explicitNoChangeDecision) {
+        return {
+          status: "explicit_no_change",
+          resolvedAtEventId: event.eventId,
+          resolutionDecisionType: explicitNoChangeDecision.decisionType,
+          decision: explicitNoChangeDecision,
+        };
+      }
+
+      for (const decision of decisions) {
+        if (decision.teamId !== input.watch.teamId) continue;
+        const actionResolution = getWatchActionResolution(
+          input.watch,
+          decision,
+          event,
+        );
+        if (!actionResolution) continue;
+        return {
+          status: actionResolution.status,
+          resolvedAtEventId: event.eventId,
+          resolutionDecisionType: decision.decisionType,
+          decision,
+          actualPlayerId: actionResolution.actualPlayerId,
+          alternativePlayerId: actionResolution.alternativePlayerId,
+        };
+      }
+
+      continue;
+    }
+
+    const event = entry.atBat;
+    if (!isCompleteAtBatWindowEvent(event)) continue;
+    if (!isSameHalf(input.watch, event.inning, event.halfInning)) {
+      return null;
+    }
+
+    const noChangeResolution = getWatchNoChangeResolutionAtBat(
+      input.watch,
+      event,
+      input.fieldingEventsByAtBat,
+    );
+    if (noChangeResolution) return noChangeResolution;
+  }
+
+  return null;
+}
+
+function findExplicitNoChangeDecisionForWatch(
+  watch: ManagerRecommendationWatchRecord,
+  event: BetweenPlayEvent,
+  decisions: ManagerDecisionRecord[],
+): ManagerDecisionRecord | null {
+  const prompted = event.promptedManagerDecision;
+  const expectedDecisionType = noChangeDecisionTypeForRecommendation(watch.type);
+  if (!prompted || prompted.source !== "recommendation" || !expectedDecisionType) {
+    return null;
+  }
+  const matchesRecommendationId =
+    prompted.recommendationId === watch.recommendationId;
+  const matchesProvenanceKey = prompted.provenanceKey === watch.suppressKey;
+  if (!matchesRecommendationId && !matchesProvenanceKey) {
+    return null;
+  }
+  if (!isNoChangeDecisionForRecommendationType(expectedDecisionType)) return null;
+
+  return (
+    decisions.find(
+      (decision) =>
+        decision.teamId === watch.teamId &&
+        decision.decisionType === expectedDecisionType,
+    ) ?? null
+  );
+}
+
+function getWatchActionResolution(
+  watch: ManagerRecommendationWatchRecord,
+  decision: ManagerDecisionRecord,
+  event: BetweenPlayEvent,
+): WatchActionResolution | null {
+  const targetPlayerId = watch.targetPlayerId;
+  if (!targetPlayerId) return null;
+
+  let actualPlayerId: string | undefined;
+  if (
+    watch.type === "consider_pitching_change" &&
+    decision.decisionType === "pitching_change" &&
+    event.pitcherChange?.outgoingPitcherId === targetPlayerId
+  ) {
+    actualPlayerId = event.pitcherChange.incomingPitcherId;
+  } else if (
+    watch.type === "consider_pinch_hitter" &&
+    decision.decisionType === "pinch_hitter" &&
+    event.substitution?.outPlayerId === targetPlayerId
+  ) {
+    actualPlayerId = event.substitution.inPlayerId;
+  } else if (
+    watch.type === "consider_defensive_replacement" &&
+    (decision.decisionType === "defensive_sub" ||
+      decision.decisionType === "position_change") &&
+    (event.substitution?.outPlayerId === targetPlayerId ||
+      event.substitution?.inPlayerId === targetPlayerId)
+  ) {
+    actualPlayerId = event.substitution?.inPlayerId;
+  } else {
+    return null;
+  }
+
+  const isAlternative =
+    Boolean(watch.suggestedPlayerId) &&
+    Boolean(actualPlayerId) &&
+    actualPlayerId !== watch.suggestedPlayerId;
+
+  return {
+    status: isAlternative ? "action_taken_alternative" : "action_taken",
+    actualPlayerId,
+    alternativePlayerId: isAlternative ? actualPlayerId : undefined,
+  };
+}
+
+function noChangeDecisionTypeForRecommendation(
+  recommendationType: ManagerRecommendationWatchType,
+): ManagerDecisionType | null {
+  if (recommendationType === "consider_pitching_change") {
+    return "leave_pitcher_in";
+  }
+  if (recommendationType === "consider_pinch_hitter") {
+    return "let_batter_hit";
+  }
+  if (recommendationType === "consider_defensive_replacement") {
+    return "keep_defender_in";
+  }
+  return null;
+}
+
+function isNoChangeDecisionForRecommendationType(
+  decisionType: ManagerDecisionType,
+): boolean {
+  return (
+    decisionType === "leave_pitcher_in" ||
+    decisionType === "let_batter_hit" ||
+    decisionType === "keep_defender_in"
+  );
+}
+
+function getWatchNoChangeResolutionAtBat(
+  watch: ManagerRecommendationWatchRecord,
+  event: AtBatEvent,
+  fieldingEventsByAtBat: Map<string, FieldingEvent[]>,
+): WatchResolution | null {
+  const decisionType = noChangeDecisionTypeForRecommendation(watch.type);
+  const targetPlayerId = watch.targetPlayerId;
+  if (!decisionType || !targetPlayerId) return null;
+
+  if (
+    watch.type === "consider_pitching_change" &&
+    event.pitcherId === targetPlayerId
+  ) {
+    return {
+      status: "inferred_no_change",
+      resolvedAtEventId: event.eventId,
+      resolutionDecisionType: decisionType,
+    };
+  }
+
+  if (watch.type === "consider_pinch_hitter" && event.batterId === targetPlayerId) {
+    return {
+      status: "inferred_no_change",
+      resolvedAtEventId: event.eventId,
+      resolutionDecisionType: decisionType,
+    };
+  }
+
+  if (watch.type === "consider_defensive_replacement") {
+    const fieldingEvent = (fieldingEventsByAtBat.get(event.eventId) ?? []).find(
+      (candidate) => candidate.playerId === targetPlayerId,
+    );
+    if (!fieldingEvent) return null;
+    return {
+      status: "inferred_no_change",
+      resolvedAtEventId: fieldingEvent.fieldingEventId,
+      resolutionDecisionType: decisionType,
+    };
+  }
+
+  return null;
+}
+
+function buildInferredNoChangeDecisionFromWatch(input: {
+  input: DeriveManagerDecisionRecordsInput;
+  gameId: string;
+  watch: ManagerRecommendationWatchRecord;
+  sourceEvent: BetweenPlayEvent;
+  decisionType: ManagerDecisionType;
+}): ManagerDecisionRecord {
+  const { watch, sourceEvent, decisionType } = input;
+  const halfInning = sourceEvent.gameState?.halfInning ?? "TOP";
+  const score = sourceEvent.gameState?.score ?? { away: 0, home: 0 };
+  const wpa = calculateBetweenPlayWindow(sourceEvent, input.input.totalInnings, input.input);
+  const window = buildDecisionWindow({
+    teamId: watch.teamId,
+    homeTeamId: input.input.homeTeamId,
+    homeWinProbabilityBefore: wpa.winProbabilityBefore,
+    decisionType,
+  });
+  const trackedPlayerIds = uniqueStrings([watch.targetPlayerId]);
+
+  return buildDecisionRecord({
+    gameId: input.gameId,
+    decisionEventId: sourceEvent.eventId,
+    linkedEventIds: [sourceEvent.eventId],
+    managerId: watch.managerId,
+    teamId: watch.teamId,
+    opponentTeamId: watch.opponentTeamId,
+    decisionType,
+    inferenceMethod: "passive",
+    decisionSource: "situational_prompt",
+    confidence: watch.confidence,
+    inning: sourceEvent.gameState?.inning ?? watch.inning,
+    halfInning,
+    outs: sourceEvent.gameState?.outs ?? watch.outs,
+    baseState: formatBetweenPlayBaseState(sourceEvent.gameState?.runnersOn),
+    scoreDifferentialForTeam: scoreDifferentialForTeam({
+      teamId: watch.teamId,
+      homeTeamId: input.input.homeTeamId,
+      homeScore: score.home,
+      awayScore: score.away,
+    }),
+    leverageIndex: watch.leverageIndex,
+    involvedPlayerIds: uniqueStrings([
+      watch.targetPlayerId,
+      watch.suggestedPlayerId,
+    ]),
+    window,
+    resolved: false,
+    resolutionWindow: buildResolutionWindow({
+      status: "pending",
+      startEventId: sourceEvent.eventId,
+      startEventIndex: sourceEvent.eventIndex,
+      startSnapshotSource: "event_state",
+      expectedEndpoint: getExpectedEndpoint(decisionType),
+      trackedPlayerIds,
+      trackedRunnerIds: [],
+    }),
+    explanationMetadata: {
+      recommendation: buildRecommendationProvenance(
+        watch,
+        "inferred_no_change",
+      ),
+    },
+    derivedFromFields: [
+      "managerRecommendationWatch",
+      "managerRecommendationWatch.recommendationId",
+      "committedBehavior.noChange",
+    ],
+    decisionKeySuffix: `watch:${watch.recommendationId}`,
+  });
+}
+
+function attachRecommendationProvenance(
+  decision: ManagerDecisionRecord,
+  watch: ManagerRecommendationWatchRecord,
+  response: Exclude<ManagerRecommendationWatchResolutionStatus, "pending">,
+  action?: { actualPlayerId?: string; alternativePlayerId?: string },
+): ManagerDecisionRecord {
+  return {
+    ...decision,
+    explanationMetadata: {
+      ...decision.explanationMetadata,
+      recommendation: buildRecommendationProvenance(watch, response, action),
+    },
+    derivation: {
+      ...decision.derivation,
+      derivedFromFields: uniqueStrings([
+        ...decision.derivation.derivedFromFields,
+        "managerRecommendationWatch",
+      ]),
+    },
+  };
+}
+
+function buildRecommendationProvenance(
+  watch: ManagerRecommendationWatchRecord,
+  response: Exclude<ManagerRecommendationWatchResolutionStatus, "pending">,
+  action?: { actualPlayerId?: string; alternativePlayerId?: string },
+): ManagerRecommendationProvenanceMetadata {
+  return {
+    recommendationId: watch.recommendationId,
+    recommendationType: watch.type,
+    suppressKey: watch.suppressKey,
+    sourceEventId: watch.sourceEventId,
+    response,
+    confidence: watch.confidence,
+    surface: watch.surface,
+    recommendedPlayerId: watch.targetPlayerId,
+    suggestedPlayerId: watch.suggestedPlayerId,
+    actualPlayerId: action?.actualPlayerId,
+    alternativePlayerId: action?.alternativePlayerId,
+  };
+}
+
+function updateWatchResolution(
+  watches: ManagerRecommendationWatchRecord[],
+  watchId: string,
+  updates: Partial<
+    Pick<
+      ManagerRecommendationWatchRecord,
+      | "status"
+      | "resolvedAtEventId"
+      | "resolvedDecisionId"
+      | "resolutionDecisionType"
+      | "actualPlayerId"
+      | "alternativePlayerId"
+    >
+  >,
+): void {
+  const index = watches.findIndex((watch) => watch.watchId === watchId);
+  if (index < 0) return;
+  const current = watches[index];
+  watches[index] = {
+    ...current,
+    ...updates,
+    linkedEventIds: uniqueStrings([
+      ...current.linkedEventIds,
+      updates.resolvedAtEventId,
+    ]),
+  };
+}
 
 function dedupePromptedManagerDecisionEvents(
   events: BetweenPlayEvent[],
@@ -483,6 +1152,7 @@ function deriveAtBatManagerDecisions(
             `runnerOutcomes.${index}.isOutAdvancing`,
           ],
           decisionIdSuffix: `runner-${index}`,
+          runnerOutcomeIndex: index,
         }),
       );
     }
@@ -493,7 +1163,9 @@ function deriveAtBatManagerDecisions(
 
 function buildAtBatDecision(params: {
   event: AtBatEvent;
-  input: ManagerAssignmentResolutionInput & { totalInnings?: number };
+  input: ManagerAssignmentResolutionInput & {
+    totalInnings?: number;
+  } & ExtraInningRunnerPolicy;
   gameId: string;
   decisionType: ManagerDecisionType;
   decisionSource: ManagerDecisionSource;
@@ -501,6 +1173,7 @@ function buildAtBatDecision(params: {
   involvedPlayerIds: string[];
   derivedFromFields: string[];
   decisionIdSuffix?: string;
+  runnerOutcomeIndex?: number;
 }): ManagerDecisionRecord {
   const { event, input, decisionType } = params;
   const attribution = resolveManagerAttributionForDecision(
@@ -509,17 +1182,35 @@ function buildAtBatDecision(params: {
     input,
   );
   const expectedEndpoint = getExpectedEndpoint(decisionType);
-  const resolvesSameEvent = expectedEndpoint === "same_event";
-  const wpa = calculateAtBatWindow(event, input.totalInnings);
-  const window = buildDecisionWindow({
-    teamId: attribution.teamId,
-    homeTeamId: input.homeTeamId,
-    homeWinProbabilityBefore: wpa.winProbabilityBefore,
-    homeWinProbabilityAfter: resolvesSameEvent
-      ? wpa.winProbabilityAfter
-      : undefined,
-    decisionType,
-  });
+  const outAdvancingWindow =
+    decisionType === "out_advancing_send"
+      ? buildOutAdvancingSendCounterfactualWindow({
+          event,
+          runnerOutcomeIndex: params.runnerOutcomeIndex,
+          teamId: attribution.teamId,
+          homeTeamId: input.homeTeamId,
+          totalInnings: input.totalInnings,
+          extraInningRunner: input.extraInningRunner,
+          extraInningRunnerDelay: input.extraInningRunnerDelay,
+        })
+      : undefined;
+  const resolvesSameEvent =
+    expectedEndpoint === "same_event" &&
+    (decisionType !== "out_advancing_send" ||
+      outAdvancingWindow?.scored === true);
+  const wpa = calculateAtBatWindow(event, input.totalInnings, input);
+  const window =
+    decisionType === "out_advancing_send" && outAdvancingWindow?.scored
+      ? outAdvancingWindow.window
+      : buildDecisionWindow({
+          teamId: attribution.teamId,
+          homeTeamId: input.homeTeamId,
+          homeWinProbabilityBefore: wpa.winProbabilityBefore,
+          homeWinProbabilityAfter: resolvesSameEvent
+            ? wpa.winProbabilityAfter
+            : undefined,
+          decisionType,
+        });
   const involvedPlayerIds = uniqueStrings(params.involvedPlayerIds);
   const trackedPlayerIds =
     decisionType === "intentional_walk"
@@ -572,7 +1263,14 @@ function buildAtBatDecision(params: {
             ibbEvent: event,
             walkedRunnerId: event.batterId,
             walkedRunnerName: event.batterName,
+            teamId: attribution.teamId,
+            homeTeamId: input.homeTeamId,
+            totalInnings: input.totalInnings,
+            extraInningRunner: input.extraInningRunner,
+            extraInningRunnerDelay: input.extraInningRunnerDelay,
           })
+        : decisionType === "out_advancing_send"
+          ? { outAdvancingSend: outAdvancingWindow?.metadata }
         : undefined,
     derivedFromFields: params.derivedFromFields,
     decisionKeySuffix: params.decisionIdSuffix,
@@ -726,8 +1424,12 @@ function deriveBetweenPlayManagerDecisions(
 
 function isSupportedPromptedManagerDecision(
   decisionType: string,
-): decisionType is "leave_pitcher_in" | "let_batter_hit" {
-  return decisionType === "leave_pitcher_in" || decisionType === "let_batter_hit";
+): decisionType is "leave_pitcher_in" | "let_batter_hit" | "keep_defender_in" {
+  return (
+    decisionType === "leave_pitcher_in" ||
+    decisionType === "let_batter_hit" ||
+    decisionType === "keep_defender_in"
+  );
 }
 
 function buildPromptedBetweenPlayDecision(params: {
@@ -761,7 +1463,7 @@ function buildPromptedBetweenPlayDecision(params: {
   );
   const expectedEndpoint =
     prompted.resolution?.expectedEndpoint ?? getExpectedEndpoint(prompted.decisionType);
-  const wpa = calculateBetweenPlayWindow(event, input.totalInnings);
+  const wpa = calculateBetweenPlayWindow(event, input.totalInnings, input);
   const window = buildDecisionWindow({
     teamId: attribution.teamId,
     homeTeamId: input.homeTeamId,
@@ -840,7 +1542,9 @@ function promptedTrackedPlayerIds(
 
 function buildBetweenPlayDecision(params: {
   event: BetweenPlayEvent;
-  input: ManagerAssignmentResolutionInput & { totalInnings?: number };
+  input: ManagerAssignmentResolutionInput & {
+    totalInnings?: number;
+  } & ExtraInningRunnerPolicy;
   gameId: string;
   decisionType: ManagerDecisionType;
   decisionSource: ManagerDecisionSource;
@@ -858,7 +1562,9 @@ function buildBetweenPlayDecision(params: {
   );
   const expectedEndpoint = getExpectedEndpoint(decisionType);
   const resolvesSameEvent =
-    params.resolved || expectedEndpoint === "same_event";
+    decisionType === "out_advancing_send"
+      ? false
+      : params.resolved || expectedEndpoint === "same_event";
   const involvedPlayerIds = uniqueStrings(params.involvedPlayerIds);
   const trackedPlayerIds = getTrackedPlayerIdsForBetweenPlayDecision(
     decisionType,
@@ -870,7 +1576,7 @@ function buildBetweenPlayDecision(params: {
     event,
     involvedPlayerIds,
   );
-  const wpa = calculateBetweenPlayWindow(event, input.totalInnings);
+  const wpa = calculateBetweenPlayWindow(event, input.totalInnings, input);
   const window = buildDecisionWindow({
     teamId: attribution.teamId,
     homeTeamId: input.homeTeamId,
@@ -917,6 +1623,16 @@ function buildBetweenPlayDecision(params: {
       trackedRunnerIds,
       maxEventIndex: resolvesSameEvent ? event.eventIndex : undefined,
     }),
+    explanationMetadata:
+      decisionType === "out_advancing_send"
+        ? {
+            outAdvancingSend: {
+              runnerId: event.runnerAction?.runnerId,
+              runnerName: event.runnerAction?.runnerName,
+              unscoredReason: "unsupported_between_play_counterfactual",
+            },
+          }
+        : undefined,
     derivedFromFields: params.derivedFromFields,
     manuallyPinned:
       event.runnerAction?.managerDecisionSource === "manual_edit" ||
@@ -930,6 +1646,8 @@ interface ResolveDecisionWindowsContext {
   fieldingEvents: FieldingEvent[];
   homeTeamId: string;
   totalInnings?: number;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
   gameEnded: boolean;
 }
 
@@ -1052,10 +1770,14 @@ function markDecisionPending(
       ? uniqueStrings([decision.decisionEventId, nextBatterPa?.eventId])
       : uniqueStrings([decision.decisionEventId]);
   const explanationMetadata = nextBatterPa
-    ? buildIntentionalWalkExplanationMetadata({
-        decision,
-        nextBatterPa,
-      })
+      ? buildIntentionalWalkExplanationMetadata({
+          decision,
+          nextBatterPa,
+          homeTeamId: context.homeTeamId,
+          totalInnings: context.totalInnings,
+          extraInningRunner: context.extraInningRunner,
+          extraInningRunnerDelay: context.extraInningRunnerDelay,
+        })
     : decision.explanationMetadata;
 
   return {
@@ -1225,7 +1947,7 @@ function findNextPlateAppearanceEndpoint(
     return true;
   });
 
-  return endpoint ? endpointFromAtBat(endpoint, context.totalInnings) : null;
+  return endpoint ? endpointFromAtBat(endpoint, context.totalInnings, context) : null;
 }
 
 function findRunnerTerminalEndpoint(
@@ -1368,8 +2090,13 @@ function endpointFromIntentionalWalkEntry(input: {
     eventIds: uniqueStrings([nextBatterPa?.eventId, ...endpoint.eventIds]),
     explanationMetadata: buildIntentionalWalkExplanationMetadata({
       decision: input.decision,
+      homeTeamId: input.context.homeTeamId,
+      totalInnings: input.context.totalInnings,
+      extraInningRunner: input.context.extraInningRunner,
+      extraInningRunnerDelay: input.context.extraInningRunnerDelay,
       nextBatterPa,
       finalConsequenceEventId: endpoint.eventId,
+      finalHomeWinProbabilityAfter: endpoint.homeWinProbabilityAfter,
       finalConsequence: input.finalConsequence,
       inningEnded: input.inningEnded,
     }),
@@ -1501,7 +2228,7 @@ function findFirstFieldingEndpoint(
   const match = candidates[0];
   if (!match) return null;
 
-  const endpoint = endpointFromAtBat(match.atBat, context.totalInnings);
+  const endpoint = endpointFromAtBat(match.atBat, context.totalInnings, context);
   return {
     ...endpoint,
     eventId: match.fieldingEvent.fieldingEventId,
@@ -1552,7 +2279,7 @@ function buildTimeline(context: ResolveDecisionWindowsContext): TimelineEntry[] 
     ...context.atBatEvents
       .filter(isCompleteAtBatWindowEvent)
       .map((event) => {
-        const wpa = calculateAtBatWindow(event, context.totalInnings);
+        const wpa = calculateAtBatWindow(event, context.totalInnings, context);
         return {
           kind: "at_bat" as const,
           eventId: event.eventId,
@@ -1565,7 +2292,7 @@ function buildTimeline(context: ResolveDecisionWindowsContext): TimelineEntry[] 
         };
       }),
     ...context.betweenPlayEvents.map((event) => {
-      const wpa = calculateBetweenPlayWindow(event, context.totalInnings);
+      const wpa = calculateBetweenPlayWindow(event, context.totalInnings, context);
       return {
         kind: "between_play" as const,
         eventId: event.eventId,
@@ -1601,8 +2328,9 @@ function isCompleteAtBatWindowEvent(event: AtBatEvent): boolean {
 function endpointFromAtBat(
   event: AtBatEvent,
   totalInnings?: number,
+  extraPolicy?: ExtraInningRunnerPolicy,
 ): ResolutionEndpoint {
-  const wpa = calculateAtBatWindow(event, totalInnings);
+  const wpa = calculateAtBatWindow(event, totalInnings, extraPolicy);
   return {
     eventId: event.eventId,
     eventIds: [event.eventId],
@@ -1652,8 +2380,14 @@ function buildIntentionalWalkExplanationMetadata(input: {
   decision?: ManagerDecisionRecord;
   walkedRunnerId?: string;
   walkedRunnerName?: string;
+  teamId?: string;
+  homeTeamId?: string;
+  totalInnings?: number;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
   nextBatterPa?: AtBatEvent;
   finalConsequenceEventId?: string;
+  finalHomeWinProbabilityAfter?: number;
   finalConsequence?: IntentionalWalkConsequenceStatus;
   inningEnded?: boolean;
 }): ManagerDecisionExplanationMetadata | undefined {
@@ -1698,8 +2432,126 @@ function buildIntentionalWalkExplanationMetadata(input: {
       finalConsequence:
         input.finalConsequence ?? existing?.finalConsequence,
       inningEnded: input.inningEnded ?? existing?.inningEnded,
+      wpaComponents: buildIntentionalWalkWpaComponents({
+        existing,
+        ibbEvent: input.ibbEvent,
+        decision: input.decision,
+        teamId: input.teamId,
+        homeTeamId: input.homeTeamId,
+        totalInnings: input.totalInnings,
+        extraInningRunner: input.extraInningRunner,
+        extraInningRunnerDelay: input.extraInningRunnerDelay,
+        finalHomeWinProbabilityAfter: input.finalHomeWinProbabilityAfter,
+      }),
     },
   };
+}
+
+function buildIntentionalWalkWpaComponents(input: {
+  existing?: NonNullable<
+    ManagerDecisionExplanationMetadata["intentionalWalk"]
+  >;
+  ibbEvent?: AtBatEvent;
+  decision?: ManagerDecisionRecord;
+  teamId?: string;
+  homeTeamId?: string;
+  totalInnings?: number;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
+  finalHomeWinProbabilityAfter?: number;
+}): NonNullable<
+  NonNullable<
+    ManagerDecisionExplanationMetadata["intentionalWalk"]
+  >["wpaComponents"]
+> | undefined {
+  const existingComponents = input.existing?.wpaComponents;
+  const teamId = input.teamId ?? input.decision?.teamId;
+  const beforeIbbTeamWinProbability =
+    existingComponents?.beforeIbbTeamWinProbability ??
+    input.decision?.teamWinProbabilityBefore ??
+    teamWinProbabilityFromAtBatWindow({
+      event: input.ibbEvent,
+      teamId,
+      homeTeamId: input.homeTeamId,
+      totalInnings: input.totalInnings,
+      extraInningRunner: input.extraInningRunner,
+      extraInningRunnerDelay: input.extraInningRunnerDelay,
+      field: "winProbabilityBefore",
+    });
+  const afterIbbTeamWinProbability =
+    existingComponents?.afterIbbTeamWinProbability ??
+    teamWinProbabilityFromAtBatWindow({
+      event: input.ibbEvent,
+      teamId,
+      homeTeamId: input.homeTeamId,
+      totalInnings: input.totalInnings,
+      extraInningRunner: input.extraInningRunner,
+      extraInningRunnerDelay: input.extraInningRunnerDelay,
+      field: "winProbabilityAfter",
+    });
+
+  if (
+    beforeIbbTeamWinProbability === undefined ||
+    afterIbbTeamWinProbability === undefined
+  ) {
+    return existingComponents;
+  }
+
+  const finalTeamWinProbability =
+    input.finalHomeWinProbabilityAfter !== undefined &&
+    teamId &&
+    input.homeTeamId
+      ? roundProbability(
+          teamWinProbability(
+            input.finalHomeWinProbabilityAfter,
+            teamId,
+            input.homeTeamId,
+          ),
+        )
+      : existingComponents?.finalTeamWinProbability;
+  const immediateRawWpa = roundWpa(
+    afterIbbTeamWinProbability - beforeIbbTeamWinProbability,
+  );
+
+  if (finalTeamWinProbability === undefined) {
+    return {
+      beforeIbbTeamWinProbability,
+      afterIbbTeamWinProbability,
+      immediateRawWpa,
+    };
+  }
+
+  return {
+    beforeIbbTeamWinProbability,
+    afterIbbTeamWinProbability,
+    finalTeamWinProbability,
+    immediateRawWpa,
+    consequenceRawWpa: roundWpa(
+      finalTeamWinProbability - afterIbbTeamWinProbability,
+    ),
+    netRawWpa: roundWpa(
+      finalTeamWinProbability - beforeIbbTeamWinProbability,
+    ),
+  };
+}
+
+function teamWinProbabilityFromAtBatWindow(input: {
+  event?: AtBatEvent;
+  teamId?: string;
+  homeTeamId?: string;
+  totalInnings?: number;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
+  field: "winProbabilityBefore" | "winProbabilityAfter";
+}): number | undefined {
+  if (!input.event || !input.teamId || !input.homeTeamId) {
+    return undefined;
+  }
+
+  const wpa = calculateAtBatWindow(input.event, input.totalInnings, input);
+  return roundProbability(
+    teamWinProbability(wpa[input.field], input.teamId, input.homeTeamId),
+  );
 }
 
 function getExpectedEndpoint(
@@ -1736,6 +2588,10 @@ function getTrackedPlayerIdsForBetweenPlayDecision(
     decisionType === "leave_pitcher_in"
   ) {
     return uniqueStrings([event.pitcherChange?.incomingPitcherId]);
+  }
+
+  if (decisionType === "keep_defender_in") {
+    return fallbackIds;
   }
 
   if (
@@ -1776,7 +2632,7 @@ function getBetweenPlayOutsAfter(event: BetweenPlayEvent): number {
 }
 
 function isSameHalf(
-  decision: ManagerDecisionRecord,
+  decision: { inning: number; half: "top" | "bottom" },
   inning: number,
   halfInning: "TOP" | "BOTTOM",
 ): boolean {
@@ -1871,7 +2727,393 @@ function buildDecisionWindow(input: {
   };
 }
 
-function calculateAtBatWindow(event: AtBatEvent, totalInnings?: number) {
+type AtBatRunnerOutcome = NonNullable<AtBatEvent["runnerOutcomes"]>[number];
+type CounterfactualBase = "first" | "second" | "third";
+type CounterfactualBaseOccupancy = Record<CounterfactualBase, string | undefined>;
+
+type OutAdvancingCounterfactualWindowResult =
+  | {
+      scored: true;
+      window: DecisionWindow;
+      metadata: ManagerOutAdvancingSendExplanationMetadata;
+    }
+  | {
+      scored: false;
+      metadata: ManagerOutAdvancingSendExplanationMetadata;
+    };
+
+function buildOutAdvancingSendCounterfactualWindow(input: {
+  event: AtBatEvent;
+  runnerOutcomeIndex?: number;
+  teamId: string;
+  homeTeamId: string;
+  totalInnings?: number;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
+}): OutAdvancingCounterfactualWindowResult {
+  const { event } = input;
+  const outcome =
+    input.runnerOutcomeIndex === undefined
+      ? undefined
+      : event.runnerOutcomes?.[input.runnerOutcomeIndex];
+  if (!outcome) {
+    return buildUnscoredOutAdvancingMetadata(
+      "missing_runner_outcome",
+      undefined,
+    );
+  }
+
+  const holdBase = inferOutAdvancingHoldBase(event, outcome);
+  if (!holdBase) {
+    return buildUnscoredOutAdvancingMetadata(
+      inferMissingHoldBaseReason(event, outcome),
+      outcome,
+    );
+  }
+
+  const counterfactualState = buildCounterfactualOutAdvancingState(
+    event,
+    outcome,
+    holdBase.base,
+  );
+  if (!counterfactualState.scored) {
+    return {
+      scored: false,
+      metadata: {
+        ...baseOutAdvancingMetadata(outcome),
+        inferredHoldBase: holdBase.base,
+        holdBaseSource: holdBase.source,
+        actualState: stateMetadataFromAtBatActual(event),
+        unscoredReason: counterfactualState.reason,
+      },
+    };
+  }
+
+  const original = {
+    inning: event.inning,
+    isTop: event.halfInning === "TOP",
+    outs: event.outs,
+    bases: runnerStateToBases(event.runners),
+    homeScore: event.homeScore,
+    awayScore: event.awayScore,
+    totalInnings: event.totalInnings ?? input.totalInnings,
+    ...resolveAtBatExtraInningRunnerPolicy(event, input),
+  };
+  const actualWpa = calculateAtBatWindow(event, input.totalInnings, input);
+  const counterfactualWpa = calculateWPA(original, {
+    outs: counterfactualState.state.outs,
+    bases: counterfactualState.state.bases,
+    homeScore: counterfactualState.state.homeScore,
+    awayScore: counterfactualState.state.awayScore,
+  });
+  const actualTeamWinProbability = roundProbability(
+    teamWinProbability(
+      actualWpa.winProbabilityAfter,
+      input.teamId,
+      input.homeTeamId,
+    ),
+  );
+  const counterfactualTeamWinProbability = roundProbability(
+    teamWinProbability(
+      counterfactualWpa.winProbabilityAfter,
+      input.teamId,
+      input.homeTeamId,
+    ),
+  );
+  const rawWindowWpa = roundWpa(
+    actualTeamWinProbability - counterfactualTeamWinProbability,
+  );
+  const share = MANAGER_WPA_SHARE_BY_DECISION_TYPE.out_advancing_send ?? 0;
+  const metadata: ManagerOutAdvancingSendExplanationMetadata = {
+    ...baseOutAdvancingMetadata(outcome),
+    inferredHoldBase: holdBase.base,
+    holdBaseSource: holdBase.source,
+    actualState: stateMetadataFromAtBatActual(event),
+    counterfactualState: counterfactualState.metadata,
+    actualTeamWinProbability,
+    counterfactualTeamWinProbability,
+    originalPlateAppearanceTeamWinProbabilityBefore: roundProbability(
+      teamWinProbability(
+        actualWpa.winProbabilityBefore,
+        input.teamId,
+        input.homeTeamId,
+      ),
+    ),
+    rawCounterfactualWpa: rawWindowWpa,
+  };
+
+  return {
+    scored: true,
+    window: {
+      teamWinProbabilityBefore: counterfactualTeamWinProbability,
+      teamWinProbabilityAfter: actualTeamWinProbability,
+      rawWindowWpa,
+      managerWpa: roundWpa(rawWindowWpa * share),
+    },
+    metadata,
+  };
+}
+
+function inferOutAdvancingHoldBase(
+  event: AtBatEvent,
+  outcome: AtBatRunnerOutcome,
+): { base: CounterfactualBase; source: string } | null {
+  const batterBase = hitBaseForResult(event.result);
+
+  if (outcome.fromBase === "batter") {
+    return batterBase
+      ? { base: batterBase, source: `batter_safe_at_${batterBase}` }
+      : null;
+  }
+
+  if (!batterBase) return null;
+
+  if (outcome.fromBase === "second") {
+    return {
+      base: "third",
+      source: "runner_from_second_safe_stop_third",
+    };
+  }
+
+  if (outcome.fromBase === "first") {
+    if (outcome.toBase === "third") {
+      return {
+        base: "second",
+        source: "runner_from_first_safe_stop_second",
+      };
+    }
+    if (outcome.toBase === "home") {
+      return batterBase === "second" || batterBase === "third"
+        ? {
+            base: "third",
+            source: "runner_from_first_safe_stop_third",
+          }
+        : null;
+    }
+    if (outcome.toBase === "out") {
+      if (batterBase === "first") {
+        return {
+          base: "second",
+          source: "runner_from_first_out_at_third_safe_stop_second",
+        };
+      }
+      if (batterBase === "second" || batterBase === "third") {
+        return {
+          base: "third",
+          source: "runner_from_first_out_at_home_safe_stop_third",
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+function inferMissingHoldBaseReason(
+  event: AtBatEvent,
+  outcome: AtBatRunnerOutcome,
+): ManagerOutAdvancingSendUnscoredReason {
+  if (!hitBaseForResult(event.result)) return "missing_hit_context";
+  if (outcome.fromBase === "third") return "missing_hold_base";
+  return "missing_hold_base";
+}
+
+function buildCounterfactualOutAdvancingState(
+  event: AtBatEvent,
+  outcome: AtBatRunnerOutcome,
+  holdBase: CounterfactualBase,
+):
+  | {
+      scored: true;
+      state: {
+        outs: number;
+        bases: { first: boolean; second: boolean; third: boolean };
+        homeScore: number;
+        awayScore: number;
+      };
+      metadata: ManagerOutAdvancingSendExplanationMetadata["counterfactualState"];
+    }
+  | {
+      scored: false;
+      reason: ManagerOutAdvancingSendUnscoredReason;
+    } {
+  const removedOut = outcome.toBase === "out" ? 1 : 0;
+  const outs = event.outsAfter - removedOut;
+  if (outs < event.outs || outs < 0) {
+    return { scored: false, reason: "invalid_out_count" };
+  }
+
+  const occupancyResult = buildCounterfactualBaseOccupancy(
+    event,
+    outcome,
+    holdBase,
+  );
+  if (!occupancyResult.scored) return occupancyResult;
+
+  let awayScore = event.awayScoreAfter;
+  let homeScore = event.homeScoreAfter;
+  if (runScoredByRunner(event, outcome.runnerId) || outcome.toBase === "home") {
+    if (event.halfInning === "TOP") awayScore -= 1;
+    else homeScore -= 1;
+  }
+  if (awayScore < 0 || homeScore < 0) {
+    return { scored: false, reason: "missing_hold_base" };
+  }
+
+  const bases =
+    outs >= 3
+      ? { first: false, second: false, third: false }
+      : basesFromOccupancy(occupancyResult.occupancy);
+  const metadata = {
+    outs,
+    awayScore,
+    homeScore,
+    bases,
+  };
+
+  return {
+    scored: true,
+    state: {
+      outs,
+      bases,
+      homeScore,
+      awayScore,
+    },
+    metadata,
+  };
+}
+
+function buildCounterfactualBaseOccupancy(
+  event: AtBatEvent,
+  targetOutcome: AtBatRunnerOutcome,
+  holdBase: CounterfactualBase,
+):
+  | { scored: true; occupancy: CounterfactualBaseOccupancy }
+  | { scored: false; reason: ManagerOutAdvancingSendUnscoredReason } {
+  const occupancy: CounterfactualBaseOccupancy = {
+    first: undefined,
+    second: undefined,
+    third: undefined,
+  };
+  const addRunner = (
+    base: CounterfactualBase,
+    runnerId: string,
+  ): ManagerOutAdvancingSendUnscoredReason | null => {
+    const current = occupancy[base];
+    if (current && current !== runnerId) return "base_conflict";
+    occupancy[base] = runnerId;
+    return null;
+  };
+
+  for (const [base, runner] of Object.entries(event.runnersAfter) as Array<
+    [CounterfactualBase, RunnerState[CounterfactualBase]]
+  >) {
+    if (!runner || runner.runnerId === targetOutcome.runnerId) continue;
+    const conflict = addRunner(base, runner.runnerId);
+    if (conflict) return { scored: false, reason: conflict };
+  }
+
+  for (const outcome of event.runnerOutcomes ?? []) {
+    if (outcome.runnerId === targetOutcome.runnerId) continue;
+    const base = outcomeToCounterfactualBase(outcome.toBase);
+    if (!base) continue;
+    const conflict = addRunner(base, outcome.runnerId);
+    if (conflict) return { scored: false, reason: conflict };
+  }
+
+  const batterBase = hitBaseForResult(event.result);
+  const batterHasOutcome = (event.runnerOutcomes ?? []).some(
+    (outcome) => outcome.runnerId === event.batterId,
+  );
+  const batterAlreadyOnBase = Object.values(occupancy).includes(event.batterId);
+  if (
+    targetOutcome.runnerId !== event.batterId &&
+    !batterHasOutcome &&
+    !batterAlreadyOnBase &&
+    batterBase
+  ) {
+    const conflict = addRunner(batterBase, event.batterId);
+    if (conflict) return { scored: false, reason: conflict };
+  }
+
+  const conflict = addRunner(holdBase, targetOutcome.runnerId);
+  if (conflict) return { scored: false, reason: conflict };
+
+  return { scored: true, occupancy };
+}
+
+function outcomeToCounterfactualBase(
+  toBase: AtBatRunnerOutcome["toBase"],
+): CounterfactualBase | null {
+  if (toBase === "first" || toBase === "second" || toBase === "third") {
+    return toBase;
+  }
+  return null;
+}
+
+function hitBaseForResult(result: AtBatEvent["result"]): CounterfactualBase | null {
+  if (result === "1B") return "first";
+  if (result === "2B" || result === "GRD") return "second";
+  if (result === "3B") return "third";
+  return null;
+}
+
+function basesFromOccupancy(occupancy: CounterfactualBaseOccupancy): {
+  first: boolean;
+  second: boolean;
+  third: boolean;
+} {
+  return {
+    first: Boolean(occupancy.first),
+    second: Boolean(occupancy.second),
+    third: Boolean(occupancy.third),
+  };
+}
+
+function stateMetadataFromAtBatActual(
+  event: AtBatEvent,
+): ManagerOutAdvancingSendExplanationMetadata["actualState"] {
+  return {
+    outs: event.outsAfter,
+    awayScore: event.awayScoreAfter,
+    homeScore: event.homeScoreAfter,
+    bases: runnerStateToBases(event.runnersAfter),
+  };
+}
+
+function buildUnscoredOutAdvancingMetadata(
+  reason: ManagerOutAdvancingSendUnscoredReason,
+  outcome: AtBatRunnerOutcome | undefined,
+): OutAdvancingCounterfactualWindowResult {
+  return {
+    scored: false,
+    metadata: {
+      ...baseOutAdvancingMetadata(outcome),
+      unscoredReason: reason,
+    },
+  };
+}
+
+function baseOutAdvancingMetadata(
+  outcome: AtBatRunnerOutcome | undefined,
+): ManagerOutAdvancingSendExplanationMetadata {
+  return {
+    runnerId: outcome?.runnerId,
+    runnerName: outcome?.runnerName,
+    fromBase: outcome?.fromBase,
+    actualToBase: outcome?.toBase,
+  };
+}
+
+function calculateAtBatWindow(
+  event: AtBatEvent,
+  totalInnings?: number,
+  extraPolicy?: ExtraInningRunnerPolicy,
+) {
+  const resolvedExtraPolicy = resolveAtBatExtraInningRunnerPolicy(
+    event,
+    extraPolicy,
+  );
   const result = calculateWPA(
     {
       inning: event.inning,
@@ -1881,6 +3123,7 @@ function calculateAtBatWindow(event: AtBatEvent, totalInnings?: number) {
       homeScore: event.homeScore,
       awayScore: event.awayScore,
       totalInnings: event.totalInnings ?? totalInnings,
+      ...resolvedExtraPolicy,
     },
     {
       outs: event.outsAfter,
@@ -1896,6 +3139,7 @@ function calculateAtBatWindow(event: AtBatEvent, totalInnings?: number) {
 function calculateBetweenPlayWindow(
   event: BetweenPlayEvent,
   totalInnings?: number,
+  extraPolicy?: ExtraInningRunnerPolicy,
 ) {
   const gameState = event.gameState;
   if (!gameState) {
@@ -1946,7 +3190,12 @@ function calculateBetweenPlayWindow(
       bases: beforeBases,
       homeScore: gameState.score.home,
       awayScore: gameState.score.away,
-      totalInnings,
+      totalInnings: gameState.totalInnings ?? totalInnings,
+      extraInningRunner:
+        gameState.extraInningRunner ?? extraPolicy?.extraInningRunner,
+      extraInningRunnerDelay:
+        gameState.extraInningRunnerDelay ??
+        extraPolicy?.extraInningRunnerDelay,
     },
     {
       outs: outsAfter,
@@ -1955,6 +3204,18 @@ function calculateBetweenPlayWindow(
       awayScore: awayScoreAfter,
     },
   );
+}
+
+function resolveAtBatExtraInningRunnerPolicy(
+  event: AtBatEvent,
+  fallback?: ExtraInningRunnerPolicy,
+): ExtraInningRunnerPolicy {
+  return {
+    extraInningRunner:
+      event.extraInningRunner ?? fallback?.extraInningRunner,
+    extraInningRunnerDelay:
+      event.extraInningRunnerDelay ?? fallback?.extraInningRunnerDelay,
+  };
 }
 
 function inferBuntDecisionType(
@@ -2020,6 +3281,7 @@ function isDefensiveManagerDecision(decisionType: ManagerDecisionType): boolean 
   return (
     decisionType === "pitching_change" ||
     decisionType === "leave_pitcher_in" ||
+    decisionType === "keep_defender_in" ||
     decisionType === "defensive_sub" ||
     decisionType === "position_change" ||
     decisionType === "intentional_walk"

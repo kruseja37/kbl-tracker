@@ -1,11 +1,23 @@
+import "fake-indexeddb/auto";
+
 import { describe, expect, test } from "vitest";
 
-import type { AtBatEvent, BetweenPlayEvent, FieldingEvent } from "../eventLog";
+import {
+  createGameHeader,
+  getAtBatEvent,
+  logAtBatEvent,
+  updateAtBatEvent,
+  type AtBatEvent,
+  type BetweenPlayEvent,
+  type FieldingEvent,
+} from "../eventLog";
 import {
   aggregateKblWpaCredits,
   deriveActualAtBatWpa,
   deriveKblWpaCredits,
 } from "../kblWpaAttribution";
+import { calculateWPA } from "../../engines/wpaCalculator";
+import { WPA_MODEL_VERSION } from "../../engines/wpaV2";
 
 function createAtBat(overrides: Partial<AtBatEvent> = {}): AtBatEvent {
   return {
@@ -36,7 +48,7 @@ function createAtBat(overrides: Partial<AtBatEvent> = {}): AtBatEvent {
     winProbabilityBefore: 0.5,
     winProbabilityAfter: 0.5,
     wpa: 0,
-    wpaModelVersion: "kbl-wpa-v2",
+    wpaModelVersion: WPA_MODEL_VERSION,
     ballInPlay: null,
     fameEvents: [],
     isLeadoff: true,
@@ -269,14 +281,14 @@ describe("KBL WPA attribution", () => {
     const credits = deriveKblWpaCredits({ atBatEvents: [event] });
     const actual = deriveActualAtBatWpa(event);
 
-    expect(actual.wpaModelVersion).toBe("kbl-wpa-v2");
+    expect(actual.wpaModelVersion).toBe(WPA_MODEL_VERSION);
     expect(actual.battingTeamDelta).toBeGreaterThan(0);
     expect(sumCredits(credits, "away")).toBeCloseTo(actual.battingTeamDelta, 5);
     expect(sumCredits(credits, "home")).toBeCloseTo(actual.fieldingTeamDelta, 5);
     expect(sumCredits(credits, "away") + sumCredits(credits, "home")).toBeCloseTo(0, 5);
   });
 
-  test("complete archived legacy events keep stored WPA unless recomputed", () => {
+  test("complete archived legacy events keep stored batting WPA unless explicitly recomputed", () => {
     const legacyEvent = createAtBat({
       result: "HR",
       wpaModelVersion: undefined,
@@ -296,8 +308,261 @@ describe("KBL WPA attribution", () => {
 
     expect(actual.wpaModelVersion).toBe("legacy-stored");
     expect(actual.battingTeamDelta).toBe(0.1234);
+    expect(totalFor(credits, "away-batter")).toBeGreaterThan(0);
+    expect(totalFor(credits, "away-batter")).toBe(0.1234);
+    expect(sumCredits(credits, "home")).toBeCloseTo(actual.fieldingTeamDelta, 5);
+  });
+
+  test("unknown non-current WPA model versions keep finite stored WPA as legacy archive policy", () => {
+    const unknownVersionEvent = createAtBat({
+      result: "HR",
+      wpaModelVersion: "mlb-savant-wpa-typo",
+      wpa: 0.4321,
+      winProbabilityBefore: 0.2,
+      winProbabilityAfter: 0.1,
+      awayScore: 0,
+      homeScore: 9,
+      awayScoreAfter: 3,
+      homeScoreAfter: 9,
+      runsScored: 3,
+      rbiCount: 3,
+    });
+
+    const actual = deriveActualAtBatWpa(unknownVersionEvent);
+    const credits = deriveKblWpaCredits({
+      atBatEvents: [unknownVersionEvent],
+    });
+
+    expect(actual.wpaModelVersion).toBe("mlb-savant-wpa-typo");
+    expect(actual.battingTeamDelta).toBe(0.4321);
+    expect(totalFor(credits, "away-batter")).toBe(0.4321);
+  });
+
+  test("sparse archived legacy events keep stored batting WPA fallback", () => {
+    const sparseLegacyEvent = {
+      ...createAtBat({
+        result: "HR",
+        wpaModelVersion: undefined,
+        wpa: 0.1234,
+        winProbabilityBefore: 0.2,
+        winProbabilityAfter: 0.1,
+        awayScore: 0,
+        homeScore: 9,
+        awayScoreAfter: 3,
+        homeScoreAfter: 9,
+        runsScored: 3,
+        rbiCount: 3,
+      }),
+      outsAfter: undefined,
+    } as unknown as AtBatEvent;
+
+    const actual = deriveActualAtBatWpa(sparseLegacyEvent);
+    const credits = deriveKblWpaCredits({ atBatEvents: [sparseLegacyEvent] });
+
+    expect(actual.wpaModelVersion).toBe("legacy-stored");
+    expect(actual.battingTeamDelta).toBe(0.1234);
     expect(totalFor(credits, "away-batter")).toBe(0.1234);
     expect(sumCredits(credits, "home")).toBe(0);
+  });
+
+  test("current-model top-half strikeouts by the same pitcher cannot become negative pitching WPA", () => {
+    const franzContext = {
+      pitcherId: "franz-zilla",
+      pitcherName: "Franz Zilla",
+      pitcherTeamId: "home",
+      catcherContext: {
+        playerId: "home-catcher",
+        playerName: "Home Catcher",
+        teamId: "home",
+        position: "C" as const,
+      },
+      wpaModelVersion: WPA_MODEL_VERSION,
+    };
+    const firstStrikeout = createAtBat({
+      ...franzContext,
+      eventId: "game-1_1",
+      eventIndex: 1,
+      result: "K",
+      outs: 0,
+      outsAfter: 1,
+      // Simulates an older stored home-team delta. Recomputed KBL WPA must ignore this sign.
+      wpa: 0.018,
+      winProbabilityBefore: 0.55,
+      winProbabilityAfter: 0.568,
+    });
+    const secondStrikeout = createAtBat({
+      ...franzContext,
+      eventId: "game-1_2",
+      eventIndex: 2,
+      result: "Kc",
+      outs: 1,
+      outsAfter: 2,
+      wpa: 0.012,
+      winProbabilityBefore: 0.568,
+      winProbabilityAfter: 0.58,
+    });
+
+    const credits = deriveKblWpaCredits({ atBatEvents: [firstStrikeout, secondStrikeout] });
+    const totals = aggregateKblWpaCredits(credits);
+    const franzTotal = totals.find((entry) => entry.playerId === "franz-zilla");
+
+    expect(deriveActualAtBatWpa(firstStrikeout).battingTeamDelta).toBeLessThan(0);
+    expect(deriveActualAtBatWpa(secondStrikeout).battingTeamDelta).toBeLessThan(0);
+    expect(franzTotal?.pitchingWpa).toBeGreaterThan(0);
+    expect(franzTotal?.totalWpa).toBeGreaterThan(0);
+  });
+
+  test("current-model archived events can inherit game-level extra-runner policy", () => {
+    const automaticRunner = {
+      runnerId: "away-previous-batter",
+      runnerName: "Away Previous Batter",
+      responsiblePitcherId: "home-pitcher",
+    };
+    const eventWithoutStoredPolicy = createAtBat({
+      inning: 10,
+      halfInning: "TOP",
+      outs: 0,
+      runners: { first: null, second: automaticRunner, third: null },
+      awayScore: 5,
+      homeScore: 5,
+      outsAfter: 1,
+      runnersAfter: { first: null, second: automaticRunner, third: null },
+      awayScoreAfter: 5,
+      homeScoreAfter: 5,
+      totalInnings: undefined,
+      extraInningRunner: undefined,
+      extraInningRunnerDelay: undefined,
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+
+    const noPolicy = deriveActualAtBatWpa(eventWithoutStoredPolicy, 9);
+    const gamePolicy = deriveActualAtBatWpa(eventWithoutStoredPolicy, 9, {
+      extraInningRunner: true,
+      extraInningRunnerDelay: 1,
+    });
+
+    expect(noPolicy.winProbabilityBefore).toBeCloseTo(0.333, 3);
+    expect(gamePolicy.winProbabilityBefore).toBeCloseTo(0.5, 3);
+    expect(
+      gamePolicy.winExpectancyTraceBefore &&
+        "rowKey" in gamePolicy.winExpectancyTraceBefore
+        ? gamePolicy.winExpectancyTraceBefore.rowKey
+        : "",
+    ).toBe("10|Top|0|2|batDiff=0");
+  });
+
+  test("event edit refresh hydrates missing extra-runner policy from game header", async () => {
+    const gameId = "game-extra-policy-refresh";
+    const eventId = `${gameId}_1`;
+    const automaticRunner = {
+      runnerId: "away-previous-batter",
+      runnerName: "Away Previous Batter",
+      responsiblePitcherId: "home-pitcher",
+    };
+
+    await createGameHeader({
+      gameId,
+      date: 1,
+      awayTeamId: "away",
+      awayTeamName: "Away",
+      homeTeamId: "home",
+      homeTeamName: "Home",
+      finalScore: null,
+      finalInning: 9,
+      totalInnings: 9,
+      extraInningRunner: true,
+      extraInningRunnerDelay: 1,
+      isComplete: false,
+    });
+    await logAtBatEvent(createAtBat({
+      eventId,
+      gameId,
+      inning: 10,
+      halfInning: "TOP",
+      outs: 0,
+      runners: { first: null, second: automaticRunner, third: null },
+      awayScore: 5,
+      homeScore: 5,
+      outsAfter: 1,
+      runnersAfter: { first: null, second: automaticRunner, third: null },
+      awayScoreAfter: 5,
+      homeScoreAfter: 5,
+      totalInnings: undefined,
+      extraInningRunner: undefined,
+      extraInningRunnerDelay: undefined,
+      wpaModelVersion: WPA_MODEL_VERSION,
+    }));
+
+    await updateAtBatEvent(eventId, { result: "Kc" });
+    const persisted = await getAtBatEvent(eventId);
+
+    expect(persisted?.extraInningRunner).toBe(true);
+    expect(persisted?.extraInningRunnerDelay).toBe(1);
+    expect(persisted?.winProbabilityBefore).toBeCloseTo(0.5, 3);
+  });
+
+  test("direct WPA field edits recompute from the current model instead of trusting caller values", async () => {
+    const gameId = "direct-wpa-update-game";
+    const eventId = `${gameId}_1`;
+    const event = createAtBat({
+      eventId,
+      gameId,
+      result: "GO",
+      inning: 7,
+      halfInning: "TOP",
+      outs: 1,
+      runners: { first: null, second: null, third: null },
+      awayScore: 2,
+      homeScore: 3,
+      outsAfter: 2,
+      runnersAfter: { first: null, second: null, third: null },
+      awayScoreAfter: 2,
+      homeScoreAfter: 3,
+      totalInnings: 9,
+      extraInningRunner: false,
+      extraInningRunnerDelay: 1,
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+    const expected = calculateWPA(
+      {
+        inning: event.inning,
+        isTop: event.halfInning === "TOP",
+        outs: event.outs,
+        bases: { first: false, second: false, third: false },
+        homeScore: event.homeScore,
+        awayScore: event.awayScore,
+        totalInnings: event.totalInnings,
+        extraInningRunner: event.extraInningRunner,
+        extraInningRunnerDelay: event.extraInningRunnerDelay,
+      },
+      {
+        outs: event.outsAfter,
+        bases: { first: false, second: false, third: false },
+        homeScore: event.homeScoreAfter,
+        awayScore: event.awayScoreAfter,
+      },
+    );
+
+    await logAtBatEvent(event);
+    await updateAtBatEvent(eventId, {
+      wpa: 0.999,
+      winProbabilityBefore: 0.999,
+      winProbabilityAfter: 0.001,
+      wpaModelVersion: "manual-poison",
+      homeDelta: -0.998,
+      battingTeamDelta: 0.999,
+      fieldingTeamDelta: -0.999,
+    });
+    const persisted = await getAtBatEvent(eventId);
+
+    expect(persisted?.wpaModelVersion).toBe(WPA_MODEL_VERSION);
+    expect(persisted?.winProbabilityBefore).toBeCloseTo(expected.winProbabilityBefore, 5);
+    expect(persisted?.winProbabilityAfter).toBeCloseTo(expected.winProbabilityAfter, 5);
+    expect(persisted?.wpa).toBeCloseTo(expected.wpa, 5);
+    expect(persisted?.homeDelta).toBeCloseTo(expected.homeDelta, 5);
+    expect(persisted?.battingTeamDelta).toBeCloseTo(expected.battingTeamDelta, 5);
+    expect(persisted?.fieldingTeamDelta).toBeCloseTo(expected.fieldingTeamDelta, 5);
+    expect(persisted?.wpa).not.toBe(0.999);
   });
 
   test("saved bases use counterfactual fielder credit instead of fixed raw units", () => {
@@ -517,6 +782,158 @@ describe("KBL WPA attribution", () => {
     expect(totalFor(credits, "home-runner")).toBeGreaterThan(0);
     expect(totalFor(credits, "away-pitcher")).toBeLessThan(0);
     expect(sumCredits(credits, "away") + sumCredits(credits, "home")).toBeCloseTo(0, 5);
+  });
+
+  test("between-play WPA uses event snapshot total innings before caller fallback", () => {
+    const event: BetweenPlayEvent = {
+      eventId: "game-1_bp_4",
+      gameId: "game-1",
+      timestamp: 5,
+      eventIndex: 5,
+      type: "pickoff",
+      gameState: {
+        inning: 8,
+        halfInning: "TOP",
+        outs: 0,
+        totalInnings: 7,
+        score: { away: 5, home: 5 },
+        extraInningRunner: true,
+        extraInningRunnerDelay: 1,
+        runnersOn: { second: "away-runner" },
+      },
+      runnerAction: {
+        runnerId: "away-runner",
+        runnerName: "Away Runner",
+        fromBase: 2,
+        toBase: 2,
+        outcome: "out",
+        reason: "pickoff",
+      },
+      runnerAttribution: {
+        pitcherId: "home-pitcher",
+        pitcherName: "Home Pitcher",
+      },
+    };
+    const credits = deriveKblWpaCredits({
+      atBatEvents: [],
+      betweenPlayEvents: [event],
+      awayTeamId: "away",
+      homeTeamId: "home",
+      totalInnings: 9,
+      extraInningRunner: true,
+      extraInningRunnerDelay: 1,
+    });
+    const expectedEventSnapshotWpa = calculateWPA(
+      {
+        inning: 8,
+        isTop: true,
+        outs: 0,
+        bases: { first: false, second: true, third: false },
+        homeScore: 5,
+        awayScore: 5,
+        totalInnings: 7,
+        extraInningRunner: true,
+        extraInningRunnerDelay: 1,
+      },
+      {
+        outs: 1,
+        bases: { first: false, second: false, third: false },
+        homeScore: 5,
+        awayScore: 5,
+      },
+    ).battingTeamDelta;
+    const fallbackNineInningWpa = calculateWPA(
+      {
+        inning: 8,
+        isTop: true,
+        outs: 0,
+        bases: { first: false, second: true, third: false },
+        homeScore: 5,
+        awayScore: 5,
+        totalInnings: 9,
+        extraInningRunner: true,
+        extraInningRunnerDelay: 1,
+      },
+      {
+        outs: 1,
+        bases: { first: false, second: false, third: false },
+        homeScore: 5,
+        awayScore: 5,
+      },
+    ).battingTeamDelta;
+
+    expect(totalFor(credits, "away-runner")).toBeCloseTo(
+      expectedEventSnapshotWpa,
+      5,
+    );
+    expect(totalFor(credits, "away-runner")).not.toBeCloseTo(
+      fallbackNineInningWpa,
+      5,
+    );
+  });
+
+  test("old between-play records without snapshot total innings use caller fallback", () => {
+    const event: BetweenPlayEvent = {
+      eventId: "game-1_bp_5",
+      gameId: "game-1",
+      timestamp: 6,
+      eventIndex: 6,
+      type: "pickoff",
+      gameState: {
+        inning: 8,
+        halfInning: "TOP",
+        outs: 0,
+        score: { away: 5, home: 5 },
+        extraInningRunner: true,
+        extraInningRunnerDelay: 1,
+        runnersOn: { second: "away-runner" },
+      },
+      runnerAction: {
+        runnerId: "away-runner",
+        runnerName: "Away Runner",
+        fromBase: 2,
+        toBase: 2,
+        outcome: "out",
+        reason: "pickoff",
+      },
+      runnerAttribution: {
+        pitcherId: "home-pitcher",
+        pitcherName: "Home Pitcher",
+      },
+    };
+    const credits = deriveKblWpaCredits({
+      atBatEvents: [],
+      betweenPlayEvents: [event],
+      awayTeamId: "away",
+      homeTeamId: "home",
+      totalInnings: 7,
+      extraInningRunner: true,
+      extraInningRunnerDelay: 1,
+    });
+    const expectedFallbackWpa = calculateWPA(
+      {
+        inning: 8,
+        isTop: true,
+        outs: 0,
+        bases: { first: false, second: true, third: false },
+        homeScore: 5,
+        awayScore: 5,
+        totalInnings: 7,
+        extraInningRunner: true,
+        extraInningRunnerDelay: 1,
+      },
+      {
+        outs: 1,
+        bases: { first: false, second: false, third: false },
+        homeScore: 5,
+        awayScore: 5,
+      },
+    ).battingTeamDelta;
+
+    expect(totalFor(credits, "away-runner")).toBeCloseTo(
+      expectedFallbackWpa,
+      5,
+    );
   });
 
   test("prompted keep-current manager decisions do not change player KBL WPA totals", () => {

@@ -13,13 +13,13 @@
 import {
   SMB4_BASELINES,
   SMB4_LINEAR_WEIGHTS,
-  SMB4_WOBA_WEIGHTS,
   MLB_BASELINES,
   type LeagueContext,
   type LinearWeights,
   type WOBAWeights,
   createDefaultLeagueContext,
 } from '../types/war';
+import { syncEngine } from '../utils/syncEngine';
 
 // ============================================
 // TYPES
@@ -222,7 +222,6 @@ export function calibrateLeagueContext(
   );
 
   // Recalibrate run environment
-  const ourRunsPerGame = aggregateStats.totalRuns / aggregateStats.totalGames;
   const newRunsPerPA = blend(
     currentContext.runsPerPA,
     aggregateStats.totalRuns / aggregateStats.totalPA,
@@ -368,7 +367,12 @@ export async function saveAdaptiveState(state: AdaptiveEngineState): Promise<voi
     const request = store.put(state);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) {
+        syncEngine.upsert(ADAPTIVE_DB_NAME, STATE_STORE, state.id, state);
+      }
+      resolve();
+    };
   });
 }
 

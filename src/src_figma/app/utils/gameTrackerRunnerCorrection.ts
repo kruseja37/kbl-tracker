@@ -334,6 +334,10 @@ export function resolveBatterOutcomeResult(args: {
     return 'D3K';
   }
 
+  if (baseResult === 'FC' || args.currentResult === 'FC') {
+    return 'FC';
+  }
+
   if (args.nextOutsRecorded >= 2) {
     return 'DP';
   }

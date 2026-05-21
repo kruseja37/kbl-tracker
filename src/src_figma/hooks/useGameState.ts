@@ -32,7 +32,15 @@ import {
 import type { GameAggregationOptions } from "../../utils/seasonAggregator";
 import { processCompletedGame } from "../../utils/processCompletedGame";
 import { deriveCommittedManagerDecisionState } from "../../utils/managerWpaGameState";
-import type { GameLockLineupSnapshots } from "../../types/managerWpa";
+import { deriveKblWpaCredits } from "../../utils/kblWpaAttribution";
+import {
+  getGamePogAwardSet,
+  type PogAwardSet,
+} from "../../utils/pogAwards";
+import type {
+  GameLockLineupSnapshots,
+  ManagerRecommendationWatchEvent,
+} from "../../types/managerWpa";
 import { appendEliminationGameFameToRun } from "../../utils/eliminationRunFameStorage";
 import { appendEliminationGameToAllTimeStats } from "../../utils/eliminationAllTimeStatsStorage";
 import {
@@ -46,6 +54,8 @@ import {
 import {
   buildStoredPlayersOfTheGame,
   rankPlayersOfTheGame,
+  type PlayerOfTheGameEntry,
+  type StoredPlayersOfTheGame,
 } from "../../utils/playersOfTheGame";
 import type {
   AtBatResult,
@@ -84,6 +94,38 @@ import { normalizeLiveSubstitutionType } from "../app/utils/gameTrackerSubstitut
 // ============================================
 // TYPES
 // ============================================
+
+function buildArchivePlayersOfTheGame(
+  awardSet: PogAwardSet,
+  rankedPlayers: PlayerOfTheGameEntry[],
+): StoredPlayersOfTheGame | undefined {
+  if (awardSet.dataQuality.source !== "kbl_wpa") {
+    return buildStoredPlayersOfTheGame(rankedPlayers);
+  }
+
+  if (!awardSet.overall?.playerId) {
+    return undefined;
+  }
+
+  const orderedPlayerIds = [
+    awardSet.overall.playerId,
+    ...awardSet.playerRoleAwards.flatMap((award) =>
+      award.playerId ? [award.playerId] : [],
+    ),
+    ...rankedPlayers.map((player) => player.playerId),
+  ];
+  const uniquePlayerIds = Array.from(new Set(orderedPlayerIds)).slice(0, 3);
+
+  if (uniquePlayerIds.length === 0) {
+    return undefined;
+  }
+
+  return {
+    first: uniquePlayerIds[0],
+    second: uniquePlayerIds[1],
+    third: uniquePlayerIds[2],
+  };
+}
 
 export type GamePhase = "PRE_GAME" | "LIVE" | "POST_FINAL_OUT";
 
@@ -468,6 +510,9 @@ export interface UseGameStateReturn {
   recordPromptedManagerDecision: (
     decision: PromptedManagerDecisionEvent,
   ) => Promise<BetweenPlayEvent>;
+  recordManagerRecommendationWatch: (
+    watch: ManagerRecommendationWatchEvent,
+  ) => Promise<BetweenPlayEvent>;
   placeGhostRunner: (base: "second", playerId: string) => void;
   advanceRunner: (
     from: "first" | "second" | "third",
@@ -701,6 +746,8 @@ export interface GameInitConfig {
   isClinchGame?: boolean;
   // T0-01: Number of regulation innings (default 9, SMB4 franchise often 6 or 7)
   totalInnings?: number;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
   stadiumName?: string | null;
   seasonNumber: number;
   // Layer 1B: Context snapshot identity fields
@@ -886,6 +933,9 @@ function buildGameHeaderDraftFromSnapshot(
     chosenLineupSnapshots: snapshot.chosenLineupSnapshots,
     finalScore: null,
     finalInning: snapshot.totalInnings ?? 9,
+    totalInnings: snapshot.totalInnings,
+    extraInningRunner: snapshot.extraInningRunner,
+    extraInningRunnerDelay: snapshot.extraInningRunnerDelay,
     isComplete: false,
   };
 }
@@ -1147,7 +1197,6 @@ function calculateOutsFromResult(result: AtBatResult): number {
     case "FLO":
     case "LO":
     case "PO":
-    case "FC":
     case "SF":
     case "SAC":
     case "D3K":
@@ -2821,7 +2870,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           inning: gameState.inning,
           halfInning: gameState.isTop ? "TOP" : "BOTTOM",
           outs: gameState.outs,
+          totalInnings: totalInningsRef.current,
           score: { away: gameState.awayScore, home: gameState.homeScore },
+          extraInningRunner: extraInningRunnerRef.current,
+          extraInningRunnerDelay: extraInningRunnerDelayRef.current,
           runnersOn: buildBetweenPlayRunnersOn(),
         },
       };
@@ -3853,6 +3905,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         franchiseId: franchiseIdRef.current,
         leagueId: leagueIdRef.current,
         totalInnings: totalInningsRef.current,
+        extraInningRunner: extraInningRunnerRef.current,
+        extraInningRunnerDelay: extraInningRunnerDelayRef.current,
 
         // 1.10: Park context
         parkContext: gameState.stadiumName
@@ -3981,6 +4035,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       playerNameByIdRef.current.clear();
       inningPitchesRef.current = { pitches: 0, strikeouts: 0, pitcherId: "" };
       totalInningsRef.current = config.totalInnings || 9;
+      extraInningRunnerRef.current = config.extraInningRunner ?? false;
+      extraInningRunnerDelayRef.current = config.extraInningRunnerDelay ?? 1;
       setScoreboard(createEmptyScoreboardState(totalInningsRef.current));
       console.log("[R3-R5] Initialized scoreboard with regulation innings", {
         gameId: config.gameId,
@@ -4152,7 +4208,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         optimalLineupSnapshots: config.optimalLineupSnapshots,
         chosenLineupSnapshots: config.chosenLineupSnapshots,
         finalScore: null,
-        finalInning: 9,
+        finalInning: totalInningsRef.current,
+        totalInnings: totalInningsRef.current,
+        extraInningRunner: extraInningRunnerRef.current,
+        extraInningRunnerDelay: extraInningRunnerDelayRef.current,
         isComplete: false,
         liveBeatReporterEnabled:
           config.liveBeatReporterEnabled ??
@@ -4407,8 +4466,20 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           const snapshotBetweenPlayEvents = await getBetweenPlayEvents(
             resolvedGameId,
           );
+          const restoredTotalInnings =
+            savedSnapshot.totalInnings ??
+            inProgressGame.totalInnings ??
+            9;
+          const restoredExtraInningRunner =
+            savedSnapshot.extraInningRunner ??
+            inProgressGame.extraInningRunner ??
+            false;
+          const restoredExtraInningRunnerDelay =
+            savedSnapshot.extraInningRunnerDelay ??
+            inProgressGame.extraInningRunnerDelay ??
+            1;
           const emptyBoard = createEmptyScoreboardState(
-            savedSnapshot.totalInnings ?? totalInningsRef.current,
+            restoredTotalInnings,
           );
           const snapshotBoard = savedSnapshot.scoreboard;
           const normalizedScoreboard: ScoreboardState = {
@@ -4479,9 +4550,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             leagueIdRef.current = savedSnapshot.leagueId;
           }
           // R3: Restore game config refs from snapshot
-          if (savedSnapshot.totalInnings != null) {
-            totalInningsRef.current = savedSnapshot.totalInnings;
-          }
+          totalInningsRef.current = restoredTotalInnings;
           if (savedSnapshot.awayUsesDh != null) {
             awayUsesDhRef.current = savedSnapshot.awayUsesDh;
           }
@@ -4489,12 +4558,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             homeUsesDhRef.current = savedSnapshot.homeUsesDh;
           }
           // R3-T0: Restore extra-inning runner config from snapshot
-          if (savedSnapshot.extraInningRunner != null) {
-            extraInningRunnerRef.current = savedSnapshot.extraInningRunner;
-          }
-          if (savedSnapshot.extraInningRunnerDelay != null) {
-            extraInningRunnerDelayRef.current = savedSnapshot.extraInningRunnerDelay;
-          }
+          extraInningRunnerRef.current = restoredExtraInningRunner;
+          extraInningRunnerDelayRef.current = restoredExtraInningRunnerDelay;
           // R3-T0: Restore team colors from snapshot
           if (savedSnapshot.awayTeamColor) {
             teamColorsRef.current.awayTeamColor = savedSnapshot.awayTeamColor;
@@ -4856,6 +4921,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         }
 
         if (inProgressGame) {
+          totalInningsRef.current = inProgressGame.totalInnings ?? 9;
+          extraInningRunnerRef.current =
+            inProgressGame.extraInningRunner ?? false;
+          extraInningRunnerDelayRef.current =
+            inProgressGame.extraInningRunnerDelay ?? 1;
+
           // Reconstruct from durable logs when live snapshot is unavailable.
           const events = await getGameEvents(inProgressGame.gameId);
           const betweenPlayEvents = await getBetweenPlayEvents(
@@ -5101,7 +5172,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           setPitcherStats(rehydratedPitcherStats);
 
           // Rebuild scoreboard from event log so inning-by-inning line score is preserved.
-          const rebuiltInnings: ScoreboardState["innings"] = Array(9)
+          const rebuiltInnings: ScoreboardState["innings"] = Array(
+            totalInningsRef.current,
+          )
             .fill(null)
             .map(() => ({
               away: undefined,
@@ -6190,6 +6263,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               homeScore: gameState.homeScore,
               awayScore: gameState.awayScore,
               totalInnings: totalInningsRef.current,
+              extraInningRunner: extraInningRunnerRef.current,
+              extraInningRunnerDelay: extraInningRunnerDelayRef.current,
             },
             {
               outs: gameState.outs,
@@ -6450,8 +6525,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           if (effectiveRunnerData.fromSecond === "out") outsOnPlay++;
           if (effectiveRunnerData.fromThird === "out") outsOnPlay++;
         }
-        // Default to 1 out if no runner data specified (most common FC scenario)
-        if (outsOnPlay === 0) outsOnPlay = 1;
+        // Default to 1 out only when no explicit FC runner outcome was provided.
+        if (outsOnPlay === 0 && !effectiveRunnerData) outsOnPlay = 1;
         console.log(
           `[recordOut] FC: ${outsOnPlay} runner out(s), batter safe at first`,
         );
@@ -6696,6 +6771,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               homeScore: gameState.homeScore,
               awayScore: gameState.awayScore,
               totalInnings: totalInningsRef.current,
+              extraInningRunner: extraInningRunnerRef.current,
+              extraInningRunnerDelay: extraInningRunnerDelayRef.current,
             },
             {
               outs: newOuts,
@@ -6719,6 +6796,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         isClutch,
         isWalkOff: endGameEvaluation.isWalkOff,
         ...buildContextSnapshot(effectiveResult, pitchCount),
+        outsRecorded: outsOnPlay,
       };
 
       if (endGameEvaluation.shouldEndGame) {
@@ -7063,6 +7141,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               homeScore: gameState.homeScore,
               awayScore: gameState.awayScore,
               totalInnings: totalInningsRef.current,
+              extraInningRunner: extraInningRunnerRef.current,
+              extraInningRunnerDelay: extraInningRunnerDelayRef.current,
             },
             {
               outs: gameState.outs,
@@ -7426,6 +7506,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               homeScore: gameState.homeScore,
               awayScore: gameState.awayScore,
               totalInnings: totalInningsRef.current,
+              extraInningRunner: extraInningRunnerRef.current,
+              extraInningRunnerDelay: extraInningRunnerDelayRef.current,
             },
             {
               outs: newOuts,
@@ -7774,6 +7856,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               homeScore: gameState.homeScore,
               awayScore: gameState.awayScore,
               totalInnings: totalInningsRef.current,
+              extraInningRunner: extraInningRunnerRef.current,
+              extraInningRunnerDelay: extraInningRunnerDelayRef.current,
             },
             {
               outs: gameState.outs,
@@ -8575,6 +8659,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             decision.source,
         },
         promptedManagerDecision: decision,
+      }),
+    [persistBetweenPlayEvent],
+  );
+
+  const recordManagerRecommendationWatch = useCallback(
+    async (watch: ManagerRecommendationWatchEvent) =>
+      persistBetweenPlayEvent({
+        type: "manager_recommendation",
+        managerRecommendationWatch: watch,
       }),
     [persistBetweenPlayEvent],
   );
@@ -10471,6 +10564,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             homeManagerId: opts?.homeManagerId,
             managerByTeamId: opts?.managerByTeamId,
             totalInnings: totalInningsRef.current,
+            extraInningRunner: extraInningRunnerRef.current,
+            extraInningRunnerDelay: extraInningRunnerDelayRef.current,
             gameEnded: true,
           });
 
@@ -10675,18 +10770,50 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           managerDeploymentStints:
             committedManagerDecisionState.managerDeploymentStints,
           managerLineupDeltas: committedManagerDecisionState.managerLineupDeltas,
+          managerRecommendationWatches:
+            committedManagerDecisionState.managerRecommendationWatches,
           optimalLineupSnapshots: gameHeader?.optimalLineupSnapshots,
           chosenLineupSnapshots: gameHeader?.chosenLineupSnapshots,
+          totalInnings: totalInningsRef.current,
+          extraInningRunner: extraInningRunnerRef.current,
+          extraInningRunnerDelay: extraInningRunnerDelayRef.current,
         };
+        const kblWpaCredits = deriveKblWpaCredits({
+          atBatEvents,
+          fieldingEvents,
+          betweenPlayEvents,
+          totalInnings: totalInningsRef.current,
+          extraInningRunner: extraInningRunnerRef.current,
+          extraInningRunnerDelay: extraInningRunnerDelayRef.current,
+          awayTeamId: gameState.awayTeamId,
+          homeTeamId: gameState.homeTeamId,
+          startingLineups: gameHeader?.startingLineups,
+        });
+        const pogAwardSet = getGamePogAwardSet({
+          kblWpaCredits,
+          playerStats: playerStatsRecord,
+          pitcherGameStats: pitcherGameStatsArray,
+          managerDecisions: committedManagerDecisionState.managerDecisions,
+          managerDeploymentStints:
+            committedManagerDecisionState.managerDeploymentStints,
+          managerLineupDeltas: committedManagerDecisionState.managerLineupDeltas,
+          eventLogAvailable:
+            atBatEvents.length > 0 ||
+            fieldingEvents.length > 0 ||
+            betweenPlayEvents.length > 0,
+        });
         const rankedPlayersOfTheGame = rankPlayersOfTheGame(
           {
             awayTeamId: gameState.awayTeamId,
             homeTeamId: gameState.homeTeamId,
             playerStats: playerStatsRecord,
+            pitcherGameStats: pitcherGameStatsArray,
           },
           atBatEvents,
+          kblWpaCredits,
         );
-        const storedPlayersOfTheGame = buildStoredPlayersOfTheGame(
+        const storedPlayersOfTheGame = buildArchivePlayersOfTheGame(
+          pogAwardSet,
           rankedPlayersOfTheGame,
         );
         console.log("[R3-R5] Archived players of the game from final event log", {
@@ -10755,6 +10882,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
                       isClinchGame: restoredPlayoffContext.isClinchGame,
                       leagueId: resolvedArchiveLeagueId,
                       totalInnings: totalInningsRef.current,
+                      extraInningRunner: extraInningRunnerRef.current,
+                      extraInningRunnerDelay: extraInningRunnerDelayRef.current,
                       pogPlayerId: storedPlayersOfTheGame?.first,
                       playersOfTheGame: storedPlayersOfTheGame,
                     },
@@ -11401,6 +11530,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           homeManagerId: options?.homeManagerId,
           managerByTeamId: options?.managerByTeamId,
           totalInnings: totalInningsRef.current,
+          extraInningRunner: extraInningRunnerRef.current,
+          extraInningRunnerDelay: extraInningRunnerDelayRef.current,
           gameEnded: true,
         });
 
@@ -11570,18 +11701,50 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         managerDeploymentStints:
           committedManagerDecisionState.managerDeploymentStints,
         managerLineupDeltas: committedManagerDecisionState.managerLineupDeltas,
+        managerRecommendationWatches:
+          committedManagerDecisionState.managerRecommendationWatches,
         optimalLineupSnapshots: endGameHeader?.optimalLineupSnapshots,
         chosenLineupSnapshots: endGameHeader?.chosenLineupSnapshots,
+        totalInnings: totalInningsRef.current,
+        extraInningRunner: extraInningRunnerRef.current,
+        extraInningRunnerDelay: extraInningRunnerDelayRef.current,
       };
+      const kblWpaCredits = deriveKblWpaCredits({
+        atBatEvents: endGameAtBatEvents,
+        fieldingEvents: endGameFieldingEvents,
+        betweenPlayEvents: endGameBetweenPlayEvents,
+        totalInnings: totalInningsRef.current,
+        extraInningRunner: extraInningRunnerRef.current,
+        extraInningRunnerDelay: extraInningRunnerDelayRef.current,
+        awayTeamId: gameState.awayTeamId,
+        homeTeamId: gameState.homeTeamId,
+        startingLineups: endGameHeader?.startingLineups,
+      });
+      const pogAwardSet = getGamePogAwardSet({
+        kblWpaCredits,
+        playerStats: playerStatsRecord,
+        pitcherGameStats: pitcherGameStatsArray,
+        managerDecisions: committedManagerDecisionState.managerDecisions,
+        managerDeploymentStints:
+          committedManagerDecisionState.managerDeploymentStints,
+        managerLineupDeltas: committedManagerDecisionState.managerLineupDeltas,
+        eventLogAvailable:
+          endGameAtBatEvents.length > 0 ||
+          endGameFieldingEvents.length > 0 ||
+          endGameBetweenPlayEvents.length > 0,
+      });
       const rankedPlayersOfTheGame = rankPlayersOfTheGame(
         {
           awayTeamId: gameState.awayTeamId,
           homeTeamId: gameState.homeTeamId,
           playerStats: playerStatsRecord,
+          pitcherGameStats: pitcherGameStatsArray,
         },
         endGameAtBatEvents,
+        kblWpaCredits,
       );
-      const storedPlayersOfTheGame = buildStoredPlayersOfTheGame(
+      const storedPlayersOfTheGame = buildArchivePlayersOfTheGame(
+        pogAwardSet,
         rankedPlayersOfTheGame,
       );
       console.log("[R3-R5] Prepared post-game archive context", {
@@ -11922,6 +12085,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     reassignRunnerEventAttribution,
     recordManagerMoment,
     recordPromptedManagerDecision,
+    recordManagerRecommendationWatch,
     placeGhostRunner,
     advanceRunner,
     advanceRunnersBatch,

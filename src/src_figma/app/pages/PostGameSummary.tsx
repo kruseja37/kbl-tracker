@@ -25,7 +25,13 @@ import {
   type KblWpaCredit,
 } from "../../../utils/kblWpaAttribution";
 import { listManagerProfiles } from "../../../utils/managerIdentityStorage";
-import { rankPlayersOfTheGame } from "../../../utils/playersOfTheGame";
+import {
+  getGamePogAwardSet,
+  getPogAwardDisplayLabel,
+  getPogAwardPointsLabel,
+  type PogAward,
+  type PogAwardSet,
+} from "../../../utils/pogAwards";
 import chalkBgImg from '../../../assets/chalk-bg.png';
 import chalkBgFaintImg from '../../../assets/chalk-bg-faint.png';
 import { FameLeaderboardCard } from "../components/FameLeaderboardCard";
@@ -224,6 +230,14 @@ function getPitcherBadgeData(
   });
 
   return Array.from(new Map(badges.map((b) => [b.label, b])).values());
+}
+
+function getVisiblePogAwards(awardSet: PogAwardSet): PogAward[] {
+  return [
+    ...((awardSet.overall ? [awardSet.overall] : []) as PogAward[]),
+    ...awardSet.playerRoleAwards,
+    ...((awardSet.managerAward ? [awardSet.managerAward] : []) as PogAward[]),
+  ];
 }
 
 export function PostGameSummary({
@@ -640,17 +654,37 @@ export function PostGameSummary({
   // Determine winner
   const homeWon = gameData.finalScore.home > gameData.finalScore.away;
   const winnerName = homeWon ? homeTeamName : awayTeamName;
+  const totalInnings = gameData.totalInnings ?? gameHeader?.totalInnings;
 
   const kblWpaCredits: KblWpaCredit[] = deriveKblWpaCredits({
     atBatEvents,
     fieldingEvents,
     betweenPlayEvents,
-    totalInnings: gameData.totalInnings,
+    totalInnings,
+    extraInningRunner: gameData.extraInningRunner ?? gameHeader?.extraInningRunner,
+    extraInningRunnerDelay:
+      gameData.extraInningRunnerDelay ?? gameHeader?.extraInningRunnerDelay,
     awayTeamId,
     homeTeamId,
     startingLineups: gameHeader?.startingLineups,
   });
-  const topPerformers = rankPlayersOfTheGame(gameData, atBatEvents, kblWpaCredits);
+  const pogAwardSet = getGamePogAwardSet({
+    kblWpaCredits,
+    playersOfTheGame: gameData.playersOfTheGame,
+    pogPlayerId: gameData.pogPlayerId,
+    playerStats: gameData.playerStats,
+    pitcherGameStats: gameData.pitcherGameStats,
+    managerProfiles,
+    managerDecisions: gameData.managerDecisions,
+    managerDeploymentStints: gameData.managerDeploymentStints,
+    managerLineupDeltas: gameData.managerLineupDeltas,
+    eventLogAvailable:
+      atBatEvents.length > 0 ||
+      fieldingEvents.length > 0 ||
+      betweenPlayEvents.length > 0,
+  });
+  const pogAwardCards = getVisiblePogAwards(pogAwardSet);
+  const teamStandoutCards = pogAwardSet.teamStandouts;
   const currentGamePlayerIds = new Set<string>([
     ...Object.keys(gameData.playerStats ?? {}),
     ...gameData.pitcherGameStats.map((pitcher) => pitcher.pitcherId),
@@ -828,24 +862,28 @@ export function PostGameSummary({
                 ) : null}
 
                 {/* Players of the game */}
-                {[0, 1, 2].map((rank) => {
-                  const player = topPerformers[rank];
-                  if (
-                    !player ||
-                    (player.ab === 0 &&
-                      player.r === 0 &&
-                      player.rbi === 0 &&
-                      typeof player.wpa !== "number")
-                  )
-                    return null;
+                {pogAwardCards.map((award) => {
+                  const playerStats = award.playerId
+                    ? gameData.playerStats[award.playerId]
+                    : undefined;
+                  const pitcherStats = award.playerId
+                    ? gameData.pitcherGameStats.find(
+                        (pitcher) => pitcher.pitcherId === award.playerId,
+                      )
+                    : undefined;
                   const borderColor =
-                    rank === 0 ? "#C4A853" : rank === 1 ? "#a0a898" : "#556B55";
-                  const label =
-                    rank === 0 ? "POG ★★★" : rank === 1 ? "POG ★★" : "POG ★";
-                  const teamColor = getTeamColors(player.isAway ? awayTeamId : homeTeamId).primary || "#2b3a2e";
+                    award.awardType === "overall" ? "#C4A853" : "#556B55";
+                  const teamColor =
+                    getTeamColors(award.teamId).primary || "#2b3a2e";
+                  const displayName =
+                    award.playerName ??
+                    award.managerName ??
+                    award.playerId ??
+                    award.managerId ??
+                    "Unknown";
                   return (
                     <div
-                      key={rank}
+                      key={`${award.awardType}-${award.playerId ?? award.managerId}`}
                       className="border-2 p-4 mb-3 rounded-sm"
                       style={{
                         borderColor,
@@ -857,34 +895,99 @@ export function PostGameSummary({
                     >
                       <div className="flex items-center gap-2 mb-2">
                         <Trophy className="w-4 h-4 text-[#C4A853]" />
-                        <div className="text-xs text-[#C4A853] tracking-[0.2em] font-bold">{label}</div>
+                        <div className="text-xs text-[#C4A853] tracking-[0.2em] font-bold">
+                          {getPogAwardDisplayLabel(award.awardType)}
+                        </div>
+                        <div className="text-[9px] text-[#a0a898] tracking-[0.16em]">
+                          {getPogAwardPointsLabel(award)}
+                        </div>
                       </div>
                       <div className="text-base text-[#E8E8D8] flex items-baseline gap-2" style={{ fontFamily: "'Tox Typewriter', monospace" }}>
-                        <span>{player.name}</span>
-                        {typeof player.wpa === "number" && (
-                          <span className="text-[10px] text-[#a0a898]" style={{ fontFamily: "'Moms Typewriter', monospace" }}>{`${player.wpa >= 0 ? "+" : ""}${player.wpa.toFixed(3)} WPA`}</span>
-                        )}
+                        <span>{displayName}</span>
+                        <span className="text-[10px] text-[#a0a898]" style={{ fontFamily: "'Moms Typewriter', monospace" }}>
+                          {award.valueLabel}
+                        </span>
                       </div>
-                      <div className="text-[9px] text-[#a0a898] space-y-0.5 mt-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-[#E8E8D8]">{player.h}</span>
-                          <span>-</span>
-                          <span>{player.ab} AB</span>
+                      {playerStats ? (
+                        <div className="text-[9px] text-[#a0a898] space-y-0.5 mt-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-[#E8E8D8]">{playerStats.h}</span>
+                            <span>-</span>
+                            <span>{playerStats.ab} AB</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span>{playerStats.bb} BB</span>
+                            <span>•</span>
+                            <span>{playerStats.k} SO</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span>{playerStats.rbi} RBI</span>
+                            <span>•</span>
+                            <span>{playerStats.r} R</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span>{player.bb} BB</span>
-                          <span>•</span>
-                          <span>{player.so} SO</span>
+                      ) : pitcherStats ? (
+                        <div className="text-[9px] text-[#a0a898] space-y-0.5 mt-1">
+                          <div className="flex items-center gap-2">
+                            <span>{formatIP(pitcherStats.outsRecorded)} IP</span>
+                            <span>•</span>
+                            <span>{pitcherStats.strikeoutsThrown} SO</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span>{pitcherStats.earnedRuns} ER</span>
+                            <span>•</span>
+                            <span>{pitcherStats.walksAllowed} BB</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span>{player.rbi} RBI</span>
-                          <span>•</span>
-                          <span>{player.r} R</span>
+                      ) : (
+                        <div className="text-[9px] text-[#a0a898] mt-1">
+                          {award.explanation}
                         </div>
-                      </div>
+                      )}
                     </div>
                   );
                 })}
+
+                {teamStandoutCards.length > 0 ? (
+                  <div className="bg-[#1f2b21] border-2 border-[#314437] p-4 mb-4 rounded-sm">
+                    <div className="text-xs text-[#C4A853] tracking-[0.3em] font-bold mb-3">
+                      TEAM STANDOUTS
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {teamStandoutCards.map((award) => {
+                        const teamColor =
+                          getTeamColors(award.teamId).primary || "#2b3a2e";
+                        const displayName =
+                          award.playerName ?? award.playerId ?? "Unknown";
+                        return (
+                          <div
+                            key={`${award.awardType}-${award.teamId}-${award.playerId}`}
+                            className="border-2 border-[#556B55] p-3 rounded-sm"
+                            style={{
+                              background: `linear-gradient(${teamColor}24, ${teamColor}24), #1f2b21`,
+                            }}
+                          >
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Trophy className="w-4 h-4 text-[#C4A853]" />
+                              <div className="text-[10px] text-[#C4A853] tracking-[0.18em] font-bold">
+                                {getPogAwardDisplayLabel(award.awardType)}
+                              </div>
+                              <div className="text-[9px] text-[#a0a898] tracking-[0.16em]">
+                                {getPogAwardPointsLabel(award)}
+                              </div>
+                            </div>
+                            <div className="mt-2 text-sm text-[#E8E8D8]" style={{ fontFamily: "'Tox Typewriter', monospace" }}>
+                              {displayName}
+                            </div>
+                            <div className="mt-1 text-[9px] text-[#a0a898]">
+                              {award.valueLabel} · Recognition only
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
 
                 <ManagerWpaOverlay game={gameData} managerProfiles={managerProfiles} />
 

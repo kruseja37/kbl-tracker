@@ -30,8 +30,13 @@ import {
 import { computeEliminationAwards, type EliminationAward } from '../../../utils/eliminationAwards';
 import { buildClutchContext, getHomeFieldPattern } from '../../../engines/playoffEngine';
 import { EliminationTeamHub } from '../components/EliminationTeamHub';
+import { TeamImpactLeaderboardsPanel } from '../components/TeamImpactLeaderboardsPanel';
 import { ReporterAssignmentPanel, type ReporterAssignmentPanelTeam } from '../components/ReporterAssignmentPanel';
 import { resolveManagerForTeam } from '../../../utils/managerIdentityStorage';
+import {
+  getInstanceTeamImpactLeaderboards,
+  type TeamImpactLeaderboards,
+} from '../../../utils/teamImpact';
 import { withPregameManagerNavigationState } from '../utils/pregameNavigationState';
 import { buildPregameBenchmarkIssues } from '../utils/pregameLineupBenchmarks';
 
@@ -652,7 +657,12 @@ export function EliminationHome() {
           />
         )}
 
-        {activeTab === 'leaders' && <PlayoffLeadersContent playoffId={playoffConfig.id} />}
+        {activeTab === 'leaders' && (
+          <PlayoffLeadersContent
+            eliminationId={eliminationId!}
+            playoffId={playoffConfig.id}
+          />
+        )}
 
         {activeTab === 'awards' && (
           <EliminationAwardsContent
@@ -858,11 +868,20 @@ function SelectedSeriesPanel({
   );
 }
 
-function PlayoffLeadersContent({ playoffId }: { playoffId: string }) {
+function PlayoffLeadersContent({
+  eliminationId,
+  playoffId,
+}: {
+  eliminationId: string;
+  playoffId: string;
+}) {
   const [isLoading, setIsLoading] = useState(true);
+  const [leaderError, setLeaderError] = useState<string | null>(null);
   const [batting, setBatting] = useState<Record<string, PlayoffPlayerStats[]>>({});
   const [pitching, setPitching] = useState<Record<string, PlayoffPlayerStats[]>>({});
   const [fielding, setFielding] = useState<Record<string, PlayoffPlayerStats[]>>({});
+  const [impactLeaderboards, setImpactLeaderboards] = useState<TeamImpactLeaderboards | null>(null);
+  const [impactError, setImpactError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -870,16 +889,23 @@ function PlayoffLeadersContent({ playoffId }: { playoffId: string }) {
     async function loadLeaders() {
       try {
         setIsLoading(true);
+        setLeaderError(null);
+        setImpactError(null);
+        setImpactLeaderboards(null);
 
         const battingStats = {
           AVG: 'avg',
+          OBP: 'obp',
+          H: 'hits',
           HR: 'homeRuns',
           RBI: 'rbi',
+          R: 'runs',
           SB: 'stolenBases',
           OPS: 'ops',
         } as const;
         const pitchingStats = {
           ERA: 'era',
+          IP: 'inningsPitched',
           W: 'wins',
           K: 'pitchingStrikeouts',
           WHIP: 'whip',
@@ -891,7 +917,14 @@ function PlayoffLeadersContent({ playoffId }: { playoffId: string }) {
           PLAYS: 'fieldingPlays',
         } as const;
 
-        const [battingEntries, pitchingEntries, fieldingEntries] = await Promise.all([
+        const impactLeadersResult = getInstanceTeamImpactLeaderboards('elimination', eliminationId, 5)
+          .then((leaderboards) => ({ leaderboards, error: null as string | null }))
+          .catch((error) => ({
+            leaderboards: null,
+            error: error instanceof Error ? error.message : 'Failed to load Team Impact leaders.',
+          }));
+
+        const [battingEntries, pitchingEntries, fieldingEntries, impactResult] = await Promise.all([
           Promise.all(
             Object.entries(battingStats).map(async ([label, stat]) => [label, await getPlayoffLeaders(playoffId, stat, 5)] as const)
           ),
@@ -901,15 +934,19 @@ function PlayoffLeadersContent({ playoffId }: { playoffId: string }) {
           Promise.all(
             Object.entries(fieldingStats).map(async ([label, stat]) => [label, await getPlayoffLeaders(playoffId, stat, 5)] as const)
           ),
+          impactLeadersResult,
         ]);
 
         if (cancelled) return;
         setBatting(Object.fromEntries(battingEntries));
         setPitching(Object.fromEntries(pitchingEntries));
         setFielding(Object.fromEntries(fieldingEntries));
+        setImpactLeaderboards(impactResult.leaderboards);
+        setImpactError(impactResult.error);
       } catch (err) {
         if (!cancelled) {
           console.error('[EliminationHome] Failed to load leaders:', err);
+          setLeaderError(err instanceof Error ? err.message : 'Failed to load leaders.');
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -920,9 +957,9 @@ function PlayoffLeadersContent({ playoffId }: { playoffId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [playoffId]);
+  }, [eliminationId, playoffId]);
 
-  const hasData =
+  const hasPlayoffLeaderData =
     Object.values(batting).some((items) => items.length > 0) ||
     Object.values(pitching).some((items) => items.length > 0) ||
     Object.values(fielding).some((items) => items.length > 0);
@@ -936,20 +973,28 @@ function PlayoffLeadersContent({ playoffId }: { playoffId: string }) {
     );
   }
 
-  if (!hasData) {
+  if (!hasPlayoffLeaderData) {
     return (
-      <div className="bg-[#5A8352] border-[6px] border-[#4A6844] p-8 text-center">
-        <BarChart3 className="w-10 h-10 text-[#E8E8D8]/30 mx-auto mb-3" />
-        <div className="text-xs text-[#E8E8D8]/60">No playoff stats yet for this bracket.</div>
-      </div>
+      <TeamImpactLeaderboardsPanel
+        leaderboards={impactLeaderboards}
+        error={impactError ?? leaderError}
+        theme="elimination"
+      />
     );
   }
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-      <LeaderPanel title="BATTING LEADERS" entries={batting} />
-      <LeaderPanel title="PITCHING LEADERS" entries={pitching} />
-      <LeaderPanel title="FIELDING LEADERS" entries={fielding} />
+    <div className="space-y-4">
+      <TeamImpactLeaderboardsPanel
+        leaderboards={impactLeaderboards}
+        error={impactError}
+        theme="elimination"
+      />
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <LeaderPanel title="BATTING LEADERS" entries={batting} />
+        <LeaderPanel title="PITCHING LEADERS" entries={pitching} />
+        <LeaderPanel title="FIELDING LEADERS" entries={fielding} />
+      </div>
     </div>
   );
 }
@@ -1022,14 +1067,18 @@ function LeaderPanel({
           <div key={label} className="bg-[#4A6844] border-4 border-[#6B9462] p-3">
             <div className="text-[8px] mb-2">{label}</div>
             {stats.length === 0 ? (
-              <div className="text-[8px] text-[#E8E8D8]/50">No data</div>
+              <div className="text-[8px] text-[#E8E8D8]/50">No qualifying data yet</div>
             ) : (
               stats.map((stat, index) => (
-                <div key={`${label}-${stat.playerId}-${index}`} className="flex justify-between text-[8px] py-1 border-b border-[#6B9462] last:border-0">
+                <div key={`${label}-${stat.playerId}-${index}`} className="flex items-start justify-between gap-3 text-[8px] py-1 border-b border-[#6B9462] last:border-0">
                   <div>
-                    {index + 1}. {stat.playerName}
+                    <div>{index + 1}. {stat.playerName}</div>
+                    <div className="text-[7px] text-[#E8E8D8]/50">{stat.teamId}</div>
                   </div>
-                  <div>{formatLeaderValue(label, stat)}</div>
+                  <div className="text-right">
+                    <div>{formatLeaderValue(label, stat)}</div>
+                    <div className="text-[7px] text-[#E8E8D8]/50">{formatLeaderContext(label, stat)}</div>
+                  </div>
                 </div>
               ))
             )}
@@ -1044,6 +1093,8 @@ function formatLeaderValue(label: string, stat: PlayoffPlayerStats): string {
   switch (label) {
     case 'AVG':
       return stat.avg.toFixed(3);
+    case 'OBP':
+      return stat.obp.toFixed(3);
     case 'OPS':
       return stat.ops.toFixed(3);
     case 'FWAR':
@@ -1056,10 +1107,16 @@ function formatLeaderValue(label: string, stat: PlayoffPlayerStats): string {
       return (stat.era ?? 0).toFixed(2);
     case 'WHIP':
       return (stat.whip ?? 0).toFixed(2);
+    case 'IP':
+      return formatInningsPitched(stat.inningsPitched ?? 0);
+    case 'H':
+      return String(stat.hits);
     case 'HR':
       return String(stat.homeRuns);
     case 'RBI':
       return String(stat.rbi);
+    case 'R':
+      return String(stat.runs);
     case 'SB':
       return String(stat.stolenBases);
     case 'W':
@@ -1071,6 +1128,46 @@ function formatLeaderValue(label: string, stat: PlayoffPlayerStats): string {
     default:
       return '0';
   }
+}
+
+function formatLeaderContext(label: string, stat: PlayoffPlayerStats): string {
+  switch (label) {
+    case 'AVG':
+      return `${stat.atBats} AB`;
+    case 'OBP':
+    case 'OPS':
+      return `${getPlayoffPlateAppearances(stat)} PA`;
+    case 'H':
+    case 'HR':
+    case 'RBI':
+    case 'R':
+    case 'SB':
+      return `${stat.games} G`;
+    case 'ERA':
+    case 'WHIP':
+    case 'IP':
+    case 'W':
+    case 'K':
+    case 'SV':
+      return `${formatInningsPitched(stat.inningsPitched ?? 0)} IP`;
+    case 'FWAR':
+    case 'RS':
+    case 'PLAYS':
+      return `${stat.fieldingPlays ?? 0} plays`;
+    default:
+      return `${stat.games} G`;
+  }
+}
+
+function formatInningsPitched(value: number): string {
+  const outs = Math.round(value * 3);
+  const innings = Math.floor(outs / 3);
+  const partialOuts = outs % 3;
+  return partialOuts === 0 ? String(innings) : `${innings}.${partialOuts}`;
+}
+
+function getPlayoffPlateAppearances(stat: PlayoffPlayerStats): number {
+  return stat.atBats + stat.walks + (stat.hitByPitch ?? 0) + (stat.sacrificeFlies ?? 0);
 }
 
 function HistoryTab({ entries }: { entries: HistoryEntry[] }) {

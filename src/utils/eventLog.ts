@@ -34,9 +34,11 @@ import type {
   GameLockLineupSnapshots,
   ManagerRunnerIntent,
   ManagerRunPlay,
+  ManagerRecommendationWatchEvent,
 } from '../types/managerWpa';
 import type { ParkFactors } from '../types/war';
 import type { CompetitionType } from './gameStorage';
+import { syncEngine } from './syncEngine';
 
 // ============================================
 // DATABASE SETUP
@@ -52,6 +54,24 @@ const STORES = {
   FIELDING_EVENTS: 'fieldingEvents', // Fielding plays for FWAR
   BETWEEN_PLAY_EVENTS: 'betweenPlayEvents', // Between-play events (SB, WP, subs, etc.)
 };
+
+function syncUpsert(storeName: string, recordKey: unknown, data: unknown): void {
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.upsert(DB_NAME, storeName, recordKey, data);
+  }
+}
+
+function syncRemove(storeName: string, recordKey: unknown): void {
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.remove(DB_NAME, storeName, recordKey);
+  }
+}
+
+function withoutTeamId<T extends { teamId: string }>(value: T): Omit<T, 'teamId'> {
+  const next: Partial<T> = { ...value };
+  delete next.teamId;
+  return next as Omit<T, 'teamId'>;
+}
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -167,6 +187,9 @@ export interface GameHeader {
   // Final state
   finalScore: { away: number; home: number } | null;  // null if game in progress
   finalInning: number;
+  totalInnings?: number;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
   isComplete: boolean;
 
   // Aggregation tracking
@@ -224,6 +247,8 @@ export interface AtBatEvent {
   battingTeamDelta?: number;     // Batting-team WPA delta from the official model
   fieldingTeamDelta?: number;    // Fielding-team WPA delta from the official model
   totalInnings?: number;         // Regulation length used for win-probability recalculation
+  extraInningRunner?: boolean;   // Whether automatic runner rules were enabled for this game
+  extraInningRunnerDelay?: 1 | 2; // Extra inning number where automatic runner starts
 
   // Ball in play data (for fielding)
   ballInPlay: BallInPlayData | null;
@@ -426,14 +451,18 @@ export type BetweenPlayEventType =
   | 'defensive_indifference' | 'runner_advance'
   | 'pitcher_change' | 'substitution' | 'position_change'
   | 'mojo_change' | 'fitness_change' | 'injury'
-  | 'pitch_count_update' | 'manager_moment';
+  | 'pitch_count_update' | 'manager_moment'
+  | 'manager_recommendation';
 
 export type PromptedManagerDecisionType = Extract<
   ManagerDecisionType,
-  'leave_pitcher_in' | 'let_batter_hit'
+  'leave_pitcher_in' | 'let_batter_hit' | 'keep_defender_in'
 >;
 
-export type PromptedManagerDecisionAction = 'keep_pitcher' | 'let_batter_hit';
+export type PromptedManagerDecisionAction =
+  | 'keep_pitcher'
+  | 'let_batter_hit'
+  | 'decline_defensive_sub';
 
 export interface PromptedManagerDecisionEvent {
   decisionType: PromptedManagerDecisionType;
@@ -486,7 +515,10 @@ export interface BetweenPlayEvent {
     inning: number;
     halfInning: 'TOP' | 'BOTTOM';
     outs: number;
+    totalInnings?: number;
     score: { away: number; home: number };
+    extraInningRunner?: boolean;
+    extraInningRunnerDelay?: 1 | 2;
     runnersOn?: {
       first?: string;
       second?: string;
@@ -586,6 +618,7 @@ export interface BetweenPlayEvent {
   };
 
   promptedManagerDecision?: PromptedManagerDecisionEvent;
+  managerRecommendationWatch?: ManagerRecommendationWatchEvent;
 }
 
 /** Runner state for situational tracking */
@@ -721,7 +754,10 @@ export async function createGameHeader(header: Omit<GameHeader, 'aggregated' | '
     const request = store.put(fullHeader);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      syncUpsert(STORES.GAME_HEADERS, fullHeader.gameId, fullHeader);
+      resolve();
+    };
   });
 }
 
@@ -749,6 +785,8 @@ export async function deleteCompetitionEventLogData(
     return;
   }
 
+  const deletedKeys: Array<{ storeName: string; key: string }> = [];
+
   await new Promise<void>((resolve, reject) => {
     const transaction = db.transaction(
       [
@@ -763,6 +801,7 @@ export async function deleteCompetitionEventLogData(
 
     for (const gameId of gameIds) {
       transaction.objectStore(STORES.GAME_HEADERS).delete(gameId);
+      deletedKeys.push({ storeName: STORES.GAME_HEADERS, key: gameId });
 
       for (const storeName of [
         STORES.AT_BAT_EVENTS,
@@ -776,6 +815,7 @@ export async function deleteCompetitionEventLogData(
         request.onsuccess = () => {
           const cursor = request.result;
           if (cursor) {
+            deletedKeys.push({ storeName, key: cursor.primaryKey as string });
             cursor.delete();
             cursor.continue();
           }
@@ -788,6 +828,10 @@ export async function deleteCompetitionEventLogData(
     transaction.onerror = () => reject(transaction.error);
     transaction.onabort = () => reject(transaction.error);
   });
+
+  for (const { storeName, key } of deletedKeys) {
+    syncRemove(storeName, key);
+  }
 }
 
 /**
@@ -799,14 +843,16 @@ export async function logAtBatEvent(event: AtBatEvent): Promise<void> {
 
   return new Promise((resolve, reject) => {
     const transaction = db.transaction([STORES.AT_BAT_EVENTS, STORES.GAME_HEADERS], 'readwrite');
-
-    // Add the event
-    const eventStore = transaction.objectStore(STORES.AT_BAT_EVENTS);
-    eventStore.put({
+    const storedEvent = {
       ...event,
       version: event.version ?? 1,
       editHistory: event.editHistory ?? [],
-    });
+    };
+    let updatedHeader: GameHeader | null = null;
+
+    // Add the event
+    const eventStore = transaction.objectStore(STORES.AT_BAT_EVENTS);
+    eventStore.put(storedEvent);
 
     // Increment event count in header
     const headerStore = transaction.objectStore(STORES.GAME_HEADERS);
@@ -817,10 +863,17 @@ export async function logAtBatEvent(event: AtBatEvent): Promise<void> {
       if (header) {
         header.eventCount += 1;
         headerStore.put(header);
+        updatedHeader = header;
       }
     };
 
-    transaction.oncomplete = () => resolve();
+    transaction.oncomplete = () => {
+      syncUpsert(STORES.AT_BAT_EVENTS, storedEvent.eventId, storedEvent);
+      if (updatedHeader) {
+        syncUpsert(STORES.GAME_HEADERS, updatedHeader.gameId, updatedHeader);
+      }
+      resolve();
+    };
     transaction.onerror = () => reject(transaction.error);
   });
 }
@@ -837,7 +890,10 @@ export async function logPitchingAppearance(appearance: PitchingAppearance): Pro
     const request = store.put(appearance);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      syncUpsert(STORES.PITCHING_APPEARANCES, appearance.appearanceId, appearance);
+      resolve();
+    };
   });
 }
 
@@ -853,7 +909,10 @@ export async function logFieldingEvent(event: FieldingEvent): Promise<void> {
     const request = store.put(event);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      syncUpsert(STORES.FIELDING_EVENTS, event.fieldingEventId, event);
+      resolve();
+    };
   });
 }
 
@@ -866,14 +925,18 @@ export async function logBetweenPlayEvent(event: BetweenPlayEvent): Promise<void
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORES.BETWEEN_PLAY_EVENTS, 'readwrite');
     const store = transaction.objectStore(STORES.BETWEEN_PLAY_EVENTS);
-    const request = store.put({
+    const storedEvent = {
       ...event,
       version: event.version ?? 1,
       editHistory: event.editHistory ?? [],
-    });
+    };
+    const request = store.put(storedEvent);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      syncUpsert(STORES.BETWEEN_PLAY_EVENTS, storedEvent.eventId, storedEvent);
+      resolve();
+    };
   });
 }
 
@@ -925,9 +988,12 @@ function applyAtBatEventUpdates(
     | 'battingTeamDelta'
     | 'fieldingTeamDelta'
     | 'totalInnings'
+    | 'extraInningRunner'
+    | 'extraInningRunnerDelay'
     | 'outsRecorded'
     | 'isWalkOff'
   >>,
+  fallbackPolicy?: WpaPolicyFallback,
 ): AtBatEvent {
   const next = { ...existing };
 
@@ -956,6 +1022,8 @@ function applyAtBatEventUpdates(
   if (updates.battingTeamDelta !== undefined) next.battingTeamDelta = updates.battingTeamDelta;
   if (updates.fieldingTeamDelta !== undefined) next.fieldingTeamDelta = updates.fieldingTeamDelta;
   if (updates.totalInnings !== undefined) next.totalInnings = updates.totalInnings;
+  if (updates.extraInningRunner !== undefined) next.extraInningRunner = updates.extraInningRunner;
+  if (updates.extraInningRunnerDelay !== undefined) next.extraInningRunnerDelay = updates.extraInningRunnerDelay;
   if (updates.outsRecorded !== undefined) next.outsRecorded = updates.outsRecorded;
   if (updates.isWalkOff !== undefined) next.isWalkOff = updates.isWalkOff;
   if (updates.version !== undefined) next.version = updates.version;
@@ -964,11 +1032,18 @@ function applyAtBatEventUpdates(
   }
 
   if (shouldRefreshStoredWpa(updates)) {
-    return refreshStoredWpa(next);
+    return refreshStoredWpa(next, fallbackPolicy);
   }
 
   return next;
 }
+
+type WpaPolicyFallback = Partial<
+  Pick<
+    AtBatEvent,
+    'totalInnings' | 'extraInningRunner' | 'extraInningRunnerDelay'
+  >
+>;
 
 function runnerStateToBaseBooleans(runners: RunnerState): { first: boolean; second: boolean; third: boolean } {
   return {
@@ -992,7 +1067,16 @@ function shouldRefreshStoredWpa(
     | 'runnersAfter'
     | 'awayScoreAfter'
     | 'homeScoreAfter'
+    | 'winProbabilityBefore'
+    | 'winProbabilityAfter'
+    | 'wpa'
+    | 'wpaModelVersion'
+    | 'homeDelta'
+    | 'battingTeamDelta'
+    | 'fieldingTeamDelta'
     | 'totalInnings'
+    | 'extraInningRunner'
+    | 'extraInningRunnerDelay'
     | 'outsRecorded'
     | 'isWalkOff'
   >>,
@@ -1009,13 +1093,63 @@ function shouldRefreshStoredWpa(
     updates.runnersAfter !== undefined ||
     updates.awayScoreAfter !== undefined ||
     updates.homeScoreAfter !== undefined ||
+    updates.winProbabilityBefore !== undefined ||
+    updates.winProbabilityAfter !== undefined ||
+    updates.wpa !== undefined ||
+    updates.wpaModelVersion !== undefined ||
+    updates.homeDelta !== undefined ||
+    updates.battingTeamDelta !== undefined ||
+    updates.fieldingTeamDelta !== undefined ||
     updates.totalInnings !== undefined ||
+    updates.extraInningRunner !== undefined ||
+    updates.extraInningRunnerDelay !== undefined ||
     updates.outsRecorded !== undefined ||
     updates.isWalkOff !== undefined
   );
 }
 
-function refreshStoredWpa(event: AtBatEvent): AtBatEvent {
+function shouldHydrateWpaPolicy(
+  existing: AtBatEvent,
+  updates: Partial<
+    Pick<
+      AtBatEvent,
+      'totalInnings' | 'extraInningRunner' | 'extraInningRunnerDelay'
+    >
+  >,
+): boolean {
+  return (
+    updates.totalInnings === undefined &&
+    existing.totalInnings === undefined
+  ) || (
+    updates.extraInningRunner === undefined &&
+    existing.extraInningRunner === undefined
+  ) || (
+    updates.extraInningRunnerDelay === undefined &&
+    existing.extraInningRunnerDelay === undefined
+  );
+}
+
+function wpaPolicyFallbackFromHeader(
+  header: GameHeader | undefined,
+): WpaPolicyFallback | undefined {
+  if (!header) return undefined;
+
+  return {
+    totalInnings: header.totalInnings,
+    extraInningRunner: header.extraInningRunner,
+    extraInningRunnerDelay: header.extraInningRunnerDelay,
+  };
+}
+
+function refreshStoredWpa(
+  event: AtBatEvent,
+  fallbackPolicy?: WpaPolicyFallback,
+): AtBatEvent {
+  const totalInnings = event.totalInnings ?? fallbackPolicy?.totalInnings;
+  const extraInningRunner =
+    event.extraInningRunner ?? fallbackPolicy?.extraInningRunner;
+  const extraInningRunnerDelay =
+    event.extraInningRunnerDelay ?? fallbackPolicy?.extraInningRunnerDelay;
   const wpaResult = calculateWPA(
     {
       inning: event.inning,
@@ -1024,7 +1158,9 @@ function refreshStoredWpa(event: AtBatEvent): AtBatEvent {
       bases: runnerStateToBaseBooleans(event.runners),
       homeScore: event.homeScore,
       awayScore: event.awayScore,
-      totalInnings: event.totalInnings,
+      totalInnings,
+      extraInningRunner,
+      extraInningRunnerDelay,
     },
     {
       outs: event.outsAfter,
@@ -1040,11 +1176,20 @@ function refreshStoredWpa(event: AtBatEvent): AtBatEvent {
     runners: runnerStateToBaseBooleans(event.runners),
     homeScore: event.homeScore,
     awayScore: event.awayScore,
-    totalInnings: event.totalInnings,
+    totalInnings,
   });
+  const resolvedPolicyFields: WpaPolicyFallback = {};
+  if (totalInnings !== undefined) resolvedPolicyFields.totalInnings = totalInnings;
+  if (extraInningRunner !== undefined) {
+    resolvedPolicyFields.extraInningRunner = extraInningRunner;
+  }
+  if (extraInningRunnerDelay !== undefined) {
+    resolvedPolicyFields.extraInningRunnerDelay = extraInningRunnerDelay;
+  }
 
   return {
     ...event,
+    ...resolvedPolicyFields,
     ...wpaResult,
     leverageIndex: leverageResult.leverageIndex,
     isClutch: leverageResult.leverageIndex >= 1.5,
@@ -1084,6 +1229,8 @@ export async function updateAtBatEvent(
     | 'battingTeamDelta'
     | 'fieldingTeamDelta'
     | 'totalInnings'
+    | 'extraInningRunner'
+    | 'extraInningRunnerDelay'
     | 'outsRecorded'
     | 'isWalkOff'
   >>
@@ -1091,9 +1238,14 @@ export async function updateAtBatEvent(
   const db = await initEventLogDB();
 
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.AT_BAT_EVENTS, 'readwrite');
+    const transaction = db.transaction(
+      [STORES.AT_BAT_EVENTS, STORES.GAME_HEADERS],
+      'readwrite',
+    );
     const store = transaction.objectStore(STORES.AT_BAT_EVENTS);
+    const headerStore = transaction.objectStore(STORES.GAME_HEADERS);
     const getRequest = store.get(eventId);
+    let updatedEvent: AtBatEvent | null = null;
 
     getRequest.onsuccess = () => {
       const existing = getRequest.result as AtBatEvent | undefined;
@@ -1102,11 +1254,32 @@ export async function updateAtBatEvent(
         return;
       }
 
-      store.put(applyAtBatEventUpdates(existing, updates));
+      const applyAndPersist = (fallbackPolicy?: WpaPolicyFallback) => {
+        updatedEvent = applyAtBatEventUpdates(existing, updates, fallbackPolicy);
+        store.put(updatedEvent);
+      };
+
+      if (shouldRefreshStoredWpa(updates) && shouldHydrateWpaPolicy(existing, updates)) {
+        const headerRequest = headerStore.get(existing.gameId);
+        headerRequest.onsuccess = () => {
+          applyAndPersist(
+            wpaPolicyFallbackFromHeader(headerRequest.result as GameHeader | undefined),
+          );
+        };
+        headerRequest.onerror = () => reject(headerRequest.error);
+        return;
+      }
+
+      applyAndPersist();
     };
 
     getRequest.onerror = () => reject(getRequest.error);
-    transaction.oncomplete = () => resolve();
+    transaction.oncomplete = () => {
+      if (updatedEvent) {
+        syncUpsert(STORES.AT_BAT_EVENTS, updatedEvent.eventId, updatedEvent);
+      }
+      resolve();
+    };
     transaction.onerror = () => reject(transaction.error);
   });
 }
@@ -1139,6 +1312,8 @@ export async function updateAtBatEventWithFieldingSync(
       | 'battingTeamDelta'
       | 'fieldingTeamDelta'
       | 'totalInnings'
+      | 'extraInningRunner'
+      | 'extraInningRunnerDelay'
       | 'isWalkOff'
       | 'outsRecorded'
       | 'version'
@@ -1150,12 +1325,18 @@ export async function updateAtBatEventWithFieldingSync(
   const db = await initEventLogDB();
 
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction([STORES.AT_BAT_EVENTS, STORES.FIELDING_EVENTS], 'readwrite');
+    const transaction = db.transaction(
+      [STORES.AT_BAT_EVENTS, STORES.FIELDING_EVENTS, STORES.GAME_HEADERS],
+      'readwrite',
+    );
     const atBatStore = transaction.objectStore(STORES.AT_BAT_EVENTS);
     const fieldingStore = transaction.objectStore(STORES.FIELDING_EVENTS);
+    const headerStore = transaction.objectStore(STORES.GAME_HEADERS);
     const fieldingIndex = fieldingStore.index('atBatEventId');
     const atBatRequest = atBatStore.get(eventId);
     const fieldingRequest = fieldingIndex.getAll(eventId);
+    let updatedAtBatEvent: AtBatEvent | null = null;
+    let removedFieldingEventIds: string[] = [];
 
     atBatRequest.onerror = () => reject(atBatRequest.error);
     fieldingRequest.onerror = () => reject(fieldingRequest.error);
@@ -1167,11 +1348,32 @@ export async function updateAtBatEventWithFieldingSync(
         return;
       }
 
-      atBatStore.put(applyAtBatEventUpdates(existing, updates));
+      const applyAndPersist = (fallbackPolicy?: WpaPolicyFallback) => {
+        updatedAtBatEvent = applyAtBatEventUpdates(
+          existing,
+          updates,
+          fallbackPolicy,
+        );
+        atBatStore.put(updatedAtBatEvent);
+      };
+
+      if (shouldRefreshStoredWpa(updates) && shouldHydrateWpaPolicy(existing, updates)) {
+        const headerRequest = headerStore.get(existing.gameId);
+        headerRequest.onsuccess = () => {
+          applyAndPersist(
+            wpaPolicyFallbackFromHeader(headerRequest.result as GameHeader | undefined),
+          );
+        };
+        headerRequest.onerror = () => reject(headerRequest.error);
+        return;
+      }
+
+      applyAndPersist();
     };
 
     fieldingRequest.onsuccess = () => {
       const existingFieldingEvents = fieldingRequest.result as FieldingEvent[];
+      removedFieldingEventIds = existingFieldingEvents.map((event) => event.fieldingEventId);
       existingFieldingEvents.forEach((event) => {
         fieldingStore.delete(event.fieldingEventId);
       });
@@ -1180,7 +1382,18 @@ export async function updateAtBatEventWithFieldingSync(
       });
     };
 
-    transaction.oncomplete = () => resolve();
+    transaction.oncomplete = () => {
+      if (updatedAtBatEvent) {
+        syncUpsert(STORES.AT_BAT_EVENTS, updatedAtBatEvent.eventId, updatedAtBatEvent);
+      }
+      for (const fieldingEventId of removedFieldingEventIds) {
+        syncRemove(STORES.FIELDING_EVENTS, fieldingEventId);
+      }
+      for (const event of nextFieldingEvents) {
+        syncUpsert(STORES.FIELDING_EVENTS, event.fieldingEventId, event);
+      }
+      resolve();
+    };
     transaction.onerror = () => reject(transaction.error);
   });
 }
@@ -1195,6 +1408,7 @@ export async function updateBetweenPlayEvent(
     const transaction = db.transaction(STORES.BETWEEN_PLAY_EVENTS, 'readwrite');
     const store = transaction.objectStore(STORES.BETWEEN_PLAY_EVENTS);
     const getRequest = store.get(eventId);
+    let updatedEvent: BetweenPlayEvent | null = null;
 
     getRequest.onerror = () => reject(getRequest.error);
     getRequest.onsuccess = () => {
@@ -1204,10 +1418,16 @@ export async function updateBetweenPlayEvent(
         return;
       }
 
-      store.put(applyBetweenPlayEventUpdates(existing, updates));
+      updatedEvent = applyBetweenPlayEventUpdates(existing, updates);
+      store.put(updatedEvent);
     };
 
-    transaction.oncomplete = () => resolve();
+    transaction.oncomplete = () => {
+      if (updatedEvent) {
+        syncUpsert(STORES.BETWEEN_PLAY_EVENTS, updatedEvent.eventId, updatedEvent);
+      }
+      resolve();
+    };
     transaction.onerror = () => reject(transaction.error);
   });
 }
@@ -1226,6 +1446,7 @@ export async function completeGame(
     const transaction = db.transaction(STORES.GAME_HEADERS, 'readwrite');
     const store = transaction.objectStore(STORES.GAME_HEADERS);
     const request = store.get(gameId);
+    let updatedHeader: GameHeader | null = null;
 
     request.onsuccess = () => {
       const header = request.result as GameHeader;
@@ -1234,10 +1455,16 @@ export async function completeGame(
         header.finalInning = finalInning;
         header.isComplete = true;
         store.put(header);
+        updatedHeader = header;
       }
     };
 
-    transaction.oncomplete = () => resolve();
+    transaction.oncomplete = () => {
+      if (updatedHeader) {
+        syncUpsert(STORES.GAME_HEADERS, updatedHeader.gameId, updatedHeader);
+      }
+      resolve();
+    };
     transaction.onerror = () => reject(transaction.error);
   });
 }
@@ -1252,6 +1479,7 @@ export async function markGameAggregated(gameId: string): Promise<void> {
     const transaction = db.transaction(STORES.GAME_HEADERS, 'readwrite');
     const store = transaction.objectStore(STORES.GAME_HEADERS);
     const request = store.get(gameId);
+    let updatedHeader: GameHeader | null = null;
 
     request.onsuccess = () => {
       const header = request.result as GameHeader;
@@ -1260,10 +1488,16 @@ export async function markGameAggregated(gameId: string): Promise<void> {
         header.aggregatedAt = Date.now();
         header.aggregationError = null;
         store.put(header);
+        updatedHeader = header;
       }
     };
 
-    transaction.oncomplete = () => resolve();
+    transaction.oncomplete = () => {
+      if (updatedHeader) {
+        syncUpsert(STORES.GAME_HEADERS, updatedHeader.gameId, updatedHeader);
+      }
+      resolve();
+    };
     transaction.onerror = () => reject(transaction.error);
   });
 }
@@ -1278,16 +1512,23 @@ export async function markAggregationFailed(gameId: string, error: string): Prom
     const transaction = db.transaction(STORES.GAME_HEADERS, 'readwrite');
     const store = transaction.objectStore(STORES.GAME_HEADERS);
     const request = store.get(gameId);
+    let updatedHeader: GameHeader | null = null;
 
     request.onsuccess = () => {
       const header = request.result as GameHeader;
       if (header) {
         header.aggregationError = error;
         store.put(header);
+        updatedHeader = header;
       }
     };
 
-    transaction.oncomplete = () => resolve();
+    transaction.oncomplete = () => {
+      if (updatedHeader) {
+        syncUpsert(STORES.GAME_HEADERS, updatedHeader.gameId, updatedHeader);
+      }
+      resolve();
+    };
     transaction.onerror = () => reject(transaction.error);
   });
 }
@@ -1483,6 +1724,9 @@ export async function undoMostRecentGameAction(gameId: string): Promise<UndoneGa
     getGameEvents(gameId),
     getBetweenPlayEvents(gameId),
   ]);
+  const undoableBetweenPlayEvents = betweenPlayEvents.filter(
+    event => event.type !== 'manager_recommendation'
+  );
 
   const candidates = [
     atBatEvents.length > 0
@@ -1493,12 +1737,12 @@ export async function undoMostRecentGameAction(gameId: string): Promise<UndoneGa
           timestamp: atBatEvents[atBatEvents.length - 1].timestamp,
         }
       : null,
-    betweenPlayEvents.length > 0
+    undoableBetweenPlayEvents.length > 0
       ? {
           kind: 'betweenPlay' as const,
-          eventId: betweenPlayEvents[betweenPlayEvents.length - 1].eventId,
-          eventIndex: betweenPlayEvents[betweenPlayEvents.length - 1].eventIndex,
-          timestamp: betweenPlayEvents[betweenPlayEvents.length - 1].timestamp,
+          eventId: undoableBetweenPlayEvents[undoableBetweenPlayEvents.length - 1].eventId,
+          eventIndex: undoableBetweenPlayEvents[undoableBetweenPlayEvents.length - 1].eventIndex,
+          timestamp: undoableBetweenPlayEvents[undoableBetweenPlayEvents.length - 1].timestamp,
         }
       : null,
   ].filter(Boolean) as Array<UndoneGameAction & { timestamp: number }>;
@@ -1529,6 +1773,8 @@ export async function undoMostRecentGameAction(gameId: string): Promise<UndoneGa
     );
     const actionRequest = actionStore.get(target.eventId);
     let undoneAction: UndoneGameAction | null = null;
+    let updatedAction: AtBatEvent | BetweenPlayEvent | null = null;
+    let updatedHeader: GameHeader | null = null;
 
     actionRequest.onerror = () => reject(actionRequest.error);
     actionRequest.onsuccess = () => {
@@ -1539,6 +1785,7 @@ export async function undoMostRecentGameAction(gameId: string): Promise<UndoneGa
 
       existing.undoneAt = Date.now();
       actionStore.put(existing);
+      updatedAction = existing;
       undoneAction = {
         kind: target.kind,
         eventId: target.eventId,
@@ -1556,10 +1803,23 @@ export async function undoMostRecentGameAction(gameId: string): Promise<UndoneGa
         if (!header) return;
         header.eventCount = Math.max(0, header.eventCount - 1);
         headerStore.put(header);
+        updatedHeader = header;
       };
     };
 
-    transaction.oncomplete = () => resolve(undoneAction);
+    transaction.oncomplete = () => {
+      if (updatedAction) {
+        syncUpsert(
+          target.kind === 'atBat' ? STORES.AT_BAT_EVENTS : STORES.BETWEEN_PLAY_EVENTS,
+          updatedAction.eventId,
+          updatedAction,
+        );
+      }
+      if (updatedHeader) {
+        syncUpsert(STORES.GAME_HEADERS, updatedHeader.gameId, updatedHeader);
+      }
+      resolve(undoneAction);
+    };
     transaction.onerror = () => reject(transaction.error);
   });
 }
@@ -1819,10 +2079,10 @@ export async function generateBoxScore(gameId: string): Promise<BoxScore | null>
   // Split batters and pitchers by team
   const awayBatters = Array.from(batterStats.values())
     .filter(b => b.teamId === header.awayTeamId)
-    .map(({ teamId, ...rest }) => rest);
+    .map(withoutTeamId);
   const homeBatters = Array.from(batterStats.values())
     .filter(b => b.teamId === header.homeTeamId)
-    .map(({ teamId, ...rest }) => rest);
+    .map(withoutTeamId);
 
   const awayPitchers = pitchingAppearances
     .filter(p => p.teamId === header.awayTeamId)

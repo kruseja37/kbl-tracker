@@ -1,6 +1,8 @@
 // Storage for player ratings that users input manually
 // These override the database defaults when calculating salary
 
+import { syncEngine } from './syncEngine';
+
 const STORAGE_KEY = 'kbl-player-ratings';
 
 export interface BatterRatings {
@@ -59,6 +61,9 @@ export function savePlayerRatings(entry: PlayerRatingsEntry): void {
       updatedAt: Date.now(),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+    if (!syncEngine.isSuppressed()) {
+      syncEngine.upsertLocal(STORAGE_KEY, all);
+    }
   } catch (err) {
     console.warn('[playerRatingsStorage] Failed to save ratings:', err);
   }
@@ -72,6 +77,9 @@ export function deletePlayerRatings(playerId: string): void {
     const all = loadAllRatings();
     delete all[playerId];
     localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+    if (!syncEngine.isSuppressed()) {
+      syncEngine.upsertLocal(STORAGE_KEY, all);
+    }
   } catch (err) {
     console.warn('[playerRatingsStorage] Failed to delete ratings:', err);
   }
@@ -83,6 +91,9 @@ export function deletePlayerRatings(playerId: string): void {
 export function clearAllRatings(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
+    if (!syncEngine.isSuppressed()) {
+      syncEngine.removeLocal(STORAGE_KEY);
+    }
   } catch (err) {
     console.warn('[playerRatingsStorage] Failed to clear ratings:', err);
   }

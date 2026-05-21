@@ -1,6 +1,7 @@
 import { Flame, Gauge, RadioTower } from "lucide-react";
 
 import { FAME_TIER_LABEL } from "../../../types/reporter";
+import { formatWpaPoints } from "../../../utils/wpaDisplay";
 import { FamePip } from "./FamePip";
 import type { ReporterContext } from "../engines/reporter/reporterContext";
 
@@ -43,8 +44,7 @@ export function getMatchupDramaLevel(dramaticWeight: number): DramaLevel {
 
 function formatSignedWpa(wpa?: number): string {
   if (wpa === undefined) return "WPA pending";
-  const sign = wpa > 0 ? "+" : "";
-  return `${sign}${wpa.toFixed(3)} WPA`;
+  return `${formatWpaPoints(wpa)} WPA`;
 }
 
 function formatFameLabel(tier: ReporterContext["batter"]["effectiveFame"]): string {

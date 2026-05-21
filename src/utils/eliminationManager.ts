@@ -7,6 +7,7 @@ import { deleteEliminationDatabase } from './eliminationPlayerStorage';
 import { deleteEliminationRosterSnapshots } from './eliminationRosterStorage';
 import type { EliminationAward } from './eliminationAwards';
 import { deleteMojoFitnessSnapshots } from './mojoFitnessStorage';
+import { getAllCompletedGames } from './gameStorage';
 import {
   createPlayoff,
   createSeries,
@@ -31,6 +32,8 @@ import {
 
 const ELIMINATION_STORE = 'eliminationList';
 
+export type EliminationSelectorState = 'ACTIVE' | 'ARCHIVED' | 'DISCARDED';
+
 export interface EliminationMetadata {
   eliminationId: string;
   name: string;
@@ -43,6 +46,8 @@ export interface EliminationMetadata {
   currentRound: number;
   champion?: string;
   awards?: EliminationAward[];
+  archivedAt?: number;
+  selectorState?: EliminationSelectorState;
 }
 
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
@@ -126,6 +131,17 @@ export async function listEliminations(): Promise<EliminationMetadata[]> {
   return (results as EliminationMetadata[]).sort((a, b) => b.lastPlayedAt - a.lastPlayedAt);
 }
 
+export function isEliminationHiddenFromSelector(metadata: EliminationMetadata): boolean {
+  return Boolean(metadata.archivedAt) ||
+    metadata.selectorState === 'ARCHIVED' ||
+    metadata.selectorState === 'DISCARDED';
+}
+
+export async function listActiveEliminations(): Promise<EliminationMetadata[]> {
+  const eliminations = await listEliminations();
+  return eliminations.filter((elimination) => !isEliminationHiddenFromSelector(elimination));
+}
+
 /**
  * Update an existing elimination bracket metadata record by merging partial fields.
  */
@@ -155,10 +171,19 @@ export async function updateElimination(
   if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-app-meta', 'eliminationList', updated.eliminationId, updated);
 }
 
+async function hasCompletedGamesForElimination(eliminationId: string): Promise<boolean> {
+  const games = await getAllCompletedGames();
+  return games.some(
+    (game) =>
+      game.competitionType === 'elimination' &&
+      game.competitionId === eliminationId,
+  );
+}
+
 /**
- * Delete elimination metadata from `eliminationList`.
+ * Permanently purge elimination metadata and active run-only storage.
  */
-export async function deleteElimination(eliminationId: string): Promise<void> {
+export async function purgeElimination(eliminationId: string): Promise<void> {
   const db = await openMetaDatabase();
   const tx = db.transaction(ELIMINATION_STORE, 'readwrite');
   const store = tx.objectStore(ELIMINATION_STORE);
@@ -180,6 +205,42 @@ export async function deleteElimination(eliminationId: string): Promise<void> {
       removeLeaguePlayerOverride(eliminationId, override.playerId),
     ),
   ]);
+}
+
+export type EliminationSelectorRemovalResult = 'archived' | 'discarded' | 'purged';
+
+/**
+ * Hide an elimination run from the active selector without destroying completed history.
+ */
+export async function removeEliminationFromSelector(
+  eliminationId: string,
+): Promise<EliminationSelectorRemovalResult> {
+  const metadata = await getElimination(eliminationId);
+  if (!metadata) {
+    throw new Error(`Elimination bracket not found: ${eliminationId}`);
+  }
+
+  if (metadata.status === 'COMPLETED') {
+    await updateElimination(eliminationId, {
+      archivedAt: Date.now(),
+      lastPlayedAt: metadata.lastPlayedAt,
+      selectorState: 'ARCHIVED',
+    });
+    return 'archived';
+  }
+
+  const hasHistoricalGames = await hasCompletedGamesForElimination(eliminationId);
+  if (hasHistoricalGames) {
+    await updateElimination(eliminationId, {
+      archivedAt: Date.now(),
+      lastPlayedAt: metadata.lastPlayedAt,
+      selectorState: 'DISCARDED',
+    });
+    return 'discarded';
+  }
+
+  await purgeElimination(eliminationId);
+  return 'purged';
 }
 
 export async function createEliminationRun(params: {

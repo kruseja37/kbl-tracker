@@ -1,17 +1,22 @@
 import "fake-indexeddb/auto";
 
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
   LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+  buildDefaultManagerProfile,
+  deleteManagerAssignmentsForInstance,
   getManagerAssignment,
   getManagerProfile,
+  listManagerAssignments,
   resetManagerIdentityDatabaseForTests,
   resolveManagerForTeam,
   saveManagerAssignment,
   saveManagerProfile,
+  saveUnassignedManagerProfile,
   seedManagerAssignmentsForTeams,
 } from "../managerIdentityStorage";
+import { syncEngine } from "../syncEngine";
 
 const DB_NAME = "kbl-manager-identity";
 
@@ -31,6 +36,7 @@ describe("manager identity storage", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     resetManagerIdentityDatabaseForTests();
     await deleteDatabase(DB_NAME).catch(() => undefined);
   });
@@ -113,5 +119,107 @@ describe("manager identity storage", () => {
       defaultManager: true,
       createdByUser: false,
     });
+  });
+
+  test("generates stable default manager profiles per team", () => {
+    expect(buildDefaultManagerProfile({ id: "beewolves", name: "Beewolves" })).toEqual(
+      buildDefaultManagerProfile({ id: "beewolves", name: "Beewolves" }),
+    );
+    expect(buildDefaultManagerProfile({ id: "beewolves", name: "Beewolves" })).not.toEqual(
+      buildDefaultManagerProfile({ id: "sirloins", name: "Sirloins" }),
+    );
+  });
+
+  test("queues manager identity changes for sync", async () => {
+    const upsertSpy = vi.spyOn(syncEngine, "upsert");
+    const removeSpy = vi.spyOn(syncEngine, "remove");
+
+    const profile = await saveManagerProfile({
+      managerId: "manager-sync",
+      displayName: "Sync Boss",
+      createdByUser: true,
+      defaultManager: false,
+    });
+    const assignment = await saveManagerAssignment({
+      managerId: profile.managerId,
+      teamId: "sirloins",
+      mode: "exhibition",
+      instanceId: "sync-league",
+    });
+
+    expect(upsertSpy).toHaveBeenCalledWith(
+      "kbl-manager-identity",
+      "managerProfiles",
+      "manager-sync",
+      expect.objectContaining({ managerId: "manager-sync", displayName: "Sync Boss" }),
+    );
+    expect(upsertSpy).toHaveBeenCalledWith(
+      "kbl-manager-identity",
+      "managerAssignments",
+      ["exhibition", "sync-league", "sirloins"],
+      expect.objectContaining(assignment),
+    );
+
+    await deleteManagerAssignmentsForInstance({
+      mode: "exhibition",
+      instanceId: "sync-league",
+    });
+
+    expect(removeSpy).toHaveBeenCalledWith(
+      "kbl-manager-identity",
+      "managerAssignments",
+      ["exhibition", "sync-league", "sirloins"],
+    );
+  });
+
+  test("saves user manager profiles without binding them to a team assignment", async () => {
+    const profile = await saveUnassignedManagerProfile({
+      managerId: "manager-casey-neutral",
+      displayName: "Casey Neutral",
+    });
+
+    await expect(getManagerProfile(profile.managerId)).resolves.toMatchObject({
+      managerId: "manager-casey-neutral",
+      displayName: "Casey Neutral",
+      createdByUser: true,
+      defaultManager: false,
+    });
+    await expect(listManagerAssignments()).resolves.toEqual([]);
+    await expect(
+      saveUnassignedManagerProfile({
+        displayName: " casey   neutral ",
+      }),
+    ).resolves.toMatchObject({
+      managerId: profile.managerId,
+      displayName: "Casey Neutral",
+    });
+
+    await saveManagerAssignment({
+      managerId: profile.managerId,
+      teamId: "sirloins",
+      mode: "exhibition",
+      instanceId: "exh-user-a",
+    });
+    await saveManagerAssignment({
+      managerId: profile.managerId,
+      teamId: "beewolves",
+      mode: "exhibition",
+      instanceId: "exh-user-b",
+    });
+
+    await expect(listManagerAssignments({ mode: "exhibition" })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          managerId: profile.managerId,
+          teamId: "sirloins",
+          instanceId: "exh-user-a",
+        }),
+        expect.objectContaining({
+          managerId: profile.managerId,
+          teamId: "beewolves",
+          instanceId: "exh-user-b",
+        }),
+      ]),
+    );
   });
 });

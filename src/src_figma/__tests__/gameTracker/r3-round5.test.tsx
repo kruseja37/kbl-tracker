@@ -558,7 +558,7 @@ describe("R3 Round 5 bug fixes", () => {
     expect(archivedState.playerStats["home-sp"].fieldingErrors).toBe(0);
   });
 
-  test("caps post-game linescore columns to the archived regulation length and honors stored POG order", async () => {
+  test("caps post-game linescore columns and uses canonical WPA POG over stored order", async () => {
     mockGetCompletedGameById.mockResolvedValue({
       gameId: "game-r3-round5",
       date: Date.now(),
@@ -652,9 +652,9 @@ describe("R3 Round 5 bug fixes", () => {
     expect(screen.queryByText("8")).not.toBeInTheDocument();
     expect(screen.queryByText("9")).not.toBeInTheDocument();
 
-    const topPogLabel = screen.getByText("POG ★★★");
+    const topPogLabel = screen.getByText("Overall POG");
     const topPogCard = topPogLabel.closest("div[style]");
     expect(topPogCard).toBeTruthy();
-    expect(within(topPogCard as HTMLElement).getByText("Away Batter 1")).toBeInTheDocument();
+    expect(within(topPogCard as HTMLElement).getByText("Home Catcher")).toBeInTheDocument();
   });
 });

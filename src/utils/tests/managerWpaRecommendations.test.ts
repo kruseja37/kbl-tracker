@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  buildManagerRecommendationWatchEvent,
   buildPromptedManagerDecisionFromRecommendation,
   buildManagerRecommendationSuppressKey,
   generateManagerRecommendations,
@@ -349,7 +350,79 @@ describe("generateManagerRecommendations", () => {
     });
   });
 
-  test("primary substitution actions and unsupported no-change actions do not create keep-current records", () => {
+  test("maps defensive-decline recommendation action to a prompted keep-defender record", () => {
+    const [recommendation] = generateManagerRecommendations({
+      ...baseInput,
+      defenders: [
+        {
+          playerId: "home-ss",
+          playerName: "Shaky Shortstop",
+          position: "SS",
+          fieldingErrors: 2,
+          fieldingRating: 42,
+        },
+      ],
+      benchDefenders: [
+        {
+          playerId: "home-glove",
+          playerName: "Clean Glove",
+          positions: ["SS"],
+          fieldingRating: 75,
+        },
+      ],
+    });
+
+    const prompted = buildPromptedManagerDecisionFromRecommendation({
+      recommendation,
+      action: "decline_defensive_sub",
+      opponentTeamId: "away",
+    });
+
+    expect(
+      getPromptedDecisionTypeForRecommendationAction("decline_defensive_sub"),
+    ).toBe("keep_defender_in");
+    expect(prompted).toMatchObject({
+      decisionType: "keep_defender_in",
+      action: "decline_defensive_sub",
+      source: "recommendation",
+      managerId: "home-manager",
+      teamId: "home",
+      opponentTeamId: "away",
+      trackedPlayerIds: ["home-ss"],
+      involvedPlayerIds: ["home-ss", "home-glove"],
+      resolution: { status: "pending", expectedEndpoint: "first_fielding_event" },
+    });
+  });
+
+  test("builds durable watch metadata for shown recommendations", () => {
+    const [recommendation] = generateManagerRecommendations({
+      ...baseInput,
+      currentPitcher: {
+        playerId: "home-pitcher",
+        playerName: "Ace Starter",
+        pitchCount: 108,
+        isStarter: true,
+      },
+      availablePitchers: [{ playerId: "home-reliever", playerName: "Fresh Arm" }],
+    });
+
+    expect(
+      buildManagerRecommendationWatchEvent({
+        recommendation,
+        opponentTeamId: "away",
+      }),
+    ).toMatchObject({
+      recommendationId: recommendation.recommendationId,
+      type: "consider_pitching_change",
+      managerId: "home-manager",
+      teamId: "home",
+      opponentTeamId: "away",
+      trackedPlayerIds: ["home-pitcher"],
+      suppressKey: recommendation.suppressKey,
+    });
+  });
+
+  test("primary substitution actions do not create keep-current records", () => {
     const [recommendation] = generateManagerRecommendations({
       ...baseInput,
       currentPitcher: {
@@ -369,6 +442,5 @@ describe("generateManagerRecommendations", () => {
       }),
     ).toBeNull();
     expect(getPromptedDecisionTypeForRecommendationAction("open_pinch_hit")).toBeNull();
-    expect(getPromptedDecisionTypeForRecommendationAction("decline_defensive_sub")).toBeNull();
   });
 });

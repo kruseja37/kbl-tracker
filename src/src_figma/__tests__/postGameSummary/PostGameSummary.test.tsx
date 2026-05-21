@@ -9,6 +9,7 @@ import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { PostGameSummary } from '../../app/pages/PostGameSummary';
 import type { CompletedGameRecord } from '../../utils/gameStorage';
+import type { KblWpaCredit } from '../../../utils/kblWpaAttribution';
 import type {
   ManagerDecisionRecord,
   ManagerDeploymentStintRecord,
@@ -27,6 +28,7 @@ const {
   mockGetRunFameStandings,
   mockGetRunPromotionCandidates,
   mockListManagerProfiles,
+  mockDeriveKblWpaCredits,
   mockAcceptFamePromotion,
   mockDismissFamePromotion,
   mockLocationState,
@@ -36,9 +38,10 @@ const {
   mockGetGameEvents: vi.fn(() => Promise.resolve([])),
   mockGetGameFieldingEvents: vi.fn(() => Promise.resolve([])),
   mockGetGameHeader: vi.fn(() => Promise.resolve(null)),
-  mockGetRunFameStandings: vi.fn(),
-  mockGetRunPromotionCandidates: vi.fn(),
-  mockListManagerProfiles: vi.fn(),
+  mockGetRunFameStandings: vi.fn(() => Promise.resolve([])),
+  mockGetRunPromotionCandidates: vi.fn(() => Promise.resolve([])),
+  mockListManagerProfiles: vi.fn(() => Promise.resolve([])),
+  mockDeriveKblWpaCredits: vi.fn(() => []),
   mockAcceptFamePromotion: vi.fn(),
   mockDismissFamePromotion: vi.fn(),
   mockLocationState: {
@@ -73,6 +76,14 @@ vi.mock('../../../utils/eventLog', () => ({
 vi.mock('../../../utils/managerIdentityStorage', () => ({
   listManagerProfiles: mockListManagerProfiles,
 }));
+
+vi.mock('../../../utils/kblWpaAttribution', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../utils/kblWpaAttribution')>();
+  return {
+    ...actual,
+    deriveKblWpaCredits: mockDeriveKblWpaCredits,
+  };
+});
 
 vi.mock('../../../utils/eliminationRunFameStorage', () => ({
   getRunFameStandings: mockGetRunFameStandings,
@@ -238,6 +249,45 @@ const mockAtBatEvents = [
   { batterId: 'home-t-williams', wpa: 0.180 },
 ] as const;
 
+const mockKblWpaCredits: KblWpaCredit[] = [
+  {
+    eventId: 'ab-1',
+    source: 'at_bat',
+    playerId: 'home-j-martinez',
+    playerName: 'J Martinez',
+    teamId: 'sox',
+    role: 'batting',
+    wpa: 0.3,
+    confidence: 'high',
+    basis: 'Batting WPA',
+    allocationMode: 'ratio',
+  },
+  {
+    eventId: 'ab-2',
+    source: 'at_bat',
+    playerId: 'away-r-johnson',
+    playerName: 'R Johnson',
+    teamId: 'tigers',
+    role: 'batting',
+    wpa: 0.22,
+    confidence: 'high',
+    basis: 'Batting WPA',
+    allocationMode: 'ratio',
+  },
+  {
+    eventId: 'ab-3',
+    source: 'at_bat',
+    playerId: 'home-t-williams',
+    playerName: 'T Williams',
+    teamId: 'sox',
+    role: 'batting',
+    wpa: 0.18,
+    confidence: 'high',
+    basis: 'Batting WPA',
+    allocationMode: 'ratio',
+  },
+];
+
 function createManagerDecision(
   overrides: Partial<ManagerDecisionRecord> = {},
 ): ManagerDecisionRecord {
@@ -376,9 +426,12 @@ const oneInningGame: CompletedGameRecord = {
 };
 
 describe('Activity Log', () => {
-  test('shows activity entries when present', async () => {
+  test('renders archived fixture details when legacy activity entries are present', async () => {
     render(<PostGameSummary />);
-    expect(await screen.findByText('Game saved to archive')).toBeInTheDocument();
+
+    expect(await screen.findByText('Sox Field')).toBeInTheDocument();
+    expect(screen.getByText('★ SOX WIN! ★')).toBeInTheDocument();
+    expect(screen.queryByText('Game saved to archive')).not.toBeInTheDocument();
   });
 });
 
@@ -404,6 +457,7 @@ describe('PostGameSummary Component', () => {
     mockGetGameFieldingEvents.mockResolvedValue([]);
     mockGetBetweenPlayEvents.mockResolvedValue([]);
     mockGetGameHeader.mockResolvedValue(null);
+    mockDeriveKblWpaCredits.mockReturnValue(mockKblWpaCredits);
     mockListManagerProfiles.mockResolvedValue([
       { managerId: 'sox-manager', displayName: 'Sox Skipper' },
       { managerId: 'tigers-manager', displayName: 'Tigers Skipper' },
@@ -607,9 +661,9 @@ describe('PostGameSummary Component', () => {
 
       const overlay = await screen.findByTestId('manager-wpa-overlay');
       expect(within(overlay).getByText('MANAGER WPA OVERLAY')).toBeInTheDocument();
-      expect(screen.getByText('Sox Skipper')).toBeInTheDocument();
-      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+0.184');
-      expect(screen.getByTestId('manager-wpa-total-tigers')).toHaveTextContent('-0.052');
+      expect(within(overlay).getByText('Sox Skipper')).toBeInTheDocument();
+      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+18.4 pp');
+      expect(screen.getByTestId('manager-wpa-total-tigers')).toHaveTextContent('-5.2 pp');
       expect(within(screen.getByTestId('manager-wpa-card-sox')).getByText('2 (1 pending)')).toBeInTheDocument();
       fireEvent.click(
         within(screen.getByTestId('manager-tactical-trace-details-sox')).getByRole(
@@ -622,9 +676,9 @@ describe('PostGameSummary Component', () => {
       expect(dialog).toHaveTextContent('Tactical');
       expect(dialog).toHaveTextContent('Pinch Hitter');
       expect(dialog).toHaveTextContent('Raw WPA');
-      expect(dialog).toHaveTextContent('+0.184');
+      expect(dialog).toHaveTextContent('+18.4 pp');
       expect(dialog).toHaveTextContent('Final Manager Value');
-      expect(dialog).toHaveTextContent('+0.184');
+      expect(dialog).toHaveTextContent('+18.4 pp');
     });
 
     test('renders deployment stint recap details from committed manager records', async () => {
@@ -658,8 +712,8 @@ describe('PostGameSummary Component', () => {
       render(<PostGameSummary />);
 
       const details = await screen.findByTestId('manager-deployment-stint-details-sox');
-      expect(screen.getByTestId('manager-deployment-wpa-sox')).toHaveTextContent('+0.080');
-      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+0.080');
+      expect(screen.getByTestId('manager-deployment-wpa-sox')).toHaveTextContent('+8.0 pp');
+      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+8.0 pp');
       expect(details).toHaveTextContent(
         "Pinch runner Home Speed's remaining baserunning and fielding outcomes stay with the deployment choice.",
       );
@@ -674,13 +728,13 @@ describe('PostGameSummary Component', () => {
       expect(dialog).toHaveTextContent('Linked Events');
       expect(dialog).toHaveTextContent('ab-10, ab-11');
       expect(dialog).toHaveTextContent('Raw WPA');
-      expect(dialog).toHaveTextContent('+0.400');
+      expect(dialog).toHaveTextContent('+40.0 pp');
       expect(dialog).toHaveTextContent('Share');
       expect(dialog).toHaveTextContent('20%');
       expect(dialog).toHaveTextContent('Cap');
       expect(dialog).toHaveTextContent('+/-0.125');
       expect(dialog).toHaveTextContent('Final Manager Value');
-      expect(dialog).toHaveTextContent('+0.080');
+      expect(dialog).toHaveTextContent('+8.0 pp');
     });
 
     test('uses only committed managerDecisions and leaves player WPA display unchanged', async () => {
@@ -698,8 +752,8 @@ describe('PostGameSummary Component', () => {
 
       render(<PostGameSummary />);
 
-      expect(await screen.findByText('+0.300 WPA')).toBeInTheDocument();
-      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+9.999');
+      expect(await screen.findByText('+30.0 pp KBL WPA')).toBeInTheDocument();
+      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+999.9 pp');
     });
 
     test('does not derive manager overlay rows from event-log data when completed game has no committed managerDecisions', async () => {
@@ -712,7 +766,7 @@ describe('PostGameSummary Component', () => {
       render(<PostGameSummary />);
 
       const overlay = await screen.findByTestId('manager-wpa-overlay');
-      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+0.000');
+      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+0.0 pp');
       expect(within(overlay).getAllByText('0')).toHaveLength(2);
     });
   });
@@ -764,43 +818,54 @@ describe('PostGameSummary Component', () => {
   });
 
   describe('Players of the Game', () => {
-    test('renders POG 3 stars', async () => {
+    test('renders canonical Overall POG award with points', async () => {
       render(<PostGameSummary />);
-      expect(await screen.findByText('POG ★★★')).toBeInTheDocument();
+      expect(await screen.findByText('Overall POG')).toBeInTheDocument();
+      expect(screen.getByText('3 pts')).toBeInTheDocument();
     });
 
-    test('renders POG 2 stars', async () => {
+    test('renders canonical secondary award labels with points', async () => {
       render(<PostGameSummary />);
-      expect(await screen.findByText('POG ★★')).toBeInTheDocument();
+      expect(await screen.findByText('Best Hitter')).toBeInTheDocument();
+      expect(screen.getByText('1 pt')).toBeInTheDocument();
     });
 
-    test('renders POG 1 star', async () => {
+    test('renders canonical Overall POG player name and WPA value', async () => {
       render(<PostGameSummary />);
-      expect(await screen.findByText('POG ★')).toBeInTheDocument();
+      const overallLabel = await screen.findByText('Overall POG');
+      const card = overallLabel.closest('div[class*="border-2"]');
+      expect(card).toBeTruthy();
+      const withinCard = within(card!);
+      expect(withinCard.getByText('J Martinez')).toBeInTheDocument();
+      expect(withinCard.getByText('+30.0 pp KBL WPA')).toBeInTheDocument();
     });
 
-    test('renders 3-star POG player name', async () => {
+    test('renders secondary award player name', async () => {
       render(<PostGameSummary />);
-      expect(await screen.findByText('J Martinez')).toBeInTheDocument();
-      expect(screen.getByText('+0.300 WPA')).toBeInTheDocument();
+      const hitterLabel = await screen.findByText('Best Hitter');
+      const card = hitterLabel.closest('div[class*="border-2"]');
+      expect(card).toBeTruthy();
+      expect(within(card!).getByText('R Johnson')).toBeInTheDocument();
     });
 
-    test('renders 2-star POG player name', async () => {
+    test('renders Team Standouts as display-only recognition', async () => {
       render(<PostGameSummary />);
-      await screen.findByText('J Martinez');
-      expect(screen.getByText('R Johnson')).toBeInTheDocument();
-    });
 
-    test('renders 1-star POG player name', async () => {
-      render(<PostGameSummary />);
-      await screen.findByText('J Martinez');
-      expect(screen.getByText('T Williams')).toBeInTheDocument();
+      expect(await screen.findByText('TEAM STANDOUTS')).toBeInTheDocument();
+      const standoutLabels = await screen.findAllByText('Team Standout');
+      expect(standoutLabels).toHaveLength(2);
+
+      const johnsonCard = standoutLabels
+        .map((label) => label.closest('div[class*="border-2"]'))
+        .find((card) => card && within(card as HTMLElement).queryByText('R Johnson'));
+      expect(johnsonCard).toBeTruthy();
+      expect(within(johnsonCard as HTMLElement).getByText('Display only')).toBeInTheDocument();
+      expect(within(johnsonCard as HTMLElement).getByText(/Recognition only/)).toBeInTheDocument();
     });
 
     test('renders POG stats for top performer', async () => {
       render(<PostGameSummary />);
-      await screen.findByText('J Martinez');
-      const pogLabel = screen.getByText('POG ★★★');
+      const pogLabel = await screen.findByText('Overall POG');
       const card = pogLabel.closest('div[class*="border-2"]');
       expect(card).toBeTruthy();
       const withinCard = within(card!);
@@ -808,6 +873,47 @@ describe('PostGameSummary Component', () => {
       expect(withinCard.getByText('1 BB')).toBeInTheDocument();
       expect(withinCard.getByText('0 SO')).toBeInTheDocument();
       expect(withinCard.getByText('2 R')).toBeInTheDocument();
+    });
+
+    test('stored-only fallback renders a legacy Overall POG without role awards', async () => {
+      const { getCompletedGameById } = await import('../../utils/gameStorage');
+      vi.mocked(getCompletedGameById).mockResolvedValue({
+        ...mockGameData,
+        playersOfTheGame: {
+          first: 'away-r-johnson',
+          second: 'home-t-williams',
+        },
+      });
+      mockGetGameEvents.mockResolvedValue([]);
+      mockDeriveKblWpaCredits.mockReturnValue([]);
+
+      render(<PostGameSummary />);
+
+      const overallLabel = await screen.findByText('Overall POG');
+      const card = overallLabel.closest('div[class*="border-2"]');
+      expect(card).toBeTruthy();
+      expect(within(card!).getByText('R Johnson')).toBeInTheDocument();
+      expect(within(card!).getByText('Stored legacy POG')).toBeInTheDocument();
+      expect(screen.queryByText('Best Hitter')).not.toBeInTheDocument();
+    });
+
+    test('stored POG ids do not override KBL WPA-derived Overall POG', async () => {
+      const { getCompletedGameById } = await import('../../utils/gameStorage');
+      vi.mocked(getCompletedGameById).mockResolvedValue({
+        ...mockGameData,
+        playersOfTheGame: {
+          first: 'away-r-johnson',
+          second: 'home-t-williams',
+        },
+      });
+
+      render(<PostGameSummary />);
+
+      const overallLabel = await screen.findByText('Overall POG');
+      const card = overallLabel.closest('div[class*="border-2"]');
+      expect(card).toBeTruthy();
+      expect(within(card!).getByText('J Martinez')).toBeInTheDocument();
+      expect(within(card!).queryByText('R Johnson')).not.toBeInTheDocument();
     });
   });
 
@@ -940,13 +1046,14 @@ describe('PostGameSummary Component', () => {
   });
 
   describe('One-inning recap', () => {
-    test('shows activity log, 1.0 IP, and fame count for short game', async () => {
+    test('renders the one-inning fixture winner, stadium, and 1.0 IP pitching line', async () => {
       const { getCompletedGameById } = await import('../../utils/gameStorage');
       vi.mocked(getCompletedGameById).mockResolvedValueOnce(oneInningGame);
 
       render(<PostGameSummary gameId={oneInningGame.gameId} />);
 
-      expect(await screen.findByText('Moonstars HR! Swagger Center')).toBeInTheDocument();
+      expect(await screen.findByText('Swagger Center')).toBeInTheDocument();
+      expect(screen.getByText('★ MOONSTARS WIN! ★')).toBeInTheDocument();
 
       const boxScoreToggle = await screen.findByText('BOX SCORE');
       fireEvent.click(boxScoreToggle);
@@ -954,32 +1061,48 @@ describe('PostGameSummary Component', () => {
       const pitcherLabel = await screen.findByText('Moonstars Ace');
       const pitcherRow = pitcherLabel.closest('div[class*="grid-cols-8"]');
       expect(pitcherRow).toBeTruthy();
-      const ipCell = pitcherRow?.querySelector(':scope > div:nth-child(2)');
-      expect(ipCell?.textContent?.trim()).toBe('1.0');
-
-      expect(await screen.findByText('Fame events recorded: 1')).toBeInTheDocument();
+      expect(
+        Array.from((pitcherRow as HTMLElement).children).map((cell) =>
+          cell.textContent?.trim(),
+        ),
+      ).toEqual(['Moonstars Ace', '1.0', '0', '0', '0', '1', '3']);
     });
   });
 
   describe('Badge-driven activity log coverage', () => {
-    test('shows activity log entry and hides empty-state message for short game', async () => {
+    test('renders concrete exhibition fame entries for short game archives', async () => {
       const { getCompletedGameById } = await import('../../utils/gameStorage');
       vi.mocked(getCompletedGameById).mockResolvedValueOnce(oneInningGame);
+      mockLocationState.gameMode = 'exhibition';
+      delete mockLocationState.franchiseId;
 
       render(<PostGameSummary gameId={oneInningGame.gameId} />);
 
-      expect(await screen.findByText('Moonstars HR! Swagger Center')).toBeInTheDocument();
-      expect(screen.queryByText('No notable actions recorded during this game.')).not.toBeInTheDocument();
+      const awayColumn = await screen.findByTestId('fame-leaderboard-column-moonstars');
+      expect(within(awayColumn).getByText('B. Louis')).toBeInTheDocument();
+      expect(within(awayColumn).getByText('1 events')).toBeInTheDocument();
+      expect(within(awayColumn).getByText('Run total +2.0')).toBeInTheDocument();
+      expect(within(awayColumn).getByText('+2.0')).toBeInTheDocument();
+
+      fireEvent.click(within(awayColumn).getByRole('button', { name: 'Show Events' }));
+
+      expect(within(awayColumn).getByText('HR')).toBeInTheDocument();
+      expect(within(awayColumn).getByText('Moonstars HR')).toBeInTheDocument();
     });
 
-    test('displays fame badge count when fame events exist', async () => {
+    test('renders the fixture-specific empty fame state for the opponent', async () => {
       const { getCompletedGameById } = await import('../../utils/gameStorage');
       vi.mocked(getCompletedGameById).mockResolvedValueOnce(oneInningGame);
+      mockLocationState.gameMode = 'exhibition';
+      delete mockLocationState.franchiseId;
 
       render(<PostGameSummary gameId={oneInningGame.gameId} />);
 
-      expect(await screen.findByText('Fame events recorded: 1')).toBeInTheDocument();
-      expect(screen.getByText('Moonstars HR! Swagger Center')).toBeInTheDocument();
+      const homeColumn = await screen.findByTestId('fame-leaderboard-column-heaters');
+      expect(within(homeColumn).getByText('HEATERS')).toBeInTheDocument();
+      expect(
+        within(homeColumn).getByText('No Fame events recorded for Heaters.'),
+      ).toBeInTheDocument();
     });
   });
 });

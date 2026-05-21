@@ -6,6 +6,7 @@ import {
   type Team,
 } from './leagueBuilderStorage';
 import { getEffectivePlayer } from './playerOverrides';
+import { syncEngine } from './syncEngine';
 
 export type { Player, Team } from './leagueBuilderStorage';
 
@@ -95,16 +96,20 @@ export async function initEliminationDatabase(bracketId: string): Promise<IDBDat
 export async function getEliminationPlayer(bracketId: string, playerId: string): Promise<Player | null> {
   const db = await initEliminationDatabase(bracketId);
   const tx = db.transaction(STORES.PLAYERS, 'readonly');
+  const txDone = transactionToPromise(tx);
   const store = tx.objectStore(STORES.PLAYERS);
   const player = await requestToPromise(store.get(playerId));
+  await txDone;
   return player ?? null;
 }
 
 export async function getAllEliminationPlayers(bracketId: string): Promise<Player[]> {
   const db = await initEliminationDatabase(bracketId);
   const tx = db.transaction(STORES.PLAYERS, 'readonly');
+  const txDone = transactionToPromise(tx);
   const store = tx.objectStore(STORES.PLAYERS);
   const players = await requestToPromise(store.getAll());
+  await txDone;
   return players ?? [];
 }
 
@@ -140,22 +145,30 @@ export async function saveEliminationPlayer(
   tx.objectStore(STORES.PLAYERS).put(fullPlayer);
   await transactionToPromise(tx);
 
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.upsert(getEliminationDatabaseName(bracketId), STORES.PLAYERS, fullPlayer.id, fullPlayer);
+  }
+
   return fullPlayer;
 }
 
 export async function getEliminationTeam(bracketId: string, teamId: string): Promise<Team | null> {
   const db = await initEliminationDatabase(bracketId);
   const tx = db.transaction(STORES.TEAMS, 'readonly');
+  const txDone = transactionToPromise(tx);
   const store = tx.objectStore(STORES.TEAMS);
   const team = await requestToPromise(store.get(teamId));
+  await txDone;
   return team ?? null;
 }
 
 export async function getAllEliminationTeams(bracketId: string): Promise<Team[]> {
   const db = await initEliminationDatabase(bracketId);
   const tx = db.transaction(STORES.TEAMS, 'readonly');
+  const txDone = transactionToPromise(tx);
   const store = tx.objectStore(STORES.TEAMS);
   const teams = await requestToPromise(store.getAll());
+  await txDone;
   return teams ?? [];
 }
 
@@ -182,10 +195,24 @@ export async function saveEliminationTeam(
   tx.objectStore(STORES.TEAMS).put(fullTeam);
   await transactionToPromise(tx);
 
+  if (!syncEngine.isSuppressed()) {
+    syncEngine.upsert(getEliminationDatabaseName(bracketId), STORES.TEAMS, fullTeam.id, fullTeam);
+  }
+
   return fullTeam;
 }
 
 export async function deleteEliminationDatabase(bracketId: string): Promise<void> {
+  if (!syncEngine.isSuppressed()) {
+    const dbName = getEliminationDatabaseName(bracketId);
+    const [existingPlayers, existingTeams] = await Promise.all([
+      getAllEliminationPlayers(bracketId).catch(() => []),
+      getAllEliminationTeams(bracketId).catch(() => []),
+    ]);
+    for (const player of existingPlayers) syncEngine.remove(dbName, STORES.PLAYERS, player.id);
+    for (const team of existingTeams) syncEngine.remove(dbName, STORES.TEAMS, team.id);
+  }
+
   const openPromise = eliminationDbPromises.get(bracketId);
   if (openPromise) {
     try {
@@ -250,6 +277,16 @@ export async function deepCopyLeagueToBracket(bracketId: string, leagueId: strin
     }),
   );
 
+  if (!syncEngine.isSuppressed()) {
+    const dbName = getEliminationDatabaseName(bracketId);
+    const [existingPlayers, existingTeams] = await Promise.all([
+      getAllEliminationPlayers(bracketId),
+      getAllEliminationTeams(bracketId),
+    ]);
+    for (const player of existingPlayers) syncEngine.remove(dbName, STORES.PLAYERS, player.id);
+    for (const team of existingTeams) syncEngine.remove(dbName, STORES.TEAMS, team.id);
+  }
+
   const tx = db.transaction([STORES.PLAYERS, STORES.TEAMS], 'readwrite');
   const playerStore = tx.objectStore(STORES.PLAYERS);
   const teamStore = tx.objectStore(STORES.TEAMS);
@@ -266,4 +303,10 @@ export async function deepCopyLeagueToBracket(bracketId: string, leagueId: strin
   }
 
   await transactionToPromise(tx);
+
+  if (!syncEngine.isSuppressed()) {
+    const dbName = getEliminationDatabaseName(bracketId);
+    for (const player of playersToCopy) syncEngine.upsert(dbName, STORES.PLAYERS, player.id, player);
+    for (const team of teamsToCopy) syncEngine.upsert(dbName, STORES.TEAMS, team.id, team);
+  }
 }

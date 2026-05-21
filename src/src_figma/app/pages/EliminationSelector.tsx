@@ -4,15 +4,15 @@
  * Per ELIMINATION_MODE_SPEC.md §3.1:
  * - Elimination cards (name, league, teams, round, status, last played)
  * - New Elimination Bracket button
- * - Actions: Load, Delete
+ * - Actions: Load, Remove
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Trophy, Trash2, Plus, Loader2, ArrowLeft } from 'lucide-react';
 import {
-  listEliminations,
-  deleteElimination,
+  listActiveEliminations,
+  removeEliminationFromSelector,
   type EliminationMetadata,
 } from '../../../utils/eliminationManager';
 
@@ -26,7 +26,7 @@ export function EliminationSelector() {
   const loadEliminations = useCallback(async () => {
     try {
       setIsLoading(true);
-      const list = await listEliminations();
+      const list = await listActiveEliminations();
       setEliminations(list);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load elimination brackets');
@@ -47,13 +47,13 @@ export function EliminationSelector() {
     navigate('/elimination/setup');
   };
 
-  const handleDelete = async (eliminationId: string) => {
+  const handleRemove = async (eliminationId: string) => {
     try {
-      await deleteElimination(eliminationId);
+      await removeEliminationFromSelector(eliminationId);
       setDeletingId(null);
       await loadEliminations();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete');
+      setError(err instanceof Error ? err.message : 'Failed to remove');
     }
   };
 
@@ -117,10 +117,10 @@ export function EliminationSelector() {
                   </p>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => handleDelete(elimination.eliminationId)}
+                      onClick={() => handleRemove(elimination.eliminationId)}
                       className="px-3 py-1 bg-red-600 hover:bg-red-500 text-white text-sm rounded"
                     >
-                      Delete
+                      Remove
                     </button>
                     <button
                       onClick={() => setDeletingId(null)}
@@ -153,7 +153,7 @@ export function EliminationSelector() {
                     <button
                       onClick={() => setDeletingId(elimination.eliminationId)}
                       className="p-2 hover:bg-[#333] rounded text-[#888] hover:text-red-400"
-                      title="Delete"
+                      title="Remove"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
