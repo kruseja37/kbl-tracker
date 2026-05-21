@@ -25,6 +25,8 @@ export interface RunnerPopoverProps {
   onSteal: (base: RunnerBase) => void;
   /** Handler: advance runner. D-11: optional destination for non-standard advance. */
   onAdvance: (base: RunnerBase, destinationBase?: 'second' | 'third' | 'home') => void;
+  /** Handler: advance runner because of a fielding/throwing/mental error. */
+  onAdvanceOnError?: (base: RunnerBase, destinationBase?: 'second' | 'third' | 'home') => void;
   /** Handler: wild pitch — all runners advance. If destinationBase provided, non-standard advance. */
   onWildPitch: (base: RunnerBase, destinationBase?: 'second' | 'third' | 'home') => void;
   /** Handler: passed ball — same as WP but charged to catcher */
@@ -39,7 +41,7 @@ export interface RunnerPopoverProps {
   onClose: () => void;
 }
 
-type DestinationMode = 'wp' | 'pb' | 'advance' | null;
+type DestinationMode = 'wp' | 'pb' | 'advance' | 'advance_error' | null;
 
 const BASE_LABELS: Record<RunnerBase, string> = {
   first: '1B',
@@ -77,6 +79,7 @@ export function RunnerPopover({
   anchorPosition,
   onSteal,
   onAdvance,
+  onAdvanceOnError,
   onWildPitch,
   onPassedBall,
   onPickoff,
@@ -132,8 +135,10 @@ export function RunnerPopover({
       onPassedBall(base, dest);
     } else if (destinationMode === 'advance') {
       onAdvance(base, dest);
+    } else if (destinationMode === 'advance_error') {
+      onAdvanceOnError?.(base, dest);
     }
-  }, [destinationMode, base, onWildPitch, onPassedBall, onAdvance]);
+  }, [destinationMode, base, onWildPitch, onPassedBall, onAdvance, onAdvanceOnError]);
 
   // D-11: Advance opens destination picker (unless runner on third → just score)
   const handleAdvance = useCallback(() => {
@@ -144,12 +149,27 @@ export function RunnerPopover({
     }
   }, [base, onAdvance]);
 
+  const handleAdvanceOnError = useCallback(() => {
+    if (!onAdvanceOnError) return;
+    if (base === 'third') {
+      onAdvanceOnError(base);
+    } else {
+      setDestinationMode('advance_error');
+    }
+  }, [base, onAdvanceOnError]);
+
   const displayName = runnerName.split(' ').pop()?.toUpperCase() || `R${BASE_LABELS[base]}`;
 
   // Destination picker sub-view (ticket 4.2)
   if (destinationMode) {
     const destinations = getDestinations(base);
-    const label = destinationMode === 'wp' ? 'WILD PITCH' : destinationMode === 'pb' ? 'PASSED BALL' : 'ADVANCE';
+    const label = destinationMode === 'wp'
+      ? 'WILD PITCH'
+      : destinationMode === 'pb'
+        ? 'PASSED BALL'
+        : destinationMode === 'advance_error'
+          ? 'ADVANCE ON ERROR'
+          : 'ADVANCE';
     return (
       <div
         ref={popoverRef}
@@ -257,6 +277,14 @@ export function RunnerPopover({
             border="border-[#5dade2]"
             onClick={handleAdvance}
           />
+          {onAdvanceOnError && (
+            <PopoverButton
+              label="Adv Err"
+              color="bg-[#7d6608]"
+              border="border-[#f4d03f]"
+              onClick={handleAdvanceOnError}
+            />
+          )}
           <PopoverButton
             label="WP"
             color="bg-[#7d6608]"

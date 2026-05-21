@@ -140,6 +140,7 @@ const formatRunnerTransitionLabel = (
   holdingFielder?: RunnerSubEntry['holdingFielder'],
   errorType?: RunnerSubEntry['errorType'],
   errorChargedTo?: RunnerSubEntry['errorChargedTo'],
+  errorAttributions?: RunnerSubEntry['errorAttributions'],
 ): string => {
   const baseTransition = `${formatRunnerBaseLabel(fromBase)}→${
     toBase === 'first'
@@ -155,13 +156,14 @@ const formatRunnerTransitionLabel = (
               : 'END'
   }`;
 
+  const attributedErrorPosition = errorChargedTo ?? errorAttributions?.[0]?.positions?.[0];
   if (
     errorType &&
-    typeof errorChargedTo === 'number' &&
-    errorChargedTo >= 1 &&
-    errorChargedTo <= 9
+    typeof attributedErrorPosition === 'number' &&
+    attributedErrorPosition >= 1 &&
+    attributedErrorPosition <= 9
   ) {
-    return `${baseTransition} (E${errorChargedTo})`;
+    return `${baseTransition} (E${attributedErrorPosition})`;
   }
 
   const holdFielder = holdingFielder || fielderPosition;
@@ -294,6 +296,7 @@ function buildRunnerSubEntries(event: AtBatEvent): RunnerSubEntry[] | undefined 
       managerDecisionNote: ro.managerDecisionNote,
       errorType: ro.errorType,
       errorChargedTo: ro.errorChargedTo,
+      errorAttributions: ro.errorAttributions,
       transitionLabel: formatRunnerTransitionLabel(
         ro.fromBase,
         getRunnerDisplayDestination(ro),
@@ -303,6 +306,7 @@ function buildRunnerSubEntries(event: AtBatEvent): RunnerSubEntry[] | undefined 
         ro.holdingFielder,
         ro.errorType,
         ro.errorChargedTo,
+        ro.errorAttributions,
       ),
     }));
 
@@ -575,17 +579,22 @@ export function mapBetweenPlayEventToPlayLogEntry(
         description: runnerDescription,
         timestamp: event.timestamp,
       });
-    case 'runner_advance':
+    case 'runner_advance': {
+      const errorAttribution = event.errorAttributions?.[0];
+      const errorPosition = errorAttribution?.positions?.[0] ?? event.runnerAttribution?.fielderPosition;
       return createBaseEntry({
         id: event.eventId,
         eventId: event.eventId,
         eventType: 'runner_advance',
         inningLabel,
         batterName: actorName(event.runnerAction?.runnerId, event.runnerAction?.runnerName),
-        result: 'ADV',
-        description: runnerDescription,
+        result: event.runnerAction?.reason === 'advance_on_error' ? 'ADV-E' : 'ADV',
+        description: event.runnerAction?.reason === 'advance_on_error' && errorPosition
+          ? `${runnerDescription} on ${errorAttribution?.type ?? 'error'} E${errorPosition}`
+          : runnerDescription,
         timestamp: event.timestamp,
       });
+    }
     case 'substitution':
       return createBaseEntry({
         id: event.eventId,

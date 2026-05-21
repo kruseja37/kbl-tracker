@@ -1,4 +1,7 @@
 import type {
+  ErrorAttribution,
+} from "../../../utils/eventLog";
+import type {
   ManagerDecisionSource,
   ManagerRunPlay,
   ManagerRunnerIntent,
@@ -59,6 +62,7 @@ export interface RunnerSubEntry {
   managerDecisionNote?: string;
   errorType?: 'fielding' | 'throwing' | 'mental';
   errorChargedTo?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+  errorAttributions?: ErrorAttribution[];
   transitionLabel?: string;
 }
 

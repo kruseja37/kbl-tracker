@@ -52,7 +52,7 @@ export interface FielderPopoverProps {
 
 type ModalMode = 'substitute' | 'pinchHit' | 'movePosition' | null;
 
-const FIELD_POSITIONS = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'P', 'DH'];
+const FIELD_POSITIONS = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF'];
 
 export function FielderPopover({
   fielder,
@@ -150,6 +150,7 @@ export function FielderPopover({
   // Move Position modal — position picker (ticket 4.5)
   if (modalMode === 'movePosition') {
     const otherPositions = FIELD_POSITIONS.filter(p => p !== fielder.positionLabel);
+    const canMovePosition = fielder.positionLabel !== 'P';
     return (
       <SubstitutionModalBase
         isOpen={true}
@@ -159,19 +160,25 @@ export function FielderPopover({
         width="sm"
       >
         <ModalSection title="SELECT NEW POSITION">
-          <PositionSelect
-            label="New Position"
-            value={selectedPosition}
-            onChange={setSelectedPosition}
-            positions={otherPositions}
-            placeholder="Select position..."
-          />
+          {canMovePosition ? (
+            <PositionSelect
+              label="New Position"
+              value={selectedPosition}
+              onChange={setSelectedPosition}
+              positions={otherPositions}
+              placeholder="Select position..."
+            />
+          ) : (
+            <div className="text-xs text-[#E8E8D8]/70">
+              Use a pitching change to move a pitcher off the mound.
+            </div>
+          )}
         </ModalSection>
         <ModalActions>
           <ModalButton variant="secondary" onClick={() => setModalMode(null)}>Cancel</ModalButton>
           <ModalButton
             variant="primary"
-            disabled={!selectedPosition}
+            disabled={!canMovePosition || !selectedPosition}
             onClick={handleMovePosition}
           >
             Confirm
@@ -211,12 +218,14 @@ export function FielderPopover({
           >
             Substitute
           </button>
-          <button
-            onClick={() => setModalMode('movePosition')}
-            className="w-full bg-[#1a5276] border-[2px] border-[#5dade2] px-2 py-1.5 text-[10px] font-bold text-white hover:scale-105 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]"
-          >
-            Move Position
-          </button>
+          {fielder.positionLabel !== 'P' && (
+            <button
+              onClick={() => setModalMode('movePosition')}
+              className="w-full bg-[#1a5276] border-[2px] border-[#5dade2] px-2 py-1.5 text-[10px] font-bold text-white hover:scale-105 transition-transform shadow-[2px_2px_0px_0px_rgba(0,0,0,0.3)]"
+            >
+              Move Position
+            </button>
+          )}
           {onViewPlayerCard && (
             <button
               onClick={onViewPlayerCard}

@@ -88,7 +88,7 @@ describe("playerLineupGameLine", () => {
     ).toBe("0 for 0; Gem");
   });
 
-  test("counts only successful diving, leaping, and robbed home run plays", () => {
+  test("counts only successful diving, leaping, sliding, and robbed home run plays", () => {
     expect(
       buildPlayerGemCounts([
         {
@@ -140,6 +140,22 @@ describe("playerLineupGameLine", () => {
           syncedAtBatVersion: 1,
         },
         {
+          id: "6",
+          gameId: "game-1",
+          atBatId: "ab-6",
+          playerId: "fielder-1",
+          playerName: "Fielder One",
+          battingTeamId: "away",
+          fieldingTeamId: "home",
+          inning: 2,
+          halfInning: "TOP",
+          zone: "8",
+          success: true,
+          specialPlayType: "Sliding",
+          timestamp: 3.5,
+          syncedAtBatVersion: 1,
+        },
+        {
           id: "4",
           gameId: "game-1",
           atBatId: "ab-4",
@@ -171,9 +187,26 @@ describe("playerLineupGameLine", () => {
           timestamp: 5,
           syncedAtBatVersion: 1,
         },
+        {
+          id: "7",
+          gameId: "game-1",
+          atBatId: "ab-7",
+          playerId: "fielder-2",
+          playerName: "Fielder Two",
+          battingTeamId: "away",
+          fieldingTeamId: "home",
+          inning: 3,
+          halfInning: "TOP",
+          zone: "8",
+          playType: "base_save",
+          success: true,
+          specialPlayType: "Diving",
+          timestamp: 6,
+          syncedAtBatVersion: 1,
+        },
       ]),
     ).toEqual({
-      "fielder-1": 2,
+      "fielder-1": 3,
       "fielder-2": 1,
     });
   });

@@ -372,7 +372,7 @@ export function LineupPreview({
 
               {/* Position badge + mojo/fitness */}
               <div className="flex items-center gap-1.5 shrink-0">
-                {isTouch && onPositionSwap ? (
+                {onPositionSwap ? (
                   <button
                     type="button"
                     onClick={() => handlePositionTap(player)}
@@ -432,7 +432,7 @@ export function LineupPreview({
             style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
             STARTING PITCHER
           </div>
-          {isTouch && onPitcherSub && benchPitchers.length > 0 ? (
+          {onPitcherSub && benchPitchers.length > 0 ? (
             <button
               type="button"
               onClick={handleStartingPitcherTap}
