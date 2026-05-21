@@ -4,6 +4,7 @@ import type { PlayerGameStats } from "../../hooks/useGameState";
 const GEM_PLAY_TYPES = new Set<FieldingEvent["specialPlayType"]>([
   "Diving",
   "Leaping",
+  "Sliding",
   "Robbed HR",
 ]);
 
@@ -21,6 +22,9 @@ export function buildPlayerGemCounts(
   const counts: Record<string, number> = {};
 
   for (const event of fieldingEvents) {
+    if (event.playType === "base_save") {
+      continue;
+    }
     if (!event.success || !event.specialPlayType || !GEM_PLAY_TYPES.has(event.specialPlayType)) {
       continue;
     }

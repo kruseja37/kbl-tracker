@@ -235,6 +235,8 @@ export interface PersistedGameState {
   homeBatterIndex?: number;
   seasonId?: string;
   statsScopeId?: string;
+  franchiseId?: string;
+  scheduleGameId?: string;
   competitionType?: CompetitionType;
   competitionId?: string;
   competitionName?: string;
@@ -561,6 +563,8 @@ export interface CompletedGameRecord {
   isEliminationGame?: boolean;
   isClinchGame?: boolean;
   leagueId?: string;
+  franchiseId?: string;
+  scheduleGameId?: string;
   seasonNumber?: number;
   stadiumName?: string | null;
   awayTeamId: string;
@@ -715,6 +719,8 @@ export async function archiveCompletedGame(
     isEliminationGame?: boolean;
     isClinchGame?: boolean;
     leagueId?: string;
+    franchiseId?: string;
+    scheduleGameId?: string;
     totalInnings?: number;
     extraInningRunner?: boolean;
     extraInningRunnerDelay?: 1 | 2;
@@ -753,6 +759,8 @@ export async function archiveCompletedGame(
       context?.isEliminationGame ?? gameState.isEliminationGame,
     isClinchGame: context?.isClinchGame ?? gameState.isClinchGame,
     leagueId: resolvedLeagueId,
+    franchiseId: context?.franchiseId ?? gameState.franchiseId,
+    scheduleGameId: context?.scheduleGameId ?? gameState.scheduleGameId,
     seasonNumber: gameState.seasonNumber,
     stadiumName: gameState.stadiumName ?? null,
     awayTeamId: gameState.awayTeamId,
@@ -866,8 +874,29 @@ export async function archiveBatchGameResult(params: {
 /**
  * Get recent completed games
  */
+export interface RecentGamesQuery {
+  seasonId?: string;
+  statsScopeId?: string;
+  franchiseId?: string;
+  competitionType?: CompetitionType;
+  competitionId?: string;
+}
+
+function completedGameMatchesQuery(
+  game: CompletedGameRecord,
+  query: RecentGamesQuery,
+): boolean {
+  if (query.seasonId && game.seasonId !== query.seasonId) return false;
+  if (query.statsScopeId && game.statsScopeId !== query.statsScopeId) return false;
+  if (query.franchiseId && game.franchiseId !== query.franchiseId) return false;
+  if (query.competitionType && game.competitionType !== query.competitionType) return false;
+  if (query.competitionId && game.competitionId !== query.competitionId) return false;
+  return true;
+}
+
 export async function getRecentGames(
   limit: number = 10,
+  query: RecentGamesQuery = {},
 ): Promise<CompletedGameRecord[]> {
   const db = await initDatabase();
 
@@ -887,7 +916,10 @@ export async function getRecentGames(
     request.onsuccess = () => {
       const cursor = request.result;
       if (cursor && results.length < limit) {
-        results.push(cursor.value);
+        const game = cursor.value as CompletedGameRecord;
+        if (completedGameMatchesQuery(game, query)) {
+          results.push(game);
+        }
         cursor.continue();
       } else {
         resolve(results);

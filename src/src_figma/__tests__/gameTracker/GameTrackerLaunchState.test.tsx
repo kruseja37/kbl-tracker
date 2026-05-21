@@ -1,9 +1,14 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
   const mockInitializeGame = vi.fn();
   const mockLoadExistingGame = vi.fn();
+  const mockEndGame = vi.fn();
+  const mockGetCareerStats = vi.fn();
+  const mockGetSeasonBattingStats = vi.fn();
+  const mockGetSeasonPitchingStats = vi.fn();
+  const mockCompleteScheduleGame = vi.fn();
   const emptyLineupSnapshot = {
     away: { lineup: [], bench: [], usedPlayers: [], currentPitcher: null },
     home: { lineup: [], bench: [], usedPlayers: [], currentPitcher: null },
@@ -67,7 +72,7 @@ const mocks = vi.hoisted(() => {
       advanceCount: vi.fn(),
       resetCount: vi.fn(),
       endInning: vi.fn(),
-      endGame: vi.fn(),
+      endGame: mockEndGame,
       applyScoreAdjustment: vi.fn(),
       applyBasesCorrection: vi.fn(),
       updateTrackedRunnerHowReached: vi.fn(),
@@ -117,6 +122,11 @@ const mocks = vi.hoisted(() => {
       restoredCompetitionContext: {},
       restoredPlayoffContext: {},
     },
+    mockEndGame,
+    mockGetCareerStats,
+    mockGetSeasonBattingStats,
+    mockGetSeasonPitchingStats,
+    mockCompleteScheduleGame,
   };
 });
 
@@ -133,11 +143,15 @@ vi.mock("@/hooks/useGameState", () => ({
 vi.mock("@/app/hooks/usePlayerState", () => ({
   usePlayerState: () => ({
     players: new Map(),
+    notifications: [],
     getAllPlayers: vi.fn(() => []),
     getPlayer: vi.fn(() => undefined),
     registerPlayer: vi.fn(),
     updateMojo: vi.fn(),
     updateFitness: vi.fn(),
+    setMojo: vi.fn(),
+    setFitness: vi.fn(),
+    dismissNotification: vi.fn(),
   }),
   getStateBadge: vi.fn(() => ""),
   formatMultiplier: vi.fn((value: number) => `${value}`),
@@ -184,7 +198,35 @@ vi.mock("../../app/hooks/useFanMorale", () => ({
   useFanMorale: () => ({
     morale: 50,
     getMoraleMultiplier: vi.fn(() => 1),
+    processGameResult: vi.fn(),
   }),
+}));
+
+vi.mock("../../app/engines/narrativeIntegration", () => ({
+  generateGameRecap: vi.fn(() => ({
+    headline: "Final",
+    summary: "Final summary",
+    keyMoment: "Key moment",
+    playerOfGame: "Player",
+    tone: "neutral",
+  })),
+}));
+
+vi.mock("../../../utils/careerStorage", () => ({
+  getCareerStats: mocks.mockGetCareerStats,
+}));
+
+vi.mock("../../../utils/milestoneDetector", () => ({
+  getApproachingMilestones: vi.fn(() => []),
+}));
+
+vi.mock("../../../utils/seasonStorage", () => ({
+  getSeasonBattingStats: mocks.mockGetSeasonBattingStats,
+  getSeasonPitchingStats: mocks.mockGetSeasonPitchingStats,
+}));
+
+vi.mock("../../../utils/scheduleStorage", () => ({
+  completeGame: mocks.mockCompleteScheduleGame,
 }));
 
 vi.mock("../../../utils/leagueBuilderStorage", () => ({
@@ -251,6 +293,42 @@ describe("GameTracker launch state", () => {
     });
     mocks.mockLoadExistingGame.mockResolvedValue(false);
     mocks.mockInitializeGame.mockImplementation(() => new Promise(() => {}));
+    mocks.mockEndGame.mockResolvedValue(undefined);
+    mocks.mockGetCareerStats.mockResolvedValue({ batting: {}, pitching: {} });
+    mocks.mockGetSeasonBattingStats.mockResolvedValue([]);
+    mocks.mockGetSeasonPitchingStats.mockResolvedValue([]);
+    mocks.mockCompleteScheduleGame.mockResolvedValue(undefined);
+    Object.assign(mocks.mockUseGameStateResult.gameState, {
+      gameId: "",
+      homeScore: 0,
+      awayScore: 0,
+      inning: 1,
+      isTop: true,
+      outs: 0,
+      balls: 0,
+      strikes: 0,
+      bases: { first: false, second: false, third: false },
+      currentBatterId: "",
+      currentBatterName: "",
+      currentPitcherId: "",
+      currentPitcherName: "",
+      currentCatcherId: "",
+      currentCatcherName: "",
+      awayTeamId: "",
+      homeTeamId: "",
+      awayTeamName: "",
+      homeTeamName: "",
+      stadiumName: null,
+      seasonId: undefined,
+      statsScopeId: undefined,
+      seasonNumber: 1,
+      gamePhase: "PRE_GAME",
+      liveBeatReporterEnabled: false,
+      postGameColumnsEnabled: false,
+    });
+    mocks.mockUseGameStateResult.restoredCompetitionContext = {};
+    mocks.mockUseGameStateResult.restoredPlayoffContext = {};
+    mocks.mockUseGameStateResult.showAutoEndPrompt = false;
     vi.spyOn(console, "error").mockImplementation(() => {});
     Object.defineProperty(window, "matchMedia", {
       writable: true,
@@ -362,4 +440,122 @@ describe("GameTracker launch state", () => {
     expect(initConfig.homeStartingPitcherName).toBe("Home Starter");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
+
+  test("direct-entry restored franchise scope drives live season stat context", async () => {
+    mocks.mockUseParams.mockReturnValue({ gameId: "game-franchise-restored" });
+    mocks.mockUseLocation.mockReturnValue({
+      pathname: "/game-tracker/game-franchise-restored",
+      search: "",
+      hash: "",
+      state: null,
+    });
+    mocks.mockLoadExistingGame.mockResolvedValue(true);
+    Object.assign(mocks.mockUseGameStateResult.gameState, {
+      gameId: "game-franchise-restored",
+      currentBatterId: "away-batter-1",
+      currentBatterName: "Away Batter 1",
+      currentPitcherId: "home-sp",
+      currentPitcherName: "Home Starter",
+      awayTeamId: "away-team",
+      homeTeamId: "home-team",
+      awayTeamName: "Away Team",
+      homeTeamName: "Home Team",
+      seasonNumber: 3,
+      gamePhase: "LIVE",
+    });
+    mocks.mockUseGameStateResult.restoredCompetitionContext = {
+      seasonId: "franchise-restored-season-3",
+      statsScopeId: "franchise-restored-season-3",
+      seasonNumber: 3,
+      competitionType: "franchise",
+      competitionId: "franchise-restored",
+      franchiseId: "franchise-restored",
+      scheduleGameId: "schedule-restored-7",
+    };
+
+    render(<GameTracker />);
+
+    await waitFor(() => {
+      expect(mocks.mockGetSeasonBattingStats).toHaveBeenCalledWith(
+        "franchise-restored-season-3",
+      );
+    });
+    expect(mocks.mockGetSeasonPitchingStats).toHaveBeenCalledWith(
+      "franchise-restored-season-3",
+    );
+    expect(mocks.mockInitializeGame).not.toHaveBeenCalled();
+  });
+
+  test("direct-entry restored franchise scope completes restored schedule game", async () => {
+    mocks.mockUseParams.mockReturnValue({ gameId: "game-franchise-restored" });
+    mocks.mockUseLocation.mockReturnValue({
+      pathname: "/game-tracker/game-franchise-restored",
+      search: "",
+      hash: "",
+      state: null,
+    });
+    mocks.mockLoadExistingGame.mockResolvedValue(true);
+    Object.assign(mocks.mockUseGameStateResult.gameState, {
+      gameId: "game-franchise-restored",
+      currentBatterId: "away-batter-1",
+      currentBatterName: "Away Batter 1",
+      currentPitcherId: "home-sp",
+      currentPitcherName: "Home Starter",
+      awayTeamId: "away-team",
+      homeTeamId: "home-team",
+      awayTeamName: "Away Team",
+      homeTeamName: "Home Team",
+      awayScore: 2,
+      homeScore: 5,
+      seasonNumber: 3,
+      gamePhase: "LIVE",
+      postGameColumnsEnabled: false,
+    });
+    mocks.mockUseGameStateResult.restoredCompetitionContext = {
+      seasonId: "franchise-restored-season-3",
+      statsScopeId: "franchise-restored-season-3",
+      seasonNumber: 3,
+      competitionType: "franchise",
+      competitionId: "franchise-restored",
+      franchiseId: "franchise-restored",
+      scheduleGameId: "schedule-restored-7",
+      leagueId: "league-restored",
+    };
+    mocks.mockUseGameStateResult.showAutoEndPrompt = true;
+
+    render(<GameTracker />);
+
+    expect(await screen.findByText(/END GAME CONFIRMATION/i)).toBeInTheDocument();
+
+    const confirmEndGameButton = screen
+      .getAllByRole("button", { name: /END GAME/i })
+      .find((button) => button.textContent?.trim() === "END GAME");
+    expect(confirmEndGameButton).toBeDefined();
+    fireEvent.click(confirmEndGameButton!);
+
+    await waitFor(() => {
+      expect(mocks.mockEndGame).toHaveBeenCalledWith(
+        expect.objectContaining({
+          seasonId: "franchise-restored-season-3",
+          statsScopeId: "franchise-restored-season-3",
+          franchiseId: "franchise-restored",
+          scheduleGameId: "schedule-restored-7",
+          currentSeason: 3,
+        }),
+      );
+    });
+    await waitFor(() => {
+      expect(mocks.mockCompleteScheduleGame).toHaveBeenCalledWith(
+        "schedule-restored-7",
+        expect.objectContaining({
+          homeScore: 5,
+          awayScore: 2,
+          winningTeamId: "home-team",
+          losingTeamId: "away-team",
+          gameLogId: "game-franchise-restored",
+        }),
+      );
+    });
+  });
+
 });

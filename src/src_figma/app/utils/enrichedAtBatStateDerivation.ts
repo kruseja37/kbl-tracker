@@ -110,13 +110,46 @@ function findBatterBaseInRunnersAfter(existingAtBat: AtBatEvent): BaseKey | null
   return null;
 }
 
+function sameRunner(
+  before: RunnerInfo | null | undefined,
+  after: RunnerInfo | null | undefined,
+): boolean {
+  if (!before || !after) return false;
+  if (before.runnerId && after.runnerId) {
+    return before.runnerId === after.runnerId;
+  }
+  return before.runnerName === after.runnerName;
+}
+
 export function completeRunnerOutcomesForDerivation(
   existingAtBat: AtBatEvent,
   runnerOutcomes: PersistedRunnerOutcome[],
 ): CompleteRunnerOutcomesForDerivationResult {
   const diagnostics: string[] = [];
-  if (runnerOutcomes.some((outcome) => outcome.fromBase === 'batter')) {
-    return { runnerOutcomes, diagnostics };
+  const completedOutcomes = [...runnerOutcomes];
+  const existingOutcomeKeys = new Set(
+    completedOutcomes.map((outcome) => `${outcome.runnerId}:${outcome.fromBase}`),
+  );
+
+  for (const base of ['first', 'second', 'third'] as const) {
+    const runnerBefore = existingAtBat.runners[base];
+    const runnerAfter = existingAtBat.runnersAfter[base];
+    if (!sameRunner(runnerBefore, runnerAfter)) continue;
+    if (!runnerBefore) continue;
+
+    const key = `${runnerBefore.runnerId}:${base}`;
+    if (existingOutcomeKeys.has(key)) continue;
+    completedOutcomes.push({
+      runnerId: runnerBefore.runnerId,
+      runnerName: runnerBefore.runnerName,
+      fromBase: base,
+      toBase: base,
+    });
+    existingOutcomeKeys.add(key);
+  }
+
+  if (completedOutcomes.some((outcome) => outcome.fromBase === 'batter')) {
+    return { runnerOutcomes: completedOutcomes, diagnostics };
   }
 
   const batterBase = findBatterBaseInRunnersAfter(existingAtBat);
@@ -127,12 +160,12 @@ export function completeRunnerOutcomesForDerivation(
     diagnostics.push(
       `Could not infer missing batter outcome for result ${existingAtBat.result}`,
     );
-    return { runnerOutcomes, diagnostics };
+    return { runnerOutcomes: completedOutcomes, diagnostics };
   }
 
   return {
     runnerOutcomes: [
-      ...runnerOutcomes,
+      ...completedOutcomes,
       {
         runnerId: existingAtBat.batterId,
         runnerName: existingAtBat.batterName,

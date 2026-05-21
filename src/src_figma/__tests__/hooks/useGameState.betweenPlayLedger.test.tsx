@@ -313,6 +313,71 @@ describe('useGameState between-play ledger', () => {
     expect(result.current.playerStats.has('home-rp')).toBe(true);
   });
 
+  test('live DH pitching changes preserve the batting lineup instead of replacing the leadoff hitter', async () => {
+    const { result } = renderHook(() => useGameState());
+
+    await act(async () => {
+      await result.current.initializeGame({
+        gameId: 'game-dh-pitcher-change',
+        awayTeamId: 'away-team',
+        awayTeamName: 'Away Team',
+        homeTeamId: 'home-team',
+        homeTeamName: 'Home Team',
+        awayStartingPitcherId: 'away-sp',
+        awayStartingPitcherName: 'Away Starter',
+        homeStartingPitcherId: 'home-sp',
+        homeStartingPitcherName: 'Home Starter',
+        awayLineup: [
+          { playerId: 'away-batter-1', playerName: 'Away Batter 1', position: 'SS' },
+          { playerId: 'away-batter-2', playerName: 'Away Batter 2', position: 'CF' },
+        ],
+        homeLineup: [
+          { playerId: 'home-leadoff', playerName: 'Home Leadoff', position: '2B' },
+          { playerId: 'home-dh', playerName: 'Home DH', position: 'DH' },
+          { playerId: 'home-rf', playerName: 'Home RF', position: 'RF' },
+        ],
+        awayBench: [],
+        homeBench: [
+          { playerId: 'home-rp', playerName: 'Home Reliever', positions: ['P'] },
+        ],
+        seasonNumber: 1,
+      });
+    });
+
+    act(() => {
+      result.current.startGame();
+    });
+
+    await act(async () => {
+      result.current.changePitcher('home-rp', 'home-sp', 'home', 'Home Reliever', 'Home Starter');
+      result.current.confirmPitchCount('home-sp', 17);
+      await Promise.resolve();
+    });
+
+    const snapshot = result.current.getLineupStateSnapshot();
+    expect(snapshot.home.lineup.map((player) => player.playerId)).toEqual([
+      'home-leadoff',
+      'home-dh',
+      'home-rf',
+    ]);
+    expect(snapshot.home.lineup[0]).toEqual(
+      expect.objectContaining({
+        playerId: 'home-leadoff',
+        playerName: 'Home Leadoff',
+        position: '2B',
+      }),
+    );
+    expect(snapshot.home.lineup.some((player) => player.playerId === 'home-rp')).toBe(false);
+    expect(snapshot.home.currentPitcher).toEqual(
+      expect.objectContaining({
+        playerId: 'home-rp',
+        playerName: 'Home Reliever',
+        position: 'P',
+      }),
+    );
+    expect(result.current.gameState.currentPitcherId).toBe('home-rp');
+  });
+
   test('allows a batting-team pinch hitter to replace a virtual no-DH pitcher row', async () => {
     const { result } = renderHook(() => useGameState());
     await initializeGame(result);

@@ -7,8 +7,11 @@ interface LiveRunnerAttributionPanelProps {
   catcherName?: string;
   fielderId: string;
   fielderOptions: Array<{ id: string; label: string }>;
+  showErrorType?: boolean;
+  errorType?: 'fielding' | 'throwing' | 'mental';
   saving?: boolean;
   onFielderChange: (fielderId: string) => void;
+  onErrorTypeChange?: (errorType: 'fielding' | 'throwing' | 'mental') => void;
   onCancel: () => void;
   onCommit: () => void;
 }
@@ -29,8 +32,11 @@ export function LiveRunnerAttributionPanel({
   catcherName,
   fielderId,
   fielderOptions,
+  showErrorType = false,
+  errorType = 'fielding',
   saving = false,
   onFielderChange,
+  onErrorTypeChange,
   onCancel,
   onCommit,
 }: LiveRunnerAttributionPanelProps) {
@@ -76,6 +82,22 @@ export function LiveRunnerAttributionPanel({
             ))}
           </select>
         </label>
+
+        {showErrorType && (
+          <label className="text-[8px] text-[#88AA88] font-bold uppercase tracking-wide">
+            Error Type
+            <select
+              value={errorType}
+              onChange={(e) => onErrorTypeChange?.(e.target.value as 'fielding' | 'throwing' | 'mental')}
+              disabled={saving}
+              className="mt-1 w-full bg-[#1f2937]/60 border border-[#4a6a4a] rounded px-2 py-1 text-[9px] text-[#E8E8D8]"
+            >
+              <option value="fielding">Fielding</option>
+              <option value="throwing">Throwing</option>
+              <option value="mental">Mental</option>
+            </select>
+          </label>
+        )}
 
         <div className="text-[7px] text-[#88AA88]">
           {saving ? 'Saving…' : 'Pitcher and catcher come from the live defensive alignment. Fielder is the defender who completed the tag, throw, or misplay.'}

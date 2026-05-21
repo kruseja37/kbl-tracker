@@ -88,7 +88,7 @@ const ItemTypes = {
   BULLPEN_PITCHER: 'BULLPEN_PITCHER',
 };
 
-const POSITION_OPTIONS = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'P', 'DH'] as const;
+const POSITION_OPTIONS = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] as const;
 
 // ============================================
 // LINEUP SLOT COMPONENT
@@ -192,7 +192,7 @@ function LineupSlot({
         {player.isUsed && ' ❌'}
       </div>
 
-      {onChangePosition && !player.isUsed && (
+      {onChangePosition && !player.isUsed && player.position !== 'P' && (
         <button
           type="button"
           onClick={(event) => {

@@ -38,6 +38,55 @@ describe("PlayerCardModal", () => {
     );
   });
 
+  test("forces active mound-pitcher substitutions through the pitcher candidate list", () => {
+    const onSubOut = vi.fn();
+
+    render(
+      <PlayerCardModal
+        player={{ name: "Shohei Ohtani", type: "pitcher", playerId: "home-sp" }}
+        playerData={{
+          name: "Shohei Ohtani",
+          battingOrder: 2,
+          position: "P",
+          battingHand: "L",
+          stats: {},
+        } as never}
+        onClose={vi.fn()}
+        onSubOut={onSubOut}
+        benchPlayers={[
+          {
+            name: "Bench Bat",
+            pos: "OF",
+            hand: "R",
+            isOutOfGame: false,
+          },
+        ]}
+        bullpenPitchers={[
+          {
+            name: "Emergency Arm",
+            hand: "R",
+          },
+        ]}
+        isActivePitcher
+        gamePhase="LIVE"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "SUB OUT" }));
+
+    expect(screen.queryByRole("button", { name: /Bench Bat/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Emergency Arm/i }));
+
+    expect(onSubOut).toHaveBeenCalledWith(
+      "home-sp",
+      "Shohei Ohtani",
+      "Emergency Arm",
+      true,
+      "P",
+      undefined,
+    );
+  });
+
   test("keeps pre-game swap-order controls visible while hiding mojo and fitness editing", () => {
     render(
       <PlayerCardModal

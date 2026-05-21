@@ -149,6 +149,9 @@ export interface GameHeader {
   competitionType?: CompetitionType;
   competitionId?: string;
   competitionName?: string;
+  franchiseId?: string;
+  leagueId?: string;
+  scheduleGameId?: string;
   playoffSeriesId?: string;
   playoffGameNumber?: number;
   playoffId?: string;
@@ -269,6 +272,7 @@ export interface AtBatEvent {
   competitionType?: CompetitionType;
   competitionId?: string;
   franchiseId?: string;
+  scheduleGameId?: string;
   leagueId?: string;
 
   // 1.10 (GAP-GT-2-G): Park context
@@ -383,6 +387,7 @@ export interface AtBatEvent {
     managerDecisionNote?: string;
     errorType?: 'fielding' | 'throwing' | 'mental';
     errorChargedTo?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+    errorAttributions?: ErrorAttribution[];
   }>;
   batterReachedOnError?: boolean;
   batterErrorType?: 'fielding' | 'throwing' | 'mental';
@@ -486,6 +491,12 @@ export interface PromptedManagerDecisionEvent {
   };
 }
 
+export interface ErrorAttribution {
+  type: 'fielding' | 'throwing' | 'mental';
+  fielderIds?: string[];
+  positions?: Array<1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9>;
+}
+
 /** Formal between-play event interface per spec §2.2 */
 export interface BetweenPlayEvent {
   eventId: string;
@@ -542,7 +553,7 @@ export interface BetweenPlayEvent {
     fromBase: 1 | 2 | 3;
     toBase: 1 | 2 | 3 | 4;
     outcome: 'safe' | 'out';
-    reason: 'stolen_base' | 'caught_stealing' | 'pickoff' | 'wild_pitch' | 'passed_ball' | 'advance';
+    reason: 'stolen_base' | 'caught_stealing' | 'pickoff' | 'wild_pitch' | 'passed_ball' | 'advance' | 'advance_on_error';
     managerIntent?: ManagerRunnerIntent;
     managerRunPlay?: ManagerRunPlay;
     managerDecisionSource?: ManagerDecisionSource;
@@ -592,6 +603,7 @@ export interface BetweenPlayEvent {
     fielderName?: string;
     fielderPosition?: number;
   };
+  errorAttributions?: ErrorAttribution[];
 
   errorChargedTo?: 'pitcher' | 'catcher' | 'fielder';
 
@@ -959,6 +971,31 @@ function applyBetweenPlayEventUpdates(
   return next;
 }
 
+function assertAuditedAtBatOutcomeEdit(
+  existing: AtBatEvent,
+  updates: {
+    result?: AtBatResult;
+    version?: number;
+    editHistory?: AtBatEvent['editHistory'];
+  },
+): void {
+  if (updates.result === undefined || updates.result === existing.result) {
+    return;
+  }
+
+  const existingVersion = existing.version ?? 1;
+  const hasVersionBump =
+    typeof updates.version === 'number' && updates.version > existingVersion;
+  const hasAuditTrail =
+    Array.isArray(updates.editHistory) && updates.editHistory.length > 0;
+
+  if (!hasVersionBump || !hasAuditTrail) {
+    throw new Error(
+      'Mode 2 v1 outcome corrections must include a version bump and editHistory.',
+    );
+  }
+}
+
 function applyAtBatEventUpdates(
   existing: AtBatEvent,
   updates: Partial<Pick<
@@ -1198,6 +1235,8 @@ function refreshStoredWpa(
 
 /**
  * Update an existing AtBatEvent in IndexedDB (for post-hoc enrichment).
+ * Mode 2 v1 treats outcome changes as corrections: result edits must carry a
+ * version bump and editHistory so the original event is never silently changed.
  * Uses put() which overwrites the record at the same eventId key.
  */
 export async function updateAtBatEvent(
@@ -1251,6 +1290,13 @@ export async function updateAtBatEvent(
       const existing = getRequest.result as AtBatEvent | undefined;
       if (!existing) {
         reject(new Error(`AtBatEvent not found: ${eventId}`));
+        return;
+      }
+      try {
+        assertAuditedAtBatOutcomeEdit(existing, updates);
+      } catch (err) {
+        transaction.abort();
+        reject(err);
         return;
       }
 
@@ -1345,6 +1391,13 @@ export async function updateAtBatEventWithFieldingSync(
       const existing = atBatRequest.result as AtBatEvent | undefined;
       if (!existing) {
         reject(new Error(`AtBatEvent not found: ${eventId}`));
+        return;
+      }
+      try {
+        assertAuditedAtBatOutcomeEdit(existing, updates);
+      } catch (err) {
+        transaction.abort();
+        reject(err);
         return;
       }
 
@@ -1758,12 +1811,30 @@ export async function undoMostRecentGameAction(gameId: string): Promise<UndoneGa
     return null;
   }
 
+  const targetBetweenPlay = target.kind === 'betweenPlay'
+    ? undoableBetweenPlayEvents.find(event => event.eventId === target.eventId)
+    : undefined;
+  const relatedBetweenPlayIds = undoableBetweenPlayEvents
+    .filter((event) => {
+      if (event.eventId === target.eventId) return false;
+      if (target.kind === 'atBat') {
+        return event.linkedEventId === target.eventId;
+      }
+
+      return Boolean(
+        (targetBetweenPlay?.eventGroupId && event.eventGroupId === targetBetweenPlay.eventGroupId) ||
+        event.linkedEventId === target.eventId ||
+        (targetBetweenPlay?.linkedEventId && event.eventId === targetBetweenPlay.linkedEventId),
+      );
+    })
+    .map(event => event.eventId);
   const db = await initEventLogDB();
 
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(
       [
-        target.kind === 'atBat' ? STORES.AT_BAT_EVENTS : STORES.BETWEEN_PLAY_EVENTS,
+        STORES.AT_BAT_EVENTS,
+        STORES.BETWEEN_PLAY_EVENTS,
         STORES.GAME_HEADERS,
       ],
       'readwrite'
@@ -1771,9 +1842,11 @@ export async function undoMostRecentGameAction(gameId: string): Promise<UndoneGa
     const actionStore = transaction.objectStore(
       target.kind === 'atBat' ? STORES.AT_BAT_EVENTS : STORES.BETWEEN_PLAY_EVENTS
     );
+    const betweenPlayStore = transaction.objectStore(STORES.BETWEEN_PLAY_EVENTS);
     const actionRequest = actionStore.get(target.eventId);
     let undoneAction: UndoneGameAction | null = null;
     let updatedAction: AtBatEvent | BetweenPlayEvent | null = null;
+    const updatedRelatedBetweenPlayEvents: BetweenPlayEvent[] = [];
     let updatedHeader: GameHeader | null = null;
 
     actionRequest.onerror = () => reject(actionRequest.error);
@@ -1807,6 +1880,17 @@ export async function undoMostRecentGameAction(gameId: string): Promise<UndoneGa
       };
     };
 
+    for (const relatedEventId of relatedBetweenPlayIds) {
+      const relatedRequest = betweenPlayStore.get(relatedEventId);
+      relatedRequest.onsuccess = () => {
+        const related = relatedRequest.result as BetweenPlayEvent | undefined;
+        if (!related || related.undoneAt) return;
+        related.undoneAt = Date.now();
+        betweenPlayStore.put(related);
+        updatedRelatedBetweenPlayEvents.push(related);
+      };
+    }
+
     transaction.oncomplete = () => {
       if (updatedAction) {
         syncUpsert(
@@ -1815,6 +1899,9 @@ export async function undoMostRecentGameAction(gameId: string): Promise<UndoneGa
           updatedAction,
         );
       }
+      for (const event of updatedRelatedBetweenPlayEvents) {
+        syncUpsert(STORES.BETWEEN_PLAY_EVENTS, event.eventId, event);
+      }
       if (updatedHeader) {
         syncUpsert(STORES.GAME_HEADERS, updatedHeader.gameId, updatedHeader);
       }
@@ -1822,6 +1909,10 @@ export async function undoMostRecentGameAction(gameId: string): Promise<UndoneGa
     };
     transaction.onerror = () => reject(transaction.error);
   });
+}
+
+export async function undoMostRecentUserAction(gameId: string): Promise<UndoneGameAction | null> {
+  return undoMostRecentGameAction(gameId);
 }
 
 /**
