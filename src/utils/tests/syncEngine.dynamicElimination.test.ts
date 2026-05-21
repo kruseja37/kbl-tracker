@@ -2324,6 +2324,45 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     ]);
   });
 
+  test("replaceCloudWithLocal allows no-base source upload when existing cloud rows already match local", async () => {
+    const gameId = "game-no-base-matched-cloud";
+    await seedCompletedGameWithEventLog(gameId);
+    const [completedGame] = await getAllRecords<Record<string, unknown>>("kbl-tracker", "completedGames");
+    mockState.cloudRows = [
+      {
+        id: "cloud-matching-completed-game",
+        user_id: "user-1",
+        db_name: "kbl-tracker",
+        store_name: "completedGames",
+        record_key: JSON.stringify(gameId),
+        data: completedGame,
+        changed_at: 200,
+        received_at: "2026-01-01T00:00:00.002Z",
+        deleted: false,
+      },
+    ];
+    const syncEngine = await loadFreshSyncEngine();
+
+    await expect(syncEngine.replaceCloudWithLocal()).resolves.toBeUndefined();
+
+    expect(mockState.cloudRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          db_name: "kbl-event-log",
+          store_name: "gameHeaders",
+          record_key: JSON.stringify(gameId),
+          deleted: false,
+        }),
+        expect.objectContaining({
+          db_name: "kbl-event-log",
+          store_name: "atBatEvents",
+          record_key: JSON.stringify(`${gameId}-ab-1`),
+          deleted: false,
+        }),
+      ]),
+    );
+  });
+
   test("replaceCloudWithLocal rejects same-identity queued writes when cloud was received after the op base", async () => {
     const gameId = "game-stale-queued-same-identity";
     const eventId = `${gameId}-ab-1`;
@@ -3120,9 +3159,7 @@ describe("syncEngine dynamic elimination copied DBs", () => {
 
     mockState.releaseBlockedUpsert?.();
     await firstUploadPromise;
-    await expect(secondUploadPromise).rejects.toThrow(
-      "Cannot full upload before this device has a server-received store cursor",
-    );
+    await expect(secondUploadPromise).resolves.toBeUndefined();
 
     const completedGameUploads = mockState.kblStoreUpserts.filter(
       (row) =>

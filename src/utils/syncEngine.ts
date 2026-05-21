@@ -105,6 +105,7 @@ interface CloudStoreVerifiedDataRow extends CloudStoreDataRow {
 }
 
 interface CloudStoreWriteBaseRow extends CloudStoreVerifiedDataRow {
+  changed_at: number;
   deleted: boolean;
 }
 
@@ -121,6 +122,7 @@ interface CloudLocalStorageVerifiedDataRow extends CloudLocalStorageDataRow {
 }
 
 interface CloudLocalStorageWriteBaseRow extends CloudLocalStorageVerifiedDataRow {
+  changed_at: number;
   deleted: boolean;
 }
 
@@ -1580,21 +1582,21 @@ class SyncEngine {
     replacementStoreScopes: Set<string>,
     baseCursor: SyncCursor,
   ): Promise<void> {
-    const scopedStoreRows = (await this.fetchStoreCursorRows(userId))
+    const scopedStoreRows = (await this.fetchStoreWriteBaseRows(userId))
       .filter((row) => replacementStoreScopes.has(this.storeCountKey(row.db_name, row.store_name)));
     if (scopedStoreRows.length > 0 && !baseCursor.receivedAt) {
-      throw new Error('Cannot full upload before this device has a server-received store cursor; run download/sync first');
+      await this.assertUnbasedCloudStoreRowsMatchLocal(scopedStoreRows);
     }
 
-    const localStorageRows = await this.fetchLocalStorageCursorRows(userId);
+    const localStorageRows = await this.fetchLocalStorageWriteBaseRows(userId);
     if (localStorageRows.length > 0 && !baseCursor.localReceivedAt) {
-      throw new Error('Cannot full upload before this device has a server-received localStorage cursor; run download/sync first');
+      this.assertUnbasedCloudLocalStorageRowsMatchLocal(localStorageRows);
     }
 
-    const newerStores = scopedStoreRows
+    const newerStores = (baseCursor.receivedAt ? scopedStoreRows : [])
       .filter((row) => this.isAfterStoreReceivedCursor(row, baseCursor));
 
-    const newerLocalStorage = localStorageRows
+    const newerLocalStorage = (baseCursor.localReceivedAt ? localStorageRows : [])
       .filter((row) => this.isAfterLocalStorageReceivedCursor(row, baseCursor));
 
     if (newerStores.length === 0 && newerLocalStorage.length === 0) return;
@@ -1610,6 +1612,64 @@ class SyncEngine {
     const suffix = total > examples.length ? `; +${total - examples.length} more` : '';
     throw new Error(
       `Cloud changed since this device last downloaded; run download/diagnostics before full upload: ${examples.join('; ')}${suffix}`,
+    );
+  }
+
+  private async assertUnbasedCloudStoreRowsMatchLocal(rows: CloudStoreWriteBaseRow[]): Promise<void> {
+    const fingerprintsByStore = new Map<string, Map<string, string> | null>();
+    const mismatches: string[] = [];
+
+    for (const row of rows) {
+      const storeKey = this.storeCountKey(row.db_name, row.store_name);
+      if (!fingerprintsByStore.has(storeKey)) {
+        const keyPath = this.getSyncStoreKeyPath(row.db_name, row.store_name);
+        fingerprintsByStore.set(
+          storeKey,
+          keyPath ? await this.getLocalStoreFingerprints(row.db_name, row.store_name, keyPath) : null,
+        );
+      }
+
+      const localFingerprints = fingerprintsByStore.get(storeKey);
+      const identity = this.storeIdentityKey(row.db_name, row.store_name, row.record_key);
+      const localFingerprint = localFingerprints?.get(identity);
+      if (row.deleted) {
+        if (localFingerprint) mismatches.push(`${this.formatStoreIdentity(identity)} is deleted in cloud`);
+        continue;
+      }
+      if (!localFingerprint || localFingerprint !== this.fingerprintValue(row.data)) {
+        mismatches.push(this.formatStoreIdentity(identity));
+      }
+    }
+
+    if (mismatches.length === 0) return;
+
+    const examples = mismatches.slice(0, 4);
+    const suffix = mismatches.length > examples.length ? `; +${mismatches.length - examples.length} more` : '';
+    throw new Error(
+      `Cannot full upload before this device has a server-received store cursor; existing cloud rows are not locally matched: ${examples.join('; ')}${suffix}`,
+    );
+  }
+
+  private assertUnbasedCloudLocalStorageRowsMatchLocal(rows: CloudLocalStorageWriteBaseRow[]): void {
+    const mismatches: string[] = [];
+
+    for (const row of rows) {
+      const raw = localStorage.getItem(row.key);
+      if (row.deleted) {
+        if (raw !== null) mismatches.push(`localStorage ${row.key} is deleted in cloud`);
+        continue;
+      }
+      if (raw === null || this.fingerprintValue(raw) !== this.fingerprintValue(this.toLocalStorageWireValue(row.data))) {
+        mismatches.push(`localStorage ${row.key}`);
+      }
+    }
+
+    if (mismatches.length === 0) return;
+
+    const examples = mismatches.slice(0, 4);
+    const suffix = mismatches.length > examples.length ? `; +${mismatches.length - examples.length} more` : '';
+    throw new Error(
+      `Cannot full upload before this device has a server-received localStorage cursor; existing cloud keys are not locally matched: ${examples.join('; ')}${suffix}`,
     );
   }
 
@@ -1880,6 +1940,19 @@ class SyncEngine {
 
   private storeIdentityKey(dbName: string, storeName: string, recordKey: string): string {
     return `${dbName}\u0000${storeName}\u0000${recordKey}`;
+  }
+
+  private getSyncStoreKeyPath(dbName: string, storeName: string): string | string[] | null {
+    const staticStores = SYNC_REGISTRY[dbName];
+    if (staticStores?.[storeName]) return staticStores[storeName];
+
+    if (dbName.startsWith(DYNAMIC_DB_PREFIX)) {
+      return DYNAMIC_DB_STORES[storeName] ?? null;
+    }
+    if (dbName.startsWith(DYNAMIC_ELIMINATION_DB_PREFIX)) {
+      return DYNAMIC_ELIMINATION_DB_STORES[storeName] ?? null;
+    }
+    return null;
   }
 
   private assertNoSupabaseError(error: { message?: string } | null | undefined, message: string): void {
