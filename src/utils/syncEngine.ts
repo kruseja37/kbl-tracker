@@ -595,9 +595,12 @@ class SyncEngine {
         await this.loadCursor();
 
         const playLogWarnings = await this.getLocalPlayLogIntegrityWarnings({ throwOnReadError: true });
-        if (playLogWarnings.length > 0) {
-          const suffix = playLogWarnings.length > 3 ? `; +${playLogWarnings.length - 3} more` : '';
-          throw new Error(`Cannot upload incomplete play-log data: ${playLogWarnings.slice(0, 3).join('; ')}${suffix}`);
+        const blockingPlayLogWarnings = playLogWarnings.filter((warning) =>
+          this.isBlockingPlayLogUploadWarning(warning),
+        );
+        if (blockingPlayLogWarnings.length > 0) {
+          const suffix = blockingPlayLogWarnings.length > 3 ? `; +${blockingPlayLogWarnings.length - 3} more` : '';
+          throw new Error(`Cannot upload incomplete play-log data: ${blockingPlayLogWarnings.slice(0, 3).join('; ')}${suffix}`);
         }
 
         const userId = session.user.id;
@@ -2930,6 +2933,14 @@ class SyncEngine {
     }
 
     return warnings;
+  }
+
+  private isBlockingPlayLogUploadWarning(warning: string): boolean {
+    return (
+      warning.includes('has no event-log header or at-bat events') ||
+      warning.includes('but no event-log header') ||
+      warning.includes('but no at-bat events')
+    );
   }
 
   private filterStoreFingerprints(

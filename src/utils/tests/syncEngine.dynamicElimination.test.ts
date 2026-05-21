@@ -3029,6 +3029,44 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     ).toEqual(expect.objectContaining({ deleted: false }));
   });
 
+  test("replaceCloudWithLocal uploads legacy play-log warning rows instead of trapping them locally", async () => {
+    const gameId = "game-legacy-playlog-warnings";
+    await seedCompletedGameWithEventLog(gameId);
+    await putAtBatEventRecord({
+      eventId: `${gameId}-ab-3`,
+      gameId,
+      eventIndex: 3,
+      timestamp: 126,
+      result: "OUT",
+      enrichment: {
+        fieldingSequence: [8],
+        fieldingPlayType: "diving",
+      },
+    });
+    const syncEngine = await loadFreshSyncEngine();
+
+    const diagnosticsBefore = await syncEngine.getDiagnostics();
+    expect(diagnosticsBefore.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("event-log count mismatch"),
+        expect.stringContaining("fielding enrichment but no fieldingEvents rows"),
+      ]),
+    );
+
+    await expect(syncEngine.replaceCloudWithLocal()).resolves.toBeUndefined();
+
+    expect(mockState.cloudRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          db_name: "kbl-event-log",
+          store_name: "atBatEvents",
+          record_key: JSON.stringify(`${gameId}-ab-3`),
+          deleted: false,
+        }),
+      ]),
+    );
+  });
+
   test("replaceCloudWithLocal waits for an active pull before reading the local replacement snapshot", async () => {
     await seedCompletedGameWithEventLog("game-waits-for-pull");
     const syncEngine = await loadFreshSyncEngine();
