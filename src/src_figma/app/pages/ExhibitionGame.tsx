@@ -60,6 +60,46 @@ async function getEffectiveTeamPlayers(
   ).filter((player): player is LBPlayer => player !== null);
 }
 
+function playerKey(player: Pick<RosterPlayer, "playerId" | "name">): string {
+  return player.playerId || player.name;
+}
+
+function applyPregameBenchSubstitution(
+  players: RosterPlayer[],
+  lineupPlayer: RosterPlayer,
+  benchPlayer: RosterPlayer,
+): RosterPlayer[] {
+  const lineupKey = playerKey(lineupPlayer);
+  const benchKey = playerKey(benchPlayer);
+  let foundBenchPlayer = false;
+
+  const updated = players.map((player) => {
+    const key = playerKey(player);
+    if (key === lineupKey) {
+      return { ...player, battingOrder: undefined, position: undefined };
+    }
+    if (key === benchKey) {
+      foundBenchPlayer = true;
+      return {
+        ...player,
+        battingOrder: lineupPlayer.battingOrder,
+        position: lineupPlayer.position,
+      };
+    }
+    return player;
+  });
+
+  if (!foundBenchPlayer) {
+    updated.push({
+      ...benchPlayer,
+      battingOrder: lineupPlayer.battingOrder,
+      position: lineupPlayer.position,
+    });
+  }
+
+  return updated;
+}
+
 export function ExhibitionGame() {
   const navigate = useNavigate();
   const { leagues, teams, players, isLoading, error, getRoster, updateRoster } = useLeagueBuilderData();
@@ -433,22 +473,10 @@ export function ExhibitionGame() {
 
   // Bench substitution — swap a lineup player with a bench player (pre-game only)
   const handleAwayBenchSub = (lineupPlayer: RosterPlayer, benchPlayer: RosterPlayer) => {
-    setAwayPlayers(prev => prev.map(p => {
-      if (p.playerId === lineupPlayer.playerId)
-        return { ...p, battingOrder: undefined, position: undefined };
-      if (p.playerId === benchPlayer.playerId)
-        return { ...p, battingOrder: lineupPlayer.battingOrder, position: lineupPlayer.position };
-      return p;
-    }));
+    setAwayPlayers(prev => applyPregameBenchSubstitution(prev, lineupPlayer, benchPlayer));
   };
   const handleHomeBenchSub = (lineupPlayer: RosterPlayer, benchPlayer: RosterPlayer) => {
-    setHomePlayers(prev => prev.map(p => {
-      if (p.playerId === lineupPlayer.playerId)
-        return { ...p, battingOrder: undefined, position: undefined };
-      if (p.playerId === benchPlayer.playerId)
-        return { ...p, battingOrder: lineupPlayer.battingOrder, position: lineupPlayer.position };
-      return p;
-    }));
+    setHomePlayers(prev => applyPregameBenchSubstitution(prev, lineupPlayer, benchPlayer));
   };
 
   // Starting pitcher substitution — swap isActive flag and update batting order in no-DH

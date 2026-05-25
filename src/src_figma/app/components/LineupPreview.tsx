@@ -73,6 +73,38 @@ interface LineupPreviewProps {
   onFitnessChange?: (playerId: string, newFitness: FitnessState) => void;
 }
 
+function pitcherToBenchPlayer(pitcher: RosterPitcher): RosterPlayer {
+  return {
+    name: pitcher.name,
+    fullName: pitcher.fullName,
+    playerId: pitcher.playerId,
+    primaryPosition: 'P',
+    stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
+    battingHand: (pitcher.throwingHand || 'R') as 'L' | 'R' | 'S',
+    mojo: pitcher.mojo,
+    fitness: pitcher.fitness,
+    velocity: pitcher.velocity,
+    junk: pitcher.junk,
+    accuracy: pitcher.accuracy,
+    arsenal: pitcher.arsenal,
+    trait1: pitcher.trait1,
+    trait2: pitcher.trait2,
+    age: pitcher.age,
+    throws: pitcher.throwingHand,
+    power: pitcher.power,
+    contact: pitcher.contact,
+    speed: pitcher.speed,
+    fieldingRating: pitcher.fieldingRating,
+    arm: pitcher.arm,
+    overallGrade: pitcher.overallGrade,
+    personality: pitcher.personality,
+    chemistry: pitcher.chemistry,
+    jerseyNumber: pitcher.jerseyNumber,
+    hometown: pitcher.hometown,
+    secondaryPosition: pitcher.secondaryPosition,
+  };
+}
+
 export function LineupPreview({
   teamName,
   lineup,
@@ -202,6 +234,15 @@ export function LineupPreview({
   };
 
   const handleBullpenPitcherTap = (pitcher: RosterPitcher) => {
+    if (selection?.mode === 'benchSub' && onBenchSub) {
+      const lineupPlayer = sortedLineup.find(
+        (p) => (p.playerId || p.name) === selection.playerId
+      );
+      if (lineupPlayer) onBenchSub(lineupPlayer, pitcherToBenchPlayer(pitcher));
+      setSelection(null);
+      return;
+    }
+
     if (selection?.mode === 'pitcherSub' && onPitcherSub) {
       onPitcherSub(pitcher);
       setSelection(null);
@@ -574,7 +615,7 @@ export function LineupPreview({
           </div>
           <div className="space-y-0.5">
             {benchPitchers.map((pitcher) => (
-              isTouch && isPitcherSubMode ? (
+              isTouch && (isPitcherSubMode || isBenchSubMode) ? (
                 <button
                   key={pitcher.playerId || pitcher.name}
                   type="button"
@@ -587,7 +628,7 @@ export function LineupPreview({
                   </span>
                   <span className="text-[7px] text-[#E8E8D8]/60"
                     style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
-                    {pitcher.throwingHand}
+                    {isBenchSubMode ? 'FIELD' : pitcher.throwingHand}
                   </span>
                 </button>
               ) : (

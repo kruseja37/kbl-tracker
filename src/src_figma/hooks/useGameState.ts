@@ -2325,6 +2325,29 @@ function createEmptyPitcherStats(): PitcherGameStats {
   };
 }
 
+function hasPitcherGameAppearance(stats: PitcherGameStats | undefined): boolean {
+  if (!stats) return false;
+  return (
+    stats.outsRecorded > 0 ||
+    stats.hitsAllowed > 0 ||
+    stats.runsAllowed > 0 ||
+    stats.earnedRuns > 0 ||
+    stats.walksAllowed > 0 ||
+    stats.strikeoutsThrown > 0 ||
+    stats.homeRunsAllowed > 0 ||
+    stats.pitchCount > 0 ||
+    stats.battersFaced > 0 ||
+    stats.intentionalWalks > 0 ||
+    stats.hitByPitch > 0 ||
+    stats.wildPitches > 0 ||
+    stats.basesLoadedWalks > 0 ||
+    stats.inheritedRunners > 0 ||
+    stats.inheritedRunnersScored > 0 ||
+    stats.bequeathedRunners > 0 ||
+    stats.bequeathedRunnersScored > 0
+  );
+}
+
 function createEmptyScoreboardState(innings = 9): ScoreboardState {
   return {
     innings: Array(innings)
@@ -10060,21 +10083,46 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       if (newPitcherName) {
         pitcherNamesRef.current.set(newPitcherId, newPitcherName);
       }
+      if (newPitcherId !== exitingPitcherId) {
+        pitcherNamesRef.current.delete(exitingPitcherId);
+      }
 
       setPitcherStats((prev) => {
         const nextStats = new Map(prev);
+        const exitingStats = nextStats.get(exitingPitcherId);
+        if (
+          newPitcherId !== exitingPitcherId &&
+          !hasPitcherGameAppearance(exitingStats)
+        ) {
+          nextStats.delete(exitingPitcherId);
+        }
         if (!nextStats.has(newPitcherId)) {
           const starterStats = createEmptyPitcherStats();
           starterStats.isStarter = true;
           starterStats.entryInning = 1;
           starterStats.entryOuts = 0;
           nextStats.set(newPitcherId, starterStats);
+        } else {
+          const existing = nextStats.get(newPitcherId);
+          if (existing) {
+            nextStats.set(newPitcherId, {
+              ...existing,
+              isStarter: true,
+              entryInning: 1,
+              entryOuts: 0,
+            });
+          }
         }
         return nextStats;
       });
 
       const activeDefensiveSide: TeamSide = gameState.isTop ? "home" : "away";
       if (pitchingTeamSide === activeDefensiveSide) {
+        runnerTrackerRef.current = syncTrackerPitcher(
+          runnerTrackerRef.current,
+          newPitcherId,
+          newPitcherName || newPitcherId,
+        );
         setGameState((prev) => ({
           ...prev,
           currentPitcherId: newPitcherId,
@@ -11334,7 +11382,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
     const immediateSnapshot = buildImmediateCurrentGameSnapshot(nextGameState);
     if (immediateSnapshot) {
+      latestPersistedRef.current = immediateSnapshot;
       persistSnapshotImmediately(immediateSnapshot);
+      void createGameHeader(buildGameHeaderDraftFromSnapshot(immediateSnapshot)).catch(
+        (error) => {
+          console.error("[useGameState] Failed to persist game-start header", error);
+        },
+      );
     }
   }, [buildImmediateCurrentGameSnapshot, persistSnapshotImmediately]);
 

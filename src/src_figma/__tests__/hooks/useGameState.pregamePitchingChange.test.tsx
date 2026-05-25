@@ -110,6 +110,115 @@ describe('useGameState pregame pitching change', () => {
     consoleErrorSpy.mockRestore();
   });
 
+  test('removes the original pregame starter from stats and persists the updated starter on game start', async () => {
+    const { result } = renderHook(() => useGameState('pregame-pitching-persist'));
+
+    await act(async () => {
+      await result.current.initializeGame({
+        gameId: 'pregame-pitching-persist',
+        awayTeamId: 'away-team',
+        awayTeamName: 'Away Team',
+        homeTeamId: 'home-team',
+        homeTeamName: 'Home Team',
+        awayStartingPitcherId: 'away-sp',
+        awayStartingPitcherName: 'Away Starter',
+        homeStartingPitcherId: 'home-sp',
+        homeStartingPitcherName: 'Home Starter',
+        awayLineup: nineSlotLineup('away'),
+        homeLineup: nineSlotLineup('home'),
+        awayBench: [{ playerId: 'away-rp', playerName: 'Away Reliever', positions: ['P'] }],
+        homeBench: [{ playerId: 'home-rp', playerName: 'Home Reliever', positions: ['P'] }],
+        seasonNumber: 1,
+      });
+    });
+
+    mockCreateGameHeader.mockClear();
+    mockImmediateSaveCurrentGame.mockClear();
+
+    act(() => {
+      result.current.changePitcher('home-rp', 'home-sp', 'home', 'Home Reliever', 'Home Starter');
+    });
+
+    expect(result.current.pitcherStats.has('home-sp')).toBe(false);
+    expect(result.current.pitcherStats.get('home-rp')).toMatchObject({
+      isStarter: true,
+      entryInning: 1,
+      entryOuts: 0,
+    });
+
+    act(() => {
+      result.current.startGame();
+    });
+
+    const savedSnapshot = mockImmediateSaveCurrentGame.mock.calls.at(-1)?.[0];
+    expect(savedSnapshot).toMatchObject({
+      gameId: 'pregame-pitching-persist',
+      gamePhase: 'LIVE',
+      currentPitcherId: 'home-rp',
+      currentPitcherName: 'Home Reliever',
+    });
+    expect(savedSnapshot.homeLineupState.currentPitcher).toMatchObject({
+      playerId: 'home-rp',
+      playerName: 'Home Reliever',
+      position: 'P',
+    });
+    expect(savedSnapshot.pitcherGameStats.map((pitcher) => pitcher.pitcherId)).toContain('home-rp');
+    expect(savedSnapshot.pitcherGameStats.map((pitcher) => pitcher.pitcherId)).not.toContain('home-sp');
+
+    const headerDraft = mockCreateGameHeader.mock.calls.at(-1)?.[0];
+    expect(headerDraft.startingPitchers.home).toMatchObject({
+      playerId: 'home-rp',
+      playerName: 'Home Reliever',
+    });
+    expect(headerDraft.startingLineups.home.find((player) => player.position === 'P')).toMatchObject({
+      playerId: 'home-rp',
+    });
+  });
+
+  test('allows a pitcher-roster player to enter the pregame lineup at a non-pitcher position', async () => {
+    const { result } = renderHook(() => useGameState('pregame-pitcher-as-fielder'));
+
+    await act(async () => {
+      await result.current.initializeGame({
+        gameId: 'pregame-pitcher-as-fielder',
+        awayTeamId: 'away-team',
+        awayTeamName: 'Away Team',
+        homeTeamId: 'home-team',
+        homeTeamName: 'Home Team',
+        awayStartingPitcherId: 'away-sp',
+        awayStartingPitcherName: 'Away Starter',
+        homeStartingPitcherId: 'home-sp',
+        homeStartingPitcherName: 'Home Starter',
+        awayLineup: nineSlotLineup('away'),
+        homeLineup: nineSlotLineup('home'),
+        awayBench: [{ playerId: 'away-rp', playerName: 'Away Reliever', positions: ['P'] }],
+        homeBench: [{ playerId: 'home-rp', playerName: 'Home Reliever', positions: ['P'] }],
+        seasonNumber: 1,
+      });
+    });
+
+    act(() => {
+      result.current.makeSubstitution('home-rp', 'home-5', 'Home Reliever', 'home Five', {
+        newPosition: 'LF',
+      });
+    });
+
+    const snapshot = result.current.getLineupStateSnapshot().home;
+    expect(snapshot.currentPitcher).toMatchObject({
+      playerId: 'home-sp',
+      position: 'P',
+    });
+    expect(snapshot.lineup.find((player) => player.playerId === 'home-rp')).toMatchObject({
+      playerId: 'home-rp',
+      playerName: 'Home Reliever',
+      position: 'LF',
+      battingOrder: 5,
+    });
+    expect(snapshot.bench.find((player) => player.playerId === 'home-5')).toMatchObject({
+      playerId: 'home-5',
+    });
+  });
+
   test('updates the pregame lineup snapshot immediately after a position swap', async () => {
     const { result } = renderHook(() => useGameState('pregame-position-swap'));
 
