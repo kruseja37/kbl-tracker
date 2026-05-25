@@ -6356,6 +6356,11 @@ export function GameTracker() {
             newPosition: sub.newPosition,
             lineupSpot: sub.lineupSpot,
             isPinchHitter,
+            beforeCommit: () => {
+              undoSystem.captureSnapshot(
+                `${sub.type}: ${sub.incomingPlayerId} for ${sub.outgoingPlayerId}`,
+              );
+            },
           },
         );
         if (!subResult.success) {
@@ -6366,9 +6371,6 @@ export function GameTracker() {
           return;
         }
 
-        undoSystem.captureSnapshot(
-          `${sub.type}: ${sub.incomingPlayerId} for ${sub.outgoingPlayerId}`,
-        );
         if (isPinchHitter) {
           // GAP-GT-7-C: Mark PH as pending — they must bat before being removed.
           setPendingPH(sub.incomingPlayerId);

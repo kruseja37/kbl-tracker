@@ -551,6 +551,7 @@ export interface UseGameStateReturn {
       lineupSpot?: number;
       base?: "1B" | "2B" | "3B";
       isPinchHitter?: boolean;
+      beforeCommit?: () => void;
     },
   ) => { success: boolean; error?: string };
   swapBattingOrder: (firstPlayerId: string, secondPlayerId: string) => boolean;
@@ -5085,8 +5086,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           );
           const lastEvent =
             events.length > 0 ? events[events.length - 1] : null;
-          const tailBetweenPlayEvents = betweenPlayEvents.filter((event) =>
-            lastEvent ? event.eventIndex > lastEvent.eventIndex : true,
+          const isTailBetweenPlayEvent = (event: BetweenPlayEvent) =>
+            lastEvent ? event.eventIndex > lastEvent.eventIndex : true;
+          const tailBetweenPlayEvents = betweenPlayEvents.filter(
+            isTailBetweenPlayEvent,
           );
           const reconstructedSubstitutionLog =
             mapBetweenPlayEventsToSubstitutionLog(betweenPlayEvents);
@@ -5265,6 +5268,35 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           }
 
           for (const event of betweenPlayEvents) {
+            if (!isTailBetweenPlayEvent(event)) {
+              replayRosterChangeEvent(event);
+            }
+          }
+
+          const replayCurrentPitchersBySide: Record<
+            TeamSide,
+            LineupState["currentPitcher"]
+          > = {
+            away: awayLineupStateRef.current.currentPitcher
+              ? { ...awayLineupStateRef.current.currentPitcher }
+              : null,
+            home: homeLineupStateRef.current.currentPitcher
+              ? { ...homeLineupStateRef.current.currentPitcher }
+              : null,
+          };
+          const resolveReplayTeamSideForPlayer = (
+            playerId?: string,
+          ): TeamSide | null =>
+            resolveTrackedTeamSide(
+              playerId,
+              teamSideByPlayerIdRef.current,
+              awayLineupRef.current,
+              homeLineupRef.current,
+              awayLineupStateRef.current,
+              homeLineupStateRef.current,
+            );
+
+          for (const event of tailBetweenPlayEvents) {
             replayRosterChangeEvent(event);
           }
 
@@ -5476,9 +5508,14 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             : lastEvent
               ? lastEvent.halfInning === "TOP"
               : true;
-          const recoveredDefensivePitcher = recoveredIsTop
-            ? homeLineupStateRef.current.currentPitcher
-            : awayLineupStateRef.current.currentPitcher;
+          const recoveredDefensiveTeamSide: TeamSide = recoveredIsTop
+            ? "home"
+            : "away";
+          const recoveredDefensivePitcher =
+            replayCurrentPitchersBySide[recoveredDefensiveTeamSide] ??
+            (recoveredIsTop
+              ? homeLineupStateRef.current.currentPitcher
+              : awayLineupStateRef.current.currentPitcher);
           let recoveredPitcherId = endedHalfOnLastAtBat
             ? recoveredDefensivePitcher?.playerId || lastEvent?.pitcherId || ""
             : (lastEvent?.pitcherId ??
@@ -5648,13 +5685,36 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             ).state;
           };
 
+          const createReplayPitcherLineupPlayer = (
+            pitcherId: string,
+            pitcherName: string,
+            previousPitcher: LineupState["currentPitcher"] = null,
+          ): LineupPlayer => ({
+            playerId: pitcherId,
+            playerName: pitcherName || pitcherId,
+            position: "P" as Position,
+            battingOrder: previousPitcher?.battingOrder ?? 0,
+            enteredInning: recoveredInning,
+            enteredFor: previousPitcher?.playerName,
+            isStarter: false,
+          });
+
+          const shouldApplyTailGameState = (event: BetweenPlayEvent) =>
+            !!event.gameState &&
+            !(
+              endedHalfOnLastAtBat &&
+              event.type === "pitch_count_update" &&
+              event.pitchCountUpdate?.timing === "end_of_half_inning"
+            );
+
           for (const event of tailBetweenPlayEvents) {
-            if (event.gameState) {
-              recoveredInning = event.gameState.inning;
-              recoveredIsTop = event.gameState.halfInning === "TOP";
-              recoveredOuts = event.gameState.outs;
-              recoveredAwayScore = event.gameState.score.away;
-              recoveredHomeScore = event.gameState.score.home;
+            const tailGameState = event.gameState;
+            if (tailGameState && shouldApplyTailGameState(event)) {
+              recoveredInning = tailGameState.inning;
+              recoveredIsTop = tailGameState.halfInning === "TOP";
+              recoveredOuts = tailGameState.outs;
+              recoveredAwayScore = tailGameState.score.away;
+              recoveredHomeScore = tailGameState.score.home;
             }
 
             if (event.runnerAction) {
@@ -5675,6 +5735,17 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             }
 
             if (event.pitcherChange) {
+              const pitcherTeamSide =
+                event.gameState?.halfInning === "TOP"
+                  ? "home"
+                  : event.gameState?.halfInning === "BOTTOM"
+                    ? "away"
+                    : resolveReplayTeamSideForPlayer(
+                        event.pitcherChange.incomingPitcherId,
+                      );
+              const previousPitcher = pitcherTeamSide
+                ? replayCurrentPitchersBySide[pitcherTeamSide]
+                : null;
               recoveredPitcherId = event.pitcherChange.incomingPitcherId;
               recoveredPitcherName =
                 event.pitcherChange.incomingPitcherName ||
@@ -5682,15 +5753,36 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               applyReplayPitchingChange(
                 recoveredPitcherId,
                 recoveredPitcherName,
-                event.pitcherChange.outgoingPitcherId,
+                event.pitcherChange.outgoingPitcherId ||
+                  previousPitcher?.playerId,
               );
+              if (pitcherTeamSide) {
+                replayCurrentPitchersBySide[pitcherTeamSide] =
+                  createReplayPitcherLineupPlayer(
+                    recoveredPitcherId,
+                    recoveredPitcherName,
+                    previousPitcher,
+                  );
+              }
             }
 
             if (
               event.type === "position_change" &&
               event.substitution?.inPosition === "P"
             ) {
-              const outgoingPitcherId = recoveredPitcherId;
+              const pitcherTeamSide = resolveReplayTeamSideForPlayer(
+                event.substitution.inPlayerId,
+              );
+              const previousPitcher = pitcherTeamSide
+                ? replayCurrentPitchersBySide[pitcherTeamSide]
+                : null;
+              const outgoingPitcherId =
+                previousPitcher?.playerId &&
+                previousPitcher.playerId !== event.substitution.inPlayerId
+                  ? previousPitcher.playerId
+                  : recoveredPitcherId !== event.substitution.inPlayerId
+                    ? recoveredPitcherId
+                    : undefined;
               recoveredPitcherId = event.substitution.inPlayerId;
               recoveredPitcherName =
                 event.substitution.inPlayerName ||
@@ -5701,6 +5793,14 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
                 recoveredPitcherName,
                 outgoingPitcherId,
               );
+              if (pitcherTeamSide) {
+                replayCurrentPitchersBySide[pitcherTeamSide] =
+                  createReplayPitcherLineupPlayer(
+                    recoveredPitcherId,
+                    recoveredPitcherName,
+                    previousPitcher,
+                  );
+              }
             }
 
             if (
@@ -9383,6 +9483,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         lineupSpot?: number; // For displayed pitcher rows synthesized into no-DH batting orders
         base?: "1B" | "2B" | "3B"; // For pinch runners: which base
         isPinchHitter?: boolean; // For pinch hitters: replace mid-at-bat
+        beforeCommit?: () => void; // Capture caller state after validation but before mutation
       },
     ): { success: boolean; error?: string } => {
       const subType = normalizeLiveSubstitutionType({
@@ -9573,6 +9674,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           return { success: false, error: "Lineup player not found" };
         }
 
+        options?.beforeCommit?.();
+
         const removedPlayer = outgoingLineupPlayer;
         const newPosition = (options?.newPosition ||
           removedPlayer.position) as Position;
@@ -9693,6 +9796,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         setLineupVersion((version) => version + 1);
         return { success: true };
       }
+
+      options?.beforeCommit?.();
 
       // Log substitution event
       setSubstitutionLog((prev) => [

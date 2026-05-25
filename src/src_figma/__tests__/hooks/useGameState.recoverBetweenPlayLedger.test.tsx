@@ -315,7 +315,27 @@ describe('useGameState recover between-play ledger', () => {
         isWalkOff: false,
       },
     ]);
-    mockGetBetweenPlayEvents.mockResolvedValueOnce([]);
+    mockGetBetweenPlayEvents.mockResolvedValueOnce([
+      {
+        eventId: 'recovery-game_bp_pitch_count',
+        gameId: 'recovery-game',
+        timestamp: 1100,
+        eventIndex: 1.001,
+        type: 'pitch_count_update',
+        gameState: {
+          inning: 1,
+          halfInning: 'BOTTOM',
+          outs: 2,
+          score: { away: 0, home: 0 },
+          runnersOn: {},
+        },
+        pitchCountUpdate: {
+          pitcherId: 'away-sp',
+          pitchCount: 15,
+          timing: 'end_of_half_inning',
+        },
+      },
+    ]);
 
     const { result } = renderHook(() => useGameState('recovery-game'));
 
@@ -403,6 +423,149 @@ describe('useGameState recover between-play ledger', () => {
       entryInning: 1,
       entryOuts: 0,
       inheritedRunners: 1,
+    });
+  });
+
+  test('closes the real outgoing pitcher for a tail position-player-to-pitcher realignment after a half-ending at-bat', async () => {
+    mockGetGameHeader.mockResolvedValueOnce({
+      gameId: 'recovery-game',
+      date: Date.now(),
+      awayTeamId: 'away-team',
+      awayTeamName: 'Away Team',
+      homeTeamId: 'home-team',
+      homeTeamName: 'Home Team',
+      stadiumName: 'Test Park',
+      startingLineups: {
+        away: [
+          { playerId: 'away-batter-1', playerName: 'Away Batter 1', position: 'SS', battingOrder: 1 },
+          { playerId: 'away-batter-2', playerName: 'Away Batter 2', position: 'CF', battingOrder: 2 },
+        ],
+        home: [
+          { playerId: 'home-batter-1', playerName: 'Home Batter 1', position: '2B', battingOrder: 1 },
+          { playerId: 'home-batter-2', playerName: 'Home Batter 2', position: 'RF', battingOrder: 2 },
+        ],
+      },
+      benchRosters: { away: [], home: [] },
+      startingPitchers: {
+        away: { playerId: 'away-sp', playerName: 'Away Starter' },
+        home: { playerId: 'home-sp', playerName: 'Home Starter' },
+      },
+      finalScore: null,
+      finalInning: 1,
+      isComplete: false,
+      aggregated: false,
+      aggregatedAt: null,
+      aggregationError: null,
+      eventCount: 1,
+      checksum: '',
+    });
+    mockGetGameEvents.mockResolvedValueOnce([
+      {
+        eventId: 'recovery-game_bottom_1_end',
+        gameId: 'recovery-game',
+        eventIndex: 1,
+        timestamp: 1000,
+        batterId: 'home-batter-1',
+        batterName: 'Home Batter 1',
+        batterTeamId: 'home-team',
+        pitcherId: 'away-sp',
+        pitcherName: 'Away Starter',
+        pitcherTeamId: 'away-team',
+        result: 'FO',
+        rbiCount: 0,
+        runsScored: 0,
+        inning: 1,
+        halfInning: 'BOTTOM',
+        outs: 2,
+        runners: { first: null, second: null, third: null },
+        awayScore: 0,
+        homeScore: 0,
+        outsAfter: 3,
+        runnersAfter: { first: null, second: null, third: null },
+        awayScoreAfter: 0,
+        homeScoreAfter: 0,
+        leverageIndex: 1,
+        winProbabilityBefore: 0.5,
+        winProbabilityAfter: 0.5,
+        wpa: 0,
+        ballInPlay: null,
+        fameEvents: [],
+        isLeadoff: true,
+        isClutch: false,
+        isWalkOff: false,
+      },
+    ]);
+    mockGetBetweenPlayEvents.mockResolvedValueOnce([
+      {
+        eventId: 'recovery-game_bp_pos_after_half',
+        gameId: 'recovery-game',
+        timestamp: 1100,
+        eventIndex: 1.001,
+        type: 'position_change',
+        eventGroupId: 'realignment-after-half',
+        gameState: {
+          inning: 2,
+          halfInning: 'TOP',
+          outs: 0,
+          score: { away: 0, home: 0 },
+          runnersOn: {},
+        },
+        substitution: {
+          subType: 'position_change',
+          outPlayerId: 'home-batter-1',
+          outPlayerName: 'Home Batter 1',
+          inPlayerId: 'home-batter-1',
+          inPlayerName: 'Home Batter 1',
+          previousPosition: '2B',
+          inPosition: 'P',
+        },
+      },
+      {
+        eventId: 'recovery-game_bp_pos_after_half_2',
+        gameId: 'recovery-game',
+        timestamp: 1101,
+        eventIndex: 1.002,
+        type: 'position_change',
+        eventGroupId: 'realignment-after-half',
+        gameState: {
+          inning: 2,
+          halfInning: 'TOP',
+          outs: 0,
+          score: { away: 0, home: 0 },
+          runnersOn: {},
+        },
+        substitution: {
+          subType: 'position_change',
+          outPlayerId: 'home-batter-2',
+          outPlayerName: 'Home Batter 2',
+          inPlayerId: 'home-batter-2',
+          inPlayerName: 'Home Batter 2',
+          previousPosition: 'RF',
+          inPosition: '2B',
+        },
+      },
+    ]);
+
+    const { result } = renderHook(() => useGameState('recovery-game'));
+
+    await act(async () => {
+      const loaded = await result.current.loadExistingGame();
+      expect(loaded).toBe(true);
+      await vi.runAllTimersAsync();
+    });
+
+    expect(result.current.gameState.inning).toBe(2);
+    expect(result.current.gameState.isTop).toBe(true);
+    expect(result.current.gameState.currentPitcherId).toBe('home-batter-1');
+    expect(result.current.pitcherStats.get('home-sp')).toMatchObject({
+      exitInning: 2,
+      exitOuts: 0,
+      bequeathedRunners: 0,
+    });
+    expect(result.current.pitcherStats.get('home-batter-1')).toMatchObject({
+      entryInning: 2,
+      entryOuts: 0,
+      inheritedRunners: 0,
     });
   });
 

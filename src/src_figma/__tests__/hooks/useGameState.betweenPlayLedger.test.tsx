@@ -532,6 +532,66 @@ describe('useGameState between-play ledger', () => {
     expect(result.current.gameState.currentPitcherId).toBe('home-sp');
   });
 
+  test('runs substitution beforeCommit after validation and before lineup mutation', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    act(() => {
+      result.current.startGame();
+    });
+
+    let beforeCommitLineupIds: string[] = [];
+    let beforeCommitCalls = 0;
+
+    act(() => {
+      const subResult = result.current.makeSubstitution(
+        'home-bench-1',
+        'home-batter-1',
+        'Home Bench 1',
+        'Home Batter 1',
+        {
+          subType: 'defensive_sub',
+          newPosition: '2B',
+          beforeCommit: () => {
+            beforeCommitCalls += 1;
+            beforeCommitLineupIds = result.current
+              .getLineupStateSnapshot()
+              .home.lineup.map((player) => player.playerId);
+          },
+        },
+      );
+      expect(subResult).toEqual({ success: true });
+    });
+
+    expect(beforeCommitCalls).toBe(1);
+    expect(beforeCommitLineupIds).toContain('home-batter-1');
+    expect(beforeCommitLineupIds).not.toContain('home-bench-1');
+
+    const updatedSnapshot = result.current.getLineupStateSnapshot();
+    expect(updatedSnapshot.home.lineup.map((player) => player.playerId)).toContain('home-bench-1');
+    expect(updatedSnapshot.home.lineup.map((player) => player.playerId)).not.toContain('home-batter-1');
+
+    let rejectedBeforeCommitCalls = 0;
+    act(() => {
+      const rejectedResult = result.current.makeSubstitution(
+        'missing-bench-player',
+        'home-batter-2',
+        'Missing Bench Player',
+        'Home Batter 2',
+        {
+          subType: 'defensive_sub',
+          newPosition: 'RF',
+          beforeCommit: () => {
+            rejectedBeforeCommitCalls += 1;
+          },
+        },
+      );
+      expect(rejectedResult.success).toBe(false);
+    });
+
+    expect(rejectedBeforeCommitCalls).toBe(0);
+  });
+
   test('tracks defensive position usage per out instead of per half-inning', async () => {
     const { result } = renderHook(() => useGameState());
     await initializeGame(result);
