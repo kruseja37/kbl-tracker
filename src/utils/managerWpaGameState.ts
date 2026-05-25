@@ -278,6 +278,7 @@ export function deriveManagerDeploymentStintRecords(
   const events = [...(input.betweenPlayEvents ?? [])]
     .filter((event) => !event.undoneAt && event.gameState)
     .sort((left, right) => left.eventIndex - right.eventIndex);
+  const realignmentGrouping = buildPrimaryRealignmentPositionChangeEventIds(events);
 
   if (events.length === 0) {
     return [];
@@ -352,7 +353,9 @@ export function deriveManagerDeploymentStintRecords(
     const substitution = event.substitution;
     const pitcherChange = event.pitcherChange;
     const substitutionOpeningRole = substitution
-      ? deploymentRoleForSubstitution(substitution.subType)
+      ? event.type === "position_change" && substitution.inPosition === "P"
+        ? "pitcher"
+        : deploymentRoleForSubstitution(substitution.subType)
       : null;
 
     if (
@@ -370,11 +373,19 @@ export function deriveManagerDeploymentStintRecords(
     ) {
       closeMatching(substitution.inPlayerId, event, "role_change");
     }
+    if (substitutionOpeningRole === "pitcher" && substitution?.inPlayerId) {
+      closeMatching(substitution.inPlayerId, event, "role_change");
+    }
     if (pitcherChange?.incomingPitcherId) {
       closeMatching(pitcherChange.incomingPitcherId, event, "role_change");
     }
 
-    const opening = buildDeploymentOpening(input, event);
+    const opening = shouldSuppressRealignmentOpening(
+      event,
+      realignmentGrouping,
+    )
+      ? null
+      : buildDeploymentOpening(input, event);
     if (opening && !hasOpenDeploymentForPlayer(open, opening)) {
       open.push(opening);
     }
@@ -560,7 +571,10 @@ function buildDeploymentOpening(
   }
 
   const { substitution } = event;
-  const role = deploymentRoleForSubstitution(substitution.subType);
+  const role =
+    event.type === "position_change" && substitution.inPosition === "P"
+      ? "pitcher"
+      : deploymentRoleForSubstitution(substitution.subType);
   if (!role) return null;
   const activation = deploymentActivationWindowForEvent({
     input,
@@ -1094,6 +1108,47 @@ function deploymentRoleForSubstitution(
     return "defensive_position";
   }
   return null;
+}
+
+function buildPrimaryRealignmentPositionChangeEventIds(
+  events: BetweenPlayEvent[],
+): { primaryEventIds: Set<string>; coalescedGroupIds: Set<string> } {
+  const grouped = new Map<string, BetweenPlayEvent[]>();
+  for (const event of events) {
+    if (event.type !== "position_change" || !event.eventGroupId) continue;
+    const group = grouped.get(event.eventGroupId) ?? [];
+    group.push(event);
+    grouped.set(event.eventGroupId, group);
+  }
+
+  const primaryEventIds = new Set<string>();
+  const coalescedGroupIds = new Set<string>();
+  for (const group of grouped.values()) {
+    if (group.length <= 1) continue;
+    if (group[0]?.eventGroupId) {
+      coalescedGroupIds.add(group[0].eventGroupId);
+    }
+    const primary =
+      group.find((event) => event.substitution?.inPosition === "P") ??
+      [...group].sort((left, right) => left.eventIndex - right.eventIndex)[0];
+    if (primary) {
+      primaryEventIds.add(primary.eventId);
+    }
+  }
+
+  return { primaryEventIds, coalescedGroupIds };
+}
+
+function shouldSuppressRealignmentOpening(
+  event: BetweenPlayEvent,
+  grouping: { primaryEventIds: Set<string>; coalescedGroupIds: Set<string> },
+): boolean {
+  return (
+    event.type === "position_change" &&
+    !!event.eventGroupId &&
+    grouping.coalescedGroupIds.has(event.eventGroupId) &&
+    !grouping.primaryEventIds.has(event.eventId)
+  );
 }
 
 function offensiveTeamIdForHalf(

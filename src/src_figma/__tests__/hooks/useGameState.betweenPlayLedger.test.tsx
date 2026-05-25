@@ -78,7 +78,14 @@ vi.mock('../../../utils/playoffStorage', () => ({
 
 import { useGameState } from '../../hooks/useGameState';
 
-async function initializeGame(result: ReturnType<typeof renderHook<typeof useGameState>>['result']) {
+type InitializeGameConfig = Parameters<
+  ReturnType<typeof useGameState>['initializeGame']
+>[0];
+
+async function initializeGame(
+  result: ReturnType<typeof renderHook<typeof useGameState>>['result'],
+  overrides: Partial<InitializeGameConfig> = {},
+) {
   await act(async () => {
     await result.current.initializeGame({
       gameId: 'game-between-play',
@@ -106,6 +113,7 @@ async function initializeGame(result: ReturnType<typeof renderHook<typeof useGam
         { playerId: 'home-rp', playerName: 'Home Reliever', positions: ['P'] },
       ],
       seasonNumber: 1,
+      ...overrides,
     });
   });
 }
@@ -311,6 +319,104 @@ describe('useGameState between-play ledger', () => {
     expect(homeLineup.some((player) => player.playerId === 'home-rp' && player.position === 'P')).toBe(true);
     expect(homeLineup.some((player) => player.playerId === 'home-sp')).toBe(false);
     expect(result.current.playerStats.has('home-rp')).toBe(true);
+  });
+
+  test('position-player move to pitcher updates the active pitcher and groups the realignment', async () => {
+    const { result } = renderHook(() => useGameState());
+
+    await initializeGame(result, {
+      homeLineup: [
+        { playerId: 'home-batter-1', playerName: 'Home Batter 1', position: '2B' },
+        { playerId: 'home-sp', playerName: 'Home Starter', position: 'P' },
+      ],
+    });
+
+    act(() => {
+      result.current.startGame();
+    });
+
+    mockLogBetweenPlayEvent.mockClear();
+
+    act(() => {
+      result.current.switchPositions([
+        { playerId: 'home-batter-1', newPosition: 'P' },
+        { playerId: 'home-sp', newPosition: '2B' },
+      ]);
+    });
+
+    const snapshot = result.current.getLineupStateSnapshot();
+    expect(snapshot.home.currentPitcher).toEqual(
+      expect.objectContaining({
+        playerId: 'home-batter-1',
+        playerName: 'Home Batter 1',
+        position: 'P',
+      }),
+    );
+    expect(result.current.gameState.currentPitcherId).toBe('home-batter-1');
+    expect(result.current.gameState.currentPitcherName).toBe('Home Batter 1');
+    expect(result.current.pitcherStats.has('home-batter-1')).toBe(true);
+
+    const positionEvents = mockLogBetweenPlayEvent.mock.calls
+      .map((call) => call[0])
+      .filter((event) => event?.type === 'position_change');
+    expect(positionEvents).toHaveLength(2);
+    expect(positionEvents[0]?.eventGroupId).toEqual(expect.any(String));
+    expect(positionEvents[1]?.eventGroupId).toBe(positionEvents[0]?.eventGroupId);
+  });
+
+  test('places the extra-inning runner in both top and bottom halves', async () => {
+    const { result } = renderHook(() => useGameState());
+
+    await initializeGame(result, {
+      totalInnings: 1,
+      extraInningRunner: true,
+      extraInningRunnerDelay: 1,
+    });
+
+    act(() => {
+      result.current.startGame();
+    });
+
+    await act(async () => {
+      result.current.endInning();
+      result.current.confirmPitchCount('home-sp', 12);
+    });
+
+    expect(result.current.gameState.inning).toBe(1);
+    expect(result.current.gameState.isTop).toBe(false);
+    expect(result.current.gameState.bases.second).toBe(false);
+
+    await act(async () => {
+      result.current.endInning();
+      result.current.confirmPitchCount('away-sp', 12);
+    });
+
+    expect(result.current.gameState.inning).toBe(2);
+    expect(result.current.gameState.isTop).toBe(true);
+    expect(result.current.gameState.bases).toEqual({
+      first: false,
+      second: true,
+      third: false,
+    });
+    expect(result.current.getBaseRunnerNames()).toEqual({
+      second: 'Away Batter 2',
+    });
+
+    await act(async () => {
+      result.current.endInning();
+      result.current.confirmPitchCount('home-sp', 24);
+    });
+
+    expect(result.current.gameState.inning).toBe(2);
+    expect(result.current.gameState.isTop).toBe(false);
+    expect(result.current.gameState.bases).toEqual({
+      first: false,
+      second: true,
+      third: false,
+    });
+    expect(result.current.getBaseRunnerNames()).toEqual({
+      second: 'Home Batter 2',
+    });
   });
 
   test('live DH pitching changes preserve the batting lineup instead of replacing the leadoff hitter', async () => {

@@ -555,6 +555,7 @@ export interface UseGameStateReturn {
   swapBattingOrder: (firstPlayerId: string, secondPlayerId: string) => boolean;
   switchPositions: (
     switches: Array<{ playerId: string; newPosition: string }>,
+    options?: { eventGroupId?: string },
   ) => void;
   changePitcher: (
     newPitcherId: string,
@@ -2003,6 +2004,27 @@ function clonePitcherStatsMap(
 }
 
 type TeamSide = "away" | "home";
+
+function deriveCurrentPitcherFromLineupState(
+  state: LineupState,
+): LineupPlayer | null {
+  const lineupPitcher = state.lineup.find((player) => player.position === "P");
+  if (lineupPitcher) {
+    return { ...lineupPitcher, position: "P" as Position };
+  }
+
+  if (
+    state.currentPitcher &&
+    !state.lineup.some(
+      (player) => player.playerId === state.currentPitcher?.playerId,
+    )
+  ) {
+    return { ...state.currentPitcher, position: "P" as Position };
+  }
+
+  return null;
+}
+
 type PendingAtBatEnrichment = NonNullable<AtBatEvent["enrichment"]> & {
   fieldingAttemptType?: "routine";
   fieldingAttemptOutcome?: "made";
@@ -2449,6 +2471,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const [showAutoEndPrompt, setShowAutoEndPrompt] = useState(false);
   const [atBatSequence, setAtBatSequence] = useState(0);
   const betweenPlayOrdinalRef = useRef(0);
+  const positionSwitchGroupOrdinalRef = useRef(0);
   const isCorrectingRunnerOutcomesRef = useRef(false);
   const isRunnerOutcomeCorrectionPanelActiveRef = useRef(false);
   const autoEndGameQueuedRef = useRef(false);
@@ -3240,6 +3263,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               ? lineupStateRef.current.usedPlayers
               : [...lineupStateRef.current.usedPlayers, outPlayerId],
           };
+          lineupStateRef.current = {
+            ...lineupStateRef.current,
+            currentPitcher: deriveCurrentPitcherFromLineupState(
+              lineupStateRef.current,
+            ),
+          };
         }
         registerIdentityForSide(
           inPlayerId,
@@ -3282,6 +3311,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
                       player.position) as Position,
                   }
                 : player,
+            ),
+          };
+          lineupStateRef.current = {
+            ...lineupStateRef.current,
+            currentPitcher: deriveCurrentPitcherFromLineupState(
+              lineupStateRef.current,
             ),
           };
         }
@@ -5535,6 +5570,19 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             }
 
             if (
+              event.type === "position_change" &&
+              event.substitution?.inPosition === "P"
+            ) {
+              recoveredPitcherId = event.substitution.inPlayerId;
+              recoveredPitcherName =
+                event.substitution.inPlayerName ||
+                resolvePlayerNameForId(event.substitution.inPlayerId) ||
+                event.substitution.inPlayerId;
+              rebuiltTracker.currentPitcherId = recoveredPitcherId;
+              rebuiltTracker.currentPitcherName = recoveredPitcherName;
+            }
+
+            if (
               event.type === "substitution" &&
               event.substitution?.subType === "pinch_run"
             ) {
@@ -5683,6 +5731,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       mapBetweenPlayEventsToSubstitutionLog,
       replayRosterChangeEvent,
       replaceFameEvents,
+      resolvePlayerNameForId,
       seedLineupStateFromHeader,
       syncRestoredCompetitionContext,
       syncRestoredPlayoffContext,
@@ -9852,8 +9901,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
   // MAJ-06: Position switch (no new players, just position reassignment)
   const switchPositions = useCallback(
-    (switches: Array<{ playerId: string; newPosition: string }>) => {
+    (
+      switches: Array<{ playerId: string; newPosition: string }>,
+      options?: { eventGroupId?: string },
+    ) => {
       const previousPositions = new Map<string, string>();
+      const previousCurrentPitchers: Record<TeamSide, LineupPlayer | null> = {
+        away: awayLineupStateRef.current.currentPitcher,
+        home: homeLineupStateRef.current.currentPitcher,
+      };
       const applySwitches = (
         lineupRef: typeof awayLineupRef,
         lineupStateRef: typeof awayLineupStateRef,
@@ -9889,13 +9945,17 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         lineupStateRef.current = {
           ...lineupStateRef.current,
           lineup: nextLineup,
-          currentPitcher: currentPitcher
-            ? {
-                ...currentPitcher,
-                position: (currentPitcherSwitch?.newPosition ??
-                  currentPitcher.position) as Position,
-              }
-            : null,
+          currentPitcher: deriveCurrentPitcherFromLineupState({
+            ...lineupStateRef.current,
+            lineup: nextLineup,
+            currentPitcher: currentPitcher
+              ? {
+                  ...currentPitcher,
+                  position: (currentPitcherSwitch?.newPosition ??
+                    currentPitcher.position) as Position,
+                }
+              : lineupStateRef.current.currentPitcher,
+          }),
         };
         lineupRef.current = nextLineup.map((player) => ({
           playerId: player.playerId,
@@ -9921,6 +9981,26 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         return;
       }
 
+      const activeDefensiveSide: TeamSide = gameState.isTop ? "home" : "away";
+      const activeLineupState =
+        activeDefensiveSide === "home"
+          ? homeLineupStateRef.current
+          : awayLineupStateRef.current;
+      const previousActivePitcher =
+        previousCurrentPitchers[activeDefensiveSide];
+      const nextActivePitcher = activeLineupState.currentPitcher;
+      const activePitcherChanged =
+        !!nextActivePitcher?.playerId &&
+        nextActivePitcher.playerId !== previousActivePitcher?.playerId;
+      const activeCatcher = activeLineupState.lineup.find(
+        (player) => player.position === "C",
+      );
+      const eventGroupId =
+        options?.eventGroupId ??
+        (switches.length > 1
+          ? `${gameState.gameId}_position_switch_${Date.now()}_${positionSwitchGroupOrdinalRef.current++}`
+          : undefined);
+
       setSubstitutionLog((prev) => [
         ...prev,
         {
@@ -9940,6 +10020,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       for (const sw of switches) {
         void persistBetweenPlayEvent({
           type: "position_change",
+          eventGroupId,
           substitution: {
             subType: "position_change",
             outPlayerId: sw.playerId,
@@ -9957,14 +10038,87 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         });
       }
 
-      // UX-053: Update currentCatcherId if someone moved to catcher
-      const newCatcher = switches.find((s) => s.newPosition === "C");
-      if (newCatcher) {
+      if (activePitcherChanged && nextActivePitcher) {
+        registerIdentityForSide(
+          nextActivePitcher.playerId,
+          nextActivePitcher.playerName,
+          activeDefensiveSide,
+        );
+        if (previousActivePitcher) {
+          registerIdentityForSide(
+            previousActivePitcher.playerId,
+            previousActivePitcher.playerName,
+            activeDefensiveSide,
+          );
+        }
+        setPitcherStats((prev) => {
+          const next = new Map(prev);
+          if (previousActivePitcher?.playerId) {
+            const outgoing = {
+              ...(next.get(previousActivePitcher.playerId) ||
+                createEmptyPitcherStats()),
+            };
+            outgoing.exitInning = gameState.inning;
+            outgoing.exitOuts = gameState.outs;
+            outgoing.bequeathedRunners =
+              runnerTrackerRef.current.runners.filter(
+                (runner) =>
+                  runner.currentBase &&
+                  runner.currentBase !== "HOME" &&
+                  runner.currentBase !== "OUT",
+              ).length;
+            next.set(previousActivePitcher.playerId, outgoing);
+          }
+
+          const incoming = {
+            ...(next.get(nextActivePitcher.playerId) ||
+              createEmptyPitcherStats()),
+          };
+          incoming.entryInning = incoming.entryInning || gameState.inning;
+          incoming.entryOuts =
+            incoming.entryOuts !== undefined
+              ? incoming.entryOuts
+              : gameState.outs;
+          incoming.inheritedRunners =
+            runnerTrackerRef.current.runners.filter(
+              (runner) =>
+                runner.currentBase &&
+                runner.currentBase !== "HOME" &&
+                runner.currentBase !== "OUT",
+            ).length;
+          next.set(nextActivePitcher.playerId, incoming);
+          return next;
+        });
+        setPlayerStats((prev) => {
+          if (prev.has(nextActivePitcher.playerId)) {
+            return prev;
+          }
+          const next = new Map(prev);
+          next.set(nextActivePitcher.playerId, createEmptyPlayerStats());
+          return next;
+        });
+        pitcherNamesRef.current.set(
+          nextActivePitcher.playerId,
+          nextActivePitcher.playerName,
+        );
+        runnerTrackerRef.current = trackerHandlePitchingChange(
+          runnerTrackerRef.current,
+          nextActivePitcher.playerId,
+          nextActivePitcher.playerName,
+        ).state;
+        setRunnerIdentityVersion((version) => version + 1);
+      }
+
+      if (changedAway || changedHome) {
         setGameState((prev) => ({
           ...prev,
-          currentCatcherId: newCatcher.playerId,
+          currentPitcherId:
+            nextActivePitcher?.playerId || prev.currentPitcherId,
+          currentPitcherName:
+            nextActivePitcher?.playerName || prev.currentPitcherName,
+          currentCatcherId: activeCatcher?.playerId || prev.currentCatcherId,
           currentCatcherName:
-            resolvePlayerNameForId(newCatcher.playerId) || newCatcher.playerId,
+            activeCatcher?.playerName || prev.currentCatcherName,
         }));
       }
 
@@ -9977,6 +10131,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     [
       gameState.inning,
       gameState.isTop,
+      gameState.outs,
       persistBetweenPlayEvent,
       registerIdentityForSide,
       resolvePlayerNameForId,
@@ -10594,39 +10749,62 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     let endTracker = trackerClearBases(runnerTrackerRef.current);
     endTracker = trackerNextInning(endTracker);
 
+    const newIsTop = !isTop;
+    // After TOP (isTop was true, newIsTop is false): stay on same inning, switch to BOTTOM
+    // After BOTTOM (isTop was false, newIsTop is true): increment inning, switch to TOP
+    const newInning = newIsTop ? inning + 1 : inning;
+
+    // Get next batter
+    const battingTeamLineup = newIsTop
+      ? awayLineupRef.current
+      : homeLineupRef.current;
+    const currentIndex = newIsTop ? awayBatterIndex : homeBatterIndex;
+    const nextBatter = battingTeamLineup[currentIndex];
+
+    // T0-02 FIX: Switch to the correct pitching team's current pitcher
+    // When newIsTop (away bats), HOME team pitches; when !newIsTop (home bats), AWAY team pitches
+    const pitchingTeamState = newIsTop ? homeLineupStateRef : awayLineupStateRef;
+    const newPitcher = pitchingTeamState.current.currentPitcher;
+
+    // UX-053: Find catcher from the new fielding team's lineup
+    const fieldingLineup = newIsTop
+      ? homeLineupRef.current
+      : awayLineupRef.current;
+    const newCatcher = fieldingLineup.find((p) => p.position === "C");
+    const runnerStartInning =
+      totalInningsRef.current + extraInningRunnerDelayRef.current;
+    const extraInningGhostRunner =
+      extraInningRunnerRef.current &&
+      newInning >= runnerStartInning &&
+      battingTeamLineup.length > 0
+        ? battingTeamLineup[
+            (currentIndex - 1 + battingTeamLineup.length) %
+              battingTeamLineup.length
+          ]
+        : undefined;
+    const shouldPlaceExtraInningRunner = !!extraInningGhostRunner?.playerId;
+
     setGameState((prev) => {
-      const newIsTop = !prev.isTop;
-      // After TOP (isTop was true, newIsTop is false): stay on same inning, switch to BOTTOM
-      // After BOTTOM (isTop was false, newIsTop is true): increment inning, switch to TOP
-      const newInning = newIsTop ? prev.inning + 1 : prev.inning;
-
-      // Get next batter
-      const battingTeamLineup = newIsTop
-        ? awayLineupRef.current
-        : homeLineupRef.current;
-      const currentIndex = newIsTop ? awayBatterIndex : homeBatterIndex;
-      const nextBatter = battingTeamLineup[currentIndex];
-
-      // T0-02 FIX: Switch to the correct pitching team's current pitcher
-      // When newIsTop (away bats), HOME team pitches; when !newIsTop (home bats), AWAY team pitches
-      const pitchingTeamState = newIsTop
-        ? homeLineupStateRef
-        : awayLineupStateRef;
-      const newPitcher = pitchingTeamState.current.currentPitcher;
       const newPitcherId = newPitcher?.playerId || prev.currentPitcherId;
       const newPitcherName = newPitcher?.playerName || prev.currentPitcherName;
-
-      // UX-053: Find catcher from the new fielding team's lineup
-      const fieldingLineup = newIsTop
-        ? homeLineupRef.current
-        : awayLineupRef.current;
-      const newCatcher = fieldingLineup.find((p) => p.position === "C");
       const newCatcherId = newCatcher?.playerId || prev.currentCatcherId;
       const newCatcherName = newCatcher?.playerName || prev.currentCatcherName;
 
       // Sync tracker with new pitcher and inning number
       endTracker = syncTrackerPitcher(endTracker, newPitcherId, newPitcherName);
       endTracker = { ...endTracker, inning: newInning };
+
+      let nextBases = { first: false, second: false, third: false };
+      if (extraInningGhostRunner?.playerId) {
+        endTracker = trackerAddRunner(
+          endTracker,
+          extraInningGhostRunner.playerId,
+          extraInningGhostRunner.playerName,
+          "2B",
+          "ghost_runner",
+        );
+        nextBases = { first: false, second: true, third: false };
+      }
       runnerTrackerRef.current = endTracker;
 
       // Reset inning pitch counter for the NEW pitcher
@@ -10643,7 +10821,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         outs: 0,
         balls: 0,
         strikes: 0,
-        bases: { first: false, second: false, third: false },
+        bases: nextBases,
         currentBatterId: nextBatter?.playerId || "",
         currentBatterName: nextBatter?.playerName || "",
         currentPitcherId: newPitcherId,
@@ -10652,6 +10830,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         currentCatcherName: newCatcherName,
       };
     });
+    if (shouldPlaceExtraInningRunner) {
+      setRunnerIdentityVersion((version) => version + 1);
+    }
   }, [
     awayBatterIndex,
     evaluateEndGameTrigger,

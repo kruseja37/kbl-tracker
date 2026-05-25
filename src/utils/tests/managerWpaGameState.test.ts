@@ -958,9 +958,13 @@ describe("committed manager WPA game state", () => {
           credit.eventId === "game-1_5",
       )
       .reduce((sum, credit) => sum + credit.wpa, 0);
-    const expectedRawLinkedWpa =
-      Math.round((battingWpa + baserunningWpa + fieldingWpa * 0.75) * 10000) /
-      10000;
+    const roundWpaForExpectation = (value: number) =>
+      Math.round(value * 10000) / 10000;
+    const expectedRawLinkedWpa = roundWpaForExpectation(
+      roundWpaForExpectation(battingWpa) +
+        roundWpaForExpectation(baserunningWpa) +
+        roundWpaForExpectation(fieldingWpa) * 0.75,
+    );
 
     expect(stint).toMatchObject({
       deploymentRole: "kept_position_player_in",
@@ -2246,6 +2250,91 @@ describe("committed manager WPA game state", () => {
     });
   });
 
+  test("coalesces grouped position-player-to-pitcher realignments", () => {
+    const moveFielderToPitcher = createBetweenPlay({
+      eventId: "game-1_bp_realign_p",
+      eventIndex: 1,
+      type: "position_change",
+      eventGroupId: "realignment-1",
+      substitution: {
+        subType: "position_change",
+        outPlayerId: "home-fielder",
+        outPlayerName: "Home Fielder",
+        inPlayerId: "home-fielder",
+        inPlayerName: "Home Fielder",
+        previousPosition: "2B",
+        inPosition: "P",
+      },
+    });
+    const movePitcherToSecond = createBetweenPlay({
+      eventId: "game-1_bp_realign_2b",
+      eventIndex: 1.001,
+      type: "position_change",
+      eventGroupId: "realignment-1",
+      substitution: {
+        subType: "position_change",
+        outPlayerId: "home-pitcher",
+        outPlayerName: "Home Pitcher",
+        inPlayerId: "home-pitcher",
+        inPlayerName: "Home Pitcher",
+        previousPosition: "P",
+        inPosition: "2B",
+      },
+    });
+    const firstPitcherPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      pitcherId: "home-fielder",
+      pitcherName: "Home Fielder",
+      pitcherTeamId: "home",
+      wpaModelVersion: WPA_MODEL_VERSION,
+      wpa: -0.2,
+    });
+    const secondPitcherPa = createAtBat({
+      eventId: "game-1_3",
+      eventIndex: 3,
+      pitcherId: "home-fielder",
+      pitcherName: "Home Fielder",
+      pitcherTeamId: "home",
+      wpaModelVersion: WPA_MODEL_VERSION,
+      wpa: -0.1,
+    });
+
+    const state = deriveCommittedManagerDecisionState({
+      gameId: "game-1",
+      atBatEvents: [firstPitcherPa, secondPitcherPa],
+      betweenPlayEvents: [moveFielderToPitcher, movePitcherToSecond],
+      fieldingEvents: [],
+      awayTeamId: "away",
+      homeTeamId: "home",
+      awayManagerId: "away-manager",
+      homeManagerId: "home-manager",
+      totalInnings: 9,
+      gameEnded: true,
+    });
+
+    const realignmentDecisions = state.managerDecisions.filter((decision) =>
+      decision.linkedEventIds.some((eventId) => eventId.includes("realign")),
+    );
+    expect(realignmentDecisions).toHaveLength(1);
+    expect(realignmentDecisions[0]).toMatchObject({
+      decisionType: "pitching_change",
+      managerId: "home-manager",
+      teamId: "home",
+      involvedPlayerIds: ["home-fielder"],
+    });
+
+    const realignmentStints = state.managerDeploymentStints.filter((stint) =>
+      stint.sourceEventId.includes("realign"),
+    );
+    expect(realignmentStints).toHaveLength(1);
+    expect(realignmentStints[0]).toMatchObject({
+      deploymentRole: "pitcher",
+      playerId: "home-fielder",
+      sourceEventId: "game-1_bp_realign_p",
+    });
+  });
+
   test("recomputes substitution subtype changes from committed between-play events", () => {
     const pinchHit = createBetweenPlay({
       substitution: {
@@ -2393,6 +2482,14 @@ describe("committed manager WPA game state", () => {
       awayScoreAfter: 4,
       homeScoreAfter: 2,
       version: 2,
+      editHistory: [
+        {
+          field: "result",
+          oldValue: "GO",
+          newValue: "HR",
+          timestamp: Date.now(),
+        },
+      ],
     });
     await refreshCurrentGameManagerDecisionState({
       gameId,

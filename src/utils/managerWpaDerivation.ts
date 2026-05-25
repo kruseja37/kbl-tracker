@@ -292,7 +292,9 @@ export function deriveManagerDecisionRecords(
     .filter((event) => !event.undoneAt)
     .sort((left, right) => left.eventIndex - right.eventIndex);
   const managerBetweenPlayEvents =
-    dedupePromptedManagerDecisionEvents(betweenPlayEvents);
+    dedupePromptedManagerDecisionEvents(
+      coalesceRealignmentPositionChangeEvents(betweenPlayEvents),
+    );
   const fieldingEvents = [...(input.fieldingEvents ?? [])].sort(
     (left, right) =>
       left.atBatEventId.localeCompare(right.atBatEventId) ||
@@ -362,7 +364,9 @@ export function deriveManagerRecommendationWatchRecords(
     .filter((event) => !event.undoneAt)
     .sort((left, right) => left.eventIndex - right.eventIndex);
   const managerBetweenPlayEvents =
-    dedupePromptedManagerDecisionEvents(betweenPlayEvents);
+    dedupePromptedManagerDecisionEvents(
+      coalesceRealignmentPositionChangeEvents(betweenPlayEvents),
+    );
   const fieldingEvents = [...(input.fieldingEvents ?? [])].sort(
     (left, right) =>
       left.atBatEventId.localeCompare(right.atBatEventId) ||
@@ -1000,6 +1004,36 @@ function dedupePromptedManagerDecisionEvents(
   });
 }
 
+function coalesceRealignmentPositionChangeEvents(
+  events: BetweenPlayEvent[],
+): BetweenPlayEvent[] {
+  const grouped = new Map<string, BetweenPlayEvent[]>();
+  for (const event of events) {
+    if (event.type !== "position_change" || !event.eventGroupId) continue;
+    const group = grouped.get(event.eventGroupId) ?? [];
+    group.push(event);
+    grouped.set(event.eventGroupId, group);
+  }
+
+  const primaryEventIds = new Set<string>();
+  for (const group of grouped.values()) {
+    if (group.length <= 1) continue;
+    const primary =
+      group.find((event) => event.substitution?.inPosition === "P") ??
+      [...group].sort((left, right) => left.eventIndex - right.eventIndex)[0];
+    if (primary) {
+      primaryEventIds.add(primary.eventId);
+    }
+  }
+
+  return events.filter((event) => {
+    if (event.type !== "position_change" || !event.eventGroupId) return true;
+    const group = grouped.get(event.eventGroupId);
+    if (!group || group.length <= 1) return true;
+    return primaryEventIds.has(event.eventId);
+  });
+}
+
 function promptedManagerDecisionDedupeKey(
   event: BetweenPlayEvent,
 ): string | null {
@@ -1401,19 +1435,23 @@ function deriveBetweenPlayManagerDecisions(
   }
 
   if (event.type === "position_change") {
+    const decisionType =
+      event.substitution?.inPosition === "P"
+        ? "pitching_change"
+        : "position_change";
     return [
       buildBetweenPlayDecision({
         event,
         input,
         gameId,
-        decisionType: "position_change",
+        decisionType,
         decisionSource: "user_action",
-        confidence: "low",
+        confidence: decisionType === "pitching_change" ? "high" : "low",
         involvedPlayerIds: [
           event.substitution?.outPlayerId,
           event.substitution?.inPlayerId,
         ],
-        derivedFromFields: ["type"],
+        derivedFromFields: ["type", "substitution.inPosition"],
         resolved: false,
       }),
     ];
@@ -2587,7 +2625,13 @@ function getTrackedPlayerIdsForBetweenPlayDecision(
     decisionType === "pitching_change" ||
     decisionType === "leave_pitcher_in"
   ) {
-    return uniqueStrings([event.pitcherChange?.incomingPitcherId]);
+    return uniqueStrings([
+      event.pitcherChange?.incomingPitcherId,
+      event.substitution?.inPosition === "P"
+        ? event.substitution.inPlayerId
+        : undefined,
+      ...fallbackIds,
+    ]);
   }
 
   if (decisionType === "keep_defender_in") {

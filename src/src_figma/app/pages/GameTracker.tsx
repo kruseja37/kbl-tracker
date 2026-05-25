@@ -1758,6 +1758,7 @@ export function GameTracker() {
     getBatterIndicesSnapshot,
     getLineupStateSnapshot,
     navigationState?.extraInningRunner,
+    navigationState?.extraInningRunnerDelay,
     navigationState?.totalInnings,
     placeGhostRunner,
   ]);
@@ -3408,16 +3409,17 @@ export function GameTracker() {
     return entries;
   })();
 
+  const fieldingTeamSnapshot =
+    fieldingTeam === "away"
+      ? runtimeLineupSnapshot.away
+      : runtimeLineupSnapshot.home;
+
   const availablePitchers = (() => {
-    const fieldingSnapshot =
-      fieldingTeam === "away"
-        ? runtimeLineupSnapshot.away
-        : runtimeLineupSnapshot.home;
     return buildAvailablePitchingCandidates({
       fieldingTeam,
       pitchers: fieldingTeamPitchersRaw,
       positionPlayers: fieldingTeamPlayersRaw,
-      fieldingSnapshot,
+      fieldingSnapshot: fieldingTeamSnapshot,
       currentPitcherId: gameState.currentPitcherId,
       getRosterEntityId,
     }).map((candidate) => ({
@@ -3452,18 +3454,33 @@ export function GameTracker() {
   );
 
   // Derive current pitcher from actual pitcher data
-  const activePitcher =
+  const currentPitcherLineupEntry = fieldingTeamSnapshot.currentPitcher;
+  const rosterMatchedCurrentPitcher =
     fieldingTeamPitchersRaw.find(
       (p) => getRosterEntityId(p, fieldingTeam) === gameState.currentPitcherId,
-    ) ||
-    fieldingTeamPitchersRaw.find((p) => p.isActive) ||
-    fieldingTeamPitchersRaw.find((p) => p.isStarter) ||
-    fieldingTeamPitchersRaw[0];
-  const currentPitcherData: BullpenPitcher = {
-    id: activePitcher
+    );
+  const activePitcher =
+    rosterMatchedCurrentPitcher ||
+    (!gameState.currentPitcherId
+      ? fieldingTeamPitchersRaw.find((p) => p.isActive) ||
+        fieldingTeamPitchersRaw.find((p) => p.isStarter) ||
+        fieldingTeamPitchersRaw[0]
+      : undefined);
+  const currentPitcherId =
+    currentPitcherLineupEntry?.playerId ||
+    gameState.currentPitcherId ||
+    (activePitcher
       ? getRosterEntityId(activePitcher, fieldingTeam)
-      : gameState.currentPitcherId || buildFallbackRuntimePlayerId("pitcher", fieldingTeam),
-    name: activePitcher?.name || gameState.currentPitcherName || "PITCHER",
+      : buildFallbackRuntimePlayerId("pitcher", fieldingTeam));
+  const currentPitcherName =
+    currentPitcherLineupEntry?.playerName ||
+    gameState.currentPitcherName ||
+    resolveRosterNameByGameId(currentPitcherId) ||
+    activePitcher?.name ||
+    "PITCHER";
+  const currentPitcherData: BullpenPitcher = {
+    id: currentPitcherId,
+    name: currentPitcherName,
     throwingHand: (activePitcher?.throwingHand || "R") as "L" | "R",
     fitness: "FIT",
     isCurrentPitcher: true,
@@ -3518,15 +3535,21 @@ export function GameTracker() {
       };
     }
 
-    if (activePitcher) {
+    if (currentPitcherData.id) {
       alignment.P = {
-        playerId: getRosterEntityId(activePitcher, fieldingTeam),
-        playerName: activePitcher.name,
+        playerId: currentPitcherData.id,
+        playerName: currentPitcherData.name,
       };
     }
 
     return alignment;
-  }, [activePitcher, fieldingTeam, fieldingTeamPlayers, getRosterEntityId]);
+  }, [
+    currentPitcherData.id,
+    currentPitcherData.name,
+    fieldingTeam,
+    fieldingTeamPlayers,
+    getRosterEntityId,
+  ]);
 
   const liveRunnerFielderOptions = useMemo(() => {
     return Object.entries(defensiveAlignmentByPosition)
@@ -10250,12 +10273,12 @@ export function GameTracker() {
       offensiveManagerId: battingTeam === "away" ? awayManagerId : homeManagerId,
       defensiveManagerId: fieldingTeam === "away" ? awayManagerId : homeManagerId,
       scoreDifferentialForFieldingTeam,
-      currentPitcher: activePitcher
+      currentPitcher: currentPitcherData.id
         ? {
             playerId: currentPitcherData.id,
             playerName: currentPitcherData.name,
             pitchCount: currentPitcherStats?.pitchCount,
-            isStarter: activePitcher.isStarter,
+            isStarter: activePitcher?.isStarter ?? false,
           }
         : undefined,
       availablePitchers: fieldingTeamPitchersRaw
