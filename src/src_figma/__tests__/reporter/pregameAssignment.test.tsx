@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { ReporterAssignmentPanel } from "../../app/components/ReporterAssignmentPanel";
@@ -9,7 +9,7 @@ import { deriveReporterAvatarPalette } from "../../../engines/reporterAvatarPale
 import { ERA_REPORTER_NAME_POOLS } from "../../../engines/reporterNameGenerator";
 import type { BeatReporter } from "../../../types/reporter";
 import { autoGenerateReporterForTeam, assignReporterToTeam } from "../../../utils/reporterAssignment";
-import { createReporter, getReporterForTeam } from "../../../utils/reporterStorage";
+import { createReporter, getReporter, getReporterForTeam } from "../../../utils/reporterStorage";
 import { loadCurrentGame, saveCurrentGame, type PersistedGameState } from "../../../utils/gameStorage";
 import { syncEngine } from "../../../utils/syncEngine";
 import { resetTrackerDbForTests } from "../../../utils/trackerDb";
@@ -135,6 +135,139 @@ describe("pre-game reporter assignment", () => {
     await expect(getReporterForTeam("new-team", "league-1")).resolves.toEqual(assigned);
   });
 
+  test("pick-existing replaces only the selected team's reporter", async () => {
+    const oldAway = await createReporter(
+      reporterInput({ teamId: "away-team", name: "Old Away Reporter" }),
+    );
+    const nextAway = await createReporter(
+      reporterInput({ teamId: "unassigned", name: "Next Away Reporter" }),
+    );
+    const home = await createReporter(
+      reporterInput({ teamId: "home-team", name: "Home Reporter" }),
+    );
+
+    render(
+      <ReporterAssignmentPanel
+        leagueId="league-1"
+        teams={[
+          {
+            label: "Away team",
+            team: {
+              id: "away-team",
+              name: "Away",
+              colors: { primary: "#123456", secondary: "#FEDCBA" },
+            },
+          },
+          {
+            label: "Home team",
+            team: {
+              id: "home-team",
+              name: "Home",
+              colors: { primary: "#112233", secondary: "#AABBCC" },
+            },
+          },
+        ]}
+        liveEnabled={false}
+        onLiveEnabledChange={() => undefined}
+        postGameEnabled={true}
+        onPostGameEnabledChange={() => undefined}
+      />,
+    );
+
+    const awayPicker = screen.getByLabelText(
+      "Away reporter picker",
+    ) as HTMLSelectElement;
+
+    await waitFor(() => expect(awayPicker.value).toBe(oldAway.id));
+
+    fireEvent.change(awayPicker, {
+      target: { value: nextAway.id },
+    });
+
+    await waitFor(() => expect(awayPicker.value).toBe(nextAway.id));
+
+    expect((screen.getByLabelText("Home reporter picker") as HTMLSelectElement).value).toBe(
+      home.id,
+    );
+    await expect(getReporterForTeam("away-team", "league-1")).resolves.toMatchObject({
+      id: nextAway.id,
+    });
+    await expect(getReporterForTeam("home-team", "league-1")).resolves.toMatchObject({
+      id: home.id,
+    });
+    await expect(getReporter(oldAway.id)).resolves.toMatchObject({
+      teamId: "unassigned",
+    });
+  });
+
+  test("pick-existing prevents either team picker from stealing the other assignment", async () => {
+    const away = await createReporter(
+      reporterInput({ teamId: "away-team", name: "Away Reporter" }),
+    );
+    const home = await createReporter(
+      reporterInput({ teamId: "home-team", name: "Home Reporter" }),
+    );
+
+    render(
+      <ReporterAssignmentPanel
+        leagueId="league-1"
+        teams={[
+          {
+            label: "Away team",
+            team: {
+              id: "away-team",
+              name: "Away",
+              colors: { primary: "#123456", secondary: "#FEDCBA" },
+            },
+          },
+          {
+            label: "Home team",
+            team: {
+              id: "home-team",
+              name: "Home",
+              colors: { primary: "#112233", secondary: "#AABBCC" },
+            },
+          },
+        ]}
+        liveEnabled={true}
+        onLiveEnabledChange={() => undefined}
+        postGameEnabled={false}
+        onPostGameEnabledChange={() => undefined}
+      />,
+    );
+
+    const awayPicker = screen.getByLabelText(
+      "Away reporter picker",
+    ) as HTMLSelectElement;
+    const homePicker = screen.getByLabelText(
+      "Home reporter picker",
+    ) as HTMLSelectElement;
+
+    await waitFor(() => {
+      expect(awayPicker.value).toBe(away.id);
+      expect(homePicker.value).toBe(home.id);
+    });
+
+    expect(
+      within(homePicker).getByRole("option", { name: "Away Reporter (assigned)" }),
+    ).toBeDisabled();
+
+    fireEvent.change(homePicker, {
+      target: { value: away.id },
+    });
+
+    await waitFor(() => {
+      expect(awayPicker.value).toBe(away.id);
+      expect(homePicker.value).toBe(home.id);
+    });
+    await expect(getReporterForTeam("away-team", "league-1")).resolves.toMatchObject({
+      id: away.id,
+    });
+    await expect(getReporterForTeam("home-team", "league-1")).resolves.toMatchObject({
+      id: home.id,
+    });
+  });
+
   test("disabled toggle state greys out generate and picker interactions", async () => {
     await createReporter(reporterInput({ name: "Available Reporter" }));
 
@@ -151,8 +284,10 @@ describe("pre-game reporter assignment", () => {
             },
           },
         ]}
-        enabled={false}
-        onEnabledChange={() => undefined}
+        liveEnabled={false}
+        onLiveEnabledChange={() => undefined}
+        postGameEnabled={false}
+        onPostGameEnabledChange={() => undefined}
       />,
     );
 

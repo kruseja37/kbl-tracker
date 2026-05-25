@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Mic2 } from "lucide-react";
 import type { BeatReporter } from "../../../types/reporter";
 import type { ReporterAssignmentTeam } from "../../../utils/reporterAssignment";
@@ -59,10 +59,39 @@ export function ReporterAssignmentPanel({
   const [availableReporters, setAvailableReporters] = useState<BeatReporter[]>([]);
   const [busyTeamId, setBusyTeamId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const refreshRequestIdRef = useRef(0);
 
   const teamIds = useMemo(() => teams.map(({ team }) => team.id).join("|"), [teams]);
+  const visibleTeamIds = useMemo(
+    () => new Set(teams.map(({ team }) => team.id)),
+    [teams],
+  );
+
+  const getReporterAssignedTeamId = useCallback(
+    (reporterId: string, currentTeamId: string): string | null => {
+      for (const [teamId, reporter] of Object.entries(assignedReporters)) {
+        if (teamId !== currentTeamId && reporter?.id === reporterId) {
+          return teamId;
+        }
+      }
+
+      const reporter = availableReporters.find((entry) => entry.id === reporterId);
+      if (
+        reporter?.teamId &&
+        reporter.teamId !== "unassigned" &&
+        reporter.teamId !== currentTeamId &&
+        visibleTeamIds.has(reporter.teamId)
+      ) {
+        return reporter.teamId;
+      }
+
+      return null;
+    },
+    [assignedReporters, availableReporters, visibleTeamIds],
+  );
 
   const refreshReporters = useCallback(async () => {
+    const requestId = (refreshRequestIdRef.current += 1);
     const [reporters, assignments] = await Promise.all([
       listReporters({ leagueId }),
       Promise.all(
@@ -73,6 +102,7 @@ export function ReporterAssignmentPanel({
       ),
     ]);
 
+    if (requestId !== refreshRequestIdRef.current) return;
     setAvailableReporters(reporters);
     setAssignedReporters(Object.fromEntries(assignments));
   }, [leagueId, teams]);
@@ -91,6 +121,7 @@ export function ReporterAssignmentPanel({
 
   const handleGenerate = async (team: ReporterAssignmentTeam) => {
     if (!enabled) return;
+    refreshRequestIdRef.current += 1;
     setBusyTeamId(team.id);
     setError(null);
     try {
@@ -105,10 +136,30 @@ export function ReporterAssignmentPanel({
 
   const handleAssign = async (teamId: string, reporterId: string) => {
     if (!enabled || !reporterId) return;
+    if (getReporterAssignedTeamId(reporterId, teamId)) {
+      setError("That reporter is already assigned to the other team.");
+      return;
+    }
+    refreshRequestIdRef.current += 1;
     setBusyTeamId(teamId);
     setError(null);
     try {
-      await assignReporterToTeam(reporterId, teamId);
+      const assigned = await assignReporterToTeam(reporterId, teamId);
+      setAssignedReporters((current) => {
+        const next = { ...current };
+        for (const existingTeamId of Object.keys(next)) {
+          if (next[existingTeamId]?.id === reporterId) {
+            next[existingTeamId] = null;
+          }
+        }
+        next[teamId] = assigned;
+        return next;
+      });
+      setAvailableReporters((current) =>
+        current.map((reporter) =>
+          reporter.id === assigned.id ? assigned : reporter,
+        ),
+      );
       await refreshReporters();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Reporter could not be assigned.");
@@ -214,11 +265,18 @@ export function ReporterAssignmentPanel({
                   className="flex-1 bg-[#26332b] text-[#E8E8D8] border-2 border-[#556B55] px-2 py-2 text-[10px] font-bold disabled:text-[#8A9A82] disabled:cursor-not-allowed"
                 >
                   <option value="">PICK EXISTING...</option>
-                  {availableReporters.map((existing) => (
-                    <option key={existing.id} value={existing.id}>
-                      {existing.name}
-                    </option>
-                  ))}
+                  {availableReporters.map((existing) => {
+                    const assignedTeamId = getReporterAssignedTeamId(existing.id, team.id);
+                    return (
+                      <option
+                        key={existing.id}
+                        value={existing.id}
+                        disabled={assignedTeamId !== null}
+                      >
+                        {existing.name}{assignedTeamId ? " (assigned)" : ""}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             </div>

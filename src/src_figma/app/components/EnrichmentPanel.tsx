@@ -1175,6 +1175,23 @@ export function EnrichmentPanel({
         </button>
       </div>
 
+      {config.chase && (
+        <div className="border-t border-[#4a6a4a] bg-[#2a3530] px-2 py-2">
+          <EnrichmentSection label="Chase" filled={!!currentEnrichment?.chased}>
+            <button
+              aria-pressed={!!currentEnrichment?.chased}
+              className={`w-full text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
+                ${currentEnrichment?.chased
+                  ? 'bg-[#f59e0b]/20 border-[#f59e0b] text-[#fbbf24]'
+                  : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+              onClick={handleChaseToggle}
+            >
+              {currentEnrichment?.chased ? 'CHASE' : 'chase'}
+            </button>
+          </EnrichmentSection>
+        </div>
+      )}
+
       {/* Scrollable enrichment fields */}
       <div className="flex-1 overflow-y-auto p-2 space-y-2">
 
@@ -1476,8 +1493,19 @@ export function EnrichmentPanel({
 
         {/* Pitches in At-Bat */}
         <EnrichmentSection label="Pitches in AB" filled={!!currentEnrichment?.pitchesInAtBat}>
-          {entry.result === 'BB' && (
-            <div className="mb-2 flex gap-1.5">
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation ${
+                currentEnrichment?.pitchesInAtBat === 1
+                  ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                  : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'
+              }`}
+              onClick={() => onUpdate('pitchesInAtBat', 1)}
+            >
+              1P AB
+            </button>
+            {entry.result === 'BB' && (
               <button
                 type="button"
                 className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation ${
@@ -1489,8 +1517,8 @@ export function EnrichmentPanel({
               >
                 4P WALK
               </button>
-            </div>
-          )}
+            )}
+          </div>
           <input
             type="number"
             min={1}
@@ -1507,21 +1535,6 @@ export function EnrichmentPanel({
             <div className="text-[10px] text-[#34d399] mt-1">Quality At-Bat (7+ pitches)</div>
           )}
         </EnrichmentSection>
-
-        {config.chase && (
-          <EnrichmentSection label="Chase" filled={!!currentEnrichment?.chased}>
-            <button
-              aria-pressed={!!currentEnrichment?.chased}
-              className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
-                ${currentEnrichment?.chased
-                  ? 'bg-[#f59e0b]/20 border-[#f59e0b] text-[#fbbf24]'
-                  : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#6b7280] hover:bg-[#4a6a4a]/40'}`}
-              onClick={handleChaseToggle}
-            >
-              {currentEnrichment?.chased ? 'CHASE' : 'chase'}
-            </button>
-          </EnrichmentSection>
-        )}
 
         {/* Layer D — Modifiers (§8.1) — context-sensitive per result */}
         {config.modifiers.length > 0 && (

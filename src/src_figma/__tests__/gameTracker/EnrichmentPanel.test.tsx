@@ -236,6 +236,41 @@ describe('EnrichmentPanel', () => {
     expect(onUpdate).toHaveBeenCalledWith('pitchesInAtBat', 4);
   });
 
+  test('shows a one-pitch at-bat quick action and saves pitchesInAtBat = 1', () => {
+    const onUpdate = vi.fn();
+
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('GO')}
+        currentEnrichment={{}}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '1P AB' }));
+
+    expect(onUpdate).toHaveBeenCalledWith('pitchesInAtBat', 1);
+  });
+
+  test('places chase before scroll-heavy field location controls', () => {
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('GO')}
+        currentEnrichment={{}}
+        onUpdate={() => {}}
+        onClose={() => {}}
+      />
+    );
+
+    const chase = screen.getByText('Chase');
+    const fieldLocation = screen.getByText('Field Location');
+
+    expect(
+      chase.compareDocumentPosition(fieldLocation) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   test('does not show the 4-pitch walk quick action for HBP', () => {
     render(
       <EnrichmentPanel

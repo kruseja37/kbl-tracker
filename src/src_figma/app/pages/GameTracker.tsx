@@ -13792,6 +13792,14 @@ function PitchCountModal({
           pitches (after inning {prompt.lastVerifiedInning})
         </div>
 
+        <button
+          type="button"
+          onClick={() => onConfirm(prompt.pitcherId, prompt.currentCount + 1)}
+          className="mb-3 w-full bg-[#2a3a2d] border-2 border-[#C4A853] text-[#C4A853] py-2 px-4 text-xs font-bold tracking-[0.12em] hover:bg-[#344a3a]"
+        >
+          ONE-PITCH AB (+1)
+        </button>
+
         <div className="mb-4">
           <label className="text-[#E8E8D8] text-xs block mb-1">
             Enter CURRENT pitch count:

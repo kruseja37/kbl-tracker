@@ -12,6 +12,7 @@ import type {
 } from "../types/reporter";
 import {
   createReporter,
+  getReporter,
   listReporters,
   updateReporter,
 } from "./reporterStorage";
@@ -110,5 +111,22 @@ export async function assignReporterToTeam(
   reporterId: string,
   teamId: string,
 ): Promise<BeatReporter> {
+  const reporter = await getReporter(reporterId);
+
+  if (!reporter) {
+    throw new Error(`Reporter not found: ${reporterId}`);
+  }
+
+  const reportersForTeam = await listReporters({
+    leagueId: reporter.leagueId,
+    teamId,
+  });
+
+  await Promise.all(
+    reportersForTeam
+      .filter((existing) => existing.id !== reporterId)
+      .map((existing) => updateReporter(existing.id, { teamId: "unassigned" })),
+  );
+
   return updateReporter(reporterId, { teamId });
 }
