@@ -304,7 +304,7 @@ describe("CommentaryFeed", () => {
     const row = screen.getByTestId("commentary-entry-manager-pinch-hit");
     expect(row).toHaveTextContent("B2");
     expect(row).toHaveTextContent("Atlanta Manager");
-    expect(row).toHaveTextContent("+0.007 WPA");
+    expect(row).toHaveTextContent("+0.7 pp WPA");
     expect(row).not.toHaveTextContent("Jeff Blauser for Rafael Belliard");
 
     fireEvent.click(

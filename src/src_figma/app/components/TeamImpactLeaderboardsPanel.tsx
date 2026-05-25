@@ -11,6 +11,7 @@ import type {
   TeamPogPointsLeaderboardEntry,
   TeamWpaLeaderboardEntry,
 } from "../../../utils/teamImpact";
+import { formatWpaPoints } from "../../../utils/wpaDisplay";
 
 type PanelTheme = "elimination" | "almanac";
 
@@ -32,8 +33,7 @@ const themeClasses = {
 } as const;
 
 function formatSigned(value: number): string {
-  const sign = value >= 0 ? "+" : "";
-  return `${sign}${value.toFixed(3)}`;
+  return formatWpaPoints(value);
 }
 
 function formatPoints(points: number): string {

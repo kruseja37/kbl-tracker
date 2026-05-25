@@ -119,10 +119,10 @@ describe("EliminationTeamHub Team Impact", () => {
 
     const panel = await screen.findByTestId("team-impact-panel");
     expect(within(panel).getByText("TEAM WPA")).toBeInTheDocument();
-    expect(within(panel).getByText("+0.350")).toBeInTheDocument();
+    expect(within(panel).getByText("+35.0 pp")).toBeInTheDocument();
     expect(within(panel).getAllByText(/2nd of 4/i)).toHaveLength(2);
-    expect(within(panel).getByText(/bracket avg \+0\.100/i)).toBeInTheDocument();
-    expect(within(panel).getByText(/\+0\.175 per game/i)).toBeInTheDocument();
+    expect(within(panel).getByText(/bracket avg \+10\.0 pp/i)).toBeInTheDocument();
+    expect(within(panel).getByText(/\+17\.5 pp per game/i)).toBeInTheDocument();
     expect(within(panel).getByText("Lineup carried them")).toBeInTheDocument();
     expect(within(panel).getByText("POG POINTS")).toBeInTheDocument();
     expect(within(panel).getByText("6 pts")).toBeInTheDocument();
@@ -130,9 +130,9 @@ describe("EliminationTeamHub Team Impact", () => {
 
     const leader = within(panel).getByTestId("team-impact-player-alpha-star");
     expect(within(leader).getByText("Dana Dunn")).toBeInTheDocument();
-    expect(within(leader).getByText(/Total \+0\.280/i)).toBeInTheDocument();
-    expect(within(leader).getByText(/High leverage WPA \+0\.110/i)).toBeInTheDocument();
-    expect(within(leader).getByText(/Best play \+0\.180/i)).toBeInTheDocument();
+    expect(within(leader).getByText(/Total \+28\.0 pp/i)).toBeInTheDocument();
+    expect(within(leader).getByText(/High leverage WPA \+11\.0 pp/i)).toBeInTheDocument();
+    expect(within(leader).getByText(/Best play \+18\.0 pp/i)).toBeInTheDocument();
   });
 
   test("renders partial data warnings honestly", async () => {
@@ -207,7 +207,7 @@ describe("EliminationTeamHub Team Impact", () => {
 
     await waitFor(() => {
       const panel = screen.getByTestId("team-impact-panel");
-      expect(within(panel).getByText("+0.420")).toBeInTheDocument();
+      expect(within(panel).getByText("+42.0 pp")).toBeInTheDocument();
       expect(within(panel).getByText("Beta Bolt")).toBeInTheDocument();
       expect(within(panel).getByText("Pitching carried them")).toBeInTheDocument();
     });

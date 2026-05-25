@@ -12,6 +12,7 @@ import type {
   ManagerRecommendationNoChangeAction,
   ManagerRecommendationPrimaryAction,
 } from "../../../utils/managerWpaRecommendations";
+import { formatWpaPoints } from "../../../utils/wpaDisplay";
 import { CommentaryTypewriter } from "./CommentaryTypewriter";
 import {
   ManagerMomentDetailDialog,
@@ -102,7 +103,7 @@ function formatManagerWpa(decision: ManagerDecisionRecord | undefined): string {
     return "pending";
   }
 
-  return `${decision.managerWpa >= 0 ? "+" : ""}${decision.managerWpa.toFixed(3)}`;
+  return formatWpaPoints(decision.managerWpa);
 }
 
 function managerWpaColorClass(status: string): string {

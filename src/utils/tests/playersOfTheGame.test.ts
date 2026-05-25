@@ -68,4 +68,60 @@ describe("rankPlayersOfTheGame", () => {
       wpa: 0.42,
     });
   });
+
+  test("ranks pitcher and runner WPA candidates without requiring hitting lines", () => {
+    const credits: KblWpaCredit[] = [
+      {
+        eventId: "game-1_pitcher",
+        source: "at_bat",
+        playerId: "home-pitcher",
+        playerName: "Home Pitcher",
+        teamId: "home",
+        role: "pitching",
+        wpa: 0.25,
+        confidence: "high",
+        basis: "Pitching WPA",
+        allocationMode: "ratio",
+      },
+      {
+        eventId: "game-1_runner",
+        source: "between_play",
+        playerId: "away-runner",
+        playerName: "Away Runner",
+        teamId: "away",
+        role: "baserunning",
+        wpa: 0.18,
+        confidence: "high",
+        basis: "Baserunning WPA",
+        allocationMode: "counterfactual",
+      },
+    ];
+
+    const ranked = rankPlayersOfTheGame(
+      {
+        awayTeamId: "away",
+        homeTeamId: "home",
+        playerStats: {},
+        pitcherGameStats: [
+          {
+            pitcherId: "home-pitcher",
+            pitcherName: "Home Pitcher",
+            teamId: "home",
+          },
+        ],
+      },
+      [],
+      credits,
+    );
+
+    expect(ranked.map((entry) => entry.playerId)).toEqual([
+      "home-pitcher",
+      "away-runner",
+    ]);
+    expect(ranked[1]).toMatchObject({
+      name: "Away Runner",
+      teamId: "away",
+      wpa: 0.18,
+    });
+  });
 });

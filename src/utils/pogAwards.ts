@@ -45,6 +45,7 @@ export interface PogDataQuality {
 export interface PogAward {
   awardType: PogAwardType;
   points: number;
+  statRole: PogAwardStatRole;
   playerId?: string;
   playerName?: string;
   managerId?: string;
@@ -54,6 +55,34 @@ export interface PogAward {
   valueLabel: string;
   explanation: string;
   source: PogAwardSource;
+}
+
+export type PogAwardStatRole =
+  | "hitter"
+  | "pitcher"
+  | "baserunner"
+  | "fielder"
+  | "manager";
+
+export interface PogAwardBattingStatLine {
+  ab: number;
+  h: number;
+  r: number;
+  rbi: number;
+  bb: number;
+  k: number;
+}
+
+export interface PogAwardPitchingStatLine {
+  outsRecorded: number;
+  earnedRuns: number;
+  walksAllowed: number;
+  strikeoutsThrown: number;
+}
+
+export interface PogAwardStatLineInput {
+  battingStats?: PogAwardBattingStatLine;
+  pitchingStats?: PogAwardPitchingStatLine;
 }
 
 export interface PogLegacyContext {
@@ -182,6 +211,41 @@ export function getPogAwardPointsLabel(award: PogAward): string {
   }
 
   return `${award.points} ${award.points === 1 ? "pt" : "pts"}`;
+}
+
+export function getPogAwardStatLineItems(
+  award: PogAward,
+  input: PogAwardStatLineInput = {},
+): string[] {
+  switch (award.statRole) {
+    case "pitcher":
+      if (input.pitchingStats) {
+        return [
+          `${formatPogInnings(input.pitchingStats.outsRecorded)} IP`,
+          `${input.pitchingStats.strikeoutsThrown} K`,
+          `${input.pitchingStats.earnedRuns} ER`,
+        ];
+      }
+      return [`Pitching ${award.valueLabel}`];
+    case "baserunner":
+      return [`Baserunning ${award.valueLabel}`];
+    case "fielder":
+      return [`Fielding ${award.valueLabel}`];
+    case "manager":
+      return [award.valueLabel];
+    case "hitter":
+    default:
+      if (input.battingStats) {
+        return [
+          `${input.battingStats.h}-${input.battingStats.ab}`,
+          `${input.battingStats.bb} BB`,
+          `${input.battingStats.k} SO`,
+          `${input.battingStats.rbi} RBI`,
+          `${input.battingStats.r} R`,
+        ];
+      }
+      return [`Batting ${award.valueLabel}`];
+  }
 }
 
 export function getGamePogAwardSet(input: GetGamePogAwardSetInput): PogAwardSet {
@@ -469,6 +533,7 @@ function buildPlayerAward(input: {
   return {
     awardType: input.awardType,
     points: input.points,
+    statRole: getPlayerAwardStatRole(input.awardType, input.total),
     playerId: input.total.playerId,
     playerName: input.total.playerName,
     teamId: input.total.teamId,
@@ -486,6 +551,7 @@ function buildStoredOverallAward(
   return {
     awardType: "overall",
     points: 3,
+    statRole: "hitter",
     playerId,
     playerName: playerRef?.playerName,
     teamId: playerRef?.teamId ?? "",
@@ -641,6 +707,7 @@ function buildBestManagerAward(
   return {
     awardType: "best_manager",
     points: 1,
+    statRole: "manager",
     managerId: winner.managerId,
     managerName: winner.managerName,
     teamId: winner.teamId,
@@ -750,6 +817,50 @@ function isMeaningfulPositive(value: number): boolean {
 
 function formatSignedWpa(value: number): string {
   return formatWpaPoints(roundWpa(value));
+}
+
+function getPlayerAwardStatRole(
+  awardType: PogAwardType,
+  total: KblWpaPlayerTotal,
+): PogAwardStatRole {
+  switch (awardType) {
+    case "best_hitter":
+      return "hitter";
+    case "best_pitcher":
+      return "pitcher";
+    case "best_baserunner":
+      return "baserunner";
+    case "best_fielder":
+      return "fielder";
+    case "best_manager":
+      return "manager";
+    case "overall":
+    case "team_standout":
+    default:
+      return getPrimaryPlayerStatRole(total);
+  }
+}
+
+function getPrimaryPlayerStatRole(total: KblWpaPlayerTotal): PogAwardStatRole {
+  const roleValues: Array<{ role: PogAwardStatRole; value: number }> = [
+    { role: "hitter", value: total.battingWpa },
+    { role: "pitcher", value: total.pitchingWpa },
+    { role: "baserunner", value: total.baserunningWpa },
+    { role: "fielder", value: roundWpa(total.fieldingWpa + total.catchingWpa) },
+  ];
+
+  const positiveLeader = roleValues
+    .filter((entry) => entry.value > 0)
+    .sort((left, right) => right.value - left.value)[0];
+  if (positiveLeader) return positiveLeader.role;
+
+  return roleValues.sort((left, right) => right.value - left.value)[0]?.role ?? "hitter";
+}
+
+function formatPogInnings(outsRecorded: number): string {
+  const fullInnings = Math.floor(outsRecorded / 3);
+  const remainder = outsRecorded % 3;
+  return `${fullInnings}.${remainder}`;
 }
 
 function roundWpa(value: number): number {

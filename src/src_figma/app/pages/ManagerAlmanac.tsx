@@ -157,7 +157,7 @@ function DecisionLeaderboardPanel({
                       )}
                     </td>
                     <td className="px-4 py-3 text-right text-white">
-                      {decision ? formatSigned(decision.value) : "+0.000"}
+                      {decision ? formatSigned(decision.value) : formatSigned(0)}
                     </td>
                   </tr>
                 );

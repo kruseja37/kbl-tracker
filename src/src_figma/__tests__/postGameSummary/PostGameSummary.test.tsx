@@ -869,7 +869,7 @@ describe('PostGameSummary Component', () => {
       const card = pogLabel.closest('div[class*="border-2"]');
       expect(card).toBeTruthy();
       const withinCard = within(card!);
-      expect(withinCard.getByText('4 AB')).toBeInTheDocument();
+      expect(withinCard.getByText('3-4')).toBeInTheDocument();
       expect(withinCard.getByText('1 BB')).toBeInTheDocument();
       expect(withinCard.getByText('0 SO')).toBeInTheDocument();
       expect(withinCard.getByText('2 R')).toBeInTheDocument();

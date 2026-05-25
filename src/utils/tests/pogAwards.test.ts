@@ -8,6 +8,7 @@ import type {
 import type { KblWpaCredit, KblWpaRole } from "../kblWpaAttribution";
 import {
   getGamePogAwardSet,
+  getPogAwardStatLineItems,
   MIN_POSITIVE_WPA,
   type PogAward,
   type PogAwardType,
@@ -163,6 +164,8 @@ describe("getGamePogAwardSet", () => {
       value: 0.42,
     });
     expect(award(awards, "best_hitter")?.playerId).toBe("away-hitter");
+    expect(awards.overall?.statRole).toBe("pitcher");
+    expect(award(awards, "best_hitter")?.statRole).toBe("hitter");
   });
 
   test("mixed/two-way player can win Overall POG from combined roles", () => {
@@ -251,6 +254,7 @@ describe("getGamePogAwardSet", () => {
     expect(awards.overall?.playerId).toBe("overall");
     expect(award(awards, "best_fielder")).toMatchObject({
       playerId: "combo-fielder",
+      statRole: "fielder",
       value: 0.008,
     });
   });
@@ -292,6 +296,7 @@ describe("getGamePogAwardSet", () => {
       awardType: "best_manager",
       managerId: "away-manager",
       points: 1,
+      statRole: "manager",
       value: 0.006,
     });
   });
@@ -424,5 +429,67 @@ describe("getGamePogAwardSet", () => {
     expect(awards.overall).toBeUndefined();
     expect(awards.playerRoleAwards).toEqual([]);
     expect(awards.managerAward).toBeUndefined();
+  });
+
+  test("POG stat lines follow the award role before generic player stats", () => {
+    const awards = getGamePogAwardSet({
+      kblWpaCredits: [
+        createCredit({ playerId: "overall", role: "batting", wpa: 0.2 }),
+        createCredit({
+          playerId: "pitcher-hitter",
+          playerName: "Pitcher Hitter",
+          role: "pitching",
+          wpa: 0.08,
+        }),
+        createCredit({
+          playerId: "runner",
+          role: "baserunning",
+          wpa: 0.06,
+        }),
+        createCredit({
+          playerId: "fielder",
+          role: "fielding",
+          wpa: 0.05,
+        }),
+      ],
+      managerDecisions: [
+        createDecision({
+          managerId: "manager-1",
+          managerWpa: 0.006,
+        }),
+      ],
+    });
+    const pitcherAward = award(awards, "best_pitcher");
+    const runnerAward = award(awards, "best_baserunner");
+    const fielderAward = award(awards, "best_fielder");
+    const managerAward = award(awards, "best_manager");
+
+    expect(pitcherAward).toBeDefined();
+    expect(
+      getPogAwardStatLineItems(pitcherAward!, {
+        battingStats: { h: 3, ab: 4, bb: 0, k: 1, rbi: 2, r: 1 },
+        pitchingStats: {
+          outsRecorded: 17,
+          strikeoutsThrown: 8,
+          earnedRuns: 1,
+          walksAllowed: 2,
+        },
+      }),
+    ).toEqual(["5.2 IP", "8 K", "1 ER"]);
+
+    expect(runnerAward).toBeDefined();
+    expect(getPogAwardStatLineItems(runnerAward!)).toEqual([
+      "Baserunning +6.0 pp KBL WPA",
+    ]);
+
+    expect(fielderAward).toBeDefined();
+    expect(getPogAwardStatLineItems(fielderAward!)).toEqual([
+      "Fielding +5.0 pp KBL WPA",
+    ]);
+
+    expect(managerAward).toBeDefined();
+    expect(getPogAwardStatLineItems(managerAward!)).toEqual([
+      "+0.6 pp Manager Value",
+    ]);
   });
 });

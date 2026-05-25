@@ -26,6 +26,7 @@ import {
   getGamePogAwardSet,
   getPogAwardDisplayLabel,
   getPogAwardPointsLabel,
+  getPogAwardStatLineItems,
   type PogAward,
   type PogAwardSet,
 } from "../../../utils/pogAwards";
@@ -803,6 +804,14 @@ export function GameDetail() {
                   award.playerId ??
                   award.managerId ??
                   "Unknown";
+                const statLineItems = getPogAwardStatLineItems(award, {
+                  battingStats: award.playerId ? game.playerStats[award.playerId] : undefined,
+                  pitchingStats: award.playerId
+                    ? game.pitcherGameStats.find(
+                        (pitcher) => pitcher.pitcherId === award.playerId,
+                      )
+                    : undefined,
+                });
                 return (
                   <div
                     key={`${award.awardType}-${award.playerId ?? award.managerId}`}
@@ -838,6 +847,13 @@ export function GameDetail() {
                     <div className="mt-4 text-[12px] text-[#E7E9F1]">
                       {award.valueLabel}
                     </div>
+                    <div className="mt-3 flex flex-wrap gap-x-2 gap-y-1 text-[8px] uppercase tracking-[0.18em] text-[#98A1B3]">
+                      {statLineItems.map((item, index) => (
+                        <span key={`${award.awardType}-${award.playerId ?? award.managerId}-stat-${index}`}>
+                          {item}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 );
               })}
@@ -856,6 +872,14 @@ export function GameDetail() {
                   award.playerName ??
                   award.playerId ??
                   "Unknown";
+                const statLineItems = getPogAwardStatLineItems(award, {
+                  battingStats: award.playerId ? game.playerStats[award.playerId] : undefined,
+                  pitchingStats: award.playerId
+                    ? game.pitcherGameStats.find(
+                        (pitcher) => pitcher.pitcherId === award.playerId,
+                      )
+                    : undefined,
+                });
                 return (
                   <div
                     key={`${award.awardType}-${award.teamId}-${award.playerId}`}
@@ -890,6 +914,13 @@ export function GameDetail() {
                     </div>
                     <div className="mt-4 text-[12px] text-[#E7E9F1]">
                       {award.valueLabel} · Recognition only
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-x-2 gap-y-1 text-[8px] uppercase tracking-[0.18em] text-[#98A1B3]">
+                      {statLineItems.map((item, index) => (
+                        <span key={`${award.awardType}-${award.teamId}-${award.playerId}-stat-${index}`}>
+                          {item}
+                        </span>
+                      ))}
                     </div>
                   </div>
                 );

@@ -44,6 +44,7 @@ import {
   type RoleWpaBreakdown,
   type TeamImpactSummary,
 } from '../../../utils/teamImpact';
+import { formatWpaPoints } from '../../../utils/wpaDisplay';
 import { OptimalLineupComparisonPanel } from './OptimalLineupComparisonPanel';
 
 interface EliminationTeamHubProps {
@@ -215,9 +216,7 @@ const IMPACT_ROLE_KEYS: Array<Exclude<keyof RoleWpaBreakdown, 'total'>> = [
 ];
 
 function formatWpa(value: number): string {
-  if (!Number.isFinite(value)) return 'n/a';
-  const rounded = value.toFixed(3);
-  return value > 0 ? `+${rounded}` : rounded;
+  return formatWpaPoints(value);
 }
 
 function formatPoints(value: number): string {

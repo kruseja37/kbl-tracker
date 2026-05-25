@@ -29,6 +29,7 @@ import {
   getGamePogAwardSet,
   getPogAwardDisplayLabel,
   getPogAwardPointsLabel,
+  getPogAwardStatLineItems,
   type PogAward,
   type PogAwardSet,
 } from "../../../utils/pogAwards";
@@ -881,6 +882,10 @@ export function PostGameSummary({
                     award.playerId ??
                     award.managerId ??
                     "Unknown";
+                  const statLineItems = getPogAwardStatLineItems(award, {
+                    battingStats: playerStats,
+                    pitchingStats: pitcherStats,
+                  });
                   return (
                     <div
                       key={`${award.awardType}-${award.playerId ?? award.managerId}`}
@@ -908,42 +913,16 @@ export function PostGameSummary({
                           {award.valueLabel}
                         </span>
                       </div>
-                      {playerStats ? (
-                        <div className="text-[9px] text-[#a0a898] space-y-0.5 mt-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-[#E8E8D8]">{playerStats.h}</span>
-                            <span>-</span>
-                            <span>{playerStats.ab} AB</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span>{playerStats.bb} BB</span>
-                            <span>•</span>
-                            <span>{playerStats.k} SO</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span>{playerStats.rbi} RBI</span>
-                            <span>•</span>
-                            <span>{playerStats.r} R</span>
-                          </div>
-                        </div>
-                      ) : pitcherStats ? (
-                        <div className="text-[9px] text-[#a0a898] space-y-0.5 mt-1">
-                          <div className="flex items-center gap-2">
-                            <span>{formatIP(pitcherStats.outsRecorded)} IP</span>
-                            <span>•</span>
-                            <span>{pitcherStats.strikeoutsThrown} SO</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span>{pitcherStats.earnedRuns} ER</span>
-                            <span>•</span>
-                            <span>{pitcherStats.walksAllowed} BB</span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-[9px] text-[#a0a898] mt-1">
-                          {award.explanation}
-                        </div>
-                      )}
+                      <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[9px] text-[#a0a898]">
+                        {statLineItems.map((item, index) => (
+                          <span
+                            key={`${award.awardType}-${award.playerId ?? award.managerId}-stat-${index}`}
+                            className={index === 0 ? "font-bold text-[#E8E8D8]" : undefined}
+                          >
+                            {item}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   );
                 })}
