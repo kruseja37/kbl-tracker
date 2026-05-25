@@ -63,7 +63,7 @@ export const RED_SOX: TeamData = {
   chemistry: 'SPIRITED',
   primaryColor: '#BD3039',  // Red
   secondaryColor: '#0C2340',  // Navy
-  rosterIds: ['bos-powers', 'bos-damon', 'bos-ortiz', 'bos-valentin', 'bos-combs', 'bos-rice', 'bos-larson', 'bos-youkilis', 'bos-burleson', 'bos-hatteberg', 'bos-ocharijo', 'bos-smith', 'bos-evans', 'bos-clemens', 'bos-lamb', 'bos-muscles', 'bos-tiant', 'bos-lowe', 'bos-dempster', 'bos-harris', 'bos-timlin', 'bos-burgmeier'],
+  rosterIds: ['bos-powers', 'bos-damon', 'bos-ortiz', 'bos-valentin', 'bos-combs', 'bos-rice', 'bos-larson', 'bos-youkilis', 'bos-burleson', 'bos-hatteberg', 'bos-ocherio', 'bos-smith', 'bos-evans', 'bos-clemens', 'bos-lamb', 'bos-muscles', 'bos-tiant', 'bos-lowe', 'bos-dempster', 'bos-harris', 'bos-timlin', 'bos-burgmeier'],
   leagueId: 'mlb-al'
 };
 

@@ -1608,8 +1608,16 @@ function convertTeam(team: TeamData): Omit<Team, 'createdDate' | 'lastModified'>
 }
 
 const LINEUP_FIELD_POSITIONS: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'DH'];
+const DEFENSIVE_LINEUP_POSITIONS: Position[] = LINEUP_FIELD_POSITIONS.filter((position) => position !== 'DH');
 const PITCHING_POSITIONS: Position[] = ['SP', 'RP', 'CP', 'SP/RP'];
 const ROTATION_POSITIONS: Position[] = ['SP', 'SP/RP'];
+const LINEUP_POSITION_FALLBACKS: Partial<Record<Position, Position[]>> = {
+  IF: ['2B', 'SS', '3B', '1B'],
+  OF: ['LF', 'CF', 'RF'],
+  'IF/OF': ['2B', 'SS', '3B', '1B', 'LF', 'CF', 'RF'],
+  '1B/OF': ['1B', 'LF', 'RF', 'CF'],
+  'TWO-WAY': ['DH'],
+};
 
 function createEmptyDepthChart(): DepthChart {
   return {
@@ -1632,17 +1640,28 @@ function isPitcherPosition(position: Position): boolean {
   return PITCHING_POSITIONS.includes(position);
 }
 
+function getLineupPositionCandidates(position?: Position): Position[] {
+  if (!position) return [];
+  if (LINEUP_FIELD_POSITIONS.includes(position)) {
+    return [position];
+  }
+  return LINEUP_POSITION_FALLBACKS[position] ?? [];
+}
+
+function getPreferredFieldPositions(player: Player): Position[] {
+  const candidates = [
+    ...getLineupPositionCandidates(player.primaryPosition),
+    ...getLineupPositionCandidates(player.secondaryPosition),
+  ];
+  return candidates.filter((position, index) => candidates.indexOf(position) === index);
+}
+
 function getPreferredFieldPosition(player: Player): Position {
-  if (LINEUP_FIELD_POSITIONS.includes(player.primaryPosition)) {
-    return player.primaryPosition;
+  const [preferredPosition] = getPreferredFieldPositions(player);
+  if (preferredPosition) {
+    return preferredPosition;
   }
-  if (player.secondaryPosition && LINEUP_FIELD_POSITIONS.includes(player.secondaryPosition)) {
-    return player.secondaryPosition;
-  }
-  if (player.primaryPosition === 'TWO-WAY') {
-    return 'DH';
-  }
-  return 'DH';
+  return DEFENSIVE_LINEUP_POSITIONS[0];
 }
 
 function assignLineupSlots(players: Player[]): LineupSlot[] {
@@ -1650,11 +1669,19 @@ function assignLineupSlots(players: Player[]): LineupSlot[] {
   const availablePositions = [...LINEUP_FIELD_POSITIONS];
 
   return selectedPlayers.map((player, index) => {
-    const preferredPosition = getPreferredFieldPosition(player);
-    const preferredIndex = availablePositions.indexOf(preferredPosition);
+    const preferredPositions = getPreferredFieldPositions(player);
+    const preferredPosition = preferredPositions.find((position) =>
+      availablePositions.includes(position),
+    );
+    const preferredIndex = preferredPosition
+      ? availablePositions.indexOf(preferredPosition)
+      : -1;
+    const fallbackIndex = availablePositions.findIndex((position) => position !== 'DH');
     const fieldingPosition = preferredIndex >= 0
       ? availablePositions.splice(preferredIndex, 1)[0]
-      : availablePositions.shift() || 'DH';
+      : fallbackIndex >= 0
+        ? availablePositions.splice(fallbackIndex, 1)[0]
+        : availablePositions.shift() || getPreferredFieldPosition(player);
 
     return {
       battingOrder: index + 1,

@@ -5,10 +5,18 @@
  * Per Ralph Framework S-B017
  */
 
-import { describe, test, expect, vi, beforeEach } from 'vitest';
+import 'fake-indexeddb/auto';
+
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { LeagueBuilderRosters } from '../../app/pages/LeagueBuilderRosters';
 import { buildLineupSnapshotFromSlots } from '../../../utils/optimalLineup';
+import {
+  __resetLeagueBuilderDatabaseForTests,
+  getPlayer,
+  getTeamRoster,
+  seedFromMLBDatabase,
+} from '../../../utils/leagueBuilderStorage';
 
 // ============================================
 // MOCKS
@@ -18,6 +26,14 @@ const mockNavigate = vi.fn();
 
 vi.mock('react-router', () => ({
   useNavigate: () => mockNavigate,
+}));
+
+vi.mock('../../../utils/syncEngine', () => ({
+  syncEngine: {
+    isSuppressed: () => true,
+    upsert: vi.fn(),
+    remove: vi.fn(),
+  },
 }));
 
 const mockGetRoster = vi.fn().mockResolvedValue(null);
@@ -79,6 +95,17 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
     updateRoster: mockUpdateRoster,
   })),
 }));
+
+const DB_NAME = 'kbl-league-builder';
+
+function deleteLeagueBuilderDatabase(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(DB_NAME);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+    request.onblocked = () => reject(new Error(`Delete blocked for ${DB_NAME}`));
+  });
+}
 
 // ============================================
 // TESTS
@@ -402,6 +429,52 @@ describe('LeagueBuilderRosters Component', () => {
 
       render(<LeagueBuilderRosters />);
       expect(screen.getByText('No teams created yet')).toBeInTheDocument();
+    });
+  });
+
+  describe('MLB seed regression', () => {
+    beforeEach(async () => {
+      __resetLeagueBuilderDatabaseForTests();
+      await deleteLeagueBuilderDatabase().catch(() => undefined);
+    });
+
+    afterEach(async () => {
+      __resetLeagueBuilderDatabaseForTests();
+      await deleteLeagueBuilderDatabase().catch(() => undefined);
+    });
+
+    test('seeds Boston DH starter while bench position players keep defensive depth slots', async () => {
+      await seedFromMLBDatabase(true);
+
+      const roster = await getTeamRoster('red-sox');
+      expect(roster).not.toBeNull();
+      expect(roster?.mlbRoster).toContain('bos-ocherio');
+      expect(roster?.mlbRoster).not.toContain('bos-ocharijo');
+
+      const ortiz = await getPlayer('bos-ortiz');
+      expect(ortiz?.primaryPosition).toBe('DH');
+      expect(ortiz?.secondaryPosition).toBe('1B');
+
+      const lineupSlots = new Map(
+        roster!.lineupWithDH.map((slot) => [slot.playerId, slot.fieldingPosition]),
+      );
+      expect(lineupSlots.get('bos-ortiz')).toBe('DH');
+      expect(lineupSlots.get('bos-powers')).toBe('2B');
+      expect(lineupSlots.get('bos-damon')).toBe('CF');
+      expect(lineupSlots.get('bos-valentin')).toBe('SS');
+      expect(lineupSlots.get('bos-burleson')).not.toBe('DH');
+      expect(roster!.lineupWithDH.filter((slot) => slot.fieldingPosition === 'DH')).toHaveLength(1);
+
+      expect(roster!.depthChart.DH).toContain('bos-ortiz');
+      expect(roster!.depthChart.DH).not.toEqual(
+        expect.arrayContaining(['bos-hatteberg', 'bos-ocherio', 'bos-smith', 'bos-evans']),
+      );
+      expect(roster!.depthChart.C).toContain('bos-hatteberg');
+      expect(roster!.depthChart['1B']).toEqual(expect.arrayContaining(['bos-ortiz', 'bos-hatteberg', 'bos-evans']));
+      expect(roster!.depthChart['3B']).toContain('bos-ocherio');
+      expect(roster!.depthChart.SS).toContain('bos-ocherio');
+      expect(roster!.depthChart.CF).toContain('bos-smith');
+      expect(roster!.depthChart.RF).toContain('bos-evans');
     });
   });
 });
