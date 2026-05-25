@@ -62,6 +62,18 @@ const nineSlotLineup = (prefix: string) => [
   { playerId: `${prefix}-sp`, playerName: `${prefix} Starter`, position: 'P' },
 ];
 
+const dhLineup = (prefix: string) => [
+  { playerId: `${prefix}-1`, playerName: `${prefix} One`, position: 'CF' },
+  { playerId: `${prefix}-2`, playerName: `${prefix} Two`, position: 'SS' },
+  { playerId: `${prefix}-3`, playerName: `${prefix} Three`, position: '1B' },
+  { playerId: `${prefix}-4`, playerName: `${prefix} Four`, position: 'RF' },
+  { playerId: `${prefix}-5`, playerName: `${prefix} Five`, position: 'LF' },
+  { playerId: `${prefix}-6`, playerName: `${prefix} Six`, position: '3B' },
+  { playerId: `${prefix}-7`, playerName: `${prefix} Seven`, position: '2B' },
+  { playerId: `${prefix}-8`, playerName: `${prefix} Eight`, position: 'C' },
+  { playerId: `${prefix}-dh`, playerName: `${prefix} DH`, position: 'DH' },
+];
+
 describe('useGameState pregame pitching change', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -173,6 +185,48 @@ describe('useGameState pregame pitching change', () => {
     expect(headerDraft.startingLineups.home.find((player) => player.position === 'P')).toMatchObject({
       playerId: 'home-rp',
     });
+  });
+
+  test('keeps the original DH-game starter available when replacing the starter before first pitch', async () => {
+    const { result } = renderHook(() => useGameState('pregame-dh-pitching-change'));
+
+    await act(async () => {
+      await result.current.initializeGame({
+        gameId: 'pregame-dh-pitching-change',
+        awayTeamId: 'away-team',
+        awayTeamName: 'Away Team',
+        homeTeamId: 'home-team',
+        homeTeamName: 'Home Team',
+        awayStartingPitcherId: 'away-sp',
+        awayStartingPitcherName: 'Away Starter',
+        homeStartingPitcherId: 'home-sp',
+        homeStartingPitcherName: 'Home Starter',
+        awayLineup: dhLineup('away'),
+        homeLineup: dhLineup('home'),
+        awayBench: [{ playerId: 'away-rp', playerName: 'Away Reliever', positions: ['P'] }],
+        homeBench: [{ playerId: 'home-rp', playerName: 'Home Reliever', positions: ['P'] }],
+        seasonNumber: 1,
+      });
+    });
+
+    act(() => {
+      result.current.changePitcher('home-rp', 'home-sp', 'home', 'Home Reliever', 'Home Starter');
+    });
+
+    const snapshot = result.current.getLineupStateSnapshot().home;
+    expect(snapshot.currentPitcher).toMatchObject({
+      playerId: 'home-rp',
+      playerName: 'Home Reliever',
+      position: 'P',
+    });
+    expect(snapshot.lineup.some((player) => player.playerId === 'home-sp')).toBe(false);
+    expect(snapshot.bench.find((player) => player.playerId === 'home-sp')).toMatchObject({
+      playerId: 'home-sp',
+      playerName: 'Home Starter',
+      positions: ['P'],
+      isAvailable: true,
+    });
+    expect(snapshot.bench.some((player) => player.playerId === 'home-rp')).toBe(false);
   });
 
   test('allows a pitcher-roster player to enter the pregame lineup at a non-pitcher position', async () => {

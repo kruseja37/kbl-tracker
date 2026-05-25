@@ -10063,6 +10063,18 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         };
       }
 
+      if (
+        newPitcherId !== exitingPitcherId &&
+        !nextBench.some((player) => player.playerId === exitingPitcherId)
+      ) {
+        nextBench.push({
+          playerId: exitingPitcherId,
+          playerName: exitingPitcherName || exitingPitcherId,
+          positions: ["P"],
+          isAvailable: true,
+        });
+      }
+
       if (pitchingLineupRef.current.length > 9) {
         console.error("[useGameState] PRE_GAME pitching lineup exceeded 9 entries", {
           pitchingTeamSide,
