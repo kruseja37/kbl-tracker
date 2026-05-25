@@ -273,6 +273,15 @@ describe('useGameState between-play ledger', () => {
         }),
       })],
     ]));
+
+    const pitcherChangeEvent = mockLogBetweenPlayEvent.mock.calls
+      .map(call => call[0])
+      .find(event => event?.type === 'pitcher_change');
+    const pitchCountEvent = mockLogBetweenPlayEvent.mock.calls
+      .map(call => call[0])
+      .find(event => event?.type === 'pitch_count_update');
+    expect(pitcherChangeEvent?.eventGroupId).toEqual(expect.any(String));
+    expect(pitchCountEvent?.eventGroupId).toBe(pitcherChangeEvent?.eventGroupId);
   });
 
   test('standalone pitching changes move the batting-order pitcher slot to the reliever', async () => {

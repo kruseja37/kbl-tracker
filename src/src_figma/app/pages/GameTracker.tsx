@@ -6135,11 +6135,6 @@ export function GameTracker() {
         return;
       }
 
-      // Capture snapshot for undo
-      undoSystem.captureSnapshot(
-        `${sub.type}: ${sub.incomingPlayerId} for ${sub.outgoingPlayerId}`,
-      );
-
       const findTeamPlayer = (playerId?: string, playerName?: string) => {
         const teams: Array<"away" | "home"> = ["away", "home"];
         for (const team of teams) {
@@ -6168,6 +6163,9 @@ export function GameTracker() {
           return;
         }
 
+        undoSystem.captureSnapshot(
+          `${sub.type}: ${sub.incomingPlayerId} for ${sub.outgoingPlayerId}`,
+        );
         changePitcher(
           sub.incomingPlayerId,
           sub.outgoingPlayerId,
@@ -6263,6 +6261,9 @@ export function GameTracker() {
           return;
         }
 
+        undoSystem.captureSnapshot(
+          `${sub.type}: ${sub.incomingPlayerId} for ${sub.outgoingPlayerId}`,
+        );
         switchPositions([
           {
             playerId: sub.incomingPlayerId,
@@ -6306,6 +6307,9 @@ export function GameTracker() {
           return;
         }
 
+        undoSystem.captureSnapshot(
+          `${sub.type}: ${sub.incomingPlayerId} for ${sub.outgoingPlayerId}`,
+        );
         const occupiedPlayer = teamPlayers.find(
           (candidate) =>
             getRosterEntityId(candidate, playerContext.team) !==
@@ -6362,6 +6366,9 @@ export function GameTracker() {
           return;
         }
 
+        undoSystem.captureSnapshot(
+          `${sub.type}: ${sub.incomingPlayerId} for ${sub.outgoingPlayerId}`,
+        );
         if (isPinchHitter) {
           // GAP-GT-7-C: Mark PH as pending — they must bat before being removed.
           setPendingPH(sub.incomingPlayerId);
@@ -6445,6 +6452,7 @@ export function GameTracker() {
       setPendingPH,
       switchPositions,
       syncDisplayedRostersToLineupSnapshot,
+      undoSystem,
     ],
   );
 

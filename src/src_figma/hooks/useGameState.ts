@@ -424,6 +424,7 @@ export interface PitchCountPrompt {
   pitcherName: string;
   currentCount: number;
   lastVerifiedInning: number;
+  eventGroupId?: string;
   // For pitching change only
   newPitcherId?: string;
 }
@@ -2472,6 +2473,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const [atBatSequence, setAtBatSequence] = useState(0);
   const betweenPlayOrdinalRef = useRef(0);
   const positionSwitchGroupOrdinalRef = useRef(0);
+  const pitcherChangeGroupOrdinalRef = useRef(0);
   const isCorrectingRunnerOutcomesRef = useRef(false);
   const isRunnerOutcomeCorrectionPanelActiveRef = useRef(false);
   const autoEndGameQueuedRef = useRef(false);
@@ -3724,6 +3726,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   // Pitch count prompt state (per PITCH_COUNT_TRACKING_SPEC.md)
   const [pitchCountPrompt, setPitchCountPrompt] =
     useState<PitchCountPrompt | null>(null);
+  const pitchCountPromptRef = useRef<PitchCountPrompt | null>(null);
   const [deferredPitchCounts, setDeferredPitchCounts] = useState<
     DeferredPitchCountEntry[]
   >([]);
@@ -4145,6 +4148,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       // Clear all state from previous game (fix for stale data issue EXH-011)
       replaceFameEvents([]);
       setSubstitutionLog([]);
+      pitchCountPromptRef.current = null;
       setPitchCountPrompt(null);
       pitcherNamesRef.current.clear();
       teamSideByPlayerIdRef.current.clear();
@@ -5514,6 +5518,52 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             }
           }
 
+          const extraInningRunnerStart =
+            totalInningsRef.current + extraInningRunnerDelayRef.current;
+          if (
+            endedHalfOnLastAtBat &&
+            extraInningRunnerRef.current &&
+            recoveredInning >= extraInningRunnerStart
+          ) {
+            const recoveredBattingLineup = recoveredIsTop
+              ? awayLineupRef.current
+              : homeLineupRef.current;
+            const recoveredBatterIndex = recoveredIsTop
+              ? recoveredAwayBatterIndex
+              : recoveredHomeBatterIndex;
+            const ghostRunner =
+              recoveredBattingLineup.length > 0
+                ? recoveredBattingLineup[
+                    (recoveredBatterIndex - 1 + recoveredBattingLineup.length) %
+                      recoveredBattingLineup.length
+                  ]
+                : undefined;
+
+            if (
+              ghostRunner?.playerId &&
+              !rebuiltTracker.runners.some(
+                (runner) => runner.currentBase === "2B",
+              )
+            ) {
+              rebuiltTracker = syncTrackerPitcher(
+                rebuiltTracker,
+                recoveredPitcherId,
+                recoveredPitcherName,
+              );
+              rebuiltTracker = {
+                ...rebuiltTracker,
+                inning: recoveredInning,
+              };
+              rebuiltTracker = trackerAddRunner(
+                rebuiltTracker,
+                ghostRunner.playerId,
+                ghostRunner.playerName,
+                "2B",
+                "ghost_runner",
+              );
+            }
+          }
+
           const moveTrackedRunner = (
             runnerId: string,
             toBase: "first" | "second" | "third" | "home",
@@ -5532,6 +5582,70 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             }
             existing.currentBase =
               toBase === "first" ? "1B" : toBase === "second" ? "2B" : "3B";
+          };
+
+          const activeTrackedRunnerCount = () =>
+            rebuiltTracker.runners.filter(
+              (runner) =>
+                runner.currentBase &&
+                runner.currentBase !== "HOME" &&
+                runner.currentBase !== "OUT",
+            ).length;
+
+          const ensureReplayPitcherStats = (
+            pitcherId: string,
+            pitcherName: string,
+            options: {
+              entryInning?: number;
+              entryOuts?: number;
+              inheritedRunners?: number;
+            } = {},
+          ) => {
+            if (!pitcherId) return;
+            const existing = rehydratedPitcherStats.get(pitcherId);
+            const stats = existing
+              ? { ...existing }
+              : createEmptyPitcherStats();
+            if (!existing) {
+              stats.entryInning = options.entryInning ?? recoveredInning;
+              stats.entryOuts = options.entryOuts ?? recoveredOuts;
+            }
+            if (options.inheritedRunners !== undefined) {
+              stats.inheritedRunners = options.inheritedRunners;
+            }
+            rehydratedPitcherStats.set(pitcherId, stats);
+            if (pitcherName) {
+              pitcherNamesRef.current.set(pitcherId, pitcherName);
+            }
+          };
+
+          const applyReplayPitchingChange = (
+            incomingPitcherId: string,
+            incomingPitcherName: string,
+            outgoingPitcherId?: string,
+          ) => {
+            const inheritedRunners = activeTrackedRunnerCount();
+            if (outgoingPitcherId) {
+              const outgoing = {
+                ...(rehydratedPitcherStats.get(outgoingPitcherId) ||
+                  createEmptyPitcherStats()),
+              };
+              outgoing.exitInning = recoveredInning;
+              outgoing.exitOuts = recoveredOuts;
+              outgoing.bequeathedRunners = inheritedRunners;
+              rehydratedPitcherStats.set(outgoingPitcherId, outgoing);
+            }
+
+            ensureReplayPitcherStats(incomingPitcherId, incomingPitcherName, {
+              entryInning: recoveredInning,
+              entryOuts: recoveredOuts,
+              inheritedRunners,
+            });
+            rebuiltTracker = trackerHandlePitchingChange(
+              rebuiltTracker,
+              incomingPitcherId,
+              incomingPitcherName,
+            ).state;
           };
 
           for (const event of tailBetweenPlayEvents) {
@@ -5565,21 +5679,28 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               recoveredPitcherName =
                 event.pitcherChange.incomingPitcherName ||
                 event.pitcherChange.incomingPitcherId;
-              rebuiltTracker.currentPitcherId = recoveredPitcherId;
-              rebuiltTracker.currentPitcherName = recoveredPitcherName;
+              applyReplayPitchingChange(
+                recoveredPitcherId,
+                recoveredPitcherName,
+                event.pitcherChange.outgoingPitcherId,
+              );
             }
 
             if (
               event.type === "position_change" &&
               event.substitution?.inPosition === "P"
             ) {
+              const outgoingPitcherId = recoveredPitcherId;
               recoveredPitcherId = event.substitution.inPlayerId;
               recoveredPitcherName =
                 event.substitution.inPlayerName ||
                 resolvePlayerNameForId(event.substitution.inPlayerId) ||
                 event.substitution.inPlayerId;
-              rebuiltTracker.currentPitcherId = recoveredPitcherId;
-              rebuiltTracker.currentPitcherName = recoveredPitcherName;
+              applyReplayPitchingChange(
+                recoveredPitcherId,
+                recoveredPitcherName,
+                outgoingPitcherId,
+              );
             }
 
             if (
@@ -5612,6 +5733,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           rebuiltTracker.currentPitcherId = recoveredPitcherId;
           rebuiltTracker.currentPitcherName = recoveredPitcherName;
           rebuiltTracker.inning = recoveredInning;
+          setPitcherStats(new Map(rehydratedPitcherStats));
 
           runnerTrackerRef.current = rebuiltTracker;
           setRunnerIdentityVersion((v) => v + 1);
@@ -10329,16 +10451,20 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       // Per PITCH_COUNT_TRACKING_SPEC.md: Mandatory pitch count capture on pitching change
       const exitingStats =
         pitcherStats.get(exitingPitcherId) || createEmptyPitcherStats();
+      const pitcherChangeEventGroupId = `${gameState.gameId}_pitcher_change_${Date.now()}_${pitcherChangeGroupOrdinalRef.current++}`;
 
       // Show pitch count prompt before completing the change
-      setPitchCountPrompt({
+      const nextPitchCountPrompt: PitchCountPrompt = {
         type: "pitching_change",
         pitcherId: exitingPitcherId,
         pitcherName: exitingPitcherName || exitingPitcherId,
         currentCount: exitingStats.pitchCount,
         lastVerifiedInning: gameState.inning,
+        eventGroupId: pitcherChangeEventGroupId,
         newPitcherId,
-      });
+      };
+      pitchCountPromptRef.current = nextPitchCountPrompt;
+      setPitchCountPrompt(nextPitchCountPrompt);
 
       // Store the pending action to execute after pitch count is confirmed
       pendingActionRef.current = async () => {
@@ -10378,6 +10504,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
         void persistBetweenPlayEvent({
           type: "pitcher_change",
+          eventGroupId: pitcherChangeEventGroupId,
           pitcherChange: {
             outgoingPitcherId: exitingPitcherId,
             outgoingPitcherName: resolvedOutgoingPitcherName,
@@ -10506,15 +10633,17 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       let result: {
         immaculateInning?: { pitcherId: string; pitcherName: string };
       } = {};
+      const activePitchCountPrompt =
+        pitchCountPrompt ?? pitchCountPromptRef.current;
       console.debug("[PITCH-COUNT] Confirming pitch count", {
-        promptType: pitchCountPrompt?.type ?? null,
+        promptType: activePitchCountPrompt?.type ?? null,
         pitcherId,
         finalCount,
       });
       // Check for immaculate inning at end of half-inning
       // Requires: user confirmed exactly 9 pitches AND we tracked 3 strikeouts this half-inning
       if (
-        pitchCountPrompt?.type === "end_inning" &&
+        activePitchCountPrompt?.type === "end_inning" &&
         finalCount === 9 &&
         inningPitchesRef.current.strikeouts === 3
       ) {
@@ -10523,18 +10652,18 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           fameType: "bonus",
           fameValue: 2, // Per FAME_VALUES.IMMACULATE_INNING
           playerId: pitcherId,
-          playerName: pitchCountPrompt.pitcherName,
+          playerName: activePitchCountPrompt.pitcherName,
           description: `Immaculate inning in inning ${gameState.inning} (${gameState.isTop ? "top" : "bottom"})`,
         };
         appendFameEvent(immaculateFameEvent);
         result = {
           immaculateInning: {
             pitcherId,
-            pitcherName: pitchCountPrompt.pitcherName,
+            pitcherName: activePitchCountPrompt.pitcherName,
           },
         };
         console.log(
-          `[Fame] Immaculate inning detected! Pitcher: ${pitchCountPrompt.pitcherName}, pitches: ${finalCount}, K: 3`,
+          `[Fame] Immaculate inning detected! Pitcher: ${activePitchCountPrompt.pitcherName}, pitches: ${finalCount}, K: 3`,
         );
       }
 
@@ -10559,13 +10688,14 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       );
 
       const timing =
-        pitchCountPrompt?.type === "pitching_change"
+        activePitchCountPrompt?.type === "pitching_change"
           ? "pitcher_removed"
-          : pitchCountPrompt?.type === "end_game"
+          : activePitchCountPrompt?.type === "end_game"
             ? "end_of_game"
             : "end_of_half_inning";
       void persistBetweenPlayEvent({
         type: "pitch_count_update",
+        eventGroupId: activePitchCountPrompt?.eventGroupId,
         pitchCountUpdate: {
           pitcherId,
           pitchCount: finalCount,
@@ -10584,7 +10714,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       pendingActionCancelRef.current = null;
 
       console.log("[R3-R7] confirmPitchCount: pendingAction =", pendingAction ? "FOUND" : "NULL",
-        "promptType =", pitchCountPrompt?.type);
+        "promptType =", activePitchCountPrompt?.type);
 
       if (pendingAction) {
         console.debug(
@@ -10599,12 +10729,14 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           })
           .finally(() => {
             console.debug("[PITCH-COUNT] Confirmed, clearing prompt");
+            pitchCountPromptRef.current = null;
             setPitchCountPrompt(null);
           });
       } else {
         console.debug(
           "[PITCH-COUNT] No pending action, clearing prompt immediately",
         );
+        pitchCountPromptRef.current = null;
         setPitchCountPrompt(null);
       }
 
@@ -10633,23 +10765,27 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     );
     pendingActionRef.current = null;
     pendingActionCancelRef.current = null;
-    setPitchCountPrompt({
+    const nextPitchCountPrompt: PitchCountPrompt = {
       type: deferredEntry.promptType,
       pitcherId: deferredEntry.pitcherId,
       pitcherName: deferredEntry.pitcherName,
       currentCount: deferredEntry.lastKnownCount,
       lastVerifiedInning: deferredEntry.inning,
-    });
+    };
+    pitchCountPromptRef.current = nextPitchCountPrompt;
+    setPitchCountPrompt(nextPitchCountPrompt);
   }, [deferredPitchCounts]);
 
   // Dismiss pitch count prompt without confirming.
   // End-game dismissal still completes the archive using the last known count.
   const dismissPitchCountPrompt = useCallback(() => {
-    if (pitchCountPrompt) {
-      deferPitchCountPrompt(pitchCountPrompt);
+    const activePitchCountPrompt =
+      pitchCountPrompt ?? pitchCountPromptRef.current;
+    if (activePitchCountPrompt) {
+      deferPitchCountPrompt(activePitchCountPrompt);
     }
 
-    if (pitchCountPrompt?.type === "end_inning") {
+    if (activePitchCountPrompt?.type === "end_inning") {
       // Still execute the inning transition, just don't update pitch count
       const pendingAction = pendingActionRef.current;
       pendingActionRef.current = null;
@@ -10665,7 +10801,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       console.log(
         "[useGameState] Pitch count prompt dismissed — inning transition proceeding without count update",
       );
-    } else if (pitchCountPrompt?.type === "end_game") {
+    } else if (activePitchCountPrompt?.type === "end_game") {
       const pendingCancel = pendingActionCancelRef.current;
       pendingActionRef.current = null;
       pendingActionCancelRef.current = null;
@@ -10688,6 +10824,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         "[useGameState] Pitch count prompt dismissed, action cancelled",
       );
     }
+    pitchCountPromptRef.current = null;
     setPitchCountPrompt(null);
   }, [deferPitchCountPrompt, pitchCountPrompt]);
 
@@ -10846,13 +10983,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     const currentPitcherStats =
       pitcherStats.get(gameState.currentPitcherId) || createEmptyPitcherStats();
 
-    setPitchCountPrompt({
+    const nextPitchCountPrompt: PitchCountPrompt = {
       type: "end_inning",
       pitcherId: gameState.currentPitcherId,
       pitcherName: gameState.currentPitcherName || gameState.currentPitcherId,
       currentCount: currentPitcherStats.pitchCount,
       lastVerifiedInning: gameState.inning,
-    });
+    };
+    pitchCountPromptRef.current = nextPitchCountPrompt;
+    setPitchCountPrompt(nextPitchCountPrompt);
 
     // Store the inning transition as a pending action
     pendingActionRef.current = async () => executeEndInning();
@@ -12256,13 +12395,15 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         pitcherStatsRef.current.get(gameState.currentPitcherId) ||
         createEmptyPitcherStats();
 
-      setPitchCountPrompt({
+      const nextPitchCountPrompt: PitchCountPrompt = {
         type: "end_game",
         pitcherId: gameState.currentPitcherId,
         pitcherName: gameState.currentPitcherName || gameState.currentPitcherId,
         currentCount: currentPitcherStats.pitchCount,
         lastVerifiedInning: gameState.inning,
-      });
+      };
+      pitchCountPromptRef.current = nextPitchCountPrompt;
+      setPitchCountPrompt(nextPitchCountPrompt);
 
       if (options?.awaitPitchCountConfirmation) {
         console.log("[R3-R7] endGame: awaiting pitch count confirmation...");

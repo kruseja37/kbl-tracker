@@ -393,4 +393,71 @@ describe('BetweenPlayEvent versioning', () => {
     );
     expect(events.find((event) => event.type === 'substitution')?.undoneAt).toBeUndefined();
   });
+
+  test('generic undo marks grouped pitch-count confirmation and pitcher change together', async () => {
+    await createGameHeader({
+      gameId: 'game-undo-pitcher-change-group',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1-regular',
+      competitionType: 'regular_season',
+      date: Date.now(),
+      awayTeamId: 'away-team',
+      awayTeamName: 'Away Team',
+      homeTeamId: 'home-team',
+      homeTeamName: 'Home Team',
+      finalScore: null,
+      finalInning: 1,
+      isComplete: false,
+    });
+
+    await logBetweenPlayEvent(createBetweenPlayEvent({
+      eventId: 'game-undo-pitcher-change-group_bp_pitch_count',
+      gameId: 'game-undo-pitcher-change-group',
+      eventIndex: 1.001,
+      timestamp: 2,
+      type: 'pitch_count_update',
+      eventGroupId: 'pitcher-change-group-1',
+      runnerAction: undefined,
+      stolenBase: undefined,
+      pitchCountUpdate: {
+        pitcherId: 'home-sp',
+        pitchCount: 17,
+        timing: 'pitcher_removed',
+      },
+    }));
+    await logBetweenPlayEvent(createBetweenPlayEvent({
+      eventId: 'game-undo-pitcher-change-group_bp_pitcher_change',
+      gameId: 'game-undo-pitcher-change-group',
+      eventIndex: 1.002,
+      timestamp: 3,
+      type: 'pitcher_change',
+      eventGroupId: 'pitcher-change-group-1',
+      runnerAction: undefined,
+      stolenBase: undefined,
+      pitcherChange: {
+        outgoingPitcherId: 'home-sp',
+        outgoingPitcherName: 'Home Starter',
+        incomingPitcherId: 'home-rp',
+        incomingPitcherName: 'Home Reliever',
+        inheritedRunners: 0,
+        outgoingPitchCount: 17,
+      },
+    }));
+
+    const undone = await undoMostRecentGameAction('game-undo-pitcher-change-group');
+    const events = await getBetweenPlayEvents('game-undo-pitcher-change-group', {
+      includeUndone: true,
+    });
+
+    expect(undone).toMatchObject({
+      kind: 'betweenPlay',
+      eventId: 'game-undo-pitcher-change-group_bp_pitcher_change',
+    });
+    expect(events.find((event) => event.type === 'pitcher_change')?.undoneAt).toEqual(
+      expect.any(Number),
+    );
+    expect(events.find((event) => event.type === 'pitch_count_update')?.undoneAt).toEqual(
+      expect.any(Number),
+    );
+  });
 });
