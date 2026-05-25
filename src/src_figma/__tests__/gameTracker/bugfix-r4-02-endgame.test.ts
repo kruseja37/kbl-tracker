@@ -234,6 +234,94 @@ describe("bugfix R4-02: end-game pitch count continuation", () => {
     expect(result.current.pitchCountPrompt).toBeNull();
   });
 
+  test("does not mark aggregation successful when processCompletedGame returns a soft aggregation failure", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mockProcessCompletedGame.mockResolvedValueOnce({
+      aggregation: {
+        success: false,
+        milestones: null,
+        error: "season aggregation failed",
+      },
+    });
+
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    await act(async () => {
+      await result.current.endGame();
+    });
+
+    expect(mockProcessCompletedGame).toHaveBeenCalledTimes(1);
+    expect(mockMarkGameAggregated).not.toHaveBeenCalled();
+    expect(mockAggregateGameToPlayoffStats).not.toHaveBeenCalled();
+    expect(mockArchiveCompletedGame).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        aggregationStatus: "archive_only",
+        aggregationError: "season aggregation failed",
+      }),
+    );
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  test("keeps the live game when process and fallback archive both fail", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mockProcessCompletedGame.mockRejectedValueOnce(
+      new Error("aggregation exploded"),
+    );
+    mockArchiveCompletedGame.mockRejectedValueOnce(
+      new Error("archive exploded"),
+    );
+
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+    mockClearCurrentGame.mockClear();
+
+    await act(async () => {
+      await expect(result.current.endGame()).resolves.toBeUndefined();
+    });
+
+    expect(mockMarkGameAggregated).not.toHaveBeenCalled();
+    expect(mockClearCurrentGame).not.toHaveBeenCalled();
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  test("does not mark aggregated or clear current game when playoff stat aggregation fails", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    mockAggregateGameToPlayoffStats.mockRejectedValueOnce(
+      new Error("playoff stat aggregation failed"),
+    );
+
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+    mockClearCurrentGame.mockClear();
+
+    act(() => {
+      result.current.setPlayoffContext("series-1", 1, "playoff-1");
+    });
+
+    await act(async () => {
+      await result.current.endGame();
+    });
+
+    expect(mockProcessCompletedGame).toHaveBeenCalledTimes(1);
+    expect(mockAggregateGameToPlayoffStats).toHaveBeenCalledWith(
+      "playoff-1",
+      expect.anything(),
+    );
+    expect(mockMarkGameAggregated).not.toHaveBeenCalled();
+    expect(mockClearCurrentGame).not.toHaveBeenCalled();
+
+    consoleErrorSpy.mockRestore();
+    consoleWarnSpy.mockRestore();
+  });
+
   test("archives the exhibition game when the end-game pitch count prompt is dismissed", async () => {
     const { result } = renderHook(() => useGameState());
     await initializeGame(result);

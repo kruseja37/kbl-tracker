@@ -11063,6 +11063,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         const header = await getGameHeader(gameState.gameId);
         const alreadyAggregated = header?.aggregated === true;
         let aggregationSucceeded = alreadyAggregated;
+        let safeToClearCurrentGame = alreadyAggregated;
 
         const targetStatsScopeId =
           opts?.statsScopeId ??
@@ -11085,55 +11086,53 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           away: inn.away ?? 0,
           home: inn.home ?? 0,
         }));
+        const archiveContextBase = {
+          statsScopeId: targetStatsScopeId,
+          competitionType:
+            opts?.competitionType ?? competitionTypeRef.current,
+          competitionId:
+            opts?.competitionId ?? competitionIdRef.current,
+          competitionName: competitionNameRef.current,
+          playoffSeriesId:
+            playoffSeriesIdRef.current || undefined,
+          playoffGameNumber:
+            playoffGameNumberRef.current || undefined,
+          playoffId: playoffIdRef.current || undefined,
+          playoffRound: restoredPlayoffContext.playoffRound,
+          isEliminationGame:
+            restoredPlayoffContext.isEliminationGame,
+          isClinchGame: restoredPlayoffContext.isClinchGame,
+          leagueId: resolvedArchiveLeagueId,
+          franchiseId: opts?.franchiseId ?? franchiseIdRef.current,
+          scheduleGameId:
+            opts?.scheduleGameId ?? scheduleGameIdRef.current,
+          totalInnings: totalInningsRef.current,
+          extraInningRunner: extraInningRunnerRef.current,
+          extraInningRunnerDelay: extraInningRunnerDelayRef.current,
+          pogPlayerId: storedPlayersOfTheGame?.first,
+          playersOfTheGame: storedPlayersOfTheGame,
+          aggregationStatus: "aggregated" as const,
+        };
 
         if (!alreadyAggregated) {
           let processingTimeoutId: ReturnType<typeof setTimeout> | null = null;
+          let processResult: Awaited<ReturnType<typeof processCompletedGame>> | null = null;
           try {
-            await Promise.race([
-              (async () => {
-                await processCompletedGame(
-                  persistedState,
-                  aggregationOptions,
-                  resolvedArchiveLeagueId,
-                  {
-                    finalScore: {
-                      away: gameState.awayScore,
-                      home: gameState.homeScore,
-                    },
-                    inningScores,
-                    seasonId: archivedSeasonId,
-                    context: {
-                      statsScopeId: targetStatsScopeId,
-                      competitionType:
-                        opts?.competitionType ?? competitionTypeRef.current,
-                      competitionId:
-                        opts?.competitionId ?? competitionIdRef.current,
-                      competitionName: competitionNameRef.current,
-                      playoffSeriesId:
-                        playoffSeriesIdRef.current || undefined,
-                      playoffGameNumber:
-                        playoffGameNumberRef.current || undefined,
-                      playoffId: playoffIdRef.current || undefined,
-                      playoffRound: restoredPlayoffContext.playoffRound,
-                      isEliminationGame:
-                        restoredPlayoffContext.isEliminationGame,
-                      isClinchGame: restoredPlayoffContext.isClinchGame,
-                      leagueId: resolvedArchiveLeagueId,
-                      franchiseId: opts?.franchiseId ?? franchiseIdRef.current,
-                      scheduleGameId:
-                        opts?.scheduleGameId ?? scheduleGameIdRef.current,
-                      totalInnings: totalInningsRef.current,
-                      extraInningRunner: extraInningRunnerRef.current,
-                      extraInningRunnerDelay: extraInningRunnerDelayRef.current,
-                      pogPlayerId: storedPlayersOfTheGame?.first,
-                      playersOfTheGame: storedPlayersOfTheGame,
-                      aggregationStatus: "aggregated",
-                    },
+            processResult = await Promise.race([
+              processCompletedGame(
+                persistedState,
+                aggregationOptions,
+                resolvedArchiveLeagueId,
+                {
+                  finalScore: {
+                    away: gameState.awayScore,
+                    home: gameState.homeScore,
                   },
-                );
-                await markGameAggregated(gameState.gameId);
-                aggregationSucceeded = true;
-              })(),
+                  inningScores,
+                  seasonId: archivedSeasonId,
+                  context: archiveContextBase,
+                },
+              ),
               new Promise<never>((_, reject) => {
                 processingTimeoutId = setTimeout(() => {
                   reject(
@@ -11144,7 +11143,6 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
                 }, PROCESSING_TIMEOUT);
               }),
             ]);
-            console.log("[T1-08] Stats aggregated to season (first call)");
           } catch (error) {
             console.error(
               "[EndGame] processCompletedGame failed or timed out:",
@@ -11162,42 +11160,82 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
                 inningScores,
                 archivedSeasonId,
                 {
-                  statsScopeId: targetStatsScopeId,
-                  competitionType:
-                    opts?.competitionType ?? competitionTypeRef.current,
-                  competitionId:
-                    opts?.competitionId ?? competitionIdRef.current,
-                  competitionName: competitionNameRef.current,
-                  playoffSeriesId: playoffSeriesIdRef.current || undefined,
-                  playoffGameNumber:
-                    playoffGameNumberRef.current || undefined,
-                  playoffId: playoffIdRef.current || undefined,
-                  playoffRound: restoredPlayoffContext.playoffRound,
-                  isEliminationGame:
-                    restoredPlayoffContext.isEliminationGame,
-                  isClinchGame: restoredPlayoffContext.isClinchGame,
-                  leagueId: resolvedArchiveLeagueId,
-                  franchiseId: opts?.franchiseId ?? franchiseIdRef.current,
-                  scheduleGameId:
-                    opts?.scheduleGameId ?? scheduleGameIdRef.current,
-                  totalInnings: totalInningsRef.current,
-                  extraInningRunner: extraInningRunnerRef.current,
-                  extraInningRunnerDelay: extraInningRunnerDelayRef.current,
-                  pogPlayerId: storedPlayersOfTheGame?.first,
-                  playersOfTheGame: storedPlayersOfTheGame,
+                  ...archiveContextBase,
                   aggregationStatus: "archive_only",
                   aggregationError: aggregationErrorMessage,
                 },
               );
+              safeToClearCurrentGame = true;
             } catch (archiveError) {
               console.error(
                 "[EndGame] fallback archiveCompletedGame failed:",
                 archiveError,
               );
+              throw archiveError;
             }
           } finally {
             if (processingTimeoutId !== null) {
               clearTimeout(processingTimeoutId);
+            }
+          }
+
+          if (processResult) {
+            if (!processResult.aggregation.success) {
+              const aggregationErrorMessage =
+                processResult.aggregation.error || "Season aggregation failed.";
+              console.error(
+                "[EndGame] processCompletedGame returned aggregation failure:",
+                aggregationErrorMessage,
+              );
+              try {
+                await archiveCompletedGame(
+                  persistedState,
+                  {
+                    away: gameState.awayScore,
+                    home: gameState.homeScore,
+                  },
+                  inningScores,
+                  archivedSeasonId,
+                  {
+                    ...archiveContextBase,
+                    aggregationStatus: "archive_only",
+                    aggregationError: aggregationErrorMessage,
+                  },
+                );
+                safeToClearCurrentGame = true;
+              } catch (archiveError) {
+                console.error(
+                  "[EndGame] fallback archiveCompletedGame failed:",
+                  archiveError,
+                );
+                throw archiveError;
+              }
+            } else {
+              try {
+                if (playoffIdRef.current) {
+                  const { aggregateGameToPlayoffStats } =
+                    await import("../../utils/playoffStorage");
+                  await aggregateGameToPlayoffStats(
+                    playoffIdRef.current,
+                    persistedState,
+                  );
+                  console.log(
+                    `[Playoff] Aggregated player stats to playoff stats: ${playoffIdRef.current}`,
+                  );
+                }
+
+                await markGameAggregated(gameState.gameId);
+                aggregationSucceeded = true;
+                safeToClearCurrentGame = true;
+                console.log("[T1-08] Stats aggregated to season (first call)");
+              } catch (error) {
+                aggregationSucceeded = false;
+                safeToClearCurrentGame = false;
+                console.error(
+                  "[EndGame] post-aggregation completion failed:",
+                  error,
+                );
+              }
             }
           }
         } else {
@@ -11325,23 +11363,6 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           }
         }
 
-        // Aggregate player stats to playoff stats store (populates Leaders tab)
-        if (!alreadyAggregated && aggregationSucceeded && playoffIdRef.current) {
-          try {
-            const { aggregateGameToPlayoffStats } =
-              await import("../../utils/playoffStorage");
-            await aggregateGameToPlayoffStats(
-              playoffIdRef.current,
-              persistedState,
-            );
-            console.log(
-              `[Playoff] Aggregated player stats to playoff stats: ${playoffIdRef.current}`,
-            );
-          } catch (err) {
-            console.error("[Playoff] Failed to aggregate playoff stats:", err);
-          }
-        }
-
         // Archive is handled once inside processCompletedGame with full context.
         if (!alreadyAggregated) {
           const resolvedCompetitionType =
@@ -11380,8 +11401,14 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             clearTimeout(autoSaveTimeoutRef.current);
             autoSaveTimeoutRef.current = null;
           }
-          await clearCurrentGame();
-          latestPersistedRef.current = null;
+          if (safeToClearCurrentGame) {
+            await clearCurrentGame();
+            latestPersistedRef.current = null;
+          } else {
+            console.warn(
+              "[useGameState] Keeping currentGame because completion persistence did not fully succeed.",
+            );
+          }
         } catch (err) {
           console.warn(
             "[useGameState] Failed to clear currentGame at game end:",

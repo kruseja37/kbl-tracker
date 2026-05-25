@@ -7,6 +7,7 @@ const {
   mockRegisterAlmanacPlayers,
 } = vi.hoisted(() => ({
   mockAggregateGameToSeason: vi.fn().mockResolvedValue({
+    success: true,
     seasonMilestones: [],
     careerMilestones: [],
     franchiseFirsts: [],
@@ -186,5 +187,24 @@ describe('processCompletedGame exhibition almanac registration', () => {
       'player-1': expect.objectContaining({ playerId: 'player-1', firstName: 'Test' }),
       'pitcher-1': expect.objectContaining({ playerId: 'pitcher-1', firstName: 'Test' }),
     });
+  });
+
+  test('returns soft aggregation failures without writing an aggregated archive', async () => {
+    mockAggregateGameToSeason.mockResolvedValueOnce({
+      success: false,
+      milestones: null,
+      error: 'season aggregation failed',
+    });
+    const gameState = createGameState();
+
+    const result = await processCompletedGame(gameState);
+
+    expect(result.aggregation).toMatchObject({
+      success: false,
+      error: 'season aggregation failed',
+    });
+    expect(mockArchiveCompletedGame).not.toHaveBeenCalled();
+    expect(mockRegisterAlmanacPlayers).not.toHaveBeenCalled();
+    expect(mockGetEffectivePlayer).not.toHaveBeenCalled();
   });
 });
