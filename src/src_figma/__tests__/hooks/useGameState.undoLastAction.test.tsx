@@ -179,4 +179,49 @@ describe('useGameState undoLastAction', () => {
       third: false,
     });
   });
+
+  test('undoes a pitch-count between-play row without also undoing the prior at-bat', async () => {
+    const { result } = renderHook(() => useGameState('game-undo-pitch-count'));
+
+    await act(async () => {
+      await result.current.initializeGame({
+        gameId: 'game-undo-pitch-count',
+        awayTeamId: 'away-team',
+        awayTeamName: 'Away Team',
+        homeTeamId: 'home-team',
+        homeTeamName: 'Home Team',
+        awayStartingPitcherId: 'away-sp',
+        awayStartingPitcherName: 'Away Starter',
+        homeStartingPitcherId: 'home-sp',
+        homeStartingPitcherName: 'Home Starter',
+        awayLineup: [
+          { playerId: 'away-batter-1', playerName: 'Away Batter 1', position: 'SS' },
+        ],
+        homeLineup: [
+          { playerId: 'home-batter-1', playerName: 'Home Batter 1', position: '2B' },
+        ],
+        awayBench: [],
+        homeBench: [],
+        seasonNumber: 1,
+      });
+    });
+
+    mockUndoMostRecentGameAction.mockClear();
+    mockClearCurrentGame.mockClear();
+    mockUndoMostRecentGameAction.mockResolvedValueOnce({
+      kind: 'betweenPlay',
+      eventId: 'game-undo-pitch-count_bp_pitch_count',
+      eventIndex: 1.001,
+    });
+
+    let undone = false;
+    await act(async () => {
+      undone = await result.current.undoLastAction({ skipReload: true });
+    });
+
+    expect(undone).toBe(true);
+    expect(mockUndoMostRecentGameAction).toHaveBeenCalledTimes(1);
+    expect(mockUndoMostRecentGameAction).toHaveBeenCalledWith('game-undo-pitch-count');
+    expect(mockClearCurrentGame).not.toHaveBeenCalled();
+  });
 });

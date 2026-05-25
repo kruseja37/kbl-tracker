@@ -5,10 +5,13 @@ import { afterEach, describe, expect, test } from 'vitest';
 import {
   createGameHeader,
   getBetweenPlayEvents,
+  getGameEvents,
   getBetweenPlayEvent,
+  logAtBatEvent,
   logBetweenPlayEvent,
   undoMostRecentGameAction,
   updateBetweenPlayEvent,
+  type AtBatEvent,
   type BetweenPlayEvent,
 } from '../../../utils/eventLog';
 
@@ -65,6 +68,48 @@ function createBetweenPlayEvent(overrides: Partial<BetweenPlayEvent> = {}): Betw
       isSuccessful: true,
       caughtBy: 2,
     },
+    ...overrides,
+  };
+}
+
+function createAtBatEvent(overrides: Partial<AtBatEvent> = {}): AtBatEvent {
+  return {
+    eventId: 'game-between_1',
+    gameId: 'game-between',
+    eventIndex: 1,
+    timestamp: 1,
+    batterId: 'away-batter',
+    batterName: 'Away Batter',
+    batterTeamId: 'away-team',
+    pitcherId: 'home-pitcher',
+    pitcherName: 'Home Pitcher',
+    pitcherTeamId: 'home-team',
+    result: '1B',
+    rbiCount: 0,
+    runsScored: [],
+    inning: 1,
+    halfInning: 'TOP',
+    outs: 0,
+    runners: { first: null, second: null, third: null },
+    awayScore: 0,
+    homeScore: 0,
+    outsAfter: 0,
+    runnersAfter: {
+      first: { runnerId: 'away-batter', runnerName: 'Away Batter' },
+      second: null,
+      third: null,
+    },
+    awayScoreAfter: 0,
+    homeScoreAfter: 0,
+    leverageIndex: 1,
+    winProbabilityBefore: 0.5,
+    winProbabilityAfter: 0.49,
+    wpa: 0.01,
+    ballInPlay: null,
+    fameEvents: [],
+    isLeadoff: true,
+    isClutch: false,
+    isWalkOff: false,
     ...overrides,
   };
 }
@@ -230,5 +275,122 @@ describe('BetweenPlayEvent versioning', () => {
     });
     expect(stolenBase?.undoneAt).toEqual(expect.any(Number));
     expect(recommendation?.undoneAt).toBeUndefined();
+  });
+
+  test('generic undo targets player state changes newer than the last at-bat', async () => {
+    await createGameHeader({
+      gameId: 'game-undo-mojo',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1-regular',
+      competitionType: 'regular_season',
+      date: Date.now(),
+      awayTeamId: 'away-team',
+      awayTeamName: 'Away Team',
+      homeTeamId: 'home-team',
+      homeTeamName: 'Home Team',
+      finalScore: null,
+      finalInning: 1,
+      isComplete: false,
+    });
+
+    await logAtBatEvent(createAtBatEvent({
+      eventId: 'game-undo-mojo_1',
+      gameId: 'game-undo-mojo',
+      eventIndex: 1,
+      timestamp: 1,
+    }));
+    await logBetweenPlayEvent(createBetweenPlayEvent({
+      eventId: 'game-undo-mojo_bp_mojo',
+      gameId: 'game-undo-mojo',
+      eventIndex: 1.001,
+      timestamp: 2,
+      type: 'mojo_change',
+      runnerAction: undefined,
+      stolenBase: undefined,
+      playerStateChange: {
+        playerId: 'away-batter',
+        playerName: 'Away Batter',
+        stateType: 'mojo',
+        previousValue: 0,
+        newValue: 1,
+        reason: 'Lineup quick adjust',
+      },
+    }));
+
+    const undone = await undoMostRecentGameAction('game-undo-mojo');
+    const betweenPlayEvents = await getBetweenPlayEvents('game-undo-mojo', {
+      includeUndone: true,
+    });
+    const remainingAtBats = await getGameEvents('game-undo-mojo');
+
+    expect(undone).toMatchObject({
+      kind: 'betweenPlay',
+      eventId: 'game-undo-mojo_bp_mojo',
+    });
+    expect(betweenPlayEvents[0]?.undoneAt).toEqual(expect.any(Number));
+    expect(remainingAtBats).toHaveLength(1);
+  });
+
+  test('generic undo follows between-play ordering for position changes after substitutions', async () => {
+    await createGameHeader({
+      gameId: 'game-undo-position-change',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1-regular',
+      competitionType: 'regular_season',
+      date: Date.now(),
+      awayTeamId: 'away-team',
+      awayTeamName: 'Away Team',
+      homeTeamId: 'home-team',
+      homeTeamName: 'Home Team',
+      finalScore: null,
+      finalInning: 1,
+      isComplete: false,
+    });
+
+    await logBetweenPlayEvent(createBetweenPlayEvent({
+      eventId: 'game-undo-position-change_bp_sub',
+      gameId: 'game-undo-position-change',
+      eventIndex: 1.001,
+      timestamp: 2,
+      type: 'substitution',
+      runnerAction: undefined,
+      stolenBase: undefined,
+      substitution: {
+        subType: 'defensive_replacement',
+        outPlayerId: 'home-2b',
+        inPlayerId: 'home-bench',
+        inPosition: '2B',
+      },
+    }));
+    await logBetweenPlayEvent(createBetweenPlayEvent({
+      eventId: 'game-undo-position-change_bp_pos',
+      gameId: 'game-undo-position-change',
+      eventIndex: 1.002,
+      timestamp: 3,
+      type: 'position_change',
+      runnerAction: undefined,
+      stolenBase: undefined,
+      substitution: {
+        subType: 'position_change',
+        outPlayerId: 'home-bench',
+        inPlayerId: 'home-bench',
+        previousPosition: '2B',
+        inPosition: 'SS',
+      },
+    }));
+
+    const undone = await undoMostRecentGameAction('game-undo-position-change');
+    const events = await getBetweenPlayEvents('game-undo-position-change', {
+      includeUndone: true,
+    });
+
+    expect(undone).toMatchObject({
+      kind: 'betweenPlay',
+      eventId: 'game-undo-position-change_bp_pos',
+    });
+    expect(events.find((event) => event.type === 'position_change')?.undoneAt).toEqual(
+      expect.any(Number),
+    );
+    expect(events.find((event) => event.type === 'substitution')?.undoneAt).toBeUndefined();
   });
 });

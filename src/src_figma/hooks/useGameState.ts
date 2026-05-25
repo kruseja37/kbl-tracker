@@ -5701,19 +5701,6 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         return false;
       }
 
-      if (undone.kind === "betweenPlay") {
-        const betweenPlayEvent = await getBetweenPlayEvent(undone.eventId);
-        if (
-          betweenPlayEvent?.type === "pitch_count_update" &&
-          betweenPlayEvent.pitchCountUpdate?.timing === "end_of_half_inning"
-        ) {
-          const pairedAtBatUndo = await undoMostRecentGameAction(targetGameId);
-          if (!pairedAtBatUndo) {
-            return false;
-          }
-        }
-      }
-
       // R3-R7: When caller has a snapshot to restore from, skip the full reload
       // (loadExistingGame reloads stale scores from persisted snapshot)
       if (options?.skipReload) {

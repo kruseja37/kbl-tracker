@@ -2429,6 +2429,10 @@ export function GameTracker() {
           scoreboard?: ScoreboardState;
           playerStatsEntries?: [string, PlayerGameStats][];
           pitcherStatsEntries?: [string, PitcherGameStats][];
+          mojoFitnessEntries?: [
+            string,
+            { mojo: MojoLevel; fitness: FitnessState },
+          ][];
           runnerTrackerSnapshot?: ReturnType<typeof getRunnerTrackerSnapshot>;
           lineupSnapshot?: GameLineupSnapshot;
           batterIndices?: { away: number; home: number };
@@ -2473,6 +2477,23 @@ export function GameTracker() {
             lineupSnapshot: snapshotData!.lineupSnapshot,
             batterIndices: snapshotData!.batterIndices,
           });
+
+          if (snapshotData!.mojoFitnessEntries) {
+            for (const [playerId, playerState] of snapshotData!.mojoFitnessEntries) {
+              const currentPlayer = playerStateHook.getPlayer(playerId);
+              if (!currentPlayer) continue;
+              if (currentPlayer.gameState.currentMojo !== playerState.mojo) {
+                playerStateHook.setMojo(playerId, playerState.mojo);
+              }
+              if (
+                currentPlayer.fitnessProfile.currentFitness !==
+                playerState.fitness
+              ) {
+                playerStateHook.setFitness(playerId, playerState.fitness);
+              }
+            }
+            setRosterVersion((version) => version + 1);
+          }
         }
 
         playAudio("undoBloop");
@@ -2483,6 +2504,7 @@ export function GameTracker() {
     },
     [
       playAudio,
+      playerStateHook,
       restoreState,
       undoLastAction,
     ],
@@ -2500,6 +2522,13 @@ export function GameTracker() {
       scoreboard,
       playerStatsEntries: Array.from(playerStats.entries()),
       pitcherStatsEntries: Array.from(pitcherStats.entries()),
+      mojoFitnessEntries: playerStateHook.getAllPlayers().map((player) => [
+        player.playerId,
+        {
+          mojo: player.gameState.currentMojo,
+          fitness: player.fitnessProfile.currentFitness,
+        },
+      ]),
       runnerTrackerSnapshot: getRunnerTrackerSnapshot(),
       lineupSnapshot: getLineupStateSnapshot(),
       batterIndices: getBatterIndicesSnapshot(),
@@ -2510,8 +2539,10 @@ export function GameTracker() {
     gameInitialized,
     gameState,
     scoreboard,
+    rosterVersion,
     playerStats,
     pitcherStats,
+    playerStateHook,
     getRunnerTrackerSnapshot,
     getLineupStateSnapshot,
     getBatterIndicesSnapshot,
@@ -4976,6 +5007,7 @@ export function GameTracker() {
       });
       if (previousMojo === undefined || previousMojo === newMojo) return;
 
+      undoSystem.captureSnapshot(`Mojo: ${name} ${previousMojo} to ${newMojo}`);
       playerStateHook.setMojo(playerId, newMojo);
       // Force a UI refresh by updating a dummy state
       setRosterVersion((v) => v + 1);
@@ -4993,6 +5025,7 @@ export function GameTracker() {
       playerStateHook,
       queuePlayLogRefresh,
       recordPlayerStateChange,
+      undoSystem,
     ],
   );
 
@@ -5011,12 +5044,20 @@ export function GameTracker() {
   );
 
   const setPlayerFitnessByName = useCallback(
-    (name: string, team: "away" | "home", newFitness: FitnessState) => {
+    (
+      name: string,
+      team: "away" | "home",
+      newFitness: FitnessState,
+      reason: string = "Player card adjustment",
+    ) => {
       const playerId = getPlayerIdFromName(name, team);
       const currentPlayer = playerStateHook.getPlayer(playerId);
       const previousFitness = currentPlayer?.fitnessProfile.currentFitness;
       if (!previousFitness || previousFitness === newFitness) return;
 
+      undoSystem.captureSnapshot(
+        `Fitness: ${name} ${previousFitness} to ${newFitness}`,
+      );
       playerStateHook.setFitness(playerId, newFitness);
       setRosterVersion((v) => v + 1);
       void recordPlayerStateChange(
@@ -5025,7 +5066,7 @@ export function GameTracker() {
         "fitness",
         previousFitness,
         newFitness,
-        "Player card adjustment",
+        reason,
       ).then(() => queuePlayLogRefresh(0));
     },
     [
@@ -5033,6 +5074,7 @@ export function GameTracker() {
       playerStateHook,
       queuePlayLogRefresh,
       recordPlayerStateChange,
+      undoSystem,
     ],
   );
 
@@ -5665,6 +5707,9 @@ export function GameTracker() {
 
       // Log via switchPositions hook for BetweenPlayEvent persistence
       if (firstPosition && secondPosition) {
+        undoSystem.captureSnapshot(
+          `Position swap: ${firstId} with ${secondPlayerId}`,
+        );
         switchPositions([
           { playerId: firstId, newPosition: secondPosition },
           { playerId: secondPlayerId, newPosition: firstPosition },
@@ -5694,39 +5739,64 @@ export function GameTracker() {
       syncDisplayedRostersToLineupSnapshot,
       switchPositions,
       queuePlayLogRefresh,
+      undoSystem,
     ],
   );
 
   // §14: Fitness change with auto-injury logging
   const handleFitnessChangeWithAutoInjury = useCallback(
     (playerId: string, playerName: string, newFitness: FitnessState) => {
-      const team = resolveRosterTeamSide(playerId, playerName) || "home";
       const currentPlayer = playerStateHook.getPlayer(playerId);
       const previousFitness = currentPlayer?.fitnessProfile.currentFitness;
       if (!previousFitness || previousFitness === newFitness) return;
 
-      // Set the fitness via existing mechanism (logs fitness_change BetweenPlayEvent)
-      setPlayerFitnessByName(playerName, team, newFitness);
+      const eventGroupId = `${gameState.gameId}_fitness_${playerId}_${Date.now()}`;
+      undoSystem.captureSnapshot(
+        `Fitness: ${playerName} ${previousFitness} to ${newFitness}`,
+      );
+      playerStateHook.setFitness(playerId, newFitness);
+      setRosterVersion((version) => version + 1);
 
       // §14: Auto-injury — log injury event when fitness set to WEAK, STRAINED, or HURT
       const injuryStates: FitnessState[] = ["WEAK", "STRAINED", "HURT"];
-      if (injuryStates.includes(newFitness)) {
-        void recordPlayerStateChange(
+      void (async () => {
+        const fitnessEvent = await recordPlayerStateChange(
+          playerId,
+          playerName,
+          "fitness",
+          previousFitness,
+          newFitness,
+          "Player card adjustment",
+          { eventGroupId },
+        );
+
+        if (!injuryStates.includes(newFitness)) {
+          queuePlayLogRefresh(0);
+          return;
+        }
+
+        await recordPlayerStateChange(
           playerId,
           playerName,
           "injury",
           previousFitness,
           newFitness,
           `Auto-injury: fitness changed to ${newFitness}`,
+          {
+            eventGroupId,
+            linkedEventId: fitnessEvent.eventId,
+          },
         ).then(() => queuePlayLogRefresh(0));
-      }
+      })().catch((error) => {
+        console.error("[GameTracker] Failed to log fitness/injury change:", error);
+      });
     },
     [
-      resolveRosterTeamSide,
+      gameState.gameId,
       playerStateHook,
-      setPlayerFitnessByName,
       recordPlayerStateChange,
       queuePlayLogRefresh,
+      undoSystem,
     ],
   );
 
@@ -9064,11 +9134,17 @@ export function GameTracker() {
         setActiveFielderPopover(null);
         return;
       }
+      undoSystem.captureSnapshot(`Position change: ${playerId} to ${newPosition}`);
       switchPositions([{ playerId, newPosition }]);
       setActiveFielderPopover(null);
       queuePlayLogRefresh(80);
     },
-    [activeFielderPopover?.fielder.positionLabel, queuePlayLogRefresh, switchPositions],
+    [
+      activeFielderPopover?.fielder.positionLabel,
+      queuePlayLogRefresh,
+      switchPositions,
+      undoSystem,
+    ],
   );
 
   // ============================================
