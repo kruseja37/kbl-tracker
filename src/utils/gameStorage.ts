@@ -587,6 +587,8 @@ export interface CompletedGameRecord {
     second?: string;
     third?: string;
   };
+  aggregationStatus?: "aggregated" | "archive_only";
+  aggregationError?: string;
   // --- NEW: CATCH THE ADVANCED ARRAYS ---
   managerDecisions?: PersistedGameState["managerDecisions"];
   managerDeploymentStints?: PersistedGameState["managerDeploymentStints"];
@@ -730,6 +732,8 @@ export async function archiveCompletedGame(
       second?: string;
       third?: string;
     };
+    aggregationStatus?: "aggregated" | "archive_only";
+    aggregationError?: string;
   },
 ): Promise<void> {
   const db = await initDatabase();
@@ -781,6 +785,8 @@ export async function archiveCompletedGame(
     inningScores,
     pogPlayerId: context?.pogPlayerId,
     playersOfTheGame: context?.playersOfTheGame,
+    aggregationStatus: context?.aggregationStatus,
+    aggregationError: context?.aggregationError,
     // --- NEW: ARCHIVE THE ADVANCED ARRAYS ---
     managerDecisions: gameState.managerDecisions || [],
     managerDeploymentStints: gameState.managerDeploymentStints || [],

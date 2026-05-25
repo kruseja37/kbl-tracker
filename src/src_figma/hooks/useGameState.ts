@@ -3328,6 +3328,11 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const [pitcherStats, setPitcherStats] = useState<
     Map<string, PitcherGameStats>
   >(new Map());
+  const pitcherStatsRef = useRef<Map<string, PitcherGameStats>>(new Map());
+
+  useEffect(() => {
+    pitcherStatsRef.current = pitcherStats;
+  }, [pitcherStats]);
 
   // Track pitcher ID → name mapping for post-game summary (EXH-011 pitcher names fix)
   const pitcherNamesRef = useRef<Map<string, string>>(new Map());
@@ -3688,7 +3693,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     DeferredPitchCountEntry[]
   >([]);
   const pendingActionRef = useRef<(() => Promise<void>) | null>(null);
-  const pendingActionCancelRef = useRef<(() => void) | null>(null);
+  const pendingActionCancelRef = useRef<
+    (() => void | Promise<void>) | null
+  >(null);
 
   // Ref to hold endInning function to avoid circular dependency
   const endInningRef = useRef<(() => void) | null>(null);
@@ -10397,6 +10404,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         };
         stats.pitchCount = finalCount;
         newStats.set(pitcherId, stats);
+        pitcherStatsRef.current = newStats;
         return newStats;
       });
 
@@ -10492,9 +10500,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     });
   }, [deferredPitchCounts]);
 
-  // Dismiss pitch count prompt without confirming
-  // For end_inning: still transitions the inning (just skips pitch count update)
-  // For pitching_change/end_game: cancels the pending action
+  // Dismiss pitch count prompt without confirming.
+  // End-game dismissal still completes the archive using the last known count.
   const dismissPitchCountPrompt = useCallback(() => {
     if (pitchCountPrompt) {
       deferPitchCountPrompt(pitchCountPrompt);
@@ -10515,6 +10522,21 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       }
       console.log(
         "[useGameState] Pitch count prompt dismissed — inning transition proceeding without count update",
+      );
+    } else if (pitchCountPrompt?.type === "end_game") {
+      const pendingCancel = pendingActionCancelRef.current;
+      pendingActionRef.current = null;
+      pendingActionCancelRef.current = null;
+      if (pendingCancel) {
+        void Promise.resolve(pendingCancel()).catch((error) => {
+          console.error(
+            "[useGameState] End-game completion failed after pitch count prompt dismiss:",
+            error,
+          );
+        });
+      }
+      console.log(
+        "[useGameState] End-game pitch count prompt dismissed — completing game with existing count",
       );
     } else {
       pendingActionRef.current = null;
@@ -10831,7 +10853,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
         // MAJ-07: Mark the last pitcher on each team as finishedGame on a cloned map.
         // Never mutate objects sourced from React state maps directly.
-        const finalizedPitcherStats = clonePitcherStatsMap(pitcherStats);
+        const finalizedPitcherStats = clonePitcherStatsMap(
+          pitcherStatsRef.current,
+        );
         const lastPitcherId = gameState.currentPitcherId;
         const lastPitcherStats = finalizedPitcherStats.get(lastPitcherId);
         if (lastPitcherStats) {
@@ -11038,6 +11062,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         // Prevents double aggregation when endGame's useEffect re-fires
         const header = await getGameHeader(gameState.gameId);
         const alreadyAggregated = header?.aggregated === true;
+        let aggregationSucceeded = alreadyAggregated;
 
         const targetStatsScopeId =
           opts?.statsScopeId ??
@@ -11102,10 +11127,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
                       extraInningRunnerDelay: extraInningRunnerDelayRef.current,
                       pogPlayerId: storedPlayersOfTheGame?.first,
                       playersOfTheGame: storedPlayersOfTheGame,
+                      aggregationStatus: "aggregated",
                     },
                   },
                 );
                 await markGameAggregated(gameState.gameId);
+                aggregationSucceeded = true;
               })(),
               new Promise<never>((_, reject) => {
                 processingTimeoutId = setTimeout(() => {
@@ -11123,6 +11150,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               "[EndGame] processCompletedGame failed or timed out:",
               error,
             );
+            const aggregationErrorMessage =
+              error instanceof Error ? error.message : String(error);
             try {
               await archiveCompletedGame(
                 persistedState,
@@ -11156,6 +11185,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
                   extraInningRunnerDelay: extraInningRunnerDelayRef.current,
                   pogPlayerId: storedPlayersOfTheGame?.first,
                   playersOfTheGame: storedPlayersOfTheGame,
+                  aggregationStatus: "archive_only",
+                  aggregationError: aggregationErrorMessage,
                 },
               );
             } catch (archiveError) {
@@ -11174,7 +11205,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         }
 
         // Record playoff series game result if this was a playoff game
-        if (playoffSeriesIdRef.current) {
+        if (aggregationSucceeded && playoffSeriesIdRef.current) {
           try {
             const { recordSeriesGame } =
               await import("../../utils/playoffStorage");
@@ -11295,7 +11326,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         }
 
         // Aggregate player stats to playoff stats store (populates Leaders tab)
-        if (!alreadyAggregated && playoffIdRef.current) {
+        if (!alreadyAggregated && aggregationSucceeded && playoffIdRef.current) {
           try {
             const { aggregateGameToPlayoffStats } =
               await import("../../utils/playoffStorage");
@@ -11848,7 +11879,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         };
       });
 
-      const pitcherGameStatsArray = Array.from(pitcherStats.entries()).map(
+      const pitcherGameStatsArray = Array.from(
+        pitcherStatsRef.current.entries(),
+      ).map(
         ([pitcherId, stats], idx) => {
           const pitcherName =
             pitcherNamesRef.current.get(pitcherId) ||
@@ -12025,7 +12058,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       // Per PITCH_COUNT_TRACKING_SPEC.md: Mandatory pitch count capture at end of game
       // Show prompt for current pitcher (simplified - full spec requires all pitchers)
       const currentPitcherStats =
-        pitcherStats.get(gameState.currentPitcherId) ||
+        pitcherStatsRef.current.get(gameState.currentPitcherId) ||
         createEmptyPitcherStats();
 
       setPitchCountPrompt({
@@ -12052,9 +12085,23 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               throw err;
             }
           };
-          pendingActionCancelRef.current = () => {
-            console.warn("[R3-R7] endGame: pitch count dismissed");
-            reject(new Error("End-game pitch count prompt dismissed"));
+          pendingActionCancelRef.current = async () => {
+            pendingActionRef.current = null;
+            pendingActionCancelRef.current = null;
+            console.warn(
+              "[R3-R7] endGame: pitch count dismissed; completing with existing count",
+            );
+            try {
+              await completeGameInternal(endGameOptions);
+              resolve();
+            } catch (err) {
+              console.error(
+                "[R3-R7] endGame: completion after pitch count dismiss threw:",
+                err,
+              );
+              reject(err);
+              throw err;
+            }
           };
         });
         console.log("[endGame] Prompt-confirmed end-game completion finished");
@@ -12290,6 +12337,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         setPlayerStats(snapshot.playerStats);
       }
       if (snapshot.pitcherStats) {
+        pitcherStatsRef.current = snapshot.pitcherStats;
         setPitcherStats(snapshot.pitcherStats);
       }
       if (snapshot.runnerTrackerState) {

@@ -70,7 +70,44 @@ vi.mock("../../../utils/playoffStorage", () => ({
   aggregateGameToPlayoffStats: mockAggregateGameToPlayoffStats,
 }));
 
-import { useGameState } from "../../hooks/useGameState";
+import { useGameState, type PitcherGameStats } from "../../hooks/useGameState";
+
+function makePitcherStats(
+  overrides: Partial<PitcherGameStats> = {},
+): PitcherGameStats {
+  return {
+    outsRecorded: 0,
+    hitsAllowed: 0,
+    runsAllowed: 0,
+    earnedRuns: 0,
+    walksAllowed: 0,
+    strikeoutsThrown: 0,
+    homeRunsAllowed: 0,
+    pitchCount: 0,
+    battersFaced: 0,
+    intentionalWalks: 0,
+    hitByPitch: 0,
+    wildPitches: 0,
+    basesLoadedWalks: 0,
+    firstInningRuns: 0,
+    consecutiveHRsAllowed: 0,
+    isStarter: false,
+    entryInning: 1,
+    entryOuts: 0,
+    exitInning: null,
+    exitOuts: null,
+    finishedGame: false,
+    inheritedRunners: 0,
+    inheritedRunnersScored: 0,
+    bequeathedRunners: 0,
+    bequeathedRunnersScored: 0,
+    decision: null,
+    save: false,
+    hold: false,
+    blownSave: false,
+    ...overrides,
+  };
+}
 
 async function initializeGame(result: {
   current: ReturnType<typeof useGameState>;
@@ -162,6 +199,10 @@ describe("bugfix R4-02: end-game pitch count continuation", () => {
     const { result } = renderHook(() => useGameState());
     await initializeGame(result);
 
+    act(() => {
+      result.current.setPlayoffContext("series-1", 1, "playoff-1");
+    });
+
     let endGamePromise: Promise<void> | undefined;
 
     await act(async () => {
@@ -179,7 +220,105 @@ describe("bugfix R4-02: end-game pitch count continuation", () => {
 
     expect(mockProcessCompletedGame).toHaveBeenCalledTimes(1);
     expect(mockMarkGameAggregated).not.toHaveBeenCalled();
-    expect(mockArchiveCompletedGame).toHaveBeenCalled();
+    expect(mockArchiveCompletedGame).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        aggregationStatus: "archive_only",
+        aggregationError: "aggregation exploded",
+      }),
+    );
+    expect(mockAggregateGameToPlayoffStats).not.toHaveBeenCalled();
     expect(result.current.pitchCountPrompt).toBeNull();
+  });
+
+  test("archives the exhibition game when the end-game pitch count prompt is dismissed", async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    let endGamePromise: Promise<void> | undefined;
+
+    await act(async () => {
+      endGamePromise = result.current.endGame({
+        awaitPitchCountConfirmation: true,
+      });
+    });
+
+    expect(result.current.pitchCountPrompt?.type).toBe("end_game");
+
+    await act(async () => {
+      result.current.dismissPitchCountPrompt();
+      await expect(endGamePromise).resolves.toBeUndefined();
+    });
+
+    expect(mockCompleteGame).toHaveBeenCalledWith(
+      "game-r4-end",
+      { away: 0, home: 0 },
+      1,
+    );
+    expect(mockProcessCompletedGame).toHaveBeenCalledTimes(1);
+    expect(result.current.pitchCountPrompt).toBeNull();
+  });
+
+  test("archives every pitcher who recorded outs, including removed pitchers", async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    act(() => {
+      result.current.restoreState({
+        gameState: {
+          ...result.current.gameState,
+          gamePhase: "LIVE",
+          currentPitcherId: "home-rp",
+          currentPitcherName: "Home Reliever",
+        },
+        scoreboard: result.current.scoreboard,
+        pitcherStats: new Map<string, PitcherGameStats>([
+          [
+            "home-sp",
+            makePitcherStats({
+              isStarter: true,
+              outsRecorded: 3,
+              battersFaced: 4,
+              pitchCount: 14,
+              exitInning: 2,
+              exitOuts: 0,
+            }),
+          ],
+          [
+            "home-rp",
+            makePitcherStats({
+              outsRecorded: 6,
+              battersFaced: 7,
+              pitchCount: 22,
+              entryInning: 2,
+              entryOuts: 0,
+            }),
+          ],
+        ]),
+      });
+    });
+
+    await act(async () => {
+      await result.current.endGame();
+    });
+
+    const persistedState = mockProcessCompletedGame.mock.calls.at(-1)?.[0];
+    expect(persistedState.pitcherGameStats).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          pitcherId: "home-sp",
+          outsRecorded: 3,
+          inningsComplete: 1,
+        }),
+        expect.objectContaining({
+          pitcherId: "home-rp",
+          outsRecorded: 6,
+          inningsComplete: 2,
+        }),
+      ]),
+    );
   });
 });
