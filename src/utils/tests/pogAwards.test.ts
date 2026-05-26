@@ -411,6 +411,53 @@ describe("getGamePogAwardSet", () => {
     ).toEqual(["7.0 IP", "8 K", "2 ER"]);
   });
 
+  test("stored-only fallback preserves hitter stat role for two-way offensive legacy winners", () => {
+    const awards = getGamePogAwardSet({
+      playersOfTheGame: {
+        first: "two-way",
+      },
+      playerStats: {
+        "two-way": {
+          playerName: "Two Way",
+          teamId: "away",
+          pa: 4,
+          ab: 4,
+          h: 3,
+          r: 1,
+          rbi: 2,
+          bb: 0,
+          k: 1,
+        },
+      },
+      pitcherGameStats: [
+        {
+          pitcherId: "two-way",
+          pitcherName: "Two Way",
+          teamId: "away",
+        },
+      ],
+    });
+
+    expect(awards.overall).toMatchObject({
+      playerId: "two-way",
+      playerName: "Two Way",
+      statRole: "hitter",
+      source: "stored_pog",
+    });
+    expect(
+      getPogAwardStatLineItems(awards.overall!, {
+        battingStats: {
+          ab: 4,
+          h: 3,
+          r: 1,
+          rbi: 2,
+          bb: 0,
+          k: 1,
+        },
+      }),
+    ).toEqual(["3-4", "0 BB", "1 SO", "2 RBI", "1 R"]);
+  });
+
   test("full KBL WPA takes precedence over stored POG ids", () => {
     const awards = getGamePogAwardSet({
       playersOfTheGame: {

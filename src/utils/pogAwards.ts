@@ -129,6 +129,13 @@ export interface PogManagerProfileRef {
 export interface PogPlayerStatLike {
   playerName: string;
   teamId: string;
+  pa?: number;
+  ab?: number;
+  h?: number;
+  r?: number;
+  rbi?: number;
+  bb?: number;
+  k?: number;
 }
 
 export interface PogPitcherStatLike {
@@ -576,6 +583,10 @@ function getStoredOverallStatRole(
   playerId: string,
   input: GetGamePogAwardSetInput,
 ): PogAwardStatRole {
+  if (hasMeaningfulBattingLine(input.playerStats?.[playerId])) {
+    return "hitter";
+  }
+
   if (
     input.pitcherGameStats?.some((pitcher) => pitcher.pitcherId === playerId)
   ) {
@@ -583,6 +594,22 @@ function getStoredOverallStatRole(
   }
 
   return "hitter";
+}
+
+function hasMeaningfulBattingLine(
+  battingStats: PogPlayerStatLike | undefined,
+): boolean {
+  if (!battingStats) return false;
+
+  return [
+    battingStats.pa,
+    battingStats.ab,
+    battingStats.h,
+    battingStats.r,
+    battingStats.rbi,
+    battingStats.bb,
+    battingStats.k,
+  ].some((value) => typeof value === "number" && value > 0);
 }
 
 function buildTeamStandouts(
