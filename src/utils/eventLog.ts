@@ -565,6 +565,7 @@ export interface BetweenPlayEvent {
     outgoingPitcherName?: string;
     incomingPitcherId: string;
     incomingPitcherName?: string;
+    pitchingTeamSide?: 'away' | 'home';
     inheritedRunners: number;
     outgoingPitchCount?: number;
     outgoingIP?: number;

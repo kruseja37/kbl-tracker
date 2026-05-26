@@ -565,6 +565,10 @@ export interface UseGameStateReturn {
     pitchingTeamSide: TeamSide,
     newPitcherName?: string,
     exitingPitcherName?: string,
+    options?: {
+      beforeCommit?: () => void;
+      afterCommit?: () => void;
+    },
   ) => void;
   advanceCount: (type: "ball" | "strike" | "foul") => void;
   resetCount: () => void;
@@ -3212,6 +3216,20 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
   const replayRosterChangeEvent = useCallback(
     (event: BetweenPlayEvent) => {
+      const resolvePitcherChangeTeamSide = (): TeamSide | null => {
+        if (!event.pitcherChange) return null;
+        return (
+          (event.pitcherChange.pitchingTeamSide as TeamSide | undefined) ||
+          resolveTeamSideForPlayerId(event.pitcherChange.outgoingPitcherId) ||
+          resolveTeamSideForPlayerId(event.pitcherChange.incomingPitcherId) ||
+          (event.gameState?.halfInning === "TOP"
+            ? "home"
+            : event.gameState?.halfInning === "BOTTOM"
+              ? "away"
+              : null)
+        );
+      };
+
       if (event.type === "substitution" && event.substitution) {
         const substitution = event.substitution;
         const outPlayerId = event.substitution.outPlayerId;
@@ -3327,8 +3345,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       }
 
       if (event.type === "pitcher_change" && event.pitcherChange) {
-        const teamSide =
-          event.gameState?.halfInning === "TOP" ? "home" : "away";
+        const teamSide = resolvePitcherChangeTeamSide();
+        if (!teamSide) return;
         const lineupStateRef =
           teamSide === "away" ? awayLineupStateRef : homeLineupStateRef;
         registerIdentityForSide(
@@ -3735,6 +3753,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const pendingActionCancelRef = useRef<
     (() => void | Promise<void>) | null
   >(null);
+  const pendingActionBeforeCommitRef = useRef<(() => void) | null>(null);
 
   // Ref to hold endInning function to avoid circular dependency
   const endInningRef = useRef<(() => void) | null>(null);
@@ -4150,6 +4169,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       replaceFameEvents([]);
       setSubstitutionLog([]);
       pitchCountPromptRef.current = null;
+      pendingActionBeforeCommitRef.current = null;
       setPitchCountPrompt(null);
       pitcherNamesRef.current.clear();
       teamSideByPlayerIdRef.current.clear();
@@ -5248,21 +5268,63 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               );
             }
             if (event.pitcherChange?.outgoingPitcherId) {
+              const pitcherChangeSide =
+                (event.pitcherChange.pitchingTeamSide as
+                  | TeamSide
+                  | undefined) ||
+                resolveTrackedTeamSide(
+                  event.pitcherChange.outgoingPitcherId,
+                  teamSideByPlayerIdRef.current,
+                  awayLineupRef.current,
+                  homeLineupRef.current,
+                  awayLineupStateRef.current,
+                  homeLineupStateRef.current,
+                ) ||
+                resolveTrackedTeamSide(
+                  event.pitcherChange.incomingPitcherId,
+                  teamSideByPlayerIdRef.current,
+                  awayLineupRef.current,
+                  homeLineupRef.current,
+                  awayLineupStateRef.current,
+                  homeLineupStateRef.current,
+                ) ||
+                (event.gameState?.halfInning === "TOP" ? "home" : "away");
               registerTrackedIdentity(
                 teamSideByPlayerIdRef.current,
                 playerNameByIdRef.current,
                 event.pitcherChange.outgoingPitcherId,
                 event.pitcherChange.outgoingPitcherName,
-                event.gameState?.halfInning === "TOP" ? "home" : "away",
+                pitcherChangeSide,
               );
             }
             if (event.pitcherChange?.incomingPitcherId) {
+              const pitcherChangeSide =
+                (event.pitcherChange.pitchingTeamSide as
+                  | TeamSide
+                  | undefined) ||
+                resolveTrackedTeamSide(
+                  event.pitcherChange.outgoingPitcherId,
+                  teamSideByPlayerIdRef.current,
+                  awayLineupRef.current,
+                  homeLineupRef.current,
+                  awayLineupStateRef.current,
+                  homeLineupStateRef.current,
+                ) ||
+                resolveTrackedTeamSide(
+                  event.pitcherChange.incomingPitcherId,
+                  teamSideByPlayerIdRef.current,
+                  awayLineupRef.current,
+                  homeLineupRef.current,
+                  awayLineupStateRef.current,
+                  homeLineupStateRef.current,
+                ) ||
+                (event.gameState?.halfInning === "TOP" ? "home" : "away");
               registerTrackedIdentity(
                 teamSideByPlayerIdRef.current,
                 playerNameByIdRef.current,
                 event.pitcherChange.incomingPitcherId,
                 event.pitcherChange.incomingPitcherName,
-                event.gameState?.halfInning === "TOP" ? "home" : "away",
+                pitcherChangeSide,
               );
             }
           }
@@ -5660,8 +5722,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             incomingPitcherId: string,
             incomingPitcherName: string,
             outgoingPitcherId?: string,
+            options: {
+              inheritedRunners?: number;
+              updateTracker?: boolean;
+            } = {},
           ) => {
-            const inheritedRunners = activeTrackedRunnerCount();
+            const inheritedRunners =
+              options.inheritedRunners ?? activeTrackedRunnerCount();
             if (outgoingPitcherId) {
               const outgoing = {
                 ...(rehydratedPitcherStats.get(outgoingPitcherId) ||
@@ -5678,11 +5745,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               entryOuts: recoveredOuts,
               inheritedRunners,
             });
-            rebuiltTracker = trackerHandlePitchingChange(
-              rebuiltTracker,
-              incomingPitcherId,
-              incomingPitcherName,
-            ).state;
+            if (options.updateTracker !== false) {
+              rebuiltTracker = trackerHandlePitchingChange(
+                rebuiltTracker,
+                incomingPitcherId,
+                incomingPitcherName,
+              ).state;
+            }
           };
 
           const createReplayPitcherLineupPlayer = (
@@ -5736,31 +5805,48 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
             if (event.pitcherChange) {
               const pitcherTeamSide =
-                event.gameState?.halfInning === "TOP"
+                (event.pitcherChange.pitchingTeamSide as
+                  | TeamSide
+                  | undefined) ||
+                resolveReplayTeamSideForPlayer(
+                  event.pitcherChange.outgoingPitcherId,
+                ) ||
+                resolveReplayTeamSideForPlayer(
+                  event.pitcherChange.incomingPitcherId,
+                ) ||
+                (event.gameState?.halfInning === "TOP"
                   ? "home"
                   : event.gameState?.halfInning === "BOTTOM"
                     ? "away"
-                    : resolveReplayTeamSideForPlayer(
-                        event.pitcherChange.incomingPitcherId,
-                      );
+                    : null);
               const previousPitcher = pitcherTeamSide
                 ? replayCurrentPitchersBySide[pitcherTeamSide]
                 : null;
-              recoveredPitcherId = event.pitcherChange.incomingPitcherId;
-              recoveredPitcherName =
+              const incomingPitcherId = event.pitcherChange.incomingPitcherId;
+              const incomingPitcherName =
                 event.pitcherChange.incomingPitcherName ||
                 event.pitcherChange.incomingPitcherId;
+              const isCurrentDefensivePitcherChange =
+                pitcherTeamSide === (recoveredIsTop ? "home" : "away");
+              if (isCurrentDefensivePitcherChange) {
+                recoveredPitcherId = incomingPitcherId;
+                recoveredPitcherName = incomingPitcherName;
+              }
               applyReplayPitchingChange(
-                recoveredPitcherId,
-                recoveredPitcherName,
+                incomingPitcherId,
+                incomingPitcherName,
                 event.pitcherChange.outgoingPitcherId ||
                   previousPitcher?.playerId,
+                {
+                  inheritedRunners: event.pitcherChange.inheritedRunners ?? 0,
+                  updateTracker: isCurrentDefensivePitcherChange,
+                },
               );
               if (pitcherTeamSide) {
                 replayCurrentPitchersBySide[pitcherTeamSide] =
                   createReplayPitcherLineupPlayer(
-                    recoveredPitcherId,
-                    recoveredPitcherName,
+                    incomingPitcherId,
+                    incomingPitcherName,
                     previousPitcher,
                   );
               }
@@ -5783,21 +5869,28 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
                   : recoveredPitcherId !== event.substitution.inPlayerId
                     ? recoveredPitcherId
                     : undefined;
-              recoveredPitcherId = event.substitution.inPlayerId;
-              recoveredPitcherName =
+              const incomingPitcherId = event.substitution.inPlayerId;
+              const incomingPitcherName =
                 event.substitution.inPlayerName ||
                 resolvePlayerNameForId(event.substitution.inPlayerId) ||
                 event.substitution.inPlayerId;
+              const isCurrentDefensivePitcherChange =
+                pitcherTeamSide === (recoveredIsTop ? "home" : "away");
+              if (isCurrentDefensivePitcherChange) {
+                recoveredPitcherId = incomingPitcherId;
+                recoveredPitcherName = incomingPitcherName;
+              }
               applyReplayPitchingChange(
-                recoveredPitcherId,
-                recoveredPitcherName,
+                incomingPitcherId,
+                incomingPitcherName,
                 outgoingPitcherId,
+                { updateTracker: isCurrentDefensivePitcherChange },
               );
               if (pitcherTeamSide) {
                 replayCurrentPitchersBySide[pitcherTeamSide] =
                   createReplayPitcherLineupPlayer(
-                    recoveredPitcherId,
-                    recoveredPitcherName,
+                    incomingPitcherId,
+                    incomingPitcherName,
                     previousPitcher,
                   );
               }
@@ -10541,8 +10634,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       pitchingTeamSide: TeamSide,
       newPitcherName?: string,
       exitingPitcherName?: string,
+      options?: {
+        beforeCommit?: () => void;
+        afterCommit?: () => void;
+      },
     ) => {
       if (gameState.gamePhase === "PRE_GAME") {
+        options?.beforeCommit?.();
         applyPregamePitchingChange(
           newPitcherId,
           exitingPitcherId,
@@ -10550,6 +10648,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           newPitcherName,
           exitingPitcherName,
         );
+        options?.afterCommit?.();
         return;
       }
 
@@ -10570,6 +10669,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       };
       pitchCountPromptRef.current = nextPitchCountPrompt;
       setPitchCountPrompt(nextPitchCountPrompt);
+      pendingActionBeforeCommitRef.current = options?.beforeCommit ?? null;
 
       // Store the pending action to execute after pitch count is confirmed
       pendingActionRef.current = async () => {
@@ -10615,6 +10715,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             outgoingPitcherName: resolvedOutgoingPitcherName,
             incomingPitcherId: newPitcherId,
             incomingPitcherName: resolvedIncomingPitcherName,
+            pitchingTeamSide,
             inheritedRunners: runnerTrackerRef.current.runners.filter(
               (r) =>
                 r.currentBase &&
@@ -10710,6 +10811,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           resolvedOutgoingPitcherName,
         );
 
+        options?.afterCommit?.();
+
         console.log(
           `[useGameState] Pitching change logged: ${newPitcherName || newPitcherId} replaces ${exitingPitcherName || exitingPitcherId} in inning ${gameState.inning}`,
         );
@@ -10745,6 +10848,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         pitcherId,
         finalCount,
       });
+      const beforeCommit = pendingActionBeforeCommitRef.current;
+      pendingActionBeforeCommitRef.current = null;
+      if (activePitchCountPrompt?.type === "pitching_change" && beforeCommit) {
+        beforeCommit();
+      }
+
       // Check for immaculate inning at end of half-inning
       // Requires: user confirmed exactly 9 pitches AND we tracked 3 strikeouts this half-inning
       if (
@@ -10870,6 +10979,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     );
     pendingActionRef.current = null;
     pendingActionCancelRef.current = null;
+    pendingActionBeforeCommitRef.current = null;
     const nextPitchCountPrompt: PitchCountPrompt = {
       type: deferredEntry.promptType,
       pitcherId: deferredEntry.pitcherId,
@@ -10895,6 +11005,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       const pendingAction = pendingActionRef.current;
       pendingActionRef.current = null;
       pendingActionCancelRef.current = null;
+      pendingActionBeforeCommitRef.current = null;
       if (pendingAction) {
         void Promise.resolve(pendingAction()).catch((error) => {
           console.error(
@@ -10910,6 +11021,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       const pendingCancel = pendingActionCancelRef.current;
       pendingActionRef.current = null;
       pendingActionCancelRef.current = null;
+      pendingActionBeforeCommitRef.current = null;
       if (pendingCancel) {
         void Promise.resolve(pendingCancel()).catch((error) => {
           console.error(
@@ -10923,6 +11035,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       );
     } else {
       pendingActionRef.current = null;
+      pendingActionBeforeCommitRef.current = null;
       pendingActionCancelRef.current?.();
       pendingActionCancelRef.current = null;
       console.log(
@@ -11097,6 +11210,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     };
     pitchCountPromptRef.current = nextPitchCountPrompt;
     setPitchCountPrompt(nextPitchCountPrompt);
+    pendingActionBeforeCommitRef.current = null;
 
     // Store the inning transition as a pending action
     pendingActionRef.current = async () => executeEndInning();
@@ -12509,6 +12623,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       };
       pitchCountPromptRef.current = nextPitchCountPrompt;
       setPitchCountPrompt(nextPitchCountPrompt);
+      pendingActionBeforeCommitRef.current = null;
 
       if (options?.awaitPitchCountConfirmation) {
         console.log("[R3-R7] endGame: awaiting pitch count confirmation...");

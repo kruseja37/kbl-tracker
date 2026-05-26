@@ -284,6 +284,67 @@ describe('useGameState between-play ledger', () => {
     expect(pitchCountEvent?.eventGroupId).toBe(pitcherChangeEvent?.eventGroupId);
   });
 
+  test('defers pitching-change beforeCommit until pitch-count confirmation and skips it on dismiss', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    act(() => {
+      result.current.startGame();
+    });
+
+    const commitOrder: string[] = [];
+    mockLogBetweenPlayEvent.mockImplementation(async (event) => {
+      commitOrder.push(`persist:${event.type}`);
+      return undefined;
+    });
+
+    act(() => {
+      result.current.changePitcher(
+        'home-rp',
+        'home-sp',
+        'home',
+        'Home Reliever',
+        'Home Starter',
+        {
+          beforeCommit: () => {
+            commitOrder.push('snapshot');
+          },
+        },
+      );
+    });
+    expect(commitOrder).toEqual([]);
+
+    act(() => {
+      result.current.dismissPitchCountPrompt();
+    });
+    expect(commitOrder).toEqual([]);
+
+    act(() => {
+      result.current.changePitcher(
+        'home-rp',
+        'home-sp',
+        'home',
+        'Home Reliever',
+        'Home Starter',
+        {
+          beforeCommit: () => {
+            commitOrder.push('snapshot');
+          },
+        },
+      );
+      result.current.confirmPitchCount('home-sp', 17);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(commitOrder[0]).toBe('snapshot');
+    expect(commitOrder).toEqual(expect.arrayContaining([
+      'persist:pitch_count_update',
+      'persist:pitcher_change',
+    ]));
+  });
+
   test('standalone pitching changes move the batting-order pitcher slot to the reliever', async () => {
     const { result } = renderHook(() => useGameState());
 

@@ -6163,16 +6163,6 @@ export function GameTracker() {
           return;
         }
 
-        undoSystem.captureSnapshot(
-          `${sub.type}: ${sub.incomingPlayerId} for ${sub.outgoingPlayerId}`,
-        );
-        changePitcher(
-          sub.incomingPlayerId,
-          sub.outgoingPlayerId,
-          pitchingTeam,
-          sub.incomingPlayerName,
-          sub.outgoingPlayerName,
-        );
         const setPitchers =
           pitchingTeam === "away" ? setAwayTeamPitchers : setHomeTeamPitchers;
         const incomingPositionPlayer = (
@@ -6182,66 +6172,83 @@ export function GameTracker() {
             getRosterEntityId(player, pitchingTeam) === sub.incomingPlayerId ||
             player.name === sub.incomingPlayerName,
         );
-        setPitchers((previous) => {
-          let foundIncomingPitcher = false;
-          const nextPitchers = previous.map((pitcher) => {
-            const pitcherId = getRosterEntityId(pitcher, pitchingTeam);
-            if (pitcherId === sub.incomingPlayerId) {
-              foundIncomingPitcher = true;
-              return {
-                ...pitcher,
-                isActive: true,
-                isOutOfGame: false,
-              };
-            }
-            if (pitcherId === sub.outgoingPlayerId) {
+        const applyPitcherDisplayChange = () => {
+          setPitchers((previous) => {
+            let foundIncomingPitcher = false;
+            const nextPitchers = previous.map((pitcher) => {
+              const pitcherId = getRosterEntityId(pitcher, pitchingTeam);
+              if (pitcherId === sub.incomingPlayerId) {
+                foundIncomingPitcher = true;
+                return {
+                  ...pitcher,
+                  isActive: true,
+                  isOutOfGame: false,
+                };
+              }
+              if (pitcherId === sub.outgoingPlayerId) {
+                return {
+                  ...pitcher,
+                  isActive: false,
+                  isOutOfGame: gameState.gamePhase === "LIVE",
+                };
+              }
               return {
                 ...pitcher,
                 isActive: false,
-                isOutOfGame: gameState.gamePhase === "LIVE",
               };
-            }
-            return {
-              ...pitcher,
-              isActive: false,
-            };
-          });
-
-          if (!foundIncomingPitcher) {
-            nextPitchers.push({
-              name:
-                incomingPositionPlayer?.name ||
-                sub.incomingPlayerName ||
-                sub.incomingPlayerId,
-              fullName:
-                incomingPositionPlayer?.name ||
-                sub.incomingPlayerName ||
-                sub.incomingPlayerId,
-              stats: { ip: "0.0", h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
-              throwingHand: (incomingPositionPlayer?.throws || "R") as "L" | "R",
-              throws: incomingPositionPlayer?.throws,
-              isStarter: false,
-              isActive: true,
-              isOutOfGame: false,
-              playerId: sub.incomingPlayerId,
-              velocity: incomingPositionPlayer?.velocity,
-              junk: incomingPositionPlayer?.junk,
-              accuracy: incomingPositionPlayer?.accuracy,
-              arsenal: incomingPositionPlayer?.arsenal,
-              overallGrade: incomingPositionPlayer?.overallGrade,
-              secondaryPosition: incomingPositionPlayer?.position,
-              power: incomingPositionPlayer?.power,
-              contact: incomingPositionPlayer?.contact,
-              speed: incomingPositionPlayer?.speed,
-              fieldingRating: incomingPositionPlayer?.fieldingRating,
-              arm: incomingPositionPlayer?.arm,
             });
-          }
 
-          return nextPitchers;
-        });
-        syncDisplayedRostersToLineupSnapshot(getLineupStateSnapshot());
-        setRosterVersion((v) => v + 1);
+            if (!foundIncomingPitcher) {
+              nextPitchers.push({
+                name:
+                  incomingPositionPlayer?.name ||
+                  sub.incomingPlayerName ||
+                  sub.incomingPlayerId,
+                fullName:
+                  incomingPositionPlayer?.name ||
+                  sub.incomingPlayerName ||
+                  sub.incomingPlayerId,
+                stats: { ip: "0.0", h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
+                throwingHand: (incomingPositionPlayer?.throws || "R") as "L" | "R",
+                throws: incomingPositionPlayer?.throws,
+                isStarter: false,
+                isActive: true,
+                isOutOfGame: false,
+                playerId: sub.incomingPlayerId,
+                velocity: incomingPositionPlayer?.velocity,
+                junk: incomingPositionPlayer?.junk,
+                accuracy: incomingPositionPlayer?.accuracy,
+                arsenal: incomingPositionPlayer?.arsenal,
+                overallGrade: incomingPositionPlayer?.overallGrade,
+                secondaryPosition: incomingPositionPlayer?.position,
+                power: incomingPositionPlayer?.power,
+                contact: incomingPositionPlayer?.contact,
+                speed: incomingPositionPlayer?.speed,
+                fieldingRating: incomingPositionPlayer?.fieldingRating,
+                arm: incomingPositionPlayer?.arm,
+              });
+            }
+
+            return nextPitchers;
+          });
+          syncDisplayedRostersToLineupSnapshot(getLineupStateSnapshot());
+          setRosterVersion((v) => v + 1);
+        };
+        changePitcher(
+          sub.incomingPlayerId,
+          sub.outgoingPlayerId,
+          pitchingTeam,
+          sub.incomingPlayerName,
+          sub.outgoingPlayerName,
+          {
+            beforeCommit: () => {
+              undoSystem.captureSnapshot(
+                `${sub.type}: ${sub.incomingPlayerId} for ${sub.outgoingPlayerId}`,
+              );
+            },
+            afterCommit: applyPitcherDisplayChange,
+          },
+        );
       } else if (sub.type === "position_swap") {
         const incomingContext = findTeamPlayer(
           sub.incomingPlayerId,
@@ -8299,6 +8306,34 @@ export function GameTracker() {
       resolvePitchingTeamSide(newPitcherId, newPitcherName) ||
       teamType;
 
+    const setPitchers =
+      pitchingTeamSide === "away" ? setAwayTeamPitchers : setHomeTeamPitchers;
+    const applyPitcherDisplayChange = () => {
+      queuePlayLogRefresh(80);
+      setPitchers((previous) =>
+        previous.map((pitcher) => {
+          if (pitcher.name === newPitcherName) {
+            return {
+              ...pitcher,
+              isActive: true,
+              isOutOfGame: false,
+            };
+          }
+          if (pitcher.name === replacedName) {
+            return {
+              ...pitcher,
+              isActive: false,
+              isOutOfGame: gameState.gamePhase === "LIVE",
+            };
+          }
+          return {
+            ...pitcher,
+            isActive: false,
+          };
+        }),
+      );
+    };
+
     // Call the hook's changePitcher function which will:
     // 1. Show pitch count prompt for exiting pitcher
     // 2. After confirmation, update currentPitcherId/currentPitcherName
@@ -8308,32 +8343,7 @@ export function GameTracker() {
       pitchingTeamSide,
       newPitcherName,
       replacedName,
-    );
-    queuePlayLogRefresh(80);
-
-    const setPitchers =
-      pitchingTeamSide === "away" ? setAwayTeamPitchers : setHomeTeamPitchers;
-    setPitchers((previous) =>
-      previous.map((pitcher) => {
-        if (pitcher.name === newPitcherName) {
-          return {
-            ...pitcher,
-            isActive: true,
-            isOutOfGame: false,
-          };
-        }
-        if (pitcher.name === replacedName) {
-          return {
-            ...pitcher,
-            isActive: false,
-            isOutOfGame: gameState.gamePhase === "LIVE",
-          };
-        }
-        return {
-          ...pitcher,
-          isActive: false,
-        };
-      }),
+      { afterCommit: applyPitcherDisplayChange },
     );
 
   };

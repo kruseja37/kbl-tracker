@@ -243,6 +243,115 @@ describe('useGameState recover between-play ledger', () => {
     });
   });
 
+  test('rehydrates both teams tail pitcher changes without moving the active pitcher to the wrong side', async () => {
+    mockGetGameHeader.mockResolvedValueOnce({
+      gameId: 'recovery-game',
+      date: Date.now(),
+      awayTeamId: 'away-team',
+      awayTeamName: 'Away Team',
+      homeTeamId: 'home-team',
+      homeTeamName: 'Home Team',
+      stadiumName: 'Test Park',
+      startingLineups: {
+        away: [
+          { playerId: 'away-batter-1', playerName: 'Away Batter 1', position: 'SS', battingOrder: 1 },
+          { playerId: 'away-batter-2', playerName: 'Away Batter 2', position: 'CF', battingOrder: 2 },
+        ],
+        home: [
+          { playerId: 'home-batter-1', playerName: 'Home Batter 1', position: '2B', battingOrder: 1 },
+          { playerId: 'home-batter-2', playerName: 'Home Batter 2', position: 'RF', battingOrder: 2 },
+        ],
+      },
+      benchRosters: {
+        away: [{ playerId: 'away-rp', playerName: 'Away Reliever', positions: ['P'], isAvailable: true }],
+        home: [{ playerId: 'home-rp', playerName: 'Home Reliever', positions: ['P'], isAvailable: true }],
+      },
+      startingPitchers: {
+        away: { playerId: 'away-sp', playerName: 'Away Starter' },
+        home: { playerId: 'home-sp', playerName: 'Home Starter' },
+      },
+      finalScore: null,
+      finalInning: 1,
+      isComplete: false,
+      aggregated: false,
+      aggregatedAt: null,
+      aggregationError: null,
+      eventCount: 1,
+      checksum: '',
+    });
+    mockGetBetweenPlayEvents.mockResolvedValueOnce([
+      {
+        eventId: 'recovery-game_bp_home_pitcher',
+        gameId: 'recovery-game',
+        timestamp: 1100,
+        eventIndex: 1.001,
+        type: 'pitcher_change',
+        gameState: {
+          inning: 1,
+          halfInning: 'TOP',
+          outs: 0,
+          score: { away: 0, home: 0 },
+          runnersOn: { first: 'away-batter-1' },
+        },
+        pitcherChange: {
+          outgoingPitcherId: 'home-sp',
+          outgoingPitcherName: 'Home Starter',
+          incomingPitcherId: 'home-rp',
+          incomingPitcherName: 'Home Reliever',
+          inheritedRunners: 1,
+          outgoingPitchCount: 12,
+        },
+      },
+      {
+        eventId: 'recovery-game_bp_away_pitcher',
+        gameId: 'recovery-game',
+        timestamp: 1200,
+        eventIndex: 1.002,
+        type: 'pitcher_change',
+        gameState: {
+          inning: 1,
+          halfInning: 'TOP',
+          outs: 0,
+          score: { away: 0, home: 0 },
+          runnersOn: { first: 'away-batter-1' },
+        },
+        pitcherChange: {
+          outgoingPitcherId: 'away-sp',
+          outgoingPitcherName: 'Away Starter',
+          incomingPitcherId: 'away-rp',
+          incomingPitcherName: 'Away Reliever',
+          inheritedRunners: 0,
+          outgoingPitchCount: 8,
+        },
+      },
+    ]);
+
+    const { result } = renderHook(() => useGameState('recovery-game'));
+
+    await act(async () => {
+      const loaded = await result.current.loadExistingGame();
+      expect(loaded).toBe(true);
+      await vi.runAllTimersAsync();
+    });
+
+    expect(result.current.gameState.isTop).toBe(true);
+    expect(result.current.gameState.currentPitcherId).toBe('home-rp');
+
+    const lineupSnapshot = result.current.getLineupStateSnapshot();
+    expect(lineupSnapshot.home.currentPitcher).toEqual(
+      expect.objectContaining({ playerId: 'home-rp' }),
+    );
+    expect(lineupSnapshot.away.currentPitcher).toEqual(
+      expect.objectContaining({ playerId: 'away-rp' }),
+    );
+    expect(result.current.pitcherStats.get('away-rp')).toMatchObject({
+      inheritedRunners: 0,
+    });
+    expect(result.current.pitcherStats.get('home-rp')).toMatchObject({
+      inheritedRunners: 1,
+    });
+  });
+
   test('rehydrates the automatic runner after a half-ending at-bat starts extras', async () => {
     mockGetGameHeader.mockResolvedValueOnce({
       gameId: 'recovery-game',
