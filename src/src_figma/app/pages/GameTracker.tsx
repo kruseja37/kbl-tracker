@@ -4387,8 +4387,12 @@ export function GameTracker() {
 
         // MAJ-09: Extract bench players (players without batting order = not in starting lineup)
         const awayStarterIds = new Set(awayLineup.map((p) => p.playerId));
+        const awayActivePitcherId = awayActivePitcher
+          ? getRosterEntityId(awayActivePitcher, "away")
+          : null;
         const awayBenchPosition = awayTeamPlayers
           .filter((p) => !awayStarterIds.has(getRosterEntityId(p, "away")))
+          .filter((p) => getRosterEntityId(p, "away") !== awayActivePitcherId)
           .filter((p) => !p.isOutOfGame)
           .map((p) => ({
             playerId: getRosterEntityId(p, "away"),
@@ -4421,8 +4425,12 @@ export function GameTracker() {
         });
 
         const homeStarterIds = new Set(homeLineup.map((p) => p.playerId));
+        const homeActivePitcherId = homeActivePitcher
+          ? getRosterEntityId(homeActivePitcher, "home")
+          : null;
         const homeBenchPosition = homeTeamPlayers
           .filter((p) => !homeStarterIds.has(getRosterEntityId(p, "home")))
+          .filter((p) => getRosterEntityId(p, "home") !== homeActivePitcherId)
           .filter((p) => !p.isOutOfGame)
           .map((p) => ({
             playerId: getRosterEntityId(p, "home"),

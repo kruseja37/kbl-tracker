@@ -7,6 +7,7 @@ import { FITNESS_STATES } from '../../../engines/fitnessEngine';
 import {
   getEliminationRosterSnapshot,
   getAllEliminationRosterSnapshots,
+  isEliminationPitcher,
   getNormalizedEliminationLineup,
   getNormalizedEliminationRotation,
   updateEliminationRosterSnapshot,
@@ -138,14 +139,9 @@ function PlayerConditionModal({
 
 const FIELD_POSITIONS_WITH_DH: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'DH'];
 const FIELD_POSITIONS_NO_DH: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'P'];
-const PITCHER_POSITIONS: Position[] = ['SP', 'RP', 'CP', 'SP/RP'];
 
 function getPlayerName(player: Player): string {
   return `${player.firstName} ${player.lastName}`;
-}
-
-function isPitcher(player: Player): boolean {
-  return PITCHER_POSITIONS.includes(player.primaryPosition);
 }
 
 function sortLineup(lineup: LineupSlot[]): LineupSlot[] {
@@ -606,7 +602,7 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
   const positionPlayers = useMemo(
     () =>
       (snapshot?.players ?? [])
-        .filter((player) => !isPitcher(player))
+        .filter((player) => !isEliminationPitcher(player))
         .sort((a, b) => a.lastName.localeCompare(b.lastName)),
     [snapshot]
   );
@@ -614,7 +610,7 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
   const pitchers = useMemo(
     () =>
       (snapshot?.players ?? [])
-        .filter((player) => isPitcher(player))
+        .filter((player) => isEliminationPitcher(player))
         .sort((a, b) => a.lastName.localeCompare(b.lastName)),
     [snapshot]
   );
