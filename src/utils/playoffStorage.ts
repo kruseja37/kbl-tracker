@@ -66,6 +66,7 @@ export interface PlayoffConfig {
 
   // Source discriminator (Elimination Mode coexistence)
   sourceType?: 'franchise' | 'elimination';  // Defaults to 'franchise' for existing records
+  franchiseId?: string;                      // Links to franchise instance
   eliminationId?: string;                     // Links to elimination instance
 
   // Timestamps
@@ -514,8 +515,13 @@ export async function getPlayoff(playoffId: string): Promise<PlayoffConfig | nul
 
 export async function getPlayoffBySeason(
   seasonNumber: number,
-  sourceType?: 'franchise' | 'elimination'
+  sourceType?: 'franchise' | 'elimination',
+  franchiseId?: string,
 ): Promise<PlayoffConfig | null> {
+  if (sourceType === 'elimination') {
+    throw new Error('Use getPlayoffByElimination(eliminationId) for elimination playoff lookup.');
+  }
+
   const db = await initPlayoffDatabase();
 
   return new Promise((resolve, reject) => {
@@ -542,7 +548,10 @@ export async function getPlayoffBySeason(
       }
 
       const existingSourceType = playoff.sourceType || 'franchise';
-      if (existingSourceType === sourceType) {
+      if (
+        existingSourceType === sourceType &&
+        (!franchiseId || playoff.franchiseId === franchiseId)
+      ) {
         resolve(playoff);
         return;
       }
@@ -1193,7 +1202,35 @@ export async function aggregateGameToPlayoffStats(
     initPlayoffDatabase(),
     getPlayoff(playoffId),
   ]);
-  const sourceType = playoff?.sourceType;
+  if (!playoff) {
+    throw new Error(`Playoff ${playoffId} not found`);
+  }
+
+  const sourceType = playoff.sourceType || 'franchise';
+  if (sourceType === 'elimination') {
+    if (
+      (gameState.competitionType != null && gameState.competitionType !== 'elimination') ||
+      (gameState.competitionId != null && gameState.competitionId !== playoff.eliminationId)
+    ) {
+      throw new Error('Cannot aggregate non-elimination game into elimination playoff stats.');
+    }
+  } else {
+    if (gameState.competitionType === 'elimination') {
+      throw new Error('Cannot aggregate elimination game into franchise playoff stats.');
+    }
+    if (!gameState.franchiseId) {
+      throw new Error('Cannot aggregate franchise playoff game without franchise identity.');
+    }
+    if (playoff.franchiseId && gameState.franchiseId !== playoff.franchiseId) {
+      throw new Error('Cannot aggregate game from a different franchise.');
+    }
+    if (gameState.seasonId && gameState.seasonId !== playoff.seasonId) {
+      throw new Error('Cannot aggregate game from a different franchise season.');
+    }
+    if (!gameState.statsScopeId || gameState.statsScopeId !== playoff.seasonId) {
+      throw new Error('Cannot aggregate franchise playoff game without canonical stats scope.');
+    }
+  }
 
   const battingByPlayer = new Map<string, {
     playerName: string;
@@ -1402,9 +1439,14 @@ export function resetPlayoffDbConnection(): void {
 
 export async function deletePlayoffBySeason(
   seasonNumber: number,
-  sourceType?: 'franchise' | 'elimination'
+  sourceType?: 'franchise' | 'elimination',
+  franchiseId?: string,
 ): Promise<void> {
-  const existing = await getPlayoffBySeason(seasonNumber, sourceType);
+  if (sourceType === 'elimination') {
+    throw new Error('deletePlayoffBySeason requires an eliminationId; use deletePlayoff on getPlayoffByElimination(eliminationId).');
+  }
+
+  const existing = await getPlayoffBySeason(seasonNumber, sourceType, franchiseId);
   if (existing) {
     await deletePlayoff(existing.id);
   }

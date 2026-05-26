@@ -104,7 +104,7 @@ function isValidEliminationInnings(value: unknown): value is number {
 function resolveEliminationInningsPerGame(
   metadata: EliminationMetadata | null,
   playoffConfig: PlayoffConfig | null,
-): number {
+): number | null {
   const metadataInnings = metadata?.inningsPerGame;
   if (isValidEliminationInnings(metadataInnings)) {
     return metadataInnings;
@@ -113,7 +113,33 @@ function resolveEliminationInningsPerGame(
   if (isValidEliminationInnings(playoffInnings)) {
     return playoffInnings;
   }
-  return 9;
+  return null;
+}
+
+function getEliminationInningsRuleWarning(
+  metadata: EliminationMetadata | null,
+  playoffConfig: PlayoffConfig | null,
+): string | null {
+  const metadataInnings = metadata?.inningsPerGame;
+  const playoffInnings = playoffConfig?.inningsPerGame;
+  const hasMetadataInnings = metadataInnings != null;
+  const hasPlayoffInnings = playoffInnings != null;
+  const metadataValid = isValidEliminationInnings(metadataInnings);
+  const playoffValid = isValidEliminationInnings(playoffInnings);
+
+  if (!metadataValid && !playoffValid) {
+    return 'Inning settings are invalid. Recreate this bracket before launching a game.';
+  }
+  if (hasMetadataInnings && !metadataValid) {
+    return `Bracket inning setting is invalid (${metadataInnings}); using playoff setting ${playoffInnings}.`;
+  }
+  if (hasPlayoffInnings && !playoffValid) {
+    return `Playoff inning setting is invalid (${playoffInnings}); using bracket setting ${metadataInnings}.`;
+  }
+  if (metadataValid && playoffValid && metadataInnings !== playoffInnings) {
+    return `Inning settings disagree: bracket ${metadataInnings}, playoff ${playoffInnings}. Using bracket setting.`;
+  }
+  return null;
 }
 
 function formatSeriesScore(series: PlayoffSeries): string {
@@ -443,6 +469,10 @@ export function EliminationHome() {
         series.round === playoffConfig.rounds,
       );
       const inningsPerGame = resolveEliminationInningsPerGame(metadata, playoffConfig);
+      if (inningsPerGame == null) {
+        setError('Elimination inning settings are invalid. Recreate this bracket before launching a game.');
+        return;
+      }
       const [awayRoster, homeRoster, awayTeamData, homeTeamData] = await Promise.all([
         buildEliminationGameTrackerRoster(eliminationId, awayTeam.teamId, playoffConfig.useDH),
         buildEliminationGameTrackerRoster(eliminationId, homeTeam.teamId, playoffConfig.useDH),
@@ -650,6 +680,7 @@ export function EliminationHome() {
             eliminationId={eliminationId!}
             playoffConfig={playoffConfig}
             inningsPerGame={resolveEliminationInningsPerGame(metadata, playoffConfig)}
+            inningRuleWarning={getEliminationInningsRuleWarning(metadata, playoffConfig)}
             seriesByRound={seriesByRound}
             selectedSeries={selectedSeries}
             onSelectSeries={setSelectedSeriesId}
@@ -703,6 +734,7 @@ function BracketTab({
   eliminationId,
   playoffConfig,
   inningsPerGame,
+  inningRuleWarning,
   seriesByRound,
   selectedSeries,
   onSelectSeries,
@@ -713,7 +745,8 @@ function BracketTab({
 }: {
   eliminationId: string;
   playoffConfig: PlayoffConfig;
-  inningsPerGame: number;
+  inningsPerGame: number | null;
+  inningRuleWarning: string | null;
   seriesByRound: Array<[number, PlayoffSeries[]]>;
   selectedSeries: PlayoffSeries | null;
   onSelectSeries: (seriesId: string) => void;
@@ -728,8 +761,13 @@ function BracketTab({
         <div className="text-sm mb-2">▶ BRACKET OVERVIEW</div>
         <div className="text-[8px] text-[#E8E8D8]/70">
           {playoffConfig.teamsQualifying} TEAMS • {playoffConfig.rounds} ROUNDS • BEST OF{' '}
-          {playoffConfig.gamesPerRound.join('/')} • {inningsPerGame} INNINGS
+          {playoffConfig.gamesPerRound.join('/')} • {inningsPerGame ?? 'INVALID'} INNINGS
         </div>
+        {inningRuleWarning && (
+          <div className="mt-3 border-2 border-[#C4A853] bg-[#2A2A1A] p-2 text-[8px] text-[#FFD966]">
+            {inningRuleWarning}
+          </div>
+        )}
       </div>
 
       {seriesByRound.length === 0 ? (
