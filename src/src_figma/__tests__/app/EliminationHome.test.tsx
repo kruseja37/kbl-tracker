@@ -166,6 +166,75 @@ describe("EliminationHome leaders Team Impact panels", () => {
     expect(screen.getByText("FIELDING LEADERS")).toBeInTheDocument();
     expect(screen.getAllByText(/Alpha Star/).length).toBeGreaterThan(0);
   });
+
+  test("elimination launch carries bracket inning rules from metadata without franchise scope", async () => {
+    mockGetElimination.mockResolvedValue({
+      eliminationId: "elim-1",
+      name: "Test Cup",
+      leagueId: "league-1",
+      leagueName: "Test League",
+      teamsCount: 2,
+      inningsPerGame: 7,
+      currentRound: 1,
+      status: "IN_PROGRESS",
+    });
+    mockGetPlayoffByElimination.mockResolvedValue({
+      id: "playoff-1",
+      sourceType: "elimination",
+      seasonId: "elim-1",
+      status: "IN_PROGRESS",
+      teams: [
+        playoffTeam("alpha", "Alpha"),
+        playoffTeam("beta", "Beta"),
+      ],
+      teamsQualifying: 2,
+      rounds: 1,
+      gamesPerRound: [1],
+      inningsPerGame: 4,
+      useDH: true,
+      liveBeatReporterEnabled: false,
+      postGameColumnsEnabled: true,
+      beatReporterEnabled: true,
+    });
+    mockGetSeriesByPlayoff.mockResolvedValue([
+      {
+        id: "series-1",
+        playoffId: "playoff-1",
+        round: 1,
+        roundName: "Round 1",
+        higherSeed: { teamId: "alpha", teamName: "Alpha", seed: 1 },
+        lowerSeed: { teamId: "beta", teamName: "Beta", seed: 2 },
+        status: "IN_PROGRESS",
+        gamesRequired: 1,
+        bestOf: 1,
+        higherSeedWins: 0,
+        lowerSeedWins: 0,
+        games: [],
+        createdAt: Date.now(),
+      },
+    ]);
+
+    render(<EliminationHome />);
+
+    expect(await screen.findByText(/7 INNINGS/i)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "PLAY GAME" }));
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
+    const state = mockNavigate.mock.calls.at(-1)?.[1]?.state;
+    expect(state).toMatchObject({
+      gameMode: "elimination",
+      eliminationId: "elim-1",
+      statsScopeId: "elimination-elim-1",
+      competitionType: "elimination",
+      competitionId: "elim-1",
+      playoffId: "playoff-1",
+      playoffSeriesId: "series-1",
+      playoffGameNumber: 1,
+      totalInnings: 7,
+    });
+    expect(state.franchiseId).toBeUndefined();
+    expect(state.seasonId).toBeUndefined();
+  });
 });
 
 function playoffTeam(teamId: string, teamName: string) {

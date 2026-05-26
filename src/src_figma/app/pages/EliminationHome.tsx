@@ -97,6 +97,25 @@ function buildSeriesCardState(
   };
 }
 
+function isValidEliminationInnings(value: unknown): value is number {
+  return Number.isInteger(value) && Number(value) >= 3 && Number(value) <= 9;
+}
+
+function resolveEliminationInningsPerGame(
+  metadata: EliminationMetadata | null,
+  playoffConfig: PlayoffConfig | null,
+): number {
+  const metadataInnings = metadata?.inningsPerGame;
+  if (isValidEliminationInnings(metadataInnings)) {
+    return metadataInnings;
+  }
+  const playoffInnings = playoffConfig?.inningsPerGame;
+  if (isValidEliminationInnings(playoffInnings)) {
+    return playoffInnings;
+  }
+  return 9;
+}
+
 function formatSeriesScore(series: PlayoffSeries): string {
   return `${series.higherSeedWins}-${series.lowerSeedWins}`;
 }
@@ -423,6 +442,7 @@ export function EliminationHome() {
         series.bestOf,
         series.round === playoffConfig.rounds,
       );
+      const inningsPerGame = resolveEliminationInningsPerGame(metadata, playoffConfig);
       const [awayRoster, homeRoster, awayTeamData, homeTeamData] = await Promise.all([
         buildEliminationGameTrackerRoster(eliminationId, awayTeam.teamId, playoffConfig.useDH),
         buildEliminationGameTrackerRoster(eliminationId, homeTeam.teamId, playoffConfig.useDH),
@@ -539,7 +559,8 @@ export function EliminationHome() {
           playoffRound: mapSeriesRoundToFameRound(series.round, playoffConfig.rounds),
           isEliminationGame: clutchContext.isEliminationGame,
           isClinchGame: clutchContext.isClinchGame,
-          totalInnings: playoffConfig.inningsPerGame,
+          totalInnings: inningsPerGame,
+          useGhostRunner: false,
           useDH: playoffConfig.useDH,
         }, {
           awayManagerId: awayManager.managerId,
@@ -628,6 +649,7 @@ export function EliminationHome() {
           <BracketTab
             eliminationId={eliminationId!}
             playoffConfig={playoffConfig}
+            inningsPerGame={resolveEliminationInningsPerGame(metadata, playoffConfig)}
             seriesByRound={seriesByRound}
             selectedSeries={selectedSeries}
             onSelectSeries={setSelectedSeriesId}
@@ -680,6 +702,7 @@ export function EliminationHome() {
 function BracketTab({
   eliminationId,
   playoffConfig,
+  inningsPerGame,
   seriesByRound,
   selectedSeries,
   onSelectSeries,
@@ -690,6 +713,7 @@ function BracketTab({
 }: {
   eliminationId: string;
   playoffConfig: PlayoffConfig;
+  inningsPerGame: number;
   seriesByRound: Array<[number, PlayoffSeries[]]>;
   selectedSeries: PlayoffSeries | null;
   onSelectSeries: (seriesId: string) => void;
@@ -704,7 +728,7 @@ function BracketTab({
         <div className="text-sm mb-2">▶ BRACKET OVERVIEW</div>
         <div className="text-[8px] text-[#E8E8D8]/70">
           {playoffConfig.teamsQualifying} TEAMS • {playoffConfig.rounds} ROUNDS • BEST OF{' '}
-          {playoffConfig.gamesPerRound.join('/')}
+          {playoffConfig.gamesPerRound.join('/')} • {inningsPerGame} INNINGS
         </div>
       </div>
 

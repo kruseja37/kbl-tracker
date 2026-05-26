@@ -43,6 +43,7 @@ export interface EliminationMetadata {
   createdAt: number;
   lastPlayedAt: number;
   teamsCount: number;
+  inningsPerGame?: number;
   currentRound: number;
   champion?: string;
   awards?: EliminationAward[];
@@ -81,6 +82,7 @@ export async function createElimination(params: {
   leagueId: string;
   leagueName: string;
   teamsCount: number;
+  inningsPerGame?: number;
   status?: EliminationMetadata['status'];
   currentRound?: number;
 }): Promise<EliminationMetadata> {
@@ -98,6 +100,7 @@ export async function createElimination(params: {
     createdAt: now,
     lastPlayedAt: now,
     teamsCount: params.teamsCount,
+    inningsPerGame: params.inningsPerGame,
     currentRound: params.currentRound ?? 1,
   };
 
@@ -339,6 +342,7 @@ export async function createEliminationRun(params: {
       leagueId: params.leagueId,
       leagueName: params.leagueName,
       teamsCount: params.teamsCount,
+      inningsPerGame,
       status: 'IN_PROGRESS',
       currentRound: 1,
     });
