@@ -360,6 +360,7 @@ export interface PersistedGameState {
   playerRatingsSnapshots?: Record<string, PlayerRatingsSnapshot>;
 
   // R3-T0: Persist exhibition config that lives only in navigationState
+  useGhostRunner?: boolean;
   extraInningRunner?: boolean;
   extraInningRunnerDelay?: 1 | 2;
 
@@ -574,6 +575,7 @@ export interface CompletedGameRecord {
   finalScore: { away: number; home: number };
   innings: number;
   totalInnings?: number;
+  useGhostRunner?: boolean;
   extraInningRunner?: boolean;
   extraInningRunnerDelay?: 1 | 2;
   fameEvents: PersistedGameState["fameEvents"];
@@ -597,6 +599,8 @@ export interface CompletedGameRecord {
   legacyManagerDecisions?: PersistedGameState["legacyManagerDecisions"];
   moraleShifts?: PersistedGameState["moraleShifts"];
   playerRatingsSnapshots?: PersistedGameState["playerRatingsSnapshots"];
+  aggregationStatus?: "aggregated" | "unaggregated" | "incomplete";
+  aggregationError?: string;
 }
 
 // ============================================
@@ -722,6 +726,7 @@ export async function archiveCompletedGame(
     franchiseId?: string;
     scheduleGameId?: string;
     totalInnings?: number;
+    useGhostRunner?: boolean;
     extraInningRunner?: boolean;
     extraInningRunnerDelay?: 1 | 2;
     pogPlayerId?: string;
@@ -730,6 +735,8 @@ export async function archiveCompletedGame(
       second?: string;
       third?: string;
     };
+    aggregationStatus?: CompletedGameRecord["aggregationStatus"];
+    aggregationError?: string;
   },
 ): Promise<void> {
   const db = await initDatabase();
@@ -770,6 +777,7 @@ export async function archiveCompletedGame(
     finalScore,
     innings: gameState.inning,
     totalInnings: context?.totalInnings ?? gameState.totalInnings,
+    useGhostRunner: context?.useGhostRunner ?? gameState.useGhostRunner,
     extraInningRunner:
       context?.extraInningRunner ?? gameState.extraInningRunner,
     extraInningRunnerDelay:
@@ -781,6 +789,8 @@ export async function archiveCompletedGame(
     inningScores,
     pogPlayerId: context?.pogPlayerId,
     playersOfTheGame: context?.playersOfTheGame,
+    aggregationStatus: context?.aggregationStatus ?? "aggregated",
+    aggregationError: context?.aggregationError,
     // --- NEW: ARCHIVE THE ADVANCED ARRAYS ---
     managerDecisions: gameState.managerDecisions || [],
     managerDeploymentStints: gameState.managerDeploymentStints || [],
@@ -880,12 +890,16 @@ export interface RecentGamesQuery {
   franchiseId?: string;
   competitionType?: CompetitionType;
   competitionId?: string;
+  includeIncomplete?: boolean;
 }
 
 function completedGameMatchesQuery(
   game: CompletedGameRecord,
   query: RecentGamesQuery,
 ): boolean {
+  if (!query.includeIncomplete && game.aggregationStatus === "incomplete") {
+    return false;
+  }
   if (query.seasonId && game.seasonId !== query.seasonId) return false;
   if (query.statsScopeId && game.statsScopeId !== query.statsScopeId) return false;
   if (query.franchiseId && game.franchiseId !== query.franchiseId) return false;
@@ -949,7 +963,9 @@ export async function getCompletedGameById(
   });
 }
 
-export async function getAllCompletedGames(): Promise<CompletedGameRecord[]> {
+export async function getAllCompletedGames(
+  options: { includeIncomplete?: boolean } = {},
+): Promise<CompletedGameRecord[]> {
   const db = await initDatabase();
 
   return new Promise((resolve, reject) => {
@@ -963,7 +979,15 @@ export async function getAllCompletedGames(): Promise<CompletedGameRecord[]> {
     };
 
     request.onsuccess = () => {
-      resolve((request.result || []).sort((a, b) => b.date - a.date));
+      const games = (request.result || []) as CompletedGameRecord[];
+      resolve(
+        games
+          .filter(
+            (game) =>
+              options.includeIncomplete || game.aggregationStatus !== "incomplete",
+          )
+          .sort((a, b) => b.date - a.date),
+      );
     };
   });
 }

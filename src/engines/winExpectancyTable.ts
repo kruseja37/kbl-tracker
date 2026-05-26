@@ -28,6 +28,7 @@ export interface WEGameState {
   awayScore: number;
   totalInnings?: number;
   runEnvironment?: number;
+  useGhostRunner?: boolean;
   extraInningRunner?: boolean;
   extraInningRunnerDelay?: 1 | 2;
 }
@@ -35,6 +36,7 @@ export interface WEGameState {
 export interface WinExpectancyLookupOptions {
   totalInnings?: number;
   runEnvironment?: number;
+  useGhostRunner?: boolean;
   extraInningRunner?: boolean;
   extraInningRunnerDelay?: 1 | 2;
 }
@@ -58,6 +60,7 @@ export function buildWEGameState(
     awayScore,
     totalInnings: options.totalInnings,
     runEnvironment: options.runEnvironment,
+    useGhostRunner: options.useGhostRunner,
     extraInningRunner: options.extraInningRunner,
     extraInningRunnerDelay: options.extraInningRunnerDelay,
   };
@@ -81,6 +84,7 @@ export function getWinExpectancyWithTrace(state: WEGameState): WinExpectancyResu
     awayScore: state.awayScore,
     scheduledInnings: state.totalInnings ?? 9,
     runEnvironment: state.runEnvironment,
+    useGhostRunner: state.useGhostRunner,
     extraInningRunner: state.extraInningRunner,
     extraInningRunnerDelay: state.extraInningRunnerDelay,
   });
@@ -105,6 +109,7 @@ export function lookupWinExpectancy(
     awayScore,
     totalInnings: options.totalInnings,
     runEnvironment: options.runEnvironment,
+    useGhostRunner: options.useGhostRunner,
     extraInningRunner: options.extraInningRunner,
     extraInningRunnerDelay: options.extraInningRunnerDelay,
   });
@@ -127,6 +132,7 @@ export function getHalfInningStartWE(
     awayScore,
     totalInnings: options.totalInnings,
     runEnvironment: options.runEnvironment,
+    useGhostRunner: options.useGhostRunner,
     extraInningRunner: options.extraInningRunner,
     extraInningRunnerDelay: options.extraInningRunnerDelay,
   });

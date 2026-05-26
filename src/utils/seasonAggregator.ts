@@ -24,7 +24,7 @@ import {
   aggregateGameWithMilestones,
   type MilestoneAggregationResult,
 } from './milestoneAggregator';
-import type { MilestoneConfig } from './milestoneDetector';
+import { SMB4_DEFAULT_GAMES, type MilestoneConfig } from './milestoneDetector';
 
 // Default season ID if none is set
 const DEFAULT_SEASON_ID = 'season-1';
@@ -123,10 +123,18 @@ export async function aggregateGameToSeason(
     // Run milestone detection if enabled
     let milestones: MilestoneAggregationResult | null = null;
     if (detectMilestones) {
+      const resolvedMilestoneConfig =
+        milestoneConfig ??
+        (gameState.totalInnings
+          ? {
+              gamesPerSeason: SMB4_DEFAULT_GAMES,
+              inningsPerGame: gameState.totalInnings,
+            }
+          : undefined);
       milestones = await aggregateGameWithMilestones(
         gameState,
         seasonId,
-        milestoneConfig,
+        resolvedMilestoneConfig,
         { franchiseId, currentGame, currentSeason }
       );
 

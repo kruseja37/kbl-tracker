@@ -245,6 +245,7 @@ function derive(
   options: {
     gameEnded?: boolean;
     totalInnings?: number;
+    useGhostRunner?: boolean;
     extraInningRunner?: boolean;
     extraInningRunnerDelay?: 1 | 2;
   } = {},
@@ -1484,6 +1485,131 @@ describe("manager WPA derivation", () => {
       rawCounterfactualWpa: decision.rawWindowWpa,
     });
     expect(batterTotal?.battingWpa ?? 0).toBeGreaterThan(0);
+  });
+
+  test("out-advancing counterfactual uses caller ghost-runner mapping when legacy event lacks it", () => {
+    const runner = {
+      runnerId: "away-runner-second",
+      runnerName: "Away Runner Second",
+      responsiblePitcherId: "home-pitcher",
+    };
+    const event = createAtBat({
+      eventId: "game-1_out_advancing_ghost_policy",
+      eventIndex: 21,
+      inning: 10,
+      outs: 1,
+      result: "2B",
+      runners: { first: null, second: runner, third: null },
+      extraInningRunner: true,
+      extraInningRunnerDelay: 1,
+      runsScored: ["away-runner-second"],
+      rbiCount: 1,
+      awayScore: 3,
+      homeScore: 3,
+      awayScoreAfter: 4,
+      homeScoreAfter: 3,
+      runnersAfter: { first: null, second: null, third: null },
+      outsAfter: 2,
+      runnerOutcomes: [
+        {
+          runnerId: "away-runner-second",
+          runnerName: "Away Runner Second",
+          fromBase: "second",
+          toBase: "home",
+        },
+        {
+          runnerId: "away-batter",
+          runnerName: "Away Batter",
+          fromBase: "batter",
+          toBase: "out",
+          isOutAdvancing: true,
+          managerIntent: "manager_send",
+          managerDecisionSource: "play_log_enhancement",
+        },
+      ],
+    });
+
+    const [decision] = derive([event], [], [], {
+      totalInnings: 9,
+      useGhostRunner: false,
+      extraInningRunner: true,
+      extraInningRunnerDelay: 1,
+    });
+    const expectedNoGhostMapping = calculateWPA(
+      {
+        inning: 10,
+        isTop: true,
+        outs: 1,
+        bases: { first: false, second: true, third: false },
+        homeScore: 3,
+        awayScore: 3,
+        totalInnings: 9,
+        useGhostRunner: false,
+        extraInningRunner: true,
+        extraInningRunnerDelay: 1,
+      },
+      {
+        outs: 2,
+        bases: { first: false, second: false, third: false },
+        homeScore: 3,
+        awayScore: 4,
+      },
+    );
+    const counterfactualNoGhostMapping = calculateWPA(
+      {
+        inning: 10,
+        isTop: true,
+        outs: 1,
+        bases: { first: false, second: true, third: false },
+        homeScore: 3,
+        awayScore: 3,
+        totalInnings: 9,
+        useGhostRunner: false,
+        extraInningRunner: true,
+        extraInningRunnerDelay: 1,
+      },
+      {
+        outs: 1,
+        bases: { first: false, second: true, third: false },
+        homeScore: 3,
+        awayScore: 4,
+      },
+    );
+    const counterfactualGhostMapping = calculateWPA(
+      {
+        inning: 10,
+        isTop: true,
+        outs: 1,
+        bases: { first: false, second: true, third: false },
+        homeScore: 3,
+        awayScore: 3,
+        totalInnings: 9,
+        extraInningRunner: true,
+        extraInningRunnerDelay: 1,
+      },
+      {
+        outs: 1,
+        bases: { first: false, second: true, third: false },
+        homeScore: 3,
+        awayScore: 4,
+      },
+    );
+    const expectedRawWpa =
+      Math.round(
+        ((1 - expectedNoGhostMapping.winProbabilityAfter) -
+          (1 - counterfactualNoGhostMapping.winProbabilityAfter)) *
+          10000,
+      ) / 10000;
+    const wrongRawWpa =
+      Math.round(
+        ((1 - expectedNoGhostMapping.winProbabilityAfter) -
+          (1 - counterfactualGhostMapping.winProbabilityAfter)) *
+          10000,
+      ) / 10000;
+
+    expect(decision.decisionType).toBe("out_advancing_send");
+    expect(decision.rawWindowWpa).toBeCloseTo(expectedRawWpa, 4);
+    expect(decision.rawWindowWpa).not.toBeCloseTo(wrongRawWpa, 4);
   });
 
   test("scores runner from second thrown out at home against a hold-at-third counterfactual", () => {

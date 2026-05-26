@@ -153,6 +153,7 @@ export interface DeriveCommittedManagerDecisionStateInput
   optimalLineupSnapshots?: GameLockLineupSnapshots;
   chosenLineupSnapshots?: GameLockLineupSnapshots;
   totalInnings?: number;
+  useGhostRunner?: boolean;
   extraInningRunner?: boolean;
   extraInningRunnerDelay?: 1 | 2;
   gameEnded?: boolean;
@@ -166,6 +167,7 @@ export interface RefreshCommittedManagerDecisionStateInput
   optimalLineupSnapshots?: GameLockLineupSnapshots;
   chosenLineupSnapshots?: GameLockLineupSnapshots;
   totalInnings?: number;
+  useGhostRunner?: boolean;
   extraInningRunner?: boolean;
   extraInningRunnerDelay?: 1 | 2;
   gameEnded?: boolean;
@@ -196,6 +198,7 @@ export function deriveManagerLineupDeltaRecords(
     betweenPlayEvents: input.betweenPlayEvents,
     fieldingEvents: input.fieldingEvents,
     totalInnings: input.totalInnings,
+    useGhostRunner: input.useGhostRunner,
     extraInningRunner: input.extraInningRunner,
     extraInningRunnerDelay: input.extraInningRunnerDelay,
     awayTeamId: input.awayTeamId,
@@ -409,6 +412,7 @@ export function deriveManagerDeploymentStintRecords(
     betweenPlayEvents: input.betweenPlayEvents,
     fieldingEvents: input.fieldingEvents,
     totalInnings: input.totalInnings,
+    useGhostRunner: input.useGhostRunner,
     extraInningRunner: input.extraInningRunner,
     extraInningRunnerDelay: input.extraInningRunnerDelay,
     awayTeamId: input.awayTeamId,
@@ -1531,6 +1535,7 @@ export async function deriveCommittedManagerDecisionStateForGame(
     chosenLineupSnapshots:
       input.chosenLineupSnapshots ?? gameHeader?.chosenLineupSnapshots,
     totalInnings: input.totalInnings ?? gameHeader?.totalInnings,
+    useGhostRunner: input.useGhostRunner ?? gameHeader?.useGhostRunner,
     extraInningRunner:
       input.extraInningRunner ?? gameHeader?.extraInningRunner,
     extraInningRunnerDelay:

@@ -11,12 +11,15 @@ import {
   getAllPlayoffs,
   getPlayoffLeaders,
   getPlayoffByElimination,
+  getPlayoffBySeason,
   initPlayoffDatabase,
   recordSeriesGame,
   resetPlayoffDbConnection,
+  deletePlayoffBySeason,
   type PlayoffConfig,
   type PlayoffTeam,
 } from "../playoffStorage";
+import { createEliminationRun } from "../eliminationManager";
 import { syncEngine } from "../syncEngine";
 import type { PersistedGameState } from "../gameStorage";
 
@@ -220,6 +223,28 @@ describe("playoffStorage elimination wiring", () => {
     await deleteDatabase(DB_NAME).catch(() => undefined);
   });
 
+  test("createEliminationRun rejects invalid inning counts instead of normalizing them", async () => {
+    await expect(
+      createEliminationRun({
+        name: "Invalid Innings",
+        leagueId: "league-1",
+        leagueName: "League 1",
+        teamsCount: 4,
+        seededTeams: [
+          { id: "team-1", name: "Team 1" },
+          { id: "team-2", name: "Team 2" },
+          { id: "team-3", name: "Team 3" },
+          { id: "team-4", name: "Team 4" },
+        ],
+        seriesLengths: [3, 3],
+        inningsPerGame: 10,
+        useDH: true,
+        liveBeatReporterEnabled: false,
+        postGameColumnsEnabled: true,
+      }),
+    ).rejects.toThrow("between 3 and 9 innings");
+  });
+
   test("names single-bracket elimination rounds without conference semantics", () => {
     expect(getEliminationRoundName(1, 2)).toBe("Semi-Finals");
     expect(getEliminationRoundName(2, 2)).toBe("Championship");
@@ -290,6 +315,133 @@ describe("playoffStorage elimination wiring", () => {
     await expect(getPlayoffByElimination("elim-b")).resolves.toMatchObject({
       id: second.id,
       eliminationId: "elim-b",
+    });
+  });
+
+  test("franchise and elimination playoffs with the same numeric season do not cross scopes", async () => {
+    const teams = [buildTeam(1), buildTeam(2), buildTeam(3), buildTeam(4)];
+    const franchisePlayoff = await createPlayoff({
+      seasonNumber: 1,
+      seasonId: "franchise-a-season-1",
+      status: "IN_PROGRESS",
+      teamsQualifying: 4,
+      rounds: 2,
+      gamesPerRound: [3, 5],
+      inningsPerGame: 9,
+      useDH: true,
+      leagues: ["Eastern"],
+      conferenceChampionship: false,
+      teams,
+      currentRound: 1,
+      sourceType: "franchise",
+      franchiseId: "franchise-a",
+    });
+    const eliminationPlayoff = await createPlayoff({
+      ...buildEliminationPlayoffConfig("elim-same-season"),
+      status: "IN_PROGRESS",
+    });
+
+    await expect(getPlayoffBySeason(1, "franchise", "franchise-a")).resolves.toMatchObject({
+      id: franchisePlayoff.id,
+      sourceType: "franchise",
+      franchiseId: "franchise-a",
+    });
+    await expect(getPlayoffByElimination("elim-same-season")).resolves.toMatchObject({
+      id: eliminationPlayoff.id,
+      sourceType: "elimination",
+      eliminationId: "elim-same-season",
+    });
+    await expect(getPlayoffBySeason(1, "elimination")).rejects.toThrow(
+      /getPlayoffByElimination/,
+    );
+
+    await expect(
+      aggregateGameToPlayoffStats(
+        eliminationPlayoff.id,
+        buildPersistedGameState({
+          competitionType: "playoff",
+          competitionId: franchisePlayoff.id,
+          franchiseId: "franchise-a",
+          playerStats: {
+            "franchise-player": buildBattingStats("Franchise Player", "team-1", { ab: 1, h: 1 }),
+          },
+        }),
+      ),
+    ).rejects.toThrow(/non-elimination game/);
+    await expect(
+      aggregateGameToPlayoffStats(
+        franchisePlayoff.id,
+        buildPersistedGameState({
+          competitionType: "elimination",
+          competitionId: "elim-same-season",
+          playerStats: {
+            "elim-player": buildBattingStats("Elim Player", "team-1", { ab: 1, h: 1 }),
+          },
+        }),
+      ),
+    ).rejects.toThrow(/elimination game/);
+
+    await expect(
+      aggregateGameToPlayoffStats(
+        franchisePlayoff.id,
+        buildPersistedGameState({
+          competitionType: "playoff",
+          competitionId: franchisePlayoff.id,
+          seasonId: "franchise-b-season-1",
+          statsScopeId: "franchise-b-season-1",
+          franchiseId: "franchise-a",
+          playerStats: {
+            "wrong-season-player": buildBattingStats("Wrong Season", "team-1", { ab: 1, h: 1 }),
+          },
+        }),
+      ),
+    ).rejects.toThrow(/different franchise season/);
+
+    await expect(
+      aggregateGameToPlayoffStats(
+        franchisePlayoff.id,
+        buildPersistedGameState({
+          competitionType: "playoff",
+          competitionId: franchisePlayoff.id,
+          seasonId: "franchise-a-season-1",
+          statsScopeId: "franchise-a-season-1",
+          playerStats: {
+            "missing-franchise-player": buildBattingStats("Missing Franchise", "team-1", { ab: 1, h: 1 }),
+          },
+        }),
+      ),
+    ).rejects.toThrow(/without franchise identity/);
+
+    await expect(
+      aggregateGameToPlayoffStats(
+        franchisePlayoff.id,
+        buildPersistedGameState({
+          competitionType: "playoff",
+          competitionId: franchisePlayoff.id,
+          seasonId: "franchise-a-season-1",
+          franchiseId: "franchise-a",
+          playerStats: {
+            "missing-scope-player": buildBattingStats("Missing Scope", "team-1", { ab: 1, h: 1 }),
+          },
+        }),
+      ),
+    ).rejects.toThrow(/without canonical stats scope/);
+
+    await deletePlayoffBySeason(1, "franchise", "franchise-a");
+    await expect(getPlayoffBySeason(1, "franchise", "franchise-a")).resolves.toBeNull();
+    await expect(getPlayoffByElimination("elim-same-season")).resolves.toMatchObject({
+      id: eliminationPlayoff.id,
+    });
+  });
+
+  test("ambiguous elimination deletes by season are rejected", async () => {
+    const playoff = await createPlayoff(buildEliminationPlayoffConfig("elim-delete-scope"));
+
+    await expect(deletePlayoffBySeason(1, "elimination")).rejects.toThrow(
+      /eliminationId/,
+    );
+    await expect(getPlayoffByElimination("elim-delete-scope")).resolves.toMatchObject({
+      id: playoff.id,
     });
   });
 

@@ -551,11 +551,11 @@ export interface UseGameStateReturn {
       base?: "1B" | "2B" | "3B";
       isPinchHitter?: boolean;
     },
-  ) => { success: boolean; error?: string };
+  ) => Promise<{ success: boolean; error?: string }>;
   swapBattingOrder: (firstPlayerId: string, secondPlayerId: string) => boolean;
   switchPositions: (
     switches: Array<{ playerId: string; newPosition: string }>,
-  ) => void;
+  ) => Promise<{ success: boolean; error?: string }>;
   changePitcher: (
     newPitcherId: string,
     exitingPitcherId: string,
@@ -606,7 +606,11 @@ export interface UseGameStateReturn {
   confirmPitchCount: (
     pitcherId: string,
     finalCount: number,
-  ) => { immaculateInning?: { pitcherId: string; pitcherName: string } };
+  ) => Promise<{
+    success: boolean;
+    error?: string;
+    immaculateInning?: { pitcherId: string; pitcherName: string };
+  }>;
   dismissPitchCountPrompt: () => void;
   deferredPitchCounts: DeferredPitchCountEntry[];
   openDeferredPitchCount: (pitcherId: string) => void;
@@ -699,6 +703,7 @@ export interface UseGameStateReturn {
   // R3-T0: Regulation innings (restored from snapshot)
   totalInningsRef: React.MutableRefObject<number>;
   // R3-T0: Persistence refs for exhibition config & mojo/fitness
+  useGhostRunnerRef: React.MutableRefObject<boolean>;
   extraInningRunnerRef: React.MutableRefObject<boolean>;
   extraInningRunnerDelayRef: React.MutableRefObject<1 | 2>;
   teamColorsRef: React.MutableRefObject<{
@@ -752,6 +757,7 @@ export interface GameInitConfig {
   isClinchGame?: boolean;
   // T0-01: Number of regulation innings (default 9, SMB4 franchise often 6 or 7)
   totalInnings?: number;
+  useGhostRunner?: boolean;
   extraInningRunner?: boolean;
   extraInningRunnerDelay?: 1 | 2;
   stadiumName?: string | null;
@@ -951,6 +957,7 @@ function buildGameHeaderDraftFromSnapshot(
     finalScore: null,
     finalInning: snapshot.totalInnings ?? 9,
     totalInnings: snapshot.totalInnings,
+    useGhostRunner: snapshot.useGhostRunner,
     extraInningRunner: snapshot.extraInningRunner,
     extraInningRunnerDelay: snapshot.extraInningRunnerDelay,
     isComplete: false,
@@ -2672,7 +2679,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   );
 
   const registerIdentityForSide = useCallback(
-    (
+    async (
       playerId: string | undefined,
       playerName: string | undefined,
       teamSide: TeamSide,
@@ -2907,11 +2914,17 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         eventId: `${gameState.gameId}_bp_${atBatSequence}_${ordinal}_${timestamp}`,
         gameId: gameState.gameId,
         seasonId: seasonIdRef.current || undefined,
+        seasonNumber: gameState.seasonNumber,
         statsScopeId:
           statsScopeIdRef.current || seasonIdRef.current || undefined,
         competitionType: competitionTypeRef.current,
         competitionId: competitionIdRef.current,
         franchiseId: franchiseIdRef.current,
+        scheduleGameId: scheduleGameIdRef.current,
+        leagueId: leagueIdRef.current,
+        playoffId: playoffIdRef.current || undefined,
+        playoffSeriesId: playoffSeriesIdRef.current || undefined,
+        playoffGameNumber: playoffGameNumberRef.current || undefined,
         timestamp,
         eventIndex,
         type,
@@ -2921,6 +2934,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           outs: gameState.outs,
           totalInnings: totalInningsRef.current,
           score: { away: gameState.awayScore, home: gameState.homeScore },
+          useGhostRunner: useGhostRunnerRef.current,
           extraInningRunner: extraInningRunnerRef.current,
           extraInningRunnerDelay: extraInningRunnerDelayRef.current,
           runnersOn: buildBetweenPlayRunnersOn(),
@@ -2936,6 +2950,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       gameState.inning,
       gameState.isTop,
       gameState.outs,
+      gameState.seasonNumber,
       nextBetweenPlayEventIndex,
     ],
   );
@@ -2947,10 +2962,16 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         | "eventId"
         | "gameId"
         | "seasonId"
+        | "seasonNumber"
         | "statsScopeId"
         | "competitionType"
         | "competitionId"
         | "franchiseId"
+        | "scheduleGameId"
+        | "leagueId"
+        | "playoffId"
+        | "playoffSeriesId"
+        | "playoffGameNumber"
         | "timestamp"
         | "eventIndex"
       >,
@@ -3631,6 +3652,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         pitcherNamesEntries: Array.from(pitcherNamesRef.current.entries()),
         substitutionLog:
           substitutionLog as PersistedGameState["substitutionLog"],
+        useGhostRunner: useGhostRunnerRef.current,
         extraInningRunner: extraInningRunnerRef.current,
         extraInningRunnerDelay: extraInningRunnerDelayRef.current,
         awayTeamColor: teamColorsRef.current.awayTeamColor,
@@ -3638,7 +3660,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         homeTeamColor: teamColorsRef.current.homeTeamColor,
         homeTeamBorderColor: teamColorsRef.current.homeTeamBorderColor,
         playerMojoFitness:
-          playerMojoFitnessGetterRef.current?.() ?? undefined,
+      playerMojoFitnessGetterRef.current?.() ?? undefined,
         gameStartTimestamp: gameStartTimestampRef.current,
       };
     },
@@ -3826,6 +3848,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
   // T0-01: Regulation innings for auto game-end detection (default 9)
   const totalInningsRef = useRef<number>(9);
+  const useGhostRunnerRef = useRef<boolean>(false);
   // R3: DH flags — persisted in snapshot so they survive refresh
   const awayUsesDhRef = useRef<boolean>(false);
   const homeUsesDhRef = useRef<boolean>(false);
@@ -3949,13 +3972,19 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       return {
         // 1.9: Identity
         seasonId: seasonIdRef.current || undefined,
+        seasonNumber: gameState.seasonNumber,
         statsScopeId:
           statsScopeIdRef.current || seasonIdRef.current || undefined,
         competitionType: competitionTypeRef.current,
         competitionId: competitionIdRef.current,
         franchiseId: franchiseIdRef.current,
+        scheduleGameId: scheduleGameIdRef.current,
         leagueId: leagueIdRef.current,
+        playoffId: playoffIdRef.current || undefined,
+        playoffSeriesId: playoffSeriesIdRef.current || undefined,
+        playoffGameNumber: playoffGameNumberRef.current || undefined,
         totalInnings: totalInningsRef.current,
+        useGhostRunner: useGhostRunnerRef.current,
         extraInningRunner: extraInningRunnerRef.current,
         extraInningRunnerDelay: extraInningRunnerDelayRef.current,
 
@@ -4087,6 +4116,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       inningPitchesRef.current = { pitches: 0, strikeouts: 0, pitcherId: "" };
       totalInningsRef.current = config.totalInnings || 9;
       extraInningRunnerRef.current = config.extraInningRunner ?? false;
+      useGhostRunnerRef.current = config.useGhostRunner ?? extraInningRunnerRef.current;
       extraInningRunnerDelayRef.current = config.extraInningRunnerDelay ?? 1;
       setScoreboard(createEmptyScoreboardState(totalInningsRef.current));
       console.log("[R3-R5] Initialized scoreboard with regulation innings", {
@@ -4273,6 +4303,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         finalScore: null,
         finalInning: totalInningsRef.current,
         totalInnings: totalInningsRef.current,
+        useGhostRunner: useGhostRunnerRef.current,
         extraInningRunner: extraInningRunnerRef.current,
         extraInningRunnerDelay: extraInningRunnerDelayRef.current,
         isComplete: false,
@@ -4539,6 +4570,10 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             savedSnapshot.extraInningRunner ??
             inProgressGame.extraInningRunner ??
             false;
+          const restoredUseGhostRunner =
+            savedSnapshot.useGhostRunner ??
+            inProgressGame.useGhostRunner ??
+            restoredExtraInningRunner;
           const restoredExtraInningRunnerDelay =
             savedSnapshot.extraInningRunnerDelay ??
             inProgressGame.extraInningRunnerDelay ??
@@ -4617,6 +4652,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             homeUsesDhRef.current = savedSnapshot.homeUsesDh;
           }
           // R3-T0: Restore extra-inning runner config from snapshot
+          useGhostRunnerRef.current = restoredUseGhostRunner;
           extraInningRunnerRef.current = restoredExtraInningRunner;
           extraInningRunnerDelayRef.current = restoredExtraInningRunnerDelay;
           // R3-T0: Restore team colors from snapshot
@@ -5003,6 +5039,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           totalInningsRef.current = inProgressGame.totalInnings ?? 9;
           extraInningRunnerRef.current =
             inProgressGame.extraInningRunner ?? false;
+          useGhostRunnerRef.current =
+            inProgressGame.useGhostRunner ?? extraInningRunnerRef.current;
           extraInningRunnerDelayRef.current =
             inProgressGame.extraInningRunnerDelay ?? 1;
 
@@ -5961,6 +5999,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       pitcherNamesEntries: Array.from(pitcherNamesRef.current.entries()),
       substitutionLog: substitutionLog as PersistedGameState["substitutionLog"],
       // R3-T0: Persist exhibition config & cosmetic state
+      useGhostRunner: useGhostRunnerRef.current,
       extraInningRunner: extraInningRunnerRef.current,
       extraInningRunnerDelay: extraInningRunnerDelayRef.current,
       awayTeamColor: teamColorsRef.current.awayTeamColor,
@@ -6374,6 +6413,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               homeScore: gameState.homeScore,
               awayScore: gameState.awayScore,
               totalInnings: totalInningsRef.current,
+              useGhostRunner: useGhostRunnerRef.current,
               extraInningRunner: extraInningRunnerRef.current,
               extraInningRunnerDelay: extraInningRunnerDelayRef.current,
             },
@@ -6882,6 +6922,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               homeScore: gameState.homeScore,
               awayScore: gameState.awayScore,
               totalInnings: totalInningsRef.current,
+              useGhostRunner: useGhostRunnerRef.current,
               extraInningRunner: extraInningRunnerRef.current,
               extraInningRunnerDelay: extraInningRunnerDelayRef.current,
             },
@@ -7252,6 +7293,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               homeScore: gameState.homeScore,
               awayScore: gameState.awayScore,
               totalInnings: totalInningsRef.current,
+              useGhostRunner: useGhostRunnerRef.current,
               extraInningRunner: extraInningRunnerRef.current,
               extraInningRunnerDelay: extraInningRunnerDelayRef.current,
             },
@@ -7525,6 +7567,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               ? "OUT_HOME"
               : "HELD",
       };
+      const leverageIndex = getCurrentLeverageIndex();
+      const isClutch = leverageIndex >= 1.5;
       const contextSnapshot = buildContextSnapshot(result, pitchCount);
       const enrichment = dropReason
         ? {
@@ -7594,7 +7638,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         ),
         // D-05 FIX: Calculate leverageIndex from base-out state instead of hardcoding 1.0
         // Same pattern as recordHit (lines 1167-1173) and recordOut
-        leverageIndex: getCurrentLeverageIndex(),
+        leverageIndex,
         // MAJ-12: WPA from win expectancy table
         ...(() => {
           const rAfter =
@@ -7617,6 +7661,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               homeScore: gameState.homeScore,
               awayScore: gameState.awayScore,
               totalInnings: totalInningsRef.current,
+              useGhostRunner: useGhostRunnerRef.current,
               extraInningRunner: extraInningRunnerRef.current,
               extraInningRunnerDelay: extraInningRunnerDelayRef.current,
             },
@@ -7635,7 +7680,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         ballInPlay: null,
         fameEvents: [],
         isLeadoff: false,
-        isClutch: false,
+        isClutch,
         isWalkOff: endGameEvaluation.isWalkOff,
         ...contextSnapshot,
         enrichment,
@@ -7904,6 +7949,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               ? "OUT_HOME"
               : "SCORED",
       };
+      const leverageIndex = getCurrentLeverageIndex();
+      const isClutch = leverageIndex >= 1.5;
 
       const event: AtBatEvent = {
         eventId: `${gameState.gameId}_${newSequence}`,
@@ -7955,7 +8002,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           gameState.currentPitcherId,
         ),
         // MAJ-12: Calculate leverageIndex and WPA from game state
-        leverageIndex: getCurrentLeverageIndex(),
+        leverageIndex,
         ...(() => {
           const rAfter = buildRunnersAfter(errorTracker);
           return calculateWPA(
@@ -7967,6 +8014,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               homeScore: gameState.homeScore,
               awayScore: gameState.awayScore,
               totalInnings: totalInningsRef.current,
+              useGhostRunner: useGhostRunnerRef.current,
               extraInningRunner: extraInningRunnerRef.current,
               extraInningRunnerDelay: extraInningRunnerDelayRef.current,
             },
@@ -7989,7 +8037,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         ballInPlay: null,
         fameEvents: [],
         isLeadoff: false,
-        isClutch: false,
+        isClutch,
         isWalkOff: endGameEvaluation.isWalkOff,
         ...buildContextSnapshot("E" as AtBatResult, pitchCount),
       };
@@ -9177,7 +9225,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
   // MAJ-09: Substitution with validation via LineupState tracking
   const makeSubstitution = useCallback(
-    (
+    async (
       benchPlayerId: string,
       lineupPlayerId: string,
       benchPlayerName?: string,
@@ -9196,7 +9244,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         base?: "1B" | "2B" | "3B"; // For pinch runners: which base
         isPinchHitter?: boolean; // For pinch hitters: replace mid-at-bat
       },
-    ): { success: boolean; error?: string } => {
+    ): Promise<{ success: boolean; error?: string }> => {
       const subType = normalizeLiveSubstitutionType({
         requestedSubType: options?.subType,
         lineupPlayerId,
@@ -9204,6 +9252,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         gamePhase: gameState.gamePhase,
         isPinchHitter: options?.isPinchHitter,
       });
+      if (subType === "double_switch" && franchiseIdRef.current) {
+        return {
+          success: false,
+          error: "Double switch is deferred in Mode 2 v1 franchise games. Use pitching and position changes separately.",
+        };
+      }
 
       // MAJ-09: Determine which team this substitution is for
       const matchesOutgoingPlayer = (player: {
@@ -9506,6 +9560,35 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         return { success: true };
       }
 
+      try {
+        await persistBetweenPlayEvent({
+          type: "substitution",
+          substitution: {
+            subType:
+              subType === "pinch_run"
+                ? "pinch_run"
+                : subType === "pinch_hit" || options?.isPinchHitter
+                  ? "pinch_hit"
+                  : "defensive_replacement",
+            outPlayerId: lineupPlayerId,
+            outPlayerName: lineupPlayerName || lineupPlayerId,
+            outPosition: outgoingPosition,
+            inPlayerId: benchPlayerId,
+            inPlayerName: benchPlayerName || benchPlayerId,
+            inPosition: options?.newPosition,
+          },
+        });
+      } catch (err) {
+        console.error(
+          "[useGameState] Failed to log substitution between-play event:",
+          err,
+        );
+        return {
+          success: false,
+          error: "Failed to persist substitution ledger event",
+        };
+      }
+
       // Log substitution event
       setSubstitutionLog((prev) => [
         ...prev,
@@ -9520,29 +9603,6 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           timestamp: Date.now(),
         },
       ]);
-
-      void persistBetweenPlayEvent({
-        type: "substitution",
-        substitution: {
-          subType:
-            subType === "pinch_run"
-              ? "pinch_run"
-              : subType === "pinch_hit" || options?.isPinchHitter
-                ? "pinch_hit"
-                : "defensive_replacement",
-          outPlayerId: lineupPlayerId,
-          outPlayerName: lineupPlayerName || lineupPlayerId,
-          outPosition: outgoingPosition,
-          inPlayerId: benchPlayerId,
-          inPlayerName: benchPlayerName || benchPlayerId,
-          inPosition: options?.newPosition,
-        },
-      }).catch((err) => {
-        console.error(
-          "[useGameState] Failed to log substitution between-play event:",
-          err,
-        );
-      });
 
       // Update lineup refs to swap the players
       if (isAwayTeam) {
@@ -9835,8 +9895,69 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
   // MAJ-06: Position switch (no new players, just position reassignment)
   const switchPositions = useCallback(
-    (switches: Array<{ playerId: string; newPosition: string }>) => {
-      const previousPositions = new Map<string, string>();
+    async (
+      switches: Array<{ playerId: string; newPosition: string }>,
+    ): Promise<{ success: boolean; error?: string }> => {
+      const plannedSwitches: Array<{
+        playerId: string;
+        newPosition: string;
+        previousPosition?: string;
+        playerName: string;
+        teamSide: TeamSide;
+      }> = [];
+      const collectSwitches = (
+        lineupStateRef: typeof awayLineupStateRef,
+        teamSide: TeamSide,
+      ) => {
+        for (const player of lineupStateRef.current.lineup) {
+          const requestedSwitch = switches.find(
+            (sw) => sw.playerId === player.playerId,
+          );
+          if (!requestedSwitch) continue;
+          plannedSwitches.push({
+            ...requestedSwitch,
+            previousPosition: player.position,
+            playerName: player.playerName,
+            teamSide,
+          });
+        }
+      };
+
+      collectSwitches(awayLineupStateRef, "away");
+      collectSwitches(homeLineupStateRef, "home");
+
+      if (plannedSwitches.length === 0) {
+        return { success: false, error: "No matching players found for position switch" };
+      }
+
+      try {
+        await Promise.all(
+          plannedSwitches.map((sw) =>
+            persistBetweenPlayEvent({
+              type: "position_change",
+              substitution: {
+                subType: "position_change",
+                outPlayerId: sw.playerId,
+                outPlayerName: sw.playerName,
+                inPlayerId: sw.playerId,
+                inPlayerName: sw.playerName,
+                inPosition: sw.newPosition,
+                previousPosition: sw.previousPosition,
+              },
+            }),
+          ),
+        );
+      } catch (err) {
+        console.error(
+          "[useGameState] Failed to log position-change between-play event:",
+          err,
+        );
+        return {
+          success: false,
+          error: "Failed to persist position-change ledger event",
+        };
+      }
+
       const applySwitches = (
         lineupRef: typeof awayLineupRef,
         lineupStateRef: typeof awayLineupStateRef,
@@ -9852,7 +9973,6 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           }
 
           changed = true;
-          previousPositions.set(player.playerId, player.position);
           registerIdentityForSide(player.playerId, player.playerName, teamSide);
           return {
             ...player,
@@ -9901,7 +10021,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       );
 
       if (!changedAway && !changedHome) {
-        return;
+        return { success: false, error: "No positions changed" };
       }
 
       setSubstitutionLog((prev) => [
@@ -9920,26 +10040,6 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         },
       ]);
 
-      for (const sw of switches) {
-        void persistBetweenPlayEvent({
-          type: "position_change",
-          substitution: {
-            subType: "position_change",
-            outPlayerId: sw.playerId,
-            outPlayerName: resolvePlayerNameForId(sw.playerId),
-            inPlayerId: sw.playerId,
-            inPlayerName: resolvePlayerNameForId(sw.playerId),
-            inPosition: sw.newPosition,
-            previousPosition: previousPositions.get(sw.playerId),
-          },
-        }).catch((err) => {
-          console.error(
-            "[useGameState] Failed to log position-change between-play event:",
-            err,
-          );
-        });
-      }
-
       // UX-053: Update currentCatcherId if someone moved to catcher
       const newCatcher = switches.find((s) => s.newPosition === "C");
       if (newCatcher) {
@@ -9956,6 +10056,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       console.log(
         `[useGameState] Position switch: ${switches.map((s) => `${s.playerId}->${s.newPosition}`).join(", ")}`,
       );
+      return { success: true };
     },
     [
       gameState.inning,
@@ -10152,22 +10253,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           pitchingTeamSide,
         );
 
-        // Log the pitching change
-        setSubstitutionLog((prev) => [
-          ...prev,
-          {
-            type: "pitching_change",
-            inning: gameState.inning,
-            halfInning: gameState.isTop ? "TOP" : "BOTTOM",
-            outgoingPlayerId: exitingPitcherId,
-            outgoingPlayerName: resolvedOutgoingPitcherName,
-            incomingPlayerId: newPitcherId,
-            incomingPlayerName: resolvedIncomingPitcherName,
-            timestamp: Date.now(),
-          },
-        ]);
-
-        void persistBetweenPlayEvent({
+        await persistBetweenPlayEvent({
           type: "pitcher_change",
           pitcherChange: {
             outgoingPitcherId: exitingPitcherId,
@@ -10182,12 +10268,22 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             ).length,
             outgoingPitchCount: exitingStats.pitchCount,
           },
-        }).catch((err) => {
-          console.error(
-            "[useGameState] Failed to log pitcher-change between-play event:",
-            err,
-          );
         });
+
+        // Log the pitching change after the durable ledger row succeeds.
+        setSubstitutionLog((prev) => [
+          ...prev,
+          {
+            type: "pitching_change",
+            inning: gameState.inning,
+            halfInning: gameState.isTop ? "TOP" : "BOTTOM",
+            outgoingPlayerId: exitingPitcherId,
+            outgoingPlayerName: resolvedOutgoingPitcherName,
+            incomingPlayerId: newPitcherId,
+            incomingPlayerName: resolvedIncomingPitcherName,
+            timestamp: Date.now(),
+          },
+        ]);
 
         // MAJ-07: Set exit info on outgoing pitcher and bequeathed runners
         setPitcherStats((prev) => {
@@ -10290,10 +10386,14 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
   // Confirm pitch count and execute pending action (per PITCH_COUNT_TRACKING_SPEC.md)
   const confirmPitchCount = useCallback(
-    (
+    async (
       pitcherId: string,
       finalCount: number,
-    ): { immaculateInning?: { pitcherId: string; pitcherName: string } } => {
+    ): Promise<{
+      success: boolean;
+      error?: string;
+      immaculateInning?: { pitcherId: string; pitcherName: string };
+    }> => {
       let result: {
         immaculateInning?: { pitcherId: string; pitcherName: string };
       } = {};
@@ -10309,15 +10409,6 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         finalCount === 9 &&
         inningPitchesRef.current.strikeouts === 3
       ) {
-        const immaculateFameEvent: FameEventRecord = {
-          eventType: "IMMACULATE_INNING",
-          fameType: "bonus",
-          fameValue: 2, // Per FAME_VALUES.IMMACULATE_INNING
-          playerId: pitcherId,
-          playerName: pitchCountPrompt.pitcherName,
-          description: `Immaculate inning in inning ${gameState.inning} (${gameState.isTop ? "top" : "bottom"})`,
-        };
-        appendFameEvent(immaculateFameEvent);
         result = {
           immaculateInning: {
             pitcherId,
@@ -10327,6 +10418,45 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         console.log(
           `[Fame] Immaculate inning detected! Pitcher: ${pitchCountPrompt.pitcherName}, pitches: ${finalCount}, K: 3`,
         );
+      }
+
+      const timing =
+        pitchCountPrompt?.type === "pitching_change"
+          ? "pitcher_removed"
+          : pitchCountPrompt?.type === "end_game"
+            ? "end_of_game"
+            : "end_of_half_inning";
+      try {
+        await persistBetweenPlayEvent({
+          type: "pitch_count_update",
+          pitchCountUpdate: {
+            pitcherId,
+            pitchCount: finalCount,
+            timing,
+          },
+        });
+      } catch (error) {
+        console.error(
+          "[useGameState] Failed to log pitch-count update:",
+          error,
+        );
+        return {
+          ...result,
+          success: false,
+          error: "Failed to persist pitch-count ledger event",
+        };
+      }
+
+      if (result.immaculateInning && pitchCountPrompt) {
+        const immaculateFameEvent: FameEventRecord = {
+          eventType: "IMMACULATE_INNING",
+          fameType: "bonus",
+          fameValue: 2, // Per FAME_VALUES.IMMACULATE_INNING
+          playerId: pitcherId,
+          playerName: pitchCountPrompt.pitcherName,
+          description: `Immaculate inning in inning ${gameState.inning} (${gameState.isTop ? "top" : "bottom"})`,
+        };
+        appendFameEvent(immaculateFameEvent);
       }
 
       // Update the pitcher's final pitch count
@@ -10348,26 +10478,6 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         `[useGameState] Pitch count confirmed: ${pitcherId} = ${finalCount} pitches`,
       );
 
-      const timing =
-        pitchCountPrompt?.type === "pitching_change"
-          ? "pitcher_removed"
-          : pitchCountPrompt?.type === "end_game"
-            ? "end_of_game"
-            : "end_of_half_inning";
-      void persistBetweenPlayEvent({
-        type: "pitch_count_update",
-        pitchCountUpdate: {
-          pitcherId,
-          pitchCount: finalCount,
-          timing,
-        },
-      }).catch((error) => {
-        console.error(
-          "[useGameState] Failed to log pitch-count update:",
-          error,
-        );
-      });
-
       // Execute the pending action (pitching change, end inning, or end game).
       const pendingAction = pendingActionRef.current;
       pendingActionRef.current = null;
@@ -10380,17 +10490,25 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         console.debug(
           "[PITCH-COUNT] Pending action found, executing continuation",
         );
-        void Promise.resolve(pendingAction())
-          .catch((error) => {
-            console.error(
-              "[useGameState] Pending pitch-count action failed:",
-              error,
-            );
-          })
-          .finally(() => {
-            console.debug("[PITCH-COUNT] Confirmed, clearing prompt");
-            setPitchCountPrompt(null);
-          });
+        try {
+          await Promise.resolve(pendingAction());
+        } catch (error) {
+          console.error(
+            "[useGameState] Pending pitch-count action failed:",
+            error,
+          );
+          setPitchCountPrompt(null);
+          return {
+            ...result,
+            success: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : "Pending pitch-count action failed",
+          };
+        }
+        console.debug("[PITCH-COUNT] Confirmed, clearing prompt");
+        setPitchCountPrompt(null);
       } else {
         console.debug(
           "[PITCH-COUNT] No pending action, clearing prompt immediately",
@@ -10398,7 +10516,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         setPitchCountPrompt(null);
       }
 
-      return result;
+      return { ...result, success: true };
     },
     [
       appendFameEvent,
@@ -10715,6 +10833,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             homeManagerId: opts?.homeManagerId,
             managerByTeamId: opts?.managerByTeamId,
             totalInnings: totalInningsRef.current,
+            useGhostRunner: useGhostRunnerRef.current,
             extraInningRunner: extraInningRunnerRef.current,
             extraInningRunnerDelay: extraInningRunnerDelayRef.current,
             gameEnded: true,
@@ -10928,6 +11047,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           optimalLineupSnapshots: gameHeader?.optimalLineupSnapshots,
           chosenLineupSnapshots: gameHeader?.chosenLineupSnapshots,
           totalInnings: totalInningsRef.current,
+          useGhostRunner: useGhostRunnerRef.current,
           extraInningRunner: extraInningRunnerRef.current,
           extraInningRunnerDelay: extraInningRunnerDelayRef.current,
         };
@@ -10936,6 +11056,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           fieldingEvents,
           betweenPlayEvents,
           totalInnings: totalInningsRef.current,
+          useGhostRunner: useGhostRunnerRef.current,
           extraInningRunner: extraInningRunnerRef.current,
           extraInningRunnerDelay: extraInningRunnerDelayRef.current,
           awayTeamId: gameState.awayTeamId,
@@ -10978,6 +11099,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         // Prevents double aggregation when endGame's useEffect re-fires
         const header = await getGameHeader(gameState.gameId);
         const alreadyAggregated = header?.aggregated === true;
+        let endGameAggregationSucceeded = alreadyAggregated;
 
         const targetStatsScopeId =
           opts?.statsScopeId ??
@@ -11006,7 +11128,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           try {
             await Promise.race([
               (async () => {
-                await processCompletedGame(
+                const processResult = await processCompletedGame(
                   persistedState,
                   aggregationOptions,
                   resolvedArchiveLeagueId,
@@ -11038,6 +11160,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
                       scheduleGameId:
                         opts?.scheduleGameId ?? scheduleGameIdRef.current,
                       totalInnings: totalInningsRef.current,
+                      useGhostRunner: useGhostRunnerRef.current,
                       extraInningRunner: extraInningRunnerRef.current,
                       extraInningRunnerDelay: extraInningRunnerDelayRef.current,
                       pogPlayerId: storedPlayersOfTheGame?.first,
@@ -11045,7 +11168,14 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
                     },
                   },
                 );
+                if (processResult.aggregation.success !== true) {
+                  throw new Error(
+                    processResult.aggregation.error ||
+                      `Failed to aggregate completed game ${gameState.gameId}`,
+                  );
+                }
                 await markGameAggregated(gameState.gameId);
+                endGameAggregationSucceeded = true;
               })(),
               new Promise<never>((_, reject) => {
                 processingTimeoutId = setTimeout(() => {
@@ -11092,10 +11222,14 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
                   scheduleGameId:
                     opts?.scheduleGameId ?? scheduleGameIdRef.current,
                   totalInnings: totalInningsRef.current,
+                  useGhostRunner: useGhostRunnerRef.current,
                   extraInningRunner: extraInningRunnerRef.current,
                   extraInningRunnerDelay: extraInningRunnerDelayRef.current,
                   pogPlayerId: storedPlayersOfTheGame?.first,
                   playersOfTheGame: storedPlayersOfTheGame,
+                  aggregationStatus: "incomplete",
+                  aggregationError:
+                    error instanceof Error ? error.message : String(error),
                 },
               );
             } catch (archiveError) {
@@ -11109,12 +11243,17 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
               clearTimeout(processingTimeoutId);
             }
           }
+          if (!endGameAggregationSucceeded) {
+            throw new Error(
+              "End-game processing did not complete season aggregation. The game was archived as incomplete and schedule/playoff advancement was blocked.",
+            );
+          }
         } else {
           console.log("[T1-08] Skipping aggregation — game already aggregated");
         }
 
         // Record playoff series game result if this was a playoff game
-        if (playoffSeriesIdRef.current) {
+        if (endGameAggregationSucceeded && playoffSeriesIdRef.current) {
           try {
             const { recordSeriesGame } =
               await import("../../utils/playoffStorage");
@@ -11235,7 +11374,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         }
 
         // Aggregate player stats to playoff stats store (populates Leaders tab)
-        if (!alreadyAggregated && playoffIdRef.current) {
+        if (!alreadyAggregated && endGameAggregationSucceeded && playoffIdRef.current) {
           try {
             const { aggregateGameToPlayoffStats } =
               await import("../../utils/playoffStorage");
@@ -11252,7 +11391,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         }
 
         // Archive is handled once inside processCompletedGame with full context.
-        if (!alreadyAggregated) {
+        if (!alreadyAggregated && endGameAggregationSucceeded) {
           const resolvedCompetitionType =
             opts?.competitionType ?? competitionTypeRef.current;
           const resolvedRunId =
@@ -11728,6 +11867,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           homeManagerId: options?.homeManagerId,
           managerByTeamId: options?.managerByTeamId,
           totalInnings: totalInningsRef.current,
+          useGhostRunner: useGhostRunnerRef.current,
           extraInningRunner: extraInningRunnerRef.current,
           extraInningRunnerDelay: extraInningRunnerDelayRef.current,
           gameEnded: true,
@@ -11906,6 +12046,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         optimalLineupSnapshots: endGameHeader?.optimalLineupSnapshots,
         chosenLineupSnapshots: endGameHeader?.chosenLineupSnapshots,
         totalInnings: totalInningsRef.current,
+        useGhostRunner: useGhostRunnerRef.current,
         extraInningRunner: extraInningRunnerRef.current,
         extraInningRunnerDelay: extraInningRunnerDelayRef.current,
       };
@@ -11914,6 +12055,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         fieldingEvents: endGameFieldingEvents,
         betweenPlayEvents: endGameBetweenPlayEvents,
         totalInnings: totalInningsRef.current,
+        useGhostRunner: useGhostRunnerRef.current,
         extraInningRunner: extraInningRunnerRef.current,
         extraInningRunnerDelay: extraInningRunnerDelayRef.current,
         awayTeamId: gameState.awayTeamId,
@@ -12005,6 +12147,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         );
       } catch (err) {
         console.error("[endGame] Direct end-game completion failed:", err);
+        throw err;
       }
       } finally {
         setIsSaving(false);
@@ -12344,6 +12487,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     positionInnings: positionInningsRef.current,
     // R3-T0: Persistence refs for exhibition config & mojo/fitness
     totalInningsRef,
+    useGhostRunnerRef,
     extraInningRunnerRef,
     extraInningRunnerDelayRef,
     teamColorsRef,

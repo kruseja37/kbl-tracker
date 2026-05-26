@@ -449,6 +449,19 @@ describe("KBL WPA attribution", () => {
         ? gamePolicy.winExpectancyTraceBefore.rowKey
         : "",
     ).toBe("10|Top|0|2|batDiff=0");
+
+    const noGhostRunnerPolicy = deriveActualAtBatWpa(eventWithoutStoredPolicy, 9, {
+      useGhostRunner: false,
+      extraInningRunner: true,
+      extraInningRunnerDelay: 1,
+    });
+
+    expect(
+      noGhostRunnerPolicy.winExpectancyTraceBefore &&
+        "rowKey" in noGhostRunnerPolicy.winExpectancyTraceBefore
+        ? noGhostRunnerPolicy.winExpectancyTraceBefore.rowKey
+        : "",
+    ).toBe("9|Top|0|2|batDiff=0");
   });
 
   test("event edit refresh hydrates missing extra-runner policy from game header", async () => {
@@ -493,7 +506,18 @@ describe("KBL WPA attribution", () => {
       wpaModelVersion: WPA_MODEL_VERSION,
     }));
 
-    await updateAtBatEvent(eventId, { result: "Kc" });
+    await updateAtBatEvent(eventId, {
+      result: "Kc",
+      version: 2,
+      editHistory: [
+        {
+          field: "result",
+          oldValue: "GO",
+          newValue: "Kc",
+          timestamp: 2,
+        },
+      ],
+    });
     const persisted = await getAtBatEvent(eventId);
 
     expect(persisted?.extraInningRunner).toBe(true);

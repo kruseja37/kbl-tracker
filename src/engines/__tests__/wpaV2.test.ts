@@ -460,7 +460,126 @@ describe("WPA v2 engine", () => {
       "savantInningMappingReason" in tiedTopExtraWithRunner.trace
         ? tiedTopExtraWithRunner.trace.savantInningMappingReason
         : "",
-    ).toBe("extra-inning-automatic-runner");
+    ).toBe("extra-inning-ghost-runner-model");
+  });
+
+  test("explicit ghost-runner policy controls extra-inning Savant mapping", () => {
+    const noGhostRunnerVariant = getHomeWinExpectancyV2(
+      state({
+        inning: 10,
+        halfInning: "TOP",
+        outs: 0,
+        bases: EMPTY,
+        homeScore: 5,
+        awayScore: 5,
+        useGhostRunner: false,
+        extraInningRunner: true,
+        extraInningRunnerDelay: 1,
+      }),
+    );
+    const ghostRunnerVariant = getHomeWinExpectancyV2(
+      state({
+        inning: 10,
+        halfInning: "TOP",
+        outs: 0,
+        bases: EMPTY,
+        homeScore: 5,
+        awayScore: 5,
+        useGhostRunner: true,
+        extraInningRunner: false,
+        extraInningRunnerDelay: 1,
+      }),
+    );
+
+    expect(
+      mapKblInningToSavant(10, 9, {
+        useGhostRunner: false,
+        extraInningRunner: true,
+      }),
+    ).toBe(9);
+    expect(
+      mapKblInningToSavant(10, 9, {
+        useGhostRunner: true,
+        extraInningRunner: false,
+      }),
+    ).toBe(10);
+    expect(
+      "savantInningMappingReason" in noGhostRunnerVariant.trace
+        ? noGhostRunnerVariant.trace.savantInningMappingReason
+        : "",
+    ).toBe("extra-inning-no-automatic-runner");
+    expect(
+      "savantInningMappingReason" in ghostRunnerVariant.trace
+        ? ghostRunnerVariant.trace.savantInningMappingReason
+        : "",
+    ).toBe("extra-inning-ghost-runner-model");
+    expect(
+      "savantGhostRunnerModelActive" in ghostRunnerVariant.trace
+        ? ghostRunnerVariant.trace.savantGhostRunnerModelActive
+        : false,
+    ).toBe(true);
+    expect(
+      "extraInningRunnerActive" in ghostRunnerVariant.trace
+        ? ghostRunnerVariant.trace.extraInningRunnerActive
+        : true,
+    ).toBe(false);
+  });
+
+  test("explicit ghost-runner policy honors delayed Savant mapping", () => {
+    expect(
+      mapKblInningToSavant(10, 9, {
+        useGhostRunner: true,
+        extraInningRunnerDelay: 2,
+      }),
+    ).toBe(9);
+    expect(
+      mapKblInningToSavant(11, 9, {
+        useGhostRunner: true,
+        extraInningRunnerDelay: 2,
+      }),
+    ).toBe(10);
+  });
+
+  test("third-out after-state uses explicit ghost-runner mapping separately from base placement", () => {
+    const noGhostRunnerMapping = calculateWpaV2(
+      state({
+        inning: 9,
+        halfInning: "BOTTOM",
+        outs: 2,
+        bases: EMPTY,
+        homeScore: 5,
+        awayScore: 5,
+        useGhostRunner: false,
+        extraInningRunner: true,
+        extraInningRunnerDelay: 1,
+      }),
+      { outs: 3, bases: EMPTY, homeScore: 5, awayScore: 5 },
+    );
+    const ghostRunnerMappingOnly = calculateWpaV2(
+      state({
+        inning: 9,
+        halfInning: "BOTTOM",
+        outs: 2,
+        bases: EMPTY,
+        homeScore: 5,
+        awayScore: 5,
+        useGhostRunner: true,
+        extraInningRunner: false,
+        extraInningRunnerDelay: 1,
+      }),
+      { outs: 3, bases: EMPTY, homeScore: 5, awayScore: 5 },
+    );
+
+    expect(
+      "rowKey" in noGhostRunnerMapping.winExpectancyTraceAfter
+        ? noGhostRunnerMapping.winExpectancyTraceAfter.rowKey
+        : "",
+    ).toBe("9|Top|0|2|batDiff=0");
+    expect(
+      "rowKey" in ghostRunnerMappingOnly.winExpectancyTraceAfter
+        ? ghostRunnerMappingOnly.winExpectancyTraceAfter.rowKey
+        : "",
+    ).toBe("10|Top|0|0|batDiff=0");
   });
 
   test("third out into automatic-runner extras starts the next half with runner on second", () => {

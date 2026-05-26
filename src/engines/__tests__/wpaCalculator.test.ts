@@ -185,6 +185,40 @@ describe('Win Expectancy Table', () => {
     expect(automaticRunner).toBeCloseTo(0.667, 3);
   });
 
+  test('lookupWinExpectancy lets useGhostRunner override base-placement policy for Savant mapping', () => {
+    const noGhostRunnerVariant = lookupWinExpectancy(
+      10,
+      true,
+      0,
+      { first: false, second: false, third: false },
+      5,
+      5,
+      {
+        totalInnings: 9,
+        useGhostRunner: false,
+        extraInningRunner: true,
+        extraInningRunnerDelay: 1,
+      },
+    );
+    const ghostRunnerVariant = lookupWinExpectancy(
+      10,
+      true,
+      0,
+      { first: false, second: false, third: false },
+      5,
+      5,
+      {
+        totalInnings: 9,
+        useGhostRunner: true,
+        extraInningRunner: false,
+        extraInningRunnerDelay: 1,
+      },
+    );
+
+    expect(noGhostRunnerVariant).toBeCloseTo(0.5, 3);
+    expect(ghostRunnerVariant).toBeCloseTo(0.667, 3);
+  });
+
   test('getHalfInningStartWE starts active automatic-runner extras on second base', () => {
     const topExtraWithRunner = getHalfInningStartWE(10, true, 5, 5, {
       totalInnings: 9,

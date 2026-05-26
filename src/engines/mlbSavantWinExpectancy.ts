@@ -50,7 +50,7 @@ export type SavantInningMappingReason =
   | "regulation-nine-inning-game"
   | "short-game-regulation-scaling"
   | "short-game-final-inning"
-  | "extra-inning-automatic-runner"
+  | "extra-inning-ghost-runner-model"
   | "extra-inning-no-automatic-runner";
 
 export interface MlbSavantBases {
@@ -67,6 +67,7 @@ export interface MlbSavantLookupState {
   homeScore: number;
   awayScore: number;
   scheduledInnings: number;
+  useGhostRunner?: boolean;
   extraInningRunner?: boolean;
   extraInningRunnerDelay?: 1 | 2;
 }
@@ -123,6 +124,7 @@ export interface MlbSavantWinExpectancyTrace {
   scheduledInnings: number;
   savantInning: number;
   savantInningMappingReason: SavantInningMappingReason;
+  savantGhostRunnerModelActive: boolean;
   extraInningRunnerActive: boolean;
   half: SavantHalfInning;
   outs: 0 | 1 | 2;
@@ -185,6 +187,7 @@ export function lookupMlbSavantHomeWinExpectancy(
     state.inning,
     state.scheduledInnings,
     {
+      useGhostRunner: state.useGhostRunner,
       extraInningRunner: state.extraInningRunner,
       extraInningRunnerDelay: state.extraInningRunnerDelay,
     },
@@ -212,6 +215,7 @@ export function lookupMlbSavantHomeWinExpectancy(
     scheduledInnings: state.scheduledInnings,
     savantInning,
     savantInningMappingReason: inningMapping.reason,
+    savantGhostRunnerModelActive: inningMapping.savantGhostRunnerModelActive,
     extraInningRunnerActive: inningMapping.extraInningRunnerActive,
     half,
     outs: state.outs,
@@ -271,6 +275,7 @@ export function mapKblInningToSavant(
   inning: number,
   scheduledInnings: number,
   options: {
+    useGhostRunner?: boolean;
     extraInningRunner?: boolean;
     extraInningRunnerDelay?: 1 | 2;
   } = {},
@@ -286,12 +291,14 @@ export function mapKblInningToSavantWithTrace(
   inning: number,
   scheduledInnings: number,
   options: {
+    useGhostRunner?: boolean;
     extraInningRunner?: boolean;
     extraInningRunnerDelay?: 1 | 2;
   } = {},
 ): {
   savantInning: number;
   reason: SavantInningMappingReason;
+  savantGhostRunnerModelActive: boolean;
   extraInningRunnerActive: boolean;
 } {
   const normalizedInning = Math.max(1, Math.floor(inning));
@@ -303,15 +310,21 @@ export function mapKblInningToSavantWithTrace(
   if (normalizedInning > normalizedScheduledInnings) {
     const delay = options.extraInningRunnerDelay ?? 1;
     const runnerStartInning = normalizedScheduledInnings + delay;
+    const useGhostRunner =
+      options.useGhostRunner ?? options.extraInningRunner ?? false;
+    const savantGhostRunnerModelActive =
+      useGhostRunner === true &&
+      normalizedInning >= runnerStartInning;
     const extraInningRunnerActive =
       options.extraInningRunner === true &&
       normalizedInning >= runnerStartInning;
 
     return {
-      savantInning: extraInningRunnerActive ? 10 : 9,
-      reason: extraInningRunnerActive
-        ? "extra-inning-automatic-runner"
+      savantInning: savantGhostRunnerModelActive ? 10 : 9,
+      reason: savantGhostRunnerModelActive
+        ? "extra-inning-ghost-runner-model"
         : "extra-inning-no-automatic-runner",
+      savantGhostRunnerModelActive,
       extraInningRunnerActive,
     };
   }
@@ -320,6 +333,7 @@ export function mapKblInningToSavantWithTrace(
     return {
       savantInning: Math.min(normalizedInning, 9),
       reason: "regulation-nine-inning-game",
+      savantGhostRunnerModelActive: false,
       extraInningRunnerActive: false,
     };
   }
@@ -328,6 +342,7 @@ export function mapKblInningToSavantWithTrace(
     return {
       savantInning: 9,
       reason: "short-game-final-inning",
+      savantGhostRunnerModelActive: false,
       extraInningRunnerActive: false,
     };
   }
@@ -340,6 +355,7 @@ export function mapKblInningToSavantWithTrace(
       normalizedInning === normalizedScheduledInnings
         ? "short-game-final-inning"
         : "short-game-regulation-scaling",
+    savantGhostRunnerModelActive: false,
     extraInningRunnerActive: false,
   };
 }

@@ -584,6 +584,7 @@ async function loadTeamImpactGameInput(
         fieldingEvents,
         betweenPlayEvents,
         totalInnings,
+        useGhostRunner: game.useGhostRunner ?? gameHeader?.useGhostRunner,
         extraInningRunner: game.extraInningRunner ?? gameHeader?.extraInningRunner,
         extraInningRunnerDelay:
           game.extraInningRunnerDelay ?? gameHeader?.extraInningRunnerDelay,

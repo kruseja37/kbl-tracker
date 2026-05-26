@@ -191,6 +191,7 @@ export interface GameHeader {
   finalScore: { away: number; home: number } | null;  // null if game in progress
   finalInning: number;
   totalInnings?: number;
+  useGhostRunner?: boolean;
   extraInningRunner?: boolean;
   extraInningRunnerDelay?: 1 | 2;
   isComplete: boolean;
@@ -250,6 +251,7 @@ export interface AtBatEvent {
   battingTeamDelta?: number;     // Batting-team WPA delta from the official model
   fieldingTeamDelta?: number;    // Fielding-team WPA delta from the official model
   totalInnings?: number;         // Regulation length used for win-probability recalculation
+  useGhostRunner?: boolean;      // Whether extra innings should use Savant ghost-runner mapping
   extraInningRunner?: boolean;   // Whether automatic runner rules were enabled for this game
   extraInningRunnerDelay?: 1 | 2; // Extra inning number where automatic runner starts
 
@@ -268,12 +270,16 @@ export interface AtBatEvent {
 
   // 1.9 (GAP-GT-2-A): Identity fields
   seasonId?: string;
+  seasonNumber?: number;
   statsScopeId?: string;
   competitionType?: CompetitionType;
   competitionId?: string;
   franchiseId?: string;
   scheduleGameId?: string;
   leagueId?: string;
+  playoffId?: string;
+  playoffSeriesId?: string;
+  playoffGameNumber?: number;
 
   // 1.10 (GAP-GT-2-G): Park context
   parkContext?: {
@@ -502,10 +508,16 @@ export interface BetweenPlayEvent {
   eventId: string;
   gameId: string;
   seasonId?: string;
+  seasonNumber?: number;
   statsScopeId?: string;
   competitionType?: CompetitionType;
   competitionId?: string;
   franchiseId?: string;
+  scheduleGameId?: string;
+  leagueId?: string;
+  playoffId?: string;
+  playoffSeriesId?: string;
+  playoffGameNumber?: number;
   timestamp: number;
   eventIndex: number;              // Interleaved with AtBatEvent indices
   undoneAt?: number | null;
@@ -528,6 +540,7 @@ export interface BetweenPlayEvent {
     outs: number;
     totalInnings?: number;
     score: { away: number; home: number };
+    useGhostRunner?: boolean;
     extraInningRunner?: boolean;
     extraInningRunnerDelay?: 1 | 2;
     runnersOn?: {
@@ -1025,6 +1038,7 @@ function applyAtBatEventUpdates(
     | 'battingTeamDelta'
     | 'fieldingTeamDelta'
     | 'totalInnings'
+    | 'useGhostRunner'
     | 'extraInningRunner'
     | 'extraInningRunnerDelay'
     | 'outsRecorded'
@@ -1059,6 +1073,7 @@ function applyAtBatEventUpdates(
   if (updates.battingTeamDelta !== undefined) next.battingTeamDelta = updates.battingTeamDelta;
   if (updates.fieldingTeamDelta !== undefined) next.fieldingTeamDelta = updates.fieldingTeamDelta;
   if (updates.totalInnings !== undefined) next.totalInnings = updates.totalInnings;
+  if (updates.useGhostRunner !== undefined) next.useGhostRunner = updates.useGhostRunner;
   if (updates.extraInningRunner !== undefined) next.extraInningRunner = updates.extraInningRunner;
   if (updates.extraInningRunnerDelay !== undefined) next.extraInningRunnerDelay = updates.extraInningRunnerDelay;
   if (updates.outsRecorded !== undefined) next.outsRecorded = updates.outsRecorded;
@@ -1078,7 +1093,7 @@ function applyAtBatEventUpdates(
 type WpaPolicyFallback = Partial<
   Pick<
     AtBatEvent,
-    'totalInnings' | 'extraInningRunner' | 'extraInningRunnerDelay'
+    'totalInnings' | 'useGhostRunner' | 'extraInningRunner' | 'extraInningRunnerDelay'
   >
 >;
 
@@ -1112,6 +1127,7 @@ function shouldRefreshStoredWpa(
     | 'battingTeamDelta'
     | 'fieldingTeamDelta'
     | 'totalInnings'
+    | 'useGhostRunner'
     | 'extraInningRunner'
     | 'extraInningRunnerDelay'
     | 'outsRecorded'
@@ -1138,6 +1154,7 @@ function shouldRefreshStoredWpa(
     updates.battingTeamDelta !== undefined ||
     updates.fieldingTeamDelta !== undefined ||
     updates.totalInnings !== undefined ||
+    updates.useGhostRunner !== undefined ||
     updates.extraInningRunner !== undefined ||
     updates.extraInningRunnerDelay !== undefined ||
     updates.outsRecorded !== undefined ||
@@ -1150,13 +1167,16 @@ function shouldHydrateWpaPolicy(
   updates: Partial<
     Pick<
       AtBatEvent,
-      'totalInnings' | 'extraInningRunner' | 'extraInningRunnerDelay'
+      'totalInnings' | 'useGhostRunner' | 'extraInningRunner' | 'extraInningRunnerDelay'
     >
   >,
 ): boolean {
   return (
     updates.totalInnings === undefined &&
     existing.totalInnings === undefined
+  ) || (
+    updates.useGhostRunner === undefined &&
+    existing.useGhostRunner === undefined
   ) || (
     updates.extraInningRunner === undefined &&
     existing.extraInningRunner === undefined
@@ -1173,6 +1193,7 @@ function wpaPolicyFallbackFromHeader(
 
   return {
     totalInnings: header.totalInnings,
+    useGhostRunner: header.useGhostRunner,
     extraInningRunner: header.extraInningRunner,
     extraInningRunnerDelay: header.extraInningRunnerDelay,
   };
@@ -1183,6 +1204,7 @@ function refreshStoredWpa(
   fallbackPolicy?: WpaPolicyFallback,
 ): AtBatEvent {
   const totalInnings = event.totalInnings ?? fallbackPolicy?.totalInnings;
+  const useGhostRunner = event.useGhostRunner ?? fallbackPolicy?.useGhostRunner;
   const extraInningRunner =
     event.extraInningRunner ?? fallbackPolicy?.extraInningRunner;
   const extraInningRunnerDelay =
@@ -1196,6 +1218,7 @@ function refreshStoredWpa(
       homeScore: event.homeScore,
       awayScore: event.awayScore,
       totalInnings,
+      useGhostRunner,
       extraInningRunner,
       extraInningRunnerDelay,
     },
@@ -1217,6 +1240,7 @@ function refreshStoredWpa(
   });
   const resolvedPolicyFields: WpaPolicyFallback = {};
   if (totalInnings !== undefined) resolvedPolicyFields.totalInnings = totalInnings;
+  if (useGhostRunner !== undefined) resolvedPolicyFields.useGhostRunner = useGhostRunner;
   if (extraInningRunner !== undefined) {
     resolvedPolicyFields.extraInningRunner = extraInningRunner;
   }
@@ -1268,6 +1292,7 @@ export async function updateAtBatEvent(
     | 'battingTeamDelta'
     | 'fieldingTeamDelta'
     | 'totalInnings'
+    | 'useGhostRunner'
     | 'extraInningRunner'
     | 'extraInningRunnerDelay'
     | 'outsRecorded'
@@ -1358,6 +1383,7 @@ export async function updateAtBatEventWithFieldingSync(
       | 'battingTeamDelta'
       | 'fieldingTeamDelta'
       | 'totalInnings'
+      | 'useGhostRunner'
       | 'extraInningRunner'
       | 'extraInningRunnerDelay'
       | 'isWalkOff'

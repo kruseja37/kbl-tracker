@@ -540,6 +540,7 @@ export function EliminationHome() {
           isEliminationGame: clutchContext.isEliminationGame,
           isClinchGame: clutchContext.isClinchGame,
           totalInnings: playoffConfig.inningsPerGame,
+          useGhostRunner: false,
           useDH: playoffConfig.useDH,
         }, {
           awayManagerId: awayManager.managerId,

@@ -152,7 +152,7 @@ import {
 import {
   useCommentaryFeed,
 } from "@/app/hooks/useCommentaryFeed";
-import type { BeatReporter } from "../../../types/reporter";
+import type { BeatReporter, ReporterGameMode, ReporterScopeIdentity } from "../../../types/reporter";
 import { getReporterForTeam } from "../../../utils/reporterStorage";
 import {
   getAllPlayers as getAllLeagueBuilderPlayers,
@@ -176,6 +176,18 @@ type GameTrackerLaunchRosterState = {
   homePlayers?: Player[];
   homePitchers?: Pitcher[];
 };
+
+function getReporterGameModeForCompetition(
+  competitionType: "exhibition" | "franchise" | "playoff" | "elimination",
+): ReporterGameMode {
+  if (competitionType === "elimination") {
+    return "elimination";
+  }
+  if (competitionType === "franchise" || competitionType === "playoff") {
+    return "franchise";
+  }
+  return "exhibition";
+}
 
 export const MISSING_GAME_TRACKER_LAUNCH_STATE_TITLE =
   "GameTracker launch data required";
@@ -484,17 +496,18 @@ const crossesRunnerOutcomeBoundary = (
 ) => isRunnerOutcomeOut(previousToBase) !== isRunnerOutcomeOut(nextToBase);
 
 type AtBatWpaEditPolicy = Required<
-  Pick<AtBatEvent, "totalInnings" | "extraInningRunner" | "extraInningRunnerDelay">
+  Pick<AtBatEvent, "totalInnings" | "useGhostRunner" | "extraInningRunner" | "extraInningRunnerDelay">
 >;
 
 const getAtBatWpaEditPolicy = (
   atBatEvent: Pick<
     AtBatEvent,
-    "totalInnings" | "extraInningRunner" | "extraInningRunnerDelay"
+    "totalInnings" | "useGhostRunner" | "extraInningRunner" | "extraInningRunnerDelay"
   >,
   fallback: AtBatWpaEditPolicy,
 ): AtBatWpaEditPolicy => ({
   totalInnings: atBatEvent.totalInnings ?? fallback.totalInnings,
+  useGhostRunner: atBatEvent.useGhostRunner ?? fallback.useGhostRunner,
   extraInningRunner:
     atBatEvent.extraInningRunner ?? fallback.extraInningRunner,
   extraInningRunnerDelay:
@@ -1241,6 +1254,7 @@ export function GameTracker() {
     // T0-01: Total innings for auto game-end detection
     totalInnings?: number;
     useDH?: boolean;
+    useGhostRunner?: boolean;
     extraInningRunner?: boolean;
     extraInningRunnerDelay?: 1 | 2;
     optimalLineupSnapshots?: GameLockLineupSnapshots;
@@ -1443,6 +1457,7 @@ export function GameTracker() {
     atBatSequence,
     // R3-T0: Persistence refs for exhibition config & mojo/fitness
     totalInningsRef: hookTotalInningsRef,
+    useGhostRunnerRef: hookUseGhostRunnerRef,
     extraInningRunnerRef: hookExtraInningRunnerRef,
     extraInningRunnerDelayRef: hookExtraInningRunnerDelayRef,
     teamColorsRef: hookTeamColorsRef,
@@ -1590,6 +1605,11 @@ export function GameTracker() {
     // Fresh game from exhibition setup — seed refs from navigation
     if (navigationState?.extraInningRunner != null) {
       hookExtraInningRunnerRef.current = navigationState.extraInningRunner;
+    }
+    if (navigationState?.useGhostRunner != null) {
+      hookUseGhostRunnerRef.current = navigationState.useGhostRunner;
+    } else if (navigationState?.extraInningRunner != null) {
+      hookUseGhostRunnerRef.current = navigationState.extraInningRunner;
     }
     if (navigationState?.extraInningRunnerDelay != null) {
       hookExtraInningRunnerDelayRef.current = navigationState.extraInningRunnerDelay;
@@ -2315,6 +2335,15 @@ export function GameTracker() {
     baseReached: "1B" | "2B" | "3B";
     fielderPosition: number;
     defaults: RunnerDefaults;
+  } | null>(null);
+  const [endGameError, setEndGameError] = useState<string | null>(null);
+  const [gameActionError, setGameActionError] = useState<string | null>(null);
+  const pendingPitcherUiChangeRef = useRef<{
+    pitchingTeamSide: "away" | "home";
+    incomingPitcherId: string;
+    outgoingPitcherId: string;
+    incomingPitcherName: string;
+    outgoingPitcherName: string;
   } | null>(null);
 
   // D-5: SF prompt state — shown when FO/FLO + R3 + <2 outs
@@ -4492,6 +4521,10 @@ export function GameTracker() {
             getCanonicalRosterName(homePitcher) || "Pitcher",
           // T0-01: Pass total innings for auto game-end detection (default 9 for exhibition)
           totalInnings: navigationState?.totalInnings || 9,
+          useGhostRunner:
+            navigationState?.useGhostRunner ??
+            navigationState?.extraInningRunner ??
+            false,
           extraInningRunner: navigationState?.extraInningRunner ?? false,
           extraInningRunnerDelay: navigationState?.extraInningRunnerDelay ?? 1,
           seasonNumber: effectiveSeasonNumber,
@@ -5118,6 +5151,53 @@ export function GameTracker() {
     runnerNames.second,
     runnerNames.third,
   ]);
+  const reporterGameMode = useMemo<ReporterGameMode>(
+    () => getReporterGameModeForCompetition(effectiveCompetitionType),
+    [effectiveCompetitionType],
+  );
+  const reporterScope = useMemo<ReporterScopeIdentity>(
+    () => {
+      if (effectiveCompetitionType === "exhibition") {
+        return {
+          competitionType: "exhibition",
+          competitionId: effectiveCompetitionId,
+        };
+      }
+      if (effectiveCompetitionType === "elimination") {
+        return {
+          competitionType: "elimination",
+          competitionId: effectiveCompetitionId,
+          statsScopeId: effectiveStatsScopeId,
+          eliminationId: effectiveEliminationId,
+        };
+      }
+      return {
+        franchiseId: effectiveFranchiseId,
+        seasonId: effectiveSeasonId,
+        seasonNumber: effectiveSeasonNumber,
+        statsScopeId: effectiveStatsScopeId,
+        scheduleGameId: effectiveScheduleGameId,
+        competitionType: effectiveCompetitionType,
+        competitionId: effectiveCompetitionId,
+        playoffId: effectivePlayoffId ?? undefined,
+        playoffSeriesId: effectivePlayoffSeriesId ?? undefined,
+        playoffGameNumber: effectivePlayoffGameNumber ?? undefined,
+      };
+    },
+    [
+      effectiveCompetitionId,
+      effectiveCompetitionType,
+      effectiveEliminationId,
+      effectiveFranchiseId,
+      effectivePlayoffGameNumber,
+      effectivePlayoffId,
+      effectivePlayoffSeriesId,
+      effectiveScheduleGameId,
+      effectiveSeasonId,
+      effectiveSeasonNumber,
+      effectiveStatsScopeId,
+    ],
+  );
   const {
     commentaryEntries,
     fireBetweenInningSummary,
@@ -5129,10 +5209,8 @@ export function GameTracker() {
     homeTeamId,
     awayTeamId,
     leagueId,
-    gameMode:
-      effectiveCompetitionType === "playoff"
-        ? "elimination"
-        : (effectiveCompetitionType as import("../../../types/reporter").ReporterGameMode),
+    gameMode: reporterGameMode,
+    reporterScope,
     getLivePreambleSeed,
   });
   const [reportersForFeed, setReportersForFeed] = useState<
@@ -5289,11 +5367,6 @@ export function GameTracker() {
     if (homeCommentaryDisabled && awayCommentaryDisabled) return;
 
     const targetGameId = gameState.gameId;
-    const reporterGameMode: import("../../../types/reporter").ReporterGameMode =
-      effectiveCompetitionType === "playoff"
-        ? "elimination"
-        : (effectiveCompetitionType as import("../../../types/reporter").ReporterGameMode);
-
     void (async () => {
       try {
         const allEvents = (await getGameEvents(targetGameId)).filter(
@@ -5307,6 +5380,7 @@ export function GameTracker() {
             away: gameState.awayScore,
           },
           gameMode: reporterGameMode,
+          reporterScope,
           gameDate: new Date().toISOString().slice(0, 10),
           opponentByReporter: {
             home: awayTeamId,
@@ -5324,6 +5398,8 @@ export function GameTracker() {
     awayCommentaryDisabled,
     awayTeamId,
     effectiveCompetitionType,
+    reporterGameMode,
+    reporterScope,
     firePostGameColumns,
     gameState.awayScore,
     gameState.gameId,
@@ -5606,10 +5682,114 @@ export function GameTracker() {
     ],
   );
 
+  const applyConfirmedPitcherUiChange = useCallback(
+    (change: {
+      pitchingTeamSide: "away" | "home";
+      incomingPitcherId: string;
+      outgoingPitcherId: string;
+      incomingPitcherName: string;
+      outgoingPitcherName: string;
+    }) => {
+      const setPitchers =
+        change.pitchingTeamSide === "away"
+          ? setAwayTeamPitchers
+          : setHomeTeamPitchers;
+      const teamPlayers =
+        change.pitchingTeamSide === "away" ? awayTeamPlayers : homeTeamPlayers;
+      const incomingPositionPlayer = teamPlayers.find(
+        (player) =>
+          getRosterEntityId(player, change.pitchingTeamSide) ===
+            change.incomingPitcherId ||
+          player.name === change.incomingPitcherName,
+      );
+
+      setPitchers((previous) => {
+        let foundIncomingPitcher = false;
+        const nextPitchers = previous.map((pitcher) => {
+          const pitcherId = getRosterEntityId(pitcher, change.pitchingTeamSide);
+          const pitcherName = pitcher.name || pitcher.fullName;
+          if (
+            pitcherId === change.incomingPitcherId ||
+            pitcherName === change.incomingPitcherName
+          ) {
+            foundIncomingPitcher = true;
+            return {
+              ...pitcher,
+              isActive: true,
+              isOutOfGame: false,
+            };
+          }
+          if (
+            pitcherId === change.outgoingPitcherId ||
+            pitcherName === change.outgoingPitcherName
+          ) {
+            return {
+              ...pitcher,
+              isActive: false,
+              isOutOfGame: gameState.gamePhase === "LIVE",
+            };
+          }
+          return {
+            ...pitcher,
+            isActive: false,
+          };
+        });
+
+        if (!foundIncomingPitcher) {
+          nextPitchers.push({
+            name:
+              incomingPositionPlayer?.name ||
+              change.incomingPitcherName ||
+              change.incomingPitcherId,
+            fullName:
+              incomingPositionPlayer?.name ||
+              change.incomingPitcherName ||
+              change.incomingPitcherId,
+            stats: { ip: "0.0", h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
+            throwingHand: (incomingPositionPlayer?.throws || "R") as
+              | "L"
+              | "R",
+            throws: incomingPositionPlayer?.throws,
+            isStarter: false,
+            isActive: true,
+            isOutOfGame: false,
+            playerId: change.incomingPitcherId,
+            velocity: incomingPositionPlayer?.velocity,
+            junk: incomingPositionPlayer?.junk,
+            accuracy: incomingPositionPlayer?.accuracy,
+            arsenal: incomingPositionPlayer?.arsenal,
+            overallGrade: incomingPositionPlayer?.overallGrade,
+            secondaryPosition: incomingPositionPlayer?.position,
+            power: incomingPositionPlayer?.power,
+            contact: incomingPositionPlayer?.contact,
+            speed: incomingPositionPlayer?.speed,
+            fieldingRating: incomingPositionPlayer?.fieldingRating,
+            arm: incomingPositionPlayer?.arm,
+          });
+        }
+
+        return nextPitchers;
+      });
+      syncDisplayedRostersToLineupSnapshot(getLineupStateSnapshot());
+      setRosterVersion((v) => v + 1);
+      queuePlayLogRefresh(80);
+    },
+    [
+      awayTeamPlayers,
+      gameState.gamePhase,
+      getLineupStateSnapshot,
+      getRosterEntityId,
+      homeTeamPlayers,
+      queuePlayLogRefresh,
+      syncDisplayedRostersToLineupSnapshot,
+    ],
+  );
+
   // §9.2: Swap Position handler — swaps fielding positions between two players
   const handleSwapPositionComplete = useCallback(
-    (secondPlayerId: string) => {
+    async (secondPlayerId: string) => {
       if (!swapPositionMode) return;
+      setGameActionError(null);
 
       const firstId = swapPositionMode.playerId;
       let firstPosition = "";
@@ -5637,20 +5817,28 @@ export function GameTracker() {
       };
 
       const awayCopy = [...awayTeamPlayers.map((p) => ({ ...p }))];
-      if (updatePositions(awayCopy)) {
-        setAwayTeamPlayers(awayCopy);
-      }
+      const changedAway = updatePositions(awayCopy);
       const homeCopy = [...homeTeamPlayers.map((p) => ({ ...p }))];
-      if (updatePositions(homeCopy)) {
-        setHomeTeamPlayers(homeCopy);
-      }
+      const changedHome = updatePositions(homeCopy);
 
       // Log via switchPositions hook for BetweenPlayEvent persistence
       if (firstPosition && secondPosition) {
-        switchPositions([
+        const switchResult = await switchPositions([
           { playerId: firstId, newPosition: secondPosition },
           { playerId: secondPlayerId, newPosition: firstPosition },
         ]);
+        if (!switchResult.success) {
+          setGameActionError(
+            switchResult.error || "Position switch could not be saved.",
+          );
+          return;
+        }
+        if (changedAway) {
+          setAwayTeamPlayers(awayCopy);
+        }
+        if (changedHome) {
+          setHomeTeamPlayers(homeCopy);
+        }
         syncDisplayedRostersToLineupSnapshot(getLineupStateSnapshot());
         setRosterVersion((v) => v + 1);
         console.log("[M1-3-fix] Applied player-card position swap", {
@@ -6005,8 +6193,9 @@ export function GameTracker() {
 
   // Handler for lineup card substitutions (Phase 6)
   const handleLineupCardSubstitution = useCallback(
-    (sub: SubstitutionData) => {
+    async (sub: SubstitutionData) => {
       console.log("LineupCard substitution:", sub);
+      setGameActionError(null);
 
       if (effectiveFranchiseId && sub.type === "double_switch") {
         console.warn(
@@ -6064,75 +6253,18 @@ export function GameTracker() {
           sub.incomingPlayerName,
           sub.outgoingPlayerName,
         );
-        const setPitchers =
-          pitchingTeam === "away" ? setAwayTeamPitchers : setHomeTeamPitchers;
-        const incomingPositionPlayer = (
-          pitchingTeam === "away" ? awayTeamPlayers : homeTeamPlayers
-        ).find(
-          (player) =>
-            getRosterEntityId(player, pitchingTeam) === sub.incomingPlayerId ||
-            player.name === sub.incomingPlayerName,
-        );
-        setPitchers((previous) => {
-          let foundIncomingPitcher = false;
-          const nextPitchers = previous.map((pitcher) => {
-            const pitcherId = getRosterEntityId(pitcher, pitchingTeam);
-            if (pitcherId === sub.incomingPlayerId) {
-              foundIncomingPitcher = true;
-              return {
-                ...pitcher,
-                isActive: true,
-                isOutOfGame: false,
-              };
-            }
-            if (pitcherId === sub.outgoingPlayerId) {
-              return {
-                ...pitcher,
-                isActive: false,
-                isOutOfGame: gameState.gamePhase === "LIVE",
-              };
-            }
-            return {
-              ...pitcher,
-              isActive: false,
-            };
-          });
-
-          if (!foundIncomingPitcher) {
-            nextPitchers.push({
-              name:
-                incomingPositionPlayer?.name ||
-                sub.incomingPlayerName ||
-                sub.incomingPlayerId,
-              fullName:
-                incomingPositionPlayer?.name ||
-                sub.incomingPlayerName ||
-                sub.incomingPlayerId,
-              stats: { ip: "0.0", h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
-              throwingHand: (incomingPositionPlayer?.throws || "R") as "L" | "R",
-              throws: incomingPositionPlayer?.throws,
-              isStarter: false,
-              isActive: true,
-              isOutOfGame: false,
-              playerId: sub.incomingPlayerId,
-              velocity: incomingPositionPlayer?.velocity,
-              junk: incomingPositionPlayer?.junk,
-              accuracy: incomingPositionPlayer?.accuracy,
-              arsenal: incomingPositionPlayer?.arsenal,
-              overallGrade: incomingPositionPlayer?.overallGrade,
-              secondaryPosition: incomingPositionPlayer?.position,
-              power: incomingPositionPlayer?.power,
-              contact: incomingPositionPlayer?.contact,
-              speed: incomingPositionPlayer?.speed,
-              fieldingRating: incomingPositionPlayer?.fieldingRating,
-              arm: incomingPositionPlayer?.arm,
-            });
-          }
-
-          return nextPitchers;
-        });
-        syncDisplayedRostersToLineupSnapshot(getLineupStateSnapshot());
-        setRosterVersion((v) => v + 1);
+        const pitcherUiChange = {
+          pitchingTeamSide: pitchingTeam,
+          incomingPitcherId: sub.incomingPlayerId,
+          outgoingPitcherId: sub.outgoingPlayerId,
+          incomingPitcherName: sub.incomingPlayerName || sub.incomingPlayerId,
+          outgoingPitcherName: sub.outgoingPlayerName || sub.outgoingPlayerId,
+        };
+        if (gameState.gamePhase === "PRE_GAME") {
+          applyConfirmedPitcherUiChange(pitcherUiChange);
+        } else {
+          pendingPitcherUiChangeRef.current = pitcherUiChange;
+        }
       } else if (sub.type === "position_swap") {
         const incomingContext = findTeamPlayer(
           sub.incomingPlayerId,
@@ -6152,13 +6284,19 @@ export function GameTracker() {
           return;
         }
 
-        switchPositions([
+        const switchResult = await switchPositions([
           {
             playerId: sub.incomingPlayerId,
             newPosition: sub.newPosition || outgoingPosition,
           },
           { playerId: sub.outgoingPlayerId, newPosition: incomingPosition },
         ]);
+        if (!switchResult.success) {
+          setGameActionError(
+            switchResult.error || "Position switch could not be saved.",
+          );
+          return;
+        }
         syncDisplayedRostersToLineupSnapshot(getLineupStateSnapshot());
         setRosterVersion((v) => v + 1);
       } else if (sub.type === "position_change") {
@@ -6205,17 +6343,29 @@ export function GameTracker() {
         );
 
         if (occupiedPlayer?.position) {
-          switchPositions([
+          const switchResult = await switchPositions([
             { playerId: sub.incomingPlayerId, newPosition: sub.newPosition },
             {
               playerId: getRosterEntityId(occupiedPlayer, playerContext.team),
               newPosition: currentPosition,
             },
           ]);
+          if (!switchResult.success) {
+            setGameActionError(
+              switchResult.error || "Position change could not be saved.",
+            );
+            return;
+          }
         } else {
-          switchPositions([
+          const switchResult = await switchPositions([
             { playerId: sub.incomingPlayerId, newPosition: sub.newPosition },
           ]);
+          if (!switchResult.success) {
+            setGameActionError(
+              switchResult.error || "Position change could not be saved.",
+            );
+            return;
+          }
         }
 
         syncDisplayedRostersToLineupSnapshot(getLineupStateSnapshot());
@@ -6226,7 +6376,7 @@ export function GameTracker() {
         const isPinchHitter =
           sub.type !== "double_switch" &&
           sub.outgoingPlayerId === gameState?.currentBatterId;
-        const subResult = makeSubstitution(
+        const subResult = await makeSubstitution(
           sub.incomingPlayerId,
           sub.outgoingPlayerId,
           sub.incomingPlayerName,
@@ -6247,7 +6397,7 @@ export function GameTracker() {
           console.warn(
             `[GameTracker] Substitution rejected: ${subResult.error}`,
           );
-          // TODO: Show UI toast/notification to user
+          setGameActionError(subResult.error || "Substitution could not be saved.");
           return;
         }
 
@@ -6314,6 +6464,7 @@ export function GameTracker() {
       queuePlayLogRefresh(80);
     },
     [
+      applyConfirmedPitcherUiChange,
       awayTeamPitchers,
       awayTeamPlayers,
       changePitcher,
@@ -8080,7 +8231,7 @@ export function GameTracker() {
   );
 
   const handleSubstitution = useCallback(
-    (
+    async (
       teamType: "away" | "home",
       benchPlayerName: string,
       lineupPlayerName: string,
@@ -8089,6 +8240,7 @@ export function GameTracker() {
         base?: "1B" | "2B" | "3B";
       },
     ) => {
+      setGameActionError(null);
       console.log(
         `Substitution: ${benchPlayerName} replacing ${lineupPlayerName} on ${teamType} team`,
       );
@@ -8098,7 +8250,7 @@ export function GameTracker() {
 
       // MAJ-06: Call with enriched options for proper sub type logging
       // MAJ-09: Check validation result before updating UI
-      const subResult = makeSubstitution(
+      const subResult = await makeSubstitution(
         benchPlayerId,
         lineupPlayerId,
         benchPlayerName,
@@ -8110,7 +8262,7 @@ export function GameTracker() {
       );
       if (!subResult.success) {
         console.warn(`[GameTracker] Substitution rejected: ${subResult.error}`);
-        // TODO: Show UI toast/notification to user
+        setGameActionError(subResult.error || "Substitution could not be saved.");
         return;
       }
 
@@ -8167,6 +8319,7 @@ export function GameTracker() {
     replacedName: string,
     replacedType: "player" | "pitcher",
   ) => {
+    setGameActionError(null);
     console.log(
       `Pitcher Substitution: ${newPitcherName} replacing ${replacedName} (${replacedType}) on ${teamType} team`,
     );
@@ -8188,38 +8341,24 @@ export function GameTracker() {
       newPitcherName,
       replacedName,
     );
-    queuePlayLogRefresh(80);
-
-    const setPitchers =
-      pitchingTeamSide === "away" ? setAwayTeamPitchers : setHomeTeamPitchers;
-    setPitchers((previous) =>
-      previous.map((pitcher) => {
-        if (pitcher.name === newPitcherName) {
-          return {
-            ...pitcher,
-            isActive: true,
-            isOutOfGame: false,
-          };
-        }
-        if (pitcher.name === replacedName) {
-          return {
-            ...pitcher,
-            isActive: false,
-            isOutOfGame: gameState.gamePhase === "LIVE",
-          };
-        }
-        return {
-          ...pitcher,
-          isActive: false,
-        };
-      }),
-    );
+    const pitcherUiChange = {
+      pitchingTeamSide,
+      incomingPitcherId: newPitcherId,
+      outgoingPitcherId: exitingPitcherId,
+      incomingPitcherName: newPitcherName,
+      outgoingPitcherName: replacedName,
+    };
+    if (gameState.gamePhase === "PRE_GAME") {
+      applyConfirmedPitcherUiChange(pitcherUiChange);
+    } else {
+      pendingPitcherUiChangeRef.current = pitcherUiChange;
+    }
 
   };
 
   // §9.1: Player card Sub Out handler — executes substitution from player card bench list
   const handlePlayerCardSubOut = useCallback(
-    (
+    async (
       outgoingPlayerId: string,
       outgoingName: string,
       incomingName: string,
@@ -8260,7 +8399,7 @@ export function GameTracker() {
         if (isActualPitcherChange) {
           handlePitcherSubstitution(fallbackTeam, incomingName, outgoingName, "pitcher");
         } else {
-          handleSubstitution(fallbackTeam, incomingName, outgoingName, runnerBase
+          await handleSubstitution(fallbackTeam, incomingName, outgoingName, runnerBase
             ? {
                 subType: "pinch_run",
                 base: runnerBaseToTrackerBase(runnerBase),
@@ -8279,7 +8418,7 @@ export function GameTracker() {
         handlePitcherSubstitution(team, incomingName, outgoingName, "pitcher");
       } else {
         // Regular substitution (including pinch-hit for batting-side pitcher)
-        handleSubstitution(team, incomingName, outgoingName, runnerBase
+        await handleSubstitution(team, incomingName, outgoingName, runnerBase
           ? {
               subType: "pinch_run",
               base: runnerBaseToTrackerBase(runnerBase),
@@ -9031,7 +9170,8 @@ export function GameTracker() {
   );
 
   const handleFielderMovePosition = useCallback(
-    (playerId: string, newPosition: string) => {
+    async (playerId: string, newPosition: string) => {
+      setGameActionError(null);
       if (newPosition === "P" || newPosition === "DH") {
         console.warn(
           "[GameTracker] Move position rejected: use substitution controls for pitcher/DH changes",
@@ -9046,7 +9186,13 @@ export function GameTracker() {
         setActiveFielderPopover(null);
         return;
       }
-      switchPositions([{ playerId, newPosition }]);
+      const switchResult = await switchPositions([{ playerId, newPosition }]);
+      if (!switchResult.success) {
+        setGameActionError(
+          switchResult.error || "Position change could not be saved.",
+        );
+        return;
+      }
       setActiveFielderPopover(null);
       queuePlayLogRefresh(80);
     },
@@ -9334,6 +9480,7 @@ export function GameTracker() {
 
           const wpaEditPolicy = getAtBatWpaEditPolicy(existingAtBat, {
             totalInnings: hookTotalInningsRef.current,
+            useGhostRunner: hookUseGhostRunnerRef.current,
             extraInningRunner: hookExtraInningRunnerRef.current,
             extraInningRunnerDelay: hookExtraInningRunnerDelayRef.current,
           });
@@ -9464,6 +9611,7 @@ export function GameTracker() {
         if (isFieldingSyncField) {
           const wpaEditPolicy = getAtBatWpaEditPolicy(existingAtBat, {
             totalInnings: hookTotalInningsRef.current,
+            useGhostRunner: hookUseGhostRunnerRef.current,
             extraInningRunner: hookExtraInningRunnerRef.current,
             extraInningRunnerDelay: hookExtraInningRunnerDelayRef.current,
           });
@@ -9784,6 +9932,9 @@ export function GameTracker() {
       await updateAtBatEvent(entry.eventId, {
         result: newResult as import("../../../types/game").AtBatResult,
         totalInnings: existingAtBat.totalInnings ?? hookTotalInningsRef.current,
+        useGhostRunner:
+          existingAtBat.useGhostRunner ??
+          hookUseGhostRunnerRef.current,
         extraInningRunner:
           existingAtBat.extraInningRunner ??
           hookExtraInningRunnerRef.current,
@@ -10698,6 +10849,7 @@ export function GameTracker() {
         }
         const wpaEditPolicy = getAtBatWpaEditPolicy(existingAtBat, {
           totalInnings: hookTotalInningsRef.current,
+          useGhostRunner: hookUseGhostRunnerRef.current,
           extraInningRunner: hookExtraInningRunnerRef.current,
           extraInningRunnerDelay: hookExtraInningRunnerDelayRef.current,
         });
@@ -11324,6 +11476,7 @@ export function GameTracker() {
       pushActivityLog(
         `[Game End] ${homeTeamName} ${gameState.homeScore} - ${awayTeamName} ${gameState.awayScore} (Inning ${gameState.inning})`,
       );
+      setEndGameError(null);
       const endGameOptions = {
         activityLog,
         seasonId: computedSeasonId,
@@ -11347,21 +11500,26 @@ export function GameTracker() {
         "[END-GAME] Step 2: Calling hookEndGame and awaiting pitch-count resolution",
       );
       // R3-R7: Await hookEndGame (shows pitch count modal, runs aggregation).
-      // Add a 30s safety timeout — game archive already saved above, so if
-      // hookEndGame hangs (IndexedDB issue, processCompletedGame timeout),
-      // navigation to PostGameSummary proceeds anyway.
+      // A timeout now aborts downstream handoff; schedule/playoff state must
+      // only advance after aggregation completes successfully.
       console.debug("[END-GAME] Step 2b: awaiting hookEndGame with 30s safety...");
       try {
         await Promise.race([
           hookEndGame(endGameOptions),
-          new Promise<void>((resolve) => setTimeout(() => {
-            console.error("[END-GAME] hookEndGame safety timeout — forcing navigation");
-            resolve();
+          new Promise<void>((_, reject) => setTimeout(() => {
+            reject(new Error("End-game processing timed out before aggregation completed."));
           }, 30000)),
         ]);
         console.debug("[END-GAME] Step 3: hookEndGame completed");
       } catch (hookErr) {
         console.error("[END-GAME] hookEndGame failed:", hookErr);
+        setEndGameError(
+          hookErr instanceof Error
+            ? hookErr.message
+            : "End-game processing failed before aggregation completed.",
+        );
+        setIsProcessingEndGame(false);
+        return;
       }
       setIsProcessingEndGame(true);
 
@@ -11427,10 +11585,6 @@ export function GameTracker() {
       // Dedup via firedPostGameForGameIdRef in the hook prevents double-fire
       // if the phase-watching effect also happens to run.
       if (gameState.postGameColumnsEnabled && completedGameId) {
-        const reporterGameMode: import("../../../types/reporter").ReporterGameMode =
-          effectiveCompetitionType === "playoff"
-            ? "elimination"
-            : (effectiveCompetitionType as import("../../../types/reporter").ReporterGameMode);
         const postGameGameId = completedGameId;
         const snapshotHomeScore = gameState.homeScore;
         const snapshotAwayScore = gameState.awayScore;
@@ -11447,6 +11601,7 @@ export function GameTracker() {
                 away: snapshotAwayScore,
               },
               gameMode: reporterGameMode,
+              reporterScope,
               gameDate: new Date().toISOString().slice(0, 10),
               opponentByReporter: {
                 home: awayTeamId,
@@ -11506,6 +11661,8 @@ export function GameTracker() {
     effectiveSeasonId,
     effectiveSeasonNumber,
     effectiveStatsScopeId,
+    reporterGameMode,
+    reporterScope,
     gameId,
     gameState,
     pitcherStats,
@@ -12519,6 +12676,48 @@ export function GameTracker() {
         {/* Undo toast notification */}
         <undoSystem.ToastComponent />
 
+        {endGameError && (
+          <div
+            role="alert"
+            className="fixed top-20 left-1/2 z-50 w-[min(520px,calc(100vw-32px))] -translate-x-1/2 bg-[#3a1818] border-4 border-[#FF9E9E] px-4 py-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.45)]"
+          >
+            <div className="text-[#FFB8B8] text-xs font-bold tracking-[0.16em] mb-1">
+              END GAME BLOCKED
+            </div>
+            <div className="text-[#F8E8E8] text-[11px] leading-5">
+              {endGameError}
+            </div>
+            <button
+              type="button"
+              onClick={() => setEndGameError(null)}
+              className="mt-3 bg-[#5a2424] border-2 border-[#FF9E9E] px-3 py-1 text-[10px] font-bold tracking-[0.12em] text-[#FFEAEA]"
+            >
+              DISMISS
+            </button>
+          </div>
+        )}
+
+        {gameActionError && (
+          <div
+            role="alert"
+            className="fixed top-20 left-1/2 z-50 w-[min(520px,calc(100vw-32px))] -translate-x-1/2 bg-[#3a1818] border-4 border-[#FF9E9E] px-4 py-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.45)]"
+          >
+            <div className="text-[#FFB8B8] text-xs font-bold tracking-[0.16em] mb-1">
+              ACTION BLOCKED
+            </div>
+            <div className="text-[#F8E8E8] text-[11px] leading-5">
+              {gameActionError}
+            </div>
+            <button
+              type="button"
+              onClick={() => setGameActionError(null)}
+              className="mt-3 bg-[#5a2424] border-2 border-[#FF9E9E] px-3 py-1 text-[10px] font-bold tracking-[0.12em] text-[#FFEAEA]"
+            >
+              DISMISS
+            </button>
+          </div>
+        )}
+
         {pendingManualSpecialPrompt && (
           <InjuryPrompt
             type={pendingManualSpecialPrompt.type}
@@ -12532,8 +12731,27 @@ export function GameTracker() {
         {pitchCountPrompt && (
           <PitchCountModal
             prompt={pitchCountPrompt}
-            onConfirm={(pitcherId: string, finalCount: number) => {
-              const result = confirmPitchCount(pitcherId, finalCount);
+            onConfirm={async (pitcherId: string, finalCount: number) => {
+              setGameActionError(null);
+              const result = await confirmPitchCount(pitcherId, finalCount);
+              if (!result.success) {
+                setGameActionError(
+                  result.error || "Pitch count could not be saved.",
+                );
+                if (
+                  result.error !==
+                  "Failed to persist pitch-count ledger event"
+                ) {
+                  pendingPitcherUiChangeRef.current = null;
+                }
+                return;
+              }
+              const pendingPitcherUiChange =
+                pendingPitcherUiChangeRef.current;
+              if (pendingPitcherUiChange) {
+                applyConfirmedPitcherUiChange(pendingPitcherUiChange);
+                pendingPitcherUiChangeRef.current = null;
+              }
               if (result.immaculateInning) {
                 fameTrackingHook.recordFameEvent(
                   "IMMACULATE_INNING" as FameEventType,
@@ -12545,7 +12763,10 @@ export function GameTracker() {
                 );
               }
             }}
-            onDismiss={dismissPitchCountPrompt}
+            onDismiss={() => {
+              pendingPitcherUiChangeRef.current = null;
+              dismissPitchCountPrompt();
+            }}
           />
         )}
 
@@ -13744,7 +13965,7 @@ interface PitchCountModalProps {
     currentCount: number;
     lastVerifiedInning: number;
   };
-  onConfirm: (pitcherId: string, finalCount: number) => void;
+  onConfirm: (pitcherId: string, finalCount: number) => void | Promise<void>;
   onDismiss: () => void;
 }
 
@@ -13756,11 +13977,17 @@ function PitchCountModal({
   const [pitchCount, setPitchCount] = React.useState(
     prompt.currentCount.toString(),
   );
+  const [isConfirming, setIsConfirming] = React.useState(false);
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     const count = parseInt(pitchCount, 10);
     if (!isNaN(count) && count >= 0) {
-      onConfirm(prompt.pitcherId, count);
+      setIsConfirming(true);
+      try {
+        await onConfirm(prompt.pitcherId, count);
+      } finally {
+        setIsConfirming(false);
+      }
     }
   };
 
@@ -13826,9 +14053,10 @@ function PitchCountModal({
           )}
           <button
             onClick={handleConfirm}
+            disabled={isConfirming}
             className="flex-1 bg-[#FFD700] border-2 border-[#CC9900] text-[#1a3020] py-2 px-4 font-bold hover:bg-[#FFE44D]"
           >
-            {isRequired ? "Confirm & Continue" : "Update"}
+            {isConfirming ? "Saving..." : isRequired ? "Confirm & Continue" : "Update"}
           </button>
           {isRequired && (
             <button

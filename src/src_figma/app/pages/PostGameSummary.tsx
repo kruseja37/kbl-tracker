@@ -661,6 +661,7 @@ export function PostGameSummary({
     fieldingEvents,
     betweenPlayEvents,
     totalInnings,
+    useGhostRunner: gameData.useGhostRunner ?? gameHeader?.useGhostRunner,
     extraInningRunner: gameData.extraInningRunner ?? gameHeader?.extraInningRunner,
     extraInningRunnerDelay:
       gameData.extraInningRunnerDelay ?? gameHeader?.extraInningRunnerDelay,

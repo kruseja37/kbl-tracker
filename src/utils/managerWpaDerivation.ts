@@ -61,12 +61,14 @@ export interface DeriveManagerDecisionRecordsInput
   betweenPlayEvents?: BetweenPlayEvent[];
   fieldingEvents?: FieldingEvent[];
   totalInnings?: number;
+  useGhostRunner?: boolean;
   extraInningRunner?: boolean;
   extraInningRunnerDelay?: 1 | 2;
   gameEnded?: boolean;
 }
 
 interface ExtraInningRunnerPolicy {
+  useGhostRunner?: boolean;
   extraInningRunner?: boolean;
   extraInningRunnerDelay?: 1 | 2;
 }
@@ -330,6 +332,7 @@ export function deriveManagerDecisionRecords(
     fieldingEvents,
     homeTeamId: input.homeTeamId,
     totalInnings: input.totalInnings,
+    useGhostRunner: input.useGhostRunner,
     extraInningRunner: input.extraInningRunner,
     extraInningRunnerDelay: input.extraInningRunnerDelay,
     gameEnded: input.gameEnded ?? false,
@@ -1190,6 +1193,7 @@ function buildAtBatDecision(params: {
           teamId: attribution.teamId,
           homeTeamId: input.homeTeamId,
           totalInnings: input.totalInnings,
+          useGhostRunner: input.useGhostRunner,
           extraInningRunner: input.extraInningRunner,
           extraInningRunnerDelay: input.extraInningRunnerDelay,
         })
@@ -1266,6 +1270,7 @@ function buildAtBatDecision(params: {
             teamId: attribution.teamId,
             homeTeamId: input.homeTeamId,
             totalInnings: input.totalInnings,
+            useGhostRunner: input.useGhostRunner,
             extraInningRunner: input.extraInningRunner,
             extraInningRunnerDelay: input.extraInningRunnerDelay,
           })
@@ -1646,6 +1651,7 @@ interface ResolveDecisionWindowsContext {
   fieldingEvents: FieldingEvent[];
   homeTeamId: string;
   totalInnings?: number;
+  useGhostRunner?: boolean;
   extraInningRunner?: boolean;
   extraInningRunnerDelay?: 1 | 2;
   gameEnded: boolean;
@@ -2383,6 +2389,7 @@ function buildIntentionalWalkExplanationMetadata(input: {
   teamId?: string;
   homeTeamId?: string;
   totalInnings?: number;
+  useGhostRunner?: boolean;
   extraInningRunner?: boolean;
   extraInningRunnerDelay?: 1 | 2;
   nextBatterPa?: AtBatEvent;
@@ -2439,6 +2446,7 @@ function buildIntentionalWalkExplanationMetadata(input: {
         teamId: input.teamId,
         homeTeamId: input.homeTeamId,
         totalInnings: input.totalInnings,
+        useGhostRunner: input.useGhostRunner,
         extraInningRunner: input.extraInningRunner,
         extraInningRunnerDelay: input.extraInningRunnerDelay,
         finalHomeWinProbabilityAfter: input.finalHomeWinProbabilityAfter,
@@ -2456,6 +2464,7 @@ function buildIntentionalWalkWpaComponents(input: {
   teamId?: string;
   homeTeamId?: string;
   totalInnings?: number;
+  useGhostRunner?: boolean;
   extraInningRunner?: boolean;
   extraInningRunnerDelay?: 1 | 2;
   finalHomeWinProbabilityAfter?: number;
@@ -2474,6 +2483,7 @@ function buildIntentionalWalkWpaComponents(input: {
       teamId,
       homeTeamId: input.homeTeamId,
       totalInnings: input.totalInnings,
+      useGhostRunner: input.useGhostRunner,
       extraInningRunner: input.extraInningRunner,
       extraInningRunnerDelay: input.extraInningRunnerDelay,
       field: "winProbabilityBefore",
@@ -2485,6 +2495,7 @@ function buildIntentionalWalkWpaComponents(input: {
       teamId,
       homeTeamId: input.homeTeamId,
       totalInnings: input.totalInnings,
+      useGhostRunner: input.useGhostRunner,
       extraInningRunner: input.extraInningRunner,
       extraInningRunnerDelay: input.extraInningRunnerDelay,
       field: "winProbabilityAfter",
@@ -2540,6 +2551,7 @@ function teamWinProbabilityFromAtBatWindow(input: {
   teamId?: string;
   homeTeamId?: string;
   totalInnings?: number;
+  useGhostRunner?: boolean;
   extraInningRunner?: boolean;
   extraInningRunnerDelay?: 1 | 2;
   field: "winProbabilityBefore" | "winProbabilityAfter";
@@ -2748,6 +2760,7 @@ function buildOutAdvancingSendCounterfactualWindow(input: {
   teamId: string;
   homeTeamId: string;
   totalInnings?: number;
+  useGhostRunner?: boolean;
   extraInningRunner?: boolean;
   extraInningRunnerDelay?: 1 | 2;
 }): OutAdvancingCounterfactualWindowResult {
@@ -3191,6 +3204,8 @@ function calculateBetweenPlayWindow(
       homeScore: gameState.score.home,
       awayScore: gameState.score.away,
       totalInnings: gameState.totalInnings ?? totalInnings,
+      useGhostRunner:
+        gameState.useGhostRunner ?? extraPolicy?.useGhostRunner,
       extraInningRunner:
         gameState.extraInningRunner ?? extraPolicy?.extraInningRunner,
       extraInningRunnerDelay:
@@ -3211,6 +3226,8 @@ function resolveAtBatExtraInningRunnerPolicy(
   fallback?: ExtraInningRunnerPolicy,
 ): ExtraInningRunnerPolicy {
   return {
+    useGhostRunner:
+      event.useGhostRunner ?? fallback?.useGhostRunner,
     extraInningRunner:
       event.extraInningRunner ?? fallback?.extraInningRunner,
     extraInningRunnerDelay:

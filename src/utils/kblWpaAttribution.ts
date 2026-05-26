@@ -33,6 +33,7 @@ export interface KblWpaDerivationInput {
   fieldingEvents?: FieldingEvent[];
   betweenPlayEvents?: BetweenPlayEvent[];
   totalInnings?: number;
+  useGhostRunner?: boolean;
   extraInningRunner?: boolean;
   extraInningRunnerDelay?: 1 | 2;
   awayTeamId?: string;
@@ -93,6 +94,7 @@ interface AfterState {
 
 interface DerivationContext {
   totalInnings?: number;
+  useGhostRunner?: boolean;
   extraInningRunner?: boolean;
   extraInningRunnerDelay?: 1 | 2;
   awayTeamId?: string;
@@ -102,6 +104,7 @@ interface DerivationContext {
 }
 
 interface ExtraInningRunnerPolicy {
+  useGhostRunner?: boolean;
   extraInningRunner?: boolean;
   extraInningRunnerDelay?: 1 | 2;
 }
@@ -188,6 +191,7 @@ export function deriveKblWpaCredits(input: KblWpaDerivationInput): KblWpaCredit[
     credits.push(
       ...deriveBetweenPlayCredits(event, {
         totalInnings: input.totalInnings,
+        useGhostRunner: input.useGhostRunner,
         extraInningRunner: input.extraInningRunner,
         extraInningRunnerDelay: input.extraInningRunnerDelay,
         awayTeamId: input.awayTeamId,
@@ -395,6 +399,8 @@ function resolveAtBatExtraInningRunnerPolicy(
   fallback?: ExtraInningRunnerPolicy,
 ): ExtraInningRunnerPolicy {
   return {
+    useGhostRunner:
+      event.useGhostRunner ?? fallback?.useGhostRunner,
     extraInningRunner:
       event.extraInningRunner ?? fallback?.extraInningRunner,
     extraInningRunnerDelay:
@@ -1234,6 +1240,7 @@ function deriveBetweenPlayCredits(
   event: BetweenPlayEvent,
   context: {
     totalInnings?: number;
+    useGhostRunner?: boolean;
     extraInningRunner?: boolean;
     extraInningRunnerDelay?: 1 | 2;
     awayTeamId?: string;
@@ -1316,6 +1323,8 @@ function deriveBetweenPlayCredits(
       homeScore: homeScoreBefore,
       awayScore: awayScoreBefore,
       totalInnings: event.gameState.totalInnings ?? context.totalInnings,
+      useGhostRunner:
+        event.gameState.useGhostRunner ?? context.useGhostRunner,
       extraInningRunner:
         event.gameState.extraInningRunner ?? context.extraInningRunner,
       extraInningRunnerDelay:

@@ -735,6 +735,7 @@ export function ExhibitionGame() {
         postGameColumnsEnabled,
         useDH,
         totalInnings,
+        useGhostRunner: extraInningRunner,
         extraInningRunner,
         extraInningRunnerDelay,
         optimalLineupSnapshots,

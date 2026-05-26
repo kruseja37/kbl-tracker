@@ -396,6 +396,8 @@ export function GameDetail() {
     });
 
     const totalInnings = game.totalInnings ?? gameHeader?.totalInnings;
+    const useGhostRunner =
+      game.useGhostRunner ?? gameHeader?.useGhostRunner;
     const extraInningRunner =
       game.extraInningRunner ?? gameHeader?.extraInningRunner;
     const extraInningRunnerDelay =
@@ -405,6 +407,7 @@ export function GameDetail() {
       fieldingEvents,
       betweenPlayEvents,
       totalInnings,
+      useGhostRunner,
       extraInningRunner,
       extraInningRunnerDelay,
       awayTeamId: game.awayTeamId,
@@ -450,6 +453,7 @@ export function GameDetail() {
       ...atBatEvents.map((event) => {
         const credits = kblCreditsByEvent.get(event.eventId) ?? [];
         const actual = deriveActualAtBatWpa(event, totalInnings, {
+          useGhostRunner,
           extraInningRunner,
           extraInningRunnerDelay,
         });

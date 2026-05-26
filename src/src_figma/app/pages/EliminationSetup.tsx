@@ -7,6 +7,8 @@ import { getEliminationRoundName } from '../../../utils/playoffStorage';
 const STEP_LABELS = ['League', 'Settings', 'Teams', 'Seeding', 'Confirm'];
 const TEAM_OPTIONS = [4, 8, 16];
 const SERIES_OPTIONS = [3, 5, 7];
+const INNING_OPTIONS = [3, 4, 5, 6, 7, 8, 9];
+
 function getValidTeamOptions(teamCount: number): number[] {
   return TEAM_OPTIONS.filter((option) => option <= teamCount);
 }
@@ -160,7 +162,24 @@ function StepPlayoffSettings(props: {
         </div>
         <div className="border-4 border-[#E8E8D8] bg-[#4A6A42] p-4">
           <label className="block text-xs text-[#E8E8D8]/70 mb-2">Innings per game</label>
-          <input type="number" min={3} max={9} value={inningsPerGame} onChange={(event) => setInningsPerGame(Math.max(3, Math.min(9, Number(event.target.value) || 9)))} className="w-full bg-[#5A7A52] border-2 border-[#E8E8D8] text-[#E8E8D8] px-3 py-2 text-sm" />
+          <div className="grid grid-cols-4 gap-2 sm:grid-cols-7" role="group" aria-label="Innings per game">
+            {INNING_OPTIONS.map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setInningsPerGame(option)}
+                aria-pressed={inningsPerGame === option}
+                className={`h-10 border-2 text-sm font-bold transition-all ${
+                  inningsPerGame === option
+                    ? 'border-[#C4A853] bg-[#C4A853] text-[#4A6A42]'
+                    : 'border-[#E8E8D8] bg-[#5A7A52] text-[#E8E8D8] hover:border-[#C4A853]'
+                }`}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-[10px] text-[#E8E8D8]/50">Choose any game length from 3 to 9 innings.</p>
         </div>
         <div className="border-4 border-[#E8E8D8] bg-[#4A6A42] p-4 flex items-center justify-between gap-4">
           <div>

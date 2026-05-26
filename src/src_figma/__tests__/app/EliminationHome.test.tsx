@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { EliminationHome } from "../../app/pages/EliminationHome";
@@ -14,6 +14,9 @@ const {
   mockGetSeriesByPlayoff,
   mockGetPlayoffLeaders,
   mockGetInstanceTeamImpactLeaderboards,
+  mockBuildEliminationGameTrackerRoster,
+  mockGetEliminationTeam,
+  mockResolveManagerForTeam,
   mockNavigate,
 } = vi.hoisted(() => ({
   mockGetElimination: vi.fn(),
@@ -24,6 +27,9 @@ const {
   mockGetSeriesByPlayoff: vi.fn(),
   mockGetPlayoffLeaders: vi.fn(),
   mockGetInstanceTeamImpactLeaderboards: vi.fn(),
+  mockBuildEliminationGameTrackerRoster: vi.fn(),
+  mockGetEliminationTeam: vi.fn(),
+  mockResolveManagerForTeam: vi.fn(),
   mockNavigate: vi.fn(),
 }));
 
@@ -38,11 +44,11 @@ vi.mock("../../../utils/eliminationManager", () => ({
 }));
 
 vi.mock("../../../utils/eliminationRosterStorage", () => ({
-  buildEliminationGameTrackerRoster: vi.fn(),
+  buildEliminationGameTrackerRoster: mockBuildEliminationGameTrackerRoster,
 }));
 
 vi.mock("../../../utils/eliminationPlayerStorage", () => ({
-  getEliminationTeam: vi.fn(),
+  getEliminationTeam: mockGetEliminationTeam,
 }));
 
 vi.mock("../../../utils/playoffStorage", () => ({
@@ -64,7 +70,7 @@ vi.mock("../../../engines/playoffEngine", () => ({
 }));
 
 vi.mock("../../../utils/managerIdentityStorage", () => ({
-  resolveManagerForTeam: vi.fn(),
+  resolveManagerForTeam: mockResolveManagerForTeam,
 }));
 
 vi.mock("../../../utils/teamImpact", () => ({
@@ -118,6 +124,26 @@ describe("EliminationHome leaders Team Impact panels", () => {
     mockGetSeriesByPlayoff.mockResolvedValue([]);
     mockGetPlayoffLeaders.mockResolvedValue([playoffLeader()]);
     mockGetInstanceTeamImpactLeaderboards.mockResolvedValue(impactLeaderboards());
+    mockBuildEliminationGameTrackerRoster.mockResolvedValue({
+      players: [{ playerId: "p1", name: "Player One", position: "SS" }],
+      pitchers: [{ playerId: "sp1", name: "Starter One", isActive: true, throwingHand: "R" }],
+      optimalLineups: {},
+    });
+    mockGetEliminationTeam.mockImplementation((_eliminationId: string, teamId: string) =>
+      Promise.resolve({
+        id: teamId,
+        name: teamId === "alpha" ? "Alpha Snapshot" : "Beta Snapshot",
+        abbreviation: teamId.slice(0, 3).toUpperCase(),
+        colors: { primary: "#111111", secondary: "#222222" },
+        stadium: `${teamId} Park`,
+      }),
+    );
+    mockResolveManagerForTeam.mockImplementation(({ team }: { team: { id: string; name: string } }) =>
+      Promise.resolve({
+        managerId: `${team.id}-manager`,
+        managerName: `${team.name} Manager`,
+      }),
+    );
   });
 
   test("Leaders tab renders Team Impact and POG leaderboards for the current run", async () => {
@@ -165,6 +191,64 @@ describe("EliminationHome leaders Team Impact panels", () => {
     expect(screen.getByText("PITCHING LEADERS")).toBeInTheDocument();
     expect(screen.getByText("FIELDING LEADERS")).toBeInTheDocument();
     expect(screen.getAllByText(/Alpha Star/).length).toBeGreaterThan(0);
+  });
+
+  test("elimination launch carries elimination identity without franchise scope", async () => {
+    mockGetPlayoffByElimination.mockResolvedValue({
+      id: "playoff-1",
+      sourceType: "elimination",
+      seasonId: "elim-1",
+      status: "IN_PROGRESS",
+      teams: [
+        playoffTeam("alpha", "Alpha"),
+        playoffTeam("beta", "Beta"),
+      ],
+      teamsQualifying: 2,
+      rounds: 1,
+      gamesPerRound: [1],
+      inningsPerGame: 5,
+      useDH: true,
+      liveBeatReporterEnabled: false,
+      postGameColumnsEnabled: true,
+      beatReporterEnabled: true,
+    });
+    mockGetSeriesByPlayoff.mockResolvedValue([
+      {
+        id: "series-1",
+        playoffId: "playoff-1",
+        round: 1,
+        roundName: "Round 1",
+        higherSeed: { teamId: "alpha", teamName: "Alpha", seed: 1 },
+        lowerSeed: { teamId: "beta", teamName: "Beta", seed: 2 },
+        status: "IN_PROGRESS",
+        gamesRequired: 1,
+        bestOf: 1,
+        higherSeedWins: 0,
+        lowerSeedWins: 0,
+        games: [],
+        createdAt: Date.now(),
+      },
+    ]);
+
+    render(<EliminationHome />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "PLAY GAME" }));
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
+    const state = mockNavigate.mock.calls.at(-1)?.[1]?.state;
+    expect(state).toMatchObject({
+      gameMode: "elimination",
+      eliminationId: "elim-1",
+      statsScopeId: "elimination-elim-1",
+      competitionType: "elimination",
+      competitionId: "elim-1",
+      playoffId: "playoff-1",
+      playoffSeriesId: "series-1",
+      playoffGameNumber: 1,
+      totalInnings: 5,
+    });
+    expect(state.franchiseId).toBeUndefined();
+    expect(state.seasonId).toBeUndefined();
   });
 });
 
