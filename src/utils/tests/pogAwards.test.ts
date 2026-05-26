@@ -511,6 +511,104 @@ describe("getGamePogAwardSet", () => {
     ).toEqual(["3-4", "0 BB", "1 SO", "2 RBI", "1 R"]);
   });
 
+  test("stored-only fallback treats non-hit offensive events as hitter signals for two-way winners", () => {
+    const awards = getGamePogAwardSet({
+      playersOfTheGame: {
+        first: "two-way-hbp",
+      },
+      playerStats: {
+        "two-way-hbp": {
+          playerName: "Two Way HBP",
+          teamId: "away",
+          pa: 1,
+          ab: 0,
+          h: 0,
+          r: 0,
+          rbi: 0,
+          bb: 0,
+          hbp: 1,
+          k: 0,
+        },
+      },
+      pitcherGameStats: [
+        {
+          pitcherId: "two-way-hbp",
+          pitcherName: "Two Way HBP",
+          teamId: "away",
+        },
+      ],
+    });
+
+    expect(awards.overall).toMatchObject({
+      playerId: "two-way-hbp",
+      playerName: "Two Way HBP",
+      statRole: "hitter",
+      source: "stored_pog",
+    });
+    expect(
+      getPogAwardStatLineItems(awards.overall!, {
+        battingStats: {
+          pa: 1,
+          ab: 0,
+          h: 0,
+          r: 0,
+          rbi: 0,
+          bb: 0,
+          hbp: 1,
+          k: 0,
+        },
+      }),
+    ).toEqual(["0-0", "1 HBP", "0 BB", "0 SO", "0 RBI", "0 R"]);
+  });
+
+  test("stored-only fallback treats PA greater than AB as an offensive signal when no counter exists", () => {
+    const awards = getGamePogAwardSet({
+      playersOfTheGame: {
+        first: "two-way-roe",
+      },
+      playerStats: {
+        "two-way-roe": {
+          playerName: "Two Way ROE",
+          teamId: "away",
+          pa: 1,
+          ab: 0,
+          h: 0,
+          r: 0,
+          rbi: 0,
+          bb: 0,
+          k: 0,
+        },
+      },
+      pitcherGameStats: [
+        {
+          pitcherId: "two-way-roe",
+          pitcherName: "Two Way ROE",
+          teamId: "away",
+        },
+      ],
+    });
+
+    expect(awards.overall).toMatchObject({
+      playerId: "two-way-roe",
+      playerName: "Two Way ROE",
+      statRole: "hitter",
+      source: "stored_pog",
+    });
+    expect(
+      getPogAwardStatLineItems(awards.overall!, {
+        battingStats: {
+          pa: 1,
+          ab: 0,
+          h: 0,
+          r: 0,
+          rbi: 0,
+          bb: 0,
+          k: 0,
+        },
+      }),
+    ).toEqual(["0-0", "1 PA", "0 BB", "0 SO", "0 RBI", "0 R"]);
+  });
+
   test("full KBL WPA takes precedence over stored POG ids", () => {
     const awards = getGamePogAwardSet({
       playersOfTheGame: {

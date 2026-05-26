@@ -65,12 +65,16 @@ export type PogAwardStatRole =
   | "manager";
 
 export interface PogAwardBattingStatLine {
+  pa?: number;
   ab: number;
   h: number;
   r: number;
   rbi: number;
   bb: number;
+  hbp?: number;
   k: number;
+  sf?: number;
+  sh?: number;
 }
 
 export interface PogAwardPitchingStatLine {
@@ -135,7 +139,10 @@ export interface PogPlayerStatLike {
   r?: number;
   rbi?: number;
   bb?: number;
+  hbp?: number;
   k?: number;
+  sf?: number;
+  sh?: number;
 }
 
 export interface PogPitcherStatLike {
@@ -243,13 +250,28 @@ export function getPogAwardStatLineItems(
     case "hitter":
     default:
       if (input.battingStats) {
-        return [
+        const items = [
           `${input.battingStats.h}-${input.battingStats.ab}`,
+        ];
+        if ((input.battingStats.hbp ?? 0) > 0) {
+          items.push(`${input.battingStats.hbp} HBP`);
+        }
+        if ((input.battingStats.sf ?? 0) > 0) {
+          items.push(`${input.battingStats.sf} SF`);
+        }
+        if ((input.battingStats.sh ?? 0) > 0) {
+          items.push(`${input.battingStats.sh} SH`);
+        }
+        if (shouldShowPlateAppearanceOnlySignal(input.battingStats)) {
+          items.push(`${input.battingStats.pa} PA`);
+        }
+        items.push(
           `${input.battingStats.bb} BB`,
           `${input.battingStats.k} SO`,
           `${input.battingStats.rbi} RBI`,
           `${input.battingStats.r} R`,
-        ];
+        );
+        return items;
       }
       return [`Batting ${award.valueLabel}`];
   }
@@ -583,7 +605,7 @@ function getStoredOverallStatRole(
   playerId: string,
   input: GetGamePogAwardSetInput,
 ): PogAwardStatRole {
-  if (hasProductiveBattingLine(input.playerStats?.[playerId])) {
+  if (hasOffensiveBattingSignal(input.playerStats?.[playerId])) {
     return "hitter";
   }
 
@@ -596,17 +618,48 @@ function getStoredOverallStatRole(
   return "hitter";
 }
 
-function hasProductiveBattingLine(
+function hasOffensiveBattingSignal(
   battingStats: PogPlayerStatLike | undefined,
 ): boolean {
   if (!battingStats) return false;
+
+  const hasCountedOffense = [
+    battingStats.h,
+    battingStats.r,
+    battingStats.rbi,
+    battingStats.bb,
+    battingStats.hbp,
+    battingStats.sf,
+    battingStats.sh,
+  ].some((value) => typeof value === "number" && value > 0);
+  if (hasCountedOffense) return true;
+
+  return (
+    typeof battingStats.pa === "number" &&
+    typeof battingStats.ab === "number" &&
+    battingStats.pa > battingStats.ab
+  );
+}
+
+function shouldShowPlateAppearanceOnlySignal(
+  battingStats: PogAwardBattingStatLine,
+): boolean {
+  if (
+    typeof battingStats.pa !== "number" ||
+    battingStats.pa <= battingStats.ab
+  ) {
+    return false;
+  }
 
   return [
     battingStats.h,
     battingStats.r,
     battingStats.rbi,
     battingStats.bb,
-  ].some((value) => typeof value === "number" && value > 0);
+    battingStats.hbp,
+    battingStats.sf,
+    battingStats.sh,
+  ].every((value) => (value ?? 0) === 0);
 }
 
 function buildTeamStandouts(
