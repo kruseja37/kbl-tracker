@@ -498,7 +498,7 @@ export function ExhibitionGame() {
         );
         const updated = prev.map(p => {
           if ((p.playerId && p.playerId === oldPitcher.playerId) || p.name === oldPitcher.name) {
-            return { ...p, battingOrder: undefined, position: undefined };
+            return { ...p, battingOrder: undefined, position: 'P' };
           }
           if ((p.playerId && p.playerId === newPitcher.playerId) || p.name === newPitcher.name) {
             return { ...p, battingOrder: oldInLineup.battingOrder, position: 'P' };
@@ -548,7 +548,7 @@ export function ExhibitionGame() {
         );
         const updated = prev.map(p => {
           if ((p.playerId && p.playerId === oldPitcher.playerId) || p.name === oldPitcher.name) {
-            return { ...p, battingOrder: undefined, position: undefined };
+            return { ...p, battingOrder: undefined, position: 'P' };
           }
           if ((p.playerId && p.playerId === newPitcher.playerId) || p.name === newPitcher.name) {
             return { ...p, battingOrder: oldInLineup.battingOrder, position: 'P' };

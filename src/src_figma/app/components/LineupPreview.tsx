@@ -392,7 +392,7 @@ export function LineupPreview({
                 )}
 
                 {/* Player name — tap to select for bench sub */}
-                {isTouch && onBenchSub ? (
+                {onBenchSub ? (
                   <button
                     type="button"
                     onClick={() => handleLineupPlayerTapForSub(player)}
@@ -570,7 +570,7 @@ export function LineupPreview({
           </div>
           <div className="space-y-0.5">
             {bench.map((player) => (
-              isTouch && isBenchSubMode ? (
+              isBenchSubMode ? (
                 <button
                   key={player.playerId || player.name}
                   type="button"
@@ -615,7 +615,7 @@ export function LineupPreview({
           </div>
           <div className="space-y-0.5">
             {benchPitchers.map((pitcher) => (
-              isTouch && (isPitcherSubMode || isBenchSubMode) ? (
+              (isPitcherSubMode || isBenchSubMode) ? (
                 <button
                   key={pitcher.playerId || pitcher.name}
                   type="button"

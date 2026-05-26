@@ -150,4 +150,37 @@ describe('LineupPreview touch reordering', () => {
     expect(screen.queryByRole('button', { name: 'Move Alpha Starter in batting order' })).toBeNull();
     expect(screen.getByText('#1')).toBeInTheDocument();
   });
+
+  test('allows desktop bench substitution with a bullpen pitcher as a field player', () => {
+    const onBenchSub = vi.fn();
+
+    render(
+      <LineupPreview
+        teamName="Desktop Team"
+        lineup={createLineup()}
+        bench={[]}
+        benchPitchers={[
+          {
+            playerId: 'delta-pitcher',
+            name: 'Delta Pitcher',
+            stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
+            throwingHand: 'R',
+          },
+        ]}
+        teamColor="#4A6A42"
+        onBenchSub={onBenchSub}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Alpha Starter' }));
+    fireEvent.click(screen.getByRole('button', { name: /Delta Pitcher/ }));
+
+    expect(onBenchSub).toHaveBeenCalledWith(
+      expect.objectContaining({ playerId: 'alpha' }),
+      expect.objectContaining({
+        playerId: 'delta-pitcher',
+        primaryPosition: 'P',
+      }),
+    );
+  });
 });

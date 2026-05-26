@@ -4339,7 +4339,16 @@ export function GameTracker() {
           .map((p) => ({
             playerId: getRosterEntityId(p, "away"),
             playerName: getCanonicalRosterName(p),
-            positions: [p.position || "DH"].filter(Boolean),
+            positions: [
+              p.position ||
+                (awayTeamPitchers.some(
+                  (pitcher) =>
+                    getRosterEntityId(pitcher, "away") ===
+                      getRosterEntityId(p, "away") || pitcher.name === p.name,
+                )
+                  ? "P"
+                  : "DH"),
+            ].filter(Boolean),
           }));
         // R3-R7: Include bench pitchers (from pitcher roster, not in starting lineup)
         const awayBenchPitchers = awayTeamPitchers
@@ -4364,7 +4373,16 @@ export function GameTracker() {
           .map((p) => ({
             playerId: getRosterEntityId(p, "home"),
             playerName: getCanonicalRosterName(p),
-            positions: [p.position || "DH"].filter(Boolean),
+            positions: [
+              p.position ||
+                (homeTeamPitchers.some(
+                  (pitcher) =>
+                    getRosterEntityId(pitcher, "home") ===
+                      getRosterEntityId(p, "home") || pitcher.name === p.name,
+                )
+                  ? "P"
+                  : "DH"),
+            ].filter(Boolean),
           }));
         // R3-R7: Include bench pitchers
         const homeBenchPitchers = homeTeamPitchers
