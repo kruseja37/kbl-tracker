@@ -402,9 +402,35 @@ describe("GameTracker launch state", () => {
   });
 
   test("valid Elimination launch state is not blocked by the missing-state guard", async () => {
-    const awayPlayers = makePlayers("away");
+    const awayPlayers = [
+      ...makePlayers("away"),
+      {
+        playerId: "away-bench-of",
+        name: "Lester Bronco",
+        position: "OF",
+        stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
+        battingHand: "R",
+      },
+      {
+        playerId: "away-starter",
+        name: "Away Starter",
+        position: "P",
+        stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
+        battingHand: "L",
+      },
+    ];
     const homePlayers = makePlayers("home");
-    const awayPitchers = makePitchers("away");
+    const awayPitchers = [
+      ...makePitchers("away"),
+      {
+        playerId: "away-reliever",
+        name: "Away Reliever",
+        stats: { ip: "0.0", h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
+        throwingHand: "L",
+        isStarter: false,
+        isActive: false,
+      },
+    ];
     const homePitchers = makePitchers("home");
 
     mocks.mockUseParams.mockReturnValue({ gameId: "elimination-game-1" });
@@ -438,6 +464,17 @@ describe("GameTracker launch state", () => {
     expect(initConfig.competitionId).toBe("elim-1");
     expect(initConfig.awayStartingPitcherName).toBe("Away Starter");
     expect(initConfig.homeStartingPitcherName).toBe("Home Starter");
+    expect(initConfig.awayBench).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ playerId: "away-bench-of", playerName: "Lester Bronco" }),
+        expect.objectContaining({ playerId: "away-reliever", playerName: "Away Reliever" }),
+      ]),
+    );
+    expect(initConfig.awayBench).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ playerId: "away-starter" }),
+      ]),
+    );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
