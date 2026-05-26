@@ -468,76 +468,16 @@ describe("GameTracker launch state", () => {
     expect(initConfig.homeStartingPitcherName).toBe("Home Starter");
     expect(initConfig.awayBench).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ playerId: "away:away-bench-of", playerName: "Lester Bronco" }),
-        expect.objectContaining({ playerId: "away:away-reliever", playerName: "Away Reliever" }),
+        expect.objectContaining({ playerId: "away-bench-of", playerName: "Lester Bronco" }),
+        expect.objectContaining({ playerId: "away-reliever", playerName: "Away Reliever" }),
       ]),
     );
     expect(initConfig.awayBench).not.toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ playerId: "away:away-starter" }),
+        expect.objectContaining({ playerId: "away-starter" }),
       ]),
     );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-  });
-
-  test("elimination launch side-scopes duplicate stored player ids", async () => {
-    const awayPlayers = makePlayers("away").map((player, index) =>
-      index === 0
-        ? { ...player, playerId: "shared-player", name: "Away Shared" }
-        : player,
-    );
-    const homePlayers = makePlayers("home").map((player, index) =>
-      index === 0
-        ? { ...player, playerId: "shared-player", name: "Home Shared" }
-        : player,
-    );
-    const awayPitchers = makePitchers("away");
-    const homePitchers = makePitchers("home");
-
-    mocks.mockUseParams.mockReturnValue({ gameId: "elimination-duplicate-ids" });
-    mocks.mockUseLocation.mockReturnValue({
-      pathname: "/game-tracker/elimination-duplicate-ids",
-      search: "",
-      hash: "",
-      state: {
-        gameMode: "elimination",
-        competitionType: "elimination",
-        eliminationId: "elim-duplicate-ids",
-        competitionId: "elim-duplicate-ids",
-        awayTeamId: "away-team",
-        homeTeamId: "home-team",
-        awayTeamName: "Away Team",
-        homeTeamName: "Home Team",
-        awayPlayers,
-        awayPitchers,
-        homePlayers,
-        homePitchers,
-        totalInnings: 7,
-        useDH: true,
-      },
-    });
-
-    render(<GameTracker />);
-
-    await waitFor(() => expect(mocks.mockInitializeGame).toHaveBeenCalled());
-
-    const initConfig = mocks.mockInitializeGame.mock.calls[0][0];
-    expect(initConfig.awayLineup).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ playerId: "away:shared-player", playerName: "Away Shared" }),
-      ]),
-    );
-    expect(initConfig.homeLineup).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ playerId: "home:shared-player", playerName: "Home Shared" }),
-      ]),
-    );
-    expect(initConfig.awayLineup.map((player: { playerId: string }) => player.playerId)).not.toContain(
-      "shared-player",
-    );
-    expect(initConfig.homeLineup.map((player: { playerId: string }) => player.playerId)).not.toContain(
-      "shared-player",
-    );
   });
 
   test("direct-entry restored franchise scope drives live season stat context", async () => {

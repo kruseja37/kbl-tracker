@@ -2756,11 +2756,9 @@ export function GameTracker() {
 
   const getRosterEntityId = useCallback(
     (entity: { name: string; playerId?: string }, team: "away" | "home") => {
-      return getRuntimeRosterEntityId(entity, team, {
-        scopeStoredPlayerIds: effectiveCompetitionType === "elimination",
-      });
+      return getRuntimeRosterEntityId(entity, team);
     },
-    [effectiveCompetitionType],
+    [],
   );
 
   const rosterIdLookups = useMemo(
