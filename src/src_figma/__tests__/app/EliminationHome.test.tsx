@@ -193,7 +193,17 @@ describe("EliminationHome leaders Team Impact panels", () => {
     expect(screen.getAllByText(/Alpha Star/).length).toBeGreaterThan(0);
   });
 
-  test("elimination launch carries elimination identity without franchise scope", async () => {
+  test("elimination launch carries bracket inning rules from metadata without franchise scope", async () => {
+    mockGetElimination.mockResolvedValue({
+      eliminationId: "elim-1",
+      name: "Test Cup",
+      leagueId: "league-1",
+      leagueName: "Test League",
+      teamsCount: 2,
+      inningsPerGame: 7,
+      currentRound: 1,
+      status: "IN_PROGRESS",
+    });
     mockGetPlayoffByElimination.mockResolvedValue({
       id: "playoff-1",
       sourceType: "elimination",
@@ -206,7 +216,7 @@ describe("EliminationHome leaders Team Impact panels", () => {
       teamsQualifying: 2,
       rounds: 1,
       gamesPerRound: [1],
-      inningsPerGame: 5,
+      inningsPerGame: 4,
       useDH: true,
       liveBeatReporterEnabled: false,
       postGameColumnsEnabled: true,
@@ -232,6 +242,7 @@ describe("EliminationHome leaders Team Impact panels", () => {
 
     render(<EliminationHome />);
 
+    expect(await screen.findByText(/7 INNINGS/i)).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "PLAY GAME" }));
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
@@ -245,7 +256,7 @@ describe("EliminationHome leaders Team Impact panels", () => {
       playoffId: "playoff-1",
       playoffSeriesId: "series-1",
       playoffGameNumber: 1,
-      totalInnings: 5,
+      totalInnings: 7,
     });
     expect(state.franchiseId).toBeUndefined();
     expect(state.seasonId).toBeUndefined();

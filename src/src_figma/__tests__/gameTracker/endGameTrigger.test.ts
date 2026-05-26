@@ -287,6 +287,25 @@ describe("end-game trigger evaluation", () => {
       isWalkOff: false,
     });
   });
+
+  test("does not treat four innings as complete when elimination games are configured for seven", () => {
+    expect(
+      expectReason({
+        inning: 4,
+        isTop: false,
+        homeScoreBefore: 5,
+        awayScoreBefore: 2,
+        homeScoreAfter: 5,
+        awayScoreAfter: 2,
+        totalInnings: 7,
+        context: "half_inning_end",
+      }),
+    ).toEqual({
+      shouldEndGame: false,
+      reason: null,
+      isWalkOff: false,
+    });
+  });
 });
 
 describe("correction-driven end-game re-evaluation", () => {

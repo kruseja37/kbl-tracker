@@ -451,6 +451,7 @@ describe("GameTracker launch state", () => {
         awayPitchers,
         homePlayers,
         homePitchers,
+        totalInnings: 7,
         useDH: true,
       },
     });
@@ -462,6 +463,7 @@ describe("GameTracker launch state", () => {
     const initConfig = mocks.mockInitializeGame.mock.calls[0][0];
     expect(initConfig.competitionType).toBe("elimination");
     expect(initConfig.competitionId).toBe("elim-1");
+    expect(initConfig.totalInnings).toBe(7);
     expect(initConfig.awayStartingPitcherName).toBe("Away Starter");
     expect(initConfig.homeStartingPitcherName).toBe("Home Starter");
     expect(initConfig.awayBench).toEqual(
