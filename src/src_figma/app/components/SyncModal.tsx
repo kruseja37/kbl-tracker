@@ -299,6 +299,7 @@ function SyncControls({
 
 function DiagnosticsPanel({ diagnostics }: { diagnostics: SyncDiagnosticsSnapshot }) {
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const [updateNotice, setUpdateNotice] = useState<string | null>(null);
   const [updateLoading, setUpdateLoading] = useState(false);
 
   const waitForWaitingWorker = (registration: ServiceWorkerRegistration | undefined) => new Promise<ServiceWorker | null>((resolve) => {
@@ -316,25 +317,47 @@ function DiagnosticsPanel({ diagnostics }: { diagnostics: SyncDiagnosticsSnapsho
       return;
     }
 
-    const timeout = window.setTimeout(() => resolve(registration.waiting ?? null), 5000);
-    installingWorker.addEventListener('statechange', () => {
-      if (installingWorker.state === 'installed' || installingWorker.state === 'activated') {
+    let settled = false;
+    let timeout: number | undefined;
+
+    const finish = (worker: ServiceWorker | null) => {
+      if (settled) return;
+      settled = true;
+      if (timeout !== undefined) {
         window.clearTimeout(timeout);
-        resolve(registration.waiting ?? installingWorker);
       }
-    }, { once: true });
+      resolve(worker);
+    };
+
+    const watchWorker = (worker: ServiceWorker | null) => {
+      if (!worker) return;
+      if (worker.state === 'installed' || worker.state === 'activated') {
+        finish(registration.waiting ?? worker);
+        return;
+      }
+      worker.addEventListener('statechange', () => {
+        if (worker.state === 'installed' || worker.state === 'activated') {
+          finish(registration.waiting ?? worker);
+        }
+      });
+    };
+
+    watchWorker(installingWorker);
+    timeout = window.setTimeout(() => finish(registration.waiting ?? null), 8000);
   });
 
   const handleReloadApp = () => {
     if (typeof window === 'undefined') return;
     void (async () => {
+      const currentUrl = window.location.href;
       setUpdateError(null);
+      setUpdateNotice(null);
       setUpdateLoading(true);
       try {
         if ('serviceWorker' in navigator) {
           const registration = await navigator.serviceWorker.getRegistration();
-          const updatedRegistration = await registration?.update();
-          const waitingWorker = await waitForWaitingWorker(updatedRegistration ?? registration);
+          await registration?.update();
+          const waitingWorker = registration?.waiting ?? await waitForWaitingWorker(registration);
           if (waitingWorker) {
             const controllerChanged = new Promise<void>((resolve) => {
               const timeout = window.setTimeout(resolve, 5000);
@@ -345,9 +368,14 @@ function DiagnosticsPanel({ diagnostics }: { diagnostics: SyncDiagnosticsSnapsho
             });
             waitingWorker.postMessage({ type: 'SKIP_WAITING' });
             await controllerChanged;
+            window.location.replace(currentUrl);
+            return;
           }
+          setUpdateNotice('No app update is ready yet. If Vercel just finished, wait a moment and check again.');
+          setUpdateLoading(false);
+          return;
         }
-        window.location.reload();
+        window.location.replace(currentUrl);
       } catch (error) {
         setUpdateError(error instanceof Error ? error.message : 'Update check failed');
         setUpdateLoading(false);
@@ -438,6 +466,11 @@ function DiagnosticsPanel({ diagnostics }: { diagnostics: SyncDiagnosticsSnapsho
       {updateError && (
         <div className="border border-[#FF4444]/40 bg-[#FF4444]/10 p-2 text-[9px] text-[#FF8888] font-mono">
           Update failed: {updateError}
+        </div>
+      )}
+      {updateNotice && (
+        <div className="border border-[#FFCC66]/40 bg-[#FFCC66]/10 p-2 text-[9px] text-[#FFCC66] font-mono">
+          {updateNotice}
         </div>
       )}
       {diagnostics.warnings.length > 0 && (

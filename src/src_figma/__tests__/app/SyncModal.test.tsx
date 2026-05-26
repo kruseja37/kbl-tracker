@@ -75,6 +75,7 @@ describe("SyncModal diagnostics status", () => {
     mocks.syncStatus.lastPullAt = 0;
     mocks.syncStatus.replaceCloudWithLocal = mocks.replaceCloudWithLocal;
     mocks.syncStatus.replaceLocalWithCloud = mocks.replaceLocalWithCloud;
+    vi.unstubAllGlobals();
   });
 
   test("does not show SYNCED when diagnostics contain a mismatched store without warnings", async () => {
@@ -146,6 +147,42 @@ describe("SyncModal diagnostics status", () => {
     expect(await screen.findByText("SYNC ISSUES")).toBeInTheDocument();
     expect(screen.queryByText("SYNCED")).not.toBeInTheDocument();
     expect(screen.getByText("Freshness: stale")).toBeInTheDocument();
+  });
+
+  test("does not reload away from the app when no service worker update is ready", async () => {
+    const update = vi.fn().mockResolvedValue(undefined);
+    const registration = {
+      waiting: null,
+      installing: null,
+      update,
+      addEventListener: vi.fn(),
+    };
+    vi.stubGlobal("navigator", {
+      serviceWorker: {
+        getRegistration: vi.fn().mockResolvedValue(registration),
+        addEventListener: vi.fn(),
+      },
+    });
+    mocks.getDiagnostics.mockResolvedValue({
+      ...matchedDiagnostics(),
+      build: {
+        id: "old-build",
+        mode: "production",
+        latest: {
+          id: "new-build",
+          fetchedAt: Date.now(),
+          matchesCurrent: false,
+        },
+        serviceWorkerControlled: true,
+      },
+    });
+
+    render(<SyncModal isOpen onClose={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /CHECK FOR UPDATE \/ RELOAD/i }));
+
+    expect(await screen.findByText(/No app update is ready yet/i)).toBeInTheDocument();
+    expect(update).toHaveBeenCalled();
   });
 
   test("header sync icon is yellow while writes are pending", () => {
