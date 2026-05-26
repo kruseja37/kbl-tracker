@@ -58,7 +58,7 @@ export function SeasonSummary() {
   const franchiseData = useFranchiseData(franchiseId, currentSeason);
   const scheduleData = useScheduleData(currentSeason);
   const seasonStats = useSeasonStats(seasonId);
-  const playoffData = usePlayoffData(currentSeason);
+  const playoffData = usePlayoffData(currentSeason, franchiseId);
 
   // Expandable sections
   const [expandedSection, setExpandedSection] = useState<string | null>("standings");

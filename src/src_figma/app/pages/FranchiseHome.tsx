@@ -175,7 +175,7 @@ export function FranchiseHome() {
   const [expandedSeriesId, setExpandedSeriesId] = useState<string | null>(null);
 
   // Playoff System State - Persisted to IndexedDB via usePlayoffData
-  const playoffData = usePlayoffData(currentSeason);
+  const playoffData = usePlayoffData(currentSeason, franchiseId);
   const location = useLocation();
   const locationState = (location.state ?? {}) as {
     refreshAfterGame?: boolean;

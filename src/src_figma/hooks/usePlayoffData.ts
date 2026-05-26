@@ -110,7 +110,10 @@ const EMPTY_PLAYOFF_TEAMS: PlayoffTeam[] = [];
 // HOOK IMPLEMENTATION
 // ============================================
 
-export function usePlayoffData(seasonNumber: number = 1): UsePlayoffDataReturn {
+export function usePlayoffData(
+  seasonNumber: number = 1,
+  franchiseId?: string,
+): UsePlayoffDataReturn {
   const [playoff, setPlayoff] = useState<PlayoffConfig | null>(null);
   const [series, setSeries] = useState<PlayoffSeries[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -125,10 +128,14 @@ export function usePlayoffData(seasonNumber: number = 1): UsePlayoffDataReturn {
       await initPlayoffDatabase();
 
       // Try to get playoff for this season
-      let playoffData = await getPlayoffBySeason(seasonNumber, 'franchise');
+      let playoffData = await getPlayoffBySeason(
+        seasonNumber,
+        'franchise',
+        franchiseId,
+      );
 
       // If no playoff, also check for any active playoff
-      if (!playoffData) {
+      if (!playoffData && !franchiseId) {
         playoffData = await getCurrentPlayoff('franchise');
       }
 
@@ -146,7 +153,7 @@ export function usePlayoffData(seasonNumber: number = 1): UsePlayoffDataReturn {
     } finally {
       setIsLoading(false);
     }
-  }, [seasonNumber]);
+  }, [franchiseId, seasonNumber]);
 
   // Initial load
   useEffect(() => {
@@ -345,7 +352,7 @@ export function usePlayoffData(seasonNumber: number = 1): UsePlayoffDataReturn {
       }
 
       // Delete any existing playoff for this season first (prevents ConstraintError on unique index)
-      await deletePlayoffBySeason(config.seasonNumber, 'franchise');
+      await deletePlayoffBySeason(config.seasonNumber, 'franchise', franchiseId);
 
       const newPlayoff = await createPlayoff({
         seasonNumber: config.seasonNumber,
@@ -360,6 +367,8 @@ export function usePlayoffData(seasonNumber: number = 1): UsePlayoffDataReturn {
         conferenceChampionship: true,
         teams: playoffTeams,
         currentRound: 0,
+        sourceType: 'franchise',
+        franchiseId,
       });
 
       // Generate initial bracket
@@ -372,7 +381,7 @@ export function usePlayoffData(seasonNumber: number = 1): UsePlayoffDataReturn {
       setError(message);
       throw err;
     }
-  }, [refresh]);
+  }, [franchiseId, refresh]);
 
   // Start playoffs
   const startPlayoffs = useCallback(async () => {
@@ -441,7 +450,11 @@ export function usePlayoffData(seasonNumber: number = 1): UsePlayoffDataReturn {
           } else {
             // Generate next round matchups from winners
             const { createNextRoundSeries } = await import('../../utils/playoffStorage');
-            const latestPlayoff = await getPlayoffBySeason(playoff.seasonNumber, 'franchise');
+            const latestPlayoff = await getPlayoffBySeason(
+              playoff.seasonNumber,
+              'franchise',
+              playoff.franchiseId,
+            );
             if (latestPlayoff) {
               await createNextRoundSeries(playoff.id, updatedSeries.round, latestPlayoff);
               // Advance the currentRound pointer

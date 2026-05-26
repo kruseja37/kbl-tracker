@@ -151,6 +151,7 @@ vi.mock('@/hooks/usePlayoffData', () => ({
 
 // Import component after all mocks are set up
 import { FranchiseHome } from '../../app/pages/FranchiseHome';
+import { usePlayoffData } from '@/hooks/usePlayoffData';
 
 // ============================================
 // TESTS
@@ -167,6 +168,12 @@ describe('FranchiseHome Component', () => {
       render(<FranchiseHome />);
       // Component should render something
       expect(document.body.textContent).toBeTruthy();
+    });
+
+    test('scopes playoff data by franchise id', () => {
+      render(<FranchiseHome />);
+
+      expect(usePlayoffData).toHaveBeenCalledWith(1, 'test-franchise-123');
     });
 
     test('renders franchise title area', () => {

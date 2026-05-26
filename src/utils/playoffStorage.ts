@@ -1214,6 +1214,15 @@ export async function aggregateGameToPlayoffStats(
     ) {
       throw new Error('Cannot aggregate non-elimination game into elimination playoff stats.');
     }
+    if (gameState.franchiseId) {
+      throw new Error('Cannot aggregate franchise game into elimination playoff stats.');
+    }
+    if (gameState.seasonId && gameState.seasonId !== playoff.seasonId) {
+      throw new Error('Cannot aggregate game from a different elimination scope.');
+    }
+    if (gameState.statsScopeId && gameState.statsScopeId !== playoff.seasonId) {
+      throw new Error('Cannot aggregate game from a different elimination scope.');
+    }
   } else {
     if (gameState.competitionType === 'elimination') {
       throw new Error('Cannot aggregate elimination game into franchise playoff stats.');

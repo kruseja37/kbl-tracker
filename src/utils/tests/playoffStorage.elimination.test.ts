@@ -346,6 +346,7 @@ describe("playoffStorage elimination wiring", () => {
       sourceType: "franchise",
       franchiseId: "franchise-a",
     });
+    await expect(getPlayoffBySeason(1, "franchise", "franchise-b")).resolves.toBeNull();
     await expect(getPlayoffByElimination("elim-same-season")).resolves.toMatchObject({
       id: eliminationPlayoff.id,
       sourceType: "elimination",
@@ -354,6 +355,20 @@ describe("playoffStorage elimination wiring", () => {
     await expect(getPlayoffBySeason(1, "elimination")).rejects.toThrow(
       /getPlayoffByElimination/,
     );
+
+    await expect(
+      aggregateGameToPlayoffStats(
+        eliminationPlayoff.id,
+        buildPersistedGameState({
+          franchiseId: "franchise-a",
+          seasonId: "franchise-a-season-1",
+          statsScopeId: "franchise-a-season-1",
+          playerStats: {
+            "ambiguous-franchise-player": buildBattingStats("Ambiguous Franchise", "team-1", { ab: 1, h: 1 }),
+          },
+        }),
+      ),
+    ).rejects.toThrow(/franchise game/);
 
     await expect(
       aggregateGameToPlayoffStats(
