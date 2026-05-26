@@ -152,7 +152,7 @@ import {
 import {
   useCommentaryFeed,
 } from "@/app/hooks/useCommentaryFeed";
-import type { BeatReporter, ReporterGameMode, ReporterScopeIdentity } from "../../../types/reporter";
+import type { BeatReporter } from "../../../types/reporter";
 import { getReporterForTeam } from "../../../utils/reporterStorage";
 import {
   getAllPlayers as getAllLeagueBuilderPlayers,
@@ -176,18 +176,6 @@ type GameTrackerLaunchRosterState = {
   homePlayers?: Player[];
   homePitchers?: Pitcher[];
 };
-
-function getReporterGameModeForCompetition(
-  competitionType: "exhibition" | "franchise" | "playoff" | "elimination",
-): ReporterGameMode {
-  if (competitionType === "elimination") {
-    return "elimination";
-  }
-  if (competitionType === "franchise" || competitionType === "playoff") {
-    return "franchise";
-  }
-  return "exhibition";
-}
 
 export const MISSING_GAME_TRACKER_LAUNCH_STATE_TITLE =
   "GameTracker launch data required";
@@ -5151,53 +5139,6 @@ export function GameTracker() {
     runnerNames.second,
     runnerNames.third,
   ]);
-  const reporterGameMode = useMemo<ReporterGameMode>(
-    () => getReporterGameModeForCompetition(effectiveCompetitionType),
-    [effectiveCompetitionType],
-  );
-  const reporterScope = useMemo<ReporterScopeIdentity>(
-    () => {
-      if (effectiveCompetitionType === "exhibition") {
-        return {
-          competitionType: "exhibition",
-          competitionId: effectiveCompetitionId,
-        };
-      }
-      if (effectiveCompetitionType === "elimination") {
-        return {
-          competitionType: "elimination",
-          competitionId: effectiveCompetitionId,
-          statsScopeId: effectiveStatsScopeId,
-          eliminationId: effectiveEliminationId,
-        };
-      }
-      return {
-        franchiseId: effectiveFranchiseId,
-        seasonId: effectiveSeasonId,
-        seasonNumber: effectiveSeasonNumber,
-        statsScopeId: effectiveStatsScopeId,
-        scheduleGameId: effectiveScheduleGameId,
-        competitionType: effectiveCompetitionType,
-        competitionId: effectiveCompetitionId,
-        playoffId: effectivePlayoffId ?? undefined,
-        playoffSeriesId: effectivePlayoffSeriesId ?? undefined,
-        playoffGameNumber: effectivePlayoffGameNumber ?? undefined,
-      };
-    },
-    [
-      effectiveCompetitionId,
-      effectiveCompetitionType,
-      effectiveEliminationId,
-      effectiveFranchiseId,
-      effectivePlayoffGameNumber,
-      effectivePlayoffId,
-      effectivePlayoffSeriesId,
-      effectiveScheduleGameId,
-      effectiveSeasonId,
-      effectiveSeasonNumber,
-      effectiveStatsScopeId,
-    ],
-  );
   const {
     commentaryEntries,
     fireBetweenInningSummary,
@@ -5209,8 +5150,10 @@ export function GameTracker() {
     homeTeamId,
     awayTeamId,
     leagueId,
-    gameMode: reporterGameMode,
-    reporterScope,
+    gameMode:
+      effectiveCompetitionType === "playoff"
+        ? "elimination"
+        : (effectiveCompetitionType as import("../../../types/reporter").ReporterGameMode),
     getLivePreambleSeed,
   });
   const [reportersForFeed, setReportersForFeed] = useState<
@@ -5367,6 +5310,11 @@ export function GameTracker() {
     if (homeCommentaryDisabled && awayCommentaryDisabled) return;
 
     const targetGameId = gameState.gameId;
+    const reporterGameMode: import("../../../types/reporter").ReporterGameMode =
+      effectiveCompetitionType === "playoff"
+        ? "elimination"
+        : (effectiveCompetitionType as import("../../../types/reporter").ReporterGameMode);
+
     void (async () => {
       try {
         const allEvents = (await getGameEvents(targetGameId)).filter(
@@ -5380,7 +5328,6 @@ export function GameTracker() {
             away: gameState.awayScore,
           },
           gameMode: reporterGameMode,
-          reporterScope,
           gameDate: new Date().toISOString().slice(0, 10),
           opponentByReporter: {
             home: awayTeamId,
@@ -5398,8 +5345,6 @@ export function GameTracker() {
     awayCommentaryDisabled,
     awayTeamId,
     effectiveCompetitionType,
-    reporterGameMode,
-    reporterScope,
     firePostGameColumns,
     gameState.awayScore,
     gameState.gameId,
@@ -11585,6 +11530,10 @@ export function GameTracker() {
       // Dedup via firedPostGameForGameIdRef in the hook prevents double-fire
       // if the phase-watching effect also happens to run.
       if (gameState.postGameColumnsEnabled && completedGameId) {
+        const reporterGameMode: import("../../../types/reporter").ReporterGameMode =
+          effectiveCompetitionType === "playoff"
+            ? "elimination"
+            : (effectiveCompetitionType as import("../../../types/reporter").ReporterGameMode);
         const postGameGameId = completedGameId;
         const snapshotHomeScore = gameState.homeScore;
         const snapshotAwayScore = gameState.awayScore;
@@ -11601,7 +11550,6 @@ export function GameTracker() {
                 away: snapshotAwayScore,
               },
               gameMode: reporterGameMode,
-              reporterScope,
               gameDate: new Date().toISOString().slice(0, 10),
               opponentByReporter: {
                 home: awayTeamId,
@@ -11661,8 +11609,6 @@ export function GameTracker() {
     effectiveSeasonId,
     effectiveSeasonNumber,
     effectiveStatsScopeId,
-    reporterGameMode,
-    reporterScope,
     gameId,
     gameState,
     pitcherStats,
