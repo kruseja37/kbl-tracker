@@ -561,6 +561,63 @@ describe("getGamePogAwardSet", () => {
     ).toEqual(["0-0", "1 HBP", "0 BB", "0 SO", "0 RBI", "0 R"]);
   });
 
+  test.each([
+    { stat: "sf" as const, label: "SF" },
+    { stat: "sh" as const, label: "SH" },
+  ])(
+    "stored-only fallback treats $label-only offense as a hitter signal for two-way winners",
+    ({ stat, label }) => {
+      const playerId = `two-way-${stat}`;
+      const awards = getGamePogAwardSet({
+        playersOfTheGame: {
+          first: playerId,
+        },
+        playerStats: {
+          [playerId]: {
+            playerName: `Two Way ${label}`,
+            teamId: "away",
+            pa: 1,
+            ab: 0,
+            h: 0,
+            r: 0,
+            rbi: 0,
+            bb: 0,
+            k: 0,
+            [stat]: 1,
+          },
+        },
+        pitcherGameStats: [
+          {
+            pitcherId: playerId,
+            pitcherName: `Two Way ${label}`,
+            teamId: "away",
+          },
+        ],
+      });
+
+      expect(awards.overall).toMatchObject({
+        playerId,
+        playerName: `Two Way ${label}`,
+        statRole: "hitter",
+        source: "stored_pog",
+      });
+      expect(
+        getPogAwardStatLineItems(awards.overall!, {
+          battingStats: {
+            pa: 1,
+            ab: 0,
+            h: 0,
+            r: 0,
+            rbi: 0,
+            bb: 0,
+            k: 0,
+            [stat]: 1,
+          },
+        }),
+      ).toEqual(["0-0", `1 ${label}`, "0 BB", "0 SO", "0 RBI", "0 R"]);
+    },
+  );
+
   test("stored-only fallback treats PA greater than AB as an offensive signal when no counter exists", () => {
     const awards = getGamePogAwardSet({
       playersOfTheGame: {
