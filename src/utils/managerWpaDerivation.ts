@@ -2622,16 +2622,19 @@ function getTrackedPlayerIdsForBetweenPlayDecision(
   fallbackIds: string[],
 ): string[] {
   if (
-    decisionType === "pitching_change" ||
-    decisionType === "leave_pitcher_in"
+    decisionType === "pitching_change"
   ) {
-    return uniqueStrings([
+    const incomingPitcherIds = uniqueStrings([
       event.pitcherChange?.incomingPitcherId,
       event.substitution?.inPosition === "P"
         ? event.substitution.inPlayerId
         : undefined,
-      ...fallbackIds,
     ]);
+    return incomingPitcherIds.length > 0 ? incomingPitcherIds : fallbackIds;
+  }
+
+  if (decisionType === "leave_pitcher_in") {
+    return fallbackIds;
   }
 
   if (decisionType === "keep_defender_in") {
