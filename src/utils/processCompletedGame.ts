@@ -26,6 +26,19 @@ export interface ProcessGameResult {
   aggregation: GameAggregationResult;
 }
 
+export function assertProcessGameSucceeded(
+  result: ProcessGameResult,
+  context = 'completed game',
+): void {
+  if (result.aggregation.success) {
+    return;
+  }
+
+  throw new Error(
+    `${context} aggregation failed: ${result.aggregation.error || 'unknown error'}`,
+  );
+}
+
 export interface CompletedGameArchiveOptions {
   finalScore?: { away: number; home: number };
   inningScores?: { away: number; home: number }[];

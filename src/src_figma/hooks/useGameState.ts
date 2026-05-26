@@ -11364,7 +11364,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         }
 
         // Archive is handled once inside processCompletedGame with full context.
-        if (!alreadyAggregated) {
+        if (aggregationSucceeded && !alreadyAggregated) {
           const resolvedCompetitionType =
             opts?.competitionType ?? competitionTypeRef.current;
           const resolvedRunId =

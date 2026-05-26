@@ -29,7 +29,10 @@ import {
   generatePlayByPlay,
   type PlayByPlayEntry,
 } from "../../../utils/syntheticGameFactory";
-import { processCompletedGame } from "../../../utils/processCompletedGame";
+import {
+  assertProcessGameSucceeded,
+  processCompletedGame,
+} from "../../../utils/processCompletedGame";
 import { markSeasonComplete } from "../../../utils/seasonStorage";
 import { getAllGames } from "../../../utils/scheduleStorage";
 import { startOffseason, OFFSEASON_PHASES, type OffseasonPhase } from "../../../utils/offseasonStorage";
@@ -3145,14 +3148,17 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
     // Process through real pipeline (runs while animation plays)
     const seasonId = franchiseId ? `${franchiseId}-season-${currentSeason}` : `season-${currentSeason}`;
 
+    let processedSuccessfully = false;
     try {
-      await processCompletedGame(game, { seasonId });
+      const processResult = await processCompletedGame(game, { seasonId });
+      assertProcessGameSucceeded(processResult, 'franchise simulation');
+      processedSuccessfully = true;
     } catch (err) {
       console.error('[handleSimulate] processCompletedGame failed:', err);
     }
 
     try {
-      if (nextGame) {
+      if (nextGame && processedSuccessfully) {
         const winningTeam = game.homeScore > game.awayScore ? homeId : awayId;
         const losingTeam = game.homeScore > game.awayScore ? awayId : homeId;
         const result = {
@@ -3163,6 +3169,10 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
           gameLogId: game.gameId,
         };
         await scheduleData.completeGame(nextGame.id, result);
+      } else if (nextGame) {
+        console.warn(
+          '[handleSimulate] Skipping schedule completion because game processing did not fully succeed.',
+        );
       }
     } catch (err) {
       console.error('[handleSimulate] scheduleData.completeGame failed:', err);
@@ -3253,7 +3263,8 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
         });
 
         // Process through full stats pipeline (batting, pitching, fielding, fame)
-        await processCompletedGame(syntheticGame, { seasonId: batchSeasonId });
+        const processResult = await processCompletedGame(syntheticGame, { seasonId: batchSeasonId });
+        assertProcessGameSucceeded(processResult, 'franchise batch simulation');
 
         // Update schedule with result
         const winningTeam = syntheticGame.homeScore > syntheticGame.awayScore ? game.homeTeamId : game.awayTeamId;

@@ -45,7 +45,10 @@ vi.mock('../../../utils/registerAlmanacPlayers', () => ({
   registerAlmanacPlayers: mockRegisterAlmanacPlayers,
 }));
 
-import { processCompletedGame } from '../../../utils/processCompletedGame';
+import {
+  assertProcessGameSucceeded,
+  processCompletedGame,
+} from '../../../utils/processCompletedGame';
 
 function createGameState() {
   return {
@@ -206,5 +209,20 @@ describe('processCompletedGame exhibition almanac registration', () => {
     expect(mockArchiveCompletedGame).not.toHaveBeenCalled();
     expect(mockRegisterAlmanacPlayers).not.toHaveBeenCalled();
     expect(mockGetEffectivePlayer).not.toHaveBeenCalled();
+  });
+
+  test('throws from success assertion on soft aggregation failure', () => {
+    expect(() =>
+      assertProcessGameSucceeded(
+        {
+          aggregation: {
+            success: false,
+            milestones: null,
+            error: 'season aggregation failed',
+          },
+        },
+        'franchise simulation',
+      ),
+    ).toThrow('franchise simulation aggregation failed: season aggregation failed');
   });
 });

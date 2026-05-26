@@ -19,6 +19,8 @@ const {
   mockClearCurrentGame,
   mockProcessCompletedGame,
   mockAggregateGameToPlayoffStats,
+  mockAppendEliminationGameFameToRun,
+  mockAppendEliminationGameToAllTimeStats,
 } = vi.hoisted(() => ({
   mockLogAtBatEvent: vi.fn().mockResolvedValue(undefined),
   mockLogBetweenPlayEvent: vi.fn().mockResolvedValue(undefined),
@@ -39,6 +41,8 @@ const {
     aggregation: { success: true, milestones: null },
   }),
   mockAggregateGameToPlayoffStats: vi.fn().mockResolvedValue(undefined),
+  mockAppendEliminationGameFameToRun: vi.fn().mockResolvedValue(undefined),
+  mockAppendEliminationGameToAllTimeStats: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../../../utils/eventLog", () => ({
@@ -68,6 +72,14 @@ vi.mock("../../../utils/processCompletedGame", () => ({
 
 vi.mock("../../../utils/playoffStorage", () => ({
   aggregateGameToPlayoffStats: mockAggregateGameToPlayoffStats,
+}));
+
+vi.mock("../../../utils/eliminationRunFameStorage", () => ({
+  appendEliminationGameFameToRun: mockAppendEliminationGameFameToRun,
+}));
+
+vi.mock("../../../utils/eliminationAllTimeStatsStorage", () => ({
+  appendEliminationGameToAllTimeStats: mockAppendEliminationGameToAllTimeStats,
 }));
 
 import { useGameState, type PitcherGameStats } from "../../hooks/useGameState";
@@ -109,9 +121,14 @@ function makePitcherStats(
   };
 }
 
-async function initializeGame(result: {
-  current: ReturnType<typeof useGameState>;
-}) {
+type GameInitOverrides = Partial<
+  Parameters<ReturnType<typeof useGameState>["initializeGame"]>[0]
+>;
+
+async function initializeGame(
+  result: { current: ReturnType<typeof useGameState> },
+  overrides: GameInitOverrides = {},
+) {
   await act(async () => {
     await result.current.initializeGame({
       gameId: "game-r4-end",
@@ -150,6 +167,7 @@ async function initializeGame(result: {
       awayBench: [],
       homeBench: [],
       seasonNumber: 1,
+      ...overrides,
     });
   });
 }
@@ -264,6 +282,41 @@ describe("bugfix R4-02: end-game pitch count continuation", () => {
         aggregationError: "season aggregation failed",
       }),
     );
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  test("does not write elimination side effects for archive-only soft aggregation failures", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mockProcessCompletedGame.mockResolvedValueOnce({
+      aggregation: {
+        success: false,
+        milestones: null,
+        error: "season aggregation failed",
+      },
+    });
+
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result, {
+      competitionType: "elimination",
+      competitionId: "elim-run-1",
+    });
+
+    await act(async () => {
+      await result.current.endGame();
+    });
+
+    expect(mockArchiveCompletedGame).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        aggregationStatus: "archive_only",
+      }),
+    );
+    expect(mockAppendEliminationGameFameToRun).not.toHaveBeenCalled();
+    expect(mockAppendEliminationGameToAllTimeStats).not.toHaveBeenCalled();
 
     consoleErrorSpy.mockRestore();
   });
