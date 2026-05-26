@@ -1849,8 +1849,10 @@ describe("manager WPA derivation", () => {
       outsAfter: 2,
     });
 
-    expect(derive([], [change])[0]).toMatchObject({
+    const pendingDecision = derive([], [change])[0];
+    expect(pendingDecision).toMatchObject({
       decisionType: "pitching_change",
+      involvedPlayerIds: ["home-pitcher", "home-reliever"],
       resolved: false,
       managerWpa: undefined,
       resolutionWindow: {
@@ -1859,6 +1861,9 @@ describe("manager WPA derivation", () => {
         trackedPlayerIds: ["home-reliever"],
       },
     });
+    expect(pendingDecision.resolutionWindow?.trackedPlayerIds).not.toContain(
+      "home-pitcher",
+    );
 
     const resolved = derive([unrelatedPa, relieverPa], [change])[0];
     expect(resolved).toMatchObject({
