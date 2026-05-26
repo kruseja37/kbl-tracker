@@ -317,7 +317,11 @@ export function getGamePogAwardSet(input: GetGamePogAwardSetInput): PogAwardSet 
       );
       const overallRef = resolvePlayerRef(storedOverallId, playerRefs);
       return buildAwardSet({
-        overall: buildStoredOverallAward(storedOverallId, overallRef),
+        overall: buildStoredOverallAward(
+          storedOverallId,
+          overallRef,
+          getStoredOverallStatRole(storedOverallId, input),
+        ),
         playerRoleAwards: [],
         managerAward,
         teamStandouts: [],
@@ -345,7 +349,11 @@ export function getGamePogAwardSet(input: GetGamePogAwardSetInput): PogAwardSet 
       "Using stored legacy Players of the Game only; KBL WPA role awards are unavailable.",
     );
     const overallRef = resolvePlayerRef(storedOverallId, playerRefs);
-    const overall = buildStoredOverallAward(storedOverallId, overallRef);
+    const overall = buildStoredOverallAward(
+      storedOverallId,
+      overallRef,
+      getStoredOverallStatRole(storedOverallId, input),
+    );
 
     return buildAwardSet({
       overall,
@@ -547,11 +555,12 @@ function buildPlayerAward(input: {
 function buildStoredOverallAward(
   playerId: string,
   playerRef: PogPlayerRef | undefined,
+  statRole: PogAwardStatRole,
 ): PogAward {
   return {
     awardType: "overall",
     points: 3,
-    statRole: "hitter",
+    statRole,
     playerId,
     playerName: playerRef?.playerName,
     teamId: playerRef?.teamId ?? "",
@@ -561,6 +570,19 @@ function buildStoredOverallAward(
       "Legacy stored Players of the Game first-place entry; no role awards are inferred.",
     source: "stored_pog",
   };
+}
+
+function getStoredOverallStatRole(
+  playerId: string,
+  input: GetGamePogAwardSetInput,
+): PogAwardStatRole {
+  if (
+    input.pitcherGameStats?.some((pitcher) => pitcher.pitcherId === playerId)
+  ) {
+    return "pitcher";
+  }
+
+  return "hitter";
 }
 
 function buildTeamStandouts(

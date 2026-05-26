@@ -379,6 +379,38 @@ describe("getGamePogAwardSet", () => {
     ]);
   });
 
+  test("stored-only fallback uses pitcher stat role when the legacy winner has pitcher stats", () => {
+    const awards = getGamePogAwardSet({
+      playersOfTheGame: {
+        first: "stored-pitcher",
+      },
+      pitcherGameStats: [
+        {
+          pitcherId: "stored-pitcher",
+          pitcherName: "Stored Pitcher",
+          teamId: "away",
+        },
+      ],
+    });
+
+    expect(awards.overall).toMatchObject({
+      playerId: "stored-pitcher",
+      playerName: "Stored Pitcher",
+      statRole: "pitcher",
+      source: "stored_pog",
+    });
+    expect(
+      getPogAwardStatLineItems(awards.overall!, {
+        pitchingStats: {
+          outsRecorded: 21,
+          earnedRuns: 2,
+          walksAllowed: 1,
+          strikeoutsThrown: 8,
+        },
+      }),
+    ).toEqual(["7.0 IP", "8 K", "2 ER"]);
+  });
+
   test("full KBL WPA takes precedence over stored POG ids", () => {
     const awards = getGamePogAwardSet({
       playersOfTheGame: {
