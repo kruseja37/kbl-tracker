@@ -411,6 +411,59 @@ describe("getGamePogAwardSet", () => {
     ).toEqual(["7.0 IP", "8 K", "2 ER"]);
   });
 
+  test("stored-only fallback keeps no-DH pitcher batting participation in pitcher stat role", () => {
+    const awards = getGamePogAwardSet({
+      playersOfTheGame: {
+        first: "away-sp",
+      },
+      playerStats: {
+        "away-sp": {
+          playerName: "Away Starter",
+          teamId: "away",
+          pa: 3,
+          ab: 3,
+          h: 0,
+          r: 0,
+          rbi: 0,
+          bb: 0,
+          k: 2,
+        },
+      },
+      pitcherGameStats: [
+        {
+          pitcherId: "away-sp",
+          pitcherName: "Away Starter",
+          teamId: "away",
+        },
+      ],
+    });
+
+    expect(awards.overall).toMatchObject({
+      playerId: "away-sp",
+      playerName: "Away Starter",
+      statRole: "pitcher",
+      source: "stored_pog",
+    });
+    expect(
+      getPogAwardStatLineItems(awards.overall!, {
+        battingStats: {
+          ab: 3,
+          h: 0,
+          r: 0,
+          rbi: 0,
+          bb: 0,
+          k: 2,
+        },
+        pitchingStats: {
+          outsRecorded: 21,
+          earnedRuns: 1,
+          walksAllowed: 2,
+          strikeoutsThrown: 6,
+        },
+      }),
+    ).toEqual(["7.0 IP", "6 K", "1 ER"]);
+  });
+
   test("stored-only fallback preserves hitter stat role for two-way offensive legacy winners", () => {
     const awards = getGamePogAwardSet({
       playersOfTheGame: {

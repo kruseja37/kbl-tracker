@@ -583,7 +583,7 @@ function getStoredOverallStatRole(
   playerId: string,
   input: GetGamePogAwardSetInput,
 ): PogAwardStatRole {
-  if (hasMeaningfulBattingLine(input.playerStats?.[playerId])) {
+  if (hasProductiveBattingLine(input.playerStats?.[playerId])) {
     return "hitter";
   }
 
@@ -596,19 +596,16 @@ function getStoredOverallStatRole(
   return "hitter";
 }
 
-function hasMeaningfulBattingLine(
+function hasProductiveBattingLine(
   battingStats: PogPlayerStatLike | undefined,
 ): boolean {
   if (!battingStats) return false;
 
   return [
-    battingStats.pa,
-    battingStats.ab,
     battingStats.h,
     battingStats.r,
     battingStats.rbi,
     battingStats.bb,
-    battingStats.k,
   ].some((value) => typeof value === "number" && value > 0);
 }
 
