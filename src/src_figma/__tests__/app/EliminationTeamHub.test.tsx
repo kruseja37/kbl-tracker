@@ -34,6 +34,10 @@ vi.mock("../../../utils/teamImpact", () => ({
 vi.mock("../../../utils/eliminationRosterStorage", () => ({
   getAllEliminationRosterSnapshots: mockGetAllEliminationRosterSnapshots,
   getEliminationRosterSnapshot: mockGetEliminationRosterSnapshot,
+  isEliminationPitcher: (player: Player) =>
+    player.isPitcher === true ||
+    String(player.primaryPosition ?? "").toUpperCase() === "P" ||
+    String(player.pitcherRole ?? player.role ?? "").toUpperCase().includes("P"),
   getNormalizedEliminationLineup: (snapshot: EliminationRosterSnapshot) => snapshot.lineup,
   getNormalizedEliminationRotation: (snapshot: EliminationRosterSnapshot) => snapshot.startingRotation,
   updateEliminationRosterSnapshot: mockUpdateEliminationRosterSnapshot,
