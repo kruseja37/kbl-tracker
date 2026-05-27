@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'vitest';
 
-import { resolveSelectedPlayerCardState } from '../../app/utils/selectedPlayerState';
+import {
+  buildSelectedLineupPlayerCard,
+  findRunnerBaseForSelectedPlayer,
+  resolveSelectedPlayerCardState,
+} from '../../app/utils/selectedPlayerState';
 
 describe('resolveSelectedPlayerCardState', () => {
   test('uses the tracked player state and canonical player id when available', () => {
@@ -35,6 +39,63 @@ describe('resolveSelectedPlayerCardState', () => {
       playerId: 'fallback-home-j-doe',
       currentMojo: -1,
       currentFitness: 'WELL',
+    });
+  });
+});
+
+describe('buildSelectedLineupPlayerCard', () => {
+  test('preserves pitcher card behavior while exposing runner actions when the pitcher is on base', () => {
+    expect(
+      buildSelectedLineupPlayerCard({
+        playerId: 'away-sp',
+        playerName: 'Away Starter',
+        isPitcher: true,
+        runnerBase: 'second',
+      }),
+    ).toEqual({
+      name: 'Away Starter',
+      type: 'pitcher',
+      playerId: 'away-sp',
+      runnerBase: 'second',
+    });
+  });
+});
+
+describe('findRunnerBaseForSelectedPlayer', () => {
+  test('does not match same-name runners when both selected player and runner have different ids', () => {
+    expect(
+      findRunnerBaseForSelectedPlayer(
+        {
+          second: { playerId: 'runner-1', name: 'Sam Lee' },
+        },
+        'pitcher-1',
+        'Sam Lee',
+      ),
+    ).toBeNull();
+  });
+
+  test('matches a pitcher baserunner by id even when preserving pitcher card type', () => {
+    const runnerBase = findRunnerBaseForSelectedPlayer(
+      {
+        second: { playerId: 'pitcher-1', name: 'Sam Lee' },
+      },
+      'pitcher-1',
+      'Sam Lee',
+    );
+
+    expect(runnerBase).toBe('second');
+    expect(
+      buildSelectedLineupPlayerCard({
+        playerId: 'pitcher-1',
+        playerName: 'Sam Lee',
+        isPitcher: true,
+        runnerBase: runnerBase || undefined,
+      }),
+    ).toEqual({
+      name: 'Sam Lee',
+      type: 'pitcher',
+      playerId: 'pitcher-1',
+      runnerBase: 'second',
     });
   });
 });

@@ -110,7 +110,11 @@ import {
 } from "../utils/runtimePlayerIdentity";
 import { buildAvailablePitchingCandidates } from "../utils/pitchingCandidates";
 import { getScorebugTeamLabel } from "../utils/scorebugLabel";
-import { resolveSelectedPlayerCardState } from "../utils/selectedPlayerState";
+import {
+  buildSelectedLineupPlayerCard,
+  findRunnerBaseForSelectedPlayer,
+  resolveSelectedPlayerCardState,
+} from "../utils/selectedPlayerState";
 import { normalizeSpecialEventType } from "../utils/gameTrackerEventDispatch";
 import {
   getDisplayedStadiumName,
@@ -126,6 +130,7 @@ import {
   FIELDING_POSITION_NUMBER_TO_CODE as POSITION_NUMBER_TO_CODE,
   resolveChargedPlayerIdFromDefensiveAlignment,
 } from "../utils/fieldingErrorAttribution";
+import { buildDefensiveAlignmentByPosition } from "../utils/defensiveAlignment";
 import { areRivals } from "../../../data/leagueStructure";
 import { getParkNames } from "../../../data/parkLookup";
 import {
@@ -3486,26 +3491,14 @@ export function GameTracker() {
     isCurrentPitcher: true,
   };
 
-  // Field positions (defense) with SVG coordinates - dynamically built from fielding team's lineup
+  // Field positions (defense) - dynamically built from fielding team's live lineup
   // When isTop = true, home team is fielding; when isTop = false, away team is fielding
   const fieldingTeamPlayers =
     fieldingTeam === "home" ? homeTeamPlayers : awayTeamPlayers;
-
-  // Map position abbreviations to position numbers and SVG coordinates
-  const positionMap: Record<
-    string,
-    { number: string; svgX: number; svgY: number }
-  > = {
-    P: { number: "1", svgX: 200, svgY: 165 },
-    C: { number: "2", svgX: 200, svgY: 259 },
-    "1B": { number: "3", svgX: 290, svgY: 152 },
-    "2B": { number: "4", svgX: 256, svgY: 120 },
-    "3B": { number: "5", svgX: 110, svgY: 152 },
-    SS: { number: "6", svgX: 144, svgY: 120 },
-    LF: { number: "7", svgX: 72, svgY: 72 },
-    CF: { number: "8", svgX: 200, svgY: 60 },
-    RF: { number: "9", svgX: 328, svgY: 72 },
-  };
+  const fieldingTeamSnapshot =
+    fieldingTeam === "away"
+      ? runtimeLineupSnapshot.away
+      : runtimeLineupSnapshot.home;
 
   // GameDiamond removed in Step 1.B (UX-004) — gameDiamondFielders no longer needed.
   // const gameDiamondFielders = useMemo(() => { ... }, [fieldingTeam, fieldingTeamPlayers, getRosterEntityId]);
@@ -3523,31 +3516,22 @@ export function GameTracker() {
   );
 
   const defensiveAlignmentByPosition = useMemo(() => {
-    const alignment: Partial<
-      Record<Position, { playerId: string; playerName: string }>
-    > = {};
-
-    for (const player of fieldingTeamPlayers) {
-      if (!player.position || !positionMap[player.position]) continue;
-      alignment[player.position as Position] = {
-        playerId: getRosterEntityId(player, fieldingTeam),
-        playerName: player.name,
-      };
-    }
-
-    if (currentPitcherData.id) {
-      alignment.P = {
-        playerId: currentPitcherData.id,
-        playerName: currentPitcherData.name,
-      };
-    }
-
-    return alignment;
+    return buildDefensiveAlignmentByPosition({
+      fieldingTeam,
+      fieldingTeamPlayers,
+      lineupSnapshot: fieldingTeamSnapshot,
+      activePitcher,
+      currentPitcherId: gameState.currentPitcherId,
+      currentPitcherName: gameState.currentPitcherName,
+      getRosterEntityId,
+    });
   }, [
-    currentPitcherData.id,
-    currentPitcherData.name,
+    activePitcher,
     fieldingTeam,
     fieldingTeamPlayers,
+    fieldingTeamSnapshot,
+    gameState.currentPitcherId,
+    gameState.currentPitcherName,
     getRosterEntityId,
   ]);
 
@@ -5833,17 +5817,11 @@ export function GameTracker() {
 
   const getRunnerBaseForPlayer = useCallback(
     (playerId: string, playerName?: string): RunnerBase | null => {
-      for (const base of ["first", "second", "third"] as const) {
-        const trackedRunner = battingLineupRunners[base];
-        if (!trackedRunner) continue;
-        if (
-          trackedRunner.playerId === playerId ||
-          (playerName && trackedRunner.name === playerName)
-        ) {
-          return base;
-        }
-      }
-      return null;
+      return findRunnerBaseForSelectedPlayer(
+        battingLineupRunners,
+        playerId,
+        playerName,
+      );
     },
     [battingLineupRunners],
   );
@@ -5902,20 +5880,20 @@ export function GameTracker() {
         return;
       }
       const isPitcher = isPitcherPlayer(playerId, playerName);
+      const runnerBase =
+        getRunnerBaseForPlayer(playerId, playerName) || undefined;
       console.log("[R3-T0] Classified lineup player tap", {
         gamePhase: gameState.gamePhase,
         playerId,
         playerName,
         isPitcher,
       });
-      setSelectedPlayer({
-        name: playerName,
-        type: isPitcher ? "pitcher" : "batter",
+      setSelectedPlayer(buildSelectedLineupPlayerCard({
         playerId,
-        runnerBase: isPitcher
-          ? undefined
-          : getRunnerBaseForPlayer(playerId, playerName) || undefined,
-      });
+        playerName,
+        isPitcher,
+        runnerBase,
+      }));
     },
     [
       swapOrderMode,
@@ -6423,6 +6401,7 @@ export function GameTracker() {
               updated[outgoingIndex] = {
                 ...updated[outgoingIndex],
                 battingOrder: undefined,
+                position: undefined,
                 isOutOfGame: gameState.gamePhase === "LIVE",
               };
 
