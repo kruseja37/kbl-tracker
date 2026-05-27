@@ -420,28 +420,26 @@ describe('Out Defaults - Fielders Choice (FC)', () => {
     expect(result.second?.to).toBe('out');
   });
 
-  test('R1+R2 with 2+ fielders triggers DP detection over FC', () => {
-    // With R1 on, 0 outs, and 2+ fielders, code detects DP over FC
+  test('R1+R2 with 2+ fielders keeps explicit FC distinct from DP', () => {
+    // Explicit FC remains batter-safe; DP detection is reserved for DP/TP or non-FC groundouts.
     const fcPlay = createPlayData({ type: 'out', outType: 'FC', fieldingSequence: [6, 4] });
     const bases: GameBases = { first: true, second: true, third: false };
     const result = calculateRunnerDefaults(fcPlay, bases, 0);
 
-    // DP logic takes precedence: batter out, R1 out, R2 advances
-    expect(result.batter.to).toBe('out');
+    expect(result.batter.to).toBe('first');
     expect(result.first?.to).toBe('out');
-    expect(result.second?.to).toBe('third');
+    expect(result.second).toBeUndefined();
   });
 
-  test('R1+R3 with 2+ fielders triggers DP detection', () => {
-    // With R1 on, 0 outs, and 2+ fielders, code detects DP
+  test('R1+R3 with 2+ fielders keeps explicit FC distinct from DP', () => {
+    // Explicit FC targets the lead runner instead of silently becoming DP.
     const fcPlay = createPlayData({ type: 'out', outType: 'FC', fieldingSequence: [6, 4] });
     const bases: GameBases = { first: true, second: false, third: true };
     const result = calculateRunnerDefaults(fcPlay, bases, 0);
 
-    // DP logic: batter out, R1 out, R3 scores
-    expect(result.batter.to).toBe('out');
-    expect(result.first?.to).toBe('out');
-    expect(result.third?.to).toBe('home');
+    expect(result.batter.to).toBe('first');
+    expect(result.first?.to).toBe('second');
+    expect(result.third?.to).toBe('out');
   });
 });
 

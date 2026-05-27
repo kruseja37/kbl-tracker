@@ -63,6 +63,7 @@ export interface RestoreResult {
 
 export const KBL_BACKUP_VERSION = 2;
 
+const DYNAMIC_FRANCHISE_DB_PREFIX = 'kbl-franchise-';
 const DYNAMIC_ELIMINATION_DB_PREFIX = 'kbl-elimination-';
 
 const trackerStores: Record<string, StoreSchema> = {
@@ -114,6 +115,18 @@ const trackerStores: Record<string, StoreSchema> = {
   seasonMetadata: {
     keyPath: 'seasonId',
     indexes: [{ name: 'status', keyPath: 'status' }],
+  },
+  franchiseSeasonSummaries: {
+    keyPath: 'seasonId',
+    indexes: [
+      { name: 'franchiseId', keyPath: 'franchiseId' },
+      { name: 'seasonNumber', keyPath: 'seasonNumber' },
+      {
+        name: 'franchiseId_seasonNumber',
+        keyPath: ['franchiseId', 'seasonNumber'],
+        options: { unique: true },
+      },
+    ],
   },
   playerCareerBatting: {
     keyPath: 'playerId',
@@ -259,7 +272,7 @@ const trackerStores: Record<string, StoreSchema> = {
 
 export const STATIC_DATABASE_SCHEMAS: Record<string, DatabaseSchema> = {
   'kbl-tracker': {
-    version: 11,
+    version: 12,
     stores: trackerStores,
   },
   'kbl-playoffs': {
@@ -350,7 +363,20 @@ export const STATIC_DATABASE_SCHEMAS: Record<string, DatabaseSchema> = {
       franchiseConfigs: { keyPath: 'franchiseId' },
       eliminationList: { keyPath: 'eliminationId' },
     },
-    includedStores: ['eliminationList'],
+    includedStores: ['franchiseList', 'franchiseConfigs', 'eliminationList'],
+  },
+  'kbl-franchise-transition-journal': {
+    version: 1,
+    stores: {
+      transitionJournals: {
+        keyPath: 'id',
+        indexes: [
+          { name: 'franchiseId', keyPath: 'franchiseId' },
+          { name: 'status', keyPath: 'status' },
+          { name: 'franchiseStatus', keyPath: ['franchiseId', 'status'] },
+        ],
+      },
+    },
   },
   'kbl-manager-identity': {
     version: 2,
@@ -536,8 +562,22 @@ export const STATIC_DATABASE_SCHEMAS: Record<string, DatabaseSchema> = {
       },
     },
   },
-  'kbl-transactions': {
+  'kbl-franchise-farm': {
     version: 1,
+    stores: {
+      franchiseFarmRecords: {
+        keyPath: 'id',
+        indexes: [
+          { name: 'by_franchise', keyPath: 'franchiseId' },
+          { name: 'by_franchise_season', keyPath: ['franchiseId', 'seasonId'] },
+          { name: 'by_franchise_season_team', keyPath: ['franchiseId', 'seasonId', 'teamId'] },
+          { name: 'by_player_scope', keyPath: ['franchiseId', 'seasonId', 'playerId'] },
+        ],
+      },
+    },
+  },
+  'kbl-transactions': {
+    version: 2,
     stores: {
       transactions: {
         keyPath: 'id',
@@ -547,7 +587,11 @@ export const STATIC_DATABASE_SCHEMAS: Record<string, DatabaseSchema> = {
           { name: 'by_type', keyPath: 'type' },
           { name: 'by_phase', keyPath: 'phase' },
           { name: 'by_actor', keyPath: 'actor' },
+          { name: 'by_franchise', keyPath: 'franchiseId' },
+          { name: 'by_season_id', keyPath: 'seasonId' },
+          { name: 'by_schedule_game', keyPath: 'scheduleGameId' },
           { name: 'by_season_game', keyPath: ['season', 'gameNumber'] },
+          { name: 'by_franchise_season', keyPath: ['franchiseId', 'seasonId'] },
         ],
       },
     },
@@ -601,6 +645,14 @@ export const STATIC_DATABASE_SCHEMAS: Record<string, DatabaseSchema> = {
 };
 
 const DYNAMIC_ELIMINATION_SCHEMA: DatabaseSchema = {
+  version: 1,
+  stores: {
+    players: { keyPath: 'id' },
+    teams: { keyPath: 'id' },
+  },
+};
+
+const DYNAMIC_FRANCHISE_SCHEMA: DatabaseSchema = {
   version: 1,
   stores: {
     players: { keyPath: 'id' },
@@ -912,6 +964,17 @@ function getEliminationIdsFromBackup(backup: BackupData): string[] {
     .filter((value): value is string => typeof value === 'string' && value.length > 0);
 }
 
+function getFranchiseIdsFromBackup(backup: BackupData): string[] {
+  const records = backup.databases['kbl-app-meta']?.franchiseList ?? [];
+  return records
+    .map((record) =>
+      typeof record === 'object' && record !== null
+        ? (record as { franchiseId?: unknown }).franchiseId
+        : undefined
+    )
+    .filter((value): value is string => typeof value === 'string' && value.length > 0);
+}
+
 function hasStorePayload(data: Record<string, unknown[]> | undefined, storeName: string): boolean {
   return Boolean(data && Object.prototype.hasOwnProperty.call(data, storeName));
 }
@@ -947,6 +1010,16 @@ function getBackupPayloadValidationError(backup: BackupData): string | undefined
     if (error) return error;
   }
 
+  for (const franchiseId of getFranchiseIdsFromBackup(backup)) {
+    const dbName = `${DYNAMIC_FRANCHISE_DB_PREFIX}${franchiseId}`;
+    const error = getDatabasePayloadValidationError(
+      dbName,
+      DYNAMIC_FRANCHISE_SCHEMA,
+      backup.databases[dbName],
+    );
+    if (error) return error;
+  }
+
   for (const eliminationId of getEliminationIdsFromBackup(backup)) {
     const dbName = `${DYNAMIC_ELIMINATION_DB_PREFIX}${eliminationId}`;
     const error = getDatabasePayloadValidationError(
@@ -972,6 +1045,11 @@ export async function exportAllData(): Promise<BackupData> {
 
   for (const [dbName, schema] of Object.entries(STATIC_DATABASE_SCHEMAS)) {
     backup.databases[dbName] = await exportDatabase(dbName, schema);
+  }
+
+  for (const franchiseId of getFranchiseIdsFromBackup(backup)) {
+    const dbName = `${DYNAMIC_FRANCHISE_DB_PREFIX}${franchiseId}`;
+    backup.databases[dbName] = await exportDatabase(dbName, DYNAMIC_FRANCHISE_SCHEMA);
   }
 
   for (const eliminationId of getEliminationIdsFromBackup(backup)) {
@@ -1115,6 +1193,15 @@ export async function restoreAllData(backup: BackupData): Promise<RestoreResult>
       await restoreDatabase(dbName, schema, dbData);
       restoredDatabases.push(dbName);
       restoredSchemas.push({ dbName, schema });
+    }
+
+    for (const franchiseId of getFranchiseIdsFromBackup(backup)) {
+      const dbName = `${DYNAMIC_FRANCHISE_DB_PREFIX}${franchiseId}`;
+      const dbData = backup.databases[dbName];
+
+      await restoreDatabase(dbName, DYNAMIC_FRANCHISE_SCHEMA, dbData);
+      restoredDatabases.push(dbName);
+      restoredSchemas.push({ dbName, schema: DYNAMIC_FRANCHISE_SCHEMA });
     }
 
     for (const eliminationId of getEliminationIdsFromBackup(backup)) {

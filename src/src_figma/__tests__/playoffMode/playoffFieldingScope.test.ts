@@ -82,6 +82,7 @@ describe('buildPlayoffFieldingScopeQuery', () => {
     expect(buildPlayoffFieldingScopeQuery(playoff)).toEqual({
       statsScopeId: 'franchise-7-season-2',
       competitionType: 'playoff',
+      competitionId: 'playoff-1',
       isComplete: true,
     });
   });

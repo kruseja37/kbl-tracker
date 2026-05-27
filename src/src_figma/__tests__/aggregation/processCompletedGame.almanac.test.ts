@@ -7,6 +7,8 @@ const {
   mockRegisterAlmanacPlayers,
 } = vi.hoisted(() => ({
   mockAggregateGameToSeason: vi.fn().mockResolvedValue({
+    success: true,
+    milestones: null,
     seasonMilestones: [],
     careerMilestones: [],
     franchiseFirsts: [],
@@ -164,6 +166,16 @@ const mockEffectivePlayer = {
 describe('processCompletedGame exhibition almanac registration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAggregateGameToSeason.mockResolvedValue({
+      success: true,
+      milestones: null,
+      seasonMilestones: [],
+      careerMilestones: [],
+      franchiseFirsts: [],
+      franchiseLeaderEvents: [],
+      fameEvents: [],
+      milestonesRecorded: [],
+    });
     mockGetEffectivePlayer.mockResolvedValue(mockEffectivePlayer);
   });
 
@@ -186,5 +198,20 @@ describe('processCompletedGame exhibition almanac registration', () => {
       'player-1': expect.objectContaining({ playerId: 'player-1', firstName: 'Test' }),
       'pitcher-1': expect.objectContaining({ playerId: 'pitcher-1', firstName: 'Test' }),
     });
+  });
+
+  test('does not archive or register almanac players when season aggregation fails', async () => {
+    const gameState = createGameState();
+    mockAggregateGameToSeason.mockResolvedValueOnce({
+      success: false,
+      milestones: null,
+      error: 'season DB unavailable',
+    });
+
+    await expect(processCompletedGame(gameState)).rejects.toThrow('season DB unavailable');
+
+    expect(mockArchiveCompletedGame).not.toHaveBeenCalled();
+    expect(mockRegisterAlmanacPlayers).not.toHaveBeenCalled();
+    expect(mockGetEffectivePlayer).not.toHaveBeenCalled();
   });
 });

@@ -10,6 +10,7 @@ import type {
   CommentaryFeedEntryRecord,
   GameStory,
   HistoricalTidbit,
+  ReporterScopeIdentity,
   ReporterGameMode,
 } from "../../../types/reporter";
 import type { NarrativeIntensity } from "../../../types/reporterPreferences";
@@ -76,6 +77,7 @@ export interface UseCommentaryFeedOptions {
   awayTeamId: string;
   leagueId?: string;
   gameMode?: ReporterGameMode;
+  reporterScope?: ReporterScopeIdentity;
   getLivePreambleSeed: () => LiveReporterContextSeed | null;
   dependencies?: UseCommentaryFeedDependencies;
 }
@@ -214,6 +216,7 @@ export function useCommentaryFeed({
   awayTeamId,
   leagueId,
   gameMode,
+  reporterScope,
   getLivePreambleSeed,
   dependencies = {},
 }: UseCommentaryFeedOptions) {
@@ -573,6 +576,8 @@ export function useCommentaryFeed({
         id: entry.id,
         gameId: targetGameId,
         leagueId,
+        gameMode,
+        ...reporterScope,
         reporterId: reporter.id,
         commentaryText: entry.commentaryText,
         halfInningLabel: entry.halfInningLabel,
@@ -587,8 +592,10 @@ export function useCommentaryFeed({
       ensureEngine,
       getLivePreambleSeed,
       leagueId,
+      gameMode,
       nowImpl,
       persistEntryRecord,
+      reporterScope,
       resolveCallPrerequisites,
     ],
   );
@@ -685,6 +692,8 @@ export function useCommentaryFeed({
         id: entry.id,
         gameId: targetGameId,
         leagueId,
+        gameMode,
+        ...reporterScope,
         reporterId: reporter.id,
         commentaryText: entry.commentaryText,
         halfInningLabel: entry.halfInningLabel,
@@ -697,8 +706,10 @@ export function useCommentaryFeed({
       buildReporterContextImpl,
       ensureEngine,
       leagueId,
+      gameMode,
       nowImpl,
       persistEntryRecord,
+      reporterScope,
       resolveCallPrerequisites,
       scoreNotabilityImpl,
     ],
@@ -797,6 +808,7 @@ export function useCommentaryFeed({
         gameId: targetGameId,
         leagueId,
         gameMode,
+        ...reporterScope,
         reporterId: reporter.id,
         commentaryText: entry.commentaryText,
         halfInningLabel: entry.halfInningLabel,
@@ -823,6 +835,7 @@ export function useCommentaryFeed({
       gameMode,
       nowImpl,
       persistEntryRecord,
+      reporterScope,
       resolveCallPrerequisites,
     ],
   );
@@ -857,6 +870,7 @@ export function useCommentaryFeed({
       allInningEvents: AtBatEvent[];
       finalScore: { home: number; away: number };
       gameMode: ReporterGameMode;
+      reporterScope?: ReporterScopeIdentity;
       gameDate: string;
       opponentByReporter?: { home?: string; away?: string };
     }) => {
@@ -865,6 +879,7 @@ export function useCommentaryFeed({
         allInningEvents,
         finalScore,
         gameMode,
+        reporterScope: postGameReporterScope,
         gameDate,
         opponentByReporter,
       } = params;
@@ -946,6 +961,7 @@ export function useCommentaryFeed({
           teamId: reporter.teamId,
           leagueId,
           gameMode,
+          ...(postGameReporterScope ?? reporterScope),
           headline: result.headline,
           body: result.body,
           playersMentioned,
@@ -980,6 +996,7 @@ export function useCommentaryFeed({
       leagueId,
       nowImpl,
       persistGameStoryImpl,
+      reporterScope,
       resolveCallPrerequisites,
     ],
   );

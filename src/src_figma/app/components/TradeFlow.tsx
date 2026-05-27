@@ -1,7 +1,13 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { X, ChevronDown, ArrowRight, Trophy, Users, Clock, TrendingUp, TrendingDown, AlertCircle, CheckCircle, XCircle, RefreshCw, History, FileText } from "lucide-react";
 import { useOffseasonData, type OffseasonPlayer, type OffseasonTeam } from "@/hooks/useOffseasonData";
 import { useOffseasonState, type Trade as StoredTrade } from "../../hooks/useOffseasonState";
+import {
+  FRANCHISE_TRADE_CALCULATION_VERSION,
+  runFranchiseTradeDryRun,
+  type FranchiseTradeAdapterData,
+} from "../../../utils/franchiseTradeAdapter";
+import type { FranchiseOffseasonAdapterIssue } from "../../../utils/franchiseOffseasonAdapters";
 
 type TradeMode = "two-way" | "three-way";
 type Screen = 
@@ -127,12 +133,308 @@ const EMPTY_TEAMS: Team[] = [];
 
 interface TradeFlowProps {
   seasonId: string;
+  seasonNumber?: number;
+  franchiseId?: string;
   onComplete?: () => void;
 }
 
-export function TradeFlow({ seasonId, onComplete }: TradeFlowProps) {
+function FranchiseTradePreviewSurface({
+  seasonId,
+  seasonNumber,
+  franchiseId,
+}: {
+  seasonId: string;
+  seasonNumber: number;
+  franchiseId: string;
+}) {
+  const [previewData, setPreviewData] = useState<FranchiseTradeAdapterData | null>(null);
+  const [previewIssues, setPreviewIssues] = useState<FranchiseOffseasonAdapterIssue[]>([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPreviewLoading(true);
+    setPreviewError(null);
+
+    runFranchiseTradeDryRun(
+      {
+        franchiseId,
+        seasonId,
+        statsScopeId: seasonId,
+        seasonNumber,
+        offseasonStateId: `offseason-${seasonId}`,
+        phase: "TRADES",
+        dryRun: true,
+      },
+      { dryRun: true },
+    )
+      .then((result) => {
+        if (cancelled) return;
+        setPreviewData(result.data ?? null);
+        setPreviewIssues(result.issues ?? []);
+        if (!result.success) {
+          setPreviewError(result.message || "Trade preview failed validation.");
+        }
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setPreviewData(null);
+        setPreviewIssues([]);
+        setPreviewError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (!cancelled) setPreviewLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [franchiseId, seasonId, seasonNumber]);
+
+  const reports = previewData?.teamReports ?? [];
+  const fitPreviews = previewData?.fitPreviews ?? [];
+  const issueGroups = previewIssues.reduce<Record<string, FranchiseOffseasonAdapterIssue[]>>((acc, issue) => {
+    const key = issue.severity ?? "info";
+    acc[key] = [...(acc[key] ?? []), issue];
+    return acc;
+  }, {});
+
+  return (
+    <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-6 min-h-[420px]">
+      <div className="space-y-5">
+        <div className="bg-[#4A6844] border-[3px] border-[#3F5A3A] p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-xl text-[#E8E8D8]">Trade Fit Preview</div>
+              <div className="text-[10px] text-[#E8E8D8]/70 mt-1">Franchise Mode 2 v1 dry-run boundary</div>
+            </div>
+            <div className="text-[10px] text-[#FFD700] text-right">
+              {FRANCHISE_TRADE_CALCULATION_VERSION}
+            </div>
+          </div>
+          <div className="text-[10px] text-[#E8E8D8]/80 mt-3 leading-relaxed">
+            Preview only: no trades are executed, no players are moved, no teams, farm records, transactions, League Builder data, prototype trade records, or offseason state are written.
+          </div>
+          <div className="text-[10px] text-[#E8E8D8]/70 mt-2">
+            Trade AI acceptance, chemistry, morale, injuries, salary-cap enforcement, and roster movement remain deferred.
+          </div>
+        </div>
+
+        {previewLoading && (
+          <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-4 text-xs text-[#E8E8D8]">
+            Loading franchise trade preview...
+          </div>
+        )}
+
+        {previewError && (
+          <div className="bg-[#5A2F2F] border-[3px] border-[#DD0000] p-4 text-xs text-[#E8E8D8]">
+            {previewError}
+          </div>
+        )}
+
+        {previewData && (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-3">
+                <div className="text-[9px] text-[#E8E8D8]/60">Teams reviewed</div>
+                <div className="text-xl text-[#E8E8D8]">{reports.length}</div>
+              </div>
+              <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-3">
+                <div className="text-[9px] text-[#E8E8D8]/60">Fit previews</div>
+                <div className="text-xl text-[#E8E8D8]">{fitPreviews.length}</div>
+              </div>
+              <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-3">
+                <div className="text-[9px] text-[#E8E8D8]/60">Warnings/issues</div>
+                <div className="text-xl text-[#E8E8D8]">{previewIssues.length}</div>
+              </div>
+              <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-3">
+                <div className="text-[9px] text-[#E8E8D8]/60">Execution</div>
+                <div className="text-xs text-[#FFD700] mt-2">Unavailable</div>
+              </div>
+            </div>
+
+            <div className="bg-[#5A8352] border-[3px] border-[#4A6844]">
+              <div className="bg-[#4A6844] p-2 text-[10px] text-[#E8E8D8]">TEAM NEEDS / SURPLUS</div>
+              <div className="p-4 space-y-3 max-h-[420px] overflow-y-auto">
+                {reports.length === 0 ? (
+                  <div className="text-[10px] text-[#E8E8D8]/60 text-center py-4">
+                    No franchise-owned teams were available for trade preview.
+                  </div>
+                ) : reports.map((report) => (
+                  <div key={report.teamId} className="bg-[#4A6844] border-[2px] border-[#3F5A3A] p-3 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-xs text-[#E8E8D8]">{report.teamName}</div>
+                        <div className="text-[9px] text-[#E8E8D8]/60">{report.teamId}</div>
+                      </div>
+                      <div className="text-[10px] text-[#FFD700] uppercase">
+                        {report.riskLevel} risk / {report.trustLevel} trust
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px] text-[#E8E8D8]">
+                      <div>MLB: {report.mlbCount}</div>
+                      <div>Farm: {report.farmCount}</div>
+                      <div>Needs: {report.needs.length}</div>
+                      <div>Surplus: {report.surpluses.length}</div>
+                    </div>
+                    <div className="grid md:grid-cols-2 gap-3">
+                      <div>
+                        <div className="text-[9px] text-[#E8E8D8]/60 mb-1">Needs</div>
+                        {report.needs.length > 0 ? report.needs.map((need) => (
+                          <div key={`${report.teamId}-need-${need.role}`} className="text-[9px] text-[#E8E8D8]/80">
+                            {need.role}: {need.currentCount}/{need.targetCount} ({need.severity})
+                          </div>
+                        )) : (
+                          <div className="text-[9px] text-[#E8E8D8]/50">No needs detected.</div>
+                        )}
+                      </div>
+                      <div>
+                        <div className="text-[9px] text-[#E8E8D8]/60 mb-1">Surplus</div>
+                        {report.surpluses.length > 0 ? report.surpluses.map((surplus) => (
+                          <div key={`${report.teamId}-surplus-${surplus.role}`} className="text-[9px] text-[#E8E8D8]/80">
+                            {surplus.role}: +{surplus.surplus}
+                          </div>
+                        )) : (
+                          <div className="text-[9px] text-[#E8E8D8]/50">No surplus detected.</div>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] text-[#E8E8D8]/60 mb-1">Evidence</div>
+                      <ul className="space-y-1">
+                        {report.evidence.map((item) => (
+                          <li key={item} className="text-[9px] text-[#E8E8D8]/80">{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-[#5A8352] border-[3px] border-[#4A6844]">
+              <div className="bg-[#4A6844] p-2 text-[10px] text-[#E8E8D8]">NON-EXECUTABLE FIT PREVIEWS</div>
+              <div className="p-4 space-y-3">
+                {fitPreviews.length === 0 ? (
+                  <div className="text-[10px] text-[#E8E8D8]/60 text-center py-4">
+                    No trade-fit previews were generated.
+                  </div>
+                ) : fitPreviews.map((preview) => (
+                  <div key={preview.id} className="bg-[#4A6844] border-[2px] border-[#3F5A3A] p-3">
+                    <div className="text-xs text-[#E8E8D8]">
+                      {preview.sourceTeamName} → {preview.targetTeamName}: {preview.role}
+                    </div>
+                    <div className="text-[10px] text-[#FFD700] mt-1">Non-executable advisory preview</div>
+                    <div className="text-[9px] text-[#E8E8D8]/80 mt-2">
+                      Source surplus: {preview.sourceSurplus} / Target gap: {preview.targetGap} / Candidates: {preview.candidatePlayerIds.length}
+                    </div>
+                    <ul className="space-y-1 mt-2">
+                      {preview.evidence.map((item) => (
+                        <li key={item} className="text-[9px] text-[#E8E8D8]/75">{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-4">
+              <div className="text-xs text-[#E8E8D8] mb-2">LIMITATIONS</div>
+              <ul className="space-y-1">
+                {previewData.limitations.map((limitation) => (
+                  <li key={limitation} className="text-[10px] text-[#E8E8D8]/80">{limitation}</li>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
+
+        {previewIssues.length > 0 && (
+          <div className="bg-[#5A8352] border-[3px] border-[#DDC45A] p-4">
+            <div className="text-xs text-[#E8E8D8] mb-2">WARNINGS / ISSUES</div>
+            <div className="text-[9px] text-[#E8E8D8]/60 mb-2">
+              Errors: {issueGroups.error?.length ?? 0} / Warnings: {issueGroups.warning?.length ?? 0}
+            </div>
+            <div className="space-y-2">
+              {previewIssues.map((issue, index) => (
+                <div key={`${issue.code}-${index}`} className="bg-[#4A6844] p-2">
+                  <div className="text-[10px] text-[#FFD700]">{issue.code}</div>
+                  <div className="text-[9px] text-[#E8E8D8]/80">{issue.message}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FranchiseTradeContextIssueSurface({
+  seasonId,
+  franchiseId,
+}: {
+  seasonId: string;
+  franchiseId: string;
+}) {
+  return (
+    <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-6 min-h-[320px]">
+      <div className="space-y-4">
+        <div className="bg-[#4A6844] border-[3px] border-[#3F5A3A] p-4">
+          <div className="text-xl text-[#E8E8D8]">Trade Fit Preview</div>
+          <div className="text-[10px] text-[#FFD700] mt-1">{FRANCHISE_TRADE_CALCULATION_VERSION}</div>
+          <div className="text-[10px] text-[#E8E8D8]/80 mt-3">
+            Preview only: no trades are executed, no players are moved, and no franchise, League Builder, transaction, prototype trade, or offseason state records are written.
+          </div>
+        </div>
+
+        <div className="bg-[#5A2F2F] border-[3px] border-[#DD0000] p-4">
+          <div className="text-xs text-[#E8E8D8] mb-2">BLOCKING ISSUE</div>
+          <div className="text-[10px] text-[#FFD700]">MISSING_SEASON_NUMBER</div>
+          <div className="text-[10px] text-[#E8E8D8]/80 mt-1">
+            Franchise trade preview requires an explicit franchise seasonNumber. The preview was not started because silently defaulting to season 1 can scope data to the wrong season.
+          </div>
+          <div className="text-[9px] text-[#E8E8D8]/60 mt-2">
+            franchiseId: {franchiseId} / seasonId: {seasonId}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function TradeFlow(props: TradeFlowProps) {
+  if (props.franchiseId) {
+    const franchiseSeasonNumber = props.seasonNumber;
+    if (
+      typeof franchiseSeasonNumber !== "number" ||
+      !Number.isFinite(franchiseSeasonNumber) ||
+      franchiseSeasonNumber < 1
+    ) {
+      return (
+        <FranchiseTradeContextIssueSurface
+          franchiseId={props.franchiseId}
+          seasonId={props.seasonId}
+        />
+      );
+    }
+
+    return (
+      <FranchiseTradePreviewSurface
+        franchiseId={props.franchiseId}
+        seasonId={props.seasonId}
+        seasonNumber={franchiseSeasonNumber}
+      />
+    );
+  }
+
+  return <ActiveTradeFlow {...props} />;
+}
+
+function ActiveTradeFlow({ seasonId, seasonNumber = 1, franchiseId, onComplete }: TradeFlowProps) {
   // Offseason state hook for persistence
-  const { addNewTrade, trades: storedTrades } = useOffseasonState(seasonId);
+  const { addNewTrade, trades: storedTrades } = useOffseasonState(seasonId, seasonNumber, { franchiseId });
   // Load real data from playerDatabase via hook
   const { teams: realTeams, players: realPlayers, hasRealData, isLoading } = useOffseasonData();
 
@@ -195,6 +497,7 @@ export function TradeFlow({ seasonId, onComplete }: TradeFlowProps) {
   // Save completed trade to storage - must be defined before early return to satisfy hooks rules
   const handleTradeComplete = useCallback(async () => {
     if (!currentTrade) return;
+    if (franchiseId) return;
 
     try {
       // Build trade data matching the Trade interface
@@ -230,7 +533,7 @@ export function TradeFlow({ seasonId, onComplete }: TradeFlowProps) {
       clearTrade();
       setCurrentScreen("trade-builder");
     }
-  }, [currentTrade, addNewTrade, clearTrade]);
+  }, [currentTrade, addNewTrade, clearTrade, franchiseId]);
 
   // Show loading state
   if (isLoading) {

@@ -24,10 +24,12 @@ import {
   type OptimalLineupCandidate,
   type OptimalLineupSnapshotField,
 } from "../../../utils/optimalLineup";
+import { analyzeBuilderTeamRoster } from "../../../utils/rosterAnalyzerBuilderAdapter";
 import type {
   OpposingPitcherHand,
   OptimalLineupSnapshot,
 } from "../../../types/managerWpa";
+import type { RosterAnalyzerReport } from "../../../engines/rosterAnalyzerEngine";
 import { OptimalLineupComparisonPanel } from "../components/OptimalLineupComparisonPanel";
 
 type TabType = "roster" | "lineup" | "rotation" | "depth";
@@ -301,6 +303,16 @@ export function LeagueBuilderRosters() {
     () => selectedTeamId ? players.filter((player) => isPlayerOnTeam(player, selectedTeamId)) : [],
     [players, selectedTeamId, activeLeagueId]
   );
+  const analyzerReport = useMemo(() => {
+    if (!selectedTeam || !currentRoster) return null;
+    return analyzeBuilderTeamRoster({
+      leagueId: activeLeagueId,
+      team: selectedTeam,
+      players,
+      roster: currentRoster,
+      generatedAt: 'builder-roster-page',
+    });
+  }, [activeLeagueId, currentRoster, players, selectedTeam]);
 
   if (isLoading) {
     return (
@@ -459,6 +471,8 @@ export function LeagueBuilderRosters() {
                   </div>
                 </div>
 
+                <BuilderRosterAnalyzerPanel report={analyzerReport} />
+
                 {/* Tabs */}
                 <div className="flex border-b-4 border-[#4A6844]">
                   {(["roster", "lineup", "rotation", "depth"] as TabType[]).map(
@@ -521,6 +535,63 @@ export function LeagueBuilderRosters() {
               </div>
             )}
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface BuilderRosterAnalyzerPanelProps {
+  report: RosterAnalyzerReport | null;
+}
+
+function BuilderRosterAnalyzerPanel({ report }: BuilderRosterAnalyzerPanelProps) {
+  if (!report) return null;
+
+  const visibleFindings = report.findings
+    .filter((finding) => finding.severity !== 'info' || finding.kind !== 'data_integrity')
+    .slice(0, 3);
+  const limitations = report.profile.limitations.slice(0, 3);
+
+  return (
+    <div className="border-b-4 border-[#4A6844] bg-[#3F563F] px-6 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div className="text-xs font-bold tracking-wider text-[#E8E8D8]/60">
+            READ-ONLY ROSTER ANALYZER
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
+            <span className="bg-[#2d3d2f] border-2 border-[#E8E8D8]/30 px-3 py-1">
+              MLB {report.profile.activeCount}
+            </span>
+            <span className="bg-[#2d3d2f] border-2 border-[#E8E8D8]/30 px-3 py-1">
+              FARM {report.profile.farmCount}
+            </span>
+            <span className="bg-[#2d3d2f] border-2 border-[#E8E8D8]/30 px-3 py-1">
+              TRUST {report.trust.overall.toUpperCase()}
+            </span>
+          </div>
+        </div>
+        <div className="max-w-xl flex-1 text-sm">
+          {visibleFindings.length > 0 ? (
+            <div className="space-y-1">
+              {visibleFindings.map((finding) => (
+                <div key={finding.id} className="text-[#E8E8D8]">
+                  <span className="font-bold text-[#FFD166]">{finding.severity.toUpperCase()}</span>
+                  <span className="text-[#E8E8D8]/80"> · {finding.title}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="font-bold text-[#A7F3D0]">
+              No critical readiness issues found.
+            </div>
+          )}
+          {limitations.length > 0 && (
+            <div className="mt-2 text-xs text-[#E8E8D8]/60">
+              {limitations.join(' ')}
+            </div>
+          )}
         </div>
       </div>
     </div>

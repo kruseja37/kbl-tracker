@@ -3,12 +3,18 @@ import { useOffseasonState } from "../../hooks/useOffseasonState";
 
 interface ContractionExpansionFlowProps {
   seasonNumber?: number;
+  seasonId?: string;
+  franchiseId?: string;
   onComplete: () => void;
 }
 
-export function ContractionExpansionFlow({ seasonNumber = 1, onComplete }: ContractionExpansionFlowProps) {
-  const seasonId = `season-${seasonNumber}`;
-  const { completeCurrentPhase } = useOffseasonState(seasonId, seasonNumber);
+export function ContractionExpansionFlow({
+  seasonNumber = 1,
+  seasonId = `season-${seasonNumber}`,
+  franchiseId,
+  onComplete,
+}: ContractionExpansionFlowProps) {
+  const { completeCurrentPhase } = useOffseasonState(seasonId, seasonNumber, { franchiseId });
   const [skipping, setSkipping] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,16 +36,15 @@ export function ContractionExpansionFlow({ seasonNumber = 1, onComplete }: Contr
       <div className="max-w-2xl mx-auto space-y-6 py-12">
         {/* Header */}
         <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-6 text-center">
-          <div className="text-2xl text-[#E8E8D8] mb-2">🏟️ Contraction & Expansion</div>
+          <div className="text-2xl text-[#E8E8D8] mb-2">Expansion Boundary</div>
           <div className="text-sm text-[#E8E8D8]/60">Season {seasonNumber} Offseason</div>
         </div>
 
         {/* Coming Soon */}
         <div className="bg-[#5A8352] border-[5px] border-[#4A6844] p-8 text-center">
-          <div className="text-lg text-[#E8E8D8] mb-4">Coming in a future update</div>
+          <div className="text-lg text-[#E8E8D8] mb-4">Deferred in Mode 2 v1</div>
           <div className="text-sm text-[#E8E8D8]/60 max-w-md mx-auto leading-relaxed">
-            This phase will allow adding or removing teams from the league,
-            including contraction rolls, expansion drafts, and team creation.
+            League expansion is not active yet. This screen is skip-only and does not mutate franchise, roster, or League Builder data.
           </div>
         </div>
 

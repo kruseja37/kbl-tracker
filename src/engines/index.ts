@@ -195,6 +195,46 @@ export const SMB4_WAR_THRESHOLDS = {
 };
 
 // ============================================
+// Roster Analyzer - Read-only roster advice
+// ============================================
+
+export {
+  analyzeRoster,
+  createDefaultRosterAnalyzerConfig,
+} from './rosterAnalyzerEngine';
+
+export type {
+  AnalyzerChemistryRules,
+  AnalyzerConstraintKind,
+  AnalyzerDepthChartEntry,
+  AnalyzerEvidenceRef,
+  AnalyzerFarmOptionState,
+  AnalyzerFinding,
+  AnalyzerIdentity,
+  AnalyzerInputProvenance,
+  AnalyzerLineupSlot,
+  AnalyzerPlayer,
+  AnalyzerPlayerStats,
+  AnalyzerRecommendation,
+  AnalyzerRecommendationKind,
+  AnalyzerReportSummary,
+  AnalyzerRosterProfile,
+  AnalyzerRosterState,
+  AnalyzerSeverity,
+  AnalyzerTeamSummary,
+  AnalyzerTraitRules,
+  AnalyzerTrustLevel,
+  AnalyzerTrustPolicy,
+  ConstraintDisposition,
+  RecommendationExecution,
+  RosterAnalyzerConfig,
+  RosterAnalyzerInput,
+  RosterAnalyzerMode,
+  RosterAnalyzerReport,
+  RosterAnalyzerSurface,
+} from './rosterAnalyzerEngine';
+
+// ============================================
 // Leverage Index - Game State Importance
 // ============================================
 
@@ -858,3 +898,127 @@ export type {
   ReporterConfidence,
   InaccuracyType,
 } from './narrativeEngine';
+
+// ============================================
+// SMB4 Generation Engines
+// ============================================
+
+export {
+  SMB4_FULL_GRADE_SCALE,
+  SMB4_CALIBRATED_GRADE_THRESHOLDS,
+  SMB4_GRADE_NUMERIC_CENTERS,
+  SMB4_GRADE_TO_INDEX,
+  SMB4_PITCHER_POSITIONS,
+  normalizeTrait,
+  normalizeSecondaryPosition,
+  normalizePitchName,
+  extractArsenalPitches,
+  isSmb4Pitcher,
+  baseWeightedHitter,
+  baseWeightedPitcher,
+  countTraitPolarity,
+  secondaryVersatility,
+  normalizeSmb4Player,
+  scoreWithSmb4Model,
+  numericScoreToSmb4Grade,
+  numericScoreToSmb4GradeByCenters,
+  buildSmb4ModelPayload,
+  scoreSmb4Player,
+  explainSmb4Player,
+} from './smb4GradeEmulator';
+
+export type {
+  Smb4Grade,
+  Smb4GradeMappingMode,
+  Smb4ScoreOptions,
+  Smb4PlayerType,
+  Smb4PlayerInput,
+  Smb4GradeThreshold,
+  NormalizedSmb4Player,
+  Smb4ModelPayload,
+  Smb4GradeResult,
+  Smb4Contribution,
+  Smb4GradeExplanation,
+} from './smb4GradeEmulator';
+
+export {
+  SMB4_TEAM_PROFILE_CATEGORIES,
+  SMB4_STANDARD_TEAM_PROFILE_CALIBRATION,
+  SMB4_STANDARD_TEAM_PROFILES,
+  scoreToTeamProfileLevel,
+  levelToImpliedScore,
+  calculateTeamProfile,
+  compareTeamProfiles,
+  targetLevelsToTeamProfile,
+} from './smb4TeamProfileEngine';
+
+export type {
+  Smb4TeamProfileCategory,
+  Smb4TeamProfileLevels,
+  Smb4TeamProfileRawScores,
+  Smb4TeamProfileCounts,
+  Smb4TeamProfile,
+  Smb4TeamProfileRange,
+  Smb4TeamProfileCalibration,
+  Smb4TeamProfileDistance,
+} from './smb4TeamProfileEngine';
+
+export {
+  SMB4_STANDARD_TEAM_ROSTER_TEMPLATES,
+  generateSmb4Players,
+  generateSmb4Roster,
+  profileLevelsToCode,
+  profileLevelsToBars,
+  summarizeSmb4Roster,
+  formatSmb4RosterReportMarkdown,
+} from './smb4PlayerGenerator';
+
+export type {
+  Smb4GeneratedTraitMode,
+  Smb4GeneratedTraitPolarity,
+  Smb4TraitPolicy,
+  Smb4GenerationRequest,
+  Smb4RosterGenerationRequest,
+  Smb4StandardTeamRosterTemplate,
+  Smb4GeneratedPlayer,
+  Smb4GeneratedRoster,
+  Smb4ProfileBarSummary,
+  Smb4ProfileBars,
+  Smb4RosterReportPlayer,
+  Smb4RosterGenerationReport,
+} from './smb4PlayerGenerator';
+
+export {
+  percentileToSmb4Rating,
+  resolveHistoricalPlayerByName,
+  convertHistoricalPlayerToSmb4,
+} from './historicalPlayerConverter';
+
+export type {
+  HistoricalConversionMode,
+  HistoricalPlayerKind,
+  HistoricalPitchArchetype,
+  HistoricalPitcherRole,
+  HistoricalConfidenceLevel,
+  HistoricalPercentileSignals,
+  HistoricalMetricSnapshot,
+  HistoricalSeasonRecord,
+  HistoricalCareerTotals,
+  HistoricalSourceProvenance,
+  HistoricalPlayerSourceRecord,
+  HistoricalGradePolicy,
+  HistoricalConversionRequest,
+  HistoricalConversionConfidence,
+  HistoricalSmb4Profile,
+} from './historicalPlayerConverter';
+
+export {
+  createManualHistoricalSourceRecord,
+  buildHistoricalSourcesFromLahmanCsv,
+} from './historicalPlayerSourceAdapters';
+
+export type {
+  ManualHistoricalSourceInput,
+  LahmanCsvBundle,
+  LahmanAdapterOptions,
+} from './historicalPlayerSourceAdapters';

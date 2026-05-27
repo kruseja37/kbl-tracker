@@ -69,6 +69,11 @@ const LeagueBuilder = lazy(() =>
     default: module.LeagueBuilder,
   })),
 );
+const Builder = lazy(() =>
+  import("./src_figma/app/pages/Builder").then((module) => ({
+    default: module.Builder,
+  })),
+);
 const LeagueBuilderLeagues = lazy(() =>
   import("./src_figma/app/pages/LeagueBuilderLeagues").then((module) => ({
     default: module.LeagueBuilderLeagues,
@@ -237,6 +242,9 @@ function App() {
           path="/elimination/:eliminationId"
           element={<EliminationHome />}
         />
+
+        {/* Builder - Figma Design */}
+        <Route path="/builder" element={<Builder />} />
 
         {/* League Builder - Figma Design */}
         <Route path="/league-builder" element={<LeagueBuilder />} />

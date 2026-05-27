@@ -599,7 +599,7 @@ export function getStarPlayFameBonus(difficulty: Difficulty): number {
  * Check if a play qualifies as a "web gem"
  */
 export function isWebGem(difficulty: Difficulty): boolean {
-  return ['diving', 'robbedHR', 'wall', 'sliding'].includes(difficulty);
+  return ['diving', 'leaping', 'robbedHR', 'wall', 'sliding'].includes(difficulty);
 }
 
 // ============================================

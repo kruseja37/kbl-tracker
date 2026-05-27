@@ -113,6 +113,13 @@ export async function processCompletedGame(
   // Step 1: Aggregate game stats to season totals
   const aggregation = await aggregateGameToSeason(gameState, options);
 
+  if (aggregation.success !== true) {
+    throw new Error(
+      aggregation.error ||
+        `Failed to aggregate completed game ${gameState.gameId} to season stats`,
+    );
+  }
+
   if (resolvedLeagueId) {
     await capturePlayerRatingsSnapshots(gameState, resolvedLeagueId);
   }

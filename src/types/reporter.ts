@@ -60,6 +60,22 @@ export type ReporterGameMode = 'exhibition' | 'elimination' | 'franchise';
 
 export type ReporterMomentum = 'HOT' | 'COLD' | 'NEUTRAL';
 
+export type ReporterCompetitionType = 'exhibition' | 'franchise' | 'playoff' | 'elimination';
+
+export interface ReporterScopeIdentity {
+  franchiseId?: string;
+  seasonId?: string;
+  seasonNumber?: number;
+  statsScopeId?: string;
+  scheduleGameId?: string;
+  competitionType?: ReporterCompetitionType;
+  competitionId?: string;
+  playoffId?: string;
+  playoffSeriesId?: string;
+  playoffGameNumber?: number;
+  eliminationId?: string;
+}
+
 export interface BeatReporter {
   id: string;
   teamId: string;
@@ -88,6 +104,17 @@ export interface GameStory {
   teamId: string;
   leagueId?: string;
   gameMode: ReporterGameMode;
+  franchiseId?: string;
+  seasonId?: string;
+  seasonNumber?: number;
+  statsScopeId?: string;
+  scheduleGameId?: string;
+  competitionType?: ReporterCompetitionType;
+  competitionId?: string;
+  playoffId?: string;
+  playoffSeriesId?: string;
+  playoffGameNumber?: number;
+  eliminationId?: string;
   headline: string;
   body: string;
   playersMentioned: string[];
@@ -162,6 +189,17 @@ export interface CommentaryFeedEntryRecord {
   gameId: string;
   leagueId?: string;
   gameMode?: ReporterGameMode;
+  franchiseId?: string;
+  seasonId?: string;
+  seasonNumber?: number;
+  statsScopeId?: string;
+  scheduleGameId?: string;
+  competitionType?: ReporterCompetitionType;
+  competitionId?: string;
+  playoffId?: string;
+  playoffSeriesId?: string;
+  playoffGameNumber?: number;
+  eliminationId?: string;
   reporterId: string;
   commentaryText: string;
   halfInningLabel: string;

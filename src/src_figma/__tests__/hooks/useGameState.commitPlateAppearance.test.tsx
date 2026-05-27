@@ -73,10 +73,14 @@ vi.mock('../../../utils/playoffStorage', () => ({
 
 import { useGameState } from '../../hooks/useGameState';
 
-async function initializeGame(result: ReturnType<typeof renderHook<typeof useGameState>>['result']) {
+async function initializeGame(
+  result: ReturnType<typeof renderHook<typeof useGameState>>['result'],
+  overrides: Partial<Parameters<ReturnType<typeof useGameState>['initializeGame']>[0]> = {},
+) {
   await act(async () => {
     await result.current.initializeGame({
       gameId: 'game-wp2',
+      ...overrides,
       awayTeamId: 'away-team',
       awayTeamName: 'Away Team',
       homeTeamId: 'home-team',
@@ -96,6 +100,7 @@ async function initializeGame(result: ReturnType<typeof renderHook<typeof useGam
       awayBench: [],
       homeBench: [],
       seasonNumber: 1,
+      ...overrides,
     });
   });
 }
@@ -227,6 +232,84 @@ describe('useGameState commitPlateAppearance', () => {
     expect(mockLogAtBatEvent.mock.calls[0][0].leverageIndex).toBeGreaterThan(2.67);
   });
 
+  test('marks high-LI dropped-third-strike events as clutch', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    act(() => {
+      result.current.restoreState({
+        gameState: {
+          ...result.current.gameState,
+          inning: 9,
+          isTop: false,
+          outs: 2,
+          bases: { first: false, second: true, third: true },
+          awayScore: 3,
+          homeScore: 2,
+          currentBatterId: 'home-batter-1',
+          currentBatterName: 'Home Batter 1',
+          currentPitcherId: 'away-sp',
+          currentPitcherName: 'Away Starter',
+        },
+        scoreboard: result.current.scoreboard,
+      });
+    });
+
+    await act(async () => {
+      await result.current.commitPlateAppearance({
+        type: 'out',
+        outType: 'K',
+        batterReached: true,
+        isDroppedThirdStrike: true,
+        dropReason: 'wild_pitch',
+      });
+    });
+
+    const event = mockLogAtBatEvent.mock.calls[0][0];
+    expect(event).toMatchObject({
+      result: 'WP_K',
+      isClutch: true,
+    });
+    expect(event.leverageIndex).toBeGreaterThanOrEqual(1.5);
+    expect(Number.isFinite(event.wpa)).toBe(true);
+  });
+
+  test('marks high-LI reach-on-error events as clutch', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    act(() => {
+      result.current.restoreState({
+        gameState: {
+          ...result.current.gameState,
+          inning: 9,
+          isTop: false,
+          outs: 2,
+          bases: { first: true, second: true, third: false },
+          awayScore: 3,
+          homeScore: 2,
+          currentBatterId: 'home-batter-1',
+          currentBatterName: 'Home Batter 1',
+          currentPitcherId: 'away-sp',
+          currentPitcherName: 'Away Starter',
+        },
+        scoreboard: result.current.scoreboard,
+      });
+    });
+
+    await act(async () => {
+      await result.current.commitPlateAppearance({ type: 'error' });
+    });
+
+    const event = mockLogAtBatEvent.mock.calls[0][0];
+    expect(event).toMatchObject({
+      result: 'E',
+      isClutch: true,
+    });
+    expect(event.leverageIndex).toBeGreaterThanOrEqual(1.5);
+    expect(Number.isFinite(event.wpa)).toBe(true);
+  });
+
   test('uses the corrected WEB_GEM fame base value', async () => {
     const { result } = renderHook(() => useGameState());
     await initializeGame(result);
@@ -262,12 +345,49 @@ describe('useGameState commitPlateAppearance', () => {
       awayScore: 4,
       totalInnings: 9,
     }).leverageIndex;
-    const archivedGame = mockArchiveCompletedGame.mock.calls.at(-1)?.[0];
+    const archivedGame = mockProcessCompletedGame.mock.calls.at(-1)?.[0];
 
     expect(archivedGame?.fameEvents?.[0]).toMatchObject({
       eventType: 'WEB_GEM',
       playerId: 'home-batter-2',
     });
     expect(archivedGame?.fameEvents?.[0].fameValue).toBeCloseTo(0.75 * Math.sqrt(expectedLI), 5);
+  });
+
+  test('stamps canonical franchise identity on at-bat event rows', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result, {
+      gameId: 'franchise-game-identity',
+      seasonId: 'franchise-abc-season-2',
+      statsScopeId: 'franchise-abc-season-2',
+      seasonNumber: 2,
+      competitionType: 'franchise',
+      competitionId: 'franchise-abc',
+      franchiseId: 'franchise-abc',
+      scheduleGameId: 'schedule-game-7',
+      leagueId: 'league-source',
+      playoffId: 'playoff-abc-2',
+      playoffSeriesId: 'series-abc-1',
+      playoffGameNumber: 3,
+    });
+
+    await act(async () => {
+      await result.current.commitPlateAppearance({ type: 'hit', hitType: '1B', rbi: 0 });
+    });
+
+    expect(mockLogAtBatEvent).toHaveBeenCalledWith(expect.objectContaining({
+      gameId: 'franchise-game-identity',
+      seasonId: 'franchise-abc-season-2',
+      seasonNumber: 2,
+      statsScopeId: 'franchise-abc-season-2',
+      competitionType: 'franchise',
+      competitionId: 'franchise-abc',
+      franchiseId: 'franchise-abc',
+      scheduleGameId: 'schedule-game-7',
+      leagueId: 'league-source',
+      playoffId: 'playoff-abc-2',
+      playoffSeriesId: 'series-abc-1',
+      playoffGameNumber: 3,
+    }));
   });
 });

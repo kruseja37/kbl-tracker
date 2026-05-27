@@ -13,6 +13,16 @@ export interface AlmanacNarrativeArchiveEntry {
   gameMode: ReporterGameMode;
   timestamp: number;
   leagueId?: string;
+  franchiseId?: string;
+  seasonId?: string;
+  seasonNumber?: number;
+  statsScopeId?: string;
+  competitionType?: CompetitionType;
+  competitionId?: string;
+  playoffId?: string;
+  playoffSeriesId?: string;
+  playoffGameNumber?: number;
+  eliminationId?: string;
   awayTeamId?: string;
   awayTeamName?: string;
   homeTeamId?: string;
@@ -32,12 +42,19 @@ export interface AlmanacNarrativeArchiveFilters {
   gameMode?: ReporterGameMode | "all";
 }
 
-function toReporterGameMode(competitionType?: CompetitionType): ReporterGameMode {
+function toReporterGameMode(
+  competitionType?: CompetitionType,
+  game?: CompletedGameRecord,
+): ReporterGameMode {
   if (competitionType === "franchise") {
     return "franchise";
   }
 
-  if (competitionType === "elimination" || competitionType === "playoff") {
+  if (competitionType === "playoff") {
+    return game?.franchiseId ? "franchise" : "elimination";
+  }
+
+  if (competitionType === "elimination") {
     return "elimination";
   }
 
@@ -65,6 +82,16 @@ function storyToArchiveEntry(
     gameMode: story.gameMode,
     timestamp: game?.date ?? story.createdAt,
     leagueId: story.leagueId ?? game?.leagueId,
+    franchiseId: story.franchiseId ?? game?.franchiseId,
+    seasonId: story.seasonId ?? game?.seasonId,
+    seasonNumber: story.seasonNumber ?? game?.seasonNumber,
+    statsScopeId: story.statsScopeId ?? game?.statsScopeId,
+    competitionType: story.competitionType ?? game?.competitionType,
+    competitionId: story.competitionId ?? game?.competitionId,
+    playoffId: story.playoffId ?? game?.playoffId,
+    playoffSeriesId: story.playoffSeriesId ?? game?.playoffSeriesId,
+    playoffGameNumber: story.playoffGameNumber ?? game?.playoffGameNumber,
+    eliminationId: story.eliminationId ?? (game?.competitionType === "elimination" ? game.competitionId : undefined),
     awayTeamId: game?.awayTeamId,
     awayTeamName: game?.awayTeamName,
     homeTeamId: game?.homeTeamId,
@@ -85,7 +112,7 @@ function tidbitToArchiveEntry(
   }
 
   const resolvedMode =
-    entry.gameMode ?? toReporterGameMode(game?.competitionType);
+    entry.gameMode ?? toReporterGameMode(game?.competitionType, game);
 
   return {
     id: `tidbit:${entry.id}`,
@@ -94,6 +121,16 @@ function tidbitToArchiveEntry(
     gameMode: resolvedMode,
     timestamp: game?.date ?? entry.timestamp,
     leagueId: entry.leagueId ?? game?.leagueId,
+    franchiseId: entry.franchiseId ?? game?.franchiseId,
+    seasonId: entry.seasonId ?? game?.seasonId,
+    seasonNumber: entry.seasonNumber ?? game?.seasonNumber,
+    statsScopeId: entry.statsScopeId ?? game?.statsScopeId,
+    competitionType: entry.competitionType ?? game?.competitionType,
+    competitionId: entry.competitionId ?? game?.competitionId,
+    playoffId: entry.playoffId ?? game?.playoffId,
+    playoffSeriesId: entry.playoffSeriesId ?? game?.playoffSeriesId,
+    playoffGameNumber: entry.playoffGameNumber ?? game?.playoffGameNumber,
+    eliminationId: entry.eliminationId ?? (game?.competitionType === "elimination" ? game.competitionId : undefined),
     awayTeamId: game?.awayTeamId,
     awayTeamName: game?.awayTeamName,
     homeTeamId: game?.homeTeamId,

@@ -141,7 +141,7 @@ describe("bugfix R4-02: end-game pitch count continuation", () => {
     expect(result.current.pitchCountPrompt?.type).toBe("end_game");
 
     await act(async () => {
-      result.current.confirmPitchCount("home-sp", 18);
+      await result.current.confirmPitchCount("home-sp", 18);
       await endGamePromise;
     });
 
@@ -154,7 +154,7 @@ describe("bugfix R4-02: end-game pitch count continuation", () => {
     expect(result.current.pitchCountPrompt).toBeNull();
   });
 
-  test("continues endGame when processCompletedGame fails after pitch-count confirmation", async () => {
+  test("blocks downstream completion when processCompletedGame fails after pitch-count confirmation", async () => {
     mockProcessCompletedGame.mockRejectedValueOnce(
       new Error("aggregation exploded"),
     );
@@ -173,13 +173,22 @@ describe("bugfix R4-02: end-game pitch count continuation", () => {
     expect(result.current.pitchCountPrompt?.type).toBe("end_game");
 
     await act(async () => {
-      result.current.confirmPitchCount("home-sp", 18);
-      await expect(endGamePromise).resolves.toBeUndefined();
+      await result.current.confirmPitchCount("home-sp", 18);
+      await expect(endGamePromise).rejects.toThrow(/season aggregation/i);
     });
 
     expect(mockProcessCompletedGame).toHaveBeenCalledTimes(1);
     expect(mockMarkGameAggregated).not.toHaveBeenCalled();
-    expect(mockArchiveCompletedGame).toHaveBeenCalled();
+    expect(mockArchiveCompletedGame).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.any(Object),
+      expect.any(Array),
+      expect.anything(),
+      expect.objectContaining({
+        aggregationStatus: "incomplete",
+        aggregationError: "aggregation exploded",
+      }),
+    );
     expect(result.current.pitchCountPrompt).toBeNull();
   });
 });

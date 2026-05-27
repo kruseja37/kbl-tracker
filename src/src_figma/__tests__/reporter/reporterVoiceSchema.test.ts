@@ -2,7 +2,7 @@ import "fake-indexeddb/auto";
 
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
-import { getTrackerDb, resetTrackerDbForTests } from "../../../utils/trackerDb";
+import { getTrackerDb, resetTrackerDbForTests, TRACKER_DB_VERSION } from "../../../utils/trackerDb";
 
 const DB_NAME = "kbl-tracker";
 
@@ -166,7 +166,7 @@ describe("reporter voice tracker schema", () => {
     await seedVersionEightTrackerDatabase();
 
     const db = await getTrackerDb();
-    expect(db.version).toBe(10);
+    expect(db.version).toBe(TRACKER_DB_VERSION);
     expect(Array.from(db.objectStoreNames)).toEqual(
       expect.arrayContaining([
         "reporters",
@@ -244,7 +244,7 @@ describe("reporter voice tracker schema", () => {
     await seedVersionNineTrackerDatabase();
 
     const db = await getTrackerDb();
-    expect(db.version).toBe(10);
+    expect(db.version).toBe(TRACKER_DB_VERSION);
     expect(Array.from(db.objectStoreNames)).toEqual(
       expect.arrayContaining([
         "commentaryFeedEntries",

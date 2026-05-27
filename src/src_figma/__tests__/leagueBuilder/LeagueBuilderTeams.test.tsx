@@ -19,8 +19,8 @@ vi.mock('react-router', () => ({
   useNavigate: () => mockNavigate,
 }));
 
-const mockCreateTeam = vi.fn().mockResolvedValue(undefined);
-const mockUpdateTeam = vi.fn().mockResolvedValue(undefined);
+const mockCreateTeam = vi.fn(async (team) => team);
+const mockUpdateTeam = vi.fn(async (team) => team);
 const mockRemoveTeam = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../hooks/useLeagueBuilderData', () => ({
@@ -63,6 +63,25 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
     createTeam: mockCreateTeam,
     updateTeam: mockUpdateTeam,
     removeTeam: mockRemoveTeam,
+  })),
+}));
+
+vi.mock('../../../utils/managerIdentityStorage', () => ({
+  LEAGUE_BUILDER_MANAGER_INSTANCE_ID: 'league-builder-template',
+  ensureDefaultManagerProfile: vi.fn(async (team) => ({
+    managerId: `default-manager-${team.id}`,
+    displayName: `${team.name} Manager`,
+    defaultManager: true,
+  })),
+  ensureDefaultManagerProfiles: vi.fn().mockResolvedValue(undefined),
+  listManagerAssignments: vi.fn().mockResolvedValue([]),
+  listManagerProfiles: vi.fn().mockResolvedValue([]),
+  saveManagerAssignment: vi.fn().mockResolvedValue(undefined),
+  saveManagerProfile: vi.fn(async (profile) => ({
+    ...profile,
+    managerId: profile.managerId || 'saved-manager',
+    displayName: profile.displayName,
+    defaultManager: profile.defaultManager ?? false,
   })),
 }));
 
@@ -126,8 +145,8 @@ describe('LeagueBuilderTeams Component', () => {
     test('renders location info', () => {
       render(<LeagueBuilderTeams />);
       // Teams display location, not stadium, in the list
-      expect(screen.getByText(/Boston/)).toBeInTheDocument();
-      expect(screen.getByText(/Detroit/)).toBeInTheDocument();
+      expect(screen.getByText('Boston Sox')).toBeInTheDocument();
+      expect(screen.getByText('Detroit Tigers')).toBeInTheDocument();
     });
 
     test('renders edit buttons for each team', () => {

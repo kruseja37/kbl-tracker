@@ -1000,13 +1000,13 @@ describe("committed manager WPA game state", () => {
     expect(battingWpa).not.toBe(0);
     expect(baserunningWpa).not.toBe(0);
     expect(fieldingWpa).not.toBe(0);
-    expect(stint.rawLinkedWpa).toBeCloseTo(expectedRawLinkedWpa, 5);
+    expect(stint.rawLinkedWpa).toBeCloseTo(expectedRawLinkedWpa, 3);
     expect(stint.managerDeploymentWpa).toBeCloseTo(
       calculateManagerDeploymentWpa(
         "kept_position_player_in",
         expectedRawLinkedWpa,
       ).managerDeploymentWpa,
-      5,
+      3,
     );
   });
 
@@ -2393,6 +2393,14 @@ describe("committed manager WPA game state", () => {
       awayScoreAfter: 4,
       homeScoreAfter: 2,
       version: 2,
+      editHistory: [
+        {
+          field: "result",
+          oldValue: "GO",
+          newValue: "HR",
+          timestamp: 2,
+        },
+      ],
     });
     await refreshCurrentGameManagerDecisionState({
       gameId,

@@ -148,6 +148,47 @@ describe('LeagueBuilderRosters Component', () => {
         expect(screen.getAllByText('Boston Sox').length).toBeGreaterThan(0);
       });
     });
+
+    test('renders read-only analyzer findings without saving roster data', async () => {
+      mockGetRoster.mockResolvedValueOnce({
+        teamId: 'team-1',
+        mlbRoster: ['player-1', 'player-2'],
+        farmRoster: [],
+        lineupWithDH: [],
+        lineupWithoutDH: [],
+        startingRotation: ['player-2'],
+        longRelievers: [],
+        closingPitcher: '',
+        setupPitchers: [],
+        depthChart: {
+          C: [],
+          '1B': [],
+          '2B': [],
+          SS: ['player-1'],
+          '3B': [],
+          LF: [],
+          CF: [],
+          RF: [],
+          DH: [],
+          SP: ['player-2'],
+          RP: [],
+          CP: [],
+        },
+        pinchHitOrder: [],
+        pinchRunOrder: [],
+        defensiveSubOrder: [],
+        lastModified: 'roster-v1',
+      });
+
+      render(<LeagueBuilderRosters />);
+      fireEvent.click(screen.getByText('Boston Sox'));
+
+      await screen.findByText('READ-ONLY ROSTER ANALYZER');
+      expect(screen.getByText('MLB 2')).toBeInTheDocument();
+      expect(screen.getByText('FARM 0')).toBeInTheDocument();
+      expect(screen.getByText(/TRUST/)).toBeInTheDocument();
+      expect(mockUpdateRoster).not.toHaveBeenCalled();
+    });
   });
 
   describe('Tabs', () => {

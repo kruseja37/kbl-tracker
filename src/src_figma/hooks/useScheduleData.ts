@@ -11,18 +11,18 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   initScheduleDatabase,
   getAllGames,
-  getGamesByTeam,
-  getNextScheduledGame,
-  getNextGameNumber,
+  getAllGamesByFranchise,
   addGame,
   addSeries,
   updateGameStatus,
   completeGame,
   deleteGame,
-  getGame,
   getScheduleMetadata,
+  getScheduleMetadataByFranchise,
   getTeamScheduleStats,
+  getTeamScheduleStatsForFranchise,
   clearSeasonSchedule,
+  clearFranchiseSeasonSchedule,
   type ScheduledGame,
   type AddGameInput,
   type GameResult,
@@ -68,15 +68,23 @@ export interface UseScheduleDataReturn {
   clearSchedule: () => Promise<void>;
 }
 
+export interface UseScheduleDataOptions {
+  franchiseId?: string;
+}
+
 // ============================================
 // HOOK IMPLEMENTATION
 // ============================================
 
-export function useScheduleData(seasonNumber: number = 1): UseScheduleDataReturn {
+export function useScheduleData(
+  seasonNumber: number = 1,
+  options: UseScheduleDataOptions = {},
+): UseScheduleDataReturn {
   const [games, setGames] = useState<ScheduledGame[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<ScheduleMetadata | null>(null);
+  const franchiseId = options.franchiseId;
 
   // Derived state
   const completedGames = games.filter(g => g.status === 'COMPLETED');
@@ -90,10 +98,15 @@ export function useScheduleData(seasonNumber: number = 1): UseScheduleDataReturn
       setError(null);
 
       await initScheduleDatabase();
-      const [gamesData, metaData] = await Promise.all([
-        getAllGames(seasonNumber),
-        getScheduleMetadata(seasonNumber),
-      ]);
+      const [gamesData, metaData] = franchiseId
+        ? await Promise.all([
+            getAllGamesByFranchise(franchiseId, seasonNumber),
+            getScheduleMetadataByFranchise(franchiseId, seasonNumber),
+          ])
+        : await Promise.all([
+            getAllGames(seasonNumber),
+            getScheduleMetadata(seasonNumber),
+          ]);
 
       setGames(gamesData);
       setMetadata(metaData);
@@ -103,7 +116,7 @@ export function useScheduleData(seasonNumber: number = 1): UseScheduleDataReturn
     } finally {
       setIsLoading(false);
     }
-  }, [seasonNumber]);
+  }, [franchiseId, seasonNumber]);
 
   // Initial load
   useEffect(() => {
@@ -117,13 +130,20 @@ export function useScheduleData(seasonNumber: number = 1): UseScheduleDataReturn
 
   // Get team stats
   const getTeamStats = useCallback(async (teamId: string): Promise<TeamScheduleStats> => {
+    if (franchiseId) {
+      return getTeamScheduleStatsForFranchise(franchiseId, seasonNumber, teamId);
+    }
     return getTeamScheduleStats(seasonNumber, teamId);
-  }, [seasonNumber]);
+  }, [franchiseId, seasonNumber]);
 
   // Add a single game
   const handleAddGame = useCallback(async (input: Omit<AddGameInput, 'seasonNumber'>): Promise<ScheduledGame> => {
     try {
-      const game = await addGame({ ...input, seasonNumber });
+      const game = await addGame({
+        ...input,
+        franchiseId: input.franchiseId ?? franchiseId,
+        seasonNumber,
+      });
       await refresh();
       return game;
     } catch (err) {
@@ -131,7 +151,7 @@ export function useScheduleData(seasonNumber: number = 1): UseScheduleDataReturn
       setError(message);
       throw err;
     }
-  }, [seasonNumber, refresh]);
+  }, [franchiseId, seasonNumber, refresh]);
 
   // Add a series
   const handleAddSeries = useCallback(async (
@@ -139,7 +159,11 @@ export function useScheduleData(seasonNumber: number = 1): UseScheduleDataReturn
     seriesLength: number = 3
   ): Promise<ScheduledGame[]> => {
     try {
-      const games = await addSeries({ ...input, seasonNumber }, seriesLength);
+      const games = await addSeries({
+        ...input,
+        franchiseId: input.franchiseId ?? franchiseId,
+        seasonNumber,
+      }, seriesLength);
       await refresh();
       return games;
     } catch (err) {
@@ -147,7 +171,7 @@ export function useScheduleData(seasonNumber: number = 1): UseScheduleDataReturn
       setError(message);
       throw err;
     }
-  }, [seasonNumber, refresh]);
+  }, [franchiseId, seasonNumber, refresh]);
 
   // Update game status
   const handleUpdateStatus = useCallback(async (gameId: string, status: GameStatus): Promise<void> => {
@@ -188,14 +212,18 @@ export function useScheduleData(seasonNumber: number = 1): UseScheduleDataReturn
   // Clear schedule
   const handleClearSchedule = useCallback(async (): Promise<void> => {
     try {
-      await clearSeasonSchedule(seasonNumber);
+      if (franchiseId) {
+        await clearFranchiseSeasonSchedule(franchiseId, seasonNumber);
+      } else {
+        await clearSeasonSchedule(seasonNumber);
+      }
       await refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to clear schedule';
       setError(message);
       throw err;
     }
-  }, [seasonNumber, refresh]);
+  }, [franchiseId, seasonNumber, refresh]);
 
   return {
     // State

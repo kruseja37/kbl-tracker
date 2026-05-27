@@ -344,4 +344,106 @@ describe('franchise GameTracker roster identity', () => {
     expect(roster.optimalLineups?.vsRHP).toBe(rhpSnapshot);
     expect(roster.optimalLineups?.vsLHP).toBe(lhpSnapshot);
   });
+
+  test('filters franchise launch rosters to active MLB assignments only', async () => {
+    mockGetFranchiseTeam.mockResolvedValue({
+      id: 'team-1',
+      leagueIds: ['league-1'],
+      startingRotation: ['active-sp'],
+    });
+    mockGetAllFranchisePlayers.mockResolvedValue([
+      {
+        id: 'active-c',
+        firstName: 'Active',
+        lastName: 'Catcher',
+        primaryPosition: 'C',
+        secondaryPosition: '1B',
+        bats: 'R',
+        throws: 'R',
+        age: 28,
+        power: 70,
+        contact: 70,
+        speed: 40,
+        fielding: 80,
+        arm: 80,
+        velocity: 0,
+        junk: 0,
+        accuracy: 0,
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'MLB' }],
+      },
+      {
+        id: 'active-sp',
+        firstName: 'Active',
+        lastName: 'Starter',
+        primaryPosition: 'SP',
+        secondaryPosition: 'P',
+        bats: 'R',
+        throws: 'R',
+        age: 30,
+        power: 10,
+        contact: 10,
+        speed: 20,
+        fielding: 50,
+        arm: 70,
+        velocity: 90,
+        junk: 80,
+        accuracy: 75,
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'MLB' }],
+      },
+      {
+        id: 'farm-ss',
+        firstName: 'Farm',
+        lastName: 'Short',
+        primaryPosition: 'SS',
+        secondaryPosition: '2B',
+        bats: 'L',
+        throws: 'R',
+        age: 22,
+        power: 65,
+        contact: 65,
+        speed: 70,
+        fielding: 70,
+        arm: 70,
+        velocity: 0,
+        junk: 0,
+        accuracy: 0,
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'FARM' }],
+      },
+      {
+        id: 'free-agent-of',
+        firstName: 'Free',
+        lastName: 'Agent',
+        primaryPosition: 'CF',
+        secondaryPosition: 'OF',
+        bats: 'R',
+        throws: 'R',
+        age: 29,
+        power: 60,
+        contact: 60,
+        speed: 80,
+        fielding: 65,
+        arm: 65,
+        velocity: 0,
+        junk: 0,
+        accuracy: 0,
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'FREE_AGENT' }],
+      },
+    ]);
+
+    const roster = await buildFranchiseGameTrackerRoster('team-1', {
+      franchiseId: 'franchise-1',
+      leagueId: 'league-1',
+      useDH: true,
+    });
+
+    const launchedIds = new Set([
+      ...roster.players.map((player) => player.playerId),
+      ...roster.pitchers.map((pitcher) => pitcher.playerId),
+    ]);
+
+    expect(launchedIds.has('active-c')).toBe(true);
+    expect(launchedIds.has('active-sp')).toBe(true);
+    expect(launchedIds.has('farm-ss')).toBe(false);
+    expect(launchedIds.has('free-agent-of')).toBe(false);
+  });
 });

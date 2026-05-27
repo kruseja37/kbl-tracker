@@ -79,13 +79,13 @@ export function AppHome() {
           </Link>
 
           <Link
-            to="/league-builder"
-            className="bg-[#CC44CC] h-[71.102px] relative block w-[300px]"
+            to="/builder"
+            className="bg-[#CC44CC] h-[71.102px] relative block w-[220px]"
           >
             <div aria-hidden="true" className="absolute border-[#992299] border-[5.556px] border-solid inset-0 pointer-events-none shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]" />
             <div className="content-stretch flex flex-col items-start pb-[5.556px] pt-[21.554px] px-[21.554px] relative size-full">
               <div className="flex gap-4 h-[27.995px] items-center w-full">
-                <p className="font-['Press_Start_2P'] leading-[20px] text-[14px] text-white tracking-[0.7px] uppercase flex-1">LEAGUE BUILDER</p>
+                <p className="font-['Press_Start_2P'] leading-[20px] text-[14px] text-white tracking-[0.7px] uppercase flex-1">BUILDER</p>
               </div>
             </div>
           </Link>

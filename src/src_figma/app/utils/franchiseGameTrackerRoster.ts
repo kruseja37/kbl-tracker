@@ -28,6 +28,16 @@ function isRotationEligiblePitcher(player: StoredPlayer): boolean {
   return ROTATION_PRIMARY_POS.has(player.primaryPosition);
 }
 
+function isActiveFranchiseRosterAssignment(
+  assignment: NonNullable<StoredPlayer['leagueAssignments']>[number],
+  teamId: string,
+  leagueId?: string,
+): boolean {
+  return assignment.teamId === teamId &&
+    (!leagueId || assignment.leagueId === leagueId) &&
+    (assignment.rosterStatus === 'MLB' || assignment.rosterStatus == null);
+}
+
 function chooseLineupPosition(
   player: StoredPlayer,
   usedPositions: Set<string>,
@@ -208,7 +218,7 @@ export async function buildFranchiseGameTrackerRoster(
       const franchisePlayers = await getAllFranchisePlayers(franchiseId);
       dbPlayers = franchisePlayers.filter((player) =>
         player.leagueAssignments?.some((assignment) =>
-          assignment.teamId === teamId && (!leagueId || assignment.leagueId === leagueId),
+          isActiveFranchiseRosterAssignment(assignment, teamId, leagueId),
         ),
       );
     } else {

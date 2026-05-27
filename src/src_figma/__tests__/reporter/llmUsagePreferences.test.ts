@@ -25,7 +25,7 @@ import {
   setNarrativeIntensity,
   setSoftMonthlyBudget,
 } from "../../../utils/userPreferencesStorage";
-import { getTrackerDb, resetTrackerDbForTests } from "../../../utils/trackerDb";
+import { getTrackerDb, resetTrackerDbForTests, TRACKER_DB_VERSION } from "../../../utils/trackerDb";
 
 const DB_NAME = "kbl-tracker";
 const APRIL_15_2026 = new Date("2026-04-15T12:00:00.000Z").getTime();
@@ -287,7 +287,7 @@ describe("F1 LLM usage logging and preferences", () => {
     await expect(getNarrativeIntensity()).resolves.toBe("medium");
 
     const db = await getTrackerDb();
-    expect(db.version).toBe(10);
+    expect(db.version).toBe(TRACKER_DB_VERSION);
     expect(Array.from(db.objectStoreNames)).toEqual(
       expect.arrayContaining([
         "llmUsageLog",

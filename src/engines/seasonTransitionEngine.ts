@@ -59,6 +59,21 @@ export interface PlayerStorageAdapter {
   save: (player: Omit<Player, 'id' | 'createdDate' | 'lastModified'> & { id?: string }) => Promise<Player>;
 }
 
+export interface SeasonTransitionOptions {
+  /**
+   * Mode 2 v1 treats mojo/fitness as user-observed state. Franchise
+   * finalization should not automatically normalize mojo unless a later spec
+   * explicitly enables that behavior.
+   */
+  skipMojoReset?: boolean;
+  /**
+   * Franchise seasons now use canonical IndexedDB records for summary and
+   * metadata. Legacy global localStorage markers remain for non-franchise
+   * flows only.
+   */
+  skipLegacyLocalStorageMarkers?: boolean;
+}
+
 export const leagueBuilderPlayerStorageAdapter: PlayerStorageAdapter = {
   getAll: getAllPlayers,
   get: getPlayer,
@@ -272,6 +287,7 @@ export async function executeSeasonTransition(
   currentSeason: number,
   onProgress?: TransitionProgressCallback,
   playerStorage: PlayerStorageAdapter = leagueBuilderPlayerStorageAdapter,
+  options: SeasonTransitionOptions = {},
 ): Promise<TransitionResult> {
   const steps: TransitionStep[] = [
     { name: 'Archive Season Data', description: 'Saving season records', status: 'pending' },
@@ -298,9 +314,13 @@ export async function executeSeasonTransition(
     // Step 1: Archive
     steps[0].status = 'running';
     onProgress?.(1, steps[0].name);
-    archiveSeasonData(currentSeason);
+    if (!options.skipLegacyLocalStorageMarkers) {
+      archiveSeasonData(currentSeason);
+    }
     steps[0].status = 'complete';
-    steps[0].details = `Season ${currentSeason} archived`;
+    steps[0].details = options.skipLegacyLocalStorageMarkers
+      ? 'Legacy local archive skipped; franchise summary is the durable archive'
+      : `Season ${currentSeason} archived`;
 
     // Step 2: Ages
     steps[1].status = 'running';
@@ -321,41 +341,61 @@ export async function executeSeasonTransition(
     // Step 4: Mojo
     steps[3].status = 'running';
     onProgress?.(4, steps[3].name);
-    const mojoResult = await resetAllMojo(playerStorage);
+    const mojoResult = options.skipMojoReset
+      ? { count: 0 }
+      : await resetAllMojo(playerStorage);
     summary.mojosReset = mojoResult.count;
     steps[3].status = 'complete';
-    steps[3].details = `${mojoResult.count} mojos reset`;
+    steps[3].details = options.skipMojoReset
+      ? 'Mojo reset skipped for Mode 2 v1 franchise finalization'
+      : `${mojoResult.count} mojos reset`;
 
     // Step 5: Clear stats
     steps[4].status = 'running';
     onProgress?.(5, steps[4].name);
-    clearSeasonalStats(currentSeason);
+    if (!options.skipLegacyLocalStorageMarkers) {
+      clearSeasonalStats(currentSeason);
+    }
     steps[4].status = 'complete';
-    steps[4].details = 'Seasonal stats cleared';
+    steps[4].details = options.skipLegacyLocalStorageMarkers
+      ? 'Legacy local stat cleanup skipped for franchise season'
+      : 'Seasonal stats cleared';
 
     // Step 6: Rookies
     steps[5].status = 'running';
     onProgress?.(6, steps[5].name);
-    const rookieResult = await applyRookieDesignations(playerStorage);
+    const rookieResult = options.skipLegacyLocalStorageMarkers
+      ? { count: 0, rookies: [] }
+      : await applyRookieDesignations(playerStorage);
     summary.rookiesApplied = rookieResult.count;
     steps[5].status = 'complete';
-    steps[5].details = `${rookieResult.count} rookies designated`;
+    steps[5].details = options.skipLegacyLocalStorageMarkers
+      ? 'Legacy local rookie markers skipped for franchise season'
+      : `${rookieResult.count} rookies designated`;
 
     // Step 7: Service
     steps[6].status = 'running';
     onProgress?.(7, steps[6].name);
-    const serviceResult = incrementYearsOfService();
+    const serviceResult = options.skipLegacyLocalStorageMarkers
+      ? { count: 0 }
+      : incrementYearsOfService();
     summary.serviceIncremented = serviceResult.count;
     steps[6].status = 'complete';
-    steps[6].details = `${serviceResult.count} service years incremented`;
+    steps[6].details = options.skipLegacyLocalStorageMarkers
+      ? 'Legacy local service markers skipped for franchise season'
+      : `${serviceResult.count} service years incremented`;
 
     // Step 8: Finalize
     steps[7].status = 'running';
     onProgress?.(8, steps[7].name);
-    const finalResult = finalizeSeasonTransition(currentSeason);
+    const finalResult = options.skipLegacyLocalStorageMarkers
+      ? { newSeason: currentSeason + 1 }
+      : finalizeSeasonTransition(currentSeason);
     summary.newSeason = finalResult.newSeason;
     steps[7].status = 'complete';
-    steps[7].details = `Now Season ${finalResult.newSeason}`;
+    steps[7].details = options.skipLegacyLocalStorageMarkers
+      ? `Franchise metadata controls Season ${finalResult.newSeason}`
+      : `Now Season ${finalResult.newSeason}`;
 
     return { success: true, steps, summary };
   } catch (error) {

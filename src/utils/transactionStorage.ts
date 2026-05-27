@@ -1,6 +1,6 @@
 /**
  * Transaction Storage Utility
- * Per KBL_XHD_TRACKER_MASTER_SPEC_v3.md Section 27
+ * Legacy transaction store plus Mode 2 v1 narrowed transaction surface.
  *
  * Provides IndexedDB storage for all transaction logging:
  * - Game flow events
@@ -10,7 +10,7 @@
  * - Offseason events
  * - User actions
  *
- * Supports rollback capability via previousState snapshots.
+ * Supports rollback capability via previousState snapshots for legacy records.
  */
 
 import { syncEngine } from './syncEngine';
@@ -20,7 +20,7 @@ import { syncEngine } from './syncEngine';
 // ============================================
 
 const DB_NAME = 'kbl-transactions';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const STORES = {
   TRANSACTIONS: 'transactions',
@@ -53,10 +53,24 @@ export type GamePhase =
   | 'CHAMPIONSHIP'
   | 'OFFSEASON';
 
+export const MODE_2_V1_TRANSACTION_TYPES = [
+  'trade',
+  'free_agent_signing',
+  'release',
+  'call_up',
+  'send_down',
+  'draft_pick',
+  'retirement',
+  'injury_list',
+] as const;
+
+export type Mode2V1TransactionType = typeof MODE_2_V1_TRANSACTION_TYPES[number];
+
 /**
- * Transaction types per spec
+ * Legacy transaction types retained for historical logs and older surfaces.
+ * Mode 2 v1 writes should go through logMode2V1Transaction.
  */
-export type TransactionType =
+export type LegacyTransactionType =
   // Game Flow
   | 'GAME_START'
   | 'GAME_COMPLETE'
@@ -97,6 +111,32 @@ export type TransactionType =
   | 'MANUAL_EDIT';
 
 /**
+ * Transaction types accepted by storage. This store can read historical broad
+ * records, while Mode 2 v1 write paths use the narrowed canonical surface.
+ */
+export type TransactionType = Mode2V1TransactionType | LegacyTransactionType;
+
+const MODE_2_V1_TRANSACTION_TYPE_SET = new Set<string>(MODE_2_V1_TRANSACTION_TYPES);
+
+const LEGACY_TO_MODE_2_V1_TRANSACTION_TYPE: Partial<Record<LegacyTransactionType, Mode2V1TransactionType>> = {
+  TRADE_EXECUTED: 'trade',
+  FA_SIGNING: 'free_agent_signing',
+  DRAFT_PICK: 'draft_pick',
+  RETIREMENT: 'retirement',
+};
+
+export function isMode2V1TransactionType(type: string): type is Mode2V1TransactionType {
+  return MODE_2_V1_TRANSACTION_TYPE_SET.has(type);
+}
+
+export function toMode2V1TransactionType(
+  type: TransactionType,
+): Mode2V1TransactionType | null {
+  if (isMode2V1TransactionType(type)) return type;
+  return LEGACY_TO_MODE_2_V1_TRANSACTION_TYPE[type as LegacyTransactionType] ?? null;
+}
+
+/**
  * Transaction log entry - the main record
  */
 export interface TransactionLogEntry {
@@ -105,6 +145,10 @@ export interface TransactionLogEntry {
   season: number;                // Season number
   gameNumber: number | null;     // null if offseason
   phase: GamePhase;              // Current game phase
+  franchiseId?: string;          // Franchise scope for Mode 2 v1 franchise writes
+  seasonId?: string;             // Canonical season scope, e.g. {franchiseId}-season-{n}
+  statsScopeId?: string;         // Optional stats scope when it differs from seasonId
+  scheduleGameId?: string;       // Scheduled game identity, when applicable
 
   type: TransactionType;         // Transaction type
   actor: TransactionActor;       // Who initiated
@@ -129,8 +173,16 @@ export interface TransactionInput {
   season: number;
   gameNumber?: number | null;
   phase?: GamePhase;
+  franchiseId?: string;
+  seasonId?: string;
+  statsScopeId?: string;
+  scheduleGameId?: string;
   data: Record<string, unknown>;
   previousState?: Record<string, unknown> | null;
+}
+
+export interface Mode2V1TransactionInput extends Omit<TransactionInput, 'type'> {
+  type: TransactionType;
 }
 
 // ============================================
@@ -147,6 +199,17 @@ function generateTransactionId(): string {
     id += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return id;
+}
+
+function ensureIndex(
+  store: IDBObjectStore,
+  name: string,
+  keyPath: string | string[],
+  options?: IDBIndexParameters,
+): void {
+  if (!store.indexNames.contains(name)) {
+    store.createIndex(name, keyPath, options);
+  }
 }
 
 /**
@@ -171,19 +234,26 @@ export async function initTransactionDB(): Promise<IDBDatabase> {
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
 
+      let store: IDBObjectStore;
       if (!db.objectStoreNames.contains(STORES.TRANSACTIONS)) {
-        const store = db.createObjectStore(STORES.TRANSACTIONS, { keyPath: 'id' });
-
-        // Indexes for common queries
-        store.createIndex('by_timestamp', 'timestamp', { unique: false });
-        store.createIndex('by_season', 'season', { unique: false });
-        store.createIndex('by_type', 'type', { unique: false });
-        store.createIndex('by_phase', 'phase', { unique: false });
-        store.createIndex('by_actor', 'actor', { unique: false });
-
-        // Composite index for season + game
-        store.createIndex('by_season_game', ['season', 'gameNumber'], { unique: false });
+        store = db.createObjectStore(STORES.TRANSACTIONS, { keyPath: 'id' });
+      } else {
+        store = (event.target as IDBOpenDBRequest).transaction!.objectStore(STORES.TRANSACTIONS);
       }
+
+      // Indexes for common queries
+      ensureIndex(store, 'by_timestamp', 'timestamp', { unique: false });
+      ensureIndex(store, 'by_season', 'season', { unique: false });
+      ensureIndex(store, 'by_type', 'type', { unique: false });
+      ensureIndex(store, 'by_phase', 'phase', { unique: false });
+      ensureIndex(store, 'by_actor', 'actor', { unique: false });
+      ensureIndex(store, 'by_franchise', 'franchiseId', { unique: false });
+      ensureIndex(store, 'by_season_id', 'seasonId', { unique: false });
+      ensureIndex(store, 'by_schedule_game', 'scheduleGameId', { unique: false });
+
+      // Composite indexes for scoped queries
+      ensureIndex(store, 'by_season_game', ['season', 'gameNumber'], { unique: false });
+      ensureIndex(store, 'by_franchise_season', ['franchiseId', 'seasonId'], { unique: false });
     };
   });
 }
@@ -204,6 +274,10 @@ export async function logTransaction(input: TransactionInput): Promise<Transacti
     season: input.season,
     gameNumber: input.gameNumber ?? null,
     phase: input.phase ?? 'REGULAR_SEASON',
+    franchiseId: input.franchiseId,
+    seasonId: input.seasonId,
+    statsScopeId: input.statsScopeId,
+    scheduleGameId: input.scheduleGameId,
     type: input.type,
     actor: input.actor ?? 'SYSTEM',
     data: input.data,
@@ -223,6 +297,27 @@ export async function logTransaction(input: TransactionInput): Promise<Transacti
       syncTransactionUpsert(entry);
       resolve(entry);
     };
+  });
+}
+
+/**
+ * Log a Mode 2 v1 transaction using the narrowed event surface.
+ *
+ * Older broad transaction names are accepted only when they map cleanly to a
+ * v1 type; unrelated legacy categories are rejected instead of leaking into
+ * the franchise transaction stream.
+ */
+export async function logMode2V1Transaction(
+  input: Mode2V1TransactionInput,
+): Promise<TransactionLogEntry> {
+  const mode2Type = toMode2V1TransactionType(input.type);
+  if (!mode2Type) {
+    throw new Error(`Unsupported Mode 2 v1 transaction type: ${input.type}`);
+  }
+
+  return logTransaction({
+    ...input,
+    type: mode2Type,
   });
 }
 
@@ -290,6 +385,26 @@ export async function getTransactionsByGame(
     const store = transaction.objectStore(STORES.TRANSACTIONS);
     const index = store.index('by_season_game');
     const request = index.getAll([season, gameNumber]);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || []);
+  });
+}
+
+/**
+ * Get transactions for one canonical franchise season.
+ */
+export async function getTransactionsByFranchiseSeason(
+  franchiseId: string,
+  seasonId: string,
+): Promise<TransactionLogEntry[]> {
+  const db = await initTransactionDB();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORES.TRANSACTIONS, 'readonly');
+    const store = transaction.objectStore(STORES.TRANSACTIONS);
+    const index = store.index('by_franchise_season');
+    const request = index.getAll([franchiseId, seasonId]);
 
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result || []);
@@ -394,6 +509,10 @@ export async function undoTransaction(
         season: existing.season,
         gameNumber: existing.gameNumber,
         phase: existing.phase,
+        franchiseId: existing.franchiseId,
+        seasonId: existing.seasonId,
+        statsScopeId: existing.statsScopeId,
+        scheduleGameId: existing.scheduleGameId,
         data: {
           originalTransactionId: id,
           originalType: existing.type,
@@ -465,13 +584,15 @@ export function logTrade(
   team2: string,
   playersFromTeam1: string[],
   playersFromTeam2: string[],
-  cash?: number
+  cash?: number,
+  identity?: Pick<TransactionInput, 'franchiseId' | 'seasonId' | 'statsScopeId' | 'scheduleGameId'>,
 ): Promise<TransactionLogEntry> {
-  return logTransaction({
-    type: 'TRADE_EXECUTED',
+  return logMode2V1Transaction({
+    type: 'trade',
     season,
     gameNumber,
     phase: gameNumber ? 'REGULAR_SEASON' : 'OFFSEASON',
+    ...identity,
     data: {
       team1,
       team2,
@@ -489,13 +610,15 @@ export function logRetirement(
   season: number,
   playerId: string,
   playerName: string,
-  careerStats: Record<string, unknown>
+  careerStats: Record<string, unknown>,
+  identity?: Pick<TransactionInput, 'franchiseId' | 'seasonId' | 'statsScopeId' | 'scheduleGameId'>,
 ): Promise<TransactionLogEntry> {
-  return logTransaction({
-    type: 'RETIREMENT',
+  return logMode2V1Transaction({
+    type: 'retirement',
     season,
     gameNumber: null,
     phase: 'OFFSEASON',
+    ...identity,
     data: { playerId, playerName, careerStats },
   });
 }
@@ -528,13 +651,15 @@ export function logFASigning(
   playerName: string,
   oldTeam: string | null,
   newTeam: string,
-  salary: number
+  salary: number,
+  identity?: Pick<TransactionInput, 'franchiseId' | 'seasonId' | 'statsScopeId' | 'scheduleGameId'>,
 ): Promise<TransactionLogEntry> {
-  return logTransaction({
-    type: 'FA_SIGNING',
+  return logMode2V1Transaction({
+    type: 'free_agent_signing',
     season,
     gameNumber: null,
     phase: 'OFFSEASON',
+    ...identity,
     data: { playerId, playerName, oldTeam, newTeam, salary },
   });
 }
@@ -548,13 +673,15 @@ export function logDraftPick(
   playerName: string,
   teamId: string,
   round: number,
-  pick: number
+  pick: number,
+  identity?: Pick<TransactionInput, 'franchiseId' | 'seasonId' | 'statsScopeId' | 'scheduleGameId'>,
 ): Promise<TransactionLogEntry> {
-  return logTransaction({
-    type: 'DRAFT_PICK',
+  return logMode2V1Transaction({
+    type: 'draft_pick',
     season,
     gameNumber: null,
     phase: 'OFFSEASON',
+    ...identity,
     data: { playerId, playerName, teamId, round, pick },
   });
 }

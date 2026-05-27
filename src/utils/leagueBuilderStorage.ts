@@ -178,6 +178,10 @@ export interface Player {
   salary: number;
   contractYears?: number;
   leagueAssignments?: LeagueAssignment[];
+  optionsUsedBySeason?: Record<string, number>;
+  optionDatesBySeason?: Record<string, string[]>;
+  ratingRevealState?: 'hidden' | 'revealed';
+  ratingRevealedAt?: string;
   createdDate: string;
   lastModified: string;
   isCustom: boolean;

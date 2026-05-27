@@ -31,15 +31,15 @@ import {
 } from "../../../utils/syntheticGameFactory";
 import { processCompletedGame } from "../../../utils/processCompletedGame";
 import { markSeasonComplete } from "../../../utils/seasonStorage";
-import { getAllGames } from "../../../utils/scheduleStorage";
+import { getAllGames, getAllGamesByFranchise } from "../../../utils/scheduleStorage";
+import { getSeasonIdForScope } from "../../../utils/franchisePersistenceContract";
 import { startOffseason, OFFSEASON_PHASES, type OffseasonPhase } from "../../../utils/offseasonStorage";
 import { useOffseasonState } from "@/hooks/useOffseasonState";
-import { generateNewSeasonSchedule } from "../../../utils/franchiseInitializer";
 import {
-  createFranchisePlayerStorageAdapter,
-  executeSeasonTransition,
-} from "../../../engines/seasonTransitionEngine";
-import { updateFranchiseMetadata } from "../../../utils/franchiseManager";
+  repairFranchisePersistence,
+} from "../../../utils/franchiseInitializer";
+import { executeSeasonTransition } from "../../../engines/seasonTransitionEngine";
+import { runJournaledFranchiseSeasonTransition } from "../../../utils/franchiseSeasonTransitionOrchestrator";
 import { getTeam } from "../../../utils/leagueBuilderStorage";
 import { getFranchiseTeam, saveFranchiseTeam } from "../../../utils/franchisePlayerStorage";
 import { syncEngine } from "../../../utils/syncEngine";
@@ -51,7 +51,7 @@ import { PregameBenchmarkChecklist } from "@/app/components/PregameBenchmarkChec
 import { MilestoneWatchPanel } from "@/app/components/MilestoneWatchPanel";
 import { getApproachingMilestones, type MilestoneWatch } from "../../../utils/milestoneDetector";
 import { getAllCareerBatting, getAllCareerPitching } from "../../../utils/careerStorage";
-import { getSeasonBattingStats, getSeasonPitchingStats, getActiveSeason } from "../../../utils/seasonStorage";
+import { getSeasonBattingStats, getSeasonPitchingStats } from "../../../utils/seasonStorage";
 import {
   buildFranchiseGameTrackerRoster,
   buildFranchisePregameReadiness,
@@ -72,6 +72,10 @@ import {
   LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
   resolveManagerForTeam,
 } from "../../../utils/managerIdentityStorage";
+import {
+  getInitialRouteSeasonNumber,
+  loadRouteSeasonNumber,
+} from "../utils/franchiseRouteSeason";
 import type {
   GameLockLineupSnapshots,
   OpposingPitcherHand,
@@ -91,6 +95,18 @@ export function useFranchiseDataContext() {
 
 type TabType = "todays-game" | "team" | "schedule" | "standings" | "news" | "leaders" | "rosters" | "allstar" | "museum" | "awards" | "ratings-adj" | "contraction" | "retirements" | "free-agency" | "draft" | "farm-reconciliation" | "chemistry" | "spring-training" | "finalize" | "advance" | "bracket" | "series" | "playoff-stats" | "playoff-leaders";
 type SeasonPhase = "regular" | "playoffs" | "offseason";
+
+const MODE_2_V1_SYNTHETIC_SIM_ENABLED = false;
+const MODE_2_V1_TRANSACTION_UI_ENABLED = false;
+const MODE_2_V1_ALL_STAR_UI_ENABLED = false;
+
+async function getVisibleFranchiseTeam(franchiseId: string | undefined, teamId: string) {
+  if (franchiseId) {
+    const franchiseTeam = await getFranchiseTeam(franchiseId, teamId);
+    if (franchiseTeam) return franchiseTeam;
+  }
+  return getTeam(teamId);
+}
 
 // ScheduledGame type is imported from useScheduleData hook
 
@@ -155,27 +171,53 @@ export function FranchiseHome() {
   const [showFinalize, setShowFinalize] = useState(false);
   const [showSeasonEnd, setShowSeasonEnd] = useState(false);
   const [showPlayoffSeeding, setShowPlayoffSeeding] = useState(false);
+  const [startSeasonError, setStartSeasonError] = useState<string | null>(null);
+  const [isStartingNewSeason, setIsStartingNewSeason] = useState(false);
   const [retiredJerseys, setRetiredJerseys] = useState<RetiredJersey[]>([]);
   const [selectedScheduleTeam, setSelectedScheduleTeam] = useState<string>("FULL LEAGUE");
 
   // Schedule System State - Persisted to IndexedDB via useScheduleData
-  // Load initial season from localStorage or default to 1
-  const [currentSeason, setCurrentSeason] = useState(() => {
-    const stored = localStorage.getItem('kbl-current-season');
-    return stored ? parseInt(stored, 10) : 1;
-  });
-  const scheduleData = useScheduleData(currentSeason);
+  // Franchise routes derive season from franchise metadata, not the global season marker.
+  const [currentSeason, setCurrentSeason] = useState(() => getInitialRouteSeasonNumber(franchiseId));
+  const activeSeasonId = getSeasonIdForScope(franchiseId, currentSeason);
+  const scheduleData = useScheduleData(currentSeason, { franchiseId });
 
   // Real season data from IndexedDB (with mock fallbacks)
   const franchiseData = useFranchiseData(franchiseId, currentSeason);
   const franchiseLeagueId = franchiseData.franchiseConfig?.league || 'sml';
+  const franchiseRepairPromise = useRef<Promise<void> | null>(null);
+
+  const runFranchisePersistenceRepair = async () => {
+    if (!franchiseId || !franchiseData.franchiseConfig?.league) return;
+
+    if (!franchiseRepairPromise.current) {
+      franchiseRepairPromise.current = repairFranchisePersistence(franchiseId, currentSeason)
+        .then(async (result) => {
+          if (
+            result.rosterBackfilled ||
+            result.seasonMetadataCreated ||
+            result.seasonMetadataUpdated
+          ) {
+            await Promise.all([
+              franchiseData.refresh(),
+              scheduleData.refresh(),
+            ]);
+          }
+        })
+        .finally(() => {
+          franchiseRepairPromise.current = null;
+        });
+    }
+
+    await franchiseRepairPromise.current;
+  };
   const [addGameModalOpen, setAddGameModalOpen] = useState(false);
 
   // Bracket UI state
   const [expandedSeriesId, setExpandedSeriesId] = useState<string | null>(null);
 
   // Playoff System State - Persisted to IndexedDB via usePlayoffData
-  const playoffData = usePlayoffData(currentSeason);
+  const playoffData = usePlayoffData(currentSeason, { franchiseId });
   const location = useLocation();
   const locationState = (location.state ?? {}) as {
     refreshAfterGame?: boolean;
@@ -188,6 +230,36 @@ export function FranchiseHome() {
   const [playoffLeaderPitching, setPlayoffLeaderPitching] = useState<Record<string, PlayoffPlayerStats[]>>({});
   const [playoffLeaderFielding, setPlayoffLeaderFielding] = useState<Record<string, PlayoffPlayerStats[]>>({});
   const [playoffLeadersLoading, setPlayoffLeadersLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    loadRouteSeasonNumber(franchiseId)
+      .then((seasonNumber) => {
+        if (!cancelled) {
+          setCurrentSeason(seasonNumber);
+        }
+      })
+      .catch((err) => {
+        console.warn('[FranchiseHome] Failed to load route season number:', err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [franchiseId]);
+
+  useEffect(() => {
+    if (!franchiseId || !franchiseData.franchiseConfig?.league) return;
+
+    void runFranchisePersistenceRepair().catch((err) => {
+      console.warn('[FranchiseHome] Franchise persistence repair failed:', err);
+    });
+  }, [
+    franchiseId,
+    currentSeason,
+    franchiseData.franchiseConfig?.league,
+  ]);
 
   useEffect(() => {
     if (!shouldRefreshAfterGame || refreshToken === null) return;
@@ -288,7 +360,7 @@ export function FranchiseHome() {
   ]);
 
   // Offseason State - tracks current phase progression
-  const offseasonState = useOffseasonState(`season-${currentSeason}`, currentSeason);
+  const offseasonState = useOffseasonState(activeSeasonId, currentSeason, { franchiseId });
 
   // Map offseason phases to their corresponding tab IDs
   const phaseToTab: Record<OffseasonPhase, TabType> = {
@@ -301,7 +373,7 @@ export function FranchiseHome() {
     DRAFT: "draft",
     FARM_RECONCILIATION: "farm-reconciliation",
     CHEMISTRY_REBALANCING: "chemistry",
-    TRADES: "rosters",
+    TRADES: "spring-training",
     SPRING_TRAINING: "spring-training",
   };
 
@@ -334,43 +406,56 @@ export function FranchiseHome() {
 
   const handleStartNewSeason = async () => {
     const newSeason = currentSeason + 1;
+    setStartSeasonError(null);
+    setIsStartingNewSeason(true);
 
-    // 1. Execute season transition (age players, recalculate salaries, reset mojo, etc.)
-    try {
-      const playerStorage = franchiseId
-        ? createFranchisePlayerStorageAdapter(franchiseId)
-        : undefined;
-      const result = await executeSeasonTransition(currentSeason, undefined, playerStorage);
-      console.log(`[handleStartNewSeason] Season transition complete:`, result);
-    } catch (err) {
-      console.error('[handleStartNewSeason] Season transition failed:', err);
-    }
-
-    // 2. Update franchise metadata in IndexedDB
     if (franchiseId) {
+      const result = await runJournaledFranchiseSeasonTransition({
+        franchiseId,
+        fromSeasonNumber: currentSeason,
+        playoffId: playoffData.playoff?.id,
+      });
+
+      if (!result.success) {
+        console.error('[handleStartNewSeason] Journaled franchise transition failed:', result);
+        setStartSeasonError(
+          `Could not start Season ${newSeason}: ${result.error || 'season transition failed'}.`,
+        );
+        setIsStartingNewSeason(false);
+        return;
+      }
+    } else {
+      // Non-franchise/global routes keep the legacy transition path.
       try {
-        await updateFranchiseMetadata(franchiseId, { currentSeason: newSeason });
-        console.log(`[handleStartNewSeason] Franchise metadata updated to Season ${newSeason}`);
+        const result = await executeSeasonTransition(currentSeason);
+        console.log(`[handleStartNewSeason] Season transition complete:`, result);
+
+        if (!result.success) {
+          const failedStep = result.steps.find((step) => step.status === 'error');
+          setStartSeasonError(
+            `Could not start Season ${newSeason}: ${failedStep?.error || failedStep?.name || 'season transition failed'}.`,
+          );
+          setIsStartingNewSeason(false);
+          return;
+        }
       } catch (err) {
-        console.error('[handleStartNewSeason] Failed to update franchise metadata:', err);
+        console.error('[handleStartNewSeason] Season transition failed:', err);
+        setStartSeasonError(
+          `Could not start Season ${newSeason}: ${err instanceof Error ? err.message : 'season handoff failed'}.`,
+        );
+        setIsStartingNewSeason(false);
+        return;
       }
     }
 
-    // 3. Generate schedule for the new season
-    if (franchiseId) {
-      try {
-        const gamesScheduled = await generateNewSeasonSchedule(franchiseId, newSeason);
-        console.log(`[handleStartNewSeason] Generated ${gamesScheduled} games for Season ${newSeason}`);
-      } catch (err) {
-        console.error('[handleStartNewSeason] Failed to generate schedule:', err);
-      }
-    }
-
-    // 4. Update React state and localStorage
+    // 4. Update React state; only global/non-franchise routes write the global season marker.
     setCurrentSeason(newSeason);
-    saveCurrentSeasonNumber(newSeason);
+    if (!franchiseId) {
+      saveCurrentSeasonNumber(newSeason);
+    }
     setSeasonPhase("regular");
     setActiveTab("todays-game");
+    setIsStartingNewSeason(false);
   };
 
   // Sync league name from franchise config when loaded
@@ -421,8 +506,7 @@ export function FranchiseHome() {
   // Begin offseason: initialize offseason state in IndexedDB, then switch phase
   const handleBeginOffseason = async () => {
     try {
-      const seasonId = `season-${currentSeason}`;
-      await startOffseason(seasonId, currentSeason);
+      await startOffseason(activeSeasonId, currentSeason, { franchiseId });
       setSeasonPhase("offseason");
       setActiveTab("awards");
     } catch (err) {
@@ -514,7 +598,7 @@ export function FranchiseHome() {
       },
       mvpCandidates: undefined, // Playoff stats not yet tracked per player
     };
-  }, [franchiseData.standings, franchiseData.teamNameMap, playoffData, currentSeason, scheduleData.games.length]);
+  }, [activeSeasonId, franchiseData.standings, franchiseData.teamNameMap, playoffData, currentSeason, scheduleData.games.length]);
 
   // Build PlayoffSeedingFlow teams from standings (sorted by win% descending)
   const playoffSeedingTeams = useMemo(() => {
@@ -582,7 +666,8 @@ export function FranchiseHome() {
 
       await playoffData.createNewPlayoff({
         seasonNumber: currentSeason,
-        seasonId: `season-${currentSeason}`,
+        seasonId: activeSeasonId,
+        franchiseId,
         teamsQualifying: seededTeams.length,
         gamesPerRound: [5, 7, 7],
         preSeededTeams,
@@ -731,20 +816,23 @@ export function FranchiseHome() {
     const homeTeamName = isHigherSeedHome ? series.higherSeed.teamName : series.lowerSeed.teamName;
     const playoffUseDH = playoffData.playoff?.useDH ?? true;
 
-    // T0-08: Load real rosters from IndexedDB for both teams
+    // T0-08: Load real rosters and franchise-owned team snapshots for both teams.
+    // League Builder fallback is only for damaged legacy contexts with missing franchise teams.
     const [awayRoster, homeRoster, awayTeamData, homeTeamData] = await Promise.all([
       buildFranchiseGameTrackerRoster(awayTeamId, { franchiseId, leagueId: franchiseLeagueId, useDH: playoffUseDH }),
       buildFranchiseGameTrackerRoster(homeTeamId, { franchiseId, leagueId: franchiseLeagueId, useDH: playoffUseDH }),
-      getTeam(awayTeamId),
-      getTeam(homeTeamId),
+      getVisibleFranchiseTeam(franchiseId, awayTeamId),
+      getVisibleFranchiseTeam(franchiseId, homeTeamId),
     ]);
+    const awayDisplayName = awayTeamData?.name ?? awayTeamName;
+    const homeDisplayName = homeTeamData?.name ?? homeTeamName;
     const managerInstanceId =
       franchiseId || franchiseLeagueId || LEAGUE_BUILDER_MANAGER_INSTANCE_ID;
     const [awayManager, homeManager] = await Promise.all([
       resolveManagerForTeam({
         team: {
           id: awayTeamId,
-          name: awayTeamName,
+          name: awayDisplayName,
           managerId: awayTeamData?.managerId,
           managerName: awayTeamData?.managerName,
         },
@@ -757,7 +845,7 @@ export function FranchiseHome() {
       resolveManagerForTeam({
         team: {
           id: homeTeamId,
-          name: homeTeamName,
+          name: homeDisplayName,
           managerId: homeTeamData?.managerId,
           managerName: homeTeamData?.managerName,
         },
@@ -802,8 +890,8 @@ export function FranchiseHome() {
         playoffGameNumber: nextGameNumber,
         awayTeamId,
         homeTeamId,
-        awayTeamName: awayTeamName.toUpperCase(),
-        homeTeamName: homeTeamName.toUpperCase(),
+        awayTeamName: awayDisplayName.toUpperCase(),
+        homeTeamName: homeDisplayName.toUpperCase(),
         awayTeamAbbreviation: awayTeamData?.abbreviation,
         homeTeamAbbreviation: homeTeamData?.abbreviation,
         awayPlayers: awayRoster.players.length > 0 ? awayRoster.players : undefined,
@@ -818,9 +906,14 @@ export function FranchiseHome() {
         homeRecord: getTeamRecord(homeTeamId), // MAJ-15: Pass actual team records to GameTracker
         franchiseId,
         leagueId: franchiseLeagueId,
+        seasonId: activeSeasonId,
+        statsScopeId: activeSeasonId,
+        competitionType: 'playoff' as const,
+        competitionId: playoffData.playoff?.id,
+        playoffId: playoffData.playoff?.id,
         useDH: playoffUseDH,
         optimalLineupSnapshots,
-        stadiumName: franchiseData.stadiumMap?.[homeTeamId] ?? homeTeamName.toUpperCase(),
+        stadiumName: homeTeamData?.stadium ?? franchiseData.stadiumMap?.[homeTeamId] ?? homeDisplayName.toUpperCase(),
         // T0-05: Pass season number for playoff persistence
         seasonNumber: currentSeason,
         // T0-01: Pass total innings for auto game-end detection
@@ -842,6 +935,7 @@ export function FranchiseHome() {
   const [playoffSimHomeName, setPlayoffSimHomeName] = useState('');
 
   const handleSimPlayoffGame = async (series: ReturnType<typeof playoffData.getSeriesForTeam> & {}) => {
+    if (!MODE_2_V1_SYNTHETIC_SIM_ENABLED) return;
     if (!series || series.status !== 'IN_PROGRESS') return;
 
     const completedGames = series.games.filter(g => g.status === 'COMPLETED').length;
@@ -918,8 +1012,12 @@ export function FranchiseHome() {
     { id: "standings", label: "STANDINGS", icon: <BarChart3 className="w-4 h-4" /> },
     { id: "team", label: "TEAM HUB", icon: <Users className="w-4 h-4" /> },
     { id: "leaders", label: "LEAGUE LEADERS", icon: <TrendingUp className="w-4 h-4" /> },
-    { id: "rosters", label: "TRADES", icon: <Folder className="w-4 h-4" /> },
-    { id: "allstar", label: "ALL-STAR", icon: <Star className="w-4 h-4" /> },
+    ...(MODE_2_V1_TRANSACTION_UI_ENABLED
+      ? [{ id: "rosters", label: "TRADES", icon: <Folder className="w-4 h-4" /> }]
+      : []),
+    ...(MODE_2_V1_ALL_STAR_UI_ENABLED
+      ? [{ id: "allstar", label: "ALL-STAR", icon: <Star className="w-4 h-4" /> }]
+      : []),
     { id: "museum", label: "MUSEUM", icon: <Trophy className="w-4 h-4" /> },
   ];
 
@@ -942,8 +1040,8 @@ export function FranchiseHome() {
     { id: "awards", label: "AWARDS", icon: <Award className="w-4 h-4" /> },
     // Phase 3: RATINGS_ADJUSTMENTS
     { id: "ratings-adj", label: "RATINGS ADJ", icon: <TrendingDown className="w-4 h-4" /> },
-    // Phase 4: CONTRACTION_EXPANSION
-    { id: "contraction", label: "CONTRACT/EXPAND", icon: <Shuffle className="w-4 h-4" /> },
+    // Phase 4: expansion/contraction is deferred in Mode 2 v1.
+    { id: "contraction", label: "EXPANSION NOTE", icon: <Shuffle className="w-4 h-4" /> },
     // Phase 5: RETIREMENTS
     { id: "retirements", label: "RETIREMENTS", icon: <UserMinus className="w-4 h-4" /> },
     // Phase 6: FREE_AGENCY
@@ -954,8 +1052,6 @@ export function FranchiseHome() {
     { id: "farm-reconciliation", label: "FARM SYSTEM", icon: <GitMerge className="w-4 h-4" /> },
     // Phase 9: CHEMISTRY_REBALANCING
     { id: "chemistry", label: "CHEMISTRY", icon: <FlaskConical className="w-4 h-4" /> },
-    // Phase 10: TRADES
-    { id: "rosters", label: "TRADES", icon: <Folder className="w-4 h-4" /> },
     // Phase 11: SPRING_TRAINING
     { id: "spring-training", label: "SPRING TRAINING", icon: <Sunrise className="w-4 h-4" /> },
     // Utility tabs (not offseason phases)
@@ -1078,9 +1174,10 @@ export function FranchiseHome() {
                 {offseasonState.isOffseasonComplete ? (
                   <button
                     onClick={handleStartNewSeason}
-                    className="bg-[#C4A853] text-black px-6 py-3 text-sm font-bold hover:bg-[#D4B863] active:scale-95 transition-all shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)]"
+                    disabled={isStartingNewSeason}
+                    className="bg-[#C4A853] text-black px-6 py-3 text-sm font-bold hover:bg-[#D4B863] active:scale-95 transition-all shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    START SEASON {currentSeason + 1}
+                    {isStartingNewSeason ? "STARTING..." : `START SEASON ${currentSeason + 1}`}
                   </button>
                 ) : (
                   <button
@@ -1100,6 +1197,11 @@ export function FranchiseHome() {
                 style={{ width: `${offseasonState.progress}%` }}
               />
             </div>
+            {startSeasonError && (
+              <div role="alert" className="mt-3 bg-[#DD0000]/20 border-2 border-[#DD0000] p-3 text-xs text-[#E8E8D8]">
+                {startSeasonError}
+              </div>
+            )}
             {/* Phase dots */}
             <div className="flex justify-between mt-2 px-1">
               {OFFSEASON_PHASES.map((phase, i) => {
@@ -1133,7 +1235,10 @@ export function FranchiseHome() {
           <GameDayContent
             scheduleData={scheduleData}
             currentSeason={currentSeason}
+            activeSeasonId={activeSeasonId}
             onDataRefresh={() => franchiseData.refresh()}
+            onRepairFranchisePersistence={runFranchisePersistenceRepair}
+            onAddGame={() => setAddGameModalOpen(true)}
           />
         )}
         {activeTab === "team" && (
@@ -1155,7 +1260,7 @@ export function FranchiseHome() {
           />
         )}
         {activeTab === "news" && (
-          <BeatReporterNews />
+          <BeatReporterNews franchiseId={franchiseId} seasonId={activeSeasonId} />
         )}
         {activeTab === "standings" && (
           <StandingsContent />
@@ -1164,7 +1269,7 @@ export function FranchiseHome() {
           <LeagueLeadersContent />
         )}
         {activeTab === "rosters" && (
-          <TradeFlow seasonId={`season-${currentSeason}`} />
+          <TradeFlow seasonId={activeSeasonId} seasonNumber={currentSeason} franchiseId={franchiseId} />
         )}
         {activeTab === "allstar" && (
           <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-6">
@@ -1609,12 +1714,14 @@ export function FranchiseHome() {
                                     >
                                       ⚾ PLAY GAME {s.games.filter(g => g.status === 'COMPLETED').length + 1}
                                     </button>
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); handleSimPlayoffGame(s); }}
-                                      className="bg-[#4A6844] border-[2px] border-[#5A8352] py-1.5 px-2 text-[10px] text-[#E8E8D8] font-bold hover:bg-[#3F5A3A] active:scale-95 transition-transform"
-                                    >
-                                      SIM
-                                    </button>
+                                    {MODE_2_V1_SYNTHETIC_SIM_ENABLED && (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleSimPlayoffGame(s); }}
+                                        className="bg-[#4A6844] border-[2px] border-[#5A8352] py-1.5 px-2 text-[10px] text-[#E8E8D8] font-bold hover:bg-[#3F5A3A] active:scale-95 transition-transform"
+                                      >
+                                        SIM
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                               )}
@@ -1704,12 +1811,14 @@ export function FranchiseHome() {
                                     >
                                       ⚾ PLAY GAME {s.games.filter(g => g.status === 'COMPLETED').length + 1}
                                     </button>
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); handleSimPlayoffGame(s); }}
-                                      className="bg-[#4A6844] border-[2px] border-[#5A8352] py-1.5 px-2 text-[10px] text-[#E8E8D8] font-bold hover:bg-[#3F5A3A] active:scale-95 transition-transform"
-                                    >
-                                      SIM
-                                    </button>
+                                    {MODE_2_V1_SYNTHETIC_SIM_ENABLED && (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleSimPlayoffGame(s); }}
+                                        className="bg-[#4A6844] border-[2px] border-[#5A8352] py-1.5 px-2 text-[10px] text-[#E8E8D8] font-bold hover:bg-[#3F5A3A] active:scale-95 transition-transform"
+                                      >
+                                        SIM
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                               )}
@@ -1760,12 +1869,14 @@ export function FranchiseHome() {
                           >
                             🏆 PLAY GAME {playoffData.bracketByLeague.Championship.games.filter(g => g.status === 'COMPLETED').length + 1}
                           </button>
-                          <button
-                            onClick={() => handleSimPlayoffGame(playoffData.bracketByLeague.Championship!)}
-                            className="bg-[#4A6844] border-[2px] border-[#5A8352] py-2 px-3 text-[10px] text-[#E8E8D8] font-bold hover:bg-[#3F5A3A] active:scale-95 transition-transform"
-                          >
-                            SIM
-                          </button>
+                          {MODE_2_V1_SYNTHETIC_SIM_ENABLED && (
+                            <button
+                              onClick={() => handleSimPlayoffGame(playoffData.bracketByLeague.Championship!)}
+                              className="bg-[#4A6844] border-[2px] border-[#5A8352] py-2 px-3 text-[10px] text-[#E8E8D8] font-bold hover:bg-[#3F5A3A] active:scale-95 transition-transform"
+                            >
+                              SIM
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -2169,15 +2280,17 @@ export function FranchiseHome() {
         )}
 
         {/* Playoff SIM overlay */}
-        <SimulationOverlay
-          isOpen={isPlayoffSimulating}
-          playByPlay={playoffSimPlayByPlay}
-          awayTeamName={playoffSimAwayName}
-          homeTeamName={playoffSimHomeName}
-          finalAwayScore={playoffSimResult?.away ?? 0}
-          finalHomeScore={playoffSimResult?.home ?? 0}
-          onComplete={handlePlayoffSimComplete}
-        />
+        {MODE_2_V1_SYNTHETIC_SIM_ENABLED && (
+          <SimulationOverlay
+            isOpen={isPlayoffSimulating}
+            playByPlay={playoffSimPlayByPlay}
+            awayTeamName={playoffSimAwayName}
+            homeTeamName={playoffSimHomeName}
+            finalAwayScore={playoffSimResult?.away ?? 0}
+            finalHomeScore={playoffSimResult?.home ?? 0}
+            onComplete={handlePlayoffSimComplete}
+          />
+        )}
         
         {activeTab === "free-agency" && (
           <div>
@@ -2192,8 +2305,9 @@ export function FranchiseHome() {
             
             {showFreeAgency && (
               <FreeAgencyFlow
-                seasonId={`season-${currentSeason}`}
+                seasonId={activeSeasonId}
                 seasonNumber={currentSeason}
+                franchiseId={franchiseId}
                 onClose={() => setShowFreeAgency(false)}
               />
             )}
@@ -2203,7 +2317,8 @@ export function FranchiseHome() {
         {/* Ratings Adjustment Modal */}
         {showRatingsAdjustment && (
           <RatingsAdjustmentFlow
-            seasonId={`season-${currentSeason}`}
+            seasonId={activeSeasonId}
+            franchiseId={franchiseId}
             onClose={() => setShowRatingsAdjustment(false)}
           />
         )}
@@ -2211,8 +2326,9 @@ export function FranchiseHome() {
         {/* Retirements Modal */}
         {showRetirements && (
           <RetirementFlow
-            seasonId={`season-${currentSeason}`}
+            seasonId={activeSeasonId}
             seasonNumber={currentSeason}
+            franchiseId={franchiseId}
             onClose={() => setShowRetirements(false)}
             onRetirementsComplete={(newJerseys) => {
               setRetiredJerseys([...retiredJerseys, ...newJerseys]);
@@ -2223,22 +2339,29 @@ export function FranchiseHome() {
         {/* Awards Ceremony Modal */}
         {showAwards && (
           <AwardsCeremonyFlow
-            seasonId={`season-${currentSeason}`}
+            seasonId={activeSeasonId}
             seasonNumber={currentSeason}
+            franchiseId={franchiseId}
             onClose={() => setShowAwards(false)}
           />
         )}
 
         {/* Contraction/Expansion Modal */}
         {showContraction && (
-          <ContractionExpansionFlow seasonNumber={currentSeason} onComplete={() => setShowContraction(false)} />
+          <ContractionExpansionFlow
+            seasonId={activeSeasonId}
+            seasonNumber={currentSeason}
+            franchiseId={franchiseId}
+            onComplete={() => setShowContraction(false)}
+          />
         )}
 
         {/* Draft Modal */}
         {showDraft && (
           <DraftFlow
-            seasonId={`season-${currentSeason}`}
+            seasonId={activeSeasonId}
             seasonNumber={currentSeason}
+            franchiseId={franchiseId}
             onComplete={() => {
               setShowDraft(false);
               setActiveTab("todays-game");
@@ -2387,12 +2510,17 @@ export function FranchiseHome() {
             {showFinalize && (
               <FinalizeAdvanceFlow
                 seasonNumber={currentSeason}
+                seasonId={activeSeasonId}
+                franchiseId={franchiseId}
+                playoffId={playoffData.playoff?.id}
                 onClose={() => setShowFinalize(false)}
                 onAdvanceComplete={() => {
-                  // Increment season number and persist to localStorage
+                  // Increment season number locally. Franchise metadata is updated by FinalizeAdvanceFlow.
                   const newSeason = currentSeason + 1;
                   setCurrentSeason(newSeason);
-                  saveCurrentSeasonNumber(newSeason);
+                  if (!franchiseId) {
+                    saveCurrentSeasonNumber(newSeason);
+                  }
 
                   // Reset to regular season
                   setSeasonPhase("regular");
@@ -2502,55 +2630,43 @@ export function FranchiseHome() {
                   ⚠️
                 </div>
                 <div>
-                  <div className="text-2xl text-[#E8E8D8]">CONTRACTION/EXPANSION</div>
+                  <div className="text-2xl text-[#E8E8D8]">EXPANSION BOUNDARY</div>
                   <div className="text-sm text-[#E8E8D8]/80">Offseason Phase 4</div>
                 </div>
               </div>
               <div className="text-sm text-[#E8E8D8]/80 mb-4">
-                Teams with low fan morale face contraction risk. Roll dice to determine which teams survive. Protected players from contracted teams enter the expansion draft, while others face retirement checks. Create new expansion teams to fill the void.
+                League contraction and expansion workflows are deferred in Mode 2 v1. This phase is skip-only until franchise-owned offseason adapters are implemented.
               </div>
               <div className="grid grid-cols-3 gap-4 mt-4">
                 <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
-                  <div className="text-2xl text-[#E8E8D8]">🎲</div>
-                  <div className="text-xs text-[#E8E8D8]/60">Risk Roll</div>
+                  <div className="text-2xl text-[#E8E8D8]">⏸</div>
+                  <div className="text-xs text-[#E8E8D8]/60">Deferred</div>
                 </div>
                 <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
-                  <div className="text-2xl text-[#E8E8D8]">4</div>
-                  <div className="text-xs text-[#E8E8D8]/60">Protected</div>
+                  <div className="text-2xl text-[#E8E8D8]">V1</div>
+                  <div className="text-xs text-[#E8E8D8]/60">Skip Only</div>
                 </div>
                 <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
                   <div className="text-2xl text-[#E8E8D8]">🏛️</div>
-                  <div className="text-xs text-[#E8E8D8]/60">Legacy</div>
+                  <div className="text-xs text-[#E8E8D8]/60">No Mutation</div>
                 </div>
               </div>
             </div>
 
             <button
-              onClick={() => setShowContraction(true)}
+              onClick={handleAdvancePhase}
               className="w-full bg-[#5A8352] border-[5px] border-[#4A6844] py-6 text-xl text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
             >
-              ⚠️ BEGIN CONTRACTION/EXPANSION PHASE ⚠️
+              SKIP DEFERRED EXPANSION PHASE →
             </button>
 
             <div className="bg-[#4169E1]/20 border-l-4 border-[#4169E1] p-4">
               <div className="text-xs text-[#E8E8D8]/90 mb-2 flex items-center gap-2">
                 <span>💡</span>
-                <span className="font-bold">Phase 4 Details</span>
+                <span className="font-bold">Phase 4 Boundary</span>
               </div>
               <div className="text-xs text-[#E8E8D8]/70 space-y-1">
-                <div className="mb-2">Complete 12-screen flow:</div>
-                <ul className="list-disc list-inside space-y-1 ml-2">
-                  <li>Risk Assessment: See all teams at contraction risk</li>
-                  <li>Contraction Rolls: Dice determine team survival</li>
-                  <li>Voluntary Sales: Option to sell additional teams</li>
-                  <li>Protection Selection: Choose 4 players to protect</li>
-                  <li>Legacy Cornerstone: Honor franchise cornerstones</li>
-                  <li>Expansion Draft: Teams select from contraction pool</li>
-                  <li>Player Disposal: Retirement checks (+30% probability)</li>
-                  <li>Museum Entries: Defunct teams preserved in history</li>
-                  <li>Expansion Creation: Build new franchises (optional)</li>
-                  <li>Phase Summary: Complete contraction/expansion report</li>
-                </ul>
+                Expansion and contraction are not active franchise workflows in Mode 2 v1. Use the skip button to continue the offseason without mutating franchise or League Builder data.
               </div>
             </div>
           </div>
@@ -2716,10 +2832,20 @@ function StandingsContent() {
 interface GameDayContentProps {
   scheduleData: ReturnType<typeof useScheduleData>;
   currentSeason: number;
+  activeSeasonId: string;
   onDataRefresh: () => Promise<void>;
+  onRepairFranchisePersistence: () => Promise<void>;
+  onAddGame: () => void;
 }
 
-function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayContentProps) {
+function GameDayContent({
+  scheduleData,
+  currentSeason,
+  activeSeasonId,
+  onDataRefresh,
+  onRepairFranchisePersistence,
+  onAddGame,
+}: GameDayContentProps) {
   const navigate = useNavigate();
   const { franchiseId } = useParams<{ franchiseId: string }>();
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
@@ -2791,6 +2917,7 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
   const hasGames = allGames.length > 0;
   const upcomingCount = (scheduleData.upcomingGames ?? []).length;
   const isSeasonOver = hasGames && upcomingCount === 0;
+  const hasNextGame = Boolean(scheduleData.nextGame);
 
   // Sync seasonComplete from schedule data on load / refresh
   useEffect(() => {
@@ -2807,13 +2934,14 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
   const checkSeasonComplete = async () => {
     try {
       // Read fresh from DB — React state may not have updated yet
-      const freshGames = await getAllGames(currentSeason);
+      const freshGames = franchiseId
+        ? await getAllGamesByFranchise(franchiseId, currentSeason)
+        : await getAllGames(currentSeason);
       if (freshGames.length === 0) return;
 
       const stillScheduled = freshGames.filter(g => g.status === 'SCHEDULED').length;
       if (stillScheduled === 0) {
-        const seasonId = `season-${currentSeason}`;
-        await markSeasonComplete(seasonId);
+        await markSeasonComplete(activeSeasonId);
         setSeasonComplete(true);
         setToastMessage('REGULAR SEASON COMPLETE!');
       }
@@ -2835,11 +2963,35 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
     const homeName = franchiseData.teamNameMap?.[home] || home;
     const gameNum = nextGame?.gameNumber ?? 1;
 
+    try {
+      await onRepairFranchisePersistence();
+    } catch (err) {
+      console.error('[FranchiseHome] Failed to prepare franchise persistence for GameTracker launch:', err);
+      setToastMessage('Franchise roster data could not be prepared. Try reloading the franchise.');
+      setConfirmAction(null);
+      return;
+    }
+
     // Load real rosters from IndexedDB for both teams
     const [awayRoster, homeRoster] = await Promise.all([
       buildFranchiseGameTrackerRoster(away, { franchiseId, leagueId: franchiseLeagueId, useDH: franchiseUseDH }),
       buildFranchiseGameTrackerRoster(home, { franchiseId, leagueId: franchiseLeagueId, useDH: franchiseUseDH }),
     ]);
+
+    const missingRosterTeams: string[] = [];
+    if (awayRoster.players.length === 0 || awayRoster.pitchers.length === 0) {
+      missingRosterTeams.push(awayName.toUpperCase());
+    }
+    if (homeRoster.players.length === 0 || homeRoster.pitchers.length === 0) {
+      missingRosterTeams.push(homeName.toUpperCase());
+    }
+    if (missingRosterTeams.length > 0) {
+      setToastMessage(
+        `Franchise roster data is incomplete for ${missingRosterTeams.join(' and ')}. Game launch blocked.`,
+      );
+      setConfirmAction(null);
+      return;
+    }
 
     // Find default starter indices (first SP)
     const awayStarterIdx = awayRoster.pitchers.findIndex(p => p.isStarter);
@@ -2867,12 +3019,11 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
     // T3-06: Async milestone watch computation (non-blocking)
     (async () => {
       try {
-        const [careerBatters, careerPitchers, activeSeason] = await Promise.all([
+        const [careerBatters, careerPitchers] = await Promise.all([
           getAllCareerBatting(),
           getAllCareerPitching(),
-          getActiveSeason(),
         ]);
-        const seasonId = activeSeason?.seasonId || '';
+        const seasonId = activeSeasonId || '';
         const [seasonBatters, seasonPitchers] = seasonId
           ? await Promise.all([
               getSeasonBattingStats(seasonId),
@@ -3004,8 +3155,8 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
     const { awayPlayers, awayPitchers, homePlayers, homePitchers } = preGameData;
 
     const [awayTeamData, homeTeamData] = await Promise.all([
-      getTeam(preGameData.awayTeamId),
-      getTeam(preGameData.homeTeamId),
+      getVisibleFranchiseTeam(franchiseId, preGameData.awayTeamId),
+      getVisibleFranchiseTeam(franchiseId, preGameData.homeTeamId),
     ]);
     const managerInstanceId =
       franchiseId || franchiseLeagueId || LEAGUE_BUILDER_MANAGER_INSTANCE_ID;
@@ -3098,10 +3249,15 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
         stadiumName: franchiseData.stadiumMap?.[preGameData.homeTeamId] ?? preGameData.homeTeamName,
         franchiseId,
         leagueId: franchiseLeagueId,
+        seasonId: activeSeasonId,
+        statsScopeId: activeSeasonId,
+        competitionType: 'franchise' as const,
+        competitionId: franchiseId,
         useDH: preGameData.useDH,
         optimalLineupSnapshots,
         scheduleGameId: preGameData.scheduleGameId,
         seasonNumber: currentSeason,
+        gameNumber: preGameData.gameNumber,
         totalInnings: franchiseData.franchiseConfig?.season?.inningsPerGame ?? 9,
       }, {
         awayManagerId: awayManager.managerId,
@@ -3115,6 +3271,7 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
 
   const handleSimulate = async () => {
     setConfirmAction(null);
+    if (!MODE_2_V1_SYNTHETIC_SIM_ENABLED) return;
 
     // Get next game from schedule — pull real team IDs and game number
     const nextGame = scheduleData.nextGame;
@@ -3143,10 +3300,8 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
     setIsSimulating(true);
 
     // Process through real pipeline (runs while animation plays)
-    const seasonId = franchiseId ? `${franchiseId}-season-${currentSeason}` : `season-${currentSeason}`;
-
     try {
-      await processCompletedGame(game, { seasonId });
+      await processCompletedGame(game, { seasonId: activeSeasonId });
     } catch (err) {
       console.error('[handleSimulate] processCompletedGame failed:', err);
     }
@@ -3219,6 +3374,7 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
 
   const handleBatchSimulate = async (scope: 'today' | 'week' | 'season') => {
     setConfirmAction(null);
+    if (!MODE_2_V1_SYNTHETIC_SIM_ENABLED) return;
 
     const games = getGamesByScope(scope);
     if (games.length === 0) return;
@@ -3228,7 +3384,7 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
     setBatchCurrent(0);
     setIsBatchRunning(true);
 
-    const batchSeasonId = franchiseId ? `${franchiseId}-season-${currentSeason}` : `season-${currentSeason}`;
+    const batchSeasonId = activeSeasonId;
     let processed = 0;
 
     // T1-10: Track rotation index per team across batch games
@@ -3340,14 +3496,14 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
     const home = nextGame.homeTeamId.toUpperCase();
 
     try {
-      // Mark as SKIPPED — no stats, no standings impact, game ceases to exist
+      // Mark as SKIPPED — no stats, no standings impact, and no later score entry.
       await scheduleData.updateStatus(nextGame.id, 'SKIPPED');
 
       // Refresh data so nextGame advances
       await onDataRefresh();
 
       // Show toast
-      setToastMessage(`Game skipped \u2014 ${away} vs ${home} removed from schedule`);
+      setToastMessage(`Game skipped — ${away} vs ${home} marked SKIPPED`);
 
       // Check if season is now complete
       await checkSeasonComplete();
@@ -3419,6 +3575,21 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
       )}
 
       {/* Next game card */}
+      {!seasonComplete && !scheduleData.isLoading && !hasNextGame && (
+        <div className="bg-[#5A8352] border-[5px] border-[#4A6844] p-8 text-center">
+          <div className="text-lg text-[#E8E8D8] mb-2">NO GAMES SCHEDULED</div>
+          <div className="text-sm text-[#E8E8D8]/80 mb-6">
+            Season {currentSeason} starts empty. Add SMB4 games manually as you play them.
+          </div>
+          <button
+            onClick={onAddGame}
+            className="bg-[#5599FF] border-[3px] border-[#3366FF] px-6 py-3 text-sm text-[#E8E8D8] hover:bg-[#3366FF] active:scale-95 transition-transform inline-flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" /> Add Game
+          </button>
+        </div>
+      )}
+
       {!seasonComplete && scheduleData.nextGame && (
       <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-4 relative">
         <div className="text-[8px] text-[#E8E8D8] mb-3">▶ NEXT GAME{scheduleData.nextGame.date ? ` • ${scheduleData.nextGame.date}` : ''}</div>
@@ -3440,81 +3611,54 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
         </div>
 
         <div className="space-y-2">
-          {/* Row 1: Play / Score */}
+          {/* Mode 2 v1: user is the bridge for every result; synthetic simulation stays unavailable. */}
           <div className="flex gap-2 justify-center">
             <button
-              onClick={() => setConfirmAction("play")}
+              onClick={() => setConfirmAction("score")}
               className="bg-[#5A8352] border-[5px] border-[#4A6844] py-3 px-8 text-sm text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
-            >
-              PLAY GAME
-            </button>
-            <button
-              onClick={() => setConfirmAction("watch")}
-              className="bg-[#4A6844] border-[5px] border-[#5A8352] py-3 px-4 text-[10px] text-[#E8E8D8] hover:bg-[#3F5A3A] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
             >
               SCORE GAME
             </button>
-          </div>
-
-          {/* Row 2: Single game simulate / skip */}
-          <div className="flex gap-2 justify-center">
-            <button
-              onClick={() => setConfirmAction("simulate")}
-              className="bg-[#4A6844] border-[5px] border-[#5A8352] py-2 px-4 text-[10px] text-[#E8E8D8] hover:bg-[#3F5A3A] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] whitespace-nowrap"
-            >
-              SIM 1 GAME
-            </button>
+            {MODE_2_V1_SYNTHETIC_SIM_ENABLED && (
+              <button
+                onClick={() => setConfirmAction("simulate")}
+                className="bg-[#4A6844] border-[5px] border-[#5A8352] py-3 px-4 text-[10px] text-[#E8E8D8] hover:bg-[#3F5A3A] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] whitespace-nowrap"
+              >
+                SIM 1 GAME
+              </button>
+            )}
             <button
               onClick={() => setConfirmAction("skip")}
-              className="bg-[#4A6844] border-[5px] border-[#5A8352] py-2 px-4 text-[10px] text-[#E8E8D8] hover:bg-[#3F5A3A] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] whitespace-nowrap"
+              className="bg-[#4A6844] border-[5px] border-[#5A8352] py-3 px-4 text-[10px] text-[#E8E8D8] hover:bg-[#3F5A3A] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] whitespace-nowrap"
             >
-              SKIP 1 GAME
+              SKIP GAME
             </button>
           </div>
 
           {/* Row 3: Batch simulate options */}
-          <div className="flex gap-1 justify-center flex-wrap">
-            <button
-              onClick={() => setConfirmAction("sim-today")}
-              className="bg-[#3F5A3A] border-[3px] border-[#5A8352] py-1 px-3 text-[8px] text-[#E8E8D8] hover:bg-[#4A6844] active:scale-95 transition-transform"
-            >
-              SIM TODAY ({getGamesByScope('today').length})
-            </button>
-            <button
-              onClick={() => setConfirmAction("sim-week")}
-              className="bg-[#3F5A3A] border-[3px] border-[#5A8352] py-1 px-3 text-[8px] text-[#E8E8D8] hover:bg-[#4A6844] active:scale-95 transition-transform"
-            >
-              SIM WEEK ({getGamesByScope('week').length})
-            </button>
-            <button
-              onClick={() => setConfirmAction("sim-season")}
-              className="bg-[#3F5A3A] border-[3px] border-[#5A8352] py-1 px-3 text-[8px] text-[#E8E8D8] hover:bg-[#4A6844] active:scale-95 transition-transform"
-            >
-              SIM SEASON ({getGamesByScope('season').length})
-            </button>
-          </div>
+          {MODE_2_V1_SYNTHETIC_SIM_ENABLED && (
+            <div className="flex gap-1 justify-center flex-wrap">
+              <button
+                onClick={() => setConfirmAction("sim-today")}
+                className="bg-[#3F5A3A] border-[3px] border-[#5A8352] py-1 px-3 text-[8px] text-[#E8E8D8] hover:bg-[#4A6844] active:scale-95 transition-transform"
+              >
+                SIM TODAY ({getGamesByScope('today').length})
+              </button>
+              <button
+                onClick={() => setConfirmAction("sim-week")}
+                className="bg-[#3F5A3A] border-[3px] border-[#5A8352] py-1 px-3 text-[8px] text-[#E8E8D8] hover:bg-[#4A6844] active:scale-95 transition-transform"
+              >
+                SIM WEEK ({getGamesByScope('week').length})
+              </button>
+              <button
+                onClick={() => setConfirmAction("sim-season")}
+                className="bg-[#3F5A3A] border-[3px] border-[#5A8352] py-1 px-3 text-[8px] text-[#E8E8D8] hover:bg-[#4A6844] active:scale-95 transition-transform"
+              >
+                SIM SEASON ({getGamesByScope('season').length})
+              </button>
+            </div>
+          )}
 
-          {/* Row 4: Batch skip options */}
-          <div className="flex gap-1 justify-center flex-wrap">
-            <button
-              onClick={() => setConfirmAction("skip-today")}
-              className="bg-[#3F5A3A] border-[3px] border-[#5A8352] py-1 px-3 text-[8px] text-[#E8E8D8]/70 hover:bg-[#4A6844] active:scale-95 transition-transform"
-            >
-              SKIP TODAY ({getGamesByScope('today').length})
-            </button>
-            <button
-              onClick={() => setConfirmAction("skip-week")}
-              className="bg-[#3F5A3A] border-[3px] border-[#5A8352] py-1 px-3 text-[8px] text-[#E8E8D8]/70 hover:bg-[#4A6844] active:scale-95 transition-transform"
-            >
-              SKIP WEEK ({getGamesByScope('week').length})
-            </button>
-            <button
-              onClick={() => setConfirmAction("skip-season")}
-              className="bg-[#3F5A3A] border-[3px] border-[#5A8352] py-1 px-3 text-[8px] text-[#E8E8D8]/70 hover:bg-[#4A6844] active:scale-95 transition-transform"
-            >
-              SKIP SEASON ({getGamesByScope('season').length})
-            </button>
-          </div>
         </div>
 
         <div className="absolute bottom-2 right-2 text-[8px] text-[#E8E8D8]">
@@ -3523,103 +3667,107 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
       </div>
       )}
 
-      {/* Beat writers button */}
-      <div>
-        <button
-          onClick={() => setShowBeatWriters(!showBeatWriters)}
-          className="bg-[#6B9462] border-[5px] border-[#4A6844] py-3 px-6 text-[10px] text-[#E8E8D8] hover:bg-[#5A8352] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] flex items-center gap-2"
-        >
-          <span>BEAT WRITERS</span>
-          {showBeatWriters ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-        </button>
-      </div>
-
-      {/* Beat writers expandable section — empty state (no narrative engine yet) */}
-      {showBeatWriters && (
-        <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4">
-          <div className="text-[8px] text-[#E8E8D8] mb-3">▶ LATEST FROM BEAT WRITERS</div>
-          <div className="text-center py-6">
-            <div className="text-[10px] text-[#E8E8D8]/50">No beat writer stories yet</div>
-            <div className="text-[8px] text-[#E8E8D8]/30 mt-1">Stories will appear as the season progresses</div>
+      {hasNextGame && (
+        <>
+          {/* Beat writers button */}
+          <div>
+            <button
+              onClick={() => setShowBeatWriters(!showBeatWriters)}
+              className="bg-[#6B9462] border-[5px] border-[#4A6844] py-3 px-6 text-[10px] text-[#E8E8D8] hover:bg-[#5A8352] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] flex items-center gap-2"
+            >
+              <span>BEAT WRITERS</span>
+              {showBeatWriters ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
           </div>
-          <div className="mt-3 text-[8px] text-[#E8E8D8] text-center">
-            FOLLOW BEAT WRITERS ON X FOR REAL-TIME UPDATES
-          </div>
-        </div>
-      )}
 
-      {/* Head-to-head button */}
-      <div>
-        <button
-          onClick={() => setShowHeadToHead(!showHeadToHead)}
-          className="bg-[#6B9462] border-[5px] border-[#4A6844] py-3 px-6 text-[10px] text-[#E8E8D8] hover:bg-[#5A8352] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] flex items-center gap-2"
-        >
-          <span>HEAD-TO-HEAD HISTORY</span>
-          {showHeadToHead ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-        </button>
-      </div>
-
-      {/* Head-to-head expandable section — empty state (needs completedGames query) */}
-      {showHeadToHead && (
-        <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4">
-          <div className="text-[8px] text-[#E8E8D8] mb-3">▶ RECENT MATCHUPS ({awayTeamId.toUpperCase()} vs {homeTeamId.toUpperCase()})</div>
-          <div className="text-center py-6">
-            <div className="text-[10px] text-[#E8E8D8]/50">No head-to-head history yet</div>
-            <div className="text-[8px] text-[#E8E8D8]/30 mt-1">Results will appear after these teams play each other</div>
-          </div>
-        </div>
-      )}
-
-      {/* Team status */}
-      <div className="grid grid-cols-2 gap-4">
-        {/* Away Team Stats */}
-        <div>
-          <button
-            onClick={() => setShowAwayTeamStats(!showAwayTeamStats)}
-            className="w-full bg-[#6B9462] border-[5px] border-[#4A6844] py-3 px-6 text-[10px] text-[#E8E8D8] hover:bg-[#5A8352] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] flex items-center justify-between"
-          >
-            <div className="flex-1 text-center">
-              <div className="text-[10px] tracking-wide uppercase" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.4)' }}>
-                {awayTeamId}
+          {/* Beat writers expandable section — empty state (no narrative engine yet) */}
+          {showBeatWriters && (
+            <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4">
+              <div className="text-[8px] text-[#E8E8D8] mb-3">▶ LATEST FROM BEAT WRITERS</div>
+              <div className="text-center py-6">
+                <div className="text-[10px] text-[#E8E8D8]/50">No beat writer stories yet</div>
+                <div className="text-[8px] text-[#E8E8D8]/30 mt-1">Stories will appear as the season progresses</div>
               </div>
-              <div className="text-[7px] text-[#E8E8D8]/80 mt-1">{getTeamRecord(awayTeamId)}</div>
-            </div>
-            {showAwayTeamStats ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          </button>
-
-          {showAwayTeamStats && (
-            <div className="bg-[#6B9462] border-4 border-[#4A6844] border-t-0 p-4 overflow-y-auto max-h-[600px]">
-              <div className="text-center text-[9px] text-[#E8E8D8]/50 py-4">
-                No stats yet — play games to see team leaders.
+              <div className="mt-3 text-[8px] text-[#E8E8D8] text-center">
+                FOLLOW BEAT WRITERS ON X FOR REAL-TIME UPDATES
               </div>
             </div>
           )}
-        </div>
 
-        {/* Home Team Stats */}
-        <div>
-          <button
-            onClick={() => setShowHomeTeamStats(!showHomeTeamStats)}
-            className="w-full bg-[#6B9462] border-[5px] border-[#4A6844] py-3 px-6 text-[10px] text-[#E8E8D8] hover:bg-[#5A8352] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] flex items-center justify-between"
-          >
-            <div className="flex-1 text-center">
-              <div className="text-[10px] tracking-wide uppercase" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.4)' }}>
-                {homeTeamId}
-              </div>
-              <div className="text-[7px] text-[#E8E8D8]/80 mt-1">{getTeamRecord(homeTeamId)}</div>
-            </div>
-            {showHomeTeamStats ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          </button>
+          {/* Head-to-head button */}
+          <div>
+            <button
+              onClick={() => setShowHeadToHead(!showHeadToHead)}
+              className="bg-[#6B9462] border-[5px] border-[#4A6844] py-3 px-6 text-[10px] text-[#E8E8D8] hover:bg-[#5A8352] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] flex items-center gap-2"
+            >
+              <span>HEAD-TO-HEAD HISTORY</span>
+              {showHeadToHead ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+          </div>
 
-          {showHomeTeamStats && (
-            <div className="bg-[#6B9462] border-4 border-[#4A6844] border-t-0 p-4 overflow-y-auto max-h-[600px]">
-              <div className="text-center text-[9px] text-[#E8E8D8]/50 py-4">
-                No stats yet — play games to see team leaders.
+          {/* Head-to-head expandable section — empty state (needs completedGames query) */}
+          {showHeadToHead && (
+            <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4">
+              <div className="text-[8px] text-[#E8E8D8] mb-3">▶ RECENT MATCHUPS ({awayTeamId.toUpperCase()} vs {homeTeamId.toUpperCase()})</div>
+              <div className="text-center py-6">
+                <div className="text-[10px] text-[#E8E8D8]/50">No head-to-head history yet</div>
+                <div className="text-[8px] text-[#E8E8D8]/30 mt-1">Results will appear after these teams play each other</div>
               </div>
             </div>
           )}
-        </div>
-      </div>
+
+          {/* Team status */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Away Team Stats */}
+            <div>
+              <button
+                onClick={() => setShowAwayTeamStats(!showAwayTeamStats)}
+                className="w-full bg-[#6B9462] border-[5px] border-[#4A6844] py-3 px-6 text-[10px] text-[#E8E8D8] hover:bg-[#5A8352] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] flex items-center justify-between"
+              >
+                <div className="flex-1 text-center">
+                  <div className="text-[10px] tracking-wide uppercase" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.4)' }}>
+                    {awayTeamId}
+                  </div>
+                  <div className="text-[7px] text-[#E8E8D8]/80 mt-1">{getTeamRecord(awayTeamId)}</div>
+                </div>
+                {showAwayTeamStats ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              </button>
+
+              {showAwayTeamStats && (
+                <div className="bg-[#6B9462] border-4 border-[#4A6844] border-t-0 p-4 overflow-y-auto max-h-[600px]">
+                  <div className="text-center text-[9px] text-[#E8E8D8]/50 py-4">
+                    No stats yet — play games to see team leaders.
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Home Team Stats */}
+            <div>
+              <button
+                onClick={() => setShowHomeTeamStats(!showHomeTeamStats)}
+                className="w-full bg-[#6B9462] border-[5px] border-[#4A6844] py-3 px-6 text-[10px] text-[#E8E8D8] hover:bg-[#5A8352] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] flex items-center justify-between"
+              >
+                <div className="flex-1 text-center">
+                  <div className="text-[10px] tracking-wide uppercase" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.4)' }}>
+                    {homeTeamId}
+                  </div>
+                  <div className="text-[7px] text-[#E8E8D8]/80 mt-1">{getTeamRecord(homeTeamId)}</div>
+                </div>
+                {showHomeTeamStats ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              </button>
+
+              {showHomeTeamStats && (
+                <div className="bg-[#6B9462] border-4 border-[#4A6844] border-t-0 p-4 overflow-y-auto max-h-[600px]">
+                  <div className="text-center text-[9px] text-[#E8E8D8]/50 py-4">
+                    No stats yet — play games to see team leaders.
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Confirmation dialog */}
       {confirmAction && (
@@ -3627,13 +3775,12 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
           <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-6 max-w-md">
             <div className="text-lg text-[#E8E8D8] mb-4 text-center">ARE YOU SURE?</div>
             <div className="text-sm text-[#E8E8D8] mb-6 text-center">
-              {confirmAction === "play" && "Start playing this game?"}
-              {confirmAction === "watch" && "Watch this game?"}
-              {confirmAction === "simulate" && "Simulate this game? Full player stats will be generated."}
-              {confirmAction === "skip" && "Skip this game? It will be removed from the schedule entirely."}
-              {confirmAction === "sim-today" && `Simulate ${getGamesByScope('today').length} game(s) for today? W/L outcomes and standings will be updated.`}
-              {confirmAction === "sim-week" && `Simulate ${getGamesByScope('week').length} game(s) this week? W/L outcomes and standings will be updated.`}
-              {confirmAction === "sim-season" && `Simulate ${getGamesByScope('season').length} remaining game(s)? W/L outcomes and standings will be updated.`}
+              {confirmAction === "score" && "Score this game in GameTracker?"}
+              {MODE_2_V1_SYNTHETIC_SIM_ENABLED && confirmAction === "simulate" && "Simulate this game? Full player stats will be generated."}
+              {confirmAction === "skip" && "Skip this game? It will be marked SKIPPED and cannot be scored later."}
+              {MODE_2_V1_SYNTHETIC_SIM_ENABLED && confirmAction === "sim-today" && `Simulate ${getGamesByScope('today').length} game(s) for today? W/L outcomes and standings will be updated.`}
+              {MODE_2_V1_SYNTHETIC_SIM_ENABLED && confirmAction === "sim-week" && `Simulate ${getGamesByScope('week').length} game(s) this week? W/L outcomes and standings will be updated.`}
+              {MODE_2_V1_SYNTHETIC_SIM_ENABLED && confirmAction === "sim-season" && `Simulate ${getGamesByScope('season').length} remaining game(s)? W/L outcomes and standings will be updated.`}
               {confirmAction === "skip-today" && `Skip ${getGamesByScope('today').length} game(s) for today? They will be removed from the schedule.`}
               {confirmAction === "skip-week" && `Skip ${getGamesByScope('week').length} game(s) this week? They will be removed from the schedule.`}
               {confirmAction === "skip-season" && `Skip ${getGamesByScope('season').length} remaining game(s)? They will be removed from the schedule.`}
@@ -3647,13 +3794,12 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
               </button>
               <button
                 onClick={() => {
-                  if (confirmAction === "play") handlePlayGame();
-                  else if (confirmAction === "watch") handlePlayGame();
-                  else if (confirmAction === "simulate") handleSimulate();
+                  if (confirmAction === "score") handlePlayGame();
+                  else if (MODE_2_V1_SYNTHETIC_SIM_ENABLED && confirmAction === "simulate") handleSimulate();
                   else if (confirmAction === "skip") handleSkip();
-                  else if (confirmAction === "sim-today") handleBatchSimulate('today');
-                  else if (confirmAction === "sim-week") handleBatchSimulate('week');
-                  else if (confirmAction === "sim-season") handleBatchSimulate('season');
+                  else if (MODE_2_V1_SYNTHETIC_SIM_ENABLED && confirmAction === "sim-today") handleBatchSimulate('today');
+                  else if (MODE_2_V1_SYNTHETIC_SIM_ENABLED && confirmAction === "sim-week") handleBatchSimulate('week');
+                  else if (MODE_2_V1_SYNTHETIC_SIM_ENABLED && confirmAction === "sim-season") handleBatchSimulate('season');
                   else if (confirmAction === "skip-today") handleBatchSkip('today');
                   else if (confirmAction === "skip-week") handleBatchSkip('week');
                   else if (confirmAction === "skip-season") handleBatchSkip('season');
@@ -3679,20 +3825,22 @@ function GameDayContent({ scheduleData, currentSeason, onDataRefresh }: GameDayC
       )}
 
       {/* Simulation overlay */}
-      <SimulationOverlay
-        isOpen={isSimulating}
-        playByPlay={simPlayByPlay}
-        awayTeamName={simAwayName || awayTeamId.toUpperCase()}
-        homeTeamName={simHomeName || homeTeamId.toUpperCase()}
-        finalAwayScore={simResult?.away ?? 0}
-        finalHomeScore={simResult?.home ?? 0}
-        onComplete={handleSimulationComplete}
-      />
+      {MODE_2_V1_SYNTHETIC_SIM_ENABLED && (
+        <SimulationOverlay
+          isOpen={isSimulating}
+          playByPlay={simPlayByPlay}
+          awayTeamName={simAwayName || awayTeamId.toUpperCase()}
+          homeTeamName={simHomeName || homeTeamId.toUpperCase()}
+          finalAwayScore={simResult?.away ?? 0}
+          finalHomeScore={simResult?.home ?? 0}
+          onComplete={handleSimulationComplete}
+        />
+      )}
 
       {/* Batch operation overlay */}
       <BatchOperationOverlay
         isOpen={isBatchRunning}
-        operationType={batchType ?? 'simulate'}
+        operationType={batchType ?? 'skip'}
         current={batchCurrent}
         total={batchTotal}
         onComplete={handleBatchComplete}
@@ -4221,7 +4369,13 @@ function LeagueLeadersContent() {
 }
 
 
-function BeatReporterNews() {
+function BeatReporterNews({
+  franchiseId,
+  seasonId,
+}: {
+  franchiseId?: string;
+  seasonId: string;
+}) {
   const [newsFilter, setNewsFilter] = useState<"all" | "league" | "team">("all");
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [expandedArticle, setExpandedArticle] = useState<number | null>(null);
@@ -4243,7 +4397,7 @@ function BeatReporterNews() {
     let cancelled = false;
     (async () => {
       try {
-        const recentGames = await getRecentGames(20);
+        const recentGames = await getRecentGames(20, { franchiseId, seasonId });
         if (cancelled) return;
         const articles = recentGames.flatMap((game, idx) => {
           const results: typeof newsArticles = [];
@@ -4293,7 +4447,7 @@ function BeatReporterNews() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [franchiseId, seasonId]);
 
   const teams = useMemo(() => [...new Set(newsArticles.map(a => a.team).filter((t): t is string => !!t))].sort(), [newsArticles]);
 

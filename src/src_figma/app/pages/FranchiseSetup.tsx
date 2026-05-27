@@ -123,7 +123,7 @@ export function FranchiseSetup() {
           <div className="bg-[#4A6A42] border-[6px] border-[#E8E8D8] p-8 text-center shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]">
             <Loader2 className="w-12 h-12 animate-spin text-[#C4A853] mx-auto mb-4" />
             <p className="text-lg text-[#E8E8D8] font-bold tracking-wider" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>CREATING FRANCHISE</p>
-            <p className="text-xs text-[#E8E8D8]/70 mt-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Generating schedule and initializing season...</p>
+            <p className="text-xs text-[#E8E8D8]/70 mt-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Initializing empty season schedule...</p>
           </div>
         </div>
       )}
@@ -570,37 +570,16 @@ function Step2SeasonSettings({
         </div>
       </div>
 
-      {/* Schedule Type */}
+      {/* Schedule Policy */}
       <div className="mb-6">
-        <p className="text-xs text-[#E8E8D8] font-bold mb-3 tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>SCHEDULE TYPE</p>
+        <p className="text-xs text-[#E8E8D8] font-bold mb-3 tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>SCHEDULE POLICY</p>
         <div className="bg-[#4A6A42] border-4 border-[#E8E8D8] p-4">
-          <div className="flex gap-4 mb-2">
-            {["Balanced", "Division Heavy", "Rivalry Focused"].map((type) => (
-              <button
-                key={type}
-                onClick={() =>
-                  setConfig({
-                    ...config,
-                    season: { ...config.season, scheduleType: type },
-                  })
-                }
-                className="flex items-center gap-2 text-xs text-[#E8E8D8]"
-                style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
-              >
-                <div
-                  className={`w-4 h-4 rounded-full border-2 ${
-                    config.season.scheduleType === type ? "border-[#C4A853] bg-[#C4A853]" : "border-[#E8E8D8]"
-                  }`}
-                >
-                  {config.season.scheduleType === type && (
-                    <div className="w-full h-full rounded-full bg-[#4A6A42] scale-50" />
-                  )}
-                </div>
-                {type}
-              </button>
-            ))}
-          </div>
-          <p className="text-[10px] text-[#C4A853]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>ℹ️ Balanced: Equal games vs all opponents in league</p>
+          <p className="text-xs text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+            Manual schedule entry. New franchise seasons start empty.
+          </p>
+          <p className="text-[10px] text-[#C4A853] mt-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+            Add SMB4 games from the Franchise Schedule tab as you play them.
+          </p>
         </div>
       </div>
 
@@ -1358,7 +1337,7 @@ function Step6Confirm({
             </div>
             <p className="text-xs text-[#E8E8D8]/70 mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
               {config.season.gamesPerTeam} games • {config.season.inningsPerGame} innings •{" "}
-              {config.season.scheduleType} schedule
+              manual schedule policy
             </p>
             <p className="text-xs text-[#E8E8D8]/50" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
               {config.season.allStarGame && "All-Star Game ✓  "}

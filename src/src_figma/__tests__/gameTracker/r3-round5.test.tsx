@@ -313,8 +313,8 @@ describe("R3 Round 5 bug fixes", () => {
       result.current.startGame();
     });
 
-    act(() => {
-      const pitcherSub = result.current.makeSubstitution(
+    await act(async () => {
+      const pitcherSub = await result.current.makeSubstitution(
         "home-rp",
         "home-sp",
         "Home Reliever",
@@ -326,8 +326,8 @@ describe("R3 Round 5 bug fixes", () => {
 
     expect(result.current.gameState.currentPitcherId).toBe("home-rp");
 
-    act(() => {
-      const catcherSub = result.current.makeSubstitution(
+    await act(async () => {
+      const catcherSub = await result.current.makeSubstitution(
         "home-c2",
         "home-c",
         "Backup Catcher",
@@ -353,8 +353,8 @@ describe("R3 Round 5 bug fixes", () => {
     const { result } = renderHook(() => useGameState());
     await initializeGame(result, 7);
 
-    act(() => {
-      const catcherSub = result.current.makeSubstitution(
+    await act(async () => {
+      const catcherSub = await result.current.makeSubstitution(
         "home-c2",
         "home-c",
         "Backup Catcher",

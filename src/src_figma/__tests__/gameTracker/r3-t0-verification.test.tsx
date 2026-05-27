@@ -273,10 +273,10 @@ describe('R3-T0 verification harness', () => {
     });
 
     await waitFor(() => {
-      expect(mockSaveCurrentGame).toHaveBeenCalled();
+      expect(mockImmediateSaveCurrentGame).toHaveBeenCalled();
     });
 
-    const persistedSnapshot = mockSaveCurrentGame.mock.calls.at(-1)?.[0];
+    const persistedSnapshot = mockImmediateSaveCurrentGame.mock.calls.at(-1)?.[0];
     expect(persistedSnapshot.awayTeamColor).toBe('#112233');
     expect(persistedSnapshot.homeTeamColor).toBe('#445566');
     expect(persistedSnapshot.gameStartTimestamp).toBe(seededStart);

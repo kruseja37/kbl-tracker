@@ -14,7 +14,7 @@
  */
 
 const DB_NAME = 'kbl-tracker';
-const DB_VERSION = 11; // Must be the highest version any consumer ever used
+export const TRACKER_DB_VERSION = 12; // Must be the highest version any consumer ever used
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -26,7 +26,7 @@ export async function getTrackerDb(): Promise<IDBDatabase> {
   if (dbInstance) return dbInstance;
 
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    const request = indexedDB.open(DB_NAME, TRACKER_DB_VERSION);
 
     request.onerror = () => {
       console.error('[trackerDb] Failed to open database:', request.error);
@@ -98,6 +98,18 @@ export async function getTrackerDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('seasonMetadata')) {
         const metaStore = db.createObjectStore('seasonMetadata', { keyPath: 'seasonId' });
         metaStore.createIndex('status', 'status', { unique: false });
+      }
+
+      // v12: Durable franchise season summaries for Mode 2 -> Mode 3 handoff
+      if (!db.objectStoreNames.contains('franchiseSeasonSummaries')) {
+        const summaryStore = db.createObjectStore('franchiseSeasonSummaries', {
+          keyPath: 'seasonId',
+        });
+        summaryStore.createIndex('franchiseId', 'franchiseId', { unique: false });
+        summaryStore.createIndex('seasonNumber', 'seasonNumber', { unique: false });
+        summaryStore.createIndex('franchiseId_seasonNumber', ['franchiseId', 'seasonNumber'], {
+          unique: true,
+        });
       }
 
       // ── Phase 5: Career stores ────────────────────────────────

@@ -14,11 +14,30 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useParams } from "react-router";
 import { Trophy, ChevronDown, ChevronUp, ArrowRight } from "lucide-react";
-import { useSeasonStats, type BattingLeaderEntry, type PitchingLeaderEntry } from "../../../hooks/useSeasonStats";
+import {
+  useSeasonStats,
+  type BattingLeaderEntry,
+  type BattingSortKey,
+  type PitchingLeaderEntry,
+  type PitchingSortKey,
+} from "../../../hooks/useSeasonStats";
 import { useFranchiseData } from "@/hooks/useFranchiseData";
 import { useScheduleData } from "@/hooks/useScheduleData";
 import { usePlayoffData } from "@/hooks/usePlayoffData";
-import type { LeagueStandings, StandingEntry } from "@/hooks/useFranchiseData";
+import type { StandingEntry } from "@/hooks/useFranchiseData";
+import { getSeasonIdForScope } from "../../../utils/franchisePersistenceContract";
+import {
+  getInitialRouteSeasonNumber,
+  loadRouteSeasonNumber,
+} from "../utils/franchiseRouteSeason";
+import {
+  getFranchiseSeasonSummary,
+  type FranchiseSeasonSummary,
+} from "../../../utils/franchiseSeasonSummaryStorage";
+import {
+  calculateBattingDerived,
+  calculatePitchingDerived,
+} from "../../../utils/seasonStorage";
 
 // ============================================
 // TYPES
@@ -38,6 +57,116 @@ interface GoldGloveWinner {
   fWAR: number;
 }
 
+type BattingLeaderBuckets = Record<'AVG' | 'HR' | 'RBI' | 'OBP' | 'SLG', BattingLeaderEntry[]>;
+type PitchingLeaderBuckets = Record<'W' | 'ERA' | 'K' | 'WHIP' | 'SV', PitchingLeaderEntry[]>;
+
+function persistedBattingLeaderEntry(
+  stats: FranchiseSeasonSummary['seasonStats']['batting'][number],
+  rank: number,
+): BattingLeaderEntry {
+  const derived = calculateBattingDerived(stats);
+  const bWAR = stats.bwar ?? 0;
+  const fWAR = stats.fwar ?? 0;
+  const rWAR = stats.rwar ?? 0;
+  return {
+    ...stats,
+    rank,
+    avg: derived.avg,
+    obp: derived.obp,
+    slg: derived.slg,
+    ops: derived.ops,
+    bWAR,
+    fWAR,
+    rWAR,
+    totalWAR: stats.totalWar ?? bWAR + fWAR + rWAR,
+  };
+}
+
+function persistedPitchingLeaderEntry(
+  stats: FranchiseSeasonSummary['seasonStats']['pitching'][number],
+  rank: number,
+): PitchingLeaderEntry {
+  const derived = calculatePitchingDerived(stats);
+  const fullInnings = Math.floor(stats.outsRecorded / 3);
+  const partialOuts = stats.outsRecorded % 3;
+  return {
+    ...stats,
+    rank,
+    era: derived.era,
+    whip: derived.whip,
+    ip: partialOuts === 0 ? `${fullInnings}.0` : `${fullInnings}.${partialOuts}`,
+    pWAR: stats.pwar ?? 0,
+  };
+}
+
+function getPersistedBattingLeaders(
+  summary: FranchiseSeasonSummary,
+  sortBy: BattingSortKey,
+  limit: number,
+): BattingLeaderEntry[] {
+  const isRateStat = sortBy === 'avg' || sortBy === 'obp' || sortBy === 'slg' || sortBy === 'ops';
+  const qualifyingAB = isRateStat ? 10 : 0;
+  const entries = summary.seasonStats.batting
+    .filter((stats) => stats.ab >= qualifyingAB)
+    .map((stats) => persistedBattingLeaderEntry(stats, 0));
+
+  const value = (entry: BattingLeaderEntry): number => {
+    switch (sortBy) {
+      case 'avg': return entry.avg;
+      case 'obp': return entry.obp;
+      case 'slg': return entry.slg;
+      case 'ops': return entry.ops;
+      case 'hr': return entry.homeRuns;
+      case 'rbi': return entry.rbi;
+      case 'hits': return entry.hits;
+      case 'runs': return entry.runs;
+      case 'sb': return entry.stolenBases;
+      case 'fameNet': return entry.fameNet;
+      case 'bWAR': return entry.bWAR;
+      case 'fWAR': return entry.fWAR;
+      case 'rWAR': return entry.rWAR;
+      case 'totalWAR': return entry.totalWAR;
+      default: return 0;
+    }
+  };
+
+  return entries
+    .sort((left, right) => value(right) - value(left))
+    .slice(0, limit)
+    .map((entry, index) => ({ ...entry, rank: index + 1 }));
+}
+
+function getPersistedPitchingLeaders(
+  summary: FranchiseSeasonSummary,
+  sortBy: PitchingSortKey,
+  limit: number,
+): PitchingLeaderEntry[] {
+  const qualifyingOuts = sortBy === 'era' || sortBy === 'whip' ? 9 : 0;
+  const entries = summary.seasonStats.pitching
+    .filter((stats) => stats.outsRecorded >= qualifyingOuts)
+    .map((stats) => persistedPitchingLeaderEntry(stats, 0));
+
+  const value = (entry: PitchingLeaderEntry): number => {
+    switch (sortBy) {
+      case 'era': return entry.era;
+      case 'whip': return entry.whip;
+      case 'wins': return entry.wins;
+      case 'strikeouts': return entry.strikeouts;
+      case 'saves': return entry.saves;
+      case 'ip': return entry.outsRecorded;
+      case 'fameNet': return entry.fameNet;
+      case 'pWAR': return entry.pWAR;
+      default: return 0;
+    }
+  };
+
+  const lowerIsBetter = sortBy === 'era' || sortBy === 'whip';
+  return entries
+    .sort((left, right) => lowerIsBetter ? value(left) - value(right) : value(right) - value(left))
+    .slice(0, limit)
+    .map((entry, index) => ({ ...entry, rank: index + 1 }));
+}
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -46,19 +175,60 @@ export function SeasonSummary() {
   const navigate = useNavigate();
   const { franchiseId } = useParams<{ franchiseId: string }>();
 
-  // Load season from localStorage (same as FranchiseHome)
-  const currentSeason = (() => {
-    const stored = localStorage.getItem('kbl-current-season');
-    return stored ? parseInt(stored, 10) : 1;
-  })();
+  // Franchise routes derive season from franchise metadata, not the global season marker.
+  const [currentSeason, setCurrentSeason] = useState(() => getInitialRouteSeasonNumber(franchiseId));
 
-  const seasonId = `season-${currentSeason}`;
+  useEffect(() => {
+    let cancelled = false;
+
+    loadRouteSeasonNumber(franchiseId)
+      .then((seasonNumber) => {
+        if (!cancelled) {
+          setCurrentSeason(seasonNumber);
+        }
+      })
+      .catch((err) => {
+        console.warn('[SeasonSummary] Failed to load route season number:', err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [franchiseId]);
+
+  const seasonId = getSeasonIdForScope(franchiseId, currentSeason);
+  const [persistedSummary, setPersistedSummary] = useState<FranchiseSeasonSummary | null>(null);
+  const [isSummaryLoading, setIsSummaryLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsSummaryLoading(true);
+
+    getFranchiseSeasonSummary(seasonId)
+      .then((summary) => {
+        if (!cancelled) {
+          setPersistedSummary(summary);
+          setIsSummaryLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.warn('[SeasonSummary] Failed to load persisted franchise season summary:', err);
+        if (!cancelled) {
+          setPersistedSummary(null);
+          setIsSummaryLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [seasonId]);
 
   // Data hooks
   const franchiseData = useFranchiseData(franchiseId, currentSeason);
-  const scheduleData = useScheduleData(currentSeason);
+  const scheduleData = useScheduleData(currentSeason, { franchiseId });
   const seasonStats = useSeasonStats(seasonId);
-  const playoffData = usePlayoffData(currentSeason);
+  const playoffData = usePlayoffData(currentSeason, { franchiseId });
 
   // Expandable sections
   const [expandedSection, setExpandedSection] = useState<string | null>("standings");
@@ -72,6 +242,16 @@ export function SeasonSummary() {
   // ============================================
 
   const battingLeaders = useMemo(() => {
+    if (isSummaryLoading) return null;
+    if (persistedSummary) {
+      return {
+        AVG: getPersistedBattingLeaders(persistedSummary, 'avg', 5),
+        HR: getPersistedBattingLeaders(persistedSummary, 'hr', 5),
+        RBI: getPersistedBattingLeaders(persistedSummary, 'rbi', 5),
+        OBP: getPersistedBattingLeaders(persistedSummary, 'obp', 5),
+        SLG: getPersistedBattingLeaders(persistedSummary, 'slg', 5),
+      };
+    }
     if (seasonStats.isLoading) return null;
     return {
       AVG: seasonStats.getBattingLeaders('avg', 5),
@@ -80,9 +260,19 @@ export function SeasonSummary() {
       OBP: seasonStats.getBattingLeaders('obp', 5),
       SLG: seasonStats.getBattingLeaders('slg', 5),
     };
-  }, [seasonStats.isLoading, seasonStats.getBattingLeaders]);
+  }, [isSummaryLoading, persistedSummary, seasonStats.isLoading, seasonStats.getBattingLeaders]);
 
   const pitchingLeaders = useMemo(() => {
+    if (isSummaryLoading) return null;
+    if (persistedSummary) {
+      return {
+        W: getPersistedPitchingLeaders(persistedSummary, 'wins', 5),
+        ERA: getPersistedPitchingLeaders(persistedSummary, 'era', 5),
+        K: getPersistedPitchingLeaders(persistedSummary, 'strikeouts', 5),
+        WHIP: getPersistedPitchingLeaders(persistedSummary, 'whip', 5),
+        SV: getPersistedPitchingLeaders(persistedSummary, 'saves', 5),
+      };
+    }
     if (seasonStats.isLoading) return null;
     return {
       W: seasonStats.getPitchingLeaders('wins', 5),
@@ -91,10 +281,28 @@ export function SeasonSummary() {
       WHIP: seasonStats.getPitchingLeaders('whip', 5),
       SV: seasonStats.getPitchingLeaders('saves', 5),
     };
-  }, [seasonStats.isLoading, seasonStats.getPitchingLeaders]);
+  }, [isSummaryLoading, persistedSummary, seasonStats.isLoading, seasonStats.getPitchingLeaders]);
 
   // Combined WAR leaderboard (position players + pitchers)
   const warLeaders = useMemo(() => {
+    if (isSummaryLoading) return [];
+    if (persistedSummary) {
+      const batters = getPersistedBattingLeaders(persistedSummary, 'totalWAR', 20)
+        .filter((entry) => entry.totalWAR !== 0);
+      const pitchers = getPersistedPitchingLeaders(persistedSummary, 'pWAR', 20)
+        .filter((entry) => entry.pWAR !== 0);
+
+      const combined: Array<{ playerName: string; teamId: string; war: number; type: 'position' | 'pitcher' }> = [];
+      for (const b of batters) {
+        combined.push({ playerName: b.playerName, teamId: b.teamId, war: b.totalWAR, type: 'position' });
+      }
+      for (const p of pitchers) {
+        combined.push({ playerName: p.playerName, teamId: p.teamId, war: p.pWAR, type: 'pitcher' });
+      }
+
+      combined.sort((a, b) => b.war - a.war);
+      return combined.slice(0, 5);
+    }
     if (seasonStats.isLoading) return [];
 
     const batters = seasonStats.getBattingLeaders('totalWAR', 20);
@@ -112,13 +320,15 @@ export function SeasonSummary() {
 
     combined.sort((a, b) => b.war - a.war);
     return combined.slice(0, 5);
-  }, [seasonStats.isLoading, seasonStats.getBattingLeaders, seasonStats.getPitchingLeaders]);
+  }, [isSummaryLoading, persistedSummary, seasonStats.isLoading, seasonStats.getBattingLeaders, seasonStats.getPitchingLeaders]);
 
   // ============================================
   // AUTO-CALCULATE AWARDS
   // ============================================
 
   const awards = useMemo(() => {
+    if (isSummaryLoading) return null;
+    if (persistedSummary) return null;
     if (seasonStats.isLoading) return null;
 
     // MVP: highest totalWAR among position players
@@ -184,13 +394,14 @@ export function SeasonSummary() {
     }
 
     return { mvp, cyYoung, goldGloves };
-  }, [seasonStats.isLoading, seasonStats.getBattingLeaders, seasonStats.getPitchingLeaders, seasonStats.getFieldingLeaders]);
+  }, [isSummaryLoading, persistedSummary, seasonStats.isLoading, seasonStats.getBattingLeaders, seasonStats.getPitchingLeaders, seasonStats.getFieldingLeaders]);
 
   // ============================================
   // USER'S TEAM SUMMARY
   // ============================================
 
   const userTeamSummary = useMemo(() => {
+    if (isSummaryLoading) return null;
     if (!franchiseData.standings || !franchiseData.franchiseConfig) return null;
 
     // Find user's team(s) from franchise config
@@ -198,6 +409,35 @@ export function SeasonSummary() {
     if (selectedTeams.length === 0) return null;
 
     const userTeamId = selectedTeams[0]; // Primary team
+
+    if (persistedSummary) {
+      const teamEntry = persistedSummary.standings.teams.find(
+        (team) => team.teamId === userTeamId || team.teamName.toLowerCase().replace(/\s+/g, '-') === userTeamId,
+      );
+      if (!teamEntry) return null;
+
+      const topBatters = getPersistedBattingLeaders(persistedSummary, 'totalWAR', 50)
+        .filter((b) => b.teamId === teamEntry.teamId)
+        .slice(0, 3);
+      const topPitchers = getPersistedPitchingLeaders(persistedSummary, 'pWAR', 50)
+        .filter((p) => p.teamId === teamEntry.teamId)
+        .slice(0, 2);
+
+      return {
+        teamName: teamEntry.teamName,
+        teamId: teamEntry.teamId,
+        wins: teamEntry.wins,
+        losses: teamEntry.losses,
+        divisionName: 'Final Standings',
+        conferenceName: '',
+        divisionRank: persistedSummary.standings.teams.findIndex((team) => team.teamId === teamEntry.teamId) + 1,
+        gamesBack: teamEntry.gamesBack,
+        runDiff: teamEntry.runDiff,
+        topBatters,
+        topPitchers,
+      };
+    }
+
     const standings = franchiseData.standings;
 
     // Find team in standings
@@ -249,13 +489,14 @@ export function SeasonSummary() {
       topBatters: teamBatters,
       topPitchers: teamPitchers,
     };
-  }, [franchiseData.standings, franchiseData.franchiseConfig, seasonStats.getBattingLeaders, seasonStats.getPitchingLeaders]);
+  }, [franchiseData.standings, franchiseData.franchiseConfig, isSummaryLoading, persistedSummary, seasonStats.getBattingLeaders, seasonStats.getPitchingLeaders]);
 
   // ============================================
   // HANDLE START PLAYOFFS
   // ============================================
 
   const [isCreatingPlayoff, setIsCreatingPlayoff] = useState(false);
+  const [playoffCreationError, setPlayoffCreationError] = useState<string | null>(null);
 
   const handleStartPlayoffs = async () => {
     // If playoff already exists, just navigate to the bracket tab
@@ -265,6 +506,7 @@ export function SeasonSummary() {
     }
 
     setIsCreatingPlayoff(true);
+    setPlayoffCreationError(null);
     try {
       const playoffConfig = franchiseData.franchiseConfig?.playoffs;
       const teamsQualifying = playoffConfig?.teamsQualifying ?? 8;
@@ -297,6 +539,7 @@ export function SeasonSummary() {
       await playoffData.createNewPlayoff({
         seasonNumber: currentSeason,
         seasonId,
+        franchiseId,
         teamsQualifying,
         gamesPerRound,
         inningsPerGame,
@@ -305,6 +548,8 @@ export function SeasonSummary() {
 
       navigate(`/franchise/${franchiseId}?tab=bracket`);
     } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create playoff.';
+      setPlayoffCreationError(message);
       console.error('Failed to create playoff:', err);
     } finally {
       setIsCreatingPlayoff(false);
@@ -315,7 +560,7 @@ export function SeasonSummary() {
   // LOADING STATE
   // ============================================
 
-  if (franchiseData.isLoading || seasonStats.isLoading || scheduleData.isLoading || playoffData.isLoading) {
+  if (franchiseData.isLoading || isSummaryLoading || (!persistedSummary && seasonStats.isLoading) || scheduleData.isLoading || playoffData.isLoading) {
     return (
       <div className="min-h-screen bg-[#567A50] flex items-center justify-center">
         <div className="text-[#E8E8D8] text-lg">Loading season summary...</div>
@@ -359,8 +604,9 @@ export function SeasonSummary() {
   // ============================================
 
   const gamesPerTeam = franchiseData.franchiseConfig?.season?.gamesPerTeam ?? 0;
-  const completedGames = scheduleData.completedGames?.length ?? 0;
-  const skippedGames = (scheduleData.games ?? []).filter(g => g.status === 'SKIPPED').length;
+  const summaryStandings = persistedSummary?.standings.teams ?? [];
+  const completedGames = persistedSummary?.completedGames.gameIds.length ?? scheduleData.completedGames?.length ?? 0;
+  const skippedGames = persistedSummary?.schedule.skippedGameIds.length ?? (scheduleData.games ?? []).filter(g => g.status === 'SKIPPED').length;
 
   return (
     <div className="min-h-screen bg-[#567A50]">
@@ -388,7 +634,30 @@ export function SeasonSummary() {
         <SectionHeader title="Final Standings" section="standings" />
         {expandedSection === "standings" && (
           <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4 space-y-4">
-            {Object.entries(franchiseData.standings).map(([conference, divisions]) => (
+            {summaryStandings.length > 0 ? (
+              <table className="w-full text-[10px] text-[#E8E8D8]">
+                <thead>
+                  <tr className="text-[#E8E8D8]/60">
+                    <th className="text-left py-0.5 w-1/3">Team</th>
+                    <th className="text-center py-0.5">W</th>
+                    <th className="text-center py-0.5">L</th>
+                    <th className="text-center py-0.5">GB</th>
+                    <th className="text-center py-0.5">DIFF</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {summaryStandings.map((team, idx) => (
+                    <tr key={team.teamId} className={idx === 0 ? 'text-[#C4A853]' : ''}>
+                      <td className="py-0.5">{team.teamName}</td>
+                      <td className="text-center py-0.5">{team.wins}</td>
+                      <td className="text-center py-0.5">{team.losses}</td>
+                      <td className="text-center py-0.5">{team.gamesBack}</td>
+                      <td className="text-center py-0.5">{team.runDiff}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : Object.entries(franchiseData.standings).map(([conference, divisions]) => (
               <div key={conference}>
                 <div className="text-xs text-[#C4A853] mb-2 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
                   {conference} Conference
@@ -566,9 +835,13 @@ export function SeasonSummary() {
             )}
 
             {/* No awards message */}
-            {!awards?.mvp && !awards?.cyYoung && (
+            {persistedSummary ? (
               <div className="text-[10px] text-[#E8E8D8]/50 italic text-center py-4">
-                No award data available — play or simulate games to generate stats
+                {persistedSummary.awards.reason || 'Awards are not finalized in Mode 2 v1 persisted season summaries.'}
+              </div>
+            ) : !awards?.mvp && !awards?.cyYoung && (
+              <div className="text-[10px] text-[#E8E8D8]/50 italic text-center py-4">
+                No award data available — play or score games to generate stats
               </div>
             )}
           </div>
@@ -594,7 +867,7 @@ export function SeasonSummary() {
                     {userTeamSummary.divisionRank === 1 ? '1st' :
                      userTeamSummary.divisionRank === 2 ? '2nd' :
                      userTeamSummary.divisionRank === 3 ? '3rd' :
-                     `${userTeamSummary.divisionRank}th`} in {userTeamSummary.divisionName} ({userTeamSummary.conferenceName})
+                     `${userTeamSummary.divisionRank}th`} in {userTeamSummary.divisionName}{userTeamSummary.conferenceName ? ` (${userTeamSummary.conferenceName})` : ''}
                     {userTeamSummary.gamesBack !== '-' && ` — ${userTeamSummary.gamesBack} GB`}
                   </div>
                   <div className="text-[9px] text-[#E8E8D8]/50 mt-1">
@@ -648,6 +921,11 @@ export function SeasonSummary() {
             <span>{isCreatingPlayoff ? 'CREATING BRACKET...' : playoffData.hasActivePlayoff ? 'VIEW PLAYOFFS' : 'START PLAYOFFS'}</span>
             {!isCreatingPlayoff && <ArrowRight className="w-5 h-5" />}
           </button>
+          {(playoffCreationError || playoffData.error) && (
+            <div className="mt-3 border-[3px] border-[#A3483D] bg-[#4A1F1B]/80 px-3 py-2 text-[10px] text-[#FFD7D2]">
+              {playoffCreationError || playoffData.error}
+            </div>
+          )}
 
           <button
             onClick={() => navigate(`/franchise/${franchiseId}`)}

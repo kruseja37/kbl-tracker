@@ -11,6 +11,7 @@ import {
 } from './optimalLineup';
 import { getEffectivePlayer } from './playerOverrides';
 import { syncEngine } from './syncEngine';
+import { getFranchiseDatabaseName } from './franchisePersistenceContract';
 
 export type { Player, Team } from './leagueBuilderStorage';
 
@@ -23,10 +24,6 @@ const STORES = {
 
 const franchiseDbPromises = new Map<string, Promise<IDBDatabase>>();
 const franchiseDbInstances = new Map<string, IDBDatabase>();
-
-function getFranchiseDatabaseName(franchiseId: string): string {
-  return `kbl-franchise-${franchiseId}`;
-}
 
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -199,7 +196,7 @@ export async function saveFranchisePlayer(
   tx.objectStore(STORES.PLAYERS).put(fullPlayer);
   await transactionToPromise(tx);
 
-  if (!syncEngine.isSuppressed()) syncEngine.upsert(`kbl-franchise-${franchiseId}`, 'players', fullPlayer.id, fullPlayer);
+  if (!syncEngine.isSuppressed()) syncEngine.upsert(getFranchiseDatabaseName(franchiseId), 'players', fullPlayer.id, fullPlayer);
 
   await markFranchiseTeamSnapshotsStaleForPlayerChange(franchiseId, existing, fullPlayer);
 
@@ -241,7 +238,7 @@ export async function saveFranchiseTeam(
   tx.objectStore(STORES.TEAMS).put(fullTeam);
   await transactionToPromise(tx);
 
-  if (!syncEngine.isSuppressed()) syncEngine.upsert(`kbl-franchise-${franchiseId}`, 'teams', fullTeam.id, fullTeam);
+  if (!syncEngine.isSuppressed()) syncEngine.upsert(getFranchiseDatabaseName(franchiseId), 'teams', fullTeam.id, fullTeam);
 
   return fullTeam;
 }
@@ -313,7 +310,7 @@ export async function deepCopyLeagueToFranchise(franchiseId: string, leagueId: s
 
   // Push tombstones for existing records before clearing
   if (!syncEngine.isSuppressed()) {
-    const dbName = `kbl-franchise-${franchiseId}`;
+    const dbName = getFranchiseDatabaseName(franchiseId);
     const existingPlayers = await getAllFranchisePlayers(franchiseId);
     const existingTeams = await getAllFranchiseTeams(franchiseId);
     for (const p of existingPlayers) syncEngine.remove(dbName, 'players', p.id);
@@ -338,7 +335,7 @@ export async function deepCopyLeagueToFranchise(franchiseId: string, leagueId: s
   await transactionToPromise(tx);
 
   if (!syncEngine.isSuppressed()) {
-    const dbName = `kbl-franchise-${franchiseId}`;
+    const dbName = getFranchiseDatabaseName(franchiseId);
     for (const player of playersToCopy) syncEngine.upsert(dbName, 'players', player.id, player);
     for (const team of teamsToCopy) syncEngine.upsert(dbName, 'teams', team.id, team);
   }

@@ -902,8 +902,8 @@ describe('Web Gem Detection', () => {
     expect(isWebGem('running')).toBe(false);
   });
 
-  test('leaping is NOT a web gem', () => {
-    expect(isWebGem('leaping')).toBe(false);
+  test('leaping is a web gem', () => {
+    expect(isWebGem('leaping')).toBe(true);
   });
 });
 

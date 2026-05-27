@@ -132,12 +132,27 @@ function generateGameId(): string {
   return `game-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
+function buildScheduleMetadata(
+  seasonNumber: number,
+  games: ScheduledGame[],
+): ScheduleMetadata {
+  return {
+    seasonNumber,
+    totalGamesScheduled: games.length,
+    totalGamesCompleted: games.filter(g => g.status === 'COMPLETED').length,
+    lastUpdated: Date.now(),
+  };
+}
+
 // ============================================
 // GAME OPERATIONS
 // ============================================
 
 /**
- * Get all scheduled games for a season
+ * Get unscoped scheduled games for a season.
+ *
+ * Franchise schedules should use getAllGamesByFranchise so multiple
+ * franchises can reuse the same seasonNumber without leaking rows.
  */
 export async function getAllGames(seasonNumber: number): Promise<ScheduledGame[]> {
   const db = await initScheduleDatabase();
@@ -149,7 +164,9 @@ export async function getAllGames(seasonNumber: number): Promise<ScheduledGame[]
     const request = index.getAll(seasonNumber);
 
     request.onsuccess = () => {
-      const games = request.result || [];
+      const games = (request.result || []).filter(
+        (game: ScheduledGame) => !game.franchiseId,
+      );
       // Sort by game number
       games.sort((a, b) => a.gameNumber - b.gameNumber);
       resolve(games);
@@ -202,8 +219,13 @@ export async function addGame(input: AddGameInput): Promise<ScheduledGame> {
     throw new Error('Away team cannot equal home team');
   }
 
-  // Auto-increment game number if not provided
-  const gameNumber = input.gameNumber ?? await getNextGameNumber(input.seasonNumber);
+  // Auto-increment game number if not provided. Franchise schedules are
+  // independently numbered so multiple franchises can share a seasonNumber.
+  const gameNumber = input.gameNumber ?? (
+    input.franchiseId
+      ? await getNextGameNumberForFranchise(input.franchiseId, input.seasonNumber)
+      : await getNextGameNumber(input.seasonNumber)
+  );
   const dayNumber = input.dayNumber ?? gameNumber;
 
   const game: ScheduledGame = {
@@ -243,7 +265,9 @@ export async function addSeries(
   seriesLength: number = 3
 ): Promise<ScheduledGame[]> {
   const games: ScheduledGame[] = [];
-  let nextGameNumber = await getNextGameNumber(input.seasonNumber);
+  const nextGameNumber = input.franchiseId
+    ? await getNextGameNumberForFranchise(input.franchiseId, input.seasonNumber)
+    : await getNextGameNumber(input.seasonNumber);
 
   for (let i = 0; i < seriesLength; i++) {
     const game = await addGame({
@@ -383,12 +407,7 @@ async function updateMetadata(seasonNumber: number): Promise<void> {
   const db = await initScheduleDatabase();
   const allGames = await getAllGames(seasonNumber);
 
-  const metadata: ScheduleMetadata = {
-    seasonNumber,
-    totalGamesScheduled: allGames.length,
-    totalGamesCompleted: allGames.filter(g => g.status === 'COMPLETED').length,
-    lastUpdated: Date.now(),
-  };
+  const metadata = buildScheduleMetadata(seasonNumber, allGames);
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORES.SCHEDULE_METADATA, 'readwrite');
@@ -530,6 +549,32 @@ export async function getAllGamesByFranchise(
 }
 
 /**
+ * Get games for a franchise/season filtered by team.
+ */
+export async function getGamesByTeamForFranchise(
+  franchiseId: string,
+  seasonNumber: number,
+  teamId: string,
+): Promise<ScheduledGame[]> {
+  const games = await getAllGamesByFranchise(franchiseId, seasonNumber);
+  return games.filter(g => g.awayTeamId === teamId || g.homeTeamId === teamId);
+}
+
+/**
+ * Get the next game number within one franchise schedule.
+ */
+export async function getNextGameNumberForFranchise(
+  franchiseId: string,
+  seasonNumber: number,
+): Promise<number> {
+  const games = await getAllGamesByFranchise(franchiseId, seasonNumber);
+  if (games.length === 0) return 1;
+
+  const maxGameNumber = Math.max(...games.map(g => g.gameNumber));
+  return maxGameNumber + 1;
+}
+
+/**
  * Get next scheduled game for a franchise/season.
  */
 export async function getNextFranchiseGame(
@@ -544,6 +589,57 @@ export async function getNextFranchiseGame(
     .filter(g => !teamFilter || g.awayTeamId === teamFilter || g.homeTeamId === teamFilter);
 
   return scheduledGames[0] || null;
+}
+
+/**
+ * Calculate metadata for a franchise/season from scoped schedule rows.
+ */
+export async function getScheduleMetadataByFranchise(
+  franchiseId: string,
+  seasonNumber: number,
+): Promise<ScheduleMetadata> {
+  const games = await getAllGamesByFranchise(franchiseId, seasonNumber);
+  return buildScheduleMetadata(seasonNumber, games);
+}
+
+/**
+ * Calculate team schedule stats within one franchise schedule.
+ */
+export async function getTeamScheduleStatsForFranchise(
+  franchiseId: string,
+  seasonNumber: number,
+  teamId: string,
+): Promise<TeamScheduleStats> {
+  const games = await getGamesByTeamForFranchise(franchiseId, seasonNumber, teamId);
+
+  const completedGames = games.filter(g => g.status === 'COMPLETED');
+  const wins = completedGames.filter(g => g.result?.winningTeamId === teamId).length;
+  const losses = completedGames.length - wins;
+  const winPct = completedGames.length > 0 ? wins / completedGames.length : 0;
+  const gamesRemaining = games.filter(g => g.status === 'SCHEDULED').length;
+
+  return {
+    teamId,
+    wins,
+    losses,
+    winPct,
+    gamesScheduled: games.length,
+    gamesRemaining,
+  };
+}
+
+/**
+ * Clear schedule rows for a single franchise season.
+ */
+export async function clearFranchiseSeasonSchedule(
+  franchiseId: string,
+  seasonNumber: number,
+): Promise<void> {
+  const games = await getAllGamesByFranchise(franchiseId, seasonNumber);
+
+  for (const game of games) {
+    await deleteGame(game.id);
+  }
 }
 
 /**

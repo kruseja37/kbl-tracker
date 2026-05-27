@@ -4,6 +4,16 @@ import { useOffseasonData, type OffseasonPlayer, type OffseasonTeam } from "@/ho
 import { useOffseasonState, type FreeAgentSigning } from "../../hooks/useOffseasonState";
 import { useLeagueBuilderData } from "../../hooks/useLeagueBuilderData";
 import { transferPlayer, retirePlayer } from "../../../utils/leagueBuilderStorage";
+import {
+  FRANCHISE_OFFSEASON_TEMPLATE_MUTATION_MESSAGE,
+  shouldBlockFranchiseTemplateMutation,
+} from "../utils/franchiseOffseasonGuards";
+import {
+  FRANCHISE_FREE_AGENCY_CALCULATION_VERSION,
+  runFranchiseFreeAgencyDryRun,
+  type FranchiseFreeAgencyAdapterData,
+} from "../../../utils/franchiseFreeAgencyAdapter";
+import type { FranchiseOffseasonAdapterIssue } from "../../../utils/franchiseOffseasonAdapters";
 
 // Types
 type Personality = "COMPETITIVE" | "RELAXED" | "DROOPY" | "JOLLY" | "TOUGH" | "TIMID" | "EGOTISTICAL";
@@ -132,16 +142,145 @@ interface FreeAgencyFlowProps {
   onClose: () => void;
   seasonId?: string;
   seasonNumber?: number;
+  franchiseId?: string;
 }
 
-export function FreeAgencyFlow({ onClose, seasonId = 'season-1', seasonNumber = 1 }: FreeAgencyFlowProps) {
+export function FreeAgencyFlow(props: FreeAgencyFlowProps) {
+  if (props.franchiseId) {
+    return (
+      <FranchiseFreeAgencyDryRunPreview
+        franchiseId={props.franchiseId}
+        seasonId={props.seasonId ?? 'season-1'}
+        seasonNumber={props.seasonNumber ?? 1}
+        onClose={props.onClose}
+      />
+    );
+  }
+
+  return <PrototypeFreeAgencyFlow {...props} />;
+}
+
+function FranchiseFreeAgencyDryRunPreview({
+  franchiseId,
+  seasonId,
+  seasonNumber,
+  onClose,
+}: {
+  franchiseId: string;
+  seasonId: string;
+  seasonNumber: number;
+  onClose: () => void;
+}) {
+  const [franchisePreviewData, setFranchisePreviewData] = useState<FranchiseFreeAgencyAdapterData | null>(null);
+  const [franchisePreviewIssues, setFranchisePreviewIssues] = useState<FranchiseOffseasonAdapterIssue[]>([]);
+  const [franchisePreviewLoading, setFranchisePreviewLoading] = useState(false);
+  const [franchisePreviewError, setFranchisePreviewError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setFranchisePreviewLoading(true);
+    setFranchisePreviewError(null);
+
+    runFranchiseFreeAgencyDryRun(
+      {
+        franchiseId,
+        seasonId,
+        seasonNumber,
+        offseasonStateId: `offseason-${seasonId}`,
+        phase: "FREE_AGENCY",
+        dryRun: true,
+      },
+      { dryRun: true },
+    )
+      .then((result) => {
+        if (cancelled) return;
+        setFranchisePreviewData(result.data ?? null);
+        setFranchisePreviewIssues(result.issues ?? []);
+        if (!result.success) {
+          setFranchisePreviewError(result.message || "Free-agency preview failed validation.");
+        }
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setFranchisePreviewData(null);
+        setFranchisePreviewIssues([]);
+        setFranchisePreviewError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (!cancelled) setFranchisePreviewLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [franchiseId, seasonId, seasonNumber]);
+
+  return (
+    <FranchiseFreeAgencyDryRunSurface
+      seasonNumber={seasonNumber}
+      data={franchisePreviewData}
+      issues={franchisePreviewIssues}
+      isLoading={franchisePreviewLoading}
+      error={franchisePreviewError}
+      onClose={onClose}
+    />
+  );
+}
+
+function PrototypeFreeAgencyFlow({ onClose, seasonId = 'season-1', seasonNumber = 1, franchiseId }: FreeAgencyFlowProps) {
   // Load real data from playerDatabase via hook
   const { teams: realTeams, players: realPlayers, hasRealData, isLoading } = useOffseasonData();
   const { leagues, teams: leagueBuilderTeams } = useLeagueBuilderData();
 
   // Wire to offseason state for persistence
-  const offseasonState = useOffseasonState(seasonId, seasonNumber);
+  const offseasonState = useOffseasonState(seasonId, seasonNumber, { franchiseId });
   const [isSaving, setIsSaving] = useState(false);
+  const [blockedMessage, setBlockedMessage] = useState<string | null>(null);
+  const [franchisePreviewData, setFranchisePreviewData] = useState<FranchiseFreeAgencyAdapterData | null>(null);
+  const [franchisePreviewIssues, setFranchisePreviewIssues] = useState<FranchiseOffseasonAdapterIssue[]>([]);
+  const [franchisePreviewLoading, setFranchisePreviewLoading] = useState(false);
+  const [franchisePreviewError, setFranchisePreviewError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!franchiseId) return;
+
+    let cancelled = false;
+    setFranchisePreviewLoading(true);
+    setFranchisePreviewError(null);
+
+    runFranchiseFreeAgencyDryRun(
+      {
+        franchiseId,
+        seasonId,
+        seasonNumber,
+        offseasonStateId: `offseason-${seasonId}`,
+        phase: "FREE_AGENCY",
+        dryRun: true,
+      },
+      { dryRun: true },
+    )
+      .then((result) => {
+        if (cancelled) return;
+        setFranchisePreviewData(result.data ?? null);
+        setFranchisePreviewIssues(result.issues ?? []);
+        if (!result.success) {
+          setFranchisePreviewError(result.message || "Free-agency preview failed validation.");
+        }
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setFranchisePreviewData(null);
+        setFranchisePreviewIssues([]);
+        setFranchisePreviewError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (!cancelled) setFranchisePreviewLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [franchiseId, seasonId, seasonNumber]);
 
   // Convert real data to local format, with mock fallback
   const TEAMS: Team[] = useMemo(() => {
@@ -383,6 +522,11 @@ export function FreeAgencyFlow({ onClose, seasonId = 'season-1', seasonNumber = 
 
   // Save free agency results and close
   const saveAndClose = useCallback(async () => {
+    if (shouldBlockFranchiseTemplateMutation(franchiseId)) {
+      setBlockedMessage(FRANCHISE_OFFSEASON_TEMPLATE_MUTATION_MESSAGE);
+      return;
+    }
+
     try {
       setIsSaving(true);
       // Convert moves to FreeAgentSigning format
@@ -440,7 +584,20 @@ export function FreeAgencyFlow({ onClose, seasonId = 'season-1', seasonNumber = 
     } finally {
       setIsSaving(false);
     }
-  }, [allMoves, offseasonState, onClose, leagues, leagueBuilderTeams]);
+  }, [allMoves, franchiseId, offseasonState, onClose, leagues, leagueBuilderTeams]);
+
+  if (franchiseId) {
+    return (
+      <FranchiseFreeAgencyDryRunSurface
+        seasonNumber={seasonNumber}
+        data={franchisePreviewData}
+        issues={franchisePreviewIssues}
+        isLoading={franchisePreviewLoading}
+        error={franchisePreviewError}
+        onClose={onClose}
+      />
+    );
+  }
 
   // Show loading state (must be after all hooks)
   if (isLoading) {
@@ -469,6 +626,11 @@ export function FreeAgencyFlow({ onClose, seasonId = 'season-1', seasonNumber = 
           </div>
           <div className="w-20"></div>
         </div>
+        {blockedMessage && (
+          <div className="max-w-5xl mx-auto mb-4 bg-[#7A341F] border-[4px] border-[#C4A853] p-4 text-sm text-[#E8E8D8]">
+            {blockedMessage}
+          </div>
+        )}
 
         {/* Main Content */}
         <div className="max-w-5xl mx-auto">
@@ -540,6 +702,201 @@ export function FreeAgencyFlow({ onClose, seasonId = 'season-1', seasonNumber = 
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function FranchiseFreeAgencyDryRunSurface({
+  seasonNumber,
+  data,
+  issues,
+  isLoading,
+  error,
+  onClose,
+}: {
+  seasonNumber: number;
+  data: FranchiseFreeAgencyAdapterData | null;
+  issues: FranchiseOffseasonAdapterIssue[];
+  isLoading: boolean;
+  error: string | null;
+  onClose: () => void;
+}) {
+  const candidates = data?.candidates ?? [];
+  const teamPreviews = data?.teamPreviews ?? [];
+
+  return (
+    <div className="fixed inset-0 bg-black/95 z-50 overflow-y-auto">
+      <div className="min-h-screen p-4">
+        <div className="max-w-6xl mx-auto mb-4 flex items-center justify-between">
+          <button
+            onClick={onClose}
+            className="flex items-center gap-2 text-[#E8E8D8] hover:text-[#DD0000] transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            <span className="text-sm">Back to Offseason Hub</span>
+          </button>
+          <div className="text-center">
+            <div className="text-xl text-[#E8E8D8]">FREE AGENCY PREVIEW</div>
+            <div className="text-xs text-[#E8E8D8]/60">Season {seasonNumber} → Season {seasonNumber + 1}</div>
+          </div>
+          <div className="w-40" />
+        </div>
+
+        <div className="max-w-6xl mx-auto space-y-4">
+          <div className="bg-[#253C5A] border-[5px] border-[#C4A853] p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-2xl text-[#E8E8D8] mb-2">Preview only, no free-agency commit</div>
+                <div className="text-sm text-[#E8E8D8]/80">
+                  Franchise Mode v1 previews dice-board exposure only. No players are released, moved, exchanged, signed, or written.
+                </div>
+                <div className="text-xs text-[#E8E8D8]/60 mt-2">
+                  Method: <span className="font-mono">{data?.calculationVersion ?? FRANCHISE_FREE_AGENCY_CALCULATION_VERSION}</span>
+                </div>
+                <div className="text-xs text-[#E8E8D8]/60 mt-1">
+                  Boundary: no dice rolls are executed, no destination is selected, and no player exchange is selected.
+                </div>
+                <div className="text-xs text-[#E8E8D8]/60 mt-1">
+                  Final free-agency ceremony and exchange model remains deferred. No transactions are written.
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-4xl text-[#F5D06F] font-bold">{candidates.length}</div>
+                <div className="text-xs text-[#E8E8D8]/70">candidates</div>
+              </div>
+            </div>
+          </div>
+
+          {isLoading && (
+            <div className="bg-[#1F2A36] border-[4px] border-[#C4A853] p-4 text-[#E8E8D8]">
+              Loading franchise free-agency preview...
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-[#7A341F] border-[4px] border-[#C4A853] p-4 text-sm text-[#E8E8D8]">
+              {error}
+            </div>
+          )}
+
+          {issues.length > 0 && (
+            <div className="bg-[#3A2F1F] border-[4px] border-[#C4A853] p-4">
+              <div className="text-lg text-[#F5D06F] mb-2">Preview warnings and validation notes</div>
+              <FreeAgencyIssueList issues={issues} />
+            </div>
+          )}
+
+          <div className="bg-[#1F2A36] border-[5px] border-[#C4A853] p-5">
+            <div className="text-xl text-[#E8E8D8] mb-3">Read-only dice-board preview</div>
+            {teamPreviews.length === 0 && !isLoading ? (
+              <div className="text-sm text-[#E8E8D8]/70">No team dice-board previews are currently available.</div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                {teamPreviews.map((teamPreview) => (
+                  <div key={teamPreview.teamId} className="bg-black/25 border border-[#E8E8D8]/15 p-3 text-sm">
+                    <div className="text-[#E8E8D8] font-bold">{teamPreview.teamId}</div>
+                    <div className="text-xs text-[#E8E8D8]/65 mt-1">
+                      Eligible: {teamPreview.eligiblePlayerCount}
+                      {teamPreview.protectedPlayerId ? ` · Protected: ${teamPreview.protectedPlayerId}` : ""}
+                    </div>
+                    <div className="text-xs text-[#E8E8D8]/55 mt-2 break-words">
+                      Dice board: {teamPreview.diceBoardPlayerIds.length ? teamPreview.diceBoardPlayerIds.join(", ") : "empty"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-[#1F2A36] border-[5px] border-[#C4A853] p-5">
+            <div className="text-xl text-[#E8E8D8] mb-3">Read-only candidate list</div>
+            {candidates.length === 0 && !isLoading ? (
+              <div className="text-sm text-[#E8E8D8]/70">No elevated free-agency exposure candidates are currently proposed.</div>
+            ) : (
+              <div className="space-y-3">
+                {candidates.slice(0, 50).map((candidate) => (
+                  <div
+                    key={candidate.playerId}
+                    className="bg-black/25 border border-[#E8E8D8]/15 p-4 text-sm"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="text-[#E8E8D8] font-bold">{candidate.playerName}</div>
+                        <div className="text-xs text-[#E8E8D8]/55">
+                          {candidate.rosterStatus} · {candidate.teamId ?? "No team"} · {candidate.playerId}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[#F5D06F] font-bold">{candidate.probabilityBand.toUpperCase()}</div>
+                        <div className="text-xs text-[#E8E8D8]/70">
+                          {candidate.probabilityScore === null ? "No score" : `${candidate.probabilityScore.toFixed(2)}% risk`}
+                          {candidate.diceValue ? ` · dice ${candidate.diceValue}` : ""}
+                          {" · "}
+                          {candidate.trustLevel} trust
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      <div>
+                        <div className="text-xs text-[#F5D06F] mb-1">Evidence</div>
+                        <ul className="list-disc pl-5 text-xs text-[#E8E8D8]/75 space-y-1">
+                          {candidate.evidence.length ? candidate.evidence.map((item) => (
+                            <li key={item}>{item}</li>
+                          )) : <li>No direct evidence available.</li>}
+                        </ul>
+                      </div>
+                      <div>
+                        <div className="text-xs text-[#F5D06F] mb-1">Limitations</div>
+                        <ul className="list-disc pl-5 text-xs text-[#E8E8D8]/75 space-y-1">
+                          {candidate.limitations.length ? candidate.limitations.map((item) => (
+                            <li key={item}>{item}</li>
+                          )) : <li>No candidate-specific limitations.</li>}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {candidates.length > 50 && (
+                  <div className="text-xs text-[#E8E8D8]/60">Showing first 50 of {candidates.length} candidates.</div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {data?.limitations.length ? (
+            <div className="bg-[#253C5A] border-[5px] border-[#C4A853] p-5">
+              <div className="text-xl text-[#E8E8D8] mb-3">Preview limitations</div>
+              <ul className="list-disc pl-5 text-sm text-[#E8E8D8]/80 space-y-1">
+                {data.limitations.map((limitation) => (
+                  <li key={limitation}>{limitation}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          <div className="flex justify-end">
+            <button
+              onClick={onClose}
+              className="bg-[#4A4A4A] hover:bg-[#5A5A5A] text-[#E8E8D8] px-6 py-3 border-[3px] border-[#C4A853] transition-colors"
+            >
+              Close Preview
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FreeAgencyIssueList({ issues }: { issues: FranchiseOffseasonAdapterIssue[] }) {
+  return (
+    <div className="space-y-2">
+      {issues.map((issue, index) => (
+        <div key={`${issue.code}-${index}`} className="text-sm text-[#E8E8D8]/85">
+          <span className="font-mono text-xs text-[#E8E8D8]/60">{issue.severity.toUpperCase()} · {issue.code}</span>
+          <div>{issue.message}</div>
+        </div>
+      ))}
     </div>
   );
 }

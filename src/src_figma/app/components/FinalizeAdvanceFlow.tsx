@@ -3,12 +3,26 @@ import { X, ChevronDown, ChevronUp, ArrowUp, ArrowDown, Trophy, BarChart3, Check
 import { useOffseasonData, type OffseasonTeam, type OffseasonPlayer } from "@/hooks/useOffseasonData";
 import { SpringTrainingFlow } from "./SpringTrainingFlow";
 import {
-  createFranchisePlayerStorageAdapter,
   executeSeasonTransition,
   type TransitionResult,
 } from "../../../engines/seasonTransitionEngine";
-import { updateFranchiseMetadata, getActiveFranchise } from "../../../utils/franchiseManager";
-import { generateNewSeasonSchedule } from "../../../utils/franchiseInitializer";
+import { getFranchiseSeasonId } from "../../../utils/franchisePersistenceContract";
+import { runJournaledFranchiseSeasonTransition } from "../../../utils/franchiseSeasonTransitionOrchestrator";
+import { validateFranchisePhase11RosterLock } from "../../../utils/franchiseRosterLockValidator";
+import {
+  planFranchisePhase11Roster,
+  type FranchisePhase11RosterPlan,
+} from "../../../utils/franchisePhase11RosterPlanner";
+import {
+  releaseFranchisePhase11Player,
+  signFranchisePhase11Player,
+  type FranchisePhase11RosterActionResult,
+} from "../../../utils/franchisePhase11RosterActions";
+import { getFranchiseOffseasonStateId } from "../../../utils/franchiseOffseasonAdapters";
+import {
+  getAllFranchisePlayers,
+  type Player as FranchiseStoredPlayer,
+} from "../../../utils/franchisePlayerStorage";
 
 type Screen =
   | "roster-management"
@@ -63,10 +77,35 @@ interface Team {
   }>;
 }
 
+interface Phase11CorrectionCandidate {
+  playerId: string;
+  playerName: string;
+  teamId?: string;
+  rosterStatus: string;
+}
+
+type Phase11PendingAction =
+  | {
+      action: "release";
+      playerId: string;
+      playerName: string;
+      teamId: string;
+    }
+  | {
+      action: "sign";
+      playerId: string;
+      playerName: string;
+      teamId: string;
+      targetRosterStatus: "MLB" | "FARM";
+    };
+
 interface FinalizeAdvanceFlowProps {
   onClose: () => void;
   onAdvanceComplete: () => void;
   seasonNumber?: number;
+  seasonId?: string;
+  franchiseId?: string;
+  playoffId?: string;
 }
 
 // Helper to convert OffseasonPlayer to local Player format
@@ -99,7 +138,56 @@ function convertToLocalPlayer(player: OffseasonPlayer, index: number): Player {
 // Empty teams fallback — populated from IndexedDB when available
 const EMPTY_TEAMS: Team[] = [];
 
-export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber = 1 }: FinalizeAdvanceFlowProps) {
+function franchisePlayerName(player: FranchiseStoredPlayer): string {
+  return `${player.firstName ?? ""} ${player.lastName ?? ""}`.trim() || player.id;
+}
+
+function normalizeFranchiseRosterStatus(status: unknown): string {
+  if (typeof status !== "string" || status.trim().length === 0) return "UNKNOWN";
+  return status;
+}
+
+function getReleaseCandidates(players: FranchiseStoredPlayer[]): Phase11CorrectionCandidate[] {
+  return players.flatMap((player) =>
+    (player.leagueAssignments ?? [])
+      .filter((assignment) => assignment.teamId && (assignment.rosterStatus === "MLB" || assignment.rosterStatus === "FARM"))
+      .map((assignment) => ({
+        playerId: player.id,
+        playerName: franchisePlayerName(player),
+        teamId: assignment.teamId,
+        rosterStatus: assignment.rosterStatus,
+      })),
+  );
+}
+
+function isPhase11SignEligible(player: FranchiseStoredPlayer): boolean {
+  const statuses = (player.leagueAssignments ?? []).map((assignment) =>
+    normalizeFranchiseRosterStatus(assignment.rosterStatus),
+  );
+  return statuses.length === 0 || statuses.every((status) => status === "FREE_AGENT" || status === "UNASSIGNED");
+}
+
+function getSignCandidates(players: FranchiseStoredPlayer[]): Phase11CorrectionCandidate[] {
+  return players
+    .filter(isPhase11SignEligible)
+    .map((player) => ({
+      playerId: player.id,
+      playerName: franchisePlayerName(player),
+      teamId: player.leagueAssignments?.[0]?.teamId,
+      rosterStatus: player.leagueAssignments?.length
+        ? Array.from(new Set(player.leagueAssignments.map((assignment) => normalizeFranchiseRosterStatus(assignment.rosterStatus)))).join("/")
+        : "NO_ASSIGNMENTS",
+    }));
+}
+
+export function FinalizeAdvanceFlow({
+  onClose,
+  onAdvanceComplete,
+  seasonNumber = 1,
+  seasonId,
+  franchiseId,
+  playoffId,
+}: FinalizeAdvanceFlowProps) {
   const nextSeason = seasonNumber + 1;
   // Get real data from hook
   const { teams: realTeams, players: realPlayers, hasRealData, isLoading } = useOffseasonData();
@@ -116,8 +204,20 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
   const [processingStep, setProcessingStep] = useState(0);
   const [transitionResult, setTransitionResult] = useState<TransitionResult | null>(null);
   const [transitionError, setTransitionError] = useState<string | null>(null);
+  const [rosterMovementError, setRosterMovementError] = useState<string | null>(null);
+  const [phase11LockIssues, setPhase11LockIssues] = useState<Array<{ code?: string; message: string; teamId?: string; playerId?: string }>>([]);
+  const [phase11Plan, setPhase11Plan] = useState<FranchisePhase11RosterPlan | null>(null);
+  const [phase11ReleaseCandidates, setPhase11ReleaseCandidates] = useState<Phase11CorrectionCandidate[]>([]);
+  const [phase11SignCandidates, setPhase11SignCandidates] = useState<Phase11CorrectionCandidate[]>([]);
+  const [phase11Loading, setPhase11Loading] = useState(false);
+  const [phase11ActionProcessing, setPhase11ActionProcessing] = useState(false);
+  const [phase11PendingAction, setPhase11PendingAction] = useState<Phase11PendingAction | null>(null);
+  const [phase11ActionResult, setPhase11ActionResult] = useState<FranchisePhase11RosterActionResult | null>(null);
+  const [phase11CorrectionError, setPhase11CorrectionError] = useState<string | null>(null);
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
   const [expandedChemistry, setExpandedChemistry] = useState<Set<string>>(new Set());
+  const isFranchiseContext = Boolean(franchiseId);
+  const franchiseRosterMovementMessage = "Franchise roster movement is blocked here until the durable roster adapter is wired into Phase 11.";
 
   // Convert real data to local format
   const convertedTeams = useMemo((): Team[] => {
@@ -158,16 +258,30 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
   const selectedTeam = teams.find(t => t.id === selectedTeamId) || teams[0] || null;
 
   const handleCallUp = (player: Player) => {
+    if (isFranchiseContext) {
+      setRosterMovementError(franchiseRosterMovementMessage);
+      return;
+    }
     setSelectedPlayer(player);
     setShowCallUpModal(true);
   };
 
   const handleSendDown = (player: Player) => {
+    if (isFranchiseContext) {
+      setRosterMovementError(franchiseRosterMovementMessage);
+      return;
+    }
     setSelectedPlayer(player);
     setShowSendDownModal(true);
   };
 
   const confirmCallUp = () => {
+    if (isFranchiseContext) {
+      setRosterMovementError(franchiseRosterMovementMessage);
+      setShowCallUpModal(false);
+      setSelectedPlayer(null);
+      return;
+    }
     if (!selectedPlayer) return;
     
     const transaction: Transaction = {
@@ -197,6 +311,12 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
   };
 
   const confirmSendDown = () => {
+    if (isFranchiseContext) {
+      setRosterMovementError(franchiseRosterMovementMessage);
+      setShowSendDownModal(false);
+      setSelectedPlayer(null);
+      return;
+    }
     if (!selectedPlayer) return;
     
     const retirementRisk = calculateRetirementRisk(selectedPlayer);
@@ -325,6 +445,89 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
 
   const allRostersValid = teams.every(isRosterValid);
 
+  const formatFranchiseRosterLockError = useCallback((issues: Array<{ message: string }>): string => {
+    const preview = issues.slice(0, 3).map((issue) => issue.message).join(" ");
+    const remaining = issues.length > 3 ? ` (+${issues.length - 3} more)` : "";
+    return `Franchise Phase 11 roster lock failed. ${preview}${remaining}`;
+  }, []);
+
+  const loadPhase11CorrectionState = useCallback(async (activeFranchiseId: string, canonicalSeasonId: string) => {
+    setPhase11Loading(true);
+    setPhase11CorrectionError(null);
+    try {
+      const [plan, players] = await Promise.all([
+        planFranchisePhase11Roster({
+          franchiseId: activeFranchiseId,
+          seasonId: canonicalSeasonId,
+        }),
+        getAllFranchisePlayers(activeFranchiseId),
+      ]);
+      setPhase11Plan(plan);
+      setPhase11ReleaseCandidates(getReleaseCandidates(players));
+      setPhase11SignCandidates(getSignCandidates(players));
+      setPhase11LockIssues(plan.blockingLockIssues.map((issue) => ({
+        code: issue.code,
+        message: issue.message,
+        teamId: issue.teamId,
+        playerId: issue.playerId,
+      })));
+      if (plan.valid) {
+        setTransitionError(null);
+        setRosterMovementError(null);
+      }
+      return plan;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Phase 11 correction data could not be loaded.";
+      setPhase11CorrectionError(message);
+      return null;
+    } finally {
+      setPhase11Loading(false);
+    }
+  }, []);
+
+  const executePhase11PendingAction = useCallback(async () => {
+    if (!phase11PendingAction || !franchiseId) return;
+
+    const canonicalSeasonId = getFranchiseSeasonId(franchiseId, seasonNumber);
+    setPhase11ActionProcessing(true);
+    setPhase11ActionResult(null);
+    setPhase11CorrectionError(null);
+
+    try {
+      const baseContext = {
+        franchiseId,
+        seasonId: canonicalSeasonId,
+        statsScopeId: canonicalSeasonId,
+        seasonNumber,
+        offseasonStateId: getFranchiseOffseasonStateId(canonicalSeasonId),
+        teamId: phase11PendingAction.teamId,
+        playerId: phase11PendingAction.playerId,
+        actor: "USER" as const,
+      };
+
+      const result = phase11PendingAction.action === "release"
+        ? await releaseFranchisePhase11Player({
+            ...baseContext,
+            reason: "Phase 11 final roster correction",
+          })
+        : await signFranchisePhase11Player({
+            ...baseContext,
+            targetRosterStatus: phase11PendingAction.targetRosterStatus,
+          });
+
+      setPhase11ActionResult(result);
+      setPhase11PendingAction(null);
+
+      if (result.success) {
+        await loadPhase11CorrectionState(franchiseId, canonicalSeasonId);
+      }
+    } catch (error) {
+      setPhase11CorrectionError(error instanceof Error ? error.message : "Phase 11 correction action failed.");
+    } finally {
+      setPhase11ActionProcessing(false);
+    }
+  }, [franchiseId, loadPhase11CorrectionState, phase11PendingAction, seasonNumber]);
+
   const processAITeams = () => {
     setCurrentScreen("ai-processing");
     // Simulate processing steps
@@ -340,17 +543,68 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
   };
 
   const startSeasonTransition = useCallback(async () => {
-    setCurrentScreen("season-transition");
     setProcessingStep(0);
     setTransitionError(null);
+    setRosterMovementError(null);
+    setPhase11LockIssues([]);
+    setPhase11Plan(null);
+    setPhase11ActionResult(null);
+    setPhase11CorrectionError(null);
+    setPhase11PendingAction(null);
 
     try {
-      const activeFranchiseId = await getActiveFranchise();
-      const playerStorage = activeFranchiseId
-        ? createFranchisePlayerStorageAdapter(activeFranchiseId)
-        : undefined;
+      const activeFranchiseId = franchiseId;
+      if (activeFranchiseId) {
+        const canonicalSeasonId = getFranchiseSeasonId(activeFranchiseId, seasonNumber);
+        if (seasonId && seasonId !== canonicalSeasonId) {
+          console.warn('[SeasonTransition] Ignoring non-canonical seasonId for franchise summary:', seasonId);
+        }
+        const rosterLock = await validateFranchisePhase11RosterLock({
+          franchiseId: activeFranchiseId,
+          seasonId: canonicalSeasonId,
+        });
+        if (!rosterLock.valid) {
+          const error = formatFranchiseRosterLockError(rosterLock.issues);
+          setTransitionError(error);
+          setRosterMovementError(error);
+          setPhase11LockIssues(rosterLock.issues.map((issue) => ({
+            code: issue.code,
+            message: issue.message,
+            teamId: issue.teamId,
+            playerId: issue.playerId,
+          })));
+          await loadPhase11CorrectionState(activeFranchiseId, canonicalSeasonId);
+          setCurrentScreen("validation");
+          return;
+        }
 
-      // Execute REAL season transition operations via the engine
+        setCurrentScreen("season-transition");
+        const journaledResult = await runJournaledFranchiseSeasonTransition({
+          franchiseId: activeFranchiseId,
+          playoffId,
+          fromSeasonNumber: seasonNumber,
+          onStep: (stepNumber: number) => {
+            const uiStep = Math.min(stepNumber, 7);
+            setProcessingStep(uiStep);
+          },
+        });
+
+        if (journaledResult.transitionResult) {
+          setTransitionResult(journaledResult.transitionResult);
+        }
+
+        if (journaledResult.success) {
+          setProcessingStep(7);
+        } else {
+          setTransitionError(
+            `Transition failed at "${journaledResult.failedStage || 'unknown'}": ${journaledResult.error || 'Unknown error'}`
+          );
+        }
+        return;
+      }
+
+      setCurrentScreen("season-transition");
+      // Execute REAL season transition operations via the engine for non-franchise/global flows.
       const result = await executeSeasonTransition(
         seasonNumber,
         (stepNumber: number, stepName: string, details?: string) => {
@@ -361,26 +615,12 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
           const uiStep = Math.min(stepNumber, 7);
           setProcessingStep(uiStep);
         },
-        playerStorage,
       );
 
       setTransitionResult(result);
 
       if (result.success) {
-        // After engine finishes, ensure UI shows step 7 complete
         setProcessingStep(7);
-
-        // Update FranchiseMetadata.currentSeason in IndexedDB
-        const franchiseId = await getActiveFranchise();
-        if (franchiseId) {
-          await updateFranchiseMetadata(franchiseId, {
-            currentSeason: seasonNumber + 1,
-          });
-
-          // Generate schedule for the new season
-          const gamesScheduled = await generateNewSeasonSchedule(franchiseId, seasonNumber + 1);
-          console.log(`[SeasonTransition] Generated ${gamesScheduled} games for Season ${seasonNumber + 1}`);
-        }
       } else {
         const failedStep = result.steps.find((s: { status: string }) => s.status === 'error');
         setTransitionError(
@@ -388,9 +628,10 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
         );
       }
     } catch (err) {
+      setCurrentScreen("season-transition");
       setTransitionError(err instanceof Error ? err.message : 'Season transition failed');
     }
-  }, [seasonNumber]);
+  }, [formatFranchiseRosterLockError, franchiseId, loadPhase11CorrectionState, playoffId, seasonId, seasonNumber]);
 
   const getChemistryLabel = (score: number): { label: string; color: string; icon: string } => {
     if (score >= 80) return { label: "Excellent", color: "#4CAF50", icon: "🟢" };
@@ -495,6 +736,16 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
                   <span className="text-[#FFD700]">⚠ {selectedTeam.mlbRoster.length} MLB + {selectedTeam.farmRoster.length} Farm = {selectedTeam.mlbRoster.length + selectedTeam.farmRoster.length} (ideal: 32)</span>
                 )}
               </div>
+              {isFranchiseContext && (
+                <div className="mt-3 border-2 border-[#C4A853] bg-[#4A6844] p-3 text-xs text-[#E8E8D8]">
+                  {franchiseRosterMovementMessage}
+                </div>
+              )}
+              {rosterMovementError && (
+                <div className="mt-3 border-2 border-[#DD0000]/60 bg-[#5A3A3A] p-3 text-xs text-[#FFD6D6]">
+                  {rosterMovementError}
+                </div>
+              )}
             </div>
 
             {/* Roster Panels */}
@@ -529,7 +780,9 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
                         {selectedTeam.isUserControlled && (
                           <button
                             onClick={() => handleSendDown(player)}
-                            className="text-xs bg-[#5A8352] text-[#E8E8D8] px-2 py-1 border-2 border-[#E8E8D8]/30 hover:bg-[#4F7D4B] flex items-center gap-1"
+                            disabled={isFranchiseContext}
+                            title={isFranchiseContext ? franchiseRosterMovementMessage : undefined}
+                            className={`text-xs bg-[#5A8352] text-[#E8E8D8] px-2 py-1 border-2 border-[#E8E8D8]/30 hover:bg-[#4F7D4B] flex items-center gap-1 ${isFranchiseContext ? "opacity-50 cursor-not-allowed" : ""}`}
                           >
                             <ArrowDown className="w-3 h-3" />
                             Send
@@ -579,7 +832,9 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
                         {selectedTeam.isUserControlled && (
                           <button
                             onClick={() => handleCallUp(player)}
-                            className="text-xs bg-[#5A8352] text-[#E8E8D8] px-2 py-1 border-2 border-[#E8E8D8]/30 hover:bg-[#4F7D4B] flex items-center gap-1"
+                            disabled={isFranchiseContext}
+                            title={isFranchiseContext ? franchiseRosterMovementMessage : undefined}
+                            className={`text-xs bg-[#5A8352] text-[#E8E8D8] px-2 py-1 border-2 border-[#E8E8D8]/30 hover:bg-[#4F7D4B] flex items-center gap-1 ${isFranchiseContext ? "opacity-50 cursor-not-allowed" : ""}`}
                           >
                             <ArrowUp className="w-3 h-3" />
                             Call
@@ -777,7 +1032,264 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
                   {teams.filter(isRosterValid).length} of {teams.length} teams at ideal roster size
                   {!allRostersValid && " — teams with fewer players will have a thinner bench"}
                 </div>
+                {transitionError && (
+                  <div className="mt-4 border-2 border-[#DD0000]/60 bg-[#5A3A3A] p-3 text-xs text-[#FFD6D6]">
+                    {transitionError}
+                    {phase11LockIssues.length > 0 && (
+                      <div className="mt-3 space-y-1 text-[#FFE2E2]">
+                        <div className="font-bold">Phase 11 lock issues to resolve before advancing:</div>
+                        {phase11LockIssues.slice(0, 8).map((issue, index) => (
+                          <div key={`${issue.code ?? 'issue'}-${issue.teamId ?? 'league'}-${issue.playerId ?? index}`}>
+                            {issue.code ? `${issue.code}: ` : ''}{issue.message}
+                          </div>
+                        ))}
+                        {phase11LockIssues.length > 8 && (
+                          <div>+{phase11LockIssues.length - 8} more issue(s)</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
+
+              {isFranchiseContext && (phase11Plan || phase11Loading || phase11CorrectionError || phase11ActionResult) && (
+                <div className="bg-[#5A8352] border-[4px] border-[#C4A853] p-6 mb-6">
+                  <div className="flex items-start justify-between gap-4 mb-4">
+                    <div>
+                      <div className="text-lg text-[#E8E8D8] font-bold">PHASE 11 FINAL ROSTER CORRECTION</div>
+                      <div className="text-xs text-[#E8E8D8]/70 mt-1">
+                        Durable final roster correction only. This is not free agency, draft, trade, retirement execution, roster analyzer movement, or generated filler creation.
+                      </div>
+                      <div className="text-xs text-[#E8E8D8]/70 mt-1">
+                        Target: 22 MLB + 10 FARM = 32 total. Rollback is compensating rollback, not true cross-store atomicity.
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => franchiseId && loadPhase11CorrectionState(franchiseId, getFranchiseSeasonId(franchiseId, seasonNumber))}
+                      disabled={phase11Loading || phase11ActionProcessing}
+                      className="text-xs bg-[#4A6844] text-[#E8E8D8] px-3 py-2 border-2 border-[#E8E8D8]/30 hover:bg-[#3D5A37] disabled:opacity-50"
+                    >
+                      Refresh Phase 11 Plan
+                    </button>
+                  </div>
+
+                  {phase11Loading && (
+                    <div className="text-sm text-[#E8E8D8]/70 mb-4">Loading franchise-owned Phase 11 correction data...</div>
+                  )}
+
+                  {phase11CorrectionError && (
+                    <div className="bg-[#5A3A3A] border-2 border-[#DD0000]/60 p-3 text-xs text-[#FFD6D6] mb-4">
+                      {phase11CorrectionError}
+                    </div>
+                  )}
+
+                  {phase11Plan && (
+                    <div className="space-y-4">
+                      <div className={`border-2 p-3 text-sm ${phase11Plan.valid ? "bg-[#3D5A37] border-[#4CAF50]/50 text-[#D9FFD9]" : "bg-[#5A3A3A] border-[#DD0000]/50 text-[#FFD6D6]"}`}>
+                        {phase11Plan.valid
+                          ? "Durable Phase 11 roster lock is valid. You can continue finalization; no automatic finalization was triggered."
+                          : "Durable Phase 11 roster lock is still invalid. Resolve the issues below before advancing."}
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-3 text-sm text-[#E8E8D8]">
+                        <div className="bg-[#4A6844] border-2 border-[#E8E8D8]/20 p-3">
+                          <div className="text-[#E8E8D8]/60">MLB</div>
+                          <div className="text-xl font-bold">{phase11Plan.totals.mlbCount}</div>
+                        </div>
+                        <div className="bg-[#4A6844] border-2 border-[#E8E8D8]/20 p-3">
+                          <div className="text-[#E8E8D8]/60">FARM</div>
+                          <div className="text-xl font-bold">{phase11Plan.totals.farmCount}</div>
+                        </div>
+                        <div className="bg-[#4A6844] border-2 border-[#E8E8D8]/20 p-3">
+                          <div className="text-[#E8E8D8]/60">TOTAL</div>
+                          <div className="text-xl font-bold">{phase11Plan.totals.totalCount}</div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {phase11Plan.teams.map((teamPlan) => {
+                          const releaseCandidates = phase11ReleaseCandidates.filter((candidate) => candidate.teamId === teamPlan.teamId);
+                          const signCandidates = phase11SignCandidates.slice(0, 8);
+                          return (
+                            <div key={teamPlan.teamId} className="bg-[#4A6844] border-2 border-[#E8E8D8]/20 p-4">
+                              <div className="text-sm text-[#E8E8D8] font-bold mb-2">
+                                {teamPlan.teamName ?? teamPlan.teamId}
+                              </div>
+                              <div className="text-xs text-[#E8E8D8]/70 mb-3">
+                                {teamPlan.mlbCount} MLB | {teamPlan.farmCount} FARM | {teamPlan.totalCount} Total
+                              </div>
+
+                              {teamPlan.requirements.length > 0 ? (
+                                <div className="space-y-1 mb-3">
+                                  {teamPlan.requirements.map((requirement) => (
+                                    <div key={`${requirement.action}-${requirement.count}-${requirement.teamId}`} className="text-xs text-[#FFD6D6]">
+                                      {requirement.action}: {requirement.message}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-xs text-[#D9FFD9] mb-3">No correction requirements for this team.</div>
+                              )}
+
+                              {teamPlan.lockIssues.length > 0 && (
+                                <div className="space-y-1 mb-3">
+                                  {teamPlan.lockIssues.slice(0, 5).map((issue, index) => (
+                                    <div key={`${issue.code}-${issue.playerId ?? index}`} className="text-xs text-[#FFE2E2]">
+                                      {issue.code}: {issue.message}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              <div className="mb-3">
+                                <div className="text-xs text-[#E8E8D8] font-bold mb-1">Durable release/cut candidates</div>
+                                {releaseCandidates.length === 0 ? (
+                                  <div className="text-xs text-[#E8E8D8]/50">No MLB/FARM release candidates found for this team.</div>
+                                ) : (
+                                  <div className="space-y-1 max-h-28 overflow-y-auto">
+                                    {releaseCandidates.slice(0, 8).map((candidate) => (
+                                      <div key={`${candidate.playerId}-${candidate.teamId}-${candidate.rosterStatus}`} className="flex items-center justify-between gap-2 text-xs">
+                                        <span className="text-[#E8E8D8]/80">{candidate.playerName} · {candidate.rosterStatus}</span>
+                                        <button
+                                          disabled={phase11ActionProcessing}
+                                          onClick={() => setPhase11PendingAction({
+                                            action: "release",
+                                            playerId: candidate.playerId,
+                                            playerName: candidate.playerName,
+                                            teamId: teamPlan.teamId,
+                                          })}
+                                          className="bg-[#5A3A3A] border-2 border-[#DD0000]/40 px-2 py-1 text-[#FFD6D6] hover:bg-[#6A4444] disabled:opacity-50"
+                                        >
+                                          Release
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div>
+                                <div className="text-xs text-[#E8E8D8] font-bold mb-1">Franchise-owned sign/fill candidates</div>
+                                {signCandidates.length === 0 ? (
+                                  <div className="text-xs text-[#E8E8D8]/50">No eligible franchise-owned free-agent, unassigned, or no-assignment players found.</div>
+                                ) : (
+                                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                                    {signCandidates.map((candidate) => (
+                                      <div key={`${candidate.playerId}-${teamPlan.teamId}`} className="flex items-center justify-between gap-2 text-xs">
+                                        <span className="text-[#E8E8D8]/80">{candidate.playerName} · {candidate.rosterStatus}</span>
+                                        <div className="flex gap-1">
+                                          <button
+                                            disabled={phase11ActionProcessing}
+                                            onClick={() => setPhase11PendingAction({
+                                              action: "sign",
+                                              playerId: candidate.playerId,
+                                              playerName: candidate.playerName,
+                                              teamId: teamPlan.teamId,
+                                              targetRosterStatus: "MLB",
+                                            })}
+                                            className="bg-[#3D5A37] border-2 border-[#4CAF50]/40 px-2 py-1 text-[#D9FFD9] hover:bg-[#4A6844] disabled:opacity-50"
+                                          >
+                                            Sign MLB
+                                          </button>
+                                          <button
+                                            disabled={phase11ActionProcessing}
+                                            onClick={() => setPhase11PendingAction({
+                                              action: "sign",
+                                              playerId: candidate.playerId,
+                                              playerName: candidate.playerName,
+                                              teamId: teamPlan.teamId,
+                                              targetRosterStatus: "FARM",
+                                            })}
+                                            className="bg-[#3D5A37] border-2 border-[#4CAF50]/40 px-2 py-1 text-[#D9FFD9] hover:bg-[#4A6844] disabled:opacity-50"
+                                          >
+                                            Sign FARM
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {phase11Plan.warnings.length > 0 && (
+                        <div className="bg-[#5A4E2D] border-2 border-[#C4A853]/60 p-3 text-xs text-[#FFF2C2]">
+                          <div className="font-bold mb-1">Warnings</div>
+                          {phase11Plan.warnings.map((warning, index) => (
+                            <div key={`${warning}-${index}`}>{warning}</div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="bg-[#4A6844] border-2 border-[#E8E8D8]/20 p-3 text-xs text-[#E8E8D8]/70">
+                        {phase11Plan.limitations.map((limitation) => (
+                          <div key={limitation}>{limitation}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {phase11PendingAction && (
+                    <div className="mt-4 bg-[#1f2a1f] border-[3px] border-[#C4A853] p-4">
+                      <div className="text-sm text-[#E8E8D8] font-bold mb-2">Confirm Phase 11 correction</div>
+                      <div className="text-xs text-[#E8E8D8]/80 mb-3">
+                        {phase11PendingAction.action === "release"
+                          ? `Release/cut ${phase11PendingAction.playerName} from ${phase11PendingAction.teamId}.`
+                          : `Sign/fill ${phase11PendingAction.playerName} to ${phase11PendingAction.targetRosterStatus} for ${phase11PendingAction.teamId}.`}
+                        {" "}This writes franchise-owned records only and may write a canonical Phase 11 transaction.
+                      </div>
+                      <div className="text-xs text-[#E8E8D8]/60 mb-4">
+                        Rollback is compensating rollback, not true cross-store atomicity.
+                      </div>
+                      <div className="flex gap-3 justify-end">
+                        <button
+                          disabled={phase11ActionProcessing}
+                          onClick={() => setPhase11PendingAction(null)}
+                          className="bg-[#4A6844] border-[3px] border-[#E8E8D8]/30 px-4 py-2 text-sm text-[#E8E8D8] hover:bg-[#3D5A37] disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          disabled={phase11ActionProcessing}
+                          onClick={executePhase11PendingAction}
+                          className="bg-[#5A8352] border-[3px] border-[#C4A853] px-4 py-2 text-sm text-[#E8E8D8] font-bold hover:bg-[#4F7D4B] disabled:opacity-50"
+                        >
+                          Confirm Phase 11 Correction
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {phase11ActionResult && (
+                    <div className={`mt-4 border-2 p-3 text-xs ${phase11ActionResult.success ? "bg-[#3D5A37] border-[#4CAF50]/50 text-[#D9FFD9]" : "bg-[#5A3A3A] border-[#DD0000]/60 text-[#FFD6D6]"}`}>
+                      <div className="font-bold mb-1">
+                        {phase11ActionResult.success ? "Phase 11 correction saved" : "Phase 11 correction failed"}
+                      </div>
+                      <div>
+                        {phase11ActionResult.success
+                          ? `${phase11ActionResult.action} saved for ${phase11ActionResult.affectedPlayerId}. Planner refreshed; finalization was not auto-started.`
+                          : `${phase11ActionResult.errorCode ?? "ERROR"}: ${phase11ActionResult.errorMessage ?? "Unknown Phase 11 correction failure."}`}
+                      </div>
+                      {phase11ActionResult.rollbackStatus && (
+                        <div className="mt-2">
+                          Rollback attempted: {phase11ActionResult.rollbackStatus.attempted ? "yes" : "no"} ·
+                          Rollback success: {phase11ActionResult.rollbackStatus.success ? "yes" : "no"}
+                          {phase11ActionResult.rollbackStatus.errors.length > 0 && (
+                            <div className="mt-1">
+                              {phase11ActionResult.rollbackStatus.errors.map((error) => (
+                                <div key={error}>{error}</div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-6 mb-6">
                 <div className="text-lg text-[#E8E8D8] font-bold mb-4">TEAM ROSTER STATUS</div>
@@ -1018,16 +1530,24 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
             <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-8">
               <div className="text-center mb-8">
                 <h3 className="text-2xl text-[#E8E8D8] font-bold mb-2">
-                  {processingStep >= 7 ? "✓ SEASON TRANSITION COMPLETE" : "⏳ PROCESSING SEASON TRANSITION"}
+                  {transitionError
+                    ? "⚠️ SEASON TRANSITION NEEDS ATTENTION"
+                    : processingStep >= 7
+                      ? "✓ SEASON TRANSITION COMPLETE"
+                      : "⏳ PROCESSING SEASON TRANSITION"}
                 </h3>
                 <div className="text-sm text-[#E8E8D8]/70">
-                  {processingStep >= 7 ? `Season ${nextSeason} is ready to begin` : `Please wait while we prepare Season ${nextSeason}`}
+                  {transitionError
+                    ? "Review the error below before trying again."
+                    : processingStep >= 7
+                      ? `Season ${nextSeason} is ready to begin`
+                      : `Please wait while we prepare Season ${nextSeason}`}
                 </div>
               </div>
 
               <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-6 mb-6">
                 <div className="text-lg text-[#E8E8D8] font-bold mb-4">
-                  {processingStep >= 7 ? "TRANSITION SUMMARY" : "PROCESSING STEPS"}
+                  {transitionError ? "TRANSITION ERROR" : processingStep >= 7 ? "TRANSITION SUMMARY" : "PROCESSING STEPS"}
                 </div>
 
                 <div className="space-y-3">
@@ -1073,7 +1593,7 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
 
                   <div className={`flex items-center justify-between p-3 ${processingStep >= 4 ? "bg-[#4A6844]" : "bg-[#3D5A37]"} border-2 border-[#E8E8D8]/30`}>
                     <div className="text-sm text-[#E8E8D8]">
-                      {processingStep >= 4 ? "✓" : "○"} Resetting player mojo...
+                      {processingStep >= 4 ? "✓" : "○"} {franchiseId ? "Preserving player mojo..." : "Resetting player mojo..."}
                       {processingStep >= 4 && (
                         <span className="text-xs text-[#E8E8D8]/60 ml-2">
                           ({transitionResult?.summary.mojosReset ?? 0} mojos reset to NORMAL)
@@ -1087,7 +1607,7 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
 
                   <div className={`flex items-center justify-between p-3 ${processingStep >= 5 ? "bg-[#4A6844]" : "bg-[#3D5A37]"} border-2 border-[#E8E8D8]/30`}>
                     <div className="text-sm text-[#E8E8D8]">
-                      {processingStep >= 5 ? "✓" : "○"} Clearing seasonal statistics...
+                      {processingStep >= 5 ? "✓" : "○"} {franchiseId ? "Preserving franchise season archive..." : "Clearing seasonal statistics..."}
                       {processingStep >= 5 && (
                         <span className="text-xs text-[#E8E8D8]/60 ml-2">(Career totals preserved)</span>
                       )}
@@ -1099,7 +1619,7 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
 
                   <div className={`flex items-center justify-between p-3 ${processingStep >= 6 ? "bg-[#4A6844]" : "bg-[#3D5A37]"} border-2 border-[#E8E8D8]/30`}>
                     <div className="text-sm text-[#E8E8D8]">
-                      {processingStep >= 6 ? "✓" : "○"} Applying rookie designations...
+                      {processingStep >= 6 ? "✓" : "○"} {franchiseId ? "Skipping legacy rookie markers..." : "Applying rookie designations..."}
                       {processingStep >= 6 && (
                         <span className="text-xs text-[#E8E8D8]/60 ml-2">
                           ({transitionResult?.summary.rookiesApplied ?? 0} rookies designated)
@@ -1113,7 +1633,7 @@ export function FinalizeAdvanceFlow({ onClose, onAdvanceComplete, seasonNumber =
 
                   <div className={`flex items-center justify-between p-3 ${processingStep >= 7 ? "bg-[#4A6844]" : "bg-[#3D5A37]"} border-2 border-[#E8E8D8]/30`}>
                     <div className="text-sm text-[#E8E8D8]">
-                      {processingStep >= 7 ? "✓" : "○"} Incrementing years of service...
+                      {processingStep >= 7 ? "✓" : "○"} {franchiseId ? "Skipping legacy service markers..." : "Incrementing years of service..."}
                       {processingStep >= 7 && (
                         <span className="text-xs text-[#E8E8D8]/60 ml-2">
                           ({transitionResult?.summary.serviceIncremented ?? 0} records updated)

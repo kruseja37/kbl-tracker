@@ -95,6 +95,50 @@ describe("gameStoriesStorage", () => {
     expect(exhOnly.map((s) => s.id)).toEqual(["a"]);
   });
 
+  test("franchise playoff stories retain franchise scope and do not appear as elimination stories", async () => {
+    vi.spyOn(syncEngine, "upsert").mockImplementation(() => undefined);
+    vi.spyOn(syncEngine, "isSuppressed").mockReturnValue(false);
+
+    const franchisePlayoff = createStory({
+      id: "franchise-playoff-story",
+      gameMode: "franchise",
+      competitionType: "playoff",
+      competitionId: "playoff-franchise-1",
+      playoffId: "playoff-franchise-1",
+      playoffSeriesId: "series-1",
+      playoffGameNumber: 2,
+      franchiseId: "franchise-1",
+      seasonId: "franchise-1-season-3",
+      seasonNumber: 3,
+      statsScopeId: "franchise-1-season-3",
+      scheduleGameId: "schedule-game-1",
+      createdAt: 5_000,
+    });
+    const elimination = createStory({
+      id: "elimination-story",
+      gameMode: "elimination",
+      competitionType: "elimination",
+      competitionId: "elim-1",
+      eliminationId: "elim-1",
+      statsScopeId: "elimination-elim-1",
+      createdAt: 6_000,
+    });
+
+    await persistGameStory(franchisePlayoff);
+    await persistGameStory(elimination);
+
+    await expect(listGameStoriesForGame("game-1")).resolves.toEqual([
+      franchisePlayoff,
+      elimination,
+    ]);
+    await expect(listGameStoriesForTeam("team-home", "franchise")).resolves.toEqual([
+      franchisePlayoff,
+    ]);
+    await expect(listGameStoriesForTeam("team-home", "elimination")).resolves.toEqual([
+      elimination,
+    ]);
+  });
+
   test("listGameStoriesMentioningPlayer filters by playersMentioned array", async () => {
     vi.spyOn(syncEngine, "upsert").mockImplementation(() => undefined);
     vi.spyOn(syncEngine, "isSuppressed").mockReturnValue(false);

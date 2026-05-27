@@ -15,7 +15,7 @@ import {
   putPlayerAlmanacCache,
   putTeamAlmanacCache,
 } from "../../../utils/reporterAlmanacCacheStorage";
-import { getTrackerDb, resetTrackerDbForTests } from "../../../utils/trackerDb";
+import { getTrackerDb, resetTrackerDbForTests, TRACKER_DB_VERSION } from "../../../utils/trackerDb";
 
 const DB_NAME = "kbl-tracker";
 
@@ -246,7 +246,7 @@ describe("reporterAlmanacCacheStorage", () => {
     await expect(getPlayerAlmanacCache("legacy-player", "elim-legacy")).resolves.toBeNull();
 
     const db = await getTrackerDb();
-    expect(db.version).toBe(10);
+    expect(db.version).toBe(TRACKER_DB_VERSION);
     expect(Array.from(db.objectStoreNames)).toEqual(
       expect.arrayContaining([
         "reporterPlayerAlmanacCaches",

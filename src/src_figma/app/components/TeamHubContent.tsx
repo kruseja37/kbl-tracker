@@ -8,12 +8,19 @@ import {
   getFranchiseTeam,
   saveFranchiseTeam,
 } from "../../../utils/franchisePlayerStorage";
+import {
+  getFranchiseFarmRoster,
+  type FranchiseFarmRecord,
+} from "../../../utils/franchiseFarmStorage";
+import { getSeasonIdForScope } from "../../../utils/franchisePersistenceContract";
+import { analyzeFranchiseTeamRoster } from "../../../utils/rosterAnalyzerFranchiseAdapter";
 import type {
   LineupSlot,
   Player,
   Position,
   Team,
 } from "../../../utils/leagueBuilderStorage";
+import type { RosterAnalyzerReport } from "../../../engines/rosterAnalyzerEngine";
 import {
   buildLineupSnapshotFromSlots,
   buildOptimalLineupSnapshot,
@@ -45,6 +52,7 @@ const EMPTY_ROSTER_DATA: { name: string; position: string; grade: string; morale
 const EMPTY_STATS_DATA: { name: string; pos: string; war: number; pwar: number; bwar: number; rwar: number; fwar: number; era?: number; ip?: number; k?: number; w?: number; l?: number; sv?: number; avg?: number; hr?: number; rbi?: number; sb?: number; ops?: number }[] = [];
 const FRANCHISE_FIELD_POSITIONS: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF'];
 const FRANCHISE_PITCHER_POSITIONS = new Set<Position>(['SP', 'RP', 'CP', 'SP/RP', 'P', 'TWO-WAY']);
+const FRANCHISE_ROTATION_POSITIONS = new Set<Position>(['SP', 'SP/RP']);
 
 // Helper to convert OffseasonPlayer to roster format
 function convertToRosterItem(player: OffseasonPlayer) {
@@ -150,6 +158,57 @@ function getFranchisePlayerName(player: Player): string {
   return `${player.firstName} ${player.lastName}`.trim();
 }
 
+function formatFranchiseShortName(player: Player): string {
+  return [player.firstName, player.lastName]
+    .filter(Boolean)
+    .map((part, index) => index === 0 ? `${part[0]}.` : part)
+    .join(' ') || player.id;
+}
+
+function isActiveFranchisePlayerForTeam(player: Player, teamId: string, leagueId?: string): boolean {
+  return player.leagueAssignments?.some((assignment) =>
+    assignment.teamId === teamId &&
+    (!leagueId || assignment.leagueId === leagueId) &&
+    (assignment.rosterStatus === 'MLB' || assignment.rosterStatus == null),
+  ) ?? false;
+}
+
+function convertFranchisePlayerToRosterItem(player: Player) {
+  const salary = player.salary || 0;
+  const contractStr = salary > 0 ? `$${(salary / 1000000).toFixed(1)}M` : '—';
+
+  return {
+    name: formatFranchiseShortName(player),
+    position: player.primaryPosition,
+    grade: player.overallGrade,
+    morale: typeof player.morale === 'number' ? player.morale : '—',
+    contract: contractStr,
+    trueValue: '—',
+    netDiff: '—',
+    fitness: '—' as string | number,
+  };
+}
+
+function convertFranchisePlayerToOffseasonShape(player: Player): OffseasonPlayer {
+  return {
+    id: player.id,
+    name: getFranchisePlayerName(player),
+    teamId: player.leagueAssignments?.find((assignment) => assignment.rosterStatus !== 'FREE_AGENT')?.teamId ?? '',
+    position: player.primaryPosition,
+    age: player.age,
+    grade: player.overallGrade,
+    salary: player.salary,
+  } as OffseasonPlayer;
+}
+
+function convertFranchisePlayerToStatsItem(
+  player: Player,
+  batting: BattingLeaderEntry | undefined,
+  pitching: PitchingLeaderEntry | undefined,
+) {
+  return convertToStatsItemFromSeason(convertFranchisePlayerToOffseasonShape(player), batting, pitching);
+}
+
 function toOptimalCandidate(player: Player): OptimalLineupCandidate {
   return {
     playerId: player.id,
@@ -213,6 +272,61 @@ function buildDefaultFranchiseLineupSlots(players: Player[], useDH: boolean): Li
   return slots;
 }
 
+function normalizeFranchiseLineupSlots(
+  players: Player[],
+  storedLineup: LineupSlot[] | undefined,
+  useDH: boolean,
+): LineupSlot[] {
+  const playerById = new Map(players.map((player) => [player.id, player]));
+  const positionPlayers = players.filter((player) => !FRANCHISE_PITCHER_POSITIONS.has(player.primaryPosition));
+  const assigned = new Set<string>();
+  const slots: LineupSlot[] = [];
+  const targetNonPitchers = useDH ? 9 : 8;
+
+  for (const slot of [...(storedLineup ?? [])].sort((left, right) => left.battingOrder - right.battingOrder)) {
+    if (slots.length === targetNonPitchers) break;
+    const player = playerById.get(slot.playerId);
+    if (!player || assigned.has(player.id)) continue;
+    if (FRANCHISE_PITCHER_POSITIONS.has(player.primaryPosition)) continue;
+    if (!useDH && slot.fieldingPosition === 'DH') continue;
+    assigned.add(player.id);
+    slots.push({
+      battingOrder: slots.length + 1,
+      playerId: player.id,
+      fieldingPosition: slot.fieldingPosition,
+    });
+  }
+
+  const fallbackSlots = buildDefaultFranchiseLineupSlots(players, useDH);
+  for (const slot of fallbackSlots) {
+    if (slots.length === targetNonPitchers) break;
+    if (assigned.has(slot.playerId)) continue;
+    assigned.add(slot.playerId);
+    slots.push({
+      ...slot,
+      battingOrder: slots.length + 1,
+    });
+  }
+
+  if (!useDH && slots.length < 9) {
+    const starter =
+      players.find((player) => FRANCHISE_ROTATION_POSITIONS.has(player.primaryPosition)) ??
+      players.find((player) => FRANCHISE_PITCHER_POSITIONS.has(player.primaryPosition));
+    if (starter) {
+      slots.push({
+        battingOrder: slots.length + 1,
+        playerId: starter.id,
+        fieldingPosition: 'P',
+      });
+    }
+  }
+
+  return slots.slice(0, 9).map((slot, index) => ({
+    ...slot,
+    battingOrder: index + 1,
+  }));
+}
+
 function getFreshOptimalLineupFields(update: Partial<Team>): OptimalLineupSnapshotField[] {
   return OPTIMAL_LINEUP_SNAPSHOT_FIELDS.filter((field) => field in update);
 }
@@ -251,7 +365,7 @@ export function TeamHubContent() {
   // Derive correct seasonId for stats lookup (must match what GameTracker uses when aggregating)
   const franchiseId = franchiseData.franchiseConfig?.franchiseId;
   const seasonNumber = franchiseData.seasonNumber || 1;
-  const seasonId = franchiseId ? `${franchiseId}-season-${seasonNumber}` : `season-${seasonNumber}`;
+  const seasonId = getSeasonIdForScope(franchiseId, seasonNumber);
   const seasonStats = useSeasonStats(seasonId);
 
   // Build team → W-L record lookup from real standings (case-insensitive)
@@ -287,7 +401,9 @@ export function TeamHubContent() {
   const [statsSortColumn, setStatsSortColumn] = useState<string>("war");
   const [statsSortDirection, setStatsSortDirection] = useState<"asc" | "desc">("desc");
   const [franchiseTeam, setFranchiseTeam] = useState<Team | null>(null);
+  const [franchiseAllPlayers, setFranchiseAllPlayers] = useState<Player[]>([]);
   const [franchiseRosterPlayers, setFranchiseRosterPlayers] = useState<Player[]>([]);
+  const [franchiseFarmRecords, setFranchiseFarmRecords] = useState<FranchiseFarmRecord[]>([]);
   const [lineupMode, setLineupMode] = useState<"DH" | "NO_DH">("NO_DH");
   const [isOptimalSaving, setIsOptimalSaving] = useState(false);
   const [optimalError, setOptimalError] = useState<string | null>(null);
@@ -297,38 +413,46 @@ export function TeamHubContent() {
     sourceConfidence?: string;
     generatedFallback: boolean;
   } | null>(null);
+  const franchiseTeamEntries = useMemo(
+    () => Object.entries(franchiseData.teamNameMap ?? {}),
+    [franchiseData.teamNameMap],
+  );
 
   // Convert real data to local formats with mock fallback
   const teams = useMemo(() => {
+    if (franchiseId && franchiseTeamEntries.length > 0) {
+      return franchiseTeamEntries.map(([, teamName]) => teamName);
+    }
     if (hasRealData && realTeams.length > 0) {
       return realTeams.map(t => t.name);
     }
     return EMPTY_TEAMS;
-  }, [realTeams, hasRealData]);
+  }, [franchiseId, franchiseTeamEntries, realTeams, hasRealData]);
 
   const stadiums = useMemo(() => {
+    if (franchiseId && franchiseTeamEntries.length > 0) {
+      return franchiseTeamEntries.map(([teamId, teamName]) => franchiseData.stadiumMap?.[teamId] ?? teamName);
+    }
     if (hasRealData && realTeams.length > 0) {
       return realTeams.map(t => t.stadium || t.name);
     }
     return EMPTY_STADIUMS;
-  }, [realTeams, hasRealData]);
+  }, [franchiseId, franchiseData.stadiumMap, franchiseTeamEntries, realTeams, hasRealData]);
 
   const selectedTeamId = useMemo(() => {
-    const realTeam = realTeams.find((team) => team.name === selectedTeam);
-    if (realTeam?.id) return realTeam.id;
     const mapped = Object.entries(franchiseData.teamNameMap ?? {}).find(
       ([, teamName]) => teamName === selectedTeam,
     );
-    return mapped?.[0] ?? "";
+    if (mapped?.[0]) return mapped[0];
+    const realTeam = realTeams.find((team) => team.name === selectedTeam);
+    return realTeam?.id ?? "";
   }, [franchiseData.teamNameMap, realTeams, selectedTeam]);
 
   const franchiseLeagueId = franchiseData.franchiseConfig?.league ?? undefined;
   const useDH = lineupMode === "DH";
   const currentFranchiseLineup = useMemo(() => {
     const storedLineup = useDH ? franchiseTeam?.lineupWithDH : franchiseTeam?.lineupWithoutDH;
-    return storedLineup && storedLineup.length > 0
-      ? storedLineup
-      : buildDefaultFranchiseLineupSlots(franchiseRosterPlayers, useDH);
+    return normalizeFranchiseLineupSlots(franchiseRosterPlayers, storedLineup, useDH);
   }, [franchiseRosterPlayers, franchiseTeam, useDH]);
 
   useEffect(() => {
@@ -338,7 +462,9 @@ export function TeamHubContent() {
   useEffect(() => {
     if (!franchiseId || !selectedTeamId) {
       setFranchiseTeam(null);
+      setFranchiseAllPlayers([]);
       setFranchiseRosterPlayers([]);
+      setFranchiseFarmRecords([]);
       return;
     }
 
@@ -348,20 +474,20 @@ export function TeamHubContent() {
     async function loadFranchiseOptimalState() {
       try {
         setOptimalError(null);
-        const [team, allPlayers] = await Promise.all([
+        const [team, allPlayers, farmRecords] = await Promise.all([
           getFranchiseTeam(activeFranchiseId, selectedTeamId),
           getAllFranchisePlayers(activeFranchiseId),
+          getFranchiseFarmRoster(activeFranchiseId, seasonId, selectedTeamId),
         ]);
 
         if (cancelled) return;
 
         setFranchiseTeam(team);
+        setFranchiseAllPlayers(allPlayers);
+        setFranchiseFarmRecords(farmRecords);
         setFranchiseRosterPlayers(
           allPlayers.filter((player) =>
-            player.leagueAssignments?.some((assignment) =>
-              assignment.teamId === selectedTeamId &&
-              (!franchiseLeagueId || assignment.leagueId === franchiseLeagueId),
-            ),
+            isActiveFranchisePlayerForTeam(player, selectedTeamId, franchiseLeagueId),
           ),
         );
       } catch (err) {
@@ -375,7 +501,31 @@ export function TeamHubContent() {
     return () => {
       cancelled = true;
     };
-  }, [franchiseId, franchiseLeagueId, selectedTeamId]);
+  }, [franchiseId, franchiseLeagueId, seasonId, selectedTeamId]);
+
+  const analyzerReport = useMemo(() => {
+    if (!franchiseId || !selectedTeamId || !franchiseTeam) return null;
+    return analyzeFranchiseTeamRoster({
+      franchiseId,
+      seasonId,
+      seasonNumber,
+      statsScopeId: seasonId,
+      leagueId: franchiseLeagueId,
+      team: franchiseTeam,
+      players: franchiseAllPlayers,
+      farmRecords: franchiseFarmRecords,
+      generatedAt: 'franchise-team-hub',
+    });
+  }, [
+    franchiseAllPlayers,
+    franchiseFarmRecords,
+    franchiseId,
+    franchiseLeagueId,
+    franchiseTeam,
+    seasonId,
+    seasonNumber,
+    selectedTeamId,
+  ]);
 
   // Default to first team once data loads
   useEffect(() => {
@@ -387,6 +537,9 @@ export function TeamHubContent() {
 
   // Get roster for selected team
   const rosterData = useMemo(() => {
+    if (franchiseId && selectedTeamId) {
+      return franchiseRosterPlayers.map((player) => convertFranchisePlayerToRosterItem(player));
+    }
     if (hasRealData && realPlayers.length > 0 && realTeams.length > 0) {
       const selectedTeamObj = realTeams.find(t => t.name === selectedTeam);
       if (selectedTeamObj) {
@@ -397,7 +550,7 @@ export function TeamHubContent() {
       }
     }
     return EMPTY_ROSTER_DATA;
-  }, [realPlayers, realTeams, selectedTeam, hasRealData]);
+  }, [franchiseId, selectedTeamId, franchiseRosterPlayers, realPlayers, realTeams, selectedTeam, hasRealData]);
 
   // Build lookup maps from season stats for real WAR
   const battingByPlayer = useMemo(() => {
@@ -425,6 +578,13 @@ export function TeamHubContent() {
 
   // Get stats for selected team
   const statsData = useMemo(() => {
+    if (franchiseId && selectedTeamId) {
+      return franchiseRosterPlayers.map((player) => {
+        const batting = battingByPlayer.get(player.id);
+        const pitching = pitchingByPlayer.get(player.id);
+        return convertFranchisePlayerToStatsItem(player, batting, pitching);
+      }).sort((a, b) => b.war - a.war);
+    }
     if (hasRealData && realPlayers.length > 0 && realTeams.length > 0) {
       const selectedTeamObj = realTeams.find(t => t.name === selectedTeam);
       if (selectedTeamObj) {
@@ -444,7 +604,7 @@ export function TeamHubContent() {
       }
     }
     return EMPTY_STATS_DATA;
-  }, [realPlayers, realTeams, selectedTeam, hasRealData, battingByPlayer, pitchingByPlayer]);
+  }, [franchiseId, selectedTeamId, franchiseRosterPlayers, realPlayers, realTeams, selectedTeam, hasRealData, battingByPlayer, pitchingByPlayer]);
 
   // NOTE: Fan morale, stadium park factors, and manager tracking
   // are not yet implemented — their tabs show empty states.
@@ -597,9 +757,14 @@ export function TeamHubContent() {
     const officialSnapshot = isOfficialOptimalLineupSnapshot(snapshot)
       ? snapshot
       : confirmEngineOptimalLineupSnapshot(snapshot);
+    const normalizedLineup = normalizeFranchiseLineupSlots(
+      franchiseRosterPlayers,
+      lineupSlotsFromOptimalSnapshot(officialSnapshot),
+      useDH,
+    );
     await saveFranchiseOptimalUpdate({
       [field]: officialSnapshot,
-      [useDH ? "lineupWithDH" : "lineupWithoutDH"]: lineupSlotsFromOptimalSnapshot(officialSnapshot),
+      [useDH ? "lineupWithDH" : "lineupWithoutDH"]: normalizedLineup,
     });
   };
 
@@ -739,6 +904,8 @@ export function TeamHubContent() {
           >
             {selectedTeam.toUpperCase()} ROSTER
           </div>
+
+          <FranchiseRosterAnalyzerPanel report={analyzerReport} />
 
           <div className="mb-4 border-[4px] border-[#4A6844] bg-[#5A8352] p-3">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -1121,6 +1288,81 @@ export function TeamHubContent() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+interface FranchiseRosterAnalyzerPanelProps {
+  report: RosterAnalyzerReport | null;
+}
+
+function FranchiseRosterAnalyzerPanel({ report }: FranchiseRosterAnalyzerPanelProps) {
+  if (!report) return null;
+
+  const visibleFindings = report.findings
+    .filter((finding) => finding.severity !== 'info' || finding.kind !== 'data_integrity')
+    .slice(0, 3);
+  const limitations = report.profile.limitations.slice(0, 3);
+  const farmAdvice = report.recommendations
+    .filter((recommendation) => recommendation.kind === 'farm_monitor')
+    .slice(0, 2);
+  const advisoryCount = report.recommendations.filter((recommendation) =>
+    recommendation.execution === 'read_only' || recommendation.execution === 'blocked_future_work',
+  ).length;
+
+  return (
+    <div className="mb-4 border-[4px] border-[#4A6844] bg-[#3F563F] p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-[9px] font-bold text-[#C4A853]">READ-ONLY ROSTER ANALYZER</div>
+          <div className="mt-1 text-[8px] text-[#E8E8D8]/60">
+            Advisory only. No call-ups, send-downs, or roster writes are executed here.
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2 text-[8px] font-bold">
+            <span className="border-2 border-[#E8E8D8]/25 bg-[#2d3d2f] px-2 py-1">
+              MLB {report.profile.activeCount}
+            </span>
+            <span className="border-2 border-[#E8E8D8]/25 bg-[#2d3d2f] px-2 py-1">
+              FARM {report.profile.farmCount}
+            </span>
+            <span className="border-2 border-[#E8E8D8]/25 bg-[#2d3d2f] px-2 py-1">
+              TRUST {report.trust.overall.toUpperCase()}
+            </span>
+            <span className="border-2 border-[#E8E8D8]/25 bg-[#2d3d2f] px-2 py-1">
+              ADVICE {advisoryCount}
+            </span>
+          </div>
+        </div>
+        <div className="min-w-[220px] flex-1 text-[8px]">
+          {visibleFindings.length > 0 ? (
+            <div className="space-y-1">
+              {visibleFindings.map((finding) => (
+                <div key={finding.id} className="text-[#E8E8D8]">
+                  <span className="font-bold text-[#FFD166]">{finding.severity.toUpperCase()}</span>
+                  <span className="text-[#E8E8D8]/80"> · {finding.title}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="font-bold text-[#A7F3D0]">No critical readiness issues found.</div>
+          )}
+          {limitations.length > 0 && (
+            <div className="mt-2 text-[#E8E8D8]/60">
+              {limitations.join(' ')}
+            </div>
+          )}
+          {farmAdvice.length > 0 && (
+            <div className="mt-2 border-t border-[#E8E8D8]/20 pt-2">
+              <div className="mb-1 font-bold text-[#C4A853]">Farm advisory only</div>
+              {farmAdvice.map((recommendation) => (
+                <div key={recommendation.id} className="text-[#E8E8D8]/75">
+                  {recommendation.title}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

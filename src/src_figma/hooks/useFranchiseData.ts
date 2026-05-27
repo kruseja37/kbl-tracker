@@ -13,8 +13,10 @@ import { useSeasonStats, type BattingLeaderEntry, type PitchingLeaderEntry } fro
 import { calculateStandings, type SeasonMetadata, type TeamStanding as StorageTeamStanding } from '../../utils/seasonStorage';
 import { useRelationshipData, type UseRelationshipDataReturn } from '../app/hooks/useRelationshipData';
 import { getFranchiseConfig, loadFranchise } from '../../utils/franchiseManager';
+import { getFranchiseSeasonId } from '../../utils/franchisePersistenceContract';
 import { getNextFranchiseGame } from '../../utils/scheduleStorage';
-import { getAllTeams, getAllLeagueTemplates, type LeagueTemplate, type Conference, type Division } from '../../utils/leagueBuilderStorage';
+import { getAllTeams, getAllLeagueTemplates, type LeagueTemplate, type Conference, type Division, type Team as LeagueBuilderTeam } from '../../utils/leagueBuilderStorage';
+import { getAllFranchiseTeams } from '../../utils/franchisePlayerStorage';
 import type { StoredFranchiseConfig } from '../../types/franchise';
 
 // ============================================
@@ -229,13 +231,75 @@ function calculateWeek(gamesPlayed: number, gamesPerWeek: number = 6): number {
   return Math.floor(gamesPlayed / gamesPerWeek) + 1;
 }
 
+function distributeEvenly<T>(items: T[], groupCount: number): T[][] {
+  const count = Math.max(1, groupCount);
+  return Array.from({ length: count }, (_, index) => {
+    const start = Math.floor((index * items.length) / count);
+    const end = Math.floor(((index + 1) * items.length) / count);
+    return items.slice(start, end);
+  });
+}
+
+function buildFranchiseLeagueTemplate(
+  config: StoredFranchiseConfig | null,
+  franchiseTeams: LeagueBuilderTeam[],
+): LeagueTemplate | null {
+  const franchiseTeamIds = new Set(franchiseTeams.map((team) => team.id));
+  const configuredTeamIds = config?.teams.selectedTeams ?? [];
+  const teamIds = (configuredTeamIds.length > 0 ? configuredTeamIds : franchiseTeams.map((team) => team.id))
+    .filter((teamId) => franchiseTeamIds.has(teamId));
+
+  if (teamIds.length === 0) return null;
+
+  const conferenceCount = Math.max(1, config?.leagueDetails?.conferences ?? 2);
+  const divisionCount = Math.max(1, config?.leagueDetails?.divisions ?? Math.min(teamIds.length, 4));
+  const divisionTeamGroups = distributeEvenly(teamIds, divisionCount);
+  const conferenceDivisionGroups = distributeEvenly(
+    Array.from({ length: divisionCount }, (_, index) => index),
+    conferenceCount,
+  );
+
+  const conferences: Conference[] = conferenceDivisionGroups.map((divisionIndexes, confIndex) => {
+    const conferenceId = `franchise-conf-${confIndex + 1}`;
+    const defaultName = confIndex === 0 ? 'Eastern' : confIndex === 1 ? 'Western' : `Conference ${confIndex + 1}`;
+    return {
+      id: conferenceId,
+      name: defaultName,
+      abbreviation: defaultName.slice(0, 3).toUpperCase(),
+      divisionIds: divisionIndexes.map((divisionIndex) => `franchise-div-${divisionIndex + 1}`),
+    };
+  });
+
+  const divisions: Division[] = divisionTeamGroups.map((divisionTeamIds, divisionIndex) => {
+    const conferenceIndex = conferenceDivisionGroups.findIndex((indexes) => indexes.includes(divisionIndex));
+    const conferenceId = conferences[Math.max(0, conferenceIndex)]?.id ?? conferences[0].id;
+    return {
+      id: `franchise-div-${divisionIndex + 1}`,
+      name: `Division ${divisionIndex + 1}`,
+      conferenceId,
+      teamIds: divisionTeamIds,
+    };
+  });
+
+  return {
+    id: config?.league ?? 'franchise-league',
+    name: config?.leagueDetails?.name ?? config?.franchiseName ?? 'Franchise League',
+    createdDate: new Date(0).toISOString(),
+    lastModified: new Date(0).toISOString(),
+    teamIds,
+    conferences,
+    divisions,
+    defaultRulesPreset: 'franchise',
+  };
+}
+
 // ============================================
 // HOOK
 // ============================================
 
 export function useFranchiseData(franchiseId?: string, currentSeason: number = 1): UseFranchiseDataReturn {
   // Derive seasonId from franchiseId and current season number
-  const seasonId = franchiseId ? `${franchiseId}-season-${currentSeason}` : `season-${currentSeason}`;
+  const seasonId = franchiseId ? getFranchiseSeasonId(franchiseId, currentSeason) : `season-${currentSeason}`;
 
   // Franchise config loaded from IndexedDB
   const [franchiseConfig, setFranchiseConfig] = useState<StoredFranchiseConfig | null>(null);
@@ -281,7 +345,7 @@ export function useFranchiseData(franchiseId?: string, currentSeason: number = 1
     let cancelled = false;
     async function loadStadiums() {
       try {
-        const teams = await getAllTeams();
+        const teams = franchiseId ? await getAllFranchiseTeams(franchiseId) : await getAllTeams();
         if (!cancelled) {
           const map: Record<string, string> = {};
           for (const team of teams) {
@@ -297,7 +361,7 @@ export function useFranchiseData(franchiseId?: string, currentSeason: number = 1
     }
     loadStadiums();
     return () => { cancelled = true; };
-  }, []);
+  }, [franchiseId]);
 
   // Get real data from existing hooks
   const seasonData = useSeasonData(seasonId);
@@ -359,6 +423,26 @@ export function useFranchiseData(franchiseId?: string, currentSeason: number = 1
     let cancelled = false;
     async function loadLeagueStructure() {
       try {
+        if (franchiseId) {
+          const [config, teams] = await Promise.all([
+            getFranchiseConfig(franchiseId),
+            getAllFranchiseTeams(franchiseId),
+          ]);
+          if (cancelled) return;
+
+          if (teams.length > 0) {
+            setLeagueTemplate(buildFranchiseLeagueTemplate(config, teams));
+            const nameMap: Record<string, string> = {};
+            for (const t of teams) {
+              nameMap[t.id] = t.name;
+            }
+            setTeamNameMap(nameMap);
+            return;
+          }
+        }
+
+        // Legacy fallback for non-franchise screens and damaged old saves with
+        // no franchise-owned team snapshot. Valid franchise saves should not hit this.
         const [templates, teams] = await Promise.all([
           getAllLeagueTemplates(),
           getAllTeams(),
@@ -378,7 +462,7 @@ export function useFranchiseData(franchiseId?: string, currentSeason: number = 1
     }
     loadLeagueStructure();
     return () => { cancelled = true; };
-  }, []);
+  }, [franchiseId]);
 
   // Load real standings from IndexedDB
   useEffect(() => {
@@ -507,7 +591,7 @@ export function useFranchiseData(franchiseId?: string, currentSeason: number = 1
     let cancelled = false;
     async function loadNextGame() {
       try {
-        const game = await getNextFranchiseGame(franchiseId!, 1);
+        const game = await getNextFranchiseGame(franchiseId!, currentSeason);
         if (!cancelled && game) {
           // Look up real W-L records from standings
           const awayStanding = realStandings.find(s => s.teamId === game.awayTeamId);
@@ -530,7 +614,7 @@ export function useFranchiseData(franchiseId?: string, currentSeason: number = 1
     }
     loadNextGame();
     return () => { cancelled = true; };
-  }, [franchiseId, totalGames, gamesPlayed, realStandings]);
+  }, [currentSeason, franchiseId, totalGames, gamesPlayed, realStandings]);
 
   // Refresh function
   const refresh = useCallback(async () => {

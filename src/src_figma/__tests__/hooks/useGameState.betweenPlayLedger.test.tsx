@@ -78,10 +78,14 @@ vi.mock('../../../utils/playoffStorage', () => ({
 
 import { useGameState } from '../../hooks/useGameState';
 
-async function initializeGame(result: ReturnType<typeof renderHook<typeof useGameState>>['result']) {
+async function initializeGame(
+  result: ReturnType<typeof renderHook<typeof useGameState>>['result'],
+  overrides: Partial<Parameters<ReturnType<typeof useGameState>['initializeGame']>[0]> = {},
+) {
   await act(async () => {
     await result.current.initializeGame({
       gameId: 'game-between-play',
+      ...overrides,
       awayTeamId: 'away-team',
       awayTeamName: 'Away Team',
       homeTeamId: 'home-team',
@@ -106,6 +110,7 @@ async function initializeGame(result: ReturnType<typeof renderHook<typeof useGam
         { playerId: 'home-rp', playerName: 'Home Reliever', positions: ['P'] },
       ],
       seasonNumber: 1,
+      ...overrides,
     });
   });
 }
@@ -119,6 +124,7 @@ describe('useGameState between-play ledger', () => {
     mockGetBetweenPlayEvents.mockResolvedValue([]);
     mockGetGameFieldingEvents.mockResolvedValue([]);
     mockGetGameHeader.mockResolvedValue({ aggregated: false });
+    mockLogBetweenPlayEvent.mockResolvedValue(undefined);
   });
 
   test('logs stolen-base runner metadata to the between-play ledger', async () => {
@@ -210,7 +216,7 @@ describe('useGameState between-play ledger', () => {
     });
 
     await act(async () => {
-      const subResult = result.current.makeSubstitution(
+      const subResult = await result.current.makeSubstitution(
         'away-bench-1',
         'away-batter-1',
         'Away Bench 1',
@@ -218,9 +224,11 @@ describe('useGameState between-play ledger', () => {
         { subType: 'pinch_hit', isPinchHitter: true, newPosition: 'SS' },
       );
       expect(subResult).toEqual({ success: true });
-      result.current.switchPositions([{ playerId: 'home-batter-1', newPosition: 'SS' }]);
+      await expect(
+        result.current.switchPositions([{ playerId: 'home-batter-1', newPosition: 'SS' }]),
+      ).resolves.toEqual({ success: true });
       result.current.changePitcher('home-rp', 'home-sp', 'home', 'Home Reliever', 'Home Starter');
-      result.current.confirmPitchCount('home-sp', 17);
+      await result.current.confirmPitchCount('home-sp', 17);
       await Promise.resolve();
     });
 
@@ -267,6 +275,175 @@ describe('useGameState between-play ledger', () => {
     ]));
   });
 
+  test('stamps canonical franchise identity on between-play rows', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result, {
+      gameId: 'game-between-play-identity',
+      seasonId: 'franchise-bp-season-4',
+      statsScopeId: 'franchise-bp-season-4',
+      seasonNumber: 4,
+      competitionType: 'playoff',
+      competitionId: 'playoff-bp',
+      franchiseId: 'franchise-bp',
+      scheduleGameId: 'schedule-bp-9',
+      leagueId: 'league-bp',
+      playoffId: 'playoff-bp',
+      playoffSeriesId: 'series-bp-1',
+      playoffGameNumber: 2,
+    });
+
+    await act(async () => {
+      await result.current.commitPlateAppearance({ type: 'hit', hitType: '1B', rbi: 0 });
+    });
+
+    mockLogBetweenPlayEvent.mockClear();
+
+    await act(async () => {
+      result.current.advanceRunner('first', 'second', 'safe');
+      await result.current.recordEvent('SB', 'away-batter-1', {
+        runnerId: 'away-batter-1',
+        runnerName: 'Away Batter 1',
+        fromBase: 'first',
+        toBase: 'second',
+        outcome: 'safe',
+      });
+    });
+
+    expect(mockLogBetweenPlayEvent).toHaveBeenCalledWith(expect.objectContaining({
+      gameId: 'game-between-play-identity',
+      seasonId: 'franchise-bp-season-4',
+      seasonNumber: 4,
+      statsScopeId: 'franchise-bp-season-4',
+      competitionType: 'playoff',
+      competitionId: 'playoff-bp',
+      franchiseId: 'franchise-bp',
+      scheduleGameId: 'schedule-bp-9',
+      leagueId: 'league-bp',
+      playoffId: 'playoff-bp',
+      playoffSeriesId: 'series-bp-1',
+      playoffGameNumber: 2,
+    }));
+  });
+
+  test('blocks pitcher-change game-state mutation when the required ledger row fails', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    act(() => {
+      result.current.startGame();
+    });
+
+    mockLogBetweenPlayEvent.mockImplementation(async (event) => {
+      if (event.type === 'pitcher_change') {
+        throw new Error('ledger unavailable');
+      }
+    });
+
+    await act(async () => {
+      result.current.changePitcher('home-rp', 'home-sp', 'home', 'Home Reliever', 'Home Starter');
+      await result.current.confirmPitchCount('home-sp', 17);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.gameState.currentPitcherId).toBe('home-sp');
+    expect(result.current.substitutionLog.some((entry) => entry.type === 'pitching_change')).toBe(false);
+  });
+
+  test('blocks substitution game-state mutation when the required ledger row fails', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    act(() => {
+      result.current.startGame();
+    });
+
+    mockLogBetweenPlayEvent.mockImplementation(async (event) => {
+      if (event.type === 'substitution') {
+        throw new Error('ledger unavailable');
+      }
+    });
+
+    await act(async () => {
+      const subResult = await result.current.makeSubstitution(
+        'away-bench-1',
+        'away-batter-1',
+        'Away Bench 1',
+        'Away Batter 1',
+        { subType: 'pinch_hit', isPinchHitter: true, newPosition: 'SS' },
+      );
+      expect(subResult.success).toBe(false);
+    });
+
+    const snapshot = result.current.getLineupStateSnapshot();
+    expect(snapshot.away.lineup[0]).toEqual(
+      expect.objectContaining({
+        playerId: 'away-batter-1',
+        playerName: 'Away Batter 1',
+        position: 'SS',
+      }),
+    );
+    expect(snapshot.away.lineup.some((player) => player.playerId === 'away-bench-1')).toBe(false);
+    expect(result.current.substitutionLog.some((entry) => entry.type === 'pinch_hit')).toBe(false);
+  });
+
+  test('blocks position-switch game-state mutation when the required ledger row fails', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    act(() => {
+      result.current.startGame();
+    });
+
+    mockLogBetweenPlayEvent.mockImplementation(async (event) => {
+      if (event.type === 'position_change') {
+        throw new Error('ledger unavailable');
+      }
+    });
+
+    await act(async () => {
+      const switchResult = await result.current.switchPositions([
+        { playerId: 'home-batter-1', newPosition: 'SS' },
+      ]);
+      expect(switchResult.success).toBe(false);
+    });
+
+    const snapshot = result.current.getLineupStateSnapshot();
+    expect(snapshot.home.lineup[0]).toEqual(
+      expect.objectContaining({
+        playerId: 'home-batter-1',
+        position: '2B',
+      }),
+    );
+    expect(result.current.substitutionLog.some((entry) => entry.type === 'position_switch')).toBe(false);
+  });
+
+  test('blocks pitch-count and pitcher mutation when pitch-count ledger persistence fails', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    act(() => {
+      result.current.startGame();
+    });
+
+    mockLogBetweenPlayEvent.mockImplementation(async (event) => {
+      if (event.type === 'pitch_count_update') {
+        throw new Error('ledger unavailable');
+      }
+    });
+
+    await act(async () => {
+      result.current.changePitcher('home-rp', 'home-sp', 'home', 'Home Reliever', 'Home Starter');
+      const pitchCountResult = await result.current.confirmPitchCount('home-sp', 17);
+      expect(pitchCountResult.success).toBe(false);
+    });
+
+    expect(result.current.pitcherStats.get('home-sp')?.pitchCount ?? 0).toBe(0);
+    expect(result.current.gameState.currentPitcherId).toBe('home-sp');
+    expect(result.current.substitutionLog.some((entry) => entry.type === 'pitching_change')).toBe(false);
+    expect(result.current.pitchCountPrompt?.pitcherId).toBe('home-sp');
+  });
+
   test('standalone pitching changes move the batting-order pitcher slot to the reliever', async () => {
     const { result } = renderHook(() => useGameState());
 
@@ -303,7 +480,9 @@ describe('useGameState between-play ledger', () => {
 
     await act(async () => {
       result.current.changePitcher('home-rp', 'home-sp', 'home', 'Home Reliever', 'Home Starter');
-      result.current.confirmPitchCount('home-sp', 17);
+      await result.current.confirmPitchCount('home-sp', 17);
+      await Promise.resolve();
+      await Promise.resolve();
       await Promise.resolve();
     });
 
@@ -350,7 +529,9 @@ describe('useGameState between-play ledger', () => {
 
     await act(async () => {
       result.current.changePitcher('home-rp', 'home-sp', 'home', 'Home Reliever', 'Home Starter');
-      result.current.confirmPitchCount('home-sp', 17);
+      await result.current.confirmPitchCount('home-sp', 17);
+      await Promise.resolve();
+      await Promise.resolve();
       await Promise.resolve();
     });
 
@@ -386,8 +567,8 @@ describe('useGameState between-play ledger', () => {
       result.current.startGame();
     });
 
-    act(() => {
-      const subResult = result.current.makeSubstitution(
+    await act(async () => {
+      const subResult = await result.current.makeSubstitution(
         'away-bench-1',
         'away-sp',
         'Away Bench 1',
@@ -417,6 +598,62 @@ describe('useGameState between-play ledger', () => {
     expect(result.current.gameState.currentPitcherId).toBe('home-sp');
   });
 
+  test('blocks direct franchise double-switch hook calls before ledger or lineup mutation', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result, {
+      franchiseId: 'franchise-a',
+      seasonId: 'franchise-a-season-2',
+      statsScopeId: 'franchise-a-season-2',
+      competitionType: 'franchise',
+      competitionId: 'franchise-a',
+    });
+
+    const before = result.current.getLineupStateSnapshot();
+    mockLogBetweenPlayEvent.mockClear();
+
+    await act(async () => {
+      const subResult = await result.current.makeSubstitution(
+        'home-bench-1',
+        'home-batter-1',
+        'Home Bench 1',
+        'Home Batter 1',
+        { subType: 'double_switch', newPosition: 'P' },
+      );
+      expect(subResult).toEqual({
+        success: false,
+        error: 'Double switch is deferred in Mode 2 v1 franchise games. Use pitching and position changes separately.',
+      });
+    });
+
+    expect(mockLogBetweenPlayEvent).not.toHaveBeenCalled();
+    expect(result.current.substitutionLog.some((entry) => entry.type === 'double_switch')).toBe(false);
+    expect(result.current.getLineupStateSnapshot()).toEqual(before);
+  });
+
+  test('preserves non-franchise double-switch hook behavior', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    act(() => {
+      result.current.startGame();
+    });
+
+    mockLogBetweenPlayEvent.mockClear();
+
+    await act(async () => {
+      const subResult = await result.current.makeSubstitution(
+        'home-bench-1',
+        'home-batter-1',
+        'Home Bench 1',
+        'Home Batter 1',
+        { subType: 'double_switch', newPosition: 'P' },
+      );
+      expect(subResult).toEqual({ success: true });
+    });
+
+    expect(result.current.substitutionLog.some((entry) => entry.type === 'double_switch')).toBe(true);
+  });
+
   test('tracks defensive position usage per out instead of per half-inning', async () => {
     const { result } = renderHook(() => useGameState());
     await initializeGame(result);
@@ -430,7 +667,7 @@ describe('useGameState between-play ledger', () => {
     expect(result.current.positionInnings.get('home-sp')).toMatchObject({ P: 1 });
 
     await act(async () => {
-      const subResult = result.current.makeSubstitution(
+      const subResult = await result.current.makeSubstitution(
         'home-bench-1',
         'home-batter-1',
         'Home Bench 1',

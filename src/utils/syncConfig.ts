@@ -9,6 +9,7 @@
 export const SYNC_REGISTRY: Record<string, Record<string, string | string[]>> = {
   'kbl-tracker': {
     completedGames: 'gameId',
+    franchiseSeasonSummaries: 'seasonId',
     // playerGameStats and pitcherGameStats NOT synced — stores exist in schema
     // but are never written to. Stats are embedded in completedGames records.
     almanacCanonicalPlayers: 'canonicalId',
@@ -91,6 +92,9 @@ export const SYNC_REGISTRY: Record<string, Record<string, string | string[]>> = 
   'kbl-farm': {
     farmPlayers: 'playerId',
   },
+  'kbl-franchise-farm': {
+    franchiseFarmRecords: 'id',
+  },
   'kbl-transactions': {
     transactions: 'id',
   },
@@ -107,10 +111,13 @@ export const SYNC_REGISTRY: Record<string, Record<string, string | string[]>> = 
     franchiseConfigs: 'franchiseId',
     eliminationList: 'eliminationId',
   },
+  'kbl-franchise-transition-journal': {
+    transitionJournals: 'id',
+  },
   'kbl-playoffs': {
     playoffs: 'id',
     series: 'id',
-    // playoffGames excluded — store exists in schema but is never written to
+    playoffGames: 'id',
     playoffStats: 'id',
   },
 };

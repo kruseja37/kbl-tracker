@@ -1,3 +1,4 @@
+import 'fake-indexeddb/auto';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { OptimalLineupSnapshot } from '../../../types/managerWpa';
@@ -10,7 +11,19 @@ const mocks = vi.hoisted(() => ({
   mockBuildFranchiseGameTrackerRoster: vi.fn(),
   mockCollectFranchiseRosterPlayerIds: vi.fn(),
   mockGetTeam: vi.fn(),
+  mockGetFranchiseTeam: vi.fn(),
+  mockSaveFranchiseTeam: vi.fn(),
   mockResolveManagerForTeam: vi.fn(),
+  mockRepairFranchisePersistence: vi.fn(),
+  mockUseOffseasonState: vi.fn(),
+  mockCreateFranchiseSeasonSummary: vi.fn(),
+  mockInitializeEmptyFranchiseSeasonSchedule: vi.fn(),
+  mockClearFranchiseSeasonSchedule: vi.fn(),
+  mockExecuteSeasonTransition: vi.fn(),
+  mockCreateFranchisePlayerStorageAdapter: vi.fn(),
+  mockUpdateFranchiseMetadata: vi.fn(),
+  mockLoadFranchise: vi.fn(),
+  mockDeleteSeasonMetadata: vi.fn(),
 }));
 
 vi.mock('react-router', () => ({
@@ -37,36 +50,7 @@ vi.mock('@/hooks/usePlayoffData', () => ({
 }));
 
 vi.mock('@/hooks/useOffseasonState', () => ({
-  useOffseasonState: () => ({
-    state: null,
-    isLoading: false,
-    error: null,
-    currentPhase: null,
-    currentPhaseIndex: 0,
-    totalPhases: 11,
-    phaseName: '',
-    progress: 0,
-    isPhaseComplete: vi.fn(() => false),
-    canAdvance: false,
-    isOffseasonComplete: false,
-    awards: null,
-    retirements: null,
-    ratings: null,
-    freeAgency: null,
-    draft: null,
-    trades: null,
-    startNewOffseason: vi.fn(),
-    completeCurrentPhase: vi.fn(),
-    advanceToNextPhase: vi.fn(),
-    saveAwards: vi.fn(),
-    saveRetirementDecisions: vi.fn(),
-    saveRatingChanges: vi.fn(),
-    saveFreeAgentSignings: vi.fn(),
-    saveDraft: vi.fn(),
-    addNewTrade: vi.fn(),
-    refresh: vi.fn(),
-    getPhaseDisplayName: vi.fn((phase: string) => phase),
-  }),
+  useOffseasonState: mocks.mockUseOffseasonState,
 }));
 
 vi.mock('@/config/teamColors', () => ({
@@ -88,9 +72,28 @@ vi.mock('../../../utils/leagueBuilderStorage', () => ({
   getTeam: mocks.mockGetTeam,
 }));
 
+vi.mock('../../../utils/franchisePlayerStorage', () => ({
+  getFranchiseTeam: mocks.mockGetFranchiseTeam,
+  saveFranchiseTeam: mocks.mockSaveFranchiseTeam,
+}));
+
 vi.mock('../../../utils/managerIdentityStorage', () => ({
   LEAGUE_BUILDER_MANAGER_INSTANCE_ID: 'league-builder',
   resolveManagerForTeam: mocks.mockResolveManagerForTeam,
+}));
+
+vi.mock('../../../utils/franchiseInitializer', () => ({
+  initializeEmptyFranchiseSeasonSchedule: mocks.mockInitializeEmptyFranchiseSeasonSchedule,
+  repairFranchisePersistence: mocks.mockRepairFranchisePersistence,
+}));
+
+vi.mock('../../../utils/franchiseSeasonSummaryStorage', () => ({
+  createFranchiseSeasonSummary: mocks.mockCreateFranchiseSeasonSummary,
+}));
+
+vi.mock('../../../utils/franchiseManager', () => ({
+  updateFranchiseMetadata: mocks.mockUpdateFranchiseMetadata,
+  loadFranchise: mocks.mockLoadFranchise,
 }));
 
 vi.mock('../../../utils/careerStorage', () => ({
@@ -99,6 +102,7 @@ vi.mock('../../../utils/careerStorage', () => ({
 }));
 
 vi.mock('../../../utils/seasonStorage', () => ({
+  deleteSeasonMetadata: mocks.mockDeleteSeasonMetadata,
   getActiveSeason: vi.fn().mockResolvedValue(null),
   getSeasonBattingStats: vi.fn().mockResolvedValue([]),
   getSeasonPitchingStats: vi.fn().mockResolvedValue([]),
@@ -107,7 +111,9 @@ vi.mock('../../../utils/seasonStorage', () => ({
 }));
 
 vi.mock('../../../utils/scheduleStorage', () => ({
+  clearFranchiseSeasonSchedule: mocks.mockClearFranchiseSeasonSchedule,
   getAllGames: vi.fn().mockResolvedValue([]),
+  getAllGamesByFranchise: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('../../utils/gameStorage', () => ({
@@ -115,8 +121,8 @@ vi.mock('../../utils/gameStorage', () => ({
 }));
 
 vi.mock('../../../engines/seasonTransitionEngine', () => ({
-  createFranchisePlayerStorageAdapter: vi.fn(),
-  executeSeasonTransition: vi.fn(),
+  createFranchisePlayerStorageAdapter: mocks.mockCreateFranchisePlayerStorageAdapter,
+  executeSeasonTransition: mocks.mockExecuteSeasonTransition,
 }));
 
 vi.mock('../../../utils/milestoneDetector', () => ({
@@ -379,6 +385,26 @@ function makeScheduleData() {
   };
 }
 
+function makeEmptyScheduleData() {
+  return {
+    games: [],
+    isLoading: false,
+    error: null,
+    metadata: { seasonNumber: 1, totalGamesScheduled: 0, totalGamesCompleted: 0, lastUpdated: 1 },
+    nextGame: null,
+    completedGames: [],
+    upcomingGames: [],
+    getTeamStats: vi.fn(),
+    addGame: vi.fn(),
+    addSeries: vi.fn(),
+    updateStatus: vi.fn(),
+    completeGame: vi.fn(),
+    deleteGame: vi.fn(),
+    refresh: vi.fn(),
+    clearSchedule: vi.fn(),
+  };
+}
+
 function makePlayoffData(useDH = true) {
   const series = {
     id: 'series-1',
@@ -430,6 +456,40 @@ function makePlayoffData(useDH = true) {
   };
 }
 
+function makeOffseasonState(overrides: Record<string, unknown> = {}) {
+  return {
+    state: null,
+    isLoading: false,
+    error: null,
+    currentPhase: null,
+    currentPhaseIndex: 0,
+    totalPhases: 11,
+    phaseName: '',
+    progress: 0,
+    isPhaseComplete: vi.fn(() => false),
+    canAdvance: false,
+    isOffseasonComplete: false,
+    awards: null,
+    retirements: null,
+    ratings: null,
+    freeAgency: null,
+    draft: null,
+    trades: null,
+    startNewOffseason: vi.fn(),
+    completeCurrentPhase: vi.fn(),
+    advanceToNextPhase: vi.fn(),
+    saveAwards: vi.fn(),
+    saveRetirementDecisions: vi.fn(),
+    saveRatingChanges: vi.fn(),
+    saveFreeAgentSignings: vi.fn(),
+    saveDraft: vi.fn(),
+    addNewTrade: vi.fn(),
+    refresh: vi.fn(),
+    getPhaseDisplayName: vi.fn((phase: string) => phase),
+    ...overrides,
+  };
+}
+
 function makeRoster(teamId: keyof typeof snapshotsByTeam, useDH: boolean) {
   const positions = useDH
     ? ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH']
@@ -465,7 +525,7 @@ function makeRoster(teamId: keyof typeof snapshotsByTeam, useDH: boolean) {
 async function startRegularSeasonGame() {
   render(<FranchiseHome />);
 
-  fireEvent.click(screen.getByRole('button', { name: 'PLAY GAME' }));
+  fireEvent.click(screen.getByRole('button', { name: 'SCORE GAME' }));
   fireEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
 
   await screen.findByText('PRE-GAME LINEUP');
@@ -480,7 +540,26 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
     mocks.mockUseFranchiseData.mockReturnValue(makeFranchiseData(true));
     mocks.mockUseScheduleData.mockReturnValue(makeScheduleData());
     mocks.mockUsePlayoffData.mockReturnValue(makePlayoffData());
+    mocks.mockUseOffseasonState.mockReturnValue(makeOffseasonState());
     mocks.mockCollectFranchiseRosterPlayerIds.mockReturnValue([]);
+    mocks.mockCreateFranchiseSeasonSummary.mockResolvedValue({ seasonId: 'franchise-1-season-1' });
+    mocks.mockInitializeEmptyFranchiseSeasonSchedule.mockResolvedValue(0);
+    mocks.mockCreateFranchisePlayerStorageAdapter.mockReturnValue({ storage: 'franchise' });
+    mocks.mockExecuteSeasonTransition.mockResolvedValue({
+      success: true,
+      steps: [],
+      summary: {
+        playersAged: 0,
+        salariesRecalculated: 0,
+        mojosReset: 0,
+        rookiesApplied: 0,
+        serviceIncremented: 0,
+        previousSeason: 1,
+        newSeason: 2,
+      },
+    });
+    mocks.mockUpdateFranchiseMetadata.mockResolvedValue(undefined);
+    mocks.mockLoadFranchise.mockResolvedValue({ id: 'franchise-1', currentSeason: 1 });
     mocks.mockGetTeam.mockImplementation((teamId: string) =>
       Promise.resolve({
         id: teamId,
@@ -490,6 +569,19 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
         managerName: `${teamId} Team Manager`,
       }),
     );
+    mocks.mockGetFranchiseTeam.mockImplementation((_franchiseId: string, teamId: string) =>
+      Promise.resolve({
+        id: teamId,
+        name: `${teamId} Copied Team`,
+        abbreviation: teamId.slice(0, 3).toUpperCase(),
+        colors: { primary: '#aa0000', secondary: '#00aa00' },
+        managerId: `${teamId}-franchise-manager`,
+        managerName: `${teamId} Franchise Manager`,
+      }),
+    );
+    mocks.mockSaveFranchiseTeam.mockResolvedValue({});
+    mocks.mockClearFranchiseSeasonSchedule.mockResolvedValue(undefined);
+    mocks.mockDeleteSeasonMetadata.mockResolvedValue(undefined);
     mocks.mockResolveManagerForTeam.mockImplementation(({ team }: { team: { id: string; name: string } }) =>
       Promise.resolve({
         managerId: `${team.id}-assigned-manager`,
@@ -502,6 +594,14 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
         },
       }),
     );
+    mocks.mockRepairFranchisePersistence.mockResolvedValue({
+      franchiseId: 'franchise-1',
+      seasonNumber: 1,
+      rosterBackfilled: false,
+      seasonMetadataCreated: false,
+      seasonMetadataUpdated: false,
+      totalGames: 1,
+    });
     mocks.mockBuildFranchiseGameTrackerRoster.mockImplementation(
       (teamId: keyof typeof snapshotsByTeam, context?: { useDH?: boolean }) =>
         Promise.resolve(makeRoster(teamId, context?.useDH ?? false)),
@@ -511,6 +611,11 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
   test('regular-season launch with DH enabled passes DH snapshots selected by opposing starter hand', async () => {
     await startRegularSeasonGame();
 
+    expect(mocks.mockUseScheduleData).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ franchiseId: 'franchise-1' }),
+    );
+    expect(mocks.mockRepairFranchisePersistence).toHaveBeenCalledWith('franchise-1', 1);
     expect(mocks.mockBuildFranchiseGameTrackerRoster).toHaveBeenCalledWith(
       'away-team',
       expect.objectContaining({ franchiseId: 'franchise-1', leagueId: 'league-1', useDH: true }),
@@ -519,13 +624,175 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
       'home-team',
       expect.objectContaining({ franchiseId: 'franchise-1', leagueId: 'league-1', useDH: true }),
     );
+    expect(mocks.mockGetFranchiseTeam).toHaveBeenCalledWith('franchise-1', 'away-team');
+    expect(mocks.mockGetFranchiseTeam).toHaveBeenCalledWith('franchise-1', 'home-team');
+    expect(mocks.mockGetTeam).not.toHaveBeenCalled();
 
     await waitFor(() => expect(mocks.mockNavigate).toHaveBeenCalled());
     const state = mocks.mockNavigate.mock.calls.at(-1)?.[1]?.state;
 
     expect(state.useDH).toBe(true);
+    expect(state.scheduleGameId).toBe('game-7');
+    expect(state.awayTeamColor).toBe('#aa0000');
+    expect(state.awayTeamBorderColor).toBe('#00aa00');
+    expect(state.homeTeamColor).toBe('#aa0000');
+    expect(state.homeTeamBorderColor).toBe('#00aa00');
+    expect(state).toMatchObject({
+      franchiseId: 'franchise-1',
+      seasonNumber: 1,
+      seasonId: 'franchise-1-season-1',
+      statsScopeId: 'franchise-1-season-1',
+      competitionType: 'franchise',
+      competitionId: 'franchise-1',
+    });
     expect(state.optimalLineupSnapshots.away).toBe(snapshotsByTeam['away-team'].dh.vsLHP);
     expect(state.optimalLineupSnapshots.home).toBe(snapshotsByTeam['home-team'].dh.vsRHP);
+  });
+
+  test('Mode 2 v1 regular-season actions expose score and single-game skip only', () => {
+    render(<FranchiseHome />);
+
+    expect(screen.getByRole('button', { name: 'SCORE GAME' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'SKIP GAME' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'PLAY GAME' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /SIM/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /SKIP TODAY/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /SKIP WEEK/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /SKIP SEASON/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'TRADES' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'ALL-STAR' })).toBeNull();
+  });
+
+  test('Franchise Home handles empty manual schedule state without matchup actions', () => {
+    mocks.mockUseScheduleData.mockReturnValue(makeEmptyScheduleData());
+
+    render(<FranchiseHome />);
+
+    expect(screen.getByText('NO GAMES SCHEDULED')).toBeInTheDocument();
+    expect(screen.getByText(/Season 1 starts empty/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add Game' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'SCORE GAME' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'SKIP GAME' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'BEAT WRITERS' })).toBeNull();
+  });
+
+  test('direct offseason start does not advance when season summary creation fails', async () => {
+    mocks.mockUseOffseasonState.mockReturnValue(makeOffseasonState({
+      state: { id: 'offseason-franchise-1-season-1' },
+      currentPhase: 'SPRING_TRAINING',
+      currentPhaseIndex: 10,
+      phaseName: 'Spring Training',
+      progress: 100,
+      isOffseasonComplete: true,
+    }));
+    mocks.mockCreateFranchiseSeasonSummary.mockRejectedValueOnce(new Error('summary unavailable'));
+
+    render(<FranchiseHome />);
+    fireEvent.click(screen.getByRole('button', { name: 'OFFSEASON' }));
+    fireEvent.click(screen.getByRole('button', { name: 'START SEASON 2' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not start Season 2: summary unavailable.',
+    );
+    expect(mocks.mockExecuteSeasonTransition).not.toHaveBeenCalled();
+    expect(mocks.mockUpdateFranchiseMetadata).not.toHaveBeenCalled();
+    expect(mocks.mockInitializeEmptyFranchiseSeasonSchedule).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'START SEASON 2' })).toBeInTheDocument();
+  });
+
+  test('direct offseason start does not advance when season transition fails', async () => {
+    mocks.mockUseOffseasonState.mockReturnValue(makeOffseasonState({
+      state: { id: 'offseason-franchise-1-season-1' },
+      currentPhase: 'SPRING_TRAINING',
+      currentPhaseIndex: 10,
+      phaseName: 'Spring Training',
+      progress: 100,
+      isOffseasonComplete: true,
+    }));
+    mocks.mockExecuteSeasonTransition.mockResolvedValueOnce({
+      success: false,
+      steps: [{ name: 'Increment Ages', status: 'error', error: 'age step failed' }],
+      summary: {
+        playersAged: 0,
+        salariesRecalculated: 0,
+        mojosReset: 0,
+        rookiesApplied: 0,
+        serviceIncremented: 0,
+        previousSeason: 1,
+        newSeason: 2,
+      },
+    });
+
+    render(<FranchiseHome />);
+    fireEvent.click(screen.getByRole('button', { name: 'OFFSEASON' }));
+    fireEvent.click(screen.getByRole('button', { name: 'START SEASON 2' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not start Season 2: age step failed.',
+    );
+    expect(mocks.mockCreateFranchiseSeasonSummary).toHaveBeenCalledWith({
+      franchiseId: 'franchise-1',
+      seasonNumber: 1,
+      playoffId: 'playoff-1',
+    });
+    expect(mocks.mockUpdateFranchiseMetadata).not.toHaveBeenCalled();
+    expect(mocks.mockInitializeEmptyFranchiseSeasonSchedule).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'START SEASON 2' })).toBeInTheDocument();
+  });
+
+  test('direct offseason start does not advance metadata when empty schedule initialization fails', async () => {
+    mocks.mockUseOffseasonState.mockReturnValue(makeOffseasonState({
+      state: { id: 'offseason-franchise-1-season-1' },
+      currentPhase: 'SPRING_TRAINING',
+      currentPhaseIndex: 10,
+      phaseName: 'Spring Training',
+      progress: 100,
+      isOffseasonComplete: true,
+    }));
+    mocks.mockInitializeEmptyFranchiseSeasonSchedule.mockRejectedValueOnce(new Error('schedule unavailable'));
+
+    render(<FranchiseHome />);
+    fireEvent.click(screen.getByRole('button', { name: 'OFFSEASON' }));
+    fireEvent.click(screen.getByRole('button', { name: 'START SEASON 2' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not start Season 2: schedule unavailable.',
+    );
+    expect(mocks.mockCreateFranchiseSeasonSummary).toHaveBeenCalled();
+    expect(mocks.mockExecuteSeasonTransition).toHaveBeenCalled();
+    expect(mocks.mockInitializeEmptyFranchiseSeasonSchedule).toHaveBeenCalledWith('franchise-1', 2);
+    expect(mocks.mockUpdateFranchiseMetadata).not.toHaveBeenCalled();
+    expect(mocks.mockClearFranchiseSeasonSchedule).toHaveBeenCalledWith('franchise-1', 2);
+    expect(mocks.mockDeleteSeasonMetadata).toHaveBeenCalledWith('franchise-1-season-2');
+    expect(screen.getByRole('button', { name: 'START SEASON 2' })).toBeInTheDocument();
+  });
+
+  test('regular-season launch blocks when a scheduled team has no usable franchise roster', async () => {
+    mocks.mockBuildFranchiseGameTrackerRoster.mockImplementation(
+      (teamId: keyof typeof snapshotsByTeam, context?: { useDH?: boolean }) => {
+        if (teamId === 'home-team') {
+          return Promise.resolve({
+            players: [],
+            pitchers: [],
+            optimalLineups: {},
+          });
+        }
+        return Promise.resolve(makeRoster(teamId, context?.useDH ?? false));
+      },
+    );
+
+    render(<FranchiseHome />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'SCORE GAME' }));
+    fireEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
+
+    await screen.findByText(
+      'Franchise roster data is incomplete for HOME TEAM. Game launch blocked.',
+    );
+
+    expect(mocks.mockRepairFranchisePersistence).toHaveBeenCalledWith('franchise-1', 1);
+    expect(screen.queryByText('PRE-GAME LINEUP')).toBeNull();
+    expect(mocks.mockNavigate).not.toHaveBeenCalled();
   });
 
   test('regular-season pregame blocks start when a required benchmark is missing or stale', async () => {
@@ -559,7 +826,7 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
 
     render(<FranchiseHome />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'PLAY GAME' }));
+    fireEvent.click(screen.getByRole('button', { name: 'SCORE GAME' }));
     fireEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
 
     await screen.findByText('PRE-GAME LINEUP');
@@ -583,7 +850,7 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
 
     render(<FranchiseHome />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'PLAY GAME' }));
+    fireEvent.click(screen.getByRole('button', { name: 'SCORE GAME' }));
     fireEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
 
     await screen.findByText('PRE-GAME LINEUP');
@@ -608,7 +875,7 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
 
     render(<FranchiseHome />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'PLAY GAME' }));
+    fireEvent.click(screen.getByRole('button', { name: 'SCORE GAME' }));
     fireEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
 
     await screen.findByText('PRE-GAME LINEUP');
@@ -632,7 +899,7 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
 
     render(<FranchiseHome />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'PLAY GAME' }));
+    fireEvent.click(screen.getByRole('button', { name: 'SCORE GAME' }));
     fireEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
 
     await screen.findByText('PRE-GAME LINEUP');
@@ -666,8 +933,8 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
       expect.objectContaining({
         team: expect.objectContaining({
           id: 'away-team',
-          managerId: 'away-team-team-manager',
-          managerName: 'away-team Team Manager',
+          managerId: 'away-team-franchise-manager',
+          managerName: 'away-team Franchise Manager',
         }),
         mode: 'franchise',
         instanceId: 'franchise-1',
@@ -680,8 +947,8 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
       expect.objectContaining({
         team: expect.objectContaining({
           id: 'home-team',
-          managerId: 'home-team-team-manager',
-          managerName: 'home-team Team Manager',
+          managerId: 'home-team-franchise-manager',
+          managerName: 'home-team Franchise Manager',
         }),
         mode: 'franchise',
         instanceId: 'franchise-1',
@@ -742,10 +1009,29 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
       'higher-seed',
       expect.objectContaining({ franchiseId: 'franchise-1', leagueId: 'league-1', useDH: true }),
     );
+    expect(mocks.mockGetFranchiseTeam).toHaveBeenCalledWith('franchise-1', 'lower-seed');
+    expect(mocks.mockGetFranchiseTeam).toHaveBeenCalledWith('franchise-1', 'higher-seed');
+    expect(mocks.mockGetTeam).not.toHaveBeenCalled();
 
     const state = mocks.mockNavigate.mock.calls.at(-1)?.[1]?.state;
 
     expect(state.useDH).toBe(true);
+    expect(state.awayTeamName).toBe('LOWER-SEED COPIED TEAM');
+    expect(state.homeTeamName).toBe('HIGHER-SEED COPIED TEAM');
+    expect(state.awayTeamColor).toBe('#aa0000');
+    expect(state.homeTeamColor).toBe('#aa0000');
+    expect(state.stadiumName).toBe('Higher Park');
+    expect(state).toMatchObject({
+      franchiseId: 'franchise-1',
+      seasonNumber: 1,
+      seasonId: 'franchise-1-season-1',
+      statsScopeId: 'franchise-1-season-1',
+      competitionType: 'playoff',
+      competitionId: 'playoff-1',
+      playoffId: 'playoff-1',
+      playoffSeriesId: 'series-1',
+      playoffGameNumber: 1,
+    });
     expect(state.optimalLineupSnapshots.away).toBe(snapshotsByTeam['lower-seed'].dh.vsLHP);
     expect(state.optimalLineupSnapshots.home).toBe(snapshotsByTeam['higher-seed'].dh.vsRHP);
     expect(state).toMatchObject({

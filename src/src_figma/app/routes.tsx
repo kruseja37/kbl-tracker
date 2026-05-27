@@ -1,5 +1,6 @@
 import { createBrowserRouter } from "react-router";
 import { AppHome } from "@/app/pages/AppHome";
+import { Builder } from "@/app/pages/Builder";
 import { LeagueBuilder } from "@/app/pages/LeagueBuilder";
 import { LeagueBuilderLeagues } from "@/app/pages/LeagueBuilderLeagues";
 import { LeagueBuilderTeams } from "@/app/pages/LeagueBuilderTeams";
@@ -22,6 +23,10 @@ export const router = createBrowserRouter([
   {
     path: "/",
     Component: AppHome,
+  },
+  {
+    path: "/builder",
+    Component: Builder,
   },
   {
     path: "/league-builder",

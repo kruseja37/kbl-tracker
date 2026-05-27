@@ -55,6 +55,7 @@ export interface OffseasonState {
   id: string;
   seasonId: string;
   seasonNumber: number;
+  franchiseId?: string;
   currentPhase: OffseasonPhase;
   phasesCompleted: OffseasonPhase[];
   status: 'IN_PROGRESS' | 'COMPLETED';
@@ -298,7 +299,8 @@ export async function initOffseasonDatabase(): Promise<IDBDatabase> {
  */
 export async function startOffseason(
   seasonId: string,
-  seasonNumber: number
+  seasonNumber: number,
+  options: { franchiseId?: string } = {},
 ): Promise<OffseasonState> {
   const db = await initOffseasonDatabase();
 
@@ -306,6 +308,7 @@ export async function startOffseason(
     id: `offseason-${seasonId}`,
     seasonId,
     seasonNumber,
+    franchiseId: options.franchiseId,
     currentPhase: 'STANDINGS_FINAL',
     phasesCompleted: [],
     status: 'IN_PROGRESS',

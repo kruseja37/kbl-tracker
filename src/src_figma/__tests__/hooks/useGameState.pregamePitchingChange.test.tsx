@@ -132,8 +132,8 @@ describe('useGameState pregame pitching change', () => {
       });
     });
 
-    act(() => {
-      result.current.switchPositions([
+    await act(async () => {
+      await result.current.switchPositions([
         { playerId: 'home-2', newPosition: 'C' },
         { playerId: 'home-8', newPosition: 'SS' },
       ]);

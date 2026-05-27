@@ -9,6 +9,7 @@ import type { TeamImpactSummary } from "../../../utils/teamImpact";
 
 const {
   mockGetInstanceTeamImpactSummaries,
+  mockEnsureEliminationRosterSnapshots,
   mockGetAllEliminationRosterSnapshots,
   mockGetEliminationRosterSnapshot,
   mockUpdateEliminationRosterSnapshot,
@@ -18,6 +19,7 @@ const {
   mockSaveManagerProfile,
 } = vi.hoisted(() => ({
   mockGetInstanceTeamImpactSummaries: vi.fn(),
+  mockEnsureEliminationRosterSnapshots: vi.fn(),
   mockGetAllEliminationRosterSnapshots: vi.fn(),
   mockGetEliminationRosterSnapshot: vi.fn(),
   mockUpdateEliminationRosterSnapshot: vi.fn(),
@@ -32,8 +34,10 @@ vi.mock("../../../utils/teamImpact", () => ({
 }));
 
 vi.mock("../../../utils/eliminationRosterStorage", () => ({
+  ensureEliminationRosterSnapshots: mockEnsureEliminationRosterSnapshots,
   getAllEliminationRosterSnapshots: mockGetAllEliminationRosterSnapshots,
   getEliminationRosterSnapshot: mockGetEliminationRosterSnapshot,
+  isEliminationPitcher: (player: Player) => ["P", "SP", "RP", "CP", "SP/RP"].includes(player.primaryPosition),
   getNormalizedEliminationLineup: (snapshot: EliminationRosterSnapshot) => snapshot.lineup,
   getNormalizedEliminationRotation: (snapshot: EliminationRosterSnapshot) => snapshot.startingRotation,
   updateEliminationRosterSnapshot: mockUpdateEliminationRosterSnapshot,
@@ -71,6 +75,13 @@ const teams: PlayoffTeam[] = [
 describe("EliminationTeamHub Team Impact", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockEnsureEliminationRosterSnapshots.mockResolvedValue({
+      requestedTeamIds: ["alpha", "beta"],
+      existingTeamIds: ["alpha", "beta"],
+      createdTeamIds: [],
+      missingTeamIds: [],
+      failures: [],
+    });
     mockGetAllEliminationRosterSnapshots.mockResolvedValue([
       rosterSnapshot("alpha", "Alpha"),
       rosterSnapshot("beta", "Beta"),
@@ -119,10 +130,10 @@ describe("EliminationTeamHub Team Impact", () => {
 
     const panel = await screen.findByTestId("team-impact-panel");
     expect(within(panel).getByText("TEAM WPA")).toBeInTheDocument();
-    expect(within(panel).getByText("+0.350")).toBeInTheDocument();
+    expect(within(panel).getByText("+35.0 pp")).toBeInTheDocument();
     expect(within(panel).getAllByText(/2nd of 4/i)).toHaveLength(2);
-    expect(within(panel).getByText(/bracket avg \+0\.100/i)).toBeInTheDocument();
-    expect(within(panel).getByText(/\+0\.175 per game/i)).toBeInTheDocument();
+    expect(within(panel).getByText(/bracket avg \+10\.0 pp/i)).toBeInTheDocument();
+    expect(within(panel).getByText(/\+17\.5 pp per game/i)).toBeInTheDocument();
     expect(within(panel).getByText("Lineup carried them")).toBeInTheDocument();
     expect(within(panel).getByText("POG POINTS")).toBeInTheDocument();
     expect(within(panel).getByText("6 pts")).toBeInTheDocument();
@@ -130,9 +141,9 @@ describe("EliminationTeamHub Team Impact", () => {
 
     const leader = within(panel).getByTestId("team-impact-player-alpha-star");
     expect(within(leader).getByText("Dana Dunn")).toBeInTheDocument();
-    expect(within(leader).getByText(/Total \+0\.280/i)).toBeInTheDocument();
-    expect(within(leader).getByText(/High leverage WPA \+0\.110/i)).toBeInTheDocument();
-    expect(within(leader).getByText(/Best play \+0\.180/i)).toBeInTheDocument();
+    expect(within(leader).getByText(/Total \+28\.0 pp/i)).toBeInTheDocument();
+    expect(within(leader).getByText(/High leverage WPA \+11\.0 pp/i)).toBeInTheDocument();
+    expect(within(leader).getByText(/Best play \+18\.0 pp/i)).toBeInTheDocument();
   });
 
   test("renders partial data warnings honestly", async () => {
@@ -207,9 +218,43 @@ describe("EliminationTeamHub Team Impact", () => {
 
     await waitFor(() => {
       const panel = screen.getByTestId("team-impact-panel");
-      expect(within(panel).getByText("+0.420")).toBeInTheDocument();
+      expect(within(panel).getByText("+42.0 pp")).toBeInTheDocument();
       expect(within(panel).getByText("Beta Bolt")).toBeInTheDocument();
       expect(within(panel).getByText("Pitching carried them")).toBeInTheDocument();
+    });
+  });
+
+  test("repairs a missing selected-team snapshot before showing the missing state", async () => {
+    let betaReads = 0;
+    mockGetAllEliminationRosterSnapshots.mockResolvedValue([rosterSnapshot("alpha", "Alpha")]);
+    mockGetEliminationRosterSnapshot.mockImplementation(
+      async (_eliminationId: string, teamId: string) => {
+        if (teamId === "beta") {
+          betaReads += 1;
+          return betaReads === 1 ? null : rosterSnapshot("beta", "Beta");
+        }
+        return rosterSnapshot("alpha", "Alpha");
+      },
+    );
+    mockEnsureEliminationRosterSnapshots.mockResolvedValue({
+      requestedTeamIds: ["beta"],
+      existingTeamIds: ["beta"],
+      createdTeamIds: ["beta"],
+      missingTeamIds: [],
+      failures: [],
+    });
+
+    render(<EliminationTeamHub eliminationId="elim-1" teams={teams} useDH />);
+
+    expect(await screen.findByTestId("team-impact-player-alpha-star")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Beta/i }));
+
+    await waitFor(() => {
+      expect(mockEnsureEliminationRosterSnapshots).toHaveBeenCalledWith("elim-1", ["beta"]);
+      expect(mockGetEliminationRosterSnapshot).toHaveBeenCalledWith("elim-1", "beta");
+    });
+    await waitFor(() => {
+      expect(screen.queryByText(/No roster snapshot found for this team/i)).not.toBeInTheDocument();
     });
   });
 });

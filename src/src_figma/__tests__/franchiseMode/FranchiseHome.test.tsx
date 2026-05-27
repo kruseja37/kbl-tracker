@@ -9,7 +9,7 @@
  */
 
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 
 // ============================================
 // MOCKS - Must be before component import
@@ -191,6 +191,27 @@ describe('FranchiseHome Component', () => {
       // Should have multiple clickable tabs/buttons
       const buttons = screen.getAllByRole('button');
       expect(buttons.length).toBeGreaterThan(3);
+    });
+
+    test('does not expose deferred regular-season franchise actions', () => {
+      render(<FranchiseHome />);
+
+      expect(screen.queryByRole('button', { name: /^TRADES$/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /ALL-STAR/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /SIM/i })).not.toBeInTheDocument();
+      expect(screen.queryByText(/roster analyzer/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/recommendation engine/i)).not.toBeInTheDocument();
+    });
+
+    test('offseason tabs hide trades and active contraction workflow copy', () => {
+      render(<FranchiseHome />);
+
+      fireEvent.click(screen.getByRole('button', { name: /OFFSEASON/i }));
+
+      expect(screen.queryByRole('button', { name: /^TRADES$/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /CONTRACT\/EXPAND/i })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /EXPANSION NOTE/i })).toBeInTheDocument();
+      expect(screen.queryByText(/BEGIN CONTRACTION/i)).not.toBeInTheDocument();
     });
   });
 

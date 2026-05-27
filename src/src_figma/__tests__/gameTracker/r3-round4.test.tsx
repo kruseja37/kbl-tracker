@@ -260,7 +260,7 @@ describe("R3 Round 4 bug fixes", () => {
 
     await act(async () => {
       result.current.endInning();
-      result.current.confirmPitchCount("home-sp", 12);
+      await result.current.confirmPitchCount("home-sp", 12);
     });
 
     expect(result.current.gameState.isTop).toBe(false);
@@ -292,7 +292,7 @@ describe("R3 Round 4 bug fixes", () => {
     expect(result.current.getBaseRunnerNames()).toEqual({});
   });
 
-  test("Bug 3: endGame includes leagueId in the initial exhibition archive context", async () => {
+  test("Bug 3: endGame includes leagueId in the exhibition completion context", async () => {
     const { result } = renderHook(() => useGameState());
     await initializeGame(result);
 
@@ -307,16 +307,16 @@ describe("R3 Round 4 bug fixes", () => {
       });
     });
 
-    expect(mockArchiveCompletedGame).toHaveBeenCalled();
-    expect(mockArchiveCompletedGame.mock.calls[0]?.[4]).toMatchObject({
+    await act(async () => {
+      await result.current.confirmPitchCount("home-sp", 18);
+      await endGamePromise;
+    });
+
+    expect(mockProcessCompletedGame).toHaveBeenCalled();
+    expect(mockProcessCompletedGame.mock.calls[0]?.[3]?.context).toMatchObject({
       competitionType: "exhibition",
       competitionId: "league-exh",
       leagueId: "league-exh",
-    });
-
-    await act(async () => {
-      result.current.confirmPitchCount("home-sp", 18);
-      await endGamePromise;
     });
   });
 
@@ -331,16 +331,16 @@ describe("R3 Round 4 bug fixes", () => {
       });
     });
 
-    expect(mockArchiveCompletedGame).toHaveBeenCalled();
     expect(
-      mockArchiveCompletedGame.mock.calls.every(
-        (call) => call[4]?.leagueId === "league-exh",
+      mockProcessCompletedGame.mock.calls.every(
+        (call) => call[3]?.context?.leagueId === "league-exh",
       ),
     ).toBe(true);
     expect(mockProcessCompletedGame).toHaveBeenCalledWith(
       expect.any(Object),
       expect.any(Object),
       "league-exh",
+      expect.any(Object),
     );
   });
 

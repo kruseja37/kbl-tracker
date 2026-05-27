@@ -123,9 +123,10 @@ interface AwardsCeremonyFlowProps {
   onClose: () => void;
   seasonId?: string;
   seasonNumber?: number;
+  franchiseId?: string;
 }
 
-export function AwardsCeremonyFlow({ onClose, seasonId = 'season-1', seasonNumber = 1 }: AwardsCeremonyFlowProps) {
+export function AwardsCeremonyFlow({ onClose, seasonId = 'season-1', seasonNumber = 1, franchiseId }: AwardsCeremonyFlowProps) {
   const [screen, setScreen] = useState<Screen>("LEAGUE_LEADERS");
   const [currentPosition, setCurrentPosition] = useState(0);
   const [currentLeague, setCurrentLeague] = useState<League>("AL");
@@ -150,7 +151,7 @@ export function AwardsCeremonyFlow({ onClose, seasonId = 'season-1', seasonNumbe
   }, [seasonId]);
 
   // Wire to offseason state for persistence
-  const offseasonState = useOffseasonState(seasonId, seasonNumber);
+  const offseasonState = useOffseasonState(seasonId, seasonNumber, { franchiseId });
 
   // Convert local Award type to AwardWinner for storage
   const convertToAwardWinner = useCallback((award: Award): AwardWinner => {

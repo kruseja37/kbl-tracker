@@ -112,14 +112,20 @@ export interface UseOffseasonStateReturn {
   getPhaseDisplayName: (phase: OffseasonPhase) => string;
 }
 
+export interface UseOffseasonStateOptions {
+  franchiseId?: string;
+}
+
 // ============================================
 // HOOK IMPLEMENTATION
 // ============================================
 
 export function useOffseasonState(
   seasonId: string,
-  seasonNumber: number = 1
+  seasonNumber: number = 1,
+  options: UseOffseasonStateOptions = {},
 ): UseOffseasonStateReturn {
+  const { franchiseId } = options;
   const [state, setState] = useState<OffseasonState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -201,7 +207,7 @@ export function useOffseasonState(
   const startNewOffseason = useCallback(async () => {
     try {
       setIsLoading(true);
-      const newState = await startOffseason(seasonId, seasonNumber);
+      const newState = await startOffseason(seasonId, seasonNumber, { franchiseId });
       setState(newState);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to start offseason';
@@ -210,7 +216,7 @@ export function useOffseasonState(
     } finally {
       setIsLoading(false);
     }
-  }, [seasonId, seasonNumber]);
+  }, [franchiseId, seasonId, seasonNumber]);
 
   // Mark current phase complete (for phases without specific data)
   const completeCurrentPhase = useCallback(async () => {

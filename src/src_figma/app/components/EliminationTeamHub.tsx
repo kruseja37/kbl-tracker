@@ -5,8 +5,10 @@ import { MOJO_LEVELS, MOJO_STATES, getMojoColor } from '../../../engines/mojoEng
 import type { FitnessState } from '../../../engines/fitnessEngine';
 import { FITNESS_STATES } from '../../../engines/fitnessEngine';
 import {
+  ensureEliminationRosterSnapshots,
   getEliminationRosterSnapshot,
   getAllEliminationRosterSnapshots,
+  isEliminationPitcher,
   getNormalizedEliminationLineup,
   getNormalizedEliminationRotation,
   updateEliminationRosterSnapshot,
@@ -44,6 +46,7 @@ import {
   type RoleWpaBreakdown,
   type TeamImpactSummary,
 } from '../../../utils/teamImpact';
+import { formatWpaPoints } from '../../../utils/wpaDisplay';
 import { OptimalLineupComparisonPanel } from './OptimalLineupComparisonPanel';
 
 interface EliminationTeamHubProps {
@@ -137,14 +140,9 @@ function PlayerConditionModal({
 
 const FIELD_POSITIONS_WITH_DH: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'DH'];
 const FIELD_POSITIONS_NO_DH: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'P'];
-const PITCHER_POSITIONS: Position[] = ['SP', 'RP', 'CP', 'SP/RP'];
 
 function getPlayerName(player: Player): string {
   return `${player.firstName} ${player.lastName}`;
-}
-
-function isPitcher(player: Player): boolean {
-  return PITCHER_POSITIONS.includes(player.primaryPosition);
 }
 
 function sortLineup(lineup: LineupSlot[]): LineupSlot[] {
@@ -215,9 +213,7 @@ const IMPACT_ROLE_KEYS: Array<Exclude<keyof RoleWpaBreakdown, 'total'>> = [
 ];
 
 function formatWpa(value: number): string {
-  if (!Number.isFinite(value)) return 'n/a';
-  const rounded = value.toFixed(3);
-  return value > 0 ? `+${rounded}` : rounded;
+  return formatWpaPoints(value);
 }
 
 function formatPoints(value: number): string {
@@ -488,17 +484,18 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
 
     async function loadSnapshotIndex() {
       try {
+        const teamIds = teams.map((team) => team.teamId);
+        await ensureEliminationRosterSnapshots(eliminationId, teamIds);
         const snapshots = await getAllEliminationRosterSnapshots(eliminationId);
         if (cancelled) return;
 
         const snapshotIds = snapshots.map((item) => item.teamId);
         setAvailableSnapshotIds(snapshotIds);
 
-        if (snapshotIds.length > 0 && !snapshotIds.includes(selectedTeamId)) {
-          setSelectedTeamId(snapshotIds[0]);
-        } else if (!selectedTeamId && teams[0]?.teamId) {
-          setSelectedTeamId(teams[0].teamId);
-        }
+        setSelectedTeamId((current) => {
+          if (current && teamIds.includes(current)) return current;
+          return teamIds[0] ?? snapshotIds[0] ?? '';
+        });
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Failed to load roster snapshots.');
@@ -510,7 +507,7 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
     return () => {
       cancelled = true;
     };
-  }, [eliminationId, selectedTeamId, teams]);
+  }, [eliminationId, teams]);
 
   useEffect(() => {
     let cancelled = false;
@@ -548,13 +545,21 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
       try {
         setIsLoading(true);
         setError(null);
-        const loadedSnapshot = await getEliminationRosterSnapshot(eliminationId, selectedTeamId);
+        let loadedSnapshot = await getEliminationRosterSnapshot(eliminationId, selectedTeamId);
+
+        if (!loadedSnapshot) {
+          await ensureEliminationRosterSnapshots(eliminationId, [selectedTeamId]);
+          loadedSnapshot = await getEliminationRosterSnapshot(eliminationId, selectedTeamId);
+        }
 
         if (!loadedSnapshot) {
           throw new Error(`Roster snapshot missing for team: ${selectedTeamId}`);
         }
 
         if (!cancelled) {
+          setAvailableSnapshotIds((current) =>
+            current.includes(selectedTeamId) ? current : [...current, selectedTeamId],
+          );
           setSnapshot({
             ...loadedSnapshot,
             lineup: sortLineup(loadedSnapshot.lineup),
@@ -607,7 +612,7 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
   const positionPlayers = useMemo(
     () =>
       (snapshot?.players ?? [])
-        .filter((player) => !isPitcher(player))
+        .filter((player) => !isEliminationPitcher(player))
         .sort((a, b) => a.lastName.localeCompare(b.lastName)),
     [snapshot]
   );
@@ -615,7 +620,7 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
   const pitchers = useMemo(
     () =>
       (snapshot?.players ?? [])
-        .filter((player) => isPitcher(player))
+        .filter((player) => isEliminationPitcher(player))
         .sort((a, b) => a.lastName.localeCompare(b.lastName)),
     [snapshot]
   );
@@ -860,9 +865,17 @@ export function EliminationTeamHub({ eliminationId, teams, useDH }: EliminationT
     const officialSnapshot = isOfficialOptimalLineupSnapshot(nextSnapshot)
       ? nextSnapshot
       : confirmEngineOptimalLineupSnapshot(nextSnapshot);
+    const nextLineup = lineupSlotsFromOptimalSnapshot(officialSnapshot);
+    const normalizedLineup = getNormalizedEliminationLineup(
+      {
+        ...snapshot,
+        [useDH ? 'lineup' : 'lineupWithoutDH']: nextLineup,
+      },
+      useDH,
+    );
     await persistUpdates(snapshot.teamId, {
       [field]: officialSnapshot,
-      [useDH ? 'lineup' : 'lineupWithoutDH']: lineupSlotsFromOptimalSnapshot(officialSnapshot),
+      [useDH ? 'lineup' : 'lineupWithoutDH']: normalizedLineup,
     });
   }
 

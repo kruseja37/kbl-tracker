@@ -5,6 +5,16 @@ import { useOffseasonState, type DraftPick as StoredDraftPick } from "../../hook
 import { savePlayer, getTeam, getTeamRoster, saveTeamRoster, type TeamRoster } from "../../../utils/leagueBuilderStorage";
 import { getActiveFranchise, loadFranchise } from "../../../utils/franchiseManager";
 import { FIRST_NAMES, LAST_NAMES } from "../../../data/nameDatabase";
+import {
+  FRANCHISE_OFFSEASON_TEMPLATE_MUTATION_MESSAGE,
+  shouldBlockFranchiseTemplateMutation,
+} from "../utils/franchiseOffseasonGuards";
+import {
+  FRANCHISE_DRAFT_CALCULATION_VERSION,
+  runFranchiseDraftDryRun,
+  type FranchiseDraftAdapterData,
+} from "../../../utils/franchiseDraftAdapter";
+import type { FranchiseOffseasonAdapterIssue } from "../../../utils/franchiseOffseasonAdapters";
 
 // Empty teams fallback — populated from IndexedDB when available
 const EMPTY_TEAMS: { name: string; mlb: number; farm: number }[] = [];
@@ -69,17 +79,318 @@ interface TeamRosterStatus {
 interface DraftFlowProps {
   seasonId: string;
   seasonNumber?: number;
+  franchiseId?: string;
   onComplete: () => void;
   onCancel: () => void;
 }
 
-export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: DraftFlowProps) {
+export function DraftFlow(props: DraftFlowProps) {
+  if (props.franchiseId) {
+    return (
+      <FranchiseDraftDryRunPreview
+        franchiseId={props.franchiseId}
+        seasonId={props.seasonId}
+        seasonNumber={props.seasonNumber ?? 1}
+        onCancel={props.onCancel}
+      />
+    );
+  }
+
+  return <PrototypeDraftFlow {...props} />;
+}
+
+function FranchiseDraftDryRunPreview({
+  franchiseId,
+  seasonId,
+  seasonNumber,
+  onCancel,
+}: {
+  franchiseId: string;
+  seasonId: string;
+  seasonNumber: number;
+  onCancel: () => void;
+}) {
+  const [franchisePreviewData, setFranchisePreviewData] = useState<FranchiseDraftAdapterData | null>(null);
+  const [franchisePreviewIssues, setFranchisePreviewIssues] = useState<FranchiseOffseasonAdapterIssue[]>([]);
+  const [franchisePreviewLoading, setFranchisePreviewLoading] = useState(false);
+  const [franchisePreviewError, setFranchisePreviewError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setFranchisePreviewLoading(true);
+    setFranchisePreviewError(null);
+
+    runFranchiseDraftDryRun(
+      {
+        franchiseId,
+        seasonId,
+        seasonNumber,
+        offseasonStateId: `offseason-${seasonId}`,
+        phase: "DRAFT",
+        dryRun: true,
+      },
+      { dryRun: true },
+    )
+      .then((result) => {
+        if (cancelled) return;
+        setFranchisePreviewData(result.data ?? null);
+        setFranchisePreviewIssues(result.issues ?? []);
+        if (!result.success) {
+          setFranchisePreviewError(result.message || "Draft readiness preview failed validation.");
+        }
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setFranchisePreviewData(null);
+        setFranchisePreviewIssues([]);
+        setFranchisePreviewError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (!cancelled) setFranchisePreviewLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [franchiseId, seasonId, seasonNumber]);
+
+  const reports = franchisePreviewData?.teamReports ?? [];
+  const teamsWithNeeds = reports.filter((report) =>
+    report.mlbVacancies > 0 ||
+    report.farmVacancies > 0 ||
+    report.farmOverage > 0 ||
+    report.positionNeeds.length > 0,
+  );
+  const issuesBySeverity = franchisePreviewIssues.reduce<Record<string, FranchiseOffseasonAdapterIssue[]>>((acc, issue) => {
+    const key = issue.severity ?? "info";
+    acc[key] = [...(acc[key] ?? []), issue];
+    return acc;
+  }, {});
+
+  return (
+    <div className="fixed inset-0 bg-black/90 z-50 overflow-y-auto">
+      <div className="min-h-screen p-8">
+        <div className="max-w-6xl mx-auto bg-[#6B9462] border-[5px] border-[#4A6844]">
+          <div className="bg-[#4A6844] p-4 border-b-[3px] border-[#3F5A3A]">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-sm text-[#E8E8D8]">DRAFT READINESS PREVIEW - SEASON {seasonNumber}</div>
+                <div className="text-[10px] text-[#E8E8D8]/60 mt-1">Franchise Mode 2 v1 dry-run boundary</div>
+              </div>
+              <button onClick={onCancel} className="text-[#E8E8D8] hover:text-[#DD0000]" aria-label="Close draft preview">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-4">
+            <div className="bg-[#5A8352] border-[3px] border-[#FFD700] p-4 space-y-2">
+              <div className="text-xs text-[#E8E8D8]">Preview only - no draft commit</div>
+              <div className="text-[10px] text-[#E8E8D8]/85">
+                Method: <span className="text-[#FFD700]">{FRANCHISE_DRAFT_CALCULATION_VERSION}</span>
+              </div>
+              <div className="text-[10px] text-[#E8E8D8]/80">
+                No draft picks are made, no players are generated, signed, released, replaced, retired, or moved, no transactions are written, and no draft class is persisted.
+              </div>
+              <div className="text-[10px] text-[#E8E8D8]/80">
+                The 22 MLB / 10 farm counts are Phase 11 roster lock readiness targets, not current draft-phase requirements.
+              </div>
+              <div className="text-[10px] text-[#E8E8D8]/80">
+                Draft class preview is unavailable until a safe pure generator is added later.
+              </div>
+            </div>
+
+            {franchisePreviewLoading && (
+              <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-4 text-xs text-[#E8E8D8]">
+                Loading draft readiness preview...
+              </div>
+            )}
+
+            {franchisePreviewError && (
+              <div className="bg-[#5A2F2F] border-[3px] border-[#DD0000] p-4 text-xs text-[#E8E8D8]">
+                {franchisePreviewError}
+              </div>
+            )}
+
+            {franchisePreviewData && (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-3">
+                    <div className="text-[9px] text-[#E8E8D8]/60">Teams reviewed</div>
+                    <div className="text-xl text-[#E8E8D8]">{reports.length}</div>
+                  </div>
+                  <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-3">
+                    <div className="text-[9px] text-[#E8E8D8]/60">Teams with needs</div>
+                    <div className="text-xl text-[#E8E8D8]">{teamsWithNeeds.length}</div>
+                  </div>
+                  <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-3">
+                    <div className="text-[9px] text-[#E8E8D8]/60">Warnings/issues</div>
+                    <div className="text-xl text-[#E8E8D8]">{franchisePreviewIssues.length}</div>
+                  </div>
+                  <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-3">
+                    <div className="text-[9px] text-[#E8E8D8]/60">Draft class</div>
+                    <div className="text-xs text-[#FFD700] mt-2">Unavailable</div>
+                  </div>
+                </div>
+
+                <div className="bg-[#5A8352] border-[3px] border-[#4A6844]">
+                  <div className="bg-[#4A6844] p-2 text-[10px] text-[#E8E8D8]">TEAM READINESS</div>
+                  <div className="p-4 space-y-3 max-h-[520px] overflow-y-auto">
+                    {reports.length === 0 ? (
+                      <div className="text-[10px] text-[#E8E8D8]/60 text-center py-4">
+                        No franchise-owned teams were available for draft readiness.
+                      </div>
+                    ) : reports.map((report) => (
+                      <div key={report.teamId} className="bg-[#4A6844] border-[2px] border-[#3F5A3A] p-3 space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <div className="text-xs text-[#E8E8D8]">{report.teamName}</div>
+                            <div className="text-[9px] text-[#E8E8D8]/60">{report.teamId}</div>
+                          </div>
+                          <div className="text-[10px] text-[#FFD700] uppercase">
+                            {report.draftUrgency} urgency / {report.trustLevel} trust
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-[10px] text-[#E8E8D8]">
+                          <div>MLB: {report.mlbCount}/22</div>
+                          <div>Farm: {report.farmCount}/10</div>
+                          <div>Total: {report.totalCount}/32</div>
+                          <div>Farm vacancies: {report.farmVacancies}</div>
+                          <div>MLB vacancies: {report.mlbVacancies}</div>
+                        </div>
+
+                        {report.positionNeeds.length > 0 && (
+                          <div className="space-y-1">
+                            <div className="text-[9px] text-[#E8E8D8]/60">Position / role needs</div>
+                            <div className="flex flex-wrap gap-2">
+                              {report.positionNeeds.map((need) => (
+                                <span key={`${report.teamId}-${need.role}`} className="text-[9px] text-[#E8E8D8] bg-[#5A8352] px-2 py-1">
+                                  {need.role}: {need.currentCount}/{need.targetCount} ({need.severity})
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="grid md:grid-cols-2 gap-3">
+                          <div>
+                            <div className="text-[9px] text-[#E8E8D8]/60 mb-1">Evidence</div>
+                            <ul className="space-y-1">
+                              {report.evidence.map((item) => (
+                                <li key={item} className="text-[9px] text-[#E8E8D8]/80">{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                          <div>
+                            <div className="text-[9px] text-[#E8E8D8]/60 mb-1">Limitations</div>
+                            <ul className="space-y-1">
+                              {report.limitations.map((item) => (
+                                <li key={item} className="text-[9px] text-[#E8E8D8]/80">{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-4">
+                  <div className="text-xs text-[#E8E8D8] mb-2">LIMITATIONS</div>
+                  <ul className="space-y-1">
+                    {franchisePreviewData.limitations.map((limitation) => (
+                      <li key={limitation} className="text-[10px] text-[#E8E8D8]/80">{limitation}</li>
+                    ))}
+                  </ul>
+                </div>
+              </>
+            )}
+
+            {franchisePreviewIssues.length > 0 && (
+              <div className="bg-[#5A8352] border-[3px] border-[#DDC45A] p-4">
+                <div className="text-xs text-[#E8E8D8] mb-2">WARNINGS / ISSUES</div>
+                <div className="text-[9px] text-[#E8E8D8]/60 mb-2">
+                  Errors: {issuesBySeverity.error?.length ?? 0} / Warnings: {issuesBySeverity.warning?.length ?? 0}
+                </div>
+                <div className="space-y-2">
+                  {franchisePreviewIssues.map((issue, index) => (
+                    <div key={`${issue.code}-${index}`} className="bg-[#4A6844] p-2">
+                      <div className="text-[10px] text-[#FFD700]">{issue.code}</div>
+                      <div className="text-[9px] text-[#E8E8D8]/80">{issue.message}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-center pt-2">
+              <button
+                onClick={onCancel}
+                className="bg-[#4A6844] border-[3px] border-[#3F5A3A] px-6 py-3 text-xs text-[#E8E8D8] hover:bg-[#3F5A3A] active:scale-95 transition-transform"
+              >
+                Close Preview
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PrototypeDraftFlow({ seasonId, seasonNumber = 1, franchiseId, onComplete, onCancel }: DraftFlowProps) {
   // Get real data from hook
   const { teams: realTeams, players: realPlayers, hasRealData, isLoading } = useOffseasonData();
 
   // Offseason state hook for persistence
-  const { saveDraft } = useOffseasonState(seasonId);
+  const { saveDraft } = useOffseasonState(seasonId, seasonNumber, { franchiseId });
   const [isSaving, setIsSaving] = useState(false);
+  const [franchisePreviewData, setFranchisePreviewData] = useState<FranchiseDraftAdapterData | null>(null);
+  const [franchisePreviewIssues, setFranchisePreviewIssues] = useState<FranchiseOffseasonAdapterIssue[]>([]);
+  const [franchisePreviewLoading, setFranchisePreviewLoading] = useState(false);
+  const [franchisePreviewError, setFranchisePreviewError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!franchiseId) return;
+
+    let cancelled = false;
+    setFranchisePreviewLoading(true);
+    setFranchisePreviewError(null);
+
+    runFranchiseDraftDryRun(
+      {
+        franchiseId,
+        seasonId,
+        seasonNumber,
+        offseasonStateId: `offseason-${seasonId}`,
+        phase: "DRAFT",
+        dryRun: true,
+      },
+      { dryRun: true },
+    )
+      .then((result) => {
+        if (cancelled) return;
+        setFranchisePreviewData(result.data ?? null);
+        setFranchisePreviewIssues(result.issues ?? []);
+        if (!result.success) {
+          setFranchisePreviewError(result.message || "Draft readiness preview failed validation.");
+        }
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setFranchisePreviewData(null);
+        setFranchisePreviewIssues([]);
+        setFranchisePreviewError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (!cancelled) setFranchisePreviewLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [franchiseId, seasonId, seasonNumber]);
 
   // Load controlled team name from franchise metadata
   const [userTeamName, setUserTeamName] = useState<string | null>(null);
@@ -429,6 +740,11 @@ export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: 
 
   // Save draft results to storage and complete
   const handleSaveAndComplete = useCallback(async () => {
+    if (shouldBlockFranchiseTemplateMutation(franchiseId)) {
+      window.alert(FRANCHISE_OFFSEASON_TEMPLATE_MUTATION_MESSAGE);
+      return;
+    }
+
     setIsSaving(true);
     try {
       // Convert draft picks to storage format
@@ -523,7 +839,7 @@ export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: 
     } finally {
       setIsSaving(false);
     }
-  }, [draftPicks, draftTeams, saveDraft, onComplete, teamNameToId]);
+  }, [draftPicks, draftTeams, franchiseId, saveDraft, onComplete, teamNameToId]);
 
   const getGradeColor = (grade: string) => {
     switch (grade) {
@@ -624,6 +940,192 @@ export function DraftFlow({ seasonId, seasonNumber = 1, onComplete, onCancel }: 
       setSortDirection("desc");
     }
   };
+
+  if (franchiseId) {
+    const reports = franchisePreviewData?.teamReports ?? [];
+    const changedTeams = reports.filter((report) =>
+      report.mlbVacancies > 0 ||
+      report.farmVacancies > 0 ||
+      report.farmOverage > 0 ||
+      report.positionNeeds.length > 0,
+    );
+    const issuesBySeverity = franchisePreviewIssues.reduce<Record<string, FranchiseOffseasonAdapterIssue[]>>((acc, issue) => {
+      const key = issue.severity ?? "info";
+      acc[key] = [...(acc[key] ?? []), issue];
+      return acc;
+    }, {});
+
+    return (
+      <div className="fixed inset-0 bg-black/90 z-50 overflow-y-auto">
+        <div className="min-h-screen p-8">
+          <div className="max-w-6xl mx-auto bg-[#6B9462] border-[5px] border-[#4A6844]">
+            <div className="bg-[#4A6844] p-4 border-b-[3px] border-[#3F5A3A]">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-sm text-[#E8E8D8]">DRAFT READINESS PREVIEW - SEASON {seasonNumber}</div>
+                  <div className="text-[10px] text-[#E8E8D8]/60 mt-1">Franchise Mode 2 v1 dry-run boundary</div>
+                </div>
+                <button onClick={onCancel} className="text-[#E8E8D8] hover:text-[#DD0000]" aria-label="Close draft preview">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-[#5A8352] border-[3px] border-[#FFD700] p-4 space-y-2">
+                <div className="text-xs text-[#E8E8D8]">Preview only - no draft commit</div>
+                <div className="text-[10px] text-[#E8E8D8]/85">
+                  Method: <span className="text-[#FFD700]">{FRANCHISE_DRAFT_CALCULATION_VERSION}</span>
+                </div>
+                <div className="text-[10px] text-[#E8E8D8]/80">
+                  No draft picks are made, no players are generated, signed, released, replaced, retired, or moved, no transactions are written, and no draft class is persisted.
+                </div>
+                <div className="text-[10px] text-[#E8E8D8]/80">
+                  The 22 MLB / 10 farm counts are Phase 11 roster lock readiness targets, not current draft-phase requirements.
+                </div>
+                <div className="text-[10px] text-[#E8E8D8]/80">
+                  Draft class preview is unavailable until a safe pure generator is added later.
+                </div>
+              </div>
+
+              {franchisePreviewLoading && (
+                <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-4 text-xs text-[#E8E8D8]">
+                  Loading draft readiness preview...
+                </div>
+              )}
+
+              {franchisePreviewError && (
+                <div className="bg-[#5A2F2F] border-[3px] border-[#DD0000] p-4 text-xs text-[#E8E8D8]">
+                  {franchisePreviewError}
+                </div>
+              )}
+
+              {franchisePreviewData && (
+                <>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-3">
+                      <div className="text-[9px] text-[#E8E8D8]/60">Teams reviewed</div>
+                      <div className="text-xl text-[#E8E8D8]">{reports.length}</div>
+                    </div>
+                    <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-3">
+                      <div className="text-[9px] text-[#E8E8D8]/60">Teams with needs</div>
+                      <div className="text-xl text-[#E8E8D8]">{changedTeams.length}</div>
+                    </div>
+                    <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-3">
+                      <div className="text-[9px] text-[#E8E8D8]/60">Warnings/issues</div>
+                      <div className="text-xl text-[#E8E8D8]">{franchisePreviewIssues.length}</div>
+                    </div>
+                    <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-3">
+                      <div className="text-[9px] text-[#E8E8D8]/60">Draft class</div>
+                      <div className="text-xs text-[#FFD700] mt-2">Unavailable</div>
+                    </div>
+                  </div>
+
+                  <div className="bg-[#5A8352] border-[3px] border-[#4A6844]">
+                    <div className="bg-[#4A6844] p-2 text-[10px] text-[#E8E8D8]">TEAM READINESS</div>
+                    <div className="p-4 space-y-3 max-h-[520px] overflow-y-auto">
+                      {reports.length === 0 ? (
+                        <div className="text-[10px] text-[#E8E8D8]/60 text-center py-4">
+                          No franchise-owned teams were available for draft readiness.
+                        </div>
+                      ) : reports.map((report) => (
+                        <div key={report.teamId} className="bg-[#4A6844] border-[2px] border-[#3F5A3A] p-3 space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <div className="text-xs text-[#E8E8D8]">{report.teamName}</div>
+                              <div className="text-[9px] text-[#E8E8D8]/60">{report.teamId}</div>
+                            </div>
+                            <div className="text-[10px] text-[#FFD700] uppercase">
+                              {report.draftUrgency} urgency / {report.trustLevel} trust
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-[10px] text-[#E8E8D8]">
+                            <div>MLB: {report.mlbCount}/22</div>
+                            <div>Farm: {report.farmCount}/10</div>
+                            <div>Total: {report.totalCount}/32</div>
+                            <div>Farm vacancies: {report.farmVacancies}</div>
+                            <div>MLB vacancies: {report.mlbVacancies}</div>
+                          </div>
+
+                          {report.positionNeeds.length > 0 && (
+                            <div className="space-y-1">
+                              <div className="text-[9px] text-[#E8E8D8]/60">Position / role needs</div>
+                              <div className="flex flex-wrap gap-2">
+                                {report.positionNeeds.map((need) => (
+                                  <span key={`${report.teamId}-${need.role}`} className="text-[9px] text-[#E8E8D8] bg-[#5A8352] px-2 py-1">
+                                    {need.role}: {need.currentCount}/{need.targetCount} ({need.severity})
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="grid md:grid-cols-2 gap-3">
+                            <div>
+                              <div className="text-[9px] text-[#E8E8D8]/60 mb-1">Evidence</div>
+                              <ul className="space-y-1">
+                                {report.evidence.map((item) => (
+                                  <li key={item} className="text-[9px] text-[#E8E8D8]/80">{item}</li>
+                                ))}
+                              </ul>
+                            </div>
+                            <div>
+                              <div className="text-[9px] text-[#E8E8D8]/60 mb-1">Limitations</div>
+                              <ul className="space-y-1">
+                                {report.limitations.map((item) => (
+                                  <li key={item} className="text-[9px] text-[#E8E8D8]/80">{item}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-4">
+                    <div className="text-xs text-[#E8E8D8] mb-2">LIMITATIONS</div>
+                    <ul className="space-y-1">
+                      {franchisePreviewData.limitations.map((limitation) => (
+                        <li key={limitation} className="text-[10px] text-[#E8E8D8]/80">{limitation}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </>
+              )}
+
+              {franchisePreviewIssues.length > 0 && (
+                <div className="bg-[#5A8352] border-[3px] border-[#DDC45A] p-4">
+                  <div className="text-xs text-[#E8E8D8] mb-2">WARNINGS / ISSUES</div>
+                  <div className="text-[9px] text-[#E8E8D8]/60 mb-2">
+                    Errors: {issuesBySeverity.error?.length ?? 0} / Warnings: {issuesBySeverity.warning?.length ?? 0}
+                  </div>
+                  <div className="space-y-2">
+                    {franchisePreviewIssues.map((issue, index) => (
+                      <div key={`${issue.code}-${index}`} className="bg-[#4A6844] p-2">
+                        <div className="text-[10px] text-[#FFD700]">{issue.code}</div>
+                        <div className="text-[9px] text-[#E8E8D8]/80">{issue.message}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-center pt-2">
+                <button
+                  onClick={onCancel}
+                  className="bg-[#4A6844] border-[3px] border-[#3F5A3A] px-6 py-3 text-xs text-[#E8E8D8] hover:bg-[#3F5A3A] active:scale-95 transition-transform"
+                >
+                  Close Preview
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Loading state
   if (isLoading) {

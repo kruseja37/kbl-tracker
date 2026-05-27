@@ -523,6 +523,44 @@ export async function getOrCreateSeason(
 }
 
 /**
+ * Persist season metadata.
+ */
+export async function saveSeasonMetadata(metadata: SeasonMetadata): Promise<SeasonMetadata> {
+  const db = await initSeasonDatabase();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORES.SEASON_METADATA, 'readwrite');
+    const store = transaction.objectStore(STORES.SEASON_METADATA);
+    const request = store.put(metadata);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-tracker', 'seasonMetadata', metadata.seasonId, metadata);
+      resolve(metadata);
+    };
+  });
+}
+
+/**
+ * Delete season metadata.
+ */
+export async function deleteSeasonMetadata(seasonId: string): Promise<void> {
+  const db = await initSeasonDatabase();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORES.SEASON_METADATA, 'readwrite');
+    const store = transaction.objectStore(STORES.SEASON_METADATA);
+    const request = store.delete(seasonId);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-tracker', 'seasonMetadata', seasonId);
+      resolve();
+    };
+  });
+}
+
+/**
  * Increment games played for a season
  */
 export async function incrementSeasonGames(seasonId: string): Promise<void> {
@@ -795,7 +833,7 @@ export interface TeamStanding {
  */
 export async function calculateStandings(seasonId?: string): Promise<TeamStanding[]> {
   // Get all completed games (up to 500 for a full season)
-  const games = await getRecentGames(500);
+  const games = await getRecentGames(500, seasonId ? { seasonId } : {});
 
   // Filter by seasonId if provided
   const seasonGames = seasonId

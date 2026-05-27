@@ -101,6 +101,58 @@ describe("commentaryFeedStorage", () => {
     ]);
   });
 
+  test("round-trips franchise playoff and elimination identity without mode crossover", async () => {
+    vi.spyOn(syncEngine, "upsert").mockImplementation(() => undefined);
+    vi.spyOn(syncEngine, "isSuppressed").mockReturnValue(false);
+
+    const franchisePlayoff = createRecord({
+      id: "commentary-franchise-playoff",
+      gameMode: "franchise",
+      competitionType: "playoff",
+      competitionId: "playoff-franchise-1",
+      playoffId: "playoff-franchise-1",
+      playoffSeriesId: "series-1",
+      playoffGameNumber: 1,
+      franchiseId: "franchise-1",
+      seasonId: "franchise-1-season-2",
+      seasonNumber: 2,
+      statsScopeId: "franchise-1-season-2",
+      scheduleGameId: "schedule-game-1",
+      timestamp: 3_000,
+      createdAt: 3_000,
+      changed_at: 3_000,
+    });
+    const elimination = createRecord({
+      id: "commentary-elimination",
+      gameMode: "elimination",
+      competitionType: "elimination",
+      competitionId: "elim-1",
+      eliminationId: "elim-1",
+      statsScopeId: "elimination-elim-1",
+      timestamp: 4_000,
+      createdAt: 4_000,
+      changed_at: 4_000,
+    });
+
+    await persistCommentaryFeedEntry(franchisePlayoff);
+    await persistCommentaryFeedEntry(elimination);
+
+    const records = await listCommentaryFeedEntriesForGame("game-1");
+    expect(records).toEqual([franchisePlayoff, elimination]);
+    expect(records[0]).toMatchObject({
+      gameMode: "franchise",
+      competitionType: "playoff",
+      franchiseId: "franchise-1",
+      playoffId: "playoff-franchise-1",
+    });
+    expect(records[1]).toMatchObject({
+      gameMode: "elimination",
+      competitionType: "elimination",
+      eliminationId: "elim-1",
+    });
+    expect(records[1].franchiseId).toBeUndefined();
+  });
+
   test("soft-delete hides record from list", async () => {
     vi.spyOn(syncEngine, "upsert").mockImplementation(() => undefined);
     vi.spyOn(syncEngine, "isSuppressed").mockReturnValue(false);

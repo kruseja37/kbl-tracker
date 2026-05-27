@@ -214,4 +214,59 @@ describe("almanacNarrativeArchive", () => {
       gameMode: "franchise",
     });
   });
+
+  test("keeps franchise playoff archive entries franchise-scoped instead of elimination-scoped", async () => {
+    await seedCompletedGame(
+      createCompletedGame({
+        gameId: "game-franchise-playoff",
+        competitionType: "playoff",
+        competitionId: "playoff-franchise-1",
+        playoffId: "playoff-franchise-1",
+        franchiseId: "franchise-1",
+        seasonId: "franchise-1-season-2",
+        statsScopeId: "franchise-1-season-2",
+        seasonNumber: 2,
+      }),
+    );
+    await seedCompletedGame(
+      createCompletedGame({
+        gameId: "game-elimination",
+        competitionType: "elimination",
+        competitionId: "elim-1",
+      }),
+    );
+
+    await persistCommentaryFeedEntry(
+      createTidbitRecord({
+        id: "tidbit-franchise-playoff",
+        gameId: "game-franchise-playoff",
+      }),
+    );
+    await persistCommentaryFeedEntry(
+      createTidbitRecord({
+        id: "tidbit-elimination",
+        gameId: "game-elimination",
+      }),
+    );
+
+    const archive = await listAlmanacNarrativeArchive();
+    const franchiseEntry = archive.find((entry) => entry.gameId === "game-franchise-playoff");
+    const eliminationEntry = archive.find((entry) => entry.gameId === "game-elimination");
+
+    expect(franchiseEntry).toMatchObject({
+      gameMode: "franchise",
+      competitionType: "playoff",
+      competitionId: "playoff-franchise-1",
+      playoffId: "playoff-franchise-1",
+      franchiseId: "franchise-1",
+      seasonId: "franchise-1-season-2",
+      statsScopeId: "franchise-1-season-2",
+    });
+    expect(eliminationEntry).toMatchObject({
+      gameMode: "elimination",
+      competitionType: "elimination",
+      competitionId: "elim-1",
+      eliminationId: "elim-1",
+    });
+  });
 });
