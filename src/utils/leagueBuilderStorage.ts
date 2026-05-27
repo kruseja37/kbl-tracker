@@ -13,6 +13,7 @@
 
 import { generateHometown } from '../data/usCities';
 import type { OptimalLineupSnapshot } from '../types/managerWpa';
+import type { ParkFactors } from '../types/war';
 import type { EraFlavor, FameTier, PlayerArchetype } from '../types/reporter';
 import { trackFieldChanges, type EditHistoryEntry } from './editHistoryTracker';
 import {
@@ -102,6 +103,8 @@ export interface Team {
   };
   logoUrl?: string;
   stadium: string;
+  stadiumId?: string;
+  parkFactors?: ParkFactors;
   stadiumCapacity?: number;
   leagueIds: string[];
   foundedYear?: number;

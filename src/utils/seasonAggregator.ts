@@ -31,6 +31,45 @@ const DEFAULT_SEASON_ID = 'season-1';
 const DEFAULT_SEASON_NUMBER = 1;
 const DEFAULT_SEASON_NAME = 'Season 1';
 const DEFAULT_TOTAL_GAMES = 162;
+const MLB_BASELINE_INNINGS = 9;
+
+export interface PitchingAchievementContext {
+  scheduledInnings?: number;
+}
+
+export function getScaledQualityStartThresholds(
+  scheduledInnings: number = MLB_BASELINE_INNINGS,
+): { outsRecorded: number; earnedRuns: number } {
+  const innings = Number.isFinite(scheduledInnings) && scheduledInnings > 0
+    ? scheduledInnings
+    : MLB_BASELINE_INNINGS;
+  const scale = innings / MLB_BASELINE_INNINGS;
+
+  return {
+    outsRecorded: Math.max(9, Math.round(18 * scale)),
+    earnedRuns: Math.max(1, Math.round(3 * scale)),
+  };
+}
+
+export function isQualityStartByContext(
+  pitcherStats: Pick<PersistedGameState['pitcherGameStats'][number], 'isStarter' | 'outsRecorded' | 'earnedRuns'>,
+  context: PitchingAchievementContext = {},
+): boolean {
+  const thresholds = getScaledQualityStartThresholds(context.scheduledInnings);
+  return pitcherStats.isStarter &&
+    pitcherStats.outsRecorded >= thresholds.outsRecorded &&
+    pitcherStats.earnedRuns <= thresholds.earnedRuns;
+}
+
+export function isCompleteGameByContext(
+  pitcherStats: Pick<PersistedGameState['pitcherGameStats'][number], 'isStarter' | 'outsRecorded'>,
+  context: PitchingAchievementContext = {},
+): boolean {
+  const scheduledInnings = Number.isFinite(context.scheduledInnings) && context.scheduledInnings && context.scheduledInnings > 0
+    ? context.scheduledInnings
+    : MLB_BASELINE_INNINGS;
+  return pitcherStats.isStarter && pitcherStats.outsRecorded >= scheduledInnings * 3;
+}
 
 function resolveFamePlayerMetadata(
   gameState: PersistedGameState,
@@ -80,6 +119,9 @@ export interface GameAggregationOptions {
   franchiseId?: string;           // Required for franchise firsts/leaders
   currentGame?: number;           // Game number in season (for leader tracking activation)
   currentSeason?: number;         // Season number (1 = first season)
+  seasonNumber?: number;
+  seasonName?: string;
+  seasonTotalGames?: number;
 }
 
 /**
@@ -100,10 +142,18 @@ export async function aggregateGameToSeason(
     franchiseId,
     currentGame,
     currentSeason,
+    seasonNumber = DEFAULT_SEASON_NUMBER,
+    seasonName = DEFAULT_SEASON_NAME,
+    seasonTotalGames,
   } = options;
   try {
     // Ensure season exists
-    await getOrCreateSeason(seasonId, DEFAULT_SEASON_NUMBER, DEFAULT_SEASON_NAME, DEFAULT_TOTAL_GAMES);
+    await getOrCreateSeason(
+      seasonId,
+      seasonNumber,
+      seasonName,
+      seasonTotalGames ?? milestoneConfig?.gamesPerSeason ?? DEFAULT_TOTAL_GAMES,
+    );
 
     // Aggregate batting stats for all players
     await aggregateBattingStats(gameState, seasonId);
@@ -229,12 +279,10 @@ async function aggregatePitchingStats(
     );
 
     // Check for achievements
-    const isQualityStart = pitcherStats.isStarter &&
-                           pitcherStats.outsRecorded >= 18 &&  // 6+ IP
-                           pitcherStats.earnedRuns <= 3;
+    const achievementContext = { scheduledInnings: gameState.totalInnings };
+    const isQualityStart = isQualityStartByContext(pitcherStats, achievementContext);
 
-    const isCompleteGame = pitcherStats.isStarter &&
-                           pitcherStats.outsRecorded >= 27;  // 9+ IP
+    const isCompleteGame = isCompleteGameByContext(pitcherStats, achievementContext);
 
     const isShutout = isCompleteGame && pitcherStats.runsAllowed === 0;
 

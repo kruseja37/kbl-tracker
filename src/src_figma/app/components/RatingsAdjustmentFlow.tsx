@@ -1454,7 +1454,7 @@ function ManagerDistributionScreen({
             <div className="flex items-center gap-3 text-sm text-[#E8E8D8]/80">
               <span>Grade: {team.managerGrade}</span>
               <span>•</span>
-              <span>mWAR: {team.mWAR.toFixed(1)}</span>
+              <span>Manager Value: {team.mWAR.toFixed(1)}</span>
               <span>•</span>
               <span>Record: {team.record.wins}-{team.record.losses}</span>
             </div>
@@ -1478,7 +1478,7 @@ function ManagerDistributionScreen({
             <span className="font-bold">+20</span>
           </div>
           <div className="flex justify-between">
-            <span>mWAR Bonus/Penalty:</span>
+            <span>Manager Value Bonus/Penalty:</span>
             <span className={`font-bold ${team.mWAR >= 2.0 ? 'text-[#228B22]' : 'text-[#B71C1C]'}`}>
               {Math.round((team.mWAR - 2.0) * 10) >= 0 ? '+' : ''}{Math.round((team.mWAR - 2.0) * 10)}
               {' '}({team.mWAR >= 2.0 ? 'above' : 'below'} league median)

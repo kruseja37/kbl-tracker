@@ -139,6 +139,84 @@ describe('completed game franchise identity', () => {
     });
   });
 
+  test('archiveCompletedGame preserves stadium identity, seeded park factors, and player WPA totals', async () => {
+    await archiveCompletedGame(
+      createPersistedGameState({
+        gameId: 'completed-franchise-game-park-wpa',
+        stadiumName: 'Apple Field',
+      }),
+      { away: 4, home: 6 },
+      [],
+      'franchise-park-season-1',
+      {
+        statsScopeId: 'franchise-park-season-1',
+        competitionType: 'franchise',
+        competitionId: 'franchise-park',
+        franchiseId: 'franchise-park',
+        playerWpaTotals: [
+          {
+            playerId: 'player-one',
+            playerName: 'Player One',
+            teamId: 'team-a',
+            totalWpa: 0.24,
+            battingWpa: 0.24,
+            pitchingWpa: 0,
+            catchingWpa: 0,
+            fieldingWpa: 0,
+            baserunningWpa: 0,
+            managingWpa: 0,
+          },
+        ],
+      },
+    );
+
+    const record = await getCompletedGameById('completed-franchise-game-park-wpa');
+
+    expect(record).toMatchObject({
+      gameId: 'completed-franchise-game-park-wpa',
+      stadiumName: 'Apple Field',
+      stadiumId: 'apple-field',
+      parkFactors: {
+        stadiumId: 'apple-field',
+        stadiumName: 'Apple Field',
+        source: 'SEED',
+      },
+      playerWpaTotals: [
+        expect.objectContaining({
+          playerId: 'player-one',
+          teamId: 'team-a',
+          totalWpa: 0.24,
+        }),
+      ],
+    });
+  });
+
+  test('archiveCompletedGame keeps custom stadium identity without fabricating park factors', async () => {
+    await archiveCompletedGame(
+      createPersistedGameState({
+        gameId: 'completed-franchise-custom-park',
+        stadiumName: 'My Custom Yard',
+      }),
+      { away: 2, home: 1 },
+      [],
+      'franchise-custom-season-1',
+      {
+        statsScopeId: 'franchise-custom-season-1',
+        competitionType: 'franchise',
+        competitionId: 'franchise-custom',
+        franchiseId: 'franchise-custom',
+      },
+    );
+
+    const record = await getCompletedGameById('completed-franchise-custom-park');
+
+    expect(record).toMatchObject({
+      stadiumName: 'My Custom Yard',
+      stadiumId: 'my-custom-yard',
+    });
+    expect(record?.parkFactors).toBeUndefined();
+  });
+
   test('recent-game queries isolate exhibition, franchise, playoff, and elimination scopes', async () => {
     await archiveCompletedGame(
       createPersistedGameState({ gameId: 'scope-exhibition-game' }),

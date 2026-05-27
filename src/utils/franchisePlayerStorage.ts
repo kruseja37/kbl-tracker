@@ -22,6 +22,9 @@ import {
   saveFranchiseFarmRecord,
   type FranchiseFarmRecord,
 } from './franchiseFarmStorage';
+import { withInitialFranchiseSalary } from './franchiseSalary';
+import { getDerivedParkFactorsIfAvailable } from '../engines/parkFactorDeriver';
+import { getStableParkId } from '../data/parkLookup';
 
 export type { Player, Team } from './leagueBuilderStorage';
 
@@ -316,11 +319,22 @@ function applyFranchiseRosterStatus(
   };
 }
 
-function mergeTeamRosterIntoTeam(team: Team, roster: TeamRoster | null): Team {
-  if (!roster) return team;
-
+export function withFranchiseTeamParkIdentity(team: Team): Team {
+  const parkFactors = getDerivedParkFactorsIfAvailable(team.stadium);
   return {
     ...team,
+    stadiumId: team.stadium ? getStableParkId(team.stadium) : team.stadiumId,
+    parkFactors,
+  };
+}
+
+function mergeTeamRosterIntoTeam(team: Team, roster: TeamRoster | null): Team {
+  const withStadiumIdentity = withFranchiseTeamParkIdentity(team);
+
+  if (!roster) return withStadiumIdentity;
+
+  return {
+    ...withStadiumIdentity,
     lineupWithDH: roster.lineupWithDH,
     lineupWithoutDH: roster.lineupWithoutDH,
     startingRotation: roster.startingRotation,
@@ -374,13 +388,13 @@ export async function deepCopyLeagueToFranchise(
         throw new Error(`Player "${player.id}" could not be resolved for league "${leagueId}"`);
       }
 
-      const franchisePlayer = {
+      const franchisePlayer = withInitialFranchiseSalary({
         ...effectivePlayer,
         leagueAssignments: (effectivePlayer.leagueAssignments ?? []).filter(
           (assignment) => assignment.leagueId === leagueId,
         ),
         editHistory: [],
-      } satisfies Player;
+      } satisfies Player);
 
       return applyFranchiseRosterStatus(franchisePlayer, leagueId, teamRostersByTeamId);
     }),

@@ -1,6 +1,7 @@
 import type { ParkFactors } from '../types/war';
 import {
   getParkByName,
+  getStableParkId,
   LEAGUE_AVG_DIMENSIONS,
   type ParkDimensions,
   type WallHeight,
@@ -16,14 +17,24 @@ const WALL_HEIGHT_ADJUSTMENT: Record<WallHeight, number> = {
 };
 
 const DEFAULT_PARK_FACTORS: ParkFactors = {
+  stadiumId: 'unavailable',
+  stadiumName: 'Unavailable',
   overall: 1,
   runs: 1,
   homeRuns: 1,
+  hits: 1,
+  doubles: 1,
+  triples: 1,
+  strikeouts: 1,
+  walks: 1,
   leftHandedHR: 1,
   rightHandedHR: 1,
   leftHandedAVG: 1,
   rightHandedAVG: 1,
+  gamesIncluded: 0,
+  lastUpdated: 'seed',
   confidence: 'LOW',
+  source: 'UNAVAILABLE',
 };
 
 export function clampParkFactorValue(value: number): number {
@@ -36,6 +47,11 @@ export function clampParkFactors(factors: ParkFactors): ParkFactors {
     overall: clampParkFactorValue(factors.overall),
     runs: clampParkFactorValue(factors.runs),
     homeRuns: clampParkFactorValue(factors.homeRuns),
+    hits: factors.hits == null ? factors.hits : clampParkFactorValue(factors.hits),
+    doubles: factors.doubles == null ? factors.doubles : clampParkFactorValue(factors.doubles),
+    triples: factors.triples == null ? factors.triples : clampParkFactorValue(factors.triples),
+    strikeouts: factors.strikeouts == null ? factors.strikeouts : clampParkFactorValue(factors.strikeouts),
+    walks: factors.walks == null ? factors.walks : clampParkFactorValue(factors.walks),
     leftHandedHR: clampParkFactorValue(factors.leftHandedHR),
     rightHandedHR: clampParkFactorValue(factors.rightHandedHR),
     leftHandedAVG: clampParkFactorValue(factors.leftHandedAVG),
@@ -63,20 +79,32 @@ function buildFromPark(park: ParkDimensions): ParkFactors {
   const ratio = averageFenceRatio(park, LEAGUE_AVG_DIMENSIONS);
   const wallAdjustment = averageWallAdjustment(park);
   const hrFactor = clampParkFactorValue(ratio + wallAdjustment);
+  const hitFactor = clampParkFactorValue(1 + ((ratio - 1) * 0.25));
+  const doublesTriplesFactor = clampParkFactorValue(1 + ((LEAGUE_AVG_DIMENSIONS.cf / park.cf) - 1) * -0.25);
 
   // TODO: Future: break ParkFactors into per-direction factors (LF/CF/RF) to
   // support direction-aware HR park adjustments. Current approach collapses
   // directional data into aggregate factors.
 
   return clampParkFactors({
+    stadiumId: getStableParkId(park.name),
+    stadiumName: park.name,
     overall: hrFactor,
-    runs: hrFactor,
+    runs: clampParkFactorValue((hrFactor * 0.55) + (hitFactor * 0.45)),
     homeRuns: hrFactor,
+    hits: hitFactor,
+    doubles: doublesTriplesFactor,
+    triples: doublesTriplesFactor,
+    strikeouts: 1,
+    walks: 1,
     leftHandedHR: hrFactor,
     rightHandedHR: hrFactor,
-    leftHandedAVG: 1,
-    rightHandedAVG: 1,
+    leftHandedAVG: hitFactor,
+    rightHandedAVG: hitFactor,
+    gamesIncluded: 0,
+    lastUpdated: 'seed',
     confidence: 'LOW',
+    source: 'SEED',
   });
 }
 
@@ -96,4 +124,9 @@ export function getDerivedParkFactorsIfAvailable(stadiumName?: string): ParkFact
 
 export function getDerivedParkFactorForStadium(stadiumName?: string): number {
   return deriveParkFactorsFromStadium(stadiumName).overall;
+}
+
+export function isParkFactorAdjustmentActive(gamesPlayed: number, gamesPerSeason: number): boolean {
+  if (gamesPerSeason <= 0) return false;
+  return gamesPlayed / gamesPerSeason >= 0.40;
 }

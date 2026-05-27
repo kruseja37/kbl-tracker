@@ -19,10 +19,7 @@ import {
   calculateTwoWayPlayerGrade,
   type Grade,
 } from '../engines/gradeEngine';
-import {
-  calculateSalary,
-  type PlayerForSalary,
-} from '../engines/salaryCalculator';
+import { calculateFranchisePlayerSalary } from './franchiseSalary';
 
 export const FRANCHISE_RATINGS_SALARY_CALCULATION_VERSION = 'franchise-ratings-salary-v1-grade-salary-only';
 
@@ -106,12 +103,12 @@ function isCompleteContext(
   );
 }
 
-function isPitcher(player: Player): boolean {
-  return ['SP', 'RP', 'CP', 'SP/RP'].includes(String(player.primaryPosition));
-}
-
 function isTwoWay(player: Player): boolean {
   return String(player.primaryPosition) === 'TWO-WAY';
+}
+
+function isPitcher(player: Player): boolean {
+  return ['SP', 'RP', 'CP', 'SP/RP', 'P', 'TWO-WAY'].includes(String(player.primaryPosition));
 }
 
 function rating(value: unknown): number {
@@ -166,48 +163,11 @@ function calculateOverallGrade(player: Player): Grade {
     : calculatePositionPlayerGrade(positionRatings);
 }
 
-function buildSalaryPlayer(player: Player): PlayerForSalary {
-  const pitcher = isPitcher(player);
-  return {
-    id: player.id,
-    name: `${player.firstName ?? ''} ${player.lastName ?? ''}`.trim() || player.id,
-    isPitcher: pitcher,
-    isTwoWay: isTwoWay(player),
-    primaryPosition: player.primaryPosition as PlayerForSalary['primaryPosition'],
-    ratings: pitcher
-      ? {
-          velocity: rating(player.velocity),
-          junk: rating(player.junk),
-          accuracy: rating(player.accuracy),
-        }
-      : {
-          power: rating(player.power),
-          contact: rating(player.contact),
-          speed: rating(player.speed),
-          fielding: rating(player.fielding),
-          arm: rating(player.arm),
-        },
-    battingRatings: pitcher
-      ? {
-          power: rating(player.power),
-          contact: rating(player.contact),
-          speed: rating(player.speed),
-          fielding: rating(player.fielding),
-          arm: rating(player.arm),
-        }
-      : undefined,
-    age: rating(player.age),
-    personality: player.personality as PlayerForSalary['personality'],
-    fame: rating(player.fame),
-    traits: [player.trait1, player.trait2].filter((trait): trait is string => Boolean(trait)),
-  };
-}
-
 export function buildFranchiseRatingsSalaryProposal(
   player: Player,
 ): FranchiseRatingsSalaryProposal {
   const nextGrade = calculateOverallGrade(player);
-  const nextSalary = calculateSalary(buildSalaryPlayer(player));
+  const nextSalary = calculateFranchisePlayerSalary(player);
   const before = buildSnapshot(player);
   const after = buildSnapshot(player, {
     overallGrade: nextGrade,
@@ -340,7 +300,7 @@ export const franchiseRatingsSalaryRecalculationAdapter: FranchiseOffseasonAdapt
     const validation = await validateRatingsSalaryContext(context, input);
     const baseData: FranchiseRatingsSalaryAdapterData = {
       calculationVersion: FRANCHISE_RATINGS_SALARY_CALCULATION_VERSION,
-      method: 'Recalculate overallGrade from current app rating weights and salary from salaryCalculator; raw ratings are unchanged.',
+      method: 'Recalculate overallGrade from current app rating weights and salary from salaryCalculator ratings inputs only; raw ratings are unchanged and True Value/performance salary adjustments remain deferred until franchise WAR/value inputs are complete.',
       proposals: [],
       changedPlayerIds: [],
       appliedPlayerIds: [],
@@ -369,6 +329,7 @@ export const franchiseRatingsSalaryRecalculationAdapter: FranchiseOffseasonAdapt
       ...baseData,
       proposals,
       changedPlayerIds,
+      method: 'Recalculate overallGrade from current app rating weights and salary from salaryCalculator ratings inputs only; True Value/performance salary adjustments remain deferred until franchise WAR/value inputs are complete.',
     };
 
     if (dryRun) {

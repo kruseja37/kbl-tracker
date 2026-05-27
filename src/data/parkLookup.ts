@@ -23,6 +23,14 @@ const normalizedParkMap = new Map<string, ParkDimensions>(
   parks.map((park) => [park.name.toLowerCase(), park])
 );
 
+export const getStableParkId = (name: string): string => {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+};
+
 export const getParkByName = (name: string): ParkDimensions | undefined => {
   return normalizedParkMap.get(name.toLowerCase());
 };

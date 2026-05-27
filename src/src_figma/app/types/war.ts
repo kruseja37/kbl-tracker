@@ -586,14 +586,24 @@ export function getWARGrade(war: number, seasonGames: number): string {
  * Park factors for WAR adjustments
  */
 export interface ParkFactors {
+  stadiumId?: string;
+  stadiumName?: string;
   overall: number;
   runs: number;
   homeRuns: number;
+  hits?: number;
+  doubles?: number;
+  triples?: number;
+  strikeouts?: number;
+  walks?: number;
   leftHandedHR: number;
   rightHandedHR: number;
   leftHandedAVG: number;
   rightHandedAVG: number;
+  gamesIncluded?: number;
+  lastUpdated?: string;
   confidence: 'LOW' | 'MEDIUM' | 'HIGH';
+  source?: 'SEED' | 'CALCULATED' | 'BLENDED' | 'UNAVAILABLE';
 }
 
 /**

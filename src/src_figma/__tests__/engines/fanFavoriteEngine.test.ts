@@ -227,8 +227,8 @@ describe('Fan Favorite Engine', () => {
       expect(applyTradeValueModifier(100, 'FAN_FAVORITE')).toBeCloseTo(115);
     });
 
-    it('Albatross gets 30% discount', () => {
-      expect(applyTradeValueModifier(100, 'ALBATROSS')).toBe(70);
+    it('Albatross gets 15% discount', () => {
+      expect(applyTradeValueModifier(100, 'ALBATROSS')).toBe(85);
     });
 
     it('no modifier for non-designated', () => {

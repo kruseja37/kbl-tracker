@@ -121,7 +121,7 @@ export const TRANSACTION_HAPPINESS_EFFECTS = {
 /** GAP-B4-017: Trade value modifiers */
 export const TRADE_VALUE_MODIFIERS = {
   FAN_FAVORITE_PREMIUM: 1.15,
-  ALBATROSS_DISCOUNT: 0.70,
+  ALBATROSS_DISCOUNT: 0.85,
 } as const;
 
 /** GAP-B4-018: Contract negotiation modifiers */

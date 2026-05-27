@@ -752,6 +752,9 @@ describe('franchise trade dry-run adapter', () => {
       expect.objectContaining({ playerId: 'a-farm-1', teamId: 'team-b' }),
     );
     expect(transactionStorage.logMode2V1Transaction).toHaveBeenCalledTimes(1);
+    const transactionInput = mocks.logMode2V1Transaction.mock.calls[0][0];
+    expect(transactionInput.data).not.toHaveProperty('salaryMatching');
+    expect(transactionInput.data).not.toHaveProperty('luxuryTax');
   });
 
   test('manual trade preserves player identity and history fields by playerId', async () => {
@@ -764,6 +767,21 @@ describe('franchise trade dry-run adapter', () => {
       backstory: 'Franchise cornerstone.',
       nicknames: ['The Thread'],
       editHistory: [{ field: 'nickname', oldValue: '', newValue: 'The Thread', changedAt: '2026-01-01T00:00:00.000Z', source: 'base' }] as never,
+      franchiseDesignations: [
+        {
+          franchiseId: context.franchiseId,
+          seasonId: context.seasonId,
+          seasonNumber: context.seasonNumber,
+          teamId: 'team-a',
+          playerId: 'story-player',
+          playerName: 'Story Keeper',
+          type: 'FAN_FAVORITE',
+          status: 'projected',
+          sourceInputs: { valueDelta: 5 },
+          calculationVersion: 'test',
+          calculatedAt: '2026-05-27T00:00:00.000Z',
+        },
+      ],
     });
     seedValidation([...makePlayers(), storyPlayer]);
 
@@ -787,6 +805,13 @@ describe('franchise trade dry-run adapter', () => {
         editHistory: expect.arrayContaining([
           expect.objectContaining({ field: 'nickname', newValue: 'The Thread' }),
         ]),
+        franchiseDesignations: [
+          expect.objectContaining({
+            playerId: 'story-player',
+            teamId: 'team-b',
+            sourceInputs: expect.objectContaining({ previousTeamId: 'team-a' }),
+          }),
+        ],
         leagueAssignments: [expect.objectContaining({ teamId: 'team-b', rosterStatus: 'MLB' })],
       }),
     );

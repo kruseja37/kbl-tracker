@@ -32,6 +32,8 @@ import type { GameAggregationOptions } from "../../utils/seasonAggregator";
 import { processCompletedGame } from "../../utils/processCompletedGame";
 import { deriveCommittedManagerDecisionState } from "../../utils/managerWpaGameState";
 import { deriveKblWpaCredits } from "../../utils/kblWpaAttribution";
+import { getStableParkId } from "../../data/parkLookup";
+import { getDerivedParkFactorsIfAvailable } from "../../engines/parkFactorDeriver";
 import {
   getGamePogAwardSet,
   type PogAwardSet,
@@ -3603,6 +3605,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         homeTeamName: currentGameState.homeTeamName,
         seasonNumber: currentGameState.seasonNumber,
         stadiumName: currentGameState.stadiumName ?? null,
+        stadiumId: currentGameState.stadiumName
+          ? getStableParkId(currentGameState.stadiumName)
+          : null,
+        parkFactors: getDerivedParkFactorsIfAvailable(
+          currentGameState.stadiumName ?? undefined,
+        ),
         currentBatterId: currentGameState.currentBatterId,
         currentBatterName: currentGameState.currentBatterName,
         currentPitcherId: currentGameState.currentPitcherId,
@@ -11041,6 +11049,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           homeTeamName: gameState.homeTeamName,
           seasonNumber: gameState.seasonNumber,
           stadiumName: resolvedStadium,
+          stadiumId: resolvedStadium ? getStableParkId(resolvedStadium) : null,
+          parkFactors: getDerivedParkFactorsIfAvailable(resolvedStadium),
           seasonId: seasonIdRef.current || undefined,
           statsScopeId:
             opts?.statsScopeId ??
@@ -11128,6 +11138,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           pogAwardSet,
           rankedPlayersOfTheGame,
         );
+        persistedState.playerWpaTotals = pogAwardSet.playerTotals;
+        persistedState.managerWpaTotals = pogAwardSet.managerTotals;
         console.log("[R3-R5] Archived players of the game from final event log", {
           gameId: gameState.gameId,
           playersOfTheGame: storedPlayersOfTheGame,
@@ -11181,6 +11193,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           extraInningRunnerDelay: extraInningRunnerDelayRef.current,
           pogPlayerId: storedPlayersOfTheGame?.first,
           playersOfTheGame: storedPlayersOfTheGame,
+          playerWpaTotals: pogAwardSet.playerTotals,
+          managerWpaTotals: pogAwardSet.managerTotals,
         };
 
         if (!alreadyAggregated) {
@@ -12059,6 +12073,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         homeTeamName: gameState.homeTeamName,
         seasonNumber: currentSeasonNumber,
         stadiumName: resolvedStadium,
+        stadiumId: resolvedStadium ? getStableParkId(resolvedStadium) : null,
+        parkFactors: getDerivedParkFactorsIfAvailable(resolvedStadium),
         seasonId: archivedSeasonId,
         statsScopeId: statsScopeIdValue,
         competitionType: options?.competitionType ?? competitionTypeRef.current,
@@ -12139,6 +12155,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         pogAwardSet,
         rankedPlayersOfTheGame,
       );
+      persistedState.playerWpaTotals = pogAwardSet.playerTotals;
+      persistedState.managerWpaTotals = pogAwardSet.managerTotals;
       console.log("[R3-R5] Prepared post-game archive context", {
         gameId: gameState.gameId,
         totalInnings: totalInningsRef.current,

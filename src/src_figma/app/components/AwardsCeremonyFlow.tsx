@@ -1641,7 +1641,7 @@ function ManagerYearScreen({ league, onContinue, managerSeasonStats = [] }: { le
 
       <div className="bg-[#5A8352] border-[5px] border-[#4A6844] p-3">
         <div className="text-[9px] text-[#E8E8D8] text-center">
-          BASED ON: Manager WAR (mWAR) | Win% vs Expected | In-Game Decisions
+          BASED ON: Manager Value | Win% vs Expected | In-Game Decisions
         </div>
       </div>
 
@@ -1671,7 +1671,7 @@ function ManagerYearScreen({ league, onContinue, managerSeasonStats = [] }: { le
               <span className="text-[#5599FF]">{winner.overperformance}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-[#E8E8D8]/60">mWAR:</span>
+              <span className="text-[#E8E8D8]/60">Manager Value:</span>
               <div className="flex items-center gap-2">
                 <span>{formatMWAR(winner.mwar)}</span>
                 <div className="w-24 bg-[#E8E8D8]/20 h-3 rounded">

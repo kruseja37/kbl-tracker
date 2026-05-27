@@ -20,6 +20,11 @@ import type {
   ManagerLineupDeltaRecord,
   ManagerRecommendationWatchRecord,
 } from "../types/managerWpa";
+import type { ParkFactors } from "../types/war";
+import type { KblWpaPlayerTotal } from "./kblWpaAttribution";
+import type { PogManagerValueTotal } from "./pogAwards";
+import { getStableParkId } from "../data/parkLookup";
+import { getDerivedParkFactorsIfAvailable } from "../engines/parkFactorDeriver";
 import { getTrackerDb } from "./trackerDb";
 import { syncEngine } from "./syncEngine";
 
@@ -95,6 +100,8 @@ export interface PersistedGameState {
   homeTeamName: string;
   seasonNumber: number;
   stadiumName?: string | null;
+  stadiumId?: string | null;
+  parkFactors?: ParkFactors;
   gamePhase?: "PRE_GAME" | "LIVE" | "POST_FINAL_OUT" | "FINALIZED";
   gameStartedAt?: number;
   currentBatterId?: string;
@@ -190,6 +197,8 @@ export interface PersistedGameState {
   managerDeploymentStints?: ManagerDeploymentStintRecord[];
   managerLineupDeltas?: ManagerLineupDeltaRecord[];
   managerRecommendationWatches?: ManagerRecommendationWatchRecord[];
+  playerWpaTotals?: KblWpaPlayerTotal[];
+  managerWpaTotals?: PogManagerValueTotal[];
   optimalLineupSnapshots?: GameLockLineupSnapshots;
   chosenLineupSnapshots?: GameLockLineupSnapshots;
 
@@ -570,6 +579,8 @@ export interface CompletedGameRecord {
   scheduleGameId?: string;
   seasonNumber?: number;
   stadiumName?: string | null;
+  stadiumId?: string | null;
+  parkFactors?: ParkFactors;
   awayTeamId: string;
   homeTeamId: string;
   awayTeamName: string;
@@ -596,6 +607,8 @@ export interface CompletedGameRecord {
   managerDeploymentStints?: PersistedGameState["managerDeploymentStints"];
   managerLineupDeltas?: PersistedGameState["managerLineupDeltas"];
   managerRecommendationWatches?: PersistedGameState["managerRecommendationWatches"];
+  playerWpaTotals?: PersistedGameState["playerWpaTotals"];
+  managerWpaTotals?: PersistedGameState["managerWpaTotals"];
   optimalLineupSnapshots?: PersistedGameState["optimalLineupSnapshots"];
   chosenLineupSnapshots?: PersistedGameState["chosenLineupSnapshots"];
   legacyManagerDecisions?: PersistedGameState["legacyManagerDecisions"];
@@ -731,6 +744,10 @@ export async function archiveCompletedGame(
     useGhostRunner?: boolean;
     extraInningRunner?: boolean;
     extraInningRunnerDelay?: 1 | 2;
+    stadiumId?: string | null;
+    parkFactors?: ParkFactors;
+    playerWpaTotals?: KblWpaPlayerTotal[];
+    managerWpaTotals?: PogManagerValueTotal[];
     pogPlayerId?: string;
     playersOfTheGame?: {
       first?: string;
@@ -749,6 +766,15 @@ export async function archiveCompletedGame(
       competitionId: context?.competitionId ?? gameState.competitionId,
       competitionType: context?.competitionType ?? gameState.competitionType,
     });
+  const resolvedStadiumName = gameState.stadiumName ?? null;
+  const resolvedStadiumId =
+    context?.stadiumId ??
+    gameState.stadiumId ??
+    (resolvedStadiumName ? getStableParkId(resolvedStadiumName) : null);
+  const resolvedParkFactors =
+    context?.parkFactors ??
+    gameState.parkFactors ??
+    (resolvedStadiumName ? getDerivedParkFactorsIfAvailable(resolvedStadiumName) : undefined);
 
   const record: CompletedGameRecord = {
     gameId: gameState.gameId,
@@ -771,7 +797,9 @@ export async function archiveCompletedGame(
     franchiseId: context?.franchiseId ?? gameState.franchiseId,
     scheduleGameId: context?.scheduleGameId ?? gameState.scheduleGameId,
     seasonNumber: gameState.seasonNumber,
-    stadiumName: gameState.stadiumName ?? null,
+    stadiumName: resolvedStadiumName,
+    stadiumId: resolvedStadiumId,
+    parkFactors: resolvedParkFactors,
     awayTeamId: gameState.awayTeamId,
     homeTeamId: gameState.homeTeamId,
     awayTeamName: gameState.awayTeamName,
@@ -798,6 +826,8 @@ export async function archiveCompletedGame(
     managerDeploymentStints: gameState.managerDeploymentStints || [],
     managerLineupDeltas: gameState.managerLineupDeltas || [],
     managerRecommendationWatches: gameState.managerRecommendationWatches || [],
+    playerWpaTotals: context?.playerWpaTotals ?? gameState.playerWpaTotals ?? [],
+    managerWpaTotals: context?.managerWpaTotals ?? gameState.managerWpaTotals ?? [],
     optimalLineupSnapshots: gameState.optimalLineupSnapshots,
     chosenLineupSnapshots: gameState.chosenLineupSnapshots,
     legacyManagerDecisions: gameState.legacyManagerDecisions || [],

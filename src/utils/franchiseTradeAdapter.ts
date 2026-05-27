@@ -30,6 +30,7 @@ import {
   markOptimalLineupSnapshotsStaleForChange,
   OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
 } from './optimalLineup';
+import { updateFranchiseDesignationTeamForTrade } from './franchiseDesignations';
 
 export const FRANCHISE_TRADE_CALCULATION_VERSION = 'franchise-trades-v1-fit-preview-dry-run';
 
@@ -316,10 +317,10 @@ function updatePlayerTradeAssignment(player: Player, fromTeamId: string, toTeamI
       : assignment,
   );
 
-  return {
+  return updateFranchiseDesignationTeamForTrade({
     ...player,
     leagueAssignments: assignments,
-  };
+  }, fromTeamId, toTeamId);
 }
 
 function farmRecordForPlayer(
