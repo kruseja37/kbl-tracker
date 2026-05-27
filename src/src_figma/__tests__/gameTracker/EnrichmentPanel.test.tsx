@@ -206,6 +206,29 @@ describe('EnrichmentPanel', () => {
     expect(onUpdate).toHaveBeenCalledWith('exitType', 'hard');
   });
 
+  test('places fielding attribution after field location and before contact type', () => {
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('GO')}
+        currentEnrichment={{}}
+        onUpdate={() => {}}
+        onClose={() => {}}
+      />
+    );
+
+    const fieldLocation = screen.getByText('Field Location');
+    const fieldingAttribution = screen.getByText('Fielding Attribution');
+    const contactType = screen.getByText('Contact Type');
+
+    expect(
+      fieldLocation.compareDocumentPosition(fieldingAttribution) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      fieldingAttribution.compareDocumentPosition(contactType) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Primary Fielder' })).toBeInTheDocument();
+  });
+
   test('does not show contact type controls for walk outcomes', () => {
     render(
       <EnrichmentPanel
@@ -219,7 +242,7 @@ describe('EnrichmentPanel', () => {
     expect(screen.queryByText('Contact Type')).not.toBeInTheDocument();
   });
 
-  test('shows a 4-pitch walk quick action for BB and saves pitchesInAtBat = 4', () => {
+  test('shows pitch-count quick buttons and saves pitchesInAtBat = 4', () => {
     const onUpdate = vi.fn();
 
     render(
@@ -231,15 +254,60 @@ describe('EnrichmentPanel', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '4P WALK' }));
+    fireEvent.click(screen.getByRole('button', { name: 'At-bat pitches 4' }));
 
     expect(onUpdate).toHaveBeenCalledWith('pitchesInAtBat', 4);
   });
 
-  test('does not show the 4-pitch walk quick action for HBP', () => {
+  test('shows one-pitch and 10-plus pitch quick buttons', () => {
+    const onUpdate = vi.fn();
+
     render(
       <EnrichmentPanel
-        entry={buildEntry('HBP')}
+        entry={buildEntry('GO')}
+        currentEnrichment={{}}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'At-bat pitches 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'At-bat pitches 10+' }));
+
+    expect(onUpdate).toHaveBeenCalledWith('pitchesInAtBat', 1);
+    expect(onUpdate).toHaveBeenCalledWith('pitchesInAtBat', 10);
+  });
+
+  test('places chase and pitch-count quick buttons before scroll-heavy field location controls', () => {
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('GO')}
+        currentEnrichment={{}}
+        onUpdate={() => {}}
+        onClose={() => {}}
+      />
+    );
+
+    const chase = screen.getByRole('button', { name: 'chase' });
+    const onePitch = screen.getByRole('button', { name: 'At-bat pitches 1' });
+    const tenPlus = screen.getByRole('button', { name: 'At-bat pitches 10+' });
+    const fieldLocation = screen.getByText('Field Location');
+
+    expect(
+      chase.compareDocumentPosition(fieldLocation) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      onePitch.compareDocumentPosition(fieldLocation) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      tenPlus.compareDocumentPosition(fieldLocation) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  test('does not show the old walk-only pitch quick action', () => {
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('BB')}
         currentEnrichment={{}}
         onUpdate={() => {}}
         onClose={() => {}}
@@ -247,6 +315,19 @@ describe('EnrichmentPanel', () => {
     );
 
     expect(screen.queryByRole('button', { name: '4P WALK' })).not.toBeInTheDocument();
+  });
+
+  test('does not show the old 7-plus pitch modifier button', () => {
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('GO')}
+        currentEnrichment={{}}
+        onUpdate={() => {}}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: '7+' })).not.toBeInTheDocument();
   });
 
   test('shows fielding attempt controls for outs with attempt type and outcome', () => {

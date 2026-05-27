@@ -21,7 +21,6 @@ describe('gameTrackerContextualEvents', () => {
     };
 
     expect(inferContextualButtons(context)).toEqual([
-      'SEVEN_PLUS_PITCH_AB',
       'ROBBERY',
       'WEB_GEM',
       'TOOTBLAN',
@@ -40,7 +39,6 @@ describe('gameTrackerContextualEvents', () => {
     };
 
     expect(inferContextualButtons(context)).toEqual([
-      'SEVEN_PLUS_PITCH_AB',
       'KILLED_PITCHER',
       'NUT_SHOT',
       'BEAT_THROW',

@@ -118,7 +118,6 @@ export interface EnrichmentUpdate {
 // ──────────────────────────────────────────────────────────────
 
 const MODIFIER_OPTIONS = [
-  { value: 'SEVEN_PLUS_PITCH_AB', label: '7+' },
   { value: 'ROBBERY', label: 'ROB' },
   { value: 'KILLED_PITCHER', label: 'KP' },
   { value: 'NUT_SHOT', label: 'NUT' },
@@ -144,8 +143,8 @@ interface EnrichmentConfig {
   hrDistance: boolean;
 }
 
-const ALL_CONTACT_MODIFIERS: AtBatModifierValue[] = ['SEVEN_PLUS_PITCH_AB', 'ROBBERY', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW', 'BEAT_RUNNER'];
-const NO_KP_NUT: AtBatModifierValue[] = ['SEVEN_PLUS_PITCH_AB', 'ROBBERY', 'BEAT_THROW', 'BEAT_RUNNER'];
+const ALL_CONTACT_MODIFIERS: AtBatModifierValue[] = ['ROBBERY', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW', 'BEAT_RUNNER'];
+const NO_KP_NUT: AtBatModifierValue[] = ['ROBBERY', 'BEAT_THROW', 'BEAT_RUNNER'];
 const HR_FIELDING_PLAY_TYPES = new Set<FieldingPlayTypeValue>([
   'failed_robbery',
 ]);
@@ -165,27 +164,27 @@ function supportsSavedBases(attemptType?: FieldingAttemptType): boolean {
 
 export const ENRICHMENT_CONFIG: Record<string, EnrichmentConfig> = {
   // Outs — §8.2 zone counts
-  GO:  { spray: true,  sprayZones: 18, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
-  FO:  { spray: true,  sprayZones: 27, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
-  FLO: { spray: true,  sprayZones: 27, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
-  LO:  { spray: true,  sprayZones: 39, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
-  PO:  { spray: true,  sprayZones: 27, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
-  DP:  { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
-  TP:  { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
-  FC:  { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW', 'BEAT_RUNNER'], hrDistance: false },
+  GO:  { spray: true,  sprayZones: 18, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
+  FO:  { spray: true,  sprayZones: 27, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
+  FLO: { spray: true,  sprayZones: 27, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
+  LO:  { spray: true,  sprayZones: 39, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
+  PO:  { spray: true,  sprayZones: 27, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
+  DP:  { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
+  TP:  { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['KILLED_PITCHER', 'NUT_SHOT', 'BEAT_RUNNER'], hrDistance: false },
+  FC:  { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW', 'BEAT_RUNNER'], hrDistance: false },
   // Hits — §8.2: 6 dirs × (3 IF + 4 OF) = 42
-  '1B': { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
-  '2B': { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
-  '3B': { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
-  GRD: { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
-  ITPHR:{ spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
+  '1B': { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
+  '2B': { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
+  '3B': { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
+  GRD: { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
+  ITPHR:{ spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['KILLED_PITCHER', 'NUT_SHOT', 'BEAT_THROW'], hrDistance: false },
   // HR — expanded to 9 dirs × 3 depths = 27 for easier tap targets with more detail
-  HR:  { spray: true,  sprayZones: 27, chase: true,  fieldingAttempt: true,  playMechanic: false, contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB'], hrDistance: true },
+  HR:  { spray: true,  sprayZones: 27, chase: true,  fieldingAttempt: true,  playMechanic: false, contactType: true, modifiers: [], hrDistance: true },
   // Sacrifices — no KP/NUT per §8.5
-  SAC: { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB'], hrDistance: false },
-  SF:  { spray: true,  sprayZones: 27, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB'], hrDistance: false },
+  SAC: { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: [], hrDistance: false },
+  SF:  { spray: true,  sprayZones: 27, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: [], hrDistance: false },
   // Errors — §8.2: IF + OF = 42
-  E:   { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['SEVEN_PLUS_PITCH_AB', 'KILLED_PITCHER', 'NUT_SHOT'], hrDistance: false },
+  E:   { spray: true,  sprayZones: 42, chase: true,  fieldingAttempt: true,  playMechanic: true,  contactType: true, modifiers: ['KILLED_PITCHER', 'NUT_SHOT'], hrDistance: false },
   // Non-contact plays — only pitch type + pitch count
   K:   { spray: false, sprayZones: 0,  chase: true,  fieldingAttempt: false, playMechanic: false, contactType: false, modifiers: [], hrDistance: false },
   Kc:  { spray: false, sprayZones: 0,  chase: false, fieldingAttempt: false, playMechanic: false, contactType: false, modifiers: [], hrDistance: false },
@@ -1175,6 +1174,41 @@ export function EnrichmentPanel({
         </button>
       </div>
 
+      <div className="border-t border-[#4a6a4a] bg-[#2a3530] px-2 py-2">
+        <div className={`grid gap-2 ${config.chase ? 'grid-cols-[minmax(80px,1fr)_minmax(0,4fr)]' : 'grid-cols-1'}`}>
+          {config.chase && (
+            <div>
+              <button
+                aria-pressed={!!currentEnrichment?.chased}
+                className={`w-full text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
+                  ${currentEnrichment?.chased
+                    ? 'bg-[#f59e0b]/20 border-[#f59e0b] text-[#fbbf24]'
+                    : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                onClick={handleChaseToggle}
+              >
+                {currentEnrichment?.chased ? 'CHASE' : 'chase'}
+              </button>
+            </div>
+          )}
+          <div className="grid grid-cols-5 gap-1.5">
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((pitchCount) => (
+              <button
+                key={pitchCount}
+                type="button"
+                aria-label={`At-bat pitches ${pitchCount === 10 ? '10+' : pitchCount}`}
+                className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation ${
+                  currentEnrichment?.pitchesInAtBat === pitchCount
+                    ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                    : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'
+                }`}
+                onClick={() => onUpdate('pitchesInAtBat', pitchCount)}
+              >
+                {pitchCount === 10 ? '10+' : pitchCount}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
       {/* Scrollable enrichment fields */}
       <div className="flex-1 overflow-y-auto p-2 space-y-2">
 
@@ -1186,6 +1220,111 @@ export function EnrichmentPanel({
               onTap={handleSpraySelection}
               result={entry.result}
             />
+          </EnrichmentSection>
+        )}
+
+        {/* Fielding Attribution (sequence + existing putout/assist/error data) */}
+        {(config.fieldingAttempt || config.playMechanic) && (
+          <EnrichmentSection label="Fielding Attribution" filled={(currentEnrichment?.fieldingSequence?.length ?? 0) > 0 || !!(putoutLabel || assistLabel || errorLabel)}>
+            <div className="mb-2">
+              <label
+                htmlFor="primary-fielder-select"
+                className="block text-[10px] text-[#88AA88] font-bold uppercase tracking-wider mb-1"
+              >
+                Primary Fielder
+              </label>
+              <select
+                id="primary-fielder-select"
+                aria-label="Primary Fielder"
+                value={primaryFielderNumber ? String(primaryFielderNumber) : ''}
+                className="w-full min-h-[40px] bg-[#2a3530] border border-[#4a6a4a] text-[#E8E8D8] text-sm px-3 py-2 rounded"
+                onChange={(e) => {
+                  const nextValue = Number(e.target.value);
+                  if (nextValue > 0) {
+                    handlePrimaryFielderChange(nextValue);
+                  }
+                }}
+              >
+                <option value="">Select primary fielder</option>
+                {FIELDER_POSITIONS.map((fielder) => (
+                  <option key={fielder.num} value={fielder.num}>
+                    {fielder.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <FieldingSequenceInput
+              sequence={localFieldingSeq}
+              onChange={handleFieldingSeqChange}
+            />
+            {canTrackRescuedThrow && (
+              <div className="mt-2">
+                <EnrichmentSection label="Rescued Throw" filled={!!currentEnrichment?.rescuedThrow}>
+                  <button
+                    className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
+                      ${currentEnrichment?.rescuedThrow
+                        ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                        : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                    onClick={() => onUpdate('rescuedThrow', !currentEnrichment?.rescuedThrow)}
+                  >
+                    1B Rescued Throw
+                  </button>
+                </EnrichmentSection>
+              </div>
+            )}
+            {allowsExtraGemCredit && localFieldingSeq.length > 1 && (
+              <div className="mt-2">
+                <EnrichmentSection label="Extra Gem Credit" filled={extraGemCreditPositions.length > 0}>
+                  <div className="flex flex-wrap gap-1.5">
+                    {localFieldingSeq.slice(1).map((positionNumber) => {
+                      const isSelected = extraGemCreditPositions.includes(positionNumber);
+                      return (
+                        <button
+                          key={positionNumber}
+                          className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation ${
+                            isSelected
+                              ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                              : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'
+                          }`}
+                          onClick={() =>
+                            onUpdate(
+                              'extraGemCreditPositions',
+                              isSelected
+                                ? extraGemCreditPositions.filter((entry) => entry !== positionNumber)
+                                : [...extraGemCreditPositions, positionNumber],
+                            )
+                          }
+                        >
+                          {positionLabel(positionNumber)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-2 text-[10px] text-[#88AA88]">
+                    Use this only when a later fielder also made a gem-worthy dig, tag, or stretch.
+                  </div>
+                </EnrichmentSection>
+              </div>
+            )}
+            {(putoutLabel || assistLabel || errorLabel) && (
+              <div className="mt-2 bg-[#2a3530]/60 border border-[#4a6a4a] rounded px-2 py-2 space-y-1">
+                {putoutLabel && (
+                  <div className="text-[10px] text-[#E8E8D8]">
+                    Putouts: <span className="text-[#C4A853]">{putoutLabel}</span>
+                  </div>
+                )}
+                {assistLabel && (
+                  <div className="text-[10px] text-[#E8E8D8]">
+                    Assists: <span className="text-[#C4A853]">{assistLabel}</span>
+                  </div>
+                )}
+                {errorLabel && (
+                  <div className="text-[10px] text-[#E8E8D8]">
+                    Errors: <span className="text-[#f59e0b]">{errorLabel}</span>
+                  </div>
+                )}
+              </div>
+            )}
           </EnrichmentSection>
         )}
 
@@ -1332,111 +1471,6 @@ export function EnrichmentPanel({
           </EnrichmentSection>
         )}
 
-        {/* Fielding Attribution (sequence + existing putout/assist/error data) */}
-        {(config.fieldingAttempt || config.playMechanic) && (
-          <EnrichmentSection label="Fielding Attribution" filled={(currentEnrichment?.fieldingSequence?.length ?? 0) > 0 || !!(putoutLabel || assistLabel || errorLabel)}>
-            <div className="mb-2">
-              <label
-                htmlFor="primary-fielder-select"
-                className="block text-[10px] text-[#88AA88] font-bold uppercase tracking-wider mb-1"
-              >
-                Primary Fielder
-              </label>
-              <select
-                id="primary-fielder-select"
-                aria-label="Primary Fielder"
-                value={primaryFielderNumber ? String(primaryFielderNumber) : ''}
-                className="w-full min-h-[40px] bg-[#2a3530] border border-[#4a6a4a] text-[#E8E8D8] text-sm px-3 py-2 rounded"
-                onChange={(e) => {
-                  const nextValue = Number(e.target.value);
-                  if (nextValue > 0) {
-                    handlePrimaryFielderChange(nextValue);
-                  }
-                }}
-              >
-                <option value="">Select primary fielder</option>
-                {FIELDER_POSITIONS.map((fielder) => (
-                  <option key={fielder.num} value={fielder.num}>
-                    {fielder.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <FieldingSequenceInput
-              sequence={localFieldingSeq}
-              onChange={handleFieldingSeqChange}
-            />
-            {canTrackRescuedThrow && (
-              <div className="mt-2">
-                <EnrichmentSection label="Rescued Throw" filled={!!currentEnrichment?.rescuedThrow}>
-                  <button
-                    className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
-                      ${currentEnrichment?.rescuedThrow
-                        ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
-                        : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
-                    onClick={() => onUpdate('rescuedThrow', !currentEnrichment?.rescuedThrow)}
-                  >
-                    1B Rescued Throw
-                  </button>
-                </EnrichmentSection>
-              </div>
-            )}
-            {allowsExtraGemCredit && localFieldingSeq.length > 1 && (
-              <div className="mt-2">
-                <EnrichmentSection label="Extra Gem Credit" filled={extraGemCreditPositions.length > 0}>
-                  <div className="flex flex-wrap gap-1.5">
-                    {localFieldingSeq.slice(1).map((positionNumber) => {
-                      const isSelected = extraGemCreditPositions.includes(positionNumber);
-                      return (
-                        <button
-                          key={positionNumber}
-                          className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation ${
-                            isSelected
-                              ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
-                              : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'
-                          }`}
-                          onClick={() =>
-                            onUpdate(
-                              'extraGemCreditPositions',
-                              isSelected
-                                ? extraGemCreditPositions.filter((entry) => entry !== positionNumber)
-                                : [...extraGemCreditPositions, positionNumber],
-                            )
-                          }
-                        >
-                          {positionLabel(positionNumber)}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="mt-2 text-[10px] text-[#88AA88]">
-                    Use this only when a later fielder also made a gem-worthy dig, tag, or stretch.
-                  </div>
-                </EnrichmentSection>
-              </div>
-            )}
-            {(putoutLabel || assistLabel || errorLabel) && (
-              <div className="mt-2 bg-[#2a3530]/60 border border-[#4a6a4a] rounded px-2 py-2 space-y-1">
-                {putoutLabel && (
-                  <div className="text-[10px] text-[#E8E8D8]">
-                    Putouts: <span className="text-[#C4A853]">{putoutLabel}</span>
-                  </div>
-                )}
-                {assistLabel && (
-                  <div className="text-[10px] text-[#E8E8D8]">
-                    Assists: <span className="text-[#C4A853]">{assistLabel}</span>
-                  </div>
-                )}
-                {errorLabel && (
-                  <div className="text-[10px] text-[#E8E8D8]">
-                    Errors: <span className="text-[#f59e0b]">{errorLabel}</span>
-                  </div>
-                )}
-              </div>
-            )}
-          </EnrichmentSection>
-        )}
-
         {/* HR Distance */}
         {config.hrDistance && (
           <EnrichmentSection label="HR Distance (ft)" filled={!!currentEnrichment?.hrDistance}>
@@ -1473,55 +1507,6 @@ export function EnrichmentPanel({
             ))}
           </div>
         </EnrichmentSection>
-
-        {/* Pitches in At-Bat */}
-        <EnrichmentSection label="Pitches in AB" filled={!!currentEnrichment?.pitchesInAtBat}>
-          {entry.result === 'BB' && (
-            <div className="mb-2 flex gap-1.5">
-              <button
-                type="button"
-                className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation ${
-                  currentEnrichment?.pitchesInAtBat === 4
-                    ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
-                    : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'
-                }`}
-                onClick={() => onUpdate('pitchesInAtBat', 4)}
-              >
-                4P WALK
-              </button>
-            </div>
-          )}
-          <input
-            type="number"
-            min={1}
-            max={20}
-            defaultValue={currentEnrichment?.pitchesInAtBat || ''}
-            placeholder="1-20"
-            className="w-full min-h-[40px] bg-[#2a3530] border border-[#4a6a4a] text-[#E8E8D8] text-sm px-3 py-2 rounded"
-            onChange={(e) => {
-              const val = parseInt(e.target.value);
-              if (val >= 1 && val <= 20) onUpdate('pitchesInAtBat', val);
-            }}
-          />
-          {(currentEnrichment?.pitchesInAtBat ?? 0) >= 7 && (
-            <div className="text-[10px] text-[#34d399] mt-1">Quality At-Bat (7+ pitches)</div>
-          )}
-        </EnrichmentSection>
-
-        {config.chase && (
-          <EnrichmentSection label="Chase" filled={!!currentEnrichment?.chased}>
-            <button
-              aria-pressed={!!currentEnrichment?.chased}
-              className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
-                ${currentEnrichment?.chased
-                  ? 'bg-[#f59e0b]/20 border-[#f59e0b] text-[#fbbf24]'
-                  : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#6b7280] hover:bg-[#4a6a4a]/40'}`}
-              onClick={handleChaseToggle}
-            >
-              {currentEnrichment?.chased ? 'CHASE' : 'chase'}
-            </button>
-          </EnrichmentSection>
-        )}
 
         {/* Layer D — Modifiers (§8.1) — context-sensitive per result */}
         {config.modifiers.length > 0 && (
