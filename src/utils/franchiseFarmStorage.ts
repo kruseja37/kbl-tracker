@@ -33,6 +33,12 @@ export interface SaveFranchiseFarmRecordInput {
   assignedAt?: string;
 }
 
+export interface FranchiseFarmCarryoverResult {
+  fromSeasonId: string;
+  toSeasonId: string;
+  carriedPlayerIds: string[];
+}
+
 const DB_NAME = 'kbl-franchise-farm';
 const DB_VERSION = 1;
 
@@ -200,4 +206,64 @@ export async function deleteFranchiseFarmRecord(
   if (!syncEngine.isSuppressed()) {
     syncEngine.remove(DB_NAME, STORES.FARM_RECORDS, recordId);
   }
+}
+
+export async function deleteFranchiseFarmRecordsForSeason(
+  franchiseId: string,
+  seasonId: string,
+): Promise<number> {
+  const records = await getFranchiseFarmRecordsForSeason(franchiseId, seasonId);
+  for (const record of records) {
+    await deleteFranchiseFarmRecord(
+      record.franchiseId,
+      record.seasonId,
+      record.teamId,
+      record.playerId,
+    );
+  }
+  return records.length;
+}
+
+export async function carryOverFranchiseFarmRecordsToSeason(params: {
+  franchiseId: string;
+  fromSeasonId: string;
+  toSeasonId: string;
+  toSeasonNumber: number;
+}): Promise<FranchiseFarmCarryoverResult> {
+  const sourceRecords = await getFranchiseFarmRecordsForSeason(params.franchiseId, params.fromSeasonId);
+  const createdRecords: FranchiseFarmRecord[] = [];
+
+  try {
+    for (const record of sourceRecords) {
+      const carried = await saveFranchiseFarmRecord({
+        franchiseId: params.franchiseId,
+        seasonId: params.toSeasonId,
+        seasonNumber: params.toSeasonNumber,
+        teamId: record.teamId,
+        playerId: record.playerId,
+        rosterLevel: record.rosterLevel,
+        optionsUsed: 0,
+        optionDates: [],
+        ratingRevealState: record.ratingRevealState,
+        assignedAt: record.assignedAt,
+      });
+      createdRecords.push(carried);
+    }
+  } catch (error) {
+    for (const record of createdRecords) {
+      await deleteFranchiseFarmRecord(
+        record.franchiseId,
+        record.seasonId,
+        record.teamId,
+        record.playerId,
+      );
+    }
+    throw error;
+  }
+
+  return {
+    fromSeasonId: params.fromSeasonId,
+    toSeasonId: params.toSeasonId,
+    carriedPlayerIds: createdRecords.map((record) => record.playerId),
+  };
 }

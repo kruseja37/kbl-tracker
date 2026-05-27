@@ -446,4 +446,118 @@ describe('franchise GameTracker roster identity', () => {
     expect(launchedIds.has('farm-ss')).toBe(false);
     expect(launchedIds.has('free-agent-of')).toBe(false);
   });
+
+  test('launch rosters reflect current franchise assignments after roster movement and trades', async () => {
+    mockGetFranchiseTeam.mockImplementation((franchiseId: string, teamId: string) =>
+      Promise.resolve({
+        id: teamId,
+        leagueIds: ['league-1'],
+        startingRotation: teamId === 'team-1' ? ['called-up-sp'] : ['traded-sp'],
+      }),
+    );
+    mockGetAllFranchisePlayers.mockResolvedValue([
+      {
+        id: 'sent-down-c',
+        firstName: 'Sent',
+        lastName: 'Down',
+        primaryPosition: 'C',
+        secondaryPosition: '1B',
+        bats: 'R',
+        throws: 'R',
+        age: 28,
+        power: 70,
+        contact: 70,
+        speed: 40,
+        fielding: 80,
+        arm: 80,
+        velocity: 0,
+        junk: 0,
+        accuracy: 0,
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'FARM' }],
+      },
+      {
+        id: 'called-up-sp',
+        firstName: 'Called',
+        lastName: 'Up',
+        primaryPosition: 'SP',
+        secondaryPosition: 'P',
+        bats: 'R',
+        throws: 'R',
+        age: 24,
+        power: 10,
+        contact: 10,
+        speed: 20,
+        fielding: 50,
+        arm: 70,
+        velocity: 90,
+        junk: 80,
+        accuracy: 75,
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'MLB' }],
+      },
+      {
+        id: 'traded-of',
+        firstName: 'Traded',
+        lastName: 'Outfield',
+        primaryPosition: 'CF',
+        secondaryPosition: 'OF',
+        bats: 'L',
+        throws: 'R',
+        age: 26,
+        power: 65,
+        contact: 70,
+        speed: 85,
+        fielding: 75,
+        arm: 70,
+        velocity: 0,
+        junk: 0,
+        accuracy: 0,
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-2', rosterStatus: 'MLB' }],
+      },
+      {
+        id: 'traded-sp',
+        firstName: 'Traded',
+        lastName: 'Starter',
+        primaryPosition: 'SP',
+        secondaryPosition: 'P',
+        bats: 'R',
+        throws: 'R',
+        age: 29,
+        power: 10,
+        contact: 10,
+        speed: 20,
+        fielding: 50,
+        arm: 70,
+        velocity: 88,
+        junk: 77,
+        accuracy: 74,
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-2', rosterStatus: 'MLB' }],
+      },
+    ]);
+
+    const teamOneRoster = await buildFranchiseGameTrackerRoster('team-1', {
+      franchiseId: 'franchise-1',
+      leagueId: 'league-1',
+      useDH: true,
+    });
+    const teamTwoRoster = await buildFranchiseGameTrackerRoster('team-2', {
+      franchiseId: 'franchise-1',
+      leagueId: 'league-1',
+      useDH: true,
+    });
+
+    const teamOneIds = new Set([
+      ...teamOneRoster.players.map((player) => player.playerId),
+      ...teamOneRoster.pitchers.map((pitcher) => pitcher.playerId),
+    ]);
+    const teamTwoIds = new Set([
+      ...teamTwoRoster.players.map((player) => player.playerId),
+      ...teamTwoRoster.pitchers.map((pitcher) => pitcher.playerId),
+    ]);
+
+    expect(teamOneIds.has('called-up-sp')).toBe(true);
+    expect(teamOneIds.has('sent-down-c')).toBe(false);
+    expect(teamOneIds.has('traded-of')).toBe(false);
+    expect(teamTwoIds.has('traded-of')).toBe(true);
+    expect(teamTwoIds.has('traded-sp')).toBe(true);
+  });
 });

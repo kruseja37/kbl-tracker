@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   getSeasonMetadata: vi.fn(),
   saveSeasonMetadata: vi.fn(),
   deleteSeasonMetadata: vi.fn(),
+  carryOverFranchiseFarmRecordsToSeason: vi.fn(),
+  deleteFranchiseFarmRecordsForSeason: vi.fn(),
 }));
 
 vi.mock('../../../utils/franchiseManager', () => ({
@@ -58,6 +60,11 @@ vi.mock('../../../utils/seasonStorage', () => ({
   getOrCreateSeason: mocks.getOrCreateSeason,
   getSeasonMetadata: mocks.getSeasonMetadata,
   saveSeasonMetadata: mocks.saveSeasonMetadata,
+}));
+
+vi.mock('../../../utils/franchiseFarmStorage', () => ({
+  carryOverFranchiseFarmRecordsToSeason: mocks.carryOverFranchiseFarmRecordsToSeason,
+  deleteFranchiseFarmRecordsForSeason: mocks.deleteFranchiseFarmRecordsForSeason,
 }));
 
 import {
@@ -149,6 +156,12 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
     mocks.deleteSeasonMetadata.mockResolvedValue(undefined);
     mocks.deleteFranchise.mockResolvedValue(undefined);
     mocks.deleteFranchiseDatabase.mockResolvedValue(undefined);
+    mocks.carryOverFranchiseFarmRecordsToSeason.mockResolvedValue({
+      fromSeasonId: 'franchise-1-season-1',
+      toSeasonId: 'franchise-1-season-2',
+      carriedPlayerIds: [],
+    });
+    mocks.deleteFranchiseFarmRecordsForSeason.mockResolvedValue(0);
     mocks.getAllGamesByFranchise.mockResolvedValue([]);
     mocks.getAllFranchisePlayers.mockResolvedValue([]);
     mocks.getAllFranchiseTeams.mockResolvedValue([]);
@@ -161,6 +174,10 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
     expect(mocks.deepCopyLeagueToFranchise).toHaveBeenCalledWith(
       'franchise-1',
       'league-1',
+      {
+        seasonId: 'franchise-1-season-1',
+        seasonNumber: 1,
+      },
     );
     expect(mocks.generateSchedule).not.toHaveBeenCalled();
     expect(mocks.initScheduleDatabase).toHaveBeenCalled();
@@ -193,6 +210,12 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
       'Season 2',
       0,
     );
+    expect(mocks.carryOverFranchiseFarmRecordsToSeason).toHaveBeenCalledWith({
+      franchiseId: 'franchise-1',
+      fromSeasonId: 'franchise-1-season-1',
+      toSeasonId: 'franchise-1-season-2',
+      toSeasonNumber: 2,
+    });
   });
 
   test('rolls back franchise metadata and season metadata when setup fails after metadata creation', async () => {
@@ -201,6 +224,7 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
     await expect(initializeFranchise(franchiseConfig)).rejects.toThrow('config write failed');
 
     expect(mocks.deleteSeasonMetadata).toHaveBeenCalledWith('franchise-1-season-1');
+    expect(mocks.deleteFranchiseFarmRecordsForSeason).toHaveBeenCalledWith('franchise-1', 'franchise-1-season-1');
     expect(mocks.deleteFranchise).toHaveBeenCalledWith('franchise-1');
     expect(mocks.deleteFranchiseDatabase).toHaveBeenCalledWith('franchise-1');
   });
@@ -228,7 +252,10 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
       seasonMetadataCreated: true,
       totalGames: 3,
     });
-    expect(mocks.deepCopyLeagueToFranchise).toHaveBeenCalledWith('franchise-1', 'league-1');
+    expect(mocks.deepCopyLeagueToFranchise).toHaveBeenCalledWith('franchise-1', 'league-1', {
+      seasonId: 'franchise-1-season-1',
+      seasonNumber: 1,
+    });
     expect(mocks.getOrCreateSeason).toHaveBeenCalledWith(
       'franchise-1-season-1',
       1,

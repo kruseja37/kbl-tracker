@@ -2,7 +2,9 @@ import {
   getAllPlayers,
   getAllTeams,
   getLeagueTemplate,
+  getTeamRoster,
   type Player,
+  type TeamRoster,
   type Team,
 } from './leagueBuilderStorage';
 import {
@@ -11,7 +13,15 @@ import {
 } from './optimalLineup';
 import { getEffectivePlayer } from './playerOverrides';
 import { syncEngine } from './syncEngine';
-import { getFranchiseDatabaseName } from './franchisePersistenceContract';
+import {
+  getFranchiseDatabaseName,
+  getFranchiseSeasonId,
+} from './franchisePersistenceContract';
+import {
+  deleteFranchiseFarmRecord,
+  saveFranchiseFarmRecord,
+  type FranchiseFarmRecord,
+} from './franchiseFarmStorage';
 
 export type { Player, Team } from './leagueBuilderStorage';
 
@@ -267,7 +277,65 @@ export async function deleteFranchiseDatabase(franchiseId: string): Promise<void
   });
 }
 
-export async function deepCopyLeagueToFranchise(franchiseId: string, leagueId: string): Promise<void> {
+export interface DeepCopyLeagueToFranchiseOptions {
+  seasonId?: string;
+  seasonNumber?: number;
+}
+
+function rosterStatusFromTeamRoster(
+  player: Player,
+  leagueId: string,
+  teamRostersByTeamId: Map<string, TeamRoster | null>,
+): 'MLB' | 'FARM' | undefined {
+  const assignment = player.leagueAssignments?.find((candidate) => candidate.leagueId === leagueId);
+  const teamId = assignment?.teamId;
+  if (!teamId) return undefined;
+
+  const roster = teamRostersByTeamId.get(teamId);
+  if (!roster) return undefined;
+  if (roster.farmRoster.includes(player.id)) return 'FARM';
+  if (roster.mlbRoster.includes(player.id)) return 'MLB';
+  return undefined;
+}
+
+function applyFranchiseRosterStatus(
+  player: Player,
+  leagueId: string,
+  teamRostersByTeamId: Map<string, TeamRoster | null>,
+): Player {
+  const rosterStatus = rosterStatusFromTeamRoster(player, leagueId, teamRostersByTeamId);
+  if (!rosterStatus) return player;
+
+  return {
+    ...player,
+    leagueAssignments: (player.leagueAssignments ?? []).map((assignment) =>
+      assignment.leagueId === leagueId
+        ? { ...assignment, rosterStatus }
+        : assignment,
+    ),
+  };
+}
+
+function mergeTeamRosterIntoTeam(team: Team, roster: TeamRoster | null): Team {
+  if (!roster) return team;
+
+  return {
+    ...team,
+    lineupWithDH: roster.lineupWithDH,
+    lineupWithoutDH: roster.lineupWithoutDH,
+    startingRotation: roster.startingRotation,
+    optimalLineupVsRHPWithDH: roster.optimalLineupVsRHPWithDH,
+    optimalLineupVsLHPWithDH: roster.optimalLineupVsLHPWithDH,
+    optimalLineupVsRHPWithoutDH: roster.optimalLineupVsRHPWithoutDH,
+    optimalLineupVsLHPWithoutDH: roster.optimalLineupVsLHPWithoutDH,
+  };
+}
+
+export async function deepCopyLeagueToFranchise(
+  franchiseId: string,
+  leagueId: string,
+  options: DeepCopyLeagueToFranchiseOptions = {},
+): Promise<void> {
   const leagueTemplate = await getLeagueTemplate(leagueId);
   if (!leagueTemplate) {
     throw new Error(`League template "${leagueId}" not found`);
@@ -279,13 +347,21 @@ export async function deepCopyLeagueToFranchise(franchiseId: string, leagueId: s
     initFranchiseDatabase(franchiseId),
   ]);
 
-  const teamsToCopy = leagueTemplate.teamIds.map((teamId) => {
+  const sourceTeams = leagueTemplate.teamIds.map((teamId) => {
     const team = allTeams.find((candidate) => candidate.id === teamId);
     if (!team) {
       throw new Error(`Team "${teamId}" not found for league "${leagueId}"`);
     }
     return team;
   });
+
+  const teamRosterEntries = await Promise.all(
+    sourceTeams.map(async (team) => [team.id, await getTeamRoster(team.id)] as const),
+  );
+  const teamRostersByTeamId = new Map(teamRosterEntries);
+  const teamsToCopy = sourceTeams.map((team) =>
+    mergeTeamRosterIntoTeam(team, teamRostersByTeamId.get(team.id) ?? null),
+  );
 
   const playersInLeague = allPlayers.filter((player) =>
     player.leagueAssignments?.some((assignment) => assignment.leagueId === leagueId),
@@ -298,13 +374,15 @@ export async function deepCopyLeagueToFranchise(franchiseId: string, leagueId: s
         throw new Error(`Player "${player.id}" could not be resolved for league "${leagueId}"`);
       }
 
-      return {
+      const franchisePlayer = {
         ...effectivePlayer,
         leagueAssignments: (effectivePlayer.leagueAssignments ?? []).filter(
           (assignment) => assignment.leagueId === leagueId,
         ),
         editHistory: [],
       } satisfies Player;
+
+      return applyFranchiseRosterStatus(franchisePlayer, leagueId, teamRostersByTeamId);
     }),
   );
 
@@ -338,5 +416,49 @@ export async function deepCopyLeagueToFranchise(franchiseId: string, leagueId: s
     const dbName = getFranchiseDatabaseName(franchiseId);
     for (const player of playersToCopy) syncEngine.upsert(dbName, 'players', player.id, player);
     for (const team of teamsToCopy) syncEngine.upsert(dbName, 'teams', team.id, team);
+  }
+
+  const seasonNumber = options.seasonNumber ?? 1;
+  const seasonId = options.seasonId ?? getFranchiseSeasonId(franchiseId, seasonNumber);
+  const farmPlayers = playersToCopy.filter((player) =>
+    player.leagueAssignments?.some((assignment) =>
+      assignment.leagueId === leagueId &&
+      assignment.teamId &&
+      assignment.rosterStatus === 'FARM',
+    ),
+  );
+
+  const createdFarmRecords: FranchiseFarmRecord[] = [];
+  try {
+    for (const player of farmPlayers) {
+      const assignment = player.leagueAssignments?.find((candidate) =>
+        candidate.leagueId === leagueId &&
+        candidate.teamId &&
+        candidate.rosterStatus === 'FARM',
+      );
+      if (!assignment?.teamId) continue;
+      const record = await saveFranchiseFarmRecord({
+        franchiseId,
+        seasonId,
+        seasonNumber,
+        teamId: assignment.teamId,
+        playerId: player.id,
+        rosterLevel: 'AAA',
+        optionsUsed: player.optionsUsedBySeason?.[seasonId] ?? 0,
+        optionDates: player.optionDatesBySeason?.[seasonId] ?? [],
+        ratingRevealState: player.ratingRevealState ?? 'hidden',
+      });
+      createdFarmRecords.push(record);
+    }
+  } catch (error) {
+    for (const record of createdFarmRecords) {
+      await deleteFranchiseFarmRecord(
+        record.franchiseId,
+        record.seasonId,
+        record.teamId,
+        record.playerId,
+      );
+    }
+    throw error;
   }
 }

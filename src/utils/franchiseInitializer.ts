@@ -43,6 +43,10 @@ import {
   getFranchiseSeasonId,
   getFranchiseSeasonName,
 } from './franchisePersistenceContract';
+import {
+  carryOverFranchiseFarmRecordsToSeason,
+  deleteFranchiseFarmRecordsForSeason,
+} from './franchiseFarmStorage';
 
 interface FranchiseLeagueTeams {
   leagueTemplate: LeagueTemplate;
@@ -146,6 +150,12 @@ async function cleanupFailedFranchiseInitialization(
   }
 
   try {
+    await deleteFranchiseFarmRecordsForSeason(franchiseId, getFranchiseSeasonId(franchiseId, seasonNumber));
+  } catch (err) {
+    console.warn('[franchiseInitializer] Failed to clean up partial franchise farm records:', err);
+  }
+
+  try {
     await deleteFranchise(franchiseId);
   } catch (err) {
     console.warn('[franchiseInitializer] Failed to clean up partial franchise:', err);
@@ -186,7 +196,10 @@ export async function repairFranchisePersistence(
       config.league,
       'Need at least 2 teams to repair franchise persistence',
     );
-    await deepCopyLeagueToFranchise(franchiseId, config.league);
+    await deepCopyLeagueToFranchise(franchiseId, config.league, {
+      seasonId: getFranchiseSeasonId(franchiseId, seasonNumber),
+      seasonNumber,
+    });
   }
 
   const totalGames = await deriveSeasonTotalGames(franchiseId, seasonNumber);
@@ -231,7 +244,10 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
     );
 
     // 3. Seed the per-franchise roster/team database from the selected league.
-    await deepCopyLeagueToFranchise(franchiseId, config.league);
+    await deepCopyLeagueToFranchise(franchiseId, config.league, {
+      seasonId: getFranchiseSeasonId(franchiseId, 1),
+      seasonNumber: 1,
+    });
 
     // 4. Determine controlled team
     const controlledTeamId = config.teams.selectedTeams[0] || teams[0].teamId;
@@ -302,6 +318,17 @@ export async function initializeEmptyFranchiseSeasonSchedule(
 
   // 3. Create season metadata with no scheduled games by default.
   await createFranchiseSeasonMetadata(franchiseId, newSeasonNumber, 0);
+
+  // 4. Carry farm holding records forward so FARM assignments remain durable
+  // in the new franchise season scope. Farm players still do not play games.
+  if (newSeasonNumber > 1) {
+    await carryOverFranchiseFarmRecordsToSeason({
+      franchiseId,
+      fromSeasonId: getFranchiseSeasonId(franchiseId, newSeasonNumber - 1),
+      toSeasonId: getFranchiseSeasonId(franchiseId, newSeasonNumber),
+      toSeasonNumber: newSeasonNumber,
+    });
+  }
 
   return 0;
 }

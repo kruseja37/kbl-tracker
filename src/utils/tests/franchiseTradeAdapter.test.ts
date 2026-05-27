@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   validateFranchiseOffseasonScope: vi.fn(),
+  getAllFranchisePlayers: vi.fn(),
+  getAllFranchiseTeams: vi.fn(),
+  getFranchiseFarmRecordsForSeason: vi.fn(),
   saveFranchisePlayer: vi.fn(),
   saveFranchiseTeam: vi.fn(),
   saveFranchiseFarmRecord: vi.fn(),
@@ -19,11 +22,14 @@ vi.mock('../franchiseOffseasonDataAccess', () => ({
 }));
 
 vi.mock('../franchisePlayerStorage', () => ({
+  getAllFranchisePlayers: mocks.getAllFranchisePlayers,
+  getAllFranchiseTeams: mocks.getAllFranchiseTeams,
   saveFranchisePlayer: mocks.saveFranchisePlayer,
   saveFranchiseTeam: mocks.saveFranchiseTeam,
 }));
 
 vi.mock('../franchiseFarmStorage', () => ({
+  getFranchiseFarmRecordsForSeason: mocks.getFranchiseFarmRecordsForSeason,
   saveFranchiseFarmRecord: mocks.saveFranchiseFarmRecord,
   deleteFranchiseFarmRecord: mocks.deleteFranchiseFarmRecord,
 }));
@@ -48,6 +54,7 @@ vi.mock('../offseasonStorage', async (importOriginal) => {
 });
 
 import {
+  executeManualFranchiseTrade,
   FRANCHISE_TRADE_CALCULATION_VERSION,
   runFranchiseTradeDryRun,
 } from '../franchiseTradeAdapter';
@@ -122,10 +129,50 @@ function makeFarmRecord(playerId: string, teamId: string): FranchiseFarmRecord {
   };
 }
 
+function makeOptimalSnapshot(teamId: string, playerId: string) {
+  return {
+    snapshotId: `snapshot-${teamId}-${playerId}`,
+    teamId,
+    mode: 'franchise',
+    opposingPitcherHand: 'R',
+    algorithmVersion: 'test',
+    generatedAt: 1,
+    generatedFrom: 'team_hub',
+    sourceConfidence: 'user_registered',
+    dhEnabled: true,
+    slots: [
+      {
+        playerId,
+        playerName: playerId,
+        battingOrderSlot: 1,
+        defensivePosition: 'SS',
+        projectedSlotKblWpa: 0,
+        projectedValueScore: 0,
+        positionalFitScore: 0,
+        confidence: 'high',
+      },
+    ],
+    projectedTeamLineupKblWpa: 0,
+    confidence: 'high',
+  } as const;
+}
+
 function makeTeams(): Team[] {
   return [
-    { id: 'team-a', name: 'Alpha' } as Team,
-    { id: 'team-b', name: 'Beta' } as Team,
+    {
+      id: 'team-a',
+      name: 'Alpha',
+      lineupWithDH: [{ battingOrder: 1, playerId: 'a-ss-1', fieldingPosition: 'SS' }],
+      lineupWithoutDH: [{ battingOrder: 1, playerId: 'a-ss-1', fieldingPosition: 'SS' }],
+      startingRotation: ['a-sp-1'],
+    } as Team,
+    {
+      id: 'team-b',
+      name: 'Beta',
+      lineupWithDH: [{ battingOrder: 1, playerId: 'b-rp-1', fieldingPosition: 'RF' }],
+      lineupWithoutDH: [{ battingOrder: 1, playerId: 'b-rp-1', fieldingPosition: 'RF' }],
+      startingRotation: ['b-sp-1'],
+    } as Team,
   ];
 }
 
@@ -141,6 +188,7 @@ function makePlayers(): Player[] {
     makePlayer({ id: 'b-c-1', teamId: 'team-b', firstName: 'Beta', lastName: 'Catcher', primaryPosition: 'C' }),
     makePlayer({ id: 'b-sp-1', teamId: 'team-b', firstName: 'Beta', lastName: 'Starter', primaryPosition: 'SP' }),
     makePlayer({ id: 'b-rp-1', teamId: 'team-b', firstName: 'Beta', lastName: 'Reliever', primaryPosition: 'RP' }),
+    makePlayer({ id: 'b-farm-1', teamId: 'team-b', firstName: 'Beta', lastName: 'Farm', primaryPosition: 'CF', leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-b', rosterStatus: 'FARM' }] }),
   ];
 }
 
@@ -153,6 +201,9 @@ function seedValidation(
   issues: Array<Record<string, unknown>> = [],
   teams: Team[] = makeTeams(),
 ) {
+  mocks.getAllFranchisePlayers.mockResolvedValue(players);
+  mocks.getAllFranchiseTeams.mockResolvedValue(teams);
+  mocks.getFranchiseFarmRecordsForSeason.mockResolvedValue(farmRecords);
   mocks.validateFranchiseOffseasonScope.mockResolvedValue({
     valid: issues.every((issue) => issue.severity !== 'error'),
     context,
@@ -196,6 +247,22 @@ function expectNoWrites() {
 describe('franchise trade dry-run adapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.saveFranchisePlayer.mockImplementation(async (_franchiseId: string, player: Player) => player);
+    mocks.saveFranchiseTeam.mockImplementation(async (_franchiseId: string, team: Team) => team);
+    mocks.saveFranchiseFarmRecord.mockImplementation(async (record: FranchiseFarmRecord) => ({
+      ...record,
+      id: `${record.franchiseId}:${record.seasonId}:${record.teamId}:${record.playerId}`,
+    }));
+    mocks.deleteFranchiseFarmRecord.mockResolvedValue(undefined);
+    mocks.logMode2V1Transaction.mockImplementation(async (input: Record<string, unknown>) => ({
+      id: 'txn-manual-trade',
+      timestamp: '2026-01-01T00:00:00.000Z',
+      undone: false,
+      undoneAt: null,
+      undoneBy: null,
+      previousState: input.previousState ?? null,
+      ...input,
+    }));
     seedValidation();
   });
 
@@ -207,8 +274,8 @@ describe('franchise trade dry-run adapter', () => {
     expect(result.data).toMatchObject({
       calculationVersion: FRANCHISE_TRADE_CALCULATION_VERSION,
       limitations: expect.arrayContaining([
-        'No trade execution is implemented by this adapter.',
-        'No players are moved and no roster or farm records are changed.',
+        'Manual execution is available only for explicit user-selected requestedTrade players.',
+        'Dry-run preview does not move players or change roster, farm, team, or transaction state.',
         'No transactions, trade state, League Builder data, or franchise offseason state are written.',
         'Trade AI, final acceptance logic, chemistry, morale, injuries, and salary-cap enforcement are deferred.',
         'All fit previews are non-executable advisory previews.',
@@ -471,16 +538,343 @@ describe('franchise trade dry-run adapter', () => {
     expectNoWrites();
   });
 
-  test('rejects apply as not implemented without writes', async () => {
+  test('executes a manual MLB-for-MLB franchise trade and logs canonical transaction context', async () => {
+    const result = await executeManualFranchiseTrade(context, {
+      requestedTrade: {
+        sourceTeamId: 'team-a',
+        targetTeamId: 'team-b',
+        outgoingPlayerId: 'a-ss-1',
+        incomingPlayerId: 'b-rp-1',
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.dryRun).toBe(false);
+    expect(franchisePlayerStorage.saveFranchisePlayer).toHaveBeenCalledWith(
+      context.franchiseId,
+      expect.objectContaining({
+        id: 'a-ss-1',
+        leagueAssignments: [expect.objectContaining({ teamId: 'team-b', rosterStatus: 'MLB' })],
+      }),
+    );
+    expect(franchisePlayerStorage.saveFranchisePlayer).toHaveBeenCalledWith(
+      context.franchiseId,
+      expect.objectContaining({
+        id: 'b-rp-1',
+        leagueAssignments: [expect.objectContaining({ teamId: 'team-a', rosterStatus: 'MLB' })],
+      }),
+    );
+    expect(franchisePlayerStorage.saveFranchiseTeam).toHaveBeenCalledWith(
+      context.franchiseId,
+      expect.objectContaining({
+        id: 'team-a',
+        lineupWithDH: [],
+        lineupWithoutDH: [],
+      }),
+    );
+    expect(franchisePlayerStorage.saveFranchiseTeam).toHaveBeenCalledWith(
+      context.franchiseId,
+      expect.objectContaining({
+        id: 'team-b',
+        lineupWithDH: [],
+        lineupWithoutDH: [],
+      }),
+    );
+    expect(franchiseFarmStorage.saveFranchiseFarmRecord).not.toHaveBeenCalled();
+    expect(franchiseFarmStorage.deleteFranchiseFarmRecord).not.toHaveBeenCalled();
+    expect(transactionStorage.logMode2V1Transaction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'trade',
+        actor: 'USER',
+        season: context.seasonNumber,
+        franchiseId: context.franchiseId,
+        seasonId: context.seasonId,
+        statsScopeId: context.statsScopeId,
+        phase: 'REGULAR_SEASON',
+        data: expect.objectContaining({
+          movementType: 'trade',
+          transactionPhase: 'REGULAR_SEASON',
+          seasonNumber: context.seasonNumber,
+          sourceTeamId: 'team-a',
+          targetTeamId: 'team-b',
+          playerIds: ['a-ss-1', 'b-rp-1'],
+          playersFromSource: ['a-ss-1'],
+          playersFromTarget: ['b-rp-1'],
+        }),
+      }),
+    );
+    expect(result.data?.executedTrade).toMatchObject({
+      transactionId: 'txn-manual-trade',
+      sourceTeamId: 'team-a',
+      targetTeamId: 'team-b',
+      playersFromSource: ['a-ss-1'],
+      playersFromTarget: ['b-rp-1'],
+    });
+    expect(result.data?.limitations).toEqual(
+      expect.arrayContaining([
+        'Manual execution moved only explicit user-selected requestedTrade players.',
+      ]),
+    );
+    expect(result.data?.limitations).not.toContain(
+      'No transactions, trade state, League Builder data, or franchise offseason state are written.',
+    );
+  });
+
+  test('manual trade marks optimal lineup snapshots stale when saving cleaned teams', async () => {
+    seedValidation(
+      makePlayers(),
+      [makeFarmRecord('a-farm-1', 'team-a'), makeFarmRecord('b-farm-1', 'team-b')],
+      [],
+      [
+        {
+          ...makeTeams()[0],
+          optimalLineupVsRHPWithDH: makeOptimalSnapshot('team-a', 'a-ss-1'),
+        } as Team,
+        {
+          ...makeTeams()[1],
+          optimalLineupVsRHPWithDH: makeOptimalSnapshot('team-b', 'b-rp-1'),
+        } as Team,
+      ],
+    );
+
+    const result = await executeManualFranchiseTrade(context, {
+      requestedTrade: {
+        sourceTeamId: 'team-a',
+        targetTeamId: 'team-b',
+        outgoingPlayerId: 'a-ss-1',
+        incomingPlayerId: 'b-rp-1',
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(franchisePlayerStorage.saveFranchiseTeam).toHaveBeenCalledWith(
+      context.franchiseId,
+      expect.objectContaining({
+        id: 'team-a',
+        optimalLineupVsRHPWithDH: expect.objectContaining({
+          sourceConfidence: 'stale_roster',
+          confidence: 'low',
+        }),
+      }),
+    );
+    expect(franchisePlayerStorage.saveFranchiseTeam).toHaveBeenCalledWith(
+      context.franchiseId,
+      expect.objectContaining({
+        id: 'team-b',
+        optimalLineupVsRHPWithDH: expect.objectContaining({
+          sourceConfidence: 'stale_roster',
+          confidence: 'low',
+        }),
+      }),
+    );
+  });
+
+  test('executes a manual FARM-for-FARM trade by moving farm records with player assignments', async () => {
+    const result = await executeManualFranchiseTrade(context, {
+      requestedTrade: {
+        sourceTeamId: 'team-a',
+        targetTeamId: 'team-b',
+        outgoingPlayerId: 'a-farm-1',
+        incomingPlayerId: 'b-farm-1',
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(franchisePlayerStorage.saveFranchisePlayer).toHaveBeenCalledWith(
+      context.franchiseId,
+      expect.objectContaining({
+        id: 'a-farm-1',
+        leagueAssignments: [expect.objectContaining({ teamId: 'team-b', rosterStatus: 'FARM' })],
+      }),
+    );
+    expect(franchisePlayerStorage.saveFranchisePlayer).toHaveBeenCalledWith(
+      context.franchiseId,
+      expect.objectContaining({
+        id: 'b-farm-1',
+        leagueAssignments: [expect.objectContaining({ teamId: 'team-a', rosterStatus: 'FARM' })],
+      }),
+    );
+    expect(franchiseFarmStorage.deleteFranchiseFarmRecord).toHaveBeenCalledWith(
+      context.franchiseId,
+      context.seasonId,
+      'team-a',
+      'a-farm-1',
+    );
+    expect(franchiseFarmStorage.deleteFranchiseFarmRecord).toHaveBeenCalledWith(
+      context.franchiseId,
+      context.seasonId,
+      'team-b',
+      'b-farm-1',
+    );
+    expect(franchiseFarmStorage.saveFranchiseFarmRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ playerId: 'a-farm-1', teamId: 'team-b', seasonId: context.seasonId }),
+    );
+    expect(franchiseFarmStorage.saveFranchiseFarmRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ playerId: 'b-farm-1', teamId: 'team-a', seasonId: context.seasonId }),
+    );
+    expect(transactionStorage.logMode2V1Transaction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          movedFarmPlayerIds: ['a-farm-1', 'b-farm-1'],
+        }),
+      }),
+    );
+  });
+
+  test('executes a mixed MLB/FARM manual trade without salary matching', async () => {
+    const result = await executeManualFranchiseTrade(context, {
+      requestedTrade: {
+        sourceTeamId: 'team-a',
+        targetTeamId: 'team-b',
+        outgoingPlayerId: 'a-farm-1',
+        incomingPlayerId: 'b-rp-1',
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(franchisePlayerStorage.saveFranchisePlayer).toHaveBeenCalledWith(
+      context.franchiseId,
+      expect.objectContaining({
+        id: 'a-farm-1',
+        salary: 1.2,
+        leagueAssignments: [expect.objectContaining({ teamId: 'team-b', rosterStatus: 'FARM' })],
+      }),
+    );
+    expect(franchisePlayerStorage.saveFranchisePlayer).toHaveBeenCalledWith(
+      context.franchiseId,
+      expect.objectContaining({
+        id: 'b-rp-1',
+        salary: 1.2,
+        leagueAssignments: [expect.objectContaining({ teamId: 'team-a', rosterStatus: 'MLB' })],
+      }),
+    );
+    expect(franchiseFarmStorage.saveFranchiseFarmRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ playerId: 'a-farm-1', teamId: 'team-b' }),
+    );
+    expect(transactionStorage.logMode2V1Transaction).toHaveBeenCalledTimes(1);
+  });
+
+  test('manual trade preserves player identity and history fields by playerId', async () => {
+    const storyPlayer = makePlayer({
+      id: 'story-player',
+      teamId: 'team-a',
+      firstName: 'Story',
+      lastName: 'Keeper',
+      nickname: 'The Thread',
+      backstory: 'Franchise cornerstone.',
+      nicknames: ['The Thread'],
+      editHistory: [{ field: 'nickname', oldValue: '', newValue: 'The Thread', changedAt: '2026-01-01T00:00:00.000Z', source: 'base' }] as never,
+    });
+    seedValidation([...makePlayers(), storyPlayer]);
+
+    const result = await executeManualFranchiseTrade(context, {
+      requestedTrade: {
+        sourceTeamId: 'team-a',
+        targetTeamId: 'team-b',
+        outgoingPlayerId: 'story-player',
+        incomingPlayerId: 'b-rp-1',
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(franchisePlayerStorage.saveFranchisePlayer).toHaveBeenCalledWith(
+      context.franchiseId,
+      expect.objectContaining({
+        id: 'story-player',
+        nickname: 'The Thread',
+        backstory: 'Franchise cornerstone.',
+        nicknames: ['The Thread'],
+        editHistory: expect.arrayContaining([
+          expect.objectContaining({ field: 'nickname', newValue: 'The Thread' }),
+        ]),
+        leagueAssignments: [expect.objectContaining({ teamId: 'team-b', rosterStatus: 'MLB' })],
+      }),
+    );
+    expect(transactionStorage.logMode2V1Transaction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          playerIds: ['story-player', 'b-rp-1'],
+          playersFromSource: ['story-player'],
+        }),
+      }),
+    );
+  });
+
+  test('rejects invalid manual trade statuses before any trade write', async () => {
+    const inactivePlayer = makePlayer({
+      id: 'inactive-player',
+      teamId: 'team-a',
+      primaryPosition: 'SS',
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-a', rosterStatus: 'INACTIVE' }],
+    });
+    seedValidation([...makePlayers(), inactivePlayer]);
+
+    const result = await executeManualFranchiseTrade(context, {
+      requestedTrade: {
+        sourceTeamId: 'team-a',
+        targetTeamId: 'team-b',
+        outgoingPlayerId: 'inactive-player',
+        incomingPlayerId: 'b-rp-1',
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('TRADE_PLAYER_STATUS_INVALID');
+    expectNoWrites();
+  });
+
+  test('rolls back player, farm, and team writes when trade transaction logging fails', async () => {
+    mocks.logMode2V1Transaction.mockRejectedValueOnce(new Error('transaction write failed'));
+
+    const result = await executeManualFranchiseTrade(context, {
+      requestedTrade: {
+        sourceTeamId: 'team-a',
+        targetTeamId: 'team-b',
+        outgoingPlayerId: 'a-farm-1',
+        incomingPlayerId: 'b-rp-1',
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('TRADE_WRITE_FAILED');
+    expect(franchisePlayerStorage.saveFranchisePlayer).toHaveBeenCalledWith(
+      context.franchiseId,
+      expect.objectContaining({
+        id: 'a-farm-1',
+        leagueAssignments: [expect.objectContaining({ teamId: 'team-a', rosterStatus: 'FARM' })],
+      }),
+    );
+    expect(franchisePlayerStorage.saveFranchisePlayer).toHaveBeenCalledWith(
+      context.franchiseId,
+      expect.objectContaining({
+        id: 'b-rp-1',
+        leagueAssignments: [expect.objectContaining({ teamId: 'team-b', rosterStatus: 'MLB' })],
+      }),
+    );
+    expect(franchiseFarmStorage.deleteFranchiseFarmRecord).toHaveBeenCalledWith(
+      context.franchiseId,
+      context.seasonId,
+      'team-b',
+      'a-farm-1',
+    );
+    expect(franchiseFarmStorage.saveFranchiseFarmRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ playerId: 'a-farm-1', teamId: 'team-a' }),
+    );
+    expect(franchisePlayerStorage.saveFranchiseTeam).toHaveBeenCalledWith(
+      context.franchiseId,
+      expect.objectContaining({ id: 'team-b', lineupWithDH: [expect.objectContaining({ playerId: 'b-rp-1' })] }),
+    );
+  });
+
+  test('keeps dry-run adapter read-only when apply is requested', async () => {
     const result = await runFranchiseTradeDryRun(context, { apply: true });
 
     expect(result.success).toBe(false);
-    expect(result.errorCode).toBe('ADAPTER_NOT_IMPLEMENTED');
+    expect(result.errorCode).toBe('TRADE_EXECUTION_NOT_IMPLEMENTED');
     expect(result.issues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          code: 'ADAPTER_NOT_IMPLEMENTED',
-          message: expect.stringContaining('dry-run only'),
+          code: 'TRADE_EXECUTION_NOT_IMPLEMENTED',
         }),
       ]),
     );

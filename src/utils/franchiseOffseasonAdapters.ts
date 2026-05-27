@@ -53,6 +53,9 @@ export type FranchiseOffseasonAdapterIssueCode =
   | 'TRADE_PLAYER_NOT_FOUND'
   | 'TRADE_PLAYER_TEAM_MISMATCH'
   | 'TRADE_PLAYER_STATUS_INVALID'
+  | 'TRADE_SELECTION_REQUIRED'
+  | 'TRADE_WRITE_FAILED'
+  | 'TRADE_ROLLBACK_FAILED'
   | 'TRADE_EXECUTION_NOT_IMPLEMENTED';
 
 export interface FranchiseOffseasonAdapterContext {

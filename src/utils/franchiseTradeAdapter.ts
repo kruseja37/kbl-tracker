@@ -9,7 +9,27 @@ import {
   type FranchiseOffseasonScopeValidationReport,
 } from './franchiseOffseasonDataAccess';
 import type { FranchiseFarmRecord } from './franchiseFarmStorage';
+import {
+  deleteFranchiseFarmRecord,
+  getFranchiseFarmRecordsForSeason,
+  saveFranchiseFarmRecord,
+} from './franchiseFarmStorage';
 import type { Player, Team } from './franchisePlayerStorage';
+import {
+  getAllFranchisePlayers,
+  getAllFranchiseTeams,
+  saveFranchisePlayer,
+  saveFranchiseTeam,
+} from './franchisePlayerStorage';
+import {
+  logMode2V1Transaction,
+  type GamePhase,
+  type TransactionLogEntry,
+} from './transactionStorage';
+import {
+  markOptimalLineupSnapshotsStaleForChange,
+  OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
+} from './optimalLineup';
 
 export const FRANCHISE_TRADE_CALCULATION_VERSION = 'franchise-trades-v1-fit-preview-dry-run';
 
@@ -22,12 +42,19 @@ export interface FranchiseTradeRequestedInput {
   targetTeamId?: string;
   outgoingPlayerId?: string;
   incomingPlayerId?: string;
+  outgoingPlayerIds?: string[];
+  incomingPlayerIds?: string[];
 }
 
 export interface FranchiseTradeAdapterInput {
   dryRun?: boolean;
   apply?: boolean;
   requestedTrade?: FranchiseTradeRequestedInput;
+}
+
+export interface ExecuteManualFranchiseTradeInput {
+  requestedTrade: FranchiseTradeRequestedInput;
+  transactionPhase?: GamePhase;
 }
 
 export interface FranchiseTradeNeedSurplus {
@@ -97,7 +124,25 @@ export interface FranchiseTradeAdapterData {
   teamReports: FranchiseTradeTeamFitReport[];
   fitPreviews: FranchiseTradeFitPreview[];
   requestedPreview?: FranchiseTradeRequestedPreview;
+  executedTrade?: FranchiseTradeExecutionSummary;
   limitations: string[];
+}
+
+export interface FranchiseTradeExecutionRollbackStatus {
+  attempted: boolean;
+  success: boolean;
+  errors: string[];
+}
+
+export interface FranchiseTradeExecutionSummary {
+  transactionId: string;
+  transaction: TransactionLogEntry;
+  sourceTeamId: string;
+  targetTeamId: string;
+  playersFromSource: string[];
+  playersFromTarget: string[];
+  movedFarmPlayerIds: string[];
+  rollbackStatus?: FranchiseTradeExecutionRollbackStatus;
 }
 
 const TRADE_ELIGIBLE_STATUSES = new Set<FranchiseTradeRosterStatus>(['MLB', 'FARM']);
@@ -248,6 +293,84 @@ function buildPlayerPreview(player: Player, teamId: string): FranchiseTradePlaye
   };
 }
 
+function uniqueIds(ids: Array<string | undefined>): string[] {
+  return Array.from(new Set(ids.filter((id): id is string => Boolean(id && id.trim().length > 0))));
+}
+
+function requestedOutgoingPlayerIds(requested: FranchiseTradeRequestedInput | undefined): string[] {
+  return uniqueIds([requested?.outgoingPlayerId, ...(requested?.outgoingPlayerIds ?? [])]);
+}
+
+function requestedIncomingPlayerIds(requested: FranchiseTradeRequestedInput | undefined): string[] {
+  return uniqueIds([requested?.incomingPlayerId, ...(requested?.incomingPlayerIds ?? [])]);
+}
+
+function assignmentIndexForTeam(player: Player, teamId: string): number {
+  return (player.leagueAssignments ?? []).findIndex((assignment) => assignment.teamId === teamId);
+}
+
+function updatePlayerTradeAssignment(player: Player, fromTeamId: string, toTeamId: string): Player {
+  const assignments = (player.leagueAssignments ?? []).map((assignment) =>
+    assignment.teamId === fromTeamId
+      ? { ...assignment, teamId: toTeamId }
+      : assignment,
+  );
+
+  return {
+    ...player,
+    leagueAssignments: assignments,
+  };
+}
+
+function farmRecordForPlayer(
+  farmRecords: FranchiseFarmRecord[],
+  teamId: string,
+  playerId: string,
+): FranchiseFarmRecord | null {
+  return farmRecords.find((record) =>
+    record.teamId === teamId &&
+    record.playerId === playerId,
+  ) ?? null;
+}
+
+function cleanTeamPlayerReferences(team: Team, playerIds: string[]): Team {
+  const removeIds = new Set(playerIds);
+  const filterIds = (ids: string[] | undefined) => (ids ?? []).filter((id) => !removeIds.has(id));
+  const filterLineup = (lineup: NonNullable<Team['lineupWithDH']> | undefined) =>
+    (lineup ?? []).filter((slot) => !removeIds.has(slot.playerId));
+
+  return markOptimalLineupSnapshotsStaleForChange({
+    ...team,
+    lineupWithDH: filterLineup(team.lineupWithDH),
+    lineupWithoutDH: filterLineup(team.lineupWithoutDH),
+    startingRotation: filterIds(team.startingRotation),
+  }, OPTIMAL_LINEUP_SNAPSHOT_FIELDS);
+}
+
+function teamChanged(previous: Team, next: Team): boolean {
+  return JSON.stringify({
+    lineupWithDH: previous.lineupWithDH ?? [],
+    lineupWithoutDH: previous.lineupWithoutDH ?? [],
+    startingRotation: previous.startingRotation ?? [],
+    optimalLineupVsRHPWithDH: previous.optimalLineupVsRHPWithDH ?? null,
+    optimalLineupVsLHPWithDH: previous.optimalLineupVsLHPWithDH ?? null,
+    optimalLineupVsRHPWithoutDH: previous.optimalLineupVsRHPWithoutDH ?? null,
+    optimalLineupVsLHPWithoutDH: previous.optimalLineupVsLHPWithoutDH ?? null,
+  }) !== JSON.stringify({
+    lineupWithDH: next.lineupWithDH ?? [],
+    lineupWithoutDH: next.lineupWithoutDH ?? [],
+    startingRotation: next.startingRotation ?? [],
+    optimalLineupVsRHPWithDH: next.optimalLineupVsRHPWithDH ?? null,
+    optimalLineupVsLHPWithDH: next.optimalLineupVsLHPWithDH ?? null,
+    optimalLineupVsRHPWithoutDH: next.optimalLineupVsRHPWithoutDH ?? null,
+    optimalLineupVsLHPWithoutDH: next.optimalLineupVsLHPWithoutDH ?? null,
+  });
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error || 'trade execution failed');
+}
+
 function buildTeamReport(
   team: Team,
   players: Player[],
@@ -389,8 +512,12 @@ function validateRequestedTrade(
 
   const teamsById = new Map(report.scope.teams.map((team) => [team.id, team]));
   const playersById = new Map(report.scope.players.map((player) => [player.id, player]));
+  const outgoingPlayerIds = requestedOutgoingPlayerIds(requested);
+  const incomingPlayerIds = requestedIncomingPlayerIds(requested);
   const evidence: string[] = [];
-  const limitations = ['Requested trade inputs are validated for preview only; no trade execution is available.'];
+  const limitations = input?.apply
+    ? ['Requested trade inputs are validated for manual execution only; trade AI and salary matching are not applied.']
+    : ['Requested trade inputs are validated for preview only; no trade execution is performed.'];
   let valid = true;
 
   const addIssue = (
@@ -433,9 +560,6 @@ function validateRequestedTrade(
     label: 'outgoing' | 'incoming',
   ): FranchiseTradePlayerPreview | undefined => {
     if (!playerId) {
-      if (label === 'outgoing') {
-        addIssue('TRADE_PLAYER_NOT_FOUND', 'Requested trade preview requires an outgoing player id.');
-      }
       return undefined;
     }
     const player = playersById.get(playerId);
@@ -478,14 +602,25 @@ function validateRequestedTrade(
     return buildPlayerPreview(player, expectedTeamId ?? actualTeamId ?? '');
   };
 
-  const outgoingPlayer = validatePlayer(requested.outgoingPlayerId, requested.sourceTeamId, 'outgoing');
-  const incomingPlayer = validatePlayer(requested.incomingPlayerId, requested.targetTeamId, 'incoming');
+  if (input?.apply && (outgoingPlayerIds.length === 0 || incomingPlayerIds.length === 0)) {
+    addIssue(
+      'TRADE_SELECTION_REQUIRED',
+      'Manual franchise trade execution requires at least one selected player from each team.',
+    );
+  }
+
+  const outgoingPlayers = outgoingPlayerIds.map((playerId) =>
+    validatePlayer(playerId, requested.sourceTeamId, 'outgoing'),
+  ).filter((player): player is FranchiseTradePlayerPreview => Boolean(player));
+  const incomingPlayers = incomingPlayerIds.map((playerId) =>
+    validatePlayer(playerId, requested.targetTeamId, 'incoming'),
+  ).filter((player): player is FranchiseTradePlayerPreview => Boolean(player));
 
   return {
     sourceTeamId: requested.sourceTeamId,
     targetTeamId: requested.targetTeamId,
-    outgoingPlayer,
-    incomingPlayer,
+    outgoingPlayer: outgoingPlayers[0],
+    incomingPlayer: incomingPlayers[0],
     valid,
     evidence,
     limitations,
@@ -535,18 +670,441 @@ function buildData(
 
   return {
     calculationVersion: FRANCHISE_TRADE_CALCULATION_VERSION,
-    method: 'Dry-run only: franchise-owned roster/farm trade-fit preview; no trade AI, acceptance, execution, player movement, transactions, morale/chemistry, injuries, or salary-cap enforcement are performed.',
+    method: 'Read-only franchise-owned roster/farm trade-fit preview; use executeManualFranchiseTrade for explicit manual requestedTrade execution.',
     teamReports,
     fitPreviews: buildFitPreviews(teamReports, teams, players),
     requestedPreview,
     limitations: [
-      'No trade execution is implemented by this adapter.',
-      'No players are moved and no roster or farm records are changed.',
+      'Manual execution is available only for explicit user-selected requestedTrade players.',
+      'Dry-run preview does not move players or change roster, farm, team, or transaction state.',
       'No transactions, trade state, League Builder data, or franchise offseason state are written.',
       'Trade AI, final acceptance logic, chemistry, morale, injuries, and salary-cap enforcement are deferred.',
       'All fit previews are non-executable advisory previews.',
     ],
   };
+}
+
+function buildManualExecutionData(
+  data: FranchiseTradeAdapterData,
+  executedTrade?: FranchiseTradeExecutionSummary,
+): FranchiseTradeAdapterData {
+  return {
+    ...data,
+    executedTrade,
+    method: 'Manual requestedTrade execution from franchise-owned roster/farm state; no trade AI, acceptance, morale/chemistry, injuries, or salary-cap enforcement are performed.',
+    limitations: [
+      'Manual execution moved only explicit user-selected requestedTrade players.',
+      'Player identity, playerId-keyed history fields, and stats continuity are preserved on the player records.',
+      'No trade AI, salary matching, morale/chemistry, injury, League Builder, or prototype trade-state writes are performed.',
+    ],
+  };
+}
+
+function emptyManualTradeScope(context: Partial<FranchiseOffseasonAdapterContext>): FranchiseOffseasonScopeValidationReport {
+  return {
+    valid: false,
+    context,
+    issues: [],
+    scope: null,
+  };
+}
+
+async function loadManualTradeScope(
+  context: Partial<FranchiseOffseasonAdapterContext>,
+): Promise<FranchiseOffseasonScopeValidationReport> {
+  const report = emptyManualTradeScope(context);
+
+  if (!context.franchiseId) {
+    report.issues.push(makeIssue('MISSING_FRANCHISE_ID', 'Manual trade execution requires a franchiseId.', context));
+  }
+  if (!context.seasonId) {
+    report.issues.push(makeIssue('MISSING_SEASON_ID', 'Manual trade execution requires a seasonId.', context));
+  }
+  if (!context.statsScopeId || context.statsScopeId.trim().length === 0) {
+    report.issues.push(makeIssue('MISSING_STATS_SCOPE_ID', 'Manual trade execution requires a canonical statsScopeId.', context));
+  }
+  if (typeof context.seasonNumber !== 'number') {
+    report.issues.push(makeIssue('MISSING_SEASON_NUMBER', 'Manual trade execution requires a seasonNumber.', context));
+  }
+
+  if (context.seasonId && context.statsScopeId && context.statsScopeId !== context.seasonId) {
+    report.issues.push(
+      makeIssue(
+        'STATS_SCOPE_MISMATCH',
+        'Manual trade execution statsScopeId must match the canonical franchise seasonId.',
+        context,
+        {
+          details: {
+            expectedStatsScopeId: context.seasonId,
+            actualStatsScopeId: context.statsScopeId,
+          },
+        },
+      ),
+    );
+  }
+
+  if (report.issues.some((issue) => issue.severity === 'error')) {
+    return report;
+  }
+
+  const fullContext = {
+    franchiseId: context.franchiseId!,
+    seasonId: context.seasonId!,
+    statsScopeId: context.statsScopeId,
+    seasonNumber: context.seasonNumber!,
+    offseasonStateId: context.offseasonStateId ?? `manual-trade-${context.seasonId}`,
+    phase: context.phase ?? 'TRADES',
+  } satisfies FranchiseOffseasonAdapterContext;
+
+  const [players, teams, farmRecords] = await Promise.all([
+    getAllFranchisePlayers(fullContext.franchiseId),
+    getAllFranchiseTeams(fullContext.franchiseId),
+    getFranchiseFarmRecordsForSeason(fullContext.franchiseId, fullContext.seasonId),
+  ]);
+
+  return {
+    valid: true,
+    context: fullContext,
+    issues: [],
+    counts: {
+      players: players.length,
+      teams: teams.length,
+      farmRecords: farmRecords.length,
+      transitionJournals: 0,
+    },
+    scope: {
+      context: fullContext,
+      offseasonState: null,
+      players,
+      teams,
+      farmRecords,
+      seasonSummary: null,
+      transitionJournals: [],
+      phase11RosterLock: null,
+    },
+  };
+}
+
+async function rollbackManualTrade(params: {
+  franchiseId: string;
+  originalPlayers: Player[];
+  originalTeams: Team[];
+  originalFarmRecords: FranchiseFarmRecord[];
+  createdFarmRecords: FranchiseFarmRecord[];
+  deletedFarmRecords: FranchiseFarmRecord[];
+  savedPlayerIds: Set<string>;
+  savedTeamIds: Set<string>;
+}): Promise<FranchiseTradeExecutionRollbackStatus> {
+  const status: FranchiseTradeExecutionRollbackStatus = {
+    attempted:
+      params.savedPlayerIds.size > 0 ||
+      params.savedTeamIds.size > 0 ||
+      params.createdFarmRecords.length > 0 ||
+      params.deletedFarmRecords.length > 0,
+    success: true,
+    errors: [],
+  };
+
+  for (const player of params.originalPlayers) {
+    if (!params.savedPlayerIds.has(player.id)) continue;
+    try {
+      await saveFranchisePlayer(params.franchiseId, player);
+    } catch (error) {
+      status.success = false;
+      status.errors.push(`player rollback failed for ${player.id}: ${errorMessage(error)}`);
+    }
+  }
+
+  for (const record of params.createdFarmRecords) {
+    try {
+      await deleteFranchiseFarmRecord(
+        record.franchiseId,
+        record.seasonId,
+        record.teamId,
+        record.playerId,
+      );
+    } catch (error) {
+      status.success = false;
+      status.errors.push(`farm cleanup rollback failed for ${record.playerId}: ${errorMessage(error)}`);
+    }
+  }
+
+  for (const record of params.originalFarmRecords) {
+    if (!params.deletedFarmRecords.some((deleted) => deleted.id === record.id)) continue;
+    try {
+      await saveFranchiseFarmRecord(record);
+    } catch (error) {
+      status.success = false;
+      status.errors.push(`farm restore rollback failed for ${record.playerId}: ${errorMessage(error)}`);
+    }
+  }
+
+  for (const team of params.originalTeams) {
+    if (!params.savedTeamIds.has(team.id)) continue;
+    try {
+      await saveFranchiseTeam(params.franchiseId, team);
+    } catch (error) {
+      status.success = false;
+      status.errors.push(`team rollback failed for ${team.id}: ${errorMessage(error)}`);
+    }
+  }
+
+  return status;
+}
+
+async function executeManualTrade(
+  context: Partial<FranchiseOffseasonAdapterContext>,
+  report: FranchiseOffseasonScopeValidationReport,
+  requested: FranchiseTradeRequestedInput,
+  data: FranchiseTradeAdapterData,
+  transactionPhase: GamePhase = 'REGULAR_SEASON',
+): Promise<FranchiseOffseasonAdapterResult<FranchiseTradeAdapterData>> {
+  const franchiseId = context.franchiseId;
+  const seasonId = context.seasonId;
+  const statsScopeId = context.statsScopeId;
+  const seasonNumber = context.seasonNumber;
+  const sourceTeamId = requested.sourceTeamId;
+  const targetTeamId = requested.targetTeamId;
+
+  if (!franchiseId || !seasonId || !statsScopeId || typeof seasonNumber !== 'number' || !sourceTeamId || !targetTeamId || !report.scope) {
+    return {
+      success: false,
+      dryRun: false,
+      context,
+      issues: report.issues,
+      errorCode: report.issues.find((issue) => issue.severity === 'error')?.code ?? 'TRADE_WRITE_FAILED',
+      message: 'Trade execution validation failed.',
+      data: buildManualExecutionData(data),
+    };
+  }
+
+  const outgoingIds = requestedOutgoingPlayerIds(requested);
+  const incomingIds = requestedIncomingPlayerIds(requested);
+  if (outgoingIds.length === 0 || incomingIds.length === 0) {
+    const issue = makeIssue(
+      'TRADE_SELECTION_REQUIRED',
+      'Manual franchise trade execution requires at least one selected player from each team.',
+      context,
+    );
+    return {
+      success: false,
+      dryRun: false,
+      context,
+      issues: [...report.issues, issue],
+      errorCode: 'TRADE_SELECTION_REQUIRED',
+      message: 'Trade execution requires player selections from both teams.',
+      data: buildManualExecutionData(data),
+    };
+  }
+
+  const playersById = new Map(report.scope.players.map((player) => [player.id, player]));
+  const teamsById = new Map(report.scope.teams.map((team) => [team.id, team]));
+  const farmRecords = report.scope.farmRecords ?? [];
+  const selectedIds = [...outgoingIds, ...incomingIds];
+  const selectedPlayers = selectedIds.map((playerId) => playersById.get(playerId)).filter((player): player is Player => Boolean(player));
+  const sourceTeam = teamsById.get(sourceTeamId);
+  const targetTeam = teamsById.get(targetTeamId);
+  const validationIssues: FranchiseOffseasonAdapterIssue[] = [];
+
+  if (!sourceTeam || !targetTeam || selectedPlayers.length !== selectedIds.length) {
+    validationIssues.push(makeIssue('TRADE_WRITE_FAILED', 'Trade execution scope is missing one or more selected players or teams.', context));
+  }
+
+  for (const playerId of outgoingIds) {
+    const player = playersById.get(playerId);
+    const status = player ? rosterStatusForPlayer(player, sourceTeamId) : 'UNKNOWN';
+    if (!player || assignmentIndexForTeam(player, sourceTeamId) < 0 || !TRADE_ELIGIBLE_STATUSES.has(status)) {
+      validationIssues.push(makeIssue('TRADE_PLAYER_STATUS_INVALID', `Outgoing trade player ${playerId} is not eligible for manual execution.`, context, {
+        playerId,
+        teamId: sourceTeamId,
+        details: { rosterStatus: status },
+      }));
+    }
+    if (status === 'FARM' && !farmRecordForPlayer(farmRecords, sourceTeamId, playerId)) {
+      validationIssues.push(makeIssue('FARM_RECORD_MISSING', `Outgoing FARM player ${playerId} is missing a scoped farm record.`, context, {
+        playerId,
+        teamId: sourceTeamId,
+      }));
+    }
+  }
+
+  for (const playerId of incomingIds) {
+    const player = playersById.get(playerId);
+    const status = player ? rosterStatusForPlayer(player, targetTeamId) : 'UNKNOWN';
+    if (!player || assignmentIndexForTeam(player, targetTeamId) < 0 || !TRADE_ELIGIBLE_STATUSES.has(status)) {
+      validationIssues.push(makeIssue('TRADE_PLAYER_STATUS_INVALID', `Incoming trade player ${playerId} is not eligible for manual execution.`, context, {
+        playerId,
+        teamId: targetTeamId,
+        details: { rosterStatus: status },
+      }));
+    }
+    if (status === 'FARM' && !farmRecordForPlayer(farmRecords, targetTeamId, playerId)) {
+      validationIssues.push(makeIssue('FARM_RECORD_MISSING', `Incoming FARM player ${playerId} is missing a scoped farm record.`, context, {
+        playerId,
+        teamId: targetTeamId,
+      }));
+    }
+  }
+
+  if (validationIssues.length > 0) {
+    return {
+      success: false,
+      dryRun: false,
+      context,
+      issues: [...report.issues, ...validationIssues],
+      errorCode: validationIssues[0].code,
+      message: 'Trade execution validation failed.',
+      data: buildManualExecutionData(data),
+    };
+  }
+
+  const sourcePlayers = outgoingIds.map((playerId) => playersById.get(playerId)!);
+  const targetPlayers = incomingIds.map((playerId) => playersById.get(playerId)!);
+  const originalPlayers = [...sourcePlayers, ...targetPlayers];
+  const originalTeams = [sourceTeam!, targetTeam!];
+  const originalFarmRecords = [
+    ...sourcePlayers.map((player) => farmRecordForPlayer(farmRecords, sourceTeamId, player.id)).filter((record): record is FranchiseFarmRecord => Boolean(record)),
+    ...targetPlayers.map((player) => farmRecordForPlayer(farmRecords, targetTeamId, player.id)).filter((record): record is FranchiseFarmRecord => Boolean(record)),
+  ];
+  const savedPlayerIds = new Set<string>();
+  const savedTeamIds = new Set<string>();
+  const deletedFarmRecords: FranchiseFarmRecord[] = [];
+  const createdFarmRecords: FranchiseFarmRecord[] = [];
+
+  try {
+    for (const player of sourcePlayers) {
+      const saved = await saveFranchisePlayer(franchiseId, updatePlayerTradeAssignment(player, sourceTeamId, targetTeamId));
+      savedPlayerIds.add(saved.id);
+    }
+
+    for (const player of targetPlayers) {
+      const saved = await saveFranchisePlayer(franchiseId, updatePlayerTradeAssignment(player, targetTeamId, sourceTeamId));
+      savedPlayerIds.add(saved.id);
+    }
+
+    const moveFarmRecord = async (record: FranchiseFarmRecord, toTeamId: string) => {
+      await deleteFranchiseFarmRecord(record.franchiseId, record.seasonId, record.teamId, record.playerId);
+      deletedFarmRecords.push(record);
+      const created = await saveFranchiseFarmRecord({
+        ...record,
+        teamId: toTeamId,
+      });
+      createdFarmRecords.push(created);
+    };
+
+    for (const player of sourcePlayers) {
+      const record = farmRecordForPlayer(farmRecords, sourceTeamId, player.id);
+      if (record) await moveFarmRecord(record, targetTeamId);
+    }
+
+    for (const player of targetPlayers) {
+      const record = farmRecordForPlayer(farmRecords, targetTeamId, player.id);
+      if (record) await moveFarmRecord(record, sourceTeamId);
+    }
+
+    const updatedSourceTeam = cleanTeamPlayerReferences(sourceTeam!, outgoingIds);
+    const updatedTargetTeam = cleanTeamPlayerReferences(targetTeam!, incomingIds);
+    if (teamChanged(sourceTeam!, updatedSourceTeam)) {
+      const saved = await saveFranchiseTeam(franchiseId, updatedSourceTeam);
+      savedTeamIds.add(saved.id);
+    }
+    if (teamChanged(targetTeam!, updatedTargetTeam)) {
+      const saved = await saveFranchiseTeam(franchiseId, updatedTargetTeam);
+      savedTeamIds.add(saved.id);
+    }
+
+    const movedFarmPlayerIds = createdFarmRecords.map((record) => record.playerId);
+    const transaction = await logMode2V1Transaction({
+      type: 'trade',
+      actor: 'USER',
+      season: seasonNumber,
+      gameNumber: null,
+      phase: transactionPhase,
+      franchiseId,
+      seasonId,
+      statsScopeId,
+      data: {
+        movementType: 'trade',
+        transactionPhase,
+        seasonNumber,
+        sourceTeamId,
+        targetTeamId,
+        playerIds: selectedIds,
+        playersFromSource: outgoingIds,
+        playersFromTarget: incomingIds,
+        movedFarmPlayerIds,
+        sourcePlayers: sourcePlayers.map((player) => ({
+          playerId: player.id,
+          playerName: playerName(player),
+          previousTeamId: sourceTeamId,
+          newTeamId: targetTeamId,
+          rosterStatus: rosterStatusForPlayer(player, sourceTeamId),
+        })),
+        targetPlayers: targetPlayers.map((player) => ({
+          playerId: player.id,
+          playerName: playerName(player),
+          previousTeamId: targetTeamId,
+          newTeamId: sourceTeamId,
+          rosterStatus: rosterStatusForPlayer(player, targetTeamId),
+        })),
+      },
+      previousState: {
+        players: originalPlayers,
+        teams: originalTeams,
+        farmRecords: originalFarmRecords,
+      },
+    });
+
+    const executedTrade: FranchiseTradeExecutionSummary = {
+      transactionId: transaction.id,
+      transaction,
+      sourceTeamId,
+      targetTeamId,
+      playersFromSource: outgoingIds,
+      playersFromTarget: incomingIds,
+      movedFarmPlayerIds,
+    };
+
+    return {
+      success: true,
+      dryRun: false,
+      context,
+      issues: report.issues,
+      data: buildManualExecutionData(data, executedTrade),
+      message: 'Manual franchise trade executed.',
+    };
+  } catch (error) {
+    const rollbackStatus = await rollbackManualTrade({
+      franchiseId,
+      originalPlayers,
+      originalTeams,
+      originalFarmRecords,
+      createdFarmRecords,
+      deletedFarmRecords,
+      savedPlayerIds,
+      savedTeamIds,
+    });
+    const issue = makeIssue(
+      rollbackStatus.success ? 'TRADE_WRITE_FAILED' : 'TRADE_ROLLBACK_FAILED',
+      errorMessage(error),
+      context,
+      {
+        details: {
+          rollbackStatus,
+        },
+      },
+    );
+
+    return {
+      success: false,
+      dryRun: false,
+      context,
+      issues: [...report.issues, issue],
+      errorCode: issue.code,
+      message: errorMessage(error),
+      data: buildManualExecutionData(data),
+    };
+  }
 }
 
 export const franchiseTradeDryRunAdapter: FranchiseOffseasonAdapter<
@@ -570,8 +1128,8 @@ export const franchiseTradeDryRunAdapter: FranchiseOffseasonAdapter<
 
     if (input.apply) {
       const issue = makeIssue(
-        'ADAPTER_NOT_IMPLEMENTED',
-        'Franchise trade execution is not implemented; this adapter is dry-run only.',
+        'TRADE_EXECUTION_NOT_IMPLEMENTED',
+        'runFranchiseTradeDryRun is read-only; use executeManualFranchiseTrade for manual trade execution.',
         context,
       );
       return {
@@ -579,8 +1137,8 @@ export const franchiseTradeDryRunAdapter: FranchiseOffseasonAdapter<
         dryRun,
         context,
         issues: [...report.issues, issue],
-        errorCode: 'ADAPTER_NOT_IMPLEMENTED',
-        message: 'Trade adapter is dry-run only.',
+        errorCode: 'TRADE_EXECUTION_NOT_IMPLEMENTED',
+        message: 'Trade dry-run is read-only.',
         data,
       };
     }
@@ -613,4 +1171,41 @@ export async function runFranchiseTradeDryRun(
   input?: FranchiseTradeAdapterInput,
 ): Promise<FranchiseOffseasonAdapterResult<FranchiseTradeAdapterData>> {
   return franchiseTradeDryRunAdapter.execute(context, input);
+}
+
+export async function executeManualFranchiseTrade(
+  context: Partial<FranchiseOffseasonAdapterContext>,
+  input: ExecuteManualFranchiseTradeInput,
+): Promise<FranchiseOffseasonAdapterResult<FranchiseTradeAdapterData>> {
+  const report = await loadManualTradeScope(context);
+  const requestedPreview = validateRequestedTrade(report, context, {
+    apply: true,
+    requestedTrade: input.requestedTrade,
+  });
+  const data = buildData(
+    report.scope?.teams ?? [],
+    report.scope?.players ?? [],
+    report.scope?.farmRecords ?? [],
+    requestedPreview,
+  );
+
+  if (!report.valid || !report.scope) {
+    return {
+      success: false,
+      dryRun: false,
+      context,
+      issues: report.issues,
+      errorCode: report.issues.find((issue) => issue.severity === 'error')?.code,
+      message: 'Manual trade execution validation failed.',
+      data: buildManualExecutionData(data),
+    };
+  }
+
+  return executeManualTrade(
+    context,
+    report,
+    input.requestedTrade,
+    data,
+    input.transactionPhase ?? 'REGULAR_SEASON',
+  );
 }
