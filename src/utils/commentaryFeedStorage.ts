@@ -93,6 +93,26 @@ export async function listAllCommentaryFeedEntries(): Promise<CommentaryFeedEntr
   }
 }
 
+export async function listCommentaryFeedEntriesForFranchiseSeason(
+  franchiseId: string,
+  seasonId: string,
+  statsScopeId?: string,
+): Promise<CommentaryFeedEntryRecord[]> {
+  try {
+    const entries = await listAllCommentaryFeedEntries();
+    return entries
+      .filter((entry) => entry.gameMode === "franchise")
+      .filter((entry) => entry.franchiseId === franchiseId)
+      .filter((entry) => entry.seasonId === seasonId)
+      .filter((entry) => (statsScopeId ? entry.statsScopeId === statsScopeId : true));
+  } catch (error) {
+    throw toStorageError(
+      `list commentary feed entries for franchise ${franchiseId} season ${seasonId}`,
+      error,
+    );
+  }
+}
+
 export async function deleteCommentaryFeedEntry(id: string): Promise<void> {
   try {
     const db = await openTrackerDb();

@@ -894,11 +894,15 @@ export function useCommentaryFeed({
       // everyone who took an at-bat or pitched. Almanac filtering is on
       // substring match of name, so this is the honest answer.
       const namesInGame = new Set<string>();
+      const playerIdsInGame = new Set<string>();
       for (const event of allInningEvents) {
         if (event.batterName) namesInGame.add(event.batterName);
         if (event.pitcherName) namesInGame.add(event.pitcherName);
+        if (event.batterId) playerIdsInGame.add(event.batterId);
+        if (event.pitcherId) playerIdsInGame.add(event.pitcherId);
       }
       const playersMentioned = Array.from(namesInGame).sort();
+      const playerIdsMentioned = Array.from(playerIdsInGame).sort();
 
       const runForReporter = async (
         reporterTeam: "home" | "away",
@@ -965,6 +969,7 @@ export function useCommentaryFeed({
           headline: result.headline,
           body: result.body,
           playersMentioned,
+          playerIdsMentioned,
           gameDate,
           opponentTeamId,
           createdAt: now,

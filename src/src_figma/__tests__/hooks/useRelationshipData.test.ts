@@ -8,7 +8,10 @@
 import { describe, test, expect } from 'vitest';
 
 // Import the hook type and underlying functions
-import type { UseRelationshipDataReturn } from '../../app/hooks/useRelationshipData';
+import {
+  RELATIONSHIP_DATA_V1_BOUNDARY,
+  type UseRelationshipDataReturn,
+} from '../../app/hooks/useRelationshipData';
 import {
   RelationshipType,
   type Relationship,
@@ -51,6 +54,15 @@ describe('useRelationshipData Hook Type Contract', () => {
     ];
 
     expect(requiredProperties.length).toBe(15);
+  });
+
+  test('v1 boundary is explicit that relationships do not canonically mutate morale or chemistry', () => {
+    expect(RELATIONSHIP_DATA_V1_BOUNDARY).toMatchObject({
+      persistence: 'preview-in-memory',
+      canonicalMutation: false,
+      moraleMutation: false,
+      chemistryMutation: false,
+    });
   });
 });
 

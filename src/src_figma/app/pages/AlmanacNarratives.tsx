@@ -12,6 +12,7 @@ const KIND_FILTERS: Array<{ value: AlmanacNarrativeKind | "all"; label: string }
   { value: "all", label: "ALL" },
   { value: "historical-tidbit", label: "TIDBITS" },
   { value: "post-game-story", label: "POST-GAME" },
+  { value: "transaction-history", label: "MOVES" },
 ];
 
 const MODE_FILTERS: Array<{ value: ReporterGameMode | "all"; label: string }> = [
@@ -34,7 +35,9 @@ function modeLabel(mode: ReporterGameMode): string {
 }
 
 function kindLabel(kind: AlmanacNarrativeKind): string {
-  return kind === "historical-tidbit" ? "HISTORICAL TIDBIT" : "POST-GAME SUMMARY";
+  if (kind === "historical-tidbit") return "HISTORICAL TIDBIT";
+  if (kind === "transaction-history") return "TRANSACTION HISTORY";
+  return "POST-GAME SUMMARY";
 }
 
 function kindIcon(kind: AlmanacNarrativeKind) {
@@ -216,12 +219,14 @@ export function AlmanacNarratives() {
                       ) : null}
                     </div>
 
-                    <Link
-                      to={`/almanac/games/${entry.gameId}`}
-                      className="inline-flex items-center justify-center border-[4px] border-[#3366FF] bg-[#111111] px-4 py-3 text-[9px] text-white transition hover:bg-[#1a1a1a]"
-                    >
-                      GAME
-                    </Link>
+                    {entry.gameId ? (
+                      <Link
+                        to={`/almanac/games/${entry.gameId}`}
+                        className="inline-flex items-center justify-center border-[4px] border-[#3366FF] bg-[#111111] px-4 py-3 text-[9px] text-white transition hover:bg-[#1a1a1a]"
+                      >
+                        GAME
+                      </Link>
+                    ) : null}
                   </div>
 
                   <div className="whitespace-pre-wrap text-[9px] leading-6 text-[#E8E8D8] sm:text-[10px]">

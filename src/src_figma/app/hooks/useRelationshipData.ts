@@ -28,6 +28,15 @@ import {
   getRelationshipsByCategory,
 } from '../engines/relationshipIntegration';
 
+export const RELATIONSHIP_DATA_V1_BOUNDARY = {
+  persistence: 'preview-in-memory',
+  canonicalMutation: false,
+  moraleMutation: false,
+  chemistryMutation: false,
+  note:
+    'Mode 2 v1 relationship data is advisory UI state only; it does not persist franchise relationships or mutate canonical morale/chemistry.',
+} as const;
+
 // ============================================
 // HOOK TYPES
 // ============================================

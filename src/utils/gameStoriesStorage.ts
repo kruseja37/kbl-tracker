@@ -125,6 +125,28 @@ export async function listGameStoriesForTeam(
   }
 }
 
+export async function listGameStoriesForFranchiseSeason(
+  franchiseId: string,
+  seasonId: string,
+  statsScopeId?: string,
+): Promise<GameStory[]> {
+  try {
+    const entries = await listAllGameStories();
+    return entries.filter((entry) => {
+      if (entry.gameMode !== "franchise") return false;
+      if (entry.franchiseId !== franchiseId) return false;
+      if (entry.seasonId !== seasonId) return false;
+      if (statsScopeId && entry.statsScopeId !== statsScopeId) return false;
+      return true;
+    });
+  } catch (error) {
+    throw toStorageError(
+      `list game stories for franchise ${franchiseId} season ${seasonId}`,
+      error,
+    );
+  }
+}
+
 /**
  * All columns that mention a given player name. IDB has no array-membership
  * index, so we scan. OK at v1 scale; can swap to a dedicated `playerMentions`
@@ -149,6 +171,35 @@ export async function listGameStoriesMentioningPlayer(
   } catch (error) {
     throw toStorageError(
       `list game stories mentioning ${playerName}`,
+      error,
+    );
+  }
+}
+
+export async function listGameStoriesMentioningPlayerId(
+  playerId: string,
+  filters: {
+    franchiseId?: string;
+    seasonId?: string;
+    statsScopeId?: string;
+  } = {},
+): Promise<GameStory[]> {
+  try {
+    const entries = await listAllGameStories();
+    return entries
+      .filter((entry) => entry.playerIdsMentioned?.includes(playerId))
+      .filter((entry) =>
+        filters.franchiseId ? entry.franchiseId === filters.franchiseId : true,
+      )
+      .filter((entry) =>
+        filters.seasonId ? entry.seasonId === filters.seasonId : true,
+      )
+      .filter((entry) =>
+        filters.statsScopeId ? entry.statsScopeId === filters.statsScopeId : true,
+      );
+  } catch (error) {
+    throw toStorageError(
+      `list game stories mentioning player id ${playerId}`,
       error,
     );
   }

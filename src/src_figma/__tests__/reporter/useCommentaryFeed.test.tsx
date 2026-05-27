@@ -1338,12 +1338,17 @@ describe("useCommentaryFeed", () => {
     // playersMentioned should be the union of all batters + pitchers across innings.
     const firstPersisted = persistSpy.mock.calls[0][0] as {
       playersMentioned: string[];
+      playerIdsMentioned: string[];
     };
     expect(firstPersisted.playersMentioned.sort()).toEqual([
       "Harry Backman",
       "Lester Bronco",
       "Manny Kays",
       "Winnie Noelle",
+    ]);
+    expect(firstPersisted.playerIdsMentioned.sort()).toEqual([
+      "batter-1",
+      "pitcher-1",
     ]);
   });
 
@@ -1447,6 +1452,14 @@ describe("useCommentaryFeed", () => {
         ],
         finalScore: { home: 1, away: 0 },
         gameMode: "exhibition",
+        reporterScope: {
+          franchiseId: "franchise-a",
+          seasonId: "franchise-a-season-1",
+          seasonNumber: 1,
+          statsScopeId: "franchise-a-season-1",
+          scheduleGameId: "sched-1",
+          competitionType: "franchise",
+        },
         gameDate: "2026-04-17",
       });
     });
@@ -1455,12 +1468,19 @@ describe("useCommentaryFeed", () => {
       expect.objectContaining({
         gameId: "game-1",
         gameMode: "exhibition",
+        franchiseId: "franchise-a",
+        seasonId: "franchise-a-season-1",
+        seasonNumber: 1,
+        statsScopeId: "franchise-a-season-1",
+        scheduleGameId: "sched-1",
+        competitionType: "franchise",
         gameDate: "2026-04-17",
         headline: "BACKMAN'S BLAST",
         body: "Three paragraphs of sparkling prose.",
         createdAt: 2000,
         changed_at: 2000,
         playersMentioned: expect.arrayContaining(["Harry Backman", "Winnie Noelle"]),
+        playerIdsMentioned: expect.arrayContaining(["batter-1", "pitcher-1"]),
       }),
     );
   });

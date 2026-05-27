@@ -118,6 +118,7 @@ export interface GameStory {
   headline: string;
   body: string;
   playersMentioned: string[];
+  playerIdsMentioned?: string[];
   gameDate: string;
   opponentTeamId?: string;
   createdAt: number;
