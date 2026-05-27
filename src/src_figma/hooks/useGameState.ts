@@ -9985,20 +9985,21 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         }
 
         const currentPitcher = lineupStateRef.current.currentPitcher;
-        const currentPitcherSwitch = currentPitcher
-          ? switches.find((sw) => sw.playerId === currentPitcher.playerId)
-          : undefined;
+        const touchesPitcherSlot = plannedSwitches.some(
+          (sw) =>
+            sw.teamSide === teamSide &&
+            (sw.previousPosition === "P" || sw.newPosition === "P"),
+        );
+        const lineupPitcher = nextLineup.find((player) => player.position === "P");
+        const nextCurrentPitcher =
+          touchesPitcherSlot && lineupPitcher
+            ? { ...lineupPitcher, position: "P" as Position }
+            : currentPitcher;
 
         lineupStateRef.current = {
           ...lineupStateRef.current,
           lineup: nextLineup,
-          currentPitcher: currentPitcher
-            ? {
-                ...currentPitcher,
-                position: (currentPitcherSwitch?.newPosition ??
-                  currentPitcher.position) as Position,
-              }
-            : null,
+          currentPitcher: nextCurrentPitcher,
         };
         lineupRef.current = nextLineup.map((player) => ({
           playerId: player.playerId,
@@ -10040,16 +10041,21 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         },
       ]);
 
-      // UX-053: Update currentCatcherId if someone moved to catcher
-      const newCatcher = switches.find((s) => s.newPosition === "C");
-      if (newCatcher) {
-        setGameState((prev) => ({
-          ...prev,
-          currentCatcherId: newCatcher.playerId,
-          currentCatcherName:
-            resolvePlayerNameForId(newCatcher.playerId) || newCatcher.playerId,
-        }));
-      }
+      const activeFieldingState =
+        gameState.isTop ? homeLineupStateRef.current : awayLineupStateRef.current;
+      const nextFieldingPitcher = activeFieldingState.currentPitcher;
+      const nextFieldingCatcher = activeFieldingState.lineup.find(
+        (player) => player.position === "C",
+      );
+      setGameState((prev) => ({
+        ...prev,
+        currentPitcherId: nextFieldingPitcher?.playerId ?? prev.currentPitcherId,
+        currentPitcherName:
+          nextFieldingPitcher?.playerName ?? prev.currentPitcherName,
+        currentCatcherId: nextFieldingCatcher?.playerId ?? prev.currentCatcherId,
+        currentCatcherName:
+          nextFieldingCatcher?.playerName ?? prev.currentCatcherName,
+      }));
 
       setLineupVersion((version) => version + 1);
 
@@ -10063,7 +10069,6 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       gameState.isTop,
       persistBetweenPlayEvent,
       registerIdentityForSide,
-      resolvePlayerNameForId,
     ],
   );
 
