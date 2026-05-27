@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => {
   const mockGetSeasonBattingStats = vi.fn();
   const mockGetSeasonPitchingStats = vi.fn();
   const mockCompleteScheduleGame = vi.fn();
+  const mockLineupCardRender = vi.fn();
+  const mockBattingLineupRender = vi.fn();
   const emptyLineupSnapshot = {
     away: { lineup: [], bench: [], usedPlayers: [], currentPitcher: null },
     home: { lineup: [], bench: [], usedPlayers: [], currentPitcher: null },
@@ -127,6 +129,8 @@ const mocks = vi.hoisted(() => {
     mockGetSeasonBattingStats,
     mockGetSeasonPitchingStats,
     mockCompleteScheduleGame,
+    mockLineupCardRender,
+    mockBattingLineupRender,
   };
 });
 
@@ -192,6 +196,20 @@ vi.mock("@/app/components/UndoSystem", () => ({
     undoBoundaryTimestamp: null,
     ToastComponent: () => null,
   }),
+}));
+
+vi.mock("@/app/components/LineupCard", () => ({
+  LineupCard: (props: unknown) => {
+    mocks.mockLineupCardRender(props);
+    return <div data-testid="lineup-card" />;
+  },
+}));
+
+vi.mock("@/app/components/BattingLineupColumn", () => ({
+  BattingLineupColumn: (props: unknown) => {
+    mocks.mockBattingLineupRender(props);
+    return <div data-testid="batting-lineup-column" />;
+  },
 }));
 
 vi.mock("../../app/hooks/useFanMorale", () => ({
@@ -298,6 +316,12 @@ describe("GameTracker launch state", () => {
     mocks.mockGetSeasonBattingStats.mockResolvedValue([]);
     mocks.mockGetSeasonPitchingStats.mockResolvedValue([]);
     mocks.mockCompleteScheduleGame.mockResolvedValue(undefined);
+    mocks.mockUseGameStateResult.getLineupStateSnapshot.mockImplementation(() => ({
+      away: { lineup: [], bench: [], usedPlayers: [], currentPitcher: null },
+      home: { lineup: [], bench: [], usedPlayers: [], currentPitcher: null },
+      awayUsesDh: undefined,
+      homeUsesDh: undefined,
+    }));
     Object.assign(mocks.mockUseGameStateResult.gameState, {
       gameId: "",
       homeScore: 0,
@@ -478,6 +502,129 @@ describe("GameTracker launch state", () => {
       ]),
     );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  test("elimination lineup card renders from the hook lineup snapshot instead of stale launch rosters", async () => {
+    const snapshotLineup = [
+      { playerId: "away-c", playerName: "Snapshot Catcher", position: "C", battingOrder: 1 },
+      { playerId: "away-1b", playerName: "Snapshot First", position: "1B", battingOrder: 2 },
+      { playerId: "away-2b", playerName: "Snapshot Second", position: "2B", battingOrder: 4 },
+      { playerId: "away-3b", playerName: "Snapshot Third", position: "3B", battingOrder: 5 },
+      { playerId: "away-ss", playerName: "Snapshot Short", position: "SS", battingOrder: 6 },
+      { playerId: "away-lf", playerName: "Snapshot Left", position: "LF", battingOrder: 7 },
+      { playerId: "away-cf", playerName: "Snapshot Center", position: "CF", battingOrder: 8 },
+      { playerId: "away-rf", playerName: "Snapshot Right", position: "RF", battingOrder: 9 },
+    ];
+    mocks.mockUseGameStateResult.getLineupStateSnapshot.mockImplementation(() => ({
+      away: {
+        lineup: snapshotLineup,
+        bench: [
+          {
+            playerId: "away-bench-of",
+            playerName: "Lester Bronco",
+            positions: ["OF"],
+            isAvailable: true,
+          },
+          {
+            playerId: "away-reliever",
+            playerName: "Away Reliever",
+            positions: ["P"],
+            isAvailable: true,
+          },
+        ],
+        usedPlayers: [],
+        currentPitcher: {
+          playerId: "away-starter",
+          playerName: "Away Starter",
+          position: "P",
+          battingOrder: 3,
+        },
+      },
+      home: { lineup: [], bench: [], usedPlayers: [], currentPitcher: null },
+      awayUsesDh: false,
+      homeUsesDh: false,
+    }));
+    mocks.mockUseParams.mockReturnValue({ gameId: "elimination-game-2" });
+    mocks.mockUseLocation.mockReturnValue({
+      pathname: "/game-tracker/elimination-game-2",
+      search: "",
+      hash: "",
+      state: {
+        gameMode: "elimination",
+        competitionType: "elimination",
+        eliminationId: "elim-1",
+        competitionId: "elim-1",
+        awayTeamId: "lower-seed",
+        homeTeamId: "higher-seed",
+        awayTeamName: "Lower Seed",
+        homeTeamName: "Higher Seed",
+        awayPlayers: [
+          ...makePlayers("away"),
+          {
+            playerId: "away-phantom",
+            name: "Raw Phantom Batter",
+            position: "2B",
+            battingOrder: 10,
+            stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
+            battingHand: "R",
+          },
+        ],
+        awayPitchers: [
+          ...makePitchers("away"),
+          {
+            playerId: "away-reliever",
+            name: "Away Reliever",
+            stats: { ip: "0.0", h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
+            throwingHand: "L",
+            isStarter: false,
+            isActive: false,
+          },
+        ],
+        homePlayers: makePlayers("home"),
+        homePitchers: makePitchers("home"),
+        totalInnings: 7,
+        useDH: false,
+      },
+    });
+    mocks.mockInitializeGame.mockResolvedValue(undefined);
+
+    render(<GameTracker />);
+
+    const expectedNames = [
+      "Snapshot Catcher",
+      "Snapshot First",
+      "Away Starter",
+      "Snapshot Second",
+      "Snapshot Third",
+      "Snapshot Short",
+      "Snapshot Left",
+      "Snapshot Center",
+      "Snapshot Right",
+    ];
+    await waitFor(() => {
+      expect(
+        mocks.mockBattingLineupRender.mock.calls.some(([props]) =>
+          (props as { players: Array<{ name: string }> }).players
+            .map((player) => player.name)
+            .join("|") === expectedNames.join("|"),
+        ),
+      ).toBe(true);
+    });
+    const props = mocks.mockBattingLineupRender.mock.calls
+      .map(([callProps]) => callProps as {
+        players: Array<{ playerId: string; name: string; position: string }>;
+      })
+      .find((callProps) =>
+        callProps.players.map((player) => player.name).join("|") ===
+        expectedNames.join("|"),
+      );
+
+    expect(props).toBeDefined();
+    expect(props!.players[2]).toMatchObject({
+      playerId: "away-starter",
+      position: "P",
+    });
+    expect(props!.players.map((player) => player.name)).not.toContain("Raw Phantom Batter");
   });
 
   test("direct-entry restored franchise scope drives live season stat context", async () => {

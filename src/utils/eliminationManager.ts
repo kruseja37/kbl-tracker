@@ -274,6 +274,14 @@ export async function createEliminationRun(params: {
     if (params.seriesLengths.length !== Math.log2(params.teamsCount)) {
       throw new Error('Choose a series length for every bracket round.');
     }
+    const inningsPerGame = params.inningsPerGame;
+    if (
+      !Number.isInteger(inningsPerGame) ||
+      inningsPerGame < 3 ||
+      inningsPerGame > 9
+    ) {
+      throw new Error('Elimination games must be between 3 and 9 innings.');
+    }
 
     const teamIds = params.seededTeams.map((team) => team.id);
     await deepCopyLeagueToBracket(eliminationId, params.leagueId);
@@ -302,7 +310,7 @@ export async function createEliminationRun(params: {
       teamsQualifying: params.teamsCount,
       rounds,
       gamesPerRound: params.seriesLengths,
-      inningsPerGame: params.inningsPerGame,
+      inningsPerGame,
       useDH: params.useDH,
       liveBeatReporterEnabled: params.liveBeatReporterEnabled,
       postGameColumnsEnabled: params.postGameColumnsEnabled,

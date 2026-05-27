@@ -3297,6 +3297,22 @@ export function GameTracker() {
   const battingActivePitcher = getPreferredActivePitcher(
     battingTeamPitchersRaw,
   );
+  const findBattingRosterPlayer = (
+    playerId?: string,
+    playerName?: string,
+  ) =>
+    battingTeamPlayersRaw.find(
+      (player) =>
+        (playerId && getRosterEntityId(player, battingTeam) === playerId) ||
+        (playerName && player.name === playerName),
+    );
+  const getBattingHandForPlayer = (
+    playerId?: string,
+    playerName?: string,
+  ): "L" | "R" | "S" => {
+    const rosterPlayer = findBattingRosterPlayer(playerId, playerName);
+    return (rosterPlayer?.battingHand || "R") as "L" | "R" | "S";
+  };
   const battingTeamUsesDh = inferTeamUsesDh(
     battingTeamPlayersRaw,
     battingTeamPitchersRaw,
@@ -3305,7 +3321,39 @@ export function GameTracker() {
       navigationState?.useDH,
   );
 
-  const currentLineupBase = battingTeamPlayersRaw
+  const snapshotLineupRows = battingTeamSnapshot.lineup
+    .filter((player) => player.battingOrder !== undefined)
+    .sort((a, b) => a.battingOrder - b.battingOrder)
+    .map((player) => ({
+      playerId: player.playerId,
+      name: player.playerName,
+      pos: player.position || "DH",
+      battingOrder: player.battingOrder,
+      batting:
+        player.playerId === gameState.currentBatterId ||
+        player.playerName === resolvedCurrentBatterName,
+    }));
+  const snapshotCurrentPitcher = battingTeamSnapshot.currentPitcher;
+  const snapshotLineupWithPitcher =
+    snapshotCurrentPitcher?.battingOrder !== undefined &&
+    !snapshotLineupRows.some(
+      (player) => player.playerId === snapshotCurrentPitcher.playerId,
+    )
+      ? [
+          ...snapshotLineupRows,
+          {
+            playerId: snapshotCurrentPitcher.playerId,
+            name: snapshotCurrentPitcher.playerName,
+            pos: snapshotCurrentPitcher.position || "P",
+            battingOrder: snapshotCurrentPitcher.battingOrder,
+            batting:
+              snapshotCurrentPitcher.playerId === gameState.currentBatterId ||
+              snapshotCurrentPitcher.playerName === resolvedCurrentBatterName,
+          },
+        ].sort((a, b) => a.battingOrder - b.battingOrder)
+      : snapshotLineupRows;
+
+  const rosterLineupBase = battingTeamPlayersRaw
     .filter(
       (player) =>
         player.battingOrder !== undefined &&
@@ -3324,6 +3372,10 @@ export function GameTracker() {
       battingOrder: p.battingOrder!,
       batting: p.name === resolvedCurrentBatterName,
     }));
+  const currentLineupBase =
+    snapshotLineupWithPitcher.length > 0
+      ? snapshotLineupWithPitcher
+      : rosterLineupBase;
   const currentLineup = (() => {
     if (
       battingTeamUsesDh ||
@@ -3380,6 +3432,28 @@ export function GameTracker() {
     const lineupIds = new Set(currentLineup.map((player) => player.playerId));
     const seenIds = new Set<string>();
     const entries: BenchPlayer[] = [];
+
+    if (battingTeamSnapshot.bench.length > 0) {
+      for (const player of battingTeamSnapshot.bench) {
+        const rosterPlayer = findBattingRosterPlayer(
+          player.playerId,
+          player.playerName,
+        );
+        if (lineupIds.has(player.playerId) || seenIds.has(player.playerId)) {
+          continue;
+        }
+        seenIds.add(player.playerId);
+        entries.push({
+          id: player.playerId,
+          name: player.playerName,
+          positions: player.positions.length > 0 ? player.positions : ["UT"],
+          battingHand: (rosterPlayer?.battingHand || "R") as "L" | "R" | "S",
+          isUsed: !player.isAvailable,
+        });
+      }
+
+      return entries;
+    }
 
     for (const player of battingTeamPlayersRaw) {
       const playerId = getRosterEntityId(player, battingTeam);
@@ -3441,8 +3515,7 @@ export function GameTracker() {
     position: player.pos,
     battingOrder: idx + 1,
     isCurrentBatter: player.batting,
-    battingHand: (battingTeamPlayersRaw.find((p) => p.name === player.name)
-      ?.battingHand || "R") as "L" | "R" | "S",
+    battingHand: getBattingHandForPlayer(player.playerId, player.name),
   }));
 
   const benchCardData: BenchPlayer[] = benchPlayerEntries;
@@ -3495,10 +3568,6 @@ export function GameTracker() {
   // When isTop = true, home team is fielding; when isTop = false, away team is fielding
   const fieldingTeamPlayers =
     fieldingTeam === "home" ? homeTeamPlayers : awayTeamPlayers;
-  const fieldingTeamSnapshot =
-    fieldingTeam === "away"
-      ? runtimeLineupSnapshot.away
-      : runtimeLineupSnapshot.home;
 
   // GameDiamond removed in Step 1.B (UX-004) — gameDiamondFielders no longer needed.
   // const gameDiamondFielders = useMemo(() => { ... }, [fieldingTeam, fieldingTeamPlayers, getRosterEntityId]);
@@ -5659,6 +5728,38 @@ export function GameTracker() {
     currentPitcherDisplayName,
   ]);
 
+  const findSnapshotLineupPlayer = useCallback(
+    (playerId?: string, playerName?: string) => {
+      if (!playerId && !playerName) return null;
+      const snapshot = getLineupStateSnapshot();
+      const teams: Array<"away" | "home"> = ["away", "home"];
+
+      for (const team of teams) {
+        const teamSnapshot = snapshot[team];
+        const lineupPlayer = teamSnapshot.lineup.find(
+          (player) =>
+            (playerId && player.playerId === playerId) ||
+            (playerName && player.playerName === playerName),
+        );
+        if (lineupPlayer) {
+          return { team, player: lineupPlayer, teamSnapshot };
+        }
+
+        const currentPitcher = teamSnapshot.currentPitcher;
+        if (
+          currentPitcher &&
+          ((playerId && currentPitcher.playerId === playerId) ||
+            (playerName && currentPitcher.playerName === playerName))
+        ) {
+          return { team, player: currentPitcher, teamSnapshot };
+        }
+      }
+
+      return null;
+    },
+    [getLineupStateSnapshot],
+  );
+
   // §9.3: Swap Order handler — swaps batting order between two players
   const handleSwapOrder = useCallback(
     (secondPlayerId: string) => {
@@ -5687,38 +5788,10 @@ export function GameTracker() {
       if (!swapPositionMode) return;
 
       const firstId = swapPositionMode.playerId;
-      let firstPosition = "";
-      let secondPosition = "";
-      const updatePositions = (players: Player[]) => {
-        const p1 = players.find(
-          (p) =>
-            getRosterEntityId(p, battingTeam) === firstId ||
-            getRosterEntityId(p, fieldingTeam) === firstId,
-        );
-        const p2 = players.find(
-          (p) =>
-            getRosterEntityId(p, battingTeam) === secondPlayerId ||
-            getRosterEntityId(p, fieldingTeam) === secondPlayerId,
-        );
-        if (p1 && p2 && p1.position && p2.position) {
-          firstPosition = p1.position;
-          secondPosition = p2.position;
-          const temp = p1.position;
-          p1.position = p2.position;
-          p2.position = temp;
-          return true;
-        }
-        return false;
-      };
-
-      const awayCopy = [...awayTeamPlayers.map((p) => ({ ...p }))];
-      if (updatePositions(awayCopy)) {
-        setAwayTeamPlayers(awayCopy);
-      }
-      const homeCopy = [...homeTeamPlayers.map((p) => ({ ...p }))];
-      if (updatePositions(homeCopy)) {
-        setHomeTeamPlayers(homeCopy);
-      }
+      const firstContext = findSnapshotLineupPlayer(firstId);
+      const secondContext = findSnapshotLineupPlayer(secondPlayerId);
+      const firstPosition = firstContext?.player.position || "";
+      const secondPosition = secondContext?.player.position || "";
 
       // Log via switchPositions hook for BetweenPlayEvent persistence
       if (firstPosition && secondPosition) {
@@ -5744,13 +5817,9 @@ export function GameTracker() {
     },
     [
       swapPositionMode,
-      awayTeamPlayers,
-      homeTeamPlayers,
-      battingTeam,
-      fieldingTeam,
+      findSnapshotLineupPlayer,
       gameState.gamePhase,
       getLineupStateSnapshot,
-      getRosterEntityId,
       syncDisplayedRostersToLineupSnapshot,
       switchPositions,
       queuePlayLogRefresh,
@@ -6121,22 +6190,6 @@ export function GameTracker() {
         return;
       }
 
-      const findTeamPlayer = (playerId?: string, playerName?: string) => {
-        const teams: Array<"away" | "home"> = ["away", "home"];
-        for (const team of teams) {
-          const players = team === "away" ? awayTeamPlayers : homeTeamPlayers;
-          const player = players.find(
-            (candidate) =>
-              (playerId && getRosterEntityId(candidate, team) === playerId) ||
-              (playerName && candidate.name === playerName),
-          );
-          if (player) {
-            return { team, player };
-          }
-        }
-        return null;
-      };
-
       if (sub.type === "pitching_change") {
         const pitchingTeam =
           resolvePitchingTeamSide(sub.outgoingPlayerId, sub.outgoingPlayerName) ||
@@ -6236,11 +6289,11 @@ export function GameTracker() {
           },
         );
       } else if (sub.type === "position_swap") {
-        const incomingContext = findTeamPlayer(
+        const incomingContext = findSnapshotLineupPlayer(
           sub.incomingPlayerId,
           sub.incomingPlayerName,
         );
-        const outgoingContext = findTeamPlayer(
+        const outgoingContext = findSnapshotLineupPlayer(
           sub.outgoingPlayerId,
           sub.outgoingPlayerName,
         );
@@ -6267,7 +6320,7 @@ export function GameTracker() {
         syncDisplayedRostersToLineupSnapshot(getLineupStateSnapshot());
         setRosterVersion((v) => v + 1);
       } else if (sub.type === "position_change") {
-        const playerContext = findTeamPlayer(
+        const playerContext = findSnapshotLineupPlayer(
           sub.incomingPlayerId,
           sub.incomingPlayerName,
         );
@@ -6278,15 +6331,14 @@ export function GameTracker() {
           return;
         }
 
-        const teamPitchers =
-          playerContext.team === "away" ? awayTeamPitchers : homeTeamPitchers;
-        const teamPlayers =
-          playerContext.team === "away" ? awayTeamPlayers : homeTeamPlayers;
-        const teamUsesDh = inferTeamUsesDh(
-          teamPlayers,
-          teamPitchers,
-          persistedUseDh ?? navigationState?.useDH,
-        );
+        const teamUsesDh =
+          (playerContext.team === "away"
+            ? getLineupStateSnapshot().awayUsesDh
+            : getLineupStateSnapshot().homeUsesDh) ??
+          inferSnapshotUsesDh(playerContext.teamSnapshot) ??
+          persistedUseDh ??
+          navigationState?.useDH ??
+          false;
         const currentPosition = playerContext.player.position || "";
 
         if (!sub.newPosition || sub.newPosition === currentPosition) {
@@ -6303,12 +6355,9 @@ export function GameTracker() {
         undoSystem.captureSnapshot(
           `${sub.type}: ${sub.incomingPlayerId} for ${sub.outgoingPlayerId}`,
         );
-        const occupiedPlayer = teamPlayers.find(
+        const occupiedPlayer = playerContext.teamSnapshot.lineup.find(
           (candidate) =>
-            getRosterEntityId(candidate, playerContext.team) !==
-              sub.incomingPlayerId &&
-            candidate.battingOrder !== undefined &&
-            !candidate.isOutOfGame &&
+            candidate.playerId !== sub.incomingPlayerId &&
             candidate.position === sub.newPosition,
         );
 
@@ -6316,7 +6365,7 @@ export function GameTracker() {
           switchPositions([
             { playerId: sub.incomingPlayerId, newPosition: sub.newPosition },
             {
-              playerId: getRosterEntityId(occupiedPlayer, playerContext.team),
+              playerId: occupiedPlayer.playerId,
               newPosition: currentPosition,
             },
           ]);
@@ -6369,61 +6418,8 @@ export function GameTracker() {
           setPendingPH(sub.incomingPlayerId);
         }
 
-        // EXH-018 FIX: Also update local player arrays so UI reflects the substitution
-        // Find which team the outgoing player is on and update that team's roster
-        const updateTeamRoster = (
-          players: Player[],
-          setPlayers: React.Dispatch<React.SetStateAction<Player[]>>,
-        ) => {
-          const outgoingIndex = players.findIndex(
-            (p) => p.name === sub.outgoingPlayerName,
-          );
-          const incomingIndex = players.findIndex(
-            (p) => p.name === sub.incomingPlayerName,
-          );
-
-          if (outgoingIndex >= 0 && incomingIndex >= 0) {
-            setPlayers((prev) => {
-              const updated = [...prev];
-              // Transfer batting order from outgoing to incoming player
-              const outgoingBattingOrder = updated[outgoingIndex].battingOrder;
-              const outgoingPosition =
-                sub.newPosition || updated[outgoingIndex].position;
-
-              // Incoming player takes the batting order and position
-              updated[incomingIndex] = {
-                ...updated[incomingIndex],
-                battingOrder: outgoingBattingOrder,
-                position: outgoingPosition,
-              };
-
-              // Outgoing player leaves the lineup slot; only live-game subs burn them.
-              updated[outgoingIndex] = {
-                ...updated[outgoingIndex],
-                battingOrder: undefined,
-                position: undefined,
-                isOutOfGame: gameState.gamePhase === "LIVE",
-              };
-
-              const teamPitchers =
-                setPlayers === setAwayTeamPlayers
-                  ? awayTeamPitchers
-                  : homeTeamPitchers;
-              return normalizeRosterForDh(
-                updated,
-                teamPitchers,
-                persistedUseDh ?? navigationState?.useDH,
-              );
-            });
-            return true;
-          }
-          return false;
-        };
-
-        // Try away team first, then home team
-        if (!updateTeamRoster(awayTeamPlayers, setAwayTeamPlayers)) {
-          updateTeamRoster(homeTeamPlayers, setHomeTeamPlayers);
-        }
+        syncDisplayedRostersToLineupSnapshot(getLineupStateSnapshot());
+        setRosterVersion((v) => v + 1);
       }
       queuePlayLogRefresh(80);
     },
@@ -8229,50 +8225,14 @@ export function GameTracker() {
         return;
       }
 
-      // Update local player state for UI display
-      const players = teamType === "away" ? awayTeamPlayers : homeTeamPlayers;
-      const setPlayers =
-        teamType === "away" ? setAwayTeamPlayers : setHomeTeamPlayers;
-
-      const outgoingIndex = players.findIndex(
-        (p) => p.name === lineupPlayerName,
-      );
-      const incomingIndex = players.findIndex(
-        (p) => p.name === benchPlayerName,
-      );
-
-      if (outgoingIndex >= 0 && incomingIndex >= 0) {
-        setPlayers((prev) => {
-          const updated = [...prev];
-          // Transfer batting order and position from outgoing to incoming player
-          const outgoingBattingOrder = updated[outgoingIndex].battingOrder;
-          const outgoingPosition = updated[outgoingIndex].position;
-
-          // Incoming player takes the batting order and position
-          updated[incomingIndex] = {
-            ...updated[incomingIndex],
-            battingOrder: outgoingBattingOrder,
-            position: outgoingPosition,
-          };
-
-          // Outgoing player leaves the lineup slot; only live-game subs burn them.
-          updated[outgoingIndex] = {
-            ...updated[outgoingIndex],
-            battingOrder: undefined,
-            position: undefined, // Remove position so they don't show in field
-            isOutOfGame: gameState.gamePhase === "LIVE",
-          };
-
-          return updated;
-        });
-      }
+      syncDisplayedRostersToLineupSnapshot(getLineupStateSnapshot());
+      setRosterVersion((v) => v + 1);
     },
     [
-      awayTeamPlayers,
-      gameState.gamePhase,
+      getLineupStateSnapshot,
       getPlayerIdFromName,
-      homeTeamPlayers,
       makeSubstitution,
+      syncDisplayedRostersToLineupSnapshot,
     ],
   );
 

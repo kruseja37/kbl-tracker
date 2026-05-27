@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { EliminationHome } from "../../app/pages/EliminationHome";
@@ -14,6 +14,9 @@ const {
   mockGetSeriesByPlayoff,
   mockGetPlayoffLeaders,
   mockGetInstanceTeamImpactLeaderboards,
+  mockBuildEliminationGameTrackerRoster,
+  mockGetEliminationTeam,
+  mockResolveManagerForTeam,
   mockNavigate,
 } = vi.hoisted(() => ({
   mockGetElimination: vi.fn(),
@@ -24,6 +27,9 @@ const {
   mockGetSeriesByPlayoff: vi.fn(),
   mockGetPlayoffLeaders: vi.fn(),
   mockGetInstanceTeamImpactLeaderboards: vi.fn(),
+  mockBuildEliminationGameTrackerRoster: vi.fn(),
+  mockGetEliminationTeam: vi.fn(),
+  mockResolveManagerForTeam: vi.fn(),
   mockNavigate: vi.fn(),
 }));
 
@@ -38,11 +44,11 @@ vi.mock("../../../utils/eliminationManager", () => ({
 }));
 
 vi.mock("../../../utils/eliminationRosterStorage", () => ({
-  buildEliminationGameTrackerRoster: vi.fn(),
+  buildEliminationGameTrackerRoster: mockBuildEliminationGameTrackerRoster,
 }));
 
 vi.mock("../../../utils/eliminationPlayerStorage", () => ({
-  getEliminationTeam: vi.fn(),
+  getEliminationTeam: mockGetEliminationTeam,
 }));
 
 vi.mock("../../../utils/playoffStorage", () => ({
@@ -64,7 +70,7 @@ vi.mock("../../../engines/playoffEngine", () => ({
 }));
 
 vi.mock("../../../utils/managerIdentityStorage", () => ({
-  resolveManagerForTeam: vi.fn(),
+  resolveManagerForTeam: mockResolveManagerForTeam,
 }));
 
 vi.mock("../../../utils/teamImpact", () => ({
@@ -118,6 +124,27 @@ describe("EliminationHome leaders Team Impact panels", () => {
     mockGetSeriesByPlayoff.mockResolvedValue([]);
     mockGetPlayoffLeaders.mockResolvedValue([playoffLeader()]);
     mockGetInstanceTeamImpactLeaderboards.mockResolvedValue(impactLeaderboards());
+    mockBuildEliminationGameTrackerRoster.mockImplementation(
+      async (_eliminationId: string, teamId: string) =>
+        gameTrackerRosterFixture(teamId),
+    );
+    mockGetEliminationTeam.mockImplementation(
+      async (_eliminationId: string, teamId: string) => ({
+        id: teamId,
+        name: teamId === "alpha" ? "Alpha" : "Beta",
+        abbreviation: teamId.toUpperCase().slice(0, 3),
+        managerId: `${teamId}-manager`,
+        managerName: `${teamId} Manager`,
+        colors: { primary: "#123456", secondary: "#abcdef" },
+        stadium: `${teamId} Park`,
+      }),
+    );
+    mockResolveManagerForTeam.mockImplementation(
+      async ({ team }: { team: { id: string; name: string } }) => ({
+        managerId: `${team.id}-manager`,
+        managerName: `${team.name} Manager`,
+      }),
+    );
   });
 
   test("Leaders tab renders Team Impact and POG leaderboards for the current run", async () => {
@@ -133,7 +160,7 @@ describe("EliminationHome leaders Team Impact panels", () => {
     expect(within(panel).getByText("Overall POG")).toBeInTheDocument();
     expect(within(panel).getByText("Best Manager")).toBeInTheDocument();
     expect(within(panel).getAllByText("Alpha Star").length).toBeGreaterThan(0);
-    expect(within(panel).getByText("+0.500")).toBeInTheDocument();
+    expect(within(panel).getByText("+50.0 pp")).toBeInTheDocument();
     expect(await screen.findByText("BATTING LEADERS")).toBeInTheDocument();
   });
 
@@ -236,6 +263,32 @@ describe("EliminationHome leaders Team Impact panels", () => {
     expect(state.seasonId).toBeUndefined();
   });
 });
+
+function gameTrackerRosterFixture(teamId: string) {
+  return {
+    players: Array.from({ length: 9 }, (_, index) => ({
+      playerId: `${teamId}-batter-${index + 1}`,
+      name: `${teamId} Batter ${index + 1}`,
+      position:
+        ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH"][index] ||
+        "DH",
+      battingOrder: index + 1,
+      stats: { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 },
+      battingHand: "R",
+    })),
+    pitchers: [
+      {
+        playerId: `${teamId}-starter`,
+        name: `${teamId} Starter`,
+        stats: { ip: "0.0", h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
+        throwingHand: "R",
+        isStarter: true,
+        isActive: true,
+      },
+    ],
+    optimalLineups: {},
+  };
+}
 
 function playoffTeam(teamId: string, teamName: string) {
   return {
