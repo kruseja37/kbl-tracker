@@ -1045,6 +1045,7 @@ import {
   runnerDefaultsToAdvancement,
   type PendingRunnerCorrectionAction,
 } from "../utils/gameTrackerRunnerCorrection";
+import { getHomeWinExpectancyV2 } from "../../../engines/winExpectancyModelV2";
 import { formatWpaPoints } from "../../../utils/wpaDisplay";
 import type { FielderCredit } from "../components/modals/FielderCreditModal";
 
@@ -2107,6 +2108,56 @@ export function GameTracker() {
       hookTotalInningsRef.current || 9,
     );
   }, [buildGameStateForLI, hookTotalInningsRef]);
+
+  const liveHomeWinProbability = useMemo(() => {
+    try {
+      const result = getHomeWinExpectancyV2({
+        inning: gameState.inning,
+        halfInning: gameState.isTop ? "TOP" : "BOTTOM",
+        outs: Math.min(Math.max(gameState.outs ?? 0, 0), 2) as 0 | 1 | 2,
+        bases: {
+          first: !!gameState.bases.first,
+          second: !!gameState.bases.second,
+          third: !!gameState.bases.third,
+        },
+        homeScore: gameState.homeScore,
+        awayScore: gameState.awayScore,
+        scheduledInnings: hookTotalInningsRef.current || 9,
+        useGhostRunner: hookUseGhostRunnerRef.current,
+        extraInningRunner: hookExtraInningRunnerRef.current,
+        extraInningRunnerDelay: hookExtraInningRunnerDelayRef.current,
+      });
+
+      return result.homeWinProbability;
+    } catch (error) {
+      console.warn(
+        "[GameTracker] Failed to calculate live home win probability",
+        error,
+      );
+      return null;
+    }
+  }, [
+    gameState.inning,
+    gameState.isTop,
+    gameState.outs,
+    gameState.bases.first,
+    gameState.bases.second,
+    gameState.bases.third,
+    gameState.homeScore,
+    gameState.awayScore,
+    hookTotalInningsRef,
+    hookUseGhostRunnerRef,
+    hookExtraInningRunnerRef,
+    hookExtraInningRunnerDelayRef,
+  ]);
+  const liveHomeWinProbabilityLabel =
+    liveHomeWinProbability == null
+      ? "--.-%"
+      : `${(liveHomeWinProbability * 100).toFixed(1)}%`;
+  const liveHomeWinProbabilityColor =
+    liveHomeWinProbability != null && liveHomeWinProbability < 0.5
+      ? "text-[#FF3C3C]"
+      : "text-[#F2C041]";
 
   // Track selected hit/out/walk details for the two-step record flow
   const [pendingOutcome, setPendingOutcome] = useState<{
@@ -4340,8 +4391,12 @@ export function GameTracker() {
 
         // MAJ-09: Extract bench players (players without batting order = not in starting lineup)
         const awayStarterIds = new Set(awayLineup.map((p) => p.playerId));
+        const awayActivePitcherId = awayActivePitcher
+          ? getRosterEntityId(awayActivePitcher, "away")
+          : null;
         const awayBenchPosition = awayTeamPlayers
           .filter((p) => !awayStarterIds.has(getRosterEntityId(p, "away")))
+          .filter((p) => getRosterEntityId(p, "away") !== awayActivePitcherId)
           .filter((p) => !p.isOutOfGame)
           .map((p) => ({
             playerId: getRosterEntityId(p, "away"),
@@ -4365,8 +4420,12 @@ export function GameTracker() {
         });
 
         const homeStarterIds = new Set(homeLineup.map((p) => p.playerId));
+        const homeActivePitcherId = homeActivePitcher
+          ? getRosterEntityId(homeActivePitcher, "home")
+          : null;
         const homeBenchPosition = homeTeamPlayers
           .filter((p) => !homeStarterIds.has(getRosterEntityId(p, "home")))
+          .filter((p) => getRosterEntityId(p, "home") !== homeActivePitcherId)
           .filter((p) => !p.isOutOfGame)
           .map((p) => ({
             playerId: getRosterEntityId(p, "home"),
@@ -11793,6 +11852,22 @@ export function GameTracker() {
               setBeatReporterSoundsOn((value) => !value)
             }
           />
+          <div
+            className="pointer-events-none absolute left-[60%] top-1/2 z-10 -translate-y-1/2"
+            aria-live="polite"
+          >
+            <div className="flex min-w-[132px] items-center justify-start gap-2 text-center sm:min-w-[160px]">
+              <span className="max-w-[84px] truncate text-[10px] font-black uppercase tracking-[0.1em] text-[#9FBE9F] sm:max-w-[104px] sm:text-[11px]">
+                {scorebugTeamLabels.home}
+              </span>
+              <span
+                className={`text-[13px] font-black leading-tight sm:text-[15px] ${liveHomeWinProbabilityColor}`}
+                data-testid="game-tracker-home-win-probability"
+              >
+                {liveHomeWinProbabilityLabel}
+              </span>
+            </div>
+          </div>
           {deferredPitchCounts.length > 0 && (
             <div className="absolute right-3 top-full mt-2 flex flex-col items-end gap-2">
               <button
