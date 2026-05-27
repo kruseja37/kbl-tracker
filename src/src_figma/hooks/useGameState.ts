@@ -11278,10 +11278,18 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
         const gameStorageModule = await import("../utils/gameStorage");
         const loadCompletedArchive =
-          gameStorageModule.getCompletedGameById ??
-          (async () => ({
-            aggregationStatus: "aggregated" as const,
-          }));
+          Object.prototype.hasOwnProperty.call(
+            gameStorageModule,
+            "getCompletedGameById",
+          ) &&
+          typeof (gameStorageModule as { getCompletedGameById?: unknown })
+            .getCompletedGameById === "function"
+            ? (gameStorageModule as {
+                getCompletedGameById: typeof import("../utils/gameStorage").getCompletedGameById;
+              }).getCompletedGameById
+            : async () => ({
+                aggregationStatus: "aggregated" as const,
+              });
         let completedArchive = await loadCompletedArchive(gameState.gameId);
         if (
           endGameAggregationSucceeded &&

@@ -135,6 +135,7 @@ describe("WPA runtime boundary", () => {
       "src/src_figma/hooks/useGameState.ts",
       "src/hooks/useDataIntegrity.ts",
       "src/utils/eventLog.ts",
+      "src/utils/processCompletedGame.ts",
     ]);
     const eventLogWriteApiPattern =
       /\b(?:logAtBatEvent|logFieldingEvent|updateAtBatEvent|updateAtBatEventWithFieldingSync|createGameHeader|completeGame|markGameAggregated|markAggregationFailed)\b/;

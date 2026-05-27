@@ -257,7 +257,9 @@ describe("R3 Round 5 bug fixes", () => {
     mockGetBetweenPlayEvents.mockResolvedValue([]);
     mockGetGameFieldingEvents.mockResolvedValue([]);
     mockGetGameHeader.mockResolvedValue({ aggregated: false });
-    mockGetCompletedGameById.mockResolvedValue(null);
+    mockGetCompletedGameById.mockResolvedValue({
+      aggregationStatus: "aggregated",
+    });
   });
 
   test("uses total innings for scoreboard init and archives the same stored POG ordering", async () => {
