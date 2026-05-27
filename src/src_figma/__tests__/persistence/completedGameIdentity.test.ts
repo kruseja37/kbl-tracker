@@ -15,6 +15,8 @@ import {
   getAllCompletedGames,
   getCompletedGameById,
   getRecentGames,
+  loadCurrentGame,
+  saveCurrentGame,
 } from '../../../utils/gameStorage';
 
 function createPersistedGameState(
@@ -55,6 +57,30 @@ function createPersistedGameState(
 }
 
 describe('completed game franchise identity', () => {
+  test('active-game snapshot policy keeps one resumable current game with explicit overwrite', async () => {
+    await saveCurrentGame(
+      createPersistedGameState({
+        gameId: 'active-franchise-game-1',
+        franchiseId: 'franchise-active-1',
+        scheduleGameId: 'schedule-active-1',
+      }),
+    );
+    await saveCurrentGame(
+      createPersistedGameState({
+        gameId: 'active-franchise-game-2',
+        franchiseId: 'franchise-active-2',
+        scheduleGameId: 'schedule-active-2',
+      }),
+    );
+
+    await expect(loadCurrentGame()).resolves.toMatchObject({
+      id: 'current',
+      gameId: 'active-franchise-game-2',
+      franchiseId: 'franchise-active-2',
+      scheduleGameId: 'schedule-active-2',
+    });
+  });
+
   test('archiveCompletedGame persists franchiseId and scheduleGameId from archive context', async () => {
     await archiveCompletedGame(
       createPersistedGameState({

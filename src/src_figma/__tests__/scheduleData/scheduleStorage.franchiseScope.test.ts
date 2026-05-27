@@ -116,6 +116,39 @@ describe('scheduleStorage franchise scoping', () => {
     });
   });
 
+  test('repeating the same completion does not duplicate or mutate schedule completion', async () => {
+    const scheduledGame = await addGame({
+      franchiseId: 'franchise-1',
+      seasonNumber: 1,
+      awayTeamId: 'team-a',
+      homeTeamId: 'team-b',
+    });
+    const result = {
+      awayScore: 4,
+      homeScore: 2,
+      winningTeamId: 'team-a',
+      losingTeamId: 'team-b',
+      gameLogId: 'completed-idempotent-1',
+    };
+
+    await completeGame(scheduledGame.id, result);
+    const [afterFirst] = await getAllGamesByFranchise('franchise-1', 1);
+    await completeGame(scheduledGame.id, result);
+    const [afterSecond] = await getAllGamesByFranchise('franchise-1', 1);
+
+    expect(afterSecond).toMatchObject({
+      id: scheduledGame.id,
+      status: 'COMPLETED',
+      result,
+      gameLogId: 'completed-idempotent-1',
+    });
+    expect(afterSecond.completedAt).toBe(afterFirst.completedAt);
+    await expect(getScheduleMetadataByFranchise('franchise-1', 1)).resolves.toMatchObject({
+      totalGamesScheduled: 1,
+      totalGamesCompleted: 1,
+    });
+  });
+
   test('manual add and delete remain scoped to one franchise schedule', async () => {
     const franchiseOneGame = await addGame({
       franchiseId: 'franchise-1',

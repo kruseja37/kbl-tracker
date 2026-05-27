@@ -18,7 +18,12 @@ import {
   type GameAggregationOptions,
   type GameAggregationResult,
 } from './seasonAggregator';
-import { archiveCompletedGame, resolveExhibitionLeagueId } from './gameStorage';
+import {
+  archiveCompletedGame,
+  getCompletedGameById,
+  resolveExhibitionLeagueId,
+} from './gameStorage';
+import { getGameHeader, markAggregationFailed, markGameAggregated } from './eventLog';
 import { getEffectivePlayer } from './playerOverrides';
 import { registerAlmanacPlayers } from './registerAlmanacPlayers';
 
@@ -109,15 +114,51 @@ export async function processCompletedGame(
   archiveOptions?: CompletedGameArchiveOptions,
 ): Promise<ProcessGameResult> {
   const resolvedLeagueId = leagueId ?? resolveExhibitionLeagueId(gameState);
+  const existingArchive = await getCompletedGameById(gameState.gameId);
+  if (existingArchive && existingArchive.aggregationStatus !== 'incomplete') {
+    return { aggregation: { success: true, milestones: null } };
+  }
+
+  const header = await getGameHeader(gameState.gameId);
+  if (header?.aggregated === true) {
+    await archiveCompletedGame(
+      gameState,
+      archiveOptions?.finalScore ?? {
+        away: gameState.awayScore,
+        home: gameState.homeScore,
+      },
+      archiveOptions?.inningScores ?? [],
+      archiveOptions?.seasonId ?? options?.seasonId,
+      archiveOptions?.context ?? {
+        leagueId: resolvedLeagueId,
+      },
+    );
+    return { aggregation: { success: true, milestones: null } };
+  }
 
   // Step 1: Aggregate game stats to season totals
   const aggregation = await aggregateGameToSeason(gameState, options);
 
   if (aggregation.success !== true) {
+    try {
+      await markAggregationFailed(
+        gameState.gameId,
+        aggregation.error ||
+          `Failed to aggregate completed game ${gameState.gameId} to season stats`,
+      );
+    } catch (error) {
+      console.warn('[processCompletedGame] Failed to mark aggregation failure:', error);
+    }
     throw new Error(
       aggregation.error ||
         `Failed to aggregate completed game ${gameState.gameId} to season stats`,
     );
+  }
+
+  try {
+    await markGameAggregated(gameState.gameId);
+  } catch (error) {
+    console.warn('[processCompletedGame] Failed to mark game aggregated:', error);
   }
 
   if (resolvedLeagueId) {

@@ -13,6 +13,7 @@ const {
   mockGetGameFieldingEvents,
   mockGetGameHeader,
   mockArchiveCompletedGame,
+  mockGetCompletedGameById,
   mockSaveCurrentGame,
   mockLoadCurrentGame,
   mockImmediateSaveCurrentGame,
@@ -31,6 +32,10 @@ const {
   mockGetGameFieldingEvents: vi.fn().mockResolvedValue([]),
   mockGetGameHeader: vi.fn().mockResolvedValue({ aggregated: false }),
   mockArchiveCompletedGame: vi.fn().mockResolvedValue(undefined),
+  mockGetCompletedGameById: vi.fn().mockResolvedValue({
+    gameId: "game-r4-end",
+    aggregationStatus: "aggregated",
+  }),
   mockSaveCurrentGame: vi.fn().mockResolvedValue(undefined),
   mockLoadCurrentGame: vi.fn().mockResolvedValue(null),
   mockImmediateSaveCurrentGame: vi.fn().mockResolvedValue(undefined),
@@ -56,6 +61,7 @@ vi.mock("../../../utils/eventLog", () => ({
 
 vi.mock("../../utils/gameStorage", () => ({
   archiveCompletedGame: mockArchiveCompletedGame,
+  getCompletedGameById: mockGetCompletedGameById,
   saveCurrentGame: mockSaveCurrentGame,
   loadCurrentGame: mockLoadCurrentGame,
   immediateSaveCurrentGame: mockImmediateSaveCurrentGame,
@@ -74,7 +80,7 @@ import { useGameState } from "../../hooks/useGameState";
 
 async function initializeGame(result: {
   current: ReturnType<typeof useGameState>;
-}) {
+}, overrides: Partial<Parameters<ReturnType<typeof useGameState>["initializeGame"]>[0]> = {}) {
   await act(async () => {
     await result.current.initializeGame({
       gameId: "game-r4-end",
@@ -113,6 +119,7 @@ async function initializeGame(result: {
       awayBench: [],
       homeBench: [],
       seasonNumber: 1,
+      ...overrides,
     });
   });
 }
@@ -124,6 +131,10 @@ describe("bugfix R4-02: end-game pitch count continuation", () => {
     mockGetBetweenPlayEvents.mockResolvedValue([]);
     mockGetGameFieldingEvents.mockResolvedValue([]);
     mockGetGameHeader.mockResolvedValue({ aggregated: false });
+    mockGetCompletedGameById.mockResolvedValue({
+      gameId: "game-r4-end",
+      aggregationStatus: "aggregated",
+    });
   });
 
   test("resolves endGame after confirming the final pitch count", async () => {
@@ -190,5 +201,34 @@ describe("bugfix R4-02: end-game pitch count continuation", () => {
       }),
     );
     expect(result.current.pitchCountPrompt).toBeNull();
+  });
+
+  test("blocks restored playoff advancement when completed archive repair fails", async () => {
+    mockGetGameHeader.mockResolvedValue({ aggregated: true });
+    mockGetCompletedGameById.mockResolvedValue({
+      gameId: "game-r4-end",
+      aggregationStatus: "incomplete",
+    });
+    mockArchiveCompletedGame.mockRejectedValueOnce(new Error("archive down"));
+
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result, {
+      competitionType: "playoff",
+      competitionId: "playoff-1",
+      seasonId: "franchise-season-1",
+      statsScopeId: "franchise-season-1",
+      franchiseId: "franchise-1",
+      playoffId: "playoff-1",
+      playoffSeriesId: "series-1",
+      playoffGameNumber: 1,
+    });
+
+    await act(async () => {
+      await expect(result.current.endGame()).rejects.toThrow("archive down");
+    });
+
+    expect(mockProcessCompletedGame).not.toHaveBeenCalled();
+    expect(mockAggregateGameToPlayoffStats).not.toHaveBeenCalled();
+    expect(mockClearCurrentGame).toHaveBeenCalledTimes(1);
   });
 });

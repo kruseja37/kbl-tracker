@@ -154,6 +154,7 @@ export interface PlayoffPlayerStats {
   playerName: string;
   teamId: string;
   sourceType?: 'franchise' | 'elimination';  // Defaults to 'franchise' for existing records
+  processedGameIds?: string[];
 
   // Batting
   games: number;
@@ -725,6 +726,14 @@ export async function startPlayoff(playoffId: string): Promise<PlayoffConfig> {
 }
 
 export async function completePlayoff(playoffId: string, championId: string, mvp?: PlayoffMVP): Promise<PlayoffConfig> {
+  const existing = await getPlayoff(playoffId);
+  if (existing?.status === 'COMPLETED') {
+    if (existing.champion && existing.champion !== championId) {
+      throw new Error(`Playoff ${playoffId} is already completed with a different champion`);
+    }
+    return existing;
+  }
+
   return updatePlayoff(playoffId, {
     status: 'COMPLETED',
     completedAt: Date.now(),
@@ -984,6 +993,11 @@ export async function createNextRoundSeries(
 
   if (nextRound > playoff.rounds) {
     throw new Error(`Cannot advance past final round (${playoff.rounds})`);
+  }
+
+  const existingNextRound = await getSeriesByRound(playoffId, nextRound);
+  if (existingNextRound.length > 0) {
+    return existingNextRound;
   }
 
   // Get all completed series from the round that just finished
@@ -1425,6 +1439,15 @@ export async function aggregateGameToPlayoffStats(
         (request.result || []).map(record => [record.playerId, record])
       );
 
+      if (
+        gameState.gameId &&
+        (request.result || []).some((record: PlayoffPlayerStats) =>
+          record.processedGameIds?.includes(gameState.gameId),
+        )
+      ) {
+        return;
+      }
+
       for (const playerId of allPlayerIds) {
         const batting = battingByPlayer.get(playerId);
         const pitching = pitchingByPlayer.get(playerId);
@@ -1437,6 +1460,9 @@ export async function aggregateGameToPlayoffStats(
           playerName: batting?.playerName || pitching?.pitcherName || existing?.playerName || 'Unknown Player',
           teamId: batting?.teamId || pitching?.teamId || existing?.teamId || 'unknown',
           sourceType: existing?.sourceType ?? sourceType,
+          processedGameIds: gameState.gameId
+            ? [...(existing?.processedGameIds || []), gameState.gameId]
+            : existing?.processedGameIds,
           games: (existing?.games || 0) + (batting?.games || 0),
           atBats: (existing?.atBats || 0) + (batting?.atBats || 0),
           hits: (existing?.hits || 0) + (batting?.hits || 0),

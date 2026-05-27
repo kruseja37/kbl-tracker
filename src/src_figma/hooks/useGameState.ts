@@ -17,7 +17,6 @@ import {
   getGameEvents,
   getBetweenPlayEvent,
   getBetweenPlayEvents,
-  markGameAggregated,
   getGameFieldingEvents,
   getGameHeader,
   updateBetweenPlayEvent,
@@ -802,6 +801,28 @@ export interface RestoredPlayoffContext {
     | "world_series";
   isEliminationGame?: boolean;
   isClinchGame?: boolean;
+}
+
+function cloneLineupSnapshot(
+  lineup: GameInitConfig["awayLineup"],
+): GameInitConfig["awayLineup"] {
+  return lineup.map((player) => ({ ...player }));
+}
+
+function cloneBenchSnapshot(
+  bench: NonNullable<GameInitConfig["awayBench"]> = [],
+): NonNullable<GameInitConfig["awayBench"]> {
+  return bench.map((player) => ({
+    ...player,
+    positions: [...player.positions],
+  }));
+}
+
+function cloneGameLockLineupSnapshots<T extends GameLockLineupSnapshots | undefined>(
+  snapshots: T,
+): T {
+  if (!snapshots) return snapshots;
+  return structuredClone(snapshots);
 }
 
 function getGameStartedSessionKey(gameId: string): string {
@@ -3631,10 +3652,14 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         totalInnings: totalInningsRef.current,
         awayUsesDh: awayUsesDhRef.current,
         homeUsesDh: homeUsesDhRef.current,
-        awayLineup: awayLineupRef.current,
-        homeLineup: homeLineupRef.current,
-        optimalLineupSnapshots: optimalLineupSnapshotsRef.current,
-        chosenLineupSnapshots: chosenLineupSnapshotsRef.current,
+        awayLineup: cloneLineupSnapshot(awayLineupRef.current),
+        homeLineup: cloneLineupSnapshot(homeLineupRef.current),
+        optimalLineupSnapshots: cloneGameLockLineupSnapshots(
+          optimalLineupSnapshotsRef.current,
+        ),
+        chosenLineupSnapshots: cloneGameLockLineupSnapshots(
+          chosenLineupSnapshotsRef.current,
+        ),
         awayLineupState:
           awayLineupStateRef.current as PersistedGameState["awayLineupState"],
         homeLineupState:
@@ -4124,11 +4149,20 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         totalInnings: totalInningsRef.current,
       });
 
+      const awayLineupSnapshot = cloneLineupSnapshot(config.awayLineup);
+      const homeLineupSnapshot = cloneLineupSnapshot(config.homeLineup);
+      const awayBenchSnapshot = cloneBenchSnapshot(config.awayBench);
+      const homeBenchSnapshot = cloneBenchSnapshot(config.homeBench);
+
       // Store lineup refs
-      awayLineupRef.current = config.awayLineup;
-      homeLineupRef.current = config.homeLineup;
-      optimalLineupSnapshotsRef.current = config.optimalLineupSnapshots;
-      chosenLineupSnapshotsRef.current = config.chosenLineupSnapshots;
+      awayLineupRef.current = awayLineupSnapshot;
+      homeLineupRef.current = homeLineupSnapshot;
+      optimalLineupSnapshotsRef.current = cloneGameLockLineupSnapshots(
+        config.optimalLineupSnapshots,
+      );
+      chosenLineupSnapshotsRef.current = cloneGameLockLineupSnapshots(
+        config.chosenLineupSnapshots,
+      );
       seasonIdRef.current = config.seasonId || "";
       statsScopeIdRef.current = config.statsScopeId || config.seasonId || "";
       competitionTypeRef.current = config.competitionType;
@@ -4151,12 +4185,12 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       awayRecordRef.current = config.awayRecord;
       homeRecordRef.current = config.homeRecord;
       // R3: Derive DH flags from whether lineup has a DH-position player
-      awayUsesDhRef.current = config.awayLineup.some(p => p.position === "DH");
-      homeUsesDhRef.current = config.homeLineup.some(p => p.position === "DH");
+      awayUsesDhRef.current = awayLineupSnapshot.some(p => p.position === "DH");
+      homeUsesDhRef.current = homeLineupSnapshot.some(p => p.position === "DH");
 
       // MAJ-09: Initialize full LineupState for substitution validation
       awayLineupStateRef.current = {
-        lineup: config.awayLineup.map((p, idx) => ({
+        lineup: awayLineupSnapshot.map((p, idx) => ({
           playerId: p.playerId,
           playerName: p.playerName,
           position: p.position as Position,
@@ -4164,7 +4198,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           enteredInning: 1,
           isStarter: true,
         })),
-        bench: (config.awayBench || []).map((b) => ({
+        bench: awayBenchSnapshot.map((b) => ({
           playerId: b.playerId,
           playerName: b.playerName,
           positions: b.positions as Position[],
@@ -4176,7 +4210,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           playerName: config.awayStartingPitcherName,
           position: "P" as Position,
           battingOrder:
-            config.awayLineup.findIndex(
+            awayLineupSnapshot.findIndex(
               (p) => p.playerId === config.awayStartingPitcherId,
             ) + 1 || 1,
           enteredInning: 1,
@@ -4184,7 +4218,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         },
       };
       homeLineupStateRef.current = {
-        lineup: config.homeLineup.map((p, idx) => ({
+        lineup: homeLineupSnapshot.map((p, idx) => ({
           playerId: p.playerId,
           playerName: p.playerName,
           position: p.position as Position,
@@ -4192,7 +4226,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           enteredInning: 1,
           isStarter: true,
         })),
-        bench: (config.homeBench || []).map((b) => ({
+        bench: homeBenchSnapshot.map((b) => ({
           playerId: b.playerId,
           playerName: b.playerName,
           positions: b.positions as Position[],
@@ -4204,7 +4238,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           playerName: config.homeStartingPitcherName,
           position: "P" as Position,
           battingOrder:
-            config.homeLineup.findIndex(
+            homeLineupSnapshot.findIndex(
               (p) => p.playerId === config.homeStartingPitcherId,
             ) + 1 || 1,
           enteredInning: 1,
@@ -4212,16 +4246,16 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         },
       };
 
-      for (const player of config.awayLineup) {
+      for (const player of awayLineupSnapshot) {
         registerIdentityForSide(player.playerId, player.playerName, "away");
       }
-      for (const player of config.homeLineup) {
+      for (const player of homeLineupSnapshot) {
         registerIdentityForSide(player.playerId, player.playerName, "home");
       }
-      for (const player of config.awayBench || []) {
+      for (const player of awayBenchSnapshot) {
         registerIdentityForSide(player.playerId, player.playerName, "away");
       }
-      for (const player of config.homeBench || []) {
+      for (const player of homeBenchSnapshot) {
         registerIdentityForSide(player.playerId, player.playerName, "home");
       }
       registerIdentityForSide(
@@ -4271,13 +4305,13 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         awayTeamName: config.awayTeamName,
         homeTeamName: config.homeTeamName,
         startingLineups: {
-          away: config.awayLineup.map((player, idx) => ({
+          away: awayLineupSnapshot.map((player, idx) => ({
             playerId: player.playerId,
             playerName: player.playerName,
             position: player.position,
             battingOrder: idx + 1,
           })),
-          home: config.homeLineup.map((player, idx) => ({
+          home: homeLineupSnapshot.map((player, idx) => ({
             playerId: player.playerId,
             playerName: player.playerName,
             position: player.position,
@@ -4285,8 +4319,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           })),
         },
         benchRosters: {
-          away: config.awayBench || [],
-          home: config.homeBench || [],
+          away: awayBenchSnapshot,
+          home: homeBenchSnapshot,
         },
         startingPitchers: {
           away: {
@@ -4298,8 +4332,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             playerName: config.homeStartingPitcherName,
           },
         },
-        optimalLineupSnapshots: config.optimalLineupSnapshots,
-        chosenLineupSnapshots: config.chosenLineupSnapshots,
+        optimalLineupSnapshots: optimalLineupSnapshotsRef.current,
+        chosenLineupSnapshots: chosenLineupSnapshotsRef.current,
         finalScore: null,
         finalInning: totalInningsRef.current,
         totalInnings: totalInningsRef.current,
@@ -4319,7 +4353,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
 
       // Initialize player stats for all lineup players
       const initialPlayerStats = new Map<string, PlayerGameStats>();
-      for (const player of [...config.awayLineup, ...config.homeLineup]) {
+      for (const player of [...awayLineupSnapshot, ...homeLineupSnapshot]) {
         initialPlayerStats.set(player.playerId, createEmptyPlayerStats());
       }
       setPlayerStats(initialPlayerStats);
@@ -4371,7 +4405,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         true;
 
       // Set initial game state
-      const leadoffBatter = config.awayLineup[0];
+      const leadoffBatter = awayLineupSnapshot[0];
       setGameState({
         gameId: config.gameId,
         homeScore: 0,
@@ -4388,9 +4422,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         currentPitcherName: config.homeStartingPitcherName,
         // UX-053: Auto-assign catcher from home lineup (home fields first in top of 1st)
         currentCatcherId:
-          config.homeLineup.find((p) => p.position === "C")?.playerId || "",
+          homeLineupSnapshot.find((p) => p.position === "C")?.playerId || "",
         currentCatcherName:
-          config.homeLineup.find((p) => p.position === "C")?.playerName || "",
+          homeLineupSnapshot.find((p) => p.position === "C")?.playerName || "",
         awayTeamId: config.awayTeamId,
         homeTeamId: config.homeTeamId,
         awayTeamName: config.awayTeamName,
@@ -5978,10 +6012,14 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       totalInnings: totalInningsRef.current,
       awayUsesDh: awayUsesDhRef.current,
       homeUsesDh: homeUsesDhRef.current,
-      awayLineup: awayLineupRef.current,
-      homeLineup: homeLineupRef.current,
-      optimalLineupSnapshots: optimalLineupSnapshotsRef.current,
-      chosenLineupSnapshots: chosenLineupSnapshotsRef.current,
+      awayLineup: cloneLineupSnapshot(awayLineupRef.current),
+      homeLineup: cloneLineupSnapshot(homeLineupRef.current),
+      optimalLineupSnapshots: cloneGameLockLineupSnapshots(
+        optimalLineupSnapshotsRef.current,
+      ),
+      chosenLineupSnapshots: cloneGameLockLineupSnapshots(
+        chosenLineupSnapshotsRef.current,
+      ),
       awayLineupState:
         awayLineupStateRef.current as PersistedGameState["awayLineupState"],
       homeLineupState:
@@ -11122,6 +11160,28 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           away: inn.away ?? 0,
           home: inn.home ?? 0,
         }));
+        const archiveContext = {
+          statsScopeId: targetStatsScopeId,
+          competitionType:
+            opts?.competitionType ?? competitionTypeRef.current,
+          competitionId: opts?.competitionId ?? competitionIdRef.current,
+          competitionName: competitionNameRef.current,
+          playoffSeriesId: playoffSeriesIdRef.current || undefined,
+          playoffGameNumber: playoffGameNumberRef.current || undefined,
+          playoffId: playoffIdRef.current || undefined,
+          playoffRound: restoredPlayoffContext.playoffRound,
+          isEliminationGame: restoredPlayoffContext.isEliminationGame,
+          isClinchGame: restoredPlayoffContext.isClinchGame,
+          leagueId: resolvedArchiveLeagueId,
+          franchiseId: opts?.franchiseId ?? franchiseIdRef.current,
+          scheduleGameId: opts?.scheduleGameId ?? scheduleGameIdRef.current,
+          totalInnings: totalInningsRef.current,
+          useGhostRunner: useGhostRunnerRef.current,
+          extraInningRunner: extraInningRunnerRef.current,
+          extraInningRunnerDelay: extraInningRunnerDelayRef.current,
+          pogPlayerId: storedPlayersOfTheGame?.first,
+          playersOfTheGame: storedPlayersOfTheGame,
+        };
 
         if (!alreadyAggregated) {
           let processingTimeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -11139,33 +11199,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
                     },
                     inningScores,
                     seasonId: archivedSeasonId,
-                    context: {
-                      statsScopeId: targetStatsScopeId,
-                      competitionType:
-                        opts?.competitionType ?? competitionTypeRef.current,
-                      competitionId:
-                        opts?.competitionId ?? competitionIdRef.current,
-                      competitionName: competitionNameRef.current,
-                      playoffSeriesId:
-                        playoffSeriesIdRef.current || undefined,
-                      playoffGameNumber:
-                        playoffGameNumberRef.current || undefined,
-                      playoffId: playoffIdRef.current || undefined,
-                      playoffRound: restoredPlayoffContext.playoffRound,
-                      isEliminationGame:
-                        restoredPlayoffContext.isEliminationGame,
-                      isClinchGame: restoredPlayoffContext.isClinchGame,
-                      leagueId: resolvedArchiveLeagueId,
-                      franchiseId: opts?.franchiseId ?? franchiseIdRef.current,
-                      scheduleGameId:
-                        opts?.scheduleGameId ?? scheduleGameIdRef.current,
-                      totalInnings: totalInningsRef.current,
-                      useGhostRunner: useGhostRunnerRef.current,
-                      extraInningRunner: extraInningRunnerRef.current,
-                      extraInningRunnerDelay: extraInningRunnerDelayRef.current,
-                      pogPlayerId: storedPlayersOfTheGame?.first,
-                      playersOfTheGame: storedPlayersOfTheGame,
-                    },
+                    context: archiveContext,
                   },
                 );
                 if (processResult.aggregation.success !== true) {
@@ -11174,7 +11208,6 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
                       `Failed to aggregate completed game ${gameState.gameId}`,
                   );
                 }
-                await markGameAggregated(gameState.gameId);
                 endGameAggregationSucceeded = true;
               })(),
               new Promise<never>((_, reject) => {
@@ -11203,30 +11236,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
                 inningScores,
                 archivedSeasonId,
                 {
-                  statsScopeId: targetStatsScopeId,
-                  competitionType:
-                    opts?.competitionType ?? competitionTypeRef.current,
-                  competitionId:
-                    opts?.competitionId ?? competitionIdRef.current,
-                  competitionName: competitionNameRef.current,
-                  playoffSeriesId: playoffSeriesIdRef.current || undefined,
-                  playoffGameNumber:
-                    playoffGameNumberRef.current || undefined,
-                  playoffId: playoffIdRef.current || undefined,
-                  playoffRound: restoredPlayoffContext.playoffRound,
-                  isEliminationGame:
-                    restoredPlayoffContext.isEliminationGame,
-                  isClinchGame: restoredPlayoffContext.isClinchGame,
-                  leagueId: resolvedArchiveLeagueId,
-                  franchiseId: opts?.franchiseId ?? franchiseIdRef.current,
-                  scheduleGameId:
-                    opts?.scheduleGameId ?? scheduleGameIdRef.current,
-                  totalInnings: totalInningsRef.current,
-                  useGhostRunner: useGhostRunnerRef.current,
-                  extraInningRunner: extraInningRunnerRef.current,
-                  extraInningRunnerDelay: extraInningRunnerDelayRef.current,
-                  pogPlayerId: storedPlayersOfTheGame?.first,
-                  playersOfTheGame: storedPlayersOfTheGame,
+                  ...archiveContext,
                   aggregationStatus: "incomplete",
                   aggregationError:
                     error instanceof Error ? error.message : String(error),
@@ -11250,6 +11260,60 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           }
         } else {
           console.log("[T1-08] Skipping aggregation — game already aggregated");
+        }
+
+        const gameStorageModule = await import("../utils/gameStorage");
+        const loadCompletedArchive =
+          gameStorageModule.getCompletedGameById ??
+          (async () => ({
+            aggregationStatus: "aggregated" as const,
+          }));
+        let completedArchive = await loadCompletedArchive(gameState.gameId);
+        if (
+          endGameAggregationSucceeded &&
+          (!completedArchive ||
+            completedArchive.aggregationStatus === "incomplete")
+        ) {
+          await archiveCompletedGame(
+            persistedState,
+            {
+              away: gameState.awayScore,
+              home: gameState.homeScore,
+            },
+            inningScores,
+            archivedSeasonId,
+            archiveContext,
+          );
+          completedArchive = await loadCompletedArchive(gameState.gameId);
+        }
+
+        if (
+          !completedArchive ||
+          completedArchive.aggregationStatus === "incomplete"
+        ) {
+          throw new Error(
+            "End-game archive is incomplete. Schedule/playoff advancement was blocked.",
+          );
+        }
+
+        // Aggregate player stats to playoff stats store before series advancement.
+        if (endGameAggregationSucceeded && playoffIdRef.current) {
+          try {
+            const { aggregateGameToPlayoffStats } =
+              await import("../../utils/playoffStorage");
+            await aggregateGameToPlayoffStats(
+              playoffIdRef.current,
+              persistedState,
+            );
+            console.log(
+              `[Playoff] Aggregated player stats to playoff stats: ${playoffIdRef.current}`,
+            );
+          } catch (err) {
+            console.error("[Playoff] Failed to aggregate playoff stats:", err);
+            if (archiveContext.competitionType !== "elimination") {
+              throw err;
+            }
+          }
         }
 
         // Record playoff series game result if this was a playoff game
@@ -11370,23 +11434,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             );
           } catch (err) {
             console.error("[Playoff] Failed to record series game:", err);
-          }
-        }
-
-        // Aggregate player stats to playoff stats store (populates Leaders tab)
-        if (!alreadyAggregated && endGameAggregationSucceeded && playoffIdRef.current) {
-          try {
-            const { aggregateGameToPlayoffStats } =
-              await import("../../utils/playoffStorage");
-            await aggregateGameToPlayoffStats(
-              playoffIdRef.current,
-              persistedState,
-            );
-            console.log(
-              `[Playoff] Aggregated player stats to playoff stats: ${playoffIdRef.current}`,
-            );
-          } catch (err) {
-            console.error("[Playoff] Failed to aggregate playoff stats:", err);
+            if (archiveContext.competitionType !== "elimination") {
+              throw err;
+            }
           }
         }
 

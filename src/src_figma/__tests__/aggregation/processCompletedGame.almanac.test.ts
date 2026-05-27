@@ -3,6 +3,10 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 const {
   mockAggregateGameToSeason,
   mockArchiveCompletedGame,
+  mockGetCompletedGameById,
+  mockGetGameHeader,
+  mockMarkAggregationFailed,
+  mockMarkGameAggregated,
   mockGetEffectivePlayer,
   mockRegisterAlmanacPlayers,
 } = vi.hoisted(() => ({
@@ -17,6 +21,10 @@ const {
     milestonesRecorded: [],
   }),
   mockArchiveCompletedGame: vi.fn().mockResolvedValue(undefined),
+  mockGetCompletedGameById: vi.fn().mockResolvedValue(null),
+  mockGetGameHeader: vi.fn().mockResolvedValue(null),
+  mockMarkAggregationFailed: vi.fn().mockResolvedValue(undefined),
+  mockMarkGameAggregated: vi.fn().mockResolvedValue(undefined),
   mockGetEffectivePlayer: vi.fn(),
   mockRegisterAlmanacPlayers: vi.fn().mockResolvedValue(undefined),
 }));
@@ -27,6 +35,7 @@ vi.mock('../../../utils/seasonAggregator', () => ({
 
 vi.mock('../../../utils/gameStorage', () => ({
   archiveCompletedGame: mockArchiveCompletedGame,
+  getCompletedGameById: mockGetCompletedGameById,
   resolveExhibitionLeagueId: (game: {
     leagueId?: string;
     competitionId?: string;
@@ -36,6 +45,12 @@ vi.mock('../../../utils/gameStorage', () => ({
     (game.competitionType === 'exhibition' || !game.competitionType
       ? game.competitionId
       : undefined),
+}));
+
+vi.mock('../../../utils/eventLog', () => ({
+  getGameHeader: mockGetGameHeader,
+  markAggregationFailed: mockMarkAggregationFailed,
+  markGameAggregated: mockMarkGameAggregated,
 }));
 
 vi.mock('../../../utils/playerOverrides', () => ({
@@ -177,6 +192,8 @@ describe('processCompletedGame exhibition almanac registration', () => {
       milestonesRecorded: [],
     });
     mockGetEffectivePlayer.mockResolvedValue(mockEffectivePlayer);
+    mockGetCompletedGameById.mockResolvedValue(null);
+    mockGetGameHeader.mockResolvedValue(null);
   });
 
   test('falls back to competitionId for exhibition league registration', async () => {
@@ -213,5 +230,33 @@ describe('processCompletedGame exhibition almanac registration', () => {
     expect(mockArchiveCompletedGame).not.toHaveBeenCalled();
     expect(mockRegisterAlmanacPlayers).not.toHaveBeenCalled();
     expect(mockGetEffectivePlayer).not.toHaveBeenCalled();
+    expect(mockMarkAggregationFailed).toHaveBeenCalledWith(
+      'game-exh-1',
+      'season DB unavailable',
+    );
+  });
+
+  test('skips duplicate aggregation when a completed archive already exists', async () => {
+    const gameState = createGameState();
+    mockGetCompletedGameById.mockResolvedValueOnce({
+      gameId: gameState.gameId,
+      aggregationStatus: 'aggregated',
+    });
+
+    await processCompletedGame(gameState);
+
+    expect(mockAggregateGameToSeason).not.toHaveBeenCalled();
+    expect(mockArchiveCompletedGame).not.toHaveBeenCalled();
+    expect(mockMarkGameAggregated).not.toHaveBeenCalled();
+  });
+
+  test('repairs archive without re-aggregating when the event header is already aggregated', async () => {
+    const gameState = createGameState();
+    mockGetGameHeader.mockResolvedValueOnce({ aggregated: true });
+
+    await processCompletedGame(gameState);
+
+    expect(mockAggregateGameToSeason).not.toHaveBeenCalled();
+    expect(mockArchiveCompletedGame).toHaveBeenCalledTimes(1);
   });
 });

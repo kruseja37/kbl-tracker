@@ -432,6 +432,8 @@ export async function saveCurrentGame(
   state: PersistedGameState,
 ): Promise<void> {
   const db = await initDatabase();
+  // Active-game policy: one resumable snapshot total. A new launch/save
+  // overwrites the previous "current" record.
   const record: PersistedGameState = {
     ...state,
     id: "current",

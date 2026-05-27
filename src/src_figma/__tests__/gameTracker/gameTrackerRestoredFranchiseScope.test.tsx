@@ -11,7 +11,14 @@ const {
   mockSaveCurrentGame,
   mockImmediateSaveCurrentGame,
   mockClearCurrentGame,
+  mockGetCompletedGameById,
   mockProcessCompletedGame,
+  mockAggregateGameToPlayoffStats,
+  mockRecordSeriesGame,
+  mockGetPlayoff,
+  mockGetSeriesByRound,
+  mockUpdatePlayoff,
+  mockCreateNextRoundSeries,
 } = vi.hoisted(() => ({
   mockGetGameHeader: vi.fn(),
   mockGetGameEvents: vi.fn(),
@@ -22,9 +29,46 @@ const {
   mockSaveCurrentGame: vi.fn().mockResolvedValue(undefined),
   mockImmediateSaveCurrentGame: vi.fn().mockResolvedValue(undefined),
   mockClearCurrentGame: vi.fn().mockResolvedValue(undefined),
+  mockGetCompletedGameById: vi.fn().mockResolvedValue({
+    gameId: "franchise-game-restored",
+    aggregationStatus: "aggregated",
+  }),
   mockProcessCompletedGame: vi.fn().mockResolvedValue({
     aggregation: { success: true, milestones: null },
   }),
+  mockAggregateGameToPlayoffStats: vi.fn().mockResolvedValue(undefined),
+  mockRecordSeriesGame: vi.fn().mockResolvedValue({
+    id: "series-restored",
+    playoffId: "playoff-restored",
+    round: 1,
+    status: "COMPLETED",
+    winner: "home-team",
+    higherSeed: { teamId: "home-team", teamName: "Home Team", seed: 1 },
+    lowerSeed: { teamId: "away-team", teamName: "Away Team", seed: 2 },
+    gamesRequired: 1,
+    games: [],
+  }),
+  mockGetPlayoff: vi.fn().mockResolvedValue({
+    id: "playoff-restored",
+    franchiseId: "franchise-restored",
+    seasonId: "franchise-restored-season-5",
+    seasonNumber: 5,
+    rounds: 2,
+    teams: [
+      { teamId: "home-team", teamName: "Home Team", eliminated: false },
+      { teamId: "away-team", teamName: "Away Team", eliminated: false },
+    ],
+  }),
+  mockGetSeriesByRound: vi.fn().mockResolvedValue([
+    {
+      id: "series-restored",
+      status: "COMPLETED",
+      winner: "home-team",
+      round: 1,
+    },
+  ]),
+  mockUpdatePlayoff: vi.fn().mockResolvedValue(undefined),
+  mockCreateNextRoundSeries: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("../../../utils/eventLog", () => ({
@@ -47,6 +91,7 @@ vi.mock("../../utils/gameStorage", () => ({
   saveCurrentGame: mockSaveCurrentGame,
   immediateSaveCurrentGame: mockImmediateSaveCurrentGame,
   clearCurrentGame: mockClearCurrentGame,
+  getCompletedGameById: mockGetCompletedGameById,
   archiveCompletedGame: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -55,7 +100,13 @@ vi.mock("../../../utils/processCompletedGame", () => ({
 }));
 
 vi.mock("../../../utils/playoffStorage", () => ({
-  aggregateGameToPlayoffStats: vi.fn().mockResolvedValue(undefined),
+  aggregateGameToPlayoffStats: mockAggregateGameToPlayoffStats,
+  recordSeriesGame: mockRecordSeriesGame,
+  getPlayoff: mockGetPlayoff,
+  getSeriesByRound: mockGetSeriesByRound,
+  updatePlayoff: mockUpdatePlayoff,
+  createNextRoundSeries: mockCreateNextRoundSeries,
+  completePlayoff: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { useGameState } from "../../hooks/useGameState";
@@ -127,6 +178,30 @@ function restoredSnapshot() {
   };
 }
 
+function restoredPlayoffSnapshot() {
+  return {
+    ...restoredSnapshot(),
+    gameId: "playoff-game-restored",
+    seasonNumber: 5,
+    seasonId: "franchise-restored-season-5",
+    statsScopeId: "franchise-restored-season-5",
+    competitionType: "playoff",
+    competitionId: "playoff-restored",
+    franchiseId: "franchise-restored",
+    scheduleGameId: undefined,
+    playoffId: "playoff-restored",
+    playoffSeriesId: "series-restored",
+    playoffGameNumber: 2,
+    homeScore: 5,
+    awayScore: 3,
+    scoreboard: {
+      innings: [{ away: 3, home: 5 }],
+      away: { runs: 3, hits: 0, errors: 0 },
+      home: { runs: 5, hits: 0, errors: 0 },
+    },
+  };
+}
+
 function restoredHeader() {
   return {
     gameId: "franchise-header-restored",
@@ -177,6 +252,10 @@ describe("restored GameTracker franchise scope", () => {
     mockGetBetweenPlayEvents.mockResolvedValue([]);
     mockLoadCurrentGame.mockResolvedValue(null);
     mockGetGameHeader.mockResolvedValue(null);
+    mockGetCompletedGameById.mockResolvedValue({
+      gameId: "franchise-game-restored",
+      aggregationStatus: "aggregated",
+    });
   });
 
   test("snapshot restore exposes canonical franchise identity and archives with it", async () => {
@@ -227,6 +306,83 @@ describe("restored GameTracker franchise scope", () => {
     );
   });
 
+  test("restored franchise playoff completion preserves playoff identity and advances once", async () => {
+    mockLoadCurrentGame.mockResolvedValue(restoredPlayoffSnapshot());
+    mockGetCompletedGameById.mockResolvedValue({
+      gameId: "playoff-game-restored",
+      aggregationStatus: "aggregated",
+    });
+    const { result } = renderHook(() => useGameState("playoff-game-restored"));
+
+    await act(async () => {
+      await result.current.loadExistingGame({ preferSnapshot: true });
+    });
+
+    await waitFor(() => {
+      expect(result.current.restoredCompetitionContext).toMatchObject({
+        seasonId: "franchise-restored-season-5",
+        statsScopeId: "franchise-restored-season-5",
+        seasonNumber: 5,
+        competitionType: "playoff",
+        competitionId: "playoff-restored",
+        franchiseId: "franchise-restored",
+      });
+      expect(result.current.restoredPlayoffContext).toMatchObject({
+        playoffId: "playoff-restored",
+        playoffSeriesId: "series-restored",
+        playoffGameNumber: 2,
+      });
+    });
+
+    await act(async () => {
+      await result.current.endGame();
+    });
+
+    expect(mockProcessCompletedGame).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gameId: "playoff-game-restored",
+        seasonId: "franchise-restored-season-5",
+        statsScopeId: "franchise-restored-season-5",
+        franchiseId: "franchise-restored",
+        playoffId: "playoff-restored",
+        playoffSeriesId: "series-restored",
+        playoffGameNumber: 2,
+      }),
+      expect.objectContaining({
+        seasonId: "franchise-restored-season-5",
+        franchiseId: "franchise-restored",
+        currentSeason: 5,
+      }),
+      "league-restored",
+      expect.objectContaining({
+        seasonId: "franchise-restored-season-5",
+        context: expect.objectContaining({
+          statsScopeId: "franchise-restored-season-5",
+          franchiseId: "franchise-restored",
+          playoffId: "playoff-restored",
+          playoffSeriesId: "series-restored",
+          playoffGameNumber: 2,
+        }),
+      }),
+    );
+    expect(mockAggregateGameToPlayoffStats).toHaveBeenCalledWith(
+      "playoff-restored",
+      expect.objectContaining({
+        gameId: "playoff-game-restored",
+        statsScopeId: "franchise-restored-season-5",
+        playoffId: "playoff-restored",
+      }),
+    );
+    expect(mockRecordSeriesGame).toHaveBeenCalledWith(
+      "series-restored",
+      expect.objectContaining({
+        gameNumber: 2,
+        gameLogId: "playoff-game-restored",
+      }),
+    );
+    expect(mockCreateNextRoundSeries).toHaveBeenCalledTimes(1);
+  });
+
   test("durable-log restore exposes schedule identity from game header", async () => {
     mockGetGameHeader.mockResolvedValue(restoredHeader());
     const { result } = renderHook(() => useGameState("franchise-header-restored"));
@@ -248,6 +404,72 @@ describe("restored GameTracker franchise scope", () => {
         leagueId: "league-header",
       });
     });
+  });
+
+  test("launch snapshot keeps lineups isolated from later roster object mutation", async () => {
+    const awayLineup = [
+      { playerId: "away-batter-1", playerName: "Away Batter 1", position: "SS" },
+    ];
+    const homeLineup = [
+      { playerId: "home-batter-1", playerName: "Home Batter 1", position: "C" },
+    ];
+    const awayBench = [
+      { playerId: "away-bench-1", playerName: "Away Bench 1", positions: ["CF"] },
+    ];
+    const { result } = renderHook(() => useGameState());
+
+    await act(async () => {
+      await result.current.initializeGame({
+        gameId: "snapshot-roster-invariant",
+        seasonId: "franchise-season-1",
+        statsScopeId: "franchise-season-1",
+        competitionType: "franchise",
+        competitionId: "franchise-1",
+        franchiseId: "franchise-1",
+        scheduleGameId: "schedule-1",
+        awayTeamId: "away-team",
+        homeTeamId: "home-team",
+        awayTeamName: "Away Team",
+        homeTeamName: "Home Team",
+        awayStartingPitcherId: "away-sp",
+        awayStartingPitcherName: "Away Starter",
+        homeStartingPitcherId: "home-sp",
+        homeStartingPitcherName: "Home Starter",
+        awayLineup,
+        homeLineup,
+        awayBench,
+        homeBench: [],
+        seasonNumber: 1,
+      });
+    });
+
+    awayLineup[0].playerName = "Mutated Away Batter";
+    homeLineup[0].position = "1B";
+    awayBench[0].positions.push("P");
+
+    await act(async () => {
+      result.current.startGame();
+    });
+
+    expect(mockImmediateSaveCurrentGame).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        gameId: "snapshot-roster-invariant",
+        awayLineup: [
+          { playerId: "away-batter-1", playerName: "Away Batter 1", position: "SS" },
+        ],
+        homeLineup: [
+          { playerId: "home-batter-1", playerName: "Home Batter 1", position: "C" },
+        ],
+        awayLineupState: expect.objectContaining({
+          bench: [
+            expect.objectContaining({
+              playerId: "away-bench-1",
+              positions: ["CF"],
+            }),
+          ],
+        }),
+      }),
+    );
   });
 
   test("identity resolver keeps restored franchise ids for end-game and schedule completion", () => {

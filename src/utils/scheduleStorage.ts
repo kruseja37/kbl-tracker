@@ -335,6 +335,11 @@ export async function completeGame(gameId: string, result: GameResult): Promise<
         return;
       }
 
+      if (game.status === 'COMPLETED' && game.gameLogId === result.gameLogId) {
+        resolve();
+        return;
+      }
+
       game.status = 'COMPLETED';
       game.completedAt = Date.now();
       game.result = result;

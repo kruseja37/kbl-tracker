@@ -10,6 +10,7 @@ import {
   getEliminationRoundName,
   getAllPlayoffs,
   getPlayoffLeaders,
+  getPlayoffStats,
   getPlayoffByElimination,
   getPlayoffBySeason,
   initPlayoffDatabase,
@@ -553,6 +554,11 @@ describe("playoffStorage elimination wiring", () => {
       higherSeed: { teamId: "team-1", seed: 1 },
       lowerSeed: { teamId: "team-2", seed: 2 },
     });
+
+    const repeatedNextRound = await createNextRoundSeries(playoff.id, 1, playoff);
+    expect(repeatedNextRound.map((series) => series.id)).toEqual(
+      nextRound.map((series) => series.id),
+    );
   });
 
   test("single-bracket 8-team elimination advances quarter-finals to semi-finals", async () => {
@@ -726,6 +732,55 @@ describe("playoffStorage elimination wiring", () => {
     await expect(getPlayoffLeaders(playoff.id, "homeRuns", 5)).resolves.toEqual([
       expect.objectContaining({ playerId: "slugger-1", homeRuns: 1 }),
     ]);
+  });
+
+  test("playoff stat aggregation is idempotent for a restored completion", async () => {
+    const playoff = await createPlayoff(buildEliminationPlayoffConfig("elim-idempotent-stats"));
+    const restoredGame = buildPersistedGameState({
+      gameId: "restored-playoff-complete-1",
+      playerStats: {
+        "slugger-1": buildBattingStats("Slugger One", "team-1", {
+          pa: 4,
+          ab: 4,
+          h: 2,
+          singles: 1,
+          hr: 1,
+          rbi: 3,
+          r: 1,
+        }),
+      },
+      pitcherGameStats: [
+        buildPitcherStats("pitcher-1", "Pitcher One", "team-1", {
+          outsRecorded: 9,
+          hitsAllowed: 2,
+          earnedRuns: 1,
+          runsAllowed: 1,
+          walksAllowed: 1,
+          strikeoutsThrown: 4,
+          decision: "W",
+        }),
+      ],
+    });
+
+    await aggregateGameToPlayoffStats(playoff.id, restoredGame);
+    await aggregateGameToPlayoffStats(playoff.id, restoredGame);
+
+    await expect(getPlayoffStats(playoff.id)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          playerId: "slugger-1",
+          games: 1,
+          homeRuns: 1,
+          processedGameIds: ["restored-playoff-complete-1"],
+        }),
+        expect.objectContaining({
+          playerId: "pitcher-1",
+          pitchingGames: 1,
+          wins: 1,
+          processedGameIds: ["restored-playoff-complete-1"],
+        }),
+      ]),
+    );
   });
 
   test("rate-stat elimination leaders use sample size as a tie-breaker", async () => {
