@@ -680,7 +680,7 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
     expect(screen.queryByRole('button', { name: 'BEAT WRITERS' })).toBeNull();
   });
 
-  test('direct offseason start does not advance when season summary creation fails', async () => {
+  test('direct offseason start is release-gated before season summary creation', () => {
     mocks.mockUseOffseasonState.mockReturnValue(makeOffseasonState({
       state: { id: 'offseason-franchise-1-season-1' },
       currentPhase: 'SPRING_TRAINING',
@@ -693,18 +693,16 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
 
     render(<FranchiseHome />);
     fireEvent.click(screen.getByRole('button', { name: 'OFFSEASON' }));
-    fireEvent.click(screen.getByRole('button', { name: 'START SEASON 2' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Could not start Season 2: summary unavailable.',
-    );
+    expect(screen.getByText('FRANCHISE V1 RELEASE GATE')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'START SEASON 2' })).not.toBeInTheDocument();
+    expect(mocks.mockCreateFranchiseSeasonSummary).not.toHaveBeenCalled();
     expect(mocks.mockExecuteSeasonTransition).not.toHaveBeenCalled();
     expect(mocks.mockUpdateFranchiseMetadata).not.toHaveBeenCalled();
     expect(mocks.mockInitializeEmptyFranchiseSeasonSchedule).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'START SEASON 2' })).toBeInTheDocument();
   });
 
-  test('direct offseason start does not advance when season transition fails', async () => {
+  test('direct offseason start is release-gated before season transition execution', () => {
     mocks.mockUseOffseasonState.mockReturnValue(makeOffseasonState({
       state: { id: 'offseason-franchise-1-season-1' },
       currentPhase: 'SPRING_TRAINING',
@@ -729,22 +727,16 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
 
     render(<FranchiseHome />);
     fireEvent.click(screen.getByRole('button', { name: 'OFFSEASON' }));
-    fireEvent.click(screen.getByRole('button', { name: 'START SEASON 2' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Could not start Season 2: age step failed.',
-    );
-    expect(mocks.mockCreateFranchiseSeasonSummary).toHaveBeenCalledWith({
-      franchiseId: 'franchise-1',
-      seasonNumber: 1,
-      playoffId: 'playoff-1',
-    });
+    expect(screen.getByText('FRANCHISE V1 RELEASE GATE')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'START SEASON 2' })).not.toBeInTheDocument();
+    expect(mocks.mockCreateFranchiseSeasonSummary).not.toHaveBeenCalled();
+    expect(mocks.mockExecuteSeasonTransition).not.toHaveBeenCalled();
     expect(mocks.mockUpdateFranchiseMetadata).not.toHaveBeenCalled();
     expect(mocks.mockInitializeEmptyFranchiseSeasonSchedule).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'START SEASON 2' })).toBeInTheDocument();
   });
 
-  test('direct offseason start does not advance metadata when empty schedule initialization fails', async () => {
+  test('direct offseason start is release-gated before new-season schedule initialization', () => {
     mocks.mockUseOffseasonState.mockReturnValue(makeOffseasonState({
       state: { id: 'offseason-franchise-1-season-1' },
       currentPhase: 'SPRING_TRAINING',
@@ -757,18 +749,15 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
 
     render(<FranchiseHome />);
     fireEvent.click(screen.getByRole('button', { name: 'OFFSEASON' }));
-    fireEvent.click(screen.getByRole('button', { name: 'START SEASON 2' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Could not start Season 2: schedule unavailable.',
-    );
-    expect(mocks.mockCreateFranchiseSeasonSummary).toHaveBeenCalled();
-    expect(mocks.mockExecuteSeasonTransition).toHaveBeenCalled();
-    expect(mocks.mockInitializeEmptyFranchiseSeasonSchedule).toHaveBeenCalledWith('franchise-1', 2);
+    expect(screen.getByText('FRANCHISE V1 RELEASE GATE')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'START SEASON 2' })).not.toBeInTheDocument();
+    expect(mocks.mockCreateFranchiseSeasonSummary).not.toHaveBeenCalled();
+    expect(mocks.mockExecuteSeasonTransition).not.toHaveBeenCalled();
+    expect(mocks.mockInitializeEmptyFranchiseSeasonSchedule).not.toHaveBeenCalled();
     expect(mocks.mockUpdateFranchiseMetadata).not.toHaveBeenCalled();
-    expect(mocks.mockClearFranchiseSeasonSchedule).toHaveBeenCalledWith('franchise-1', 2);
-    expect(mocks.mockDeleteSeasonMetadata).toHaveBeenCalledWith('franchise-1-season-2');
-    expect(screen.getByRole('button', { name: 'START SEASON 2' })).toBeInTheDocument();
+    expect(mocks.mockClearFranchiseSeasonSchedule).not.toHaveBeenCalled();
+    expect(mocks.mockDeleteSeasonMetadata).not.toHaveBeenCalled();
   });
 
   test('regular-season launch blocks when a scheduled team has no usable franchise roster', async () => {

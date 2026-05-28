@@ -889,7 +889,7 @@ export function TeamHubContent() {
             <div className="text-[24px] text-[#E8E8D8]/30 mb-4">📊</div>
             <div className="text-[12px] text-[#E8E8D8]/50 mb-2">FAN MORALE</div>
             <div className="text-[10px] text-[#E8E8D8]/40">
-              Fan morale tracking begins after games are played.
+              Fan morale mutation is deferred in Franchise v1.
             </div>
           </div>
         </div>
@@ -1069,7 +1069,11 @@ export function TeamHubContent() {
                       </span>
                     </td>
                     <td className="py-2 px-2 text-center">
-                      <button className="p-1 hover:bg-[#4A6844] transition">
+                      <button
+                        disabled
+                        title="Roster edits use the Franchise roster and transaction surfaces."
+                        className="p-1 opacity-40 cursor-not-allowed"
+                      >
                         <Edit className="w-3 h-3 text-[#E8E8D8]" />
                       </button>
                     </td>
@@ -1098,14 +1102,14 @@ export function TeamHubContent() {
                 STATS TABLE
               </button>
               <button
-                onClick={() => setStatsView("spraychart")}
+                disabled
                 className={`flex-1 py-2 px-3 text-[9px] transition ${
                   statsView === "spraychart"
                     ? "bg-[#4A6844] text-[#E8E8D8]"
-                    : "bg-[#5A8352] text-[#E8E8D8]/60 hover:bg-[#4F7D4B]"
+                    : "bg-[#5A8352] text-[#E8E8D8]/40 cursor-not-allowed"
                 }`}
               >
-                SPRAY CHARTS
+                SPRAY CHARTS DEFERRED
               </button>
             </div>
           </div>
@@ -1170,74 +1174,10 @@ export function TeamHubContent() {
           )}
 
           {statsView === "spraychart" && (
-            <div className="space-y-4">
-              {/* Player Selection */}
-              <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-4">
-                <div className="text-[10px] text-[#E8E8D8]/70 mb-2">SELECT PLAYER</div>
-                <select
-                  value={selectedStatsPlayer}
-                  onChange={(e) => setSelectedStatsPlayer(e.target.value)}
-                  className="w-full bg-[#4A6844] text-[#E8E8D8] p-2 text-[10px] border-2 border-[#3F5A3A]"
-                >
-                  {statsData.map((player) => (
-                    <option key={player.name} value={player.name}>
-                      {player.name} ({player.pos})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Spray Chart Visualization */}
-              <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-6">
-                <div 
-                  className="text-[12px] text-[#E8E8D8] mb-4 text-center"
-                  style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}
-                >
-                  {selectedStatsPlayer} SPRAY CHART
-                </div>
-                
-                {/* Simplified spray chart placeholder */}
-                <div className="relative bg-[#4A6844] aspect-square max-w-md mx-auto rounded-full border-[5px] border-[#3F5A3A]">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center">
-                      <div className="text-[10px] text-[#E8E8D8]/70 mb-2">HIT DISTRIBUTION</div>
-                      <div className="grid grid-cols-3 gap-2 text-[8px]">
-                        <div className="bg-[#5A8352] p-2">
-                          <div className="text-[#E8E8D8]/70">LEFT</div>
-                          <div className="text-[#E8E8D8] font-bold">32%</div>
-                        </div>
-                        <div className="bg-[#5A8352] p-2">
-                          <div className="text-[#E8E8D8]/70">CENTER</div>
-                          <div className="text-[#E8E8D8] font-bold">41%</div>
-                        </div>
-                        <div className="bg-[#5A8352] p-2">
-                          <div className="text-[#E8E8D8]/70">RIGHT</div>
-                          <div className="text-[#E8E8D8] font-bold">27%</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Advanced Stats */}
-                <div className="mt-6 grid grid-cols-2 gap-3">
-                  <div className="bg-[#5A8352] p-3">
-                    <div className="text-[8px] text-[#E8E8D8]/70">HARD HIT %</div>
-                    <div className="text-[14px] text-[#E8E8D8] font-bold">42.3%</div>
-                  </div>
-                  <div className="bg-[#5A8352] p-3">
-                    <div className="text-[8px] text-[#E8E8D8]/70">EXIT VELO AVG</div>
-                    <div className="text-[14px] text-[#E8E8D8] font-bold">92.4 MPH</div>
-                  </div>
-                  <div className="bg-[#5A8352] p-3">
-                    <div className="text-[8px] text-[#E8E8D8]/70">LAUNCH ANGLE</div>
-                    <div className="text-[14px] text-[#E8E8D8] font-bold">18.2°</div>
-                  </div>
-                  <div className="bg-[#5A8352] p-3">
-                    <div className="text-[8px] text-[#E8E8D8]/70">BARREL %</div>
-                    <div className="text-[14px] text-[#E8E8D8] font-bold">11.8%</div>
-                  </div>
-                </div>
+            <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-8 text-center">
+              <div className="text-[12px] text-[#E8E8D8]/50 mb-2">SPRAY CHARTS DEFERRED</div>
+              <div className="text-[10px] text-[#E8E8D8]/40">
+                Franchise v1 does not display fabricated batted-ball distributions or advanced contact metrics.
               </div>
             </div>
           )}
@@ -1269,7 +1209,7 @@ export function TeamHubContent() {
               <Building2 className="w-8 h-8 text-[#E8E8D8]/30 mx-auto mb-4" />
               <div className="text-[12px] text-[#E8E8D8]/50 mb-2">{selectedStadium || 'STADIUM'}</div>
               <div className="text-[10px] text-[#E8E8D8]/40">
-                Park factors and stadium records will be available after games are played.
+                Seeded stadium identity is read-only. Custom park factors are deferred in Franchise v1.
               </div>
             </div>
           </div>

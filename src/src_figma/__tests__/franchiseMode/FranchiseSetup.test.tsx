@@ -102,6 +102,14 @@ describe('FranchiseSetup Component', () => {
     vi.clearAllMocks();
   });
 
+  function selectLeagueAndAdvance(times = 1) {
+    fireEvent.click(screen.getByText('KRUSE BASEBALL LEAGUE'));
+    const next = () => fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+    for (let index = 0; index < times; index += 1) {
+      next();
+    }
+  }
+
   describe('Header', () => {
     test('renders NEW FRANCHISE title', () => {
       render(<FranchiseSetup />);
@@ -196,6 +204,41 @@ describe('FranchiseSetup Component', () => {
         btn.textContent === '▼' || btn.textContent === '▲'
       );
       expect(expandButtons.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Franchise v1 release gates', () => {
+    test('marks unsupported setup events as deferred instead of selectable', () => {
+      render(<FranchiseSetup />);
+      selectLeagueAndAdvance(1);
+
+      expect(screen.getByRole('button', { name: /All-Star Game.*deferred in v1/i })).toBeDisabled();
+
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+      expect(screen.getByRole('button', { name: /Pool Play.*deferred/i })).toBeDisabled();
+      expect(screen.getByRole('button', { name: /Best Record Bye.*deferred/i })).toBeDisabled();
+    });
+
+    test('keeps team control explicit with no AI or random team shortcut copy', () => {
+      render(<FranchiseSetup />);
+      selectLeagueAndAdvance(3);
+
+      expect(screen.getByText(/Unselected teams remain uncontrolled/i)).toBeInTheDocument();
+      expect(screen.getByText(/UNCONTROLLED:/i)).toBeInTheDocument();
+      expect(screen.queryByText(/AI-CONTROLLED/i)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Random 1/i })).not.toBeInTheDocument();
+    });
+
+    test('defers fantasy draft and generated roster fallbacks', () => {
+      render(<FranchiseSetup />);
+      selectLeagueAndAdvance(3);
+      fireEvent.click(screen.getAllByRole('button', { name: /Team 1/i })[0]);
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+
+      expect(screen.getByRole('button', { name: /Fantasy Draft.*Deferred/i })).toBeDisabled();
+      expect(screen.getByText(/22 MLB \+ 10 FARM/i)).toBeInTheDocument();
+      expect(screen.getByText(/No generated or fantasy-draft fallback/i)).toBeInTheDocument();
+      expect(screen.queryByText(/Generate new fictional players/i)).not.toBeInTheDocument();
     });
   });
 });

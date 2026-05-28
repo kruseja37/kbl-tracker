@@ -231,15 +231,21 @@ describe('FranchiseHome Component', () => {
       expect(screen.queryByText(/recommendation engine/i)).not.toBeInTheDocument();
     });
 
-    test('offseason tabs hide trades and active contraction workflow copy', () => {
+    test('offseason release gate blocks prototype execution surfaces', () => {
       render(<FranchiseHome />);
 
       fireEvent.click(screen.getByRole('button', { name: /OFFSEASON/i }));
 
       expect(screen.queryByRole('button', { name: /^TRADES$/i })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /CONTRACT\/EXPAND/i })).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /EXPANSION NOTE/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /V1 RELEASE GATE/i })).toBeInTheDocument();
+      expect(screen.getByText(/FRANCHISE V1 RELEASE GATE/i)).toBeInTheDocument();
+      expect(screen.getByText(/Offseason execution is deferred/i)).toBeInTheDocument();
       expect(screen.queryByText(/BEGIN CONTRACTION/i)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /START FREE AGENCY/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /BEGIN AWARDS CEREMONY/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /BEGIN RETIREMENT PHASE/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /START FINALIZE/i })).not.toBeInTheDocument();
     });
   });
 

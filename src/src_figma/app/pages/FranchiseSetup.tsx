@@ -13,7 +13,7 @@ const INITIAL_CONFIG: FranchiseConfig = {
     inningsPerGame: 7,
     extraInningsRule: "Standard",
     scheduleType: "Balanced",
-    allStarGame: true,
+    allStarGame: false,
     tradeDeadline: true,
     mercyRule: false,
   },
@@ -588,22 +588,26 @@ function Step2SeasonSettings({
         <p className="text-xs text-[#E8E8D8] font-bold mb-3 tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>ADDITIONAL OPTIONS</p>
         <div className="bg-[#4A6A42] border-4 border-[#E8E8D8] p-4 space-y-2">
           {[
-            { key: "allStarGame", label: "All-Star Game", note: "(at 60% of season)" },
-            { key: "tradeDeadline", label: "Trade Deadline", note: "(at 70% of season)" },
-            { key: "mercyRule", label: "Mercy Rule", note: "(10 runs after 5 innings)" },
+            { key: "allStarGame", label: "All-Star Game", note: "(deferred in v1)", disabled: true },
+            { key: "tradeDeadline", label: "Trade Deadline", note: "(at 70% of season)", disabled: false },
+            { key: "mercyRule", label: "Mercy Rule", note: "(10 runs after 5 innings)", disabled: false },
           ].map((option) => (
             <button
               key={option.key}
-              onClick={() =>
+              disabled={option.disabled}
+              onClick={() => {
+                if (option.disabled) return;
                 setConfig({
                   ...config,
                   season: {
                     ...config.season,
                     [option.key]: !config.season[option.key as keyof typeof config.season],
                   },
-                })
-              }
-              className="flex items-center gap-3 text-xs text-[#E8E8D8] w-full"
+                });
+              }}
+              className={`flex items-center gap-3 text-xs text-[#E8E8D8] w-full ${
+                option.disabled ? "opacity-55 cursor-not-allowed" : ""
+              }`}
               style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
             >
               <div
@@ -678,16 +682,22 @@ function Step3PlayoffSettings({
         <p className="text-xs text-[#E8E8D8] font-bold mb-3 tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>PLAYOFF FORMAT</p>
         <div className="bg-[#4A6A42] border-4 border-[#E8E8D8] p-4">
           <div className="flex gap-4 mb-2">
-            {["Bracket", "Pool Play", "Best Record Bye"].map((format) => (
+            {["Bracket", "Pool Play", "Best Record Bye"].map((format) => {
+              const isDeferred = format !== "Bracket";
+              return (
               <button
                 key={format}
-                onClick={() =>
+                disabled={isDeferred}
+                onClick={() => {
+                  if (isDeferred) return;
                   setConfig({
                     ...config,
                     playoffs: { ...config.playoffs, format },
-                  })
-                }
-                className="flex items-center gap-2 text-xs text-[#E8E8D8]"
+                  });
+                }}
+                className={`flex items-center gap-2 text-xs text-[#E8E8D8] ${
+                  isDeferred ? "opacity-50 cursor-not-allowed" : ""
+                }`}
                 style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
               >
                 <div
@@ -700,8 +710,10 @@ function Step3PlayoffSettings({
                   )}
                 </div>
                 {format}
+                {isDeferred && <span className="text-[#E8E8D8]/50">(deferred)</span>}
               </button>
-            ))}
+              );
+            })}
           </div>
           <p className="text-[10px] text-[#C4A853]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>ℹ️ Bracket: Traditional elimination tournament</p>
         </div>
@@ -871,20 +883,8 @@ function Step4TeamControl({
     });
   };
 
-  const selectRandom = () => {
-    if (leagueTeams.length === 0) return;
-    const randomTeam = leagueTeams[Math.floor(Math.random() * leagueTeams.length)];
-    setConfig({
-      ...config,
-      teams: {
-        ...config.teams,
-        selectedTeams: [randomTeam.id],
-      },
-    });
-  };
-
   const selectedCount = config.teams.selectedTeams.length;
-  const aiCount = leagueTeams.length - selectedCount;
+  const uncontrolledCount = leagueTeams.length - selectedCount;
 
   if (leagueTeams.length === 0) {
     return (
@@ -900,7 +900,7 @@ function Step4TeamControl({
     <div>
       <h2 className="text-lg font-bold text-[#E8E8D8] mb-2 tracking-wide" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>SELECT YOUR TEAM(S)</h2>
       <p className="text-xs text-[#E8E8D8]/70 mb-6" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
-        Click teams you want to control. Unselected teams will be AI.
+        Click teams you want to control. Unselected teams remain uncontrolled and use manual score entry.
       </p>
 
       {/* Quick Select */}
@@ -911,9 +911,6 @@ function Step4TeamControl({
         </button>
         <button onClick={clearAll} className="text-xs text-[#C4A853] hover:text-[#C4A853]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
           [Clear All]
-        </button>
-        <button onClick={selectRandom} className="text-xs text-[#C4A853] hover:text-[#C4A853]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
-          [Random 1]
         </button>
       </div>
 
@@ -983,7 +980,7 @@ function Step4TeamControl({
             )}
           </p>
           <p className="text-xs text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
-            AI-CONTROLLED: <span className="text-[#E8E8D8]/50">{aiCount} teams</span>
+            UNCONTROLLED: <span className="text-[#E8E8D8]/50">{uncontrolledCount} teams</span>
           </p>
         </div>
 
@@ -1092,176 +1089,33 @@ function Step5RosterMode({
             <p className="text-xs text-[#E8E8D8]/70 mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>ROSTER SUMMARY</p>
             <div className="h-[1px] bg-[#E8E8D8]/30 mb-3" />
             <div className="space-y-2 mb-3">
-              <p className="text-xs text-[#00CC00]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>✓ All {leagueTeams.length} teams have valid rosters (22 MLB + up to 10 farm)</p>
-              <p className="text-xs text-[#00CC00]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>✓ 506 total players assigned</p>
+              <p className="text-xs text-[#00CC00]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>✓ Franchise creation validates all {leagueTeams.length} teams</p>
+              <p className="text-xs text-[#00CC00]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>✓ Required contract: 22 MLB + 10 FARM players per team</p>
+              <p className="text-xs text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>No generated or fantasy-draft fallback is used in Franchise v1.</p>
             </div>
-            <button onClick={() => navigate('/league-builder/rosters')} className="text-xs text-[#C4A853] hover:text-[#FFD700] underline" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>[View Rosters]</button>
+            <button onClick={() => navigate('/league-builder/players')} className="text-xs text-[#C4A853] hover:text-[#FFD700] underline" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>[Review League Builder Players]</button>
           </div>
         )}
       </div>
 
       {/* Fantasy Draft Option */}
       <div
-        className={`border-4 p-5 transition-all ${
-          config.roster.mode === "draft" ? "border-[#C4A853] bg-[#C4A853]/10 border-l-[8px]" : "border-[#E8E8D8] bg-[#4A6A42]"
-        }`}
+        className="border-4 p-5 transition-all border-[#E8E8D8]/40 bg-[#4A6A42] opacity-60"
       >
         <button
-          onClick={() =>
-            setConfig({
-              ...config,
-              roster: {
-                mode: "draft",
-                draftSettings: {
-                  playerPool: "league",
-                  rounds: 22,
-                  format: "Snake",
-                  timePerPick: "Unlimited",
-                },
-              },
-            })
-          }
-          className="flex items-start gap-3 w-full text-left"
+          disabled
+          className="flex items-start gap-3 w-full text-left cursor-not-allowed"
         >
           <div
-            className={`w-6 h-6 rounded-full border-4 flex-shrink-0 mt-1 ${
-              config.roster.mode === "draft" ? "border-[#C4A853] bg-[#C4A853]" : "border-[#E8E8D8] bg-transparent"
-            }`}
-          >
-            {config.roster.mode === "draft" && <div className="w-full h-full rounded-full bg-[#4A6A42] scale-50" />}
-          </div>
+            className="w-6 h-6 rounded-full border-4 flex-shrink-0 mt-1 border-[#E8E8D8] bg-transparent"
+          />
           <div className="flex-1">
-            <h3 className="text-sm font-bold text-[#E8E8D8] mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>FANTASY DRAFT</h3>
+            <h3 className="text-sm font-bold text-[#E8E8D8] mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>FANTASY DRAFT (DEFERRED)</h3>
             <div className="h-[1px] bg-[#E8E8D8]/30 mb-3" />
-            <p className="text-xs text-[#E8E8D8]/70 mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Run a snake draft to build all rosters from scratch.</p>
-            <p className="text-xs text-[#E8E8D8]/70 mb-4" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>You draft for your team(s), AI drafts for others.</p>
+            <p className="text-xs text-[#E8E8D8]/70 mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Franchise v1 uses existing League Builder rosters only.</p>
+            <p className="text-xs text-[#E8E8D8]/70 mb-4" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Drafts, generated pools, and AI roster filling are not part of the release path.</p>
           </div>
         </button>
-
-        {config.roster.mode === "draft" && config.roster.draftSettings && (
-          <div className="ml-9 mt-4 space-y-4">
-            {/* Player Pool Source */}
-            <div className="bg-[#3A5A32] border-2 border-[#E8E8D8]/30 p-4">
-              <p className="text-xs text-[#E8E8D8]/70 mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>PLAYER POOL SOURCE</p>
-              <div className="h-[1px] bg-[#E8E8D8]/30 mb-3" />
-              <div className="space-y-2">
-                {[
-                  { value: "league", label: "Players from Kruse Baseball League" },
-                  { value: "all", label: "All players in database (includes all leagues)" },
-                  { value: "generate", label: "Generate new fictional players" },
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() =>
-                      setConfig({
-                        ...config,
-                        roster: {
-                          ...config.roster,
-                          draftSettings: {
-                            ...config.roster.draftSettings!,
-                            playerPool: option.value,
-                          },
-                        },
-                      })
-                    }
-                    className="flex items-center gap-2 text-xs text-[#E8E8D8] w-full"
-                    style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
-                  >
-                    <div
-                      className={`w-4 h-4 rounded-full border-2 ${
-                        config.roster.draftSettings?.playerPool === option.value
-                          ? "border-[#C4A853] bg-[#C4A853]"
-                          : "border-[#E8E8D8]"
-                      }`}
-                    >
-                      {config.roster.draftSettings?.playerPool === option.value && (
-                        <div className="w-full h-full rounded-full bg-[#4A6A42] scale-50" />
-                      )}
-                    </div>
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Draft Settings */}
-            <div className="bg-[#3A5A32] border-2 border-[#E8E8D8]/30 p-4">
-              <p className="text-xs text-[#E8E8D8]/70 mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>DRAFT SETTINGS</p>
-              <div className="h-[1px] bg-[#E8E8D8]/30 mb-3" />
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Rounds:</span>
-                  <input
-                    type="number"
-                    value={config.roster.draftSettings?.rounds}
-                    onChange={(e) =>
-                      setConfig({
-                        ...config,
-                        roster: {
-                          ...config.roster,
-                          draftSettings: {
-                            ...config.roster.draftSettings!,
-                            rounds: parseInt(e.target.value) || 22,
-                          },
-                        },
-                      })
-                    }
-                    className="w-20 px-2 py-1 bg-[#2A4A22] border-2 border-[#E8E8D8] text-[#E8E8D8] text-xs text-right"
-                    style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
-                  />
-                  <span className="text-xs text-[#E8E8D8]/50" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>(fills 22-man MLB roster)</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Format:</span>
-                  <select
-                    value={config.roster.draftSettings?.format}
-                    onChange={(e) =>
-                      setConfig({
-                        ...config,
-                        roster: {
-                          ...config.roster,
-                          draftSettings: {
-                            ...config.roster.draftSettings!,
-                            format: e.target.value,
-                          },
-                        },
-                      })
-                    }
-                    className="px-3 py-1 bg-[#2A4A22] border-2 border-[#E8E8D8] text-[#E8E8D8] text-xs"
-                    style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
-                  >
-                    <option>Snake</option>
-                    <option>Linear</option>
-                  </select>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Time/Pick:</span>
-                  <select
-                    value={config.roster.draftSettings?.timePerPick}
-                    onChange={(e) =>
-                      setConfig({
-                        ...config,
-                        roster: {
-                          ...config.roster,
-                          draftSettings: {
-                            ...config.roster.draftSettings!,
-                            timePerPick: e.target.value,
-                          },
-                        },
-                      })
-                    }
-                    className="px-3 py-1 bg-[#2A4A22] border-2 border-[#E8E8D8] text-[#E8E8D8] text-xs"
-                    style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
-                  >
-                    <option>Unlimited</option>
-                    <option>30 seconds</option>
-                    <option>60 seconds</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -1340,8 +1194,8 @@ function Step6Confirm({
               manual schedule policy
             </p>
             <p className="text-xs text-[#E8E8D8]/50" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
-              {config.season.allStarGame && "All-Star Game ✓  "}
               {config.season.tradeDeadline && "Trade Deadline ✓"}
+              {!config.season.tradeDeadline && "No optional events enabled"}
             </p>
           </div>
 
@@ -1390,7 +1244,7 @@ function Step6Confirm({
               {selectedTeams.length > 1 ? "s" : ""}
             </p>
             <p className="text-xs text-[#E8E8D8]/50" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
-              {leagueTeams.length - selectedTeams.length} AI-controlled teams
+              {leagueTeams.length - selectedTeams.length} uncontrolled teams
             </p>
           </div>
 
@@ -1404,8 +1258,8 @@ function Step6Confirm({
             </div>
             <p className="text-xs text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
               {config.roster.mode === "existing"
-                ? "Using existing rosters from League Builder"
-                : "Fantasy draft - all rosters will be drafted"}
+                ? "Using existing rosters from League Builder; validated as 22 MLB + 10 FARM per team"
+                : "Fantasy draft deferred in Franchise v1"}
             </p>
           </div>
         </div>

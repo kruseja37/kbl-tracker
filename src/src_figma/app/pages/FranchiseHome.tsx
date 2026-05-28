@@ -11,7 +11,6 @@ import { AwardsCeremonyFlow } from "@/app/components/AwardsCeremonyFlow";
 import { ContractionExpansionFlow } from "@/app/components/ContractionExpansionFlow";
 import { DraftFlow } from "@/app/components/DraftFlow";
 import { FinalizeAdvanceFlow } from "@/app/components/FinalizeAdvanceFlow";
-import { SeasonEndFlow } from "@/app/components/SeasonEndFlow";
 import { TradeFlow } from "@/app/components/TradeFlow";
 import { SpringTrainingFlow } from "@/app/components/SpringTrainingFlow";
 import { AddGameModal, type GameFormData } from "@/app/components/AddGameModal";
@@ -98,6 +97,7 @@ type SeasonPhase = "regular" | "playoffs" | "offseason";
 const MODE_2_V1_SYNTHETIC_SIM_ENABLED = false;
 const MODE_2_V1_TRANSACTION_UI_ENABLED = true;
 const MODE_2_V1_ALL_STAR_UI_ENABLED = false;
+const FRANCHISE_V1_OFFSEASON_EXECUTION_ENABLED = false;
 
 async function getVisibleFranchiseTeam(franchiseId: string | undefined, teamId: string) {
   if (franchiseId) {
@@ -105,6 +105,34 @@ async function getVisibleFranchiseTeam(franchiseId: string | undefined, teamId: 
     if (franchiseTeam) return franchiseTeam;
   }
   return getTeam(teamId);
+}
+
+function FranchiseV1OffseasonGate() {
+  return (
+    <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-8">
+      <div className="max-w-3xl mx-auto text-center">
+        <div className="text-xl text-[#E8E8D8] font-bold mb-2">FRANCHISE V1 RELEASE GATE</div>
+        <div className="text-sm text-[#E8E8D8]/75 mb-6">
+          Offseason execution is deferred for this release. Existing-roster handoff, manual schedules,
+          score-only results, GameTracker, transactions, playoffs, and read-only summaries remain available.
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-left">
+          <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-3">
+            <div className="text-[10px] text-[#C4A853] font-bold mb-1">DEFERRED</div>
+            <div className="text-[9px] text-[#E8E8D8]/70">Awards, retirements, free agency, draft, spring training, and season rollover execution.</div>
+          </div>
+          <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-3">
+            <div className="text-[10px] text-[#C4A853] font-bold mb-1">NO MUTATION</div>
+            <div className="text-[9px] text-[#E8E8D8]/70">This gate does not change League Builder templates, salaries, morale, or franchise rosters.</div>
+          </div>
+          <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-3">
+            <div className="text-[10px] text-[#C4A853] font-bold mb-1">AVAILABLE</div>
+            <div className="text-[9px] text-[#E8E8D8]/70">Use Museum and season summary surfaces for read-only review.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ScheduledGame type is imported from useScheduleData hook
@@ -168,7 +196,6 @@ export function FranchiseHome() {
   const [showContraction, setShowContraction] = useState(false);
   const [showDraft, setShowDraft] = useState(false);
   const [showFinalize, setShowFinalize] = useState(false);
-  const [showSeasonEnd, setShowSeasonEnd] = useState(false);
   const [startSeasonError, setStartSeasonError] = useState<string | null>(null);
   const [isStartingNewSeason, setIsStartingNewSeason] = useState(false);
   const [retiredJerseys, setRetiredJerseys] = useState<RetiredJersey[]>([]);
@@ -391,6 +418,11 @@ export function FranchiseHome() {
 
   // Complete current phase and advance to next, then navigate to the new phase's tab
   const handleAdvancePhase = async () => {
+    if (!FRANCHISE_V1_OFFSEASON_EXECUTION_ENABLED) {
+      setActiveTab("news");
+      return;
+    }
+
     try {
       // Figure out what the next phase will be before advancing
       const currentIdx = offseasonState.currentPhase
@@ -517,6 +549,12 @@ export function FranchiseHome() {
 
   // Begin offseason: initialize offseason state in IndexedDB, then switch phase
   const handleBeginOffseason = async () => {
+    if (!FRANCHISE_V1_OFFSEASON_EXECUTION_ENABLED) {
+      setSeasonPhase("offseason");
+      setActiveTab("news");
+      return;
+    }
+
     try {
       await startOffseason(activeSeasonId, currentSeason, { franchiseId });
       setSeasonPhase("offseason");
@@ -528,89 +566,6 @@ export function FranchiseHome() {
       setActiveTab("awards");
     }
   };
-
-  // Build SeasonEndFlow props from franchise + playoff data
-  const seasonEndProps = useMemo(() => {
-    // Flatten standings from { Eastern: { div: entry[] }, Western: { div: entry[] } } to TeamStanding[]
-    const flatStandings: Array<{
-      teamId: string; teamName: string; shortName: string;
-      wins: number; losses: number; division: string;
-      primaryColor: string;
-    }> = [];
-
-    const standings = franchiseData.standings;
-    if (standings) {
-      for (const [, conf] of Object.entries(standings)) {
-        if (!conf || typeof conf !== 'object') continue;
-        for (const [divName, entries] of Object.entries(conf as Record<string, unknown>)) {
-          if (!Array.isArray(entries)) continue;
-          entries.forEach((entry: { team?: string; wins?: number; losses?: number }) => {
-            if (!entry || !entry.team) return;
-            const teamName = entry.team;
-            // Find teamId by name from teamNameMap (reverse lookup)
-            const teamId = Object.entries(franchiseData.teamNameMap ?? {})
-              .find(([, name]) => name === teamName)?.[0] || teamName;
-            const colors = getTeamColors(teamId);
-            flatStandings.push({
-              teamId,
-              teamName,
-              shortName: teamName.slice(0, 3).toUpperCase(),
-              wins: entry.wins ?? 0,
-              losses: entry.losses ?? 0,
-              division: divName,
-              primaryColor: colors.primary || '#5A8352',
-            });
-          });
-        }
-      }
-    }
-
-    // Championship data from playoff bracket
-    const championship = playoffData.bracketByLeague?.Championship ?? null;
-    const championTeam = playoffData.playoff?.champion
-      ? playoffData.playoff.teams.find(t => t.teamId === playoffData.playoff?.champion)
-      : null;
-
-    const championshipData = championship && championTeam ? {
-      teamName: championTeam.teamName,
-      opponentName: championship.winner === championship.higherSeed.teamId
-        ? championship.lowerSeed.teamName
-        : championship.higherSeed.teamName,
-      seriesResult: `${championship.higherSeedWins}-${championship.lowerSeedWins}`,
-      seasonNumber: currentSeason,
-      rosterCount: 0,
-      pitchers: [] as { name: string; position: string }[],
-      positionPlayers: [] as { name: string; position: string }[],
-    } : undefined;
-
-    const totalPlayers = flatStandings.length * 22; // Approximate roster size
-
-    return {
-      seasonNumber: currentSeason,
-      standings: flatStandings,
-      hadPlayoffs: playoffData.playoff?.status === 'COMPLETED',
-      championship: championshipData,
-      mojoReset: {
-        hotPlayers: 0,
-        coldPlayers: 0,
-        specialMojo: 0,
-        normalPlayers: totalPlayers,
-        totalPlayers,
-      },
-      archive: {
-        seasonNumber: currentSeason,
-        champion: championTeam?.teamName,
-        championResult: championship
-          ? `${championship.higherSeedWins}-${championship.lowerSeedWins}`
-          : undefined,
-        divisionWinners: [],
-        playoffTeams: playoffData.playoff?.teams.length ?? 0,
-        totalGames: scheduleData.games.length,
-        totalPlayers,
-      },
-      mvpCandidates: undefined, // Playoff stats not yet tracked per player
-    };
-  }, [activeSeasonId, franchiseData.standings, franchiseData.teamNameMap, playoffData, currentSeason, scheduleData.games.length]);
 
   const handleCreatePlayoffBracket = async () => {
     if (!franchiseId) return;
@@ -1052,34 +1007,39 @@ export function FranchiseHome() {
     { id: "museum", label: "MUSEUM", icon: <Trophy className="w-4 h-4" /> },
   ];
 
-  // Offseason tabs: phases 1-11 in state machine order, then utility tabs (finalize, museum)
-  const offseasonTabs = [
-    // Phase 1: STANDINGS_FINAL
-    { id: "news", label: "THE TOOTWHISTLE TIMES", icon: <Newspaper className="w-4 h-4" /> },
-    // Phase 2: AWARDS
-    { id: "awards", label: "AWARDS", icon: <Award className="w-4 h-4" /> },
-    // Phase 3: RATINGS_ADJUSTMENTS
-    { id: "ratings-adj", label: "RATINGS ADJ", icon: <TrendingDown className="w-4 h-4" /> },
-    // Phase 4: expansion/contraction is deferred in Mode 2 v1.
-    { id: "contraction", label: "EXPANSION NOTE", icon: <Shuffle className="w-4 h-4" /> },
-    // Phase 5: RETIREMENTS
-    { id: "retirements", label: "RETIREMENTS", icon: <UserMinus className="w-4 h-4" /> },
-    // Phase 6: FREE_AGENCY
-    { id: "free-agency", label: "FREE AGENCY", icon: <DollarSign className="w-4 h-4" /> },
-    // Phase 7: DRAFT
-    { id: "draft", label: "DRAFT", icon: <ClipboardList className="w-4 h-4" /> },
-    // Phase 8: FARM_RECONCILIATION
-    { id: "farm-reconciliation", label: "FARM SYSTEM", icon: <GitMerge className="w-4 h-4" /> },
-    // Phase 9: CHEMISTRY_REBALANCING
-    { id: "chemistry", label: "CHEMISTRY", icon: <FlaskConical className="w-4 h-4" /> },
-    // Phase 11: SPRING_TRAINING
-    { id: "spring-training", label: "SPRING TRAINING", icon: <Sunrise className="w-4 h-4" /> },
-    // Utility tabs (not offseason phases)
-    { id: "finalize", label: "FINALIZE & ADVANCE", icon: <CheckCircle className="w-4 h-4" /> },
-    { id: "museum", label: "MUSEUM", icon: <Trophy className="w-4 h-4" /> },
-  ];
+  const offseasonTabs = FRANCHISE_V1_OFFSEASON_EXECUTION_ENABLED
+    ? [
+        // Phase 1: STANDINGS_FINAL
+        { id: "news", label: "THE TOOTWHISTLE TIMES", icon: <Newspaper className="w-4 h-4" /> },
+        // Phase 2: AWARDS
+        { id: "awards", label: "AWARDS", icon: <Award className="w-4 h-4" /> },
+        // Phase 3: RATINGS_ADJUSTMENTS
+        { id: "ratings-adj", label: "RATINGS ADJ", icon: <TrendingDown className="w-4 h-4" /> },
+        // Phase 4: expansion/contraction is deferred in Mode 2 v1.
+        { id: "contraction", label: "EXPANSION NOTE", icon: <Shuffle className="w-4 h-4" /> },
+        // Phase 5: RETIREMENTS
+        { id: "retirements", label: "RETIREMENTS", icon: <UserMinus className="w-4 h-4" /> },
+        // Phase 6: FREE_AGENCY
+        { id: "free-agency", label: "FREE AGENCY", icon: <DollarSign className="w-4 h-4" /> },
+        // Phase 7: DRAFT
+        { id: "draft", label: "DRAFT", icon: <ClipboardList className="w-4 h-4" /> },
+        // Phase 8: FARM_RECONCILIATION
+        { id: "farm-reconciliation", label: "FARM SYSTEM", icon: <GitMerge className="w-4 h-4" /> },
+        // Phase 9: CHEMISTRY_REBALANCING
+        { id: "chemistry", label: "CHEMISTRY", icon: <FlaskConical className="w-4 h-4" /> },
+        // Phase 11: SPRING_TRAINING
+        { id: "spring-training", label: "SPRING TRAINING", icon: <Sunrise className="w-4 h-4" /> },
+        // Utility tabs (not offseason phases)
+        { id: "finalize", label: "FINALIZE & ADVANCE", icon: <CheckCircle className="w-4 h-4" /> },
+        { id: "museum", label: "MUSEUM", icon: <Trophy className="w-4 h-4" /> },
+      ]
+    : [
+        { id: "news", label: "V1 RELEASE GATE", icon: <Newspaper className="w-4 h-4" /> },
+        { id: "museum", label: "MUSEUM", icon: <Trophy className="w-4 h-4" /> },
+      ];
 
   const currentTabs = seasonPhase === "regular" ? regularSeasonTabs : seasonPhase === "playoffs" ? playoffTabs : offseasonTabs;
+  const canUseOffseasonExecution = seasonPhase === "offseason" && FRANCHISE_V1_OFFSEASON_EXECUTION_ENABLED;
 
   // Schedule data is now loaded from IndexedDB via useScheduleData hook
   // No mock initialization needed - schedule starts empty per Figma spec
@@ -1191,7 +1151,11 @@ export function FranchiseHome() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                {offseasonState.isOffseasonComplete ? (
+                {!FRANCHISE_V1_OFFSEASON_EXECUTION_ENABLED ? (
+                  <div className="bg-[#4A6844] border-[3px] border-[#5A8352] px-5 py-2 text-sm text-[#E8E8D8]/70">
+                    OFFSEASON EXECUTION DEFERRED
+                  </div>
+                ) : offseasonState.isOffseasonComplete ? (
                   <button
                     onClick={handleStartNewSeason}
                     disabled={isStartingNewSeason}
@@ -1231,6 +1195,10 @@ export function FranchiseHome() {
                   <button
                     key={phase}
                     onClick={() => {
+                      if (!FRANCHISE_V1_OFFSEASON_EXECUTION_ENABLED) {
+                        setActiveTab("news");
+                        return;
+                      }
                       const tabForPhase = phaseToTab[phase];
                       if (tabForPhase) setActiveTab(tabForPhase);
                     }}
@@ -1299,7 +1267,9 @@ export function FranchiseHome() {
           />
         )}
         {activeTab === "news" && (
-          <BeatReporterNews franchiseId={franchiseId} seasonId={activeSeasonId} />
+          seasonPhase === "offseason"
+            ? <FranchiseV1OffseasonGate />
+            : <BeatReporterNews franchiseId={franchiseId} seasonId={activeSeasonId} />
         )}
         {activeTab === "standings" && (
           <StandingsContent />
@@ -1639,13 +1609,13 @@ export function FranchiseHome() {
                       </div>
                     </div>
 
-                    {/* BEGIN OFFSEASON Button */}
+                    {/* Franchise v1 release gate */}
                     <button
                       onClick={handleBeginOffseason}
                       className="w-full bg-[#C4A853] border-[5px] border-[#9A7B2C] py-4 px-8 text-lg text-[#1a1a1a] hover:bg-[#D4B863] active:scale-[0.98] transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] flex items-center justify-center gap-3"
                       style={{ textShadow: '1px 1px 0px rgba(255,255,255,0.3)' }}
                     >
-                      <span>BEGIN OFFSEASON</span>
+                      <span>VIEW V1 RELEASE GATE</span>
                       <ArrowRight className="w-5 h-5" />
                     </button>
                   </div>
@@ -2199,7 +2169,7 @@ export function FranchiseHome() {
           <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-8">
             <div className="text-center mb-8">
               <h2 className="text-2xl text-[#E8E8D8] font-bold mb-2">ADVANCE TO OFFSEASON</h2>
-              <div className="text-sm text-[#E8E8D8]/70">Complete playoffs and begin offseason activities</div>
+              <div className="text-sm text-[#E8E8D8]/70">Complete playoffs and review the season summary</div>
             </div>
 
             <div className="max-w-2xl mx-auto space-y-6">
@@ -2264,7 +2234,7 @@ export function FranchiseHome() {
 
               {/* Advance Button */}
               <button
-                onClick={() => setShowSeasonEnd(true)}
+                onClick={() => navigate(`/franchise/${franchiseId}/season-summary`)}
                 disabled={playoffData.playoff?.status !== 'COMPLETED'}
                 className={`w-full border-[5px] p-8 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] group ${
                   playoffData.playoff?.status === 'COMPLETED'
@@ -2281,10 +2251,10 @@ export function FranchiseHome() {
                   <div className="text-left">
                     <div className={`text-2xl font-bold mb-1 ${
                       playoffData.playoff?.status === 'COMPLETED' ? 'text-[#E8E8D8]' : 'text-[#E8E8D8]/60'
-                    }`}>PROCEED TO OFFSEASON</div>
+                    }`}>VIEW SEASON SUMMARY</div>
                     <div className={`text-sm ${
                       playoffData.playoff?.status === 'COMPLETED' ? 'text-[#E8E8D8]/80' : 'text-[#E8E8D8]/40'
-                    }`}>Begin Awards, Free Agency, Draft, and more</div>
+                    }`}>Offseason execution is deferred in Franchise v1</div>
                   </div>
                 </div>
               </button>
@@ -2293,17 +2263,6 @@ export function FranchiseHome() {
                 <div className="text-center text-xs text-[#FF9944] mt-4">
                   ⚠️ Complete all playoff series before advancing to offseason
                 </div>
-              )}
-
-              {showSeasonEnd && (
-                <SeasonEndFlow
-                  {...seasonEndProps}
-                  onComplete={() => {
-                    setShowSeasonEnd(false);
-                    handleBeginOffseason();
-                  }}
-                  onCancel={() => setShowSeasonEnd(false)}
-                />
               )}
             </div>
           </div>
@@ -2322,7 +2281,7 @@ export function FranchiseHome() {
           />
         )}
         
-        {activeTab === "free-agency" && (
+        {canUseOffseasonExecution && activeTab === "free-agency" && (
           <div>
             <div className="text-center py-12">
               <button
@@ -2345,7 +2304,7 @@ export function FranchiseHome() {
         )}
         
         {/* Ratings Adjustment Modal */}
-        {showRatingsAdjustment && (
+        {canUseOffseasonExecution && showRatingsAdjustment && (
           <RatingsAdjustmentFlow
             seasonId={activeSeasonId}
             franchiseId={franchiseId}
@@ -2354,7 +2313,7 @@ export function FranchiseHome() {
         )}
         
         {/* Retirements Modal */}
-        {showRetirements && (
+        {canUseOffseasonExecution && showRetirements && (
           <RetirementFlow
             seasonId={activeSeasonId}
             seasonNumber={currentSeason}
@@ -2367,7 +2326,7 @@ export function FranchiseHome() {
         )}
 
         {/* Awards Ceremony Modal */}
-        {showAwards && (
+        {canUseOffseasonExecution && showAwards && (
           <AwardsCeremonyFlow
             seasonId={activeSeasonId}
             seasonNumber={currentSeason}
@@ -2377,7 +2336,7 @@ export function FranchiseHome() {
         )}
 
         {/* Contraction/Expansion Modal */}
-        {showContraction && (
+        {canUseOffseasonExecution && showContraction && (
           <ContractionExpansionFlow
             seasonId={activeSeasonId}
             seasonNumber={currentSeason}
@@ -2387,7 +2346,7 @@ export function FranchiseHome() {
         )}
 
         {/* Draft Modal */}
-        {showDraft && (
+        {canUseOffseasonExecution && showDraft && (
           <DraftFlow
             seasonId={activeSeasonId}
             seasonNumber={currentSeason}
@@ -2400,7 +2359,7 @@ export function FranchiseHome() {
           />
         )}
 
-        {activeTab === "draft" && (
+        {canUseOffseasonExecution && activeTab === "draft" && (
           <button
             onClick={() => setShowDraft(true)}
             className="w-full bg-[#6B9462] border-[5px] border-[#C4A853] p-8 hover:bg-[#5A8352] transition-colors group"
@@ -2437,7 +2396,7 @@ export function FranchiseHome() {
             </div>
           </button>
         )}
-        {activeTab === "farm-reconciliation" && (
+        {canUseOffseasonExecution && activeTab === "farm-reconciliation" && (
           <div className="p-8 space-y-6">
             <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-6">
               <div className="flex items-center gap-4 mb-4">
@@ -2479,7 +2438,7 @@ export function FranchiseHome() {
             </div>
           </div>
         )}
-        {activeTab === "chemistry" && (
+        {canUseOffseasonExecution && activeTab === "chemistry" && (
           <div className="p-8 space-y-6">
             <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-6">
               <div className="flex items-center gap-4 mb-4">
@@ -2521,12 +2480,12 @@ export function FranchiseHome() {
             </div>
           </div>
         )}
-        {activeTab === "spring-training" && (
+        {canUseOffseasonExecution && activeTab === "spring-training" && (
           <div className="p-8">
             <SpringTrainingFlow onComplete={handleAdvancePhase} />
           </div>
         )}
-        {activeTab === "finalize" && (
+        {canUseOffseasonExecution && activeTab === "finalize" && (
           <div>
             <div className="text-center py-12">
               <button
@@ -2560,7 +2519,7 @@ export function FranchiseHome() {
             )}
           </div>
         )}
-        {activeTab === "ratings-adj" && (
+        {canUseOffseasonExecution && activeTab === "ratings-adj" && (
           <button
             onClick={() => setShowRatingsAdjustment(true)}
             className="w-full bg-[#6B9462] border-[5px] border-[#C4A853] p-8 hover:bg-[#5A8352] transition-colors group"
@@ -2592,7 +2551,7 @@ export function FranchiseHome() {
             </div>
           </button>
         )}
-        {activeTab === "awards" && (
+        {canUseOffseasonExecution && activeTab === "awards" && (
           <div className="p-8 space-y-6">
             <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-6">
               <div className="flex items-center gap-4 mb-4">
@@ -2652,7 +2611,7 @@ export function FranchiseHome() {
             </div>
           </div>
         )}
-        {activeTab === "contraction" && (
+        {canUseOffseasonExecution && activeTab === "contraction" && (
           <div className="p-8 space-y-6">
             <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-6">
               <div className="flex items-center gap-4 mb-4">
@@ -2701,7 +2660,7 @@ export function FranchiseHome() {
             </div>
           </div>
         )}
-        {activeTab === "retirements" && (
+        {canUseOffseasonExecution && activeTab === "retirements" && (
           <div className="p-8 space-y-6">
             <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-6">
               <div className="flex items-center gap-4 mb-4">
