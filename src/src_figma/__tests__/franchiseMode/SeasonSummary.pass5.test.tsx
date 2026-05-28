@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   mockUseFranchiseData: vi.fn(),
   mockUseScheduleData: vi.fn(),
   mockUsePlayoffData: vi.fn(),
+  mockCreateNewPlayoff: vi.fn(),
   mockUseSeasonStats: vi.fn(),
 }));
 
@@ -171,7 +172,20 @@ describe('SeasonSummary Pass 5 persisted-summary fidelity', () => {
     mocks.mockUseFranchiseData.mockReturnValue({
       franchiseConfig: {
         teams: { selectedTeams: ['team-1'] },
-        season: { gamesPerTeam: 60 },
+        playoffSetupSnapshot: {
+          teamsQualifying: 2,
+          format: 'conference',
+          seriesLengths: {
+            wildCard: 'best-of-3',
+            divisionSeries: 'best-of-5',
+            championship: 'best-of-7',
+            worldSeries: 'best-of-7',
+          },
+          homeFieldAdvantage: 'higher-seed',
+        },
+        rulesSnapshot: { useDH: false, inningsPerGame: 7 },
+        seasonLength: { inningsPerGame: 7 },
+        season: { gamesPerTeam: 60, inningsPerGame: 9, useDH: true },
       },
       standings: {},
       leagueName: 'Snapshot League',
@@ -188,7 +202,7 @@ describe('SeasonSummary Pass 5 persisted-summary fidelity', () => {
       hasActivePlayoff: false,
       isLoading: false,
       error: null,
-      createNewPlayoff: vi.fn(),
+      createNewPlayoff: mocks.mockCreateNewPlayoff,
     });
     mocks.mockUseSeasonStats.mockReturnValue({
       isLoading: false,
@@ -220,5 +234,26 @@ describe('SeasonSummary Pass 5 persisted-summary fidelity', () => {
     expect(liveStats.getBattingLeaders).not.toHaveBeenCalled();
     expect(liveStats.getPitchingLeaders).not.toHaveBeenCalled();
     expect(liveStats.getFieldingLeaders).not.toHaveBeenCalled();
+  });
+
+  test('starts playoffs with stored no-DH franchise rules from the season summary route', async () => {
+    mocks.mockCreateNewPlayoff.mockResolvedValue({ id: 'playoff-created' });
+
+    render(<SeasonSummary />);
+
+    await screen.findByText('SEASON 1 SUMMARY');
+    fireEvent.click(screen.getByRole('button', { name: /START PLAYOFFS/i }));
+
+    await waitFor(() =>
+      expect(mocks.mockCreateNewPlayoff).toHaveBeenCalledWith(expect.objectContaining({
+        franchiseId: 'franchise-1',
+        seasonId: 'franchise-1-season-1',
+        seasonNumber: 1,
+        teamsQualifying: 2,
+        inningsPerGame: 7,
+        useDH: false,
+      })),
+    );
+    expect(mocks.mockNavigate).toHaveBeenCalledWith('/franchise/franchise-1?tab=bracket');
   });
 });

@@ -508,7 +508,8 @@ export function SeasonSummary() {
     setIsCreatingPlayoff(true);
     setPlayoffCreationError(null);
     try {
-      const playoffConfig = franchiseData.franchiseConfig?.playoffs;
+      const playoffConfig = franchiseData.franchiseConfig?.playoffSetupSnapshot
+        ?? franchiseData.franchiseConfig?.playoffs;
       const teamsQualifying = playoffConfig?.teamsQualifying ?? 8;
 
       // Convert seriesLengths strings (e.g. "Best-of-5") to gamesPerRound numbers
@@ -534,7 +535,13 @@ export function SeasonSummary() {
         gamesPerRound.push(5, 7, 7);
       }
 
-      const inningsPerGame = franchiseData.franchiseConfig?.season?.inningsPerGame ?? 9;
+      const inningsPerGame = franchiseData.franchiseConfig?.seasonLength?.inningsPerGame
+        ?? franchiseData.franchiseConfig?.rulesSnapshot?.inningsPerGame
+        ?? franchiseData.franchiseConfig?.season?.inningsPerGame
+        ?? 9;
+      const useDH = franchiseData.franchiseConfig?.rulesSnapshot?.useDH
+        ?? franchiseData.franchiseConfig?.season?.useDH
+        ?? true;
 
       await playoffData.createNewPlayoff({
         seasonNumber: currentSeason,
@@ -543,7 +550,7 @@ export function SeasonSummary() {
         teamsQualifying,
         gamesPerRound,
         inningsPerGame,
-        useDH: true,
+        useDH,
       });
 
       navigate(`/franchise/${franchiseId}?tab=bracket`);

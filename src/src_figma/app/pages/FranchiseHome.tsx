@@ -1523,7 +1523,18 @@ export function FranchiseHome() {
           </div>
         )}
         {activeTab === "museum" && (
-          <MuseumContent retiredJerseys={retiredJerseys} />
+          <div className="space-y-4">
+            <div
+              data-testid="franchise-v1-global-museum-notice"
+              className="bg-[#4A6844] border-[4px] border-[#C4A853] p-4 text-center"
+            >
+              <div className="text-[10px] text-[#C4A853] font-bold mb-1">GLOBAL MUSEUM NOTICE</div>
+              <div className="text-[9px] text-[#E8E8D8]/80">
+                This read-only Museum is global and not franchise-scoped in internal v1.
+              </div>
+            </div>
+            <MuseumContent retiredJerseys={retiredJerseys} />
+          </div>
         )}
         
         {/* Playoff Tabs Content */}
@@ -4054,31 +4065,8 @@ function LeagueLeadersContent() {
   const pitchingLeadersAL = makeSummary(pitchingLeadersDataAL as unknown as Record<string, { value: string }[]>);
   const pitchingLeadersNL = makeSummary(pitchingLeadersDataNL as unknown as Record<string, { value: string }[]>);
 
-  // Empty award race data — will be populated from fWAR calculations when games are played
-  const goldGloveLeadersAL: { position: string; player: string; team: string; tier: string; fWAR: string }[] = [];
-  const boogerGloveLeaderAL = { position: "", player: "", team: "", tier: "BOOGER", fWAR: "" };
-  const goldGloveLeadersNL: { position: string; player: string; team: string; tier: string; fWAR: string }[] = [];
-  const boogerGloveLeaderNL = { position: "", player: "", team: "", tier: "BOOGER", fWAR: "" };
-
-  const silverSluggerLeadersAL: { position: string; player: string; team: string }[] = [];
-  const silverSluggerLeadersNL: { position: string; player: string; team: string }[] = [];
-
-  const majorAwardsLeadersAL: { award: string; player: string; team: string; stats: string }[] = [];
-  const majorAwardsLeadersNL: { award: string; player: string; team: string; stats: string }[] = [];
-
-  const leagueWideAwardsLeaders: { award: string; player: string; team: string; stats: string }[] = [];
-
   const toggleSection = (section: string) => {
     setExpandedSection(expandedSection === section ? null : section);
-  };
-
-  const getTierColor = (tier: string) => {
-    switch (tier) {
-      case "PLATINUM": return "#E5E4E2";
-      case "GOLD": return "#FFD700";
-      case "BOOGER": return "#9ACD32";
-      default: return "#FFD700";
-    }
   };
 
   return (
@@ -4086,9 +4074,9 @@ function LeagueLeadersContent() {
       {/* Season 1 Leaders Header */}
       <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4 text-center">
         <div className="text-2xl text-[#E8E8D8] mb-1" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.2)' }}>
-          SEASON 1 AWARDS RACE
+          SEASON 1 LEAGUE LEADERS
         </div>
-        <div className="text-[8px] text-[#E8E8D8]/70">CURRENT LEADERS & VOTING TRACKER</div>
+        <div className="text-[8px] text-[#E8E8D8]/70">REAL BATTING AND PITCHING LEADERBOARDS</div>
       </div>
 
       {/* League Leaders Section */}
@@ -4234,198 +4222,14 @@ function LeagueLeadersContent() {
         )}
       </div>
 
-      {/* Fielding Awards Section */}
-      <div>
-        <button
-          onClick={() => toggleSection("gloves")}
-          className="w-full bg-[#FFD700] border-[5px] border-black py-3 px-4 text-[10px] text-black hover:bg-[#DAA520] active:scale-[0.99] transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] flex items-center justify-between"
-        >
-          <span>▶ GOLD / PLATINUM / BOOGER GLOVES RACE</span>
-          {expandedSection === "gloves" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-        </button>
-        
-        {expandedSection === "gloves" && (
-          <div className="bg-[#6B9462] border-[5px] border-[#4A6844] border-t-0 p-4">
-            {/* League toggles */}
-            <div className="flex gap-2 mb-4">
-              <button
-                onClick={() => setExpandedLeague("al")}
-                className={`flex-1 py-2 px-4 border-[4px] border-[#4A6844] transition ${
-                  expandedLeague === "al" ? "bg-[#4A6844] text-[#E8E8D8]" : "bg-[#5A8352] text-[#E8E8D8]/70 hover:bg-[#4F7D4B]"
-                }`}
-              >
-                <div className="text-[10px] font-bold">EASTERN LEAGUE</div>
-              </button>
-              <button
-                onClick={() => setExpandedLeague("nl")}
-                className={`flex-1 py-2 px-4 border-[4px] border-[#4A6844] transition ${
-                  expandedLeague === "nl" ? "bg-[#4A6844] text-[#E8E8D8]" : "bg-[#5A8352] text-[#E8E8D8]/70 hover:bg-[#4F7D4B]"
-                }`}
-              >
-                <div className="text-[10px] font-bold">WESTERN LEAGUE</div>
-              </button>
-            </div>
-
-            {/* Display selected league */}
-            <div className="grid grid-cols-3 gap-2">
-              {(expandedLeague === "al" ? goldGloveLeadersAL : goldGloveLeadersNL).map((leader, index) => (
-                <div 
-                  key={index} 
-                  className="bg-[#5A8352] border-[4px] border-[#4A6844] p-3"
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="text-sm text-[#E8E8D8] font-bold">{leader.position}</div>
-                    {leader.tier === "Gold Glove" && (
-                      <Trophy className="w-5 h-5 text-[#FFD700]" />
-                    )}
-                    {leader.tier === "Platinum Glove" && (
-                      <Trophy className="w-5 h-5 text-[#C0C0C0]" />
-                    )}
-                  </div>
-                  <div className="text-center">
-                    <div className="text-[8px] text-[#E8E8D8]">{leader.player}</div>
-                    <div className="text-[8px] text-[#E8E8D8]/70">{leader.team}</div>
-                    <div className="mt-2 text-[7px] text-[#E8E8D8] font-bold">{leader.tier}</div>
-                    <div className="text-[7px] text-[#E8E8D8]/70">fWAR: {leader.fWAR}</div>
-                  </div>
-                </div>
-              ))}
-              <div 
-                className="bg-[#5A8352] border-[4px] border-[#4A6844] p-3"
-              >
-                <div className="text-sm text-[#E8E8D8] font-bold mb-2">{expandedLeague === "al" ? boogerGloveLeaderAL.position : boogerGloveLeaderNL.position}</div>
-                <div className="text-center">
-                  <div className="text-[8px] text-[#E8E8D8]">{expandedLeague === "al" ? boogerGloveLeaderAL.player : boogerGloveLeaderNL.player}</div>
-                  <div className="text-[8px] text-[#E8E8D8]/70">{expandedLeague === "al" ? boogerGloveLeaderAL.team : boogerGloveLeaderNL.team}</div>
-                  <div className="mt-2 text-[7px] text-[#E8E8D8] font-bold">{expandedLeague === "al" ? boogerGloveLeaderAL.tier : boogerGloveLeaderNL.tier}</div>
-                  <div className="text-[7px] text-[#E8E8D8]/70">fWAR: {expandedLeague === "al" ? boogerGloveLeaderAL.fWAR : boogerGloveLeaderNL.fWAR}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Silver Sluggers Section */}
-      <div>
-        <button
-          onClick={() => toggleSection("sluggers")}
-          className="w-full bg-[#C0C0C0] border-[5px] border-black py-3 px-4 text-[10px] text-black hover:bg-[#D0D0D0] active:scale-[0.99] transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] flex items-center justify-between"
-        >
-          <span>▶ SILVER SLUGGERS RACE</span>
-          {expandedSection === "sluggers" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-        </button>
-        
-        {expandedSection === "sluggers" && (
-          <div className="bg-[#6B9462] border-[5px] border-[#4A6844] border-t-0 p-4">
-            {/* League toggles */}
-            <div className="flex gap-2 mb-4">
-              <button
-                onClick={() => setExpandedLeague("al")}
-                className={`flex-1 py-2 px-4 border-[4px] border-[#4A6844] transition ${
-                  expandedLeague === "al" ? "bg-[#4A6844] text-[#E8E8D8]" : "bg-[#5A8352] text-[#E8E8D8]/70 hover:bg-[#4F7D4B]"
-                }`}
-              >
-                <div className="text-[10px] font-bold">EASTERN LEAGUE</div>
-              </button>
-              <button
-                onClick={() => setExpandedLeague("nl")}
-                className={`flex-1 py-2 px-4 border-[4px] border-[#4A6844] transition ${
-                  expandedLeague === "nl" ? "bg-[#4A6844] text-[#E8E8D8]" : "bg-[#5A8352] text-[#E8E8D8]/70 hover:bg-[#4F7D4B]"
-                }`}
-              >
-                <div className="text-[10px] font-bold">WESTERN LEAGUE</div>
-              </button>
-            </div>
-
-            {/* Display selected league */}
-            <div className="grid grid-cols-3 gap-2">
-              {(expandedLeague === "al" ? silverSluggerLeadersAL : silverSluggerLeadersNL).map((leader, index) => (
-                <div key={index} className="bg-[#5A8352] border-[4px] border-[#4A6844] p-3">
-                  <div className="text-center">
-                    <div className="text-sm text-[#E8E8D8] font-bold mb-1">{leader.position}</div>
-                    <div className="text-[8px] text-[#E8E8D8]">{leader.player}</div>
-                    <div className="text-[8px] text-[#E8E8D8]/70">{leader.team}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Major Awards Section */}
-      <div>
-        <button
-          onClick={() => toggleSection("major")}
-          className="w-full bg-[#DD0000] border-[5px] border-black py-3 px-4 text-[10px] text-white hover:bg-[#EE1111] active:scale-[0.99] transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] flex items-center justify-between"
-        >
-          <span>▶ MAJOR AWARDS RACE</span>
-          {expandedSection === "major" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-        </button>
-        
-        {expandedSection === "major" && (
-          <div className="bg-[#6B9462] border-[5px] border-[#4A6844] border-t-0 p-4">
-            {/* League toggles */}
-            <div className="flex gap-2 mb-4">
-              <button
-                onClick={() => setExpandedLeague("al")}
-                className={`flex-1 py-2 px-4 border-[4px] border-[#4A6844] transition ${
-                  expandedLeague === "al" ? "bg-[#4A6844] text-[#E8E8D8]" : "bg-[#5A8352] text-[#E8E8D8]/70 hover:bg-[#4F7D4B]"
-                }`}
-              >
-                <div className="text-[10px] font-bold">EASTERN LEAGUE</div>
-              </button>
-              <button
-                onClick={() => setExpandedLeague("nl")}
-                className={`flex-1 py-2 px-4 border-[4px] border-[#4A6844] transition ${
-                  expandedLeague === "nl" ? "bg-[#4A6844] text-[#E8E8D8]" : "bg-[#5A8352] text-[#E8E8D8]/70 hover:bg-[#4F7D4B]"
-                }`}
-              >
-                <div className="text-[10px] font-bold">WESTERN LEAGUE</div>
-              </button>
-            </div>
-
-            {/* Display selected league */}
-            <div className="space-y-2">
-              {(expandedLeague === "al" ? majorAwardsLeadersAL : majorAwardsLeadersNL).map((award, index) => (
-                <div key={index} className="bg-[#5A8352] border-[4px] border-[#4A6844] p-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <div className="text-[10px] text-[#E8E8D8] font-bold mb-1">{award.award}</div>
-                      <div className="text-[8px] text-[#E8E8D8]">{award.player} ({award.team})</div>
-                      <div className="text-[8px] text-[#E8E8D8]/70 mt-1">{award.stats}</div>
-                    </div>
-                    {!award.award.includes("BUST OF THE YEAR") && (
-                      <Trophy className="w-6 h-6 text-[#FFD700]" />
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* League-wide awards */}
-            <div className="mt-4">
-              <div className="bg-[#4A6844] border-[4px] border-[#5A8352] p-2 mb-2">
-                <div className="text-[10px] text-[#E8E8D8] text-center font-bold">LEAGUE-WIDE AWARDS</div>
-              </div>
-              <div className="space-y-2">
-                {leagueWideAwardsLeaders.map((award, index) => (
-                  <div key={index} className="bg-[#5A8352] border-[4px] border-[#4A6844] p-3">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="text-[10px] text-[#E8E8D8] font-bold mb-1">{award.award}</div>
-                        <div className="text-[8px] text-[#E8E8D8]">{award.player} ({award.team})</div>
-                        <div className="text-[8px] text-[#E8E8D8]/70 mt-1">{award.stats}</div>
-                      </div>
-                      <Trophy className="w-6 h-6 text-[#FFD700]" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
+      <div
+        data-testid="franchise-v1-awards-deferred"
+        className="bg-[#4A6844] border-[4px] border-[#5A8352] p-4 text-center"
+      >
+        <div className="text-[10px] text-[#C4A853] font-bold mb-1">AWARDS AND VOTING DEFERRED</div>
+        <div className="text-[9px] text-[#E8E8D8]/80">
+          Internal v1 shows stat leaderboards only. Gloves, Silver Sluggers, major award races, and voting trackers are not active.
+        </div>
       </div>
     </div>
   );

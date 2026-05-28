@@ -106,6 +106,8 @@ vi.mock('@/hooks/useFranchiseData', () => ({
       batting: [],
       pitching: [],
     },
+    battingLeaders: { AVG: [], HR: [], RBI: [], SB: [], OPS: [], WAR: [], fWAR: [], rWAR: [] },
+    pitchingLeaders: { ERA: [], W: [], K: [], WHIP: [], SV: [], WAR: [] },
     news: [],
     seasonStats: {},
     isLoading: false,
@@ -246,6 +248,36 @@ describe('FranchiseHome Component', () => {
       expect(screen.queryByRole('button', { name: /BEGIN AWARDS CEREMONY/i })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /BEGIN RETIREMENT PHASE/i })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /START FINALIZE/i })).not.toBeInTheDocument();
+    });
+
+    test('regular-season league leaders gate deferred awards and voting surfaces', () => {
+      render(<FranchiseHome />);
+
+      fireEvent.click(screen.getByRole('button', { name: /LEAGUE LEADERS/i }));
+
+      expect(screen.getByText('SEASON 1 LEAGUE LEADERS')).toBeInTheDocument();
+      expect(screen.getByText('REAL BATTING AND PITCHING LEADERBOARDS')).toBeInTheDocument();
+      expect(screen.getByTestId('franchise-v1-awards-deferred')).toHaveTextContent(
+        'AWARDS AND VOTING DEFERRED',
+      );
+      expect(screen.queryByText('CURRENT LEADERS & VOTING TRACKER')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /GLOVES RACE/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /SILVER SLUGGERS RACE/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /MAJOR AWARDS RACE/i })).not.toBeInTheDocument();
+    });
+
+    test('regular-season Museum is clearly labeled as global and non-franchise-scoped', () => {
+      render(<FranchiseHome />);
+
+      fireEvent.click(screen.getByRole('button', { name: /MUSEUM/i }));
+
+      expect(screen.getByTestId('franchise-v1-global-museum-notice')).toHaveTextContent(
+        'GLOBAL MUSEUM NOTICE',
+      );
+      expect(screen.getByTestId('franchise-v1-global-museum-notice')).toHaveTextContent(
+        'global and not franchise-scoped',
+      );
+      expect(screen.getByTestId('museum-content')).toBeInTheDocument();
     });
   });
 
