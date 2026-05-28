@@ -193,6 +193,83 @@ export function collectFranchiseRosterPlayerIds(
   return playerIds;
 }
 
+const EMPTY_BATTER_STATS = { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 };
+
+export function applyFranchiseStarterSelectionToRosterSnapshot(input: {
+  players: TeamRosterPlayer[];
+  pitchers: TeamRosterPitcher[];
+  selectedStarterIdx: number;
+  useDH: boolean;
+}): { players: TeamRosterPlayer[]; pitchers: TeamRosterPitcher[] } {
+  const selectedStarter = input.pitchers[input.selectedStarterIdx] ?? input.pitchers.find((pitcher) => pitcher.isStarter) ?? input.pitchers[0];
+  const pitchers = input.pitchers.map((pitcher) => ({
+    ...pitcher,
+    isStarter: Boolean(selectedStarter && pitcher === selectedStarter),
+    isActive: Boolean(selectedStarter && pitcher === selectedStarter),
+  }));
+
+  if (input.useDH || !selectedStarter) {
+    return {
+      players: input.players.map((player) => ({ ...player })),
+      pitchers,
+    };
+  }
+
+  const lineupPlayers = input.players
+    .filter((player) => player.battingOrder != null && !isPitcherLineupPlayer(player))
+    .sort((left, right) => (left.battingOrder ?? 99) - (right.battingOrder ?? 99))
+    .slice(0, 8)
+    .map((player, index) => ({
+      ...player,
+      battingOrder: index + 1,
+    }));
+  const benchPlayers = input.players
+    .filter((player) => player.battingOrder == null && player.playerId !== selectedStarter.playerId)
+    .map((player) => ({ ...player }));
+  const existingStarterBattingRow = input.players.find((player) => player.playerId === selectedStarter.playerId);
+  const pitcherBattingHand =
+    existingStarterBattingRow?.battingHand ??
+    ((selectedStarter as TeamRosterPitcher & { battingHand?: 'L' | 'R' | 'S' }).battingHand) ??
+    selectedStarter.throwingHand;
+  const pitcherLineupPlayer: TeamRosterPlayer = {
+    ...(existingStarterBattingRow ?? {}),
+    playerId: selectedStarter.playerId,
+    name: selectedStarter.name,
+    fullName: selectedStarter.fullName,
+    position: 'P',
+    primaryPosition: 'P',
+    battingOrder: 9,
+    stats: existingStarterBattingRow?.stats ?? { ...EMPTY_BATTER_STATS },
+    battingHand: pitcherBattingHand,
+    mojo: selectedStarter.mojo,
+    fitness: selectedStarter.fitness,
+    power: selectedStarter.power,
+    contact: selectedStarter.contact,
+    speed: selectedStarter.speed,
+    fieldingRating: selectedStarter.fieldingRating,
+    arm: selectedStarter.arm,
+    velocity: selectedStarter.velocity,
+    junk: selectedStarter.junk,
+    accuracy: selectedStarter.accuracy,
+    arsenal: selectedStarter.arsenal,
+    overallGrade: selectedStarter.overallGrade,
+    trait1: selectedStarter.trait1,
+    trait2: selectedStarter.trait2,
+    personality: selectedStarter.personality,
+    chemistry: selectedStarter.chemistry,
+    age: selectedStarter.age,
+    jerseyNumber: selectedStarter.jerseyNumber,
+    hometown: selectedStarter.hometown,
+    throws: selectedStarter.throws ?? selectedStarter.throwingHand,
+    secondaryPosition: selectedStarter.secondaryPosition,
+  };
+
+  return {
+    players: [...lineupPlayers, pitcherLineupPlayer, ...benchPlayers],
+    pitchers,
+  };
+}
+
 export async function buildFranchiseGameTrackerRoster(
   teamId: string,
   context: { franchiseId?: string; leagueId?: string; useDH?: boolean } = {},

@@ -24,6 +24,7 @@ vi.mock('../../../utils/franchisePlayerStorage', () => ({
 
 import { buildOptimalLineupSnapshot } from '../../../utils/optimalLineup';
 import {
+  applyFranchiseStarterSelectionToRosterSnapshot,
   buildFranchiseGameTrackerRoster,
   buildFranchisePregameReadiness,
   collectFranchiseRosterPlayerIds,
@@ -438,6 +439,74 @@ describe('franchise GameTracker roster identity', () => {
         expect.objectContaining({ playerId: 'sp-b', isStarter: true }),
       ]),
     );
+  });
+
+  test('starter override updates no-DH P batting slot without moving pitcher to leadoff', () => {
+    const batterStats = { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 };
+    const pitcherStats = { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 };
+    const players = [
+      {
+        playerId: 'saved-sp',
+        name: 'Saved Starter',
+        position: 'P',
+        primaryPosition: 'P',
+        battingOrder: 1,
+        stats: batterStats,
+        battingHand: 'R' as const,
+      },
+      ...['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'].map((position, index) => ({
+        playerId: `b${index + 1}`,
+        name: `Batter ${index + 1}`,
+        position,
+        primaryPosition: position,
+        battingOrder: index + 2,
+        stats: batterStats,
+        battingHand: 'R' as const,
+      })),
+    ];
+    const pitchers = [
+      {
+        playerId: 'saved-sp',
+        name: 'Saved Starter',
+        stats: pitcherStats,
+        throwingHand: 'R' as const,
+        isStarter: true,
+        isActive: true,
+      },
+      {
+        playerId: 'override-sp',
+        name: 'Override Starter',
+        stats: pitcherStats,
+        throwingHand: 'L' as const,
+        isStarter: false,
+        isActive: false,
+        power: 12,
+        contact: 14,
+      },
+    ];
+
+    const snapshot = applyFranchiseStarterSelectionToRosterSnapshot({
+      players,
+      pitchers,
+      selectedStarterIdx: 1,
+      useDH: false,
+    });
+
+    expect(snapshot.pitchers).toEqual([
+      expect.objectContaining({ playerId: 'saved-sp', isStarter: false, isActive: false }),
+      expect.objectContaining({ playerId: 'override-sp', isStarter: true, isActive: true }),
+    ]);
+    expect(snapshot.players[0]).toMatchObject({ playerId: 'b1', battingOrder: 1 });
+    expect(snapshot.players[8]).toMatchObject({
+      playerId: 'override-sp',
+      name: 'Override Starter',
+      position: 'P',
+      battingOrder: 9,
+      battingHand: 'L',
+      power: 12,
+      contact: 14,
+    });
+    expect(snapshot.players.find((player) => player.playerId === 'saved-sp')).toBeUndefined();
   });
 
   test('filters franchise launch rosters to active MLB assignments only', async () => {

@@ -51,6 +51,7 @@ import { getApproachingMilestones, type MilestoneWatch } from "../../../utils/mi
 import { getAllCareerBatting, getAllCareerPitching } from "../../../utils/careerStorage";
 import { getSeasonBattingStats, getSeasonPitchingStats } from "../../../utils/seasonStorage";
 import {
+  applyFranchiseStarterSelectionToRosterSnapshot,
   buildFranchiseGameTrackerRoster,
   buildFranchisePregameReadiness,
   collectFranchiseRosterPlayerIds,
@@ -3243,17 +3244,20 @@ function GameDayContent({
       }),
     ]);
 
-    // Apply selected starter: mark the chosen pitcher as isStarter/isActive
-    const finalAwayPitchers = awayPitchers.map((p, i) => ({
-      ...p,
-      isStarter: i === preGameData.selectedAwayStarterIdx,
-      isActive: i === preGameData.selectedAwayStarterIdx,
-    }));
-    const finalHomePitchers = homePitchers.map((p, i) => ({
-      ...p,
-      isStarter: i === preGameData.selectedHomeStarterIdx,
-      isActive: i === preGameData.selectedHomeStarterIdx,
-    }));
+    const finalAwayRoster = applyFranchiseStarterSelectionToRosterSnapshot({
+      players: awayPlayers,
+      pitchers: awayPitchers,
+      selectedStarterIdx: preGameData.selectedAwayStarterIdx,
+      useDH: preGameData.useDH,
+    });
+    const finalHomeRoster = applyFranchiseStarterSelectionToRosterSnapshot({
+      players: homePlayers,
+      pitchers: homePitchers,
+      selectedStarterIdx: preGameData.selectedHomeStarterIdx,
+      useDH: preGameData.useDH,
+    });
+    const finalAwayPitchers = finalAwayRoster.pitchers;
+    const finalHomePitchers = finalHomeRoster.pitchers;
     const awayStarter = finalAwayPitchers.find((pitcher) => pitcher.isStarter);
     const homeStarter = finalHomePitchers.find((pitcher) => pitcher.isStarter);
     const optimalLineupSnapshots: GameLockLineupSnapshots = {
@@ -3290,9 +3294,9 @@ function GameDayContent({
         homeTeamName: preGameData.homeTeamName,
         awayTeamAbbreviation: awayTeamData?.abbreviation,
         homeTeamAbbreviation: homeTeamData?.abbreviation,
-        awayPlayers: awayPlayers.length > 0 ? awayPlayers : undefined,
+        awayPlayers: finalAwayRoster.players.length > 0 ? finalAwayRoster.players : undefined,
         awayPitchers: finalAwayPitchers.length > 0 ? finalAwayPitchers : undefined,
-        homePlayers: homePlayers.length > 0 ? homePlayers : undefined,
+        homePlayers: finalHomeRoster.players.length > 0 ? finalHomeRoster.players : undefined,
         homePitchers: finalHomePitchers.length > 0 ? finalHomePitchers : undefined,
         awayTeamColor: awayTeamData?.colors.primary || getTeamColors(preGameData.awayTeamId).primary,
         awayTeamBorderColor: awayTeamData?.colors.secondary || getTeamColors(preGameData.awayTeamId).secondary,
@@ -3935,8 +3939,9 @@ function GameDayContent({
             <div className="grid grid-cols-2 gap-4 mb-4">
               {/* Away Starter */}
               <div>
-                <div className="text-[9px] text-[#E8E8D8]/60 mb-1 uppercase tracking-wider">Away Starting Pitcher</div>
+                <div className="text-[9px] text-[#E8E8D8]/60 mb-1 uppercase tracking-wider">Away starter override</div>
                 <select
+                  aria-label="Away starter override"
                   value={preGameData.selectedAwayStarterIdx}
                   onChange={(e) => setPreGameData({ ...preGameData, selectedAwayStarterIdx: Number(e.target.value) })}
                   className="w-full bg-[#3d5240] border-[3px] border-[#2a3a2d] text-[#E8E8D8] text-xs px-2 py-2"
@@ -3948,8 +3953,9 @@ function GameDayContent({
               </div>
               {/* Home Starter */}
               <div>
-                <div className="text-[9px] text-[#E8E8D8]/60 mb-1 uppercase tracking-wider">Home Starting Pitcher</div>
+                <div className="text-[9px] text-[#E8E8D8]/60 mb-1 uppercase tracking-wider">Home starter override</div>
                 <select
+                  aria-label="Home starter override"
                   value={preGameData.selectedHomeStarterIdx}
                   onChange={(e) => setPreGameData({ ...preGameData, selectedHomeStarterIdx: Number(e.target.value) })}
                   className="w-full bg-[#3d5240] border-[3px] border-[#2a3a2d] text-[#E8E8D8] text-xs px-2 py-2"
@@ -3959,6 +3965,9 @@ function GameDayContent({
                   ))}
                 </select>
               </div>
+            </div>
+            <div className="mb-4 text-center text-[10px] text-[#E8E8D8]/60">
+              Lineup order and rotation source from Team Hub. Starter override is game-only.
             </div>
 
             {/* Lineups Side by Side */}

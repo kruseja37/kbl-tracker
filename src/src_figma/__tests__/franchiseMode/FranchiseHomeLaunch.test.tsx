@@ -526,6 +526,48 @@ function makeRoster(teamId: keyof typeof snapshotsByTeam, useDH: boolean) {
   };
 }
 
+function makeNoDhRosterWithStarterOverride(teamId: keyof typeof snapshotsByTeam) {
+  const roster = makeRoster(teamId, false);
+  const first = roster.players[0];
+  const second = roster.players[1];
+  roster.players = [
+    { ...second, battingOrder: 1 },
+    { ...first, battingOrder: 2 },
+    ...roster.players.slice(2, 8),
+    {
+      ...roster.players[8],
+      playerId: `${teamId}-starter-a`,
+      name: `${teamId} Starter A`,
+      battingOrder: 9,
+      position: 'P',
+      primaryPosition: 'P',
+    },
+  ];
+  roster.pitchers = [
+    {
+      playerId: `${teamId}-starter-a`,
+      name: `${teamId} Starter A`,
+      stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
+      throwingHand: starterHands[teamId],
+      isStarter: true,
+      isActive: true,
+      power: 11,
+      contact: 12,
+    },
+    {
+      playerId: `${teamId}-starter-b`,
+      name: `${teamId} Starter B`,
+      stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
+      throwingHand: teamId === 'home-team' ? 'R' : 'L',
+      isStarter: false,
+      isActive: false,
+      power: 21,
+      contact: 22,
+    },
+  ];
+  return roster;
+}
+
 async function startRegularSeasonGame() {
   render(<FranchiseHome />);
 
@@ -979,6 +1021,58 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
 
     expect(state.useDH).toBe(false);
     expect(state.optimalLineupSnapshots.away).toBe(snapshotsByTeam['away-team'].noDh.vsLHP);
+    expect(state.optimalLineupSnapshots.home).toBe(snapshotsByTeam['home-team'].noDh.vsRHP);
+  });
+
+  test('regular-season no-DH launch uses Team Hub lineup order and reconciles game-only starter override', async () => {
+    mocks.mockUseFranchiseData.mockReturnValue(makeFranchiseData(false));
+    mocks.mockBuildFranchiseGameTrackerRoster.mockImplementation(
+      (teamId: keyof typeof snapshotsByTeam) => Promise.resolve(makeNoDhRosterWithStarterOverride(teamId)),
+    );
+
+    render(<FranchiseHome />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'SCORE GAME' }));
+    fireEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
+
+    await screen.findByText('PRE-GAME LINEUP');
+    expect(screen.getByText(/Lineup order and rotation source from Team Hub/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('combobox', { name: /Home starter override/i }), {
+      target: { value: '1' },
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'START GAME' })).not.toHaveAttribute('disabled'),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'START GAME' }));
+
+    await waitFor(() => expect(mocks.mockNavigate).toHaveBeenCalled());
+    const state = mocks.mockNavigate.mock.calls.at(-1)?.[1]?.state;
+
+    expect(state.awayPlayers.slice(0, 2).map((player: { playerId: string }) => player.playerId)).toEqual([
+      'away-team-batter-2',
+      'away-team-batter-1',
+    ]);
+    expect(state.homePlayers.slice(0, 2).map((player: { playerId: string }) => player.playerId)).toEqual([
+      'home-team-batter-2',
+      'home-team-batter-1',
+    ]);
+    expect(state.homePitchers).toEqual([
+      expect.objectContaining({ playerId: 'home-team-starter-a', isStarter: false, isActive: false }),
+      expect.objectContaining({ playerId: 'home-team-starter-b', isStarter: true, isActive: true }),
+    ]);
+    expect(state.homePlayers[0]).toMatchObject({ playerId: 'home-team-batter-2', battingOrder: 1 });
+    expect(state.homePlayers[8]).toMatchObject({
+      playerId: 'home-team-starter-b',
+      position: 'P',
+      battingOrder: 9,
+      power: 21,
+      contact: 22,
+    });
+    expect(state.homePlayers.find((player: { playerId: string }) => player.playerId === 'home-team-starter-a')).toBeUndefined();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+    expect(state.optimalLineupSnapshots.away).toBe(snapshotsByTeam['away-team'].noDh.vsRHP);
     expect(state.optimalLineupSnapshots.home).toBe(snapshotsByTeam['home-team'].noDh.vsRHP);
   });
 
