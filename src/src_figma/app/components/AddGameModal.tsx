@@ -6,6 +6,8 @@ interface AddGameModalProps {
   onClose: () => void;
   onAddGame: (game: GameFormData) => void;
   onAddSeries: (game: GameFormData, count: number) => void;
+  onUpdateGame?: (gameId: string, game: GameFormData) => void;
+  editingGame?: (GameFormData & { id: string }) | null;
   nextGameNumber: number;
   nextDayNumber: number;
   nextDate: string;
@@ -26,6 +28,8 @@ export function AddGameModal({
   onClose,
   onAddGame,
   onAddSeries,
+  onUpdateGame,
+  editingGame,
   nextGameNumber,
   nextDayNumber,
   nextDate,
@@ -42,16 +46,16 @@ export function AddGameModal({
 
   useEffect(() => {
     if (isOpen) {
-      setGameNumber(nextGameNumber);
-      setDayNumber(""); // Don't auto-fill day number
-      setDate(nextDate);
-      setTime("");
-      setAwayTeam("");
-      setHomeTeam("");
+      setGameNumber(editingGame?.gameNumber ?? nextGameNumber);
+      setDayNumber(editingGame?.dayNumber ?? ""); // Don't auto-fill day number
+      setDate(editingGame?.date ?? nextDate);
+      setTime(editingGame?.time ?? "");
+      setAwayTeam(editingGame?.awayTeamId ?? "");
+      setHomeTeam(editingGame?.homeTeamId ?? "");
       setSeriesCount(3);
       setError("");
     }
-  }, [isOpen, nextGameNumber, nextDayNumber]);
+  }, [isOpen, editingGame, nextGameNumber, nextDayNumber, nextDate]);
 
   const validateForm = (): boolean => {
     if (!awayTeam || !homeTeam) {
@@ -98,6 +102,20 @@ export function AddGameModal({
     onClose();
   };
 
+  const handleUpdateGame = () => {
+    if (!editingGame || !onUpdateGame || !validateForm()) return;
+
+    onUpdateGame(editingGame.id, {
+      gameNumber,
+      dayNumber: typeof dayNumber === 'number' ? dayNumber : gameNumber,
+      date: date || undefined,
+      time: time || undefined,
+      awayTeamId: awayTeam,
+      homeTeamId: homeTeam
+    });
+    onClose();
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -105,7 +123,7 @@ export function AddGameModal({
       <div className="bg-[#5A8352] border-[5px] border-[#FFD700] max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="bg-[#4A6844] border-b-[3px] border-[#3F5A3A] p-4 flex items-center justify-between">
-          <div className="text-sm text-[#E8E8D8]">➕ ADD GAME TO SCHEDULE</div>
+          <div className="text-sm text-[#E8E8D8]">{editingGame ? "EDIT SCHEDULE GAME" : "ADD GAME TO SCHEDULE"}</div>
           <button
             onClick={onClose}
             className="text-[#E8E8D8] hover:text-[#DD0000] transition-colors"
@@ -229,6 +247,7 @@ export function AddGameModal({
           </div>
 
           {/* Quick Add Series */}
+          {!editingGame && (
           <div className="bg-[#4A6844] border-[3px] border-[#5599FF] p-4 space-y-3">
             <div className="text-xs text-[#E8E8D8] mb-2">💡 QUICK ADD SERIES</div>
 
@@ -257,6 +276,7 @@ export function AddGameModal({
               Add as Series
             </button>
           </div>
+          )}
 
           {/* Error message */}
           {error && (
@@ -274,10 +294,10 @@ export function AddGameModal({
               Cancel
             </button>
             <button
-              onClick={handleAddGame}
+              onClick={editingGame ? handleUpdateGame : handleAddGame}
               className="flex-1 bg-[#5599FF] border-[3px] border-[#3366FF] py-3 text-sm text-[#E8E8D8] hover:bg-[#3366FF] active:scale-95 transition-transform shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)]"
             >
-              Add Game
+              {editingGame ? "Save Game" : "Add Game"}
             </button>
           </div>
         </div>

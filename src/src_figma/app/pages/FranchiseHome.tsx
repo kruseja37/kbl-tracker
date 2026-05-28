@@ -212,6 +212,15 @@ export function FranchiseHome() {
     await franchiseRepairPromise.current;
   };
   const [addGameModalOpen, setAddGameModalOpen] = useState(false);
+  const [editingScheduleGame, setEditingScheduleGame] = useState<{
+    id: string;
+    gameNumber: number;
+    dayNumber: number;
+    date?: string;
+    time?: string;
+    awayTeamId: string;
+    homeTeamId: string;
+  } | null>(null);
 
   // Bracket UI state
   const [expandedSeriesId, setExpandedSeriesId] = useState<string | null>(null);
@@ -757,6 +766,22 @@ export function FranchiseHome() {
     }
   };
 
+  const handleUpdateGame = async (gameId: string, gameData: GameFormData) => {
+    try {
+      await scheduleData.updateGame(gameId, {
+        gameNumber: gameData.gameNumber,
+        dayNumber: gameData.dayNumber,
+        date: gameData.date,
+        time: gameData.time,
+        awayTeamId: gameData.awayTeamId,
+        homeTeamId: gameData.homeTeamId,
+      });
+      setEditingScheduleGame(null);
+    } catch (err) {
+      console.error('[FranchiseHome] Failed to update game:', err);
+    }
+  };
+
   // Add series - persisted to IndexedDB via useScheduleData hook
   const handleAddSeries = async (gameData: GameFormData, count: number) => {
     try {
@@ -1257,6 +1282,24 @@ export function FranchiseHome() {
             seasonNumber={currentSeason}
             teamNameMap={franchiseData.teamNameMap}
             onDeleteGame={async (gameId) => { await scheduleData.deleteGame(gameId); }}
+            onEditGame={(game) => {
+              setEditingScheduleGame({
+                id: game.id,
+                gameNumber: game.gameNumber,
+                dayNumber: game.dayNumber,
+                date: game.date,
+                time: game.time,
+                awayTeamId: game.awayTeamId,
+                homeTeamId: game.homeTeamId,
+              });
+              setAddGameModalOpen(true);
+            }}
+            onImportCsvRows={async (rows) => {
+              await scheduleData.importFranchiseRows(rows, {
+                seasonId: activeSeasonId,
+                statsScopeId: activeSeasonId,
+              });
+            }}
           />
         )}
         {activeTab === "news" && (
@@ -2734,9 +2777,11 @@ export function FranchiseHome() {
       {/* Add Game Modal */}
       <AddGameModal
         isOpen={addGameModalOpen}
-        onClose={() => setAddGameModalOpen(false)}
+        onClose={() => { setAddGameModalOpen(false); setEditingScheduleGame(null); }}
         onAddGame={handleAddGame}
         onAddSeries={handleAddSeries}
+        onUpdateGame={handleUpdateGame}
+        editingGame={editingScheduleGame}
         nextGameNumber={getNextGameNumber()}
         nextDayNumber={getNextDayNumber()}
         nextDate={getNextDate()}

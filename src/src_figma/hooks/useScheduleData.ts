@@ -14,6 +14,8 @@ import {
   getAllGamesByFranchise,
   addGame,
   addSeries,
+  importFranchiseScheduleRows,
+  updateGame,
   updateGameStatus,
   completeGame,
   deleteGame,
@@ -25,6 +27,7 @@ import {
   clearFranchiseSeasonSchedule,
   type ScheduledGame,
   type AddGameInput,
+  type FranchiseScheduleImportRow,
   type GameResult,
   type GameStatus,
   type ScheduleMetadata,
@@ -61,6 +64,8 @@ export interface UseScheduleDataReturn {
   // Actions
   addGame: (input: Omit<AddGameInput, 'seasonNumber'>) => Promise<ScheduledGame>;
   addSeries: (input: Omit<AddGameInput, 'seasonNumber' | 'gameNumber' | 'dayNumber'>, seriesLength?: number) => Promise<ScheduledGame[]>;
+  importFranchiseRows: (rows: FranchiseScheduleImportRow[], scope?: { seasonId?: string; statsScopeId?: string }) => Promise<ScheduledGame[]>;
+  updateGame: (gameId: string, input: Omit<AddGameInput, 'seasonNumber' | 'franchiseId' | 'seasonId' | 'statsScopeId' | 'source' | 'importedAt'>) => Promise<ScheduledGame>;
   updateStatus: (gameId: string, status: GameStatus) => Promise<void>;
   completeGame: (gameId: string, result: GameResult) => Promise<void>;
   deleteGame: (gameId: string) => Promise<void>;
@@ -173,6 +178,46 @@ export function useScheduleData(
     }
   }, [franchiseId, seasonNumber, refresh]);
 
+  const handleImportFranchiseRows = useCallback(async (
+    rows: FranchiseScheduleImportRow[],
+    scope: { seasonId?: string; statsScopeId?: string } = {},
+  ): Promise<ScheduledGame[]> => {
+    if (!franchiseId) {
+      throw new Error('Franchise schedule import requires a franchiseId');
+    }
+
+    try {
+      const imported = await importFranchiseScheduleRows({
+        franchiseId,
+        seasonNumber,
+        seasonId: scope.seasonId,
+        statsScopeId: scope.statsScopeId ?? scope.seasonId,
+        rows,
+      });
+      await refresh();
+      return imported;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to import schedule';
+      setError(message);
+      throw err;
+    }
+  }, [franchiseId, seasonNumber, refresh]);
+
+  const handleUpdateGame = useCallback(async (
+    gameId: string,
+    input: Omit<AddGameInput, 'seasonNumber' | 'franchiseId' | 'seasonId' | 'statsScopeId' | 'source' | 'importedAt'>,
+  ): Promise<ScheduledGame> => {
+    try {
+      const game = await updateGame(gameId, input);
+      await refresh();
+      return game;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update game';
+      setError(message);
+      throw err;
+    }
+  }, [refresh]);
+
   // Update game status
   const handleUpdateStatus = useCallback(async (gameId: string, status: GameStatus): Promise<void> => {
     try {
@@ -241,6 +286,8 @@ export function useScheduleData(
     // Actions
     addGame: handleAddGame,
     addSeries: handleAddSeries,
+    importFranchiseRows: handleImportFranchiseRows,
+    updateGame: handleUpdateGame,
     updateStatus: handleUpdateStatus,
     completeGame: handleCompleteGame,
     deleteGame: handleDeleteGame,

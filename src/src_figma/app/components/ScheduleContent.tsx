@@ -1,5 +1,10 @@
 import { useState } from "react";
-import { ChevronDown, ChevronUp, CheckCircle, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, CheckCircle, Edit3, FileUp, Plus, Trash2 } from "lucide-react";
+import {
+  validateFranchiseScheduleCsv,
+  type FranchiseScheduleCsvValidationResult,
+} from "../../../utils/franchiseScheduleCsv";
+import type { FranchiseScheduleImportRow } from "../../../utils/scheduleStorage";
 interface ScheduledGame {
   id: string;
   seasonNumber: number;
@@ -30,6 +35,8 @@ interface ScheduleContentProps {
   seasonNumber?: number;
   teamNameMap?: Record<string, string>;
   onDeleteGame?: (gameId: string) => void;
+  onEditGame?: (game: ScheduledGame) => void;
+  onImportCsvRows?: (rows: FranchiseScheduleImportRow[]) => Promise<void> | void;
 }
 
 export function ScheduleContent({
@@ -44,8 +51,14 @@ export function ScheduleContent({
   seasonNumber = 1,
   teamNameMap = {},
   onDeleteGame,
+  onEditGame,
+  onImportCsvRows,
 }: ScheduleContentProps) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [csvReview, setCsvReview] = useState<FranchiseScheduleCsvValidationResult | null>(null);
+  const [csvFileName, setCsvFileName] = useState<string>("");
+  const [csvImportError, setCsvImportError] = useState<string | null>(null);
+  const [csvImporting, setCsvImporting] = useState(false);
   // Helper: resolve team ID to display name
   const teamName = (id: string) => teamNameMap[id] || id;
   const filteredGames = selectedTeam === "FULL LEAGUE" 
@@ -85,6 +98,43 @@ export function ScheduleContent({
         <Trash2 className="w-3.5 h-3.5" />
       </button>
     );
+  };
+
+  const handleCsvFileSelected = async (file: File | null) => {
+    setCsvImportError(null);
+    setCsvReview(null);
+    setCsvFileName(file?.name ?? "");
+    if (!file) return;
+
+    try {
+      const csvText = await file.text();
+      const review = validateFranchiseScheduleCsv(csvText, {
+        teams: availableTeams.map((teamId) => ({
+          id: teamId,
+          name: teamNameMap[teamId],
+        })),
+        existingGames: games,
+      });
+      setCsvReview(review);
+    } catch (err) {
+      setCsvImportError(err instanceof Error ? err.message : "Unable to read schedule CSV");
+    }
+  };
+
+  const handleAcceptCsvImport = async () => {
+    if (!csvReview || csvReview.hasErrors || csvReview.acceptedRows.length === 0 || !onImportCsvRows) return;
+
+    try {
+      setCsvImporting(true);
+      setCsvImportError(null);
+      await onImportCsvRows(csvReview.acceptedRows);
+      setCsvReview(null);
+      setCsvFileName("");
+    } catch (err) {
+      setCsvImportError(err instanceof Error ? err.message : "Schedule import failed");
+    } finally {
+      setCsvImporting(false);
+    }
   };
 
   // Get team stats if filtering by team
@@ -133,6 +183,87 @@ export function ScheduleContent({
           </div>
         )}
       </div>
+
+      {onImportCsvRows && (
+        <div className="bg-[#5A8352] border-[5px] border-[#4A6844] p-4 space-y-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-[10px] text-[#E8E8D8]">CSV SCHEDULE IMPORT</div>
+              <div className="text-[9px] text-[#E8E8D8]/70">
+                Header: gameNumber, awayTeam, homeTeam, optional dayNumber, date, time, notes
+              </div>
+            </div>
+            <label className="bg-[#4A6844] border-[3px] border-[#3F5A3A] px-3 py-2 text-[10px] text-[#E8E8D8] hover:bg-[#3F5A3A] active:scale-95 transition-transform inline-flex items-center gap-2 cursor-pointer">
+              <FileUp className="w-3.5 h-3.5" /> Review CSV
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(event) => {
+                  void handleCsvFileSelected(event.target.files?.[0] ?? null);
+                  event.currentTarget.value = "";
+                }}
+              />
+            </label>
+          </div>
+
+          {csvFileName && (
+            <div className="text-[9px] text-[#E8E8D8]/70">Selected: {csvFileName}</div>
+          )}
+
+          {csvImportError && (
+            <div className="bg-[#8B0000] border-[3px] border-[#DC3545] p-2 text-[9px] text-white">
+              {csvImportError}
+            </div>
+          )}
+
+          {csvReview && (
+            <div className="bg-[#4A6844] border-[3px] border-[#3F5A3A] p-3 space-y-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-[10px] text-[#E8E8D8]">
+                  {csvReview.acceptedRows.length} valid rows
+                  {csvReview.issues.length > 0 ? ` | ${csvReview.issues.length} issue${csvReview.issues.length === 1 ? "" : "s"}` : ""}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setCsvReview(null); setCsvFileName(""); setCsvImportError(null); }}
+                    className="bg-[#5A8352] border-[2px] border-[#3F5A3A] px-3 py-1 text-[9px] text-[#E8E8D8] hover:bg-[#3F5A3A]"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    onClick={() => void handleAcceptCsvImport()}
+                    disabled={csvReview.hasErrors || csvReview.acceptedRows.length === 0 || csvImporting}
+                    className="bg-[#5599FF] border-[2px] border-[#3366FF] px-3 py-1 text-[9px] text-[#E8E8D8] hover:bg-[#3366FF] disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {csvImporting ? "Importing" : "Accept Import"}
+                  </button>
+                </div>
+              </div>
+
+              {csvReview.issues.length > 0 && (
+                <div className="space-y-1">
+                  {csvReview.issues.slice(0, 6).map((issue, index) => (
+                    <div key={`${issue.rowNumber}-${issue.code}-${index}`} className="text-[9px] text-[#FFD7D7]">
+                      Row {issue.rowNumber}: {issue.message}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {csvReview.acceptedRows.length > 0 && (
+                <div className="space-y-1">
+                  {csvReview.acceptedRows.slice(0, 5).map((row) => (
+                    <div key={row.gameNumber} className="text-[9px] text-[#E8E8D8]/75">
+                      Game {row.gameNumber}: {teamName(row.awayTeamId)} @ {teamName(row.homeTeamId)}{row.date ? ` | ${row.date}` : ""}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Filter Dropdown */}
       <div className="bg-[#5A8352] border-[5px] border-[#4A6844] p-4">
@@ -221,6 +352,15 @@ export function ScheduleContent({
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="text-[8px] text-[#E8E8D8] bg-[#4A6844] px-2 py-1">NEXT GAME</div>
+                  {onEditGame && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onEditGame(nextGame); }}
+                      className="text-[#E8E8D8]/40 hover:text-[#FFD700] transition-colors p-1"
+                      title="Edit game"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   {renderDeleteButton(nextGame.id)}
                 </div>
               </div>
@@ -256,7 +396,16 @@ export function ScheduleContent({
                   <div className="flex items-center justify-between text-[10px] text-[#E8E8D8]/80 mb-2">
                     <span>Game {game.gameNumber} │ Day {game.dayNumber}</span>
                     <div className="flex items-center gap-2">
-                      {index === 0 && <span className="text-[#FFD700]">← NEXT GAME</span>}
+                  {index === 0 && <span className="text-[#FFD700]">← NEXT GAME</span>}
+                      {onEditGame && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onEditGame(game); }}
+                          className="text-[#E8E8D8]/40 hover:text-[#FFD700] transition-colors p-1"
+                          title="Edit game"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       {renderDeleteButton(game.id)}
                     </div>
                   </div>
@@ -279,6 +428,15 @@ export function ScheduleContent({
                 <div className="flex items-center gap-2">
                   {game.time && (
                     <div className="text-[8px] text-[#E8E8D8] bg-[#4A6844] px-2 py-1">{game.time}</div>
+                  )}
+                  {onEditGame && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onEditGame(game); }}
+                      className="text-[#E8E8D8]/40 hover:text-[#FFD700] transition-colors p-1"
+                      title="Edit game"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
                   )}
                   {renderDeleteButton(game.id)}
                 </div>

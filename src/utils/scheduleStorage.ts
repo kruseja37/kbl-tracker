@@ -28,11 +28,14 @@ export type GameStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'SKIPPED';
 export interface ScheduledGame {
   id: string;
   franchiseId?: string;         // Tags game to a franchise (multi-franchise isolation)
+  seasonId?: string;            // Canonical franchise season scope, when applicable
+  statsScopeId?: string;        // Stats aggregation scope; franchise v1 uses seasonId
   seasonNumber: number;
   gameNumber: number;           // 1, 2, 3... (league-wide sequence)
   dayNumber: number;            // For display: Day 1, Day 2...
   date?: string;                // Optional: "July 12"
   time?: string;                // Optional: "7:00 PM"
+  notes?: string;               // Optional user-authored schedule note/import note
   awayTeamId: string;
   homeTeamId: string;
   status: GameStatus;
@@ -44,6 +47,8 @@ export interface ScheduledGame {
   };
   gameLogId?: string;           // Links to full game data after completion
   createdAt: number;            // timestamp
+  importedAt?: number;          // timestamp for accepted user-provided CSV imports
+  source?: 'manual' | 'csv-import';
   completedAt?: number;         // timestamp
 }
 
@@ -56,13 +61,46 @@ export interface ScheduleMetadata {
 
 export interface AddGameInput {
   franchiseId?: string;         // Tags game to a franchise
+  seasonId?: string;
+  statsScopeId?: string;
   seasonNumber: number;
   gameNumber?: number;          // Auto-increment if not provided
   dayNumber?: number;           // Auto-increment if not provided
   date?: string;
   time?: string;
+  notes?: string;
   awayTeamId: string;
   homeTeamId: string;
+  source?: ScheduledGame['source'];
+  importedAt?: number;
+}
+
+export interface UpdateGameInput {
+  gameNumber?: number;
+  dayNumber?: number;
+  date?: string;
+  time?: string;
+  notes?: string;
+  awayTeamId?: string;
+  homeTeamId?: string;
+}
+
+export interface FranchiseScheduleImportRow {
+  gameNumber: number;
+  dayNumber?: number;
+  date?: string;
+  time?: string;
+  notes?: string;
+  awayTeamId: string;
+  homeTeamId: string;
+}
+
+export interface ImportFranchiseScheduleRowsInput {
+  franchiseId: string;
+  seasonNumber: number;
+  seasonId?: string;
+  statsScopeId?: string;
+  rows: FranchiseScheduleImportRow[];
 }
 
 export interface GameResult {
@@ -218,6 +256,12 @@ export async function addGame(input: AddGameInput): Promise<ScheduledGame> {
   if (input.awayTeamId === input.homeTeamId) {
     throw new Error('Away team cannot equal home team');
   }
+  if (input.gameNumber != null && input.gameNumber < 1) {
+    throw new Error('Game number must be positive');
+  }
+  if (input.dayNumber != null && input.dayNumber < 1) {
+    throw new Error('Day number must be positive');
+  }
 
   // Auto-increment game number if not provided. Franchise schedules are
   // independently numbered so multiple franchises can share a seasonNumber.
@@ -231,15 +275,20 @@ export async function addGame(input: AddGameInput): Promise<ScheduledGame> {
   const game: ScheduledGame = {
     id: generateGameId(),
     franchiseId: input.franchiseId,
+    seasonId: input.seasonId,
+    statsScopeId: input.statsScopeId ?? input.seasonId,
     seasonNumber: input.seasonNumber,
     gameNumber,
     dayNumber,
     date: input.date,
     time: input.time,
+    notes: input.notes,
     awayTeamId: input.awayTeamId,
     homeTeamId: input.homeTeamId,
     status: 'SCHEDULED',
     createdAt: Date.now(),
+    importedAt: input.importedAt,
+    source: input.source ?? 'manual',
   };
 
   return new Promise((resolve, reject) => {
@@ -255,6 +304,172 @@ export async function addGame(input: AddGameInput): Promise<ScheduledGame> {
 
     request.onerror = () => reject(request.error);
   });
+}
+
+/**
+ * Update schedule details for a pending manual/imported row.
+ *
+ * Identity and scope fields are intentionally immutable here: edits can fix
+ * order/date/matchup notes, but cannot move a row into another franchise.
+ */
+export async function updateGame(gameId: string, input: UpdateGameInput): Promise<ScheduledGame> {
+  const db = await initScheduleDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.SCHEDULED_GAMES, 'readwrite');
+    const store = tx.objectStore(STORES.SCHEDULED_GAMES);
+    const getRequest = store.get(gameId);
+
+    getRequest.onsuccess = () => {
+      const existing = getRequest.result as ScheduledGame | undefined;
+      if (!existing) {
+        reject(new Error(`Game ${gameId} not found`));
+        return;
+      }
+
+      if (existing.status === 'COMPLETED') {
+        reject(new Error('Completed games cannot be edited from the schedule'));
+        return;
+      }
+
+      const nextAwayTeamId = input.awayTeamId ?? existing.awayTeamId;
+      const nextHomeTeamId = input.homeTeamId ?? existing.homeTeamId;
+      if (nextAwayTeamId === nextHomeTeamId) {
+        reject(new Error('Away team cannot equal home team'));
+        return;
+      }
+
+      if (input.gameNumber != null && input.gameNumber < 1) {
+        reject(new Error('Game number must be positive'));
+        return;
+      }
+      if (input.dayNumber != null && input.dayNumber < 1) {
+        reject(new Error('Day number must be positive'));
+        return;
+      }
+
+      const nextGameNumber = input.gameNumber ?? existing.gameNumber;
+      if (nextGameNumber !== existing.gameNumber) {
+        const allRequest = store.getAll();
+        allRequest.onerror = () => reject(allRequest.error);
+        allRequest.onsuccess = () => {
+          const duplicate = (allRequest.result as ScheduledGame[]).find((game) => {
+            if (game.id === existing.id) return false;
+            if (game.seasonNumber !== existing.seasonNumber) return false;
+            if (game.gameNumber !== nextGameNumber) return false;
+            if (existing.franchiseId) {
+              return game.franchiseId === existing.franchiseId;
+            }
+            return !game.franchiseId;
+          });
+
+          if (duplicate) {
+            reject(new Error(`Duplicate game number ${nextGameNumber} in schedule`));
+            return;
+          }
+
+          const updated: ScheduledGame = {
+            ...existing,
+            gameNumber: nextGameNumber,
+            dayNumber: input.dayNumber ?? existing.dayNumber,
+            date: Object.prototype.hasOwnProperty.call(input, 'date') ? input.date : existing.date,
+            time: Object.prototype.hasOwnProperty.call(input, 'time') ? input.time : existing.time,
+            notes: Object.prototype.hasOwnProperty.call(input, 'notes') ? input.notes : existing.notes,
+            awayTeamId: nextAwayTeamId,
+            homeTeamId: nextHomeTeamId,
+          };
+
+          const putRequest = store.put(updated);
+          putRequest.onsuccess = () => {
+            if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-schedule', 'scheduledGames', gameId, updated);
+            updateMetadata(updated.seasonNumber);
+            resolve(updated);
+          };
+          putRequest.onerror = () => reject(putRequest.error);
+        };
+        return;
+      }
+
+      const updated: ScheduledGame = {
+        ...existing,
+        gameNumber: nextGameNumber,
+        dayNumber: input.dayNumber ?? existing.dayNumber,
+        date: Object.prototype.hasOwnProperty.call(input, 'date') ? input.date : existing.date,
+        time: Object.prototype.hasOwnProperty.call(input, 'time') ? input.time : existing.time,
+        notes: Object.prototype.hasOwnProperty.call(input, 'notes') ? input.notes : existing.notes,
+        awayTeamId: nextAwayTeamId,
+        homeTeamId: nextHomeTeamId,
+      };
+
+      const putRequest = store.put(updated);
+      putRequest.onsuccess = () => {
+        if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-schedule', 'scheduledGames', gameId, updated);
+        updateMetadata(updated.seasonNumber);
+        resolve(updated);
+      };
+      putRequest.onerror = () => reject(putRequest.error);
+    };
+
+    getRequest.onerror = () => reject(getRequest.error);
+  });
+}
+
+/**
+ * Accept already-validated user-authored CSV rows into one franchise schedule.
+ * This is deliberately not a generator: callers provide every matchup.
+ */
+export async function importFranchiseScheduleRows(
+  input: ImportFranchiseScheduleRowsInput,
+): Promise<ScheduledGame[]> {
+  if (!input.franchiseId) {
+    throw new Error('Franchise schedule import requires a franchiseId');
+  }
+  if (input.rows.length === 0) {
+    throw new Error('Cannot import an empty schedule');
+  }
+
+  const existingGames = await getAllGamesByFranchise(input.franchiseId, input.seasonNumber);
+  const usedGameNumbers = new Set(existingGames.map((game) => game.gameNumber));
+  const importedGameNumbers = new Set<number>();
+
+  for (const row of input.rows) {
+    if (row.gameNumber < 1) {
+      throw new Error(`Game ${row.gameNumber} must have a positive game number`);
+    }
+    if (row.dayNumber != null && row.dayNumber < 1) {
+      throw new Error(`Game ${row.gameNumber} must have a positive day number`);
+    }
+    if (row.awayTeamId === row.homeTeamId) {
+      throw new Error(`Game ${row.gameNumber} has the same home and away team`);
+    }
+    if (usedGameNumbers.has(row.gameNumber) || importedGameNumbers.has(row.gameNumber)) {
+      throw new Error(`Duplicate game number ${row.gameNumber} in franchise schedule import`);
+    }
+    importedGameNumbers.add(row.gameNumber);
+  }
+
+  const importedAt = Date.now();
+  const importedGames: ScheduledGame[] = [];
+  for (const row of input.rows) {
+    const game = await addGame({
+      franchiseId: input.franchiseId,
+      seasonNumber: input.seasonNumber,
+      seasonId: input.seasonId,
+      statsScopeId: input.statsScopeId ?? input.seasonId,
+      gameNumber: row.gameNumber,
+      dayNumber: row.dayNumber ?? row.gameNumber,
+      date: row.date,
+      time: row.time,
+      notes: row.notes,
+      awayTeamId: row.awayTeamId,
+      homeTeamId: row.homeTeamId,
+      source: 'csv-import',
+      importedAt,
+    });
+    importedGames.push(game);
+  }
+
+  return importedGames;
 }
 
 /**
