@@ -124,6 +124,13 @@ export interface StartupProspectDraftReport {
   issues: string[];
 }
 
+export interface StartupProspectDraftRollbackReport {
+  attemptedPlayerIds: string[];
+  restoredTeamIds: string[];
+  errors: string[];
+  valid: boolean;
+}
+
 interface DraftCandidate {
   poolIndex: number;
   position: Position;
@@ -135,9 +142,9 @@ interface DraftCandidate {
 
 interface DraftTeamState {
   teamId: string;
-  existingRoster: TeamRoster | null;
+  existingRoster: TeamRoster;
   nextRoster: TeamRoster;
-  existingFarmCount: number;
+  existingFarmIds: string[];
   vacancies: number;
   payroll: number;
   picks: StartupProspectDraftPick[];
@@ -153,42 +160,6 @@ interface ProspectProfile {
   trueGrade: Grade;
   scoutedGrade: Grade;
   potentialGrade: Grade;
-}
-
-function createEmptyDepthChart(): DepthChart {
-  return {
-    C: [],
-    '1B': [],
-    '2B': [],
-    SS: [],
-    '3B': [],
-    LF: [],
-    CF: [],
-    RF: [],
-    DH: [],
-    SP: [],
-    RP: [],
-    CP: [],
-  };
-}
-
-function makeEmptyRoster(teamId: string): TeamRoster {
-  return {
-    teamId,
-    mlbRoster: [],
-    farmRoster: [],
-    lineupWithDH: [],
-    lineupWithoutDH: [],
-    startingRotation: [],
-    longRelievers: [],
-    closingPitcher: '',
-    setupPitchers: [],
-    depthChart: createEmptyDepthChart(),
-    pinchHitOrder: [],
-    pinchRunOrder: [],
-    defensiveSubOrder: [],
-    lastModified: new Date(0).toISOString(),
-  };
 }
 
 function hashString(input: string): number {
@@ -376,7 +347,7 @@ function buildPlayer(
   const trait2 = traitCount >= 2 ? traitPool[Math.floor(randomUnit(`${traitSeed}:2`) * traitPool.length)] : undefined;
   const firstName = FIRST_NAMES[Math.floor(randomUnit(`${candidate.seed}:first`) * FIRST_NAMES.length)] ?? 'Prospect';
   const lastName = LAST_NAMES[Math.floor(randomUnit(`${candidate.seed}:last`) * LAST_NAMES.length)] ?? 'Player';
-  const playerId = `startup-prospect-${leagueId}-${teamId}-${round}-${pickNumber}`;
+  const playerId = buildProspectId(leagueId, teamId, round, pickNumber);
   const batsRoll = randomUnit(`${candidate.seed}:bats`);
 
   return {
@@ -439,6 +410,29 @@ function getTeamPayroll(teamId: string, leagueId: string, players: Player[]): nu
   }, 0);
 }
 
+function hasAssignment(player: Player, leagueId: string, teamId: string, rosterStatus: 'MLB' | 'FARM'): boolean {
+  return Boolean(player.leagueAssignments?.some((candidate) =>
+    candidate.leagueId === leagueId &&
+    candidate.teamId === teamId &&
+    candidate.rosterStatus === rosterStatus,
+  ));
+}
+
+function uniqueSorted(ids: string[]): string[] {
+  return [...new Set(ids)].sort((a, b) => a.localeCompare(b));
+}
+
+function sameIdSet(left: string[], right: string[]): boolean {
+  const sortedLeft = uniqueSorted(left);
+  const sortedRight = uniqueSorted(right);
+  return sortedLeft.length === sortedRight.length &&
+    sortedLeft.every((id, index) => id === sortedRight[index]);
+}
+
+function buildProspectId(leagueId: string, teamId: string, round: number, pickNumber: number): string {
+  return `startup-prospect-${leagueId}-${teamId}-${round}-${pickNumber}`;
+}
+
 function cloneRoster(roster: TeamRoster): TeamRoster {
   const depthChart: DepthChart = {
     C: [...roster.depthChart.C],
@@ -483,28 +477,69 @@ export async function runStartupProspectDraftForLeague(
   const rounds = options.rounds ?? FARM_TARGET_SIZE;
   const seasonNumber = options.seasonNumber ?? 1;
   const allPlayers = await getAllPlayers();
+  const existingPlayerIds = new Set(allPlayers.map((player) => player.id));
   const teamStates: DraftTeamState[] = [];
   const teamFarmCounts: StartupProspectDraftReport['teamFarmCounts'] = {};
+  const preflightIssues: string[] = [];
 
   for (const teamId of league.teamIds) {
     const existingRoster = await getTeamRoster(teamId);
-    const nextRoster = cloneRoster(existingRoster ?? makeEmptyRoster(teamId));
-    const existingFarmCount = nextRoster.farmRoster.length;
-    const vacancies = Math.max(0, FARM_TARGET_SIZE - existingFarmCount);
+    if (!existingRoster) {
+      preflightIssues.push(`Team "${teamId}" is missing a League Builder roster.`);
+      teamFarmCounts[teamId] = { before: 0, after: 0, added: 0 };
+      continue;
+    }
+
+    const assignedFarmIds = uniqueSorted(allPlayers
+      .filter((player) => hasAssignment(player, leagueId, teamId, 'FARM'))
+      .map((player) => player.id));
+    const assignedMlbIds = uniqueSorted(allPlayers
+      .filter((player) => hasAssignment(player, leagueId, teamId, 'MLB'))
+      .map((player) => player.id));
+    const rosterFarmIds = uniqueSorted(existingRoster.farmRoster);
+
+    if (rosterFarmIds.length !== existingRoster.farmRoster.length) {
+      preflightIssues.push(`Team "${teamId}" FARM roster contains duplicate player ids.`);
+    }
+    if (!sameIdSet(rosterFarmIds, assignedFarmIds)) {
+      preflightIssues.push(`Team "${teamId}" FARM roster does not match player FARM assignments.`);
+    }
+    if (assignedFarmIds.length > FARM_TARGET_SIZE) {
+      preflightIssues.push(`Team "${teamId}" already has ${assignedFarmIds.length} FARM assignments; expected at most ${FARM_TARGET_SIZE}.`);
+    }
+    if (assignedMlbIds.length !== 22) {
+      preflightIssues.push(`Team "${teamId}" has ${assignedMlbIds.length} MLB assignments; expected 22 before startup prospect draft.`);
+    }
+
+    const nextRoster = cloneRoster(existingRoster);
+    const vacancies = Math.max(0, FARM_TARGET_SIZE - assignedFarmIds.length);
     teamFarmCounts[teamId] = {
-      before: existingFarmCount,
-      after: existingFarmCount,
+      before: assignedFarmIds.length,
+      after: assignedFarmIds.length,
       added: 0,
     };
     teamStates.push({
       teamId,
       existingRoster,
       nextRoster,
-      existingFarmCount,
+      existingFarmIds: assignedFarmIds,
       vacancies,
       payroll: getTeamPayroll(teamId, leagueId, allPlayers),
       picks: [],
     });
+  }
+
+  if (preflightIssues.length > 0) {
+    return {
+      methodVersion: STARTUP_PROSPECT_DRAFT_VERSION,
+      leagueId,
+      rounds,
+      totalVacancies: 0,
+      picks: [],
+      teamFarmCounts,
+      valid: false,
+      issues: preflightIssues,
+    };
   }
 
   const totalVacancies = teamStates.reduce((sum, team) => sum + team.vacancies, 0);
@@ -528,6 +563,44 @@ export async function runStartupProspectDraftForLeague(
   });
   const seed = options.seed ?? `${STARTUP_PROSPECT_DRAFT_VERSION}:${leagueId}:${seasonNumber}:${totalVacancies}`;
   const pool = buildDraftPool(seed, totalVacancies, rounds);
+  const preflightTeamPickCounts = new Map<string, number>();
+  let preflightPickNumber = 0;
+  for (let round = 1; round <= rounds; round += 1) {
+    const roundOrder = round % 2 === 1 ? baseOrder : [...baseOrder].reverse();
+    for (const teamState of roundOrder) {
+      const currentCount = preflightTeamPickCounts.get(teamState.teamId) ?? 0;
+      if (currentCount >= teamState.vacancies) continue;
+      preflightPickNumber += 1;
+      const prospectId = buildProspectId(leagueId, teamState.teamId, round, preflightPickNumber);
+      if (existingPlayerIds.has(prospectId)) {
+        return {
+          methodVersion: STARTUP_PROSPECT_DRAFT_VERSION,
+          leagueId,
+          rounds,
+          totalVacancies,
+          picks: [],
+          teamFarmCounts,
+          valid: false,
+          issues: [`Generated prospect id "${prospectId}" already exists.`],
+        };
+      }
+      preflightTeamPickCounts.set(teamState.teamId, currentCount + 1);
+    }
+  }
+  const preflightFilledVacancies = Array.from(preflightTeamPickCounts.values()).reduce((sum, count) => sum + count, 0);
+  if (preflightFilledVacancies < totalVacancies) {
+    return {
+      methodVersion: STARTUP_PROSPECT_DRAFT_VERSION,
+      leagueId,
+      rounds,
+      totalVacancies,
+      picks: [],
+      teamFarmCounts,
+      valid: false,
+      issues: [`Startup prospect draft needs ${totalVacancies} picks but ${rounds} rounds can only fill ${preflightFilledVacancies}.`],
+    };
+  }
+
   const createdPlayerIds: string[] = [];
   const touchedTeams = new Set<string>();
   const picks: StartupProspectDraftPick[] = [];
@@ -566,22 +639,30 @@ export async function runStartupProspectDraftForLeague(
       if (!touchedTeams.has(teamState.teamId)) continue;
       await saveTeamRoster(teamState.nextRoster);
       teamFarmCounts[teamState.teamId] = {
-        before: teamState.existingFarmCount,
+        before: teamState.existingFarmIds.length,
         after: teamState.nextRoster.farmRoster.length,
-        added: teamState.nextRoster.farmRoster.length - teamState.existingFarmCount,
+        added: teamState.nextRoster.farmRoster.length - teamState.existingFarmIds.length,
       };
     }
   } catch (error) {
+    const rollbackErrors: string[] = [];
     for (const teamState of teamStates) {
       if (!touchedTeams.has(teamState.teamId)) continue;
-      if (teamState.existingRoster) {
+      try {
         await saveTeamRoster(teamState.existingRoster);
-      } else {
-        await saveTeamRoster(makeEmptyRoster(teamState.teamId));
+      } catch (rollbackError) {
+        rollbackErrors.push(`Failed to restore roster for "${teamState.teamId}": ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`);
       }
     }
     for (const playerId of createdPlayerIds) {
-      await deletePlayer(playerId).catch(() => undefined);
+      try {
+        await deletePlayer(playerId);
+      } catch (rollbackError) {
+        rollbackErrors.push(`Failed to delete generated prospect "${playerId}": ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`);
+      }
+    }
+    if (rollbackErrors.length > 0) {
+      throw new Error(`${error instanceof Error ? error.message : String(error)} Rollback issues: ${rollbackErrors.join('; ')}`);
     }
     throw error;
   }
@@ -599,5 +680,44 @@ export async function runStartupProspectDraftForLeague(
     teamFarmCounts,
     valid: issues.length === 0,
     issues,
+  };
+}
+
+export async function rollbackStartupProspectDraftForLeague(
+  _leagueId: string,
+  report: Pick<StartupProspectDraftReport, 'picks'>,
+): Promise<StartupProspectDraftRollbackReport> {
+  const attemptedPlayerIds = uniqueSorted(report.picks.map((pick) => pick.playerId));
+  const affectedTeamIds = uniqueSorted(report.picks.map((pick) => pick.teamId));
+  const errors: string[] = [];
+  const restoredTeamIds: string[] = [];
+
+  for (const teamId of affectedTeamIds) {
+    try {
+      const roster = await getTeamRoster(teamId);
+      if (!roster) continue;
+      await saveTeamRoster({
+        ...cloneRoster(roster),
+        farmRoster: roster.farmRoster.filter((playerId) => !attemptedPlayerIds.includes(playerId)),
+      });
+      restoredTeamIds.push(teamId);
+    } catch (error) {
+      errors.push(`Failed to remove startup prospects from roster "${teamId}": ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  for (const playerId of attemptedPlayerIds) {
+    try {
+      await deletePlayer(playerId);
+    } catch (error) {
+      errors.push(`Failed to delete startup prospect "${playerId}": ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  return {
+    attemptedPlayerIds,
+    restoredTeamIds,
+    errors,
+    valid: errors.length === 0,
   };
 }

@@ -4,7 +4,11 @@ import { ArrowLeft, Check, Gamepad2, Loader2, AlertCircle } from "lucide-react";
 import { useLeagueBuilderData, type LeagueTemplate, type Team } from "../../hooks/useLeagueBuilderData";
 import type { FranchiseConfig } from "../../../types/franchise";
 import { initializeFranchise } from "../../../utils/franchiseInitializer";
-import { runStartupProspectDraftForLeague } from "../../../utils/franchiseStartupProspectDraft";
+import {
+  rollbackStartupProspectDraftForLeague,
+  runStartupProspectDraftForLeague,
+  type StartupProspectDraftReport,
+} from "../../../utils/franchiseStartupProspectDraft";
 
 const INITIAL_CONFIG: FranchiseConfig = {
   league: null,
@@ -84,17 +88,28 @@ export function FranchiseSetup() {
       // Start franchise — persist to IndexedDB and navigate
       setIsInitializing(true);
       setInitError(null);
+      let startupProspectDraftReport: StartupProspectDraftReport | null = null;
       try {
         if (config.league && config.roster.startupProspectDraft?.enabled) {
-          await runStartupProspectDraftForLeague(config.league, {
+          startupProspectDraftReport = await runStartupProspectDraftForLeague(config.league, {
             rounds: config.roster.startupProspectDraft.rounds,
             seasonNumber: 1,
           });
+          if (!startupProspectDraftReport.valid) {
+            throw new Error(`Startup Prospect Draft blocked: ${startupProspectDraftReport.issues.join(' ')}`);
+          }
         }
         const franchiseId = await initializeFranchise(config);
         navigate(`/franchise/${franchiseId}`);
       } catch (err) {
-        setInitError(err instanceof Error ? err.message : 'Failed to create franchise');
+        let rollbackMessage = '';
+        if (config.league && startupProspectDraftReport?.picks.length) {
+          const rollbackReport = await rollbackStartupProspectDraftForLeague(config.league, startupProspectDraftReport);
+          if (!rollbackReport.valid) {
+            rollbackMessage = ` Startup Prospect Draft rollback issues: ${rollbackReport.errors.join(' ')}`;
+          }
+        }
+        setInitError(`${err instanceof Error ? err.message : 'Failed to create franchise'}${rollbackMessage}`);
         setIsInitializing(false);
       }
     }

@@ -15,6 +15,7 @@ import { FranchiseSetup } from '../../app/pages/FranchiseSetup';
 
 const mockNavigate = vi.fn();
 const mockRunStartupProspectDraftForLeague = vi.fn();
+const mockRollbackStartupProspectDraftForLeague = vi.fn();
 const mockInitializeFranchise = vi.fn();
 
 vi.mock('react-router', () => ({
@@ -23,6 +24,7 @@ vi.mock('react-router', () => ({
 
 vi.mock('../../../utils/franchiseStartupProspectDraft', () => ({
   runStartupProspectDraftForLeague: (...args: unknown[]) => mockRunStartupProspectDraftForLeague(...args),
+  rollbackStartupProspectDraftForLeague: (...args: unknown[]) => mockRollbackStartupProspectDraftForLeague(...args),
 }));
 
 vi.mock('../../../utils/franchiseInitializer', () => ({
@@ -113,7 +115,9 @@ describe('FranchiseSetup Component', () => {
     mockRunStartupProspectDraftForLeague.mockResolvedValue({
       valid: true,
       picks: [],
+      issues: [],
     });
+    mockRollbackStartupProspectDraftForLeague.mockResolvedValue({ valid: true, errors: [] });
     mockInitializeFranchise.mockResolvedValue('franchise-1');
   });
 
@@ -276,6 +280,45 @@ describe('FranchiseSetup Component', () => {
       expect(mockRunStartupProspectDraftForLeague.mock.invocationCallOrder[0]).toBeLessThan(
         mockInitializeFranchise.mock.invocationCallOrder[0],
       );
+    });
+
+    test('blocks franchise initialization when startup prospect draft validation fails', async () => {
+      mockRunStartupProspectDraftForLeague.mockResolvedValueOnce({
+        valid: false,
+        picks: [],
+        issues: ['Team "team-1" FARM roster does not match player FARM assignments.'],
+      });
+
+      render(<FranchiseSetup />);
+      selectLeagueAndAdvance(3);
+      fireEvent.click(screen.getAllByRole('button', { name: /Team 1/i })[0]);
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+      fireEvent.click(screen.getByRole('button', { name: /START FRANCHISE/i }));
+
+      expect(await screen.findByText(/Startup Prospect Draft blocked/i)).toBeInTheDocument();
+      expect(mockInitializeFranchise).not.toHaveBeenCalled();
+      expect(mockRollbackStartupProspectDraftForLeague).not.toHaveBeenCalled();
+    });
+
+    test('rolls back startup prospect picks when franchise initialization fails', async () => {
+      const report = {
+        valid: true,
+        picks: [{ playerId: 'prospect-1', teamId: 'team-1' }],
+        issues: [],
+      };
+      mockRunStartupProspectDraftForLeague.mockResolvedValueOnce(report);
+      mockInitializeFranchise.mockRejectedValueOnce(new Error('copy failed'));
+
+      render(<FranchiseSetup />);
+      selectLeagueAndAdvance(3);
+      fireEvent.click(screen.getAllByRole('button', { name: /Team 1/i })[0]);
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+      fireEvent.click(screen.getByRole('button', { name: /START FRANCHISE/i }));
+
+      expect(await screen.findByText(/copy failed/i)).toBeInTheDocument();
+      expect(mockRollbackStartupProspectDraftForLeague).toHaveBeenCalledWith('kbl', report);
     });
   });
 });

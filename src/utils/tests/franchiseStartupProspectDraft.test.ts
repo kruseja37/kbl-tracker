@@ -11,11 +11,13 @@ vi.mock('../syncEngine', () => ({
 
 import {
   STARTUP_PROSPECT_DRAFT_VERSION,
+  rollbackStartupProspectDraftForLeague,
   runStartupProspectDraftForLeague,
 } from '../franchiseStartupProspectDraft';
 import {
   __resetLeagueBuilderDatabaseForTests,
   clearAllLeagueBuilderData,
+  deleteTeamRoster,
   getAllPlayers,
   getTeamRoster,
   saveLeagueTemplate,
@@ -93,6 +95,16 @@ function makeRoster(teamId: string, farmRoster: string[] = []): TeamRoster {
     pinchRunOrder: [],
     defensiveSubOrder: [],
     lastModified: '2026-01-01T00:00:00.000Z',
+  };
+}
+
+function makeFarmPlayer(teamId: string, index: number): Omit<Player, 'createdDate' | 'lastModified'> {
+  return {
+    ...makePlayer(teamId, index, 'CF'),
+    id: `${teamId}-farm-${index}`,
+    firstName: `FARM${index}`,
+    salary: 0.5,
+    leagueAssignments: [{ leagueId: LEAGUE_ID, teamId, rosterStatus: 'FARM' }],
   };
 }
 
@@ -176,6 +188,82 @@ describe('startup prospect draft', () => {
     expect(secondReport.picks).toHaveLength(0);
     const prospects = (await getAllPlayers()).filter((player) => player.sourceDatabase === 'startup-prospect-draft');
     expect(prospects).toHaveLength(20);
+  });
+
+  test('fills only actual assignment-backed farm vacancies on partial farms', async () => {
+    const farmIds = ['team-a-farm-1', 'team-a-farm-2', 'team-a-farm-3'];
+    for (let index = 1; index <= 3; index += 1) {
+      await savePlayer(makeFarmPlayer(TEAM_A, index));
+    }
+    await saveTeamRoster(makeRoster(TEAM_A, farmIds));
+
+    const report = await runStartupProspectDraftForLeague(LEAGUE_ID, { seed: 'partial-seed' });
+
+    expect(report.valid).toBe(true);
+    expect(report.teamFarmCounts[TEAM_A]).toEqual({ before: 3, after: 10, added: 7 });
+    expect(report.picks.filter((pick) => pick.teamId === TEAM_A)).toHaveLength(7);
+    expect((await getTeamRoster(TEAM_A))?.farmRoster).toHaveLength(10);
+  });
+
+  test('blocks stale farm roster ids before writing prospects', async () => {
+    await saveTeamRoster(makeRoster(TEAM_A, ['missing-farm-player']));
+
+    const report = await runStartupProspectDraftForLeague(LEAGUE_ID, { seed: 'stale-roster' });
+
+    expect(report.valid).toBe(false);
+    expect(report.issues.join(' ')).toMatch(/FARM roster does not match player FARM assignments/i);
+    const prospects = (await getAllPlayers()).filter((player) => player.sourceDatabase === 'startup-prospect-draft');
+    expect(prospects).toHaveLength(0);
+  });
+
+  test('blocks farm assignments that are absent from the team roster before writing prospects', async () => {
+    await savePlayer(makeFarmPlayer(TEAM_A, 1));
+
+    const report = await runStartupProspectDraftForLeague(LEAGUE_ID, { seed: 'missing-roster-id' });
+
+    expect(report.valid).toBe(false);
+    expect(report.issues.join(' ')).toMatch(/FARM roster does not match player FARM assignments/i);
+    const prospects = (await getAllPlayers()).filter((player) => player.sourceDatabase === 'startup-prospect-draft');
+    expect(prospects).toHaveLength(0);
+  });
+
+  test('blocks missing team rosters before writing prospects', async () => {
+    await deleteTeamRoster(TEAM_A);
+
+    const report = await runStartupProspectDraftForLeague(LEAGUE_ID, { seed: 'missing-roster' });
+
+    expect(report.valid).toBe(false);
+    expect(report.issues.join(' ')).toMatch(/missing a League Builder roster/i);
+    const prospects = (await getAllPlayers()).filter((player) => player.sourceDatabase === 'startup-prospect-draft');
+    expect(prospects).toHaveLength(0);
+  });
+
+  test('blocks generated player id collisions before overwriting existing players', async () => {
+    await savePlayer({
+      ...makePlayer(TEAM_A, 99),
+      id: `startup-prospect-${LEAGUE_ID}-${TEAM_A}-1-1`,
+      leagueAssignments: [],
+    });
+
+    const report = await runStartupProspectDraftForLeague(LEAGUE_ID, { seed: 'collision-seed' });
+
+    expect(report.valid).toBe(false);
+    expect(report.issues.join(' ')).toMatch(/already exists/i);
+    const collisionPlayer = (await getAllPlayers()).find((player) => player.id === `startup-prospect-${LEAGUE_ID}-${TEAM_A}-1-1`);
+    expect(collisionPlayer?.sourceDatabase).toBe('test');
+  });
+
+  test('can roll back a completed startup prospect draft after downstream setup failure', async () => {
+    const report = await runStartupProspectDraftForLeague(LEAGUE_ID, { seed: 'rollback-seed' });
+
+    const rollback = await rollbackStartupProspectDraftForLeague(LEAGUE_ID, report);
+
+    expect(rollback.valid).toBe(true);
+    expect(rollback.attemptedPlayerIds).toHaveLength(20);
+    expect((await getTeamRoster(TEAM_A))?.farmRoster).toHaveLength(0);
+    expect((await getTeamRoster(TEAM_B))?.farmRoster).toHaveLength(0);
+    const prospects = (await getAllPlayers()).filter((player) => player.sourceDatabase === 'startup-prospect-draft');
+    expect(prospects).toHaveLength(0);
   });
 
   test('uses lower payroll team first in round one and snake order in round two', async () => {
