@@ -718,6 +718,11 @@ export async function updatePlayoff(playoffId: string, updates: Partial<PlayoffC
 }
 
 export async function startPlayoff(playoffId: string): Promise<PlayoffConfig> {
+  const existing = await getPlayoff(playoffId);
+  if (existing?.status === 'IN_PROGRESS' || existing?.status === 'COMPLETED') {
+    return existing;
+  }
+
   return updatePlayoff(playoffId, {
     status: 'IN_PROGRESS',
     startedAt: Date.now(),
@@ -918,12 +923,43 @@ export async function generateBracket(
   teams: PlayoffTeam[],
   gamesPerRound: number[]
 ): Promise<PlayoffSeries[]> {
+  const existingFirstRound = await getSeriesByRound(playoffId, 1);
+  if (existingFirstRound.length > 0) {
+    return existingFirstRound;
+  }
+
   // Sort teams by seed within each league
   const eastern = teams.filter(t => t.league === 'Eastern').sort((a, b) => a.seed - b.seed);
   const western = teams.filter(t => t.league === 'Western').sort((a, b) => a.seed - b.seed);
 
   const allSeries: PlayoffSeries[] = [];
   const totalRounds = gamesPerRound.length;
+
+  if (teams.length === 2) {
+    const seededTeams = [...teams].sort((a, b) => a.seed - b.seed);
+    const series = await createSeries({
+      playoffId,
+      round: 1,
+      roundName: getRoundName(1, totalRounds),
+      higherSeed: {
+        teamId: seededTeams[0].teamId,
+        teamName: seededTeams[0].teamName,
+        seed: seededTeams[0].seed,
+      },
+      lowerSeed: {
+        teamId: seededTeams[1].teamId,
+        teamName: seededTeams[1].teamName,
+        seed: seededTeams[1].seed,
+      },
+      status: 'PENDING',
+      bestOf: gamesPerRound[0] || 7,
+      gamesRequired: Math.ceil((gamesPerRound[0] || 7) / 2),
+      higherSeedWins: 0,
+      lowerSeedWins: 0,
+      games: [],
+    });
+    return [series];
+  }
 
   // Generate first round matchups (1v8, 4v5, 2v7, 3v6)
   const createFirstRoundMatchups = async (leagueTeams: PlayoffTeam[], round: number) => {

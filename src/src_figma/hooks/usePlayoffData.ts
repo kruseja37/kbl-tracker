@@ -26,7 +26,6 @@ import {
   generateBracket,
   getPlayoffLeaders,
   getRoundName,
-  deletePlayoffBySeason,
   type PlayoffConfig,
   type PlayoffSeries,
   type PlayoffTeam,
@@ -40,6 +39,8 @@ import { qualifyTeams, type TeamStanding as EngineTeamStanding, type Qualificati
 import { getAllLeagueTemplates, getAllTeams, type LeagueTemplate } from '../../utils/leagueBuilderStorage';
 import { getFranchiseSeasonId } from '../../utils/franchisePersistenceContract';
 import { getAllFranchiseTeams } from '../../utils/franchisePlayerStorage';
+import { getFranchiseConfig } from '../../utils/franchiseManager';
+import type { FranchisePlayoffSetupSnapshot, StoredFranchiseConfig } from '../../types/franchise';
 
 // Re-export types
 export type {
@@ -114,6 +115,64 @@ export interface UsePlayoffDataOptions {
 
 const EMPTY_PLAYOFF_TEAMS: PlayoffTeam[] = [];
 
+function winPct(standing: Pick<TeamStanding, 'wins' | 'losses'>): number {
+  const totalGames = standing.wins + standing.losses;
+  return totalGames > 0 ? standing.wins / totalGames : 0;
+}
+
+function compareFranchisePlayoffStandings(left: TeamStanding, right: TeamStanding): number {
+  const winPctDelta = winPct(right) - winPct(left);
+  if (Math.abs(winPctDelta) > 0.000001) return winPctDelta;
+  if (right.wins !== left.wins) return right.wins - left.wins;
+  if (left.losses !== right.losses) return left.losses - right.losses;
+  if (right.runDiff !== left.runDiff) return right.runDiff - left.runDiff;
+  return left.teamId.localeCompare(right.teamId);
+}
+
+function sameUnresolvedPlayoffRank(left: TeamStanding, right: TeamStanding): boolean {
+  return Math.abs(winPct(left) - winPct(right)) <= 0.000001 &&
+    left.wins === right.wins &&
+    left.losses === right.losses &&
+    left.runDiff === right.runDiff;
+}
+
+function findUnresolvedPlayoffTie(
+  rankedStandings: TeamStanding[],
+  teamsQualifying: number,
+): TeamStanding[] | null {
+  for (let index = 0; index < Math.min(rankedStandings.length, teamsQualifying); index += 1) {
+    const tied = rankedStandings.filter((standing) =>
+      sameUnresolvedPlayoffRank(standing, rankedStandings[index]),
+    );
+    if (tied.length > 1) return tied;
+  }
+
+  return null;
+}
+
+function parseSeriesLength(value: string | undefined, fallback: number): number {
+  const match = value?.match(/(\d+)/);
+  const parsed = match ? Number.parseInt(match[1], 10) : Number.NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function buildGamesPerRoundFromSetup(setup: FranchisePlayoffSetupSnapshot): number[] {
+  const roundCount = Math.max(1, Math.ceil(Math.log2(Math.max(2, setup.teamsQualifying))));
+  const lengths = setup.seriesLengths;
+  const availableRounds = [
+    parseSeriesLength(lengths.wildCard, 3),
+    parseSeriesLength(lengths.divisionSeries, 5),
+    parseSeriesLength(lengths.championship, 7),
+    parseSeriesLength(lengths.worldSeries, 7),
+  ];
+
+  return availableRounds.slice(-roundCount);
+}
+
+function getStoredFranchisePlayoffSetup(config: StoredFranchiseConfig): FranchisePlayoffSetupSnapshot {
+  return config.playoffSetupSnapshot ?? config.playoffs;
+}
+
 type FranchiseTeamSnapshot = {
   id?: string;
   teamId?: string;
@@ -184,7 +243,18 @@ async function buildFranchisePlayoffTeams(config: {
     }
   }
 
-  const qualifiedStandings = standings.slice(0, config.teamsQualifying);
+  const rankedStandings = [...standings].sort(compareFranchisePlayoffStandings);
+  const unresolvedTie = findUnresolvedPlayoffTie(rankedStandings, config.teamsQualifying);
+  if (unresolvedTie) {
+    const teamNames = unresolvedTie
+      .map((standing) => standing.teamName || standing.teamId)
+      .join(', ');
+    throw new Error(
+      `Manual playoff seeding resolution required: ${teamNames} remain tied after record and run differential.`,
+    );
+  }
+
+  const qualifiedStandings = rankedStandings.slice(0, config.teamsQualifying);
   const missingTeamIds = qualifiedStandings
     .map(standing => standing.teamId)
     .filter(teamId => !franchiseTeamById.has(teamId));
@@ -373,14 +443,43 @@ export function usePlayoffData(
       let playoffTeams: PlayoffTeam[];
       const playoffFranchiseId = config.franchiseId ?? franchiseId;
 
-      if (config.preSeededTeams && config.preSeededTeams.length > 0) {
-        // Use pre-seeded teams from PlayoffSeedingFlow (user-adjusted seeding)
-        playoffTeams = config.preSeededTeams;
-      } else if (playoffFranchiseId) {
+      if (playoffFranchiseId) {
+        const existingPlayoff = await getPlayoffByFranchiseSeason({
+          franchiseId: playoffFranchiseId,
+          seasonNumber: config.seasonNumber,
+          seasonId: config.seasonId,
+        });
+        if (existingPlayoff) {
+          await refresh();
+          return existingPlayoff;
+        }
+
+        const franchiseConfig = await getFranchiseConfig(playoffFranchiseId);
+        if (!franchiseConfig) {
+          throw new Error('Cannot create franchise playoff without stored Mode 1 playoff setup.');
+        }
+        const storedPlayoffSetup = getStoredFranchisePlayoffSetup(franchiseConfig);
+        config = {
+          ...config,
+          teamsQualifying: storedPlayoffSetup.teamsQualifying,
+          gamesPerRound: buildGamesPerRoundFromSetup(storedPlayoffSetup),
+          inningsPerGame: franchiseConfig.seasonLength?.inningsPerGame
+            ?? franchiseConfig.rulesSnapshot?.inningsPerGame
+            ?? franchiseConfig.season?.inningsPerGame
+            ?? config.inningsPerGame,
+          useDH: franchiseConfig.rulesSnapshot?.useDH
+            ?? franchiseConfig.season?.useDH
+            ?? config.useDH,
+          preSeededTeams: undefined,
+        };
+
         // Franchise playoffs must be seeded from franchise-owned snapshots, not
         // mutable League Builder templates. Missing snapshots are a damaged save
         // condition and should fail safely instead of drifting to globals.
         playoffTeams = await buildFranchisePlayoffTeams(config, playoffFranchiseId);
+      } else if (config.preSeededTeams && config.preSeededTeams.length > 0) {
+        // Non-franchise playoff helpers may still accept explicit pre-seeding.
+        playoffTeams = config.preSeededTeams;
       } else try {
         const [standings, leagueTemplates, allTeams] = await Promise.all([
           calculateStandings(config.seasonId),
@@ -466,9 +565,6 @@ export function usePlayoffData(
         // Fall back to empty teams
         playoffTeams = EMPTY_PLAYOFF_TEAMS.slice(0, config.teamsQualifying);
       }
-
-      // Delete any existing playoff for this season first (prevents ConstraintError on unique index)
-      await deletePlayoffBySeason(config.seasonNumber, 'franchise', playoffFranchiseId);
 
       const newPlayoff = await createPlayoff({
         seasonNumber: config.seasonNumber,

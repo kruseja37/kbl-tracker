@@ -7,16 +7,19 @@ import {
   createPlayoff,
   createSeries,
   aggregateGameToPlayoffStats,
+  generateBracket,
   getEliminationRoundName,
   getAllPlayoffs,
   getPlayoffLeaders,
   getPlayoffStats,
   getPlayoffByElimination,
   getPlayoffBySeason,
+  getSeriesByRound,
   initPlayoffDatabase,
   recordSeriesGame,
   resetPlayoffDbConnection,
   deletePlayoffBySeason,
+  startPlayoff,
   type PlayoffConfig,
   type PlayoffTeam,
 } from "../playoffStorage";
@@ -433,6 +436,80 @@ describe("playoffStorage elimination wiring", () => {
     await expect(getPlayoffByElimination("elim-same-season")).resolves.toMatchObject({
       id: eliminationPlayoff.id,
     });
+  });
+
+  test("starting and bracket generation are idempotent for an existing franchise playoff", async () => {
+    const teams = [buildTeam(1), buildTeam(2), buildTeam(3), buildTeam(4)];
+    const playoff = await createPlayoff({
+      seasonNumber: 2,
+      seasonId: "franchise-idempotent-season-2",
+      status: "NOT_STARTED",
+      teamsQualifying: 4,
+      rounds: 2,
+      gamesPerRound: [3, 5],
+      inningsPerGame: 9,
+      useDH: true,
+      leagues: ["Eastern"],
+      conferenceChampionship: false,
+      teams,
+      currentRound: 0,
+      sourceType: "franchise",
+      franchiseId: "franchise-idempotent",
+    });
+
+    const firstBracket = await generateBracket(playoff.id, teams, [3, 5]);
+    const repeatedBracket = await generateBracket(playoff.id, teams, [3, 5]);
+    expect(repeatedBracket.map((series) => series.id)).toEqual(
+      firstBracket.map((series) => series.id),
+    );
+    await expect(getSeriesByRound(playoff.id, 1)).resolves.toHaveLength(firstBracket.length);
+
+    const started = await startPlayoff(playoff.id);
+    const repeatedStart = await startPlayoff(playoff.id);
+    expect(repeatedStart).toMatchObject({
+      id: playoff.id,
+      status: "IN_PROGRESS",
+      currentRound: 1,
+      startedAt: started.startedAt,
+    });
+  });
+
+  test("generates one direct championship series for a two-team franchise playoff", async () => {
+    const teams = [buildTeam(1), buildTeam(2)];
+    const playoff = await createPlayoff({
+      seasonNumber: 3,
+      seasonId: "franchise-two-team-season-3",
+      status: "NOT_STARTED",
+      teamsQualifying: 2,
+      rounds: 1,
+      gamesPerRound: [7],
+      inningsPerGame: 9,
+      useDH: true,
+      leagues: ["Eastern", "Western"],
+      conferenceChampionship: true,
+      teams,
+      currentRound: 0,
+      sourceType: "franchise",
+      franchiseId: "franchise-two-team",
+    });
+
+    const bracket = await generateBracket(playoff.id, teams, [7]);
+
+    expect(bracket).toHaveLength(1);
+    expect(bracket[0]).toMatchObject({
+      round: 1,
+      roundName: "Championship",
+      bestOf: 7,
+      higherSeed: {
+        teamId: "team-1",
+        seed: 1,
+      },
+      lowerSeed: {
+        teamId: "team-2",
+        seed: 2,
+      },
+    });
+    await expect(getSeriesByRound(playoff.id, 1)).resolves.toHaveLength(1);
   });
 
   test("ambiguous elimination deletes by season are rejected", async () => {

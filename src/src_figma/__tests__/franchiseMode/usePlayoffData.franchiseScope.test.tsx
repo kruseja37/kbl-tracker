@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   mockGetAllLeagueTemplates: vi.fn(),
   mockGetAllTeams: vi.fn(),
   mockGetAllFranchiseTeams: vi.fn(),
+  mockGetFranchiseConfig: vi.fn(),
 }));
 
 vi.mock('../../../utils/playoffStorage', () => ({
@@ -60,6 +61,10 @@ vi.mock('../../../utils/franchisePlayerStorage', () => ({
   getAllFranchiseTeams: mocks.mockGetAllFranchiseTeams,
 }));
 
+vi.mock('../../../utils/franchiseManager', () => ({
+  getFranchiseConfig: mocks.mockGetFranchiseConfig,
+}));
+
 import { usePlayoffData } from '../../hooks/usePlayoffData';
 
 function mockStandings() {
@@ -78,6 +83,34 @@ function mockFranchiseTeams() {
     { id: 'team-c', name: 'Franchise Charlie', conference: 'Western' },
     { id: 'team-d', name: 'Franchise Delta', conference: 'Western' },
   ];
+}
+
+function mockFranchiseConfig(overrides: Record<string, unknown> = {}) {
+  return {
+    playoffSetupSnapshot: {
+      teamsQualifying: 4,
+      format: 'conference',
+      seriesLengths: {
+        wildCard: 'best-of-3',
+        divisionSeries: 'best-of-5',
+        championship: 'best-of-7',
+        worldSeries: 'best-of-7',
+      },
+      homeFieldAdvantage: 'higher-seed',
+    },
+    rulesSnapshot: {
+      inningsPerGame: 7,
+      useDH: false,
+    },
+    seasonLength: {
+      inningsPerGame: 7,
+    },
+    season: {
+      inningsPerGame: 9,
+      useDH: true,
+    },
+    ...overrides,
+  };
 }
 
 describe('usePlayoffData franchise-scoped playoff seeding', () => {
@@ -108,6 +141,7 @@ describe('usePlayoffData franchise-scoped playoff seeding', () => {
     mocks.mockGetAllLeagueTemplates.mockResolvedValue([
       { id: 'league-global', conferences: [], divisions: [] },
     ]);
+    mocks.mockGetFranchiseConfig.mockResolvedValue(mockFranchiseConfig());
   });
 
   test('does not call League Builder globals for franchise playoff creation without preseeded teams', async () => {
@@ -126,6 +160,7 @@ describe('usePlayoffData franchise-scoped playoff seeding', () => {
     });
 
     expect(mocks.mockGetAllFranchiseTeams).toHaveBeenCalledWith('franchise-1');
+    expect(mocks.mockGetFranchiseConfig).toHaveBeenCalledWith('franchise-1');
     expect(mocks.mockGetAllTeams).not.toHaveBeenCalled();
     expect(mocks.mockGetAllLeagueTemplates).not.toHaveBeenCalled();
   });
@@ -149,11 +184,55 @@ describe('usePlayoffData franchise-scoped playoff seeding', () => {
       franchiseId: 'franchise-1',
       seasonId: 'franchise-1-season-3',
       sourceType: 'franchise',
+      teamsQualifying: 4,
+      gamesPerRound: [7, 7],
+      inningsPerGame: 7,
+      useDH: false,
       teams: [
         expect.objectContaining({ teamId: 'team-a', teamName: 'Franchise Alpha', league: 'Eastern' }),
         expect.objectContaining({ teamId: 'team-b', teamName: 'Franchise Bravo', league: 'Eastern' }),
         expect.objectContaining({ teamId: 'team-c', teamName: 'Franchise Charlie', league: 'Western' }),
         expect.objectContaining({ teamId: 'team-d', teamName: 'Franchise Delta', league: 'Western' }),
+      ],
+    }));
+  });
+
+  test('derives a single championship round for a stored two-team franchise playoff setup', async () => {
+    mocks.mockGetFranchiseConfig.mockResolvedValue(mockFranchiseConfig({
+      playoffSetupSnapshot: {
+        teamsQualifying: 2,
+        format: 'conference',
+        seriesLengths: {
+          wildCard: 'best-of-3',
+          divisionSeries: 'best-of-5',
+          championship: 'best-of-7',
+          worldSeries: 'best-of-9',
+        },
+        homeFieldAdvantage: 'higher-seed',
+      },
+    }));
+
+    const { result } = renderHook(() => usePlayoffData(3, { franchiseId: 'franchise-1' }));
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await act(async () => {
+      await result.current.createNewPlayoff({
+        seasonNumber: 3,
+        seasonId: 'franchise-1-season-3',
+        franchiseId: 'franchise-1',
+        teamsQualifying: 4,
+        gamesPerRound: [3, 5],
+      });
+    });
+
+    expect(mocks.mockCreatePlayoff).toHaveBeenCalledWith(expect.objectContaining({
+      teamsQualifying: 2,
+      rounds: 1,
+      gamesPerRound: [9],
+      teams: [
+        expect.objectContaining({ teamId: 'team-a', seed: 1 }),
+        expect.objectContaining({ teamId: 'team-b', seed: 2 }),
       ],
     }));
   });
@@ -182,5 +261,101 @@ describe('usePlayoffData franchise-scoped playoff seeding', () => {
     expect(mocks.mockGenerateBracket).not.toHaveBeenCalled();
 
     warnSpy.mockRestore();
+  });
+
+  test('uses run differential to seed teams with identical records', async () => {
+    mocks.mockCalculateStandings.mockResolvedValue([
+      { teamId: 'team-a', teamName: 'Global Alpha', wins: 90, losses: 72, runDiff: 10 },
+      { teamId: 'team-b', teamName: 'Global Bravo', wins: 90, losses: 72, runDiff: 45 },
+      { teamId: 'team-c', teamName: 'Global Charlie', wins: 88, losses: 74, runDiff: 24 },
+      { teamId: 'team-d', teamName: 'Global Delta', wins: 84, losses: 78, runDiff: 12 },
+    ]);
+
+    const { result } = renderHook(() => usePlayoffData(3, { franchiseId: 'franchise-1' }));
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await act(async () => {
+      await result.current.createNewPlayoff({
+        seasonNumber: 3,
+        seasonId: 'franchise-1-season-3',
+        franchiseId: 'franchise-1',
+        teamsQualifying: 4,
+        gamesPerRound: [3, 5],
+      });
+    });
+
+    const createdConfig = mocks.mockCreatePlayoff.mock.calls[0][0];
+    expect(createdConfig.teams.map((team: { teamId: string; seed: number }) => [team.teamId, team.seed])).toEqual([
+      ['team-b', 1],
+      ['team-a', 2],
+      ['team-c', 3],
+      ['team-d', 4],
+    ]);
+  });
+
+  test('blocks playoff creation when record and run differential cannot resolve a seeding tie', async () => {
+    mocks.mockCalculateStandings.mockResolvedValue([
+      { teamId: 'team-a', teamName: 'Global Alpha', wins: 90, losses: 72, runDiff: 45 },
+      { teamId: 'team-b', teamName: 'Global Bravo', wins: 90, losses: 72, runDiff: 45 },
+      { teamId: 'team-c', teamName: 'Global Charlie', wins: 88, losses: 74, runDiff: 24 },
+      { teamId: 'team-d', teamName: 'Global Delta', wins: 84, losses: 78, runDiff: 12 },
+    ]);
+
+    const { result } = renderHook(() => usePlayoffData(3, { franchiseId: 'franchise-1' }));
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await expect(act(async () => {
+      await result.current.createNewPlayoff({
+        seasonNumber: 3,
+        seasonId: 'franchise-1-season-3',
+        franchiseId: 'franchise-1',
+        teamsQualifying: 4,
+        gamesPerRound: [3, 5],
+      });
+    })).rejects.toThrow(/Manual playoff seeding resolution required/);
+
+    expect(mocks.mockCreatePlayoff).not.toHaveBeenCalled();
+    expect(mocks.mockGenerateBracket).not.toHaveBeenCalled();
+  });
+
+  test('reuses an existing franchise playoff instead of deleting and recreating it', async () => {
+    const existing = {
+      id: 'existing-playoff',
+      seasonNumber: 3,
+      seasonId: 'franchise-1-season-3',
+      franchiseId: 'franchise-1',
+      sourceType: 'franchise',
+      status: 'IN_PROGRESS',
+      teams: [],
+      currentRound: 1,
+      rounds: 2,
+    };
+    mocks.mockGetPlayoffByFranchiseSeason
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(existing);
+
+    const { result } = renderHook(() => usePlayoffData(3, { franchiseId: 'franchise-1' }));
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    let returned: unknown;
+    await act(async () => {
+      returned = await result.current.createNewPlayoff({
+        seasonNumber: 3,
+        seasonId: 'franchise-1-season-3',
+        franchiseId: 'franchise-1',
+        teamsQualifying: 4,
+        gamesPerRound: [3, 5],
+      });
+    });
+
+    expect(returned).toBe(existing);
+    expect(mocks.mockGetFranchiseConfig).not.toHaveBeenCalled();
+    expect(mocks.mockCalculateStandings).not.toHaveBeenCalled();
+    expect(mocks.mockCreatePlayoff).not.toHaveBeenCalled();
+    expect(mocks.mockDeletePlayoffBySeason).not.toHaveBeenCalled();
+    expect(mocks.mockGenerateBracket).not.toHaveBeenCalled();
   });
 });
