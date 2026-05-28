@@ -5817,40 +5817,39 @@ export function GameTracker() {
       setGameActionError(null);
 
       const firstId = swapPositionMode.playerId;
-      let firstPosition = "";
-      let secondPosition = "";
-      const updatePositions = (players: Player[]) => {
-        const p1 = players.find(
-          (p) =>
-            getRosterEntityId(p, battingTeam) === firstId ||
-            getRosterEntityId(p, fieldingTeam) === firstId,
+      const lineupSnapshot = getLineupStateSnapshot();
+      const findPlayerPosition = (
+        teamSide: "away" | "home",
+        playerId: string,
+      ) => {
+        const lineupPlayer = lineupSnapshot[teamSide].lineup.find(
+          (player) => player.playerId === playerId,
         );
-        const p2 = players.find(
-          (p) =>
-            getRosterEntityId(p, battingTeam) === secondPlayerId ||
-            getRosterEntityId(p, fieldingTeam) === secondPlayerId,
-        );
-        if (p1 && p2 && p1.position && p2.position) {
-          firstPosition = p1.position;
-          secondPosition = p2.position;
-          const temp = p1.position;
-          p1.position = p2.position;
-          p2.position = temp;
-          return true;
+        if (lineupPlayer?.position) {
+          return lineupPlayer.position;
         }
-        return false;
+        const currentPitcher = lineupSnapshot[teamSide].currentPitcher;
+        return currentPitcher?.playerId === playerId
+          ? currentPitcher.position
+          : undefined;
+      };
+      const findSameTeamPositions = () => {
+        for (const teamSide of ["away", "home"] as const) {
+          const firstPosition = findPlayerPosition(teamSide, firstId);
+          const secondPosition = findPlayerPosition(teamSide, secondPlayerId);
+          if (firstPosition && secondPosition) {
+            return { teamSide, firstPosition, secondPosition };
+          }
+        }
+        return null;
       };
 
-      const awayCopy = [...awayTeamPlayers.map((p) => ({ ...p }))];
-      const changedAway = updatePositions(awayCopy);
-      const homeCopy = [...homeTeamPlayers.map((p) => ({ ...p }))];
-      const changedHome = updatePositions(homeCopy);
-
       // Log via switchPositions hook for BetweenPlayEvent persistence
-      if (firstPosition && secondPosition) {
+      const swapPositions = findSameTeamPositions();
+      if (swapPositions) {
         const switchResult = await switchPositions([
-          { playerId: firstId, newPosition: secondPosition },
-          { playerId: secondPlayerId, newPosition: firstPosition },
+          { playerId: firstId, newPosition: swapPositions.secondPosition },
+          { playerId: secondPlayerId, newPosition: swapPositions.firstPosition },
         ]);
         if (!switchResult.success) {
           setGameActionError(
@@ -5858,34 +5857,26 @@ export function GameTracker() {
           );
           return;
         }
-        if (changedAway) {
-          setAwayTeamPlayers(awayCopy);
-        }
-        if (changedHome) {
-          setHomeTeamPlayers(homeCopy);
-        }
         syncDisplayedRostersToLineupSnapshot(getLineupStateSnapshot());
         setRosterVersion((v) => v + 1);
         console.log("[M1-3-fix] Applied player-card position swap", {
           gamePhase: gameState.gamePhase,
+          teamSide: swapPositions.teamSide,
           firstPlayerId: firstId,
           secondPlayerId,
-          firstNewPosition: secondPosition,
-          secondNewPosition: firstPosition,
+          firstNewPosition: swapPositions.secondPosition,
+          secondNewPosition: swapPositions.firstPosition,
         });
+      } else {
+        setGameActionError("Position switch could not find both players on the same team.");
       }
       queuePlayLogRefresh(80);
       setSwapPositionMode(null);
     },
     [
       swapPositionMode,
-      awayTeamPlayers,
-      homeTeamPlayers,
-      battingTeam,
-      fieldingTeam,
       gameState.gamePhase,
       getLineupStateSnapshot,
-      getRosterEntityId,
       syncDisplayedRostersToLineupSnapshot,
       switchPositions,
       queuePlayLogRefresh,
@@ -8258,6 +8249,8 @@ export function GameTracker() {
       options?: {
         subType?: "player_sub" | "pinch_run";
         base?: "1B" | "2B" | "3B";
+        benchPlayerId?: string;
+        lineupPlayerId?: string;
       },
     ) => {
       setGameActionError(null);
@@ -8265,8 +8258,11 @@ export function GameTracker() {
         `Substitution: ${benchPlayerName} replacing ${lineupPlayerName} on ${teamType} team`,
       );
 
-      const benchPlayerId = getPlayerIdFromName(benchPlayerName, teamType);
-      const lineupPlayerId = getPlayerIdFromName(lineupPlayerName, teamType);
+      const benchPlayerId =
+        options?.benchPlayerId || getPlayerIdFromName(benchPlayerName, teamType);
+      const lineupPlayerId =
+        options?.lineupPlayerId ||
+        getPlayerIdFromName(lineupPlayerName, teamType);
 
       // MAJ-06: Call with enriched options for proper sub type logging
       // MAJ-09: Check validation result before updating UI
@@ -8286,50 +8282,14 @@ export function GameTracker() {
         return;
       }
 
-      // Update local player state for UI display
-      const players = teamType === "away" ? awayTeamPlayers : homeTeamPlayers;
-      const setPlayers =
-        teamType === "away" ? setAwayTeamPlayers : setHomeTeamPlayers;
-
-      const outgoingIndex = players.findIndex(
-        (p) => p.name === lineupPlayerName,
-      );
-      const incomingIndex = players.findIndex(
-        (p) => p.name === benchPlayerName,
-      );
-
-      if (outgoingIndex >= 0 && incomingIndex >= 0) {
-        setPlayers((prev) => {
-          const updated = [...prev];
-          // Transfer batting order and position from outgoing to incoming player
-          const outgoingBattingOrder = updated[outgoingIndex].battingOrder;
-          const outgoingPosition = updated[outgoingIndex].position;
-
-          // Incoming player takes the batting order and position
-          updated[incomingIndex] = {
-            ...updated[incomingIndex],
-            battingOrder: outgoingBattingOrder,
-            position: outgoingPosition,
-          };
-
-          // Outgoing player leaves the lineup slot; only live-game subs burn them.
-          updated[outgoingIndex] = {
-            ...updated[outgoingIndex],
-            battingOrder: undefined,
-            position: undefined, // Remove position so they don't show in field
-            isOutOfGame: gameState.gamePhase === "LIVE",
-          };
-
-          return updated;
-        });
-      }
+      syncDisplayedRostersToLineupSnapshot(getLineupStateSnapshot());
+      setRosterVersion((v) => v + 1);
     },
     [
-      awayTeamPlayers,
-      gameState.gamePhase,
       getPlayerIdFromName,
-      homeTeamPlayers,
+      getLineupStateSnapshot,
       makeSubstitution,
+      syncDisplayedRostersToLineupSnapshot,
     ],
   );
 
@@ -8338,14 +8298,18 @@ export function GameTracker() {
     newPitcherName: string,
     replacedName: string,
     replacedType: "player" | "pitcher",
+    newPitcherIdOverride?: string,
+    exitingPitcherIdOverride?: string,
   ) => {
     setGameActionError(null);
     console.log(
       `Pitcher Substitution: ${newPitcherName} replacing ${replacedName} (${replacedType}) on ${teamType} team`,
     );
 
-    const newPitcherId = getPitcherIdFromName(newPitcherName, teamType);
-    const exitingPitcherId = getPitcherIdFromName(replacedName, teamType);
+    const newPitcherId =
+      newPitcherIdOverride || getPitcherIdFromName(newPitcherName, teamType);
+    const exitingPitcherId =
+      exitingPitcherIdOverride || getPitcherIdFromName(replacedName, teamType);
     const pitchingTeamSide =
       resolvePitchingTeamSide(exitingPitcherId, replacedName) ||
       resolvePitchingTeamSide(newPitcherId, newPitcherName) ||
@@ -8381,6 +8345,7 @@ export function GameTracker() {
     async (
       outgoingPlayerId: string,
       outgoingName: string,
+      incomingPlayerId: string,
       incomingName: string,
       isPitcher: boolean,
       incomingPosition?: string,
@@ -8417,14 +8382,31 @@ export function GameTracker() {
         }
         // Use fallback
         if (isActualPitcherChange) {
-          handlePitcherSubstitution(fallbackTeam, incomingName, outgoingName, "pitcher");
+          handlePitcherSubstitution(
+            fallbackTeam,
+            incomingName,
+            outgoingName,
+            "pitcher",
+            incomingPlayerId,
+            outgoingPlayerId,
+          );
         } else {
-          await handleSubstitution(fallbackTeam, incomingName, outgoingName, runnerBase
-            ? {
-                subType: "pinch_run",
-                base: runnerBaseToTrackerBase(runnerBase),
-              }
-            : undefined);
+          await handleSubstitution(
+            fallbackTeam,
+            incomingName,
+            outgoingName,
+            runnerBase
+              ? {
+                  subType: "pinch_run",
+                  base: runnerBaseToTrackerBase(runnerBase),
+                  benchPlayerId: incomingPlayerId,
+                  lineupPlayerId: outgoingPlayerId,
+                }
+              : {
+                  benchPlayerId: incomingPlayerId,
+                  lineupPlayerId: outgoingPlayerId,
+                },
+          );
         }
         return;
       }
@@ -8435,15 +8417,32 @@ export function GameTracker() {
       });
 
       if (isActualPitcherChange) {
-        handlePitcherSubstitution(team, incomingName, outgoingName, "pitcher");
+        handlePitcherSubstitution(
+          team,
+          incomingName,
+          outgoingName,
+          "pitcher",
+          incomingPlayerId,
+          outgoingPlayerId,
+        );
       } else {
         // Regular substitution (including pinch-hit for batting-side pitcher)
-        await handleSubstitution(team, incomingName, outgoingName, runnerBase
-          ? {
-              subType: "pinch_run",
-              base: runnerBaseToTrackerBase(runnerBase),
-            }
-          : undefined);
+        await handleSubstitution(
+          team,
+          incomingName,
+          outgoingName,
+          runnerBase
+            ? {
+                subType: "pinch_run",
+                base: runnerBaseToTrackerBase(runnerBase),
+                benchPlayerId: incomingPlayerId,
+                lineupPlayerId: outgoingPlayerId,
+              }
+            : {
+                benchPlayerId: incomingPlayerId,
+                lineupPlayerId: outgoingPlayerId,
+              },
+        );
 
         // R3-R8: If the outgoing player was the team's pitcher (batting side),
         // the pinch-hitter becomes the pending pitcher for next defensive half.
@@ -12346,6 +12345,7 @@ export function GameTracker() {
                     ? rosterPlayer.position
                     : undefined;
                 return {
+                  playerId: benchPlayer.playerId,
                   name: benchPlayer.playerName,
                   pos: benchPlayer.positions[0] || rosterPosition || "UT",
                   hand,
@@ -12353,16 +12353,17 @@ export function GameTracker() {
                 };
               })
               .filter(
-              (entry, index, entries) =>
-                entries.findIndex(
-                  (candidate) => candidate.name === entry.name,
-                ) === index,
+                (entry, index, entries) =>
+                  entries.findIndex(
+                    (candidate) => candidate.playerId === entry.playerId,
+                  ) === index,
               );
             const playerCardBullpenEntries =
               selectedPlayer.type === "pitcher"
                 ? (
                     isSelectedActivePitcher
                       ? availablePitchers.map((pitcher) => ({
+                          playerId: pitcher.id,
                           name: pitcher.name,
                           hand: pitcher.hand,
                         }))
@@ -12372,6 +12373,7 @@ export function GameTracker() {
                         )
                           .filter((pitcher) => !pitcher.isActive && !pitcher.isOutOfGame)
                           .map((pitcher) => ({
+                            playerId: getRosterEntityId(pitcher, selectedPlayerTeam),
                             name: pitcher.name,
                             hand: pitcher.throwingHand || pitcher.throws || "R",
                           }))
@@ -12379,7 +12381,7 @@ export function GameTracker() {
                     .filter(
                       (entry, index, entries) =>
                         entries.findIndex(
-                          (candidate) => candidate.name === entry.name,
+                          (candidate) => candidate.playerId === entry.playerId,
                         ) === index,
                     )
                 : undefined;
@@ -14191,6 +14193,7 @@ function ExpandablePanel({
 }
 
 interface PlayerCardBenchEntry {
+  playerId: string;
   name: string;
   pos: string;
   hand: string;
@@ -14213,13 +14216,14 @@ interface PlayerCardModalProps {
   onSubOut?: (
     outgoingPlayerId: string,
     outgoingName: string,
+    incomingPlayerId: string,
     incomingName: string,
     isPitcher: boolean,
     incomingPosition?: string,
     runnerBase?: RunnerBase,
   ) => void;
   benchPlayers?: PlayerCardBenchEntry[];
-  bullpenPitchers?: Array<{ name: string; hand: string }>;
+  bullpenPitchers?: Array<{ playerId: string; name: string; hand: string }>;
   isActivePitcher?: boolean;
   // §9.2: Swap Position
   showSwapPosition?: boolean;
@@ -14356,6 +14360,7 @@ export function PlayerCardModal({
   const availableBench =
     isPitchingSubstitution
       ? (bullpenPitchers || []).map((pitcher) => ({
+          playerId: pitcher.playerId,
           name: pitcher.name,
           pos: "P",
           hand: pitcher.hand,
@@ -14407,11 +14412,12 @@ export function PlayerCardModal({
             ) : (
               availableBench.map((bp) => (
                 <button
-                  key={bp.name}
+                  key={bp.playerId}
                   onClick={() => {
                     onSubOut?.(
                       player.playerId,
                       player.name,
+                      bp.playerId,
                       bp.name,
                       isPitchingSubstitution,
                       bp.pos,

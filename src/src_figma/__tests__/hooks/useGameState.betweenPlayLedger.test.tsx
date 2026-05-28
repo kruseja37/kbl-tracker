@@ -444,6 +444,91 @@ describe('useGameState between-play ledger', () => {
     expect(result.current.pitchCountPrompt?.pitcherId).toBe('home-sp');
   });
 
+  test('keeps current pitcher aligned with the lineup player occupying P after a position swap', async () => {
+    const { result } = renderHook(() => useGameState());
+
+    await act(async () => {
+      await result.current.initializeGame({
+        gameId: 'position-player-to-pitcher-swap',
+        awayTeamId: 'away-team',
+        awayTeamName: 'Away Team',
+        homeTeamId: 'home-team',
+        homeTeamName: 'Home Team',
+        awayStartingPitcherId: 'away-sp',
+        awayStartingPitcherName: 'Away Starter',
+        homeStartingPitcherId: 'home-sp',
+        homeStartingPitcherName: 'Home Starter',
+        awayLineup: [
+          { playerId: 'away-batter-1', playerName: 'Away Batter 1', position: 'SS' },
+          { playerId: 'away-sp', playerName: 'Away Starter', position: 'P' },
+        ],
+        homeLineup: [
+          { playerId: 'home-ss', playerName: 'Home Shortstop', position: 'SS' },
+          { playerId: 'home-sp', playerName: 'Home Starter', position: 'P' },
+          { playerId: 'home-c', playerName: 'Home Catcher', position: 'C' },
+        ],
+        awayBench: [],
+        homeBench: [
+          { playerId: 'home-rp', playerName: 'Home Reliever', positions: ['P'] },
+        ],
+        seasonNumber: 1,
+      });
+      result.current.startGame();
+    });
+
+    await act(async () => {
+      const switchResult = await result.current.switchPositions([
+        { playerId: 'home-sp', newPosition: 'SS' },
+        { playerId: 'home-ss', newPosition: 'P' },
+      ]);
+      expect(switchResult).toEqual({ success: true });
+    });
+
+    const afterSwap = result.current.getLineupStateSnapshot().home;
+    expect(afterSwap.lineup.find((player) => player.playerId === 'home-sp')).toMatchObject({
+      position: 'SS',
+    });
+    expect(afterSwap.lineup.find((player) => player.playerId === 'home-ss')).toMatchObject({
+      position: 'P',
+    });
+    expect(afterSwap.lineup.filter((player) => player.position === 'P')).toHaveLength(1);
+    expect(afterSwap.currentPitcher).toEqual(
+      expect.objectContaining({
+        playerId: 'home-ss',
+        playerName: 'Home Shortstop',
+        position: 'P',
+      }),
+    );
+    expect(result.current.gameState.currentPitcherId).toBe('home-ss');
+    expect(result.current.gameState.currentPitcherName).toBe('Home Shortstop');
+
+    await act(async () => {
+      const subResult = await result.current.makeSubstitution(
+        'home-rp',
+        'home-ss',
+        'Home Reliever',
+        'Home Shortstop',
+        { subType: 'defensive_sub', newPosition: 'P' },
+      );
+      expect(subResult).toEqual({ success: true });
+    });
+
+    const afterSub = result.current.getLineupStateSnapshot().home;
+    expect(afterSub.lineup.find((player) => player.playerId === 'home-rp')).toMatchObject({
+      position: 'P',
+    });
+    expect(afterSub.lineup.filter((player) => player.position === 'P')).toHaveLength(1);
+    expect(afterSub.currentPitcher).toEqual(
+      expect.objectContaining({
+        playerId: 'home-rp',
+        playerName: 'Home Reliever',
+        position: 'P',
+      }),
+    );
+    expect(result.current.gameState.currentPitcherId).toBe('home-rp');
+    expect(result.current.gameState.currentPitcherName).toBe('Home Reliever');
+  });
+
   test('standalone pitching changes move the batting-order pitcher slot to the reliever', async () => {
     const { result } = renderHook(() => useGameState());
 
