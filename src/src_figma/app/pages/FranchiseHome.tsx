@@ -97,7 +97,7 @@ type TabType = "todays-game" | "team" | "schedule" | "standings" | "news" | "lea
 type SeasonPhase = "regular" | "playoffs" | "offseason";
 
 const MODE_2_V1_SYNTHETIC_SIM_ENABLED = false;
-const MODE_2_V1_TRANSACTION_UI_ENABLED = false;
+const MODE_2_V1_TRANSACTION_UI_ENABLED = true;
 const MODE_2_V1_ALL_STAR_UI_ENABLED = false;
 
 async function getVisibleFranchiseTeam(franchiseId: string | undefined, teamId: string) {
@@ -1038,7 +1038,7 @@ export function FranchiseHome() {
     { id: "team", label: "TEAM HUB", icon: <Users className="w-4 h-4" /> },
     { id: "leaders", label: "LEAGUE LEADERS", icon: <TrendingUp className="w-4 h-4" /> },
     ...(MODE_2_V1_TRANSACTION_UI_ENABLED
-      ? [{ id: "rosters", label: "TRADES", icon: <Folder className="w-4 h-4" /> }]
+      ? [{ id: "rosters", label: "ROSTER & TRADES", icon: <Folder className="w-4 h-4" /> }]
       : []),
     ...(MODE_2_V1_ALL_STAR_UI_ENABLED
       ? [{ id: "allstar", label: "ALL-STAR", icon: <Star className="w-4 h-4" /> }]

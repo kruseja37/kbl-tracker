@@ -193,10 +193,10 @@ describe('FranchiseHome Component', () => {
       expect(buttons.length).toBeGreaterThan(3);
     });
 
-    test('does not expose deferred regular-season franchise actions', () => {
+    test('exposes regular-season roster/trade desk while keeping deferred actions hidden', () => {
       render(<FranchiseHome />);
 
-      expect(screen.queryByRole('button', { name: /^TRADES$/i })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /ROSTER & TRADES/i })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /ALL-STAR/i })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /SIM/i })).not.toBeInTheDocument();
       expect(screen.queryByText(/roster analyzer/i)).not.toBeInTheDocument();

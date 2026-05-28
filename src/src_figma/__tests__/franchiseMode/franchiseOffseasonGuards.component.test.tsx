@@ -21,9 +21,15 @@ const mocks = vi.hoisted(() => ({
   mockRunFranchiseRetirementDryRun: vi.fn(),
   mockRevealFranchiseRetirementForTeam: vi.fn(),
   mockGetFranchiseFarmRecordsForSeason: vi.fn(),
+  mockGetAllFranchiseTeams: vi.fn(),
+  mockGetAllFranchisePlayers: vi.fn(),
+  mockGetTransactionsByFranchiseSeason: vi.fn(),
   mockRunFranchiseFreeAgencyDryRun: vi.fn(),
   mockRunFranchiseDraftDryRun: vi.fn(),
   mockRunFranchiseTradeDryRun: vi.fn(),
+  mockExecuteManualFranchiseTrade: vi.fn(),
+  mockCallUpFranchisePlayer: vi.fn(),
+  mockSendDownFranchisePlayer: vi.fn(),
   mockUseOffseasonData: vi.fn(),
   mockUseLeagueBuilderData: vi.fn(),
   mockUseOffseasonState: vi.fn(),
@@ -134,6 +140,20 @@ vi.mock("../../../utils/franchiseFarmStorage", () => ({
   getFranchiseFarmRecordsForSeason: mocks.mockGetFranchiseFarmRecordsForSeason,
 }));
 
+vi.mock("../../../utils/franchisePlayerStorage", () => ({
+  getAllFranchiseTeams: mocks.mockGetAllFranchiseTeams,
+  getAllFranchisePlayers: mocks.mockGetAllFranchisePlayers,
+}));
+
+vi.mock("../../../utils/transactionStorage", () => ({
+  getTransactionsByFranchiseSeason: mocks.mockGetTransactionsByFranchiseSeason,
+}));
+
+vi.mock("../../../utils/franchiseRosterMovement", () => ({
+  callUpFranchisePlayer: mocks.mockCallUpFranchisePlayer,
+  sendDownFranchisePlayer: mocks.mockSendDownFranchisePlayer,
+}));
+
 vi.mock("../../../utils/franchiseFreeAgencyAdapter", () => ({
   FRANCHISE_FREE_AGENCY_CALCULATION_VERSION: "franchise-free-agency-v1-dice-board-dry-run",
   runFranchiseFreeAgencyDryRun: mocks.mockRunFranchiseFreeAgencyDryRun,
@@ -147,6 +167,7 @@ vi.mock("../../../utils/franchiseDraftAdapter", () => ({
 vi.mock("../../../utils/franchiseTradeAdapter", () => ({
   FRANCHISE_TRADE_CALCULATION_VERSION: "franchise-trades-v1-fit-preview-dry-run",
   runFranchiseTradeDryRun: mocks.mockRunFranchiseTradeDryRun,
+  executeManualFranchiseTrade: mocks.mockExecuteManualFranchiseTrade,
 }));
 
 import { FreeAgencyFlow } from "../../app/components/FreeAgencyFlow";
@@ -686,6 +707,36 @@ describe("franchise offseason prototype mutation guards", () => {
     mocks.mockRunFranchiseRetirementDryRun.mockResolvedValue(makeRetirementAdapterResult());
     mocks.mockRevealFranchiseRetirementForTeam.mockReturnValue(makeCeremonyRevealResult());
     mocks.mockGetFranchiseFarmRecordsForSeason.mockResolvedValue([]);
+    mocks.mockGetAllFranchiseTeams.mockResolvedValue([
+      { id: "team-a", name: "Alpha", leagueIds: ["league-a"] },
+      { id: "team-b", name: "Beta", leagueIds: ["league-a"] },
+    ]);
+    mocks.mockGetAllFranchisePlayers.mockResolvedValue([
+      {
+        id: "player-a",
+        firstName: "Alpha",
+        lastName: "One",
+        primaryPosition: "SS",
+        overallGrade: "B",
+        leagueAssignments: [{ leagueId: "league-a", teamId: "team-a", rosterStatus: "MLB" }],
+      },
+      {
+        id: "player-b",
+        firstName: "Beta",
+        lastName: "Two",
+        primaryPosition: "RP",
+        overallGrade: "C",
+        leagueAssignments: [{ leagueId: "league-a", teamId: "team-b", rosterStatus: "MLB" }],
+      },
+    ]);
+    mocks.mockGetTransactionsByFranchiseSeason.mockResolvedValue([]);
+    mocks.mockExecuteManualFranchiseTrade.mockResolvedValue({
+      success: true,
+      dryRun: false,
+      data: { executedTrade: { transactionId: "txn-manual" } },
+    });
+    mocks.mockCallUpFranchisePlayer.mockResolvedValue({ success: true, transactionId: "txn-call-up" });
+    mocks.mockSendDownFranchisePlayer.mockResolvedValue({ success: true, transactionId: "txn-send-down" });
     mocks.mockRunFranchiseFreeAgencyDryRun.mockResolvedValue(makeFreeAgencyAdapterResult());
     mocks.mockRunFranchiseDraftDryRun.mockResolvedValue(makeDraftAdapterResult());
     mocks.mockRunFranchiseTradeDryRun.mockResolvedValue(makeTradeAdapterResult());
@@ -1707,7 +1758,7 @@ describe("franchise offseason prototype mutation guards", () => {
     expect(mocks.mockSaveTeamRoster).not.toHaveBeenCalled();
   });
 
-  test("TradeFlow renders franchise dry-run trade preview without prototype trade controls", async () => {
+  test("TradeFlow exposes franchise transaction console and keeps advisory preview read-only", async () => {
     render(
       <TradeFlow
         franchiseId="franchise-a"
@@ -1716,12 +1767,21 @@ describe("franchise offseason prototype mutation guards", () => {
       />,
     );
 
+    expect(await screen.findByText(/Regular-Season Roster Desk/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ROSTER MOVES/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /MANUAL TRADE/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /HISTORY/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /FIT PREVIEW/i })).toBeInTheDocument();
+    expect(screen.getByText(/League Builder roster writes are not used here/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /FIT PREVIEW/i }));
+
     expect(await screen.findByText(/Trade Fit Preview/i)).toBeInTheDocument();
     expect(screen.getByText(/franchise-trades-v1-fit-preview-dry-run/i)).toBeInTheDocument();
     expect(screen.getByText(/no trades are executed/i)).toBeInTheDocument();
     expect(screen.getAllByText(/no players are moved/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/no teams, farm records, transactions, League Builder data, prototype trade records, or offseason state are written/i)).toBeInTheDocument();
-    expect(screen.getByText(/Trade AI acceptance, chemistry, morale, injuries, salary-cap enforcement, and roster movement remain deferred/i)).toBeInTheDocument();
+    expect(screen.getByText(/Trade AI acceptance, chemistry, morale, injuries, salary-cap enforcement/i)).toBeInTheDocument();
     expect(screen.getByText(/TEAM NEEDS \/ SURPLUS/i)).toBeInTheDocument();
     expect(screen.getByText(/NON-EXECUTABLE FIT PREVIEWS/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Alpha/i).length).toBeGreaterThanOrEqual(1);
@@ -1747,6 +1807,7 @@ describe("franchise offseason prototype mutation guards", () => {
     expect(mocks.mockSavePlayer).not.toHaveBeenCalled();
     expect(mocks.mockSaveTeamRoster).not.toHaveBeenCalled();
     expect(mocks.mockTransferPlayer).not.toHaveBeenCalled();
+    expect(mocks.mockExecuteManualFranchiseTrade).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: /PROPOSE TRADE/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /COMPLETE TRADE/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /CONFIRM TRADE/i })).not.toBeInTheDocument();
@@ -1761,11 +1822,15 @@ describe("franchise offseason prototype mutation guards", () => {
       />,
     );
 
-    expect(screen.getByText(/Trade Fit Preview/i)).toBeInTheDocument();
+    expect(screen.getByText(/Regular-Season Roster Desk/i)).toBeInTheDocument();
     expect(screen.getByText(/franchise-trades-v1-fit-preview-dry-run/i)).toBeInTheDocument();
     expect(screen.getByText(/MISSING_SEASON_NUMBER/i)).toBeInTheDocument();
+    expect(screen.getByText(/no roster moves, trades, previews, or history reads were started/i)).toBeInTheDocument();
     expect(screen.getByText(/silently defaulting to season 1 can scope data to the wrong season/i)).toBeInTheDocument();
     expect(mocks.mockRunFranchiseTradeDryRun).not.toHaveBeenCalled();
+    expect(mocks.mockGetAllFranchiseTeams).not.toHaveBeenCalled();
+    expect(mocks.mockGetAllFranchisePlayers).not.toHaveBeenCalled();
+    expect(mocks.mockGetTransactionsByFranchiseSeason).not.toHaveBeenCalled();
     expect(mocks.mockUseOffseasonData).not.toHaveBeenCalled();
     expect(mocks.mockUseOffseasonState).not.toHaveBeenCalled();
     expect(mocks.mockAddNewTrade).not.toHaveBeenCalled();
