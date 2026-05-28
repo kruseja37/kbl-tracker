@@ -15,10 +15,8 @@ export const CONTEXTUAL_BUTTONS_TIMEOUT = 3000;
 export function inferContextualButtons(ctx: PlayContext | null): SpecialEventType[] {
   const buttons: SpecialEventType[] = [];
 
-  buttons.push('SEVEN_PLUS_PITCH_AB');
-
   if (!ctx) {
-    console.log('[ContextualButtons] No context, returning only 7+ PITCH');
+    console.log('[ContextualButtons] No context, returning no contextual buttons');
     return buttons;
   }
 
