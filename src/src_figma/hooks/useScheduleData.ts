@@ -15,6 +15,7 @@ import {
   addGame,
   addSeries,
   importFranchiseScheduleRows,
+  completeFranchiseScheduleGameScoreOnly,
   updateGame,
   updateGameStatus,
   completeGame,
@@ -27,6 +28,7 @@ import {
   clearFranchiseSeasonSchedule,
   type ScheduledGame,
   type AddGameInput,
+  type CompleteFranchiseScoreOnlyInput,
   type FranchiseScheduleImportRow,
   type GameResult,
   type GameStatus,
@@ -68,6 +70,7 @@ export interface UseScheduleDataReturn {
   updateGame: (gameId: string, input: Omit<AddGameInput, 'seasonNumber' | 'franchiseId' | 'seasonId' | 'statsScopeId' | 'source' | 'importedAt'>) => Promise<ScheduledGame>;
   updateStatus: (gameId: string, status: GameStatus) => Promise<void>;
   completeGame: (gameId: string, result: GameResult) => Promise<void>;
+  completeFranchiseScoreOnly: (input: Omit<CompleteFranchiseScoreOnlyInput, 'franchiseId' | 'seasonNumber'>) => Promise<ScheduledGame>;
   deleteGame: (gameId: string) => Promise<void>;
   refresh: () => Promise<void>;
   clearSchedule: () => Promise<void>;
@@ -242,6 +245,28 @@ export function useScheduleData(
     }
   }, [refresh]);
 
+  const handleCompleteFranchiseScoreOnly = useCallback(async (
+    input: Omit<CompleteFranchiseScoreOnlyInput, 'franchiseId' | 'seasonNumber'>,
+  ): Promise<ScheduledGame> => {
+    if (!franchiseId) {
+      throw new Error('Score-only completion requires a franchiseId');
+    }
+
+    try {
+      const game = await completeFranchiseScheduleGameScoreOnly({
+        ...input,
+        franchiseId,
+        seasonNumber,
+      });
+      await refresh();
+      return game;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to complete score-only result';
+      setError(message);
+      throw err;
+    }
+  }, [franchiseId, seasonNumber, refresh]);
+
   // Delete a game
   const handleDeleteGame = useCallback(async (gameId: string): Promise<void> => {
     try {
@@ -290,6 +315,7 @@ export function useScheduleData(
     updateGame: handleUpdateGame,
     updateStatus: handleUpdateStatus,
     completeGame: handleCompleteGame,
+    completeFranchiseScoreOnly: handleCompleteFranchiseScoreOnly,
     deleteGame: handleDeleteGame,
     refresh,
     clearSchedule: handleClearSchedule,

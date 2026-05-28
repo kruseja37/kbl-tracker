@@ -24,12 +24,14 @@ const mockGames = [
     awayTeamId: 'TIGERS',
     homeTeamId: 'SOX',
     status: 'COMPLETED' as const,
+    createdAt: 1,
     result: {
       awayScore: 5,
       homeScore: 3,
       winningTeamId: 'TIGERS',
       losingTeamId: 'SOX',
     },
+    completionSource: 'score-only' as const,
   },
   {
     id: 'game-2',
@@ -41,6 +43,7 @@ const mockGames = [
     awayTeamId: 'SOX',
     homeTeamId: 'TIGERS',
     status: 'SCHEDULED' as const,
+    createdAt: 2,
   },
   {
     id: 'game-3',
@@ -52,6 +55,7 @@ const mockGames = [
     awayTeamId: 'BEARS',
     homeTeamId: 'CROCS',
     status: 'SCHEDULED' as const,
+    createdAt: 3,
   },
 ];
 
@@ -179,6 +183,11 @@ describe('ScheduleContent Component', () => {
       // There's a completed games indicator
       expect(screen.getByText(/COMPLETED GAMES/)).toBeInTheDocument();
     });
+
+    test('marks score-only completed games distinctly', () => {
+      render(<ScheduleContent {...defaultProps} />);
+      expect(screen.getByText('SCORE ONLY')).toBeInTheDocument();
+    });
   });
 
   describe('Next Game Highlight', () => {
@@ -191,6 +200,18 @@ describe('ScheduleContent Component', () => {
       render(<ScheduleContent {...defaultProps} />);
       // Next game is game 2
       expect(screen.getByText('Game 2')).toBeInTheDocument();
+    });
+
+    test('can request final-score-only entry for a scheduled game', () => {
+      const onEnterFinalScore = vi.fn();
+      render(<ScheduleContent {...defaultProps} onEnterFinalScore={onEnterFinalScore} />);
+
+      fireEvent.click(screen.getAllByText('Final Score')[0]);
+
+      expect(onEnterFinalScore).toHaveBeenCalledWith(expect.objectContaining({
+        id: 'game-2',
+        status: 'SCHEDULED',
+      }));
     });
   });
 

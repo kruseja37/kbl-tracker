@@ -219,6 +219,11 @@ export function FranchiseHome() {
     awayTeamId: string;
     homeTeamId: string;
   } | null>(null);
+  const [scoreOnlyGame, setScoreOnlyGame] = useState<ScheduledGame | null>(null);
+  const [scoreOnlyAwayScore, setScoreOnlyAwayScore] = useState("");
+  const [scoreOnlyHomeScore, setScoreOnlyHomeScore] = useState("");
+  const [scoreOnlyError, setScoreOnlyError] = useState<string | null>(null);
+  const [scoreOnlySaving, setScoreOnlySaving] = useState(false);
 
   // Bracket UI state
   const [expandedSeriesId, setExpandedSeriesId] = useState<string | null>(null);
@@ -699,6 +704,8 @@ export function FranchiseHome() {
   const handleAddGame = async (gameData: GameFormData) => {
     try {
       await scheduleData.addGame({
+        seasonId: activeSeasonId,
+        statsScopeId: activeSeasonId,
         gameNumber: gameData.gameNumber,
         dayNumber: gameData.dayNumber,
         date: gameData.date,
@@ -731,6 +738,8 @@ export function FranchiseHome() {
   const handleAddSeries = async (gameData: GameFormData, count: number) => {
     try {
       await scheduleData.addSeries({
+        seasonId: activeSeasonId,
+        statsScopeId: activeSeasonId,
         date: gameData.date,
         time: gameData.time,
         awayTeamId: gameData.awayTeamId,
@@ -738,6 +747,47 @@ export function FranchiseHome() {
       }, count);
     } catch (err) {
       console.error('[FranchiseHome] Failed to add series:', err);
+    }
+  };
+
+  const openScoreOnlyModal = (game: ScheduledGame) => {
+    setScoreOnlyGame(game);
+    setScoreOnlyAwayScore("");
+    setScoreOnlyHomeScore("");
+    setScoreOnlyError(null);
+  };
+
+  const closeScoreOnlyModal = () => {
+    setScoreOnlyGame(null);
+    setScoreOnlyAwayScore("");
+    setScoreOnlyHomeScore("");
+    setScoreOnlyError(null);
+    setScoreOnlySaving(false);
+  };
+
+  const handleScoreOnlySubmit = async () => {
+    if (!scoreOnlyGame) return;
+    if (scoreOnlyAwayScore.trim() === "" || scoreOnlyHomeScore.trim() === "") {
+      setScoreOnlyError('Enter both final scores');
+      return;
+    }
+    const awayScore = Number(scoreOnlyAwayScore);
+    const homeScore = Number(scoreOnlyHomeScore);
+
+    try {
+      setScoreOnlySaving(true);
+      setScoreOnlyError(null);
+      await scheduleData.completeFranchiseScoreOnly({
+        scheduleGameId: scoreOnlyGame.id,
+        seasonId: activeSeasonId,
+        awayScore,
+        homeScore,
+      });
+      await franchiseData.refresh();
+      closeScoreOnlyModal();
+    } catch (err) {
+      setScoreOnlyError(err instanceof Error ? err.message : 'Failed to save final score');
+      setScoreOnlySaving(false);
     }
   };
 
@@ -1239,6 +1289,7 @@ export function FranchiseHome() {
               });
               setAddGameModalOpen(true);
             }}
+            onEnterFinalScore={openScoreOnlyModal}
             onImportCsvRows={async (rows) => {
               await scheduleData.importFranchiseRows(rows, {
                 seasonId: activeSeasonId,
@@ -2723,6 +2774,69 @@ export function FranchiseHome() {
         nextDate={getNextDate()}
         teams={availableTeams}
       />
+
+      {scoreOnlyGame && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+          <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-6 max-w-md w-full mx-4">
+            <div className="text-lg text-[#E8E8D8] mb-2 text-center">ENTER FINAL SCORE</div>
+            <div className="text-[10px] text-[#E8E8D8]/70 mb-5 text-center">
+              Score-only updates schedule results and team standings only.
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <label className="block">
+                <span className="block text-[9px] text-[#E8E8D8]/80 mb-1">
+                  {franchiseData.teamNameMap[scoreOnlyGame.awayTeamId] ?? scoreOnlyGame.awayTeamId}
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={scoreOnlyAwayScore}
+                  onChange={(event) => setScoreOnlyAwayScore(event.target.value)}
+                  className="w-full bg-[#4A6844] border-[3px] border-[#3F5A3A] p-2 text-sm text-[#E8E8D8]"
+                />
+              </label>
+              <label className="block">
+                <span className="block text-[9px] text-[#E8E8D8]/80 mb-1">
+                  {franchiseData.teamNameMap[scoreOnlyGame.homeTeamId] ?? scoreOnlyGame.homeTeamId}
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={scoreOnlyHomeScore}
+                  onChange={(event) => setScoreOnlyHomeScore(event.target.value)}
+                  className="w-full bg-[#4A6844] border-[3px] border-[#3F5A3A] p-2 text-sm text-[#E8E8D8]"
+                />
+              </label>
+            </div>
+
+            {scoreOnlyError && (
+              <div className="bg-[#8B0000] border-[3px] border-[#DC3545] p-2 text-[9px] text-white mb-4">
+                {scoreOnlyError}
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={closeScoreOnlyModal}
+                disabled={scoreOnlySaving}
+                className="flex-1 bg-[#4A6844] border-[5px] border-[#5A8352] py-3 text-sm text-[#E8E8D8] hover:bg-[#3F5A3A] disabled:opacity-50"
+              >
+                CANCEL
+              </button>
+              <button
+                onClick={() => void handleScoreOnlySubmit()}
+                disabled={scoreOnlySaving}
+                className="flex-1 bg-[#5A8352] border-[5px] border-[#4A6844] py-3 text-sm text-[#E8E8D8] hover:bg-[#4F7D4B] disabled:opacity-50"
+              >
+                {scoreOnlySaving ? 'SAVING' : 'SAVE FINAL'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
     </FranchiseDataContext.Provider>

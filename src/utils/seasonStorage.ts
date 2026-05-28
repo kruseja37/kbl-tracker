@@ -8,6 +8,8 @@
 
 import { getTrackerDb } from './trackerDb';
 import { syncEngine } from './syncEngine';
+import { getScoreOnlyCompletedGamesBySeason } from './scheduleStorage';
+import { getRecentGames, type CompletedGameRecord } from './gameStorage';
 
 // Store names
 const STORES = {
@@ -810,8 +812,6 @@ export function calculateFieldingDerived(stats: PlayerSeasonFielding): FieldingD
 // STANDINGS CALCULATION
 // ============================================
 
-import { getRecentGames, type CompletedGameRecord } from './gameStorage';
-
 export interface TeamStanding {
   teamId: string;
   teamName: string;
@@ -828,17 +828,52 @@ export interface TeamStanding {
   gamesBack: number;
 }
 
+function isRegularSeasonCompletedGame(game: CompletedGameRecord): boolean {
+  return (
+    game.competitionType !== 'playoff' &&
+    game.competitionType !== 'elimination' &&
+    !game.playoffId &&
+    !game.playoffSeriesId &&
+    game.playoffGameNumber === undefined &&
+    game.isEliminationGame !== true
+  );
+}
+
 /**
  * Calculate standings from completed games for a season
  */
 export async function calculateStandings(seasonId?: string): Promise<TeamStanding[]> {
   // Get all completed games (up to 500 for a full season)
-  const games = await getRecentGames(500, seasonId ? { seasonId } : {});
+  const [games, scoreOnlyScheduleGames] = await Promise.all([
+    getRecentGames(500, seasonId ? { seasonId } : {}),
+    seasonId ? getScoreOnlyCompletedGamesBySeason(seasonId) : Promise.resolve([]),
+  ]);
 
   // Filter by seasonId if provided
-  const seasonGames = seasonId
-    ? games.filter(g => g.seasonId === seasonId)
-    : games;
+  const completedGameStandingsInputs = seasonId
+    ? games.filter(g => g.seasonId === seasonId && isRegularSeasonCompletedGame(g))
+    : games.filter(isRegularSeasonCompletedGame);
+  const seasonGames = [
+    ...completedGameStandingsInputs.map((game) => ({
+      date: game.date,
+      awayTeamId: game.awayTeamId,
+      homeTeamId: game.homeTeamId,
+      awayTeamName: game.awayTeamName,
+      homeTeamName: game.homeTeamName,
+      finalScore: game.finalScore,
+    })),
+    ...scoreOnlyScheduleGames.map((game) => ({
+      date: game.completedAt ?? game.resultEnteredAt ?? game.createdAt,
+      awayTeamId: game.awayTeamId,
+      homeTeamId: game.homeTeamId,
+      awayTeamName: game.awayTeamId,
+      homeTeamName: game.homeTeamId,
+      finalScore: {
+        away: game.result?.awayScore ?? 0,
+        home: game.result?.homeScore ?? 0,
+      },
+    })),
+  ];
 
   // Build team records
   const teamMap = new Map<string, {

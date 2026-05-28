@@ -4,24 +4,7 @@ import {
   validateFranchiseScheduleCsv,
   type FranchiseScheduleCsvValidationResult,
 } from "../../../utils/franchiseScheduleCsv";
-import type { FranchiseScheduleImportRow } from "../../../utils/scheduleStorage";
-interface ScheduledGame {
-  id: string;
-  seasonNumber: number;
-  gameNumber: number;
-  dayNumber: number;
-  date?: string;
-  time?: string;
-  awayTeamId: string;
-  homeTeamId: string;
-  status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'SKIPPED';
-  result?: {
-    awayScore: number;
-    homeScore: number;
-    winningTeamId: string;
-    losingTeamId: string;
-  };
-}
+import type { FranchiseScheduleImportRow, ScheduledGame } from "../../../utils/scheduleStorage";
 
 interface ScheduleContentProps {
   games: ScheduledGame[];
@@ -36,6 +19,7 @@ interface ScheduleContentProps {
   teamNameMap?: Record<string, string>;
   onDeleteGame?: (gameId: string) => void;
   onEditGame?: (game: ScheduledGame) => void;
+  onEnterFinalScore?: (game: ScheduledGame) => void;
   onImportCsvRows?: (rows: FranchiseScheduleImportRow[]) => Promise<void> | void;
 }
 
@@ -52,6 +36,7 @@ export function ScheduleContent({
   teamNameMap = {},
   onDeleteGame,
   onEditGame,
+  onEnterFinalScore,
   onImportCsvRows,
 }: ScheduleContentProps) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -96,6 +81,19 @@ export function ScheduleContent({
         title="Remove game"
       >
         <Trash2 className="w-3.5 h-3.5" />
+      </button>
+    );
+  };
+
+  const renderFinalScoreButton = (game: ScheduledGame) => {
+    if (!onEnterFinalScore || game.status !== 'SCHEDULED') return null;
+    return (
+      <button
+        onClick={(e) => { e.stopPropagation(); onEnterFinalScore(game); }}
+        className="bg-[#4A6844] border-[2px] border-[#3F5A3A] px-2 py-1 text-[8px] text-[#E8E8D8] hover:bg-[#3F5A3A] transition-colors"
+        title="Enter final score only"
+      >
+        Final Score
       </button>
     );
   };
@@ -361,6 +359,7 @@ export function ScheduleContent({
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
                   )}
+                  {renderFinalScoreButton(nextGame)}
                   {renderDeleteButton(nextGame.id)}
                 </div>
               </div>
@@ -406,6 +405,7 @@ export function ScheduleContent({
                           <Edit3 className="w-3.5 h-3.5" />
                         </button>
                       )}
+                      {renderFinalScoreButton(game)}
                       {renderDeleteButton(game.id)}
                     </div>
                   </div>
@@ -438,6 +438,7 @@ export function ScheduleContent({
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
                   )}
+                  {renderFinalScoreButton(game)}
                   {renderDeleteButton(game.id)}
                 </div>
               </div>
@@ -505,6 +506,9 @@ export function ScheduleContent({
                   {game.date || `DAY ${game.dayNumber}`}
                 </div>
                 <div className="text-[8px] text-[#E8E8D8] bg-[#4A6844] px-2 py-1">FINAL</div>
+                {game.completionSource === 'score-only' && (
+                  <div className="text-[8px] text-[#E8E8D8] bg-[#3F5A3A] px-2 py-1">SCORE ONLY</div>
+                )}
               </div>
               <div className="flex items-center justify-center gap-4">
                 <div className="text-right">

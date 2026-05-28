@@ -24,6 +24,7 @@ const STORES = {
 // ============================================
 
 export type GameStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'SKIPPED';
+export type ScheduleCompletionSource = 'game-tracker' | 'score-only';
 
 export interface ScheduledGame {
   id: string;
@@ -45,6 +46,9 @@ export interface ScheduledGame {
     winningTeamId: string;
     losingTeamId: string;
   };
+  completionSource?: ScheduleCompletionSource;
+  resultEnteredAt?: number;
+  scoreOnlyResultId?: string;
   gameLogId?: string;           // Links to full game data after completion
   createdAt: number;            // timestamp
   importedAt?: number;          // timestamp for accepted user-provided CSV imports
@@ -109,6 +113,15 @@ export interface GameResult {
   winningTeamId: string;
   losingTeamId: string;
   gameLogId?: string;
+}
+
+export interface CompleteFranchiseScoreOnlyInput {
+  scheduleGameId: string;
+  franchiseId: string;
+  seasonId: string;
+  seasonNumber: number;
+  awayScore: number;
+  homeScore: number;
 }
 
 // ============================================
@@ -180,6 +193,42 @@ function buildScheduleMetadata(
     totalGamesCompleted: games.filter(g => g.status === 'COMPLETED').length,
     lastUpdated: Date.now(),
   };
+}
+
+function validateFinalScore(awayScore: number, homeScore: number): void {
+  if (!Number.isInteger(awayScore) || !Number.isInteger(homeScore)) {
+    throw new Error('Final scores must be whole numbers');
+  }
+  if (awayScore < 0 || homeScore < 0) {
+    throw new Error('Final scores cannot be negative');
+  }
+  if (awayScore === homeScore) {
+    throw new Error('Final-score-only results cannot end in a tie');
+  }
+}
+
+function buildGameResult(
+  game: Pick<ScheduledGame, 'awayTeamId' | 'homeTeamId'>,
+  awayScore: number,
+  homeScore: number,
+): GameResult {
+  const awayWon = awayScore > homeScore;
+  return {
+    awayScore,
+    homeScore,
+    winningTeamId: awayWon ? game.awayTeamId : game.homeTeamId,
+    losingTeamId: awayWon ? game.homeTeamId : game.awayTeamId,
+  };
+}
+
+function sameResult(a: ScheduledGame['result'], b: GameResult): boolean {
+  return Boolean(
+    a
+    && a.awayScore === b.awayScore
+    && a.homeScore === b.homeScore
+    && a.winningTeamId === b.winningTeamId
+    && a.losingTeamId === b.losingTeamId,
+  );
 }
 
 // ============================================
@@ -550,21 +599,118 @@ export async function completeGame(gameId: string, result: GameResult): Promise<
         return;
       }
 
+      if (game.status === 'COMPLETED' && game.completionSource === 'score-only') {
+        reject(new Error('Schedule game already has a score-only result; reopening is not supported in v1'));
+        return;
+      }
       if (game.status === 'COMPLETED' && game.gameLogId === result.gameLogId) {
         resolve();
         return;
       }
 
+      const now = Date.now();
       game.status = 'COMPLETED';
-      game.completedAt = Date.now();
+      game.completedAt = now;
       game.result = result;
       game.gameLogId = result.gameLogId;
+      game.completionSource = 'game-tracker';
+      game.resultEnteredAt = now;
+      delete game.scoreOnlyResultId;
 
       const putRequest = store.put(game);
       putRequest.onsuccess = () => {
         if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-schedule', 'scheduledGames', gameId, game);
         updateMetadata(game.seasonNumber);
         resolve();
+      };
+      putRequest.onerror = () => reject(putRequest.error);
+    };
+
+    getRequest.onerror = () => reject(getRequest.error);
+  });
+}
+
+/**
+ * Complete one franchise schedule row from a final score only.
+ *
+ * This deliberately updates only the schedule row. It does not create a
+ * completed-game archive, aggregate player stats, WPA, milestones, stories, or
+ * any GameTracker-derived data.
+ */
+export async function completeFranchiseScheduleGameScoreOnly(
+  input: CompleteFranchiseScoreOnlyInput,
+): Promise<ScheduledGame> {
+  if (!input.franchiseId) {
+    throw new Error('Score-only completion requires a franchiseId');
+  }
+  if (!input.seasonId) {
+    throw new Error('Score-only completion requires a seasonId');
+  }
+  validateFinalScore(input.awayScore, input.homeScore);
+
+  const db = await initScheduleDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.SCHEDULED_GAMES, 'readwrite');
+    const store = tx.objectStore(STORES.SCHEDULED_GAMES);
+    const getRequest = store.get(input.scheduleGameId);
+
+    getRequest.onsuccess = () => {
+      const game = getRequest.result as ScheduledGame | undefined;
+      if (!game) {
+        reject(new Error(`Schedule game ${input.scheduleGameId} not found`));
+        return;
+      }
+      if (game.franchiseId !== input.franchiseId) {
+        reject(new Error('Schedule game does not belong to this franchise'));
+        return;
+      }
+      if (game.seasonNumber !== input.seasonNumber) {
+        reject(new Error('Schedule game does not belong to this season number'));
+        return;
+      }
+      if (game.seasonId && game.seasonId !== input.seasonId) {
+        reject(new Error('Schedule game does not belong to this season'));
+        return;
+      }
+
+      const result = buildGameResult(game, input.awayScore, input.homeScore);
+      if (game.status === 'COMPLETED') {
+        if (
+          game.completionSource === 'score-only'
+          && game.seasonId === input.seasonId
+          && sameResult(game.result, result)
+        ) {
+          resolve(game);
+          return;
+        }
+        reject(new Error('Schedule game is already completed; score-only editing/reopening is not supported in v1'));
+        return;
+      }
+      if (game.status !== 'SCHEDULED') {
+        reject(new Error('Only pending scheduled games can receive a score-only result'));
+        return;
+      }
+
+      const now = Date.now();
+      const updated: ScheduledGame = {
+        ...game,
+        seasonId: game.seasonId ?? input.seasonId,
+        statsScopeId: game.statsScopeId ?? input.seasonId,
+        status: 'COMPLETED',
+        result,
+        completedAt: now,
+        resultEnteredAt: now,
+        completionSource: 'score-only',
+        scoreOnlyResultId: `score-only:${input.franchiseId}:${input.seasonId}:${game.id}`,
+        gameLogId: undefined,
+      };
+
+      const putRequest = store.put(updated);
+      putRequest.onsuccess = () => {
+        if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-schedule', 'scheduledGames', game.id, updated);
+        updateMetadata(updated.seasonNumber);
+        resolve(updated);
       };
       putRequest.onerror = () => reject(putRequest.error);
     };
@@ -761,6 +907,38 @@ export async function getAllGamesByFranchise(
       const games = (request.result || [])
         .filter((g: ScheduledGame) => g.franchiseId === franchiseId && g.seasonNumber === seasonNumber)
         .sort((a: ScheduledGame, b: ScheduledGame) => a.gameNumber - b.gameNumber);
+      resolve(games);
+    };
+
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * Get completed score-only schedule results for standings. These rows are
+ * schedule/team-result truth only; callers must not treat them as player-game
+ * archives.
+ */
+export async function getScoreOnlyCompletedGamesBySeason(
+  seasonId: string,
+): Promise<ScheduledGame[]> {
+  if (!seasonId) return [];
+  const db = await initScheduleDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.SCHEDULED_GAMES, 'readonly');
+    const store = tx.objectStore(STORES.SCHEDULED_GAMES);
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+      const games = (request.result || [])
+        .filter((game: ScheduledGame) =>
+          game.status === 'COMPLETED'
+          && game.completionSource === 'score-only'
+          && game.seasonId === seasonId
+          && Boolean(game.result),
+        )
+        .sort((a: ScheduledGame, b: ScheduledGame) => (a.completedAt ?? 0) - (b.completedAt ?? 0));
       resolve(games);
     };
 

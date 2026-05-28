@@ -496,7 +496,7 @@ export function useFranchiseData(franchiseId?: string, currentSeason: number = 1
       const s = standingsByTeamId.get(teamId);
       if (s) {
         return {
-          team: s.teamName,
+          team: teamNameMap[teamId] || s.teamName,
           wins: s.wins,
           losses: s.losses,
           gamesBack: s.gamesBack === 0 ? "-" : s.gamesBack.toFixed(1),
