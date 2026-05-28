@@ -2,8 +2,13 @@
  * Game Completion Orchestrator
  *
  * Runs a completed game through the full stats pipeline:
- *   1. aggregateGameToSeason() — batting/pitching/fielding/fame/milestone aggregation
+ *   1. aggregateGameToSeason() — regular-season batting/pitching/fielding/fame/milestone aggregation
  *   2. archiveCompletedGame() — writes to completedGames store
+ *
+ * Stat truth boundary:
+ * - franchise/exhibition completions aggregate into regular-season season stats.
+ * - playoff/elimination completions are archived here, then their callers write to
+ *   postseason-specific stores. They must not contaminate regular-season rows.
  *
  * Adapted from test-utils/processCompletedGame.ts for production use.
  * Import paths fixed for src/utils/ location.
@@ -36,6 +41,30 @@ export interface CompletedGameArchiveOptions {
   inningScores?: { away: number; home: number }[];
   seasonId?: string;
   context?: Parameters<typeof archiveCompletedGame>[4];
+}
+
+export function shouldAggregateToRegularSeasonStats(
+  gameState: PersistedGameState,
+  archiveOptions?: CompletedGameArchiveOptions,
+): boolean {
+  const competitionType =
+    archiveOptions?.context?.competitionType ?? gameState.competitionType;
+  const playoffId = archiveOptions?.context?.playoffId ?? gameState.playoffId;
+  const playoffSeriesId =
+    archiveOptions?.context?.playoffSeriesId ?? gameState.playoffSeriesId;
+  const playoffGameNumber =
+    archiveOptions?.context?.playoffGameNumber ?? gameState.playoffGameNumber;
+  const isEliminationGame =
+    archiveOptions?.context?.isEliminationGame ?? gameState.isEliminationGame;
+
+  return (
+    competitionType !== 'playoff' &&
+    competitionType !== 'elimination' &&
+    !playoffId &&
+    !playoffSeriesId &&
+    playoffGameNumber === undefined &&
+    isEliminationGame !== true
+  );
 }
 
 function buildPlayerRatingsSnapshot(
@@ -136,23 +165,27 @@ export async function processCompletedGame(
     return { aggregation: { success: true, milestones: null } };
   }
 
-  // Step 1: Aggregate game stats to season totals
-  const aggregation = await aggregateGameToSeason(gameState, options);
+  let aggregation: GameAggregationResult = { success: true, milestones: null };
 
-  if (aggregation.success !== true) {
-    try {
-      await markAggregationFailed(
-        gameState.gameId,
+  if (shouldAggregateToRegularSeasonStats(gameState, archiveOptions)) {
+    // Step 1: Aggregate regular-season game stats to season totals.
+    aggregation = await aggregateGameToSeason(gameState, options);
+
+    if (aggregation.success !== true) {
+      try {
+        await markAggregationFailed(
+          gameState.gameId,
+          aggregation.error ||
+            `Failed to aggregate completed game ${gameState.gameId} to season stats`,
+        );
+      } catch (error) {
+        console.warn('[processCompletedGame] Failed to mark aggregation failure:', error);
+      }
+      throw new Error(
         aggregation.error ||
           `Failed to aggregate completed game ${gameState.gameId} to season stats`,
       );
-    } catch (error) {
-      console.warn('[processCompletedGame] Failed to mark aggregation failure:', error);
     }
-    throw new Error(
-      aggregation.error ||
-        `Failed to aggregate completed game ${gameState.gameId} to season stats`,
-    );
   }
 
   try {

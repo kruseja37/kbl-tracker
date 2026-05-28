@@ -31,6 +31,10 @@ import {
   type PlayoffConfig,
   type PlayoffPlayerStats,
 } from './playoffStorage';
+import {
+  buildFranchisePlayerTeamStatStints,
+  type FranchisePlayerTeamStatStint,
+} from './franchiseStatAttribution';
 import { getOffseasonState } from './offseasonStorage';
 import { getTrackerDb } from './trackerDb';
 import { syncEngine } from './syncEngine';
@@ -111,6 +115,7 @@ export interface FranchiseSeasonSummary {
     batting: PlayerSeasonBatting[];
     pitching: PlayerSeasonPitching[];
     fielding: PlayerSeasonFielding[];
+    teamStints?: FranchisePlayerTeamStatStint[];
   };
   playoffs: {
     playoffId?: string;
@@ -281,6 +286,12 @@ export async function buildFranchiseSeasonSummary(params: {
       batting: deepClone(batting),
       pitching: deepClone(pitching),
       fielding: deepClone(fielding),
+      teamStints: buildFranchisePlayerTeamStatStints(completedGames, {
+        franchiseId: params.franchiseId,
+        seasonId,
+        statsScopeId: seasonId,
+        competitionType: 'franchise',
+      }),
     },
     playoffs: playoff
       ? {
