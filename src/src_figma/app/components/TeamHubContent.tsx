@@ -173,6 +173,46 @@ function isActiveFranchisePlayerForTeam(player: Player, teamId: string, leagueId
   ) ?? false;
 }
 
+function isFarmFranchisePlayerForTeam(player: Player, teamId: string, leagueId?: string): boolean {
+  return player.leagueAssignments?.some((assignment) =>
+    assignment.teamId === teamId &&
+    (!leagueId || assignment.leagueId === leagueId) &&
+    assignment.rosterStatus === 'FARM',
+  ) ?? false;
+}
+
+interface ProspectMetadata {
+  source?: string;
+  methodVersion?: string;
+  draftYear?: number;
+  draftRound?: number;
+  draftPick?: number;
+  teamId?: string;
+  scoutedGrade?: string;
+  potentialGrade?: string;
+  scoutId?: string;
+  scoutName?: string;
+  scoutConfidence?: 'low' | 'medium' | 'high' | string;
+  scoutSpecialtiesVisible?: string[];
+  scoutWeaknessesVisible?: string[];
+}
+
+function prospectMetadata(player: Player): ProspectMetadata {
+  const carrier = player as Player & { prospectProfile?: ProspectMetadata };
+  return carrier.prospectProfile ?? {};
+}
+
+function formatFarmSalary(player: Player): string {
+  const salary = Number(player.salary) || 0;
+  if (salary <= 0) return '—';
+  return salary >= 10000 ? `$${(salary / 1000000).toFixed(1)}M` : `$${salary.toFixed(1)}M`;
+}
+
+function formatFarmOptionDates(optionDates: string[]): string {
+  if (optionDates.length === 0) return 'None';
+  return optionDates.map((date) => date.slice(0, 10)).join(', ');
+}
+
 function convertFranchisePlayerToRosterItem(player: Player) {
   const salary = player.salary || 0;
   const contractStr = salary > 0 ? `$${(salary / 1000000).toFixed(1)}M` : '—';
@@ -526,6 +566,29 @@ export function TeamHubContent() {
     seasonNumber,
     selectedTeamId,
   ]);
+
+  const franchiseFarmPlayers = useMemo(() => {
+    if (!franchiseId || !selectedTeamId) return [];
+    return franchiseAllPlayers.filter((player) =>
+      isFarmFranchisePlayerForTeam(player, selectedTeamId, franchiseLeagueId),
+    );
+  }, [franchiseAllPlayers, franchiseId, franchiseLeagueId, selectedTeamId]);
+
+  const farmRecordByPlayerId = useMemo(() => {
+    return new Map(franchiseFarmRecords.map((record) => [record.playerId, record]));
+  }, [franchiseFarmRecords]);
+
+  const farmPlayerById = useMemo(() => {
+    return new Map(franchiseFarmPlayers.map((player) => [player.id, player]));
+  }, [franchiseFarmPlayers]);
+
+  const farmPlayersMissingRecords = useMemo(() => {
+    return franchiseFarmPlayers.filter((player) => !farmRecordByPlayerId.has(player.id));
+  }, [farmRecordByPlayerId, franchiseFarmPlayers]);
+
+  const orphanFarmRecords = useMemo(() => {
+    return franchiseFarmRecords.filter((record) => !farmPlayerById.has(record.playerId));
+  }, [farmPlayerById, franchiseFarmRecords]);
 
   // Default to first team once data loads
   useEffect(() => {
@@ -1015,7 +1078,7 @@ export function TeamHubContent() {
           </div>
           
           <div className="overflow-x-auto">
-            <table className="w-full text-[9px]">
+            <table aria-label="MLB roster table" className="w-full text-[9px]">
               <thead>
                 <tr className="border-b-2 border-[#4A6844]">
                   <th className="text-left py-2 px-2 text-[#E8E8D8]/70 cursor-pointer hover:text-[#E8E8D8]" onClick={() => handleRosterSort("name")}>
@@ -1082,6 +1145,13 @@ export function TeamHubContent() {
               </tbody>
             </table>
           </div>
+
+          <FranchiseFarmVisibilityPanel
+            farmPlayers={franchiseFarmPlayers}
+            farmRecordByPlayerId={farmRecordByPlayerId}
+            missingRecordPlayers={farmPlayersMissingRecords}
+            orphanFarmRecords={orphanFarmRecords}
+          />
         </div>
       )}
 
@@ -1234,6 +1304,108 @@ export function TeamHubContent() {
 
 interface FranchiseRosterAnalyzerPanelProps {
   report: RosterAnalyzerReport | null;
+}
+
+interface FranchiseFarmVisibilityPanelProps {
+  farmPlayers: Player[];
+  farmRecordByPlayerId: Map<string, FranchiseFarmRecord>;
+  missingRecordPlayers: Player[];
+  orphanFarmRecords: FranchiseFarmRecord[];
+}
+
+function FranchiseFarmVisibilityPanel({
+  farmPlayers,
+  farmRecordByPlayerId,
+  missingRecordPlayers,
+  orphanFarmRecords,
+}: FranchiseFarmVisibilityPanelProps) {
+  return (
+    <div
+      role="region"
+      aria-label="Franchise FARM prospects"
+      className="mt-4 border-[4px] border-[#4A6844] bg-[#3F563F] p-3"
+    >
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-[9px] font-bold text-[#C4A853]">FARM PROSPECTS</div>
+          <div className="mt-1 text-[8px] text-[#E8E8D8]/60">
+            Read-only. FARM players are not available for GameTracker until moved through roster transaction flows.
+          </div>
+        </div>
+        <div className="border-2 border-[#4A6844] bg-[#5A8352] px-2 py-1 text-[8px] text-[#E8E8D8]">
+          {farmPlayers.length} FARM
+        </div>
+      </div>
+
+      {farmPlayers.length === 0 ? (
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-3 text-[8px] text-[#E8E8D8]/65">
+          No FARM players are assigned to this franchise team.
+        </div>
+      ) : (
+        <div className="grid gap-3 lg:grid-cols-2">
+          {farmPlayers.map((player) => {
+            const record = farmRecordByPlayerId.get(player.id);
+            const metadata = prospectMetadata(player);
+            const traits = [player.trait1, player.trait2].filter(Boolean).join(', ') || 'None';
+            const revealState = record?.ratingRevealState ?? player.ratingRevealState ?? 'hidden';
+            return (
+              <div key={player.id} className="border-2 border-[#4A6844] bg-[#4A6844] p-3">
+                <div className="mb-2 flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-[10px] font-bold text-[#E8E8D8]">{getFranchisePlayerName(player)}</div>
+                    <div className="mt-1 text-[8px] text-[#E8E8D8]/65">
+                      {player.primaryPosition} · Age {player.age} · B/T {player.bats}/{player.throws}
+                    </div>
+                  </div>
+                  <div className="border-2 border-[#5A8352] px-2 py-1 text-[7px] font-bold text-[#C4A853]">
+                    {String(revealState).toUpperCase()}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[8px] text-[#E8E8D8]/75">
+                  <div>Scouted: <span className="font-bold text-[#E8E8D8]">{metadata.scoutedGrade ?? 'Unscouted'}</span></div>
+                  <div>Potential: <span className="font-bold text-[#E8E8D8]">{metadata.potentialGrade ?? 'Unknown'}</span></div>
+                  <div>Confidence: {metadata.scoutConfidence ?? 'Unknown'}</div>
+                  <div>Salary: {formatFarmSalary(player)}</div>
+                  <div>Chemistry: {player.chemistry ?? '—'}</div>
+                  <div>Personality: {player.personality ?? '—'}</div>
+                  <div className="col-span-2">Traits: {traits}</div>
+                  <div>Options used: {record?.optionsUsed ?? 'Missing record'}</div>
+                  <div>Option dates: {record ? formatFarmOptionDates(record.optionDates) : 'Missing record'}</div>
+                  <div className="col-span-2">
+                    Source: {metadata.source ?? player.sourceDatabase ?? 'Unknown'}
+                    {metadata.draftRound ? ` · Round ${metadata.draftRound}` : ''}
+                    {metadata.draftPick ? ` · Pick ${metadata.draftPick}` : ''}
+                  </div>
+                </div>
+
+                {!record && (
+                  <div className="mt-2 border-2 border-[#C4A853]/50 bg-[#5A3F3F] p-2 text-[8px] text-[#FFD6D6]">
+                    FARM record missing for {getFranchisePlayerName(player)}.
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {(missingRecordPlayers.length > 0 || orphanFarmRecords.length > 0) && (
+        <div className="mt-3 space-y-2">
+          {missingRecordPlayers.map((player) => (
+            <div key={`missing-${player.id}`} className="border-2 border-[#C4A853]/50 bg-[#5A3F3F] p-2 text-[8px] text-[#FFD6D6]">
+              Missing FARM record for FARM-assigned player {getFranchisePlayerName(player)}.
+            </div>
+          ))}
+          {orphanFarmRecords.map((record) => (
+            <div key={`orphan-${record.id}`} className="border-2 border-[#C4A853]/50 bg-[#5A3F3F] p-2 text-[8px] text-[#FFD6D6]">
+              FARM record exists without matching player: {record.playerId}.
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function FranchiseRosterAnalyzerPanel({ report }: FranchiseRosterAnalyzerPanelProps) {
