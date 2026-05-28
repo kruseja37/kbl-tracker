@@ -367,6 +367,159 @@ function normalizeFranchiseLineupSlots(
   }));
 }
 
+function isFranchisePitcher(player: Player): boolean {
+  return FRANCHISE_PITCHER_POSITIONS.has(player.primaryPosition);
+}
+
+function getManualLineupTargetCount(players: Player[], useDH: boolean): number {
+  const positionPlayerCount = players.filter((player) => !isFranchisePitcher(player)).length;
+  return Math.min(useDH ? 9 : 8, positionPlayerCount);
+}
+
+function buildEditableFranchiseLineupSlots(
+  players: Player[],
+  storedLineup: LineupSlot[] | undefined,
+  useDH: boolean,
+): LineupSlot[] {
+  const playerById = new Map(players.map((player) => [player.id, player]));
+  const targetCount = getManualLineupTargetCount(players, useDH);
+  return normalizeFranchiseLineupSlots(players, storedLineup, useDH)
+    .filter((slot) => {
+      const player = playerById.get(slot.playerId);
+      return Boolean(player && !isFranchisePitcher(player));
+    })
+    .slice(0, targetCount)
+    .map((slot, index) => ({
+      ...slot,
+      battingOrder: index + 1,
+      fieldingPosition: !useDH && slot.fieldingPosition === 'DH' ? players.find((player) => player.id === slot.playerId)?.primaryPosition ?? 'LF' : slot.fieldingPosition,
+    }));
+}
+
+function getFranchiseRotationCandidates(players: Player[]): Player[] {
+  const rotationEligible = players.filter((player) => FRANCHISE_ROTATION_POSITIONS.has(player.primaryPosition));
+  return rotationEligible.length > 0
+    ? rotationEligible
+    : players.filter((player) => isFranchisePitcher(player));
+}
+
+function normalizeFranchiseRotationIds(players: Player[], storedRotation: string[] | undefined): string[] {
+  const candidates = getFranchiseRotationCandidates(players);
+  const candidateIds = new Set(candidates.map((player) => player.id));
+  const assigned = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const playerId of storedRotation ?? []) {
+    if (!candidateIds.has(playerId) || assigned.has(playerId)) continue;
+    assigned.add(playerId);
+    normalized.push(playerId);
+  }
+
+  for (const player of candidates) {
+    if (assigned.has(player.id)) continue;
+    assigned.add(player.id);
+    normalized.push(player.id);
+  }
+
+  return normalized;
+}
+
+function duplicateIds(ids: string[]): string[] {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const id of ids) {
+    if (!id) continue;
+    if (seen.has(id)) duplicates.add(id);
+    seen.add(id);
+  }
+  return Array.from(duplicates);
+}
+
+function expectedManualLineupPositions(useDH: boolean): Position[] {
+  return useDH ? [...FRANCHISE_FIELD_POSITIONS, 'DH'] : FRANCHISE_FIELD_POSITIONS;
+}
+
+function describeStoredLineupRotationWarnings(
+  players: Player[],
+  storedLineup: LineupSlot[] | undefined,
+  storedRotation: string[] | undefined,
+  useDH: boolean,
+): string[] {
+  const playerById = new Map(players.map((player) => [player.id, player]));
+  const rotationCandidateIds = new Set(getFranchiseRotationCandidates(players).map((player) => player.id));
+  const warnings: string[] = [];
+  const staleLineupIds = (storedLineup ?? [])
+    .filter((slot) => {
+      const playerId = slot.playerId;
+      const player = playerById.get(playerId);
+      if (!player) return true;
+      if (isFranchisePitcher(player)) return useDH || slot?.fieldingPosition !== 'P';
+      if (!useDH && slot?.fieldingPosition === 'DH') return true;
+      return false;
+    })
+    .map((slot) => slot.playerId);
+  const duplicateLineupIds = duplicateIds((storedLineup ?? []).map((slot) => slot.playerId));
+  const staleRotationIds = (storedRotation ?? []).filter((playerId) => !rotationCandidateIds.has(playerId));
+  const duplicateRotationIds = duplicateIds(storedRotation ?? []);
+
+  if (staleLineupIds.length > 0) {
+    warnings.push(`Saved lineup includes non-current MLB players: ${Array.from(new Set(staleLineupIds)).join(', ')}.`);
+  }
+  if (duplicateLineupIds.length > 0) {
+    warnings.push(`Saved lineup includes duplicate players: ${duplicateLineupIds.join(', ')}.`);
+  }
+  if (staleRotationIds.length > 0) {
+    warnings.push(`Saved rotation includes non-current MLB pitchers: ${Array.from(new Set(staleRotationIds)).join(', ')}.`);
+  }
+  if (duplicateRotationIds.length > 0) {
+    warnings.push(`Saved rotation includes duplicate pitchers: ${duplicateRotationIds.join(', ')}.`);
+  }
+
+  return warnings;
+}
+
+function buildManualLineupForSave(
+  players: Player[],
+  editableSlots: LineupSlot[],
+  rotationIds: string[],
+  useDH: boolean,
+): LineupSlot[] {
+  const activePlayerIds = new Set(players.map((player) => player.id));
+  const playerById = new Map(players.map((player) => [player.id, player]));
+  const targetCount = getManualLineupTargetCount(players, useDH);
+  const slots: LineupSlot[] = editableSlots
+    .filter((slot) => activePlayerIds.has(slot.playerId))
+    .filter((slot) => {
+      const player = playerById.get(slot.playerId);
+      return Boolean(player && !isFranchisePitcher(player));
+    })
+    .slice(0, targetCount)
+    .map((slot, index) => ({
+      ...slot,
+      battingOrder: index + 1,
+      fieldingPosition: !useDH && slot.fieldingPosition === 'DH' ? playerById.get(slot.playerId)?.primaryPosition ?? 'LF' : slot.fieldingPosition,
+    }));
+
+  if (!useDH) {
+    const rotationCandidates = getFranchiseRotationCandidates(players);
+    const starterId =
+      rotationIds.find((playerId) => rotationCandidates.some((candidate) => candidate.id === playerId)) ??
+      rotationCandidates[0]?.id;
+    if (starterId) {
+      slots.push({
+        battingOrder: slots.length + 1,
+        playerId: starterId,
+        fieldingPosition: 'P',
+      });
+    }
+  }
+
+  return slots.slice(0, 9).map((slot, index) => ({
+    ...slot,
+    battingOrder: index + 1,
+  }));
+}
+
 function getFreshOptimalLineupFields(update: Partial<Team>): OptimalLineupSnapshotField[] {
   return OPTIMAL_LINEUP_SNAPSHOT_FIELDS.filter((field) => field in update);
 }
@@ -445,6 +598,12 @@ export function TeamHubContent() {
   const [franchiseRosterPlayers, setFranchiseRosterPlayers] = useState<Player[]>([]);
   const [franchiseFarmRecords, setFranchiseFarmRecords] = useState<FranchiseFarmRecord[]>([]);
   const [lineupMode, setLineupMode] = useState<"DH" | "NO_DH">("NO_DH");
+  const [manualLineupSlots, setManualLineupSlots] = useState<LineupSlot[]>([]);
+  const [manualRotationIds, setManualRotationIds] = useState<string[]>([]);
+  const [lineupRotationDirty, setLineupRotationDirty] = useState(false);
+  const [isLineupRotationSaving, setIsLineupRotationSaving] = useState(false);
+  const [lineupRotationMessage, setLineupRotationMessage] = useState<string | null>(null);
+  const [lineupRotationError, setLineupRotationError] = useState<string | null>(null);
   const [isOptimalSaving, setIsOptimalSaving] = useState(false);
   const [optimalError, setOptimalError] = useState<string | null>(null);
   const [lineupComparison, setLineupComparison] = useState<{
@@ -494,10 +653,89 @@ export function TeamHubContent() {
     const storedLineup = useDH ? franchiseTeam?.lineupWithDH : franchiseTeam?.lineupWithoutDH;
     return normalizeFranchiseLineupSlots(franchiseRosterPlayers, storedLineup, useDH);
   }, [franchiseRosterPlayers, franchiseTeam, useDH]);
+  const franchiseRosterPlayerById = useMemo(
+    () => new Map(franchiseRosterPlayers.map((player) => [player.id, player])),
+    [franchiseRosterPlayers],
+  );
+  const manualLineupPlayerOptions = useMemo(
+    () => franchiseRosterPlayers.filter((player) => !isFranchisePitcher(player)),
+    [franchiseRosterPlayers],
+  );
+  const manualRotationPlayerOptions = useMemo(
+    () => getFranchiseRotationCandidates(franchiseRosterPlayers),
+    [franchiseRosterPlayers],
+  );
+  const manualFieldingPositionOptions = useMemo(
+    () => useDH ? [...FRANCHISE_FIELD_POSITIONS, 'DH' as Position] : FRANCHISE_FIELD_POSITIONS,
+    [useDH],
+  );
+  const storedLineupRotationWarnings = useMemo(() => {
+    const storedLineup = useDH ? franchiseTeam?.lineupWithDH : franchiseTeam?.lineupWithoutDH;
+    return describeStoredLineupRotationWarnings(
+      franchiseRosterPlayers,
+      storedLineup,
+      franchiseTeam?.startingRotation,
+      useDH,
+    );
+  }, [franchiseRosterPlayers, franchiseTeam, useDH]);
+  const duplicateManualLineupIds = useMemo(
+    () => duplicateIds(manualLineupSlots.map((slot) => slot.playerId)),
+    [manualLineupSlots],
+  );
+  const duplicateManualRotationIds = useMemo(
+    () => duplicateIds(manualRotationIds),
+    [manualRotationIds],
+  );
+  const duplicateManualLineupPositions = useMemo(
+    () => duplicateIds(manualLineupSlots.map((slot) => slot.fieldingPosition)),
+    [manualLineupSlots],
+  );
+  const missingManualLineupPositions = useMemo(() => {
+    const assignedPositions = new Set(manualLineupSlots.map((slot) => slot.fieldingPosition));
+    return expectedManualLineupPositions(useDH).filter((position) => !assignedPositions.has(position));
+  }, [manualLineupSlots, useDH]);
+  const lineupRotationBlockingMessage = useMemo(() => {
+    if (duplicateManualLineupIds.length > 0) {
+      return `Lineup has duplicate players: ${duplicateManualLineupIds.join(', ')}.`;
+    }
+    if (duplicateManualLineupPositions.length > 0) {
+      return `Lineup has duplicate defensive positions: ${duplicateManualLineupPositions.join(', ')}.`;
+    }
+    if (missingManualLineupPositions.length > 0) {
+      return `Lineup is missing defensive positions: ${missingManualLineupPositions.join(', ')}.`;
+    }
+    if (duplicateManualRotationIds.length > 0) {
+      return `Rotation has duplicate pitchers: ${duplicateManualRotationIds.join(', ')}.`;
+    }
+    return null;
+  }, [
+    duplicateManualLineupIds,
+    duplicateManualLineupPositions,
+    duplicateManualRotationIds,
+    missingManualLineupPositions,
+  ]);
 
   useEffect(() => {
     setLineupComparison(null);
   }, [selectedTeam, useDH]);
+
+  useEffect(() => {
+    if (!franchiseTeam) {
+      setManualLineupSlots([]);
+      setManualRotationIds([]);
+      setLineupRotationDirty(false);
+      setLineupRotationMessage(null);
+      setLineupRotationError(null);
+      return;
+    }
+
+    const storedLineup = useDH ? franchiseTeam.lineupWithDH : franchiseTeam.lineupWithoutDH;
+    setManualLineupSlots(buildEditableFranchiseLineupSlots(franchiseRosterPlayers, storedLineup, useDH));
+    setManualRotationIds(normalizeFranchiseRotationIds(franchiseRosterPlayers, franchiseTeam.startingRotation));
+    setLineupRotationDirty(false);
+    setLineupRotationMessage(null);
+    setLineupRotationError(null);
+  }, [franchiseRosterPlayers, franchiseTeam, useDH]);
 
   useEffect(() => {
     if (!franchiseId || !selectedTeamId) {
@@ -738,6 +976,88 @@ export function TeamHubContent() {
     }
   };
 
+  const updateManualLineupSlot = (index: number, update: Partial<LineupSlot>) => {
+    setManualLineupSlots((slots) =>
+      slots.map((slot, slotIndex) =>
+        slotIndex === index ? { ...slot, ...update } : slot,
+      ),
+    );
+    setLineupRotationDirty(true);
+    setLineupRotationMessage(null);
+    setLineupRotationError(null);
+  };
+
+  const moveManualLineupSlot = (index: number, direction: -1 | 1) => {
+    setManualLineupSlots((slots) => {
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= slots.length) return slots;
+      const next = [...slots];
+      const [slot] = next.splice(index, 1);
+      next.splice(nextIndex, 0, slot);
+      return next.map((lineupSlot, slotIndex) => ({
+        ...lineupSlot,
+        battingOrder: slotIndex + 1,
+      }));
+    });
+    setLineupRotationDirty(true);
+    setLineupRotationMessage(null);
+    setLineupRotationError(null);
+  };
+
+  const moveManualRotationSlot = (index: number, direction: -1 | 1) => {
+    setManualRotationIds((rotationIds) => {
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= rotationIds.length) return rotationIds;
+      const next = [...rotationIds];
+      const [playerId] = next.splice(index, 1);
+      next.splice(nextIndex, 0, playerId);
+      return next;
+    });
+    setLineupRotationDirty(true);
+    setLineupRotationMessage(null);
+    setLineupRotationError(null);
+  };
+
+  const rebuildManualLineupRotationFromMlb = () => {
+    setManualLineupSlots(buildEditableFranchiseLineupSlots(franchiseRosterPlayers, undefined, useDH));
+    setManualRotationIds(normalizeFranchiseRotationIds(franchiseRosterPlayers, undefined));
+    setLineupRotationDirty(true);
+    setLineupRotationMessage("Rebuilt from current MLB assignments. Save to make it durable.");
+    setLineupRotationError(null);
+  };
+
+  const handleSaveLineupRotation = async () => {
+    if (!franchiseId || !franchiseTeam || lineupRotationBlockingMessage) return;
+
+    setLineupComparison(null);
+    setIsLineupRotationSaving(true);
+    setLineupRotationError(null);
+    setLineupRotationMessage(null);
+
+    try {
+      const normalizedRotationIds = normalizeFranchiseRotationIds(franchiseRosterPlayers, manualRotationIds);
+      const lineupForSave = buildManualLineupForSave(
+        franchiseRosterPlayers,
+        manualLineupSlots,
+        normalizedRotationIds,
+        useDH,
+      );
+      const update: Partial<Team> = {
+        startingRotation: normalizedRotationIds,
+        [useDH ? "lineupWithDH" : "lineupWithoutDH"]: lineupForSave,
+      };
+      const nextTeam = applyFranchiseTeamUpdateWithStaleOptimalSnapshots(franchiseTeam, update);
+      const savedTeam = await saveFranchiseTeam(franchiseId, nextTeam);
+      setFranchiseTeam(savedTeam);
+      setLineupRotationDirty(false);
+      setLineupRotationMessage("Lineup and rotation saved to franchise team state.");
+    } catch (err) {
+      setLineupRotationError(err instanceof Error ? err.message : "Failed to save franchise lineup and rotation.");
+    } finally {
+      setIsLineupRotationSaving(false);
+    }
+  };
+
   const buildFranchiseOptimalSnapshot = (hand: OpposingPitcherHand) => {
     if (!franchiseTeam || !selectedTeamId) return null;
 
@@ -969,6 +1289,178 @@ export function TeamHubContent() {
           </div>
 
           <FranchiseRosterAnalyzerPanel report={analyzerReport} />
+
+          <section
+            aria-label="Franchise lineup and rotation manager"
+            className="mb-4 border-[4px] border-[#4A6844] bg-[#5A8352] p-3"
+          >
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <div className="text-[10px] text-[#C4A853]">DURABLE LINEUP + ROTATION</div>
+                <div className="mt-1 text-[8px] text-[#E8E8D8]/60">
+                  Saves current franchise-owned MLB setup for GameTracker launch.
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={rebuildManualLineupRotationFromMlb}
+                  disabled={!franchiseTeam || isLineupRotationSaving}
+                  className="border-2 border-[#E8E8D8]/30 bg-[#4A6844] px-3 py-1 text-[8px] font-bold text-[#E8E8D8] hover:border-[#C4A853] disabled:opacity-40"
+                >
+                  REBUILD FROM MLB ASSIGNMENTS
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSaveLineupRotation()}
+                  disabled={!franchiseTeam || isLineupRotationSaving || Boolean(lineupRotationBlockingMessage)}
+                  className="border-2 border-[#E8E8D8] bg-[#4A6844] px-3 py-1 text-[8px] font-bold text-[#E8E8D8] hover:border-[#C4A853] disabled:opacity-40"
+                >
+                  {isLineupRotationSaving ? "SAVING..." : "SAVE LINEUP + ROTATION"}
+                </button>
+              </div>
+            </div>
+
+            {storedLineupRotationWarnings.length > 0 && (
+              <div className="mb-3 space-y-1 border-2 border-[#C4A853]/60 bg-[#4A6844] p-2 text-[8px] text-[#FFEFB5]">
+                {storedLineupRotationWarnings.map((warning) => (
+                  <div key={warning}>{warning}</div>
+                ))}
+              </div>
+            )}
+            {lineupRotationBlockingMessage && (
+              <div className="mb-3 border-2 border-[#DD0000]/50 bg-[#4A6844] p-2 text-[8px] text-[#FFD6D6]">
+                {lineupRotationBlockingMessage}
+              </div>
+            )}
+            {lineupRotationError && (
+              <div className="mb-3 border-2 border-[#DD0000]/50 bg-[#4A6844] p-2 text-[8px] text-[#FFD6D6]">
+                {lineupRotationError}
+              </div>
+            )}
+            {lineupRotationMessage && (
+              <div className="mb-3 border-2 border-[#E8E8D8]/30 bg-[#4A6844] p-2 text-[8px] text-[#E8E8D8]">
+                {lineupRotationMessage}
+              </div>
+            )}
+
+            <div className="mb-3 text-[8px] text-[#E8E8D8]/60">
+              Status: {lineupRotationDirty ? "dirty / unsaved" : "saved"}
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(220px,1fr)]">
+              <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2">
+                <div className="mb-2 text-[8px] font-bold text-[#C4A853]">
+                  LINEUP ORDER ({useDH ? "DH" : "NO DH"})
+                </div>
+                {manualLineupSlots.length === 0 ? (
+                  <div className="text-[8px] text-[#E8E8D8]/60">No current MLB position players available.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {manualLineupSlots.map((slot, index) => {
+                      const player = franchiseRosterPlayerById.get(slot.playerId);
+                      return (
+                        <div key={`${slot.battingOrder}-${slot.playerId}-${index}`} className="grid grid-cols-[34px_minmax(150px,1fr)_80px_80px] items-center gap-2 text-[8px]">
+                          <div className="text-[#E8E8D8]/70">#{index + 1}</div>
+                          <select
+                            aria-label={`Lineup slot ${index + 1} player`}
+                            value={slot.playerId}
+                            onChange={(event) => updateManualLineupSlot(index, { playerId: event.target.value })}
+                            className="min-w-0 border-2 border-[#3F5A3A] bg-[#5A8352] p-1 text-[#E8E8D8]"
+                          >
+                            {manualLineupPlayerOptions.map((optionPlayer) => (
+                              <option key={optionPlayer.id} value={optionPlayer.id}>
+                                {getFranchisePlayerName(optionPlayer)}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            aria-label={`Lineup slot ${index + 1} position`}
+                            value={slot.fieldingPosition}
+                            onChange={(event) => updateManualLineupSlot(index, { fieldingPosition: event.target.value as Position })}
+                            className="border-2 border-[#3F5A3A] bg-[#5A8352] p-1 text-[#E8E8D8]"
+                          >
+                            {manualFieldingPositionOptions.map((position) => (
+                              <option key={position} value={position}>
+                                {position}
+                              </option>
+                            ))}
+                          </select>
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              aria-label={`Move lineup slot ${index + 1} up`}
+                              disabled={index === 0}
+                              onClick={() => moveManualLineupSlot(index, -1)}
+                              className="flex-1 border border-[#E8E8D8]/30 bg-[#5A8352] px-1 py-1 text-[#E8E8D8] disabled:opacity-30"
+                            >
+                              UP
+                            </button>
+                            <button
+                              type="button"
+                              aria-label={`Move lineup slot ${index + 1} down`}
+                              disabled={index === manualLineupSlots.length - 1}
+                              onClick={() => moveManualLineupSlot(index, 1)}
+                              className="flex-1 border border-[#E8E8D8]/30 bg-[#5A8352] px-1 py-1 text-[#E8E8D8] disabled:opacity-30"
+                            >
+                              DN
+                            </button>
+                          </div>
+                          {!player && (
+                            <div className="col-span-4 text-[#FFD6D6]">Selected player is no longer MLB-active for this team.</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2">
+                <div className="mb-2 text-[8px] font-bold text-[#C4A853]">STARTING ROTATION</div>
+                {manualRotationIds.length === 0 ? (
+                  <div className="text-[8px] text-[#E8E8D8]/60">No current MLB starters available.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {manualRotationIds.map((playerId, index) => {
+                      const player = franchiseRosterPlayerById.get(playerId);
+                      return (
+                        <div key={`${playerId}-${index}`} className="grid grid-cols-[28px_minmax(120px,1fr)_70px] items-center gap-2 text-[8px]">
+                          <div className="text-[#E8E8D8]/70">#{index + 1}</div>
+                          <div className="text-[#E8E8D8]">
+                            {player ? `${getFranchisePlayerName(player)} (${player.primaryPosition})` : playerId}
+                          </div>
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              aria-label={`Move rotation pitcher ${index + 1} up`}
+                              disabled={index === 0}
+                              onClick={() => moveManualRotationSlot(index, -1)}
+                              className="flex-1 border border-[#E8E8D8]/30 bg-[#5A8352] px-1 py-1 text-[#E8E8D8] disabled:opacity-30"
+                            >
+                              UP
+                            </button>
+                            <button
+                              type="button"
+                              aria-label={`Move rotation pitcher ${index + 1} down`}
+                              disabled={index === manualRotationIds.length - 1}
+                              onClick={() => moveManualRotationSlot(index, 1)}
+                              className="flex-1 border border-[#E8E8D8]/30 bg-[#5A8352] px-1 py-1 text-[#E8E8D8] disabled:opacity-30"
+                            >
+                              DN
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {manualRotationPlayerOptions.length === 0 && (
+                  <div className="mt-2 text-[8px] text-[#FFEFB5]">GameTracker will need a valid MLB pitcher before launch.</div>
+                )}
+              </div>
+            </div>
+          </section>
 
           <div className="mb-4 border-[4px] border-[#4A6844] bg-[#5A8352] p-3">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

@@ -35,6 +35,67 @@ vi.mock('../../../utils/franchiseFarmStorage', () => ({
 
 import { TeamHubContent } from '../../app/components/TeamHubContent';
 
+function franchisePlayer(
+  id: string,
+  firstName: string,
+  lastName: string,
+  primaryPosition: string,
+  overrides: Record<string, unknown> = {},
+) {
+  const isPitcher = ['SP', 'RP', 'CP', 'SP/RP', 'P'].includes(primaryPosition);
+  return {
+    id,
+    firstName,
+    lastName,
+    gender: 'M',
+    age: 26,
+    bats: 'R',
+    throws: 'R',
+    primaryPosition,
+    secondaryPosition: isPitcher ? 'P' : 'DH',
+    power: isPitcher ? 10 : 60,
+    contact: isPitcher ? 10 : 60,
+    speed: isPitcher ? 20 : 60,
+    fielding: 60,
+    arm: 60,
+    velocity: isPitcher ? 88 : 0,
+    junk: isPitcher ? 75 : 0,
+    accuracy: isPitcher ? 72 : 0,
+    arsenal: isPitcher ? ['4F', 'SL'] : [],
+    overallGrade: 'B',
+    personality: 'Jolly',
+    chemistry: 'Spirited',
+    morale: 55,
+    mojo: 'Normal',
+    fame: 0,
+    salary: 3000000,
+    leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'MLB' }],
+    createdDate: '2026-01-01T00:00:00.000Z',
+    lastModified: '2026-01-01T00:00:00.000Z',
+    isCustom: false,
+    ...overrides,
+  };
+}
+
+function lineupManagerPlayers() {
+  return [
+    franchisePlayer('batter-1', 'Batter', 'One', 'C'),
+    franchisePlayer('batter-2', 'Batter', 'Two', '1B'),
+    franchisePlayer('batter-3', 'Batter', 'Three', '2B'),
+    franchisePlayer('batter-4', 'Batter', 'Four', 'SS'),
+    franchisePlayer('batter-5', 'Batter', 'Five', '3B'),
+    franchisePlayer('batter-6', 'Batter', 'Six', 'LF'),
+    franchisePlayer('batter-7', 'Batter', 'Seven', 'CF'),
+    franchisePlayer('batter-8', 'Batter', 'Eight', 'RF'),
+    franchisePlayer('batter-9', 'Batter', 'Nine', 'DH'),
+    franchisePlayer('starter-a', 'Starter', 'Alpha', 'SP'),
+    franchisePlayer('starter-b', 'Starter', 'Beta', 'SP'),
+    franchisePlayer('farm-hidden', 'Farm', 'Hidden', 'CF', {
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'FARM' }],
+    }),
+  ];
+}
+
 describe('TeamHubContent franchise-owned visible reads', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -177,6 +238,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
         lastModified: '2026-01-01T00:00:00.000Z',
       },
     ]);
+    mocks.mockSaveFranchiseTeam.mockImplementation(async (_franchiseId: string, team: unknown) => team);
   });
 
   test('shows copied franchise roster rows and read-only analyzer instead of global/static offseason rows', async () => {
@@ -301,6 +363,195 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
 
     expect(await screen.findByText(/No FARM players are assigned to this franchise team/i)).toBeInTheDocument();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
+  test('renders franchise MLB lineup and rotation controls without FARM candidates', async () => {
+    mocks.mockGetAllFranchisePlayers.mockResolvedValueOnce(lineupManagerPlayers());
+    mocks.mockGetFranchiseTeam.mockResolvedValueOnce({
+      id: 'team-1',
+      name: 'Copied Alpha',
+      leagueIds: ['league-1'],
+      lineupWithoutDH: [
+        { battingOrder: 1, playerId: 'batter-1', fieldingPosition: 'C' },
+        { battingOrder: 2, playerId: 'batter-2', fieldingPosition: '1B' },
+      ],
+      startingRotation: ['starter-a', 'starter-b'],
+      lastModified: '2026-01-01T00:00:00.000Z',
+    });
+    mocks.mockGetFranchiseFarmRoster.mockResolvedValueOnce([]);
+
+    render(<TeamHubContent />);
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+
+    const manager = await screen.findByRole('region', { name: /Franchise lineup and rotation manager/i });
+    expect(within(manager).getByRole('combobox', { name: /Lineup slot 1 player/i })).toHaveValue('batter-1');
+    expect(within(manager).getByText(/Starter Alpha \(SP\)/i)).toBeInTheDocument();
+    expect(within(manager).queryByRole('option', { name: /Farm Hidden/i })).not.toBeInTheDocument();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
+  test('saves reordered lineup and franchise-owned rotation fields', async () => {
+    mocks.mockGetAllFranchisePlayers.mockResolvedValueOnce(lineupManagerPlayers());
+    mocks.mockGetFranchiseTeam.mockResolvedValueOnce({
+      id: 'team-1',
+      name: 'Copied Alpha',
+      leagueIds: ['league-1'],
+      lineupWithoutDH: [
+        { battingOrder: 1, playerId: 'batter-1', fieldingPosition: 'C' },
+        { battingOrder: 2, playerId: 'batter-2', fieldingPosition: '1B' },
+        { battingOrder: 3, playerId: 'batter-3', fieldingPosition: '2B' },
+        { battingOrder: 4, playerId: 'batter-4', fieldingPosition: 'SS' },
+        { battingOrder: 5, playerId: 'batter-5', fieldingPosition: '3B' },
+        { battingOrder: 6, playerId: 'batter-6', fieldingPosition: 'LF' },
+        { battingOrder: 7, playerId: 'batter-7', fieldingPosition: 'CF' },
+        { battingOrder: 8, playerId: 'batter-8', fieldingPosition: 'RF' },
+        { battingOrder: 9, playerId: 'starter-a', fieldingPosition: 'P' },
+      ],
+      startingRotation: ['starter-a', 'starter-b'],
+      lastModified: '2026-01-01T00:00:00.000Z',
+    });
+    mocks.mockGetFranchiseFarmRoster.mockResolvedValueOnce([]);
+
+    render(<TeamHubContent />);
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    const manager = await screen.findByRole('region', { name: /Franchise lineup and rotation manager/i });
+
+    fireEvent.click(within(manager).getByRole('button', { name: /Move lineup slot 2 up/i }));
+    fireEvent.click(within(manager).getByRole('button', { name: /SAVE LINEUP \+ ROTATION/i }));
+
+    await waitFor(() => expect(mocks.mockSaveFranchiseTeam).toHaveBeenCalled());
+    const savedTeam = mocks.mockSaveFranchiseTeam.mock.calls[0][1];
+    expect(savedTeam.lineupWithoutDH.map((slot: { playerId: string }) => slot.playerId).slice(0, 3)).toEqual([
+      'batter-2',
+      'batter-1',
+      'batter-3',
+    ]);
+    expect(savedTeam.lineupWithoutDH[8]).toMatchObject({ playerId: 'starter-a', fieldingPosition: 'P' });
+    expect(savedTeam.startingRotation).toEqual(['starter-a', 'starter-b']);
+  });
+
+  test('saves reordered starting rotation to franchise-owned team state', async () => {
+    mocks.mockGetAllFranchisePlayers.mockResolvedValueOnce(lineupManagerPlayers());
+    mocks.mockGetFranchiseTeam.mockResolvedValueOnce({
+      id: 'team-1',
+      name: 'Copied Alpha',
+      leagueIds: ['league-1'],
+      lineupWithoutDH: [],
+      startingRotation: ['starter-a', 'starter-b'],
+      lastModified: '2026-01-01T00:00:00.000Z',
+    });
+    mocks.mockGetFranchiseFarmRoster.mockResolvedValueOnce([]);
+
+    render(<TeamHubContent />);
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    const manager = await screen.findByRole('region', { name: /Franchise lineup and rotation manager/i });
+
+    fireEvent.click(within(manager).getByRole('button', { name: /Move rotation pitcher 2 up/i }));
+    fireEvent.click(within(manager).getByRole('button', { name: /SAVE LINEUP \+ ROTATION/i }));
+
+    await waitFor(() => expect(mocks.mockSaveFranchiseTeam).toHaveBeenCalled());
+    const savedTeam = mocks.mockSaveFranchiseTeam.mock.calls[0][1];
+    expect(savedTeam.startingRotation).toEqual(['starter-b', 'starter-a']);
+    expect(savedTeam.lineupWithoutDH[8]).toMatchObject({ playerId: 'starter-b', fieldingPosition: 'P' });
+  });
+
+  test('detects stale saved lineup and rotation references and rebuilds from current MLB assignments', async () => {
+    mocks.mockGetAllFranchisePlayers.mockResolvedValueOnce(lineupManagerPlayers());
+    mocks.mockGetFranchiseTeam.mockResolvedValueOnce({
+      id: 'team-1',
+      name: 'Copied Alpha',
+      leagueIds: ['league-1'],
+      lineupWithoutDH: [
+        { battingOrder: 1, playerId: 'traded-player', fieldingPosition: 'SS' },
+        { battingOrder: 2, playerId: 'batter-1', fieldingPosition: 'C' },
+        { battingOrder: 3, playerId: 'batter-1', fieldingPosition: '1B' },
+      ],
+      startingRotation: ['missing-starter', 'starter-a', 'starter-a'],
+      lastModified: '2026-01-01T00:00:00.000Z',
+    });
+    mocks.mockGetFranchiseFarmRoster.mockResolvedValueOnce([]);
+
+    render(<TeamHubContent />);
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    const manager = await screen.findByRole('region', { name: /Franchise lineup and rotation manager/i });
+
+    expect(within(manager).getByText(/Saved lineup includes non-current MLB players: traded-player/i)).toBeInTheDocument();
+    expect(within(manager).getByText(/Saved lineup includes duplicate players: batter-1/i)).toBeInTheDocument();
+    expect(within(manager).getByText(/Saved rotation includes non-current MLB pitchers: missing-starter/i)).toBeInTheDocument();
+    expect(within(manager).getByText(/Saved rotation includes duplicate pitchers: starter-a/i)).toBeInTheDocument();
+
+    fireEvent.click(within(manager).getByRole('button', { name: /REBUILD FROM MLB ASSIGNMENTS/i }));
+    fireEvent.click(within(manager).getByRole('button', { name: /SAVE LINEUP \+ ROTATION/i }));
+
+    await waitFor(() => expect(mocks.mockSaveFranchiseTeam).toHaveBeenCalled());
+    const savedTeam = mocks.mockSaveFranchiseTeam.mock.calls[0][1];
+    const savedLineupIds = savedTeam.lineupWithoutDH.map((slot: { playerId: string }) => slot.playerId);
+    expect(savedLineupIds).not.toContain('traded-player');
+    expect(new Set(savedLineupIds).size).toBe(savedLineupIds.length);
+    expect(savedTeam.startingRotation).toEqual(['starter-a', 'starter-b']);
+  });
+
+  test('blocks duplicate manual lineup selections before saving', async () => {
+    mocks.mockGetAllFranchisePlayers.mockResolvedValueOnce(lineupManagerPlayers());
+    mocks.mockGetFranchiseTeam.mockResolvedValueOnce({
+      id: 'team-1',
+      name: 'Copied Alpha',
+      leagueIds: ['league-1'],
+      lineupWithoutDH: [
+        { battingOrder: 1, playerId: 'batter-1', fieldingPosition: 'C' },
+        { battingOrder: 2, playerId: 'batter-2', fieldingPosition: '1B' },
+      ],
+      startingRotation: ['starter-a', 'starter-b'],
+      lastModified: '2026-01-01T00:00:00.000Z',
+    });
+    mocks.mockGetFranchiseFarmRoster.mockResolvedValueOnce([]);
+
+    render(<TeamHubContent />);
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    const manager = await screen.findByRole('region', { name: /Franchise lineup and rotation manager/i });
+
+    fireEvent.change(within(manager).getByRole('combobox', { name: /Lineup slot 2 player/i }), {
+      target: { value: 'batter-1' },
+    });
+
+    expect(within(manager).getByText(/Lineup has duplicate players: batter-1/i)).toBeInTheDocument();
+    expect(within(manager).getByRole('button', { name: /SAVE LINEUP \+ ROTATION/i })).toBeDisabled();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
+  test('blocks duplicate defensive positions before saving durable lineup', async () => {
+    mocks.mockGetAllFranchisePlayers.mockResolvedValueOnce(lineupManagerPlayers());
+    mocks.mockGetFranchiseTeam.mockResolvedValueOnce({
+      id: 'team-1',
+      name: 'Copied Alpha',
+      leagueIds: ['league-1'],
+      lineupWithoutDH: [
+        { battingOrder: 1, playerId: 'batter-1', fieldingPosition: 'C' },
+        { battingOrder: 2, playerId: 'batter-2', fieldingPosition: '1B' },
+        { battingOrder: 3, playerId: 'batter-3', fieldingPosition: '2B' },
+        { battingOrder: 4, playerId: 'batter-4', fieldingPosition: 'SS' },
+        { battingOrder: 5, playerId: 'batter-5', fieldingPosition: '3B' },
+        { battingOrder: 6, playerId: 'batter-6', fieldingPosition: 'LF' },
+        { battingOrder: 7, playerId: 'batter-7', fieldingPosition: 'CF' },
+        { battingOrder: 8, playerId: 'batter-8', fieldingPosition: 'RF' },
+        { battingOrder: 9, playerId: 'starter-a', fieldingPosition: 'P' },
+      ],
+      startingRotation: ['starter-a', 'starter-b'],
+      lastModified: '2026-01-01T00:00:00.000Z',
+    });
+    mocks.mockGetFranchiseFarmRoster.mockResolvedValueOnce([]);
+
+    render(<TeamHubContent />);
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    const manager = await screen.findByRole('region', { name: /Franchise lineup and rotation manager/i });
+
+    fireEvent.change(within(manager).getByRole('combobox', { name: /Lineup slot 2 position/i }), {
+      target: { value: 'C' },
+    });
+
+    expect(within(manager).getByText(/Lineup has duplicate defensive positions: C/i)).toBeInTheDocument();
+    expect(within(manager).getByRole('button', { name: /SAVE LINEUP \+ ROTATION/i })).toBeDisabled();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
   });
 });

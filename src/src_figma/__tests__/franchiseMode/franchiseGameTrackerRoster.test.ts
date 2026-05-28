@@ -345,6 +345,101 @@ describe('franchise GameTracker roster identity', () => {
     expect(roster.optimalLineups?.vsLHP).toBe(lhpSnapshot);
   });
 
+  test('loads saved no-DH franchise lineup and rotation starter for game launch', async () => {
+    const batter = (id: string, firstName: string, lastName: string, primaryPosition: string) => ({
+      id,
+      firstName,
+      lastName,
+      primaryPosition,
+      secondaryPosition: 'DH',
+      bats: 'R',
+      throws: 'R',
+      age: 27,
+      power: 70,
+      contact: 70,
+      speed: 60,
+      fielding: 70,
+      arm: 70,
+      velocity: 0,
+      junk: 0,
+      accuracy: 0,
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'MLB' }],
+    });
+    const starter = (id: string, firstName: string, lastName: string) => ({
+      id,
+      firstName,
+      lastName,
+      primaryPosition: 'SP',
+      secondaryPosition: 'P',
+      bats: 'R',
+      throws: 'R',
+      age: 30,
+      power: 10,
+      contact: 10,
+      speed: 20,
+      fielding: 55,
+      arm: 70,
+      velocity: 90,
+      junk: 80,
+      accuracy: 75,
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'MLB' }],
+    });
+    const franchisePlayers = [
+      batter('b1', 'Batter', 'One', 'C'),
+      batter('b2', 'Batter', 'Two', '1B'),
+      batter('b3', 'Batter', 'Three', '2B'),
+      batter('b4', 'Batter', 'Four', 'SS'),
+      batter('b5', 'Batter', 'Five', '3B'),
+      batter('b6', 'Batter', 'Six', 'LF'),
+      batter('b7', 'Batter', 'Seven', 'CF'),
+      batter('b8', 'Batter', 'Eight', 'RF'),
+      starter('sp-a', 'Starter', 'Alpha'),
+      starter('sp-b', 'Starter', 'Beta'),
+    ];
+
+    mockGetFranchiseTeam.mockResolvedValue({
+      id: 'team-1',
+      leagueIds: ['league-1'],
+      startingRotation: ['sp-b', 'sp-a'],
+      lineupWithoutDH: [
+        { battingOrder: 1, playerId: 'b2', fieldingPosition: '1B' },
+        { battingOrder: 2, playerId: 'b1', fieldingPosition: 'C' },
+        { battingOrder: 3, playerId: 'b3', fieldingPosition: '2B' },
+        { battingOrder: 4, playerId: 'b4', fieldingPosition: 'SS' },
+        { battingOrder: 5, playerId: 'b5', fieldingPosition: '3B' },
+        { battingOrder: 6, playerId: 'b6', fieldingPosition: 'LF' },
+        { battingOrder: 7, playerId: 'b7', fieldingPosition: 'CF' },
+        { battingOrder: 8, playerId: 'b8', fieldingPosition: 'RF' },
+        { battingOrder: 9, playerId: 'sp-b', fieldingPosition: 'P' },
+      ],
+    });
+    mockGetAllFranchisePlayers.mockResolvedValue(franchisePlayers);
+
+    const roster = await buildFranchiseGameTrackerRoster('team-1', {
+      franchiseId: 'franchise-1',
+      leagueId: 'league-1',
+      useDH: false,
+    });
+
+    expect(roster.players.map((player) => player.playerId)).toEqual([
+      'b2',
+      'b1',
+      'b3',
+      'b4',
+      'b5',
+      'b6',
+      'b7',
+      'b8',
+      'sp-b',
+    ]);
+    expect(roster.players[8]).toMatchObject({ playerId: 'sp-b', position: 'P', battingOrder: 9 });
+    expect(roster.pitchers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ playerId: 'sp-b', isStarter: true }),
+      ]),
+    );
+  });
+
   test('filters franchise launch rosters to active MLB assignments only', async () => {
     mockGetFranchiseTeam.mockResolvedValue({
       id: 'team-1',
