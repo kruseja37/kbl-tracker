@@ -349,6 +349,7 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
       seasonId: getFranchiseSeasonId(franchiseId, 1),
       seasonNumber: 1,
       teamControl: teamControlSnapshot.teamControl,
+      farmScoutingBridgeRepairApplied: config.roster.startupProspectDraft?.bridgeRepairApplied,
     });
 
     // 4. Determine controlled team

@@ -64,6 +64,27 @@ export interface FranchiseRosterRequirementSnapshot {
   farmPlayersPerTeam: number;
   validationStatus: 'passed';
   teamCounts: Record<string, { MLB: number; FARM: number }>;
+  farmScouting?: FranchiseFarmScoutingHandoffSnapshot;
+}
+
+export interface FranchiseFarmScoutingHandoffSnapshot {
+  ownership: 'league-builder-mode-1';
+  validationVersion: 'league-builder-farm-scouting-v1';
+  bridgePolicy: 'temporary-franchise-setup-repair-only';
+  preparedInLeagueBuilder: boolean;
+  bridgeRepairApplied: boolean;
+  mlbPlayersPerTeam: number;
+  farmPlayersPerTeam: number;
+  hiddenTrueRatingsUntilReveal: true;
+  scoutProfilesRequired: false;
+  teamCounts: Record<string, {
+    MLB: number;
+    FARM: number;
+    hiddenFarm: number;
+    visibleSafeMetadata: number;
+  }>;
+  warnings: string[];
+  limitations: string[];
 }
 
 export interface FranchiseSalaryBaselineProof {
@@ -98,6 +119,7 @@ export interface FranchiseStartupProspectDraftConfig {
   enabled: boolean;
   rounds: number;
   mode: 'auto-snake-v1';
+  bridgeRepairApplied?: boolean;
 }
 
 export interface FranchiseConfig {

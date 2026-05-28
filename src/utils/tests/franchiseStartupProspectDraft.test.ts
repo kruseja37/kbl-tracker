@@ -14,6 +14,8 @@ import {
   rollbackStartupProspectDraftForLeague,
   runStartupProspectDraftForLeague,
 } from '../franchiseStartupProspectDraft';
+import { PROSPECT_SCOUTING_DRAFT_ENGINE_VERSION } from '../prospectScoutingDraftEngine';
+import { validatePreparedLeagueBuilderFarmScoutingState } from '../leagueBuilderFarmScoutingHandoff';
 import {
   __resetLeagueBuilderDatabaseForTests,
   clearAllLeagueBuilderData,
@@ -156,11 +158,24 @@ describe('startup prospect draft', () => {
     });
 
     expect(report.methodVersion).toBe(STARTUP_PROSPECT_DRAFT_VERSION);
+    expect(report.bridgeMethodVersion).toBe(STARTUP_PROSPECT_DRAFT_VERSION);
+    expect(report.engineMethodVersion).toBe(PROSPECT_SCOUTING_DRAFT_ENGINE_VERSION);
+    expect(report.seed).toBe('test-seed');
+    expect(report.bridgeRepairApplied).toBe(true);
     expect(report.valid).toBe(true);
     expect(report.totalVacancies).toBe(20);
     expect(report.picks).toHaveLength(20);
     expect(report.teamFarmCounts[TEAM_A]).toEqual({ before: 0, after: 10, added: 10 });
     expect(report.teamFarmCounts[TEAM_B]).toEqual({ before: 0, after: 10, added: 10 });
+    expect(report.visibleReports).toHaveLength(20);
+    expect(report.visibleReports[0]).toEqual(expect.objectContaining({
+      playerId: report.picks[0].playerId,
+      scoutedGrade: expect.any(String),
+      potentialGrade: expect.any(String),
+      scoutConfidence: expect.stringMatching(/^(low|medium|high)$/),
+      scoutSpecialtiesVisible: expect.any(Array),
+      scoutWeaknessesVisible: expect.any(Array),
+    }));
 
     const rosterA = await getTeamRoster(TEAM_A);
     const rosterB = await getTeamRoster(TEAM_B);
@@ -178,6 +193,30 @@ describe('startup prospect draft', () => {
         assignment.rosterStatus === 'FARM',
       ),
     )).toBe(true);
+
+    const generatedProspect = prospects[0] as Player & {
+      prospectProfile?: {
+        methodVersion?: string;
+        source?: string;
+        scoutConfidence?: string;
+        scoutSpecialtiesVisible?: unknown[];
+        scoutWeaknessesVisible?: unknown[];
+      };
+      hiddenPersonalityModifiers?: Record<string, number>;
+    };
+    expect(generatedProspect.prospectProfile).toEqual(expect.objectContaining({
+      methodVersion: PROSPECT_SCOUTING_DRAFT_ENGINE_VERSION,
+      source: 'league-builder-startup-prospect-draft',
+      scoutConfidence: expect.stringMatching(/^(low|medium|high)$/),
+      scoutSpecialtiesVisible: expect.any(Array),
+      scoutWeaknessesVisible: expect.any(Array),
+    }));
+    expect(generatedProspect.hiddenPersonalityModifiers).toEqual(expect.objectContaining({
+      leadership: expect.any(Number),
+      volatility: expect.any(Number),
+      adaptability: expect.any(Number),
+      pressure: expect.any(Number),
+    }));
   });
 
   test('is idempotent when farm rosters are already full', async () => {
@@ -186,6 +225,8 @@ describe('startup prospect draft', () => {
 
     expect(secondReport.totalVacancies).toBe(0);
     expect(secondReport.picks).toHaveLength(0);
+    expect(secondReport.bridgeRepairApplied).toBe(false);
+    expect(secondReport.engineMethodVersion).toBe(PROSPECT_SCOUTING_DRAFT_ENGINE_VERSION);
     const prospects = (await getAllPlayers()).filter((player) => player.sourceDatabase === 'startup-prospect-draft');
     expect(prospects).toHaveLength(20);
   });
@@ -202,7 +243,9 @@ describe('startup prospect draft', () => {
     expect(report.valid).toBe(true);
     expect(report.teamFarmCounts[TEAM_A]).toEqual({ before: 3, after: 10, added: 7 });
     expect(report.picks.filter((pick) => pick.teamId === TEAM_A)).toHaveLength(7);
+    expect(report.picks.filter((pick) => pick.teamId === TEAM_B)).toHaveLength(10);
     expect((await getTeamRoster(TEAM_A))?.farmRoster).toHaveLength(10);
+    expect((await getTeamRoster(TEAM_B))?.farmRoster).toHaveLength(10);
   });
 
   test('blocks stale farm roster ids before writing prospects', async () => {
@@ -239,9 +282,10 @@ describe('startup prospect draft', () => {
   });
 
   test('blocks generated player id collisions before overwriting existing players', async () => {
+    const collidingId = `prospect-${LEAGUE_ID}-1-${TEAM_A}-1-1`;
     await savePlayer({
       ...makePlayer(TEAM_A, 99),
-      id: `startup-prospect-${LEAGUE_ID}-${TEAM_A}-1-1`,
+      id: collidingId,
       leagueAssignments: [],
     });
 
@@ -249,8 +293,30 @@ describe('startup prospect draft', () => {
 
     expect(report.valid).toBe(false);
     expect(report.issues.join(' ')).toMatch(/already exists/i);
-    const collisionPlayer = (await getAllPlayers()).find((player) => player.id === `startup-prospect-${LEAGUE_ID}-${TEAM_A}-1-1`);
+    const collisionPlayer = (await getAllPlayers()).find((player) => player.id === collidingId);
     expect(collisionPlayer?.sourceDatabase).toBe('test');
+  });
+
+  test('prepared League Builder farm/scouting handoff validates after bridge repair', async () => {
+    const bridgeReport = await runStartupProspectDraftForLeague(LEAGUE_ID, {
+      seed: 'handoff-repair-seed',
+      seasonNumber: 1,
+    });
+    const validation = await validatePreparedLeagueBuilderFarmScoutingState(LEAGUE_ID);
+
+    expect(bridgeReport.valid).toBe(true);
+    expect(bridgeReport.bridgeRepairApplied).toBe(true);
+    expect(validation.status).toBe('prepared');
+    expect(validation.bridgeRequired).toBe(false);
+    expect(validation.teams).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        teamId: TEAM_A,
+        MLB: 22,
+        FARM: 10,
+        hiddenFarm: 10,
+        visibleSafeMetadata: 10,
+      }),
+    ]));
   });
 
   test('can roll back a completed startup prospect draft after downstream setup failure', async () => {

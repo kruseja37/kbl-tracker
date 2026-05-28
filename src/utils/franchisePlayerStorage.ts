@@ -26,6 +26,12 @@ import {
   FRANCHISE_INITIAL_SALARY_CALCULATION_VERSION,
   withInitialFranchiseSalary,
 } from './franchiseSalary';
+import {
+  V1_FARM_PLAYERS_PER_TEAM,
+  V1_MLB_PLAYERS_PER_TEAM,
+  buildLeagueBuilderFarmScoutingHandoffSnapshot,
+  validateLeagueBuilderFarmScoutingHandoffState,
+} from './leagueBuilderFarmScoutingHandoff';
 import { getDerivedParkFactorsIfAvailable } from '../engines/parkFactorDeriver';
 import { getStableParkId } from '../data/parkLookup';
 import type {
@@ -293,6 +299,7 @@ export interface DeepCopyLeagueToFranchiseOptions {
   seasonId?: string;
   seasonNumber?: number;
   teamControl?: Record<string, FranchiseTeamControl>;
+  farmScoutingBridgeRepairApplied?: boolean;
 }
 
 export interface DeepCopyLeagueToFranchiseResult {
@@ -301,8 +308,8 @@ export interface DeepCopyLeagueToFranchiseResult {
   stadiums: FranchiseTeamStadiumSnapshot[];
 }
 
-const REQUIRED_MLB_PLAYERS_PER_TEAM = 22;
-const REQUIRED_FARM_PLAYERS_PER_TEAM = 10;
+const REQUIRED_MLB_PLAYERS_PER_TEAM = V1_MLB_PLAYERS_PER_TEAM;
+const REQUIRED_FARM_PLAYERS_PER_TEAM = V1_FARM_PLAYERS_PER_TEAM;
 
 function rosterStatusFromTeamRoster(
   player: Player,
@@ -388,6 +395,8 @@ function validateV1RosterHandoff(
   leagueId: string,
   teams: Team[],
   players: Player[],
+  rostersByTeamId: Map<string, TeamRoster | null>,
+  options: { bridgeRepairApplied?: boolean } = {},
 ): FranchiseRosterRequirementSnapshot {
   const teamCounts: Record<string, { MLB: number; FARM: number }> = {};
   const issues: string[] = [];
@@ -413,11 +422,30 @@ function validateV1RosterHandoff(
     throw new Error(`Invalid Mode 1 roster handoff. ${issues.join(' ')}`);
   }
 
+  const farmScoutingReport = validateLeagueBuilderFarmScoutingHandoffState({
+    leagueId,
+    teams,
+    players,
+    rostersByTeamId,
+  });
+
+  if (farmScoutingReport.status !== 'prepared') {
+    throw new Error(
+      `Invalid Mode 1 farm/scouting handoff. ${[
+        ...farmScoutingReport.blockers,
+        ...farmScoutingReport.warnings.filter((warning) => warning.includes('FARM players')),
+      ].join(' ')}`,
+    );
+  }
+
   return {
     mlbPlayersPerTeam: REQUIRED_MLB_PLAYERS_PER_TEAM,
     farmPlayersPerTeam: REQUIRED_FARM_PLAYERS_PER_TEAM,
     validationStatus: 'passed',
     teamCounts,
+    farmScouting: buildLeagueBuilderFarmScoutingHandoffSnapshot(farmScoutingReport, {
+      bridgeRepairApplied: options.bridgeRepairApplied,
+    }),
   };
 }
 
@@ -524,7 +552,13 @@ export async function deepCopyLeagueToFranchise(
     }),
   );
 
-  const rosterRequirements = validateV1RosterHandoff(leagueId, teamsToCopy, playersToCopy);
+  const rosterRequirements = validateV1RosterHandoff(
+    leagueId,
+    teamsToCopy,
+    playersToCopy,
+    teamRostersByTeamId,
+    { bridgeRepairApplied: options.farmScoutingBridgeRepairApplied },
+  );
   const salaryBaseline = buildSalaryBaselineProof(leagueId, teamsToCopy, playersToCopy);
   const stadiums = buildTeamStadiumSnapshots(teamsToCopy);
 

@@ -1,359 +1,299 @@
-/**
- * LeagueBuilderDraft Component Tests
- *
- * Tests the draft setup page with configuration and prospect generation.
- * Per Ralph Framework S-B017
- */
-
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { LeagueBuilderDraft } from '../../app/pages/LeagueBuilderDraft';
-
-// ============================================
-// MOCKS
-// ============================================
+import {
+  applyLeagueBuilderStartupFarmDraft,
+  createLeagueBuilderStartupFarmDraftPreview,
+} from '../../../utils/leagueBuilderStartupFarmDraft';
+import { useLeagueBuilderData } from '../../hooks/useLeagueBuilderData';
 
 const mockNavigate = vi.fn();
+const mockRefresh = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('react-router', () => ({
   useNavigate: () => mockNavigate,
 }));
 
+vi.mock('../../../utils/leagueBuilderStartupFarmDraft', async () => {
+  const actual = await vi.importActual<typeof import('../../../utils/leagueBuilderStartupFarmDraft')>(
+    '../../../utils/leagueBuilderStartupFarmDraft',
+  );
+  return {
+    ...actual,
+    createLeagueBuilderStartupFarmDraftPreview: vi.fn(),
+    applyLeagueBuilderStartupFarmDraft: vi.fn(),
+  };
+});
+
+const baseLeague = {
+  id: 'league-1',
+  name: 'League One',
+  teamIds: ['team-1', 'team-2'],
+  conferences: [],
+  divisions: [],
+  createdDate: '2026-01-01',
+  lastModified: '2026-01-01',
+};
+
+const baseTeams = [
+  {
+    id: 'team-1',
+    name: 'Sox',
+    location: 'Boston',
+    abbreviation: 'SOX',
+    colors: { primary: '#FF0000', secondary: '#FFFFFF' },
+    leagueIds: ['league-1'],
+  },
+  {
+    id: 'team-2',
+    name: 'Tigers',
+    location: 'Detroit',
+    abbreviation: 'DET',
+    colors: { primary: '#FF6600', secondary: '#000000' },
+    leagueIds: ['league-1'],
+  },
+];
+
+function makePlayer(teamId: string, index: number, rosterStatus: 'MLB' | 'FARM') {
+  return {
+    id: `${teamId}-${rosterStatus.toLowerCase()}-${index}`,
+    firstName: rosterStatus,
+    lastName: `${index}`,
+    primaryPosition: rosterStatus === 'MLB' ? 'C' : 'CF',
+    overallGrade: 'B',
+    salary: rosterStatus === 'MLB' ? 4 : 0.5,
+    leagueAssignments: [{ leagueId: 'league-1', teamId, rosterStatus }],
+    ratingRevealState: rosterStatus === 'FARM' ? 'hidden' : undefined,
+  };
+}
+
+function makePlayers(farmCount = 0) {
+  return baseTeams.flatMap((team) => [
+    ...Array.from({ length: 22 }, (_, index) => makePlayer(team.id, index + 1, 'MLB')),
+    ...Array.from({ length: farmCount }, (_, index) => makePlayer(team.id, index + 1, 'FARM')),
+  ]);
+}
+
 vi.mock('../../hooks/useLeagueBuilderData', () => ({
   useLeagueBuilderData: vi.fn(() => ({
-    leagues: [
-      { id: 'league-1', name: 'League One', teamIds: ['team-1', 'team-2'] },
-    ],
-    teams: [
-      {
-        id: 'team-1',
-        name: 'Boston Sox',
-        abbreviation: 'SOX',
-        colors: { primary: '#FF0000', secondary: '#FFFFFF' },
-        leagueIds: ['league-1'],
-      },
-      {
-        id: 'team-2',
-        name: 'Detroit Tigers',
-        abbreviation: 'DET',
-        colors: { primary: '#FF6600', secondary: '#000000' },
-        leagueIds: ['league-1'],
-      },
-    ],
-    players: [
-      {
-        id: 'player-inactive-1',
-        firstName: 'Mike',
-        lastName: 'Retired',
-        primaryPosition: 'SS',
-        overallGrade: 'B-',
-        leagueAssignments: [{ leagueId: 'league-1', teamId: '', rosterStatus: 'FREE_AGENT' }],
-      },
-      {
-        id: 'player-inactive-2',
-        firstName: 'Steve',
-        lastName: 'Released',
-        primaryPosition: 'SP',
-        overallGrade: 'C+',
-        leagueAssignments: [{ leagueId: 'league-1', teamId: '', rosterStatus: 'FREE_AGENT' }],
-      },
-    ],
+    leagues: [baseLeague],
+    teams: baseTeams,
+    players: makePlayers(),
+    rulesPresets: [],
     isLoading: false,
     error: null,
+    refresh: mockRefresh,
   })),
 }));
 
-// ============================================
-// TESTS
-// ============================================
+function makePreview(overrides: Record<string, unknown> = {}) {
+  return {
+    workflowVersion: 'league-builder-startup-farm-draft-v1',
+    engineMethodVersion: 'league-builder-startup-prospect-scouting-draft-v1',
+    leagueId: 'league-1',
+    seasonNumber: 1,
+    rounds: 10,
+    seed: 'ui-seed',
+    valid: true,
+    prepared: false,
+    totalVacancies: 2,
+    blockers: [],
+    warnings: [],
+    limitations: [],
+    teams: [
+      { teamId: 'team-1', teamName: 'Boston Sox', farmCount: 9, mlbCount: 22, missingFarm: 1, prepared: false },
+      { teamId: 'team-2', teamName: 'Detroit Tigers', farmCount: 9, mlbCount: 22, missingFarm: 1, prepared: false },
+    ],
+    selectedPicks: [
+      {
+        round: 1,
+        pickNumber: 1,
+        teamId: 'team-1',
+        playerId: 'prospect-league-1-1-team-1-1-1',
+        playerName: 'Ari Banks',
+        position: 'CF',
+        trueGrade: 'A',
+        scoutedGrade: 'B+',
+        potentialGrade: 'A-',
+        scoutAccuracy: 70,
+        scoutConfidence: 'medium',
+        salary: 2,
+        player: {
+          prospectProfile: {
+            trueGrade: 'A',
+            scoutedGrade: 'B+',
+            scoutSpecialtiesVisible: ['outfield'],
+            scoutWeaknessesVisible: ['CP'],
+          },
+          hiddenPersonalityModifiers: {
+            leadership: 90,
+          },
+        },
+        visibleReport: {
+          candidateId: 'candidate-1',
+          playerId: 'prospect-league-1-1-team-1-1-1',
+          playerName: 'Ari Banks',
+          position: 'CF',
+          age: 20,
+          bats: 'R',
+          throws: 'R',
+          scoutedGrade: 'B+',
+          potentialGrade: 'A-',
+          scoutConfidence: 'medium',
+          chemistry: 'Crafty',
+          personality: 'Competitive',
+          salary: 2,
+        },
+      },
+    ],
+    visibleReports: [
+      {
+        candidateId: 'candidate-1',
+        playerId: 'prospect-league-1-1-team-1-1-1',
+        playerName: 'Ari Banks',
+        position: 'CF',
+        age: 20,
+        bats: 'R',
+        throws: 'R',
+        scoutedGrade: 'B+',
+        potentialGrade: 'A-',
+        scoutConfidence: 'medium',
+        chemistry: 'Crafty',
+        personality: 'Competitive',
+        salary: 2,
+        teamId: 'team-1',
+        round: 1,
+        pickNumber: 1,
+        scoutName: 'Startup Farm Scout 1',
+        scoutSpecialtiesVisible: ['outfield'],
+        scoutWeaknessesVisible: ['CP'],
+      },
+    ],
+    ...overrides,
+  };
+}
 
-describe('LeagueBuilderDraft Component', () => {
+describe('LeagueBuilderDraft startup farm draft UI', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  describe('Header', () => {
-    test('renders DRAFT SETUP title', () => {
-      render(<LeagueBuilderDraft />);
-      expect(screen.getByText('DRAFT SETUP')).toBeInTheDocument();
-    });
-
-    test('renders back button', () => {
-      render(<LeagueBuilderDraft />);
-      const buttons = screen.getAllByRole('button');
-      expect(buttons[0]).toBeInTheDocument();
-    });
-
-    test('back button navigates to league builder', () => {
-      render(<LeagueBuilderDraft />);
-      const buttons = screen.getAllByRole('button');
-      fireEvent.click(buttons[0]);
-      expect(mockNavigate).toHaveBeenCalledWith('/league-builder');
-    });
-  });
-
-  describe('Tabs', () => {
-    test('renders settings, prospects, inactive tabs', () => {
-      render(<LeagueBuilderDraft />);
-      expect(screen.getByText('SETTINGS')).toBeInTheDocument();
-      // PROSPECTS appears in tab and button, use more specific selector
-      expect(screen.getByRole('button', { name: /PROSPECTS \(0\)/ })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /INACTIVE \(2\)/ })).toBeInTheDocument();
-    });
-
-    test('settings tab is active by default', () => {
-      render(<LeagueBuilderDraft />);
-      expect(screen.getByText('DRAFT CONFIGURATION')).toBeInTheDocument();
+    mockRefresh.mockResolvedValue(undefined);
+    vi.mocked(useLeagueBuilderData).mockReturnValue({
+      leagues: [baseLeague],
+      teams: baseTeams,
+      players: makePlayers(),
+      rulesPresets: [],
+      isLoading: false,
+      error: null,
+      refresh: mockRefresh,
+    } as any);
+    vi.mocked(createLeagueBuilderStartupFarmDraftPreview).mockResolvedValue(makePreview() as any);
+    vi.mocked(applyLeagueBuilderStartupFarmDraft).mockResolvedValue({
+      workflowVersion: 'league-builder-startup-farm-draft-v1',
+      leagueId: 'league-1',
+      valid: true,
+      applied: true,
+      createdPlayerIds: ['prospect-league-1-1-team-1-1-1'],
+      updatedTeamIds: ['team-1'],
+      issues: [],
+      rollbackErrors: [],
     });
   });
 
-  describe('Settings Tab', () => {
-    test('shows draft order dropdown', () => {
-      render(<LeagueBuilderDraft />);
-      expect(screen.getByText('DRAFT ORDER')).toBeInTheDocument();
-    });
+  test('renders startup farm draft controls', () => {
+    render(<LeagueBuilderDraft />);
 
-    test('shows rounds slider', () => {
-      render(<LeagueBuilderDraft />);
-      expect(screen.getByText(/ROUNDS/)).toBeInTheDocument();
-    });
-
-    test('shows pick timer slider', () => {
-      render(<LeagueBuilderDraft />);
-      expect(screen.getByText(/PICK TIMER/)).toBeInTheDocument();
-    });
-
-    test('shows CPU auto-pick option', () => {
-      render(<LeagueBuilderDraft />);
-      expect(screen.getByText('CPU AUTO-PICK')).toBeInTheDocument();
-    });
-
-    test('shows participating teams section', () => {
-      render(<LeagueBuilderDraft />);
-      expect(screen.getByText('PARTICIPATING TEAMS (2)')).toBeInTheDocument();
-    });
-
-    test('shows team names in participating teams', () => {
-      render(<LeagueBuilderDraft />);
-      expect(screen.getByText('Boston Sox')).toBeInTheDocument();
-      expect(screen.getByText('Detroit Tigers')).toBeInTheDocument();
-    });
+    expect(screen.getByText('STARTUP FARM DRAFT')).toBeInTheDocument();
+    expect(screen.getByText('LEAGUE BUILDER SETUP')).toBeInTheDocument();
+    expect(screen.getByLabelText(/DETERMINISTIC SEED/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /GENERATE STARTUP FARM DRAFT/i })).toBeInTheDocument();
+    expect(screen.getByText('TEAM FARM READINESS')).toBeInTheDocument();
   });
 
-  describe('Draft Class Overview', () => {
-    test('shows draft class overview section', () => {
-      render(<LeagueBuilderDraft />);
-      expect(screen.getByText('DRAFT CLASS OVERVIEW')).toBeInTheDocument();
-    });
+  test('back button navigates to League Builder', () => {
+    render(<LeagueBuilderDraft />);
 
-    test('shows no draft class message initially', () => {
-      render(<LeagueBuilderDraft />);
-      expect(screen.getByText('No draft class generated yet')).toBeInTheDocument();
-    });
+    fireEvent.click(screen.getByRole('button', { name: /Back to League Builder/i }));
 
-    test('shows generate prospects button', () => {
-      render(<LeagueBuilderDraft />);
-      expect(screen.getByText('GENERATE PROSPECTS')).toBeInTheDocument();
-    });
-
-    test('clicking generate prospects creates draft class', async () => {
-      render(<LeagueBuilderDraft />);
-      fireEvent.click(screen.getByText('GENERATE PROSPECTS'));
-
-      await waitFor(() => {
-        // After generating, should show total prospects count
-        expect(screen.getByText('TOTAL PROSPECTS')).toBeInTheDocument();
-      });
-    });
+    expect(mockNavigate).toHaveBeenCalledWith('/league-builder');
   });
 
-  describe('Prospects Tab', () => {
-    test('shows generate message when no prospects', () => {
-      render(<LeagueBuilderDraft />);
-      fireEvent.click(screen.getByRole('button', { name: /PROSPECTS \(0\)/ }));
-      expect(screen.getByText('Generate a draft class to see prospects')).toBeInTheDocument();
-    });
+  test('prepared league shows no required draft apply action', async () => {
+    vi.mocked(createLeagueBuilderStartupFarmDraftPreview).mockResolvedValueOnce(makePreview({
+      prepared: true,
+      totalVacancies: 0,
+      selectedPicks: [],
+      visibleReports: [],
+      teams: [
+        { teamId: 'team-1', teamName: 'Boston Sox', farmCount: 10, mlbCount: 22, missingFarm: 0, prepared: true },
+        { teamId: 'team-2', teamName: 'Detroit Tigers', farmCount: 10, mlbCount: 22, missingFarm: 0, prepared: true },
+      ],
+    }) as any);
 
-    test('shows prospects after generation', async () => {
-      render(<LeagueBuilderDraft />);
-      fireEvent.click(screen.getByText('GENERATE PROSPECTS'));
+    render(<LeagueBuilderDraft />);
+    fireEvent.click(screen.getByRole('button', { name: /GENERATE STARTUP FARM DRAFT/i }));
 
-      await waitFor(() => {
-        expect(screen.getByText('TOTAL PROSPECTS')).toBeInTheDocument();
-      });
-
-      // After generation, prospects tab will have count > 0
-      const prospectsTab = screen.getByRole('button', { name: /PROSPECTS/ });
-      fireEvent.click(prospectsTab);
-
-      await waitFor(() => {
-        expect(screen.getByText(/DRAFT CLASS/)).toBeInTheDocument();
-      });
-    });
+    await screen.findByText('PREPARED');
+    expect(screen.getByText(/already has 10 FARM players per team/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /APPLY DRAFT TO LEAGUE BUILDER/i })).not.toBeInTheDocument();
   });
 
-  describe('Inactive Tab', () => {
-    test('shows inactive players section', () => {
-      render(<LeagueBuilderDraft />);
-      fireEvent.click(screen.getByText(/INACTIVE/));
-      expect(screen.getByText('INACTIVE PLAYERS (B or below)')).toBeInTheDocument();
+  test('incomplete league can generate, review, and apply draft', async () => {
+    render(<LeagueBuilderDraft />);
+    fireEvent.click(screen.getByRole('button', { name: /GENERATE STARTUP FARM DRAFT/i }));
+
+    await screen.findByText('Ari Banks');
+    expect(screen.getByText('Scouted B+')).toBeInTheDocument();
+    expect(screen.getByText('Specialties: outfield')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /APPLY DRAFT TO LEAGUE BUILDER/i }));
+
+    await waitFor(() => {
+      expect(applyLeagueBuilderStartupFarmDraft).toHaveBeenCalled();
+      expect(mockRefresh).toHaveBeenCalled();
     });
-
-    test('shows inactive player names', () => {
-      render(<LeagueBuilderDraft />);
-      fireEvent.click(screen.getByText(/INACTIVE/));
-      expect(screen.getByText('Mike Retired')).toBeInTheDocument();
-      expect(screen.getByText('Steve Released')).toBeInTheDocument();
-    });
-
-    test('allows selecting inactive players', () => {
-      render(<LeagueBuilderDraft />);
-      fireEvent.click(screen.getByText(/INACTIVE/));
-
-      const checkboxes = screen.getAllByRole('checkbox');
-      fireEvent.click(checkboxes[0]);
-
-      expect(screen.getByText('1 selected for draft')).toBeInTheDocument();
-    });
+    expect(await screen.findByText(/Applied 1 FARM prospects/i)).toBeInTheDocument();
   });
 
-  describe('Info Panel', () => {
-    test('shows farm-first draft info', () => {
-      render(<LeagueBuilderDraft />);
-      expect(screen.getByText('Farm-First Draft Model')).toBeInTheDocument();
-    });
+  test('does not render hidden true ratings or hidden personality modifiers', async () => {
+    render(<LeagueBuilderDraft />);
+    fireEvent.click(screen.getByRole('button', { name: /GENERATE STARTUP FARM DRAFT/i }));
+
+    await screen.findByText('Ari Banks');
+    expect(screen.queryByText(/true grade/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/leadership/i)).not.toBeInTheDocument();
   });
 
-  describe('Loading State', () => {
-    test('shows loading indicator when isLoading', async () => {
-      const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
-      vi.mocked(useLeagueBuilderData).mockReturnValue({
-        teams: [],
-        players: [],
-        leagues: [],
-        rulesPresets: [],
-        isLoading: true,
-        error: null,
-        createLeague: vi.fn(),
-        updateLeague: vi.fn(),
-        removeLeague: vi.fn(),
-        duplicateLeague: vi.fn(),
-        createTeam: vi.fn(),
-        updateTeam: vi.fn(),
-        removeTeam: vi.fn(),
-        createPlayer: vi.fn(),
-        updatePlayer: vi.fn(),
-        removePlayer: vi.fn(),
-        createRulesPreset: vi.fn(),
-        updateRulesPreset: vi.fn(),
-        removeRulesPreset: vi.fn(),
-        getRoster: vi.fn(),
-        updateRoster: vi.fn(),
-        refresh: vi.fn(),
-      });
+  test('blocked farm state reports blocker and hides apply action', async () => {
+    vi.mocked(createLeagueBuilderStartupFarmDraftPreview).mockResolvedValueOnce(makePreview({
+      valid: false,
+      blockers: ['Boston Sox: FARM roster does not match player FARM assignments.'],
+      selectedPicks: [],
+      visibleReports: [],
+    }) as any);
 
-      render(<LeagueBuilderDraft />);
-      expect(screen.getByText('Loading draft configuration...')).toBeInTheDocument();
-    });
+    render(<LeagueBuilderDraft />);
+    fireEvent.click(screen.getByRole('button', { name: /GENERATE STARTUP FARM DRAFT/i }));
+
+    await screen.findByText('BLOCKED');
+    expect(screen.getByText(/does not match player FARM assignments/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /APPLY DRAFT TO LEAGUE BUILDER/i })).not.toBeInTheDocument();
   });
 
-  describe('Error State', () => {
-    test('shows error message when error occurs', async () => {
-      const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
-      vi.mocked(useLeagueBuilderData).mockReturnValue({
-        teams: [],
-        players: [],
-        leagues: [],
-        rulesPresets: [],
-        isLoading: false,
-        error: 'Failed to load draft configuration',
-        createLeague: vi.fn(),
-        updateLeague: vi.fn(),
-        removeLeague: vi.fn(),
-        duplicateLeague: vi.fn(),
-        createTeam: vi.fn(),
-        updateTeam: vi.fn(),
-        removeTeam: vi.fn(),
-        createPlayer: vi.fn(),
-        updatePlayer: vi.fn(),
-        removePlayer: vi.fn(),
-        createRulesPreset: vi.fn(),
-        updateRulesPreset: vi.fn(),
-        removeRulesPreset: vi.fn(),
-        getRoster: vi.fn(),
-        updateRoster: vi.fn(),
-        refresh: vi.fn(),
-      });
+  test('no-team league blocks generation', async () => {
+    vi.mocked(useLeagueBuilderData).mockReturnValue({
+      leagues: [{ ...baseLeague, teamIds: [] }],
+      teams: [],
+      players: [],
+      rulesPresets: [],
+      isLoading: false,
+      error: null,
+      refresh: mockRefresh,
+    } as any);
 
-      render(<LeagueBuilderDraft />);
-      expect(screen.getByText(/Failed to load draft configuration/)).toBeInTheDocument();
-    });
-  });
+    render(<LeagueBuilderDraft />);
 
-  describe('No Teams State', () => {
-    test('shows no teams message when teams empty', async () => {
-      const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
-      vi.mocked(useLeagueBuilderData).mockReturnValue({
-        teams: [],
-        players: [],
-        leagues: [],
-        rulesPresets: [],
-        isLoading: false,
-        error: null,
-        createLeague: vi.fn(),
-        updateLeague: vi.fn(),
-        removeLeague: vi.fn(),
-        duplicateLeague: vi.fn(),
-        createTeam: vi.fn(),
-        updateTeam: vi.fn(),
-        removeTeam: vi.fn(),
-        createPlayer: vi.fn(),
-        updatePlayer: vi.fn(),
-        removePlayer: vi.fn(),
-        createRulesPreset: vi.fn(),
-        updateRulesPreset: vi.fn(),
-        removeRulesPreset: vi.fn(),
-        getRoster: vi.fn(),
-        updateRoster: vi.fn(),
-        refresh: vi.fn(),
-      });
-
-      render(<LeagueBuilderDraft />);
-      expect(screen.getByText('No teams created yet. Create teams first to set up a draft.')).toBeInTheDocument();
-    });
-  });
-
-  describe('No Inactive Players State', () => {
-    test('shows no inactive players message when none eligible', async () => {
-      const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
-      vi.mocked(useLeagueBuilderData).mockReturnValue({
-        teams: [{ id: 'team-1', name: 'Sox', colors: { primary: '#FF0000', secondary: '#FFFFFF' } }],
-        players: [],
-        leagues: [],
-        rulesPresets: [],
-        isLoading: false,
-        error: null,
-        createLeague: vi.fn(),
-        updateLeague: vi.fn(),
-        removeLeague: vi.fn(),
-        duplicateLeague: vi.fn(),
-        createTeam: vi.fn(),
-        updateTeam: vi.fn(),
-        removeTeam: vi.fn(),
-        createPlayer: vi.fn(),
-        updatePlayer: vi.fn(),
-        removePlayer: vi.fn(),
-        createRulesPreset: vi.fn(),
-        updateRulesPreset: vi.fn(),
-        removeRulesPreset: vi.fn(),
-        getRoster: vi.fn(),
-        updateRoster: vi.fn(),
-        refresh: vi.fn(),
-      });
-
-      render(<LeagueBuilderDraft />);
-      fireEvent.click(screen.getByText(/INACTIVE/));
-      expect(screen.getByText('No inactive players eligible for draft')).toBeInTheDocument();
-    });
+    expect(screen.getByText('Selected league has no teams.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /GENERATE STARTUP FARM DRAFT/i })).toBeDisabled();
   });
 });

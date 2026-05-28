@@ -9,6 +9,10 @@ import {
   runStartupProspectDraftForLeague,
   type StartupProspectDraftReport,
 } from "../../../utils/franchiseStartupProspectDraft";
+import {
+  validatePreparedLeagueBuilderFarmScoutingState,
+  type LeagueBuilderFarmScoutingValidationReport,
+} from "../../../utils/leagueBuilderFarmScoutingHandoff";
 
 const INITIAL_CONFIG: FranchiseConfig = {
   league: null,
@@ -57,6 +61,10 @@ export function FranchiseSetup() {
   const [expandedLeague, setExpandedLeague] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
+  const [farmScoutingReport, setFarmScoutingReport] =
+    useState<LeagueBuilderFarmScoutingValidationReport | null>(null);
+  const [farmScoutingLoading, setFarmScoutingLoading] = useState(false);
+  const [farmScoutingError, setFarmScoutingError] = useState<string | null>(null);
   const autoSeedAttempted = useRef(false);
 
   // Auto-seed SMB4 data if no leagues exist (first-time setup)
@@ -69,6 +77,36 @@ export function FranchiseSetup() {
       });
     }
   }, [isLoading, error, leagues.length, seedSMB4Data]);
+
+  useEffect(() => {
+    if (!config.league) {
+      setFarmScoutingReport(null);
+      setFarmScoutingError(null);
+      setFarmScoutingLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setFarmScoutingLoading(true);
+    setFarmScoutingError(null);
+    validatePreparedLeagueBuilderFarmScoutingState(config.league)
+      .then((report) => {
+        if (cancelled) return;
+        setFarmScoutingReport(report);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setFarmScoutingReport(null);
+        setFarmScoutingError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setFarmScoutingLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [config.league]);
 
   // Get teams that belong to the selected league
   const leagueTeams = useMemo(() => {
@@ -90,16 +128,58 @@ export function FranchiseSetup() {
       setInitError(null);
       let startupProspectDraftReport: StartupProspectDraftReport | null = null;
       try {
-        if (config.league && config.roster.startupProspectDraft?.enabled) {
+        let bridgeRepairApplied = false;
+        let handoffValidation = config.league
+          ? await validatePreparedLeagueBuilderFarmScoutingState(config.league)
+          : null;
+        if (handoffValidation) {
+          setFarmScoutingReport(handoffValidation);
+          if (handoffValidation.status === 'blocked') {
+            throw new Error(`League Builder farm/scouting handoff blocked: ${handoffValidation.blockers.join(' ')}`);
+          }
+        }
+
+        if (
+          config.league &&
+          config.roster.startupProspectDraft?.enabled &&
+          handoffValidation?.bridgeRequired
+        ) {
+          if (!handoffValidation.bridgeAllowed) {
+            throw new Error(`Startup farm bridge blocked: ${handoffValidation.blockers.join(' ')}`);
+          }
           startupProspectDraftReport = await runStartupProspectDraftForLeague(config.league, {
             rounds: config.roster.startupProspectDraft.rounds,
             seasonNumber: 1,
           });
           if (!startupProspectDraftReport.valid) {
-            throw new Error(`Startup Prospect Draft blocked: ${startupProspectDraftReport.issues.join(' ')}`);
+            throw new Error(`Temporary startup farm bridge blocked: ${startupProspectDraftReport.issues.join(' ')}`);
           }
+          bridgeRepairApplied = startupProspectDraftReport.picks.length > 0;
+          handoffValidation = await validatePreparedLeagueBuilderFarmScoutingState(config.league);
+          setFarmScoutingReport(handoffValidation);
         }
-        const franchiseId = await initializeFranchise(config);
+
+        if (handoffValidation && handoffValidation.status !== 'prepared') {
+          throw new Error(`League Builder farm/scouting handoff is not prepared: ${[
+            ...handoffValidation.blockers,
+            ...handoffValidation.warnings,
+          ].join(' ')}`);
+        }
+        const franchiseConfig: FranchiseConfig = bridgeRepairApplied
+          ? {
+              ...config,
+              roster: {
+                ...config.roster,
+                startupProspectDraft: config.roster.startupProspectDraft
+                  ? {
+                      ...config.roster.startupProspectDraft,
+                      bridgeRepairApplied: true,
+                    }
+                  : undefined,
+              },
+            }
+          : config;
+        const franchiseId = await initializeFranchise(franchiseConfig);
         navigate(`/franchise/${franchiseId}`);
       } catch (err) {
         let rollbackMessage = '';
@@ -253,8 +333,8 @@ export function FranchiseSetup() {
               {currentStep === 2 && <Step2SeasonSettings config={config} setConfig={setConfig} />}
               {currentStep === 3 && <Step3PlayoffSettings config={config} setConfig={setConfig} />}
               {currentStep === 4 && <Step4TeamControl config={config} setConfig={setConfig} leagueTeams={leagueTeams} />}
-              {currentStep === 5 && <Step5RosterMode config={config} setConfig={setConfig} leagueTeams={leagueTeams} />}
-              {currentStep === 6 && <Step6Confirm config={config} setConfig={setConfig} jumpToStep={jumpToStep} leagues={leagues} leagueTeams={leagueTeams} />}
+              {currentStep === 5 && <Step5RosterMode config={config} setConfig={setConfig} leagueTeams={leagueTeams} farmScoutingReport={farmScoutingReport} farmScoutingLoading={farmScoutingLoading} farmScoutingError={farmScoutingError} />}
+              {currentStep === 6 && <Step6Confirm config={config} setConfig={setConfig} jumpToStep={jumpToStep} leagues={leagues} leagueTeams={leagueTeams} farmScoutingReport={farmScoutingReport} farmScoutingLoading={farmScoutingLoading} farmScoutingError={farmScoutingError} />}
             </>
           )}
         </div>
@@ -1068,12 +1148,30 @@ function Step5RosterMode({
   config,
   setConfig,
   leagueTeams,
+  farmScoutingReport,
+  farmScoutingLoading,
+  farmScoutingError,
 }: {
   config: FranchiseConfig;
   setConfig: (config: FranchiseConfig) => void;
   leagueTeams: Team[];
+  farmScoutingReport: LeagueBuilderFarmScoutingValidationReport | null;
+  farmScoutingLoading: boolean;
+  farmScoutingError: string | null;
 }) {
   const navigate = useNavigate();
+  const farmStatusText = farmScoutingLoading
+    ? "Checking League Builder farm/scouting handoff..."
+    : farmScoutingError
+      ? `Validation unavailable: ${farmScoutingError}`
+      : farmScoutingReport?.status === "prepared"
+        ? "League Builder farm/scouting state is prepared. Franchise Setup will validate and copy it; the temporary bridge will not run."
+        : farmScoutingReport?.status === "repairable-by-bridge"
+          ? "League Builder farm/scouting state is incomplete. The temporary v1 bridge will repair missing FARM slots before copy."
+          : farmScoutingReport?.status === "blocked"
+            ? "League Builder farm/scouting state has blockers. Fix League Builder rosters before starting."
+            : "Select a league to check League Builder farm/scouting state.";
+
   return (
     <div>
       <h2 className="text-lg font-bold text-[#E8E8D8] mb-2 tracking-wide" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>ROSTER MODE</h2>
@@ -1118,7 +1216,8 @@ function Step5RosterMode({
             <div className="space-y-2 mb-3">
               <p className="text-xs text-[#00CC00]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>✓ Franchise creation validates all {leagueTeams.length} teams</p>
               <p className="text-xs text-[#00CC00]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>✓ Required contract: 22 MLB + 10 FARM players per team</p>
-              <p className="text-xs text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Startup Prospect Draft fills missing FARM slots before the franchise copy.</p>
+              <p className="text-xs text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Startup farm/scouting belongs to League Builder. Franchise Setup validates and copies prepared state.</p>
+              <p className="text-xs text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>{farmStatusText}</p>
             </div>
             <button onClick={() => navigate('/league-builder/players')} className="text-xs text-[#C4A853] hover:text-[#FFD700] underline" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>[Review League Builder Players]</button>
           </div>
@@ -1129,8 +1228,9 @@ function Step5RosterMode({
             <p className="text-xs text-[#C4A853] font-bold mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>STARTUP PROSPECT DRAFT</p>
             <div className="h-[1px] bg-[#E8E8D8]/30 mb-3" />
             <div className="space-y-2 text-xs text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
-              <p>Enabled for Franchise v1. The app auto-runs a 10-round snake prospect draft during setup.</p>
-              <p>Order is based on team payroll, prospects receive rookie salaries, and ratings are stored hidden until call-up.</p>
+              <p>Temporary bridge only. It runs at franchise creation only when the selected League Builder league is missing FARM players and is otherwise repairable.</p>
+              <p>Prepared leagues skip the bridge. Repaired prospects receive rookie salaries, visible-safe scouting metadata, and hidden reveal state.</p>
+              <p>Scout profiles are not durable yet; missing scout/profile data is reported as a v1 limitation, not a blocker.</p>
               <p>No fantasy MLB draft, AI game simulation, or generated regular-season schedule is enabled.</p>
             </div>
           </div>
@@ -1152,7 +1252,7 @@ function Step5RosterMode({
             <h3 className="text-sm font-bold text-[#E8E8D8] mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>FANTASY DRAFT (DEFERRED)</h3>
             <div className="h-[1px] bg-[#E8E8D8]/30 mb-3" />
             <p className="text-xs text-[#E8E8D8]/70 mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Franchise v1 uses existing League Builder MLB rosters.</p>
-            <p className="text-xs text-[#E8E8D8]/70 mb-4" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>The separate Startup Prospect Draft fills FARM rosters; fantasy MLB drafting stays deferred.</p>
+            <p className="text-xs text-[#E8E8D8]/70 mb-4" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>The final startup farm/scouting workflow belongs in League Builder; fantasy MLB drafting stays deferred.</p>
           </div>
         </button>
       </div>
@@ -1167,14 +1267,31 @@ function Step6Confirm({
   jumpToStep,
   leagues,
   leagueTeams,
+  farmScoutingReport,
+  farmScoutingLoading,
+  farmScoutingError,
 }: {
   config: FranchiseConfig;
   setConfig: (config: FranchiseConfig) => void;
   jumpToStep: (step: number) => void;
   leagues: LeagueTemplate[];
   leagueTeams: Team[];
+  farmScoutingReport: LeagueBuilderFarmScoutingValidationReport | null;
+  farmScoutingLoading: boolean;
+  farmScoutingError: string | null;
 }) {
   const selectedTeams = leagueTeams.filter((t) => config.teams.selectedTeams.includes(t.id));
+  const farmScoutingSummary = farmScoutingLoading
+    ? "Checking League Builder farm/scouting handoff"
+    : farmScoutingError
+      ? "Farm/scouting validation unavailable"
+      : farmScoutingReport?.status === "prepared"
+        ? "League Builder farm/scouting prepared; bridge skipped"
+        : farmScoutingReport?.status === "repairable-by-bridge"
+          ? "Temporary bridge will repair missing FARM slots"
+          : farmScoutingReport?.status === "blocked"
+            ? "Farm/scouting blockers must be fixed in League Builder"
+            : "Farm/scouting handoff not checked";
 
   return (
     <div>
@@ -1297,7 +1414,7 @@ function Step6Confirm({
             </div>
             <p className="text-xs text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
               {config.roster.mode === "existing"
-                ? "Using existing MLB rosters plus Startup Prospect Draft for 10 FARM players per team"
+                ? `Using League Builder rosters. ${farmScoutingSummary}.`
                 : "Fantasy draft deferred in Franchise v1"}
             </p>
           </div>

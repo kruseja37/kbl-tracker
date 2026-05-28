@@ -1,126 +1,140 @@
 import { useNavigate } from "react-router";
-import { ArrowLeft, Shuffle, Play, Users, RefreshCw, Trash2, Plus, Sparkles, User } from "lucide-react";
-import { useState, useMemo, useEffect } from "react";
+import { ArrowLeft, CheckCircle2, FileText, RefreshCw, ShieldAlert, Shuffle, Sparkles, Users } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useLeagueBuilderData,
   type Player,
-  type Position,
-  type Grade,
+  type Team,
 } from "../../hooks/useLeagueBuilderData";
+import {
+  applyLeagueBuilderStartupFarmDraft,
+  createLeagueBuilderStartupFarmDraftPreview,
+  STARTUP_FARM_TARGET_SIZE,
+  type ApplyStartupFarmDraftReport,
+  type LeagueBuilderStartupFarmDraftPreview,
+} from "../../../utils/leagueBuilderStartupFarmDraft";
 
-type TabType = "settings" | "prospects" | "inactive";
+function hasAssignment(player: Player, leagueId: string, teamId: string, rosterStatus: "MLB" | "FARM"): boolean {
+  return Boolean(player.leagueAssignments?.some((assignment) =>
+    assignment.leagueId === leagueId &&
+    assignment.teamId === teamId &&
+    assignment.rosterStatus === rosterStatus,
+  ));
+}
 
-const GRADES: Grade[] = ['B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'D-'];
-const POSITIONS: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'SP', 'RP', 'CP'];
-
-interface DraftProspect {
-  id: string;
-  firstName: string;
-  lastName: string;
-  position: Position;
-  grade: Grade;
-  age: number;
-  ceiling: Grade;
-  isFromInactive: boolean;
+function teamDisplayName(team: Team): string {
+  return team.location ? `${team.location} ${team.name}` : team.name;
 }
 
 export function LeagueBuilderDraft() {
   const navigate = useNavigate();
-  const { leagues, teams, players, isLoading, error } = useLeagueBuilderData();
+  const { leagues, teams, players, isLoading, error, refresh } = useLeagueBuilderData();
+  const [activeLeagueId, setActiveLeagueId] = useState("");
+  const [seed, setSeed] = useState("startup-farm-v1");
+  const [preview, setPreview] = useState<LeagueBuilderStartupFarmDraftPreview | null>(null);
+  const [applyReport, setApplyReport] = useState<ApplyStartupFarmDraftReport | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<TabType>("settings");
-  const [draftRounds, setDraftRounds] = useState(3);
-  const [pickTimer, setPickTimer] = useState(90);
-  const [draftOrder, setDraftOrder] = useState<"snake" | "straight">("snake");
-  const [autoPickEnabled, setAutoPickEnabled] = useState(true);
-
-  // Mock draft class - in production this would be generated/stored
-  const [prospects, setProspects] = useState<DraftProspect[]>([]);
-  const [selectedInactive, setSelectedInactive] = useState<string[]>([]);
-  const [activeLeagueId, setActiveLeagueId] = useState<string>("");
-
-  // Auto-select first league on load
   useEffect(() => {
     if (!activeLeagueId && leagues.length > 0) {
       setActiveLeagueId(leagues[0].id);
     }
-  }, [leagues, activeLeagueId]);
+  }, [activeLeagueId, leagues]);
 
-  // Get inactive players (those without a team assignment, grade B or below)
-  const inactivePlayers = useMemo(() => {
-    return players.filter(
-      (p) =>
-        (p.leagueAssignments?.some(
-          (assignment) => assignment.leagueId === activeLeagueId && assignment.rosterStatus === 'FREE_AGENT',
-        ) ?? false) &&
-        ['B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'D-'].includes(p.overallGrade)
-    );
-  }, [players, activeLeagueId]);
+  useEffect(() => {
+    setPreview(null);
+    setApplyReport(null);
+  }, [activeLeagueId]);
 
-  // Generate prospects
-  const generateProspects = () => {
-    const generated: DraftProspect[] = [];
-    const totalProspects = teams.length * draftRounds;
+  const activeLeague = useMemo(
+    () => leagues.find((league) => league.id === activeLeagueId) ?? null,
+    [activeLeagueId, leagues],
+  );
 
-    // Generate balanced by position
-    for (let i = 0; i < totalProspects; i++) {
-      const position = POSITIONS[i % POSITIONS.length];
-      const gradeIdx = Math.floor(Math.random() * GRADES.length);
-      const ceilingIdx = Math.max(0, gradeIdx - Math.floor(Math.random() * 3));
+  const leagueTeams = useMemo(() => {
+    if (!activeLeague?.teamIds?.length) return [];
+    return activeLeague.teamIds
+      .map((teamId) => teams.find((team) => team.id === teamId))
+      .filter(Boolean) as Team[];
+  }, [activeLeague, teams]);
 
-      generated.push({
-        id: `prospect-${Date.now()}-${i}`,
-        firstName: generateFirstName(),
-        lastName: generateLastName(),
-        position,
-        grade: GRADES[gradeIdx],
-        age: 18 + Math.floor(Math.random() * 5),
-        ceiling: GRADES[ceilingIdx],
-        isFromInactive: false,
+  const currentTeamCounts = useMemo(() => {
+    return leagueTeams.map((team) => {
+      const farmCount = players.filter((player) => hasAssignment(player, activeLeagueId, team.id, "FARM")).length;
+      const mlbCount = players.filter((player) => hasAssignment(player, activeLeagueId, team.id, "MLB")).length;
+      return {
+        teamId: team.id,
+        teamName: teamDisplayName(team),
+        farmCount,
+        mlbCount,
+        missingFarm: Math.max(0, STARTUP_FARM_TARGET_SIZE - farmCount),
+      };
+    });
+  }, [activeLeagueId, leagueTeams, players]);
+
+  const displayTeams = preview?.teams ?? currentTeamCounts;
+  const canGenerate = Boolean(activeLeagueId && leagueTeams.length > 0 && !isGenerating && !isApplying);
+  const canApply = Boolean(preview?.valid && !preview.prepared && preview.selectedPicks.length > 0 && !isApplying);
+
+  const handleGenerate = async () => {
+    if (!activeLeagueId) return;
+    setIsGenerating(true);
+    setApplyReport(null);
+    try {
+      const nextPreview = await createLeagueBuilderStartupFarmDraftPreview(activeLeagueId, {
+        seasonNumber: 1,
+        rounds: STARTUP_FARM_TARGET_SIZE,
+        seed: seed.trim() || undefined,
       });
+      setPreview(nextPreview);
+    } catch (err) {
+      setPreview({
+        workflowVersion: "league-builder-startup-farm-draft-v1",
+        engineMethodVersion: "league-builder-startup-prospect-scouting-draft-v1",
+        leagueId: activeLeagueId,
+        seasonNumber: 1,
+        rounds: STARTUP_FARM_TARGET_SIZE,
+        seed,
+        valid: false,
+        prepared: false,
+        totalVacancies: 0,
+        blockers: [err instanceof Error ? err.message : "Failed to generate startup farm draft."],
+        warnings: [],
+        limitations: [],
+        teams: [],
+        selectedPicks: [],
+        visibleReports: [],
+      });
+    } finally {
+      setIsGenerating(false);
     }
-
-    // Add selected inactive players
-    const inactiveProspects: DraftProspect[] = selectedInactive
-      .map((id) => {
-        const player = players.find((p) => p.id === id);
-        if (!player) return null;
-        return {
-          id: `inactive-${player.id}`,
-          firstName: player.firstName,
-          lastName: player.lastName,
-          position: player.primaryPosition,
-          grade: player.overallGrade,
-          age: 22,
-          ceiling: player.overallGrade,
-          isFromInactive: true,
-        };
-      })
-      .filter(Boolean) as DraftProspect[];
-
-    setProspects([...inactiveProspects, ...generated]);
   };
 
-  const gradeDistribution = useMemo(() => {
-    const dist: Record<string, number> = {};
-    prospects.forEach((p) => {
-      dist[p.grade] = (dist[p.grade] || 0) + 1;
-    });
-    return dist;
-  }, [prospects]);
-
-  const positionDistribution = useMemo(() => {
-    const dist: Record<string, number> = {};
-    prospects.forEach((p) => {
-      dist[p.position] = (dist[p.position] || 0) + 1;
-    });
-    return dist;
-  }, [prospects]);
+  const handleApply = async () => {
+    if (!preview) return;
+    setIsApplying(true);
+    try {
+      const report = await applyLeagueBuilderStartupFarmDraft(preview);
+      setApplyReport(report);
+      if (report.applied) {
+        await refresh();
+        const updatedPreview = await createLeagueBuilderStartupFarmDraftPreview(activeLeagueId, {
+          seasonNumber: preview.seasonNumber,
+          rounds: preview.rounds,
+          seed: preview.seed,
+        });
+        setPreview(updatedPreview);
+      }
+    } finally {
+      setIsApplying(false);
+    }
+  };
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#2d3d2f] text-[#E8E8D8] p-8 flex items-center justify-center">
-        <div className="text-lg">Loading draft configuration...</div>
+        <div className="text-lg">Loading startup farm draft...</div>
       </div>
     );
   }
@@ -136,10 +150,10 @@ export function LeagueBuilderDraft() {
   return (
     <div className="min-h-screen bg-[#2d3d2f] text-[#E8E8D8] p-8">
       <div className="max-w-6xl mx-auto">
-        {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
             <button
+              aria-label="Back to League Builder"
               onClick={() => navigate("/league-builder")}
               className="p-3 bg-[#4A6844] hover:bg-[#5A8352] border-4 border-[#E8E8D8] transition active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
             >
@@ -151,410 +165,196 @@ export function LeagueBuilderDraft() {
                 className="text-2xl font-bold text-[#E8E8D8] tracking-wider"
                 style={{ textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}
               >
-                DRAFT SETUP
+                STARTUP FARM DRAFT
               </h1>
             </div>
-            {/* League Selector */}
-            {leagues.length > 1 && (
-              <select
-                value={activeLeagueId}
-                onChange={(e) => setActiveLeagueId(e.target.value)}
-                className="bg-[#4A6844] border-4 border-[#E8E8D8] text-[#E8E8D8] px-4 py-2 text-sm font-bold tracking-wider shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] cursor-pointer"
-              >
-                {leagues.map((league) => (
-                  <option key={league.id} value={league.id}>
-                    {league.name.toUpperCase()}
-                  </option>
-                ))}
-              </select>
-            )}
           </div>
-          {prospects.length > 0 && (
-            <button
-              className="flex items-center gap-2 px-6 py-3 bg-[#7733DD] hover:bg-[#6622CC] border-4 border-[#E8E8D8] transition active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
-              onClick={() => {
-                // In production, this would navigate to the draft execution flow
-                alert("Draft simulation would start here during Offseason Phase 7");
-              }}
-            >
-              <Play className="w-5 h-5" />
-              <span className="font-bold">START DRAFT</span>
-            </button>
-          )}
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-2 mb-6">
-          {(["settings", "prospects", "inactive"] as TabType[]).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-6 py-3 font-bold transition ${
-                activeTab === tab
-                  ? "bg-[#7733DD] border-4 border-[#E8E8D8] shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
-                  : "bg-[#4A6844] border-4 border-[#E8E8D8]/30 hover:border-[#E8E8D8]/60"
-              }`}
+        <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6">
+          <section className="bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
+            <h2 className="font-bold mb-4 text-lg">LEAGUE BUILDER SETUP</h2>
+
+            <label htmlFor="startup-farm-draft-league" className="block text-xs text-[#E8E8D8]/70 mb-1">LEAGUE</label>
+            <select
+              id="startup-farm-draft-league"
+              value={activeLeagueId}
+              onChange={(event) => setActiveLeagueId(event.target.value)}
+              className="w-full bg-[#4A6844] border-4 border-[#E8E8D8]/30 px-3 py-2 text-[#E8E8D8] font-bold focus:border-[#E8E8D8]/60 outline-none mb-4"
             >
-              {tab === "settings" && "SETTINGS"}
-              {tab === "prospects" && `PROSPECTS (${prospects.length})`}
-              {tab === "inactive" && `INACTIVE (${inactivePlayers.length})`}
-            </button>
-          ))}
-        </div>
+              {leagues.map((league) => (
+                <option key={league.id} value={league.id}>
+                  {league.name}
+                </option>
+              ))}
+            </select>
 
-        {/* Content */}
-        {activeTab === "settings" && (
-          <div className="grid grid-cols-2 gap-6">
-            {/* Draft Configuration */}
-            <div className="bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
-              <h3
-                className="font-bold mb-6 text-lg"
-                style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.8)" }}
-              >
-                DRAFT CONFIGURATION
-              </h3>
+            <label htmlFor="startup-farm-draft-seed" className="block text-xs text-[#E8E8D8]/70 mb-1">DETERMINISTIC SEED</label>
+            <input
+              id="startup-farm-draft-seed"
+              value={seed}
+              onChange={(event) => setSeed(event.target.value)}
+              className="w-full bg-[#4A6844] border-4 border-[#E8E8D8]/30 px-3 py-2 text-[#E8E8D8] font-bold focus:border-[#E8E8D8]/60 outline-none mb-4"
+            />
 
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs text-[#E8E8D8]/60 mb-1">DRAFT ORDER</label>
-                  <select
-                    value={draftOrder}
-                    onChange={(e) => setDraftOrder(e.target.value as "snake" | "straight")}
-                    className="w-full bg-[#4A6844] border-4 border-[#E8E8D8]/30 px-3 py-2 text-[#E8E8D8] font-bold focus:border-[#E8E8D8]/60 outline-none"
-                  >
-                    <option value="snake">Snake (1-2-3...3-2-1)</option>
-                    <option value="straight">Straight (1-2-3...1-2-3)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs text-[#E8E8D8]/60 mb-1">
-                    ROUNDS ({draftRounds})
-                  </label>
-                  <input
-                    type="range"
-                    value={draftRounds}
-                    onChange={(e) => setDraftRounds(parseInt(e.target.value, 10))}
-                    className="w-full accent-[#7733DD]"
-                    min={1}
-                    max={5}
-                  />
-                  <div className="flex justify-between text-xs text-[#E8E8D8]/60 mt-1">
-                    <span>1</span>
-                    <span>3</span>
-                    <span>5</span>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs text-[#E8E8D8]/60 mb-1">
-                    PICK TIMER ({pickTimer}s)
-                  </label>
-                  <input
-                    type="range"
-                    value={pickTimer}
-                    onChange={(e) => setPickTimer(parseInt(e.target.value, 10))}
-                    className="w-full accent-[#7733DD]"
-                    min={30}
-                    max={180}
-                    step={15}
-                  />
-                  <div className="flex justify-between text-xs text-[#E8E8D8]/60 mt-1">
-                    <span>30s</span>
-                    <span>90s</span>
-                    <span>180s</span>
-                  </div>
-                </div>
-
-                <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={autoPickEnabled}
-                      onChange={(e) => setAutoPickEnabled(e.target.checked)}
-                      className="w-5 h-5 accent-[#7733DD]"
-                    />
-                    <div>
-                      <span className="font-bold">CPU AUTO-PICK</span>
-                      <p className="text-xs text-[#E8E8D8]/60 mt-1">
-                        AI teams automatically select best available
-                      </p>
-                    </div>
-                  </label>
-                </div>
+            <div className="grid grid-cols-2 gap-3 mb-5">
+              <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
+                <div className="text-xs text-[#E8E8D8]/60">TEAMS</div>
+                <div className="font-bold text-xl">{leagueTeams.length}</div>
+              </div>
+              <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
+                <div className="text-xs text-[#E8E8D8]/60">TARGET</div>
+                <div className="font-bold text-xl">{STARTUP_FARM_TARGET_SIZE} FARM</div>
               </div>
             </div>
 
-            {/* Draft Class Overview */}
-            <div className="bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
-              <h3
-                className="font-bold mb-6 text-lg"
-                style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.8)" }}
+            <button
+              onClick={handleGenerate}
+              disabled={!canGenerate}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#7733DD] hover:bg-[#6622CC] disabled:opacity-50 disabled:hover:bg-[#7733DD] border-4 border-[#E8E8D8] transition font-bold"
+            >
+              {isGenerating ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+              <span>{isGenerating ? "GENERATING" : "GENERATE STARTUP FARM DRAFT"}</span>
+            </button>
+
+            {leagueTeams.length === 0 && (
+              <p className="text-sm text-[#FFD27A] mt-4">Selected league has no teams.</p>
+            )}
+
+            {canApply && (
+              <button
+                onClick={handleApply}
+                disabled={isApplying}
+                className="w-full mt-3 flex items-center justify-center gap-2 px-4 py-3 bg-[#2F7D46] hover:bg-[#3E9959] disabled:opacity-50 border-4 border-[#E8E8D8] transition font-bold"
               >
-                DRAFT CLASS OVERVIEW
-              </h3>
+                {isApplying ? <RefreshCw className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
+                <span>{isApplying ? "APPLYING" : "APPLY DRAFT TO LEAGUE BUILDER"}</span>
+              </button>
+            )}
 
-              {prospects.length === 0 ? (
-                <div className="text-center py-8">
-                  <Sparkles className="w-12 h-12 mx-auto mb-4 text-[#7733DD] opacity-50" />
-                  <p className="text-[#E8E8D8]/60 mb-4">
-                    No draft class generated yet
-                  </p>
-                  <button
-                    onClick={generateProspects}
-                    className="flex items-center gap-2 px-6 py-3 bg-[#7733DD] hover:bg-[#6622CC] border-4 border-[#E8E8D8] transition mx-auto"
-                  >
-                    <Sparkles className="w-5 h-5" />
-                    <span className="font-bold">GENERATE PROSPECTS</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
-                      <div className="text-xs text-[#E8E8D8]/60 mb-1">TOTAL PROSPECTS</div>
-                      <div className="font-bold text-xl">{prospects.length}</div>
-                    </div>
-                    <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
-                      <div className="text-xs text-[#E8E8D8]/60 mb-1">FROM INACTIVE</div>
-                      <div className="font-bold text-xl">
-                        {prospects.filter((p) => p.isFromInactive).length}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
-                    <div className="text-xs text-[#E8E8D8]/60 mb-2">GRADE DISTRIBUTION</div>
-                    <div className="flex flex-wrap gap-2">
-                      {GRADES.map((grade) => (
-                        <div key={grade} className="bg-[#556B55] px-2 py-1 text-xs">
-                          <span className="font-bold">{grade}:</span>{" "}
-                          {gradeDistribution[grade] || 0}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button
-                      onClick={generateProspects}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-[#4A6844] hover:bg-[#5A8352] border-4 border-[#E8E8D8]/30 transition"
-                    >
-                      <RefreshCw className="w-4 h-4" />
-                      <span className="font-bold">REGENERATE</span>
-                    </button>
-                    <button
-                      onClick={() => setProspects([])}
-                      className="flex items-center gap-2 px-4 py-2 bg-[#DD0000] hover:bg-[#FF2222] border-4 border-[#E8E8D8]/30 transition"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Teams Participating */}
-            <div className="col-span-2 bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
-              <h3
-                className="font-bold mb-4 text-lg"
-                style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.8)" }}
-              >
-                PARTICIPATING TEAMS ({teams.length})
-              </h3>
-              <div className="grid grid-cols-4 gap-3">
-                {teams.map((team, idx) => (
-                  <div
-                    key={team.id}
-                    className="flex items-center gap-2 bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-2"
-                  >
-                    <span className="w-6 h-6 flex items-center justify-center bg-[#7733DD] font-bold text-sm">
-                      {idx + 1}
-                    </span>
-                    <div
-                      className="w-6 h-6 rounded-full border-2"
-                      style={{
-                        backgroundColor: team.colors.primary,
-                        borderColor: team.colors.secondary,
-                      }}
-                    />
-                    <span className="flex-1 font-bold text-sm truncate">{team.name}</span>
-                  </div>
-                ))}
-                {teams.length === 0 && (
-                  <div className="col-span-4 text-center py-4 text-[#E8E8D8]/50">
-                    No teams created yet. Create teams first to set up a draft.
-                  </div>
+            {applyReport && (
+              <div className={`mt-4 border-4 p-3 text-sm ${applyReport.applied ? "bg-[#2F7D46] border-[#E8E8D8]/40" : "bg-[#6B3A3A] border-[#FFD27A]"}`}>
+                {applyReport.applied
+                  ? `Applied ${applyReport.createdPlayerIds.length} FARM prospects.`
+                  : applyReport.issues.join(" ")}
+                {applyReport.rollbackErrors.length > 0 && (
+                  <div className="mt-2 text-[#FFD27A]">{applyReport.rollbackErrors.join(" ")}</div>
                 )}
               </div>
-            </div>
-          </div>
-        )}
+            )}
+          </section>
 
-        {activeTab === "prospects" && (
-          <div className="bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
+          <section className="bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
             <div className="flex items-center justify-between mb-4">
-              <h3
-                className="font-bold text-lg"
-                style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.8)" }}
-              >
-                DRAFT CLASS ({prospects.length} prospects)
-              </h3>
-              {prospects.length > 0 && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={generateProspects}
-                    className="flex items-center gap-2 px-4 py-2 bg-[#4A6844] hover:bg-[#5A8352] border-4 border-[#E8E8D8]/30"
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                    <span className="font-bold text-sm">REGENERATE</span>
-                  </button>
-                </div>
+              <h2 className="font-bold text-lg">TEAM FARM READINESS</h2>
+              {preview?.prepared && (
+                <span className="flex items-center gap-2 text-sm font-bold text-[#9DFFB0]">
+                  <CheckCircle2 className="w-4 h-4" />
+                  PREPARED
+                </span>
               )}
             </div>
 
-            {prospects.length === 0 ? (
-              <div className="text-center py-12">
-                <User className="w-16 h-16 mx-auto mb-4 text-[#E8E8D8]/30" />
-                <p className="text-[#E8E8D8]/60 mb-4">
-                  Generate a draft class to see prospects
-                </p>
-                <button
-                  onClick={generateProspects}
-                  className="flex items-center gap-2 px-6 py-3 bg-[#7733DD] hover:bg-[#6622CC] border-4 border-[#E8E8D8] transition mx-auto"
-                >
-                  <Sparkles className="w-5 h-5" />
-                  <span className="font-bold">GENERATE PROSPECTS</span>
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-3 gap-3 max-h-[500px] overflow-y-auto">
-                {prospects.map((prospect) => (
-                  <div
-                    key={prospect.id}
-                    className={`bg-[#4A6844] border-4 p-3 ${
-                      prospect.isFromInactive
-                        ? "border-[#7733DD]"
-                        : "border-[#E8E8D8]/30"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-bold text-sm">
-                        {prospect.firstName} {prospect.lastName}
-                      </span>
-                      {prospect.isFromInactive && (
-                        <span className="px-2 py-0.5 bg-[#7733DD] text-xs font-bold">
-                          INACTIVE
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-[#E8E8D8]/70">
-                      <span className="px-2 py-0.5 bg-[#556B55]">{prospect.position}</span>
-                      <span>Grade: {prospect.grade}</span>
-                      <span>Age: {prospect.age}</span>
-                    </div>
-                    <div className="mt-2 text-xs">
-                      <span className="text-[#E8E8D8]/60">Ceiling: </span>
-                      <span className="font-bold text-[#7733DD]">{prospect.ceiling}</span>
-                    </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {displayTeams.map((team) => (
+                <div key={team.teamId} className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="font-bold truncate">{team.teamName}</div>
+                    <div className="text-sm font-bold">{team.farmCount}/{STARTUP_FARM_TARGET_SIZE} FARM</div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === "inactive" && (
-          <div className="bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
-            <div className="flex items-center justify-between mb-4">
-              <h3
-                className="font-bold text-lg"
-                style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.8)" }}
-              >
-                INACTIVE PLAYERS (B or below)
-              </h3>
-              <div className="text-sm text-[#E8E8D8]/60">
-                {selectedInactive.length} selected for draft
-              </div>
+                  <div className="text-xs text-[#E8E8D8]/70 mt-1">
+                    MLB {team.mlbCount} · Missing FARM {team.missingFarm}
+                  </div>
+                </div>
+              ))}
             </div>
 
-            <p className="text-[#E8E8D8]/70 mb-4 text-sm">
-              Select retired or released players to add to the draft class. Only players with
-              grade B or below are eligible (Farm roster max grade).
-            </p>
-
-            {inactivePlayers.length === 0 ? (
-              <div className="text-center py-12">
-                <Users className="w-16 h-16 mx-auto mb-4 text-[#E8E8D8]/30" />
-                <p className="text-[#E8E8D8]/60">
-                  No inactive players eligible for draft
-                </p>
-                <p className="text-[#E8E8D8]/50 text-sm mt-2">
-                  Players must be unassigned and grade B or below
-                </p>
+            {preview?.blockers.length ? (
+              <div className="mt-5 bg-[#6B3A3A] border-4 border-[#FFD27A] p-4">
+                <div className="flex items-center gap-2 font-bold mb-2">
+                  <ShieldAlert className="w-5 h-5" />
+                  BLOCKED
+                </div>
+                <ul className="space-y-1 text-sm text-[#FFE8B0]">
+                  {preview.blockers.map((blocker) => (
+                    <li key={blocker}>{blocker}</li>
+                  ))}
+                </ul>
               </div>
-            ) : (
-              <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                {inactivePlayers.map((player) => (
-                  <label
-                    key={player.id}
-                    className={`flex items-center gap-3 bg-[#4A6844] border-4 p-3 cursor-pointer transition ${
-                      selectedInactive.includes(player.id)
-                        ? "border-[#7733DD]"
-                        : "border-[#E8E8D8]/30 hover:border-[#E8E8D8]/50"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedInactive.includes(player.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedInactive([...selectedInactive, player.id]);
-                        } else {
-                          setSelectedInactive(selectedInactive.filter((id) => id !== player.id));
-                        }
-                      }}
-                      className="w-5 h-5 accent-[#7733DD]"
-                    />
-                    <span className="px-2 py-0.5 bg-[#556B55] text-xs font-bold">
-                      {player.primaryPosition}
-                    </span>
-                    <span className="flex-1 font-bold text-sm">
-                      {player.firstName} {player.lastName}
-                    </span>
-                    <span className="text-xs text-[#E8E8D8]/70">
-                      {player.overallGrade}
-                    </span>
-                  </label>
-                ))}
+            ) : null}
+
+            {preview?.prepared && (
+              <div className="mt-5 bg-[#2F7D46] border-4 border-[#E8E8D8]/40 p-4 text-sm">
+                This league already has 10 FARM players per team. Franchise Setup can validate and copy this prepared League Builder state.
               </div>
             )}
 
-            {selectedInactive.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-[#E8E8D8]/20">
-                <button
-                  onClick={() => setSelectedInactive([])}
-                  className="flex items-center gap-2 px-4 py-2 bg-[#DD0000] hover:bg-[#FF2222] border-4 border-[#E8E8D8]/30 transition"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span className="font-bold text-sm">CLEAR SELECTION</span>
-                </button>
+            {preview && !preview.prepared && preview.valid && (
+              <div className="mt-5 bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
+                <div className="grid grid-cols-3 gap-3 text-sm">
+                  <div>
+                    <div className="text-[#E8E8D8]/60">PICKS</div>
+                    <div className="font-bold text-xl">{preview.selectedPicks.length}</div>
+                  </div>
+                  <div>
+                    <div className="text-[#E8E8D8]/60">SEED</div>
+                    <div className="font-bold truncate">{preview.seed}</div>
+                  </div>
+                  <div>
+                    <div className="text-[#E8E8D8]/60">ENGINE</div>
+                    <div className="font-bold text-xs">{preview.engineMethodVersion}</div>
+                  </div>
+                </div>
               </div>
             )}
+          </section>
+        </div>
+
+        <section className="mt-6 bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-bold text-lg">VISIBLE SCOUTING REPORTS</h2>
+            <div className="text-sm text-[#E8E8D8]/60">{preview?.visibleReports.length ?? 0} reports</div>
           </div>
-        )}
 
-        {/* Info Panel */}
+          {!preview || preview.visibleReports.length === 0 ? (
+            <div className="text-center py-10 text-[#E8E8D8]/60">
+              <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              Generate a startup farm draft to review visible scouting reports.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[540px] overflow-y-auto">
+              {preview.visibleReports.map((report) => (
+                <div key={report.playerId} className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <div className="font-bold truncate">{report.playerName}</div>
+                    <span className="bg-[#7733DD] px-2 py-0.5 text-xs font-bold">{report.position}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs text-[#E8E8D8]/75">
+                    <div>Round {report.round}</div>
+                    <div>Pick {report.pickNumber}</div>
+                    <div>Scouted {report.scoutedGrade}</div>
+                    <div>Potential {report.potentialGrade}</div>
+                    <div>Confidence {report.scoutConfidence}</div>
+                    <div>Salary ${report.salary.toFixed(1)}M</div>
+                  </div>
+                  <div className="mt-3 text-xs text-[#E8E8D8]/70">
+                    <div className="font-bold text-[#E8E8D8]">{report.scoutName}</div>
+                    <div>Specialties: {report.scoutSpecialtiesVisible.join(", ") || "None"}</div>
+                    <div>Weaknesses: {report.scoutWeaknessesVisible.join(", ") || "None"}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
         <div className="mt-6 bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
           <div className="flex items-start gap-3">
-            <Shuffle className="w-5 h-5 text-[#7733DD] flex-shrink-0 mt-0.5" />
+            <Users className="w-5 h-5 text-[#7733DD] flex-shrink-0 mt-0.5" />
             <div>
-              <h4 className="font-bold text-sm mb-1">Farm-First Draft Model</h4>
+              <h4 className="font-bold text-sm mb-1">League Builder Startup Farm Draft</h4>
               <p className="text-xs text-[#E8E8D8]/70">
-                All drafted players go directly to FARM rosters (max grade B). Draft class
-                consists of AI-generated prospects plus any inactive players you select.
-                After the draft, use the Trade phase to swap players, then Finalize &
-                Advance to call up prospects to MLB.
+                Drafted players are saved into League Builder FARM rosters with hidden reveal state. Franchise Setup remains the validation and copy step for prepared League Builder state.
               </p>
             </div>
           </div>
@@ -562,15 +362,4 @@ export function LeagueBuilderDraft() {
       </div>
     </div>
   );
-}
-
-// Name generators — use shared name database (2,756 first + 2,128 last names)
-import { FIRST_NAMES, LAST_NAMES, pickRandomName } from "../../../data/nameDatabase";
-
-function generateFirstName(): string {
-  return pickRandomName(FIRST_NAMES);
-}
-
-function generateLastName(): string {
-  return pickRandomName(LAST_NAMES);
 }
