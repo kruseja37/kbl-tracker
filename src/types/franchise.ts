@@ -94,6 +94,12 @@ export interface FranchiseModeHandoffContract {
   salaryBaseline: FranchiseSalaryBaselineProof;
 }
 
+export interface FranchiseStartupProspectDraftConfig {
+  enabled: boolean;
+  rounds: number;
+  mode: 'auto-snake-v1';
+}
+
 export interface FranchiseConfig {
   league: string | null;
   leagueDetails: {
@@ -136,6 +142,7 @@ export interface FranchiseConfig {
       format: string;
       timePerPick: string;
     };
+    startupProspectDraft?: FranchiseStartupProspectDraftConfig;
   };
   franchiseName: string;
   franchiseType?: FranchiseType;

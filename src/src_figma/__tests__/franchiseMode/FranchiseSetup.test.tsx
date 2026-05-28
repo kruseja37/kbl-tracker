@@ -6,7 +6,7 @@
  */
 
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { FranchiseSetup } from '../../app/pages/FranchiseSetup';
 
 // ============================================
@@ -14,9 +14,19 @@ import { FranchiseSetup } from '../../app/pages/FranchiseSetup';
 // ============================================
 
 const mockNavigate = vi.fn();
+const mockRunStartupProspectDraftForLeague = vi.fn();
+const mockInitializeFranchise = vi.fn();
 
 vi.mock('react-router', () => ({
   useNavigate: () => mockNavigate,
+}));
+
+vi.mock('../../../utils/franchiseStartupProspectDraft', () => ({
+  runStartupProspectDraftForLeague: (...args: unknown[]) => mockRunStartupProspectDraftForLeague(...args),
+}));
+
+vi.mock('../../../utils/franchiseInitializer', () => ({
+  initializeFranchise: (...args: unknown[]) => mockInitializeFranchise(...args),
 }));
 
 // Mock league data — FranchiseSetup uses { leagues, teams, isLoading, error } from this hook
@@ -100,6 +110,11 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
 describe('FranchiseSetup Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRunStartupProspectDraftForLeague.mockResolvedValue({
+      valid: true,
+      picks: [],
+    });
+    mockInitializeFranchise.mockResolvedValue('franchise-1');
   });
 
   function selectLeagueAndAdvance(times = 1) {
@@ -229,7 +244,7 @@ describe('FranchiseSetup Component', () => {
       expect(screen.queryByRole('button', { name: /Random 1/i })).not.toBeInTheDocument();
     });
 
-    test('defers fantasy draft and generated roster fallbacks', () => {
+    test('defers fantasy draft and enables startup prospect draft for farms', () => {
       render(<FranchiseSetup />);
       selectLeagueAndAdvance(3);
       fireEvent.click(screen.getAllByRole('button', { name: /Team 1/i })[0]);
@@ -237,8 +252,30 @@ describe('FranchiseSetup Component', () => {
 
       expect(screen.getByRole('button', { name: /Fantasy Draft.*Deferred/i })).toBeDisabled();
       expect(screen.getByText(/22 MLB \+ 10 FARM/i)).toBeInTheDocument();
-      expect(screen.getByText(/No generated or fantasy-draft fallback/i)).toBeInTheDocument();
+      expect(screen.getByText(/Startup Prospect Draft fills missing FARM slots/i)).toBeInTheDocument();
+      expect(screen.getByText(/auto-runs a 10-round snake prospect draft/i)).toBeInTheDocument();
       expect(screen.queryByText(/Generate new fictional players/i)).not.toBeInTheDocument();
+    });
+
+    test('runs startup prospect draft before franchise initialization', async () => {
+      render(<FranchiseSetup />);
+      selectLeagueAndAdvance(3);
+      fireEvent.click(screen.getAllByRole('button', { name: /Team 1/i })[0]);
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+      fireEvent.click(screen.getByRole('button', { name: /START FRANCHISE/i }));
+
+      await waitFor(() => {
+        expect(mockInitializeFranchise).toHaveBeenCalled();
+      });
+      expect(mockRunStartupProspectDraftForLeague).toHaveBeenCalledWith('kbl', {
+        rounds: 10,
+        seasonNumber: 1,
+      });
+      expect(mockInitializeFranchise).toHaveBeenCalled();
+      expect(mockRunStartupProspectDraftForLeague.mock.invocationCallOrder[0]).toBeLessThan(
+        mockInitializeFranchise.mock.invocationCallOrder[0],
+      );
     });
   });
 });

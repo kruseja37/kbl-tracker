@@ -4,6 +4,7 @@ import { ArrowLeft, Check, Gamepad2, Loader2, AlertCircle } from "lucide-react";
 import { useLeagueBuilderData, type LeagueTemplate, type Team } from "../../hooks/useLeagueBuilderData";
 import type { FranchiseConfig } from "../../../types/franchise";
 import { initializeFranchise } from "../../../utils/franchiseInitializer";
+import { runStartupProspectDraftForLeague } from "../../../utils/franchiseStartupProspectDraft";
 
 const INITIAL_CONFIG: FranchiseConfig = {
   league: null,
@@ -35,6 +36,11 @@ const INITIAL_CONFIG: FranchiseConfig = {
   },
   roster: {
     mode: "existing",
+    startupProspectDraft: {
+      enabled: true,
+      rounds: 10,
+      mode: "auto-snake-v1",
+    },
   },
   franchiseName: "Dynasty League Season 1",
 };
@@ -79,6 +85,12 @@ export function FranchiseSetup() {
       setIsInitializing(true);
       setInitError(null);
       try {
+        if (config.league && config.roster.startupProspectDraft?.enabled) {
+          await runStartupProspectDraftForLeague(config.league, {
+            rounds: config.roster.startupProspectDraft.rounds,
+            seasonNumber: 1,
+          });
+        }
         const franchiseId = await initializeFranchise(config);
         navigate(`/franchise/${franchiseId}`);
       } catch (err) {
@@ -1091,9 +1103,21 @@ function Step5RosterMode({
             <div className="space-y-2 mb-3">
               <p className="text-xs text-[#00CC00]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>✓ Franchise creation validates all {leagueTeams.length} teams</p>
               <p className="text-xs text-[#00CC00]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>✓ Required contract: 22 MLB + 10 FARM players per team</p>
-              <p className="text-xs text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>No generated or fantasy-draft fallback is used in Franchise v1.</p>
+              <p className="text-xs text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Startup Prospect Draft fills missing FARM slots before the franchise copy.</p>
             </div>
             <button onClick={() => navigate('/league-builder/players')} className="text-xs text-[#C4A853] hover:text-[#FFD700] underline" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>[Review League Builder Players]</button>
+          </div>
+        )}
+
+        {config.roster.mode === "existing" && (
+          <div className="mt-4 bg-[#3A5A32] border-2 border-[#C4A853] p-4">
+            <p className="text-xs text-[#C4A853] font-bold mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>STARTUP PROSPECT DRAFT</p>
+            <div className="h-[1px] bg-[#E8E8D8]/30 mb-3" />
+            <div className="space-y-2 text-xs text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
+              <p>Enabled for Franchise v1. The app auto-runs a 10-round snake prospect draft during setup.</p>
+              <p>Order is based on team payroll, prospects receive rookie salaries, and ratings are stored hidden until call-up.</p>
+              <p>No fantasy MLB draft, AI game simulation, or generated regular-season schedule is enabled.</p>
+            </div>
           </div>
         )}
       </div>
@@ -1112,8 +1136,8 @@ function Step5RosterMode({
           <div className="flex-1">
             <h3 className="text-sm font-bold text-[#E8E8D8] mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>FANTASY DRAFT (DEFERRED)</h3>
             <div className="h-[1px] bg-[#E8E8D8]/30 mb-3" />
-            <p className="text-xs text-[#E8E8D8]/70 mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Franchise v1 uses existing League Builder rosters only.</p>
-            <p className="text-xs text-[#E8E8D8]/70 mb-4" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Drafts, generated pools, and AI roster filling are not part of the release path.</p>
+            <p className="text-xs text-[#E8E8D8]/70 mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Franchise v1 uses existing League Builder MLB rosters.</p>
+            <p className="text-xs text-[#E8E8D8]/70 mb-4" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>The separate Startup Prospect Draft fills FARM rosters; fantasy MLB drafting stays deferred.</p>
           </div>
         </button>
       </div>
@@ -1258,7 +1282,7 @@ function Step6Confirm({
             </div>
             <p className="text-xs text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
               {config.roster.mode === "existing"
-                ? "Using existing rosters from League Builder; validated as 22 MLB + 10 FARM per team"
+                ? "Using existing MLB rosters plus Startup Prospect Draft for 10 FARM players per team"
                 : "Fantasy draft deferred in Franchise v1"}
             </p>
           </div>
