@@ -14,6 +14,7 @@ describe("PlayerCardModal", () => {
         onSubOut={onSubOut}
         benchPlayers={[
           {
+            playerId: "bench-runner-sub",
             name: "Dave Roberts",
             pos: "OF",
             hand: "L",
@@ -31,6 +32,7 @@ describe("PlayerCardModal", () => {
     expect(onSubOut).toHaveBeenCalledWith(
       "runner-1",
       "Rickey Henderson",
+      "bench-runner-sub",
       "Dave Roberts",
       false,
       "OF",
@@ -55,6 +57,7 @@ describe("PlayerCardModal", () => {
         onSubOut={onSubOut}
         benchPlayers={[
           {
+            playerId: "bench-bat",
             name: "Bench Bat",
             pos: "OF",
             hand: "R",
@@ -63,6 +66,7 @@ describe("PlayerCardModal", () => {
         ]}
         bullpenPitchers={[
           {
+            playerId: "emergency-arm",
             name: "Emergency Arm",
             hand: "R",
           },
@@ -80,6 +84,7 @@ describe("PlayerCardModal", () => {
     expect(onSubOut).toHaveBeenCalledWith(
       "home-sp",
       "Shohei Ohtani",
+      "emergency-arm",
       "Emergency Arm",
       true,
       "P",
