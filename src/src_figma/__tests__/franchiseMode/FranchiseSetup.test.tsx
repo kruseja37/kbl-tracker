@@ -71,8 +71,19 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
         createdDate: '2026-01-01',
         lastModified: '2026-01-01',
       },
+      {
+        id: 'duel',
+        name: 'Duel League',
+        description: 'Two-team test league',
+        teamIds: ['team-21', 'team-22'],
+        conferences: [],
+        divisions: [],
+        defaultRulesPreset: 'preset-1',
+        createdDate: '2026-01-01',
+        lastModified: '2026-01-01',
+      },
     ],
-    teams: Array.from({ length: 20 }, (_, i) => ({
+    teams: Array.from({ length: 22 }, (_, i) => ({
       id: `team-${i + 1}`,
       name: `Team ${i + 1}`,
       abbreviation: `T${i + 1}`,
@@ -460,6 +471,50 @@ describe('FranchiseSetup Component', () => {
 
       expect(await screen.findByText(/copy failed/i)).toBeInTheDocument();
       expect(mockRollbackStartupProspectDraftForLeague).toHaveBeenCalledWith('kbl', report);
+    });
+  });
+
+  describe('Step 3 - Playoff Team Count Guard', () => {
+    test('hides impossible Top 4 qualifier option for a 2-team league', () => {
+      render(<FranchiseSetup />);
+
+      fireEvent.click(screen.getByText('DUEL LEAGUE'));
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+
+      expect(screen.getByText(/With 2 teams in league: Top 2 teams qualify/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Top 2 teams qualify/i })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Top 4 teams qualify/i })).not.toBeInTheDocument();
+      expect(screen.queryByText(/Top 4 teams qualify/i)).not.toBeInTheDocument();
+    });
+
+    test('preserves standard playoff qualifier options for a 16-team league', () => {
+      render(<FranchiseSetup />);
+
+      selectLeagueAndAdvance(2);
+
+      expect(screen.getByText(/With 16 teams in league: Top 4 teams qualify/i)).toBeInTheDocument();
+      for (const count of ['4', '6', '8', '10', '12']) {
+        expect(screen.getByRole('button', { name: `Top ${count} teams qualify` })).toBeInTheDocument();
+      }
+      expect(screen.queryByRole('button', { name: /Top 2 teams qualify/i })).not.toBeInTheDocument();
+    });
+
+    test('clamps playoff qualifier count when switching to a smaller league', () => {
+      render(<FranchiseSetup />);
+
+      selectLeagueAndAdvance(2);
+      fireEvent.click(screen.getByRole('button', { name: /Top 12 teams qualify/i }));
+      expect(screen.getByText(/With 16 teams in league: Top 12 teams qualify/i)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: /BACK/i }));
+      fireEvent.click(screen.getByRole('button', { name: /BACK/i }));
+      fireEvent.click(screen.getByText('DUEL LEAGUE'));
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+
+      expect(screen.getByText(/With 2 teams in league: Top 2 teams qualify/i)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Top 12 teams qualify/i })).not.toBeInTheDocument();
     });
   });
 });

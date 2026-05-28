@@ -53,6 +53,21 @@ const INITIAL_CONFIG: FranchiseConfig = {
   franchiseName: "Dynasty League Season 1",
 };
 
+const STANDARD_PLAYOFF_TEAM_COUNT_OPTIONS = [4, 6, 8, 10, 12];
+
+function getValidPlayoffTeamCountOptions(teamCount: number): number[] {
+  const standardOptions = STANDARD_PLAYOFF_TEAM_COUNT_OPTIONS.filter((count) => count <= teamCount);
+  if (standardOptions.length > 0) return standardOptions;
+  return teamCount >= 2 ? [2] : [];
+}
+
+function clampPlayoffTeamsQualifying(currentCount: number, teamCount: number): number {
+  const options = getValidPlayoffTeamCountOptions(teamCount);
+  if (options.length === 0) return currentCount;
+  if (options.includes(currentCount)) return currentCount;
+  return options[options.length - 1];
+}
+
 export function FranchiseSetup() {
   const navigate = useNavigate();
   const { leagues, teams, isLoading, error, seedSMB4Data } = useLeagueBuilderData();
@@ -116,6 +131,20 @@ export function FranchiseSetup() {
     // Filter teams that are in the selected league's teamIds array
     return teams.filter(t => selectedLeague.teamIds?.includes(t.id));
   }, [config.league, leagues, teams]);
+
+  useEffect(() => {
+    const teamCount = config.leagueDetails?.teams ?? leagueTeams.length;
+    if (!config.league || teamCount <= 0) return;
+    const clampedTeamsQualifying = clampPlayoffTeamsQualifying(config.playoffs.teamsQualifying, teamCount);
+    if (clampedTeamsQualifying === config.playoffs.teamsQualifying) return;
+    setConfig({
+      ...config,
+      playoffs: {
+        ...config.playoffs,
+        teamsQualifying: clampedTeamsQualifying,
+      },
+    });
+  }, [config, leagueTeams.length]);
 
   const totalSteps = 6;
 
@@ -409,14 +438,19 @@ function Step1SelectLeague({
     if (league) {
       // Get teams count for this league
       const leagueTeamCount = teams.filter(t => league.teamIds?.includes(t.id)).length;
+      const teamCount = leagueTeamCount || league.teamIds?.length || 0;
       setConfig({
         ...config,
         league: leagueId,
         leagueDetails: {
           name: league.name,
-          teams: leagueTeamCount || league.teamIds?.length || 0,
+          teams: teamCount,
           conferences: league.conferences?.length || 0,
           divisions: league.divisions?.length || 0,
+        },
+        playoffs: {
+          ...config.playoffs,
+          teamsQualifying: clampPlayoffTeamsQualifying(config.playoffs.teamsQualifying, teamCount),
         },
         // Reset team selection when league changes
         teams: {
@@ -747,6 +781,9 @@ function Step3PlayoffSettings({
   config: FranchiseConfig;
   setConfig: (config: FranchiseConfig) => void;
 }) {
+  const leagueTeamCount = config.leagueDetails?.teams || 16;
+  const playoffTeamCountOptions = getValidPlayoffTeamCountOptions(leagueTeamCount);
+
   return (
     <div>
       <h2 className="text-lg font-bold text-[#E8E8D8] mb-2 tracking-wide" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>PLAYOFF SETTINGS</h2>
@@ -757,9 +794,10 @@ function Step3PlayoffSettings({
         <p className="text-xs text-[#E8E8D8] font-bold mb-3 tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>TEAMS QUALIFYING</p>
         <div className="bg-[#4A6A42] border-4 border-[#E8E8D8] p-4">
           <div className="flex gap-2 mb-3">
-            {[4, 6, 8, 10, 12].map((num) => (
+            {playoffTeamCountOptions.map((num) => (
               <button
                 key={num}
+                aria-label={`Top ${num} teams qualify`}
                 onClick={() =>
                   setConfig({
                     ...config,
@@ -778,7 +816,7 @@ function Step3PlayoffSettings({
             ))}
           </div>
           <p className="text-[10px] text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
-            With {config.leagueDetails?.teams || 16} teams in league: Top {config.playoffs.teamsQualifying} teams
+            With {leagueTeamCount} teams in league: Top {config.playoffs.teamsQualifying} teams
             qualify
           </p>
         </div>
