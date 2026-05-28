@@ -121,6 +121,14 @@ describe('franchise roster movement boundary', () => {
     const teamId = nextId('team-handoff');
     const mlbPlayerId = nextId('mlb-handoff');
     const farmPlayerId = nextId('farm-handoff');
+    const mlbPlayerIds = [
+      mlbPlayerId,
+      ...Array.from({ length: 21 }, (_, index) => nextId(`mlb-handoff-${index + 2}`)),
+    ];
+    const farmPlayerIds = [
+      farmPlayerId,
+      ...Array.from({ length: 9 }, (_, index) => nextId(`farm-handoff-${index + 2}`)),
+    ];
 
     await leagueBuilderStorage.saveLeagueTemplate({
       id: leagueId,
@@ -140,18 +148,24 @@ describe('franchise roster movement boundary', () => {
       stadium: 'Handoff Park',
       leagueIds: [leagueId],
     });
-    await leagueBuilderStorage.savePlayer(makePlayer({
-      id: mlbPlayerId,
-      leagueAssignments: [{ leagueId, teamId, rosterStatus: 'MLB' }],
-    }));
-    await leagueBuilderStorage.savePlayer(makePlayer({
-      id: farmPlayerId,
-      leagueAssignments: [{ leagueId, teamId, rosterStatus: 'MLB' }],
-    }));
+    for (const [index, playerId] of mlbPlayerIds.entries()) {
+      await leagueBuilderStorage.savePlayer(makePlayer({
+        id: playerId,
+        primaryPosition: index >= 13 ? 'SP' : 'SS',
+        leagueAssignments: [{ leagueId, teamId, rosterStatus: 'MLB' }],
+      }));
+    }
+    for (const [index, playerId] of farmPlayerIds.entries()) {
+      await leagueBuilderStorage.savePlayer(makePlayer({
+        id: playerId,
+        primaryPosition: index >= 8 ? 'SP' : 'SS',
+        leagueAssignments: [{ leagueId, teamId, rosterStatus: 'MLB' }],
+      }));
+    }
     await leagueBuilderStorage.saveTeamRoster({
       teamId,
-      mlbRoster: [mlbPlayerId],
-      farmRoster: [farmPlayerId],
+      mlbRoster: mlbPlayerIds,
+      farmRoster: farmPlayerIds,
       lineupWithDH: [{ battingOrder: 1, playerId: mlbPlayerId, fieldingPosition: 'SS' }],
       lineupWithoutDH: [{ battingOrder: 1, playerId: mlbPlayerId, fieldingPosition: 'SS' }],
       startingRotation: [],

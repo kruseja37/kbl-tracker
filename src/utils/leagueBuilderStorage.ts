@@ -105,6 +105,7 @@ export interface Team {
   stadium: string;
   stadiumId?: string;
   parkFactors?: ParkFactors;
+  controlledBy?: 'human' | 'ai';
   stadiumCapacity?: number;
   leagueIds: string[];
   foundedYear?: number;

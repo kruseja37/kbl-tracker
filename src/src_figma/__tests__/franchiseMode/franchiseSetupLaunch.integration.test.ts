@@ -16,12 +16,16 @@ import {
   saveLeagueTemplate,
   savePlayer,
   saveTeam,
+  saveTeamRoster,
+  getTeam,
 } from '../../../utils/leagueBuilderStorage';
 import {
+  getFranchiseConfig,
   deleteFranchise,
 } from '../../../utils/franchiseManager';
 import {
   deleteFranchiseDatabase,
+  getAllFranchiseTeams,
 } from '../../../utils/franchisePlayerStorage';
 import {
   getAllGamesByFranchise,
@@ -34,6 +38,9 @@ import {
 import {
   getFranchiseSeasonId,
 } from '../../../utils/franchisePersistenceContract';
+import {
+  getFranchiseFarmRecordsForSeason,
+} from '../../../utils/franchiseFarmStorage';
 import {
   initializeEmptyFranchiseSeasonSchedule,
   initializeFranchise,
@@ -54,12 +61,13 @@ function makePlayer(
   teamId: string,
   index: number,
   primaryPosition: SavePlayerInput['primaryPosition'],
+  rosterStatus: 'MLB' | 'FARM' = 'MLB',
 ): SavePlayerInput {
-  const isPitcher = primaryPosition === 'SP';
+  const isPitcher = ['SP', 'RP', 'CP', 'SP/RP', 'P', 'TWO-WAY'].includes(String(primaryPosition));
 
   return {
-    id: `${teamId}-${isPitcher ? 'sp' : 'batter'}-${index}`,
-    firstName: isPitcher ? 'Starter' : `Batter${index}`,
+    id: `${teamId}-${rosterStatus.toLowerCase()}-${isPitcher ? 'p' : 'b'}-${index}`,
+    firstName: rosterStatus === 'FARM' ? `Farm${index}` : isPitcher ? `Pitcher${index}` : `Batter${index}`,
     lastName: teamId,
     gender: 'M',
     jerseyNumber: index,
@@ -88,7 +96,7 @@ function makePlayer(
       {
         leagueId: LEAGUE_ID,
         teamId,
-        rosterStatus: 'MLB',
+        rosterStatus,
       },
     ],
     isCustom: true,
@@ -98,8 +106,16 @@ function makePlayer(
 
 async function seedLeagueTeam(teamId: string, name: string): Promise<void> {
   const lineupPositions = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'] as const;
-  const batterIds = lineupPositions.map((_, index) => `${teamId}-batter-${index + 1}`);
-  const starterId = `${teamId}-sp-1`;
+  const benchPositions = ['C', 'IF', 'OF', '1B/OF'] as const;
+  const pitcherPositions = ['SP', 'SP', 'SP', 'SP', 'RP', 'RP', 'RP', 'CP', 'SP/RP'] as const;
+  const farmPositions = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'SP', 'RP'] as const;
+  const batterIds = lineupPositions.map((_, index) => `${teamId}-mlb-b-${index + 1}`);
+  const benchIds = benchPositions.map((_, index) => `${teamId}-mlb-b-${lineupPositions.length + index + 1}`);
+  const pitcherIds = pitcherPositions.map((_, index) => `${teamId}-mlb-p-${index + 1}`);
+  const farmIds = farmPositions.map((position, index) =>
+    `${teamId}-farm-${['SP', 'RP', 'CP', 'SP/RP', 'P', 'TWO-WAY'].includes(position) ? 'p' : 'b'}-${index + 1}`,
+  );
+  const starterId = pitcherIds[0];
 
   const team: SaveTeamInput = {
     id: teamId,
@@ -138,7 +154,44 @@ async function seedLeagueTeam(teamId: string, name: string): Promise<void> {
   for (const [index, position] of lineupPositions.entries()) {
     await savePlayer(makePlayer(teamId, index + 1, position));
   }
-  await savePlayer(makePlayer(teamId, 1, 'SP'));
+  for (const [index, position] of benchPositions.entries()) {
+    await savePlayer(makePlayer(teamId, lineupPositions.length + index + 1, position));
+  }
+  for (const [index, position] of pitcherPositions.entries()) {
+    await savePlayer(makePlayer(teamId, index + 1, position));
+  }
+  for (const [index, position] of farmPositions.entries()) {
+    await savePlayer(makePlayer(teamId, index + 1, position, 'FARM'));
+  }
+  await saveTeamRoster({
+    teamId,
+    mlbRoster: [...batterIds, ...benchIds, ...pitcherIds],
+    farmRoster: farmIds,
+    lineupWithDH: team.lineupWithDH ?? [],
+    lineupWithoutDH: team.lineupWithoutDH ?? [],
+    startingRotation: [starterId],
+    longRelievers: [],
+    closingPitcher: pitcherIds[7],
+    setupPitchers: [pitcherIds[6]],
+    depthChart: {
+      C: [],
+      '1B': [],
+      '2B': [],
+      SS: [],
+      '3B': [],
+      LF: [],
+      CF: [],
+      RF: [],
+      DH: [],
+      SP: [],
+      RP: [],
+      CP: [],
+    },
+    pinchHitOrder: benchIds,
+    pinchRunOrder: benchIds,
+    defensiveSubOrder: benchIds,
+    lastModified: new Date().toISOString(),
+  });
 }
 
 function makeFranchiseConfig(): FranchiseConfig {
@@ -230,6 +283,88 @@ describe('franchise setup-to-launch persistence integration', () => {
       totalGames: 0,
     });
 
+    const storedConfig = await getFranchiseConfig(franchiseId);
+    expect(storedConfig).toMatchObject({
+      franchiseType: 'solo',
+      teamControl: {
+        [AWAY_TEAM_ID]: 'human',
+        [HOME_TEAM_ID]: 'ai',
+      },
+      controlledTeams: [
+        {
+          teamId: AWAY_TEAM_ID,
+          teamName: 'Away Club',
+          controlledBy: 'human',
+        },
+      ],
+      rulesSnapshot: {
+        gamesPerTeam: 1,
+        inningsPerGame: 9,
+        extraInningsRule: 'standard',
+        scheduleType: 'balanced',
+        useDH: true,
+        allStarGame: false,
+        tradeDeadline: false,
+        mercyRule: false,
+      },
+      playoffSetupSnapshot: makeFranchiseConfig().playoffs,
+      seasonLength: {
+        gamesPerTeam: 1,
+        expectedRegularSeasonGamesPerTeam: 1,
+        inningsPerGame: 9,
+        adaptiveStandardsInningsPerGame: 9,
+      },
+      schedulePolicy: {
+        policy: 'empty-manual-user-supplied',
+        generatedSchedulesAllowed: false,
+        initialScheduleRows: 0,
+        allowedSources: ['manual', 'csv'],
+      },
+      rosterRequirements: {
+        mlbPlayersPerTeam: 22,
+        farmPlayersPerTeam: 10,
+        validationStatus: 'passed',
+        teamCounts: {
+          [AWAY_TEAM_ID]: { MLB: 22, FARM: 10 },
+          [HOME_TEAM_ID]: { MLB: 22, FARM: 10 },
+        },
+      },
+      salaryBaseline: {
+        calculationVersion: 'franchise-initial-salary-v1-ratings-only',
+        playerCount: 64,
+        salariedPlayerCount: 64,
+      },
+      handoffContract: {
+        version: 'mode1-mode2-v1',
+        franchiseType: 'solo',
+      },
+    });
+    expect(storedConfig?.salaryBaseline.totalSalary).toBeGreaterThan(0);
+    expect(storedConfig?.stadiums).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          teamId: AWAY_TEAM_ID,
+          teamName: 'Away Club',
+          stadium: 'Away Club Park',
+          stadiumId: expect.any(String),
+        }),
+      ]),
+    );
+
+    const franchiseTeams = await getAllFranchiseTeams(franchiseId);
+    expect(franchiseTeams).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: AWAY_TEAM_ID, controlledBy: 'human' }),
+        expect.objectContaining({ id: HOME_TEAM_ID, controlledBy: 'ai' }),
+      ]),
+    );
+    await expect(getTeam(AWAY_TEAM_ID)).resolves.not.toHaveProperty('controlledBy');
+
+    const farmRecords = await getFranchiseFarmRecordsForSeason(franchiseId, seasonId);
+    expect(farmRecords).toHaveLength(20);
+    expect(farmRecords.filter((record) => record.teamId === AWAY_TEAM_ID)).toHaveLength(10);
+    expect(farmRecords.filter((record) => record.teamId === HOME_TEAM_ID)).toHaveLength(10);
+
     await clearAllLeagueBuilderData();
 
     const [awayRoster, homeRoster] = await Promise.all([
@@ -251,6 +386,28 @@ describe('franchise setup-to-launch persistence integration', () => {
     expect(homeRoster.pitchers.length).toBeGreaterThan(0);
     expect(awayRoster.players[0].playerId).toContain(AWAY_TEAM_ID);
     expect(homeRoster.pitchers[0].playerId).toContain(HOME_TEAM_ID);
+  });
+
+  test('initializeFranchise blocks invalid MLB/farm handoff without writing schedule rows', async () => {
+    await seedLeagueTeam(AWAY_TEAM_ID, 'Away Club');
+    await seedLeagueTeam(HOME_TEAM_ID, 'Home Club');
+    await savePlayer({
+      ...makePlayer(HOME_TEAM_ID, 99, 'C', 'FARM'),
+      id: `${HOME_TEAM_ID}-extra-farm`,
+    });
+    await saveLeagueTemplate({
+      id: LEAGUE_ID,
+      name: 'Integration League',
+      teamIds: [AWAY_TEAM_ID, HOME_TEAM_ID],
+      conferences: [],
+      divisions: [],
+      defaultRulesPreset: 'default',
+    });
+
+    await expect(initializeFranchise(makeFranchiseConfig())).rejects.toThrow(
+      /Invalid Mode 1 roster handoff/,
+    );
+    await expect(getAllGamesByFranchise('franchise-1', 1)).resolves.toHaveLength(0);
   });
 
   test('repair and next-season empty schedule initialization use copied franchise data after source templates are cleared', async () => {

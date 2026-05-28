@@ -11,7 +11,18 @@
  *   6. Set as active franchise
  */
 
-import type { FranchiseConfig, StoredFranchiseConfig } from '../types/franchise';
+import type {
+  FranchiseConfig,
+  FranchiseControlledTeamMetadata,
+  FranchiseModeHandoffContract,
+  FranchisePlayoffSetupSnapshot,
+  FranchiseRulesSnapshot,
+  FranchiseSeasonLengthMetadata,
+  FranchiseTeamControl,
+  FranchiseTeamControlSnapshot,
+  FranchiseType,
+  StoredFranchiseConfig,
+} from '../types/franchise';
 import {
   createFranchise,
   deleteFranchise,
@@ -51,6 +62,93 @@ import {
 interface FranchiseLeagueTeams {
   leagueTemplate: LeagueTemplate;
   teams: ScheduleTeam[];
+}
+
+function normalizeSelectedTeamIds(config: FranchiseConfig, teams: ScheduleTeam[]): string[] {
+  const teamIds = new Set(teams.map((team) => team.teamId));
+  const selected = Array.from(new Set(config.teams.selectedTeams));
+  const unknown = selected.filter((teamId) => !teamIds.has(teamId));
+
+  if (unknown.length > 0) {
+    throw new Error(`Selected franchise team(s) are not in the selected league: ${unknown.join(', ')}`);
+  }
+
+  if (selected.length === 0) {
+    throw new Error('At least one controlled team must be selected');
+  }
+
+  return selected;
+}
+
+function deriveFranchiseType(
+  config: FranchiseConfig,
+  selectedTeamIds: string[],
+  teams: ScheduleTeam[],
+): FranchiseType {
+  if (config.franchiseType) return config.franchiseType;
+  if (selectedTeamIds.length === teams.length) return 'couch-coop';
+  if (selectedTeamIds.length > 1 || config.teams.mode === 'multiplayer') return 'custom';
+  return 'solo';
+}
+
+function buildTeamControlSnapshot(
+  config: FranchiseConfig,
+  teams: ScheduleTeam[],
+): FranchiseTeamControlSnapshot {
+  const selectedTeamIds = normalizeSelectedTeamIds(config, teams);
+  const franchiseType = deriveFranchiseType(config, selectedTeamIds, teams);
+  const selectedSet = new Set(selectedTeamIds);
+  const teamControl: Record<string, FranchiseTeamControl> = {};
+
+  for (const team of teams) {
+    teamControl[team.teamId] = selectedSet.has(team.teamId) ? 'human' : 'ai';
+  }
+
+  const controlledTeams: FranchiseControlledTeamMetadata[] = teams
+    .filter((team) => selectedSet.has(team.teamId))
+    .map((team) => ({
+      teamId: team.teamId,
+      teamName: team.teamName,
+      controlledBy: 'human',
+    }));
+
+  return {
+    franchiseType,
+    aiScoreEntry: config.aiScoreEntry ?? franchiseType !== 'couch-coop',
+    teamControl,
+    controlledTeams,
+  };
+}
+
+function buildRulesSnapshot(config: FranchiseConfig): FranchiseRulesSnapshot {
+  return {
+    gamesPerTeam: config.season.gamesPerTeam,
+    inningsPerGame: config.season.inningsPerGame,
+    extraInningsRule: config.season.extraInningsRule,
+    scheduleType: config.season.scheduleType,
+    useDH: config.season.useDH,
+    allStarGame: config.season.allStarGame,
+    tradeDeadline: config.season.tradeDeadline,
+    mercyRule: config.season.mercyRule,
+  };
+}
+
+function buildPlayoffSetupSnapshot(config: FranchiseConfig): FranchisePlayoffSetupSnapshot {
+  return {
+    teamsQualifying: config.playoffs.teamsQualifying,
+    format: config.playoffs.format,
+    seriesLengths: { ...config.playoffs.seriesLengths },
+    homeFieldAdvantage: config.playoffs.homeFieldAdvantage,
+  };
+}
+
+function buildSeasonLengthMetadata(config: FranchiseConfig): FranchiseSeasonLengthMetadata {
+  return {
+    gamesPerTeam: config.season.gamesPerTeam,
+    expectedRegularSeasonGamesPerTeam: config.season.gamesPerTeam,
+    inningsPerGame: config.season.inningsPerGame,
+    adaptiveStandardsInningsPerGame: config.season.inningsPerGame,
+  };
 }
 
 export interface FranchisePersistenceRepairResult {
@@ -199,6 +297,7 @@ export async function repairFranchisePersistence(
     await deepCopyLeagueToFranchise(franchiseId, config.league, {
       seasonId: getFranchiseSeasonId(franchiseId, seasonNumber),
       seasonNumber,
+      teamControl: config.teamControl,
     });
   }
 
@@ -243,14 +342,17 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
       'Need at least 2 teams to create a franchise',
     );
 
+    const teamControlSnapshot = buildTeamControlSnapshot(config, teams);
+
     // 3. Seed the per-franchise roster/team database from the selected league.
-    await deepCopyLeagueToFranchise(franchiseId, config.league, {
+    const copyResult = await deepCopyLeagueToFranchise(franchiseId, config.league, {
       seasonId: getFranchiseSeasonId(franchiseId, 1),
       seasonNumber: 1,
+      teamControl: teamControlSnapshot.teamControl,
     });
 
     // 4. Determine controlled team
-    const controlledTeamId = config.teams.selectedTeams[0] || teams[0].teamId;
+    const controlledTeamId = teamControlSnapshot.controlledTeams[0]?.teamId || teams[0].teamId;
     const controlledTeam = teams.find(t => t.teamId === controlledTeamId);
     const controlledTeamName = controlledTeam?.teamName || 'Unknown Team';
 
@@ -264,8 +366,40 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
     });
 
     // 6. Save full FranchiseConfig for later retrieval
+    const rulesSnapshot = buildRulesSnapshot(config);
+    const playoffSetupSnapshot = buildPlayoffSetupSnapshot(config);
+    const seasonLength = buildSeasonLengthMetadata(config);
+    const schedulePolicy = {
+      policy: 'empty-manual-user-supplied' as const,
+      generatedSchedulesAllowed: false as const,
+      initialScheduleRows: 0 as const,
+      allowedSources: ['manual', 'csv'] as Array<'manual' | 'csv'>,
+    };
+    const handoffContract: FranchiseModeHandoffContract = {
+      version: 'mode1-mode2-v1',
+      franchiseType: teamControlSnapshot.franchiseType,
+      teamControl: teamControlSnapshot,
+      rulesSnapshot,
+      playoffSetupSnapshot,
+      seasonLength,
+      schedulePolicy,
+      rosterRequirements: copyResult.rosterRequirements,
+      stadiums: copyResult.stadiums,
+      salaryBaseline: copyResult.salaryBaseline,
+    };
     const storedConfig: StoredFranchiseConfig = {
       ...config,
+      franchiseType: teamControlSnapshot.franchiseType,
+      teamControl: teamControlSnapshot.teamControl,
+      controlledTeams: teamControlSnapshot.controlledTeams,
+      rulesSnapshot,
+      playoffSetupSnapshot,
+      seasonLength,
+      schedulePolicy,
+      rosterRequirements: copyResult.rosterRequirements,
+      stadiums: copyResult.stadiums,
+      salaryBaseline: copyResult.salaryBaseline,
+      handoffContract,
       franchiseId,
       createdAt: Date.now(),
     };

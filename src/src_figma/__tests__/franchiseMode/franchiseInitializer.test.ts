@@ -112,6 +112,44 @@ const franchiseConfig: FranchiseConfig = {
   },
 };
 
+const copyResult = {
+  rosterRequirements: {
+    mlbPlayersPerTeam: 22,
+    farmPlayersPerTeam: 10,
+    validationStatus: 'passed' as const,
+    teamCounts: {
+      'team-away': { MLB: 22, FARM: 10 },
+      'team-home': { MLB: 22, FARM: 10 },
+    },
+  },
+  salaryBaseline: {
+    calculationVersion: 'franchise-initial-salary-v1-ratings-only',
+    playerCount: 64,
+    salariedPlayerCount: 64,
+    totalSalary: 320,
+    teamPayrolls: {
+      'team-away': 160,
+      'team-home': 160,
+    },
+  },
+  stadiums: [
+    {
+      teamId: 'team-away',
+      teamName: 'Away Club',
+      stadium: 'Apple Field',
+      stadiumId: 'apple-field',
+      hasSeedParkFactors: true,
+    },
+    {
+      teamId: 'team-home',
+      teamName: 'Home Club',
+      stadium: 'Home Park',
+      stadiumId: 'home-park',
+      hasSeedParkFactors: false,
+    },
+  ],
+};
+
 describe('franchiseInitializer Wave 1 persistence handoff', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -149,7 +187,7 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
     mocks.saveFranchiseConfig.mockResolvedValue(undefined);
     mocks.updateFranchiseMetadata.mockResolvedValue(undefined);
     mocks.setActiveFranchise.mockResolvedValue(undefined);
-    mocks.deepCopyLeagueToFranchise.mockResolvedValue(undefined);
+    mocks.deepCopyLeagueToFranchise.mockResolvedValue(copyResult);
     mocks.getOrCreateSeason.mockResolvedValue(undefined);
     mocks.getSeasonMetadata.mockResolvedValue(null);
     mocks.saveSeasonMetadata.mockImplementation(async (metadata: unknown) => metadata);
@@ -177,6 +215,10 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
       {
         seasonId: 'franchise-1-season-1',
         seasonNumber: 1,
+        teamControl: {
+          'team-away': 'human',
+          'team-home': 'ai',
+        },
       },
     );
     expect(mocks.generateSchedule).not.toHaveBeenCalled();
@@ -189,6 +231,50 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
     );
     expect(mocks.deepCopyLeagueToFranchise.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.setActiveFranchise.mock.invocationCallOrder[0],
+    );
+    expect(mocks.saveFranchiseConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        franchiseId: 'franchise-1',
+        franchiseType: 'solo',
+        teamControl: {
+          'team-away': 'human',
+          'team-home': 'ai',
+        },
+        controlledTeams: [
+          {
+            teamId: 'team-away',
+            teamName: 'Away Club',
+            controlledBy: 'human',
+          },
+        ],
+        rulesSnapshot: expect.objectContaining({
+          gamesPerTeam: 1,
+          inningsPerGame: 9,
+          scheduleType: 'balanced',
+        }),
+        playoffSetupSnapshot: franchiseConfig.playoffs,
+        seasonLength: {
+          gamesPerTeam: 1,
+          expectedRegularSeasonGamesPerTeam: 1,
+          inningsPerGame: 9,
+          adaptiveStandardsInningsPerGame: 9,
+        },
+        schedulePolicy: {
+          policy: 'empty-manual-user-supplied',
+          generatedSchedulesAllowed: false,
+          initialScheduleRows: 0,
+          allowedSources: ['manual', 'csv'],
+        },
+        rosterRequirements: copyResult.rosterRequirements,
+        stadiums: copyResult.stadiums,
+        salaryBaseline: copyResult.salaryBaseline,
+        handoffContract: expect.objectContaining({
+          version: 'mode1-mode2-v1',
+          franchiseType: 'solo',
+          rosterRequirements: copyResult.rosterRequirements,
+          salaryBaseline: copyResult.salaryBaseline,
+        }),
+      }),
     );
   });
 
@@ -255,6 +341,7 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
     expect(mocks.deepCopyLeagueToFranchise).toHaveBeenCalledWith('franchise-1', 'league-1', {
       seasonId: 'franchise-1-season-1',
       seasonNumber: 1,
+      teamControl: undefined,
     });
     expect(mocks.getOrCreateSeason).toHaveBeenCalledWith(
       'franchise-1-season-1',

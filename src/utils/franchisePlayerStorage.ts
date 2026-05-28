@@ -22,9 +22,18 @@ import {
   saveFranchiseFarmRecord,
   type FranchiseFarmRecord,
 } from './franchiseFarmStorage';
-import { withInitialFranchiseSalary } from './franchiseSalary';
+import {
+  FRANCHISE_INITIAL_SALARY_CALCULATION_VERSION,
+  withInitialFranchiseSalary,
+} from './franchiseSalary';
 import { getDerivedParkFactorsIfAvailable } from '../engines/parkFactorDeriver';
 import { getStableParkId } from '../data/parkLookup';
+import type {
+  FranchiseRosterRequirementSnapshot,
+  FranchiseSalaryBaselineProof,
+  FranchiseTeamControl,
+  FranchiseTeamStadiumSnapshot,
+} from '../types/franchise';
 
 export type { Player, Team } from './leagueBuilderStorage';
 
@@ -283,7 +292,17 @@ export async function deleteFranchiseDatabase(franchiseId: string): Promise<void
 export interface DeepCopyLeagueToFranchiseOptions {
   seasonId?: string;
   seasonNumber?: number;
+  teamControl?: Record<string, FranchiseTeamControl>;
 }
+
+export interface DeepCopyLeagueToFranchiseResult {
+  rosterRequirements: FranchiseRosterRequirementSnapshot;
+  salaryBaseline: FranchiseSalaryBaselineProof;
+  stadiums: FranchiseTeamStadiumSnapshot[];
+}
+
+const REQUIRED_MLB_PLAYERS_PER_TEAM = 22;
+const REQUIRED_FARM_PLAYERS_PER_TEAM = 10;
 
 function rosterStatusFromTeamRoster(
   player: Player,
@@ -328,13 +347,21 @@ export function withFranchiseTeamParkIdentity(team: Team): Team {
   };
 }
 
-function mergeTeamRosterIntoTeam(team: Team, roster: TeamRoster | null): Team {
+function mergeTeamRosterIntoTeam(
+  team: Team,
+  roster: TeamRoster | null,
+  controlledBy?: FranchiseTeamControl,
+): Team {
   const withStadiumIdentity = withFranchiseTeamParkIdentity(team);
+  const withControl = {
+    ...withStadiumIdentity,
+    controlledBy: controlledBy ?? 'ai',
+  };
 
-  if (!roster) return withStadiumIdentity;
+  if (!roster) return withControl;
 
   return {
-    ...withStadiumIdentity,
+    ...withControl,
     lineupWithDH: roster.lineupWithDH,
     lineupWithoutDH: roster.lineupWithoutDH,
     startingRotation: roster.startingRotation,
@@ -345,11 +372,104 @@ function mergeTeamRosterIntoTeam(team: Team, roster: TeamRoster | null): Team {
   };
 }
 
+function getTeamAssignment(
+  player: Player,
+  leagueId: string,
+  teamId: string,
+): NonNullable<Player['leagueAssignments']>[number] | undefined {
+  return player.leagueAssignments?.find((assignment) =>
+    assignment.leagueId === leagueId &&
+    assignment.teamId === teamId &&
+    (assignment.rosterStatus === 'MLB' || assignment.rosterStatus === 'FARM'),
+  );
+}
+
+function validateV1RosterHandoff(
+  leagueId: string,
+  teams: Team[],
+  players: Player[],
+): FranchiseRosterRequirementSnapshot {
+  const teamCounts: Record<string, { MLB: number; FARM: number }> = {};
+  const issues: string[] = [];
+
+  for (const team of teams) {
+    let MLB = 0;
+    let FARM = 0;
+    for (const player of players) {
+      const assignment = getTeamAssignment(player, leagueId, team.id);
+      if (assignment?.rosterStatus === 'MLB') MLB += 1;
+      if (assignment?.rosterStatus === 'FARM') FARM += 1;
+    }
+
+    teamCounts[team.id] = { MLB, FARM };
+    if (MLB !== REQUIRED_MLB_PLAYERS_PER_TEAM || FARM !== REQUIRED_FARM_PLAYERS_PER_TEAM) {
+      issues.push(
+        `${team.name}: expected ${REQUIRED_MLB_PLAYERS_PER_TEAM} MLB and ${REQUIRED_FARM_PLAYERS_PER_TEAM} FARM players; found ${MLB} MLB and ${FARM} FARM.`,
+      );
+    }
+  }
+
+  if (issues.length > 0) {
+    throw new Error(`Invalid Mode 1 roster handoff. ${issues.join(' ')}`);
+  }
+
+  return {
+    mlbPlayersPerTeam: REQUIRED_MLB_PLAYERS_PER_TEAM,
+    farmPlayersPerTeam: REQUIRED_FARM_PLAYERS_PER_TEAM,
+    validationStatus: 'passed',
+    teamCounts,
+  };
+}
+
+function buildSalaryBaselineProof(
+  leagueId: string,
+  teams: Team[],
+  players: Player[],
+): FranchiseSalaryBaselineProof {
+  const teamIds = new Set(teams.map((team) => team.id));
+  const teamPayrolls: Record<string, number> = {};
+  for (const team of teams) teamPayrolls[team.id] = 0;
+
+  for (const player of players) {
+    const assignment = player.leagueAssignments?.find((candidate) =>
+      candidate.leagueId === leagueId &&
+      candidate.teamId &&
+      teamIds.has(candidate.teamId) &&
+      (candidate.rosterStatus === 'MLB' || candidate.rosterStatus === 'FARM'),
+    );
+    if (!assignment?.teamId) continue;
+    teamPayrolls[assignment.teamId] += Number(player.salary) || 0;
+  }
+
+  const totalSalary = Object.values(teamPayrolls).reduce((sum, salary) => sum + salary, 0);
+  const salariedPlayerCount = players.filter((player) =>
+    Number.isFinite(Number(player.salary)) && Number(player.salary) > 0,
+  ).length;
+
+  return {
+    calculationVersion: FRANCHISE_INITIAL_SALARY_CALCULATION_VERSION,
+    playerCount: players.length,
+    salariedPlayerCount,
+    totalSalary,
+    teamPayrolls,
+  };
+}
+
+function buildTeamStadiumSnapshots(teams: Team[]): FranchiseTeamStadiumSnapshot[] {
+  return teams.map((team) => ({
+    teamId: team.id,
+    teamName: team.name,
+    stadium: team.stadium,
+    stadiumId: team.stadiumId,
+    hasSeedParkFactors: Boolean(team.parkFactors),
+  }));
+}
+
 export async function deepCopyLeagueToFranchise(
   franchiseId: string,
   leagueId: string,
   options: DeepCopyLeagueToFranchiseOptions = {},
-): Promise<void> {
+): Promise<DeepCopyLeagueToFranchiseResult> {
   const leagueTemplate = await getLeagueTemplate(leagueId);
   if (!leagueTemplate) {
     throw new Error(`League template "${leagueId}" not found`);
@@ -374,7 +494,11 @@ export async function deepCopyLeagueToFranchise(
   );
   const teamRostersByTeamId = new Map(teamRosterEntries);
   const teamsToCopy = sourceTeams.map((team) =>
-    mergeTeamRosterIntoTeam(team, teamRostersByTeamId.get(team.id) ?? null),
+    mergeTeamRosterIntoTeam(
+      team,
+      teamRostersByTeamId.get(team.id) ?? null,
+      options.teamControl?.[team.id],
+    ),
   );
 
   const playersInLeague = allPlayers.filter((player) =>
@@ -399,6 +523,10 @@ export async function deepCopyLeagueToFranchise(
       return applyFranchiseRosterStatus(franchisePlayer, leagueId, teamRostersByTeamId);
     }),
   );
+
+  const rosterRequirements = validateV1RosterHandoff(leagueId, teamsToCopy, playersToCopy);
+  const salaryBaseline = buildSalaryBaselineProof(leagueId, teamsToCopy, playersToCopy);
+  const stadiums = buildTeamStadiumSnapshots(teamsToCopy);
 
   // Push tombstones for existing records before clearing
   if (!syncEngine.isSuppressed()) {
@@ -475,4 +603,10 @@ export async function deepCopyLeagueToFranchise(
     }
     throw error;
   }
+
+  return {
+    rosterRequirements,
+    salaryBaseline,
+    stadiums,
+  };
 }
