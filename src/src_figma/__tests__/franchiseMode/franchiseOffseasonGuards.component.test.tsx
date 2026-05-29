@@ -667,6 +667,10 @@ function makeTradeAdapterResult(overrides: Record<string, any> = {}) {
   };
 }
 
+async function clickRetirementCeremonyReveal(teamId = "team-a") {
+  fireEvent.click(await screen.findByRole("button", { name: new RegExp(`Reveal ceremony for ${teamId}`, "i") }));
+}
+
 describe("franchise offseason prototype mutation guards", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -857,7 +861,7 @@ describe("franchise offseason prototype mutation guards", () => {
     expect(screen.getByText(/Confirmation\/apply integration is deferred/i)).toBeInTheDocument();
     expect(screen.getByText(/No reroll, jersey retirement, narrative\/news, milestone, or replacement-player effects/i)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Reveal ceremony for team-a/i }));
+    await clickRetirementCeremonyReveal();
 
     expect(mocks.mockRevealFranchiseRetirementForTeam).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -936,7 +940,7 @@ describe("franchise offseason prototype mutation guards", () => {
     );
 
     await screen.findByText(/Retirement ceremony preview/i);
-    fireEvent.click(screen.getByRole("button", { name: /Reveal ceremony for team-a/i }));
+    await clickRetirementCeremonyReveal();
 
     expect(screen.getByText(/Staged suggestion: Alpha Two \(player-b\)/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Apply selected retirements/i })).not.toBeInTheDocument();
@@ -1097,7 +1101,7 @@ describe("franchise offseason prototype mutation guards", () => {
         "franchise-a-season-3",
       );
     });
-    fireEvent.click(screen.getByRole("button", { name: /Reveal ceremony for team-a/i }));
+    await clickRetirementCeremonyReveal();
 
     const revealInput = mocks.mockRevealFranchiseRetirementForTeam.mock.calls[0][0];
     expect(revealInput.farmRecords).toEqual([
@@ -1175,7 +1179,7 @@ describe("franchise offseason prototype mutation guards", () => {
     );
 
     await screen.findByText(/Farm Risk/i);
-    fireEvent.click(screen.getByRole("button", { name: /Reveal ceremony for team-a/i }));
+    await clickRetirementCeremonyReveal();
 
     expect(mocks.mockRevealFranchiseRetirementForTeam).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1263,7 +1267,7 @@ describe("franchise offseason prototype mutation guards", () => {
     expect(await screen.findByText(/FARM_RECORD_LOAD_FAILED/i)).toBeInTheDocument();
     expect(screen.getByText(/could not be loaded for retirement ceremony eligibility/i)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Reveal ceremony for team-a/i }));
+    await clickRetirementCeremonyReveal();
 
     const revealInput = mocks.mockRevealFranchiseRetirementForTeam.mock.calls[0][0];
     expect(revealInput.farmRecords).toEqual([]);
@@ -1300,7 +1304,7 @@ describe("franchise offseason prototype mutation guards", () => {
     );
 
     await screen.findByText(/Retirement ceremony preview/i);
-    fireEvent.click(screen.getByRole("button", { name: /Reveal ceremony for team-a/i }));
+    await clickRetirementCeremonyReveal();
 
     expect(screen.getByText(/No retirement was selected by this ceremony reveal/i)).toBeInTheDocument();
     expect(screen.getByText(/No selected player IDs were staged/i)).toBeInTheDocument();
@@ -1344,7 +1348,7 @@ describe("franchise offseason prototype mutation guards", () => {
     );
 
     await screen.findByText(/Retirement ceremony preview/i);
-    fireEvent.click(screen.getByRole("button", { name: /Reveal ceremony for team-a/i }));
+    await clickRetirementCeremonyReveal();
 
     expect(screen.getByText(/Ceremony issues and warnings/i)).toBeInTheDocument();
     expect(screen.getByText(/MISSING_TEAM_ID/i)).toBeInTheDocument();

@@ -1,0 +1,689 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "npm run export:smb4-team-profiles",
+  "source": "spec-docs/data/smb4_players_fixed.csv",
+  "categories": [
+    "power",
+    "contact",
+    "speed",
+    "rotation",
+    "bullpen"
+  ],
+  "formulas": {
+    "power": "mean(hitter.power)",
+    "contact": "mean(hitter.contact)",
+    "speed": "mean(hitter.speed)",
+    "rotation": "mean((velocity + junk + accuracy) / 3 for SP and SP/RP)",
+    "bullpen": "mean((velocity + junk + accuracy) / 3 for RP and CP)",
+    "levels": "roundHalfEven(6 * (score - standard_min) / (standard_max - standard_min)), clamped to 0..6"
+  },
+  "calibration": {
+    "power": {
+      "min": 47.15,
+      "max": 75.38,
+      "average": 60.22
+    },
+    "contact": {
+      "min": 46.85,
+      "max": 75.15,
+      "average": 60.91
+    },
+    "speed": {
+      "min": 47.23,
+      "max": 73.23,
+      "average": 60.1
+    },
+    "rotation": {
+      "min": 50.6,
+      "max": 69.53,
+      "average": 59.25
+    },
+    "bullpen": {
+      "min": 50.08,
+      "max": 73.92,
+      "average": 60.34
+    }
+  },
+  "profiles": {
+    "Beewolves": {
+      "teamName": "Beewolves",
+      "profileCode": "P2-C3-S4-R4-B0",
+      "levels": {
+        "power": 2,
+        "contact": 3,
+        "speed": 4,
+        "rotation": 4,
+        "bullpen": 0
+      },
+      "bars": {
+        "power": "■■□□□□",
+        "contact": "■■■□□□",
+        "speed": "■■■■□□",
+        "rotation": "■■■■□□",
+        "bullpen": "□□□□□□"
+      },
+      "rawScores": {
+        "power": 54.4,
+        "contact": 61,
+        "speed": 63.9,
+        "rotation": 63.2,
+        "bullpen": 50.1
+      },
+      "counts": {
+        "players": 22,
+        "hitters": 13,
+        "rotation": 5,
+        "bullpen": 4
+      },
+      "warnings": []
+    },
+    "Blowfish": {
+      "teamName": "Blowfish",
+      "profileCode": "P2-C6-S4-R2-B0",
+      "levels": {
+        "power": 2,
+        "contact": 6,
+        "speed": 4,
+        "rotation": 2,
+        "bullpen": 0
+      },
+      "bars": {
+        "power": "■■□□□□",
+        "contact": "■■■■■■",
+        "speed": "■■■■□□",
+        "rotation": "■■□□□□",
+        "bullpen": "□□□□□□"
+      },
+      "rawScores": {
+        "power": 56.6,
+        "contact": 73.2,
+        "speed": 64.8,
+        "rotation": 56.5,
+        "bullpen": 51.8
+      },
+      "counts": {
+        "players": 22,
+        "hitters": 13,
+        "rotation": 6,
+        "bullpen": 3
+      },
+      "warnings": []
+    },
+    "Buzzards": {
+      "teamName": "Buzzards",
+      "profileCode": "P2-C4-S4-R1-B2",
+      "levels": {
+        "power": 2,
+        "contact": 4,
+        "speed": 4,
+        "rotation": 1,
+        "bullpen": 2
+      },
+      "bars": {
+        "power": "■■□□□□",
+        "contact": "■■■■□□",
+        "speed": "■■■■□□",
+        "rotation": "■□□□□□",
+        "bullpen": "■■□□□□"
+      },
+      "rawScores": {
+        "power": 55.2,
+        "contact": 63.7,
+        "speed": 65,
+        "rotation": 54.2,
+        "bullpen": 56.4
+      },
+      "counts": {
+        "players": 22,
+        "hitters": 13,
+        "rotation": 6,
+        "bullpen": 3
+      },
+      "warnings": []
+    },
+    "Crocodons": {
+      "teamName": "Crocodons",
+      "profileCode": "P1-C4-S2-R6-B1",
+      "levels": {
+        "power": 1,
+        "contact": 4,
+        "speed": 2,
+        "rotation": 6,
+        "bullpen": 1
+      },
+      "bars": {
+        "power": "■□□□□□",
+        "contact": "■■■■□□",
+        "speed": "■■□□□□",
+        "rotation": "■■■■■■",
+        "bullpen": "■□□□□□"
+      },
+      "rawScores": {
+        "power": 51.3,
+        "contact": 64.8,
+        "speed": 56.1,
+        "rotation": 69.1,
+        "bullpen": 53.2
+      },
+      "counts": {
+        "players": 22,
+        "hitters": 13,
+        "rotation": 5,
+        "bullpen": 4
+      },
+      "warnings": []
+    },
+    "Freebooters": {
+      "teamName": "Freebooters",
+      "profileCode": "P2-C4-S1-R4-B6",
+      "levels": {
+        "power": 2,
+        "contact": 4,
+        "speed": 1,
+        "rotation": 4,
+        "bullpen": 6
+      },
+      "bars": {
+        "power": "■■□□□□",
+        "contact": "■■■■□□",
+        "speed": "■□□□□□",
+        "rotation": "■■■■□□",
+        "bullpen": "■■■■■■"
+      },
+      "rawScores": {
+        "power": 58.4,
+        "contact": 66.1,
+        "speed": 51.1,
+        "rotation": 62.3,
+        "bullpen": 73.9
+      },
+      "counts": {
+        "players": 22,
+        "hitters": 13,
+        "rotation": 5,
+        "bullpen": 4
+      },
+      "warnings": []
+    },
+    "Grapplers": {
+      "teamName": "Grapplers",
+      "profileCode": "P2-C1-S4-R1-B5",
+      "levels": {
+        "power": 2,
+        "contact": 1,
+        "speed": 4,
+        "rotation": 1,
+        "bullpen": 5
+      },
+      "bars": {
+        "power": "■■□□□□",
+        "contact": "■□□□□□",
+        "speed": "■■■■□□",
+        "rotation": "■□□□□□",
+        "bullpen": "■■■■■□"
+      },
+      "rawScores": {
+        "power": 58.5,
+        "contact": 49.2,
+        "speed": 64.1,
+        "rotation": 53.4,
+        "bullpen": 69
+      },
+      "counts": {
+        "players": 22,
+        "hitters": 13,
+        "rotation": 5,
+        "bullpen": 4
+      },
+      "warnings": []
+    },
+    "Heaters": {
+      "teamName": "Heaters",
+      "profileCode": "P1-C2-S5-R3-B1",
+      "levels": {
+        "power": 1,
+        "contact": 2,
+        "speed": 5,
+        "rotation": 3,
+        "bullpen": 1
+      },
+      "bars": {
+        "power": "■□□□□□",
+        "contact": "■■□□□□",
+        "speed": "■■■■■□",
+        "rotation": "■■■□□□",
+        "bullpen": "■□□□□□"
+      },
+      "rawScores": {
+        "power": 53.6,
+        "contact": 56.5,
+        "speed": 67.5,
+        "rotation": 58.8,
+        "bullpen": 53.6
+      },
+      "counts": {
+        "players": 22,
+        "hitters": 13,
+        "rotation": 5,
+        "bullpen": 4
+      },
+      "warnings": []
+    },
+    "Herbisaurs": {
+      "teamName": "Herbisaurs",
+      "profileCode": "P1-C2-S5-R4-B0",
+      "levels": {
+        "power": 1,
+        "contact": 2,
+        "speed": 5,
+        "rotation": 4,
+        "bullpen": 0
+      },
+      "bars": {
+        "power": "■□□□□□",
+        "contact": "■■□□□□",
+        "speed": "■■■■■□",
+        "rotation": "■■■■□□",
+        "bullpen": "□□□□□□"
+      },
+      "rawScores": {
+        "power": 51.7,
+        "contact": 54.9,
+        "speed": 66.8,
+        "rotation": 64.7,
+        "bullpen": 50.8
+      },
+      "counts": {
+        "players": 22,
+        "hitters": 13,
+        "rotation": 5,
+        "bullpen": 4
+      },
+      "warnings": []
+    },
+    "Hot Corners": {
+      "teamName": "Hot Corners",
+      "profileCode": "P4-C6-S2-R4-B3",
+      "levels": {
+        "power": 4,
+        "contact": 6,
+        "speed": 2,
+        "rotation": 4,
+        "bullpen": 3
+      },
+      "bars": {
+        "power": "■■■■□□",
+        "contact": "■■■■■■",
+        "speed": "■■□□□□",
+        "rotation": "■■■■□□",
+        "bullpen": "■■■□□□"
+      },
+      "rawScores": {
+        "power": 64.6,
+        "contact": 72.8,
+        "speed": 55.1,
+        "rotation": 62,
+        "bullpen": 63.9
+      },
+      "counts": {
+        "players": 22,
+        "hitters": 13,
+        "rotation": 5,
+        "bullpen": 4
+      },
+      "warnings": []
+    },
+    "Jacks": {
+      "teamName": "Jacks",
+      "profileCode": "P3-C6-S0-R0-B4",
+      "levels": {
+        "power": 3,
+        "contact": 6,
+        "speed": 0,
+        "rotation": 0,
+        "bullpen": 4
+      },
+      "bars": {
+        "power": "■■■□□□",
+        "contact": "■■■■■■",
+        "speed": "□□□□□□",
+        "rotation": "□□□□□□",
+        "bullpen": "■■■■□□"
+      },
+      "rawScores": {
+        "power": 63.2,
+        "contact": 75.2,
+        "speed": 47.2,
+        "rotation": 50.6,
+        "bullpen": 67.5
+      },
+      "counts": {
+        "players": 22,
+        "hitters": 13,
+        "rotation": 5,
+        "bullpen": 4
+      },
+      "warnings": []
+    },
+    "Moonstars": {
+      "teamName": "Moonstars",
+      "profileCode": "P3-C3-S1-R6-B5",
+      "levels": {
+        "power": 3,
+        "contact": 3,
+        "speed": 1,
+        "rotation": 6,
+        "bullpen": 5
+      },
+      "bars": {
+        "power": "■■■□□□",
+        "contact": "■■■□□□",
+        "speed": "■□□□□□",
+        "rotation": "■■■■■■",
+        "bullpen": "■■■■■□"
+      },
+      "rawScores": {
+        "power": 60.1,
+        "contact": 60.1,
+        "speed": 49.7,
+        "rotation": 69.5,
+        "bullpen": 70.9
+      },
+      "counts": {
+        "players": 22,
+        "hitters": 14,
+        "rotation": 5,
+        "bullpen": 3
+      },
+      "warnings": []
+    },
+    "Moose": {
+      "teamName": "Moose",
+      "profileCode": "P5-C1-S1-R3-B6",
+      "levels": {
+        "power": 5,
+        "contact": 1,
+        "speed": 1,
+        "rotation": 3,
+        "bullpen": 6
+      },
+      "bars": {
+        "power": "■■■■■□",
+        "contact": "■□□□□□",
+        "speed": "■□□□□□",
+        "rotation": "■■■□□□",
+        "bullpen": "■■■■■■"
+      },
+      "rawScores": {
+        "power": 69.3,
+        "contact": 52.8,
+        "speed": 52,
+        "rotation": 59.5,
+        "bullpen": 72.4
+      },
+      "counts": {
+        "players": 22,
+        "hitters": 13,
+        "rotation": 6,
+        "bullpen": 3
+      },
+      "warnings": []
+    },
+    "Nemesis": {
+      "teamName": "Nemesis",
+      "profileCode": "P5-C4-S1-R0-B0",
+      "levels": {
+        "power": 5,
+        "contact": 4,
+        "speed": 1,
+        "rotation": 0,
+        "bullpen": 0
+      },
+      "bars": {
+        "power": "■■■■■□",
+        "contact": "■■■■□□",
+        "speed": "■□□□□□",
+        "rotation": "□□□□□□",
+        "bullpen": "□□□□□□"
+      },
+      "rawScores": {
+        "power": 71.7,
+        "contact": 64.2,
+        "speed": 49.8,
+        "rotation": 51.3,
+        "bullpen": 50.4
+      },
+      "counts": {
+        "players": 22,
+        "hitters": 13,
+        "rotation": 5,
+        "bullpen": 4
+      },
+      "warnings": []
+    },
+    "Overdogs": {
+      "teamName": "Overdogs",
+      "profileCode": "P3-C2-S6-R2-B2",
+      "levels": {
+        "power": 3,
+        "contact": 2,
+        "speed": 6,
+        "rotation": 2,
+        "bullpen": 2
+      },
+      "bars": {
+        "power": "■■■□□□",
+        "contact": "■■□□□□",
+        "speed": "■■■■■■",
+        "rotation": "■■□□□□",
+        "bullpen": "■■□□□□"
+      },
+      "rawScores": {
+        "power": 62.9,
+        "contact": 57.7,
+        "speed": 71.5,
+        "rotation": 56.9,
+        "bullpen": 58.8
+      },
+      "counts": {
+        "players": 22,
+        "hitters": 13,
+        "rotation": 5,
+        "bullpen": 4
+      },
+      "warnings": []
+    },
+    "Platypi": {
+      "teamName": "Platypi",
+      "profileCode": "P1-C5-S4-R1-B1",
+      "levels": {
+        "power": 1,
+        "contact": 5,
+        "speed": 4,
+        "rotation": 1,
+        "bullpen": 1
+      },
+      "bars": {
+        "power": "■□□□□□",
+        "contact": "■■■■■□",
+        "speed": "■■■■□□",
+        "rotation": "■□□□□□",
+        "bullpen": "■□□□□□"
+      },
+      "rawScores": {
+        "power": 52.6,
+        "contact": 68.5,
+        "speed": 63.5,
+        "rotation": 55,
+        "bullpen": 53.8
+      },
+      "counts": {
+        "players": 22,
+        "hitters": 13,
+        "rotation": 6,
+        "bullpen": 3
+      },
+      "warnings": []
+    },
+    "Sandcats": {
+      "teamName": "Sandcats",
+      "profileCode": "P0-C2-S6-R0-B5",
+      "levels": {
+        "power": 0,
+        "contact": 2,
+        "speed": 6,
+        "rotation": 0,
+        "bullpen": 5
+      },
+      "bars": {
+        "power": "□□□□□□",
+        "contact": "■■□□□□",
+        "speed": "■■■■■■",
+        "rotation": "□□□□□□",
+        "bullpen": "■■■■■□"
+      },
+      "rawScores": {
+        "power": 47.2,
+        "contact": 58.1,
+        "speed": 73.2,
+        "rotation": 51.3,
+        "bullpen": 68.6
+      },
+      "counts": {
+        "players": 22,
+        "hitters": 13,
+        "rotation": 5,
+        "bullpen": 4
+      },
+      "warnings": []
+    },
+    "Sawteeth": {
+      "teamName": "Sawteeth",
+      "profileCode": "P3-C3-S3-R2-B4",
+      "levels": {
+        "power": 3,
+        "contact": 3,
+        "speed": 3,
+        "rotation": 2,
+        "bullpen": 4
+      },
+      "bars": {
+        "power": "■■■□□□",
+        "contact": "■■■□□□",
+        "speed": "■■■□□□",
+        "rotation": "■■□□□□",
+        "bullpen": "■■■■□□"
+      },
+      "rawScores": {
+        "power": 61.1,
+        "contact": 61.6,
+        "speed": 58.2,
+        "rotation": 57.2,
+        "bullpen": 64.5
+      },
+      "counts": {
+        "players": 22,
+        "hitters": 13,
+        "rotation": 5,
+        "bullpen": 4
+      },
+      "warnings": []
+    },
+    "Sirloins": {
+      "teamName": "Sirloins",
+      "profileCode": "P6-C0-S3-R5-B1",
+      "levels": {
+        "power": 6,
+        "contact": 0,
+        "speed": 3,
+        "rotation": 5,
+        "bullpen": 1
+      },
+      "bars": {
+        "power": "■■■■■■",
+        "contact": "□□□□□□",
+        "speed": "■■■□□□",
+        "rotation": "■■■■■□",
+        "bullpen": "■□□□□□"
+      },
+      "rawScores": {
+        "power": 75.4,
+        "contact": 46.8,
+        "speed": 61.3,
+        "rotation": 65.5,
+        "bullpen": 53.1
+      },
+      "counts": {
+        "players": 22,
+        "hitters": 13,
+        "rotation": 5,
+        "bullpen": 4
+      },
+      "warnings": []
+    },
+    "Wideloads": {
+      "teamName": "Wideloads",
+      "profileCode": "P5-C3-S1-R4-B2",
+      "levels": {
+        "power": 5,
+        "contact": 3,
+        "speed": 1,
+        "rotation": 4,
+        "bullpen": 2
+      },
+      "bars": {
+        "power": "■■■■■□",
+        "contact": "■■■□□□",
+        "speed": "■□□□□□",
+        "rotation": "■■■■□□",
+        "bullpen": "■■□□□□"
+      },
+      "rawScores": {
+        "power": 70.5,
+        "contact": 62.1,
+        "speed": 53,
+        "rotation": 63.5,
+        "bullpen": 56.6
+      },
+      "counts": {
+        "players": 22,
+        "hitters": 13,
+        "rotation": 5,
+        "bullpen": 4
+      },
+      "warnings": []
+    },
+    "Wild Pigs": {
+      "teamName": "Wild Pigs",
+      "profileCode": "P4-C0-S5-R3-B4",
+      "levels": {
+        "power": 4,
+        "contact": 0,
+        "speed": 5,
+        "rotation": 3,
+        "bullpen": 4
+      },
+      "bars": {
+        "power": "■■■■□□",
+        "contact": "□□□□□□",
+        "speed": "■■■■■□",
+        "rotation": "■■■□□□",
+        "bullpen": "■■■■□□"
+      },
+      "rawScores": {
+        "power": 66.1,
+        "contact": 48.8,
+        "speed": 68.4,
+        "rotation": 60.6,
+        "bullpen": 67.4
+      },
+      "counts": {
+        "players": 22,
+        "hitters": 13,
+        "rotation": 6,
+        "bullpen": 3
+      },
+      "warnings": []
+    }
+  }
+}
