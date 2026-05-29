@@ -13,6 +13,19 @@ interface SyncModalProps {
   onClose: () => void;
 }
 
+const DIAGNOSTICS_TIMEOUT_MS = 15_000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId !== null) clearTimeout(timeoutId);
+  });
+}
+
 export function SyncModal({ isOpen, onClose }: SyncModalProps) {
   const { user, isAuthenticated, isLoading: authLoading, error: authError, signIn, signOut } = useAuth();
   const sync = useSyncStatus();
@@ -165,7 +178,11 @@ function SyncControls({
     setOperationError(null);
     setDiagnosticsLoading(true);
     try {
-      setDiagnostics(await syncEngine.getDiagnostics());
+      setDiagnostics(await withTimeout(
+        syncEngine.getDiagnostics(),
+        DIAGNOSTICS_TIMEOUT_MS,
+        'Sync diagnostics timed out. Close and reopen Cloud Sync, or use Upload/Download if you know which side should win.',
+      ));
     } catch (error) {
       setOperationError(error instanceof Error ? error.message : 'Diagnostics failed');
     } finally {

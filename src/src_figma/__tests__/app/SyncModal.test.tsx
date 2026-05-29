@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { SyncModal, SyncStatusIcon } from "../../app/components/SyncModal";
 
@@ -68,6 +68,7 @@ function matchedDiagnostics() {
 
 describe("SyncModal diagnostics status", () => {
   beforeEach(() => {
+    vi.useRealTimers();
     mocks.getDiagnostics.mockReset();
     mocks.syncStatus.state = "idle";
     mocks.syncStatus.pendingCount = 0;
@@ -75,6 +76,10 @@ describe("SyncModal diagnostics status", () => {
     mocks.syncStatus.lastPullAt = 0;
     mocks.syncStatus.replaceCloudWithLocal = mocks.replaceCloudWithLocal;
     mocks.syncStatus.replaceLocalWithCloud = mocks.replaceLocalWithCloud;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   test("does not show SYNCED when diagnostics contain a mismatched store without warnings", async () => {
@@ -146,6 +151,23 @@ describe("SyncModal diagnostics status", () => {
     expect(await screen.findByText("SYNC ISSUES")).toBeInTheDocument();
     expect(screen.queryByText("SYNCED")).not.toBeInTheDocument();
     expect(screen.getByText("Freshness: stale")).toBeInTheDocument();
+  });
+
+  test("surfaces a timeout instead of spinning forever when diagnostics stall", async () => {
+    vi.useFakeTimers();
+    mocks.getDiagnostics.mockReturnValue(new Promise(() => undefined));
+
+    render(<SyncModal isOpen onClose={vi.fn()} />);
+
+    expect(screen.getByText("CHECKING SYNC DATA")).toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+    });
+
+    expect(screen.getByText("SYNC ISSUES")).toBeInTheDocument();
+    expect(screen.queryByText("CHECKING SYNC DATA")).not.toBeInTheDocument();
+    expect(screen.getByText(/Sync diagnostics timed out/i)).toBeInTheDocument();
   });
 
   test("header sync icon is yellow while writes are pending", () => {
