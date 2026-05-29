@@ -13,6 +13,11 @@ import {
   type FranchiseFarmRecord,
 } from "../../../utils/franchiseFarmStorage";
 import { getSeasonIdForScope } from "../../../utils/franchisePersistenceContract";
+import {
+  getTransactionsByFranchiseSeason,
+  type Mode2V1TransactionType,
+  type TransactionLogEntry,
+} from "../../../utils/transactionStorage";
 import { analyzeFranchiseTeamRoster } from "../../../utils/rosterAnalyzerFranchiseAdapter";
 import type {
   LineupSlot,
@@ -53,6 +58,11 @@ const EMPTY_STATS_DATA: { name: string; pos: string; war: number; pwar: number; 
 const FRANCHISE_FIELD_POSITIONS: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF'];
 const FRANCHISE_PITCHER_POSITIONS = new Set<Position>(['SP', 'RP', 'CP', 'SP/RP', 'P', 'TWO-WAY']);
 const FRANCHISE_ROTATION_POSITIONS = new Set<Position>(['SP', 'SP/RP']);
+const FRANCHISE_TEAM_HUB_HISTORY_TYPES = new Set<Mode2V1TransactionType>([
+  'trade',
+  'call_up',
+  'send_down',
+]);
 
 // Helper to convert OffseasonPlayer to roster format
 function convertToRosterItem(player: OffseasonPlayer) {
@@ -211,6 +221,89 @@ function formatFarmSalary(player: Player): string {
 function formatFarmOptionDates(optionDates: string[]): string {
   if (optionDates.length === 0) return 'None';
   return optionDates.map((date) => date.slice(0, 10)).join(', ');
+}
+
+function formatTeamHubTransactionTimestamp(timestamp: string): string {
+  const parsed = new Date(timestamp);
+  if (Number.isNaN(parsed.getTime())) return timestamp;
+  return parsed.toLocaleString();
+}
+
+function transactionDataString(entry: TransactionLogEntry, key: string): string | undefined {
+  const value = entry.data?.[key];
+  return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
+}
+
+function transactionDataStrings(entry: TransactionLogEntry, key: string): string[] {
+  const value = entry.data?.[key];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : [];
+}
+
+function transactionDataObjects(entry: TransactionLogEntry, key: string): Record<string, unknown>[] {
+  const value = entry.data?.[key];
+  return Array.isArray(value)
+    ? value.filter((item): item is Record<string, unknown> => item != null && typeof item === 'object')
+    : [];
+}
+
+function formatTeamHubTransactionType(type: TransactionLogEntry['type']): string {
+  return String(type).replaceAll('_', ' ').toUpperCase();
+}
+
+function describeTeamHubTransactionPlayers(entry: TransactionLogEntry): string {
+  if (entry.type === 'trade') {
+    const movedPlayers = [
+      ...transactionDataObjects(entry, 'sourcePlayers'),
+      ...transactionDataObjects(entry, 'targetPlayers'),
+    ].map((row) => {
+      const playerId = typeof row.playerId === 'string' ? row.playerId : '';
+      const playerName = typeof row.playerName === 'string' && row.playerName.trim().length > 0
+        ? row.playerName
+        : playerId;
+      const rosterStatus = typeof row.rosterStatus === 'string' ? row.rosterStatus : 'UNKNOWN';
+      const previousTeamId = typeof row.previousTeamId === 'string'
+        ? row.previousTeamId
+        : transactionDataString(entry, 'sourceTeamId');
+      const newTeamId = typeof row.newTeamId === 'string'
+        ? row.newTeamId
+        : transactionDataString(entry, 'targetTeamId');
+      const movement = previousTeamId || newTeamId
+        ? ` ${previousTeamId ?? 'UNKNOWN'} -> ${newTeamId ?? 'UNKNOWN'}`
+        : '';
+      return `${playerName || playerId} (${playerId || 'unknown-player'}, ${rosterStatus})${movement}`;
+    });
+    if (movedPlayers.length > 0) return movedPlayers.join(' / ');
+  }
+
+  const playerName = transactionDataString(entry, 'playerName');
+  const playerId = transactionDataString(entry, 'playerId');
+  const playerIds = transactionDataStrings(entry, 'playerIds');
+  if (playerName && playerId) return `${playerName} (${playerId})`;
+  if (playerId) return playerId;
+  return playerIds.join(', ') || 'No player ids recorded';
+}
+
+function describeTeamHubTransactionTeams(entry: TransactionLogEntry): string {
+  const sourceTeamId = transactionDataString(entry, 'sourceTeamId') ?? transactionDataString(entry, 'oldTeam');
+  const targetTeamId = transactionDataString(entry, 'targetTeamId') ?? transactionDataString(entry, 'newTeam');
+  if (sourceTeamId || targetTeamId) return `${sourceTeamId ?? 'UNKNOWN'} -> ${targetTeamId ?? 'UNKNOWN'}`;
+  return transactionDataString(entry, 'teamId') ?? 'UNKNOWN';
+}
+
+function describeTeamHubTransactionStatuses(entry: TransactionLogEntry): string {
+  if (entry.type === 'trade') {
+    const movedFarm = transactionDataStrings(entry, 'movedFarmPlayerIds');
+    return movedFarm.length > 0
+      ? `Mixed MLB/FARM trade; farm moved: ${movedFarm.join(', ')}`
+      : 'Player ids retained across teams';
+  }
+
+  const source = transactionDataString(entry, 'sourceRosterStatus');
+  const target = transactionDataString(entry, 'targetRosterStatus');
+  if (source || target) return `${source ?? 'UNKNOWN'} -> ${target ?? 'UNKNOWN'}`;
+  return 'Status not recorded';
 }
 
 function convertFranchisePlayerToRosterItem(player: Player) {
@@ -597,6 +690,9 @@ export function TeamHubContent() {
   const [franchiseAllPlayers, setFranchiseAllPlayers] = useState<Player[]>([]);
   const [franchiseRosterPlayers, setFranchiseRosterPlayers] = useState<Player[]>([]);
   const [franchiseFarmRecords, setFranchiseFarmRecords] = useState<FranchiseFarmRecord[]>([]);
+  const [franchiseTransactionHistory, setFranchiseTransactionHistory] = useState<TransactionLogEntry[]>([]);
+  const [transactionHistoryLoading, setTransactionHistoryLoading] = useState(false);
+  const [transactionHistoryError, setTransactionHistoryError] = useState<string | null>(null);
   const [lineupMode, setLineupMode] = useState<"DH" | "NO_DH">("NO_DH");
   const [manualLineupSlots, setManualLineupSlots] = useState<LineupSlot[]>([]);
   const [manualRotationIds, setManualRotationIds] = useState<string[]>([]);
@@ -780,6 +876,53 @@ export function TeamHubContent() {
       cancelled = true;
     };
   }, [franchiseId, franchiseLeagueId, seasonId, selectedTeamId]);
+
+  useEffect(() => {
+    if (!franchiseId || !seasonId) {
+      setFranchiseTransactionHistory([]);
+      setTransactionHistoryLoading(false);
+      setTransactionHistoryError(null);
+      return;
+    }
+
+    let cancelled = false;
+    const activeFranchiseId = franchiseId;
+    const activeSeasonId = seasonId;
+
+    async function loadFranchiseTransactionHistory() {
+      setTransactionHistoryLoading(true);
+      setTransactionHistoryError(null);
+      try {
+        const entries = await getTransactionsByFranchiseSeason(activeFranchiseId, activeSeasonId);
+        if (cancelled) return;
+        setFranchiseTransactionHistory(
+          entries
+            .filter((entry) =>
+              entry.franchiseId === activeFranchiseId &&
+              entry.seasonId === activeSeasonId &&
+              (entry.statsScopeId ?? activeSeasonId) === activeSeasonId &&
+              FRANCHISE_TEAM_HUB_HISTORY_TYPES.has(entry.type as Mode2V1TransactionType) &&
+              !entry.undone,
+            )
+            .sort((left, right) => right.timestamp.localeCompare(left.timestamp)),
+        );
+      } catch (err) {
+        if (!cancelled) {
+          setFranchiseTransactionHistory([]);
+          setTransactionHistoryError(err instanceof Error ? err.message : 'Failed to load franchise transaction history.');
+        }
+      } finally {
+        if (!cancelled) {
+          setTransactionHistoryLoading(false);
+        }
+      }
+    }
+
+    void loadFranchiseTransactionHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, [franchiseId, seasonId]);
 
   const analyzerReport = useMemo(() => {
     if (!franchiseId || !selectedTeamId || !franchiseTeam) return null;
@@ -1290,6 +1433,12 @@ export function TeamHubContent() {
 
           <FranchiseRosterAnalyzerPanel report={analyzerReport} />
 
+          <FranchiseTransactionHistoryPanel
+            transactions={franchiseTransactionHistory}
+            isLoading={transactionHistoryLoading}
+            error={transactionHistoryError}
+          />
+
           <section
             aria-label="Franchise lineup and rotation manager"
             className="mb-4 border-[4px] border-[#4A6844] bg-[#5A8352] p-3"
@@ -1569,6 +1718,14 @@ export function TeamHubContent() {
             )}
           </div>
           
+          <div
+            data-testid="franchise-v1-roster-value-gate"
+            className="mb-3 border-2 border-[#4A6844] bg-[#3F563F] p-2 text-[8px] text-[#E8E8D8]/65"
+          >
+            Morale, True Value, and value-delta columns are deferred until those franchise calculations are canonical.
+            The v1 roster table shows stable identity, grade, contract, fitness, and lineup controls only.
+          </div>
+
           <div className="overflow-x-auto">
             <table aria-label="MLB roster table" className="w-full text-[9px]">
               <thead>
@@ -1582,17 +1739,8 @@ export function TeamHubContent() {
                   <th className="text-center py-2 px-2 text-[#E8E8D8]/70 cursor-pointer hover:text-[#E8E8D8]" onClick={() => handleRosterSort("grade")}>
                     GRADE {rosterSortColumn === "grade" && (rosterSortDirection === "asc" ? "↑" : "↓")}
                   </th>
-                  <th className="text-center py-2 px-2 text-[#E8E8D8]/70 cursor-pointer hover:text-[#E8E8D8]" onClick={() => handleRosterSort("morale")}>
-                    MORALE {rosterSortColumn === "morale" && (rosterSortDirection === "asc" ? "↑" : "↓")}
-                  </th>
                   <th className="text-center py-2 px-2 text-[#E8E8D8]/70 cursor-pointer hover:text-[#E8E8D8]" onClick={() => handleRosterSort("contract")}>
                     CONTRACT {rosterSortColumn === "contract" && (rosterSortDirection === "asc" ? "↑" : "↓")}
-                  </th>
-                  <th className="text-center py-2 px-2 text-[#E8E8D8]/70 cursor-pointer hover:text-[#E8E8D8]" onClick={() => handleRosterSort("trueValue")}>
-                    TRUE VAL {rosterSortColumn === "trueValue" && (rosterSortDirection === "asc" ? "↑" : "↓")}
-                  </th>
-                  <th className="text-center py-2 px-2 text-[#E8E8D8]/70 cursor-pointer hover:text-[#E8E8D8]" onClick={() => handleRosterSort("netDiff")}>
-                    NET DIFF {rosterSortColumn === "netDiff" && (rosterSortDirection === "asc" ? "↑" : "↓")}
                   </th>
                   <th className="text-center py-2 px-2 text-[#E8E8D8]/70 cursor-pointer hover:text-[#E8E8D8]" onClick={() => handleRosterSort("fitness")}>
                     FITNESS {rosterSortColumn === "fitness" && (rosterSortDirection === "asc" ? "↑" : "↓")}
@@ -1603,24 +1751,13 @@ export function TeamHubContent() {
               <tbody>
                 {getSortedRoster().map((player, idx) => (
                   <tr key={idx} className={`border-b border-[#4A6844]/30 ${idx % 2 === 0 ? 'bg-[#5A8352]/20' : ''}`}>
-                    <td className="py-2 px-2 text-[#E8E8D8]">{player.name}</td>
-                    <td className="py-2 px-2 text-[#E8E8D8] text-center">{player.position}</td>
-                    <td className="py-2 px-2 text-[#E8E8D8] text-center font-bold">{player.grade}</td>
-                    <td className="py-2 px-2 text-center">
-                      <span className={typeof player.morale === 'number' ? (player.morale >= 85 ? "text-[#00DD00]" : player.morale >= 70 ? "text-[#E8E8D8]" : "text-[#DD0000]") : "text-[#E8E8D8]/50"}>
-                        {player.morale}
-                      </span>
-                    </td>
-                    <td className="py-2 px-2 text-[#E8E8D8] text-center">{player.contract}</td>
-                    <td className="py-2 px-2 text-[#E8E8D8]/50 text-center">{player.trueValue}</td>
-                    <td className="py-2 px-2 text-center">
-                      <span className={typeof player.netDiff === 'string' && player.netDiff.startsWith("+") ? "text-[#00DD00]" : player.netDiff === '—' ? "text-[#E8E8D8]/50" : "text-[#DD0000]"}>
-                        {player.netDiff}
-                      </span>
-                    </td>
-                    <td className="py-2 px-2 text-center">
-                      <span className={typeof player.fitness === 'number' ? (player.fitness >= 90 ? "text-[#00DD00]" : player.fitness >= 80 ? "text-[#E8E8D8]" : "text-[#DD0000]") : "text-[#E8E8D8]/50"}>
-                        {player.fitness}
+	                    <td className="py-2 px-2 text-[#E8E8D8]">{player.name}</td>
+	                    <td className="py-2 px-2 text-[#E8E8D8] text-center">{player.position}</td>
+	                    <td className="py-2 px-2 text-[#E8E8D8] text-center font-bold">{player.grade}</td>
+	                    <td className="py-2 px-2 text-[#E8E8D8] text-center">{player.contract}</td>
+	                    <td className="py-2 px-2 text-center">
+	                      <span className={typeof player.fitness === 'number' ? (player.fitness >= 90 ? "text-[#00DD00]" : player.fitness >= 80 ? "text-[#E8E8D8]" : "text-[#DD0000]") : "text-[#E8E8D8]/50"}>
+	                        {player.fitness}
                       </span>
                     </td>
                     <td className="py-2 px-2 text-center">
@@ -1798,11 +1935,95 @@ interface FranchiseRosterAnalyzerPanelProps {
   report: RosterAnalyzerReport | null;
 }
 
+interface FranchiseTransactionHistoryPanelProps {
+  transactions: TransactionLogEntry[];
+  isLoading: boolean;
+  error: string | null;
+}
+
 interface FranchiseFarmVisibilityPanelProps {
   farmPlayers: Player[];
   farmRecordByPlayerId: Map<string, FranchiseFarmRecord>;
   missingRecordPlayers: Player[];
   orphanFarmRecords: FranchiseFarmRecord[];
+}
+
+function FranchiseTransactionHistoryPanel({
+  transactions,
+  isLoading,
+  error,
+}: FranchiseTransactionHistoryPanelProps) {
+  return (
+    <section
+      role="region"
+      aria-label="Read-only franchise transaction history"
+      className="mb-4 border-[4px] border-[#4A6844] bg-[#3F563F] p-3"
+    >
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-[9px] font-bold text-[#C4A853]">READ-ONLY TRANSACTION HISTORY</div>
+          <div className="mt-1 text-[8px] text-[#E8E8D8]/60">
+            Roster & Trades remains the canonical mutation surface. This panel only reads scoped trades, call-ups, and send-downs.
+          </div>
+        </div>
+        <div className="border-2 border-[#4A6844] bg-[#5A8352] px-2 py-1 text-[8px] text-[#E8E8D8]">
+          {transactions.length} LOGGED
+        </div>
+      </div>
+
+      {isLoading && (
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-3 text-[8px] text-[#E8E8D8]/65">
+          Loading scoped transaction history...
+        </div>
+      )}
+
+      {!isLoading && error && (
+        <div className="border-2 border-[#C4A853]/50 bg-[#5A3F3F] p-3 text-[8px] text-[#FFD6D6]">
+          {error}
+        </div>
+      )}
+
+      {!isLoading && !error && transactions.length === 0 && (
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-3 text-[8px] text-[#E8E8D8]/65">
+          No scoped trade, call-up, or send-down rows have been logged for this franchise season.
+        </div>
+      )}
+
+      {!isLoading && !error && transactions.length > 0 && (
+        <div className="space-y-2">
+          {transactions.map((entry) => (
+            <div key={entry.id} className="border-2 border-[#4A6844] bg-[#4A6844] p-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-[9px] font-bold text-[#E8E8D8]">{formatTeamHubTransactionType(entry.type)}</div>
+                  <div className="mt-1 text-[7px] text-[#E8E8D8]/55">
+                    {entry.id} / {formatTeamHubTransactionTimestamp(entry.timestamp)}
+                  </div>
+                </div>
+                <div className="border-2 border-[#5A8352] px-2 py-1 text-[7px] font-bold text-[#C4A853]">
+                  {entry.phase}
+                </div>
+              </div>
+              <div className="mt-3 grid gap-2 text-[8px] text-[#E8E8D8]/75 md:grid-cols-3">
+                <div>
+                  <div className="text-[#E8E8D8]/50">Players</div>
+                  <div>{describeTeamHubTransactionPlayers(entry)}</div>
+                </div>
+                <div>
+                  <div className="text-[#E8E8D8]/50">Teams</div>
+                  <div>{describeTeamHubTransactionTeams(entry)}</div>
+                </div>
+                <div>
+                  <div className="text-[#E8E8D8]/50">Status</div>
+                  <div>{describeTeamHubTransactionStatuses(entry)}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
 }
 
 function FranchiseFarmVisibilityPanel({

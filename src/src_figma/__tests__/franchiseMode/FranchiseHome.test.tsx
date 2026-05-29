@@ -281,6 +281,17 @@ describe('FranchiseHome Component', () => {
       expect(screen.getByTestId('museum-content')).toBeInTheDocument();
     });
 
+    test('next-game preview gates deferred story and head-to-head modules', () => {
+      render(<FranchiseHome />);
+
+      expect(screen.getByTestId('franchise-v1-next-game-preview-gate')).toHaveTextContent(
+        'Next-game story and head-to-head preview modules are deferred',
+      );
+      expect(screen.queryByRole('button', { name: /BEAT WRITERS/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /HEAD-TO-HEAD HISTORY/i })).not.toBeInTheDocument();
+      expect(screen.queryByText(/FOLLOW BEAT WRITERS/i)).not.toBeInTheDocument();
+    });
+
     test('playoff completed game chips map scores by actual away/home teams, not seed order', () => {
       const series = {
         id: 'series-score-map',

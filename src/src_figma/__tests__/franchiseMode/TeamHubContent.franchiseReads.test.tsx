@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   mockGetFranchiseTeam: vi.fn(),
   mockGetAllFranchisePlayers: vi.fn(),
   mockGetFranchiseFarmRoster: vi.fn(),
+  mockGetTransactionsByFranchiseSeason: vi.fn(),
   mockSaveFranchiseTeam: vi.fn(),
 }));
 
@@ -31,6 +32,10 @@ vi.mock('../../../utils/franchisePlayerStorage', () => ({
 
 vi.mock('../../../utils/franchiseFarmStorage', () => ({
   getFranchiseFarmRoster: mocks.mockGetFranchiseFarmRoster,
+}));
+
+vi.mock('../../../utils/transactionStorage', () => ({
+  getTransactionsByFranchiseSeason: mocks.mockGetTransactionsByFranchiseSeason,
 }));
 
 import { TeamHubContent } from '../../app/components/TeamHubContent';
@@ -238,6 +243,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
         lastModified: '2026-01-01T00:00:00.000Z',
       },
     ]);
+    mocks.mockGetTransactionsByFranchiseSeason.mockResolvedValue([]);
     mocks.mockSaveFranchiseTeam.mockImplementation(async (_franchiseId: string, team: unknown) => team);
   });
 
@@ -251,7 +257,14 @@ describe('TeamHubContent franchise-owned visible reads', () => {
 
     await waitFor(() => expect(screen.getByText('C. Player')).toBeInTheDocument());
     expect(screen.queryByText('G. Template')).not.toBeInTheDocument();
-    expect(within(screen.getByRole('table', { name: /MLB roster table/i })).queryByText('Farm Hidden')).not.toBeInTheDocument();
+    const mlbTable = screen.getByRole('table', { name: /MLB roster table/i });
+    expect(within(mlbTable).queryByText('Farm Hidden')).not.toBeInTheDocument();
+    expect(within(mlbTable).queryByText('MORALE')).not.toBeInTheDocument();
+    expect(within(mlbTable).queryByText('TRUE VAL')).not.toBeInTheDocument();
+    expect(within(mlbTable).queryByText('NET DIFF')).not.toBeInTheDocument();
+    expect(screen.getByTestId('franchise-v1-roster-value-gate')).toHaveTextContent(
+      'Morale, True Value, and value-delta columns are deferred',
+    );
     expect(await screen.findByText('READ-ONLY ROSTER ANALYZER')).toBeInTheDocument();
     expect(screen.getByText('MLB 1')).toBeInTheDocument();
     expect(screen.getByText('FARM 1')).toBeInTheDocument();
@@ -294,6 +307,179 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(farmRegion).queryByText(/Volatility/i)).not.toBeInTheDocument();
     expect(within(farmRegion).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
     expect(within(farmRegion).queryByText(/trueGrade/i)).not.toBeInTheDocument();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
+  test('renders scoped transaction rows read-only outside the transaction desk', async () => {
+    mocks.mockGetTransactionsByFranchiseSeason.mockResolvedValueOnce([
+      {
+        id: 'txn-call-up-visible',
+        timestamp: '2026-05-28T12:00:00.000Z',
+        season: 2,
+        gameNumber: null,
+        phase: 'REGULAR_SEASON',
+        franchiseId: 'franchise-1',
+        seasonId: 'franchise-1-season-2',
+        statsScopeId: 'franchise-1-season-2',
+        type: 'call_up',
+        actor: 'USER',
+        data: {
+          playerId: 'farm-player',
+          playerName: 'Farm Hidden',
+          sourceTeamId: 'team-1',
+          targetTeamId: 'team-1',
+          sourceRosterStatus: 'FARM',
+          targetRosterStatus: 'MLB',
+        },
+        previousState: null,
+        undone: false,
+        undoneAt: null,
+        undoneBy: null,
+      },
+      {
+        id: 'txn-send-down-visible',
+        timestamp: '2026-05-28T13:00:00.000Z',
+        season: 2,
+        gameNumber: null,
+        phase: 'REGULAR_SEASON',
+        franchiseId: 'franchise-1',
+        seasonId: 'franchise-1-season-2',
+        statsScopeId: 'franchise-1-season-2',
+        type: 'send_down',
+        actor: 'USER',
+        data: {
+          playerId: 'copied-player',
+          playerName: 'Copied Player',
+          sourceTeamId: 'team-1',
+          targetTeamId: 'team-1',
+          sourceRosterStatus: 'MLB',
+          targetRosterStatus: 'FARM',
+        },
+        previousState: null,
+        undone: false,
+        undoneAt: null,
+        undoneBy: null,
+      },
+      {
+        id: 'txn-cross-franchise',
+        timestamp: '2026-05-28T14:00:00.000Z',
+        season: 2,
+        gameNumber: null,
+        phase: 'REGULAR_SEASON',
+        franchiseId: 'franchise-2',
+        seasonId: 'franchise-1-season-2',
+        statsScopeId: 'franchise-1-season-2',
+        type: 'call_up',
+        actor: 'USER',
+        data: { playerName: 'Cross Franchise' },
+        previousState: null,
+        undone: false,
+        undoneAt: null,
+        undoneBy: null,
+      },
+      {
+        id: 'txn-orphan',
+        timestamp: '2026-05-28T15:00:00.000Z',
+        season: 2,
+        gameNumber: null,
+        phase: 'REGULAR_SEASON',
+        seasonId: 'franchise-1-season-2',
+        statsScopeId: 'franchise-1-season-2',
+        type: 'send_down',
+        actor: 'USER',
+        data: { playerName: 'Orphan Row' },
+        previousState: null,
+        undone: false,
+        undoneAt: null,
+        undoneBy: null,
+      },
+      {
+        id: 'txn-wrong-scope',
+        timestamp: '2026-05-28T16:00:00.000Z',
+        season: 2,
+        gameNumber: null,
+        phase: 'REGULAR_SEASON',
+        franchiseId: 'franchise-1',
+        seasonId: 'franchise-1-season-2',
+        statsScopeId: 'other-scope',
+        type: 'call_up',
+        actor: 'USER',
+        data: { playerName: 'Wrong Scope' },
+        previousState: null,
+        undone: false,
+        undoneAt: null,
+        undoneBy: null,
+      },
+    ]);
+
+    render(<TeamHubContent />);
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+
+    const historyRegion = await screen.findByRole('region', { name: /Read-only franchise transaction history/i });
+    expect(await within(historyRegion).findByText(/CALL UP/i)).toBeInTheDocument();
+    expect(within(historyRegion).getByText(/SEND DOWN/i)).toBeInTheDocument();
+    expect(within(historyRegion).getByText(/Farm Hidden \(farm-player\)/i)).toBeInTheDocument();
+    expect(within(historyRegion).getByText(/Copied Player \(copied-player\)/i)).toBeInTheDocument();
+    expect(within(historyRegion).getByText(/FARM -> MLB/i)).toBeInTheDocument();
+    expect(within(historyRegion).getByText(/MLB -> FARM/i)).toBeInTheDocument();
+    expect(within(historyRegion).queryByText(/Cross Franchise/i)).not.toBeInTheDocument();
+    expect(within(historyRegion).queryByText(/Orphan Row/i)).not.toBeInTheDocument();
+    expect(within(historyRegion).queryByText(/Wrong Scope/i)).not.toBeInTheDocument();
+    expect(within(historyRegion).queryByRole('button')).not.toBeInTheDocument();
+    expect(mocks.mockGetTransactionsByFranchiseSeason).toHaveBeenCalledWith('franchise-1', 'franchise-1-season-2');
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
+  test('renders trade history by playerId across team changes', async () => {
+    mocks.mockGetTransactionsByFranchiseSeason.mockResolvedValueOnce([
+      {
+        id: 'txn-trade-player-id',
+        timestamp: '2026-05-28T12:00:00.000Z',
+        season: 2,
+        gameNumber: null,
+        phase: 'REGULAR_SEASON',
+        franchiseId: 'franchise-1',
+        seasonId: 'franchise-1-season-2',
+        statsScopeId: 'franchise-1-season-2',
+        type: 'trade',
+        actor: 'USER',
+        data: {
+          sourceTeamId: 'old-team',
+          targetTeamId: 'team-1',
+          sourcePlayers: [
+            {
+              playerId: 'copied-player',
+              playerName: 'Copied Player',
+              previousTeamId: 'old-team',
+              newTeamId: 'team-1',
+              rosterStatus: 'MLB',
+            },
+          ],
+          targetPlayers: [
+            {
+              playerId: 'farm-player',
+              playerName: 'Farm Hidden',
+              previousTeamId: 'team-1',
+              newTeamId: 'old-team',
+              rosterStatus: 'FARM',
+            },
+          ],
+        },
+        previousState: null,
+        undone: false,
+        undoneAt: null,
+        undoneBy: null,
+      },
+    ]);
+
+    render(<TeamHubContent />);
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+
+    const historyRegion = await screen.findByRole('region', { name: /Read-only franchise transaction history/i });
+    expect(await within(historyRegion).findByText(/^TRADE$/i)).toBeInTheDocument();
+    expect(within(historyRegion).getByText(/Copied Player \(copied-player, MLB\) old-team -> team-1/i)).toBeInTheDocument();
+    expect(within(historyRegion).getByText(/Farm Hidden \(farm-player, FARM\) team-1 -> old-team/i)).toBeInTheDocument();
+    expect(within(historyRegion).getByText(/Player ids retained across teams/i)).toBeInTheDocument();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
   });
 

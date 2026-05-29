@@ -2940,8 +2940,6 @@ function GameDayContent({
   const navigate = useNavigate();
   const { franchiseId } = useParams<{ franchiseId: string }>();
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
-  const [showHeadToHead, setShowHeadToHead] = useState(false);
-  const [showBeatWriters, setShowBeatWriters] = useState(false);
   const [showAwayTeamStats, setShowAwayTeamStats] = useState(false);
   const [showHomeTeamStats, setShowHomeTeamStats] = useState(false);
 
@@ -3763,52 +3761,12 @@ function GameDayContent({
 
       {hasNextGame && (
         <>
-          {/* Beat writers button */}
-          <div>
-            <button
-              onClick={() => setShowBeatWriters(!showBeatWriters)}
-              className="bg-[#6B9462] border-[5px] border-[#4A6844] py-3 px-6 text-[10px] text-[#E8E8D8] hover:bg-[#5A8352] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] flex items-center gap-2"
-            >
-              <span>BEAT WRITERS</span>
-              {showBeatWriters ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            </button>
+          <div
+            data-testid="franchise-v1-next-game-preview-gate"
+            className="bg-[#6B9462] border-[5px] border-[#4A6844] p-4 text-[9px] text-[#E8E8D8]/70"
+          >
+            Next-game story and head-to-head preview modules are deferred in internal v1. Use Schedule, Team Hub, and Game Detail for canonical game records.
           </div>
-
-          {/* Beat writers expandable section — empty state (no narrative engine yet) */}
-          {showBeatWriters && (
-            <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4">
-              <div className="text-[8px] text-[#E8E8D8] mb-3">▶ LATEST FROM BEAT WRITERS</div>
-              <div className="text-center py-6">
-                <div className="text-[10px] text-[#E8E8D8]/50">No beat writer stories yet</div>
-                <div className="text-[8px] text-[#E8E8D8]/30 mt-1">Stories will appear as the season progresses</div>
-              </div>
-              <div className="mt-3 text-[8px] text-[#E8E8D8] text-center">
-                FOLLOW BEAT WRITERS ON X FOR REAL-TIME UPDATES
-              </div>
-            </div>
-          )}
-
-          {/* Head-to-head button */}
-          <div>
-            <button
-              onClick={() => setShowHeadToHead(!showHeadToHead)}
-              className="bg-[#6B9462] border-[5px] border-[#4A6844] py-3 px-6 text-[10px] text-[#E8E8D8] hover:bg-[#5A8352] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] flex items-center gap-2"
-            >
-              <span>HEAD-TO-HEAD HISTORY</span>
-              {showHeadToHead ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            </button>
-          </div>
-
-          {/* Head-to-head expandable section — empty state (needs completedGames query) */}
-          {showHeadToHead && (
-            <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4">
-              <div className="text-[8px] text-[#E8E8D8] mb-3">▶ RECENT MATCHUPS ({awayTeamId.toUpperCase()} vs {homeTeamId.toUpperCase()})</div>
-              <div className="text-center py-6">
-                <div className="text-[10px] text-[#E8E8D8]/50">No head-to-head history yet</div>
-                <div className="text-[8px] text-[#E8E8D8]/30 mt-1">Results will appear after these teams play each other</div>
-              </div>
-            </div>
-          )}
 
           {/* Team status */}
           <div className="grid grid-cols-2 gap-4">
