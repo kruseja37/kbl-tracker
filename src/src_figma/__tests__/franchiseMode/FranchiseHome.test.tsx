@@ -180,6 +180,7 @@ vi.mock('@/hooks/usePlayoffData', () => ({
 }));
 
 // Import component after all mocks are set up
+import { usePlayoffData } from '@/hooks/usePlayoffData';
 import { FranchiseHome } from '../../app/pages/FranchiseHome';
 
 // ============================================
@@ -278,6 +279,79 @@ describe('FranchiseHome Component', () => {
         'global and not franchise-scoped',
       );
       expect(screen.getByTestId('museum-content')).toBeInTheDocument();
+    });
+
+    test('playoff completed game chips map scores by actual away/home teams, not seed order', () => {
+      const series = {
+        id: 'series-score-map',
+        playoffId: 'playoff-1',
+        round: 1,
+        roundName: 'Division Series',
+        status: 'COMPLETED' as const,
+        gamesRequired: 2,
+        bestOf: 3,
+        higherSeedWins: 2,
+        lowerSeedWins: 0,
+        winner: 'higher-seed',
+        higherSeed: { seed: 1, teamId: 'higher-seed', teamName: 'Higher Seed' },
+        lowerSeed: { seed: 4, teamId: 'lower-seed', teamName: 'Lower Seed' },
+        games: [
+          {
+            gameNumber: 1,
+            awayTeamId: 'lower-seed',
+            homeTeamId: 'higher-seed',
+            status: 'COMPLETED' as const,
+            result: { awayScore: 3, homeScore: 4, winnerId: 'higher-seed', innings: 9 },
+          },
+          {
+            gameNumber: 2,
+            awayTeamId: 'higher-seed',
+            homeTeamId: 'lower-seed',
+            status: 'COMPLETED' as const,
+            result: { awayScore: 6, homeScore: 5, winnerId: 'higher-seed', innings: 9 },
+          },
+        ],
+        createdAt: 1,
+      };
+      vi.mocked(usePlayoffData).mockReturnValue({
+        playoff: {
+          id: 'playoff-1',
+          seasonNumber: 1,
+          status: 'IN_PROGRESS',
+          teams: [
+            { seed: 1, teamId: 'higher-seed', teamName: 'Higher Seed', league: 'Eastern' },
+            { seed: 4, teamId: 'lower-seed', teamName: 'Lower Seed', league: 'Eastern' },
+          ],
+        },
+        bracketByLeague: {
+          Eastern: [series],
+          Western: [],
+          Championship: null,
+        },
+        completedSeries: [],
+        hasActivePlayoff: true,
+        isLoading: false,
+        error: null,
+        createNewPlayoff: vi.fn(),
+        startPlayoffs: vi.fn(),
+        recordGameResult: vi.fn(),
+        advanceRound: vi.fn(),
+        completePlayoffs: vi.fn(),
+        refresh: vi.fn(),
+        getBattingLeaders: vi.fn(() => []),
+        getPitchingLeaders: vi.fn(() => []),
+      } as ReturnType<typeof usePlayoffData>);
+
+      render(<FranchiseHome />);
+
+      fireEvent.click(screen.getByRole('button', { name: /PLAYOFFS/i }));
+      fireEvent.click(screen.getByRole('button', { name: /BRACKET/i }));
+      fireEvent.click(screen.getByText(/\(1\) Higher Seed/i));
+
+      expect(screen.getByTestId('playoff-game-score-series-score-map-1')).toHaveTextContent('A (4) Lower Seed3');
+      expect(screen.getByTestId('playoff-game-score-series-score-map-1')).toHaveTextContent('H (1) Higher Seed4');
+      expect(screen.getByTestId('playoff-game-score-series-score-map-2')).toHaveTextContent('A (1) Higher Seed6');
+      expect(screen.getByTestId('playoff-game-score-series-score-map-2')).toHaveTextContent('H (4) Lower Seed5');
     });
   });
 

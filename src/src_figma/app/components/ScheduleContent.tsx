@@ -98,6 +98,41 @@ export function ScheduleContent({
     );
   };
 
+  const isScoreOnlyResult = (game: ScheduledGame) =>
+    game.status === 'COMPLETED' && game.completionSource === 'score-only';
+
+  const hasGameDetailLink = (game: ScheduledGame) =>
+    game.status === 'COMPLETED' && game.completionSource === 'game-tracker' && Boolean(game.gameLogId);
+
+  const renderScoreOnlyBadge = (game: ScheduledGame) => {
+    if (!isScoreOnlyResult(game)) return null;
+    return (
+      <div className="text-[8px] text-[#E8E8D8] bg-[#3F5A3A] px-2 py-1">SCORE ONLY</div>
+    );
+  };
+
+  const renderGameDetailLink = (game: ScheduledGame) => {
+    if (!hasGameDetailLink(game) || !game.gameLogId) return null;
+    return (
+      <a
+        href={`/almanac/games/${game.gameLogId}`}
+        className="text-[8px] text-[#1a1a1a] bg-[#C4A853] border-[2px] border-[#9A7B2C] px-2 py-1 font-bold hover:bg-[#D4B863] transition-colors"
+        onClick={(e) => e.stopPropagation()}
+      >
+        Game Detail
+      </a>
+    );
+  };
+
+  const renderScoreOnlyCopy = (game: ScheduledGame) => {
+    if (!isScoreOnlyResult(game)) return null;
+    return (
+      <div className="mt-2 text-[8px] text-[#E8E8D8]/65">
+        Schedule + standings only; no game archive or player stats.
+      </div>
+    );
+  };
+
   const handleCsvFileSelected = async (file: File | null) => {
     setCsvImportError(null);
     setCsvReview(null);
@@ -486,15 +521,20 @@ export function ScheduleContent({
 
                 return (
                   <div key={game.id} className="bg-[#5A8352] border-[5px] border-[#4A6844] p-3">
-                    <div className="flex items-center justify-between text-[10px] text-[#E8E8D8]/80">
-                      <span>Game {game.gameNumber} │ Day {game.dayNumber} │ {game.awayTeamId === selectedTeam ? "@" : "vs"} {teamName(opponent)} │ {location}</span>
+                  <div className="flex items-center justify-between text-[10px] text-[#E8E8D8]/80">
+                    <span>Game {game.gameNumber} │ Day {game.dayNumber} │ {game.awayTeamId === selectedTeam ? "@" : "vs"} {teamName(opponent)} │ {location}</span>
+                    <div className="flex items-center gap-2">
+                      {renderScoreOnlyBadge(game)}
+                      {renderGameDetailLink(game)}
                       <span className={isWin ? "text-[#00DD00]" : "text-[#DD0000]"}>
                         {isWin ? "W" : "L"} {score}
                       </span>
                     </div>
                   </div>
-                );
-              })}
+                  {renderScoreOnlyCopy(game)}
+                </div>
+              );
+            })}
             </>
           )}
 
@@ -506,9 +546,8 @@ export function ScheduleContent({
                   {game.date || `DAY ${game.dayNumber}`}
                 </div>
                 <div className="text-[8px] text-[#E8E8D8] bg-[#4A6844] px-2 py-1">FINAL</div>
-                {game.completionSource === 'score-only' && (
-                  <div className="text-[8px] text-[#E8E8D8] bg-[#3F5A3A] px-2 py-1">SCORE ONLY</div>
-                )}
+                {renderScoreOnlyBadge(game)}
+                {renderGameDetailLink(game)}
               </div>
               <div className="flex items-center justify-center gap-4">
                 <div className="text-right">
@@ -529,6 +568,7 @@ export function ScheduleContent({
                   <div className="text-[8px] text-[#E8E8D8]/60">(HOME)</div>
                 </div>
               </div>
+              {renderScoreOnlyCopy(game)}
               <div className="text-[8px] text-[#E8E8D8]/60 text-right mt-2">Game {game.gameNumber}</div>
             </div>
           ))}

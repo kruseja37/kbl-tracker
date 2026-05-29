@@ -17,7 +17,7 @@ import { AddGameModal, type GameFormData } from "@/app/components/AddGameModal";
 import { ScheduleContent } from "@/app/components/ScheduleContent";
 import { useFranchiseData, type UseFranchiseDataReturn } from "@/hooks/useFranchiseData";
 import { useScheduleData, type ScheduledGame } from "@/hooks/useScheduleData";
-import { usePlayoffData, type PlayoffPlayerStats } from "@/hooks/usePlayoffData";
+import { usePlayoffData, type PlayoffPlayerStats, type PlayoffSeries, type SeriesGame } from "@/hooks/usePlayoffData";
 import { getHomeFieldPattern, detectClinch } from "../../../engines/playoffEngine";
 import { SimulationOverlay } from "@/app/components/SimulationOverlay";
 import { BatchOperationOverlay, type BatchOperationType } from "@/app/components/BatchOperationOverlay";
@@ -94,6 +94,52 @@ export function useFranchiseDataContext() {
 
 type TabType = "todays-game" | "team" | "schedule" | "standings" | "news" | "leaders" | "rosters" | "allstar" | "museum" | "awards" | "ratings-adj" | "contraction" | "retirements" | "free-agency" | "draft" | "farm-reconciliation" | "chemistry" | "spring-training" | "finalize" | "advance" | "bracket" | "series" | "playoff-stats" | "playoff-leaders";
 type SeasonPhase = "regular" | "playoffs" | "offseason";
+
+function getPlayoffSeriesTeam(series: PlayoffSeries, teamId: string) {
+  if (series.higherSeed.teamId === teamId) return series.higherSeed;
+  if (series.lowerSeed.teamId === teamId) return series.lowerSeed;
+  return null;
+}
+
+function PlayoffGameResultChip({
+  series,
+  game,
+}: {
+  series: PlayoffSeries;
+  game: SeriesGame;
+}) {
+  if (!game.result) return null;
+
+  const awayTeam = getPlayoffSeriesTeam(series, game.awayTeamId);
+  const homeTeam = getPlayoffSeriesTeam(series, game.homeTeamId);
+
+  const renderLine = (
+    label: "A" | "H",
+    team: ReturnType<typeof getPlayoffSeriesTeam>,
+    teamId: string,
+    score: number,
+  ) => (
+    <div className="flex items-center justify-between gap-2">
+      <span className={game.result!.winnerId === teamId ? 'text-[#00DD00] font-bold' : 'text-[#E8E8D8]/70'}>
+        {label} {team ? `(${team.seed}) ${team.teamName}` : teamId}
+      </span>
+      <span className={game.result!.winnerId === teamId ? 'text-[#00DD00] font-bold' : 'text-[#E8E8D8]'}>
+        {score}
+      </span>
+    </div>
+  );
+
+  return (
+    <div
+      className="bg-[#5A8352] p-2 text-[8px]"
+      data-testid={`playoff-game-score-${series.id}-${game.gameNumber}`}
+    >
+      <div className="text-[8px] text-[#E8E8D8]/60 text-center mb-1">G{game.gameNumber}</div>
+      {renderLine("A", awayTeam, game.awayTeamId, game.result.awayScore)}
+      {renderLine("H", homeTeam, game.homeTeamId, game.result.homeScore)}
+    </div>
+  );
+}
 
 const MODE_2_V1_SYNTHETIC_SIM_ENABLED = false;
 const MODE_2_V1_TRANSACTION_UI_ENABLED = true;
@@ -1706,12 +1752,7 @@ export function FranchiseHome() {
                                 <div className="mt-2 pt-2 border-t border-[#E8E8D8]/20">
                                   <div className="grid grid-cols-3 gap-1">
                                     {s.games.filter(g => g.status === 'COMPLETED' && g.result).map(g => (
-                                      <div key={g.gameNumber} className="bg-[#5A8352] p-1 text-center">
-                                        <div className="text-[8px] text-[#E8E8D8]/60">G{g.gameNumber}</div>
-                                        <div className={`text-[9px] font-bold ${g.result!.winnerId === s.higherSeed.teamId ? 'text-[#00DD00]' : 'text-[#E8E8D8]'}`}>
-                                          {g.result!.awayScore}-{g.result!.homeScore}
-                                        </div>
-                                      </div>
+                                      <PlayoffGameResultChip key={g.gameNumber} series={s} game={g} />
                                     ))}
                                   </div>
                                 </div>
@@ -1803,12 +1844,7 @@ export function FranchiseHome() {
                                 <div className="mt-2 pt-2 border-t border-[#E8E8D8]/20">
                                   <div className="grid grid-cols-3 gap-1">
                                     {s.games.filter(g => g.status === 'COMPLETED' && g.result).map(g => (
-                                      <div key={g.gameNumber} className="bg-[#5A8352] p-1 text-center">
-                                        <div className="text-[8px] text-[#E8E8D8]/60">G{g.gameNumber}</div>
-                                        <div className={`text-[9px] font-bold ${g.result!.winnerId === s.higherSeed.teamId ? 'text-[#00DD00]' : 'text-[#E8E8D8]'}`}>
-                                          {g.result!.awayScore}-{g.result!.homeScore}
-                                        </div>
-                                      </div>
+                                      <PlayoffGameResultChip key={g.gameNumber} series={s} game={g} />
                                     ))}
                                   </div>
                                 </div>
@@ -1989,18 +2025,7 @@ export function FranchiseHome() {
                                 <div className="text-[10px] text-[#E8E8D8]/60 mb-2">GAME RESULTS</div>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
                                   {s.games.filter(g => g.status === 'COMPLETED' && g.result).map((game) => (
-                                    <div key={game.gameNumber} className="bg-[#5A8352] p-2 text-center">
-                                      <div className="text-[10px] text-[#E8E8D8]/60 mb-1">Game {game.gameNumber}</div>
-                                      <div className="text-xs">
-                                        <span className={game.result!.winnerId === s.higherSeed.teamId ? 'text-[#00DD00] font-bold' : 'text-[#E8E8D8]/60'}>
-                                          {game.result!.homeScore}
-                                        </span>
-                                        <span className="text-[#E8E8D8]/40 mx-1">-</span>
-                                        <span className={game.result!.winnerId === s.lowerSeed.teamId ? 'text-[#00DD00] font-bold' : 'text-[#E8E8D8]/60'}>
-                                          {game.result!.awayScore}
-                                        </span>
-                                      </div>
-                                    </div>
+                                    <PlayoffGameResultChip key={game.gameNumber} series={s} game={game} />
                                   ))}
                                 </div>
                               </div>

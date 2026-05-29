@@ -59,6 +59,27 @@ const mockGames = [
   },
 ];
 
+const gameTrackerCompletedGame = {
+  id: 'game-tracker-completed',
+  seasonNumber: 2,
+  gameNumber: 4,
+  dayNumber: 4,
+  date: 'July 15',
+  time: '7:00 PM',
+  awayTeamId: 'BEARS',
+  homeTeamId: 'CROCS',
+  status: 'COMPLETED' as const,
+  createdAt: 4,
+  result: {
+    awayScore: 2,
+    homeScore: 6,
+    winningTeamId: 'CROCS',
+    losingTeamId: 'BEARS',
+  },
+  completionSource: 'game-tracker' as const,
+  gameLogId: 'completed-game-tracker-1',
+};
+
 const defaultProps = {
   games: mockGames,
   selectedTeam: 'FULL LEAGUE',
@@ -187,6 +208,31 @@ describe('ScheduleContent Component', () => {
     test('marks score-only completed games distinctly', () => {
       render(<ScheduleContent {...defaultProps} />);
       expect(screen.getByText('SCORE ONLY')).toBeInTheDocument();
+      expect(screen.getByText('Schedule + standings only; no game archive or player stats.')).toBeInTheDocument();
+    });
+
+    test('links GameTracker-completed rows to Game Detail when a game archive exists', () => {
+      render(<ScheduleContent {...defaultProps} games={[gameTrackerCompletedGame]} />);
+
+      expect(screen.getByRole('link', { name: /Game Detail/i })).toHaveAttribute(
+        'href',
+        '/almanac/games/completed-game-tracker-1',
+      );
+      expect(screen.queryByText('SCORE ONLY')).not.toBeInTheDocument();
+    });
+
+    test('does not link score-only completed rows to Game Detail', () => {
+      render(<ScheduleContent {...defaultProps} games={[mockGames[0]]} />);
+
+      expect(screen.getByText('SCORE ONLY')).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /Game Detail/i })).not.toBeInTheDocument();
+    });
+
+    test('team-filtered completed rows show score-only label and stat-boundary copy', () => {
+      render(<ScheduleContent {...defaultProps} selectedTeam="TIGERS" />);
+
+      expect(screen.getByText('SCORE ONLY')).toBeInTheDocument();
+      expect(screen.getByText('Schedule + standings only; no game archive or player stats.')).toBeInTheDocument();
     });
   });
 
