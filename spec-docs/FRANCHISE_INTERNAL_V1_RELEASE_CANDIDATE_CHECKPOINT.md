@@ -2,13 +2,13 @@
 
 Date: 2026-05-29
 Branch: `codex/franchise-v1-next`
-Checkpoint base commit: `3060873 Gate franchise v1 reporting and transaction history surfaces`
+Checkpoint base commit: `2d82986 Add 16-team Franchise v1 smoke journey`
 
 ## Executive Summary
 
-Franchise internal v1 is product-ready as an internal release candidate. The release-candidate verification pass on `3060873` is green: focused Franchise v1 tests passed, the seeded browser happy path passed, the full Vitest suite passed, and the production build passed.
+Franchise internal v1 is product-ready as an internal release candidate. The release-candidate verification pass is green: focused Franchise v1 tests passed, the seeded browser happy path passed, the 16-team browser smoke passed, the full Vitest suite passed, and the production build passed.
 
-No release-blocking Franchise v1 regression was found in this audit. The current branch contains the accepted GameTracker parity, setup/handoff, manual schedule/score-only, startup farm draft, Team Hub farm/lineup/rotation, transaction desk, playoff, stat-boundary, result-reporting, transaction-history discoverability, and reporting-gate work visible in the latest commit stack.
+No release-blocking Franchise v1 regression was found in this audit. The current branch contains the accepted GameTracker parity, setup/handoff, manual schedule/score-only, startup farm draft, Team Hub farm/lineup/rotation, transaction desk, playoff, stat-boundary, result-reporting, transaction-history discoverability, reporting-gate work, and 16-team browser smoke coverage visible in the latest commit stack.
 
 ## Findings
 
@@ -41,6 +41,8 @@ No release-blocking Franchise v1 regression was found in this audit. The current
   - Evidence: `src/src_figma/app/pages/FranchiseHome.tsx:575-589`, `src/src_figma/hooks/usePlayoffData.ts:461-472`.
 - Generated franchise schedules are not reachable in the seeded v1 path. The seeded Playwright journey explicitly fails if `initializeFranchise` creates schedule rows, and that journey passed.
   - Evidence: `test-utils/journeys/09-franchise-v1-seeded-happy-path.spec.ts:263`.
+- A larger 16-team browser smoke now covers the internal-v1 workflow shape with League Builder FARM draft, no-DH franchise initialization, manual schedule rows, GameTracker launch, score-only results, Team Hub FARM and transaction-history visibility, roster movement/trade storage paths, playoff seeding, and no-DH playoff configuration.
+  - Evidence: `test-utils/journeys/10-franchise-v1-16-team-realistic-smoke.spec.ts`.
 
 ## Current RC Coverage
 
@@ -60,6 +62,7 @@ Confirmed by commit stack and focused code/test evidence:
 - Regular-season vs playoff stat boundary.
 - Franchise playoff creation from franchise-owned snapshots and stored playoff/rules metadata.
 - Reporting gates for awards/voting, global Museum scope, and offseason execution.
+- Browser smoke coverage for both the original seeded happy path and a larger 16-team internal-v1 fixture.
 
 ## Known Deferred Systems
 
@@ -87,6 +90,10 @@ Commands run:
 - `npx playwright test test-utils/journeys/09-franchise-v1-seeded-happy-path.spec.ts --reporter=list`
   - Result: passed.
   - Summary: `1 passed`.
+- `npx playwright test test-utils/journeys/10-franchise-v1-16-team-realistic-smoke.spec.ts --reporter=list`
+  - Result: passed.
+  - Summary: `1 passed`.
+  - Coverage boundary: the journey launches GameTracker in-browser, then completes the archived game through the existing `processCompletedGame` and schedule-storage path instead of manually clicking through a full at-bat game to final out. It is a system smoke, not a full human-input gameplay simulation.
 - `npm test -- --reporter=dot`
   - Result: passed.
   - Final summary: `330` test files, `6694` tests.
@@ -103,4 +110,4 @@ Product/internal RC go: yes, with the current Franchise v1 scope and deferred-sy
 
 Strict repository verification go: yes. The final full-suite rerun is green after restoring the SMB4 standard team-profile artifacts and tightening the retirement ceremony test wait.
 
-Recommended release note: internal Franchise v1 is a manually scheduled, existing-roster franchise flow. It supports prepared League Builder leagues, startup FARM readiness, manual/CSV schedules, score-only results, GameTracker games, standings, scoped stats, Team Hub roster/FARM/lineup/rotation, transaction-history visibility, transactions, trades, roster movement, and playoffs. It does not include generated schedules, AI sim, fantasy startup draft, full offseason execution, franchise-scoped Museum, morale/relationships, custom park-factor workflows, or awards systems.
+Recommended release note: internal Franchise v1 is a manually scheduled, existing-roster franchise flow. It supports prepared League Builder leagues, startup FARM readiness, manual/CSV schedules, score-only results, GameTracker games, standings, scoped stats, Team Hub roster/FARM/lineup/rotation, transaction-history visibility, transactions, trades, roster movement, and playoffs. It now has both a tight seeded happy-path smoke and a larger 16-team browser smoke. It does not include generated schedules, AI sim, fantasy startup draft, full offseason execution, franchise-scoped Museum, morale/relationships, custom park-factor workflows, or awards systems.
