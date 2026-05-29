@@ -9,11 +9,15 @@ const mocks = vi.hoisted(() => ({
   signOut: vi.fn(),
   replaceCloudWithLocal: vi.fn(),
   replaceLocalWithCloud: vi.fn(),
+  pull: vi.fn(),
+  init: vi.fn(),
+  flush: vi.fn(),
   syncStatus: {
     state: "idle",
     lastPullAt: 0,
     pendingCount: 0,
     error: null,
+    pull: vi.fn(),
     replaceCloudWithLocal: vi.fn(),
     replaceLocalWithCloud: vi.fn(),
   },
@@ -37,7 +41,8 @@ vi.mock("../../../hooks/useSyncStatus", () => ({
 vi.mock("../../../utils/syncEngine", () => ({
   syncEngine: {
     getDiagnostics: mocks.getDiagnostics,
-    init: vi.fn(),
+    init: mocks.init,
+    flush: mocks.flush,
   },
 }));
 
@@ -70,10 +75,17 @@ describe("SyncModal diagnostics status", () => {
   beforeEach(() => {
     vi.useRealTimers();
     mocks.getDiagnostics.mockReset();
+    mocks.init.mockReset();
+    mocks.flush.mockReset();
+    mocks.pull.mockReset();
+    mocks.init.mockResolvedValue(undefined);
+    mocks.flush.mockResolvedValue(undefined);
+    mocks.pull.mockResolvedValue(undefined);
     mocks.syncStatus.state = "idle";
     mocks.syncStatus.pendingCount = 0;
     mocks.syncStatus.error = null;
     mocks.syncStatus.lastPullAt = 0;
+    mocks.syncStatus.pull = mocks.pull;
     mocks.syncStatus.replaceCloudWithLocal = mocks.replaceCloudWithLocal;
     mocks.syncStatus.replaceLocalWithCloud = mocks.replaceLocalWithCloud;
   });
@@ -110,9 +122,24 @@ describe("SyncModal diagnostics status", () => {
 
     render(<SyncModal isOpen onClose={vi.fn()} />);
 
-    expect(await screen.findByText("SYNC ISSUES")).toBeInTheDocument();
+    expect(screen.getByText("SYNC ISSUES")).toBeInTheDocument();
     expect(screen.queryByText("SYNCED")).not.toBeInTheDocument();
     expect(screen.getByText("(1 pending)")).toBeInTheDocument();
+    expect(mocks.init).toHaveBeenCalled();
+    expect(mocks.getDiagnostics).not.toHaveBeenCalled();
+  });
+
+  test("runs a non-destructive sync-now pass for pending writes", async () => {
+    mocks.syncStatus.pendingCount = 1;
+    mocks.getDiagnostics.mockResolvedValue(matchedDiagnostics());
+
+    render(<SyncModal isOpen onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /SYNC NOW/i }));
+
+    expect(await screen.findByText("Syncing pending changes...")).toBeInTheDocument();
+    expect(mocks.init).toHaveBeenCalled();
+    expect(mocks.flush).toHaveBeenCalled();
+    expect(mocks.pull).toHaveBeenCalled();
   });
 
   test("does not keep a green headline when a diagnostic refresh fails after a clean snapshot", async () => {

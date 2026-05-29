@@ -191,8 +191,30 @@ function SyncControls({
   }, []);
 
   useEffect(() => {
-    void handleDiagnostics();
-  }, [handleDiagnostics]);
+    void syncEngine.init();
+  }, []);
+
+  useEffect(() => {
+    if (sync.pendingCount === 0) {
+      void handleDiagnostics();
+    }
+  }, [handleDiagnostics, sync.pendingCount]);
+
+  const handleSyncNow = async () => {
+    setConfirm(null);
+    setOperationError(null);
+    setProgress('Syncing pending changes...');
+    try {
+      await syncEngine.init();
+      await syncEngine.flush();
+      await sync.pull();
+      await handleDiagnostics();
+    } catch (error) {
+      setOperationError(error instanceof Error ? error.message : 'Sync failed');
+    } finally {
+      setProgress(null);
+    }
+  };
 
   const handleUpload = async () => {
     setConfirm(null);
@@ -272,6 +294,13 @@ function SyncControls({
           />
         ) : (
           <>
+            <button
+              onClick={handleSyncNow}
+              className="w-full bg-[#0F766E] text-white font-['Press_Start_2P'] text-[8px] py-2.5 hover:bg-[#0D9488] flex items-center justify-center gap-2"
+            >
+              <Cloud className="w-3 h-3" />
+              SYNC NOW
+            </button>
             <button
               onClick={() => setConfirm('upload')}
               className="w-full bg-[#1A44CC] text-white font-['Press_Start_2P'] text-[8px] py-2.5 hover:bg-[#2255DD] flex items-center justify-center gap-2"
