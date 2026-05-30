@@ -162,6 +162,18 @@ describe('franchise roster movement boundary', () => {
         leagueAssignments: [{ leagueId, teamId, rosterStatus: 'MLB' }],
       }));
     }
+    for (let index = 1; index <= 2; index += 1) {
+      await leagueBuilderStorage.saveScoutProfile({
+        id: nextId(`scout-handoff-${index}`),
+        leagueId,
+        teamId,
+        name: `Handoff Scout ${index}`,
+        specialties: index === 1 ? ['infield'] : ['pitching'],
+        weaknesses: index === 1 ? ['CP'] : ['1B'],
+        accuracyByPosition: { SS: 82, SP: 78, CP: 55 },
+        seed: `handoff-scout-${index}`,
+      });
+    }
     await leagueBuilderStorage.saveTeamRoster({
       teamId,
       mlbRoster: mlbPlayerIds,

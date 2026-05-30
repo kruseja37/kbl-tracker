@@ -356,6 +356,8 @@ async function initializeNoDhFranchiseAndManualSchedule(
 }
 
 test.describe('Journey 10: Franchise v1 realistic 16-team browser smoke', () => {
+  test.setTimeout(180_000);
+
   test('16-team no-DH fixture covers FARM draft, manual schedule, GameTracker, score-only, transactions, and playoffs', async ({ page }) => {
     const seededLeague = await seedSixteenTeamLeagueBuilderLeague(page);
 

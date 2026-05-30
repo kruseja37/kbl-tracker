@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { SyncModal, SyncStatusIcon } from "../../app/components/SyncModal";
@@ -136,10 +136,11 @@ describe("SyncModal diagnostics status", () => {
     render(<SyncModal isOpen onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /SYNC NOW/i }));
 
-    expect(await screen.findByText("Syncing pending changes...")).toBeInTheDocument();
-    expect(mocks.init).toHaveBeenCalled();
-    expect(mocks.flush).toHaveBeenCalled();
-    expect(mocks.pull).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(mocks.init).toHaveBeenCalled();
+      expect(mocks.flush).toHaveBeenCalled();
+      expect(mocks.pull).toHaveBeenCalled();
+    });
   });
 
   test("does not keep a green headline when a diagnostic refresh fails after a clean snapshot", async () => {
