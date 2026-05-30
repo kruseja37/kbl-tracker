@@ -462,7 +462,7 @@ function baseAccuracy(position: DraftPosition): number {
   return byPosition[position] ?? 70;
 }
 
-function scoutAccuracy(position: DraftPosition, scout?: ProspectScoutDescriptor): number {
+export function scoutAccuracy(position: DraftPosition, scout?: ProspectScoutDescriptor): number {
   const specialtyBonus = scout?.specialties?.some((specialty) => specialtyMatches(position, specialty)) ? 18 : 0;
   const weaknessPenalty = scout?.weaknesses?.some((weakness) => specialtyMatches(position, weakness)) ? 18 : 0;
   return clamp(baseAccuracy(position) + (scout?.accuracyModifier ?? 0) + specialtyBonus - weaknessPenalty, 45, 92);
@@ -667,6 +667,24 @@ function buildPlayerDto(input: {
     },
     hiddenPersonalityModifiers: candidate.hiddenPersonalityModifiers,
   };
+}
+
+export function buildProspectPlayerForPick(input: {
+  engineInput: ProspectScoutingDraftInput;
+  candidate: GeneratedProspectCandidate;
+  report: ProspectScoutingReport;
+  pick: { round: number; pickNumber: number; teamId: string };
+  playerId: string;
+}): LeagueBuilderProspectPlayerDto {
+  return buildPlayerDto(input);
+}
+
+export function visibleReportForProspectPlayer(input: {
+  candidate: GeneratedProspectCandidate;
+  player: LeagueBuilderProspectPlayerDto;
+  report: ProspectScoutingReport;
+}): VisibleSafeProspectReport {
+  return visibleReportFromPlayer(input.candidate, input.player, input.report);
 }
 
 export function generateProspectScoutingDraft(

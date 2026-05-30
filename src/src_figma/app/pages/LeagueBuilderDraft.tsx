@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router";
-import { ArrowLeft, CheckCircle2, FileText, RefreshCw, ShieldAlert, Shuffle, Sparkles, Users } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ClipboardList, RefreshCw, ShieldAlert, Shuffle, UserCheck, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   useLeagueBuilderData,
@@ -7,12 +7,16 @@ import {
   type Team,
 } from "../../hooks/useLeagueBuilderData";
 import {
-  applyLeagueBuilderStartupFarmDraft,
-  createLeagueBuilderStartupFarmDraftPreview,
+  confirmLeagueBuilderProspectPick,
+  createLeagueBuilderStartupDraftSession,
+  draftLeagueBuilderScout,
+  getLeagueBuilderStartupDraftView,
   STARTUP_FARM_TARGET_SIZE,
-  type ApplyStartupFarmDraftReport,
-  type LeagueBuilderStartupFarmDraftPreview,
+  STARTUP_SCOUTS_PER_TEAM,
+  type LeagueBuilderStartupDraftView,
+  type StartupProspectBoardCandidate,
 } from "../../../utils/leagueBuilderStartupFarmDraft";
+import type { LeagueBuilderScoutProfile } from "../../../utils/leagueBuilderStorage";
 
 function hasAssignment(player: Player, leagueId: string, teamId: string, rosterStatus: "MLB" | "FARM"): boolean {
   return Boolean(player.leagueAssignments?.some((assignment) =>
@@ -26,26 +30,29 @@ function teamDisplayName(team: Team): string {
   return team.location ? `${team.location} ${team.name}` : team.name;
 }
 
+function formatAccuracy(scout: LeagueBuilderScoutProfile): string {
+  const highlights = Object.entries(scout.accuracyByPosition)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([position, accuracy]) => `${position} ${accuracy}%`);
+  return highlights.join(" · ");
+}
+
 export function LeagueBuilderDraft() {
   const navigate = useNavigate();
   const { leagues, teams, players, isLoading, error, refresh } = useLeagueBuilderData();
   const [activeLeagueId, setActiveLeagueId] = useState("");
   const [seed, setSeed] = useState("startup-farm-v1");
-  const [preview, setPreview] = useState<LeagueBuilderStartupFarmDraftPreview | null>(null);
-  const [applyReport, setApplyReport] = useState<ApplyStartupFarmDraftReport | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isApplying, setIsApplying] = useState(false);
+  const [teamOrder, setTeamOrder] = useState<string[]>([]);
+  const [draftView, setDraftView] = useState<LeagueBuilderStartupDraftView | null>(null);
+  const [isWorking, setIsWorking] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!activeLeagueId && leagues.length > 0) {
       setActiveLeagueId(leagues[0].id);
     }
   }, [activeLeagueId, leagues]);
-
-  useEffect(() => {
-    setPreview(null);
-    setApplyReport(null);
-  }, [activeLeagueId]);
 
   const activeLeague = useMemo(
     () => leagues.find((league) => league.id === activeLeagueId) ?? null,
@@ -59,6 +66,16 @@ export function LeagueBuilderDraft() {
       .filter(Boolean) as Team[];
   }, [activeLeague, teams]);
 
+  useEffect(() => {
+    setDraftView(null);
+    setActionError(null);
+    setTeamOrder(leagueTeams.map((team) => team.id));
+    if (!activeLeagueId) return;
+    getLeagueBuilderStartupDraftView(activeLeagueId)
+      .then(setDraftView)
+      .catch((err) => setActionError(err instanceof Error ? err.message : String(err)));
+  }, [activeLeagueId, leagueTeams.length]);
+
   const currentTeamCounts = useMemo(() => {
     return leagueTeams.map((team) => {
       const farmCount = players.filter((player) => hasAssignment(player, activeLeagueId, team.id, "FARM")).length;
@@ -69,67 +86,61 @@ export function LeagueBuilderDraft() {
         farmCount,
         mlbCount,
         missingFarm: Math.max(0, STARTUP_FARM_TARGET_SIZE - farmCount),
+        scoutCount: 0,
+        prepared: farmCount === STARTUP_FARM_TARGET_SIZE,
       };
     });
   }, [activeLeagueId, leagueTeams, players]);
 
-  const displayTeams = preview?.teams ?? currentTeamCounts;
-  const canGenerate = Boolean(activeLeagueId && leagueTeams.length > 0 && !isGenerating && !isApplying);
-  const canApply = Boolean(preview?.valid && !preview.prepared && preview.selectedPicks.length > 0 && !isApplying);
+  const displayTeams = draftView?.teams.length ? draftView.teams : currentTeamCounts;
+  const scoutDraftComplete = draftView?.scoutDraftComplete === true;
+  const prospectDraftComplete = draftView?.prospectDraftComplete === true;
+  const prepared = draftView?.prepared === true;
+  const normalScoutRestartBlocked = Boolean(draftView?.blockers.some((blocker) =>
+    blocker.toLowerCase().includes("normal startup scout draft restart is blocked"),
+  ));
+  const showStartControls = !draftView?.session && !prepared && !normalScoutRestartBlocked;
+  const canStart = Boolean(activeLeagueId && leagueTeams.length > 0 && !isWorking);
 
-  const handleGenerate = async () => {
-    if (!activeLeagueId) return;
-    setIsGenerating(true);
-    setApplyReport(null);
+  const moveTeam = (teamId: string, direction: -1 | 1) => {
+    const index = teamOrder.indexOf(teamId);
+    const nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || nextIndex >= teamOrder.length) return;
+    const next = [...teamOrder];
+    [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+    setTeamOrder(next);
+  };
+
+  const runAction = async (action: () => Promise<LeagueBuilderStartupDraftView>) => {
+    setIsWorking(true);
+    setActionError(null);
     try {
-      const nextPreview = await createLeagueBuilderStartupFarmDraftPreview(activeLeagueId, {
-        seasonNumber: 1,
-        rounds: STARTUP_FARM_TARGET_SIZE,
-        seed: seed.trim() || undefined,
-      });
-      setPreview(nextPreview);
+      const nextView = await action();
+      setDraftView(nextView);
+      await refresh();
     } catch (err) {
-      setPreview({
-        workflowVersion: "league-builder-startup-farm-draft-v1",
-        engineMethodVersion: "league-builder-startup-prospect-scouting-draft-v1",
-        leagueId: activeLeagueId,
-        seasonNumber: 1,
-        rounds: STARTUP_FARM_TARGET_SIZE,
-        seed,
-        valid: false,
-        prepared: false,
-        totalVacancies: 0,
-        blockers: [err instanceof Error ? err.message : "Failed to generate startup farm draft."],
-        warnings: [],
-        limitations: [],
-        teams: [],
-        selectedPicks: [],
-        visibleReports: [],
-      });
+      setActionError(err instanceof Error ? err.message : String(err));
     } finally {
-      setIsGenerating(false);
+      setIsWorking(false);
     }
   };
 
-  const handleApply = async () => {
-    if (!preview) return;
-    setIsApplying(true);
-    try {
-      const report = await applyLeagueBuilderStartupFarmDraft(preview);
-      setApplyReport(report);
-      if (report.applied) {
-        await refresh();
-        const updatedPreview = await createLeagueBuilderStartupFarmDraftPreview(activeLeagueId, {
-          seasonNumber: preview.seasonNumber,
-          rounds: preview.rounds,
-          seed: preview.seed,
-        });
-        setPreview(updatedPreview);
-      }
-    } finally {
-      setIsApplying(false);
-    }
-  };
+  const handleStartDraft = () => runAction(() =>
+    createLeagueBuilderStartupDraftSession({
+      leagueId: activeLeagueId,
+      seasonNumber: 1,
+      seed,
+      scoutOrder: teamOrder,
+    }),
+  );
+
+  const handleHireScout = (scoutId: string) => runAction(() =>
+    draftLeagueBuilderScout({ leagueId: activeLeagueId, seasonNumber: 1, scoutId }),
+  );
+
+  const handleDraftProspect = (candidateId: string) => runAction(() =>
+    confirmLeagueBuilderProspectPick({ leagueId: activeLeagueId, seasonNumber: 1, candidateId }),
+  );
 
   if (isLoading) {
     return (
@@ -149,7 +160,7 @@ export function LeagueBuilderDraft() {
 
   return (
     <div className="min-h-screen bg-[#2d3d2f] text-[#E8E8D8] p-8">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
             <button
@@ -165,11 +176,23 @@ export function LeagueBuilderDraft() {
                 className="text-2xl font-bold text-[#E8E8D8] tracking-wider"
                 style={{ textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}
               >
-                STARTUP FARM DRAFT
+                STARTUP SCOUT + PROSPECT DRAFT
               </h1>
             </div>
           </div>
+          {prepared && (
+            <span className="flex items-center gap-2 bg-[#2F7D46] border-4 border-[#E8E8D8]/40 px-4 py-2 font-bold">
+              <CheckCircle2 className="w-5 h-5" />
+              PREPARED
+            </span>
+          )}
         </div>
+
+        {actionError && (
+          <div className="mb-6 bg-[#6B3A3A] border-4 border-[#FFD27A] p-4 text-[#FFE8B0] font-bold">
+            {actionError}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6">
           <section className="bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
@@ -194,7 +217,8 @@ export function LeagueBuilderDraft() {
               id="startup-farm-draft-seed"
               value={seed}
               onChange={(event) => setSeed(event.target.value)}
-              className="w-full bg-[#4A6844] border-4 border-[#E8E8D8]/30 px-3 py-2 text-[#E8E8D8] font-bold focus:border-[#E8E8D8]/60 outline-none mb-4"
+              disabled={Boolean(draftView?.session)}
+              className="w-full bg-[#4A6844] border-4 border-[#E8E8D8]/30 px-3 py-2 text-[#E8E8D8] font-bold focus:border-[#E8E8D8]/60 outline-none mb-4 disabled:opacity-60"
             />
 
             <div className="grid grid-cols-2 gap-3 mb-5">
@@ -203,158 +227,205 @@ export function LeagueBuilderDraft() {
                 <div className="font-bold text-xl">{leagueTeams.length}</div>
               </div>
               <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
-                <div className="text-xs text-[#E8E8D8]/60">TARGET</div>
-                <div className="font-bold text-xl">{STARTUP_FARM_TARGET_SIZE} FARM</div>
+                <div className="text-xs text-[#E8E8D8]/60">SCOUTS</div>
+                <div className="font-bold text-xl">{STARTUP_SCOUTS_PER_TEAM}/TEAM</div>
               </div>
             </div>
 
-            <button
-              onClick={handleGenerate}
-              disabled={!canGenerate}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#7733DD] hover:bg-[#6622CC] disabled:opacity-50 disabled:hover:bg-[#7733DD] border-4 border-[#E8E8D8] transition font-bold"
-            >
-              {isGenerating ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
-              <span>{isGenerating ? "GENERATING" : "GENERATE STARTUP FARM DRAFT"}</span>
-            </button>
+            {showStartControls && (
+              <>
+                <h3 className="text-sm font-bold mb-2">SCOUT DRAFT ORDER</h3>
+                <div className="space-y-2 mb-4">
+                  {teamOrder.map((teamId, index) => {
+                    const team = leagueTeams.find((candidate) => candidate.id === teamId);
+                    return (
+                      <div key={teamId} className="bg-[#4A6844] border-2 border-[#E8E8D8]/30 p-2 flex items-center justify-between gap-2">
+                        <span className="text-sm font-bold truncate">#{index + 1} {team ? teamDisplayName(team) : teamId}</span>
+                        <span className="flex gap-1">
+                          <button className="px-2 bg-[#2d3d2f] border border-[#E8E8D8]/30" onClick={() => moveTeam(teamId, -1)}>UP</button>
+                          <button className="px-2 bg-[#2d3d2f] border border-[#E8E8D8]/30" onClick={() => moveTeam(teamId, 1)}>DOWN</button>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={handleStartDraft}
+                  disabled={!canStart}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#7733DD] hover:bg-[#6622CC] disabled:opacity-50 disabled:hover:bg-[#7733DD] border-4 border-[#E8E8D8] transition font-bold"
+                >
+                  {isWorking ? <RefreshCw className="w-5 h-5 animate-spin" /> : <UserCheck className="w-5 h-5" />}
+                  <span>{isWorking ? "STARTING" : "BEGIN SCOUT DRAFT"}</span>
+                </button>
+              </>
+            )}
+
+            {!draftView?.session && (prepared || normalScoutRestartBlocked) && (
+              <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4 text-sm text-[#E8E8D8]/80">
+                Startup scout/FARM state is already durable for this league. Normal scout draft restart is blocked in v1; Franchise Setup will validate and copy the prepared League Builder state.
+              </div>
+            )}
 
             {leagueTeams.length === 0 && (
               <p className="text-sm text-[#FFD27A] mt-4">Selected league has no teams.</p>
-            )}
-
-            {canApply && (
-              <button
-                onClick={handleApply}
-                disabled={isApplying}
-                className="w-full mt-3 flex items-center justify-center gap-2 px-4 py-3 bg-[#2F7D46] hover:bg-[#3E9959] disabled:opacity-50 border-4 border-[#E8E8D8] transition font-bold"
-              >
-                {isApplying ? <RefreshCw className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
-                <span>{isApplying ? "APPLYING" : "APPLY DRAFT TO LEAGUE BUILDER"}</span>
-              </button>
-            )}
-
-            {applyReport && (
-              <div className={`mt-4 border-4 p-3 text-sm ${applyReport.applied ? "bg-[#2F7D46] border-[#E8E8D8]/40" : "bg-[#6B3A3A] border-[#FFD27A]"}`}>
-                {applyReport.applied
-                  ? `Applied ${applyReport.createdPlayerIds.length} FARM prospects.`
-                  : applyReport.issues.join(" ")}
-                {applyReport.rollbackErrors.length > 0 && (
-                  <div className="mt-2 text-[#FFD27A]">{applyReport.rollbackErrors.join(" ")}</div>
-                )}
-              </div>
             )}
           </section>
 
           <section className="bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-bold text-lg">TEAM FARM READINESS</h2>
-              {preview?.prepared && (
-                <span className="flex items-center gap-2 text-sm font-bold text-[#9DFFB0]">
-                  <CheckCircle2 className="w-4 h-4" />
-                  PREPARED
-                </span>
-              )}
+              <div className="text-sm text-[#E8E8D8]/60">{STARTUP_FARM_TARGET_SIZE} FARM TARGET</div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {displayTeams.map((team) => (
-                <div key={team.teamId} className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="font-bold truncate">{team.teamName}</div>
-                    <div className="text-sm font-bold">{team.farmCount}/{STARTUP_FARM_TARGET_SIZE} FARM</div>
+              {displayTeams.map((team) => {
+                const scouts = draftView?.session?.hiredScoutIdsByTeamId[team.teamId]?.length ?? team.scoutCount ?? 0;
+                return (
+                  <div key={team.teamId} className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="font-bold truncate">{team.teamName}</div>
+                      <div className="text-sm font-bold">{team.farmCount}/{STARTUP_FARM_TARGET_SIZE} FARM</div>
+                    </div>
+                    <div className="text-xs text-[#E8E8D8]/70 mt-1">
+                      MLB {team.mlbCount} · Missing FARM {team.missingFarm} · Scouts {scouts}/{STARTUP_SCOUTS_PER_TEAM}
+                    </div>
                   </div>
-                  <div className="text-xs text-[#E8E8D8]/70 mt-1">
-                    MLB {team.mlbCount} · Missing FARM {team.missingFarm}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
-            {preview?.blockers.length ? (
+            {draftView?.blockers.length ? (
               <div className="mt-5 bg-[#6B3A3A] border-4 border-[#FFD27A] p-4">
                 <div className="flex items-center gap-2 font-bold mb-2">
                   <ShieldAlert className="w-5 h-5" />
                   BLOCKED
                 </div>
                 <ul className="space-y-1 text-sm text-[#FFE8B0]">
-                  {preview.blockers.map((blocker) => (
+                  {draftView.blockers.map((blocker) => (
                     <li key={blocker}>{blocker}</li>
                   ))}
                 </ul>
               </div>
             ) : null}
 
-            {preview?.prepared && (
+            {prepared && (
               <div className="mt-5 bg-[#2F7D46] border-4 border-[#E8E8D8]/40 p-4 text-sm">
-                This league already has 10 FARM players per team. Franchise Setup can validate and copy this prepared League Builder state.
-              </div>
-            )}
-
-            {preview && !preview.prepared && preview.valid && (
-              <div className="mt-5 bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                <div className="grid grid-cols-3 gap-3 text-sm">
-                  <div>
-                    <div className="text-[#E8E8D8]/60">PICKS</div>
-                    <div className="font-bold text-xl">{preview.selectedPicks.length}</div>
-                  </div>
-                  <div>
-                    <div className="text-[#E8E8D8]/60">SEED</div>
-                    <div className="font-bold truncate">{preview.seed}</div>
-                  </div>
-                  <div>
-                    <div className="text-[#E8E8D8]/60">ENGINE</div>
-                    <div className="font-bold text-xs">{preview.engineMethodVersion}</div>
-                  </div>
-                </div>
+                League Builder is prepared: each team has two hired scouts and 10 hidden-safe FARM prospects. Franchise Setup can validate and copy this state.
               </div>
             )}
           </section>
         </div>
 
-        <section className="mt-6 bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-lg">VISIBLE SCOUTING REPORTS</h2>
-            <div className="text-sm text-[#E8E8D8]/60">{preview?.visibleReports.length ?? 0} reports</div>
-          </div>
-
-          {!preview || preview.visibleReports.length === 0 ? (
-            <div className="text-center py-10 text-[#E8E8D8]/60">
-              <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              Generate a startup farm draft to review visible scouting reports.
+        {draftView?.session && !scoutDraftComplete && (
+          <section className="mt-6 bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-bold text-lg">SCOUT DRAFT</h2>
+              <div className="font-bold text-[#FFD27A]">
+                ON THE CLOCK: {draftView.currentScoutPick?.teamName ?? draftView.currentScoutPick?.teamId}
+              </div>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[540px] overflow-y-auto">
-              {preview.visibleReports.map((report) => (
-                <div key={report.playerId} className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
-                  <div className="flex items-center justify-between gap-3 mb-2">
-                    <div className="font-bold truncate">{report.playerName}</div>
-                    <span className="bg-[#7733DD] px-2 py-0.5 text-xs font-bold">{report.position}</span>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[560px] overflow-y-auto">
+              {draftView.availableScouts.map((scout) => (
+                <div key={scout.id} className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
+                  <div className="font-bold text-lg mb-2">{scout.name}</div>
+                  <div className="text-xs text-[#E8E8D8]/75 space-y-1 mb-3">
+                    <div>Specialties: {scout.specialties.join(", ")}</div>
+                    <div>Weaknesses: {scout.weaknesses.join(", ")}</div>
+                    <div>Accuracy: {formatAccuracy(scout)}</div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs text-[#E8E8D8]/75">
-                    <div>Round {report.round}</div>
-                    <div>Pick {report.pickNumber}</div>
-                    <div>Scouted {report.scoutedGrade}</div>
-                    <div>Potential {report.potentialGrade}</div>
-                    <div>Confidence {report.scoutConfidence}</div>
-                    <div>Salary ${report.salary.toFixed(1)}M</div>
-                  </div>
-                  <div className="mt-3 text-xs text-[#E8E8D8]/70">
-                    <div className="font-bold text-[#E8E8D8]">{report.scoutName}</div>
-                    <div>Specialties: {report.scoutSpecialtiesVisible.join(", ") || "None"}</div>
-                    <div>Weaknesses: {report.scoutWeaknessesVisible.join(", ") || "None"}</div>
-                  </div>
+                  <button
+                    onClick={() => handleHireScout(scout.id)}
+                    disabled={isWorking}
+                    className="w-full px-3 py-2 bg-[#2F7D46] border-4 border-[#E8E8D8] font-bold disabled:opacity-50"
+                  >
+                    HIRE SCOUT
+                  </button>
                 </div>
               ))}
             </div>
-          )}
-        </section>
+          </section>
+        )}
+
+        {draftView?.session && scoutDraftComplete && (
+          <section className="mt-6 bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-bold text-lg">PROSPECT DRAFT BOARD</h2>
+              {draftView.currentProspectPick ? (
+                <div className="font-bold text-[#FFD27A]">
+                  ON THE CLOCK: {draftView.currentProspectPick.teamName ?? draftView.currentProspectPick.teamId}
+                </div>
+              ) : (
+                <div className="font-bold text-[#9DFFB0]">DRAFT COMPLETE</div>
+              )}
+            </div>
+
+            {draftView.currentProspectPick && (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[620px] overflow-y-auto">
+                {draftView.prospectBoard.map((candidate: StartupProspectBoardCandidate) => (
+                  <div key={candidate.candidateId} className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <div className="font-bold truncate">{candidate.playerName}</div>
+                      <span className="bg-[#7733DD] px-2 py-0.5 text-xs font-bold">{candidate.position}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs text-[#E8E8D8]/75 mb-3">
+                      <div>Potential {candidate.potentialGrade}</div>
+                      <div>Age {candidate.age}</div>
+                      <div>Chemistry {candidate.chemistry}</div>
+                      <div>Personality {candidate.personality}</div>
+                      <div>Salary ${candidate.salary.toFixed(1)}M</div>
+                      <div>Traits {[candidate.trait1, candidate.trait2].filter(Boolean).join(", ") || "None"}</div>
+                    </div>
+                    <div className="space-y-2 mb-3">
+                      {candidate.reports.map((report) => (
+                        <div key={report.scoutId} className="bg-[#2d3d2f] border-2 border-[#E8E8D8]/20 p-2 text-xs">
+                          <div className="font-bold">{report.scoutName}</div>
+                          <div>Scouted {report.scoutedGrade} · {report.scoutConfidence} · {report.scoutAccuracy}%</div>
+                          <div>Specialties: {report.scoutSpecialtiesVisible.join(", ")}</div>
+                          <div>Weaknesses: {report.scoutWeaknessesVisible.join(", ")}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => handleDraftProspect(candidate.candidateId)}
+                      disabled={isWorking}
+                      className="w-full px-3 py-2 bg-[#2F7D46] border-4 border-[#E8E8D8] font-bold disabled:opacity-50"
+                    >
+                      DRAFT TO FARM
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {draftView?.completedPicks.length ? (
+          <section className="mt-6 bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
+            <div className="flex items-center gap-2 mb-4">
+              <ClipboardList className="w-5 h-5 text-[#FFD27A]" />
+              <h2 className="font-bold text-lg">RECENT PICKS</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {draftView.completedPicks.slice(-12).reverse().map((pick) => (
+                <div key={pick.playerId} className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3 text-sm">
+                  <div className="font-bold">{pick.playerName}</div>
+                  <div className="text-[#E8E8D8]/70">
+                    Round {pick.round}, Pick {pick.pickNumber} · {pick.position} · Scouted {pick.scoutedGrade} · Potential {pick.potentialGrade}
+                  </div>
+                  <div className="text-[#9DFFB0] mt-1">→ {pick.teamName ?? pick.teamId} FARM</div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <div className="mt-6 bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
           <div className="flex items-start gap-3">
             <Users className="w-5 h-5 text-[#7733DD] flex-shrink-0 mt-0.5" />
             <div>
-              <h4 className="font-bold text-sm mb-1">League Builder Startup Farm Draft</h4>
+              <h4 className="font-bold text-sm mb-1">League Builder Startup Draft</h4>
               <p className="text-xs text-[#E8E8D8]/70">
-                Drafted players are saved into League Builder FARM rosters with hidden reveal state. Franchise Setup remains the validation and copy step for prepared League Builder state.
+                Hire two scouts for every team, then draft prospects one pick at a time. Only the team on the clock sees its own scouts' reports. True ratings and hidden personality modifiers stay hidden until call-up.
               </p>
             </div>
           </div>

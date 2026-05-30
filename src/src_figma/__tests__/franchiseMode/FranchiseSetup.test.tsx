@@ -14,18 +14,11 @@ import { FranchiseSetup } from '../../app/pages/FranchiseSetup';
 // ============================================
 
 const mockNavigate = vi.fn();
-const mockRunStartupProspectDraftForLeague = vi.fn();
-const mockRollbackStartupProspectDraftForLeague = vi.fn();
 const mockInitializeFranchise = vi.fn();
 const mockValidatePreparedLeagueBuilderFarmScoutingState = vi.fn();
 
 vi.mock('react-router', () => ({
   useNavigate: () => mockNavigate,
-}));
-
-vi.mock('../../../utils/franchiseStartupProspectDraft', () => ({
-  runStartupProspectDraftForLeague: (...args: unknown[]) => mockRunStartupProspectDraftForLeague(...args),
-  rollbackStartupProspectDraftForLeague: (...args: unknown[]) => mockRollbackStartupProspectDraftForLeague(...args),
 }));
 
 vi.mock('../../../utils/franchiseInitializer', () => ({
@@ -129,12 +122,6 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
 describe('FranchiseSetup Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockRunStartupProspectDraftForLeague.mockResolvedValue({
-      valid: true,
-      picks: [],
-      issues: [],
-    });
-    mockRollbackStartupProspectDraftForLeague.mockResolvedValue({ valid: true, errors: [] });
     mockInitializeFranchise.mockResolvedValue('franchise-1');
     mockValidatePreparedLeagueBuilderFarmScoutingState.mockResolvedValue({
       validationVersion: 'league-builder-farm-scouting-v1',
@@ -146,8 +133,8 @@ describe('FranchiseSetup Component', () => {
       bridgeRequired: false,
       bridgeAllowed: true,
       blockers: [],
-      warnings: ['Scout profiles are not durable yet.'],
-      limitations: ['Durable scout profiles are deferred.'],
+      warnings: [],
+      limitations: [],
       teams: [],
     });
   });
@@ -279,7 +266,7 @@ describe('FranchiseSetup Component', () => {
       expect(screen.queryByRole('button', { name: /Random 1/i })).not.toBeInTheDocument();
     });
 
-    test('defers fantasy draft and enables startup prospect draft for farms', () => {
+    test('defers fantasy draft and points farm setup to League Builder scout and prospect draft', () => {
       render(<FranchiseSetup />);
       selectLeagueAndAdvance(3);
       fireEvent.click(screen.getAllByRole('button', { name: /Team 1/i })[0]);
@@ -288,11 +275,12 @@ describe('FranchiseSetup Component', () => {
       expect(screen.getByRole('button', { name: /Fantasy Draft.*Deferred/i })).toBeDisabled();
       expect(screen.getByText(/22 MLB \+ 10 FARM/i)).toBeInTheDocument();
       expect(screen.getByText(/Startup farm\/scouting belongs to League Builder/i)).toBeInTheDocument();
-      expect(screen.getByText(/Temporary bridge only/i)).toBeInTheDocument();
+      expect(screen.getByText(/hire two scouts for every team/i)).toBeInTheDocument();
+      expect(screen.getByText(/Franchise Setup does not auto-fill farms/i)).toBeInTheDocument();
       expect(screen.queryByText(/Generate new fictional players/i)).not.toBeInTheDocument();
     });
 
-    test('does not run startup bridge when League Builder farm state is already prepared', async () => {
+    test('starts franchise when League Builder farm and scouting state is prepared', async () => {
       render(<FranchiseSetup />);
       selectLeagueAndAdvance(3);
       fireEvent.click(screen.getAllByRole('button', { name: /Team 1/i })[0]);
@@ -303,59 +291,27 @@ describe('FranchiseSetup Component', () => {
       await waitFor(() => {
         expect(mockInitializeFranchise).toHaveBeenCalled();
       });
-      expect(mockRunStartupProspectDraftForLeague).not.toHaveBeenCalled();
       expect(mockInitializeFranchise).toHaveBeenCalled();
     });
 
-    test('runs temporary startup bridge before franchise initialization when farm state is repairable', async () => {
+    test('blocks franchise initialization when farms are incomplete instead of running a setup bridge', async () => {
+      const incompleteReport = {
+        validationVersion: 'league-builder-farm-scouting-v1',
+        ownership: 'league-builder-mode-1',
+        bridgePolicy: 'internal-test-legacy-repair-only',
+        leagueId: 'kbl',
+        status: 'blocked',
+        prepared: false,
+        bridgeRequired: true,
+        bridgeAllowed: false,
+        blockers: ['Team 1: has 0/10 FARM players; run the League Builder startup prospect draft.'],
+        warnings: [],
+        limitations: [],
+        teams: [],
+      };
       mockValidatePreparedLeagueBuilderFarmScoutingState
-        .mockResolvedValueOnce({
-          validationVersion: 'league-builder-farm-scouting-v1',
-          ownership: 'league-builder-mode-1',
-          bridgePolicy: 'temporary-franchise-setup-repair-only',
-          leagueId: 'kbl',
-          status: 'repairable-by-bridge',
-          prepared: false,
-          bridgeRequired: true,
-          bridgeAllowed: true,
-          blockers: [],
-          warnings: ['Team 1 has 0/10 FARM players; temporary bridge can fill missing slots.'],
-          limitations: ['Durable scout profiles are deferred.'],
-          teams: [],
-        })
-        .mockResolvedValueOnce({
-          validationVersion: 'league-builder-farm-scouting-v1',
-          ownership: 'league-builder-mode-1',
-          bridgePolicy: 'temporary-franchise-setup-repair-only',
-          leagueId: 'kbl',
-          status: 'repairable-by-bridge',
-          prepared: false,
-          bridgeRequired: true,
-          bridgeAllowed: true,
-          blockers: [],
-          warnings: ['Team 1 has 0/10 FARM players; temporary bridge can fill missing slots.'],
-          limitations: ['Durable scout profiles are deferred.'],
-          teams: [],
-        })
-        .mockResolvedValueOnce({
-          validationVersion: 'league-builder-farm-scouting-v1',
-          ownership: 'league-builder-mode-1',
-          bridgePolicy: 'temporary-franchise-setup-repair-only',
-          leagueId: 'kbl',
-          status: 'prepared',
-          prepared: true,
-          bridgeRequired: false,
-          bridgeAllowed: true,
-          blockers: [],
-          warnings: ['Scout profiles are not durable yet.'],
-          limitations: ['Durable scout profiles are deferred.'],
-          teams: [],
-        });
-      mockRunStartupProspectDraftForLeague.mockResolvedValueOnce({
-        valid: true,
-        picks: [{ playerId: 'prospect-1', teamId: 'team-1' }],
-        issues: [],
-      });
+        .mockResolvedValueOnce(incompleteReport)
+        .mockResolvedValueOnce(incompleteReport);
 
       render(<FranchiseSetup />);
       selectLeagueAndAdvance(3);
@@ -364,18 +320,8 @@ describe('FranchiseSetup Component', () => {
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
       fireEvent.click(screen.getByRole('button', { name: /START FRANCHISE/i }));
 
-      await waitFor(() => {
-        expect(mockInitializeFranchise).toHaveBeenCalled();
-      });
-      expect(mockRunStartupProspectDraftForLeague).toHaveBeenCalledWith('kbl', {
-        rounds: 10,
-        seasonNumber: 1,
-      });
-      expect(mockInitializeFranchise).toHaveBeenCalled();
-      expect(mockRunStartupProspectDraftForLeague.mock.invocationCallOrder[0]).toBeLessThan(
-        mockInitializeFranchise.mock.invocationCallOrder[0],
-      );
-      expect(mockInitializeFranchise.mock.calls[0]?.[0]?.roster.startupProspectDraft.bridgeRepairApplied).toBe(true);
+      expect(await screen.findByText(/farm\/scouting handoff blocked/i)).toBeInTheDocument();
+      expect(mockInitializeFranchise).not.toHaveBeenCalled();
     });
 
     test('blocks franchise initialization when League Builder farm validation is blocked', async () => {
@@ -390,7 +336,7 @@ describe('FranchiseSetup Component', () => {
         bridgeAllowed: false,
         blockers: ['Team 1: FARM roster does not match player FARM assignments.'],
         warnings: [],
-        limitations: ['Durable scout profiles are deferred.'],
+        limitations: ['Scouting output remains imperfect and true ratings stay hidden until call-up/reveal.'],
         teams: [],
       };
       mockValidatePreparedLeagueBuilderFarmScoutingState
@@ -406,60 +352,9 @@ describe('FranchiseSetup Component', () => {
 
       expect(await screen.findByText(/farm\/scouting handoff blocked/i)).toBeInTheDocument();
       expect(mockInitializeFranchise).not.toHaveBeenCalled();
-      expect(mockRunStartupProspectDraftForLeague).not.toHaveBeenCalled();
-      expect(mockRollbackStartupProspectDraftForLeague).not.toHaveBeenCalled();
     });
 
-    test('rolls back startup prospect picks when franchise initialization fails', async () => {
-      const report = {
-        valid: true,
-        picks: [{ playerId: 'prospect-1', teamId: 'team-1' }],
-        issues: [],
-      };
-      mockValidatePreparedLeagueBuilderFarmScoutingState
-        .mockResolvedValueOnce({
-          validationVersion: 'league-builder-farm-scouting-v1',
-          ownership: 'league-builder-mode-1',
-          bridgePolicy: 'temporary-franchise-setup-repair-only',
-          leagueId: 'kbl',
-          status: 'repairable-by-bridge',
-          prepared: false,
-          bridgeRequired: true,
-          bridgeAllowed: true,
-          blockers: [],
-          warnings: ['Team 1 has 0/10 FARM players; temporary bridge can fill missing slots.'],
-          limitations: ['Durable scout profiles are deferred.'],
-          teams: [],
-        })
-        .mockResolvedValueOnce({
-          validationVersion: 'league-builder-farm-scouting-v1',
-          ownership: 'league-builder-mode-1',
-          bridgePolicy: 'temporary-franchise-setup-repair-only',
-          leagueId: 'kbl',
-          status: 'repairable-by-bridge',
-          prepared: false,
-          bridgeRequired: true,
-          bridgeAllowed: true,
-          blockers: [],
-          warnings: ['Team 1 has 0/10 FARM players; temporary bridge can fill missing slots.'],
-          limitations: ['Durable scout profiles are deferred.'],
-          teams: [],
-        })
-        .mockResolvedValueOnce({
-          validationVersion: 'league-builder-farm-scouting-v1',
-          ownership: 'league-builder-mode-1',
-          bridgePolicy: 'temporary-franchise-setup-repair-only',
-          leagueId: 'kbl',
-          status: 'prepared',
-          prepared: true,
-          bridgeRequired: false,
-          bridgeAllowed: true,
-          blockers: [],
-          warnings: ['Scout profiles are not durable yet.'],
-          limitations: ['Durable scout profiles are deferred.'],
-          teams: [],
-        });
-      mockRunStartupProspectDraftForLeague.mockResolvedValueOnce(report);
+    test('does not mutate League Builder when franchise initialization fails after prepared validation', async () => {
       mockInitializeFranchise.mockRejectedValueOnce(new Error('copy failed'));
 
       render(<FranchiseSetup />);
@@ -470,7 +365,7 @@ describe('FranchiseSetup Component', () => {
       fireEvent.click(screen.getByRole('button', { name: /START FRANCHISE/i }));
 
       expect(await screen.findByText(/copy failed/i)).toBeInTheDocument();
-      expect(mockRollbackStartupProspectDraftForLeague).toHaveBeenCalledWith('kbl', report);
+      expect(mockValidatePreparedLeagueBuilderFarmScoutingState).toHaveBeenCalled();
     });
   });
 

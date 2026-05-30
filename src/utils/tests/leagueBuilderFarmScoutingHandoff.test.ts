@@ -17,6 +17,7 @@ import {
   clearAllLeagueBuilderData,
   saveLeagueTemplate,
   savePlayer,
+  saveScoutProfile,
   saveTeam,
   saveTeamRoster,
   type Player,
@@ -112,6 +113,7 @@ async function seedLeague(options: {
   farmCount?: number;
   farmMetadata?: boolean;
   revealedFarm?: boolean;
+  scouts?: boolean;
 } = {}): Promise<void> {
   const farmCount = options.farmCount ?? 10;
   await saveLeagueTemplate({
@@ -161,6 +163,22 @@ async function seedLeague(options: {
     }
 
     await saveTeamRoster(makeRoster(teamId, farmIds));
+
+    if (options.scouts !== false) {
+      for (let index = 1; index <= 2; index += 1) {
+        await saveScoutProfile({
+          id: `${teamId}-scout-${index}`,
+          leagueId: LEAGUE_ID,
+          teamId,
+          name: `${teamId} Scout ${index}`,
+          specialties: index === 1 ? ['CF'] : ['pitching'],
+          weaknesses: index === 1 ? ['CP'] : ['1B'],
+          accuracyByPosition: { CF: 83, CP: 52, SP: 80, '1B': 65 },
+          seed: `${teamId}:scout:${index}`,
+          hiredPick: { round: index, pickNumber: index, teamId },
+        });
+      }
+    }
   }
 }
 
@@ -194,18 +212,18 @@ describe('League Builder farm/scouting handoff validation', () => {
         }),
       ]),
     );
-    expect(report.limitations.join(' ')).toMatch(/scout profiles/i);
+    expect(report.teams[0].scouts).toBe(2);
   });
 
-  test('incomplete farm state is reported as repairable by the temporary bridge', async () => {
+  test('incomplete farm state is blocked until the League Builder prospect draft fills vacancies', async () => {
     await seedLeague({ farmCount: 4 });
 
     const report = await validatePreparedLeagueBuilderFarmScoutingState(LEAGUE_ID);
 
-    expect(report.status).toBe('repairable-by-bridge');
+    expect(report.status).toBe('blocked');
     expect(report.bridgeRequired).toBe(true);
-    expect(report.bridgeAllowed).toBe(true);
-    expect(report.warnings.join(' ')).toMatch(/temporary bridge can fill missing slots/i);
+    expect(report.bridgeAllowed).toBe(false);
+    expect(report.blockers.join(' ')).toMatch(/startup prospect draft/i);
   });
 
   test('revealed FARM ratings block the v1 handoff', async () => {
@@ -218,14 +236,22 @@ describe('League Builder farm/scouting handoff validation', () => {
     expect(report.blockers.join(' ')).toMatch(/revealed ratings before call-up/i);
   });
 
-  test('missing scout profiles and visible-safe metadata are warnings or limitations, not blockers', async () => {
+  test('missing scout profiles block while missing visible-safe metadata remains a warning', async () => {
+    await seedLeague({ scouts: false });
+
+    const report = await validatePreparedLeagueBuilderFarmScoutingState(LEAGUE_ID);
+
+    expect(report.status).toBe('blocked');
+    expect(report.blockers.join(' ')).toMatch(/expected 2 hired scouts/i);
+  });
+
+  test('missing visible-safe metadata remains a warning with required scouts present', async () => {
     await seedLeague({ farmMetadata: false });
 
     const report = await validatePreparedLeagueBuilderFarmScoutingState(LEAGUE_ID);
 
     expect(report.status).toBe('prepared');
     expect(report.warnings.join(' ')).toMatch(/visible-safe prospect\/scouting metadata/i);
-    expect(report.limitations.join(' ')).toMatch(/scout profiles/i);
   });
 
   test('franchise copy preserves FARM reveal state and prospect metadata', async () => {
@@ -251,7 +277,16 @@ describe('League Builder farm/scouting handoff validation', () => {
         ownership: 'league-builder-mode-1',
         preparedInLeagueBuilder: true,
         bridgeRepairApplied: false,
-        scoutProfilesRequired: false,
+        scoutProfilesRequired: true,
+        scoutProfilesByTeamId: expect.objectContaining({
+          [TEAM_IDS[0]]: expect.arrayContaining([
+            expect.objectContaining({
+              id: `${TEAM_IDS[0]}-scout-1`,
+              specialties: ['CF'],
+              weaknesses: ['CP'],
+            }),
+          ]),
+        }),
       }),
     );
     expect(farmPlayer?.ratingRevealState).toBe('hidden');

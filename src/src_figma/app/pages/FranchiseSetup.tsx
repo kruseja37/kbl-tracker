@@ -5,11 +5,6 @@ import { useLeagueBuilderData, type LeagueTemplate, type Team } from "../../hook
 import type { FranchiseConfig } from "../../../types/franchise";
 import { initializeFranchise } from "../../../utils/franchiseInitializer";
 import {
-  rollbackStartupProspectDraftForLeague,
-  runStartupProspectDraftForLeague,
-  type StartupProspectDraftReport,
-} from "../../../utils/franchiseStartupProspectDraft";
-import {
   validatePreparedLeagueBuilderFarmScoutingState,
   type LeagueBuilderFarmScoutingValidationReport,
 } from "../../../utils/leagueBuilderFarmScoutingHandoff";
@@ -155,9 +150,7 @@ export function FranchiseSetup() {
       // Start franchise — persist to IndexedDB and navigate
       setIsInitializing(true);
       setInitError(null);
-      let startupProspectDraftReport: StartupProspectDraftReport | null = null;
       try {
-        let bridgeRepairApplied = false;
         let handoffValidation = config.league
           ? await validatePreparedLeagueBuilderFarmScoutingState(config.league)
           : null;
@@ -168,57 +161,16 @@ export function FranchiseSetup() {
           }
         }
 
-        if (
-          config.league &&
-          config.roster.startupProspectDraft?.enabled &&
-          handoffValidation?.bridgeRequired
-        ) {
-          if (!handoffValidation.bridgeAllowed) {
-            throw new Error(`Startup farm bridge blocked: ${handoffValidation.blockers.join(' ')}`);
-          }
-          startupProspectDraftReport = await runStartupProspectDraftForLeague(config.league, {
-            rounds: config.roster.startupProspectDraft.rounds,
-            seasonNumber: 1,
-          });
-          if (!startupProspectDraftReport.valid) {
-            throw new Error(`Temporary startup farm bridge blocked: ${startupProspectDraftReport.issues.join(' ')}`);
-          }
-          bridgeRepairApplied = startupProspectDraftReport.picks.length > 0;
-          handoffValidation = await validatePreparedLeagueBuilderFarmScoutingState(config.league);
-          setFarmScoutingReport(handoffValidation);
-        }
-
         if (handoffValidation && handoffValidation.status !== 'prepared') {
           throw new Error(`League Builder farm/scouting handoff is not prepared: ${[
             ...handoffValidation.blockers,
             ...handoffValidation.warnings,
           ].join(' ')}`);
         }
-        const franchiseConfig: FranchiseConfig = bridgeRepairApplied
-          ? {
-              ...config,
-              roster: {
-                ...config.roster,
-                startupProspectDraft: config.roster.startupProspectDraft
-                  ? {
-                      ...config.roster.startupProspectDraft,
-                      bridgeRepairApplied: true,
-                    }
-                  : undefined,
-              },
-            }
-          : config;
-        const franchiseId = await initializeFranchise(franchiseConfig);
+        const franchiseId = await initializeFranchise(config);
         navigate(`/franchise/${franchiseId}`);
       } catch (err) {
-        let rollbackMessage = '';
-        if (config.league && startupProspectDraftReport?.picks.length) {
-          const rollbackReport = await rollbackStartupProspectDraftForLeague(config.league, startupProspectDraftReport);
-          if (!rollbackReport.valid) {
-            rollbackMessage = ` Startup Prospect Draft rollback issues: ${rollbackReport.errors.join(' ')}`;
-          }
-        }
-        setInitError(`${err instanceof Error ? err.message : 'Failed to create franchise'}${rollbackMessage}`);
+        setInitError(err instanceof Error ? err.message : 'Failed to create franchise');
         setIsInitializing(false);
       }
     }
@@ -1203,9 +1155,9 @@ function Step5RosterMode({
     : farmScoutingError
       ? `Validation unavailable: ${farmScoutingError}`
       : farmScoutingReport?.status === "prepared"
-        ? "League Builder farm/scouting state is prepared. Franchise Setup will validate and copy it; the temporary bridge will not run."
+        ? "League Builder farm/scouting state is prepared. Franchise Setup will validate and copy it."
         : farmScoutingReport?.status === "repairable-by-bridge"
-          ? "League Builder farm/scouting state is incomplete. The temporary v1 bridge will repair missing FARM slots before copy."
+          ? "League Builder farm/scouting state is incomplete. Run the startup scout + prospect draft in League Builder before starting."
           : farmScoutingReport?.status === "blocked"
             ? "League Builder farm/scouting state has blockers. Fix League Builder rosters before starting."
             : "Select a league to check League Builder farm/scouting state.";
@@ -1266,9 +1218,9 @@ function Step5RosterMode({
             <p className="text-xs text-[#C4A853] font-bold mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>STARTUP PROSPECT DRAFT</p>
             <div className="h-[1px] bg-[#E8E8D8]/30 mb-3" />
             <div className="space-y-2 text-xs text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
-              <p>Temporary bridge only. It runs at franchise creation only when the selected League Builder league is missing FARM players and is otherwise repairable.</p>
-              <p>Prepared leagues skip the bridge. Repaired prospects receive rookie salaries, visible-safe scouting metadata, and hidden reveal state.</p>
-              <p>Scout profiles are not durable yet; missing scout/profile data is reported as a v1 limitation, not a blocker.</p>
+              <p>Use League Builder Draft to hire two scouts for every team, then draft FARM prospects one pick at a time.</p>
+              <p>Franchise Setup does not auto-fill farms. It only validates and copies prepared League Builder state.</p>
+              <p>Drafted prospects keep true ratings and hidden personality modifiers hidden until call-up.</p>
               <p>No fantasy MLB draft, AI game simulation, or generated regular-season schedule is enabled.</p>
             </div>
           </div>
@@ -1324,9 +1276,9 @@ function Step6Confirm({
     : farmScoutingError
       ? "Farm/scouting validation unavailable"
       : farmScoutingReport?.status === "prepared"
-        ? "League Builder farm/scouting prepared; bridge skipped"
+        ? "League Builder farm/scouting prepared"
         : farmScoutingReport?.status === "repairable-by-bridge"
-          ? "Temporary bridge will repair missing FARM slots"
+          ? "Run League Builder startup scout + prospect draft before starting"
           : farmScoutingReport?.status === "blocked"
             ? "Farm/scouting blockers must be fixed in League Builder"
             : "Farm/scouting handoff not checked";

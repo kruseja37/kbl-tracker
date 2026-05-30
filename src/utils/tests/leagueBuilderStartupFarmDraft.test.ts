@@ -20,9 +20,13 @@ import {
   __resetLeagueBuilderDatabaseForTests,
   clearAllLeagueBuilderData,
   getAllPlayers,
+  getStartupDraftSession,
+  getScoutProfilesForLeague,
   getTeamRoster,
+  deleteScoutProfilesForLeague,
   saveLeagueTemplate,
   savePlayer,
+  saveScoutProfile,
   saveTeam,
   saveTeamRoster,
   type Player,
@@ -119,7 +123,26 @@ function makePlayer(
   };
 }
 
-async function seedLeague(options: { farmCount?: number } = {}): Promise<void> {
+async function seedScouts(): Promise<void> {
+  for (const teamId of [TEAM_A, TEAM_B]) {
+    for (let index = 1; index <= 2; index += 1) {
+      await saveScoutProfile({
+        id: `${teamId}-scout-${index}`,
+        leagueId: LEAGUE_ID,
+        teamId,
+        name: `Scout ${teamId} ${index}`,
+        specialties: index === 1 ? ['outfield'] : ['pitching'],
+        weaknesses: index === 1 ? ['CP'] : ['1B'],
+        accuracyByPosition: { CF: 82, SP: 78, CP: 58 },
+        seed: `test-scout-${teamId}-${index}`,
+        createdDate: '2026-01-01',
+        lastModified: '2026-01-01',
+      });
+    }
+  }
+}
+
+async function seedLeague(options: { farmCount?: number; scouts?: boolean } = {}): Promise<void> {
   const farmCount = options.farmCount ?? 0;
   await saveLeagueTemplate({
     id: LEAGUE_ID,
@@ -154,6 +177,9 @@ async function seedLeague(options: { farmCount?: number } = {}): Promise<void> {
       farmIds.push(farmPlayer.id!);
     }
     await saveTeamRoster(makeRoster(teamId, farmIds));
+  }
+  if (options.scouts) {
+    await seedScouts();
   }
 }
 
@@ -209,7 +235,244 @@ describe('League Builder startup farm draft persistence', () => {
       leadership: expect.any(Number),
       volatility: expect.any(Number),
     }));
-    expect(handoff.status).toBe('prepared');
+    expect(handoff.status).toBe('blocked');
+    expect(handoff.blockers.join(' ')).toMatch(/expected 2 hired scouts/i);
+  });
+
+  test('session scout draft creates deterministic scout pool and persists two scouts per team', async () => {
+    const {
+      createLeagueBuilderStartupDraftSession,
+      draftLeagueBuilderScout,
+      STARTUP_SCOUTS_PER_TEAM,
+      STARTUP_SCOUT_POOL_MULTIPLIER,
+    } = await import('../leagueBuilderStartupFarmDraft');
+    await seedLeague();
+
+    let view = await createLeagueBuilderStartupDraftSession({
+      leagueId: LEAGUE_ID,
+      seed: 'scout-session-seed',
+      scoutOrder: [TEAM_B, TEAM_A],
+    });
+
+    expect(view.session?.scoutPool).toHaveLength(2 * STARTUP_SCOUTS_PER_TEAM * STARTUP_SCOUT_POOL_MULTIPLIER);
+    expect(view.currentScoutPick?.teamId).toBe(TEAM_B);
+    expect(view.session?.scoutPool.every((scout) =>
+      Object.values(scout.accuracyByPosition).every((accuracy) => accuracy < 100),
+    )).toBe(true);
+
+    while (!view.scoutDraftComplete) {
+      const scout = view.availableScouts[0];
+      view = await draftLeagueBuilderScout({
+        leagueId: LEAGUE_ID,
+        scoutId: scout.id,
+      });
+    }
+
+    const storedScouts = await getScoutProfilesForLeague(LEAGUE_ID);
+    expect(storedScouts).toHaveLength(4);
+    expect(storedScouts.filter((scout) => scout.teamId === TEAM_A)).toHaveLength(2);
+    expect(storedScouts.filter((scout) => scout.teamId === TEAM_B)).toHaveLength(2);
+    expect(view.scoutDraftComplete).toBe(true);
+  });
+
+  test('prepared league cannot start a destructive new scout draft session', async () => {
+    const { createLeagueBuilderStartupDraftSession } = await import('../leagueBuilderStartupFarmDraft');
+    await seedLeague({ farmCount: 10, scouts: true });
+    const beforeScouts = await getScoutProfilesForLeague(LEAGUE_ID);
+
+    await expect(createLeagueBuilderStartupDraftSession({
+      leagueId: LEAGUE_ID,
+      seed: 'blocked-prepared-restart',
+      scoutOrder: [TEAM_A, TEAM_B],
+    })).rejects.toThrow(/restart is blocked/i);
+
+    const afterScouts = await getScoutProfilesForLeague(LEAGUE_ID);
+    expect(afterScouts.map((scout) => scout.id).sort()).toEqual(beforeScouts.map((scout) => scout.id).sort());
+    expect(await getStartupDraftSession(LEAGUE_ID, 1)).toBeNull();
+  });
+
+  test('session create failure does not delete existing durable scout profiles', async () => {
+    const { createLeagueBuilderStartupDraftSession } = await import('../leagueBuilderStartupFarmDraft');
+    await seedLeague({ scouts: true });
+    const beforeScouts = await getScoutProfilesForLeague(LEAGUE_ID);
+
+    await expect(createLeagueBuilderStartupDraftSession({
+      leagueId: LEAGUE_ID,
+      seed: 'blocked-durable-scout-restart',
+      scoutOrder: [TEAM_A, TEAM_B],
+    })).rejects.toThrow(/durable scout profiles already exist/i);
+
+    const afterScouts = await getScoutProfilesForLeague(LEAGUE_ID);
+    expect(afterScouts.map((scout) => scout.id).sort()).toEqual(beforeScouts.map((scout) => scout.id).sort());
+  });
+
+  test('scout session save failure rolls back the just-hired durable scout', async () => {
+    const {
+      createLeagueBuilderStartupDraftSession,
+      draftLeagueBuilderScout,
+    } = await import('../leagueBuilderStartupFarmDraft');
+    await seedLeague();
+
+    let view = await createLeagueBuilderStartupDraftSession({
+      leagueId: LEAGUE_ID,
+      seed: 'scout-rollback-seed',
+      scoutOrder: [TEAM_A, TEAM_B],
+    });
+    const firstPickTeamId = view.currentScoutPick?.teamId;
+    const firstScoutId = view.availableScouts[0].id;
+    view = await draftLeagueBuilderScout({
+      leagueId: LEAGUE_ID,
+      scoutId: firstScoutId,
+    });
+    expect((await getScoutProfilesForLeague(LEAGUE_ID)).map((scout) => scout.id)).toEqual([firstScoutId]);
+
+    const secondPickTeamId = view.currentScoutPick?.teamId;
+    const secondScoutId = view.availableScouts[0].id;
+    await expect(draftLeagueBuilderScout({
+      leagueId: LEAGUE_ID,
+      scoutId: secondScoutId,
+    }, {
+      saveStartupDraftSession: async () => {
+        throw new Error('forced scout session write failure');
+      },
+    })).rejects.toThrow(/forced scout session write failure/i);
+
+    const storedScouts = await getScoutProfilesForLeague(LEAGUE_ID);
+    const session = await getStartupDraftSession(LEAGUE_ID, 1);
+
+    expect(storedScouts.map((scout) => scout.id)).toEqual([firstScoutId]);
+    expect(session?.hiredScoutIdsByTeamId[firstPickTeamId!]).toEqual([firstScoutId]);
+    expect(session?.hiredScoutIdsByTeamId[secondPickTeamId!]).not.toContain(secondScoutId);
+  });
+
+  test('pick-by-pick prospect board is team-specific and confirmed picks persist one player to FARM', async () => {
+    const {
+      createLeagueBuilderStartupDraftSession,
+      draftLeagueBuilderScout,
+      confirmLeagueBuilderProspectPick,
+    } = await import('../leagueBuilderStartupFarmDraft');
+    await seedLeague();
+
+    let view = await createLeagueBuilderStartupDraftSession({
+      leagueId: LEAGUE_ID,
+      seed: 'prospect-session-seed',
+      scoutOrder: [TEAM_A, TEAM_B],
+    });
+    while (!view.scoutDraftComplete) {
+      view = await draftLeagueBuilderScout({
+        leagueId: LEAGUE_ID,
+        scoutId: view.availableScouts[0].id,
+      });
+    }
+
+    expect(view.currentProspectPick?.teamId).toBe(TEAM_A);
+    const candidate = view.prospectBoard[0];
+    expect(candidate.reports).toHaveLength(2);
+    expect(candidate.reports.every((report) =>
+      report.scoutId === view.session?.hiredScoutIdsByTeamId[TEAM_A][0] ||
+      report.scoutId === view.session?.hiredScoutIdsByTeamId[TEAM_A][1],
+    )).toBe(true);
+    expect(JSON.stringify(candidate)).not.toMatch(/hiddenPersonalityModifiers|trueGrade|power|contact|velocity/i);
+
+    view = await confirmLeagueBuilderProspectPick({
+      leagueId: LEAGUE_ID,
+      candidateId: candidate.candidateId,
+    });
+
+    const players = await getAllPlayers();
+    const drafted = players.filter((player) => player.sourceDatabase === 'league-builder-startup-prospect-draft');
+    const rosterA = await getTeamRoster(TEAM_A);
+
+    expect(drafted).toHaveLength(1);
+    expect(rosterA?.farmRoster).toContain(drafted[0].id);
+    expect(drafted[0].ratingRevealState).toBe('hidden');
+    expect(view.completedPicks).toHaveLength(1);
+    expect(view.currentProspectPick?.teamId).toBe(TEAM_B);
+  });
+
+  test('full FARM rosters without durable scouts are not reported prepared in startup draft view', async () => {
+    const { getLeagueBuilderStartupDraftView } = await import('../leagueBuilderStartupFarmDraft');
+    await seedLeague({ farmCount: 10 });
+
+    const view = await getLeagueBuilderStartupDraftView(LEAGUE_ID);
+
+    expect(view.prepared).toBe(false);
+    expect(view.blockers.join(' ')).toMatch(/expected 2 hired scouts/i);
+  });
+
+  test('deleted durable scouts block prospect picks before writes', async () => {
+    const {
+      createLeagueBuilderStartupDraftSession,
+      draftLeagueBuilderScout,
+      confirmLeagueBuilderProspectPick,
+    } = await import('../leagueBuilderStartupFarmDraft');
+    await seedLeague();
+
+    let view = await createLeagueBuilderStartupDraftSession({
+      leagueId: LEAGUE_ID,
+      seed: 'stale-scout-session-seed',
+      scoutOrder: [TEAM_A, TEAM_B],
+    });
+    while (!view.scoutDraftComplete) {
+      view = await draftLeagueBuilderScout({
+        leagueId: LEAGUE_ID,
+        scoutId: view.availableScouts[0].id,
+      });
+    }
+    const candidate = view.prospectBoard[0];
+    await deleteScoutProfilesForLeague(LEAGUE_ID);
+
+    await expect(confirmLeagueBuilderProspectPick({
+      leagueId: LEAGUE_ID,
+      candidateId: candidate.candidateId,
+    })).rejects.toThrow(/scout state changed/i);
+
+    const drafted = (await getAllPlayers()).filter((player) =>
+      player.sourceDatabase === 'league-builder-startup-prospect-draft',
+    );
+    expect(drafted).toHaveLength(0);
+    expect((await getTeamRoster(TEAM_A))?.farmRoster).toHaveLength(0);
+  });
+
+  test('session persistence failure rolls back confirmed prospect player and roster writes', async () => {
+    const {
+      createLeagueBuilderStartupDraftSession,
+      draftLeagueBuilderScout,
+      confirmLeagueBuilderProspectPick,
+    } = await import('../leagueBuilderStartupFarmDraft');
+    await seedLeague();
+
+    let view = await createLeagueBuilderStartupDraftSession({
+      leagueId: LEAGUE_ID,
+      seed: 'session-rollback-seed',
+      scoutOrder: [TEAM_A, TEAM_B],
+    });
+    while (!view.scoutDraftComplete) {
+      view = await draftLeagueBuilderScout({
+        leagueId: LEAGUE_ID,
+        scoutId: view.availableScouts[0].id,
+      });
+    }
+    const candidate = view.prospectBoard[0];
+
+    await expect(confirmLeagueBuilderProspectPick({
+      leagueId: LEAGUE_ID,
+      candidateId: candidate.candidateId,
+    }, {
+      saveStartupDraftSession: async () => {
+        throw new Error('forced session write failure');
+      },
+    })).rejects.toThrow(/forced session write failure/i);
+
+    const drafted = (await getAllPlayers()).filter((player) =>
+      player.sourceDatabase === 'league-builder-startup-prospect-draft',
+    );
+    const session = await getStartupDraftSession(LEAGUE_ID, 1);
+
+    expect(drafted).toHaveLength(0);
+    expect((await getTeamRoster(TEAM_A))?.farmRoster).toHaveLength(0);
+    expect(session?.currentPickIndex).toBe(0);
+    expect(session?.completedPicks).toHaveLength(0);
   });
 
   test('prepared league is a valid no-op with no apply action required', async () => {

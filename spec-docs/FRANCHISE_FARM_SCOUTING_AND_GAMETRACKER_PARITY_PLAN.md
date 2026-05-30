@@ -513,6 +513,40 @@ Still deferred:
 - Durable scout profile/storage.
 - Scout hiring/assignment workflow.
 
+## 13. Real Scout Draft + Pick-By-Pick Prospect Draft Checkpoint
+
+This checkpoint supersedes the earlier bulk-generate/apply startup FARM draft UI.
+
+Implemented boundary:
+
+- League Builder Draft now starts with a durable scout draft session.
+- Each team hires two scouts from a deterministic pool sized at 3x total scout need.
+- Scout draft order is user-arranged, then executed as a two-round snake.
+- Scout profiles persist in League Builder storage with team assignments, specialties, weaknesses, and per-position accuracy capped below 100%.
+- Prospect drafting starts only after every team has two hired scouts.
+- The prospect draft fills only current FARM vacancies, using reverse-payroll snake order.
+- Each pick writes exactly one selected prospect into League Builder player storage and the drafting team FARM roster.
+- Franchise Setup no longer runs the startup auto-fill bridge in normal UI flow; it validates/copies prepared League Builder state only.
+- The legacy bridge remains in code as an internal/test/legacy utility, but is no longer the user-facing League Builder draft experience.
+
+Locked visibility behavior:
+
+- The current team on the clock sees only its own two hired scouts' reports.
+- Prospect cards show visible-safe fields: scouted grade, confidence, potential grade, age, handedness, chemistry, visible personality, traits, and rookie salary.
+- True numeric ratings, true grade, and hidden personality modifiers remain hidden in storage-only fields until future reveal/call-up flows.
+
+Verification added:
+
+- Unit coverage for deterministic scout pools, scout accuracy caps, scout assignment counts, team-specific report boards, hidden-safe reports, and one-pick-at-a-time FARM persistence.
+- Component coverage for scout draft flow, prospect board visibility, one-pick confirmation, no bulk apply action, and Franchise Setup blocking incomplete scout/FARM state.
+- Playwright journeys now exercise the real scout draft and pick-by-pick prospect draft before Franchise Setup.
+
+Still deferred:
+
+- Dedicated scout hiring economy/contracts beyond startup assignment.
+- Mode 3 annual draft/scouting systems.
+- AI drafting, auto-picking for other teams, fantasy MLB draft, and simulation.
+
 ## 12. Slice 4 League Builder Startup Farm Draft Checkpoint
 
 Slice 4 adds the minimum durable League Builder startup farm draft workflow.

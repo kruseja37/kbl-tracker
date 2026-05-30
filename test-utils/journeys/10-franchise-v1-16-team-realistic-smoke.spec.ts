@@ -199,16 +199,24 @@ async function seedSixteenTeamLeagueBuilderLeague(page: Page): Promise<SeededLea
 
 async function applyStartupFarmDraftThroughLeagueBuilder(page: Page): Promise<void> {
   await page.goto('/league-builder/draft');
-  await expect(page.getByRole('heading', { name: 'STARTUP FARM DRAFT', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'STARTUP SCOUT + PROSPECT DRAFT', exact: true })).toBeVisible();
   await expect(page.locator('section').filter({ hasText: 'LEAGUE BUILDER SETUP' }).getByText('16', { exact: true })).toBeVisible();
   await page.getByLabel(/DETERMINISTIC SEED/i).fill('franchise-v1-realistic-16-team-smoke');
-  await page.getByRole('button', { name: /GENERATE STARTUP FARM DRAFT/i }).click();
-  await expect(page.getByRole('button', { name: /APPLY DRAFT TO LEAGUE BUILDER/i })).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText(/160 reports/i)).toBeVisible();
-  await page.getByRole('button', { name: /APPLY DRAFT TO LEAGUE BUILDER/i }).click();
-  await expect(page.getByText(/Applied 160 FARM prospects/i)).toBeVisible({ timeout: 60_000 });
+  await page.getByRole('button', { name: /BEGIN SCOUT DRAFT/i }).click();
+
+  for (let index = 0; index < 32; index += 1) {
+    await expect(page.getByText(/ON THE CLOCK:/i)).toBeVisible({ timeout: 60_000 });
+    await page.getByRole('button', { name: /HIRE SCOUT/i }).first().click();
+  }
+
+  await expect(page.getByText('PROSPECT DRAFT BOARD')).toBeVisible({ timeout: 60_000 });
+  for (let index = 0; index < 160; index += 1) {
+    await expect(page.getByRole('button', { name: /DRAFT TO FARM/i }).first()).toBeVisible({ timeout: 60_000 });
+    await page.getByRole('button', { name: /DRAFT TO FARM/i }).first().click();
+  }
+
   await expect(page.getByText('PREPARED', { exact: true })).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText(/already has 10 FARM players per team/i)).toBeVisible();
+  await expect(page.getByText(/two hired scouts and 10 hidden-safe FARM prospects/i)).toBeVisible();
 }
 
 async function initializeNoDhFranchiseAndManualSchedule(

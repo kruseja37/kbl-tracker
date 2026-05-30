@@ -15,6 +15,7 @@ import {
   clearAllLeagueBuilderData,
   saveLeagueTemplate,
   savePlayer,
+  saveScoutProfile,
   saveTeam,
   saveTeamRoster,
   getTeam,
@@ -162,6 +163,19 @@ async function seedLeagueTeam(teamId: string, name: string): Promise<void> {
   }
   for (const [index, position] of farmPositions.entries()) {
     await savePlayer(makePlayer(teamId, index + 1, position, 'FARM'));
+  }
+  for (let index = 1; index <= 2; index += 1) {
+    await saveScoutProfile({
+      id: `${teamId}-scout-${index}`,
+      leagueId: LEAGUE_ID,
+      teamId,
+      name: `${name} Scout ${index}`,
+      specialties: index === 1 ? ['outfield'] : ['pitching'],
+      weaknesses: index === 1 ? ['CP'] : ['1B'],
+      accuracyByPosition: { CF: 84, SP: 80, CP: 55, '1B': 64 },
+      seed: `${teamId}:scout:${index}`,
+      hiredPick: { round: index, pickNumber: index, teamId },
+    });
   }
   await saveTeamRoster({
     teamId,

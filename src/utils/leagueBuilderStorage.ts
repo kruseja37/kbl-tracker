@@ -27,7 +27,7 @@ export type { EraFlavor, FameTier, PlayerArchetype } from '../types/reporter';
 export { FAME_TIER_LABEL } from '../types/reporter';
 
 const DB_NAME = 'kbl-league-builder';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 const STORES = {
   LEAGUE_TEMPLATES: 'leagueTemplates',
@@ -36,6 +36,8 @@ const STORES = {
   LEAGUE_PLAYER_OVERRIDES: 'leaguePlayerOverrides',
   RULES_PRESETS: 'rulesPresets',
   TEAM_ROSTERS: 'teamRosters',
+  SCOUT_PROFILES: 'scoutProfiles',
+  STARTUP_DRAFT_SESSIONS: 'startupDraftSessions',
 } as const;
 
 // ============================================
@@ -140,6 +142,47 @@ export interface LeagueAssignment {
   leagueId: string;
   teamId: string;
   rosterStatus: RosterStatus;
+}
+
+export interface LeagueBuilderScoutProfile {
+  id: string;
+  leagueId: string;
+  teamId?: string;
+  name: string;
+  specialties: string[];
+  weaknesses: string[];
+  accuracyByPosition: Record<string, number>;
+  seed: string;
+  hiredPick?: {
+    round: number;
+    pickNumber: number;
+    teamId: string;
+  };
+  createdDate: string;
+  lastModified: string;
+}
+
+export interface LeagueBuilderStartupDraftSession {
+  id: string;
+  leagueId: string;
+  seasonNumber: number;
+  seed: string;
+  workflowVersion: string;
+  engineMethodVersion: string;
+  scoutOrder: string[];
+  scoutPool: LeagueBuilderScoutProfile[];
+  hiredScoutIdsByTeamId: Record<string, string[]>;
+  prospectPickOrder: Array<{
+    round: number;
+    pickNumber: number;
+    teamId: string;
+    teamName?: string;
+  }>;
+  prospectPool: unknown[];
+  completedPicks: unknown[];
+  currentPickIndex: number;
+  createdDate: string;
+  lastModified: string;
 }
 
 // Player
@@ -619,6 +662,17 @@ export async function initLeagueBuilderDatabase(): Promise<IDBDatabase> {
       // Team Rosters store
       if (!db.objectStoreNames.contains(STORES.TEAM_ROSTERS)) {
         db.createObjectStore(STORES.TEAM_ROSTERS, { keyPath: 'teamId' });
+      }
+
+      if (!db.objectStoreNames.contains(STORES.SCOUT_PROFILES)) {
+        const store = db.createObjectStore(STORES.SCOUT_PROFILES, { keyPath: 'id' });
+        store.createIndex('leagueId', 'leagueId', { unique: false });
+        store.createIndex('teamId', 'teamId', { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains(STORES.STARTUP_DRAFT_SESSIONS)) {
+        const store = db.createObjectStore(STORES.STARTUP_DRAFT_SESSIONS, { keyPath: 'id' });
+        store.createIndex('leagueId', 'leagueId', { unique: false });
       }
 
       // League Player Overrides store
@@ -1255,6 +1309,140 @@ export async function deleteTeamRoster(teamId: string): Promise<void> {
 }
 
 // ============================================
+// SCOUT / STARTUP DRAFT OPERATIONS
+// ============================================
+
+export function createStartupDraftSessionId(leagueId: string, seasonNumber = 1): string {
+  return `${leagueId}::startup-farm-draft::${seasonNumber}`;
+}
+
+export async function getAllScoutProfiles(): Promise<LeagueBuilderScoutProfile[]> {
+  const db = await initLeagueBuilderDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.SCOUT_PROFILES, 'readonly');
+    const store = tx.objectStore(STORES.SCOUT_PROFILES);
+    const request = store.getAll();
+
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function getScoutProfilesForLeague(leagueId: string): Promise<LeagueBuilderScoutProfile[]> {
+  const scouts = await getAllScoutProfiles();
+  return scouts.filter((scout) => scout.leagueId === leagueId);
+}
+
+export async function saveScoutProfile(
+  scout: Omit<LeagueBuilderScoutProfile, 'createdDate' | 'lastModified'> & {
+    createdDate?: string;
+    lastModified?: string;
+  },
+): Promise<LeagueBuilderScoutProfile> {
+  const db = await initLeagueBuilderDatabase();
+  const now = nowISO();
+  const existing = (await getAllScoutProfiles()).find((candidate) => candidate.id === scout.id);
+  const fullScout: LeagueBuilderScoutProfile = {
+    ...scout,
+    createdDate: scout.createdDate ?? existing?.createdDate ?? now,
+    lastModified: now,
+  };
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.SCOUT_PROFILES, 'readwrite');
+    const store = tx.objectStore(STORES.SCOUT_PROFILES);
+    const request = store.put(fullScout);
+
+    request.onerror = () => reject(request.error);
+    tx.oncomplete = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-league-builder', 'scoutProfiles', fullScout.id, fullScout);
+      resolve(fullScout);
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function deleteScoutProfilesForLeague(leagueId: string): Promise<void> {
+  const scouts = await getScoutProfilesForLeague(leagueId);
+  const db = await initLeagueBuilderDatabase();
+
+  await Promise.all(scouts.map((scout) => new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORES.SCOUT_PROFILES, 'readwrite');
+    const store = tx.objectStore(STORES.SCOUT_PROFILES);
+    const request = store.delete(scout.id);
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-league-builder', 'scoutProfiles', scout.id);
+      resolve();
+    };
+    request.onerror = () => reject(request.error);
+  })));
+}
+
+export async function getStartupDraftSession(
+  leagueId: string,
+  seasonNumber = 1,
+): Promise<LeagueBuilderStartupDraftSession | null> {
+  const db = await initLeagueBuilderDatabase();
+  const id = createStartupDraftSessionId(leagueId, seasonNumber);
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.STARTUP_DRAFT_SESSIONS, 'readonly');
+    const store = tx.objectStore(STORES.STARTUP_DRAFT_SESSIONS);
+    const request = store.get(id);
+
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function saveStartupDraftSession(
+  session: Omit<LeagueBuilderStartupDraftSession, 'createdDate' | 'lastModified'> & {
+    createdDate?: string;
+    lastModified?: string;
+  },
+): Promise<LeagueBuilderStartupDraftSession> {
+  const db = await initLeagueBuilderDatabase();
+  const now = nowISO();
+  const existing = await getStartupDraftSession(session.leagueId, session.seasonNumber);
+  const fullSession: LeagueBuilderStartupDraftSession = {
+    ...session,
+    createdDate: session.createdDate ?? existing?.createdDate ?? now,
+    lastModified: now,
+  };
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.STARTUP_DRAFT_SESSIONS, 'readwrite');
+    const store = tx.objectStore(STORES.STARTUP_DRAFT_SESSIONS);
+    const request = store.put(fullSession);
+
+    request.onerror = () => reject(request.error);
+    tx.oncomplete = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-league-builder', 'startupDraftSessions', fullSession.id, fullSession);
+      resolve(fullSession);
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function deleteStartupDraftSession(leagueId: string, seasonNumber = 1): Promise<void> {
+  const db = await initLeagueBuilderDatabase();
+  const id = createStartupDraftSessionId(leagueId, seasonNumber);
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.STARTUP_DRAFT_SESSIONS, 'readwrite');
+    const store = tx.objectStore(STORES.STARTUP_DRAFT_SESSIONS);
+    const request = store.delete(id);
+
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-league-builder', 'startupDraftSessions', id);
+      resolve();
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+// ============================================
 // DEFAULT PRESETS
 // ============================================
 
@@ -1364,6 +1552,8 @@ export async function clearAllLeagueBuilderData(): Promise<void> {
       { store: STORES.LEAGUE_PLAYER_OVERRIDES, keyField: 'id' },
       { store: STORES.RULES_PRESETS, keyField: 'id' },
       { store: STORES.TEAM_ROSTERS, keyField: 'teamId' },
+      { store: STORES.SCOUT_PROFILES, keyField: 'id' },
+      { store: STORES.STARTUP_DRAFT_SESSIONS, keyField: 'id' },
     ];
 
     for (const { store: storeName, keyField } of storeConfigs) {
@@ -1386,6 +1576,8 @@ export async function clearAllLeagueBuilderData(): Promise<void> {
         STORES.LEAGUE_PLAYER_OVERRIDES,
         STORES.RULES_PRESETS,
         STORES.TEAM_ROSTERS,
+        STORES.SCOUT_PROFILES,
+        STORES.STARTUP_DRAFT_SESSIONS,
       ],
       'readwrite'
     );
@@ -1396,6 +1588,8 @@ export async function clearAllLeagueBuilderData(): Promise<void> {
     tx.objectStore(STORES.LEAGUE_PLAYER_OVERRIDES).clear();
     tx.objectStore(STORES.RULES_PRESETS).clear();
     tx.objectStore(STORES.TEAM_ROSTERS).clear();
+    tx.objectStore(STORES.SCOUT_PROFILES).clear();
+    tx.objectStore(STORES.STARTUP_DRAFT_SESSIONS).clear();
 
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);

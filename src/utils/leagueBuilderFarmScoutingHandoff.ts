@@ -1,6 +1,7 @@
 import type { FranchiseFarmScoutingHandoffSnapshot } from '../types/franchise';
 import {
   getAllPlayers,
+  getScoutProfilesForLeague,
   getAllTeams,
   getLeagueTemplate,
   getTeamRoster,
@@ -31,6 +32,7 @@ export interface LeagueBuilderFarmScoutingTeamReport {
   hiddenFarm: number;
   visibleSafeMetadata: number;
   missingFarm: number;
+  scouts: number;
 }
 
 export interface LeagueBuilderFarmScoutingValidationReport {
@@ -97,7 +99,10 @@ function hasVisibleSafeProspectMetadata(player: Player): boolean {
 
 export function buildLeagueBuilderFarmScoutingHandoffSnapshot(
   report: LeagueBuilderFarmScoutingValidationReport,
-  options: { bridgeRepairApplied?: boolean } = {},
+  options: {
+    bridgeRepairApplied?: boolean;
+    scoutProfilesByTeamId?: FranchiseFarmScoutingHandoffSnapshot['scoutProfilesByTeamId'];
+  } = {},
 ): FranchiseFarmScoutingHandoffSnapshot {
   return {
     ownership: LEAGUE_BUILDER_FARM_SCOUTING_OWNERSHIP,
@@ -108,7 +113,7 @@ export function buildLeagueBuilderFarmScoutingHandoffSnapshot(
     mlbPlayersPerTeam: V1_MLB_PLAYERS_PER_TEAM,
     farmPlayersPerTeam: V1_FARM_PLAYERS_PER_TEAM,
     hiddenTrueRatingsUntilReveal: true,
-    scoutProfilesRequired: false,
+    scoutProfilesRequired: true,
     teamCounts: Object.fromEntries(
       report.teams.map((team) => [
         team.teamId,
@@ -117,9 +122,11 @@ export function buildLeagueBuilderFarmScoutingHandoffSnapshot(
           FARM: team.FARM,
           hiddenFarm: team.hiddenFarm,
           visibleSafeMetadata: team.visibleSafeMetadata,
+          scouts: team.scouts,
         },
       ]),
     ),
+    scoutProfilesByTeamId: options.scoutProfilesByTeamId,
     warnings: report.warnings,
     limitations: report.limitations,
   };
@@ -130,11 +137,12 @@ export function validateLeagueBuilderFarmScoutingHandoffState(input: {
   teams: Team[];
   players: Player[];
   rostersByTeamId: Map<string, TeamRoster | null>;
+  scoutsByTeamId?: Map<string, number>;
 }): LeagueBuilderFarmScoutingValidationReport {
   const blockers: string[] = [];
   const warnings: string[] = [];
   const limitations = [
-    'Durable scout profiles are deferred in Slice 1; missing scout/profile data is a warning, not a blocker.',
+    'Each team must hire two League Builder scouts before Franchise Setup can copy farm/scouting state.',
     'Scouting output remains imperfect and true ratings stay hidden until call-up/reveal.',
   ];
   const teams: LeagueBuilderFarmScoutingTeamReport[] = [];
@@ -154,6 +162,7 @@ export function validateLeagueBuilderFarmScoutingHandoffState(input: {
         hiddenFarm: 0,
         visibleSafeMetadata: 0,
         missingFarm: V1_FARM_PLAYERS_PER_TEAM,
+        scouts: 0,
       });
       continue;
     }
@@ -168,6 +177,7 @@ export function validateLeagueBuilderFarmScoutingHandoffState(input: {
     const hiddenFarm = farmPlayers.filter((player) => player.ratingRevealState !== 'revealed').length;
     const visibleSafeMetadata = farmPlayers.filter(hasVisibleSafeProspectMetadata).length;
     const missingFarm = Math.max(0, V1_FARM_PLAYERS_PER_TEAM - farmPlayers.length);
+    const scoutCount = input.scoutsByTeamId?.get(team.id) ?? 0;
 
     teams.push({
       teamId: team.id,
@@ -177,6 +187,7 @@ export function validateLeagueBuilderFarmScoutingHandoffState(input: {
       hiddenFarm,
       visibleSafeMetadata,
       missingFarm,
+      scouts: scoutCount,
     });
 
     if (uniqueCount(roster.farmRoster) !== roster.farmRoster.length) {
@@ -197,7 +208,12 @@ export function validateLeagueBuilderFarmScoutingHandoffState(input: {
     }
     if (farmPlayers.length < V1_FARM_PLAYERS_PER_TEAM) {
       bridgeRequired = true;
-      warnings.push(`${team.name}: has ${farmPlayers.length}/${V1_FARM_PLAYERS_PER_TEAM} FARM players; temporary bridge can fill missing slots.`);
+      blockers.push(`${team.name}: has ${farmPlayers.length}/${V1_FARM_PLAYERS_PER_TEAM} FARM players; run the League Builder startup prospect draft.`);
+      bridgeAllowed = false;
+    }
+    if (scoutCount !== 2) {
+      blockers.push(`${team.name}: expected 2 hired scouts; found ${scoutCount}.`);
+      bridgeAllowed = false;
     }
     const revealedFarm = farmPlayers.filter((player) => player.ratingRevealState === 'revealed');
     if (revealedFarm.length > 0) {
@@ -258,6 +274,12 @@ export async function validatePreparedLeagueBuilderFarmScoutingState(
     getAllPlayers(),
     getAllTeams(),
   ]);
+  const scouts = await getScoutProfilesForLeague(leagueId);
+  const scoutsByTeamId = new Map<string, number>();
+  for (const scout of scouts) {
+    if (!scout.teamId) continue;
+    scoutsByTeamId.set(scout.teamId, (scoutsByTeamId.get(scout.teamId) ?? 0) + 1);
+  }
   const teams = league.teamIds.map((teamId) => allTeams.find((team) => team.id === teamId)).filter(Boolean) as Team[];
   const missingTeamIds = league.teamIds.filter((teamId) => !teams.some((team) => team.id === teamId));
   const rosterEntries = await Promise.all(
@@ -268,6 +290,7 @@ export async function validatePreparedLeagueBuilderFarmScoutingState(
     teams,
     players,
     rostersByTeamId: new Map(rosterEntries),
+    scoutsByTeamId,
   });
 
   if (missingTeamIds.length === 0) return report;

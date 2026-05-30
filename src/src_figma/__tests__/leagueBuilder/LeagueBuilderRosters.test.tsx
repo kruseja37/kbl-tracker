@@ -22,6 +22,7 @@ vi.mock('react-router', () => ({
 
 const mockGetRoster = vi.fn().mockResolvedValue(null);
 const mockUpdateRoster = vi.fn().mockResolvedValue(undefined);
+const mockUpdatePlayer = vi.fn().mockImplementation(async (player) => player);
 
 vi.mock('../../hooks/useLeagueBuilderData', () => ({
   useLeagueBuilderData: vi.fn(() => ({
@@ -76,6 +77,7 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
     isLoading: false,
     error: null,
     getRoster: mockGetRoster,
+    updatePlayer: mockUpdatePlayer,
     updateRoster: mockUpdateRoster,
   })),
 }));
@@ -87,6 +89,7 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
 describe('LeagueBuilderRosters Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUpdatePlayer.mockImplementation(async (player) => player);
   });
 
   describe('Header', () => {
@@ -337,6 +340,50 @@ describe('LeagueBuilderRosters Component', () => {
       expect(savedRoster.optimalLineupVsRHPWithDH.sourceConfidence).toBe('stale_roster');
       expect(savedRoster.optimalLineupVsRHPWithDH.confidence).toBe('low');
       expect(savedRoster.optimalLineupVsRHPWithDH.slots).toEqual(savedOptimal.slots);
+    });
+
+    test('removing a FARM player unassigns League Builder roster status without deleting the player', async () => {
+      mockGetRoster.mockResolvedValueOnce({
+        teamId: 'team-1',
+        mlbRoster: ['player-1'],
+        farmRoster: ['player-2'],
+        lineupWithDH: [],
+        lineupWithoutDH: [],
+        startingRotation: [],
+        longRelievers: [],
+        closingPitcher: '',
+        setupPitchers: [],
+        depthChart: {
+          C: [],
+          '1B': [],
+          '2B': [],
+          SS: [],
+          '3B': [],
+          LF: [],
+          CF: [],
+          RF: [],
+          DH: [],
+          SP: [],
+          RP: [],
+          CP: [],
+        },
+        pinchHitOrder: [],
+        pinchRunOrder: [],
+        defensiveSubOrder: [],
+        lastModified: 'roster-v1',
+      });
+
+      render(<LeagueBuilderRosters />);
+      fireEvent.click(screen.getByText('Boston Sox'));
+
+      await screen.findByText('AAA ROSTER (1)');
+      fireEvent.click(screen.getAllByRole('button', { name: '✕' })[1]);
+
+      await waitFor(() => expect(mockUpdatePlayer).toHaveBeenCalled());
+      const updatedPlayer = mockUpdatePlayer.mock.calls[0]?.[0];
+      expect(updatedPlayer.id).toBe('player-2');
+      expect(updatedPlayer.leagueAssignments).toEqual([]);
+      expect(mockUpdateRoster).not.toHaveBeenCalled();
     });
   });
 

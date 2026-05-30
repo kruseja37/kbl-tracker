@@ -1,14 +1,23 @@
 import {
   deletePlayer,
+  deleteScoutProfilesForLeague,
+  createStartupDraftSessionId,
+  deleteStartupDraftSession,
+  getStartupDraftSession,
   getAllPlayers,
   getAllTeams,
   getLeagueTemplate,
+  getScoutProfilesForLeague,
   getTeamRoster,
+  saveScoutProfile,
   savePlayer,
+  saveStartupDraftSession,
   saveTeamRoster,
   type Chemistry,
   type DepthChart,
   type Grade,
+  type LeagueBuilderScoutProfile,
+  type LeagueBuilderStartupDraftSession,
   type Personality,
   type PitchType,
   type Player,
@@ -17,8 +26,14 @@ import {
   type TeamRoster,
 } from './leagueBuilderStorage';
 import {
+  buildProspectPlayerForPick,
   generateProspectScoutingDraft,
   PROSPECT_SCOUTING_DRAFT_ENGINE_VERSION,
+  scoutAccuracy,
+  scoutProspect,
+  visibleReportForProspectPlayer,
+  type DraftPosition,
+  type GeneratedProspectCandidate,
   type LeagueBuilderProspectPlayerDto,
   type ProspectDraftPick,
   type ProspectScoutDescriptor,
@@ -31,6 +46,8 @@ export const LEAGUE_BUILDER_STARTUP_FARM_DRAFT_VERSION =
 
 export const STARTUP_FARM_TARGET_SIZE = 10;
 export const STARTUP_MLB_REQUIRED_SIZE = 22;
+export const STARTUP_SCOUTS_PER_TEAM = 2;
+export const STARTUP_SCOUT_POOL_MULTIPLIER = 3;
 
 export interface StartupFarmDraftTeamStatus {
   teamId: string;
@@ -38,6 +55,7 @@ export interface StartupFarmDraftTeamStatus {
   farmCount: number;
   mlbCount: number;
   missingFarm: number;
+  scoutCount?: number;
   prepared: boolean;
 }
 
@@ -78,6 +96,56 @@ export interface ApplyStartupFarmDraftReport {
   updatedTeamIds: string[];
   issues: string[];
   rollbackErrors: string[];
+}
+
+export interface StartupScoutDraftPickSlot {
+  round: number;
+  pickNumber: number;
+  teamId: string;
+  teamName?: string;
+}
+
+export interface StartupProspectBoardReport extends VisibleSafeProspectReport {
+  scoutId: string;
+  scoutName: string;
+  scoutAccuracy: number;
+  scoutSpecialtiesVisible: ScoutSpecialty[];
+  scoutWeaknessesVisible: ScoutSpecialty[];
+}
+
+export interface StartupProspectBoardCandidate extends VisibleSafeProspectReport {
+  reports: StartupProspectBoardReport[];
+  bestScoutedGrade: Grade;
+  bestConfidence: 'low' | 'medium' | 'high';
+}
+
+export interface StartupDraftCompletedPick {
+  round: number;
+  pickNumber: number;
+  teamId: string;
+  teamName?: string;
+  candidateId: string;
+  playerId: string;
+  playerName: string;
+  position: DraftPosition;
+  scoutedGrade: Grade;
+  potentialGrade: Grade;
+  scoutReports: StartupProspectBoardReport[];
+}
+
+export interface LeagueBuilderStartupDraftView {
+  session: LeagueBuilderStartupDraftSession | null;
+  teams: StartupFarmDraftTeamStatus[];
+  blockers: string[];
+  warnings: string[];
+  prepared: boolean;
+  scoutDraftComplete: boolean;
+  prospectDraftComplete: boolean;
+  currentScoutPick: StartupScoutDraftPickSlot | null;
+  availableScouts: LeagueBuilderScoutProfile[];
+  currentProspectPick: StartupScoutDraftPickSlot | null;
+  prospectBoard: StartupProspectBoardCandidate[];
+  completedPicks: StartupDraftCompletedPick[];
 }
 
 interface DraftTeamState {
@@ -674,4 +742,688 @@ export async function applyLeagueBuilderStartupFarmDraft(
     applied: true,
     issues: [],
   };
+}
+
+const DRAFT_POSITIONS: DraftPosition[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'DH', 'SP', 'RP', 'CP'];
+const SCOUT_FIRST_NAMES = ['Riley', 'Morgan', 'Casey', 'Jordan', 'Taylor', 'Avery', 'Rowan', 'Hayden', 'Emerson', 'Finley', 'Dakota', 'Reese'];
+const SCOUT_LAST_NAMES = ['Kline', 'Mercer', 'Vale', 'Soto', 'Bishop', 'Hale', 'Quinn', 'Madden', 'Wilder', 'Stone', 'Hollis', 'Baker'];
+const SCOUT_SPECIALTY_POOL: ScoutSpecialty[] = ['pitching', 'outfield', 'infield', 'catching', 'power', 'contact', 'defense', 'speed', 'SP', 'RP', 'CF', 'SS', 'CP', '1B'];
+
+function hashString(input: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function randomUnit(seed: string): number {
+  return hashString(seed) / 0xffffffff;
+}
+
+function pick<T>(seed: string, values: readonly T[]): T {
+  return values[Math.floor(randomUnit(seed) * values.length)] ?? values[0];
+}
+
+function gradeRank(grade: Grade): number {
+  const order: Grade[] = ['A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D'];
+  const index = order.indexOf(grade);
+  return index < 0 ? order.length : index;
+}
+
+function confidenceRank(confidence: 'low' | 'medium' | 'high'): number {
+  return confidence === 'high' ? 2 : confidence === 'medium' ? 1 : 0;
+}
+
+function toScoutDescriptor(scout: LeagueBuilderScoutProfile): ProspectScoutDescriptor {
+  return {
+    scoutId: scout.id,
+    scoutName: scout.name,
+    specialties: scout.specialties as ScoutSpecialty[],
+    weaknesses: scout.weaknesses as ScoutSpecialty[],
+  };
+}
+
+function buildScoutPool(leagueId: string, seed: string, teamCount: number): LeagueBuilderScoutProfile[] {
+  const poolSize = teamCount * STARTUP_SCOUTS_PER_TEAM * STARTUP_SCOUT_POOL_MULTIPLIER;
+  return Array.from({ length: poolSize }, (_, index) => {
+    const scoutSeed = `${seed}:scout:${index + 1}`;
+    const specialty = pick(`${scoutSeed}:specialty`, SCOUT_SPECIALTY_POOL);
+    let weakness = pick(`${scoutSeed}:weakness`, SCOUT_SPECIALTY_POOL);
+    if (weakness === specialty) {
+      weakness = pick(`${scoutSeed}:weakness-alt`, SCOUT_SPECIALTY_POOL.filter((item) => item !== specialty));
+    }
+    const descriptor: ProspectScoutDescriptor = {
+      scoutId: `scout-${leagueId}-${index + 1}`,
+      scoutName: `${pick(`${scoutSeed}:first`, SCOUT_FIRST_NAMES)} ${pick(`${scoutSeed}:last`, SCOUT_LAST_NAMES)}`,
+      specialties: [specialty],
+      weaknesses: [weakness],
+    };
+    return {
+      id: descriptor.scoutId,
+      leagueId,
+      name: descriptor.scoutName,
+      specialties: descriptor.specialties ?? [],
+      weaknesses: descriptor.weaknesses ?? [],
+      accuracyByPosition: Object.fromEntries(
+        DRAFT_POSITIONS.map((position) => [position, scoutAccuracy(position, descriptor)]),
+      ),
+      seed: scoutSeed,
+      createdDate: '',
+      lastModified: '',
+    };
+  });
+}
+
+function buildScoutPickOrder(teamOrder: Array<{ teamId: string; teamName?: string }>): StartupScoutDraftPickSlot[] {
+  const picks: StartupScoutDraftPickSlot[] = [];
+  let pickNumber = 0;
+  for (let round = 1; round <= STARTUP_SCOUTS_PER_TEAM; round += 1) {
+    const roundOrder = round % 2 === 1 ? teamOrder : [...teamOrder].reverse();
+    for (const team of roundOrder) {
+      pickNumber += 1;
+      picks.push({ round, pickNumber, teamId: team.teamId, teamName: team.teamName });
+    }
+  }
+  return picks;
+}
+
+function sessionCompletedPicks(session: LeagueBuilderStartupDraftSession): StartupDraftCompletedPick[] {
+  return (session.completedPicks ?? []) as StartupDraftCompletedPick[];
+}
+
+function sessionProspectPool(session: LeagueBuilderStartupDraftSession): GeneratedProspectCandidate[] {
+  return (session.prospectPool ?? []) as GeneratedProspectCandidate[];
+}
+
+function buildProspectPickOrder(teamStates: DraftTeamState[]): StartupScoutDraftPickSlot[] {
+  const baseOrder = [...teamStates].sort((a, b) => {
+    const payrollDiff = a.payroll - b.payroll;
+    if (payrollDiff !== 0) return payrollDiff;
+    return a.team.id.localeCompare(b.team.id);
+  });
+  const remainingByTeamId = new Map(baseOrder.map((state) => [state.team.id, state.vacancies]));
+  const order: StartupScoutDraftPickSlot[] = [];
+  let pickNumber = 0;
+  for (let round = 1; round <= STARTUP_FARM_TARGET_SIZE; round += 1) {
+    const roundOrder = round % 2 === 1 ? baseOrder : [...baseOrder].reverse();
+    for (const state of roundOrder) {
+      const remaining = remainingByTeamId.get(state.team.id) ?? 0;
+      if (remaining <= 0) continue;
+      pickNumber += 1;
+      order.push({
+        round,
+        pickNumber,
+        teamId: state.team.id,
+        teamName: teamDisplayNameForDraft(state.team),
+      });
+      remainingByTeamId.set(state.team.id, remaining - 1);
+    }
+  }
+  return order;
+}
+
+function teamDisplayNameForDraft(team: Team): string {
+  return team.location ? `${team.location} ${team.name}` : team.name;
+}
+
+async function collectDraftTeamStates(leagueId: string): Promise<{
+  teams: StartupFarmDraftTeamStatus[];
+  teamStates: DraftTeamState[];
+  blockers: string[];
+  warnings: string[];
+}> {
+  const league = await getLeagueTemplate(leagueId);
+  if (!league) {
+    return { teams: [], teamStates: [], blockers: [`League template "${leagueId}" not found.`], warnings: [] };
+  }
+  const [allPlayers, allTeams] = await Promise.all([getAllPlayers(), getAllTeams()]);
+  const teams: StartupFarmDraftTeamStatus[] = [];
+  const teamStates: DraftTeamState[] = [];
+  const blockers: string[] = [];
+  const warnings: string[] = [];
+
+  for (const teamId of league.teamIds ?? []) {
+    const team = allTeams.find((candidate) => candidate.id === teamId);
+    const roster = await getTeamRoster(teamId);
+    if (!team) {
+      blockers.push(`Team "${teamId}" is missing from League Builder storage.`);
+      continue;
+    }
+    if (!roster) {
+      blockers.push(`${team.name}: missing League Builder roster.`);
+      teams.push({
+        teamId,
+        teamName: teamDisplayNameForDraft(team),
+        farmCount: 0,
+        mlbCount: 0,
+        missingFarm: STARTUP_FARM_TARGET_SIZE,
+        prepared: false,
+      });
+      continue;
+    }
+    const farmPlayers = allPlayers.filter((player) => hasAssignment(player, leagueId, team.id, 'FARM'));
+    const mlbPlayers = allPlayers.filter((player) => hasAssignment(player, leagueId, team.id, 'MLB'));
+    const farmIds = uniqueSorted(farmPlayers.map((player) => player.id));
+    const mlbIds = uniqueSorted(mlbPlayers.map((player) => player.id));
+    const vacancies = Math.max(0, STARTUP_FARM_TARGET_SIZE - farmIds.length);
+    teams.push({
+      teamId: team.id,
+      teamName: teamDisplayNameForDraft(team),
+      farmCount: farmIds.length,
+      mlbCount: mlbIds.length,
+      missingFarm: vacancies,
+      prepared: vacancies === 0,
+    });
+    if (uniqueSorted(roster.farmRoster).length !== roster.farmRoster.length) {
+      blockers.push(`${team.name}: FARM roster contains duplicate player ids.`);
+    }
+    if (!sameIdSet(roster.farmRoster, farmIds)) {
+      blockers.push(`${team.name}: FARM roster does not match player FARM assignments.`);
+    }
+    if (farmIds.length > STARTUP_FARM_TARGET_SIZE) {
+      blockers.push(`${team.name}: FARM roster is over the startup limit (${farmIds.length}/${STARTUP_FARM_TARGET_SIZE}).`);
+    }
+    if (mlbIds.length !== STARTUP_MLB_REQUIRED_SIZE) {
+      blockers.push(`${team.name}: expected ${STARTUP_MLB_REQUIRED_SIZE} MLB players before startup farm draft; found ${mlbIds.length}.`);
+    }
+    if (farmPlayers.some((player) => player.ratingRevealState === 'revealed')) {
+      blockers.push(`${team.name}: FARM players must keep ratings hidden before call-up.`);
+    }
+    teamStates.push({
+      team,
+      roster,
+      farmIds,
+      mlbIds,
+      vacancies,
+      payroll: getTeamPayroll(team.id, leagueId, allPlayers),
+    });
+  }
+  return { teams, teamStates, blockers, warnings };
+}
+
+function currentScoutPick(session: LeagueBuilderStartupDraftSession): StartupScoutDraftPickSlot | null {
+  const teamOrder = session.scoutOrder.map((teamId) => ({ teamId }));
+  const scoutOrder = buildScoutPickOrder(teamOrder);
+  const completedScoutPicks = Object.values(session.hiredScoutIdsByTeamId)
+    .reduce((sum, scouts) => sum + scouts.length, 0);
+  return scoutOrder[completedScoutPicks] ?? null;
+}
+
+function hiredScoutsForTeam(session: LeagueBuilderStartupDraftSession, teamId: string): LeagueBuilderScoutProfile[] {
+  const ids = new Set(session.hiredScoutIdsByTeamId[teamId] ?? []);
+  return session.scoutPool.filter((scout) => ids.has(scout.id));
+}
+
+function allTeamsHaveScouts(session: LeagueBuilderStartupDraftSession): boolean {
+  return session.scoutOrder.every((teamId) =>
+    (session.hiredScoutIdsByTeamId[teamId] ?? []).length === STARTUP_SCOUTS_PER_TEAM,
+  );
+}
+
+function scoutProfileMatchesSession(
+  sessionScout: LeagueBuilderScoutProfile | undefined,
+  durableScout: LeagueBuilderScoutProfile,
+): boolean {
+  if (!sessionScout) return false;
+  return sessionScout.id === durableScout.id &&
+    sessionScout.name === durableScout.name &&
+    JSON.stringify(sessionScout.specialties) === JSON.stringify(durableScout.specialties) &&
+    JSON.stringify(sessionScout.weaknesses) === JSON.stringify(durableScout.weaknesses) &&
+    JSON.stringify(sessionScout.accuracyByPosition) === JSON.stringify(durableScout.accuracyByPosition);
+}
+
+async function getDurableScoutCountsByTeam(leagueId: string): Promise<Map<string, number>> {
+  const scouts = await getScoutProfilesForLeague(leagueId);
+  const counts = new Map<string, number>();
+  for (const scout of scouts) {
+    if (!scout.teamId) continue;
+    counts.set(scout.teamId, (counts.get(scout.teamId) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function missingDurableScoutIssues(
+  teams: StartupFarmDraftTeamStatus[],
+  scoutCounts: Map<string, number>,
+): string[] {
+  return teams
+    .filter((team) => (scoutCounts.get(team.teamId) ?? 0) !== STARTUP_SCOUTS_PER_TEAM)
+    .map((team) =>
+      `${team.teamName}: expected ${STARTUP_SCOUTS_PER_TEAM} hired scouts; found ${scoutCounts.get(team.teamId) ?? 0}.`,
+    );
+}
+
+function normalScoutDraftRestartBlockedMessage(scoutCount: number): string {
+  return `Normal startup scout draft restart is blocked because ${scoutCount} durable scout profile${scoutCount === 1 ? '' : 's'} already exist for this league. V1 keeps the prepared scout state; reset flow is deferred.`;
+}
+
+async function validateSessionDurableScoutState(
+  session: LeagueBuilderStartupDraftSession,
+): Promise<string[]> {
+  const durableScouts = await getScoutProfilesForLeague(session.leagueId);
+  const durableById = new Map(durableScouts.map((scout) => [scout.id, scout]));
+  const issues: string[] = [];
+
+  for (const teamId of session.scoutOrder) {
+    const hiredIds = session.hiredScoutIdsByTeamId[teamId] ?? [];
+    const durableTeamScouts = durableScouts.filter((scout) => scout.teamId === teamId);
+    if (hiredIds.length !== STARTUP_SCOUTS_PER_TEAM) {
+      issues.push(`Team "${teamId}" must hire ${STARTUP_SCOUTS_PER_TEAM} scouts before prospect drafting.`);
+      continue;
+    }
+    if (durableTeamScouts.length !== STARTUP_SCOUTS_PER_TEAM) {
+      issues.push(`Team "${teamId}" durable scout state changed; expected ${STARTUP_SCOUTS_PER_TEAM}, found ${durableTeamScouts.length}.`);
+      continue;
+    }
+    for (const scoutId of hiredIds) {
+      const durableScout = durableById.get(scoutId);
+      const sessionScout = session.scoutPool.find((scout) => scout.id === scoutId);
+      if (!durableScout || durableScout.teamId !== teamId) {
+        issues.push(`Team "${teamId}" hired scout "${scoutId}" is missing from durable League Builder scout profiles.`);
+        continue;
+      }
+      if (!scoutProfileMatchesSession(sessionScout, durableScout)) {
+        issues.push(`Team "${teamId}" hired scout "${scoutId}" no longer matches the active draft session.`);
+      }
+    }
+  }
+
+  return issues;
+}
+
+function currentProspectPick(session: LeagueBuilderStartupDraftSession): StartupScoutDraftPickSlot | null {
+  return session.prospectPickOrder[session.currentPickIndex] ?? null;
+}
+
+function deterministicPickPlayerId(
+  leagueId: string,
+  seasonNumber: number,
+  pick: StartupScoutDraftPickSlot,
+  existingPlayerIds: Set<string>,
+): string {
+  const base = `prospect-${leagueId}-${seasonNumber}-${pick.teamId}-${pick.round}-${pick.pickNumber}`;
+  if (!existingPlayerIds.has(base)) return base;
+  let suffix = 1;
+  while (existingPlayerIds.has(`${base}-alt-${suffix}`)) suffix += 1;
+  return `${base}-alt-${suffix}`;
+}
+
+function buildBoardForSession(session: LeagueBuilderStartupDraftSession): StartupProspectBoardCandidate[] {
+  const pickSlot = currentProspectPick(session);
+  if (!pickSlot || !allTeamsHaveScouts(session)) return [];
+  const completed = sessionCompletedPicks(session);
+  const usedCandidateIds = new Set(completed.map((pick) => pick.candidateId));
+  const scouts = hiredScoutsForTeam(session, pickSlot.teamId);
+  const pool = sessionProspectPool(session).filter((candidate) => !usedCandidateIds.has(candidate.candidateId));
+
+  return pool.map((candidate) => {
+    const reports = scouts.map((scout) => {
+      const descriptor = toScoutDescriptor(scout);
+      const report = scoutProspect(candidate, descriptor, session.seed);
+      return {
+        candidateId: candidate.candidateId,
+        playerName: `${candidate.firstName} ${candidate.lastName}`,
+        position: candidate.position,
+        age: 18,
+        bats: 'R',
+        throws: 'R',
+        scoutedGrade: report.scoutedGrade,
+        potentialGrade: candidate.potentialGrade,
+        scoutConfidence: report.scoutConfidence,
+        chemistry: candidate.chemistry,
+        personality: candidate.personality,
+        trait1: candidate.trait1,
+        trait2: candidate.trait2,
+        salary: 0.5,
+        scoutId: scout.id,
+        scoutName: scout.name,
+        scoutAccuracy: report.scoutAccuracy,
+        scoutSpecialtiesVisible: [...scout.specialties] as ScoutSpecialty[],
+        scoutWeaknessesVisible: [...scout.weaknesses] as ScoutSpecialty[],
+      } satisfies StartupProspectBoardReport;
+    });
+    const sortedReports = [...reports].sort((a, b) => {
+      const gradeDiff = gradeRank(a.scoutedGrade) - gradeRank(b.scoutedGrade);
+      if (gradeDiff !== 0) return gradeDiff;
+      return confidenceRank(b.scoutConfidence) - confidenceRank(a.scoutConfidence);
+    });
+    const best = sortedReports[0];
+    return {
+      candidateId: candidate.candidateId,
+      playerName: `${candidate.firstName} ${candidate.lastName}`,
+      position: candidate.position,
+      age: 18,
+      bats: 'R',
+      throws: 'R',
+      scoutedGrade: best.scoutedGrade,
+      bestScoutedGrade: best.scoutedGrade,
+      potentialGrade: candidate.potentialGrade,
+      bestConfidence: best.scoutConfidence,
+      scoutConfidence: best.scoutConfidence,
+      chemistry: candidate.chemistry,
+      personality: candidate.personality,
+      trait1: candidate.trait1,
+      trait2: candidate.trait2,
+      salary: 0.5,
+      reports,
+    } satisfies StartupProspectBoardCandidate;
+  }).sort((a, b) => {
+    const gradeDiff = gradeRank(a.bestScoutedGrade) - gradeRank(b.bestScoutedGrade);
+    if (gradeDiff !== 0) return gradeDiff;
+    const confidenceDiff = confidenceRank(b.bestConfidence) - confidenceRank(a.bestConfidence);
+    if (confidenceDiff !== 0) return confidenceDiff;
+    const potentialDiff = gradeRank(a.potentialGrade) - gradeRank(b.potentialGrade);
+    if (potentialDiff !== 0) return potentialDiff;
+    return a.playerName.localeCompare(b.playerName);
+  });
+}
+
+export async function createLeagueBuilderStartupDraftSession(input: {
+  leagueId: string;
+  seasonNumber?: number;
+  seed?: string;
+  scoutOrder?: string[];
+}): Promise<LeagueBuilderStartupDraftView> {
+  const seasonNumber = input.seasonNumber ?? 1;
+  const seed = input.seed?.trim() || `${LEAGUE_BUILDER_STARTUP_FARM_DRAFT_VERSION}:${input.leagueId}:${seasonNumber}`;
+  const { teams, teamStates, blockers, warnings } = await collectDraftTeamStates(input.leagueId);
+  const teamIds = teamStates.map((state) => state.team.id);
+  const scoutOrder = input.scoutOrder?.filter((teamId) => teamIds.includes(teamId)) ?? teamIds;
+  const completeScoutOrder = [...scoutOrder, ...teamIds.filter((teamId) => !scoutOrder.includes(teamId))];
+
+  if (blockers.length > 0) {
+    await deleteStartupDraftSession(input.leagueId, seasonNumber);
+    return {
+      session: null,
+      teams,
+      blockers,
+      warnings,
+      prepared: false,
+      scoutDraftComplete: false,
+      prospectDraftComplete: false,
+      currentScoutPick: null,
+      availableScouts: [],
+      currentProspectPick: null,
+      prospectBoard: [],
+      completedPicks: [],
+    };
+  }
+
+  const existingScoutProfiles = await getScoutProfilesForLeague(input.leagueId);
+  if (existingScoutProfiles.length > 0) {
+    throw new Error(normalScoutDraftRestartBlockedMessage(existingScoutProfiles.length));
+  }
+
+  const scoutPool = buildScoutPool(input.leagueId, seed, teamStates.length);
+  const prospectPickOrder = buildProspectPickOrder(teamStates);
+  const draft = generateProspectScoutingDraft({
+    leagueId: input.leagueId,
+    seasonNumber,
+    teamDraftOrder: teamStates
+      .sort((a, b) => {
+        const payrollDiff = a.payroll - b.payroll;
+        if (payrollDiff !== 0) return payrollDiff;
+        return a.team.id.localeCompare(b.team.id);
+      })
+      .map((state) => ({ teamId: state.team.id, teamName: teamDisplayNameForDraft(state.team) })),
+    rounds: STARTUP_FARM_TARGET_SIZE,
+    seed,
+    scoutsByTeamId: {},
+    existingPlayerIds: [],
+    existingTeamIds: teamIds,
+    candidatePoolMultiplier: 3,
+  });
+  const session = await saveStartupDraftSession({
+    id: createStartupDraftSessionId(input.leagueId, seasonNumber),
+    leagueId: input.leagueId,
+    seasonNumber,
+    seed,
+    workflowVersion: LEAGUE_BUILDER_STARTUP_FARM_DRAFT_VERSION,
+    engineMethodVersion: draft.methodVersion,
+    scoutOrder: completeScoutOrder,
+    scoutPool,
+    hiredScoutIdsByTeamId: Object.fromEntries(completeScoutOrder.map((teamId) => [teamId, []])),
+    prospectPickOrder,
+    prospectPool: draft.draftClass,
+    completedPicks: [],
+    currentPickIndex: 0,
+  });
+  return getLeagueBuilderStartupDraftView(input.leagueId, seasonNumber, session);
+}
+
+export async function getLeagueBuilderStartupDraftView(
+  leagueId: string,
+  seasonNumber = 1,
+  providedSession?: LeagueBuilderStartupDraftSession | null,
+): Promise<LeagueBuilderStartupDraftView> {
+  const session = providedSession ?? await getStartupDraftSession(leagueId, seasonNumber);
+  const { teams, blockers, warnings } = await collectDraftTeamStates(leagueId);
+  const durableScoutCounts = await getDurableScoutCountsByTeam(leagueId);
+  if (!session) {
+    const scoutIssues = missingDurableScoutIssues(teams, durableScoutCounts);
+    const durableScoutCount = [...durableScoutCounts.values()].reduce((sum, count) => sum + count, 0);
+    const startupFarmPrepared = teams.length > 0 && teams.every((team) => team.missingFarm === 0);
+    const durableScoutRestartBlockers = durableScoutCount > 0 && !startupFarmPrepared
+      ? [normalScoutDraftRestartBlockedMessage(durableScoutCount)]
+      : [];
+    const teamsWithDurableScoutCounts = teams.map((team) => ({
+      ...team,
+      scoutCount: durableScoutCounts.get(team.teamId) ?? 0,
+    }));
+    return {
+      session: null,
+      teams: teamsWithDurableScoutCounts,
+      blockers: [...blockers, ...scoutIssues, ...durableScoutRestartBlockers],
+      warnings,
+      prepared: blockers.length === 0 &&
+        scoutIssues.length === 0 &&
+        durableScoutRestartBlockers.length === 0 &&
+        teams.length > 0 &&
+        startupFarmPrepared,
+      scoutDraftComplete: false,
+      prospectDraftComplete: false,
+      currentScoutPick: null,
+      availableScouts: [],
+      currentProspectPick: null,
+      prospectBoard: [],
+      completedPicks: [],
+    };
+  }
+  const hiredIds = new Set(Object.values(session.hiredScoutIdsByTeamId).flat());
+  const availableScouts = session.scoutPool.filter((scout) => !hiredIds.has(scout.id));
+  const completedPicks = sessionCompletedPicks(session);
+  const sessionScoutDraftComplete = allTeamsHaveScouts(session);
+  const durableScoutIssues = sessionScoutDraftComplete
+    ? await validateSessionDurableScoutState(session)
+    : [];
+  const effectiveBlockers = [...blockers, ...durableScoutIssues];
+  const scoutDraftComplete = sessionScoutDraftComplete && durableScoutIssues.length === 0;
+  const prospectDraftComplete = session.currentPickIndex >= session.prospectPickOrder.length;
+  return {
+    session,
+    teams,
+    blockers: effectiveBlockers,
+    warnings,
+    prepared: effectiveBlockers.length === 0 &&
+      teams.length > 0 &&
+      teams.every((team) => team.missingFarm === 0) &&
+      scoutDraftComplete,
+    scoutDraftComplete,
+    prospectDraftComplete,
+    currentScoutPick: scoutDraftComplete ? null : currentScoutPick(session),
+    availableScouts,
+    currentProspectPick: scoutDraftComplete && !prospectDraftComplete ? currentProspectPick(session) : null,
+    prospectBoard: scoutDraftComplete ? buildBoardForSession(session) : [],
+    completedPicks,
+  };
+}
+
+export async function draftLeagueBuilderScout(input: {
+  leagueId: string;
+  seasonNumber?: number;
+  scoutId: string;
+}, options: {
+  saveStartupDraftSession?: typeof saveStartupDraftSession;
+} = {}): Promise<LeagueBuilderStartupDraftView> {
+  const persistSession = options.saveStartupDraftSession ?? saveStartupDraftSession;
+  const seasonNumber = input.seasonNumber ?? 1;
+  const session = await getStartupDraftSession(input.leagueId, seasonNumber);
+  if (!session) throw new Error('Start a League Builder scout draft session first.');
+  const pickSlot = currentScoutPick(session);
+  if (!pickSlot) throw new Error('Scout draft is already complete.');
+  const scout = session.scoutPool.find((candidate) => candidate.id === input.scoutId);
+  if (!scout) throw new Error(`Scout "${input.scoutId}" is not in this draft pool.`);
+  if (Object.values(session.hiredScoutIdsByTeamId).flat().includes(input.scoutId)) {
+    throw new Error(`Scout "${scout.name}" has already been hired.`);
+  }
+  const currentTeamScouts = session.hiredScoutIdsByTeamId[pickSlot.teamId] ?? [];
+  if (currentTeamScouts.length >= STARTUP_SCOUTS_PER_TEAM) {
+    throw new Error(`Team "${pickSlot.teamId}" already has ${STARTUP_SCOUTS_PER_TEAM} scouts.`);
+  }
+  const hiredScout: LeagueBuilderScoutProfile = {
+    ...scout,
+    teamId: pickSlot.teamId,
+    hiredPick: pickSlot,
+  };
+  const previousScoutProfiles = await getScoutProfilesForLeague(input.leagueId);
+  await saveScoutProfile(hiredScout);
+  let nextSession: LeagueBuilderStartupDraftSession;
+  try {
+    nextSession = await persistSession({
+      ...session,
+      scoutPool: session.scoutPool.map((candidate) => candidate.id === input.scoutId ? hiredScout : candidate),
+      hiredScoutIdsByTeamId: {
+        ...session.hiredScoutIdsByTeamId,
+        [pickSlot.teamId]: [...currentTeamScouts, input.scoutId],
+      },
+    });
+  } catch (error) {
+    await deleteScoutProfilesForLeague(input.leagueId);
+    await Promise.all(previousScoutProfiles.map((profile) => saveScoutProfile(profile)));
+    throw error;
+  }
+  return getLeagueBuilderStartupDraftView(input.leagueId, seasonNumber, nextSession);
+}
+
+export async function confirmLeagueBuilderProspectPick(input: {
+  leagueId: string;
+  seasonNumber?: number;
+  candidateId: string;
+}, options: {
+  saveStartupDraftSession?: typeof saveStartupDraftSession;
+} = {}): Promise<LeagueBuilderStartupDraftView> {
+  const persistSession = options.saveStartupDraftSession ?? saveStartupDraftSession;
+  const seasonNumber = input.seasonNumber ?? 1;
+  const session = await getStartupDraftSession(input.leagueId, seasonNumber);
+  if (!session) throw new Error('Start a League Builder prospect draft session first.');
+  if (!allTeamsHaveScouts(session)) throw new Error('Every team must hire two scouts before the prospect draft begins.');
+  const durableScoutIssues = await validateSessionDurableScoutState(session);
+  if (durableScoutIssues.length > 0) {
+    throw new Error(`Startup prospect draft scout state changed: ${durableScoutIssues.join(' ')}`);
+  }
+  const pickSlot = currentProspectPick(session);
+  if (!pickSlot) throw new Error('Prospect draft is already complete.');
+  const { teams, blockers } = await collectDraftTeamStates(input.leagueId);
+  if (blockers.length > 0) throw new Error(`Startup prospect draft blocked: ${blockers.join(' ')}`);
+  const teamStatus = teams.find((team) => team.teamId === pickSlot.teamId);
+  if (!teamStatus || teamStatus.missingFarm <= 0) {
+    throw new Error(`Team "${pickSlot.teamId}" no longer has a FARM vacancy.`);
+  }
+  const candidate = sessionProspectPool(session).find((item) => item.candidateId === input.candidateId);
+  if (!candidate) throw new Error(`Prospect "${input.candidateId}" is not available.`);
+  const completed = sessionCompletedPicks(session);
+  if (completed.some((pick) => pick.candidateId === input.candidateId)) {
+    throw new Error(`Prospect "${input.candidateId}" has already been drafted.`);
+  }
+
+  const scouts = hiredScoutsForTeam(session, pickSlot.teamId);
+  const reports = scouts.map((scout) => {
+    const report = scoutProspect(candidate, toScoutDescriptor(scout), session.seed);
+    return { scout, report };
+  });
+  const best = [...reports].sort((a, b) => {
+    const gradeDiff = gradeRank(a.report.scoutedGrade) - gradeRank(b.report.scoutedGrade);
+    if (gradeDiff !== 0) return gradeDiff;
+    return confidenceRank(b.report.scoutConfidence) - confidenceRank(a.report.scoutConfidence);
+  })[0];
+  const existingPlayers = await getAllPlayers();
+  const playerId = deterministicPickPlayerId(input.leagueId, seasonNumber, pickSlot, new Set(existingPlayers.map((player) => player.id)));
+  const player = buildProspectPlayerForPick({
+    engineInput: {
+      leagueId: input.leagueId,
+      seasonNumber,
+      teamDraftOrder: [],
+      rounds: STARTUP_FARM_TARGET_SIZE,
+      seed: session.seed,
+    },
+    candidate,
+    report: best.report,
+    pick: pickSlot,
+    playerId,
+  });
+  const storedPlayer = toStoragePlayer({
+    ...player,
+    prospectProfile: {
+      ...player.prospectProfile,
+      scoutReportsVisible: reports.map(({ scout, report }) => ({
+        scoutId: scout.id,
+        scoutName: scout.name,
+        scoutedGrade: report.scoutedGrade,
+        scoutAccuracy: report.scoutAccuracy,
+        scoutConfidence: report.scoutConfidence,
+        scoutSpecialtiesVisible: scout.specialties,
+        scoutWeaknessesVisible: scout.weaknesses,
+      })),
+    } as LeagueBuilderProspectPlayerDto['prospectProfile'],
+  } as LeagueBuilderProspectPlayerDto);
+  const roster = await getTeamRoster(pickSlot.teamId);
+  if (!roster) throw new Error(`Team "${pickSlot.teamId}" is missing a League Builder roster.`);
+  if (roster.farmRoster.includes(playerId)) throw new Error(`Prospect "${playerId}" is already on the FARM roster.`);
+  const saved = await savePlayer(storedPlayer);
+  const originalRoster = cloneRoster(roster);
+  try {
+    await saveTeamRoster({
+      ...cloneRoster(roster),
+      farmRoster: [...roster.farmRoster, saved.id],
+    });
+  } catch (error) {
+    await deletePlayer(saved.id);
+    throw error;
+  }
+  const visibleReport = visibleReportForProspectPlayer({ candidate, player, report: best.report });
+  const scoutReports: StartupProspectBoardReport[] = reports.map(({ scout, report }) => ({
+    ...visibleReport,
+    scoutedGrade: report.scoutedGrade,
+    scoutConfidence: report.scoutConfidence,
+    scoutId: scout.id,
+    scoutName: scout.name,
+    scoutAccuracy: report.scoutAccuracy,
+    scoutSpecialtiesVisible: [...scout.specialties] as ScoutSpecialty[],
+    scoutWeaknessesVisible: [...scout.weaknesses] as ScoutSpecialty[],
+  }));
+  const completedPick: StartupDraftCompletedPick = {
+    ...pickSlot,
+    candidateId: candidate.candidateId,
+    playerId: saved.id,
+    playerName: `${saved.firstName} ${saved.lastName}`,
+    position: candidate.position,
+    scoutedGrade: best.report.scoutedGrade,
+    potentialGrade: candidate.potentialGrade,
+    scoutReports,
+  };
+  let nextSession: LeagueBuilderStartupDraftSession;
+  try {
+    nextSession = await persistSession({
+      ...session,
+      completedPicks: [...completed, completedPick],
+      currentPickIndex: session.currentPickIndex + 1,
+    });
+  } catch (error) {
+    await saveTeamRoster(originalRoster);
+    await deletePlayer(saved.id);
+    throw error;
+  }
+  return getLeagueBuilderStartupDraftView(input.leagueId, seasonNumber, nextSession);
 }

@@ -76,13 +76,21 @@ export interface FranchiseFarmScoutingHandoffSnapshot {
   mlbPlayersPerTeam: number;
   farmPlayersPerTeam: number;
   hiddenTrueRatingsUntilReveal: true;
-  scoutProfilesRequired: false;
+  scoutProfilesRequired: true;
   teamCounts: Record<string, {
     MLB: number;
     FARM: number;
     hiddenFarm: number;
     visibleSafeMetadata: number;
+    scouts: number;
   }>;
+  scoutProfilesByTeamId?: Record<string, Array<{
+    id: string;
+    name: string;
+    specialties: string[];
+    weaknesses: string[];
+    accuracyByPosition: Record<string, number>;
+  }>>;
   warnings: string[];
   limitations: string[];
 }

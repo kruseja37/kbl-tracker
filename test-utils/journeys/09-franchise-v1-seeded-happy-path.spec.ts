@@ -178,30 +178,48 @@ async function seedFranchiseV1HappyPath(page: Page) {
       defaultRulesPreset: 'default',
     });
 
-    const preview = await startupFarmDraft.createLeagueBuilderStartupFarmDraftPreview(leagueId, {
+    let draftView = await startupFarmDraft.createLeagueBuilderStartupDraftSession({
+      leagueId,
       seasonNumber: 1,
       seed: 'franchise-v1-browser-smoke',
+      scoutOrder: [awayTeamId, homeTeamId],
     });
-    if (!preview.valid || preview.totalVacancies !== 20 || preview.selectedPicks.length !== 20) {
-      throw new Error(`Startup FARM draft preview did not fill 20 vacancies: ${JSON.stringify({
-        valid: preview.valid,
-        totalVacancies: preview.totalVacancies,
-        pickCount: preview.selectedPicks.length,
-        blockers: preview.blockers,
-      })}`);
+    if (draftView.blockers.length > 0) {
+      throw new Error(`Startup scout draft blocked: ${draftView.blockers.join(' ')}`);
     }
-
-    const applyReport = await startupFarmDraft.applyLeagueBuilderStartupFarmDraft(preview);
-    if (!applyReport.applied || applyReport.createdPlayerIds.length !== 20) {
-      throw new Error(`Startup FARM draft apply failed: ${JSON.stringify(applyReport)}`);
+    while (!draftView.scoutDraftComplete) {
+      const scout = draftView.availableScouts[0];
+      if (!scout) throw new Error('Startup scout draft ran out of available scouts.');
+      draftView = await startupFarmDraft.draftLeagueBuilderScout({
+        leagueId,
+        seasonNumber: 1,
+        scoutId: scout.id,
+      });
+    }
+    while (!draftView.prospectDraftComplete) {
+      const prospect = draftView.prospectBoard[0];
+      if (!prospect) throw new Error('Startup prospect draft board is empty before all vacancies are filled.');
+      draftView = await startupFarmDraft.confirmLeagueBuilderProspectPick({
+        leagueId,
+        seasonNumber: 1,
+        candidateId: prospect.candidateId,
+      });
     }
 
     const preparedPreview = await startupFarmDraft.createLeagueBuilderStartupFarmDraftPreview(leagueId, {
       seasonNumber: 1,
       seed: 'franchise-v1-browser-smoke',
     });
-    if (!preparedPreview.prepared || preparedPreview.totalVacancies !== 0) {
-      throw new Error(`Prepared League Builder state was not detected: ${JSON.stringify(preparedPreview)}`);
+    const preparedView = await startupFarmDraft.getLeagueBuilderStartupDraftView(leagueId, 1);
+    if (!preparedPreview.prepared || preparedPreview.totalVacancies !== 0 || !preparedView.prepared) {
+      throw new Error(`Prepared League Builder state was not detected: ${JSON.stringify({
+        preview: preparedPreview,
+        view: {
+          prepared: preparedView.prepared,
+          blockers: preparedView.blockers,
+          completedPicks: preparedView.completedPicks.length,
+        },
+      })}`);
     }
 
     const leaguePlayers = await leagueBuilderStorage.getAllPlayers();
@@ -297,7 +315,7 @@ async function seedFranchiseV1HappyPath(page: Page) {
       homeStarterA: homeSeed.pitcherIds[0],
       manualGameId: manualGame.id,
       farmPlayerIds: franchiseFarmPlayerIds,
-      startupDraftCreated: applyReport.createdPlayerIds.length,
+      startupDraftCreated: draftView.completedPicks.length,
       preparedFarmCount: farmPlayers.length,
     };
   });
@@ -312,10 +330,9 @@ test.describe('Journey 9: Franchise v1 seeded happy path', () => {
     expect(seed.farmPlayerIds).toHaveLength(20);
 
     await page.goto('/league-builder/draft');
-    await expect(page.getByRole('heading', { name: 'STARTUP FARM DRAFT', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: /GENERATE STARTUP FARM DRAFT/i }).click();
+    await expect(page.getByRole('heading', { name: 'STARTUP SCOUT + PROSPECT DRAFT', exact: true })).toBeVisible();
     await expect(page.getByText('PREPARED', { exact: true })).toBeVisible();
-    await expect(page.getByText(/already has 10 FARM players per team/i)).toBeVisible();
+    await expect(page.getByText(/two hired scouts and 10 hidden-safe FARM prospects/i)).toBeVisible();
 
     await page.goto('/franchise/setup');
     await expect(page.getByText(/NEW FRANCHISE/i)).toBeVisible();

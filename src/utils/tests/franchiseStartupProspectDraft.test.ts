@@ -297,7 +297,7 @@ describe('startup prospect draft', () => {
     expect(collisionPlayer?.sourceDatabase).toBe('test');
   });
 
-  test('prepared League Builder farm/scouting handoff validates after bridge repair', async () => {
+  test('legacy bridge fills FARM vacancies but handoff still requires hired scouts', async () => {
     const bridgeReport = await runStartupProspectDraftForLeague(LEAGUE_ID, {
       seed: 'handoff-repair-seed',
       seasonNumber: 1,
@@ -306,8 +306,9 @@ describe('startup prospect draft', () => {
 
     expect(bridgeReport.valid).toBe(true);
     expect(bridgeReport.bridgeRepairApplied).toBe(true);
-    expect(validation.status).toBe('prepared');
+    expect(validation.status).toBe('blocked');
     expect(validation.bridgeRequired).toBe(false);
+    expect(validation.blockers.join(' ')).toMatch(/expected 2 hired scouts/i);
     expect(validation.teams).toEqual(expect.arrayContaining([
       expect.objectContaining({
         teamId: TEAM_A,

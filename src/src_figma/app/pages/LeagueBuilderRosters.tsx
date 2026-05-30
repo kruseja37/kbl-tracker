@@ -120,6 +120,7 @@ export function LeagueBuilderRosters() {
     isLoading,
     error,
     getRoster,
+    updatePlayer,
     updateRoster,
   } = useLeagueBuilderData();
 
@@ -135,6 +136,29 @@ export function LeagueBuilderRosters() {
       current ? applyRosterUpdateWithStaleOptimalSnapshots(current, update) : current,
     );
     setHasChanges(true);
+  };
+
+  const updatePlayerRosterAssignment = async (
+    playerId: string,
+    rosterStatus: "MLB" | "FARM" | null,
+  ) => {
+    if (!selectedTeamId || !activeLeagueId) return;
+    const player = players.find((candidate) => candidate.id === playerId);
+    if (!player) return;
+    const nextAssignments = (player.leagueAssignments ?? []).filter(
+      (assignment) => assignment.leagueId !== activeLeagueId,
+    );
+    if (rosterStatus) {
+      nextAssignments.push({
+        leagueId: activeLeagueId,
+        teamId: selectedTeamId,
+        rosterStatus,
+      });
+    }
+    await updatePlayer({
+      ...player,
+      leagueAssignments: nextAssignments,
+    });
   };
 
   // Auto-select first league on load
@@ -498,6 +522,7 @@ export function LeagueBuilderRosters() {
                       roster={currentRoster}
                       players={teamPlayers}
                       onUpdate={applyCurrentRosterUpdate}
+                      onSetRosterStatus={updatePlayerRosterAssignment}
                     />
                   )}
                   {activeTab === "lineup" && (
@@ -606,34 +631,38 @@ interface RosterTabProps {
   roster: TeamRoster;
   players: Player[];
   onUpdate: (update: Partial<TeamRoster>) => void;
+  onSetRosterStatus: (playerId: string, rosterStatus: "MLB" | "FARM" | null) => Promise<void>;
 }
 
-function RosterTab({ roster, players, onUpdate }: RosterTabProps) {
+function RosterTab({ roster, players, onUpdate, onSetRosterStatus }: RosterTabProps) {
   const mlbPlayers = players.filter((p) => roster.mlbRoster.includes(p.id));
   const farmPlayers = players.filter((p) => roster.farmRoster.includes(p.id));
   const unassigned = players.filter(
     (p) => !roster.mlbRoster.includes(p.id) && !roster.farmRoster.includes(p.id)
   );
 
-  const moveToMLB = (playerId: string) => {
+  const moveToMLB = async (playerId: string) => {
     onUpdate({
       mlbRoster: [...roster.mlbRoster, playerId],
       farmRoster: roster.farmRoster.filter((id) => id !== playerId),
     });
+    await onSetRosterStatus(playerId, "MLB");
   };
 
-  const moveToFarm = (playerId: string) => {
+  const moveToFarm = async (playerId: string) => {
     onUpdate({
       farmRoster: [...roster.farmRoster, playerId],
       mlbRoster: roster.mlbRoster.filter((id) => id !== playerId),
     });
+    await onSetRosterStatus(playerId, "FARM");
   };
 
-  const removeFromRoster = (playerId: string) => {
+  const removeFromRoster = async (playerId: string) => {
     onUpdate({
       mlbRoster: roster.mlbRoster.filter((id) => id !== playerId),
       farmRoster: roster.farmRoster.filter((id) => id !== playerId),
     });
+    await onSetRosterStatus(playerId, null);
   };
 
   return (

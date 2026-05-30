@@ -2,6 +2,7 @@ import {
   getAllPlayers,
   getAllTeams,
   getLeagueTemplate,
+  getScoutProfilesForLeague,
   getTeamRoster,
   type Player,
   type TeamRoster,
@@ -396,7 +397,15 @@ function validateV1RosterHandoff(
   teams: Team[],
   players: Player[],
   rostersByTeamId: Map<string, TeamRoster | null>,
-  options: { bridgeRepairApplied?: boolean } = {},
+  options: {
+    bridgeRepairApplied?: boolean;
+    scoutsByTeamId?: Map<string, number>;
+    scoutProfilesByTeamId?: FranchiseRosterRequirementSnapshot['farmScouting'] extends infer Snapshot
+      ? Snapshot extends { scoutProfilesByTeamId?: infer Profiles }
+        ? Profiles
+        : never
+      : never;
+  } = {},
 ): FranchiseRosterRequirementSnapshot {
   const teamCounts: Record<string, { MLB: number; FARM: number }> = {};
   const issues: string[] = [];
@@ -427,6 +436,7 @@ function validateV1RosterHandoff(
     teams,
     players,
     rostersByTeamId,
+    scoutsByTeamId: options.scoutsByTeamId,
   });
 
   if (farmScoutingReport.status !== 'prepared') {
@@ -445,6 +455,7 @@ function validateV1RosterHandoff(
     teamCounts,
     farmScouting: buildLeagueBuilderFarmScoutingHandoffSnapshot(farmScoutingReport, {
       bridgeRepairApplied: options.bridgeRepairApplied,
+      scoutProfilesByTeamId: options.scoutProfilesByTeamId,
     }),
   };
 }
@@ -503,9 +514,10 @@ export async function deepCopyLeagueToFranchise(
     throw new Error(`League template "${leagueId}" not found`);
   }
 
-  const [allPlayers, allTeams, db] = await Promise.all([
+  const [allPlayers, allTeams, scouts, db] = await Promise.all([
     getAllPlayers(),
     getAllTeams(),
+    getScoutProfilesForLeague(leagueId),
     initFranchiseDatabase(franchiseId),
   ]);
 
@@ -557,7 +569,28 @@ export async function deepCopyLeagueToFranchise(
     teamsToCopy,
     playersToCopy,
     teamRostersByTeamId,
-    { bridgeRepairApplied: options.farmScoutingBridgeRepairApplied },
+    {
+      bridgeRepairApplied: options.farmScoutingBridgeRepairApplied,
+      scoutsByTeamId: scouts.reduce<Map<string, number>>((counts, scout) => {
+        if (scout.teamId) counts.set(scout.teamId, (counts.get(scout.teamId) ?? 0) + 1);
+        return counts;
+      }, new Map()),
+      scoutProfilesByTeamId: scouts.reduce<NonNullable<FranchiseRosterRequirementSnapshot['farmScouting']>['scoutProfilesByTeamId']>((profiles, scout) => {
+        if (!scout.teamId) return profiles;
+        profiles ??= {};
+        profiles[scout.teamId] = [
+          ...(profiles[scout.teamId] ?? []),
+          {
+            id: scout.id,
+            name: scout.name,
+            specialties: [...scout.specialties],
+            weaknesses: [...scout.weaknesses],
+            accuracyByPosition: { ...scout.accuracyByPosition },
+          },
+        ];
+        return profiles;
+      }, {}),
+    },
   );
   const salaryBaseline = buildSalaryBaselineProof(leagueId, teamsToCopy, playersToCopy);
   const stadiums = buildTeamStadiumSnapshots(teamsToCopy);

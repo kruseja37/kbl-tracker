@@ -2,8 +2,10 @@ import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { LeagueBuilderDraft } from '../../app/pages/LeagueBuilderDraft';
 import {
-  applyLeagueBuilderStartupFarmDraft,
-  createLeagueBuilderStartupFarmDraftPreview,
+  confirmLeagueBuilderProspectPick,
+  createLeagueBuilderStartupDraftSession,
+  draftLeagueBuilderScout,
+  getLeagueBuilderStartupDraftView,
 } from '../../../utils/leagueBuilderStartupFarmDraft';
 import { useLeagueBuilderData } from '../../hooks/useLeagueBuilderData';
 
@@ -20,8 +22,10 @@ vi.mock('../../../utils/leagueBuilderStartupFarmDraft', async () => {
   );
   return {
     ...actual,
-    createLeagueBuilderStartupFarmDraftPreview: vi.fn(),
-    applyLeagueBuilderStartupFarmDraft: vi.fn(),
+    createLeagueBuilderStartupDraftSession: vi.fn(),
+    draftLeagueBuilderScout: vi.fn(),
+    confirmLeagueBuilderProspectPick: vi.fn(),
+    getLeagueBuilderStartupDraftView: vi.fn(),
   };
 });
 
@@ -74,6 +78,164 @@ function makePlayers(farmCount = 0) {
   ]);
 }
 
+const scoutOne = {
+  id: 'scout-1',
+  leagueId: 'league-1',
+  name: 'Riley Kline',
+  specialties: ['outfield'],
+  weaknesses: ['CP'],
+  accuracyByPosition: { CF: 88, SP: 66, CP: 52 },
+  seed: 'scout-seed-1',
+  createdDate: '2026-01-01',
+  lastModified: '2026-01-01',
+};
+
+const scoutTwo = {
+  id: 'scout-2',
+  leagueId: 'league-1',
+  name: 'Morgan Vale',
+  specialties: ['pitching'],
+  weaknesses: ['1B'],
+  accuracyByPosition: { SP: 87, CF: 61, CP: 80 },
+  seed: 'scout-seed-2',
+  createdDate: '2026-01-01',
+  lastModified: '2026-01-01',
+};
+
+const scoutThree = {
+  id: 'scout-3',
+  leagueId: 'league-1',
+  name: 'Casey Soto',
+  specialties: ['infield'],
+  weaknesses: ['LF'],
+  accuracyByPosition: { SS: 86, CF: 60, CP: 64 },
+  seed: 'scout-seed-3',
+  createdDate: '2026-01-01',
+  lastModified: '2026-01-01',
+};
+
+function baseView(overrides: Record<string, unknown> = {}) {
+  return {
+    session: null,
+    teams: [
+      { teamId: 'team-1', teamName: 'Boston Sox', farmCount: 0, mlbCount: 22, missingFarm: 10, prepared: false },
+      { teamId: 'team-2', teamName: 'Detroit Tigers', farmCount: 0, mlbCount: 22, missingFarm: 10, prepared: false },
+    ],
+    blockers: [],
+    warnings: [],
+    prepared: false,
+    scoutDraftComplete: false,
+    prospectDraftComplete: false,
+    currentScoutPick: null,
+    availableScouts: [],
+    currentProspectPick: null,
+    prospectBoard: [],
+    completedPicks: [],
+    ...overrides,
+  };
+}
+
+function scoutDraftView(overrides: Record<string, unknown> = {}) {
+  return baseView({
+    session: {
+      id: 'startup-draft-league-1-1',
+      leagueId: 'league-1',
+      seasonNumber: 1,
+      seed: 'ui-seed',
+      workflowVersion: 'league-builder-startup-farm-draft-v1',
+      engineMethodVersion: 'league-builder-startup-prospect-scouting-draft-v1',
+      scoutOrder: ['team-1', 'team-2'],
+      scoutPool: [scoutOne, scoutTwo, scoutThree],
+      hiredScoutIdsByTeamId: { 'team-1': [], 'team-2': [] },
+      prospectPickOrder: [],
+      prospectPool: [],
+      completedPicks: [],
+      currentPickIndex: 0,
+    },
+    currentScoutPick: { round: 1, pickNumber: 1, teamId: 'team-1', teamName: 'Boston Sox' },
+    availableScouts: [scoutOne, scoutTwo, scoutThree],
+    ...overrides,
+  });
+}
+
+function prospectDraftView(overrides: Record<string, unknown> = {}) {
+  return scoutDraftView({
+    scoutDraftComplete: true,
+    currentScoutPick: null,
+    session: {
+      ...(scoutDraftView().session as any),
+      hiredScoutIdsByTeamId: { 'team-1': ['scout-1', 'scout-2'], 'team-2': ['scout-3', 'scout-4'] },
+    },
+    currentProspectPick: { round: 1, pickNumber: 1, teamId: 'team-1', teamName: 'Boston Sox' },
+    prospectBoard: [
+      {
+        candidateId: 'candidate-1',
+        playerName: 'Ari Banks',
+        position: 'CF',
+        age: 18,
+        bats: 'R',
+        throws: 'R',
+        scoutedGrade: 'B+',
+        bestScoutedGrade: 'B+',
+        potentialGrade: 'A',
+        bestConfidence: 'high',
+        scoutConfidence: 'high',
+        chemistry: 'Crafty',
+        personality: 'Competitive',
+        trait1: 'RBI Man',
+        trait2: 'First Pitch Slayer',
+        salary: 0.5,
+        reports: [
+          {
+            candidateId: 'candidate-1',
+            playerName: 'Ari Banks',
+            position: 'CF',
+            age: 18,
+            bats: 'R',
+            throws: 'R',
+            scoutedGrade: 'B+',
+            potentialGrade: 'A',
+            scoutConfidence: 'high',
+            chemistry: 'Crafty',
+            personality: 'Competitive',
+            trait1: 'RBI Man',
+            trait2: 'First Pitch Slayer',
+            salary: 0.5,
+            scoutId: 'scout-1',
+            scoutName: 'Riley Kline',
+            scoutAccuracy: 88,
+            scoutSpecialtiesVisible: ['outfield'],
+            scoutWeaknessesVisible: ['CP'],
+          },
+          {
+            candidateId: 'candidate-1',
+            playerName: 'Ari Banks',
+            position: 'CF',
+            age: 18,
+            bats: 'R',
+            throws: 'R',
+            scoutedGrade: 'C+',
+            potentialGrade: 'A',
+            scoutConfidence: 'medium',
+            chemistry: 'Crafty',
+            personality: 'Competitive',
+            trait1: 'RBI Man',
+            trait2: 'First Pitch Slayer',
+            salary: 0.5,
+            scoutId: 'scout-2',
+            scoutName: 'Morgan Vale',
+            scoutAccuracy: 61,
+            scoutSpecialtiesVisible: ['pitching'],
+            scoutWeaknessesVisible: ['1B'],
+          },
+        ],
+      },
+    ],
+    completedPicks: [],
+    ...overrides,
+  });
+}
+
 vi.mock('../../hooks/useLeagueBuilderData', () => ({
   useLeagueBuilderData: vi.fn(() => ({
     leagues: [baseLeague],
@@ -86,94 +248,7 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
   })),
 }));
 
-function makePreview(overrides: Record<string, unknown> = {}) {
-  return {
-    workflowVersion: 'league-builder-startup-farm-draft-v1',
-    engineMethodVersion: 'league-builder-startup-prospect-scouting-draft-v1',
-    leagueId: 'league-1',
-    seasonNumber: 1,
-    rounds: 10,
-    seed: 'ui-seed',
-    valid: true,
-    prepared: false,
-    totalVacancies: 2,
-    blockers: [],
-    warnings: [],
-    limitations: [],
-    teams: [
-      { teamId: 'team-1', teamName: 'Boston Sox', farmCount: 9, mlbCount: 22, missingFarm: 1, prepared: false },
-      { teamId: 'team-2', teamName: 'Detroit Tigers', farmCount: 9, mlbCount: 22, missingFarm: 1, prepared: false },
-    ],
-    selectedPicks: [
-      {
-        round: 1,
-        pickNumber: 1,
-        teamId: 'team-1',
-        playerId: 'prospect-league-1-1-team-1-1-1',
-        playerName: 'Ari Banks',
-        position: 'CF',
-        trueGrade: 'A',
-        scoutedGrade: 'B+',
-        potentialGrade: 'A-',
-        scoutAccuracy: 70,
-        scoutConfidence: 'medium',
-        salary: 2,
-        player: {
-          prospectProfile: {
-            trueGrade: 'A',
-            scoutedGrade: 'B+',
-            scoutSpecialtiesVisible: ['outfield'],
-            scoutWeaknessesVisible: ['CP'],
-          },
-          hiddenPersonalityModifiers: {
-            leadership: 90,
-          },
-        },
-        visibleReport: {
-          candidateId: 'candidate-1',
-          playerId: 'prospect-league-1-1-team-1-1-1',
-          playerName: 'Ari Banks',
-          position: 'CF',
-          age: 20,
-          bats: 'R',
-          throws: 'R',
-          scoutedGrade: 'B+',
-          potentialGrade: 'A-',
-          scoutConfidence: 'medium',
-          chemistry: 'Crafty',
-          personality: 'Competitive',
-          salary: 2,
-        },
-      },
-    ],
-    visibleReports: [
-      {
-        candidateId: 'candidate-1',
-        playerId: 'prospect-league-1-1-team-1-1-1',
-        playerName: 'Ari Banks',
-        position: 'CF',
-        age: 20,
-        bats: 'R',
-        throws: 'R',
-        scoutedGrade: 'B+',
-        potentialGrade: 'A-',
-        scoutConfidence: 'medium',
-        chemistry: 'Crafty',
-        personality: 'Competitive',
-        salary: 2,
-        teamId: 'team-1',
-        round: 1,
-        pickNumber: 1,
-        scoutName: 'Startup Farm Scout 1',
-        scoutSpecialtiesVisible: ['outfield'],
-        scoutWeaknessesVisible: ['CP'],
-      },
-    ],
-    ...overrides,
-  };
-}
-
-describe('LeagueBuilderDraft startup farm draft UI', () => {
+describe('LeagueBuilderDraft scout and prospect draft UI', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRefresh.mockResolvedValue(undefined);
@@ -186,101 +261,165 @@ describe('LeagueBuilderDraft startup farm draft UI', () => {
       error: null,
       refresh: mockRefresh,
     } as any);
-    vi.mocked(createLeagueBuilderStartupFarmDraftPreview).mockResolvedValue(makePreview() as any);
-    vi.mocked(applyLeagueBuilderStartupFarmDraft).mockResolvedValue({
-      workflowVersion: 'league-builder-startup-farm-draft-v1',
-      leagueId: 'league-1',
-      valid: true,
-      applied: true,
-      createdPlayerIds: ['prospect-league-1-1-team-1-1-1'],
-      updatedTeamIds: ['team-1'],
-      issues: [],
-      rollbackErrors: [],
-    });
+    vi.mocked(getLeagueBuilderStartupDraftView).mockResolvedValue(baseView() as any);
+    vi.mocked(createLeagueBuilderStartupDraftSession).mockResolvedValue(scoutDraftView() as any);
+    vi.mocked(draftLeagueBuilderScout).mockResolvedValue(scoutDraftView({
+      session: {
+        ...(scoutDraftView().session as any),
+        hiredScoutIdsByTeamId: { 'team-1': ['scout-1'], 'team-2': [] },
+      },
+    }) as any);
+    vi.mocked(confirmLeagueBuilderProspectPick).mockResolvedValue(prospectDraftView({
+      completedPicks: [
+        {
+          round: 1,
+          pickNumber: 1,
+          teamId: 'team-1',
+          teamName: 'Boston Sox',
+          candidateId: 'candidate-1',
+          playerId: 'prospect-1',
+          playerName: 'Ari Banks',
+          position: 'CF',
+          scoutedGrade: 'B+',
+          potentialGrade: 'A',
+          scoutReports: [],
+        },
+      ],
+    }) as any);
   });
 
-  test('renders startup farm draft controls', () => {
+  test('renders scout-first startup draft controls and no bulk apply action', async () => {
     render(<LeagueBuilderDraft />);
 
-    expect(screen.getByText('STARTUP FARM DRAFT')).toBeInTheDocument();
+    expect(screen.getByText('STARTUP SCOUT + PROSPECT DRAFT')).toBeInTheDocument();
     expect(screen.getByText('LEAGUE BUILDER SETUP')).toBeInTheDocument();
     expect(screen.getByLabelText(/DETERMINISTIC SEED/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /GENERATE STARTUP FARM DRAFT/i })).toBeInTheDocument();
-    expect(screen.getByText('TEAM FARM READINESS')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /BEGIN SCOUT DRAFT/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /APPLY DRAFT TO LEAGUE BUILDER/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /GENERATE STARTUP FARM DRAFT/i })).not.toBeInTheDocument();
   });
 
-  test('back button navigates to League Builder', () => {
+  test('back button navigates to League Builder', async () => {
     render(<LeagueBuilderDraft />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Back to League Builder/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Back to League Builder/i }));
 
     expect(mockNavigate).toHaveBeenCalledWith('/league-builder');
   });
 
-  test('prepared league shows no required draft apply action', async () => {
-    vi.mocked(createLeagueBuilderStartupFarmDraftPreview).mockResolvedValueOnce(makePreview({
+  test('starts the scout draft with user ordered teams', async () => {
+    render(<LeagueBuilderDraft />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /BEGIN SCOUT DRAFT/i }));
+
+    await waitFor(() => {
+      expect(createLeagueBuilderStartupDraftSession).toHaveBeenCalledWith(expect.objectContaining({
+        leagueId: 'league-1',
+        scoutOrder: ['team-1', 'team-2'],
+      }));
+    });
+    expect(await screen.findByText('SCOUT DRAFT')).toBeInTheDocument();
+  });
+
+  test('scout draft lets the team on the clock hire one visible scout', async () => {
+    vi.mocked(getLeagueBuilderStartupDraftView).mockResolvedValue(scoutDraftView() as any);
+
+    render(<LeagueBuilderDraft />);
+
+    expect(await screen.findByText('ON THE CLOCK: Boston Sox')).toBeInTheDocument();
+    expect(screen.getByText('Riley Kline')).toBeInTheDocument();
+    expect(screen.getByText(/Specialties: outfield/i)).toBeInTheDocument();
+    expect(screen.getByText(/Weaknesses: CP/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: /HIRE SCOUT/i })[0]);
+
+    await waitFor(() => {
+      expect(draftLeagueBuilderScout).toHaveBeenCalledWith({
+        leagueId: 'league-1',
+        seasonNumber: 1,
+        scoutId: 'scout-1',
+      });
+    });
+  });
+
+  test('prospect board shows only current team scout reports and writes one pick at a time', async () => {
+    vi.mocked(getLeagueBuilderStartupDraftView).mockResolvedValue(prospectDraftView() as any);
+
+    render(<LeagueBuilderDraft />);
+
+    expect(await screen.findByText('PROSPECT DRAFT BOARD')).toBeInTheDocument();
+    expect(screen.getByText('ON THE CLOCK: Boston Sox')).toBeInTheDocument();
+    expect(screen.getByText('Ari Banks')).toBeInTheDocument();
+    expect(screen.getByText('Riley Kline')).toBeInTheDocument();
+    expect(screen.getByText('Morgan Vale')).toBeInTheDocument();
+    expect(screen.getByText(/Scouted B\+/i)).toBeInTheDocument();
+    expect(screen.queryByText(/true grade/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/leadership/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Detroit Tigers Scout/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /DRAFT TO FARM/i }));
+
+    await waitFor(() => {
+      expect(confirmLeagueBuilderProspectPick).toHaveBeenCalledWith({
+        leagueId: 'league-1',
+        seasonNumber: 1,
+        candidateId: 'candidate-1',
+      });
+    });
+    expect(await screen.findByText('RECENT PICKS')).toBeInTheDocument();
+  });
+
+  test('prepared league reports ready state without showing bulk apply', async () => {
+    vi.mocked(getLeagueBuilderStartupDraftView).mockResolvedValue(baseView({
       prepared: true,
-      totalVacancies: 0,
-      selectedPicks: [],
-      visibleReports: [],
+      scoutDraftComplete: true,
+      prospectDraftComplete: true,
       teams: [
-        { teamId: 'team-1', teamName: 'Boston Sox', farmCount: 10, mlbCount: 22, missingFarm: 0, prepared: true },
-        { teamId: 'team-2', teamName: 'Detroit Tigers', farmCount: 10, mlbCount: 22, missingFarm: 0, prepared: true },
+        { teamId: 'team-1', teamName: 'Boston Sox', farmCount: 10, mlbCount: 22, missingFarm: 0, scoutCount: 2, prepared: true },
+        { teamId: 'team-2', teamName: 'Detroit Tigers', farmCount: 10, mlbCount: 22, missingFarm: 0, scoutCount: 2, prepared: true },
       ],
     }) as any);
 
     render(<LeagueBuilderDraft />);
-    fireEvent.click(screen.getByRole('button', { name: /GENERATE STARTUP FARM DRAFT/i }));
 
-    await screen.findByText('PREPARED');
-    expect(screen.getByText(/already has 10 FARM players per team/i)).toBeInTheDocument();
+    expect(await screen.findByText('PREPARED')).toBeInTheDocument();
+    expect(screen.getByText(/each team has two hired scouts and 10 hidden-safe FARM prospects/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Scouts 2\/2/i)).toHaveLength(2);
+    expect(screen.queryByText(/Scouts 0\/2/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/normal scout draft restart is blocked in v1/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /BEGIN SCOUT DRAFT/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /APPLY DRAFT TO LEAGUE BUILDER/i })).not.toBeInTheDocument();
   });
 
-  test('incomplete league can generate, review, and apply draft', async () => {
-    render(<LeagueBuilderDraft />);
-    fireEvent.click(screen.getByRole('button', { name: /GENERATE STARTUP FARM DRAFT/i }));
-
-    await screen.findByText('Ari Banks');
-    expect(screen.getByText('Scouted B+')).toBeInTheDocument();
-    expect(screen.getByText('Specialties: outfield')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: /APPLY DRAFT TO LEAGUE BUILDER/i }));
-
-    await waitFor(() => {
-      expect(applyLeagueBuilderStartupFarmDraft).toHaveBeenCalled();
-      expect(mockRefresh).toHaveBeenCalled();
-    });
-    expect(await screen.findByText(/Applied 1 FARM prospects/i)).toBeInTheDocument();
-  });
-
-  test('does not render hidden true ratings or hidden personality modifiers', async () => {
-    render(<LeagueBuilderDraft />);
-    fireEvent.click(screen.getByRole('button', { name: /GENERATE STARTUP FARM DRAFT/i }));
-
-    await screen.findByText('Ari Banks');
-    expect(screen.queryByText(/true grade/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/leadership/i)).not.toBeInTheDocument();
-  });
-
-  test('blocked farm state reports blocker and hides apply action', async () => {
-    vi.mocked(createLeagueBuilderStartupFarmDraftPreview).mockResolvedValueOnce(makePreview({
-      valid: false,
-      blockers: ['Boston Sox: FARM roster does not match player FARM assignments.'],
-      selectedPicks: [],
-      visibleReports: [],
+  test('durable scout restart blocker hides normal scout draft start action', async () => {
+    vi.mocked(getLeagueBuilderStartupDraftView).mockResolvedValue(baseView({
+      blockers: [
+        'Normal startup scout draft restart is blocked because 4 durable scout profiles already exist for this league. V1 keeps the prepared scout state; reset flow is deferred.',
+      ],
     }) as any);
 
     render(<LeagueBuilderDraft />);
-    fireEvent.click(screen.getByRole('button', { name: /GENERATE STARTUP FARM DRAFT/i }));
+
+    expect(await screen.findByText(/restart is blocked because 4 durable scout profiles already exist/i)).toBeInTheDocument();
+    expect(screen.getByText(/normal scout draft restart is blocked in v1/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /BEGIN SCOUT DRAFT/i })).not.toBeInTheDocument();
+  });
+
+  test('blocked farm state reports blocker and hides draft actions', async () => {
+    vi.mocked(getLeagueBuilderStartupDraftView).mockResolvedValue(baseView({
+      blockers: ['Boston Sox: FARM roster does not match player FARM assignments.'],
+    }) as any);
+
+    render(<LeagueBuilderDraft />);
 
     await screen.findByText('BLOCKED');
     expect(screen.getByText(/does not match player FARM assignments/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /DRAFT TO FARM/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /APPLY DRAFT TO LEAGUE BUILDER/i })).not.toBeInTheDocument();
   });
 
-  test('no-team league blocks generation', async () => {
+  test('no-team league blocks draft start', async () => {
     vi.mocked(useLeagueBuilderData).mockReturnValue({
       leagues: [{ ...baseLeague, teamIds: [] }],
       teams: [],
@@ -290,10 +429,14 @@ describe('LeagueBuilderDraft startup farm draft UI', () => {
       error: null,
       refresh: mockRefresh,
     } as any);
+    vi.mocked(getLeagueBuilderStartupDraftView).mockResolvedValue(baseView({
+      teams: [],
+      blockers: ['Selected league has no teams.'],
+    }) as any);
 
     render(<LeagueBuilderDraft />);
 
-    expect(screen.getByText('Selected league has no teams.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /GENERATE STARTUP FARM DRAFT/i })).toBeDisabled();
+    expect(await screen.findByText('Selected league has no teams.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /BEGIN SCOUT DRAFT/i })).toBeDisabled();
   });
 });
