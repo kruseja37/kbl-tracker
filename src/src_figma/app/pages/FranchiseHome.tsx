@@ -2942,6 +2942,7 @@ function GameDayContent({
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
   const [showAwayTeamStats, setShowAwayTeamStats] = useState(false);
   const [showHomeTeamStats, setShowHomeTeamStats] = useState(false);
+  const [isPreparingGameLaunch, setIsPreparingGameLaunch] = useState(false);
 
   // Simulation state
   const [isSimulating, setIsSimulating] = useState(false);
@@ -3045,6 +3046,7 @@ function GameDayContent({
 
   // T3-01: Show pre-game lineup review before launching game
   const handlePlayGame = async () => {
+    if (isPreparingGameLaunch) return;
     const nextGame = scheduleData.nextGame;
     const away = nextGame?.awayTeamId || awayTeamId;
     const home = nextGame?.homeTeamId || homeTeamId;
@@ -3052,103 +3054,107 @@ function GameDayContent({
     const homeName = franchiseData.teamNameMap?.[home] || home;
     const gameNum = nextGame?.gameNumber ?? 1;
 
+    setConfirmAction(null);
+    setIsPreparingGameLaunch(true);
     try {
       await onRepairFranchisePersistence();
-    } catch (err) {
-      console.error('[FranchiseHome] Failed to prepare franchise persistence for GameTracker launch:', err);
-      setToastMessage('Franchise roster data could not be prepared. Try reloading the franchise.');
-      setConfirmAction(null);
-      return;
-    }
 
-    // Load real rosters from IndexedDB for both teams
-    const [awayRoster, homeRoster] = await Promise.all([
-      buildFranchiseGameTrackerRoster(away, { franchiseId, leagueId: franchiseLeagueId, useDH: franchiseUseDH }),
-      buildFranchiseGameTrackerRoster(home, { franchiseId, leagueId: franchiseLeagueId, useDH: franchiseUseDH }),
-    ]);
+      // Load real rosters from IndexedDB for both teams
+      const [awayRoster, homeRoster] = await Promise.all([
+        buildFranchiseGameTrackerRoster(away, { franchiseId, leagueId: franchiseLeagueId, useDH: franchiseUseDH }),
+        buildFranchiseGameTrackerRoster(home, { franchiseId, leagueId: franchiseLeagueId, useDH: franchiseUseDH }),
+      ]);
 
-    const missingRosterTeams: string[] = [];
-    if (awayRoster.players.length === 0 || awayRoster.pitchers.length === 0) {
-      missingRosterTeams.push(awayName.toUpperCase());
-    }
-    if (homeRoster.players.length === 0 || homeRoster.pitchers.length === 0) {
-      missingRosterTeams.push(homeName.toUpperCase());
-    }
-    if (missingRosterTeams.length > 0) {
-      setToastMessage(
-        `Franchise roster data is incomplete for ${missingRosterTeams.join(' and ')}. Game launch blocked.`,
-      );
-      setConfirmAction(null);
-      return;
-    }
-
-    // Find default starter indices (first SP)
-    const awayStarterIdx = awayRoster.pitchers.findIndex(p => p.isStarter);
-    const homeStarterIdx = homeRoster.pitchers.findIndex(p => p.isStarter);
-
-    setPreGameData({
-      awayPlayers: awayRoster.players,
-      awayPitchers: awayRoster.pitchers,
-      homePlayers: homeRoster.players,
-      homePitchers: homeRoster.pitchers,
-      awayTeamId: away,
-      homeTeamId: home,
-      awayTeamName: awayName.toUpperCase(),
-      homeTeamName: homeName.toUpperCase(),
-      gameNumber: gameNum,
-      scheduleGameId: nextGame?.id,
-      useDH: franchiseUseDH,
-      selectedAwayStarterIdx: awayStarterIdx >= 0 ? awayStarterIdx : 0,
-      selectedHomeStarterIdx: homeStarterIdx >= 0 ? homeStarterIdx : 0,
-      awayOptimalLineups: awayRoster.optimalLineups,
-      homeOptimalLineups: homeRoster.optimalLineups,
-    });
-    setConfirmAction(null);
-
-    // T3-06: Async milestone watch computation (non-blocking)
-    (async () => {
-      try {
-        const [careerBatters, careerPitchers] = await Promise.all([
-          getAllCareerBatting(),
-          getAllCareerPitching(),
-        ]);
-        const seasonId = activeSeasonId || '';
-        const [seasonBatters, seasonPitchers] = seasonId
-          ? await Promise.all([
-              getSeasonBattingStats(seasonId),
-              getSeasonPitchingStats(seasonId),
-            ])
-          : [[], []];
-
-        // Build lookup maps
-        const careerBatMap = new Map(careerBatters.map(b => [b.playerId, b]));
-        const careerPitMap = new Map(careerPitchers.map(p => [p.playerId, p]));
-        const seasonBatMap = new Map(seasonBatters.map(b => [b.playerId, b]));
-        const seasonPitMap = new Map(seasonPitchers.map(p => [p.playerId, p]));
-        const achieved = new Set<string>(); // TODO: load from careerStorage milestones
-
-        const playerIds = collectFranchiseRosterPlayerIds([awayRoster, homeRoster]);
-
-        const watches: MilestoneWatch[] = [];
-        for (const pid of playerIds) {
-          const pw = getApproachingMilestones(
-            careerBatMap.get(pid) || null,
-            careerPitMap.get(pid) || null,
-            seasonBatMap.get(pid) || null,
-            seasonPitMap.get(pid) || null,
-            achieved,
-          );
-          watches.push(...pw);
-        }
-
-        // Sort by closest to milestone
-        watches.sort((a, b) => a.neededForMilestone - b.neededForMilestone);
-
-        setPreGameData(prev => prev ? { ...prev, milestoneWatches: watches } : prev);
-      } catch (err) {
-        console.warn('[FranchiseHome] Milestone watch computation failed:', err);
+      const missingRosterTeams: string[] = [];
+      if (awayRoster.players.length === 0 || awayRoster.pitchers.length === 0) {
+        missingRosterTeams.push(awayName.toUpperCase());
       }
-    })();
+      if (homeRoster.players.length === 0 || homeRoster.pitchers.length === 0) {
+        missingRosterTeams.push(homeName.toUpperCase());
+      }
+      if (missingRosterTeams.length > 0) {
+        setToastMessage(
+          `Franchise roster data is incomplete for ${missingRosterTeams.join(' and ')}. Game launch blocked.`,
+        );
+        return;
+      }
+
+      // Find default starter indices (first SP)
+      const awayStarterIdx = awayRoster.pitchers.findIndex(p => p.isStarter);
+      const homeStarterIdx = homeRoster.pitchers.findIndex(p => p.isStarter);
+
+      setPreGameData({
+        awayPlayers: awayRoster.players,
+        awayPitchers: awayRoster.pitchers,
+        homePlayers: homeRoster.players,
+        homePitchers: homeRoster.pitchers,
+        awayTeamId: away,
+        homeTeamId: home,
+        awayTeamName: awayName.toUpperCase(),
+        homeTeamName: homeName.toUpperCase(),
+        gameNumber: gameNum,
+        scheduleGameId: nextGame?.id,
+        useDH: franchiseUseDH,
+        selectedAwayStarterIdx: awayStarterIdx >= 0 ? awayStarterIdx : 0,
+        selectedHomeStarterIdx: homeStarterIdx >= 0 ? homeStarterIdx : 0,
+        awayOptimalLineups: awayRoster.optimalLineups,
+        homeOptimalLineups: homeRoster.optimalLineups,
+      });
+
+      // T3-06: Async milestone watch computation (non-blocking)
+      (async () => {
+        try {
+          const [careerBatters, careerPitchers] = await Promise.all([
+            getAllCareerBatting(),
+            getAllCareerPitching(),
+          ]);
+          const seasonId = activeSeasonId || '';
+          const [seasonBatters, seasonPitchers] = seasonId
+            ? await Promise.all([
+                getSeasonBattingStats(seasonId),
+                getSeasonPitchingStats(seasonId),
+              ])
+            : [[], []];
+
+          // Build lookup maps
+          const careerBatMap = new Map(careerBatters.map(b => [b.playerId, b]));
+          const careerPitMap = new Map(careerPitchers.map(p => [p.playerId, p]));
+          const seasonBatMap = new Map(seasonBatters.map(b => [b.playerId, b]));
+          const seasonPitMap = new Map(seasonPitchers.map(p => [p.playerId, p]));
+          const achieved = new Set<string>(); // TODO: load from careerStorage milestones
+
+          const playerIds = collectFranchiseRosterPlayerIds([awayRoster, homeRoster]);
+
+          const watches: MilestoneWatch[] = [];
+          for (const pid of playerIds) {
+            const pw = getApproachingMilestones(
+              careerBatMap.get(pid) || null,
+              careerPitMap.get(pid) || null,
+              seasonBatMap.get(pid) || null,
+              seasonPitMap.get(pid) || null,
+              achieved,
+            );
+            watches.push(...pw);
+          }
+
+          // Sort by closest to milestone
+          watches.sort((a, b) => a.neededForMilestone - b.neededForMilestone);
+
+          setPreGameData(prev => prev ? { ...prev, milestoneWatches: watches } : prev);
+        } catch (err) {
+          console.warn('[FranchiseHome] Milestone watch computation failed:', err);
+        }
+      })();
+    } catch (err) {
+      console.error('[FranchiseHome] Failed to prepare GameTracker launch:', err);
+      setToastMessage(
+        err instanceof Error && err.message
+          ? `GameTracker launch blocked: ${err.message}`
+          : 'GameTracker launch blocked. Try reloading the franchise.',
+      );
+    } finally {
+      setIsPreparingGameLaunch(false);
+    }
   };
 
   const persistPregameBenchmark = async (
@@ -3856,9 +3862,10 @@ function GameDayContent({
                   else if (confirmAction === "skip-week") handleBatchSkip('week');
                   else if (confirmAction === "skip-season") handleBatchSkip('season');
                 }}
+                disabled={isPreparingGameLaunch}
                 className="flex-1 bg-[#5A8352] border-[5px] border-[#4A6844] py-3 text-sm text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
               >
-                CONFIRM
+                {isPreparingGameLaunch ? "PREPARING..." : "CONFIRM"}
               </button>
             </div>
           </div>

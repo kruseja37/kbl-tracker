@@ -292,6 +292,14 @@ describe('FranchiseSetup Component', () => {
         expect(mockInitializeFranchise).toHaveBeenCalled();
       });
       expect(mockInitializeFranchise).toHaveBeenCalled();
+      expect(mockNavigate).toHaveBeenCalledWith('/franchise/franchise-1', {
+        replace: true,
+        state: {
+          createdFromSetup: true,
+          franchiseId: 'franchise-1',
+        },
+      });
+      expect(screen.queryByText(/CREATING FRANCHISE/i)).not.toBeInTheDocument();
     });
 
     test('blocks franchise initialization when farms are incomplete instead of running a setup bridge', async () => {

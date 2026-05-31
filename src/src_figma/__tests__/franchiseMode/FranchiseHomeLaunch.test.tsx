@@ -830,6 +830,23 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
     expect(mocks.mockNavigate).not.toHaveBeenCalled();
   });
 
+  test('regular-season launch surfaces roster build failures instead of leaving confirmation stuck', async () => {
+    mocks.mockBuildFranchiseGameTrackerRoster.mockRejectedValueOnce(
+      new Error('franchise roster adapter failed'),
+    );
+
+    render(<FranchiseHome />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'SCORE GAME' }));
+    fireEvent.click(screen.getByRole('button', { name: 'CONFIRM' }));
+
+    await screen.findByText(/GameTracker launch blocked: franchise roster adapter failed/i);
+
+    expect(screen.queryByText('ARE YOU SURE?')).toBeNull();
+    expect(screen.queryByText('PRE-GAME LINEUP')).toBeNull();
+    expect(mocks.mockNavigate).not.toHaveBeenCalled();
+  });
+
   test('regular-season pregame blocks start when a required benchmark is missing or stale', async () => {
     mocks.mockBuildFranchiseGameTrackerRoster.mockImplementation(
       (teamId: keyof typeof snapshotsByTeam, context?: { useDH?: boolean }) => {

@@ -32,6 +32,7 @@ export function FranchiseSelector() {
 
   // Delete confirmation
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteInProgressId, setDeleteInProgressId] = useState<string | null>(null);
 
   const loadFranchises = useCallback(async () => {
     try {
@@ -74,12 +75,16 @@ export function FranchiseSelector() {
   };
 
   const handleDelete = async (franchiseId: string) => {
+    if (deleteInProgressId) return;
     try {
+      setDeleteInProgressId(franchiseId);
       await deleteFranchise(franchiseId);
       setDeletingId(null);
       await loadFranchises();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete');
+    } finally {
+      setDeleteInProgressId(null);
     }
   };
 
@@ -155,9 +160,10 @@ export function FranchiseSelector() {
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleDelete(franchise.id)}
+                      disabled={deleteInProgressId === franchise.id}
                       className="px-3 py-1 bg-red-600 hover:bg-red-500 text-white text-sm rounded"
                     >
-                      Delete
+                      {deleteInProgressId === franchise.id ? 'Deleting...' : 'Confirm Delete'}
                     </button>
                     <button
                       onClick={() => setDeletingId(null)}
@@ -216,7 +222,10 @@ export function FranchiseSelector() {
                   {/* Actions */}
                   <div className="flex gap-1 shrink-0">
                     <button
-                      onClick={() => {
+                      type="button"
+                      aria-label={`Rename ${franchise.name}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
                         setRenamingId(franchise.id);
                         setRenameValue(franchise.name);
                       }}
@@ -226,14 +235,24 @@ export function FranchiseSelector() {
                       <Pencil className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => handleExport(franchise)}
+                      type="button"
+                      aria-label={`Export ${franchise.name}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleExport(franchise);
+                      }}
                       className="p-2 hover:bg-[#333] rounded text-[#888] hover:text-white"
                       title="Export"
                     >
                       <Download className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => setDeletingId(franchise.id)}
+                      type="button"
+                      aria-label={`Delete ${franchise.name}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setDeletingId(franchise.id);
+                      }}
                       className="p-2 hover:bg-[#333] rounded text-[#888] hover:text-red-400"
                       title="Delete"
                     >

@@ -144,6 +144,7 @@ export function FranchiseSetup() {
   const totalSteps = 6;
 
   const handleNext = async () => {
+    if (isInitializing) return;
     if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
     } else {
@@ -168,7 +169,14 @@ export function FranchiseSetup() {
           ].join(' ')}`);
         }
         const franchiseId = await initializeFranchise(config);
-        navigate(`/franchise/${franchiseId}`);
+        setIsInitializing(false);
+        navigate(`/franchise/${franchiseId}`, {
+          replace: true,
+          state: {
+            createdFromSetup: true,
+            franchiseId,
+          },
+        });
       } catch (err) {
         setInitError(err instanceof Error ? err.message : 'Failed to create franchise');
         setIsInitializing(false);
@@ -196,6 +204,7 @@ export function FranchiseSetup() {
         return true;
     }
   };
+  const canAdvance = !isInitializing && canProceed();
 
   const jumpToStep = (step: number) => {
     if (step < currentStep) {
@@ -341,13 +350,13 @@ export function FranchiseSetup() {
           </button>
           <button
             onClick={handleNext}
-            disabled={!canProceed()}
+            disabled={!canAdvance}
             className={`px-8 py-3 border-4 border-[#E8E8D8] font-bold text-sm tracking-wide transition-all flex items-center gap-2 ${
-              canProceed()
+              canAdvance
                 ? "bg-[#C4A853] text-[#4A6A42] hover:bg-[#B59A4A] active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)]"
                 : "bg-[#3A5A32] text-[#8A9A82] border-[#8A9A82] cursor-not-allowed"
             }`}
-            style={canProceed() ? { textShadow: '1px 1px 0px rgba(0,0,0,0.2)' } : {}}
+            style={canAdvance ? { textShadow: '1px 1px 0px rgba(0,0,0,0.2)' } : {}}
           >
             {currentStep === totalSteps ? (
               <>
