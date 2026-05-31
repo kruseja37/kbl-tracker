@@ -9602,7 +9602,7 @@ export function GameTracker() {
         }
         const shouldMarkQualityAtBat =
           field === "pitchesInAtBat" &&
-          (value as number) >= 7 &&
+          (value as number) >= 6 &&
           !existingAtBat.isQualityAtBat;
         if (shouldMarkQualityAtBat) {
           editHistory.push({
@@ -12825,19 +12825,16 @@ export function GameTracker() {
                 <label className="text-[9px] text-[#88AA88] font-bold tracking-wider block mb-1">
                   DISTANCE (ft)
                 </label>
-                <input
-                  type="number"
-                  min={200}
-                  max={600}
+                <TouchNumberPad
                   value={hrPrompt.distance}
-                  onChange={(e) =>
+                  onChange={(distance) =>
                     setHrPrompt((p) =>
-                      p ? { ...p, distance: e.target.value } : p,
+                      p ? { ...p, distance } : p,
                     )
                   }
                   placeholder="e.g. 420"
-                  className="w-full bg-[#0d1a0f] border-2 border-[#3d5240] text-white text-sm px-2 py-1.5 rounded focus:border-[#C4A853] outline-none"
-                  autoFocus
+                  enterLabel="Enter"
+                  onEnter={handleHrPromptDone}
                 />
               </div>
               <div className="mb-3">
@@ -14012,10 +14009,12 @@ function PitchCountModal({
   onConfirm,
   onDismiss,
 }: PitchCountModalProps) {
-  const [pitchCount, setPitchCount] = React.useState(
-    prompt.currentCount.toString(),
-  );
+  const [pitchCount, setPitchCount] = React.useState("");
   const [isConfirming, setIsConfirming] = React.useState(false);
+
+  React.useEffect(() => {
+    setPitchCount("");
+  }, [prompt.pitcherId, prompt.type, prompt.currentCount]);
 
   const handleConfirm = async () => {
     const count = parseInt(pitchCount, 10);
@@ -14061,16 +14060,15 @@ function PitchCountModal({
           <label className="text-[#E8E8D8] text-xs block mb-1">
             Enter CURRENT pitch count:
           </label>
-          <input
-            type="number"
-            min={prompt.currentCount}
+          <TouchNumberPad
             value={pitchCount}
-            onChange={(e) => setPitchCount(e.target.value)}
-            className="w-full bg-[#2a3a2d] border-2 border-[#1a3020] text-white text-lg font-bold p-2 text-center"
-            autoFocus
+            onChange={setPitchCount}
+            placeholder="0"
+            enterLabel="Enter"
+            onEnter={handleConfirm}
           />
           <div className="text-[#88AA88] text-[10px] mt-1">
-            💡 Check the broadcast or scoreboard for current count
+            Check the broadcast or scoreboard for current count.
           </div>
         </div>
 
@@ -14099,12 +14097,88 @@ function PitchCountModal({
           {isRequired && (
             <button
               onClick={onDismiss}
-              className="bg-[#663333] border-2 border-[#4a2424] text-[#E8E8D8] py-2 px-4 font-bold hover:bg-[#884444]"
+              className="flex-1 bg-[#663333] border-2 border-[#4a2424] text-[#E8E8D8] py-2 px-4 font-bold hover:bg-[#884444]"
             >
               Cancel
             </button>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+interface TouchNumberPadProps {
+  value: string;
+  onChange: (value: string) => void;
+  onEnter: () => void;
+  placeholder?: string;
+  enterLabel?: string;
+}
+
+function TouchNumberPad({
+  value,
+  onChange,
+  onEnter,
+  placeholder = "",
+  enterLabel = "Enter",
+}: TouchNumberPadProps) {
+  const appendDigit = (digit: string) => {
+    const nextValue = value === "0" ? digit : `${value}${digit}`;
+    onChange(nextValue.slice(0, 4));
+  };
+
+  const removeDigit = () => {
+    onChange(value.slice(0, -1));
+  };
+
+  return (
+    <div className="space-y-2">
+      <div
+        className="w-full min-h-[42px] bg-[#0d1a0f] border-2 border-[#3d5240] text-white text-lg font-bold px-3 py-2 rounded text-center tabular-nums"
+        aria-live="polite"
+        data-testid="touch-number-pad-display"
+      >
+        {value || (
+          <span className="text-[#789078] font-normal">{placeholder}</span>
+        )}
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit) => (
+          <button
+            key={digit}
+            type="button"
+            aria-label={`Number ${digit}`}
+            onClick={() => appendDigit(digit)}
+            className="min-h-[44px] rounded border-2 border-[#3d5240] bg-[#223525] text-white text-base font-bold hover:border-[#C4A853] hover:bg-[#2d4632] active:scale-95 transition-all"
+          >
+            {digit}
+          </button>
+        ))}
+        <button
+          type="button"
+          aria-label="Delete digit"
+          onClick={removeDigit}
+          className="min-h-[44px] rounded border-2 border-[#3d5240] bg-[#2a2f2b] text-[#C9D6C9] text-xs font-bold uppercase hover:border-[#C4A853] hover:bg-[#394039] active:scale-95 transition-all"
+        >
+          Del
+        </button>
+        <button
+          type="button"
+          aria-label="Number 0"
+          onClick={() => appendDigit("0")}
+          className="min-h-[44px] rounded border-2 border-[#3d5240] bg-[#223525] text-white text-base font-bold hover:border-[#C4A853] hover:bg-[#2d4632] active:scale-95 transition-all"
+        >
+          0
+        </button>
+        <button
+          type="button"
+          aria-label={enterLabel}
+          onClick={onEnter}
+          className="min-h-[44px] rounded border-2 border-[#CC9900] bg-[#FFD700] text-[#1a3020] text-xs font-bold uppercase hover:bg-[#FFE44D] active:scale-95 transition-all"
+        >
+          {enterLabel}
+        </button>
       </div>
     </div>
   );

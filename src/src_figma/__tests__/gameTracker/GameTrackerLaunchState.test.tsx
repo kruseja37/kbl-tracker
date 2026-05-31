@@ -329,6 +329,7 @@ describe("GameTracker launch state", () => {
     mocks.mockUseGameStateResult.restoredCompetitionContext = {};
     mocks.mockUseGameStateResult.restoredPlayoffContext = {};
     mocks.mockUseGameStateResult.showAutoEndPrompt = false;
+    mocks.mockUseGameStateResult.pitchCountPrompt = null;
     vi.spyOn(console, "error").mockImplementation(() => {});
     Object.defineProperty(window, "matchMedia", {
       writable: true,
@@ -521,6 +522,131 @@ describe("GameTracker launch state", () => {
       "franchise-restored-season-3",
     );
     expect(mocks.mockInitializeGame).not.toHaveBeenCalled();
+  });
+
+  test("franchise pitch-count prompt uses the shared touch number pad", async () => {
+    mocks.mockUseParams.mockReturnValue({ gameId: "game-franchise-restored" });
+    mocks.mockUseLocation.mockReturnValue({
+      pathname: "/game-tracker/game-franchise-restored",
+      search: "",
+      hash: "",
+      state: null,
+    });
+    mocks.mockLoadExistingGame.mockResolvedValue(true);
+    Object.assign(mocks.mockUseGameStateResult.gameState, {
+      gameId: "game-franchise-restored",
+      currentBatterId: "away-batter-1",
+      currentBatterName: "Away Batter 1",
+      currentPitcherId: "home-sp",
+      currentPitcherName: "Home Starter",
+      awayTeamId: "away-team",
+      homeTeamId: "home-team",
+      awayTeamName: "Away Team",
+      homeTeamName: "Home Team",
+      seasonNumber: 3,
+      gamePhase: "LIVE",
+    });
+    mocks.mockUseGameStateResult.restoredCompetitionContext = {
+      seasonId: "franchise-restored-season-3",
+      statsScopeId: "franchise-restored-season-3",
+      seasonNumber: 3,
+      competitionType: "franchise",
+      competitionId: "franchise-restored",
+      franchiseId: "franchise-restored",
+      scheduleGameId: "schedule-restored-7",
+    };
+    mocks.mockUseGameStateResult.pitchCountPrompt = {
+      type: "end_inning",
+      pitcherId: "home-sp",
+      pitcherName: "Home Starter",
+      currentCount: 12,
+      lastVerifiedInning: 2,
+    };
+    mocks.mockUseGameStateResult.confirmPitchCount.mockResolvedValue({
+      success: true,
+    });
+
+    render(<GameTracker />);
+
+    expect(await screen.findByText(/END OF INNING/i)).toBeInTheDocument();
+    expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Number 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Number 3" }));
+    fireEvent.click(screen.getByRole("button", { name: "Enter" }));
+
+    await waitFor(() => {
+      expect(mocks.mockUseGameStateResult.confirmPitchCount).toHaveBeenCalledWith(
+        "home-sp",
+        23,
+      );
+    });
+  });
+
+  test("franchise pitch-count number pad resets when a new prompt appears", async () => {
+    mocks.mockUseParams.mockReturnValue({ gameId: "game-franchise-restored" });
+    mocks.mockUseLocation.mockReturnValue({
+      pathname: "/game-tracker/game-franchise-restored",
+      search: "",
+      hash: "",
+      state: null,
+    });
+    mocks.mockLoadExistingGame.mockResolvedValue(true);
+    Object.assign(mocks.mockUseGameStateResult.gameState, {
+      gameId: "game-franchise-restored",
+      currentBatterId: "away-batter-1",
+      currentBatterName: "Away Batter 1",
+      currentPitcherId: "home-sp",
+      currentPitcherName: "Home Starter",
+      awayTeamId: "away-team",
+      homeTeamId: "home-team",
+      awayTeamName: "Away Team",
+      homeTeamName: "Home Team",
+      seasonNumber: 3,
+      gamePhase: "LIVE",
+    });
+    mocks.mockUseGameStateResult.restoredCompetitionContext = {
+      seasonId: "franchise-restored-season-3",
+      statsScopeId: "franchise-restored-season-3",
+      seasonNumber: 3,
+      competitionType: "franchise",
+      competitionId: "franchise-restored",
+      franchiseId: "franchise-restored",
+      scheduleGameId: "schedule-restored-7",
+    };
+    mocks.mockUseGameStateResult.pitchCountPrompt = {
+      type: "end_inning",
+      pitcherId: "home-sp",
+      pitcherName: "Home Starter",
+      currentCount: 12,
+      lastVerifiedInning: 2,
+    };
+
+    const { rerender } = render(<GameTracker />);
+
+    expect(await screen.findByText(/END OF INNING/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Number 4" }));
+    fireEvent.click(screen.getByRole("button", { name: "Number 5" }));
+    expect(screen.getByTestId("touch-number-pad-display")).toHaveTextContent(
+      "45",
+    );
+
+    mocks.mockUseGameStateResult.pitchCountPrompt = {
+      type: "pitching_change",
+      pitcherId: "away-sp",
+      pitcherName: "Away Starter",
+      currentCount: 31,
+      lastVerifiedInning: 3,
+    };
+    rerender(<GameTracker />);
+
+    expect(await screen.findByText(/PITCHING CHANGE/i)).toBeInTheDocument();
+    expect(screen.getByTestId("touch-number-pad-display")).toHaveTextContent(
+      "0",
+    );
+    expect(screen.getByTestId("touch-number-pad-display")).not.toHaveTextContent(
+      "45",
+    );
   });
 
   test("direct-entry restored franchise scope completes restored schedule game", async () => {
