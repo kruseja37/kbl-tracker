@@ -15,6 +15,10 @@ import {
   type FranchisePlayerProfileViewModel,
 } from "../../../utils/franchisePlayerProfile";
 import {
+  buildFranchisePlayerContinuity,
+  type FranchisePlayerContinuityReport,
+} from "../../../utils/franchisePlayerContinuity";
+import {
   applyFranchisePlayerProfileEdit,
   FRANCHISE_PROFILE_CHEMISTRIES,
   FRANCHISE_PROFILE_GRADES,
@@ -28,6 +32,18 @@ import {
   getFranchiseFarmRoster,
   type FranchiseFarmRecord,
 } from "../../../utils/franchiseFarmStorage";
+import {
+  buildFranchisePlayerTeamStatStints,
+  type FranchisePlayerTeamStatStint,
+} from "../../../utils/franchiseStatAttribution";
+import {
+  getRecentGames,
+  type CompletedGameRecord,
+} from "../../../utils/gameStorage";
+import {
+  getAllGamesByFranchise,
+  type ScheduledGame,
+} from "../../../utils/scheduleStorage";
 import { getSeasonIdForScope } from "../../../utils/franchisePersistenceContract";
 import {
   buildFranchiseDesignationEligibility,
@@ -832,6 +848,11 @@ export function TeamHubContent() {
   const [franchiseTransactionHistory, setFranchiseTransactionHistory] = useState<TransactionLogEntry[]>([]);
   const [transactionHistoryLoading, setTransactionHistoryLoading] = useState(false);
   const [transactionHistoryError, setTransactionHistoryError] = useState<string | null>(null);
+  const [franchiseScheduleGames, setFranchiseScheduleGames] = useState<ScheduledGame[]>([]);
+  const [franchiseCompletedGames, setFranchiseCompletedGames] = useState<CompletedGameRecord[]>([]);
+  const [franchisePlayerTeamStints, setFranchisePlayerTeamStints] = useState<FranchisePlayerTeamStatStint[]>([]);
+  const [continuityLoading, setContinuityLoading] = useState(false);
+  const [continuityError, setContinuityError] = useState<string | null>(null);
   const [salaryLifecycleReport, setSalaryLifecycleReport] = useState<FranchiseSalaryLifecycleReport | null>(null);
   const [designationEligibilityReport, setDesignationEligibilityReport] = useState<FranchiseDesignationEligibilityReport | null>(null);
   const [valueTruthLoading, setValueTruthLoading] = useState(false);
@@ -1069,6 +1090,60 @@ export function TeamHubContent() {
 
   useEffect(() => {
     if (!franchiseId || !seasonId) {
+      setFranchiseScheduleGames([]);
+      setFranchiseCompletedGames([]);
+      setFranchisePlayerTeamStints([]);
+      setContinuityLoading(false);
+      setContinuityError(null);
+      return;
+    }
+
+    let cancelled = false;
+    const activeFranchiseId = franchiseId;
+    const activeSeasonId = seasonId;
+    const activeSeasonNumber = seasonNumber;
+
+    async function loadContinuitySources() {
+      setContinuityLoading(true);
+      setContinuityError(null);
+      try {
+        const [scheduleRows, completedRows] = await Promise.all([
+          getAllGamesByFranchise(activeFranchiseId, activeSeasonNumber),
+          getRecentGames(1000, { franchiseId: activeFranchiseId, seasonId: activeSeasonId }),
+        ]);
+        if (cancelled) return;
+        setFranchiseScheduleGames(scheduleRows);
+        setFranchiseCompletedGames(completedRows);
+        setFranchisePlayerTeamStints(
+          buildFranchisePlayerTeamStatStints(completedRows, {
+            franchiseId: activeFranchiseId,
+            seasonId: activeSeasonId,
+            statsScopeId: activeSeasonId,
+            competitionType: 'franchise',
+          }),
+        );
+      } catch (err) {
+        if (!cancelled) {
+          setFranchiseScheduleGames([]);
+          setFranchiseCompletedGames([]);
+          setFranchisePlayerTeamStints([]);
+          setContinuityError(err instanceof Error ? err.message : 'Failed to load franchise player continuity sources.');
+        }
+      } finally {
+        if (!cancelled) {
+          setContinuityLoading(false);
+        }
+      }
+    }
+
+    void loadContinuitySources();
+    return () => {
+      cancelled = true;
+    };
+  }, [franchiseId, seasonId, seasonNumber]);
+
+  useEffect(() => {
+    if (!franchiseId || !seasonId) {
       setSalaryLifecycleReport(null);
       setDesignationEligibilityReport(null);
       setValueTruthLoading(false);
@@ -1178,6 +1253,36 @@ export function TeamHubContent() {
   }, [
     farmRecordByPlayerId,
     franchiseLeagueId,
+    selectedProfilePlayer,
+    selectedTeamId,
+  ]);
+
+  const selectedProfileContinuity = useMemo(() => {
+    if (!franchiseId || !selectedProfilePlayer) return null;
+    return buildFranchisePlayerContinuity({
+      franchiseId,
+      seasonId,
+      statsScopeId: seasonId,
+      seasonNumber,
+      player: selectedProfilePlayer,
+      farmRecord: farmRecordByPlayerId.get(selectedProfilePlayer.id) ?? null,
+      teamId: selectedTeamId,
+      leagueId: franchiseLeagueId,
+      transactions: franchiseTransactionHistory,
+      completedGames: franchiseCompletedGames,
+      scheduledGames: franchiseScheduleGames,
+      teamStints: franchisePlayerTeamStints,
+    });
+  }, [
+    farmRecordByPlayerId,
+    franchiseCompletedGames,
+    franchiseId,
+    franchiseLeagueId,
+    franchisePlayerTeamStints,
+    franchiseScheduleGames,
+    franchiseTransactionHistory,
+    seasonId,
+    seasonNumber,
     selectedProfilePlayer,
     selectedTeamId,
   ]);
@@ -2258,6 +2363,9 @@ export function TeamHubContent() {
       {selectedProfile && (
         <FranchisePlayerProfileModal
           profile={selectedProfile}
+          continuity={selectedProfileContinuity}
+          continuityLoading={continuityLoading}
+          continuityError={continuityError}
           editForm={profileEditForm}
           editMode={profileEditMode}
           editErrors={profileEditErrors}
@@ -2302,6 +2410,9 @@ interface FranchiseFarmVisibilityPanelProps {
 
 interface FranchisePlayerProfileModalProps {
   profile: FranchisePlayerProfileViewModel;
+  continuity: FranchisePlayerContinuityReport | null;
+  continuityLoading: boolean;
+  continuityError: string | null;
   editForm: FranchiseProfileEditForm | null;
   editMode: boolean;
   editErrors: string[];
@@ -2377,6 +2488,120 @@ function FranchiseProfileEditHistoryPanel({
   );
 }
 
+function formatContinuityDate(value?: number | string): string {
+  if (value == null || value === '') return 'Date unavailable';
+  const parsed = typeof value === 'number' ? new Date(value) : new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  return parsed.toLocaleDateString();
+}
+
+function ContinuityMiniList({
+  title,
+  entries,
+  empty,
+}: {
+  title: string;
+  entries: string[];
+  empty: string;
+}) {
+  return (
+    <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2">
+      <div className="text-[7px] font-bold text-[#C4A853]">{title}</div>
+      {entries.length === 0 ? (
+        <div className="mt-1 text-[8px] text-[#E8E8D8]/55">{empty}</div>
+      ) : (
+        <div className="mt-2 space-y-1 text-[8px] text-[#E8E8D8]/75">
+          {entries.slice(0, 4).map((entry, index) => (
+            <div key={`${title}-${index}`}>{entry}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FranchisePlayerContinuityPanel({
+  report,
+  isLoading,
+  error,
+}: {
+  report: FranchisePlayerContinuityReport | null;
+  isLoading: boolean;
+  error: string | null;
+}) {
+  return (
+    <section className="mt-4 border-[4px] border-[#4A6844] bg-[#3F563F] p-3">
+      <div className="text-[9px] font-bold text-[#C4A853]">PLAYER CONTINUITY</div>
+      <div className="mt-1 text-[8px] text-[#E8E8D8]/65">
+        Read-only playerId projection. Profile edits stay player-local; roster transactions, archive-backed games, score-only team results, and team stints remain separate evidence.
+      </div>
+      {isLoading && (
+        <div className="mt-3 border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[8px] text-[#E8E8D8]/65">
+          Loading player continuity...
+        </div>
+      )}
+      {error && (
+        <div className="mt-3 border-2 border-[#DD0000]/50 bg-[#5A3F3F] p-2 text-[8px] text-[#FFD6D6]">
+          {error}
+        </div>
+      )}
+      {!isLoading && !error && report && (
+        <>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <ContinuityMiniList
+              title="PROFILE EDITS"
+              empty="No player-local profile edits in this projection."
+              entries={report.profileEdits.map((entry) =>
+                `${entry.field}: ${entry.oldValue} → ${entry.newValue}${entry.date ? ` (${formatContinuityDate(entry.date)})` : ''}`,
+              )}
+            />
+            <ContinuityMiniList
+              title="ROSTER EVENTS"
+              empty="No scoped roster transactions for this player."
+              entries={report.rosterTransactions.map((entry) =>
+                `${entry.transactionType}: ${entry.sourceTeamId ?? entry.teamId ?? 'UNKNOWN'} → ${entry.targetTeamId ?? entry.teamId ?? 'UNKNOWN'}${entry.targetRosterStatus ? ` (${entry.targetRosterStatus})` : ''}`,
+              )}
+            />
+            <ContinuityMiniList
+              title="GAME / STAT EVIDENCE"
+              empty="No archive-backed GameTracker evidence for this player."
+              entries={report.gameEvidence.map((entry) =>
+                `${entry.gameLogId}: ${entry.teamId ?? 'UNKNOWN'} vs ${entry.opponentTeamId ?? 'UNKNOWN'} (${entry.competitionType ?? 'game'})`,
+              )}
+            />
+            <ContinuityMiniList
+              title="SCORE-ONLY TEAM RESULTS"
+              empty="No score-only team-result rows tied to known player teams."
+              entries={report.scoreOnlyResults.map((entry) =>
+                `Game ${entry.gameNumber}: ${entry.awayTeamId} ${entry.awayScore ?? '—'} @ ${entry.homeTeamId} ${entry.homeScore ?? '—'}; no player archive/player stats.`,
+              )}
+            />
+            <ContinuityMiniList
+              title="TEAM STINTS"
+              empty="No archive-derived team stints for this player."
+              entries={report.teamStints.map((entry) =>
+                `${entry.teamId}: ${entry.games} game${entry.games === 1 ? '' : 's'} (${entry.gameIds.join(', ')})`,
+              )}
+            />
+            <ContinuityMiniList
+              title="KNOWN TEAMS"
+              empty="No team context beyond current assignment."
+              entries={report.knownTeamIds.map((teamId) => teamId)}
+            />
+          </div>
+          {report.limitations.length > 0 && (
+            <div className="mt-3 border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[8px] text-[#E8E8D8]/60">
+              {report.limitations.slice(0, 3).map((limitation) => (
+                <div key={limitation}>{limitation}</div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 function ProfileTextInput({
   label,
   value,
@@ -2432,6 +2657,9 @@ function ProfileSelectInput<T extends string>({
 
 function FranchisePlayerProfileModal({
   profile,
+  continuity,
+  continuityLoading,
+  continuityError,
   editForm,
   editMode,
   editErrors,
@@ -2615,6 +2843,11 @@ function FranchisePlayerProfileModal({
         )}
 
         <FranchiseProfileEditHistoryPanel entries={profile.editHistory} />
+        <FranchisePlayerContinuityPanel
+          report={continuity}
+          isLoading={continuityLoading}
+          error={continuityError}
+        />
       </div>
     </div>
   );

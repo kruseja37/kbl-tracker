@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   mockSaveFranchisePlayer: vi.fn(),
   mockGetFranchiseFarmRoster: vi.fn(),
   mockGetTransactionsByFranchiseSeason: vi.fn(),
+  mockGetRecentGames: vi.fn(),
+  mockGetAllGamesByFranchise: vi.fn(),
   mockBuildFranchiseSalaryLifecycle: vi.fn(),
   mockBuildFranchiseDesignationEligibility: vi.fn(),
   mockSaveFranchiseTeam: vi.fn(),
@@ -42,6 +44,14 @@ vi.mock('../../../utils/franchiseFarmStorage', () => ({
 
 vi.mock('../../../utils/transactionStorage', () => ({
   getTransactionsByFranchiseSeason: mocks.mockGetTransactionsByFranchiseSeason,
+}));
+
+vi.mock('../../../utils/gameStorage', () => ({
+  getRecentGames: mocks.mockGetRecentGames,
+}));
+
+vi.mock('../../../utils/scheduleStorage', () => ({
+  getAllGamesByFranchise: mocks.mockGetAllGamesByFranchise,
 }));
 
 vi.mock('../../../utils/franchiseSalaryLifecycle', () => ({
@@ -427,6 +437,8 @@ describe('TeamHubContent franchise-owned visible reads', () => {
       },
     ]);
     mocks.mockGetTransactionsByFranchiseSeason.mockResolvedValue([]);
+    mocks.mockGetRecentGames.mockResolvedValue([]);
+    mocks.mockGetAllGamesByFranchise.mockResolvedValue([]);
     mocks.mockBuildFranchiseSalaryLifecycle.mockResolvedValue(salaryLifecycleReport());
     mocks.mockBuildFranchiseDesignationEligibility.mockResolvedValue(designationEligibilityReport());
     mocks.mockSaveFranchiseTeam.mockImplementation(async (_franchiseId: string, team: unknown) => team);
@@ -712,14 +724,153 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(dialog).getByText('PROFILE EDIT HISTORY')).toBeInTheDocument();
     expect(within(dialog).getByText(/Player-local profile changes only/i)).toBeInTheDocument();
     expect(within(dialog).getByText('power')).toBeInTheDocument();
-    expect(within(dialog).getByText(/60.*77/i)).toBeInTheDocument();
+    expect(within(dialog).getAllByText(/60.*77/i).length).toBeGreaterThan(0);
     expect(within(dialog).getByText('nickname')).toBeInTheDocument();
-    expect(within(dialog).getByText(/Old Nick.*New Nick/i)).toBeInTheDocument();
-    expect(within(dialog).queryByText(/transaction/i)).not.toBeInTheDocument();
-    expect(within(dialog).queryByText(/trade/i)).not.toBeInTheDocument();
-    expect(within(dialog).queryByText(/call-up/i)).not.toBeInTheDocument();
-    expect(within(dialog).queryByText(/official log/i)).not.toBeInTheDocument();
+    expect(within(dialog).getAllByText(/Old Nick.*New Nick/i).length).toBeGreaterThan(0);
+    const editHistorySection = within(dialog).getByText('PROFILE EDIT HISTORY').closest('section');
+    expect(editHistorySection).toBeTruthy();
+    expect(within(editHistorySection as HTMLElement).queryByText(/trade/i)).not.toBeInTheDocument();
+    expect(within(editHistorySection as HTMLElement).queryByText(/call-up/i)).not.toBeInTheDocument();
+    expect(within(editHistorySection as HTMLElement).queryByText(/official log/i)).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
+  });
+
+  test('profile continuity separates player edits roster events archive evidence score-only rows and team stints', async () => {
+    mocks.mockGetAllFranchisePlayers.mockResolvedValueOnce([
+      franchisePlayer('copied-player', 'Copied', 'Player', 'SS', {
+        editHistory: [{
+          date: '2026-04-01T12:00:00.000Z',
+          field: 'nickname',
+          oldValue: '',
+          newValue: 'Continuity',
+          context: 'base',
+        }],
+      }),
+    ]);
+    mocks.mockGetTransactionsByFranchiseSeason.mockResolvedValueOnce([
+      {
+        id: 'trade-copied-player',
+        timestamp: '2026-04-02T12:00:00.000Z',
+        season: 2,
+        gameNumber: null,
+        phase: 'REGULAR_SEASON',
+        franchiseId: 'franchise-1',
+        seasonId: 'franchise-1-season-2',
+        statsScopeId: 'franchise-1-season-2',
+        type: 'trade',
+        actor: 'USER',
+        data: {
+          sourceTeamId: 'team-old',
+          targetTeamId: 'team-1',
+          playerIds: ['copied-player', 'other-player'],
+          playersFromSource: ['copied-player'],
+        },
+        previousState: null,
+        undone: false,
+        undoneAt: null,
+        undoneBy: null,
+      },
+    ]);
+    mocks.mockGetRecentGames.mockResolvedValueOnce([
+      {
+        gameId: 'archive-game-1',
+        date: 1000,
+        seasonId: 'franchise-1-season-2',
+        statsScopeId: 'franchise-1-season-2',
+        franchiseId: 'franchise-1',
+        competitionType: 'franchise',
+        competitionId: 'franchise-1',
+        scheduleGameId: 'schedule-archive-1',
+        seasonNumber: 2,
+        awayTeamId: 'team-1',
+        homeTeamId: 'team-2',
+        awayTeamName: 'Copied Alpha',
+        homeTeamName: 'Beta',
+        finalScore: { away: 5, home: 3 },
+        innings: 9,
+        totalInnings: 9,
+        fameEvents: [],
+        playerStats: {
+          'copied-player': {
+            playerName: 'Copied Player',
+            teamId: 'team-1',
+            pa: 4,
+            ab: 4,
+            h: 1,
+            singles: 1,
+            doubles: 0,
+            triples: 0,
+            hr: 0,
+            rbi: 0,
+            r: 1,
+            bb: 0,
+            hbp: 0,
+            k: 1,
+            sb: 0,
+            cs: 0,
+            sf: 0,
+            sh: 0,
+            gidp: 0,
+            putouts: 1,
+            assists: 2,
+            fieldingErrors: 0,
+          },
+        },
+        pitcherGameStats: [],
+        activityLog: [],
+        inningScores: [],
+        aggregationStatus: 'aggregated',
+      },
+    ]);
+    mocks.mockGetAllGamesByFranchise.mockResolvedValueOnce([
+      {
+        id: 'schedule-score-only-1',
+        franchiseId: 'franchise-1',
+        seasonId: 'franchise-1-season-2',
+        statsScopeId: 'franchise-1-season-2',
+        seasonNumber: 2,
+        gameNumber: 2,
+        dayNumber: 2,
+        awayTeamId: 'team-old',
+        homeTeamId: 'team-2',
+        status: 'COMPLETED',
+        result: {
+          awayScore: 3,
+          homeScore: 1,
+          winningTeamId: 'team-old',
+          losingTeamId: 'team-2',
+        },
+        completionSource: 'score-only',
+        scoreOnlyResultId: 'score-only-1',
+        resultEnteredAt: 1100,
+        completedAt: 1100,
+        createdAt: 1,
+        source: 'manual',
+      },
+    ]);
+
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Open profile for C\. Player/i }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Copied Player/i });
+    expect(await within(dialog).findByText('PLAYER CONTINUITY')).toBeInTheDocument();
+    expect(within(dialog).getByText(/Read-only playerId projection/i)).toBeInTheDocument();
+    expect(within(dialog).getByText('PROFILE EDITS')).toBeInTheDocument();
+    expect(within(dialog).getByText(/nickname: .*Continuity/i)).toBeInTheDocument();
+    expect(within(dialog).getByText('ROSTER EVENTS')).toBeInTheDocument();
+    expect(within(dialog).getByText(/trade: team-old → team-1/i)).toBeInTheDocument();
+    expect(within(dialog).getByText('GAME / STAT EVIDENCE')).toBeInTheDocument();
+    expect(within(dialog).getByText(/archive-game-1: team-1 vs team-2/i)).toBeInTheDocument();
+    expect(within(dialog).getByText('SCORE-ONLY TEAM RESULTS')).toBeInTheDocument();
+    expect(within(dialog).getByText(/Game 2: team-old 3 @ team-2 1; no player archive\/player stats/i)).toBeInTheDocument();
+    expect(within(dialog).getByText('TEAM STINTS')).toBeInTheDocument();
+    expect(within(dialog).getByText(/team-1: 1 game \(archive-game-1\)/i)).toBeInTheDocument();
+    expect(within(dialog).getByText('KNOWN TEAMS')).toBeInTheDocument();
+    expect(within(dialog).getByText('team-old')).toBeInTheDocument();
+    expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
   });
 
   test('edits MLB/revealed profile through franchise-owned save path and refreshes display', async () => {
@@ -771,7 +922,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(dialog).getByText('Manual Current')).toBeInTheDocument();
     expect(within(dialog).getByText('PROFILE EDIT HISTORY')).toBeInTheDocument();
     expect(within(dialog).getByText('power')).toBeInTheDocument();
-    expect(within(dialog).getByText(/60.*77/i)).toBeInTheDocument();
+    expect(within(dialog).getAllByText(/60.*77/i).length).toBeGreaterThan(0);
     expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
     expect(mocks.mockBuildFranchiseSalaryLifecycle).toHaveBeenCalledTimes(1);
@@ -867,7 +1018,9 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     const dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Farm Hidden/i });
     expect(within(dialog).getByText('PROFILE EDIT HISTORY')).toBeInTheDocument();
     expect(within(dialog).getByText('firstName')).toBeInTheDocument();
-    expect(within(dialog).getByText(/Farm.*Visible/i)).toBeInTheDocument();
+    expect(within(dialog).getAllByText(/Farm.*Visible/i).length).toBeGreaterThan(0);
+    expect(within(dialog).getByText('PLAYER CONTINUITY')).toBeInTheDocument();
+    expect(within(dialog).getByText(/Unrevealed FARM continuity is hidden-safe/i)).toBeInTheDocument();
     expect(within(dialog).queryByText('power')).not.toBeInTheDocument();
     expect(within(dialog).queryByText(/30.*99/i)).not.toBeInTheDocument();
     expect(within(dialog).queryByText(/trueGrade/i)).not.toBeInTheDocument();
