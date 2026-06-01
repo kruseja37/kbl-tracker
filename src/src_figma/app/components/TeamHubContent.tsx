@@ -14,6 +14,14 @@ import {
 } from "../../../utils/franchiseFarmStorage";
 import { getSeasonIdForScope } from "../../../utils/franchisePersistenceContract";
 import {
+  buildFranchiseDesignationEligibility,
+  type FranchiseDesignationEligibilityReport,
+} from "../../../utils/franchiseDesignationEligibility";
+import {
+  buildFranchiseSalaryLifecycle,
+  type FranchiseSalaryLifecycleReport,
+} from "../../../utils/franchiseSalaryLifecycle";
+import {
   getTransactionsByFranchiseSeason,
   type Mode2V1TransactionType,
   type TransactionLogEntry,
@@ -693,6 +701,10 @@ export function TeamHubContent() {
   const [franchiseTransactionHistory, setFranchiseTransactionHistory] = useState<TransactionLogEntry[]>([]);
   const [transactionHistoryLoading, setTransactionHistoryLoading] = useState(false);
   const [transactionHistoryError, setTransactionHistoryError] = useState<string | null>(null);
+  const [salaryLifecycleReport, setSalaryLifecycleReport] = useState<FranchiseSalaryLifecycleReport | null>(null);
+  const [designationEligibilityReport, setDesignationEligibilityReport] = useState<FranchiseDesignationEligibilityReport | null>(null);
+  const [valueTruthLoading, setValueTruthLoading] = useState(false);
+  const [valueTruthError, setValueTruthError] = useState<string | null>(null);
   const [lineupMode, setLineupMode] = useState<"DH" | "NO_DH">("NO_DH");
   const [manualLineupSlots, setManualLineupSlots] = useState<LineupSlot[]>([]);
   const [manualRotationIds, setManualRotationIds] = useState<string[]>([]);
@@ -923,6 +935,53 @@ export function TeamHubContent() {
       cancelled = true;
     };
   }, [franchiseId, seasonId]);
+
+  useEffect(() => {
+    if (!franchiseId || !seasonId) {
+      setSalaryLifecycleReport(null);
+      setDesignationEligibilityReport(null);
+      setValueTruthLoading(false);
+      setValueTruthError(null);
+      return;
+    }
+
+    let cancelled = false;
+    const input = {
+      franchiseId,
+      seasonId,
+      statsScopeId: seasonId,
+      seasonNumber,
+    };
+
+    async function loadValueTruthReports() {
+      setValueTruthLoading(true);
+      setValueTruthError(null);
+      try {
+        const [salaryReport, designationReport] = await Promise.all([
+          buildFranchiseSalaryLifecycle(input),
+          buildFranchiseDesignationEligibility(input),
+        ]);
+        if (cancelled) return;
+        setSalaryLifecycleReport(salaryReport);
+        setDesignationEligibilityReport(designationReport);
+      } catch (err) {
+        if (!cancelled) {
+          setSalaryLifecycleReport(null);
+          setDesignationEligibilityReport(null);
+          setValueTruthError(err instanceof Error ? err.message : 'Failed to load Franchise v1 value truth labels.');
+        }
+      } finally {
+        if (!cancelled) {
+          setValueTruthLoading(false);
+        }
+      }
+    }
+
+    void loadValueTruthReports();
+    return () => {
+      cancelled = true;
+    };
+  }, [franchiseId, seasonId, seasonNumber]);
 
   const analyzerReport = useMemo(() => {
     if (!franchiseId || !selectedTeamId || !franchiseTeam) return null;
@@ -1439,6 +1498,14 @@ export function TeamHubContent() {
             error={transactionHistoryError}
           />
 
+          <FranchiseValueTruthPanel
+            selectedTeamId={selectedTeamId}
+            salaryLifecycleReport={salaryLifecycleReport}
+            designationEligibilityReport={designationEligibilityReport}
+            isLoading={valueTruthLoading}
+            error={valueTruthError}
+          />
+
           <section
             aria-label="Franchise lineup and rotation manager"
             className="mb-4 border-[4px] border-[#4A6844] bg-[#5A8352] p-3"
@@ -1718,14 +1785,6 @@ export function TeamHubContent() {
             )}
           </div>
           
-          <div
-            data-testid="franchise-v1-roster-value-gate"
-            className="mb-3 border-2 border-[#4A6844] bg-[#3F563F] p-2 text-[8px] text-[#E8E8D8]/65"
-          >
-            Morale, True Value, and value-delta columns are deferred until those franchise calculations are canonical.
-            The v1 roster table shows stable identity, grade, contract, fitness, and lineup controls only.
-          </div>
-
           <div className="overflow-x-auto">
             <table aria-label="MLB roster table" className="w-full text-[9px]">
               <thead>
@@ -1941,11 +2000,159 @@ interface FranchiseTransactionHistoryPanelProps {
   error: string | null;
 }
 
+interface FranchiseValueTruthPanelProps {
+  selectedTeamId: string;
+  salaryLifecycleReport: FranchiseSalaryLifecycleReport | null;
+  designationEligibilityReport: FranchiseDesignationEligibilityReport | null;
+  isLoading: boolean;
+  error: string | null;
+}
+
 interface FranchiseFarmVisibilityPanelProps {
   farmPlayers: Player[];
   farmRecordByPlayerId: Map<string, FranchiseFarmRecord>;
   missingRecordPlayers: Player[];
   orphanFarmRecords: FranchiseFarmRecord[];
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+function formatTruthStatus(status: string): string {
+  return status.replace(/-/g, ' ').toUpperCase();
+}
+
+function FranchiseValueTruthPanel({
+  selectedTeamId,
+  salaryLifecycleReport,
+  designationEligibilityReport,
+  isLoading,
+  error,
+}: FranchiseValueTruthPanelProps) {
+  const salaryRecords = (salaryLifecycleReport?.playerRecords ?? []).filter((record) =>
+    !selectedTeamId || record.teamId === selectedTeamId,
+  );
+  const teamPayrollRecord = salaryLifecycleReport?.teamRecords.find((record) => record.teamId === selectedTeamId);
+  const stableSalaryCount = salaryRecords.filter((record) => record.initialSalaryBaseline.status === 'stable-baseline').length;
+  const blockedSalaryCount = salaryRecords.filter((record) => record.initialSalaryBaseline.status === 'blocked').length;
+  const playerSalaryBaselineLabel = stableSalaryCount > 0 && blockedSalaryCount > 0
+    ? `PARTIAL (${stableSalaryCount} stable / ${blockedSalaryCount} missing)`
+    : stableSalaryCount > 0
+      ? `STABLE BASELINE (${stableSalaryCount} current team players)`
+      : 'BLOCKED';
+  const performanceStatus = salaryRecords[0]?.performanceSalaryMovement.status ?? 'blocked';
+  const offseasonStatus = salaryRecords[0]?.offseasonSalaryRecalculation.status ?? 'deferred';
+  const salaryLimitations = uniqueStrings([
+    ...salaryRecords.flatMap((record) => record.limitations),
+    ...(teamPayrollRecord?.limitations ?? []),
+  ]).slice(0, 4);
+
+  const designationRecords = (designationEligibilityReport?.records ?? []).filter((record) =>
+    !selectedTeamId || record.teamId === selectedTeamId,
+  );
+  const previewDesignationTypes = uniqueStrings(
+    designationRecords
+      .filter((record) => record.status === 'preview-only' && (record.designationType === 'TEAM_MVP' || record.designationType === 'ACE'))
+      .map((record) => record.designationType),
+  );
+  const blockedDesignationSummaries = uniqueStrings(
+    designationRecords
+      .filter((record) => record.status === 'blocked')
+      .filter((record) => ['FAN_FAVORITE', 'ALBATROSS', 'CAPTAIN', 'FAN_HOPEFUL', 'CORNERSTONE'].includes(record.designationType))
+      .map((record) => `${record.designationType} ${record.status}: ${record.reasons[0]}`),
+  ).slice(0, 5);
+
+  return (
+    <section
+      data-testid="franchise-v1-roster-value-gate"
+      role="region"
+      aria-label="Franchise v1 value salary designation truth labels"
+      className="mb-4 border-[4px] border-[#4A6844] bg-[#3F563F] p-3"
+    >
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-[9px] font-bold text-[#C4A853]">VALUE / SALARY / DESIGNATION TRUTH</div>
+          <div className="mt-1 text-[8px] text-[#E8E8D8]/60">
+            Read-only internal v1 labels. Morale, True Value, and value-delta columns are deferred until canonical inputs exist.
+          </div>
+        </div>
+        <div className="border-2 border-[#4A6844] bg-[#5A8352] px-2 py-1 text-[8px] text-[#E8E8D8]">
+          {isLoading ? 'LOADING' : 'READ ONLY'}
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-3 border-2 border-[#DD0000]/50 bg-[#5A3F3F] p-2 text-[8px] text-[#FFD6D6]">
+          {error}
+        </div>
+      )}
+
+      <div className="grid gap-3 lg:grid-cols-3">
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[8px] text-[#E8E8D8]/75">
+          <div className="mb-1 font-bold text-[#C4A853]">SALARY BASELINE</div>
+          <div>
+            Player salary baseline: {playerSalaryBaselineLabel}
+          </div>
+          {blockedSalaryCount > 0 && (
+            <div>Missing salary baseline: {blockedSalaryCount} players</div>
+          )}
+          <div>
+            Team payroll baseline: {teamPayrollRecord
+              ? formatTruthStatus(teamPayrollRecord.payrollBaselineState.status)
+              : 'BLOCKED'}
+          </div>
+          {teamPayrollRecord?.payrollBaseline == null && (
+            <div className="text-[#FFEFB5]">Team payroll baseline limitation: missing handoff payroll proof.</div>
+          )}
+        </div>
+
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[8px] text-[#E8E8D8]/75">
+          <div className="mb-1 font-bold text-[#C4A853]">VALUE MOVEMENT</div>
+          <div>Performance salary movement: {formatTruthStatus(performanceStatus)}</div>
+          <div>Offseason salary recalculation: {formatTruthStatus(offseasonStatus)}</div>
+          <div>True Value / value delta: DEFERRED until canonical inputs exist.</div>
+          <div>Luxury tax, salary matching, and AI salary valuation: BLOCKED / INACTIVE.</div>
+        </div>
+
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[8px] text-[#E8E8D8]/75">
+          <div className="mb-1 font-bold text-[#C4A853]">DYNAMIC DESIGNATIONS</div>
+          {previewDesignationTypes.length > 0 ? (
+            <div>{previewDesignationTypes.join(', ')} preview-only eligibility; not winners or saved designations.</div>
+          ) : (
+            <div>No TEAM_MVP or ACE preview eligibility for the current inputs.</div>
+          )}
+          <div>Designation persistence: BLOCKED.</div>
+          <div>No designation records are written from Team Hub.</div>
+        </div>
+      </div>
+
+      {(blockedDesignationSummaries.length > 0 || salaryLimitations.length > 0) && (
+        <div className="mt-3 grid gap-2 lg:grid-cols-2">
+          {blockedDesignationSummaries.length > 0 && (
+            <div className="border-2 border-[#4A6844] bg-[#5A3F3F] p-2 text-[8px] text-[#FFD6D6]">
+              <div className="mb-1 font-bold text-[#FFEFB5]">Blocked / deferred designation reasons</div>
+              {blockedDesignationSummaries.map((summary) => (
+                <div key={summary}>{summary}</div>
+              ))}
+            </div>
+          )}
+          {salaryLimitations.length > 0 && (
+            <div className="border-2 border-[#4A6844] bg-[#5A3F3F] p-2 text-[8px] text-[#FFD6D6]">
+              <div className="mb-1 font-bold text-[#FFEFB5]">Salary context limitations</div>
+              {salaryLimitations.map((limitation) => (
+                <div key={limitation}>{limitation}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="mt-3 text-[8px] text-[#E8E8D8]/55">
+        The v1 roster table shows stable identity, grade, contract, fitness, and lineup controls only.
+      </div>
+    </section>
+  );
 }
 
 function FranchiseTransactionHistoryPanel({

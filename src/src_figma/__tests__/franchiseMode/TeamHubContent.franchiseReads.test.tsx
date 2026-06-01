@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   mockGetAllFranchisePlayers: vi.fn(),
   mockGetFranchiseFarmRoster: vi.fn(),
   mockGetTransactionsByFranchiseSeason: vi.fn(),
+  mockBuildFranchiseSalaryLifecycle: vi.fn(),
+  mockBuildFranchiseDesignationEligibility: vi.fn(),
   mockSaveFranchiseTeam: vi.fn(),
 }));
 
@@ -36,6 +38,14 @@ vi.mock('../../../utils/franchiseFarmStorage', () => ({
 
 vi.mock('../../../utils/transactionStorage', () => ({
   getTransactionsByFranchiseSeason: mocks.mockGetTransactionsByFranchiseSeason,
+}));
+
+vi.mock('../../../utils/franchiseSalaryLifecycle', () => ({
+  buildFranchiseSalaryLifecycle: mocks.mockBuildFranchiseSalaryLifecycle,
+}));
+
+vi.mock('../../../utils/franchiseDesignationEligibility', () => ({
+  buildFranchiseDesignationEligibility: mocks.mockBuildFranchiseDesignationEligibility,
 }));
 
 import { TeamHubContent } from '../../app/components/TeamHubContent';
@@ -99,6 +109,175 @@ function lineupManagerPlayers() {
       leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'FARM' }],
     }),
   ];
+}
+
+function salaryLifecycleRecord(overrides: Record<string, unknown> = {}) {
+  return {
+    contractVersion: 'franchise-salary-lifecycle-v1-readonly',
+    franchiseId: 'franchise-1',
+    seasonId: 'franchise-1-season-2',
+    statsScopeId: 'franchise-1-season-2',
+    seasonNumber: 2,
+    playerId: 'copied-player',
+    playerName: 'Copied Player',
+    teamId: 'team-1',
+    rosterStatus: 'MLB',
+    salary: 3000000,
+    contractYears: 2,
+    salaryBaselineCalculationVersion: 'franchise-initial-salary-v1-ratings-only',
+    teamPayrollBaseline: 4000000,
+    initialSalaryBaseline: {
+      status: 'stable-baseline',
+      persistable: false,
+      recalculable: false,
+      reasons: ['Stored franchise salary baseline is available from the Mode 1 handoff/franchise copy.'],
+    },
+    teamPayrollBaselineState: {
+      status: 'stable-baseline',
+      persistable: false,
+      recalculable: false,
+      reasons: ['Stored team payroll baseline is available from the franchise handoff.'],
+    },
+    performanceSalaryMovement: {
+      status: 'blocked',
+      persistable: false,
+      recalculable: false,
+      reasons: ['Performance salary movement is blocked because canonical True Value is unavailable.'],
+    },
+    offseasonSalaryRecalculation: {
+      status: 'deferred',
+      persistable: false,
+      recalculable: false,
+      reasons: ['Offseason salary recalculation is deferred for internal v1.'],
+    },
+    persistable: false,
+    recalculable: false,
+    sourceInputs: {
+      salaryBaselineAvailable: true,
+      teamPayrollBaselineAvailable: true,
+      seasonStatsAvailable: true,
+      warPreviewInputAvailable: true,
+      wpaAvailable: false,
+      trustedFinalWarWpaAvailable: false,
+      trueValueAvailable: false,
+      parkAdjustedValueInputsAvailable: false,
+      luxuryTaxActive: false,
+      salaryMatchingActive: false,
+      aiTradeValuationActive: false,
+    },
+    limitations: ['Final True Value salary movement is unavailable in internal v1.'],
+    ...overrides,
+  };
+}
+
+function salaryLifecycleReport(overrides: Record<string, unknown> = {}) {
+  const playerRecords = overrides.playerRecords ?? [salaryLifecycleRecord()];
+  return {
+    contractVersion: 'franchise-salary-lifecycle-v1-readonly',
+    franchiseId: 'franchise-1',
+    seasonId: 'franchise-1-season-2',
+    statsScopeId: 'franchise-1-season-2',
+    seasonNumber: 2,
+    valueInputContractVersion: 'franchise-mode2-value-inputs-v1-readonly',
+    generatedAt: 1,
+    playerRecords,
+    teamRecords: [{
+      contractVersion: 'franchise-salary-lifecycle-v1-readonly',
+      franchiseId: 'franchise-1',
+      seasonId: 'franchise-1-season-2',
+      statsScopeId: 'franchise-1-season-2',
+      seasonNumber: 2,
+      teamId: 'team-1',
+      payrollBaseline: 4000000,
+      playerCount: 1,
+      payrollBaselineState: {
+        status: 'stable-baseline',
+        persistable: false,
+        recalculable: false,
+        reasons: ['Stored team payroll baseline is available from the franchise handoff.'],
+      },
+      limitations: [],
+    }],
+    policies: {
+      luxuryTax: { status: 'blocked', active: false, reasons: ['Luxury tax is inactive for Franchise internal v1.'] },
+      salaryMatching: { status: 'blocked', active: false, reasons: ['Salary matching for trades is inactive for Franchise internal v1.'] },
+      aiTradeSalaryValuation: { status: 'blocked', active: false, reasons: ['AI trade salary valuation is inactive for Franchise internal v1.'] },
+    },
+    anyPersistable: false,
+    anyRecalculable: false,
+    limitations: [],
+    ...overrides,
+  };
+}
+
+function designationEligibilityRecord(designationType: string, overrides: Record<string, unknown> = {}) {
+  return {
+    contractVersion: 'franchise-designation-eligibility-v1-readonly',
+    franchiseId: 'franchise-1',
+    seasonId: 'franchise-1-season-2',
+    statsScopeId: 'franchise-1-season-2',
+    seasonNumber: 2,
+    playerId: 'copied-player',
+    playerName: 'Copied Player',
+    teamId: 'team-1',
+    rosterStatus: 'MLB',
+    designationType,
+    status: designationType === 'TEAM_MVP' || designationType === 'ACE' ? 'preview-only' : 'blocked',
+    persistable: false,
+    reasons: designationType === 'FAN_FAVORITE'
+      ? ['FAN_FAVORITE requires canonical True Value and value-delta inputs, which are unavailable in internal v1.']
+      : ['Final designation persistence is blocked until trusted final value/designation inputs exist.'],
+    limitations: [],
+    sourceInputs: {
+      salaryBaselineAvailable: true,
+      teamSalaryBaselineAvailable: true,
+      seasonStatsAvailable: true,
+      warPreviewInputAvailable: true,
+      pitchingWarPreviewInputAvailable: designationType === 'ACE',
+      wpaAvailable: false,
+      wpaTrustedForFinalValue: false,
+      trueValueAvailable: false,
+      moraleAvailable: false,
+      relationshipInputsAvailable: false,
+      awardInputsFinalized: false,
+      seedParkFactorsAvailable: true,
+      parkAdjustedValueInputsAvailable: false,
+      seasonMetadataAvailable: true,
+    },
+    ...overrides,
+  };
+}
+
+function designationEligibilityReport(overrides: Record<string, unknown> = {}) {
+  return {
+    contractVersion: 'franchise-designation-eligibility-v1-readonly',
+    franchiseId: 'franchise-1',
+    seasonId: 'franchise-1-season-2',
+    statsScopeId: 'franchise-1-season-2',
+    seasonNumber: 2,
+    valueInputContractVersion: 'franchise-mode2-value-inputs-v1-readonly',
+    generatedAt: 1,
+    records: [
+      designationEligibilityRecord('TEAM_MVP'),
+      designationEligibilityRecord('ACE'),
+      designationEligibilityRecord('FAN_FAVORITE'),
+      designationEligibilityRecord('ALBATROSS', {
+        reasons: ['ALBATROSS requires canonical True Value and value-delta inputs, which are unavailable in internal v1.'],
+      }),
+      designationEligibilityRecord('CAPTAIN', {
+        reasons: ['CAPTAIN is deferred because leadership, morale, and relationship inputs are not canonical in internal v1.'],
+      }),
+      designationEligibilityRecord('FAN_HOPEFUL', {
+        reasons: ['FAN_HOPEFUL is deferred because fan, morale, and True Value inputs are not canonical in internal v1.'],
+      }),
+      designationEligibilityRecord('CORNERSTONE', {
+        reasons: ['CORNERSTONE is deferred because future value, contract trajectory, morale, and relationship inputs are not canonical in internal v1.'],
+      }),
+    ],
+    anyPersistable: false,
+    limitations: [],
+    ...overrides,
+  };
 }
 
 describe('TeamHubContent franchise-owned visible reads', () => {
@@ -244,6 +423,8 @@ describe('TeamHubContent franchise-owned visible reads', () => {
       },
     ]);
     mocks.mockGetTransactionsByFranchiseSeason.mockResolvedValue([]);
+    mocks.mockBuildFranchiseSalaryLifecycle.mockResolvedValue(salaryLifecycleReport());
+    mocks.mockBuildFranchiseDesignationEligibility.mockResolvedValue(designationEligibilityReport());
     mocks.mockSaveFranchiseTeam.mockImplementation(async (_franchiseId: string, team: unknown) => team);
   });
 
@@ -272,6 +453,170 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(screen.getByText('Farm advisory only')).toBeInTheDocument();
     expect(screen.getAllByText(/Review farm OF coverage|Monitor Farm Hidden/).length).toBeGreaterThan(0);
     expect(mocks.mockGetFranchiseFarmRoster).toHaveBeenCalledWith('franchise-1', 'franchise-1-season-2', 'team-1');
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
+  test('shows read-only value salary and designation truth labels from lifecycle gates', async () => {
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    const truthRegion = await screen.findByRole('region', { name: /Franchise v1 value salary designation truth labels/i });
+
+    expect(within(truthRegion).getByText(/Player salary baseline: STABLE BASELINE/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/Team payroll baseline: STABLE BASELINE/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/Performance salary movement: BLOCKED/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/Offseason salary recalculation: DEFERRED/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/True Value \/ value delta: DEFERRED/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/Luxury tax, salary matching, and AI salary valuation: BLOCKED \/ INACTIVE/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/TEAM_MVP, ACE preview-only eligibility; not winners or saved designations/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/FAN_FAVORITE blocked: FAN_FAVORITE requires canonical True Value and value-delta inputs/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/ALBATROSS blocked: ALBATROSS requires canonical True Value and value-delta inputs/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/No designation records are written from Team Hub/i)).toBeInTheDocument();
+    expect(within(truthRegion).queryByText(/MVP winner/i)).not.toBeInTheDocument();
+    expect(within(truthRegion).queryByText(/Ace winner/i)).not.toBeInTheDocument();
+    expect(within(truthRegion).queryByText(/Fan Favorite designation/i)).not.toBeInTheDocument();
+    expect(mocks.mockBuildFranchiseSalaryLifecycle).toHaveBeenCalledWith({
+      franchiseId: 'franchise-1',
+      seasonId: 'franchise-1-season-2',
+      statsScopeId: 'franchise-1-season-2',
+      seasonNumber: 2,
+    });
+    expect(mocks.mockBuildFranchiseDesignationEligibility).toHaveBeenCalled();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
+  test('labels mixed salary baselines as partial instead of fully stable', async () => {
+    mocks.mockBuildFranchiseSalaryLifecycle.mockResolvedValueOnce(salaryLifecycleReport({
+      playerRecords: [
+        salaryLifecycleRecord({ playerId: 'stable-player', playerName: 'Stable Player' }),
+        salaryLifecycleRecord({
+          playerId: 'missing-player',
+          playerName: 'Missing Player',
+          salary: null,
+          initialSalaryBaseline: {
+            status: 'blocked',
+            persistable: false,
+            recalculable: false,
+            reasons: ['Stored player salary baseline is missing or incomplete.'],
+          },
+          limitations: [
+            'Stored player salary baseline is missing or incomplete.',
+            'Final True Value salary movement is unavailable in internal v1.',
+          ],
+        }),
+      ],
+    }));
+
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    const truthRegion = await screen.findByRole('region', { name: /Franchise v1 value salary designation truth labels/i });
+
+    expect(within(truthRegion).getByText(/Player salary baseline: PARTIAL \(1 stable \/ 1 missing\)/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/Missing salary baseline: 1 players/i)).toBeInTheDocument();
+    expect(within(truthRegion).queryByText(/Player salary baseline: STABLE BASELINE/i)).not.toBeInTheDocument();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
+  test('shows missing payroll and salary context limitations from salary lifecycle gate', async () => {
+    mocks.mockBuildFranchiseSalaryLifecycle.mockResolvedValueOnce(salaryLifecycleReport({
+      playerRecords: [
+        salaryLifecycleRecord({
+          playerId: 'copied-player',
+          teamPayrollBaseline: null,
+          initialSalaryBaseline: {
+            status: 'blocked',
+            persistable: false,
+            recalculable: false,
+            reasons: ['Stored player salary baseline is missing or incomplete.'],
+          },
+          teamPayrollBaselineState: {
+            status: 'blocked',
+            persistable: false,
+            recalculable: false,
+            reasons: ['Team payroll baseline is missing for this player/team context.'],
+          },
+          limitations: [
+            'Team payroll baseline is unavailable for salary/value designation checks.',
+            'Final True Value salary movement is unavailable in internal v1.',
+          ],
+        }),
+      ],
+      teamRecords: [{
+        contractVersion: 'franchise-salary-lifecycle-v1-readonly',
+        franchiseId: 'franchise-1',
+        seasonId: 'franchise-1-season-2',
+        statsScopeId: 'franchise-1-season-2',
+        seasonNumber: 2,
+        teamId: 'team-1',
+        payrollBaseline: null,
+        playerCount: 1,
+        payrollBaselineState: {
+          status: 'blocked',
+          persistable: false,
+          recalculable: false,
+          reasons: ['Team payroll baseline is missing for this team.'],
+        },
+        limitations: ['Team payroll baseline is unavailable for this team.'],
+      }],
+    }));
+
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    const truthRegion = await screen.findByRole('region', { name: /Franchise v1 value salary designation truth labels/i });
+
+    expect(within(truthRegion).getByText(/Player salary baseline: BLOCKED/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/Missing salary baseline: 1 players/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/Team payroll baseline: BLOCKED/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/Team payroll baseline limitation: missing handoff payroll proof/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/Team payroll baseline is unavailable for salary\/value designation checks/i)).toBeInTheDocument();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
+  test('surfaces FARM salary and designation limitations without revealing hidden prospect data', async () => {
+    mocks.mockBuildFranchiseSalaryLifecycle.mockResolvedValueOnce(salaryLifecycleReport({
+      playerRecords: [
+        salaryLifecycleRecord(),
+        salaryLifecycleRecord({
+          playerId: 'farm-player',
+          playerName: 'Farm Hidden',
+          rosterStatus: 'FARM',
+          salary: 1000000,
+          limitations: [
+            'FARM player salary context is read-only; FARM players are not eligible for MLB salary movement in this slice.',
+          ],
+        }),
+      ],
+    }));
+    mocks.mockBuildFranchiseDesignationEligibility.mockResolvedValueOnce(designationEligibilityReport({
+      records: [
+        designationEligibilityRecord('TEAM_MVP', {
+          playerId: 'farm-player',
+          playerName: 'Farm Hidden',
+          rosterStatus: 'FARM',
+          status: 'blocked',
+          reasons: ['Current MLB roster status is required; found FARM.'],
+        }),
+        designationEligibilityRecord('FAN_FAVORITE', {
+          playerId: 'farm-player',
+          playerName: 'Farm Hidden',
+          rosterStatus: 'FARM',
+          status: 'blocked',
+          reasons: ['FAN_FAVORITE requires canonical True Value and value-delta inputs, which are unavailable in internal v1.'],
+        }),
+      ],
+    }));
+
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    const truthRegion = await screen.findByRole('region', { name: /Franchise v1 value salary designation truth labels/i });
+
+    expect(within(truthRegion).getByText(/FARM player salary context is read-only/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/FAN_FAVORITE blocked: FAN_FAVORITE requires canonical True Value and value-delta inputs/i)).toBeInTheDocument();
+    expect(within(truthRegion).queryByText(/trueGrade/i)).not.toBeInTheDocument();
+    expect(within(truthRegion).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
   });
 
