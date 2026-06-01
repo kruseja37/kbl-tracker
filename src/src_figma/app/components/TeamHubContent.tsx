@@ -2324,12 +2324,56 @@ function formatProfileValue(value: unknown): string {
   return String(value);
 }
 
+function formatProfileHistoryDate(value?: string): string {
+  if (!value) return 'Date unavailable';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString();
+}
+
 function FranchiseProfileField({ label, value }: { label: string; value: unknown }) {
   return (
     <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2">
       <div className="text-[7px] font-bold text-[#C4A853]">{label}</div>
       <div className="mt-1 text-[9px] text-[#E8E8D8]">{formatProfileValue(value)}</div>
     </div>
+  );
+}
+
+function FranchiseProfileEditHistoryPanel({
+  entries,
+}: {
+  entries: FranchisePlayerProfileViewModel['editHistory'];
+}) {
+  return (
+    <section className="mt-4 border-[4px] border-[#4A6844] bg-[#3F563F] p-3">
+      <div className="text-[9px] font-bold text-[#C4A853]">PROFILE EDIT HISTORY</div>
+      <div className="mt-1 text-[8px] text-[#E8E8D8]/65">
+        Latest 8 player-local profile changes only. Roster movement history remains separate.
+      </div>
+      {entries.length === 0 ? (
+        <div className="mt-3 border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[8px] text-[#E8E8D8]/65">
+          No player-local profile edits recorded.
+        </div>
+      ) : (
+        <div className="mt-3 space-y-2">
+          {entries.map((entry, index) => (
+            <div
+              key={`${entry.date ?? 'unknown'}-${entry.field}-${index}`}
+              className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[8px] text-[#E8E8D8]"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-bold text-[#C4A853]">{entry.field}</span>
+                <span className="text-[#E8E8D8]/55">{formatProfileHistoryDate(entry.date)}</span>
+              </div>
+              <div className="mt-1 text-[#E8E8D8]/75">
+                {entry.oldValue} → {entry.newValue}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -2569,6 +2613,8 @@ function FranchisePlayerProfileModal({
             )}
           </section>
         )}
+
+        <FranchiseProfileEditHistoryPanel entries={profile.editHistory} />
       </div>
     </div>
   );

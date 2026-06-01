@@ -674,9 +674,52 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(dialog).getByText('CON')).toBeInTheDocument();
     expect(within(dialog).getByText('SPD')).toBeInTheDocument();
     expect(within(dialog).getByText(/\$3\.0M/i)).toBeInTheDocument();
+    expect(within(dialog).getByText('PROFILE EDIT HISTORY')).toBeInTheDocument();
+    expect(within(dialog).getByText(/No player-local profile edits recorded/i)).toBeInTheDocument();
     expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
+  test('shows player-local profile edit history without official history wording', async () => {
+    mocks.mockGetAllFranchisePlayers.mockResolvedValueOnce([
+      franchisePlayer('copied-player', 'Copied', 'Player', 'SS', {
+        editHistory: [
+          {
+            date: '2026-04-01T12:00:00.000Z',
+            field: 'nickname',
+            oldValue: 'Old Nick',
+            newValue: 'New Nick',
+            context: 'base',
+          },
+          {
+            date: '2026-04-02T12:00:00.000Z',
+            field: 'power',
+            oldValue: 60,
+            newValue: 77,
+            context: 'base',
+          },
+        ],
+      }),
+    ]);
+
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Open profile for C\. Player/i }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Copied Player/i });
+    expect(within(dialog).getByText('PROFILE EDIT HISTORY')).toBeInTheDocument();
+    expect(within(dialog).getByText(/Player-local profile changes only/i)).toBeInTheDocument();
+    expect(within(dialog).getByText('power')).toBeInTheDocument();
+    expect(within(dialog).getByText(/60.*77/i)).toBeInTheDocument();
+    expect(within(dialog).getByText('nickname')).toBeInTheDocument();
+    expect(within(dialog).getByText(/Old Nick.*New Nick/i)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/transaction/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/trade/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/call-up/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/official log/i)).not.toBeInTheDocument();
+    expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
   });
 
   test('edits MLB/revealed profile through franchise-owned save path and refreshes display', async () => {
@@ -726,6 +769,9 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     ]));
     expect(await within(dialog).findByText(/Profile saved to franchise-owned player record/i)).toBeInTheDocument();
     expect(within(dialog).getByText('Manual Current')).toBeInTheDocument();
+    expect(within(dialog).getByText('PROFILE EDIT HISTORY')).toBeInTheDocument();
+    expect(within(dialog).getByText('power')).toBeInTheDocument();
+    expect(within(dialog).getByText(/60.*77/i)).toBeInTheDocument();
     expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
     expect(mocks.mockBuildFranchiseSalaryLifecycle).toHaveBeenCalledTimes(1);
@@ -750,6 +796,8 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(dialog).getByText('A-')).toBeInTheDocument();
     expect(within(dialog).getByText('medium')).toBeInTheDocument();
     expect(within(dialog).getByText(/\$1\.0M/i)).toBeInTheDocument();
+    expect(within(dialog).getByText('PROFILE EDIT HISTORY')).toBeInTheDocument();
+    expect(within(dialog).getByText(/No player-local profile edits recorded/i)).toBeInTheDocument();
     expect(within(dialog).queryByText('BASEBALL DETAILS')).not.toBeInTheDocument();
     expect(within(dialog).queryByText('POW')).not.toBeInTheDocument();
     expect(within(dialog).queryByText('CON')).not.toBeInTheDocument();
@@ -761,6 +809,72 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
+  test('hidden FARM profile edit history omits rating, true-grade, and hidden modifier values', async () => {
+    mocks.mockGetAllFranchisePlayers.mockResolvedValueOnce([
+      franchisePlayer('farm-player', 'Farm', 'Hidden', 'CF', {
+        secondaryPosition: 'OF',
+        salary: 1000000,
+        power: 95,
+        ratingRevealState: 'hidden',
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'FARM' }],
+        prospectProfile: {
+          trueGrade: 'A',
+          scoutedGrade: 'B',
+          potentialGrade: 'A-',
+          scoutConfidence: 'medium',
+        },
+        hiddenPersonalityModifiers: { leadership: 92 },
+        editHistory: [
+          {
+            date: '2026-04-01T12:00:00.000Z',
+            field: 'firstName',
+            oldValue: 'Farm',
+            newValue: 'Visible',
+            context: 'base',
+          },
+          {
+            date: '2026-04-02T12:00:00.000Z',
+            field: 'power',
+            oldValue: 30,
+            newValue: 99,
+            context: 'base',
+          },
+          {
+            date: '2026-04-03T12:00:00.000Z',
+            field: 'trueGrade',
+            oldValue: 'C',
+            newValue: 'S',
+            context: 'base',
+          },
+          {
+            date: '2026-04-04T12:00:00.000Z',
+            field: 'hiddenPersonalityModifiers',
+            oldValue: { leadership: 10 },
+            newValue: { leadership: 99 },
+            context: 'base',
+          },
+        ],
+      }),
+    ]);
+
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Open profile for Farm Hidden/i }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Farm Hidden/i });
+    expect(within(dialog).getByText('PROFILE EDIT HISTORY')).toBeInTheDocument();
+    expect(within(dialog).getByText('firstName')).toBeInTheDocument();
+    expect(within(dialog).getByText(/Farm.*Visible/i)).toBeInTheDocument();
+    expect(within(dialog).queryByText('power')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/30.*99/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/trueGrade/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/^S$/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/leadership/i)).not.toBeInTheDocument();
+    expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
   });
 
   test('edits unrevealed FARM profile with visible identity fields only', async () => {

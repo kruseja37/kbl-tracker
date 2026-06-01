@@ -92,6 +92,7 @@ describe('franchise player profile view model', () => {
     }));
     expect(profile.salary).toBe(3_000_000);
     expect(profile.contractYears).toBe(2);
+    expect(profile.editHistory).toEqual([]);
     expect(profile.suppressedHiddenFieldLabels).toHaveLength(0);
   });
 
@@ -172,6 +173,65 @@ describe('franchise player profile view model', () => {
     expect(serialized).not.toContain('hiddenScoutTruth');
     expect(serialized).not.toContain('hiddenPersonalityModifiers');
     expect(profile.limitations.join(' ')).toContain('true ratings');
+  });
+
+  test('hidden FARM profile edit history omits rating and hidden truth entries', () => {
+    const profile = buildFranchisePlayerProfileViewModel({
+      player: makePlayer({
+        id: 'farm-player',
+        firstName: 'Farm',
+        lastName: 'Hidden',
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'FARM' }],
+        ratingRevealState: 'hidden',
+        editHistory: [
+          {
+            date: '2026-04-01T00:00:00.000Z',
+            field: 'firstName',
+            oldValue: 'Farm',
+            newValue: 'Visible',
+            context: 'base',
+          },
+          {
+            date: '2026-04-02T00:00:00.000Z',
+            field: 'power',
+            oldValue: 40,
+            newValue: 99,
+            context: 'base',
+          },
+          {
+            date: '2026-04-03T00:00:00.000Z',
+            field: 'trueGrade',
+            oldValue: 'C',
+            newValue: 'S',
+            context: 'base',
+          },
+          {
+            date: '2026-04-04T00:00:00.000Z',
+            field: 'hiddenPersonalityModifiers',
+            oldValue: { leadership: 10 },
+            newValue: { leadership: 99 },
+            context: 'base',
+          },
+        ],
+      }),
+      farmRecord: makeFarmRecord(),
+      teamId: 'team-1',
+      leagueId: 'league-1',
+    });
+    const serialized = JSON.stringify(profile.editHistory);
+
+    expect(profile.editHistory).toEqual([
+      {
+        date: '2026-04-01T00:00:00.000Z',
+        field: 'firstName',
+        oldValue: 'Farm',
+        newValue: 'Visible',
+      },
+    ]);
+    expect(serialized).not.toContain('99');
+    expect(serialized).not.toContain('trueGrade');
+    expect(serialized).not.toContain('hiddenPersonalityModifiers');
+    expect(serialized).not.toContain('leadership');
   });
 
   test('revealed or called-up prospect exposes full details', () => {

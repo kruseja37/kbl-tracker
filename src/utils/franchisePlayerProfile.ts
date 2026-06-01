@@ -1,4 +1,5 @@
 import type {
+  EditHistoryEntry,
   Grade,
   PitchType,
   Player,
@@ -79,6 +80,13 @@ export interface FranchisePlayerProfileProspectReport {
   draftPick?: number;
 }
 
+export interface FranchisePlayerProfileEditHistoryEntry {
+  date?: string;
+  field: string;
+  oldValue: string;
+  newValue: string;
+}
+
 export interface FranchisePlayerProfileViewModel {
   playerId: string;
   teamId?: string;
@@ -98,6 +106,7 @@ export interface FranchisePlayerProfileViewModel {
   };
   prospectReport: FranchisePlayerProfileProspectReport;
   fullDetails: FranchisePlayerProfileFullDetails | null;
+  editHistory: FranchisePlayerProfileEditHistoryEntry[];
   suppressedHiddenFieldLabels: string[];
   limitations: string[];
 }
@@ -167,6 +176,75 @@ function collectHiddenSuppressionLabels(player: Player & ProspectProfileCarrier)
   return labels;
 }
 
+const HIDDEN_SAFE_EDIT_HISTORY_FIELDS = new Set<string>([
+  'firstName',
+  'lastName',
+  'nickname',
+  'age',
+  'bats',
+  'throws',
+  'primaryPosition',
+  'secondaryPosition',
+  'trait1',
+  'trait2',
+  'personality',
+  'chemistry',
+]);
+
+const SENSITIVE_EDIT_HISTORY_FIELDS = new Set<string>([
+  'power',
+  'contact',
+  'speed',
+  'fielding',
+  'arm',
+  'velocity',
+  'junk',
+  'accuracy',
+  'arsenal',
+  'overallGrade',
+  'trueGrade',
+  'trueRatings',
+  'hiddenPersonalityModifiers',
+  'hiddenScoutTruth',
+  'hiddenRatingFields',
+  'prospectProfile',
+  'scoutedGrade',
+  'potentialGrade',
+  'scoutConfidence',
+  'salary',
+  'contractYears',
+  'leagueAssignments',
+  'ratingRevealState',
+  'ratingRevealedAt',
+]);
+
+function formatEditHistoryValue(value: unknown): string {
+  if (value == null || value === '') return '—';
+  if (Array.isArray(value)) return value.map(formatEditHistoryValue).join(', ');
+  if (typeof value === 'object') return '[redacted]';
+  return String(value);
+}
+
+function buildProfileEditHistory(
+  entries: EditHistoryEntry[] | undefined,
+  hiddenSafe: boolean,
+): FranchisePlayerProfileEditHistoryEntry[] {
+  const filtered = (entries ?? []).filter((entry) => {
+    if (!hiddenSafe) return true;
+    return HIDDEN_SAFE_EDIT_HISTORY_FIELDS.has(entry.field) && !SENSITIVE_EDIT_HISTORY_FIELDS.has(entry.field);
+  });
+
+  return filtered
+    .slice(-8)
+    .reverse()
+    .map((entry) => ({
+      date: entry.date,
+      field: entry.field,
+      oldValue: formatEditHistoryValue(entry.oldValue),
+      newValue: formatEditHistoryValue(entry.newValue),
+    }));
+}
+
 export function buildFranchisePlayerProfileViewModel({
   player,
   farmRecord,
@@ -221,6 +299,7 @@ export function buildFranchisePlayerProfileViewModel({
       draftPick: prospectProfile.draftPick,
     },
     fullDetails: hiddenSafe ? null : buildFullDetails(player),
+    editHistory: buildProfileEditHistory(player.editHistory, hiddenSafe),
     suppressedHiddenFieldLabels: hiddenSafe ? collectHiddenSuppressionLabels(carrier) : [],
     limitations: hiddenSafe
       ? ['Unrevealed FARM profile: true ratings and hidden prospect truth stay hidden until call-up/reveal.']
