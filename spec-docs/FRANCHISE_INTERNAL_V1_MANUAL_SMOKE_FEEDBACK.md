@@ -49,6 +49,15 @@ The manual smoke test mostly validated the recent Franchise v1 direction, but Ga
    - Needed info includes ratings, attributes, traits, positions, handedness, salary, and any other console-relevant details.
    - Hidden prospect info must remain hidden until the appropriate reveal/call-up point, but once revealed the user needs enough information to recreate the player in SMB4.
 
+## GameTracker / Fame Logic Bugs
+
+1. Immaculate inning detection is too loose.
+   - User observation: Franchise GameTracker can treat an inning as immaculate when all three outs are strikeouts, even if the pitcher allowed a walk and a hit.
+   - Correct rule: an immaculate inning requires exactly three batters faced, three strikeouts, and exactly nine pitches, with no walk, hit, error, hit-by-pitch, or other baserunner/reach event.
+   - User impact: fame/story logic can award or report a false achievement.
+   - Area to inspect later: end-inning pitch-count confirmation, inning-level batter/pitch/result tracking, fame event detection, and any shared achievement predicates used across Exhibition, Elimination, and Franchise GameTracker.
+   - Scope note: this is a gameplay correctness bug to fix in a focused GameTracker/Fame hardening slice, not a reason to derail the current Franchise Mode implementation plan.
+
 ## Suggested Future Triage Buckets
 
 1. Launch / handoff blockers
@@ -65,6 +74,10 @@ The manual smoke test mostly validated the recent Franchise v1 direction, but Ga
    - Player profile pop-up or Team Hub profile panel.
    - Revealed FARM prospect console-entry details.
    - Hidden-safe behavior before reveal.
+
+4. GameTracker / fame correctness
+   - Tighten immaculate inning detection to the true nine-pitch, three-batter, three-strikeout rule.
+   - Confirm the fix applies consistently across all GameTracker entry points.
 
 ## Notes
 
