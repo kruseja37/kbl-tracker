@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Edit, Building2, User } from "lucide-react";
+import { Building2, User } from "lucide-react";
 import { useOffseasonData, type OffseasonTeam, type OffseasonPlayer } from "@/hooks/useOffseasonData";
 import { useSeasonStats, type BattingLeaderEntry, type PitchingLeaderEntry } from '../../../hooks/useSeasonStats';
 import { useFranchiseDataContext } from "@/app/pages/FranchiseHome";
@@ -8,6 +8,10 @@ import {
   getFranchiseTeam,
   saveFranchiseTeam,
 } from "../../../utils/franchisePlayerStorage";
+import {
+  buildFranchisePlayerProfileViewModel,
+  type FranchisePlayerProfileViewModel,
+} from "../../../utils/franchisePlayerProfile";
 import {
   getFranchiseFarmRoster,
   type FranchiseFarmRecord,
@@ -60,7 +64,19 @@ type TeamHubTab = "team" | "fan-morale" | "roster" | "stats" | "stadium" | "mana
 const EMPTY_TEAMS: string[] = [];
 const EMPTY_STADIUMS: string[] = [];
 
-const EMPTY_ROSTER_DATA: { name: string; position: string; grade: string; morale: string | number; contract: string; trueValue: string; netDiff: string; fitness: string | number }[] = [];
+interface RosterTableItem {
+  playerId?: string;
+  name: string;
+  position: string;
+  grade: string;
+  morale: string | number;
+  contract: string;
+  trueValue: string;
+  netDiff: string;
+  fitness: string | number;
+}
+
+const EMPTY_ROSTER_DATA: RosterTableItem[] = [];
 
 const EMPTY_STATS_DATA: { name: string; pos: string; war: number; pwar: number; bwar: number; rwar: number; fwar: number; era?: number; ip?: number; k?: number; w?: number; l?: number; sv?: number; avg?: number; hr?: number; rbi?: number; sb?: number; ops?: number }[] = [];
 const FRANCHISE_FIELD_POSITIONS: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF'];
@@ -73,7 +89,7 @@ const FRANCHISE_TEAM_HUB_HISTORY_TYPES = new Set<Mode2V1TransactionType>([
 ]);
 
 // Helper to convert OffseasonPlayer to roster format
-function convertToRosterItem(player: OffseasonPlayer) {
+function convertToRosterItem(player: OffseasonPlayer): RosterTableItem {
   const salary = player.salary || 0;
   const contractStr = salary > 0 ? `$${(salary / 1000000).toFixed(1)}M` : '—';
 
@@ -314,11 +330,12 @@ function describeTeamHubTransactionStatuses(entry: TransactionLogEntry): string 
   return 'Status not recorded';
 }
 
-function convertFranchisePlayerToRosterItem(player: Player) {
+function convertFranchisePlayerToRosterItem(player: Player): RosterTableItem {
   const salary = player.salary || 0;
   const contractStr = salary > 0 ? `$${(salary / 1000000).toFixed(1)}M` : '—';
 
   return {
+    playerId: player.id,
     name: formatFranchiseShortName(player),
     position: player.primaryPosition,
     grade: player.overallGrade,
@@ -698,6 +715,7 @@ export function TeamHubContent() {
   const [franchiseAllPlayers, setFranchiseAllPlayers] = useState<Player[]>([]);
   const [franchiseRosterPlayers, setFranchiseRosterPlayers] = useState<Player[]>([]);
   const [franchiseFarmRecords, setFranchiseFarmRecords] = useState<FranchiseFarmRecord[]>([]);
+  const [selectedProfilePlayerId, setSelectedProfilePlayerId] = useState<string | null>(null);
   const [franchiseTransactionHistory, setFranchiseTransactionHistory] = useState<TransactionLogEntry[]>([]);
   const [transactionHistoryLoading, setTransactionHistoryLoading] = useState(false);
   const [transactionHistoryError, setTransactionHistoryError] = useState<string | null>(null);
@@ -1029,6 +1047,28 @@ export function TeamHubContent() {
   const orphanFarmRecords = useMemo(() => {
     return franchiseFarmRecords.filter((record) => !farmPlayerById.has(record.playerId));
   }, [farmPlayerById, franchiseFarmRecords]);
+
+  const selectedProfile = useMemo(() => {
+    if (!selectedProfilePlayerId) return null;
+    const player = franchiseAllPlayers.find((candidate) => candidate.id === selectedProfilePlayerId);
+    if (!player) return null;
+    return buildFranchisePlayerProfileViewModel({
+      player,
+      farmRecord: farmRecordByPlayerId.get(player.id) ?? null,
+      teamId: selectedTeamId,
+      leagueId: franchiseLeagueId,
+    });
+  }, [
+    farmRecordByPlayerId,
+    franchiseAllPlayers,
+    franchiseLeagueId,
+    selectedProfilePlayerId,
+    selectedTeamId,
+  ]);
+
+  useEffect(() => {
+    setSelectedProfilePlayerId(null);
+  }, [selectedTeamId]);
 
   // Default to first team once data loads
   useEffect(() => {
@@ -1804,12 +1844,12 @@ export function TeamHubContent() {
                   <th className="text-center py-2 px-2 text-[#E8E8D8]/70 cursor-pointer hover:text-[#E8E8D8]" onClick={() => handleRosterSort("fitness")}>
                     FITNESS {rosterSortColumn === "fitness" && (rosterSortDirection === "asc" ? "↑" : "↓")}
                   </th>
-                  <th className="text-center py-2 px-2 text-[#E8E8D8]/70">EDIT</th>
+                  <th className="text-center py-2 px-2 text-[#E8E8D8]/70">PROFILE</th>
                 </tr>
               </thead>
               <tbody>
                 {getSortedRoster().map((player, idx) => (
-                  <tr key={idx} className={`border-b border-[#4A6844]/30 ${idx % 2 === 0 ? 'bg-[#5A8352]/20' : ''}`}>
+                  <tr key={player.playerId ?? idx} className={`border-b border-[#4A6844]/30 ${idx % 2 === 0 ? 'bg-[#5A8352]/20' : ''}`}>
 	                    <td className="py-2 px-2 text-[#E8E8D8]">{player.name}</td>
 	                    <td className="py-2 px-2 text-[#E8E8D8] text-center">{player.position}</td>
 	                    <td className="py-2 px-2 text-[#E8E8D8] text-center font-bold">{player.grade}</td>
@@ -1821,11 +1861,14 @@ export function TeamHubContent() {
                     </td>
                     <td className="py-2 px-2 text-center">
                       <button
-                        disabled
-                        title="Roster edits use the Franchise roster and transaction surfaces."
-                        className="p-1 opacity-40 cursor-not-allowed"
+                        type="button"
+                        disabled={!player.playerId}
+                        title="Open read-only franchise player profile."
+                        aria-label={`Open profile for ${player.name}`}
+                        onClick={() => player.playerId && setSelectedProfilePlayerId(player.playerId)}
+                        className="p-1 hover:bg-[#4A6844] disabled:opacity-40 disabled:cursor-not-allowed"
                       >
-                        <Edit className="w-3 h-3 text-[#E8E8D8]" />
+                        <User className="w-3 h-3 text-[#E8E8D8]" />
                       </button>
                     </td>
                   </tr>
@@ -1839,6 +1882,7 @@ export function TeamHubContent() {
             farmRecordByPlayerId={farmRecordByPlayerId}
             missingRecordPlayers={farmPlayersMissingRecords}
             orphanFarmRecords={orphanFarmRecords}
+            onOpenProfile={setSelectedProfilePlayerId}
           />
         </div>
       )}
@@ -1986,6 +2030,13 @@ export function TeamHubContent() {
           </div>
         </div>
       )}
+
+      {selectedProfile && (
+        <FranchisePlayerProfileModal
+          profile={selectedProfile}
+          onClose={() => setSelectedProfilePlayerId(null)}
+        />
+      )}
     </div>
   );
 }
@@ -2013,6 +2064,120 @@ interface FranchiseFarmVisibilityPanelProps {
   farmRecordByPlayerId: Map<string, FranchiseFarmRecord>;
   missingRecordPlayers: Player[];
   orphanFarmRecords: FranchiseFarmRecord[];
+  onOpenProfile: (playerId: string) => void;
+}
+
+interface FranchisePlayerProfileModalProps {
+  profile: FranchisePlayerProfileViewModel;
+  onClose: () => void;
+}
+
+function formatProfileSalary(salary: number | null): string {
+  if (salary == null || salary <= 0) return '—';
+  return salary >= 10000 ? `$${(salary / 1000000).toFixed(1)}M` : `$${salary.toFixed(1)}M`;
+}
+
+function formatProfileValue(value: unknown): string {
+  if (value == null || value === '') return '—';
+  return String(value);
+}
+
+function FranchiseProfileField({ label, value }: { label: string; value: unknown }) {
+  return (
+    <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2">
+      <div className="text-[7px] font-bold text-[#C4A853]">{label}</div>
+      <div className="mt-1 text-[9px] text-[#E8E8D8]">{formatProfileValue(value)}</div>
+    </div>
+  );
+}
+
+function FranchisePlayerProfileModal({ profile, onClose }: FranchisePlayerProfileModalProps) {
+  const traits = profile.identity.traits.length > 0 ? profile.identity.traits.join(', ') : 'None';
+  const position = profile.identity.secondaryPosition
+    ? `${profile.identity.primaryPosition} / ${profile.identity.secondaryPosition}`
+    : profile.identity.primaryPosition;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Franchise player profile for ${profile.identity.name}`}
+        className="max-h-[90vh] w-full max-w-3xl overflow-y-auto border-[5px] border-[#4A6844] bg-[#6B9462] p-4 text-[#E8E8D8] shadow-[8px_8px_0px_rgba(0,0,0,0.35)]"
+      >
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b-2 border-[#4A6844] pb-3">
+          <div>
+            <div className="text-[8px] font-bold text-[#C4A853]">FRANCHISE PLAYER PROFILE</div>
+            <div className="mt-1 text-[14px] font-bold">{profile.identity.name}</div>
+            <div className="mt-1 text-[8px] text-[#E8E8D8]/65">
+              {profile.rosterStatus} · {String(profile.revealState).toUpperCase()} · Read-only
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="border-2 border-[#E8E8D8]/40 bg-[#4A6844] px-3 py-1 text-[8px] font-bold hover:border-[#C4A853]"
+          >
+            CLOSE
+          </button>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <FranchiseProfileField label="AGE" value={profile.identity.age} />
+          <FranchiseProfileField label="BATS / THROWS" value={`${profile.identity.bats} / ${profile.identity.throws}`} />
+          <FranchiseProfileField label="POSITION" value={position} />
+          <FranchiseProfileField label="TRAITS" value={traits} />
+          <FranchiseProfileField label="PERSONALITY" value={profile.identity.personality} />
+          <FranchiseProfileField label="CHEMISTRY" value={profile.identity.chemistry} />
+          <FranchiseProfileField label="SALARY BASELINE" value={formatProfileSalary(profile.salary)} />
+          <FranchiseProfileField label="CONTRACT YEARS" value={profile.contractYears ?? '—'} />
+          <FranchiseProfileField label="TEAM / STATUS" value={`${profile.teamId ?? 'UNKNOWN'} / ${profile.rosterStatus}`} />
+        </div>
+
+        {profile.hiddenSafe ? (
+          <section className="mt-4 border-[4px] border-[#4A6844] bg-[#3F563F] p-3">
+            <div className="text-[9px] font-bold text-[#C4A853]">VISIBLE SCOUTING REPORT</div>
+            <div className="mt-1 text-[8px] text-[#E8E8D8]/65">
+              Hidden prospect details stay unavailable until call-up or reveal.
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <FranchiseProfileField label="SCOUTED GRADE" value={profile.prospectReport.scoutedGrade ?? 'Unscouted'} />
+              <FranchiseProfileField label="POTENTIAL" value={profile.prospectReport.potentialGrade ?? 'Unknown'} />
+              <FranchiseProfileField label="CONFIDENCE" value={profile.prospectReport.scoutConfidence ?? 'Unknown'} />
+              <FranchiseProfileField label="SCOUT" value={profile.prospectReport.scoutName ?? '—'} />
+              <FranchiseProfileField label="SOURCE" value={profile.prospectReport.source ?? 'Unknown'} />
+              <FranchiseProfileField
+                label="DRAFT"
+                value={[
+                  profile.prospectReport.draftYear ? `Year ${profile.prospectReport.draftYear}` : null,
+                  profile.prospectReport.draftRound ? `Round ${profile.prospectReport.draftRound}` : null,
+                  profile.prospectReport.draftPick ? `Pick ${profile.prospectReport.draftPick}` : null,
+                ].filter(Boolean).join(' · ') || '—'}
+              />
+              <FranchiseProfileField label="OPTIONS USED" value={profile.farm.optionsUsed ?? '—'} />
+              <FranchiseProfileField label="OPTION DATES" value={profile.farm.optionDates.length > 0 ? profile.farm.optionDates.map((date) => date.slice(0, 10)).join(', ') : 'None'} />
+            </div>
+          </section>
+        ) : (
+          <section className="mt-4 border-[4px] border-[#4A6844] bg-[#3F563F] p-3">
+            <div className="text-[9px] font-bold text-[#C4A853]">BASEBALL DETAILS</div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <FranchiseProfileField label="GRADE" value={profile.fullDetails?.overallGrade ?? '—'} />
+              <FranchiseProfileField label="POW" value={profile.fullDetails?.power ?? '—'} />
+              <FranchiseProfileField label="CON" value={profile.fullDetails?.contact ?? '—'} />
+              <FranchiseProfileField label="SPD" value={profile.fullDetails?.speed ?? '—'} />
+              <FranchiseProfileField label="FLD" value={profile.fullDetails?.fielding ?? '—'} />
+              <FranchiseProfileField label="ARM" value={profile.fullDetails?.arm ?? '—'} />
+              <FranchiseProfileField label="VEL" value={profile.fullDetails?.velocity ?? '—'} />
+              <FranchiseProfileField label="JNK" value={profile.fullDetails?.junk ?? '—'} />
+              <FranchiseProfileField label="ACC" value={profile.fullDetails?.accuracy ?? '—'} />
+              <FranchiseProfileField label="ARSENAL" value={profile.fullDetails?.arsenal.length ? profile.fullDetails.arsenal.join(', ') : '—'} />
+            </div>
+          </section>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function uniqueStrings(values: string[]): string[] {
@@ -2238,6 +2403,7 @@ function FranchiseFarmVisibilityPanel({
   farmRecordByPlayerId,
   missingRecordPlayers,
   orphanFarmRecords,
+  onOpenProfile,
 }: FranchiseFarmVisibilityPanelProps) {
   return (
     <div
@@ -2277,8 +2443,18 @@ function FranchiseFarmVisibilityPanel({
                       {player.primaryPosition} · Age {player.age} · B/T {player.bats}/{player.throws}
                     </div>
                   </div>
-                  <div className="border-2 border-[#5A8352] px-2 py-1 text-[7px] font-bold text-[#C4A853]">
-                    {String(revealState).toUpperCase()}
+                  <div className="flex flex-col items-end gap-2">
+                    <div className="border-2 border-[#5A8352] px-2 py-1 text-[7px] font-bold text-[#C4A853]">
+                      {String(revealState).toUpperCase()}
+                    </div>
+                    <button
+                      type="button"
+                      aria-label={`Open profile for ${getFranchisePlayerName(player)}`}
+                      onClick={() => onOpenProfile(player.id)}
+                      className="border-2 border-[#E8E8D8]/25 bg-[#5A8352] px-2 py-1 text-[7px] font-bold text-[#E8E8D8] hover:border-[#C4A853]"
+                    >
+                      PROFILE
+                    </button>
                   </div>
                 </div>
 

@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   mockUseSeasonStats: vi.fn(),
   mockGetFranchiseTeam: vi.fn(),
   mockGetAllFranchisePlayers: vi.fn(),
+  mockSaveFranchisePlayer: vi.fn(),
   mockGetFranchiseFarmRoster: vi.fn(),
   mockGetTransactionsByFranchiseSeason: vi.fn(),
   mockBuildFranchiseSalaryLifecycle: vi.fn(),
@@ -29,6 +30,7 @@ vi.mock('../../../hooks/useSeasonStats', () => ({
 vi.mock('../../../utils/franchisePlayerStorage', () => ({
   getFranchiseTeam: mocks.mockGetFranchiseTeam,
   getAllFranchisePlayers: mocks.mockGetAllFranchisePlayers,
+  saveFranchisePlayer: mocks.mockSaveFranchisePlayer,
   saveFranchiseTeam: mocks.mockSaveFranchiseTeam,
 }));
 
@@ -652,6 +654,56 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(farmRegion).queryByText(/Volatility/i)).not.toBeInTheDocument();
     expect(within(farmRegion).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
     expect(within(farmRegion).queryByText(/trueGrade/i)).not.toBeInTheDocument();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
+  test('opens read-only player profile from MLB roster row', async () => {
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Open profile for C\. Player/i }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Copied Player/i });
+    expect(within(dialog).getByText('FRANCHISE PLAYER PROFILE')).toBeInTheDocument();
+    expect(within(dialog).getByText('Copied Player')).toBeInTheDocument();
+    expect(within(dialog).getByText(/MLB · REVEALED · Read-only/i)).toBeInTheDocument();
+    expect(within(dialog).getByText('BASEBALL DETAILS')).toBeInTheDocument();
+    expect(within(dialog).getByText('POW')).toBeInTheDocument();
+    expect(within(dialog).getByText('CON')).toBeInTheDocument();
+    expect(within(dialog).getByText('SPD')).toBeInTheDocument();
+    expect(within(dialog).getByText(/\$3\.0M/i)).toBeInTheDocument();
+    expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
+  test('opens hidden-safe read-only player profile from FARM prospect section', async () => {
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Open profile for Farm Hidden/i }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Farm Hidden/i });
+    expect(within(dialog).getByText(/FARM · HIDDEN · Read-only/i)).toBeInTheDocument();
+    expect(within(dialog).getByText('VISIBLE SCOUTING REPORT')).toBeInTheDocument();
+    expect(within(dialog).getByText(/Hidden prospect details stay unavailable/i)).toBeInTheDocument();
+    expect(within(dialog).getByText('SCOUTED GRADE')).toBeInTheDocument();
+    expect(within(dialog).getByText('POTENTIAL')).toBeInTheDocument();
+    expect(within(dialog).getByText('CONFIDENCE')).toBeInTheDocument();
+    expect(within(dialog).getByText('B')).toBeInTheDocument();
+    expect(within(dialog).getByText('A-')).toBeInTheDocument();
+    expect(within(dialog).getByText('medium')).toBeInTheDocument();
+    expect(within(dialog).getByText(/\$1\.0M/i)).toBeInTheDocument();
+    expect(within(dialog).queryByText('BASEBALL DETAILS')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('POW')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('CON')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('VEL')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/Leadership/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/Volatility/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/trueGrade/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
   });
 

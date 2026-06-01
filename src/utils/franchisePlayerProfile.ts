@@ -1,0 +1,229 @@
+import type {
+  Grade,
+  PitchType,
+  Player,
+  Position,
+  RosterStatus,
+} from './leagueBuilderStorage';
+import type { FranchiseFarmRecord } from './franchiseFarmStorage';
+
+type RevealState = 'hidden' | 'revealed';
+
+interface ProspectProfileCarrier {
+  prospectProfile?: {
+    source?: string;
+    methodVersion?: string;
+    draftYear?: number;
+    draftRound?: number;
+    draftPick?: number;
+    teamId?: string;
+    scoutedGrade?: string;
+    potentialGrade?: string;
+    scoutId?: string;
+    scoutName?: string;
+    scoutConfidence?: string;
+    scoutSpecialtiesVisible?: string[];
+    scoutWeaknessesVisible?: string[];
+    trueGrade?: unknown;
+    trueRatings?: unknown;
+    hiddenScoutTruth?: unknown;
+    hiddenRatingFields?: unknown;
+    [key: string]: unknown;
+  };
+  hiddenPersonalityModifiers?: unknown;
+}
+
+export interface BuildFranchisePlayerProfileInput {
+  player: Player;
+  farmRecord?: FranchiseFarmRecord | null;
+  teamId?: string;
+  leagueId?: string;
+}
+
+export interface FranchisePlayerProfileBaseballIdentity {
+  name: string;
+  age: number;
+  bats: Player['bats'];
+  throws: Player['throws'];
+  primaryPosition: Position;
+  secondaryPosition?: Position;
+  traits: string[];
+  personality: Player['personality'];
+  chemistry: Player['chemistry'];
+}
+
+export interface FranchisePlayerProfileFullDetails {
+  overallGrade: Grade;
+  power: number;
+  contact: number;
+  speed: number;
+  fielding: number;
+  arm: number;
+  velocity: number;
+  junk: number;
+  accuracy: number;
+  arsenal: PitchType[];
+}
+
+export interface FranchisePlayerProfileProspectReport {
+  scoutedGrade?: string;
+  potentialGrade?: string;
+  scoutConfidence?: string;
+  scoutName?: string;
+  scoutSpecialtiesVisible: string[];
+  scoutWeaknessesVisible: string[];
+  source?: string;
+  methodVersion?: string;
+  draftYear?: number;
+  draftRound?: number;
+  draftPick?: number;
+}
+
+export interface FranchisePlayerProfileViewModel {
+  playerId: string;
+  teamId?: string;
+  leagueId?: string;
+  rosterStatus: RosterStatus | 'UNKNOWN';
+  revealState: RevealState;
+  hiddenSafe: boolean;
+  identity: FranchisePlayerProfileBaseballIdentity;
+  salary: number | null;
+  contractYears?: number;
+  farm: {
+    recordPresent: boolean;
+    rosterLevel?: string;
+    optionsUsed?: number;
+    optionDates: string[];
+    assignedAt?: string;
+  };
+  prospectReport: FranchisePlayerProfileProspectReport;
+  fullDetails: FranchisePlayerProfileFullDetails | null;
+  suppressedHiddenFieldLabels: string[];
+  limitations: string[];
+}
+
+function playerName(player: Player): string {
+  return `${player.firstName} ${player.lastName}`.trim() || player.id;
+}
+
+function playerTraits(player: Player): string[] {
+  return [player.trait1, player.trait2].filter((trait): trait is string =>
+    typeof trait === 'string' && trait.trim().length > 0,
+  );
+}
+
+function resolveAssignment(
+  player: Player,
+  teamId?: string,
+  leagueId?: string,
+) {
+  const assignments = player.leagueAssignments ?? [];
+  return (
+    assignments.find((assignment) =>
+      (!teamId || assignment.teamId === teamId) &&
+      (!leagueId || assignment.leagueId === leagueId),
+    ) ??
+    assignments.find((assignment) => !teamId || assignment.teamId === teamId) ??
+    assignments[0]
+  );
+}
+
+function resolveRevealState(player: Player, rosterStatus: RosterStatus | 'UNKNOWN', farmRecord?: FranchiseFarmRecord | null): RevealState {
+  if (farmRecord?.ratingRevealState === 'revealed') return 'revealed';
+  if (farmRecord?.ratingRevealState === 'hidden') return 'hidden';
+  if (player.ratingRevealState === 'revealed') return 'revealed';
+  if (player.ratingRevealState === 'hidden') return 'hidden';
+  return rosterStatus === 'FARM' ? 'hidden' : 'revealed';
+}
+
+function buildFullDetails(player: Player): FranchisePlayerProfileFullDetails {
+  return {
+    overallGrade: player.overallGrade,
+    power: player.power,
+    contact: player.contact,
+    speed: player.speed,
+    fielding: player.fielding,
+    arm: player.arm,
+    velocity: player.velocity,
+    junk: player.junk,
+    accuracy: player.accuracy,
+    arsenal: [...(player.arsenal ?? [])],
+  };
+}
+
+function collectHiddenSuppressionLabels(player: Player & ProspectProfileCarrier): string[] {
+  const labels = [
+    'true numeric ratings',
+    'true grade',
+    'hidden personality modifiers',
+    'hidden scout truth',
+    'raw hidden rating fields',
+  ];
+
+  if (!player.prospectProfile?.trueGrade) {
+    return labels.filter((label) => label !== 'true grade');
+  }
+
+  return labels;
+}
+
+export function buildFranchisePlayerProfileViewModel({
+  player,
+  farmRecord,
+  teamId,
+  leagueId,
+}: BuildFranchisePlayerProfileInput): FranchisePlayerProfileViewModel {
+  const carrier = player as Player & ProspectProfileCarrier;
+  const assignment = resolveAssignment(player, teamId, leagueId);
+  const rosterStatus = assignment?.rosterStatus ?? 'UNKNOWN';
+  const revealState = resolveRevealState(player, rosterStatus, farmRecord);
+  const hiddenSafe = rosterStatus === 'FARM' && revealState !== 'revealed';
+  const prospectProfile = carrier.prospectProfile ?? {};
+
+  return {
+    playerId: player.id,
+    teamId: assignment?.teamId ?? teamId,
+    leagueId: assignment?.leagueId ?? leagueId,
+    rosterStatus,
+    revealState,
+    hiddenSafe,
+    identity: {
+      name: playerName(player),
+      age: player.age,
+      bats: player.bats,
+      throws: player.throws,
+      primaryPosition: player.primaryPosition,
+      secondaryPosition: player.secondaryPosition,
+      traits: playerTraits(player),
+      personality: player.personality,
+      chemistry: player.chemistry,
+    },
+    salary: Number.isFinite(Number(player.salary)) ? Number(player.salary) : null,
+    contractYears: player.contractYears,
+    farm: {
+      recordPresent: Boolean(farmRecord),
+      rosterLevel: farmRecord?.rosterLevel,
+      optionsUsed: farmRecord?.optionsUsed,
+      optionDates: [...(farmRecord?.optionDates ?? [])],
+      assignedAt: farmRecord?.assignedAt,
+    },
+    prospectReport: {
+      scoutedGrade: prospectProfile.scoutedGrade,
+      potentialGrade: prospectProfile.potentialGrade,
+      scoutConfidence: prospectProfile.scoutConfidence,
+      scoutName: prospectProfile.scoutName,
+      scoutSpecialtiesVisible: [...(prospectProfile.scoutSpecialtiesVisible ?? [])],
+      scoutWeaknessesVisible: [...(prospectProfile.scoutWeaknessesVisible ?? [])],
+      source: prospectProfile.source ?? player.sourceDatabase,
+      methodVersion: prospectProfile.methodVersion,
+      draftYear: prospectProfile.draftYear,
+      draftRound: prospectProfile.draftRound,
+      draftPick: prospectProfile.draftPick,
+    },
+    fullDetails: hiddenSafe ? null : buildFullDetails(player),
+    suppressedHiddenFieldLabels: hiddenSafe ? collectHiddenSuppressionLabels(carrier) : [],
+    limitations: hiddenSafe
+      ? ['Unrevealed FARM profile: true ratings and hidden prospect truth stay hidden until call-up/reveal.']
+      : [],
+  };
+}
