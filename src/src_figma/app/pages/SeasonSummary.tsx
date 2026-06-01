@@ -4,7 +4,7 @@
  * Displays after regular season is complete:
  * 1. Final standings by division/conference
  * 2. League leaders (batting, pitching, WAR)
- * 3. Awards (MVP, Cy Young, Gold Glove per position)
+ * 3. Awards status and read-only stat leader previews
  * 4. User's team summary
  * 5. "START PLAYOFFS" button
  *
@@ -323,7 +323,7 @@ export function SeasonSummary() {
   }, [isSummaryLoading, persistedSummary, seasonStats.isLoading, seasonStats.getBattingLeaders, seasonStats.getPitchingLeaders]);
 
   // ============================================
-  // AUTO-CALCULATE AWARDS
+  // AUTO-CALCULATE READ-ONLY LEADER PREVIEWS
   // ============================================
 
   const awards = useMemo(() => {
@@ -331,7 +331,7 @@ export function SeasonSummary() {
     if (persistedSummary) return null;
     if (seasonStats.isLoading) return null;
 
-    // MVP: highest totalWAR among position players
+    // Position player preview: highest totalWAR among position players
     const topBatters = seasonStats.getBattingLeaders('totalWAR', 1);
     const mvp: AwardWinner | null = topBatters.length > 0 ? {
       playerName: topBatters[0].playerName,
@@ -340,7 +340,7 @@ export function SeasonSummary() {
       statLabel: 'WAR',
     } : null;
 
-    // Cy Young: highest pWAR among pitchers
+    // Pitcher preview: highest pWAR among pitchers
     const topPitchers = seasonStats.getPitchingLeaders('pWAR', 1);
     const cyYoung: AwardWinner | null = topPitchers.length > 0 ? {
       playerName: topPitchers[0].playerName,
@@ -349,7 +349,7 @@ export function SeasonSummary() {
       statLabel: 'pWAR',
     } : null;
 
-    // Gold Glove: highest fWAR at each position
+    // Fielding preview: highest fWAR at each position
     const allBatters = seasonStats.getBattingLeaders('totalWAR', 100);
     const goldGloves: GoldGloveWinner[] = [];
     const positions = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'];
@@ -793,15 +793,19 @@ export function SeasonSummary() {
         )}
 
         {/* ============================================ */}
-        {/* 3. AWARDS */}
+        {/* 3. AWARDS STATUS / LEADER PREVIEW */}
         {/* ============================================ */}
-        <SectionHeader title="Awards" section="awards" />
+        <SectionHeader title="Awards Status" section="awards" />
         {expandedSection === "awards" && (
           <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4 space-y-3">
-            {/* MVP */}
+            <div className="text-[10px] text-[#E8E8D8]/70 leading-relaxed">
+              Internal v1 does not finalize MVP, Cy Young, Gold Glove, or dynamic designation awards here. These are read-only stat leader previews when data is available.
+            </div>
+
+            {/* Position player preview */}
             {awards?.mvp && (
               <div className="bg-[#5A8352] border-[3px] border-[#C4A853] p-3">
-                <div className="text-[9px] text-[#C4A853] mb-1">MOST VALUABLE PLAYER</div>
+                <div className="text-[9px] text-[#C4A853] mb-1">TOP POSITION PLAYER PREVIEW</div>
                 <div className="text-sm text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
                   {awards.mvp.playerName}
                 </div>
@@ -811,10 +815,10 @@ export function SeasonSummary() {
               </div>
             )}
 
-            {/* Cy Young */}
+            {/* Pitcher preview */}
             {awards?.cyYoung && (
               <div className="bg-[#5A8352] border-[3px] border-[#C4A853] p-3">
-                <div className="text-[9px] text-[#C4A853] mb-1">CY YOUNG AWARD</div>
+                <div className="text-[9px] text-[#C4A853] mb-1">TOP PITCHER PREVIEW</div>
                 <div className="text-sm text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
                   {awards.cyYoung.playerName}
                 </div>
@@ -824,10 +828,10 @@ export function SeasonSummary() {
               </div>
             )}
 
-            {/* Gold Gloves */}
+            {/* Fielding previews */}
             {awards?.goldGloves && awards.goldGloves.length > 0 && (
               <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-3">
-                <div className="text-[9px] text-[#C4A853] mb-2">GOLD GLOVE AWARDS</div>
+                <div className="text-[9px] text-[#C4A853] mb-2">FIELDING LEADER PREVIEW</div>
                 <div className="grid grid-cols-2 gap-1">
                   {awards.goldGloves.map(gg => (
                     <div key={gg.position} className="flex justify-between text-[9px] text-[#E8E8D8]">
@@ -848,7 +852,7 @@ export function SeasonSummary() {
               </div>
             ) : !awards?.mvp && !awards?.cyYoung && (
               <div className="text-[10px] text-[#E8E8D8]/50 italic text-center py-4">
-                No award data available — play or score games to generate stats
+                No stat leader preview data available — play or score games to generate stats
               </div>
             )}
           </div>

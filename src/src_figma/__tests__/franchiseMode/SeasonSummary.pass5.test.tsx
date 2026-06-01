@@ -256,4 +256,52 @@ describe('SeasonSummary Pass 5 persisted-summary fidelity', () => {
     );
     expect(mocks.mockNavigate).toHaveBeenCalledWith('/franchise/franchise-1?tab=bracket');
   });
+
+  test('labels live WAR-derived awards fallback as read-only leader previews, not finalized awards', async () => {
+    mocks.mockGetFranchiseSeasonSummary.mockResolvedValue(null);
+    mocks.mockUseSeasonStats.mockReturnValue({
+      isLoading: false,
+      getBattingLeaders: vi.fn((sortBy: string) => {
+        if (sortBy === 'totalWAR') {
+          return [{
+            playerId: 'live-batter',
+            playerName: 'Live Preview Batter',
+            teamId: 'team-1',
+            totalWAR: 3.2,
+            fWAR: 0.7,
+          }];
+        }
+        return [];
+      }),
+      getPitchingLeaders: vi.fn((sortBy: string) => {
+        if (sortBy === 'pWAR') {
+          return [{
+            playerId: 'live-pitcher',
+            playerName: 'Live Preview Pitcher',
+            teamId: 'team-1',
+            pWAR: 2.1,
+          }];
+        }
+        return [];
+      }),
+      getFieldingLeaders: vi.fn(() => [{
+        playerId: 'live-batter',
+        playerName: 'Live Preview Batter',
+        gamesByPosition: { SS: 12 },
+      }]),
+    });
+
+    render(<SeasonSummary />);
+
+    await screen.findByText('SEASON 1 SUMMARY');
+    fireEvent.click(screen.getByRole('button', { name: /Awards Status/i }));
+
+    expect(screen.getByText(/Internal v1 does not finalize MVP, Cy Young, Gold Glove, or dynamic designation awards here/i)).toBeInTheDocument();
+    expect(screen.getByText('TOP POSITION PLAYER PREVIEW')).toBeInTheDocument();
+    expect(screen.getByText('TOP PITCHER PREVIEW')).toBeInTheDocument();
+    expect(screen.getByText('FIELDING LEADER PREVIEW')).toBeInTheDocument();
+    expect(screen.queryByText('MOST VALUABLE PLAYER')).not.toBeInTheDocument();
+    expect(screen.queryByText('CY YOUNG AWARD')).not.toBeInTheDocument();
+    expect(screen.queryByText('GOLD GLOVE AWARDS')).not.toBeInTheDocument();
+  });
 });
