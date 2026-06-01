@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, type ReactNode } from "react";
 import { Building2, User } from "lucide-react";
 import { useOffseasonData, type OffseasonTeam, type OffseasonPlayer } from "@/hooks/useOffseasonData";
 import { useSeasonStats, type BattingLeaderEntry, type PitchingLeaderEntry } from '../../../hooks/useSeasonStats';
@@ -89,7 +89,7 @@ import type {
 } from "../../../types/managerWpa";
 import { OptimalLineupComparisonPanel } from "./OptimalLineupComparisonPanel";
 
-type TeamHubTab = "team" | "fan-morale" | "roster" | "stats" | "stadium" | "manager";
+type TeamHubTab = "team" | "fan-morale" | "roster" | "directory" | "stats" | "stadium" | "manager";
 
 // Empty fallbacks — populated from real data when available
 const EMPTY_TEAMS: string[] = [];
@@ -118,6 +118,24 @@ const FRANCHISE_TEAM_HUB_HISTORY_TYPES = new Set<Mode2V1TransactionType>([
   'call_up',
   'send_down',
 ]);
+type FranchiseDirectoryRosterFilter = 'ALL' | 'MLB' | 'FARM' | 'FREE_AGENT' | 'UNASSIGNED';
+type FranchiseDirectoryRevealFilter = 'ALL' | 'HIDDEN' | 'REVEALED';
+type FranchiseDirectorySort = 'name' | 'team' | 'rosterStatus' | 'position' | 'grade';
+
+interface FranchiseDirectoryRow {
+  player: Player;
+  playerId: string;
+  name: string;
+  teamId?: string;
+  teamName: string;
+  rosterStatus: string;
+  primaryPosition: string;
+  positionLabel: string;
+  revealState: 'hidden' | 'revealed';
+  hiddenSafe: boolean;
+  gradeLabel: string;
+  gradeSortValue: number;
+}
 
 interface FranchiseProfileEditForm {
   firstName: string;
@@ -246,6 +264,94 @@ function convertToStatsItemFromSeason(
 
 function getFranchisePlayerName(player: Player): string {
   return `${player.firstName} ${player.lastName}`.trim();
+}
+
+function franchisePlayerDirectoryAssignment(player: Player, leagueId?: string) {
+  const assignments = player.leagueAssignments ?? [];
+  return (
+    assignments.find((assignment) => leagueId && assignment.leagueId === leagueId && String(assignment.rosterStatus) !== 'RELEASED') ??
+    assignments.find((assignment) => String(assignment.rosterStatus) !== 'RELEASED') ??
+    assignments[0]
+  );
+}
+
+function franchiseDirectoryRevealState(player: Player, rosterStatus: string): 'hidden' | 'revealed' {
+  if (player.ratingRevealState === 'hidden') return 'hidden';
+  if (player.ratingRevealState === 'revealed') return 'revealed';
+  return rosterStatus === 'FARM' ? 'hidden' : 'revealed';
+}
+
+const FRANCHISE_GRADE_ORDER = new Map<string, number>([
+  ['S', 12],
+  ['A+', 11],
+  ['A', 10],
+  ['A-', 9],
+  ['B+', 8],
+  ['B', 7],
+  ['B-', 6],
+  ['C+', 5],
+  ['C', 4],
+  ['C-', 3],
+  ['D+', 2],
+  ['D', 1],
+  ['D-', 0],
+]);
+
+function franchiseGradeSortValue(grade?: string): number {
+  return FRANCHISE_GRADE_ORDER.get(String(grade ?? '').toUpperCase()) ?? -1;
+}
+
+function franchiseDirectoryGrade(player: Player, hiddenSafe: boolean): { label: string; sortValue: number } {
+  if (hiddenSafe) {
+    const metadata = prospectMetadata(player);
+    const scouted = metadata.scoutedGrade ?? 'Unscouted';
+    const potential = metadata.potentialGrade ? ` / Pot ${metadata.potentialGrade}` : '';
+    return {
+      label: `Scouted ${scouted}${potential}`,
+      sortValue: franchiseGradeSortValue(metadata.scoutedGrade),
+    };
+  }
+
+  return {
+    label: String(player.overallGrade ?? '—'),
+    sortValue: franchiseGradeSortValue(String(player.overallGrade ?? '')),
+  };
+}
+
+function buildFranchiseDirectoryRow(
+  player: Player,
+  teamNameMap: Record<string, string>,
+  leagueId?: string,
+): FranchiseDirectoryRow {
+  const assignment = franchisePlayerDirectoryAssignment(player, leagueId);
+  const teamId = assignment?.teamId;
+  const rosterStatus = String(assignment?.rosterStatus ?? 'UNASSIGNED');
+  const revealState = franchiseDirectoryRevealState(player, rosterStatus);
+  const hiddenSafe = rosterStatus === 'FARM' && revealState !== 'revealed';
+  const grade = franchiseDirectoryGrade(player, hiddenSafe);
+  const primaryPosition = String(player.primaryPosition ?? 'UNKNOWN');
+
+  return {
+    player,
+    playerId: player.id,
+    name: getFranchisePlayerName(player) || player.id,
+    teamId,
+    teamName: teamId ? teamNameMap[teamId] ?? teamId : 'Unassigned',
+    rosterStatus,
+    primaryPosition,
+    positionLabel: player.secondaryPosition ? `${primaryPosition} / ${player.secondaryPosition}` : primaryPosition,
+    revealState,
+    hiddenSafe,
+    gradeLabel: grade.label,
+    gradeSortValue: grade.sortValue,
+  };
+}
+
+function franchiseDirectoryPositionMatches(row: FranchiseDirectoryRow, filter: string): boolean {
+  if (filter === 'ALL') return true;
+  if (filter === 'PITCHERS') return FRANCHISE_PITCHER_POSITIONS.has(row.player.primaryPosition);
+  if (filter === 'FIELDERS') return !FRANCHISE_PITCHER_POSITIONS.has(row.player.primaryPosition);
+  return row.primaryPosition === filter;
 }
 
 function formatFranchiseShortName(player: Player): string {
@@ -832,6 +938,12 @@ export function TeamHubContent() {
   const [statsView, setStatsView] = useState<"table" | "spraychart">("table");
   const [rosterSortColumn, setRosterSortColumn] = useState<string>("name");
   const [rosterSortDirection, setRosterSortDirection] = useState<"asc" | "desc">("asc");
+  const [directorySearch, setDirectorySearch] = useState("");
+  const [directoryTeamFilter, setDirectoryTeamFilter] = useState("ALL");
+  const [directoryRosterFilter, setDirectoryRosterFilter] = useState<FranchiseDirectoryRosterFilter>("ALL");
+  const [directoryPositionFilter, setDirectoryPositionFilter] = useState("ALL");
+  const [directoryRevealFilter, setDirectoryRevealFilter] = useState<FranchiseDirectoryRevealFilter>("ALL");
+  const [directorySort, setDirectorySort] = useState<FranchiseDirectorySort>("name");
   const [statsSortColumn, setStatsSortColumn] = useState<string>("war");
   const [statsSortDirection, setStatsSortDirection] = useState<"asc" | "desc">("desc");
   const [franchiseTeam, setFranchiseTeam] = useState<Team | null>(null);
@@ -1235,6 +1347,66 @@ export function TeamHubContent() {
   const orphanFarmRecords = useMemo(() => {
     return franchiseFarmRecords.filter((record) => !farmPlayerById.has(record.playerId));
   }, [farmPlayerById, franchiseFarmRecords]);
+
+  const franchiseDirectoryRows = useMemo(() => {
+    const search = directorySearch.trim().toLowerCase();
+    const rows = franchiseAllPlayers
+      .map((player) =>
+        buildFranchiseDirectoryRow(player, franchiseData.teamNameMap ?? {}, franchiseLeagueId),
+      )
+      .filter((row) => {
+        if (search && !row.name.toLowerCase().includes(search)) return false;
+        if (directoryTeamFilter !== 'ALL' && row.teamId !== directoryTeamFilter) return false;
+        if (directoryRosterFilter !== 'ALL') {
+          if (directoryRosterFilter === 'UNASSIGNED') {
+            if (row.rosterStatus !== 'UNASSIGNED' && row.rosterStatus !== 'UNKNOWN') return false;
+          } else if (row.rosterStatus !== directoryRosterFilter) {
+            return false;
+          }
+        }
+        if (!franchiseDirectoryPositionMatches(row, directoryPositionFilter)) return false;
+        if (directoryRevealFilter !== 'ALL' && row.revealState.toUpperCase() !== directoryRevealFilter) return false;
+        return true;
+      });
+
+    rows.sort((left, right) => {
+      if (directorySort === 'grade') {
+        return right.gradeSortValue - left.gradeSortValue || left.name.localeCompare(right.name);
+      }
+      const leftValue = directorySort === 'name'
+        ? left.name
+        : directorySort === 'team'
+          ? left.teamName
+          : directorySort === 'rosterStatus'
+            ? left.rosterStatus
+            : left.primaryPosition;
+      const rightValue = directorySort === 'name'
+        ? right.name
+        : directorySort === 'team'
+          ? right.teamName
+          : directorySort === 'rosterStatus'
+            ? right.rosterStatus
+            : right.primaryPosition;
+      return String(leftValue).localeCompare(String(rightValue)) || left.name.localeCompare(right.name);
+    });
+
+    return rows;
+  }, [
+    directoryPositionFilter,
+    directoryRevealFilter,
+    directoryRosterFilter,
+    directorySearch,
+    directorySort,
+    directoryTeamFilter,
+    franchiseAllPlayers,
+    franchiseData.teamNameMap,
+    franchiseLeagueId,
+  ]);
+
+  const franchiseDirectoryPositionOptions = useMemo(() => {
+    const positions = Array.from(new Set(franchiseAllPlayers.map((player) => String(player.primaryPosition ?? '')).filter(Boolean))).sort();
+    return ['ALL', 'FIELDERS', 'PITCHERS', ...positions];
+  }, [franchiseAllPlayers]);
 
   const selectedProfilePlayer = useMemo(() => {
     if (!selectedProfilePlayerId) return null;
@@ -1770,6 +1942,7 @@ export function TeamHubContent() {
             { id: "team", label: "TEAM SELECT" },
             { id: "fan-morale", label: "FAN MORALE" },
             { id: "roster", label: "ROSTER" },
+            { id: "directory", label: "DIRECTORY" },
             { id: "stats", label: "STATS" },
             { id: "stadium", label: "STADIUM" },
             { id: "manager", label: "MANAGER" },
@@ -2216,6 +2389,28 @@ export function TeamHubContent() {
         </div>
       )}
 
+      {activeHubTab === "directory" && (
+        <FranchisePlayerDirectoryPanel
+          rows={franchiseDirectoryRows}
+          totalCount={franchiseAllPlayers.length}
+          teamOptions={franchiseTeamEntries.map(([teamId, teamName]) => ({ teamId, teamName }))}
+          positionOptions={franchiseDirectoryPositionOptions}
+          search={directorySearch}
+          teamFilter={directoryTeamFilter}
+          rosterFilter={directoryRosterFilter}
+          positionFilter={directoryPositionFilter}
+          revealFilter={directoryRevealFilter}
+          sort={directorySort}
+          onSearchChange={setDirectorySearch}
+          onTeamFilterChange={setDirectoryTeamFilter}
+          onRosterFilterChange={setDirectoryRosterFilter}
+          onPositionFilterChange={setDirectoryPositionFilter}
+          onRevealFilterChange={setDirectoryRevealFilter}
+          onSortChange={setDirectorySort}
+          onOpenProfile={setSelectedProfilePlayerId}
+        />
+      )}
+
       {/* Stats Tab */}
       {activeHubTab === "stats" && (
         <div className="space-y-4">
@@ -2405,6 +2600,26 @@ interface FranchiseFarmVisibilityPanelProps {
   farmRecordByPlayerId: Map<string, FranchiseFarmRecord>;
   missingRecordPlayers: Player[];
   orphanFarmRecords: FranchiseFarmRecord[];
+  onOpenProfile: (playerId: string) => void;
+}
+
+interface FranchisePlayerDirectoryPanelProps {
+  rows: FranchiseDirectoryRow[];
+  totalCount: number;
+  teamOptions: Array<{ teamId: string; teamName: string }>;
+  positionOptions: string[];
+  search: string;
+  teamFilter: string;
+  rosterFilter: FranchiseDirectoryRosterFilter;
+  positionFilter: string;
+  revealFilter: FranchiseDirectoryRevealFilter;
+  sort: FranchiseDirectorySort;
+  onSearchChange: (value: string) => void;
+  onTeamFilterChange: (value: string) => void;
+  onRosterFilterChange: (value: FranchiseDirectoryRosterFilter) => void;
+  onPositionFilterChange: (value: string) => void;
+  onRevealFilterChange: (value: FranchiseDirectoryRevealFilter) => void;
+  onSortChange: (value: FranchiseDirectorySort) => void;
   onOpenProfile: (playerId: string) => void;
 }
 
@@ -3062,6 +3277,173 @@ function FranchiseTransactionHistoryPanel({
                   <div className="text-[#E8E8D8]/50">Status</div>
                   <div>{describeTeamHubTransactionStatuses(entry)}</div>
                 </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function DirectorySelect({
+  label,
+  value,
+  onChange,
+  children,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  children: ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="block text-[8px] font-bold text-[#C4A853]">{label}</span>
+      <select
+        aria-label={label}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-1 min-h-10 w-full border-2 border-[#4A6844] bg-[#5A8352] px-2 py-2 text-[10px] text-[#E8E8D8]"
+      >
+        {children}
+      </select>
+    </label>
+  );
+}
+
+function FranchisePlayerDirectoryPanel({
+  rows,
+  totalCount,
+  teamOptions,
+  positionOptions,
+  search,
+  teamFilter,
+  rosterFilter,
+  positionFilter,
+  revealFilter,
+  sort,
+  onSearchChange,
+  onTeamFilterChange,
+  onRosterFilterChange,
+  onPositionFilterChange,
+  onRevealFilterChange,
+  onSortChange,
+  onOpenProfile,
+}: FranchisePlayerDirectoryPanelProps) {
+  return (
+    <section
+      role="region"
+      aria-label="Franchise player directory"
+      className="bg-[#6B9462] border-[5px] border-[#4A6844] p-4"
+    >
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-bold text-[#E8E8D8]">FRANCHISE PLAYER DIRECTORY</div>
+          <div className="mt-1 text-[8px] text-[#E8E8D8]/65">
+            Read-only franchise-owned players. Hidden FARM rows use visible scouting grades only.
+          </div>
+        </div>
+        <div className="border-2 border-[#4A6844] bg-[#5A8352] px-3 py-2 text-[9px] text-[#E8E8D8]">
+          {rows.length} / {totalCount} PLAYERS
+        </div>
+      </div>
+
+      <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <label className="block md:col-span-2 xl:col-span-1">
+          <span className="block text-[8px] font-bold text-[#C4A853]">SEARCH PLAYER NAME</span>
+          <input
+            aria-label="Search player name"
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder="Type a player name..."
+            className="mt-1 min-h-10 w-full border-2 border-[#4A6844] bg-[#5A8352] px-3 py-2 text-[10px] text-[#E8E8D8] placeholder:text-[#E8E8D8]/35"
+          />
+        </label>
+        <DirectorySelect label="TEAM FILTER" value={teamFilter} onChange={onTeamFilterChange}>
+          <option value="ALL">All teams</option>
+          {teamOptions.map((team) => (
+            <option key={team.teamId} value={team.teamId}>{team.teamName}</option>
+          ))}
+        </DirectorySelect>
+        <DirectorySelect
+          label="ROSTER STATUS"
+          value={rosterFilter}
+          onChange={(value) => onRosterFilterChange(value as FranchiseDirectoryRosterFilter)}
+        >
+          <option value="ALL">All statuses</option>
+          <option value="MLB">MLB</option>
+          <option value="FARM">FARM</option>
+          <option value="FREE_AGENT">Free agent</option>
+          <option value="UNASSIGNED">Unassigned / unknown</option>
+        </DirectorySelect>
+        <DirectorySelect label="POSITION" value={positionFilter} onChange={onPositionFilterChange}>
+          {positionOptions.map((position) => (
+            <option key={position} value={position}>
+              {position === 'ALL' ? 'All positions' : position === 'FIELDERS' ? 'Fielders' : position === 'PITCHERS' ? 'Pitchers' : position}
+            </option>
+          ))}
+        </DirectorySelect>
+        <DirectorySelect
+          label="REVEAL STATE"
+          value={revealFilter}
+          onChange={(value) => onRevealFilterChange(value as FranchiseDirectoryRevealFilter)}
+        >
+          <option value="ALL">Hidden and revealed</option>
+          <option value="HIDDEN">Hidden prospects</option>
+          <option value="REVEALED">Revealed players</option>
+        </DirectorySelect>
+        <DirectorySelect
+          label="SORT BY"
+          value={sort}
+          onChange={(value) => onSortChange(value as FranchiseDirectorySort)}
+        >
+          <option value="name">Name</option>
+          <option value="team">Team</option>
+          <option value="rosterStatus">Roster status</option>
+          <option value="position">Position</option>
+          <option value="grade">Grade / scouted grade</option>
+        </DirectorySelect>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-4 text-[9px] text-[#E8E8D8]/65">
+          No franchise-owned players match the current directory filters.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {rows.map((row) => (
+            <div
+              key={row.playerId}
+              className="border-[4px] border-[#4A6844] bg-[#5A8352] p-3"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[12px] font-bold text-[#E8E8D8]">{row.name}</div>
+                  <div className="mt-1 flex flex-wrap gap-2 text-[8px] text-[#E8E8D8]/70">
+                    <span>{row.teamName}</span>
+                    <span>•</span>
+                    <span>{row.rosterStatus}</span>
+                    <span>•</span>
+                    <span>{row.positionLabel}</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="border-2 border-[#4A6844] bg-[#4A6844] px-2 py-1 text-[8px] font-bold text-[#C4A853]">
+                      {row.revealState.toUpperCase()}
+                    </span>
+                    <span className="border-2 border-[#4A6844] bg-[#4A6844] px-2 py-1 text-[8px] text-[#E8E8D8]">
+                      {row.gradeLabel}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  aria-label={`Open profile for ${row.name}`}
+                  onClick={() => onOpenProfile(row.playerId)}
+                  className="min-h-10 border-2 border-[#E8E8D8]/30 bg-[#4A6844] px-4 py-2 text-[9px] font-bold text-[#E8E8D8] hover:border-[#C4A853]"
+                >
+                  PROFILE
+                </button>
               </div>
             </div>
           ))}

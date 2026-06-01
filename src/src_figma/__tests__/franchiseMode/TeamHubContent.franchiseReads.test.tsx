@@ -671,6 +671,85 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
   });
 
+  test('directory lists MLB and FARM franchise-owned players with hidden-safe row grades', async () => {
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /DIRECTORY/i }));
+    const directory = await screen.findByRole('region', { name: /Franchise player directory/i });
+
+    expect(within(directory).getByText('FRANCHISE PLAYER DIRECTORY')).toBeInTheDocument();
+    expect(within(directory).getByText('Copied Player')).toBeInTheDocument();
+    expect(within(directory).getByText('Farm Hidden')).toBeInTheDocument();
+    expect(within(directory).getAllByText('MLB').length).toBeGreaterThan(0);
+    expect(within(directory).getAllByText('FARM').length).toBeGreaterThan(0);
+    expect(within(directory).getByText('B+')).toBeInTheDocument();
+    expect(within(directory).getByText(/Scouted B \/ Pot A-/i)).toBeInTheDocument();
+    expect(within(directory).queryByText(/trueGrade/i)).not.toBeInTheDocument();
+    expect(within(directory).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
+    expect(within(directory).queryByText(/Leadership/i)).not.toBeInTheDocument();
+    expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
+  test('directory search filters by player name', async () => {
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /DIRECTORY/i }));
+    const directory = await screen.findByRole('region', { name: /Franchise player directory/i });
+    fireEvent.change(within(directory).getByLabelText(/Search player name/i), { target: { value: 'Farm' } });
+
+    expect(within(directory).getByText('Farm Hidden')).toBeInTheDocument();
+    expect(within(directory).queryByText('Copied Player')).not.toBeInTheDocument();
+  });
+
+  test('directory filters by roster status and hidden reveal state', async () => {
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /DIRECTORY/i }));
+    const directory = await screen.findByRole('region', { name: /Franchise player directory/i });
+    fireEvent.change(within(directory).getByLabelText(/Roster status/i), { target: { value: 'FARM' } });
+    fireEvent.change(within(directory).getByLabelText(/Reveal state/i), { target: { value: 'HIDDEN' } });
+
+    expect(within(directory).getByText('Farm Hidden')).toBeInTheDocument();
+    expect(within(directory).queryByText('Copied Player')).not.toBeInTheDocument();
+  });
+
+  test('directory opens existing profile modal from a row', async () => {
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /DIRECTORY/i }));
+    const directory = await screen.findByRole('region', { name: /Franchise player directory/i });
+    fireEvent.click(within(directory).getByRole('button', { name: /Open profile for Copied Player/i }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Copied Player/i });
+    expect(within(dialog).getByText('FRANCHISE PLAYER PROFILE')).toBeInTheDocument();
+    expect(within(dialog).getByText('PLAYER CONTINUITY')).toBeInTheDocument();
+    expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
+  test('directory hidden FARM row and profile do not expose hidden prospect truth', async () => {
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /DIRECTORY/i }));
+    const directory = await screen.findByRole('region', { name: /Franchise player directory/i });
+    expect(within(directory).getByText(/Scouted B \/ Pot A-/i)).toBeInTheDocument();
+    expect(within(directory).queryByText(/trueGrade/i)).not.toBeInTheDocument();
+    expect(within(directory).queryByText(/Leadership/i)).not.toBeInTheDocument();
+
+    fireEvent.click(within(directory).getByRole('button', { name: /Open profile for Farm Hidden/i }));
+    const dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Farm Hidden/i });
+    expect(within(dialog).getByText(/FARM · HIDDEN · Read-only/i)).toBeInTheDocument();
+    expect(within(dialog).getByText('VISIBLE SCOUTING REPORT')).toBeInTheDocument();
+    expect(within(dialog).queryByText('BASEBALL DETAILS')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('POW')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/trueGrade/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/Leadership/i)).not.toBeInTheDocument();
+    expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
   test('opens read-only player profile from MLB roster row', async () => {
     render(<TeamHubContent />);
 
