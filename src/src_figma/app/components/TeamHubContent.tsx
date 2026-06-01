@@ -5,13 +5,25 @@ import { useSeasonStats, type BattingLeaderEntry, type PitchingLeaderEntry } fro
 import { useFranchiseDataContext } from "@/app/pages/FranchiseHome";
 import {
   getAllFranchisePlayers,
+  getFranchisePlayer,
   getFranchiseTeam,
+  saveFranchisePlayer,
   saveFranchiseTeam,
 } from "../../../utils/franchisePlayerStorage";
 import {
   buildFranchisePlayerProfileViewModel,
   type FranchisePlayerProfileViewModel,
 } from "../../../utils/franchisePlayerProfile";
+import {
+  applyFranchisePlayerProfileEdit,
+  FRANCHISE_PROFILE_CHEMISTRIES,
+  FRANCHISE_PROFILE_GRADES,
+  FRANCHISE_PROFILE_PERSONALITIES,
+  FRANCHISE_PROFILE_PITCH_TYPES,
+  FRANCHISE_PROFILE_PRIMARY_POSITIONS,
+  FRANCHISE_PROFILE_SECONDARY_POSITIONS,
+  type FranchisePlayerProfileEditPayload,
+} from "../../../utils/franchisePlayerProfileEdit";
 import {
   getFranchiseFarmRoster,
   type FranchiseFarmRecord,
@@ -32,7 +44,10 @@ import {
 } from "../../../utils/transactionStorage";
 import { analyzeFranchiseTeamRoster } from "../../../utils/rosterAnalyzerFranchiseAdapter";
 import type {
+  Chemistry,
+  Grade,
   LineupSlot,
+  Personality,
   Player,
   Position,
   Team,
@@ -87,6 +102,31 @@ const FRANCHISE_TEAM_HUB_HISTORY_TYPES = new Set<Mode2V1TransactionType>([
   'call_up',
   'send_down',
 ]);
+
+interface FranchiseProfileEditForm {
+  firstName: string;
+  lastName: string;
+  nickname: string;
+  age: string;
+  bats: Player['bats'];
+  throws: Player['throws'];
+  primaryPosition: Position;
+  secondaryPosition: Position | '';
+  power: string;
+  contact: string;
+  speed: string;
+  fielding: string;
+  arm: string;
+  velocity: string;
+  junk: string;
+  accuracy: string;
+  arsenal: string;
+  trait1: string;
+  trait2: string;
+  personality: Personality;
+  chemistry: Chemistry;
+  overallGrade: Grade;
+}
 
 // Helper to convert OffseasonPlayer to roster format
 function convertToRosterItem(player: OffseasonPlayer): RosterTableItem {
@@ -365,6 +405,73 @@ function convertFranchisePlayerToStatsItem(
   pitching: PitchingLeaderEntry | undefined,
 ) {
   return convertToStatsItemFromSeason(convertFranchisePlayerToOffseasonShape(player), batting, pitching);
+}
+
+function buildProfileEditForm(player: Player): FranchiseProfileEditForm {
+  return {
+    firstName: player.firstName ?? '',
+    lastName: player.lastName ?? '',
+    nickname: player.nickname ?? '',
+    age: String(player.age ?? 25),
+    bats: player.bats,
+    throws: player.throws,
+    primaryPosition: player.primaryPosition,
+    secondaryPosition: player.secondaryPosition ?? '',
+    power: String(player.power ?? 0),
+    contact: String(player.contact ?? 0),
+    speed: String(player.speed ?? 0),
+    fielding: String(player.fielding ?? 0),
+    arm: String(player.arm ?? 0),
+    velocity: String(player.velocity ?? 0),
+    junk: String(player.junk ?? 0),
+    accuracy: String(player.accuracy ?? 0),
+    arsenal: (player.arsenal ?? []).join(', '),
+    trait1: player.trait1 ?? '',
+    trait2: player.trait2 ?? '',
+    personality: player.personality,
+    chemistry: player.chemistry,
+    overallGrade: player.overallGrade,
+  };
+}
+
+function profileEditFormToPayload(
+  form: FranchiseProfileEditForm,
+  baseForm?: FranchiseProfileEditForm | null,
+): FranchisePlayerProfileEditPayload {
+  const rawPayload: Record<keyof FranchiseProfileEditForm, unknown> = {
+    firstName: form.firstName,
+    lastName: form.lastName,
+    nickname: form.nickname,
+    age: form.age,
+    bats: form.bats,
+    throws: form.throws,
+    primaryPosition: form.primaryPosition,
+    secondaryPosition: form.secondaryPosition,
+    power: form.power,
+    contact: form.contact,
+    speed: form.speed,
+    fielding: form.fielding,
+    arm: form.arm,
+    velocity: form.velocity,
+    junk: form.junk,
+    accuracy: form.accuracy,
+    arsenal: form.arsenal
+      .split(',')
+      .map((pitch) => pitch.trim())
+      .filter(Boolean),
+    trait1: form.trait1,
+    trait2: form.trait2,
+    personality: form.personality,
+    chemistry: form.chemistry,
+    overallGrade: form.overallGrade,
+  };
+
+  const payload: FranchisePlayerProfileEditPayload = {};
+  for (const field of Object.keys(rawPayload) as Array<keyof FranchiseProfileEditForm>) {
+    if (baseForm && form[field] === baseForm[field]) continue;
+    payload[field] = rawPayload[field];
+  }
+  return payload;
 }
 
 function toOptimalCandidate(player: Player): OptimalLineupCandidate {
@@ -716,6 +823,12 @@ export function TeamHubContent() {
   const [franchiseRosterPlayers, setFranchiseRosterPlayers] = useState<Player[]>([]);
   const [franchiseFarmRecords, setFranchiseFarmRecords] = useState<FranchiseFarmRecord[]>([]);
   const [selectedProfilePlayerId, setSelectedProfilePlayerId] = useState<string | null>(null);
+  const [profileEditMode, setProfileEditMode] = useState(false);
+  const [profileEditForm, setProfileEditForm] = useState<FranchiseProfileEditForm | null>(null);
+  const [profileEditBaseForm, setProfileEditBaseForm] = useState<FranchiseProfileEditForm | null>(null);
+  const [profileEditErrors, setProfileEditErrors] = useState<string[]>([]);
+  const [profileEditMessage, setProfileEditMessage] = useState<string | null>(null);
+  const [isProfileSaving, setIsProfileSaving] = useState(false);
   const [franchiseTransactionHistory, setFranchiseTransactionHistory] = useState<TransactionLogEntry[]>([]);
   const [transactionHistoryLoading, setTransactionHistoryLoading] = useState(false);
   const [transactionHistoryError, setTransactionHistoryError] = useState<string | null>(null);
@@ -1048,9 +1161,13 @@ export function TeamHubContent() {
     return franchiseFarmRecords.filter((record) => !farmPlayerById.has(record.playerId));
   }, [farmPlayerById, franchiseFarmRecords]);
 
-  const selectedProfile = useMemo(() => {
+  const selectedProfilePlayer = useMemo(() => {
     if (!selectedProfilePlayerId) return null;
-    const player = franchiseAllPlayers.find((candidate) => candidate.id === selectedProfilePlayerId);
+    return franchiseAllPlayers.find((candidate) => candidate.id === selectedProfilePlayerId) ?? null;
+  }, [franchiseAllPlayers, selectedProfilePlayerId]);
+
+  const selectedProfile = useMemo(() => {
+    const player = selectedProfilePlayer;
     if (!player) return null;
     return buildFranchisePlayerProfileViewModel({
       player,
@@ -1060,15 +1177,122 @@ export function TeamHubContent() {
     });
   }, [
     farmRecordByPlayerId,
-    franchiseAllPlayers,
     franchiseLeagueId,
-    selectedProfilePlayerId,
+    selectedProfilePlayer,
     selectedTeamId,
   ]);
 
   useEffect(() => {
     setSelectedProfilePlayerId(null);
   }, [selectedTeamId]);
+
+  useEffect(() => {
+    if (!selectedProfilePlayer) {
+      setProfileEditMode(false);
+      setProfileEditForm(null);
+      setProfileEditBaseForm(null);
+      setProfileEditErrors([]);
+      setProfileEditMessage(null);
+      return;
+    }
+    if (!profileEditMode) {
+      const form = buildProfileEditForm(selectedProfilePlayer);
+      setProfileEditForm(form);
+      setProfileEditBaseForm(form);
+      setProfileEditErrors([]);
+    }
+  }, [profileEditMode, selectedProfilePlayer]);
+
+  const closeSelectedProfile = () => {
+    setSelectedProfilePlayerId(null);
+    setProfileEditMode(false);
+    setProfileEditForm(null);
+    setProfileEditBaseForm(null);
+    setProfileEditErrors([]);
+    setProfileEditMessage(null);
+    setIsProfileSaving(false);
+  };
+
+  const startProfileEdit = () => {
+    if (!selectedProfilePlayer) return;
+    const form = buildProfileEditForm(selectedProfilePlayer);
+    setProfileEditForm(form);
+    setProfileEditBaseForm(form);
+    setProfileEditErrors([]);
+    setProfileEditMessage(null);
+    setProfileEditMode(true);
+  };
+
+  const cancelProfileEdit = () => {
+    if (selectedProfilePlayer) {
+      const form = buildProfileEditForm(selectedProfilePlayer);
+      setProfileEditForm(form);
+      setProfileEditBaseForm(form);
+    }
+    setProfileEditErrors([]);
+    setProfileEditMessage(null);
+    setProfileEditMode(false);
+  };
+
+  const handleSaveProfileEdit = async () => {
+    if (!franchiseId || !selectedProfile || !selectedProfilePlayer || !profileEditForm || !profileEditBaseForm) return;
+
+    setIsProfileSaving(true);
+    setProfileEditErrors([]);
+    setProfileEditMessage(null);
+
+    try {
+      const freshPlayer = await getFranchisePlayer(franchiseId, selectedProfilePlayer.id);
+      if (!freshPlayer) {
+        setProfileEditErrors(['Franchise player record was not found.']);
+        return;
+      }
+
+      const payload = profileEditFormToPayload(profileEditForm, profileEditBaseForm);
+      if (selectedProfile.hiddenSafe) {
+        delete payload.power;
+        delete payload.contact;
+        delete payload.speed;
+        delete payload.fielding;
+        delete payload.arm;
+        delete payload.velocity;
+        delete payload.junk;
+        delete payload.accuracy;
+        delete payload.arsenal;
+        delete payload.overallGrade;
+      }
+
+      const editResult = applyFranchisePlayerProfileEdit({
+        player: freshPlayer,
+        farmRecord: farmRecordByPlayerId.get(freshPlayer.id) ?? null,
+        teamId: selectedTeamId,
+        leagueId: franchiseLeagueId,
+        changes: payload,
+      });
+
+      if (!editResult.valid) {
+        setProfileEditErrors(editResult.errors);
+        return;
+      }
+
+      const savedPlayer = await saveFranchisePlayer(franchiseId, editResult.player);
+      setFranchiseAllPlayers((players) =>
+        players.map((player) => player.id === savedPlayer.id ? savedPlayer : player),
+      );
+      setFranchiseRosterPlayers((players) =>
+        players.map((player) => player.id === savedPlayer.id ? savedPlayer : player),
+      );
+      const savedForm = buildProfileEditForm(savedPlayer);
+      setProfileEditForm(savedForm);
+      setProfileEditBaseForm(savedForm);
+      setProfileEditMode(false);
+      setProfileEditMessage('Profile saved to franchise-owned player record.');
+    } catch (err) {
+      setProfileEditErrors([err instanceof Error ? err.message : 'Failed to save franchise player profile.']);
+    } finally {
+      setIsProfileSaving(false);
+    }
+  };
 
   // Default to first team once data loads
   useEffect(() => {
@@ -2034,7 +2258,16 @@ export function TeamHubContent() {
       {selectedProfile && (
         <FranchisePlayerProfileModal
           profile={selectedProfile}
-          onClose={() => setSelectedProfilePlayerId(null)}
+          editForm={profileEditForm}
+          editMode={profileEditMode}
+          editErrors={profileEditErrors}
+          editMessage={profileEditMessage}
+          isSaving={isProfileSaving}
+          onClose={closeSelectedProfile}
+          onStartEdit={startProfileEdit}
+          onCancelEdit={cancelProfileEdit}
+          onEditFormChange={setProfileEditForm}
+          onSaveEdit={() => void handleSaveProfileEdit()}
         />
       )}
     </div>
@@ -2069,7 +2302,16 @@ interface FranchiseFarmVisibilityPanelProps {
 
 interface FranchisePlayerProfileModalProps {
   profile: FranchisePlayerProfileViewModel;
+  editForm: FranchiseProfileEditForm | null;
+  editMode: boolean;
+  editErrors: string[];
+  editMessage: string | null;
+  isSaving: boolean;
   onClose: () => void;
+  onStartEdit: () => void;
+  onCancelEdit: () => void;
+  onEditFormChange: (form: FranchiseProfileEditForm) => void;
+  onSaveEdit: () => void;
 }
 
 function formatProfileSalary(salary: number | null): string {
@@ -2091,11 +2333,81 @@ function FranchiseProfileField({ label, value }: { label: string; value: unknown
   );
 }
 
-function FranchisePlayerProfileModal({ profile, onClose }: FranchisePlayerProfileModalProps) {
+function ProfileTextInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block border-2 border-[#4A6844] bg-[#4A6844] p-2">
+      <span className="block text-[7px] font-bold text-[#C4A853]">{label}</span>
+      <input
+        aria-label={label}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-1 w-full border-2 border-[#3F5A3A] bg-[#5A8352] p-1 text-[9px] text-[#E8E8D8]"
+      />
+    </label>
+  );
+}
+
+function ProfileSelectInput<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+  includeBlank,
+}: {
+  label: string;
+  value: T | '';
+  options: readonly T[];
+  onChange: (value: T | '') => void;
+  includeBlank?: boolean;
+}) {
+  return (
+    <label className="block border-2 border-[#4A6844] bg-[#4A6844] p-2">
+      <span className="block text-[7px] font-bold text-[#C4A853]">{label}</span>
+      <select
+        aria-label={label}
+        value={value}
+        onChange={(event) => onChange(event.target.value as T | '')}
+        className="mt-1 w-full border-2 border-[#3F5A3A] bg-[#5A8352] p-1 text-[9px] text-[#E8E8D8]"
+      >
+        {includeBlank && <option value="">—</option>}
+        {options.map((option) => (
+          <option key={option} value={option}>{option}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function FranchisePlayerProfileModal({
+  profile,
+  editForm,
+  editMode,
+  editErrors,
+  editMessage,
+  isSaving,
+  onClose,
+  onStartEdit,
+  onCancelEdit,
+  onEditFormChange,
+  onSaveEdit,
+}: FranchisePlayerProfileModalProps) {
   const traits = profile.identity.traits.length > 0 ? profile.identity.traits.join(', ') : 'None';
   const position = profile.identity.secondaryPosition
     ? `${profile.identity.primaryPosition} / ${profile.identity.secondaryPosition}`
     : profile.identity.primaryPosition;
+  const form = editForm;
+  const updateForm = (update: Partial<FranchiseProfileEditForm>) => {
+    if (!form) return;
+    onEditFormChange({ ...form, ...update });
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
@@ -2110,29 +2422,96 @@ function FranchisePlayerProfileModal({ profile, onClose }: FranchisePlayerProfil
             <div className="text-[8px] font-bold text-[#C4A853]">FRANCHISE PLAYER PROFILE</div>
             <div className="mt-1 text-[14px] font-bold">{profile.identity.name}</div>
             <div className="mt-1 text-[8px] text-[#E8E8D8]/65">
-              {profile.rosterStatus} · {String(profile.revealState).toUpperCase()} · Read-only
+              {profile.rosterStatus} · {String(profile.revealState).toUpperCase()} · {editMode ? 'Manual edit' : 'Read-only'}
             </div>
+            {profile.hiddenSafe && (
+              <div className="mt-1 text-[8px] text-[#FFEFB5]">
+                Limited edit: visible identity only. Ratings and hidden prospect truth stay blocked.
+              </div>
+            )}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="border-2 border-[#E8E8D8]/40 bg-[#4A6844] px-3 py-1 text-[8px] font-bold hover:border-[#C4A853]"
-          >
-            CLOSE
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {editMode ? (
+              <>
+                <button
+                  type="button"
+                  onClick={onCancelEdit}
+                  disabled={isSaving}
+                  className="border-2 border-[#E8E8D8]/40 bg-[#4A6844] px-3 py-1 text-[8px] font-bold hover:border-[#C4A853] disabled:opacity-40"
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="button"
+                  onClick={onSaveEdit}
+                  disabled={isSaving || !form}
+                  className="border-2 border-[#E8E8D8] bg-[#4A6844] px-3 py-1 text-[8px] font-bold hover:border-[#C4A853] disabled:opacity-40"
+                >
+                  {isSaving ? 'SAVING...' : 'SAVE PROFILE'}
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={onStartEdit}
+                className="border-2 border-[#E8E8D8] bg-[#4A6844] px-3 py-1 text-[8px] font-bold hover:border-[#C4A853]"
+              >
+                {profile.hiddenSafe ? 'LIMITED EDIT' : 'EDIT PROFILE'}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSaving}
+              className="border-2 border-[#E8E8D8]/40 bg-[#4A6844] px-3 py-1 text-[8px] font-bold hover:border-[#C4A853] disabled:opacity-40"
+            >
+              CLOSE
+            </button>
+          </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <FranchiseProfileField label="AGE" value={profile.identity.age} />
-          <FranchiseProfileField label="BATS / THROWS" value={`${profile.identity.bats} / ${profile.identity.throws}`} />
-          <FranchiseProfileField label="POSITION" value={position} />
-          <FranchiseProfileField label="TRAITS" value={traits} />
-          <FranchiseProfileField label="PERSONALITY" value={profile.identity.personality} />
-          <FranchiseProfileField label="CHEMISTRY" value={profile.identity.chemistry} />
-          <FranchiseProfileField label="SALARY BASELINE" value={formatProfileSalary(profile.salary)} />
-          <FranchiseProfileField label="CONTRACT YEARS" value={profile.contractYears ?? '—'} />
-          <FranchiseProfileField label="TEAM / STATUS" value={`${profile.teamId ?? 'UNKNOWN'} / ${profile.rosterStatus}`} />
-        </div>
+        {editErrors.length > 0 && (
+          <div className="mb-3 border-2 border-[#DD0000]/50 bg-[#5A3F3F] p-2 text-[8px] text-[#FFD6D6]">
+            {editErrors.map((error) => <div key={error}>{error}</div>)}
+          </div>
+        )}
+        {editMessage && (
+          <div className="mb-3 border-2 border-[#E8E8D8]/30 bg-[#4A6844] p-2 text-[8px] text-[#E8E8D8]">
+            {editMessage}
+          </div>
+        )}
+
+        {editMode && form ? (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <ProfileTextInput label="FIRST NAME" value={form.firstName} onChange={(firstName) => updateForm({ firstName })} />
+            <ProfileTextInput label="LAST NAME" value={form.lastName} onChange={(lastName) => updateForm({ lastName })} />
+            <ProfileTextInput label="NICKNAME" value={form.nickname} onChange={(nickname) => updateForm({ nickname })} />
+            <ProfileTextInput label="AGE" value={form.age} onChange={(age) => updateForm({ age })} />
+            <ProfileSelectInput label="BATS" value={form.bats} options={['L', 'R', 'S'] as const} onChange={(bats) => bats && updateForm({ bats })} />
+            <ProfileSelectInput label="THROWS" value={form.throws} options={['L', 'R'] as const} onChange={(throws) => throws && updateForm({ throws })} />
+            <ProfileSelectInput label="PRIMARY POSITION" value={form.primaryPosition} options={FRANCHISE_PROFILE_PRIMARY_POSITIONS} onChange={(primaryPosition) => primaryPosition && updateForm({ primaryPosition })} />
+            <ProfileSelectInput label="SECONDARY POSITION" value={form.secondaryPosition} options={FRANCHISE_PROFILE_SECONDARY_POSITIONS} includeBlank onChange={(secondaryPosition) => updateForm({ secondaryPosition })} />
+            <ProfileTextInput label="TRAIT 1" value={form.trait1} onChange={(trait1) => updateForm({ trait1 })} />
+            <ProfileTextInput label="TRAIT 2" value={form.trait2} onChange={(trait2) => updateForm({ trait2 })} />
+            <ProfileSelectInput label="PERSONALITY" value={form.personality} options={FRANCHISE_PROFILE_PERSONALITIES} onChange={(personality) => personality && updateForm({ personality })} />
+            <ProfileSelectInput label="CHEMISTRY" value={form.chemistry} options={FRANCHISE_PROFILE_CHEMISTRIES} onChange={(chemistry) => chemistry && updateForm({ chemistry })} />
+            <FranchiseProfileField label="SALARY BASELINE" value={formatProfileSalary(profile.salary)} />
+            <FranchiseProfileField label="CONTRACT YEARS" value={profile.contractYears ?? '—'} />
+            <FranchiseProfileField label="TEAM / STATUS" value={`${profile.teamId ?? 'UNKNOWN'} / ${profile.rosterStatus}`} />
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <FranchiseProfileField label="AGE" value={profile.identity.age} />
+            <FranchiseProfileField label="BATS / THROWS" value={`${profile.identity.bats} / ${profile.identity.throws}`} />
+            <FranchiseProfileField label="POSITION" value={position} />
+            <FranchiseProfileField label="TRAITS" value={traits} />
+            <FranchiseProfileField label="PERSONALITY" value={profile.identity.personality} />
+            <FranchiseProfileField label="CHEMISTRY" value={profile.identity.chemistry} />
+            <FranchiseProfileField label="SALARY BASELINE" value={formatProfileSalary(profile.salary)} />
+            <FranchiseProfileField label="CONTRACT YEARS" value={profile.contractYears ?? '—'} />
+            <FranchiseProfileField label="TEAM / STATUS" value={`${profile.teamId ?? 'UNKNOWN'} / ${profile.rosterStatus}`} />
+          </div>
+        )}
 
         {profile.hiddenSafe ? (
           <section className="mt-4 border-[4px] border-[#4A6844] bg-[#3F563F] p-3">
@@ -2161,18 +2540,33 @@ function FranchisePlayerProfileModal({ profile, onClose }: FranchisePlayerProfil
         ) : (
           <section className="mt-4 border-[4px] border-[#4A6844] bg-[#3F563F] p-3">
             <div className="text-[9px] font-bold text-[#C4A853]">BASEBALL DETAILS</div>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <FranchiseProfileField label="GRADE" value={profile.fullDetails?.overallGrade ?? '—'} />
-              <FranchiseProfileField label="POW" value={profile.fullDetails?.power ?? '—'} />
-              <FranchiseProfileField label="CON" value={profile.fullDetails?.contact ?? '—'} />
-              <FranchiseProfileField label="SPD" value={profile.fullDetails?.speed ?? '—'} />
-              <FranchiseProfileField label="FLD" value={profile.fullDetails?.fielding ?? '—'} />
-              <FranchiseProfileField label="ARM" value={profile.fullDetails?.arm ?? '—'} />
-              <FranchiseProfileField label="VEL" value={profile.fullDetails?.velocity ?? '—'} />
-              <FranchiseProfileField label="JNK" value={profile.fullDetails?.junk ?? '—'} />
-              <FranchiseProfileField label="ACC" value={profile.fullDetails?.accuracy ?? '—'} />
-              <FranchiseProfileField label="ARSENAL" value={profile.fullDetails?.arsenal.length ? profile.fullDetails.arsenal.join(', ') : '—'} />
-            </div>
+            {editMode && form ? (
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <ProfileSelectInput label="GRADE" value={form.overallGrade} options={FRANCHISE_PROFILE_GRADES} onChange={(overallGrade) => overallGrade && updateForm({ overallGrade })} />
+                <ProfileTextInput label="POW" value={form.power} onChange={(power) => updateForm({ power })} />
+                <ProfileTextInput label="CON" value={form.contact} onChange={(contact) => updateForm({ contact })} />
+                <ProfileTextInput label="SPD" value={form.speed} onChange={(speed) => updateForm({ speed })} />
+                <ProfileTextInput label="FLD" value={form.fielding} onChange={(fielding) => updateForm({ fielding })} />
+                <ProfileTextInput label="ARM" value={form.arm} onChange={(arm) => updateForm({ arm })} />
+                <ProfileTextInput label="VEL" value={form.velocity} onChange={(velocity) => updateForm({ velocity })} />
+                <ProfileTextInput label="JNK" value={form.junk} onChange={(junk) => updateForm({ junk })} />
+                <ProfileTextInput label="ACC" value={form.accuracy} onChange={(accuracy) => updateForm({ accuracy })} />
+                <ProfileTextInput label={`ARSENAL (${FRANCHISE_PROFILE_PITCH_TYPES.join(', ')})`} value={form.arsenal} onChange={(arsenal) => updateForm({ arsenal })} />
+              </div>
+            ) : (
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <FranchiseProfileField label="GRADE" value={profile.fullDetails?.overallGrade ?? '—'} />
+                <FranchiseProfileField label="POW" value={profile.fullDetails?.power ?? '—'} />
+                <FranchiseProfileField label="CON" value={profile.fullDetails?.contact ?? '—'} />
+                <FranchiseProfileField label="SPD" value={profile.fullDetails?.speed ?? '—'} />
+                <FranchiseProfileField label="FLD" value={profile.fullDetails?.fielding ?? '—'} />
+                <FranchiseProfileField label="ARM" value={profile.fullDetails?.arm ?? '—'} />
+                <FranchiseProfileField label="VEL" value={profile.fullDetails?.velocity ?? '—'} />
+                <FranchiseProfileField label="JNK" value={profile.fullDetails?.junk ?? '—'} />
+                <FranchiseProfileField label="ACC" value={profile.fullDetails?.accuracy ?? '—'} />
+                <FranchiseProfileField label="ARSENAL" value={profile.fullDetails?.arsenal.length ? profile.fullDetails.arsenal.join(', ') : '—'} />
+              </div>
+            )}
           </section>
         )}
       </div>

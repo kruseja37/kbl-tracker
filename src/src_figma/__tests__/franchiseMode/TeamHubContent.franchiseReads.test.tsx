@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   mockUseFranchiseDataContext: vi.fn(),
   mockUseSeasonStats: vi.fn(),
   mockGetFranchiseTeam: vi.fn(),
+  mockGetFranchisePlayer: vi.fn(),
   mockGetAllFranchisePlayers: vi.fn(),
   mockSaveFranchisePlayer: vi.fn(),
   mockGetFranchiseFarmRoster: vi.fn(),
@@ -29,6 +30,7 @@ vi.mock('../../../hooks/useSeasonStats', () => ({
 
 vi.mock('../../../utils/franchisePlayerStorage', () => ({
   getFranchiseTeam: mocks.mockGetFranchiseTeam,
+  getFranchisePlayer: mocks.mockGetFranchisePlayer,
   getAllFranchisePlayers: mocks.mockGetAllFranchisePlayers,
   saveFranchisePlayer: mocks.mockSaveFranchisePlayer,
   saveFranchiseTeam: mocks.mockSaveFranchiseTeam,
@@ -677,6 +679,60 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
   });
 
+  test('edits MLB/revealed profile through franchise-owned save path and refreshes display', async () => {
+    const freshPlayer = franchisePlayer('copied-player', 'Copied', 'Current', 'SS', {
+      secondaryPosition: '2B',
+      power: 60,
+      overallGrade: 'B+',
+      editHistory: [],
+    });
+    mocks.mockGetFranchisePlayer.mockResolvedValueOnce(freshPlayer);
+    mocks.mockSaveFranchisePlayer.mockImplementationOnce(async (_franchiseId: string, player: unknown) => ({
+      ...(player as Record<string, unknown>),
+      lastModified: '2026-02-01T00:00:00.000Z',
+    }));
+
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Open profile for C\. Player/i }));
+    const dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Copied Player/i });
+    fireEvent.click(within(dialog).getByRole('button', { name: /EDIT PROFILE/i }));
+    fireEvent.change(within(dialog).getByLabelText('FIRST NAME'), { target: { value: 'Manual' } });
+    fireEvent.change(within(dialog).getByLabelText('AGE'), { target: { value: '29' } });
+    fireEvent.change(within(dialog).getByLabelText('SECONDARY POSITION'), { target: { value: '' } });
+    fireEvent.change(within(dialog).getByLabelText('POW'), { target: { value: '77' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /SAVE PROFILE/i }));
+
+    await waitFor(() => expect(mocks.mockSaveFranchisePlayer).toHaveBeenCalledTimes(1));
+    expect(mocks.mockGetFranchisePlayer).toHaveBeenCalledWith('franchise-1', 'copied-player');
+    const [franchiseId, savedPlayer] = mocks.mockSaveFranchisePlayer.mock.calls[0];
+    expect(franchiseId).toBe('franchise-1');
+    expect(savedPlayer).toEqual(expect.objectContaining({
+      id: 'copied-player',
+      firstName: 'Manual',
+      lastName: 'Current',
+      age: 29,
+      secondaryPosition: undefined,
+      power: 77,
+      salary: 3000000,
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'MLB' }],
+    }));
+    expect((savedPlayer.editHistory as Array<{ field: string }>).map((entry) => entry.field)).toEqual(expect.arrayContaining([
+      'firstName',
+      'age',
+      'secondaryPosition',
+      'power',
+    ]));
+    expect(await within(dialog).findByText(/Profile saved to franchise-owned player record/i)).toBeInTheDocument();
+    expect(within(dialog).getByText('Manual Current')).toBeInTheDocument();
+    expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+    expect(mocks.mockBuildFranchiseSalaryLifecycle).toHaveBeenCalledTimes(1);
+    expect(mocks.mockBuildFranchiseDesignationEligibility).toHaveBeenCalledTimes(1);
+    expect(mocks.mockGetTransactionsByFranchiseSeason).toHaveBeenCalledTimes(1);
+  });
+
   test('opens hidden-safe read-only player profile from FARM prospect section', async () => {
     render(<TeamHubContent />);
 
@@ -704,6 +760,67 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(dialog).queryByText(/trueGrade/i)).not.toBeInTheDocument();
     expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
+  test('edits unrevealed FARM profile with visible identity fields only', async () => {
+    const freshFarmPlayer = franchisePlayer('farm-player', 'Farm', 'Hidden', 'CF', {
+      secondaryPosition: 'OF',
+      salary: 1000000,
+      power: 95,
+      ratingRevealState: 'hidden',
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'FARM' }],
+      prospectProfile: {
+        trueGrade: 'A',
+        scoutedGrade: 'B',
+        potentialGrade: 'A-',
+        scoutConfidence: 'medium',
+      },
+      hiddenPersonalityModifiers: { leadership: 92 },
+      editHistory: [],
+    });
+    mocks.mockGetFranchisePlayer.mockResolvedValueOnce(freshFarmPlayer);
+    mocks.mockSaveFranchisePlayer.mockImplementationOnce(async (_franchiseId: string, player: unknown) => ({
+      ...(player as Record<string, unknown>),
+      lastModified: '2026-02-01T00:00:00.000Z',
+    }));
+
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Open profile for Farm Hidden/i }));
+    const dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Farm Hidden/i });
+    fireEvent.click(within(dialog).getByRole('button', { name: /LIMITED EDIT/i }));
+    expect(within(dialog).getByText(/Limited edit: visible identity only/i)).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText('POW')).not.toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText('FIRST NAME'), { target: { value: 'Visible' } });
+    fireEvent.change(within(dialog).getByLabelText('AGE'), { target: { value: '22' } });
+    fireEvent.change(within(dialog).getByLabelText('TRAIT 1'), { target: { value: 'Clutch' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /SAVE PROFILE/i }));
+
+    await waitFor(() => expect(mocks.mockSaveFranchisePlayer).toHaveBeenCalledTimes(1));
+    const [, savedPlayer] = mocks.mockSaveFranchisePlayer.mock.calls[0];
+    expect(savedPlayer).toEqual(expect.objectContaining({
+      id: 'farm-player',
+      firstName: 'Visible',
+      lastName: 'Hidden',
+      age: 22,
+      trait1: 'Clutch',
+      power: 95,
+      salary: 1000000,
+      ratingRevealState: 'hidden',
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'FARM' }],
+    }));
+    expect((savedPlayer.editHistory as Array<{ field: string }>).map((entry) => entry.field)).toEqual(expect.arrayContaining([
+      'firstName',
+      'age',
+    ]));
+    expect(await within(dialog).findByText(/Profile saved to franchise-owned player record/i)).toBeInTheDocument();
+    expect(within(dialog).getByText('Visible Hidden')).toBeInTheDocument();
+    expect(within(dialog).queryByText('BASEBALL DETAILS')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('POW')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/trueGrade/i)).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
   });
 
