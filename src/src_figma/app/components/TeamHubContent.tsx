@@ -46,6 +46,14 @@ import {
 } from "../../../utils/scheduleStorage";
 import { getSeasonIdForScope } from "../../../utils/franchisePersistenceContract";
 import {
+  buildFranchiseAnalyticsTrustReport,
+  type FranchiseAnalyticsTrustReport,
+} from "../../../utils/franchiseAnalyticsTrust";
+import {
+  buildFranchiseValueInputRows,
+  type FranchiseValueInputReport,
+} from "../../../utils/franchiseValueInputs";
+import {
   buildFranchiseDesignationEligibility,
   type FranchiseDesignationEligibilityReport,
 } from "../../../utils/franchiseDesignationEligibility";
@@ -53,6 +61,14 @@ import {
   buildFranchiseSalaryLifecycle,
   type FranchiseSalaryLifecycleReport,
 } from "../../../utils/franchiseSalaryLifecycle";
+import {
+  buildFranchiseMoraleRelationshipTrustReport,
+  type FranchiseMoraleRelationshipTrustReport,
+} from "../../../utils/franchiseMoraleRelationshipTrust";
+import {
+  buildFranchiseNarrativeEventEligibilityReport,
+  type FranchiseNarrativeEventEligibilityReport,
+} from "../../../utils/franchiseNarrativeEventEligibility";
 import {
   getTransactionsByFranchiseSeason,
   type Mode2V1TransactionType,
@@ -965,6 +981,7 @@ export function TeamHubContent() {
   const [franchisePlayerTeamStints, setFranchisePlayerTeamStints] = useState<FranchisePlayerTeamStatStint[]>([]);
   const [continuityLoading, setContinuityLoading] = useState(false);
   const [continuityError, setContinuityError] = useState<string | null>(null);
+  const [valueInputReport, setValueInputReport] = useState<FranchiseValueInputReport | null>(null);
   const [salaryLifecycleReport, setSalaryLifecycleReport] = useState<FranchiseSalaryLifecycleReport | null>(null);
   const [designationEligibilityReport, setDesignationEligibilityReport] = useState<FranchiseDesignationEligibilityReport | null>(null);
   const [valueTruthLoading, setValueTruthLoading] = useState(false);
@@ -1256,6 +1273,7 @@ export function TeamHubContent() {
 
   useEffect(() => {
     if (!franchiseId || !seasonId) {
+      setValueInputReport(null);
       setSalaryLifecycleReport(null);
       setDesignationEligibilityReport(null);
       setValueTruthLoading(false);
@@ -1275,15 +1293,18 @@ export function TeamHubContent() {
       setValueTruthLoading(true);
       setValueTruthError(null);
       try {
-        const [salaryReport, designationReport] = await Promise.all([
+        const [valueReport, salaryReport, designationReport] = await Promise.all([
+          buildFranchiseValueInputRows(input),
           buildFranchiseSalaryLifecycle(input),
           buildFranchiseDesignationEligibility(input),
         ]);
         if (cancelled) return;
+        setValueInputReport(valueReport);
         setSalaryLifecycleReport(salaryReport);
         setDesignationEligibilityReport(designationReport);
       } catch (err) {
         if (!cancelled) {
+          setValueInputReport(null);
           setSalaryLifecycleReport(null);
           setDesignationEligibilityReport(null);
           setValueTruthError(err instanceof Error ? err.message : 'Failed to load Franchise v1 value truth labels.');
@@ -1300,6 +1321,55 @@ export function TeamHubContent() {
       cancelled = true;
     };
   }, [franchiseId, seasonId, seasonNumber]);
+
+  const analyticsTrustReport = useMemo(() => {
+    if (!valueInputReport) return null;
+    return buildFranchiseAnalyticsTrustReport({
+      valueInputReport,
+      completedGames: franchiseCompletedGames,
+      scheduledGames: franchiseScheduleGames,
+      teamStints: franchisePlayerTeamStints,
+    });
+  }, [
+    franchiseCompletedGames,
+    franchisePlayerTeamStints,
+    franchiseScheduleGames,
+    valueInputReport,
+  ]);
+
+  const moraleRelationshipTrustReport = useMemo(() => {
+    if (!valueInputReport) return null;
+    return buildFranchiseMoraleRelationshipTrustReport({
+      valueInputReport,
+      players: franchiseAllPlayers,
+      transactions: franchiseTransactionHistory,
+      completedGames: franchiseCompletedGames,
+      scheduledGames: franchiseScheduleGames,
+    });
+  }, [
+    franchiseAllPlayers,
+    franchiseCompletedGames,
+    franchiseScheduleGames,
+    franchiseTransactionHistory,
+    valueInputReport,
+  ]);
+
+  const narrativeEventEligibilityReport = useMemo(() => {
+    if (!analyticsTrustReport) return null;
+    return buildFranchiseNarrativeEventEligibilityReport({
+      analyticsTrustReport,
+      valueInputReport: valueInputReport ?? undefined,
+      salaryLifecycleReport: salaryLifecycleReport ?? undefined,
+      designationEligibilityReport: designationEligibilityReport ?? undefined,
+      moraleRelationshipTrustReport: moraleRelationshipTrustReport ?? undefined,
+    });
+  }, [
+    analyticsTrustReport,
+    designationEligibilityReport,
+    moraleRelationshipTrustReport,
+    salaryLifecycleReport,
+    valueInputReport,
+  ]);
 
   const analyzerReport = useMemo(() => {
     if (!franchiseId || !selectedTeamId || !franchiseTeam) return null;
@@ -2040,6 +2110,17 @@ export function TeamHubContent() {
             error={transactionHistoryError}
           />
 
+          <FranchiseMode2FoundationStatusPanel
+            valueInputReport={valueInputReport}
+            analyticsTrustReport={analyticsTrustReport}
+            salaryLifecycleReport={salaryLifecycleReport}
+            designationEligibilityReport={designationEligibilityReport}
+            moraleRelationshipTrustReport={moraleRelationshipTrustReport}
+            narrativeEventEligibilityReport={narrativeEventEligibilityReport}
+            isLoading={valueTruthLoading || continuityLoading}
+            error={valueTruthError ?? continuityError}
+          />
+
           <FranchiseValueTruthPanel
             selectedTeamId={selectedTeamId}
             salaryLifecycleReport={salaryLifecycleReport}
@@ -2595,6 +2676,17 @@ interface FranchiseValueTruthPanelProps {
   error: string | null;
 }
 
+interface FranchiseMode2FoundationStatusPanelProps {
+  valueInputReport: FranchiseValueInputReport | null;
+  analyticsTrustReport: FranchiseAnalyticsTrustReport | null;
+  salaryLifecycleReport: FranchiseSalaryLifecycleReport | null;
+  designationEligibilityReport: FranchiseDesignationEligibilityReport | null;
+  moraleRelationshipTrustReport: FranchiseMoraleRelationshipTrustReport | null;
+  narrativeEventEligibilityReport: FranchiseNarrativeEventEligibilityReport | null;
+  isLoading: boolean;
+  error: string | null;
+}
+
 interface FranchiseFarmVisibilityPanelProps {
   farmPlayers: Player[];
   farmRecordByPlayerId: Map<string, FranchiseFarmRecord>;
@@ -3074,6 +3166,165 @@ function uniqueStrings(values: string[]): string[] {
 
 function formatTruthStatus(status: string): string {
   return status.replace(/-/g, ' ').toUpperCase();
+}
+
+function foundationStatusClass(status: string): string {
+  if (status === 'trusted' || status === 'eligible-context' || status === 'stable-baseline') {
+    return 'border-[#9DFFB0]/60 text-[#9DFFB0]';
+  }
+  if (status === 'preview-only' || status === 'partial') return 'border-[#FFD27A]/60 text-[#FFD27A]';
+  if (status === 'deferred' || status === 'not-applicable') return 'border-[#E8E8D8]/35 text-[#E8E8D8]/75';
+  return 'border-[#FFD6D6]/60 text-[#FFD6D6]';
+}
+
+function FoundationStatusBadge({ status }: { status: string }) {
+  return (
+    <span className={`inline-flex border-2 px-2 py-0.5 text-[9px] font-bold ${foundationStatusClass(status)}`}>
+      {formatTruthStatus(status)}
+    </span>
+  );
+}
+
+function FoundationStatusCard({
+  title,
+  status,
+  body,
+}: {
+  title: string;
+  status: string;
+  body: string;
+}) {
+  return (
+    <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="text-[9px] font-bold text-[#C4A853]">{title}</div>
+        <FoundationStatusBadge status={status} />
+      </div>
+      <div className="text-[10px] leading-snug text-[#E8E8D8]/75">{body}</div>
+    </div>
+  );
+}
+
+function FranchiseMode2FoundationStatusPanel({
+  valueInputReport,
+  analyticsTrustReport,
+  salaryLifecycleReport,
+  designationEligibilityReport,
+  moraleRelationshipTrustReport,
+  narrativeEventEligibilityReport,
+  isLoading,
+  error,
+}: FranchiseMode2FoundationStatusPanelProps) {
+  const valueRows = valueInputReport?.rows.length ?? 0;
+  const stableSalaryRows = salaryLifecycleReport?.playerRecords.filter((record) =>
+    record.initialSalaryBaseline.status === 'stable-baseline',
+  ).length ?? 0;
+  const salaryRows = salaryLifecycleReport?.playerRecords.length ?? 0;
+  const blockedSalaryRows = salaryLifecycleReport?.playerRecords.filter((record) =>
+    record.initialSalaryBaseline.status !== 'stable-baseline',
+  ).length ?? 0;
+  const previewDesignationCount = designationEligibilityReport?.records.filter((record) =>
+    record.status === 'preview-only' &&
+    (record.designationType === 'TEAM_MVP' || record.designationType === 'ACE'),
+  ).length ?? 0;
+  const blockedDesignationCount = designationEligibilityReport?.records.filter((record) =>
+    record.status === 'blocked',
+  ).length ?? 0;
+  const hiddenFarmRows = narrativeEventEligibilityReport?.hiddenFarmProspectData.hiddenSafeRows ?? 0;
+
+  const statsStatus = analyticsTrustReport?.coreStats.status ?? 'blocked';
+  const valueStatus = valueInputReport?.trueValuePolicy.finalTrueValueCalculated
+    ? 'trusted'
+    : (valueRows > 0 ? 'preview-only' : 'blocked');
+  const salaryStatus = stableSalaryRows > 0 && blockedSalaryRows === 0
+    ? 'trusted'
+    : (stableSalaryRows > 0 ? 'partial' : 'blocked');
+  const designationStatus = previewDesignationCount > 0 && blockedDesignationCount === 0
+    ? 'preview-only'
+    : (previewDesignationCount > 0 ? 'partial' : 'blocked');
+  const moraleStatus = moraleRelationshipTrustReport?.scope.status ?? 'blocked';
+  const narrativeStatus = narrativeEventEligibilityReport?.downstreamConsumers.readOnlySummaries.status ?? 'blocked';
+
+  return (
+    <section
+      role="region"
+      aria-label="Mode 2 Foundation Status"
+      className="mb-4 border-[4px] border-[#4A6844] bg-[#3F563F] p-3"
+    >
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-[9px] font-bold text-[#C4A853]">MODE 2 FOUNDATION STATUS</div>
+          <div className="mt-1 text-[10px] leading-snug text-[#E8E8D8]/60">
+            Read-only gate summary. These labels explain what can be reported as context and what remains blocked or deferred.
+          </div>
+        </div>
+        <div className="border-2 border-[#4A6844] bg-[#5A8352] px-2 py-1 text-[10px] text-[#E8E8D8]">
+          {isLoading ? 'LOADING' : 'READ ONLY'}
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-3 border-2 border-[#DD0000]/50 bg-[#5A3F3F] p-2 text-[10px] text-[#FFD6D6]">
+          {error}
+        </div>
+      )}
+
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+        <FoundationStatusCard
+          title="STATS / ARCHIVE / SCOPE"
+          status={statsStatus}
+          body={`${analyticsTrustReport?.coreStats.scopedArchiveRows ?? 0} scoped archive-backed game(s), ${analyticsTrustReport?.coreStats.seasonStatsRows ?? 0} stat row(s). Scope identity stays required.`}
+        />
+        <FoundationStatusCard
+          title="VALUE INPUTS"
+          status={valueStatus}
+          body={`${valueRows} canonical player row(s). Final True Value and value delta remain deferred.`}
+        />
+        <FoundationStatusCard
+          title="SALARY LIFECYCLE"
+          status={salaryStatus}
+          body={`${stableSalaryRows}/${salaryRows} stable salary baseline row(s). Salary movement, luxury tax, and salary matching stay blocked.`}
+        />
+        <FoundationStatusCard
+          title="DESIGNATION ELIGIBILITY"
+          status={designationStatus}
+          body={`${previewDesignationCount} TEAM_MVP/ACE preview row(s), ${blockedDesignationCount} blocked row(s). Awards/designations are not persisted.`}
+        />
+        <FoundationStatusCard
+          title="MORALE / RELATIONSHIPS"
+          status={moraleStatus}
+          body="Visible personality and chemistry may be read-only context. Morale and relationship state changes stay blocked."
+        />
+        <FoundationStatusCard
+          title="NARRATIVE / RANDOM EVENTS"
+          status={narrativeStatus}
+          body="Stable facts may be read-only summary context. Narrative generation, random events, and story persistence stay blocked."
+        />
+      </div>
+
+      <div className="mt-3 grid gap-2 lg:grid-cols-2">
+        <div className="border-2 border-[#4A6844] bg-[#5A3F3F] p-2 text-[10px] leading-snug text-[#FFD6D6]">
+          <div className="mb-1 font-bold text-[#FFEFB5]">Blocked / inactive systems</div>
+          <div>True Value finalization: BLOCKED / DEFERRED.</div>
+          <div>Salary movement: {formatTruthStatus(narrativeEventEligibilityReport?.salaryMovement.status ?? 'blocked')}.</div>
+          <div>Morale state changes: {formatTruthStatus(narrativeEventEligibilityReport?.downstreamConsumers.moraleMutation.status ?? 'blocked')}.</div>
+          <div>Relationship state changes: {formatTruthStatus(narrativeEventEligibilityReport?.downstreamConsumers.relationshipMutation.status ?? 'blocked')}.</div>
+          <div>Narrative/random event generation: {formatTruthStatus(narrativeEventEligibilityReport?.downstreamConsumers.randomEventGeneration.status ?? 'blocked')}.</div>
+          <div>Story persistence: {formatTruthStatus(narrativeEventEligibilityReport?.downstreamConsumers.storyPersistence.status ?? 'blocked')}.</div>
+          <div>Awards persistence: BLOCKED.</div>
+          <div>Mode 3/offseason execution: {formatTruthStatus(narrativeEventEligibilityReport?.downstreamConsumers.mode3OffseasonExecution.status ?? 'deferred')}.</div>
+        </div>
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[10px] leading-snug text-[#E8E8D8]/70">
+          <div className="mb-1 font-bold text-[#C4A853]">Hidden-safe boundary</div>
+          <div>Unrevealed FARM/prospect hidden inputs: {hiddenFarmRows > 0 ? 'BLOCKED' : 'NOT APPLICABLE'}.</div>
+          <div>True ratings, true grade, hidden scout truth, and hidden personality modifiers are not surfaced as event inputs.</div>
+          <div className="mt-2 text-[#E8E8D8]/55">
+            This panel creates no records and enables no mutation actions.
+          </div>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function FranchiseValueTruthPanel({

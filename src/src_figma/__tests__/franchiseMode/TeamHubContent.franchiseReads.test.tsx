@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   mockGetTransactionsByFranchiseSeason: vi.fn(),
   mockGetRecentGames: vi.fn(),
   mockGetAllGamesByFranchise: vi.fn(),
+  mockBuildFranchiseValueInputRows: vi.fn(),
   mockBuildFranchiseSalaryLifecycle: vi.fn(),
   mockBuildFranchiseDesignationEligibility: vi.fn(),
   mockSaveFranchiseTeam: vi.fn(),
@@ -52,6 +53,10 @@ vi.mock('../../../utils/gameStorage', () => ({
 
 vi.mock('../../../utils/scheduleStorage', () => ({
   getAllGamesByFranchise: mocks.mockGetAllGamesByFranchise,
+}));
+
+vi.mock('../../../utils/franchiseValueInputs', () => ({
+  buildFranchiseValueInputRows: mocks.mockBuildFranchiseValueInputRows,
 }));
 
 vi.mock('../../../utils/franchiseSalaryLifecycle', () => ({
@@ -219,6 +224,91 @@ function salaryLifecycleReport(overrides: Record<string, unknown> = {}) {
     },
     anyPersistable: false,
     anyRecalculable: false,
+    limitations: [],
+    ...overrides,
+  };
+}
+
+function valueInputRow(overrides: Record<string, unknown> = {}) {
+  return {
+    contractVersion: 'franchise-mode2-value-inputs-v1-readonly',
+    franchiseId: 'franchise-1',
+    seasonId: 'franchise-1-season-2',
+    statsScopeId: 'franchise-1-season-2',
+    seasonNumber: 2,
+    playerId: 'copied-player',
+    playerName: 'Copied Player',
+    currentTeamId: 'team-1',
+    rosterStatus: 'MLB',
+    salary: 3000000,
+    contractYears: 2,
+    salaryBaselineCalculationVersion: 'franchise-initial-salary-v1-ratings-only',
+    teamSalaryBaseline: 4000000,
+    salaryBaselineAvailable: true,
+    seasonStatsAvailability: {
+      batting: true,
+      pitching: false,
+      fielding: true,
+      any: true,
+    },
+    warInputAvailability: {
+      battingWar: true,
+      pitchingWar: false,
+      fieldingWar: true,
+      baserunningWar: false,
+      any: true,
+      trustedForFinalValue: false,
+    },
+    wpaInputAvailability: {
+      playerWpa: false,
+      managerWpa: false,
+      archiveBacked: false,
+      trustedForFinalValue: false,
+    },
+    seasonContext: {
+      seasonId: 'franchise-1-season-2',
+      statsScopeId: 'franchise-1-season-2',
+      seasonNumber: 2,
+      gamesPerTeam: 24,
+      inningsPerGame: 6,
+      seasonLengthSource: 'stored-franchise-config',
+      scheduleRowCount: 0,
+      scheduleRowsUsedAsSeasonLength: false,
+      seasonMetadataTotalGames: 0,
+    },
+    stadiumId: 'stadium-1',
+    parkFactorAvailability: {
+      stadiumIdAvailable: true,
+      seedParkFactorsAvailable: true,
+      customParkFactorsAvailable: false,
+      status: 'seed-only',
+      parkAdjustedValueInputsAvailable: false,
+    },
+    limitations: [],
+    ...overrides,
+  };
+}
+
+function valueInputReport(overrides: Record<string, unknown> = {}) {
+  const rows = overrides.rows ?? [valueInputRow()];
+  return {
+    contractVersion: 'franchise-mode2-value-inputs-v1-readonly',
+    franchiseId: 'franchise-1',
+    seasonId: 'franchise-1-season-2',
+    statsScopeId: 'franchise-1-season-2',
+    seasonNumber: 2,
+    generatedAt: 1,
+    seasonContext: valueInputRow().seasonContext,
+    rows,
+    trueValuePolicy: {
+      finalTrueValueCalculated: false,
+      persistedTrueValueCreated: false,
+    },
+    designationPolicy: {
+      finalDesignationsCalculated: false,
+      persistedDesignationRecordsCreated: false,
+      inventedDesignationTypes: [],
+    },
     limitations: [],
     ...overrides,
   };
@@ -439,6 +529,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     mocks.mockGetTransactionsByFranchiseSeason.mockResolvedValue([]);
     mocks.mockGetRecentGames.mockResolvedValue([]);
     mocks.mockGetAllGamesByFranchise.mockResolvedValue([]);
+    mocks.mockBuildFranchiseValueInputRows.mockResolvedValue(valueInputReport());
     mocks.mockBuildFranchiseSalaryLifecycle.mockResolvedValue(salaryLifecycleReport());
     mocks.mockBuildFranchiseDesignationEligibility.mockResolvedValue(designationEligibilityReport());
     mocks.mockSaveFranchiseTeam.mockImplementation(async (_franchiseId: string, team: unknown) => team);
@@ -501,6 +592,84 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
   });
 
+  test('renders read-only Mode 2 foundation statuses without mutation actions or hidden prospect leakage', async () => {
+    mocks.mockGetRecentGames.mockResolvedValueOnce([{
+      gameId: 'game-archive-1',
+      date: 100,
+      franchiseId: 'franchise-1',
+      seasonId: 'franchise-1-season-2',
+      statsScopeId: 'franchise-1-season-2',
+      competitionType: 'franchise',
+      competitionId: 'franchise-1',
+      seasonNumber: 2,
+      awayTeamId: 'team-1',
+      homeTeamId: 'team-2',
+      awayTeamName: 'Copied Alpha',
+      homeTeamName: 'Copied Beta',
+      finalScore: { away: 4, home: 2 },
+      innings: 6,
+      totalInnings: 6,
+      fameEvents: [],
+      playerStats: {},
+      pitcherGameStats: [],
+      activityLog: [],
+      inningScores: [],
+      aggregationStatus: 'aggregated',
+    }]);
+    mocks.mockGetAllGamesByFranchise.mockResolvedValueOnce([{
+      id: 'schedule-score-only-1',
+      franchiseId: 'franchise-1',
+      seasonId: 'franchise-1-season-2',
+      statsScopeId: 'franchise-1-season-2',
+      seasonNumber: 2,
+      gameNumber: 2,
+      dayNumber: 2,
+      awayTeamId: 'team-1',
+      homeTeamId: 'team-2',
+      status: 'COMPLETED',
+      result: {
+        awayScore: 5,
+        homeScore: 3,
+        winningTeamId: 'team-1',
+        losingTeamId: 'team-2',
+      },
+      completionSource: 'score-only',
+      resultEnteredAt: 100,
+      scoreOnlyResultId: 'score-only-1',
+      createdAt: 1,
+      completedAt: 100,
+      source: 'manual',
+    }]);
+
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    const foundationRegion = await screen.findByRole('region', { name: /Mode 2 Foundation Status/i });
+
+    expect(within(foundationRegion).getByText('MODE 2 FOUNDATION STATUS')).toBeInTheDocument();
+    expect(within(foundationRegion).getByText('STATS / ARCHIVE / SCOPE')).toBeInTheDocument();
+    expect(within(foundationRegion).getByText(/1 scoped archive-backed game\(s\), 1 stat row\(s\)/i)).toBeInTheDocument();
+    expect(within(foundationRegion).getByText('VALUE INPUTS')).toBeInTheDocument();
+    expect(within(foundationRegion).getByText(/1 canonical player row\(s\)/i)).toBeInTheDocument();
+    expect(within(foundationRegion).getByText('SALARY LIFECYCLE')).toBeInTheDocument();
+    expect(within(foundationRegion).getByText(/1\/1 stable salary baseline row\(s\)/i)).toBeInTheDocument();
+    expect(within(foundationRegion).getByText('DESIGNATION ELIGIBILITY')).toBeInTheDocument();
+    expect(within(foundationRegion).getByText(/2 TEAM_MVP\/ACE preview row\(s\)/i)).toBeInTheDocument();
+    expect(within(foundationRegion).getByText('MORALE / RELATIONSHIPS')).toBeInTheDocument();
+    expect(within(foundationRegion).getByText(/Morale state changes: BLOCKED/i)).toBeInTheDocument();
+    expect(within(foundationRegion).getByText(/Relationship state changes: BLOCKED/i)).toBeInTheDocument();
+    expect(within(foundationRegion).getByText(/Narrative\/random event generation: BLOCKED/i)).toBeInTheDocument();
+    expect(within(foundationRegion).getByText(/Story persistence: BLOCKED/i)).toBeInTheDocument();
+    expect(within(foundationRegion).getByText(/Awards persistence: BLOCKED/i)).toBeInTheDocument();
+    expect(within(foundationRegion).getByText(/Mode 3\/offseason execution: DEFERRED/i)).toBeInTheDocument();
+    expect(within(foundationRegion).getByText(/True ratings, true grade, hidden scout truth, and hidden personality modifiers are not surfaced/i)).toBeInTheDocument();
+    expect(within(foundationRegion).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
+    expect(within(foundationRegion).queryByText(/leadership: 92/i)).not.toBeInTheDocument();
+    expect(within(foundationRegion).queryByRole('button')).not.toBeInTheDocument();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+    expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
+  });
+
   test('labels mixed salary baselines as partial instead of fully stable', async () => {
     mocks.mockBuildFranchiseSalaryLifecycle.mockResolvedValueOnce(salaryLifecycleReport({
       playerRecords: [
@@ -527,10 +696,16 @@ describe('TeamHubContent franchise-owned visible reads', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
     const truthRegion = await screen.findByRole('region', { name: /Franchise v1 value salary designation truth labels/i });
+    const foundationRegion = await screen.findByRole('region', { name: /Mode 2 Foundation Status/i });
 
     expect(within(truthRegion).getByText(/Player salary baseline: PARTIAL \(1 stable \/ 1 missing\)/i)).toBeInTheDocument();
     expect(within(truthRegion).getByText(/Missing salary baseline: 1 players/i)).toBeInTheDocument();
     expect(within(truthRegion).queryByText(/Player salary baseline: STABLE BASELINE/i)).not.toBeInTheDocument();
+    const salaryFoundationCard = within(foundationRegion).getByText('SALARY LIFECYCLE').closest('div.border-2');
+    expect(salaryFoundationCard).not.toBeNull();
+    expect(within(salaryFoundationCard as HTMLElement).getByText('PARTIAL')).toBeInTheDocument();
+    expect(within(salaryFoundationCard as HTMLElement).getByText(/1\/2 stable salary baseline row\(s\)/i)).toBeInTheDocument();
+    expect(within(foundationRegion).queryByText(/2\/2 stable salary baseline row\(s\)/i)).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
   });
 
