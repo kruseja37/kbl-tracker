@@ -367,7 +367,7 @@ These are accepted input constraints from the Mode 1 worksheet and should not be
 **Test confidence:** Medium for storage/surfaces; low-medium for full gospel behavior.
 
 **User decision:** [ ] approve [x] modify [ ] reject [ ] discuss  
-**User notes:** Include stable narrative/news/event feed surfaces that reflect real approved Mode 2 events. Do not treat narrative as proof that morale, relationships, milestones, designations, reporter behavior, or offseason story systems are complete. Narrative outputs must be franchise-scoped and evidence-backed.  
+**User notes:** Include stable narrative/news/event feed surfaces that reflect real approved Mode 2 events. Do not treat narrative as proof that morale, relationships, milestones, designations, reporter behavior, or offseason story systems are complete. Narrative outputs must be franchise-scoped and evidence-backed. Random event generation is now a v1 priority after the stadium foundation: prompts should produce evidence-backed suggested/manual changes, log confirmation state, and avoid silent player-profile or morale mutation.
 
 ### M2-D015: Fan morale
 
@@ -377,7 +377,7 @@ These are accepted input constraints from the Mode 1 worksheet and should not be
 
 **What is ambiguous or unproven:** Durable per-franchise fan morale storage, daily snapshots, event history, trade aftermaths, season-summary handoff, Team Hub display, and Mode 3 effects are not proven.
 
-**v1 inclusion recommendation:** Discuss or defer full fan morale. If included, define a limited durable baseline rather than the full gospel formula.
+**v1 inclusion recommendation:** Fan morale is a v1 priority after the stadium foundation and random-event log. Start with durable scoped state and manual/user-confirmed changes; do not silently mutate from unapproved score-only, narrative, salary, or relationship inputs.
 
 **Consequences of including:** Adds meaningful season emotion and Mode 3 consequences but introduces many dependencies.
 
@@ -388,7 +388,7 @@ These are accepted input constraints from the Mode 1 worksheet and should not be
 **Test confidence:** Medium for engine; low for franchise integration.
 
 **User decision:** [ ] approve [x] modify [ ] reject [ ] discuss  
-**User notes:** Fan morale is a desired franchise system, but v1 inclusion requires durable franchise-scoped state and evidence-backed inputs. If not proven, include only stable read-only/baseline surfaces and defer full dynamic fan morale effects.  
+**User notes:** Fan morale is a desired franchise system and now a critical v1 pillar. v1 inclusion requires durable franchise-scoped state, evidence-backed inputs, and clear user-approved/manual confirmation rules. Score-only result effects need explicit approval. Stadium/spray evidence and random-event confirmations may become inputs only after their contracts are stable.
 
 ### M2-D016: Player morale
 
@@ -398,7 +398,7 @@ These are accepted input constraints from the Mode 1 worksheet and should not be
 
 **What is ambiguous or unproven:** Storage, UI, history, thresholds, rating-change suggestion pipeline, and integration with narrative/fan morale/relationships are not proven.
 
-**v1 inclusion recommendation:** Defer unless the user approves a very small read-only or placeholder baseline. Do not collapse it into generic narrative.
+**v1 inclusion recommendation:** Player morale is a v1 priority after the stadium foundation and random-event log. Start with explicit scoped state and user-confirmed/manual changes rather than full automatic mutation.
 
 **Consequences of including:** Adds long-term player emotional state, but requires many other derived systems to be real.
 
@@ -409,7 +409,7 @@ These are accepted input constraints from the Mode 1 worksheet and should not be
 **Test confidence:** Low.
 
 **User decision:** [ ] approve [x] modify [ ] reject [ ] discuss  
-**User notes:** Preserve player morale fields/baseline if already present, but defer full dynamic player morale behavior until role, roster movement, personality, relationships, and transaction inputs are scoped and durable.  
+**User notes:** Preserve player morale fields/baseline if already present. Full dynamic player morale should be built only after role, roster movement, personality, relationships, transaction inputs, random-event confirmations, and hidden prospect safety are scoped and durable.
 
 ### M2-D017: Relationships engine
 
@@ -482,18 +482,18 @@ These are accepted input constraints from the Mode 1 worksheet and should not be
 
 **What is ambiguous or unproven:** Seed factor coverage, observed blending, per-stadium persistence, spray chart records, stadium records, and WAR integration are not proven end-to-end.
 
-**v1 inclusion recommendation:** Preserve stadium inputs and event context. Discuss full park factor analytics separately, likely defer unless WAR fairness requires a minimal seed-only implementation.
+**v1 inclusion recommendation:** Stadium foundation is the next active Mode 2 v1 pillar. Include read-only stadium identity, dimensions, seed/static park factors, and archive-backed spray chart projection before any adaptive factor persistence.
 
-**Consequences of including:** WAR and stat comparisons become more fair, and stadium pages gain meaning.
+**Consequences of including:** WAR and stat comparisons become more fair, stadium pages gain meaning, spray-chart reporting becomes franchise-contextual, and future random-event/morale prompts gain a major evidence source.
 
-**Consequences of deferring:** WAR should avoid claiming park-adjusted precision, but core scoring is unaffected.
+**Consequences of deferring:** WAR should avoid claiming park-adjusted precision, spray-chart reporting remains disconnected from franchise history, and random-event/morale systems lose a major evidence source.
 
 **Dependencies:** Mode 1 stadium/team identity, event location enrichment, WAR, season stats, adaptive standards.
 
 **Test confidence:** Medium for type/engine pieces; low for franchise UI/persistence.
 
 **User decision:** [ ] approve [x] modify [ ] reject [ ] discuss  
-**User notes:** Mode 2 must preserve stadium/park-factor inputs and use them in any approved park-adjusted stats, WAR/value, salary, or designation calculations. Park factors and stadium analytics should use PARK_FACTOR_SEED_SPEC.md and STADIUM_ANALYTICS_SPEC.md as source-of-truth inputs for a dedicated audit/build pass. Because GameTracker captures spray chart data for every at-bat, v1 should consider stadium-linked metrics in Team Hubs and game/stadium analysis where feasible. Full scope should be decided during the park factors/stadium analytics pass; calculation paths must clearly state whether they are park-adjusted or unadjusted.  
+**User notes:** Stadium identity, dimensions, seed/static park factors, and spray chart projection are now active v1 priorities. Spray charts must support batting, pitching, and fielding views, sortable/filterable by player, team, stadium, franchise/season/stats scope, handedness, and outcome when data exists. Use completed GameTracker archive/event evidence as the source. Adaptive park factors remain preview-only until separately audited and should not drive final WAR, salary, designations, random events, or morale mutation yet.
 
 ### M2-D021: Salary/payroll display or season effects
 

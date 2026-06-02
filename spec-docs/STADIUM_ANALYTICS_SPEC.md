@@ -2,7 +2,7 @@
 
 > **Version**: 1.0
 > **Last Updated**: January 2026
-> **Status**: Draft
+> **Status**: Draft; Mode 2 v1 stadium foundation is now active priority
 > **Dependencies**: GAME_SIMULATION_SPEC.md, BWAR_CALCULATION_SPEC.md, PWAR_CALCULATION_SPEC.md
 
 ---
@@ -23,6 +23,18 @@
 ---
 
 ## 1. Overview
+
+### 1.0 Mode 2 V1 Resync
+
+For Franchise Mode 2 v1, stadium analytics should ship in foundation order rather than as a full dynamic analytics system at once:
+
+1. Preserve franchise-scoped stadium identity, dimensions, and seed/static park factors.
+2. Project batting, pitching, and fielding spray charts from completed GameTracker archive/event evidence.
+3. Support filters/sorts by player, team, stadium, franchise/season/stats scope, handedness, and outcome when data exists.
+4. Keep archive-derived adaptive park factors preview-only until a later audit approves persistence and final value/WAR consumers.
+5. Use stadium/spray facts as future evidence for random-event prompts and fan/player morale, but do not mutate those systems from this spec alone.
+
+This v1 resync is captured in `FRANCHISE_MODE2_V1_ROADMAP_RESYNC.md`.
 
 ### 1.1 Purpose
 
