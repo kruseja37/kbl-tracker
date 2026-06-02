@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   mockGetFranchiseFarmRoster: vi.fn(),
   mockGetTransactionsByFranchiseSeason: vi.fn(),
   mockGetRecentGames: vi.fn(),
+  mockGetGameEvents: vi.fn(),
+  mockGetGameFieldingEvents: vi.fn(),
   mockGetAllGamesByFranchise: vi.fn(),
   mockBuildFranchiseValueInputRows: vi.fn(),
   mockBuildFranchiseSalaryLifecycle: vi.fn(),
@@ -49,6 +51,11 @@ vi.mock('../../../utils/transactionStorage', () => ({
 
 vi.mock('../../../utils/gameStorage', () => ({
   getRecentGames: mocks.mockGetRecentGames,
+}));
+
+vi.mock('../../../utils/eventLog', () => ({
+  getGameEvents: mocks.mockGetGameEvents,
+  getGameFieldingEvents: mocks.mockGetGameFieldingEvents,
 }));
 
 vi.mock('../../../utils/scheduleStorage', () => ({
@@ -528,6 +535,8 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     ]);
     mocks.mockGetTransactionsByFranchiseSeason.mockResolvedValue([]);
     mocks.mockGetRecentGames.mockResolvedValue([]);
+    mocks.mockGetGameEvents.mockResolvedValue([]);
+    mocks.mockGetGameFieldingEvents.mockResolvedValue([]);
     mocks.mockGetAllGamesByFranchise.mockResolvedValue([]);
     mocks.mockBuildFranchiseValueInputRows.mockResolvedValue(valueInputReport());
     mocks.mockBuildFranchiseSalaryLifecycle.mockResolvedValue(salaryLifecycleReport());
@@ -666,6 +675,176 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(foundationRegion).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
     expect(within(foundationRegion).queryByText(/leadership: 92/i)).not.toBeInTheDocument();
     expect(within(foundationRegion).queryByRole('button')).not.toBeInTheDocument();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+    expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
+  });
+
+  test('renders read-only stadium foundation and archive-backed spray evidence', async () => {
+    mocks.mockUseFranchiseDataContext.mockReturnValue({
+      franchiseConfig: {
+        franchiseId: 'franchise-1',
+        league: 'league-1',
+      },
+      seasonNumber: 2,
+      standings: {},
+      teamNameMap: { 'team-1': 'Copied Alpha' },
+      stadiumMap: { 'team-1': 'Apple Field' },
+    });
+    const parkFactors = {
+      stadiumId: 'apple-field',
+      stadiumName: 'Apple Field',
+      overall: 1.02,
+      runs: 1.01,
+      homeRuns: 0.99,
+      hits: 1,
+      doubles: 1,
+      triples: 1,
+      strikeouts: 1,
+      walks: 1,
+      leftHandedHR: 1,
+      rightHandedHR: 1,
+      leftHandedAVG: 1,
+      rightHandedAVG: 1,
+      gamesIncluded: 0,
+      lastUpdated: 'seed',
+      confidence: 'LOW',
+      source: 'SEED',
+    };
+    mocks.mockGetRecentGames.mockResolvedValueOnce([{
+      gameId: 'game-archive-1',
+      date: 100,
+      franchiseId: 'franchise-1',
+      seasonId: 'franchise-1-season-2',
+      statsScopeId: 'franchise-1-season-2',
+      competitionType: 'franchise',
+      competitionId: 'franchise-1',
+      seasonNumber: 2,
+      awayTeamId: 'team-2',
+      homeTeamId: 'team-1',
+      awayTeamName: 'Copied Beta',
+      homeTeamName: 'Copied Alpha',
+      stadiumName: 'Apple Field',
+      stadiumId: 'apple-field',
+      parkFactors,
+      finalScore: { away: 4, home: 2 },
+      innings: 6,
+      totalInnings: 6,
+      fameEvents: [],
+      playerStats: {},
+      pitcherGameStats: [],
+      activityLog: [],
+      inningScores: [],
+      aggregationStatus: 'aggregated',
+    }]);
+    mocks.mockGetGameEvents.mockResolvedValueOnce([{
+      eventId: 'game-archive-1-1',
+      gameId: 'game-archive-1',
+      eventIndex: 1,
+      timestamp: 101,
+      batterId: 'batter-1',
+      batterName: 'Batter One',
+      batterTeamId: 'team-2',
+      pitcherId: 'pitcher-1',
+      pitcherName: 'Pitcher One',
+      pitcherTeamId: 'team-1',
+      result: '1B',
+      rbiCount: 0,
+      runsScored: [],
+      inning: 1,
+      halfInning: 'TOP',
+      outs: 0,
+      runners: { first: null, second: null, third: null },
+      awayScore: 0,
+      homeScore: 0,
+      outsAfter: 0,
+      runnersAfter: { first: null, second: null, third: null },
+      awayScoreAfter: 0,
+      homeScoreAfter: 0,
+      leverageIndex: 1,
+      winProbabilityBefore: 0.5,
+      winProbabilityAfter: 0.48,
+      wpa: 0.02,
+      ballInPlay: {
+        trajectory: 'line',
+        zone: 0,
+        velocity: 'hard',
+        fielderIds: ['fielder-1'],
+        primaryFielderId: 'fielder-1',
+      },
+      fameEvents: [],
+      isLeadoff: true,
+      isClutch: false,
+      isWalkOff: false,
+      franchiseId: 'franchise-1',
+      seasonId: 'franchise-1-season-2',
+      statsScopeId: 'franchise-1-season-2',
+      seasonNumber: 2,
+      parkContext: {
+        stadiumId: 'apple-field',
+        stadiumName: 'Apple Field',
+        parkFactors,
+      },
+      teamContext: {
+        battingTeam: { teamId: 'team-2', teamName: 'Copied Beta' },
+        fieldingTeam: { teamId: 'team-1', teamName: 'Copied Alpha' },
+      },
+      batterContext: {
+        playerId: 'batter-1',
+        playerName: 'Batter One',
+        handedness: 'R',
+      },
+      pitcherContext: {
+        playerId: 'pitcher-1',
+        playerName: 'Pitcher One',
+        handedness: 'L',
+      },
+      enrichment: {
+        fieldLocation: { x: 74, y: 48, zone: 'Z05' },
+        exitType: 'line_drive',
+      },
+    }]);
+    mocks.mockGetGameFieldingEvents.mockResolvedValueOnce([{
+      fieldingEventId: 'fielding-1',
+      gameId: 'game-archive-1',
+      atBatEventId: 'game-archive-1-1',
+      sequence: 0,
+      playerId: 'fielder-1',
+      playerName: 'Fielder One',
+      position: 'RF',
+      teamId: 'team-1',
+      playType: 'putout',
+      difficulty: 'routine',
+      ballInPlay: {
+        trajectory: 'fly',
+        zone: 5,
+        velocity: 'medium',
+        fielderIds: ['fielder-1'],
+        primaryFielderId: 'fielder-1',
+      },
+      success: true,
+      runsPreventedOrAllowed: 0,
+    }]);
+
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /STADIUM/i }));
+    const stadiumRegion = await screen.findByRole('region', { name: /Franchise stadium foundation/i });
+
+    expect(within(stadiumRegion).getByText('STADIUM FOUNDATION')).toBeInTheDocument();
+    expect(within(stadiumRegion).getAllByText('Apple Field').length).toBeGreaterThan(0);
+    expect(within(stadiumRegion).getByText('SEED / STATIC FACTORS')).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText(/Seed park factors are trusted as v1 stadium inputs/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText('ADAPTIVE FACTORS')).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText(/1 scoped archive game\(s\). Preview-only; not persisted/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText('LF 337')).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText('CF 419')).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText('RF 347')).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText(/Archive rows: 1. Spray rows: 3/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText(/3 selected-stadium row\(s\): batting 1, pitching 1, fielding 1/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText('Batter One')).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText('Pitcher One')).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText('Fielder One')).toBeInTheDocument();
+    expect(within(stadiumRegion).queryByRole('button')).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
     expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
   });

@@ -41,6 +41,12 @@ import {
   type CompletedGameRecord,
 } from "../../../utils/gameStorage";
 import {
+  getGameEvents,
+  getGameFieldingEvents,
+  type AtBatEvent,
+  type FieldingEvent,
+} from "../../../utils/eventLog";
+import {
   getAllGamesByFranchise,
   type ScheduledGame,
 } from "../../../utils/scheduleStorage";
@@ -69,6 +75,12 @@ import {
   buildFranchiseNarrativeEventEligibilityReport,
   type FranchiseNarrativeEventEligibilityReport,
 } from "../../../utils/franchiseNarrativeEventEligibility";
+import {
+  buildFranchiseStadiumFoundationReport,
+  filterAndSortFranchiseSprayChartRows,
+  type FranchiseStadiumFoundationReport,
+  type FranchiseSprayChartRole,
+} from "../../../utils/franchiseStadiumFoundation";
 import {
   validateFranchiseMoraleRelationshipOverrideProposal,
   type FranchiseMoraleRelationshipOverrideProposal,
@@ -983,6 +995,8 @@ export function TeamHubContent() {
   const [transactionHistoryError, setTransactionHistoryError] = useState<string | null>(null);
   const [franchiseScheduleGames, setFranchiseScheduleGames] = useState<ScheduledGame[]>([]);
   const [franchiseCompletedGames, setFranchiseCompletedGames] = useState<CompletedGameRecord[]>([]);
+  const [franchiseAtBatEvents, setFranchiseAtBatEvents] = useState<AtBatEvent[]>([]);
+  const [franchiseFieldingEvents, setFranchiseFieldingEvents] = useState<FieldingEvent[]>([]);
   const [franchisePlayerTeamStints, setFranchisePlayerTeamStints] = useState<FranchisePlayerTeamStatStint[]>([]);
   const [continuityLoading, setContinuityLoading] = useState(false);
   const [continuityError, setContinuityError] = useState<string | null>(null);
@@ -1226,6 +1240,8 @@ export function TeamHubContent() {
     if (!franchiseId || !seasonId) {
       setFranchiseScheduleGames([]);
       setFranchiseCompletedGames([]);
+      setFranchiseAtBatEvents([]);
+      setFranchiseFieldingEvents([]);
       setFranchisePlayerTeamStints([]);
       setContinuityLoading(false);
       setContinuityError(null);
@@ -1245,9 +1261,24 @@ export function TeamHubContent() {
           getAllGamesByFranchise(activeFranchiseId, activeSeasonNumber),
           getRecentGames(1000, { franchiseId: activeFranchiseId, seasonId: activeSeasonId }),
         ]);
+        const eventDetails = await Promise.all(
+          completedRows.map(async (game) => {
+            try {
+              const [atBats, fielding] = await Promise.all([
+                getGameEvents(game.gameId),
+                getGameFieldingEvents(game.gameId),
+              ]);
+              return { atBats, fielding };
+            } catch {
+              return { atBats: [] as AtBatEvent[], fielding: [] as FieldingEvent[] };
+            }
+          }),
+        );
         if (cancelled) return;
         setFranchiseScheduleGames(scheduleRows);
         setFranchiseCompletedGames(completedRows);
+        setFranchiseAtBatEvents(eventDetails.flatMap((details) => details.atBats));
+        setFranchiseFieldingEvents(eventDetails.flatMap((details) => details.fielding));
         setFranchisePlayerTeamStints(
           buildFranchisePlayerTeamStatStints(completedRows, {
             franchiseId: activeFranchiseId,
@@ -1260,6 +1291,8 @@ export function TeamHubContent() {
         if (!cancelled) {
           setFranchiseScheduleGames([]);
           setFranchiseCompletedGames([]);
+          setFranchiseAtBatEvents([]);
+          setFranchiseFieldingEvents([]);
           setFranchisePlayerTeamStints([]);
           setContinuityError(err instanceof Error ? err.message : 'Failed to load franchise player continuity sources.');
         }
@@ -1374,6 +1407,35 @@ export function TeamHubContent() {
     moraleRelationshipTrustReport,
     salaryLifecycleReport,
     valueInputReport,
+  ]);
+
+  const stadiumFoundationReport = useMemo(() => {
+    if (!franchiseId) return null;
+    return buildFranchiseStadiumFoundationReport({
+      franchiseId,
+      seasonId,
+      statsScopeId: seasonId,
+      seasonNumber,
+      stadiumSnapshots: franchiseTeamEntries.map(([teamId, teamName]) => ({
+        teamId,
+        teamName,
+        stadium: franchiseData.stadiumMap?.[teamId] ?? teamName,
+        stadiumId: undefined,
+        hasSeedParkFactors: false,
+      })),
+      completedGames: franchiseCompletedGames,
+      atBatEvents: franchiseAtBatEvents,
+      fieldingEvents: franchiseFieldingEvents,
+    });
+  }, [
+    franchiseAtBatEvents,
+    franchiseCompletedGames,
+    franchiseData.stadiumMap,
+    franchiseFieldingEvents,
+    franchiseId,
+    franchiseTeamEntries,
+    seasonId,
+    seasonNumber,
   ]);
 
   const analyzerReport = useMemo(() => {
@@ -2598,34 +2660,14 @@ export function TeamHubContent() {
 
       {/* Stadiums Tab */}
       {activeHubTab === "stadium" && (
-        <div className="space-y-4">
-          {/* Stadium Selection */}
-          <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-4">
-            <div className="text-[10px] text-[#E8E8D8]/70 mb-2">SELECT STADIUM</div>
-            <select
-              value={selectedStadium}
-              onChange={(e) => setSelectedStadium(e.target.value)}
-              className="w-full bg-[#4A6844] text-[#E8E8D8] p-2 text-[10px] border-2 border-[#3F5A3A]"
-            >
-              {stadiums.map((stadium) => (
-                <option key={stadium} value={stadium}>
-                  {stadium}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Empty state — park factors/records not yet tracked */}
-          <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-8">
-            <div className="text-center">
-              <Building2 className="w-8 h-8 text-[#E8E8D8]/30 mx-auto mb-4" />
-              <div className="text-[12px] text-[#E8E8D8]/50 mb-2">{selectedStadium || 'STADIUM'}</div>
-              <div className="text-[10px] text-[#E8E8D8]/40">
-                Seeded stadium identity is read-only. Custom park factors are deferred in Franchise v1.
-              </div>
-            </div>
-          </div>
-        </div>
+        <FranchiseStadiumFoundationPanel
+          stadiums={stadiums}
+          selectedStadium={selectedStadium}
+          onSelectedStadiumChange={setSelectedStadium}
+          report={stadiumFoundationReport}
+          isLoading={continuityLoading}
+          error={continuityError}
+        />
       )}
 
       {/* Manager Tab */}
@@ -2692,6 +2734,15 @@ interface FranchiseMode2FoundationStatusPanelProps {
   designationEligibilityReport: FranchiseDesignationEligibilityReport | null;
   moraleRelationshipTrustReport: FranchiseMoraleRelationshipTrustReport | null;
   narrativeEventEligibilityReport: FranchiseNarrativeEventEligibilityReport | null;
+  isLoading: boolean;
+  error: string | null;
+}
+
+interface FranchiseStadiumFoundationPanelProps {
+  stadiums: string[];
+  selectedStadium: string;
+  onSelectedStadiumChange: (stadium: string) => void;
+  report: FranchiseStadiumFoundationReport | null;
   isLoading: boolean;
   error: string | null;
 }
@@ -3422,6 +3473,172 @@ function FoundationStatusCard({
       </div>
       <div className="text-[10px] leading-snug text-[#E8E8D8]/75">{body}</div>
     </div>
+  );
+}
+
+function FranchiseStadiumFoundationPanel({
+  stadiums,
+  selectedStadium,
+  onSelectedStadiumChange,
+  report,
+  isLoading,
+  error,
+}: FranchiseStadiumFoundationPanelProps) {
+  const stadiumOptions = useMemo(() => {
+    const reportNames = report?.stadiumIdentity.stadiums.map((stadium) => stadium.stadiumName) ?? [];
+    return uniqueStrings([...stadiums, ...reportNames]).sort((left, right) => left.localeCompare(right));
+  }, [report, stadiums]);
+  const selected = useMemo(() => {
+    if (!report) return null;
+    return report.stadiumIdentity.stadiums.find((stadium) =>
+      stadium.stadiumName === selectedStadium || stadium.stadiumId === selectedStadium,
+    ) ?? report.stadiumIdentity.stadiums[0] ?? null;
+  }, [report, selectedStadium]);
+  const selectedRows = useMemo(() => {
+    if (!report || !selected) return [];
+    return filterAndSortFranchiseSprayChartRows(report.sprayCharts.rows, {
+      stadiumId: selected.stadiumId,
+      sortBy: 'timestamp',
+      sortDirection: 'desc',
+    });
+  }, [report, selected]);
+  const selectedRowsByRole = (role: FranchiseSprayChartRole) =>
+    selectedRows.filter((row) => row.role === role).length;
+  const recentRows = selectedRows.slice(0, 6);
+  const dimensions = selected?.dimensions ?? null;
+  const seedFactors = selected?.seedParkFactors ?? null;
+
+  return (
+    <section
+      role="region"
+      aria-label="Franchise stadium foundation"
+      className="border-[5px] border-[#4A6844] bg-[#6B9462] p-4"
+    >
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <Building2 className="mt-1 h-6 w-6 text-[#C4A853]" />
+          <div>
+            <div className="text-[14px] font-bold text-[#E8E8D8]">STADIUM FOUNDATION</div>
+            <div className="mt-1 max-w-3xl text-[10px] leading-snug text-[#E8E8D8]/70">
+              Read-only stadium identity, seed park factors, and archive-backed spray evidence. Adaptive factors and stadium records stay preview-only.
+            </div>
+          </div>
+        </div>
+        <FoundationStatusBadge status={report?.stadiumIdentity.status ?? 'blocked'} />
+      </div>
+
+      {error && (
+        <div className="mb-3 border-2 border-[#DD0000]/50 bg-[#5A3F3F] p-2 text-[10px] text-[#FFD6D6]">
+          {error}
+        </div>
+      )}
+
+      <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(220px,0.8fr)_minmax(0,1.2fr)]">
+        <label className="block">
+          <div className="mb-1 text-[10px] font-bold text-[#C4A853]">STADIUM</div>
+          <select
+            value={selected?.stadiumName ?? selectedStadium}
+            onChange={(event) => onSelectedStadiumChange(event.target.value)}
+            className="w-full border-2 border-[#4A6844] bg-[#3F563F] px-3 py-2 text-[11px] text-[#E8E8D8]"
+            aria-label="Select stadium foundation report"
+          >
+            {stadiumOptions.length === 0 && <option value="">No stadiums loaded</option>}
+            {stadiumOptions.map((stadium) => (
+              <option key={stadium} value={stadium}>{stadium}</option>
+            ))}
+          </select>
+        </label>
+
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <FoundationStatusCard
+            title="SEED / STATIC FACTORS"
+            status={selected?.seedParkFactorsTrusted ? 'trusted' : 'blocked'}
+            body={selected?.seedParkFactorsTrusted
+              ? 'Seed park factors are trusted as v1 stadium inputs.'
+              : 'No seed/static park factors are available for this stadium yet.'}
+          />
+          <FoundationStatusCard
+            title="ADAPTIVE FACTORS"
+            status={selected?.adaptiveParkFactorPreview.status ?? 'not-applicable'}
+            body={`${selected?.adaptiveParkFactorPreview.gamesIncluded ?? 0} scoped archive game(s). Preview-only; not persisted.`}
+          />
+          <FoundationStatusCard
+            title="SPRAY EVIDENCE"
+            status={report?.sprayCharts.status ?? 'blocked'}
+            body={`${selectedRows.length} selected-stadium row(s): batting ${selectedRowsByRole('batting')}, pitching ${selectedRowsByRole('pitching')}, fielding ${selectedRowsByRole('fielding')}.`}
+          />
+          <FoundationStatusCard
+            title="STADIUM RECORDS"
+            status={selected?.stadiumRecords.status ?? 'blocked'}
+            body="Future consumer only. Records are not persisted from Team Hub."
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-3">
+          <div className="mb-2 text-[10px] font-bold text-[#C4A853]">DIMENSIONS / FACTORS</div>
+          {selected ? (
+            <div className="space-y-2 text-[10px] leading-snug text-[#E8E8D8]/75">
+              <div className="text-[12px] font-bold text-[#E8E8D8]">{selected.stadiumName}</div>
+              {dimensions ? (
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="border border-[#E8E8D8]/20 p-2">LF {dimensions.lf}</div>
+                  <div className="border border-[#E8E8D8]/20 p-2">CF {dimensions.cf}</div>
+                  <div className="border border-[#E8E8D8]/20 p-2">RF {dimensions.rf}</div>
+                </div>
+              ) : (
+                <div>Dimensions unavailable for this stadium identity.</div>
+              )}
+              <div>
+                Archive rows: {selected.archiveGameRows}. Spray rows: {selected.sprayEventRows}.
+              </div>
+              {seedFactors ? (
+                <div>
+                  Runs {seedFactors.runs.toFixed(2)} / HR {seedFactors.homeRuns.toFixed(2)} / Overall {seedFactors.overall.toFixed(2)} / Confidence {seedFactors.confidence}
+                </div>
+              ) : (
+                <div>Seed park factor row unavailable.</div>
+              )}
+            </div>
+          ) : (
+            <div className="text-[10px] text-[#E8E8D8]/65">
+              {isLoading ? 'Loading stadium foundation data.' : 'No stadium foundation rows are available.'}
+            </div>
+          )}
+        </div>
+
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-3">
+          <div className="mb-2 text-[10px] font-bold text-[#C4A853]">RECENT SPRAY EVIDENCE</div>
+          {recentRows.length > 0 ? (
+            <div className="space-y-2">
+              {recentRows.map((row) => (
+                <div key={`${row.role}:${row.eventId}:${row.playerId}`} className="border border-[#E8E8D8]/20 p-2 text-[10px] leading-snug text-[#E8E8D8]/75">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-bold text-[#E8E8D8]">{row.playerName}</span>
+                    <span className="text-[#C4A853]">{row.role.toUpperCase()}</span>
+                  </div>
+                  <div>
+                    {row.outcome} · {row.zoneName ?? 'Unknown zone'} · {row.direction} / {row.depth}
+                  </div>
+                  <div className="text-[#E8E8D8]/50">
+                    Team {row.teamId} · Game {row.gameId}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-[10px] leading-snug text-[#E8E8D8]/65">
+              No scoped spray event detail yet. Completed-game archive rows can still prove stadium identity/sample.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-3 border-2 border-[#4A6844] bg-[#3F563F] p-2 text-[10px] leading-snug text-[#E8E8D8]/65">
+        This panel writes no stadium records, adaptive factors, random events, morale changes, or player-profile automation.
+      </div>
+    </section>
   );
 }
 
