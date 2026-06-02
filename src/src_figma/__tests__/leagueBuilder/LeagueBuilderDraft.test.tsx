@@ -184,7 +184,7 @@ function prospectDraftView(overrides: Record<string, unknown> = {}) {
         personality: 'Competitive',
         trait1: 'RBI Man',
         trait2: 'First Pitch Slayer',
-        salary: 0.5,
+        salary: 2.0,
         reports: [
           {
             candidateId: 'candidate-1',
@@ -200,7 +200,7 @@ function prospectDraftView(overrides: Record<string, unknown> = {}) {
             personality: 'Competitive',
             trait1: 'RBI Man',
             trait2: 'First Pitch Slayer',
-            salary: 0.5,
+            salary: 2.0,
             scoutId: 'scout-1',
             scoutName: 'Riley Kline',
             scoutAccuracy: 88,
@@ -221,7 +221,7 @@ function prospectDraftView(overrides: Record<string, unknown> = {}) {
             personality: 'Competitive',
             trait1: 'RBI Man',
             trait2: 'First Pitch Slayer',
-            salary: 0.5,
+            salary: 2.0,
             scoutId: 'scout-2',
             scoutName: 'Morgan Vale',
             scoutAccuracy: 61,
@@ -282,6 +282,7 @@ describe('LeagueBuilderDraft scout and prospect draft UI', () => {
           position: 'CF',
           scoutedGrade: 'B+',
           potentialGrade: 'A',
+          salary: 2.0,
           scoutReports: [],
         },
       ],
@@ -350,6 +351,7 @@ describe('LeagueBuilderDraft scout and prospect draft UI', () => {
     expect(await screen.findByText('PROSPECT DRAFT BOARD')).toBeInTheDocument();
     expect(screen.getByText('ON THE CLOCK: Boston Sox')).toBeInTheDocument();
     expect(screen.getByText('Ari Banks')).toBeInTheDocument();
+    expect(screen.getByText('Salary $2.0M')).toBeInTheDocument();
     expect(screen.getByText('Riley Kline')).toBeInTheDocument();
     expect(screen.getByText('Morgan Vale')).toBeInTheDocument();
     expect(screen.getByText(/Scouted B\+/i)).toBeInTheDocument();
@@ -368,6 +370,7 @@ describe('LeagueBuilderDraft scout and prospect draft UI', () => {
       });
     });
     expect(await screen.findByText('RECENT PICKS')).toBeInTheDocument();
+    expect((await screen.findAllByText('Salary $2.0M')).length).toBeGreaterThanOrEqual(1);
   });
 
   test('prepared league reports ready state without showing bulk apply', async () => {

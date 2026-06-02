@@ -14,7 +14,10 @@ import {
   createLeagueBuilderStartupFarmDraftPreview,
   LEAGUE_BUILDER_STARTUP_FARM_DRAFT_VERSION,
 } from '../leagueBuilderStartupFarmDraft';
-import { PROSPECT_SCOUTING_DRAFT_ENGINE_VERSION } from '../prospectScoutingDraftEngine';
+import {
+  PROSPECT_SCOUTING_DRAFT_ENGINE_VERSION,
+  prospectSalaryForDraftRound,
+} from '../prospectScoutingDraftEngine';
 import { validatePreparedLeagueBuilderFarmScoutingState } from '../leagueBuilderFarmScoutingHandoff';
 import {
   __resetLeagueBuilderDatabaseForTests,
@@ -212,8 +215,17 @@ describe('League Builder startup farm draft persistence', () => {
     expect(preview.valid).toBe(true);
     expect(preview.totalVacancies).toBe(20);
     expect(preview.visibleReports).toHaveLength(20);
+    expect(preview.visibleReports.every((report) => {
+      const pick = preview.selectedPicks.find((candidate) => candidate.playerId === report.playerId);
+      return pick?.player.salary === report.salary && pick.salary === report.salary;
+    })).toBe(true);
     expect(report.applied).toBe(true);
     expect(drafted).toHaveLength(20);
+    for (const pick of preview.selectedPicks) {
+      const saved = drafted.find((player) => player.id === pick.playerId);
+      expect(saved?.salary).toBe(prospectSalaryForDraftRound(pick.round));
+      expect(saved?.salary).toBe(pick.visibleReport.salary);
+    }
     expect(rosterA?.farmRoster).toHaveLength(10);
     expect(drafted.every((player) =>
       player.ratingRevealState === 'hidden' &&
@@ -367,7 +379,9 @@ describe('League Builder startup farm draft persistence', () => {
 
     expect(view.currentProspectPick?.teamId).toBe(TEAM_A);
     const candidate = view.prospectBoard[0];
+    expect(candidate.salary).toBe(prospectSalaryForDraftRound(view.currentProspectPick!.round));
     expect(candidate.reports).toHaveLength(2);
+    expect(candidate.reports.every((report) => report.salary === candidate.salary)).toBe(true);
     expect(candidate.reports.every((report) =>
       report.scoutId === view.session?.hiredScoutIdsByTeamId[TEAM_A][0] ||
       report.scoutId === view.session?.hiredScoutIdsByTeamId[TEAM_A][1],
@@ -385,9 +399,60 @@ describe('League Builder startup farm draft persistence', () => {
 
     expect(drafted).toHaveLength(1);
     expect(rosterA?.farmRoster).toContain(drafted[0].id);
+    expect(drafted[0].salary).toBe(candidate.salary);
+    expect(view.completedPicks[0].salary).toBe(candidate.salary);
     expect(drafted[0].ratingRevealState).toBe('hidden');
     expect(view.completedPicks).toHaveLength(1);
     expect(view.currentProspectPick?.teamId).toBe(TEAM_B);
+  });
+
+  test('legacy completed picks without stored salary fall back to round-based salary', async () => {
+    const {
+      createLeagueBuilderStartupDraftSession,
+      getLeagueBuilderStartupDraftView,
+    } = await import('../leagueBuilderStartupFarmDraft');
+    await seedLeague();
+
+    const view = await createLeagueBuilderStartupDraftSession({
+      leagueId: LEAGUE_ID,
+      seed: 'legacy-completed-pick-salary-seed',
+      scoutOrder: [TEAM_A, TEAM_B],
+    });
+    const legacySession = {
+      ...view.session!,
+      completedPicks: [{
+        round: 2,
+        pickNumber: 3,
+        teamId: TEAM_A,
+        candidateId: 'legacy-candidate',
+        playerId: 'legacy-player',
+        playerName: 'Legacy Prospect',
+        position: 'CF',
+        scoutedGrade: 'B',
+        potentialGrade: 'A',
+        scoutReports: [],
+      }],
+    };
+
+    const legacyView = await getLeagueBuilderStartupDraftView(LEAGUE_ID, 1, legacySession);
+
+    expect(legacyView.completedPicks[0].salary).toBe(prospectSalaryForDraftRound(2));
+  });
+
+  test('reverse-payroll prospect ordering uses active MLB payroll and ignores existing FARM salaries', async () => {
+    await seedLeague({ farmCount: 1 });
+    await savePlayer(makePlayer(TEAM_A, 1, 'FARM', { salary: 999 }));
+
+    const preview = await createLeagueBuilderStartupFarmDraftPreview(LEAGUE_ID, {
+      seed: 'mlb-payroll-order-seed',
+      seasonNumber: 1,
+    });
+
+    expect(preview.valid).toBe(true);
+    expect(preview.selectedPicks[0]).toMatchObject({ round: 1, teamId: TEAM_A });
+    expect(preview.selectedPicks[1]).toMatchObject({ round: 1, teamId: TEAM_B });
+    expect(preview.selectedPicks[2]).toMatchObject({ round: 2, teamId: TEAM_B });
+    expect(preview.selectedPicks[3]).toMatchObject({ round: 2, teamId: TEAM_A });
   });
 
   test('full FARM rosters without durable scouts are not reported prepared in startup draft view', async () => {

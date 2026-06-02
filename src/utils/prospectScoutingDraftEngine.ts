@@ -424,7 +424,7 @@ function buildArsenal(seed: string, position: DraftPosition, junk: number): stri
   return ['4F', ...shuffled.slice(0, count)];
 }
 
-function prospectSalary(round: number): number {
+export function prospectSalaryForDraftRound(round: number): number {
   if (round === 1) return 2.0;
   if (round === 2) return 1.2;
   if (round === 3) return 0.7;
@@ -607,7 +607,7 @@ function buildPlayerDto(input: {
   const { engineInput, candidate, report, pick: draftPick, playerId } = input;
   const seed = `${engineInput.seed}:player:${playerId}`;
   const hometown = pick(`${seed}:hometown`, CITIES);
-  const salary = prospectSalary(draftPick.round);
+  const salary = prospectSalaryForDraftRound(draftPick.round);
   return {
     id: playerId,
     firstName: candidate.firstName,

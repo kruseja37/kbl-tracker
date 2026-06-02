@@ -29,6 +29,7 @@ import {
   deleteFranchiseDatabase,
   getAllFranchisePlayers,
 } from '../franchisePlayerStorage';
+import { calculateFranchisePlayerSalary } from '../franchiseSalary';
 import { getFranchiseFarmRoster } from '../franchiseFarmStorage';
 import { getFranchiseSeasonId } from '../franchisePersistenceContract';
 
@@ -297,5 +298,42 @@ describe('League Builder farm/scouting handoff validation', () => {
       }),
     );
     expect(farmRecords.find((record) => record.playerId === farmPlayer?.id)?.ratingRevealState).toBe('hidden');
+  });
+
+  test('franchise copy normalizes MLB and FARM salaries and stores a copied-player salary baseline', async () => {
+    await seedLeague();
+
+    const result = await deepCopyLeagueToFranchise(FRANCHISE_ID, LEAGUE_ID, {
+      seasonId: getFranchiseSeasonId(FRANCHISE_ID, 1),
+      seasonNumber: 1,
+      farmScoutingBridgeRepairApplied: false,
+    });
+    const franchisePlayers = await getAllFranchisePlayers(FRANCHISE_ID);
+
+    expect(franchisePlayers).toHaveLength(64);
+    for (const player of franchisePlayers) {
+      expect(player.salary).toBe(calculateFranchisePlayerSalary(player));
+    }
+
+    const teamPayrolls = Object.fromEntries(TEAM_IDS.map((teamId) => {
+      const teamPlayers = franchisePlayers.filter((player) =>
+        player.leagueAssignments?.some((assignment) =>
+          assignment.leagueId === LEAGUE_ID &&
+          assignment.teamId === teamId &&
+          (assignment.rosterStatus === 'MLB' || assignment.rosterStatus === 'FARM'),
+        ),
+      );
+      return [teamId, teamPlayers.reduce((sum, player) => sum + player.salary, 0)];
+    }));
+
+    expect(result.salaryBaseline.playerCount).toBe(64);
+    expect(result.salaryBaseline.salariedPlayerCount).toBe(64);
+    for (const teamId of TEAM_IDS) {
+      expect(result.salaryBaseline.teamPayrolls[teamId]).toBeCloseTo(teamPayrolls[teamId]);
+      expect(result.salaryBaseline.teamPayrolls[teamId]).toBeGreaterThan(22 * 4);
+    }
+    expect(result.salaryBaseline.totalSalary).toBeCloseTo(
+      Object.values(teamPayrolls).reduce((sum, payroll) => sum + payroll, 0),
+    );
   });
 });

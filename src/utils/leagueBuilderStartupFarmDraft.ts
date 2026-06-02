@@ -28,6 +28,7 @@ import {
 import {
   buildProspectPlayerForPick,
   generateProspectScoutingDraft,
+  prospectSalaryForDraftRound,
   PROSPECT_SCOUTING_DRAFT_ENGINE_VERSION,
   scoutAccuracy,
   scoutProspect,
@@ -130,6 +131,7 @@ export interface StartupDraftCompletedPick {
   position: DraftPosition;
   scoutedGrade: Grade;
   potentialGrade: Grade;
+  salary: number;
   scoutReports: StartupProspectBoardReport[];
 }
 
@@ -830,7 +832,15 @@ function buildScoutPickOrder(teamOrder: Array<{ teamId: string; teamName?: strin
 }
 
 function sessionCompletedPicks(session: LeagueBuilderStartupDraftSession): StartupDraftCompletedPick[] {
-  return (session.completedPicks ?? []) as StartupDraftCompletedPick[];
+  return (session.completedPicks ?? []).map((rawPick) => {
+    const pick = rawPick as Partial<StartupDraftCompletedPick>;
+    return {
+      ...pick,
+      salary: typeof pick.salary === 'number'
+        ? pick.salary
+        : prospectSalaryForDraftRound(typeof pick.round === 'number' ? pick.round : 4),
+    } as StartupDraftCompletedPick;
+  });
 }
 
 function sessionProspectPool(session: LeagueBuilderStartupDraftSession): GeneratedProspectCandidate[] {
@@ -1053,6 +1063,7 @@ function deterministicPickPlayerId(
 function buildBoardForSession(session: LeagueBuilderStartupDraftSession): StartupProspectBoardCandidate[] {
   const pickSlot = currentProspectPick(session);
   if (!pickSlot || !allTeamsHaveScouts(session)) return [];
+  const salary = prospectSalaryForDraftRound(pickSlot.round);
   const completed = sessionCompletedPicks(session);
   const usedCandidateIds = new Set(completed.map((pick) => pick.candidateId));
   const scouts = hiredScoutsForTeam(session, pickSlot.teamId);
@@ -1076,7 +1087,7 @@ function buildBoardForSession(session: LeagueBuilderStartupDraftSession): Startu
         personality: candidate.personality,
         trait1: candidate.trait1,
         trait2: candidate.trait2,
-        salary: 0.5,
+        salary,
         scoutId: scout.id,
         scoutName: scout.name,
         scoutAccuracy: report.scoutAccuracy,
@@ -1106,7 +1117,7 @@ function buildBoardForSession(session: LeagueBuilderStartupDraftSession): Startu
       personality: candidate.personality,
       trait1: candidate.trait1,
       trait2: candidate.trait2,
-      salary: 0.5,
+      salary,
       reports,
     } satisfies StartupProspectBoardCandidate;
   }).sort((a, b) => {
@@ -1411,6 +1422,7 @@ export async function confirmLeagueBuilderProspectPick(input: {
     position: candidate.position,
     scoutedGrade: best.report.scoutedGrade,
     potentialGrade: candidate.potentialGrade,
+    salary: saved.salary,
     scoutReports,
   };
   let nextSession: LeagueBuilderStartupDraftSession;

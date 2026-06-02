@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import {
   generateProspectScoutingDraft,
   gradeDistance,
+  prospectSalaryForDraftRound,
   scoutProspect,
   type GeneratedProspectCandidate,
   type ProspectScoutingDraftInput,
@@ -213,6 +214,24 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     expect(byTeam.get('team-a')).toBe(10);
     expect(byTeam.get('team-b')).toBe(10);
     expect(output.farmAssignments.every((assignment) => assignment.ratingRevealState === 'hidden')).toBe(true);
+  });
+
+  test('round-based prospect salary helper is shared with visible reports and persisted players', () => {
+    const output = generateProspectScoutingDraft(BASE_INPUT);
+    const firstRound = output.selectedPicks.find((pick) => pick.round === 1);
+    const secondRound = output.selectedPicks.find((pick) => pick.round === 2);
+    const thirdRound = output.selectedPicks.find((pick) => pick.round === 3);
+    const laterRound = output.selectedPicks.find((pick) => pick.round === 4);
+
+    expect(prospectSalaryForDraftRound(1)).toBe(2.0);
+    expect(prospectSalaryForDraftRound(2)).toBe(1.2);
+    expect(prospectSalaryForDraftRound(3)).toBe(0.7);
+    expect(prospectSalaryForDraftRound(4)).toBe(0.5);
+    for (const pick of [firstRound, secondRound, thirdRound, laterRound]) {
+      expect(pick?.salary).toBe(prospectSalaryForDraftRound(pick!.round));
+      expect(pick?.player.salary).toBe(pick?.salary);
+      expect(pick?.visibleReport.salary).toBe(pick?.salary);
+    }
   });
 
   test('pure engine has no storage imports and no raw runtime randomness', () => {

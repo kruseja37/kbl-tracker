@@ -412,6 +412,7 @@ export function LeagueBuilderDraft() {
                   <div className="text-[#E8E8D8]/70">
                     Round {pick.round}, Pick {pick.pickNumber} · {pick.position} · Scouted {pick.scoutedGrade} · Potential {pick.potentialGrade}
                   </div>
+                  <div className="text-[#E8E8D8]/70">Salary ${pick.salary.toFixed(1)}M</div>
                   <div className="text-[#9DFFB0] mt-1">→ {pick.teamName ?? pick.teamId} FARM</div>
                 </div>
               ))}
