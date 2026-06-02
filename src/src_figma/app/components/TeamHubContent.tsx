@@ -82,6 +82,10 @@ import {
   type FranchiseSprayChartRole,
 } from "../../../utils/franchiseStadiumFoundation";
 import {
+  buildFranchiseRandomEventLogReport,
+  type FranchiseRandomEventLogReport,
+} from "../../../utils/franchiseRandomEventLog";
+import {
   validateFranchiseMoraleRelationshipOverrideProposal,
   type FranchiseMoraleRelationshipOverrideProposal,
   type FranchiseMoraleRelationshipOverrideValidationResult,
@@ -1438,6 +1442,14 @@ export function TeamHubContent() {
     seasonNumber,
   ]);
 
+  const randomEventLogReport = useMemo(() => {
+    if (!narrativeEventEligibilityReport) return null;
+    return buildFranchiseRandomEventLogReport({
+      narrativeEventEligibilityReport,
+      stadiumFoundationReport: stadiumFoundationReport ?? undefined,
+    });
+  }, [narrativeEventEligibilityReport, stadiumFoundationReport]);
+
   const analyzerReport = useMemo(() => {
     if (!franchiseId || !selectedTeamId || !franchiseTeam) return null;
     return analyzeFranchiseTeamRoster({
@@ -2188,6 +2200,12 @@ export function TeamHubContent() {
             error={valueTruthError ?? continuityError}
           />
 
+          <FranchiseRandomEventLogPanel
+            report={randomEventLogReport}
+            isLoading={valueTruthLoading || continuityLoading}
+            error={valueTruthError ?? continuityError}
+          />
+
           <FranchiseValueTruthPanel
             selectedTeamId={selectedTeamId}
             salaryLifecycleReport={salaryLifecycleReport}
@@ -2743,6 +2761,12 @@ interface FranchiseStadiumFoundationPanelProps {
   selectedStadium: string;
   onSelectedStadiumChange: (stadium: string) => void;
   report: FranchiseStadiumFoundationReport | null;
+  isLoading: boolean;
+  error: string | null;
+}
+
+interface FranchiseRandomEventLogPanelProps {
+  report: FranchiseRandomEventLogReport | null;
   isLoading: boolean;
   error: string | null;
 }
@@ -3440,11 +3464,12 @@ function formatTruthStatus(status: string): string {
 }
 
 function foundationStatusClass(status: string): string {
-  if (status === 'trusted' || status === 'eligible-context' || status === 'stable-baseline' || status === 'valid-draft') {
+  if (status === 'trusted' || status === 'eligible-context' || status === 'stable-baseline' || status === 'valid-draft' || status === 'confirmed-manual-change') {
     return 'border-[#9DFFB0]/60 text-[#9DFFB0]';
   }
-  if (status === 'preview-only' || status === 'partial' || status === 'needs-approval') return 'border-[#FFD27A]/60 text-[#FFD27A]';
+  if (status === 'preview-only' || status === 'partial' || status === 'needs-approval' || status === 'ready-for-review') return 'border-[#FFD27A]/60 text-[#FFD27A]';
   if (status === 'deferred' || status === 'not-applicable') return 'border-[#E8E8D8]/35 text-[#E8E8D8]/75';
+  if (status === 'dismissed') return 'border-[#E8E8D8]/25 text-[#E8E8D8]/45';
   return 'border-[#FFD6D6]/60 text-[#FFD6D6]';
 }
 
@@ -3759,6 +3784,115 @@ function FranchiseMode2FoundationStatusPanel({
             This panel creates no records and enables no mutation actions.
           </div>
         </div>
+      </div>
+    </section>
+  );
+}
+
+function FranchiseRandomEventLogPanel({
+  report,
+  isLoading,
+  error,
+}: FranchiseRandomEventLogPanelProps) {
+  const entries = report?.entries ?? [];
+  const visibleEntries = entries.slice(0, 5);
+
+  return (
+    <section
+      role="region"
+      aria-label="Franchise random event log preview"
+      className="mb-4 border-[4px] border-[#4A6844] bg-[#3F563F] p-3"
+    >
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-[10px] font-bold text-[#C4A853]">RANDOM EVENT LOG PREVIEW</div>
+          <div className="mt-1 text-[10px] leading-snug text-[#E8E8D8]/65">
+            Draft-only prompt log. Suggested changes require manual user action and are not persisted or applied here.
+          </div>
+        </div>
+        <div className="border-2 border-[#4A6844] bg-[#5A8352] px-2 py-1 text-[10px] text-[#E8E8D8]">
+          {isLoading ? 'LOADING' : 'DRAFT ONLY'}
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-3 border-2 border-[#DD0000]/50 bg-[#5A3F3F] p-2 text-[10px] text-[#FFD6D6]">
+          {error}
+        </div>
+      )}
+
+      <div className="mb-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <FoundationStatusCard
+          title="READY"
+          status={report && report.readyForReview > 0 ? 'ready-for-review' : 'not-applicable'}
+          body={`${report?.readyForReview ?? 0} prompt(s) ready for manual review.`}
+        />
+        <FoundationStatusCard
+          title="CONFIRMED"
+          status={report && report.confirmedManualChanges > 0 ? 'confirmed-manual-change' : 'not-applicable'}
+          body={`${report?.confirmedManualChanges ?? 0} caller-provided confirmation(s). Not durable history yet.`}
+        />
+        <FoundationStatusCard
+          title="BLOCKED"
+          status={report && report.blocked > 0 ? 'blocked' : 'not-applicable'}
+          body={`${report?.blocked ?? 0} prompt(s) blocked by scope or safety gates.`}
+        />
+        <FoundationStatusCard
+          title="MUTATION"
+          status="blocked"
+          body="Profile, morale, relationship, salary, story, park-factor, and Mode 3 mutations remain blocked."
+        />
+      </div>
+
+      {report?.blockers.length ? (
+        <div className="mb-3 border-2 border-[#DD0000]/50 bg-[#5A3F3F] p-2 text-[10px] leading-snug text-[#FFD6D6]">
+          {report.blockers.join(' ')}
+        </div>
+      ) : null}
+
+      {visibleEntries.length > 0 ? (
+        <div className="space-y-2">
+          {visibleEntries.map((entry) => (
+            <article key={entry.id} className="border-2 border-[#4A6844] bg-[#4A6844] p-3">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="text-[10px] font-bold text-[#E8E8D8]">{entry.title}</div>
+                <FoundationStatusBadge status={entry.status} />
+              </div>
+              <div className="grid gap-2 text-[10px] leading-snug text-[#E8E8D8]/75 lg:grid-cols-2">
+                <div>
+                  <div className="mb-1 font-bold text-[#C4A853]">Evidence / reason</div>
+                  <div>{entry.reason}</div>
+                  <div className="mt-1 text-[#E8E8D8]/55">
+                    Evidence: {entry.evidenceReferences.map((reference) => `${reference.type} (${reference.count})`).join(', ')}
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-1 font-bold text-[#C4A853]">Suggested manual change</div>
+                  <div>{entry.suggestedManualChange.summary}</div>
+                  <div className="mt-1 text-[#E8E8D8]/55">
+                    Checkbox state: Manual change completed {entry.confirmation.checked ? 'checked' : 'unchecked'}.
+                  </div>
+                </div>
+              </div>
+              <div className="mt-2 border border-[#E8E8D8]/20 p-2 text-[10px] leading-snug text-[#E8E8D8]/65">
+                {entry.narrativeReadableStatus}
+              </div>
+              {entry.warnings.length > 0 && (
+                <div className="mt-2 text-[10px] leading-snug text-[#FFD27A]">
+                  {entry.warnings.join(' ')}
+                </div>
+              )}
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-3 text-[10px] leading-snug text-[#E8E8D8]/65">
+          No random-event prompt context is available yet. This panel does not fabricate events when scoped evidence is missing.
+        </div>
+      )}
+
+      <div className="mt-3 border-2 border-[#4A6844] bg-[#5A3F3F] p-2 text-[10px] leading-snug text-[#FFD6D6]">
+        Read-only v1 boundary: this preview creates no records, persists no confirmations, and applies no player-profile, morale, relationship, salary, story, park-factor, or offseason changes.
       </div>
     </section>
   );

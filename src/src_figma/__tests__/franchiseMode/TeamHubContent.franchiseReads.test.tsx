@@ -654,6 +654,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
     const foundationRegion = await screen.findByRole('region', { name: /Mode 2 Foundation Status/i });
+    const randomEventRegion = await screen.findByRole('region', { name: /Franchise random event log preview/i });
 
     expect(within(foundationRegion).getByText('MODE 2 FOUNDATION STATUS')).toBeInTheDocument();
     expect(within(foundationRegion).getByText('STATS / ARCHIVE / SCOPE')).toBeInTheDocument();
@@ -675,6 +676,17 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(foundationRegion).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
     expect(within(foundationRegion).queryByText(/leadership: 92/i)).not.toBeInTheDocument();
     expect(within(foundationRegion).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(randomEventRegion).getByText('RANDOM EVENT LOG PREVIEW')).toBeInTheDocument();
+    expect(within(randomEventRegion).getByText(/Draft-only prompt log/i)).toBeInTheDocument();
+    expect(within(randomEventRegion).getByText(/2 prompt\(s\) ready for manual review/i)).toBeInTheDocument();
+    expect(within(randomEventRegion).getByText('Archive-backed game facts available')).toBeInTheDocument();
+    expect(within(randomEventRegion).getByText('Score-only result context available')).toBeInTheDocument();
+    expect(within(randomEventRegion).getAllByText(/Checkbox state: Manual change completed unchecked/i).length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getByText(/Score-only evidence has no player archive, player stats, WPA, WAR, morale, or relationship authority/i)).toBeInTheDocument();
+    expect(within(randomEventRegion).getByText(/persists no confirmations/i)).toBeInTheDocument();
+    expect(within(randomEventRegion).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
+    expect(within(randomEventRegion).queryByText(/leadership: 92/i)).not.toBeInTheDocument();
+    expect(within(randomEventRegion).queryByRole('button')).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
     expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
   });
