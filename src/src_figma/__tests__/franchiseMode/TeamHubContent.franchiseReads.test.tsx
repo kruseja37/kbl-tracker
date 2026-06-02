@@ -942,7 +942,39 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(dialog).getByText(/\$3\.0M/i)).toBeInTheDocument();
     expect(within(dialog).getByText('PROFILE EDIT HISTORY')).toBeInTheDocument();
     expect(within(dialog).getByText(/No player-local profile edits recorded/i)).toBeInTheDocument();
+    expect(within(dialog).getByText('MANUAL OVERRIDE PREVIEW')).toBeInTheDocument();
     expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
+  test('profile modal shows read-only manual override preview for MLB/revealed player', async () => {
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Open profile for C\. Player/i }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Copied Player/i });
+    const preview = within(dialog).getByRole('region', { name: /Manual Override Preview/i });
+
+    expect(within(preview).getByText('MANUAL OVERRIDE PREVIEW')).toBeInTheDocument();
+    expect(within(preview).getByText(/Draft-only validator preview/i)).toBeInTheDocument();
+    expect(within(preview).getByText(/creates no morale state, relationship state, approval record, or transaction/i)).toBeInTheDocument();
+    expect(within(preview).getByText('VALID DRAFT')).toBeInTheDocument();
+    expect(within(preview).getByText('PROPOSAL KIND')).toBeInTheDocument();
+    expect(within(preview).getByText('player-morale')).toBeInTheDocument();
+    expect(within(preview).getByText('TARGET PLAYER')).toBeInTheDocument();
+    expect(within(preview).getByText(/Copied Player \(copied-player\)/i)).toBeInTheDocument();
+    expect(within(preview).getByText('ACTOR / SOURCE')).toBeInTheDocument();
+    expect(within(preview).getByText('Internal v1 manual preview')).toBeInTheDocument();
+    expect(within(preview).getByText('PROPOSED EFFECT')).toBeInTheDocument();
+    expect(within(preview).getByText(/context-only: Preview-only context note/i)).toBeInTheDocument();
+    expect(within(preview).getByText(/Proposal is valid as a draft-only manual override contract/i)).toBeInTheDocument();
+    expect(within(preview).getByText(/No draft blockers/i)).toBeInTheDocument();
+    expect(within(preview).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(preview).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(within(preview).queryByText(/submit/i)).not.toBeInTheDocument();
+    expect(within(preview).queryByText(/approve/i)).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
   });
@@ -1203,6 +1235,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(dialog).getByText(/\$1\.0M/i)).toBeInTheDocument();
     expect(within(dialog).getByText('PROFILE EDIT HISTORY')).toBeInTheDocument();
     expect(within(dialog).getByText(/No player-local profile edits recorded/i)).toBeInTheDocument();
+    expect(within(dialog).getByText('MANUAL OVERRIDE PREVIEW')).toBeInTheDocument();
     expect(within(dialog).queryByText('BASEBALL DETAILS')).not.toBeInTheDocument();
     expect(within(dialog).queryByText('POW')).not.toBeInTheDocument();
     expect(within(dialog).queryByText('CON')).not.toBeInTheDocument();
@@ -1212,6 +1245,32 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(dialog).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
     expect(within(dialog).queryByText(/trueGrade/i)).not.toBeInTheDocument();
     expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
+  test('unrevealed FARM manual override preview stays hidden-safe and blocks hidden truth evidence', async () => {
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Open profile for Farm Hidden/i }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Farm Hidden/i });
+    const preview = within(dialog).getByRole('region', { name: /Manual Override Preview/i });
+
+    expect(within(preview).getByText('VALID DRAFT')).toBeInTheDocument();
+    expect(within(preview).getByText(/Farm Hidden \(farm-player\)/i)).toBeInTheDocument();
+    expect(within(preview).getByText(/Visible scouting\/profile context only; hidden prospect truth is not included/i)).toBeInTheDocument();
+    expect(within(preview).getByText(/HIDDEN TRUTH EVIDENCE GUARD: INVALID/i)).toBeInTheDocument();
+    expect(within(preview).getByText(/Hidden ratings, true grade, hidden scout truth, and hidden personality modifiers are blocked as evidence/i)).toBeInTheDocument();
+    expect(within(preview).getByText(/Unrevealed FARM\/prospect hidden truth cannot be used/i)).toBeInTheDocument();
+    expect(within(preview).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
+    expect(within(preview).queryByText(/leadership/i)).not.toBeInTheDocument();
+    expect(within(preview).queryByText(/trueGrade/i)).not.toBeInTheDocument();
+    expect(within(preview).queryByText(/^A$/)).not.toBeInTheDocument();
+    expect(within(preview).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(preview).queryByText(/submit/i)).not.toBeInTheDocument();
+    expect(within(preview).queryByText(/approve/i)).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
   });

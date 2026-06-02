@@ -70,6 +70,11 @@ import {
   type FranchiseNarrativeEventEligibilityReport,
 } from "../../../utils/franchiseNarrativeEventEligibility";
 import {
+  validateFranchiseMoraleRelationshipOverrideProposal,
+  type FranchiseMoraleRelationshipOverrideProposal,
+  type FranchiseMoraleRelationshipOverrideValidationResult,
+} from "../../../utils/franchiseMoraleRelationshipOverrideSchema";
+import {
   getTransactionsByFranchiseSeason,
   type Mode2V1TransactionType,
   type TransactionLogEntry,
@@ -2642,6 +2647,10 @@ export function TeamHubContent() {
           continuity={selectedProfileContinuity}
           continuityLoading={continuityLoading}
           continuityError={continuityError}
+          franchiseId={franchiseId ?? ''}
+          seasonId={seasonId}
+          statsScopeId={seasonId}
+          seasonNumber={seasonNumber}
           editForm={profileEditForm}
           editMode={profileEditMode}
           editErrors={profileEditErrors}
@@ -2720,6 +2729,10 @@ interface FranchisePlayerProfileModalProps {
   continuity: FranchisePlayerContinuityReport | null;
   continuityLoading: boolean;
   continuityError: string | null;
+  franchiseId: string;
+  seasonId: string;
+  statsScopeId: string;
+  seasonNumber: number;
   editForm: FranchiseProfileEditForm | null;
   editMode: boolean;
   editErrors: string[];
@@ -2788,6 +2801,199 @@ function FranchiseProfileEditHistoryPanel({
                 {entry.oldValue} → {entry.newValue}
               </div>
             </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+interface FranchiseManualOverridePreview {
+  proposal: FranchiseMoraleRelationshipOverrideProposal;
+  validation: FranchiseMoraleRelationshipOverrideValidationResult;
+  hiddenTruthGuard?: FranchiseMoraleRelationshipOverrideValidationResult;
+}
+
+function buildManualOverridePreview(
+  profile: FranchisePlayerProfileViewModel,
+  context: {
+    franchiseId: string;
+    seasonId: string;
+    statsScopeId: string;
+    seasonNumber: number;
+  },
+): FranchiseManualOverridePreview {
+  const proposal: FranchiseMoraleRelationshipOverrideProposal = {
+    kind: 'player-morale',
+    franchiseId: context.franchiseId,
+    seasonId: context.seasonId,
+    statsScopeId: context.statsScopeId,
+    seasonNumber: context.seasonNumber,
+    actor: {
+      actorType: 'user',
+      actorId: 'internal-v1-preview',
+      displayName: 'Internal v1 manual preview',
+    },
+    targetPlayerId: profile.playerId,
+    targetTeamId: profile.teamId,
+    overrideType: 'manual-player-context-preview',
+    proposedEffect: {
+      direction: 'context-only',
+      magnitude: 'minor',
+      summary: 'Preview-only context note; no morale or relationship state is created.',
+    },
+    reason: `Preview manual morale/relationship override shape for ${profile.identity.name}.`,
+    evidenceReferences: profile.hiddenSafe
+      ? [{
+          type: 'scouting-report',
+          context: 'prospect-visible',
+          playerId: profile.playerId,
+          teamId: profile.teamId,
+          description: 'Visible scouting/profile context only; hidden prospect truth is not included.',
+        }]
+      : [{
+          type: 'manual-note',
+          context: 'player',
+          playerId: profile.playerId,
+          teamId: profile.teamId,
+          description: 'Manual profile context preview only.',
+        }],
+    hiddenProspectSafety: {
+      targetRosterStatus: profile.rosterStatus,
+      targetRevealState: profile.revealState,
+      includesHiddenTruthEvidence: false,
+      hiddenFieldsReferenced: [],
+    },
+    approvalState: 'draft',
+  };
+
+  const validation = validateFranchiseMoraleRelationshipOverrideProposal(proposal);
+  const hiddenTruthGuard = profile.hiddenSafe
+    ? validateFranchiseMoraleRelationshipOverrideProposal({
+        ...proposal,
+        evidenceReferences: [{
+          type: 'hidden-prospect-truth',
+          context: 'hidden-truth',
+          playerId: profile.playerId,
+          teamId: profile.teamId,
+          hiddenProspectTruth: true,
+          hiddenFields: ['true ratings', 'true grade', 'hidden scout truth', 'hidden personality modifiers'],
+          description: 'Blocked hidden prospect truth marker; no hidden values are rendered.',
+        }],
+        hiddenProspectSafety: {
+          targetRosterStatus: profile.rosterStatus,
+          targetRevealState: profile.revealState,
+          includesHiddenTruthEvidence: true,
+          hiddenFieldsReferenced: ['true ratings', 'true grade', 'hidden scout truth', 'hidden personality modifiers'],
+        },
+      })
+    : undefined;
+
+  return { proposal, validation, hiddenTruthGuard };
+}
+
+function ValidationLineList({
+  label,
+  entries,
+  empty,
+}: {
+  label: string;
+  entries: string[];
+  empty: string;
+}) {
+  return (
+    <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2">
+      <div className="text-[9px] font-bold text-[#C4A853]">{label}</div>
+      {entries.length === 0 ? (
+        <div className="mt-1 text-[10px] leading-snug text-[#E8E8D8]/55">{empty}</div>
+      ) : (
+        <div className="mt-2 space-y-1 text-[10px] leading-snug text-[#E8E8D8]/75">
+          {entries.slice(0, 4).map((entry) => (
+            <div key={entry}>{entry}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FranchiseManualOverridePreviewPanel({
+  preview,
+  playerName,
+}: {
+  preview: FranchiseManualOverridePreview;
+  playerName: string;
+}) {
+  const { proposal, validation, hiddenTruthGuard } = preview;
+  const targetId =
+    proposal.kind === 'fanbase-team-relationship'
+      ? proposal.targetTeamId
+      : proposal.kind === 'scout-prospect-relationship'
+        ? proposal.targetProspectPlayerId
+        : proposal.targetPlayerId;
+  return (
+    <section
+      role="region"
+      aria-label="Manual Override Preview"
+      className="mt-4 border-[4px] border-[#4A6844] bg-[#3F563F] p-3"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="text-[9px] font-bold text-[#C4A853]">MANUAL OVERRIDE PREVIEW</div>
+          <div className="mt-1 text-[10px] leading-snug text-[#E8E8D8]/65">
+            Draft-only validator preview. This creates no morale state, relationship state, approval record, or transaction.
+          </div>
+        </div>
+        <span className={`border-2 px-2 py-1 text-[10px] font-bold ${foundationStatusClass(validation.status)}`}>
+          {formatTruthStatus(validation.status)}
+        </span>
+      </div>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <FranchiseProfileField label="PROPOSAL KIND" value={proposal.kind} />
+        <FranchiseProfileField label="TARGET PLAYER" value={`${playerName} (${targetId})`} />
+        <FranchiseProfileField label="ACTOR / SOURCE" value={proposal.actor.displayName ?? proposal.actor.actorType} />
+        <FranchiseProfileField label="PROPOSED EFFECT" value={`${proposal.proposedEffect.direction}: ${proposal.proposedEffect.summary}`} />
+      </div>
+
+      <div className="mt-3 grid gap-2 md:grid-cols-3">
+        <ValidationLineList
+          label="REASONS"
+          entries={validation.reasons}
+          empty="No validator reasons returned."
+        />
+        <ValidationLineList
+          label="WARNINGS"
+          entries={validation.warnings}
+          empty="No preview warnings."
+        />
+        <ValidationLineList
+          label="BLOCKERS"
+          entries={validation.blockers}
+          empty="No draft blockers."
+        />
+      </div>
+
+      <div className="mt-3">
+        <ValidationLineList
+          label="EVIDENCE"
+          entries={proposal.evidenceReferences.map((reference) =>
+            reference.description ?? `${reference.type}: ${reference.context}`,
+          )}
+          empty="No evidence references in this draft preview."
+        />
+      </div>
+
+      {hiddenTruthGuard && (
+        <div className="mt-3 border-2 border-[#5A3F3F] bg-[#5A3F3F] p-2 text-[10px] leading-snug text-[#FFD6D6]">
+          <div className="font-bold text-[#FFEFB5]">
+            {`HIDDEN TRUTH EVIDENCE GUARD: ${formatTruthStatus(hiddenTruthGuard.status)}`}
+          </div>
+          <div className="mt-1">
+            Hidden ratings, true grade, hidden scout truth, and hidden personality modifiers are blocked as evidence.
+          </div>
+          {hiddenTruthGuard.blockers.slice(0, 2).map((blocker) => (
+            <div key={blocker} className="mt-1">{blocker}</div>
           ))}
         </div>
       )}
@@ -2967,6 +3173,10 @@ function FranchisePlayerProfileModal({
   continuity,
   continuityLoading,
   continuityError,
+  franchiseId,
+  seasonId,
+  statsScopeId,
+  seasonNumber,
   editForm,
   editMode,
   editErrors,
@@ -2982,6 +3192,12 @@ function FranchisePlayerProfileModal({
   const position = profile.identity.secondaryPosition
     ? `${profile.identity.primaryPosition} / ${profile.identity.secondaryPosition}`
     : profile.identity.primaryPosition;
+  const manualOverridePreview = useMemo(() => buildManualOverridePreview(profile, {
+    franchiseId,
+    seasonId,
+    statsScopeId,
+    seasonNumber,
+  }), [franchiseId, profile, seasonId, seasonNumber, statsScopeId]);
   const form = editForm;
   const updateForm = (update: Partial<FranchiseProfileEditForm>) => {
     if (!form) return;
@@ -3150,6 +3366,10 @@ function FranchisePlayerProfileModal({
         )}
 
         <FranchiseProfileEditHistoryPanel entries={profile.editHistory} />
+        <FranchiseManualOverridePreviewPanel
+          preview={manualOverridePreview}
+          playerName={profile.identity.name}
+        />
         <FranchisePlayerContinuityPanel
           report={continuity}
           isLoading={continuityLoading}
@@ -3169,10 +3389,10 @@ function formatTruthStatus(status: string): string {
 }
 
 function foundationStatusClass(status: string): string {
-  if (status === 'trusted' || status === 'eligible-context' || status === 'stable-baseline') {
+  if (status === 'trusted' || status === 'eligible-context' || status === 'stable-baseline' || status === 'valid-draft') {
     return 'border-[#9DFFB0]/60 text-[#9DFFB0]';
   }
-  if (status === 'preview-only' || status === 'partial') return 'border-[#FFD27A]/60 text-[#FFD27A]';
+  if (status === 'preview-only' || status === 'partial' || status === 'needs-approval') return 'border-[#FFD27A]/60 text-[#FFD27A]';
   if (status === 'deferred' || status === 'not-applicable') return 'border-[#E8E8D8]/35 text-[#E8E8D8]/75';
   return 'border-[#FFD6D6]/60 text-[#FFD6D6]';
 }
