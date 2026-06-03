@@ -683,9 +683,20 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(foundationRegion).queryByRole('button')).not.toBeInTheDocument();
     await waitFor(() => expect(within(randomEventRegion).getByText('RANDOM EVENT LOG')).toBeInTheDocument());
     expect(within(randomEventRegion).getByText(/Durable Franchise v1 prompt records/i)).toBeInTheDocument();
+    const workflow = within(randomEventRegion).getByLabelText(/Random event manual review workflow/i);
+    expect(within(workflow).getByText('1. EVIDENCE')).toBeInTheDocument();
+    expect(within(workflow).getByText('2. SAFE EFFECT')).toBeInTheDocument();
+    expect(within(workflow).getByText('3. DECISION')).toBeInTheDocument();
+    expect(within(workflow).getByText('4. VERIFY')).toBeInTheDocument();
     await waitFor(() => expect(within(randomEventRegion).getByText(/2 durable prompt\(s\) ready for manual review/i)).toBeInTheDocument());
     expect(within(randomEventRegion).getByText('Archive-backed game facts available')).toBeInTheDocument();
     expect(within(randomEventRegion).getByText('Score-only result context available')).toBeInTheDocument();
+    expect(within(randomEventRegion).getAllByText(/Source:/i).length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getByText(/GameTracker archive/i)).toBeInTheDocument();
+    expect(within(randomEventRegion).getByText(/Score-only schedule/i)).toBeInTheDocument();
+    expect(within(randomEventRegion).getAllByText(/Safe target:/i).length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getAllByText(/Team fan morale target: Copied Alpha/i).length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getAllByText(/Manual smoke: after confirm, open Fan Morale and check Event-Backed History/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText(/Checkbox state: Manual change completed unchecked/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getByText(/Score-only evidence has no player archive, player stats, WPA, WAR, morale, or relationship authority/i)).toBeInTheDocument();
     expect(within(randomEventRegion).getByText(/confirmations persist to the random-event log and can apply scoped morale only/i)).toBeInTheDocument();
@@ -745,6 +756,9 @@ describe('TeamHubContent franchise-owned visible reads', () => {
       .closest('article');
     expect(playerPromptArticle).not.toBeNull();
     expect(within(playerPromptArticle as HTMLElement).getByText(/Player morale \+1/i)).toBeInTheDocument();
+    expect(playerPromptArticle as HTMLElement).toHaveTextContent(/Source:\s*GameTracker archive/i);
+    expect(playerPromptArticle as HTMLElement).toHaveTextContent(/Safe target:\s*Player morale target: copied-player/i);
+    expect(within(playerPromptArticle as HTMLElement).getByText(/Manual smoke: after confirm, open the player profile and check Player Morale History/i)).toBeInTheDocument();
     const scope = {
       franchiseId: 'franchise-1',
       seasonId: 'franchise-1-season-2',

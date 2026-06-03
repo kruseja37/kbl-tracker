@@ -380,6 +380,30 @@ function randomEventSafeEffectTarget(
   };
 }
 
+function randomEventSourceLabel(record: FranchiseRandomEventLogRecord): string {
+  switch (record.kind) {
+    case 'gametracker-archive-fact':
+      return 'GameTracker archive';
+    case 'score-only-context':
+      return 'Score-only schedule';
+    case 'roster-movement-context':
+      return 'Roster movement';
+    case 'player-profile-edit-context':
+      return 'Player profile edit';
+    case 'stadium-spray-context':
+      return 'Stadium spray';
+    default:
+      return 'Scoped evidence';
+  }
+}
+
+function randomEventFollowUpLabel(effectPreview: ReturnType<typeof classifyFranchiseRandomEventSafeEffect>): string {
+  if (!effectPreview.allowed) return 'Manual smoke: confirm is expected to record context only or skip the safe effect.';
+  if (effectPreview.targetType === 'player') return 'Manual smoke: after confirm, open the player profile and check Player Morale History.';
+  if (effectPreview.targetType === 'team-fan') return 'Manual smoke: after confirm, open Fan Morale and check Event-Backed History.';
+  return 'Manual smoke: after confirm, verify no blocked systems changed.';
+}
+
 const FRANCHISE_GRADE_ORDER = new Map<string, number>([
   ['S', 12],
   ['A+', 11],
@@ -4192,6 +4216,28 @@ function FranchiseRandomEventLogPanel({
         />
       </div>
 
+      <div
+        className="mb-3 grid gap-2 text-[10px] leading-snug text-[#E8E8D8]/75 md:grid-cols-4"
+        aria-label="Random event manual review workflow"
+      >
+        <div className="border-2 border-[#4A6844] bg-[#5A8352] p-2">
+          <div className="font-bold text-[#C4A853]">1. EVIDENCE</div>
+          <div>Generated from scoped archive, schedule, roster, profile, or stadium facts.</div>
+        </div>
+        <div className="border-2 border-[#4A6844] bg-[#5A8352] p-2">
+          <div className="font-bold text-[#C4A853]">2. SAFE EFFECT</div>
+          <div>Review the exact team fan or revealed player morale target before acting.</div>
+        </div>
+        <div className="border-2 border-[#4A6844] bg-[#5A8352] p-2">
+          <div className="font-bold text-[#C4A853]">3. DECISION</div>
+          <div>Confirm to persist the decision, or dismiss to leave it out of future narrative context.</div>
+        </div>
+        <div className="border-2 border-[#4A6844] bg-[#5A8352] p-2">
+          <div className="font-bold text-[#C4A853]">4. VERIFY</div>
+          <div>Check Fan Morale or Player Profile history after confirmation.</div>
+        </div>
+      </div>
+
       {report?.blockers.length ? (
         <div className="mb-3 border-2 border-[#DD0000]/50 bg-[#5A3F3F] p-2 text-[10px] leading-snug text-[#FFD6D6]">
           {report.blockers.join(' ')}
@@ -4206,6 +4252,13 @@ function FranchiseRandomEventLogPanel({
               record,
               randomEventSafeEffectTarget(record, selectedTeamId || undefined),
             );
+            const sourceLabel = randomEventSourceLabel(record);
+            const targetLabel = effectPreview.allowed
+              ? effectPreview.targetType === 'player'
+                ? `Player morale target: ${effectPreview.playerId}`
+                : `Team fan morale target: ${effectPreview.teamId ? selectedTeamName || effectPreview.teamId : 'selected team'}`
+              : 'No safe morale target';
+            const followUpLabel = randomEventFollowUpLabel(effectPreview);
             return (
             <article key={record.id} className="border-2 border-[#4A6844] bg-[#4A6844] p-3">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -4219,6 +4272,17 @@ function FranchiseRandomEventLogPanel({
                         : entry.status
                   }
                 />
+              </div>
+              <div className="mb-2 grid gap-2 text-[10px] leading-snug text-[#E8E8D8]/70 md:grid-cols-3">
+                <div className="border border-[#E8E8D8]/20 p-2">
+                  <span className="font-bold text-[#C4A853]">Source:</span> {sourceLabel}
+                </div>
+                <div className="border border-[#E8E8D8]/20 p-2">
+                  <span className="font-bold text-[#C4A853]">Safe target:</span> {targetLabel}
+                </div>
+                <div className="border border-[#E8E8D8]/20 p-2">
+                  <span className="font-bold text-[#C4A853]">Follow-up:</span> {followUpLabel}
+                </div>
               </div>
               <div className="grid gap-2 text-[10px] leading-snug text-[#E8E8D8]/75 lg:grid-cols-2">
                 <div>
