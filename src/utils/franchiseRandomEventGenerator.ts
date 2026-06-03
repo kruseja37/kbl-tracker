@@ -8,6 +8,7 @@ import {
   type FranchiseRandomEventSuggestedManualChange,
   type FranchiseRandomEventSuggestedManualChangeTarget,
 } from './franchiseRandomEventLog';
+import { buildFranchiseFanMoraleGameResultEffects } from './franchiseFanMoraleGameResultFormula';
 import type { FranchiseStadiumFoundationReport } from './franchiseStadiumFoundation';
 
 export const FRANCHISE_RANDOM_EVENT_GENERATOR_VERSION =
@@ -288,16 +289,6 @@ function hasHiddenProspectTruth(player: FranchiseRandomEventPlayerEvidence | und
   );
 }
 
-function winningTeamId(game: FranchiseRandomEventCompletedGameEvidence): string {
-  if (game.finalScore.away > game.finalScore.home) return game.awayTeamId;
-  if (game.finalScore.home > game.finalScore.away) return game.homeTeamId;
-  return game.homeTeamId;
-}
-
-function scoreOnlyWinningTeamId(game: FranchiseRandomEventScheduleEvidence): string {
-  return game.result?.winningTeamId ?? game.homeTeamId;
-}
-
 function evidence(
   scope: EventScope,
   type: FranchiseRandomEventEvidenceReference['type'],
@@ -409,34 +400,44 @@ function buildScoreOnlyCandidates(
   seed: string,
   rows: FranchiseRandomEventScheduleEvidence[],
 ): FranchiseRandomEventCandidate[] {
-  return rows.map((game) => {
-    const teamId = scoreOnlyWinningTeamId(game);
-    return candidate(scope, seed, 'score-only-team-fan-reaction', 'score-only-context', game.id, {
-      title: 'Score-only result context available',
-      targetType: 'team-fan',
-      targetId: teamId,
-      reason: `Score-only Game ${game.gameNumber} can be reviewed as team fan reaction context only.`,
-      suggestedManualChange: manualChange(
-        'fan-morale-draft',
-        'Optional team fan morale draft only. Score-only rows must not target player morale or player stats.',
-      ),
-      evidenceReferences: [
-        evidence(scope, 'score-only-schedule-summary', `Score-only Game ${game.gameNumber}: ${game.awayTeamId} at ${game.homeTeamId}.`, 1, {
-          teamId,
-          scoreOnlyContextOnly: true,
-        }),
-      ],
-      safeEffectPreview: {
-        target: 'fan-morale-draft',
-        targetType: 'team-fan',
-        targetId: teamId,
-        delta: 1,
-      },
-      warnings: [
-        'Score-only evidence has no player archive, player stats, WPA, WAR, morale, or relationship authority.',
-        'Score-only evidence is schedule/standings context only and cannot target player morale.',
-      ],
+  return rows.flatMap((game) => {
+    const formula = buildFranchiseFanMoraleGameResultEffects({
+      source: 'score-only',
+      gameId: game.id,
+      awayTeamId: game.awayTeamId,
+      homeTeamId: game.homeTeamId,
+      awayScore: game.result?.awayScore ?? Number.NaN,
+      homeScore: game.result?.homeScore ?? Number.NaN,
     });
+    return formula.effects.map((effectResult) =>
+      candidate(scope, seed, 'score-only-team-fan-reaction', 'score-only-context', `${game.id}:${effectResult.teamId}`, {
+        title: `Score-only ${effectResult.outcome.replace('-', ' ')} fan reaction`,
+        targetType: 'team-fan',
+        targetId: effectResult.teamId,
+        reason: `Score-only Game ${game.gameNumber}: ${effectResult.reason}`,
+        suggestedManualChange: manualChange(
+          'fan-morale-draft',
+          `Optional team fan morale draft (${effectResult.delta > 0 ? '+' : ''}${effectResult.delta}) only. Score-only rows must not target player morale or player stats.`,
+        ),
+        evidenceReferences: [
+          evidence(scope, 'score-only-schedule-summary', `Score-only Game ${game.gameNumber}: ${game.awayTeamId} ${game.result?.awayScore ?? '—'} at ${game.homeTeamId} ${game.result?.homeScore ?? '—'}.`, 1, {
+            teamId: effectResult.teamId,
+            scoreOnlyContextOnly: true,
+          }),
+        ],
+        safeEffectPreview: {
+          target: 'fan-morale-draft',
+          targetType: 'team-fan',
+          targetId: effectResult.teamId,
+          delta: effectResult.delta,
+        },
+        warnings: [
+          ...formula.limitations,
+          'Score-only evidence has no player archive, player stats, WPA, WAR, morale, or relationship authority.',
+          'Score-only evidence is schedule/standings context only and cannot target player morale.',
+        ],
+      }),
+    );
   });
 }
 
@@ -445,30 +446,42 @@ function buildArchiveTeamCandidates(
   seed: string,
   games: FranchiseRandomEventCompletedGameEvidence[],
 ): FranchiseRandomEventCandidate[] {
-  return games.map((game) => {
-    const teamId = winningTeamId(game);
-    return candidate(scope, seed, 'archive-backed-team-fan-reaction', 'gametracker-archive-fact', game.gameId, {
-      title: 'Archive-backed game facts available',
-      targetType: 'team-fan',
-      targetId: teamId,
-      reason: `Archive-backed ${game.awayTeamName} ${game.finalScore.away} at ${game.homeTeamName} ${game.finalScore.home} can be reviewed as team fan reaction context.`,
-      suggestedManualChange: manualChange(
-        'fan-morale-draft',
-        'Optional team fan morale draft based on archive-backed game facts. No automatic effect is applied.',
-      ),
-      evidenceReferences: [
-        evidence(scope, 'gametracker-archive-summary', `Archive-backed completed game ${game.gameId}.`, 1, {
-          teamId,
-          archiveBacked: true,
-        }),
-      ],
-      safeEffectPreview: {
-        target: 'fan-morale-draft',
-        targetType: 'team-fan',
-        targetId: teamId,
-        delta: 1,
-      },
+  return games.flatMap((game) => {
+    const formula = buildFranchiseFanMoraleGameResultEffects({
+      source: 'gametracker-archive',
+      gameId: game.gameId,
+      awayTeamId: game.awayTeamId,
+      homeTeamId: game.homeTeamId,
+      awayTeamName: game.awayTeamName,
+      homeTeamName: game.homeTeamName,
+      awayScore: game.finalScore.away,
+      homeScore: game.finalScore.home,
     });
+    return formula.effects.map((effectResult) =>
+      candidate(scope, seed, 'archive-backed-team-fan-reaction', 'gametracker-archive-fact', `${game.gameId}:${effectResult.teamId}`, {
+        title: `Archive-backed ${effectResult.outcome.replace('-', ' ')} fan reaction`,
+        targetType: 'team-fan',
+        targetId: effectResult.teamId,
+        reason: `Archive-backed ${game.awayTeamName} ${game.finalScore.away} at ${game.homeTeamName} ${game.finalScore.home}: ${effectResult.reason}`,
+        suggestedManualChange: manualChange(
+          'fan-morale-draft',
+          `Optional team fan morale draft (${effectResult.delta > 0 ? '+' : ''}${effectResult.delta}) based on archive-backed game facts. No automatic effect is applied.`,
+        ),
+        evidenceReferences: [
+          evidence(scope, 'gametracker-archive-summary', `Archive-backed completed game ${game.gameId}.`, 1, {
+            teamId: effectResult.teamId,
+            archiveBacked: true,
+          }),
+        ],
+        safeEffectPreview: {
+          target: 'fan-morale-draft',
+          targetType: 'team-fan',
+          targetId: effectResult.teamId,
+          delta: effectResult.delta,
+        },
+        warnings: formula.limitations,
+      }),
+    );
   });
 }
 
@@ -668,6 +681,11 @@ function logEntryFromCandidate(
     title: candidate.title,
     reason: `${candidate.reason} Roll ${candidate.roll.toFixed(3)} from ${candidate.seed}.`,
     suggestedManualChange: candidate.suggestedManualChange,
+    safeEffectPreview: {
+      ...candidate.safeEffectPreview,
+      reason: candidate.reason,
+      source: candidate.evidenceReferences[0]?.type ?? 'gametracker-archive-summary',
+    },
     evidenceReferences,
     confirmation,
     narrativeReadableStatus: status === 'confirmed-manual-change'

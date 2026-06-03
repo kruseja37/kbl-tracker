@@ -303,37 +303,67 @@ describe('franchise random event generator core', () => {
 
     expect(report.candidates.some((candidate) => candidate.reason.includes('wrong-franchise'))).toBe(false);
     expect(report.candidates.some((candidate) => candidate.id.includes('wrong-scope'))).toBe(false);
-    expect(report.candidates.filter((candidate) => candidate.triggerCategory === 'archive-backed-team-fan-reaction')).toHaveLength(2);
+    expect(report.candidates.filter((candidate) => candidate.triggerCategory === 'archive-backed-team-fan-reaction')).toHaveLength(4);
     expect(report.candidates.filter((candidate) => candidate.triggerCategory === 'archive-backed-player-morale-prompt')).toHaveLength(1);
-    expect(report.candidates.filter((candidate) => candidate.triggerCategory === 'score-only-team-fan-reaction')).toHaveLength(1);
+    expect(report.candidates.filter((candidate) => candidate.triggerCategory === 'score-only-team-fan-reaction')).toHaveLength(2);
     expect(report.candidates.filter((candidate) => candidate.triggerCategory === 'roster-movement-morale-prompt')).toHaveLength(1);
     expect(JSON.stringify(report)).not.toMatch(/wrong-scope-player|Wrong/);
     expect(JSON.stringify(report)).not.toMatch(/missing-scope-player|Missing Scope Player|Missing/);
     expect(report.warnings.join(' ')).toMatch(/out-of-scope player\/profile evidence/i);
   });
 
-  test('score-only candidates target team fan morale only', () => {
+  test('score-only candidates target both teams as team fan morale only', () => {
     const report = build();
-    const scoreOnly = report.candidates.find((candidate) => candidate.triggerCategory === 'score-only-team-fan-reaction');
+    const scoreOnlyCandidates = report.candidates.filter((candidate) => candidate.triggerCategory === 'score-only-team-fan-reaction');
 
-    expect(scoreOnly).toBeDefined();
-    expect(scoreOnly).toMatchObject({
-      eventKind: 'score-only-context',
-      targetType: 'team-fan',
-      targetId: 'team-1',
-      safeEffectPreview: {
-        target: 'fan-morale-draft',
+    expect(scoreOnlyCandidates).toHaveLength(2);
+    expect(scoreOnlyCandidates).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        eventKind: 'score-only-context',
         targetType: 'team-fan',
         targetId: 'team-1',
-        automaticMoraleMutationAllowed: false,
-      },
-    });
-    expect(scoreOnly?.evidenceReferences[0]).toMatchObject({
+        safeEffectPreview: expect.objectContaining({
+          target: 'fan-morale-draft',
+          targetType: 'team-fan',
+          targetId: 'team-1',
+          delta: 1,
+          automaticMoraleMutationAllowed: false,
+        }),
+      }),
+      expect.objectContaining({
+        eventKind: 'score-only-context',
+        targetType: 'team-fan',
+        targetId: 'team-2',
+        safeEffectPreview: expect.objectContaining({
+          target: 'fan-morale-draft',
+          targetType: 'team-fan',
+          targetId: 'team-2',
+          delta: -1,
+        }),
+      }),
+    ]));
+    expect(scoreOnlyCandidates[0].evidenceReferences[0]).toMatchObject({
       type: 'score-only-schedule-summary',
       scoreOnlyContextOnly: true,
       hiddenProspectTruth: false,
     });
-    expect(JSON.stringify(scoreOnly)).not.toMatch(/player-morale-draft/);
+    expect(JSON.stringify(scoreOnlyCandidates)).not.toMatch(/player-morale-draft/);
+  });
+
+  test('archive-backed team candidates include signed winner and loser prompts', () => {
+    const report = build();
+    const teamCandidates = report.candidates.filter((candidate) => candidate.triggerCategory === 'archive-backed-team-fan-reaction');
+
+    expect(teamCandidates).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        targetId: 'team-1',
+        safeEffectPreview: expect.objectContaining({ targetType: 'team-fan', targetId: 'team-1', delta: 1 }),
+      }),
+      expect.objectContaining({
+        targetId: 'team-2',
+        safeEffectPreview: expect.objectContaining({ targetType: 'team-fan', targetId: 'team-2', delta: -1 }),
+      }),
+    ]));
   });
 
   test('archive-backed revealed player morale candidate requires revealed current player target', () => {
@@ -383,8 +413,8 @@ describe('franchise random event generator core', () => {
       players: [hidden],
     });
 
-    expect(report.candidates).toHaveLength(1);
-    expect(report.candidates[0].triggerCategory).toBe('archive-backed-team-fan-reaction');
+    expect(report.candidates).toHaveLength(2);
+    expect(report.candidates.every((candidate) => candidate.triggerCategory === 'archive-backed-team-fan-reaction')).toBe(true);
     expect(JSON.stringify(report)).not.toMatch(/hiddenPersonalityModifiers|leadership|trueGrade|hiddenScoutTruth|accuracy: 90/);
     expect(report.warnings.join(' ')).toMatch(/Hidden FARM\/prospect truth is excluded/i);
   });
@@ -416,6 +446,7 @@ describe('franchise random event generator core', () => {
     expect(logReport.entries.every((entry) => entry.persistable === false && entry.mutable === false)).toBe(true);
     expect(logReport.entries.every((entry) => entry.hiddenSafe === true)).toBe(true);
     expect(logReport.entries.map((entry) => entry.kind)).toEqual(candidateReport.candidates.map((candidate) => candidate.eventKind));
+    expect(logReport.entries.some((entry) => entry.safeEffectPreview?.delta === -1)).toBe(true);
     expect(playerEntry?.evidenceReferences[0]).toMatchObject({
       targetType: 'player',
       targetId: 'player-1',

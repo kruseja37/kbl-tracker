@@ -252,10 +252,19 @@ export function classifyFranchiseRandomEventSafeEffect(
   const playerReference = record.entry.evidenceReferences.find((ref) =>
     ref.targetType === 'player' || Boolean(ref.playerId),
   );
-  const targetTeamId = target.targetTeamId ?? teamReference?.teamId ?? (teamReference?.targetType === 'team-fan' ? teamReference.targetId : undefined);
-  const targetPlayerId = target.targetPlayerId ?? playerReference?.playerId ?? (playerReference?.targetType === 'player' ? playerReference.targetId : undefined);
+  const persistedPreview = record.entry.safeEffectPreview;
+  const persistedTeamId = persistedPreview?.targetType === 'team-fan' ? persistedPreview.targetId : undefined;
+  const persistedPlayerId = persistedPreview?.targetType === 'player' ? persistedPreview.targetId : undefined;
+  const targetTeamId = persistedTeamId ?? target.targetTeamId ?? teamReference?.teamId ?? (teamReference?.targetType === 'team-fan' ? teamReference.targetId : undefined);
+  const targetPlayerId = persistedPlayerId ?? target.targetPlayerId ?? playerReference?.playerId ?? (playerReference?.targetType === 'player' ? playerReference.targetId : undefined);
   const targetPlayerRevealState = target.targetPlayerRevealState ?? playerReference?.targetPlayerRevealState;
   const targetPlayerCurrent = target.targetPlayerCurrent ?? playerReference?.targetPlayerCurrent;
+  const persistedDelta = persistedPreview &&
+    ((persistedPreview.targetType === 'team-fan' && persistedPreview.targetId === targetTeamId) ||
+      (persistedPreview.targetType === 'player' && persistedPreview.targetId === targetPlayerId))
+    ? persistedPreview.delta
+    : undefined;
+  const persistedReason = persistedPreview?.reason;
 
   if (record.entry.status === 'blocked' || record.entry.blockers.length > 0) {
     blockers.push('Prompt is blocked and cannot apply morale effects.');
@@ -281,8 +290,8 @@ export function classifyFranchiseRandomEventSafeEffect(
       allowed: blockers.length === 0,
       targetType: 'team-fan',
       teamId: targetTeamId,
-      delta: blockers.length === 0 ? 1 : 0,
-      reason: 'Confirmed score-only result context may adjust team fan morale only.',
+      delta: blockers.length === 0 ? persistedDelta ?? 1 : 0,
+      reason: persistedReason ?? 'Confirmed score-only result context may adjust team fan morale only.',
       warnings,
       blockers,
     };
@@ -293,8 +302,8 @@ export function classifyFranchiseRandomEventSafeEffect(
       allowed: blockers.length === 0,
       targetType: 'player',
       playerId: targetPlayerId,
-      delta: blockers.length === 0 ? 1 : 0,
-      reason: 'Confirmed player-scoped event context may adjust revealed/current player morale.',
+      delta: blockers.length === 0 ? persistedDelta ?? 1 : 0,
+      reason: persistedReason ?? 'Confirmed player-scoped event context may adjust revealed/current player morale.',
       warnings,
       blockers,
     };
@@ -305,10 +314,10 @@ export function classifyFranchiseRandomEventSafeEffect(
       allowed: blockers.length === 0,
       targetType: 'team-fan',
       teamId: targetTeamId,
-      delta: blockers.length === 0 ? 1 : 0,
-      reason: record.kind === 'stadium-spray-context'
+      delta: blockers.length === 0 ? persistedDelta ?? 1 : 0,
+      reason: persistedReason ?? (record.kind === 'stadium-spray-context'
         ? 'Confirmed stadium spray context may adjust team fan morale as story context.'
-        : 'Confirmed team-scoped event context may adjust team fan morale.',
+        : 'Confirmed team-scoped event context may adjust team fan morale.'),
       warnings,
       blockers,
     };

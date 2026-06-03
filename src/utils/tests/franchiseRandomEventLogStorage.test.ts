@@ -194,16 +194,22 @@ describe('franchise random event durable log and morale effects', () => {
 
     expect(generated.entries.map((entry) => entry.kind)).toEqual([
       'gametracker-archive-fact',
+      'gametracker-archive-fact',
+      'score-only-context',
       'score-only-context',
     ]);
 
     await syncFranchiseRandomEventLogFromReport(generated, '2026-01-01T00:00:00.000Z');
-    const [archiveRecord, scoreOnlyRecord] = await listFranchiseRandomEventLogRecords(
+    const records = await listFranchiseRandomEventLogRecords(
       scope.franchiseId,
       scope.seasonId,
       scope.statsScopeId,
       scope.seasonNumber,
     );
+    const archiveRecord = records.find((record) => record.kind === 'gametracker-archive-fact')!;
+    const scoreOnlyRecord = records.find((record) =>
+      record.kind === 'score-only-context' && record.entry.safeEffectPreview?.targetId === 'team-a'
+    )!;
 
     await confirmFranchiseRandomEventLogRecord({
       recordId: scoreOnlyRecord.id,
@@ -317,6 +323,74 @@ describe('franchise random event durable log and morale effects', () => {
     const playerSnapshot = await getFranchiseMoraleSnapshot(scope, 'player', 'player-a');
     expect(fanSnapshot?.currentValue).toBe(51);
     expect(playerSnapshot).toBeNull();
+  });
+
+  test('generated game-result prompts apply persisted positive and negative formula deltas', async () => {
+    const generated = buildGeneratedFranchiseRandomEventLogReport({
+      ...scope,
+      seed: 'signed-delta-seed',
+      completedGames: [{
+        gameId: 'archive-signed-1',
+        date: 100,
+        ...scope,
+        franchiseId: scope.franchiseId,
+        competitionType: 'franchise',
+        competitionId: scope.franchiseId,
+        awayTeamId: 'team-a',
+        homeTeamId: 'team-b',
+        awayTeamName: 'A',
+        homeTeamName: 'B',
+        finalScore: { away: 0, home: 3 },
+        innings: 6,
+        totalInnings: 6,
+        fameEvents: [],
+        playerStats: {},
+        pitcherGameStats: [],
+        activityLog: [],
+        inningScores: [],
+        aggregationStatus: 'aggregated',
+      }],
+    });
+    const winnerPrompt = generated.entries.find((entry) => entry.safeEffectPreview?.targetId === 'team-b');
+    const loserPrompt = generated.entries.find((entry) => entry.safeEffectPreview?.targetId === 'team-a');
+
+    expect(winnerPrompt?.safeEffectPreview).toMatchObject({ targetType: 'team-fan', targetId: 'team-b', delta: 2 });
+    expect(loserPrompt?.safeEffectPreview).toMatchObject({ targetType: 'team-fan', targetId: 'team-a', delta: -2 });
+
+    await syncFranchiseRandomEventLogFromReport(generated);
+    await confirmFranchiseRandomEventLogRecord({
+      recordId: winnerPrompt!.id,
+      targetTeamId: 'team-b',
+      actorDisplayName: 'Tester',
+      timestamp: '2026-01-01T00:00:00.000Z',
+    });
+    await confirmFranchiseRandomEventLogRecord({
+      recordId: loserPrompt!.id,
+      targetTeamId: 'team-a',
+      actorDisplayName: 'Tester',
+      timestamp: '2026-01-01T00:01:00.000Z',
+    });
+
+    const winnerSnapshot = await getFranchiseMoraleSnapshot(scope, 'team-fan', 'team-b');
+    const loserSnapshot = await getFranchiseMoraleSnapshot(scope, 'team-fan', 'team-a');
+    expect(winnerSnapshot?.currentValue).toBe(52);
+    expect(loserSnapshot?.currentValue).toBe(48);
+  });
+
+  test('legacy entries without safe-effect preview still fall back safely', async () => {
+    const prompt = entry('gametracker-archive-fact', 'legacy', { teamId: 'team-a' });
+    await syncFranchiseRandomEventLogFromReport(report([prompt]));
+
+    const confirmed = await confirmFranchiseRandomEventLogRecord({
+      recordId: prompt.id,
+      targetTeamId: 'team-a',
+      actorDisplayName: 'Tester',
+      timestamp: '2026-01-01T00:00:00.000Z',
+    });
+
+    expect(confirmed.appliedEffect.delta).toBe(1);
+    const snapshot = await getFranchiseMoraleSnapshot(scope, 'team-fan', 'team-a');
+    expect(snapshot?.currentValue).toBe(51);
   });
 
   test('generated player prompts carry target metadata and apply player morale without a UI-selected team target', async () => {

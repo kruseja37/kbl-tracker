@@ -67,6 +67,24 @@ export interface FranchiseRandomEventSuggestedManualChange {
   automaticRelationshipMutationAllowed: false;
 }
 
+export interface FranchiseRandomEventLogSafeEffectPreview {
+  target: FranchiseRandomEventSuggestedManualChangeTarget;
+  targetType: FranchiseRandomEventEvidenceTargetType;
+  targetId?: string;
+  delta: number;
+  reason: string;
+  source: FranchiseRandomEventEvidenceType;
+  requiresUserConfirmation: true;
+  automaticProfileMutationAllowed: false;
+  automaticMoraleMutationAllowed: false;
+  automaticRelationshipMutationAllowed: false;
+  automaticStoryPersistenceAllowed: false;
+  salaryMovementAllowed: false;
+  trueValueMutationAllowed: false;
+  designationMutationAllowed: false;
+  mode3OffseasonAllowed: false;
+}
+
 export interface FranchiseRandomEventManualConfirmation {
   state: 'unconfirmed' | 'confirmed' | 'dismissed';
   checked: boolean;
@@ -88,6 +106,7 @@ export interface FranchiseRandomEventLogEntry {
   title: string;
   reason: string;
   suggestedManualChange: FranchiseRandomEventSuggestedManualChange;
+  safeEffectPreview?: FranchiseRandomEventLogSafeEffectPreview;
   evidenceReferences: FranchiseRandomEventEvidenceReference[];
   confirmation: FranchiseRandomEventManualConfirmation;
   narrativeReadableStatus: string;

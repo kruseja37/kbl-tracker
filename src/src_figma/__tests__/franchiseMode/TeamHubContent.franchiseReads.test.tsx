@@ -688,17 +688,22 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(workflow).getByText('2. SAFE EFFECT')).toBeInTheDocument();
     expect(within(workflow).getByText('3. DECISION')).toBeInTheDocument();
     expect(within(workflow).getByText('4. VERIFY')).toBeInTheDocument();
-    await waitFor(() => expect(within(randomEventRegion).getByText(/2 durable prompt\(s\) ready for manual review/i)).toBeInTheDocument());
-    expect(within(randomEventRegion).getByText('Archive-backed game facts available')).toBeInTheDocument();
-    expect(within(randomEventRegion).getByText('Score-only result context available')).toBeInTheDocument();
+    await waitFor(() => expect(within(randomEventRegion).getByText(/4 durable prompt\(s\) ready for manual review/i)).toBeInTheDocument());
+    expect(within(randomEventRegion).getByText('Archive-backed win fan reaction')).toBeInTheDocument();
+    expect(within(randomEventRegion).getByText('Archive-backed loss fan reaction')).toBeInTheDocument();
+    expect(within(randomEventRegion).getByText('Score-only win fan reaction')).toBeInTheDocument();
+    expect(within(randomEventRegion).getByText('Score-only loss fan reaction')).toBeInTheDocument();
     expect(within(randomEventRegion).getAllByText(/Source:/i).length).toBeGreaterThan(0);
-    expect(within(randomEventRegion).getByText(/GameTracker archive/i)).toBeInTheDocument();
-    expect(within(randomEventRegion).getByText(/Score-only schedule/i)).toBeInTheDocument();
+    expect(within(randomEventRegion).getAllByText(/GameTracker archive/i).length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getAllByText(/Score-only schedule/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText(/Safe target:/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText(/Team fan morale target: Copied Alpha/i).length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getAllByText(/Team fan morale target: team-2/i).length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getAllByText(/Team fan morale \+1/i).length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getAllByText(/Team fan morale -1/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText(/Manual smoke: after confirm, open Fan Morale and check Event-Backed History/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText(/Checkbox state: Manual change completed unchecked/i).length).toBeGreaterThan(0);
-    expect(within(randomEventRegion).getByText(/Score-only evidence has no player archive, player stats, WPA, WAR, morale, or relationship authority/i)).toBeInTheDocument();
+    expect(within(randomEventRegion).getAllByText(/Score-only evidence has no player archive, player stats, WPA, WAR, morale, or relationship authority/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getByText(/confirmations persist to the random-event log and can apply scoped morale only/i)).toBeInTheDocument();
     expect(within(randomEventRegion).getAllByRole('button', { name: 'CONFIRM' }).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByRole('button', { name: 'DISMISS' }).length).toBeGreaterThan(0);
@@ -784,7 +789,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
 
     fireEvent.click(within(playerPromptArticle as HTMLElement).getByRole('button', { name: 'CONFIRM' }));
     await waitFor(() =>
-      expect(within(playerPromptArticle as HTMLElement).getByText(/Confirmed player-scoped event context may adjust revealed\/current player morale/i)).toBeInTheDocument(),
+      expect(within(playerPromptArticle as HTMLElement).getByText(/APPLIED: Copied Player has archive-backed player stat evidence/i)).toBeInTheDocument(),
     );
 
     const playerSnapshot = await getFranchiseMoraleSnapshot(scope, 'player', 'copied-player');

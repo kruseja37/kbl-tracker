@@ -4351,10 +4351,15 @@ function FranchiseRandomEventLogPanel({
               randomEventSafeEffectTarget(record, selectedTeamId || undefined),
             );
             const sourceLabel = randomEventSourceLabel(record);
+            const effectTeamLabel = effectPreview.teamId
+              ? effectPreview.teamId === selectedTeamId
+                ? selectedTeamName || effectPreview.teamId
+                : effectPreview.teamId
+              : 'selected team';
             const targetLabel = effectPreview.allowed
               ? effectPreview.targetType === 'player'
                 ? `Player morale target: ${effectPreview.playerId}`
-                : `Team fan morale target: ${effectPreview.teamId ? selectedTeamName || effectPreview.teamId : 'selected team'}`
+                : `Team fan morale target: ${effectTeamLabel}`
               : 'No safe morale target';
             const followUpLabel = randomEventFollowUpLabel(effectPreview);
             return (
@@ -4403,7 +4408,7 @@ function FranchiseRandomEventLogPanel({
                   <div className="mb-1 font-bold text-[#C4A853]">Safe-effect preview</div>
                   <div>
                     {effectPreview.allowed
-                      ? `${effectPreview.targetType === 'team-fan' ? 'Team fan morale' : 'Player morale'} ${effectPreview.delta > 0 ? '+' : ''}${effectPreview.delta}${effectPreview.teamId ? ` for ${selectedTeamName || effectPreview.teamId}` : ''}.`
+                      ? `${effectPreview.targetType === 'team-fan' ? 'Team fan morale' : 'Player morale'} ${effectPreview.delta > 0 ? '+' : ''}${effectPreview.delta}${effectPreview.teamId ? ` for ${effectTeamLabel}` : ''}.`
                       : 'No safe morale effect target is available yet.'}
                   </div>
                   {effectPreview.blockers.length > 0 && (
