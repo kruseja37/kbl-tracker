@@ -86,7 +86,7 @@ describe('franchise fan morale game-result formula', () => {
     expect(invalid.blockers.join(' ')).toMatch(/Non-negative integer final scores/i);
   });
 
-  test('documents deferred modifiers instead of silently applying them', () => {
+  test('documents separate blowout and streak formulas plus deferred richer modifiers', () => {
     const result = buildFranchiseFanMoraleGameResultEffects({
       source: 'gametracker-archive',
       gameId: 'game-2',
@@ -96,6 +96,7 @@ describe('franchise fan morale game-result formula', () => {
       homeScore: 0,
     });
 
-    expect(result.limitations.join(' ')).toMatch(/Walk-offs, no-hitters, blowouts, rivals, playoff implications, expected wins, and streaks remain deferred/i);
+    expect(result.limitations.join(' ')).toMatch(/Blowout modifiers and streaks are handled by separate confirmation-gated fan morale prompt formulas/i);
+    expect(result.limitations.join(' ')).toMatch(/Walk-offs, no-hitters, rivals, playoff implications, and expected wins remain deferred/i);
   });
 });

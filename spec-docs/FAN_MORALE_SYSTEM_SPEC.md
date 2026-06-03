@@ -17,8 +17,8 @@
 Current Franchise v1 support is intentionally narrower than the full formula system below:
 
 - Implemented: durable scoped fan/player morale snapshots, event-backed history, confirmed random-event effects, and read-only Team Hub fan morale display aligned to the spec state labels.
-- Partial: random-event prompts can be manually confirmed for safe scoped morale effects. Game-result base impacts now support confirmation-gated team fan morale prompts for both teams (`+1/-1` regular results, `+2/-2` shutouts), and streak milestones/breaks now generate confirmation-gated team fan morale prompts. Score-only evidence remains team fan morale only after confirmation.
-- Deferred: expected-wins baseline, performance-gap formula weighting, roster composition formula, walk-offs, no-hitters, blowout/rival/playoff modifiers, full event catalog weighting, free-agency consequences, franchise health consequences, daily snapshots/high-low-average tracking, player morale influence/coupling, and automatic recalculation cadence.
+- Partial: random-event prompts can be manually confirmed for safe scoped morale effects. Game-result base impacts now support confirmation-gated team fan morale prompts for both teams (`+1/-1` regular results, `+2/-2` shutouts), streak milestones/breaks generate confirmation-gated prompts, and 7+ run blowout modifiers generate confirmation-gated team fan morale prompts. Score-only evidence remains team fan morale only after confirmation.
+- Deferred: expected-wins baseline, performance-gap formula weighting, roster composition formula, walk-offs, no-hitters, rival/playoff modifiers, full event catalog weighting, free-agency consequences, franchise health consequences, daily snapshots/high-low-average tracking, player morale influence/coupling, and automatic recalculation cadence.
 - Blocked for v1: True Value/designation inputs, beat reporter sentiment, relationship mutation, salary movement, narrative/random-event automation, and Mode 3/offseason mutation.
 
 Next roadmap steps are richer event modifiers, expected-wins baseline, formula weighting, and daily morale snapshot tracking once canonical value/designation inputs are trusted.

@@ -409,6 +409,66 @@ describe('franchise random event generator core', () => {
     ]));
   });
 
+  test('scoped archive blowouts generate signed team fan prompts', () => {
+    const report = buildFranchiseRandomEventCandidates({
+      ...scope,
+      seed: 'archive-blowout-seed',
+      completedGames: [completedGame({ gameId: 'archive-blowout-1', finalScore: { away: 10, home: 2 } })],
+      generatedAt: 123,
+    });
+    const blowouts = report.candidates.filter((candidate) => candidate.triggerCategory === 'blowout-team-fan-reaction');
+
+    expect(blowouts).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        eventKind: 'gametracker-archive-fact',
+        targetType: 'team-fan',
+        targetId: 'team-1',
+        title: 'blowout win fan reaction',
+        safeEffectPreview: expect.objectContaining({ delta: 1, targetId: 'team-1' }),
+      }),
+      expect.objectContaining({
+        eventKind: 'gametracker-archive-fact',
+        targetType: 'team-fan',
+        targetId: 'team-2',
+        title: 'blowout loss fan reaction',
+        safeEffectPreview: expect.objectContaining({ delta: -1, targetId: 'team-2' }),
+      }),
+    ]));
+    expect(blowouts[0].id).toMatch(/team-[12]:blowout-(win|loss):8:archive-blowout-1/);
+  });
+
+  test('scoped score-only blowouts generate team-fan-only prompts', () => {
+    const report = buildFranchiseRandomEventCandidates({
+      ...scope,
+      seed: 'score-only-blowout-seed',
+      scoreOnlyScheduleRows: [scoreOnlyGame({ result: {
+        awayScore: 1,
+        homeScore: 9,
+        winningTeamId: 'team-2',
+        losingTeamId: 'team-1',
+      } })],
+      generatedAt: 123,
+    });
+    const blowouts = report.candidates.filter((candidate) => candidate.triggerCategory === 'blowout-team-fan-reaction');
+
+    expect(blowouts).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        eventKind: 'score-only-context',
+        targetType: 'team-fan',
+        targetId: 'team-2',
+        safeEffectPreview: expect.objectContaining({ delta: 1, targetType: 'team-fan', targetId: 'team-2' }),
+      }),
+      expect.objectContaining({
+        eventKind: 'score-only-context',
+        targetType: 'team-fan',
+        targetId: 'team-1',
+        safeEffectPreview: expect.objectContaining({ delta: -1, targetType: 'team-fan', targetId: 'team-1' }),
+      }),
+    ]));
+    expect(JSON.stringify(blowouts)).not.toMatch(/player-morale-draft/);
+    expect(blowouts.map((candidate) => candidate.warnings.join(' ')).join(' ')).toMatch(/Score-only blowout evidence has no player archive/i);
+  });
+
   test('scoped archive games generate signed streak prompts', () => {
     const report = buildFranchiseRandomEventCandidates({
       ...scope,

@@ -8,6 +8,7 @@ import {
   type FranchiseRandomEventSuggestedManualChange,
   type FranchiseRandomEventSuggestedManualChangeTarget,
 } from './franchiseRandomEventLog';
+import { buildFranchiseFanMoraleBlowoutEffects } from './franchiseFanMoraleBlowoutFormula';
 import { buildFranchiseFanMoraleGameResultEffects } from './franchiseFanMoraleGameResultFormula';
 import {
   buildFranchiseFanMoraleStreakEffects,
@@ -21,6 +22,7 @@ export const FRANCHISE_RANDOM_EVENT_GENERATOR_VERSION =
 export type FranchiseRandomEventTriggerCategory =
   | 'score-only-team-fan-reaction'
   | 'archive-backed-team-fan-reaction'
+  | 'blowout-team-fan-reaction'
   | 'streak-team-fan-reaction'
   | 'archive-backed-player-morale-prompt'
   | 'roster-movement-morale-prompt'
@@ -493,6 +495,69 @@ function buildArchiveTeamCandidates(
   });
 }
 
+function buildBlowoutCandidates(
+  scope: EventScope,
+  seed: string,
+  games: Array<{
+    source: 'gametracker-archive' | 'score-only';
+    gameId: string;
+    display: string;
+    awayTeamId: string;
+    homeTeamId: string;
+    awayTeamName?: string;
+    homeTeamName?: string;
+    awayScore: number;
+    homeScore: number;
+  }>,
+): FranchiseRandomEventCandidate[] {
+  return games.flatMap((game) => {
+    const formula = buildFranchiseFanMoraleBlowoutEffects({
+      source: game.source,
+      gameId: game.gameId,
+      awayTeamId: game.awayTeamId,
+      homeTeamId: game.homeTeamId,
+      awayTeamName: game.awayTeamName,
+      homeTeamName: game.homeTeamName,
+      awayScore: game.awayScore,
+      homeScore: game.homeScore,
+    });
+    return formula.effects.map((effectResult) =>
+      candidate(scope, seed, 'blowout-team-fan-reaction', game.source === 'score-only' ? 'score-only-context' : 'gametracker-archive-fact', `${effectResult.teamId}:${effectResult.outcome}:${effectResult.runDifferential}:${game.gameId}`, {
+        title: `${effectResult.outcome.replace('-', ' ')} fan reaction`,
+        targetType: 'team-fan',
+        targetId: effectResult.teamId,
+        reason: `${game.display}: ${effectResult.reason}`,
+        suggestedManualChange: manualChange(
+          'fan-morale-draft',
+          `Optional team fan morale blowout draft (${effectResult.delta > 0 ? '+' : ''}${effectResult.delta}). No automatic effect is applied.`,
+        ),
+        evidenceReferences: [
+          evidence(scope, game.source === 'score-only' ? 'score-only-schedule-summary' : 'gametracker-archive-summary', `Blowout evidence from ${game.gameId}: ${effectResult.runDifferential}-run differential.`, 1, {
+            teamId: effectResult.teamId,
+            archiveBacked: game.source === 'gametracker-archive',
+            scoreOnlyContextOnly: game.source === 'score-only' ? true : undefined,
+          }),
+        ],
+        safeEffectPreview: {
+          target: 'fan-morale-draft',
+          targetType: 'team-fan',
+          targetId: effectResult.teamId,
+          delta: effectResult.delta,
+        },
+        warnings: [
+          ...formula.limitations,
+          ...(game.source === 'score-only'
+            ? [
+                'Score-only blowout evidence has no player archive, player stats, WPA, WAR, morale, or relationship authority.',
+                'Score-only blowout evidence is schedule/standings context only and cannot target player morale.',
+              ]
+            : []),
+        ],
+      }),
+    );
+  });
+}
+
 function finiteOrder(...values: Array<number | undefined | null>): number {
   const found = values.find((value) => Number.isFinite(value));
   return typeof found === 'number' ? found : Number.MAX_SAFE_INTEGER;
@@ -829,6 +894,28 @@ export function buildFranchiseRandomEventCandidates(
   const candidates = blockers.length > 0 ? [] : [
     ...buildScoreOnlyCandidates(scope, input.seed, scopedScoreOnlyRows),
     ...buildArchiveTeamCandidates(scope, input.seed, scopedCompletedGames),
+    ...buildBlowoutCandidates(scope, input.seed, [
+      ...scopedCompletedGames.map((game) => ({
+        source: 'gametracker-archive' as const,
+        gameId: game.gameId,
+        display: `Archive-backed ${game.awayTeamName} ${game.finalScore.away} at ${game.homeTeamName} ${game.finalScore.home}`,
+        awayTeamId: game.awayTeamId,
+        homeTeamId: game.homeTeamId,
+        awayTeamName: game.awayTeamName,
+        homeTeamName: game.homeTeamName,
+        awayScore: game.finalScore.away,
+        homeScore: game.finalScore.home,
+      })),
+      ...scopedScoreOnlyRows.map((game) => ({
+        source: 'score-only' as const,
+        gameId: game.id,
+        display: `Score-only Game ${game.gameNumber}: ${game.awayTeamId} ${game.result?.awayScore ?? '—'} at ${game.homeTeamId} ${game.result?.homeScore ?? '—'}`,
+        awayTeamId: game.awayTeamId,
+        homeTeamId: game.homeTeamId,
+        awayScore: game.result?.awayScore ?? Number.NaN,
+        homeScore: game.result?.homeScore ?? Number.NaN,
+      })),
+    ]),
     ...buildStreakCandidates(scope, input.seed, [
       ...scopedCompletedGames.map(streakGameEvidenceFromArchive),
       ...scopedScoreOnlyRows.map(streakGameEvidenceFromScoreOnly),

@@ -667,7 +667,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
       homeTeamId: 'team-2',
       status: 'COMPLETED',
       result: {
-        awayScore: 5,
+        awayScore: 11,
         homeScore: 3,
         winningTeamId: 'team-1',
         losingTeamId: 'team-2',
@@ -713,11 +713,13 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(workflow).getByText('2. SAFE EFFECT')).toBeInTheDocument();
     expect(within(workflow).getByText('3. DECISION')).toBeInTheDocument();
     expect(within(workflow).getByText('4. VERIFY')).toBeInTheDocument();
-    await waitFor(() => expect(within(randomEventRegion).getByText(/8 durable prompt\(s\) ready for manual review/i)).toBeInTheDocument());
+    await waitFor(() => expect(within(randomEventRegion).getByText(/10 durable prompt\(s\) ready for manual review/i)).toBeInTheDocument());
     expect(within(randomEventRegion).getAllByText('Archive-backed win fan reaction').length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText('Archive-backed loss fan reaction').length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText('Score-only win fan reaction').length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText('Score-only loss fan reaction').length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getAllByText('blowout win fan reaction').length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getAllByText('blowout loss fan reaction').length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getByText('win streak 3 fan reaction')).toBeInTheDocument();
     expect(within(randomEventRegion).getByText('loss streak 3 fan reaction')).toBeInTheDocument();
     expect(within(randomEventRegion).getAllByText(/Source:/i).length).toBeGreaterThan(0);

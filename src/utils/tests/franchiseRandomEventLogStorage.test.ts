@@ -479,6 +479,70 @@ describe('franchise random event durable log and morale effects', () => {
     expect(negativeSnapshot?.currentValue).toBe(48);
   });
 
+  test('generated blowout prompts apply persisted signed deltas idempotently', async () => {
+    const generated = buildGeneratedFranchiseRandomEventLogReport({
+      ...scope,
+      seed: 'blowout-storage-seed',
+      completedGames: [{
+        gameId: 'archive-blowout-1',
+        date: 1,
+        ...scope,
+        franchiseId: scope.franchiseId,
+        competitionType: 'franchise',
+        competitionId: scope.franchiseId,
+        awayTeamId: 'team-a',
+        homeTeamId: 'team-b',
+        awayTeamName: 'A',
+        homeTeamName: 'B',
+        finalScore: { away: 11, home: 2 },
+        innings: 6,
+        totalInnings: 6,
+        fameEvents: [],
+        playerStats: {},
+        pitcherGameStats: [],
+        activityLog: [],
+        inningScores: [],
+        aggregationStatus: 'aggregated',
+      }],
+    });
+    const positiveBlowout = generated.entries.find((entry) =>
+      entry.safeEffectPreview?.targetId === 'team-a' &&
+      entry.safeEffectPreview.delta === 1 &&
+      entry.title.includes('blowout win')
+    );
+    const negativeBlowout = generated.entries.find((entry) =>
+      entry.safeEffectPreview?.targetId === 'team-b' &&
+      entry.safeEffectPreview.delta === -1 &&
+      entry.title.includes('blowout loss')
+    );
+
+    expect(positiveBlowout).toBeDefined();
+    expect(negativeBlowout).toBeDefined();
+
+    await syncFranchiseRandomEventLogFromReport(generated);
+    await confirmFranchiseRandomEventLogRecord({
+      recordId: positiveBlowout!.id,
+      actorDisplayName: 'Tester',
+      timestamp: '2026-01-01T00:00:00.000Z',
+    });
+    await confirmFranchiseRandomEventLogRecord({
+      recordId: positiveBlowout!.id,
+      actorDisplayName: 'Tester',
+      timestamp: '2026-01-01T00:01:00.000Z',
+    });
+    await confirmFranchiseRandomEventLogRecord({
+      recordId: negativeBlowout!.id,
+      actorDisplayName: 'Tester',
+      timestamp: '2026-01-01T00:02:00.000Z',
+    });
+
+    const positiveSnapshot = await getFranchiseMoraleSnapshot(scope, 'team-fan', 'team-a');
+    const negativeSnapshot = await getFranchiseMoraleSnapshot(scope, 'team-fan', 'team-b');
+    expect(positiveSnapshot?.currentValue).toBe(51);
+    expect(positiveSnapshot?.history).toHaveLength(1);
+    expect(negativeSnapshot?.currentValue).toBe(49);
+  });
+
   test('legacy entries without safe-effect preview still fall back safely', async () => {
     const prompt = entry('gametracker-archive-fact', 'legacy', { teamId: 'team-a' });
     await syncFranchiseRandomEventLogFromReport(report([prompt]));
