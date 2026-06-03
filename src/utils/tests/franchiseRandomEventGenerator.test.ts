@@ -684,7 +684,7 @@ describe('franchise random event generator core', () => {
     expect(designationCandidates).toHaveLength(2);
     expect(designationCandidates).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        title: 'TEAM_MVP recognition morale prompt',
+        title: 'TEAM_MVP preview recognition candidate',
         targetType: 'player',
         targetId: 'player-1',
         eventKind: 'roster-movement-context',
@@ -698,7 +698,7 @@ describe('franchise random event generator core', () => {
         }),
       }),
       expect.objectContaining({
-        title: 'ACE recognition morale prompt',
+        title: 'ACE preview recognition candidate',
         targetType: 'player',
         targetId: 'pitcher-1',
         safeEffectPreview: expect.objectContaining({
@@ -708,6 +708,7 @@ describe('franchise random event generator core', () => {
       }),
     ]));
     expect(designationCandidates.every((candidate) => candidate.limitations.some((limitation) => /read-only candidate generation/i.test(limitation)))).toBe(true);
+    expect(JSON.stringify(designationCandidates)).not.toMatch(/winner|awarded|locked|saved designation/i);
   });
 
   test('designation context with omitted scope fields produces no candidates while fully scoped equivalent still works', () => {

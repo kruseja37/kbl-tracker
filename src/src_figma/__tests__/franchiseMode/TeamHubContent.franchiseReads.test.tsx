@@ -737,8 +737,13 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(workflow).getByText('3. DECISION')).toBeInTheDocument();
     expect(within(workflow).getByText('4. VERIFY')).toBeInTheDocument();
     await waitFor(() => expect(within(randomEventRegion).getByText(/14 durable prompt\(s\) ready for manual review/i)).toBeInTheDocument());
-    expect(within(randomEventRegion).getByText('TEAM_MVP recognition morale prompt')).toBeInTheDocument();
-    expect(within(randomEventRegion).getByText('ACE recognition morale prompt')).toBeInTheDocument();
+    expect(within(randomEventRegion).getByText('TEAM_MVP preview recognition candidate')).toBeInTheDocument();
+    expect(within(randomEventRegion).getByText('ACE preview recognition candidate')).toBeInTheDocument();
+    const designationPromptText = [
+      within(randomEventRegion).getByText('TEAM_MVP preview recognition candidate').closest('article')?.textContent ?? '',
+      within(randomEventRegion).getByText('ACE preview recognition candidate').closest('article')?.textContent ?? '',
+    ].join(' ');
+    expect(designationPromptText).not.toMatch(/winner|awarded|locked|saved designation/i);
     expect(within(randomEventRegion).getAllByText(/Player morale target: copied-player/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText(/Player morale \+3/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText(/Player morale \+2/i).length).toBeGreaterThan(0);

@@ -44,6 +44,7 @@ describe('franchise designation morale bridge', () => {
     expect(mvp.candidates).toHaveLength(1);
     expect(mvp.candidates[0]).toMatchObject({
       designationType: 'TEAM_MVP',
+      title: 'TEAM_MVP preview recognition candidate',
       promptKind: 'designation-recognition-player-morale',
       targetType: 'player',
       targetId: 'player-1',
@@ -60,7 +61,9 @@ describe('franchise designation morale bridge', () => {
         designationMutationAllowed: false,
       }),
     });
+    expect(ace.candidates[0].title).toBe('ACE preview recognition candidate');
     expect(ace.candidates[0].safeEffectPreview).toMatchObject({ target: 'player-morale-draft', delta: 2 });
+    expect(JSON.stringify([mvp.candidates[0], ace.candidates[0]])).not.toMatch(/winner|awarded|locked|saved designation/i);
   });
 
   test('Fan Favorite trade or send-down blocks without trusted value delta and produces negative fan/player prompts when trusted', () => {

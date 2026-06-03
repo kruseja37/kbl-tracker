@@ -307,13 +307,13 @@ function recognitionCandidates(
     baseCandidate(scope, input, {
       suffix: 'player-recognition',
       promptKind: 'designation-recognition-player-morale',
-      title: `${input.designationType} recognition morale prompt`,
+      title: `${input.designationType} preview recognition candidate`,
       targetType: 'player',
       targetId: input.playerId,
       targetName: input.playerName,
       delta: input.designationType === 'ACE' ? 2 : 3,
-      summary: `${input.playerName ?? input.playerId} can receive a reviewed player morale recognition prompt for ${input.designationType}.`,
-      reason: `${input.designationType} recognition context is safe as a revealed/current player morale prompt only after user confirmation.`,
+      summary: `${input.playerName ?? input.playerId} can receive a reviewed player morale preview-recognition prompt for ${input.designationType}.`,
+      reason: `${input.designationType} preview recognition context is safe as a revealed/current player morale prompt only after user confirmation.`,
     }),
   ];
 }
