@@ -736,7 +736,19 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(workflow).getByText('2. SAFE EFFECT')).toBeInTheDocument();
     expect(within(workflow).getByText('3. DECISION')).toBeInTheDocument();
     expect(within(workflow).getByText('4. VERIFY')).toBeInTheDocument();
-    await waitFor(() => expect(within(randomEventRegion).getByText(/12 durable prompt\(s\) ready for manual review/i)).toBeInTheDocument());
+    await waitFor(() => expect(within(randomEventRegion).getByText(/14 durable prompt\(s\) ready for manual review/i)).toBeInTheDocument());
+    expect(within(randomEventRegion).getByText('TEAM_MVP recognition morale prompt')).toBeInTheDocument();
+    expect(within(randomEventRegion).getByText('ACE recognition morale prompt')).toBeInTheDocument();
+    expect(within(randomEventRegion).getAllByText(/Player morale target: copied-player/i).length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getAllByText(/Player morale \+3/i).length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getAllByText(/Player morale \+2/i).length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getAllByText(/Source:/i).length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getAllByText(/Roster movement/i).length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getAllByText(/Manual smoke: after confirm, open the player profile and check Player Morale History/i).length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).queryByText(/Fan Favorite negative fan reaction prompt/i)).not.toBeInTheDocument();
+    expect(within(randomEventRegion).queryByText(/Albatross relief fan morale prompt/i)).not.toBeInTheDocument();
+    expect(within(randomEventRegion).queryByText(/Cornerstone moved fan morale prompt/i)).not.toBeInTheDocument();
+    expect(within(randomEventRegion).queryByText(/Fan Hopeful prospect-safe morale prompt/i)).not.toBeInTheDocument();
     expect(within(randomEventRegion).getAllByText('no hitter fan reaction').length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText('getting no hit fan reaction').length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText('Archive-backed win fan reaction').length).toBeGreaterThan(0);
@@ -747,7 +759,6 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(randomEventRegion).getAllByText('blowout loss fan reaction').length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getByText('win streak 3 fan reaction')).toBeInTheDocument();
     expect(within(randomEventRegion).getByText('loss streak 3 fan reaction')).toBeInTheDocument();
-    expect(within(randomEventRegion).getAllByText(/Source:/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText(/GameTracker archive/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText(/Score-only schedule/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText(/Safe target:/i).length).toBeGreaterThan(0);
@@ -770,7 +781,9 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
     expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
 
-    fireEvent.click(within(randomEventRegion).getAllByRole('button', { name: 'CONFIRM' })[0]);
+    const noHitterPrompt = within(randomEventRegion).getAllByText('no hitter fan reaction')[0].closest('article');
+    expect(noHitterPrompt).toBeTruthy();
+    fireEvent.click(within(noHitterPrompt as HTMLElement).getByRole('button', { name: 'CONFIRM' }));
     await waitFor(() => expect(within(randomEventRegion).getByText(/APPLIED:/i)).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole('button', { name: /FAN MORALE/i }));

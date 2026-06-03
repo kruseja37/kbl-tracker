@@ -64,6 +64,9 @@ import {
   type FranchiseDesignationEligibilityReport,
 } from "../../../utils/franchiseDesignationEligibility";
 import {
+  buildFranchiseDesignationMoraleContextAdapterReport,
+} from "../../../utils/franchiseDesignationMoraleContextAdapter";
+import {
   buildFranchiseSalaryLifecycle,
   type FranchiseSalaryLifecycleReport,
 } from "../../../utils/franchiseSalaryLifecycle";
@@ -1547,6 +1550,11 @@ export function TeamHubContent() {
     seasonNumber,
   ]);
 
+  const designationMoraleContextReport = useMemo(() => {
+    if (!designationEligibilityReport) return null;
+    return buildFranchiseDesignationMoraleContextAdapterReport(designationEligibilityReport);
+  }, [designationEligibilityReport]);
+
   const randomEventLogReport = useMemo(() => {
     if (!franchiseId) return null;
     const randomEventFarmRecordByPlayerId = new Map(franchiseFarmRecords.map((record) => [record.playerId, record]));
@@ -1568,8 +1576,10 @@ export function TeamHubContent() {
         farmRecordByPlayerId: randomEventFarmRecordByPlayerId,
       })),
       stadiumFoundationReport: stadiumFoundationReport ?? undefined,
+      designationMoraleContexts: designationMoraleContextReport?.contexts,
     });
   }, [
+    designationMoraleContextReport,
     franchiseAllPlayers,
     franchiseCompletedGames,
     franchiseFarmRecords,
