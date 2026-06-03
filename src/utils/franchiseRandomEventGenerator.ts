@@ -8,6 +8,7 @@ import {
   type FranchiseRandomEventSuggestedManualChange,
   type FranchiseRandomEventSuggestedManualChangeTarget,
 } from './franchiseRandomEventLog';
+import { buildFranchiseFanMoraleAchievementEffects } from './franchiseFanMoraleAchievementFormula';
 import { buildFranchiseFanMoraleBlowoutEffects } from './franchiseFanMoraleBlowoutFormula';
 import { buildFranchiseFanMoraleGameResultEffects } from './franchiseFanMoraleGameResultFormula';
 import {
@@ -22,6 +23,7 @@ export const FRANCHISE_RANDOM_EVENT_GENERATOR_VERSION =
 export type FranchiseRandomEventTriggerCategory =
   | 'score-only-team-fan-reaction'
   | 'archive-backed-team-fan-reaction'
+  | 'achievement-team-fan-reaction'
   | 'blowout-team-fan-reaction'
   | 'streak-team-fan-reaction'
   | 'archive-backed-player-morale-prompt'
@@ -157,6 +159,13 @@ export interface FranchiseRandomEventCompletedGameEvidence {
   awayTeamName: string;
   homeTeamName: string;
   finalScore: { away: number; home: number };
+  fameEvents?: Array<{
+    id?: string;
+    eventType: string;
+    playerId?: string;
+    playerName?: string;
+    playerTeam?: string;
+  }>;
   playerStats?: Record<string, { playerName?: string; teamId?: string }>;
 }
 
@@ -558,6 +567,49 @@ function buildBlowoutCandidates(
   });
 }
 
+function buildAchievementCandidates(
+  scope: EventScope,
+  seed: string,
+  games: FranchiseRandomEventCompletedGameEvidence[],
+): FranchiseRandomEventCandidate[] {
+  return games.flatMap((game) => {
+    const formula = buildFranchiseFanMoraleAchievementEffects({
+      gameId: game.gameId,
+      awayTeamId: game.awayTeamId,
+      homeTeamId: game.homeTeamId,
+      awayTeamName: game.awayTeamName,
+      homeTeamName: game.homeTeamName,
+      fameEvents: game.fameEvents,
+    });
+    return formula.effects.map((effectResult) =>
+      candidate(scope, seed, 'achievement-team-fan-reaction', 'gametracker-archive-fact', `${effectResult.teamId}:${effectResult.achievementType}:${effectResult.outcome}:${game.gameId}`, {
+        title: `${effectResult.outcome.replace(/-/g, ' ')} fan reaction`,
+        targetType: 'team-fan',
+        targetId: effectResult.teamId,
+        reason: `Archive-backed achievement in ${game.gameId}: ${effectResult.reason}`,
+        suggestedManualChange: manualChange(
+          'fan-morale-draft',
+          `Optional team fan morale achievement draft (${effectResult.delta > 0 ? '+' : ''}${effectResult.delta}). No automatic effect is applied.`,
+        ),
+        evidenceReferences: [
+          evidence(scope, 'gametracker-archive-summary', `Achievement fame event ${effectResult.achievementType} from completed game ${game.gameId}.`, 1, {
+            teamId: effectResult.teamId,
+            playerId: game.fameEvents?.find((event) => (event.id?.trim() || `${game.gameId}:${event.eventType}:${event.playerTeam}`) === effectResult.fameEventId)?.playerId,
+            archiveBacked: true,
+          }),
+        ],
+        safeEffectPreview: {
+          target: 'fan-morale-draft',
+          targetType: 'team-fan',
+          targetId: effectResult.teamId,
+          delta: effectResult.delta,
+        },
+        warnings: formula.limitations,
+      }),
+    );
+  });
+}
+
 function finiteOrder(...values: Array<number | undefined | null>): number {
   const found = values.find((value) => Number.isFinite(value));
   return typeof found === 'number' ? found : Number.MAX_SAFE_INTEGER;
@@ -894,6 +946,7 @@ export function buildFranchiseRandomEventCandidates(
   const candidates = blockers.length > 0 ? [] : [
     ...buildScoreOnlyCandidates(scope, input.seed, scopedScoreOnlyRows),
     ...buildArchiveTeamCandidates(scope, input.seed, scopedCompletedGames),
+    ...buildAchievementCandidates(scope, input.seed, scopedCompletedGames),
     ...buildBlowoutCandidates(scope, input.seed, [
       ...scopedCompletedGames.map((game) => ({
         source: 'gametracker-archive' as const,

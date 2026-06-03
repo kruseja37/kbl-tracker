@@ -120,6 +120,25 @@ function completedGame(overrides: Partial<CompletedGameRecord> = {}): CompletedG
   };
 }
 
+function fameEvent(overrides: Partial<CompletedGameRecord['fameEvents'][number]> = {}): CompletedGameRecord['fameEvents'][number] {
+  return {
+    id: 'fame-no-hitter-1',
+    gameId: 'game-1',
+    eventType: 'NO_HITTER',
+    playerId: 'pitcher-1',
+    playerName: 'Ace One',
+    playerTeam: 'team-1',
+    fameValue: 5,
+    fameType: 'bonus',
+    inning: 6,
+    halfInning: 'BOTTOM',
+    timestamp: 100,
+    autoDetected: true,
+    description: 'No-hitter',
+    ...overrides,
+  };
+}
+
 function completedGameForTeam(
   index: number,
   awayScore: number,
@@ -435,6 +454,71 @@ describe('franchise random event generator core', () => {
       }),
     ]));
     expect(blowouts[0].id).toMatch(/team-[12]:blowout-(win|loss):8:archive-blowout-1/);
+  });
+
+  test('scoped archive fame events generate achievement team-fan prompts', () => {
+    const report = buildFranchiseRandomEventCandidates({
+      ...scope,
+      seed: 'archive-achievement-seed',
+      completedGames: [completedGame({
+        gameId: 'archive-achievement-1',
+        fameEvents: [fameEvent({
+          id: 'fame-no-hitter-archive-1',
+          gameId: 'archive-achievement-1',
+          eventType: 'NO_HITTER',
+          playerTeam: 'team-1',
+        })],
+      })],
+      generatedAt: 123,
+    });
+    const achievements = report.candidates.filter((candidate) => candidate.triggerCategory === 'achievement-team-fan-reaction');
+
+    expect(achievements).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        eventKind: 'gametracker-archive-fact',
+        targetType: 'team-fan',
+        targetId: 'team-1',
+        title: 'no hitter fan reaction',
+        safeEffectPreview: expect.objectContaining({ delta: 5, targetId: 'team-1' }),
+      }),
+      expect.objectContaining({
+        eventKind: 'gametracker-archive-fact',
+        targetType: 'team-fan',
+        targetId: 'team-2',
+        title: 'getting no hit fan reaction',
+        safeEffectPreview: expect.objectContaining({ delta: -4, targetId: 'team-2' }),
+      }),
+    ]));
+    expect(achievements[0].id).toMatch(/team-[12]:NO_HITTER:(no-hitter|getting-no-hit):archive-achievement-1/);
+    expect(achievements[0].evidenceReferences[0]).toMatchObject({
+      type: 'gametracker-archive-summary',
+      archiveBacked: true,
+      hiddenProspectTruth: false,
+    });
+  });
+
+  test('score-only rows and out-of-scope archives never create achievement prompts', () => {
+    const report = buildFranchiseRandomEventCandidates({
+      ...scope,
+      seed: 'achievement-scope-seed',
+      completedGames: [
+        completedGame({
+          gameId: 'wrong-scope-achievement',
+          statsScopeId: 'other-scope',
+          fameEvents: [fameEvent({ gameId: 'wrong-scope-achievement' })],
+        }),
+        completedGame({
+          gameId: 'missing-scope-achievement',
+          statsScopeId: undefined,
+          fameEvents: [fameEvent({ gameId: 'missing-scope-achievement' })],
+        }),
+      ],
+      scoreOnlyScheduleRows: [scoreOnlyGame({ id: 'score-only-achievement-shape' })],
+      generatedAt: 123,
+    });
+
+    expect(report.candidates.filter((candidate) => candidate.triggerCategory === 'achievement-team-fan-reaction')).toEqual([]);
+    expect(JSON.stringify(report.candidates)).not.toMatch(/NO_HITTER|PERFECT_GAME|no hitter|perfect game/i);
   });
 
   test('scoped score-only blowouts generate team-fan-only prompts', () => {

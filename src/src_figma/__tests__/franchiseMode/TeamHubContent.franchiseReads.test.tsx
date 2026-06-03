@@ -624,7 +624,21 @@ describe('TeamHubContent franchise-owned visible reads', () => {
         finalScore: { away: 4, home: 2 },
         innings: 6,
         totalInnings: 6,
-        fameEvents: [],
+        fameEvents: [{
+          id: 'fame-no-hitter-1',
+          gameId: 'game-archive-1',
+          eventType: 'NO_HITTER',
+          playerId: 'pitcher-1',
+          playerName: 'Ace One',
+          playerTeam: 'team-1',
+          fameValue: 5,
+          fameType: 'bonus',
+          inning: 6,
+          halfInning: 'BOTTOM',
+          timestamp: 100,
+          autoDetected: true,
+          description: 'No-hitter',
+        }],
         playerStats: {},
         pitcherGameStats: [],
         activityLog: [],
@@ -713,7 +727,9 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(workflow).getByText('2. SAFE EFFECT')).toBeInTheDocument();
     expect(within(workflow).getByText('3. DECISION')).toBeInTheDocument();
     expect(within(workflow).getByText('4. VERIFY')).toBeInTheDocument();
-    await waitFor(() => expect(within(randomEventRegion).getByText(/10 durable prompt\(s\) ready for manual review/i)).toBeInTheDocument());
+    await waitFor(() => expect(within(randomEventRegion).getByText(/12 durable prompt\(s\) ready for manual review/i)).toBeInTheDocument());
+    expect(within(randomEventRegion).getAllByText('no hitter fan reaction').length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getAllByText('getting no hit fan reaction').length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText('Archive-backed win fan reaction').length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText('Archive-backed loss fan reaction').length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText('Score-only win fan reaction').length).toBeGreaterThan(0);
@@ -732,6 +748,8 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(randomEventRegion).getAllByText(/Team fan morale -1/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText(/Team fan morale \+2/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText(/Team fan morale -2/i).length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getAllByText(/Team fan morale \+5/i).length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getAllByText(/Team fan morale -4/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText(/Manual smoke: after confirm, open Fan Morale and check Event-Backed History/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText(/Checkbox state: Manual change completed unchecked/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText(/Score-only evidence has no player archive, player stats, WPA, WAR, morale, or relationship authority/i).length).toBeGreaterThan(0);
@@ -748,11 +766,11 @@ describe('TeamHubContent franchise-owned visible reads', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /FAN MORALE/i }));
     expect(await screen.findByText(/Canonical Franchise v1 morale comes from confirmed random-event/i)).toBeInTheDocument();
-    expect(screen.getByText('51')).toBeInTheDocument();
+    expect(screen.getByText('55')).toBeInTheDocument();
     expect(within(screen.getByRole('region', { name: /Fan morale history/i })).getByText(/EVENT-BACKED HISTORY/i)).toBeInTheDocument();
     const fanSpecRegion = screen.getByRole('region', { name: /Fan morale spec alignment status/i });
     expect(within(fanSpecRegion).getByText(/FAN MORALE SPEC ALIGNMENT/i)).toBeInTheDocument();
-    expect(within(fanSpecRegion).getByText(/State: RESTLESS/i)).toBeInTheDocument();
+    expect(within(fanSpecRegion).getByText(/State: CONTENT/i)).toBeInTheDocument();
     expect(within(fanSpecRegion).getByText(/Trend: RISING/i)).toBeInTheDocument();
     expect(within(fanSpecRegion).getByText(/Risk: SAFE/i)).toBeInTheDocument();
     expect(within(fanSpecRegion).getByText(/Canonical scoped storage: IMPLEMENTED/i)).toBeInTheDocument();

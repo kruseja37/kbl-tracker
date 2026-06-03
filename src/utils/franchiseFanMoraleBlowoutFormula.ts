@@ -96,7 +96,8 @@ export function buildFranchiseFanMoraleBlowoutEffects(
 
   const limitations = [
     'V1 blowout formula supports 7+ run differential team fan morale modifiers only.',
-    'Rival, playoff, comeback, walk-off, no-hitter, expected-wins, and daily snapshot modifiers remain deferred.',
+    'No-hitter and perfect-game achievements are handled by a separate confirmation-gated fan morale prompt formula.',
+    'Rival, playoff, comeback, walk-off, expected-wins, and daily snapshot modifiers remain deferred.',
     'Returned effects are preview targets until the user confirms a durable random-event prompt.',
   ];
 

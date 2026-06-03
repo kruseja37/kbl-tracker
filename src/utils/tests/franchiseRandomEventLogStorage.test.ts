@@ -543,6 +543,84 @@ describe('franchise random event durable log and morale effects', () => {
     expect(negativeSnapshot?.currentValue).toBe(49);
   });
 
+  test('generated achievement prompts apply persisted signed deltas idempotently', async () => {
+    const generated = buildGeneratedFranchiseRandomEventLogReport({
+      ...scope,
+      seed: 'achievement-storage-seed',
+      completedGames: [{
+        gameId: 'archive-achievement-1',
+        date: 1,
+        ...scope,
+        franchiseId: scope.franchiseId,
+        competitionType: 'franchise',
+        competitionId: scope.franchiseId,
+        awayTeamId: 'team-a',
+        homeTeamId: 'team-b',
+        awayTeamName: 'A',
+        homeTeamName: 'B',
+        finalScore: { away: 3, home: 0 },
+        innings: 6,
+        totalInnings: 6,
+        fameEvents: [{
+          id: 'fame-perfect-1',
+          gameId: 'archive-achievement-1',
+          eventType: 'PERFECT_GAME',
+          playerId: 'pitcher-a',
+          playerName: 'Ace Alpha',
+          playerTeam: 'team-a',
+          fameValue: 7,
+          fameType: 'bonus',
+          inning: 6,
+          halfInning: 'BOTTOM',
+          timestamp: 1,
+          autoDetected: true,
+          description: 'Perfect game',
+        }],
+        playerStats: {},
+        pitcherGameStats: [],
+        activityLog: [],
+        inningScores: [],
+        aggregationStatus: 'aggregated',
+      }],
+    });
+    const positiveAchievement = generated.entries.find((entry) =>
+      entry.safeEffectPreview?.targetId === 'team-a' &&
+      entry.safeEffectPreview.delta === 7 &&
+      entry.title.includes('perfect game')
+    );
+    const negativeAchievement = generated.entries.find((entry) =>
+      entry.safeEffectPreview?.targetId === 'team-b' &&
+      entry.safeEffectPreview.delta === -4 &&
+      entry.title.includes('getting perfect gamed')
+    );
+
+    expect(positiveAchievement).toBeDefined();
+    expect(negativeAchievement).toBeDefined();
+
+    await syncFranchiseRandomEventLogFromReport(generated);
+    await confirmFranchiseRandomEventLogRecord({
+      recordId: positiveAchievement!.id,
+      actorDisplayName: 'Tester',
+      timestamp: '2026-01-01T00:00:00.000Z',
+    });
+    await confirmFranchiseRandomEventLogRecord({
+      recordId: positiveAchievement!.id,
+      actorDisplayName: 'Tester',
+      timestamp: '2026-01-01T00:01:00.000Z',
+    });
+    await confirmFranchiseRandomEventLogRecord({
+      recordId: negativeAchievement!.id,
+      actorDisplayName: 'Tester',
+      timestamp: '2026-01-01T00:02:00.000Z',
+    });
+
+    const positiveSnapshot = await getFranchiseMoraleSnapshot(scope, 'team-fan', 'team-a');
+    const negativeSnapshot = await getFranchiseMoraleSnapshot(scope, 'team-fan', 'team-b');
+    expect(positiveSnapshot?.currentValue).toBe(57);
+    expect(positiveSnapshot?.history).toHaveLength(1);
+    expect(negativeSnapshot?.currentValue).toBe(46);
+  });
+
   test('legacy entries without safe-effect preview still fall back safely', async () => {
     const prompt = entry('gametracker-archive-fact', 'legacy', { teamId: 'team-a' });
     await syncFranchiseRandomEventLogFromReport(report([prompt]));

@@ -93,8 +93,8 @@ export function buildFranchiseFanMoraleGameResultEffects(
 
   const limitations = [
     'V1 game-result formula supports regular win/loss and shutout win/loss only.',
-    'Blowout modifiers and streaks are handled by separate confirmation-gated fan morale prompt formulas.',
-    'Walk-offs, no-hitters, rivals, playoff implications, and expected wins remain deferred.',
+    'Blowout modifiers, streaks, and no-hitter/perfect-game achievements are handled by separate confirmation-gated fan morale prompt formulas.',
+    'Walk-offs, rivals, playoff implications, and expected wins remain deferred.',
     'Returned effects are preview targets until the user confirms a durable random-event prompt.',
   ];
 

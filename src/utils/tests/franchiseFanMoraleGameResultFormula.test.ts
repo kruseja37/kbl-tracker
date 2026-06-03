@@ -96,7 +96,7 @@ describe('franchise fan morale game-result formula', () => {
       homeScore: 0,
     });
 
-    expect(result.limitations.join(' ')).toMatch(/Blowout modifiers and streaks are handled by separate confirmation-gated fan morale prompt formulas/i);
-    expect(result.limitations.join(' ')).toMatch(/Walk-offs, no-hitters, rivals, playoff implications, and expected wins remain deferred/i);
+    expect(result.limitations.join(' ')).toMatch(/Blowout modifiers, streaks, and no-hitter\/perfect-game achievements are handled by separate confirmation-gated fan morale prompt formulas/i);
+    expect(result.limitations.join(' ')).toMatch(/Walk-offs, rivals, playoff implications, and expected wins remain deferred/i);
   });
 });

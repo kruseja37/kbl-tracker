@@ -69,6 +69,7 @@ describe('franchise fan morale blowout formula', () => {
   test('documents deferred richer modifiers without applying them', () => {
     const result = buildFranchiseFanMoraleBlowoutEffects(input());
 
-    expect(result.limitations.join(' ')).toMatch(/Rival, playoff, comeback, walk-off, no-hitter, expected-wins, and daily snapshot modifiers remain deferred/i);
+    expect(result.limitations.join(' ')).toMatch(/No-hitter and perfect-game achievements are handled by a separate confirmation-gated fan morale prompt formula/i);
+    expect(result.limitations.join(' ')).toMatch(/Rival, playoff, comeback, walk-off, expected-wins, and daily snapshot modifiers remain deferred/i);
   });
 });
