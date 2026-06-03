@@ -71,6 +71,13 @@ export function resetFranchiseMoraleDatabaseForTests(): void {
   dbInstance = null;
 }
 
+export async function clearFranchiseMoraleDatabaseForTests(): Promise<void> {
+  const db = await initFranchiseMoraleDatabase();
+  const tx = db.transaction(STORES.SNAPSHOTS, 'readwrite');
+  tx.objectStore(STORES.SNAPSHOTS).clear();
+  await transactionToPromise(tx);
+}
+
 function nowISO(): string {
   return new Date().toISOString();
 }

@@ -98,13 +98,18 @@ import {
   type FranchiseRandomEventSafeEffectTarget,
 } from "../../../utils/franchiseRandomEventLogStorage";
 import {
+  applyFranchiseMoraleEffect,
   listFranchiseMoraleSnapshots,
   type FranchiseMoraleSnapshot,
+  type FranchiseMoraleTargetType,
 } from "../../../utils/franchiseMoraleState";
 import {
   buildFranchiseFanMoraleSpecViewModel,
   type FranchiseFanMoraleSpecViewModel,
 } from "../../../utils/franchiseFanMoraleSpecAdapter";
+import {
+  buildFranchisePlayerMoraleSpecViewModel,
+} from "../../../utils/franchisePlayerMoraleSpecAdapter";
 import {
   validateFranchiseMoraleRelationshipOverrideProposal,
   type FranchiseMoraleRelationshipOverrideProposal,
@@ -1106,6 +1111,9 @@ export function TeamHubContent() {
   const [moraleSnapshots, setMoraleSnapshots] = useState<FranchiseMoraleSnapshot[]>([]);
   const [moraleLoading, setMoraleLoading] = useState(false);
   const [moraleError, setMoraleError] = useState<string | null>(null);
+  const [manualMoraleActionId, setManualMoraleActionId] = useState<string | null>(null);
+  const [manualMoraleMessage, setManualMoraleMessage] = useState<string | null>(null);
+  const [manualMoraleError, setManualMoraleError] = useState<string | null>(null);
   const [lineupMode, setLineupMode] = useState<"DH" | "NO_DH">("NO_DH");
   const [manualLineupSlots, setManualLineupSlots] = useState<LineupSlot[]>([]);
   const [manualRotationIds, setManualRotationIds] = useState<string[]>([]);
@@ -1677,6 +1685,54 @@ export function TeamHubContent() {
       setRandomEventActionId(null);
     }
   }, [refreshRandomEventWorkflow]);
+
+  const applyManualMoraleAdjustment = useCallback(async (input: {
+    targetType: FranchiseMoraleTargetType;
+    targetId: string;
+    delta: number;
+    reason: string;
+  }) => {
+    if (!franchiseId || !seasonId) return;
+    const trimmedReason = input.reason.trim();
+    const actionId = `manual:${input.targetType}:${input.targetId}`;
+    setManualMoraleActionId(actionId);
+    setManualMoraleMessage(null);
+    setManualMoraleError(null);
+    setMoraleError(null);
+    try {
+      const timestamp = new Date().toISOString();
+      const result = await applyFranchiseMoraleEffect({
+        franchiseId,
+        seasonId,
+        statsScopeId: seasonId,
+        seasonNumber,
+        targetType: input.targetType,
+        teamId: input.targetType === 'team-fan' ? input.targetId : undefined,
+        playerId: input.targetType === 'player' ? input.targetId : undefined,
+        delta: input.delta,
+        reason: trimmedReason,
+        sourceEventId: `${actionId}:${timestamp}`,
+        sourceKind: 'manual-override',
+        actorDisplayName: 'User',
+        timestamp,
+      });
+      if (result.status === 'failed') {
+        throw new Error(result.reason || 'Manual morale adjustment failed.');
+      }
+      setManualMoraleMessage(
+        result.status === 'skipped'
+          ? 'Manual morale adjustment was already recorded for this source.'
+          : `Manual morale adjustment applied: ${result.previousValue} → ${result.currentValue} (${result.delta > 0 ? '+' : ''}${result.delta}).`,
+      );
+      await refreshRandomEventWorkflow();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to apply manual morale adjustment.';
+      setManualMoraleError(message);
+      setMoraleError(message);
+    } finally {
+      setManualMoraleActionId(null);
+    }
+  }, [franchiseId, refreshRandomEventWorkflow, seasonId, seasonNumber]);
 
   const analyzerReport = useMemo(() => {
     if (!franchiseId || !selectedTeamId || !franchiseTeam) return null;
@@ -2394,6 +2450,12 @@ export function TeamHubContent() {
           selectedTeamName={selectedTeam}
           isLoading={moraleLoading}
           error={moraleError}
+          actionId={manualMoraleActionId}
+          message={manualMoraleMessage}
+          manualError={manualMoraleError}
+          onApplyManualMorale={(targetId, delta, reason) =>
+            void applyManualMoraleAdjustment({ targetType: 'team-fan', targetId, delta, reason })
+          }
         />
       )}
 
@@ -2951,6 +3013,12 @@ export function TeamHubContent() {
           editErrors={profileEditErrors}
           editMessage={profileEditMessage}
           isSaving={isProfileSaving}
+          moraleActionId={manualMoraleActionId}
+          moraleMessage={manualMoraleMessage}
+          moraleError={manualMoraleError}
+          onApplyManualMorale={(targetId, delta, reason) =>
+            void applyManualMoraleAdjustment({ targetType: 'player', targetId, delta, reason })
+          }
           onClose={closeSelectedProfile}
           onStartEdit={startProfileEdit}
           onCancelEdit={cancelProfileEdit}
@@ -3018,6 +3086,10 @@ interface FranchiseFanMoralePanelProps {
   selectedTeamName: string;
   isLoading: boolean;
   error: string | null;
+  actionId: string | null;
+  message: string | null;
+  manualError: string | null;
+  onApplyManualMorale: (targetId: string, delta: number, reason: string) => void;
 }
 
 interface FranchiseFarmVisibilityPanelProps {
@@ -3063,6 +3135,10 @@ interface FranchisePlayerProfileModalProps {
   editErrors: string[];
   editMessage: string | null;
   isSaving: boolean;
+  moraleActionId: string | null;
+  moraleMessage: string | null;
+  moraleError: string | null;
+  onApplyManualMorale: (targetId: string, delta: number, reason: string) => void;
   onClose: () => void;
   onStartEdit: () => void;
   onCancelEdit: () => void;
@@ -3080,6 +3156,10 @@ function formatProfileValue(value: unknown): string {
   return String(value);
 }
 
+function canManuallyAdjustPlayerMorale(profile: FranchisePlayerProfileViewModel): boolean {
+  return profile.revealState === 'revealed' && (profile.rosterStatus === 'MLB' || profile.rosterStatus === 'FARM');
+}
+
 function formatProfileHistoryDate(value?: string): string {
   if (!value) return 'Date unavailable';
   const parsed = new Date(value);
@@ -3093,6 +3173,111 @@ function FranchiseProfileField({ label, value }: { label: string; value: unknown
       <div className="text-[7px] font-bold text-[#C4A853]">{label}</div>
       <div className="mt-1 text-[9px] text-[#E8E8D8]">{formatProfileValue(value)}</div>
     </div>
+  );
+}
+
+function parseManualMoraleDelta(value: string): number | null {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed === 0) return null;
+  return parsed;
+}
+
+function FranchiseManualMoraleAdjustmentPanel({
+  title,
+  targetType,
+  targetId,
+  targetLabel,
+  deltaLabel,
+  reasonLabel,
+  actionId,
+  message,
+  error,
+  disabled,
+  onApply,
+}: {
+  title: string;
+  targetType: FranchiseMoraleTargetType;
+  targetId: string;
+  targetLabel: string;
+  deltaLabel: string;
+  reasonLabel: string;
+  actionId: string | null;
+  message: string | null;
+  error: string | null;
+  disabled?: boolean;
+  onApply: (targetId: string, delta: number, reason: string) => void;
+}) {
+  const [delta, setDelta] = useState('1');
+  const [reason, setReason] = useState('');
+  const parsedDelta = parseManualMoraleDelta(delta);
+  const trimmedReason = reason.trim();
+  const pending = actionId === `manual:${targetType}:${targetId}`;
+  const blocked = disabled || pending || !targetId || parsedDelta == null || !trimmedReason;
+
+  return (
+    <section
+      className="mt-3 border-[4px] border-[#4A6844] bg-[#3F563F] p-3"
+      aria-label={`${title} manual adjustment`}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="text-[10px] font-bold text-[#C4A853]">{title}</div>
+          <div className="mt-1 text-[10px] leading-snug text-[#E8E8D8]/65">
+            Manual override only. Starts from canonical 50 baseline and writes scoped morale history; it does not edit profiles, relationships, salary, stories, or Mode 3.
+          </div>
+        </div>
+        <FoundationStatusBadge status={disabled ? 'blocked' : 'ready-for-review'} />
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-[140px_1fr_auto]">
+        <label className="block border-2 border-[#4A6844] bg-[#4A6844] p-2">
+          <span className="block text-[9px] font-bold text-[#C4A853]">{deltaLabel}</span>
+          <input
+            aria-label={deltaLabel}
+            type="number"
+            step={1}
+            value={delta}
+            disabled={disabled || pending}
+            onChange={(event) => setDelta(event.target.value)}
+            className="mt-1 w-full border-2 border-[#3F5A3A] bg-[#5A8352] p-1 text-[10px] text-[#E8E8D8]"
+          />
+        </label>
+        <label className="block border-2 border-[#4A6844] bg-[#4A6844] p-2">
+          <span className="block text-[9px] font-bold text-[#C4A853]">{reasonLabel}</span>
+          <input
+            aria-label={reasonLabel}
+            value={reason}
+            disabled={disabled || pending}
+            onChange={(event) => setReason(event.target.value)}
+            className="mt-1 w-full border-2 border-[#3F5A3A] bg-[#5A8352] p-1 text-[10px] text-[#E8E8D8]"
+          />
+        </label>
+        <button
+          type="button"
+          disabled={blocked}
+          onClick={() => {
+            if (parsedDelta == null || !trimmedReason) return;
+            onApply(targetId, parsedDelta, trimmedReason);
+            setReason('');
+          }}
+          className="border-2 border-[#C4A853] bg-[#6B9462] px-3 py-2 text-[10px] font-bold text-[#E8E8D8] hover:bg-[#5A8352] disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {pending ? 'APPLYING...' : 'APPLY'}
+        </button>
+      </div>
+      <div className="mt-2 text-[10px] leading-snug text-[#E8E8D8]/60">
+        Target: {targetLabel}. Delta must be a non-zero whole number; storage clamps the final value to 0-99.
+      </div>
+      {message && (
+        <div className="mt-2 border-2 border-[#9DFFB0]/40 bg-[#4A6844] p-2 text-[10px] text-[#9DFFB0]">
+          {message}
+        </div>
+      )}
+      {error && (
+        <div className="mt-2 border-2 border-[#DD0000]/50 bg-[#5A3F3F] p-2 text-[10px] text-[#FFD6D6]">
+          {error}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -3135,35 +3320,127 @@ function FranchiseProfileEditHistoryPanel({
 
 function FranchisePlayerMoraleHistoryPanel({
   snapshot,
+  playerId,
+  playerName,
+  canAdjust,
+  actionId,
+  message,
+  error,
+  onApplyManualMorale,
 }: {
   snapshot: FranchiseMoraleSnapshot | null;
+  playerId: string;
+  playerName: string;
+  canAdjust: boolean;
+  actionId: string | null;
+  message: string | null;
+  error: string | null;
+  onApplyManualMorale: (targetId: string, delta: number, reason: string) => void;
 }) {
+  const view = buildFranchisePlayerMoraleSpecViewModel({
+    snapshot,
+    fallbackPlayerId: playerId,
+    fallbackPlayerName: playerName,
+  });
+  const implementedAreas = [
+    view.implementationStatus.canonicalStorage,
+    view.implementationStatus.confirmedEventEffects,
+    view.implementationStatus.manualOverrides,
+    view.implementationStatus.playerProfileDisplay,
+    view.implementationStatus.neutralBaseline,
+  ];
+  const pendingAreas = [
+    view.implementationStatus.personalityBaseline,
+    view.implementationStatus.roleMorale,
+    view.implementationStatus.relationshipEffects,
+    view.implementationStatus.salarySatisfaction,
+    view.implementationStatus.fanMoraleCoupling,
+    view.implementationStatus.designationInputs,
+    view.implementationStatus.performanceFormula,
+    view.implementationStatus.ratingChangeSuggestions,
+    view.implementationStatus.offseasonConsequences,
+  ];
+
   return (
-    <section className="mt-4 border-[4px] border-[#4A6844] bg-[#3F563F] p-3">
+    <section
+      className="mt-4 border-[4px] border-[#4A6844] bg-[#3F563F] p-3"
+      aria-label="Player morale spec alignment"
+    >
       <div className="text-[9px] font-bold text-[#C4A853]">PLAYER MORALE HISTORY</div>
-      <div className="mt-1 text-[8px] text-[#E8E8D8]/65">
-        Durable player morale changes only. Relationship state and profile edits remain separate.
+      <div className="mt-1 text-[10px] leading-snug text-[#E8E8D8]/65">
+        Canonical Franchise v1 player morale uses a neutral 50 baseline on a 0-99 scale. Relationship state, profile edits, salary, ratings, clutch, and Mode 3 remain separate.
       </div>
-      {!snapshot ? (
-        <div className="mt-3 border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[8px] text-[#E8E8D8]/65">
-          Neutral baseline. No confirmed player morale changes recorded for this season.
+
+      <div className="mt-3 grid gap-2 md:grid-cols-3">
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[10px] leading-snug text-[#E8E8D8]">
+          <div className="font-bold text-[#C4A853]">Current</div>
+          <div className="mt-1 text-[24px] font-black leading-none">{view.currentValue}</div>
+          <div className="mt-1">State: {view.state}</div>
+          <div>Trend: {view.trend}</div>
+          <div>Risk: {view.riskLevel}</div>
+          <div>Previous: {view.previousValue ?? '—'}</div>
+        </div>
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[10px] leading-snug text-[#E8E8D8]/75">
+          <div className="font-bold text-[#C4A853]">Implemented</div>
+          <div className="mt-1 space-y-1">
+            {implementedAreas.map((area) => (
+              <div key={area.label}>{area.label}: {formatTruthStatus(area.status)}</div>
+            ))}
+          </div>
+        </div>
+        <div className="border-2 border-[#5A3F3F] bg-[#5A3F3F] p-2 text-[10px] leading-snug text-[#FFD6D6]">
+          <div className="font-bold text-[#FFEFB5]">Deferred / Blocked</div>
+          <div className="mt-1 space-y-1">
+            {pendingAreas.slice(0, 6).map((area) => (
+              <div key={area.label}>{area.label}: {formatTruthStatus(area.status)}</div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {view.lastEvent ? (
+        <div className="mt-3 border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[10px] leading-snug text-[#E8E8D8]/70">
+          Last event: {view.lastEvent.reason}
         </div>
       ) : (
+        <div className="mt-3 border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[10px] leading-snug text-[#E8E8D8]/65">
+          Neutral baseline. No confirmed or manual player morale changes recorded for this season.
+        </div>
+      )}
+
+      {view.recentHistory.length > 0 && (
         <div className="mt-3 space-y-2">
-          <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[8px] text-[#E8E8D8]">
-            Current morale: <span className="font-bold text-[#C4A853]">{snapshot.currentValue}</span>
-          </div>
-          {snapshot.history.slice().reverse().slice(0, 6).map((entry) => (
-            <div key={entry.id} className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[8px] text-[#E8E8D8]">
+          {view.recentHistory.map((entry) => (
+            <div key={entry.id ?? `${entry.sourceEventId}-${entry.timestamp}`} className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[10px] text-[#E8E8D8]">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-bold text-[#C4A853]">
-                  {entry.previousValue} → {entry.currentValue} ({entry.delta > 0 ? '+' : ''}{entry.delta})
+                  {entry.previousValue} → {entry.currentValue} ({(entry.delta ?? 0) > 0 ? '+' : ''}{entry.delta ?? 0})
                 </span>
                 <span className="text-[#E8E8D8]/55">{formatProfileHistoryDate(entry.timestamp)}</span>
               </div>
               <div className="mt-1 text-[#E8E8D8]/75">{entry.reason}</div>
+              <div className="mt-1 text-[#E8E8D8]/55">Source: {entry.sourceKind ?? 'unknown'}</div>
             </div>
           ))}
+        </div>
+      )}
+
+      {canAdjust ? (
+        <FranchiseManualMoraleAdjustmentPanel
+          title="MANUAL PLAYER MORALE ADJUSTMENT"
+          targetType="player"
+          targetId={playerId}
+          targetLabel={`${playerName} (${playerId})`}
+          deltaLabel="Player morale delta"
+          reasonLabel="Player morale reason"
+          actionId={actionId}
+          message={message}
+          error={error}
+          onApply={onApplyManualMorale}
+        />
+      ) : (
+        <div className="mt-3 border-2 border-[#5A3F3F] bg-[#5A3F3F] p-2 text-[10px] leading-snug text-[#FFD6D6]">
+          Manual player morale controls are hidden until the player is revealed/current. Hidden FARM/prospect truth cannot drive morale changes.
         </div>
       )}
     </section>
@@ -3545,6 +3822,10 @@ function FranchisePlayerProfileModal({
   editErrors,
   editMessage,
   isSaving,
+  moraleActionId,
+  moraleMessage,
+  moraleError,
+  onApplyManualMorale,
   onClose,
   onStartEdit,
   onCancelEdit,
@@ -3729,7 +4010,16 @@ function FranchisePlayerProfileModal({
         )}
 
         <FranchiseProfileEditHistoryPanel entries={profile.editHistory} />
-        <FranchisePlayerMoraleHistoryPanel snapshot={moraleSnapshot} />
+        <FranchisePlayerMoraleHistoryPanel
+          snapshot={moraleSnapshot}
+          playerId={profile.playerId}
+          playerName={profile.identity.name}
+          canAdjust={canManuallyAdjustPlayerMorale(profile)}
+          actionId={moraleActionId}
+          message={moraleMessage}
+          error={moraleError}
+          onApplyManualMorale={onApplyManualMorale}
+        />
         <FranchiseManualOverridePreviewPanel
           preview={manualOverridePreview}
           playerName={profile.identity.name}
@@ -4084,6 +4374,10 @@ function FranchiseFanMoralePanel({
   selectedTeamName,
   isLoading,
   error,
+  actionId,
+  message,
+  manualError,
+  onApplyManualMorale,
 }: FranchiseFanMoralePanelProps) {
   const teamFanSnapshot = snapshots.find((snapshot) =>
     snapshot.targetType === 'team-fan' && snapshot.teamId === selectedTeamId,
@@ -4159,6 +4453,20 @@ function FranchiseFanMoralePanel({
           )}
         </section>
       </div>
+
+      <FranchiseManualMoraleAdjustmentPanel
+        title="MANUAL FAN MORALE ADJUSTMENT"
+        targetType="team-fan"
+        targetId={selectedTeamId}
+        targetLabel={`${selectedTeamName || 'Selected team'} (${selectedTeamId || 'missing-team'})`}
+        deltaLabel="Fan morale delta"
+        reasonLabel="Fan morale reason"
+        actionId={actionId}
+        message={message}
+        error={manualError}
+        disabled={!selectedTeamId}
+        onApply={onApplyManualMorale}
+      />
 
       <FranchiseFanMoraleSpecAlignmentPanel view={specView} />
 

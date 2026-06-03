@@ -81,6 +81,13 @@ export function resetFranchiseRandomEventLogDatabaseForTests(): void {
   dbInstance = null;
 }
 
+export async function clearFranchiseRandomEventLogDatabaseForTests(): Promise<void> {
+  const db = await initFranchiseRandomEventLogDatabase();
+  const tx = db.transaction(STORES.RECORDS, 'readwrite');
+  tx.objectStore(STORES.RECORDS).clear();
+  await transactionToPromise(tx);
+}
+
 function nowISO(): string {
   return new Date().toISOString();
 }

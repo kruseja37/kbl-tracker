@@ -1,8 +1,15 @@
 import 'fake-indexeddb/auto';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { getFranchiseMoraleSnapshot, resetFranchiseMoraleDatabaseForTests } from '../../../utils/franchiseMoraleState';
-import { resetFranchiseRandomEventLogDatabaseForTests } from '../../../utils/franchiseRandomEventLogStorage';
+import {
+  clearFranchiseMoraleDatabaseForTests,
+  getFranchiseMoraleSnapshot,
+  resetFranchiseMoraleDatabaseForTests,
+} from '../../../utils/franchiseMoraleState';
+import {
+  clearFranchiseRandomEventLogDatabaseForTests,
+  resetFranchiseRandomEventLogDatabaseForTests,
+} from '../../../utils/franchiseRandomEventLogStorage';
 
 const mocks = vi.hoisted(() => ({
   mockUseOffseasonData: vi.fn(),
@@ -395,9 +402,11 @@ function designationEligibilityReport(overrides: Record<string, unknown> = {}) {
 }
 
 describe('TeamHubContent franchise-owned visible reads', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     resetFranchiseRandomEventLogDatabaseForTests();
     resetFranchiseMoraleDatabaseForTests();
+    await clearFranchiseRandomEventLogDatabaseForTests();
+    await clearFranchiseMoraleDatabaseForTests();
     vi.clearAllMocks();
     mocks.mockUseOffseasonData.mockReturnValue({
       teams: [{ id: 'team-1', name: 'Mutable Alpha', stadium: 'Mutable Park' }],
@@ -783,6 +792,40 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(fanSpecRegion).getByText(/Daily snapshots \/ high-low-average tracking: DEFERRED/i)).toBeInTheDocument();
     expect(within(fanSpecRegion).getByText(/Player morale influence\/coupling: DEFERRED/i)).toBeInTheDocument();
     expect(within(fanSpecRegion).queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  test('manual fan morale adjustment writes scoped team fan morale history without unrelated mutation', async () => {
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /FAN MORALE/i }));
+    const selectedTeamRegion = await screen.findByRole('region', { name: /Selected team fan morale/i });
+    const beforeSnapshot = await getFranchiseMoraleSnapshot({
+      franchiseId: 'franchise-1',
+      seasonId: 'franchise-1-season-2',
+      statsScopeId: 'franchise-1-season-2',
+    }, 'team-fan', 'team-1');
+    const beforeValue = beforeSnapshot?.currentValue ?? 50;
+    expect(within(selectedTeamRegion).getByText(String(beforeValue))).toBeInTheDocument();
+    const manualRegion = screen.getByRole('region', { name: /MANUAL FAN MORALE ADJUSTMENT manual adjustment/i });
+    fireEvent.change(within(manualRegion).getByLabelText(/Fan morale delta/i), { target: { value: '4' } });
+    fireEvent.change(within(manualRegion).getByLabelText(/Fan morale reason/i), { target: { value: 'Manual fan sentiment note.' } });
+    fireEvent.click(within(manualRegion).getByRole('button', { name: 'APPLY' }));
+
+    const afterValue = Math.min(99, beforeValue + 4);
+    await waitFor(() => expect(within(manualRegion).getByText(new RegExp(`Manual morale adjustment applied: ${beforeValue} → ${afterValue} \\(\\+4\\)`, 'i'))).toBeInTheDocument());
+    await waitFor(() => expect(within(selectedTeamRegion).getByText(String(afterValue))).toBeInTheDocument());
+    const historyRegion = screen.getByRole('region', { name: /Fan morale history/i });
+    expect(within(historyRegion).getByText(/Manual fan sentiment note/i)).toBeInTheDocument();
+
+    const snapshot = await getFranchiseMoraleSnapshot({
+      franchiseId: 'franchise-1',
+      seasonId: 'franchise-1-season-2',
+      statsScopeId: 'franchise-1-season-2',
+    }, 'team-fan', 'team-1');
+    expect(snapshot?.currentValue).toBe(afterValue);
+    expect(snapshot?.history[0]?.sourceKind).toBe('manual-override');
+    expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
   });
 
   test('confirms generated archive-backed player prompts as player morale instead of selected-team fan morale', async () => {
@@ -1291,10 +1334,88 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(dialog).getByText(/\$3\.0M/i)).toBeInTheDocument();
     expect(within(dialog).getByText('PROFILE EDIT HISTORY')).toBeInTheDocument();
     expect(within(dialog).getByText(/No player-local profile edits recorded/i)).toBeInTheDocument();
+    const moraleRegion = within(dialog).getByRole('region', { name: /Player morale spec alignment/i });
+    expect(within(moraleRegion).getByText('PLAYER MORALE HISTORY')).toBeInTheDocument();
+    expect(within(moraleRegion).getByText('50')).toBeInTheDocument();
+    expect(within(moraleRegion).getByText(/State: CONTENT/i)).toBeInTheDocument();
+    expect(within(moraleRegion).getByText(/Neutral 50 baseline: IMPLEMENTED/i)).toBeInTheDocument();
+    expect(within(moraleRegion).getByLabelText(/Player morale delta/i)).toBeInTheDocument();
+    expect(within(moraleRegion).getByLabelText(/Player morale reason/i)).toBeInTheDocument();
     expect(within(dialog).getByText('MANUAL OVERRIDE PREVIEW')).toBeInTheDocument();
-    expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/SAVE PLAYER MORALE/i)).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
+  test('revealed FARM profile can use manual player morale controls', async () => {
+    mocks.mockGetAllFranchisePlayers.mockResolvedValueOnce([
+      franchisePlayer('farm-revealed', 'Farm', 'Revealed', 'CF', {
+        ratingRevealState: 'revealed',
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'FARM' }],
+      }),
+    ]);
+    mocks.mockGetFranchiseFarmRoster.mockResolvedValueOnce([
+      {
+        id: 'franchise-1:franchise-1-season-2:team-1:farm-revealed',
+        franchiseId: 'franchise-1',
+        seasonId: 'franchise-1-season-2',
+        seasonNumber: 2,
+        teamId: 'team-1',
+        playerId: 'farm-revealed',
+        rosterLevel: 'AAA',
+        rosterStatus: 'FARM',
+        optionsUsed: 0,
+        optionDates: [],
+        ratingRevealState: 'revealed',
+        assignedAt: '2026-01-01T00:00:00.000Z',
+        lastModified: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /DIRECTORY/i }));
+    const directory = await screen.findByRole('region', { name: /Franchise player directory/i });
+    fireEvent.click(within(directory).getByRole('button', { name: /Open profile for Farm Revealed/i }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Farm Revealed/i });
+    expect(within(dialog).getByText(/FARM · REVEALED · Read-only/i)).toBeInTheDocument();
+    const moraleRegion = within(dialog).getByRole('region', { name: /Player morale spec alignment/i });
+    expect(within(moraleRegion).getByLabelText(/Player morale delta/i)).toBeInTheDocument();
+    expect(within(moraleRegion).getByLabelText(/Player morale reason/i)).toBeInTheDocument();
+  });
+
+  test('free-agent and unknown profiles do not show manual player morale controls', async () => {
+    mocks.mockGetAllFranchisePlayers.mockResolvedValueOnce([
+      franchisePlayer('free-agent-player', 'Free', 'Agent', 'SS', {
+        leagueAssignments: [{ leagueId: 'league-1', teamId: '', rosterStatus: 'FREE_AGENT' }],
+      }),
+      franchisePlayer('unknown-player', 'Unknown', 'Player', 'CF', {
+        leagueAssignments: [],
+      }),
+    ]);
+    mocks.mockGetFranchiseFarmRoster.mockResolvedValueOnce([]);
+
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /DIRECTORY/i }));
+    const directory = await screen.findByRole('region', { name: /Franchise player directory/i });
+    fireEvent.click(within(directory).getByRole('button', { name: /Open profile for Free Agent/i }));
+
+    let dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Free Agent/i });
+    let moraleRegion = within(dialog).getByRole('region', { name: /Player morale spec alignment/i });
+    expect(within(moraleRegion).queryByLabelText(/Player morale delta/i)).not.toBeInTheDocument();
+    expect(within(moraleRegion).queryByLabelText(/Player morale reason/i)).not.toBeInTheDocument();
+    expect(within(moraleRegion).getByText(/Manual player morale controls are hidden until the player is revealed\/current/i)).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'CLOSE' }));
+    fireEvent.click(within(directory).getByRole('button', { name: /Open profile for Unknown Player/i }));
+
+    dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Unknown Player/i });
+    moraleRegion = within(dialog).getByRole('region', { name: /Player morale spec alignment/i });
+    expect(within(moraleRegion).queryByLabelText(/Player morale delta/i)).not.toBeInTheDocument();
+    expect(within(moraleRegion).queryByLabelText(/Player morale reason/i)).not.toBeInTheDocument();
+    expect(within(moraleRegion).getByText(/Manual player morale controls are hidden until the player is revealed\/current/i)).toBeInTheDocument();
   });
 
   test('profile modal shows read-only manual override preview for MLB/revealed player', async () => {
@@ -1324,6 +1445,34 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(preview).queryByRole('textbox')).not.toBeInTheDocument();
     expect(within(preview).queryByText(/submit/i)).not.toBeInTheDocument();
     expect(within(preview).queryByText(/approve/i)).not.toBeInTheDocument();
+    expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
+  test('manual player morale adjustment writes scoped player morale history without profile mutation', async () => {
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Open profile for C\. Player/i }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Copied Player/i });
+    const moraleRegion = within(dialog).getByRole('region', { name: /Player morale spec alignment/i });
+    fireEvent.change(within(moraleRegion).getByLabelText(/Player morale delta/i), { target: { value: '-6' } });
+    fireEvent.change(within(moraleRegion).getByLabelText(/Player morale reason/i), { target: { value: 'Manual confidence correction.' } });
+    fireEvent.click(within(moraleRegion).getByRole('button', { name: 'APPLY' }));
+
+    await waitFor(() => expect(within(moraleRegion).getByText(/Manual morale adjustment applied: 50 → 44 \(-6\)/i)).toBeInTheDocument());
+    await waitFor(() => expect(within(moraleRegion).getByText(/State: FRUSTRATED/i)).toBeInTheDocument());
+    expect(within(moraleRegion).getAllByText(/Manual confidence correction/i).length).toBeGreaterThan(0);
+    expect(within(moraleRegion).getByText(/Source: manual-override/i)).toBeInTheDocument();
+
+    const snapshot = await getFranchiseMoraleSnapshot({
+      franchiseId: 'franchise-1',
+      seasonId: 'franchise-1-season-2',
+      statsScopeId: 'franchise-1-season-2',
+    }, 'player', 'copied-player');
+    expect(snapshot?.currentValue).toBe(44);
+    expect(snapshot?.history[0]?.sourceKind).toBe('manual-override');
     expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
   });
@@ -1558,7 +1707,8 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(dialog).getByText('PROFILE EDIT HISTORY')).toBeInTheDocument();
     expect(within(dialog).getByText('power')).toBeInTheDocument();
     expect(within(dialog).getAllByText(/60.*77/i).length).toBeGreaterThan(0);
-    expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText('FIRST NAME')).not.toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/Player morale reason/i)).toBeInTheDocument();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
     expect(mocks.mockBuildFranchiseSalaryLifecycle).toHaveBeenCalledTimes(1);
     expect(mocks.mockBuildFranchiseDesignationEligibility).toHaveBeenCalledTimes(1);

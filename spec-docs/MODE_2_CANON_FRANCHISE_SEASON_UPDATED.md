@@ -2454,6 +2454,8 @@ interface TeamDesignationState {
 
 **Player morale** is a per-player 0-100 value tracking each player's emotional/motivational state. Distinct from fan morale (§20), which is per-team.
 
+**Franchise internal v1 checkpoint (June 2026):** canonical Franchise morale storage currently uses a 0-99 scale for both fan and player morale. Every player starts at neutral `50`; personality-specific baselines remain deferred until explicitly approved for Franchise v1.
+
 ```typescript
 interface PlayerMorale {
   playerId: string;
