@@ -6,6 +6,7 @@ import {
   franchiseRandomEventCandidatesToLogReport,
   FRANCHISE_RANDOM_EVENT_GENERATOR_VERSION,
 } from '../franchiseRandomEventGenerator';
+import type { FranchiseDesignationMoraleBridgeInput } from '../franchiseDesignationMoraleBridge';
 import type { CompletedGameRecord } from '../gameStorage';
 import type { Player } from '../leagueBuilderStorage';
 import type { ScheduledGame } from '../scheduleStorage';
@@ -232,6 +233,31 @@ function transaction(overrides: Partial<TransactionLogEntry> = {}): TransactionL
   };
 }
 
+function designationContext(
+  overrides: Partial<FranchiseDesignationMoraleBridgeInput> = {},
+): FranchiseDesignationMoraleBridgeInput {
+  return {
+    ...scope,
+    designationType: 'TEAM_MVP',
+    designationStatus: 'preview-only',
+    playerId: 'player-1',
+    playerName: 'Revealed Player',
+    teamId: 'team-1',
+    teamName: 'Alpha',
+    rosterStatus: 'MLB',
+    ratingRevealState: 'revealed',
+    playerCurrent: true,
+    triggerKind: 'recognition',
+    valueDeltaTrusted: false,
+    durableDesignationStateTrusted: false,
+    hiddenProspectTruthPresent: false,
+    hiddenProspectTruthApproved: false,
+    hiddenTruthExposed: false,
+    generatedAt: 123,
+    ...overrides,
+  };
+}
+
 function stadiumReport(overrides: Partial<FranchiseStadiumFoundationReport> = {}): FranchiseStadiumFoundationReport {
   return {
     contractVersion: FRANCHISE_STADIUM_FOUNDATION_CONTRACT_VERSION,
@@ -410,6 +436,27 @@ describe('franchise random event generator core', () => {
       hiddenProspectTruth: false,
     });
     expect(JSON.stringify(scoreOnlyCandidates)).not.toMatch(/player-morale-draft/);
+  });
+
+  test('score-only prompts remain team fan morale only when designation contexts are also present', () => {
+    const report = buildFranchiseRandomEventCandidates({
+      ...scope,
+      seed: 'score-only-designation-isolation-seed',
+      scoreOnlyScheduleRows: [scoreOnlyGame()],
+      designationMoraleContexts: [
+        designationContext({
+          designationType: 'TEAM_MVP',
+          triggerKind: 'recognition',
+        }),
+      ],
+      generatedAt: 123,
+    });
+    const scoreOnlyCandidates = report.candidates.filter((candidate) => candidate.triggerCategory === 'score-only-team-fan-reaction');
+
+    expect(scoreOnlyCandidates).toHaveLength(2);
+    expect(scoreOnlyCandidates.every((candidate) => candidate.targetType === 'team-fan')).toBe(true);
+    expect(scoreOnlyCandidates.every((candidate) => candidate.eventKind === 'score-only-context')).toBe(true);
+    expect(JSON.stringify(scoreOnlyCandidates)).not.toMatch(/TEAM_MVP|player-morale-draft/i);
   });
 
   test('archive-backed team candidates include signed winner and loser prompts', () => {
@@ -620,6 +667,246 @@ describe('franchise random event generator core', () => {
       },
     });
     expect(playerCandidate?.reason).toMatch(/archive-backed player stat evidence/i);
+  });
+
+  test('designation bridge integration generates MVP and Ace player morale prompt candidates with safe-effect previews', () => {
+    const report = buildFranchiseRandomEventCandidates({
+      ...scope,
+      seed: 'designation-recognition-seed',
+      designationMoraleContexts: [
+        designationContext({ designationType: 'TEAM_MVP' }),
+        designationContext({ designationType: 'ACE', playerId: 'pitcher-1', playerName: 'Ace One' }),
+      ],
+      generatedAt: 123,
+    });
+    const designationCandidates = report.candidates.filter((candidate) => candidate.triggerCategory === 'designation-morale-reaction');
+
+    expect(designationCandidates).toHaveLength(2);
+    expect(designationCandidates).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        title: 'TEAM_MVP recognition morale prompt',
+        targetType: 'player',
+        targetId: 'player-1',
+        eventKind: 'roster-movement-context',
+        safeEffectPreview: expect.objectContaining({
+          target: 'player-morale-draft',
+          targetType: 'player',
+          targetId: 'player-1',
+          delta: 3,
+          automaticMoraleMutationAllowed: false,
+          designationMutationAllowed: false,
+        }),
+      }),
+      expect.objectContaining({
+        title: 'ACE recognition morale prompt',
+        targetType: 'player',
+        targetId: 'pitcher-1',
+        safeEffectPreview: expect.objectContaining({
+          target: 'player-morale-draft',
+          delta: 2,
+        }),
+      }),
+    ]));
+    expect(designationCandidates.every((candidate) => candidate.limitations.some((limitation) => /read-only candidate generation/i.test(limitation)))).toBe(true);
+  });
+
+  test('designation context with omitted scope fields produces no candidates while fully scoped equivalent still works', () => {
+    const omittedScope = buildFranchiseRandomEventCandidates({
+      ...scope,
+      seed: 'designation-omitted-scope-seed',
+      designationMoraleContexts: [
+        designationContext({
+          franchiseId: undefined,
+          seasonId: undefined,
+          statsScopeId: undefined,
+          seasonNumber: undefined,
+        }),
+      ],
+      generatedAt: 123,
+    });
+
+    expect(omittedScope.candidates.filter((candidate) => candidate.triggerCategory === 'designation-morale-reaction')).toHaveLength(0);
+    expect(omittedScope.warnings.join(' ')).toMatch(/TEAM_MVP designation morale context blocked/i);
+
+    const fullyScoped = buildFranchiseRandomEventCandidates({
+      ...scope,
+      seed: 'designation-fully-scoped-seed',
+      designationMoraleContexts: [
+        designationContext(),
+      ],
+      generatedAt: 123,
+    });
+
+    expect(fullyScoped.candidates.filter((candidate) => candidate.triggerCategory === 'designation-morale-reaction')).toHaveLength(1);
+    expect(fullyScoped.candidates.find((candidate) => candidate.triggerCategory === 'designation-morale-reaction')).toMatchObject({
+      targetType: 'player',
+      targetId: 'player-1',
+      safeEffectPreview: expect.objectContaining({ target: 'player-morale-draft' }),
+    });
+  });
+
+  test('trusted Fan Favorite roster move generates fan and player prompts while untrusted value-delta blocks', () => {
+    const report = buildFranchiseRandomEventCandidates({
+      ...scope,
+      seed: 'designation-fan-favorite-seed',
+      designationMoraleContexts: [
+        designationContext({
+          designationType: 'FAN_FAVORITE',
+          triggerKind: 'trade',
+          valueDeltaTrusted: false,
+          durableDesignationStateTrusted: false,
+        }),
+        designationContext({
+          designationType: 'FAN_FAVORITE',
+          triggerKind: 'trade',
+          valueDeltaTrusted: true,
+          durableDesignationStateTrusted: true,
+        }),
+      ],
+      generatedAt: 123,
+    });
+    const designationCandidates = report.candidates.filter((candidate) => candidate.triggerCategory === 'designation-morale-reaction');
+
+    expect(designationCandidates).toHaveLength(2);
+    expect(report.warnings.join(' ')).toMatch(/FAN_FAVORITE designation morale context blocked/i);
+    expect(designationCandidates.map((candidate) => candidate.targetType)).toEqual(['player', 'team-fan']);
+    expect(designationCandidates.find((candidate) => candidate.targetType === 'team-fan')?.safeEffectPreview).toMatchObject({
+      target: 'fan-morale-draft',
+      delta: -3,
+    });
+    expect(designationCandidates.find((candidate) => candidate.targetType === 'player')?.safeEffectPreview).toMatchObject({
+      target: 'player-morale-draft',
+      delta: -2,
+    });
+  });
+
+  test('trusted Albatross move generates relief candidates while untrusted value-delta blocks', () => {
+    const report = buildFranchiseRandomEventCandidates({
+      ...scope,
+      seed: 'designation-albatross-seed',
+      designationMoraleContexts: [
+        designationContext({
+          designationType: 'ALBATROSS',
+          triggerKind: 'trade',
+          valueDeltaTrusted: false,
+          durableDesignationStateTrusted: false,
+        }),
+        designationContext({
+          designationType: 'ALBATROSS',
+          triggerKind: 'trade',
+          valueDeltaTrusted: true,
+          durableDesignationStateTrusted: true,
+        }),
+      ],
+      generatedAt: 123,
+    });
+    const designationCandidates = report.candidates.filter((candidate) => candidate.triggerCategory === 'designation-morale-reaction');
+
+    expect(designationCandidates).toHaveLength(2);
+    expect(report.warnings.join(' ')).toMatch(/ALBATROSS designation morale context blocked/i);
+    expect(designationCandidates.find((candidate) => candidate.targetType === 'team-fan')?.safeEffectPreview).toMatchObject({
+      target: 'fan-morale-draft',
+      delta: 2,
+    });
+    expect(designationCandidates.find((candidate) => candidate.targetType === 'player')?.safeEffectPreview).toMatchObject({
+      target: 'player-morale-draft',
+      delta: 1,
+    });
+  });
+
+  test('trusted Cornerstone move generates stronger fan and player candidates while untrusted durable state blocks', () => {
+    const report = buildFranchiseRandomEventCandidates({
+      ...scope,
+      seed: 'designation-cornerstone-seed',
+      designationMoraleContexts: [
+        designationContext({
+          designationType: 'CORNERSTONE',
+          triggerKind: 'trade',
+          durableDesignationStateTrusted: false,
+        }),
+        designationContext({
+          designationType: 'CORNERSTONE',
+          triggerKind: 'trade',
+          durableDesignationStateTrusted: true,
+        }),
+      ],
+      generatedAt: 123,
+    });
+    const designationCandidates = report.candidates.filter((candidate) => candidate.triggerCategory === 'designation-morale-reaction');
+
+    expect(designationCandidates).toHaveLength(2);
+    expect(report.warnings.join(' ')).toMatch(/CORNERSTONE designation morale context blocked/i);
+    expect(designationCandidates.find((candidate) => candidate.targetType === 'team-fan')?.safeEffectPreview.delta).toBe(-5);
+    expect(designationCandidates.find((candidate) => candidate.targetType === 'player')?.safeEffectPreview.delta).toBe(-3);
+  });
+
+  test('Captain remains blocked when hidden-charisma safety is false', () => {
+    const report = buildFranchiseRandomEventCandidates({
+      ...scope,
+      seed: 'designation-captain-seed',
+      designationMoraleContexts: [
+        designationContext({
+          designationType: 'CAPTAIN',
+          triggerKind: 'recognition',
+          hiddenProspectTruthPresent: true,
+          hiddenProspectTruthApproved: false,
+        }),
+      ],
+      generatedAt: 123,
+    });
+
+    expect(report.candidates.filter((candidate) => candidate.triggerCategory === 'designation-morale-reaction')).toHaveLength(0);
+    expect(report.warnings.join(' ')).toMatch(/CAPTAIN designation morale context blocked/i);
+  });
+
+  test('Fan Hopeful prompt is prospect-safe and does not expose hidden truth', () => {
+    const report = buildFranchiseRandomEventCandidates({
+      ...scope,
+      seed: 'designation-fan-hopeful-seed',
+      designationMoraleContexts: [
+        designationContext({
+          designationType: 'FAN_HOPEFUL',
+          triggerKind: 'call_up',
+          rosterStatus: 'FARM',
+          ratingRevealState: 'hidden',
+          hiddenProspectTruthPresent: false,
+          hiddenTruthExposed: false,
+        }),
+      ],
+      generatedAt: 123,
+    });
+    const [candidate] = report.candidates.filter((event) => event.triggerCategory === 'designation-morale-reaction');
+
+    expect(candidate).toMatchObject({
+      title: 'Fan Hopeful prospect-safe morale prompt',
+      targetType: 'player',
+      targetId: 'player-1',
+      safeEffectPreview: expect.objectContaining({
+        target: 'player-morale-draft',
+        targetType: 'player',
+        delta: 1,
+      }),
+    });
+    expect(candidate.evidenceReferences[0]).toMatchObject({
+      targetPlayerRevealState: 'hidden',
+      hiddenProspectTruth: false,
+    });
+    expect(JSON.stringify(candidate)).not.toMatch(/true ratings|trueGrade|hiddenScoutTruth|hiddenPersonalityModifiers|leadership/i);
+  });
+
+  test('missing or mismatched designation scope produces no designation prompt candidates', () => {
+    const report = buildFranchiseRandomEventCandidates({
+      ...scope,
+      seed: 'designation-scope-seed',
+      designationMoraleContexts: [
+        designationContext({ franchiseId: '', seasonId: '', statsScopeId: '', seasonNumber: 0 }),
+        designationContext({ triggerFranchiseId: 'other-franchise', triggerStatsScopeId: 'other-scope' }),
+      ],
+      generatedAt: 123,
+    });
+
+    expect(report.candidates.filter((candidate) => candidate.triggerCategory === 'designation-morale-reaction')).toHaveLength(0);
+    expect(report.warnings.join(' ')).toMatch(/TEAM_MVP designation morale context blocked/i);
   });
 
   test('hidden FARM/prospect targets and truth are excluded from candidates', () => {

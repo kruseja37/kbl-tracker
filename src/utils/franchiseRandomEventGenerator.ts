@@ -12,6 +12,10 @@ import { buildFranchiseFanMoraleAchievementEffects } from './franchiseFanMoraleA
 import { buildFranchiseFanMoraleBlowoutEffects } from './franchiseFanMoraleBlowoutFormula';
 import { buildFranchiseFanMoraleGameResultEffects } from './franchiseFanMoraleGameResultFormula';
 import {
+  buildFranchiseDesignationMoraleBridgeReport,
+  type FranchiseDesignationMoraleBridgeInput,
+} from './franchiseDesignationMoraleBridge';
+import {
   buildFranchiseFanMoraleStreakEffects,
   type FranchiseFanMoraleStreakGameEvidence,
 } from './franchiseFanMoraleStreakFormula';
@@ -28,6 +32,7 @@ export type FranchiseRandomEventTriggerCategory =
   | 'streak-team-fan-reaction'
   | 'archive-backed-player-morale-prompt'
   | 'roster-movement-morale-prompt'
+  | 'designation-morale-reaction'
   | 'stadium-spray-story-prompt'
   | 'manual-profile-review-prompt';
 
@@ -74,6 +79,7 @@ export interface FranchiseRandomEventCandidate {
   safeEffectPreview: FranchiseRandomEventSafeEffectPreviewMetadata;
   blockers: string[];
   warnings: string[];
+  limitations: string[];
   hiddenSafe: true;
 }
 
@@ -107,6 +113,7 @@ export interface BuildFranchiseRandomEventCandidatesInput {
   scoreOnlyScheduleRows?: FranchiseRandomEventScheduleEvidence[];
   rosterTransactions?: FranchiseRandomEventTransactionEvidence[];
   players?: FranchiseRandomEventPlayerEvidence[];
+  designationMoraleContexts?: FranchiseDesignationMoraleBridgeInput[];
   stadiumFoundationReport?: FranchiseStadiumFoundationReport | null;
   moraleSnapshots?: FranchiseRandomEventMoraleSnapshotEvidence[];
   generatedAt?: number;
@@ -367,6 +374,7 @@ function candidate(
     >;
     warnings?: string[];
     blockers?: string[];
+    limitations?: string[];
   },
 ): FranchiseRandomEventCandidate {
   const seed = `${inputSeed}:${triggerCategory}:${suffix}`;
@@ -399,6 +407,7 @@ function candidate(
     },
     blockers: unique(input.blockers ?? []),
     warnings: unique(input.warnings ?? []),
+    limitations: unique(input.limitations ?? []),
     hiddenSafe: true,
   };
 }
@@ -759,6 +768,42 @@ function buildRosterMovementCandidates(
   return candidates;
 }
 
+function buildDesignationMoraleCandidates(
+  scope: EventScope,
+  seed: string,
+  designationMoraleContexts: FranchiseDesignationMoraleBridgeInput[],
+  warnings: string[],
+): FranchiseRandomEventCandidate[] {
+  return designationMoraleContexts.flatMap((context, index) => {
+    const report = buildFranchiseDesignationMoraleBridgeReport(context);
+
+    if (report.blockers.length > 0) {
+      warnings.push(`${context.designationType} designation morale context blocked; no random-event candidate generated.`);
+      return [];
+    }
+
+    return report.candidates.map((bridgeCandidate) =>
+      candidate(scope, seed, 'designation-morale-reaction', bridgeCandidate.eventKind, `${context.designationType}:${context.triggerKind}:${index}:${bridgeCandidate.targetType}:${bridgeCandidate.targetId}`, {
+        title: bridgeCandidate.title,
+        targetType: bridgeCandidate.targetType,
+        targetId: bridgeCandidate.targetId,
+        reason: bridgeCandidate.reason,
+        suggestedManualChange: bridgeCandidate.suggestedManualChange,
+        evidenceReferences: bridgeCandidate.evidenceReferences,
+        safeEffectPreview: {
+          target: bridgeCandidate.safeEffectPreview.target,
+          targetType: bridgeCandidate.safeEffectPreview.targetType,
+          targetId: bridgeCandidate.safeEffectPreview.targetId,
+          delta: bridgeCandidate.safeEffectPreview.delta,
+        },
+        warnings: [],
+        blockers: bridgeCandidate.blockers,
+        limitations: bridgeCandidate.limitations,
+      }),
+    );
+  });
+}
+
 function buildStadiumCandidates(
   scope: EventScope,
   seed: string,
@@ -864,7 +909,7 @@ function logEntryFromCandidate(
     ...reference,
     targetType: candidate.targetType,
     targetId: candidate.targetId,
-    targetPlayerRevealState: candidate.targetType === 'player' ? 'revealed' as const : reference.targetPlayerRevealState,
+    targetPlayerRevealState: candidate.targetType === 'player' ? reference.targetPlayerRevealState ?? 'revealed' as const : reference.targetPlayerRevealState,
     targetPlayerCurrent: candidate.targetType === 'player' ? true : reference.targetPlayerCurrent,
   }));
   return {
@@ -975,6 +1020,7 @@ export function buildFranchiseRandomEventCandidates(
     ]),
     ...buildArchivePlayerCandidates(scope, input.seed, scopedCompletedGames, playersById),
     ...buildRosterMovementCandidates(scope, input.seed, scopedTransactions, playersById),
+    ...buildDesignationMoraleCandidates(scope, input.seed, input.designationMoraleContexts ?? [], warnings),
     ...buildStadiumCandidates(scope, input.seed, input.stadiumFoundationReport),
     ...buildProfileReviewCandidates(scope, input.seed, scopedPlayers),
   ].sort((left, right) =>
