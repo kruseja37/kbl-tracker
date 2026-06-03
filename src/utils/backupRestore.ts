@@ -576,6 +576,35 @@ export const STATIC_DATABASE_SCHEMAS: Record<string, DatabaseSchema> = {
       },
     },
   },
+  'kbl-franchise-random-events': {
+    version: 1,
+    stores: {
+      randomEventEntries: {
+        keyPath: 'id',
+        indexes: [
+          { name: 'by_franchise', keyPath: 'franchiseId' },
+          { name: 'by_franchise_season', keyPath: ['franchiseId', 'seasonId'] },
+          { name: 'by_scope_kind', keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'kind'] },
+          { name: 'by_confirmation', keyPath: ['franchiseId', 'seasonId', 'confirmation.state'] },
+        ],
+      },
+    },
+  },
+  'kbl-franchise-morale': {
+    version: 1,
+    stores: {
+      moraleSnapshots: {
+        keyPath: 'id',
+        indexes: [
+          { name: 'by_franchise', keyPath: 'franchiseId' },
+          { name: 'by_franchise_season', keyPath: ['franchiseId', 'seasonId'] },
+          { name: 'by_scope_target', keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'targetType'] },
+          { name: 'by_team_scope', keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'teamId'] },
+          { name: 'by_player_scope', keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'] },
+        ],
+      },
+    },
+  },
   'kbl-transactions': {
     version: 2,
     stores: {

@@ -95,6 +95,12 @@ export const SYNC_REGISTRY: Record<string, Record<string, string | string[]>> = 
   'kbl-franchise-farm': {
     franchiseFarmRecords: 'id',
   },
+  'kbl-franchise-random-events': {
+    randomEventEntries: 'id',
+  },
+  'kbl-franchise-morale': {
+    moraleSnapshots: 'id',
+  },
   'kbl-transactions': {
     transactions: 'id',
   },

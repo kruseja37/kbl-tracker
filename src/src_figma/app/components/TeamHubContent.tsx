@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, type ReactNode } from "react";
+import { useState, useMemo, useEffect, useCallback, type ReactNode } from "react";
 import { Building2, User } from "lucide-react";
 import { useOffseasonData, type OffseasonTeam, type OffseasonPlayer } from "@/hooks/useOffseasonData";
 import { useSeasonStats, type BattingLeaderEntry, type PitchingLeaderEntry } from '../../../hooks/useSeasonStats';
@@ -85,6 +85,18 @@ import {
   buildFranchiseRandomEventLogReport,
   type FranchiseRandomEventLogReport,
 } from "../../../utils/franchiseRandomEventLog";
+import {
+  classifyFranchiseRandomEventSafeEffect,
+  confirmFranchiseRandomEventLogRecord,
+  dismissFranchiseRandomEventLogRecord,
+  listFranchiseRandomEventLogRecords,
+  syncFranchiseRandomEventLogFromReport,
+  type FranchiseRandomEventLogRecord,
+} from "../../../utils/franchiseRandomEventLogStorage";
+import {
+  listFranchiseMoraleSnapshots,
+  type FranchiseMoraleSnapshot,
+} from "../../../utils/franchiseMoraleState";
 import {
   validateFranchiseMoraleRelationshipOverrideProposal,
   type FranchiseMoraleRelationshipOverrideProposal,
@@ -1009,6 +1021,13 @@ export function TeamHubContent() {
   const [designationEligibilityReport, setDesignationEligibilityReport] = useState<FranchiseDesignationEligibilityReport | null>(null);
   const [valueTruthLoading, setValueTruthLoading] = useState(false);
   const [valueTruthError, setValueTruthError] = useState<string | null>(null);
+  const [randomEventRecords, setRandomEventRecords] = useState<FranchiseRandomEventLogRecord[]>([]);
+  const [randomEventLoading, setRandomEventLoading] = useState(false);
+  const [randomEventError, setRandomEventError] = useState<string | null>(null);
+  const [randomEventActionId, setRandomEventActionId] = useState<string | null>(null);
+  const [moraleSnapshots, setMoraleSnapshots] = useState<FranchiseMoraleSnapshot[]>([]);
+  const [moraleLoading, setMoraleLoading] = useState(false);
+  const [moraleError, setMoraleError] = useState<string | null>(null);
   const [lineupMode, setLineupMode] = useState<"DH" | "NO_DH">("NO_DH");
   const [manualLineupSlots, setManualLineupSlots] = useState<LineupSlot[]>([]);
   const [manualRotationIds, setManualRotationIds] = useState<string[]>([]);
@@ -1449,6 +1468,109 @@ export function TeamHubContent() {
       stadiumFoundationReport: stadiumFoundationReport ?? undefined,
     });
   }, [narrativeEventEligibilityReport, stadiumFoundationReport]);
+
+  const refreshRandomEventWorkflow = useCallback(async () => {
+    if (!franchiseId || !seasonId) {
+      setRandomEventRecords([]);
+      setMoraleSnapshots([]);
+      return;
+    }
+
+    if (randomEventLogReport) {
+      await syncFranchiseRandomEventLogFromReport(randomEventLogReport);
+    }
+    const [records, snapshots] = await Promise.all([
+      listFranchiseRandomEventLogRecords(franchiseId, seasonId, seasonId, seasonNumber),
+      listFranchiseMoraleSnapshots(franchiseId, seasonId, seasonId, seasonNumber),
+    ]);
+    setRandomEventRecords(records);
+    setMoraleSnapshots(snapshots);
+  }, [franchiseId, randomEventLogReport, seasonId, seasonNumber]);
+
+  useEffect(() => {
+    if (!franchiseId || !seasonId) {
+      setRandomEventRecords([]);
+      setRandomEventLoading(false);
+      setRandomEventError(null);
+      setMoraleSnapshots([]);
+      setMoraleLoading(false);
+      setMoraleError(null);
+      return;
+    }
+
+    let cancelled = false;
+    const activeFranchiseId = franchiseId;
+    const activeSeasonId = seasonId;
+
+    async function loadRandomEventWorkflow() {
+      setRandomEventLoading(true);
+      setMoraleLoading(true);
+      setRandomEventError(null);
+      setMoraleError(null);
+      try {
+        if (randomEventLogReport) {
+          await syncFranchiseRandomEventLogFromReport(randomEventLogReport);
+        }
+        const [records, snapshots] = await Promise.all([
+          listFranchiseRandomEventLogRecords(activeFranchiseId, activeSeasonId, activeSeasonId, seasonNumber),
+          listFranchiseMoraleSnapshots(activeFranchiseId, activeSeasonId, activeSeasonId, seasonNumber),
+        ]);
+        if (cancelled) return;
+        setRandomEventRecords(records);
+        setMoraleSnapshots(snapshots);
+      } catch (err) {
+        if (!cancelled) {
+          const message = err instanceof Error ? err.message : 'Failed to load Franchise random event workflow.';
+          setRandomEventError(message);
+          setMoraleError(message);
+          setRandomEventRecords([]);
+          setMoraleSnapshots([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setRandomEventLoading(false);
+          setMoraleLoading(false);
+        }
+      }
+    }
+
+    void loadRandomEventWorkflow();
+    return () => {
+      cancelled = true;
+    };
+  }, [franchiseId, randomEventLogReport, seasonId, seasonNumber]);
+
+  const confirmRandomEventRecord = useCallback(async (recordId: string) => {
+    setRandomEventActionId(recordId);
+    setRandomEventError(null);
+    setMoraleError(null);
+    try {
+      await confirmFranchiseRandomEventLogRecord({
+        recordId,
+        targetTeamId: selectedTeamId || undefined,
+        actorDisplayName: 'User',
+      });
+      await refreshRandomEventWorkflow();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to confirm random event prompt.';
+      setRandomEventError(message);
+    } finally {
+      setRandomEventActionId(null);
+    }
+  }, [refreshRandomEventWorkflow, selectedTeamId]);
+
+  const dismissRandomEventRecord = useCallback(async (recordId: string) => {
+    setRandomEventActionId(recordId);
+    setRandomEventError(null);
+    try {
+      await dismissFranchiseRandomEventLogRecord(recordId, 'User');
+      await refreshRandomEventWorkflow();
+    } catch (err) {
+      setRandomEventError(err instanceof Error ? err.message : 'Failed to dismiss random event prompt.');
+    } finally {
+      setRandomEventActionId(null);
+    }
+  }, [refreshRandomEventWorkflow]);
 
   const analyzerReport = useMemo(() => {
     if (!franchiseId || !selectedTeamId || !franchiseTeam) return null;
@@ -2160,15 +2282,13 @@ export function TeamHubContent() {
 
       {/* Fan Morale Tab */}
       {activeHubTab === "fan-morale" && (
-        <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-8">
-          <div className="text-center">
-            <div className="text-[24px] text-[#E8E8D8]/30 mb-4">📊</div>
-            <div className="text-[12px] text-[#E8E8D8]/50 mb-2">FAN MORALE</div>
-            <div className="text-[10px] text-[#E8E8D8]/40">
-              Fan morale mutation is deferred in Franchise v1.
-            </div>
-          </div>
-        </div>
+        <FranchiseFanMoralePanel
+          snapshots={moraleSnapshots}
+          selectedTeamId={selectedTeamId}
+          selectedTeamName={selectedTeam}
+          isLoading={moraleLoading}
+          error={moraleError}
+        />
       )}
 
       {/* Roster Tab */}
@@ -2202,8 +2322,14 @@ export function TeamHubContent() {
 
           <FranchiseRandomEventLogPanel
             report={randomEventLogReport}
-            isLoading={valueTruthLoading || continuityLoading}
-            error={valueTruthError ?? continuityError}
+            records={randomEventRecords}
+            selectedTeamId={selectedTeamId}
+            selectedTeamName={selectedTeam}
+            isLoading={valueTruthLoading || continuityLoading || randomEventLoading}
+            error={valueTruthError ?? continuityError ?? randomEventError}
+            actionId={randomEventActionId}
+            onConfirm={confirmRandomEventRecord}
+            onDismiss={dismissRandomEventRecord}
           />
 
           <FranchiseValueTruthPanel
@@ -2707,6 +2833,9 @@ export function TeamHubContent() {
           continuity={selectedProfileContinuity}
           continuityLoading={continuityLoading}
           continuityError={continuityError}
+          moraleSnapshot={moraleSnapshots.find((snapshot) =>
+            snapshot.targetType === 'player' && snapshot.playerId === selectedProfile.playerId,
+          ) ?? null}
           franchiseId={franchiseId ?? ''}
           seasonId={seasonId}
           statsScopeId={seasonId}
@@ -2767,6 +2896,20 @@ interface FranchiseStadiumFoundationPanelProps {
 
 interface FranchiseRandomEventLogPanelProps {
   report: FranchiseRandomEventLogReport | null;
+  records: FranchiseRandomEventLogRecord[];
+  selectedTeamId: string;
+  selectedTeamName: string;
+  isLoading: boolean;
+  error: string | null;
+  actionId: string | null;
+  onConfirm: (recordId: string) => void;
+  onDismiss: (recordId: string) => void;
+}
+
+interface FranchiseFanMoralePanelProps {
+  snapshots: FranchiseMoraleSnapshot[];
+  selectedTeamId: string;
+  selectedTeamName: string;
   isLoading: boolean;
   error: string | null;
 }
@@ -2804,6 +2947,7 @@ interface FranchisePlayerProfileModalProps {
   continuity: FranchisePlayerContinuityReport | null;
   continuityLoading: boolean;
   continuityError: string | null;
+  moraleSnapshot: FranchiseMoraleSnapshot | null;
   franchiseId: string;
   seasonId: string;
   statsScopeId: string;
@@ -2875,6 +3019,43 @@ function FranchiseProfileEditHistoryPanel({
               <div className="mt-1 text-[#E8E8D8]/75">
                 {entry.oldValue} → {entry.newValue}
               </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function FranchisePlayerMoraleHistoryPanel({
+  snapshot,
+}: {
+  snapshot: FranchiseMoraleSnapshot | null;
+}) {
+  return (
+    <section className="mt-4 border-[4px] border-[#4A6844] bg-[#3F563F] p-3">
+      <div className="text-[9px] font-bold text-[#C4A853]">PLAYER MORALE HISTORY</div>
+      <div className="mt-1 text-[8px] text-[#E8E8D8]/65">
+        Durable player morale changes only. Relationship state and profile edits remain separate.
+      </div>
+      {!snapshot ? (
+        <div className="mt-3 border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[8px] text-[#E8E8D8]/65">
+          Neutral baseline. No confirmed player morale changes recorded for this season.
+        </div>
+      ) : (
+        <div className="mt-3 space-y-2">
+          <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[8px] text-[#E8E8D8]">
+            Current morale: <span className="font-bold text-[#C4A853]">{snapshot.currentValue}</span>
+          </div>
+          {snapshot.history.slice().reverse().slice(0, 6).map((entry) => (
+            <div key={entry.id} className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[8px] text-[#E8E8D8]">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-bold text-[#C4A853]">
+                  {entry.previousValue} → {entry.currentValue} ({entry.delta > 0 ? '+' : ''}{entry.delta})
+                </span>
+                <span className="text-[#E8E8D8]/55">{formatProfileHistoryDate(entry.timestamp)}</span>
+              </div>
+              <div className="mt-1 text-[#E8E8D8]/75">{entry.reason}</div>
             </div>
           ))}
         </div>
@@ -3248,6 +3429,7 @@ function FranchisePlayerProfileModal({
   continuity,
   continuityLoading,
   continuityError,
+  moraleSnapshot,
   franchiseId,
   seasonId,
   statsScopeId,
@@ -3441,6 +3623,7 @@ function FranchisePlayerProfileModal({
         )}
 
         <FranchiseProfileEditHistoryPanel entries={profile.editHistory} />
+        <FranchisePlayerMoraleHistoryPanel snapshot={moraleSnapshot} />
         <FranchiseManualOverridePreviewPanel
           preview={manualOverridePreview}
           playerName={profile.identity.name}
@@ -3789,13 +3972,100 @@ function FranchiseMode2FoundationStatusPanel({
   );
 }
 
-function FranchiseRandomEventLogPanel({
-  report,
+function FranchiseFanMoralePanel({
+  snapshots,
+  selectedTeamId,
+  selectedTeamName,
   isLoading,
   error,
+}: FranchiseFanMoralePanelProps) {
+  const teamFanSnapshot = snapshots.find((snapshot) =>
+    snapshot.targetType === 'team-fan' && snapshot.teamId === selectedTeamId,
+  );
+  const playerSnapshots = snapshots.filter((snapshot) => snapshot.targetType === 'player');
+
+  return (
+    <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-4">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2 border-b-2 border-[#4A6844] pb-2">
+        <div>
+          <div className="text-[12px] font-bold text-[#E8E8D8]" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
+            FAN MORALE
+          </div>
+          <div className="mt-1 text-[10px] leading-snug text-[#E8E8D8]/65">
+            Canonical Franchise v1 morale comes from confirmed random-event or manual override evidence only.
+          </div>
+        </div>
+        <div className="border-2 border-[#4A6844] bg-[#5A8352] px-2 py-1 text-[10px] text-[#E8E8D8]">
+          {isLoading ? 'LOADING' : `${snapshots.length} SNAPSHOT(S)`}
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-3 border-2 border-[#DD0000]/50 bg-[#5A3F3F] p-2 text-[10px] text-[#FFD6D6]">
+          {error}
+        </div>
+      )}
+
+      <div className="grid gap-3 lg:grid-cols-[260px_1fr]">
+        <section className="border-[4px] border-[#4A6844] bg-[#5A8352] p-3" aria-label="Selected team fan morale">
+          <div className="text-[10px] font-bold text-[#C4A853]">SELECTED TEAM</div>
+          <div className="mt-1 text-[12px] font-bold text-[#E8E8D8]">{selectedTeamName || 'No team selected'}</div>
+          <div className="mt-3 text-[36px] font-black leading-none text-[#E8E8D8]">
+            {teamFanSnapshot ? teamFanSnapshot.currentValue : 50}
+          </div>
+          <div className="mt-1 text-[10px] text-[#E8E8D8]/65">
+            {teamFanSnapshot
+              ? `Last updated ${new Date(teamFanSnapshot.lastModified).toLocaleString()}`
+              : 'Neutral baseline. No confirmed event-backed fan morale changes yet.'}
+          </div>
+        </section>
+
+        <section className="border-[4px] border-[#4A6844] bg-[#5A8352] p-3" aria-label="Fan morale history">
+          <div className="mb-2 text-[10px] font-bold text-[#C4A853]">EVENT-BACKED HISTORY</div>
+          {teamFanSnapshot?.history.length ? (
+            <div className="space-y-2">
+              {teamFanSnapshot.history.slice().reverse().slice(0, 6).map((entry) => (
+                <div key={entry.id} className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[10px] leading-snug text-[#E8E8D8]/75">
+                  <div className="font-bold text-[#E8E8D8]">
+                    {entry.previousValue} → {entry.currentValue} ({entry.delta > 0 ? '+' : ''}{entry.delta})
+                  </div>
+                  <div className="mt-1">{entry.reason}</div>
+                  <div className="mt-1 text-[#E8E8D8]/55">
+                    Source: {entry.sourceKind} · {new Date(entry.timestamp).toLocaleString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="border-2 border-[#4A6844] bg-[#4A6844] p-3 text-[10px] leading-snug text-[#E8E8D8]/65">
+              No durable fan morale history yet. Confirm an eligible random-event prompt to create the first event-backed change.
+            </div>
+          )}
+        </section>
+      </div>
+
+      <div className="mt-3 border-2 border-[#4A6844] bg-[#3F563F] p-2 text-[10px] leading-snug text-[#E8E8D8]/65">
+        Player morale snapshots stored this season: {playerSnapshots.length}. Relationship mutation, salary movement, profile automation, awards/designations, and Mode 3/offseason effects remain blocked.
+      </div>
+    </div>
+  );
+}
+
+function FranchiseRandomEventLogPanel({
+  report,
+  records,
+  selectedTeamId,
+  selectedTeamName,
+  isLoading,
+  error,
+  actionId,
+  onConfirm,
+  onDismiss,
 }: FranchiseRandomEventLogPanelProps) {
-  const entries = report?.entries ?? [];
-  const visibleEntries = entries.slice(0, 5);
+  const visibleRecords = records.slice(0, 5);
+  const readyCount = records.filter((record) => record.confirmation.state === 'unconfirmed').length;
+  const confirmedCount = records.filter((record) => record.confirmation.state === 'confirmed').length;
+  const dismissedCount = records.filter((record) => record.confirmation.state === 'dismissed').length;
 
   return (
     <section
@@ -3805,13 +4075,13 @@ function FranchiseRandomEventLogPanel({
     >
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-[10px] font-bold text-[#C4A853]">RANDOM EVENT LOG PREVIEW</div>
+          <div className="text-[10px] font-bold text-[#C4A853]">RANDOM EVENT LOG</div>
           <div className="mt-1 text-[10px] leading-snug text-[#E8E8D8]/65">
-            Draft-only prompt log. Suggested changes require manual user action and are not persisted or applied here.
+            Durable Franchise v1 prompt records. Confirming can apply only safe fan/player morale effects through scoped morale storage.
           </div>
         </div>
         <div className="border-2 border-[#4A6844] bg-[#5A8352] px-2 py-1 text-[10px] text-[#E8E8D8]">
-          {isLoading ? 'LOADING' : 'DRAFT ONLY'}
+          {isLoading ? 'LOADING' : `${records.length} RECORD(S)`}
         </div>
       </div>
 
@@ -3824,23 +4094,23 @@ function FranchiseRandomEventLogPanel({
       <div className="mb-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <FoundationStatusCard
           title="READY"
-          status={report && report.readyForReview > 0 ? 'ready-for-review' : 'not-applicable'}
-          body={`${report?.readyForReview ?? 0} prompt(s) ready for manual review.`}
+          status={readyCount > 0 ? 'ready-for-review' : 'not-applicable'}
+          body={`${readyCount} durable prompt(s) ready for manual review.`}
         />
         <FoundationStatusCard
           title="CONFIRMED"
-          status={report && report.confirmedManualChanges > 0 ? 'confirmed-manual-change' : 'not-applicable'}
-          body={`${report?.confirmedManualChanges ?? 0} caller-provided confirmation(s). Not durable history yet.`}
+          status={confirmedCount > 0 ? 'confirmed-manual-change' : 'not-applicable'}
+          body={`${confirmedCount} confirmed prompt(s) with applied/skipped effect state.`}
         />
         <FoundationStatusCard
-          title="BLOCKED"
-          status={report && report.blocked > 0 ? 'blocked' : 'not-applicable'}
-          body={`${report?.blocked ?? 0} prompt(s) blocked by scope or safety gates.`}
+          title="DISMISSED"
+          status={dismissedCount > 0 ? 'dismissed' : 'not-applicable'}
+          body={`${dismissedCount} dismissed prompt(s).`}
         />
         <FoundationStatusCard
-          title="MUTATION"
+          title="AUTOMATION"
           status="blocked"
-          body="Profile, morale, relationship, salary, story, park-factor, and Mode 3 mutations remain blocked."
+          body="Profile, relationship, salary, story, park-factor, designation, and Mode 3 mutations remain blocked."
         />
       </div>
 
@@ -3850,13 +4120,26 @@ function FranchiseRandomEventLogPanel({
         </div>
       ) : null}
 
-      {visibleEntries.length > 0 ? (
+      {visibleRecords.length > 0 ? (
         <div className="space-y-2">
-          {visibleEntries.map((entry) => (
-            <article key={entry.id} className="border-2 border-[#4A6844] bg-[#4A6844] p-3">
+          {visibleRecords.map((record) => {
+            const entry = record.entry;
+            const effectPreview = classifyFranchiseRandomEventSafeEffect(record, {
+              targetTeamId: selectedTeamId || undefined,
+            });
+            return (
+            <article key={record.id} className="border-2 border-[#4A6844] bg-[#4A6844] p-3">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <div className="text-[10px] font-bold text-[#E8E8D8]">{entry.title}</div>
-                <FoundationStatusBadge status={entry.status} />
+                <FoundationStatusBadge
+                  status={
+                    record.confirmation.state === 'confirmed'
+                      ? 'confirmed-manual-change'
+                      : record.confirmation.state === 'dismissed'
+                        ? 'dismissed'
+                        : entry.status
+                  }
+                />
               </div>
               <div className="grid gap-2 text-[10px] leading-snug text-[#E8E8D8]/75 lg:grid-cols-2">
                 <div>
@@ -3870,29 +4153,73 @@ function FranchiseRandomEventLogPanel({
                   <div className="mb-1 font-bold text-[#C4A853]">Suggested manual change</div>
                   <div>{entry.suggestedManualChange.summary}</div>
                   <div className="mt-1 text-[#E8E8D8]/55">
-                    Checkbox state: Manual change completed {entry.confirmation.checked ? 'checked' : 'unchecked'}.
+                    Checkbox state: Manual change completed {record.confirmation.checked ? 'checked' : 'unchecked'}.
                   </div>
                 </div>
               </div>
+              <div className="mt-2 grid gap-2 text-[10px] leading-snug lg:grid-cols-2">
+                <div className="border border-[#E8E8D8]/20 p-2 text-[#E8E8D8]/70">
+                  <div className="mb-1 font-bold text-[#C4A853]">Safe-effect preview</div>
+                  <div>
+                    {effectPreview.allowed
+                      ? `${effectPreview.targetType === 'team-fan' ? 'Team fan morale' : 'Player morale'} ${effectPreview.delta > 0 ? '+' : ''}${effectPreview.delta}${effectPreview.teamId ? ` for ${selectedTeamName || effectPreview.teamId}` : ''}.`
+                      : 'No safe morale effect target is available yet.'}
+                  </div>
+                  {effectPreview.blockers.length > 0 && (
+                    <div className="mt-1 text-[#FFD6D6]">{effectPreview.blockers.join(' ')}</div>
+                  )}
+                  {effectPreview.warnings.length > 0 && (
+                    <div className="mt-1 text-[#FFD27A]">{effectPreview.warnings.join(' ')}</div>
+                  )}
+                </div>
+                <div className="border border-[#E8E8D8]/20 p-2 text-[#E8E8D8]/70">
+                  <div className="mb-1 font-bold text-[#C4A853]">Applied state</div>
+                  <div>{record.appliedEffect.state.toUpperCase()}: {record.appliedEffect.reason}</div>
+                  {record.appliedEffect.currentValue != null && (
+                    <div className="mt-1 text-[#E8E8D8]/55">
+                      Morale {record.appliedEffect.previousValue} → {record.appliedEffect.currentValue}
+                    </div>
+                  )}
+                </div>
+              </div>
               <div className="mt-2 border border-[#E8E8D8]/20 p-2 text-[10px] leading-snug text-[#E8E8D8]/65">
-                {entry.narrativeReadableStatus}
+                {record.narrativeReadableStatus}
               </div>
               {entry.warnings.length > 0 && (
                 <div className="mt-2 text-[10px] leading-snug text-[#FFD27A]">
                   {entry.warnings.join(' ')}
                 </div>
               )}
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={record.confirmation.state !== 'unconfirmed' || actionId === record.id}
+                  onClick={() => onConfirm(record.id)}
+                  className="border-2 border-[#C4A853] bg-[#6B9462] px-3 py-1 text-[10px] font-bold text-[#E8E8D8] hover:bg-[#5A8352] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  CONFIRM
+                </button>
+                <button
+                  type="button"
+                  disabled={record.confirmation.state !== 'unconfirmed' || actionId === record.id}
+                  onClick={() => onDismiss(record.id)}
+                  className="border-2 border-[#E8E8D8]/30 bg-[#5A3F3F] px-3 py-1 text-[10px] font-bold text-[#E8E8D8] hover:border-[#C4A853] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  DISMISS
+                </button>
+              </div>
             </article>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="border-2 border-[#4A6844] bg-[#4A6844] p-3 text-[10px] leading-snug text-[#E8E8D8]/65">
-          No random-event prompt context is available yet. This panel does not fabricate events when scoped evidence is missing.
+          No durable random-event prompt records are available yet. This panel does not fabricate events when scoped evidence is missing.
         </div>
       )}
 
       <div className="mt-3 border-2 border-[#4A6844] bg-[#5A3F3F] p-2 text-[10px] leading-snug text-[#FFD6D6]">
-        Read-only v1 boundary: this preview creates no records, persists no confirmations, and applies no player-profile, morale, relationship, salary, story, park-factor, or offseason changes.
+        V1 boundary: confirmations persist to the random-event log and can apply scoped morale only. They do not edit profiles, relationships, salary, stories, park factors, designations, or offseason systems.
       </div>
     </section>
   );

@@ -11379,8 +11379,15 @@ export function GameTracker() {
         );
       }
 
-      // MAJ-02: Update fan morale at game end (franchise/playoff only — no morale in exhibition)
-      if (gameMode !== "exhibition") {
+      // Prototype fan morale is not canonical Franchise v1 storage.
+      // Franchise regular-season/playoff morale now flows through confirmed random-event prompts.
+      const shouldUsePrototypeFanMorale =
+        gameMode !== "exhibition" &&
+        gameMode !== "franchise" &&
+        gameMode !== "playoff" &&
+        effectiveGameMode !== "franchise" &&
+        effectiveGameMode !== "playoff";
+      if (shouldUsePrototypeFanMorale) {
         try {
           const homeWon = gameState.homeScore > gameState.awayScore;
           const homeRunDiff = gameState.homeScore - gameState.awayScore;

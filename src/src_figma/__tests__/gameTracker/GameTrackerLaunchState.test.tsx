@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => {
   const mockInitializeGame = vi.fn();
   const mockLoadExistingGame = vi.fn();
   const mockEndGame = vi.fn();
+  const mockFanMoraleProcessGameResult = vi.fn();
   const mockGetCareerStats = vi.fn();
   const mockGetSeasonBattingStats = vi.fn();
   const mockGetSeasonPitchingStats = vi.fn();
@@ -22,6 +23,7 @@ const mocks = vi.hoisted(() => {
     mockUseLocation: vi.fn(),
     mockInitializeGame,
     mockLoadExistingGame,
+    mockFanMoraleProcessGameResult,
     mockUseGameStateResult: {
       gameState: {
         gameId: "",
@@ -198,7 +200,7 @@ vi.mock("../../app/hooks/useFanMorale", () => ({
   useFanMorale: () => ({
     morale: 50,
     getMoraleMultiplier: vi.fn(() => 1),
-    processGameResult: vi.fn(),
+    processGameResult: mocks.mockFanMoraleProcessGameResult,
   }),
 }));
 
@@ -719,6 +721,7 @@ describe("GameTracker launch state", () => {
         }),
       );
     });
+    expect(mocks.mockFanMoraleProcessGameResult).not.toHaveBeenCalled();
   });
 
   test("does not advance restored franchise schedule when end-game aggregation fails", async () => {

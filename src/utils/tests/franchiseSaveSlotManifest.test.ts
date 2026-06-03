@@ -1000,6 +1000,8 @@ describe('franchise save-slot manifest contract', () => {
     expect(SYNC_REGISTRY['kbl-tracker']).toHaveProperty('franchiseSeasonSummaries', 'seasonId');
     expect(SYNC_REGISTRY['kbl-playoffs']).toHaveProperty('playoffGames', 'id');
     expect(SYNC_REGISTRY['kbl-franchise-farm']).toHaveProperty('franchiseFarmRecords', 'id');
+    expect(SYNC_REGISTRY['kbl-franchise-random-events']).toHaveProperty('randomEventEntries', 'id');
+    expect(SYNC_REGISTRY['kbl-franchise-morale']).toHaveProperty('moraleSnapshots', 'id');
     expect(SYNC_REGISTRY['kbl-transactions']).toHaveProperty('transactions', 'id');
     expect(SYNC_REGISTRY['kbl-franchise-transition-journal']).toHaveProperty('transitionJournals', 'id');
 
@@ -1009,6 +1011,8 @@ describe('franchise save-slot manifest contract', () => {
     expect(STATIC_DATABASE_SCHEMAS['kbl-tracker'].stores).toHaveProperty('franchiseSeasonSummaries');
     expect(STATIC_DATABASE_SCHEMAS['kbl-playoffs'].stores).toHaveProperty('playoffGames');
     expect(STATIC_DATABASE_SCHEMAS['kbl-franchise-farm'].stores).toHaveProperty('franchiseFarmRecords');
+    expect(STATIC_DATABASE_SCHEMAS['kbl-franchise-random-events'].stores).toHaveProperty('randomEventEntries');
+    expect(STATIC_DATABASE_SCHEMAS['kbl-franchise-morale'].stores).toHaveProperty('moraleSnapshots');
     expect(STATIC_DATABASE_SCHEMAS['kbl-franchise-transition-journal'].stores).toHaveProperty('transitionJournals');
     expect(STATIC_DATABASE_SCHEMAS['kbl-transactions'].version).toBe(2);
     expect(STATIC_DATABASE_SCHEMAS['kbl-transactions'].stores.transactions.indexes).toEqual(

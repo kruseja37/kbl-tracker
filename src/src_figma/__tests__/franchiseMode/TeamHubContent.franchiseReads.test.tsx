@@ -1,5 +1,8 @@
+import 'fake-indexeddb/auto';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { resetFranchiseMoraleDatabaseForTests } from '../../../utils/franchiseMoraleState';
+import { resetFranchiseRandomEventLogDatabaseForTests } from '../../../utils/franchiseRandomEventLogStorage';
 
 const mocks = vi.hoisted(() => ({
   mockUseOffseasonData: vi.fn(),
@@ -393,6 +396,8 @@ function designationEligibilityReport(overrides: Record<string, unknown> = {}) {
 
 describe('TeamHubContent franchise-owned visible reads', () => {
   beforeEach(() => {
+    resetFranchiseRandomEventLogDatabaseForTests();
+    resetFranchiseMoraleDatabaseForTests();
     vi.clearAllMocks();
     mocks.mockUseOffseasonData.mockReturnValue({
       teams: [{ id: 'team-1', name: 'Mutable Alpha', stadium: 'Mutable Park' }],
@@ -676,19 +681,28 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(foundationRegion).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
     expect(within(foundationRegion).queryByText(/leadership: 92/i)).not.toBeInTheDocument();
     expect(within(foundationRegion).queryByRole('button')).not.toBeInTheDocument();
-    expect(within(randomEventRegion).getByText('RANDOM EVENT LOG PREVIEW')).toBeInTheDocument();
-    expect(within(randomEventRegion).getByText(/Draft-only prompt log/i)).toBeInTheDocument();
-    expect(within(randomEventRegion).getByText(/2 prompt\(s\) ready for manual review/i)).toBeInTheDocument();
+    await waitFor(() => expect(within(randomEventRegion).getByText('RANDOM EVENT LOG')).toBeInTheDocument());
+    expect(within(randomEventRegion).getByText(/Durable Franchise v1 prompt records/i)).toBeInTheDocument();
+    await waitFor(() => expect(within(randomEventRegion).getByText(/2 durable prompt\(s\) ready for manual review/i)).toBeInTheDocument());
     expect(within(randomEventRegion).getByText('Archive-backed game facts available')).toBeInTheDocument();
     expect(within(randomEventRegion).getByText('Score-only result context available')).toBeInTheDocument();
     expect(within(randomEventRegion).getAllByText(/Checkbox state: Manual change completed unchecked/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getByText(/Score-only evidence has no player archive, player stats, WPA, WAR, morale, or relationship authority/i)).toBeInTheDocument();
-    expect(within(randomEventRegion).getByText(/persists no confirmations/i)).toBeInTheDocument();
+    expect(within(randomEventRegion).getByText(/confirmations persist to the random-event log and can apply scoped morale only/i)).toBeInTheDocument();
+    expect(within(randomEventRegion).getAllByRole('button', { name: 'CONFIRM' }).length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getAllByRole('button', { name: 'DISMISS' }).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
     expect(within(randomEventRegion).queryByText(/leadership: 92/i)).not.toBeInTheDocument();
-    expect(within(randomEventRegion).queryByRole('button')).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
     expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
+
+    fireEvent.click(within(randomEventRegion).getAllByRole('button', { name: 'CONFIRM' })[0]);
+    await waitFor(() => expect(within(randomEventRegion).getByText(/APPLIED:/i)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /FAN MORALE/i }));
+    expect(await screen.findByText(/Canonical Franchise v1 morale comes from confirmed random-event/i)).toBeInTheDocument();
+    expect(screen.getByText('51')).toBeInTheDocument();
+    expect(screen.getByText(/EVENT-BACKED HISTORY/i)).toBeInTheDocument();
   });
 
   test('renders read-only stadium foundation and archive-backed spray evidence', async () => {
