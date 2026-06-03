@@ -102,6 +102,10 @@ import {
   type FranchiseMoraleSnapshot,
 } from "../../../utils/franchiseMoraleState";
 import {
+  buildFranchiseFanMoraleSpecViewModel,
+  type FranchiseFanMoraleSpecViewModel,
+} from "../../../utils/franchiseFanMoraleSpecAdapter";
+import {
   validateFranchiseMoraleRelationshipOverrideProposal,
   type FranchiseMoraleRelationshipOverrideProposal,
   type FranchiseMoraleRelationshipOverrideValidationResult,
@@ -4085,6 +4089,11 @@ function FranchiseFanMoralePanel({
     snapshot.targetType === 'team-fan' && snapshot.teamId === selectedTeamId,
   );
   const playerSnapshots = snapshots.filter((snapshot) => snapshot.targetType === 'player');
+  const specView = buildFranchiseFanMoraleSpecViewModel({
+    snapshot: teamFanSnapshot ?? null,
+    fallbackTeamId: selectedTeamId,
+    fallbackTeamName: selectedTeamName,
+  });
 
   return (
     <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-4">
@@ -4113,11 +4122,16 @@ function FranchiseFanMoralePanel({
           <div className="text-[10px] font-bold text-[#C4A853]">SELECTED TEAM</div>
           <div className="mt-1 text-[12px] font-bold text-[#E8E8D8]">{selectedTeamName || 'No team selected'}</div>
           <div className="mt-3 text-[36px] font-black leading-none text-[#E8E8D8]">
-            {teamFanSnapshot ? teamFanSnapshot.currentValue : 50}
+            {specView.currentValue}
+          </div>
+          <div className="mt-1 text-[10px] font-bold text-[#C4A853]">
+            {specView.state} · {specView.trend} · {specView.riskLevel}
           </div>
           <div className="mt-1 text-[10px] text-[#E8E8D8]/65">
-            {teamFanSnapshot
-              ? `Last updated ${new Date(teamFanSnapshot.lastModified).toLocaleString()}`
+            {teamFanSnapshot && specView.lastEvent
+              ? `Last event: ${specView.lastEvent.reason}`
+              : teamFanSnapshot
+                ? `Last updated ${new Date(teamFanSnapshot.lastModified).toLocaleString()}`
               : 'Neutral baseline. No confirmed event-backed fan morale changes yet.'}
           </div>
         </section>
@@ -4146,10 +4160,94 @@ function FranchiseFanMoralePanel({
         </section>
       </div>
 
+      <FranchiseFanMoraleSpecAlignmentPanel view={specView} />
+
       <div className="mt-3 border-2 border-[#4A6844] bg-[#3F563F] p-2 text-[10px] leading-snug text-[#E8E8D8]/65">
         Player morale snapshots stored this season: {playerSnapshots.length}. Relationship mutation, salary movement, profile automation, awards/designations, and Mode 3/offseason effects remain blocked.
       </div>
     </div>
+  );
+}
+
+function FranchiseFanMoraleSpecAlignmentPanel({ view }: { view: FranchiseFanMoraleSpecViewModel }) {
+  const implementedAreas = [
+    view.implementationStatus.canonicalStorage,
+    view.implementationStatus.confirmedEventEffects,
+    view.implementationStatus.teamHubDisplay,
+    view.implementationStatus.eventBackedHistory,
+  ];
+  const pendingAreas = [
+    view.implementationStatus.randomEventConfirmation,
+    view.implementationStatus.scoreOnlyFanMorale,
+    view.implementationStatus.expectedWinsBaseline,
+    view.implementationStatus.performanceGapFormula,
+    view.implementationStatus.rosterCompositionFormula,
+    view.implementationStatus.randomEventWeighting,
+    view.implementationStatus.trueValueInputs,
+    view.implementationStatus.designations,
+    view.implementationStatus.beatReporterSentiment,
+    view.implementationStatus.freeAgencyConsequences,
+    view.implementationStatus.franchiseHealthConsequences,
+    view.implementationStatus.dailySnapshots,
+    view.implementationStatus.automaticGameTrackerMutation,
+    view.implementationStatus.playerMoraleCoupling,
+  ];
+
+  return (
+    <section
+      className="mt-3 border-[4px] border-[#4A6844] bg-[#3F563F] p-3"
+      aria-label="Fan morale spec alignment status"
+    >
+      <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="text-[10px] font-bold text-[#C4A853]">FAN MORALE SPEC ALIGNMENT</div>
+          <div className="mt-1 text-[10px] leading-snug text-[#E8E8D8]/65">
+            Read-only alignment with the fan morale spec. Current storage/display support is not the full formula engine.
+          </div>
+        </div>
+        <div className="border-2 border-[#4A6844] bg-[#5A8352] px-2 py-1 text-[10px] text-[#E8E8D8]">
+          READ ONLY
+        </div>
+      </div>
+
+      <div className="grid gap-2 md:grid-cols-3">
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[10px] leading-snug text-[#E8E8D8]">
+          <div className="font-bold text-[#C4A853]">Current</div>
+          <div className="mt-1">Value: {view.currentValue}</div>
+          <div>Previous: {view.previousValue ?? '—'}</div>
+          <div>State: {view.state}</div>
+          <div>Trend: {view.trend}</div>
+          <div>Risk: {view.riskLevel}</div>
+        </div>
+
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[10px] leading-snug text-[#E8E8D8]/75">
+          <div className="font-bold text-[#C4A853]">Implemented</div>
+          <div className="mt-1 space-y-1">
+            {implementedAreas.map((area) => (
+              <div key={area.label}>{area.label}: {formatTruthStatus(area.status)}</div>
+            ))}
+          </div>
+        </div>
+
+        <div className="border-2 border-[#4A6844] bg-[#5A3F3F] p-2 text-[10px] leading-snug text-[#FFD6D6]">
+          <div className="font-bold text-[#FFEFB5]">Deferred / Blocked</div>
+          <div className="mt-1 space-y-1">
+            {pendingAreas.map((area) => (
+              <div key={area.label}>{area.label}: {formatTruthStatus(area.status)}</div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-2 border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[10px] leading-snug text-[#E8E8D8]/65">
+        {view.lastEvent
+          ? `Last event/reason: ${view.lastEvent.reason}`
+          : 'Last event/reason: no confirmed event-backed fan morale change yet.'}
+        <div className="mt-1">
+          Expected wins, performance gap, roster composition formula, random-event weighting, daily snapshots, designations, beat reporter sentiment, salary/True Value inputs, free-agency consequences, franchise health consequences, relationships, narrative/random events, and Mode 3/offseason effects remain partial, blocked, or deferred.
+        </div>
+      </div>
+    </section>
   );
 }
 

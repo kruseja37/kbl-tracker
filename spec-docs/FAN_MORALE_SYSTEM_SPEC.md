@@ -12,6 +12,19 @@
 
 ---
 
+## Franchise Internal v1 Checkpoint (June 2026)
+
+Current Franchise v1 support is intentionally narrower than the full formula system below:
+
+- Implemented: durable scoped fan/player morale snapshots, event-backed history, confirmed random-event effects, and read-only Team Hub fan morale display aligned to the spec state labels.
+- Partial: random-event prompts can be manually confirmed for safe scoped morale effects; score-only evidence remains team fan morale only after confirmation. Random-event weighting is not formula-complete.
+- Deferred: expected-wins baseline, performance-gap formula weighting, roster composition formula, full event catalog weighting, free-agency consequences, franchise health consequences, daily snapshots/high-low-average tracking, player morale influence/coupling, and automatic recalculation cadence.
+- Blocked for v1: True Value/designation inputs, beat reporter sentiment, relationship mutation, salary movement, narrative/random-event automation, and Mode 3/offseason mutation.
+
+Next roadmap steps are expected-wins baseline, event catalog weighting, formula weighting, and daily morale snapshot tracking once canonical value/designation inputs are trusted.
+
+---
+
 ## 0. Simplified Core Formula (v1.1)
 
 > **UPDATE February 2026**: The granular event-driven system described in sections below is the FULL specification. For implementation priority, Fan Morale can be approximated by this simplified weighted formula:

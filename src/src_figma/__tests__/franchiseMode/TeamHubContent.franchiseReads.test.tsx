@@ -713,7 +713,22 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     fireEvent.click(screen.getByRole('button', { name: /FAN MORALE/i }));
     expect(await screen.findByText(/Canonical Franchise v1 morale comes from confirmed random-event/i)).toBeInTheDocument();
     expect(screen.getByText('51')).toBeInTheDocument();
-    expect(screen.getByText(/EVENT-BACKED HISTORY/i)).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: /Fan morale history/i })).getByText(/EVENT-BACKED HISTORY/i)).toBeInTheDocument();
+    const fanSpecRegion = screen.getByRole('region', { name: /Fan morale spec alignment status/i });
+    expect(within(fanSpecRegion).getByText(/FAN MORALE SPEC ALIGNMENT/i)).toBeInTheDocument();
+    expect(within(fanSpecRegion).getByText(/State: RESTLESS/i)).toBeInTheDocument();
+    expect(within(fanSpecRegion).getByText(/Trend: RISING/i)).toBeInTheDocument();
+    expect(within(fanSpecRegion).getByText(/Risk: SAFE/i)).toBeInTheDocument();
+    expect(within(fanSpecRegion).getByText(/Canonical scoped storage: IMPLEMENTED/i)).toBeInTheDocument();
+    expect(within(fanSpecRegion).getByText(/Expected wins baseline: DEFERRED/i)).toBeInTheDocument();
+    expect(within(fanSpecRegion).getByText(/Roster composition formula: DEFERRED/i)).toBeInTheDocument();
+    expect(within(fanSpecRegion).getByText(/Random-event weighting: PARTIAL/i)).toBeInTheDocument();
+    expect(within(fanSpecRegion).getByText(/True Value inputs: BLOCKED/i)).toBeInTheDocument();
+    expect(within(fanSpecRegion).getByText(/Beat reporter sentiment: BLOCKED/i)).toBeInTheDocument();
+    expect(within(fanSpecRegion).getByText(/Free-agency consequences: DEFERRED/i)).toBeInTheDocument();
+    expect(within(fanSpecRegion).getByText(/Daily snapshots \/ high-low-average tracking: DEFERRED/i)).toBeInTheDocument();
+    expect(within(fanSpecRegion).getByText(/Player morale influence\/coupling: DEFERRED/i)).toBeInTheDocument();
+    expect(within(fanSpecRegion).queryByRole('button')).not.toBeInTheDocument();
   });
 
   test('confirms generated archive-backed player prompts as player morale instead of selected-team fan morale', async () => {
