@@ -82,9 +82,12 @@ import {
   type FranchiseSprayChartRole,
 } from "../../../utils/franchiseStadiumFoundation";
 import {
-  buildFranchiseRandomEventLogReport,
   type FranchiseRandomEventLogReport,
 } from "../../../utils/franchiseRandomEventLog";
+import {
+  buildGeneratedFranchiseRandomEventLogReport,
+  type FranchiseRandomEventPlayerEvidence,
+} from "../../../utils/franchiseRandomEventGenerator";
 import {
   classifyFranchiseRandomEventSafeEffect,
   confirmFranchiseRandomEventLogRecord,
@@ -92,6 +95,7 @@ import {
   listFranchiseRandomEventLogRecords,
   syncFranchiseRandomEventLogFromReport,
   type FranchiseRandomEventLogRecord,
+  type FranchiseRandomEventSafeEffectTarget,
 } from "../../../utils/franchiseRandomEventLogStorage";
 import {
   listFranchiseMoraleSnapshots,
@@ -328,6 +332,52 @@ function franchiseDirectoryRevealState(player: Player, rosterStatus: string): 'h
   if (player.ratingRevealState === 'hidden') return 'hidden';
   if (player.ratingRevealState === 'revealed') return 'revealed';
   return rosterStatus === 'FARM' ? 'hidden' : 'revealed';
+}
+
+function buildRandomEventPlayerEvidence(
+  player: Player,
+  input: {
+    franchiseId: string;
+    seasonId: string;
+    statsScopeId: string;
+    seasonNumber: number;
+    leagueId?: string;
+    farmRecordByPlayerId: Map<string, FranchiseFarmRecord>;
+  },
+): FranchiseRandomEventPlayerEvidence {
+  const assignment = franchisePlayerDirectoryAssignment(player, input.leagueId);
+  const rosterStatus = String(assignment?.rosterStatus ?? '');
+  const farmRecord = input.farmRecordByPlayerId.get(player.id);
+  return {
+    ...player,
+    franchiseId: input.franchiseId,
+    seasonId: input.seasonId,
+    statsScopeId: input.statsScopeId,
+    seasonNumber: input.seasonNumber,
+    ratingRevealState: farmRecord?.ratingRevealState ?? player.ratingRevealState ?? (rosterStatus === 'FARM' ? 'hidden' : 'revealed'),
+  };
+}
+
+function randomEventSafeEffectTarget(
+  record: FranchiseRandomEventLogRecord,
+  fallbackTeamId?: string,
+): FranchiseRandomEventSafeEffectTarget {
+  const playerReference = record.entry.evidenceReferences.find((reference) =>
+    reference.targetType === 'player' || Boolean(reference.playerId),
+  );
+  if (record.kind !== 'score-only-context' && (playerReference?.targetType === 'player' || playerReference?.targetPlayerRevealState)) {
+    return {
+      targetPlayerId: playerReference.playerId ?? playerReference.targetId,
+      targetPlayerRevealState: playerReference.targetPlayerRevealState,
+      targetPlayerCurrent: playerReference.targetPlayerCurrent,
+    };
+  }
+  const teamReference = record.entry.evidenceReferences.find((reference) =>
+    reference.targetType === 'team-fan' || Boolean(reference.teamId),
+  );
+  return {
+    targetTeamId: teamReference?.teamId ?? (teamReference?.targetType === 'team-fan' ? teamReference.targetId : undefined) ?? fallbackTeamId,
+  };
 }
 
 const FRANCHISE_GRADE_ORDER = new Map<string, number>([
@@ -1462,12 +1512,39 @@ export function TeamHubContent() {
   ]);
 
   const randomEventLogReport = useMemo(() => {
-    if (!narrativeEventEligibilityReport) return null;
-    return buildFranchiseRandomEventLogReport({
-      narrativeEventEligibilityReport,
+    if (!franchiseId) return null;
+    const randomEventFarmRecordByPlayerId = new Map(franchiseFarmRecords.map((record) => [record.playerId, record]));
+    return buildGeneratedFranchiseRandomEventLogReport({
+      franchiseId,
+      seasonId,
+      statsScopeId: seasonId,
+      seasonNumber,
+      seed: `team-hub:${franchiseId}:${seasonId}:${seasonNumber}`,
+      completedGames: franchiseCompletedGames,
+      scoreOnlyScheduleRows: franchiseScheduleGames,
+      rosterTransactions: franchiseTransactionHistory,
+      players: franchiseAllPlayers.map((player) => buildRandomEventPlayerEvidence(player, {
+        franchiseId,
+        seasonId,
+        statsScopeId: seasonId,
+        seasonNumber,
+        leagueId: franchiseLeagueId,
+        farmRecordByPlayerId: randomEventFarmRecordByPlayerId,
+      })),
       stadiumFoundationReport: stadiumFoundationReport ?? undefined,
     });
-  }, [narrativeEventEligibilityReport, stadiumFoundationReport]);
+  }, [
+    franchiseAllPlayers,
+    franchiseCompletedGames,
+    franchiseFarmRecords,
+    franchiseId,
+    franchiseLeagueId,
+    franchiseScheduleGames,
+    franchiseTransactionHistory,
+    seasonId,
+    seasonNumber,
+    stadiumFoundationReport,
+  ]);
 
   const refreshRandomEventWorkflow = useCallback(async () => {
     if (!franchiseId || !seasonId) {
@@ -1545,9 +1622,10 @@ export function TeamHubContent() {
     setRandomEventError(null);
     setMoraleError(null);
     try {
+      const record = randomEventRecords.find((candidate) => candidate.id === recordId);
       await confirmFranchiseRandomEventLogRecord({
         recordId,
-        targetTeamId: selectedTeamId || undefined,
+        ...(record ? randomEventSafeEffectTarget(record, selectedTeamId || undefined) : { targetTeamId: selectedTeamId || undefined }),
         actorDisplayName: 'User',
       });
       await refreshRandomEventWorkflow();
@@ -1557,7 +1635,7 @@ export function TeamHubContent() {
     } finally {
       setRandomEventActionId(null);
     }
-  }, [refreshRandomEventWorkflow, selectedTeamId]);
+  }, [randomEventRecords, refreshRandomEventWorkflow, selectedTeamId]);
 
   const dismissRandomEventRecord = useCallback(async (recordId: string) => {
     setRandomEventActionId(recordId);
@@ -2237,7 +2315,7 @@ export function TeamHubContent() {
       {activeHubTab === "team" && (
         <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-6">
           <div className="text-center mb-6">
-            <div 
+            <div
               className="text-[14px] text-[#E8E8D8] mb-2"
               style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}
             >
@@ -2294,7 +2372,7 @@ export function TeamHubContent() {
       {/* Roster Tab */}
       {activeHubTab === "roster" && (
         <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-4">
-          <div 
+          <div
             className="text-[12px] text-[#E8E8D8] mb-3 pb-2 border-b-2 border-[#4A6844]"
             style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}
           >
@@ -2618,7 +2696,7 @@ export function TeamHubContent() {
               />
             )}
           </div>
-          
+
           <div className="overflow-x-auto">
             <table aria-label="MLB roster table" className="w-full text-[9px]">
               <thead>
@@ -2734,13 +2812,13 @@ export function TeamHubContent() {
 
           {statsView === "table" && (
             <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-4">
-              <div 
+              <div
                 className="text-[12px] text-[#E8E8D8] mb-3 pb-2 border-b-2 border-[#4A6844]"
                 style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}
               >
                 {selectedTeam.toUpperCase()} PLAYER STATS
               </div>
-              
+
               <div className="overflow-x-auto">
                 <table className="w-full text-[9px]">
                   <thead>
@@ -4124,9 +4202,10 @@ function FranchiseRandomEventLogPanel({
         <div className="space-y-2">
           {visibleRecords.map((record) => {
             const entry = record.entry;
-            const effectPreview = classifyFranchiseRandomEventSafeEffect(record, {
-              targetTeamId: selectedTeamId || undefined,
-            });
+            const effectPreview = classifyFranchiseRandomEventSafeEffect(
+              record,
+              randomEventSafeEffectTarget(record, selectedTeamId || undefined),
+            );
             return (
             <article key={record.id} className="border-2 border-[#4A6844] bg-[#4A6844] p-3">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">

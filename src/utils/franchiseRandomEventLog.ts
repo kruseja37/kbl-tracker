@@ -32,6 +32,13 @@ export type FranchiseRandomEventEvidenceType =
   | 'player-profile-edit-summary'
   | 'stadium-spray-summary';
 
+export type FranchiseRandomEventEvidenceTargetType =
+  | 'team-fan'
+  | 'player'
+  | 'stadium'
+  | 'player-profile'
+  | 'none';
+
 export interface FranchiseRandomEventEvidenceReference {
   type: FranchiseRandomEventEvidenceType;
   description: string;
@@ -42,6 +49,10 @@ export interface FranchiseRandomEventEvidenceReference {
   playerId?: string;
   teamId?: string;
   stadiumId?: string;
+  targetType?: FranchiseRandomEventEvidenceTargetType;
+  targetId?: string;
+  targetPlayerRevealState?: 'hidden' | 'revealed';
+  targetPlayerCurrent?: boolean;
   hiddenProspectTruth: false;
   scoreOnlyContextOnly?: boolean;
   archiveBacked?: boolean;

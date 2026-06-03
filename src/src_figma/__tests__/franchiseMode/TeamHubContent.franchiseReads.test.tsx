@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { resetFranchiseMoraleDatabaseForTests } from '../../../utils/franchiseMoraleState';
+import { getFranchiseMoraleSnapshot, resetFranchiseMoraleDatabaseForTests } from '../../../utils/franchiseMoraleState';
 import { resetFranchiseRandomEventLogDatabaseForTests } from '../../../utils/franchiseRandomEventLogStorage';
 
 const mocks = vi.hoisted(() => ({
@@ -703,6 +703,67 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(await screen.findByText(/Canonical Franchise v1 morale comes from confirmed random-event/i)).toBeInTheDocument();
     expect(screen.getByText('51')).toBeInTheDocument();
     expect(screen.getByText(/EVENT-BACKED HISTORY/i)).toBeInTheDocument();
+  });
+
+  test('confirms generated archive-backed player prompts as player morale instead of selected-team fan morale', async () => {
+    mocks.mockGetRecentGames.mockResolvedValueOnce([{
+      gameId: 'game-player-prompt-1',
+      date: 100,
+      franchiseId: 'franchise-1',
+      seasonId: 'franchise-1-season-2',
+      statsScopeId: 'franchise-1-season-2',
+      competitionType: 'franchise',
+      competitionId: 'franchise-1',
+      seasonNumber: 2,
+      awayTeamId: 'team-1',
+      homeTeamId: 'team-2',
+      awayTeamName: 'Copied Alpha',
+      homeTeamName: 'Copied Beta',
+      finalScore: { away: 4, home: 2 },
+      innings: 6,
+      totalInnings: 6,
+      fameEvents: [],
+      playerStats: {
+        'copied-player': {
+          playerName: 'Copied Player',
+          teamId: 'team-1',
+        },
+      },
+      pitcherGameStats: [],
+      activityLog: [],
+      inningScores: [],
+      aggregationStatus: 'aggregated',
+    }]);
+
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    const randomEventRegion = await screen.findByRole('region', { name: /Franchise random event log preview/i });
+    await waitFor(() => expect(within(randomEventRegion).getByText('Archive-backed revealed player morale prompt')).toBeInTheDocument());
+    const playerPromptArticle = within(randomEventRegion)
+      .getByText('Archive-backed revealed player morale prompt')
+      .closest('article');
+    expect(playerPromptArticle).not.toBeNull();
+    expect(within(playerPromptArticle as HTMLElement).getByText(/Player morale \+1/i)).toBeInTheDocument();
+    const scope = {
+      franchiseId: 'franchise-1',
+      seasonId: 'franchise-1-season-2',
+      statsScopeId: 'franchise-1-season-2',
+      seasonNumber: 2,
+    };
+    const teamSnapshotBefore = await getFranchiseMoraleSnapshot(scope, 'team-fan', 'team-1');
+
+    fireEvent.click(within(playerPromptArticle as HTMLElement).getByRole('button', { name: 'CONFIRM' }));
+    await waitFor(() =>
+      expect(within(playerPromptArticle as HTMLElement).getByText(/Confirmed player-scoped event context may adjust revealed\/current player morale/i)).toBeInTheDocument(),
+    );
+
+    const playerSnapshot = await getFranchiseMoraleSnapshot(scope, 'player', 'copied-player');
+    const teamSnapshot = await getFranchiseMoraleSnapshot(scope, 'team-fan', 'team-1');
+
+    expect(playerSnapshot?.currentValue).toBe(51);
+    expect(teamSnapshot?.currentValue ?? 50).toBe(teamSnapshotBefore?.currentValue ?? 50);
+    expect(teamSnapshot?.history.length ?? 0).toBe(teamSnapshotBefore?.history.length ?? 0);
   });
 
   test('renders read-only stadium foundation and archive-backed spray evidence', async () => {

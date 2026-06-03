@@ -246,8 +246,16 @@ export function classifyFranchiseRandomEventSafeEffect(
 ): FranchiseRandomEventSafeEffectPreview {
   const blockers: string[] = [];
   const warnings: string[] = [];
-  const targetTeamId = target.targetTeamId ?? record.entry.evidenceReferences.find((ref) => ref.teamId)?.teamId;
-  const targetPlayerId = target.targetPlayerId ?? record.entry.evidenceReferences.find((ref) => ref.playerId)?.playerId;
+  const teamReference = record.entry.evidenceReferences.find((ref) =>
+    ref.targetType === 'team-fan' || Boolean(ref.teamId),
+  );
+  const playerReference = record.entry.evidenceReferences.find((ref) =>
+    ref.targetType === 'player' || Boolean(ref.playerId),
+  );
+  const targetTeamId = target.targetTeamId ?? teamReference?.teamId ?? (teamReference?.targetType === 'team-fan' ? teamReference.targetId : undefined);
+  const targetPlayerId = target.targetPlayerId ?? playerReference?.playerId ?? (playerReference?.targetType === 'player' ? playerReference.targetId : undefined);
+  const targetPlayerRevealState = target.targetPlayerRevealState ?? playerReference?.targetPlayerRevealState;
+  const targetPlayerCurrent = target.targetPlayerCurrent ?? playerReference?.targetPlayerCurrent;
 
   if (record.entry.status === 'blocked' || record.entry.blockers.length > 0) {
     blockers.push('Prompt is blocked and cannot apply morale effects.');
@@ -255,10 +263,10 @@ export function classifyFranchiseRandomEventSafeEffect(
   if (record.confirmation.state === 'dismissed') {
     blockers.push('Prompt has been dismissed.');
   }
-  if (target.targetPlayerRevealState === 'hidden') {
+  if (targetPlayerRevealState === 'hidden') {
     blockers.push('Unrevealed FARM/prospect hidden truth cannot receive morale effects.');
   }
-  if (targetPlayerId && target.targetPlayerCurrent === false) {
+  if (targetPlayerId && targetPlayerCurrent === false) {
     blockers.push('Player morale requires a current/revealed franchise player target.');
   }
 
@@ -280,7 +288,7 @@ export function classifyFranchiseRandomEventSafeEffect(
     };
   }
 
-  if (targetPlayerId && target.targetPlayerRevealState === 'revealed' && target.targetPlayerCurrent !== false) {
+  if (targetPlayerId && targetPlayerRevealState === 'revealed' && targetPlayerCurrent !== false) {
     return {
       allowed: blockers.length === 0,
       targetType: 'player',

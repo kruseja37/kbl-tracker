@@ -11,6 +11,7 @@ import {
   resetFranchiseRandomEventLogDatabaseForTests,
   syncFranchiseRandomEventLogFromReport,
 } from '../franchiseRandomEventLogStorage';
+import { buildGeneratedFranchiseRandomEventLogReport } from '../franchiseRandomEventGenerator';
 import {
   applyFranchiseMoraleEffect,
   getFranchiseMoraleSnapshot,
@@ -143,6 +144,88 @@ describe('franchise random event durable log and morale effects', () => {
     expect(resynced[0].appliedEffect.teamId).toBe('team-a');
   });
 
+  test('generated candidate log sync preserves confirm dismiss and idempotency', async () => {
+    const generated = buildGeneratedFranchiseRandomEventLogReport({
+      ...scope,
+      seed: 'storage-generated-seed',
+      scoreOnlyScheduleRows: [{
+        id: 'score-only-generated-1',
+        ...scope,
+        gameNumber: 1,
+        dayNumber: 1,
+        awayTeamId: 'team-a',
+        homeTeamId: 'team-b',
+        status: 'COMPLETED',
+        result: {
+          awayScore: 5,
+          homeScore: 2,
+          winningTeamId: 'team-a',
+          losingTeamId: 'team-b',
+        },
+        completionSource: 'score-only',
+        scoreOnlyResultId: 'score-only-1',
+        resultEnteredAt: 100,
+        completedAt: 100,
+        createdAt: 1,
+        source: 'manual',
+      }],
+      completedGames: [{
+        gameId: 'archive-generated-1',
+        date: 100,
+        ...scope,
+        franchiseId: scope.franchiseId,
+        competitionType: 'franchise',
+        competitionId: scope.franchiseId,
+        awayTeamId: 'team-a',
+        homeTeamId: 'team-b',
+        awayTeamName: 'A',
+        homeTeamName: 'B',
+        finalScore: { away: 1, home: 4 },
+        innings: 6,
+        totalInnings: 6,
+        fameEvents: [],
+        playerStats: {},
+        pitcherGameStats: [],
+        activityLog: [],
+        inningScores: [],
+        aggregationStatus: 'aggregated',
+      }],
+    });
+
+    expect(generated.entries.map((entry) => entry.kind)).toEqual([
+      'gametracker-archive-fact',
+      'score-only-context',
+    ]);
+
+    await syncFranchiseRandomEventLogFromReport(generated, '2026-01-01T00:00:00.000Z');
+    const [archiveRecord, scoreOnlyRecord] = await listFranchiseRandomEventLogRecords(
+      scope.franchiseId,
+      scope.seasonId,
+      scope.statsScopeId,
+      scope.seasonNumber,
+    );
+
+    await confirmFranchiseRandomEventLogRecord({
+      recordId: scoreOnlyRecord.id,
+      targetTeamId: 'team-a',
+      actorDisplayName: 'Tester',
+      timestamp: '2026-01-01T00:01:00.000Z',
+    });
+    await dismissFranchiseRandomEventLogRecord(archiveRecord.id, 'Tester', '2026-01-01T00:02:00.000Z');
+
+    const resynced = await syncFranchiseRandomEventLogFromReport(generated, '2026-01-01T00:03:00.000Z');
+    const confirmed = resynced.find((record) => record.id === scoreOnlyRecord.id);
+    const dismissed = resynced.find((record) => record.id === archiveRecord.id);
+
+    expect(confirmed?.confirmation.state).toBe('confirmed');
+    expect(confirmed?.appliedEffect.state).toBe('applied');
+    expect(dismissed?.confirmation.state).toBe('dismissed');
+    expect(dismissed?.appliedEffect.state).toBe('skipped');
+
+    const snapshot = await getFranchiseMoraleSnapshot(scope, 'team-fan', 'team-a');
+    expect(snapshot?.history).toHaveLength(1);
+  });
+
   test('re-confirming an applied record preserves the original applied effect state', async () => {
     const prompt = entry('gametracker-archive-fact', 'archive');
     await syncFranchiseRandomEventLogFromReport(report([prompt]), '2026-01-01T00:00:00.000Z');
@@ -234,6 +317,75 @@ describe('franchise random event durable log and morale effects', () => {
     const playerSnapshot = await getFranchiseMoraleSnapshot(scope, 'player', 'player-a');
     expect(fanSnapshot?.currentValue).toBe(51);
     expect(playerSnapshot).toBeNull();
+  });
+
+  test('generated player prompts carry target metadata and apply player morale without a UI-selected team target', async () => {
+    const generated = buildGeneratedFranchiseRandomEventLogReport({
+      ...scope,
+      seed: 'player-target-seed',
+      completedGames: [{
+        gameId: 'archive-player-1',
+        date: 100,
+        ...scope,
+        franchiseId: scope.franchiseId,
+        competitionType: 'franchise',
+        competitionId: scope.franchiseId,
+        awayTeamId: 'team-a',
+        homeTeamId: 'team-b',
+        awayTeamName: 'A',
+        homeTeamName: 'B',
+        finalScore: { away: 6, home: 2 },
+        innings: 6,
+        totalInnings: 6,
+        fameEvents: [],
+        playerStats: {
+          'player-a': {
+            playerName: 'Player Alpha',
+            teamId: 'team-a',
+          },
+        },
+        pitcherGameStats: [],
+        activityLog: [],
+        inningScores: [],
+        aggregationStatus: 'aggregated',
+      }],
+      players: [{
+        id: 'player-a',
+        ...scope,
+        firstName: 'Player',
+        lastName: 'Alpha',
+        ratingRevealState: 'revealed',
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-a', rosterStatus: 'MLB' }],
+      }],
+    });
+    const playerPrompt = generated.entries.find((candidate) =>
+      candidate.evidenceReferences.some((reference) => reference.targetType === 'player'),
+    );
+
+    expect(playerPrompt?.evidenceReferences[0]).toMatchObject({
+      playerId: 'player-a',
+      targetType: 'player',
+      targetId: 'player-a',
+      targetPlayerRevealState: 'revealed',
+      targetPlayerCurrent: true,
+    });
+
+    await syncFranchiseRandomEventLogFromReport(generated);
+    const confirmed = await confirmFranchiseRandomEventLogRecord({
+      recordId: playerPrompt!.id,
+      actorDisplayName: 'Tester',
+      timestamp: '2026-01-01T00:00:00.000Z',
+    });
+
+    expect(confirmed.appliedEffect.state).toBe('applied');
+    expect(confirmed.appliedEffect.targetType).toBe('player');
+    expect(confirmed.appliedEffect.playerId).toBe('player-a');
+    expect(confirmed.appliedEffect.teamId).toBeUndefined();
+
+    const playerSnapshot = await getFranchiseMoraleSnapshot(scope, 'player', 'player-a');
+    const fanSnapshot = await getFranchiseMoraleSnapshot(scope, 'team-fan', 'team-a');
+    expect(playerSnapshot?.currentValue).toBe(51);
+    expect(fanSnapshot).toBeNull();
   });
 
   test('hidden player targets are blocked from player morale effects', async () => {
