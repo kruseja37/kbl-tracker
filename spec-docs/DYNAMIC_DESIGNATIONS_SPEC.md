@@ -4,6 +4,19 @@
 
 Player designations (Team MVP, Ace, Fan Favorite, Albatross) are tracked dynamically throughout the season with "projected" status, then locked in at season's end. This creates engaging storylines as players compete for designations during the season.
 
+## Franchise Internal v1 Morale Bridge Checkpoint (June 2026)
+
+Dynamic designations are morale context for Franchise v1, but they should not silently mutate morale, player profiles, salary, relationships, story state, or Mode 3/offseason systems.
+
+- Designation effects enter v1 through confirmation-gated random-event prompts.
+- Team MVP/Ace recognition can become player morale prompt context.
+- Fan Favorite and Albatross require trusted True Value/value-delta inputs before final prompt behavior.
+- Cornerstone can create fan trust and stronger roster-move reaction prompts once durable designation state is trusted.
+- Captain morale amplification remains blocked until hidden-charisma/leadership safety is approved.
+- Fan Hopeful can create prospect-safe player morale excitement, but unrevealed FARM hidden truth remains blocked.
+
+See `FRANCHISE_MODE2_DYNAMIC_DESIGNATION_MORALE_BRIDGE.md` for the active v1 bridge contract.
+
 ## Designation Types
 
 ### Team MVP (Position Players)
@@ -419,9 +432,11 @@ async function lockSeasonDesignations(
 
 Designations create meaningful connections between player performance and fan morale throughout the season. Effects scale based on how established the designation is and the context of the performance.
 
+> **Franchise internal v1 boundary:** The tables in this section are full-system design targets. In v1, they may only be translated into confirmation-gated random-event prompt candidates through the morale bridge. They must not silently mutate fan morale, player morale, player profiles, designations, salary, relationships, story persistence, offseason systems, or Mode 3.
+
 ### Per-Game Happiness Adjustments
 
-After each game, designated players' performances affect team happiness:
+After each game, designated players' performances can affect team happiness in the full system:
 
 ```typescript
 interface DesignationHappinessConfig {
@@ -666,7 +681,7 @@ function calculateDesignationHappinessEffect(
 
 ### Cornerstone Baseline Bonus
 
-Teams with Cornerstones get a passive happiness boost representing franchise stability:
+Teams with Cornerstones get a passive happiness boost representing franchise stability in the full system. For Franchise internal v1, this is bridge context only until durable designation state and formula weighting are trusted:
 
 ```typescript
 function getCornerstoneBaselineBonus(cornerstones: Cornerstone[]): number {
@@ -747,6 +762,8 @@ function getCornerstoneBaselineBonus(cornerstones: Cornerstone[]): number {
 
 ### Offseason Effects (Locked Only)
 
+> **Franchise internal v1 boundary:** These offseason effects are not active mutations in v1. Fan morale, trade value, contract negotiation, franchise legacy, and retirement ceremony effects remain future/full-system behavior unless a later slice explicitly routes a safe subset through confirmation-gated prompts.
+
 **Fan Favorite:**
 - +5 team happiness
 - 15% trade value premium
@@ -779,6 +796,8 @@ function getCornerstoneBaselineBonus(cornerstones: Cornerstone[]): number {
 ### Farm System Integration
 
 Designations interact with the farm system in meaningful ways:
+
+> **Franchise internal v1 boundary:** These FARM interactions are future/full-system targets. In v1, send-down/call-up designation reactions may only become confirmation-gated prompt candidates after designation state, roster-move evidence, value-delta requirements, and hidden prospect safety are trusted.
 
 - **Albatross Send-Down**: Sending down the Albatross for a prospect = +8 base happiness (see [FARM_SYSTEM_SPEC.md](./FARM_SYSTEM_SPEC.md))
 - **Fan Favorite Send-Down**: Demoting the Fan Favorite = -12 happiness (devastating)
