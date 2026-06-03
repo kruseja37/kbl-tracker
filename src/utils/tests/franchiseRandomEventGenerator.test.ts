@@ -120,6 +120,25 @@ function completedGame(overrides: Partial<CompletedGameRecord> = {}): CompletedG
   };
 }
 
+function completedGameForTeam(
+  index: number,
+  awayScore: number,
+  homeScore: number,
+  overrides: Partial<CompletedGameRecord> = {},
+): CompletedGameRecord {
+  return completedGame({
+    gameId: `archive-streak-${index}`,
+    date: index,
+    awayTeamId: 'team-1',
+    homeTeamId: 'team-2',
+    awayTeamName: 'Alpha',
+    homeTeamName: 'Beta',
+    finalScore: { away: awayScore, home: homeScore },
+    playerStats: {},
+    ...overrides,
+  });
+}
+
 function scoreOnlyGame(overrides: Partial<ScheduledGame> = {}): ScheduledGame {
   return {
     id: 'schedule-score-only-1',
@@ -143,6 +162,29 @@ function scoreOnlyGame(overrides: Partial<ScheduledGame> = {}): ScheduledGame {
     source: 'manual',
     ...overrides,
   };
+}
+
+function scoreOnlyGameForTeam(
+  index: number,
+  awayScore: number,
+  homeScore: number,
+  overrides: Partial<ScheduledGame> = {},
+): ScheduledGame {
+  return scoreOnlyGame({
+    id: `score-streak-${index}`,
+    gameNumber: index,
+    completedAt: index,
+    resultEnteredAt: index,
+    awayTeamId: 'team-1',
+    homeTeamId: 'team-2',
+    result: {
+      awayScore,
+      homeScore,
+      winningTeamId: awayScore > homeScore ? 'team-1' : 'team-2',
+      losingTeamId: awayScore > homeScore ? 'team-2' : 'team-1',
+    },
+    ...overrides,
+  });
 }
 
 function transaction(overrides: Partial<TransactionLogEntry> = {}): TransactionLogEntry {
@@ -306,6 +348,7 @@ describe('franchise random event generator core', () => {
     expect(report.candidates.filter((candidate) => candidate.triggerCategory === 'archive-backed-team-fan-reaction')).toHaveLength(4);
     expect(report.candidates.filter((candidate) => candidate.triggerCategory === 'archive-backed-player-morale-prompt')).toHaveLength(1);
     expect(report.candidates.filter((candidate) => candidate.triggerCategory === 'score-only-team-fan-reaction')).toHaveLength(2);
+    expect(report.candidates.filter((candidate) => candidate.triggerCategory === 'streak-team-fan-reaction')).toHaveLength(2);
     expect(report.candidates.filter((candidate) => candidate.triggerCategory === 'roster-movement-morale-prompt')).toHaveLength(1);
     expect(JSON.stringify(report)).not.toMatch(/wrong-scope-player|Wrong/);
     expect(JSON.stringify(report)).not.toMatch(/missing-scope-player|Missing Scope Player|Missing/);
@@ -364,6 +407,57 @@ describe('franchise random event generator core', () => {
         safeEffectPreview: expect.objectContaining({ targetType: 'team-fan', targetId: 'team-2', delta: -1 }),
       }),
     ]));
+  });
+
+  test('scoped archive games generate signed streak prompts', () => {
+    const report = buildFranchiseRandomEventCandidates({
+      ...scope,
+      seed: 'archive-streak-seed',
+      completedGames: [
+        completedGameForTeam(1, 5, 1),
+        completedGameForTeam(2, 4, 2),
+        completedGameForTeam(3, 3, 1),
+      ],
+      generatedAt: 123,
+    });
+    const streak = report.candidates.find((candidate) =>
+      candidate.triggerCategory === 'streak-team-fan-reaction' &&
+      candidate.targetId === 'team-1'
+    );
+
+    expect(streak).toMatchObject({
+      eventKind: 'gametracker-archive-fact',
+      targetType: 'team-fan',
+      targetId: 'team-1',
+      safeEffectPreview: expect.objectContaining({ delta: 2, targetType: 'team-fan', targetId: 'team-1' }),
+    });
+    expect(streak?.id).toMatch(/team-1:win-streak-3:3:archive-streak-3/);
+  });
+
+  test('scoped score-only rows contribute team-fan-only streak prompts', () => {
+    const report = buildFranchiseRandomEventCandidates({
+      ...scope,
+      seed: 'score-only-streak-seed',
+      scoreOnlyScheduleRows: [
+        scoreOnlyGameForTeam(1, 1, 4),
+        scoreOnlyGameForTeam(2, 2, 5),
+        scoreOnlyGameForTeam(3, 0, 3),
+      ],
+      generatedAt: 123,
+    });
+    const streak = report.candidates.find((candidate) =>
+      candidate.triggerCategory === 'streak-team-fan-reaction' &&
+      candidate.targetId === 'team-1'
+    );
+
+    expect(streak).toMatchObject({
+      eventKind: 'score-only-context',
+      targetType: 'team-fan',
+      targetId: 'team-1',
+      safeEffectPreview: expect.objectContaining({ delta: -2, targetType: 'team-fan', targetId: 'team-1' }),
+    });
+    expect(JSON.stringify(streak)).not.toMatch(/player-morale-draft/);
+    expect(streak?.warnings.join(' ')).toMatch(/Score-only streak evidence has no player archive/i);
   });
 
   test('archive-backed revealed player morale candidate requires revealed current player target', () => {

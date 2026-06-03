@@ -4262,7 +4262,7 @@ function FranchiseRandomEventLogPanel({
   onConfirm,
   onDismiss,
 }: FranchiseRandomEventLogPanelProps) {
-  const visibleRecords = records.slice(0, 5);
+  const visibleRecords = records.slice(0, 12);
   const readyCount = records.filter((record) => record.confirmation.state === 'unconfirmed').length;
   const confirmedCount = records.filter((record) => record.confirmation.state === 'confirmed').length;
   const dismissedCount = records.filter((record) => record.confirmation.state === 'dismissed').length;

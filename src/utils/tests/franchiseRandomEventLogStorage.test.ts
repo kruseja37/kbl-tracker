@@ -377,6 +377,108 @@ describe('franchise random event durable log and morale effects', () => {
     expect(loserSnapshot?.currentValue).toBe(48);
   });
 
+  test('generated streak prompts apply persisted signed deltas', async () => {
+    const generated = buildGeneratedFranchiseRandomEventLogReport({
+      ...scope,
+      seed: 'streak-storage-seed',
+      completedGames: [
+        {
+          gameId: 'archive-streak-1',
+          date: 1,
+          ...scope,
+          franchiseId: scope.franchiseId,
+          competitionType: 'franchise',
+          competitionId: scope.franchiseId,
+          awayTeamId: 'team-a',
+          homeTeamId: 'team-b',
+          awayTeamName: 'A',
+          homeTeamName: 'B',
+          finalScore: { away: 5, home: 1 },
+          innings: 6,
+          totalInnings: 6,
+          fameEvents: [],
+          playerStats: {},
+          pitcherGameStats: [],
+          activityLog: [],
+          inningScores: [],
+          aggregationStatus: 'aggregated',
+        },
+        {
+          gameId: 'archive-streak-2',
+          date: 2,
+          ...scope,
+          franchiseId: scope.franchiseId,
+          competitionType: 'franchise',
+          competitionId: scope.franchiseId,
+          awayTeamId: 'team-a',
+          homeTeamId: 'team-b',
+          awayTeamName: 'A',
+          homeTeamName: 'B',
+          finalScore: { away: 4, home: 2 },
+          innings: 6,
+          totalInnings: 6,
+          fameEvents: [],
+          playerStats: {},
+          pitcherGameStats: [],
+          activityLog: [],
+          inningScores: [],
+          aggregationStatus: 'aggregated',
+        },
+        {
+          gameId: 'archive-streak-3',
+          date: 3,
+          ...scope,
+          franchiseId: scope.franchiseId,
+          competitionType: 'franchise',
+          competitionId: scope.franchiseId,
+          awayTeamId: 'team-a',
+          homeTeamId: 'team-b',
+          awayTeamName: 'A',
+          homeTeamName: 'B',
+          finalScore: { away: 3, home: 1 },
+          innings: 6,
+          totalInnings: 6,
+          fameEvents: [],
+          playerStats: {},
+          pitcherGameStats: [],
+          activityLog: [],
+          inningScores: [],
+          aggregationStatus: 'aggregated',
+        },
+      ],
+    });
+    const positiveStreak = generated.entries.find((entry) =>
+      entry.safeEffectPreview?.targetId === 'team-a' &&
+      entry.safeEffectPreview.delta === 2 &&
+      entry.title.includes('win streak 3')
+    );
+    const negativeStreak = generated.entries.find((entry) =>
+      entry.safeEffectPreview?.targetId === 'team-b' &&
+      entry.safeEffectPreview.delta === -2 &&
+      entry.title.includes('loss streak 3')
+    );
+
+    expect(positiveStreak).toBeDefined();
+    expect(negativeStreak).toBeDefined();
+
+    await syncFranchiseRandomEventLogFromReport(generated);
+    await confirmFranchiseRandomEventLogRecord({
+      recordId: positiveStreak!.id,
+      actorDisplayName: 'Tester',
+      timestamp: '2026-01-01T00:00:00.000Z',
+    });
+    await confirmFranchiseRandomEventLogRecord({
+      recordId: negativeStreak!.id,
+      actorDisplayName: 'Tester',
+      timestamp: '2026-01-01T00:01:00.000Z',
+    });
+
+    const positiveSnapshot = await getFranchiseMoraleSnapshot(scope, 'team-fan', 'team-a');
+    const negativeSnapshot = await getFranchiseMoraleSnapshot(scope, 'team-fan', 'team-b');
+    expect(positiveSnapshot?.currentValue).toBe(52);
+    expect(negativeSnapshot?.currentValue).toBe(48);
+  });
+
   test('legacy entries without safe-effect preview still fall back safely', async () => {
     const prompt = entry('gametracker-archive-fact', 'legacy', { teamId: 'team-a' });
     await syncFranchiseRandomEventLogFromReport(report([prompt]));

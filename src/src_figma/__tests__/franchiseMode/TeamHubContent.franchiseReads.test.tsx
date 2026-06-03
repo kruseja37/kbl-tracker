@@ -607,29 +607,54 @@ describe('TeamHubContent franchise-owned visible reads', () => {
   });
 
   test('renders read-only Mode 2 foundation statuses without mutation actions or hidden prospect leakage', async () => {
-    mocks.mockGetRecentGames.mockResolvedValueOnce([{
-      gameId: 'game-archive-1',
-      date: 100,
-      franchiseId: 'franchise-1',
-      seasonId: 'franchise-1-season-2',
-      statsScopeId: 'franchise-1-season-2',
-      competitionType: 'franchise',
-      competitionId: 'franchise-1',
-      seasonNumber: 2,
-      awayTeamId: 'team-1',
-      homeTeamId: 'team-2',
-      awayTeamName: 'Copied Alpha',
-      homeTeamName: 'Copied Beta',
-      finalScore: { away: 4, home: 2 },
-      innings: 6,
-      totalInnings: 6,
-      fameEvents: [],
-      playerStats: {},
-      pitcherGameStats: [],
-      activityLog: [],
-      inningScores: [],
-      aggregationStatus: 'aggregated',
-    }]);
+    mocks.mockGetRecentGames.mockResolvedValueOnce([
+      {
+        gameId: 'game-archive-1',
+        date: 100,
+        franchiseId: 'franchise-1',
+        seasonId: 'franchise-1-season-2',
+        statsScopeId: 'franchise-1-season-2',
+        competitionType: 'franchise',
+        competitionId: 'franchise-1',
+        seasonNumber: 2,
+        awayTeamId: 'team-1',
+        homeTeamId: 'team-2',
+        awayTeamName: 'Copied Alpha',
+        homeTeamName: 'Copied Beta',
+        finalScore: { away: 4, home: 2 },
+        innings: 6,
+        totalInnings: 6,
+        fameEvents: [],
+        playerStats: {},
+        pitcherGameStats: [],
+        activityLog: [],
+        inningScores: [],
+        aggregationStatus: 'aggregated',
+      },
+      {
+        gameId: 'game-archive-2',
+        date: 101,
+        franchiseId: 'franchise-1',
+        seasonId: 'franchise-1-season-2',
+        statsScopeId: 'franchise-1-season-2',
+        competitionType: 'franchise',
+        competitionId: 'franchise-1',
+        seasonNumber: 2,
+        awayTeamId: 'team-1',
+        homeTeamId: 'team-2',
+        awayTeamName: 'Copied Alpha',
+        homeTeamName: 'Copied Beta',
+        finalScore: { away: 3, home: 1 },
+        innings: 6,
+        totalInnings: 6,
+        fameEvents: [],
+        playerStats: {},
+        pitcherGameStats: [],
+        activityLog: [],
+        inningScores: [],
+        aggregationStatus: 'aggregated',
+      },
+    ]);
     mocks.mockGetAllGamesByFranchise.mockResolvedValueOnce([{
       id: 'schedule-score-only-1',
       franchiseId: 'franchise-1',
@@ -663,7 +688,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
 
     expect(within(foundationRegion).getByText('MODE 2 FOUNDATION STATUS')).toBeInTheDocument();
     expect(within(foundationRegion).getByText('STATS / ARCHIVE / SCOPE')).toBeInTheDocument();
-    expect(within(foundationRegion).getByText(/1 scoped archive-backed game\(s\), 1 stat row\(s\)/i)).toBeInTheDocument();
+    expect(within(foundationRegion).getByText(/2 scoped archive-backed game\(s\), 1 stat row\(s\)/i)).toBeInTheDocument();
     expect(within(foundationRegion).getByText('VALUE INPUTS')).toBeInTheDocument();
     expect(within(foundationRegion).getByText(/1 canonical player row\(s\)/i)).toBeInTheDocument();
     expect(within(foundationRegion).getByText('SALARY LIFECYCLE')).toBeInTheDocument();
@@ -688,11 +713,13 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(workflow).getByText('2. SAFE EFFECT')).toBeInTheDocument();
     expect(within(workflow).getByText('3. DECISION')).toBeInTheDocument();
     expect(within(workflow).getByText('4. VERIFY')).toBeInTheDocument();
-    await waitFor(() => expect(within(randomEventRegion).getByText(/4 durable prompt\(s\) ready for manual review/i)).toBeInTheDocument());
-    expect(within(randomEventRegion).getByText('Archive-backed win fan reaction')).toBeInTheDocument();
-    expect(within(randomEventRegion).getByText('Archive-backed loss fan reaction')).toBeInTheDocument();
-    expect(within(randomEventRegion).getByText('Score-only win fan reaction')).toBeInTheDocument();
-    expect(within(randomEventRegion).getByText('Score-only loss fan reaction')).toBeInTheDocument();
+    await waitFor(() => expect(within(randomEventRegion).getByText(/8 durable prompt\(s\) ready for manual review/i)).toBeInTheDocument());
+    expect(within(randomEventRegion).getAllByText('Archive-backed win fan reaction').length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getAllByText('Archive-backed loss fan reaction').length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getAllByText('Score-only win fan reaction').length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getAllByText('Score-only loss fan reaction').length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getByText('win streak 3 fan reaction')).toBeInTheDocument();
+    expect(within(randomEventRegion).getByText('loss streak 3 fan reaction')).toBeInTheDocument();
     expect(within(randomEventRegion).getAllByText(/Source:/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText(/GameTracker archive/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText(/Score-only schedule/i).length).toBeGreaterThan(0);
@@ -701,6 +728,8 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(randomEventRegion).getAllByText(/Team fan morale target: team-2/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText(/Team fan morale \+1/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText(/Team fan morale -1/i).length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getAllByText(/Team fan morale \+2/i).length).toBeGreaterThan(0);
+    expect(within(randomEventRegion).getAllByText(/Team fan morale -2/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText(/Manual smoke: after confirm, open Fan Morale and check Event-Backed History/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText(/Checkbox state: Manual change completed unchecked/i).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByText(/Score-only evidence has no player archive, player stats, WPA, WAR, morale, or relationship authority/i).length).toBeGreaterThan(0);

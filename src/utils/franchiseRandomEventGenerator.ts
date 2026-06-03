@@ -9,6 +9,10 @@ import {
   type FranchiseRandomEventSuggestedManualChangeTarget,
 } from './franchiseRandomEventLog';
 import { buildFranchiseFanMoraleGameResultEffects } from './franchiseFanMoraleGameResultFormula';
+import {
+  buildFranchiseFanMoraleStreakEffects,
+  type FranchiseFanMoraleStreakGameEvidence,
+} from './franchiseFanMoraleStreakFormula';
 import type { FranchiseStadiumFoundationReport } from './franchiseStadiumFoundation';
 
 export const FRANCHISE_RANDOM_EVENT_GENERATOR_VERSION =
@@ -17,6 +21,7 @@ export const FRANCHISE_RANDOM_EVENT_GENERATOR_VERSION =
 export type FranchiseRandomEventTriggerCategory =
   | 'score-only-team-fan-reaction'
   | 'archive-backed-team-fan-reaction'
+  | 'streak-team-fan-reaction'
   | 'archive-backed-player-morale-prompt'
   | 'roster-movement-morale-prompt'
   | 'stadium-spray-story-prompt'
@@ -138,6 +143,7 @@ export interface FranchiseRandomEventPlayerEvidence {
 
 export interface FranchiseRandomEventCompletedGameEvidence {
   gameId: string;
+  date?: number;
   franchiseId?: string;
   seasonId?: string;
   statsScopeId?: string;
@@ -163,6 +169,8 @@ export interface FranchiseRandomEventScheduleEvidence {
   homeTeamId: string;
   status: string;
   completionSource?: string;
+  completedAt?: number;
+  resultEnteredAt?: number;
   result?: {
     awayScore: number;
     homeScore: number;
@@ -485,6 +493,79 @@ function buildArchiveTeamCandidates(
   });
 }
 
+function finiteOrder(...values: Array<number | undefined | null>): number {
+  const found = values.find((value) => Number.isFinite(value));
+  return typeof found === 'number' ? found : Number.MAX_SAFE_INTEGER;
+}
+
+function streakGameEvidenceFromArchive(game: FranchiseRandomEventCompletedGameEvidence): FranchiseFanMoraleStreakGameEvidence {
+  return {
+    evidenceId: game.gameId,
+    source: 'gametracker-archive',
+    order: finiteOrder(game.date),
+    awayTeamId: game.awayTeamId,
+    homeTeamId: game.homeTeamId,
+    awayTeamName: game.awayTeamName,
+    homeTeamName: game.homeTeamName,
+    awayScore: game.finalScore.away,
+    homeScore: game.finalScore.home,
+  };
+}
+
+function streakGameEvidenceFromScoreOnly(game: FranchiseRandomEventScheduleEvidence): FranchiseFanMoraleStreakGameEvidence {
+  return {
+    evidenceId: game.id,
+    source: 'score-only',
+    order: finiteOrder(game.completedAt, game.resultEnteredAt, game.gameNumber),
+    awayTeamId: game.awayTeamId,
+    homeTeamId: game.homeTeamId,
+    awayScore: game.result?.awayScore ?? Number.NaN,
+    homeScore: game.result?.homeScore ?? Number.NaN,
+  };
+}
+
+function buildStreakCandidates(
+  scope: EventScope,
+  seed: string,
+  games: FranchiseFanMoraleStreakGameEvidence[],
+): FranchiseRandomEventCandidate[] {
+  const formula = buildFranchiseFanMoraleStreakEffects(games);
+  return formula.effects.map((effectResult) =>
+    candidate(scope, seed, 'streak-team-fan-reaction', effectResult.source === 'score-only' ? 'score-only-context' : 'gametracker-archive-fact', `${effectResult.teamId}:${effectResult.type}:${effectResult.streakLength}:${effectResult.evidenceGameId}`, {
+      title: `${effectResult.type.replace(/-/g, ' ')} fan reaction`,
+      targetType: 'team-fan',
+      targetId: effectResult.teamId,
+      reason: effectResult.reason,
+      suggestedManualChange: manualChange(
+        'fan-morale-draft',
+        `Optional team fan morale streak draft (${effectResult.delta > 0 ? '+' : ''}${effectResult.delta}). No automatic effect is applied.`,
+      ),
+      evidenceReferences: [
+        evidence(scope, effectResult.source === 'score-only' ? 'score-only-schedule-summary' : 'gametracker-archive-summary', `Streak evidence from ${effectResult.evidenceGameId}.`, effectResult.streakLength, {
+          teamId: effectResult.teamId,
+          archiveBacked: effectResult.source === 'gametracker-archive',
+          scoreOnlyContextOnly: effectResult.source === 'score-only' ? true : undefined,
+        }),
+      ],
+      safeEffectPreview: {
+        target: 'fan-morale-draft',
+        targetType: 'team-fan',
+        targetId: effectResult.teamId,
+        delta: effectResult.delta,
+      },
+      warnings: [
+        ...formula.limitations,
+        ...(effectResult.source === 'score-only'
+          ? [
+              'Score-only streak evidence has no player archive, player stats, WPA, WAR, morale, or relationship authority.',
+              'Score-only streak evidence is schedule/standings context only and cannot target player morale.',
+            ]
+          : []),
+      ],
+    }),
+  );
+}
+
 function buildArchivePlayerCandidates(
   scope: EventScope,
   seed: string,
@@ -748,6 +829,10 @@ export function buildFranchiseRandomEventCandidates(
   const candidates = blockers.length > 0 ? [] : [
     ...buildScoreOnlyCandidates(scope, input.seed, scopedScoreOnlyRows),
     ...buildArchiveTeamCandidates(scope, input.seed, scopedCompletedGames),
+    ...buildStreakCandidates(scope, input.seed, [
+      ...scopedCompletedGames.map(streakGameEvidenceFromArchive),
+      ...scopedScoreOnlyRows.map(streakGameEvidenceFromScoreOnly),
+    ]),
     ...buildArchivePlayerCandidates(scope, input.seed, scopedCompletedGames, playersById),
     ...buildRosterMovementCandidates(scope, input.seed, scopedTransactions, playersById),
     ...buildStadiumCandidates(scope, input.seed, input.stadiumFoundationReport),
