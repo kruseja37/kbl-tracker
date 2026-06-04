@@ -8,9 +8,9 @@ Reliability-first Mode 2 completion. Finish a playable, scoped, auditable intern
 
 Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
-Latest committed checkpoint: `38f7e04 Add performance gap fan morale prompts`.
+Latest committed checkpoint: `189b065 Add designation readiness report`.
 
-Latest working checkpoint: Designation Readiness / Fan Favorite-Albatross Promotion Decision (pending commit).
+Latest working checkpoint: no active uncommitted slice. Next planned slice is Daily Morale Snapshots.
 
 ## Current Completed
 
@@ -26,9 +26,9 @@ Latest working checkpoint: Designation Readiness / Fan Favorite-Albatross Promot
 
 ## Current Active Slice
 
-Designation Readiness / Fan Favorite-Albatross Promotion Decision.
+Daily Morale Snapshots.
 
-Goal: inspect preview True Value/value-delta context for Fan Favorite/Albatross while keeping promotion blocked until trusted value inputs are explicitly approved.
+Goal: convert confirmed prompt/manual morale history into durable daily high/low/average summaries without adding automatic drift, recovery, offseason effects, or Mode 3 handoff.
 
 ## Next Queue
 
