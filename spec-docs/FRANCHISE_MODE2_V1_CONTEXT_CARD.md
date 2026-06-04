@@ -10,7 +10,7 @@ Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
 Latest committed checkpoint: `189b065 Add designation readiness report`.
 
-Latest working checkpoint: no active uncommitted slice. Next planned slice is Daily Morale Snapshots.
+Latest working checkpoint: Daily Morale Snapshots implemented pending commit.
 
 ## Current Completed
 
@@ -20,6 +20,7 @@ Latest working checkpoint: no active uncommitted slice. Next planned slice is Da
 - Durable random-event log supports generated prompts, confirmation/dismissal, idempotent safe-effect application, and Team Hub workflow.
 - Canonical fan/player morale storage uses 0-99 scale; player morale starts at neutral `50`; manual scoped adjustments exist.
 - Fan morale prompt formulas cover game result, streaks, 7+ run blowouts, archive-backed no-hitter/perfect-game fame events, and performance-gap team fan morale prompts from durable expected-wins baseline evidence.
+- Durable daily morale snapshot summaries can persist scoped high/low/average evidence from confirmed/manual morale history without drift, recovery, or automatic mutation.
 - Dynamic designation morale bridge supports safe preview TEAM_MVP/ACE recognition prompts through random-event confirmation.
 - Fan Favorite/Albatross readiness can be inspected from preview True Value/value-delta rows, but remains blocked for final designation behavior, random-event morale prompts, salary movement, relationships, and Mode 3.
 - Numeric WAR preview, position-relative True Value preview, expected-wins preview, Team Hub display, and durable expected-wins baseline snapshots are read-only and untrusted.
@@ -28,12 +29,12 @@ Latest working checkpoint: no active uncommitted slice. Next planned slice is Da
 
 Daily Morale Snapshots.
 
-Goal: convert confirmed prompt/manual morale history into durable daily high/low/average summaries without adding automatic drift, recovery, offseason effects, or Mode 3 handoff.
+Goal: verify durable daily high/low/average summaries from confirmed prompt/manual morale history without adding automatic drift, recovery, offseason effects, or Mode 3 handoff.
 
 ## Next Queue
 
-1. Daily morale snapshots.
-2. Stadium records and richer spray UI.
+1. Stadium records and richer spray UI.
+2. Relationship context display.
 
 ## Hard Boundaries
 

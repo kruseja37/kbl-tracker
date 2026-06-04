@@ -116,7 +116,7 @@ describe('franchise fan morale spec adapter', () => {
     expect(report.limitations.join(' ')).toMatch(/No durable team fan morale snapshot/i);
   });
 
-  test('marks full formula consequences snapshots and weighting areas as deferred partial or blocked', () => {
+  test('marks full formula consequences daily summaries and weighting areas as implemented partial deferred or blocked', () => {
     const report = buildFranchiseFanMoraleSpecViewModel({ snapshot: snapshot() });
 
     expect(report.implementationStatus.canonicalStorage.status).toBe('implemented');
@@ -132,7 +132,8 @@ describe('franchise fan morale spec adapter', () => {
     expect(report.implementationStatus.beatReporterSentiment.status).toBe('blocked');
     expect(report.implementationStatus.freeAgencyConsequences.status).toBe('deferred');
     expect(report.implementationStatus.franchiseHealthConsequences.status).toBe('deferred');
-    expect(report.implementationStatus.dailySnapshots.status).toBe('deferred');
+    expect(report.implementationStatus.dailySnapshots.status).toBe('implemented');
+    expect(report.implementationStatus.dailySnapshots.reason).toMatch(/confirmed\/manual morale history/i);
     expect(report.implementationStatus.automaticGameTrackerMutation.status).toBe('blocked');
     expect(report.implementationStatus.playerMoraleCoupling.status).toBe('deferred');
     expect(report.calculatesExpectedWins).toBe(false);

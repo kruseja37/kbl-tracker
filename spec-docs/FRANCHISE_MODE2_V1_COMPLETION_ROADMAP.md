@@ -12,7 +12,7 @@ Manual smoke feedback remains a bug and feature backlog. The build order for Mod
 
 Latest committed checkpoint: `189b065 Add designation readiness report`.
 
-Latest working checkpoint: no active uncommitted slice. Next planned slice is Daily Morale Snapshots.
+Latest working checkpoint: Daily Morale Snapshots implemented pending commit.
 
 Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved.
 
@@ -31,28 +31,24 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Numeric WAR preview values, position-relative True Value preview, and expected-wins preview exist as read-only, untrusted contracts.
 - Team Hub surfaces True Value and expected-wins previews in Mode 2 Foundation Status with explicit preview-only boundaries.
 - Expected-wins baseline snapshots persist scoped read-only baseline evidence from preview contracts while remaining untrusted for mutation and final formula consumers.
+- Daily morale snapshot summaries persist scoped high/low/average evidence from confirmed/manual morale history while remaining read-only and untrusted for drift, recovery, relationship effects, and Mode 3.
 
 ## Active Priority Order
 
-1. Daily Morale Snapshots
-   - Convert confirmed prompt/manual history into durable daily high/low/average morale summaries.
-   - Keep automatic drift/recovery blocked until snapshot and weighting policy is approved.
-
-2. Stadium Records + Richer Spray UI
+1. Stadium Records + Richer Spray UI
    - Add durable stadium records and richer batting/pitching/fielding spray views after preview surfaces are stable.
    - Keep adaptive park-factor persistence and final value/WAR consumers blocked until separately audited.
 
-3. Relationship Context
+2. Relationship Context
    - Relationships remain visible/draft/manual context only in v1.
    - No durable relationship mutation until fan/player morale is stable.
 
-4. Season Handoff
+3. Season Handoff
    - Later slice: decide what morale/event state carries into future seasons.
    - No Mode 3/offseason execution until scoped lifecycle rules are approved.
 
 ## Playable V1 Remaining Work
 
-- Daily morale snapshots and season high/low/average summaries.
 - Stadium record storage and richer spray-chart UI.
 - Relationship context display only, without mutation.
 - Season-end readiness checks before any Mode 3 handoff.
@@ -75,7 +71,7 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - GameTracker archive-backed events can support prompts and confirmed effects, but GameTracker completion must not silently mutate canonical franchise morale.
 - Confirmed random events can apply safe fan/player morale effects only through the canonical morale state model.
 - Dynamic designation effects must enter v1 as confirmation-gated random-event prompts, not automatic designation/profile/morale mutation.
-- True Value, value deltas, and expected wins are currently preview-only and not trusted for final designations, salary movement, morale automation, daily snapshots, or Mode 3.
+- True Value, value deltas, and expected wins are currently preview-only and not trusted for final designations, salary movement, morale automation, automatic drift/recovery, or Mode 3.
 - Fan Favorite and Albatross final behavior requires an explicit promotion decision for trusted True Value/value-delta inputs.
 - Captain morale amplification remains blocked until hidden-charisma reveal/safety policy is approved.
 - Fan Hopeful morale boosts must be prospect-safe and must not expose hidden FARM truth.

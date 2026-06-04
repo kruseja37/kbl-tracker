@@ -171,7 +171,7 @@ export function buildFranchiseFanMoraleSpecViewModel(
 
   const limitations = [
     'Read-only fan morale spec adapter only; it does not mutate morale or create events.',
-    'Expected wins baselines and performance-gap prompts are preview-only, confirmation-gated team fan morale context; roster composition formula, True Value, dynamic designations, beat reporter sentiment, consequences, daily snapshots, and full formula weighting are not trusted fan morale inputs in internal v1.',
+    'Expected wins baselines, performance-gap prompts, and daily high/low/average summaries are read-only or confirmation-gated team fan morale context; roster composition formula, True Value, dynamic designations, beat reporter sentiment, consequences, and full formula weighting are not trusted fan morale inputs in internal v1.',
     'Score-only fan morale changes remain team-level only after explicit random-event confirmation.',
     'Player morale and relationship state remain separate from fan morale.',
     'Hidden FARM/prospect truth is not consumed by this fan morale view model.',
@@ -209,7 +209,7 @@ export function buildFranchiseFanMoraleSpecViewModel(
       beatReporterSentiment: status('blocked', 'Beat reporter sentiment', 'Beat reporter sentiment is not a canonical input for fan morale in internal v1.'),
       freeAgencyConsequences: status('deferred', 'Free-agency consequences', 'Fan morale does not affect free-agency destination logic in internal v1.'),
       franchiseHealthConsequences: status('deferred', 'Franchise health consequences', 'Fan morale does not drive franchise health, contraction, ownership, or offseason consequences in internal v1.'),
-      dailySnapshots: status('deferred', 'Daily snapshots / high-low-average tracking', 'Daily morale snapshots and season high/low/average tracking are not persisted yet.'),
+      dailySnapshots: status('implemented', 'Daily snapshots / high-low-average summaries', 'Durable daily morale summaries can be persisted from existing confirmed/manual morale history without adding drift, recovery, or mutation.'),
       automaticGameTrackerMutation: status('blocked', 'Automatic GameTracker morale mutation', 'GameTracker completion does not automatically mutate fan morale.'),
       playerMoraleCoupling: status('deferred', 'Player morale influence/coupling', 'Confirmed player morale effects are stored separately; fan morale does not influence player morale automatically in internal v1.'),
       relationships: status('blocked', 'Relationship coupling', 'Fan morale does not mutate relationship state in internal v1.'),
