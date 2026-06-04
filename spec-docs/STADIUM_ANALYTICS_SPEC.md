@@ -30,9 +30,10 @@ For Franchise Mode 2 v1, stadium analytics should ship in foundation order rathe
 
 1. Preserve franchise-scoped stadium identity, dimensions, and seed/static park factors.
 2. Project batting, pitching, and fielding spray charts from completed GameTracker archive/event evidence.
-3. Support filters/sorts by player, team, stadium, franchise/season/stats scope, handedness, and outcome when data exists.
-4. Keep archive-derived adaptive park factors preview-only until a later audit approves persistence and final value/WAR consumers.
-5. Use stadium/spray facts as future evidence for random-event prompts and fan/player morale, but do not mutate those systems from this spec alone.
+3. Persist conservative scoped stadium record evidence for team/game records, spray event leaders, and safe no-hitter/perfect-game archive context.
+4. Support filters/sorts by player, team, stadium, franchise/season/stats scope, handedness, and outcome when data exists.
+5. Keep archive-derived adaptive park factors preview-only until a later audit approves persistence and final value/WAR consumers.
+6. Use stadium/spray facts as future evidence for random-event prompts and fan/player morale, but do not mutate those systems from this spec alone.
 
 This v1 resync is captured in `FRANCHISE_MODE2_V1_ROADMAP_RESYNC.md`.
 
@@ -563,6 +564,16 @@ function recordBattedBall(
 ---
 
 ## 5. Stadium Records
+
+### 5.0 Franchise Internal V1 Boundary
+
+The first Franchise Mode 2 v1 stadium-records layer is intentionally narrower than the full record system below:
+
+- Implemented boundary: scoped durable read-only records from completed GameTracker archive/foundation evidence for highest team runs in a game, highest combined runs in a game, largest run differential, batting/pitching/fielding spray event leaders, and safe no-hitter/perfect-game fame-event context.
+- Strict scope: records require exact `franchiseId`, `seasonId`, `statsScopeId`, positive `seasonNumber`, and non-empty `stadiumId`; wrong-scope completed games/events are not normalized into the current franchise.
+- Fielding spray records preserve the foundation boundary: fielding evidence requires linked scoped at-bat evidence.
+- Blocked: adaptive park-factor persistence, final park-adjusted WAR/value consumers, automatic random-event prompts, morale/designation/salary/relationship mutation, story persistence beyond the existing random-event log, and Mode 3/offseason behavior.
+- Deferred: full stadium record notifications, narrative hooks, home run distance records, career stadium leaderboards, and richer spray UI.
 
 ### 5.1 Record Categories
 

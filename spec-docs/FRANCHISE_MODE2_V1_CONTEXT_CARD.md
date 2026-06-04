@@ -10,13 +10,14 @@ Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
 Latest committed checkpoint: `5f42e01 Add daily morale snapshot storage`.
 
-Latest working checkpoint: no active uncommitted slice. Next planned slice is Stadium Records + Richer Spray UI.
+Latest working checkpoint: Stadium Records Boundary implemented pending commit.
 
 ## Current Completed
 
 - Read-only scoped gates exist for value, salary, designation, analytics, morale/relationship, and narrative eligibility.
 - Team Hub surfaces player profiles, profile edits, continuity, directory, foundation status, stadium foundation, random-event log, fan/player morale, True Value preview, and expected-wins preview.
 - Stadium foundation supports scoped identity, seed/static park-factor trust, archive-backed batting/pitching/fielding spray projection, and preview-only adaptive factors.
+- Stadium records boundary can persist scoped read-only record evidence for team/game records, spray leaders, and safe no-hitter/perfect-game archive context.
 - Durable random-event log supports generated prompts, confirmation/dismissal, idempotent safe-effect application, and Team Hub workflow.
 - Canonical fan/player morale storage uses 0-99 scale; player morale starts at neutral `50`; manual scoped adjustments exist.
 - Fan morale prompt formulas cover game result, streaks, 7+ run blowouts, archive-backed no-hitter/perfect-game fame events, and performance-gap team fan morale prompts from durable expected-wins baseline evidence.
@@ -27,13 +28,13 @@ Latest working checkpoint: no active uncommitted slice. Next planned slice is St
 
 ## Current Active Slice
 
-Stadium Records + Richer Spray UI.
+Stadium Records Boundary.
 
-Goal: add durable stadium record boundaries and richer batting/pitching/fielding spray views without promoting adaptive park factors or park-adjusted value/WAR consumers.
+Goal: verify durable scoped stadium record evidence without promoting adaptive park factors, park-adjusted value/WAR consumers, random-event automation, or Mode 3 behavior.
 
 ## Next Queue
 
-1. Stadium records and richer spray UI.
+1. Richer spray UI.
 2. Relationship context display.
 
 ## Hard Boundaries
