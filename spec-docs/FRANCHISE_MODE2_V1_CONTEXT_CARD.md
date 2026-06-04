@@ -8,9 +8,9 @@ Reliability-first Mode 2 completion. Finish a playable, scoped, auditable intern
 
 Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
-Latest committed checkpoint: `189b065 Add designation readiness report`.
+Latest committed checkpoint: `5f42e01 Add daily morale snapshot storage`.
 
-Latest working checkpoint: Daily Morale Snapshots implemented pending commit.
+Latest working checkpoint: no active uncommitted slice. Next planned slice is Stadium Records + Richer Spray UI.
 
 ## Current Completed
 
@@ -27,9 +27,9 @@ Latest working checkpoint: Daily Morale Snapshots implemented pending commit.
 
 ## Current Active Slice
 
-Daily Morale Snapshots.
+Stadium Records + Richer Spray UI.
 
-Goal: verify durable daily high/low/average summaries from confirmed prompt/manual morale history without adding automatic drift, recovery, offseason effects, or Mode 3 handoff.
+Goal: add durable stadium record boundaries and richer batting/pitching/fielding spray views without promoting adaptive park factors or park-adjusted value/WAR consumers.
 
 ## Next Queue
 

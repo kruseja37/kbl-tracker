@@ -10,9 +10,9 @@ Manual smoke feedback remains a bug and feature backlog. The build order for Mod
 
 ## Current State As Of Latest Commit
 
-Latest committed checkpoint: `189b065 Add designation readiness report`.
+Latest committed checkpoint: `5f42e01 Add daily morale snapshot storage`.
 
-Latest working checkpoint: Daily Morale Snapshots implemented pending commit.
+Latest working checkpoint: no active uncommitted slice. Next planned slice is Stadium Records + Richer Spray UI.
 
 Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved.
 
