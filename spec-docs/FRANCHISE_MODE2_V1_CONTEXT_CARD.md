@@ -10,7 +10,7 @@ Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
 Latest committed checkpoint: `3e18b6c Add season handoff planning report`.
 
-Latest working checkpoint: no active uncommitted slice. Next planned checkpoint is Mode 2 V1 Playable Foundation Wrap-Up Audit.
+Latest working checkpoint: Mode 2 V1 evidence store portability registration patch in progress.
 
 ## Current Completed
 
@@ -26,19 +26,21 @@ Latest working checkpoint: no active uncommitted slice. Next planned checkpoint 
 - Canonical fan/player morale storage uses 0-99 scale; player morale starts at neutral `50`; manual scoped adjustments exist.
 - Fan morale prompt formulas cover game result, streaks, 7+ run blowouts, archive-backed no-hitter/perfect-game fame events, and performance-gap team fan morale prompts from durable expected-wins baseline evidence.
 - Durable daily morale snapshot summaries can persist scoped high/low/average evidence from confirmed/manual morale history without drift, recovery, or automatic mutation.
+- Expected-wins baselines, daily morale snapshots, and stadium records are registered as portable scoped evidence stores for save-slot, backup, and sync surfaces; they remain read-only evidence and do not unlock mutation.
 - Dynamic designation morale bridge supports safe preview TEAM_MVP/ACE recognition prompts through random-event confirmation.
 - Fan Favorite/Albatross readiness can be inspected from preview True Value/value-delta rows, but remains blocked for final designation behavior, random-event morale prompts, salary movement, relationships, and Mode 3.
 - Numeric WAR preview, position-relative True Value preview, expected-wins preview, Team Hub display, and durable expected-wins baseline snapshots are read-only and untrusted.
 
 ## Current Active Slice
 
-Mode 2 V1 Playable Foundation Wrap-Up Audit.
+Mode 2 V1 Patch: Evidence Store Portability Registration.
 
-Goal: verify the completed v1 foundation end to end, identify remaining release blockers, and confirm no Mode 3/offseason execution is enabled.
+Goal: resolve the wrap-up audit portability release blocker by registering expected-wins baselines, daily morale snapshots, and stadium records alongside random events and canonical morale without adding new generation or mutation behavior.
 
 ## Next Queue
 
-1. Broader Mode 2 v1 playable foundation wrap-up audit.
+1. Skeptical re-audit of the evidence store portability patch.
+2. Broader Mode 2 v1 playable foundation wrap-up audit.
 
 ## Hard Boundaries
 

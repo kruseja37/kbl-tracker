@@ -101,6 +101,15 @@ export const SYNC_REGISTRY: Record<string, Record<string, string | string[]>> = 
   'kbl-franchise-morale': {
     moraleSnapshots: 'id',
   },
+  'kbl-franchise-expected-wins-baselines': {
+    expectedWinsBaselineSnapshots: 'id',
+  },
+  'kbl-franchise-morale-daily-snapshots': {
+    moraleDailySnapshots: 'id',
+  },
+  'kbl-franchise-stadium-records': {
+    stadiumRecords: 'id',
+  },
   'kbl-transactions': {
     transactions: 'id',
   },

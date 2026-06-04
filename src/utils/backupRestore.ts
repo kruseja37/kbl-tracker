@@ -605,6 +605,45 @@ export const STATIC_DATABASE_SCHEMAS: Record<string, DatabaseSchema> = {
       },
     },
   },
+  'kbl-franchise-expected-wins-baselines': {
+    version: 1,
+    stores: {
+      expectedWinsBaselineSnapshots: {
+        keyPath: 'id',
+        indexes: [
+          { name: 'by_scope', keyPath: 'scopeKey' },
+          { name: 'by_team_scope', keyPath: 'teamScopeKey' },
+          { name: 'by_identity', keyPath: 'identityKey', options: { unique: true } },
+        ],
+      },
+    },
+  },
+  'kbl-franchise-morale-daily-snapshots': {
+    version: 1,
+    stores: {
+      moraleDailySnapshots: {
+        keyPath: 'id',
+        indexes: [
+          { name: 'by_scope', keyPath: 'scopeKey' },
+          { name: 'by_target_scope', keyPath: 'targetScopeKey' },
+          { name: 'by_identity', keyPath: 'identityKey', options: { unique: true } },
+        ],
+      },
+    },
+  },
+  'kbl-franchise-stadium-records': {
+    version: 1,
+    stores: {
+      stadiumRecords: {
+        keyPath: 'id',
+        indexes: [
+          { name: 'by_scope', keyPath: 'scopeKey' },
+          { name: 'by_stadium_scope', keyPath: 'stadiumScopeKey' },
+          { name: 'by_identity', keyPath: 'identityKey', options: { unique: true } },
+        ],
+      },
+    },
+  },
   'kbl-transactions': {
     version: 2,
     stores: {

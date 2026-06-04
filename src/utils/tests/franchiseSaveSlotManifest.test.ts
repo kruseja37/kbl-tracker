@@ -576,12 +576,39 @@ describe('franchise save-slot manifest contract', () => {
       'derived.standings',
       'narrative.context',
       'fanMorale',
+      'expectedWinsBaselines',
+      'dailyMoraleSnapshots',
+      'stadiumRecords',
       'milestones',
       'designations',
       'derived.parkFactors',
       'leagueBuilder.templates',
       'farm',
       'localStorage.legacyMarkers',
+    ]));
+
+    expect(manifest).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'expectedWinsBaselines',
+        databaseName: 'kbl-franchise-expected-wins-baselines',
+        storeName: 'expectedWinsBaselineSnapshots',
+        exportResponsibility: 'include',
+        deleteResponsibility: 'delete-scoped',
+      }),
+      expect.objectContaining({
+        id: 'dailyMoraleSnapshots',
+        databaseName: 'kbl-franchise-morale-daily-snapshots',
+        storeName: 'moraleDailySnapshots',
+        exportResponsibility: 'include',
+        deleteResponsibility: 'delete-scoped',
+      }),
+      expect.objectContaining({
+        id: 'stadiumRecords',
+        databaseName: 'kbl-franchise-stadium-records',
+        storeName: 'stadiumRecords',
+        exportResponsibility: 'include',
+        deleteResponsibility: 'delete-scoped',
+      }),
     ]));
 
     for (const manifestEntry of manifest) {
@@ -1002,6 +1029,12 @@ describe('franchise save-slot manifest contract', () => {
     expect(SYNC_REGISTRY['kbl-franchise-farm']).toHaveProperty('franchiseFarmRecords', 'id');
     expect(SYNC_REGISTRY['kbl-franchise-random-events']).toHaveProperty('randomEventEntries', 'id');
     expect(SYNC_REGISTRY['kbl-franchise-morale']).toHaveProperty('moraleSnapshots', 'id');
+    expect(SYNC_REGISTRY['kbl-franchise-expected-wins-baselines']).toHaveProperty(
+      'expectedWinsBaselineSnapshots',
+      'id',
+    );
+    expect(SYNC_REGISTRY['kbl-franchise-morale-daily-snapshots']).toHaveProperty('moraleDailySnapshots', 'id');
+    expect(SYNC_REGISTRY['kbl-franchise-stadium-records']).toHaveProperty('stadiumRecords', 'id');
     expect(SYNC_REGISTRY['kbl-transactions']).toHaveProperty('transactions', 'id');
     expect(SYNC_REGISTRY['kbl-franchise-transition-journal']).toHaveProperty('transitionJournals', 'id');
 
@@ -1013,6 +1046,13 @@ describe('franchise save-slot manifest contract', () => {
     expect(STATIC_DATABASE_SCHEMAS['kbl-franchise-farm'].stores).toHaveProperty('franchiseFarmRecords');
     expect(STATIC_DATABASE_SCHEMAS['kbl-franchise-random-events'].stores).toHaveProperty('randomEventEntries');
     expect(STATIC_DATABASE_SCHEMAS['kbl-franchise-morale'].stores).toHaveProperty('moraleSnapshots');
+    expect(STATIC_DATABASE_SCHEMAS['kbl-franchise-expected-wins-baselines'].stores).toHaveProperty(
+      'expectedWinsBaselineSnapshots',
+    );
+    expect(STATIC_DATABASE_SCHEMAS['kbl-franchise-morale-daily-snapshots'].stores).toHaveProperty(
+      'moraleDailySnapshots',
+    );
+    expect(STATIC_DATABASE_SCHEMAS['kbl-franchise-stadium-records'].stores).toHaveProperty('stadiumRecords');
     expect(STATIC_DATABASE_SCHEMAS['kbl-franchise-transition-journal'].stores).toHaveProperty('transitionJournals');
     expect(STATIC_DATABASE_SCHEMAS['kbl-transactions'].version).toBe(2);
     expect(STATIC_DATABASE_SCHEMAS['kbl-transactions'].stores.transactions.indexes).toEqual(
