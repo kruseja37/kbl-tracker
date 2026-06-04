@@ -12,7 +12,7 @@ Manual smoke feedback remains a bug and feature backlog. The build order for Mod
 
 Latest committed checkpoint: `419759d Add relationship context preview`.
 
-Latest working checkpoint: no active uncommitted slice. Next planned slice is Season-End Readiness Checks.
+Latest working checkpoint: Season-End Readiness Checks implemented pending verification/commit.
 
 Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved.
 
@@ -35,6 +35,7 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Stadium records boundary persists scoped read-only evidence for conservative team/game stadium records, spray event leaders, and safe no-hitter/perfect-game archive context while adaptive factors and final park-adjusted consumers remain blocked.
 - Team Hub Stadium tab provides a compact read-only spray evidence inspector with role/player/team/hand/outcome/zone/sort filters using scoped stadium foundation rows.
 - Team Hub player profiles surface read-only relationship context/proposal boundaries for player-player, fan/team, and hidden-safe scout/prospect contexts using the draft-only manual override validator.
+- Season-end readiness report exists as a pure read-only review contract for scoped game archives, random-event review state, morale evidence, daily summaries, expected-wins baselines, stadium records, designation readiness, relationship context, and blocked future systems.
 
 ## Active Priority Order
 
@@ -44,7 +45,8 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 
 ## Playable V1 Remaining Work
 
-- Season-end readiness checks before any Mode 3 handoff.
+- Skeptical audit/commit for the read-only season-end readiness checkpoint.
+- Future season handoff planning before any Mode 3 execution.
 
 ## Full Spec Parity Backlog
 

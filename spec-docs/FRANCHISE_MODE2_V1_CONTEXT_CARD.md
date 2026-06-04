@@ -10,7 +10,7 @@ Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
 Latest committed checkpoint: `419759d Add relationship context preview`.
 
-Latest working checkpoint: no active uncommitted slice. Next planned slice is Season-End Readiness Checks.
+Latest working checkpoint: Season-End Readiness Checks implemented pending verification/commit.
 
 ## Current Completed
 
@@ -20,6 +20,7 @@ Latest working checkpoint: no active uncommitted slice. Next planned slice is Se
 - Stadium records boundary can persist scoped read-only record evidence for team/game records, spray leaders, and safe no-hitter/perfect-game archive context.
 - Team Hub Stadium tab includes a compact read-only spray evidence inspector with role/player/team/hand/outcome/zone/sort filters.
 - Team Hub player profiles include compact read-only relationship context/proposal boundaries using the draft-only manual override validator.
+- Season-end readiness checks can classify scoped Mode 2 evidence for review before future handoff while keeping Mode 3/offseason execution blocked.
 - Durable random-event log supports generated prompts, confirmation/dismissal, idempotent safe-effect application, and Team Hub workflow.
 - Canonical fan/player morale storage uses 0-99 scale; player morale starts at neutral `50`; manual scoped adjustments exist.
 - Fan morale prompt formulas cover game result, streaks, 7+ run blowouts, archive-backed no-hitter/perfect-game fame events, and performance-gap team fan morale prompts from durable expected-wins baseline evidence.
@@ -32,11 +33,14 @@ Latest working checkpoint: no active uncommitted slice. Next planned slice is Se
 
 Season-End Readiness Checks.
 
+Status: implemented pending verification/commit.
+
 Goal: audit whether Mode 2 v1 has the required scoped evidence, blockers, and handoff boundaries before any Mode 3/offseason execution.
 
 ## Next Queue
 
-1. Season-end readiness checks.
+1. Skeptical audit/commit for season-end readiness checks.
+2. Future season handoff planning only; no Mode 3 execution.
 
 ## Hard Boundaries
 
