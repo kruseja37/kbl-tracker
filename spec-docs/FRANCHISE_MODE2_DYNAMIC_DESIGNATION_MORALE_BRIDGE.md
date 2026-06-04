@@ -11,8 +11,8 @@ This bridge does not make designations automatic morale mutations. It defines wh
 ## V1 Direction
 
 - `Team MVP` and `Ace` can produce recognition prompts and player morale boosts when awarded or clearly achieved by trusted evidence.
-- `Fan Favorite` represents positive fan attachment and surplus-value identity. It can amplify fan reaction to trades, send-downs, clutch moments, and manual narrative prompts after value-delta inputs are trusted.
-- `Albatross` represents negative contract/value sentiment. It can create player morale risk, fan frustration, and fan/player relief prompts when moved or benched after value-delta inputs are trusted.
+- `Fan Favorite` represents positive fan attachment and surplus-value identity. Current v1 can inspect preview surplus context, but it cannot amplify fan reaction to trades, send-downs, clutch moments, or manual narrative prompts until value-delta inputs and durable designation state are trusted.
+- `Albatross` represents negative contract/value sentiment. Current v1 can inspect preview deficit context, but it cannot create player morale risk, fan frustration, or fan/player relief prompts until value-delta inputs and durable designation state are trusted.
 - `Cornerstone` represents earned franchise trust. It can create baseline fan trust and stronger negative reactions to trades/send-downs.
 - `Captain` can amplify morale effects only after hidden-charisma/leadership reveal safety is approved.
 - `Fan Hopeful` can create prospect-safe player morale excitement, but must not expose hidden FARM truth.
@@ -36,6 +36,7 @@ Allowed prompt families:
 
 - Durable designation locking/carryover if the designation state itself is not trusted.
 - True Value/value-delta finalization for Fan Favorite and Albatross.
+- Random-event Fan Favorite/Albatross morale prompts from preview-only readiness rows.
 - Hidden Captain charisma/leadership effects.
 - Relationship mutation.
 - Salary/free-agency/Mode 3/offseason effects.
@@ -48,6 +49,7 @@ Dynamic designations are morale context, not expected-wins inputs.
 
 - Expected wins should remain based on roster True Value once that path is trusted.
 - Fan Favorite/Albatross should describe surplus/deficit contract sentiment and roster-move reaction.
+- Preview-only Fan Favorite/Albatross readiness rows are inspection context only; they are not random-event prompt authority.
 - Overperforming a contract should generally raise fan sentiment through Fan Favorite/value-delta prompts, not raise the baseline expectation so sharply that success becomes disappointment.
 
 ## Audit Targets

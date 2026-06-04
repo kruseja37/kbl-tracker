@@ -10,7 +10,7 @@ Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
 Latest committed checkpoint: `38f7e04 Add performance gap fan morale prompts`.
 
-Latest working checkpoint: no active uncommitted slice. Next planned slice is Designation Readiness / Fan Favorite-Albatross Promotion Decision.
+Latest working checkpoint: Designation Readiness / Fan Favorite-Albatross Promotion Decision (pending commit).
 
 ## Current Completed
 
@@ -21,19 +21,19 @@ Latest working checkpoint: no active uncommitted slice. Next planned slice is De
 - Canonical fan/player morale storage uses 0-99 scale; player morale starts at neutral `50`; manual scoped adjustments exist.
 - Fan morale prompt formulas cover game result, streaks, 7+ run blowouts, archive-backed no-hitter/perfect-game fame events, and performance-gap team fan morale prompts from durable expected-wins baseline evidence.
 - Dynamic designation morale bridge supports safe preview TEAM_MVP/ACE recognition prompts through random-event confirmation.
+- Fan Favorite/Albatross readiness can be inspected from preview True Value/value-delta rows, but remains blocked for final designation behavior, random-event morale prompts, salary movement, relationships, and Mode 3.
 - Numeric WAR preview, position-relative True Value preview, expected-wins preview, Team Hub display, and durable expected-wins baseline snapshots are read-only and untrusted.
 
 ## Current Active Slice
 
 Designation Readiness / Fan Favorite-Albatross Promotion Decision.
 
-Goal: decide whether preview True Value/value-delta can support projected Fan Favorite/Albatross morale context without promoting final designations, salary movement, or automatic morale mutation.
+Goal: inspect preview True Value/value-delta context for Fan Favorite/Albatross while keeping promotion blocked until trusted value inputs are explicitly approved.
 
 ## Next Queue
 
-1. Designation readiness / Fan Favorite-Albatross promotion decision.
-2. Daily morale snapshots.
-3. Stadium records and richer spray UI.
+1. Daily morale snapshots.
+2. Stadium records and richer spray UI.
 
 ## Hard Boundaries
 

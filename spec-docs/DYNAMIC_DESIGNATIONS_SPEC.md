@@ -10,12 +10,22 @@ Dynamic designations are morale context for Franchise v1, but they should not si
 
 - Designation effects enter v1 through confirmation-gated random-event prompts.
 - Team MVP/Ace recognition can become player morale prompt context.
-- Fan Favorite and Albatross require trusted True Value/value-delta inputs before final prompt behavior.
+- Fan Favorite and Albatross readiness can now be inspected from preview True Value/value-delta rows, but they still require trusted True Value/value-delta inputs and durable designation state before final prompt behavior.
 - Cornerstone can create fan trust and stronger roster-move reaction prompts once durable designation state is trusted.
 - Captain morale amplification remains blocked until hidden-charisma/leadership safety is approved.
 - Fan Hopeful can create prospect-safe player morale excitement, but unrevealed FARM hidden truth remains blocked.
 
 See `FRANCHISE_MODE2_DYNAMIC_DESIGNATION_MORALE_BRIDGE.md` for the active v1 bridge contract.
+
+## Franchise Internal v1 Readiness Checkpoint (June 2026)
+
+Current v1 exposes Fan Favorite/Albatross readiness as read-only preview context only:
+
+- Positive preview value delta can be labeled as Fan Favorite preview context.
+- Negative preview value delta can be labeled as Albatross preview context.
+- Neutral, missing, FARM/unassigned, or blocked value rows produce no actionable readiness.
+- Preview readiness does not create random-event morale prompts, final designations, salary movement, relationship effects, story persistence, offseason behavior, or Mode 3 handoff.
+- Trusted True Value/value-delta promotion remains a future explicit decision.
 
 ## Designation Types
 
