@@ -10,9 +10,9 @@ Manual smoke feedback remains a bug and feature backlog. The build order for Mod
 
 ## Current State As Of Latest Commit
 
-Latest committed checkpoint: `6c998e4 Add stadium records storage boundary`.
+Latest committed checkpoint: `a258340 Add richer spray evidence inspector`.
 
-Latest working checkpoint: Richer Spray UI implemented pending commit.
+Latest working checkpoint: no active uncommitted slice. Next planned slice is Relationship Context Display.
 
 Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved.
 

@@ -8,9 +8,9 @@ Reliability-first Mode 2 completion. Finish a playable, scoped, auditable intern
 
 Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
-Latest committed checkpoint: `6c998e4 Add stadium records storage boundary`.
+Latest committed checkpoint: `a258340 Add richer spray evidence inspector`.
 
-Latest working checkpoint: Richer Spray UI implemented pending commit.
+Latest working checkpoint: no active uncommitted slice. Next planned slice is Relationship Context Display.
 
 ## Current Completed
 
@@ -29,9 +29,9 @@ Latest working checkpoint: Richer Spray UI implemented pending commit.
 
 ## Current Active Slice
 
-Richer Spray UI.
+Relationship Context Display.
 
-Goal: verify the read-only Team Hub spray evidence inspector without promoting adaptive park factors, park-adjusted value/WAR consumers, random-event automation, or Mode 3 behavior.
+Goal: surface safe relationship context and draft/manual proposal state without adding durable relationship mutation or automatic relationship effects.
 
 ## Next Queue
 
