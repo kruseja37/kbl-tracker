@@ -83,6 +83,10 @@ import {
   type FranchiseMoraleRelationshipTrustReport,
 } from "../../../utils/franchiseMoraleRelationshipTrust";
 import {
+  buildFranchiseRelationshipContextPreview,
+  type FranchiseRelationshipContextPreviewReport,
+} from "../../../utils/franchiseRelationshipContextPreview";
+import {
   buildFranchiseNarrativeEventEligibilityReport,
   type FranchiseNarrativeEventEligibilityReport,
 } from "../../../utils/franchiseNarrativeEventEligibility";
@@ -1921,6 +1925,24 @@ export function TeamHubContent() {
     selectedTeamId,
   ]);
 
+  const selectedProfileRelationshipContext = useMemo(() => {
+    if (!selectedProfile) return null;
+    return buildFranchiseRelationshipContextPreview({
+      franchiseId: franchiseId ?? '',
+      seasonId,
+      statsScopeId: seasonId,
+      seasonNumber,
+      profile: selectedProfile,
+      trustReport: moraleRelationshipTrustReport,
+    });
+  }, [
+    franchiseId,
+    moraleRelationshipTrustReport,
+    seasonId,
+    seasonNumber,
+    selectedProfile,
+  ]);
+
   useEffect(() => {
     setSelectedProfilePlayerId(null);
   }, [selectedTeamId]);
@@ -3032,6 +3054,7 @@ export function TeamHubContent() {
         <FranchisePlayerProfileModal
           profile={selectedProfile}
           continuity={selectedProfileContinuity}
+          relationshipContext={selectedProfileRelationshipContext}
           continuityLoading={continuityLoading}
           continuityError={continuityError}
           moraleSnapshot={moraleSnapshots.find((snapshot) =>
@@ -3160,6 +3183,7 @@ interface FranchisePlayerDirectoryPanelProps {
 interface FranchisePlayerProfileModalProps {
   profile: FranchisePlayerProfileViewModel;
   continuity: FranchisePlayerContinuityReport | null;
+  relationshipContext: FranchiseRelationshipContextPreviewReport | null;
   continuityLoading: boolean;
   continuityError: string | null;
   moraleSnapshot: FranchiseMoraleSnapshot | null;
@@ -3677,6 +3701,92 @@ function FranchiseManualOverridePreviewPanel({
   );
 }
 
+function FranchiseRelationshipContextPanel({
+  report,
+}: {
+  report: FranchiseRelationshipContextPreviewReport | null;
+}) {
+  return (
+    <section
+      role="region"
+      aria-label="Relationship Context"
+      className="mt-4 border-[4px] border-[#4A6844] bg-[#3F563F] p-3"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="text-[9px] font-bold text-[#C4A853]">RELATIONSHIP CONTEXT</div>
+          <div className="mt-1 text-[10px] leading-snug text-[#E8E8D8]/65">
+            Read-only / draft-only proposal context. No durable relationship state exists in Franchise v1.
+          </div>
+        </div>
+        <FoundationStatusBadge status="blocked" />
+      </div>
+
+      {!report ? (
+        <div className="mt-3 border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[10px] leading-snug text-[#E8E8D8]/65">
+          Relationship context is unavailable until franchise scope and player profile data are loaded.
+        </div>
+      ) : (
+        <>
+          <div className="mt-3 grid gap-2 md:grid-cols-3">
+            {report.rows.map((row) => (
+              <div key={row.kind} className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[10px] leading-snug text-[#E8E8D8]">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-bold text-[#C4A853]">{row.label}</span>
+                  <FoundationStatusBadge status={row.status} />
+                </div>
+                <div className="mt-2 text-[#E8E8D8]/70">
+                  {row.proposal?.kind ?? row.kind}. Context only; no save, confirm, apply, or relationship effect.
+                </div>
+                {row.evidenceDescriptions.slice(0, 2).map((description) => (
+                  <div key={description} className="mt-1 text-[#E8E8D8]/60">{description}</div>
+                ))}
+                {row.blockers.slice(0, 2).map((blocker) => (
+                  <div key={blocker} className="mt-1 text-[#FFD6D6]">{blocker}</div>
+                ))}
+                {row.warnings.slice(0, 2).map((warning) => (
+                  <div key={warning} className="mt-1 text-[#FFD27A]">{warning}</div>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            <ValidationLineList
+              label="EVIDENCE POLICY"
+              entries={report.evidencePolicy}
+              empty="No evidence policy returned."
+            />
+            <ValidationLineList
+              label="BLOCKERS / LIMITATIONS"
+              entries={report.limitations}
+              empty="No relationship-context limitations returned."
+            />
+          </div>
+
+          {report.hiddenTruthGuard && (
+            <div className="mt-3 border-2 border-[#5A3F3F] bg-[#5A3F3F] p-2 text-[10px] leading-snug text-[#FFD6D6]">
+              <div className="font-bold text-[#FFEFB5]">
+                {`HIDDEN TRUTH RELATIONSHIP GUARD: ${formatTruthStatus(report.hiddenTruthGuard.status)}`}
+              </div>
+              <div className="mt-1">
+                Hidden FARM/prospect truth is blocked from relationship evidence and proposal context.
+              </div>
+              {report.hiddenTruthGuard.blockers.slice(0, 2).map((blocker) => (
+                <div key={blocker} className="mt-1">{blocker}</div>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-3 border-2 border-[#5A3F3F] bg-[#5A3F3F] p-2 text-[10px] leading-snug text-[#FFD6D6]">
+            Relationship mutation, morale mutation from relationships, profile automation, salary movement, designation mutation, story persistence, offseason, and Mode 3 remain blocked.
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 function formatContinuityDate(value?: number | string): string {
   if (value == null || value === '') return 'Date unavailable';
   const parsed = typeof value === 'number' ? new Date(value) : new Date(value);
@@ -3847,6 +3957,7 @@ function ProfileSelectInput<T extends string>({
 function FranchisePlayerProfileModal({
   profile,
   continuity,
+  relationshipContext,
   continuityLoading,
   continuityError,
   moraleSnapshot,
@@ -4061,6 +4172,7 @@ function FranchisePlayerProfileModal({
           preview={manualOverridePreview}
           playerName={profile.identity.name}
         />
+        <FranchiseRelationshipContextPanel report={relationshipContext} />
         <FranchisePlayerContinuityPanel
           report={continuity}
           isLoading={continuityLoading}

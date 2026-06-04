@@ -12,7 +12,7 @@ Manual smoke feedback remains a bug and feature backlog. The build order for Mod
 
 Latest committed checkpoint: `a258340 Add richer spray evidence inspector`.
 
-Latest working checkpoint: no active uncommitted slice. Next planned slice is Relationship Context Display.
+Latest working checkpoint: Relationship Context Display implemented pending verification/commit.
 
 Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved.
 
@@ -34,20 +34,16 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Daily morale snapshot summaries persist scoped high/low/average evidence from confirmed/manual morale history while remaining read-only and untrusted for drift, recovery, relationship effects, and Mode 3.
 - Stadium records boundary persists scoped read-only evidence for conservative team/game stadium records, spray event leaders, and safe no-hitter/perfect-game archive context while adaptive factors and final park-adjusted consumers remain blocked.
 - Team Hub Stadium tab provides a compact read-only spray evidence inspector with role/player/team/hand/outcome/zone/sort filters using scoped stadium foundation rows.
+- Team Hub player profiles surface read-only relationship context/proposal boundaries for player-player, fan/team, and hidden-safe scout/prospect contexts using the draft-only manual override validator.
 
 ## Active Priority Order
 
-1. Relationship Context
-   - Relationships remain visible/draft/manual context only in v1.
-   - No durable relationship mutation until fan/player morale is stable.
-
-2. Season Handoff
+1. Season Handoff
    - Later slice: decide what morale/event state carries into future seasons.
    - No Mode 3/offseason execution until scoped lifecycle rules are approved.
 
 ## Playable V1 Remaining Work
 
-- Relationship context display only, without mutation.
 - Season-end readiness checks before any Mode 3 handoff.
 
 ## Full Spec Parity Backlog

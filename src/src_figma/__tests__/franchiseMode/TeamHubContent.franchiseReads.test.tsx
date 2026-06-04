@@ -1664,6 +1664,30 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
   });
 
+  test('profile modal shows read-only relationship context boundaries for MLB/revealed player', async () => {
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Open profile for C\. Player/i }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Copied Player/i });
+    const relationshipRegion = within(dialog).getByRole('region', { name: /Relationship Context/i });
+
+    expect(within(relationshipRegion).getByText('RELATIONSHIP CONTEXT')).toBeInTheDocument();
+    expect(within(relationshipRegion).getByText(/Read-only \/ draft-only proposal context/i)).toBeInTheDocument();
+    expect(within(relationshipRegion).getByText(/No durable relationship state exists in Franchise v1/i)).toBeInTheDocument();
+    expect(within(relationshipRegion).getByText(/Player-player relationship proposal boundary/i)).toBeInTheDocument();
+    expect(within(relationshipRegion).getByText(/Fan\/team relationship proposal boundary/i)).toBeInTheDocument();
+    expect(within(relationshipRegion).getByText(/player relationship overrides require relatedPlayerId/i)).toBeInTheDocument();
+    expect(within(relationshipRegion).getAllByText(/Score-only data is team\/schedule context only, not player relationship authority/i).length).toBeGreaterThan(0);
+    expect(within(relationshipRegion).getByText(/GameTracker\/archive facts may be factual context only/i)).toBeInTheDocument();
+    expect(within(relationshipRegion).getByText(/Relationship mutation, morale mutation from relationships, profile automation, salary movement, designation mutation, story persistence, offseason, and Mode 3 remain blocked/i)).toBeInTheDocument();
+    expect(within(relationshipRegion).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(relationshipRegion).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
   test('manual player morale adjustment writes scoped player morale history without profile mutation', async () => {
     render(<TeamHubContent />);
 
@@ -1950,6 +1974,11 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(dialog).getByText('PROFILE EDIT HISTORY')).toBeInTheDocument();
     expect(within(dialog).getByText(/No player-local profile edits recorded/i)).toBeInTheDocument();
     expect(within(dialog).getByText('MANUAL OVERRIDE PREVIEW')).toBeInTheDocument();
+    const relationshipRegion = within(dialog).getByRole('region', { name: /Relationship Context/i });
+    expect(within(relationshipRegion).getByText(/Scout\/prospect relationship proposal boundary/i)).toBeInTheDocument();
+    expect(within(relationshipRegion).getByText(/Visible scouting report context only; hidden scout truth is blocked/i)).toBeInTheDocument();
+    expect(within(relationshipRegion).getByText(/HIDDEN TRUTH RELATIONSHIP GUARD: INVALID/i)).toBeInTheDocument();
+    expect(within(relationshipRegion).getByText(/Hidden FARM\/prospect truth is blocked from relationship evidence/i)).toBeInTheDocument();
     expect(within(dialog).queryByText('BASEBALL DETAILS')).not.toBeInTheDocument();
     expect(within(dialog).queryByText('POW')).not.toBeInTheDocument();
     expect(within(dialog).queryByText('CON')).not.toBeInTheDocument();
@@ -1958,6 +1987,9 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(dialog).queryByText(/Volatility/i)).not.toBeInTheDocument();
     expect(within(dialog).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
     expect(within(dialog).queryByText(/trueGrade/i)).not.toBeInTheDocument();
+    expect(within(relationshipRegion).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
+    expect(within(relationshipRegion).queryByText(/trueGrade/i)).not.toBeInTheDocument();
+    expect(within(relationshipRegion).queryByRole('button')).not.toBeInTheDocument();
     expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();

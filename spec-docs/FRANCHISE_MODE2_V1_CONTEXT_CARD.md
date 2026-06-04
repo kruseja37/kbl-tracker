@@ -10,7 +10,7 @@ Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
 Latest committed checkpoint: `a258340 Add richer spray evidence inspector`.
 
-Latest working checkpoint: no active uncommitted slice. Next planned slice is Relationship Context Display.
+Latest working checkpoint: Relationship Context Display implemented pending verification/commit.
 
 ## Current Completed
 
@@ -19,6 +19,7 @@ Latest working checkpoint: no active uncommitted slice. Next planned slice is Re
 - Stadium foundation supports scoped identity, seed/static park-factor trust, archive-backed batting/pitching/fielding spray projection, and preview-only adaptive factors.
 - Stadium records boundary can persist scoped read-only record evidence for team/game records, spray leaders, and safe no-hitter/perfect-game archive context.
 - Team Hub Stadium tab includes a compact read-only spray evidence inspector with role/player/team/hand/outcome/zone/sort filters.
+- Team Hub player profiles include compact read-only relationship context/proposal boundaries using the draft-only manual override validator.
 - Durable random-event log supports generated prompts, confirmation/dismissal, idempotent safe-effect application, and Team Hub workflow.
 - Canonical fan/player morale storage uses 0-99 scale; player morale starts at neutral `50`; manual scoped adjustments exist.
 - Fan morale prompt formulas cover game result, streaks, 7+ run blowouts, archive-backed no-hitter/perfect-game fame events, and performance-gap team fan morale prompts from durable expected-wins baseline evidence.
@@ -31,12 +32,13 @@ Latest working checkpoint: no active uncommitted slice. Next planned slice is Re
 
 Relationship Context Display.
 
+Status: implemented pending verification/commit.
+
 Goal: surface safe relationship context and draft/manual proposal state without adding durable relationship mutation or automatic relationship effects.
 
 ## Next Queue
 
-1. Relationship context display.
-2. Season-end readiness checks.
+1. Season-end readiness checks.
 
 ## Hard Boundaries
 
