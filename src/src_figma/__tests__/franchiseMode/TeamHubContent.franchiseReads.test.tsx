@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import {
+  applyFranchiseMoraleEffect,
   clearFranchiseMoraleDatabaseForTests,
   getFranchiseMoraleSnapshot,
   resetFranchiseMoraleDatabaseForTests,
@@ -576,15 +577,18 @@ describe('TeamHubContent franchise-owned visible reads', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /ROSTER/i }));
 
-    await waitFor(() => expect(screen.getByText('C. Player')).toBeInTheDocument());
     expect(screen.queryByText('G. Template')).not.toBeInTheDocument();
-    const mlbTable = screen.getByRole('table', { name: /MLB roster table/i });
-    expect(within(mlbTable).queryByText('Farm Hidden')).not.toBeInTheDocument();
-    expect(within(mlbTable).queryByText('MORALE')).not.toBeInTheDocument();
+    const mlbTable = screen.getByRole('table', { name: /Franchise roster scan table/i });
+    expect(within(mlbTable).getByText('Copied Player')).toBeInTheDocument();
+    expect(within(mlbTable).getByText('Farm Hidden')).toBeInTheDocument();
+    expect(within(mlbTable).getByText('MORALE')).toBeInTheDocument();
+    expect(within(mlbTable).getByText('SALARY')).toBeInTheDocument();
+    expect(within(mlbTable).getByText('STATS')).toBeInTheDocument();
+    expect(within(mlbTable).getByText('DESIGNATION')).toBeInTheDocument();
     expect(within(mlbTable).queryByText('TRUE VAL')).not.toBeInTheDocument();
     expect(within(mlbTable).queryByText('NET DIFF')).not.toBeInTheDocument();
     expect(screen.getByTestId('franchise-v1-roster-value-gate')).toHaveTextContent(
-      'Morale, True Value, and value-delta columns are deferred',
+      'safe salary, morale, stats, and preview designation context only',
     );
     expect(await screen.findByText('READ-ONLY ROSTER ANALYZER')).toBeInTheDocument();
     expect(screen.getByText('MLB 1')).toBeInTheDocument();
@@ -594,6 +598,89 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(screen.getAllByText(/Review farm OF coverage|Monitor Farm Hidden/).length).toBeGreaterThan(0);
     expect(mocks.mockGetFranchiseFarmRoster).toHaveBeenCalledWith('franchise-1', 'franchise-1-season-2', 'team-1');
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
+  test('roster scan displays salary, neutral morale, safe stats, and preview designation summaries', async () => {
+    mocks.mockUseSeasonStats.mockReturnValue({
+      isLoading: false,
+      getBattingLeaders: vi.fn(() => [{
+        playerId: 'copied-player',
+        playerName: 'Copied Player',
+        teamId: 'team-1',
+        avg: 0.321,
+        ops: 0.901,
+        homeRuns: 7,
+        rbi: 21,
+        stolenBases: 4,
+        bWAR: 1.1,
+        rWAR: 0.2,
+        fWAR: 0.3,
+        totalWAR: 1.6,
+      }]),
+      getPitchingLeaders: vi.fn(() => []),
+    });
+
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    const rosterTable = await screen.findByRole('table', { name: /Franchise roster scan table/i });
+
+    expect(within(rosterTable).getByText('Copied Player')).toBeInTheDocument();
+    expect(within(rosterTable).getByText('MLB')).toBeInTheDocument();
+    expect(within(rosterTable).getByText('$3.0M')).toBeInTheDocument();
+    expect(within(rosterTable).getAllByText('50').length).toBeGreaterThan(0);
+    expect(within(rosterTable).getAllByText('Neutral').length).toBeGreaterThan(0);
+    expect(within(rosterTable).getByText('1.6 WAR · 7 HR · 21 RBI')).toBeInTheDocument();
+    expect(within(rosterTable).getByText('TEAM_MVP, ACE preview')).toBeInTheDocument();
+  });
+
+  test('roster scan sorts salary and morale deterministically', async () => {
+    await applyFranchiseMoraleEffect({
+      franchiseId: 'franchise-1',
+      seasonId: 'franchise-1-season-2',
+      statsScopeId: 'franchise-1-season-2',
+      seasonNumber: 2,
+      targetType: 'player',
+      playerId: 'copied-player',
+      delta: 30,
+      reason: 'Test morale sort lift.',
+      sourceKind: 'manual-override',
+      sourceEventId: 'test-morale-sort',
+    });
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    const rosterTable = await screen.findByRole('table', { name: /Franchise roster scan table/i });
+    const namesInOrder = () => within(rosterTable)
+      .getAllByRole('row')
+      .slice(1)
+      .map((row) => within(row).getAllByRole('button')[0].textContent ?? '');
+
+    fireEvent.click(within(rosterTable).getByRole('columnheader', { name: /SALARY/i }));
+    await waitFor(() => expect(namesInOrder()).toEqual(['Farm Hidden', 'Copied Player']));
+    fireEvent.click(within(rosterTable).getByRole('columnheader', { name: /SALARY/i }));
+    await waitFor(() => expect(namesInOrder()).toEqual(['Copied Player', 'Farm Hidden']));
+
+    fireEvent.click(within(rosterTable).getByRole('columnheader', { name: /MORALE/i }));
+    await waitFor(() => expect(namesInOrder()).toEqual(['Farm Hidden', 'Copied Player']));
+    fireEvent.click(within(rosterTable).getByRole('columnheader', { name: /MORALE/i }));
+    await waitFor(() => expect(namesInOrder()).toEqual(['Copied Player', 'Farm Hidden']));
+  });
+
+  test('hidden FARM roster scan row does not leak hidden prospect truth', async () => {
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    const rosterTable = await screen.findByRole('table', { name: /Franchise roster scan table/i });
+    const farmRow = within(rosterTable).getByText('Farm Hidden').closest('tr');
+
+    expect(farmRow).not.toBeNull();
+    expect(within(farmRow as HTMLElement).getByText('FARM')).toBeInTheDocument();
+    expect(within(farmRow as HTMLElement).getAllByText('Hidden').length).toBeGreaterThanOrEqual(2);
+    expect(within(farmRow as HTMLElement).getByText('$1.0M')).toBeInTheDocument();
+    expect(within(farmRow as HTMLElement).getByText('50')).toBeInTheDocument();
+    expect(farmRow as HTMLElement).not.toHaveTextContent(/A-|trueGrade|leadership|92|Sprinter|B scout|scout truth/i);
+    expect(within(rosterTable).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
   });
 
   test('shows read-only value salary and designation truth labels from lifecycle gates', async () => {
@@ -1424,7 +1511,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
 
     const farmRegion = await screen.findByRole('region', { name: /Franchise FARM prospects/i });
-    const mlbTable = screen.getByRole('table', { name: /MLB roster table/i });
+    const rosterTable = screen.getByRole('table', { name: /Franchise roster scan table/i });
 
     expect(within(farmRegion).getByText('Farm Hidden')).toBeInTheDocument();
     expect(within(farmRegion).getByText(/CF · Age 21 · B\/T L\/R/i)).toBeInTheDocument();
@@ -1440,7 +1527,10 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(farmRegion).getByText(/Options used: 1/i)).toBeInTheDocument();
     expect(within(farmRegion).getByText(/Option dates: None/i)).toBeInTheDocument();
     expect(within(farmRegion).getAllByText(/^HIDDEN$/i).length).toBeGreaterThan(0);
-    expect(within(mlbTable).queryByText('Farm Hidden')).not.toBeInTheDocument();
+    const farmScanRow = within(rosterTable).getByText('Farm Hidden').closest('tr');
+    expect(farmScanRow).not.toBeNull();
+    expect(farmScanRow as HTMLElement).toHaveTextContent(/FARM/);
+    expect(farmScanRow as HTMLElement).toHaveTextContent(/Hidden/);
     expect(within(farmRegion).queryByText(/Power/i)).not.toBeInTheDocument();
     expect(within(farmRegion).queryByText(/Contact/i)).not.toBeInTheDocument();
     expect(within(farmRegion).queryByText(/Velocity/i)).not.toBeInTheDocument();
@@ -1536,7 +1626,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     render(<TeamHubContent />);
 
     fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /Open profile for C\. Player/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Open profile for Copied Player/i }));
 
     const dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Copied Player/i });
     expect(within(dialog).getByText('FRANCHISE PLAYER PROFILE')).toBeInTheDocument();
@@ -1637,7 +1727,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     render(<TeamHubContent />);
 
     fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /Open profile for C\. Player/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Open profile for Copied Player/i }));
 
     const dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Copied Player/i });
     const preview = within(dialog).getByRole('region', { name: /Manual Override Preview/i });
@@ -1668,7 +1758,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     render(<TeamHubContent />);
 
     fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /Open profile for C\. Player/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Open profile for Copied Player/i }));
 
     const dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Copied Player/i });
     const relationshipRegion = within(dialog).getByRole('region', { name: /Relationship Context/i });
@@ -1692,7 +1782,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     render(<TeamHubContent />);
 
     fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /Open profile for C\. Player/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Open profile for Copied Player/i }));
 
     const dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Copied Player/i });
     const moraleRegion = within(dialog).getByRole('region', { name: /Player morale spec alignment/i });
@@ -1741,7 +1831,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     render(<TeamHubContent />);
 
     fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /Open profile for C\. Player/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Open profile for Copied Player/i }));
 
     const dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Copied Player/i });
     expect(within(dialog).getByText('PROFILE EDIT HISTORY')).toBeInTheDocument();
@@ -1875,7 +1965,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     render(<TeamHubContent />);
 
     fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /Open profile for C\. Player/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Open profile for Copied Player/i }));
 
     const dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Copied Player/i });
     expect(await within(dialog).findByText('PLAYER CONTINUITY')).toBeInTheDocument();
@@ -1912,7 +2002,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     render(<TeamHubContent />);
 
     fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /Open profile for C\. Player/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Open profile for Copied Player/i }));
     const dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Copied Player/i });
     fireEvent.click(within(dialog).getByRole('button', { name: /EDIT PROFILE/i }));
     fireEvent.change(within(dialog).getByLabelText('FIRST NAME'), { target: { value: 'Manual' } });

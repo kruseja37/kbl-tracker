@@ -177,13 +177,24 @@ interface RosterTableItem {
   playerId?: string;
   name: string;
   position: string;
+  rosterStatus: string;
+  teamContext: string;
   grade: string;
   morale: string | number;
+  moraleState: string;
   contract: string;
+  salarySortValue: number;
   trueValue: string;
   netDiff: string;
   fitness: string | number;
+  statSummary: string;
+  statSortValue: number;
+  designationSummary: string;
+  hiddenSafe: boolean;
+  originalIndex: number;
 }
+
+type RosterSortColumn = 'name' | 'position' | 'rosterStatus' | 'salary' | 'morale' | 'stat' | 'designation';
 
 const EMPTY_ROSTER_DATA: RosterTableItem[] = [];
 
@@ -248,12 +259,21 @@ function convertToRosterItem(player: OffseasonPlayer): RosterTableItem {
   return {
     name: player.name.split(' ').map((n, i) => i === 0 ? n[0] + '.' : n).join(' '),
     position: player.position,
+    rosterStatus: 'MLB',
+    teamContext: player.teamId ?? '',
     grade: player.grade,
     morale: '—' as string | number,
+    moraleState: '—',
     contract: contractStr,
+    salarySortValue: salary,
     trueValue: '—',
     netDiff: '—',
     fitness: '—' as string | number,
+    statSummary: '—',
+    statSortValue: Number.NEGATIVE_INFINITY,
+    designationSummary: '—',
+    hiddenSafe: false,
+    originalIndex: 0,
   };
 }
 
@@ -640,20 +660,111 @@ function describeTeamHubTransactionStatuses(entry: TransactionLogEntry): string 
   return 'Status not recorded';
 }
 
-function convertFranchisePlayerToRosterItem(player: Player): RosterTableItem {
-  const salary = player.salary || 0;
-  const contractStr = salary > 0 ? `$${(salary / 1000000).toFixed(1)}M` : '—';
+function franchisePlayerRosterStatus(player: Player, leagueId?: string): string {
+  return String(franchisePlayerDirectoryAssignment(player, leagueId)?.rosterStatus ?? 'UNASSIGNED');
+}
+
+function formatRosterSalary(salary: number | null | undefined): string {
+  const value = Number(salary);
+  if (!Number.isFinite(value) || value <= 0) return '—';
+  return value >= 10000 ? `$${(value / 1000000).toFixed(1)}M` : `$${value.toFixed(1)}M`;
+}
+
+function moraleStateLabel(value: number): string {
+  if (value >= 70) return 'High';
+  if (value <= 35) return 'Low';
+  return 'Neutral';
+}
+
+function rosterStatSummary(input: {
+  player: Player;
+  batting?: BattingLeaderEntry;
+  pitching?: PitchingLeaderEntry;
+  hiddenSafe: boolean;
+}): { label: string; sortValue: number } {
+  if (input.hiddenSafe) return { label: 'Hidden', sortValue: Number.NEGATIVE_INFINITY };
+  if (isFranchisePitcher(input.player)) {
+    const pitching = input.pitching;
+    if (!pitching) return { label: 'No stats', sortValue: Number.NEGATIVE_INFINITY };
+    return {
+      label: `${pitching.pWAR.toFixed(1)} pWAR · ${pitching.era.toFixed(2)} ERA`,
+      sortValue: pitching.pWAR,
+    };
+  }
+  const batting = input.batting;
+  if (!batting) return { label: 'No stats', sortValue: Number.NEGATIVE_INFINITY };
+  return {
+    label: `${batting.totalWAR.toFixed(1)} WAR · ${batting.homeRuns} HR · ${batting.rbi} RBI`,
+    sortValue: batting.totalWAR,
+  };
+}
+
+function rosterDesignationSummary(input: {
+  playerId: string;
+  hiddenSafe: boolean;
+  report: FranchiseDesignationEligibilityReport | null;
+}): string {
+  if (input.hiddenSafe) return 'Hidden';
+  const records = (input.report?.records ?? []).filter((record) => record.playerId === input.playerId);
+  const preview = uniqueStrings(
+    records
+      .filter((record) => record.status === 'preview-only')
+      .map((record) => record.designationType),
+  );
+  if (preview.length > 0) return `${preview.join(', ')} preview`;
+  if (records.some((record) => record.status === 'blocked')) return 'Blocked';
+  return '—';
+}
+
+function convertFranchisePlayerToRosterItem(input: {
+  player: Player;
+  leagueId?: string;
+  teamName?: string;
+  moraleSnapshot?: FranchiseMoraleSnapshot;
+  batting?: BattingLeaderEntry;
+  pitching?: PitchingLeaderEntry;
+  designationEligibilityReport: FranchiseDesignationEligibilityReport | null;
+  farmRecordByPlayerId: Map<string, FranchiseFarmRecord>;
+  originalIndex: number;
+}): RosterTableItem {
+  const { player } = input;
+  const rosterStatus = franchisePlayerRosterStatus(player, input.leagueId);
+  const revealState = input.farmRecordByPlayerId.get(player.id)?.ratingRevealState ??
+    player.ratingRevealState ??
+    (rosterStatus === 'FARM' ? 'hidden' : 'revealed');
+  const hiddenSafe = rosterStatus === 'FARM' && revealState !== 'revealed';
+  const salary = Number(player.salary);
+  const moraleValue = input.moraleSnapshot?.currentValue ?? 50;
+  const stats = rosterStatSummary({
+    player,
+    batting: input.batting,
+    pitching: input.pitching,
+    hiddenSafe,
+  });
 
   return {
     playerId: player.id,
-    name: formatFranchiseShortName(player),
+    name: getFranchisePlayerName(player),
     position: player.primaryPosition,
-    grade: player.overallGrade,
-    morale: typeof player.morale === 'number' ? player.morale : '—',
-    contract: contractStr,
+    rosterStatus,
+    teamContext: input.teamName ?? input.leagueId ?? '',
+    grade: hiddenSafe ? 'Hidden' : player.overallGrade,
+    morale: moraleValue,
+    moraleState: moraleStateLabel(moraleValue),
+    contract: formatRosterSalary(Number.isFinite(salary) ? salary : null),
+    salarySortValue: Number.isFinite(salary) && salary > 0 ? salary : Number.NEGATIVE_INFINITY,
     trueValue: '—',
     netDiff: '—',
     fitness: '—' as string | number,
+    statSummary: stats.label,
+    statSortValue: stats.sortValue,
+    designationSummary: rosterDesignationSummary({
+      playerId: player.id,
+      hiddenSafe,
+      report: input.designationEligibilityReport,
+    }),
+    hiddenSafe,
+    originalIndex: input.originalIndex,
   };
 }
 
@@ -1084,7 +1195,7 @@ export function TeamHubContent() {
   const [selectedStadium, setSelectedStadium] = useState<string>("");
   const [selectedStatsPlayer, setSelectedStatsPlayer] = useState<string>("J. Rodriguez");
   const [statsView, setStatsView] = useState<"table" | "spraychart">("table");
-  const [rosterSortColumn, setRosterSortColumn] = useState<string>("name");
+  const [rosterSortColumn, setRosterSortColumn] = useState<RosterSortColumn>("name");
   const [rosterSortDirection, setRosterSortDirection] = useState<"asc" | "desc">("asc");
   const [directorySearch, setDirectorySearch] = useState("");
   const [directoryTeamFilter, setDirectoryTeamFilter] = useState("ALL");
@@ -2063,23 +2174,6 @@ export function TeamHubContent() {
     }
   }, [teams, stadiums, selectedTeam]);
 
-  // Get roster for selected team
-  const rosterData = useMemo(() => {
-    if (franchiseId && selectedTeamId) {
-      return franchiseRosterPlayers.map((player) => convertFranchisePlayerToRosterItem(player));
-    }
-    if (hasRealData && realPlayers.length > 0 && realTeams.length > 0) {
-      const selectedTeamObj = realTeams.find(t => t.name === selectedTeam);
-      if (selectedTeamObj) {
-        const teamPlayers = realPlayers.filter(p => p.teamId === selectedTeamObj.id).slice(0, 15);
-        if (teamPlayers.length > 0) {
-          return teamPlayers.map(p => convertToRosterItem(p));
-        }
-      }
-    }
-    return EMPTY_ROSTER_DATA;
-  }, [franchiseId, selectedTeamId, franchiseRosterPlayers, realPlayers, realTeams, selectedTeam, hasRealData]);
-
   // Build lookup maps from season stats for real WAR
   const battingByPlayer = useMemo(() => {
     const map = new Map<string, BattingLeaderEntry>();
@@ -2103,6 +2197,70 @@ export function TeamHubContent() {
     }
     return map;
   }, [seasonStats.isLoading, seasonStats.getPitchingLeaders]);
+
+  const moraleSnapshotByPlayerId = useMemo(() => {
+    const map = new Map<string, FranchiseMoraleSnapshot>();
+    for (const snapshot of moraleSnapshots) {
+      if (snapshot.targetType === 'player' && snapshot.playerId) {
+        map.set(snapshot.playerId, snapshot);
+      }
+    }
+    return map;
+  }, [moraleSnapshots]);
+
+  const rosterFarmRecordByPlayerId = useMemo(() => {
+    const map = new Map<string, FranchiseFarmRecord>();
+    for (const record of franchiseFarmRecords) {
+      map.set(record.playerId, record);
+    }
+    return map;
+  }, [franchiseFarmRecords]);
+
+  // Get roster for selected team
+  const rosterData = useMemo(() => {
+    if (franchiseId && selectedTeamId) {
+      return franchiseAllPlayers
+        .filter((player) =>
+          isActiveFranchisePlayerForTeam(player, selectedTeamId, franchiseLeagueId) ||
+          isFarmFranchisePlayerForTeam(player, selectedTeamId, franchiseLeagueId)
+        )
+        .map((player, index) => convertFranchisePlayerToRosterItem({
+          player,
+          leagueId: franchiseLeagueId,
+          teamName: selectedTeam,
+          moraleSnapshot: moraleSnapshotByPlayerId.get(player.id),
+          batting: battingByPlayer.get(player.id),
+          pitching: pitchingByPlayer.get(player.id),
+          designationEligibilityReport,
+          farmRecordByPlayerId: rosterFarmRecordByPlayerId,
+          originalIndex: index,
+        }));
+    }
+    if (hasRealData && realPlayers.length > 0 && realTeams.length > 0) {
+      const selectedTeamObj = realTeams.find(t => t.name === selectedTeam);
+      if (selectedTeamObj) {
+        const teamPlayers = realPlayers.filter(p => p.teamId === selectedTeamObj.id).slice(0, 15);
+        if (teamPlayers.length > 0) {
+          return teamPlayers.map((p, index) => ({ ...convertToRosterItem(p), originalIndex: index }));
+        }
+      }
+    }
+    return EMPTY_ROSTER_DATA;
+  }, [
+    franchiseId,
+    selectedTeamId,
+    franchiseAllPlayers,
+    franchiseLeagueId,
+    selectedTeam,
+    moraleSnapshotByPlayerId,
+    battingByPlayer,
+    pitchingByPlayer,
+    designationEligibilityReport,
+    rosterFarmRecordByPlayerId,
+    realPlayers,
+    realTeams,
+    hasRealData,
+  ]);
 
   // Get stats for selected team
   const statsData = useMemo(() => {
@@ -2138,7 +2296,7 @@ export function TeamHubContent() {
   // are not yet implemented — their tabs show empty states.
 
   // Sorting functions
-  const handleRosterSort = (column: string) => {
+  const handleRosterSort = (column: RosterSortColumn) => {
     if (rosterSortColumn === column) {
       setRosterSortDirection(rosterSortDirection === "asc" ? "desc" : "asc");
     } else {
@@ -2157,21 +2315,28 @@ export function TeamHubContent() {
   };
 
   const getSortedRoster = () => {
-    const sorted = [...rosterData].sort((a, b) => {
-      let aVal: any = a[rosterSortColumn as keyof typeof a];
-      let bVal: any = b[rosterSortColumn as keyof typeof b];
+    const valueFor = (row: RosterTableItem): string | number => {
+      if (rosterSortColumn === 'salary') return row.salarySortValue;
+      if (rosterSortColumn === 'morale') return typeof row.morale === 'number' ? row.morale : Number.NEGATIVE_INFINITY;
+      if (rosterSortColumn === 'stat') return row.statSortValue;
+      if (rosterSortColumn === 'designation') return row.designationSummary;
+      return row[rosterSortColumn];
+    };
 
-      // Handle numeric string values
-      if (typeof aVal === "string" && aVal.includes("$")) {
-        aVal = parseFloat(aVal.replace(/[$M]/g, ""));
-        bVal = parseFloat(bVal.replace(/[$M]/g, ""));
+    return [...rosterData].sort((a, b) => {
+      const aVal = valueFor(a);
+      const bVal = valueFor(b);
+      let comparison = 0;
+      if (typeof aVal === 'number' && typeof bVal === 'number') {
+        comparison = aVal - bVal;
+      } else {
+        comparison = String(aVal).localeCompare(String(bVal));
       }
-
-      if (aVal < bVal) return rosterSortDirection === "asc" ? -1 : 1;
-      if (aVal > bVal) return rosterSortDirection === "asc" ? 1 : -1;
-      return 0;
+      if (comparison !== 0) return rosterSortDirection === "asc" ? comparison : -comparison;
+      const nameComparison = a.name.localeCompare(b.name);
+      if (nameComparison !== 0) return nameComparison;
+      return a.originalIndex - b.originalIndex;
     });
-    return sorted;
   };
 
   const getSortedStats = () => {
@@ -2843,7 +3008,7 @@ export function TeamHubContent() {
           </div>
 
           <div className="overflow-x-auto">
-            <table aria-label="MLB roster table" className="w-full text-[9px]">
+            <table aria-label="Franchise roster scan table" className="w-full min-w-[760px] text-[9px]">
               <thead>
                 <tr className="border-b-2 border-[#4A6844]">
                   <th className="text-left py-2 px-2 text-[#E8E8D8]/70 cursor-pointer hover:text-[#E8E8D8]" onClick={() => handleRosterSort("name")}>
@@ -2852,14 +3017,20 @@ export function TeamHubContent() {
                   <th className="text-center py-2 px-2 text-[#E8E8D8]/70 cursor-pointer hover:text-[#E8E8D8]" onClick={() => handleRosterSort("position")}>
                     POS {rosterSortColumn === "position" && (rosterSortDirection === "asc" ? "↑" : "↓")}
                   </th>
-                  <th className="text-center py-2 px-2 text-[#E8E8D8]/70 cursor-pointer hover:text-[#E8E8D8]" onClick={() => handleRosterSort("grade")}>
-                    GRADE {rosterSortColumn === "grade" && (rosterSortDirection === "asc" ? "↑" : "↓")}
+                  <th className="text-center py-2 px-2 text-[#E8E8D8]/70 cursor-pointer hover:text-[#E8E8D8]" onClick={() => handleRosterSort("rosterStatus")}>
+                    STATUS {rosterSortColumn === "rosterStatus" && (rosterSortDirection === "asc" ? "↑" : "↓")}
                   </th>
-                  <th className="text-center py-2 px-2 text-[#E8E8D8]/70 cursor-pointer hover:text-[#E8E8D8]" onClick={() => handleRosterSort("contract")}>
-                    CONTRACT {rosterSortColumn === "contract" && (rosterSortDirection === "asc" ? "↑" : "↓")}
+                  <th className="text-right py-2 px-2 text-[#E8E8D8]/70 cursor-pointer hover:text-[#E8E8D8]" onClick={() => handleRosterSort("salary")}>
+                    SALARY {rosterSortColumn === "salary" && (rosterSortDirection === "asc" ? "↑" : "↓")}
                   </th>
-                  <th className="text-center py-2 px-2 text-[#E8E8D8]/70 cursor-pointer hover:text-[#E8E8D8]" onClick={() => handleRosterSort("fitness")}>
-                    FITNESS {rosterSortColumn === "fitness" && (rosterSortDirection === "asc" ? "↑" : "↓")}
+                  <th className="text-center py-2 px-2 text-[#E8E8D8]/70 cursor-pointer hover:text-[#E8E8D8]" onClick={() => handleRosterSort("morale")}>
+                    MORALE {rosterSortColumn === "morale" && (rosterSortDirection === "asc" ? "↑" : "↓")}
+                  </th>
+                  <th className="text-left py-2 px-2 text-[#E8E8D8]/70 cursor-pointer hover:text-[#E8E8D8]" onClick={() => handleRosterSort("stat")}>
+                    STATS {rosterSortColumn === "stat" && (rosterSortDirection === "asc" ? "↑" : "↓")}
+                  </th>
+                  <th className="text-left py-2 px-2 text-[#E8E8D8]/70 cursor-pointer hover:text-[#E8E8D8]" onClick={() => handleRosterSort("designation")}>
+                    DESIGNATION {rosterSortColumn === "designation" && (rosterSortDirection === "asc" ? "↑" : "↓")}
                   </th>
                   <th className="text-center py-2 px-2 text-[#E8E8D8]/70">PROFILE</th>
                 </tr>
@@ -2867,21 +3038,40 @@ export function TeamHubContent() {
               <tbody>
                 {getSortedRoster().map((player, idx) => (
                   <tr key={player.playerId ?? idx} className={`border-b border-[#4A6844]/30 ${idx % 2 === 0 ? 'bg-[#5A8352]/20' : ''}`}>
-	                    <td className="py-2 px-2 text-[#E8E8D8]">{player.name}</td>
-	                    <td className="py-2 px-2 text-[#E8E8D8] text-center">{player.position}</td>
-	                    <td className="py-2 px-2 text-[#E8E8D8] text-center font-bold">{player.grade}</td>
-	                    <td className="py-2 px-2 text-[#E8E8D8] text-center">{player.contract}</td>
-	                    <td className="py-2 px-2 text-center">
-	                      <span className={typeof player.fitness === 'number' ? (player.fitness >= 90 ? "text-[#00DD00]" : player.fitness >= 80 ? "text-[#E8E8D8]" : "text-[#DD0000]") : "text-[#E8E8D8]/50"}>
-	                        {player.fitness}
+                    <td className="py-2 px-2 text-[#E8E8D8]">
+                      <button
+                        type="button"
+                        disabled={!player.playerId}
+                        onClick={() => player.playerId && setSelectedProfilePlayerId(player.playerId)}
+                        className="text-left font-bold text-[#E8E8D8] hover:text-[#C4A853] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {player.name}
+                      </button>
+                    </td>
+                    <td className="py-2 px-2 text-[#E8E8D8] text-center">{player.position}</td>
+                    <td className="py-2 px-2 text-[#E8E8D8] text-center">
+                      <div className="font-bold">{player.rosterStatus}</div>
+                      <div className="text-[7px] text-[#E8E8D8]/55">{player.teamContext || '—'}</div>
+                    </td>
+                    <td className="py-2 px-2 text-[#E8E8D8] text-right">{player.contract}</td>
+                    <td className="py-2 px-2 text-center">
+                      <span className={typeof player.morale === 'number' ? (player.morale >= 70 ? "text-[#00DD00]" : player.morale <= 35 ? "text-[#DD0000]" : "text-[#E8E8D8]") : "text-[#E8E8D8]/50"}>
+                        {player.morale}
                       </span>
+                      <div className="text-[7px] text-[#E8E8D8]/55">{player.moraleState}</div>
+                    </td>
+                    <td className={`py-2 px-2 text-left ${player.hiddenSafe ? 'text-[#E8E8D8]/60' : 'text-[#E8E8D8]'}`}>
+                      {player.statSummary}
+                    </td>
+                    <td className={`py-2 px-2 text-left ${player.hiddenSafe ? 'text-[#E8E8D8]/60' : 'text-[#E8E8D8]'}`}>
+                      {player.designationSummary}
                     </td>
                     <td className="py-2 px-2 text-center">
                       <button
                         type="button"
                         disabled={!player.playerId}
                         title="Open read-only franchise player profile."
-                        aria-label={`Open profile for ${player.name}`}
+                        aria-label={`${player.rosterStatus === 'FARM' ? 'Open roster scan profile' : 'Open profile'} for ${player.name}`}
                         onClick={() => player.playerId && setSelectedProfilePlayerId(player.playerId)}
                         className="p-1 hover:bg-[#4A6844] disabled:opacity-40 disabled:cursor-not-allowed"
                       >
@@ -5346,7 +5536,7 @@ function FranchiseValueTruthPanel({
       )}
 
       <div className="mt-3 text-[8px] text-[#E8E8D8]/55">
-        The v1 roster table shows stable identity, grade, contract, fitness, and lineup controls only.
+        The roster scan is read-only and shows safe salary, morale, stats, and preview designation context only.
       </div>
     </section>
   );
