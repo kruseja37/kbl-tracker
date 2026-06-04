@@ -8,6 +8,125 @@ Purpose: preserve user-observed manual smoke-test feedback without interrupting 
 
 The manual smoke test mostly validated the recent Franchise v1 direction, but GameTracker launch and several League Builder / Franchise UX details need follow-up. The immediate theme is not to chase these bugs ad hoc; instead, keep them visible so the implementation roadmap covers them deliberately.
 
+## 2026-06-04 Follow-Up Smoke Notes
+
+This follow-up pass raised confidence that the recently implemented foundation pieces exist, but also showed that the current experience is not yet comfortable enough to call the user-facing playable v1 done. These notes should feed the next hardening plan before deeper Mode 3 or full-spec implementation.
+
+### High-Priority Playability / Data Correctness
+
+1. Pitcher name formatting is inconsistent in GameTracker.
+   - Current behavior: pitchers show as first initial plus last name, while position players show full names.
+   - Desired behavior: all players should display full names consistently.
+   - Area to inspect: GameTracker lineup/player display helpers, pitcher-specific display-name formatting, and any shared compact-name utility.
+
+2. DH still appears in Franchise Mode generation policy.
+   - Desired behavior: DH should not be a Franchise Mode position.
+   - No prospects should have `DH` as primary or secondary position.
+   - No scouts should have `DH` as a specialty or weakness.
+   - Area to inspect: prospect generation, scout generation, draft pool construction, and any position/specialty constants.
+
+3. Scout and player names remain too repetitive.
+   - Desired behavior: stronger name variability using the SMB4 first-name / last-name database.
+   - Area to inspect: generated prospect/scout name pools, SMB4 name source availability, duplicate prevention, and randomization weighting.
+
+4. Dynamic designation logic appears wrong after games.
+   - Smoke example: a starting pitcher gave up two runs in a one-inning intentional-loss test, had `-8.4 WAR`, and still received `Team MVP`.
+   - Smoke observation: nearly every player, possibly every player, received `Team MVP` in roster view awaiting user confirmation.
+   - Desired behavior: designation eligibility should match spec thresholds and should not flood the user with false-positive MVP prompts.
+   - Future UX note: once designation logic is trustworthy, automatic morale changes with an undo/review path may be preferable to requiring users to confirm excessive post-game changes one by one.
+   - Area to inspect: dynamic designation eligibility, WAR/value source inputs, preview-vs-awarded wording, post-game prompt generation, and Team Hub roster designation display.
+
+5. Nothing from Franchise Mode persists to the almanac.
+   - Desired behavior: Franchise Mode results/events that should become historical record need a defined almanac persistence path.
+   - Area to inspect: completed game archive, almanac write paths, franchise scope metadata, season summaries, records, awards/fame events, and save/export behavior.
+
+### Missing Workflow / Testing Ergonomics
+
+1. Auto-assign is needed for hiring scouts and drafting players.
+   - User impact: manual setup is too slow for repeated smoke testing.
+   - Desired behavior: preview/test mode should support auto-hire scouts and auto-draft players.
+   - Scope: this can be test/preview tooling first, not necessarily final AI behavior.
+   - Area to inspect: draft setup, scout hiring flow, draft board selection, generated class constraints, and repeatable seeded test paths.
+
+2. Team salaries are missing.
+   - User impact: expected wins / roster expectation / True Value analysis feels disconnected because contracts/salary totals are not visible or complete.
+   - Area to inspect: roster salary data, Team Hub salary display, team salary summaries, and value/expected-wins preview inputs.
+
+3. Expected Wins / True Value is preview-only but currently lacks meaningful contracts.
+   - Desired behavior: roster expectation analysis needs contracts/team salaries before it can feel useful.
+   - Boundary reminder: this does not mean final True Value or salary movement should be promoted automatically.
+
+### Roster / Team Hub UX
+
+1. Player morale should appear in roster view as a sortable column.
+   - Desired behavior: user can scan morale across the whole roster and sort by morale, salary, stats, etc.
+   - Area to inspect: Team Hub roster table columns, sorting model, canonical morale snapshot lookup, and hidden-safe display.
+
+2. Dynamic designations need a clearer home in roster/player detail views.
+   - Current behavior: UI feels busy and designations do not have a clear, easy-to-scan place.
+   - Desired behavior: on iPad, the user should be able to see player details and designations in a roster view without hunting through dense panels.
+   - Area to inspect: Team Hub roster layout, player profile modal, designation chips/status columns, and responsive density.
+
+3. The UI is too wordy and hard to read.
+   - Desired behavior: default copy should be more succinct.
+   - Robust explanations should move behind help buttons/tooltips/disclosure where needed.
+   - Area to inspect: Team Hub foundation panels, random-event cards, morale/spec alignment copy, stadium panels, relationship context, and modal density.
+
+### Stadium / Spray / Analytics UX
+
+1. Stadium tab currently raises trust/authoring questions.
+   - Smoke observation: dimensions appear loaded, but there is no obvious way to enter stadiums or edit dimensions in League Builder.
+   - User question: unclear where the stadium information is coming from.
+   - Area to inspect: League Builder stadium authoring, team/stadium assignment, seed factor inputs, stadium identity source, and Team Hub explanatory copy.
+
+2. Seed factors and spray charts/evidence look blocked or unclear.
+   - Desired behavior: if data is preview-only or blocked, UI should explain that succinctly and show what evidence is missing.
+   - Area to inspect: Stadium tab empty states, foundation report blockers, completed archive requirements, and spray inspector availability.
+
+3. Player spray charts still show deferred.
+   - Desired behavior: batting, pitching, and fielding spray evidence should eventually be visible by player/team/stadium in a useful way.
+   - Area to inspect: player profile spray context, Team Hub stadium spray inspector, and future heat-map/diagram work.
+
+### Game / Analytics Gaps
+
+1. No visible WPA for players or managers.
+   - Desired behavior: if WPA is in spec for v1 or near-v1, it needs a visible/trusted calculation path and clear scope.
+   - Area to inspect: GameTracker win-probability model, player WPA attribution, manager WPA/decision logic, archive persistence, and Team Hub/almanac display.
+
+2. GameTracker / dynamic designation / WAR interactions need focused correctness review.
+   - The `Team MVP` smoke issue suggests designation formulas may be using incomplete, inverted, or placeholder evidence.
+   - Area to inspect: stat boundaries after intentionally shortened games, WAR preview values, designation eligibility inputs, and post-game prompt batching.
+
+### Triage Implication
+
+The Mode 2 v1 foundation may be technically safe, but the next milestone should be a user-facing playable-v1 hardening plan before deeper Mode 3 implementation. Suggested order:
+
+1. Data correctness and generation policy.
+   - Full-name display.
+   - Remove DH from Franchise prospects/scouts.
+   - Improve scout/prospect names from SMB4 data.
+   - Fix dynamic designation flood/false MVP logic.
+
+2. Testing ergonomics.
+   - Auto-hire scouts.
+   - Auto-draft players.
+
+3. Core roster/finance visibility.
+   - Team salaries.
+   - Roster columns for morale/salary/stats/designations.
+
+4. Stadium and analytics clarity.
+   - Stadium authoring/source clarity.
+   - Spray chart availability/empty-state clarity.
+   - WPA visibility decision.
+
+5. Persistence/history.
+   - Franchise-to-almanac persistence path.
+
+6. UI simplification pass.
+   - Reduce default explanatory copy.
+   - Move long explanations behind help/disclosure controls.
+
 ## Blocking Or High-Priority Workflow Issues
 
 1. Franchise creation can hang on `Start Franchise`.

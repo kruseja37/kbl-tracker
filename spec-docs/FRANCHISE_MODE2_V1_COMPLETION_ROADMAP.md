@@ -12,9 +12,9 @@ Manual smoke feedback remains a bug and feature backlog. The build order for Mod
 
 Latest committed checkpoint: `cf0cfd0 Register Mode 2 evidence stores for portability`.
 
-Latest working checkpoint: no active uncommitted slice. Next planned checkpoint is Mode 2 V1 Playable Foundation Wrap-Up Audit.
+Latest working checkpoint: Mode 1/2 Playable V1 Gap Analysis doc pass completed pending review/commit.
 
-Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved.
+Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved. The technical foundation is safe, but manual smoke feedback shows user-facing Mode 1/Mode 2 playable UI/UX is not yet approved as complete.
 
 ## Completed Checkpoints
 
@@ -38,18 +38,28 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Team Hub player profiles surface read-only relationship context/proposal boundaries for player-player, fan/team, and hidden-safe scout/prospect contexts using the draft-only manual override validator.
 - Season-end readiness report exists as a pure read-only review contract for scoped game archives, random-event review state, morale evidence, daily summaries, expected-wins baselines, stadium records, designation readiness, relationship context, and blocked future systems.
 - Season handoff plan exists as a pure read-only blocked migration manifest that lists eligible review evidence, blocked carryover categories, unresolved blockers, warnings, and future decisions required before any Mode 3/offseason execution.
+- `FRANCHISE_MODE1_MODE2_PLAYABLE_V1_GAP_ANALYSIS.md` reconciles the current foundation, manual smoke feedback, and Mode 2 worksheet into the active Mode 1/Mode 2 playable hardening plan.
 
 ## Active Priority Order
 
-1. Mode 2 V1 Playable Foundation Wrap-Up Audit
-   - Verify the completed v1 foundation end to end.
-   - Confirm the evidence store portability blocker is resolved.
-   - Identify any remaining release blockers before Mode 3/offseason planning.
-   - No Mode 3/offseason execution until scoped lifecycle rules are approved.
+1. Mode 1/2 Core Launch And Persistence Smoke Hardening
+   - Verify and patch Franchise Setup completion/navigation, FranchiseHome launch confirmation, manual schedule/result loop, GameTracker completion/archive, save-slot delete, and full pitcher-name display.
+   - Keep Mode 1 and Mode 2 as the only active playable-v1 priority.
+   - No auto-draft and no Mode 3/offseason execution until separately approved.
+2. Franchise Data Generation Policy Cleanup: no DH, SMB4 names, salaries
+   - Remove DH from Franchise prospect/scout generation pools, improve generated names from approved SMB4 sources, and prove salary/payroll baseline correctness at handoff.
+3. Team Hub Roster Usability: sortable salary/morale/stats/designation columns
+   - Make roster/finance/designation context scan-friendly on iPad without promoting preview systems into final mutation.
 
 ## Playable V1 Remaining Work
 
-- Broader Mode 2 v1 playable foundation wrap-up audit before any Mode 3 execution.
+- Mode 1/2 Core Launch And Persistence Smoke Hardening.
+- Franchise Data Generation Policy Cleanup: no DH, SMB4 names, salaries.
+- Team Hub Roster Usability: sortable salary/morale/stats/designation columns.
+- Dynamic Designation Correctness: MVP/Ace ranking and prompt volume.
+- Stadium And League Builder Source-Of-Truth Pass.
+- Analytics/Continuity pass for WPA visibility and franchise-to-almanac persistence.
+- Copy/UI cleanup to reduce default explanatory text and move deeper explanation behind help affordances.
 
 ## Full Spec Parity Backlog
 
@@ -61,6 +71,7 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Story persistence beyond the random-event log and full narrative engine integration.
 - Adaptive park-factor persistence, stadium historical records, and final park-adjusted value/WAR consumers.
 - Awards persistence, playoffs/finals summaries, complete season handoff, and Mode 3/offseason execution.
+- Auto-draft remains deferred/excluded from the active playable-v1 plan unless separately approved as tooling.
 
 ## Locked V1 Boundaries
 
@@ -75,6 +86,7 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Fan Hopeful morale boosts must be prospect-safe and must not expose hidden FARM truth.
 - Profile automation, salary movement, final True Value, final designation changes, relationship mutation, story persistence beyond the random-event log, Mode 3/offseason effects, and unrevealed FARM hidden-truth effects remain blocked.
 - Existing prototype/global `useFanMorale` paths are not canonical Franchise v1 morale storage.
+- Mode 1/Mode 2 playable hardening remains active until the user-facing loop is approved; foundation-safe does not mean playable-complete.
 
 ## Operating Rules
 

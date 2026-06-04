@@ -10,7 +10,7 @@ Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
 Latest committed checkpoint: `cf0cfd0 Register Mode 2 evidence stores for portability`.
 
-Latest working checkpoint: no active uncommitted slice. Next planned checkpoint is Mode 2 V1 Playable Foundation Wrap-Up Audit.
+Latest working checkpoint: Mode 1/2 Playable V1 Gap Analysis doc pass completed pending review/commit.
 
 ## Current Completed
 
@@ -30,16 +30,20 @@ Latest working checkpoint: no active uncommitted slice. Next planned checkpoint 
 - Dynamic designation morale bridge supports safe preview TEAM_MVP/ACE recognition prompts through random-event confirmation.
 - Fan Favorite/Albatross readiness can be inspected from preview True Value/value-delta rows, but remains blocked for final designation behavior, random-event morale prompts, salary movement, relationships, and Mode 3.
 - Numeric WAR preview, position-relative True Value preview, expected-wins preview, Team Hub display, and durable expected-wins baseline snapshots are read-only and untrusted.
+- The Mode 2 technical foundation is safe to build on, but manual smoke feedback shows the user-facing Mode 1/Mode 2 playable UI/UX is not complete.
+- `FRANCHISE_MODE1_MODE2_PLAYABLE_V1_GAP_ANALYSIS.md` is the active playable-v1 gap plan for launch/persistence, generation policy, roster usability, designation correctness, finance visibility, stadium source-of-truth, analytics continuity, and copy cleanup.
 
 ## Current Active Slice
 
-Mode 2 V1 Playable Foundation Wrap-Up Audit.
+Mode 1/2 Playable V1 Gap Analysis doc pass.
 
-Goal: verify the completed v1 foundation end to end, confirm the portability blocker is resolved, and identify any remaining release blockers before Mode 3/offseason planning.
+Goal: preserve the foundation-safe state while making user-facing Mode 1/Mode 2 playable hardening the active priority. Do not treat Mode 2 as fully playable-complete yet.
 
 ## Next Queue
 
-1. Broader Mode 2 v1 playable foundation wrap-up audit.
+1. Mode 1/2 Core Launch And Persistence Smoke Hardening.
+2. Franchise Data Generation Policy Cleanup: no DH, SMB4 names, salaries.
+3. Team Hub Roster Usability: sortable salary/morale/stats/designation columns.
 
 ## Hard Boundaries
 
@@ -50,6 +54,7 @@ Goal: verify the completed v1 foundation end to end, confirm the portability blo
 - No story persistence beyond the random-event log.
 - No adaptive park-factor persistence or final park-adjusted value/WAR consumers.
 - No Mode 3/offseason handoff or execution.
+- No auto-draft active path.
 - Score-only rows may affect team fan morale only after explicit confirmation; never player morale, stats, WPA/WAR, awards, designations, player history, or relationships.
 
 ## Operating Rules
