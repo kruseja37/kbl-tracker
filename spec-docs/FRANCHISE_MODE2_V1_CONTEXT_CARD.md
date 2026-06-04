@@ -8,9 +8,9 @@ Reliability-first Mode 2 completion. Finish a playable, scoped, auditable intern
 
 Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
-Latest committed checkpoint: `a258340 Add richer spray evidence inspector`.
+Latest committed checkpoint: `419759d Add relationship context preview`.
 
-Latest working checkpoint: Relationship Context Display implemented pending verification/commit.
+Latest working checkpoint: no active uncommitted slice. Next planned slice is Season-End Readiness Checks.
 
 ## Current Completed
 
@@ -30,11 +30,9 @@ Latest working checkpoint: Relationship Context Display implemented pending veri
 
 ## Current Active Slice
 
-Relationship Context Display.
+Season-End Readiness Checks.
 
-Status: implemented pending verification/commit.
-
-Goal: surface safe relationship context and draft/manual proposal state without adding durable relationship mutation or automatic relationship effects.
+Goal: audit whether Mode 2 v1 has the required scoped evidence, blockers, and handoff boundaries before any Mode 3/offseason execution.
 
 ## Next Queue
 

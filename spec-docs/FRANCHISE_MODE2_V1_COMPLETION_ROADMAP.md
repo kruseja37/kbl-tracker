@@ -10,9 +10,9 @@ Manual smoke feedback remains a bug and feature backlog. The build order for Mod
 
 ## Current State As Of Latest Commit
 
-Latest committed checkpoint: `a258340 Add richer spray evidence inspector`.
+Latest committed checkpoint: `419759d Add relationship context preview`.
 
-Latest working checkpoint: Relationship Context Display implemented pending verification/commit.
+Latest working checkpoint: no active uncommitted slice. Next planned slice is Season-End Readiness Checks.
 
 Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved.
 
