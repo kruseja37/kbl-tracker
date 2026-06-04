@@ -55,6 +55,15 @@ function row(overrides: Partial<FranchiseValueInputRow> = {}): FranchiseValueInp
       any: true,
       trustedForFinalValue: false,
     },
+    warPreviewValues: {
+      battingWar: 0.2,
+      pitchingWar: null,
+      fieldingWar: 0.1,
+      baserunningWar: 0.1,
+      totalWar: 0.4,
+      totalWarSource: 'stat-row',
+      trustedForFinalValue: false,
+    },
     wpaInputAvailability: {
       playerWpa: false,
       managerWpa: false,

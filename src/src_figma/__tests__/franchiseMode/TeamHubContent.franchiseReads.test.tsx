@@ -276,6 +276,15 @@ function valueInputRow(overrides: Record<string, unknown> = {}) {
       any: true,
       trustedForFinalValue: false,
     },
+    warPreviewValues: {
+      battingWar: 0.2,
+      pitchingWar: null,
+      fieldingWar: 0.1,
+      baserunningWar: null,
+      totalWar: 0.3,
+      totalWarSource: 'derived-from-components',
+      trustedForFinalValue: false,
+    },
     wpaInputAvailability: {
       playerWpa: false,
       managerWpa: false,

@@ -21,6 +21,16 @@ export const FRANCHISE_VALUE_INPUT_CONTRACT_VERSION = 'franchise-mode2-value-inp
 
 export type FranchiseValueParkFactorStatus = 'seed-only' | 'custom-unavailable' | 'unadjusted';
 
+export interface FranchiseWarPreviewValues {
+  battingWar: number | null;
+  pitchingWar: number | null;
+  fieldingWar: number | null;
+  baserunningWar: number | null;
+  totalWar: number | null;
+  totalWarSource: 'stat-row' | 'derived-from-components' | 'unavailable';
+  trustedForFinalValue: false;
+}
+
 export interface FranchiseValueInputSeasonContext {
   seasonId: string;
   statsScopeId: string;
@@ -62,6 +72,7 @@ export interface FranchiseValueInputRow {
     any: boolean;
     trustedForFinalValue: false;
   };
+  warPreviewValues: FranchiseWarPreviewValues;
   wpaInputAvailability: {
     playerWpa: boolean;
     managerWpa: boolean;
@@ -110,6 +121,10 @@ export interface BuildFranchiseValueInputRowsInput {
 
 function finiteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
+}
+
+function finiteOrNull(value: unknown): number | null {
+  return finiteNumber(value) ? value : null;
 }
 
 function playerName(player: Player): string {
@@ -193,6 +208,52 @@ function hasBaserunningWarInput(batting?: PlayerSeasonBatting): boolean {
   ));
 }
 
+function buildWarPreviewValues(
+  batting?: PlayerSeasonBatting,
+  pitching?: PlayerSeasonPitching,
+): FranchiseWarPreviewValues {
+  const battingWar = finiteOrNull(batting?.bwar);
+  const pitchingWar = finiteOrNull(pitching?.pwar);
+  const fieldingWar = finiteOrNull(batting?.fwar);
+  const baserunningWar = finiteOrNull(batting?.rwar);
+  const statRowTotalWar = finiteOrNull(batting?.totalWar);
+
+  if (statRowTotalWar !== null) {
+    return {
+      battingWar,
+      pitchingWar,
+      fieldingWar,
+      baserunningWar,
+      totalWar: statRowTotalWar,
+      totalWarSource: 'stat-row',
+      trustedForFinalValue: false,
+    };
+  }
+
+  const components = [battingWar, pitchingWar, fieldingWar, baserunningWar]
+    .filter((value): value is number => value !== null);
+
+  return {
+    battingWar,
+    pitchingWar,
+    fieldingWar,
+    baserunningWar,
+    totalWar: components.length > 0
+      ? Number(components.reduce((sum, value) => sum + value, 0).toFixed(3))
+      : null,
+    totalWarSource: components.length > 0 ? 'derived-from-components' : 'unavailable',
+    trustedForFinalValue: false,
+  };
+}
+
+function hasWarPreviewValue(values: FranchiseWarPreviewValues): boolean {
+  return values.battingWar !== null ||
+    values.pitchingWar !== null ||
+    values.fieldingWar !== null ||
+    values.baserunningWar !== null ||
+    values.totalWar !== null;
+}
+
 function unique(values: string[]): string[] {
   return Array.from(new Set(values));
 }
@@ -273,6 +334,7 @@ export async function buildFranchiseValueInputRows(
     const pitchingWar = hasPitchingWarInput(pitching);
     const fieldingWar = hasFieldingWarInput(fielding, batting);
     const baserunningWar = hasBaserunningWarInput(batting);
+    const warPreviewValues = buildWarPreviewValues(batting, pitching);
     const salaryBaselineAvailable = finiteNumber(player.salary) && Boolean(config?.salaryBaseline?.calculationVersion);
     const teamSalaryBaselineAvailable = hasTeamPayrollBaseline(config, currentTeamId);
     const playerWpaAvailable = completedGames.some((game) =>
@@ -311,6 +373,9 @@ export async function buildFranchiseValueInputRows(
     if (gamesPerTeam === null || inningsPerGame === null) {
       limitations.push('Stored season length or innings metadata is missing.');
     }
+    if (hasWarPreviewValue(warPreviewValues)) {
+      limitations.push('WAR preview values are read-only scoped season-stat inputs and are not final True Value authority.');
+    }
 
     return {
       contractVersion: FRANCHISE_VALUE_INPUT_CONTRACT_VERSION,
@@ -343,6 +408,7 @@ export async function buildFranchiseValueInputRows(
         any: battingWar || pitchingWar || fieldingWar || baserunningWar,
         trustedForFinalValue: false,
       },
+      warPreviewValues,
       wpaInputAvailability: {
         playerWpa: playerWpaAvailable,
         managerWpa: managerWpaAvailable,

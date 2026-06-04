@@ -77,6 +77,15 @@ function makeRow(overrides: Partial<FranchiseValueInputRow> = {}): FranchiseValu
       any: false,
       trustedForFinalValue: false,
     },
+    warPreviewValues: {
+      battingWar: null,
+      pitchingWar: null,
+      fieldingWar: null,
+      baserunningWar: null,
+      totalWar: null,
+      totalWarSource: 'unavailable',
+      trustedForFinalValue: false,
+    },
     wpaInputAvailability: {
       playerWpa: false,
       managerWpa: false,

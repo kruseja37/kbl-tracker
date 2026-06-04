@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Player, Team } from '../franchisePlayerStorage';
 import { buildFranchiseValueInputRows } from '../franchiseValueInputs';
@@ -260,6 +261,15 @@ describe('franchise value input contract', () => {
       fieldingWar: true,
       trustedForFinalValue: false,
     }));
+    expect(row.warPreviewValues).toEqual({
+      battingWar: 0.2,
+      pitchingWar: null,
+      fieldingWar: 0.1,
+      baserunningWar: 0.1,
+      totalWar: 0.4,
+      totalWarSource: 'stat-row',
+      trustedForFinalValue: false,
+    });
     expect(row.wpaInputAvailability).toEqual({
       playerWpa: false,
       managerWpa: false,
@@ -267,6 +277,177 @@ describe('franchise value input contract', () => {
       trustedForFinalValue: false,
     });
     expect(row.limitations.join(' ')).toContain('Final True Value and dynamic designations are not calculated');
+    expect(row.limitations.join(' ')).toContain('WAR preview values are read-only scoped season-stat inputs');
+    expect(row.warInputAvailability.trustedForFinalValue).toBe(false);
+    expect(row.warPreviewValues.trustedForFinalValue).toBe(false);
+  });
+
+  test('derives total WAR preview only from existing finite component values when no stat-row total is present', async () => {
+    mocks.getAllBattingStats.mockResolvedValue([{
+      seasonId: 'season-1',
+      playerId: 'player-1',
+      playerName: 'Canon Input',
+      teamId: 'team-1',
+      games: 1,
+      pa: 4,
+      ab: 4,
+      hits: 2,
+      singles: 1,
+      doubles: 1,
+      triples: 0,
+      homeRuns: 0,
+      rbi: 1,
+      runs: 1,
+      walks: 0,
+      strikeouts: 1,
+      hitByPitch: 0,
+      sacFlies: 0,
+      sacBunts: 0,
+      stolenBases: 1,
+      caughtStealing: 0,
+      gidp: 0,
+      fameBonuses: 0,
+      fameBoners: 0,
+      fameNet: 0,
+      bwar: 0.2,
+      rwar: 0.1,
+      fwar: 0.1,
+      lastUpdated: 1,
+    }]);
+    mocks.getAllPitchingStats.mockResolvedValue([{
+      seasonId: 'season-1',
+      playerId: 'player-1',
+      playerName: 'Canon Input',
+      teamId: 'team-1',
+      games: 1,
+      gamesStarted: 1,
+      outsRecorded: 18,
+      hitsAllowed: 4,
+      runsAllowed: 1,
+      earnedRuns: 1,
+      walksAllowed: 1,
+      strikeouts: 5,
+      homeRunsAllowed: 0,
+      hitBatters: 0,
+      wildPitches: 0,
+      wins: 1,
+      losses: 0,
+      saves: 0,
+      holds: 0,
+      blownSaves: 0,
+      qualityStarts: 1,
+      completeGames: 0,
+      shutouts: 0,
+      noHitters: 0,
+      perfectGames: 0,
+      fameBonuses: 0,
+      fameBoners: 0,
+      fameNet: 0,
+      pwar: 0.7,
+      lastUpdated: 1,
+    }]);
+
+    const report = await buildFranchiseValueInputRows({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      seasonNumber: 1,
+    });
+
+    expect(report.rows[0].warPreviewValues).toEqual({
+      battingWar: 0.2,
+      pitchingWar: 0.7,
+      fieldingWar: 0.1,
+      baserunningWar: 0.1,
+      totalWar: 1.1,
+      totalWarSource: 'derived-from-components',
+      trustedForFinalValue: false,
+    });
+    expect(report.rows[0].warInputAvailability.trustedForFinalValue).toBe(false);
+  });
+
+  test('leaves missing or invalid WAR preview numbers unavailable without changing final trust', async () => {
+    mocks.getAllBattingStats.mockResolvedValue([{
+      seasonId: 'season-1',
+      playerId: 'player-1',
+      playerName: 'Canon Input',
+      teamId: 'team-1',
+      games: 1,
+      pa: 4,
+      ab: 4,
+      hits: 2,
+      singles: 1,
+      doubles: 1,
+      triples: 0,
+      homeRuns: 0,
+      rbi: 1,
+      runs: 1,
+      walks: 0,
+      strikeouts: 1,
+      hitByPitch: 0,
+      sacFlies: 0,
+      sacBunts: 0,
+      stolenBases: 0,
+      caughtStealing: 0,
+      gidp: 0,
+      fameBonuses: 0,
+      fameBoners: 0,
+      fameNet: 0,
+      bwar: Number.NaN,
+      rwar: Number.POSITIVE_INFINITY,
+      fwar: Number.NEGATIVE_INFINITY,
+      totalWar: Number.NaN,
+      lastUpdated: 1,
+    }]);
+    mocks.getAllPitchingStats.mockResolvedValue([{
+      seasonId: 'season-1',
+      playerId: 'player-1',
+      playerName: 'Canon Input',
+      teamId: 'team-1',
+      games: 1,
+      gamesStarted: 1,
+      outsRecorded: 18,
+      hitsAllowed: 4,
+      runsAllowed: 1,
+      earnedRuns: 1,
+      walksAllowed: 1,
+      strikeouts: 5,
+      homeRunsAllowed: 0,
+      hitBatters: 0,
+      wildPitches: 0,
+      wins: 1,
+      losses: 0,
+      saves: 0,
+      holds: 0,
+      blownSaves: 0,
+      qualityStarts: 1,
+      completeGames: 0,
+      shutouts: 0,
+      noHitters: 0,
+      perfectGames: 0,
+      fameBonuses: 0,
+      fameBoners: 0,
+      fameNet: 0,
+      pwar: Number.NaN,
+      lastUpdated: 1,
+    }]);
+
+    const report = await buildFranchiseValueInputRows({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      seasonNumber: 1,
+    });
+
+    expect(report.rows[0].warPreviewValues).toEqual({
+      battingWar: null,
+      pitchingWar: null,
+      fieldingWar: null,
+      baserunningWar: null,
+      totalWar: null,
+      totalWarSource: 'unavailable',
+      trustedForFinalValue: false,
+    });
+    expect(report.rows[0].warInputAvailability.any).toBe(true);
+    expect(report.rows[0].warInputAvailability.trustedForFinalValue).toBe(false);
   });
 
   test('detects archive-backed WPA availability without trusting it for final value', async () => {
@@ -394,6 +575,10 @@ describe('franchise value input contract', () => {
     expect(farm).toEqual(expect.objectContaining({ currentTeamId: 'team-1', rosterStatus: 'FARM' }));
     expect(freeAgent).toEqual(expect.objectContaining({ currentTeamId: null, rosterStatus: null }));
     expect(unassigned).toEqual(expect.objectContaining({ currentTeamId: null, rosterStatus: null }));
+    expect(farm?.warInputAvailability.trustedForFinalValue).toBe(false);
+    expect(farm?.warPreviewValues.trustedForFinalValue).toBe(false);
+    expect(freeAgent?.warInputAvailability.trustedForFinalValue).toBe(false);
+    expect(unassigned?.warInputAvailability.trustedForFinalValue).toBe(false);
     expect(freeAgent?.limitations).toContain('Current franchise team assignment is unavailable.');
     expect(unassigned?.limitations).toContain('Current franchise team assignment is unavailable.');
   });
@@ -443,5 +628,19 @@ describe('franchise value input contract', () => {
       status: 'unadjusted',
       parkAdjustedValueInputsAvailable: false,
     }));
+  });
+
+  test('utility imports no storage write salary movement designation morale or expected-wins APIs', async () => {
+    const source = readFileSync('src/utils/franchiseValueInputs.ts', 'utf8');
+    const report = await buildFranchiseValueInputRows({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      seasonNumber: 1,
+    });
+
+    expect(source).not.toMatch(/save[A-Z]|set[A-Z]|persist[A-Z]|\bput\(|\bdelete\(|withInitialFranchiseSalary|recalculate|expectedWins|persistFranchiseDesignations|applyFranchiseMoraleEffect|confirmFranchiseRandomEvent/);
+    expect(report.trueValuePolicy.finalTrueValueCalculated).toBe(false);
+    expect(report.rows[0].warInputAvailability.trustedForFinalValue).toBe(false);
+    expect(report.rows[0].warPreviewValues.trustedForFinalValue).toBe(false);
   });
 });
