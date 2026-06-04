@@ -12,7 +12,7 @@ Manual smoke feedback remains a bug and feature backlog. The build order for Mod
 
 Latest committed checkpoint: `04b40ea Add season-end readiness report`.
 
-Latest working checkpoint: no active uncommitted slice. Next planned slice is Season Handoff Planning.
+Latest working checkpoint: Season Handoff Planning implemented pending verification/commit.
 
 Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved.
 
@@ -36,16 +36,18 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Team Hub Stadium tab provides a compact read-only spray evidence inspector with role/player/team/hand/outcome/zone/sort filters using scoped stadium foundation rows.
 - Team Hub player profiles surface read-only relationship context/proposal boundaries for player-player, fan/team, and hidden-safe scout/prospect contexts using the draft-only manual override validator.
 - Season-end readiness report exists as a pure read-only review contract for scoped game archives, random-event review state, morale evidence, daily summaries, expected-wins baselines, stadium records, designation readiness, relationship context, and blocked future systems.
+- Season handoff plan exists as a pure read-only blocked migration manifest that lists eligible review evidence, blocked carryover categories, unresolved blockers, warnings, and future decisions required before any Mode 3/offseason execution.
 
 ## Active Priority Order
 
 1. Season Handoff
-   - Later slice: decide what morale/event state carries into future seasons.
+   - Current slice: review-only planning contract exists; next step is skeptical audit/commit.
    - No Mode 3/offseason execution until scoped lifecycle rules are approved.
 
 ## Playable V1 Remaining Work
 
-- Future season handoff planning before any Mode 3 execution.
+- Skeptical audit/commit for the read-only season handoff planning checkpoint.
+- Broader Mode 2 v1 playable foundation wrap-up audit before any Mode 3 execution.
 
 ## Full Spec Parity Backlog
 

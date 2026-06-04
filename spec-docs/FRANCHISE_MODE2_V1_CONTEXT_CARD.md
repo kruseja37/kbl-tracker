@@ -10,7 +10,7 @@ Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
 Latest committed checkpoint: `04b40ea Add season-end readiness report`.
 
-Latest working checkpoint: no active uncommitted slice. Next planned slice is Season Handoff Planning.
+Latest working checkpoint: Season Handoff Planning implemented pending verification/commit.
 
 ## Current Completed
 
@@ -21,6 +21,7 @@ Latest working checkpoint: no active uncommitted slice. Next planned slice is Se
 - Team Hub Stadium tab includes a compact read-only spray evidence inspector with role/player/team/hand/outcome/zone/sort filters.
 - Team Hub player profiles include compact read-only relationship context/proposal boundaries using the draft-only manual override validator.
 - Season-end readiness checks can classify scoped Mode 2 evidence for review before future handoff while keeping Mode 3/offseason execution blocked.
+- Season handoff planning can produce a read-only blocked migration manifest for future carry-forward decisions without rollover/carryover writes.
 - Durable random-event log supports generated prompts, confirmation/dismissal, idempotent safe-effect application, and Team Hub workflow.
 - Canonical fan/player morale storage uses 0-99 scale; player morale starts at neutral `50`; manual scoped adjustments exist.
 - Fan morale prompt formulas cover game result, streaks, 7+ run blowouts, archive-backed no-hitter/perfect-game fame events, and performance-gap team fan morale prompts from durable expected-wins baseline evidence.
@@ -33,11 +34,14 @@ Latest working checkpoint: no active uncommitted slice. Next planned slice is Se
 
 Season Handoff Planning.
 
-Goal: decide what scoped evidence may carry forward to future seasons while keeping Mode 3/offseason execution blocked.
+Status: implemented pending verification/commit.
+
+Goal: decide what scoped evidence may be reviewed for future seasons while keeping Mode 3/offseason execution blocked.
 
 ## Next Queue
 
-1. Future season handoff planning only; no Mode 3 execution.
+1. Skeptical audit/commit for season handoff planning.
+2. Broader Mode 2 v1 playable foundation wrap-up audit.
 
 ## Hard Boundaries
 
