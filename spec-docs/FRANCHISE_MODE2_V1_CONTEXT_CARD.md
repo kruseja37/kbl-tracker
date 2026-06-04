@@ -8,9 +8,9 @@ Reliability-first Mode 2 completion. Finish a playable, scoped, auditable intern
 
 Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
-Latest committed checkpoint: `5f42e01 Add daily morale snapshot storage`.
+Latest committed checkpoint: `6c998e4 Add stadium records storage boundary`.
 
-Latest working checkpoint: Stadium Records Boundary implemented pending commit.
+Latest working checkpoint: no active uncommitted slice. Next planned slice is Richer Spray UI.
 
 ## Current Completed
 
@@ -28,9 +28,9 @@ Latest working checkpoint: Stadium Records Boundary implemented pending commit.
 
 ## Current Active Slice
 
-Stadium Records Boundary.
+Richer Spray UI.
 
-Goal: verify durable scoped stadium record evidence without promoting adaptive park factors, park-adjusted value/WAR consumers, random-event automation, or Mode 3 behavior.
+Goal: add richer read-only batting/pitching/fielding spray views from scoped stadium foundation data without promoting adaptive park factors, park-adjusted value/WAR consumers, random-event automation, or Mode 3 behavior.
 
 ## Next Queue
 
