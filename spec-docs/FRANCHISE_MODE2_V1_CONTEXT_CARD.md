@@ -8,9 +8,9 @@ Reliability-first Mode 2 completion. Finish a playable, scoped, auditable intern
 
 Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
-Latest committed checkpoint: `419759d Add relationship context preview`.
+Latest committed checkpoint: `04b40ea Add season-end readiness report`.
 
-Latest working checkpoint: Season-End Readiness Checks implemented pending verification/commit.
+Latest working checkpoint: no active uncommitted slice. Next planned slice is Season Handoff Planning.
 
 ## Current Completed
 
@@ -31,16 +31,13 @@ Latest working checkpoint: Season-End Readiness Checks implemented pending verif
 
 ## Current Active Slice
 
-Season-End Readiness Checks.
+Season Handoff Planning.
 
-Status: implemented pending verification/commit.
-
-Goal: audit whether Mode 2 v1 has the required scoped evidence, blockers, and handoff boundaries before any Mode 3/offseason execution.
+Goal: decide what scoped evidence may carry forward to future seasons while keeping Mode 3/offseason execution blocked.
 
 ## Next Queue
 
-1. Skeptical audit/commit for season-end readiness checks.
-2. Future season handoff planning only; no Mode 3 execution.
+1. Future season handoff planning only; no Mode 3 execution.
 
 ## Hard Boundaries
 

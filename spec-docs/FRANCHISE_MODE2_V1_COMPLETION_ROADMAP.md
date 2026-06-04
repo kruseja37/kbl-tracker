@@ -10,9 +10,9 @@ Manual smoke feedback remains a bug and feature backlog. The build order for Mod
 
 ## Current State As Of Latest Commit
 
-Latest committed checkpoint: `419759d Add relationship context preview`.
+Latest committed checkpoint: `04b40ea Add season-end readiness report`.
 
-Latest working checkpoint: Season-End Readiness Checks implemented pending verification/commit.
+Latest working checkpoint: no active uncommitted slice. Next planned slice is Season Handoff Planning.
 
 Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved.
 
@@ -45,7 +45,6 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 
 ## Playable V1 Remaining Work
 
-- Skeptical audit/commit for the read-only season-end readiness checkpoint.
 - Future season handoff planning before any Mode 3 execution.
 
 ## Full Spec Parity Backlog
