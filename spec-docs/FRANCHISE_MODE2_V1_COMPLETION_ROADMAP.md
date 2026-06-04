@@ -10,7 +10,7 @@ Manual smoke feedback remains a bug and feature backlog. The build order for Mod
 
 ## Current State As Of Latest Commit
 
-Latest checkpoint: `66a2a52 Surface true value and expected wins previews in Team Hub`.
+Latest checkpoint: Expected-wins baseline snapshot storage (pending commit).
 
 Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved.
 
@@ -27,41 +27,37 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Dynamic designation morale bridge exists for safe confirmation-gated prompt candidates, and Team Hub surfaces preview-only TEAM_MVP/ACE recognition candidates through the random-event workflow.
 - Numeric WAR preview values, position-relative True Value preview, and expected-wins preview exist as read-only, untrusted contracts.
 - Team Hub surfaces True Value and expected-wins previews in Mode 2 Foundation Status with explicit preview-only boundaries.
+- Expected-wins baseline snapshots persist scoped read-only baseline evidence from preview contracts while remaining untrusted for mutation and final formula consumers.
 
 ## Active Priority Order
 
-1. Expected-Wins Baseline Snapshot Storage
-   - Persist scoped read-only expected-wins baseline snapshots before any performance-gap morale prompts.
-   - Snapshots should preserve source contract versions and remain untrusted for automatic morale, designations, salary movement, daily drift, or Mode 3.
-
-2. Performance-Gap Fan Morale Prompts
+1. Performance-Gap Fan Morale Prompts
    - Compare actual standings/schedule record to durable expected-wins baseline snapshots.
    - Generate confirmation-gated team fan morale prompts only; no silent recalculation or GameTracker mutation.
 
-3. Designation Readiness / Fan Favorite-Albatross Promotion Decision
+2. Designation Readiness / Fan Favorite-Albatross Promotion Decision
    - Decide whether preview True Value/value-delta can support projected Fan Favorite/Albatross context.
    - Keep final designation persistence and salary movement blocked unless explicitly promoted.
    - See `FRANCHISE_MODE2_DYNAMIC_DESIGNATION_MORALE_BRIDGE.md`.
 
-4. Daily Morale Snapshots
+3. Daily Morale Snapshots
    - Convert confirmed prompt/manual history into durable daily high/low/average morale summaries.
    - Keep automatic drift/recovery blocked until snapshot and weighting policy is approved.
 
-5. Stadium Records + Richer Spray UI
+4. Stadium Records + Richer Spray UI
    - Add durable stadium records and richer batting/pitching/fielding spray views after preview surfaces are stable.
    - Keep adaptive park-factor persistence and final value/WAR consumers blocked until separately audited.
 
-6. Relationship Context
+5. Relationship Context
    - Relationships remain visible/draft/manual context only in v1.
    - No durable relationship mutation until fan/player morale is stable.
 
-7. Season Handoff
+6. Season Handoff
    - Later slice: decide what morale/event state carries into future seasons.
    - No Mode 3/offseason execution until scoped lifecycle rules are approved.
 
 ## Playable V1 Remaining Work
 
-- Expected-wins baseline snapshots.
 - Performance-gap fan morale prompts.
 - Designation readiness report and Fan Favorite/Albatross promotion decision.
 - Daily morale snapshots and season high/low/average summaries.

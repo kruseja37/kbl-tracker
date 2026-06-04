@@ -16,14 +16,14 @@
 
 Current Franchise v1 support is intentionally narrower than the full formula system below:
 
-- Implemented: durable scoped fan/player morale snapshots, event-backed history, confirmed random-event effects, and read-only Team Hub fan morale display aligned to the spec state labels.
+- Implemented: durable scoped fan/player morale snapshots, event-backed history, confirmed random-event effects, read-only Team Hub fan morale display aligned to the spec state labels, and durable read-only expected-wins baseline snapshots from preview contracts.
 - Partial: random-event prompts can be manually confirmed for safe scoped morale effects. Game-result base impacts now support confirmation-gated team fan morale prompts for both teams (`+1/-1` regular results, `+2/-2` shutouts), streak milestones/breaks generate confirmation-gated prompts, 7+ run blowout modifiers generate confirmation-gated team fan morale prompts, and archive-backed no-hitter/perfect-game fame events generate confirmation-gated team fan morale prompts. Score-only evidence remains team fan morale only after confirmation and never creates achievement prompts.
 - Player morale checkpoint: Mode 2 §17.14 remains the canonical design target. Franchise internal v1 stores player morale on the same canonical 0-99 morale scale as fan morale, starts every player at neutral `50`, and treats older personality-specific baselines in `playerMorale.ts` as non-canonical until personality weighting is explicitly approved.
 - Dynamic designation bridge: designations are now treated as a first-class morale dependency. See `FRANCHISE_MODE2_DYNAMIC_DESIGNATION_MORALE_BRIDGE.md` for the v1 confirmation-gated prompt contract.
-- Deferred: expected-wins baseline, performance-gap formula weighting, roster composition formula, designation-morale prompt generation, walk-offs, rival/playoff modifiers, full event catalog weighting, free-agency consequences, franchise health consequences, daily snapshots/high-low-average tracking, player morale influence/coupling, and automatic recalculation cadence.
+- Deferred: performance-gap formula weighting, roster composition formula, walk-offs, rival/playoff modifiers, full event catalog weighting, free-agency consequences, franchise health consequences, daily snapshots/high-low-average tracking, player morale influence/coupling, and automatic recalculation cadence.
 - Blocked for v1 until trusted inputs exist: True Value/value-delta finalization for Fan Favorite/Albatross, Captain hidden-charisma effects, beat reporter sentiment, relationship mutation, salary movement, narrative/random-event automation, and Mode 3/offseason mutation.
 
-Next roadmap steps are the dynamic designation morale bridge, expected-wins baseline, formula weighting, and daily morale snapshot tracking once canonical value/designation inputs are trusted.
+Next roadmap steps are performance-gap fan morale prompts from durable expected-wins baseline evidence, formula weighting, and daily morale snapshot tracking once canonical value/designation inputs are trusted.
 
 ---
 

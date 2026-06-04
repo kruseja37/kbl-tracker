@@ -8,7 +8,7 @@ Reliability-first Mode 2 completion. Finish a playable, scoped, auditable intern
 
 Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
-Latest checkpoint: `66a2a52 Surface true value and expected wins previews in Team Hub`.
+Latest checkpoint: Expected-wins baseline snapshot storage (pending commit).
 
 ## Current Completed
 
@@ -19,21 +19,20 @@ Latest checkpoint: `66a2a52 Surface true value and expected wins previews in Tea
 - Canonical fan/player morale storage uses 0-99 scale; player morale starts at neutral `50`; manual scoped adjustments exist.
 - Fan morale prompt formulas cover game result, streaks, 7+ run blowouts, and archive-backed no-hitter/perfect-game fame events.
 - Dynamic designation morale bridge supports safe preview TEAM_MVP/ACE recognition prompts through random-event confirmation.
-- Numeric WAR preview, position-relative True Value preview, expected-wins preview, and Team Hub display are read-only and untrusted.
+- Numeric WAR preview, position-relative True Value preview, expected-wins preview, Team Hub display, and durable expected-wins baseline snapshots are read-only and untrusted.
 
 ## Current Active Slice
 
-Expected-Wins Baseline Snapshot Storage.
+Performance-Gap Fan Morale Prompts.
 
-Goal: persist scoped read-only expected-wins baseline snapshots before building performance-gap fan morale prompts.
+Goal: compare actual scoped records against durable expected-wins baseline snapshots to create confirmation-gated team fan morale prompts.
 
 ## Next Queue
 
-1. Expected-wins baseline snapshots.
-2. Performance-gap fan morale prompts.
-3. Designation readiness / Fan Favorite-Albatross promotion decision.
-4. Daily morale snapshots.
-5. Stadium records and richer spray UI.
+1. Performance-gap fan morale prompts.
+2. Designation readiness / Fan Favorite-Albatross promotion decision.
+3. Daily morale snapshots.
+4. Stadium records and richer spray UI.
 
 ## Hard Boundaries
 
