@@ -10,7 +10,7 @@ Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
 Latest committed checkpoint: `6c998e4 Add stadium records storage boundary`.
 
-Latest working checkpoint: no active uncommitted slice. Next planned slice is Richer Spray UI.
+Latest working checkpoint: Richer Spray UI implemented pending commit.
 
 ## Current Completed
 
@@ -18,6 +18,7 @@ Latest working checkpoint: no active uncommitted slice. Next planned slice is Ri
 - Team Hub surfaces player profiles, profile edits, continuity, directory, foundation status, stadium foundation, random-event log, fan/player morale, True Value preview, and expected-wins preview.
 - Stadium foundation supports scoped identity, seed/static park-factor trust, archive-backed batting/pitching/fielding spray projection, and preview-only adaptive factors.
 - Stadium records boundary can persist scoped read-only record evidence for team/game records, spray leaders, and safe no-hitter/perfect-game archive context.
+- Team Hub Stadium tab includes a compact read-only spray evidence inspector with role/player/team/hand/outcome/zone/sort filters.
 - Durable random-event log supports generated prompts, confirmation/dismissal, idempotent safe-effect application, and Team Hub workflow.
 - Canonical fan/player morale storage uses 0-99 scale; player morale starts at neutral `50`; manual scoped adjustments exist.
 - Fan morale prompt formulas cover game result, streaks, 7+ run blowouts, archive-backed no-hitter/perfect-game fame events, and performance-gap team fan morale prompts from durable expected-wins baseline evidence.
@@ -30,12 +31,12 @@ Latest working checkpoint: no active uncommitted slice. Next planned slice is Ri
 
 Richer Spray UI.
 
-Goal: add richer read-only batting/pitching/fielding spray views from scoped stadium foundation data without promoting adaptive park factors, park-adjusted value/WAR consumers, random-event automation, or Mode 3 behavior.
+Goal: verify the read-only Team Hub spray evidence inspector without promoting adaptive park factors, park-adjusted value/WAR consumers, random-event automation, or Mode 3 behavior.
 
 ## Next Queue
 
-1. Richer spray UI.
-2. Relationship context display.
+1. Relationship context display.
+2. Season-end readiness checks.
 
 ## Hard Boundaries
 

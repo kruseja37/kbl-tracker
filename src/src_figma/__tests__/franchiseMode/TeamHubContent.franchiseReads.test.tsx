@@ -823,7 +823,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(fanSpecRegion).getByText(/True Value inputs: BLOCKED/i)).toBeInTheDocument();
     expect(within(fanSpecRegion).getByText(/Beat reporter sentiment: BLOCKED/i)).toBeInTheDocument();
     expect(within(fanSpecRegion).getByText(/Free-agency consequences: DEFERRED/i)).toBeInTheDocument();
-    expect(within(fanSpecRegion).getByText(/Daily snapshots \/ high-low-average tracking: DEFERRED/i)).toBeInTheDocument();
+    expect(within(fanSpecRegion).getByText(/Daily snapshots \/ high-low-average summaries: IMPLEMENTED/i)).toBeInTheDocument();
     expect(within(fanSpecRegion).getByText(/Player morale influence\/coupling: DEFERRED/i)).toBeInTheDocument();
     expect(within(fanSpecRegion).queryByRole('button')).not.toBeInTheDocument();
   });
@@ -1120,28 +1120,117 @@ describe('TeamHubContent franchise-owned visible reads', () => {
         fieldLocation: { x: 74, y: 48, zone: 'Z05' },
         exitType: 'line_drive',
       },
-    }]);
-    mocks.mockGetGameFieldingEvents.mockResolvedValueOnce([{
-      fieldingEventId: 'fielding-1',
-      gameId: 'game-archive-1',
-      atBatEventId: 'game-archive-1-1',
-      sequence: 0,
-      playerId: 'fielder-1',
-      playerName: 'Fielder One',
-      position: 'RF',
-      teamId: 'team-1',
-      playType: 'putout',
-      difficulty: 'routine',
+    }, {
+      eventId: 'wrong-scope-1',
+      gameId: 'wrong-scope-game',
+      eventIndex: 1,
+      timestamp: 201,
+      batterId: 'wrong-scope-batter',
+      batterName: 'Wrong Scope Batter',
+      batterTeamId: 'team-2',
+      pitcherId: 'wrong-scope-pitcher',
+      pitcherName: 'Wrong Scope Pitcher',
+      pitcherTeamId: 'team-1',
+      result: 'HR',
+      rbiCount: 0,
+      runsScored: [],
+      inning: 1,
+      halfInning: 'TOP',
+      outs: 0,
+      runners: { first: null, second: null, third: null },
+      awayScore: 0,
+      homeScore: 0,
+      outsAfter: 0,
+      runnersAfter: { first: null, second: null, third: null },
+      awayScoreAfter: 0,
+      homeScoreAfter: 0,
+      leverageIndex: 1,
+      winProbabilityBefore: 0.5,
+      winProbabilityAfter: 0.48,
+      wpa: 0.02,
       ballInPlay: {
         trajectory: 'fly',
-        zone: 5,
-        velocity: 'medium',
-        fielderIds: ['fielder-1'],
-        primaryFielderId: 'fielder-1',
+        zone: 0,
+        velocity: 'hard',
+        fielderIds: ['wrong-scope-fielder'],
+        primaryFielderId: 'wrong-scope-fielder',
       },
-      success: true,
-      runsPreventedOrAllowed: 0,
+      fameEvents: [],
+      isLeadoff: true,
+      isClutch: false,
+      isWalkOff: false,
+      franchiseId: 'other-franchise',
+      seasonId: 'other-season',
+      statsScopeId: 'other-season',
+      seasonNumber: 2,
+      parkContext: {
+        stadiumId: 'apple-field',
+        stadiumName: 'Apple Field',
+        parkFactors,
+      },
+      teamContext: {
+        battingTeam: { teamId: 'team-2', teamName: 'Copied Beta' },
+        fieldingTeam: { teamId: 'team-1', teamName: 'Copied Alpha' },
+      },
+      batterContext: {
+        playerId: 'wrong-scope-batter',
+        playerName: 'Wrong Scope Batter',
+        handedness: 'L',
+      },
+      pitcherContext: {
+        playerId: 'wrong-scope-pitcher',
+        playerName: 'Wrong Scope Pitcher',
+        handedness: 'R',
+      },
+      enrichment: {
+        fieldLocation: { x: 30, y: 30, zone: 'Z03' },
+        exitType: 'fly_ball',
+      },
     }]);
+    mocks.mockGetGameFieldingEvents.mockResolvedValueOnce([
+      {
+        fieldingEventId: 'fielding-1',
+        gameId: 'game-archive-1',
+        atBatEventId: 'game-archive-1-1',
+        sequence: 0,
+        playerId: 'fielder-1',
+        playerName: 'Fielder One',
+        position: 'RF',
+        teamId: 'team-1',
+        playType: 'putout',
+        difficulty: 'routine',
+        ballInPlay: {
+          trajectory: 'fly',
+          zone: 5,
+          velocity: 'medium',
+          fielderIds: ['fielder-1'],
+          primaryFielderId: 'fielder-1',
+        },
+        success: true,
+        runsPreventedOrAllowed: 0,
+      },
+      {
+        fieldingEventId: 'orphan-fielding',
+        gameId: 'game-archive-1',
+        atBatEventId: 'missing-at-bat',
+        sequence: 1,
+        playerId: 'orphan-fielder',
+        playerName: 'Orphan Fielder',
+        position: 'CF',
+        teamId: 'team-1',
+        playType: 'assist',
+        difficulty: 'routine',
+        ballInPlay: {
+          trajectory: 'ground',
+          zone: 4,
+          velocity: 'medium',
+          fielderIds: ['orphan-fielder'],
+          primaryFielderId: 'orphan-fielder',
+        },
+        success: true,
+        runsPreventedOrAllowed: 0,
+      },
+    ]);
 
     render(<TeamHubContent />);
 
@@ -1159,10 +1248,31 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(stadiumRegion).getByText('RF 347')).toBeInTheDocument();
     expect(within(stadiumRegion).getByText(/Archive rows: 1. Spray rows: 3/i)).toBeInTheDocument();
     expect(within(stadiumRegion).getByText(/3 selected-stadium row\(s\): batting 1, pitching 1, fielding 1/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText('SPRAY EVIDENCE INSPECTOR')).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText(/3 ROW\(S\) · READ ONLY/i)).toBeInTheDocument();
     expect(within(stadiumRegion).getByText('Batter One')).toBeInTheDocument();
     expect(within(stadiumRegion).getByText('Pitcher One')).toBeInTheDocument();
     expect(within(stadiumRegion).getByText('Fielder One')).toBeInTheDocument();
-    expect(within(stadiumRegion).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(stadiumRegion).getAllByText(/1B · Shallow RF · oppo \/ shallow · Hand R/i).length).toBeGreaterThan(0);
+    expect(within(stadiumRegion).getAllByText(/Source game game-archive-1 · Evidence game-archive-1-1 · Source at-bat-event/i).length).toBeGreaterThan(0);
+    expect(within(stadiumRegion).getByText(/Source game game-archive-1 · Evidence fielding-1 · Source fielding-event/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).queryByText('Wrong Scope Batter')).not.toBeInTheDocument();
+    expect(within(stadiumRegion).queryByText('Orphan Fielder')).not.toBeInTheDocument();
+    expect(within(stadiumRegion).queryByText(/hiddenPersonalityModifiers|trueGrade|hidden scout truth/i)).not.toBeInTheDocument();
+
+    fireEvent.change(within(stadiumRegion).getByRole('combobox', { name: /Spray role filter/i }), {
+      target: { value: 'batting' },
+    });
+    const filteredArticles = within(stadiumRegion).getAllByRole('article');
+    expect(filteredArticles).toHaveLength(1);
+    expect(within(filteredArticles[0]).getByText('Batter One')).toBeInTheDocument();
+    expect(filteredArticles[0]).not.toHaveTextContent('Pitcher One');
+    expect(filteredArticles[0]).not.toHaveTextContent('Fielder One');
+    expect(within(stadiumRegion).getByText(/1 ROW\(S\) · READ ONLY/i)).toBeInTheDocument();
+
+    expect(within(stadiumRegion).getByText(/Storage boundary exists. Evidence-only records/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText(/writes no stadium records, adaptive factors, random events, morale changes, designations, salary changes, relationship changes, stories, offseason state, or player-profile automation/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).queryByRole('button', { name: /generate|persist|confirm|dismiss|save|delete|offseason|mode 3/i })).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
     expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
   });

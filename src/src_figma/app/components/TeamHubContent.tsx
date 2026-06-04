@@ -90,6 +90,7 @@ import {
   buildFranchiseStadiumFoundationReport,
   filterAndSortFranchiseSprayChartRows,
   type FranchiseStadiumFoundationReport,
+  type FranchiseSprayChartFilterSortOptions,
   type FranchiseSprayChartRole,
 } from "../../../utils/franchiseStadiumFoundation";
 import {
@@ -4207,6 +4208,14 @@ function FranchiseStadiumFoundationPanel({
   isLoading,
   error,
 }: FranchiseStadiumFoundationPanelProps) {
+  const [sprayRole, setSprayRole] = useState<FranchiseSprayChartRole | 'all'>('all');
+  const [sprayPlayerId, setSprayPlayerId] = useState('all');
+  const [sprayTeamId, setSprayTeamId] = useState('all');
+  const [sprayHandedness, setSprayHandedness] = useState<'all' | 'L' | 'R' | 'S'>('all');
+  const [sprayOutcome, setSprayOutcome] = useState('all');
+  const [sprayZoneId, setSprayZoneId] = useState('all');
+  const [spraySortBy, setSpraySortBy] = useState<NonNullable<FranchiseSprayChartFilterSortOptions['sortBy']>>('timestamp');
+  const [spraySortDirection, setSpraySortDirection] = useState<'asc' | 'desc'>('desc');
   const stadiumOptions = useMemo(() => {
     const reportNames = report?.stadiumIdentity.stadiums.map((stadium) => stadium.stadiumName) ?? [];
     return uniqueStrings([...stadiums, ...reportNames]).sort((left, right) => left.localeCompare(right));
@@ -4225,9 +4234,64 @@ function FranchiseStadiumFoundationPanel({
       sortDirection: 'desc',
     });
   }, [report, selected]);
+  useEffect(() => {
+    if (sprayPlayerId !== 'all' && !selectedRows.some((row) => row.playerId === sprayPlayerId)) {
+      setSprayPlayerId('all');
+    }
+    if (sprayTeamId !== 'all' && !selectedRows.some((row) => row.teamId === sprayTeamId)) {
+      setSprayTeamId('all');
+    }
+    if (sprayOutcome !== 'all' && !selectedRows.some((row) => row.outcome === sprayOutcome)) {
+      setSprayOutcome('all');
+    }
+    if (sprayZoneId !== 'all' && !selectedRows.some((row) => row.zoneId === sprayZoneId)) {
+      setSprayZoneId('all');
+    }
+  }, [selectedRows, sprayOutcome, sprayPlayerId, sprayTeamId, sprayZoneId]);
   const selectedRowsByRole = (role: FranchiseSprayChartRole) =>
     selectedRows.filter((row) => row.role === role).length;
-  const recentRows = selectedRows.slice(0, 6);
+  const playerOptions = useMemo(() => {
+    const byId = new Map<string, string>();
+    selectedRows.forEach((row) => {
+      if (row.playerId) byId.set(row.playerId, row.playerName || row.playerId);
+    });
+    return Array.from(byId.entries()).sort((left, right) => left[1].localeCompare(right[1]));
+  }, [selectedRows]);
+  const teamOptions = useMemo(() => uniqueStrings(selectedRows.map((row) => row.teamId)).sort((left, right) => left.localeCompare(right)), [selectedRows]);
+  const outcomeOptions = useMemo(() => uniqueStrings(selectedRows.map((row) => row.outcome)).sort((left, right) => left.localeCompare(right)), [selectedRows]);
+  const zoneOptions = useMemo(() => {
+    const byId = new Map<string, string>();
+    selectedRows.forEach((row) => {
+      if (row.zoneId) byId.set(row.zoneId, row.zoneName ?? row.zoneId);
+    });
+    return Array.from(byId.entries()).sort((left, right) => left[1].localeCompare(right[1]));
+  }, [selectedRows]);
+  const filteredSprayRows = useMemo(() => {
+    if (!report || !selected) return [];
+    return filterAndSortFranchiseSprayChartRows(report.sprayCharts.rows, {
+      stadiumId: selected.stadiumId,
+      role: sprayRole,
+      playerId: sprayPlayerId === 'all' ? undefined : sprayPlayerId,
+      teamId: sprayTeamId === 'all' ? undefined : sprayTeamId,
+      handedness: sprayHandedness === 'all' ? undefined : sprayHandedness,
+      outcome: sprayOutcome === 'all' ? undefined : sprayOutcome,
+      zoneId: sprayZoneId === 'all' ? undefined : sprayZoneId,
+      sortBy: spraySortBy,
+      sortDirection: spraySortDirection,
+    });
+  }, [
+    report,
+    selected,
+    sprayHandedness,
+    sprayOutcome,
+    sprayPlayerId,
+    sprayRole,
+    spraySortBy,
+    spraySortDirection,
+    sprayTeamId,
+    sprayZoneId,
+  ]);
+  const visibleSprayRows = filteredSprayRows.slice(0, 12);
   const dimensions = selected?.dimensions ?? null;
   const seedFactors = selected?.seedParkFactors ?? null;
 
@@ -4292,8 +4356,8 @@ function FranchiseStadiumFoundationPanel({
           />
           <FoundationStatusCard
             title="STADIUM RECORDS"
-            status={selected?.stadiumRecords.status ?? 'blocked'}
-            body="Future consumer only. Records are not persisted from Team Hub."
+            status="preview-only"
+            body="Storage boundary exists. Evidence-only records; no Team Hub edit/delete/generate controls."
           />
         </div>
       </div>
@@ -4332,24 +4396,130 @@ function FranchiseStadiumFoundationPanel({
         </div>
 
         <div className="border-2 border-[#4A6844] bg-[#4A6844] p-3">
-          <div className="mb-2 text-[10px] font-bold text-[#C4A853]">RECENT SPRAY EVIDENCE</div>
-          {recentRows.length > 0 ? (
-            <div className="space-y-2">
-              {recentRows.map((row) => (
-                <div key={`${row.role}:${row.eventId}:${row.playerId}`} className="border border-[#E8E8D8]/20 p-2 text-[10px] leading-snug text-[#E8E8D8]/75">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-bold text-[#E8E8D8]">{row.playerName}</span>
-                    <span className="text-[#C4A853]">{row.role.toUpperCase()}</span>
-                  </div>
-                  <div>
-                    {row.outcome} · {row.zoneName ?? 'Unknown zone'} · {row.direction} / {row.depth}
-                  </div>
-                  <div className="text-[#E8E8D8]/50">
-                    Team {row.teamId} · Game {row.gameId}
-                  </div>
-                </div>
-              ))}
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="text-[10px] font-bold text-[#C4A853]">SPRAY EVIDENCE INSPECTOR</div>
+            <div className="text-[9px] font-bold text-[#E8E8D8]/60">
+              {filteredSprayRows.length} ROW(S) · READ ONLY
             </div>
+          </div>
+
+          {selectedRows.length > 0 ? (
+            <>
+              <div className="mb-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                <SprayFilterSelect
+                  label="Role"
+                  value={sprayRole}
+                  onChange={(value) => setSprayRole(value as FranchiseSprayChartRole | 'all')}
+                  options={[
+                    ['all', 'All roles'],
+                    ['batting', 'Batting'],
+                    ['pitching', 'Pitching'],
+                    ['fielding', 'Fielding'],
+                  ]}
+                />
+                <SprayFilterSelect
+                  label="Player"
+                  value={sprayPlayerId}
+                  onChange={setSprayPlayerId}
+                  options={[
+                    ['all', 'All players'],
+                    ...playerOptions.map(([playerId, playerName]) => [playerId, `${playerName} (${playerId})`] as [string, string]),
+                  ]}
+                />
+                <SprayFilterSelect
+                  label="Team"
+                  value={sprayTeamId}
+                  onChange={setSprayTeamId}
+                  options={[
+                    ['all', 'All teams'],
+                    ...teamOptions.map((teamId) => [teamId, teamId] as [string, string]),
+                  ]}
+                />
+                <SprayFilterSelect
+                  label="Hand"
+                  value={sprayHandedness}
+                  onChange={(value) => setSprayHandedness(value as 'all' | 'L' | 'R' | 'S')}
+                  options={[
+                    ['all', 'All hands'],
+                    ['L', 'L'],
+                    ['R', 'R'],
+                    ['S', 'S'],
+                  ]}
+                />
+                <SprayFilterSelect
+                  label="Outcome"
+                  value={sprayOutcome}
+                  onChange={setSprayOutcome}
+                  options={[
+                    ['all', 'All outcomes'],
+                    ...outcomeOptions.map((outcome) => [outcome, outcome] as [string, string]),
+                  ]}
+                />
+                <SprayFilterSelect
+                  label="Zone"
+                  value={sprayZoneId}
+                  onChange={setSprayZoneId}
+                  options={[
+                    ['all', 'All zones'],
+                    ...zoneOptions.map(([zoneId, zoneName]) => [zoneId, `${zoneName} (${zoneId})`] as [string, string]),
+                  ]}
+                />
+                <SprayFilterSelect
+                  label="Sort"
+                  value={spraySortBy}
+                  onChange={(value) => setSpraySortBy(value as NonNullable<FranchiseSprayChartFilterSortOptions['sortBy']>)}
+                  options={[
+                    ['timestamp', 'Time'],
+                    ['player', 'Player'],
+                    ['team', 'Team'],
+                    ['stadium', 'Stadium'],
+                    ['outcome', 'Outcome'],
+                    ['zone', 'Zone'],
+                  ]}
+                />
+                <SprayFilterSelect
+                  label="Order"
+                  value={spraySortDirection}
+                  onChange={(value) => setSpraySortDirection(value as 'asc' | 'desc')}
+                  options={[
+                    ['desc', 'Newest / Z-A'],
+                    ['asc', 'Oldest / A-Z'],
+                  ]}
+                />
+              </div>
+
+              {visibleSprayRows.length > 0 ? (
+                <div className="space-y-2">
+                  {visibleSprayRows.map((row) => (
+                    <article key={`${row.role}:${row.eventId}:${row.playerId}`} className="border border-[#E8E8D8]/20 p-2 text-[10px] leading-snug text-[#E8E8D8]/75">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-bold text-[#E8E8D8]">{row.playerName}</span>
+                        <span className="text-[#C4A853]">{row.role.toUpperCase()}</span>
+                      </div>
+                      <div>
+                        {row.outcome} · {row.zoneName ?? 'Unknown zone'} · {row.direction} / {row.depth}
+                        {row.handedness ? ` · Hand ${row.handedness}` : ''}
+                      </div>
+                      <div>
+                        Team {row.teamId} · Stadium {row.stadiumName} ({row.stadiumId})
+                      </div>
+                      <div className="text-[#E8E8D8]/50">
+                        Source game {row.gameId} · Evidence {row.eventId} · Source {row.source}
+                      </div>
+                    </article>
+                  ))}
+                  {filteredSprayRows.length > visibleSprayRows.length && (
+                    <div className="border border-[#E8E8D8]/15 p-2 text-[10px] text-[#E8E8D8]/60">
+                      Showing first {visibleSprayRows.length} filtered row(s). Narrow the filters to inspect the remaining evidence.
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="border border-[#E8E8D8]/15 p-2 text-[10px] leading-snug text-[#E8E8D8]/65">
+                  No spray rows match the current read-only filters.
+                </div>
+              )}
+            </>
           ) : (
             <div className="text-[10px] leading-snug text-[#E8E8D8]/65">
               No scoped spray event detail yet. Completed-game archive rows can still prove stadium identity/sample.
@@ -4359,9 +4529,37 @@ function FranchiseStadiumFoundationPanel({
       </div>
 
       <div className="mt-3 border-2 border-[#4A6844] bg-[#3F563F] p-2 text-[10px] leading-snug text-[#E8E8D8]/65">
-        This panel writes no stadium records, adaptive factors, random events, morale changes, or player-profile automation.
+        This panel writes no stadium records, adaptive factors, random events, morale changes, designations, salary changes, relationship changes, stories, offseason state, or player-profile automation.
       </div>
     </section>
+  );
+}
+
+function SprayFilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<[string, string]>;
+}) {
+  return (
+    <label className="block">
+      <div className="mb-1 text-[9px] font-bold text-[#C4A853]">{label}</div>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full border border-[#E8E8D8]/20 bg-[#3F563F] px-2 py-1.5 text-[10px] text-[#E8E8D8]"
+        aria-label={`Spray ${label.toLowerCase()} filter`}
+      >
+        {options.map(([optionValue, optionLabel]) => (
+          <option key={optionValue} value={optionValue}>{optionLabel}</option>
+        ))}
+      </select>
+    </label>
   );
 }
 

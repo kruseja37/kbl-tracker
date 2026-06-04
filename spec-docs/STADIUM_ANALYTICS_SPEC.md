@@ -393,6 +393,16 @@ function archiveSeasonParkFactors(stadium: Stadium, season: number): void {
 
 ## 4. Spray Chart Tracking
 
+### 4.0 Franchise Internal V1 Boundary
+
+Franchise Mode 2 v1 now exposes archive-backed spray evidence in Team Hub as a compact read-only inspector:
+
+- Implemented UI: selected-stadium spray rows can be inspected with role, player, team, handedness, outcome, zone, sort, and order filters.
+- Evidence source: `franchiseStadiumFoundation` rows projected from scoped completed GameTracker at-bat and linked fielding evidence.
+- Fielding safety: orphan fielding rows remain excluded unless linked to scoped at-bat evidence.
+- Blocked: spray UI does not write stadium records, persist adaptive factors, generate random events, mutate morale/designations/salary/relationships, create stories, change GameTracker behavior, or unlock Mode 3.
+- Deferred: full stadium diagram plotting, heat maps, distance rings, persisted spray stores, and final park-adjusted WAR/value consumers.
+
 ### 4.1 Spray Zone Definitions
 
 ```typescript
@@ -573,7 +583,7 @@ The first Franchise Mode 2 v1 stadium-records layer is intentionally narrower th
 - Strict scope: records require exact `franchiseId`, `seasonId`, `statsScopeId`, positive `seasonNumber`, and non-empty `stadiumId`; wrong-scope completed games/events are not normalized into the current franchise.
 - Fielding spray records preserve the foundation boundary: fielding evidence requires linked scoped at-bat evidence.
 - Blocked: adaptive park-factor persistence, final park-adjusted WAR/value consumers, automatic random-event prompts, morale/designation/salary/relationship mutation, story persistence beyond the existing random-event log, and Mode 3/offseason behavior.
-- Deferred: full stadium record notifications, narrative hooks, home run distance records, career stadium leaderboards, and richer spray UI.
+- Deferred: full stadium record notifications, narrative hooks, home run distance records, career stadium leaderboards, and persisted stadium-record UI management.
 
 ### 5.1 Record Categories
 

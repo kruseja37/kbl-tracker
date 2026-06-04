@@ -12,7 +12,7 @@ Manual smoke feedback remains a bug and feature backlog. The build order for Mod
 
 Latest committed checkpoint: `6c998e4 Add stadium records storage boundary`.
 
-Latest working checkpoint: no active uncommitted slice. Next planned slice is Richer Spray UI.
+Latest working checkpoint: Richer Spray UI implemented pending commit.
 
 Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved.
 
@@ -33,24 +33,20 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Expected-wins baseline snapshots persist scoped read-only baseline evidence from preview contracts while remaining untrusted for mutation and final formula consumers.
 - Daily morale snapshot summaries persist scoped high/low/average evidence from confirmed/manual morale history while remaining read-only and untrusted for drift, recovery, relationship effects, and Mode 3.
 - Stadium records boundary persists scoped read-only evidence for conservative team/game stadium records, spray event leaders, and safe no-hitter/perfect-game archive context while adaptive factors and final park-adjusted consumers remain blocked.
+- Team Hub Stadium tab provides a compact read-only spray evidence inspector with role/player/team/hand/outcome/zone/sort filters using scoped stadium foundation rows.
 
 ## Active Priority Order
 
-1. Richer Spray UI
-   - Add richer batting/pitching/fielding spray views after foundation and record-evidence storage are stable.
-   - Keep adaptive park-factor persistence and final value/WAR consumers blocked until separately audited.
-
-2. Relationship Context
+1. Relationship Context
    - Relationships remain visible/draft/manual context only in v1.
    - No durable relationship mutation until fan/player morale is stable.
 
-3. Season Handoff
+2. Season Handoff
    - Later slice: decide what morale/event state carries into future seasons.
    - No Mode 3/offseason execution until scoped lifecycle rules are approved.
 
 ## Playable V1 Remaining Work
 
-- Richer spray-chart UI.
 - Relationship context display only, without mutation.
 - Season-end readiness checks before any Mode 3 handoff.
 
