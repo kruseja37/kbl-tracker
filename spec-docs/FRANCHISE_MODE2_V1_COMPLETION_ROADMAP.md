@@ -4,7 +4,15 @@ Recommended reasoning effort: high for implementation slices, medium for audits 
 
 ## Current Source Of Truth
 
-This document supersedes ad hoc manual-smoke notes as the active Mode 2 v1 roadmap. Manual smoke feedback remains a bug and feature backlog, but the build order for Mode 2 should follow this file unless explicitly revised.
+This document is the canonical Mode 2 v1 roadmap. `FRANCHISE_MODE2_V1_CONTEXT_CARD.md` is the compact resume card, and older roadmap/resync docs are historical context unless this file explicitly references them.
+
+Manual smoke feedback remains a bug and feature backlog. The build order for Mode 2 should follow this file unless explicitly revised.
+
+## Current State As Of Latest Commit
+
+Latest checkpoint: `66a2a52 Surface true value and expected wins previews in Team Hub`.
+
+Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved.
 
 ## Completed Checkpoints
 
@@ -14,31 +22,63 @@ This document supersedes ad hoc manual-smoke notes as the active Mode 2 v1 roadm
 - Stadium foundation is surfaced read-only in Team Hub.
 - Random event prompts now have durable scoped records, confirmation/dismiss state, idempotent safe-effect application, and Team Hub workflow.
 - Canonical fan/player morale snapshots exist on the 0-99 scale, with player morale starting at neutral `50`.
+- Team Hub exposes fan/player morale history and manual scoped morale controls while keeping profiles, salary, relationships, stories, and Mode 3 separate.
 - Fan morale prompt formulas currently cover confirmed game results, streaks, 7+ run blowouts, and archive-backed no-hitter/perfect-game fame events.
+- Dynamic designation morale bridge exists for safe confirmation-gated prompt candidates, and Team Hub surfaces preview-only TEAM_MVP/ACE recognition candidates through the random-event workflow.
+- Numeric WAR preview values, position-relative True Value preview, and expected-wins preview exist as read-only, untrusted contracts.
+- Team Hub surfaces True Value and expected-wins previews in Mode 2 Foundation Status with explicit preview-only boundaries.
 
 ## Active Priority Order
 
-1. Dynamic Designation Morale Bridge
-   - Treat designations as first-class morale context before deep expected-wins work.
-   - Map designation identity, changes, roster moves, and performance context into confirmation-gated morale prompt candidates.
+1. Expected-Wins Baseline Snapshot Storage
+   - Persist scoped read-only expected-wins baseline snapshots before any performance-gap morale prompts.
+   - Snapshots should preserve source contract versions and remain untrusted for automatic morale, designations, salary movement, daily drift, or Mode 3.
+
+2. Performance-Gap Fan Morale Prompts
+   - Compare actual standings/schedule record to durable expected-wins baseline snapshots.
+   - Generate confirmation-gated team fan morale prompts only; no silent recalculation or GameTracker mutation.
+
+3. Designation Readiness / Fan Favorite-Albatross Promotion Decision
+   - Decide whether preview True Value/value-delta can support projected Fan Favorite/Albatross context.
+   - Keep final designation persistence and salary movement blocked unless explicitly promoted.
    - See `FRANCHISE_MODE2_DYNAMIC_DESIGNATION_MORALE_BRIDGE.md`.
 
-2. Expected Wins + Performance Gap
-   - Expected wins remain True Value based per fan morale spec.
-   - Contract/payroll baselines may describe preseason expectation context, but should not replace True Value performance-gap logic.
-   - Fan Favorite/Albatross value-delta sentiment belongs to the designation bridge, not expected-wins baseline.
+4. Daily Morale Snapshots
+   - Convert confirmed prompt/manual history into durable daily high/low/average morale summaries.
+   - Keep automatic drift/recovery blocked until snapshot and weighting policy is approved.
 
-3. Formula Weighting + Daily Snapshots
-   - Convert confirmed prompt history into daily high/low/average morale summaries.
-   - Keep automatic recalculation blocked until expected-wins and designation inputs are trusted.
+5. Stadium Records + Richer Spray UI
+   - Add durable stadium records and richer batting/pitching/fielding spray views after preview surfaces are stable.
+   - Keep adaptive park-factor persistence and final value/WAR consumers blocked until separately audited.
 
-4. Relationship Context
+6. Relationship Context
    - Relationships remain visible/draft/manual context only in v1.
    - No durable relationship mutation until fan/player morale is stable.
 
-5. Season Handoff
+7. Season Handoff
    - Later slice: decide what morale/event state carries into future seasons.
    - No Mode 3/offseason execution until scoped lifecycle rules are approved.
+
+## Playable V1 Remaining Work
+
+- Expected-wins baseline snapshots.
+- Performance-gap fan morale prompts.
+- Designation readiness report and Fan Favorite/Albatross promotion decision.
+- Daily morale snapshots and season high/low/average summaries.
+- Stadium record storage and richer spray-chart UI.
+- Relationship context display only, without mutation.
+- Season-end readiness checks before any Mode 3 handoff.
+
+## Full Spec Parity Backlog
+
+- Final True Value promotion, salary movement, and salary lifecycle automation.
+- Projected and locked dynamic designations, including season-end locking/carryover.
+- Captain hidden-charisma/leadership policy and morale amplification.
+- Full fan morale formula weighting, beat reporter sentiment, drift/recovery, franchise health, free-agency consequences, and trade scrutiny.
+- Durable relationship state, relationship mutation, and chemistry/narrative effects.
+- Story persistence beyond the random-event log and full narrative engine integration.
+- Adaptive park-factor persistence, stadium historical records, and final park-adjusted value/WAR consumers.
+- Awards persistence, playoffs/finals summaries, complete season handoff, and Mode 3/offseason execution.
 
 ## Locked V1 Boundaries
 
@@ -47,20 +87,37 @@ This document supersedes ad hoc manual-smoke notes as the active Mode 2 v1 roadm
 - GameTracker archive-backed events can support prompts and confirmed effects, but GameTracker completion must not silently mutate canonical franchise morale.
 - Confirmed random events can apply safe fan/player morale effects only through the canonical morale state model.
 - Dynamic designation effects must enter v1 as confirmation-gated random-event prompts, not automatic designation/profile/morale mutation.
-- Fan Favorite and Albatross final behavior requires trusted True Value/value-delta inputs.
+- True Value, value deltas, and expected wins are currently preview-only and not trusted for final designations, salary movement, morale automation, daily snapshots, or Mode 3.
+- Fan Favorite and Albatross final behavior requires an explicit promotion decision for trusted True Value/value-delta inputs.
 - Captain morale amplification remains blocked until hidden-charisma reveal/safety policy is approved.
 - Fan Hopeful morale boosts must be prospect-safe and must not expose hidden FARM truth.
-- Profile automation, salary movement, True Value, designation changes, relationship mutation, story persistence beyond the random-event log, Mode 3/offseason effects, and unrevealed FARM hidden-truth effects remain blocked.
+- Profile automation, salary movement, final True Value, final designation changes, relationship mutation, story persistence beyond the random-event log, Mode 3/offseason effects, and unrevealed FARM hidden-truth effects remain blocked.
 - Existing prototype/global `useFanMorale` paths are not canonical Franchise v1 morale storage.
+
+## Operating Rules
+
+- Docs are memory, commits are checkpoints, prompts are the workflow.
+- Commit north-star doc changes before relying on them as durable context.
+- Before every new Mode 2 implementation slice, read:
+  - `FRANCHISE_MODE2_V1_CONTEXT_CARD.md`
+  - `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`
+  - the feature-specific spec being touched.
+- Every Mode 2 implementation or audit prompt should state the current slice, current phase, recommended reasoning effort, and hard boundaries.
+- Every meaningful checkpoint must either update the roadmap/context card or explicitly state `no roadmap update needed` in the audit/commit summary.
+- Do not promote preview-only systems to trusted or mutating unless this roadmap names that promotion as the active slice.
+- Commit rhythm: implement, focused tests/build/diff check, skeptical audit, patch if needed, commit, then derive the next prompt from this roadmap.
+- If conversation context is compacted or uncertain, recover from repo truth by reading the context card, this roadmap, `git status --short --branch`, and `git log --oneline -8`.
 
 ## Audit Cadence
 
 Use one skeptical audit per meaningful checkpoint:
 
-- Durable random-event log + morale storage.
-- Team Hub confirm/dismiss workflow.
-- GameTracker prototype morale reconciliation.
-- Dynamic designation morale bridge contract.
+- Doc/context resync.
+- Expected-wins baseline snapshot storage.
+- Performance-gap prompt generator.
+- Designation readiness/Fan Favorite-Albatross promotion decision.
+- Daily morale snapshots.
+- Stadium records/richer spray UI.
 - Future relationship state planning.
 - Season handoff.
 

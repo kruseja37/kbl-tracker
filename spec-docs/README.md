@@ -20,6 +20,7 @@
 - **IMPLEMENTATION_PLAN.md is the active plan** - Uses Data-Flow-First methodology
 - **Original "completed" days are being re-evaluated** - Many engines are orphaned
 - **124 gaps identified** - See FEATURE_WISHLIST.md for full audit results
+- **Mode 2 v1 north star** - For Franchise Mode 2 work, read `FRANCHISE_MODE2_V1_CONTEXT_CARD.md` first, then `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`. These supersede older Mode 2 roadmap/resync notes unless explicitly referenced.
 
 ---
 
@@ -35,6 +36,8 @@
 | `FEATURE_WISHLIST.md` | Known gaps and missing features |
 | `AI_OPERATING_PREFERENCES.md` | How AI should work on this project |
 | `DECISIONS_LOG.md` | Key design decisions |
+| `FRANCHISE_MODE2_V1_CONTEXT_CARD.md` | Compact current north star for Mode 2 v1 work |
+| `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md` | Canonical Mode 2 v1 completion roadmap |
 
 ### Master Reference
 

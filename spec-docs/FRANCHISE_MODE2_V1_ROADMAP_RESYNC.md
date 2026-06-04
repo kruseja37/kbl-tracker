@@ -2,7 +2,11 @@
 
 **Date:** June 2, 2026
 **Recommended reasoning effort:** high for implementation; medium for doc-only updates
-**Status:** Active planning baseline
+**Status:** Historical resync checkpoint; superseded by `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`
+
+## Superseded By Current North Star
+
+Use `FRANCHISE_MODE2_V1_CONTEXT_CARD.md` as the compact resume card and `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md` as the active Mode 2 v1 roadmap. This document remains useful historical context for why stadium foundation, random events, and morale became v1 priorities, but it is no longer the source of truth for implementation order.
 
 ## Purpose
 
