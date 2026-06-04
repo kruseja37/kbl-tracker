@@ -41,6 +41,7 @@ import {
   type ScoutSpecialty,
   type VisibleSafeProspectReport,
 } from './prospectScoutingDraftEngine';
+import { FIRST_NAMES as SMB4_FIRST_NAMES, LAST_NAMES as SMB4_LAST_NAMES } from '../data/nameDatabase';
 
 export const LEAGUE_BUILDER_STARTUP_FARM_DRAFT_VERSION =
   'league-builder-startup-farm-draft-v1';
@@ -746,9 +747,7 @@ export async function applyLeagueBuilderStartupFarmDraft(
   };
 }
 
-const DRAFT_POSITIONS: DraftPosition[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'DH', 'SP', 'RP', 'CP'];
-const SCOUT_FIRST_NAMES = ['Riley', 'Morgan', 'Casey', 'Jordan', 'Taylor', 'Avery', 'Rowan', 'Hayden', 'Emerson', 'Finley', 'Dakota', 'Reese'];
-const SCOUT_LAST_NAMES = ['Kline', 'Mercer', 'Vale', 'Soto', 'Bishop', 'Hale', 'Quinn', 'Madden', 'Wilder', 'Stone', 'Hollis', 'Baker'];
+const DRAFT_POSITIONS: DraftPosition[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'SP', 'RP', 'CP'];
 const SCOUT_SPECIALTY_POOL: ScoutSpecialty[] = ['pitching', 'outfield', 'infield', 'catching', 'power', 'contact', 'defense', 'speed', 'SP', 'RP', 'CF', 'SS', 'CP', '1B'];
 
 function hashString(input: string): number {
@@ -798,7 +797,7 @@ function buildScoutPool(leagueId: string, seed: string, teamCount: number): Leag
     }
     const descriptor: ProspectScoutDescriptor = {
       scoutId: `scout-${leagueId}-${index + 1}`,
-      scoutName: `${pick(`${scoutSeed}:first`, SCOUT_FIRST_NAMES)} ${pick(`${scoutSeed}:last`, SCOUT_LAST_NAMES)}`,
+      scoutName: `${pick(`${scoutSeed}:first`, SMB4_FIRST_NAMES)} ${pick(`${scoutSeed}:last`, SMB4_LAST_NAMES)}`,
       specialties: [specialty],
       weaknesses: [weakness],
     };

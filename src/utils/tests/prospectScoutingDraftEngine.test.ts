@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { FIRST_NAMES as SMB4_FIRST_NAMES, LAST_NAMES as SMB4_LAST_NAMES } from '../../data/nameDatabase';
 import {
   generateProspectScoutingDraft,
   gradeDistance,
@@ -70,6 +71,45 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     });
 
     expect(compact(second)).not.toEqual(compact(first));
+  });
+
+  test('generated franchise prospects never use DH primary or secondary position', () => {
+    const output = generateProspectScoutingDraft({
+      ...BASE_INPUT,
+      rounds: 12,
+      candidatePoolMultiplier: 5,
+      seed: 'no-dh-policy-seed',
+    });
+
+    expect(output.draftClass).toHaveLength(120);
+    expect(output.draftClass.every((candidate) => candidate.position !== 'DH')).toBe(true);
+    expect(output.generatedPlayers.every((player) =>
+      player.primaryPosition !== 'DH' &&
+      player.secondaryPosition !== 'DH',
+    )).toBe(true);
+    expect(output.visibleReports.every((report) => report.position !== 'DH')).toBe(true);
+  });
+
+  test('generated prospect names come from the SMB4 database with deterministic variety', () => {
+    const output = generateProspectScoutingDraft({
+      ...BASE_INPUT,
+      rounds: 12,
+      candidatePoolMultiplier: 5,
+      seed: 'smb4-name-policy-seed',
+    });
+    const names = output.draftClass.map((candidate) => `${candidate.firstName} ${candidate.lastName}`);
+
+    expect(output.draftClass.every((candidate) => SMB4_FIRST_NAMES.includes(candidate.firstName))).toBe(true);
+    expect(output.draftClass.every((candidate) => SMB4_LAST_NAMES.includes(candidate.lastName))).toBe(true);
+    expect(new Set(output.draftClass.map((candidate) => candidate.firstName)).size).toBeGreaterThan(40);
+    expect(new Set(output.draftClass.map((candidate) => candidate.lastName)).size).toBeGreaterThan(40);
+    expect(new Set(names).size).toBe(names.length);
+    expect(generateProspectScoutingDraft({
+      ...BASE_INPUT,
+      rounds: 12,
+      candidatePoolMultiplier: 5,
+      seed: 'smb4-name-policy-seed',
+    }).draftClass.map((candidate) => `${candidate.firstName} ${candidate.lastName}`)).toEqual(names);
   });
 
   test('generated ids are deterministic and collision-safe', () => {

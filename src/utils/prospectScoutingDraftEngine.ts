@@ -4,6 +4,7 @@ import {
   type PitcherRatings,
   type PositionPlayerRatings,
 } from '../engines/gradeEngine';
+import { FIRST_NAMES as SMB4_FIRST_NAMES, LAST_NAMES as SMB4_LAST_NAMES } from '../data/nameDatabase';
 
 export const PROSPECT_SCOUTING_DRAFT_ENGINE_VERSION =
   'league-builder-startup-prospect-scouting-draft-v1';
@@ -242,8 +243,6 @@ const CHEMISTRY_POOL = ['Competitive', 'Crafty', 'Disciplined', 'Spirited', 'Sch
 const PERSONALITY_POOL = ['Competitive', 'Spirited', 'Crafty', 'Scholarly', 'Disciplined', 'Tough', 'Relaxed'];
 const BATTER_TRAITS = ['Clutch', 'Tough Out', 'Rally Starter', 'Sprinter', 'Magic Hands', 'Utility'];
 const PITCHER_TRAITS = ['K Collector', 'Workhorse', 'Elite 4F', 'Elite SL', 'Specialist', 'Rally Stopper'];
-const FIRST_NAMES = ['Ari', 'Beck', 'Cam', 'Drew', 'Ellis', 'Finn', 'Gray', 'Harper', 'Indy', 'Jules', 'Kai', 'Lane', 'Mika', 'Nico', 'Parker', 'Quinn', 'Rory', 'Sage', 'Tatum', 'Vale'];
-const LAST_NAMES = ['Banks', 'Cruz', 'Davenport', 'Ellington', 'Fields', 'Gable', 'Hayes', 'Ivers', 'Jensen', 'Keller', 'Lopez', 'Maddox', 'Novak', 'Ortiz', 'Price', 'Reed', 'Santos', 'Turner', 'Vaughn', 'West'];
 const CITIES = [
   { city: 'Denver', state: 'CO' },
   { city: 'Portland', state: 'OR' },
@@ -440,7 +439,7 @@ function specialtyMatches(position: DraftPosition, specialty: ScoutSpecialty): b
   if (specialty === 'defense') return ['C', '2B', 'SS', 'CF'].includes(position);
   if (specialty === 'speed') return ['SS', 'CF', 'LF'].includes(position);
   if (specialty === 'power') return ['1B', '3B', 'LF', 'RF', 'CP'].includes(position);
-  if (specialty === 'contact') return ['C', '2B', 'SS', 'DH'].includes(position);
+  if (specialty === 'contact') return ['C', '2B', 'SS'].includes(position);
   return false;
 }
 
@@ -532,8 +531,8 @@ function buildCandidate(input: ProspectScoutingDraftInput, index: number, totalP
   const trait2Raw = traitCount >= 2 ? pick(`${seed}:trait2`, traitPool) : undefined;
   return {
     candidateId: `candidate-${input.leagueId}-${input.seasonNumber}-${index + 1}`,
-    firstName: pick(`${seed}:first`, FIRST_NAMES),
-    lastName: pick(`${seed}:last`, LAST_NAMES),
+    firstName: pick(`${seed}:first`, SMB4_FIRST_NAMES),
+    lastName: pick(`${seed}:last`, SMB4_LAST_NAMES),
     position,
     trueGrade,
     potentialGrade: potentialGrade(`${seed}:potential`, trueGrade),

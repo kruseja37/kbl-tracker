@@ -1,5 +1,6 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { FIRST_NAMES as SMB4_FIRST_NAMES, LAST_NAMES as SMB4_LAST_NAMES } from '../../data/nameDatabase';
 
 vi.mock('../syncEngine', () => ({
   syncEngine: {
@@ -271,6 +272,17 @@ describe('League Builder startup farm draft persistence', () => {
     expect(view.session?.scoutPool.every((scout) =>
       Object.values(scout.accuracyByPosition).every((accuracy) => accuracy < 100),
     )).toBe(true);
+    expect(view.session?.scoutPool.every((scout) =>
+      !scout.specialties.includes('DH') &&
+      !scout.weaknesses.includes('DH') &&
+      !Object.keys(scout.accuracyByPosition).includes('DH'),
+    )).toBe(true);
+    expect(view.session?.scoutPool.every((scout) => {
+      const [firstName, ...lastNameParts] = scout.name.split(' ');
+      return SMB4_FIRST_NAMES.includes(firstName) &&
+        SMB4_LAST_NAMES.includes(lastNameParts.join(' '));
+    })).toBe(true);
+    expect(new Set(view.session?.scoutPool.map((scout) => scout.name)).size).toBe(view.session?.scoutPool.length);
 
     while (!view.scoutDraftComplete) {
       const scout = view.availableScouts[0];
