@@ -8,9 +8,9 @@ Reliability-first Mode 2 completion. Finish a playable, scoped, auditable intern
 
 Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
-Latest committed checkpoint: `beedb03 Add expected wins baseline snapshot storage`.
+Latest committed checkpoint: `38f7e04 Add performance gap fan morale prompts`.
 
-Latest working checkpoint: Performance-gap fan morale prompts (pending commit).
+Latest working checkpoint: no active uncommitted slice. Next planned slice is Designation Readiness / Fan Favorite-Albatross Promotion Decision.
 
 ## Current Completed
 
@@ -25,16 +25,15 @@ Latest working checkpoint: Performance-gap fan morale prompts (pending commit).
 
 ## Current Active Slice
 
-Performance-Gap Fan Morale Prompts (pending commit).
+Designation Readiness / Fan Favorite-Albatross Promotion Decision.
 
-Goal: compare actual scoped records against durable expected-wins baseline snapshots to create confirmation-gated team fan morale prompts.
+Goal: decide whether preview True Value/value-delta can support projected Fan Favorite/Albatross morale context without promoting final designations, salary movement, or automatic morale mutation.
 
 ## Next Queue
 
-1. Performance-gap fan morale prompts.
-2. Designation readiness / Fan Favorite-Albatross promotion decision.
-3. Daily morale snapshots.
-4. Stadium records and richer spray UI.
+1. Designation readiness / Fan Favorite-Albatross promotion decision.
+2. Daily morale snapshots.
+3. Stadium records and richer spray UI.
 
 ## Hard Boundaries
 
