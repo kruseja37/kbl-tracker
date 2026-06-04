@@ -63,6 +63,7 @@ export interface FranchiseTrueValuePreviewReport {
   statsScopeId: string;
   seasonNumber: number;
   sourceContractVersion: string;
+  seasonContext: FranchiseValueInputReport['seasonContext'];
   playerRows: FranchiseTrueValuePreviewPlayerRow[];
   teamSummaries: FranchiseTrueValuePreviewTeamSummary[];
   policies: {
@@ -300,6 +301,7 @@ export function buildFranchiseTrueValuePreviewReport(
     statsScopeId: valueInputReport.statsScopeId,
     seasonNumber: valueInputReport.seasonNumber,
     sourceContractVersion: valueInputReport.contractVersion,
+    seasonContext: valueInputReport.seasonContext,
     playerRows,
     teamSummaries: teams,
     policies: {
