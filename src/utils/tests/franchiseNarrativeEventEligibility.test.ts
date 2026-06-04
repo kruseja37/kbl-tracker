@@ -34,6 +34,7 @@ function valueRow(overrides: Partial<FranchiseValueInputRow> = {}): FranchiseVal
     seasonNumber: 1,
     playerId: 'player-1',
     playerName: 'Narrative Player',
+    valuePosition: 'SS',
     currentTeamId: 'team-1',
     rosterStatus: 'MLB',
     salary: 8.5,

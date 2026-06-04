@@ -16,11 +16,13 @@ export interface FranchiseTrueValuePreviewPlayerRow {
   seasonNumber: number;
   playerId: string;
   playerName: string;
+  valuePosition: string | null;
   teamId: string | null;
   rosterStatus: string | null;
   salary: number | null;
   salaryBaselineAvailable: boolean;
   warInputAvailable: boolean;
+  warPreviewTotal: number | null;
   seasonMetadataAvailable: boolean;
   status: FranchiseTrueValuePreviewStatus;
   previewValueEstimate: number | null;
@@ -93,6 +95,10 @@ function hasSeasonMetadata(row: FranchiseValueInputRow): boolean {
   return row.seasonContext.gamesPerTeam !== null && row.seasonContext.inningsPerGame !== null;
 }
 
+function finiteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
 function rowScopeMatchesReport(report: FranchiseValueInputReport, row: FranchiseValueInputRow): boolean {
   return (
     row.franchiseId === report.franchiseId &&
@@ -102,7 +108,7 @@ function rowScopeMatchesReport(report: FranchiseValueInputReport, row: Franchise
   );
 }
 
-function blockReasons(report: FranchiseValueInputReport, row: FranchiseValueInputRow): string[] {
+function baseBlockReasons(report: FranchiseValueInputReport, row: FranchiseValueInputRow): string[] {
   const reasons: string[] = [];
   if (!hasReportScope(report)) {
     reasons.push('Explicit franchise, season, stats scope, and positive season number are required for True Value preview.');
@@ -116,11 +122,14 @@ function blockReasons(report: FranchiseValueInputReport, row: FranchiseValueInpu
   if (!row.currentTeamId) {
     reasons.push('Current team id is required for True Value preview.');
   }
+  if (!row.valuePosition) {
+    reasons.push('Primary/value position is required for position-relative True Value preview.');
+  }
   if (row.salary === null || !row.salaryBaselineAvailable) {
     reasons.push('Stable stored salary baseline is required for True Value preview.');
   }
-  if (!row.warInputAvailability.any) {
-    reasons.push('WAR-like preview inputs are required for True Value preview.');
+  if (!row.warInputAvailability.any || !finiteNumber(row.warPreviewValues.totalWar)) {
+    reasons.push('Numeric WAR preview total is required for position-relative True Value preview.');
   }
   if (!hasSeasonMetadata(row)) {
     reasons.push('Stored season length and innings metadata are required for True Value preview.');
@@ -128,13 +137,71 @@ function blockReasons(report: FranchiseValueInputReport, row: FranchiseValueInpu
   return unique(reasons);
 }
 
-function previewRow(report: FranchiseValueInputReport, row: FranchiseValueInputRow): FranchiseTrueValuePreviewPlayerRow {
-  const reasons = blockReasons(report, row);
-  const previewValueEstimate = reasons.length === 0 && row.salary !== null
-    ? row.salary
+function isPeerEligible(report: FranchiseValueInputReport, row: FranchiseValueInputRow): boolean {
+  return baseBlockReasons(report, row).length === 0 && finiteNumber(row.salary);
+}
+
+function positionPeerPools(report: FranchiseValueInputReport): Map<string, FranchiseValueInputRow[]> {
+  const pools = new Map<string, FranchiseValueInputRow[]>();
+  for (const row of report.rows) {
+    if (!isPeerEligible(report, row) || !row.valuePosition) continue;
+    const rows = pools.get(row.valuePosition) ?? [];
+    rows.push(row);
+    pools.set(row.valuePosition, rows);
+  }
+  return pools;
+}
+
+function rankPercentileByWar(row: FranchiseValueInputRow, peerPool: FranchiseValueInputRow[]): number | null {
+  if (peerPool.length < 2 || !finiteNumber(row.warPreviewValues.totalWar)) return null;
+  const sorted = [...peerPool].sort((left, right) => {
+    const warDelta = (left.warPreviewValues.totalWar ?? 0) - (right.warPreviewValues.totalWar ?? 0);
+    return warDelta !== 0 ? warDelta : left.playerId.localeCompare(right.playerId);
+  });
+  const matchingIndexes = sorted
+    .map((candidate, index) => ({ candidate, index }))
+    .filter(({ candidate }) => candidate.warPreviewValues.totalWar === row.warPreviewValues.totalWar)
+    .map(({ index }) => index);
+  if (matchingIndexes.length === 0) return null;
+  const averageIndex = matchingIndexes.reduce((sum, index) => sum + index, 0) / matchingIndexes.length;
+  return averageIndex / (sorted.length - 1);
+}
+
+function salaryAtPercentile(peerPool: FranchiseValueInputRow[], percentile: number): number | null {
+  const salaries = peerPool
+    .map((row) => row.salary)
+    .filter((salary): salary is number => finiteNumber(salary))
+    .sort((left, right) => left - right);
+  if (salaries.length < 2) return null;
+  const boundedPercentile = Math.min(1, Math.max(0, percentile));
+  const position = boundedPercentile * (salaries.length - 1);
+  const lowerIndex = Math.floor(position);
+  const upperIndex = Math.ceil(position);
+  const lower = salaries[lowerIndex];
+  const upper = salaries[upperIndex];
+  if (!finiteNumber(lower) || !finiteNumber(upper)) return null;
+  const estimate = lower + (upper - lower) * (position - lowerIndex);
+  return Number(estimate.toFixed(3));
+}
+
+function previewRow(
+  report: FranchiseValueInputReport,
+  row: FranchiseValueInputRow,
+  peerPool: FranchiseValueInputRow[],
+): FranchiseTrueValuePreviewPlayerRow {
+  const reasons = baseBlockReasons(report, row);
+  if (reasons.length === 0 && peerPool.length < 2) {
+    reasons.push(`At least two current MLB ${row.valuePosition ?? 'position'} peers with salary and numeric WAR preview totals are required for position-relative True Value preview.`);
+  }
+  const warPercentile = reasons.length === 0 ? rankPercentileByWar(row, peerPool) : null;
+  const previewValueEstimate = warPercentile !== null
+    ? salaryAtPercentile(peerPool, warPercentile)
     : null;
+  if (reasons.length === 0 && previewValueEstimate === null) {
+    reasons.push('Comparable position salary percentile could not be derived from the peer pool.');
+  }
   const valueDeltaEstimate = previewValueEstimate !== null && row.salary !== null
-    ? previewValueEstimate - row.salary
+    ? Number((previewValueEstimate - row.salary).toFixed(3))
     : null;
 
   return {
@@ -145,11 +212,13 @@ function previewRow(report: FranchiseValueInputReport, row: FranchiseValueInputR
     seasonNumber: row.seasonNumber,
     playerId: row.playerId,
     playerName: row.playerName,
+    valuePosition: row.valuePosition,
     teamId: row.currentTeamId,
     rosterStatus: row.rosterStatus,
     salary: row.salary,
     salaryBaselineAvailable: row.salaryBaselineAvailable,
     warInputAvailable: row.warInputAvailability.any,
+    warPreviewTotal: finiteNumber(row.warPreviewValues.totalWar) ? row.warPreviewValues.totalWar : null,
     seasonMetadataAvailable: hasSeasonMetadata(row),
     status: reasons.length === 0 ? 'preview-only' : 'blocked',
     previewValueEstimate,
@@ -162,11 +231,11 @@ function previewRow(report: FranchiseValueInputReport, row: FranchiseValueInputR
     reasons: reasons.length > 0
       ? reasons
       : [
-        'Salary-anchored True Value preview is available because stable salary, current MLB roster context, WAR-like input readiness, and season metadata are present.',
+        'Position-relative True Value preview is available from current MLB peer salary percentiles and scoped numeric WAR preview totals.',
       ],
     limitations: unique([
       ...row.limitations,
-      'Preview estimate is salary-anchored because numeric final WAR/market valuation is not exposed by the current value input contract.',
+      'Position-relative percentile estimate is preview-only; upstream WAR completeness is not final.',
       'Value delta estimate is preview-only and is not trusted for Fan Favorite, Albatross, expected wins, salary movement, or designation finalization.',
       'No True Value, value delta, salary, morale, designation, relationship, offseason, or Mode 3 state is persisted by this preview contract.',
     ]),
@@ -217,7 +286,10 @@ function teamSummaries(
 export function buildFranchiseTrueValuePreviewReport(
   valueInputReport: FranchiseValueInputReport,
 ): FranchiseTrueValuePreviewReport {
-  const playerRows = valueInputReport.rows.map((row) => previewRow(valueInputReport, row));
+  const peerPools = positionPeerPools(valueInputReport);
+  const playerRows = valueInputReport.rows.map((row) =>
+    previewRow(valueInputReport, row, row.valuePosition ? peerPools.get(row.valuePosition) ?? [] : []),
+  );
   const teams = teamSummaries(valueInputReport, playerRows);
 
   return {
@@ -241,7 +313,7 @@ export function buildFranchiseTrueValuePreviewReport(
     },
     limitations: unique([
       ...valueInputReport.limitations,
-      'True Value preview is read-only and salary-anchored until numeric final WAR, market valuation, park adjustment, and lifecycle rules are trusted.',
+      'True Value preview is read-only and position-relative; final WAR, market valuation, park adjustment, and lifecycle rules remain untrusted.',
       'Preview value delta is not trusted for Fan Favorite, Albatross, expected wins, salary movement, morale, or designation finalization.',
     ]),
   };

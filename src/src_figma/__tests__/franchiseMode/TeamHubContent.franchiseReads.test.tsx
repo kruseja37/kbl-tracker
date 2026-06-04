@@ -255,6 +255,7 @@ function valueInputRow(overrides: Record<string, unknown> = {}) {
     seasonNumber: 2,
     playerId: 'copied-player',
     playerName: 'Copied Player',
+    valuePosition: 'SS',
     currentTeamId: 'team-1',
     rosterStatus: 'MLB',
     salary: 3000000,

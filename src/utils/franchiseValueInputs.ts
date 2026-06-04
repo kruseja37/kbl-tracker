@@ -51,6 +51,7 @@ export interface FranchiseValueInputRow {
   seasonNumber: number;
   playerId: string;
   playerName: string;
+  valuePosition: string | null;
   currentTeamId: string | null;
   rosterStatus: string | null;
   salary: number | null;
@@ -385,6 +386,7 @@ export async function buildFranchiseValueInputRows(
       seasonNumber: input.seasonNumber,
       playerId: player.id,
       playerName: playerName(player),
+      valuePosition: player.primaryPosition ?? null,
       currentTeamId,
       rosterStatus: assignment?.rosterStatus ?? null,
       salary: finiteNumber(player.salary) ? player.salary : null,

@@ -56,6 +56,7 @@ function makeRow(overrides: Partial<FranchiseValueInputRow> = {}): FranchiseValu
     seasonNumber: 1,
     playerId: 'player-1',
     playerName: 'Canon Input',
+    valuePosition: 'SS',
     currentTeamId: 'team-1',
     rosterStatus: 'MLB',
     salary: 8.5,
