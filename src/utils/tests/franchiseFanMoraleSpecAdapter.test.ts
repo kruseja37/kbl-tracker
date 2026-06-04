@@ -123,8 +123,8 @@ describe('franchise fan morale spec adapter', () => {
     expect(report.implementationStatus.confirmedEventEffects.status).toBe('implemented');
     expect(report.implementationStatus.randomEventConfirmation.status).toBe('partial');
     expect(report.implementationStatus.scoreOnlyFanMorale.status).toBe('partial');
-    expect(report.implementationStatus.expectedWinsBaseline.status).toBe('deferred');
-    expect(report.implementationStatus.performanceGapFormula.status).toBe('deferred');
+    expect(report.implementationStatus.expectedWinsBaseline.status).toBe('partial');
+    expect(report.implementationStatus.performanceGapFormula.status).toBe('partial');
     expect(report.implementationStatus.rosterCompositionFormula.status).toBe('deferred');
     expect(report.implementationStatus.randomEventWeighting.status).toBe('partial');
     expect(report.implementationStatus.trueValueInputs.status).toBe('blocked');

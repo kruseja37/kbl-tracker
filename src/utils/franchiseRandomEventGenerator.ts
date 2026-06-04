@@ -19,6 +19,10 @@ import {
   buildFranchiseFanMoraleStreakEffects,
   type FranchiseFanMoraleStreakGameEvidence,
 } from './franchiseFanMoraleStreakFormula';
+import {
+  buildFranchiseFanMoralePerformanceGapEffects,
+  type FranchiseFanMoralePerformanceGapInput,
+} from './franchiseFanMoralePerformanceGapFormula';
 import type { FranchiseStadiumFoundationReport } from './franchiseStadiumFoundation';
 
 export const FRANCHISE_RANDOM_EVENT_GENERATOR_VERSION =
@@ -30,6 +34,7 @@ export type FranchiseRandomEventTriggerCategory =
   | 'achievement-team-fan-reaction'
   | 'blowout-team-fan-reaction'
   | 'streak-team-fan-reaction'
+  | 'performance-gap-team-fan-reaction'
   | 'archive-backed-player-morale-prompt'
   | 'roster-movement-morale-prompt'
   | 'designation-morale-reaction'
@@ -114,6 +119,7 @@ export interface BuildFranchiseRandomEventCandidatesInput {
   rosterTransactions?: FranchiseRandomEventTransactionEvidence[];
   players?: FranchiseRandomEventPlayerEvidence[];
   designationMoraleContexts?: FranchiseDesignationMoraleBridgeInput[];
+  performanceGapContexts?: FranchiseFanMoralePerformanceGapInput[];
   stadiumFoundationReport?: FranchiseStadiumFoundationReport | null;
   moraleSnapshots?: FranchiseRandomEventMoraleSnapshotEvidence[];
   generatedAt?: number;
@@ -265,6 +271,18 @@ function transactionInScope(entry: FranchiseRandomEventTransactionEvidence, scop
     entry.statsScopeId === scope.statsScopeId &&
     entry.season === scope.seasonNumber &&
     entry.undone !== true
+  );
+}
+
+function performanceGapContextInScope(
+  context: FranchiseFanMoralePerformanceGapInput,
+  scope: EventScope,
+): boolean {
+  return (
+    context.franchiseId === scope.franchiseId &&
+    context.seasonId === scope.seasonId &&
+    context.statsScopeId === scope.statsScopeId &&
+    context.seasonNumber === scope.seasonNumber
   );
 }
 
@@ -692,6 +710,55 @@ function buildStreakCandidates(
   );
 }
 
+function buildPerformanceGapCandidates(
+  scope: EventScope,
+  seed: string,
+  contexts: FranchiseFanMoralePerformanceGapInput[],
+  warnings: string[],
+): FranchiseRandomEventCandidate[] {
+  return contexts.flatMap((context) => {
+    if (!performanceGapContextInScope(context, scope)) {
+      warnings.push(`${context.teamId?.trim() || 'missing-team'} performance-gap context blocked; no random-event candidate generated.`);
+      return [];
+    }
+    const formula = buildFranchiseFanMoralePerformanceGapEffects(context);
+    if (formula.blockers.length > 0 || formula.effects.length === 0) {
+      warnings.push(`${context.teamId?.trim() || 'missing-team'} performance-gap context blocked; no random-event candidate generated.`);
+      return [];
+    }
+
+    return formula.effects.map((effectResult) =>
+      candidate(scope, seed, 'performance-gap-team-fan-reaction', 'performance-gap-context', `${effectResult.teamId}:${effectResult.band}:${effectResult.gamesPlayed}:${effectResult.baselineIdentity}`, {
+        title: `${effectResult.band.replace(/-/g, ' ')} performance-gap fan reaction`,
+        targetType: 'team-fan',
+        targetId: effectResult.teamId,
+        reason: `${effectResult.reason} Baseline ${effectResult.baselineIdentity} remains preview-only evidence.`,
+        suggestedManualChange: manualChange(
+          'fan-morale-draft',
+          `Optional team fan morale performance-gap draft (${effectResult.delta > 0 ? '+' : ''}${effectResult.delta}). No automatic effect is applied.`,
+        ),
+        evidenceReferences: [
+          evidence(scope, 'performance-gap-summary', `Performance gap ${effectResult.performanceGap}: actual wins ${effectResult.actualWins} vs expected wins to date ${effectResult.expectedWinsToDate}.`, 1, {
+            teamId: effectResult.teamId,
+            targetType: 'team-fan',
+            targetId: effectResult.teamId,
+          }),
+        ],
+        safeEffectPreview: {
+          target: 'fan-morale-draft',
+          targetType: 'team-fan',
+          targetId: effectResult.teamId,
+          delta: effectResult.delta,
+        },
+        warnings: [
+          ...formula.limitations,
+          'Performance-gap evidence is team record context only and cannot target player morale, player stats, WPA, WAR, salary, designations, relationships, stories, offseason, or Mode 3.',
+        ],
+      }),
+    );
+  });
+}
+
 function buildArchivePlayerCandidates(
   scope: EventScope,
   seed: string,
@@ -1018,6 +1085,7 @@ export function buildFranchiseRandomEventCandidates(
       ...scopedCompletedGames.map(streakGameEvidenceFromArchive),
       ...scopedScoreOnlyRows.map(streakGameEvidenceFromScoreOnly),
     ]),
+    ...buildPerformanceGapCandidates(scope, input.seed, input.performanceGapContexts ?? [], warnings),
     ...buildArchivePlayerCandidates(scope, input.seed, scopedCompletedGames, playersById),
     ...buildRosterMovementCandidates(scope, input.seed, scopedTransactions, playersById),
     ...buildDesignationMoraleCandidates(scope, input.seed, input.designationMoraleContexts ?? [], warnings),

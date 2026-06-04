@@ -817,7 +817,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(fanSpecRegion).getByText(/Trend: RISING/i)).toBeInTheDocument();
     expect(within(fanSpecRegion).getByText(/Risk: SAFE/i)).toBeInTheDocument();
     expect(within(fanSpecRegion).getByText(/Canonical scoped storage: IMPLEMENTED/i)).toBeInTheDocument();
-    expect(within(fanSpecRegion).getByText(/Expected wins baseline: DEFERRED/i)).toBeInTheDocument();
+    expect(within(fanSpecRegion).getByText(/Expected wins baseline: PARTIAL/i)).toBeInTheDocument();
     expect(within(fanSpecRegion).getByText(/Roster composition formula: DEFERRED/i)).toBeInTheDocument();
     expect(within(fanSpecRegion).getByText(/Random-event weighting: PARTIAL/i)).toBeInTheDocument();
     expect(within(fanSpecRegion).getByText(/True Value inputs: BLOCKED/i)).toBeInTheDocument();

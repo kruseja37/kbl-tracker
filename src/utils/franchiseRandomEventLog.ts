@@ -7,6 +7,7 @@ export const FRANCHISE_RANDOM_EVENT_LOG_CONTRACT_VERSION =
 export type FranchiseRandomEventLogEntryKind =
   | 'gametracker-archive-fact'
   | 'score-only-context'
+  | 'performance-gap-context'
   | 'roster-movement-context'
   | 'player-profile-edit-context'
   | 'stadium-spray-context';
@@ -28,6 +29,7 @@ export type FranchiseRandomEventSuggestedManualChangeTarget =
 export type FranchiseRandomEventEvidenceType =
   | 'gametracker-archive-summary'
   | 'score-only-schedule-summary'
+  | 'performance-gap-summary'
   | 'roster-movement-summary'
   | 'player-profile-edit-summary'
   | 'stadium-spray-summary';

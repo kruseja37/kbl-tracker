@@ -13,6 +13,7 @@ import type { ScheduledGame } from '../scheduleStorage';
 import type { FranchiseStadiumFoundationReport } from '../franchiseStadiumFoundation';
 import { FRANCHISE_STADIUM_FOUNDATION_CONTRACT_VERSION } from '../franchiseStadiumFoundation';
 import type { TransactionLogEntry } from '../transactionStorage';
+import type { FranchiseFanMoralePerformanceGapInput } from '../franchiseFanMoralePerformanceGapFormula';
 
 const scope = {
   franchiseId: 'franchise-1',
@@ -254,6 +255,31 @@ function designationContext(
     hiddenProspectTruthApproved: false,
     hiddenTruthExposed: false,
     generatedAt: 123,
+    ...overrides,
+  };
+}
+
+function performanceGapContext(
+  overrides: Partial<FranchiseFanMoralePerformanceGapInput> = {},
+): FranchiseFanMoralePerformanceGapInput {
+  return {
+    ...scope,
+    teamId: 'team-1',
+    teamName: 'Alpha',
+    baseline: {
+      id: 'expected-wins-baseline-1',
+      identityKey: 'franchise-1:season-2:team-1:true-value-preview',
+      storageVersion: 'franchise-expected-wins-baseline-storage-v1',
+      expectedWinsPreviewContractVersion: 'franchise-expected-wins-preview-v1-readonly',
+      trueValuePreviewContractVersion: 'franchise-true-value-preview-v1-readonly',
+      ...scope,
+      teamId: 'team-1',
+      expectedWinsEstimate: 10,
+      gamesPerTeam: 20,
+      status: 'preview-only',
+    },
+    actualWins: 7,
+    actualLosses: 3,
     ...overrides,
   };
 }
@@ -649,6 +675,68 @@ describe('franchise random event generator core', () => {
     });
     expect(JSON.stringify(streak)).not.toMatch(/player-morale-draft/);
     expect(streak?.warnings.join(' ')).toMatch(/Score-only streak evidence has no player archive/i);
+  });
+
+  test('performance-gap context creates team fan morale prompts from baseline and record evidence', () => {
+    const report = buildFranchiseRandomEventCandidates({
+      ...scope,
+      seed: 'performance-gap-seed',
+      performanceGapContexts: [
+        performanceGapContext({
+          actualWins: 9,
+          actualLosses: 1,
+        }),
+      ],
+      generatedAt: 123,
+    });
+    const [candidate] = report.candidates.filter((event) => event.triggerCategory === 'performance-gap-team-fan-reaction');
+
+    expect(candidate).toMatchObject({
+      eventKind: 'performance-gap-context',
+      targetType: 'team-fan',
+      targetId: 'team-1',
+      safeEffectPreview: expect.objectContaining({
+        target: 'fan-morale-draft',
+        targetType: 'team-fan',
+        targetId: 'team-1',
+        delta: 2,
+      }),
+    });
+    expect(candidate.id).toContain('team-1:over-plus-4:10:franchise-1:season-2:team-1:true-value-preview');
+    expect(candidate.evidenceReferences[0]).toMatchObject({
+      type: 'performance-gap-summary',
+      targetType: 'team-fan',
+      targetId: 'team-1',
+      teamId: 'team-1',
+      hiddenProspectTruth: false,
+    });
+    expect(JSON.stringify(candidate)).not.toMatch(/player-morale-draft|player stats authority|WPA authority|WAR authority/i);
+  });
+
+  test('performance-gap contexts with missing or mismatched scope produce no candidates', () => {
+    const report = buildFranchiseRandomEventCandidates({
+      ...scope,
+      seed: 'performance-gap-scope-seed',
+      performanceGapContexts: [
+        performanceGapContext({
+          franchiseId: '',
+          seasonId: '',
+          statsScopeId: '',
+          seasonNumber: 0,
+        } as Partial<FranchiseFanMoralePerformanceGapInput>),
+        performanceGapContext({
+          franchiseId: 'other-franchise',
+          baseline: {
+            ...performanceGapContext().baseline!,
+            franchiseId: 'other-franchise',
+          },
+        }),
+      ],
+      generatedAt: 123,
+    });
+
+    expect(report.candidates.filter((event) => event.triggerCategory === 'performance-gap-team-fan-reaction')).toHaveLength(0);
+    expect(report.warnings.join(' ')).toMatch(/performance-gap context blocked/i);
   });
 
   test('archive-backed revealed player morale candidate requires revealed current player target', () => {

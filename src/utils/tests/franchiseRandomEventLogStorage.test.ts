@@ -621,6 +621,99 @@ describe('franchise random event durable log and morale effects', () => {
     expect(negativeSnapshot?.currentValue).toBe(46);
   });
 
+  test('generated performance-gap prompts apply persisted signed team fan deltas idempotently', async () => {
+    const generated = buildGeneratedFranchiseRandomEventLogReport({
+      ...scope,
+      seed: 'performance-gap-storage-seed',
+      performanceGapContexts: [
+        {
+          ...scope,
+          teamId: 'team-a',
+          teamName: 'Alpha',
+          baseline: {
+            id: 'baseline-team-a',
+            identityKey: 'baseline-key-team-a',
+            storageVersion: 'franchise-expected-wins-baseline-storage-v1',
+            expectedWinsPreviewContractVersion: 'franchise-expected-wins-preview-v1-readonly',
+            trueValuePreviewContractVersion: 'franchise-true-value-preview-v1-readonly',
+            ...scope,
+            teamId: 'team-a',
+            expectedWinsEstimate: 10,
+            gamesPerTeam: 20,
+            status: 'preview-only',
+          },
+          actualWins: 9,
+          actualLosses: 1,
+        },
+        {
+          ...scope,
+          teamId: 'team-b',
+          teamName: 'Beta',
+          baseline: {
+            id: 'baseline-team-b',
+            identityKey: 'baseline-key-team-b',
+            storageVersion: 'franchise-expected-wins-baseline-storage-v1',
+            expectedWinsPreviewContractVersion: 'franchise-expected-wins-preview-v1-readonly',
+            trueValuePreviewContractVersion: 'franchise-true-value-preview-v1-readonly',
+            ...scope,
+            teamId: 'team-b',
+            expectedWinsEstimate: 10,
+            gamesPerTeam: 20,
+            status: 'preview-only',
+          },
+          actualWins: 1,
+          actualLosses: 9,
+        },
+      ],
+    });
+    const positivePrompt = generated.entries.find((entry) =>
+      entry.kind === 'performance-gap-context' &&
+      entry.safeEffectPreview?.targetId === 'team-a'
+    );
+    const negativePrompt = generated.entries.find((entry) =>
+      entry.kind === 'performance-gap-context' &&
+      entry.safeEffectPreview?.targetId === 'team-b'
+    );
+
+    expect(positivePrompt?.safeEffectPreview).toMatchObject({
+      targetType: 'team-fan',
+      targetId: 'team-a',
+      delta: 2,
+    });
+    expect(negativePrompt?.safeEffectPreview).toMatchObject({
+      targetType: 'team-fan',
+      targetId: 'team-b',
+      delta: -2,
+    });
+    expect(JSON.stringify(generated.entries.filter((entry) => entry.kind === 'performance-gap-context'))).not.toMatch(/player-morale-draft/);
+
+    await syncFranchiseRandomEventLogFromReport(generated);
+    await confirmFranchiseRandomEventLogRecord({
+      recordId: positivePrompt!.id,
+      actorDisplayName: 'Tester',
+      timestamp: '2026-01-01T00:00:00.000Z',
+    });
+    await confirmFranchiseRandomEventLogRecord({
+      recordId: positivePrompt!.id,
+      actorDisplayName: 'Tester',
+      timestamp: '2026-01-01T00:01:00.000Z',
+    });
+    await confirmFranchiseRandomEventLogRecord({
+      recordId: negativePrompt!.id,
+      actorDisplayName: 'Tester',
+      timestamp: '2026-01-01T00:02:00.000Z',
+    });
+
+    const positiveSnapshot = await getFranchiseMoraleSnapshot(scope, 'team-fan', 'team-a');
+    const negativeSnapshot = await getFranchiseMoraleSnapshot(scope, 'team-fan', 'team-b');
+    const playerSnapshot = await getFranchiseMoraleSnapshot(scope, 'player', 'team-a');
+
+    expect(positiveSnapshot?.currentValue).toBe(52);
+    expect(positiveSnapshot?.history).toHaveLength(1);
+    expect(negativeSnapshot?.currentValue).toBe(48);
+    expect(playerSnapshot).toBeNull();
+  });
+
   test('legacy entries without safe-effect preview still fall back safely', async () => {
     const prompt = entry('gametracker-archive-fact', 'legacy', { teamId: 'team-a' });
     await syncFranchiseRandomEventLogFromReport(report([prompt]));

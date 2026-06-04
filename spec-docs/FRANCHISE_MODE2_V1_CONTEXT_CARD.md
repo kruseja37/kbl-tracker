@@ -8,7 +8,9 @@ Reliability-first Mode 2 completion. Finish a playable, scoped, auditable intern
 
 Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
-Latest checkpoint: Expected-wins baseline snapshot storage (pending commit).
+Latest committed checkpoint: `beedb03 Add expected wins baseline snapshot storage`.
+
+Latest working checkpoint: Performance-gap fan morale prompts (pending commit).
 
 ## Current Completed
 
@@ -17,13 +19,13 @@ Latest checkpoint: Expected-wins baseline snapshot storage (pending commit).
 - Stadium foundation supports scoped identity, seed/static park-factor trust, archive-backed batting/pitching/fielding spray projection, and preview-only adaptive factors.
 - Durable random-event log supports generated prompts, confirmation/dismissal, idempotent safe-effect application, and Team Hub workflow.
 - Canonical fan/player morale storage uses 0-99 scale; player morale starts at neutral `50`; manual scoped adjustments exist.
-- Fan morale prompt formulas cover game result, streaks, 7+ run blowouts, and archive-backed no-hitter/perfect-game fame events.
+- Fan morale prompt formulas cover game result, streaks, 7+ run blowouts, archive-backed no-hitter/perfect-game fame events, and performance-gap team fan morale prompts from durable expected-wins baseline evidence.
 - Dynamic designation morale bridge supports safe preview TEAM_MVP/ACE recognition prompts through random-event confirmation.
 - Numeric WAR preview, position-relative True Value preview, expected-wins preview, Team Hub display, and durable expected-wins baseline snapshots are read-only and untrusted.
 
 ## Current Active Slice
 
-Performance-Gap Fan Morale Prompts.
+Performance-Gap Fan Morale Prompts (pending commit).
 
 Goal: compare actual scoped records against durable expected-wins baseline snapshots to create confirmation-gated team fan morale prompts.
 

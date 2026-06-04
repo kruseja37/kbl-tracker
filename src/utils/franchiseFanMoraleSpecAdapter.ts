@@ -171,7 +171,7 @@ export function buildFranchiseFanMoraleSpecViewModel(
 
   const limitations = [
     'Read-only fan morale spec adapter only; it does not mutate morale or create events.',
-    'Expected wins, performance gap, roster composition formula, True Value, dynamic designations, beat reporter sentiment, consequences, daily snapshots, and formula weighting are not trusted fan morale inputs in internal v1.',
+    'Expected wins baselines and performance-gap prompts are preview-only, confirmation-gated team fan morale context; roster composition formula, True Value, dynamic designations, beat reporter sentiment, consequences, daily snapshots, and full formula weighting are not trusted fan morale inputs in internal v1.',
     'Score-only fan morale changes remain team-level only after explicit random-event confirmation.',
     'Player morale and relationship state remain separate from fan morale.',
     'Hidden FARM/prospect truth is not consumed by this fan morale view model.',
@@ -200,8 +200,8 @@ export function buildFranchiseFanMoraleSpecViewModel(
       eventBackedHistory: status('implemented', 'Event-backed history', 'Stored morale history entries provide previous/current values, reasons, source, and timestamp.'),
       randomEventConfirmation: status('partial', 'Manual random-event confirmation', 'Eligible random-event prompts can be confirmed manually; the full event catalog and formula weighting are not complete.'),
       scoreOnlyFanMorale: status('partial', 'Score-only team fan morale only', 'Score-only rows may contribute only to team fan morale after explicit confirmation; they do not create player morale, stats, or archive evidence.'),
-      expectedWinsBaseline: status('deferred', 'Expected wins baseline', 'Expected wins are not calculated yet because canonical True Value and formula weighting remain incomplete.'),
-      performanceGapFormula: status('deferred', 'Performance gap formula', 'Actual-vs-expected win gap is deferred until expected wins are canonical.'),
+      expectedWinsBaseline: status('partial', 'Expected wins baseline', 'Durable preview expected-wins baseline snapshots exist, but canonical True Value and full formula weighting remain incomplete.'),
+      performanceGapFormula: status('partial', 'Performance gap formula', 'Actual-vs-preview-expected win gap can create confirmation-gated team fan morale prompts only; automatic weighting remains incomplete.'),
       rosterCompositionFormula: status('deferred', 'Roster composition formula', 'Roster-composition morale weighting is deferred until the formula inputs and event catalog are canonical.'),
       randomEventWeighting: status('partial', 'Random-event weighting', 'Confirmed random-event effects exist, but full weighting, cadence, and catalog rules are not complete.'),
       trueValueInputs: status('blocked', 'True Value inputs', 'True Value/value delta are not trusted fan morale inputs in Franchise internal v1.'),

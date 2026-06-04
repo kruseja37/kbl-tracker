@@ -10,7 +10,9 @@ Manual smoke feedback remains a bug and feature backlog. The build order for Mod
 
 ## Current State As Of Latest Commit
 
-Latest checkpoint: Expected-wins baseline snapshot storage (pending commit).
+Latest committed checkpoint: `beedb03 Add expected wins baseline snapshot storage`.
+
+Latest working checkpoint: Performance-gap fan morale prompts (pending commit).
 
 Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved.
 
@@ -23,7 +25,7 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Random event prompts now have durable scoped records, confirmation/dismiss state, idempotent safe-effect application, and Team Hub workflow.
 - Canonical fan/player morale snapshots exist on the 0-99 scale, with player morale starting at neutral `50`.
 - Team Hub exposes fan/player morale history and manual scoped morale controls while keeping profiles, salary, relationships, stories, and Mode 3 separate.
-- Fan morale prompt formulas currently cover confirmed game results, streaks, 7+ run blowouts, and archive-backed no-hitter/perfect-game fame events.
+- Fan morale prompt formulas currently cover confirmed game results, streaks, 7+ run blowouts, archive-backed no-hitter/perfect-game fame events, and performance-gap team fan morale prompts from durable expected-wins baseline evidence.
 - Dynamic designation morale bridge exists for safe confirmation-gated prompt candidates, and Team Hub surfaces preview-only TEAM_MVP/ACE recognition candidates through the random-event workflow.
 - Numeric WAR preview values, position-relative True Value preview, and expected-wins preview exist as read-only, untrusted contracts.
 - Team Hub surfaces True Value and expected-wins previews in Mode 2 Foundation Status with explicit preview-only boundaries.
@@ -31,7 +33,7 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 
 ## Active Priority Order
 
-1. Performance-Gap Fan Morale Prompts
+1. Performance-Gap Fan Morale Prompts (pending commit)
    - Compare actual standings/schedule record to durable expected-wins baseline snapshots.
    - Generate confirmation-gated team fan morale prompts only; no silent recalculation or GameTracker mutation.
 
