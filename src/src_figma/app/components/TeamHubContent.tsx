@@ -60,6 +60,14 @@ import {
   type FranchiseValueInputReport,
 } from "../../../utils/franchiseValueInputs";
 import {
+  buildFranchiseTrueValuePreviewReport,
+  type FranchiseTrueValuePreviewReport,
+} from "../../../utils/franchiseTrueValuePreview";
+import {
+  buildFranchiseExpectedWinsPreviewReport,
+  type FranchiseExpectedWinsPreviewReport,
+} from "../../../utils/franchiseExpectedWinsPreview";
+import {
   buildFranchiseDesignationEligibility,
   type FranchiseDesignationEligibilityReport,
 } from "../../../utils/franchiseDesignationEligibility";
@@ -1472,6 +1480,16 @@ export function TeamHubContent() {
     };
   }, [franchiseId, seasonId, seasonNumber]);
 
+  const trueValuePreviewReport = useMemo(() => {
+    if (!valueInputReport) return null;
+    return buildFranchiseTrueValuePreviewReport(valueInputReport);
+  }, [valueInputReport]);
+
+  const expectedWinsPreviewReport = useMemo(() => {
+    if (!trueValuePreviewReport) return null;
+    return buildFranchiseExpectedWinsPreviewReport(trueValuePreviewReport);
+  }, [trueValuePreviewReport]);
+
   const analyticsTrustReport = useMemo(() => {
     if (!valueInputReport) return null;
     return buildFranchiseAnalyticsTrustReport({
@@ -2488,7 +2506,11 @@ export function TeamHubContent() {
           />
 
           <FranchiseMode2FoundationStatusPanel
+            selectedTeamId={selectedTeamId}
+            selectedTeamName={selectedTeam}
             valueInputReport={valueInputReport}
+            trueValuePreviewReport={trueValuePreviewReport}
+            expectedWinsPreviewReport={expectedWinsPreviewReport}
             analyticsTrustReport={analyticsTrustReport}
             salaryLifecycleReport={salaryLifecycleReport}
             designationEligibilityReport={designationEligibilityReport}
@@ -3059,7 +3081,11 @@ interface FranchiseValueTruthPanelProps {
 }
 
 interface FranchiseMode2FoundationStatusPanelProps {
+  selectedTeamId: string;
+  selectedTeamName: string;
   valueInputReport: FranchiseValueInputReport | null;
+  trueValuePreviewReport: FranchiseTrueValuePreviewReport | null;
+  expectedWinsPreviewReport: FranchiseExpectedWinsPreviewReport | null;
   analyticsTrustReport: FranchiseAnalyticsTrustReport | null;
   salaryLifecycleReport: FranchiseSalaryLifecycleReport | null;
   designationEligibilityReport: FranchiseDesignationEligibilityReport | null;
@@ -4052,6 +4078,14 @@ function formatTruthStatus(status: string): string {
   return status.replace(/-/g, ' ').toUpperCase();
 }
 
+function formatPreviewNumber(value: number | null | undefined, digits = 1): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}
+
 function foundationStatusClass(status: string): string {
   if (status === 'trusted' || status === 'eligible-context' || status === 'stable-baseline' || status === 'valid-draft' || status === 'confirmed-manual-change') {
     return 'border-[#9DFFB0]/60 text-[#9DFFB0]';
@@ -4087,6 +4121,81 @@ function FoundationStatusCard({
       </div>
       <div className="text-[10px] leading-snug text-[#E8E8D8]/75">{body}</div>
     </div>
+  );
+}
+
+function FranchiseValueExpectedWinsPreviewPanel({
+  selectedTeamId,
+  selectedTeamName,
+  trueValuePreviewReport,
+  expectedWinsPreviewReport,
+  isLoading,
+}: {
+  selectedTeamId: string;
+  selectedTeamName: string;
+  trueValuePreviewReport: FranchiseTrueValuePreviewReport | null;
+  expectedWinsPreviewReport: FranchiseExpectedWinsPreviewReport | null;
+  isLoading: boolean;
+}) {
+  const teamSummary = trueValuePreviewReport?.teamSummaries.find((summary) => summary.teamId === selectedTeamId) ?? null;
+  const expectedWinsRow = expectedWinsPreviewReport?.teamRows.find((row) => row.teamId === selectedTeamId) ?? null;
+  const blockers = expectedWinsRow?.blockers ?? [];
+  const isAvailable = Boolean(teamSummary && expectedWinsRow && expectedWinsRow.status === 'preview-only');
+  const valueDelta = teamSummary?.valueDeltaEstimateTotal ?? expectedWinsRow?.previewGapFromLeagueAverage ?? null;
+
+  return (
+    <section
+      role="region"
+      aria-label="Team True Value and Expected Wins Preview"
+      className="mt-3 border-[4px] border-[#4A6844] bg-[#5A8352] p-3"
+    >
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="text-[10px] font-bold text-[#C4A853]">TRUE VALUE + EXPECTED WINS PREVIEW</div>
+          <div className="mt-1 text-[10px] leading-snug text-[#E8E8D8]/65">
+            PREVIEW ONLY · READ ONLY · NOT TRUSTED FOR DESIGNATIONS/MORALE.
+          </div>
+        </div>
+        <FoundationStatusBadge status={isAvailable ? 'preview-only' : 'blocked'} />
+      </div>
+
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[10px] leading-snug text-[#E8E8D8]">
+          <div className="font-bold text-[#C4A853]">Team</div>
+          <div className="mt-1">{selectedTeamName || selectedTeamId || 'No team selected'}</div>
+        </div>
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[10px] leading-snug text-[#E8E8D8]">
+          <div className="font-bold text-[#C4A853]">Team salary total</div>
+          <div className="mt-1">{formatPreviewNumber(teamSummary?.salaryTotal)}</div>
+        </div>
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[10px] leading-snug text-[#E8E8D8]">
+          <div className="font-bold text-[#C4A853]">Preview value total</div>
+          <div className="mt-1">{formatPreviewNumber(teamSummary?.previewValueEstimateTotal)}</div>
+        </div>
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[10px] leading-snug text-[#E8E8D8]">
+          <div className="font-bold text-[#C4A853]">Preview value delta</div>
+          <div className="mt-1">{formatPreviewNumber(valueDelta)}</div>
+        </div>
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[10px] leading-snug text-[#E8E8D8]">
+          <div className="font-bold text-[#C4A853]">Expected wins estimate</div>
+          <div className="mt-1">{formatPreviewNumber(expectedWinsRow?.expectedWinsEstimate)}</div>
+        </div>
+      </div>
+
+      <div className="mt-2 border-2 border-[#4A6844] bg-[#3F563F] p-2 text-[10px] leading-snug text-[#E8E8D8]/70">
+        <div>League average preview value baseline: {formatPreviewNumber(expectedWinsPreviewReport?.leagueAveragePreviewValueBaseline)}</div>
+        <div>Expected-wins persistence, daily snapshots, Fan Favorite/Albatross finalization, salary movement, morale mutation, relationship effects, GameTracker completion mutation, offseason, and Mode 3 remain blocked.</div>
+        {!isAvailable && (
+          <div className="mt-2 text-[#FFD6D6]">
+            {isLoading
+              ? 'Loading preview contracts.'
+              : blockers.length > 0
+                ? `Blocked: ${blockers.join(' ')}`
+                : 'Blocked: insufficient current MLB position peer/team data for this selected team.'}
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -4257,7 +4366,11 @@ function FranchiseStadiumFoundationPanel({
 }
 
 function FranchiseMode2FoundationStatusPanel({
+  selectedTeamId,
+  selectedTeamName,
   valueInputReport,
+  trueValuePreviewReport,
+  expectedWinsPreviewReport,
   analyticsTrustReport,
   salaryLifecycleReport,
   designationEligibilityReport,
@@ -4352,6 +4465,14 @@ function FranchiseMode2FoundationStatusPanel({
           body="Stable facts may be read-only summary context. Narrative generation, random events, and story persistence stay blocked."
         />
       </div>
+
+      <FranchiseValueExpectedWinsPreviewPanel
+        selectedTeamId={selectedTeamId}
+        selectedTeamName={selectedTeamName}
+        trueValuePreviewReport={trueValuePreviewReport}
+        expectedWinsPreviewReport={expectedWinsPreviewReport}
+        isLoading={isLoading}
+      />
 
       <div className="mt-3 grid gap-2 lg:grid-cols-2">
         <div className="border-2 border-[#4A6844] bg-[#5A3F3F] p-2 text-[10px] leading-snug text-[#FFD6D6]">

@@ -736,6 +736,12 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(foundationRegion).getByText(/Awards persistence: BLOCKED/i)).toBeInTheDocument();
     expect(within(foundationRegion).getByText(/Mode 3\/offseason execution: DEFERRED/i)).toBeInTheDocument();
     expect(within(foundationRegion).getByText(/True ratings, true grade, hidden scout truth, and hidden personality modifiers are not surfaced/i)).toBeInTheDocument();
+    const valueWinsRegion = within(foundationRegion).getByRole('region', { name: /Team True Value and Expected Wins Preview/i });
+    expect(within(valueWinsRegion).getByText('TRUE VALUE + EXPECTED WINS PREVIEW')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText(/PREVIEW ONLY · READ ONLY · NOT TRUSTED FOR DESIGNATIONS\/MORALE/i)).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText(/Blocked: .*At least two teams/i)).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText(/Expected-wins persistence, daily snapshots, Fan Favorite\/Albatross finalization, salary movement, morale mutation/i)).toBeInTheDocument();
+    expect(within(valueWinsRegion).queryByRole('button')).not.toBeInTheDocument();
     expect(within(foundationRegion).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
     expect(within(foundationRegion).queryByText(/leadership: 92/i)).not.toBeInTheDocument();
     expect(within(foundationRegion).queryByRole('button')).not.toBeInTheDocument();
@@ -852,6 +858,77 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     }, 'team-fan', 'team-1');
     expect(snapshot?.currentValue).toBe(afterValue);
     expect(snapshot?.history[0]?.sourceKind).toBe('manual-override');
+    expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
+  test('renders team True Value and expected wins preview when peer inputs are available', async () => {
+    mocks.mockUseFranchiseDataContext.mockReturnValue({
+      franchiseConfig: {
+        franchiseId: 'franchise-1',
+        league: 'league-1',
+      },
+      seasonNumber: 2,
+      standings: {},
+      teamNameMap: { 'team-1': 'Copied Alpha', 'team-2': 'Copied Beta' },
+      stadiumMap: { 'team-1': 'Copied Park', 'team-2': 'Beta Park' },
+    });
+    mocks.mockBuildFranchiseValueInputRows.mockResolvedValue(valueInputReport({
+      rows: [
+        valueInputRow({
+          playerId: 'team-1-high-war-low-salary',
+          playerName: 'High WAR Low Salary',
+          currentTeamId: 'team-1',
+          salary: 2,
+          teamSalaryBaseline: 2,
+          warPreviewValues: {
+            battingWar: 2,
+            pitchingWar: null,
+            fieldingWar: 0.6,
+            baserunningWar: 0.4,
+            totalWar: 3,
+            totalWarSource: 'stat-row',
+            trustedForFinalValue: false,
+          },
+        }),
+        valueInputRow({
+          playerId: 'team-2-low-war-high-salary',
+          playerName: 'Low WAR High Salary',
+          currentTeamId: 'team-2',
+          salary: 10,
+          teamSalaryBaseline: 10,
+          warPreviewValues: {
+            battingWar: 0.4,
+            pitchingWar: null,
+            fieldingWar: 0.1,
+            baserunningWar: 0,
+            totalWar: 0.5,
+            totalWarSource: 'stat-row',
+            trustedForFinalValue: false,
+          },
+        }),
+      ],
+    }));
+
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    const valueWinsRegion = await screen.findByRole('region', { name: /Team True Value and Expected Wins Preview/i });
+
+    expect(within(valueWinsRegion).getByText(/PREVIEW ONLY · READ ONLY · NOT TRUSTED FOR DESIGNATIONS\/MORALE/i)).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('Copied Alpha')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('Team salary total')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('2.0')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('Preview value total')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('10.0')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('Preview value delta')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('8.0')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('Expected wins estimate')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('14.0')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText(/League average preview value baseline: 6.0/i)).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText(/Fan Favorite\/Albatross finalization, salary movement, morale mutation/i)).toBeInTheDocument();
+    expect(within(valueWinsRegion).queryByText(/Blocked:/i)).not.toBeInTheDocument();
+    expect(within(valueWinsRegion).queryByRole('button')).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
   });
