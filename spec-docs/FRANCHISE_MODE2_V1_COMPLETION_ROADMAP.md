@@ -10,9 +10,9 @@ Manual smoke feedback remains a bug and feature backlog. The build order for Mod
 
 ## Current State As Of Latest Commit
 
-Latest committed checkpoint: `04b40ea Add season-end readiness report`.
+Latest committed checkpoint: `3e18b6c Add season handoff planning report`.
 
-Latest working checkpoint: Season Handoff Planning implemented pending verification/commit.
+Latest working checkpoint: no active uncommitted slice. Next planned checkpoint is Mode 2 V1 Playable Foundation Wrap-Up Audit.
 
 Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved.
 
@@ -40,13 +40,13 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 
 ## Active Priority Order
 
-1. Season Handoff
-   - Current slice: review-only planning contract exists; next step is skeptical audit/commit.
+1. Mode 2 V1 Playable Foundation Wrap-Up Audit
+   - Verify the completed v1 foundation end to end.
+   - Identify release blockers, portability gaps, and any stale docs.
    - No Mode 3/offseason execution until scoped lifecycle rules are approved.
 
 ## Playable V1 Remaining Work
 
-- Skeptical audit/commit for the read-only season handoff planning checkpoint.
 - Broader Mode 2 v1 playable foundation wrap-up audit before any Mode 3 execution.
 
 ## Full Spec Parity Backlog
