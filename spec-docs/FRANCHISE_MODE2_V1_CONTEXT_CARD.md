@@ -8,9 +8,9 @@ Reliability-first Mode 2 completion. Finish a playable, scoped, auditable intern
 
 Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
-Latest committed checkpoint: `3e18b6c Add season handoff planning report`.
+Latest committed checkpoint: `cf0cfd0 Register Mode 2 evidence stores for portability`.
 
-Latest working checkpoint: Mode 2 V1 evidence store portability registration patch in progress.
+Latest working checkpoint: no active uncommitted slice. Next planned checkpoint is Mode 2 V1 Playable Foundation Wrap-Up Audit.
 
 ## Current Completed
 
@@ -33,14 +33,13 @@ Latest working checkpoint: Mode 2 V1 evidence store portability registration pat
 
 ## Current Active Slice
 
-Mode 2 V1 Patch: Evidence Store Portability Registration.
+Mode 2 V1 Playable Foundation Wrap-Up Audit.
 
-Goal: resolve the wrap-up audit portability release blocker by registering expected-wins baselines, daily morale snapshots, and stadium records alongside random events and canonical morale without adding new generation or mutation behavior.
+Goal: verify the completed v1 foundation end to end, confirm the portability blocker is resolved, and identify any remaining release blockers before Mode 3/offseason planning.
 
 ## Next Queue
 
-1. Skeptical re-audit of the evidence store portability patch.
-2. Broader Mode 2 v1 playable foundation wrap-up audit.
+1. Broader Mode 2 v1 playable foundation wrap-up audit.
 
 ## Hard Boundaries
 

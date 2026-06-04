@@ -10,9 +10,9 @@ Manual smoke feedback remains a bug and feature backlog. The build order for Mod
 
 ## Current State As Of Latest Commit
 
-Latest committed checkpoint: `3e18b6c Add season handoff planning report`.
+Latest committed checkpoint: `cf0cfd0 Register Mode 2 evidence stores for portability`.
 
-Latest working checkpoint: Mode 2 V1 evidence store portability registration patch in progress.
+Latest working checkpoint: no active uncommitted slice. Next planned checkpoint is Mode 2 V1 Playable Foundation Wrap-Up Audit.
 
 Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved.
 
@@ -41,14 +41,14 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 
 ## Active Priority Order
 
-1. Mode 2 V1 Evidence Store Portability Registration
-   - Resolve the wrap-up audit release blocker for expected-wins baseline, daily morale snapshot, and stadium record evidence portability.
-   - Keep these stores read-only evidence; do not promote expected wins, morale summaries, or stadium records into mutating/final consumers.
+1. Mode 2 V1 Playable Foundation Wrap-Up Audit
+   - Verify the completed v1 foundation end to end.
+   - Confirm the evidence store portability blocker is resolved.
+   - Identify any remaining release blockers before Mode 3/offseason planning.
    - No Mode 3/offseason execution until scoped lifecycle rules are approved.
 
 ## Playable V1 Remaining Work
 
-- Skeptical re-audit of the evidence store portability patch.
 - Broader Mode 2 v1 playable foundation wrap-up audit before any Mode 3 execution.
 
 ## Full Spec Parity Backlog
