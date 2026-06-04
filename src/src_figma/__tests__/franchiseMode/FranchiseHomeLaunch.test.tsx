@@ -847,7 +847,7 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
     expect(mocks.mockNavigate).not.toHaveBeenCalled();
   });
 
-  test('regular-season pregame blocks start when a required benchmark is missing or stale', async () => {
+  test('regular-season pregame warns but allows start when a benchmark is missing or stale', async () => {
     mocks.mockBuildFranchiseGameTrackerRoster.mockImplementation(
       (teamId: keyof typeof snapshotsByTeam, context?: { useDH?: boolean }) => {
         const roster = makeRoster(teamId, context?.useDH ?? false);
@@ -886,8 +886,16 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
     expect(screen.getByText('LINEUP DELTA BENCHMARKS')).toBeTruthy();
     expect(screen.getByText(/AWAY TEAM vs LHP \(DH\): not set/)).toBeTruthy();
     expect(screen.getByText(/HOME TEAM vs RHP \(DH\): needs confirmation\/recalculation/)).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'START GAME' })).toHaveAttribute('disabled');
-    expect(mocks.mockNavigate).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'START GAME' })).not.toHaveAttribute('disabled');
+
+    fireEvent.click(screen.getByRole('button', { name: 'START GAME' }));
+
+    await waitFor(() => expect(mocks.mockNavigate).toHaveBeenCalled());
+    const state = mocks.mockNavigate.mock.calls.at(-1)?.[1]?.state;
+    expect(state.optimalLineupSnapshots.away).toBeUndefined();
+    expect(state.optimalLineupSnapshots.home).toMatchObject({
+      sourceConfidence: 'stale_roster',
+    });
   });
 
   test('regular-season pregame blocks benchmark registration when current lineups are incomplete', async () => {
@@ -1144,5 +1152,125 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
     });
     expect(state.awayManagerId).not.toBe('lower-seed-manager');
     expect(state.homeManagerId).not.toBe('higher-seed-manager');
+  });
+
+  test('playoff launch succeeds when Lineup Delta benchmark metadata is missing or stale', async () => {
+    mocks.mockUseFranchiseData.mockReturnValue(makeFranchiseData(false));
+    mocks.mockUsePlayoffData.mockReturnValue(makePlayoffData(true));
+    mocks.mockBuildFranchiseGameTrackerRoster.mockImplementation(
+      (teamId: keyof typeof snapshotsByTeam, context?: { useDH?: boolean }) => {
+        const roster = makeRoster(teamId, context?.useDH ?? false);
+        if (teamId === 'lower-seed') {
+          return Promise.resolve({
+            ...roster,
+            optimalLineups: {
+              ...roster.optimalLineups,
+              vsLHP: undefined,
+            },
+          });
+        }
+        if (teamId === 'higher-seed') {
+          return Promise.resolve({
+            ...roster,
+            optimalLineups: {
+              ...roster.optimalLineups,
+              vsRHP: {
+                ...roster.optimalLineups.vsRHP,
+                sourceConfidence: 'stale_roster',
+              },
+            },
+          });
+        }
+        return Promise.resolve(roster);
+      },
+    );
+
+    render(<FranchiseHome />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYOFFS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'BRACKET' }));
+    fireEvent.click(screen.getByRole('button', { name: /PLAY GAME 1/ }));
+
+    await waitFor(() => expect(mocks.mockNavigate).toHaveBeenCalled());
+    const state = mocks.mockNavigate.mock.calls.at(-1)?.[1]?.state;
+
+    expect(state).toMatchObject({
+      franchiseId: 'franchise-1',
+      seasonNumber: 1,
+      seasonId: 'franchise-1-season-1',
+      statsScopeId: 'franchise-1-season-1',
+      competitionType: 'playoff',
+      playoffId: 'playoff-1',
+      playoffSeriesId: 'series-1',
+      playoffGameNumber: 1,
+    });
+    expect(state.awayPlayers).toHaveLength(9);
+    expect(state.awayPitchers).toHaveLength(1);
+    expect(state.homePlayers).toHaveLength(9);
+    expect(state.homePitchers).toHaveLength(1);
+    expect(state.optimalLineupSnapshots.away).toBeUndefined();
+    expect(state.optimalLineupSnapshots.home).toMatchObject({
+      sourceConfidence: 'stale_roster',
+    });
+  });
+
+  test('playoff launch blocks when away roster readiness is incomplete', async () => {
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    mocks.mockUseFranchiseData.mockReturnValue(makeFranchiseData(false));
+    mocks.mockUsePlayoffData.mockReturnValue(makePlayoffData(true));
+    mocks.mockBuildFranchiseGameTrackerRoster.mockImplementation(
+      (teamId: keyof typeof snapshotsByTeam, context?: { useDH?: boolean }) => {
+        const roster = makeRoster(teamId, context?.useDH ?? false);
+        if (teamId === 'lower-seed') {
+          return Promise.resolve({
+            ...roster,
+            players: roster.players.slice(0, 1),
+          });
+        }
+        return Promise.resolve(roster);
+      },
+    );
+
+    render(<FranchiseHome />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYOFFS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'BRACKET' }));
+    fireEvent.click(screen.getByRole('button', { name: /PLAY GAME 1/ }));
+
+    await waitFor(() =>
+      expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('GameTracker playoff launch blocked')),
+    );
+    expect(alertSpy.mock.calls[0][0]).toContain('lower-seed Copied Team: needs 9 batting-order players');
+    expect(mocks.mockNavigate).not.toHaveBeenCalled();
+  });
+
+  test('playoff launch blocks when home starter readiness is incomplete', async () => {
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    mocks.mockUseFranchiseData.mockReturnValue(makeFranchiseData(false));
+    mocks.mockUsePlayoffData.mockReturnValue(makePlayoffData(true));
+    mocks.mockBuildFranchiseGameTrackerRoster.mockImplementation(
+      (teamId: keyof typeof snapshotsByTeam, context?: { useDH?: boolean }) => {
+        const roster = makeRoster(teamId, context?.useDH ?? false);
+        if (teamId === 'higher-seed') {
+          return Promise.resolve({
+            ...roster,
+            pitchers: [],
+          });
+        }
+        return Promise.resolve(roster);
+      },
+    );
+
+    render(<FranchiseHome />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYOFFS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'BRACKET' }));
+    fireEvent.click(screen.getByRole('button', { name: /PLAY GAME 1/ }));
+
+    await waitFor(() =>
+      expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('GameTracker playoff launch blocked')),
+    );
+    expect(alertSpy.mock.calls[0][0]).toContain('higher-seed Copied Team: select a starting pitcher');
+    expect(mocks.mockNavigate).not.toHaveBeenCalled();
   });
 });

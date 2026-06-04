@@ -5154,17 +5154,10 @@ export function GameTracker() {
   const currentPitcherStats = pitcherStats.get(gameState.currentPitcherId);
   const pitcherPitchCount = currentPitcherStats?.pitchCount ?? 0;
 
-  // Format display name: already-initialed names stay as-is; full names become initial + last name.
+  // Preserve full roster names in the live matchup display.
   const formatDisplayName = (name: string | undefined): string => {
-    if (!name) return "UNKNOWN";
-    // If already in "F. LAST" format, return as-is
-    if (name.match(/^[A-Z]\.\s[A-Z]+$/)) return name;
-    // Otherwise, format "First Last" to "F. LAST"
-    const parts = name.split(" ");
-    if (parts.length >= 2) {
-      return `${parts[0][0]}. ${parts[parts.length - 1].toUpperCase()}`;
-    }
-    return name.toUpperCase();
+    const trimmed = name?.trim();
+    return trimmed || "UNKNOWN";
   };
 
   const currentBatterDisplayName = formatDisplayName(resolvedCurrentBatterName);

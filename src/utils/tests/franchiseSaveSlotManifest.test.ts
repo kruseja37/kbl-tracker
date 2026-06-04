@@ -46,6 +46,9 @@ import {
   failFranchiseTransitionJournal,
   recordTransitionStaging,
 } from '../franchiseTransitionJournal';
+import { initFranchiseExpectedWinsBaselineDatabase } from '../franchiseExpectedWinsBaselineStorage';
+import { initFranchiseMoraleDailySnapshotDatabase } from '../franchiseMoraleDailySnapshotStorage';
+import { initFranchiseStadiumRecordsDatabase } from '../franchiseStadiumRecordsStorage';
 
 let counter = 0;
 
@@ -282,6 +285,8 @@ async function seedLifecycleRecords(params: {
   const awayTeamId = `${teamPrefix}-a`;
   const homeTeamId = `${teamPrefix}-b`;
   const playerId = `${teamPrefix}-player-a`;
+  const statsScopeId = seasonId;
+  const scopeKey = `${franchiseId}:${seasonId}:${statsScopeId}:${seasonNumber}`;
 
   await putTrackerRecord('currentGame', {
     id: 'current',
@@ -289,7 +294,7 @@ async function seedLifecycleRecords(params: {
     franchiseId,
     seasonNumber,
     seasonId,
-    statsScopeId: seasonId,
+    statsScopeId,
     competitionType: 'franchise',
     competitionId: franchiseId,
     scheduleGameId: `${gameId}-schedule`,
@@ -305,7 +310,7 @@ async function seedLifecycleRecords(params: {
     franchiseId,
     seasonNumber,
     seasonId,
-    statsScopeId: seasonId,
+    statsScopeId,
     competitionType: 'franchise',
     competitionId: franchiseId,
     scheduleGameId: `${gameId}-schedule`,
@@ -356,7 +361,7 @@ async function seedLifecycleRecords(params: {
   await createGameHeader({
     gameId,
     seasonId,
-    statsScopeId: seasonId,
+    statsScopeId,
     competitionType: 'franchise',
     competitionId: franchiseId,
     franchiseId,
@@ -472,8 +477,69 @@ async function seedLifecycleRecords(params: {
     phase: 'OFFSEASON',
     franchiseId,
     seasonId,
-    statsScopeId: seasonId,
+    statsScopeId,
     data: { playerId },
+  });
+  await initFranchiseExpectedWinsBaselineDatabase();
+  await initFranchiseMoraleDailySnapshotDatabase();
+  await initFranchiseStadiumRecordsDatabase();
+  await putRecord('kbl-franchise-expected-wins-baselines', 'expectedWinsBaselineSnapshots', {
+    id: `${teamPrefix}-expected-wins-baseline`,
+    franchiseId,
+    seasonId,
+    statsScopeId,
+    seasonNumber,
+    teamId: awayTeamId,
+    sourceKind: 'true-value-preview',
+    expectedWinsPreviewContractVersion: 'test-expected-wins-v1',
+    trueValuePreviewContractVersion: 'test-true-value-v1',
+    expectedWinsEstimate: 1,
+    status: 'preview-only',
+    scopeKey,
+    teamScopeKey: `${scopeKey}:${awayTeamId}`,
+    identityKey: `${scopeKey}:${awayTeamId}:true-value-preview:test-true-value-v1:test-expected-wins-v1`,
+  });
+  await putRecord('kbl-franchise-morale-daily-snapshots', 'moraleDailySnapshots', {
+    id: `${teamPrefix}-daily-morale-snapshot`,
+    franchiseId,
+    seasonId,
+    statsScopeId,
+    seasonNumber,
+    targetType: 'team-fan',
+    targetId: awayTeamId,
+    teamId: awayTeamId,
+    dateKey: '2026-06-04',
+    openingValue: 50,
+    closingValue: 51,
+    highValue: 51,
+    lowValue: 50,
+    averageValue: 50.5,
+    changeCount: 1,
+    scopeKey,
+    targetScopeKey: `${scopeKey}:team-fan:${awayTeamId}`,
+    identityKey: `${scopeKey}:team-fan:${awayTeamId}:2026-06-04`,
+  });
+  await putRecord('kbl-franchise-stadium-records', 'stadiumRecords', {
+    id: `${teamPrefix}-stadium-record`,
+    franchiseId,
+    seasonId,
+    statsScopeId,
+    seasonNumber,
+    stadiumId: `${teamPrefix}-park`,
+    stadiumName: 'Manifest Park',
+    recordType: 'highest-team-runs-game',
+    recordKey: `${gameId}-runs`,
+    value: 4,
+    valueLabel: '4 runs',
+    leaderTeamIds: [awayTeamId],
+    leaderPlayerIds: [playerId],
+    leaderPlayerNames: [`${playerId} Player`],
+    sourceGameIds: [gameId],
+    evidenceIds: [`${gameId}:runs`],
+    evidenceSummary: 'Manifest fixture stadium record.',
+    scopeKey,
+    stadiumScopeKey: `${scopeKey}:${teamPrefix}-park`,
+    identityKey: `${scopeKey}:${teamPrefix}-park:highest-team-runs-game:${gameId}-runs`,
   });
 
   return { gameId, playoffId: playoff.id };
@@ -863,6 +929,9 @@ describe('franchise save-slot manifest contract', () => {
     expect(domain(payload, 'playoff.stats').recordCount).toBe(1);
     expect(domain(payload, 'offseason.state').recordCount).toBe(1);
     expect(domain(payload, 'farm').recordCount).toBe(1);
+    expect(domain(payload, 'expectedWinsBaselines').recordCount).toBe(1);
+    expect(domain(payload, 'dailyMoraleSnapshots').recordCount).toBe(1);
+    expect(domain(payload, 'stadiumRecords').recordCount).toBe(1);
     expect(domain(payload, 'leagueBuilder.templates')).toMatchObject({ recordCount: 0, status: 'skipped' });
 
     const exportedCompletedIds = new Set(
@@ -991,6 +1060,15 @@ describe('franchise save-slot manifest contract', () => {
       recordCount: 4,
       status: 'warning',
     });
+    expect(report.domains.find((candidate) => candidate.manifestEntryId === 'expectedWinsBaselines')).toMatchObject({
+      recordCount: 1,
+    });
+    expect(report.domains.find((candidate) => candidate.manifestEntryId === 'dailyMoraleSnapshots')).toMatchObject({
+      recordCount: 1,
+    });
+    expect(report.domains.find((candidate) => candidate.manifestEntryId === 'stadiumRecords')).toMatchObject({
+      recordCount: 1,
+    });
 
     const completedGames = await getRecords('kbl-tracker', 'completedGames');
     expect(completedGames.some((record) => record.gameId === owned.gameId)).toBe(false);
@@ -1016,6 +1094,18 @@ describe('franchise save-slot manifest contract', () => {
     const transitionJournals = await getRecords('kbl-franchise-transition-journal', 'transitionJournals');
     expect(transitionJournals.some((record) => record.franchiseId === seeded.franchiseId)).toBe(false);
     expect(transitionJournals.some((record) => record.franchiseId === other.franchiseId)).toBe(true);
+
+    const expectedWinsBaselines = await getRecords('kbl-franchise-expected-wins-baselines', 'expectedWinsBaselineSnapshots');
+    expect(expectedWinsBaselines.some((record) => record.franchiseId === seeded.franchiseId)).toBe(false);
+    expect(expectedWinsBaselines.some((record) => record.franchiseId === other.franchiseId)).toBe(true);
+
+    const dailyMoraleSnapshots = await getRecords('kbl-franchise-morale-daily-snapshots', 'moraleDailySnapshots');
+    expect(dailyMoraleSnapshots.some((record) => record.franchiseId === seeded.franchiseId)).toBe(false);
+    expect(dailyMoraleSnapshots.some((record) => record.franchiseId === other.franchiseId)).toBe(true);
+
+    const stadiumRecords = await getRecords('kbl-franchise-stadium-records', 'stadiumRecords');
+    expect(stadiumRecords.some((record) => record.franchiseId === seeded.franchiseId)).toBe(false);
+    expect(stadiumRecords.some((record) => record.franchiseId === other.franchiseId)).toBe(true);
   });
 
   test('backup and sync schemas cover manifest-owned shared stores and franchise roots', async () => {

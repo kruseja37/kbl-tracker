@@ -526,6 +526,46 @@ describe("GameTracker launch state", () => {
     expect(mocks.mockInitializeGame).not.toHaveBeenCalled();
   });
 
+  test("live matchup display keeps full batter and pitcher names", async () => {
+    mocks.mockUseParams.mockReturnValue({ gameId: "game-franchise-restored" });
+    mocks.mockUseLocation.mockReturnValue({
+      pathname: "/game-tracker/game-franchise-restored",
+      search: "",
+      hash: "",
+      state: null,
+    });
+    mocks.mockLoadExistingGame.mockResolvedValue(true);
+    Object.assign(mocks.mockUseGameStateResult.gameState, {
+      gameId: "game-franchise-restored",
+      currentBatterId: "away-batter-1",
+      currentBatterName: "Luisa Longname",
+      currentPitcherId: "home-sp",
+      currentPitcherName: "Pedro Fullname",
+      awayTeamId: "away-team",
+      homeTeamId: "home-team",
+      awayTeamName: "Away Team",
+      homeTeamName: "Home Team",
+      seasonNumber: 3,
+      gamePhase: "LIVE",
+    });
+    mocks.mockUseGameStateResult.restoredCompetitionContext = {
+      seasonId: "franchise-restored-season-3",
+      statsScopeId: "franchise-restored-season-3",
+      seasonNumber: 3,
+      competitionType: "franchise",
+      competitionId: "franchise-restored",
+      franchiseId: "franchise-restored",
+      scheduleGameId: "schedule-restored-7",
+    };
+
+    render(<GameTracker />);
+
+    expect(await screen.findByText("Pedro Fullname")).toBeInTheDocument();
+    expect(screen.getAllByText("Luisa Longname").length).toBeGreaterThan(0);
+    expect(document.body).not.toHaveTextContent("P. FULLNAME");
+    expect(document.body).not.toHaveTextContent("L. LONGNAME");
+  });
+
   test("franchise pitch-count prompt uses the shared touch number pad", async () => {
     mocks.mockUseParams.mockReturnValue({ gameId: "game-franchise-restored" });
     mocks.mockUseLocation.mockReturnValue({

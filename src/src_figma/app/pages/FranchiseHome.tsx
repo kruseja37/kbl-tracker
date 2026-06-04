@@ -216,6 +216,11 @@ function getFranchiseStarterHand(
   return (pitcher?.throwingHand || "R") === "L" ? "L" : "R";
 }
 
+function getSelectedStarterIndex(pitchers: TeamRosterPitcher[]): number {
+  const starterIndex = pitchers.findIndex((pitcher) => pitcher.isStarter);
+  return starterIndex >= 0 ? starterIndex : 0;
+}
+
 export function resolveFranchiseGameUseDH(franchiseConfig: UseFranchiseDataReturn["franchiseConfig"]): boolean {
   return franchiseConfig?.season?.useDH ?? false;
 }
@@ -848,6 +853,30 @@ export function FranchiseHome() {
     ]);
     const awayDisplayName = awayTeamData?.name ?? awayTeamName;
     const homeDisplayName = homeTeamData?.name ?? homeTeamName;
+    const awaySelectedStarterIdx = getSelectedStarterIndex(awayRoster.pitchers);
+    const homeSelectedStarterIdx = getSelectedStarterIndex(homeRoster.pitchers);
+    const readiness = buildFranchisePregameReadiness({
+      teams: [
+        {
+          teamName: awayDisplayName,
+          players: awayRoster.players,
+          pitchers: awayRoster.pitchers,
+          selectedStarterIdx: awaySelectedStarterIdx,
+          useDH: playoffUseDH,
+        },
+        {
+          teamName: homeDisplayName,
+          players: homeRoster.players,
+          pitchers: homeRoster.pitchers,
+          selectedStarterIdx: homeSelectedStarterIdx,
+          useDH: playoffUseDH,
+        },
+      ],
+    });
+    if (!readiness.isReady) {
+      window.alert(`GameTracker playoff launch blocked: ${readiness.issues.join(" | ")}`);
+      return;
+    }
     const managerInstanceId =
       franchiseId || franchiseLeagueId || LEAGUE_BUILDER_MANAGER_INSTANCE_ID;
     const [awayManager, homeManager] = await Promise.all([
@@ -884,27 +913,6 @@ export function FranchiseHome() {
       away: selectOptimalLineupForOpposingPitcher(awayRoster.optimalLineups, homeStarter),
       home: selectOptimalLineupForOpposingPitcher(homeRoster.optimalLineups, awayStarter),
     };
-    const lineupBenchmarkIssues = buildPregameBenchmarkIssues([
-      {
-        teamName: awayTeamName.toUpperCase(),
-        opposingPitcherHand: getFranchiseStarterHand(homeStarter),
-        dhEnabled: playoffUseDH,
-        snapshot: optimalLineupSnapshots.away,
-      },
-      {
-        teamName: homeTeamName.toUpperCase(),
-        opposingPitcherHand: getFranchiseStarterHand(awayStarter),
-        dhEnabled: playoffUseDH,
-        snapshot: optimalLineupSnapshots.home,
-      },
-    ]);
-    if (lineupBenchmarkIssues.length > 0) {
-      window.alert(
-        `Lineup Delta benchmarks need attention before first pitch: ${lineupBenchmarkIssues.join(" • ")} Use Team Hub to recalculate/apply or set the current lineup as optimal.`,
-      );
-      return;
-    }
-
     navigate(`/game-tracker/playoff-${series.id}-g${nextGameNumber}`, {
       state: withPregameManagerNavigationState({
         gameMode: 'playoff' as const,
@@ -3304,27 +3312,6 @@ function GameDayContent({
       away: selectOptimalLineupForOpposingPitcher(preGameData.awayOptimalLineups, homeStarter),
       home: selectOptimalLineupForOpposingPitcher(preGameData.homeOptimalLineups, awayStarter),
     };
-    const lineupBenchmarkIssues = buildPregameBenchmarkIssues([
-      {
-        teamName: preGameData.awayTeamName,
-        opposingPitcherHand: getFranchiseStarterHand(homeStarter),
-        dhEnabled: preGameData.useDH,
-        snapshot: optimalLineupSnapshots.away,
-      },
-      {
-        teamName: preGameData.homeTeamName,
-        opposingPitcherHand: getFranchiseStarterHand(awayStarter),
-        dhEnabled: preGameData.useDH,
-        snapshot: optimalLineupSnapshots.home,
-      },
-    ]);
-    if (lineupBenchmarkIssues.length > 0) {
-      setToastMessage(
-        `Lineup Delta benchmarks need attention: ${lineupBenchmarkIssues.join(" | ")}`,
-      );
-      return;
-    }
-
     navigate(`/game-tracker/franchise-g${preGameData.gameNumber}`, {
       state: withPregameManagerNavigationState({
         gameMode: 'franchise' as const,
@@ -3645,7 +3632,7 @@ function GameDayContent({
   const pregameReadiness = preGameData ? getPregameReadiness(preGameData) : undefined;
   const pregameReadinessIssues = pregameReadiness?.issues ?? [];
   const canRegisterPregameBenchmarks = pregameReadiness?.isReady ?? false;
-  const canLaunchPregame = canRegisterPregameBenchmarks && pregameBenchmarkIssues.length === 0;
+  const canLaunchPregame = pregameReadiness?.isReady ?? false;
 
   return (
     <div className="space-y-4">
