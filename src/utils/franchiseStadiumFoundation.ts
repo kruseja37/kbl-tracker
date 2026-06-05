@@ -163,8 +163,17 @@ function hasScopeIdentity(record: {
 }
 
 function normalizeStadiumId(stadiumName?: string | null, stadiumId?: string | null): string | null {
-  if (stadiumId) return stadiumId;
-  if (stadiumName) return getStableParkId(stadiumName);
+  const trimmedName = stadiumName?.trim() ?? '';
+  const trimmedId = stadiumId?.trim() ?? '';
+  if (trimmedName) {
+    const stableFromName = getStableParkId(trimmedName);
+    if (!trimmedId) return stableFromName;
+    if (trimmedId === trimmedName || getStableParkId(trimmedId) === stableFromName) {
+      return stableFromName;
+    }
+    return trimmedId;
+  }
+  if (trimmedId) return trimmedId;
   return null;
 }
 

@@ -441,6 +441,43 @@ describe('franchise stadium foundation', () => {
     });
   });
 
+  test('maps legacy name-as-id archive spray events to the selected stable stadium id', () => {
+    const report = buildFranchiseStadiumFoundationReport({
+      ...scope,
+      stadiumSnapshots: [stadiumSnapshot()],
+      completedGames: [completedGame()],
+      atBatEvents: [
+        atBat({
+          parkContext: {
+            stadiumId: 'Apple Field',
+            stadiumName: 'Apple Field',
+            parkFactors: seedParkFactors,
+          },
+        }),
+      ],
+      fieldingEvents: [],
+    });
+
+    expect(report.sprayCharts.status).toBe('trusted');
+    expect(report.sprayCharts.summary).toMatchObject({
+      rows: 2,
+      battingRows: 1,
+      pitchingRows: 1,
+      fieldingRows: 0,
+      stadiumIds: ['apple-field'],
+    });
+    expect(filterAndSortFranchiseSprayChartRows(report.sprayCharts.rows, {
+      stadiumId: 'apple-field',
+    })).toHaveLength(2);
+    expect(filterAndSortFranchiseSprayChartRows(report.sprayCharts.rows, {
+      stadiumId: 'Apple Field',
+    })).toHaveLength(0);
+    expect(report.stadiumIdentity.stadiums[0]).toMatchObject({
+      stadiumId: 'apple-field',
+      sprayEventRows: 2,
+    });
+  });
+
   test('strictly excludes mismatched franchise season or stats scope event evidence', () => {
     const report = buildFranchiseStadiumFoundationReport({
       ...scope,

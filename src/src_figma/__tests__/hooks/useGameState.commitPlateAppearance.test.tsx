@@ -161,6 +161,41 @@ describe('useGameState commitPlateAppearance', () => {
     });
   });
 
+  test('records stable stadium identity and seed factors on at-bat park context', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result, {
+      seasonId: 'franchise-1-season-1',
+      statsScopeId: 'franchise-1-season-1',
+      competitionType: 'franchise',
+      competitionId: 'franchise-1',
+      franchiseId: 'franchise-1',
+      stadiumName: 'Apple Field',
+    });
+
+    await act(async () => {
+      await result.current.commitPlateAppearance({ type: 'hit', hitType: '1B', rbi: 0 });
+    });
+
+    expect(mockCreateGameHeader).toHaveBeenCalledWith(expect.objectContaining({
+      stadiumName: 'Apple Field',
+    }));
+    expect(mockLogAtBatEvent).toHaveBeenCalledTimes(1);
+    expect(mockLogAtBatEvent.mock.calls[0][0]).toMatchObject({
+      franchiseId: 'franchise-1',
+      seasonId: 'franchise-1-season-1',
+      statsScopeId: 'franchise-1-season-1',
+      parkContext: {
+        stadiumId: 'apple-field',
+        stadiumName: 'Apple Field',
+        parkFactors: expect.objectContaining({
+          stadiumId: 'apple-field',
+          stadiumName: 'Apple Field',
+          source: 'SEED',
+        }),
+      },
+    });
+  });
+
   test('routes dropped-third-strike metadata through the canonical recorder', async () => {
     const { result } = renderHook(() => useGameState());
     await initializeGame(result);

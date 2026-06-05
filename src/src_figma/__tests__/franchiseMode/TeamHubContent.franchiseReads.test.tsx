@@ -1278,7 +1278,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
       statsScopeId: 'franchise-1-season-2',
       seasonNumber: 2,
       parkContext: {
-        stadiumId: 'apple-field',
+        stadiumId: 'Apple Field',
         stadiumName: 'Apple Field',
         parkFactors,
       },

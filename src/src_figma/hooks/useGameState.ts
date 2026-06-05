@@ -4024,8 +4024,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         // 1.10: Park context
         parkContext: gameState.stadiumName
           ? {
-              stadiumId: gameState.stadiumName, // Use name as ID — no separate stadiumId system yet
+              stadiumId: getStableParkId(gameState.stadiumName),
               stadiumName: gameState.stadiumName,
+              parkFactors: getDerivedParkFactorsIfAvailable(gameState.stadiumName),
             }
           : undefined,
 
@@ -4312,6 +4313,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         homeTeamId: config.homeTeamId,
         awayTeamName: config.awayTeamName,
         homeTeamName: config.homeTeamName,
+        stadiumName: config.stadiumName || null,
         startingLineups: {
           away: awayLineupSnapshot.map((player, idx) => ({
             playerId: player.playerId,
