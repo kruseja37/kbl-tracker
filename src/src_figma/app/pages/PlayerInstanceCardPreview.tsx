@@ -5,6 +5,7 @@ import type {
 } from "../../../utils/leagueBuilderStorage";
 import type { FameTier } from "../../../types/reporter";
 import type { PlayerFameGameSource } from "../components/PlayerFameSection";
+import type { PlayerInstanceWpaSummary } from "../../../utils/almanacQueries";
 import {
   PlayerInstanceCardContent,
   type PlayerInstanceCardContentState,
@@ -95,11 +96,13 @@ function createPreviewState({
   instance,
   playerOverride,
   latestGame,
+  wpaSummary,
 }: {
   player: Player;
   instance: CanonicalPlayerInstance;
   playerOverride?: LeaguePlayerOverrideRecord | null;
   latestGame?: PlayerFameGameSource | null;
+  wpaSummary?: PlayerInstanceWpaSummary | null;
 }): PlayerInstanceCardContentState {
   return {
     canonicalPlayer: {
@@ -117,7 +120,7 @@ function createPreviewState({
     usedFallback: true,
     batting: null,
     pitching: null,
-    wpaSummary: null,
+    wpaSummary: wpaSummary ?? null,
     allTimeEliminationBatting: null,
     allTimeEliminationPitching: null,
     teams: [],
@@ -186,6 +189,20 @@ const eliminationGame = createGame("preview-elimination-game", [
   },
 ]);
 
+const franchiseWpaSummary: PlayerInstanceWpaSummary = {
+  totalWpa: 0.42,
+  battingWpa: 0.31,
+  pitchingWpa: 0,
+  catchingWpa: 0,
+  fieldingWpa: 0.07,
+  baserunningWpa: 0.04,
+  managingWpa: 0,
+  gamesWithWpa: 2,
+  gamesWithoutWpa: 1,
+  latestGameId: "preview-franchise-wpa-game",
+  latestGameDate: Date.parse("2026-04-15T20:30:00.000Z"),
+};
+
 const previewVariants: PreviewVariant[] = [
   {
     key: "unknown",
@@ -244,6 +261,7 @@ const previewVariants: PreviewVariant[] = [
         instanceName: "Franchise Archive",
       }),
       latestGame: exhibitionGame,
+      wpaSummary: franchiseWpaSummary,
     }),
   },
 ];

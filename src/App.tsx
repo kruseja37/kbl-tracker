@@ -184,6 +184,15 @@ const BetweenInningSummaryPreview = lazy(() =>
     default: module.BetweenInningSummaryPreview,
   })),
 );
+const enableFranchiseVisualSmokePreviewRoute =
+  import.meta.env.DEV || import.meta.env.MODE === "test";
+const FranchiseV1VisualSmokeSeed = enableFranchiseVisualSmokePreviewRoute
+  ? lazy(() =>
+      import("./src_figma/app/pages/FranchiseV1VisualSmokeSeed").then((module) => ({
+        default: module.FranchiseV1VisualSmokeSeed,
+      })),
+    )
+  : null;
 
 /**
  * KBL Tracker - Main App
@@ -309,6 +318,12 @@ function App() {
           path="/__preview/between-inning-summary"
           element={<BetweenInningSummaryPreview />}
         />
+        {enableFranchiseVisualSmokePreviewRoute ? (
+          <Route
+            path="/__preview/franchise-v1-visual-smoke"
+            element={FranchiseV1VisualSmokeSeed ? <FranchiseV1VisualSmokeSeed /> : <NotFound />}
+          />
+        ) : null}
 
         {/* 404 */}
         <Route path="*" element={<NotFound />} />

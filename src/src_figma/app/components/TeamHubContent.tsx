@@ -4489,6 +4489,9 @@ function FranchiseValueExpectedWinsPreviewPanel({
             <span className="border border-[#E8E8D8]/25 bg-[#4A6844] px-2 py-0.5 text-[8px] font-bold text-[#E8E8D8]/75">
               SALARY BASELINE CONTEXT
             </span>
+            <span className="border border-[#E8E8D8]/25 bg-[#3F563F] px-2 py-0.5 text-[8px] font-bold text-[#E8E8D8]/75">
+              READ ONLY
+            </span>
             <span className="border border-[#DD0000]/35 bg-[#5A3F3F] px-2 py-0.5 text-[8px] font-bold text-[#FFD6D6]">
               NO SALARY MOVEMENT
             </span>

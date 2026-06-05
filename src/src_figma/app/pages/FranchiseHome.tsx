@@ -1101,10 +1101,10 @@ export function FranchiseHome() {
 
   return (
     <FranchiseDataContext.Provider value={franchiseData}>
-    <div className="min-h-screen bg-[#567A50] text-white">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#567A50] text-white">
       {/* Header with logo */}
       <div className="bg-[#6B9462] border-b-[6px] border-[#4A6844] px-4 py-3">
-        <div className="max-w-7xl mx-auto flex items-center justify-between bg-[#5A8352] px-6 py-4">
+        <div className="mx-auto flex w-full max-w-7xl min-w-0 items-center justify-between gap-4 bg-[#5A8352] px-4 py-4 sm:px-6">
           <button
             onClick={handleLogoClick}
             className="hover:scale-105 transition-transform active:scale-95"
@@ -1117,8 +1117,8 @@ export function FranchiseHome() {
           </button>
 
           {/* League name - centered */}
-          <div className="text-center">
-            <div className="text-[16px] text-[#E8E8D8]" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>{leagueName}</div>
+          <div className="min-w-0 text-center">
+            <div className="truncate text-[14px] text-[#E8E8D8] sm:text-[16px]" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>{leagueName}</div>
             <div className="text-[8px] text-[#E8E8D8]/70">
               SEASON {currentSeason} • WEEK {franchiseData.currentWeek}
               {franchiseData.hasRealData && <span className="ml-2 text-[#C4A853]">●</span>}
@@ -1136,10 +1136,10 @@ export function FranchiseHome() {
 
       {/* Season phase toggle */}
       <div className="bg-[#6B9462] border-b-4 border-[#4A6844]">
-        <div className="max-w-7xl mx-auto flex">
+        <div className="mx-auto flex w-full max-w-7xl min-w-0">
           <button
             onClick={() => setSeasonPhase("regular")}
-            className={`flex-1 py-2 text-sm border-r-4 border-[#4A6844] transition ${
+            className={`min-w-0 flex-1 border-r-4 border-[#4A6844] px-1 py-2 text-[9px] transition sm:text-sm ${
               seasonPhase === "regular"
                 ? "bg-[#4A6844] text-[#E8E8D8]"
                 : "bg-[#5A8352] text-[#E8E8D8]/60 hover:bg-[#4F7D4B]"
@@ -1149,7 +1149,7 @@ export function FranchiseHome() {
           </button>
           <button
             onClick={() => setSeasonPhase("playoffs")}
-            className={`flex-1 py-2 text-sm border-r-4 border-[#4A6844] transition ${
+            className={`min-w-0 flex-1 border-r-4 border-[#4A6844] px-1 py-2 text-[9px] transition sm:text-sm ${
               seasonPhase === "playoffs"
                 ? "bg-[#4A6844] text-[#E8E8D8]"
                 : "bg-[#5A8352] text-[#E8E8D8]/60 hover:bg-[#4F7D4B]"
@@ -1159,7 +1159,7 @@ export function FranchiseHome() {
           </button>
           <button
             onClick={() => setSeasonPhase("offseason")}
-            className={`flex-1 py-2 text-sm transition ${
+            className={`min-w-0 flex-1 px-1 py-2 text-[9px] transition sm:text-sm ${
               seasonPhase === "offseason"
                 ? "bg-[#4A6844] text-[#E8E8D8]"
                 : "bg-[#5A8352] text-[#E8E8D8]/60 hover:bg-[#4F7D4B]"
@@ -1172,7 +1172,7 @@ export function FranchiseHome() {
 
       {/* Sub-tabs */}
       <div className="bg-[#6B9462] overflow-x-auto border-b-4 border-[#4A6844]">
-        <div className={`max-w-7xl mx-auto flex ${seasonPhase === "regular" ? "gap-0" : "gap-0"}`}>
+        <div className={`mx-auto flex w-max min-w-full max-w-7xl ${seasonPhase === "regular" ? "gap-0" : "gap-0"}`}>
           {currentTabs.map((tab, index) => {
             return (
               <button
@@ -1192,7 +1192,7 @@ export function FranchiseHome() {
       </div>
 
       {/* Content area */}
-      <div className="max-w-7xl mx-auto p-4 bg-[#567A50]">
+      <div className="mx-auto w-full max-w-7xl bg-[#567A50] p-4">
         {/* Offseason Phase Progress Banner */}
         {seasonPhase === "offseason" && offseasonState.state && (
           <div className="mb-4 bg-[#6B9462] border-[5px] border-[#C4A853] p-4">
