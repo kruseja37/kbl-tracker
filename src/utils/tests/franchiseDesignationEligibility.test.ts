@@ -166,6 +166,7 @@ describe('franchise designation eligibility adapter', () => {
     const mvp = makeRow({
       playerId: 'mvp',
       playerName: 'Preview MVP',
+      valuePosition: 'SS',
       seasonStatsAvailability: { batting: true, pitching: false, fielding: true, any: true },
       warInputAvailability: {
         battingWar: true,
@@ -175,10 +176,20 @@ describe('franchise designation eligibility adapter', () => {
         any: true,
         trustedForFinalValue: false,
       },
+      warPreviewValues: {
+        battingWar: 1.4,
+        pitchingWar: null,
+        fieldingWar: 0.2,
+        baserunningWar: 0.1,
+        totalWar: 1.7,
+        totalWarSource: 'stat-row',
+        trustedForFinalValue: false,
+      },
     });
     const ace = makeRow({
       playerId: 'ace',
       playerName: 'Preview Ace',
+      valuePosition: 'P',
       seasonStatsAvailability: { batting: false, pitching: true, fielding: false, any: true },
       warInputAvailability: {
         battingWar: false,
@@ -186,6 +197,15 @@ describe('franchise designation eligibility adapter', () => {
         fieldingWar: false,
         baserunningWar: false,
         any: true,
+        trustedForFinalValue: false,
+      },
+      warPreviewValues: {
+        battingWar: null,
+        pitchingWar: 1.2,
+        fieldingWar: null,
+        baserunningWar: null,
+        totalWar: 1.2,
+        totalWarSource: 'derived-from-components',
         trustedForFinalValue: false,
       },
     });
@@ -206,6 +226,288 @@ describe('franchise designation eligibility adapter', () => {
       statsScopeId: 'season-1',
     });
     expect(report.records.every((record) => record.persistable === false)).toBe(true);
+  });
+
+  test.each(['SP', 'RP', 'CP', 'SP/RP', 'TWO-WAY', 'P'])(
+    'TEAM_MVP blocks positive-WAR pitcher identity shape %s',
+    (valuePosition) => {
+      const report = classifyFranchiseDesignationEligibility(makeReport([
+        makeRow({
+          playerId: `pitcher-${valuePosition.replace(/[^a-z0-9]/gi, '-').toLowerCase()}`,
+          playerName: `${valuePosition} Pitcher`,
+          valuePosition,
+          currentTeamId: `team-${valuePosition.replace(/[^a-z0-9]/gi, '-').toLowerCase()}`,
+          seasonStatsAvailability: { batting: true, pitching: true, fielding: false, any: true },
+          warInputAvailability: {
+            battingWar: true,
+            pitchingWar: true,
+            fieldingWar: false,
+            baserunningWar: false,
+            any: true,
+            trustedForFinalValue: false,
+          },
+          warPreviewValues: {
+            battingWar: 0.2,
+            pitchingWar: 1.1,
+            fieldingWar: null,
+            baserunningWar: null,
+            totalWar: 1.3,
+            totalWarSource: 'derived-from-components',
+            trustedForFinalValue: false,
+          },
+        }),
+      ]));
+
+      const mvp = report.records.find((record) => record.designationType === 'TEAM_MVP');
+      expect(mvp).toMatchObject({
+        status: 'blocked',
+        persistable: false,
+      });
+      expect(mvp?.reasons.join(' ')).toContain('pitcher recognition uses ACE');
+    },
+  );
+
+  test.each(['SP', 'RP', 'CP', 'SP/RP', 'TWO-WAY', 'P'])(
+    'ACE can consider repo-native pitcher identity shape %s with pWAR at or above threshold',
+    (valuePosition) => {
+      const safePosition = valuePosition.replace(/[^a-z0-9]/gi, '-').toLowerCase();
+      const report = classifyFranchiseDesignationEligibility(makeReport([
+        makeRow({
+          playerId: `ace-${safePosition}`,
+          playerName: `${valuePosition} Ace`,
+          valuePosition,
+          currentTeamId: `team-${safePosition}`,
+          seasonStatsAvailability: { batting: false, pitching: true, fielding: false, any: true },
+          warInputAvailability: {
+            battingWar: false,
+            pitchingWar: true,
+            fieldingWar: false,
+            baserunningWar: false,
+            any: true,
+            trustedForFinalValue: false,
+          },
+          warPreviewValues: {
+            battingWar: null,
+            pitchingWar: 0.5,
+            fieldingWar: null,
+            baserunningWar: null,
+            totalWar: 0.5,
+            totalWarSource: 'derived-from-components',
+            trustedForFinalValue: false,
+          },
+        }),
+      ]));
+
+      expect(findRecord(report.records, `ace-${safePosition}`, 'ACE')).toMatchObject({
+        status: 'preview-only',
+        persistable: false,
+      });
+    },
+  );
+
+  test('negative-WAR player is not a Team MVP candidate even with broad input readiness', () => {
+    const report = classifyFranchiseDesignationEligibility(makeReport([
+      makeRow({
+        playerId: 'negative-pitcher',
+        playerName: 'Bad Start',
+        valuePosition: 'P',
+        seasonStatsAvailability: { batting: false, pitching: true, fielding: false, any: true },
+        warInputAvailability: {
+          battingWar: false,
+          pitchingWar: true,
+          fieldingWar: false,
+          baserunningWar: false,
+          any: true,
+          trustedForFinalValue: false,
+        },
+        warPreviewValues: {
+          battingWar: null,
+          pitchingWar: -0.4,
+          fieldingWar: null,
+          baserunningWar: null,
+          totalWar: -0.4,
+          totalWarSource: 'derived-from-components',
+          trustedForFinalValue: false,
+        },
+      }),
+    ]));
+
+    const mvp = findRecord(report.records, 'negative-pitcher', 'TEAM_MVP');
+    const ace = findRecord(report.records, 'negative-pitcher', 'ACE');
+    expect(mvp.status).toBe('blocked');
+    expect(mvp.reasons.join(' ')).toMatch(/positive season\/team-relative WAR|position-player/i);
+    expect(ace.status).toBe('blocked');
+    expect(ace.reasons.join(' ')).toContain('pWAR of at least 0.5');
+  });
+
+  test('broad input-ready roster does not produce a Team MVP preview flood', () => {
+    const rows = [
+      makeRow({
+        playerId: 'strong-batter',
+        playerName: 'Strong Batter',
+        valuePosition: 'SS',
+        seasonStatsAvailability: { batting: true, pitching: false, fielding: true, any: true },
+        warInputAvailability: {
+          battingWar: true,
+          pitchingWar: false,
+          fieldingWar: true,
+          baserunningWar: true,
+          any: true,
+          trustedForFinalValue: false,
+        },
+        warPreviewValues: {
+          battingWar: 1.3,
+          pitchingWar: null,
+          fieldingWar: 0.2,
+          baserunningWar: 0.1,
+          totalWar: 1.6,
+          totalWarSource: 'stat-row',
+          trustedForFinalValue: false,
+        },
+      }),
+      makeRow({
+        playerId: 'input-ready-runner-up',
+        playerName: 'Runner Up',
+        valuePosition: 'CF',
+        seasonStatsAvailability: { batting: true, pitching: false, fielding: true, any: true },
+        warInputAvailability: {
+          battingWar: true,
+          pitchingWar: false,
+          fieldingWar: true,
+          baserunningWar: true,
+          any: true,
+          trustedForFinalValue: false,
+        },
+        warPreviewValues: {
+          battingWar: 0.7,
+          pitchingWar: null,
+          fieldingWar: 0.1,
+          baserunningWar: 0.1,
+          totalWar: 0.9,
+          totalWarSource: 'stat-row',
+          trustedForFinalValue: false,
+        },
+      }),
+    ];
+
+    const report = classifyFranchiseDesignationEligibility(makeReport(rows));
+    const mvpPreviews = report.records.filter((record) => record.designationType === 'TEAM_MVP' && record.status === 'preview-only');
+
+    expect(mvpPreviews).toHaveLength(1);
+    expect(mvpPreviews[0].playerId).toBe('strong-batter');
+    expect(findRecord(report.records, 'input-ready-runner-up', 'TEAM_MVP').reasons.join(' ')).toContain('ranked/selective');
+  });
+
+  test('strongest positive pitcher can become the only Ace candidate', () => {
+    const report = classifyFranchiseDesignationEligibility(makeReport([
+      makeRow({
+        playerId: 'weaker-pitcher',
+        playerName: 'Weaker Pitcher',
+        valuePosition: 'P',
+        seasonStatsAvailability: { batting: false, pitching: true, fielding: false, any: true },
+        warInputAvailability: {
+          battingWar: false,
+          pitchingWar: true,
+          fieldingWar: false,
+          baserunningWar: false,
+          any: true,
+          trustedForFinalValue: false,
+        },
+        warPreviewValues: {
+          battingWar: null,
+          pitchingWar: 0.7,
+          fieldingWar: null,
+          baserunningWar: null,
+          totalWar: 0.7,
+          totalWarSource: 'derived-from-components',
+          trustedForFinalValue: false,
+        },
+      }),
+      makeRow({
+        playerId: 'ace-leader',
+        playerName: 'Ace Leader',
+        valuePosition: 'P',
+        seasonStatsAvailability: { batting: false, pitching: true, fielding: false, any: true },
+        warInputAvailability: {
+          battingWar: false,
+          pitchingWar: true,
+          fieldingWar: false,
+          baserunningWar: false,
+          any: true,
+          trustedForFinalValue: false,
+        },
+        warPreviewValues: {
+          battingWar: null,
+          pitchingWar: 1.4,
+          fieldingWar: null,
+          baserunningWar: null,
+          totalWar: 1.4,
+          totalWarSource: 'derived-from-components',
+          trustedForFinalValue: false,
+        },
+      }),
+    ]));
+
+    const acePreviews = report.records.filter((record) => record.designationType === 'ACE' && record.status === 'preview-only');
+    expect(acePreviews).toHaveLength(1);
+    expect(acePreviews[0].playerId).toBe('ace-leader');
+    expect(findRecord(report.records, 'weaker-pitcher', 'ACE').reasons.join(' ')).toContain('ranked/selective');
+  });
+
+  test('no MVP or Ace preview emits when performance evidence is insufficient', () => {
+    const report = classifyFranchiseDesignationEligibility(makeReport([
+      makeRow({
+        playerId: 'low-batter',
+        playerName: 'Low Batter',
+        valuePosition: 'SS',
+        seasonStatsAvailability: { batting: true, pitching: false, fielding: false, any: true },
+        warInputAvailability: {
+          battingWar: true,
+          pitchingWar: false,
+          fieldingWar: false,
+          baserunningWar: false,
+          any: true,
+          trustedForFinalValue: false,
+        },
+        warPreviewValues: {
+          battingWar: 0,
+          pitchingWar: null,
+          fieldingWar: null,
+          baserunningWar: null,
+          totalWar: 0,
+          totalWarSource: 'stat-row',
+          trustedForFinalValue: false,
+        },
+      }),
+      makeRow({
+        playerId: 'low-pitcher',
+        playerName: 'Low Pitcher',
+        valuePosition: 'P',
+        seasonStatsAvailability: { batting: false, pitching: true, fielding: false, any: true },
+        warInputAvailability: {
+          battingWar: false,
+          pitchingWar: true,
+          fieldingWar: false,
+          baserunningWar: false,
+          any: true,
+          trustedForFinalValue: false,
+        },
+        warPreviewValues: {
+          battingWar: null,
+          pitchingWar: 0.2,
+          fieldingWar: null,
+          baserunningWar: null,
+          totalWar: 0.2,
+          totalWarSource: 'derived-from-components',
+          trustedForFinalValue: false,
+        },
+      }),
+    ]));
+
+    expect(report.records.filter((record) =>
+      (record.designationType === 'TEAM_MVP' || record.designationType === 'ACE') &&
+      record.status === 'preview-only',
+    )).toHaveLength(0);
   });
 
   test('FAN_FAVORITE and ALBATROSS block without canonical True Value and value delta', () => {

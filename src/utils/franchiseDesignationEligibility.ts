@@ -74,8 +74,66 @@ const ALL_DESIGNATION_TYPES: FranchiseDesignationEligibilityType[] = [
   'CORNERSTONE',
 ];
 
+type RankedDesignationType = 'TEAM_MVP' | 'ACE';
+
+interface RankedCandidate {
+  key: string;
+  row: FranchiseValueInputRow;
+  score: number;
+}
+
+const PITCHER_VALUE_POSITIONS = new Set(['P', 'SP', 'RP', 'CP', 'SP/RP', 'TWO-WAY']);
+
 function unique(values: string[]): string[] {
   return Array.from(new Set(values));
+}
+
+function candidateKey(teamId: string | null, designationType: RankedDesignationType): string {
+  return `${teamId ?? 'missing-team'}:${designationType}`;
+}
+
+function isPitcherPosition(position: string | null): boolean {
+  return PITCHER_VALUE_POSITIONS.has(String(position ?? '').trim().toUpperCase());
+}
+
+function rankedScore(row: FranchiseValueInputRow, designationType: RankedDesignationType): number | null {
+  if (designationType === 'ACE') return row.warPreviewValues.pitchingWar;
+  return row.warPreviewValues.totalWar;
+}
+
+function rankingBlockers(row: FranchiseValueInputRow, designationType: RankedDesignationType): string[] {
+  const reasons: string[] = [];
+  const score = rankedScore(row, designationType);
+  if (score === null) {
+    reasons.push(`${designationType} preview requires a numeric WAR preview value, not only input readiness.`);
+  } else if (designationType === 'ACE' && score < 0.5) {
+    reasons.push('ACE preview requires pitcher-specific positive pWAR of at least 0.5.');
+  } else if (designationType === 'TEAM_MVP' && score <= 0) {
+    reasons.push('TEAM_MVP preview requires positive season/team-relative WAR evidence.');
+  }
+  if (designationType === 'TEAM_MVP' && isPitcherPosition(row.valuePosition)) {
+    reasons.push('TEAM_MVP preview is limited to position-player candidates in internal v1; pitcher recognition uses ACE.');
+  }
+  return reasons;
+}
+
+function buildRankedCandidates(
+  rows: FranchiseValueInputRow[],
+  designationType: RankedDesignationType,
+): Map<string, RankedCandidate> {
+  const best = new Map<string, RankedCandidate>();
+  for (const row of rows) {
+    if (stableWarPreviewBlockers(row, designationType).length > 0) continue;
+    if (rankingBlockers(row, designationType).length > 0) continue;
+    const score = rankedScore(row, designationType);
+    if (score === null) continue;
+    const key = candidateKey(row.currentTeamId, designationType);
+    const existing = best.get(key);
+    if (!existing || score > existing.score || (score === existing.score && row.playerName.localeCompare(existing.row.playerName) < 0)) {
+      best.set(key, { key, row, score });
+    }
+  }
+  return best;
 }
 
 function hasSeasonMetadata(row: FranchiseValueInputRow): boolean {
@@ -146,16 +204,30 @@ function stableWarPreviewBlockers(row: FranchiseValueInputRow, type: 'TEAM_MVP' 
 function classifyTeamMvpOrAce(
   row: FranchiseValueInputRow,
   designationType: 'TEAM_MVP' | 'ACE',
+  rankedCandidates: Map<string, RankedCandidate>,
 ): Pick<FranchiseDesignationEligibilityRecord, 'status' | 'reasons'> {
   const blockers = stableWarPreviewBlockers(row, designationType);
   if (blockers.length > 0) {
     return { status: 'blocked', reasons: blockers };
   }
+  const rankingReasons = rankingBlockers(row, designationType);
+  if (rankingReasons.length > 0) {
+    return { status: 'blocked', reasons: rankingReasons };
+  }
+  const rankedCandidate = rankedCandidates.get(candidateKey(row.currentTeamId, designationType));
+  if (!rankedCandidate || rankedCandidate.row.playerId !== row.playerId) {
+    return {
+      status: 'blocked',
+      reasons: [
+        `${designationType} preview is ranked/selective; this input-ready player is not the top plausible team candidate.`,
+      ],
+    };
+  }
 
   return {
     status: 'preview-only',
     reasons: [
-      `${designationType} has enough stat/WAR-like input for read-only preview.`,
+      `${designationType} ranked preview candidate has positive team-relative performance evidence.`,
       'Final designation persistence is blocked until trusted final value/designation inputs exist.',
     ],
   };
@@ -201,9 +273,10 @@ function deferredNarrativeBlockers(designationType: 'CAPTAIN' | 'FAN_HOPEFUL' | 
 function classifyDesignation(
   row: FranchiseValueInputRow,
   designationType: FranchiseDesignationEligibilityType,
+  rankedCandidates: Map<string, RankedCandidate>,
 ): Pick<FranchiseDesignationEligibilityRecord, 'status' | 'reasons'> {
   if (designationType === 'TEAM_MVP' || designationType === 'ACE') {
-    return classifyTeamMvpOrAce(row, designationType);
+    return classifyTeamMvpOrAce(row, designationType, rankedCandidates);
   }
   if (designationType === 'FAN_FAVORITE' || designationType === 'ALBATROSS') {
     return { status: 'blocked', reasons: valueDesignationBlockers(row, designationType) };
@@ -214,8 +287,9 @@ function classifyDesignation(
 function recordFor(
   row: FranchiseValueInputRow,
   designationType: FranchiseDesignationEligibilityType,
+  rankedCandidates: Map<string, RankedCandidate>,
 ): FranchiseDesignationEligibilityRecord {
-  const classification = classifyDesignation(row, designationType);
+  const classification = classifyDesignation(row, designationType, rankedCandidates);
   return {
     contractVersion: FRANCHISE_DESIGNATION_ELIGIBILITY_CONTRACT_VERSION,
     franchiseId: row.franchiseId,
@@ -238,8 +312,12 @@ function recordFor(
 export function classifyFranchiseDesignationEligibility(
   valueInputReport: FranchiseValueInputReport,
 ): FranchiseDesignationEligibilityReport {
+  const rankedCandidates = new Map<string, RankedCandidate>([
+    ...buildRankedCandidates(valueInputReport.rows, 'TEAM_MVP'),
+    ...buildRankedCandidates(valueInputReport.rows, 'ACE'),
+  ]);
   const records = valueInputReport.rows.flatMap((row) =>
-    ALL_DESIGNATION_TYPES.map((designationType) => recordFor(row, designationType)),
+    ALL_DESIGNATION_TYPES.map((designationType) => recordFor(row, designationType, rankedCandidates)),
   );
 
   return {

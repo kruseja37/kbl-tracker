@@ -799,6 +799,56 @@ describe('franchise random event generator core', () => {
     expect(JSON.stringify(designationCandidates)).not.toMatch(/winner|awarded|locked|saved designation/i);
   });
 
+  test('designation bridge integration caps duplicate MVP and Ace prompt volume per team', () => {
+    const report = buildFranchiseRandomEventCandidates({
+      ...scope,
+      seed: 'designation-volume-cap-seed',
+      designationMoraleContexts: [
+        designationContext({ designationType: 'TEAM_MVP', playerId: 'mvp-1', playerName: 'MVP One' }),
+        designationContext({ designationType: 'TEAM_MVP', playerId: 'mvp-2', playerName: 'MVP Two' }),
+        designationContext({ designationType: 'ACE', playerId: 'ace-1', playerName: 'Ace One' }),
+        designationContext({ designationType: 'ACE', playerId: 'ace-2', playerName: 'Ace Two' }),
+      ],
+      generatedAt: 123,
+    });
+    const designationCandidates = report.candidates.filter((candidate) => candidate.triggerCategory === 'designation-morale-reaction');
+
+    expect(designationCandidates).toHaveLength(2);
+    expect(designationCandidates.map((candidate) => candidate.targetId).sort()).toEqual(['ace-1', 'mvp-1']);
+    expect(report.warnings.join(' ')).toMatch(/TEAM_MVP designation morale context capped/);
+    expect(report.warnings.join(' ')).toMatch(/ACE designation morale context capped/);
+    expect(JSON.stringify(designationCandidates)).toMatch(/preview recognition candidate/);
+    expect(JSON.stringify(designationCandidates)).not.toMatch(/winner|awarded|locked|saved designation/i);
+  });
+
+  test('blocked designation context does not consume the team preview cap before a later valid context', () => {
+    const report = buildFranchiseRandomEventCandidates({
+      ...scope,
+      seed: 'designation-blocked-before-valid-seed',
+      designationMoraleContexts: [
+        designationContext({
+          franchiseId: undefined,
+          playerId: 'blocked-mvp',
+          playerName: 'Blocked MVP',
+        }),
+        designationContext({
+          playerId: 'valid-mvp',
+          playerName: 'Valid MVP',
+        }),
+      ],
+      generatedAt: 123,
+    });
+    const designationCandidates = report.candidates.filter((candidate) => candidate.triggerCategory === 'designation-morale-reaction');
+
+    expect(designationCandidates).toHaveLength(1);
+    expect(designationCandidates[0]).toMatchObject({
+      title: 'TEAM_MVP preview recognition candidate',
+      targetId: 'valid-mvp',
+    });
+    expect(report.warnings.join(' ')).toMatch(/TEAM_MVP designation morale context blocked/i);
+    expect(report.warnings.join(' ')).not.toMatch(/TEAM_MVP designation morale context capped/);
+  });
+
   test('designation context with omitted scope fields produces no candidates while fully scoped equivalent still works', () => {
     const omittedScope = buildFranchiseRandomEventCandidates({
       ...scope,

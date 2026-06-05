@@ -841,12 +841,24 @@ function buildDesignationMoraleCandidates(
   designationMoraleContexts: FranchiseDesignationMoraleBridgeInput[],
   warnings: string[],
 ): FranchiseRandomEventCandidate[] {
+  const seenDesignationKeys = new Set<string>();
   return designationMoraleContexts.flatMap((context, index) => {
+    const volumeKey = context.designationType === 'TEAM_MVP' || context.designationType === 'ACE'
+      ? `${context.teamId ?? 'missing-team'}:${context.designationType}`
+      : null;
     const report = buildFranchiseDesignationMoraleBridgeReport(context);
 
     if (report.blockers.length > 0) {
       warnings.push(`${context.designationType} designation morale context blocked; no random-event candidate generated.`);
       return [];
+    }
+
+    if (volumeKey) {
+      if (seenDesignationKeys.has(volumeKey)) {
+        warnings.push(`${context.designationType} designation morale context capped for ${context.teamId ?? 'missing team'}; no duplicate random-event candidate generated.`);
+        return [];
+      }
+      seenDesignationKeys.add(volumeKey);
     }
 
     return report.candidates.map((bridgeCandidate) =>
