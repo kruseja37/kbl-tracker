@@ -1423,6 +1423,48 @@ export async function getEliminationGames(
     .sort((left, right) => right.date - left.date);
 }
 
+export async function getFranchiseGames(
+  filters: ExhibitionGameFilters = {},
+): Promise<CompletedGameRecord[]> {
+  const allGames = await getAllCompletedGames();
+  const fromTs = parseDateBoundary(filters.dateFrom);
+  const toTs = parseDateBoundary(filters.dateTo, true);
+
+  return allGames
+    .filter(
+      (game) =>
+        game.competitionType === 'franchise' ||
+        game.competitionType === 'playoff',
+    )
+    .filter((game) => {
+      if (fromTs !== null && game.date < fromTs) {
+        return false;
+      }
+      if (toTs !== null && game.date > toTs) {
+        return false;
+      }
+      if (
+        filters.teamId &&
+        game.awayTeamId !== filters.teamId &&
+        game.homeTeamId !== filters.teamId
+      ) {
+        return false;
+      }
+      if (!filters.opponentId) {
+        return true;
+      }
+      if (filters.teamId) {
+        const matchupIds = new Set([game.awayTeamId, game.homeTeamId]);
+        return matchupIds.has(filters.teamId) && matchupIds.has(filters.opponentId);
+      }
+      return (
+        game.awayTeamId === filters.opponentId ||
+        game.homeTeamId === filters.opponentId
+      );
+    })
+    .sort((left, right) => right.date - left.date);
+}
+
 export async function getInstanceGames(
   mode: AlmanacInstanceMode,
   instanceId: string,

@@ -18,6 +18,15 @@ import { EliminationHome } from "@/app/pages/EliminationHome";
 import { EliminationSelector } from "@/app/pages/EliminationSelector";
 import { EliminationSetup } from "@/app/pages/EliminationSetup";
 import { SeasonSummary } from "@/app/pages/SeasonSummary";
+import { AlmanacHome } from "@/app/pages/AlmanacHome";
+import { AlmanacNarratives } from "@/app/pages/AlmanacNarratives";
+import { ExhibitionLeaders } from "@/app/pages/ExhibitionLeaders";
+import { GameBrowser } from "@/app/pages/GameBrowser";
+import { GameDetail } from "@/app/pages/GameDetail";
+import { ManagerAlmanac } from "@/app/pages/ManagerAlmanac";
+import { PlayerDirectory } from "@/app/pages/PlayerDirectory";
+import { PlayerInstanceCard } from "@/app/pages/PlayerInstanceCard";
+import { TeamPage } from "@/app/pages/TeamPage";
 
 export const router = createBrowserRouter([
   {
@@ -95,5 +104,53 @@ export const router = createBrowserRouter([
   {
     path: "/elimination/:eliminationId",
     Component: EliminationHome,
+  },
+  {
+    path: "/almanac",
+    Component: AlmanacHome,
+  },
+  {
+    path: "/almanac/exhibition",
+    Component: ExhibitionLeaders,
+  },
+  {
+    path: "/almanac/elimination",
+    Component: GameBrowser,
+  },
+  {
+    path: "/almanac/franchise",
+    Component: GameBrowser,
+  },
+  {
+    path: "/almanac/games",
+    Component: GameBrowser,
+  },
+  {
+    path: "/almanac/games/:gameId",
+    Component: GameDetail,
+  },
+  {
+    path: "/almanac/managers",
+    Component: ManagerAlmanac,
+  },
+  {
+    path: "/almanac/narratives",
+    Component: AlmanacNarratives,
+  },
+  {
+    path: "/almanac/players",
+    Component: PlayerDirectory,
+  },
+  {
+    path: "/almanac/players/:canonicalId",
+    Component: PlayerDirectory,
+  },
+  {
+    path: "/almanac/players/:canonicalId/:instanceId",
+    Component: PlayerInstanceCard,
+  },
+  {
+    path: "/almanac/teams/:leagueId/:teamId",
+    Component: TeamPage,
   },
 ]);

@@ -279,6 +279,7 @@ function App() {
         <Route path="/almanac/managers" element={<ManagerAlmanac />} />
         <Route path="/almanac/exhibition" element={<ExhibitionLeaders />} />
         <Route path="/almanac/elimination" element={<GameBrowser />} />
+        <Route path="/almanac/franchise" element={<GameBrowser />} />
         <Route path="/almanac/games" element={<GameBrowser />} />
         <Route path="/almanac/games/:gameId" element={<GameDetail />} />
         <Route path="/almanac/players" element={<PlayerDirectory />} />

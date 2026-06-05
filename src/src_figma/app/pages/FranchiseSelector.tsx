@@ -149,6 +149,12 @@ export function FranchiseSelector() {
           </div>
         )}
 
+        <div className="mb-4 rounded border border-[#333] bg-[#111] p-3 text-xs leading-5 text-[#aaa]">
+          Export and delete are available for franchise save slots. Import/upload
+          is not implemented yet, so exported backups cannot be restored from this
+          screen in v1.
+        </div>
+
         {/* Franchise Cards */}
         <div className="space-y-3 mb-6">
           {franchises.map((franchise) => (

@@ -281,16 +281,30 @@ export function AlmanacHome() {
             </div>
           </Link>
 
-          <button
-            type="button"
-            disabled
-            title="Coming Soon"
-            className="cursor-not-allowed border-[6px] border-[#4B4B4B] bg-[#232323] p-5 text-left text-[#9A9A9A] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.65)]"
+          <div
+            className="border-[6px] border-[#4B4B4B] bg-[#232323] p-5 text-left text-[#E8E8D8] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.65)]"
           >
             <div className="text-[10px] text-[#707070]">MODE 02</div>
             <div className="mt-3 text-sm leading-6">FRANCHISE</div>
-            <div className="mt-4 text-[9px] leading-5 text-[#B0B0B0]">COMING SOON</div>
-          </button>
+            <div className="mt-4 text-[9px] leading-5 text-[#B0B0B0]">
+              ARCHIVE-BACKED FRANCHISE GAMES, PLAYER INSTANCES, AND TEAM LINKS
+              ARE AVAILABLE. FULL FRANCHISE HISTORY HUB REMAINS DEFERRED.
+            </div>
+            <div className="mt-4 flex flex-col gap-2">
+              <Link
+                to="/almanac/franchise"
+                className="border-[4px] border-[#3366FF] bg-[#111111] px-3 py-2 text-[8px] text-white transition hover:bg-[#1a1a1a]"
+              >
+                FRANCHISE GAME ARCHIVE
+              </Link>
+              <Link
+                to="/almanac/players?mode=franchise"
+                className="border-[4px] border-[#3366FF] bg-[#111111] px-3 py-2 text-[8px] text-white transition hover:bg-[#1a1a1a]"
+              >
+                FRANCHISE PLAYER SEARCH
+              </Link>
+            </div>
+          </div>
 
           <Link
             to="/almanac/elimination"

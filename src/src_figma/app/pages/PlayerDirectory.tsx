@@ -8,13 +8,21 @@ import {
 import type { CanonicalPlayer } from "../../../utils/almanacStorage";
 import {
   searchArchivedPlayerInstances,
+  type AlmanacInstanceMode,
   type ExhibitionPlayerSearchEntry,
 } from "../../../utils/almanacQueries";
+
+function parseModeFilter(value: string | null): AlmanacInstanceMode | null {
+  return value === "franchise" || value === "exhibition" || value === "elimination"
+    ? value
+    : null;
+}
 
 export function PlayerDirectory() {
   const { canonicalId } = useParams<{ canonicalId: string }>();
   const [searchParams] = useSearchParams();
   const queryParam = searchParams.get("q") ?? "";
+  const modeFilter = parseModeFilter(searchParams.get("mode"));
 
   const [player, setPlayer] = useState<CanonicalPlayer | null>(null);
   const [searchResults, setSearchResults] = useState<CanonicalPlayer[]>([]);
@@ -42,11 +50,21 @@ export function PlayerDirectory() {
       } else {
         const [results, archivedResults] = await Promise.all([
           searchCanonicalPlayers(queryParam),
-          searchArchivedPlayerInstances(queryParam),
+          searchArchivedPlayerInstances(
+            queryParam,
+            modeFilter ? [modeFilter] : undefined,
+          ),
         ]);
         if (!cancelled) {
-          const canonicalIds = new Set(results.map((result) => result.canonicalId));
-          setSearchResults(results);
+          const modeScopedResults = modeFilter
+            ? results.filter((result) =>
+                result.instances.some((instance) => instance.mode === modeFilter),
+              )
+            : results;
+          const canonicalIds = new Set(
+            modeScopedResults.map((result) => result.canonicalId),
+          );
+          setSearchResults(modeScopedResults);
           setFallbackResults(
             archivedResults.filter(
               (result) => !canonicalIds.has(result.canonicalId),
@@ -59,7 +77,7 @@ export function PlayerDirectory() {
 
     load();
     return () => { cancelled = true; };
-  }, [canonicalId, queryParam]);
+  }, [canonicalId, modeFilter, queryParam]);
 
   if (loading) {
     return (
@@ -172,7 +190,14 @@ export function PlayerDirectory() {
 
         {queryParam && (
           <div className="text-[10px] text-[#8F96A3]">
-            RESULTS FOR &quot;{queryParam.toUpperCase()}&quot; ({searchResults.length})
+            RESULTS FOR &quot;{queryParam.toUpperCase()}&quot;
+            {modeFilter ? ` • ${modeFilter.toUpperCase()} ONLY` : ""} ({searchResults.length + fallbackResults.length})
+          </div>
+        )}
+        {!queryParam && modeFilter === "franchise" && (
+          <div className="border-[6px] border-[#2B2B2B] bg-[#101010] p-5 text-[10px] leading-5 text-[#E8E8D8] shadow-[8px_8px_0px_0px_rgba(51,102,255,0.25)]">
+            FRANCHISE PLAYER SEARCH IS ARCHIVE-BACKED. ENTER A PLAYER NAME TO FIND
+            FRANCHISE INSTANCES FROM COMPLETED GAMETRACKER GAMES.
           </div>
         )}
 

@@ -60,6 +60,24 @@ describe('FranchiseSelector', () => {
     expect(screen.getByText(/No franchises yet/i)).toBeInTheDocument();
   });
 
+  test('shows compact import/upload blocker copy next to save-slot export/delete actions', async () => {
+    mockListFranchises.mockResolvedValue([
+      {
+        id: 'franchise-1',
+        name: 'Smoke Franchise',
+        currentSeason: 1,
+        lastPlayedAt: Date.now(),
+        storageUsed: 0,
+      },
+    ]);
+
+    render(<FranchiseSelector />);
+
+    expect(await screen.findByText('Smoke Franchise')).toBeInTheDocument();
+    expect(screen.getByText(/Export and delete are available/i)).toBeInTheDocument();
+    expect(screen.getByText(/Import\/upload is not implemented yet/i)).toBeInTheDocument();
+  });
+
   test('action buttons do not open the franchise card while deleting', async () => {
     mockListFranchises.mockResolvedValue([
       {

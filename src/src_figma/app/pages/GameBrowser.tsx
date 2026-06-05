@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import {
   getExhibitionGames,
   getEliminationGames,
+  getFranchiseGames,
   getGameAtBatEvents,
   type ExhibitionGameFilters,
 } from "../../../utils/almanacQueries";
@@ -132,6 +133,7 @@ function buildTeamOptions(games: CompletedGameRecord[]): TeamOption[] {
 export function GameBrowser() {
   const location = useLocation();
   const isEliminationMode = location.pathname.startsWith("/almanac/elimination");
+  const isFranchiseMode = location.pathname.startsWith("/almanac/franchise");
   const [filters, setFilters] = useState<ExhibitionGameFilters>({});
   const [teamOptions, setTeamOptions] = useState<TeamOption[]>([]);
   const [runOptions, setRunOptions] = useState<RunOption[]>([]);
@@ -139,12 +141,23 @@ export function GameBrowser() {
   const [rows, setRows] = useState<GameBrowserRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const title = useMemo(
-    () => (isEliminationMode ? "ELIMINATION GAMES" : "EXHIBITION GAMES"),
-    [isEliminationMode],
+    () =>
+      isEliminationMode
+        ? "ELIMINATION GAMES"
+        : isFranchiseMode
+          ? "FRANCHISE GAMES"
+          : "EXHIBITION GAMES",
+    [isEliminationMode, isFranchiseMode],
   );
-  const backLink = isEliminationMode ? "/almanac" : "/almanac/exhibition";
+  const backLink = isEliminationMode
+    ? "/almanac"
+    : isFranchiseMode
+      ? "/almanac"
+      : "/almanac/exhibition";
   const emptyLabel = isEliminationMode
     ? "No elimination games recorded yet."
+    : isFranchiseMode
+      ? "No franchise archive-backed games recorded yet."
     : "No exhibition games recorded yet.";
 
   useEffect(() => {
@@ -153,6 +166,8 @@ export function GameBrowser() {
     async function loadTeams() {
       const games = isEliminationMode
         ? await getEliminationGames()
+        : isFranchiseMode
+          ? await getFranchiseGames()
         : await getExhibitionGames();
       if (cancelled) {
         return;
@@ -184,7 +199,7 @@ export function GameBrowser() {
     return () => {
       cancelled = true;
     };
-  }, [isEliminationMode]);
+  }, [isEliminationMode, isFranchiseMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -198,6 +213,8 @@ export function GameBrowser() {
               ...filters,
               runId: selectedRunId || undefined,
             })
+          : isFranchiseMode
+            ? await getFranchiseGames(filters)
           : await getExhibitionGames(filters);
         const eventLists = await Promise.all(games.map((game) => getGameAtBatEvents(game.gameId)));
 
@@ -226,7 +243,7 @@ export function GameBrowser() {
     return () => {
       cancelled = true;
     };
-  }, [filters, isEliminationMode, selectedRunId]);
+  }, [filters, isEliminationMode, isFranchiseMode, selectedRunId]);
 
   return (
     <div className="min-h-screen bg-black px-4 py-6 font-['Press_Start_2P'] text-white sm:px-6">
