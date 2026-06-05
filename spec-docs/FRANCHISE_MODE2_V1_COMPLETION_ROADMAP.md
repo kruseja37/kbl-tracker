@@ -10,11 +10,11 @@ Manual smoke feedback remains a bug and feature backlog. The build order for Mod
 
 ## Current State As Of Latest Commit
 
-Latest committed checkpoint: `3625f02 Add safe Mode 2 visual smoke preview`.
+Latest committed checkpoint: `366064a Define v1 dynamic designation policy`.
 
-Latest working checkpoint: Dynamic Designation Policy Matrix And Two-Way Boundary.
+Latest working checkpoint: Playable V1 Remaining Gap Reconciliation And Next Priority Pick.
 
-Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved. The technical foundation is safe, and the first Mode 1/2 playable hardening wave plus the Almanac/WPA/fame/visual-smoke trust wave are committed, but manual smoke feedback still blocks declaring user-facing playable v1 complete.
+Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved. The technical foundation is safe, and the first Mode 1/2 playable hardening waves through schedule/trade/FARM/stadium/designation policy are committed, but manual smoke feedback still blocks declaring user-facing playable v1 complete.
 
 ## Completed Checkpoints
 
@@ -51,31 +51,35 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - WPA And Manager Moments Visibility is committed with read-only archived franchise WPA/Manager Moments evidence surfaced in Game Detail and Player Instance Card contexts.
 - Fame Event Correctness And Continuity is committed with trusted no-hitter/perfect-game context preserved for completed archives and confirmation-gated fan morale prompt inputs.
 - Seeded Mode 1/2 Browser Visual Smoke Pass is committed with a safe dev/test preview route, fixture tests, root-width/iPad shell fix, finance `READ ONLY` chip, and seeded WPA/fame/GameTracker long-name screenshots.
+- Populated visual smoke fixture is committed for seeded schedule and Team Hub roster confidence, but real populated production visual smoke remains a future check.
+- Schedule Editing And Import Workflow Hardening is committed with current manual/CSV non-generated schedule boundaries.
+- Trade And FARM Hidden-Safety And Movement Continuity is committed for v1-safe call-up/send-down/trade continuity, hidden prospect boundaries, transaction visibility, and future GameTracker availability.
+- Park Factor Archive Trust Tightening is committed so archive `game.parkFactors` are trusted only when verified as SMB4 seed inputs.
+- Dynamic Designation Policy Matrix And Two-Way Boundary is committed: TEAM_MVP/ACE are active preview-only, TWO-WAY routes pitcher-only through ACE for internal v1, and older full-system designation lock/carryover language remains subordinate to the v1 matrix.
 
 ## Active Priority Order
 
-1. Populated Schedule And Team Hub Roster Visual Fixture
-   - Extend the safe preview/test fixture so Franchise Home shows at least one populated schedule row and Team Hub shows at least one populated roster scan row.
-   - Capture iPad and desktop screenshots for row-rich schedule/roster states without depending on user local IndexedDB data.
+1. Manual Final-Score Workflow UX Polish And Confirmation-Gated Wording
+   - Make score-only/manual-result entry clearer at the point of action and after completion.
+   - Ensure labels and copy distinguish schedule/standings/team fan morale confirmation from player stats, WPA, fame, awards, designations, Almanac player history, and relationship effects.
    - Keep Mode 1 and Mode 2 as the only active playable-v1 priority.
    - No auto-draft, generated schedules, AI simulation, awards finalization, story automation, production storage mutation, or Mode 3/offseason execution until separately approved.
-2. Manual Final-Score Entry And Score-Only Boundary Reconciliation
-   - Make the score-only/manual-result flow and compact copy prove which team-level evidence persists and which player/stat/WPA/fame/award paths remain unavailable.
-3. Manual Schedule Editing And CSV Workflow Pass
-   - Improve or document the approved non-generated schedule entry/editing/import path.
-4. Trade And FARM Roster Movement Continuity Audit
-   - Prove transaction history, current roster rows, call-up/send-down evidence, and hidden-safe FARM/prospect boundaries stay consistent and portable.
-5. Remaining Mode 1/2 Trust/Policy Tightening
-   - Continue compact trust-boundary tightening as audits find issues. The internal-v1 TWO-WAY designation route is now pitcher-only through ACE; stricter two-way Team MVP criteria remain deferred.
+2. Real Populated Production Team Hub/Schedule Visual Smoke Harness
+   - Move beyond fixture-only confidence by proving populated schedule and Team Hub roster rows in a production-shaped state without writing unsafe demo data.
+3. Transaction History Drilldown And Roster Movement Explainability
+   - Improve discoverability for call-up/send-down/trade continuity if users still cannot tell what happened, while keeping mutation paths unchanged.
+4. Score-only History/Almanac Boundary Copy Pass
+   - Keep only if the manual final-score slice does not fully settle score-only labels in history/reporting surfaces.
+5. Remaining Compact UI/Help-Affordance Cleanup
+   - Reduce explanatory text in default views while preserving blockers behind help/disclosure affordances.
 
 ## Playable V1 Remaining Work
 
-- Populated schedule-row visual smoke.
-- Populated Team Hub roster-row visual smoke.
-- Manual final-score entry and score-only boundary clarity.
-- Manual schedule editing/CSV/import workflow.
-- Trade/FARM roster movement continuity.
-- Full seeded state harness scope beyond the current safe preview route.
+- Manual final-score workflow UX polish and score-only confirmation-gated wording.
+- Real populated production schedule-row visual smoke, beyond fixture-only preview confidence.
+- Real populated production Team Hub roster-row visual smoke, beyond fixture-only preview confidence.
+- Transaction history drilldown and roster movement explainability, if current trade/FARM workflow remains opaque in manual smoke.
+- Full seeded state harness scope beyond the current safe preview route and fixture-only coverage.
 - Future stricter two-way Team MVP criteria, if approved later.
 
 ## Full Spec Parity Backlog
@@ -87,6 +91,7 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Durable relationship state, relationship mutation, and chemistry/narrative effects.
 - Story persistence beyond the random-event log and full narrative engine integration.
 - Adaptive park-factor persistence, stadium historical records, and final park-adjusted value/WAR consumers.
+- Custom stadium factor entry and custom/adaptive factor persistence.
 - Awards persistence, playoffs/finals summaries, complete season handoff, and Mode 3/offseason execution.
 - Auto-draft remains deferred/excluded from the active playable-v1 plan unless separately approved as tooling.
 
@@ -98,6 +103,7 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - GameTracker archive-backed events can support prompts and confirmed effects, but GameTracker completion must not silently mutate canonical franchise morale.
 - Confirmed random events can apply safe fan/player morale effects only through the canonical morale state model.
 - Dynamic designation effects must enter v1 as confirmation-gated random-event prompts, not automatic designation/profile/morale mutation.
+- Older full-system designation lock/carryover wording is subordinate to the committed v1 designation matrix until a separate final-designation promotion slice is approved.
 - True Value, value deltas, and expected wins are currently preview-only and not trusted for final designations, salary movement, morale automation, automatic drift/recovery, or Mode 3.
 - Fan Favorite and Albatross final behavior requires an explicit promotion decision for trusted True Value/value-delta inputs.
 - Captain morale amplification remains blocked until hidden-charisma reveal/safety policy is approved.
