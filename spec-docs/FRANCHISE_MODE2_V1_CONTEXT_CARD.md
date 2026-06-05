@@ -10,7 +10,7 @@ Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
 Latest committed checkpoint: `366064a Define v1 dynamic designation policy`.
 
-Latest working checkpoint: Manual Smoke Findings Capture And FARM Hidden-Rating Leak Hardening.
+Latest working checkpoint: Playable V1 Smoke Findings Reconciliation And Next Gate.
 
 ## Current Completed
 
@@ -32,26 +32,30 @@ Latest working checkpoint: Manual Smoke Findings Capture And FARM Hidden-Rating 
 - Fan Favorite/Albatross readiness can be inspected from preview True Value/value-delta rows, but remains blocked for final designation behavior, random-event morale prompts, salary movement, relationships, and Mode 3.
 - Numeric WAR preview, position-relative True Value preview, expected-wins preview, Team Hub display, and durable expected-wins baseline snapshots are read-only and untrusted.
 - The Mode 2 technical foundation is safe to build on, but manual smoke feedback shows the user-facing Mode 1/Mode 2 playable UI/UX is not complete.
-- Mode 1/2 playable hardening has now committed core launch/persistence smoke fixes, generated data policy cleanup, roster scan table improvements, MVP/Ace preview correctness, salary baseline visibility, stadium source-of-truth copy, dense UI hardening, Almanac continuity, archived WPA visibility, fame-event continuity, a safe visual-smoke preview route, populated fixture coverage, schedule editing/import hardening, trade/FARM hidden-safety and movement continuity, park-factor archive trust tightening, the dynamic designation policy matrix/TWO-WAY boundary, and manual final-score/score-only UX polish.
+- Mode 1/2 playable hardening has now committed core launch/persistence smoke fixes, generated data policy cleanup, roster scan table improvements, MVP/Ace preview correctness, salary baseline visibility, stadium source-of-truth copy, dense UI hardening, Almanac continuity, archived WPA visibility, fame-event continuity, a safe visual-smoke preview route, populated fixture coverage, schedule editing/import hardening, trade/FARM hidden-safety and movement continuity, park-factor archive trust tightening, the dynamic designation policy matrix/TWO-WAY boundary, manual final-score/score-only UX polish, hidden FARM salary/reveal safety, player profile position/pitching integrity, GameTracker substitution full-name display, and Almanac Franchise access/save import clarity.
 - Schedule editing/import is hardened for the current manual/CSV non-generated policy, but production populated schedule visual smoke remains fixture-backed rather than proven from arbitrary user local data.
 - Trade/FARM continuity is hardened for v1-safe hidden-safety and movement boundaries, while full trade UX, AI trades, salary matching, and offseason trade systems remain deferred.
 - The safe visual-smoke preview covers shell/foundation/finance/stadium, populated fixture rows, Game Detail WPA/fame, Player Instance Card WPA, and GameTracker long-name visibility, but real populated production Team Hub/schedule visual smoke remains a future confidence check.
-- `FRANCHISE_MODE1_MODE2_PLAYABLE_V1_GAP_ANALYSIS.md` is the active playable-v1 gap plan and now includes the 2026-06-05 manual smoke findings. Playable v1 is still not approved.
-- Hidden/unrevealed FARM prospect salary is being hardened to use draft/scouting-safe public context rather than actual hidden ratings. Revealed/sent-down players must stay revealed and editable even while rostered as FARM.
+- `FRANCHISE_MODE1_MODE2_PLAYABLE_V1_GAP_ANALYSIS.md` is the active playable-v1 gap plan and now includes the 2026-06-05 manual smoke findings plus the latest reconciliation. Playable v1 is still not approved.
+- Hidden/unrevealed FARM prospect salary now uses draft/scouting-safe public context rather than actual hidden ratings. Revealed/sent-down players stay revealed and editable even while rostered as FARM.
+- Player profiles now separate primary/secondary positions, avoid non-pitcher pitching-rating leakage, and preserve hidden-safe FARM behavior.
+- GameTracker substitution menus now display full names for pitchers and position players.
+- Almanac Franchise access now surfaces archive-backed franchise games/player instances/team links, while save import/upload is clearly labeled not implemented yet.
 
 ## Current Active Slice
 
-Manual Smoke Findings Capture And FARM Hidden-Rating Leak Hardening.
+Playable V1 Smoke Findings Reconciliation And Next Gate.
 
-Goal: preserve the latest manual smoke findings, keep playable v1 unapproved, and harden the first P0 data-policy target: FARM salary/reveal safety.
+Goal: mark the latest smoke-response hardening as addressed, keep playable v1 unapproved, and set the next gate to user manual smoke rerun unless a still-open implementation blocker appears.
 
 ## Next Queue
 
-1. Finish FARM salary/reveal hardening and rerun focused salary/FARM/profile/trade/launch tests.
-2. Patch the next smallest remaining manual smoke finding.
-3. Keep playable v1 unapproved until the blocker set is cleared and the user approves it.
-4. If later smoke reveals only polish, queue that polish explicitly after the approval decision.
-5. Keep Mode 3/offseason and full-spec systems deferred until approval.
+1. User reruns the manual smoke checklist in the real app.
+2. If stadium spray data is still missing from real Team Hub, implement **Stadium Spray Evidence Visibility In Real Team Hub**.
+3. If stadium smoke passes but Manager WPA lineup delta is still missing from Game Detail, implement **Manager WPA Lineup Delta Visibility**.
+4. Keep playable v1 unapproved until the blocker set is cleared and the user approves it.
+5. If later smoke reveals only polish, queue that polish explicitly after the approval decision.
+6. Keep Mode 3/offseason and full-spec systems deferred until approval.
 
 ## Hard Boundaries
 
