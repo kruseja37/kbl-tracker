@@ -12,7 +12,7 @@ Manual smoke feedback remains a bug and feature backlog. The build order for Mod
 
 Latest committed checkpoint: `366064a Define v1 dynamic designation policy`.
 
-Latest working checkpoint: Playable V1 Remaining Gap Reconciliation And Next Priority Pick.
+Latest working checkpoint: Final Mode 1/2 Playable V1 Status Reconciliation And Smoke Checklist.
 
 Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved. The technical foundation is safe, and the first Mode 1/2 playable hardening waves through schedule/trade/FARM/stadium/designation policy are committed, but manual smoke feedback still blocks declaring user-facing playable v1 complete.
 
@@ -56,30 +56,30 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Trade And FARM Hidden-Safety And Movement Continuity is committed for v1-safe call-up/send-down/trade continuity, hidden prospect boundaries, transaction visibility, and future GameTracker availability.
 - Park Factor Archive Trust Tightening is committed so archive `game.parkFactors` are trusted only when verified as SMB4 seed inputs.
 - Dynamic Designation Policy Matrix And Two-Way Boundary is committed: TEAM_MVP/ACE are active preview-only, TWO-WAY routes pitcher-only through ACE for internal v1, and older full-system designation lock/carryover language remains subordinate to the v1 matrix.
+- Manual Final-Score Workflow UX Polish And Confirmation-Gated Wording is complete: score-only rows are visually distinct, lack Game Detail/archive affordances, and compactly state schedule/standings-only plus confirmation-gated team-fan morale boundaries.
 
 ## Active Priority Order
 
-1. Manual Final-Score Workflow UX Polish And Confirmation-Gated Wording
-   - Make score-only/manual-result entry clearer at the point of action and after completion.
-   - Ensure labels and copy distinguish schedule/standings/team fan morale confirmation from player stats, WPA, fame, awards, designations, Almanac player history, and relationship effects.
+1. Final Mode 1/2 Manual Smoke Checklist
+   - Run the real app checklist in `FRANCHISE_MODE1_MODE2_PLAYABLE_V1_GAP_ANALYSIS.md`.
+   - Do not declare playable v1 approved until the user reviews the smoke result and explicitly approves it.
    - Keep Mode 1 and Mode 2 as the only active playable-v1 priority.
    - No auto-draft, generated schedules, AI simulation, awards finalization, story automation, production storage mutation, or Mode 3/offseason execution until separately approved.
-2. Real Populated Production Team Hub/Schedule Visual Smoke Harness
-   - Move beyond fixture-only confidence by proving populated schedule and Team Hub roster rows in a production-shaped state without writing unsafe demo data.
-3. Transaction History Drilldown And Roster Movement Explainability
-   - Improve discoverability for call-up/send-down/trade continuity if users still cannot tell what happened, while keeping mutation paths unchanged.
-4. Score-only History/Almanac Boundary Copy Pass
-   - Keep only if the manual final-score slice does not fully settle score-only labels in history/reporting surfaces.
-5. Remaining Compact UI/Help-Affordance Cleanup
-   - Reduce explanatory text in default views while preserving blockers behind help/disclosure affordances.
+2. Respond To Manual Smoke Findings
+   - If the checklist finds a blocker, patch the smallest exact issue and rerun the relevant smoke section.
+3. Approval Decision
+   - If smoke passes, ask the user whether Mode 1/2 playable v1 is approved.
+4. Post-Approval Polish Queue
+   - If smoke reveals only non-blocking polish, queue it after the approval decision.
+5. Deferred Full-Spec Backlog
+   - Keep Mode 3/offseason, auto-draft, AI simulation, final awards, salary/designation/morale automation, relationships, adaptive factors, and generated schedules out of active scope.
 
 ## Playable V1 Remaining Work
 
-- Manual final-score workflow UX polish and score-only confirmation-gated wording.
-- Real populated production schedule-row visual smoke, beyond fixture-only preview confidence.
-- Real populated production Team Hub roster-row visual smoke, beyond fixture-only preview confidence.
-- Transaction history drilldown and roster movement explainability, if current trade/FARM workflow remains opaque in manual smoke.
-- Full seeded state harness scope beyond the current safe preview route and fixture-only coverage.
+- Run the final real-app manual smoke checklist.
+- Patch any blocker found by that checklist.
+- Get explicit user approval before declaring Mode 1/2 playable v1 complete.
+- Track any non-blocking production visual-smoke, roster/schedule readability, or transaction drilldown polish as follow-up after the approval decision.
 - Future stricter two-way Team MVP criteria, if approved later.
 
 ## Full Spec Parity Backlog
@@ -112,6 +112,13 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Profile automation, salary movement, final True Value, final designation changes, relationship mutation, story persistence beyond the random-event log, Mode 3/offseason effects, and unrevealed FARM hidden-truth effects remain blocked.
 - Existing prototype/global `useFanMorale` paths are not canonical Franchise v1 morale storage.
 - Mode 1/Mode 2 playable hardening remains active until the user-facing loop is approved; foundation-safe does not mean playable-complete.
+
+## Manual Smoke Approval Gate
+
+- The final real-app checklist lives in `FRANCHISE_MODE1_MODE2_PLAYABLE_V1_GAP_ANALYSIS.md`.
+- If any checklist item fails, the next implementation priority is the smallest patch for that finding.
+- If the checklist passes, ask the user whether Mode 1/Mode 2 playable v1 is approved.
+- Do not start Mode 3/offseason, auto-draft, AI simulation, final awards, final True Value/salary movement, final designation persistence, morale automation, relationship mutation, adaptive park-factor persistence, custom stadium factor entry, generated schedules, or full trade AI/salary matching before that approval decision.
 
 ## Operating Rules
 

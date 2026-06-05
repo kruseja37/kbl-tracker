@@ -43,11 +43,11 @@ That foundation is technically safer than it was, and the first hardening wave h
 - Fame-event continuity is hardened for trusted completed-game no-hitter/perfect-game context and confirmation-gated fan morale prompt consumers; score-only/manual result rows remain blocked from fake fame/player-stat/WPA evidence.
 - The `/__preview/franchise-v1-visual-smoke` route is dev/test gated and non-mutating/read-only. It supports repeatable iPad/desktop screenshots for the Mode 1/2 shell, Team Hub foundation/finance/stadium panels, Game Detail WPA/fame evidence, Player Instance Card WPA evidence, and GameTracker long-name display.
 - Populated fixture smoke coverage, schedule editing/import hardening, trade/FARM hidden-safety and movement continuity, park-factor archive trust tightening, and the dynamic designation policy matrix/TWO-WAY boundary are now completed hardening checkpoints.
+- Manual final-score / score-only UX polish is complete: score-only rows are visually distinct, do not show Game Detail/archive affordances, and explicitly state schedule/standings-only plus confirmation-gated team-fan morale boundaries.
 
-Manual smoke feedback still blocks declaring playable v1 done:
+Manual smoke approval is now the remaining gate before declaring playable v1 done:
 
-- Manual final-score entry and score-only boundaries need one more user-facing reconciliation pass before the score-only workflow can be treated as comfortable.
-- Real populated production schedule-row and Team Hub roster-row visual smoke remain open because the current row-rich confidence is fixture-backed rather than proven from arbitrary user local data.
+- Real app schedule-row and Team Hub roster-row behavior must be checked with actual local Franchise state, not only fixture-backed previews.
 - Full seeded state harness scope remains a known follow-up.
 - Schedule editing/import hardening is complete for the current manual/CSV non-generated policy, but production smoke should keep watching for usability issues.
 - Trade/FARM hidden-safety and movement continuity are hardened for v1, while full trade UX, AI trades, salary matching, and offseason trade systems remain deferred.
@@ -59,13 +59,13 @@ Manual smoke feedback still blocks declaring playable v1 done:
 
 Mode 1 and Mode 2 only until playable v1 is approved.
 
-The next work should polish the remaining score-only/manual-result workflow before expanding workflows:
+The next work is not a speculative feature. It is a real-app manual smoke pass and then a response to findings:
 
-1. Manual final-score workflow UX polish and confirmation-gated wording.
-2. Real populated production Team Hub/schedule visual smoke harness.
-3. Transaction history drilldown and roster movement explainability, if manual smoke still finds the trade/FARM flow opaque.
-4. Score-only history/Almanac boundary copy pass, if not fully covered by the manual final-score slice.
-5. Remaining compact UI/help-affordance cleanup.
+1. Run the final Mode 1/2 manual smoke checklist below.
+2. If a blocker appears, patch the smallest exact issue and rerun the affected checklist section.
+3. If smoke passes, ask the user whether Mode 1/2 playable v1 is approved.
+4. If only non-blocking polish appears, queue it after the approval decision.
+5. Keep Mode 3/offseason and full-spec systems deferred unless separately approved.
 
 ## Explicit Exclusions
 
@@ -98,7 +98,7 @@ These are not active playable-v1 implementation targets in this plan:
 | Franchise-to-Almanac persistence was unclear | Smoke said nothing from Franchise persisted to Almanac | M2-D006, M2-D013, M2-D014, M2-D028 | Committed slice `Persist franchise players into Almanac` | Keep approved franchise archive/player/team evidence scoped and portable | Completed hardening | Done | Completed games, scope filters, save/export/delete behavior, score-only boundaries | Mode 3/offseason execution blocked |
 | Fame-event context needed continuity hardening | Fame/achievement evidence risked losing franchise context or being consumed from untrusted rows | Fame/fan morale prompt specs; manual smoke history concerns | Committed slice `Preserve franchise fame event context` | Keep no-hitter/perfect-game evidence scoped to trusted completed archives; block score-only fabricated fame | Completed hardening | Done | Player/team/opponent/game/franchise context, fan morale prompt source trust | Awards persistence and broader fame categories blocked |
 | Narrative/milestone carryover is incomplete | Historical records, milestones, and stories need defined persistence | M2-D013, M2-D014, M2-D028 | Milestone/narrative systems exist but are deferred/partial in manifest and roadmap | Keep stable read-only history; do not imply complete museum/almanac/carryover until proven | P2 Analytics/Continuity | Analytics/Continuity: WPA and Almanac Persistence Pass | No global/prototype surfaces presented as franchise-complete | Story persistence beyond random-event log blocked |
-| Manual final-score workflow needs boundary polish | Score-only rows are useful, but users need clarity that they do not create player stats, WPA, fame, awards, or Almanac player evidence | Manual smoke feedback; score-only hard boundaries | Score-only boundaries are tested in several persistence/Almanac/fame paths | Make the workflow copy/tests prove exactly what score-only can and cannot persist | P1 Workflow Trust | Manual Final-Score Entry And Score-Only Boundary Reconciliation | Team-only result effects, no fabricated player/WPA/fame evidence, save/export consistency | No AI simulation or stat fabrication |
+| Manual final-score workflow needed boundary polish | Score-only rows are useful, but users need clarity that they do not create player stats, WPA, fame, awards, or Almanac player evidence | Manual smoke feedback; score-only hard boundaries | Completed slice `Manual Final-Score Workflow UX Polish And Confirmation-Gated Wording` | Keep score-only visibly schedule/standings-only, with team-fan morale effects confirmation-gated in Random Event Log | Completed hardening | Done | Team-only result effects, no fabricated player/WPA/fame/Game Detail evidence, save/export consistency | No AI simulation or stat fabrication |
 | Manual schedule workflow needed hardening | Users need comfortable schedule authoring/editing without generated schedules | Manual smoke feedback; Mode 1/2 launch flow | Committed slice `Harden franchise schedule editing boundaries` | Keep manual/CSV non-generated schedule path usable and clearly scoped | Completed hardening | Done | No generated schedules, launch state remains scoped, row copy concise | Generated schedules excluded |
 | Trade/FARM roster movement continuity needed audit | FARM/call-up/send-down/trade evidence must stay consistent across Team Hub, roster rows, and persistence | FARM/scouting/transaction specs; Team Hub roster usability | Committed slice `Protect hidden prospect data in trades` plus movement-continuity hardening | Keep roster movement history and current roster rows consistent and hidden-safe | Completed hardening | Done | Hidden prospects, call-up reveal boundary, transaction portability, future GameTracker availability | Auto-draft/offseason execution excluded; full trade UX/AI/salary matching deferred |
 | Testing ergonomics request conflicts with scope | Manual smoke asked for auto-hire scouts and auto-draft for repeated testing | Manual smoke feedback | League Builder startup draft UI exists; deterministic engine exists | Do not include auto-draft in active playable-v1 plan; revisit only as separate approved tooling slice | Explicit Exclusion | No active slice | Ensure roadmap does not schedule auto-draft | Auto-draft deferred/excluded |
@@ -150,27 +150,70 @@ These are not active playable-v1 implementation targets in this plan:
 15. **Dynamic Designation Policy Matrix And Two-Way Boundary**
    - Committed. Locked TEAM_MVP/ACE as active preview-only designations, routed TWO-WAY players pitcher-only through ACE for internal v1, and kept Fan Favorite/Albatross/Cornerstone/Captain/Fan Hopeful blocked or trusted-bridge-only.
 
-## Next 5 Implementation Slices
+16. **Manual Final-Score Workflow UX Polish And Confirmation-Gated Wording**
+   - Completed. Made score-only entry and completed rows visibly distinct from GameTracker archives, removed archive affordances, and clarified Random Event Log confirmation for team-fan morale only.
 
-1. **Manual Final-Score Workflow UX Polish And Confirmation-Gated Wording**
-   - Make the score-only/manual-result workflow and compact copy prove exactly which team-level evidence persists and which player/WPA/fame/award/stat paths remain unavailable.
-   - Acceptance target: score-only rows are useful for standings/history without fabricating player evidence.
+## Final Manual Smoke Checklist
 
-2. **Real Populated Production Team Hub/Schedule Visual Smoke Harness**
-   - Prove populated Franchise Home schedule rows and Team Hub roster rows in a production-shaped state, not only the safe fixture route.
-   - Acceptance target: row-rich schedule/roster screenshots are repeatable without hidden prospect truth, generated schedules, unsafe demo writes, or fixture-only assumptions.
+Run this in the real app before deciding whether Mode 1/Mode 2 playable v1 is approved. Use a normal local Franchise save, not only preview routes.
 
-3. **Transaction History Drilldown And Roster Movement Explainability**
-   - Add or tighten read-only drilldown affordances if manual smoke still finds trade/FARM movement opaque.
-   - Acceptance target: users can trace moved player identity without new trade logic, salary matching, AI, or offseason execution.
+1. **Create/load Franchise**
+   - Create a Franchise from a prepared League Builder league, then leave and reload Franchise Mode.
+   - Pass if the saved franchise appears once, opens cleanly, and loading states clear.
 
-4. **Score-only History/Almanac Boundary Copy Pass**
-   - Run only if the manual final-score slice does not fully settle score-only wording in schedule/history/reporting surfaces.
-   - Acceptance target: score-only results remain visibly team/schedule/standings-only and never imply player archives.
+2. **No generated schedule unless user-supplied**
+   - Open the schedule immediately after Franchise creation.
+   - Pass if there are zero generated regular-season rows until the user manually adds/imports schedule data.
 
-5. **Remaining Compact UI/Help-Affordance Cleanup**
-   - Continue reducing default explanatory text while keeping deeper trust-boundary detail available behind help/disclosure.
-   - Acceptance target: compact copy remains operational while blockers stay explicit.
+3. **Manual schedule row**
+   - Add one regular-season schedule row manually, then reload.
+   - Pass if the row persists with the intended away/home teams, day/game number, and no generated extra games.
+
+4. **Score-only result boundary**
+   - Complete one scheduled game by entering final score only.
+   - Pass if standings update, the completed row is labeled `SCORE ONLY`, no Game Detail/archive link appears, and copy states Random Event Log confirmation is required for any team-fan morale effect.
+
+5. **GameTracker schedule launch**
+   - Launch a different scheduled game into GameTracker from FranchiseHome.
+   - Pass if roster/lineup/starter readiness blocks only true incomplete roster issues, not stale Lineup Delta metadata.
+
+6. **Complete/archive GameTracker game**
+   - Finish or helper-complete the GameTracker game.
+   - Pass if the schedule row completes as archive-backed, shows a Game Detail affordance, and does not look like a score-only row.
+
+7. **Almanac continuity**
+   - Open Game Detail, Player Instance Card, team/almanac views where available.
+   - Pass if completed GameTracker evidence keeps franchise/season/team/player identity and score-only rows do not create player evidence.
+
+8. **Team Hub roster scan**
+   - Open Team Hub roster/directory.
+   - Pass if salary, morale, stats/value, roster status, and preview designation columns are readable/sortable and hidden FARM truth is not exposed.
+
+9. **Trade/FARM movement**
+   - Run one approved call-up/send-down or trade path.
+   - Pass if playerId continuity, roster status, transaction history, FARM hidden-safety, and future GameTracker availability remain clear.
+
+10. **Stadium source and spray evidence**
+    - Open Team Hub Stadium.
+    - Pass if stadium source/seed-factor status is understandable, archive spray rows are inspectable, and custom/adaptive park factors remain blocked.
+
+11. **WPA/fame visibility**
+    - Inspect the completed archive in Game Detail and related player contexts.
+    - Pass if WPA/Manager WPA and trusted fame context appear when archive-backed, while score-only rows remain blocked from those surfaces.
+
+12. **Save-slot delete/export boundaries**
+    - Delete a disposable Franchise save slot and check export/backup expectations if part of the smoke pass.
+    - Pass if scoped Franchise stores delete/export consistently without touching unrelated saves.
+
+13. **iPad readability**
+    - Check FranchiseHome schedule rows, Team Hub roster, Team Hub random-event log, Stadium, and GameTracker at iPad width.
+    - Pass if row text fits, controls are tappable, and dense trust labels remain compact.
+
+## Next Response Rule
+
+- If any checklist item fails, the next implementation priority is the smallest patch for that finding.
+- If the checklist passes, the next step is asking the user whether Mode 1/Mode 2 playable v1 is approved.
+- Do not start Mode 3/offseason, auto-draft, AI simulation, final awards, final True Value/salary movement, final designation persistence, morale automation, relationship mutation, adaptive park-factor persistence, custom stadium factor entry, generated schedules, or full trade AI/salary matching without a separate approval.
 
 ## Audit Rules For The Next Slices
 
@@ -191,6 +234,6 @@ Every implementation slice above should be audited against:
 
 Playable v1 should not be declared done yet.
 
-The first Mode 1/Mode 2 user-facing hardening wave plus the Almanac/WPA/fame/visual-smoke trust wave are committed. Playable v1 should still not be declared done because manual score-only workflow clarity, real populated production schedule/Team Hub visual smoke, transaction-history drilldown/explainability, and full seeded harness scope remain unresolved. Schedule editing/import and trade/FARM movement continuity are hardened for v1; archive `game.parkFactors` trust and internal-v1 TWO-WAY designation routing are now tightened policy boundaries, not open playable-v1 blockers.
+The first Mode 1/Mode 2 user-facing hardening wave plus the Almanac/WPA/fame/visual-smoke trust wave are committed. Manual score-only workflow clarity, schedule editing/import, trade/FARM movement continuity, archive `game.parkFactors` trust, and internal-v1 TWO-WAY designation routing are now hardened for v1.
 
-Since schedule editing/import hardening, trade/FARM hidden-safety and movement continuity, park-factor archive trust tightening, and the dynamic designation policy matrix/TWO-WAY boundary are now completed checkpoints, the right next milestone is **Manual Final-Score Workflow UX Polish And Confirmation-Gated Wording**. Score-only remains the clearest user-facing trust gap: it is useful for schedule and standings, but must be impossible to mistake for GameTracker archives, player stats, WPA/fame evidence, awards, designations, or relationship/morale automation beyond explicit team-fan confirmation. The advanced Mode 2 foundation remains useful, but it should stay read-only, preview-only, confirmation-gated, or blocked until the core playable loop and continuity story are reliable and clear.
+Playable v1 should still not be declared approved until the user runs the final real-app manual smoke checklist above and explicitly approves the result. The right next milestone is **respond to manual smoke findings**. If there are no blocking findings, ask for the playable-v1 approval decision rather than starting a speculative new feature. The advanced Mode 2 foundation remains useful, but it should stay read-only, preview-only, confirmation-gated, or blocked until the user approves the playable loop.

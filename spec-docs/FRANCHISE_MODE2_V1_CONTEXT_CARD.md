@@ -10,7 +10,7 @@ Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
 Latest committed checkpoint: `366064a Define v1 dynamic designation policy`.
 
-Latest working checkpoint: Playable V1 Remaining Gap Reconciliation And Next Priority Pick.
+Latest working checkpoint: Final Mode 1/2 Playable V1 Status Reconciliation And Smoke Checklist.
 
 ## Current Completed
 
@@ -32,39 +32,41 @@ Latest working checkpoint: Playable V1 Remaining Gap Reconciliation And Next Pri
 - Fan Favorite/Albatross readiness can be inspected from preview True Value/value-delta rows, but remains blocked for final designation behavior, random-event morale prompts, salary movement, relationships, and Mode 3.
 - Numeric WAR preview, position-relative True Value preview, expected-wins preview, Team Hub display, and durable expected-wins baseline snapshots are read-only and untrusted.
 - The Mode 2 technical foundation is safe to build on, but manual smoke feedback shows the user-facing Mode 1/Mode 2 playable UI/UX is not complete.
-- Mode 1/2 playable hardening has now committed core launch/persistence smoke fixes, generated data policy cleanup, roster scan table improvements, MVP/Ace preview correctness, salary baseline visibility, stadium source-of-truth copy, dense UI hardening, Almanac continuity, archived WPA visibility, fame-event continuity, a safe visual-smoke preview route, populated fixture coverage, schedule editing/import hardening, trade/FARM hidden-safety and movement continuity, park-factor archive trust tightening, and the dynamic designation policy matrix/TWO-WAY boundary.
+- Mode 1/2 playable hardening has now committed core launch/persistence smoke fixes, generated data policy cleanup, roster scan table improvements, MVP/Ace preview correctness, salary baseline visibility, stadium source-of-truth copy, dense UI hardening, Almanac continuity, archived WPA visibility, fame-event continuity, a safe visual-smoke preview route, populated fixture coverage, schedule editing/import hardening, trade/FARM hidden-safety and movement continuity, park-factor archive trust tightening, the dynamic designation policy matrix/TWO-WAY boundary, and manual final-score/score-only UX polish.
 - Schedule editing/import is hardened for the current manual/CSV non-generated policy, but production populated schedule visual smoke remains fixture-backed rather than proven from arbitrary user local data.
 - Trade/FARM continuity is hardened for v1-safe hidden-safety and movement boundaries, while full trade UX, AI trades, salary matching, and offseason trade systems remain deferred.
 - The safe visual-smoke preview covers shell/foundation/finance/stadium, populated fixture rows, Game Detail WPA/fame, Player Instance Card WPA, and GameTracker long-name visibility, but real populated production Team Hub/schedule visual smoke remains a future confidence check.
-- `FRANCHISE_MODE1_MODE2_PLAYABLE_V1_GAP_ANALYSIS.md` is the active playable-v1 gap plan. The next implementation priority is Manual Final-Score Workflow UX Polish And Confirmation-Gated Wording.
+- `FRANCHISE_MODE1_MODE2_PLAYABLE_V1_GAP_ANALYSIS.md` is the active playable-v1 gap plan and now includes the final manual smoke checklist. The next implementation priority is to respond to manual smoke findings, not to start speculative new feature work.
 
 ## Current Active Slice
 
-Playable V1 Remaining Gap Reconciliation And Next Priority Pick.
+Final Mode 1/2 Playable V1 Status Reconciliation And Smoke Checklist.
 
-Goal: mark completed Mode 1/2 hardening checkpoints, preserve remaining playable-v1 risks, and choose the next priority without promoting deferred Mode 3/offseason or full-spec systems.
+Goal: mark score-only/manual final-score polish complete, reconcile the remaining approval gate, and give the user a compact real-app manual smoke checklist before deciding whether Mode 1/2 playable v1 is approved.
 
 ## Next Queue
 
-1. Manual Final-Score Workflow UX Polish And Confirmation-Gated Wording.
-2. Real Populated Production Team Hub/Schedule Visual Smoke Harness.
-3. Transaction History Drilldown And Roster Movement Explainability.
-4. Score-only History/Almanac Boundary Copy Pass, if not fully covered by the manual final-score slice.
-5. Remaining compact UI/help-affordance cleanup.
+1. Run the final Mode 1/2 real-app manual smoke checklist.
+2. Respond to manual smoke findings with the smallest targeted patch if a blocker appears.
+3. If smoke passes, ask the user to approve or reject Mode 1/2 playable v1.
+4. If smoke reveals only polish, queue that polish explicitly after the approval decision.
+5. Keep Mode 3/offseason and full-spec systems deferred until approval.
 
 ## Hard Boundaries
 
 - No silent GameTracker morale mutation.
 - No hidden FARM/prospect truth leaks.
 - No final True Value, final designations, salary movement, or Fan Favorite/Albatross finalization yet.
+- No final awards persistence or awards automation.
 - TWO-WAY designation routing is pitcher-only for internal v1; stricter two-way Team MVP criteria are deferred.
 - Older full-system designation lock/carryover wording is subordinate to the v1 matrix until a separate final-designation promotion slice is approved.
 - No relationship mutation.
 - No story persistence beyond the random-event log.
-- No adaptive park-factor persistence or final park-adjusted value/WAR consumers.
+- No adaptive park-factor persistence, custom stadium factor entry, or final park-adjusted value/WAR consumers.
 - Archive `game.parkFactors` trust has been tightened to accept only verified SMB4 seed inputs; adaptive park-factor persistence remains blocked.
 - No Mode 3/offseason handoff or execution.
 - No auto-draft active path.
+- No AI simulation, AI trades, full trade AI, or salary matching.
 - Score-only rows may affect team fan morale only after explicit confirmation; never player morale, stats, WPA/WAR, awards, designations, player history, or relationships.
 - Safe preview/fixture routes must stay dev/test oriented and must not mutate real user Franchise, schedule, GameTracker, completed-game, or Almanac storage.
 
