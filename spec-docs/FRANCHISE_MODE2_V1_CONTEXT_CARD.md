@@ -8,9 +8,9 @@ Reliability-first Mode 2 completion. Finish a playable, scoped, auditable intern
 
 Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
-Latest committed checkpoint: `cf0cfd0 Register Mode 2 evidence stores for portability`.
+Latest committed checkpoint: `c6bcd69 Tighten Mode 1 and Mode 2 dense UI`.
 
-Latest working checkpoint: Mode 1/2 Playable V1 Gap Analysis doc pass completed pending review/commit.
+Latest working checkpoint: Mode 1/2 Playable V1 Gap Tracker Update And Next-Priority Selection doc pass.
 
 ## Current Completed
 
@@ -31,19 +31,22 @@ Latest working checkpoint: Mode 1/2 Playable V1 Gap Analysis doc pass completed 
 - Fan Favorite/Albatross readiness can be inspected from preview True Value/value-delta rows, but remains blocked for final designation behavior, random-event morale prompts, salary movement, relationships, and Mode 3.
 - Numeric WAR preview, position-relative True Value preview, expected-wins preview, Team Hub display, and durable expected-wins baseline snapshots are read-only and untrusted.
 - The Mode 2 technical foundation is safe to build on, but manual smoke feedback shows the user-facing Mode 1/Mode 2 playable UI/UX is not complete.
-- `FRANCHISE_MODE1_MODE2_PLAYABLE_V1_GAP_ANALYSIS.md` is the active playable-v1 gap plan for launch/persistence, generation policy, roster usability, designation correctness, finance visibility, stadium source-of-truth, analytics continuity, and copy cleanup.
+- Mode 1/2 playable hardening has now committed core launch/persistence smoke fixes, generated data policy cleanup, roster scan table improvements, MVP/Ace preview correctness, salary baseline visibility, stadium source-of-truth copy, and a dense UI visual-smoke pass.
+- `FRANCHISE_MODE1_MODE2_PLAYABLE_V1_GAP_ANALYSIS.md` is the active playable-v1 gap plan. The next implementation priority is Franchise-to-Almanac persistence/continuity, with WPA/manager WPA visibility as adjacent analytics continuity work.
 
 ## Current Active Slice
 
-Mode 1/2 Playable V1 Gap Analysis doc pass.
+Mode 1/2 Playable V1 Gap Tracker Update And Next-Priority Selection.
 
-Goal: preserve the foundation-safe state while making user-facing Mode 1/Mode 2 playable hardening the active priority. Do not treat Mode 2 as fully playable-complete yet.
+Goal: update the gap tracker, context card, and roadmap after the committed playable-v1 hardening slices. Do not implement code in this slice, and do not treat Mode 2 as fully playable-complete yet.
 
 ## Next Queue
 
-1. Mode 1/2 Core Launch And Persistence Smoke Hardening.
-2. Franchise Data Generation Policy Cleanup: no DH, SMB4 names, salaries.
-3. Team Hub Roster Usability: sortable salary/morale/stats/designation columns.
+1. Franchise-to-Almanac Persistence And Continuity Audit.
+2. WPA And Manager WPA Visibility Decision.
+3. Immaculate Inning / Fame Event Correctness.
+4. Seeded Visual Smoke Harness For Team Hub And GameTracker.
+5. Remaining copy polish, including the finance `READ ONLY` chip.
 
 ## Hard Boundaries
 
@@ -53,6 +56,7 @@ Goal: preserve the foundation-safe state while making user-facing Mode 1/Mode 2 
 - No relationship mutation.
 - No story persistence beyond the random-event log.
 - No adaptive park-factor persistence or final park-adjusted value/WAR consumers.
+- Archive `game.parkFactors` trust remains a known follow-up; do not treat archived park factors as trusted adaptive persistence without a future tightening slice.
 - No Mode 3/offseason handoff or execution.
 - No auto-draft active path.
 - Score-only rows may affect team fan morale only after explicit confirmation; never player morale, stats, WPA/WAR, awards, designations, player history, or relationships.
