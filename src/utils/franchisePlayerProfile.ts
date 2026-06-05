@@ -8,6 +8,10 @@ import type {
 } from './leagueBuilderStorage';
 import type { FranchiseFarmRecord } from './franchiseFarmStorage';
 import { getVisibleSafeFranchisePlayerSalary } from './franchiseSalary';
+import {
+  calculateFranchisePlayerRatingModelGrade,
+  playerHasFranchisePitchingModel,
+} from './franchisePlayerRatingModel';
 
 type RevealState = 'hidden' | 'revealed';
 
@@ -55,12 +59,18 @@ export interface FranchisePlayerProfileBaseballIdentity {
 }
 
 export interface FranchisePlayerProfileFullDetails {
-  overallGrade: Grade;
+  ratingModelGrade: Grade;
+  storedOverallGrade: Grade;
   power: number;
   contact: number;
   speed: number;
   fielding: number;
   arm: number;
+  pitchingModelAvailable: boolean;
+  pitchingRatings: FranchisePlayerProfilePitchingDetails | null;
+}
+
+export interface FranchisePlayerProfilePitchingDetails {
   velocity: number;
   junk: number;
   accuracy: number;
@@ -147,17 +157,24 @@ function resolveRevealState(player: Player, rosterStatus: RosterStatus | 'UNKNOW
 }
 
 function buildFullDetails(player: Player): FranchisePlayerProfileFullDetails {
+  const pitchingModelAvailable = playerHasFranchisePitchingModel(player);
   return {
-    overallGrade: player.overallGrade,
+    ratingModelGrade: calculateFranchisePlayerRatingModelGrade(player),
+    storedOverallGrade: player.overallGrade,
     power: player.power,
     contact: player.contact,
     speed: player.speed,
     fielding: player.fielding,
     arm: player.arm,
-    velocity: player.velocity,
-    junk: player.junk,
-    accuracy: player.accuracy,
-    arsenal: [...(player.arsenal ?? [])],
+    pitchingModelAvailable,
+    pitchingRatings: pitchingModelAvailable
+      ? {
+          velocity: player.velocity,
+          junk: player.junk,
+          accuracy: player.accuracy,
+          arsenal: [...(player.arsenal ?? [])],
+        }
+      : null,
   };
 }
 

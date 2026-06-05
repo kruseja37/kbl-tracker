@@ -184,6 +184,62 @@ describe('franchise player profile manual edit utility', () => {
     expect(result.editHistoryEntries.map((entry) => entry.field)).toContain('secondaryPosition');
   });
 
+  test('revealed non-pitcher blocks pitching rating and arsenal edits', () => {
+    const result = validateFranchisePlayerProfileEdit({
+      player: makePlayer({
+        primaryPosition: 'LF',
+        secondaryPosition: 'OF',
+        velocity: 0,
+        junk: 0,
+        accuracy: 0,
+        arsenal: [],
+      }),
+      changes: {
+        velocity: 50,
+        junk: 51,
+        accuracy: 52,
+        arsenal: ['4F'],
+      },
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.blockedFields).toEqual(expect.arrayContaining([
+      'velocity',
+      'junk',
+      'accuracy',
+      'arsenal',
+    ]));
+    expect(result.sanitizedChanges).toEqual({});
+    expect(result.errors.join(' ')).toContain('blocked unless the player is a pitcher or TWO-WAY');
+  });
+
+  test('TWO-WAY revealed player allows pitching rating and arsenal edits', () => {
+    const result = applyFranchisePlayerProfileEdit({
+      player: makePlayer({
+        primaryPosition: 'TWO-WAY',
+        secondaryPosition: 'OF',
+        velocity: 70,
+        junk: 71,
+        accuracy: 72,
+        arsenal: ['4F'],
+      }),
+      changes: {
+        velocity: 82,
+        junk: 83,
+        accuracy: 84,
+        arsenal: ['4F', 'CH'],
+      },
+    });
+
+    expect(result.valid).toBe(true);
+    expect(result.player).toEqual(expect.objectContaining({
+      velocity: 82,
+      junk: 83,
+      accuracy: 84,
+      arsenal: ['4F', 'CH'],
+    }));
+  });
+
   test('unrevealed FARM can edit visible identity fields only', () => {
     const result = applyFranchisePlayerProfileEdit({
       player: makePlayer({

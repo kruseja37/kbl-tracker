@@ -1742,9 +1742,21 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(dialog).getByText('Copied Player')).toBeInTheDocument();
     expect(within(dialog).getByText(/MLB · REVEALED · Read-only/i)).toBeInTheDocument();
     expect(within(dialog).getByText('BASEBALL DETAILS')).toBeInTheDocument();
+    expect(within(dialog).getByText('PRIMARY POSITION')).toBeInTheDocument();
+    expect(within(dialog).getByText('SECONDARY POSITION')).toBeInTheDocument();
+    expect(within(dialog).getByText('SS')).toBeInTheDocument();
+    expect(within(dialog).getByText('2B')).toBeInTheDocument();
+    expect(within(dialog).getByText('ANALYZER GRADE')).toBeInTheDocument();
+    expect(within(dialog).getByText('STORED GRADE')).toBeInTheDocument();
+    expect(within(dialog).getAllByText('B+').length).toBeGreaterThanOrEqual(2);
     expect(within(dialog).getByText('POW')).toBeInTheDocument();
     expect(within(dialog).getByText('CON')).toBeInTheDocument();
     expect(within(dialog).getByText('SPD')).toBeInTheDocument();
+    expect(within(dialog).queryByText('VEL')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('JNK')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('ACC')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('ARSENAL')).not.toBeInTheDocument();
+    expect(within(dialog).getByText(/Pitching ratings hidden for non-pitcher/i)).toBeInTheDocument();
     expect(within(dialog).getByText(/\$3\.0M/i)).toBeInTheDocument();
     expect(within(dialog).getByText('PROFILE EDIT HISTORY')).toBeInTheDocument();
     expect(within(dialog).getByText(/No player-local profile edits recorded/i)).toBeInTheDocument();
@@ -1757,6 +1769,42 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(moraleRegion).getByLabelText(/Player morale reason/i)).toBeInTheDocument();
     expect(within(dialog).getByText('MANUAL OVERRIDE PREVIEW')).toBeInTheDocument();
     expect(within(dialog).queryByText(/SAVE PLAYER MORALE/i)).not.toBeInTheDocument();
+    expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+  });
+
+  test('profile modal shows pitching ratings and arsenal for TWO-WAY player', async () => {
+    mocks.mockGetAllFranchisePlayers.mockResolvedValueOnce([
+      franchisePlayer('two-way-player', 'Two', 'Way', 'TWO-WAY', {
+        secondaryPosition: 'OF',
+        velocity: 82,
+        junk: 81,
+        accuracy: 79,
+        arsenal: ['4F', 'CH', 'SL'],
+      }),
+    ]);
+    mocks.mockGetFranchiseFarmRoster.mockResolvedValueOnce([]);
+
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /DIRECTORY/i }));
+    const directory = await screen.findByRole('region', { name: /Franchise player directory/i });
+    fireEvent.click(within(directory).getByRole('button', { name: /Open profile for Two Way/i }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Franchise player profile for Two Way/i });
+    expect(within(dialog).getByText('PRIMARY POSITION')).toBeInTheDocument();
+    expect(within(dialog).getByText('TWO-WAY')).toBeInTheDocument();
+    expect(within(dialog).getByText('SECONDARY POSITION')).toBeInTheDocument();
+    expect(within(dialog).getByText('OF')).toBeInTheDocument();
+    expect(within(dialog).getByText('VEL')).toBeInTheDocument();
+    expect(within(dialog).getByText('JNK')).toBeInTheDocument();
+    expect(within(dialog).getByText('ACC')).toBeInTheDocument();
+    expect(within(dialog).getByText('ARSENAL')).toBeInTheDocument();
+    expect(within(dialog).getByText('82')).toBeInTheDocument();
+    expect(within(dialog).getByText('81')).toBeInTheDocument();
+    expect(within(dialog).getByText('79')).toBeInTheDocument();
+    expect(within(dialog).getByText(/4F, CH, SL/i)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/Pitching ratings hidden/i)).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
   });
@@ -2116,8 +2164,12 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: /EDIT PROFILE/i }));
     fireEvent.change(within(dialog).getByLabelText('FIRST NAME'), { target: { value: 'Manual' } });
     fireEvent.change(within(dialog).getByLabelText('AGE'), { target: { value: '29' } });
+    expect(within(dialog).getByLabelText('PRIMARY POSITION')).toBeInTheDocument();
     fireEvent.change(within(dialog).getByLabelText('SECONDARY POSITION'), { target: { value: '' } });
     fireEvent.change(within(dialog).getByLabelText('POW'), { target: { value: '77' } });
+    expect(within(dialog).queryByLabelText('VEL')).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText('JNK')).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText('ACC')).not.toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole('button', { name: /SAVE PROFILE/i }));
 
     await waitFor(() => expect(mocks.mockSaveFranchisePlayer).toHaveBeenCalledTimes(1));

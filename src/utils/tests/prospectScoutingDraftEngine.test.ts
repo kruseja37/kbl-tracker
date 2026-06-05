@@ -90,6 +90,51 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     expect(output.visibleReports.every((report) => report.position !== 'DH')).toBe(true);
   });
 
+  test('generated non-pitcher prospects do not carry visible pitching ratings or arsenal', () => {
+    const output = generateProspectScoutingDraft({
+      ...BASE_INPUT,
+      rounds: 12,
+      candidatePoolMultiplier: 5,
+      seed: 'non-pitcher-pitching-model-policy-seed',
+    });
+    const pitcherPositions = new Set(['SP', 'RP', 'CP']);
+    const nonPitcherCandidates = output.draftClass.filter((candidate) => !pitcherPositions.has(candidate.position));
+    const nonPitcherPlayers = output.generatedPlayers.filter((player) => !pitcherPositions.has(player.primaryPosition));
+
+    expect(nonPitcherCandidates.length).toBeGreaterThan(0);
+    expect(nonPitcherCandidates.every((candidate) =>
+      candidate.ratings.velocity === 0 &&
+      candidate.ratings.junk === 0 &&
+      candidate.ratings.accuracy === 0 &&
+      candidate.arsenal.length === 0,
+    )).toBe(true);
+    expect(nonPitcherPlayers.every((player) =>
+      player.velocity === 0 &&
+      player.junk === 0 &&
+      player.accuracy === 0 &&
+      player.arsenal.length === 0,
+    )).toBe(true);
+  });
+
+  test('generated pitcher prospects keep pitching ratings and arsenal', () => {
+    const output = generateProspectScoutingDraft({
+      ...BASE_INPUT,
+      rounds: 12,
+      candidatePoolMultiplier: 5,
+      seed: 'pitcher-pitching-model-policy-seed',
+    });
+    const pitcherPositions = new Set(['SP', 'RP', 'CP']);
+    const pitcherPlayers = output.generatedPlayers.filter((player) => pitcherPositions.has(player.primaryPosition));
+
+    expect(pitcherPlayers.length).toBeGreaterThan(0);
+    expect(pitcherPlayers.every((player) =>
+      player.velocity > 0 &&
+      player.junk > 0 &&
+      player.accuracy > 0 &&
+      player.arsenal.length > 0,
+    )).toBe(true);
+  });
+
   test('generated prospect names come from the SMB4 database with deterministic variety', () => {
     const output = generateProspectScoutingDraft({
       ...BASE_INPUT,

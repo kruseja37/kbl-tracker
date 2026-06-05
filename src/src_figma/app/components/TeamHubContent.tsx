@@ -28,6 +28,7 @@ import {
   FRANCHISE_PROFILE_SECONDARY_POSITIONS,
   type FranchisePlayerProfileEditPayload,
 } from "../../../utils/franchisePlayerProfileEdit";
+import { playerHasFranchisePitchingModel } from "../../../utils/franchisePlayerRatingModel";
 import {
   getFranchiseFarmRoster,
   type FranchiseFarmRecord,
@@ -4189,9 +4190,6 @@ function FranchisePlayerProfileModal({
   onSaveEdit,
 }: FranchisePlayerProfileModalProps) {
   const traits = profile.identity.traits.length > 0 ? profile.identity.traits.join(', ') : 'None';
-  const position = profile.identity.secondaryPosition
-    ? `${profile.identity.primaryPosition} / ${profile.identity.secondaryPosition}`
-    : profile.identity.primaryPosition;
   const manualOverridePreview = useMemo(() => buildManualOverridePreview(profile, {
     franchiseId,
     seasonId,
@@ -4199,6 +4197,9 @@ function FranchisePlayerProfileModal({
     seasonNumber,
   }), [franchiseId, profile, seasonId, seasonNumber, statsScopeId]);
   const form = editForm;
+  const pitchingModelAvailable = form
+    ? playerHasFranchisePitchingModel({ primaryPosition: form.primaryPosition })
+    : Boolean(profile.fullDetails?.pitchingModelAvailable);
   const updateForm = (update: Partial<FranchiseProfileEditForm>) => {
     if (!form) return;
     onEditFormChange({ ...form, ...update });
@@ -4298,7 +4299,8 @@ function FranchisePlayerProfileModal({
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <FranchiseProfileField label="AGE" value={profile.identity.age} />
             <FranchiseProfileField label="BATS / THROWS" value={`${profile.identity.bats} / ${profile.identity.throws}`} />
-            <FranchiseProfileField label="POSITION" value={position} />
+            <FranchiseProfileField label="PRIMARY POSITION" value={profile.identity.primaryPosition} />
+            <FranchiseProfileField label="SECONDARY POSITION" value={profile.identity.secondaryPosition ?? '—'} />
             <FranchiseProfileField label="TRAITS" value={traits} />
             <FranchiseProfileField label="PERSONALITY" value={profile.identity.personality} />
             <FranchiseProfileField label="CHEMISTRY" value={profile.identity.chemistry} />
@@ -4343,23 +4345,40 @@ function FranchisePlayerProfileModal({
                 <ProfileTextInput label="SPD" value={form.speed} onChange={(speed) => updateForm({ speed })} />
                 <ProfileTextInput label="FLD" value={form.fielding} onChange={(fielding) => updateForm({ fielding })} />
                 <ProfileTextInput label="ARM" value={form.arm} onChange={(arm) => updateForm({ arm })} />
-                <ProfileTextInput label="VEL" value={form.velocity} onChange={(velocity) => updateForm({ velocity })} />
-                <ProfileTextInput label="JNK" value={form.junk} onChange={(junk) => updateForm({ junk })} />
-                <ProfileTextInput label="ACC" value={form.accuracy} onChange={(accuracy) => updateForm({ accuracy })} />
-                <ProfileTextInput label={`ARSENAL (${FRANCHISE_PROFILE_PITCH_TYPES.join(', ')})`} value={form.arsenal} onChange={(arsenal) => updateForm({ arsenal })} />
+                {pitchingModelAvailable ? (
+                  <>
+                    <ProfileTextInput label="VEL" value={form.velocity} onChange={(velocity) => updateForm({ velocity })} />
+                    <ProfileTextInput label="JNK" value={form.junk} onChange={(junk) => updateForm({ junk })} />
+                    <ProfileTextInput label="ACC" value={form.accuracy} onChange={(accuracy) => updateForm({ accuracy })} />
+                    <ProfileTextInput label={`ARSENAL (${FRANCHISE_PROFILE_PITCH_TYPES.join(', ')})`} value={form.arsenal} onChange={(arsenal) => updateForm({ arsenal })} />
+                  </>
+                ) : (
+                  <div className="border-2 border-[#E8E8D8]/15 bg-[#2d3d2f] p-2 text-[8px] text-[#E8E8D8]/70 sm:col-span-2 lg:col-span-3">
+                    Pitching ratings hidden for non-pitcher / non-TWO-WAY profile.
+                  </div>
+                )}
               </div>
             ) : (
               <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <FranchiseProfileField label="GRADE" value={profile.fullDetails?.overallGrade ?? '—'} />
+                <FranchiseProfileField label="ANALYZER GRADE" value={profile.fullDetails?.ratingModelGrade ?? '—'} />
+                <FranchiseProfileField label="STORED GRADE" value={profile.fullDetails?.storedOverallGrade ?? '—'} />
                 <FranchiseProfileField label="POW" value={profile.fullDetails?.power ?? '—'} />
                 <FranchiseProfileField label="CON" value={profile.fullDetails?.contact ?? '—'} />
                 <FranchiseProfileField label="SPD" value={profile.fullDetails?.speed ?? '—'} />
                 <FranchiseProfileField label="FLD" value={profile.fullDetails?.fielding ?? '—'} />
                 <FranchiseProfileField label="ARM" value={profile.fullDetails?.arm ?? '—'} />
-                <FranchiseProfileField label="VEL" value={profile.fullDetails?.velocity ?? '—'} />
-                <FranchiseProfileField label="JNK" value={profile.fullDetails?.junk ?? '—'} />
-                <FranchiseProfileField label="ACC" value={profile.fullDetails?.accuracy ?? '—'} />
-                <FranchiseProfileField label="ARSENAL" value={profile.fullDetails?.arsenal.length ? profile.fullDetails.arsenal.join(', ') : '—'} />
+                {profile.fullDetails?.pitchingRatings ? (
+                  <>
+                    <FranchiseProfileField label="VEL" value={profile.fullDetails.pitchingRatings.velocity} />
+                    <FranchiseProfileField label="JNK" value={profile.fullDetails.pitchingRatings.junk} />
+                    <FranchiseProfileField label="ACC" value={profile.fullDetails.pitchingRatings.accuracy} />
+                    <FranchiseProfileField label="ARSENAL" value={profile.fullDetails.pitchingRatings.arsenal.length ? profile.fullDetails.pitchingRatings.arsenal.join(', ') : '—'} />
+                  </>
+                ) : (
+                  <div className="border-2 border-[#E8E8D8]/15 bg-[#2d3d2f] p-2 text-[8px] text-[#E8E8D8]/70 sm:col-span-2 lg:col-span-3">
+                    Pitching ratings hidden for non-pitcher / non-TWO-WAY profile.
+                  </div>
+                )}
               </div>
             )}
           </section>

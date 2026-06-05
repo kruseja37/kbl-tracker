@@ -410,9 +410,9 @@ function buildRatings(seed: string, grade: Grade, position: DraftPosition): Posi
     speed: rating(`${seed}:speed`, center, bias.speed ?? 0),
     fielding: rating(`${seed}:fielding`, center, bias.fielding ?? 0),
     arm: rating(`${seed}:arm`, center, bias.arm ?? 0),
-    velocity: rating(`${seed}:velocity`, 30),
-    junk: rating(`${seed}:junk`, 30),
-    accuracy: rating(`${seed}:accuracy`, 30),
+    velocity: 0,
+    junk: 0,
+    accuracy: 0,
   };
 }
 

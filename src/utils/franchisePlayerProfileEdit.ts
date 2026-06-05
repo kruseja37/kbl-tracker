@@ -9,6 +9,7 @@ import {
   type Position,
   type RosterStatus,
 } from './leagueBuilderStorage';
+import { playerHasFranchisePitchingModel } from './franchisePlayerRatingModel';
 
 export const FRANCHISE_PROFILE_PRIMARY_POSITIONS: Position[] = [
   'C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'DH', 'SP', 'RP', 'CP', 'SP/RP', 'TWO-WAY',
@@ -96,6 +97,13 @@ const RATING_FIELDS = new Set<string>([
   'velocity',
   'junk',
   'accuracy',
+]);
+
+const PITCHING_MODEL_FIELDS = new Set<string>([
+  'velocity',
+  'junk',
+  'accuracy',
+  'arsenal',
 ]);
 
 export interface FranchisePlayerProfileEditPayload {
@@ -308,6 +316,19 @@ export function validateFranchisePlayerProfileEdit({
     } else if (field === 'overallGrade') {
       const grade = parseEnumValue(field, value, FRANCHISE_PROFILE_GRADES, errors);
       if (grade) sanitizedChanges.overallGrade = grade;
+    }
+  }
+
+  const finalPrimaryPosition = sanitizedChanges.primaryPosition ?? player.primaryPosition;
+  const finalPitchingModelAvailable = playerHasFranchisePitchingModel({
+    primaryPosition: finalPrimaryPosition,
+  });
+  if (!hiddenFarmLimitedEdit && !finalPitchingModelAvailable) {
+    for (const field of Object.keys(changes)) {
+      if (!PITCHING_MODEL_FIELDS.has(field)) continue;
+      blockedFields.push(field);
+      errors.push(`${field} is blocked unless the player is a pitcher or TWO-WAY.`);
+      delete (sanitizedChanges as Record<string, unknown>)[field];
     }
   }
 

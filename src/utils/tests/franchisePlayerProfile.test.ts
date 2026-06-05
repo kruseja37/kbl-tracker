@@ -82,14 +82,20 @@ describe('franchise player profile view model', () => {
       chemistry: 'Spirited',
     }));
     expect(profile.fullDetails).toEqual(expect.objectContaining({
-      overallGrade: 'B+',
+      ratingModelGrade: 'A-',
+      storedOverallGrade: 'B+',
       power: 71,
       contact: 72,
       speed: 73,
       fielding: 74,
       arm: 75,
-      arsenal: [],
+      pitchingModelAvailable: false,
+      pitchingRatings: null,
     }));
+    expect(JSON.stringify(profile.fullDetails)).not.toContain('velocity');
+    expect(JSON.stringify(profile.fullDetails)).not.toContain('junk');
+    expect(JSON.stringify(profile.fullDetails)).not.toContain('accuracy');
+    expect(JSON.stringify(profile.fullDetails)).not.toContain('arsenal');
     expect(profile.salary).toBe(3_000_000);
     expect(profile.contractYears).toBe(2);
     expect(profile.editHistory).toEqual([]);
@@ -262,12 +268,44 @@ describe('franchise player profile view model', () => {
     expect(profile.revealState).toBe('revealed');
     expect(profile.rosterStatus).toBe('MLB');
     expect(profile.fullDetails).toEqual(expect.objectContaining({
-      velocity: 89,
-      junk: 76,
-      accuracy: 77,
-      arsenal: ['4F', 'SL'],
+      pitchingModelAvailable: true,
+      pitchingRatings: {
+        velocity: 89,
+        junk: 76,
+        accuracy: 77,
+        arsenal: ['4F', 'SL'],
+      },
     }));
     expect(JSON.stringify(profile)).not.toContain('trueGrade');
+  });
+
+  test('TWO-WAY revealed player exposes full pitching model details', () => {
+    const profile = buildFranchisePlayerProfileViewModel({
+      player: makePlayer({
+        id: 'two-way-player',
+        firstName: 'Two',
+        lastName: 'Way',
+        primaryPosition: 'TWO-WAY',
+        secondaryPosition: 'OF',
+        velocity: 81,
+        junk: 79,
+        accuracy: 74,
+        arsenal: ['4F', 'CH', 'SL'],
+        ratingRevealState: 'revealed',
+      }),
+      teamId: 'team-1',
+      leagueId: 'league-1',
+    });
+
+    expect(profile.fullDetails).toEqual(expect.objectContaining({
+      pitchingModelAvailable: true,
+      pitchingRatings: {
+        velocity: 81,
+        junk: 79,
+        accuracy: 74,
+        arsenal: ['4F', 'CH', 'SL'],
+      },
+    }));
   });
 
   test('sent-down revealed player remains full-detail visible and keeps known salary context on FARM', () => {
@@ -292,9 +330,12 @@ describe('franchise player profile view model', () => {
     expect(profile.revealState).toBe('revealed');
     expect(profile.hiddenSafe).toBe(false);
     expect(profile.fullDetails).toEqual(expect.objectContaining({
-      overallGrade: 'B+',
+      ratingModelGrade: 'A-',
+      storedOverallGrade: 'B+',
       power: 71,
       contact: 72,
+      pitchingModelAvailable: false,
+      pitchingRatings: null,
     }));
     expect(profile.salary).toBe(7.5);
   });

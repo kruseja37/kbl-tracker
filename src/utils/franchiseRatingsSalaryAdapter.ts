@@ -14,11 +14,9 @@ import {
   type Player,
 } from './franchisePlayerStorage';
 import {
-  calculatePitcherGrade,
-  calculatePositionPlayerGrade,
-  calculateTwoWayPlayerGrade,
-  type Grade,
-} from '../engines/gradeEngine';
+  calculateFranchisePlayerRatingModelGrade,
+} from './franchisePlayerRatingModel';
+import type { Grade } from '../engines/gradeEngine';
 import { calculateFranchisePlayerSalary } from './franchiseSalary';
 
 export const FRANCHISE_RATINGS_SALARY_CALCULATION_VERSION = 'franchise-ratings-salary-v1-grade-salary-only';
@@ -103,19 +101,6 @@ function isCompleteContext(
   );
 }
 
-function isTwoWay(player: Player): boolean {
-  return String(player.primaryPosition) === 'TWO-WAY';
-}
-
-function isPitcher(player: Player): boolean {
-  return ['SP', 'RP', 'CP', 'SP/RP', 'P', 'TWO-WAY'].includes(String(player.primaryPosition));
-}
-
-function rating(value: unknown): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 function buildSnapshot(
   player: Player,
   overrides: Partial<Pick<Player, 'overallGrade' | 'salary'>> = {},
@@ -141,26 +126,7 @@ function buildSnapshot(
 }
 
 function calculateOverallGrade(player: Player): Grade {
-  const positionRatings = {
-    power: rating(player.power),
-    contact: rating(player.contact),
-    speed: rating(player.speed),
-    fielding: rating(player.fielding),
-    arm: rating(player.arm),
-  };
-  const pitcherRatings = {
-    velocity: rating(player.velocity),
-    junk: rating(player.junk),
-    accuracy: rating(player.accuracy),
-  };
-
-  if (isTwoWay(player)) {
-    return calculateTwoWayPlayerGrade(positionRatings, pitcherRatings);
-  }
-
-  return isPitcher(player)
-    ? calculatePitcherGrade(pitcherRatings)
-    : calculatePositionPlayerGrade(positionRatings);
+  return calculateFranchisePlayerRatingModelGrade(player) as Grade;
 }
 
 export function buildFranchiseRatingsSalaryProposal(
