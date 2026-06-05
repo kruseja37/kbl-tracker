@@ -168,6 +168,62 @@ function normalizeStadiumId(stadiumName?: string | null, stadiumId?: string | nu
   return null;
 }
 
+const PARK_FACTOR_NUMERIC_KEYS: Array<keyof Pick<
+  ParkFactors,
+  | 'overall'
+  | 'runs'
+  | 'homeRuns'
+  | 'hits'
+  | 'doubles'
+  | 'triples'
+  | 'strikeouts'
+  | 'walks'
+  | 'leftHandedHR'
+  | 'rightHandedHR'
+  | 'leftHandedAVG'
+  | 'rightHandedAVG'
+>> = [
+  'overall',
+  'runs',
+  'homeRuns',
+  'hits',
+  'doubles',
+  'triples',
+  'strikeouts',
+  'walks',
+  'leftHandedHR',
+  'rightHandedHR',
+  'leftHandedAVG',
+  'rightHandedAVG',
+];
+
+function numericParkFactorMatches(left: unknown, right: unknown): boolean {
+  if (typeof left !== 'number' || typeof right !== 'number') return false;
+  if (!Number.isFinite(left) || !Number.isFinite(right)) return false;
+  return Math.abs(left - right) <= 0.000001;
+}
+
+function trustedArchiveSeedParkFactors(
+  stadiumName: string,
+  stadiumId: string,
+  parkFactors?: ParkFactors | null,
+): ParkFactors | null {
+  if (!parkFactors || parkFactors.source !== 'SEED') return null;
+
+  const derived = getDerivedParkFactorsIfAvailable(stadiumName);
+  if (!derived) return null;
+
+  const expectedStadiumId = getStableParkId(derived.stadiumName ?? stadiumName);
+  if (stadiumId !== expectedStadiumId) return null;
+  if (parkFactors.stadiumId && parkFactors.stadiumId !== expectedStadiumId) return null;
+  if (parkFactors.stadiumName && parkFactors.stadiumName !== derived.stadiumName) return null;
+
+  const allFactorsMatch = PARK_FACTOR_NUMERIC_KEYS.every((key) =>
+    numericParkFactorMatches(parkFactors[key], derived[key]),
+  );
+  return allFactorsMatch ? parkFactors : null;
+}
+
 function zoneIdFromEvent(atBat: AtBatEvent): string | null {
   const enrichedZone = atBat.enrichment?.fieldLocation?.zone;
   if (enrichedZone) return enrichedZone;
@@ -416,7 +472,13 @@ function buildStadiums(
     const stadiumName = game.stadiumName;
     const stadiumId = normalizeStadiumId(stadiumName, game.stadiumId);
     if (!stadiumName || !stadiumId) continue;
-    const stadium = ensure(stadiumName, stadiumId, null, null, game.parkFactors ?? null);
+    const stadium = ensure(
+      stadiumName,
+      stadiumId,
+      null,
+      null,
+      trustedArchiveSeedParkFactors(stadiumName, stadiumId, game.parkFactors),
+    );
     stadium.archiveGameRows += 1;
   }
 

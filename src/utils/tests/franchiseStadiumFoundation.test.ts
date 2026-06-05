@@ -5,6 +5,7 @@ import {
   filterAndSortFranchiseSprayChartRows,
   FRANCHISE_STADIUM_FOUNDATION_CONTRACT_VERSION,
 } from '../franchiseStadiumFoundation';
+import { getDerivedParkFactorsIfAvailable } from '../../engines/parkFactorDeriver';
 import type { AtBatEvent, FieldingEvent } from '../eventLog';
 import type { CompletedGameRecord } from '../gameStorage';
 import type { FranchiseTeamStadiumSnapshot } from '../../types/franchise';
@@ -37,6 +38,8 @@ const seedParkFactors: ParkFactors = {
   confidence: 'LOW',
   source: 'SEED',
 };
+
+const trustedAppleSeedParkFactors = getDerivedParkFactorsIfAvailable('Apple Field')!;
 
 function completedGame(overrides: Partial<CompletedGameRecord> = {}): CompletedGameRecord {
   return {
@@ -250,6 +253,108 @@ describe('franchise stadium foundation', () => {
     });
     expect(report.parkFactors.status).toBe('trusted');
     expect(report.parkFactors.seedFactorsTrusted).toBe(true);
+  });
+
+  test('trusts valid SMB4 seed park factors from scoped completed-game archives', () => {
+    const report = buildFranchiseStadiumFoundationReport({
+      ...scope,
+      stadiumSnapshots: [],
+      completedGames: [
+        completedGame({
+          parkFactors: trustedAppleSeedParkFactors,
+        }),
+      ],
+      atBatEvents: [],
+      fieldingEvents: [],
+    });
+
+    expect(report.stadiumIdentity.status).toBe('trusted');
+    expect(report.stadiumIdentity.stadiums[0]).toMatchObject({
+      stadiumId: 'apple-field',
+      stadiumName: 'Apple Field',
+      archiveGameRows: 1,
+      seedParkFactorsTrusted: true,
+      seedParkFactors: {
+        stadiumId: 'apple-field',
+        stadiumName: 'Apple Field',
+        source: 'SEED',
+      },
+      dimensions: {
+        name: 'Apple Field',
+      },
+    });
+    expect(report.parkFactors.status).toBe('trusted');
+    expect(report.parkFactors.seedFactorsTrusted).toBe(true);
+  });
+
+  test('blocks malformed archive park factors from creating seed trust', () => {
+    const report = buildFranchiseStadiumFoundationReport({
+      ...scope,
+      stadiumSnapshots: [],
+      completedGames: [
+        completedGame({
+          parkFactors: {
+            ...trustedAppleSeedParkFactors,
+            source: 'SEED',
+            homeRuns: 1.3,
+          },
+        }),
+      ],
+      atBatEvents: [],
+      fieldingEvents: [],
+    });
+
+    expect(report.stadiumIdentity.status).toBe('trusted');
+    expect(report.stadiumIdentity.stadiums[0]).toMatchObject({
+      stadiumId: 'apple-field',
+      stadiumName: 'Apple Field',
+      archiveGameRows: 1,
+      dimensions: {
+        name: 'Apple Field',
+      },
+      seedParkFactors: null,
+      seedParkFactorsTrusted: false,
+      adaptiveParkFactorPreview: {
+        status: 'preview-only',
+        gamesIncluded: 1,
+        trustedForPersistence: false,
+      },
+    });
+    expect(report.parkFactors.status).toBe('blocked');
+    expect(report.parkFactors.seedFactorsTrusted).toBe(false);
+  });
+
+  test('blocks custom archive park factors while preserving copied custom stadium context', () => {
+    const report = buildFranchiseStadiumFoundationReport({
+      ...scope,
+      stadiumSnapshots: [],
+      completedGames: [
+        completedGame({
+          stadiumName: 'Custom Backyard',
+          stadiumId: 'custom-backyard',
+          parkFactors: {
+            ...trustedAppleSeedParkFactors,
+            stadiumId: 'custom-backyard',
+            stadiumName: 'Custom Backyard',
+            source: 'SEED',
+          },
+        }),
+      ],
+      atBatEvents: [],
+      fieldingEvents: [],
+    });
+
+    expect(report.stadiumIdentity.status).toBe('trusted');
+    expect(report.stadiumIdentity.stadiums[0]).toMatchObject({
+      stadiumId: 'custom-backyard',
+      stadiumName: 'Custom Backyard',
+      archiveGameRows: 1,
+      dimensions: null,
+      seedParkFactors: null,
+      seedParkFactorsTrusted: false,
+    });
+    expect(report.parkFactors.status).toBe('blocked');
+    expect(report.parkFactors.reasons.join(' ')).toContain('Seed/static park factors are unavailable');
   });
 
   test('copies unmatched League Builder stadium names but blocks dimensions and seed factors', () => {
