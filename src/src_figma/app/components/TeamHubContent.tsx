@@ -4432,17 +4432,44 @@ function FranchiseValueExpectedWinsPreviewPanel({
   selectedTeamName,
   trueValuePreviewReport,
   expectedWinsPreviewReport,
+  salaryLifecycleReport,
   isLoading,
 }: {
   selectedTeamId: string;
   selectedTeamName: string;
   trueValuePreviewReport: FranchiseTrueValuePreviewReport | null;
   expectedWinsPreviewReport: FranchiseExpectedWinsPreviewReport | null;
+  salaryLifecycleReport: FranchiseSalaryLifecycleReport | null;
   isLoading: boolean;
 }) {
   const teamSummary = trueValuePreviewReport?.teamSummaries.find((summary) => summary.teamId === selectedTeamId) ?? null;
   const expectedWinsRow = expectedWinsPreviewReport?.teamRows.find((row) => row.teamId === selectedTeamId) ?? null;
+  const teamPayrollRecord = salaryLifecycleReport?.teamRecords.find((record) => record.teamId === selectedTeamId) ?? null;
+  const selectedSalaryRecords = (salaryLifecycleReport?.playerRecords ?? []).filter((record) => record.teamId === selectedTeamId);
+  const stableSalaryBaselineCount = selectedSalaryRecords.filter((record) => record.initialSalaryBaseline.status === 'stable-baseline').length;
+  const contractYearsProofCount = selectedSalaryRecords.filter((record) =>
+    Number.isFinite(record.contractYears) && Number(record.contractYears) > 0,
+  ).length;
+  const missingContractYearsCount = selectedSalaryRecords.length - contractYearsProofCount;
+  const rosterSalarySum = selectedSalaryRecords.reduce((sum, record) =>
+    typeof record.salary === 'number' && Number.isFinite(record.salary) ? sum + record.salary : sum,
+  0);
+  const payrollBaseline = teamPayrollRecord?.payrollBaseline ?? null;
+  const payrollMatchesRoster = payrollBaseline !== null && rosterSalarySum > 0
+    ? Math.abs(payrollBaseline - rosterSalarySum) < 0.001
+    : false;
   const blockers = expectedWinsRow?.blockers ?? [];
+  const salaryBlockers = [
+    ...(stableSalaryBaselineCount < selectedSalaryRecords.length
+      ? [`${selectedSalaryRecords.length - stableSalaryBaselineCount} selected-team player salary baseline(s) missing.`]
+      : []),
+    ...(missingContractYearsCount > 0
+      ? [`Contract years missing for ${missingContractYearsCount} salary row${missingContractYearsCount === 1 ? '' : 's'}.`]
+      : []),
+    ...(teamPayrollRecord?.payrollBaselineState.status === 'blocked' || payrollBaseline === null
+      ? ['Team payroll baseline is missing for this selected team.']
+      : []),
+  ];
   const isAvailable = Boolean(teamSummary && expectedWinsRow && expectedWinsRow.status === 'preview-only');
   const valueDelta = teamSummary?.valueDeltaEstimateTotal ?? expectedWinsRow?.previewGapFromLeagueAverage ?? null;
 
@@ -4458,8 +4485,39 @@ function FranchiseValueExpectedWinsPreviewPanel({
           <div className="mt-1 text-[10px] leading-snug text-[#E8E8D8]/65">
             PREVIEW ONLY · READ ONLY · NOT TRUSTED FOR DESIGNATIONS/MORALE.
           </div>
+          <div className="mt-1 text-[9px] leading-snug text-[#E8E8D8]/55">
+            Uses current preview value totals and Mode 1 salary baselines for context only; it does not move salaries.
+          </div>
         </div>
         <FoundationStatusBadge status={isAvailable ? 'preview-only' : 'blocked'} />
+      </div>
+
+      <div className="mb-2 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[10px] leading-snug text-[#E8E8D8]">
+          <div className="font-bold text-[#C4A853]">Team payroll baseline</div>
+          <div className="mt-1">{formatRosterSalary(payrollBaseline)}</div>
+          <div className="text-[8px] text-[#E8E8D8]/55">{teamPayrollRecord ? formatTruthStatus(teamPayrollRecord.payrollBaselineState.status) : 'BLOCKED'}</div>
+        </div>
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[10px] leading-snug text-[#E8E8D8]">
+          <div className="font-bold text-[#C4A853]">Roster salary sum</div>
+          <div className="mt-1">{rosterSalarySum > 0 ? formatRosterSalary(rosterSalarySum) : '—'}</div>
+          <div className="text-[8px] text-[#E8E8D8]/55">{payrollMatchesRoster ? 'MATCHES PAYROLL BASELINE' : 'READ-ONLY CROSS-CHECK'}</div>
+        </div>
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[10px] leading-snug text-[#E8E8D8]">
+          <div className="font-bold text-[#C4A853]">Stable salary baselines</div>
+          <div className="mt-1">{stableSalaryBaselineCount}/{selectedSalaryRecords.length}</div>
+          <div className="text-[8px] text-[#E8E8D8]/55">Selected-team salary rows</div>
+        </div>
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[10px] leading-snug text-[#E8E8D8]">
+          <div className="font-bold text-[#C4A853]">Contract years proof</div>
+          <div className="mt-1">{contractYearsProofCount}/{selectedSalaryRecords.length}</div>
+          <div className="text-[8px] text-[#E8E8D8]/55">Separate from salary baseline stability</div>
+        </div>
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[10px] leading-snug text-[#E8E8D8]">
+          <div className="font-bold text-[#C4A853]">Salary movement</div>
+          <div className="mt-1">Blocked</div>
+          <div className="text-[8px] text-[#E8E8D8]/55">No final True Value or offseason mutation</div>
+        </div>
       </div>
 
       <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
@@ -4488,6 +4546,11 @@ function FranchiseValueExpectedWinsPreviewPanel({
       <div className="mt-2 border-2 border-[#4A6844] bg-[#3F563F] p-2 text-[10px] leading-snug text-[#E8E8D8]/70">
         <div>League average preview value baseline: {formatPreviewNumber(expectedWinsPreviewReport?.leagueAveragePreviewValueBaseline)}</div>
         <div>Expected-wins persistence, daily snapshots, Fan Favorite/Albatross finalization, salary movement, morale mutation, relationship effects, GameTracker completion mutation, offseason, and Mode 3 remain blocked.</div>
+        {salaryBlockers.length > 0 && (
+          <div className="mt-2 text-[#FFEFB5]">
+            Salary blocker: {salaryBlockers.join(' ')}
+          </div>
+        )}
         {!isAvailable && (
           <div className="mt-2 text-[#FFD6D6]">
             {isLoading
@@ -4971,6 +5034,7 @@ function FranchiseMode2FoundationStatusPanel({
         selectedTeamName={selectedTeamName}
         trueValuePreviewReport={trueValuePreviewReport}
         expectedWinsPreviewReport={expectedWinsPreviewReport}
+        salaryLifecycleReport={salaryLifecycleReport}
         isLoading={isLoading}
       />
 

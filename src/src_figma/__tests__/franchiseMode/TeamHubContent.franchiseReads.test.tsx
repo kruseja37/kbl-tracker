@@ -826,6 +826,14 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     const valueWinsRegion = within(foundationRegion).getByRole('region', { name: /Team True Value and Expected Wins Preview/i });
     expect(within(valueWinsRegion).getByText('TRUE VALUE + EXPECTED WINS PREVIEW')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText(/PREVIEW ONLY · READ ONLY · NOT TRUSTED FOR DESIGNATIONS\/MORALE/i)).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText(/Uses current preview value totals and Mode 1 salary baselines/i)).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('Team payroll baseline')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('$4.0M')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('Roster salary sum')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('$3.0M')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('Stable salary baselines')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('Contract years proof')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getAllByText('1/1').length).toBeGreaterThanOrEqual(2);
     expect(within(valueWinsRegion).getByText(/Blocked: .*At least two teams/i)).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText(/Expected-wins persistence, daily snapshots, Fan Favorite\/Albatross finalization, salary movement, morale mutation/i)).toBeInTheDocument();
     expect(within(valueWinsRegion).queryByRole('button')).not.toBeInTheDocument();
@@ -913,6 +921,87 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(fanSpecRegion).getByText(/Daily snapshots \/ high-low-average summaries: IMPLEMENTED/i)).toBeInTheDocument();
     expect(within(fanSpecRegion).getByText(/Player morale influence\/coupling: DEFERRED/i)).toBeInTheDocument();
     expect(within(fanSpecRegion).queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  test('shows selected-team payroll baseline and roster salary sum consistently with roster rows', async () => {
+    mocks.mockBuildFranchiseSalaryLifecycle.mockResolvedValueOnce(salaryLifecycleReport({
+      playerRecords: [
+        salaryLifecycleRecord(),
+        salaryLifecycleRecord({
+          playerId: 'farm-hidden',
+          playerName: 'Farm Hidden',
+          rosterStatus: 'FARM',
+          salary: 1000000,
+        }),
+      ],
+      teamRecords: [{
+        contractVersion: 'franchise-salary-lifecycle-v1-readonly',
+        franchiseId: 'franchise-1',
+        seasonId: 'franchise-1-season-2',
+        statsScopeId: 'franchise-1-season-2',
+        seasonNumber: 2,
+        teamId: 'team-1',
+        payrollBaseline: 4000000,
+        playerCount: 2,
+        payrollBaselineState: {
+          status: 'stable-baseline',
+          persistable: false,
+          recalculable: false,
+          reasons: ['Stored team payroll baseline is available from the franchise handoff.'],
+        },
+        limitations: [],
+      }],
+    }));
+
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    const rosterTable = await screen.findByRole('table', { name: /Franchise roster scan table/i });
+    const valueWinsRegion = await screen.findByRole('region', { name: /Team True Value and Expected Wins Preview/i });
+
+    expect(within(rosterTable).getByText('$3.0M')).toBeInTheDocument();
+    expect(within(rosterTable).getByText('$1.0M')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('Team payroll baseline')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getAllByText('$4.0M').length).toBeGreaterThanOrEqual(2);
+    expect(within(valueWinsRegion).getByText('Roster salary sum')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('MATCHES PAYROLL BASELINE')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('Stable salary baselines')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('Contract years proof')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getAllByText('2/2').length).toBeGreaterThanOrEqual(2);
+    expect(within(valueWinsRegion).queryByText(/Salary blocker/i)).not.toBeInTheDocument();
+  });
+
+  test('does not treat stable salary baseline as contract-years proof when contract years are missing', async () => {
+    mocks.mockBuildFranchiseSalaryLifecycle.mockResolvedValueOnce(salaryLifecycleReport({
+      playerRecords: [
+        salaryLifecycleRecord({
+          playerId: 'stable-no-contract-years',
+          playerName: 'Stable No Contract Years',
+          contractYears: null,
+          initialSalaryBaseline: {
+            status: 'stable-baseline',
+            persistable: false,
+            recalculable: false,
+            reasons: ['Stored franchise salary baseline is available from the Mode 1 handoff/franchise copy.'],
+          },
+        }),
+      ],
+    }));
+
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    const valueWinsRegion = await screen.findByRole('region', { name: /Team True Value and Expected Wins Preview/i });
+
+    expect(within(valueWinsRegion).getByText('Stable salary baselines')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('1/1')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('Contract years proof')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('0/1')).toBeInTheDocument();
+    expect(within(valueWinsRegion).queryByText('Stable contracts')).not.toBeInTheDocument();
+    expect(valueWinsRegion).toHaveTextContent(/Salary blocker:/i);
+    expect(valueWinsRegion).toHaveTextContent(/Contract years missing for 1 salary row/i);
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+    expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
   });
 
   test('manual fan morale adjustment writes scoped team fan morale history without unrelated mutation', async () => {
@@ -1003,6 +1092,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     const valueWinsRegion = await screen.findByRole('region', { name: /Team True Value and Expected Wins Preview/i });
 
     expect(within(valueWinsRegion).getByText(/PREVIEW ONLY · READ ONLY · NOT TRUSTED FOR DESIGNATIONS\/MORALE/i)).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText(/Uses current preview value totals and Mode 1 salary baselines/i)).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Copied Alpha')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Team salary total')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('2.0')).toBeInTheDocument();
@@ -1456,6 +1546,10 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(truthRegion).getByText(/Team payroll baseline: BLOCKED/i)).toBeInTheDocument();
     expect(within(truthRegion).getByText(/Team payroll baseline limitation: missing handoff payroll proof/i)).toBeInTheDocument();
     expect(within(truthRegion).getByText(/Team payroll baseline is unavailable for salary\/value designation checks/i)).toBeInTheDocument();
+    const valueWinsRegion = await screen.findByRole('region', { name: /Team True Value and Expected Wins Preview/i });
+    expect(within(valueWinsRegion).getByText('Team payroll baseline')).toBeInTheDocument();
+    expect(valueWinsRegion).toHaveTextContent(/Salary blocker:/i);
+    expect(valueWinsRegion).toHaveTextContent(/Team payroll baseline is missing for this selected team/i);
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
   });
 
@@ -1497,9 +1591,12 @@ describe('TeamHubContent franchise-owned visible reads', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
     const truthRegion = await screen.findByRole('region', { name: /Franchise v1 value salary designation truth labels/i });
+    const valueWinsRegion = await screen.findByRole('region', { name: /Team True Value and Expected Wins Preview/i });
 
     expect(within(truthRegion).getByText(/FARM player salary context is read-only/i)).toBeInTheDocument();
     expect(within(truthRegion).getByText(/FAN_FAVORITE blocked: FAN_FAVORITE requires canonical True Value and value-delta inputs/i)).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('Roster salary sum')).toBeInTheDocument();
+    expect(within(valueWinsRegion).queryByText(/trueGrade/i)).not.toBeInTheDocument();
     expect(within(truthRegion).queryByText(/trueGrade/i)).not.toBeInTheDocument();
     expect(within(truthRegion).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
