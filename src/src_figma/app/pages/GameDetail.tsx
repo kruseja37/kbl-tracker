@@ -1335,32 +1335,54 @@ export function GameDetail() {
 
         <SectionFrame title="Fame Events" subtitle="Archived fame swings captured on the completed game record.">
           {game.fameEvents.length === 0 ? (
-            <EmptyState label="No fame events in this game." />
+            <EmptyState label="No trusted fame events stored. Score-only/manual-result games do not create fame evidence." />
           ) : (
             <div className="grid gap-3 lg:grid-cols-2">
-              {game.fameEvents.map((event) => (
-                <div
-                  key={event.id}
-                  className="border-[4px] border-[#503A0D] bg-[#181208] p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.4)]"
-                >
-                  <div className="text-[9px] leading-5 text-[#E7E9F1]">
-                    <PlayerNameLink
-                      playerId={event.playerId}
-                      playerName={event.playerName}
-                      canonicalLookup={canonicalLookup}
-                    />
+              {game.fameEvents.map((event) => {
+                const teamName =
+                  event.teamName ??
+                  (event.playerTeam === game.awayTeamId
+                    ? game.awayTeamName
+                    : event.playerTeam === game.homeTeamId
+                      ? game.homeTeamName
+                      : undefined);
+                const opponentName =
+                  event.opponentTeamName ??
+                  (event.opponentTeamId === game.awayTeamId
+                    ? game.awayTeamName
+                    : event.opponentTeamId === game.homeTeamId
+                      ? game.homeTeamName
+                      : undefined);
+
+                return (
+                  <div
+                    key={event.id}
+                    className="border-[4px] border-[#503A0D] bg-[#181208] p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.4)]"
+                  >
+                    <div className="text-[9px] leading-5 text-[#E7E9F1]">
+                      <PlayerNameLink
+                        playerId={event.playerId}
+                        playerName={event.playerName}
+                        canonicalLookup={canonicalLookup}
+                      />
+                    </div>
+                    <div className="mt-3 text-[8px] uppercase tracking-[0.26em] text-[#D8A84A]">
+                      {humanizeToken(event.eventType)}
+                    </div>
+                    {teamName && (
+                      <div className="mt-2 text-[8px] leading-5 text-[#E7E9F1]">
+                        {teamName}{opponentName ? ` vs ${opponentName}` : ""}
+                      </div>
+                    )}
+                    <div className={`mt-3 text-[10px] ${event.fameType === "bonus" ? "text-[#7EF0A8]" : "text-[#FF9E9E]"}`}>
+                      {event.fameType === "bonus" ? "+" : "-"}{Math.abs(event.fameValue)}
+                    </div>
+                    <div className="mt-3 text-[8px] leading-5 text-[#BDAE8B]">
+                      {event.description ?? "No description saved."}
+                    </div>
                   </div>
-                  <div className="mt-3 text-[8px] uppercase tracking-[0.26em] text-[#D8A84A]">
-                    {humanizeToken(event.eventType)}
-                  </div>
-                  <div className={`mt-3 text-[10px] ${event.fameType === "bonus" ? "text-[#7EF0A8]" : "text-[#FF9E9E]"}`}>
-                    {event.fameType === "bonus" ? "+" : "-"}{Math.abs(event.fameValue)}
-                  </div>
-                  <div className="mt-3 text-[8px] leading-5 text-[#BDAE8B]">
-                    {event.description ?? "No description saved."}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </SectionFrame>

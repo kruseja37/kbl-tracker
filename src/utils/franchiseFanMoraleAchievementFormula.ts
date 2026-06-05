@@ -14,6 +14,7 @@ export interface FranchiseFanMoraleAchievementFameEvent {
   playerId?: string;
   playerName?: string;
   playerTeam?: string;
+  teamId?: string;
 }
 
 export interface FranchiseFanMoraleAchievementGameInput {
@@ -118,10 +119,10 @@ export function buildFranchiseFanMoraleAchievementEffects(
   }>();
   for (const event of input.fameEvents ?? []) {
     const type = achievementType(event.eventType);
-    const teamId = event.playerTeam?.trim();
+    const teamId = (event.teamId ?? event.playerTeam)?.trim();
     if (!type || !teamId) continue;
     if (teamId !== awayTeamId && teamId !== homeTeamId) {
-      blockers.push(`Ignored achievement fame event ${event.id ?? event.eventType}: playerTeam does not match either game team.`);
+      blockers.push(`Ignored achievement fame event ${event.id ?? event.eventType}: team does not match either game team.`);
       continue;
     }
     const eventId = event.id?.trim() || `${input.gameId}:${event.eventType}:${teamId}`;
@@ -132,7 +133,7 @@ export function buildFranchiseFanMoraleAchievementEffects(
   }
 
   for (const { type, event, eventId } of selectedEventsByTeam.values()) {
-    const teamId = event.playerTeam!.trim();
+    const teamId = (event.teamId ?? event.playerTeam)!.trim();
     const opponentTeamId = teamId === awayTeamId ? homeTeamId : awayTeamId;
     const teamNameValue = teamId === awayTeamId ? awayName : homeName;
     const opponentName = opponentTeamId === awayTeamId ? awayName : homeName;

@@ -178,6 +178,7 @@ export interface FranchiseRandomEventCompletedGameEvidence {
     playerId?: string;
     playerName?: string;
     playerTeam?: string;
+    teamId?: string;
   }>;
   playerStats?: Record<string, { playerName?: string; teamId?: string }>;
 }

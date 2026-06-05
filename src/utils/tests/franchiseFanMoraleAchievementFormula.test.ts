@@ -89,7 +89,7 @@ describe('franchise fan morale achievement formula', () => {
     expect(unknown.effects).toEqual([]);
     expect(missingTeam.effects).toEqual([]);
     expect(wrongTeam.effects).toEqual([]);
-    expect(wrongTeam.blockers.join(' ')).toMatch(/playerTeam does not match either game team/i);
+    expect(wrongTeam.blockers.join(' ')).toMatch(/team does not match either game team/i);
   });
 
   test('blank ids and same-team games produce no effects', () => {

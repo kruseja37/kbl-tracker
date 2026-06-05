@@ -244,6 +244,53 @@ describe("GameDetail Manager WPA overlay", () => {
     expect(within(standoutsSection as HTMLElement).getByText(/Recognition only/)).toBeInTheDocument();
   });
 
+  test("renders archived fame event team and opponent context", async () => {
+    mockGetCompletedGameById.mockResolvedValue({
+      ...createCompletedGame(),
+      fameEvents: [
+        {
+          id: "fame-perfect-game-1",
+          gameId: "game-detail-1",
+          eventType: "PERFECT_GAME",
+          playerId: "pitcher-one",
+          playerName: "Pitcher One",
+          playerTeam: "away",
+          teamId: "away",
+          teamName: "Away Club",
+          opponentTeamId: "home",
+          opponentTeamName: "Home Club",
+          fameValue: 7,
+          fameType: "bonus",
+          inning: 9,
+          halfInning: "BOTTOM",
+          timestamp: 123,
+          autoDetected: true,
+          description: "Pitcher One finishes a perfect game.",
+        },
+      ],
+    });
+
+    render(<GameDetail />);
+
+    const fameTitle = await screen.findByText("Fame Events");
+    const fameSection = fameTitle.closest("section");
+    expect(fameSection).not.toBeNull();
+    expect(within(fameSection as HTMLElement).getByText("Pitcher One")).toBeInTheDocument();
+    expect(within(fameSection as HTMLElement).getByText("PERFECT GAME")).toBeInTheDocument();
+    expect(within(fameSection as HTMLElement).getByText("Away Club vs Home Club")).toBeInTheDocument();
+    expect(within(fameSection as HTMLElement).getByText("Pitcher One finishes a perfect game.")).toBeInTheDocument();
+  });
+
+  test("renders compact blocker when archive has no trusted fame events", async () => {
+    mockGetCompletedGameById.mockResolvedValue(createCompletedGame());
+
+    render(<GameDetail />);
+
+    expect(
+      await screen.findByText("No trusted fame events stored. Score-only/manual-result games do not create fame evidence."),
+    ).toBeInTheDocument();
+  });
+
   test("stored POG ids do not override KBL WPA-derived GameDetail awards", async () => {
     mockGetCompletedGameById.mockResolvedValue({
       ...createCompletedGame(),

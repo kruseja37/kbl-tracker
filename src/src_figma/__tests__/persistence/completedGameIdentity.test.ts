@@ -139,6 +139,65 @@ describe('completed game franchise identity', () => {
     });
   });
 
+  test('archiveCompletedGame scopes trusted fame events to franchise, teams, and schedule context', async () => {
+    await archiveCompletedGame(
+      createPersistedGameState({
+        gameId: 'completed-franchise-no-hitter',
+        awayTeamId: 'team-alpha',
+        homeTeamId: 'team-beta',
+        awayTeamName: 'Alpha Club',
+        homeTeamName: 'Beta Club',
+        fameEvents: [
+          {
+            id: 'completed-franchise-no-hitter:fame:1',
+            gameId: 'completed-franchise-no-hitter',
+            eventType: 'NO_HITTER',
+            playerId: 'pitcher-alpha',
+            playerName: 'Nolan Alpha',
+            playerTeam: 'team-alpha',
+            fameValue: 5,
+            fameType: 'bonus',
+            inning: 9,
+            halfInning: 'BOTTOM',
+            timestamp: 123,
+            autoDetected: true,
+            description: 'Nolan Alpha finishes a no-hitter.',
+          },
+        ],
+      }),
+      { away: 4, home: 0 },
+      [],
+      'franchise-fame-season-1',
+      {
+        statsScopeId: 'franchise-fame-season-1',
+        competitionType: 'franchise',
+        competitionId: 'franchise-fame',
+        franchiseId: 'franchise-fame',
+        scheduleGameId: 'schedule-fame-1',
+      },
+    );
+
+    const record = await getCompletedGameById('completed-franchise-no-hitter');
+
+    expect(record?.fameEvents).toEqual([
+      expect.objectContaining({
+        eventType: 'NO_HITTER',
+        playerId: 'pitcher-alpha',
+        playerName: 'Nolan Alpha',
+        teamId: 'team-alpha',
+        teamName: 'Alpha Club',
+        opponentTeamId: 'team-beta',
+        opponentTeamName: 'Beta Club',
+        franchiseId: 'franchise-fame',
+        seasonId: 'franchise-fame-season-1',
+        statsScopeId: 'franchise-fame-season-1',
+        competitionType: 'franchise',
+        competitionId: 'franchise-fame',
+        scheduleGameId: 'schedule-fame-1',
+      }),
+    ]);
+  });
+
   test('archiveCompletedGame preserves stadium identity, seeded park factors, and player WPA totals', async () => {
     await archiveCompletedGame(
       createPersistedGameState({

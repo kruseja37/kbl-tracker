@@ -539,7 +539,7 @@ describe('franchise random event generator core', () => {
           id: 'fame-no-hitter-archive-1',
           gameId: 'archive-achievement-1',
           eventType: 'NO_HITTER',
-          playerTeam: 'team-1',
+          teamId: 'team-1',
         })],
       })],
       generatedAt: 123,

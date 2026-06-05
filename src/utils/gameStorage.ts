@@ -183,6 +183,16 @@ export interface PersistedGameState {
     playerId: string;
     playerName: string;
     playerTeam: string;
+    teamId?: string;
+    teamName?: string;
+    opponentTeamId?: string;
+    opponentTeamName?: string;
+    franchiseId?: string;
+    seasonId?: string;
+    statsScopeId?: string;
+    competitionType?: CompetitionType;
+    competitionId?: string;
+    scheduleGameId?: string;
     fameValue: number;
     fameType: "bonus" | "boner";
     inning: number;
@@ -714,6 +724,80 @@ export function captureStartingLineups(
   };
 }
 
+interface ArchiveCompletedGameContext {
+  statsScopeId?: string;
+  competitionType?: CompetitionType;
+  competitionId?: string;
+  competitionName?: string;
+  playoffSeriesId?: string;
+  playoffGameNumber?: number;
+  playoffId?: string;
+  playoffRound?:
+    | "wild_card"
+    | "division_series"
+    | "championship_series"
+    | "world_series";
+  isEliminationGame?: boolean;
+  isClinchGame?: boolean;
+  leagueId?: string;
+  franchiseId?: string;
+  scheduleGameId?: string;
+  totalInnings?: number;
+  useGhostRunner?: boolean;
+  extraInningRunner?: boolean;
+  extraInningRunnerDelay?: 1 | 2;
+  stadiumId?: string | null;
+  parkFactors?: ParkFactors;
+  playerWpaTotals?: KblWpaPlayerTotal[];
+  managerWpaTotals?: PogManagerValueTotal[];
+  pogPlayerId?: string;
+  playersOfTheGame?: {
+    first?: string;
+    second?: string;
+    third?: string;
+  };
+  aggregationStatus?: CompletedGameRecord["aggregationStatus"];
+  aggregationError?: string;
+}
+
+function enrichArchivedFameEvents(
+  gameState: PersistedGameState,
+  seasonId?: string,
+  context?: ArchiveCompletedGameContext,
+): PersistedGameState["fameEvents"] {
+  const resolvedStatsScopeId = context?.statsScopeId ?? gameState.statsScopeId ?? seasonId;
+  const resolvedCompetitionType = context?.competitionType ?? gameState.competitionType;
+  const resolvedCompetitionId = context?.competitionId ?? gameState.competitionId;
+  const resolvedFranchiseId = context?.franchiseId ?? gameState.franchiseId;
+  const resolvedScheduleGameId = context?.scheduleGameId ?? gameState.scheduleGameId;
+
+  return gameState.fameEvents.map((event) => {
+    const teamId = event.teamId ?? event.playerTeam;
+    const isAway = teamId === gameState.awayTeamId;
+    const isHome = teamId === gameState.homeTeamId;
+    const teamName =
+      event.teamName ?? (isAway ? gameState.awayTeamName : isHome ? gameState.homeTeamName : undefined);
+    const opponentTeamId =
+      event.opponentTeamId ?? (isAway ? gameState.homeTeamId : isHome ? gameState.awayTeamId : undefined);
+    const opponentTeamName =
+      event.opponentTeamName ?? (isAway ? gameState.homeTeamName : isHome ? gameState.awayTeamName : undefined);
+
+    return {
+      ...event,
+      teamId,
+      teamName,
+      opponentTeamId,
+      opponentTeamName,
+      franchiseId: event.franchiseId ?? resolvedFranchiseId,
+      seasonId: event.seasonId ?? seasonId ?? gameState.seasonId,
+      statsScopeId: event.statsScopeId ?? resolvedStatsScopeId,
+      competitionType: event.competitionType ?? resolvedCompetitionType,
+      competitionId: event.competitionId ?? resolvedCompetitionId,
+      scheduleGameId: event.scheduleGameId ?? resolvedScheduleGameId,
+    };
+  });
+}
+
 /**
  * Archive a completed game
  */
@@ -722,41 +806,7 @@ export async function archiveCompletedGame(
   finalScore: { away: number; home: number },
   inningScores: { away: number; home: number }[] = [],
   seasonId?: string,
-  context?: {
-    statsScopeId?: string;
-    competitionType?: CompetitionType;
-    competitionId?: string;
-    competitionName?: string;
-    playoffSeriesId?: string;
-    playoffGameNumber?: number;
-    playoffId?: string;
-    playoffRound?:
-      | "wild_card"
-      | "division_series"
-      | "championship_series"
-      | "world_series";
-    isEliminationGame?: boolean;
-    isClinchGame?: boolean;
-    leagueId?: string;
-    franchiseId?: string;
-    scheduleGameId?: string;
-    totalInnings?: number;
-    useGhostRunner?: boolean;
-    extraInningRunner?: boolean;
-    extraInningRunnerDelay?: 1 | 2;
-    stadiumId?: string | null;
-    parkFactors?: ParkFactors;
-    playerWpaTotals?: KblWpaPlayerTotal[];
-    managerWpaTotals?: PogManagerValueTotal[];
-    pogPlayerId?: string;
-    playersOfTheGame?: {
-      first?: string;
-      second?: string;
-      third?: string;
-    };
-    aggregationStatus?: CompletedGameRecord["aggregationStatus"];
-    aggregationError?: string;
-  },
+  context?: ArchiveCompletedGameContext,
 ): Promise<void> {
   const db = await initDatabase();
   const resolvedLeagueId =
@@ -812,7 +862,7 @@ export async function archiveCompletedGame(
       context?.extraInningRunner ?? gameState.extraInningRunner,
     extraInningRunnerDelay:
       context?.extraInningRunnerDelay ?? gameState.extraInningRunnerDelay,
-    fameEvents: gameState.fameEvents,
+    fameEvents: enrichArchivedFameEvents(gameState, seasonId, context),
     playerStats: gameState.playerStats,
     pitcherGameStats: gameState.pitcherGameStats,
     activityLog: gameState.activityLog,
