@@ -66,7 +66,7 @@ function makeRow(overrides: Partial<FranchiseValueInputRow> = {}): FranchiseValu
     rosterStatus: 'MLB',
     salary: 8.5,
     contractYears: 2,
-    salaryBaselineCalculationVersion: 'franchise-initial-salary-v1-ratings-only',
+    salaryBaselineCalculationVersion: 'franchise-initial-salary-v1-ratings-and-hidden-prospect-safe',
     teamSalaryBaseline: 42,
     salaryBaselineAvailable: true,
     seasonStatsAvailability: {
@@ -161,7 +161,7 @@ describe('franchise salary lifecycle adapter', () => {
       recalculable: false,
     }));
     expect(record.salary).toBe(8.5);
-    expect(record.salaryBaselineCalculationVersion).toBe('franchise-initial-salary-v1-ratings-only');
+    expect(record.salaryBaselineCalculationVersion).toBe('franchise-initial-salary-v1-ratings-and-hidden-prospect-safe');
     expect(report.anyPersistable).toBe(false);
     expect(report.anyRecalculable).toBe(false);
   });

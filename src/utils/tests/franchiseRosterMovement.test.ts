@@ -302,8 +302,10 @@ describe('franchise roster movement boundary', () => {
         rosterStatus: 'FARM',
         rosterLevel: 'AAA',
         optionsUsed: 1,
+        ratingRevealState: 'revealed',
       }),
     ]);
+    expect(sendDown.player?.ratingRevealState).toBe('revealed');
 
     const callUp = await callUpFranchisePlayer({
       franchiseId,

@@ -16,6 +16,7 @@ import {
 } from './seasonStorage';
 import { getAllGamesByFranchise } from './scheduleStorage';
 import { getRecentGames } from './gameStorage';
+import { getVisibleSafeFranchisePlayerSalary } from './franchiseSalary';
 
 export const FRANCHISE_VALUE_INPUT_CONTRACT_VERSION = 'franchise-mode2-value-inputs-v1-readonly';
 
@@ -336,7 +337,8 @@ export async function buildFranchiseValueInputRows(
     const fieldingWar = hasFieldingWarInput(fielding, batting);
     const baserunningWar = hasBaserunningWarInput(batting);
     const warPreviewValues = buildWarPreviewValues(batting, pitching);
-    const salaryBaselineAvailable = finiteNumber(player.salary) && Boolean(config?.salaryBaseline?.calculationVersion);
+    const visibleSafeSalary = getVisibleSafeFranchisePlayerSalary(player);
+    const salaryBaselineAvailable = visibleSafeSalary !== null && Boolean(config?.salaryBaseline?.calculationVersion);
     const teamSalaryBaselineAvailable = hasTeamPayrollBaseline(config, currentTeamId);
     const playerWpaAvailable = completedGames.some((game) =>
       (game.playerWpaTotals ?? []).some((total) => total.playerId === player.id),
@@ -377,6 +379,9 @@ export async function buildFranchiseValueInputRows(
     if (hasWarPreviewValue(warPreviewValues)) {
       limitations.push('WAR preview values are read-only scoped season-stat inputs and are not final True Value authority.');
     }
+    if (assignment?.rosterStatus === 'FARM' && player.ratingRevealState !== 'revealed') {
+      limitations.push('Hidden FARM prospect salary uses draft/scouting-safe public context; true ratings and true grade are not salary inputs.');
+    }
 
     return {
       contractVersion: FRANCHISE_VALUE_INPUT_CONTRACT_VERSION,
@@ -389,7 +394,7 @@ export async function buildFranchiseValueInputRows(
       valuePosition: player.primaryPosition ?? null,
       currentTeamId,
       rosterStatus: assignment?.rosterStatus ?? null,
-      salary: finiteNumber(player.salary) ? player.salary : null,
+      salary: visibleSafeSalary,
       contractYears: finiteNumber(player.contractYears) ? player.contractYears : null,
       salaryBaselineCalculationVersion: config?.salaryBaseline?.calculationVersion ?? null,
       teamSalaryBaseline: currentTeamId && finiteNumber(config?.salaryBaseline?.teamPayrolls?.[currentTeamId])

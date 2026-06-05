@@ -12,6 +12,59 @@ The manual smoke test mostly validated the recent Franchise v1 direction, but Ga
 
 This follow-up pass raised confidence that the recently implemented foundation pieces exist, but also showed that the current experience is not yet comfortable enough to call the user-facing playable v1 done. These notes should feed the next hardening plan before deeper Mode 3 or full-spec implementation.
 
+## 2026-06-05 Manual Smoke Findings
+
+This pass keeps Mode 1/Mode 2 playable v1 in **not approved** status. The foundation remains useful, but real-app play still found data-safety and inspection gaps that need focused hardening before approval.
+
+### Preserved Findings
+
+1. GameTracker sub-out pitcher names still abbreviate.
+   - Earlier full-name hardening improved several pitcher display paths, but the substitution/out pitcher path still needs a focused display-name pass.
+
+2. Almanac Game Detail works from schedule, but Almanac Franchise section is still `Coming Soon`.
+   - Archive-backed Game Detail continuity is real.
+   - Franchise-level Almanac history is not complete and should not be represented as playable-v1 complete.
+
+3. Franchise save export/delete works; upload/import path is unclear.
+   - Export/delete confidence improved.
+   - Import/upload discoverability and expected restore behavior need a focused save-slot UX pass.
+
+4. FARM salaries leak hidden ratings and should be draft-slot/scouting based, not actual-rating based.
+   - This is the first hardening target for the current patch.
+   - Hidden/unrevealed FARM prospect salary must derive from public draft/scouting/handoff context only.
+   - Rating-derived salary/value must not reveal relative true prospect quality.
+
+5. FARM prospect grade mismatch versus Player Analyzer.
+   - Scouted labels such as `Scouted B` must remain scouted/report labels, not true-grade labels.
+   - Player Analyzer comparison needs a future hidden-safe review.
+
+6. Player profile missing primary/secondary position separation.
+   - Team Hub profile should distinguish primary and secondary positions clearly enough for SMB4 console entry.
+
+7. Position players have pitching ratings by default despite no two-way trait or arsenal.
+   - This needs a data-generation/profile visibility pass so non-pitchers do not look like unsupported two-way players.
+
+8. Sent-down revealed players lose full rating/edit visibility.
+   - Reveal should be irreversible.
+   - A revealed MLB player sent to FARM should stay fully inspectable/editable and keep known salary context.
+
+9. Stadium spray data missing from Team Hub.
+   - Richer spray UI is implemented in the foundation, but real-app smoke did not surface the expected data.
+   - Treat this as a production-data/fixture/source investigation, not a new analytics promotion.
+
+10. Manager WPA lineup delta missing from Game Detail.
+    - Manager WPA visibility exists in some archive-backed contexts, but lineup delta detail is not complete in Game Detail.
+
+### Current Patch Target
+
+The first response is **Manual Smoke Findings Capture And FARM Hidden-Rating Leak Hardening**:
+
+- Preserve these smoke findings in docs.
+- Keep playable v1 unapproved.
+- Harden hidden FARM prospect salary so it uses draft/scouting-safe context instead of actual ratings.
+- Preserve revealed/sent-down players as revealed and editable even when their roster status is FARM.
+- Do not promote salary movement, final True Value, final designations, morale automation, relationships, Mode 3/offseason, auto-draft, or AI simulation.
+
 ### High-Priority Playability / Data Correctness
 
 1. Pitcher name formatting is inconsistent in GameTracker.

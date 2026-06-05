@@ -10,7 +10,7 @@ Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
 Latest committed checkpoint: `366064a Define v1 dynamic designation policy`.
 
-Latest working checkpoint: Final Mode 1/2 Playable V1 Status Reconciliation And Smoke Checklist.
+Latest working checkpoint: Manual Smoke Findings Capture And FARM Hidden-Rating Leak Hardening.
 
 ## Current Completed
 
@@ -36,20 +36,21 @@ Latest working checkpoint: Final Mode 1/2 Playable V1 Status Reconciliation And 
 - Schedule editing/import is hardened for the current manual/CSV non-generated policy, but production populated schedule visual smoke remains fixture-backed rather than proven from arbitrary user local data.
 - Trade/FARM continuity is hardened for v1-safe hidden-safety and movement boundaries, while full trade UX, AI trades, salary matching, and offseason trade systems remain deferred.
 - The safe visual-smoke preview covers shell/foundation/finance/stadium, populated fixture rows, Game Detail WPA/fame, Player Instance Card WPA, and GameTracker long-name visibility, but real populated production Team Hub/schedule visual smoke remains a future confidence check.
-- `FRANCHISE_MODE1_MODE2_PLAYABLE_V1_GAP_ANALYSIS.md` is the active playable-v1 gap plan and now includes the final manual smoke checklist. The next implementation priority is to respond to manual smoke findings, not to start speculative new feature work.
+- `FRANCHISE_MODE1_MODE2_PLAYABLE_V1_GAP_ANALYSIS.md` is the active playable-v1 gap plan and now includes the 2026-06-05 manual smoke findings. Playable v1 is still not approved.
+- Hidden/unrevealed FARM prospect salary is being hardened to use draft/scouting-safe public context rather than actual hidden ratings. Revealed/sent-down players must stay revealed and editable even while rostered as FARM.
 
 ## Current Active Slice
 
-Final Mode 1/2 Playable V1 Status Reconciliation And Smoke Checklist.
+Manual Smoke Findings Capture And FARM Hidden-Rating Leak Hardening.
 
-Goal: mark score-only/manual final-score polish complete, reconcile the remaining approval gate, and give the user a compact real-app manual smoke checklist before deciding whether Mode 1/2 playable v1 is approved.
+Goal: preserve the latest manual smoke findings, keep playable v1 unapproved, and harden the first P0 data-policy target: FARM salary/reveal safety.
 
 ## Next Queue
 
-1. Run the final Mode 1/2 real-app manual smoke checklist.
-2. Respond to manual smoke findings with the smallest targeted patch if a blocker appears.
-3. If smoke passes, ask the user to approve or reject Mode 1/2 playable v1.
-4. If smoke reveals only polish, queue that polish explicitly after the approval decision.
+1. Finish FARM salary/reveal hardening and rerun focused salary/FARM/profile/trade/launch tests.
+2. Patch the next smallest remaining manual smoke finding.
+3. Keep playable v1 unapproved until the blocker set is cleared and the user approves it.
+4. If later smoke reveals only polish, queue that polish explicitly after the approval decision.
 5. Keep Mode 3/offseason and full-spec systems deferred until approval.
 
 ## Hard Boundaries

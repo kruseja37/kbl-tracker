@@ -314,6 +314,7 @@ export async function sendDownFranchisePlayer(
     const updatedPlayer = await franchisePlayerStorage.saveFranchisePlayer(input.franchiseId, {
       ...originalPlayer,
       leagueAssignments: assignments,
+      ratingRevealState: originalPlayer.ratingRevealState ?? 'revealed',
       optionsUsedBySeason: {
         ...(originalPlayer.optionsUsedBySeason ?? {}),
         [input.seasonId]: nextOptions,
@@ -335,7 +336,7 @@ export async function sendDownFranchisePlayer(
       rosterLevel: input.rosterLevel ?? originalFarmRecord?.rosterLevel ?? 'AAA',
       optionsUsed: nextOptions,
       optionDates,
-      ratingRevealState: updatedPlayer.ratingRevealState ?? 'hidden',
+      ratingRevealState: updatedPlayer.ratingRevealState ?? 'revealed',
       assignedAt: timestamp,
     });
     farmMutated = true;

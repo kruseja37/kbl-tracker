@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import type { Player } from '../franchisePlayerStorage';
 import {
+  calculateHiddenFarmProspectSalaryFromPublicContext,
   calculateFranchisePlayerSalary,
+  getVisibleSafeFranchisePlayerSalary,
   withInitialFranchiseSalary,
 } from '../franchiseSalary';
 
@@ -57,6 +59,71 @@ describe('franchise salary helpers', () => {
     expect(copied.id).toBe(source.id);
     expect(copied.salary).toBe(calculateFranchisePlayerSalary(source));
     expect(source.salary).toBe(0.5);
+  });
+
+  test('hidden FARM prospect salary uses draft/scouting-safe context instead of true ratings', () => {
+    const highTrueRatings = makePlayer({
+      id: 'hidden-high',
+      primaryPosition: 'CF',
+      power: 99,
+      contact: 99,
+      speed: 99,
+      fielding: 99,
+      arm: 99,
+      overallGrade: 'A',
+      salary: 40,
+      ratingRevealState: 'hidden',
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-a', rosterStatus: 'FARM' }],
+      prospectProfile: {
+        draftRound: 2,
+        draftPick: 7,
+        scoutedGrade: 'B',
+        potentialGrade: 'A-',
+        trueGrade: 'A',
+      },
+    } as Partial<Player> & Record<string, unknown>);
+    const lowTrueRatings = makePlayer({
+      id: 'hidden-low',
+      primaryPosition: 'CF',
+      power: 20,
+      contact: 20,
+      speed: 20,
+      fielding: 20,
+      arm: 20,
+      overallGrade: 'D',
+      salary: 0.5,
+      ratingRevealState: 'hidden',
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-a', rosterStatus: 'FARM' }],
+      prospectProfile: {
+        draftRound: 2,
+        draftPick: 8,
+        scoutedGrade: 'B',
+        potentialGrade: 'A-',
+        trueGrade: 'D',
+      },
+    } as Partial<Player> & Record<string, unknown>);
+
+    expect(calculateHiddenFarmProspectSalaryFromPublicContext(highTrueRatings)).toBe(1.2);
+    expect(calculateHiddenFarmProspectSalaryFromPublicContext(lowTrueRatings)).toBe(1.2);
+    expect(withInitialFranchiseSalary(highTrueRatings).salary).toBe(1.2);
+    expect(withInitialFranchiseSalary(lowTrueRatings).salary).toBe(1.2);
+    expect(withInitialFranchiseSalary(highTrueRatings).salary).not.toBe(calculateFranchisePlayerSalary(highTrueRatings));
+    expect(getVisibleSafeFranchisePlayerSalary(highTrueRatings)).toBe(1.2);
+  });
+
+  test('revealed FARM players keep known salary context instead of hidden prospect fallback', () => {
+    const revealedFarm = makePlayer({
+      salary: 6.4,
+      ratingRevealState: 'revealed',
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-a', rosterStatus: 'FARM' }],
+      prospectProfile: {
+        draftRound: 4,
+        scoutedGrade: 'C',
+      },
+    } as Partial<Player> & Record<string, unknown>);
+
+    expect(calculateHiddenFarmProspectSalaryFromPublicContext(revealedFarm)).toBeNull();
+    expect(getVisibleSafeFranchisePlayerSalary(revealedFarm)).toBe(6.4);
   });
 
   test('uses pitcher ratings and batting bonus inputs for pitcher salaries', () => {

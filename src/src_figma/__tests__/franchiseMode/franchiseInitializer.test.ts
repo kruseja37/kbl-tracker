@@ -123,7 +123,7 @@ const copyResult = {
     },
   },
   salaryBaseline: {
-    calculationVersion: 'franchise-initial-salary-v1-ratings-only',
+    calculationVersion: 'franchise-initial-salary-v1-ratings-and-hidden-prospect-safe',
     playerCount: 64,
     salariedPlayerCount: 64,
     totalSalary: 320,

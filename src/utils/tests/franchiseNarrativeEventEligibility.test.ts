@@ -39,7 +39,7 @@ function valueRow(overrides: Partial<FranchiseValueInputRow> = {}): FranchiseVal
     rosterStatus: 'MLB',
     salary: 8.5,
     contractYears: 2,
-    salaryBaselineCalculationVersion: 'franchise-initial-salary-v1-ratings-only',
+    salaryBaselineCalculationVersion: 'franchise-initial-salary-v1-ratings-and-hidden-prospect-safe',
     teamSalaryBaseline: 80,
     salaryBaselineAvailable: true,
     seasonStatsAvailability: {

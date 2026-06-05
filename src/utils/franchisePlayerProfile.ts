@@ -7,6 +7,7 @@ import type {
   RosterStatus,
 } from './leagueBuilderStorage';
 import type { FranchiseFarmRecord } from './franchiseFarmStorage';
+import { getVisibleSafeFranchisePlayerSalary } from './franchiseSalary';
 
 type RevealState = 'hidden' | 'revealed';
 
@@ -138,10 +139,10 @@ function resolveAssignment(
 }
 
 function resolveRevealState(player: Player, rosterStatus: RosterStatus | 'UNKNOWN', farmRecord?: FranchiseFarmRecord | null): RevealState {
-  if (farmRecord?.ratingRevealState === 'revealed') return 'revealed';
-  if (farmRecord?.ratingRevealState === 'hidden') return 'hidden';
   if (player.ratingRevealState === 'revealed') return 'revealed';
+  if (farmRecord?.ratingRevealState === 'revealed') return 'revealed';
   if (player.ratingRevealState === 'hidden') return 'hidden';
+  if (farmRecord?.ratingRevealState === 'hidden') return 'hidden';
   return rosterStatus === 'FARM' ? 'hidden' : 'revealed';
 }
 
@@ -276,7 +277,7 @@ export function buildFranchisePlayerProfileViewModel({
       personality: player.personality,
       chemistry: player.chemistry,
     },
-    salary: Number.isFinite(Number(player.salary)) ? Number(player.salary) : null,
+    salary: hiddenSafe ? getVisibleSafeFranchisePlayerSalary(player) : (Number.isFinite(Number(player.salary)) ? Number(player.salary) : null),
     contractYears: player.contractYears,
     farm: {
       recordPresent: Boolean(farmRecord),

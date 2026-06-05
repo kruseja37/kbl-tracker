@@ -29,7 +29,11 @@ import {
   deleteFranchiseDatabase,
   getAllFranchisePlayers,
 } from '../franchisePlayerStorage';
-import { calculateFranchisePlayerSalary } from '../franchiseSalary';
+import {
+  calculateFranchisePlayerSalary,
+  getVisibleSafeFranchisePlayerSalary,
+} from '../franchiseSalary';
+import { prospectSalaryForDraftRound } from '../prospectScoutingDraftEngine';
 import { getFranchiseFarmRoster } from '../franchiseFarmStorage';
 import { getFranchiseSeasonId } from '../franchisePersistenceContract';
 
@@ -300,7 +304,7 @@ describe('League Builder farm/scouting handoff validation', () => {
     expect(farmRecords.find((record) => record.playerId === farmPlayer?.id)?.ratingRevealState).toBe('hidden');
   });
 
-  test('franchise copy normalizes MLB and FARM salaries and stores a copied-player salary baseline', async () => {
+  test('franchise copy normalizes MLB salaries and keeps hidden FARM prospect salaries draft-safe in baseline proof', async () => {
     await seedLeague();
 
     const result = await deepCopyLeagueToFranchise(FRANCHISE_ID, LEAGUE_ID, {
@@ -311,8 +315,24 @@ describe('League Builder farm/scouting handoff validation', () => {
     const franchisePlayers = await getAllFranchisePlayers(FRANCHISE_ID);
 
     expect(franchisePlayers).toHaveLength(64);
-    for (const player of franchisePlayers) {
+    const hiddenFarmPlayers = franchisePlayers.filter((player) =>
+      player.ratingRevealState === 'hidden' &&
+      player.leagueAssignments?.some((assignment) => assignment.rosterStatus === 'FARM'),
+    );
+    const mlbPlayers = franchisePlayers.filter((player) =>
+      player.leagueAssignments?.some((assignment) => assignment.rosterStatus === 'MLB'),
+    );
+
+    for (const player of mlbPlayers) {
       expect(player.salary).toBe(calculateFranchisePlayerSalary(player));
+    }
+    for (const player of hiddenFarmPlayers) {
+      const draftRound = Number((player as typeof player & { prospectProfile?: { draftRound?: number } }).prospectProfile?.draftRound);
+      const expectedSalary = Number.isInteger(draftRound) && draftRound > 0
+        ? prospectSalaryForDraftRound(draftRound)
+        : prospectSalaryForDraftRound(2);
+      expect(player.salary).toBe(expectedSalary);
+      expect(getVisibleSafeFranchisePlayerSalary(player)).toBe(player.salary);
     }
 
     const teamPayrolls = Object.fromEntries(TEAM_IDS.map((teamId) => {

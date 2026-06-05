@@ -162,10 +162,10 @@ function resolveRevealState(
   rosterStatus: RosterStatus | 'UNKNOWN',
   farmRecord?: FranchiseFarmRecord | null,
 ): 'hidden' | 'revealed' {
-  if (farmRecord?.ratingRevealState === 'revealed') return 'revealed';
-  if (farmRecord?.ratingRevealState === 'hidden') return 'hidden';
   if (player.ratingRevealState === 'revealed') return 'revealed';
+  if (farmRecord?.ratingRevealState === 'revealed') return 'revealed';
   if (player.ratingRevealState === 'hidden') return 'hidden';
+  if (farmRecord?.ratingRevealState === 'hidden') return 'hidden';
   return rosterStatus === 'FARM' ? 'hidden' : 'revealed';
 }
 

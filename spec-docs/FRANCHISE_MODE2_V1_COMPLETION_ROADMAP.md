@@ -12,9 +12,9 @@ Manual smoke feedback remains a bug and feature backlog. The build order for Mod
 
 Latest committed checkpoint: `366064a Define v1 dynamic designation policy`.
 
-Latest working checkpoint: Final Mode 1/2 Playable V1 Status Reconciliation And Smoke Checklist.
+Latest working checkpoint: Manual Smoke Findings Capture And FARM Hidden-Rating Leak Hardening.
 
-Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved. The technical foundation is safe, and the first Mode 1/2 playable hardening waves through schedule/trade/FARM/stadium/designation policy are committed, but manual smoke feedback still blocks declaring user-facing playable v1 complete.
+Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved. The technical foundation is safe, and the first Mode 1/2 playable hardening waves through schedule/trade/FARM/stadium/designation policy are committed, but the 2026-06-05 manual smoke findings still block declaring user-facing playable v1 complete.
 
 ## Completed Checkpoints
 
@@ -57,18 +57,19 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Park Factor Archive Trust Tightening is committed so archive `game.parkFactors` are trusted only when verified as SMB4 seed inputs.
 - Dynamic Designation Policy Matrix And Two-Way Boundary is committed: TEAM_MVP/ACE are active preview-only, TWO-WAY routes pitcher-only through ACE for internal v1, and older full-system designation lock/carryover language remains subordinate to the v1 matrix.
 - Manual Final-Score Workflow UX Polish And Confirmation-Gated Wording is complete: score-only rows are visually distinct, lack Game Detail/archive affordances, and compactly state schedule/standings-only plus confirmation-gated team-fan morale boundaries.
+- 2026-06-05 manual smoke findings are captured. The first response hardens hidden FARM prospect salary/reveal safety so hidden salaries use draft/scouting-safe context and sent-down revealed players stay revealed.
 
 ## Active Priority Order
 
-1. Final Mode 1/2 Manual Smoke Checklist
-   - Run the real app checklist in `FRANCHISE_MODE1_MODE2_PLAYABLE_V1_GAP_ANALYSIS.md`.
-   - Do not declare playable v1 approved until the user reviews the smoke result and explicitly approves it.
+1. Manual Smoke Findings Response
+   - Patch the 2026-06-05 real-app findings in smallest-first order.
+   - Do not declare playable v1 approved until the blocker set is cleared and the user explicitly approves it.
    - Keep Mode 1 and Mode 2 as the only active playable-v1 priority.
    - No auto-draft, generated schedules, AI simulation, awards finalization, story automation, production storage mutation, or Mode 3/offseason execution until separately approved.
-2. Respond To Manual Smoke Findings
-   - If the checklist finds a blocker, patch the smallest exact issue and rerun the relevant smoke section.
+2. Current P0 Data Policy Target
+   - FARM salary/reveal safety: hidden prospect salary must not use actual ratings; revealed players sent to FARM must stay full-detail visible/editable.
 3. Approval Decision
-   - If smoke passes, ask the user whether Mode 1/2 playable v1 is approved.
+   - If the remaining smoke findings pass, ask the user whether Mode 1/2 playable v1 is approved.
 4. Post-Approval Polish Queue
    - If smoke reveals only non-blocking polish, queue it after the approval decision.
 5. Deferred Full-Spec Backlog
@@ -76,8 +77,15 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 
 ## Playable V1 Remaining Work
 
-- Run the final real-app manual smoke checklist.
-- Patch any blocker found by that checklist.
+- Patch remaining 2026-06-05 manual smoke findings:
+  - GameTracker sub-out pitcher names still abbreviate.
+  - Almanac Franchise section remains `Coming Soon`.
+  - Save upload/import path is unclear.
+  - FARM prospect grade mismatch versus Player Analyzer.
+  - Player profile needs clearer primary/secondary position separation.
+  - Position players show pitching ratings without two-way trait/arsenal.
+  - Stadium spray evidence did not appear in Team Hub real-app smoke.
+  - Manager WPA lineup delta is missing from Game Detail.
 - Get explicit user approval before declaring Mode 1/2 playable v1 complete.
 - Track any non-blocking production visual-smoke, roster/schedule readability, or transaction drilldown polish as follow-up after the approval decision.
 - Future stricter two-way Team MVP criteria, if approved later.

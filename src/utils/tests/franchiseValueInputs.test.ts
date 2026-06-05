@@ -583,6 +583,59 @@ describe('franchise value input contract', () => {
     expect(unassigned?.limitations).toContain('Current franchise team assignment is unavailable.');
   });
 
+  test('hidden FARM prospect salary rows use public draft/scouting context instead of true rating salary', async () => {
+    mocks.getFranchiseConfig.mockResolvedValue({
+      franchiseId: 'franchise-1',
+      league: 'league-1',
+      seasonLength: { gamesPerTeam: 24, inningsPerGame: 6 },
+      salaryBaseline: {
+        calculationVersion: 'salary-baseline-v1',
+        teamPayrolls: { 'team-1': 1.2 },
+      },
+    });
+    mocks.getAllFranchisePlayers.mockResolvedValue([
+      makePlayer({
+        id: 'hidden-high',
+        firstName: 'Hidden',
+        lastName: 'High',
+        salary: 42,
+        power: 99,
+        contact: 99,
+        speed: 99,
+        fielding: 99,
+        arm: 99,
+        overallGrade: 'A',
+        ratingRevealState: 'hidden',
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'FARM' }],
+        prospectProfile: {
+          draftRound: 2,
+          draftPick: 7,
+          scoutedGrade: 'B',
+          potentialGrade: 'A-',
+          trueGrade: 'A',
+        },
+      } as Partial<Player> & Record<string, unknown>),
+    ]);
+    mocks.getAllBattingStats.mockResolvedValue([]);
+    mocks.getAllPitchingStats.mockResolvedValue([]);
+    mocks.getAllFieldingStats.mockResolvedValue([]);
+
+    const report = await buildFranchiseValueInputRows({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      seasonNumber: 1,
+    });
+    const row = report.rows.find((candidate) => candidate.playerId === 'hidden-high');
+
+    expect(row?.salary).toBe(1.2);
+    expect(row?.salaryBaselineAvailable).toBe(true);
+    expect(row?.limitations).toContain(
+      'Hidden FARM prospect salary uses draft/scouting-safe public context; true ratings and true grade are not salary inputs.',
+    );
+    expect(JSON.stringify(row)).not.toContain('42');
+    expect(row?.warInputAvailability.trustedForFinalValue).toBe(false);
+  });
+
   test('classifies custom and missing stadium park-factor states as unavailable and unadjusted', async () => {
     mocks.getFranchiseConfig.mockResolvedValue({
       franchiseId: 'franchise-1',

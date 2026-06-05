@@ -220,10 +220,10 @@ function assignmentForPlayer(player: Player, teamId?: string, leagueId?: string)
 }
 
 function resolveRevealState(player: Player, rosterStatus: string, farmRecord?: FranchiseFarmRecord | null): RevealState {
-  if (farmRecord?.ratingRevealState === 'revealed') return 'revealed';
-  if (farmRecord?.ratingRevealState === 'hidden') return 'hidden';
   if (player.ratingRevealState === 'revealed') return 'revealed';
+  if (farmRecord?.ratingRevealState === 'revealed') return 'revealed';
   if (player.ratingRevealState === 'hidden') return 'hidden';
+  if (farmRecord?.ratingRevealState === 'hidden') return 'hidden';
   return rosterStatus === 'FARM' ? 'hidden' : 'revealed';
 }
 

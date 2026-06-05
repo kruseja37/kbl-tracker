@@ -269,4 +269,33 @@ describe('franchise player profile view model', () => {
     }));
     expect(JSON.stringify(profile)).not.toContain('trueGrade');
   });
+
+  test('sent-down revealed player remains full-detail visible and keeps known salary context on FARM', () => {
+    const profile = buildFranchisePlayerProfileViewModel({
+      player: makePlayer({
+        id: 'sent-down-player',
+        firstName: 'Sent',
+        lastName: 'Down',
+        salary: 7.5,
+        ratingRevealState: 'revealed',
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'FARM' }],
+      }),
+      farmRecord: makeFarmRecord({
+        playerId: 'sent-down-player',
+        ratingRevealState: 'hidden',
+      }),
+      teamId: 'team-1',
+      leagueId: 'league-1',
+    });
+
+    expect(profile.rosterStatus).toBe('FARM');
+    expect(profile.revealState).toBe('revealed');
+    expect(profile.hiddenSafe).toBe(false);
+    expect(profile.fullDetails).toEqual(expect.objectContaining({
+      overallGrade: 'B+',
+      power: 71,
+      contact: 72,
+    }));
+    expect(profile.salary).toBe(7.5);
+  });
 });

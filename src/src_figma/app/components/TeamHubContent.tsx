@@ -79,6 +79,10 @@ import {
   type FranchiseSalaryLifecycleReport,
 } from "../../../utils/franchiseSalaryLifecycle";
 import {
+  getVisibleSafeFranchisePlayerSalary,
+  resolveFranchiseSalaryRevealState,
+} from "../../../utils/franchiseSalary";
+import {
   buildFranchiseMoraleRelationshipTrustReport,
   type FranchiseMoraleRelationshipTrustReport,
 } from "../../../utils/franchiseMoraleRelationshipTrust";
@@ -374,9 +378,7 @@ function franchisePlayerDirectoryAssignment(player: Player, leagueId?: string) {
 }
 
 function franchiseDirectoryRevealState(player: Player, rosterStatus: string): 'hidden' | 'revealed' {
-  if (player.ratingRevealState === 'hidden') return 'hidden';
-  if (player.ratingRevealState === 'revealed') return 'revealed';
-  return rosterStatus === 'FARM' ? 'hidden' : 'revealed';
+  return resolveFranchiseSalaryRevealState(player, rosterStatus);
 }
 
 function buildRandomEventPlayerEvidence(
@@ -399,7 +401,15 @@ function buildRandomEventPlayerEvidence(
     seasonId: input.seasonId,
     statsScopeId: input.statsScopeId,
     seasonNumber: input.seasonNumber,
-    ratingRevealState: farmRecord?.ratingRevealState ?? player.ratingRevealState ?? (rosterStatus === 'FARM' ? 'hidden' : 'revealed'),
+    ratingRevealState: resolveFranchiseSalaryRevealState(
+      {
+        ...player,
+        ratingRevealState: player.ratingRevealState === 'revealed'
+          ? 'revealed'
+          : farmRecord?.ratingRevealState ?? player.ratingRevealState,
+      },
+      rosterStatus,
+    ),
   };
 }
 
@@ -567,7 +577,7 @@ function prospectMetadata(player: Player): ProspectMetadata {
 }
 
 function formatFarmSalary(player: Player): string {
-  const salary = Number(player.salary) || 0;
+  const salary = getVisibleSafeFranchisePlayerSalary(player) ?? 0;
   if (salary <= 0) return '—';
   return salary >= 10000 ? `$${(salary / 1000000).toFixed(1)}M` : `$${salary.toFixed(1)}M`;
 }
@@ -729,11 +739,19 @@ function convertFranchisePlayerToRosterItem(input: {
 }): RosterTableItem {
   const { player } = input;
   const rosterStatus = franchisePlayerRosterStatus(player, input.leagueId);
-  const revealState = input.farmRecordByPlayerId.get(player.id)?.ratingRevealState ??
-    player.ratingRevealState ??
-    (rosterStatus === 'FARM' ? 'hidden' : 'revealed');
+  const farmRevealState = input.farmRecordByPlayerId.get(player.id)?.ratingRevealState;
+  const revealState = resolveFranchiseSalaryRevealState(
+    {
+      ...player,
+      ratingRevealState: player.ratingRevealState === 'revealed'
+        ? 'revealed'
+        : farmRevealState ?? player.ratingRevealState,
+    },
+    rosterStatus,
+  );
   const hiddenSafe = rosterStatus === 'FARM' && revealState !== 'revealed';
-  const salary = Number(player.salary);
+  const salary = hiddenSafe ? getVisibleSafeFranchisePlayerSalary(player) : Number(player.salary);
+  const salaryAvailable = salary !== null && Number.isFinite(salary);
   const moraleValue = input.moraleSnapshot?.currentValue ?? 50;
   const stats = rosterStatSummary({
     player,
@@ -751,8 +769,8 @@ function convertFranchisePlayerToRosterItem(input: {
     grade: hiddenSafe ? 'Hidden' : player.overallGrade,
     morale: moraleValue,
     moraleState: moraleStateLabel(moraleValue),
-    contract: formatRosterSalary(Number.isFinite(salary) ? salary : null),
-    salarySortValue: Number.isFinite(salary) && salary > 0 ? salary : Number.NEGATIVE_INFINITY,
+    contract: formatRosterSalary(salaryAvailable ? salary : null),
+    salarySortValue: salaryAvailable && salary > 0 ? salary : Number.NEGATIVE_INFINITY,
     trueValue: '—',
     netDiff: '—',
     fitness: '—' as string | number,
@@ -5924,7 +5942,15 @@ function FranchiseFarmVisibilityPanel({
             const record = farmRecordByPlayerId.get(player.id);
             const metadata = prospectMetadata(player);
             const traits = [player.trait1, player.trait2].filter(Boolean).join(', ') || 'None';
-            const revealState = record?.ratingRevealState ?? player.ratingRevealState ?? 'hidden';
+            const revealState = resolveFranchiseSalaryRevealState(
+              {
+                ...player,
+                ratingRevealState: player.ratingRevealState === 'revealed'
+                  ? 'revealed'
+                  : record?.ratingRevealState ?? player.ratingRevealState,
+              },
+              'FARM',
+            );
             return (
               <div key={player.id} className="border-2 border-[#4A6844] bg-[#4A6844] p-3">
                 <div className="mb-2 flex items-start justify-between gap-3">

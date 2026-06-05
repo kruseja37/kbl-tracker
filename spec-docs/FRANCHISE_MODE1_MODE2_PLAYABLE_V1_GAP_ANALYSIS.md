@@ -45,7 +45,22 @@ That foundation is technically safer than it was, and the first hardening wave h
 - Populated fixture smoke coverage, schedule editing/import hardening, trade/FARM hidden-safety and movement continuity, park-factor archive trust tightening, and the dynamic designation policy matrix/TWO-WAY boundary are now completed hardening checkpoints.
 - Manual final-score / score-only UX polish is complete: score-only rows are visually distinct, do not show Game Detail/archive affordances, and explicitly state schedule/standings-only plus confirmation-gated team-fan morale boundaries.
 
-Manual smoke approval is now the remaining gate before declaring playable v1 done:
+Manual smoke approval is still blocked by the 2026-06-05 real-app findings:
+
+- GameTracker sub-out pitcher names still abbreviate.
+- Almanac Game Detail works from schedule, but Almanac Franchise remains `Coming Soon`.
+- Franchise save export/delete works, but upload/import behavior is unclear.
+- FARM prospect salary leaked hidden ratings and must use draft/scouting-safe context.
+- FARM prospect grade display mismatches Player Analyzer expectations.
+- Player profile position display needs clearer primary/secondary separation.
+- Position players can show pitching ratings despite no two-way trait/arsenal.
+- Sent-down revealed players can lose full rating/edit visibility.
+- Stadium spray data did not appear in Team Hub during real-app smoke.
+- Manager WPA lineup delta is missing from Game Detail.
+
+The first response is now in progress/completed in this hardening slice: hidden FARM prospect salaries are draft/scouting-safe and revealed sent-down players stay revealed. The remaining findings stay in the playable-v1 queue.
+
+Manual smoke approval remains the gate before declaring playable v1 done:
 
 - Real app schedule-row and Team Hub roster-row behavior must be checked with actual local Franchise state, not only fixture-backed previews.
 - Full seeded state harness scope remains a known follow-up.
@@ -59,12 +74,12 @@ Manual smoke approval is now the remaining gate before declaring playable v1 don
 
 Mode 1 and Mode 2 only until playable v1 is approved.
 
-The next work is not a speculative feature. It is a real-app manual smoke pass and then a response to findings:
+The next work is not a speculative feature. It is response to the real-app manual smoke findings:
 
-1. Run the final Mode 1/2 manual smoke checklist below.
-2. If a blocker appears, patch the smallest exact issue and rerun the affected checklist section.
-3. If smoke passes, ask the user whether Mode 1/2 playable v1 is approved.
-4. If only non-blocking polish appears, queue it after the approval decision.
+1. Patch the smallest exact issue from the smoke findings.
+2. Rerun the affected checklist section.
+3. Keep playable v1 unapproved until the user confirms the blocker set is cleared.
+4. If only non-blocking polish remains, queue it after the approval decision.
 5. Keep Mode 3/offseason and full-spec systems deferred unless separately approved.
 
 ## Explicit Exclusions
@@ -101,6 +116,12 @@ These are not active playable-v1 implementation targets in this plan:
 | Manual final-score workflow needed boundary polish | Score-only rows are useful, but users need clarity that they do not create player stats, WPA, fame, awards, or Almanac player evidence | Manual smoke feedback; score-only hard boundaries | Completed slice `Manual Final-Score Workflow UX Polish And Confirmation-Gated Wording` | Keep score-only visibly schedule/standings-only, with team-fan morale effects confirmation-gated in Random Event Log | Completed hardening | Done | Team-only result effects, no fabricated player/WPA/fame/Game Detail evidence, save/export consistency | No AI simulation or stat fabrication |
 | Manual schedule workflow needed hardening | Users need comfortable schedule authoring/editing without generated schedules | Manual smoke feedback; Mode 1/2 launch flow | Committed slice `Harden franchise schedule editing boundaries` | Keep manual/CSV non-generated schedule path usable and clearly scoped | Completed hardening | Done | No generated schedules, launch state remains scoped, row copy concise | Generated schedules excluded |
 | Trade/FARM roster movement continuity needed audit | FARM/call-up/send-down/trade evidence must stay consistent across Team Hub, roster rows, and persistence | FARM/scouting/transaction specs; Team Hub roster usability | Committed slice `Protect hidden prospect data in trades` plus movement-continuity hardening | Keep roster movement history and current roster rows consistent and hidden-safe | Completed hardening | Done | Hidden prospects, call-up reveal boundary, transaction portability, future GameTracker availability | Auto-draft/offseason execution excluded; full trade UX/AI/salary matching deferred |
+| FARM salary and reveal safety failed manual smoke | Hidden FARM salaries could reveal true rating quality; sent-down revealed players could become hidden by FARM status | FARM salary/reveal spec; salary spec; player profile requirements | Current hardening routes hidden FARM salaries through draft/scouting-safe context and makes reveal irreversible for send-down/profile views | Hidden prospects show safe salary only; revealed FARM/sent-down players keep full visible/edit context | P0 Data Policy | Manual Smoke Findings Capture And FARM Hidden-Rating Leak Hardening | No true ratings/true grade/rating-derived salary leaks; sent-down player remains revealed | Final salary movement/True Value remains blocked |
+| GameTracker sub-out pitcher names still abbreviate | Sub-out pitcher names still use compact display | GameTracker playable smoke; full-name display rule | Previous full-name hardening did not cover this path | Pitcher and position-player names display consistently in sub-out UI | P0 Core Loop Blocker | GameTracker Sub-Out Pitcher Name Display Patch | Shared display-name helper, no layout overflow | None |
+| Almanac Franchise section still incomplete | Game Detail works, Franchise section says Coming Soon | Almanac/continuity requirements | Game Detail archive continuity exists; franchise-level Almanac is not complete | Do not claim Franchise Almanac complete; either label clearly or implement scoped read-only section | P1 Analytics/Continuity | Almanac Franchise Section Truth Label Or Scoped Read Surface | No fabricated global/franchise history | Full museum/almanac architecture deferred |
+| Save import/upload path unclear | Export/delete works; upload/import expectations are hard to find | Save-slot portability requirements | Stores are portable/registered; UX still unclear | User can tell how to import/restore or see it is deferred | P1 Roster/Team Hub Usability | Save Export Import UX Clarity Pass | No Cloud Sync scope creep | Cloud/deploy excluded |
+| Player profile console-entry details incomplete | Primary/secondary position separation and non-pitcher pitching-rating display are confusing | Player profile/manual edit requirements | Profile exists; fields need smoke polish | Profile is clear for SMB4 manual entry while hidden-safe | P1 Roster/Team Hub Usability | Player Profile Console Entry Clarity Pass | Hidden FARM truth remains blocked | Two-way policy/final profile automation deferred |
+| Stadium spray and Manager WPA detail missing in real smoke | Stadium spray did not appear; Manager WPA lineup delta missing from Game Detail | Stadium/WPA specs | Foundation exists; real-app evidence display incomplete | Surfaces should show archive-backed evidence or clear blocked/empty reason | P1 Stadium/League Builder Flow | Stadium Spray And Manager WPA Production Evidence Pass | Wrong-scope/score-only evidence blocked | Adaptive factors/story automation blocked |
 | Testing ergonomics request conflicts with scope | Manual smoke asked for auto-hire scouts and auto-draft for repeated testing | Manual smoke feedback | League Builder startup draft UI exists; deterministic engine exists | Do not include auto-draft in active playable-v1 plan; revisit only as separate approved tooling slice | Explicit Exclusion | No active slice | Ensure roadmap does not schedule auto-draft | Auto-draft deferred/excluded |
 
 ## Completed Hardening Slices
@@ -152,6 +173,9 @@ These are not active playable-v1 implementation targets in this plan:
 
 16. **Manual Final-Score Workflow UX Polish And Confirmation-Gated Wording**
    - Completed. Made score-only entry and completed rows visibly distinct from GameTracker archives, removed archive affordances, and clarified Random Event Log confirmation for team-fan morale only.
+
+17. **Manual Smoke Findings Capture And FARM Hidden-Rating Leak Hardening**
+   - Current hardening checkpoint. Captures the 2026-06-05 manual smoke findings, keeps playable v1 unapproved, routes hidden FARM prospect salary through draft/scouting-safe public context, and preserves revealed/editable state for sent-down players.
 
 ## Final Manual Smoke Checklist
 
@@ -211,8 +235,9 @@ Run this in the real app before deciding whether Mode 1/Mode 2 playable v1 is ap
 
 ## Next Response Rule
 
-- If any checklist item fails, the next implementation priority is the smallest patch for that finding.
-- If the checklist passes, the next step is asking the user whether Mode 1/Mode 2 playable v1 is approved.
+- The 2026-06-05 checklist found blockers; playable v1 remains unapproved.
+- The next implementation priority is the smallest patch for the next remaining manual smoke finding.
+- If the blocker set later passes, the next step is asking the user whether Mode 1/Mode 2 playable v1 is approved.
 - Do not start Mode 3/offseason, auto-draft, AI simulation, final awards, final True Value/salary movement, final designation persistence, morale automation, relationship mutation, adaptive park-factor persistence, custom stadium factor entry, generated schedules, or full trade AI/salary matching without a separate approval.
 
 ## Audit Rules For The Next Slices
@@ -236,4 +261,4 @@ Playable v1 should not be declared done yet.
 
 The first Mode 1/Mode 2 user-facing hardening wave plus the Almanac/WPA/fame/visual-smoke trust wave are committed. Manual score-only workflow clarity, schedule editing/import, trade/FARM movement continuity, archive `game.parkFactors` trust, and internal-v1 TWO-WAY designation routing are now hardened for v1.
 
-Playable v1 should still not be declared approved until the user runs the final real-app manual smoke checklist above and explicitly approves the result. The right next milestone is **respond to manual smoke findings**. If there are no blocking findings, ask for the playable-v1 approval decision rather than starting a speculative new feature. The advanced Mode 2 foundation remains useful, but it should stay read-only, preview-only, confirmation-gated, or blocked until the user approves the playable loop.
+Playable v1 should still not be declared approved. The 2026-06-05 real-app smoke found blockers, and this checkpoint handles only the first data-safety target around hidden FARM salary/reveal state. The right next milestone remains **respond to manual smoke findings**. If the blocker set is later cleared, ask for the playable-v1 approval decision rather than starting a speculative new feature. The advanced Mode 2 foundation remains useful, but it should stay read-only, preview-only, confirmation-gated, or blocked until the user approves the playable loop.

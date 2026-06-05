@@ -5,6 +5,9 @@ import {
   type PositionPlayerRatings,
 } from '../engines/gradeEngine';
 import { FIRST_NAMES as SMB4_FIRST_NAMES, LAST_NAMES as SMB4_LAST_NAMES } from '../data/nameDatabase';
+import { prospectSalaryForDraftRound } from './prospectSalary';
+
+export { prospectSalaryForDraftRound } from './prospectSalary';
 
 export const PROSPECT_SCOUTING_DRAFT_ENGINE_VERSION =
   'league-builder-startup-prospect-scouting-draft-v1';
@@ -421,13 +424,6 @@ function buildArsenal(seed: string, position: DraftPosition, junk: number): stri
   );
   const count = junk >= 70 ? 4 : junk >= 55 ? 3 : junk >= 40 ? 2 : 1;
   return ['4F', ...shuffled.slice(0, count)];
-}
-
-export function prospectSalaryForDraftRound(round: number): number {
-  if (round === 1) return 2.0;
-  if (round === 2) return 1.2;
-  if (round === 3) return 0.7;
-  return 0.5;
 }
 
 function specialtyMatches(position: DraftPosition, specialty: ScoutSpecialty): boolean {

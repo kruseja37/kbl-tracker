@@ -344,7 +344,7 @@ describe('franchise setup-to-launch persistence integration', () => {
         },
       },
       salaryBaseline: {
-        calculationVersion: 'franchise-initial-salary-v1-ratings-only',
+        calculationVersion: 'franchise-initial-salary-v1-ratings-and-hidden-prospect-safe',
         playerCount: 64,
         salariedPlayerCount: 64,
       },
