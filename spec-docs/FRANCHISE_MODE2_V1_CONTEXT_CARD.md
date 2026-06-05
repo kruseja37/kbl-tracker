@@ -10,7 +10,7 @@ Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
 Latest committed checkpoint: `3625f02 Add safe Mode 2 visual smoke preview`.
 
-Latest working checkpoint: Final Playable V1 Gap Reconciliation And Next Priority Decision doc pass.
+Latest working checkpoint: Dynamic Designation Policy Matrix And Two-Way Boundary.
 
 ## Current Completed
 
@@ -28,6 +28,7 @@ Latest working checkpoint: Final Playable V1 Gap Reconciliation And Next Priorit
 - Durable daily morale snapshot summaries can persist scoped high/low/average evidence from confirmed/manual morale history without drift, recovery, or automatic mutation.
 - Expected-wins baselines, daily morale snapshots, and stadium records are registered as portable scoped evidence stores for save-slot, backup, and sync surfaces; they remain read-only evidence and do not unlock mutation.
 - Dynamic designation morale bridge supports safe preview TEAM_MVP/ACE recognition prompts through random-event confirmation.
+- Dynamic designation policy matrix is explicit: TEAM_MVP/ACE are the only app-facing active preview-only designations, TWO-WAY routes as pitcher-only through ACE, and Fan Favorite/Albatross/Cornerstone/Captain/Fan Hopeful remain blocked or explicit trusted-bridge-only context.
 - Fan Favorite/Albatross readiness can be inspected from preview True Value/value-delta rows, but remains blocked for final designation behavior, random-event morale prompts, salary movement, relationships, and Mode 3.
 - Numeric WAR preview, position-relative True Value preview, expected-wins preview, Team Hub display, and durable expected-wins baseline snapshots are read-only and untrusted.
 - The Mode 2 technical foundation is safe to build on, but manual smoke feedback shows the user-facing Mode 1/Mode 2 playable UI/UX is not complete.
@@ -37,9 +38,9 @@ Latest working checkpoint: Final Playable V1 Gap Reconciliation And Next Priorit
 
 ## Current Active Slice
 
-Final Playable V1 Gap Reconciliation And Next Priority Decision.
+Dynamic Designation Policy Matrix And Two-Way Boundary.
 
-Goal: update the gap tracker, context card, and roadmap after the committed Almanac/WPA/fame/visual-smoke slices. Do not implement code in this slice, and do not treat Mode 2 as fully playable-complete yet.
+Goal: make all designation-family v1 statuses explicit, preserve TEAM_MVP/ACE preview-only behavior, route TWO-WAY players as pitcher-only through ACE for internal v1, and keep final designation persistence plus downstream automation blocked.
 
 ## Next Queue
 
@@ -47,17 +48,18 @@ Goal: update the gap tracker, context card, and roadmap after the committed Alma
 2. Manual Final-Score Entry And Score-Only Boundary Reconciliation.
 3. Manual Schedule Editing And CSV Workflow Pass.
 4. Trade And FARM Roster Movement Continuity Audit.
-5. Remaining trust/policy tightening, including archive `game.parkFactors` trust and two-way MVP/Ace policy.
+5. Remaining trust/policy tightening, excluding the now-decided internal-v1 TWO-WAY pitcher-only designation route.
 
 ## Hard Boundaries
 
 - No silent GameTracker morale mutation.
 - No hidden FARM/prospect truth leaks.
 - No final True Value, final designations, salary movement, or Fan Favorite/Albatross finalization yet.
+- TWO-WAY designation routing is pitcher-only for internal v1; stricter two-way Team MVP criteria are deferred.
 - No relationship mutation.
 - No story persistence beyond the random-event log.
 - No adaptive park-factor persistence or final park-adjusted value/WAR consumers.
-- Archive `game.parkFactors` trust remains a known follow-up; do not treat archived park factors as trusted adaptive persistence without a future tightening slice.
+- Archive `game.parkFactors` trust has been tightened to accept only verified SMB4 seed inputs; adaptive park-factor persistence remains blocked.
 - No Mode 3/offseason handoff or execution.
 - No auto-draft active path.
 - Score-only rows may affect team fan morale only after explicit confirmation; never player morale, stats, WPA/WAR, awards, designations, player history, or relationships.

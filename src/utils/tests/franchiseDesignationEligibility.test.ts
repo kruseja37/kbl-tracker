@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import {
   buildFranchiseDesignationEligibility,
   classifyFranchiseDesignationEligibility,
+  FRANCHISE_DESIGNATION_V1_POLICY_MATRIX,
   type FranchiseDesignationEligibilityRecord,
 } from '../franchiseDesignationEligibility';
 import {
@@ -162,6 +163,29 @@ describe('franchise designation eligibility adapter', () => {
     expect(findRecord(report.records, 'player-1', 'TEAM_MVP').reasons.join(' ')).toContain('WAR-like season inputs');
   });
 
+  test('policy matrix documents every designation family and keeps only MVP/Ace active preview-only', () => {
+    expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.map((policy) => policy.designationType)).toEqual([
+      'TEAM_MVP',
+      'ACE',
+      'FAN_FAVORITE',
+      'ALBATROSS',
+      'CAPTAIN',
+      'FAN_HOPEFUL',
+      'CORNERSTONE',
+    ]);
+    expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.filter((policy) => policy.status === 'active-preview-only').map((policy) => policy.designationType)).toEqual([
+      'TEAM_MVP',
+      'ACE',
+    ]);
+    expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.every((policy) => policy.persistable === false)).toBe(true);
+    expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.find((policy) => policy.designationType === 'TEAM_MVP')?.blockers.join(' ')).toMatch(/TWO-WAY.*ACE/i);
+    expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.find((policy) => policy.designationType === 'FAN_FAVORITE')?.summary).toMatch(/True Value\/value-delta/i);
+    expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.find((policy) => policy.designationType === 'ALBATROSS')?.summary).toMatch(/salary\/value/i);
+    expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.find((policy) => policy.designationType === 'CORNERSTONE')?.summary).toMatch(/durable designation state/i);
+    expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.find((policy) => policy.designationType === 'CAPTAIN')?.summary).toMatch(/hidden charisma\/leadership/i);
+    expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.find((policy) => policy.designationType === 'FAN_HOPEFUL')?.summary).toMatch(/visible-safe prospect/i);
+  });
+
   test('TEAM_MVP and ACE return preview-only with stat/WAR-like input but remain non-persistable', () => {
     const mvp = makeRow({
       playerId: 'mvp',
@@ -263,7 +287,13 @@ describe('franchise designation eligibility adapter', () => {
         status: 'blocked',
         persistable: false,
       });
-      expect(mvp?.reasons.join(' ')).toContain('pitcher recognition uses ACE');
+      const reasonText = mvp?.reasons.join(' ') ?? '';
+      if (valuePosition === 'TWO-WAY') {
+        expect(reasonText).toContain('TWO-WAY players are routed as pitcher-only');
+        expect(reasonText).toContain('stricter two-way TEAM_MVP criteria are deferred');
+      } else {
+        expect(reasonText).toContain('pitcher recognition uses ACE');
+      }
     },
   );
 
@@ -538,9 +568,74 @@ describe('franchise designation eligibility adapter', () => {
   test('future narrative/value designations are blocked with deferred input reasons', () => {
     const report = classifyFranchiseDesignationEligibility(makeReport([makeRow()]));
 
-    expect(findRecord(report.records, 'player-1', 'CAPTAIN').reasons.join(' ')).toContain('leadership, morale, and relationship inputs');
-    expect(findRecord(report.records, 'player-1', 'FAN_HOPEFUL').reasons.join(' ')).toContain('fan, morale, and True Value inputs');
-    expect(findRecord(report.records, 'player-1', 'CORNERSTONE').reasons.join(' ')).toContain('future value, contract trajectory, morale, and relationship inputs');
+    expect(findRecord(report.records, 'player-1', 'CAPTAIN').reasons.join(' ')).toContain('hidden charisma/leadership safety policy');
+    expect(findRecord(report.records, 'player-1', 'FAN_HOPEFUL').reasons.join(' ')).toContain('visible-safe prospect assignment source');
+    expect(findRecord(report.records, 'player-1', 'CORNERSTONE').reasons.join(' ')).toContain('durable designation state and roster-move consequence policy');
+  });
+
+  test('every designation family is evaluated but only TEAM_MVP and ACE can become preview-only in v1', () => {
+    const report = classifyFranchiseDesignationEligibility(makeReport([
+      makeRow({
+        playerId: 'position-leader',
+        playerName: 'Position Leader',
+        valuePosition: 'SS',
+        seasonStatsAvailability: { batting: true, pitching: false, fielding: true, any: true },
+        warInputAvailability: {
+          battingWar: true,
+          pitchingWar: false,
+          fieldingWar: true,
+          baserunningWar: true,
+          any: true,
+          trustedForFinalValue: false,
+        },
+        warPreviewValues: {
+          battingWar: 1.5,
+          pitchingWar: null,
+          fieldingWar: 0.2,
+          baserunningWar: 0.1,
+          totalWar: 1.8,
+          totalWarSource: 'derived-from-components',
+          trustedForFinalValue: false,
+        },
+      }),
+      makeRow({
+        playerId: 'two-way-ace',
+        playerName: 'Two Way Ace',
+        valuePosition: 'TWO-WAY',
+        currentTeamId: 'team-2',
+        seasonStatsAvailability: { batting: true, pitching: true, fielding: true, any: true },
+        warInputAvailability: {
+          battingWar: true,
+          pitchingWar: true,
+          fieldingWar: true,
+          baserunningWar: true,
+          any: true,
+          trustedForFinalValue: false,
+        },
+        warPreviewValues: {
+          battingWar: 1.4,
+          pitchingWar: 1.1,
+          fieldingWar: 0.1,
+          baserunningWar: 0.1,
+          totalWar: 2,
+          totalWarSource: 'derived-from-components',
+          trustedForFinalValue: false,
+        },
+      }),
+    ]));
+
+    expect(report.records).toHaveLength(14);
+    expect(report.records.filter((record) => record.status === 'preview-only').map((record) => `${record.playerId}:${record.designationType}`).sort()).toEqual([
+      'position-leader:TEAM_MVP',
+      'two-way-ace:ACE',
+    ]);
+    expect(findRecord(report.records, 'two-way-ace', 'TEAM_MVP').reasons.join(' ')).toMatch(/TWO-WAY players are routed as pitcher-only/i);
+    for (const designationType of ['FAN_FAVORITE', 'ALBATROSS', 'CAPTAIN', 'FAN_HOPEFUL', 'CORNERSTONE'] as const) {
+      expect(findRecord(report.records, 'position-leader', designationType).status).toBe('blocked');
+      expect(findRecord(report.records, 'two-way-ace', designationType).status).toBe('blocked');
+    }
+    expect(report.limitations.join(' ')).toMatch(/active preview-only designations are TEAM_MVP and ACE only/i);
+    expect(report.limitations.join(' ')).toMatch(/TWO-WAY players are routed as pitcher-only/i);
   });
 
   test('missing metadata, missing team payroll, FARM/free-agent status, and unavailable park factors are surfaced clearly', () => {

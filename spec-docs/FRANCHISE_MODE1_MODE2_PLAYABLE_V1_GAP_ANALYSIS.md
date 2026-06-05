@@ -49,7 +49,7 @@ Manual smoke feedback still blocks declaring playable v1 done:
 - Manual final-score entry and score-only boundaries need one more user-facing reconciliation pass before the score-only workflow can be treated as comfortable.
 - Schedule editing/CSV/manual schedule workflow remains a practical Mode 1/2 usability gap.
 - Trade/FARM roster movement continuity remains a likely P1 once the visible roster-row fixture is trustworthy.
-- Archive `game.parkFactors` trust tightening, full seeded state harness scope, and two-way MVP/Ace workflow policy remain known follow-ups.
+- Full seeded state harness scope remains a known follow-up. Archive `game.parkFactors` trust is tightened for verified SMB4 seed inputs, and internal-v1 TWO-WAY designation routing is explicitly pitcher-only through ACE.
 - Broader Mode 1/2 gaps and full spec parity remain outside this completed hardening wave.
 
 ## Active Priority
@@ -62,7 +62,7 @@ The next work should close the remaining release-confidence fixture gap before e
 2. Manual final-score entry and score-only boundary reconciliation.
 3. Schedule editing/CSV/manual schedule workflow.
 4. Trade/FARM roster movement continuity audit.
-5. Remaining compact trust-boundary tightening, including archive `game.parkFactors` and two-way MVP/Ace policy.
+5. Remaining compact trust-boundary tightening as audits find issues; archive `game.parkFactors` trust and internal-v1 TWO-WAY designation routing are no longer open policy questions.
 
 ## Explicit Exclusions
 
@@ -85,9 +85,9 @@ These are not active playable-v1 implementation targets in this plan:
 | Core launch/persistence smoke paths needed hardening | Creation/launch/delete/full-name smoke issues could strand the user | Mode 1 handoff assumptions; M2-D001 through M2-D007; M2-D029 | Committed slice `Harden franchise launch and persistence smoke paths` | Keep regression coverage; visual smoke still needs seeded repeatability | Completed hardening | Done | No duplicate slots, loading clears, GameTracker launch/resume, save-slot delete, full names | No AI simulation |
 | Generated data policy needed cleanup | DH leaked into prospects/scouts; names were repetitive; salary baseline was unclear | Mode 1 handoff assumptions; FARM/scouting specs; M2-D021 | Committed slice `Clean up franchise generated prospect and scout data` | Keep no-DH/name/salary generation tests green | Completed hardening | Done | Deterministic SMB4 name source, no generated data churn, salary baseline counts | Auto-draft excluded |
 | Team Hub roster scan was not efficient enough | User wanted sortable morale, salary, stats, designation columns | M2-D010, M2-D012, M2-D015, M2-D019, M2-D021 | Committed slice `Improve Team Hub roster scan table` | Keep hidden-safe scan table behavior and iPad-readable density | Completed hardening | Done | Hidden-safe FARM rows, stable sorting, no mutation | Relationship mutation and final designations blocked |
-| MVP/Ace preview floods users | Nearly every player could receive Team MVP; negative-WAR pitcher surfaced as Team MVP | M2-D011, M2-D019; designation worksheet decisions | Committed slice `Tighten MVP and Ace designation previews` | Keep MVP/Ace ranking selective and preview-only | Completed hardening | Done | Negative WAR exclusion, candidate caps, no award/final language | Future two-way MVP/Ace policy decision remains |
+| MVP/Ace preview floods users | Nearly every player could receive Team MVP; negative-WAR pitcher surfaced as Team MVP | M2-D011, M2-D019; designation worksheet decisions | Committed slice `Tighten MVP and Ace designation previews`; internal-v1 policy now routes TWO-WAY as pitcher-only through ACE | Keep MVP/Ace ranking selective and preview-only | Completed hardening | Done | Negative WAR exclusion, candidate caps, no award/final language, TWO-WAY pitcher-only routing | Future stricter two-way Team MVP criteria deferred |
 | Team salary/contract visibility was incomplete | Expected Wins/True Value felt disconnected without contracts/team salaries | M2-D021; salary spec | Committed slice `Show salary baselines in Team Hub analysis` | Keep salary totals and roster salary rows consistent and preview-only | Completed hardening | Done | Salary values match baseline, blocker copy clear, no recalculation controls | Finance `READ ONLY` chip polish remains |
-| Stadium source of truth was unclear | User did not know where dimensions/factors came from or how to edit them | M2-D020; stadium analytics spec | Committed slice `Clarify stadium source of truth` | Keep League Builder/Team Hub source and seed-factor status clear | Completed hardening | Done | Dimension source, seed factor identity, no custom/adaptive mutation | Archive `game.parkFactors` trust tightening remains |
+| Stadium source of truth was unclear | User did not know where dimensions/factors came from or how to edit them | M2-D020; stadium analytics spec | Committed slice `Clarify stadium source of truth`; archive factors are trusted only when verified as SMB4 seed inputs | Keep League Builder/Team Hub source and seed-factor status clear | Completed hardening | Done | Dimension source, seed factor identity, no custom/adaptive mutation | Adaptive park-factor persistence remains blocked |
 | UI density/readability needed smoke pass | Foundation/status panels were too wordy; GameTracker names could truncate; nested controls logged browser errors | Manual smoke feedback; roadmap operating rules | Committed slice `Tighten Mode 1 and Mode 2 dense UI` | Keep compact copy and readable dense rows; add seeded visual smoke later | Completed hardening | Done | iPad/desktop readability, no overlap, no nested-button regression | Seeded Team Hub/GameTracker screenshots still needed |
 | Safe visual smoke preview exists; populated row fixtures remain thin | Browser smoke now reaches seeded shell/foundation/WPA/fame/GameTracker long-name surfaces, but schedule-row and roster-row screenshots are not yet populated enough | Manual smoke feedback; release confidence | Committed slice `Add safe Mode 2 visual smoke preview`; route is read-only/dev-test gated and has focused tests | Add a compact deterministic fixture that shows at least one populated schedule row and one populated Team Hub roster row without relying on user local IndexedDB | P0 Release Confidence | Populated Schedule And Team Hub Roster Visual Fixture | iPad/desktop screenshots, no hidden prospect truth, no writes to real user stores, fixture labels cannot be mistaken for production data | No auto-draft, no generated schedules, no AI simulation |
 | UI is too wordy | Foundation panels and prompts are dense | Manual smoke feedback; roadmap operating rules | Many read-only panels include long explanatory copy to protect boundaries | Default surfaces should be concise; deeper explanation should move behind help/disclosure | P2 Copy/UI Cleanup | Copy/UI Cleanup: concise defaults with help affordances | Hidden-safety copy remains available, no loss of blockers, no mutation buttons | None |
@@ -112,7 +112,7 @@ These are not active playable-v1 implementation targets in this plan:
    - Committed. Added compact sortable roster columns and iPad-readable row density for salary, morale, stats/value, and preview designation status.
 
 4. **Dynamic Designation Correctness: MVP/Ace ranking and prompt volume**
-   - Committed. Bounded TEAM_MVP/ACE preview candidates, blocked negative-WAR/bad-evidence candidates, kept preview wording distinct from awards/designations, and avoided prompt floods.
+   - Committed. Bounded TEAM_MVP/ACE preview candidates, blocked negative-WAR/bad-evidence candidates, kept preview wording distinct from awards/designations, avoided prompt floods, and routed TWO-WAY players as pitcher-only through ACE for internal v1.
 
 5. **Stadium And League Builder Source-Of-Truth Pass**
    - Committed. Clarified stadium dimensions/source/editability in League Builder and Team Hub and improved seed-factor/spray evidence labels.
@@ -154,7 +154,7 @@ These are not active playable-v1 implementation targets in this plan:
    - Acceptance target: roster movement continuity is visible and portable without auto-draft or offseason execution.
 
 5. **Remaining Trust/Policy Tightening**
-   - Tighten archive `game.parkFactors` trust and decide future two-way MVP/Ace prompt policy.
+   - Continue compact trust-boundary tightening as audits find issues.
    - Acceptance target: compact copy remains operational while trust boundaries stay explicit.
 
 ## Audit Rules For The Next Slices
@@ -176,6 +176,6 @@ Every implementation slice above should be audited against:
 
 Playable v1 should not be declared done yet.
 
-The first Mode 1/Mode 2 user-facing hardening wave plus the Almanac/WPA/fame/visual-smoke trust wave are committed. Playable v1 should still not be declared done because populated schedule-row visual smoke, populated Team Hub roster-row visual smoke, manual score-only workflow clarity, manual schedule authoring/import, trade/FARM roster movement continuity, archive `game.parkFactors` trust, full seeded harness scope, and future two-way MVP/Ace policy remain unresolved.
+The first Mode 1/Mode 2 user-facing hardening wave plus the Almanac/WPA/fame/visual-smoke trust wave are committed. Playable v1 should still not be declared done because populated schedule-row visual smoke, populated Team Hub roster-row visual smoke, manual score-only workflow clarity, manual schedule authoring/import, trade/FARM roster movement continuity, and full seeded harness scope remain unresolved. Archive `game.parkFactors` trust and internal-v1 TWO-WAY designation routing are now tightened policy boundaries, not open playable-v1 blockers.
 
 The right next milestone is **Populated Schedule And Team Hub Roster Visual Fixture**, because the latest smoke preview proves safe shell/analysis/WPA/fame/GameTracker visibility but still does not prove the row-rich schedule and roster states a user actually scans on iPad. The advanced Mode 2 foundation remains useful, but it should stay read-only, preview-only, confirmation-gated, or blocked until the core playable loop and continuity story are reliable and clear.

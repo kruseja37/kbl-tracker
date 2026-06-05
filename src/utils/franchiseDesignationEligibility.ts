@@ -18,6 +18,20 @@ export type FranchiseDesignationEligibilityType =
 
 export type FranchiseDesignationEligibilityStatus = 'eligible' | 'preview-only' | 'blocked';
 
+export type FranchiseDesignationV1PolicyStatus =
+  | 'active-preview-only'
+  | 'blocked'
+  | 'deferred';
+
+export interface FranchiseDesignationV1Policy {
+  designationType: FranchiseDesignationEligibilityType;
+  status: FranchiseDesignationV1PolicyStatus;
+  persistable: false;
+  promptAuthority: 'eligibility-context-adapter' | 'explicit-trusted-bridge-input-only' | 'none';
+  summary: string;
+  blockers: string[];
+}
+
 export interface FranchiseDesignationEligibilityRecord {
   contractVersion: typeof FRANCHISE_DESIGNATION_ELIGIBILITY_CONTRACT_VERSION;
   franchiseId: string;
@@ -82,7 +96,93 @@ interface RankedCandidate {
   score: number;
 }
 
-const PITCHER_VALUE_POSITIONS = new Set(['P', 'SP', 'RP', 'CP', 'SP/RP', 'TWO-WAY']);
+export const FRANCHISE_PITCHER_DESIGNATION_POSITIONS = new Set(['P', 'SP', 'RP', 'CP', 'SP/RP', 'TWO-WAY']);
+
+export const FRANCHISE_DESIGNATION_V1_POLICY_MATRIX: readonly FranchiseDesignationV1Policy[] = [
+  {
+    designationType: 'TEAM_MVP',
+    status: 'active-preview-only',
+    persistable: false,
+    promptAuthority: 'eligibility-context-adapter',
+    summary: 'Ranked/selective preview for current MLB position players with positive visible WAR-like performance evidence.',
+    blockers: [
+      'Final designation persistence is blocked.',
+      'Pitcher identities, including TWO-WAY in internal v1, route through ACE instead of TEAM_MVP.',
+    ],
+  },
+  {
+    designationType: 'ACE',
+    status: 'active-preview-only',
+    persistable: false,
+    promptAuthority: 'eligibility-context-adapter',
+    summary: 'Ranked/selective preview for current MLB pitcher identities with pWAR >= 0.5.',
+    blockers: [
+      'Final designation persistence is blocked.',
+      'ACE does not create salary, morale, relationship, award, or Mode 3 effects automatically.',
+    ],
+  },
+  {
+    designationType: 'FAN_FAVORITE',
+    status: 'blocked',
+    persistable: false,
+    promptAuthority: 'explicit-trusted-bridge-input-only',
+    summary: 'Blocked until trusted True Value/value-delta and fan attachment policy exist.',
+    blockers: [
+      'Canonical True Value/value-delta is unavailable.',
+      'Fan attachment and durable designation state are not trusted for internal v1.',
+    ],
+  },
+  {
+    designationType: 'ALBATROSS',
+    status: 'blocked',
+    persistable: false,
+    promptAuthority: 'explicit-trusted-bridge-input-only',
+    summary: 'Blocked until trusted True Value/value-delta and salary/value policy exist.',
+    blockers: [
+      'Canonical True Value/value-delta is unavailable.',
+      'Salary/value designation policy is not trusted for internal v1.',
+    ],
+  },
+  {
+    designationType: 'CAPTAIN',
+    status: 'blocked',
+    persistable: false,
+    promptAuthority: 'none',
+    summary: 'Blocked until hidden charisma/leadership safety policy is approved.',
+    blockers: [
+      'Hidden charisma/leadership safety is not approved.',
+      'Relationship and morale amplification rules are deferred.',
+    ],
+  },
+  {
+    designationType: 'FAN_HOPEFUL',
+    status: 'blocked',
+    persistable: false,
+    promptAuthority: 'explicit-trusted-bridge-input-only',
+    summary: 'Blocked in eligibility until a visible-safe prospect source exists; hidden FARM truth must never be exposed.',
+    blockers: [
+      'Visible-safe prospect assignment source is not promoted into designation eligibility.',
+      'Unrevealed FARM true ratings, true grade, hidden scout truth, and hidden personality modifiers are blocked.',
+    ],
+  },
+  {
+    designationType: 'CORNERSTONE',
+    status: 'blocked',
+    persistable: false,
+    promptAuthority: 'explicit-trusted-bridge-input-only',
+    summary: 'Blocked until durable designation state and roster-move consequence policy exist.',
+    blockers: [
+      'Durable designation state is not trusted.',
+      'Roster-move consequence policy is deferred.',
+    ],
+  },
+] as const;
+
+export function franchiseDesignationV1Policy(
+  designationType: FranchiseDesignationEligibilityType,
+): FranchiseDesignationV1Policy {
+  return FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.find((policy) => policy.designationType === designationType)!;
+}
 
 function unique(values: string[]): string[] {
   return Array.from(new Set(values));
@@ -93,7 +193,7 @@ function candidateKey(teamId: string | null, designationType: RankedDesignationT
 }
 
 function isPitcherPosition(position: string | null): boolean {
-  return PITCHER_VALUE_POSITIONS.has(String(position ?? '').trim().toUpperCase());
+  return FRANCHISE_PITCHER_DESIGNATION_POSITIONS.has(String(position ?? '').trim().toUpperCase());
 }
 
 function rankedScore(row: FranchiseValueInputRow, designationType: RankedDesignationType): number | null {
@@ -112,7 +212,11 @@ function rankingBlockers(row: FranchiseValueInputRow, designationType: RankedDes
     reasons.push('TEAM_MVP preview requires positive season/team-relative WAR evidence.');
   }
   if (designationType === 'TEAM_MVP' && isPitcherPosition(row.valuePosition)) {
-    reasons.push('TEAM_MVP preview is limited to position-player candidates in internal v1; pitcher recognition uses ACE.');
+    if (String(row.valuePosition ?? '').trim().toUpperCase() === 'TWO-WAY') {
+      reasons.push('TWO-WAY players are routed as pitcher-only for internal v1 designation previews; stricter two-way TEAM_MVP criteria are deferred.');
+    } else {
+      reasons.push('TEAM_MVP preview is limited to position-player candidates in internal v1; pitcher recognition uses ACE.');
+    }
   }
   return reasons;
 }
@@ -254,19 +358,19 @@ function valueDesignationBlockers(
 function deferredNarrativeBlockers(designationType: 'CAPTAIN' | 'FAN_HOPEFUL' | 'CORNERSTONE'): string[] {
   if (designationType === 'CAPTAIN') {
     return [
-      'CAPTAIN is deferred because leadership, morale, and relationship inputs are not canonical in internal v1.',
-      'Awards and historical designation inputs are not finalized for persistence.',
+      'CAPTAIN is blocked until hidden charisma/leadership safety policy is approved.',
+      'Morale amplification, relationship, and historical designation inputs are not canonical in internal v1.',
     ];
   }
   if (designationType === 'FAN_HOPEFUL') {
     return [
-      'FAN_HOPEFUL is deferred because fan, morale, and True Value inputs are not canonical in internal v1.',
-      'Awards and narrative inputs are not finalized for persistence.',
+      'FAN_HOPEFUL is blocked in eligibility until a visible-safe prospect assignment source is promoted.',
+      'Unrevealed FARM true ratings, true grade, hidden scout truth, and hidden personality modifiers remain blocked.',
     ];
   }
   return [
-    'CORNERSTONE is deferred because future value, contract trajectory, morale, and relationship inputs are not canonical in internal v1.',
-    'True Value and awards inputs are unavailable for final designation persistence.',
+    'CORNERSTONE is blocked until durable designation state and roster-move consequence policy are trusted.',
+    'Future value, contract trajectory, morale, relationship, True Value, and awards inputs are unavailable for final designation persistence.',
   ];
 }
 
@@ -334,6 +438,8 @@ export function classifyFranchiseDesignationEligibility(
       ...valueInputReport.limitations,
       ...records.flatMap((record) => record.limitations),
       'No dynamic designation is persistable in internal v1 conditions.',
+      'Internal v1 active preview-only designations are TEAM_MVP and ACE only; Fan Favorite, Albatross, Cornerstone, Captain, and Fan Hopeful remain blocked/deferred by policy matrix.',
+      'TWO-WAY players are routed as pitcher-only for internal v1 designation previews and can only appear through ACE when pitcher evidence qualifies.',
     ]),
   };
 }

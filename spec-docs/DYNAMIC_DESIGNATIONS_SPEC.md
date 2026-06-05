@@ -17,6 +17,23 @@ Dynamic designations are morale context for Franchise v1, but they should not si
 
 See `FRANCHISE_MODE2_DYNAMIC_DESIGNATION_MORALE_BRIDGE.md` for the active v1 bridge contract.
 
+## Franchise Internal v1 Policy Matrix Checkpoint (June 2026)
+
+Internal v1 currently treats dynamic designations as read-only preview context, not final season designations.
+
+| Designation | Internal v1 status | Prompt authority | Policy |
+|---|---|---|---|
+| Team MVP | Active preview-only | Eligibility context adapter | Ranked/selective current MLB position-player preview only. Positive visible WAR-like evidence required. Final persistence, awards, salary, morale automation, relationships, and Mode 3 effects remain blocked. |
+| Ace | Active preview-only | Eligibility context adapter | Ranked/selective pitcher preview only. Pitcher-specific positive evidence required, currently pWAR >= 0.5. Final persistence and downstream automation remain blocked. |
+| TWO-WAY players | Pitcher-only routing for v1 | ACE only | A `TWO-WAY` value/position identity is treated as pitcher identity for internal v1. It is blocked from Team MVP and may only appear as Ace when pitcher evidence qualifies. Stricter two-way MVP criteria are deferred. |
+| Fan Favorite | Blocked | Explicit trusted bridge input only, not app eligibility | Requires trusted True Value/value-delta, durable designation state, and fan attachment policy. Preview readiness is inspection context only. |
+| Albatross | Blocked | Explicit trusted bridge input only, not app eligibility | Requires trusted True Value/value-delta plus salary/value policy. Preview readiness is inspection context only. |
+| Cornerstone | Blocked | Explicit trusted bridge input only, not app eligibility | Requires trusted durable designation state and roster-move consequence policy. |
+| Captain | Blocked | None | Requires hidden charisma/leadership safety approval plus relationship/morale amplification rules. |
+| Fan Hopeful | Blocked in eligibility | Explicit prospect-safe bridge input only | Requires a visible-safe prospect source. Unrevealed FARM true ratings, true grade, hidden scout truth, and hidden personality modifiers remain blocked. |
+
+No designation record is persistable in current internal v1 conditions.
+
 ## Franchise Internal v1 Readiness Checkpoint (June 2026)
 
 Current v1 exposes Fan Favorite/Albatross readiness as read-only preview context only:

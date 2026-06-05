@@ -12,7 +12,7 @@ Manual smoke feedback remains a bug and feature backlog. The build order for Mod
 
 Latest committed checkpoint: `3625f02 Add safe Mode 2 visual smoke preview`.
 
-Latest working checkpoint: Final Playable V1 Gap Reconciliation And Next Priority Decision doc pass.
+Latest working checkpoint: Dynamic Designation Policy Matrix And Two-Way Boundary.
 
 Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved. The technical foundation is safe, and the first Mode 1/2 playable hardening wave plus the Almanac/WPA/fame/visual-smoke trust wave are committed, but manual smoke feedback still blocks declaring user-facing playable v1 complete.
 
@@ -27,6 +27,7 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Team Hub exposes fan/player morale history and manual scoped morale controls while keeping profiles, salary, relationships, stories, and Mode 3 separate.
 - Fan morale prompt formulas currently cover confirmed game results, streaks, 7+ run blowouts, archive-backed no-hitter/perfect-game fame events, and performance-gap team fan morale prompts from durable expected-wins baseline evidence.
 - Dynamic designation morale bridge exists for safe confirmation-gated prompt candidates, and Team Hub surfaces preview-only TEAM_MVP/ACE recognition candidates through the random-event workflow.
+- Dynamic designation policy matrix is explicit: TEAM_MVP/ACE are the only app-facing active preview-only designations, TWO-WAY routes as pitcher-only through ACE for internal v1, and Fan Favorite/Albatross/Cornerstone/Captain/Fan Hopeful remain blocked or explicit trusted-bridge-only context.
 - Fan Favorite/Albatross readiness can be inspected from preview True Value/value-delta rows, but final designation behavior, random-event morale prompts, salary movement, relationships, and Mode 3 remain blocked.
 - Numeric WAR preview values, position-relative True Value preview, and expected-wins preview exist as read-only, untrusted contracts.
 - Team Hub surfaces True Value and expected-wins previews in Mode 2 Foundation Status with explicit preview-only boundaries.
@@ -65,7 +66,7 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 4. Trade And FARM Roster Movement Continuity Audit
    - Prove transaction history, current roster rows, call-up/send-down evidence, and hidden-safe FARM/prospect boundaries stay consistent and portable.
 5. Remaining Mode 1/2 Trust/Policy Tightening
-   - Tighten archive `game.parkFactors` trust and decide the future two-way MVP/Ace prompt workflow policy.
+   - Continue compact trust-boundary tightening as audits find issues. The internal-v1 TWO-WAY designation route is now pitcher-only through ACE; stricter two-way Team MVP criteria remain deferred.
 
 ## Playable V1 Remaining Work
 
@@ -74,9 +75,8 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Manual final-score entry and score-only boundary clarity.
 - Manual schedule editing/CSV/import workflow.
 - Trade/FARM roster movement continuity.
-- Archive `game.parkFactors` trust tightening so archived park-factor data is not mistaken for trusted adaptive persistence.
 - Full seeded state harness scope beyond the current safe preview route.
-- Two-way MVP/Ace policy decision for future confirmation flow versus automation/undo behavior.
+- Future stricter two-way Team MVP criteria, if approved later.
 
 ## Full Spec Parity Backlog
 
@@ -102,9 +102,9 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Fan Favorite and Albatross final behavior requires an explicit promotion decision for trusted True Value/value-delta inputs.
 - Captain morale amplification remains blocked until hidden-charisma reveal/safety policy is approved.
 - Fan Hopeful morale boosts must be prospect-safe and must not expose hidden FARM truth.
+- TWO-WAY designation routing is pitcher-only for internal v1; stricter two-way Team MVP criteria are deferred.
 - Profile automation, salary movement, final True Value, final designation changes, relationship mutation, story persistence beyond the random-event log, Mode 3/offseason effects, and unrevealed FARM hidden-truth effects remain blocked.
 - Existing prototype/global `useFanMorale` paths are not canonical Franchise v1 morale storage.
-- Archive `game.parkFactors` trust remains unresolved and must not be promoted to trusted adaptive park-factor evidence without a focused future slice.
 - Mode 1/Mode 2 playable hardening remains active until the user-facing loop is approved; foundation-safe does not mean playable-complete.
 
 ## Operating Rules
