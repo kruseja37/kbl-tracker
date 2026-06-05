@@ -183,6 +183,27 @@ describe('LeagueBuilderTeams Component', () => {
       });
     });
 
+    test('shows League Builder stadium source guidance for unmatched custom stadium names', async () => {
+      render(<LeagueBuilderTeams />);
+      fireEvent.click(screen.getAllByTitle('Edit team')[0]);
+
+      expect(await screen.findByText('Stadium source of truth')).toBeInTheDocument();
+      expect(screen.getByText(/Custom stadium dimensions are not stored in League Builder yet/i)).toBeInTheDocument();
+      expect(screen.getByText(/Mode 2 will copy this stadium name/i)).toBeInTheDocument();
+      expect(screen.getByText(/Team Hub reads the copied Mode 1 team stadium snapshot/i)).toBeInTheDocument();
+    });
+
+    test('shows matched SMB4 stadium dimensions as the seed source', async () => {
+      render(<LeagueBuilderTeams />);
+      fireEvent.click(screen.getAllByTitle('Edit team')[0]);
+
+      const stadiumInput = await screen.findByDisplayValue('Fenway Park');
+      fireEvent.change(stadiumInput, { target: { value: 'Apple Field' } });
+
+      expect(screen.getByText(/Dimensions will use SMB4 seed data for Apple Field: LF 337, CF 419, RF 347/i)).toBeInTheDocument();
+      expect(screen.queryByText(/Custom stadium dimensions are not stored in League Builder yet/i)).not.toBeInTheDocument();
+    });
+
     test('round-trips team editorial identity fields through updateTeam', async () => {
       render(<LeagueBuilderTeams />);
       fireEvent.click(screen.getAllByTitle('Edit team')[0]);

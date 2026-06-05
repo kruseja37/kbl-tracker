@@ -3140,7 +3140,7 @@ export function TeamHubContent() {
                     : "bg-[#5A8352] text-[#E8E8D8]/40 cursor-not-allowed"
                 }`}
               >
-                SPRAY CHARTS DEFERRED
+                SPRAY INSPECTOR IN STADIUM
               </button>
             </div>
           </div>
@@ -3206,9 +3206,9 @@ export function TeamHubContent() {
 
           {statsView === "spraychart" && (
             <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-8 text-center">
-              <div className="text-[12px] text-[#E8E8D8]/50 mb-2">SPRAY CHARTS DEFERRED</div>
+              <div className="text-[12px] text-[#E8E8D8]/50 mb-2">ROW EVIDENCE INSPECTOR AVAILABLE IN STADIUM TAB</div>
               <div className="text-[10px] text-[#E8E8D8]/40">
-                Franchise v1 does not display fabricated batted-ball distributions or advanced contact metrics.
+                Franchise v1 shows archive-backed spray rows in Team Hub Stadium. Full heat maps and stadium diagrams remain deferred.
               </div>
             </div>
           )}
@@ -4659,6 +4659,15 @@ function FranchiseStadiumFoundationPanel({
   const visibleSprayRows = filteredSprayRows.slice(0, 12);
   const dimensions = selected?.dimensions ?? null;
   const seedFactors = selected?.seedParkFactors ?? null;
+  const stadiumSourceLabel = selected
+    ? 'Mode 2 source: copied Mode 1 / League Builder team stadium snapshot.'
+    : 'Mode 2 source: no copied stadium snapshot loaded.';
+  const dimensionsSourceLabel = dimensions
+    ? 'Dimensions source: SMB4 park dimensions database matched by stadium name.'
+    : 'Dimensions source: missing/untrusted because the copied stadium name does not match the SMB4 dimensions database.';
+  const seedSourceLabel = selected?.seedParkFactorsTrusted
+    ? 'Seed factor source: SMB4-derived static park factors copied/read from Mode 1 context.'
+    : 'Seed factor source: missing/untrusted; adaptive park factors are not persisted.';
 
   return (
     <section
@@ -4672,7 +4681,7 @@ function FranchiseStadiumFoundationPanel({
           <div>
             <div className="text-[14px] font-bold text-[#E8E8D8]">STADIUM FOUNDATION</div>
             <div className="mt-1 max-w-3xl text-[10px] leading-snug text-[#E8E8D8]/70">
-              Read-only stadium identity, seed park factors, and archive-backed spray evidence. Adaptive factors and stadium records stay preview-only.
+              Read-only stadium identity, seed park factors, and archive-backed spray evidence. Source-of-truth is the copied Mode 1/League Builder stadium name plus SMB4 seed data where matched. Adaptive factors and stadium records stay preview-only.
             </div>
           </div>
         </div>
@@ -4703,6 +4712,13 @@ function FranchiseStadiumFoundationPanel({
 
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <FoundationStatusCard
+            title="SOURCE OF TRUTH"
+            status={selected ? 'trusted' : 'blocked'}
+            body={selected
+              ? 'Copied from Mode 1/League Builder. Custom dimensions are not editable in Mode 2.'
+              : 'Missing copied stadium snapshot or archive stadium row.'}
+          />
+          <FoundationStatusCard
             title="SEED / STATIC FACTORS"
             status={selected?.seedParkFactorsTrusted ? 'trusted' : 'blocked'}
             body={selected?.seedParkFactorsTrusted
@@ -4725,6 +4741,13 @@ function FranchiseStadiumFoundationPanel({
             body="Storage boundary exists. Evidence-only records; no Team Hub edit/delete/generate controls."
           />
         </div>
+      </div>
+
+      <div className="mb-3 border-2 border-[#4A6844] bg-[#3F563F] p-2 text-[10px] leading-snug text-[#E8E8D8]/70">
+        <div>{stadiumSourceLabel}</div>
+        <div>{dimensionsSourceLabel}</div>
+        <div>{seedSourceLabel}</div>
+        <div>League Builder currently edits stadium name/capacity only; custom dimension persistence is a separate future slice.</div>
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
@@ -4766,6 +4789,9 @@ function FranchiseStadiumFoundationPanel({
             <div className="text-[9px] font-bold text-[#E8E8D8]/60">
               {filteredSprayRows.length} ROW(S) · READ ONLY
             </div>
+          </div>
+          <div className="mb-2 text-[9px] leading-snug text-[#E8E8D8]/55">
+            Row evidence inspector available for batting, pitching, and fielding spray rows; full heat map and stadium diagram rendering remain deferred.
           </div>
 
           {selectedRows.length > 0 ? (

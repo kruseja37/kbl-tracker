@@ -36,6 +36,7 @@ import {
   saveManagerProfile,
 } from "../../../utils/managerIdentityStorage";
 import { getDefaultManagerIdForTeam } from "../../../utils/managerWpaDerivation";
+import { getParkByName } from "../../../data/parkLookup";
 
 const ERA_FLAVORS: EraFlavor[] = ['GOLDEN_AGE', 'CLASSIC_TV', 'MODERN_LOCAL'];
 
@@ -530,6 +531,10 @@ export function LeagueBuilderTeams() {
     );
     return sameLeagueTeams.filter((team) => !selectedOpponentIds.has(team.id));
   }, [formData.rivalries, sameLeagueTeams]);
+  const stadiumDimensionMatch = useMemo(() => {
+    const stadiumName = formData.stadium.trim();
+    return stadiumName ? getParkByName(stadiumName) : undefined;
+  }, [formData.stadium]);
 
   const addHeritageFact = () => {
     setFormData((prev) => {
@@ -867,6 +872,21 @@ export function LeagueBuilderTeams() {
                     placeholder="e.g., 41500"
                     className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] placeholder-[#E8E8D8]/40 focus:border-[#E8E8D8] outline-none"
                   />
+                </div>
+              </div>
+              <div className="bg-[#4A6844]/55 border-[4px] border-[#3F5A3A] p-3 text-xs leading-snug text-[#E8E8D8]/70">
+                <div className="font-bold text-[#C4A853]">Stadium source of truth</div>
+                {stadiumDimensionMatch ? (
+                  <div className="mt-1">
+                    Dimensions will use SMB4 seed data for {stadiumDimensionMatch.name}: LF {stadiumDimensionMatch.lf}, CF {stadiumDimensionMatch.cf}, RF {stadiumDimensionMatch.rf}.
+                  </div>
+                ) : (
+                  <div className="mt-1">
+                    Custom stadium dimensions are not stored in League Builder yet. Mode 2 will copy this stadium name, but dimensions and seed park factors remain missing/untrusted unless the name matches the SMB4 park database.
+                  </div>
+                )}
+                <div className="mt-1 text-[#E8E8D8]/55">
+                  Team Hub reads the copied Mode 1 team stadium snapshot; adaptive park-factor persistence remains blocked.
                 </div>
               </div>
 

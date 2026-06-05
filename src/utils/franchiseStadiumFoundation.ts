@@ -6,6 +6,7 @@ import {
   type ZoneDepth,
 } from '../data/fieldZones';
 import { getParkByName, getStableParkId, type ParkDimensions } from '../data/parkLookup';
+import { getDerivedParkFactorsIfAvailable } from '../engines/parkFactorDeriver';
 import type { ParkFactors } from '../types/war';
 import type { AtBatEvent, FieldingEvent } from './eventLog';
 import type { CompletedGameRecord } from './gameStorage';
@@ -402,7 +403,13 @@ function buildStadiums(
     const stadiumName = snapshot.stadium;
     const stadiumId = normalizeStadiumId(stadiumName, snapshot.stadiumId);
     if (!stadiumName || !stadiumId) continue;
-    ensure(stadiumName, stadiumId, snapshot.teamId, snapshot.teamName, null);
+    ensure(
+      stadiumName,
+      stadiumId,
+      snapshot.teamId,
+      snapshot.teamName,
+      getDerivedParkFactorsIfAvailable(stadiumName) ?? null,
+    );
   }
 
   for (const game of scopedGames) {

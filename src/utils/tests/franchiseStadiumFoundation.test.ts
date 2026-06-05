@@ -214,6 +214,74 @@ describe('franchise stadium foundation', () => {
     });
   });
 
+  test('trusts SMB4 stadium dimensions and seed factors from copied Mode 1 snapshots without archive games', () => {
+    const report = buildFranchiseStadiumFoundationReport({
+      ...scope,
+      stadiumSnapshots: [stadiumSnapshot()],
+      completedGames: [],
+      atBatEvents: [],
+      fieldingEvents: [],
+    });
+
+    expect(report.stadiumIdentity.status).toBe('trusted');
+    expect(report.stadiumIdentity.reasons.join(' ')).toContain('Mode 1 handoff snapshots');
+    expect(report.stadiumIdentity.stadiums[0]).toMatchObject({
+      stadiumId: 'apple-field',
+      stadiumName: 'Apple Field',
+      teamId: 'team-home',
+      archiveGameRows: 0,
+      sprayEventRows: 0,
+      seedParkFactorsTrusted: true,
+      seedParkFactors: {
+        stadiumName: 'Apple Field',
+        source: 'SEED',
+      },
+      adaptiveParkFactorPreview: {
+        status: 'not-applicable',
+        gamesIncluded: 0,
+        trustedForPersistence: false,
+      },
+    });
+    expect(report.stadiumIdentity.stadiums[0].dimensions).toMatchObject({
+      name: 'Apple Field',
+      lf: 337,
+      cf: 419,
+      rf: 347,
+    });
+    expect(report.parkFactors.status).toBe('trusted');
+    expect(report.parkFactors.seedFactorsTrusted).toBe(true);
+  });
+
+  test('copies unmatched League Builder stadium names but blocks dimensions and seed factors', () => {
+    const report = buildFranchiseStadiumFoundationReport({
+      ...scope,
+      stadiumSnapshots: [
+        stadiumSnapshot({
+          stadium: 'Custom Backyard',
+          stadiumId: 'custom-backyard',
+          hasSeedParkFactors: false,
+        }),
+      ],
+      completedGames: [],
+      atBatEvents: [],
+      fieldingEvents: [],
+    });
+
+    expect(report.stadiumIdentity.status).toBe('trusted');
+    expect(report.stadiumIdentity.stadiums[0]).toMatchObject({
+      stadiumId: 'custom-backyard',
+      stadiumName: 'Custom Backyard',
+      dimensions: null,
+      seedParkFactors: null,
+      seedParkFactorsTrusted: false,
+      archiveGameRows: 0,
+      sprayEventRows: 0,
+    });
+    expect(report.parkFactors.status).toBe('blocked');
+    expect(report.parkFactors.reasons.join(' ')).toContain('Seed/static park factors are unavailable');
+    expect(report.parkFactors.limitations.join(' ')).toContain('No scoped archive sample exists yet');
+  });
+
   test('projects batting, pitching, and fielding spray rows from scoped archive event evidence', () => {
     const report = buildFranchiseStadiumFoundationReport({
       ...scope,

@@ -1416,6 +1416,12 @@ describe('TeamHubContent franchise-owned visible reads', () => {
 
     expect(within(stadiumRegion).getByText('STADIUM FOUNDATION')).toBeInTheDocument();
     expect(within(stadiumRegion).getAllByText('Apple Field').length).toBeGreaterThan(0);
+    expect(within(stadiumRegion).getByText('SOURCE OF TRUTH')).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText(/Copied from Mode 1\/League Builder/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText(/Mode 2 source: copied Mode 1 \/ League Builder team stadium snapshot/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText(/Dimensions source: SMB4 park dimensions database matched by stadium name/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText(/Seed factor source: SMB4-derived static park factors copied\/read from Mode 1 context/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText(/League Builder currently edits stadium name\/capacity only/i)).toBeInTheDocument();
     expect(within(stadiumRegion).getByText('SEED / STATIC FACTORS')).toBeInTheDocument();
     expect(within(stadiumRegion).getByText(/Seed park factors are trusted as v1 stadium inputs/i)).toBeInTheDocument();
     expect(within(stadiumRegion).getByText('ADAPTIVE FACTORS')).toBeInTheDocument();
@@ -1426,6 +1432,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(stadiumRegion).getByText(/Archive rows: 1. Spray rows: 3/i)).toBeInTheDocument();
     expect(within(stadiumRegion).getByText(/3 selected-stadium row\(s\): batting 1, pitching 1, fielding 1/i)).toBeInTheDocument();
     expect(within(stadiumRegion).getByText('SPRAY EVIDENCE INSPECTOR')).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText(/Row evidence inspector available for batting, pitching, and fielding spray rows; full heat map and stadium diagram rendering remain deferred/i)).toBeInTheDocument();
     expect(within(stadiumRegion).getByText(/3 ROW\(S\) · READ ONLY/i)).toBeInTheDocument();
     expect(within(stadiumRegion).getByText('Batter One')).toBeInTheDocument();
     expect(within(stadiumRegion).getByText('Pitcher One')).toBeInTheDocument();
