@@ -38,28 +38,31 @@ That foundation is technically safer than it was, and the first hardening wave h
 - Team Hub finance/analysis surfaces show salary baselines and clearer True Value/Expected Wins preview-only framing.
 - League Builder and Team Hub stadium source-of-truth/status copy is clearer, with spray evidence labeled as row evidence rather than fully deferred.
 - A dense UI pass compacted recent surfaces and covered reachable Mode 1/2 browser smoke, while preserving a known need for repeatable seeded Team Hub/GameTracker screenshots.
-- The `/__preview/franchise-v1-visual-smoke` route is now dev/test gated and non-mutating/read-only. The dense UI screenshots used seeded preview labels, but the route does not write current-game, completed-game, schedule, franchise, or Almanac storage. Populated schedule-row and populated Team Hub roster-row visual smoke remains a future fixture check.
+- Franchise-to-Almanac continuity is now covered for approved franchise player/team/game archive evidence, save-slot manifest/export/delete behavior, and score-only boundaries.
+- Archived franchise WPA/Manager Moments evidence is visible in approved read-only surfaces without adding new formulas or fabricating score-only evidence.
+- Fame-event continuity is hardened for trusted completed-game no-hitter/perfect-game context and confirmation-gated fan morale prompt consumers; score-only/manual result rows remain blocked from fake fame/player-stat/WPA evidence.
+- The `/__preview/franchise-v1-visual-smoke` route is dev/test gated and non-mutating/read-only. It supports repeatable iPad/desktop screenshots for the Mode 1/2 shell, Team Hub foundation/finance/stadium panels, Game Detail WPA/fame evidence, Player Instance Card WPA evidence, and GameTracker long-name display.
 
 Manual smoke feedback still blocks declaring playable v1 done:
 
-- Franchise-to-Almanac persistence/continuity remains unclear, and smoke explicitly reported that nothing from Franchise Mode appears to persist to Almanac.
-- WPA/Manager WPA visibility still needs a trusted v1 decision.
-- Immaculate inning/fame event correctness has a known false-positive risk before history/fame evidence becomes more visible.
-- Visual smoke still needs a seeded Team Hub/live GameTracker harness or fixture state for repeatable screenshots.
-- Finance `READ ONLY` chip polish, archive `game.parkFactors` trust tightening, and two-way MVP/Ace workflow policy remain known follow-ups.
+- Populated schedule-row and populated Team Hub roster-row visual smoke remain open because the safe preview route currently covers shell/foundation evidence more strongly than row-rich schedule/roster fixtures.
+- Manual final-score entry and score-only boundaries need one more user-facing reconciliation pass before the score-only workflow can be treated as comfortable.
+- Schedule editing/CSV/manual schedule workflow remains a practical Mode 1/2 usability gap.
+- Trade/FARM roster movement continuity remains a likely P1 once the visible roster-row fixture is trustworthy.
+- Archive `game.parkFactors` trust tightening, full seeded state harness scope, and two-way MVP/Ace workflow policy remain known follow-ups.
 - Broader Mode 1/2 gaps and full spec parity remain outside this completed hardening wave.
 
 ## Active Priority
 
 Mode 1 and Mode 2 only until playable v1 is approved.
 
-The next work should harden continuity and trust on top of the now-committed playable loop:
+The next work should close the remaining release-confidence fixture gap before expanding workflows:
 
-1. Franchise-to-Almanac persistence and continuity.
-2. WPA/Manager WPA visibility decision.
-3. Immaculate inning/fame event correctness.
-4. Seeded visual smoke harness for Team Hub and GameTracker.
-5. Remaining compact copy polish and trust-boundary tightening.
+1. Populated schedule-row and Team Hub roster-row visual fixture.
+2. Manual final-score entry and score-only boundary reconciliation.
+3. Schedule editing/CSV/manual schedule workflow.
+4. Trade/FARM roster movement continuity audit.
+5. Remaining compact trust-boundary tightening, including archive `game.parkFactors` and two-way MVP/Ace policy.
 
 ## Explicit Exclusions
 
@@ -86,11 +89,15 @@ These are not active playable-v1 implementation targets in this plan:
 | Team salary/contract visibility was incomplete | Expected Wins/True Value felt disconnected without contracts/team salaries | M2-D021; salary spec | Committed slice `Show salary baselines in Team Hub analysis` | Keep salary totals and roster salary rows consistent and preview-only | Completed hardening | Done | Salary values match baseline, blocker copy clear, no recalculation controls | Finance `READ ONLY` chip polish remains |
 | Stadium source of truth was unclear | User did not know where dimensions/factors came from or how to edit them | M2-D020; stadium analytics spec | Committed slice `Clarify stadium source of truth` | Keep League Builder/Team Hub source and seed-factor status clear | Completed hardening | Done | Dimension source, seed factor identity, no custom/adaptive mutation | Archive `game.parkFactors` trust tightening remains |
 | UI density/readability needed smoke pass | Foundation/status panels were too wordy; GameTracker names could truncate; nested controls logged browser errors | Manual smoke feedback; roadmap operating rules | Committed slice `Tighten Mode 1 and Mode 2 dense UI` | Keep compact copy and readable dense rows; add seeded visual smoke later | Completed hardening | Done | iPad/desktop readability, no overlap, no nested-button regression | Seeded Team Hub/GameTracker screenshots still needed |
-| Visual smoke needs seeded repeatability | Current browser smoke cannot reliably reach Team Hub/live GameTracker in a fresh IndexedDB context | Manual smoke feedback; release confidence | Browser smoke covered reachable surfaces; `/__preview/franchise-v1-visual-smoke` is safe/read-only, but fresh context lacks prepared League Builder/FARM/scouting/schedule state | Provide or document a seeded smoke harness/fixture state for Team Hub and GameTracker screenshots without mutating real app storage | P0 Release Confidence | Seeded Visual Smoke Harness For Team Hub And GameTracker | Deterministic setup, no user-data dependency, screenshots at iPad and desktop widths, preview routes remain non-mutating | No auto-draft unless separately approved as tooling |
+| Safe visual smoke preview exists; populated row fixtures remain thin | Browser smoke now reaches seeded shell/foundation/WPA/fame/GameTracker long-name surfaces, but schedule-row and roster-row screenshots are not yet populated enough | Manual smoke feedback; release confidence | Committed slice `Add safe Mode 2 visual smoke preview`; route is read-only/dev-test gated and has focused tests | Add a compact deterministic fixture that shows at least one populated schedule row and one populated Team Hub roster row without relying on user local IndexedDB | P0 Release Confidence | Populated Schedule And Team Hub Roster Visual Fixture | iPad/desktop screenshots, no hidden prospect truth, no writes to real user stores, fixture labels cannot be mistaken for production data | No auto-draft, no generated schedules, no AI simulation |
 | UI is too wordy | Foundation panels and prompts are dense | Manual smoke feedback; roadmap operating rules | Many read-only panels include long explanatory copy to protect boundaries | Default surfaces should be concise; deeper explanation should move behind help/disclosure | P2 Copy/UI Cleanup | Copy/UI Cleanup: concise defaults with help affordances | Hidden-safety copy remains available, no loss of blockers, no mutation buttons | None |
-| WPA/Manager WPA visibility is insufficient | User sees no visible WPA for players/managers | M2-D011, M2-D012 | WPA/Manager WPA engines and archives are strong, but visible surfaces may not be obvious | Decide and expose trusted WPA/Manager WPA read surfaces if they remain v1 | P2 Analytics/Continuity | Analytics/Continuity: WPA and Almanac Persistence Pass | Archive identity, player/manager attribution, separation from WAR/mWAR labels | Awards/story persistence blocked |
-| Franchise-to-Almanac persistence is unclear | Smoke says nothing from Franchise persists to Almanac | M2-D006, M2-D013, M2-D014, M2-D028 | Completed-game archive and almanac storage exist; franchise-specific history scope may be incomplete | Define what Franchise records appear in Almanac and prove scope/history persistence | P0 Continuity/Trust | Franchise-to-Almanac Persistence And Continuity Audit | Completed games, milestones, records, scope filters, save/export behavior | Mode 3/offseason execution blocked |
+| WPA/Manager WPA visibility was insufficient | User saw no visible WPA for players/managers | M2-D011, M2-D012 | Committed slice `Surface archived franchise WPA` | Keep read-only archived evidence visible and compact; score-only rows stay blocked | Completed hardening | Done | Archive identity, player/manager attribution, separation from WAR/mWAR labels | Awards/story persistence blocked |
+| Franchise-to-Almanac persistence was unclear | Smoke said nothing from Franchise persisted to Almanac | M2-D006, M2-D013, M2-D014, M2-D028 | Committed slice `Persist franchise players into Almanac` | Keep approved franchise archive/player/team evidence scoped and portable | Completed hardening | Done | Completed games, scope filters, save/export/delete behavior, score-only boundaries | Mode 3/offseason execution blocked |
+| Fame-event context needed continuity hardening | Fame/achievement evidence risked losing franchise context or being consumed from untrusted rows | Fame/fan morale prompt specs; manual smoke history concerns | Committed slice `Preserve franchise fame event context` | Keep no-hitter/perfect-game evidence scoped to trusted completed archives; block score-only fabricated fame | Completed hardening | Done | Player/team/opponent/game/franchise context, fan morale prompt source trust | Awards persistence and broader fame categories blocked |
 | Narrative/milestone carryover is incomplete | Historical records, milestones, and stories need defined persistence | M2-D013, M2-D014, M2-D028 | Milestone/narrative systems exist but are deferred/partial in manifest and roadmap | Keep stable read-only history; do not imply complete museum/almanac/carryover until proven | P2 Analytics/Continuity | Analytics/Continuity: WPA and Almanac Persistence Pass | No global/prototype surfaces presented as franchise-complete | Story persistence beyond random-event log blocked |
+| Manual final-score workflow needs boundary polish | Score-only rows are useful, but users need clarity that they do not create player stats, WPA, fame, awards, or Almanac player evidence | Manual smoke feedback; score-only hard boundaries | Score-only boundaries are tested in several persistence/Almanac/fame paths | Make the workflow copy/tests prove exactly what score-only can and cannot persist | P1 Workflow Trust | Manual Final-Score Entry And Score-Only Boundary Reconciliation | Team-only result effects, no fabricated player/WPA/fame evidence, save/export consistency | No AI simulation or stat fabrication |
+| Manual schedule workflow remains shallow | Users need comfortable schedule authoring/editing without generated schedules | Manual smoke feedback; Mode 1/2 launch flow | Manual schedule/result path exists, but editing/CSV workflow remains incomplete | Improve or document manual schedule/CSV entry as the active non-generated schedule path | P1 Workflow Usability | Manual Schedule Editing And CSV Workflow Pass | No generated schedules, launch state remains scoped, row copy concise | Generated schedules excluded |
+| Trade/FARM roster movement continuity needs audit | FARM/call-up/send-down/trade evidence must stay consistent across Team Hub, roster rows, and persistence | FARM/scouting/transaction specs; Team Hub roster usability | Transaction history and roster scan surfaces exist, but full continuity was not the latest focus | Prove roster movement history and current roster rows stay consistent and hidden-safe | P1 Roster Continuity | Trade And FARM Roster Movement Continuity Audit | Hidden prospects, call-up reveal boundary, transaction portability | Auto-draft/offseason execution excluded |
 | Testing ergonomics request conflicts with scope | Manual smoke asked for auto-hire scouts and auto-draft for repeated testing | Manual smoke feedback | League Builder startup draft UI exists; deterministic engine exists | Do not include auto-draft in active playable-v1 plan; revisit only as separate approved tooling slice | Explicit Exclusion | No active slice | Ensure roadmap does not schedule auto-draft | Auto-draft deferred/excluded |
 
 ## Completed Hardening Slices
@@ -116,26 +123,38 @@ These are not active playable-v1 implementation targets in this plan:
 7. **Mode 1/2 Visual Smoke And UI Density Pass**
    - Committed. Tightened dense copy, roster readability, League Builder stadium badges, GameTracker lineup-name wrapping, and the starting-pitcher nested-control issue.
 
+8. **Franchise-to-Almanac Persistence And Continuity Audit**
+   - Committed. Registered approved franchise player/team/game archive evidence into Almanac continuity, preserved franchise/season scope, and kept score-only rows from fabricating player/WPA/fame evidence.
+
+9. **WPA And Manager Moments Visibility Pass**
+   - Committed. Surfaced archived franchise WPA/Manager Moments evidence as read-only Game Detail and Player Instance Card context without changing formulas.
+
+10. **Fame Event Correctness And Continuity Audit**
+   - Committed. Preserved trusted no-hitter/perfect-game fame context through completed archives and confirmation-gated fan morale prompt inputs.
+
+11. **Seeded Mode 1/2 Browser Visual Smoke Pass**
+   - Committed. Added the safe visual-smoke preview route, fixture tests, iPad/desktop screenshots, root-width/tablet shell fix, finance `READ ONLY` chip, and Player Card WPA preview evidence.
+
 ## Next 5 Implementation Slices
 
-1. **Franchise-to-Almanac Persistence And Continuity Audit**
-   - Define and prove which Franchise Mode results/events appear in Almanac/history surfaces, including completed games, player/team/manager stats, milestones, records, fame-safe events, franchise scope filters, and save/export behavior.
-   - Acceptance target: the user can tell what Franchise history persists, where it appears, and what remains blocked without implying Mode 3/offseason, awards finalization, or story automation.
+1. **Populated Schedule And Team Hub Roster Visual Fixture**
+   - Extend the safe preview/test fixture so visual smoke captures at least one populated Franchise Home schedule row and one populated Team Hub roster scan row at iPad and desktop widths.
+   - Acceptance target: row-rich schedule/roster screenshots are repeatable without real user data, auto-draft, generated schedules, hidden prospect truth, or production storage mutation.
 
-2. **WPA And Manager WPA Visibility Decision**
-   - Decide whether player WPA and Manager WPA belong in playable v1. If approved, expose only trusted scoped archive evidence in concise read-only surfaces.
-   - Acceptance target: WPA visibility is either implemented as a safe read surface or explicitly moved to full spec parity backlog.
+2. **Manual Final-Score Entry And Score-Only Boundary Reconciliation**
+   - Make the score-only/manual-result workflow and compact copy prove exactly which team-level evidence persists and which player/WPA/fame/award/stat paths remain unavailable.
+   - Acceptance target: score-only rows are useful for standings/history without fabricating player evidence.
 
-3. **Immaculate Inning / Fame Event Correctness**
-   - Tighten the known false-positive immaculate-inning rule before fame/story/history evidence becomes more visible.
-   - Acceptance target: an immaculate inning requires exactly three batters faced, three strikeouts, exactly nine pitches, and no reach events.
+3. **Manual Schedule Editing And CSV Workflow Pass**
+   - Improve or document the approved non-generated schedule entry/editing workflow.
+   - Acceptance target: users can author/edit/import a schedule path for Mode 1/2 without generated schedules.
 
-4. **Seeded Visual Smoke Harness For Team Hub And GameTracker**
-   - Add or document a repeatable seeded browser state for Team Hub roster/finance/stadium and live GameTracker screenshots at iPad and desktop widths.
-   - Acceptance target: visual smoke no longer depends on manually prepared local IndexedDB data.
+4. **Trade And FARM Roster Movement Continuity Audit**
+   - Prove transaction history, roster scan rows, call-up/send-down evidence, and hidden-safe FARM/prospect boundaries stay consistent.
+   - Acceptance target: roster movement continuity is visible and portable without auto-draft or offseason execution.
 
-5. **Remaining Trust/Copy Polish**
-   - Tighten the finance `READ ONLY` chip, archive `game.parkFactors` trust, and any short copy that still implies final analytics.
+5. **Remaining Trust/Policy Tightening**
+   - Tighten archive `game.parkFactors` trust and decide future two-way MVP/Ace prompt policy.
    - Acceptance target: compact copy remains operational while trust boundaries stay explicit.
 
 ## Audit Rules For The Next Slices
@@ -157,6 +176,6 @@ Every implementation slice above should be audited against:
 
 Playable v1 should not be declared done yet.
 
-The first Mode 1/Mode 2 user-facing hardening wave is committed. Playable v1 should still not be declared done because Franchise-to-Almanac continuity, WPA visibility, fame-event correctness, seeded visual smoke, finance `READ ONLY` polish, archive `game.parkFactors` trust, and future two-way MVP/Ace policy remain unresolved.
+The first Mode 1/Mode 2 user-facing hardening wave plus the Almanac/WPA/fame/visual-smoke trust wave are committed. Playable v1 should still not be declared done because populated schedule-row visual smoke, populated Team Hub roster-row visual smoke, manual score-only workflow clarity, manual schedule authoring/import, trade/FARM roster movement continuity, archive `game.parkFactors` trust, full seeded harness scope, and future two-way MVP/Ace policy remain unresolved.
 
-The right next milestone is **Franchise-to-Almanac Persistence And Continuity Audit**, because manual smoke explicitly reported that Franchise Mode history does not appear to persist to Almanac and that gap affects season payoff/trust more than the remaining copy polish. The advanced Mode 2 foundation remains useful, but it should stay read-only, preview-only, confirmation-gated, or blocked until the core playable loop and continuity story are reliable and clear.
+The right next milestone is **Populated Schedule And Team Hub Roster Visual Fixture**, because the latest smoke preview proves safe shell/analysis/WPA/fame/GameTracker visibility but still does not prove the row-rich schedule and roster states a user actually scans on iPad. The advanced Mode 2 foundation remains useful, but it should stay read-only, preview-only, confirmation-gated, or blocked until the core playable loop and continuity story are reliable and clear.

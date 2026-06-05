@@ -10,11 +10,11 @@ Manual smoke feedback remains a bug and feature backlog. The build order for Mod
 
 ## Current State As Of Latest Commit
 
-Latest committed checkpoint: `c6bcd69 Tighten Mode 1 and Mode 2 dense UI`.
+Latest committed checkpoint: `3625f02 Add safe Mode 2 visual smoke preview`.
 
-Latest working checkpoint: Mode 1/2 Playable V1 Gap Tracker Update And Next-Priority Selection doc pass.
+Latest working checkpoint: Final Playable V1 Gap Reconciliation And Next Priority Decision doc pass.
 
-Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved. The technical foundation is safe, and the first Mode 1/2 playable hardening wave is committed, but manual smoke feedback still blocks declaring user-facing playable v1 complete.
+Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved. The technical foundation is safe, and the first Mode 1/2 playable hardening wave plus the Almanac/WPA/fame/visual-smoke trust wave are committed, but manual smoke feedback still blocks declaring user-facing playable v1 complete.
 
 ## Completed Checkpoints
 
@@ -46,31 +46,36 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Finance/Analysis Visibility is committed with salary baseline/team payroll visibility and preview-only True Value/Expected Wins framing.
 - Stadium And League Builder Source-Of-Truth Pass is committed with compact stadium source/status copy and spray evidence wording.
 - Mode 1/2 Visual Smoke And UI Density Pass is committed with denser Team Hub/League Builder copy, readable roster table adjustments, GameTracker full-name wrapping, and a starting-pitcher nested-control fix.
+- Franchise-to-Almanac Persistence And Continuity is committed with approved franchise archive/player/team evidence, scope preservation, and score-only anti-fabrication coverage.
+- WPA And Manager Moments Visibility is committed with read-only archived franchise WPA/Manager Moments evidence surfaced in Game Detail and Player Instance Card contexts.
+- Fame Event Correctness And Continuity is committed with trusted no-hitter/perfect-game context preserved for completed archives and confirmation-gated fan morale prompt inputs.
+- Seeded Mode 1/2 Browser Visual Smoke Pass is committed with a safe dev/test preview route, fixture tests, root-width/iPad shell fix, finance `READ ONLY` chip, and seeded WPA/fame/GameTracker long-name screenshots.
 
 ## Active Priority Order
 
-1. Franchise-to-Almanac Persistence And Continuity Audit
-   - Define which Franchise Mode game results/events, player/manager/team stats, milestones, records, and fame/narrative-safe evidence should appear in Almanac/history surfaces.
-   - Audit completed-game archive, Almanac write paths, franchise scope metadata, season summaries, records, awards/fame event boundaries, and save/export behavior.
+1. Populated Schedule And Team Hub Roster Visual Fixture
+   - Extend the safe preview/test fixture so Franchise Home shows at least one populated schedule row and Team Hub shows at least one populated roster scan row.
+   - Capture iPad and desktop screenshots for row-rich schedule/roster states without depending on user local IndexedDB data.
    - Keep Mode 1 and Mode 2 as the only active playable-v1 priority.
-   - No auto-draft, generated schedules, AI simulation, awards finalization, story automation, or Mode 3/offseason execution until separately approved.
-2. WPA And Manager WPA Visibility Decision
-   - Decide whether player WPA and Manager WPA are playable-v1 read surfaces or full-spec backlog, then expose only trusted scoped archive evidence if approved.
-3. Immaculate Inning / Fame Event Correctness
-   - Fix the known false-positive immaculate-inning rule before fame/story history becomes more visible.
-4. Seeded Visual Smoke Harness For Team Hub And GameTracker
-   - Add or document a repeatable seeded browser state so Team Hub and live GameTracker screenshots can be captured without relying on manual local IndexedDB state.
-5. Remaining Mode 1/2 Copy Polish
-   - Keep compact operational copy, including the finance `READ ONLY` chip polish note, without changing data boundaries.
+   - No auto-draft, generated schedules, AI simulation, awards finalization, story automation, production storage mutation, or Mode 3/offseason execution until separately approved.
+2. Manual Final-Score Entry And Score-Only Boundary Reconciliation
+   - Make the score-only/manual-result flow and compact copy prove which team-level evidence persists and which player/stat/WPA/fame/award paths remain unavailable.
+3. Manual Schedule Editing And CSV Workflow Pass
+   - Improve or document the approved non-generated schedule entry/editing/import path.
+4. Trade And FARM Roster Movement Continuity Audit
+   - Prove transaction history, current roster rows, call-up/send-down evidence, and hidden-safe FARM/prospect boundaries stay consistent and portable.
+5. Remaining Mode 1/2 Trust/Policy Tightening
+   - Tighten archive `game.parkFactors` trust and decide the future two-way MVP/Ace prompt workflow policy.
 
 ## Playable V1 Remaining Work
 
-- Franchise-to-Almanac persistence and continuity audit.
-- WPA/Manager WPA visibility decision and any approved read-only scoped surfaces.
-- Immaculate inning/fame event correctness before broader history surfacing.
-- Seeded visual smoke harness for Team Hub and GameTracker.
-- Finance `READ ONLY` chip polish.
+- Populated schedule-row visual smoke.
+- Populated Team Hub roster-row visual smoke.
+- Manual final-score entry and score-only boundary clarity.
+- Manual schedule editing/CSV/import workflow.
+- Trade/FARM roster movement continuity.
 - Archive `game.parkFactors` trust tightening so archived park-factor data is not mistaken for trusted adaptive persistence.
+- Full seeded state harness scope beyond the current safe preview route.
 - Two-way MVP/Ace policy decision for future confirmation flow versus automation/undo behavior.
 
 ## Full Spec Parity Backlog
@@ -89,6 +94,7 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 
 - Score-only results may affect team fan morale only after user confirmation.
 - Score-only results must never create player morale, player stats, WPA/WAR, awards, designations, player history, or relationship mutation.
+- Safe preview/fixture routes must stay dev/test oriented and must not mutate real user Franchise, schedule, GameTracker, completed-game, or Almanac storage.
 - GameTracker archive-backed events can support prompts and confirmed effects, but GameTracker completion must not silently mutate canonical franchise morale.
 - Confirmed random events can apply safe fan/player morale effects only through the canonical morale state model.
 - Dynamic designation effects must enter v1 as confirmation-gated random-event prompts, not automatic designation/profile/morale mutation.
