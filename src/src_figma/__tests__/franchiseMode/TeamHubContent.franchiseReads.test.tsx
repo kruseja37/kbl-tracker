@@ -825,8 +825,9 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(foundationRegion).getByText(/True ratings, true grade, hidden scout truth, and hidden personality modifiers are not surfaced/i)).toBeInTheDocument();
     const valueWinsRegion = within(foundationRegion).getByRole('region', { name: /Team True Value and Expected Wins Preview/i });
     expect(within(valueWinsRegion).getByText('TRUE VALUE + EXPECTED WINS PREVIEW')).toBeInTheDocument();
-    expect(within(valueWinsRegion).getByText(/PREVIEW ONLY · READ ONLY · NOT TRUSTED FOR DESIGNATIONS\/MORALE/i)).toBeInTheDocument();
-    expect(within(valueWinsRegion).getByText(/Uses current preview value totals and Mode 1 salary baselines/i)).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('PREVIEW ONLY')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('SALARY BASELINE CONTEXT')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('NO SALARY MOVEMENT')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Team payroll baseline')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('$4.0M')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Roster salary sum')).toBeInTheDocument();
@@ -835,7 +836,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(valueWinsRegion).getByText('Contract years proof')).toBeInTheDocument();
     expect(within(valueWinsRegion).getAllByText('1/1').length).toBeGreaterThanOrEqual(2);
     expect(within(valueWinsRegion).getByText(/Blocked: .*At least two teams/i)).toBeInTheDocument();
-    expect(within(valueWinsRegion).getByText(/Expected-wins persistence, daily snapshots, Fan Favorite\/Albatross finalization, salary movement, morale mutation/i)).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText(/Blocked: expected-wins persistence, final designations, salary movement, morale\/relationship mutation, offseason, Mode 3/i)).toBeInTheDocument();
     expect(within(valueWinsRegion).queryByRole('button')).not.toBeInTheDocument();
     expect(within(foundationRegion).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
     expect(within(foundationRegion).queryByText(/leadership: 92/i)).not.toBeInTheDocument();
@@ -1091,8 +1092,9 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
     const valueWinsRegion = await screen.findByRole('region', { name: /Team True Value and Expected Wins Preview/i });
 
-    expect(within(valueWinsRegion).getByText(/PREVIEW ONLY · READ ONLY · NOT TRUSTED FOR DESIGNATIONS\/MORALE/i)).toBeInTheDocument();
-    expect(within(valueWinsRegion).getByText(/Uses current preview value totals and Mode 1 salary baselines/i)).toBeInTheDocument();
+    expect(within(valueWinsRegion).getAllByText('PREVIEW ONLY').length).toBeGreaterThanOrEqual(1);
+    expect(within(valueWinsRegion).getByText('SALARY BASELINE CONTEXT')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('NO SALARY MOVEMENT')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Copied Alpha')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Team salary total')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('2.0')).toBeInTheDocument();
@@ -1103,8 +1105,8 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(valueWinsRegion).getByText('Expected wins estimate')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('14.0')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText(/League average preview value baseline: 6.0/i)).toBeInTheDocument();
-    expect(within(valueWinsRegion).getByText(/Fan Favorite\/Albatross finalization, salary movement, morale mutation/i)).toBeInTheDocument();
-    expect(within(valueWinsRegion).queryByText(/Blocked:/i)).not.toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText(/Blocked: expected-wins persistence, final designations, salary movement, morale\/relationship mutation, offseason, Mode 3/i)).toBeInTheDocument();
+    expect(within(valueWinsRegion).queryByText(/Blocked: At least two teams/i)).not.toBeInTheDocument();
     expect(within(valueWinsRegion).queryByRole('button')).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
@@ -1418,10 +1420,10 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(stadiumRegion).getAllByText('Apple Field').length).toBeGreaterThan(0);
     expect(within(stadiumRegion).getByText('SOURCE OF TRUTH')).toBeInTheDocument();
     expect(within(stadiumRegion).getByText(/Copied from Mode 1\/League Builder/i)).toBeInTheDocument();
-    expect(within(stadiumRegion).getByText(/Mode 2 source: copied Mode 1 \/ League Builder team stadium snapshot/i)).toBeInTheDocument();
-    expect(within(stadiumRegion).getByText(/Dimensions source: SMB4 park dimensions database matched by stadium name/i)).toBeInTheDocument();
-    expect(within(stadiumRegion).getByText(/Seed factor source: SMB4-derived static park factors copied\/read from Mode 1 context/i)).toBeInTheDocument();
-    expect(within(stadiumRegion).getByText(/League Builder currently edits stadium name\/capacity only/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText('Mode 2 copy')).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText('SMB4 dimensions matched')).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText('Seed factors trusted')).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText('Custom dimensions blocked')).toBeInTheDocument();
     expect(within(stadiumRegion).getByText('SEED / STATIC FACTORS')).toBeInTheDocument();
     expect(within(stadiumRegion).getByText(/Seed park factors are trusted as v1 stadium inputs/i)).toBeInTheDocument();
     expect(within(stadiumRegion).getByText('ADAPTIVE FACTORS')).toBeInTheDocument();
@@ -1432,7 +1434,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(stadiumRegion).getByText(/Archive rows: 1. Spray rows: 3/i)).toBeInTheDocument();
     expect(within(stadiumRegion).getByText(/3 selected-stadium row\(s\): batting 1, pitching 1, fielding 1/i)).toBeInTheDocument();
     expect(within(stadiumRegion).getByText('SPRAY EVIDENCE INSPECTOR')).toBeInTheDocument();
-    expect(within(stadiumRegion).getByText(/Row evidence inspector available for batting, pitching, and fielding spray rows; full heat map and stadium diagram rendering remain deferred/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText(/Row evidence available; heat map and stadium diagram deferred/i)).toBeInTheDocument();
     expect(within(stadiumRegion).getByText(/3 ROW\(S\) · READ ONLY/i)).toBeInTheDocument();
     expect(within(stadiumRegion).getByText('Batter One')).toBeInTheDocument();
     expect(within(stadiumRegion).getByText('Pitcher One')).toBeInTheDocument();

@@ -1,8 +1,8 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { LineupPreview } from '../../app/components/LineupPreview';
-import type { Player as RosterPlayer } from '../../app/components/TeamRoster';
+import type { Pitcher as RosterPitcher, Player as RosterPlayer } from '../../app/components/TeamRoster';
 
 function setMaxTouchPoints(points: number) {
   Object.defineProperty(window.navigator, 'maxTouchPoints', {
@@ -55,6 +55,18 @@ function createLineup(): RosterPlayer[] {
       battingHand: 'S',
     },
   ];
+}
+
+function createPitcher(name: string, overrides: Partial<RosterPitcher> = {}): RosterPitcher {
+  return {
+    playerId: name.toLowerCase().replace(/\s+/g, '-'),
+    name,
+    stats: { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 },
+    throwingHand: 'R',
+    isStarter: true,
+    isActive: true,
+    ...overrides,
+  };
 }
 
 describe('LineupPreview touch reordering', () => {
@@ -149,5 +161,34 @@ describe('LineupPreview touch reordering', () => {
 
     expect(screen.queryByRole('button', { name: 'Move Alpha Starter in batting order' })).toBeNull();
     expect(screen.getByText('#1')).toBeInTheDocument();
+  });
+
+  test('keeps starting pitcher selection accessible without nesting control buttons', () => {
+    setMaxTouchPoints(5);
+    const onPitcherSub = vi.fn();
+    const onMojoChange = vi.fn();
+    const onFitnessChange = vi.fn();
+
+    render(
+      <LineupPreview
+        teamName="Pitcher Team"
+        lineup={createLineup()}
+        bench={[]}
+        startingPitcher={createPitcher('Starter Alpha')}
+        benchPitchers={[createPitcher('Reliever Bravo', { isStarter: false, isActive: false })]}
+        teamColor="#4A6A42"
+        onPitcherSub={onPitcherSub}
+        onMojoChange={onMojoChange}
+        onFitnessChange={onFitnessChange}
+      />,
+    );
+
+    const startingPitcherRow = screen.getByRole('button', { name: /Starter Alpha/i });
+    expect(startingPitcherRow).toBeInTheDocument();
+    fireEvent.click(startingPitcherRow);
+    expect(screen.getByText(/Tap a bullpen pitcher to start/)).toBeInTheDocument();
+
+    fireEvent.click(within(startingPitcherRow).getByTitle('Mojo: NRM'));
+    expect(onMojoChange).toHaveBeenCalledWith('starter-alpha', 1);
   });
 });

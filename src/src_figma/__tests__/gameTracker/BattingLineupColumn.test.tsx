@@ -91,7 +91,7 @@ describe('BattingLineupColumn', () => {
     const battingOrder = screen.getByText('1.');
 
     expect(nameRow.style.backgroundImage).toBe('');
-    expect(nameRow).toHaveClass('h-[14px]', 'leading-[14px]');
+    expect(nameRow).toHaveClass('min-h-[22px]', 'leading-[11px]');
     expect(nameHighlight.style.backgroundImage).not.toBe('');
     expect(nameHighlight.style.backgroundColor).toBe('rgba(242, 192, 65, 0.03)');
     expect(nameHighlight).toHaveClass('flex-1');
@@ -118,7 +118,7 @@ describe('BattingLineupColumn', () => {
     expect(gameLine.style.whiteSpace).toBe('normal');
   });
 
-  test('keeps the runner base marker visible before a truncated lineup name', () => {
+  test('keeps the runner base marker visible before a wrapped full lineup name', () => {
     render(
       <BattingLineupColumn
         {...baseProps}
@@ -139,7 +139,9 @@ describe('BattingLineupColumn', () => {
 
     expect(nameHighlight).toHaveClass('flex');
     expect(nameHighlight).not.toHaveClass('overflow-hidden');
-    expect(nameMarker).toHaveClass('truncate');
+    expect(nameMarker).toHaveClass('whitespace-normal', 'break-words');
+    expect(nameMarker.style.display).toBe('-webkit-box');
+    expect(nameMarker.style.webkitLineClamp).toBe('2');
     expect(baseMarker).toHaveTextContent('1');
     expect(baseMarker.tagName).toBe('SPAN');
     expect(baseMarker).toHaveClass('inline-flex', 'shrink-0', 'self-start', 'font-black');

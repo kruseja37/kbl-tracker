@@ -187,10 +187,11 @@ describe('LeagueBuilderTeams Component', () => {
       render(<LeagueBuilderTeams />);
       fireEvent.click(screen.getAllByTitle('Edit team')[0]);
 
-      expect(await screen.findByText('Stadium source of truth')).toBeInTheDocument();
-      expect(screen.getByText(/Custom stadium dimensions are not stored in League Builder yet/i)).toBeInTheDocument();
-      expect(screen.getByText(/Mode 2 will copy this stadium name/i)).toBeInTheDocument();
-      expect(screen.getByText(/Team Hub reads the copied Mode 1 team stadium snapshot/i)).toBeInTheDocument();
+      expect(await screen.findByText('Stadium source')).toBeInTheDocument();
+      expect(screen.getByText('MODE 2 COPY')).toBeInTheDocument();
+      expect(screen.getByText('DIMENSIONS MISSING')).toBeInTheDocument();
+      expect(screen.getByText(/Mode 2 copies this name/i)).toBeInTheDocument();
+      expect(screen.getByText(/Custom dimensions and adaptive park-factor persistence remain blocked/i)).toBeInTheDocument();
     });
 
     test('shows matched SMB4 stadium dimensions as the seed source', async () => {
@@ -200,8 +201,9 @@ describe('LeagueBuilderTeams Component', () => {
       const stadiumInput = await screen.findByDisplayValue('Fenway Park');
       fireEvent.change(stadiumInput, { target: { value: 'Apple Field' } });
 
-      expect(screen.getByText(/Dimensions will use SMB4 seed data for Apple Field: LF 337, CF 419, RF 347/i)).toBeInTheDocument();
-      expect(screen.queryByText(/Custom stadium dimensions are not stored in League Builder yet/i)).not.toBeInTheDocument();
+      expect(screen.getByText('SMB4 MATCH')).toBeInTheDocument();
+      expect(screen.getByText(/Apple Field: LF 337 · CF 419 · RF 347/i)).toBeInTheDocument();
+      expect(screen.queryByText('DIMENSIONS MISSING')).not.toBeInTheDocument();
     });
 
     test('round-trips team editorial identity fields through updateTeam', async () => {

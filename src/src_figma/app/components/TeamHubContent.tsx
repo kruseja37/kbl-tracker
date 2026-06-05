@@ -3008,7 +3008,7 @@ export function TeamHubContent() {
           </div>
 
           <div className="overflow-x-auto">
-            <table aria-label="Franchise roster scan table" className="w-full min-w-[760px] text-[9px]">
+            <table aria-label="Franchise roster scan table" className="w-full min-w-[760px] text-[10px]">
               <thead>
                 <tr className="border-b-2 border-[#4A6844]">
                   <th className="text-left py-2 px-2 text-[#E8E8D8]/70 cursor-pointer hover:text-[#E8E8D8]" onClick={() => handleRosterSort("name")}>
@@ -3051,14 +3051,14 @@ export function TeamHubContent() {
                     <td className="py-2 px-2 text-[#E8E8D8] text-center">{player.position}</td>
                     <td className="py-2 px-2 text-[#E8E8D8] text-center">
                       <div className="font-bold">{player.rosterStatus}</div>
-                      <div className="text-[7px] text-[#E8E8D8]/55">{player.teamContext || '—'}</div>
+                      <div className="text-[8px] text-[#E8E8D8]/55">{player.teamContext || '—'}</div>
                     </td>
                     <td className="py-2 px-2 text-[#E8E8D8] text-right">{player.contract}</td>
                     <td className="py-2 px-2 text-center">
                       <span className={typeof player.morale === 'number' ? (player.morale >= 70 ? "text-[#00DD00]" : player.morale <= 35 ? "text-[#DD0000]" : "text-[#E8E8D8]") : "text-[#E8E8D8]/50"}>
                         {player.morale}
                       </span>
-                      <div className="text-[7px] text-[#E8E8D8]/55">{player.moraleState}</div>
+                      <div className="text-[8px] text-[#E8E8D8]/55">{player.moraleState}</div>
                     </td>
                     <td className={`py-2 px-2 text-left ${player.hiddenSafe ? 'text-[#E8E8D8]/60' : 'text-[#E8E8D8]'}`}>
                       {player.statSummary}
@@ -4482,11 +4482,16 @@ function FranchiseValueExpectedWinsPreviewPanel({
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
         <div>
           <div className="text-[10px] font-bold text-[#C4A853]">TRUE VALUE + EXPECTED WINS PREVIEW</div>
-          <div className="mt-1 text-[10px] leading-snug text-[#E8E8D8]/65">
-            PREVIEW ONLY · READ ONLY · NOT TRUSTED FOR DESIGNATIONS/MORALE.
-          </div>
-          <div className="mt-1 text-[9px] leading-snug text-[#E8E8D8]/55">
-            Uses current preview value totals and Mode 1 salary baselines for context only; it does not move salaries.
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            <span className="border border-[#FFD27A]/50 bg-[#5A5130] px-2 py-0.5 text-[8px] font-bold text-[#FFEFB5]">
+              PREVIEW ONLY
+            </span>
+            <span className="border border-[#E8E8D8]/25 bg-[#4A6844] px-2 py-0.5 text-[8px] font-bold text-[#E8E8D8]/75">
+              SALARY BASELINE CONTEXT
+            </span>
+            <span className="border border-[#DD0000]/35 bg-[#5A3F3F] px-2 py-0.5 text-[8px] font-bold text-[#FFD6D6]">
+              NO SALARY MOVEMENT
+            </span>
           </div>
         </div>
         <FoundationStatusBadge status={isAvailable ? 'preview-only' : 'blocked'} />
@@ -4545,7 +4550,7 @@ function FranchiseValueExpectedWinsPreviewPanel({
 
       <div className="mt-2 border-2 border-[#4A6844] bg-[#3F563F] p-2 text-[10px] leading-snug text-[#E8E8D8]/70">
         <div>League average preview value baseline: {formatPreviewNumber(expectedWinsPreviewReport?.leagueAveragePreviewValueBaseline)}</div>
-        <div>Expected-wins persistence, daily snapshots, Fan Favorite/Albatross finalization, salary movement, morale mutation, relationship effects, GameTracker completion mutation, offseason, and Mode 3 remain blocked.</div>
+        <div>Blocked: expected-wins persistence, final designations, salary movement, morale/relationship mutation, offseason, Mode 3.</div>
         {salaryBlockers.length > 0 && (
           <div className="mt-2 text-[#FFEFB5]">
             Salary blocker: {salaryBlockers.join(' ')}
@@ -4660,14 +4665,14 @@ function FranchiseStadiumFoundationPanel({
   const dimensions = selected?.dimensions ?? null;
   const seedFactors = selected?.seedParkFactors ?? null;
   const stadiumSourceLabel = selected
-    ? 'Mode 2 source: copied Mode 1 / League Builder team stadium snapshot.'
-    : 'Mode 2 source: no copied stadium snapshot loaded.';
+    ? 'Mode 2 copy'
+    : 'No copied snapshot';
   const dimensionsSourceLabel = dimensions
-    ? 'Dimensions source: SMB4 park dimensions database matched by stadium name.'
-    : 'Dimensions source: missing/untrusted because the copied stadium name does not match the SMB4 dimensions database.';
+    ? 'SMB4 dimensions matched'
+    : 'Dimensions missing/untrusted';
   const seedSourceLabel = selected?.seedParkFactorsTrusted
-    ? 'Seed factor source: SMB4-derived static park factors copied/read from Mode 1 context.'
-    : 'Seed factor source: missing/untrusted; adaptive park factors are not persisted.';
+    ? 'Seed factors trusted'
+    : 'Seed factors missing/untrusted';
 
   return (
     <section
@@ -4681,7 +4686,7 @@ function FranchiseStadiumFoundationPanel({
           <div>
             <div className="text-[14px] font-bold text-[#E8E8D8]">STADIUM FOUNDATION</div>
             <div className="mt-1 max-w-3xl text-[10px] leading-snug text-[#E8E8D8]/70">
-              Read-only stadium identity, seed park factors, and archive-backed spray evidence. Source-of-truth is the copied Mode 1/League Builder stadium name plus SMB4 seed data where matched. Adaptive factors and stadium records stay preview-only.
+              Read-only stadium identity, seed factors, and archive-backed spray evidence. Adaptive factors and records stay preview-only.
             </div>
           </div>
         </div>
@@ -4743,11 +4748,15 @@ function FranchiseStadiumFoundationPanel({
         </div>
       </div>
 
-      <div className="mb-3 border-2 border-[#4A6844] bg-[#3F563F] p-2 text-[10px] leading-snug text-[#E8E8D8]/70">
-        <div>{stadiumSourceLabel}</div>
-        <div>{dimensionsSourceLabel}</div>
-        <div>{seedSourceLabel}</div>
-        <div>League Builder currently edits stadium name/capacity only; custom dimension persistence is a separate future slice.</div>
+      <div className="mb-3 flex flex-wrap gap-1.5 border-2 border-[#4A6844] bg-[#3F563F] p-2 text-[9px] font-bold text-[#E8E8D8]/75">
+        <span className="border border-[#E8E8D8]/20 bg-[#4A6844] px-2 py-0.5">{stadiumSourceLabel}</span>
+        <span className={`border px-2 py-0.5 ${
+          dimensions ? 'border-[#88DD44]/45 bg-[#274627] text-[#A8F08A]' : 'border-[#FFD27A]/45 bg-[#5A5130] text-[#FFEFB5]'
+        }`}>{dimensionsSourceLabel}</span>
+        <span className={`border px-2 py-0.5 ${
+          selected?.seedParkFactorsTrusted ? 'border-[#88DD44]/45 bg-[#274627] text-[#A8F08A]' : 'border-[#FFD27A]/45 bg-[#5A5130] text-[#FFEFB5]'
+        }`}>{seedSourceLabel}</span>
+        <span className="border border-[#E8E8D8]/20 bg-[#4A6844] px-2 py-0.5">Custom dimensions blocked</span>
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
@@ -4791,7 +4800,7 @@ function FranchiseStadiumFoundationPanel({
             </div>
           </div>
           <div className="mb-2 text-[9px] leading-snug text-[#E8E8D8]/55">
-            Row evidence inspector available for batting, pitching, and fielding spray rows; full heat map and stadium diagram rendering remain deferred.
+            Row evidence available; heat map and stadium diagram deferred.
           </div>
 
           {selectedRows.length > 0 ? (

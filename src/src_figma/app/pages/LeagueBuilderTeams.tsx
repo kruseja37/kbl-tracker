@@ -874,19 +874,31 @@ export function LeagueBuilderTeams() {
                   />
                 </div>
               </div>
-              <div className="bg-[#4A6844]/55 border-[4px] border-[#3F5A3A] p-3 text-xs leading-snug text-[#E8E8D8]/70">
-                <div className="font-bold text-[#C4A853]">Stadium source of truth</div>
+              <div className="bg-[#4A6844]/55 border-[4px] border-[#3F5A3A] p-3 text-[11px] leading-snug text-[#E8E8D8]/75">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-bold text-[#C4A853]">Stadium source</span>
+                  <span className="border border-[#E8E8D8]/25 bg-[#3F5A3A] px-2 py-0.5 text-[9px] font-bold text-[#E8E8D8]/80">
+                    MODE 2 COPY
+                  </span>
+                  <span className={`border px-2 py-0.5 text-[9px] font-bold ${
+                    stadiumDimensionMatch
+                      ? 'border-[#88DD44]/50 bg-[#274627] text-[#A8F08A]'
+                      : 'border-[#FFD27A]/50 bg-[#5A5130] text-[#FFEFB5]'
+                  }`}>
+                    {stadiumDimensionMatch ? 'SMB4 MATCH' : 'DIMENSIONS MISSING'}
+                  </span>
+                </div>
                 {stadiumDimensionMatch ? (
-                  <div className="mt-1">
-                    Dimensions will use SMB4 seed data for {stadiumDimensionMatch.name}: LF {stadiumDimensionMatch.lf}, CF {stadiumDimensionMatch.cf}, RF {stadiumDimensionMatch.rf}.
+                  <div className="mt-2">
+                    {stadiumDimensionMatch.name}: LF {stadiumDimensionMatch.lf} · CF {stadiumDimensionMatch.cf} · RF {stadiumDimensionMatch.rf}
                   </div>
                 ) : (
-                  <div className="mt-1">
-                    Custom stadium dimensions are not stored in League Builder yet. Mode 2 will copy this stadium name, but dimensions and seed park factors remain missing/untrusted unless the name matches the SMB4 park database.
+                  <div className="mt-2">
+                    Mode 2 copies this name; dimensions and seed factors stay untrusted unless it matches the SMB4 park database.
                   </div>
                 )}
                 <div className="mt-1 text-[#E8E8D8]/55">
-                  Team Hub reads the copied Mode 1 team stadium snapshot; adaptive park-factor persistence remains blocked.
+                  Custom dimensions and adaptive park-factor persistence remain blocked.
                 </div>
               </div>
 

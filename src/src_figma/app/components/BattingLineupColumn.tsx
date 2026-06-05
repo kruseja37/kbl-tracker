@@ -198,10 +198,10 @@ export function BattingLineupColumn({
                 <div className="flex h-full min-h-0 flex-col overflow-hidden">
                   <div
                     data-testid={`batting-lineup-name-row-${player.playerId}`}
-                    className={`flex h-[14px] shrink-0 items-center text-[11px] leading-[14px] tracking-wide ${onBase ? 'font-black text-white' : 'font-bold text-[#E8E8D8]'}`}
+                    className={`flex min-h-[22px] shrink-0 items-start text-[10px] leading-[11px] tracking-wide ${onBase ? 'font-black text-white' : 'font-bold text-[#E8E8D8]'}`}
                   >
                     <span
-                      className="inline-flex w-[26px] shrink-0 items-center text-[#CBB89C]"
+                      className="inline-flex w-[26px] shrink-0 items-start text-[#CBB89C]"
                       style={{
                         fontFamily: "'Moms Typewriter', monospace",
                         fontSize: '11px',
@@ -238,11 +238,15 @@ export function BattingLineupColumn({
                         </span>
                       )}
                       <span
-                        className="min-w-0 truncate"
+                        className="min-w-0 flex-1 whitespace-normal break-words"
                         style={{
                           ...mojoStyle,
                           ...fitnessStyle,
                           fontFamily: "'Tox Typewriter', monospace",
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
                         }}
                         title={[
                           playerMojo !== 0 && playerMojo !== undefined
