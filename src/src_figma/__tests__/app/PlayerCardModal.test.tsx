@@ -92,6 +92,78 @@ describe("PlayerCardModal", () => {
     );
   });
 
+  test("renders full bullpen pitcher names in the sub-out menu without changing substitution identity payload", () => {
+    const onSubOut = vi.fn();
+
+    render(
+      <PlayerCardModal
+        player={{ name: "S. OHTANI", type: "pitcher", playerId: "home-sp" }}
+        playerData={{
+          name: "Shohei Ohtani",
+          battingOrder: 2,
+          position: "P",
+          battingHand: "L",
+          stats: {},
+        } as never}
+        onClose={vi.fn()}
+        onSubOut={onSubOut}
+        bullpenPitchers={[
+          {
+            playerId: "emergency-arm",
+            name: "E. ARM",
+            fullName: "Emergency Arm",
+            hand: "R",
+          },
+        ]}
+        isActivePitcher
+        gamePhase="LIVE"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "SUB OUT" }));
+
+    expect(screen.getByRole("button", { name: /Emergency Arm/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /E\. ARM/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Emergency Arm/i }));
+
+    expect(onSubOut).toHaveBeenCalledWith(
+      "home-sp",
+      "S. OHTANI",
+      "emergency-arm",
+      "E. ARM",
+      true,
+      "P",
+      undefined,
+    );
+  });
+
+  test("keeps position-player sub-out menu names full when full names are available", () => {
+    render(
+      <PlayerCardModal
+        player={{ name: "M. BETTS", type: "batter", playerId: "batter-1" }}
+        onClose={vi.fn()}
+        onSubOut={vi.fn()}
+        benchPlayers={[
+          {
+            playerId: "bench-bat",
+            name: "L. ARRAEZ",
+            fullName: "Luis Arraez",
+            pos: "IF",
+            hand: "L",
+            isOutOfGame: false,
+          },
+        ]}
+        gamePhase="LIVE"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "SUB OUT" }));
+
+    expect(screen.getByRole("button", { name: /Luis Arraez/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /L\. ARRAEZ/i })).not.toBeInTheDocument();
+  });
+
   test("keeps pre-game swap-order controls visible while hiding mojo and fitness editing", () => {
     render(
       <PlayerCardModal

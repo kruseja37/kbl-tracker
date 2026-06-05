@@ -12326,6 +12326,19 @@ export function GameTracker() {
                 selectedPlayer.name === gameState.currentPitcherName ||
                 selectedPlayer.name === resolvedCurrentPitcherName
               );
+            const teamPitchers =
+              selectedPlayerTeam === "away" ? awayTeamPitchers : homeTeamPitchers;
+            const resolvePitcherDisplayName = (
+              playerId: string,
+              compactName: string,
+            ) => {
+              const rosterPitcher = teamPitchers.find(
+                (candidate) =>
+                  getRosterEntityId(candidate, selectedPlayerTeam) === playerId ||
+                  candidate.name === compactName,
+              );
+              return getCanonicalRosterName(rosterPitcher) || compactName;
+            };
             const playerCardBenchEntries = lineupSnapshot[
               selectedPlayerTeam
             ].bench
@@ -12347,6 +12360,9 @@ export function GameTracker() {
                 return {
                   playerId: benchPlayer.playerId,
                   name: benchPlayer.playerName,
+                  fullName:
+                    (rosterPlayer && getCanonicalRosterName(rosterPlayer)) ||
+                    benchPlayer.playerName,
                   pos: benchPlayer.positions[0] || rosterPosition || "UT",
                   hand,
                   isOutOfGame: !benchPlayer.isAvailable,
@@ -12365,16 +12381,18 @@ export function GameTracker() {
                       ? availablePitchers.map((pitcher) => ({
                           playerId: pitcher.id,
                           name: pitcher.name,
+                          fullName: resolvePitcherDisplayName(
+                            pitcher.id,
+                            pitcher.name,
+                          ),
                           hand: pitcher.hand,
                         }))
-                      : (selectedPlayerTeam === "away"
-                          ? awayTeamPitchers
-                          : homeTeamPitchers
-                        )
+                      : teamPitchers
                           .filter((pitcher) => !pitcher.isActive && !pitcher.isOutOfGame)
                           .map((pitcher) => ({
                             playerId: getRosterEntityId(pitcher, selectedPlayerTeam),
                             name: pitcher.name,
+                            fullName: getCanonicalRosterName(pitcher),
                             hand: pitcher.throwingHand || pitcher.throws || "R",
                           }))
                   )
@@ -14269,6 +14287,7 @@ function ExpandablePanel({
 interface PlayerCardBenchEntry {
   playerId: string;
   name: string;
+  fullName?: string;
   pos: string;
   hand: string;
   isOutOfGame: boolean;
@@ -14297,7 +14316,12 @@ interface PlayerCardModalProps {
     runnerBase?: RunnerBase,
   ) => void;
   benchPlayers?: PlayerCardBenchEntry[];
-  bullpenPitchers?: Array<{ playerId: string; name: string; hand: string }>;
+  bullpenPitchers?: Array<{
+    playerId: string;
+    name: string;
+    fullName?: string;
+    hand: string;
+  }>;
   isActivePitcher?: boolean;
   // §9.2: Swap Position
   showSwapPosition?: boolean;
@@ -14431,16 +14455,26 @@ export function PlayerCardModal({
   const isPitchingSubstitution =
     player.type === "pitcher" &&
     (isActivePitcher || playerData?.battingOrder === undefined);
+  const formatSubstitutionMenuName = (entry: {
+    name: string;
+    fullName?: string;
+  }) => entry.fullName?.trim() || entry.name;
   const availableBench =
     isPitchingSubstitution
       ? (bullpenPitchers || []).map((pitcher) => ({
           playerId: pitcher.playerId,
           name: pitcher.name,
+          displayName: formatSubstitutionMenuName(pitcher),
           pos: "P",
           hand: pitcher.hand,
           isOutOfGame: false,
         }))
-      : (benchPlayers || []).filter((p) => !p.isOutOfGame);
+      : (benchPlayers || [])
+          .filter((p) => !p.isOutOfGame)
+          .map((benchPlayer) => ({
+            ...benchPlayer,
+            displayName: formatSubstitutionMenuName(benchPlayer),
+          }));
 
   // §9.1: BENCH VIEW — replaces card content when Sub Out is tapped
   if (cardView === "bench") {
@@ -14510,7 +14544,7 @@ export function PlayerCardModal({
                       className="text-[11px] text-[#E8E8D8] font-bold"
                       style={{ fontFamily: "'Tox Typewriter', monospace" }}
                     >
-                      {bp.name}
+                      {bp.displayName}
                     </div>
                   </div>
                   <div className="text-[8px] text-[#88AA88]/70">{bp.hand}</div>
