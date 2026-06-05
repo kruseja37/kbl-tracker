@@ -214,12 +214,15 @@ describe('ScheduleContent Component', () => {
     test('marks score-only completed games distinctly', () => {
       render(<ScheduleContent {...defaultProps} />);
       expect(screen.getByText('SCORE ONLY')).toBeInTheDocument();
-      expect(screen.getByText('Schedule + standings + team-fan prompt context only; no player stats, WPA, fame, awards, designations, or Almanac player evidence.')).toBeInTheDocument();
+      expect(screen.getByText(/Schedule \+ standings only/i)).toBeInTheDocument();
+      expect(screen.getByText(/May queue team-fan morale prompt; confirm in Random Event Log/i)).toBeInTheDocument();
+      expect(screen.getByText(/No Game Detail archive, player stats, WPA, fame, milestones, awards, designations, relationships, or Almanac player evidence/i)).toBeInTheDocument();
     });
 
     test('links GameTracker-completed rows to Game Detail when a game archive exists', () => {
       render(<ScheduleContent {...defaultProps} games={[gameTrackerCompletedGame]} />);
 
+      expect(screen.getByText('ARCHIVE')).toBeInTheDocument();
       expect(screen.getByRole('link', { name: /Game Detail/i })).toHaveAttribute(
         'href',
         '/almanac/games/completed-game-tracker-1',
@@ -247,14 +250,16 @@ describe('ScheduleContent Component', () => {
 
       expect(screen.queryByTitle('Edit game')).not.toBeInTheDocument();
       expect(screen.queryByTitle('Remove game')).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Final Score' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Score Only/i })).not.toBeInTheDocument();
     });
 
     test('team-filtered completed rows show score-only label and stat-boundary copy', () => {
       render(<ScheduleContent {...defaultProps} selectedTeam="TIGERS" />);
 
       expect(screen.getByText('SCORE ONLY')).toBeInTheDocument();
-      expect(screen.getByText('Schedule + standings + team-fan prompt context only; no player stats, WPA, fame, awards, designations, or Almanac player evidence.')).toBeInTheDocument();
+      expect(screen.getByText(/Schedule \+ standings only/i)).toBeInTheDocument();
+      expect(screen.getByText(/confirm in Random Event Log/i)).toBeInTheDocument();
+      expect(screen.getByText(/No Game Detail archive, player stats, WPA, fame, milestones, awards, designations, relationships, or Almanac player evidence/i)).toBeInTheDocument();
     });
   });
 
@@ -274,7 +279,7 @@ describe('ScheduleContent Component', () => {
       const onEnterFinalScore = vi.fn();
       render(<ScheduleContent {...defaultProps} onEnterFinalScore={onEnterFinalScore} />);
 
-      fireEvent.click(screen.getAllByText('Final Score')[0]);
+      fireEvent.click(screen.getAllByRole('button', { name: /Enter score-only final score/i })[0]);
 
       expect(onEnterFinalScore).toHaveBeenCalledWith(expect.objectContaining({
         id: 'game-2',

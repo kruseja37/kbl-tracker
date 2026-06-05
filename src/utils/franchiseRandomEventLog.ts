@@ -353,7 +353,7 @@ export function buildFranchiseRandomEventLogReport(
       reason: `${narrative.scoreOnlyCompletedGames.scopedRows} scoped score-only result(s) can be reviewed as team/schedule context only.`,
       suggestedManualChange: manualChange(
         'story-note',
-        'Optional team-level story note only. Score-only rows must not create player-stat, profile, morale, or relationship changes.',
+        'Optional team-level note only. Score-only rows may queue team-fan morale review after confirmation, but must not create player-stat, profile, player morale, or relationship changes.',
       ),
       evidenceReferences: [
         evidence(
@@ -366,7 +366,8 @@ export function buildFranchiseRandomEventLogReport(
       ],
       confirmations: input.confirmations,
       warnings: [
-        'Score-only evidence has no player archive, player stats, WPA, WAR, morale, or relationship authority.',
+        'Score-only evidence has no player archive, player stats, WPA, WAR, player morale, fame, milestones, awards, designations, relationships, or Game Detail archive authority.',
+        'Team-fan morale can change only after Random Event Log confirmation.',
       ],
     }));
   }

@@ -2784,7 +2784,7 @@ export function FranchiseHome() {
           <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-6 max-w-md w-full mx-4">
             <div className="text-lg text-[#E8E8D8] mb-2 text-center">ENTER FINAL SCORE</div>
             <div className="text-[10px] text-[#E8E8D8]/70 mb-5 text-center">
-              Score-only updates schedule, standings, and team-fan prompt context only. It does not create player stats, WPA, fame, awards, designations, or Almanac player evidence.
+              Score-only updates schedule + standings. It may queue team-fan morale prompt context, but morale changes only after Random Event Log confirmation. No Game Detail archive, player stats, WPA, fame, milestones, awards, designations, relationships, or Almanac player evidence.
             </div>
 
             <div className="grid grid-cols-2 gap-3 mb-4">
@@ -2835,7 +2835,7 @@ export function FranchiseHome() {
                 disabled={scoreOnlySaving}
                 className="flex-1 bg-[#5A8352] border-[5px] border-[#4A6844] py-3 text-sm text-[#E8E8D8] hover:bg-[#4F7D4B] disabled:opacity-50"
               >
-                {scoreOnlySaving ? 'SAVING' : 'SAVE FINAL'}
+                {scoreOnlySaving ? 'SAVING' : 'SAVE SCORE ONLY'}
               </button>
             </div>
           </div>

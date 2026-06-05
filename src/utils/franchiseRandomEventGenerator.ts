@@ -464,7 +464,7 @@ function buildScoreOnlyCandidates(
         reason: `Score-only Game ${game.gameNumber}: ${effectResult.reason}`,
         suggestedManualChange: manualChange(
           'fan-morale-draft',
-          `Optional team fan morale draft (${effectResult.delta > 0 ? '+' : ''}${effectResult.delta}) only. Score-only rows must not target player morale or player stats.`,
+          `Optional team fan morale draft (${effectResult.delta > 0 ? '+' : ''}${effectResult.delta}) only after confirmation. Score-only rows must not target player morale or player stats.`,
         ),
         evidenceReferences: [
           evidence(scope, 'score-only-schedule-summary', `Score-only Game ${game.gameNumber}: ${game.awayTeamId} ${game.result?.awayScore ?? '—'} at ${game.homeTeamId} ${game.result?.homeScore ?? '—'}.`, 1, {
@@ -480,8 +480,8 @@ function buildScoreOnlyCandidates(
         },
         warnings: [
           ...formula.limitations,
-          'Score-only evidence has no player archive, player stats, WPA, WAR, morale, or relationship authority.',
-          'Score-only evidence is schedule/standings context only and cannot target player morale.',
+          'Score-only evidence has no player archive, player stats, WPA, WAR, player morale, fame, milestones, awards, designations, relationships, or Game Detail archive authority.',
+          'Score-only evidence is schedule/standings context only; team-fan morale can change only after Random Event Log confirmation.',
         ],
       }),
     );

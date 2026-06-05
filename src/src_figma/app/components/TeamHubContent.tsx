@@ -430,7 +430,7 @@ function randomEventSourceLabel(record: FranchiseRandomEventLogRecord): string {
     case 'gametracker-archive-fact':
       return 'GameTracker archive';
     case 'score-only-context':
-      return 'Score-only schedule';
+      return 'Score-only schedule; confirm team-fan morale only';
     case 'roster-movement-context':
       return 'Roster movement';
     case 'player-profile-edit-context':
@@ -5369,7 +5369,7 @@ function FranchiseRandomEventLogPanel({
         </div>
         <div className="border-2 border-[#4A6844] bg-[#5A8352] p-2">
           <div className="font-bold text-[#C4A853]">3. DECISION</div>
-          <div>Confirm to persist the decision, or dismiss to leave it out of future narrative context.</div>
+          <div>Confirm to persist the decision and apply allowed morale; dismiss to skip it.</div>
         </div>
         <div className="border-2 border-[#4A6844] bg-[#5A8352] p-2">
           <div className="font-bold text-[#C4A853]">4. VERIFY</div>
@@ -5449,7 +5449,7 @@ function FranchiseRandomEventLogPanel({
                   <div className="mb-1 font-bold text-[#C4A853]">Safe-effect preview</div>
                   <div>
                     {effectPreview.allowed
-                      ? `${effectPreview.targetType === 'team-fan' ? 'Team fan morale' : 'Player morale'} ${effectPreview.delta > 0 ? '+' : ''}${effectPreview.delta}${effectPreview.teamId ? ` for ${effectTeamLabel}` : ''}.`
+                      ? `On confirm: ${effectPreview.targetType === 'team-fan' ? 'Team fan morale' : 'Player morale'} ${effectPreview.delta > 0 ? '+' : ''}${effectPreview.delta}${effectPreview.teamId ? ` for ${effectTeamLabel}` : ''}.`
                       : 'No safe morale effect target is available yet.'}
                   </div>
                   {effectPreview.blockers.length > 0 && (

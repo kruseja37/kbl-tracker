@@ -91,9 +91,10 @@ export function ScheduleContent({
       <button
         onClick={(e) => { e.stopPropagation(); onEnterFinalScore(game); }}
         className="bg-[#4A6844] border-[2px] border-[#3F5A3A] px-2 py-1 text-[8px] text-[#E8E8D8] hover:bg-[#3F5A3A] transition-colors"
-        title="Enter final score only"
+        title="Enter score-only final score"
+        aria-label={`Enter score-only final score for game ${game.gameNumber}`}
       >
-        Final Score
+        Score Only
       </button>
     );
   };
@@ -107,7 +108,14 @@ export function ScheduleContent({
   const renderScoreOnlyBadge = (game: ScheduledGame) => {
     if (!isScoreOnlyResult(game)) return null;
     return (
-      <div className="text-[8px] text-[#E8E8D8] bg-[#3F5A3A] px-2 py-1">SCORE ONLY</div>
+      <div className="text-[8px] font-bold text-[#1a1a1a] bg-[#FFD27A] border-[2px] border-[#C4A853] px-2 py-1">SCORE ONLY</div>
+    );
+  };
+
+  const renderArchiveBadge = (game: ScheduledGame) => {
+    if (!hasGameDetailLink(game)) return null;
+    return (
+      <div className="text-[8px] font-bold text-[#E8E8D8] bg-[#3F5A3A] border-[2px] border-[#C4A853] px-2 py-1">ARCHIVE</div>
     );
   };
 
@@ -128,7 +136,7 @@ export function ScheduleContent({
     if (!isScoreOnlyResult(game)) return null;
     return (
       <div className="mt-2 text-[8px] text-[#E8E8D8]/65">
-        Schedule + standings + team-fan prompt context only; no player stats, WPA, fame, awards, designations, or Almanac player evidence.
+        Schedule + standings only. May queue team-fan morale prompt; confirm in Random Event Log. No Game Detail archive, player stats, WPA, fame, milestones, awards, designations, relationships, or Almanac player evidence.
       </div>
     );
   };
@@ -531,6 +539,7 @@ export function ScheduleContent({
                     <span>Game {game.gameNumber} │ Day {game.dayNumber} │ {game.awayTeamId === selectedTeam ? "@" : "vs"} {teamName(opponent)} │ {location}</span>
                     <div className="flex items-center gap-2">
                       {renderScoreOnlyBadge(game)}
+                      {renderArchiveBadge(game)}
                       {renderGameDetailLink(game)}
                       <span className={isWin ? "text-[#00DD00]" : "text-[#DD0000]"}>
                         {isWin ? "W" : "L"} {score}
@@ -553,6 +562,7 @@ export function ScheduleContent({
                 </div>
                 <div className="text-[8px] text-[#E8E8D8] bg-[#4A6844] px-2 py-1">FINAL</div>
                 {renderScoreOnlyBadge(game)}
+                {renderArchiveBadge(game)}
                 {renderGameDetailLink(game)}
               </div>
               <div className="flex items-center justify-center gap-4">

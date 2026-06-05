@@ -461,6 +461,9 @@ describe('franchise random event generator core', () => {
       scoreOnlyContextOnly: true,
       hiddenProspectTruth: false,
     });
+    expect(scoreOnlyCandidates[0].suggestedManualChange.summary).toMatch(/only after confirmation/i);
+    expect(scoreOnlyCandidates[0].warnings.join(' ')).toMatch(/team-fan morale can change only after Random Event Log confirmation/i);
+    expect(scoreOnlyCandidates[0].warnings.join(' ')).toMatch(/no player archive, player stats, WPA, WAR, player morale, fame, milestones, awards, designations, relationships, or Game Detail archive authority/i);
     expect(JSON.stringify(scoreOnlyCandidates)).not.toMatch(/player-morale-draft/);
   });
 

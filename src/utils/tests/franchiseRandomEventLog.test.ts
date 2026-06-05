@@ -220,7 +220,7 @@ describe('franchise random event log foundation', () => {
     });
   });
 
-  test('keeps score-only rows as schedule context only with no player or morale authority', () => {
+  test('keeps score-only rows as schedule context only with confirmation-gated team fan morale', () => {
     const report = buildFranchiseRandomEventLogReport({
       narrativeEventEligibilityReport: narrativeReport(),
     });
@@ -238,7 +238,9 @@ describe('franchise random event log foundation', () => {
       scoreOnlyContextOnly: true,
       hiddenProspectTruth: false,
     });
-    expect(scoreOnly?.warnings.join(' ')).toMatch(/no player archive, player stats, WPA, WAR, morale, or relationship authority/i);
+    expect(scoreOnly?.suggestedManualChange.summary).toMatch(/team-fan morale review after confirmation/i);
+    expect(scoreOnly?.warnings.join(' ')).toMatch(/no player archive, player stats, WPA, WAR, player morale, fame, milestones, awards, designations, relationships, or Game Detail archive authority/i);
+    expect(scoreOnly?.warnings.join(' ')).toMatch(/Team-fan morale can change only after Random Event Log confirmation/i);
   });
 
   test('applies confirmation checkbox state without enabling persistence or mutation', () => {
