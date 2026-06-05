@@ -538,6 +538,56 @@ describe('franchise trade dry-run adapter', () => {
     expectNoWrites();
   });
 
+  test('requested trade preview does not expose unrevealed FARM true grade', async () => {
+    const players = makePlayers().map((player) =>
+      player.id === 'a-farm-1'
+        ? makePlayer({
+          id: 'a-farm-1',
+          teamId: 'team-a',
+          firstName: 'Alpha',
+          lastName: 'Farm',
+          primaryPosition: 'SS',
+          overallGrade: 'S',
+          ratingRevealState: 'hidden',
+          prospectProfile: {
+            scoutedGrade: 'B',
+            potentialGrade: 'A',
+            trueGrade: 'S',
+            hiddenScoutTruth: { accuracy: 98 },
+          },
+          hiddenPersonalityModifiers: { leadership: 99 },
+          leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-a', rosterStatus: 'FARM' }],
+        } as Partial<Player> & Record<string, unknown> & { id: string; teamId: string })
+        : player,
+    );
+    seedValidation(players);
+
+    const result = await runFranchiseTradeDryRun(context, {
+      dryRun: true,
+      requestedTrade: {
+        sourceTeamId: 'team-a',
+        targetTeamId: 'team-b',
+        outgoingPlayerId: 'a-farm-1',
+        incomingPlayerId: 'b-rp-1',
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.requestedPreview?.outgoingPlayer).toEqual(
+      expect.objectContaining({
+        playerId: 'a-farm-1',
+        rosterStatus: 'FARM',
+        visibleGradeLabel: 'Scouted B',
+        hiddenGradeBlocked: true,
+      }),
+    );
+    expect(result.data?.requestedPreview?.outgoingPlayer).not.toHaveProperty('overallGrade');
+    expect(JSON.stringify(result.data?.requestedPreview?.outgoingPlayer)).not.toMatch(
+      /"S"|trueGrade|hiddenScoutTruth|hiddenPersonalityModifiers|leadership|accuracy/i,
+    );
+    expectNoWrites();
+  });
+
   test('executes a manual MLB-for-MLB franchise trade and logs canonical transaction context', async () => {
     const result = await executeManualFranchiseTrade(context, {
       requestedTrade: {

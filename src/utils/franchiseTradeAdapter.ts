@@ -74,6 +74,8 @@ export interface FranchiseTradePlayerPreview {
   rosterStatus: FranchiseTradeRosterStatus;
   primaryPosition: string;
   overallGrade?: string;
+  visibleGradeLabel: string;
+  hiddenGradeBlocked?: boolean;
   salary?: number;
 }
 
@@ -216,6 +218,45 @@ function rosterStatusForPlayer(player: Player, teamId?: string): FranchiseTradeR
   return 'UNKNOWN';
 }
 
+function playerRevealState(player: Player): 'hidden' | 'revealed' | undefined {
+  const state = String((player as Player & Record<string, unknown>).ratingRevealState ?? '').toLowerCase();
+  if (state === 'hidden' || state === 'revealed') return state;
+  return undefined;
+}
+
+function visibleScoutedGrade(player: Player): string | undefined {
+  const carrier = player as Player & {
+    prospectProfile?: {
+      scoutedGrade?: unknown;
+      potentialGrade?: unknown;
+    };
+    scoutedGrade?: unknown;
+    potentialGrade?: unknown;
+  };
+  const scouted = carrier.prospectProfile?.scoutedGrade ?? carrier.scoutedGrade;
+  if (typeof scouted === 'string' && scouted.trim().length > 0) {
+    return scouted.trim();
+  }
+  const potential = carrier.prospectProfile?.potentialGrade ?? carrier.potentialGrade;
+  if (typeof potential === 'string' && potential.trim().length > 0) {
+    return `Potential ${potential.trim()}`;
+  }
+  return undefined;
+}
+
+function isHiddenFarmTradePlayer(player: Player, teamId: string): boolean {
+  return rosterStatusForPlayer(player, teamId) === 'FARM' && playerRevealState(player) !== 'revealed';
+}
+
+function visibleGradeLabelForPlayer(player: Player, teamId: string): string {
+  if (isHiddenFarmTradePlayer(player, teamId)) {
+    const scouted = visibleScoutedGrade(player);
+    return scouted ? `Scouted ${scouted}` : 'Hidden FARM grade';
+  }
+
+  return `Grade ${String(player.overallGrade ?? '--')}`;
+}
+
 function playerTeamId(player: Player): string | undefined {
   return primaryAssignment(player)?.teamId;
 }
@@ -283,13 +324,16 @@ function buildNeedSurplus(players: Player[]): { needs: FranchiseTradeNeedSurplus
 }
 
 function buildPlayerPreview(player: Player, teamId: string): FranchiseTradePlayerPreview {
+  const hiddenGradeBlocked = isHiddenFarmTradePlayer(player, teamId);
   return {
     playerId: player.id,
     playerName: playerName(player),
     teamId,
     rosterStatus: rosterStatusForPlayer(player, teamId),
     primaryPosition: primaryPosition(player),
-    overallGrade: player.overallGrade,
+    ...(hiddenGradeBlocked ? {} : { overallGrade: player.overallGrade }),
+    visibleGradeLabel: visibleGradeLabelForPlayer(player, teamId),
+    hiddenGradeBlocked: hiddenGradeBlocked || undefined,
     salary: typeof player.salary === 'number' ? player.salary : undefined,
   };
 }

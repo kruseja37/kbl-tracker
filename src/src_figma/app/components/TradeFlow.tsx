@@ -187,8 +187,36 @@ function franchisePlayerPosition(player: FranchisePlayer): string {
   return String(player.primaryPosition ?? player.secondaryPosition ?? "POS").toUpperCase();
 }
 
-function franchisePlayerGrade(player: FranchisePlayer): string {
-  return String((player as unknown as Record<string, unknown>).overallGrade ?? "--");
+function franchisePlayerRevealState(player: FranchisePlayer): "hidden" | "revealed" | undefined {
+  const state = String((player as FranchisePlayer & Record<string, unknown>).ratingRevealState ?? "").toLowerCase();
+  if (state === "hidden" || state === "revealed") return state;
+  return undefined;
+}
+
+function franchiseVisibleScoutedGrade(player: FranchisePlayer): string | undefined {
+  const carrier = player as FranchisePlayer & {
+    prospectProfile?: {
+      scoutedGrade?: unknown;
+      potentialGrade?: unknown;
+    };
+    scoutedGrade?: unknown;
+    potentialGrade?: unknown;
+  };
+  const scouted = carrier.prospectProfile?.scoutedGrade ?? carrier.scoutedGrade;
+  if (typeof scouted === "string" && scouted.trim().length > 0) return scouted.trim();
+  const potential = carrier.prospectProfile?.potentialGrade ?? carrier.potentialGrade;
+  if (typeof potential === "string" && potential.trim().length > 0) return `Potential ${potential.trim()}`;
+  return undefined;
+}
+
+function franchisePlayerGradeLabel(player: FranchisePlayer, teamId: string): string {
+  const status = franchiseRosterStatus(player, teamId);
+  if (status === "FARM" && franchisePlayerRevealState(player) !== "revealed") {
+    const scouted = franchiseVisibleScoutedGrade(player);
+    return scouted ? `Scouted ${scouted}` : "Hidden FARM grade";
+  }
+
+  return `Grade ${String((player as unknown as Record<string, unknown>).overallGrade ?? "--")}`;
 }
 
 function assignmentForTeam(player: FranchisePlayer, teamId: string) {
@@ -530,7 +558,7 @@ function FranchiseTransactionConsole({
               <div>
                 <div className="text-sm font-bold">{franchisePlayerName(player, player.id)}</div>
                 <div className={`text-[10px] ${selected ? "text-black/70" : "text-[#E8E8D8]/70"}`}>
-                  {player.id} / {franchisePlayerPosition(player)} / {status} / Grade {franchisePlayerGrade(player)}
+                  {player.id} / {franchisePlayerPosition(player)} / {status} / {franchisePlayerGradeLabel(player, teamId)}
                 </div>
               </div>
               <div className="text-xs font-bold">{selected ? "SELECTED" : status}</div>

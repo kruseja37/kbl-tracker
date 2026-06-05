@@ -77,7 +77,15 @@ const players = [
     firstName: "Farm",
     lastName: "Alpha",
     primaryPosition: "SP",
-    overallGrade: "C",
+    overallGrade: "S",
+    ratingRevealState: "hidden",
+    prospectProfile: {
+      scoutedGrade: "B",
+      potentialGrade: "A",
+      trueGrade: "S",
+      hiddenScoutTruth: { accuracy: 99 },
+    },
+    hiddenPersonalityModifiers: { leadership: 99 },
     leagueAssignments: [{ leagueId: "league-a", teamId: "team-a", rosterStatus: "FARM" }],
   },
   {
@@ -269,6 +277,20 @@ describe("TradeFlow franchise regular-season transactions", () => {
     expect(await screen.findByText(/Manual trade logged as txn-trade/i)).toBeInTheDocument();
     expect(mocks.mockRunFranchiseTradeDryRun).not.toHaveBeenCalled();
     expect(mocks.mockSaveTeamRoster).not.toHaveBeenCalled();
+  });
+
+  test("manual trade picker keeps unrevealed FARM grades hidden-safe", async () => {
+    await renderFranchiseTradeFlow();
+
+    fireEvent.click(screen.getByRole("button", { name: /MANUAL TRADE/i }));
+    await screen.findByText("Farm Alpha");
+
+    expect(screen.getByText(/farm-a \/ SP \/ FARM \/ Scouted B/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Grade S/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/trueGrade|hiddenScoutTruth|hiddenPersonalityModifiers|leadership|accuracy/i)).not.toBeInTheDocument();
+    expect(mocks.mockExecuteManualFranchiseTrade).not.toHaveBeenCalled();
+    expect(mocks.mockSaveTeamRoster).not.toHaveBeenCalled();
+    expect(mocks.mockSavePlayer).not.toHaveBeenCalled();
   });
 
   test("manual trade validation fails before writes when teams are invalid", async () => {
