@@ -34,6 +34,7 @@ import {
   getPlayerExhibitionStats,
   getArchiveInstanceMode,
   getPlayerInstanceStats,
+  getPlayerInstanceWpaSummary,
   searchArchivedPlayerInstances,
   getTeamRosterFromGames,
 } from '../../../utils/almanacQueries';
@@ -437,6 +438,139 @@ describe('almanacQueries player exhibition stats', () => {
         SO: 3,
       }),
     });
+  });
+
+  test('summarizes franchise player WPA from stored completed-game totals only', async () => {
+    mockGetAllCanonicalPlayers.mockResolvedValue([
+      {
+        canonicalId: 'frannie',
+        playerName: 'Frannie First',
+        hometown: { city: 'Denver', state: 'CO' },
+        instances: [
+          {
+            instanceId: 'franchise-alpha',
+            instanceName: 'Alpha Franchise',
+            mode: 'franchise',
+            playerIdInInstance: 'franchise-player-1',
+          },
+        ],
+      },
+    ]);
+    mockGetAllCompletedGames.mockResolvedValue([
+      {
+        gameId: 'franchise-game-wpa',
+        date: Date.UTC(2026, 4, 12),
+        competitionType: 'franchise',
+        competitionId: 'franchise-alpha',
+        competitionName: 'Alpha Franchise',
+        franchiseId: 'franchise-alpha',
+        awayTeamId: 'team-alpha',
+        awayTeamName: 'Alpha',
+        homeTeamId: 'team-beta',
+        homeTeamName: 'Beta',
+        finalScore: { away: 5, home: 2 },
+        innings: 9,
+        fameEvents: [],
+        playerStats: {
+          'franchise-player-1': {
+            playerName: 'Frannie First',
+            teamId: 'team-alpha',
+            pa: 4,
+            ab: 4,
+            h: 2,
+            singles: 2,
+            doubles: 0,
+            triples: 0,
+            hr: 0,
+            rbi: 3,
+            r: 1,
+            bb: 0,
+            hbp: 0,
+            k: 1,
+            sb: 0,
+            cs: 0,
+            sf: 0,
+            sh: 0,
+            gidp: 0,
+            putouts: 0,
+            assists: 0,
+            fieldingErrors: 0,
+          },
+        },
+        pitcherGameStats: [],
+        playerWpaTotals: [
+          {
+            playerId: 'franchise-player-1',
+            playerName: 'Frannie First',
+            teamId: 'team-alpha',
+            totalWpa: 0.184,
+            battingWpa: 0.144,
+            pitchingWpa: 0,
+            catchingWpa: 0,
+            fieldingWpa: 0.02,
+            baserunningWpa: 0.02,
+            managingWpa: 0,
+          },
+        ],
+      },
+      {
+        gameId: 'franchise-game-no-wpa',
+        date: Date.UTC(2026, 4, 11),
+        competitionType: 'franchise',
+        competitionId: 'franchise-alpha',
+        competitionName: 'Alpha Franchise',
+        franchiseId: 'franchise-alpha',
+        awayTeamId: 'team-alpha',
+        awayTeamName: 'Alpha',
+        homeTeamId: 'team-beta',
+        homeTeamName: 'Beta',
+        finalScore: { away: 9, home: 8 },
+        innings: 9,
+        fameEvents: [],
+        playerStats: {
+          'franchise-player-1': {
+            playerName: 'Frannie First',
+            teamId: 'team-alpha',
+            pa: 4,
+            ab: 4,
+            h: 1,
+            singles: 1,
+            doubles: 0,
+            triples: 0,
+            hr: 0,
+            rbi: 1,
+            r: 0,
+            bb: 0,
+            hbp: 0,
+            k: 1,
+            sb: 0,
+            cs: 0,
+            sf: 0,
+            sh: 0,
+            gidp: 0,
+            putouts: 0,
+            assists: 0,
+            fieldingErrors: 0,
+          },
+        },
+        pitcherGameStats: [],
+        playerWpaTotals: [],
+      },
+    ]);
+
+    await expect(
+      getPlayerInstanceWpaSummary('franchise-player-1', 'franchise', 'franchise-alpha'),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        gamesWithWpa: 1,
+        gamesWithoutWpa: 1,
+        totalWpa: 0.184,
+        battingWpa: 0.144,
+        fieldingWpa: 0.02,
+        baserunningWpa: 0.02,
+        latestGameId: 'franchise-game-wpa',
+      }),
+    );
   });
 
   test('counts batting and pitching stats in the same completed game once in player search', async () => {

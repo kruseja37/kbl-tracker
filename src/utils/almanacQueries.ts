@@ -110,6 +110,23 @@ export interface PitchingLine {
   ERA: number;
 }
 
+export interface PlayerWpaRoleLine {
+  totalWpa: number;
+  battingWpa: number;
+  pitchingWpa: number;
+  catchingWpa: number;
+  fieldingWpa: number;
+  baserunningWpa: number;
+  managingWpa: number;
+}
+
+export interface PlayerInstanceWpaSummary extends PlayerWpaRoleLine {
+  gamesWithWpa: number;
+  gamesWithoutWpa: number;
+  latestGameId?: string;
+  latestGameDate?: number;
+}
+
 export type AlmanacInstanceMode = 'exhibition' | 'franchise' | 'elimination';
 
 export type ManagerAlmanacModeFilter = AlmanacInstanceMode | 'all';
@@ -1911,6 +1928,77 @@ export async function getPlayerInstanceStats(
             ),
           }
         : null,
+  };
+}
+
+export async function getPlayerInstanceWpaSummary(
+  playerId: string,
+  mode: AlmanacInstanceMode,
+  instanceId: string,
+): Promise<PlayerInstanceWpaSummary | null> {
+  const registry = await getCanonicalRegistry();
+  const playerIds = resolvePlayerAliasesForLeague(registry, instanceId, playerId);
+  const games = await getInstanceGames(mode, instanceId);
+  const appearanceGames = games.filter(
+    (game) =>
+      Boolean(getBattingEntryForAliases(game, playerIds)) ||
+      Boolean(getPitchingEntryForAliases(game, playerIds)),
+  );
+
+  if (appearanceGames.length === 0) {
+    return null;
+  }
+
+  const summary: PlayerInstanceWpaSummary = {
+    gamesWithWpa: 0,
+    gamesWithoutWpa: 0,
+    totalWpa: 0,
+    battingWpa: 0,
+    pitchingWpa: 0,
+    catchingWpa: 0,
+    fieldingWpa: 0,
+    baserunningWpa: 0,
+    managingWpa: 0,
+  };
+
+  for (const game of appearanceGames) {
+    const total = (game.playerWpaTotals ?? []).find((candidate) =>
+      playerIds.has(candidate.playerId),
+    );
+
+    if (!total) {
+      summary.gamesWithoutWpa += 1;
+      continue;
+    }
+
+    summary.gamesWithWpa += 1;
+    summary.totalWpa += total.totalWpa;
+    summary.battingWpa += total.battingWpa;
+    summary.pitchingWpa += total.pitchingWpa;
+    summary.catchingWpa += total.catchingWpa;
+    summary.fieldingWpa += total.fieldingWpa;
+    summary.baserunningWpa += total.baserunningWpa;
+    summary.managingWpa += total.managingWpa;
+
+    if (!summary.latestGameDate || game.date > summary.latestGameDate) {
+      summary.latestGameId = game.gameId;
+      summary.latestGameDate = game.date;
+    }
+  }
+
+  if (summary.gamesWithWpa === 0) {
+    return null;
+  }
+
+  return {
+    ...summary,
+    totalWpa: roundTo(summary.totalWpa, 6),
+    battingWpa: roundTo(summary.battingWpa, 6),
+    pitchingWpa: roundTo(summary.pitchingWpa, 6),
+    catchingWpa: roundTo(summary.catchingWpa, 6),
+    fieldingWpa: roundTo(summary.fieldingWpa, 6),
+    baserunningWpa: roundTo(summary.baserunningWpa, 6),
+    managingWpa: roundTo(summary.managingWpa, 6),
   };
 }
 

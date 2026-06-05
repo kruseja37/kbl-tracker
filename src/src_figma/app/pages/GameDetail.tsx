@@ -231,6 +231,127 @@ function EmptyState({ label }: { label: string }) {
   );
 }
 
+function teamNameForId(game: CompletedGameRecord, teamId: string): string {
+  if (normalizeTeamId(teamId) === normalizeTeamId(game.awayTeamId)) {
+    return game.awayTeamName;
+  }
+
+  if (normalizeTeamId(teamId) === normalizeTeamId(game.homeTeamId)) {
+    return game.homeTeamName;
+  }
+
+  return humanizeToken(teamId);
+}
+
+function ArchivedWpaSummary({
+  game,
+  canonicalLookup,
+}: {
+  game: CompletedGameRecord;
+  canonicalLookup: CanonicalLookup;
+}) {
+  const playerTotals = game.playerWpaTotals ?? [];
+  const managerTotals = game.managerWpaTotals ?? [];
+  const hasArchivedWpa = playerTotals.length > 0 || managerTotals.length > 0;
+
+  if (!hasArchivedWpa) {
+    return (
+      <SectionFrame
+        title="Archived WPA Totals"
+        subtitle="Stored totals from fully scored GameTracker archives only."
+      >
+        <EmptyState label="WPA unavailable for score-only/manual-result games or older archives without stored WPA totals." />
+      </SectionFrame>
+    );
+  }
+
+  return (
+    <SectionFrame
+      title="Archived WPA Totals"
+      subtitle="Read-only completed-game totals. LI and clutch details remain in the play log/audit sections when the event log is available."
+    >
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="border-[4px] border-[#32394B] bg-[#0B0E14] p-4">
+          <div className="mb-3 text-[9px] uppercase tracking-[0.25em] text-[#D8A84A]">Players</div>
+          {playerTotals.length === 0 ? (
+            <EmptyState label="No player WPA totals stored." />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-left text-[8px] text-[#E7E9F1]">
+                <thead className="text-[#8C94A6]">
+                  <tr>
+                    <th className="pb-3 pr-3">Player</th>
+                    <th className="pb-3 pr-3">Team</th>
+                    <th className="pb-3 pr-3">Roles</th>
+                    <th className="pb-3 text-right">WPA</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {playerTotals.map((total) => {
+                    const roles = [
+                      total.battingWpa ? 'BAT' : null,
+                      total.pitchingWpa ? 'PIT' : null,
+                      total.fieldingWpa ? 'FLD' : null,
+                      total.baserunningWpa ? 'RUN' : null,
+                      total.catchingWpa ? 'CAT' : null,
+                    ].filter(Boolean).join(' / ') || 'KBL';
+                    return (
+                      <tr key={total.playerId} className="border-t border-white/8">
+                        <td className="py-3 pr-3 leading-5">
+                          <PlayerNameLink
+                            playerId={total.playerId}
+                            playerName={total.playerName}
+                            canonicalLookup={canonicalLookup}
+                          />
+                        </td>
+                        <td className="py-3 pr-3 text-[#9FA7B8]">{teamNameForId(game, total.teamId)}</td>
+                        <td className="py-3 pr-3 text-[#9FA7B8]">{roles}</td>
+                        <td className={`py-3 text-right ${total.totalWpa >= 0 ? "text-[#7EF0A8]" : "text-[#FF9E9E]"}`}>
+                          {formatWpaPoints(total.totalWpa)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <div className="border-[4px] border-[#32394B] bg-[#0B0E14] p-4">
+          <div className="mb-3 text-[9px] uppercase tracking-[0.25em] text-[#D8A84A]">Managers</div>
+          {managerTotals.length === 0 ? (
+            <EmptyState label="No Manager Moments stored." />
+          ) : (
+            <div className="space-y-3">
+              {managerTotals.map((total) => (
+                <div key={`${total.managerId}-${total.teamId}`} className="border-[3px] border-[#262C39] bg-[#111620] p-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <div className="text-[9px] leading-5 text-[#E7E9F1]">{total.managerName}</div>
+                      <div className="mt-1 text-[8px] uppercase tracking-[0.22em] text-[#8C94A6]">
+                        {teamNameForId(game, total.teamId)}
+                      </div>
+                    </div>
+                    <div className={`text-[10px] ${total.managerValue >= 0 ? "text-[#7EF0A8]" : "text-[#FF9E9E]"}`}>
+                      {formatWpaPoints(total.managerValue)}
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-[8px] text-[#B0B8CA]">
+                    <div>Tactical {formatWpaPoints(total.tacticalManagerWpa, 1)}</div>
+                    <div>Deploy {formatWpaPoints(total.deploymentWpa, 1)}</div>
+                    <div>Lineup {formatWpaPoints(total.lineupDeltaWpa, 1)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </SectionFrame>
+  );
+}
+
 function PlayerNameLink({
   playerId,
   playerName,
@@ -901,6 +1022,8 @@ export function GameDetail() {
             </div>
           </SectionFrame>
         ) : null}
+
+        <ArchivedWpaSummary game={game} canonicalLookup={canonicalLookup} />
 
         <ManagerWpaOverlay game={game} managerProfiles={data.managerProfiles} />
 

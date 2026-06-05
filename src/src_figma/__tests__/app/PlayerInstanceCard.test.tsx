@@ -17,6 +17,7 @@ const {
   mockGetLeaguePlayerOverride,
   mockGetEffectivePlayer,
   mockGetPlayerInstanceContext,
+  mockGetPlayerInstanceWpaSummary,
 } = vi.hoisted(() => ({
   mockUseParams: vi.fn(),
   mockGetCanonicalPlayer: vi.fn(),
@@ -26,6 +27,7 @@ const {
   mockGetLeaguePlayerOverride: vi.fn(),
   mockGetEffectivePlayer: vi.fn(),
   mockGetPlayerInstanceContext: vi.fn(),
+  mockGetPlayerInstanceWpaSummary: vi.fn(),
 }));
 
 vi.mock("react-router-dom", async () => {
@@ -47,6 +49,7 @@ vi.mock("../../../utils/almanacStorage", () => ({
 vi.mock("../../../utils/almanacQueries", () => ({
   getPlayerInstanceStats: vi.fn(),
   getPlayerEliminationAllTimeStats: vi.fn(),
+  getPlayerInstanceWpaSummary: mockGetPlayerInstanceWpaSummary,
 }));
 
 vi.mock("../../../utils/leagueBuilderStorage", () => ({
@@ -174,6 +177,7 @@ describe("PlayerInstanceCard", () => {
       playerIds: ["player-1"],
       teamNames: new Map(),
     });
+    mockGetPlayerInstanceWpaSummary.mockResolvedValue(null);
     mockGetEffectivePlayer.mockResolvedValue(player);
   });
 
@@ -193,6 +197,39 @@ describe("PlayerInstanceCard", () => {
       screen.getByLabelText("Fame tier Captain (4/5)"),
     ).toBeInTheDocument();
     expect(screen.queryByText("SUPERSTAR")).not.toBeInTheDocument();
+    expect(screen.getByTestId("player-instance-wpa-unavailable")).toHaveTextContent(
+      "WPA unavailable for score-only/manual-result games",
+    );
+  });
+
+  test("renders archived WPA totals for the selected player instance", async () => {
+    mockGetPlayerInstanceWpaSummary.mockResolvedValue({
+      gamesWithWpa: 2,
+      gamesWithoutWpa: 1,
+      latestGameId: "game-franchise-2",
+      latestGameDate: Date.UTC(2026, 4, 12),
+      totalWpa: 0.184,
+      battingWpa: 0.12,
+      pitchingWpa: 0.04,
+      catchingWpa: 0,
+      fieldingWpa: 0.014,
+      baserunningWpa: 0.01,
+      managingWpa: 0,
+    });
+
+    render(
+      <MemoryRouter>
+        <PlayerInstanceCard />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("SKYLAR VEGA")).toBeInTheDocument();
+    const wpaSummary = screen.getByTestId("player-instance-wpa-summary");
+    expect(wpaSummary).toHaveTextContent("Archived KBL WPA");
+    expect(wpaSummary).toHaveTextContent("+18.4 pp");
+    expect(wpaSummary).toHaveTextContent("2 scored games | 1 without WPA");
+    expect(wpaSummary).toHaveTextContent("BAT");
+    expect(wpaSummary).toHaveTextContent("+12.0 pp");
   });
 
   test("uses the instance override only for elimination context", () => {

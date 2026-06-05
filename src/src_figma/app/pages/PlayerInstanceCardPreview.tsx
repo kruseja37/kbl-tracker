@@ -117,6 +117,7 @@ function createPreviewState({
     usedFallback: true,
     batting: null,
     pitching: null,
+    wpaSummary: null,
     allTimeEliminationBatting: null,
     allTimeEliminationPitching: null,
     teams: [],

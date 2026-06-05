@@ -291,6 +291,31 @@ describe('processCompletedGame exhibition almanac registration', () => {
       seasonId: 'franchise-alpha-season-1',
       statsScopeId: 'franchise-alpha-season-1',
       scheduleGameId: 'sched-1',
+      playerWpaTotals: [
+        {
+          playerId: 'player-1',
+          playerName: 'Player One',
+          teamId: 'away-team',
+          totalWpa: 0.184,
+          battingWpa: 0.184,
+          pitchingWpa: 0,
+          catchingWpa: 0,
+          fieldingWpa: 0,
+          baserunningWpa: 0,
+          managingWpa: 0,
+        },
+      ],
+      managerWpaTotals: [
+        {
+          managerId: 'away-manager',
+          managerName: 'Away Manager',
+          teamId: 'away-team',
+          tacticalManagerWpa: 0.12,
+          deploymentWpa: 0,
+          lineupDeltaWpa: 0.02,
+          managerValue: 0.14,
+        },
+      ],
     };
 
     await processCompletedGame(
@@ -306,6 +331,8 @@ describe('processCompletedGame exhibition almanac registration', () => {
           franchiseId: 'franchise-alpha',
           statsScopeId: 'franchise-alpha-season-1',
           scheduleGameId: 'sched-1',
+          playerWpaTotals: gameState.playerWpaTotals,
+          managerWpaTotals: gameState.managerWpaTotals,
         },
       },
     );
@@ -320,6 +347,8 @@ describe('processCompletedGame exhibition almanac registration', () => {
         competitionId: 'franchise-alpha',
         franchiseId: 'franchise-alpha',
         statsScopeId: 'franchise-alpha-season-1',
+        playerWpaTotals: gameState.playerWpaTotals,
+        managerWpaTotals: gameState.managerWpaTotals,
       }),
     );
     expect(mockRegisterAlmanacPlayers).toHaveBeenCalledWith(

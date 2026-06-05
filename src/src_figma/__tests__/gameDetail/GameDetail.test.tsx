@@ -778,6 +778,73 @@ describe("GameDetail Manager WPA overlay", () => {
     expect(within(leaderboardSection as HTMLElement).queryByText("+9.999")).not.toBeInTheDocument();
   });
 
+  test("renders archived player and manager WPA totals from completed franchise games", async () => {
+    mockGetCompletedGameById.mockResolvedValue({
+      ...createCompletedGame([
+        createManagerDecision({
+          managerWpa: 0.184,
+          rawWindowWpa: 0.184,
+        }),
+      ]),
+      competitionType: "franchise",
+      competitionId: "franchise-alpha",
+      franchiseId: "franchise-alpha",
+      playerWpaTotals: [
+        {
+          playerId: "player-one",
+          playerName: "Player One",
+          teamId: "away",
+          totalWpa: 0.3,
+          battingWpa: 0.3,
+          pitchingWpa: 0,
+          catchingWpa: 0,
+          fieldingWpa: 0,
+          baserunningWpa: 0,
+          managingWpa: 0,
+        },
+      ],
+      managerWpaTotals: [
+        {
+          managerId: "away-manager",
+          managerName: "Casey Custom",
+          teamId: "away",
+          tacticalManagerWpa: 0.184,
+          deploymentWpa: 0,
+          lineupDeltaWpa: -0.025,
+          managerValue: 0.159,
+        },
+      ],
+    } satisfies CompletedGameRecord);
+
+    render(<GameDetail />);
+
+    const archivedTitle = await screen.findByText("Archived WPA Totals");
+    const archivedSection = archivedTitle.closest("section");
+    expect(archivedSection).not.toBeNull();
+    expect(within(archivedSection as HTMLElement).getByText("Player One")).toBeInTheDocument();
+    expect(within(archivedSection as HTMLElement).getByText("+30.0 pp")).toBeInTheDocument();
+    expect(within(archivedSection as HTMLElement).getByText("Casey Custom")).toBeInTheDocument();
+    expect(within(archivedSection as HTMLElement).getByText("+15.9 pp")).toBeInTheDocument();
+    expect(within(archivedSection as HTMLElement).getByText(/LI and clutch details remain/i)).toBeInTheDocument();
+  });
+
+  test("shows compact WPA blocker when an archive has no stored WPA totals", async () => {
+    mockGetCompletedGameById.mockResolvedValue({
+      ...createCompletedGame(),
+      playerWpaTotals: [],
+      managerWpaTotals: [],
+    });
+
+    render(<GameDetail />);
+
+    const archivedTitle = await screen.findByText("Archived WPA Totals");
+    const archivedSection = archivedTitle.closest("section");
+    expect(archivedSection).not.toBeNull();
+    expect(within(archivedSection as HTMLElement).getByText(
+      "WPA unavailable for score-only/manual-result games or older archives without stored WPA totals.",
+    )).toBeInTheDocument();
+  });
+
   test("does not derive overlay values from event-log data without committed managerDecisions", async () => {
     mockGetCompletedGameById.mockResolvedValue(createCompletedGame([]));
     mockGetBetweenPlayEvents.mockResolvedValue([

@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Loader2 } from 'lucide-react';
-import type { BattingLine, PitchingLine } from '../../../utils/almanacQueries';
+import type {
+  BattingLine,
+  PitchingLine,
+  PlayerInstanceWpaSummary,
+} from '../../../utils/almanacQueries';
+import { getPlayerInstanceWpaSummary } from '../../../utils/almanacQueries';
 import {
   getCanonicalPlayer,
   findCanonicalByPlayerId,
@@ -20,6 +25,7 @@ import { FAME_TIER_LABEL, type FameTier } from '../../../types/reporter';
 import { getEffectiveFame } from '../../../utils/effectiveValues';
 import { getEffectivePlayer } from '../../../utils/playerOverrides';
 import { getRunPromotionDecision } from '../../../utils/eliminationRunFameStorage';
+import { formatWpaPoints } from '../../../utils/wpaDisplay';
 import { FamePip } from '../components/FamePip';
 import { PlayerFameSection, type PlayerFameGameSource } from '../components/PlayerFameSection';
 import {
@@ -69,6 +75,7 @@ interface PlayerCardState {
   usedFallback: boolean;
   batting: BattingLine | null;
   pitching: PitchingLine | null;
+  wpaSummary: PlayerInstanceWpaSummary | null;
   allTimeEliminationBatting: BattingLine | null;
   allTimeEliminationPitching: PitchingLine | null;
   teams: TeamSummary[];
@@ -86,6 +93,7 @@ export interface PlayerInstanceCardContentState {
   usedFallback: boolean;
   batting: BattingLine | null;
   pitching: PitchingLine | null;
+  wpaSummary: PlayerInstanceWpaSummary | null;
   allTimeEliminationBatting: BattingLine | null;
   allTimeEliminationPitching: PitchingLine | null;
   teams: TeamSummary[];
@@ -106,6 +114,7 @@ const initialState: PlayerCardState = {
   usedFallback: false,
   batting: null,
   pitching: null,
+  wpaSummary: null,
   allTimeEliminationBatting: null,
   allTimeEliminationPitching: null,
   teams: [],
@@ -521,6 +530,64 @@ function StatTable({
   );
 }
 
+function WpaSummaryPanel({
+  summary,
+}: {
+  summary: PlayerInstanceWpaSummary | null;
+}) {
+  if (!summary) {
+    return (
+      <div
+        className="mt-5 border-[4px] border-[#D3BF84] bg-[#FFF8DB] px-4 py-5 text-[9px] leading-5 text-[#6F5B25] sm:text-[10px]"
+        data-testid="player-instance-wpa-unavailable"
+      >
+        WPA unavailable for score-only/manual-result games or older archives without stored KBL WPA totals.
+      </div>
+    );
+  }
+
+  const roleRows = [
+    ['BAT', summary.battingWpa],
+    ['PIT', summary.pitchingWpa],
+    ['FLD', summary.fieldingWpa],
+    ['RUN', summary.baserunningWpa],
+    ['CAT', summary.catchingWpa],
+  ] as const;
+
+  return (
+    <div
+      className="mt-5 border-[4px] border-[#D3BF84] bg-[#FFF8DB] p-4 text-black"
+      data-testid="player-instance-wpa-summary"
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="text-[8px] uppercase tracking-[0.18em] text-[#8A6A1A] sm:text-[9px]">
+            Archived KBL WPA
+          </div>
+          <div className="mt-2 text-sm text-[#B01212]">
+            {formatWpaPoints(summary.totalWpa)}
+          </div>
+        </div>
+        <div className="text-[8px] leading-4 text-[#6F5B25] sm:text-[9px]">
+          {summary.gamesWithWpa} scored game{summary.gamesWithWpa === 1 ? '' : 's'}
+          {summary.gamesWithoutWpa > 0
+            ? ` | ${summary.gamesWithoutWpa} without WPA`
+            : ''}
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-5">
+        {roleRows.map(([label, value]) => (
+          <div key={label} className="border-[3px] border-[#E3D4A6] bg-[#FFF3CC] px-3 py-3">
+            <div className="text-[8px] text-[#8A6A1A]">{label}</div>
+            <div className="mt-2 text-[10px] text-black">{formatWpaPoints(value)}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function AttributeCell({
   label,
   value,
@@ -678,6 +745,7 @@ export function PlayerInstanceCardContent({
             instanceId={state.instance.instanceId}
           />
         </div>
+        <WpaSummaryPanel summary={state.wpaSummary} />
       </section>
 
       <section className="border-[6px] border-[#A57C1B] bg-[#FFF3CC] p-5 text-black shadow-[8px_8px_0px_0px_rgba(176,18,18,0.35)] sm:p-6">
@@ -728,6 +796,11 @@ export function PlayerInstanceCard() {
           getPlayerDisplayStats(playerIdInInstance, resolvedMode, instanceId),
           getPlayerInstanceContext(playerIdInInstance, resolvedMode, instanceId),
         ]);
+        const wpaSummary = await getPlayerInstanceWpaSummary(
+          playerIdInInstance,
+          resolvedMode,
+          instanceId,
+        );
         const playerOverride =
           leaguePlayerOverride ??
           (promotionDecision?.acceptedTier
@@ -817,6 +890,7 @@ export function PlayerInstanceCard() {
             usedFallback: !playerContext.latestSnapshot && Boolean(ratingState),
             batting: displayStats.instanceBatting,
             pitching: displayStats.instancePitching,
+            wpaSummary,
             allTimeEliminationBatting: displayStats.allTimeEliminationBatting,
             allTimeEliminationPitching: displayStats.allTimeEliminationPitching,
             teams,
@@ -891,6 +965,7 @@ export function PlayerInstanceCard() {
     usedFallback: state.usedFallback,
     batting: state.batting,
     pitching: state.pitching,
+    wpaSummary: state.wpaSummary,
     allTimeEliminationBatting: state.allTimeEliminationBatting,
     allTimeEliminationPitching: state.allTimeEliminationPitching,
     teams: state.teams,
