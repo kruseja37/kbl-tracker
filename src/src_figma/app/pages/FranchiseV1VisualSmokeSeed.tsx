@@ -5,6 +5,80 @@ const SMOKE_LIVE_GAME_ID = "visual-smoke-live-game";
 const SMOKE_FRANCHISE_ID = "visual-franchise";
 const SMOKE_SEASON_ID = "visual-franchise-season-1";
 
+type ScheduleFixtureRow = {
+  id: string;
+  week: number;
+  status: string;
+  awayTeam: string;
+  homeTeam: string;
+  stadium: string;
+  starter: string;
+  action: string;
+};
+
+type RosterFixtureRow = {
+  id: string;
+  name: string;
+  position: string;
+  rosterStatus: string;
+  salary: string;
+  morale: string;
+  statSummary: string;
+  designation: string;
+  hiddenSafe: boolean;
+  safetyLabel?: string;
+};
+
+const scheduleFixtureRows: ScheduleFixtureRow[] = [
+  {
+    id: "visual-schedule-row-1",
+    week: 3,
+    status: "SCHEDULED",
+    awayTeam: "Denver Longnames",
+    homeTeam: "Boulder Baselines",
+    stadium: "Apple Field",
+    starter: "Owen Carefully-Named",
+    action: "Launch GameTracker",
+  },
+];
+
+const rosterFixtureRows: RosterFixtureRow[] = [
+  {
+    id: "visual-roster-row-mlb",
+    name: "Catalina Fullname-Rivera",
+    position: "SS",
+    rosterStatus: "MLB / Sirloins",
+    salary: "$2.4M",
+    morale: "64 / steady",
+    statSummary: "2.1 WAR / .842 OPS",
+    designation: "MVP preview",
+    hiddenSafe: false,
+  },
+  {
+    id: "visual-roster-row-farm-hidden",
+    name: "Juniper McAllister-Santos",
+    position: "CF",
+    rosterStatus: "FARM / hidden",
+    salary: "Baseline hidden",
+    morale: "50 / neutral",
+    statSummary: "Visible scouting only",
+    designation: "Blocked",
+    hiddenSafe: true,
+    safetyLabel: "HIDDEN SAFE",
+  },
+  {
+    id: "visual-roster-row-pitcher",
+    name: "Marisol Longstride",
+    position: "SP",
+    rosterStatus: "MLB / rotation",
+    salary: "$5.1M",
+    morale: "72 / upbeat",
+    statSummary: "3.4 pWAR / 2.42 ERA",
+    designation: "Ace preview",
+    hiddenSafe: false,
+  },
+];
+
 function lineup(names: string[], positions: string[]) {
   return names.map((playerName, index) => ({
     playerId: `visual-${playerName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
@@ -232,10 +306,11 @@ export function FranchiseV1VisualSmokeSeed() {
   const fameEvent = completedPreview.fameEvents[0];
   const managerWpa = completedPreview.managerWpaTotals?.[0];
   const playerWpa = completedPreview.playerWpaTotals?.[0];
+  const scheduleFixture = scheduleFixtureRows[0];
 
   return (
     <main className="min-h-screen bg-[#567A50] px-4 py-6 text-white font-['Press_Start_2P']">
-      <div className="mx-auto max-w-5xl border-[6px] border-[#4A6844] bg-[#6B9462] p-5 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.45)]">
+      <div className="mx-auto w-full max-w-5xl min-w-0 border-[6px] border-[#4A6844] bg-[#6B9462] p-5 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.45)]">
         <div className="text-[16px] text-[#E8E8D8]">Mode 1/2 Visual Smoke Preview</div>
         <div className="mt-2 text-[9px] leading-5 text-[#E8E8D8]/75">
           Deterministic local preview labels for browser smoke. This route is read-only and does not write the current
@@ -243,6 +318,114 @@ export function FranchiseV1VisualSmokeSeed() {
         </div>
         <div className="mt-4 inline-block border-2 border-[#4A6844] bg-[#5A8352] px-3 py-2 text-[10px] text-[#FFEFB5]">
           READ ONLY / NO STORAGE WRITES
+        </div>
+
+        <div className="mt-5 grid gap-3">
+          <section
+            aria-label="Populated Franchise schedule fixture"
+            className="border-4 border-[#4A6844] bg-[#5A8352] p-4 text-[9px] leading-5 text-[#E8E8D8]"
+            data-testid="visual-smoke-schedule-fixture"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-[10px] text-[#FFEFB5]">Populated schedule row visual smoke</div>
+                <div className="mt-2 text-[#E8E8D8]/70">
+                  Fixture-only row. No schedule store row is written.
+                </div>
+              </div>
+              <div className="border border-[#E8E8D8]/30 bg-[#3F563F] px-2 py-1 text-[8px] text-[#E8E8D8]/80">
+                WEEK {scheduleFixture.week} / {scheduleFixture.status}
+              </div>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto_1fr] md:items-center">
+              <div className="min-w-0 border-2 border-[#4A6844] bg-[#4A6844] p-3">
+                <div className="text-[8px] text-[#C4A853]">AWAY</div>
+                <div className="mt-1 break-words text-[11px] text-[#E8E8D8]">{scheduleFixture.awayTeam}</div>
+              </div>
+              <div className="text-center text-[10px] text-[#FFEFB5]">AT</div>
+              <div className="min-w-0 border-2 border-[#4A6844] bg-[#4A6844] p-3">
+                <div className="text-[8px] text-[#C4A853]">HOME</div>
+                <div className="mt-1 break-words text-[11px] text-[#E8E8D8]">{scheduleFixture.homeTeam}</div>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-3">
+              <div className="border border-[#E8E8D8]/20 bg-[#4A6844] p-2">
+                <div className="text-[8px] text-[#C4A853]">STADIUM</div>
+                <div className="mt-1 break-words">{scheduleFixture.stadium}</div>
+              </div>
+              <div className="border border-[#E8E8D8]/20 bg-[#4A6844] p-2">
+                <div className="text-[8px] text-[#C4A853]">EXPECTED STARTER</div>
+                <div className="mt-1 break-words">{scheduleFixture.starter}</div>
+              </div>
+              <div className="border border-[#E8E8D8]/20 bg-[#3F563F] p-2">
+                <div className="text-[8px] text-[#C4A853]">ACTION LAYOUT</div>
+                <div className="mt-1 break-words">{scheduleFixture.action}</div>
+              </div>
+            </div>
+          </section>
+
+          <section
+            aria-label="Populated Team Hub roster fixture"
+            className="border-4 border-[#4A6844] bg-[#5A8352] p-4 text-[9px] leading-5 text-[#E8E8D8]"
+            data-testid="visual-smoke-roster-fixture"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-[10px] text-[#FFEFB5]">Populated Team Hub roster rows</div>
+                <div className="mt-2 text-[#E8E8D8]/70">
+                  Fixture-only scan table. Hidden FARM row uses labels, not hidden ratings or scout truth.
+                </div>
+              </div>
+              <div className="border border-[#E8E8D8]/30 bg-[#3F563F] px-2 py-1 text-[8px] text-[#E8E8D8]/80">
+                {rosterFixtureRows.length} ROWS / READ ONLY
+              </div>
+            </div>
+            <div className="mt-4 overflow-x-auto border-2 border-[#4A6844]">
+              <table className="min-w-[720px] w-full border-collapse text-left">
+                <thead className="bg-[#4A6844] text-[8px] text-[#C4A853]">
+                  <tr>
+                    <th className="px-2 py-2">PLAYER</th>
+                    <th className="px-2 py-2">POS</th>
+                    <th className="px-2 py-2">STATUS</th>
+                    <th className="px-2 py-2">SALARY</th>
+                    <th className="px-2 py-2">MORALE</th>
+                    <th className="px-2 py-2">STATS</th>
+                    <th className="px-2 py-2">DESIG</th>
+                    <th className="px-2 py-2">SAFETY</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rosterFixtureRows.map((row) => (
+                    <tr
+                      key={row.id}
+                      className={row.hiddenSafe ? "bg-[#3F563F] text-[#E8E8D8]/75" : "bg-[#5A8352] text-[#E8E8D8]"}
+                      data-testid={row.id}
+                    >
+                      <td className="px-2 py-2">
+                        <div className="max-w-[190px] break-words text-[9px]">{row.name}</div>
+                      </td>
+                      <td className="px-2 py-2">{row.position}</td>
+                      <td className="px-2 py-2">{row.rosterStatus}</td>
+                      <td className="px-2 py-2">{row.salary}</td>
+                      <td className="px-2 py-2">{row.morale}</td>
+                      <td className="px-2 py-2">{row.statSummary}</td>
+                      <td className="px-2 py-2">{row.designation}</td>
+                      <td className="px-2 py-2">
+                        {row.hiddenSafe ? (
+                          <div className="inline-block border border-[#FFEFB5]/40 bg-[#4A6844] px-2 py-1 text-[8px] text-[#FFEFB5]">
+                            {row.safetyLabel}
+                            <span className="block text-[#E8E8D8]/75">Ratings truth blocked</span>
+                          </div>
+                        ) : (
+                          <span className="text-[#E8E8D8]/60">Visible row</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -262,15 +445,6 @@ export function FranchiseV1VisualSmokeSeed() {
             <div>Player WPA: {playerWpa?.playerName ?? "none"} {playerWpa ? playerWpa.totalWpa.toFixed(2) : "0.00"}</div>
             <div>Manager WPA: {managerWpa?.managerName ?? "none"} {managerWpa ? managerWpa.managerValue.toFixed(2) : "0.00"}</div>
             <div className="mt-2 text-[#E8E8D8]/70">No completed-game archive is written by this page.</div>
-          </section>
-
-          <section className="border-4 border-[#4A6844] bg-[#5A8352] p-4 text-[9px] leading-5 text-[#E8E8D8]">
-            <div className="text-[10px] text-[#FFEFB5]">Team Hub roster visual smoke</div>
-            <div className="mt-3">Fixture franchise: {SMOKE_FRANCHISE_ID}</div>
-            <div>Fixture season: {SMOKE_SEASON_ID}</div>
-            <div className="mt-2 text-[#E8E8D8]/70">
-              Populated Team Hub roster-row screenshots still require an external seeded fixture; this route does not create one.
-            </div>
           </section>
 
           <Link className="border-4 border-[#4A6844] bg-[#5A8352] p-4 text-[10px] text-[#E8E8D8]" to="/__preview/player-instance-card">
