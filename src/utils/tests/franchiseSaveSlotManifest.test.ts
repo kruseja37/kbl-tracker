@@ -1108,6 +1108,85 @@ describe('franchise save-slot manifest contract', () => {
     expect(stadiumRecords.some((record) => record.franchiseId === other.franchiseId)).toBe(true);
   });
 
+  test('delete removes only franchise-owned canonical Almanac player instances', async () => {
+    const seeded = await seedHealthyFranchise({
+      seasonNumber: 26,
+      teamPrefix: nextId('delete-almanac-owned'),
+    });
+    const other = await seedHealthyFranchise({
+      seasonNumber: 26,
+      teamPrefix: nextId('delete-almanac-other'),
+    });
+
+    await putTrackerRecord('almanacCanonicalPlayers', {
+      canonicalId: 'custom-owned-only',
+      playerName: 'Owned Only',
+      hometown: { city: 'Denver', state: 'CO' },
+      instances: [
+        {
+          mode: 'franchise',
+          instanceId: seeded.franchiseId,
+          instanceName: 'Owned Franchise',
+          playerIdInInstance: `${seeded.teamPrefix}-player-a`,
+        },
+      ],
+    });
+    await putTrackerRecord('almanacCanonicalPlayers', {
+      canonicalId: 'custom-shared',
+      playerName: 'Shared Player',
+      hometown: { city: 'Boulder', state: 'CO' },
+      instances: [
+        {
+          mode: 'franchise',
+          instanceId: seeded.franchiseId,
+          instanceName: 'Owned Franchise',
+          playerIdInInstance: `${seeded.teamPrefix}-player-b`,
+        },
+        {
+          mode: 'exhibition',
+          instanceId: 'manifest-league',
+          instanceName: 'Manifest League',
+          playerIdInInstance: `${seeded.teamPrefix}-player-b`,
+        },
+      ],
+    });
+    await putTrackerRecord('almanacCanonicalPlayers', {
+      canonicalId: 'custom-other-franchise',
+      playerName: 'Other Franchise',
+      hometown: { city: 'Fort Collins', state: 'CO' },
+      instances: [
+        {
+          mode: 'franchise',
+          instanceId: other.franchiseId,
+          instanceName: 'Other Franchise',
+          playerIdInInstance: `${other.teamPrefix}-player-a`,
+        },
+      ],
+    });
+
+    const report = await deleteFranchiseSaveSlot(seeded.franchiseId);
+
+    expect(report.domains.find((candidate) => candidate.manifestEntryId === 'almanac.canonicalPlayers')).toMatchObject({
+      recordCount: 2,
+      status: 'pass',
+    });
+
+    const canonicalPlayers = await getRecords('kbl-tracker', 'almanacCanonicalPlayers');
+    expect(canonicalPlayers.some((record) => record.canonicalId === 'custom-owned-only')).toBe(false);
+
+    const shared = canonicalPlayers.find((record) => record.canonicalId === 'custom-shared');
+    expect(shared).toBeDefined();
+    expect((shared!.instances as Array<{ mode: string; instanceId: string }>)).toEqual([
+      expect.objectContaining({ mode: 'exhibition', instanceId: 'manifest-league' }),
+    ]);
+
+    const unrelated = canonicalPlayers.find((record) => record.canonicalId === 'custom-other-franchise');
+    expect(unrelated).toBeDefined();
+    expect((unrelated!.instances as Array<{ mode: string; instanceId: string }>)).toEqual([
+      expect.objectContaining({ mode: 'franchise', instanceId: other.franchiseId }),
+    ]);
+  });
+
   test('backup and sync schemas cover manifest-owned shared stores and franchise roots', async () => {
     const seeded = await seedHealthyFranchise({
       seasonNumber: 25,

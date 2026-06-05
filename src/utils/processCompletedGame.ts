@@ -143,6 +143,30 @@ export async function processCompletedGame(
   archiveOptions?: CompletedGameArchiveOptions,
 ): Promise<ProcessGameResult> {
   const resolvedLeagueId = leagueId ?? resolveExhibitionLeagueId(gameState);
+  const registerCompletedGameForAlmanac = async (): Promise<void> => {
+    const almanacCompetitionType =
+      archiveOptions?.context?.competitionType ?? gameState.competitionType;
+    const almanacCompetitionId =
+      archiveOptions?.context?.competitionId ?? gameState.competitionId;
+    const almanacFranchiseId =
+      archiveOptions?.context?.franchiseId ?? gameState.franchiseId;
+    const shouldRegisterAlmanac =
+      Boolean(resolvedLeagueId) ||
+      almanacCompetitionType === 'franchise' ||
+      almanacCompetitionType === 'playoff' ||
+      almanacCompetitionType === 'elimination';
+
+    if (shouldRegisterAlmanac) {
+      await registerAlmanacPlayers(gameState, resolvedLeagueId, {
+        competitionType: almanacCompetitionType,
+        competitionId: almanacCompetitionId,
+        competitionName: archiveOptions?.context?.competitionName ?? gameState.competitionName,
+        franchiseId: almanacFranchiseId,
+        leagueId: resolvedLeagueId,
+      });
+    }
+  };
+
   const existingArchive = await getCompletedGameById(gameState.gameId);
   if (existingArchive && existingArchive.aggregationStatus !== 'incomplete') {
     return { aggregation: { success: true, milestones: null } };
@@ -162,6 +186,7 @@ export async function processCompletedGame(
         leagueId: resolvedLeagueId,
       },
     );
+    await registerCompletedGameForAlmanac();
     return { aggregation: { success: true, milestones: null } };
   }
 
@@ -212,10 +237,10 @@ export async function processCompletedGame(
     }
   );
 
-  // Step 3: Register players in Almanac canonical registry
-  if (resolvedLeagueId) {
-    await registerAlmanacPlayers(gameState, resolvedLeagueId);
-  }
+  // Step 3: Register players in Almanac canonical registry. Franchise
+  // archives may not have an exhibition league id, but they still have a
+  // durable franchise/competition instance for Almanac continuity.
+  await registerCompletedGameForAlmanac();
 
   return { aggregation };
 }

@@ -75,6 +75,10 @@ export interface ExhibitionPlayerSearchEntry {
   mode: AlmanacInstanceMode;
 }
 
+interface PlayerSearchAccumulator extends ExhibitionPlayerSearchEntry {
+  gameIds: Set<string>;
+}
+
 export interface BattingLine {
   G: number;
   AB: number;
@@ -2455,11 +2459,12 @@ export async function searchArchivedPlayerInstances(
   const games = await getAllCompletedGames();
   const allowedModes = new Set(modes);
   const canonicalRegistry = await getCanonicalRegistry();
-  const players = new Map<string, ExhibitionPlayerSearchEntry>();
+  const players = new Map<string, PlayerSearchAccumulator>();
 
   const upsertEntry = (
     mode: AlmanacInstanceMode,
     instanceId: string,
+    gameId: string,
     playerId: string,
     playerName: string,
     teamId: string,
@@ -2477,7 +2482,7 @@ export async function searchArchivedPlayerInstances(
     const key = `${mode}::${instanceId}::${identity.aggregateKey}`;
     const existing = players.get(key);
     if (existing) {
-      existing.games += 1;
+      existing.gameIds.add(gameId);
       existing.playerId = identity.preferredPlayerId;
       existing.playerName = playerName;
       existing.teamId = teamId;
@@ -2493,8 +2498,9 @@ export async function searchArchivedPlayerInstances(
       canonicalId: identity.canonicalId,
       teamId,
       teamName,
-      games: 1,
+      games: 0,
       mode,
+      gameIds: new Set([gameId]),
     });
   };
 
@@ -2508,6 +2514,7 @@ export async function searchArchivedPlayerInstances(
       upsertEntry(
         descriptor.mode,
         descriptor.instanceId,
+        game.gameId,
         playerId,
         stats.playerName,
         stats.teamId,
@@ -2519,6 +2526,7 @@ export async function searchArchivedPlayerInstances(
       upsertEntry(
         descriptor.mode,
         descriptor.instanceId,
+        game.gameId,
         pitcher.pitcherId,
         pitcher.pitcherName,
         pitcher.teamId,
@@ -2527,9 +2535,14 @@ export async function searchArchivedPlayerInstances(
     }
   }
 
-  const results = Array.from(players.values()).sort(
-    (a, b) => b.games - a.games || a.playerName.localeCompare(b.playerName),
-  );
+  const results = Array.from(players.values())
+    .map(({ gameIds, ...entry }) => ({
+      ...entry,
+      games: gameIds.size,
+    }))
+    .sort(
+      (a, b) => b.games - a.games || a.playerName.localeCompare(b.playerName),
+    );
 
   console.log('[M4-1] searchArchivedPlayerInstances', {
     query,

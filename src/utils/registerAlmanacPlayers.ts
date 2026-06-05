@@ -3,6 +3,7 @@ import type {
   PersistedGameState,
   CompletedGameRecord,
   PlayerRatingsSnapshot,
+  CompetitionType,
 } from './gameStorage';
 import { getAllCompletedGames } from './gameStorage';
 import { getElimination } from './eliminationManager';
@@ -107,6 +108,81 @@ function normalizeRegistrationMode(
   return 'exhibition';
 }
 
+export interface AlmanacRegistrationOptions {
+  competitionType?: CompetitionType;
+  competitionId?: string;
+  competitionName?: string;
+  franchiseId?: string;
+  leagueId?: string;
+  instanceId?: string;
+  instanceName?: string;
+}
+
+interface ResolvedAlmanacRegistrationContext {
+  mode: CanonicalPlayerInstance['mode'];
+  instanceId: string;
+  instanceName: string;
+  sourceLeagueId?: string;
+}
+
+async function resolveAlmanacRegistrationContext(
+  game:
+    | Pick<PersistedGameState, 'competitionType' | 'competitionId' | 'competitionName' | 'franchiseId' | 'leagueId'>
+    | Pick<CompletedGameRecord, 'competitionType' | 'competitionId' | 'competitionName' | 'franchiseId' | 'leagueId'>,
+  leagueId?: string,
+  options: AlmanacRegistrationOptions = {},
+): Promise<ResolvedAlmanacRegistrationContext | null> {
+  const competitionType =
+    options.competitionType ?? game.competitionType;
+  const mode = normalizeRegistrationMode(competitionType);
+  const sourceLeagueId =
+    options.leagueId ?? leagueId ?? game.leagueId ?? resolveExhibitionLeagueId({
+      leagueId: game.leagueId,
+      competitionId: options.competitionId ?? game.competitionId,
+      competitionType,
+    });
+  const competitionId =
+    options.competitionId ?? game.competitionId;
+  const franchiseId =
+    options.franchiseId ?? game.franchiseId;
+  const instanceId =
+    options.instanceId ??
+    (mode === 'exhibition'
+      ? sourceLeagueId ?? competitionId
+      : mode === 'franchise'
+        ? competitionId ?? franchiseId ?? sourceLeagueId
+        : competitionId ?? sourceLeagueId);
+
+  if (!instanceId) {
+    return null;
+  }
+
+  const leagueTemplate = sourceLeagueId ? await getLeagueTemplate(sourceLeagueId) : null;
+  const eliminationMetadata =
+    mode === 'elimination' && competitionId
+      ? await getElimination(competitionId)
+      : null;
+  const competitionName =
+    options.competitionName ?? game.competitionName;
+  const instanceName =
+    options.instanceName ??
+    (mode === 'elimination'
+      ? eliminationMetadata?.name ||
+        competitionName ||
+        `${leagueTemplate?.name ?? instanceId} Elimination`
+      : mode === 'franchise'
+        ? competitionName ||
+          (leagueTemplate?.name ? `${leagueTemplate.name} Franchise` : `${instanceId} Franchise`)
+        : leagueTemplate?.name ?? competitionName ?? instanceId);
+
+  return {
+    mode,
+    instanceId,
+    instanceName,
+    sourceLeagueId,
+  };
+}
+
 function getPersistedPlayerName(
   game:
     | Pick<PersistedGameState, 'playerStats' | 'pitcherGameStats'>
@@ -166,26 +242,20 @@ async function resolveRegistrationIdentity(
 
 export async function registerAlmanacPlayers(
   gameState: PersistedGameState,
-  leagueId: string
+  leagueId?: string,
+  options: AlmanacRegistrationOptions = {},
 ): Promise<void> {
-  const leagueTemplate = await getLeagueTemplate(leagueId);
-  const mode = normalizeRegistrationMode(gameState.competitionType);
-  const instanceId =
-    mode === 'exhibition'
-      ? leagueId
-      : gameState.competitionId || leagueId;
-  const eliminationMetadata =
-    mode === 'elimination' && gameState.competitionId
-      ? await getElimination(gameState.competitionId)
-      : null;
-  const instanceName =
-    mode === 'elimination'
-      ? eliminationMetadata?.name ||
-        gameState.competitionName ||
-        `${leagueTemplate?.name ?? leagueId} Elimination`
-      : mode === 'franchise'
-        ? `${leagueTemplate?.name ?? leagueId} Franchise`
-        : leagueTemplate?.name ?? leagueId;
+  const registration = await resolveAlmanacRegistrationContext(gameState, leagueId, options);
+  if (!registration) {
+    console.warn('[M4-1] registerAlmanacPlayers skipped game without almanac instance identity', {
+      gameId: gameState.gameId,
+      competitionType: options.competitionType ?? gameState.competitionType ?? null,
+      competitionId: options.competitionId ?? gameState.competitionId ?? null,
+      franchiseId: options.franchiseId ?? gameState.franchiseId ?? null,
+      leagueId: options.leagueId ?? leagueId ?? gameState.leagueId ?? null,
+    });
+    return;
+  }
 
   const instanceIds = new Set<string>([
     ...Object.keys(gameState.playerStats),
@@ -198,9 +268,9 @@ export async function registerAlmanacPlayers(
     const existingByInstance = await findCanonicalByPlayerId(playerId);
     const targetCanonicalId = existingByInstance?.canonicalId ?? canonicalId;
     const exhibitionInstance: CanonicalPlayerInstance = {
-      mode,
-      instanceId,
-      instanceName,
+      mode: registration.mode,
+      instanceId: registration.instanceId,
+      instanceName: registration.instanceName,
       playerIdInInstance: playerId,
     };
 
@@ -274,12 +344,16 @@ export async function backfillCanonicalPlayers(): Promise<number> {
   let registered = 0;
 
   for (const game of completedGames) {
-    const resolvedLeagueId = resolveExhibitionLeagueId(game);
-    if (!resolvedLeagueId) {
-      console.log('[M4-1] backfillCanonicalPlayers skipped game without leagueId', {
+    const registration = await resolveAlmanacRegistrationContext(
+      game,
+      resolveExhibitionLeagueId(game),
+    );
+    if (!registration) {
+      console.log('[M4-1] backfillCanonicalPlayers skipped game without almanac instance identity', {
         gameId: game.gameId,
         competitionType: game.competitionType ?? null,
         competitionId: game.competitionId ?? null,
+        franchiseId: game.franchiseId ?? null,
       });
       continue;
     }
@@ -289,32 +363,13 @@ export async function backfillCanonicalPlayers(): Promise<number> {
       ...(game.pitcherGameStats || []).map((s) => s.pitcherId),
     ]);
 
-    const mode = normalizeRegistrationMode(game.competitionType);
-    const instanceId =
-      mode === 'exhibition'
-        ? resolvedLeagueId
-        : game.competitionId || resolvedLeagueId;
-    const leagueTemplate = await getLeagueTemplate(resolvedLeagueId);
-    const eliminationMetadata =
-      mode === 'elimination' && game.competitionId
-        ? await getElimination(game.competitionId)
-        : null;
-    const instanceName =
-      mode === 'elimination'
-        ? eliminationMetadata?.name ||
-          game.competitionName ||
-          `${leagueTemplate?.name ?? resolvedLeagueId} Elimination`
-        : mode === 'franchise'
-          ? `${leagueTemplate?.name ?? resolvedLeagueId} Franchise`
-          : leagueTemplate?.name ?? resolvedLeagueId;
-
     for (const playerId of playerIds) {
       const { canonicalId, playerName, hometown } =
         await resolveRegistrationIdentity(game, playerId);
       const instance: CanonicalPlayerInstance = {
-        mode,
-        instanceId,
-        instanceName,
+        mode: registration.mode,
+        instanceId: registration.instanceId,
+        instanceName: registration.instanceName,
         playerIdInInstance: playerId,
       };
       const instanceKey = buildInstanceKey(instance);
@@ -326,7 +381,7 @@ export async function backfillCanonicalPlayers(): Promise<number> {
         if (existingCanonicalId && existingCanonicalId !== canonicalId) {
           console.log('[M4-1] backfillCanonicalPlayers reused existing canonicalId for player alias', {
             playerId,
-            leagueId: resolvedLeagueId,
+            instanceId: registration.instanceId,
             candidateCanonicalId: canonicalId,
             existingCanonicalId,
           });

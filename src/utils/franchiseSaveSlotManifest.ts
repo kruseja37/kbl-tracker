@@ -1970,6 +1970,40 @@ export async function deleteFranchiseSaveSlot(
   }
 
   try {
+    const { removeCanonicalPlayerInstancesForFranchise } = await import('./almanacStorage');
+    const almanacCleanup = await removeCanonicalPlayerInstancesForFranchise(franchiseId);
+    const affectedRecords = almanacCleanup.updated + almanacCleanup.deleted;
+    domains.push({
+      manifestEntryId: 'almanac.canonicalPlayers',
+      domain: 'Almanac canonical player franchise instances',
+      databaseName: 'kbl-tracker',
+      storeName: 'almanacCanonicalPlayers',
+      lifecycle: 'optional',
+      responsibility: 'delete-scoped',
+      recordCount: affectedRecords,
+      status: 'pass',
+      messages:
+        affectedRecords > 0
+          ? [
+              `Removed ${almanacCleanup.updated} franchise instance set(s) and deleted ${almanacCleanup.deleted} orphan canonical player record(s).`,
+            ]
+          : ['No owned Almanac canonical player instances found.'],
+    });
+  } catch (error) {
+    domains.push({
+      manifestEntryId: 'almanac.canonicalPlayers',
+      domain: 'Almanac canonical player franchise instances',
+      databaseName: 'kbl-tracker',
+      storeName: 'almanacCanonicalPlayers',
+      lifecycle: 'optional',
+      responsibility: 'delete-scoped',
+      recordCount: 0,
+      status: 'warning',
+      messages: [`Almanac canonical player cleanup did not complete: ${error instanceof Error ? error.message : String(error)}`],
+    });
+  }
+
+  try {
     const { deleteFranchiseDatabase } = await import('./franchisePlayerStorage');
     await deleteFranchiseDatabase(franchiseId);
   } catch (error) {

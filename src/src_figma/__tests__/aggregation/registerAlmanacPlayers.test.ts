@@ -219,4 +219,125 @@ describe('registerAlmanacPlayers', () => {
       }),
     );
   });
+
+  test('registers franchise players using franchise identity when no league id exists', async () => {
+    mockGetPlayer.mockResolvedValue(null);
+
+    await registerAlmanacPlayers(
+      {
+        gameId: 'franchise-game-1',
+        competitionType: 'franchise',
+        competitionId: 'franchise-alpha',
+        competitionName: 'Alpha Franchise',
+        franchiseId: 'franchise-alpha',
+        playerStats: {
+          'franchise-player-1': {
+            playerName: 'Frannie First',
+            teamId: 'team-alpha',
+            pa: 4,
+            ab: 4,
+            h: 2,
+            singles: 2,
+            doubles: 0,
+            triples: 0,
+            hr: 0,
+            rbi: 3,
+            r: 1,
+            bb: 0,
+            hbp: 0,
+            k: 1,
+            sb: 0,
+            cs: 0,
+            sf: 0,
+            sh: 0,
+            gidp: 0,
+            putouts: 0,
+            assists: 0,
+            fieldingErrors: 0,
+          },
+        },
+        pitcherGameStats: [],
+      } as never,
+    );
+
+    expect(mockGetLeagueTemplate).not.toHaveBeenCalled();
+    expect(mockUpsertCanonicalPlayer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        canonicalId: 'custom_franchise-player-1',
+        playerName: 'Frannie First',
+        instances: [
+          expect.objectContaining({
+            mode: 'franchise',
+            instanceId: 'franchise-alpha',
+            instanceName: 'Alpha Franchise',
+            playerIdInInstance: 'franchise-player-1',
+          }),
+        ],
+      }),
+    );
+  });
+
+  test('backfills archived franchise games without requiring exhibition league identity', async () => {
+    mockGetPlayer.mockResolvedValue(null);
+    mockGetAllCompletedGames.mockResolvedValue([
+      {
+        gameId: 'franchise-game-1',
+        date: Date.now(),
+        competitionType: 'franchise',
+        competitionId: 'franchise-alpha',
+        competitionName: 'Alpha Franchise',
+        franchiseId: 'franchise-alpha',
+        awayTeamId: 'team-alpha',
+        awayTeamName: 'Alpha',
+        homeTeamId: 'team-beta',
+        homeTeamName: 'Beta',
+        finalScore: { away: 5, home: 2 },
+        innings: 9,
+        fameEvents: [],
+        playerStats: {
+          'franchise-player-1': {
+            playerName: 'Frannie First',
+            teamId: 'team-alpha',
+            pa: 4,
+            ab: 4,
+            h: 2,
+            singles: 2,
+            doubles: 0,
+            triples: 0,
+            hr: 0,
+            rbi: 3,
+            r: 1,
+            bb: 0,
+            hbp: 0,
+            k: 1,
+            sb: 0,
+            cs: 0,
+            sf: 0,
+            sh: 0,
+            gidp: 0,
+            putouts: 0,
+            assists: 0,
+            fieldingErrors: 0,
+          },
+        },
+        pitcherGameStats: [],
+      },
+    ]);
+
+    await expect(backfillCanonicalPlayers()).resolves.toBe(1);
+
+    expect(mockUpsertCanonicalPlayer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        canonicalId: 'custom_franchise-player-1',
+        playerName: 'Frannie First',
+        instances: [
+          expect.objectContaining({
+            mode: 'franchise',
+            instanceId: 'franchise-alpha',
+            instanceName: 'Alpha Franchise',
+          }),
+        ],
+      }),
+    );
+  });
 });

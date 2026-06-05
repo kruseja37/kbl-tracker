@@ -33,6 +33,7 @@ import {
   getExhibitionBattingLeaders,
   getPlayerExhibitionStats,
   getArchiveInstanceMode,
+  getPlayerInstanceStats,
   searchArchivedPlayerInstances,
   getTeamRosterFromGames,
 } from '../../../utils/almanacQueries';
@@ -289,6 +290,249 @@ describe('almanacQueries player exhibition stats', () => {
         canonicalId: 'beefcake',
         instanceId: 'elim-run-1',
         games: 1,
+      }),
+    ]);
+  });
+
+  test('includes franchise archived instances in search, roster, and player-card stats', async () => {
+    mockGetAllCanonicalPlayers.mockResolvedValue([
+      {
+        canonicalId: 'frannie',
+        playerName: 'Frannie First',
+        hometown: { city: 'Denver', state: 'CO' },
+        instances: [
+          {
+            instanceId: 'franchise-alpha',
+            instanceName: 'Alpha Franchise',
+            mode: 'franchise',
+            playerIdInInstance: 'franchise-player-1',
+          },
+        ],
+      },
+    ]);
+    mockGetAllCompletedGames.mockResolvedValue([
+      {
+        gameId: 'franchise-game-1',
+        date: Date.now(),
+        competitionType: 'franchise',
+        competitionId: 'franchise-alpha',
+        competitionName: 'Alpha Franchise',
+        franchiseId: 'franchise-alpha',
+        seasonId: 'franchise-alpha-season-1',
+        statsScopeId: 'franchise-alpha-season-1',
+        scheduleGameId: 'sched-1',
+        awayTeamId: 'team-alpha',
+        awayTeamName: 'Alpha',
+        homeTeamId: 'team-beta',
+        homeTeamName: 'Beta',
+        finalScore: { away: 5, home: 2 },
+        innings: 9,
+        fameEvents: [],
+        playerStats: {
+          'franchise-player-1': {
+            playerName: 'Frannie First',
+            teamId: 'team-alpha',
+            pa: 4,
+            ab: 4,
+            h: 2,
+            singles: 1,
+            doubles: 1,
+            triples: 0,
+            hr: 0,
+            rbi: 3,
+            r: 1,
+            bb: 0,
+            hbp: 0,
+            k: 1,
+            sb: 0,
+            cs: 0,
+            sf: 0,
+            sh: 0,
+            gidp: 0,
+            putouts: 0,
+            assists: 0,
+            fieldingErrors: 0,
+          },
+        },
+        pitcherGameStats: [
+          {
+            pitcherId: 'franchise-player-1',
+            pitcherName: 'Frannie First',
+            teamId: 'team-alpha',
+            isStarter: true,
+            entryInning: 1,
+            outsRecorded: 9,
+            hitsAllowed: 1,
+            runsAllowed: 0,
+            earnedRuns: 0,
+            walksAllowed: 0,
+            strikeoutsThrown: 3,
+            homeRunsAllowed: 0,
+            hitBatters: 0,
+            basesReachedViaError: 0,
+            wildPitches: 0,
+            pitchCount: 35,
+            battersFaced: 10,
+            consecutiveHRsAllowed: 0,
+            firstInningRuns: 0,
+            basesLoadedWalks: 0,
+            inningsComplete: 3,
+            decision: 'W',
+            save: false,
+            hold: false,
+            blownSave: false,
+          },
+        ],
+      },
+      {
+        gameId: 'score-only-row',
+        date: Date.now() - 1000,
+        competitionType: 'franchise',
+        competitionId: 'franchise-alpha',
+        franchiseId: 'franchise-alpha',
+        awayTeamId: 'team-alpha',
+        awayTeamName: 'Alpha',
+        homeTeamId: 'team-beta',
+        homeTeamName: 'Beta',
+        finalScore: { away: 9, home: 8 },
+        innings: 9,
+        fameEvents: [],
+        playerStats: {},
+        pitcherGameStats: [],
+      },
+    ]);
+
+    await expect(searchArchivedPlayerInstances('Frannie')).resolves.toEqual([
+      expect.objectContaining({
+        canonicalId: 'frannie',
+        instanceId: 'franchise-alpha',
+        mode: 'franchise',
+        teamId: 'team-alpha',
+        teamName: 'Alpha',
+        games: 1,
+      }),
+    ]);
+
+    await expect(getArchiveInstanceMode('franchise-alpha')).resolves.toBe('franchise');
+
+    await expect(getTeamRosterFromGames('franchise-alpha', 'team-alpha')).resolves.toEqual([
+      expect.objectContaining({
+        canonicalId: 'frannie',
+        instanceId: 'franchise-alpha',
+        games: 1,
+      }),
+    ]);
+
+    await expect(
+      getPlayerInstanceStats('franchise-player-1', 'franchise', 'franchise-alpha'),
+    ).resolves.toMatchObject({
+      batting: expect.objectContaining({
+        G: 1,
+        H: 2,
+        RBI: 3,
+      }),
+      pitching: expect.objectContaining({
+        G: 1,
+        W: 1,
+        SO: 3,
+      }),
+    });
+  });
+
+  test('counts batting and pitching stats in the same completed game once in player search', async () => {
+    mockGetAllCompletedGames.mockResolvedValue([
+      {
+        gameId: 'two-way-game-1',
+        date: Date.now(),
+        competitionType: 'franchise',
+        competitionId: 'franchise-alpha',
+        franchiseId: 'franchise-alpha',
+        awayTeamId: 'team-alpha',
+        awayTeamName: 'Alpha',
+        homeTeamId: 'team-beta',
+        homeTeamName: 'Beta',
+        finalScore: { away: 5, home: 2 },
+        innings: 9,
+        fameEvents: [],
+        playerStats: {
+          'two-way-player': {
+            playerName: 'Two Way Terry',
+            teamId: 'team-alpha',
+          },
+        },
+        pitcherGameStats: [
+          {
+            pitcherId: 'two-way-player',
+            pitcherName: 'Two Way Terry',
+            teamId: 'team-alpha',
+          },
+        ],
+      },
+    ]);
+
+    await expect(searchArchivedPlayerInstances('Two Way')).resolves.toEqual([
+      expect.objectContaining({
+        playerId: 'two-way-player',
+        instanceId: 'franchise-alpha',
+        mode: 'franchise',
+        games: 1,
+      }),
+    ]);
+  });
+
+  test('counts distinct stat-bearing completed games separately in player search', async () => {
+    mockGetAllCompletedGames.mockResolvedValue([
+      {
+        gameId: 'search-game-1',
+        date: Date.now(),
+        competitionType: 'franchise',
+        competitionId: 'franchise-alpha',
+        franchiseId: 'franchise-alpha',
+        awayTeamId: 'team-alpha',
+        awayTeamName: 'Alpha',
+        homeTeamId: 'team-beta',
+        homeTeamName: 'Beta',
+        finalScore: { away: 5, home: 2 },
+        innings: 9,
+        fameEvents: [],
+        playerStats: {
+          'search-player': {
+            playerName: 'Searchable Sam',
+            teamId: 'team-alpha',
+          },
+        },
+        pitcherGameStats: [],
+      },
+      {
+        gameId: 'search-game-2',
+        date: Date.now() - 1000,
+        competitionType: 'franchise',
+        competitionId: 'franchise-alpha',
+        franchiseId: 'franchise-alpha',
+        awayTeamId: 'team-alpha',
+        awayTeamName: 'Alpha',
+        homeTeamId: 'team-beta',
+        homeTeamName: 'Beta',
+        finalScore: { away: 3, home: 1 },
+        innings: 9,
+        fameEvents: [],
+        playerStats: {},
+        pitcherGameStats: [
+          {
+            pitcherId: 'search-player',
+            pitcherName: 'Searchable Sam',
+            teamId: 'team-alpha',
+          },
+        ],
+      },
+    ]);
+
+    await expect(searchArchivedPlayerInstances('Searchable')).resolves.toEqual([
+      expect.objectContaining({
+        playerId: 'search-player',
+        instanceId: 'franchise-alpha',
+        mode: 'franchise',
+        games: 2,
       }),
     ]);
   });

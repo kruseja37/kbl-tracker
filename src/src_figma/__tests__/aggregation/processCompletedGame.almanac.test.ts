@@ -210,7 +210,17 @@ describe('processCompletedGame exhibition almanac registration', () => {
       undefined,
       { leagueId: 'league-exh' }
     );
-    expect(mockRegisterAlmanacPlayers).toHaveBeenCalledWith(gameState, 'league-exh');
+    expect(mockRegisterAlmanacPlayers).toHaveBeenCalledWith(
+      gameState,
+      'league-exh',
+      {
+        competitionId: 'league-exh',
+        competitionName: undefined,
+        competitionType: 'exhibition',
+        franchiseId: undefined,
+        leagueId: 'league-exh',
+      },
+    );
     expect(gameState.playerRatingsSnapshots).toMatchObject({
       'player-1': expect.objectContaining({ playerId: 'player-1', firstName: 'Test' }),
       'pitcher-1': expect.objectContaining({ playerId: 'pitcher-1', firstName: 'Test' }),
@@ -258,5 +268,70 @@ describe('processCompletedGame exhibition almanac registration', () => {
 
     expect(mockAggregateGameToSeason).not.toHaveBeenCalled();
     expect(mockArchiveCompletedGame).toHaveBeenCalledTimes(1);
+    expect(mockRegisterAlmanacPlayers).toHaveBeenCalledWith(
+      gameState,
+      'league-exh',
+      expect.objectContaining({
+        competitionId: 'league-exh',
+        competitionType: 'exhibition',
+        leagueId: 'league-exh',
+      }),
+    );
+  });
+
+  test('registers franchise players in Almanac even without an exhibition league id', async () => {
+    const gameState = {
+      ...createGameState(),
+      gameId: 'game-franchise-1',
+      competitionType: 'franchise' as const,
+      competitionId: 'franchise-alpha',
+      competitionName: 'Alpha Franchise',
+      franchiseId: 'franchise-alpha',
+      leagueId: undefined,
+      seasonId: 'franchise-alpha-season-1',
+      statsScopeId: 'franchise-alpha-season-1',
+      scheduleGameId: 'sched-1',
+    };
+
+    await processCompletedGame(
+      gameState,
+      { seasonId: 'franchise-alpha-season-1' },
+      undefined,
+      {
+        seasonId: 'franchise-alpha-season-1',
+        context: {
+          competitionType: 'franchise',
+          competitionId: 'franchise-alpha',
+          competitionName: 'Alpha Franchise',
+          franchiseId: 'franchise-alpha',
+          statsScopeId: 'franchise-alpha-season-1',
+          scheduleGameId: 'sched-1',
+        },
+      },
+    );
+
+    expect(mockArchiveCompletedGame).toHaveBeenCalledWith(
+      gameState,
+      { away: 4, home: 5 },
+      [],
+      'franchise-alpha-season-1',
+      expect.objectContaining({
+        competitionType: 'franchise',
+        competitionId: 'franchise-alpha',
+        franchiseId: 'franchise-alpha',
+        statsScopeId: 'franchise-alpha-season-1',
+      }),
+    );
+    expect(mockRegisterAlmanacPlayers).toHaveBeenCalledWith(
+      gameState,
+      undefined,
+      {
+        competitionId: 'franchise-alpha',
+        competitionName: 'Alpha Franchise',
+        competitionType: 'franchise',
+        franchiseId: 'franchise-alpha',
+        leagueId: undefined,
+      },
+    );
   });
 });
