@@ -250,6 +250,9 @@ export function AddGameModal({
           {!editingGame && (
           <div className="bg-[#4A6844] border-[3px] border-[#5599FF] p-4 space-y-3">
             <div className="text-xs text-[#E8E8D8] mb-2">💡 QUICK ADD SERIES</div>
+            <div className="text-[9px] text-[#E8E8D8]/70">
+              Explicit repeat only: same matchup, consecutive game/day numbers, no generated opponents.
+            </div>
 
             <div className="flex items-center gap-2">
               <span className="text-[10px] text-[#E8E8D8]">Add</span>
@@ -266,7 +269,7 @@ export function AddGameModal({
             </div>
 
             <div className="text-[9px] text-[#E8E8D8]/70 italic">
-              Each game will be on consecutive dates
+              Edit rows after adding if dates or times differ.
             </div>
 
             <button

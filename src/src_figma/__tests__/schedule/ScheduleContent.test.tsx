@@ -125,6 +125,12 @@ describe('ScheduleContent Component', () => {
       render(<ScheduleContent {...defaultProps} />);
       expect(screen.getByText(/3 games scheduled/)).toBeInTheDocument();
     });
+
+    test('labels v1 schedule actions as user supplied with generated schedules off', () => {
+      render(<ScheduleContent {...defaultProps} />);
+      expect(screen.getByText(/V1 schedule is user-supplied only/i)).toBeInTheDocument();
+      expect(screen.getByText(/Generated schedules are off/i)).toBeInTheDocument();
+    });
   });
 
   describe('Team Filter Dropdown', () => {
@@ -228,6 +234,22 @@ describe('ScheduleContent Component', () => {
       expect(screen.queryByRole('link', { name: /Game Detail/i })).not.toBeInTheDocument();
     });
 
+    test('completed rows do not expose edit delete or final score actions', () => {
+      render(
+        <ScheduleContent
+          {...defaultProps}
+          games={[mockGames[0]]}
+          onEditGame={vi.fn()}
+          onDeleteGame={vi.fn()}
+          onEnterFinalScore={vi.fn()}
+        />,
+      );
+
+      expect(screen.queryByTitle('Edit game')).not.toBeInTheDocument();
+      expect(screen.queryByTitle('Remove game')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Final Score' })).not.toBeInTheDocument();
+    });
+
     test('team-filtered completed rows show score-only label and stat-boundary copy', () => {
       render(<ScheduleContent {...defaultProps} selectedTeam="TIGERS" />);
 
@@ -258,6 +280,15 @@ describe('ScheduleContent Component', () => {
         id: 'game-2',
         status: 'SCHEDULED',
       }));
+    });
+  });
+
+  describe('CSV Import', () => {
+    test('labels CSV import as user-provided rows only', () => {
+      render(<ScheduleContent {...defaultProps} onImportCsvRows={vi.fn()} />);
+
+      expect(screen.getByText('CSV SCHEDULE IMPORT')).toBeInTheDocument();
+      expect(screen.getByText(/User-provided rows only; import does not generate missing matchups/i)).toBeInTheDocument();
     });
   });
 

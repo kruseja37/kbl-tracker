@@ -719,10 +719,7 @@ export async function completeFranchiseScheduleGameScoreOnly(
   });
 }
 
-/**
- * Delete a game from the schedule
- */
-export async function deleteGame(gameId: string): Promise<void> {
+async function removeScheduleGame(gameId: string, options: { allowCompleted: boolean }): Promise<void> {
   const db = await initScheduleDatabase();
 
   return new Promise((resolve, reject) => {
@@ -734,6 +731,10 @@ export async function deleteGame(gameId: string): Promise<void> {
     getRequest.onsuccess = () => {
       const game = getRequest.result as ScheduledGame | undefined;
       const seasonNumber = game?.seasonNumber;
+      if (game?.status === 'COMPLETED' && !options.allowCompleted) {
+        reject(new Error('Completed games cannot be deleted from the schedule'));
+        return;
+      }
 
       const deleteRequest = store.delete(gameId);
       deleteRequest.onsuccess = () => {
@@ -747,6 +748,13 @@ export async function deleteGame(gameId: string): Promise<void> {
     };
     getRequest.onerror = () => reject(getRequest.error);
   });
+}
+
+/**
+ * Delete one unplayed game from the schedule.
+ */
+export async function deleteGame(gameId: string): Promise<void> {
+  await removeScheduleGame(gameId, { allowCompleted: false });
 }
 
 /**
@@ -844,7 +852,7 @@ export async function clearSeasonSchedule(seasonNumber: number): Promise<void> {
   const games = await getAllGames(seasonNumber);
 
   for (const game of games) {
-    await deleteGame(game.id);
+    await removeScheduleGame(game.id, { allowCompleted: true });
   }
 }
 
@@ -1036,7 +1044,7 @@ export async function clearFranchiseSeasonSchedule(
   const games = await getAllGamesByFranchise(franchiseId, seasonNumber);
 
   for (const game of games) {
-    await deleteGame(game.id);
+    await removeScheduleGame(game.id, { allowCompleted: true });
   }
 }
 

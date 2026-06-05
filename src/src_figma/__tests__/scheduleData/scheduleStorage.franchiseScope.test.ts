@@ -12,6 +12,7 @@ vi.mock('../../../utils/syncEngine', () => ({
 import {
   addGame,
   clearAllSchedules,
+  clearFranchiseSeasonSchedule,
   completeGame,
   completeFranchiseScheduleGameScoreOnly,
   deleteGame,
@@ -594,9 +595,40 @@ describe('scheduleStorage franchise scoping', () => {
       gameLogId: 'completed-imported-game',
     });
     await expect(updateGame(game.id, { gameNumber: 6 })).rejects.toThrow('Completed games cannot be edited');
+    await expect(deleteGame(game.id)).rejects.toThrow('Completed games cannot be deleted');
+    await expect(getAllGamesByFranchise('franchise-1', 4)).resolves.toHaveLength(1);
 
-    await deleteGame(game.id);
+    await clearFranchiseSeasonSchedule('franchise-1', 4);
     await expect(getAllGamesByFranchise('franchise-1', 4)).resolves.toEqual([]);
+  });
+
+  test('completed score-only rows cannot be deleted through manual row delete', async () => {
+    const game = await addGame({
+      franchiseId: 'franchise-score-only-delete',
+      seasonNumber: 7,
+      seasonId: 'franchise-score-only-delete-season-7',
+      statsScopeId: 'franchise-score-only-delete-season-7',
+      awayTeamId: 'team-a',
+      homeTeamId: 'team-b',
+    });
+
+    await completeFranchiseScheduleGameScoreOnly({
+      scheduleGameId: game.id,
+      franchiseId: 'franchise-score-only-delete',
+      seasonNumber: 7,
+      seasonId: 'franchise-score-only-delete-season-7',
+      awayScore: 2,
+      homeScore: 5,
+    });
+
+    await expect(deleteGame(game.id)).rejects.toThrow('Completed games cannot be deleted');
+    await expect(getAllGamesByFranchise('franchise-score-only-delete', 7)).resolves.toMatchObject([
+      {
+        id: game.id,
+        status: 'COMPLETED',
+        completionSource: 'score-only',
+      },
+    ]);
   });
 
   test('manual edit cannot create duplicate game numbers inside one franchise schedule', async () => {

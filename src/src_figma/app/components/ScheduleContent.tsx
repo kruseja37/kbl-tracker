@@ -215,6 +215,9 @@ export function ScheduleContent({
             Full League │ {games.length} games scheduled
           </div>
         )}
+        <div className="mt-2 text-[9px] text-[#E8E8D8]/65">
+          V1 schedule is user-supplied only: add/edit/delete pending rows or review CSV. Generated schedules are off.
+        </div>
       </div>
 
       {onImportCsvRows && (
@@ -224,6 +227,9 @@ export function ScheduleContent({
               <div className="text-[10px] text-[#E8E8D8]">CSV SCHEDULE IMPORT</div>
               <div className="text-[9px] text-[#E8E8D8]/70">
                 Header: gameNumber, awayTeam, homeTeam, optional dayNumber, date, time, notes
+              </div>
+              <div className="text-[8px] text-[#E8E8D8]/60">
+                User-provided rows only; import does not generate missing matchups.
               </div>
             </div>
             <label className="bg-[#4A6844] border-[3px] border-[#3F5A3A] px-3 py-2 text-[10px] text-[#E8E8D8] hover:bg-[#3F5A3A] active:scale-95 transition-transform inline-flex items-center gap-2 cursor-pointer">
