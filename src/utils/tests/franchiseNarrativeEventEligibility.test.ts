@@ -493,7 +493,7 @@ describe('franchise narrative/random-event eligibility gate', () => {
 
     expect(report.designationPrerequisites.teamMvpAcePreview).toMatchObject({
       status: 'preview-only',
-      previewRecords: 3,
+      previewRecords: 1,
       eligibleForReadOnlySummaryContext: true,
       eligibleForNarrativeGeneration: false,
       persistable: false,

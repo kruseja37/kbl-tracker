@@ -128,7 +128,7 @@ export function ScheduleContent({
     if (!isScoreOnlyResult(game)) return null;
     return (
       <div className="mt-2 text-[8px] text-[#E8E8D8]/65">
-        Schedule + standings only; no game archive or player stats.
+        Schedule + standings + team-fan prompt context only; no player stats, WPA, fame, awards, designations, or Almanac player evidence.
       </div>
     );
   };

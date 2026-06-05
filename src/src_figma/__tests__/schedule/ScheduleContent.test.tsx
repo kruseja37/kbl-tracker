@@ -208,7 +208,7 @@ describe('ScheduleContent Component', () => {
     test('marks score-only completed games distinctly', () => {
       render(<ScheduleContent {...defaultProps} />);
       expect(screen.getByText('SCORE ONLY')).toBeInTheDocument();
-      expect(screen.getByText('Schedule + standings only; no game archive or player stats.')).toBeInTheDocument();
+      expect(screen.getByText('Schedule + standings + team-fan prompt context only; no player stats, WPA, fame, awards, designations, or Almanac player evidence.')).toBeInTheDocument();
     });
 
     test('links GameTracker-completed rows to Game Detail when a game archive exists', () => {
@@ -232,7 +232,7 @@ describe('ScheduleContent Component', () => {
       render(<ScheduleContent {...defaultProps} selectedTeam="TIGERS" />);
 
       expect(screen.getByText('SCORE ONLY')).toBeInTheDocument();
-      expect(screen.getByText('Schedule + standings only; no game archive or player stats.')).toBeInTheDocument();
+      expect(screen.getByText('Schedule + standings + team-fan prompt context only; no player stats, WPA, fame, awards, designations, or Almanac player evidence.')).toBeInTheDocument();
     });
   });
 

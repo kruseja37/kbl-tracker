@@ -2784,7 +2784,7 @@ export function FranchiseHome() {
           <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-6 max-w-md w-full mx-4">
             <div className="text-lg text-[#E8E8D8] mb-2 text-center">ENTER FINAL SCORE</div>
             <div className="text-[10px] text-[#E8E8D8]/70 mb-5 text-center">
-              Score-only updates schedule results and team standings only.
+              Score-only updates schedule, standings, and team-fan prompt context only. It does not create player stats, WPA, fame, awards, designations, or Almanac player evidence.
             </div>
 
             <div className="grid grid-cols-2 gap-3 mb-4">
