@@ -11202,6 +11202,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           playersOfTheGame: storedPlayersOfTheGame,
           playerWpaTotals: pogAwardSet.playerTotals,
           managerWpaTotals: pogAwardSet.managerTotals,
+          atBatEvents,
+          fieldingEvents,
         };
 
         if (!alreadyAggregated) {

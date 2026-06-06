@@ -1464,6 +1464,145 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
   });
 
+  test('renders selected-stadium spray evidence from completed-game archive embedded events when event-log rows are unavailable', async () => {
+    mocks.mockUseFranchiseDataContext.mockReturnValue({
+      franchiseConfig: {
+        franchiseId: 'franchise-1',
+        league: 'league-1',
+      },
+      seasonNumber: 2,
+      standings: {},
+      teamNameMap: { 'team-1': 'Copied Alpha', 'team-2': 'Copied Beta' },
+      stadiumMap: { 'team-1': 'Apple Field' },
+    });
+    const parkFactors = {
+      stadiumId: 'apple-field',
+      stadiumName: 'Apple Field',
+      overall: 1.02,
+      runs: 1.01,
+      homeRuns: 0.99,
+      hits: 1,
+      doubles: 1,
+      triples: 1,
+      strikeouts: 1,
+      walks: 1,
+      leftHandedHR: 1,
+      rightHandedHR: 1,
+      leftHandedAVG: 1,
+      rightHandedAVG: 1,
+      gamesIncluded: 0,
+      lastUpdated: 'seed',
+      confidence: 'LOW',
+      source: 'SEED',
+    };
+    mocks.mockGetRecentGames.mockResolvedValueOnce([{
+      gameId: 'archive-embedded-spray-1',
+      date: 100,
+      franchiseId: 'franchise-1',
+      seasonId: 'franchise-1-season-2',
+      statsScopeId: 'franchise-1-season-2',
+      competitionType: 'franchise',
+      competitionId: 'franchise-1',
+      seasonNumber: 2,
+      awayTeamId: 'team-2',
+      homeTeamId: 'team-1',
+      awayTeamName: 'Copied Beta',
+      homeTeamName: 'Copied Alpha',
+      stadiumName: 'Apple Field',
+      stadiumId: 'apple-field',
+      parkFactors,
+      finalScore: { away: 4, home: 2 },
+      innings: 6,
+      totalInnings: 6,
+      fameEvents: [],
+      playerStats: {},
+      pitcherGameStats: [],
+      activityLog: [],
+      inningScores: [],
+      aggregationStatus: 'aggregated',
+      atBatEvents: [{
+        eventId: 'archive-embedded-spray-1-1',
+        gameId: 'archive-embedded-spray-1',
+        eventIndex: 1,
+        timestamp: 101,
+        batterId: 'batter-1',
+        batterName: 'Batter One',
+        batterTeamId: 'team-2',
+        pitcherId: 'pitcher-1',
+        pitcherName: 'Pitcher One',
+        pitcherTeamId: 'team-1',
+        result: '1B',
+        rbiCount: 0,
+        runsScored: [],
+        inning: 1,
+        halfInning: 'TOP',
+        outs: 0,
+        runners: { first: null, second: null, third: null },
+        awayScore: 0,
+        homeScore: 0,
+        outsAfter: 0,
+        runnersAfter: { first: null, second: null, third: null },
+        awayScoreAfter: 0,
+        homeScoreAfter: 0,
+        leverageIndex: 1,
+        winProbabilityBefore: 0.5,
+        winProbabilityAfter: 0.48,
+        wpa: 0.02,
+        ballInPlay: {
+          trajectory: 'line',
+          zone: 0,
+          velocity: 'hard',
+          fielderIds: ['fielder-1'],
+          primaryFielderId: 'fielder-1',
+        },
+        fameEvents: [],
+        isLeadoff: true,
+        isClutch: false,
+        isWalkOff: false,
+        franchiseId: 'franchise-1',
+        seasonId: 'franchise-1-season-2',
+        statsScopeId: 'franchise-1-season-2',
+        seasonNumber: 2,
+        parkContext: {
+          stadiumId: 'apple-field',
+          stadiumName: 'Apple Field',
+          parkFactors,
+        },
+        batterContext: {
+          playerId: 'batter-1',
+          playerName: 'Batter One',
+          handedness: 'R',
+        },
+        pitcherContext: {
+          playerId: 'pitcher-1',
+          playerName: 'Pitcher One',
+          handedness: 'L',
+        },
+        enrichment: {
+          fieldLocation: { x: 74, y: 48, zone: 'Z05' },
+          exitType: 'line_drive',
+        },
+      }],
+    }]);
+    mocks.mockGetGameEvents.mockResolvedValue([]);
+    mocks.mockGetGameFieldingEvents.mockResolvedValue([]);
+
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /STADIUM/i }));
+    const stadiumRegion = await screen.findByRole('region', { name: /Franchise stadium foundation/i });
+
+    expect(within(stadiumRegion).getByText(/2 selected-stadium row\(s\): batting 1, pitching 1, fielding 0/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText(/Archive rows: 1. Spray rows: 2/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText(/2 ROW\(S\) · READ ONLY/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText('Batter One')).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText('Pitcher One')).toBeInTheDocument();
+    expect(within(stadiumRegion).queryByText(/No scoped spray event detail yet/i)).not.toBeInTheDocument();
+    expect(mocks.mockGetGameEvents).toHaveBeenCalledWith('archive-embedded-spray-1');
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+    expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
+  });
+
   test('labels mixed salary baselines as partial instead of fully stable', async () => {
     mocks.mockBuildFranchiseSalaryLifecycle.mockResolvedValueOnce(salaryLifecycleReport({
       playerRecords: [

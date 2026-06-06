@@ -478,6 +478,54 @@ describe('franchise stadium foundation', () => {
     });
   });
 
+  test('projects batting and pitching spray rows from completed-game archive embedded event detail', () => {
+    const report = buildFranchiseStadiumFoundationReport({
+      ...scope,
+      stadiumSnapshots: [stadiumSnapshot()],
+      completedGames: [
+        completedGame({
+          atBatEvents: [atBat()],
+        }),
+      ],
+      atBatEvents: [],
+      fieldingEvents: [],
+    });
+
+    expect(report.stadiumIdentity.stadiums[0]).toMatchObject({
+      archiveGameRows: 1,
+      sprayEventRows: 2,
+    });
+    expect(report.sprayCharts.status).toBe('trusted');
+    expect(report.sprayCharts.summary).toMatchObject({
+      rows: 2,
+      battingRows: 1,
+      pitchingRows: 1,
+      fieldingRows: 0,
+      stadiumIds: ['apple-field'],
+    });
+    expect(filterAndSortFranchiseSprayChartRows(report.sprayCharts.rows, {
+      stadiumId: 'apple-field',
+      role: 'batting',
+    }).map((row) => row.playerId)).toEqual(['batter-1']);
+  });
+
+  test('keeps score-only or no-event archive samples from fabricating spray rows', () => {
+    const report = buildFranchiseStadiumFoundationReport({
+      ...scope,
+      stadiumSnapshots: [stadiumSnapshot()],
+      completedGames: [completedGame()],
+      atBatEvents: [],
+      fieldingEvents: [],
+    });
+
+    expect(report.stadiumIdentity.stadiums[0]).toMatchObject({
+      archiveGameRows: 1,
+      sprayEventRows: 0,
+    });
+    expect(report.sprayCharts.status).toBe('blocked');
+    expect(report.sprayCharts.summary.rows).toBe(0);
+  });
+
   test('strictly excludes mismatched franchise season or stats scope event evidence', () => {
     const report = buildFranchiseStadiumFoundationReport({
       ...scope,

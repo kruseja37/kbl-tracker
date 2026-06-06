@@ -196,6 +196,53 @@ describe('useGameState commitPlateAppearance', () => {
     });
   });
 
+  test('passes spray-enriched at-bat events into completed-game archive context', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result, {
+      seasonId: 'franchise-1-season-1',
+      statsScopeId: 'franchise-1-season-1',
+      competitionType: 'franchise',
+      competitionId: 'franchise-1',
+      franchiseId: 'franchise-1',
+      stadiumName: 'Apple Field',
+    });
+
+    act(() => {
+      result.current.setNextEventEnrichment({
+        fieldLocation: { x: 74, y: 48, zone: 'Z05' },
+        exitType: 'line_drive',
+      });
+    });
+    await act(async () => {
+      await result.current.commitPlateAppearance({ type: 'hit', hitType: '1B', rbi: 0 });
+    });
+
+    const sprayEvent = mockLogAtBatEvent.mock.calls[0][0];
+    mockGetGameEvents.mockResolvedValue([sprayEvent]);
+    mockGetGameFieldingEvents.mockResolvedValue([]);
+    mockGetBetweenPlayEvents.mockResolvedValue([]);
+
+    await act(async () => {
+      await result.current.endGame();
+    });
+
+    const archiveOptions = mockProcessCompletedGame.mock.calls.at(-1)?.[3];
+    expect(archiveOptions?.context?.atBatEvents).toEqual([sprayEvent]);
+    expect(archiveOptions?.context?.fieldingEvents).toEqual([]);
+    expect(archiveOptions?.context?.atBatEvents?.[0]).toMatchObject({
+      franchiseId: 'franchise-1',
+      seasonId: 'franchise-1-season-1',
+      statsScopeId: 'franchise-1-season-1',
+      parkContext: {
+        stadiumId: 'apple-field',
+        stadiumName: 'Apple Field',
+      },
+      enrichment: {
+        fieldLocation: { zone: 'Z05' },
+      },
+    });
+  });
+
   test('routes dropped-third-strike metadata through the canonical recorder', async () => {
     const { result } = renderHook(() => useGameState());
     await initializeGame(result);

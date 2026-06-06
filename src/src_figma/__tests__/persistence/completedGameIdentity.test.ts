@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, test, vi } from 'vitest';
 import type { PersistedGameState } from '../../../utils/gameStorage';
+import type { AtBatEvent } from '../../../utils/eventLog';
 
 vi.mock('../../../utils/syncEngine', () => ({
   syncEngine: {
@@ -109,6 +110,99 @@ describe('completed game franchise identity', () => {
       competitionId: 'franchise-1',
       franchiseId: 'franchise-1',
       scheduleGameId: 'schedule-game-1',
+    });
+  });
+
+  test('archiveCompletedGame persists scoped spray-enriched at-bat evidence', async () => {
+    const atBatEvent: AtBatEvent = {
+      eventId: 'spray-game-1-1',
+      gameId: 'spray-game-1',
+      eventIndex: 1,
+      timestamp: 101,
+      batterId: 'batter-1',
+      batterName: 'Batter One',
+      batterTeamId: 'away-team',
+      pitcherId: 'pitcher-1',
+      pitcherName: 'Pitcher One',
+      pitcherTeamId: 'home-team',
+      result: '1B',
+      rbiCount: 0,
+      runsScored: [],
+      inning: 1,
+      halfInning: 'TOP',
+      outs: 0,
+      runners: { first: null, second: null, third: null },
+      awayScore: 0,
+      homeScore: 0,
+      outsAfter: 0,
+      runnersAfter: { first: null, second: null, third: null },
+      awayScoreAfter: 0,
+      homeScoreAfter: 0,
+      leverageIndex: 1,
+      winProbabilityBefore: 0.5,
+      winProbabilityAfter: 0.48,
+      wpa: 0.02,
+      ballInPlay: {
+        trajectory: 'line',
+        zone: 0,
+        velocity: 'hard',
+        fielderIds: ['fielder-1'],
+        primaryFielderId: 'fielder-1',
+      },
+      fameEvents: [],
+      isLeadoff: true,
+      isClutch: false,
+      isWalkOff: false,
+      enrichment: {
+        fieldLocation: { x: 74, y: 48, zone: 'Z05' },
+        exitType: 'line_drive',
+      },
+    };
+
+    await archiveCompletedGame(
+      createPersistedGameState({
+        gameId: 'spray-game-1',
+        stadiumName: 'Apple Field',
+      }),
+      { away: 3, home: 5 },
+      [],
+      'franchise-1-season-1',
+      {
+        statsScopeId: 'franchise-1-season-1',
+        competitionType: 'franchise',
+        competitionId: 'franchise-1',
+        leagueId: 'league-1',
+        franchiseId: 'franchise-1',
+        scheduleGameId: 'schedule-game-1',
+        atBatEvents: [atBatEvent],
+        fieldingEvents: [],
+      },
+    );
+
+    const record = await getCompletedGameById('spray-game-1');
+
+    expect(record?.atBatEvents).toHaveLength(1);
+    expect(record?.fieldingEvents).toBeUndefined();
+    expect(record?.atBatEvents?.[0]).toMatchObject({
+      eventId: 'spray-game-1-1',
+      franchiseId: 'franchise-1',
+      seasonId: 'franchise-1-season-1',
+      statsScopeId: 'franchise-1-season-1',
+      competitionType: 'franchise',
+      competitionId: 'franchise-1',
+      scheduleGameId: 'schedule-game-1',
+      parkContext: {
+        stadiumId: 'apple-field',
+        stadiumName: 'Apple Field',
+        parkFactors: expect.objectContaining({
+          stadiumId: 'apple-field',
+          stadiumName: 'Apple Field',
+          source: 'SEED',
+        }),
+      },
+      enrichment: {
+        fieldLocation: { zone: 'Z05' },
+      },
     });
   });
 

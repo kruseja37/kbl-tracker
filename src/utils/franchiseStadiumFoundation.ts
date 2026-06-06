@@ -278,6 +278,38 @@ function uniqueSorted(values: Array<string | null | undefined>): string[] {
     .sort((a, b) => a.localeCompare(b));
 }
 
+function mergeAtBatEventsById(
+  archiveGames: CompletedGameRecord[],
+  eventLogRows: AtBatEvent[],
+): AtBatEvent[] {
+  const byId = new Map<string, AtBatEvent>();
+  for (const game of archiveGames) {
+    for (const event of game.atBatEvents ?? []) {
+      byId.set(event.eventId, event);
+    }
+  }
+  for (const event of eventLogRows) {
+    byId.set(event.eventId, event);
+  }
+  return Array.from(byId.values());
+}
+
+function mergeFieldingEventsById(
+  archiveGames: CompletedGameRecord[],
+  eventLogRows: FieldingEvent[],
+): FieldingEvent[] {
+  const byId = new Map<string, FieldingEvent>();
+  for (const game of archiveGames) {
+    for (const event of game.fieldingEvents ?? []) {
+      byId.set(event.fieldingEventId, event);
+    }
+  }
+  for (const event of eventLogRows) {
+    byId.set(event.fieldingEventId, event);
+  }
+  return Array.from(byId.values());
+}
+
 function buildAtBatSprayRows(
   events: AtBatEvent[],
   completedGamesById: Map<string, CompletedGameRecord>,
@@ -528,11 +560,11 @@ export function buildFranchiseStadiumFoundationReport(
     game.aggregationStatus !== 'incomplete',
   );
   const completedGamesById = new Map(scopedGames.map((game) => [game.gameId, game]));
-  const atBatEvents = input.atBatEvents ?? [];
+  const atBatEvents = mergeAtBatEventsById(scopedGames, input.atBatEvents ?? []);
   const atBatEventsById = new Map(atBatEvents.map((event) => [event.eventId, event]));
   const battingPitchingRows = buildAtBatSprayRows(atBatEvents, completedGamesById, scope);
   const fieldingRows = buildFieldingSprayRows(
-    input.fieldingEvents ?? [],
+    mergeFieldingEventsById(scopedGames, input.fieldingEvents ?? []),
     atBatEventsById,
     completedGamesById,
     scope,

@@ -23,6 +23,7 @@ import type {
 import type { ParkFactors } from "../types/war";
 import type { KblWpaPlayerTotal } from "./kblWpaAttribution";
 import type { PogManagerValueTotal } from "./pogAwards";
+import type { AtBatEvent, FieldingEvent } from "./eventLog";
 import { getStableParkId } from "../data/parkLookup";
 import { getDerivedParkFactorsIfAvailable } from "../engines/parkFactorDeriver";
 import { getTrackerDb } from "./trackerDb";
@@ -619,6 +620,8 @@ export interface CompletedGameRecord {
   managerRecommendationWatches?: PersistedGameState["managerRecommendationWatches"];
   playerWpaTotals?: PersistedGameState["playerWpaTotals"];
   managerWpaTotals?: PersistedGameState["managerWpaTotals"];
+  atBatEvents?: AtBatEvent[];
+  fieldingEvents?: FieldingEvent[];
   optimalLineupSnapshots?: PersistedGameState["optimalLineupSnapshots"];
   chosenLineupSnapshots?: PersistedGameState["chosenLineupSnapshots"];
   legacyManagerDecisions?: PersistedGameState["legacyManagerDecisions"];
@@ -750,6 +753,8 @@ interface ArchiveCompletedGameContext {
   parkFactors?: ParkFactors;
   playerWpaTotals?: KblWpaPlayerTotal[];
   managerWpaTotals?: PogManagerValueTotal[];
+  atBatEvents?: AtBatEvent[];
+  fieldingEvents?: FieldingEvent[];
   pogPlayerId?: string;
   playersOfTheGame?: {
     first?: string;
@@ -794,6 +799,53 @@ function enrichArchivedFameEvents(
       competitionType: event.competitionType ?? resolvedCompetitionType,
       competitionId: event.competitionId ?? resolvedCompetitionId,
       scheduleGameId: event.scheduleGameId ?? resolvedScheduleGameId,
+    };
+  });
+}
+
+function enrichArchivedAtBatEvents(
+  events: AtBatEvent[] | undefined,
+  gameState: PersistedGameState,
+  seasonId: string | undefined,
+  context: ArchiveCompletedGameContext | undefined,
+  stadiumName: string | null,
+  stadiumId: string | null,
+  parkFactors: ParkFactors | undefined,
+): AtBatEvent[] | undefined {
+  if (!events || events.length === 0) return undefined;
+
+  const resolvedStatsScopeId = context?.statsScopeId ?? gameState.statsScopeId ?? seasonId;
+  const resolvedCompetitionType = context?.competitionType ?? gameState.competitionType;
+  const resolvedCompetitionId = context?.competitionId ?? gameState.competitionId;
+  const resolvedFranchiseId = context?.franchiseId ?? gameState.franchiseId;
+  const resolvedScheduleGameId = context?.scheduleGameId ?? gameState.scheduleGameId;
+  const resolvedLeagueId = context?.leagueId ?? gameState.leagueId;
+
+  return events.map((event) => {
+    const eventStadiumName = event.parkContext?.stadiumName ?? stadiumName ?? undefined;
+    const eventStadiumId = eventStadiumName
+      ? getStableParkId(eventStadiumName)
+      : event.parkContext?.stadiumId ?? stadiumId ?? undefined;
+
+    return {
+      ...event,
+      seasonId: event.seasonId ?? seasonId ?? gameState.seasonId,
+      seasonNumber: event.seasonNumber ?? gameState.seasonNumber,
+      statsScopeId: event.statsScopeId ?? resolvedStatsScopeId,
+      competitionType: event.competitionType ?? resolvedCompetitionType,
+      competitionId: event.competitionId ?? resolvedCompetitionId,
+      franchiseId: event.franchiseId ?? resolvedFranchiseId,
+      scheduleGameId: event.scheduleGameId ?? resolvedScheduleGameId,
+      leagueId: event.leagueId ?? resolvedLeagueId,
+      parkContext:
+        eventStadiumName && eventStadiumId
+          ? {
+              ...event.parkContext,
+              stadiumId: eventStadiumId,
+              stadiumName: eventStadiumName,
+              parkFactors: event.parkContext?.parkFactors ?? parkFactors,
+            }
+          : event.parkContext,
     };
   });
 }
@@ -878,6 +930,16 @@ export async function archiveCompletedGame(
     managerRecommendationWatches: gameState.managerRecommendationWatches || [],
     playerWpaTotals: context?.playerWpaTotals ?? gameState.playerWpaTotals ?? [],
     managerWpaTotals: context?.managerWpaTotals ?? gameState.managerWpaTotals ?? [],
+    atBatEvents: enrichArchivedAtBatEvents(
+      context?.atBatEvents,
+      gameState,
+      seasonId,
+      context,
+      resolvedStadiumName,
+      resolvedStadiumId,
+      resolvedParkFactors,
+    ),
+    fieldingEvents: context?.fieldingEvents?.length ? context.fieldingEvents : undefined,
     optimalLineupSnapshots: gameState.optimalLineupSnapshots,
     chosenLineupSnapshots: gameState.chosenLineupSnapshots,
     legacyManagerDecisions: gameState.legacyManagerDecisions || [],
