@@ -1,6 +1,7 @@
 import { Suspense, lazy } from "react";
 import { Routes, Route } from "react-router-dom";
 import { PostGameRouteBoundary } from "./components/PostGameRouteBoundary";
+import { FRANCHISE_MANUAL_SMOKE_SETUP_ROUTE } from "./utils/franchiseManualSmokeFixtureGate";
 
 // Global styles
 import "./styles/global.css";
@@ -186,10 +187,19 @@ const BetweenInningSummaryPreview = lazy(() =>
 );
 const enableFranchiseVisualSmokePreviewRoute =
   import.meta.env.DEV || import.meta.env.MODE === "test";
+const enableFranchiseManualSmokeSetupRoute =
+  import.meta.env.DEV || import.meta.env.MODE === "test";
 const FranchiseV1VisualSmokeSeed = enableFranchiseVisualSmokePreviewRoute
   ? lazy(() =>
       import("./src_figma/app/pages/FranchiseV1VisualSmokeSeed").then((module) => ({
         default: module.FranchiseV1VisualSmokeSeed,
+      })),
+    )
+  : null;
+const FranchiseManualSmokeSetup = enableFranchiseManualSmokeSetupRoute
+  ? lazy(() =>
+      import("./src_figma/app/pages/FranchiseManualSmokeSetup").then((module) => ({
+        default: module.FranchiseManualSmokeSetup,
       })),
     )
   : null;
@@ -323,6 +333,12 @@ function App() {
           <Route
             path="/__preview/franchise-v1-visual-smoke"
             element={FranchiseV1VisualSmokeSeed ? <FranchiseV1VisualSmokeSeed /> : <NotFound />}
+          />
+        ) : null}
+        {enableFranchiseManualSmokeSetupRoute ? (
+          <Route
+            path={FRANCHISE_MANUAL_SMOKE_SETUP_ROUTE}
+            element={FranchiseManualSmokeSetup ? <FranchiseManualSmokeSetup /> : <NotFound />}
           />
         ) : null}
 
