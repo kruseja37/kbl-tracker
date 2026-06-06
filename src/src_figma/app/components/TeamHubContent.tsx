@@ -100,8 +100,13 @@ import {
   filterAndSortFranchiseSprayChartRows,
   type FranchiseStadiumFoundationReport,
   type FranchiseSprayChartFilterSortOptions,
+  type FranchiseSprayChartRow,
   type FranchiseSprayChartRole,
 } from "../../../utils/franchiseStadiumFoundation";
+import {
+  ZONE_CENTERS,
+  ZONE_POLYGONS,
+} from "../../../data/fieldZones";
 import {
   type FranchiseRandomEventLogReport,
 } from "../../../utils/franchiseRandomEventLog";
@@ -4799,53 +4804,30 @@ function FranchiseStadiumFoundationPanel({
         <span className="border border-[#E8E8D8]/20 bg-[#4A6844] px-2 py-0.5">Custom dimensions blocked</span>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)]">
         <div className="border-2 border-[#4A6844] bg-[#4A6844] p-3">
-          <div className="mb-2 text-[10px] font-bold text-[#C4A853]">DIMENSIONS / FACTORS</div>
-          {selected ? (
-            <div className="space-y-2 text-[10px] leading-snug text-[#E8E8D8]/75">
-              <div className="text-[12px] font-bold text-[#E8E8D8]">{selected.stadiumName}</div>
-              {dimensions ? (
-                <div className="grid gap-2 sm:grid-cols-3">
-                  <div className="border border-[#E8E8D8]/20 p-2">LF {dimensions.lf}</div>
-                  <div className="border border-[#E8E8D8]/20 p-2">CF {dimensions.cf}</div>
-                  <div className="border border-[#E8E8D8]/20 p-2">RF {dimensions.rf}</div>
-                </div>
-              ) : (
-                <div>Dimensions unavailable for this stadium identity.</div>
-              )}
-              <div>
-                Archive rows: {selected.archiveGameRows}. Spray rows: {selected.sprayEventRows}.
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-[12px] font-bold text-[#C4A853]">SPRAY CHART</div>
+              <div className="mt-1 text-[9px] leading-snug text-[#E8E8D8]/60">
+                Graphic plot from scoped completed-game spray evidence. Heat map remains deferred.
               </div>
-              {seedFactors ? (
-                <div>
-                  Runs {seedFactors.runs.toFixed(2)} / HR {seedFactors.homeRuns.toFixed(2)} / Overall {seedFactors.overall.toFixed(2)} / Confidence {seedFactors.confidence}
-                </div>
-              ) : (
-                <div>Seed park factor row unavailable.</div>
-              )}
             </div>
-          ) : (
-            <div className="text-[10px] text-[#E8E8D8]/65">
-              {isLoading ? 'Loading stadium foundation data.' : 'No stadium foundation rows are available.'}
+            <div className="text-[9px] font-bold text-[#E8E8D8]/60">
+              {filteredSprayRows.length} POINT(S) · READ ONLY
             </div>
-          )}
+          </div>
+          <FranchiseSprayChartGraphic
+            rows={filteredSprayRows}
+            dimensionsAvailable={Boolean(dimensions)}
+            stadiumName={selected?.stadiumName ?? selectedStadium}
+          />
         </div>
 
         <div className="border-2 border-[#4A6844] bg-[#4A6844] p-3">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <div className="text-[10px] font-bold text-[#C4A853]">SPRAY EVIDENCE INSPECTOR</div>
-            <div className="text-[9px] font-bold text-[#E8E8D8]/60">
-              {filteredSprayRows.length} ROW(S) · READ ONLY
-            </div>
-          </div>
-          <div className="mb-2 text-[9px] leading-snug text-[#E8E8D8]/55">
-            Row evidence available; heat map and stadium diagram deferred.
-          </div>
-
+          <div className="mb-2 text-[10px] font-bold text-[#C4A853]">EVIDENCE FILTERS</div>
           {selectedRows.length > 0 ? (
-            <>
-              <div className="mb-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
                 <SprayFilterSelect
                   label="Role"
                   value={sprayRole}
@@ -4927,7 +4909,74 @@ function FranchiseStadiumFoundationPanel({
                   ]}
                 />
               </div>
+          ) : (
+            <div className="text-[10px] leading-snug text-[#E8E8D8]/65">
+              No scoped spray event detail yet. Completed-game archive rows can still prove stadium identity/sample.
+            </div>
+          )}
+        </div>
+      </div>
 
+      <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,0.65fr)_minmax(0,1fr)]">
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-3">
+          <div className="mb-2 text-[10px] font-bold text-[#C4A853]">STADIUM STATS / ADVANCED METRICS</div>
+          {selected ? (
+            <div className="space-y-2 text-[10px] leading-snug text-[#E8E8D8]/75">
+              <div className="text-[12px] font-bold text-[#E8E8D8]">{selected.stadiumName}</div>
+              {dimensions ? (
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="border border-[#E8E8D8]/20 p-2">LF {dimensions.lf}</div>
+                  <div className="border border-[#E8E8D8]/20 p-2">CF {dimensions.cf}</div>
+                  <div className="border border-[#E8E8D8]/20 p-2">RF {dimensions.rf}</div>
+                </div>
+              ) : (
+                <div>Dimensions unavailable for this stadium identity. Chart uses a safe default field layout.</div>
+              )}
+              <div>
+                Archive rows: {selected.archiveGameRows}. Spray rows: {selected.sprayEventRows}.
+              </div>
+              {seedFactors ? (
+                <div>
+                  Runs {seedFactors.runs.toFixed(2)} / HR {seedFactors.homeRuns.toFixed(2)} / Overall {seedFactors.overall.toFixed(2)} / Confidence {seedFactors.confidence}
+                </div>
+              ) : (
+                <div>Seed park factor row unavailable.</div>
+              )}
+              <div className="text-[#E8E8D8]/55">
+                Adaptive factors are preview-only. Park-adjusted WAR/value consumers remain blocked.
+              </div>
+            </div>
+          ) : (
+            <div className="text-[10px] text-[#E8E8D8]/65">
+              {isLoading ? 'Loading stadium foundation data.' : 'No stadium foundation rows are available.'}
+            </div>
+          )}
+        </div>
+
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-3">
+          <div className="mb-2 text-[10px] font-bold text-[#C4A853]">STADIUM RECORDS</div>
+          <div className="space-y-2 text-[10px] leading-snug text-[#E8E8D8]/70">
+            <div>Evidence-only record storage boundary exists.</div>
+            <div>No Team Hub record edit, delete, generate, adaptive-factor, or park-adjusted WAR controls are active.</div>
+            <div className="border border-[#E8E8D8]/20 bg-[#3F563F] p-2 text-[#E8E8D8]/60">
+              Records can summarize archive-backed team/game/spray evidence later; this panel does not write records.
+            </div>
+          </div>
+        </div>
+
+        <div className="border-2 border-[#4A6844] bg-[#4A6844] p-3">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="text-[10px] font-bold text-[#C4A853]">SPRAY EVIDENCE DETAILS</div>
+            <div className="text-[9px] font-bold text-[#E8E8D8]/60">
+              {filteredSprayRows.length} ROW(S) · READ ONLY
+            </div>
+          </div>
+          <div className="mb-2 text-[9px] leading-snug text-[#E8E8D8]/55">
+            Compact audit list for the plotted evidence above.
+          </div>
+
+          {selectedRows.length > 0 ? (
+            <>
               {visibleSprayRows.length > 0 ? (
                 <div className="space-y-2">
                   {visibleSprayRows.map((row) => (
@@ -5000,6 +5049,178 @@ function SprayFilterSelect({
         ))}
       </select>
     </label>
+  );
+}
+
+function roleLabel(role: FranchiseSprayChartRole): string {
+  if (role === 'batting') return 'BAT';
+  if (role === 'pitching') return 'PIT';
+  return 'FLD';
+}
+
+function roleColor(role: FranchiseSprayChartRole): string {
+  if (role === 'batting') return '#F2CC8F';
+  if (role === 'pitching') return '#81B29A';
+  return '#A9BCD0';
+}
+
+function outcomeStroke(outcome: string): string {
+  const normalized = outcome.toUpperCase();
+  if (normalized === 'HR') return '#FF6B6B';
+  if (normalized === '2B' || normalized === '3B') return '#FFD166';
+  if (normalized.includes('E')) return '#B388FF';
+  if (normalized.includes('O') || normalized.includes('DP') || normalized.includes('FC')) return '#D8DEE9';
+  return '#FFFFFF';
+}
+
+function pointOffset(index: number): { x: number; y: number } {
+  const offsets = [
+    { x: 0, y: 0 },
+    { x: 2.4, y: -1.8 },
+    { x: -2.4, y: 1.8 },
+    { x: 2.4, y: 1.8 },
+    { x: -2.4, y: -1.8 },
+  ];
+  return offsets[index % offsets.length];
+}
+
+function fallbackPointForSprayRow(row: FranchiseSprayChartRow): { x: number; y: number } {
+  const depthY: Record<string, number> = {
+    infield: 62,
+    shallow: 42,
+    medium: 24,
+    deep: 11,
+    foul_shallow: 70,
+    foul_medium: 38,
+    foul_deep: 16,
+    foul_catcher: 92,
+    unknown: 44,
+  };
+  const directionX: Record<string, number> = {
+    pull: row.handedness === 'L' ? 76 : 24,
+    pull_center: row.handedness === 'L' ? 62 : 38,
+    center: 50,
+    oppo_center: row.handedness === 'L' ? 38 : 62,
+    oppo: row.handedness === 'L' ? 24 : 76,
+    foul_left: 8,
+    foul_right: 92,
+    foul_back: 50,
+    unknown: 50,
+  };
+  return {
+    x: directionX[row.direction] ?? 50,
+    y: depthY[row.depth] ?? 44,
+  };
+}
+
+function pointForSprayRow(row: FranchiseSprayChartRow, index: number): { x: number; y: number } {
+  const center = row.zoneId ? ZONE_CENTERS[row.zoneId] : null;
+  const base = center ?? fallbackPointForSprayRow(row);
+  const offset = pointOffset(index);
+  return {
+    x: Math.max(2, Math.min(98, base.x + offset.x)),
+    y: Math.max(3, Math.min(97, base.y + offset.y)),
+  };
+}
+
+function FranchiseSprayChartGraphic({
+  rows,
+  stadiumName,
+  dimensionsAvailable,
+}: {
+  rows: FranchiseSprayChartRow[];
+  stadiumName: string;
+  dimensionsAvailable: boolean;
+}) {
+  const plottedRows = rows.slice(0, 80);
+  const groupedByRole = plottedRows.reduce<Record<FranchiseSprayChartRole, number>>((counts, row) => {
+    counts[row.role] += 1;
+    return counts;
+  }, { batting: 0, pitching: 0, fielding: 0 });
+
+  return (
+    <div>
+      <svg
+        role="img"
+        aria-label={`Spray chart graphic for ${stadiumName || 'selected stadium'}`}
+        data-testid="team-hub-stadium-spray-chart"
+        viewBox="0 0 100 100"
+        className="h-[360px] w-full border-2 border-[#2F4C36] bg-[#20382A]"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <title>{`Spray chart for ${stadiumName || 'selected stadium'}`}</title>
+        <rect x="0" y="0" width="100" height="100" fill="#20382A" />
+        <path d="M 50 96 L 2 18 Q 50 -8 98 18 Z" fill="#274A34" stroke="#8EA87E" strokeWidth="0.7" />
+        <path d="M 50 96 L 10 24 Q 50 3 90 24 Z" fill="none" stroke="#D0B56D" strokeWidth="0.5" strokeDasharray="2 2" opacity="0.75" />
+        <path d="M 50 96 L 22 48 Q 50 20 78 48 Z" fill="none" stroke="#7FA372" strokeWidth="0.45" opacity="0.85" />
+        <polygon points="50,92 36,76 50,61 64,76" fill="#8C6A3D" opacity="0.38" stroke="#F4F1DE" strokeWidth="0.45" />
+        <line x1="50" y1="96" x2="0" y2="8" stroke="#F4F1DE" strokeWidth="0.35" opacity="0.7" />
+        <line x1="50" y1="96" x2="100" y2="8" stroke="#F4F1DE" strokeWidth="0.35" opacity="0.7" />
+        {Object.entries(ZONE_POLYGONS).map(([zoneId, points]) => (
+          <path
+            key={zoneId}
+            d={points}
+            data-testid={`team-hub-spray-zone-${zoneId}`}
+            fill={zoneId.startsWith('F') ? '#5A4A37' : '#365A3D'}
+            opacity={zoneId.startsWith('F') ? 0.12 : 0.16}
+            stroke="#D8E8D0"
+            strokeWidth="0.12"
+          />
+        ))}
+        <rect x="48.7" y="93.2" width="2.6" height="2.6" fill="#F4F1DE" />
+        <rect x="34.5" y="74.3" width="2" height="2" fill="#F4F1DE" />
+        <rect x="49" y="59.8" width="2" height="2" fill="#F4F1DE" />
+        <rect x="62.5" y="74.3" width="2" height="2" fill="#F4F1DE" />
+        {plottedRows.map((row, index) => {
+          const point = pointForSprayRow(row, index);
+          const fill = roleColor(row.role);
+          const stroke = outcomeStroke(row.outcome);
+          const key = `${row.role}:${row.eventId}:${row.playerId}:${index}`;
+          const label = `${roleLabel(row.role)} ${row.playerName}: ${row.outcome}, ${row.zoneName ?? row.zoneId ?? 'unknown zone'}, ${row.source}`;
+          return (
+            <g key={key} data-testid={`spray-point-${row.role}`} aria-label={label}>
+              <title>{label}</title>
+              {row.role === 'fielding' ? (
+                <rect
+                  x={point.x - 1.7}
+                  y={point.y - 1.7}
+                  width="3.4"
+                  height="3.4"
+                  fill={fill}
+                  stroke={stroke}
+                  strokeWidth="0.65"
+                />
+              ) : row.role === 'pitching' ? (
+                <polygon
+                  points={`${point.x},${point.y - 2.2} ${point.x + 2.1},${point.y + 1.7} ${point.x - 2.1},${point.y + 1.7}`}
+                  fill={fill}
+                  stroke={stroke}
+                  strokeWidth="0.65"
+                />
+              ) : (
+                <circle cx={point.x} cy={point.y} r="2.1" fill={fill} stroke={stroke} strokeWidth="0.65" />
+              )}
+            </g>
+          );
+        })}
+        {plottedRows.length === 0 ? (
+          <text x="50" y="48" textAnchor="middle" fill="#F4F1DE" fontSize="3.2" fontFamily="monospace">
+            NO SCOPED SPRAY POINTS
+          </text>
+        ) : null}
+      </svg>
+      <div className="mt-2 flex flex-wrap gap-2 text-[9px] font-bold text-[#E8E8D8]/70">
+        <span className="border border-[#F2CC8F]/50 px-2 py-1 text-[#F2CC8F]">● Batting {groupedByRole.batting}</span>
+        <span className="border border-[#81B29A]/50 px-2 py-1 text-[#A7F3C1]">▲ Pitching {groupedByRole.pitching}</span>
+        <span className="border border-[#A9BCD0]/50 px-2 py-1 text-[#D8E7FF]">■ Fielding {groupedByRole.fielding}</span>
+        <span className="border border-[#E8E8D8]/20 px-2 py-1">
+          {dimensionsAvailable ? 'Trusted dimensions' : 'Default field layout'}
+        </span>
+        {rows.length > plottedRows.length ? (
+          <span className="border border-[#E8E8D8]/20 px-2 py-1">Showing first {plottedRows.length} points</span>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

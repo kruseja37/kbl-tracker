@@ -1434,8 +1434,18 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(stadiumRegion).getByText('RF 347')).toBeInTheDocument();
     expect(within(stadiumRegion).getByText(/Archive rows: 1. Spray rows: 3/i)).toBeInTheDocument();
     expect(within(stadiumRegion).getByText(/3 selected-stadium row\(s\): batting 1, pitching 1, fielding 1/i)).toBeInTheDocument();
-    expect(within(stadiumRegion).getByText('SPRAY EVIDENCE INSPECTOR')).toBeInTheDocument();
-    expect(within(stadiumRegion).getByText(/Row evidence available; heat map and stadium diagram deferred/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText('SPRAY CHART')).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText(/Graphic plot from scoped completed-game spray evidence/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).getByTestId('team-hub-stadium-spray-chart')).toBeInTheDocument();
+    expect(within(stadiumRegion).getAllByTestId('spray-point-batting')).toHaveLength(1);
+    expect(within(stadiumRegion).getAllByTestId('spray-point-pitching')).toHaveLength(1);
+    expect(within(stadiumRegion).getAllByTestId('spray-point-fielding')).toHaveLength(1);
+    expect(within(stadiumRegion).getByText('EVIDENCE FILTERS')).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText('STADIUM STATS / ADVANCED METRICS')).toBeInTheDocument();
+    expect(within(stadiumRegion).getAllByText('STADIUM RECORDS').length).toBeGreaterThan(0);
+    expect(within(stadiumRegion).getByText('SPRAY EVIDENCE DETAILS')).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText(/Compact audit list for the plotted evidence above/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText(/3 POINT\(S\) · READ ONLY/i)).toBeInTheDocument();
     expect(within(stadiumRegion).getByText(/3 ROW\(S\) · READ ONLY/i)).toBeInTheDocument();
     expect(within(stadiumRegion).getByText('Batter One')).toBeInTheDocument();
     expect(within(stadiumRegion).getByText('Pitcher One')).toBeInTheDocument();
@@ -1456,6 +1466,10 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(filteredArticles[0]).not.toHaveTextContent('Pitcher One');
     expect(filteredArticles[0]).not.toHaveTextContent('Fielder One');
     expect(within(stadiumRegion).getByText(/1 ROW\(S\) · READ ONLY/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText(/1 POINT\(S\) · READ ONLY/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).getAllByTestId('spray-point-batting')).toHaveLength(1);
+    expect(within(stadiumRegion).queryByTestId('spray-point-pitching')).not.toBeInTheDocument();
+    expect(within(stadiumRegion).queryByTestId('spray-point-fielding')).not.toBeInTheDocument();
 
     expect(within(stadiumRegion).getByText(/Storage boundary exists. Evidence-only records/i)).toBeInTheDocument();
     expect(within(stadiumRegion).getByText(/writes no stadium records, adaptive factors, random events, morale changes, designations, salary changes, relationship changes, stories, offseason state, or player-profile automation/i)).toBeInTheDocument();
@@ -1594,11 +1608,93 @@ describe('TeamHubContent franchise-owned visible reads', () => {
 
     expect(within(stadiumRegion).getByText(/2 selected-stadium row\(s\): batting 1, pitching 1, fielding 0/i)).toBeInTheDocument();
     expect(within(stadiumRegion).getByText(/Archive rows: 1. Spray rows: 2/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).getByTestId('team-hub-stadium-spray-chart')).toBeInTheDocument();
+    expect(within(stadiumRegion).getAllByTestId('spray-point-batting')).toHaveLength(1);
+    expect(within(stadiumRegion).getAllByTestId('spray-point-pitching')).toHaveLength(1);
+    expect(within(stadiumRegion).queryByTestId('spray-point-fielding')).not.toBeInTheDocument();
+    expect(within(stadiumRegion).getByText(/2 POINT\(S\) · READ ONLY/i)).toBeInTheDocument();
     expect(within(stadiumRegion).getByText(/2 ROW\(S\) · READ ONLY/i)).toBeInTheDocument();
     expect(within(stadiumRegion).getByText('Batter One')).toBeInTheDocument();
     expect(within(stadiumRegion).getByText('Pitcher One')).toBeInTheDocument();
     expect(within(stadiumRegion).queryByText(/No scoped spray event detail yet/i)).not.toBeInTheDocument();
     expect(mocks.mockGetGameEvents).toHaveBeenCalledWith('archive-embedded-spray-1');
+    expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
+    expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
+  });
+
+  test('renders empty spray chart state for archive samples without event detail', async () => {
+    mocks.mockUseFranchiseDataContext.mockReturnValue({
+      franchiseConfig: {
+        franchiseId: 'franchise-1',
+        league: 'league-1',
+      },
+      seasonNumber: 2,
+      standings: {},
+      teamNameMap: { 'team-1': 'Copied Alpha', 'team-2': 'Copied Beta' },
+      stadiumMap: { 'team-1': 'Apple Field' },
+    });
+    const parkFactors = {
+      stadiumId: 'apple-field',
+      stadiumName: 'Apple Field',
+      overall: 1.02,
+      runs: 1.01,
+      homeRuns: 0.99,
+      hits: 1,
+      doubles: 1,
+      triples: 1,
+      strikeouts: 1,
+      walks: 1,
+      leftHandedHR: 1,
+      rightHandedHR: 1,
+      leftHandedAVG: 1,
+      rightHandedAVG: 1,
+      gamesIncluded: 0,
+      lastUpdated: 'seed',
+      confidence: 'LOW',
+      source: 'SEED',
+    };
+    mocks.mockGetRecentGames.mockResolvedValueOnce([{
+      gameId: 'archive-no-spray-1',
+      date: 100,
+      franchiseId: 'franchise-1',
+      seasonId: 'franchise-1-season-2',
+      statsScopeId: 'franchise-1-season-2',
+      competitionType: 'franchise',
+      competitionId: 'franchise-1',
+      seasonNumber: 2,
+      awayTeamId: 'team-2',
+      homeTeamId: 'team-1',
+      awayTeamName: 'Copied Beta',
+      homeTeamName: 'Copied Alpha',
+      stadiumName: 'Apple Field',
+      stadiumId: 'apple-field',
+      parkFactors,
+      finalScore: { away: 4, home: 2 },
+      innings: 6,
+      totalInnings: 6,
+      fameEvents: [],
+      playerStats: {},
+      pitcherGameStats: [],
+      activityLog: [],
+      inningScores: [],
+      aggregationStatus: 'aggregated',
+    }]);
+    mocks.mockGetGameEvents.mockResolvedValue([]);
+    mocks.mockGetGameFieldingEvents.mockResolvedValue([]);
+
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /STADIUM/i }));
+    const stadiumRegion = await screen.findByRole('region', { name: /Franchise stadium foundation/i });
+
+    expect(within(stadiumRegion).getByTestId('team-hub-stadium-spray-chart')).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText('NO SCOPED SPRAY POINTS')).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText(/0 selected-stadium row\(s\): batting 0, pitching 0, fielding 0/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText(/Archive rows: 1. Spray rows: 0/i)).toBeInTheDocument();
+    expect(within(stadiumRegion).getAllByText(/No scoped spray event detail yet/i).length).toBeGreaterThan(0);
+    expect(within(stadiumRegion).queryByTestId('spray-point-batting')).not.toBeInTheDocument();
+    expect(within(stadiumRegion).queryByTestId('spray-point-pitching')).not.toBeInTheDocument();
+    expect(within(stadiumRegion).queryByTestId('spray-point-fielding')).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
     expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
   });
