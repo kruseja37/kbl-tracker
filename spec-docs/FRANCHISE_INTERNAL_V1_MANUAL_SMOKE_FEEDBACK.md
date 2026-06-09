@@ -88,6 +88,21 @@ The immediate next step is **User reruns manual smoke checklist**:
 - Save import/upload remains explicitly not implemented unless separately approved.
 - Do not promote salary movement, final True Value, final designations, morale automation, relationships, Mode 3/offseason, auto-draft, or AI simulation.
 
+### Product UX Cleanup Lane
+
+Current app UI still contains too much implementation, audit, and progress wording. Many Mode 1/Mode 2 panels are functioning as trust-boundary documentation rather than product-grade UX. This is useful while data contracts are being hardened, but it must be cleaned before final playable approval or before any broader user-facing release.
+
+Future cleanup should:
+
+- Remove implementation-progress prose from app surfaces.
+- Replace long explanations with compact labels, badges, and short blocker states.
+- Move deeper explanations behind help/details affordances.
+- Simplify Team Hub, Stadium, Finance, Morale, Designation, Random Event, Schedule, and Almanac panels.
+- Preserve hidden-safety and trust boundaries without making the UI feel like a spec document.
+- Keep iPad-readable layouts as a hard requirement.
+
+Priority rule: functionality and trust boundaries stay first until remaining critical data flows are stable. UX cleanup moves ahead only when the UI blocks comprehension, causes wrong action, or hides an important boundary.
+
 ### High-Priority Playability / Data Correctness
 
 1. Pitcher name formatting is inconsistent in GameTracker.
@@ -147,6 +162,7 @@ The immediate next step is **User reruns manual smoke checklist**:
    - Desired behavior: default copy should be more succinct.
    - Robust explanations should move behind help buttons/tooltips/disclosure where needed.
    - Area to inspect: Team Hub foundation panels, random-event cards, morale/spec alignment copy, stadium panels, relationship context, and modal density.
+   - Status: product UX cleanup lane captured; keep after critical data-flow blockers unless wording blocks comprehension or causes wrong action.
 
 ### Stadium / Spray / Analytics UX
 
@@ -162,6 +178,7 @@ The immediate next step is **User reruns manual smoke checklist**:
 3. Player spray charts still show deferred.
    - Desired behavior: batting, pitching, and fielding spray evidence should eventually be visible by player/team/stadium in a useful way.
    - Area to inspect: player profile spray context, Team Hub stadium spray inspector, and future heat-map/diagram work.
+   - Status: Team Hub stadium spray chart is a provisional functional visualization, not final design.
 
 ### Game / Analytics Gaps
 

@@ -41,6 +41,8 @@ Latest working checkpoint: Playable V1 Smoke Findings Reconciliation And Next Ga
 - Player profiles now separate primary/secondary positions, avoid non-pitcher pitching-rating leakage, and preserve hidden-safe FARM behavior.
 - GameTracker substitution menus now display full names for pitchers and position players.
 - Almanac Franchise access now surfaces archive-backed franchise games/player instances/team links, while save import/upload is clearly labeled not implemented yet.
+- Product UX cleanup is an explicit future lane: current app surfaces still contain too much implementation/audit/progress wording and many panels feel like trust-boundary documentation. Clean this before final playable approval or broader release, while preserving safety boundaries and iPad-readable layouts.
+- Team Hub stadium spray chart is provisional functional visualization, not final design.
 
 ## Current Active Slice
 
@@ -54,8 +56,9 @@ Goal: mark the latest smoke-response hardening as addressed, keep playable v1 un
 2. If stadium spray data is still missing from real Team Hub, implement **Stadium Spray Evidence Visibility In Real Team Hub**.
 3. If stadium smoke passes but Manager WPA lineup delta is still missing from Game Detail, implement **Manager WPA Lineup Delta Visibility**.
 4. Keep playable v1 unapproved until the blocker set is cleared and the user approves it.
-5. If later smoke reveals only polish, queue that polish explicitly after the approval decision.
-6. Keep Mode 3/offseason and full-spec systems deferred until approval.
+5. Keep Product UX Cleanup queued after remaining critical data flows unless UI wording/layout blocks comprehension or causes wrong action.
+6. If later smoke reveals only polish, queue that polish explicitly after the approval decision.
+7. Keep Mode 3/offseason and full-spec systems deferred until approval.
 
 ## Hard Boundaries
 
@@ -84,6 +87,7 @@ Goal: mark the latest smoke-response hardening as addressed, keep playable v1 un
 - Every meaningful checkpoint must update this card/roadmap or explicitly say `no roadmap update needed`.
 - Do one skeptical audit per meaningful checkpoint, not repeated audits for copy polish.
 - Never promote preview-only data to trusted/mutating behavior unless the roadmap names that promotion as the active slice.
+- For product UX cleanup, remove implementation-progress prose, prefer compact labels/badges, move deep explanations to help/details, and preserve trust boundaries without making the UI read like a spec document.
 - If conversation context is compacted or uncertain, recover from repo truth by reading this card, the roadmap, `git status --short --branch`, and `git log --oneline -8`.
 
 ## Audit Prompt Template

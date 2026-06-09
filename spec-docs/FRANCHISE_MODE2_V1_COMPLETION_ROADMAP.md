@@ -61,6 +61,8 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Player profile position/pitching integrity is hardened: primary/secondary position display is separated, non-pitcher pitching ratings/arsenal are hidden unless a pitching model exists, and hidden FARM profiles remain hidden-safe.
 - GameTracker substitution menu full-name display is hardened for pitchers and position players.
 - Almanac Franchise access and save import clarity are hardened: archive-backed franchise games/player instances/team links are reachable, and save import/upload is explicitly not implemented yet.
+- Product UX cleanup lane is captured: current app surfaces still contain too much implementation/audit/progress wording and many panels behave like trust-boundary documentation instead of product-grade UX.
+- Team Hub stadium spray chart is provisional functional visualization, not final design.
 
 ## Active Priority Order
 
@@ -75,9 +77,18 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
    - Save import/upload remains deferred unless separately approved.
 3. Approval Decision
    - If the remaining smoke findings pass, ask the user whether Mode 1/2 playable v1 is approved.
-4. Post-Approval Polish Queue
+4. Product UX Cleanup Lane
+   - Clean before final playable approval or broader release if UI wording/layout blocks comprehension or causes wrong action.
+   - Otherwise keep it after remaining critical data-flow blockers.
+   - Remove implementation-progress prose from app surfaces.
+   - Replace long explanations with compact labels, badges, and short blockers.
+   - Move deep explanations to help/details.
+   - Simplify Team Hub, Stadium, Finance, Morale, Designation, Random Event, Schedule, and Almanac panels.
+   - Preserve trust boundaries and hidden-safety without making the UI feel like a spec document.
+   - Ensure iPad-readable layouts.
+5. Post-Approval Polish Queue
    - If smoke reveals only non-blocking polish, queue it after the approval decision.
-5. Deferred Full-Spec Backlog
+6. Deferred Full-Spec Backlog
    - Keep Mode 3/offseason, auto-draft, AI simulation, final awards, salary/designation/morale automation, relationships, adaptive factors, and generated schedules out of active scope.
 
 ## Playable V1 Remaining Work
@@ -94,6 +105,7 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
   - Manager WPA lineup delta is missing from Game Detail.
 - Get explicit user approval before declaring Mode 1/2 playable v1 complete.
 - Track any non-blocking production visual-smoke, roster/schedule readability, or transaction drilldown polish as follow-up after the approval decision.
+- Track product UX cleanup separately from data-flow blockers: concise product surfaces are required for approval/release quality, but must not weaken trust-boundary copy or hide blocked states.
 - Future stricter two-way Team MVP criteria, if approved later.
 
 ## Full Spec Parity Backlog
