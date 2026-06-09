@@ -150,7 +150,7 @@ function lineupManagerPlayers() {
 
 function salaryLifecycleRecord(overrides: Record<string, unknown> = {}) {
   return {
-    contractVersion: 'franchise-salary-lifecycle-v1-readonly',
+    contractVersion: 'franchise-salary-lifecycle-v1-current-salary',
     franchiseId: 'franchise-1',
     seasonId: 'franchise-1-season-2',
     statsScopeId: 'franchise-1-season-2',
@@ -165,21 +165,27 @@ function salaryLifecycleRecord(overrides: Record<string, unknown> = {}) {
     teamPayrollBaseline: 4000000,
     initialSalaryBaseline: {
       status: 'stable-baseline',
-      persistable: false,
-      recalculable: false,
-      reasons: ['Stored franchise salary baseline is available from the Mode 1 handoff/franchise copy.'],
+      persistable: true,
+      recalculable: true,
+      reasons: ['Stored franchise salary is available from the Mode 1 handoff or current salary sync.'],
     },
     teamPayrollBaselineState: {
       status: 'stable-baseline',
-      persistable: false,
-      recalculable: false,
-      reasons: ['Stored team payroll baseline is available from the franchise handoff.'],
+      persistable: true,
+      recalculable: true,
+      reasons: ['Stored team payroll proof is available from the franchise salary baseline.'],
+    },
+    currentSalaryCalculation: {
+      status: 'active',
+      persistable: true,
+      recalculable: true,
+      reasons: ['Current salary calculation uses base ratings, position, age, traits, personality context, neutral fame, and scoped season-stat performance when available.'],
     },
     performanceSalaryMovement: {
-      status: 'blocked',
-      persistable: false,
-      recalculable: false,
-      reasons: ['Performance salary movement is blocked because canonical True Value is unavailable.'],
+      status: 'active',
+      persistable: true,
+      recalculable: true,
+      reasons: ['Performance salary modifier is active from scoped current-season WAR-like stat inputs.'],
     },
     offseasonSalaryRecalculation: {
       status: 'deferred',
@@ -187,8 +193,8 @@ function salaryLifecycleRecord(overrides: Record<string, unknown> = {}) {
       recalculable: false,
       reasons: ['Offseason salary recalculation is deferred for internal v1.'],
     },
-    persistable: false,
-    recalculable: false,
+    persistable: true,
+    recalculable: true,
     sourceInputs: {
       salaryBaselineAvailable: true,
       teamPayrollBaselineAvailable: true,
@@ -210,7 +216,7 @@ function salaryLifecycleRecord(overrides: Record<string, unknown> = {}) {
 function salaryLifecycleReport(overrides: Record<string, unknown> = {}) {
   const playerRecords = overrides.playerRecords ?? [salaryLifecycleRecord()];
   return {
-    contractVersion: 'franchise-salary-lifecycle-v1-readonly',
+    contractVersion: 'franchise-salary-lifecycle-v1-current-salary',
     franchiseId: 'franchise-1',
     seasonId: 'franchise-1-season-2',
     statsScopeId: 'franchise-1-season-2',
@@ -219,7 +225,7 @@ function salaryLifecycleReport(overrides: Record<string, unknown> = {}) {
     generatedAt: 1,
     playerRecords,
     teamRecords: [{
-      contractVersion: 'franchise-salary-lifecycle-v1-readonly',
+      contractVersion: 'franchise-salary-lifecycle-v1-current-salary',
       franchiseId: 'franchise-1',
       seasonId: 'franchise-1-season-2',
       statsScopeId: 'franchise-1-season-2',
@@ -229,9 +235,9 @@ function salaryLifecycleReport(overrides: Record<string, unknown> = {}) {
       playerCount: 1,
       payrollBaselineState: {
         status: 'stable-baseline',
-        persistable: false,
-        recalculable: false,
-        reasons: ['Stored team payroll baseline is available from the franchise handoff.'],
+        persistable: true,
+        recalculable: true,
+        reasons: ['Stored team payroll proof is available from current franchise salary data.'],
       },
       limitations: [],
     }],
@@ -240,8 +246,9 @@ function salaryLifecycleReport(overrides: Record<string, unknown> = {}) {
       salaryMatching: { status: 'blocked', active: false, reasons: ['Salary matching for trades is inactive for Franchise internal v1.'] },
       aiTradeSalaryValuation: { status: 'blocked', active: false, reasons: ['AI trade salary valuation is inactive for Franchise internal v1.'] },
     },
-    anyPersistable: false,
-    anyRecalculable: false,
+    salarySystemSync: null,
+    anyPersistable: true,
+    anyRecalculable: true,
     limitations: [],
     ...overrides,
   };
@@ -689,9 +696,9 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
     const truthRegion = await screen.findByRole('region', { name: /Franchise v1 value salary designation truth labels/i });
 
-    expect(within(truthRegion).getByText(/Player salary baseline: STABLE BASELINE/i)).toBeInTheDocument();
-    expect(within(truthRegion).getByText(/Team payroll baseline: STABLE BASELINE/i)).toBeInTheDocument();
-    expect(within(truthRegion).getByText(/Performance salary movement: BLOCKED/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/Player salary state: STABLE BASELINE/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/Team payroll proof: STABLE BASELINE/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/Performance salary formula: ACTIVE/i)).toBeInTheDocument();
     expect(within(truthRegion).getByText(/Offseason salary recalculation: DEFERRED/i)).toBeInTheDocument();
     expect(within(truthRegion).getByText(/True Value \/ value delta: DEFERRED/i)).toBeInTheDocument();
     expect(within(truthRegion).getByText(/Luxury tax, salary matching, and AI salary valuation: BLOCKED \/ INACTIVE/i)).toBeInTheDocument();
@@ -707,7 +714,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
       seasonId: 'franchise-1-season-2',
       statsScopeId: 'franchise-1-season-2',
       seasonNumber: 2,
-    });
+    }, { syncCurrentSalaries: true });
     expect(mocks.mockBuildFranchiseDesignationEligibility).toHaveBeenCalled();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
   });
@@ -812,7 +819,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(foundationRegion).getByText('VALUE INPUTS')).toBeInTheDocument();
     expect(within(foundationRegion).getByText(/1 canonical player row\(s\)/i)).toBeInTheDocument();
     expect(within(foundationRegion).getByText('SALARY LIFECYCLE')).toBeInTheDocument();
-    expect(within(foundationRegion).getByText(/1\/1 stable salary baseline row\(s\)/i)).toBeInTheDocument();
+    expect(within(foundationRegion).getByText(/1\/1 current salary row\(s\)/i)).toBeInTheDocument();
     expect(within(foundationRegion).getByText('DESIGNATION ELIGIBILITY')).toBeInTheDocument();
     expect(within(foundationRegion).getByText(/2 TEAM_MVP\/ACE preview row\(s\)/i)).toBeInTheDocument();
     expect(within(foundationRegion).getByText('MORALE / RELATIONSHIPS')).toBeInTheDocument();
@@ -826,13 +833,13 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     const valueWinsRegion = within(foundationRegion).getByRole('region', { name: /Team True Value and Expected Wins Preview/i });
     expect(within(valueWinsRegion).getByText('TRUE VALUE + EXPECTED WINS PREVIEW')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('PREVIEW ONLY')).toBeInTheDocument();
-    expect(within(valueWinsRegion).getByText('SALARY BASELINE CONTEXT')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('CURRENT SALARY CONTEXT')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('NO SALARY MOVEMENT')).toBeInTheDocument();
-    expect(within(valueWinsRegion).getByText('Team payroll baseline')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('Team payroll proof')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('$4.0M')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Roster salary sum')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('$3.0M')).toBeInTheDocument();
-    expect(within(valueWinsRegion).getByText('Stable salary baselines')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('Current salary rows')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Contract years proof')).toBeInTheDocument();
     expect(within(valueWinsRegion).getAllByText('1/1').length).toBeGreaterThanOrEqual(2);
     expect(within(valueWinsRegion).getByText(/Blocked: .*At least two teams/i)).toBeInTheDocument();
@@ -963,11 +970,11 @@ describe('TeamHubContent franchise-owned visible reads', () => {
 
     expect(within(rosterTable).getByText('$3.0M')).toBeInTheDocument();
     expect(within(rosterTable).getByText('$1.2M')).toBeInTheDocument();
-    expect(within(valueWinsRegion).getByText('Team payroll baseline')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('Team payroll proof')).toBeInTheDocument();
     expect(within(valueWinsRegion).getAllByText('$3.0M').length).toBeGreaterThanOrEqual(2);
     expect(within(valueWinsRegion).getByText('Roster salary sum')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('MATCHES PAYROLL BASELINE')).toBeInTheDocument();
-    expect(within(valueWinsRegion).getByText('Stable salary baselines')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('Current salary rows')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Contract years proof')).toBeInTheDocument();
     expect(within(valueWinsRegion).getAllByText('2/2').length).toBeGreaterThanOrEqual(2);
     expect(within(valueWinsRegion).queryByText(/Salary blocker/i)).not.toBeInTheDocument();
@@ -995,7 +1002,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
     const valueWinsRegion = await screen.findByRole('region', { name: /Team True Value and Expected Wins Preview/i });
 
-    expect(within(valueWinsRegion).getByText('Stable salary baselines')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('Current salary rows')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('1/1')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Contract years proof')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('0/1')).toBeInTheDocument();
@@ -1094,7 +1101,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     const valueWinsRegion = await screen.findByRole('region', { name: /Team True Value and Expected Wins Preview/i });
 
     expect(within(valueWinsRegion).getAllByText('PREVIEW ONLY').length).toBeGreaterThanOrEqual(1);
-    expect(within(valueWinsRegion).getByText('SALARY BASELINE CONTEXT')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('CURRENT SALARY CONTEXT')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('NO SALARY MOVEMENT')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Copied Alpha')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Team salary total')).toBeInTheDocument();
@@ -1713,6 +1720,12 @@ describe('TeamHubContent franchise-owned visible reads', () => {
             recalculable: false,
             reasons: ['Stored player salary baseline is missing or incomplete.'],
           },
+          currentSalaryCalculation: {
+            status: 'blocked',
+            persistable: false,
+            recalculable: false,
+            reasons: ['Current salary calculation is blocked until stored salary and season metadata are available.'],
+          },
           limitations: [
             'Stored player salary baseline is missing or incomplete.',
             'Final True Value salary movement is unavailable in internal v1.',
@@ -1727,14 +1740,14 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     const truthRegion = await screen.findByRole('region', { name: /Franchise v1 value salary designation truth labels/i });
     const foundationRegion = await screen.findByRole('region', { name: /Mode 2 Foundation Status/i });
 
-    expect(within(truthRegion).getByText(/Player salary baseline: PARTIAL \(1 stable \/ 1 missing\)/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/Player salary state: PARTIAL \(1 stable \/ 1 missing\)/i)).toBeInTheDocument();
     expect(within(truthRegion).getByText(/Missing salary baseline: 1 players/i)).toBeInTheDocument();
-    expect(within(truthRegion).queryByText(/Player salary baseline: STABLE BASELINE/i)).not.toBeInTheDocument();
+    expect(within(truthRegion).queryByText(/Player salary state: STABLE BASELINE/i)).not.toBeInTheDocument();
     const salaryFoundationCard = within(foundationRegion).getByText('SALARY LIFECYCLE').closest('div.border-2');
     expect(salaryFoundationCard).not.toBeNull();
     expect(within(salaryFoundationCard as HTMLElement).getByText('PARTIAL')).toBeInTheDocument();
-    expect(within(salaryFoundationCard as HTMLElement).getByText(/1\/2 stable salary baseline row\(s\)/i)).toBeInTheDocument();
-    expect(within(foundationRegion).queryByText(/2\/2 stable salary baseline row\(s\)/i)).not.toBeInTheDocument();
+    expect(within(salaryFoundationCard as HTMLElement).getByText(/1\/2 current salary row\(s\)/i)).toBeInTheDocument();
+    expect(within(foundationRegion).queryByText(/2\/2 current salary row\(s\)/i)).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
   });
 
@@ -1750,6 +1763,12 @@ describe('TeamHubContent franchise-owned visible reads', () => {
             recalculable: false,
             reasons: ['Stored player salary baseline is missing or incomplete.'],
           },
+          currentSalaryCalculation: {
+            status: 'blocked',
+            persistable: false,
+            recalculable: false,
+            reasons: ['Current salary calculation is blocked until stored salary and season metadata are available.'],
+          },
           teamPayrollBaselineState: {
             status: 'blocked',
             persistable: false,
@@ -1763,7 +1782,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
         }),
       ],
       teamRecords: [{
-        contractVersion: 'franchise-salary-lifecycle-v1-readonly',
+        contractVersion: 'franchise-salary-lifecycle-v1-current-salary',
         franchiseId: 'franchise-1',
         seasonId: 'franchise-1-season-2',
         statsScopeId: 'franchise-1-season-2',
@@ -1786,15 +1805,15 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
     const truthRegion = await screen.findByRole('region', { name: /Franchise v1 value salary designation truth labels/i });
 
-    expect(within(truthRegion).getByText(/Player salary baseline: BLOCKED/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/Player salary state: BLOCKED/i)).toBeInTheDocument();
     expect(within(truthRegion).getByText(/Missing salary baseline: 1 players/i)).toBeInTheDocument();
-    expect(within(truthRegion).getByText(/Team payroll baseline: BLOCKED/i)).toBeInTheDocument();
-    expect(within(truthRegion).getByText(/Team payroll baseline limitation: missing handoff payroll proof/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/Team payroll proof: BLOCKED/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/Team payroll proof limitation: missing handoff payroll proof/i)).toBeInTheDocument();
     expect(within(truthRegion).getByText(/Team payroll baseline is unavailable for salary\/value designation checks/i)).toBeInTheDocument();
     const valueWinsRegion = await screen.findByRole('region', { name: /Team True Value and Expected Wins Preview/i });
-    expect(within(valueWinsRegion).getByText('Team payroll baseline')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('Team payroll proof')).toBeInTheDocument();
     expect(valueWinsRegion).toHaveTextContent(/Salary blocker:/i);
-    expect(valueWinsRegion).toHaveTextContent(/Team payroll baseline is missing for this selected team/i);
+    expect(valueWinsRegion).toHaveTextContent(/Team payroll proof is missing for this selected team/i);
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
   });
 
@@ -1808,7 +1827,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
           rosterStatus: 'FARM',
           salary: 1000000,
           limitations: [
-            'FARM player salary context is read-only; FARM players are not eligible for MLB salary movement in this slice.',
+            'FARM player salary context uses public draft/scouting-safe salary or revealed known salary; hidden true ratings remain blocked.',
           ],
         }),
       ],
@@ -1838,7 +1857,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     const truthRegion = await screen.findByRole('region', { name: /Franchise v1 value salary designation truth labels/i });
     const valueWinsRegion = await screen.findByRole('region', { name: /Team True Value and Expected Wins Preview/i });
 
-    expect(within(truthRegion).getByText(/FARM player salary context is read-only/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/FARM player salary context uses public draft\/scouting-safe salary/i)).toBeInTheDocument();
     expect(within(truthRegion).getByText(/FAN_FAVORITE blocked: FAN_FAVORITE requires canonical True Value and value-delta inputs/i)).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Roster salary sum')).toBeInTheDocument();
     expect(within(valueWinsRegion).queryByText(/trueGrade/i)).not.toBeInTheDocument();

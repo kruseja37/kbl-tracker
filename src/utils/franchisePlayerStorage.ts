@@ -24,7 +24,7 @@ import {
   type FranchiseFarmRecord,
 } from './franchiseFarmStorage';
 import {
-  FRANCHISE_INITIAL_SALARY_CALCULATION_VERSION,
+  FRANCHISE_CURRENT_SALARY_CALCULATION_VERSION,
   withInitialFranchiseSalary,
 } from './franchiseSalary';
 import {
@@ -491,7 +491,7 @@ function buildSalaryBaselineProof(
   ).length;
 
   return {
-    calculationVersion: FRANCHISE_INITIAL_SALARY_CALCULATION_VERSION,
+    calculationVersion: FRANCHISE_CURRENT_SALARY_CALCULATION_VERSION,
     playerCount: players.length,
     salariedPlayerCount,
     totalSalary,

@@ -4,10 +4,15 @@ import {
   type FranchiseValueInputReport,
   type FranchiseValueInputRow,
 } from './franchiseValueInputs';
+import {
+  upsertFranchiseSeasonSalariesFromValueInputReport,
+  type FranchiseSalarySystemUpsertResult,
+} from './franchiseSalarySystem';
 
-export const FRANCHISE_SALARY_LIFECYCLE_CONTRACT_VERSION = 'franchise-salary-lifecycle-v1-readonly';
+export const FRANCHISE_SALARY_LIFECYCLE_CONTRACT_VERSION = 'franchise-salary-lifecycle-v1-current-salary';
 
 export type FranchiseSalaryLifecycleStatus =
+  | 'active'
   | 'stable-baseline'
   | 'preview-only'
   | 'blocked'
@@ -15,8 +20,8 @@ export type FranchiseSalaryLifecycleStatus =
 
 export interface FranchiseSalaryLifecycleStep {
   status: FranchiseSalaryLifecycleStatus;
-  persistable: false;
-  recalculable: false;
+  persistable: boolean;
+  recalculable: boolean;
   reasons: string[];
 }
 
@@ -36,10 +41,11 @@ export interface FranchisePlayerSalaryLifecycleRecord {
   teamPayrollBaseline: number | null;
   initialSalaryBaseline: FranchiseSalaryLifecycleStep;
   teamPayrollBaselineState: FranchiseSalaryLifecycleStep;
+  currentSalaryCalculation: FranchiseSalaryLifecycleStep;
   performanceSalaryMovement: FranchiseSalaryLifecycleStep;
   offseasonSalaryRecalculation: FranchiseSalaryLifecycleStep;
-  persistable: false;
-  recalculable: false;
+  persistable: boolean;
+  recalculable: boolean;
   sourceInputs: {
     salaryBaselineAvailable: boolean;
     teamPayrollBaselineAvailable: boolean;
@@ -90,8 +96,9 @@ export interface FranchiseSalaryLifecycleReport {
     salaryMatching: FranchiseSalaryLifecyclePolicyState;
     aiTradeSalaryValuation: FranchiseSalaryLifecyclePolicyState;
   };
-  anyPersistable: false;
-  anyRecalculable: false;
+  salarySystemSync: FranchiseSalarySystemUpsertResult | null;
+  anyPersistable: boolean;
+  anyRecalculable: boolean;
   limitations: string[];
 }
 
@@ -102,11 +109,13 @@ function unique(values: string[]): string[] {
 function step(
   status: FranchiseSalaryLifecycleStatus,
   reasons: string[],
+  persistable = false,
+  recalculable = false,
 ): FranchiseSalaryLifecycleStep {
   return {
     status,
-    persistable: false,
-    recalculable: false,
+    persistable,
+    recalculable,
     reasons: unique(reasons),
   };
 }
@@ -118,9 +127,9 @@ function hasSeasonMetadata(row: FranchiseValueInputRow): boolean {
 function initialSalaryBaseline(row: FranchiseValueInputRow): FranchiseSalaryLifecycleStep {
   if (row.salary !== null && row.salaryBaselineAvailable) {
     return step('stable-baseline', [
-      'Stored franchise salary baseline is available from the Mode 1 handoff/franchise copy.',
-      'This baseline is read-only in internal v1 and is not recalculated by this adapter.',
-    ]);
+      'Stored franchise salary is available from the Mode 1 handoff or current salary sync.',
+      'Current salary values are part of the Franchise v1 salary system; non-salary consumers remain blocked.',
+    ], true, true);
   }
 
   return step('blocked', [
@@ -132,9 +141,9 @@ function initialSalaryBaseline(row: FranchiseValueInputRow): FranchiseSalaryLife
 function teamPayrollBaselineState(row: FranchiseValueInputRow): FranchiseSalaryLifecycleStep {
   if (row.currentTeamId && row.teamSalaryBaseline !== null) {
     return step('stable-baseline', [
-      'Stored team payroll baseline is available from the franchise handoff.',
-      'Team payroll is read-only in internal v1 and is not recalculated by this adapter.',
-    ]);
+      'Stored team payroll proof is available from the franchise salary baseline.',
+      'Team payroll is recalculated from franchise-owned player salaries when the salary sync runs.',
+    ], true, true);
   }
 
   return step('blocked', [
@@ -143,10 +152,49 @@ function teamPayrollBaselineState(row: FranchiseValueInputRow): FranchiseSalaryL
   ]);
 }
 
-function performanceSalaryMovement(row: FranchiseValueInputRow): FranchiseSalaryLifecycleStep {
+function currentSalaryCalculation(row: FranchiseValueInputRow): FranchiseSalaryLifecycleStep {
+  if (row.salary !== null && row.salaryBaselineAvailable && hasSeasonMetadata(row)) {
+    if (row.rosterStatus === 'FARM') {
+      return step('stable-baseline', [
+        'FARM salary context is stable from public draft/scouting-safe salary or revealed known salary.',
+        'Hidden FARM true ratings and true grade are not salary inputs.',
+      ], true, true);
+    }
+    return step('active', [
+      'Current salary calculation uses base ratings, position, age, traits, personality context, neutral fame, and scoped season-stat performance when available.',
+      'This salary calculation does not create final True Value, designations, morale, relationships, salary matching, luxury tax, offseason, or Mode 3 state.',
+    ], true, true);
+  }
+
   const reasons = [
-    'Performance salary movement is blocked because canonical True Value is unavailable.',
-    'Trusted final WAR/WPA salary inputs are unavailable; current WAR/WPA flags are preview/read-only only.',
+    'Current salary calculation is blocked until stored salary and season metadata are available.',
+  ];
+  if (row.salary === null || !row.salaryBaselineAvailable) {
+    reasons.push('Stored franchise salary is missing or incomplete.');
+  }
+  if (!hasSeasonMetadata(row)) {
+    reasons.push('Stored season length and innings metadata are missing.');
+  }
+  return step('blocked', reasons);
+}
+
+function performanceSalaryMovement(row: FranchiseValueInputRow): FranchiseSalaryLifecycleStep {
+  if (row.salary !== null && row.salaryBaselineAvailable && hasSeasonMetadata(row)) {
+    if (row.seasonStatsAvailability.any && row.warPreviewValues.totalWar !== null) {
+      return step('active', [
+        'Performance salary modifier is active from scoped current-season WAR-like stat inputs.',
+        'These salary inputs do not promote WAR/WPA into final True Value, designations, morale, awards, or relationship authority.',
+      ], true, true);
+    }
+    return step('stable-baseline', [
+      'Performance salary modifier is neutral at 1.0 until scoped season stat inputs exist.',
+      'Current salary can still persist from ratings, position, age, traits, personality context, and neutral fame.',
+    ], true, true);
+  }
+
+  const reasons = [
+    'Performance salary calculation is blocked until current franchise salary and season metadata are available.',
+    'True Value, designations, morale, relationships, salary matching, luxury tax, offseason, and Mode 3 remain blocked.',
   ];
   if (!row.seasonStatsAvailability.any) {
     reasons.push('No franchise season stat rows are available for this player.');
@@ -173,7 +221,7 @@ function offseasonSalaryRecalculation(row: FranchiseValueInputRow): FranchiseSal
 
 function rosterLimitations(row: FranchiseValueInputRow): string[] {
   if (row.rosterStatus === 'FARM') {
-    return ['FARM player salary context is read-only; FARM players are not eligible for MLB salary movement in this slice.'];
+    return ['FARM player salary context uses public draft/scouting-safe salary or revealed known salary; hidden true ratings remain blocked.'];
   }
   if (!row.currentTeamId || !row.rosterStatus) {
     return ['Free-agent or unassigned salary context is incomplete for franchise team payroll decisions.'];
@@ -201,6 +249,8 @@ function sourceInputs(row: FranchiseValueInputRow): FranchisePlayerSalaryLifecyc
 }
 
 function playerRecord(row: FranchiseValueInputRow): FranchisePlayerSalaryLifecycleRecord {
+  const currentSalary = currentSalaryCalculation(row);
+  const performanceSalary = performanceSalaryMovement(row);
   const limitations = unique([
     ...row.limitations,
     ...rosterLimitations(row),
@@ -224,10 +274,11 @@ function playerRecord(row: FranchiseValueInputRow): FranchisePlayerSalaryLifecyc
     teamPayrollBaseline: row.teamSalaryBaseline,
     initialSalaryBaseline: initialSalaryBaseline(row),
     teamPayrollBaselineState: teamPayrollBaselineState(row),
-    performanceSalaryMovement: performanceSalaryMovement(row),
+    currentSalaryCalculation: currentSalary,
+    performanceSalaryMovement: performanceSalary,
     offseasonSalaryRecalculation: offseasonSalaryRecalculation(row),
-    persistable: false,
-    recalculable: false,
+    persistable: currentSalary.persistable,
+    recalculable: currentSalary.recalculable || performanceSalary.recalculable,
     sourceInputs: sourceInputs(row),
     limitations,
   };
@@ -247,9 +298,9 @@ function teamRecordsFromRows(
     const payroll = teamRows.find((row) => row.teamSalaryBaseline !== null)?.teamSalaryBaseline ?? null;
     const payrollBaselineState = payroll !== null
       ? step('stable-baseline', [
-          'Stored team payroll baseline is available from the franchise handoff.',
-          'Team payroll baseline is read-only in internal v1.',
-        ])
+          'Stored team payroll proof is available from current franchise salary data.',
+          'Team payroll is recalculated from copied MLB and FARM franchise-owned players.',
+        ], true, true)
       : step('blocked', [
           'Team payroll baseline is missing for this team.',
           'Team payroll cannot drive salary lifecycle decisions until baseline proof exists.',
@@ -283,6 +334,7 @@ function blockedPolicy(reasons: string[]): FranchiseSalaryLifecyclePolicyState {
 
 export function classifyFranchiseSalaryLifecycle(
   valueInputReport: FranchiseValueInputReport,
+  salarySystemSync: FranchiseSalarySystemUpsertResult | null = null,
 ): FranchiseSalaryLifecycleReport {
   const playerRecords = valueInputReport.rows.map(playerRecord);
   const teamRecords = teamRecordsFromRows(valueInputReport);
@@ -312,20 +364,33 @@ export function classifyFranchiseSalaryLifecycle(
     playerRecords,
     teamRecords,
     policies,
-    anyPersistable: false,
-    anyRecalculable: false,
+    salarySystemSync,
+    anyPersistable: playerRecords.some((record) => record.persistable),
+    anyRecalculable: playerRecords.some((record) => record.recalculable),
     limitations: unique([
       ...valueInputReport.limitations,
       ...playerRecords.flatMap((record) => record.limitations),
       ...teamRecords.flatMap((record) => record.limitations),
-      'No salary output is persistable or recalculable in internal v1 conditions.',
+      ...(salarySystemSync?.limitations ?? []),
+      'Current salary values and team payroll proof can persist in Franchise v1.',
+      'True Value, designation finalization, luxury tax, salary matching, AI trade salary valuation, morale, relationships, offseason, and Mode 3 remain blocked.',
     ]),
   };
 }
 
+export interface BuildFranchiseSalaryLifecycleOptions {
+  syncCurrentSalaries?: boolean;
+}
+
 export async function buildFranchiseSalaryLifecycle(
   input: BuildFranchiseValueInputRowsInput,
+  options: BuildFranchiseSalaryLifecycleOptions = {},
 ): Promise<FranchiseSalaryLifecycleReport> {
-  const valueInputReport = await buildFranchiseValueInputRows(input);
-  return classifyFranchiseSalaryLifecycle(valueInputReport);
+  let valueInputReport = await buildFranchiseValueInputRows(input);
+  let salarySystemSync: FranchiseSalarySystemUpsertResult | null = null;
+  if (options.syncCurrentSalaries) {
+    salarySystemSync = await upsertFranchiseSeasonSalariesFromValueInputReport(valueInputReport);
+    valueInputReport = await buildFranchiseValueInputRows(input);
+  }
+  return classifyFranchiseSalaryLifecycle(valueInputReport, salarySystemSync);
 }

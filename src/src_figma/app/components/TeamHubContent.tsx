@@ -1591,9 +1591,9 @@ export function TeamHubContent() {
       setValueTruthLoading(true);
       setValueTruthError(null);
       try {
-        const [valueReport, salaryReport, designationReport] = await Promise.all([
+        const salaryReport = await buildFranchiseSalaryLifecycle(input, { syncCurrentSalaries: true });
+        const [valueReport, designationReport] = await Promise.all([
           buildFranchiseValueInputRows(input),
-          buildFranchiseSalaryLifecycle(input),
           buildFranchiseDesignationEligibility(input),
         ]);
         if (cancelled) return;
@@ -4432,7 +4432,7 @@ function formatPreviewNumber(value: number | null | undefined, digits = 1): stri
 }
 
 function foundationStatusClass(status: string): string {
-  if (status === 'trusted' || status === 'eligible-context' || status === 'stable-baseline' || status === 'valid-draft' || status === 'confirmed-manual-change') {
+  if (status === 'trusted' || status === 'active' || status === 'eligible-context' || status === 'stable-baseline' || status === 'valid-draft' || status === 'confirmed-manual-change') {
     return 'border-[#9DFFB0]/60 text-[#9DFFB0]';
   }
   if (status === 'preview-only' || status === 'partial' || status === 'needs-approval' || status === 'ready-for-review') return 'border-[#FFD27A]/60 text-[#FFD27A]';
@@ -4509,7 +4509,7 @@ function FranchiseValueExpectedWinsPreviewPanel({
       ? [`Contract years missing for ${missingContractYearsCount} salary row${missingContractYearsCount === 1 ? '' : 's'}.`]
       : []),
     ...(teamPayrollRecord?.payrollBaselineState.status === 'blocked' || payrollBaseline === null
-      ? ['Team payroll baseline is missing for this selected team.']
+      ? ['Team payroll proof is missing for this selected team.']
       : []),
   ];
   const isAvailable = Boolean(teamSummary && expectedWinsRow && expectedWinsRow.status === 'preview-only');
@@ -4529,7 +4529,7 @@ function FranchiseValueExpectedWinsPreviewPanel({
               PREVIEW ONLY
             </span>
             <span className="border border-[#E8E8D8]/25 bg-[#4A6844] px-2 py-0.5 text-[8px] font-bold text-[#E8E8D8]/75">
-              SALARY BASELINE CONTEXT
+              CURRENT SALARY CONTEXT
             </span>
             <span className="border border-[#E8E8D8]/25 bg-[#3F563F] px-2 py-0.5 text-[8px] font-bold text-[#E8E8D8]/75">
               READ ONLY
@@ -4544,7 +4544,7 @@ function FranchiseValueExpectedWinsPreviewPanel({
 
       <div className="mb-2 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
         <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[10px] leading-snug text-[#E8E8D8]">
-          <div className="font-bold text-[#C4A853]">Team payroll baseline</div>
+          <div className="font-bold text-[#C4A853]">Team payroll proof</div>
           <div className="mt-1">{formatRosterSalary(payrollBaseline)}</div>
           <div className="text-[8px] text-[#E8E8D8]/55">{teamPayrollRecord ? formatTruthStatus(teamPayrollRecord.payrollBaselineState.status) : 'BLOCKED'}</div>
         </div>
@@ -4554,7 +4554,7 @@ function FranchiseValueExpectedWinsPreviewPanel({
           <div className="text-[8px] text-[#E8E8D8]/55">{payrollMatchesRoster ? 'MATCHES PAYROLL BASELINE' : 'READ-ONLY CROSS-CHECK'}</div>
         </div>
         <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[10px] leading-snug text-[#E8E8D8]">
-          <div className="font-bold text-[#C4A853]">Stable salary baselines</div>
+          <div className="font-bold text-[#C4A853]">Current salary rows</div>
           <div className="mt-1">{stableSalaryBaselineCount}/{selectedSalaryRecords.length}</div>
           <div className="text-[8px] text-[#E8E8D8]/55">Selected-team salary rows</div>
         </div>
@@ -5240,7 +5240,7 @@ function FranchiseMode2FoundationStatusPanel({
 }: FranchiseMode2FoundationStatusPanelProps) {
   const valueRows = valueInputReport?.rows.length ?? 0;
   const stableSalaryRows = salaryLifecycleReport?.playerRecords.filter((record) =>
-    record.initialSalaryBaseline.status === 'stable-baseline',
+    record.currentSalaryCalculation?.status === 'active' || record.initialSalaryBaseline.status === 'stable-baseline',
   ).length ?? 0;
   const salaryRows = salaryLifecycleReport?.playerRecords.length ?? 0;
   const blockedSalaryRows = salaryLifecycleReport?.playerRecords.filter((record) =>
@@ -5306,7 +5306,7 @@ function FranchiseMode2FoundationStatusPanel({
         <FoundationStatusCard
           title="SALARY LIFECYCLE"
           status={salaryStatus}
-          body={`${stableSalaryRows}/${salaryRows} stable salary baseline row(s). Salary movement, luxury tax, and salary matching stay blocked.`}
+          body={`${stableSalaryRows}/${salaryRows} current salary row(s). Team payroll proof is real; luxury tax, salary matching, and offseason automation stay blocked.`}
         />
         <FoundationStatusCard
           title="DESIGNATION ELIGIBILITY"
@@ -5821,7 +5821,7 @@ function FranchiseValueTruthPanel({
         <div>
           <div className="text-[9px] font-bold text-[#C4A853]">VALUE / SALARY / DESIGNATION TRUTH</div>
           <div className="mt-1 text-[8px] text-[#E8E8D8]/60">
-            Read-only internal v1 labels. Morale, True Value, and value-delta columns are deferred until canonical inputs exist.
+            Franchise v1 salary values are current salary state. Morale, True Value, and value-delta columns remain deferred until canonical inputs exist.
           </div>
         </div>
         <div className="border-2 border-[#4A6844] bg-[#5A8352] px-2 py-1 text-[8px] text-[#E8E8D8]">
@@ -5837,26 +5837,26 @@ function FranchiseValueTruthPanel({
 
       <div className="grid gap-3 lg:grid-cols-3">
         <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[8px] text-[#E8E8D8]/75">
-          <div className="mb-1 font-bold text-[#C4A853]">SALARY BASELINE</div>
+          <div className="mb-1 font-bold text-[#C4A853]">CURRENT SALARY</div>
           <div>
-            Player salary baseline: {playerSalaryBaselineLabel}
+            Player salary state: {playerSalaryBaselineLabel}
           </div>
           {blockedSalaryCount > 0 && (
             <div>Missing salary baseline: {blockedSalaryCount} players</div>
           )}
           <div>
-            Team payroll baseline: {teamPayrollRecord
+            Team payroll proof: {teamPayrollRecord
               ? formatTruthStatus(teamPayrollRecord.payrollBaselineState.status)
               : 'BLOCKED'}
           </div>
           {teamPayrollRecord?.payrollBaseline == null && (
-            <div className="text-[#FFEFB5]">Team payroll baseline limitation: missing handoff payroll proof.</div>
+            <div className="text-[#FFEFB5]">Team payroll proof limitation: missing handoff payroll proof.</div>
           )}
         </div>
 
         <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[8px] text-[#E8E8D8]/75">
           <div className="mb-1 font-bold text-[#C4A853]">VALUE MOVEMENT</div>
-          <div>Performance salary movement: {formatTruthStatus(performanceStatus)}</div>
+          <div>Performance salary formula: {formatTruthStatus(performanceStatus)}</div>
           <div>Offseason salary recalculation: {formatTruthStatus(offseasonStatus)}</div>
           <div>True Value / value delta: DEFERRED until canonical inputs exist.</div>
           <div>Luxury tax, salary matching, and AI salary valuation: BLOCKED / INACTIVE.</div>

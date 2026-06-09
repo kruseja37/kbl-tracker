@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   saveFranchiseTeam: vi.fn(),
   saveFranchiseConfig: vi.fn(),
   withInitialFranchiseSalary: vi.fn(),
+  upsertFranchiseSeasonSalariesFromValueInputReport: vi.fn(),
 }));
 
 vi.mock('../franchiseValueInputs', () => ({
@@ -35,6 +36,10 @@ vi.mock('../franchiseManager', () => ({
 
 vi.mock('../franchiseSalary', () => ({
   withInitialFranchiseSalary: mocks.withInitialFranchiseSalary,
+}));
+
+vi.mock('../franchiseSalarySystem', () => ({
+  upsertFranchiseSeasonSalariesFromValueInputReport: mocks.upsertFranchiseSeasonSalariesFromValueInputReport,
 }));
 
 function makeSeasonContext(overrides: Partial<FranchiseValueInputRow['seasonContext']> = {}): FranchiseValueInputRow['seasonContext'] {
@@ -157,13 +162,14 @@ describe('franchise salary lifecycle adapter', () => {
 
     expect(record.initialSalaryBaseline).toEqual(expect.objectContaining({
       status: 'stable-baseline',
-      persistable: false,
-      recalculable: false,
+      persistable: true,
+      recalculable: true,
     }));
+    expect(record.currentSalaryCalculation.status).toBe('active');
     expect(record.salary).toBe(8.5);
     expect(record.salaryBaselineCalculationVersion).toBe('franchise-initial-salary-v1-ratings-and-hidden-prospect-safe');
-    expect(report.anyPersistable).toBe(false);
-    expect(report.anyRecalculable).toBe(false);
+    expect(report.anyPersistable).toBe(true);
+    expect(report.anyRecalculable).toBe(true);
   });
 
   test('missing salary baseline blocks stable salary classification', () => {
@@ -179,6 +185,7 @@ describe('franchise salary lifecycle adapter', () => {
 
     expect(record.initialSalaryBaseline.status).toBe('blocked');
     expect(record.initialSalaryBaseline.reasons.join(' ')).toContain('Stored player salary baseline is missing');
+    expect(record.currentSalaryCalculation.status).toBe('blocked');
     expect(record.persistable).toBe(false);
     expect(record.recalculable).toBe(false);
   });
@@ -213,7 +220,7 @@ describe('franchise salary lifecycle adapter', () => {
     expect(teamTwo?.limitations).toContain('Team payroll baseline is unavailable for this team.');
   });
 
-  test('performance salary movement is blocked without canonical True Value and trusted final WAR/WPA', () => {
+  test('performance salary formula is active from scoped season stats without unlocking True Value or designations', () => {
     const report = classifyFranchiseSalaryLifecycle(makeReport([
       makeRow({
         seasonStatsAvailability: { batting: true, pitching: false, fielding: true, any: true },
@@ -223,6 +230,15 @@ describe('franchise salary lifecycle adapter', () => {
           fieldingWar: true,
           baserunningWar: true,
           any: true,
+          trustedForFinalValue: false,
+        },
+        warPreviewValues: {
+          battingWar: 0.8,
+          pitchingWar: null,
+          fieldingWar: 0.2,
+          baserunningWar: 0.1,
+          totalWar: 1.1,
+          totalWarSource: 'derived-from-components',
           trustedForFinalValue: false,
         },
         wpaInputAvailability: {
@@ -235,9 +251,9 @@ describe('franchise salary lifecycle adapter', () => {
     ]));
     const record = playerRecord(report.playerRecords, 'player-1');
 
-    expect(record.performanceSalaryMovement.status).toBe('blocked');
-    expect(record.performanceSalaryMovement.reasons.join(' ')).toContain('canonical True Value is unavailable');
-    expect(record.performanceSalaryMovement.reasons.join(' ')).toContain('Trusted final WAR/WPA salary inputs are unavailable');
+    expect(record.performanceSalaryMovement.status).toBe('active');
+    expect(record.performanceSalaryMovement.reasons.join(' ')).toContain('Performance salary modifier is active');
+    expect(record.performanceSalaryMovement.reasons.join(' ')).toContain('do not promote WAR/WPA into final True Value');
     expect(record.sourceInputs).toEqual(expect.objectContaining({
       warPreviewInputAvailable: true,
       wpaAvailable: true,
@@ -274,7 +290,7 @@ describe('franchise salary lifecycle adapter', () => {
     ]));
 
     expect(playerRecord(report.playerRecords, 'farm-player').limitations).toContain(
-      'FARM player salary context is read-only; FARM players are not eligible for MLB salary movement in this slice.',
+      'FARM player salary context uses public draft/scouting-safe salary or revealed known salary; hidden true ratings remain blocked.',
     );
     expect(playerRecord(report.playerRecords, 'free-agent').limitations).toContain(
       'Free-agent or unassigned salary context is incomplete for franchise team payroll decisions.',
@@ -282,7 +298,7 @@ describe('franchise salary lifecycle adapter', () => {
     expect(playerRecord(report.playerRecords, 'unassigned').teamPayrollBaselineState.status).toBe('blocked');
   });
 
-  test('offseason salary recalculation is deferred and no salary output is persistable or recalculable', () => {
+  test('offseason salary recalculation is deferred while current salary remains the only persistable salary output', () => {
     const report = classifyFranchiseSalaryLifecycle(makeReport([
       makeRow({
         seasonContext: makeSeasonContext({ gamesPerTeam: null, inningsPerGame: null, seasonLengthSource: 'missing' }),
@@ -293,12 +309,12 @@ describe('franchise salary lifecycle adapter', () => {
     expect(record.offseasonSalaryRecalculation.status).toBe('deferred');
     expect(record.offseasonSalaryRecalculation.reasons.join(' ')).toContain('Offseason salary recalculation is deferred');
     expect(record.offseasonSalaryRecalculation.reasons.join(' ')).toContain('Stored season length and innings metadata are missing');
-    expect(report.playerRecords.every((candidate) => candidate.persistable === false && candidate.recalculable === false)).toBe(true);
+    expect(record.currentSalaryCalculation.status).toBe('blocked');
     expect(report.anyPersistable).toBe(false);
     expect(report.anyRecalculable).toBe(false);
   });
 
-  test('async adapter consumes the value-input contract and does not call save/set/persist APIs', async () => {
+  test('async adapter consumes the value-input contract without salary sync by default', async () => {
     const input: BuildFranchiseValueInputRowsInput = {
       franchiseId: 'franchise-1',
       seasonId: 'season-1',
@@ -313,6 +329,47 @@ describe('franchise salary lifecycle adapter', () => {
     expect(mocks.saveFranchiseTeam).not.toHaveBeenCalled();
     expect(mocks.saveFranchiseConfig).not.toHaveBeenCalled();
     expect(mocks.withInitialFranchiseSalary).not.toHaveBeenCalled();
-    expect(report.playerRecords.every((record) => record.persistable === false && record.recalculable === false)).toBe(true);
+    expect(mocks.upsertFranchiseSeasonSalariesFromValueInputReport).not.toHaveBeenCalled();
+    expect(report.playerRecords.every((record) => record.persistable === true && record.recalculable === true)).toBe(true);
+  });
+
+  test('async adapter can sync scoped current salaries before rebuilding the lifecycle report', async () => {
+    const input: BuildFranchiseValueInputRowsInput = {
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      seasonNumber: 1,
+    };
+    const firstReport = makeReport([makeRow({ salary: 8.5 })]);
+    const syncedReport = makeReport([makeRow({ salary: 9.2 })]);
+    mocks.buildFranchiseValueInputRows
+      .mockResolvedValueOnce(firstReport)
+      .mockResolvedValueOnce(syncedReport);
+    mocks.upsertFranchiseSeasonSalariesFromValueInputReport.mockResolvedValue({
+      persisted: true,
+      updatedPlayerCount: 1,
+      skippedPlayerCount: 0,
+      limitations: ['Current salary values and team payroll proof persisted.'],
+      blockers: [],
+      policies: {
+        salaryValuesPersisted: true,
+        teamPayrollPersisted: true,
+        fameModifierActive: false,
+        trueValueCalculated: false,
+        designationFinalizationAllowed: false,
+        luxuryTaxActive: false,
+        salaryMatchingActive: false,
+        aiTradeSalaryValuationActive: false,
+        moraleMutationAllowed: false,
+        relationshipEffectsAllowed: false,
+        mode3HandoffAllowed: false,
+      },
+    });
+
+    const report = await buildFranchiseSalaryLifecycle(input, { syncCurrentSalaries: true });
+
+    expect(mocks.upsertFranchiseSeasonSalariesFromValueInputReport).toHaveBeenCalledWith(firstReport);
+    expect(mocks.buildFranchiseValueInputRows).toHaveBeenCalledTimes(2);
+    expect(report.playerRecords[0].salary).toBe(9.2);
+    expect(report.salarySystemSync?.persisted).toBe(true);
   });
 });

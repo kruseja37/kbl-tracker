@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import type { Player } from '../franchisePlayerStorage';
 import {
+  calculateFranchiseCurrentSalary,
   calculateHiddenFarmProspectSalaryFromPublicContext,
   calculateFranchisePlayerSalary,
+  FRANCHISE_CURRENT_SALARY_CALCULATION_VERSION,
   getVisibleSafeFranchisePlayerSalary,
   withInitialFranchiseSalary,
 } from '../franchiseSalary';
@@ -49,6 +51,50 @@ describe('franchise salary helpers', () => {
 
     expect(calculateFranchisePlayerSalary(player)).toBe(calculateFranchisePlayerSalary(player));
     expect(calculateFranchisePlayerSalary(player)).toBeGreaterThan(0.5);
+  });
+
+  test('calculates v1 multifactor current salary with neutral fame and adaptive performance context', () => {
+    const player = makePlayer({
+      age: 31,
+      trait1: 'Clutch',
+      personality: 'Competitive',
+      fame: 100,
+    });
+
+    const neutral = calculateFranchiseCurrentSalary(player, {
+      seasonContext: { gamesPerTeam: 32, inningsPerGame: 6 },
+    });
+    const withPerformance = calculateFranchiseCurrentSalary(player, {
+      seasonContext: { gamesPerTeam: 32, inningsPerGame: 6 },
+      seasonStats: {
+        battingWar: 2.5,
+        fieldingWar: 0.2,
+        baserunningWar: 0.1,
+        totalWar: 2.8,
+      },
+      isNewTeam: true,
+    });
+
+    expect(withPerformance.calculationVersion).toBe(FRANCHISE_CURRENT_SALARY_CALCULATION_VERSION);
+    expect(withPerformance.status).toBe('calculated');
+    expect(withPerformance.adaptiveStandards.gamesPerSeason).toBe(32);
+    expect(withPerformance.breakdown?.baseSalary).toBeGreaterThan(0.5);
+    expect(withPerformance.breakdown?.positionMultiplier).toBeGreaterThan(1);
+    expect(withPerformance.breakdown?.traitModifier).toBeGreaterThan(1);
+    expect(withPerformance.breakdown?.ageFactor).toBe(1.1);
+    expect(withPerformance.breakdown?.performanceModifier).toBeGreaterThan(1);
+    expect(withPerformance.breakdown?.personalityModifier).toBe(1.05);
+    expect(withPerformance.breakdown?.fameModifier).toBe(1);
+    expect(withPerformance.expectedPerformance?.total).toBeLessThan(2);
+    expect(withPerformance.salary).toBeGreaterThan(neutral.salary ?? 0);
+  });
+
+  test('fame remains neutral for franchise v1 salary even when player fame differs', () => {
+    const anonymous = makePlayer({ fame: 0 });
+    const famous = makePlayer({ fame: 100 });
+
+    expect(calculateFranchisePlayerSalary(famous)).toBe(calculateFranchisePlayerSalary(anonymous));
+    expect(calculateFranchiseCurrentSalary(famous).breakdown?.fameModifier).toBe(1);
   });
 
   test('returns a franchise-owned copy with salary updated without mutating the source player', () => {
@@ -107,8 +153,12 @@ describe('franchise salary helpers', () => {
     expect(calculateHiddenFarmProspectSalaryFromPublicContext(lowTrueRatings)).toBe(1.2);
     expect(withInitialFranchiseSalary(highTrueRatings).salary).toBe(1.2);
     expect(withInitialFranchiseSalary(lowTrueRatings).salary).toBe(1.2);
-    expect(withInitialFranchiseSalary(highTrueRatings).salary).not.toBe(calculateFranchisePlayerSalary(highTrueRatings));
+    expect(withInitialFranchiseSalary(highTrueRatings).salary).not.toBe(calculateFranchisePlayerSalary({
+      ...highTrueRatings,
+      ratingRevealState: 'revealed',
+    }));
     expect(getVisibleSafeFranchisePlayerSalary(highTrueRatings)).toBe(1.2);
+    expect(calculateFranchiseCurrentSalary(highTrueRatings).salary).toBe(1.2);
   });
 
   test('revealed FARM players keep known salary context instead of hidden prospect fallback', () => {

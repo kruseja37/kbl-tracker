@@ -223,6 +223,25 @@ export interface Player {
   mojo: MojoState;
   fame: number;
   salary: number;
+  salaryCalculationVersion?: string;
+  salarySeasonId?: string;
+  salaryStatsScopeId?: string;
+  salarySeasonNumber?: number;
+  salaryUpdatedAt?: string;
+  salaryFactors?: {
+    source: 'multifactor-current-season' | 'hidden-farm-public-context';
+    baseSalary?: number;
+    positionMultiplier?: number;
+    traitModifier?: number;
+    ageFactor?: number;
+    performanceModifier?: number;
+    fameModifier?: number;
+    personalityModifier?: number;
+    actualWar?: number | null;
+    expectedWar?: number | null;
+    gamesPerSeason?: number | null;
+    inningsPerGame?: number | null;
+  };
   contractYears?: number;
   leagueAssignments?: LeagueAssignment[];
   optionsUsedBySeason?: Record<string, number>;
