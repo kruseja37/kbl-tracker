@@ -609,6 +609,43 @@ describe('franchise stadium foundation', () => {
     }).map((row) => row.playerName)).toEqual(['Fielder One']);
   });
 
+  test('sorts spray rows by scoped outcome-zone frequency without fabricating evidence', () => {
+    const report = buildFranchiseStadiumFoundationReport({
+      ...scope,
+      stadiumSnapshots: [stadiumSnapshot()],
+      completedGames: [completedGame()],
+      atBatEvents: [
+        atBat({ eventId: 'game-1-1', timestamp: 101, result: '1B', batterId: 'batter-1', batterName: 'Batter One' }),
+        atBat({ eventId: 'game-1-2', timestamp: 102, result: '1B', batterId: 'batter-2', batterName: 'Batter Two' }),
+        atBat({
+          eventId: 'game-1-3',
+          timestamp: 103,
+          result: 'HR',
+          batterId: 'batter-3',
+          batterName: 'Batter Three',
+          enrichment: {
+            fieldLocation: { x: 35, y: 20, zone: 'Z03' },
+            exitType: 'fly_ball',
+          },
+        }),
+      ],
+    });
+
+    const battingRows = filterAndSortFranchiseSprayChartRows(report.sprayCharts.rows, {
+      role: 'batting',
+      sortBy: 'frequency',
+      sortDirection: 'desc',
+    });
+
+    expect(battingRows.map((row) => row.playerName)).toEqual([
+      'Batter One',
+      'Batter Two',
+      'Batter Three',
+    ]);
+    expect(battingRows.map((row) => row.outcome)).toEqual(['1B', '1B', 'HR']);
+    expect(report.sprayCharts.summary.battingRows).toBe(3);
+  });
+
   test('does not enable random events morale mutation or adaptive factor persistence', () => {
     const report = buildFranchiseStadiumFoundationReport({
       ...scope,

@@ -212,18 +212,24 @@ Key files: `managerWpaGameState.ts`, `ManagerWpaOverlay.tsx`, `GameDetail.tsx`, 
 
 ### 1.7 — Spray Chart Full Filter Set
 
-**Status:** Spray chart exists as "provisional functional visualization." Archive-backed batting/pitching/fielding spray projection works. Full filter set is incomplete per worksheet M2-D020.
+**Status:** Completed for v1 functional filters. Spray chart remains a provisional functional visualization, but archive-backed batting/pitching/fielding spray projection now has the full read-only filter/sort set required for internal v1.
 
-**Important pre-work:** Before implementing filters, Codex must query the archive storage schema to understand the actual shape of spray event records — specifically which fields exist for player, team, handedness, outcome, zone, and how batting/pitching/fielding events are distinguished. Do not assume the schema matches the spec without verifying. Include this as the first step in the prompt contract.
+**Verified archive/foundation row shape:**
+- At-bat archive/event evidence projects batting and pitching rows with player, batter, pitcher, team/opponent, handedness, outcome, zone, direction/depth, stadium, franchise/season/stats scope, game id, event id, and source.
+- Fielding evidence projects fielding rows only when linked to scoped at-bat evidence; orphan fielding rows remain blocked.
+- Score-only/manual rows and older archives without spray event detail do not fabricate points.
 
-**What's needed:**
+**Implemented v1 boundary:**
 - Three view modes: Batting, Pitching, Fielding (tab or toggle)
-- Filters: player, team, stadium, franchise/season/stats scope, handedness (L/R/S), outcome (hit/out/HR/strikeout/etc.), zone
+- Filters: player, team, stadium, exact franchise/season/stats scope display, handedness (L/R/S), outcome (hit/out/HR/strikeout/etc.), zone
 - Sort: by frequency, by outcome, by player
 - Filter state persists within session (not across sessions — in-memory is fine)
 - Visual: spray zones clearly labeled, outcome density represented
 
-**Gate:** All three views work. All filter combinations return correct data from real archive. iPad-readable layout. Filter state persists within session.
+**Still deferred:**
+- Final visual design, heat maps, persisted spray stores, adaptive factor persistence, and final park-adjusted WAR/value consumers.
+
+**Gate:** All three views work. Filter combinations return correct scoped archive/foundation data. iPad-readable layout. Filter state remains session-local.
 
 **ROUTE: Codex 5.5 | very high**
 Key files: `StadiumSprayChart.tsx`, `SprayChartFilters.tsx`, `franchiseStadiumAnalyticsEngine.ts`, archive storage schema (read first)

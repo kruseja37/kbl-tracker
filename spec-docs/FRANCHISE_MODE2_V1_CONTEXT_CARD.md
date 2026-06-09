@@ -10,7 +10,7 @@ Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
 Latest committed checkpoint: `366064a Define v1 dynamic designation policy`.
 
-Latest working checkpoint: Playable V1 Smoke Findings Reconciliation And Next Gate.
+Latest working checkpoint: Spray Chart Full Filter Set.
 
 ## Current Completed
 
@@ -18,7 +18,7 @@ Latest working checkpoint: Playable V1 Smoke Findings Reconciliation And Next Ga
 - Team Hub surfaces player profiles, profile edits, continuity, directory, foundation status, stadium foundation, random-event log, fan/player morale, True Value preview, and expected-wins preview.
 - Stadium foundation supports scoped identity, seed/static park-factor trust, archive-backed batting/pitching/fielding spray projection, and preview-only adaptive factors.
 - Stadium records boundary can persist scoped read-only record evidence for team/game records, spray leaders, and safe no-hitter/perfect-game archive context.
-- Team Hub Stadium tab includes a compact read-only spray evidence inspector with role/player/team/hand/outcome/zone/sort filters.
+- Team Hub Stadium tab includes a compact read-only spray evidence inspector with role/player/team/stadium/scope/hand/outcome/zone filters and frequency/outcome/player sorting.
 - Team Hub player profiles include compact read-only relationship context/proposal boundaries using the draft-only manual override validator.
 - Season-end readiness checks can classify scoped Mode 2 evidence for review before future handoff while keeping Mode 3/offseason execution blocked.
 - Season handoff planning can produce a read-only blocked migration manifest for future carry-forward decisions without rollover/carryover writes.
@@ -33,7 +33,7 @@ Latest working checkpoint: Playable V1 Smoke Findings Reconciliation And Next Ga
 - Numeric WAR now has a narrow trusted consumer contract only for TEAM_MVP/ACE designation input gating when scoped completed archive evidence, scoped season stats, current MLB/team context, and stored season metadata are present.
 - Position-relative True Value preview, value delta, expected-wins preview, Team Hub display, and durable expected-wins baseline snapshots remain read-only and untrusted for final designations, salary movement, morale automation, awards, and Mode 3.
 - The Mode 2 technical foundation is safe to build on, but manual smoke feedback shows the user-facing Mode 1/Mode 2 playable UI/UX is not complete.
-- Mode 1/2 playable hardening has now committed core launch/persistence smoke fixes, generated data policy cleanup, roster scan table improvements, MVP/Ace active designation promotion, salary baseline visibility, stadium source-of-truth copy, dense UI hardening, Almanac continuity, archived WPA visibility, fame-event continuity, a safe visual-smoke preview route, populated fixture coverage, schedule editing/import hardening, trade/FARM hidden-safety and movement continuity, park-factor archive trust tightening, the dynamic designation policy matrix/TWO-WAY boundary, manual final-score/score-only UX polish, hidden FARM salary/reveal safety, player profile position/pitching integrity, GameTracker substitution full-name display, Almanac Franchise access/save import clarity, and Manager WPA lineup-delta visibility in Game Detail.
+- Mode 1/2 playable hardening has now committed core launch/persistence smoke fixes, generated data policy cleanup, roster scan table improvements, MVP/Ace active designation promotion, salary baseline visibility, stadium source-of-truth copy, dense UI hardening, Almanac continuity, archived WPA visibility, fame-event continuity, a safe visual-smoke preview route, populated fixture coverage, schedule editing/import hardening, trade/FARM hidden-safety and movement continuity, park-factor archive trust tightening, the dynamic designation policy matrix/TWO-WAY boundary, manual final-score/score-only UX polish, hidden FARM salary/reveal safety, player profile position/pitching integrity, GameTracker substitution full-name display, Almanac Franchise access/save import clarity, Manager WPA lineup-delta visibility in Game Detail, and Team Hub spray chart full filters.
 - Schedule editing/import is hardened for the current manual/CSV non-generated policy, but production populated schedule visual smoke remains fixture-backed rather than proven from arbitrary user local data.
 - Trade/FARM continuity is hardened for v1-safe hidden-safety and movement boundaries, while full trade UX, AI trades, salary matching, and offseason trade systems remain deferred.
 - The safe visual-smoke preview covers shell/foundation/finance/stadium, populated fixture rows, Game Detail WPA/fame, Player Instance Card WPA, and GameTracker long-name visibility, but real populated production Team Hub/schedule visual smoke remains a future confidence check.
@@ -47,9 +47,9 @@ Latest working checkpoint: Playable V1 Smoke Findings Reconciliation And Next Ga
 
 ## Current Active Slice
 
-Manager WPA Lineup Delta Visibility.
+Spray Chart Full Filter Set.
 
-Goal: surface archive-backed manager decision-quality and lineup-delta evidence in Game Detail without fabricating records for older, score-only, or manual-result archives.
+Goal: complete session-local read-only filters and sorting over actual scoped Team Hub stadium spray evidence without fabricating rows or promoting stadium analytics consumers.
 
 ## Next Queue
 

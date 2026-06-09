@@ -12,7 +12,7 @@ Manual smoke feedback remains a bug and feature backlog. The build order for Mod
 
 Latest committed checkpoint: `366064a Define v1 dynamic designation policy`.
 
-Latest working checkpoint: Playable V1 Smoke Findings Reconciliation And Next Gate.
+Latest working checkpoint: Spray Chart Full Filter Set.
 
 Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved. The technical foundation is safe, and the first Mode 1/2 playable hardening waves through schedule/trade/FARM/stadium/designation policy plus the latest smoke-response patches are complete, but user-facing playable v1 still requires another real-app smoke pass and explicit user approval.
 
@@ -37,7 +37,7 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Daily morale snapshot summaries persist scoped high/low/average evidence from confirmed/manual morale history while remaining read-only and untrusted for drift, recovery, relationship effects, and Mode 3.
 - Stadium records boundary persists scoped read-only evidence for conservative team/game stadium records, spray event leaders, and safe no-hitter/perfect-game archive context while adaptive factors and final park-adjusted consumers remain blocked.
 - Expected-wins baselines, daily morale snapshots, and stadium records are registered as portable scoped evidence stores in save-slot, backup, and sync registry surfaces, matching random events and canonical morale.
-- Team Hub Stadium tab provides a compact read-only spray evidence inspector with role/player/team/hand/outcome/zone/sort filters using scoped stadium foundation rows.
+- Team Hub Stadium tab provides a compact read-only spray evidence inspector with role/player/team/stadium/scope/hand/outcome/zone filters and frequency/outcome/player sorting using scoped stadium foundation rows.
 - Team Hub player profiles surface read-only relationship context/proposal boundaries for player-player, fan/team, and hidden-safe scout/prospect contexts using the draft-only manual override validator.
 - Season-end readiness report exists as a pure read-only review contract for scoped game archives, random-event review state, morale evidence, daily summaries, expected-wins baselines, stadium records, designation readiness, relationship context, and blocked future systems.
 - Season handoff plan exists as a pure read-only blocked migration manifest that lists eligible review evidence, blocked carryover categories, unresolved blockers, warnings, and future decisions required before any Mode 3/offseason execution.

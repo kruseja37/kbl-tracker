@@ -1461,6 +1461,11 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(stadiumRegion).getAllByTestId('spray-point-pitching')).toHaveLength(1);
     expect(within(stadiumRegion).getAllByTestId('spray-point-fielding')).toHaveLength(1);
     expect(within(stadiumRegion).getByText('EVIDENCE FILTERS')).toBeInTheDocument();
+    expect(within(stadiumRegion).getByTestId('spray-scope-filter-summary')).toHaveTextContent('Franchise franchise-1');
+    expect(within(stadiumRegion).getByTestId('spray-scope-filter-summary')).toHaveTextContent('Season franchise-1-season-2');
+    expect(within(stadiumRegion).getByTestId('spray-scope-filter-summary')).toHaveTextContent('Stats franchise-1-season-2');
+    expect(within(stadiumRegion).getByRole('combobox', { name: /Spray stadium filter/i })).toBeInTheDocument();
+    expect(within(stadiumRegion).getByRole('combobox', { name: /Spray sort filter/i })).toHaveTextContent('Frequency');
     expect(within(stadiumRegion).getByText('STADIUM STATS / ADVANCED METRICS')).toBeInTheDocument();
     expect(within(stadiumRegion).getAllByText('STADIUM RECORDS').length).toBeGreaterThan(0);
     expect(within(stadiumRegion).getByText('SPRAY EVIDENCE DETAILS')).toBeInTheDocument();
@@ -1477,10 +1482,47 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(stadiumRegion).queryByText('Orphan Fielder')).not.toBeInTheDocument();
     expect(within(stadiumRegion).queryByText(/hiddenPersonalityModifiers|trueGrade|hidden scout truth/i)).not.toBeInTheDocument();
 
+    fireEvent.change(within(stadiumRegion).getByRole('combobox', { name: /Spray stadium filter/i }), {
+      target: { value: 'all' },
+    });
+    expect(within(stadiumRegion).getByText(/3 ROW\(S\) · READ ONLY/i)).toBeInTheDocument();
+
+    fireEvent.change(within(stadiumRegion).getByRole('combobox', { name: /Spray player filter/i }), {
+      target: { value: 'pitcher-1' },
+    });
+    let filteredArticles = within(stadiumRegion).getAllByRole('article');
+    expect(filteredArticles).toHaveLength(1);
+    expect(within(filteredArticles[0]).getByText('Pitcher One')).toBeInTheDocument();
+    expect(filteredArticles[0]).not.toHaveTextContent('Batter One');
+
+    fireEvent.change(within(stadiumRegion).getByRole('combobox', { name: /Spray player filter/i }), {
+      target: { value: 'all' },
+    });
+    fireEvent.change(within(stadiumRegion).getByRole('combobox', { name: /Spray team filter/i }), {
+      target: { value: 'team-1' },
+    });
+    filteredArticles = within(stadiumRegion).getAllByRole('article');
+    expect(filteredArticles).toHaveLength(2);
+    expect(filteredArticles.map((article) => article.textContent ?? '').join(' ')).toContain('Pitcher One');
+    expect(filteredArticles.map((article) => article.textContent ?? '').join(' ')).toContain('Fielder One');
+
+    fireEvent.change(within(stadiumRegion).getByRole('combobox', { name: /Spray team filter/i }), {
+      target: { value: 'all' },
+    });
+    fireEvent.change(within(stadiumRegion).getByRole('combobox', { name: /Spray hand filter/i }), {
+      target: { value: 'R' },
+    });
+    expect(within(stadiumRegion).getByText(/3 ROW\(S\) · READ ONLY/i)).toBeInTheDocument();
+
+    fireEvent.change(within(stadiumRegion).getByRole('combobox', { name: /Spray sort filter/i }), {
+      target: { value: 'frequency' },
+    });
+    expect(within(stadiumRegion).getByRole('combobox', { name: /Spray sort filter/i })).toHaveValue('frequency');
+
     fireEvent.change(within(stadiumRegion).getByRole('combobox', { name: /Spray role filter/i }), {
       target: { value: 'batting' },
     });
-    const filteredArticles = within(stadiumRegion).getAllByRole('article');
+    filteredArticles = within(stadiumRegion).getAllByRole('article');
     expect(filteredArticles).toHaveLength(1);
     expect(within(filteredArticles[0]).getByText('Batter One')).toBeInTheDocument();
     expect(filteredArticles[0]).not.toHaveTextContent('Pitcher One');
@@ -1490,6 +1532,12 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(stadiumRegion).getAllByTestId('spray-point-batting')).toHaveLength(1);
     expect(within(stadiumRegion).queryByTestId('spray-point-pitching')).not.toBeInTheDocument();
     expect(within(stadiumRegion).queryByTestId('spray-point-fielding')).not.toBeInTheDocument();
+
+    fireEvent.change(within(stadiumRegion).getByRole('combobox', { name: /Spray outcome filter/i }), {
+      target: { value: 'putout' },
+    });
+    expect(within(stadiumRegion).getByText('NO SCOPED SPRAY POINTS')).toBeInTheDocument();
+    expect(within(stadiumRegion).getByText(/No spray rows match the current read-only filters/i)).toBeInTheDocument();
 
     expect(within(stadiumRegion).getByText(/Storage boundary exists. Evidence-only records/i)).toBeInTheDocument();
     expect(within(stadiumRegion).getByText(/writes no stadium records, adaptive factors, random events, morale changes, designations, salary changes, relationship changes, stories, offseason state, or player-profile automation/i)).toBeInTheDocument();

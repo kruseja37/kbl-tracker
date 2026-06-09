@@ -4662,6 +4662,7 @@ function FranchiseStadiumFoundationPanel({
   const [sprayRole, setSprayRole] = useState<FranchiseSprayChartRole | 'all'>('all');
   const [sprayPlayerId, setSprayPlayerId] = useState('all');
   const [sprayTeamId, setSprayTeamId] = useState('all');
+  const [sprayStadiumId, setSprayStadiumId] = useState<'selected' | 'all' | string>('selected');
   const [sprayHandedness, setSprayHandedness] = useState<'all' | 'L' | 'R' | 'S'>('all');
   const [sprayOutcome, setSprayOutcome] = useState('all');
   const [sprayZoneId, setSprayZoneId] = useState('all');
@@ -4685,42 +4686,62 @@ function FranchiseStadiumFoundationPanel({
       sortDirection: 'desc',
     });
   }, [report, selected]);
+  const effectiveSprayStadiumId = sprayStadiumId === 'all'
+    ? undefined
+    : sprayStadiumId === 'selected'
+      ? selected?.stadiumId
+      : sprayStadiumId;
+  const stadiumFilteredRows = useMemo(() => {
+    if (!report) return [];
+    return filterAndSortFranchiseSprayChartRows(report.sprayCharts.rows, {
+      stadiumId: effectiveSprayStadiumId,
+      sortBy: 'timestamp',
+      sortDirection: 'desc',
+    });
+  }, [effectiveSprayStadiumId, report]);
   useEffect(() => {
-    if (sprayPlayerId !== 'all' && !selectedRows.some((row) => row.playerId === sprayPlayerId)) {
+    if (sprayPlayerId !== 'all' && !stadiumFilteredRows.some((row) => row.playerId === sprayPlayerId)) {
       setSprayPlayerId('all');
     }
-    if (sprayTeamId !== 'all' && !selectedRows.some((row) => row.teamId === sprayTeamId)) {
+    if (sprayTeamId !== 'all' && !stadiumFilteredRows.some((row) => row.teamId === sprayTeamId)) {
       setSprayTeamId('all');
     }
-    if (sprayOutcome !== 'all' && !selectedRows.some((row) => row.outcome === sprayOutcome)) {
+    if (sprayOutcome !== 'all' && !stadiumFilteredRows.some((row) => row.outcome === sprayOutcome)) {
       setSprayOutcome('all');
     }
-    if (sprayZoneId !== 'all' && !selectedRows.some((row) => row.zoneId === sprayZoneId)) {
+    if (sprayZoneId !== 'all' && !stadiumFilteredRows.some((row) => row.zoneId === sprayZoneId)) {
       setSprayZoneId('all');
     }
-  }, [selectedRows, sprayOutcome, sprayPlayerId, sprayTeamId, sprayZoneId]);
+  }, [sprayOutcome, sprayPlayerId, sprayTeamId, sprayZoneId, stadiumFilteredRows]);
   const selectedRowsByRole = (role: FranchiseSprayChartRole) =>
     selectedRows.filter((row) => row.role === role).length;
+  const stadiumFilterOptions = useMemo(() => {
+    const byId = new Map<string, string>();
+    report?.sprayCharts.rows.forEach((row) => {
+      byId.set(row.stadiumId, row.stadiumName || row.stadiumId);
+    });
+    return Array.from(byId.entries()).sort((left, right) => left[1].localeCompare(right[1]));
+  }, [report]);
   const playerOptions = useMemo(() => {
     const byId = new Map<string, string>();
-    selectedRows.forEach((row) => {
+    stadiumFilteredRows.forEach((row) => {
       if (row.playerId) byId.set(row.playerId, row.playerName || row.playerId);
     });
     return Array.from(byId.entries()).sort((left, right) => left[1].localeCompare(right[1]));
-  }, [selectedRows]);
-  const teamOptions = useMemo(() => uniqueStrings(selectedRows.map((row) => row.teamId)).sort((left, right) => left.localeCompare(right)), [selectedRows]);
-  const outcomeOptions = useMemo(() => uniqueStrings(selectedRows.map((row) => row.outcome)).sort((left, right) => left.localeCompare(right)), [selectedRows]);
+  }, [stadiumFilteredRows]);
+  const teamOptions = useMemo(() => uniqueStrings(stadiumFilteredRows.map((row) => row.teamId)).sort((left, right) => left.localeCompare(right)), [stadiumFilteredRows]);
+  const outcomeOptions = useMemo(() => uniqueStrings(stadiumFilteredRows.map((row) => row.outcome)).sort((left, right) => left.localeCompare(right)), [stadiumFilteredRows]);
   const zoneOptions = useMemo(() => {
     const byId = new Map<string, string>();
-    selectedRows.forEach((row) => {
+    stadiumFilteredRows.forEach((row) => {
       if (row.zoneId) byId.set(row.zoneId, row.zoneName ?? row.zoneId);
     });
     return Array.from(byId.entries()).sort((left, right) => left[1].localeCompare(right[1]));
-  }, [selectedRows]);
+  }, [stadiumFilteredRows]);
   const filteredSprayRows = useMemo(() => {
-    if (!report || !selected) return [];
+    if (!report) return [];
     return filterAndSortFranchiseSprayChartRows(report.sprayCharts.rows, {
-      stadiumId: selected.stadiumId,
+      stadiumId: effectiveSprayStadiumId,
       role: sprayRole,
       playerId: sprayPlayerId === 'all' ? undefined : sprayPlayerId,
       teamId: sprayTeamId === 'all' ? undefined : sprayTeamId,
@@ -4731,8 +4752,8 @@ function FranchiseStadiumFoundationPanel({
       sortDirection: spraySortDirection,
     });
   }, [
+    effectiveSprayStadiumId,
     report,
-    selected,
     sprayHandedness,
     sprayOutcome,
     sprayPlayerId,
@@ -4743,6 +4764,7 @@ function FranchiseStadiumFoundationPanel({
     sprayZoneId,
   ]);
   const visibleSprayRows = filteredSprayRows.slice(0, 12);
+  const hasScopedSprayRows = (report?.sprayCharts.rows.length ?? 0) > 0;
   const dimensions = selected?.dimensions ?? null;
   const seedFactors = selected?.seedParkFactors ?? null;
   const stadiumSourceLabel = selected
@@ -4862,8 +4884,27 @@ function FranchiseStadiumFoundationPanel({
 
         <div className="border-2 border-[#4A6844] bg-[#4A6844] p-3">
           <div className="mb-2 text-[10px] font-bold text-[#C4A853]">EVIDENCE FILTERS</div>
-          {selectedRows.length > 0 ? (
+          {hasScopedSprayRows ? (
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                <div
+                  className="border border-[#E8E8D8]/20 bg-[#3F563F] p-2 text-[9px] leading-snug text-[#E8E8D8]/65"
+                  data-testid="spray-scope-filter-summary"
+                >
+                  <div className="font-bold text-[#C4A853]">Scope</div>
+                  <div>Franchise {report?.scope.franchiseId}</div>
+                  <div>Season {report?.scope.seasonId}</div>
+                  <div>Stats {report?.scope.statsScopeId}</div>
+                </div>
+                <SprayFilterSelect
+                  label="Stadium"
+                  value={sprayStadiumId}
+                  onChange={setSprayStadiumId}
+                  options={[
+                    ['selected', `Selected stadium (${selected?.stadiumName ?? (selectedStadium || 'none')})`],
+                    ['all', 'All scoped stadiums'],
+                    ...stadiumFilterOptions.map(([stadiumId, stadiumName]) => [stadiumId, `${stadiumName} (${stadiumId})`] as [string, string]),
+                  ]}
+                />
                 <SprayFilterSelect
                   label="Role"
                   value={sprayRole}
@@ -4928,6 +4969,7 @@ function FranchiseStadiumFoundationPanel({
                   onChange={(value) => setSpraySortBy(value as NonNullable<FranchiseSprayChartFilterSortOptions['sortBy']>)}
                   options={[
                     ['timestamp', 'Time'],
+                    ['frequency', 'Frequency'],
                     ['player', 'Player'],
                     ['team', 'Team'],
                     ['stadium', 'Stadium'],
@@ -5011,7 +5053,7 @@ function FranchiseStadiumFoundationPanel({
             Compact audit list for the plotted evidence above.
           </div>
 
-          {selectedRows.length > 0 ? (
+          {hasScopedSprayRows ? (
             <>
               {visibleSprayRows.length > 0 ? (
                 <div className="space-y-2">

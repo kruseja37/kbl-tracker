@@ -138,7 +138,7 @@ export interface FranchiseSprayChartFilterSortOptions {
   handedness?: 'L' | 'R' | 'S';
   outcome?: string;
   zoneId?: string;
-  sortBy?: 'timestamp' | 'player' | 'team' | 'stadium' | 'outcome' | 'zone';
+  sortBy?: 'timestamp' | 'frequency' | 'player' | 'team' | 'stadium' | 'outcome' | 'zone';
   sortDirection?: 'asc' | 'desc';
 }
 
@@ -665,8 +665,14 @@ export function filterAndSortFranchiseSprayChartRows(
 
   const sortBy = options.sortBy ?? 'timestamp';
   const direction = options.sortDirection === 'desc' ? -1 : 1;
+  const frequencyCounts = countBy(filtered, (row) =>
+    `${row.role}:${row.outcome}:${row.zoneId ?? 'unknown-zone'}`,
+  );
   const valueFor = (row: FranchiseSprayChartRow): string | number => {
     if (sortBy === 'timestamp') return row.timestamp;
+    if (sortBy === 'frequency') {
+      return frequencyCounts[`${row.role}:${row.outcome}:${row.zoneId ?? 'unknown-zone'}`] ?? 0;
+    }
     if (sortBy === 'player') return row.playerName;
     if (sortBy === 'team') return row.teamId;
     if (sortBy === 'stadium') return row.stadiumName;
@@ -678,7 +684,7 @@ export function filterAndSortFranchiseSprayChartRows(
     const left = valueFor(a);
     const right = valueFor(b);
     if (typeof left === 'number' && typeof right === 'number') {
-      return (left - right) * direction;
+      return (left - right) * direction || a.outcome.localeCompare(b.outcome) || a.playerName.localeCompare(b.playerName) || a.eventId.localeCompare(b.eventId);
     }
     return String(left).localeCompare(String(right)) * direction || a.eventId.localeCompare(b.eventId);
   });
