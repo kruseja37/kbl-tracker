@@ -538,6 +538,86 @@ describe('franchise trade dry-run adapter', () => {
     expectNoWrites();
   });
 
+  test('requested trade preview surfaces active TEAM_MVP and ACE designation context for revealed players only', async () => {
+    const players = makePlayers().map((player) =>
+      player.id === 'a-ss-1'
+        ? makePlayer({
+          id: 'a-ss-1',
+          teamId: 'team-a',
+          firstName: 'Alpha',
+          lastName: 'Active',
+          primaryPosition: 'SS',
+          franchiseDesignations: [
+            {
+              franchiseId: context.franchiseId,
+              seasonId: context.seasonId,
+              statsScopeId: context.statsScopeId,
+              seasonNumber: context.seasonNumber,
+              teamId: 'team-a',
+              playerId: 'a-ss-1',
+              playerName: 'Alpha Active',
+              type: 'TEAM_MVP',
+              status: 'active',
+              sourceInputs: { totalWAR: 1.7 },
+              calculationVersion: 'franchise-designations-v1-active-team-mvp-ace',
+              calculatedAt: '2026-06-01T00:00:00.000Z',
+            },
+          ],
+        } as Partial<Player> & Record<string, unknown> & { id: string; teamId: string })
+        : player.id === 'b-rp-1'
+          ? makePlayer({
+            id: 'b-rp-1',
+            teamId: 'team-b',
+            firstName: 'Beta',
+            lastName: 'Ace',
+            primaryPosition: 'RP',
+            franchiseDesignations: [
+              {
+                franchiseId: context.franchiseId,
+                seasonId: context.seasonId,
+                statsScopeId: context.statsScopeId,
+                seasonNumber: context.seasonNumber,
+                teamId: 'team-b',
+                playerId: 'b-rp-1',
+                playerName: 'Beta Ace',
+                type: 'ACE',
+                status: 'active',
+                sourceInputs: { pWAR: 1.2 },
+                calculationVersion: 'franchise-designations-v1-active-team-mvp-ace',
+                calculatedAt: '2026-06-01T00:00:00.000Z',
+              },
+            ],
+          } as Partial<Player> & Record<string, unknown> & { id: string; teamId: string })
+        : player,
+    );
+    seedValidation(players);
+
+    const result = await runFranchiseTradeDryRun(context, {
+      dryRun: true,
+      requestedTrade: {
+        sourceTeamId: 'team-a',
+        targetTeamId: 'team-b',
+        outgoingPlayerId: 'a-ss-1',
+        incomingPlayerId: 'b-rp-1',
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.requestedPreview?.outgoingPlayer).toEqual(
+      expect.objectContaining({
+        playerId: 'a-ss-1',
+        activeDesignations: ['TEAM_MVP'],
+      }),
+    );
+    expect(result.data?.requestedPreview?.incomingPlayer).toEqual(
+      expect.objectContaining({
+        playerId: 'b-rp-1',
+        activeDesignations: ['ACE'],
+      }),
+    );
+    expectNoWrites();
+  });
+
   test('requested trade preview does not expose unrevealed FARM true grade', async () => {
     const players = makePlayers().map((player) =>
       player.id === 'a-farm-1'

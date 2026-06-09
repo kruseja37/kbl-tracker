@@ -8,8 +8,9 @@ Player designations (Team MVP, Ace, Fan Favorite, Albatross) are tracked dynamic
 
 Dynamic designations are morale context for Franchise v1, but they should not silently mutate morale, player profiles, salary, relationships, story state, or Mode 3/offseason systems.
 
-- Designation effects enter v1 through confirmation-gated random-event prompts.
-- Team MVP/Ace recognition can become player morale prompt context.
+- TEAM_MVP and ACE can now persist as active v1 designation state when the scoped WAR consumer-trust gate passes.
+- TEAM_MVP/ACE changes emit typed `DesignationEvent` objects for later morale/story consumption, but no morale engine consumes those events yet.
+- TEAM_MVP/ACE recognition no longer enters v1 through duplicate preview random-event prompts.
 - Fan Favorite and Albatross readiness can now be inspected from preview True Value/value-delta rows, but they still require trusted True Value/value-delta inputs and durable designation state before final prompt behavior.
 - Cornerstone can create fan trust and stronger roster-move reaction prompts once durable designation state is trusted.
 - Captain morale amplification remains blocked until hidden-charisma/leadership safety is approved.
@@ -19,12 +20,12 @@ See `FRANCHISE_MODE2_DYNAMIC_DESIGNATION_MORALE_BRIDGE.md` for the active v1 bri
 
 ## Franchise Internal v1 Policy Matrix Checkpoint (June 2026)
 
-Internal v1 currently treats dynamic designations as read-only preview context, not final season designations.
+Internal v1 promotes only TEAM_MVP and ACE to active in-season designation state. They are still not final season-end locks, awards, salary inputs, morale automation, relationship inputs, or Mode 3/offseason handoff state.
 
 | Designation | Internal v1 status | Prompt authority | Policy |
 |---|---|---|---|
-| Team MVP | Active preview-only | Eligibility context adapter | Ranked/selective current MLB position-player preview only. Positive visible WAR-like evidence required. Final persistence, awards, salary, morale automation, relationships, and Mode 3 effects remain blocked. |
-| Ace | Active preview-only | Eligibility context adapter | Ranked/selective pitcher preview only. Pitcher-specific positive evidence required, currently pWAR >= 0.5. Final persistence and downstream automation remain blocked. |
+| Team MVP | Active persisted v1 | `DesignationEvent` only | Ranked/selective current MLB position-player active designation. Trusted scoped numeric WAR evidence required. Season-end locking, awards, salary, morale automation, relationships, and Mode 3 effects remain blocked. |
+| Ace | Active persisted v1 | `DesignationEvent` only | Ranked/selective pitcher active designation. Trusted scoped pitcher WAR evidence required, currently pWAR >= 0.5. Season-end locking and downstream automation remain blocked. |
 | TWO-WAY players | Pitcher-only routing for v1 | ACE only | A `TWO-WAY` value/position identity is treated as pitcher identity for internal v1. It is blocked from Team MVP and may only appear as Ace when pitcher evidence qualifies. Stricter two-way MVP criteria are deferred. |
 | Fan Favorite | Blocked | Explicit trusted bridge input only, not app eligibility | Requires trusted True Value/value-delta, durable designation state, and fan attachment policy. Preview readiness is inspection context only. |
 | Albatross | Blocked | Explicit trusted bridge input only, not app eligibility | Requires trusted True Value/value-delta plus salary/value policy. Preview readiness is inspection context only. |
@@ -32,7 +33,7 @@ Internal v1 currently treats dynamic designations as read-only preview context, 
 | Captain | Blocked | None | Requires hidden charisma/leadership safety approval plus relationship/morale amplification rules. |
 | Fan Hopeful | Blocked in eligibility | Explicit prospect-safe bridge input only | Requires a visible-safe prospect source. Unrevealed FARM true ratings, true grade, hidden scout truth, and hidden personality modifiers remain blocked. |
 
-No designation record is persistable in current internal v1 conditions.
+Only TEAM_MVP and ACE records are persistable in current internal v1 conditions. Fan Favorite, Albatross, Cornerstone, Captain, and Fan Hopeful remain blocked/deferred.
 
 ## Franchise Internal v1 Readiness Checkpoint (June 2026)
 

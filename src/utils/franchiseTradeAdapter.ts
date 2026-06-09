@@ -31,6 +31,7 @@ import {
   OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
 } from './optimalLineup';
 import { updateFranchiseDesignationTeamForTrade } from './franchiseDesignations';
+import type { FranchisePlayerDesignationRecord } from './franchiseDesignations';
 
 export const FRANCHISE_TRADE_CALCULATION_VERSION = 'franchise-trades-v1-fit-preview-dry-run';
 
@@ -77,6 +78,7 @@ export interface FranchiseTradePlayerPreview {
   visibleGradeLabel: string;
   hiddenGradeBlocked?: boolean;
   salary?: number;
+  activeDesignations?: Array<'TEAM_MVP' | 'ACE'>;
 }
 
 export interface FranchiseTradeTeamFitReport {
@@ -325,6 +327,14 @@ function buildNeedSurplus(players: Player[]): { needs: FranchiseTradeNeedSurplus
 
 function buildPlayerPreview(player: Player, teamId: string): FranchiseTradePlayerPreview {
   const hiddenGradeBlocked = isHiddenFarmTradePlayer(player, teamId);
+  const activeDesignations = ((player as Player & { franchiseDesignations?: FranchisePlayerDesignationRecord[] }).franchiseDesignations ?? [])
+    .filter((designation) =>
+      !hiddenGradeBlocked &&
+      designation.status === 'active' &&
+      designation.teamId === teamId &&
+      (designation.type === 'TEAM_MVP' || designation.type === 'ACE'),
+    )
+    .map((designation) => designation.type as 'TEAM_MVP' | 'ACE');
   return {
     playerId: player.id,
     playerName: playerName(player),
@@ -335,6 +345,7 @@ function buildPlayerPreview(player: Player, teamId: string): FranchiseTradePlaye
     visibleGradeLabel: visibleGradeLabelForPlayer(player, teamId),
     hiddenGradeBlocked: hiddenGradeBlocked || undefined,
     salary: typeof player.salary === 'number' ? player.salary : undefined,
+    activeDesignations: activeDesignations.length > 0 ? activeDesignations : undefined,
   };
 }
 

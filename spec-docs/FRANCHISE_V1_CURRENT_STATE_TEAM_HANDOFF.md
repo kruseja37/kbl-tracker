@@ -104,7 +104,7 @@ The revised playable v1 goal is not full Franchise simulation. It is a user-play
 5. Let the user launch a scheduled Franchise game into GameTracker when true roster/lineup readiness is satisfied.
 6. Complete/archive a GameTracker game with franchise/season/schedule/team/player identity preserved.
 7. Surface completed-game evidence in Team Hub, Game Detail, Player Card, and Almanac without fabricating evidence from score-only rows.
-8. Support roster inspection, FARM visibility, call-up/send-down/trade continuity, salaries, morale, designation previews, stadium evidence, WPA/fame evidence, save export/delete, and iPad-readable use.
+8. Support roster inspection, FARM visibility, call-up/send-down/trade continuity, salaries, morale, active MVP/Ace designations, blocked/deferred designation families, stadium evidence, WPA/fame evidence, save export/delete, and iPad-readable use.
 9. Keep all preview-only, read-only, confirmation-gated, or blocked systems honest.
 10. Ask the user for explicit approval before declaring Mode 1/2 playable v1 complete.
 
@@ -119,7 +119,7 @@ Do not implement or promote any of the following without explicit user approval:
 - Generated regular-season schedules.
 - Final True Value.
 - Salary movement, luxury tax, salary lifecycle automation, or salary-matching logic.
-- Final dynamic designation persistence, season-end designation locking, or carryover.
+- Final dynamic designation persistence beyond active MVP/Ace, season-end designation locking, or carryover.
 - Final awards persistence or awards automation.
 - Automatic morale mutation outside explicit confirmation flows.
 - Relationship mutation or durable relationship state.
@@ -173,7 +173,7 @@ Commit hygiene:
 | FARM/scouting hidden safety | Hidden FARM salary now uses draft/scouting-safe context, not true ratings. Hidden grades/truth blocked in Team Hub/trade/profile surfaces. | Full scouting UX remains incomplete. | Likely v1-safe for hidden truth after smoke. |
 | Trades and roster movement | Manual call-up/send-down/trade continuity hardened. Hidden prospect data protected in picker/preview. GameTracker roster uses current MLB assignments. | Full trade UX, AI trades, salary matching, transaction drilldowns deferred. | Manual-only movement acceptable for v1 unless user wants fuller trade UX. |
 | Salary/finance/True Value | Salary baseline/team payroll visibility exists. True Value and Expected Wins are preview-only/read-only. Contract-years proof is separated from stable salary baseline proof. | No final salary movement. UI is wordy. FARM hidden salary patched but needs user smoke. | Keep preview-only for v1. |
-| Dynamic designations | TEAM_MVP and ACE are active preview-only. Ranked/selective. TWO-WAY routes pitcher-only through ACE for internal v1. Other designation families blocked/deferred. | Future stricter TWO-WAY MVP criteria deferred. Final designation persistence/carryover deferred. | Accept preview-only MVP/Ace for v1. |
+| Dynamic designations | TEAM_MVP and ACE are active persisted v1 designations after the trusted scoped WAR gate. Ranked/selective. TWO-WAY routes pitcher-only through ACE for internal v1. Other designation families blocked/deferred. | Future stricter TWO-WAY MVP criteria, season-end locking/carryover, morale/story consumers, and non-MVP/Ace families remain deferred. | Accept active persisted MVP/Ace for v1 and keep other designation families blocked. |
 | Morale/random events | Durable random-event log exists with confirmation/dismissal and safe-effect application. Team-fan score-only prompts require confirmation. Player morale starts neutral 50. | No morale automation, drift/recovery, relationship effects, or full formula system. UI is wordy. | Keep confirmation-gated for v1. |
 | Stadium identity/park factors | Source-of-truth and archive trust tightened. SMB4 seed factors trusted only when verified. Custom/adaptive factors blocked/preview-only. | Custom stadium factor entry and adaptive persistence deferred. | Accept seed/static read-only foundation for v1. |
 | Stadium spray evidence | Backend path now persists completed-game spray evidence into archives and maps event-log/archive rows into stadium foundation. Latest screenshot showed Team Hub chart with points, but design was not adequate. | Team Hub stadium spray chart is provisional functional visualization, not final design. Heat map/advanced analytics/records UI not done. Older archives may have zero rows. | Decide whether provisional visualization is acceptable for internal playable v1 or must be redesigned before approval. |
@@ -373,15 +373,16 @@ Known nuance:
 
 ## Dynamic Designation Current State
 
-Active app-facing v1 designation previews:
+Active persisted v1 designations:
 
 - `TEAM_MVP`
 - `ACE`
 
 Policy:
 
-- Preview-only.
-- Non-persistable.
+- Active persisted v1 franchise-player designation records after the trusted scoped WAR gate.
+- Not season-end locked and not carried over yet.
+- Emits designation events only when newly earned or meaningfully changed.
 - Ranked/selective.
 - TEAM_MVP requires positive WAR evidence and blocks pitcher identities.
 - ACE requires pitcher pWAR `>= 0.5`.
@@ -637,7 +638,7 @@ Expected approach:
 
 ## Final Current-State Summary
 
-The repo is no longer in early foundation mode. Most core Mode 1/2 data contracts have been hardened: launch, schedule boundaries, GameTracker archive, Almanac continuity, hidden FARM safety, profile integrity, salary baselines, designation previews, random-event confirmation, stadium source/trust, spray persistence, and save-slot export/delete all have meaningful coverage.
+The repo is no longer in early foundation mode. Most core Mode 1/2 data contracts have been hardened: launch, schedule boundaries, GameTracker archive, Almanac continuity, hidden FARM safety, profile integrity, salary baselines, active persisted TEAM_MVP/ACE designations, still-preview/deferred designation and value systems, random-event confirmation, stadium source/trust, spray persistence, and save-slot export/delete all have meaningful coverage.
 
 The revised v1 is not approved because the team still needs a final real-app smoke pass and at least one explicit roadmap decision around Product UX Cleanup. The remaining work is now less about discovering whether the foundation exists and more about deciding the acceptance threshold:
 

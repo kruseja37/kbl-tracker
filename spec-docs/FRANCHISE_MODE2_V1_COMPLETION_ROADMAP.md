@@ -26,8 +26,9 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Canonical fan/player morale snapshots exist on the 0-99 scale, with player morale starting at neutral `50`.
 - Team Hub exposes fan/player morale history and manual scoped morale controls while keeping profiles, salary, relationships, stories, and Mode 3 separate.
 - Fan morale prompt formulas currently cover confirmed game results, streaks, 7+ run blowouts, archive-backed no-hitter/perfect-game fame events, and performance-gap team fan morale prompts from durable expected-wins baseline evidence.
-- Dynamic designation morale bridge exists for safe confirmation-gated prompt candidates, and Team Hub surfaces preview-only TEAM_MVP/ACE recognition candidates through the random-event workflow.
-- Dynamic designation policy matrix is explicit: TEAM_MVP/ACE are the only app-facing active preview-only designations, TWO-WAY routes as pitcher-only through ACE for internal v1, and Fan Favorite/Albatross/Cornerstone/Captain/Fan Hopeful remain blocked or explicit trusted-bridge-only context.
+- Dynamic designation morale bridge remains available for explicit trusted bridge inputs, but TEAM_MVP/ACE no longer use duplicate preview random-event recognition prompts.
+- Dynamic designation policy matrix is explicit: TEAM_MVP/ACE are the only app-facing active persisted v1 designations, TWO-WAY routes as pitcher-only through ACE for internal v1, and Fan Favorite/Albatross/Cornerstone/Captain/Fan Hopeful remain blocked or explicit trusted-bridge-only context.
+- TEAM_MVP/ACE changes emit typed `DesignationEvent` objects for later morale/story consumers; morale mutation is not wired.
 - Fan Favorite/Albatross readiness can be inspected from preview True Value/value-delta rows, but final designation behavior, random-event morale prompts, salary movement, relationships, and Mode 3 remain blocked.
 - Numeric WAR has a narrow trusted consumer contract only for TEAM_MVP/ACE designation input gating when scoped completed archive evidence, scoped season stats, current MLB/team context, and stored season metadata are present.
 - Position-relative True Value preview, value delta, and expected-wins preview remain read-only and untrusted for final designations, salary movement, morale automation, awards, and Mode 3.
@@ -44,7 +45,7 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Mode 1/2 Core Launch And Persistence Smoke Hardening is committed.
 - Franchise Data Generation Policy Cleanup is committed: generated Franchise prospects/scouts no longer use DH identities, SMB4 name sources are used where present, and salary/payroll baselines are covered for generated data.
 - Team Hub Roster Usability is committed with sortable salary, morale, stat/value, and designation summary columns.
-- Dynamic Designation Correctness is committed for bounded TEAM_MVP/ACE preview ranking and prompt volume.
+- Dynamic Designation Correctness is committed for bounded TEAM_MVP/ACE active ranking and no duplicate preview prompt volume.
 - Finance/Analysis Visibility is committed with salary baseline/team payroll visibility and preview-only True Value/Expected Wins framing.
 - Stadium And League Builder Source-Of-Truth Pass is committed with compact stadium source/status copy and spray evidence wording.
 - Mode 1/2 Visual Smoke And UI Density Pass is committed with denser Team Hub/League Builder copy, readable roster table adjustments, GameTracker full-name wrapping, and a starting-pitcher nested-control fix.
@@ -56,7 +57,7 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Schedule Editing And Import Workflow Hardening is committed with current manual/CSV non-generated schedule boundaries.
 - Trade And FARM Hidden-Safety And Movement Continuity is committed for v1-safe call-up/send-down/trade continuity, hidden prospect boundaries, transaction visibility, and future GameTracker availability.
 - Park Factor Archive Trust Tightening is committed so archive `game.parkFactors` are trusted only when verified as SMB4 seed inputs.
-- Dynamic Designation Policy Matrix And Two-Way Boundary is committed: TEAM_MVP/ACE are active preview-only, TWO-WAY routes pitcher-only through ACE for internal v1, and older full-system designation lock/carryover language remains subordinate to the v1 matrix.
+- Dynamic Designation Policy Matrix And Two-Way Boundary is committed: TEAM_MVP/ACE are active persisted v1 designations, TWO-WAY routes pitcher-only through ACE for internal v1, and older full-system designation lock/carryover language remains subordinate to the v1 matrix.
 - Manual Final-Score Workflow UX Polish And Confirmation-Gated Wording is complete: score-only rows are visually distinct, lack Game Detail/archive affordances, and compactly state schedule/standings-only plus confirmation-gated team-fan morale boundaries.
 - 2026-06-05 manual smoke findings are captured. Hidden FARM prospect salary/reveal safety is hardened so hidden salaries use draft/scouting-safe context and sent-down revealed players stay revealed.
 - Player profile position/pitching integrity is hardened: primary/secondary position display is separated, non-pitcher pitching ratings/arsenal are hidden unless a pitching model exists, and hidden FARM profiles remain hidden-safe.

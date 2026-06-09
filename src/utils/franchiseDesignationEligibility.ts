@@ -16,17 +16,17 @@ export type FranchiseDesignationEligibilityType =
   | 'FAN_HOPEFUL'
   | 'CORNERSTONE';
 
-export type FranchiseDesignationEligibilityStatus = 'eligible' | 'preview-only' | 'blocked';
+export type FranchiseDesignationEligibilityStatus = 'eligible' | 'preview-only' | 'active' | 'blocked';
 
 export type FranchiseDesignationV1PolicyStatus =
-  | 'active-preview-only'
+  | 'active'
   | 'blocked'
   | 'deferred';
 
 export interface FranchiseDesignationV1Policy {
   designationType: FranchiseDesignationEligibilityType;
   status: FranchiseDesignationV1PolicyStatus;
-  persistable: false;
+  persistable: boolean;
   promptAuthority: 'eligibility-context-adapter' | 'explicit-trusted-bridge-input-only' | 'none';
   summary: string;
   blockers: string[];
@@ -44,7 +44,7 @@ export interface FranchiseDesignationEligibilityRecord {
   rosterStatus: string | null;
   designationType: FranchiseDesignationEligibilityType;
   status: FranchiseDesignationEligibilityStatus;
-  persistable: false;
+  persistable: boolean;
   reasons: string[];
   limitations: string[];
   sourceInputs: {
@@ -53,6 +53,8 @@ export interface FranchiseDesignationEligibilityRecord {
     seasonStatsAvailable: boolean;
     warPreviewInputAvailable: boolean;
     pitchingWarPreviewInputAvailable: boolean;
+    totalWar: number | null;
+    pitchingWar: number | null;
     teamMvpWarTrusted: boolean;
     aceWarTrusted: boolean;
     wpaAvailable: boolean;
@@ -76,7 +78,7 @@ export interface FranchiseDesignationEligibilityReport {
   valueInputContractVersion: string;
   generatedAt: number;
   records: FranchiseDesignationEligibilityRecord[];
-  anyPersistable: false;
+  anyPersistable: boolean;
   limitations: string[];
 }
 
@@ -103,23 +105,23 @@ export const FRANCHISE_PITCHER_DESIGNATION_POSITIONS = new Set(['P', 'SP', 'RP',
 export const FRANCHISE_DESIGNATION_V1_POLICY_MATRIX: readonly FranchiseDesignationV1Policy[] = [
   {
     designationType: 'TEAM_MVP',
-    status: 'active-preview-only',
-    persistable: false,
-    promptAuthority: 'eligibility-context-adapter',
-    summary: 'Ranked/selective preview for current MLB position players with positive visible WAR-like performance evidence.',
+    status: 'active',
+    persistable: true,
+    promptAuthority: 'none',
+    summary: 'Ranked/selective active v1 designation for current MLB position players with positive trusted scoped WAR evidence.',
     blockers: [
-      'Final designation persistence is blocked.',
+      'Season-end locking/carryover remains blocked.',
       'Pitcher identities, including TWO-WAY in internal v1, route through ACE instead of TEAM_MVP.',
     ],
   },
   {
     designationType: 'ACE',
-    status: 'active-preview-only',
-    persistable: false,
-    promptAuthority: 'eligibility-context-adapter',
-    summary: 'Ranked/selective preview for current MLB pitcher identities with pWAR >= 0.5.',
+    status: 'active',
+    persistable: true,
+    promptAuthority: 'none',
+    summary: 'Ranked/selective active v1 designation for current MLB pitcher identities with trusted pWAR >= 0.5.',
     blockers: [
-      'Final designation persistence is blocked.',
+      'Season-end locking/carryover remains blocked.',
       'ACE does not create salary, morale, relationship, award, or Mode 3 effects automatically.',
     ],
   },
@@ -207,17 +209,17 @@ function rankingBlockers(row: FranchiseValueInputRow, designationType: RankedDes
   const reasons: string[] = [];
   const score = rankedScore(row, designationType);
   if (score === null) {
-    reasons.push(`${designationType} preview requires a numeric WAR preview value, not only input readiness.`);
+      reasons.push(`${designationType} active designation requires a numeric WAR value from scoped season stats, not only input readiness.`);
   } else if (designationType === 'ACE' && score < 0.5) {
-    reasons.push('ACE preview requires pitcher-specific positive pWAR of at least 0.5.');
+    reasons.push('ACE active designation requires pitcher-specific positive pWAR of at least 0.5.');
   } else if (designationType === 'TEAM_MVP' && score <= 0) {
-    reasons.push('TEAM_MVP preview requires positive season/team-relative WAR evidence.');
+    reasons.push('TEAM_MVP active designation requires positive season/team-relative WAR evidence.');
   }
   if (designationType === 'TEAM_MVP' && isPitcherPosition(row.valuePosition)) {
     if (String(row.valuePosition ?? '').trim().toUpperCase() === 'TWO-WAY') {
-      reasons.push('TWO-WAY players are routed as pitcher-only for internal v1 designation previews; stricter two-way TEAM_MVP criteria are deferred.');
+      reasons.push('TWO-WAY players are routed as pitcher-only for internal v1 active designations; stricter two-way TEAM_MVP criteria are deferred.');
     } else {
-      reasons.push('TEAM_MVP preview is limited to position-player candidates in internal v1; pitcher recognition uses ACE.');
+      reasons.push('TEAM_MVP active designation is limited to position-player candidates in internal v1; pitcher recognition uses ACE.');
     }
   }
   return reasons;
@@ -264,6 +266,8 @@ function sourceInputs(row: FranchiseValueInputRow): FranchiseDesignationEligibil
     seasonStatsAvailable: row.seasonStatsAvailability.any,
     warPreviewInputAvailable: row.warInputAvailability.any,
     pitchingWarPreviewInputAvailable: row.warInputAvailability.pitchingWar,
+    totalWar: row.warPreviewValues.totalWar,
+    pitchingWar: row.warPreviewValues.pitchingWar,
     teamMvpWarTrusted: row.warConsumerTrust?.teamMvpDesignations === true,
     aceWarTrusted: row.warConsumerTrust?.aceDesignations === true,
     wpaAvailable: row.wpaInputAvailability.archiveBacked,
@@ -296,22 +300,22 @@ function stableWarPreviewBlockers(row: FranchiseValueInputRow, type: 'TEAM_MVP' 
   const reasons = [...mlbBlockers(row)];
   const consumerTrust = row.warConsumerTrust;
   if (!hasSeasonMetadata(row)) {
-    reasons.push('Stored season length and innings metadata are missing, so WAR-like inputs are not stable enough for preview.');
+    reasons.push('Stored season length and innings metadata are missing, so WAR-like inputs are not stable enough for active designation promotion.');
   }
   if (!row.seasonStatsAvailability.any) {
-    reasons.push('Franchise season stat rows are required for a designation preview.');
+    reasons.push('Franchise season stat rows are required for active designation promotion.');
   }
   if (type === 'TEAM_MVP' && !row.warInputAvailability.any) {
-    reasons.push('TEAM_MVP preview requires WAR-like season inputs.');
+    reasons.push('TEAM_MVP active designation requires WAR-like season inputs.');
   }
   if (type === 'ACE' && !row.warInputAvailability.pitchingWar) {
-    reasons.push('ACE preview requires pitching WAR-like season inputs.');
+    reasons.push('ACE active designation requires pitching WAR-like season inputs.');
   }
   if (type === 'TEAM_MVP' && consumerTrust?.teamMvpDesignations !== true) {
-    reasons.push('TEAM_MVP preview requires the explicit scoped WAR consumer-trust gate for designation inputs.');
+    reasons.push('TEAM_MVP active designation requires the explicit scoped WAR consumer-trust gate for designation inputs.');
   }
   if (type === 'ACE' && consumerTrust?.aceDesignations !== true) {
-    reasons.push('ACE preview requires the explicit scoped pitching-WAR consumer-trust gate for designation inputs.');
+    reasons.push('ACE active designation requires the explicit scoped pitching-WAR consumer-trust gate for designation inputs.');
   }
   if (!consumerTrust) {
     reasons.push('Explicit WAR consumer trust contract is missing from the value input row.');
@@ -339,16 +343,16 @@ function classifyTeamMvpOrAce(
     return {
       status: 'blocked',
       reasons: [
-        `${designationType} preview is ranked/selective; this input-ready player is not the top plausible team candidate.`,
+      `${designationType} active designation is ranked/selective; this input-ready player is not the top trusted team candidate.`,
       ],
     };
   }
 
   return {
-    status: 'preview-only',
+    status: 'active',
     reasons: [
-      `${designationType} ranked preview candidate has positive team-relative performance evidence and scoped WAR consumer trust.`,
-      'Final designation persistence is blocked until trusted final value/designation inputs exist.',
+      `${designationType} ranked active v1 designation has positive team-relative performance evidence and scoped WAR consumer trust.`,
+      'Season-end locking/carryover, awards, morale mutation, relationships, salary movement, and Mode 3 remain blocked.',
     ],
   };
 }
@@ -422,7 +426,7 @@ function recordFor(
     rosterStatus: row.rosterStatus,
     designationType,
     status: classification.status,
-    persistable: false,
+    persistable: classification.status === 'active' && (designationType === 'TEAM_MVP' || designationType === 'ACE'),
     reasons: unique(classification.reasons),
     limitations: commonLimitations(row),
     sourceInputs: sourceInputs(row),
@@ -449,13 +453,13 @@ export function classifyFranchiseDesignationEligibility(
     valueInputContractVersion: valueInputReport.contractVersion,
     generatedAt: Date.now(),
     records,
-    anyPersistable: false,
+    anyPersistable: records.some((record) => record.persistable),
     limitations: unique([
       ...valueInputReport.limitations,
       ...records.flatMap((record) => record.limitations),
-      'No dynamic designation is persistable in internal v1 conditions.',
-      'Internal v1 active preview-only designations are TEAM_MVP and ACE only; Fan Favorite, Albatross, Cornerstone, Captain, and Fan Hopeful remain blocked/deferred by policy matrix.',
-      'TWO-WAY players are routed as pitcher-only for internal v1 designation previews and can only appear through ACE when pitcher evidence qualifies.',
+      'Only TEAM_MVP and ACE can persist as active v1 designations from trusted scoped WAR input gates.',
+      'Fan Favorite, Albatross, Cornerstone, Captain, and Fan Hopeful remain blocked/deferred by policy matrix.',
+      'TWO-WAY players are routed as pitcher-only for internal v1 designations and can only appear through ACE when pitcher evidence qualifies.',
     ]),
   };
 }

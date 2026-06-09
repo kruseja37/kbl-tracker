@@ -18,6 +18,8 @@ function sourceInputs(): FranchiseDesignationEligibilityRecord['sourceInputs'] {
     seasonStatsAvailable: true,
     warPreviewInputAvailable: true,
     pitchingWarPreviewInputAvailable: true,
+    totalWar: 1.2,
+    pitchingWar: 0.8,
     teamMvpWarTrusted: true,
     aceWarTrusted: true,
     wpaAvailable: false,
@@ -162,13 +164,15 @@ describe('franchise designation morale context adapter', () => {
     expect(output.blocked.find((blocked) => blocked.designationType === 'FAN_HOPEFUL')?.reasons.join(' ')).toMatch(/visible-safe prospect assignment/i);
   });
 
-  test('does not treat blocked or eligible records as bridge-ready durable designation state', () => {
+  test('does not treat blocked eligible or active records as bridge-ready durable designation state', () => {
     const output = buildFranchiseDesignationMoraleContextAdapterReport(report([
       record({ designationType: 'TEAM_MVP', status: 'blocked' }),
       record({ designationType: 'ACE', status: 'eligible' }),
+      record({ designationType: 'TEAM_MVP', status: 'active', persistable: true }),
     ]));
 
     expect(output.contexts).toHaveLength(0);
+    expect(output.blocked.map((blocked) => blocked.playerId)).toEqual(['player-1', 'player-1', 'player-1']);
     expect(output.blocked.every((blocked) =>
       blocked.reasons.some((reason) => reason.includes('Only preview-only TEAM_MVP/ACE')),
     )).toBe(true);

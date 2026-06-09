@@ -7,6 +7,7 @@ import type {
   RosterStatus,
 } from './leagueBuilderStorage';
 import type { FranchiseFarmRecord } from './franchiseFarmStorage';
+import type { FranchisePlayerDesignationRecord } from './franchiseDesignations';
 import { getVisibleSafeFranchisePlayerSalary } from './franchiseSalary';
 import {
   calculateFranchisePlayerRatingModelGrade,
@@ -117,6 +118,12 @@ export interface FranchisePlayerProfileViewModel {
   };
   prospectReport: FranchisePlayerProfileProspectReport;
   fullDetails: FranchisePlayerProfileFullDetails | null;
+  activeDesignations: Array<{
+    type: FranchisePlayerDesignationRecord['type'];
+    status: FranchisePlayerDesignationRecord['status'];
+    teamId: string;
+    calculatedAt: string;
+  }>;
   editHistory: FranchisePlayerProfileEditHistoryEntry[];
   suppressedHiddenFieldLabels: string[];
   limitations: string[];
@@ -263,6 +270,27 @@ function buildProfileEditHistory(
     }));
 }
 
+function buildActiveDesignations(
+  player: Player,
+  teamId: string | undefined,
+  hiddenSafe: boolean,
+): FranchisePlayerProfileViewModel['activeDesignations'] {
+  if (hiddenSafe) return [];
+  const carrier = player as Player & { franchiseDesignations?: FranchisePlayerDesignationRecord[] };
+  return (carrier.franchiseDesignations ?? [])
+    .filter((designation) =>
+      designation.status === 'active' &&
+      (designation.type === 'TEAM_MVP' || designation.type === 'ACE') &&
+      (!teamId || designation.teamId === teamId),
+    )
+    .map((designation) => ({
+      type: designation.type,
+      status: designation.status,
+      teamId: designation.teamId,
+      calculatedAt: designation.calculatedAt,
+    }));
+}
+
 export function buildFranchisePlayerProfileViewModel({
   player,
   farmRecord,
@@ -275,10 +303,11 @@ export function buildFranchisePlayerProfileViewModel({
   const revealState = resolveRevealState(player, rosterStatus, farmRecord);
   const hiddenSafe = rosterStatus === 'FARM' && revealState !== 'revealed';
   const prospectProfile = carrier.prospectProfile ?? {};
+  const resolvedTeamId = assignment?.teamId ?? teamId;
 
   return {
     playerId: player.id,
-    teamId: assignment?.teamId ?? teamId,
+    teamId: resolvedTeamId,
     leagueId: assignment?.leagueId ?? leagueId,
     rosterStatus,
     revealState,
@@ -317,6 +346,7 @@ export function buildFranchisePlayerProfileViewModel({
       draftPick: prospectProfile.draftPick,
     },
     fullDetails: hiddenSafe ? null : buildFullDetails(player),
+    activeDesignations: buildActiveDesignations(player, resolvedTeamId, hiddenSafe),
     editHistory: buildProfileEditHistory(player.editHistory, hiddenSafe),
     suppressedHiddenFieldLabels: hiddenSafe ? collectHiddenSuppressionLabels(carrier) : [],
     limitations: hiddenSafe

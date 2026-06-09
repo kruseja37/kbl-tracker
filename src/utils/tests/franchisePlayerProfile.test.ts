@@ -98,6 +98,7 @@ describe('franchise player profile view model', () => {
     expect(JSON.stringify(profile.fullDetails)).not.toContain('arsenal');
     expect(profile.salary).toBe(3_000_000);
     expect(profile.contractYears).toBe(2);
+    expect(profile.activeDesignations).toEqual([]);
     expect(profile.editHistory).toEqual([]);
     expect(profile.suppressedHiddenFieldLabels).toHaveLength(0);
   });
@@ -179,6 +180,70 @@ describe('franchise player profile view model', () => {
     expect(serialized).not.toContain('hiddenScoutTruth');
     expect(serialized).not.toContain('hiddenPersonalityModifiers');
     expect(profile.limitations.join(' ')).toContain('true ratings');
+    expect(profile.activeDesignations).toEqual([]);
+  });
+
+  test('revealed current player exposes active TEAM_MVP and ACE designation context', () => {
+    const profile = buildFranchisePlayerProfileViewModel({
+      player: makePlayer({
+        franchiseDesignations: [
+          {
+            franchiseId: 'franchise-1',
+            seasonId: 'season-1',
+            statsScopeId: 'season-1',
+            seasonNumber: 1,
+            teamId: 'team-1',
+            playerId: 'player-1',
+            playerName: 'Profile Player',
+            type: 'TEAM_MVP',
+            status: 'active',
+            sourceInputs: { totalWAR: 1.8 },
+            calculationVersion: 'franchise-designations-v1-active-team-mvp-ace',
+            calculatedAt: '2026-06-01T00:00:00.000Z',
+          },
+          {
+            franchiseId: 'franchise-1',
+            seasonId: 'season-1',
+            statsScopeId: 'season-1',
+            seasonNumber: 1,
+            teamId: 'team-2',
+            playerId: 'player-1',
+            playerName: 'Profile Player',
+            type: 'ACE',
+            status: 'active',
+            sourceInputs: { pWAR: 1.2 },
+            calculationVersion: 'franchise-designations-v1-active-team-mvp-ace',
+            calculatedAt: '2026-06-02T00:00:00.000Z',
+          },
+          {
+            franchiseId: 'franchise-1',
+            seasonId: 'season-1',
+            statsScopeId: 'season-1',
+            seasonNumber: 1,
+            teamId: 'team-1',
+            playerId: 'player-1',
+            playerName: 'Profile Player',
+            type: 'FAN_FAVORITE',
+            status: 'projected',
+            sourceInputs: { valueDelta: 2 },
+            calculationVersion: 'legacy-test',
+            calculatedAt: '2026-06-03T00:00:00.000Z',
+          },
+        ],
+      }),
+      teamId: 'team-1',
+      leagueId: 'league-1',
+    });
+
+    expect(profile.hiddenSafe).toBe(false);
+    expect(profile.activeDesignations).toEqual([
+      {
+        type: 'TEAM_MVP',
+        status: 'active',
+        teamId: 'team-1',
+        calculatedAt: '2026-06-01T00:00:00.000Z',
+      },
+    ]);
   });
 
   test('hidden FARM profile edit history omits rating and hidden truth entries', () => {

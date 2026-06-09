@@ -104,7 +104,7 @@ Key files: `franchiseValueInputs.ts`, `franchiseAnalyticsTrust.ts`, `franchiseTr
 
 ### 1.3 — Dynamic Designations Fully Promoted
 
-**Status:** TEAM_MVP and ACE exist as preview-only confirmation-gated candidates. Fan Favorite, Albatross, Cornerstone, Fan Hopeful are blocked. Captain is blocked pending hidden-charisma policy. TWO-WAY routes pitcher-only through ACE.
+**Status:** TEAM_MVP and ACE are active persisted v1 designations when the scoped WAR consumer-trust gate passes. `DesignationEvent` objects are emitted for later consumers, but morale mutation is not wired. Fan Favorite, Albatross, Cornerstone, Fan Hopeful are blocked. Captain is blocked pending hidden-charisma policy. TWO-WAY routes pitcher-only through ACE.
 
 **What's needed:**
 - Consume the 1.2.5 WAR trust contract for TEAM_MVP/ACE only.

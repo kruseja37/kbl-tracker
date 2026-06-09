@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import type { Player } from '../franchisePlayerStorage';
 import {
-  FRANCHISE_ALBATROSS_TRADE_VALUE_MULTIPLIER,
   applyFranchiseDesignationsToPlayers,
   calculateFranchiseDesignations,
   updateFranchiseDesignationTeamForTrade,
+  type FranchisePlayerDesignationRecord,
   type FranchiseDesignationPlayerInput,
 } from '../franchiseDesignations';
 
@@ -68,7 +68,7 @@ function storagePlayer(id: string, teamId: string): Player {
 }
 
 describe('franchise dynamic designations', () => {
-  test('derives stable projected MVP, Ace, Fan Favorite, and Albatross records by playerId', () => {
+  test('derives stable projected MVP and Ace records by playerId while value designations stay blocked', () => {
     const designations = calculateFranchiseDesignations([
       player({ playerId: 'mvp', playerName: 'Most Value', totalWAR: 3.2, trueValue: 8, salary: 6 }),
       player({ playerId: 'ace', playerName: 'Ace Pitcher', position: 'SP', pWAR: 1.1, totalWAR: 1.5 }),
@@ -80,14 +80,11 @@ describe('franchise dynamic designations', () => {
       expect.arrayContaining([
         ['TEAM_MVP', 'mvp'],
         ['ACE', 'ace'],
-        ['FAN_FAVORITE', 'fan'],
-        ['ALBATROSS', 'alb'],
       ]),
     );
+    expect(designations.map((designation) => designation.type)).not.toContain('FAN_FAVORITE');
+    expect(designations.map((designation) => designation.type)).not.toContain('ALBATROSS');
     expect(designations.every((designation) => designation.status === 'projected')).toBe(true);
-    expect(
-      designations.find((designation) => designation.type === 'ALBATROSS')?.sourceInputs.tradeValueMultiplier,
-    ).toBe(FRANCHISE_ALBATROSS_TRADE_VALUE_MULTIPLIER);
   });
 
   test('does not invent narrative-only Captain or Fan Hopeful designations', () => {
@@ -101,11 +98,22 @@ describe('franchise dynamic designations', () => {
 
   test('stores records on franchise player copies and keeps them with playerId through a trade remap', () => {
     const basePlayer = storagePlayer('fan', 'team-a');
+    const fanFavorite: FranchisePlayerDesignationRecord = {
+      franchiseId: context.franchiseId,
+      seasonId: context.seasonId,
+      seasonNumber: context.seasonNumber,
+      teamId: 'team-a',
+      playerId: 'fan',
+      playerName: 'Fan Bargain',
+      type: 'FAN_FAVORITE',
+      status: 'projected',
+      sourceInputs: { valueDelta: 5 },
+      calculationVersion: 'test-existing-record',
+      calculatedAt: context.calculatedAt,
+    };
     const [withDesignation] = applyFranchiseDesignationsToPlayers(
       [basePlayer],
-      calculateFranchiseDesignations([
-        player({ playerId: 'fan', playerName: 'Fan Bargain', teamId: 'team-a', trueValue: 12, salary: 2 }),
-      ], context),
+      [fanFavorite],
     );
 
     const traded = updateFranchiseDesignationTeamForTrade(withDesignation, 'team-a', 'team-b') as Player & {

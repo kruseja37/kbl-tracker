@@ -114,7 +114,7 @@ function blockedReasonsForRecord(
     }
   }
   if (record.status !== 'preview-only') {
-    reasons.push('Only preview-only TEAM_MVP/ACE eligibility records can become morale bridge contexts in this adapter.');
+    reasons.push('Only preview-only TEAM_MVP/ACE eligibility records can become morale bridge contexts in this adapter; active designations emit DesignationEvent records instead.');
   }
   if (record.rosterStatus !== 'MLB') {
     reasons.push(`Current revealed MLB roster status is required; found ${record.rosterStatus ?? 'unassigned/free-agent'}.`);
@@ -189,6 +189,7 @@ export function buildFranchiseDesignationMoraleContextAdapterReport(
       ...eligibilityReport.limitations,
       'Adapter emits only read-only bridge contexts; it does not create random-event records or apply morale.',
       'Only preview-only TEAM_MVP/ACE records for current MLB players are converted.',
+      'Active TEAM_MVP/ACE designations are not converted here to avoid duplicate recognition prompts.',
       'Fan Favorite, Albatross, Cornerstone, Captain, and Fan Hopeful remain blocked until their upstream trust sources exist.',
       'Hidden FARM/prospect truth is not accepted or exposed by this adapter.',
     ]),
