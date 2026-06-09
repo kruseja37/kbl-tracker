@@ -32,6 +32,7 @@ import {
 } from './optimalLineup';
 import { updateFranchiseDesignationTeamForTrade } from './franchiseDesignations';
 import type { FranchisePlayerDesignationRecord } from './franchiseDesignations';
+import { V1_MLB_PLAYERS_PER_TEAM } from './leagueBuilderFarmScoutingHandoff';
 
 export const FRANCHISE_TRADE_CALCULATION_VERSION = 'franchise-trades-v1-fit-preview-dry-run';
 
@@ -246,12 +247,30 @@ function visibleScoutedGrade(player: Player): string | undefined {
   return undefined;
 }
 
-function isHiddenFarmTradePlayer(player: Player, teamId: string): boolean {
-  return rosterStatusForPlayer(player, teamId) === 'FARM' && playerRevealState(player) !== 'revealed';
+function isRevealedFarmTradePlayer(
+  player: Player,
+  teamId: string,
+  farmRecords: FranchiseFarmRecord[] = [],
+): boolean {
+  if (rosterStatusForPlayer(player, teamId) !== 'FARM') return false;
+  const revealState = playerRevealState(player);
+  if (revealState === 'hidden') return false;
+  if (revealState === 'revealed') return true;
+  const record = farmRecordForPlayer(farmRecords, teamId, player.id);
+  return record?.ratingRevealState === 'revealed';
 }
 
-function visibleGradeLabelForPlayer(player: Player, teamId: string): string {
-  if (isHiddenFarmTradePlayer(player, teamId)) {
+function isHiddenFarmTradePlayer(
+  player: Player,
+  teamId: string,
+  farmRecords: FranchiseFarmRecord[] = [],
+): boolean {
+  return rosterStatusForPlayer(player, teamId) === 'FARM' &&
+    !isRevealedFarmTradePlayer(player, teamId, farmRecords);
+}
+
+function visibleGradeLabelForPlayer(player: Player, teamId: string, farmRecords: FranchiseFarmRecord[] = []): string {
+  if (isHiddenFarmTradePlayer(player, teamId, farmRecords)) {
     const scouted = visibleScoutedGrade(player);
     return scouted ? `Scouted ${scouted}` : 'Hidden FARM grade';
   }
@@ -269,6 +288,39 @@ function playersForTeam(players: Player[], teamId: string): Player[] {
       assignment.teamId === teamId && TRADE_ELIGIBLE_STATUSES.has(rosterStatusForPlayer(player, teamId)),
     ),
   );
+}
+
+function mlbCountForTeam(players: Player[], teamId: string): number {
+  return players.filter((player) => rosterStatusForPlayer(player, teamId) === 'MLB').length;
+}
+
+function projectManualTradeMlbCounts(params: {
+  players: Player[];
+  sourceTeamId: string;
+  targetTeamId: string;
+  sourcePlayers: Player[];
+  targetPlayers: Player[];
+}): Record<string, number> {
+  let sourceMlbCount = mlbCountForTeam(params.players, params.sourceTeamId);
+  let targetMlbCount = mlbCountForTeam(params.players, params.targetTeamId);
+
+  for (const player of params.sourcePlayers) {
+    if (rosterStatusForPlayer(player, params.sourceTeamId) === 'MLB') {
+      sourceMlbCount -= 1;
+      targetMlbCount += 1;
+    }
+  }
+  for (const player of params.targetPlayers) {
+    if (rosterStatusForPlayer(player, params.targetTeamId) === 'MLB') {
+      targetMlbCount -= 1;
+      sourceMlbCount += 1;
+    }
+  }
+
+  return {
+    [params.sourceTeamId]: sourceMlbCount,
+    [params.targetTeamId]: targetMlbCount,
+  };
 }
 
 function farmRecordsForTeam(records: FranchiseFarmRecord[], teamId: string): FranchiseFarmRecord[] {
@@ -325,8 +377,8 @@ function buildNeedSurplus(players: Player[]): { needs: FranchiseTradeNeedSurplus
   };
 }
 
-function buildPlayerPreview(player: Player, teamId: string): FranchiseTradePlayerPreview {
-  const hiddenGradeBlocked = isHiddenFarmTradePlayer(player, teamId);
+function buildPlayerPreview(player: Player, teamId: string, farmRecords: FranchiseFarmRecord[] = []): FranchiseTradePlayerPreview {
+  const hiddenGradeBlocked = isHiddenFarmTradePlayer(player, teamId, farmRecords);
   const activeDesignations = ((player as Player & { franchiseDesignations?: FranchisePlayerDesignationRecord[] }).franchiseDesignations ?? [])
     .filter((designation) =>
       !hiddenGradeBlocked &&
@@ -342,7 +394,7 @@ function buildPlayerPreview(player: Player, teamId: string): FranchiseTradePlaye
     rosterStatus: rosterStatusForPlayer(player, teamId),
     primaryPosition: primaryPosition(player),
     ...(hiddenGradeBlocked ? {} : { overallGrade: player.overallGrade }),
-    visibleGradeLabel: visibleGradeLabelForPlayer(player, teamId),
+    visibleGradeLabel: visibleGradeLabelForPlayer(player, teamId, farmRecords),
     hiddenGradeBlocked: hiddenGradeBlocked || undefined,
     salary: typeof player.salary === 'number' ? player.salary : undefined,
     activeDesignations: activeDesignations.length > 0 ? activeDesignations : undefined,
@@ -568,6 +620,7 @@ function validateRequestedTrade(
 
   const teamsById = new Map(report.scope.teams.map((team) => [team.id, team]));
   const playersById = new Map(report.scope.players.map((player) => [player.id, player]));
+  const farmRecords = report.scope.farmRecords ?? [];
   const outgoingPlayerIds = requestedOutgoingPlayerIds(requested);
   const incomingPlayerIds = requestedIncomingPlayerIds(requested);
   const evidence: string[] = [];
@@ -654,8 +707,20 @@ function validateRequestedTrade(
       );
     }
 
+    if (isHiddenFarmTradePlayer(player, expectedTeamId ?? actualTeamId ?? '', farmRecords)) {
+      addIssue(
+        'TRADE_PLAYER_STATUS_INVALID',
+        `Requested ${label} trade player ${playerId} is an unrevealed FARM prospect and cannot be traded in v1.`,
+        {
+          playerId,
+          teamId: expectedTeamId,
+          details: { rosterStatus: status, ratingRevealState: 'hidden' },
+        },
+      );
+    }
+
     evidence.push(`${label} player ${playerId} roster status: ${status}.`);
-    return buildPlayerPreview(player, expectedTeamId ?? actualTeamId ?? '');
+    return buildPlayerPreview(player, expectedTeamId ?? actualTeamId ?? '', farmRecords);
   };
 
   if (input?.apply && (outgoingPlayerIds.length === 0 || incomingPlayerIds.length === 0)) {
@@ -982,6 +1047,13 @@ async function executeManualTrade(
         teamId: sourceTeamId,
       }));
     }
+    if (player && isHiddenFarmTradePlayer(player, sourceTeamId, farmRecords)) {
+      validationIssues.push(makeIssue('TRADE_PLAYER_STATUS_INVALID', `Outgoing trade player ${playerId} is an unrevealed FARM prospect and cannot be traded in v1.`, context, {
+        playerId,
+        teamId: sourceTeamId,
+        details: { rosterStatus: status, ratingRevealState: 'hidden' },
+      }));
+    }
   }
 
   for (const playerId of incomingIds) {
@@ -999,6 +1071,42 @@ async function executeManualTrade(
         playerId,
         teamId: targetTeamId,
       }));
+    }
+    if (player && isHiddenFarmTradePlayer(player, targetTeamId, farmRecords)) {
+      validationIssues.push(makeIssue('TRADE_PLAYER_STATUS_INVALID', `Incoming trade player ${playerId} is an unrevealed FARM prospect and cannot be traded in v1.`, context, {
+        playerId,
+        teamId: targetTeamId,
+        details: { rosterStatus: status, ratingRevealState: 'hidden' },
+      }));
+    }
+  }
+
+  if (validationIssues.length === 0) {
+    const projectedMlbCounts = projectManualTradeMlbCounts({
+      players: report.scope.players,
+      sourceTeamId,
+      targetTeamId,
+      sourcePlayers: outgoingIds.map((playerId) => playersById.get(playerId)!),
+      targetPlayers: incomingIds.map((playerId) => playersById.get(playerId)!),
+    });
+    for (const [teamId, projectedMlbCount] of Object.entries(projectedMlbCounts)) {
+      if (projectedMlbCount > V1_MLB_PLAYERS_PER_TEAM) {
+        const team = teamsById.get(teamId);
+        validationIssues.push(makeIssue(
+          'TRADE_PLAYER_STATUS_INVALID',
+          `Manual trade would exceed the ${V1_MLB_PLAYERS_PER_TEAM}-player MLB roster cap for ${team ? teamName(team) : teamId}.`,
+          context,
+          {
+            teamId,
+            details: {
+              projectedMlbCount,
+              mlbRosterCap: V1_MLB_PLAYERS_PER_TEAM,
+              sourceTeamId,
+              targetTeamId,
+            },
+          },
+        ));
+      }
     }
   }
 

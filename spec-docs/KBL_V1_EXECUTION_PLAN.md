@@ -147,7 +147,7 @@ After 1.3, before building anything else:
 - Call-up: farm player moves to MLB roster, `RosterMoveEvent` emitted (morale engine consumes in Phase 2), transaction logged
 - Send-down: MLB player moves to farm, `RosterMoveEvent` emitted, transaction logged
 - Farm stats tracked separately from MLB stats within same season scope
-- Roster counts enforced: MLB roster cap + farm cap, hard stop if either is exceeded
+- Roster counts enforced: MLB roster cap is a hard stop; FARM startup target/depth is tracked, but regular-season send-down/trade outcomes are not blocked by a FARM hard cap
 - Trade eligibility: hidden farm prospects cannot be traded (enforced at trade engine level)
 - GameTracker player availability: only MLB-roster players available in GameTracker lineup builder
 - All farm movement events emitted as typed `RosterMoveEvent` objects — morale mutation not wired yet

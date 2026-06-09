@@ -123,7 +123,7 @@ function makeFarmRecord(playerId: string, teamId: string): FranchiseFarmRecord {
     rosterStatus: 'FARM',
     optionsUsed: 0,
     optionDates: [],
-    ratingRevealState: 'hidden',
+    ratingRevealState: 'revealed',
     assignedAt: '2026-01-01T00:00:00.000Z',
     lastModified: '2026-01-01T00:00:00.000Z',
   };
@@ -184,11 +184,11 @@ function makePlayers(): Player[] {
     makePlayer({ id: 'a-2b-2', teamId: 'team-a', firstName: 'Alpha', lastName: 'Second 2', primaryPosition: '2B' }),
     makePlayer({ id: 'a-c-1', teamId: 'team-a', firstName: 'Alpha', lastName: 'Catcher', primaryPosition: 'C' }),
     makePlayer({ id: 'a-sp-1', teamId: 'team-a', firstName: 'Alpha', lastName: 'Starter', primaryPosition: 'SP' }),
-    makePlayer({ id: 'a-farm-1', teamId: 'team-a', firstName: 'Alpha', lastName: 'Farm', primaryPosition: 'SS', leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-a', rosterStatus: 'FARM' }] }),
+    makePlayer({ id: 'a-farm-1', teamId: 'team-a', firstName: 'Alpha', lastName: 'Farm', primaryPosition: 'SS', ratingRevealState: 'revealed', leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-a', rosterStatus: 'FARM' }] }),
     makePlayer({ id: 'b-c-1', teamId: 'team-b', firstName: 'Beta', lastName: 'Catcher', primaryPosition: 'C' }),
     makePlayer({ id: 'b-sp-1', teamId: 'team-b', firstName: 'Beta', lastName: 'Starter', primaryPosition: 'SP' }),
     makePlayer({ id: 'b-rp-1', teamId: 'team-b', firstName: 'Beta', lastName: 'Reliever', primaryPosition: 'RP' }),
-    makePlayer({ id: 'b-farm-1', teamId: 'team-b', firstName: 'Beta', lastName: 'Farm', primaryPosition: 'CF', leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-b', rosterStatus: 'FARM' }] }),
+    makePlayer({ id: 'b-farm-1', teamId: 'team-b', firstName: 'Beta', lastName: 'Farm', primaryPosition: 'CF', ratingRevealState: 'revealed', leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-b', rosterStatus: 'FARM' }] }),
   ];
 }
 
@@ -652,7 +652,17 @@ describe('franchise trade dry-run adapter', () => {
       },
     });
 
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('TRADE_PLAYER_STATUS_INVALID');
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'TRADE_PLAYER_STATUS_INVALID',
+          playerId: 'a-farm-1',
+          message: expect.stringMatching(/unrevealed FARM prospect and cannot be traded/i),
+        }),
+      ]),
+    );
     expect(result.data?.requestedPreview?.outgoingPlayer).toEqual(
       expect.objectContaining({
         playerId: 'a-farm-1',
@@ -664,6 +674,111 @@ describe('franchise trade dry-run adapter', () => {
     expect(result.data?.requestedPreview?.outgoingPlayer).not.toHaveProperty('overallGrade');
     expect(JSON.stringify(result.data?.requestedPreview?.outgoingPlayer)).not.toMatch(
       /"S"|trueGrade|hiddenScoutTruth|hiddenPersonalityModifiers|leadership|accuracy/i,
+    );
+    expectNoWrites();
+  });
+
+  test('manual trade execution blocks hidden FARM prospects before any write', async () => {
+    const extraFarmPlayers = Array.from({ length: 10 }, (_, index) =>
+      makePlayer({
+        id: `a-extra-farm-${index}`,
+        teamId: 'team-a',
+        firstName: 'Alpha',
+        lastName: `Extra Farm ${index}`,
+        primaryPosition: 'SS',
+        ratingRevealState: 'revealed',
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-a', rosterStatus: 'FARM' }],
+      }),
+    );
+    const players = makePlayers().map((player) =>
+      player.id === 'a-farm-1'
+        ? makePlayer({
+          id: 'a-farm-1',
+          teamId: 'team-a',
+          firstName: 'Alpha',
+          lastName: 'Farm',
+          primaryPosition: 'SS',
+          ratingRevealState: 'hidden',
+          prospectProfile: {
+            scoutedGrade: 'B',
+            trueGrade: 'S',
+            hiddenScoutTruth: { accuracy: 98 },
+          },
+          leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-a', rosterStatus: 'FARM' }],
+        } as Partial<Player> & Record<string, unknown> & { id: string; teamId: string })
+        : player,
+    );
+    seedValidation(
+      [...players, ...extraFarmPlayers],
+      [
+        makeFarmRecord('a-farm-1', 'team-a'),
+        makeFarmRecord('b-farm-1', 'team-b'),
+        ...extraFarmPlayers.map((player) => makeFarmRecord(player.id, 'team-a')),
+      ],
+    );
+
+    const result = await executeManualFranchiseTrade(context, {
+      requestedTrade: {
+        sourceTeamId: 'team-a',
+        targetTeamId: 'team-b',
+        outgoingPlayerId: 'a-farm-1',
+        incomingPlayerId: 'b-rp-1',
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('TRADE_PLAYER_STATUS_INVALID');
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'TRADE_PLAYER_STATUS_INVALID',
+          playerId: 'a-farm-1',
+          message: expect.stringMatching(/unrevealed FARM prospect and cannot be traded/i),
+        }),
+      ]),
+    );
+    expectNoWrites();
+    expect(JSON.stringify(result.data?.requestedPreview?.outgoingPlayer)).not.toMatch(
+      /"S"|trueGrade|hiddenScoutTruth|accuracy/i,
+    );
+  });
+
+  test('manual trade blocks uneven MLB acquisition when the receiving team is already at the MLB cap', async () => {
+    const extraMlbPlayers = Array.from({ length: 16 }, (_, index) =>
+      makePlayer({
+        id: `a-extra-mlb-${index}`,
+        teamId: 'team-a',
+        firstName: 'Alpha',
+        lastName: `Extra MLB ${index}`,
+        primaryPosition: 'RF',
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-a', rosterStatus: 'MLB' }],
+      }),
+    );
+    seedValidation([...makePlayers(), ...extraMlbPlayers]);
+
+    const result = await executeManualFranchiseTrade(context, {
+      requestedTrade: {
+        sourceTeamId: 'team-a',
+        targetTeamId: 'team-b',
+        outgoingPlayerId: 'a-farm-1',
+        incomingPlayerId: 'b-rp-1',
+      },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('TRADE_PLAYER_STATUS_INVALID');
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'TRADE_PLAYER_STATUS_INVALID',
+          teamId: 'team-a',
+          message: expect.stringMatching(/22-player MLB roster cap/i),
+          details: expect.objectContaining({
+            projectedMlbCount: 23,
+            mlbRosterCap: 22,
+          }),
+        }),
+      ]),
     );
     expectNoWrites();
   });
@@ -885,6 +1000,50 @@ describe('franchise trade dry-run adapter', () => {
     const transactionInput = mocks.logMode2V1Transaction.mock.calls[0][0];
     expect(transactionInput.data).not.toHaveProperty('salaryMatching');
     expect(transactionInput.data).not.toHaveProperty('luxuryTax');
+  });
+
+  test('executes a revealed FARM move when the destination FARM is already over startup depth', async () => {
+    const extraFarmPlayers = Array.from({ length: 10 }, (_, index) =>
+      makePlayer({
+        id: `b-extra-farm-${index}`,
+        teamId: 'team-b',
+        firstName: 'Beta',
+        lastName: `Extra Farm ${index}`,
+        primaryPosition: 'CF',
+        ratingRevealState: 'revealed',
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-b', rosterStatus: 'FARM' }],
+      }),
+    );
+    seedValidation(
+      [...makePlayers(), ...extraFarmPlayers],
+      [
+        makeFarmRecord('a-farm-1', 'team-a'),
+        makeFarmRecord('b-farm-1', 'team-b'),
+        ...extraFarmPlayers.map((player) => makeFarmRecord(player.id, 'team-b')),
+      ],
+    );
+
+    const result = await executeManualFranchiseTrade(context, {
+      requestedTrade: {
+        sourceTeamId: 'team-a',
+        targetTeamId: 'team-b',
+        outgoingPlayerId: 'a-farm-1',
+        incomingPlayerId: 'b-rp-1',
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(franchisePlayerStorage.saveFranchisePlayer).toHaveBeenCalledWith(
+      context.franchiseId,
+      expect.objectContaining({
+        id: 'a-farm-1',
+        leagueAssignments: [expect.objectContaining({ teamId: 'team-b', rosterStatus: 'FARM' })],
+      }),
+    );
+    expect(franchiseFarmStorage.saveFranchiseFarmRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ playerId: 'a-farm-1', teamId: 'team-b' }),
+    );
+    expect(transactionStorage.logMode2V1Transaction).toHaveBeenCalledTimes(1);
   });
 
   test('manual trade preserves player identity and history fields by playerId', async () => {

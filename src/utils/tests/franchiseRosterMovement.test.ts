@@ -292,6 +292,25 @@ describe('franchise roster movement boundary', () => {
     expect(sendDown.transactionId).toBe(sendDown.transaction?.id);
     expect(sendDown.player?.leagueAssignments?.[0].rosterStatus).toBe('FARM');
     expect(sendDown.player?.optionsUsedBySeason?.[seasonId]).toBe(1);
+    expect(sendDown.rosterMoveEvent).toEqual(expect.objectContaining({
+      eventType: 'roster-move',
+      movementType: 'send_down',
+      franchiseId,
+      seasonId,
+      statsScopeId: seasonId,
+      seasonNumber: 4,
+      teamId: 'team-1',
+      playerId,
+      sourceRosterStatus: 'MLB',
+      targetRosterStatus: 'FARM',
+      optionsUsed: 1,
+      rosterLevel: 'AAA',
+      transactionId: sendDown.transactionId,
+      moraleMutationApplied: false,
+      relationshipMutationApplied: false,
+      salaryMovementApplied: false,
+      mode3HandoffApplied: false,
+    }));
     const farmRoster = await getFranchiseFarmRoster(franchiseId, seasonId, 'team-1');
     expect(farmRoster).toEqual([
       expect.objectContaining({
@@ -320,6 +339,24 @@ describe('franchise roster movement boundary', () => {
     const updatedPlayer = await getFranchisePlayer(franchiseId, playerId);
     expect(callUp.success).toBe(true);
     expect(callUp.player?.leagueAssignments?.[0].rosterStatus).toBe('MLB');
+    expect(callUp.rosterMoveEvent).toEqual(expect.objectContaining({
+      eventType: 'roster-move',
+      movementType: 'call_up',
+      franchiseId,
+      seasonId,
+      statsScopeId: seasonId,
+      seasonNumber: 4,
+      teamId: 'team-1',
+      playerId,
+      sourceRosterStatus: 'FARM',
+      targetRosterStatus: 'MLB',
+      ratingRevealState: 'revealed',
+      transactionId: callUp.transactionId,
+      moraleMutationApplied: false,
+      relationshipMutationApplied: false,
+      salaryMovementApplied: false,
+      mode3HandoffApplied: false,
+    }));
     expect(updatedPlayer?.ratingRevealState).toBe('revealed');
     expect(await getFranchiseFarmRoster(franchiseId, seasonId, 'team-1')).toHaveLength(0);
 
@@ -327,6 +364,14 @@ describe('franchise roster movement boundary', () => {
     expect(transactions.map((transaction) => transaction.type)).toEqual(
       expect.arrayContaining(['send_down', 'call_up']),
     );
+    const loggedSendDown = transactions.find((transaction) => transaction.type === 'send_down');
+    const loggedCallUp = transactions.find((transaction) => transaction.type === 'call_up');
+    const loggedSendDownEvent = loggedSendDown?.data.rosterMoveEvent as { transactionId?: string } | undefined;
+    const loggedCallUpEvent = loggedCallUp?.data.rosterMoveEvent as { transactionId?: string } | undefined;
+    expect(loggedSendDownEvent?.transactionId).toBe(loggedSendDown?.id);
+    expect(sendDown.rosterMoveEvent?.transactionId).toBe(loggedSendDownEvent?.transactionId);
+    expect(loggedCallUpEvent?.transactionId).toBe(loggedCallUp?.id);
+    expect(callUp.rosterMoveEvent?.transactionId).toBe(loggedCallUpEvent?.transactionId);
     expect(transactions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -346,6 +391,13 @@ describe('franchise roster movement boundary', () => {
             targetRosterStatus: 'FARM',
             optionsUsed: 1,
             rosterMovementPhase: 'OFFSEASON',
+            rosterMoveEvent: expect.objectContaining({
+              movementType: 'send_down',
+              sourceRosterStatus: 'MLB',
+              targetRosterStatus: 'FARM',
+              transactionId: loggedSendDown?.id,
+              moraleMutationApplied: false,
+            }),
           }),
         }),
         expect.objectContaining({
@@ -365,6 +417,13 @@ describe('franchise roster movement boundary', () => {
             targetRosterStatus: 'MLB',
             ratingRevealState: 'revealed',
             rosterMovementPhase: 'PHASE_11_FINALIZE',
+            rosterMoveEvent: expect.objectContaining({
+              movementType: 'call_up',
+              sourceRosterStatus: 'FARM',
+              targetRosterStatus: 'MLB',
+              transactionId: loggedCallUp?.id,
+              moraleMutationApplied: false,
+            }),
           }),
         }),
       ]),
@@ -445,6 +504,96 @@ describe('franchise roster movement boundary', () => {
     const player = await getFranchisePlayer(franchiseId, playerId);
     expect(player?.leagueAssignments?.[0].rosterStatus).toBe('MLB');
     expect(await getFranchiseFarmRoster(franchiseId, seasonId, 'team-1')).toHaveLength(0);
+  });
+
+  test('call-up blocks when the MLB roster is already at the v1 cap', async () => {
+    const franchiseId = nextId('franchise-mlb-cap');
+    const seasonId = `${franchiseId}-season-5`;
+    const farmPlayerId = 'player-call-up-cap';
+    for (let index = 0; index < 22; index += 1) {
+      await saveFranchisePlayer(franchiseId, makePlayer({
+        id: `mlb-cap-${index}`,
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'MLB' }],
+      }));
+    }
+    await saveFranchisePlayer(franchiseId, makePlayer({
+      id: farmPlayerId,
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'FARM' }],
+    }));
+    await saveFranchiseFarmRecord({
+      franchiseId,
+      seasonId,
+      seasonNumber: 5,
+      teamId: 'team-1',
+      playerId: farmPlayerId,
+      optionsUsed: 0,
+    });
+
+    const result = await callUpFranchisePlayer({
+      franchiseId,
+      seasonId,
+      seasonNumber: 5,
+      teamId: 'team-1',
+      playerId: farmPlayerId,
+      leagueId: 'league-1',
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      errorCode: 'MLB_ROSTER_CAP_EXCEEDED',
+      affectedPlayerId: farmPlayerId,
+      affectedTeamId: 'team-1',
+    });
+    expect((await getFranchisePlayer(franchiseId, farmPlayerId))?.leagueAssignments?.[0].rosterStatus).toBe('FARM');
+    expect(await getFranchiseFarmRoster(franchiseId, seasonId, 'team-1')).toHaveLength(1);
+  });
+
+  test('send-down is allowed when the FARM roster is already at startup depth', async () => {
+    const franchiseId = nextId('franchise-farm-cap');
+    const seasonId = `${franchiseId}-season-5`;
+    const mlbPlayerId = 'player-send-down-cap';
+    await saveFranchisePlayer(franchiseId, makePlayer({ id: mlbPlayerId }));
+    for (let index = 0; index < 10; index += 1) {
+      const farmPlayerId = `farm-cap-${index}`;
+      await saveFranchisePlayer(franchiseId, makePlayer({
+        id: farmPlayerId,
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'FARM' }],
+      }));
+      await saveFranchiseFarmRecord({
+        franchiseId,
+        seasonId,
+        seasonNumber: 5,
+        teamId: 'team-1',
+        playerId: farmPlayerId,
+        optionsUsed: 0,
+      });
+    }
+
+    const result = await sendDownFranchisePlayer({
+      franchiseId,
+      seasonId,
+      seasonNumber: 5,
+      teamId: 'team-1',
+      playerId: mlbPlayerId,
+      leagueId: 'league-1',
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      affectedPlayerId: mlbPlayerId,
+      affectedTeamId: 'team-1',
+    });
+    expect(result.rosterMoveEvent).toMatchObject({
+      movementType: 'send_down',
+      sourceRosterStatus: 'MLB',
+      targetRosterStatus: 'FARM',
+      moraleMutationApplied: false,
+      relationshipMutationApplied: false,
+      salaryMovementApplied: false,
+      mode3HandoffApplied: false,
+    });
+    expect((await getFranchisePlayer(franchiseId, mlbPlayerId))?.leagueAssignments?.[0].rosterStatus).toBe('FARM');
+    expect(await getFranchiseFarmRoster(franchiseId, seasonId, 'team-1')).toHaveLength(11);
   });
 
   test('eligibility helper rejects inactive statuses and allows legacy send-down compatibility only for unknown active assignments', async () => {

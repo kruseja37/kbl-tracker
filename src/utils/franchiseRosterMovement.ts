@@ -4,6 +4,7 @@ import * as transactionStorage from './transactionStorage';
 import type { FranchiseFarmRecord, FranchiseFarmRosterLevel } from './franchiseFarmStorage';
 import type { Player } from './franchisePlayerStorage';
 import type { GamePhase, TransactionLogEntry } from './transactionStorage';
+import { V1_MLB_PLAYERS_PER_TEAM } from './leagueBuilderFarmScoutingHandoff';
 
 const MAX_OPTIONS_PER_SEASON = 3;
 
@@ -30,6 +31,7 @@ export type FranchiseRosterMovementErrorCode =
   | 'PLAYER_NOT_ASSIGNED'
   | 'INVALID_ROSTER_STATUS'
   | 'OPTION_LIMIT_EXCEEDED'
+  | 'MLB_ROSTER_CAP_EXCEEDED'
   | 'FARM_RECORD_NOT_FOUND'
   | 'PLAYER_SAVE_FAILED'
   | 'FARM_SAVE_FAILED'
@@ -59,6 +61,31 @@ export interface FranchiseRosterMovementRollbackStatus {
   errors: string[];
 }
 
+export interface RosterMoveEvent {
+  id: string;
+  eventType: 'roster-move';
+  movementType: FranchiseRosterMovementKind;
+  franchiseId: string;
+  seasonId: string;
+  statsScopeId: string;
+  seasonNumber: number;
+  teamId: string;
+  playerId: string;
+  playerName: string;
+  sourceRosterStatus: 'MLB' | 'FARM';
+  targetRosterStatus: 'MLB' | 'FARM';
+  rosterLevel?: FranchiseFarmRosterLevel;
+  optionsUsed?: number;
+  ratingRevealState?: 'hidden' | 'revealed';
+  rosterMovementPhase: FranchiseRosterMovementPhase;
+  createdAt: string;
+  transactionId?: string;
+  moraleMutationApplied: false;
+  relationshipMutationApplied: false;
+  salaryMovementApplied: false;
+  mode3HandoffApplied: false;
+}
+
 export interface FranchiseRosterMovementResult {
   success: boolean;
   affectedPlayerId: string;
@@ -70,6 +97,7 @@ export interface FranchiseRosterMovementResult {
   transaction?: TransactionLogEntry;
   transactionId?: string;
   farmRecord?: FranchiseFarmRecord | null;
+  rosterMoveEvent?: RosterMoveEvent;
 }
 
 export interface FranchiseRosterMovementEligibility {
@@ -126,10 +154,126 @@ function normalizeRosterStatus(status: unknown): FranchiseRosterStatus {
   return 'UNKNOWN';
 }
 
+function normalizeRevealState(value: unknown): 'hidden' | 'revealed' | undefined {
+  return value === 'hidden' || value === 'revealed' ? value : undefined;
+}
+
+function assignmentMatchesTeam(
+  assignment: NonNullable<Player['leagueAssignments']>[number],
+  teamId: string,
+  leagueId?: string,
+): boolean {
+  return assignment.teamId === teamId && (!leagueId || assignment.leagueId === leagueId);
+}
+
+function rosterStatusForTeam(
+  player: Player,
+  teamId: string,
+  leagueId?: string,
+): FranchiseRosterStatus {
+  const assignment = (player.leagueAssignments ?? []).find((candidate) =>
+    assignmentMatchesTeam(candidate, teamId, leagueId),
+  );
+  return normalizeRosterStatus(assignment?.rosterStatus);
+}
+
+async function validateRosterCapacity(params: {
+  franchiseId: string;
+  teamId: string;
+  leagueId?: string;
+  playerId: string;
+  movement: FranchiseRosterMovementKind;
+}): Promise<{
+  eligible: boolean;
+  errorCode?: FranchiseRosterMovementErrorCode;
+  message?: string;
+}> {
+  const players = await franchisePlayerStorage.getAllFranchisePlayers(params.franchiseId);
+  const otherPlayers = players.filter((player) => player.id !== params.playerId);
+  const mlbCount = otherPlayers.filter((player) =>
+    rosterStatusForTeam(player, params.teamId, params.leagueId) === 'MLB',
+  ).length;
+  if (params.movement === 'call_up' && mlbCount >= V1_MLB_PLAYERS_PER_TEAM) {
+    return {
+      eligible: false,
+      errorCode: 'MLB_ROSTER_CAP_EXCEEDED',
+      message: `Call-up would exceed the ${V1_MLB_PLAYERS_PER_TEAM}-player MLB roster cap for team ${params.teamId}.`,
+    };
+  }
+
+  return { eligible: true };
+}
+
 function transactionPhaseForMovement(phase: FranchiseRosterMovementPhase | undefined): GamePhase {
   if (phase === 'REGULAR_SEASON') return 'REGULAR_SEASON';
   if (phase === 'POSTSEASON') return 'PLAYOFFS';
   return 'OFFSEASON';
+}
+
+function buildRosterMoveEvent(params: {
+  movementType: FranchiseRosterMovementKind;
+  input: FranchiseRosterMovementInput;
+  player: Player;
+  sourceRosterStatus: 'MLB' | 'FARM';
+  targetRosterStatus: 'MLB' | 'FARM';
+  rosterMovementPhase: FranchiseRosterMovementPhase;
+  createdAt: string;
+  rosterLevel?: FranchiseFarmRosterLevel;
+  optionsUsed?: number;
+  ratingRevealState?: 'hidden' | 'revealed';
+  transactionId?: string;
+}): RosterMoveEvent {
+  return {
+    id: [
+      'roster-move',
+      params.input.franchiseId,
+      params.input.seasonId,
+      params.input.teamId,
+      params.input.playerId,
+      params.movementType,
+      params.createdAt,
+    ].join(':'),
+    eventType: 'roster-move',
+    movementType: params.movementType,
+    franchiseId: params.input.franchiseId,
+    seasonId: params.input.seasonId,
+    statsScopeId: params.input.statsScopeId ?? params.input.seasonId,
+    seasonNumber: params.input.seasonNumber,
+    teamId: params.input.teamId,
+    playerId: params.input.playerId,
+    playerName: playerName(params.player),
+    sourceRosterStatus: params.sourceRosterStatus,
+    targetRosterStatus: params.targetRosterStatus,
+    rosterLevel: params.rosterLevel,
+    optionsUsed: params.optionsUsed,
+    ratingRevealState: params.ratingRevealState,
+    rosterMovementPhase: params.rosterMovementPhase,
+    createdAt: params.createdAt,
+    transactionId: params.transactionId,
+    moraleMutationApplied: false,
+    relationshipMutationApplied: false,
+    salaryMovementApplied: false,
+    mode3HandoffApplied: false,
+  };
+}
+
+function buildRosterMovementTransactionId(params: {
+  input: FranchiseRosterMovementInput;
+  movementType: FranchiseRosterMovementKind;
+  createdAt: string;
+}): string {
+  return [
+    'txn',
+    'roster-move',
+    params.input.franchiseId,
+    params.input.seasonId,
+    params.input.teamId,
+    params.input.playerId,
+    params.movementType,
+    params.createdAt,
+  ]
+    .join('_')
+    .replace(/[^A-Za-z0-9_-]/g, '_');
 }
 
 export function validateFranchiseRosterMovementEligibility(params: {
@@ -293,6 +437,17 @@ export async function sendDownFranchisePlayer(
     return failureResult(input, eligibility.errorCode ?? 'INVALID_ROSTER_STATUS', eligibility.message ?? 'Player is not eligible for send-down.');
   }
 
+  const capacity = await validateRosterCapacity({
+    franchiseId: input.franchiseId,
+    teamId: input.teamId,
+    leagueId: input.leagueId,
+    playerId: input.playerId,
+    movement: 'send_down',
+  });
+  if (!capacity.eligible) {
+    return failureResult(input, capacity.errorCode ?? 'MLB_ROSTER_CAP_EXCEEDED', capacity.message ?? 'Roster cap would be exceeded.');
+  }
+
   const timestamp = new Date().toISOString();
   const assignments = cloneAssignments(originalPlayer);
   assignments[eligibility.assignmentIndex] = {
@@ -343,7 +498,26 @@ export async function sendDownFranchisePlayer(
 
     failureCode = 'TRANSACTION_LOG_FAILED';
     const rosterMovementPhase = input.rosterMovementPhase ?? 'OFFSEASON';
+    const transactionId = buildRosterMovementTransactionId({
+      input,
+      movementType: 'send_down',
+      createdAt: timestamp,
+    });
+    const rosterMoveEvent = buildRosterMoveEvent({
+      movementType: 'send_down',
+      input,
+      player: updatedPlayer,
+      sourceRosterStatus: 'MLB',
+      targetRosterStatus: 'FARM',
+      rosterMovementPhase,
+      createdAt: timestamp,
+      rosterLevel: farmRecord.rosterLevel,
+      optionsUsed: nextOptions,
+      ratingRevealState: normalizeRevealState(farmRecord.ratingRevealState),
+      transactionId,
+    });
     const transaction = await transactionStorage.logMode2V1Transaction({
+      id: transactionId,
       type: 'send_down',
       actor: input.actor ?? 'USER',
       season: input.seasonNumber,
@@ -365,6 +539,7 @@ export async function sendDownFranchisePlayer(
         rosterLevel: farmRecord.rosterLevel,
         optionsUsed: nextOptions,
         rosterMovementPhase,
+        rosterMoveEvent,
       },
     });
 
@@ -376,6 +551,7 @@ export async function sendDownFranchisePlayer(
       farmRecord,
       transaction,
       transactionId: transaction.id,
+      rosterMoveEvent,
     };
   } catch (error) {
     const rollbackStatus = await rollbackRosterMovement({
@@ -420,6 +596,17 @@ export async function callUpFranchisePlayer(
     return failureResult(input, eligibility.errorCode ?? 'INVALID_ROSTER_STATUS', eligibility.message ?? 'Player is not eligible for call-up.');
   }
 
+  const capacity = await validateRosterCapacity({
+    franchiseId: input.franchiseId,
+    teamId: input.teamId,
+    leagueId: input.leagueId,
+    playerId: input.playerId,
+    movement: 'call_up',
+  });
+  if (!capacity.eligible) {
+    return failureResult(input, capacity.errorCode ?? 'MLB_ROSTER_CAP_EXCEEDED', capacity.message ?? 'MLB roster cap would be exceeded.');
+  }
+
   const timestamp = new Date().toISOString();
   const assignments = cloneAssignments(originalPlayer);
   assignments[eligibility.assignmentIndex] = {
@@ -446,7 +633,24 @@ export async function callUpFranchisePlayer(
 
     failureCode = 'TRANSACTION_LOG_FAILED';
     const rosterMovementPhase = input.rosterMovementPhase ?? 'OFFSEASON';
+    const transactionId = buildRosterMovementTransactionId({
+      input,
+      movementType: 'call_up',
+      createdAt: timestamp,
+    });
+    const rosterMoveEvent = buildRosterMoveEvent({
+      movementType: 'call_up',
+      input,
+      player: updatedPlayer,
+      sourceRosterStatus: 'FARM',
+      targetRosterStatus: 'MLB',
+      rosterMovementPhase,
+      createdAt: timestamp,
+      ratingRevealState: normalizeRevealState(updatedPlayer.ratingRevealState),
+      transactionId,
+    });
     const transaction = await transactionStorage.logMode2V1Transaction({
+      id: transactionId,
       type: 'call_up',
       actor: input.actor ?? 'USER',
       season: input.seasonNumber,
@@ -467,6 +671,7 @@ export async function callUpFranchisePlayer(
         targetRosterStatus: 'MLB',
         ratingRevealState: updatedPlayer.ratingRevealState,
         rosterMovementPhase,
+        rosterMoveEvent,
       },
     });
 
@@ -478,6 +683,7 @@ export async function callUpFranchisePlayer(
       farmRecord: null,
       transaction,
       transactionId: transaction.id,
+      rosterMoveEvent,
     };
   } catch (error) {
     const rollbackStatus = await rollbackRosterMovement({

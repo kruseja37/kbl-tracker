@@ -168,6 +168,7 @@ export interface TransactionLogEntry {
  * Input for creating a new transaction
  */
 export interface TransactionInput {
+  id?: string;
   type: TransactionType;
   actor?: TransactionActor;      // Defaults to 'SYSTEM'
   season: number;
@@ -269,7 +270,7 @@ export async function logTransaction(input: TransactionInput): Promise<Transacti
   const db = await initTransactionDB();
 
   const entry: TransactionLogEntry = {
-    id: generateTransactionId(),
+    id: input.id ?? generateTransactionId(),
     timestamp: new Date().toISOString(),
     season: input.season,
     gameNumber: input.gameNumber ?? null,
