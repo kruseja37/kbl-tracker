@@ -168,17 +168,17 @@ Key files: `franchiseFarmEngine.ts`, `franchiseRosterStorage.ts`, `FarmRosterVie
 **What's needed:**
 
 *Engine work (must be done before UI):*
-- Trade engine validates both sides: roster eligibility, farm eligibility (hidden prospects blocked per 1.4), salary cap checks
+- Trade engine validates both sides: roster eligibility, farm eligibility (hidden prospects blocked per 1.4), MLB roster cap checks, and salary/payroll proof without salary matching or luxury tax
 - Player historical stats (career scope) travel with player to new team — verify stat scope keys carry correctly
-- Salary/payroll updates on both teams atomically — both succeed or both roll back
-- `TradeEvent` emitted with both sides, traded players, and designation context (Cornerstone/Albatross/Fan Favorite trades emit typed events for morale engine in Phase 2 — emit only, no morale mutation)
+- Salary/payroll proof updates are included in the v1 compensating rollback path — both succeed or compensating rollback attempts to restore prior player/team/farm/salary config state. True cross-store IndexedDB atomicity remains future hardening if needed.
+- `TradeEvent` emitted with both sides, traded players, salary/payroll impact, and active TEAM_MVP/ACE designation context only. Fan Favorite, Albatross, Cornerstone, Captain, and Fan Hopeful trade-event effects remain blocked/deferred; no morale mutation is wired here.
 - Transaction log records trade with both rosters and all moved players
 
 *UI work (after engine is verified):*
 - Trade UI: select players from both rosters, preview salary impact, confirm trade, execute
 - Post-trade: both rosters immediately reflect changes, transaction log entry visible
 
-**Gate:** Trade executes end-to-end. Both rosters correct. Career stats travel with player. Salary/payroll updates atomically. Transaction log entry complete. Farm eligibility enforced. `TradeEvent` emitted. Morale not yet connected.
+**Gate:** Trade executes end-to-end. Both rosters correct. Career stats travel with player. Salary/payroll proof participates in compensating rollback with player/team/farm state. Transaction log entry complete. Farm eligibility enforced. `TradeEvent` emitted with active TEAM_MVP/ACE context only. Morale not yet connected.
 
 **ROUTE: Codex 5.5 | very high**
 Key files: `franchiseTradeEngine.ts`, `franchiseRosterStorage.ts`, `franchiseTransactionLog.ts`, `TradeUI.tsx`, `franchiseSalaryStorage.ts`

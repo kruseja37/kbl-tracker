@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   getFranchiseFarmRecordsForSeason: vi.fn(),
   saveFranchisePlayer: vi.fn(),
   saveFranchiseTeam: vi.fn(),
+  getFranchiseConfig: vi.fn(),
+  saveFranchiseConfig: vi.fn(),
   saveFranchiseFarmRecord: vi.fn(),
   deleteFranchiseFarmRecord: vi.fn(),
   savePlayer: vi.fn(),
@@ -26,6 +28,11 @@ vi.mock('../franchisePlayerStorage', () => ({
   getAllFranchiseTeams: mocks.getAllFranchiseTeams,
   saveFranchisePlayer: mocks.saveFranchisePlayer,
   saveFranchiseTeam: mocks.saveFranchiseTeam,
+}));
+
+vi.mock('../franchiseManager', () => ({
+  getFranchiseConfig: mocks.getFranchiseConfig,
+  saveFranchiseConfig: mocks.saveFranchiseConfig,
 }));
 
 vi.mock('../franchiseFarmStorage', () => ({
@@ -65,6 +72,7 @@ import * as transactionStorage from '../transactionStorage';
 import * as offseasonStorage from '../offseasonStorage';
 import type { FranchiseFarmRecord } from '../franchiseFarmStorage';
 import type { Player, Team } from '../franchisePlayerStorage';
+import type { StoredFranchiseConfig } from '../../types/franchise';
 
 const context = {
   franchiseId: 'franchise-a',
@@ -157,6 +165,157 @@ function makeOptimalSnapshot(teamId: string, playerId: string) {
   } as const;
 }
 
+function makeConfig(overrides: Partial<StoredFranchiseConfig> = {}): StoredFranchiseConfig {
+  const salaryBaseline = overrides.salaryBaseline ?? {
+    calculationVersion: 'franchise-salary-v1-spec-multifactor-hidden-safe',
+    playerCount: 11,
+    salariedPlayerCount: 11,
+    totalSalary: 13.2,
+    teamPayrolls: {
+      'team-a': 8.4,
+      'team-b': 4.8,
+    },
+  };
+
+  return {
+    franchiseId: context.franchiseId,
+    franchiseName: 'Franchise A',
+    league: 'league-1',
+    leagueDetails: { name: 'League', teams: 2, conferences: 1, divisions: 1 },
+    season: {
+      gamesPerTeam: 32,
+      inningsPerGame: 6,
+      extraInningsRule: 'standard',
+      scheduleType: 'manual',
+      useDH: true,
+      allStarGame: false,
+      tradeDeadline: true,
+      mercyRule: false,
+    },
+    playoffs: {
+      teamsQualifying: 2,
+      format: 'series',
+      seriesLengths: {
+        wildCard: '1',
+        divisionSeries: '1',
+        championship: '1',
+        worldSeries: '1',
+      },
+      homeFieldAdvantage: 'higher-seed',
+    },
+    teams: {
+      selectedTeams: ['team-a'],
+      mode: 'single',
+      playerAssignments: {},
+    },
+    roster: { mode: 'existing' },
+    franchiseType: 'solo',
+    aiScoreEntry: false,
+    createdAt: 1,
+    teamControl: { 'team-a': 'human', 'team-b': 'ai' },
+    controlledTeams: [{ teamId: 'team-a', teamName: 'Alpha', controlledBy: 'human' }],
+    rulesSnapshot: {
+      gamesPerTeam: 32,
+      inningsPerGame: 6,
+      extraInningsRule: 'standard',
+      scheduleType: 'manual',
+      useDH: true,
+      allStarGame: false,
+      tradeDeadline: true,
+      mercyRule: false,
+    },
+    playoffSetupSnapshot: {
+      teamsQualifying: 2,
+      format: 'series',
+      seriesLengths: {
+        wildCard: '1',
+        divisionSeries: '1',
+        championship: '1',
+        worldSeries: '1',
+      },
+      homeFieldAdvantage: 'higher-seed',
+    },
+    seasonLength: {
+      gamesPerTeam: 32,
+      expectedRegularSeasonGamesPerTeam: 32,
+      inningsPerGame: 6,
+      adaptiveStandardsInningsPerGame: 6,
+    },
+    schedulePolicy: {
+      policy: 'empty-manual-user-supplied',
+      generatedSchedulesAllowed: false,
+      initialScheduleRows: 0,
+      allowedSources: ['manual', 'csv'],
+    },
+    rosterRequirements: {
+      mlbPlayersPerTeam: 22,
+      farmPlayersPerTeam: 10,
+      validationStatus: 'passed',
+      teamCounts: {
+        'team-a': { MLB: 6, FARM: 1 },
+        'team-b': { MLB: 3, FARM: 1 },
+      },
+    },
+    stadiums: [],
+    salaryBaseline,
+    handoffContract: {
+      version: 'mode1-mode2-v1',
+      franchiseType: 'solo',
+      teamControl: {
+        franchiseType: 'solo',
+        aiScoreEntry: false,
+        teamControl: { 'team-a': 'human', 'team-b': 'ai' },
+        controlledTeams: [{ teamId: 'team-a', teamName: 'Alpha', controlledBy: 'human' }],
+      },
+      rulesSnapshot: {
+        gamesPerTeam: 32,
+        inningsPerGame: 6,
+        extraInningsRule: 'standard',
+        scheduleType: 'manual',
+        useDH: true,
+        allStarGame: false,
+        tradeDeadline: true,
+        mercyRule: false,
+      },
+      playoffSetupSnapshot: {
+        teamsQualifying: 2,
+        format: 'series',
+        seriesLengths: {
+          wildCard: '1',
+          divisionSeries: '1',
+          championship: '1',
+          worldSeries: '1',
+        },
+        homeFieldAdvantage: 'higher-seed',
+      },
+      seasonLength: {
+        gamesPerTeam: 32,
+        expectedRegularSeasonGamesPerTeam: 32,
+        inningsPerGame: 6,
+        adaptiveStandardsInningsPerGame: 6,
+      },
+      schedulePolicy: {
+        policy: 'empty-manual-user-supplied',
+        generatedSchedulesAllowed: false,
+        initialScheduleRows: 0,
+        allowedSources: ['manual', 'csv'],
+      },
+      rosterRequirements: {
+        mlbPlayersPerTeam: 22,
+        farmPlayersPerTeam: 10,
+        validationStatus: 'passed',
+        teamCounts: {
+          'team-a': { MLB: 6, FARM: 1 },
+          'team-b': { MLB: 3, FARM: 1 },
+        },
+      },
+      stadiums: [],
+      salaryBaseline,
+    },
+    ...overrides,
+  } as StoredFranchiseConfig;
+}
+
 function makeTeams(): Team[] {
   return [
     {
@@ -234,6 +393,7 @@ function seedValidation(
 function expectNoWrites() {
   expect(franchisePlayerStorage.saveFranchisePlayer).not.toHaveBeenCalled();
   expect(franchisePlayerStorage.saveFranchiseTeam).not.toHaveBeenCalled();
+  expect(mocks.saveFranchiseConfig).not.toHaveBeenCalled();
   expect(franchiseFarmStorage.saveFranchiseFarmRecord).not.toHaveBeenCalled();
   expect(franchiseFarmStorage.deleteFranchiseFarmRecord).not.toHaveBeenCalled();
   expect(leagueBuilderStorage.savePlayer).not.toHaveBeenCalled();
@@ -247,6 +407,8 @@ function expectNoWrites() {
 describe('franchise trade dry-run adapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.getFranchiseConfig.mockResolvedValue(makeConfig());
+    mocks.saveFranchiseConfig.mockImplementation(async (config: StoredFranchiseConfig) => config);
     mocks.saveFranchisePlayer.mockImplementation(async (_franchiseId: string, player: Player) => player);
     mocks.saveFranchiseTeam.mockImplementation(async (_franchiseId: string, team: Team) => team);
     mocks.saveFranchiseFarmRecord.mockImplementation(async (record: FranchiseFarmRecord) => ({
@@ -255,7 +417,7 @@ describe('franchise trade dry-run adapter', () => {
     }));
     mocks.deleteFranchiseFarmRecord.mockResolvedValue(undefined);
     mocks.logMode2V1Transaction.mockImplementation(async (input: Record<string, unknown>) => ({
-      id: 'txn-manual-trade',
+      id: String(input.id ?? 'txn-manual-trade'),
       timestamp: '2026-01-01T00:00:00.000Z',
       undone: false,
       undoneAt: null,
@@ -277,7 +439,7 @@ describe('franchise trade dry-run adapter', () => {
         'Manual execution is available only for explicit user-selected requestedTrade players.',
         'Dry-run preview does not move players or change roster, farm, team, or transaction state.',
         'No transactions, trade state, League Builder data, or franchise offseason state are written.',
-        'Trade AI, final acceptance logic, chemistry, morale, injuries, and salary-cap enforcement are deferred.',
+        'Trade AI, final acceptance logic, chemistry, morale, injuries, salary matching, and luxury-tax enforcement are deferred.',
         'All fit previews are non-executable advisory previews.',
       ]),
     });
@@ -618,6 +780,87 @@ describe('franchise trade dry-run adapter', () => {
     expectNoWrites();
   });
 
+  test('manual trade emits active TEAM_MVP and ACE context in TradeEvent without morale effects', async () => {
+    const players = makePlayers().map((player) =>
+      player.id === 'a-ss-1'
+        ? makePlayer({
+          id: 'a-ss-1',
+          teamId: 'team-a',
+          firstName: 'Alpha',
+          lastName: 'Active',
+          primaryPosition: 'SS',
+          franchiseDesignations: [
+            {
+              franchiseId: context.franchiseId,
+              seasonId: context.seasonId,
+              statsScopeId: context.statsScopeId,
+              seasonNumber: context.seasonNumber,
+              teamId: 'team-a',
+              playerId: 'a-ss-1',
+              playerName: 'Alpha Active',
+              type: 'TEAM_MVP',
+              status: 'active',
+              sourceInputs: { totalWAR: 1.7 },
+              calculationVersion: 'franchise-designations-v1-active-team-mvp-ace',
+              calculatedAt: '2026-06-01T00:00:00.000Z',
+            },
+          ],
+        } as Partial<Player> & Record<string, unknown> & { id: string; teamId: string })
+        : player.id === 'b-rp-1'
+          ? makePlayer({
+            id: 'b-rp-1',
+            teamId: 'team-b',
+            firstName: 'Beta',
+            lastName: 'Ace',
+            primaryPosition: 'RP',
+            franchiseDesignations: [
+              {
+                franchiseId: context.franchiseId,
+                seasonId: context.seasonId,
+                statsScopeId: context.statsScopeId,
+                seasonNumber: context.seasonNumber,
+                teamId: 'team-b',
+                playerId: 'b-rp-1',
+                playerName: 'Beta Ace',
+                type: 'ACE',
+                status: 'active',
+                sourceInputs: { pWAR: 1.2 },
+                calculationVersion: 'franchise-designations-v1-active-team-mvp-ace',
+                calculatedAt: '2026-06-01T00:00:00.000Z',
+              },
+            ],
+          } as Partial<Player> & Record<string, unknown> & { id: string; teamId: string })
+          : player,
+    );
+    seedValidation(players);
+
+    const result = await executeManualFranchiseTrade(context, {
+      requestedTrade: {
+        sourceTeamId: 'team-a',
+        targetTeamId: 'team-b',
+        outgoingPlayerId: 'a-ss-1',
+        incomingPlayerId: 'b-rp-1',
+      },
+    });
+
+    expect(result.success).toBe(true);
+    const transactionInput = mocks.logMode2V1Transaction.mock.calls[0][0];
+    expect(transactionInput.data.tradeEvent).toEqual(expect.objectContaining({
+      activeDesignationContext: expect.arrayContaining([
+        expect.objectContaining({ playerId: 'a-ss-1', teamId: 'team-a', designationType: 'TEAM_MVP' }),
+        expect.objectContaining({ playerId: 'b-rp-1', teamId: 'team-b', designationType: 'ACE' }),
+      ]),
+      playersFromSource: [
+        expect.objectContaining({ playerId: 'a-ss-1', activeDesignations: ['TEAM_MVP'] }),
+      ],
+      playersFromTarget: [
+        expect.objectContaining({ playerId: 'b-rp-1', activeDesignations: ['ACE'] }),
+      ],
+      moraleMutationApplied: false,
+      relationshipMutationApplied: false,
+    }));
+  });
+
   test('requested trade preview does not expose unrevealed FARM true grade', async () => {
     const players = makePlayers().map((player) =>
       player.id === 'a-farm-1'
@@ -827,8 +1070,10 @@ describe('franchise trade dry-run adapter', () => {
     );
     expect(franchiseFarmStorage.saveFranchiseFarmRecord).not.toHaveBeenCalled();
     expect(franchiseFarmStorage.deleteFranchiseFarmRecord).not.toHaveBeenCalled();
+    const transactionInput = mocks.logMode2V1Transaction.mock.calls[0][0];
     expect(transactionStorage.logMode2V1Transaction).toHaveBeenCalledWith(
       expect.objectContaining({
+        id: transactionInput.id,
         type: 'trade',
         actor: 'USER',
         season: context.seasonNumber,
@@ -845,15 +1090,42 @@ describe('franchise trade dry-run adapter', () => {
           playerIds: ['a-ss-1', 'b-rp-1'],
           playersFromSource: ['a-ss-1'],
           playersFromTarget: ['b-rp-1'],
+          tradeEvent: expect.objectContaining({
+            transactionId: transactionInput.id,
+            eventType: 'trade',
+            playersFromSource: [
+              expect.objectContaining({ playerId: 'a-ss-1', sourceRosterStatus: 'MLB', targetRosterStatus: 'MLB' }),
+            ],
+            playersFromTarget: [
+              expect.objectContaining({ playerId: 'b-rp-1', sourceRosterStatus: 'MLB', targetRosterStatus: 'MLB' }),
+            ],
+            moraleMutationApplied: false,
+            relationshipMutationApplied: false,
+            salaryMovementApplied: false,
+            mode3HandoffApplied: false,
+            aiTradeBehaviorApplied: false,
+          }),
+          careerStatContinuity: expect.objectContaining({
+            playerIdsPreserved: ['a-ss-1', 'b-rp-1'],
+            completedGameArchivesRewritten: false,
+            futureTeamContextUsesCurrentAssignments: true,
+          }),
         }),
       }),
     );
     expect(result.data?.executedTrade).toMatchObject({
-      transactionId: 'txn-manual-trade',
+      transactionId: transactionInput.id,
       sourceTeamId: 'team-a',
       targetTeamId: 'team-b',
       playersFromSource: ['a-ss-1'],
       playersFromTarget: ['b-rp-1'],
+      tradeEvent: expect.objectContaining({
+        transactionId: transactionInput.id,
+        moraleMutationApplied: false,
+        relationshipMutationApplied: false,
+        salaryMovementApplied: false,
+        mode3HandoffApplied: false,
+      }),
     });
     expect(result.data?.limitations).toEqual(
       expect.arrayContaining([
@@ -1002,6 +1274,95 @@ describe('franchise trade dry-run adapter', () => {
     expect(transactionInput.data).not.toHaveProperty('luxuryTax');
   });
 
+  test('refreshes scoped team payroll proof and logs salary impact without salary matching', async () => {
+    const players = makePlayers().map((player) =>
+      player.id === 'a-farm-1'
+        ? makePlayer({
+          id: 'a-farm-1',
+          teamId: 'team-a',
+          firstName: 'Alpha',
+          lastName: 'Farm',
+          primaryPosition: 'SS',
+          salary: 0.5,
+          ratingRevealState: 'revealed',
+          leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-a', rosterStatus: 'FARM' }],
+        })
+        : player.id === 'b-rp-1'
+          ? makePlayer({
+            id: 'b-rp-1',
+            teamId: 'team-b',
+            firstName: 'Beta',
+            lastName: 'Reliever',
+            primaryPosition: 'RP',
+            salary: 4,
+          })
+          : player,
+    );
+    const salaryBaselineBefore = {
+      calculationVersion: 'franchise-salary-v1-spec-multifactor-hidden-safe',
+      playerCount: players.length,
+      salariedPlayerCount: players.length,
+      totalSalary: 15.3,
+      teamPayrolls: {
+        'team-a': 7.7,
+        'team-b': 7.6,
+      },
+    };
+    mocks.getFranchiseConfig.mockResolvedValueOnce(makeConfig({ salaryBaseline: salaryBaselineBefore }));
+    seedValidation(players);
+
+    const result = await executeManualFranchiseTrade(context, {
+      requestedTrade: {
+        sourceTeamId: 'team-a',
+        targetTeamId: 'team-b',
+        outgoingPlayerId: 'a-farm-1',
+        incomingPlayerId: 'b-rp-1',
+      },
+    });
+
+    expect(result.success).toBe(true);
+    const savedConfig = mocks.saveFranchiseConfig.mock.calls[0]?.[0] as StoredFranchiseConfig;
+    expect(savedConfig.salaryBaseline.teamPayrolls['team-a']).toBeCloseTo(11.2);
+    expect(savedConfig.salaryBaseline.teamPayrolls['team-b']).toBeCloseTo(4.1);
+    expect(savedConfig.handoffContract.salaryBaseline.teamPayrolls['team-a']).toBeCloseTo(11.2);
+    expect(savedConfig.handoffContract.salaryBaseline.teamPayrolls['team-b']).toBeCloseTo(4.1);
+
+    const transactionInput = mocks.logMode2V1Transaction.mock.calls[0][0];
+    expect(transactionInput.data.salaryImpact).toEqual(expect.objectContaining({
+      payrollProofUpdated: true,
+      salaryMatchingApplied: false,
+      luxuryTaxApplied: false,
+      teamImpacts: expect.arrayContaining([
+        expect.objectContaining({
+          teamId: 'team-a',
+          payrollBefore: 7.7,
+          payrollAfter: 11.2,
+          delta: expect.closeTo(3.5),
+        }),
+        expect.objectContaining({
+          teamId: 'team-b',
+          payrollBefore: 7.6,
+          payrollAfter: 4.1,
+          delta: expect.closeTo(-3.5),
+        }),
+      ]),
+      movedPlayerSalaries: expect.arrayContaining([
+        expect.objectContaining({ playerId: 'a-farm-1', salary: 0.5 }),
+        expect.objectContaining({ playerId: 'b-rp-1', salary: 4 }),
+      ]),
+    }));
+    expect(transactionInput.data.tradeEvent).toEqual(expect.objectContaining({
+      transactionId: transactionInput.id,
+      salaryImpact: expect.objectContaining({
+        payrollProofUpdated: true,
+        salaryMatchingApplied: false,
+        luxuryTaxApplied: false,
+      }),
+      salaryMovementApplied: false,
+      aiTradeBehaviorApplied: false,
+    }));
+  });
+
   test('executes a revealed FARM move when the destination FARM is already over startup depth', async () => {
     const extraFarmPlayers = Array.from({ length: 10 }, (_, index) =>
       makePlayer({
@@ -1137,7 +1498,44 @@ describe('franchise trade dry-run adapter', () => {
     expectNoWrites();
   });
 
-  test('rolls back player, farm, and team writes when trade transaction logging fails', async () => {
+  test('rolls back player, farm, team, and payroll proof writes when trade transaction logging fails', async () => {
+    const players = makePlayers().map((player) =>
+      player.id === 'a-farm-1'
+        ? makePlayer({
+          id: 'a-farm-1',
+          teamId: 'team-a',
+          firstName: 'Alpha',
+          lastName: 'Farm',
+          primaryPosition: 'SS',
+          salary: 0.5,
+          ratingRevealState: 'revealed',
+          leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-a', rosterStatus: 'FARM' }],
+        })
+        : player.id === 'b-rp-1'
+          ? makePlayer({
+            id: 'b-rp-1',
+            teamId: 'team-b',
+            firstName: 'Beta',
+            lastName: 'Reliever',
+            primaryPosition: 'RP',
+            salary: 4,
+          })
+          : player,
+    );
+    const originalConfig = makeConfig({
+      salaryBaseline: {
+        calculationVersion: 'franchise-salary-v1-spec-multifactor-hidden-safe',
+        playerCount: players.length,
+        salariedPlayerCount: players.length,
+        totalSalary: 15.3,
+        teamPayrolls: {
+          'team-a': 7.7,
+          'team-b': 7.6,
+        },
+      },
+    });
+    mocks.getFranchiseConfig.mockResolvedValueOnce(originalConfig);
+    seedValidation(players);
     mocks.logMode2V1Transaction.mockRejectedValueOnce(new Error('transaction write failed'));
 
     const result = await executeManualFranchiseTrade(context, {
@@ -1178,6 +1576,17 @@ describe('franchise trade dry-run adapter', () => {
       context.franchiseId,
       expect.objectContaining({ id: 'team-b', lineupWithDH: [expect.objectContaining({ playerId: 'b-rp-1' })] }),
     );
+    expect(mocks.saveFranchiseConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        salaryBaseline: expect.objectContaining({
+          teamPayrolls: expect.objectContaining({
+            'team-a': expect.closeTo(11.2),
+            'team-b': expect.closeTo(4.1),
+          }),
+        }),
+      }),
+    );
+    expect(mocks.saveFranchiseConfig).toHaveBeenCalledWith(originalConfig);
   });
 
   test('keeps dry-run adapter read-only when apply is requested', async () => {

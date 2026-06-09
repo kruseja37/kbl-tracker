@@ -33,6 +33,18 @@ import {
 import { updateFranchiseDesignationTeamForTrade } from './franchiseDesignations';
 import type { FranchisePlayerDesignationRecord } from './franchiseDesignations';
 import { V1_MLB_PLAYERS_PER_TEAM } from './leagueBuilderFarmScoutingHandoff';
+import {
+  getFranchiseConfig,
+  saveFranchiseConfig,
+} from './franchiseManager';
+import {
+  FRANCHISE_CURRENT_SALARY_CALCULATION_VERSION,
+  getVisibleSafeFranchisePlayerSalary,
+} from './franchiseSalary';
+import type {
+  FranchiseSalaryBaselineProof,
+  StoredFranchiseConfig,
+} from '../types/franchise';
 
 export const FRANCHISE_TRADE_CALCULATION_VERSION = 'franchise-trades-v1-fit-preview-dry-run';
 
@@ -148,7 +160,72 @@ export interface FranchiseTradeExecutionSummary {
   playersFromSource: string[];
   playersFromTarget: string[];
   movedFarmPlayerIds: string[];
+  tradeEvent?: TradeEvent;
   rollbackStatus?: FranchiseTradeExecutionRollbackStatus;
+}
+
+export interface TradeEventPlayer {
+  playerId: string;
+  playerName: string;
+  previousTeamId: string;
+  newTeamId: string;
+  sourceRosterStatus: FranchiseTradeRosterStatus;
+  targetRosterStatus: FranchiseTradeRosterStatus;
+  salary: number | null;
+  activeDesignations: Array<'TEAM_MVP' | 'ACE'>;
+}
+
+export interface TradeEventPayrollImpact {
+  teamId: string;
+  payrollBefore: number;
+  payrollAfter: number;
+  delta: number;
+}
+
+export interface TradeEventSalaryImpactSummary {
+  calculationVersion: typeof FRANCHISE_CURRENT_SALARY_CALCULATION_VERSION;
+  payrollProofUpdated: boolean;
+  teamImpacts: TradeEventPayrollImpact[];
+  movedPlayerSalaries: Array<{
+    playerId: string;
+    playerName: string;
+    previousTeamId: string;
+    newTeamId: string;
+    salary: number | null;
+  }>;
+  salaryMatchingApplied: false;
+  luxuryTaxApplied: false;
+}
+
+export interface TradeEvent {
+  id: string;
+  eventType: 'trade';
+  transactionId: string;
+  franchiseId: string;
+  seasonId: string;
+  statsScopeId: string;
+  seasonNumber: number;
+  sourceTeamId: string;
+  targetTeamId: string;
+  playersFromSource: TradeEventPlayer[];
+  playersFromTarget: TradeEventPlayer[];
+  movedFarmPlayerIds: string[];
+  salaryImpact: TradeEventSalaryImpactSummary;
+  careerStatContinuity: {
+    playerIdsPreserved: string[];
+    completedGameArchivesRewritten: false;
+    futureTeamContextUsesCurrentAssignments: true;
+  };
+  activeDesignationContext: Array<{
+    playerId: string;
+    teamId: string;
+    designationType: 'TEAM_MVP' | 'ACE';
+  }>;
+  moraleMutationApplied: false;
+  relationshipMutationApplied: false;
+  salaryMovementApplied: false;
+  mode3HandoffApplied: false;
+  aiTradeBehaviorApplied: false;
 }
 
 const TRADE_ELIGIBLE_STATUSES = new Set<FranchiseTradeRosterStatus>(['MLB', 'FARM']);
@@ -294,6 +371,24 @@ function mlbCountForTeam(players: Player[], teamId: string): number {
   return players.filter((player) => rosterStatusForPlayer(player, teamId) === 'MLB').length;
 }
 
+function tradeRosterSnapshot(players: Player[], teamId: string): {
+  teamId: string;
+  mlbPlayerIds: string[];
+  farmPlayerIds: string[];
+} {
+  return {
+    teamId,
+    mlbPlayerIds: players
+      .filter((player) => rosterStatusForPlayer(player, teamId) === 'MLB')
+      .map((player) => player.id)
+      .sort(),
+    farmPlayerIds: players
+      .filter((player) => rosterStatusForPlayer(player, teamId) === 'FARM')
+      .map((player) => player.id)
+      .sort(),
+  };
+}
+
 function projectManualTradeMlbCounts(params: {
   players: Player[];
   sourceTeamId: string;
@@ -320,6 +415,185 @@ function projectManualTradeMlbCounts(params: {
   return {
     [params.sourceTeamId]: sourceMlbCount,
     [params.targetTeamId]: targetMlbCount,
+  };
+}
+
+function activeTeamMvpAceDesignations(
+  player: Player,
+  teamId: string,
+): Array<'TEAM_MVP' | 'ACE'> {
+  return ((player as Player & { franchiseDesignations?: FranchisePlayerDesignationRecord[] }).franchiseDesignations ?? [])
+    .filter((designation) =>
+      designation.status === 'active' &&
+      designation.teamId === teamId &&
+      (designation.type === 'TEAM_MVP' || designation.type === 'ACE'),
+    )
+    .map((designation) => designation.type as 'TEAM_MVP' | 'ACE');
+}
+
+function visibleSafeSalaryTotal(players: Player[]): number {
+  return players.reduce((sum, player) =>
+    sum + (getVisibleSafeFranchisePlayerSalary(player) ?? 0),
+  0);
+}
+
+function buildTradeSalaryBaselineProofAfterTrade(params: {
+  baselineBefore: FranchiseSalaryBaselineProof;
+  sourceTeamId: string;
+  targetTeamId: string;
+  sourcePlayers: Player[];
+  targetPlayers: Player[];
+}): FranchiseSalaryBaselineProof {
+  const sourceOutgoingSalary = visibleSafeSalaryTotal(params.sourcePlayers);
+  const targetOutgoingSalary = visibleSafeSalaryTotal(params.targetPlayers);
+  const teamPayrolls = { ...params.baselineBefore.teamPayrolls };
+  teamPayrolls[params.sourceTeamId] =
+    (teamPayrolls[params.sourceTeamId] ?? 0) - sourceOutgoingSalary + targetOutgoingSalary;
+  teamPayrolls[params.targetTeamId] =
+    (teamPayrolls[params.targetTeamId] ?? 0) - targetOutgoingSalary + sourceOutgoingSalary;
+
+  return {
+    ...params.baselineBefore,
+    calculationVersion: FRANCHISE_CURRENT_SALARY_CALCULATION_VERSION,
+    totalSalary: Object.values(teamPayrolls).reduce((sum, salary) => sum + salary, 0),
+    teamPayrolls,
+  };
+}
+
+function salaryBaselineChanged(
+  config: StoredFranchiseConfig,
+  baseline: FranchiseSalaryBaselineProof,
+): boolean {
+  return JSON.stringify(config.salaryBaseline ?? null) !== JSON.stringify(baseline);
+}
+
+function buildManualTradeTransactionId(params: {
+  franchiseId: string;
+  seasonId: string;
+  sourceTeamId: string;
+  targetTeamId: string;
+  selectedIds: string[];
+  createdAt: string;
+}): string {
+  return [
+    'txn',
+    'trade',
+    params.franchiseId,
+    params.seasonId,
+    params.sourceTeamId,
+    params.targetTeamId,
+    params.selectedIds.join('-'),
+    params.createdAt,
+  ]
+    .join('_')
+    .replace(/[^A-Za-z0-9_-]/g, '_');
+}
+
+function tradeEventPlayer(params: {
+  player: Player;
+  previousTeamId: string;
+  newTeamId: string;
+  targetRosterStatus?: FranchiseTradeRosterStatus;
+}): TradeEventPlayer {
+  const sourceRosterStatus = rosterStatusForPlayer(params.player, params.previousTeamId);
+  return {
+    playerId: params.player.id,
+    playerName: playerName(params.player),
+    previousTeamId: params.previousTeamId,
+    newTeamId: params.newTeamId,
+    sourceRosterStatus,
+    targetRosterStatus: params.targetRosterStatus ?? sourceRosterStatus,
+    salary: getVisibleSafeFranchisePlayerSalary(params.player),
+    activeDesignations: activeTeamMvpAceDesignations(params.player, params.previousTeamId),
+  };
+}
+
+function buildTradeEvent(params: {
+  transactionId: string;
+  franchiseId: string;
+  seasonId: string;
+  statsScopeId: string;
+  seasonNumber: number;
+  sourceTeamId: string;
+  targetTeamId: string;
+  sourcePlayers: Player[];
+  targetPlayers: Player[];
+  movedFarmPlayerIds: string[];
+  salaryBaselineBefore: FranchiseSalaryBaselineProof;
+  salaryBaselineAfter: FranchiseSalaryBaselineProof;
+}): TradeEvent {
+  const playersFromSource = params.sourcePlayers.map((player) =>
+    tradeEventPlayer({
+      player,
+      previousTeamId: params.sourceTeamId,
+      newTeamId: params.targetTeamId,
+    }),
+  );
+  const playersFromTarget = params.targetPlayers.map((player) =>
+    tradeEventPlayer({
+      player,
+      previousTeamId: params.targetTeamId,
+      newTeamId: params.sourceTeamId,
+    }),
+  );
+  const selectedPlayerIds = [...params.sourcePlayers, ...params.targetPlayers].map((player) => player.id);
+  const teamImpacts = [params.sourceTeamId, params.targetTeamId].map((teamId) => {
+    const payrollBefore = params.salaryBaselineBefore.teamPayrolls[teamId] ?? 0;
+    const payrollAfter = params.salaryBaselineAfter.teamPayrolls[teamId] ?? 0;
+    return {
+      teamId,
+      payrollBefore,
+      payrollAfter,
+      delta: payrollAfter - payrollBefore,
+    };
+  });
+  const movedPlayerSalaries = [...playersFromSource, ...playersFromTarget].map((player) => ({
+    playerId: player.playerId,
+    playerName: player.playerName,
+    previousTeamId: player.previousTeamId,
+    newTeamId: player.newTeamId,
+    salary: player.salary,
+  }));
+  const activeDesignationContext = [...playersFromSource, ...playersFromTarget].flatMap((player) =>
+    player.activeDesignations.map((designationType) => ({
+      playerId: player.playerId,
+      teamId: player.previousTeamId,
+      designationType,
+    })),
+  );
+
+  return {
+    id: `trade-event:${params.transactionId}`,
+    eventType: 'trade',
+    transactionId: params.transactionId,
+    franchiseId: params.franchiseId,
+    seasonId: params.seasonId,
+    statsScopeId: params.statsScopeId,
+    seasonNumber: params.seasonNumber,
+    sourceTeamId: params.sourceTeamId,
+    targetTeamId: params.targetTeamId,
+    playersFromSource,
+    playersFromTarget,
+    movedFarmPlayerIds: params.movedFarmPlayerIds,
+    salaryImpact: {
+      calculationVersion: FRANCHISE_CURRENT_SALARY_CALCULATION_VERSION,
+      payrollProofUpdated: true,
+      teamImpacts,
+      movedPlayerSalaries,
+      salaryMatchingApplied: false,
+      luxuryTaxApplied: false,
+    },
+    careerStatContinuity: {
+      playerIdsPreserved: selectedPlayerIds,
+      completedGameArchivesRewritten: false,
+      futureTeamContextUsesCurrentAssignments: true,
+    },
+    activeDesignationContext,
+    moraleMutationApplied: false,
+    relationshipMutationApplied: false,
+    salaryMovementApplied: false,
+    mode3HandoffApplied: false,
+    aiTradeBehaviorApplied: false,
   };
 }
 
@@ -489,7 +763,7 @@ function buildTeamReport(
   const farmCount = farmRecordsForTeam(farmRecords, team.id).length;
   const { needs, surpluses } = buildNeedSurplus(teamPlayers);
   const limitations = [
-    'Trade AI, final acceptance, roster movement, transactions, morale/chemistry effects, injuries, and salary enforcement are deferred.',
+    'Trade AI, final acceptance, morale/chemistry effects, injuries, salary matching, and luxury-tax enforcement are deferred.',
   ];
 
   if (farmCount === 0) {
@@ -799,7 +1073,7 @@ function buildData(
       'Manual execution is available only for explicit user-selected requestedTrade players.',
       'Dry-run preview does not move players or change roster, farm, team, or transaction state.',
       'No transactions, trade state, League Builder data, or franchise offseason state are written.',
-      'Trade AI, final acceptance logic, chemistry, morale, injuries, and salary-cap enforcement are deferred.',
+      'Trade AI, final acceptance logic, chemistry, morale, injuries, salary matching, and luxury-tax enforcement are deferred.',
       'All fit previews are non-executable advisory previews.',
     ],
   };
@@ -812,7 +1086,7 @@ function buildManualExecutionData(
   return {
     ...data,
     executedTrade,
-    method: 'Manual requestedTrade execution from franchise-owned roster/farm state; no trade AI, acceptance, morale/chemistry, injuries, or salary-cap enforcement are performed.',
+    method: 'Manual requestedTrade execution from franchise-owned roster/farm state; no trade AI, acceptance, morale/chemistry, injuries, salary matching, or luxury-tax enforcement are performed.',
     limitations: [
       'Manual execution moved only explicit user-selected requestedTrade players.',
       'Player identity, playerId-keyed history fields, and stats continuity are preserved on the player records.',
@@ -908,6 +1182,8 @@ async function loadManualTradeScope(
 
 async function rollbackManualTrade(params: {
   franchiseId: string;
+  originalConfig: StoredFranchiseConfig | null;
+  savedConfig: boolean;
   originalPlayers: Player[];
   originalTeams: Team[];
   originalFarmRecords: FranchiseFarmRecord[];
@@ -921,10 +1197,20 @@ async function rollbackManualTrade(params: {
       params.savedPlayerIds.size > 0 ||
       params.savedTeamIds.size > 0 ||
       params.createdFarmRecords.length > 0 ||
-      params.deletedFarmRecords.length > 0,
+      params.deletedFarmRecords.length > 0 ||
+      params.savedConfig,
     success: true,
     errors: [],
   };
+
+  if (params.savedConfig && params.originalConfig) {
+    try {
+      await saveFranchiseConfig(params.originalConfig);
+    } catch (error) {
+      status.success = false;
+      status.errors.push(`franchise config rollback failed for ${params.originalConfig.franchiseId}: ${errorMessage(error)}`);
+    }
+  }
 
   for (const player of params.originalPlayers) {
     if (!params.savedPlayerIds.has(player.id)) continue;
@@ -1124,6 +1410,33 @@ async function executeManualTrade(
 
   const sourcePlayers = outgoingIds.map((playerId) => playersById.get(playerId)!);
   const targetPlayers = incomingIds.map((playerId) => playersById.get(playerId)!);
+  let franchiseConfig: StoredFranchiseConfig | null = null;
+  try {
+    franchiseConfig = await getFranchiseConfig(franchiseId);
+  } catch (error) {
+    const issue = makeIssue('TRADE_WRITE_FAILED', `Trade execution could not load franchise salary/payroll proof: ${errorMessage(error)}`, context);
+    return {
+      success: false,
+      dryRun: false,
+      context,
+      issues: [...report.issues, issue],
+      errorCode: issue.code,
+      message: 'Trade execution validation failed.',
+      data: buildManualExecutionData(data),
+    };
+  }
+  if (!franchiseConfig) {
+    const issue = makeIssue('TRADE_WRITE_FAILED', 'Trade execution requires the franchise config before payroll proof can be refreshed.', context);
+    return {
+      success: false,
+      dryRun: false,
+      context,
+      issues: [...report.issues, issue],
+      errorCode: issue.code,
+      message: 'Trade execution validation failed.',
+      data: buildManualExecutionData(data),
+    };
+  }
   const originalPlayers = [...sourcePlayers, ...targetPlayers];
   const originalTeams = [sourceTeam!, targetTeam!];
   const originalFarmRecords = [
@@ -1134,16 +1447,20 @@ async function executeManualTrade(
   const savedTeamIds = new Set<string>();
   const deletedFarmRecords: FranchiseFarmRecord[] = [];
   const createdFarmRecords: FranchiseFarmRecord[] = [];
+  let savedConfig = false;
 
   try {
+    const updatedPlayersById = new Map(report.scope.players.map((player) => [player.id, player]));
     for (const player of sourcePlayers) {
       const saved = await saveFranchisePlayer(franchiseId, updatePlayerTradeAssignment(player, sourceTeamId, targetTeamId));
       savedPlayerIds.add(saved.id);
+      updatedPlayersById.set(saved.id, saved);
     }
 
     for (const player of targetPlayers) {
       const saved = await saveFranchisePlayer(franchiseId, updatePlayerTradeAssignment(player, targetTeamId, sourceTeamId));
       savedPlayerIds.add(saved.id);
+      updatedPlayersById.set(saved.id, saved);
     }
 
     const moveFarmRecord = async (record: FranchiseFarmRecord, toTeamId: string) => {
@@ -1177,8 +1494,60 @@ async function executeManualTrade(
       savedTeamIds.add(saved.id);
     }
 
+    const salaryBaselineBefore = franchiseConfig.salaryBaseline;
+    const salaryBaselineAfter = buildTradeSalaryBaselineProofAfterTrade({
+      baselineBefore: salaryBaselineBefore,
+      sourceTeamId,
+      targetTeamId,
+      sourcePlayers,
+      targetPlayers,
+    });
+    if (salaryBaselineChanged(franchiseConfig, salaryBaselineAfter)) {
+      await saveFranchiseConfig({
+        ...franchiseConfig,
+        salaryBaseline: salaryBaselineAfter,
+        handoffContract: {
+          ...franchiseConfig.handoffContract,
+          salaryBaseline: salaryBaselineAfter,
+        },
+      });
+      savedConfig = true;
+    }
+
     const movedFarmPlayerIds = createdFarmRecords.map((record) => record.playerId);
+    const transactionId = buildManualTradeTransactionId({
+      franchiseId,
+      seasonId,
+      sourceTeamId,
+      targetTeamId,
+      selectedIds,
+      createdAt: new Date().toISOString(),
+    });
+    const tradeEvent = buildTradeEvent({
+      transactionId,
+      franchiseId,
+      seasonId,
+      statsScopeId,
+      seasonNumber,
+      sourceTeamId,
+      targetTeamId,
+      sourcePlayers,
+      targetPlayers,
+      movedFarmPlayerIds,
+      salaryBaselineBefore,
+      salaryBaselineAfter,
+    });
+    const rosterSnapshotsBefore = {
+      source: tradeRosterSnapshot(report.scope.players, sourceTeamId),
+      target: tradeRosterSnapshot(report.scope.players, targetTeamId),
+    };
+    const nextPlayers = Array.from(updatedPlayersById.values());
+    const rosterSnapshotsAfter = {
+      source: tradeRosterSnapshot(nextPlayers, sourceTeamId),
+      target: tradeRosterSnapshot(nextPlayers, targetTeamId),
+    };
     const transaction = await logMode2V1Transaction({
+      id: transactionId,
       type: 'trade',
       actor: 'USER',
       season: seasonNumber,
@@ -1197,6 +1566,11 @@ async function executeManualTrade(
         playersFromSource: outgoingIds,
         playersFromTarget: incomingIds,
         movedFarmPlayerIds,
+        salaryImpact: tradeEvent.salaryImpact,
+        tradeEvent,
+        rosterSnapshotsBefore,
+        rosterSnapshotsAfter,
+        careerStatContinuity: tradeEvent.careerStatContinuity,
         sourcePlayers: sourcePlayers.map((player) => ({
           playerId: player.id,
           playerName: playerName(player),
@@ -1216,6 +1590,7 @@ async function executeManualTrade(
         players: originalPlayers,
         teams: originalTeams,
         farmRecords: originalFarmRecords,
+        salaryBaseline: salaryBaselineBefore,
       },
     });
 
@@ -1227,6 +1602,7 @@ async function executeManualTrade(
       playersFromSource: outgoingIds,
       playersFromTarget: incomingIds,
       movedFarmPlayerIds,
+      tradeEvent,
     };
 
     return {
@@ -1243,6 +1619,8 @@ async function executeManualTrade(
       originalPlayers,
       originalTeams,
       originalFarmRecords,
+      originalConfig: franchiseConfig,
+      savedConfig,
       createdFarmRecords,
       deletedFarmRecords,
       savedPlayerIds,
