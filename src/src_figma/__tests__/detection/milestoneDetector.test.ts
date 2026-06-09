@@ -13,6 +13,11 @@
 
 import { describe, test, expect } from 'vitest';
 import {
+  CAREER_PITCHING_TIERS as FIGMA_CAREER_PITCHING_TIERS,
+  checkCareerPitchingMilestones as checkFigmaCareerPitchingMilestones,
+} from '../../utils/milestoneDetector';
+
+import {
   // Configuration
   MLB_BASELINE_GAMES,
   MLB_BASELINE_INNINGS,
@@ -608,6 +613,11 @@ describe('Career Pitching Tiers', () => {
       expect(noHitterTiers.tiers[6].threshold).toBe(7);
     });
 
+    test('uses fixed rare-event scaling so no-hitter tiers do not collapse', () => {
+      expect(CAREER_PITCHING_TIERS.noHitters.scalingType).toBe('none');
+      expect(FIGMA_CAREER_PITCHING_TIERS.noHitters.scalingType).toBe('none');
+    });
+
     test('first no-hitter has 2x fame multiplier', () => {
       expect(CAREER_PITCHING_TIERS.noHitters.tiers[0].fameMultiplier).toBe(2);
     });
@@ -619,6 +629,11 @@ describe('Career Pitching Tiers', () => {
       expect(pgTiers.tiers).toHaveLength(2);
       expect(pgTiers.tiers[0].threshold).toBe(1);
       expect(pgTiers.tiers[1].threshold).toBe(2);
+    });
+
+    test('uses fixed rare-event scaling so perfect-game tiers do not collapse', () => {
+      expect(CAREER_PITCHING_TIERS.perfectGames.scalingType).toBe('none');
+      expect(FIGMA_CAREER_PITCHING_TIERS.perfectGames.scalingType).toBe('none');
     });
 
     test('first perfect game has 5x fame multiplier', () => {
@@ -1114,6 +1129,35 @@ describe('checkCareerPitchingMilestones', () => {
       expect(nhResult).toBeDefined();
       expect(nhResult?.tier).toBe(1);
     });
+
+    test('32-game first no-hitter emits exactly one no-hitter tier', () => {
+      const current = createMockCareerPitching({ noHitters: 1 });
+      const previous = createMockCareerPitching({ noHitters: 0 });
+      const shortConfig = { gamesPerSeason: 32, inningsPerGame: 6 };
+
+      const results = checkCareerPitchingMilestones(current, previous, new Set(), shortConfig);
+      const noHitterResults = results.filter(r => r.eventType === 'CAREER_NO_HITTERS_TIER');
+
+      expect(noHitterResults).toHaveLength(1);
+      expect(noHitterResults[0]).toMatchObject({
+        tier: 1,
+        threshold: 1,
+        actualValue: 1,
+      });
+    });
+
+    test('default first no-hitter behavior remains one fixed tier', () => {
+      const current = createMockCareerPitching({ noHitters: 1 });
+      const previous = createMockCareerPitching({ noHitters: 0 });
+      const mlbConfig = { gamesPerSeason: 162, inningsPerGame: 9 };
+
+      const results = checkCareerPitchingMilestones(current, previous, new Set(), mlbConfig);
+      const noHitterResults = results.filter(r => r.eventType === 'CAREER_NO_HITTERS_TIER');
+
+      expect(noHitterResults).toHaveLength(1);
+      expect(noHitterResults[0]?.tier).toBe(1);
+      expect(noHitterResults[0]?.threshold).toBe(1);
+    });
   });
 
   describe('Perfect Game Milestones', () => {
@@ -1127,6 +1171,51 @@ describe('checkCareerPitchingMilestones', () => {
       const pgResult = results.find(r => r.eventType === 'CAREER_PERFECT_GAMES_TIER');
       expect(pgResult).toBeDefined();
       expect(pgResult?.fameValue).toBeGreaterThan(0);
+    });
+
+    test('32-game first perfect game emits exactly one perfect-game tier', () => {
+      const current = createMockCareerPitching({ perfectGames: 1 });
+      const previous = createMockCareerPitching({ perfectGames: 0 });
+      const shortConfig = { gamesPerSeason: 32, inningsPerGame: 6 };
+
+      const results = checkCareerPitchingMilestones(current, previous, new Set(), shortConfig);
+      const perfectGameResults = results.filter(r => r.eventType === 'CAREER_PERFECT_GAMES_TIER');
+
+      expect(perfectGameResults).toHaveLength(1);
+      expect(perfectGameResults[0]).toMatchObject({
+        tier: 1,
+        threshold: 1,
+        actualValue: 1,
+      });
+    });
+
+    test('default first perfect-game behavior remains one fixed tier', () => {
+      const current = createMockCareerPitching({ perfectGames: 1 });
+      const previous = createMockCareerPitching({ perfectGames: 0 });
+      const mlbConfig = { gamesPerSeason: 162, inningsPerGame: 9 };
+
+      const results = checkCareerPitchingMilestones(current, previous, new Set(), mlbConfig);
+      const perfectGameResults = results.filter(r => r.eventType === 'CAREER_PERFECT_GAMES_TIER');
+
+      expect(perfectGameResults).toHaveLength(1);
+      expect(perfectGameResults[0]?.tier).toBe(1);
+      expect(perfectGameResults[0]?.threshold).toBe(1);
+    });
+
+    test('app-side duplicate detector keeps rare-event ladder behavior consistent', () => {
+      const current = createMockCareerPitching({ noHitters: 1, perfectGames: 1 });
+      const previous = createMockCareerPitching({ noHitters: 0, perfectGames: 0 });
+      const shortConfig = { gamesPerSeason: 32, inningsPerGame: 6 };
+
+      const results = checkFigmaCareerPitchingMilestones(
+        current as Parameters<typeof checkFigmaCareerPitchingMilestones>[0],
+        previous as Parameters<typeof checkFigmaCareerPitchingMilestones>[1],
+        new Set(),
+        shortConfig,
+      );
+
+      expect(results.filter(r => r.eventType === 'CAREER_NO_HITTERS_TIER')).toHaveLength(1);
+      expect(results.filter(r => r.eventType === 'CAREER_PERFECT_GAMES_TIER')).toHaveLength(1);
     });
   });
 });

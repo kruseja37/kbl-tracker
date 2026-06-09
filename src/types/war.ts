@@ -4,6 +4,12 @@
  *
  * Comprehensive type definitions for all WAR components.
  */
+import {
+  MLB_BASELINE_GAMES,
+  MLB_BASELINE_INNINGS,
+  normalizeToMlbSeasonEquivalent,
+  runsPerWinForSeason,
+} from '../utils/franchiseAdaptiveStandards';
 
 // ============================================
 // LEAGUE CONTEXT & BASELINES
@@ -29,7 +35,7 @@ export const SEASON_GAMES: Record<SeasonLength, number> = {
  * MLB baseline constants (reference only - use SMB4 for actual calculations)
  */
 export const MLB_BASELINES = {
-  gamesPerSeason: 162,
+  gamesPerSeason: MLB_BASELINE_GAMES,
   runsPerWin: 10.0,
   runsPerPA: 0.115,
   replacementRunsPer600PA: -17.5,
@@ -45,9 +51,9 @@ export const MLB_BASELINES = {
  * Total IP: 2,791.3 | Total PA: 10,994 | Total R: 1,277
  */
 export const SMB4_BASELINES = {
-  // Season structure (source data was 50-game, 9-inning season)
+  // Season structure (source data was a 50-game standard-inning season)
   gamesPerTeam: 50,
-  inningsPerGame: 9,
+  inningsPerGame: MLB_BASELINE_INNINGS,
   opportunityFactor: 0.309,
 
   // Batting
@@ -71,7 +77,7 @@ export const SMB4_BASELINES = {
   runsPerGameBothTeams: 6.38,
 
   // ⚠️ WARNING: This is for Pythagorean expectation analysis, NOT for WAR!
-  // For WAR calculations, use: 10 × (seasonGames / 162)
+  // For WAR calculations, use runsPerWinForSeason().
   // See getRunsPerWin() in each calculator, or MLB_BASELINES.runsPerWin
   runEnvironmentRPW: 17.87,  // sqrt(3.19) × 10 — DO NOT USE FOR WAR
 
@@ -182,7 +188,7 @@ export interface LeagueContext {
   // Replacement level
   replacementRunsPer600PA: number;
 
-  // Positional adjustments (runs per 162 games)
+  // Positional adjustments at the MLB baseline season length.
   positionalAdjustments: PositionalAdjustments;
 
   // Calibration metadata
@@ -192,7 +198,7 @@ export interface LeagueContext {
 }
 
 /**
- * Positional adjustments (runs per 162 games, scaled for season)
+ * Positional adjustments at the MLB baseline season length, scaled for season.
  * Per FWAR_CALCULATION_SPEC.md
  */
 export interface PositionalAdjustments {
@@ -229,11 +235,7 @@ export function createDefaultLeagueContext(
   seasonId: string,
   seasonGames: number
 ): LeagueContext {
-  // Scale runs per win based on season length
-  // Per FWAR_CALCULATION_SPEC.md Section 2:
-  // MLB: 162 games = 10 RPW. Shorter seasons = fewer runs per win.
-  // This is because each run has MORE impact on win% in shorter seasons.
-  const runsPerWin = MLB_BASELINES.runsPerWin * (seasonGames / MLB_BASELINES.gamesPerSeason);
+  const runsPerWin = runsPerWinForSeason(seasonGames, MLB_BASELINES.runsPerWin);
 
   return {
     seasonId,
@@ -555,7 +557,7 @@ export interface TotalWARResult {
 // ============================================
 
 /**
- * WAR quality thresholds (per 162 games, scale for shorter seasons)
+ * WAR quality thresholds normalized to the MLB baseline season length.
  */
 export const WAR_THRESHOLDS = {
   mvp: 8.0,
@@ -569,8 +571,7 @@ export const WAR_THRESHOLDS = {
  * Get WAR grade description
  */
 export function getWARGrade(war: number, seasonGames: number): string {
-  const scale = seasonGames / 162;
-  const scaledWAR = war / scale;  // Normalize to 162-game equivalent
+  const scaledWAR = normalizeToMlbSeasonEquivalent(war, seasonGames);
 
   if (scaledWAR >= WAR_THRESHOLDS.mvp) return 'MVP Candidate';
   if (scaledWAR >= 6.0) return 'Superstar';

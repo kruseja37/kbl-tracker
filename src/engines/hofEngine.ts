@@ -6,6 +6,8 @@
  * USER NOTE: HOF score weighted by games/season variable from season setup.
  */
 
+import { mlbEquivalentSeasonMultiplier } from '../utils/franchiseAdaptiveStandards';
+
 // ============================================
 // TYPES
 // ============================================
@@ -73,13 +75,10 @@ export const HOF_FIRST_BALLOT_SCORE = 90;
  * Weighted by games/season to normalize across different season lengths.
  *
  * The season length weighting ensures that a 50-game season's stats
- * are properly scaled when compared to a 162-game reference.
+ * are properly scaled when compared to the MLB baseline season reference.
  */
 export function calculateHOFScore(candidate: HOFCandidate): number {
-  // Scale factor: normalize WAR to 162-game equivalent
-  const seasonScale = candidate.gamesPerSeason > 0
-    ? 162 / candidate.gamesPerSeason
-    : 1;
+  const seasonScale = mlbEquivalentSeasonMultiplier(candidate.gamesPerSeason);
 
   // WAR is scaled by season length; awards are NOT (1 MVP = 1 MVP regardless)
   const scaledWAR = candidate.careerWAR * seasonScale;
@@ -101,10 +100,7 @@ export function calculateHOFScore(candidate: HOFCandidate): number {
 export function evaluateHOFEligibility(candidate: HOFCandidate): HOFResult {
   const hofScore = calculateHOFScore(candidate);
 
-  // Scale WAR threshold by season length
-  const seasonScale = candidate.gamesPerSeason > 0
-    ? 162 / candidate.gamesPerSeason
-    : 1;
+  const seasonScale = mlbEquivalentSeasonMultiplier(candidate.gamesPerSeason);
   const scaledWAR = candidate.careerWAR * seasonScale;
 
   let eligible = false;

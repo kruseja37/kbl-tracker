@@ -14,9 +14,9 @@ import type { FameEventType } from '../types/game';
 import { FAME_VALUES } from '../types/game';
 import type { MilestoneConfig } from '../utils/milestoneDetector';
 import {
+  getCombinedScalingFactor,
   getSeasonScalingFactor,
   scaleCountingThreshold,
-  MLB_BASELINE_GAMES,
   SMB4_DEFAULT_GAMES,
   SMB4_DEFAULT_INNINGS,
 } from '../utils/milestoneDetector';
@@ -144,7 +144,7 @@ export interface FameResult {
  * - checkCareerBattingMilestones()
  * - checkCareerPitchingMilestones()
  * - These accept MilestoneConfig and scale dynamically based on:
- *   - gamesPerSeason (e.g., 50, 128, 162)
+ *   - gamesPerSeason (e.g., short, SMB4 default, or MLB baseline)
  *   - inningsPerGame (e.g., 6, 9)
  *   - scalingType ('counting', 'innings', 'none')
  *
@@ -390,12 +390,12 @@ const DEFAULT_FAME_CONFIG: MilestoneConfig = {
  * Scaling type for milestone thresholds
  *
  * - 'opportunity': Scales with BOTH season length AND innings per game
- *   Formula: (gamesPerSeason / 162) × (inningsPerGame / 9)
+ *   Formula: shared combined adaptive scaling factor
  *   Used for: All stats tied to plate appearances or innings pitched
  *   (HR, hits, RBI, SB, pitcher K, IP, walks, etc.)
  *
  * - 'per-game': Scales with season length ONLY
- *   Formula: gamesPerSeason / 162
+ *   Formula: shared season adaptive scaling factor
  *   Used for: Stats that happen once per game max (wins, saves, games played)
  *
  * - 'none': No scaling
@@ -470,15 +470,13 @@ const MILESTONE_STAT_SCALING: Record<string, MilestoneScalingType> = {
  * Used for stats that accumulate with plate appearances or innings pitched
  */
 function getOpportunityScalingFactor(config: MilestoneConfig): number {
-  const seasonFactor = config.gamesPerSeason / MLB_BASELINE_GAMES;
-  const inningsFactor = config.inningsPerGame / 9;
-  return seasonFactor * inningsFactor;
+  return getCombinedScalingFactor(config);
 }
 
 /**
  * Scale a milestone threshold based on stat type and franchise config
  *
- * @param threshold - MLB baseline threshold (162 games, 9 innings)
+ * @param threshold - MLB baseline threshold
  * @param scalingType - How to scale: 'opportunity', 'per-game', or 'none'
  * @param config - Franchise configuration
  * @returns Scaled threshold for the franchise

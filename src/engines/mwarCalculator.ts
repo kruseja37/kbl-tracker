@@ -15,6 +15,7 @@
  */
 
 import { getLeverageIndex, type GameStateForLI } from './leverageCalculator';
+import { runsPerWinForSeason } from '../utils/franchiseAdaptiveStandards';
 
 // ============================================
 // TYPES
@@ -685,8 +686,7 @@ export function calculateSeasonMWAR(
       overperformanceWins: 0, rating: 'Average' };
   }
 
-  // Default RPW for season length
-  const rpw = runsPerWin ?? (10 * (seasonGames / 162));
+  const rpw = runsPerWin ?? runsPerWinForSeason(seasonGames);
 
   // Component 1: Decision WAR (60%)
   const decisionWAR = calculateDecisionWAR(decisions, rpw);

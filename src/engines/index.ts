@@ -5,6 +5,11 @@
  * Uses SMB4 baselines from ADAPTIVE_STANDARDS_ENGINE_SPEC.md.
  */
 
+import {
+  normalizeToMlbSeasonEquivalent,
+  runsPerWinForSeason,
+} from '../utils/franchiseAdaptiveStandards';
+
 // ============================================
 // bWAR - Batting WAR
 // ============================================
@@ -135,17 +140,10 @@ export type {
  * Get runs per win for a given season length
  * Central function that all WAR calculators use
  *
- * Per FWAR_CALCULATION_SPEC.md Section 2:
- * - MLB: 162 games = 10 RPW
- * - Shorter seasons = fewer runs per win
- * - Each run has MORE impact on win% in shorter seasons
- *
- * Formula: RPW = 10 × (seasonGames / 162)
+ * Shared adaptive standards runs-per-win helper.
  */
 export function getUnifiedRunsPerWin(seasonGames: number): number {
-  const MLB_GAMES = 162;
-  const MLB_RUNS_PER_WIN = 10;
-  return MLB_RUNS_PER_WIN * (seasonGames / MLB_GAMES);
+  return runsPerWinForSeason(seasonGames);
 }
 
 /**
@@ -166,9 +164,7 @@ export function calculateTotalWAR(
  * Get WAR quality tier
  */
 export function getTotalWARTier(totalWAR: number, seasonGames: number = 48): string {
-  // Scale to 162-game equivalent for grading
-  const scaleFactor = 162 / seasonGames;
-  const annualizedWAR = totalWAR * scaleFactor;
+  const annualizedWAR = normalizeToMlbSeasonEquivalent(totalWAR, seasonGames);
 
   if (annualizedWAR >= 8.0) return 'MVP Candidate';
   if (annualizedWAR >= 6.0) return 'Superstar';
@@ -184,7 +180,7 @@ export function getTotalWARTier(totalWAR: number, seasonGames: number = 48): str
  * SMB4-specific WAR thresholds for a 48-game season
  */
 export const SMB4_WAR_THRESHOLDS = {
-  // For a 48-game season (48/162 = 0.296 of full season)
+  // For a short season, grading normalizes WAR to the MLB baseline.
   mvpCandidate: 2.4,     // 8.0 × 0.296
   superstar: 1.8,        // 6.0 × 0.296
   allStar: 1.2,          // 4.0 × 0.296

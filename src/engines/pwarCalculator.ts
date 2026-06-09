@@ -1,4 +1,5 @@
 import { MAX_PARK_FACTOR, MIN_PARK_FACTOR } from './parkFactorDeriver';
+import { runsPerWinForSeason } from '../utils/franchiseAdaptiveStandards';
 
 /**
  * Pitching WAR (pWAR) Calculator
@@ -41,7 +42,7 @@ export const SMB4_PITCHING_BASELINES = {
   gamesPerTeam: 50,
 
   // ⚠️ WARNING: This is for run environment analysis (Pythagorean), NOT for WAR!
-  // WAR uses: 10 × (seasonGames / 162) — see getBaseRunsPerWin()
+  // WAR uses the shared adaptive standards runs-per-win helper.
   runEnvironmentRPW: 17.87,  // sqrt(3.19) × 10 — DO NOT USE FOR WAR
 };
 
@@ -253,17 +254,10 @@ export function estimateLeverageIndex(
 // ============================================
 
 /**
- * Get base runs per win for a season
- * Per FWAR_CALCULATION_SPEC.md Section 2:
- * MLB: 162 games = 10 RPW. Shorter seasons = fewer runs per win.
- * Each run has MORE impact on win% in shorter seasons.
- *
- * Formula: RPW = 10 × (seasonGames / 162)
+ * Get base runs per win for a season.
  */
 export function getBaseRunsPerWin(seasonGames: number): number {
-  const MLB_GAMES = 162;
-  const MLB_RUNS_PER_WIN = 10;
-  return MLB_RUNS_PER_WIN * (seasonGames / MLB_GAMES);
+  return runsPerWinForSeason(seasonGames);
 }
 
 /**

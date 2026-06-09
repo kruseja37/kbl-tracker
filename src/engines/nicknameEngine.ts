@@ -5,6 +5,12 @@
  * 16 auto-nickname triggers with user override support.
  */
 
+import {
+  deriveAdaptiveStandardsConfig,
+  scaledFullSeasonGamesThreshold,
+  type AdaptiveStandardsConfigInput,
+} from '../utils/franchiseAdaptiveStandards';
+
 // ============================================
 // TYPES
 // ============================================
@@ -53,6 +59,7 @@ export interface NicknamePlayerContext {
   saves?: number;
   isRookie: boolean;
   consecutiveGamesPlayed?: number;
+  adaptiveStandards?: AdaptiveStandardsConfigInput | null;
 }
 
 // ============================================
@@ -63,6 +70,12 @@ interface NicknameTrigger {
   id: NicknameId;
   displayName: string;
   check: (ctx: NicknamePlayerContext) => boolean;
+}
+
+function ironManGamesThreshold(ctx: NicknamePlayerContext): number {
+  return scaledFullSeasonGamesThreshold(
+    ctx.adaptiveStandards ? deriveAdaptiveStandardsConfig(ctx.adaptiveStandards) : undefined,
+  );
 }
 
 export const NICKNAME_TRIGGERS: NicknameTrigger[] = [
@@ -146,7 +159,7 @@ export const NICKNAME_TRIGGERS: NicknameTrigger[] = [
   {
     id: 'IRON_MAN',
     displayName: 'Iron Man',
-    check: (p) => (p.consecutiveGamesPlayed ?? 0) >= 162,
+    check: (p) => (p.consecutiveGamesPlayed ?? 0) >= ironManGamesThreshold(p),
   },
   {
     id: 'THE_CLOSER',

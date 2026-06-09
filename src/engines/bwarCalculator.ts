@@ -21,6 +21,7 @@ import {
   createDefaultLeagueContext,
 } from '../types/war';
 import { clampParkFactors, getDerivedParkFactorsIfAvailable } from './parkFactorDeriver';
+import { runsPerWinForSeason } from '../utils/franchiseAdaptiveStandards';
 
 // Re-export types and constants for engines/index.ts
 export {
@@ -183,17 +184,10 @@ export function getReplacementLevelRuns(
 // ============================================
 
 /**
- * Calculate runs per win for a given season length
- * Per FWAR_CALCULATION_SPEC.md Section 2:
- * MLB: 162 games = 10 RPW. Shorter seasons = fewer runs per win.
- * Each run has MORE impact on win% in shorter seasons.
- *
- * Formula: RPW = 10 × (seasonGames / 162)
+ * Calculate runs per win for a given season length.
  */
 export function getRunsPerWin(seasonGames: number): number {
-  const MLB_GAMES = 162;
-  const MLB_RUNS_PER_WIN = 10;
-  return MLB_RUNS_PER_WIN * (seasonGames / MLB_GAMES);
+  return runsPerWinForSeason(seasonGames);
 }
 
 // ============================================

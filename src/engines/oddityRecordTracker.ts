@@ -5,6 +5,11 @@
  * Tracks 19 unusual/funny records across play-by-play, end-of-game, and season-end.
  */
 
+import {
+  MLB_BASELINE_INNINGS,
+  getSeasonScalingFactor,
+} from '../utils/franchiseAdaptiveStandards';
+
 // ============================================
 // TYPES
 // ============================================
@@ -443,7 +448,10 @@ export function checkSeasonEndOddities(
   season: number,
 ): OddityRecordCandidate[] {
   const candidates: OddityRecordCandidate[] = [];
-  const scaledHRThreshold = Math.round(20 * (seasonLength / 162));
+  const scaledHRThreshold = Math.round(20 * getSeasonScalingFactor({
+    gamesPerSeason: seasonLength,
+    inningsPerGame: MLB_BASELINE_INNINGS,
+  }));
 
   // SPEEDSTER_STRIKEOUT_KING: Most Ks by 90+ speed player
   const speedsters = playerStats.filter(p => (p.ratings.speed ?? 0) >= 90);

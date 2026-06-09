@@ -31,6 +31,10 @@ import {
   calculatePitcherBattingMultiplier,
   PITCHER_ROTATION_FACTOR,
 } from '../utils/leagueConfig';
+import {
+  MLB_BASELINE_INNINGS,
+  getSeasonScalingFactor,
+} from '../utils/franchiseAdaptiveStandards';
 
 // Re-export DHContext for consumers
 export type { DHContext } from '../utils/leagueConfig';
@@ -760,7 +764,10 @@ export function calculateExpectedWAR(
   gamesPerSeason: number = 48
 ): ExpectedPerformance {
   const weightedRating = calculateWeightedRating(player.ratings, player.isPitcher);
-  const scaleFactor = gamesPerSeason / 162;
+  const scaleFactor = getSeasonScalingFactor({
+    gamesPerSeason,
+    inningsPerGame: MLB_BASELINE_INNINGS,
+  });
 
   let baseExpectedWAR: number;
   if (weightedRating >= 95) baseExpectedWAR = 6.0;

@@ -17,39 +17,33 @@ import type {
   PlayerSeasonBatting,
   PlayerSeasonPitching,
 } from './seasonStorage';
-
-// ============================================
-// CONFIGURATION
-// ============================================
-
-/**
- * Franchise milestone configuration
- *
- * Scaling is based on two factors:
- * 1. Season length: gamesPerSeason / MLB_BASELINE_GAMES (e.g., 128/162 = 0.79)
- * 2. Game length: inningsPerGame / MLB_BASELINE_INNINGS (e.g., 6/9 = 0.67)
- *
- * Combined scaling for per-game stats (pitching especially):
- *   seasonFactor × inningsFactor = 0.79 × 0.67 = 0.53
- *
- * For counting stats accumulated over a season:
- *   Just use seasonFactor (0.79)
- *
- * For career stats:
- *   Use seasonFactor (assumes same season length throughout career)
- */
-export interface MilestoneConfig {
-  gamesPerSeason: number;    // Games per season (default: 128 for SMB4)
-  inningsPerGame: number;    // Innings per game (default: 6 for SMB4)
-}
-
-// MLB baseline values for scaling calculations
-export const MLB_BASELINE_GAMES = 162;
-export const MLB_BASELINE_INNINGS = 9;
-
-// SMB4 default values
-export const SMB4_DEFAULT_GAMES = 128;
-export const SMB4_DEFAULT_INNINGS = 6;
+import {
+  getSeasonScalingFactor,
+  getInningsScalingFactor,
+  getCombinedScalingFactor,
+  scaleCountingThreshold,
+  scaleInningsThreshold,
+  type MilestoneConfig,
+  MLB_BASELINE_GAMES,
+  MLB_BASELINE_INNINGS,
+  SMB4_DEFAULT_GAMES,
+  SMB4_DEFAULT_INNINGS,
+} from './franchiseAdaptiveStandards';
+export type { MilestoneConfig } from './franchiseAdaptiveStandards';
+export {
+  getSeasonScalingFactor,
+  getInningsScalingFactor,
+  getCombinedScalingFactor,
+  scaleCountingThreshold,
+  scaleInningsThreshold,
+  scaledThreshold,
+  deriveAdaptiveStandardsConfig,
+  adaptiveStandardsConfig,
+  MLB_BASELINE_GAMES,
+  MLB_BASELINE_INNINGS,
+  SMB4_DEFAULT_GAMES,
+  SMB4_DEFAULT_INNINGS,
+} from './franchiseAdaptiveStandards';
 
 const DEFAULT_CONFIG: MilestoneConfig = {
   gamesPerSeason: SMB4_DEFAULT_GAMES,
@@ -57,50 +51,10 @@ const DEFAULT_CONFIG: MilestoneConfig = {
 };
 
 /**
- * Get season-length scaling factor
- * e.g., 128/162 = 0.79 for SMB4 default season
- */
-export function getSeasonScalingFactor(config: MilestoneConfig): number {
-  return config.gamesPerSeason / MLB_BASELINE_GAMES;
-}
-
-/**
- * Get innings-per-game scaling factor
- * e.g., 6/9 = 0.67 for SMB4 default games
- */
-export function getInningsScalingFactor(config: MilestoneConfig): number {
-  return config.inningsPerGame / MLB_BASELINE_INNINGS;
-}
-
-/**
- * Get combined scaling factor (for per-game pitching stats like IP)
- * e.g., 0.79 × 0.67 = 0.53
- */
-export function getCombinedScalingFactor(config: MilestoneConfig): number {
-  return getSeasonScalingFactor(config) * getInningsScalingFactor(config);
-}
-
-/**
  * @deprecated Use getSeasonScalingFactor instead
  */
 export function getScalingFactor(config: MilestoneConfig): number {
   return getSeasonScalingFactor(config);
-}
-
-/**
- * Scale a counting stat threshold for shorter seasons
- * Used for: HR, Hits, RBI, SB, Wins, Saves, K (batter), etc.
- */
-export function scaleCountingThreshold(threshold: number, config: MilestoneConfig): number {
-  return Math.round(threshold * getSeasonScalingFactor(config));
-}
-
-/**
- * Scale an innings-based threshold for shorter games AND seasons
- * Used for: IP, pitching K (somewhat), CG, Shutouts
- */
-export function scaleInningsThreshold(threshold: number, config: MilestoneConfig): number {
-  return Math.round(threshold * getCombinedScalingFactor(config));
 }
 
 /**
@@ -221,7 +175,7 @@ export interface CareerTier {
 // ============================================
 // CAREER MILESTONE THRESHOLDS (MLB BASELINE)
 // ============================================
-// These are stored as MLB baseline values (162 games, 9 innings)
+// These are stored as MLB baseline values and scaled at runtime.
 // They get scaled at runtime based on franchise configuration
 // Use scaleCountingThreshold() for counting stats
 // Use scaleInningsThreshold() for innings-based stats
@@ -348,7 +302,7 @@ export const CAREER_BATTING_TIERS: Record<string, { stat: string; tiers: CareerT
 };
 
 // Pitching career milestones (MLB baseline values)
-export const CAREER_PITCHING_TIERS: Record<string, { stat: string; tiers: CareerTier[]; eventType: FameEventType; scalingType: 'counting' | 'innings' }> = {
+export const CAREER_PITCHING_TIERS: Record<string, { stat: string; tiers: CareerTier[]; eventType: FameEventType; scalingType: 'counting' | 'innings' | 'none' }> = {
   wins: {
     stat: 'wins',
     eventType: 'CAREER_WINS_TIER',
@@ -439,7 +393,9 @@ export const CAREER_PITCHING_TIERS: Record<string, { stat: string; tiers: Career
   noHitters: {
     stat: 'noHitters',
     eventType: 'CAREER_NO_HITTERS_TIER',
-    scalingType: 'counting',  // Rare events - no scaling (1 is 1)
+    // Rare one-event ladders do not scale. A first no-hitter is one event in
+    // every season length, and later tiers must not collapse onto threshold 1.
+    scalingType: 'none',
     // MLB thresholds: 1, 2, 3, 4, 5, 6, 7
     tiers: [
       { threshold: 1, tier: 1, fameMultiplier: 2 },
@@ -454,7 +410,9 @@ export const CAREER_PITCHING_TIERS: Record<string, { stat: string; tiers: Career
   perfectGames: {
     stat: 'perfectGames',
     eventType: 'CAREER_PERFECT_GAMES_TIER',
-    scalingType: 'counting',  // Rare events - no scaling
+    // Rare one-event ladders do not scale. A first perfect game is one event in
+    // every season length, and the second tier remains a second event.
+    scalingType: 'none',
     // MLB thresholds: 1, 2
     tiers: [
       { threshold: 1, tier: 1, fameMultiplier: 5 },
@@ -791,7 +749,7 @@ export function checkSeasonBattingMilestones(
     const previousValue = previousStats?.[statName as keyof PlayerSeasonBatting] as number ?? 0;
 
     for (const { threshold, eventType, description } of thresholds) {
-      const scaledThreshold = Math.round(threshold * scaleFactor);
+      const scaledThreshold = scaleCountingThreshold(threshold, config);
       const milestoneKey = `${eventType}_${stats.seasonId}`;
 
       // Check if crossed threshold (wasn't achieved before, is now)
@@ -862,8 +820,8 @@ export function checkSeasonBattingMilestones(
 
   // Check HR-SB Club milestones
   for (const { hr, sb, eventType, description } of CLUB_THRESHOLDS) {
-    const scaledHR = Math.round(hr * scaleFactor);
-    const scaledSB = Math.round(sb * scaleFactor);
+    const scaledHR = scaleCountingThreshold(hr, config);
+    const scaledSB = scaleCountingThreshold(sb, config);
     const milestoneKey = `${eventType}_${stats.seasonId}`;
 
     if (
@@ -906,7 +864,7 @@ export function checkSeasonPitchingMilestones(
     const previousValue = previousStats?.[statName as keyof PlayerSeasonPitching] as number ?? 0;
 
     for (const { threshold, eventType, description } of thresholds) {
-      const scaledThreshold = Math.round(threshold * scaleFactor);
+      const scaledThreshold = scaleCountingThreshold(threshold, config);
       const milestoneKey = `${eventType}_${stats.seasonId}`;
 
       if (
@@ -1360,7 +1318,7 @@ export function getApproachingMilestones(
       const currentValue = seasonBatting[statName as keyof PlayerSeasonBatting] as number;
 
       for (const { threshold, eventType } of thresholds) {
-        const scaledThreshold = Math.round(threshold * scaleFactor);
+        const scaledThreshold = scaleCountingThreshold(threshold, config);
         const milestoneKey = `${eventType}_${seasonBatting.seasonId}`;
         if (achievedMilestones.has(milestoneKey)) continue;
 
@@ -1390,7 +1348,7 @@ export function getApproachingMilestones(
       const currentValue = seasonPitching[statName as keyof PlayerSeasonPitching] as number;
 
       for (const { threshold, eventType } of thresholds) {
-        const scaledThreshold = Math.round(threshold * scaleFactor);
+        const scaledThreshold = scaleCountingThreshold(threshold, config);
         const milestoneKey = `${eventType}_${seasonPitching.seasonId}`;
         if (achievedMilestones.has(milestoneKey)) continue;
 

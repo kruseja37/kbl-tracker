@@ -32,6 +32,10 @@ import {
   createDefaultLeagueContext,
   SMB4_BASELINES,
 } from '../../../types/war';
+import {
+  MLB_BASELINE_INNINGS,
+  getSeasonScalingFactor,
+} from '../../../utils/franchiseAdaptiveStandards';
 
 // ============================================
 // SIMPLIFIED INPUT TYPES
@@ -363,9 +367,10 @@ export function getWARQuality(war: number, seasonGames: number = 50): {
   color: string;
   tier: 'elite' | 'all-star' | 'starter' | 'average' | 'below' | 'replacement';
 } {
-  // Scale thresholds based on season length
-  // 162-game reference: 6.0/4.0/2.0/0.5/0.0 WAR
-  const scale = seasonGames / 162;
+  const scale = getSeasonScalingFactor({
+    gamesPerSeason: seasonGames,
+    inningsPerGame: MLB_BASELINE_INNINGS,
+  });
 
   const elite = 6.0 * scale;
   const allStar = 4.0 * scale;

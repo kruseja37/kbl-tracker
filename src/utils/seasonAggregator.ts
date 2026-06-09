@@ -25,13 +25,18 @@ import {
   type MilestoneAggregationResult,
 } from './milestoneAggregator';
 import { SMB4_DEFAULT_GAMES, type MilestoneConfig } from './milestoneDetector';
+import {
+  MLB_BASELINE_GAMES,
+  MLB_BASELINE_INNINGS,
+  MIN_QUALITY_START_OUTS,
+  scaledGameInningsThreshold,
+} from './franchiseAdaptiveStandards';
 
 // Default season ID if none is set
 const DEFAULT_SEASON_ID = 'season-1';
 const DEFAULT_SEASON_NUMBER = 1;
 const DEFAULT_SEASON_NAME = 'Season 1';
-const DEFAULT_TOTAL_GAMES = 162;
-const MLB_BASELINE_INNINGS = 9;
+const DEFAULT_TOTAL_GAMES = MLB_BASELINE_GAMES;
 
 export interface PitchingAchievementContext {
   scheduledInnings?: number;
@@ -43,11 +48,10 @@ export function getScaledQualityStartThresholds(
   const innings = Number.isFinite(scheduledInnings) && scheduledInnings > 0
     ? scheduledInnings
     : MLB_BASELINE_INNINGS;
-  const scale = innings / MLB_BASELINE_INNINGS;
 
   return {
-    outsRecorded: Math.max(9, Math.round(18 * scale)),
-    earnedRuns: Math.max(1, Math.round(3 * scale)),
+    outsRecorded: Math.max(MIN_QUALITY_START_OUTS, scaledGameInningsThreshold(18, innings)),
+    earnedRuns: Math.max(1, scaledGameInningsThreshold(3, innings)),
   };
 }
 

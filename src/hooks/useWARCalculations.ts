@@ -42,6 +42,7 @@ import {
 import {
   type BattingStatsForWAR,
 } from '../types/war';
+import { normalizeToMlbSeasonEquivalent } from '../utils/franchiseAdaptiveStandards';
 
 // ============================================
 // TYPES
@@ -575,9 +576,7 @@ export function getWARColor(war: number): string {
  * Get WAR tier description
  */
 export function getWARTier(war: number, seasonGames: number): string {
-  // Scale to 162-game equivalent
-  const scale = seasonGames / 162;
-  const scaledWAR = war / scale;
+  const scaledWAR = normalizeToMlbSeasonEquivalent(war, seasonGames);
 
   if (scaledWAR >= 8.0) return 'MVP';
   if (scaledWAR >= 6.0) return 'Superstar';

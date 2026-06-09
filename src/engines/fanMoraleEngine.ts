@@ -18,6 +18,12 @@
  * @see FAN_MORALE_SYSTEM_SPEC.md
  */
 
+import {
+  MLB_BASELINE_GAMES,
+  MLB_BASELINE_INNINGS,
+  getSeasonScalingFactor,
+} from '../utils/franchiseAdaptiveStandards';
+
 // ============================================
 // TYPES
 // ============================================
@@ -625,13 +631,16 @@ export function getHistoryModifier(
 export function calculateExpectedWins(
   totalTrueValue: number,
   leagueAvgTrueValue: number,
-  totalGames: number = 162
+  totalGames: number = MLB_BASELINE_GAMES
 ): number {
   // Baseline is 50% win rate
   const baselineWins = totalGames / 2;
 
   // Each point above/below average = ~0.5 wins (scaled for season length)
-  const scaleFactor = totalGames / 162;
+  const scaleFactor = getSeasonScalingFactor({
+    gamesPerSeason: totalGames,
+    inningsPerGame: MLB_BASELINE_INNINGS,
+  });
   const winAdjustment = (totalTrueValue - leagueAvgTrueValue) * 0.5 * scaleFactor;
 
   return Math.round(baselineWins + winAdjustment);
