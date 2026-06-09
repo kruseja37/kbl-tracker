@@ -259,13 +259,34 @@ Key files: `franchisePlayoffEngine.ts`, `franchiseStandingsEngine.ts`, `PlayoffB
 
 ---
 
+### 1.8.5 — Final WAR / Award Trust Promotion Gate
+
+**Status:** Required prerequisite before 1.9. The 1.9 WAR trust audit found that `finalWarTrusted` is still false, `trustedForAwards` is false, position-relative True Value remains preview-only, persisted True Value/value-delta trust is not promoted, award-specific milestone weighting is not proven, and adaptive award thresholds are not yet trusted. Do not implement awards/watchlists until this gate passes.
+
+**What's needed:**
+- Define final WAR trust for award consumers, separate from the current TEAM_MVP/ACE-only consumer gate.
+- Decide whether awards require final True Value/value-delta, or define an award-specific value policy that does not depend on untrusted preview estimates.
+- Prove award-specific milestone weighting and adaptive award thresholds with `scaledThreshold()` and no hardcoded MLB season assumptions.
+- Keep score-only rows blocked from player stats, WPA/WAR, awards, designations, player history, and relationships.
+- Keep hidden/unrevealed FARM rows blocked from trusted award inputs.
+- Keep Fan Favorite, Albatross, Cornerstone, Captain, and Fan Hopeful blocked/deferred unless separate trust gates promote them.
+
+**Hard boundary:** This is a trust-promotion checkpoint only. Do not implement awards, watchlists, season-end award storage, Mode 3/offseason, morale automation, relationship mutation, salary movement, generated schedules, AI simulation/trades, auto-draft, salary matching, luxury tax, or FA automation in this prerequisite.
+
+**Gate:** Awards can start only after final award-consumer WAR trust, award-specific True Value/value-delta policy, milestone weighting, adaptive thresholds, score-only exclusion, and hidden FARM exclusion are all explicitly proven.
+
+**ROUTE: Codex 5.5 | extra high**
+Key files: `franchiseAnalyticsTrust.ts`, `franchiseValueInputs.ts`, `franchiseTrueValuePreview.ts`, milestone/adaptive tests, future award trust tests
+
+---
+
 ### 1.9 — Awards / Watchlists
 
-**Status:** Not in the active roadmap. Worksheet says "v1 goal — must wait for WAR, salary/value, dynamic designations, and season-length weighting."
+**Status:** Blocked, not implemented. The 1.9 WAR trust audit confirmed current WAR trust is consumer-specific for TEAM_MVP/ACE designation input gating only. `finalWarTrusted` and `trustedForAwards` remain false, position-relative True Value/value delta are preview-only, only TEAM_MVP/ACE are active persisted v1 designations, and award-specific milestone/adaptive thresholds are not proven.
 
-**Hard prerequisite — WAR trust audit:** Before this ticket starts, confirm WAR is trusted (not preview-only). This is a named hard gate, not a soft check. If WAR is still preview-only at this point, stop and promote WAR to trusted as the first action of this ticket. Do not build award logic on untrusted WAR inputs.
+**Hard prerequisite — 1.8.5 Final WAR / Award Trust Promotion Gate:** Do not build award logic on the current TEAM_MVP/ACE-only WAR gate. Awards/watchlists must wait until final award-consumer WAR trust, award-specific True Value/value-delta policy, milestone weighting, adaptive thresholds, score-only exclusion, and hidden FARM exclusion are all explicitly proven.
 
-**What's needed (post 1.1–1.3 and WAR trusted):**
+**What's needed after 1.8.5 passes:**
 - Award categories: MVP, Cy Young, Rookie of Year, Gold Glove, Silver Slugger, Manager of Year
 - Award logic: WAR + position-relative True Value + designation status + milestone weighting
 - All thresholds use `scaledThreshold()` from 1.1 — no hardcoded MLB season lengths
@@ -273,7 +294,7 @@ Key files: `franchisePlayoffEngine.ts`, `franchiseStandingsEngine.ts`, `PlayoffB
 - Season-end: awards finalized and stored in franchise history
 - Award history visible in player profile and Almanac
 
-**Gate:** WAR confirmed trusted before build starts. All award categories compute correct winners at season end. Watchlist updates during season. Awards stored in franchise history and visible in player profile and Almanac.
+**Gate:** Blocked until 1.8.5 passes. All award categories must compute correct winners at season end, watchlists must update during season, awards must be stored in franchise history, and score-only/hidden FARM boundaries must remain proven before 1.9 can be considered implemented.
 
 **ROUTE: Codex 5.5 | very high**
 Key files: `franchiseAwardsEngine.ts`, `franchiseAwardsStorage.ts`, `AwardsWatchlist.tsx`, `PlayerProfileCard.tsx`, `Almanac.tsx`

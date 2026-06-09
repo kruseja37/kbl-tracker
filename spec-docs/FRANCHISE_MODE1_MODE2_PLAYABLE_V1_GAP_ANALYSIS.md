@@ -253,6 +253,7 @@ Run this in the real app before deciding whether Mode 1/Mode 2 playable v1 is ap
 - Stadium spray and Manager WPA lineup delta are now smoke-confirmation items and should only become implementation targets again if newly completed archives with stored evidence still fail to render the evidence.
 - If the blocker set passes, ask the user whether Mode 1/Mode 2 playable v1 is approved.
 - Do not start Mode 3/offseason, auto-draft, AI simulation, final awards, final True Value/salary movement, final designation persistence, morale automation, relationship mutation, adaptive park-factor persistence, custom stadium factor entry, generated schedules, or full trade AI/salary matching without a separate approval.
+- Do not implement awards/watchlists from the current TEAM_MVP/ACE-only WAR gate; the 1.9 audit keeps awards blocked until a Final WAR / Award Trust Promotion Gate proves award-consumer WAR trust, award-specific True Value/value-delta policy, milestone weighting, adaptive thresholds, score-only exclusion, and hidden FARM exclusion.
 
 ## Audit Rules For The Next Slices
 
@@ -263,6 +264,7 @@ Every implementation slice above should be audited against:
 - No AI simulation or AI trades.
 - No final True Value, salary movement, luxury tax, or salary matching.
 - No final designation persistence, awards persistence, or automatic designation mutation.
+- No awards/watchlists until final award-consumer WAR trust and award-specific value/milestone/adaptive policies are proven.
 - No automatic morale mutation outside explicit confirmation-gated safe-effect paths.
 - No relationship mutation or durable relationship state.
 - No adaptive park-factor persistence or park-adjusted WAR/value consumers.

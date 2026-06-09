@@ -121,6 +121,7 @@ Do not implement or promote any of the following without explicit user approval:
 - Salary movement, luxury tax, salary lifecycle automation, or salary-matching logic.
 - Final dynamic designation persistence beyond active MVP/Ace, season-end designation locking, or carryover.
 - Final awards persistence or awards automation.
+- Awards/watchlists from the current TEAM_MVP/ACE WAR gate. The 1.9 audit keeps awards blocked until final award-consumer WAR trust, award-specific True Value/value-delta policy, milestone weighting, adaptive thresholds, score-only exclusion, and hidden FARM exclusion are proven.
 - Automatic morale mutation outside explicit confirmation flows.
 - Relationship mutation or durable relationship state.
 - Story persistence beyond the existing random-event log.
@@ -647,5 +648,6 @@ The revised v1 is not approved because the team still needs a final real-app smo
 - Functional blockers: any remaining real-app smoke failure, including Manager WPA lineup-delta visibility only if the new archive-backed Game Detail display does not pass smoke.
 - Product blockers: the app currently over-explains implementation state and the Stadium spray chart design is not final.
 - Deferred systems: Mode 3/offseason, auto-draft, generated schedules, AI simulation/trades, final salary/designation/award/morale/relationship/adaptive-stadium systems.
+- Awards/watchlists are not next-up implementation until the Final WAR / Award Trust Promotion Gate passes; current WAR trust remains limited to TEAM_MVP/ACE designation input gating.
 
 Do not let short-term fixes blur those categories. Keep functionality, product UX, and full-spec backlog separated in every future prompt and audit.

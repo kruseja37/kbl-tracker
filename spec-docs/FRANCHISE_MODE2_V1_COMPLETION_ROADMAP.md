@@ -32,6 +32,7 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Fan Favorite/Albatross readiness can be inspected from preview True Value/value-delta rows, but final designation behavior, random-event morale prompts, salary movement, relationships, and Mode 3 remain blocked.
 - Numeric WAR has a narrow trusted consumer contract only for TEAM_MVP/ACE designation input gating when scoped completed archive evidence, scoped season stats, current MLB/team context, and stored season metadata are present.
 - Position-relative True Value preview, value delta, and expected-wins preview remain read-only and untrusted for final designations, salary movement, morale automation, awards, and Mode 3.
+- Awards/watchlists are blocked by the 1.9 audit until a Final WAR / Award Trust Promotion Gate proves final award-consumer WAR trust, award-specific True Value/value-delta policy, milestone weighting, adaptive thresholds, score-only exclusion, and hidden FARM exclusion.
 - Team Hub surfaces True Value and expected-wins previews in Mode 2 Foundation Status with explicit preview-only boundaries.
 - Expected-wins baseline snapshots persist scoped read-only baseline evidence from preview contracts while remaining untrusted for mutation and final formula consumers.
 - Daily morale snapshot summaries persist scoped high/low/average evidence from confirmed/manual morale history while remaining read-only and untrusted for drift, recovery, relationship effects, and Mode 3.
@@ -136,6 +137,7 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Older full-system designation lock/carryover wording is subordinate to the committed v1 designation matrix until a separate final-designation promotion slice is approved.
 - True Value, value deltas, and expected wins are currently preview-only and not trusted for final designations, salary movement, morale automation, automatic drift/recovery, or Mode 3.
 - WAR trust is consumer-specific: TEAM_MVP/ACE input gating may trust rows that pass the scoped completed-archive/stat/metadata contract, but that does not promote Fan Favorite, Albatross, awards, True Value, salary movement, morale, or Mode 3.
+- Awards/watchlists must not be implemented from preview WAR or preview True Value. First add a dedicated Final WAR / Award Trust Promotion Gate and keep `finalWarTrusted`, `trustedForAwards`, final True Value/value-delta trust, score-only exclusion, and hidden FARM exclusion explicit.
 - Fan Favorite and Albatross final behavior requires an explicit promotion decision for trusted True Value/value-delta inputs.
 - Captain morale amplification remains blocked until hidden-charisma reveal/safety policy is approved.
 - Fan Hopeful morale boosts must be prospect-safe and must not expose hidden FARM truth.
