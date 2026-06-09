@@ -26,7 +26,7 @@ import type { ScheduledGame } from '../scheduleStorage';
 import type { TransactionLogEntry } from '../transactionStorage';
 
 function valueRow(overrides: Partial<FranchiseValueInputRow> = {}): FranchiseValueInputRow {
-  return {
+  const row: FranchiseValueInputRow = {
     contractVersion: FRANCHISE_VALUE_INPUT_CONTRACT_VERSION,
     franchiseId: 'franchise-1',
     seasonId: 'franchise-1-season-1',
@@ -92,6 +92,25 @@ function valueRow(overrides: Partial<FranchiseValueInputRow> = {}): FranchiseVal
     },
     limitations: [],
     ...overrides,
+  };
+  const metadataReady = row.seasonContext.gamesPerTeam !== null && row.seasonContext.inningsPerGame !== null;
+  const commonReady = row.currentTeamId !== null && row.rosterStatus === 'MLB' && metadataReady && row.seasonStatsAvailability.any;
+  return {
+    ...row,
+    warConsumerTrust: row.warConsumerTrust ?? {
+      teamMvpDesignations: commonReady && row.warInputAvailability.any && row.warPreviewValues.totalWar !== null,
+      aceDesignations: commonReady && row.warInputAvailability.pitchingWar && row.warPreviewValues.pitchingWar !== null,
+      fanFavoriteAlbatrossDesignations: false,
+      awards: false,
+      salaryMovement: false,
+      trueValue: false,
+      morale: false,
+      mode3Handoff: false,
+      blockers: commonReady ? [] : ['Fixture row does not meet scoped MLB WAR trust prerequisites.'],
+      limitations: [
+        'WAR consumer trust is limited to TEAM_MVP/ACE designation input gating; it does not trust final True Value, value delta, awards, salary movement, morale, relationships, or Mode 3.',
+      ],
+    },
   };
 }
 

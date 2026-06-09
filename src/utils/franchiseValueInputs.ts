@@ -32,6 +32,19 @@ export interface FranchiseWarPreviewValues {
   trustedForFinalValue: false;
 }
 
+export interface FranchiseWarConsumerTrust {
+  teamMvpDesignations: boolean;
+  aceDesignations: boolean;
+  fanFavoriteAlbatrossDesignations: false;
+  awards: false;
+  salaryMovement: false;
+  trueValue: false;
+  morale: false;
+  mode3Handoff: false;
+  blockers: string[];
+  limitations: string[];
+}
+
 export interface FranchiseValueInputSeasonContext {
   seasonId: string;
   statsScopeId: string;
@@ -75,6 +88,7 @@ export interface FranchiseValueInputRow {
     trustedForFinalValue: false;
   };
   warPreviewValues: FranchiseWarPreviewValues;
+  warConsumerTrust?: FranchiseWarConsumerTrust;
   wpaInputAvailability: {
     playerWpa: boolean;
     managerWpa: boolean;
@@ -256,6 +270,68 @@ function hasWarPreviewValue(values: FranchiseWarPreviewValues): boolean {
     values.totalWar !== null;
 }
 
+function hasCompleteSeasonContext(context: FranchiseValueInputSeasonContext): boolean {
+  return finiteNumber(context.gamesPerTeam) &&
+    context.gamesPerTeam > 0 &&
+    finiteNumber(context.inningsPerGame) &&
+    context.inningsPerGame > 0 &&
+    context.seasonLengthSource === 'stored-franchise-config';
+}
+
+function buildWarConsumerTrust(params: {
+  currentTeamId: string | null;
+  rosterStatus: string | null;
+  seasonContext: FranchiseValueInputSeasonContext;
+  seasonStatsAvailable: boolean;
+  scopedCompletedArchiveAvailable: boolean;
+  warInputAvailability: FranchiseValueInputRow['warInputAvailability'];
+  warPreviewValues: FranchiseWarPreviewValues;
+}): FranchiseWarConsumerTrust {
+  const blockers: string[] = [];
+  const limitations = [
+    'WAR consumer trust is limited to TEAM_MVP/ACE designation input gating; it does not trust final True Value, value delta, awards, salary movement, morale, relationships, or Mode 3.',
+  ];
+  if (!params.currentTeamId) {
+    blockers.push('Current MLB team id is required before WAR can be trusted for designation inputs.');
+  }
+  if (params.rosterStatus !== 'MLB') {
+    blockers.push(`Current MLB roster status is required before WAR can be trusted; found ${params.rosterStatus ?? 'unassigned/free-agent'}.`);
+  }
+  if (!hasCompleteSeasonContext(params.seasonContext)) {
+    blockers.push('Explicit stored games-per-team and innings-per-game metadata are required before WAR can be trusted for designation inputs.');
+  }
+  if (!params.seasonStatsAvailable) {
+    blockers.push('Scoped franchise season stat rows are required before WAR can be trusted for designation inputs.');
+  }
+  if (!params.scopedCompletedArchiveAvailable) {
+    blockers.push('Scoped completed GameTracker archive evidence is required before WAR can be trusted for designation inputs.');
+  }
+
+  const commonReady = blockers.length === 0;
+  const teamMvpBlockers = [...blockers];
+  if (!params.warInputAvailability.any || params.warPreviewValues.totalWar === null) {
+    teamMvpBlockers.push('TEAM_MVP WAR trust requires a numeric total WAR value from scoped season stats.');
+  }
+
+  const aceBlockers = [...blockers];
+  if (!params.warInputAvailability.pitchingWar || params.warPreviewValues.pitchingWar === null) {
+    aceBlockers.push('ACE WAR trust requires a numeric pitching WAR value from scoped season stats.');
+  }
+
+  return {
+    teamMvpDesignations: commonReady && teamMvpBlockers.length === 0,
+    aceDesignations: commonReady && aceBlockers.length === 0,
+    fanFavoriteAlbatrossDesignations: false,
+    awards: false,
+    salaryMovement: false,
+    trueValue: false,
+    morale: false,
+    mode3Handoff: false,
+    blockers: unique([...teamMvpBlockers, ...aceBlockers]),
+    limitations,
+  };
+}
+
 function unique(values: string[]): string[] {
   return Array.from(new Set(values));
 }
@@ -337,6 +413,29 @@ export async function buildFranchiseValueInputRows(
     const fieldingWar = hasFieldingWarInput(fielding, batting);
     const baserunningWar = hasBaserunningWarInput(batting);
     const warPreviewValues = buildWarPreviewValues(batting, pitching);
+    const warInputAvailability: FranchiseValueInputRow['warInputAvailability'] = {
+      battingWar,
+      pitchingWar,
+      fieldingWar,
+      baserunningWar,
+      any: battingWar || pitchingWar || fieldingWar || baserunningWar,
+      trustedForFinalValue: false,
+    };
+    const scopedCompletedArchiveAvailable = completedGames.some((game) =>
+      game.franchiseId === input.franchiseId &&
+      game.seasonId === input.seasonId &&
+      game.statsScopeId === statsScopeId &&
+      game.aggregationStatus !== 'incomplete',
+    );
+    const warConsumerTrust = buildWarConsumerTrust({
+      currentTeamId,
+      rosterStatus: assignment?.rosterStatus ?? null,
+      seasonContext,
+      seasonStatsAvailable: Boolean(batting || pitching || fielding),
+      scopedCompletedArchiveAvailable,
+      warInputAvailability,
+      warPreviewValues,
+    });
     const visibleSafeSalary = getVisibleSafeFranchisePlayerSalary(player);
     const salaryBaselineAvailable = visibleSafeSalary !== null && Boolean(config?.salaryBaseline?.calculationVersion);
     const teamSalaryBaselineAvailable = hasTeamPayrollBaseline(config, currentTeamId);
@@ -379,6 +478,9 @@ export async function buildFranchiseValueInputRows(
     if (hasWarPreviewValue(warPreviewValues)) {
       limitations.push('WAR preview values are read-only scoped season-stat inputs and are not final True Value authority.');
     }
+    if (warConsumerTrust.teamMvpDesignations || warConsumerTrust.aceDesignations) {
+      limitations.push('Scoped WAR is trusted only for TEAM_MVP/ACE designation input gating; final designations, value delta, awards, salary movement, morale, and Mode 3 remain blocked.');
+    }
     if (assignment?.rosterStatus === 'FARM' && player.ratingRevealState !== 'revealed') {
       limitations.push('Hidden FARM prospect salary uses draft/scouting-safe public context; true ratings and true grade are not salary inputs.');
     }
@@ -407,15 +509,9 @@ export async function buildFranchiseValueInputRows(
         fielding: Boolean(fielding),
         any: Boolean(batting || pitching || fielding),
       },
-      warInputAvailability: {
-        battingWar,
-        pitchingWar,
-        fieldingWar,
-        baserunningWar,
-        any: battingWar || pitchingWar || fieldingWar || baserunningWar,
-        trustedForFinalValue: false,
-      },
+      warInputAvailability,
       warPreviewValues,
+      warConsumerTrust,
       wpaInputAvailability: {
         playerWpa: playerWpaAvailable,
         managerWpa: managerWpaAvailable,

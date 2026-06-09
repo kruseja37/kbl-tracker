@@ -41,6 +41,14 @@ export interface FranchiseWpaTrust extends FranchiseAnalyticsTrustArea {
 
 export interface FranchiseWarTrust extends FranchiseAnalyticsTrustArea {
   warLikePreviewAvailable: boolean;
+  trustedForTeamMvpDesignations: boolean;
+  trustedForAceDesignations: boolean;
+  trustedForFanFavoriteAlbatrossDesignations: false;
+  trustedForAwards: false;
+  trustedForSalaryMovement: false;
+  trustedForTrueValue: false;
+  trustedForMorale: false;
+  trustedForMode3Handoff: false;
   finalWarTrusted: false;
   components: {
     batting: boolean;
@@ -127,6 +135,14 @@ function hasAnySeasonStats(rows: FranchiseValueInputRow[]): boolean {
 
 function hasAnyWarPreview(rows: FranchiseValueInputRow[]): boolean {
   return rows.some((row) => row.warInputAvailability.any);
+}
+
+function hasTeamMvpWarTrust(rows: FranchiseValueInputRow[]): boolean {
+  return rows.some((row) => row.warConsumerTrust?.teamMvpDesignations === true);
+}
+
+function hasAceWarTrust(rows: FranchiseValueInputRow[]): boolean {
+  return rows.some((row) => row.warConsumerTrust?.aceDesignations === true);
 }
 
 function hasAnyWpa(rows: FranchiseValueInputRow[]): boolean {
@@ -299,18 +315,32 @@ function buildWarTrust(rows: FranchiseValueInputRow[]): FranchiseWarTrust {
     baserunning: rows.some((row) => row.warInputAvailability.baserunningWar),
   };
   const warLikePreviewAvailable = Object.values(components).some(Boolean);
+  const trustedForTeamMvpDesignations = hasTeamMvpWarTrust(rows);
+  const trustedForAceDesignations = hasAceWarTrust(rows);
+  const trustedForTeamMvpAce = trustedForTeamMvpDesignations || trustedForAceDesignations;
 
   return {
     ...area(
-      warLikePreviewAvailable ? 'preview-only' : 'blocked',
-      warLikePreviewAvailable
-        ? ['WAR-like component inputs are available, but final WAR is not trusted for value movement.']
+      trustedForTeamMvpAce ? 'trusted' : warLikePreviewAvailable ? 'preview-only' : 'blocked',
+      trustedForTeamMvpAce
+        ? ['Scoped WAR inputs are trusted only for TEAM_MVP/ACE designation input gating.']
+        : warLikePreviewAvailable
+          ? ['WAR-like component inputs are available, but no row meets the consumer-specific TEAM_MVP/ACE trust gate.']
         : ['No WAR-like component inputs are available.'],
       [
-        'Final WAR remains preview-only until all components, park context, season metadata, and adaptive thresholds are trusted.',
+        'Final WAR remains untrusted for True Value, value delta, awards, salary movement, morale, relationships, and Mode 3.',
+        'Fan Favorite and Albatross remain blocked because True Value/value-delta trust is not promoted by WAR input trust.',
       ],
     ),
     warLikePreviewAvailable,
+    trustedForTeamMvpDesignations,
+    trustedForAceDesignations,
+    trustedForFanFavoriteAlbatrossDesignations: false,
+    trustedForAwards: false,
+    trustedForSalaryMovement: false,
+    trustedForTrueValue: false,
+    trustedForMorale: false,
+    trustedForMode3Handoff: false,
     finalWarTrusted: false,
     components,
   };
@@ -409,11 +439,16 @@ function buildDownstreamConsumers(params: {
       'Salary movement is blocked because canonical True Value, trusted final WAR/WPA, and salary lifecycle inputs are not approved for recalculation.',
     ]),
     dynamicDesignations: area(
-      params.war.warLikePreviewAvailable ? 'preview-only' : 'blocked',
-      params.war.warLikePreviewAvailable
-        ? ['TEAM_MVP/ACE-style designation eligibility may be preview-only from stats/WAR-like inputs.']
+      params.war.trustedForTeamMvpDesignations || params.war.trustedForAceDesignations ? 'trusted' : params.war.warLikePreviewAvailable ? 'preview-only' : 'blocked',
+      params.war.trustedForTeamMvpDesignations || params.war.trustedForAceDesignations
+        ? ['TEAM_MVP/ACE designation input gating can trust scoped WAR rows that pass the explicit consumer contract.']
+        : params.war.warLikePreviewAvailable
+          ? ['TEAM_MVP/ACE-style designation eligibility may be preview-only from stats/WAR-like inputs, but the trusted consumer gate is not satisfied.']
         : ['Dynamic designation inputs are missing or untrusted.'],
-      ['No designation records are persistable from the analytics trust report.'],
+      [
+        'No designation records are persistable from the analytics trust report.',
+        'Fan Favorite, Albatross, Cornerstone, Captain, Fan Hopeful, awards, morale, and Mode 3 remain blocked.',
+      ],
     ),
     awards: area('preview-only', [
       'Award-style output may be shown only as stat leader/preview reporting, not finalized awards.',

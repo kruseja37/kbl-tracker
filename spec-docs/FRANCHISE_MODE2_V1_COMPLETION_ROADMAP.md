@@ -29,7 +29,8 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Dynamic designation morale bridge exists for safe confirmation-gated prompt candidates, and Team Hub surfaces preview-only TEAM_MVP/ACE recognition candidates through the random-event workflow.
 - Dynamic designation policy matrix is explicit: TEAM_MVP/ACE are the only app-facing active preview-only designations, TWO-WAY routes as pitcher-only through ACE for internal v1, and Fan Favorite/Albatross/Cornerstone/Captain/Fan Hopeful remain blocked or explicit trusted-bridge-only context.
 - Fan Favorite/Albatross readiness can be inspected from preview True Value/value-delta rows, but final designation behavior, random-event morale prompts, salary movement, relationships, and Mode 3 remain blocked.
-- Numeric WAR preview values, position-relative True Value preview, and expected-wins preview exist as read-only, untrusted contracts.
+- Numeric WAR has a narrow trusted consumer contract only for TEAM_MVP/ACE designation input gating when scoped completed archive evidence, scoped season stats, current MLB/team context, and stored season metadata are present.
+- Position-relative True Value preview, value delta, and expected-wins preview remain read-only and untrusted for final designations, salary movement, morale automation, awards, and Mode 3.
 - Team Hub surfaces True Value and expected-wins previews in Mode 2 Foundation Status with explicit preview-only boundaries.
 - Expected-wins baseline snapshots persist scoped read-only baseline evidence from preview contracts while remaining untrusted for mutation and final formula consumers.
 - Daily morale snapshot summaries persist scoped high/low/average evidence from confirmed/manual morale history while remaining read-only and untrusted for drift, recovery, relationship effects, and Mode 3.
@@ -131,6 +132,7 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Dynamic designation effects must enter v1 as confirmation-gated random-event prompts, not automatic designation/profile/morale mutation.
 - Older full-system designation lock/carryover wording is subordinate to the committed v1 designation matrix until a separate final-designation promotion slice is approved.
 - True Value, value deltas, and expected wins are currently preview-only and not trusted for final designations, salary movement, morale automation, automatic drift/recovery, or Mode 3.
+- WAR trust is consumer-specific: TEAM_MVP/ACE input gating may trust rows that pass the scoped completed-archive/stat/metadata contract, but that does not promote Fan Favorite, Albatross, awards, True Value, salary movement, morale, or Mode 3.
 - Fan Favorite and Albatross final behavior requires an explicit promotion decision for trusted True Value/value-delta inputs.
 - Captain morale amplification remains blocked until hidden-charisma reveal/safety policy is approved.
 - Fan Hopeful morale boosts must be prospect-safe and must not expose hidden FARM truth.

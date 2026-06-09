@@ -48,8 +48,34 @@ function makeSeasonContext(overrides: Partial<FranchiseValueInputRow['seasonCont
   };
 }
 
-function makeRow(overrides: Partial<FranchiseValueInputRow> = {}): FranchiseValueInputRow {
+function warConsumerTrust(row: FranchiseValueInputRow): FranchiseValueInputRow['warConsumerTrust'] {
+  const metadataReady = row.seasonContext.gamesPerTeam !== null && row.seasonContext.inningsPerGame !== null;
+  const commonReady = row.currentTeamId !== null && row.rosterStatus === 'MLB' && metadataReady && row.seasonStatsAvailability.any;
+  const blockers = commonReady ? [] : ['Fixture row does not meet scoped MLB WAR trust prerequisites.'];
+  if (!row.warInputAvailability.any || row.warPreviewValues.totalWar === null) {
+    blockers.push('TEAM_MVP WAR trust requires a numeric total WAR value from scoped season stats.');
+  }
+  if (!row.warInputAvailability.pitchingWar || row.warPreviewValues.pitchingWar === null) {
+    blockers.push('ACE WAR trust requires a numeric pitching WAR value from scoped season stats.');
+  }
   return {
+    teamMvpDesignations: commonReady && row.warInputAvailability.any && row.warPreviewValues.totalWar !== null,
+    aceDesignations: commonReady && row.warInputAvailability.pitchingWar && row.warPreviewValues.pitchingWar !== null,
+    fanFavoriteAlbatrossDesignations: false,
+    awards: false,
+    salaryMovement: false,
+    trueValue: false,
+    morale: false,
+    mode3Handoff: false,
+    blockers,
+    limitations: [
+      'WAR consumer trust is limited to TEAM_MVP/ACE designation input gating; it does not trust final True Value, value delta, awards, salary movement, morale, relationships, or Mode 3.',
+    ],
+  };
+}
+
+function makeRow(overrides: Partial<FranchiseValueInputRow> = {}): FranchiseValueInputRow {
+  const row: FranchiseValueInputRow = {
     contractVersion: FRANCHISE_VALUE_INPUT_CONTRACT_VERSION,
     franchiseId: 'franchise-1',
     seasonId: 'season-1',
@@ -107,6 +133,10 @@ function makeRow(overrides: Partial<FranchiseValueInputRow> = {}): FranchiseValu
       'Final True Value and dynamic designations are not calculated by this read-only contract.',
     ],
     ...overrides,
+  };
+  return {
+    ...row,
+    warConsumerTrust: row.warConsumerTrust ?? warConsumerTrust(row),
   };
 }
 

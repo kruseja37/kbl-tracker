@@ -53,6 +53,8 @@ export interface FranchiseDesignationEligibilityRecord {
     seasonStatsAvailable: boolean;
     warPreviewInputAvailable: boolean;
     pitchingWarPreviewInputAvailable: boolean;
+    teamMvpWarTrusted: boolean;
+    aceWarTrusted: boolean;
     wpaAvailable: boolean;
     wpaTrustedForFinalValue: false;
     trueValueAvailable: false;
@@ -262,6 +264,8 @@ function sourceInputs(row: FranchiseValueInputRow): FranchiseDesignationEligibil
     seasonStatsAvailable: row.seasonStatsAvailability.any,
     warPreviewInputAvailable: row.warInputAvailability.any,
     pitchingWarPreviewInputAvailable: row.warInputAvailability.pitchingWar,
+    teamMvpWarTrusted: row.warConsumerTrust?.teamMvpDesignations === true,
+    aceWarTrusted: row.warConsumerTrust?.aceDesignations === true,
     wpaAvailable: row.wpaInputAvailability.archiveBacked,
     wpaTrustedForFinalValue: false,
     trueValueAvailable: false,
@@ -290,6 +294,7 @@ function commonLimitations(row: FranchiseValueInputRow): string[] {
 
 function stableWarPreviewBlockers(row: FranchiseValueInputRow, type: 'TEAM_MVP' | 'ACE'): string[] {
   const reasons = [...mlbBlockers(row)];
+  const consumerTrust = row.warConsumerTrust;
   if (!hasSeasonMetadata(row)) {
     reasons.push('Stored season length and innings metadata are missing, so WAR-like inputs are not stable enough for preview.');
   }
@@ -301,6 +306,17 @@ function stableWarPreviewBlockers(row: FranchiseValueInputRow, type: 'TEAM_MVP' 
   }
   if (type === 'ACE' && !row.warInputAvailability.pitchingWar) {
     reasons.push('ACE preview requires pitching WAR-like season inputs.');
+  }
+  if (type === 'TEAM_MVP' && consumerTrust?.teamMvpDesignations !== true) {
+    reasons.push('TEAM_MVP preview requires the explicit scoped WAR consumer-trust gate for designation inputs.');
+  }
+  if (type === 'ACE' && consumerTrust?.aceDesignations !== true) {
+    reasons.push('ACE preview requires the explicit scoped pitching-WAR consumer-trust gate for designation inputs.');
+  }
+  if (!consumerTrust) {
+    reasons.push('Explicit WAR consumer trust contract is missing from the value input row.');
+  } else if ((type === 'TEAM_MVP' && !consumerTrust.teamMvpDesignations) || (type === 'ACE' && !consumerTrust.aceDesignations)) {
+    reasons.push(...consumerTrust.blockers);
   }
   return reasons;
 }
@@ -331,7 +347,7 @@ function classifyTeamMvpOrAce(
   return {
     status: 'preview-only',
     reasons: [
-      `${designationType} ranked preview candidate has positive team-relative performance evidence.`,
+      `${designationType} ranked preview candidate has positive team-relative performance evidence and scoped WAR consumer trust.`,
       'Final designation persistence is blocked until trusted final value/designation inputs exist.',
     ],
   };

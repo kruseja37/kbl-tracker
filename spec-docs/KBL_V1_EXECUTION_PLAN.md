@@ -2,7 +2,7 @@
 
 **Version:** 1.2
 **Created:** 2026-06-08
-**Updated:** 2026-06-08 (v1.2 — adaptive standards moved to first, routing corrections, dependency fixes, morale contradiction resolved, mid-Phase 1 smoke added, WAR gate hardened, Phase 3 copy fixed)
+**Updated:** 2026-06-08 (v1.2.5 — adaptive standards moved to first, salary v1 added, WAR/value trust gate split before designations, Phase 3 copy fixed)
 **Status:** ACTIVE — canonical build order for Mode 2 v1 completion
 **Source authority:** FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md, MODE_2_V1_RECONCILIATION_AND_DECISION_WORKSHEET.md, gap analysis session 2026-06-08
 
@@ -82,14 +82,35 @@ Key files: `franchiseSalaryEngine.ts`, `franchiseSalaryStorage.ts`, `TeamHubFina
 
 ---
 
+### 1.2.5 — WAR And Value Trust Promotion Gate
+
+**Status:** Required prerequisite before 1.3. Current repo state can promote a narrow scoped WAR consumer contract for TEAM_MVP/ACE designation input gating only. True Value/value delta, Fan Favorite/Albatross, awards, morale, salary movement, and Mode 3 remain blocked.
+
+**What's needed:**
+- Explicit row-level WAR consumer-trust contract from value inputs.
+- Trust only scoped completed GameTracker archive evidence plus scoped season stat rows, current MLB roster/team context, and stored season-length/innings metadata.
+- TEAM_MVP trust requires numeric total WAR from scoped season stats.
+- ACE trust requires numeric pitching WAR from scoped season stats.
+- Keep `finalWarTrusted`, final True Value, value-delta trust, awards, morale, salary movement, and Mode 3 false.
+- Keep score-only rows blocked from player stats, WPA/WAR, awards, designations, player history, and relationships.
+- Hidden/unrevealed FARM rows cannot feed trusted WAR/value consumers.
+
+**Gate:** Analytics and value-input reports expose consumer-specific WAR trust for TEAM_MVP/ACE only. True Value/value delta remain preview-only and untrusted. 1.3 can resume only for TEAM_MVP/ACE promotion unless a later True Value/value-delta slice explicitly promotes Fan Favorite/Albatross inputs.
+
+**ROUTE: Codex 5.5 | very high**
+Key files: `franchiseValueInputs.ts`, `franchiseAnalyticsTrust.ts`, `franchiseTrueValuePreview.ts`, designation eligibility tests
+
+---
+
 ### 1.3 — Dynamic Designations Fully Promoted
 
 **Status:** TEAM_MVP and ACE exist as preview-only confirmation-gated candidates. Fan Favorite, Albatross, Cornerstone, Fan Hopeful are blocked. Captain is blocked pending hidden-charisma policy. TWO-WAY routes pitcher-only through ACE.
 
 **What's needed:**
-- WAR status audit: confirm WAR is trusted before this ticket starts — if still preview-only, promote WAR to trusted as part of this ticket before proceeding to designation logic
-- All upstream inputs now stable after 1.1 and 1.2: True Value trusted, salary/value delta trusted, WAR trusted
-- TEAM_MVP, ACE, Fan Favorite, Albatross, Cornerstone, Fan Hopeful promoted from preview-only to active designations
+- Consume the 1.2.5 WAR trust contract for TEAM_MVP/ACE only.
+- True Value/value-delta audit remains a separate blocker before Fan Favorite/Albatross can be promoted.
+- TEAM_MVP and ACE may be promoted from preview-only to active designations if 1.2.5 passes.
+- Fan Favorite, Albatross, Cornerstone, and Fan Hopeful stay blocked unless separate trusted inputs are approved.
 - Designation earning logic wired to trusted inputs
 - Designation effects for v1: salary weighting, FA destination penalty/bonus, display in player profile/roster table/trade UI
 - Morale effects: **not wired here** — designation events will be emitted as typed events that the morale engine (Phase 2, step 2.3) will consume; wire the event emission only, not the morale mutation
@@ -98,7 +119,7 @@ Key files: `franchiseSalaryEngine.ts`, `franchiseSalaryStorage.ts`, `TeamHubFina
 
 **Hard boundary:** Do not wire morale mutation in this ticket. Emit `DesignationEvent` objects with typed event types. Phase 2 step 2.3 consumes them. If this boundary is unclear to Codex, add it explicitly to the prompt contract.
 
-**Gate:** All non-Captain designations can be earned and displayed. Salary and FA effects apply. `DesignationEvent` objects are emitted but morale mutation is not yet connected. No preview-only labels on designation surfaces.
+**Gate:** TEAM_MVP/ACE can be earned and displayed from trusted scoped WAR inputs. Fan Favorite/Albatross are not promoted until True Value/value-delta trust is explicitly approved. Salary and FA effects apply only to promoted designation types. `DesignationEvent` objects are emitted but morale mutation is not yet connected. No preview-only labels on promoted designation surfaces.
 
 **ROUTE: Codex 5.5 | very high**
 Key files: `franchiseDesignationEngine.ts`, `franchiseDesignationStorage.ts`, `PlayerProfileCard.tsx`, `RosterTable.tsx`
@@ -430,7 +451,8 @@ Locked out until a separate approval decision after v1 ships:
 |---|---|---|---|---|
 | 1.1 | Adaptive standards infra | 1 | Codex 5.5 very high | — |
 | 1.2 | Salary system per spec | 1 | Codex 5.5 very high | 1.1 |
-| 1.3 | Dynamic designations promoted | 1 | Codex 5.5 very high | 1.1, 1.2 |
+| 1.2.5 | WAR/value trust promotion gate | 1 | Codex 5.5 very high | 1.1, 1.2 |
+| 1.3 | Dynamic designations promoted | 1 | Codex 5.5 very high | 1.1, 1.2, 1.2.5 |
 | ☑ | Mini-smoke A: salary + designations | — | Manual | 1.3 |
 | 1.4 | Farm system core | 1 | Codex 5.5 very high | 1.1 |
 | 1.5 | Full trade execution | 1 | Codex 5.5 very high | 1.2, 1.4 |

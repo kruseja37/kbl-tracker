@@ -18,6 +18,8 @@ function sourceInputs(): FranchiseDesignationEligibilityRecord['sourceInputs'] {
     seasonStatsAvailable: true,
     warPreviewInputAvailable: true,
     pitchingWarPreviewInputAvailable: true,
+    teamMvpWarTrusted: true,
+    aceWarTrusted: true,
     wpaAvailable: false,
     wpaTrustedForFinalValue: false,
     trueValueAvailable: false,

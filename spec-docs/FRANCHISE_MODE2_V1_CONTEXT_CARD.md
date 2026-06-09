@@ -30,7 +30,8 @@ Latest working checkpoint: Playable V1 Smoke Findings Reconciliation And Next Ga
 - Dynamic designation morale bridge supports safe preview TEAM_MVP/ACE recognition prompts through random-event confirmation.
 - Dynamic designation policy matrix is explicit: TEAM_MVP/ACE are the only app-facing active preview-only designations, TWO-WAY routes as pitcher-only through ACE, and Fan Favorite/Albatross/Cornerstone/Captain/Fan Hopeful remain blocked or explicit trusted-bridge-only context.
 - Fan Favorite/Albatross readiness can be inspected from preview True Value/value-delta rows, but remains blocked for final designation behavior, random-event morale prompts, salary movement, relationships, and Mode 3.
-- Numeric WAR preview, position-relative True Value preview, expected-wins preview, Team Hub display, and durable expected-wins baseline snapshots are read-only and untrusted.
+- Numeric WAR now has a narrow trusted consumer contract only for TEAM_MVP/ACE designation input gating when scoped completed archive evidence, scoped season stats, current MLB/team context, and stored season metadata are present.
+- Position-relative True Value preview, value delta, expected-wins preview, Team Hub display, and durable expected-wins baseline snapshots remain read-only and untrusted for final designations, salary movement, morale automation, awards, and Mode 3.
 - The Mode 2 technical foundation is safe to build on, but manual smoke feedback shows the user-facing Mode 1/Mode 2 playable UI/UX is not complete.
 - Mode 1/2 playable hardening has now committed core launch/persistence smoke fixes, generated data policy cleanup, roster scan table improvements, MVP/Ace preview correctness, salary baseline visibility, stadium source-of-truth copy, dense UI hardening, Almanac continuity, archived WPA visibility, fame-event continuity, a safe visual-smoke preview route, populated fixture coverage, schedule editing/import hardening, trade/FARM hidden-safety and movement continuity, park-factor archive trust tightening, the dynamic designation policy matrix/TWO-WAY boundary, manual final-score/score-only UX polish, hidden FARM salary/reveal safety, player profile position/pitching integrity, GameTracker substitution full-name display, and Almanac Franchise access/save import clarity.
 - Schedule editing/import is hardened for the current manual/CSV non-generated policy, but production populated schedule visual smoke remains fixture-backed rather than proven from arbitrary user local data.
@@ -64,7 +65,7 @@ Goal: mark the latest smoke-response hardening as addressed, keep playable v1 un
 
 - No silent GameTracker morale mutation.
 - No hidden FARM/prospect truth leaks.
-- No final True Value, final designations, salary movement, or Fan Favorite/Albatross finalization yet.
+- No final True Value, value-delta trust, final designations, salary movement, or Fan Favorite/Albatross finalization yet.
 - No final awards persistence or awards automation.
 - TWO-WAY designation routing is pitcher-only for internal v1; stricter two-way Team MVP criteria are deferred.
 - Older full-system designation lock/carryover wording is subordinate to the v1 matrix until a separate final-designation promotion slice is approved.

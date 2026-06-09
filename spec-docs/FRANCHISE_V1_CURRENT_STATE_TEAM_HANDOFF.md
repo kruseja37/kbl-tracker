@@ -410,12 +410,13 @@ Current status:
 - Hidden FARM salary is draft/scouting-safe.
 - Expected Wins and True Value previews exist.
 - Durable expected-wins baseline snapshots exist as read-only scoped evidence.
+- WAR has a narrow consumer-specific trust gate only for TEAM_MVP/ACE designation input review when scoped completed archive evidence, scoped season stats, current MLB/team context, and stored season metadata are present.
 
 Boundaries:
 
-- Preview-only.
+- True Value, value delta, expected wins, awards, morale, salary movement, and Mode 3 remain preview-only or blocked as applicable.
 - Read-only.
-- Not trusted for final designations, morale automation, salary movement, or Mode 3.
+- WAR trust does not promote Fan Favorite/Albatross, final designations, morale automation, salary movement, awards, or Mode 3.
 - No final True Value promotion.
 - No salary lifecycle automation.
 

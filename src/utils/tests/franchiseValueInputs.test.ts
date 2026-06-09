@@ -280,6 +280,47 @@ describe('franchise value input contract', () => {
     expect(row.limitations.join(' ')).toContain('WAR preview values are read-only scoped season-stat inputs');
     expect(row.warInputAvailability.trustedForFinalValue).toBe(false);
     expect(row.warPreviewValues.trustedForFinalValue).toBe(false);
+    expect(row.warConsumerTrust).toMatchObject({
+      teamMvpDesignations: false,
+      aceDesignations: false,
+      trueValue: false,
+      awards: false,
+      salaryMovement: false,
+      morale: false,
+      mode3Handoff: false,
+    });
+    expect(row.warConsumerTrust?.blockers.join(' ')).toMatch(/completed GameTracker archive evidence/i);
+  });
+
+  test('trusts scoped WAR only for TEAM_MVP or ACE designation input gates when completed archive evidence exists', async () => {
+    mocks.getRecentGames.mockResolvedValue([{
+      gameId: 'completed-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+      franchiseId: 'franchise-1',
+      aggregationStatus: 'aggregated',
+    }]);
+
+    const report = await buildFranchiseValueInputRows({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      seasonNumber: 1,
+    });
+
+    const row = report.rows[0];
+    expect(row.warConsumerTrust).toMatchObject({
+      teamMvpDesignations: true,
+      aceDesignations: false,
+      fanFavoriteAlbatrossDesignations: false,
+      awards: false,
+      salaryMovement: false,
+      trueValue: false,
+      morale: false,
+      mode3Handoff: false,
+    });
+    expect(row.warInputAvailability.trustedForFinalValue).toBe(false);
+    expect(row.warPreviewValues.trustedForFinalValue).toBe(false);
+    expect(row.limitations.join(' ')).toMatch(/Scoped WAR is trusted only for TEAM_MVP\/ACE/i);
   });
 
   test('derives total WAR preview only from existing finite component values when no stat-row total is present', async () => {
@@ -448,6 +489,8 @@ describe('franchise value input contract', () => {
     });
     expect(report.rows[0].warInputAvailability.any).toBe(true);
     expect(report.rows[0].warInputAvailability.trustedForFinalValue).toBe(false);
+    expect(report.rows[0].warConsumerTrust?.teamMvpDesignations).toBe(false);
+    expect(report.rows[0].warConsumerTrust?.aceDesignations).toBe(false);
   });
 
   test('detects archive-backed WPA availability without trusting it for final value', async () => {
@@ -577,6 +620,8 @@ describe('franchise value input contract', () => {
     expect(unassigned).toEqual(expect.objectContaining({ currentTeamId: null, rosterStatus: null }));
     expect(farm?.warInputAvailability.trustedForFinalValue).toBe(false);
     expect(farm?.warPreviewValues.trustedForFinalValue).toBe(false);
+    expect(farm?.warConsumerTrust?.teamMvpDesignations).toBe(false);
+    expect(farm?.warConsumerTrust?.aceDesignations).toBe(false);
     expect(freeAgent?.warInputAvailability.trustedForFinalValue).toBe(false);
     expect(unassigned?.warInputAvailability.trustedForFinalValue).toBe(false);
     expect(freeAgent?.limitations).toContain('Current franchise team assignment is unavailable.');
@@ -634,6 +679,8 @@ describe('franchise value input contract', () => {
     );
     expect(JSON.stringify(row)).not.toContain('42');
     expect(row?.warInputAvailability.trustedForFinalValue).toBe(false);
+    expect(row?.warConsumerTrust?.teamMvpDesignations).toBe(false);
+    expect(row?.warConsumerTrust?.aceDesignations).toBe(false);
   });
 
   test('classifies custom and missing stadium park-factor states as unavailable and unadjusted', async () => {
@@ -695,5 +742,6 @@ describe('franchise value input contract', () => {
     expect(report.trueValuePolicy.finalTrueValueCalculated).toBe(false);
     expect(report.rows[0].warInputAvailability.trustedForFinalValue).toBe(false);
     expect(report.rows[0].warPreviewValues.trustedForFinalValue).toBe(false);
+    expect(report.rows[0].warConsumerTrust?.trueValue).toBe(false);
   });
 });

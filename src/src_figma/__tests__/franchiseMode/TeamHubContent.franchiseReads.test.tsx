@@ -373,6 +373,8 @@ function designationEligibilityRecord(designationType: string, overrides: Record
       seasonStatsAvailable: true,
       warPreviewInputAvailable: true,
       pitchingWarPreviewInputAvailable: designationType === 'ACE',
+      teamMvpWarTrusted: designationType === 'TEAM_MVP',
+      aceWarTrusted: designationType === 'ACE',
       wpaAvailable: false,
       wpaTrustedForFinalValue: false,
       trueValueAvailable: false,

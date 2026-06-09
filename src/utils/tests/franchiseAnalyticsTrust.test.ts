@@ -16,7 +16,7 @@ import type { FranchisePlayerTeamStatStint } from '../franchiseStatAttribution';
 
 function valueRow(overrides: Partial<FranchiseValueInputRow> = {}): FranchiseValueInputRow {
   const parkStatus = overrides.parkFactorAvailability?.status ?? 'seed-only';
-  return {
+  const row: FranchiseValueInputRow = {
     contractVersion: FRANCHISE_VALUE_INPUT_CONTRACT_VERSION,
     franchiseId: 'franchise-1',
     seasonId: 'franchise-1-season-1',
@@ -83,6 +83,25 @@ function valueRow(overrides: Partial<FranchiseValueInputRow> = {}): FranchiseVal
     },
     limitations: [],
     ...overrides,
+  };
+  const metadataReady = row.seasonContext.gamesPerTeam !== null && row.seasonContext.inningsPerGame !== null;
+  const commonReady = row.currentTeamId !== null && row.rosterStatus === 'MLB' && metadataReady && row.seasonStatsAvailability.any;
+  return {
+    ...row,
+    warConsumerTrust: row.warConsumerTrust ?? {
+      teamMvpDesignations: commonReady && row.warInputAvailability.any && row.warPreviewValues.totalWar !== null,
+      aceDesignations: commonReady && row.warInputAvailability.pitchingWar && row.warPreviewValues.pitchingWar !== null,
+      fanFavoriteAlbatrossDesignations: false,
+      awards: false,
+      salaryMovement: false,
+      trueValue: false,
+      morale: false,
+      mode3Handoff: false,
+      blockers: commonReady ? [] : ['Fixture row does not meet scoped MLB WAR trust prerequisites.'],
+      limitations: [
+        'WAR consumer trust is limited to TEAM_MVP/ACE designation input gating; it does not trust final True Value, value delta, awards, salary movement, morale, relationships, or Mode 3.',
+      ],
+    },
   };
 }
 
@@ -388,14 +407,22 @@ describe('franchise analytics trust report', () => {
     expect(report.downstreamConsumers.salaryMovement.status).toBe('blocked');
   });
 
-  test('WAR is preview-only when components, park, or adaptive inputs are incomplete', () => {
+  test('WAR can be trusted only for MVP/Ace designation input gating while final consumers remain blocked', () => {
     const report = buildFranchiseAnalyticsTrustReport({
       valueInputReport: valueReport(),
     });
 
     expect(report.war).toMatchObject({
-      status: 'preview-only',
+      status: 'trusted',
       warLikePreviewAvailable: true,
+      trustedForTeamMvpDesignations: true,
+      trustedForAceDesignations: false,
+      trustedForFanFavoriteAlbatrossDesignations: false,
+      trustedForAwards: false,
+      trustedForSalaryMovement: false,
+      trustedForTrueValue: false,
+      trustedForMorale: false,
+      trustedForMode3Handoff: false,
       finalWarTrusted: false,
       components: {
         batting: true,
@@ -404,7 +431,8 @@ describe('franchise analytics trust report', () => {
         baserunning: true,
       },
     });
-    expect(report.war.limitations.join(' ')).toMatch(/Final WAR remains preview-only/i);
+    expect(report.war.reasons.join(' ')).toMatch(/TEAM_MVP\/ACE designation input gating/i);
+    expect(report.war.limitations.join(' ')).toMatch(/Final WAR remains untrusted/i);
   });
 
   test('missing season metadata blocks adaptive and final analytics trust', () => {
@@ -435,6 +463,12 @@ describe('franchise analytics trust report', () => {
       inningsMetadataAvailable: false,
       consumerThresholdsProven: false,
     });
+    expect(report.war).toMatchObject({
+      status: 'preview-only',
+      trustedForTeamMvpDesignations: false,
+      trustedForAceDesignations: false,
+      finalWarTrusted: false,
+    });
     expect(report.adaptiveStandards.reasons.join(' ')).toMatch(/metadata is missing/i);
   });
 
@@ -453,14 +487,16 @@ describe('franchise analytics trust report', () => {
     expect(missing.parkFactors.status).toBe('blocked');
   });
 
-  test('downstream consumers remain blocked or preview-only under current v1 conditions', () => {
+  test('downstream consumers keep narrow WAR trust separate from blocked final systems', () => {
     const report = buildFranchiseAnalyticsTrustReport({
       valueInputReport: valueReport(),
       completedGames: [completedGame()],
     });
 
     expect(report.downstreamConsumers.salaryMovement.status).toBe('blocked');
-    expect(report.downstreamConsumers.dynamicDesignations.status).toBe('preview-only');
+    expect(report.downstreamConsumers.dynamicDesignations.status).toBe('trusted');
+    expect(report.downstreamConsumers.dynamicDesignations.reasons.join(' ')).toMatch(/TEAM_MVP\/ACE designation input gating/i);
+    expect(report.downstreamConsumers.dynamicDesignations.limitations.join(' ')).toMatch(/Fan Favorite, Albatross/i);
     expect(report.downstreamConsumers.awards.status).toBe('preview-only');
     expect(report.downstreamConsumers.moraleRelationships.status).toBe('blocked');
     expect(report.downstreamConsumers.narrativeRandomEvents.status).toBe('blocked');
