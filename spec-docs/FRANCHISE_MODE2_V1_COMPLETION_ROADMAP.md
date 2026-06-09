@@ -75,7 +75,7 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
    - No auto-draft, generated schedules, AI simulation, awards finalization, story automation, production storage mutation, or Mode 3/offseason execution until separately approved.
 2. Next Implementation If Smoke Still Fails
    - First candidate: Stadium Spray Evidence Visibility In Real Team Hub.
-   - Second candidate: Manager WPA Lineup Delta Visibility.
+   - Second candidate: any remaining Manager WPA lineup delta visibility issue found during smoke; Game Detail now has archive-backed display for stored evidence.
    - Save import/upload remains deferred unless separately approved.
 3. Approval Decision
    - If the remaining smoke findings pass, ask the user whether Mode 1/2 playable v1 is approved.
@@ -104,7 +104,7 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Remaining open implementation candidates if smoke still fails:
   - FARM prospect grade mismatch versus Player Analyzer.
   - Stadium spray evidence did not appear in Team Hub real-app smoke.
-  - Manager WPA lineup delta is missing from Game Detail.
+  - Manager WPA lineup delta should now be visible in Game Detail when completed-game archives contain stored manager lineup-delta records; smoke should verify this with a real archive.
 - Get explicit user approval before declaring Mode 1/2 playable v1 complete.
 - Track any non-blocking production visual-smoke, roster/schedule readability, or transaction drilldown polish as follow-up after the approval decision.
 - Track product UX cleanup separately from data-flow blockers: concise product surfaces are required for approval/release quality, but must not weaken trust-boundary copy or hide blocked states.

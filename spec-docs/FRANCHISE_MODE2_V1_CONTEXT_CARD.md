@@ -33,7 +33,7 @@ Latest working checkpoint: Playable V1 Smoke Findings Reconciliation And Next Ga
 - Numeric WAR now has a narrow trusted consumer contract only for TEAM_MVP/ACE designation input gating when scoped completed archive evidence, scoped season stats, current MLB/team context, and stored season metadata are present.
 - Position-relative True Value preview, value delta, expected-wins preview, Team Hub display, and durable expected-wins baseline snapshots remain read-only and untrusted for final designations, salary movement, morale automation, awards, and Mode 3.
 - The Mode 2 technical foundation is safe to build on, but manual smoke feedback shows the user-facing Mode 1/Mode 2 playable UI/UX is not complete.
-- Mode 1/2 playable hardening has now committed core launch/persistence smoke fixes, generated data policy cleanup, roster scan table improvements, MVP/Ace active designation promotion, salary baseline visibility, stadium source-of-truth copy, dense UI hardening, Almanac continuity, archived WPA visibility, fame-event continuity, a safe visual-smoke preview route, populated fixture coverage, schedule editing/import hardening, trade/FARM hidden-safety and movement continuity, park-factor archive trust tightening, the dynamic designation policy matrix/TWO-WAY boundary, manual final-score/score-only UX polish, hidden FARM salary/reveal safety, player profile position/pitching integrity, GameTracker substitution full-name display, and Almanac Franchise access/save import clarity.
+- Mode 1/2 playable hardening has now committed core launch/persistence smoke fixes, generated data policy cleanup, roster scan table improvements, MVP/Ace active designation promotion, salary baseline visibility, stadium source-of-truth copy, dense UI hardening, Almanac continuity, archived WPA visibility, fame-event continuity, a safe visual-smoke preview route, populated fixture coverage, schedule editing/import hardening, trade/FARM hidden-safety and movement continuity, park-factor archive trust tightening, the dynamic designation policy matrix/TWO-WAY boundary, manual final-score/score-only UX polish, hidden FARM salary/reveal safety, player profile position/pitching integrity, GameTracker substitution full-name display, Almanac Franchise access/save import clarity, and Manager WPA lineup-delta visibility in Game Detail.
 - Schedule editing/import is hardened for the current manual/CSV non-generated policy, but production populated schedule visual smoke remains fixture-backed rather than proven from arbitrary user local data.
 - Trade/FARM continuity is hardened for v1-safe hidden-safety and movement boundaries, while full trade UX, AI trades, salary matching, and offseason trade systems remain deferred.
 - The safe visual-smoke preview covers shell/foundation/finance/stadium, populated fixture rows, Game Detail WPA/fame, Player Instance Card WPA, and GameTracker long-name visibility, but real populated production Team Hub/schedule visual smoke remains a future confidence check.
@@ -47,15 +47,15 @@ Latest working checkpoint: Playable V1 Smoke Findings Reconciliation And Next Ga
 
 ## Current Active Slice
 
-Playable V1 Smoke Findings Reconciliation And Next Gate.
+Manager WPA Lineup Delta Visibility.
 
-Goal: mark the latest smoke-response hardening as addressed, keep playable v1 unapproved, and set the next gate to user manual smoke rerun unless a still-open implementation blocker appears.
+Goal: surface archive-backed manager decision-quality and lineup-delta evidence in Game Detail without fabricating records for older, score-only, or manual-result archives.
 
 ## Next Queue
 
 1. User reruns the manual smoke checklist in the real app.
 2. If stadium spray data is still missing from real Team Hub, implement **Stadium Spray Evidence Visibility In Real Team Hub**.
-3. If stadium smoke passes but Manager WPA lineup delta is still missing from Game Detail, implement **Manager WPA Lineup Delta Visibility**.
+3. Recheck Manager WPA lineup-delta visibility in Game Detail during smoke; it should now show archived evidence when records exist and unavailable copy when they do not.
 4. Keep playable v1 unapproved until the blocker set is cleared and the user approves it.
 5. Keep Product UX Cleanup queued after remaining critical data flows unless UI wording/layout blocks comprehension or causes wrong action.
 6. If later smoke reveals only polish, queue that polish explicitly after the approval decision.

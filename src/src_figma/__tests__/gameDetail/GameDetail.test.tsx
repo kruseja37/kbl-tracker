@@ -666,6 +666,24 @@ describe("GameDetail Manager WPA overlay", () => {
     expect(screen.getByTestId("manager-deployment-wpa-away")).toHaveTextContent("+1.2 pp");
     expect(screen.getByTestId("manager-lineup-delta-away")).toHaveTextContent("+10.0 pp");
     expect(screen.getByTestId("manager-value-away")).toHaveTextContent("+29.6 pp");
+    expect(screen.getByTestId("manager-wpa-boundary-copy")).toHaveTextContent(
+      "Player WPA remains player outcome credit",
+    );
+    expect(screen.getByTestId("manager-decision-quality-evidence-away")).toHaveTextContent(
+      "Tactical Pinch hitter: +18.4 pp",
+    );
+    expect(screen.getByTestId("manager-decision-quality-evidence-away")).toHaveTextContent(
+      "Deployment Kept position player in: +1.2 pp",
+    );
+    expect(screen.getByTestId("manager-lineup-delta-evidence-away")).toHaveTextContent(
+      "Slot 1 SS Player One vs optimal Slot 4 CF Bench One",
+    );
+    expect(screen.getByTestId("manager-lineup-delta-evidence-away")).toHaveTextContent(
+      "actual +40.0 pp, expected +3.2 pp, delta +36.8 pp, manager +10.0 pp",
+    );
+    expect(screen.getByTestId("manager-lineup-delta-evidence-away")).toHaveTextContent(
+      "separate from player WPA",
+    );
     expect(screen.getByTestId("manager-lineup-delta-details-away")).toHaveTextContent(
       "Lineup Delta: chose #1 SS Player One instead of optimal #4 CF Bench One; actual value was compared to the optimal projection.",
     );
@@ -907,6 +925,12 @@ describe("GameDetail Manager WPA overlay", () => {
     await screen.findByTestId("manager-wpa-overlay");
     expect(screen.getByTestId("manager-wpa-total-away")).toHaveTextContent("+0.0 pp");
     expect(screen.getByTestId("manager-wpa-total-home")).toHaveTextContent("+0.0 pp");
+    expect(screen.getByTestId("manager-decision-quality-evidence-away")).toHaveTextContent(
+      "Decision quality unavailable for older archives, score-only/manual-result games",
+    );
+    expect(screen.getByTestId("manager-lineup-delta-evidence-away")).toHaveTextContent(
+      "Lineup delta unavailable for older archives, score-only/manual-result games",
+    );
     expect(screen.getByTestId("manager-lineup-delta-empty-away")).toHaveTextContent("No lineup deviations");
   });
 });

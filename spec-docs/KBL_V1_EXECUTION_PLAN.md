@@ -187,25 +187,26 @@ Key files: `franchiseTradeEngine.ts`, `franchiseRosterStorage.ts`, `franchiseTra
 
 ### 1.6 — Manager WPA Lineup Delta Visibility
 
-**Status:** WPA and Manager Moments are committed as read-only archived evidence in Game Detail and Player Instance Card. Lineup delta — which lineup decisions added or subtracted WPA — is missing from Game Detail.
+**Status:** Completed for v1 archive-backed visibility. WPA and Manager Moments are committed as read-only archived evidence in Game Detail and Player Instance Card, and Game Detail now surfaces stored lineup-delta and manager decision-quality evidence when the completed-game archive contains it.
 
-**What's needed:**
+**Implemented v1 boundary:**
 
-*Engine work (do not skip — the display data doesn't exist yet):*
-- Extend `franchiseWPAEngine.ts` to compute per-lineup-slot expected contribution baseline from historical batting order data
-- Compute actual vs. expected delta per slot for the completed game
-- Compute manager decision quality: substitutions and pinch hits with WPA impact
-- Store lineup delta and decision summary in game archive record
+- Existing completed-game archive fields preserve committed `managerDecisions`, `managerDeploymentStints`, and `managerLineupDeltas`.
+- Game Detail shows a manager decision-quality evidence section for archived tactical/deployment rows.
+- Game Detail shows a lineup-delta evidence section for archived chosen-vs-optimal lineup construction rows.
+- Empty/older/score-only/manual-result archives show unavailable copy rather than fabricated Manager WPA.
+- Player WPA remains displayed separately from Manager WPA/decision quality.
 
-*Display work (after engine verified):*
-- Game Detail panel: lineup delta view showing each batting order slot's over/underperformance
-- Manager decision summary: each substitution with WPA impact clearly labeled
-- Distinguish player WPA (what happened) from manager WPA (decision quality) — two separate sections
+**Still deferred:**
 
-**Gate:** Game Detail shows lineup delta panel with per-slot deltas. Substitution decisions have WPA impact attached. Engine changes have passing tests before UI is touched.
+- Backfilling older archives that do not contain committed manager records.
+- Any new formula expansion beyond the existing Manager Moments/lineup-delta engine.
+- Any awards, morale, relationship, salary, or Mode 3 consumers of Manager WPA.
+
+**Gate:** Game Detail shows archived lineup delta and manager decision-quality evidence when records exist, and unavailable copy when records do not exist.
 
 **ROUTE: Codex 5.5 | very high**
-Key files: `franchiseWPAEngine.ts`, `GameDetail.tsx`, `GameDetailManagerPanel.tsx`, game archive storage
+Key files: `managerWpaGameState.ts`, `ManagerWpaOverlay.tsx`, `GameDetail.tsx`, game archive storage
 
 ---
 

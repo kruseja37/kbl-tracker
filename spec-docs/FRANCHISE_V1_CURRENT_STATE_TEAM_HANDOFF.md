@@ -177,7 +177,7 @@ Commit hygiene:
 | Morale/random events | Durable random-event log exists with confirmation/dismissal and safe-effect application. Team-fan score-only prompts require confirmation. Player morale starts neutral 50. | No morale automation, drift/recovery, relationship effects, or full formula system. UI is wordy. | Keep confirmation-gated for v1. |
 | Stadium identity/park factors | Source-of-truth and archive trust tightened. SMB4 seed factors trusted only when verified. Custom/adaptive factors blocked/preview-only. | Custom stadium factor entry and adaptive persistence deferred. | Accept seed/static read-only foundation for v1. |
 | Stadium spray evidence | Backend path now persists completed-game spray evidence into archives and maps event-log/archive rows into stadium foundation. Latest screenshot showed Team Hub chart with points, but design was not adequate. | Team Hub stadium spray chart is provisional functional visualization, not final design. Heat map/advanced analytics/records UI not done. Older archives may have zero rows. | Decide whether provisional visualization is acceptable for internal playable v1 or must be redesigned before approval. |
-| WPA/Manager Moments | Archived player and manager WPA totals are visible in approved contexts. Formula files were not changed in the visibility pass. | Manager WPA lineup delta is still missing/not obvious in Game Detail. | Likely next functional implementation blocker if required for v1. |
+| WPA/Manager Moments | Archived player and manager WPA totals are visible in approved contexts. Game Detail now separates player WPA from Manager WPA decision-quality and lineup-delta evidence when archive records exist. Formula files were not changed in the visibility pass. | Older archives or score-only/manual-result rows without committed manager records show unavailable copy and are not backfilled. | Smoke should verify with a real completed archive; no fabricated evidence. |
 | Fame events | Trusted no-hitter/perfect-game context preserved with franchise/season/team/opponent scope and confirmation-gated fan morale prompts. Score-only rows blocked. | Broader fame categories and awards deferred. | Accept scoped trusted fame for v1. |
 | Visual smoke tooling | Safe visual smoke preview route and populated fixture exist. Dev-only manual smoke setup route seeds disposable smoke league after click. | Full production-shaped harness remains limited. User still needs real-app smoke. | Keep as internal tooling, not product feature. |
 | Product UX | A cleanup lane is documented. | App currently reads too much like implementation/audit/progress documentation. Stadium chart design is inadequate. Team Hub/Finance/Morale/Designation/Random Event/Schedule/Almanac need simplification. | Decide whether UX cleanup is required before playable-v1 approval or immediately after functionality approval. |
@@ -220,8 +220,8 @@ Minimum smoke areas:
 
 Known likely candidates:
 
-1. Manager WPA Lineup Delta Visibility in Game Detail.
-2. Any remaining real-app Stadium spray evidence issue.
+1. Any remaining real-app Stadium spray evidence issue.
+2. Any Manager WPA lineup-delta visibility issue found during smoke after the archive-backed display patch.
 3. Any real-app player profile/analyzer discrepancy.
 4. Any save-slot clarity issue around import/upload expectations.
 
@@ -302,16 +302,17 @@ What exists:
 
 - Archived player WPA and manager/Manager Moments totals can be surfaced from completed-game records.
 - Game Detail and Player Instance Card can show stored archive totals.
+- Game Detail now shows archive-backed Manager WPA decision-quality and lineup-delta evidence when `managerDecisions`, `managerDeploymentStints`, or `managerLineupDeltas` are stored on the completed-game archive.
 - No WPA, LI, Clutch, or Manager Moments formula files were changed by the visibility pass.
 
-Known gap:
+Known limitation:
 
-- Manager WPA lineup delta data is still missing or not visible in Game Detail according to manual smoke.
+- Older archives and score-only/manual-result rows without committed manager records show unavailable copy. Do not fabricate lineup delta or decision quality from score-only rows.
 
-Before implementing:
+Before extending:
 
 - Inspect the completed-game archive shape for manager WPA totals and lineup-delta-specific attribution.
-- Confirm whether the data is absent, stored under another field, or only not rendered.
+- Confirm whether any requested additional data is absent, stored under another field, or only not rendered.
 - Do not invent or recompute formulas unless the active slice explicitly says to implement formula work.
 - Prefer displaying stored archive evidence with clear unavailable copy when the archive lacks it.
 
@@ -566,7 +567,7 @@ The next team should make these decisions explicitly, not by drift:
 
 1. Is Product UX Cleanup required before internal playable-v1 approval, or immediately after functionality approval?
 2. Is the provisional Team Hub stadium spray chart acceptable for internal playable v1, or must it be redesigned first?
-3. Is Manager WPA lineup delta required before playable-v1 approval?
+3. Does the new archive-backed Manager WPA lineup delta display pass real-app smoke?
 4. Is no save import/upload acceptable for playable v1?
 5. Is archive/search access enough for Almanac Franchise v1, or does v1 require a full Franchise history hub?
 6. Are manual trades/call-ups/send-downs enough for v1, with AI/salary matching deferred?
@@ -579,7 +580,7 @@ Recommended answers based on current evidence:
 
 - Product UX Cleanup should happen before broader release and probably before final playable-v1 approval if the user experience still feels like a debug/audit panel.
 - Stadium backend data is likely good enough to keep, but the spray chart design is not final.
-- Manager WPA lineup delta is the cleanest remaining functional implementation candidate.
+- Manager WPA lineup delta has been implemented as archive-backed Game Detail visibility; rerun smoke before choosing another functional blocker.
 - Save import/upload can stay deferred if copy remains clear and the user accepts export/delete-only.
 - Almanac archive/search access is probably enough for internal v1 if honestly labeled.
 - Keep generated schedules, auto-draft, AI simulation/trades, final salary/designation/morale/relationship systems, adaptive factors, and Mode 3 deferred.
@@ -589,26 +590,26 @@ Recommended answers based on current evidence:
 If the user asks for implementation next and does not override priorities:
 
 ```md
-Current slice: Manager WPA Lineup Delta Visibility
+Current slice: Manager WPA Lineup Delta Smoke Verification
 Phase: Mode 1/2 playable-v1 smoke response
-Recommended reasoning effort: high
+Recommended reasoning effort: medium
 
 Goal:
-Make Game Detail surface Manager WPA lineup delta evidence when it exists in completed-game archives, and show clear unavailable copy when archives do not contain that stored evidence.
+Rerun the real-app manual smoke path and confirm Game Detail surfaces Manager WPA lineup delta and decision-quality evidence for a completed GameTracker archive that contains committed manager records.
 
 Hard boundaries:
-- Do not change WPA formulas unless evidence shows the stored data is impossible to expose without a narrowly scoped formula fix.
+- Do not change WPA formulas during verification.
 - Do not fabricate Manager WPA or lineup delta for score-only/manual rows.
 - Do not add awards, morale automation, relationship mutation, story persistence, salary movement, final designations, adaptive park-factor persistence, AI simulation, or Mode 3/offseason behavior.
 - Keep output read-only/archive-backed.
 
 Expected approach:
-1. Inspect completed-game archive shape and Game Detail's current WPA/manager rendering.
-2. Determine whether lineup delta exists but is not rendered, or is not persisted.
-3. Implement the smallest read-only visibility/persistence patch needed.
-4. Add focused tests for archive-backed visible data and unavailable/score-only rows.
-5. Run focused GameDetail/WPA/almanac regressions, `npm run build`, and `git diff --check`.
-6. Update docs only if the checkpoint changes roadmap state.
+1. Complete or load a GameTracker archive with committed manager records.
+2. Open Game Detail from Almanac/Schedule.
+3. Confirm Player WPA remains separate from Manager WPA.
+4. Confirm Decision Quality Evidence and Lineup Delta Evidence appear when archive records exist.
+5. Confirm older/score-only/manual-result archives show unavailable copy instead of fabricated metrics.
+6. If the smoke fails, capture the exact archive shape and route before patching.
 ```
 
 If the user instead prioritizes UX:
@@ -642,7 +643,7 @@ The repo is no longer in early foundation mode. Most core Mode 1/2 data contract
 
 The revised v1 is not approved because the team still needs a final real-app smoke pass and at least one explicit roadmap decision around Product UX Cleanup. The remaining work is now less about discovering whether the foundation exists and more about deciding the acceptance threshold:
 
-- Functional blockers: likely Manager WPA lineup delta and any new smoke failures.
+- Functional blockers: any remaining real-app smoke failure, including Manager WPA lineup-delta visibility only if the new archive-backed Game Detail display does not pass smoke.
 - Product blockers: the app currently over-explains implementation state and the Stadium spray chart design is not final.
 - Deferred systems: Mode 3/offseason, auto-draft, generated schedules, AI simulation/trades, final salary/designation/award/morale/relationship/adaptive-stadium systems.
 

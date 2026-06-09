@@ -199,6 +199,50 @@ function formatDecisionSummary(decision: ManagerDecisionRecord | undefined): str
   return `${decision.displayTitle}, ${formatSignedManagerWpa(decision.managerWpa)}`;
 }
 
+function formatPlayerName(name: string | undefined, id: string | undefined): string {
+  return name?.trim() || id?.trim() || "Unknown player";
+}
+
+function formatSlotLabel(
+  battingOrderSlot: number | undefined,
+  defensivePosition: string | undefined,
+): string {
+  const slot = battingOrderSlot ? `Slot ${battingOrderSlot}` : "Slot ?";
+  const position = defensivePosition?.trim() || "POS";
+  return `${slot} ${position}`;
+}
+
+function formatLineupDeltaEvidence(delta: ManagerLineupDeltaRecord): string {
+  const chosenSlot = formatSlotLabel(
+    delta.chosenBattingOrderSlot ?? delta.battingOrderSlot,
+    delta.chosenDefensivePosition ?? delta.defensivePosition,
+  );
+  const optimalSlot = formatSlotLabel(
+    delta.optimalBattingOrderSlot,
+    delta.optimalDefensivePosition,
+  );
+  const chosenPlayer = formatPlayerName(
+    delta.chosenPlayerName ?? delta.starterPlayerName,
+    delta.chosenPlayerId ?? delta.starterPlayerId,
+  );
+  const optimalPlayer = formatPlayerName(delta.optimalPlayerName, delta.optimalPlayerId);
+  const actualValue = delta.actualChosenKblWpa ?? delta.actualPlayerKblWpa;
+  const expectedValue = delta.optimalProjectedKblWpa ?? delta.replacementExpectedKblWpa;
+  const deltaValue = delta.actualVsOptimalProjection ?? delta.rawPerformanceDelta;
+
+  return `${chosenSlot} ${chosenPlayer} vs optimal ${optimalSlot} ${optimalPlayer}: actual ${formatSignedManagerWpa(actualValue)}, expected ${formatSignedManagerWpa(expectedValue)}, delta ${formatSignedManagerWpa(deltaValue)}, manager ${formatSignedManagerWpa(delta.managerWpa)}.`;
+}
+
+function formatDecisionQualityEvidence(trace: ManagerValueTraceRow): string {
+  const layer = formatManagerMomentLayer(trace.layer);
+  const event = trace.endpointEventId
+    ? `resolved ${trace.endpointEventId}`
+    : trace.sourceEventId
+      ? `source ${trace.sourceEventId}`
+      : "archive evidence";
+  return `${layer} ${trace.label}: ${formatManagerMomentFinalValue(trace)} (${event}).`;
+}
+
 function traceValueClass(trace: ManagerValueTraceRow): string {
   if (trace.compatibilityOnly) return "text-[#a0a898]";
   if (trace.pending) return "text-[#fbbf24]";
@@ -272,6 +316,14 @@ export function ManagerWpaOverlay({ game, managerProfiles }: ManagerWpaOverlayPr
           Committed truth layer only
         </div>
       </div>
+      <div
+        className="mb-3 rounded-sm border border-[#3d5240] bg-[#172019] px-3 py-2 text-[8px] leading-[1.45] text-[#cfd8c9]"
+        data-testid="manager-wpa-boundary-copy"
+      >
+        Player WPA remains player outcome credit. Manager WPA below is archived
+        decision-quality evidence from tactical decisions, deployment stints, and
+        lineup construction deltas.
+      </div>
 
       <div className="grid gap-3 md:grid-cols-2">
         {rows.map((row) => {
@@ -284,6 +336,9 @@ export function ManagerWpaOverlay({ game, managerProfiles }: ManagerWpaOverlayPr
           );
           const lineupTraceRows = row.traceRows.filter(
             (trace) => trace.layer === "lineup",
+          );
+          const decisionQualityTraceRows = row.traceRows.filter(
+            (trace) => trace.layer === "tactical" || trace.layer === "deployment",
           );
           return (
             <article
@@ -328,6 +383,34 @@ export function ManagerWpaOverlay({ game, managerProfiles }: ManagerWpaOverlayPr
                   </div>
                   <div className="text-[#E8E8D8]">
                     {formatSignedManagerWpa(row.tacticalManagerWpa)}
+                  </div>
+                </div>
+                <div className="col-span-2">
+                  <div className="uppercase tracking-[0.16em] text-[#6b7b6e]">
+                    Decision Quality Evidence
+                  </div>
+                  <div
+                    className="mt-1 space-y-1 text-[#E8E8D8]"
+                    data-testid={`manager-decision-quality-evidence-${testId}`}
+                  >
+                    {decisionQualityTraceRows.length === 0 ? (
+                      <div className="text-[#a0a898]">
+                        Decision quality unavailable for older archives,
+                        score-only/manual-result games, or games without linked
+                        substitution, pinch-hit, or deployment evidence.
+                      </div>
+                    ) : (
+                      decisionQualityTraceRows.slice(0, 4).map((trace) => (
+                        <div key={trace.recordId} className="rounded-sm bg-[#172019] p-2">
+                          <div className="text-[8px] font-bold text-[#E8E8D8]">
+                            {formatDecisionQualityEvidence(trace)}
+                          </div>
+                          <div className="mt-0.5 text-[7px] leading-[1.35] text-[#a0a898]">
+                            {trace.description}
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
                 <div className="col-span-2">
@@ -423,6 +506,34 @@ export function ManagerWpaOverlay({ game, managerProfiles }: ManagerWpaOverlayPr
                 </div>
                 <div className="col-span-2">
                   <div className="uppercase tracking-[0.16em] text-[#6b7b6e]">
+                    Lineup Delta Evidence
+                  </div>
+                  <div
+                    className="mt-1 space-y-1 text-[#E8E8D8]"
+                    data-testid={`manager-lineup-delta-evidence-${testId}`}
+                  >
+                    {row.lineupDeltas.length === 0 ? (
+                      <div className="text-[#a0a898]">
+                        No lineup deviations. Lineup delta unavailable for older
+                        archives, score-only/manual-result games, or completed games
+                        without official optimal/chosen lineup snapshots.
+                      </div>
+                    ) : (
+                      row.lineupDeltas.slice(0, 5).map((delta) => (
+                        <div key={delta.decisionId} className="rounded-sm bg-[#172019] p-2">
+                          <div className="text-[8px] font-bold text-[#E8E8D8]">
+                            {formatLineupDeltaEvidence(delta)}
+                          </div>
+                          <div className="mt-0.5 text-[7px] uppercase tracking-[0.12em] text-[#88AA88]">
+                            Archived lineup construction delta, separate from player WPA
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <div className="col-span-2">
+                  <div className="uppercase tracking-[0.16em] text-[#6b7b6e]">
                     Lineup Delta Details
                   </div>
                   <div
@@ -434,7 +545,7 @@ export function ManagerWpaOverlay({ game, managerProfiles }: ManagerWpaOverlayPr
                         className="text-[#a0a898]"
                         data-testid={`manager-lineup-delta-empty-${testId}`}
                       >
-                        No lineup deviations
+                        No lineup deviations. Lineup delta unavailable for older archives or score-only/manual-result games.
                       </div>
                     ) : (
                       lineupTraceRows.slice(0, 3).map((trace) => (
