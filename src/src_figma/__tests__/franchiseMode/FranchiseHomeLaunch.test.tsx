@@ -426,12 +426,27 @@ function makePlayoffData(useDH = true) {
     playoff: {
       id: 'playoff-1',
       seasonNumber: 1,
+      seasonId: 'franchise-1-season-1',
+      franchiseId: 'franchise-1',
       status: 'IN_PROGRESS',
       useDH,
+      teamsQualifying: 2,
       teams: [
         { seed: 1, teamId: 'higher-seed', teamName: 'Higher Seed', league: 'Eastern' },
         { seed: 4, teamId: 'lower-seed', teamName: 'Lower Seed', league: 'Eastern' },
       ],
+      seedingConfirmation: {
+        confirmedAt: 1234,
+        confirmedBy: 'user',
+        source: 'season-end-review',
+        tiebreakerPolicy: 'record-then-run-differential',
+        teamsQualifying: 2,
+        teams: [
+          { teamId: 'higher-seed', teamName: 'Higher Seed', seed: 1, wins: 10, losses: 2, runDiff: 21, qualifying: true, eliminated: false, tiebreakerNote: 'Ordered by regular-season record.' },
+          { teamId: 'lower-seed', teamName: 'Lower Seed', seed: 2, wins: 9, losses: 3, runDiff: 12, qualifying: true, eliminated: false, tiebreakerNote: 'Ordered by regular-season record.' },
+        ],
+        tieGroups: [],
+      },
     },
     series: [series],
     isLoading: false,
@@ -449,6 +464,7 @@ function makePlayoffData(useDH = true) {
     hasActivePlayoff: true,
     getRoundName: vi.fn(() => 'Division Series'),
     getSeriesForTeam: vi.fn(() => series),
+    preparePlayoffSeedingReview: vi.fn(),
     createNewPlayoff: vi.fn(),
     startPlayoffs: vi.fn(),
     recordGameResult: vi.fn(),
@@ -457,6 +473,90 @@ function makePlayoffData(useDH = true) {
     refresh: vi.fn(),
     getBattingLeaders: vi.fn(),
     getPitchingLeaders: vi.fn(),
+  };
+}
+
+function makeStartedUnconfirmedPlayoffData(useDH = true) {
+  const playoffData = makePlayoffData(useDH);
+  playoffData.playoff = {
+    ...playoffData.playoff,
+    id: 'playoff-unconfirmed-started',
+  };
+  delete (playoffData.playoff as Record<string, unknown>).seedingConfirmation;
+  return playoffData;
+}
+
+function makeNoPlayoffData() {
+  return {
+    playoff: null,
+    series: [],
+    isLoading: false,
+    error: null,
+    currentRoundSeries: [],
+    completedSeries: [],
+    inProgressSeries: [],
+    pendingSeries: [],
+    bracketByRound: new Map(),
+    bracketByLeague: {
+      Eastern: [],
+      Western: [],
+      Championship: null,
+    },
+    hasActivePlayoff: false,
+    getRoundName: vi.fn((round: number) => `Round ${round}`),
+    getSeriesForTeam: vi.fn(() => null),
+    preparePlayoffSeedingReview: vi.fn(),
+    createNewPlayoff: vi.fn(),
+    startPlayoffs: vi.fn(),
+    recordGameResult: vi.fn(),
+    advanceRound: vi.fn(),
+    completePlayoffs: vi.fn(),
+    refresh: vi.fn(),
+    getBattingLeaders: vi.fn(),
+    getPitchingLeaders: vi.fn(),
+  };
+}
+
+function makeUnconfirmedPlayoffData() {
+  return {
+    ...makeNoPlayoffData(),
+    playoff: {
+      id: 'playoff-unconfirmed',
+      seasonNumber: 1,
+      seasonId: 'franchise-1-season-1',
+      franchiseId: 'franchise-1',
+      status: 'NOT_STARTED',
+      useDH: true,
+      teamsQualifying: 4,
+      teams: [
+        { seed: 1, teamId: 'higher-seed', teamName: 'Higher Seed', league: 'Eastern' },
+        { seed: 2, teamId: 'lower-seed', teamName: 'Lower Seed', league: 'Eastern' },
+      ],
+    },
+    hasActivePlayoff: true,
+  };
+}
+
+function makeSeedingReview() {
+  const teams = [
+    { teamId: 'higher-seed', teamName: 'Higher Seed', seed: 1, league: 'Eastern' as const, wins: 10, losses: 2, runDiff: 21, winPct: 0.833, qualifying: true, eliminated: false, tiebreakerNote: 'Ordered by regular-season record.' },
+    { teamId: 'lower-seed', teamName: 'Lower Seed', seed: 2, league: 'Eastern' as const, wins: 9, losses: 3, runDiff: 12, winPct: 0.75, qualifying: true, eliminated: false, tiebreakerNote: 'Ordered by regular-season record.' },
+    { teamId: 'away-team', teamName: 'Away Team', seed: 3, league: 'Western' as const, wins: 8, losses: 4, runDiff: 4, winPct: 0.667, qualifying: true, eliminated: false, tiebreakerNote: 'Ordered by regular-season record.' },
+    { teamId: 'home-team', teamName: 'Home Team', seed: 4, league: 'Western' as const, wins: 7, losses: 5, runDiff: -2, winPct: 0.583, qualifying: true, eliminated: false, tiebreakerNote: 'Ordered by regular-season record.' },
+  ];
+  return {
+    franchiseId: 'franchise-1',
+    seasonId: 'franchise-1-season-1',
+    statsScopeId: 'franchise-1-season-1',
+    seasonNumber: 1,
+    teamsQualifying: 4,
+    tiebreakerPolicy: 'record-then-run-differential' as const,
+    teams,
+    qualifiedTeams: teams,
+    eliminatedTeams: [],
+    tieGroups: [],
+    blockers: [],
+    generatedAt: 1234,
   };
 }
 
@@ -693,6 +793,103 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
     });
     expect(state.optimalLineupSnapshots.away).toBe(snapshotsByTeam['away-team'].dh.vsLHP);
     expect(state.optimalLineupSnapshots.home).toBe(snapshotsByTeam['home-team'].dh.vsRHP);
+  });
+
+  test('playoff bracket creation is disabled until seeding review is confirmed', async () => {
+    const playoffData = makeNoPlayoffData();
+    const review = makeSeedingReview();
+    playoffData.preparePlayoffSeedingReview.mockResolvedValue(review);
+    mocks.mockUseScheduleData.mockReturnValue(makeEmptyScheduleData());
+    mocks.mockUsePlayoffData.mockReturnValue(playoffData);
+
+    render(<FranchiseHome />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYOFFS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'BRACKET' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'REVIEW STANDINGS' }));
+    await screen.findByText('CONFIRMED-SEEDING REVIEW');
+
+    expect(screen.getByRole('button', { name: 'CREATE CONFIRMED BRACKET' })).toHaveAttribute('disabled');
+    expect(playoffData.createNewPlayoff).not.toHaveBeenCalled();
+  });
+
+  test('confirmed playoff seeding creates bracket from confirmed review context', async () => {
+    const playoffData = makeNoPlayoffData();
+    const review = makeSeedingReview();
+    playoffData.preparePlayoffSeedingReview.mockResolvedValue(review);
+    playoffData.createNewPlayoff.mockResolvedValue({ id: 'playoff-created' });
+    mocks.mockUseScheduleData.mockReturnValue(makeEmptyScheduleData());
+    mocks.mockUsePlayoffData.mockReturnValue(playoffData);
+
+    render(<FranchiseHome />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYOFFS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'BRACKET' }));
+    fireEvent.click(screen.getByRole('button', { name: 'REVIEW STANDINGS' }));
+    await screen.findByText('CONFIRMED-SEEDING REVIEW');
+
+    fireEvent.click(screen.getByRole('button', { name: 'CONFIRM SEEDING' }));
+    await screen.findByRole('button', { name: 'SEEDING CONFIRMED' });
+    fireEvent.click(screen.getByRole('button', { name: 'CREATE CONFIRMED BRACKET' }));
+
+    await waitFor(() =>
+      expect(playoffData.createNewPlayoff).toHaveBeenCalledWith(expect.objectContaining({
+        seasonNumber: 1,
+        seasonId: 'franchise-1-season-1',
+        franchiseId: 'franchise-1',
+        teamsQualifying: 4,
+        useDH: true,
+        confirmedSeedingReview: review,
+      })),
+    );
+    expect(playoffData.startPlayoffs).not.toHaveBeenCalled();
+  });
+
+  test('existing unconfirmed playoff shows seeding repair before bracket start', async () => {
+    const playoffData = makeUnconfirmedPlayoffData();
+    const review = makeSeedingReview();
+    playoffData.preparePlayoffSeedingReview.mockResolvedValue(review);
+    playoffData.createNewPlayoff.mockResolvedValue({ id: 'playoff-repaired' });
+    mocks.mockUseScheduleData.mockReturnValue(makeEmptyScheduleData());
+    mocks.mockUsePlayoffData.mockReturnValue(playoffData);
+
+    render(<FranchiseHome />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYOFFS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'BRACKET' }));
+
+    expect(screen.getByText('Playoff Seeding Needs Confirmation')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'REVIEW STANDINGS' }));
+    await screen.findByText('CONFIRMED-SEEDING REVIEW');
+    fireEvent.click(screen.getByRole('button', { name: 'CONFIRM SEEDING' }));
+    await screen.findByRole('button', { name: 'SEEDING CONFIRMED' });
+    fireEvent.click(screen.getByRole('button', { name: 'CREATE CONFIRMED BRACKET' }));
+
+    await waitFor(() =>
+      expect(playoffData.createNewPlayoff).toHaveBeenCalledWith(expect.objectContaining({
+        confirmedSeedingReview: review,
+      })),
+    );
+    expect(playoffData.startPlayoffs).not.toHaveBeenCalled();
+  });
+
+  test('already-started unconfirmed legacy playoff is blocked from GameTracker launch', () => {
+    const playoffData = makeStartedUnconfirmedPlayoffData();
+    mocks.mockUseScheduleData.mockReturnValue(makeEmptyScheduleData());
+    mocks.mockUsePlayoffData.mockReturnValue(playoffData);
+
+    render(<FranchiseHome />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYOFFS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'BRACKET' }));
+
+    expect(screen.getByText('LEGACY PLAYOFF BLOCKED')).toBeInTheDocument();
+    expect(screen.getByText(/already started without confirmed seeding/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /PLAY GAME/i })).toBeNull();
+    expect(screen.getByText('PLAY BLOCKED - missing confirmed seeding')).toBeInTheDocument();
+    expect(mocks.mockNavigate).not.toHaveBeenCalled();
+    expect(mocks.mockBuildFranchiseGameTrackerRoster).not.toHaveBeenCalled();
   });
 
   test('Mode 2 v1 regular-season actions expose score and single-game skip only', () => {

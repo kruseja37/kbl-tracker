@@ -343,6 +343,7 @@ describe('FranchiseHome Component', () => {
         hasActivePlayoff: true,
         isLoading: false,
         error: null,
+        preparePlayoffSeedingReview: vi.fn(),
         createNewPlayoff: vi.fn(),
         startPlayoffs: vi.fn(),
         recordGameResult: vi.fn(),

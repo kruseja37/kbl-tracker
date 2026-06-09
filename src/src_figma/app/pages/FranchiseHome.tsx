@@ -80,6 +80,7 @@ import type {
   OpposingPitcherHand,
   OptimalLineupSnapshot,
 } from "../../../types/managerWpa";
+import type { FranchisePlayoffSeedingReview } from "../../../utils/franchisePlayoffSeedingReview";
 
 // Context for passing franchise data to child components
 const FranchiseDataContext = createContext<UseFranchiseDataReturn | null>(null);
@@ -306,6 +307,10 @@ export function FranchiseHome() {
 
   // Bracket UI state
   const [expandedSeriesId, setExpandedSeriesId] = useState<string | null>(null);
+  const [playoffSeedingReview, setPlayoffSeedingReview] = useState<FranchisePlayoffSeedingReview | null>(null);
+  const [confirmedPlayoffSeedingReview, setConfirmedPlayoffSeedingReview] = useState<FranchisePlayoffSeedingReview | null>(null);
+  const [playoffReviewLoading, setPlayoffReviewLoading] = useState(false);
+  const [playoffReviewError, setPlayoffReviewError] = useState<string | null>(null);
 
   // Playoff System State - Persisted to IndexedDB via usePlayoffData
   const playoffData = usePlayoffData(currentSeason, { franchiseId });
@@ -619,27 +624,76 @@ export function FranchiseHome() {
     }
   };
 
-  const handleCreatePlayoffBracket = async () => {
+  const buildPlayoffCreationConfig = () => {
+    const playoffSetup = franchiseData.franchiseConfig?.playoffSetupSnapshot
+      ?? franchiseData.franchiseConfig?.playoffs;
+    return {
+      seasonNumber: currentSeason,
+      seasonId: activeSeasonId,
+      franchiseId,
+      teamsQualifying: playoffSetup?.teamsQualifying ?? 8,
+      gamesPerRound: [5, 7, 7],
+      inningsPerGame: franchiseData.franchiseConfig?.seasonLength?.inningsPerGame
+        ?? franchiseData.franchiseConfig?.season?.inningsPerGame
+        ?? 9,
+      useDH: franchiseData.franchiseConfig?.rulesSnapshot?.useDH
+        ?? franchiseData.franchiseConfig?.season?.useDH
+        ?? true,
+    };
+  };
+
+  const handlePreparePlayoffSeedingReview = async () => {
     if (!franchiseId) return;
 
     try {
-      const playoffSetup = franchiseData.franchiseConfig?.playoffSetupSnapshot
-        ?? franchiseData.franchiseConfig?.playoffs;
-      await playoffData.createNewPlayoff({
-        seasonNumber: currentSeason,
-        seasonId: activeSeasonId,
+      setPlayoffReviewLoading(true);
+      setPlayoffReviewError(null);
+      const config = buildPlayoffCreationConfig();
+      const review = await playoffData.preparePlayoffSeedingReview({
+        seasonNumber: config.seasonNumber,
+        seasonId: config.seasonId,
         franchiseId,
-        teamsQualifying: playoffSetup?.teamsQualifying ?? 8,
-        gamesPerRound: [5, 7, 7],
-        inningsPerGame: franchiseData.franchiseConfig?.seasonLength?.inningsPerGame
-          ?? franchiseData.franchiseConfig?.season?.inningsPerGame
-          ?? 9,
-        useDH: franchiseData.franchiseConfig?.rulesSnapshot?.useDH
-          ?? franchiseData.franchiseConfig?.season?.useDH
-          ?? true,
+        teamsQualifying: config.teamsQualifying,
+      });
+      setPlayoffSeedingReview(review);
+      setConfirmedPlayoffSeedingReview(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to review playoff seeding.';
+      setPlayoffReviewError(message);
+      console.error('Failed to review playoff seeding:', err);
+    } finally {
+      setPlayoffReviewLoading(false);
+    }
+  };
+
+  const handleConfirmPlayoffSeeding = () => {
+    if (!playoffSeedingReview || playoffSeedingReview.blockers.length > 0) return;
+    setConfirmedPlayoffSeedingReview(playoffSeedingReview);
+    setPlayoffReviewError(null);
+  };
+
+  const handleCreatePlayoffBracket = async () => {
+    if (!franchiseId) return;
+
+    if (!confirmedPlayoffSeedingReview) {
+      setPlayoffReviewError('Confirm playoff seeding before creating the bracket.');
+      return;
+    }
+
+    try {
+      setPlayoffReviewLoading(true);
+      setPlayoffReviewError(null);
+      const config = buildPlayoffCreationConfig();
+      await playoffData.createNewPlayoff({
+        ...config,
+        confirmedSeedingReview: confirmedPlayoffSeedingReview,
       });
     } catch (err) {
-      console.error('Failed to create playoff from stored franchise setup:', err);
+      const message = err instanceof Error ? err.message : 'Failed to create playoff from confirmed seeding.';
+      setPlayoffReviewError(message);
+      console.error('Failed to create playoff from confirmed seeding:', err);
+    } finally {
+      setPlayoffReviewLoading(false);
     }
   };
 
@@ -824,6 +878,10 @@ export function FranchiseHome() {
   // Launch a playoff game in the GameTracker
   const handlePlayPlayoffGame = async (series: ReturnType<typeof playoffData.getSeriesForTeam> & {}) => {
     if (!series || series.status !== 'IN_PROGRESS') return;
+    if (playoffData.playoff && !playoffData.playoff.seedingConfirmation) {
+      window.alert('GameTracker playoff launch blocked: confirm playoff seeding before playoff games can be played.');
+      return;
+    }
 
     // Determine next game number (count completed games + 1)
     const completedGames = series.games.filter(g => g.status === 'COMPLETED').length;
@@ -967,6 +1025,10 @@ export function FranchiseHome() {
   const handleSimPlayoffGame = async (series: ReturnType<typeof playoffData.getSeriesForTeam> & {}) => {
     if (!MODE_2_V1_SYNTHETIC_SIM_ENABLED) return;
     if (!series || series.status !== 'IN_PROGRESS') return;
+    if (playoffData.playoff && !playoffData.playoff.seedingConfirmation) {
+      window.alert('Playoff sim blocked: confirm playoff seeding before playoff games can be played.');
+      return;
+    }
 
     const completedGames = series.games.filter(g => g.status === 'COMPLETED').length;
     const nextGameNumber = completedGames + 1;
@@ -1095,6 +1157,17 @@ export function FranchiseHome() {
 
   const currentTabs = seasonPhase === "regular" ? regularSeasonTabs : seasonPhase === "playoffs" ? playoffTabs : offseasonTabs;
   const canUseOffseasonExecution = seasonPhase === "offseason" && FRANCHISE_V1_OFFSEASON_EXECUTION_ENABLED;
+  const playoffNeedsSeedingConfirmation = Boolean(
+    playoffData.playoff &&
+    playoffData.playoff.status === 'NOT_STARTED' &&
+    !playoffData.playoff.seedingConfirmation,
+  );
+  const playoffIsConfirmedForPlay = Boolean(playoffData.playoff?.seedingConfirmation);
+  const playoffIsStartedWithoutConfirmedSeeding = Boolean(
+    playoffData.playoff &&
+    playoffData.playoff.status !== 'NOT_STARTED' &&
+    !playoffData.playoff.seedingConfirmation,
+  );
 
   // Schedule data is now loaded from IndexedDB via useScheduleData hook
   // No mock initialization needed - schedule starts empty per Figma spec
@@ -1689,24 +1762,132 @@ export function FranchiseHome() {
               })()}
             </div>
 
-            {!playoffData.playoff ? (
-              // No playoff exists - show create option
-              <div className="text-center py-12">
+            {(!playoffData.playoff || playoffNeedsSeedingConfirmation) ? (
+              // No confirmed bracket exists - show season-end review / repair option
+              <div className="py-8">
                 <Trophy className="w-16 h-16 text-[#E8E8D8]/30 mx-auto mb-4" />
-                <div className="text-lg text-[#E8E8D8] mb-2">No Playoffs Configured</div>
-                <div className="text-sm text-[#E8E8D8]/70 mb-6">
-                  Create a playoff bracket based on current standings
+                <div className="text-center text-lg text-[#E8E8D8] mb-2">
+                  {playoffNeedsSeedingConfirmation ? 'Playoff Seeding Needs Confirmation' : 'No Playoffs Configured'}
                 </div>
-                <button
-                  onClick={handleCreatePlayoffBracket}
-                  className="bg-[#5599FF] border-[3px] border-[#3366FF] px-6 py-3 text-sm text-[#E8E8D8] hover:bg-[#3366FF] active:scale-95 transition-transform"
-                >
-                  CREATE PLAYOFF BRACKET
-                </button>
+                <div className="text-center text-sm text-[#E8E8D8]/70 mb-6">
+                  {playoffNeedsSeedingConfirmation
+                    ? 'This existing bracket has no confirmed seeding review. Reconfirm final standings before playoff play begins.'
+                    : 'Review final standings, confirm run-differential tiebreakers, then create the bracket.'}
+                </div>
+                <div className="mx-auto max-w-4xl space-y-4">
+                  <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <div className="text-[11px] text-[#C4A853] font-bold">SEASON-END REVIEW</div>
+                        <div className="text-[10px] text-[#E8E8D8]/70">
+                          Score-only rows count for standings only; GameTracker archives keep game detail evidence.
+                        </div>
+                      </div>
+                      <button
+                        onClick={handlePreparePlayoffSeedingReview}
+                        disabled={playoffReviewLoading}
+                        className="bg-[#5599FF] border-[3px] border-[#3366FF] px-4 py-2 text-[11px] text-[#E8E8D8] hover:bg-[#3366FF] disabled:opacity-50 active:scale-95 transition-transform"
+                      >
+                        {playoffReviewLoading ? 'REVIEWING...' : 'REVIEW STANDINGS'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {playoffReviewError && (
+                    <div className="bg-[#6B3F3F] border-[3px] border-[#DC3545] p-3 text-[10px] text-[#FFE0E0]">
+                      {playoffReviewError}
+                    </div>
+                  )}
+
+                  {playoffSeedingReview && (
+                    <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-4">
+                      <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                        <div>
+                          <div className="text-[11px] text-[#C4A853] font-bold">CONFIRMED-SEEDING REVIEW</div>
+                          <div className="text-[10px] text-[#E8E8D8]/70">
+                            Tiebreaker policy: record, then run differential. {playoffSeedingReview.qualifiedTeams.length} of {playoffSeedingReview.teams.length} teams qualify.
+                          </div>
+                        </div>
+                        <div className="text-[10px] text-[#E8E8D8]/70">
+                          Eliminated: {playoffSeedingReview.eliminatedTeams.length}
+                        </div>
+                      </div>
+
+                      {playoffSeedingReview.tieGroups.some((group) => group.resolvedByRunDifferential) && (
+                        <div className="mb-3 bg-[#4A6844] border border-[#C4A853]/60 p-2 text-[10px] text-[#E8E8D8]/80">
+                          Run differential resolved tied W-L groups:
+                          {' '}
+                          {playoffSeedingReview.tieGroups
+                            .filter((group) => group.resolvedByRunDifferential)
+                            .map((group) => `${group.wins}-${group.losses}: ${group.teamIds.join(', ')}`)
+                            .join(' | ')}
+                        </div>
+                      )}
+
+                      {playoffSeedingReview.blockers.length > 0 ? (
+                        <div className="mb-3 bg-[#6B3F3F] border border-[#DC3545] p-2 text-[10px] text-[#FFE0E0]">
+                          {playoffSeedingReview.blockers.join(' ')}
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full min-w-[620px] text-[10px] text-[#E8E8D8]">
+                            <thead className="border-b-2 border-[#4A6844] text-[#C4A853]">
+                              <tr>
+                                <th className="py-2 text-left">Seed</th>
+                                <th className="py-2 text-left">Team</th>
+                                <th className="py-2 text-center">W-L</th>
+                                <th className="py-2 text-center">Run Diff</th>
+                                <th className="py-2 text-left">Status</th>
+                                <th className="py-2 text-left">Tiebreaker</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {playoffSeedingReview.teams.map((team) => (
+                                <tr key={team.teamId} className={`border-b border-[#4A6844]/70 ${team.eliminated ? 'opacity-55' : ''}`}>
+                                  <td className="py-2">{team.seed ?? '-'}</td>
+                                  <td className="py-2">{team.teamName}</td>
+                                  <td className="py-2 text-center">{team.wins}-{team.losses}</td>
+                                  <td className="py-2 text-center">{team.runDiff >= 0 ? '+' : ''}{team.runDiff}</td>
+                                  <td className="py-2">{team.qualifying ? 'QUALIFIED' : 'ELIMINATED'}</td>
+                                  <td className="py-2 text-[#E8E8D8]/70">{team.tiebreakerNote}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                        <button
+                          onClick={handleConfirmPlayoffSeeding}
+                          disabled={playoffSeedingReview.blockers.length > 0}
+                          className="bg-[#C4A853] border-[3px] border-[#9A7B2C] px-4 py-2 text-[11px] text-[#1a1a1a] hover:bg-[#D4B863] disabled:opacity-50 active:scale-95 transition-transform"
+                        >
+                          {confirmedPlayoffSeedingReview === playoffSeedingReview ? 'SEEDING CONFIRMED' : 'CONFIRM SEEDING'}
+                        </button>
+                        <button
+                          onClick={handleCreatePlayoffBracket}
+                          disabled={!confirmedPlayoffSeedingReview || playoffReviewLoading}
+                          className="bg-[#5599FF] border-[3px] border-[#3366FF] px-4 py-2 text-[11px] text-[#E8E8D8] hover:bg-[#3366FF] disabled:opacity-50 active:scale-95 transition-transform"
+                        >
+                          CREATE CONFIRMED BRACKET
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             ) : (
               // Playoff exists - show bracket
               <>
+                {playoffIsStartedWithoutConfirmedSeeding && (
+                  <div className="mb-4 bg-[#6B3F3F] border-[4px] border-[#DC3545] p-4 text-center">
+                    <div className="text-[11px] text-[#FFE0E0] font-bold">LEGACY PLAYOFF BLOCKED</div>
+                    <div className="text-[10px] text-[#FFE0E0]/80">
+                      This playoff already started without confirmed seeding. GameTracker launch is unavailable; repair is only available before playoff play begins.
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   {/* Eastern Conference */}
                   <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-6">
@@ -1768,22 +1949,28 @@ export function FranchiseHome() {
                               {s.status === 'IN_PROGRESS' && (
                                 <div className="mt-2 space-y-2">
                                   <div className="text-[8px] text-[#5599FF] text-center">IN PROGRESS - Best of {s.bestOf}</div>
-                                  <div className="flex gap-1">
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); handlePlayPlayoffGame(s); }}
-                                      className="flex-1 bg-[#5599FF] border-[2px] border-[#3366FF] py-1.5 text-[10px] text-white font-bold hover:bg-[#3366FF] active:scale-95 transition-transform"
-                                    >
-                                      ⚾ PLAY GAME {s.games.filter(g => g.status === 'COMPLETED').length + 1}
-                                    </button>
-                                    {MODE_2_V1_SYNTHETIC_SIM_ENABLED && (
+                                  {playoffIsConfirmedForPlay ? (
+                                    <div className="flex gap-1">
                                       <button
-                                        onClick={(e) => { e.stopPropagation(); handleSimPlayoffGame(s); }}
-                                        className="bg-[#4A6844] border-[2px] border-[#5A8352] py-1.5 px-2 text-[10px] text-[#E8E8D8] font-bold hover:bg-[#3F5A3A] active:scale-95 transition-transform"
+                                        onClick={(e) => { e.stopPropagation(); handlePlayPlayoffGame(s); }}
+                                        className="flex-1 bg-[#5599FF] border-[2px] border-[#3366FF] py-1.5 text-[10px] text-white font-bold hover:bg-[#3366FF] active:scale-95 transition-transform"
                                       >
-                                        SIM
+                                        ⚾ PLAY GAME {s.games.filter(g => g.status === 'COMPLETED').length + 1}
                                       </button>
-                                    )}
-                                  </div>
+                                      {MODE_2_V1_SYNTHETIC_SIM_ENABLED && (
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); handleSimPlayoffGame(s); }}
+                                          className="bg-[#4A6844] border-[2px] border-[#5A8352] py-1.5 px-2 text-[10px] text-[#E8E8D8] font-bold hover:bg-[#3F5A3A] active:scale-95 transition-transform"
+                                        >
+                                          SIM
+                                        </button>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="bg-[#6B3F3F] border border-[#DC3545] p-2 text-center text-[8px] text-[#FFE0E0]">
+                                      PLAY BLOCKED - missing confirmed seeding
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -1860,22 +2047,28 @@ export function FranchiseHome() {
                               {s.status === 'IN_PROGRESS' && (
                                 <div className="mt-2 space-y-2">
                                   <div className="text-[8px] text-[#5599FF] text-center">IN PROGRESS - Best of {s.bestOf}</div>
-                                  <div className="flex gap-1">
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); handlePlayPlayoffGame(s); }}
-                                      className="flex-1 bg-[#5599FF] border-[2px] border-[#3366FF] py-1.5 text-[10px] text-white font-bold hover:bg-[#3366FF] active:scale-95 transition-transform"
-                                    >
-                                      ⚾ PLAY GAME {s.games.filter(g => g.status === 'COMPLETED').length + 1}
-                                    </button>
-                                    {MODE_2_V1_SYNTHETIC_SIM_ENABLED && (
+                                  {playoffIsConfirmedForPlay ? (
+                                    <div className="flex gap-1">
                                       <button
-                                        onClick={(e) => { e.stopPropagation(); handleSimPlayoffGame(s); }}
-                                        className="bg-[#4A6844] border-[2px] border-[#5A8352] py-1.5 px-2 text-[10px] text-[#E8E8D8] font-bold hover:bg-[#3F5A3A] active:scale-95 transition-transform"
+                                        onClick={(e) => { e.stopPropagation(); handlePlayPlayoffGame(s); }}
+                                        className="flex-1 bg-[#5599FF] border-[2px] border-[#3366FF] py-1.5 text-[10px] text-white font-bold hover:bg-[#3366FF] active:scale-95 transition-transform"
                                       >
-                                        SIM
+                                        ⚾ PLAY GAME {s.games.filter(g => g.status === 'COMPLETED').length + 1}
                                       </button>
-                                    )}
-                                  </div>
+                                      {MODE_2_V1_SYNTHETIC_SIM_ENABLED && (
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); handleSimPlayoffGame(s); }}
+                                          className="bg-[#4A6844] border-[2px] border-[#5A8352] py-1.5 px-2 text-[10px] text-[#E8E8D8] font-bold hover:bg-[#3F5A3A] active:scale-95 transition-transform"
+                                        >
+                                          SIM
+                                        </button>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="bg-[#6B3F3F] border border-[#DC3545] p-2 text-center text-[8px] text-[#FFE0E0]">
+                                      PLAY BLOCKED - missing confirmed seeding
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -1918,22 +2111,28 @@ export function FranchiseHome() {
                         <span className="text-lg text-[#E8E8D8]">{playoffData.bracketByLeague.Championship.lowerSeedWins}</span>
                       </div>
                       {playoffData.bracketByLeague.Championship.status === 'IN_PROGRESS' && (
-                        <div className="flex gap-1 mt-3">
-                          <button
-                            onClick={() => handlePlayPlayoffGame(playoffData.bracketByLeague.Championship!)}
-                            className="flex-1 bg-[#FFD700] border-[2px] border-[#CC9900] py-2 text-[11px] text-[#1a1a1a] font-bold hover:bg-[#CC9900] hover:text-white active:scale-95 transition-transform"
-                          >
-                            🏆 PLAY GAME {playoffData.bracketByLeague.Championship.games.filter(g => g.status === 'COMPLETED').length + 1}
-                          </button>
-                          {MODE_2_V1_SYNTHETIC_SIM_ENABLED && (
+                        playoffIsConfirmedForPlay ? (
+                          <div className="flex gap-1 mt-3">
                             <button
-                              onClick={() => handleSimPlayoffGame(playoffData.bracketByLeague.Championship!)}
-                              className="bg-[#4A6844] border-[2px] border-[#5A8352] py-2 px-3 text-[10px] text-[#E8E8D8] font-bold hover:bg-[#3F5A3A] active:scale-95 transition-transform"
+                              onClick={() => handlePlayPlayoffGame(playoffData.bracketByLeague.Championship!)}
+                              className="flex-1 bg-[#FFD700] border-[2px] border-[#CC9900] py-2 text-[11px] text-[#1a1a1a] font-bold hover:bg-[#CC9900] hover:text-white active:scale-95 transition-transform"
                             >
-                              SIM
+                              🏆 PLAY GAME {playoffData.bracketByLeague.Championship.games.filter(g => g.status === 'COMPLETED').length + 1}
                             </button>
-                          )}
-                        </div>
+                            {MODE_2_V1_SYNTHETIC_SIM_ENABLED && (
+                              <button
+                                onClick={() => handleSimPlayoffGame(playoffData.bracketByLeague.Championship!)}
+                                className="bg-[#4A6844] border-[2px] border-[#5A8352] py-2 px-3 text-[10px] text-[#E8E8D8] font-bold hover:bg-[#3F5A3A] active:scale-95 transition-transform"
+                              >
+                                SIM
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="mt-3 bg-[#6B3F3F] border border-[#DC3545] p-2 text-center text-[9px] text-[#FFE0E0]">
+                            PLAY BLOCKED - missing confirmed seeding
+                          </div>
+                        )
                       )}
                     </div>
                   ) : (
@@ -1946,17 +2145,24 @@ export function FranchiseHome() {
                 {/* Start Playoffs Button */}
                 {playoffData.playoff.status === 'NOT_STARTED' && (
                   <div className="mt-6 text-center">
+                    {!playoffData.playoff.seedingConfirmation && (
+                      <div className="mb-3 text-[10px] text-[#FFD700]">
+                        Bracket start blocked until playoff seeding is reviewed and confirmed.
+                      </div>
+                    )}
                     <button
                       onClick={async () => {
                         try {
                           await playoffData.startPlayoffs();
                         } catch (err) {
                           console.error('Failed to start playoffs:', err);
+                          window.alert(err instanceof Error ? err.message : 'Failed to start playoffs');
                         }
                       }}
+                      disabled={!playoffData.playoff.seedingConfirmation}
                       className="bg-[#5599FF] border-[3px] border-[#3366FF] px-6 py-3 text-sm text-[#E8E8D8] hover:bg-[#3366FF] active:scale-95 transition-transform"
                     >
-                      START PLAYOFFS
+                      CONFIRM BRACKET AND START PLAYOFFS
                     </button>
                   </div>
                 )}

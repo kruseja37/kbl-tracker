@@ -238,15 +238,19 @@ Key files: `StadiumSprayChart.tsx`, `SprayChartFilters.tsx`, `franchiseStadiumAn
 
 ### 1.8 — Playoff Confirmation + Tiebreaker Resolution
 
-**Status:** Season-end readiness report exists as read-only. Playoff seeding and run-differential tiebreaker resolution are not implemented per worksheet §6.2.
+**Status:** Implemented for Phase 1 v1. FranchiseHome now has a season-end seeding review that displays final standings, run-differential tiebreaker evidence, qualified/eliminated teams, and requires user confirmation before bracket creation. Playoff start requires stored seeding confirmation and records bracket confirmation before play begins. Mode 3/offseason remains blocked.
 
-**What's needed:**
-- Season-end review step: standings displayed with current seeding
-- Tiebreaker surface: when teams are tied in W-L, show run differential and resolve seeding; user confirms resolution
-- Playoff bracket generated from confirmed seedings
-- User confirms bracket before playoff play begins — no auto-advance
-- Elimination status correctly computed and enforced: eliminated teams cannot appear in bracket
-- All seeding thresholds use `scaledThreshold()` from 1.1
+**Implemented v1 boundary:**
+- Season-end review step: standings displayed with current seeding.
+- Tiebreaker surface: same W-L groups display run differential; run differential resolves seeding where possible.
+- If record and run differential cannot resolve a qualifying seeding tie, bracket creation blocks for manual seeding resolution instead of fabricating a seed.
+- Playoff bracket generated only from confirmed seedings.
+- Playoff play starts only after stored seeding confirmation and explicit bracket/start confirmation; there is no auto-advance into playoffs.
+- Eliminated teams are preserved in confirmation evidence but absent from bracket teams.
+- Score-only rows count for standings only; GameTracker-completed rows preserve archive/game detail evidence.
+
+**Still deferred:**
+- Mode 3/offseason execution, season rollover, playoff-to-handoff migration, awards finalization, and any automatic generated schedule/simulation behavior.
 
 **Gate:** User can complete a regular season, resolve tiebreakers, confirm playoff bracket, and enter playoffs. Bracket is correct. Eliminated teams are absent.
 

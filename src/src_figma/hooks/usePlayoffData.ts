@@ -34,13 +34,19 @@ import {
   type PlayoffPlayerStats,
   type PlayoffStatus,
 } from '../../utils/playoffStorage';
-import { calculateStandings, type TeamStanding } from '../../utils/seasonStorage';
+import { calculateStandings } from '../../utils/seasonStorage';
 import { qualifyTeams, type TeamStanding as EngineTeamStanding, type QualificationConfig } from '../../engines/playoffEngine';
 import { getAllLeagueTemplates, getAllTeams, type LeagueTemplate } from '../../utils/leagueBuilderStorage';
 import { getFranchiseSeasonId } from '../../utils/franchisePersistenceContract';
 import { getAllFranchiseTeams } from '../../utils/franchisePlayerStorage';
 import { getFranchiseConfig } from '../../utils/franchiseManager';
+import { getAllGamesByFranchise, type ScheduledGame } from '../../utils/scheduleStorage';
 import type { FranchisePlayoffSetupSnapshot, StoredFranchiseConfig } from '../../types/franchise';
+import {
+  buildFranchisePlayoffSeedingReview,
+  reviewMatchesPlayoffScope,
+  type FranchisePlayoffSeedingReview,
+} from '../../utils/franchisePlayoffSeedingReview';
 
 // Re-export types
 export type {
@@ -93,7 +99,14 @@ export interface UsePlayoffDataReturn {
     useDH?: boolean;
     preSeededTeams?: PlayoffTeam[];
     franchiseId?: string;
+    confirmedSeedingReview?: FranchisePlayoffSeedingReview;
   }) => Promise<PlayoffConfig>;
+  preparePlayoffSeedingReview: (config: {
+    seasonNumber: number;
+    seasonId: string;
+    teamsQualifying: number;
+    franchiseId?: string;
+  }) => Promise<FranchisePlayoffSeedingReview>;
   startPlayoffs: () => Promise<void>;
   recordGameResult: (seriesId: string, game: SeriesGame) => Promise<void>;
   advanceRound: () => Promise<void>;
@@ -114,41 +127,6 @@ export interface UsePlayoffDataOptions {
 // ============================================
 
 const EMPTY_PLAYOFF_TEAMS: PlayoffTeam[] = [];
-
-function winPct(standing: Pick<TeamStanding, 'wins' | 'losses'>): number {
-  const totalGames = standing.wins + standing.losses;
-  return totalGames > 0 ? standing.wins / totalGames : 0;
-}
-
-function compareFranchisePlayoffStandings(left: TeamStanding, right: TeamStanding): number {
-  const winPctDelta = winPct(right) - winPct(left);
-  if (Math.abs(winPctDelta) > 0.000001) return winPctDelta;
-  if (right.wins !== left.wins) return right.wins - left.wins;
-  if (left.losses !== right.losses) return left.losses - right.losses;
-  if (right.runDiff !== left.runDiff) return right.runDiff - left.runDiff;
-  return left.teamId.localeCompare(right.teamId);
-}
-
-function sameUnresolvedPlayoffRank(left: TeamStanding, right: TeamStanding): boolean {
-  return Math.abs(winPct(left) - winPct(right)) <= 0.000001 &&
-    left.wins === right.wins &&
-    left.losses === right.losses &&
-    left.runDiff === right.runDiff;
-}
-
-function findUnresolvedPlayoffTie(
-  rankedStandings: TeamStanding[],
-  teamsQualifying: number,
-): TeamStanding[] | null {
-  for (let index = 0; index < Math.min(rankedStandings.length, teamsQualifying); index += 1) {
-    const tied = rankedStandings.filter((standing) =>
-      sameUnresolvedPlayoffRank(standing, rankedStandings[index]),
-    );
-    if (tied.length > 1) return tied;
-  }
-
-  return null;
-}
 
 function parseSeriesLength(value: string | undefined, fallback: number): number {
   const match = value?.match(/(\d+)/);
@@ -183,99 +161,81 @@ type FranchiseTeamSnapshot = {
   conferenceId?: string;
 };
 
-function getSnapshotTeamId(team: FranchiseTeamSnapshot): string | undefined {
-  return team.id ?? team.teamId;
-}
+function regularSeasonScheduleCompletionBlockers(
+  games: ScheduledGame[],
+  seasonId: string,
+): string[] {
+  const scopedGames = games.filter((game) => !game.seasonId || game.seasonId === seasonId);
+  const blockers: string[] = [];
 
-function resolveSnapshotLeague(
-  team: FranchiseTeamSnapshot,
-  seedIndex: number,
-  teamsQualifying: number,
-): 'Eastern' | 'Western' {
-  const rawLeague = [
-    team.league,
-    team.conference,
-    team.conferenceName,
-    team.conferenceId,
-  ].find(value => typeof value === 'string' && value.length > 0);
-
-  if (rawLeague) {
-    const normalized = rawLeague.toLowerCase();
-    if (normalized.includes('west')) return 'Western';
-    if (normalized.includes('east')) return 'Eastern';
+  if (scopedGames.length === 0) {
+    return ['Cannot review playoff seeding without a regular-season schedule.'];
   }
 
-  return seedIndex < Math.ceil(teamsQualifying / 2) ? 'Eastern' : 'Western';
+  const wrongScopeRows = games.filter((game) => game.seasonId && game.seasonId !== seasonId);
+  if (wrongScopeRows.length > 0) {
+    blockers.push(`Cannot review playoff seeding: ${wrongScopeRows.length} schedule row(s) belong to another season scope.`);
+  }
+
+  const incompleteRows = scopedGames.filter((game) => game.status !== 'COMPLETED' || !game.result);
+  if (incompleteRows.length > 0) {
+    blockers.push(`Cannot review playoff seeding until all regular-season schedule rows are completed (${incompleteRows.length} incomplete).`);
+  }
+
+  return blockers;
 }
 
-async function buildFranchisePlayoffTeams(config: {
+async function prepareFranchisePlayoffSeedingReview(config: {
   seasonId: string;
+  seasonNumber: number;
   teamsQualifying: number;
-}, playoffFranchiseId: string): Promise<PlayoffTeam[]> {
-  const [standings, franchiseTeams] = await Promise.all([
+}, playoffFranchiseId: string): Promise<FranchisePlayoffSeedingReview> {
+  const [scheduleGames, standings, franchiseTeams] = await Promise.all([
+    getAllGamesByFranchise(playoffFranchiseId, config.seasonNumber),
     calculateStandings(config.seasonId),
     getAllFranchiseTeams(playoffFranchiseId),
   ]);
 
-  if (franchiseTeams.length === 0) {
-    console.warn('[usePlayoffData] Cannot create franchise playoff without franchise-owned team snapshots.', {
+  const scheduleBlockers = regularSeasonScheduleCompletionBlockers(scheduleGames, config.seasonId);
+  if (scheduleBlockers.length > 0) {
+    console.warn('[usePlayoffData] Cannot review franchise playoff seeding.', {
       franchiseId: playoffFranchiseId,
       seasonId: config.seasonId,
+      blockers: scheduleBlockers,
     });
-    throw new Error('Cannot create franchise playoff without franchise-owned team snapshots.');
+    throw new Error(scheduleBlockers[0]);
   }
 
-  if (standings.length < config.teamsQualifying) {
-    console.warn('[usePlayoffData] Cannot create franchise playoff without enough scoped standings.', {
+  const review = buildFranchisePlayoffSeedingReview({
+    franchiseId: playoffFranchiseId,
+    seasonId: config.seasonId,
+    statsScopeId: config.seasonId,
+    seasonNumber: config.seasonNumber,
+    standings,
+    franchiseTeams: franchiseTeams as FranchiseTeamSnapshot[],
+    teamsQualifying: config.teamsQualifying,
+  });
+
+  if (review.blockers.length > 0) {
+    console.warn('[usePlayoffData] Cannot review franchise playoff seeding.', {
       franchiseId: playoffFranchiseId,
       seasonId: config.seasonId,
-      standingsCount: standings.length,
-      teamsQualifying: config.teamsQualifying,
+      blockers: review.blockers,
     });
-    throw new Error('Cannot create franchise playoff without enough scoped standings.');
+    throw new Error(review.blockers[0]);
   }
 
-  const franchiseTeamById = new Map<string, FranchiseTeamSnapshot>();
-  for (const team of franchiseTeams as FranchiseTeamSnapshot[]) {
-    const teamId = getSnapshotTeamId(team);
-    if (teamId) {
-      franchiseTeamById.set(teamId, team);
-    }
-  }
+  return review;
+}
 
-  const rankedStandings = [...standings].sort(compareFranchisePlayoffStandings);
-  const unresolvedTie = findUnresolvedPlayoffTie(rankedStandings, config.teamsQualifying);
-  if (unresolvedTie) {
-    const teamNames = unresolvedTie
-      .map((standing) => standing.teamName || standing.teamId)
-      .join(', ');
-    throw new Error(
-      `Manual playoff seeding resolution required: ${teamNames} remain tied after record and run differential.`,
-    );
-  }
-
-  const qualifiedStandings = rankedStandings.slice(0, config.teamsQualifying);
-  const missingTeamIds = qualifiedStandings
-    .map(standing => standing.teamId)
-    .filter(teamId => !franchiseTeamById.has(teamId));
-
-  if (missingTeamIds.length > 0) {
-    console.warn('[usePlayoffData] Cannot create franchise playoff; standings include teams missing from franchise-owned snapshots.', {
-      franchiseId: playoffFranchiseId,
-      seasonId: config.seasonId,
-      missingTeamIds,
-    });
-    throw new Error(`Cannot create franchise playoff; missing franchise-owned team snapshots for ${missingTeamIds.join(', ')}.`);
-  }
-
-  return qualifiedStandings.map((standing, index) => {
-    const team = franchiseTeamById.get(standing.teamId)!;
+function buildPlayoffTeamsFromConfirmedReview(review: FranchisePlayoffSeedingReview): PlayoffTeam[] {
+  return review.qualifiedTeams.map((team) => {
     return {
-      teamId: standing.teamId,
-      teamName: team.name || standing.teamName || standing.teamId,
-      seed: index + 1,
-      league: resolveSnapshotLeague(team, index, config.teamsQualifying),
-      regularSeasonRecord: { wins: standing.wins, losses: standing.losses },
+      teamId: team.teamId,
+      teamName: team.teamName,
+      seed: team.seed ?? 0,
+      league: team.league,
+      regularSeasonRecord: { wins: team.wins, losses: team.losses },
       eliminated: false,
     };
   });
@@ -427,6 +387,69 @@ export function usePlayoffData(
     return teamSeries.sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))[0] || null;
   }, [series]);
 
+  const preparePlayoffSeedingReview = useCallback(async (config: {
+    seasonNumber: number;
+    seasonId: string;
+    teamsQualifying: number;
+    franchiseId?: string;
+  }): Promise<FranchisePlayoffSeedingReview> => {
+    const playoffFranchiseId = config.franchiseId ?? franchiseId;
+    if (!playoffFranchiseId) {
+      throw new Error('Playoff seeding review requires a franchise id.');
+    }
+
+    const existingPlayoff = await getPlayoffByFranchiseSeason({
+      franchiseId: playoffFranchiseId,
+      seasonNumber: config.seasonNumber,
+      seasonId: config.seasonId,
+    });
+    if (existingPlayoff?.seedingConfirmation) {
+      const teams = existingPlayoff.seedingConfirmation.teams.map((team) => {
+        const playoffTeam = existingPlayoff.teams.find((candidate) => candidate.teamId === team.teamId);
+        const games = team.wins + team.losses;
+        return {
+          teamId: team.teamId,
+          teamName: team.teamName,
+          seed: team.seed,
+          league: playoffTeam?.league ?? (team.seed !== null && team.seed <= Math.ceil(existingPlayoff.teamsQualifying / 2) ? 'Eastern' : 'Western'),
+          wins: team.wins,
+          losses: team.losses,
+          runDiff: team.runDiff,
+          winPct: games > 0 ? team.wins / games : 0,
+          qualifying: team.qualifying,
+          eliminated: team.eliminated,
+          tiebreakerNote: team.tiebreakerNote,
+        };
+      });
+      return {
+        franchiseId: playoffFranchiseId,
+        seasonId: existingPlayoff.seasonId,
+        statsScopeId: existingPlayoff.seasonId,
+        seasonNumber: existingPlayoff.seasonNumber,
+        teamsQualifying: existingPlayoff.teamsQualifying,
+        tiebreakerPolicy: existingPlayoff.seedingConfirmation.tiebreakerPolicy,
+        teams,
+        qualifiedTeams: teams.filter((team) => team.qualifying),
+        eliminatedTeams: teams.filter((team) => team.eliminated),
+        tieGroups: existingPlayoff.seedingConfirmation.tieGroups,
+        blockers: [],
+        generatedAt: existingPlayoff.seedingConfirmation.confirmedAt,
+      };
+    }
+
+    const franchiseConfig = await getFranchiseConfig(playoffFranchiseId);
+    if (!franchiseConfig) {
+      throw new Error('Cannot review playoff seeding without stored Mode 1 playoff setup.');
+    }
+    const storedPlayoffSetup = getStoredFranchisePlayoffSetup(franchiseConfig);
+
+    return prepareFranchisePlayoffSeedingReview({
+      seasonNumber: config.seasonNumber,
+      seasonId: config.seasonId,
+      teamsQualifying: storedPlayoffSetup.teamsQualifying,
+    }, playoffFranchiseId);
+  }, [franchiseId]);
+
   // Create new playoff
   const createNewPlayoff = useCallback(async (config: {
     seasonNumber: number;
@@ -437,6 +460,7 @@ export function usePlayoffData(
     useDH?: boolean;
     preSeededTeams?: PlayoffTeam[];
     franchiseId?: string;
+    confirmedSeedingReview?: FranchisePlayoffSeedingReview;
   }): Promise<PlayoffConfig> => {
     try {
       // Get standings + league structure to determine playoff teams via qualifyTeams()
@@ -449,7 +473,7 @@ export function usePlayoffData(
           seasonNumber: config.seasonNumber,
           seasonId: config.seasonId,
         });
-        if (existingPlayoff) {
+        if (existingPlayoff?.seedingConfirmation) {
           await refresh();
           return existingPlayoff;
         }
@@ -473,10 +497,30 @@ export function usePlayoffData(
           preSeededTeams: undefined,
         };
 
-        // Franchise playoffs must be seeded from franchise-owned snapshots, not
-        // mutable League Builder templates. Missing snapshots are a damaged save
-        // condition and should fail safely instead of drifting to globals.
-        playoffTeams = await buildFranchisePlayoffTeams(config, playoffFranchiseId);
+        if (!config.confirmedSeedingReview) {
+          throw new Error('Confirm playoff seeding before creating the bracket.');
+        }
+        if (existingPlayoff && existingPlayoff.status !== 'NOT_STARTED') {
+          throw new Error('Existing playoff is already in progress; unconfirmed bracket repair is available only before playoff play begins.');
+        }
+        const scheduleGames = await getAllGamesByFranchise(playoffFranchiseId, config.seasonNumber);
+        const scheduleBlockers = regularSeasonScheduleCompletionBlockers(scheduleGames, config.seasonId);
+        if (scheduleBlockers.length > 0) {
+          throw new Error(scheduleBlockers[0]);
+        }
+        if (!reviewMatchesPlayoffScope(config.confirmedSeedingReview, {
+          franchiseId: playoffFranchiseId,
+          seasonId: config.seasonId,
+          statsScopeId: config.seasonId,
+          seasonNumber: config.seasonNumber,
+          teamsQualifying: config.teamsQualifying,
+        })) {
+          throw new Error('Confirmed playoff seeding no longer matches this franchise season.');
+        }
+
+        // Franchise playoffs must be seeded from confirmed franchise-owned
+        // standings review, not mutable League Builder templates.
+        playoffTeams = buildPlayoffTeamsFromConfirmedReview(config.confirmedSeedingReview);
       } else if (config.preSeededTeams && config.preSeededTeams.length > 0) {
         // Non-franchise playoff helpers may still accept explicit pre-seeding.
         playoffTeams = config.preSeededTeams;
@@ -580,6 +624,27 @@ export function usePlayoffData(
         leagues: ['Eastern', 'Western'],
         conferenceChampionship: true,
         teams: playoffTeams,
+        seedingConfirmation: playoffFranchiseId && config.confirmedSeedingReview
+          ? {
+              confirmedAt: Date.now(),
+              confirmedBy: 'user',
+              source: 'season-end-review',
+              tiebreakerPolicy: config.confirmedSeedingReview.tiebreakerPolicy,
+              teamsQualifying: config.confirmedSeedingReview.teamsQualifying,
+              teams: config.confirmedSeedingReview.teams.map((team) => ({
+                teamId: team.teamId,
+                teamName: team.teamName,
+                seed: team.seed,
+                wins: team.wins,
+                losses: team.losses,
+                runDiff: team.runDiff,
+                qualifying: team.qualifying,
+                eliminated: team.eliminated,
+                tiebreakerNote: team.tiebreakerNote,
+              })),
+              tieGroups: config.confirmedSeedingReview.tieGroups,
+            }
+          : undefined,
         currentRound: 0,
       });
 
@@ -600,12 +665,24 @@ export function usePlayoffData(
     if (!playoff) {
       throw new Error('No playoff to start');
     }
+    if (!playoff.seedingConfirmation) {
+      throw new Error('Confirm playoff seeding and bracket before starting playoffs.');
+    }
 
     try {
+      const firstRoundSeries = await getSeriesByRound(playoff.id, 1);
+      await updatePlayoff(playoff.id, {
+        bracketConfirmation: {
+          confirmedAt: Date.now(),
+          confirmedBy: 'user',
+          source: 'confirmed-seeding',
+          teamCount: playoff.teams.length,
+          seriesCount: firstRoundSeries.length,
+        },
+      });
       await startPlayoff(playoff.id);
 
       // Mark first round series as IN_PROGRESS
-      const firstRoundSeries = await getSeriesByRound(playoff.id, 1);
       for (const s of firstRoundSeries) {
         await updateSeries(s.id, { status: 'IN_PROGRESS' });
       }
@@ -622,6 +699,9 @@ export function usePlayoffData(
   const recordGameResult = useCallback(async (seriesId: string, game: SeriesGame) => {
     if (!playoff) {
       throw new Error('No playoff to record game result');
+    }
+    if ((playoff.franchiseId || franchiseId) && !playoff.seedingConfirmation) {
+      throw new Error('Confirm playoff seeding before recording franchise playoff games.');
     }
 
     try {
@@ -797,6 +877,7 @@ export function usePlayoffData(
     getSeriesForTeam,
 
     // Actions
+    preparePlayoffSeedingReview,
     createNewPlayoff,
     startPlayoffs,
     recordGameResult,

@@ -10,7 +10,7 @@ Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
 Latest committed checkpoint: `366064a Define v1 dynamic designation policy`.
 
-Latest working checkpoint: Spray Chart Full Filter Set.
+Latest working checkpoint: Playoff Confirmation + Tiebreaker Resolution.
 
 ## Current Completed
 
@@ -33,7 +33,8 @@ Latest working checkpoint: Spray Chart Full Filter Set.
 - Numeric WAR now has a narrow trusted consumer contract only for TEAM_MVP/ACE designation input gating when scoped completed archive evidence, scoped season stats, current MLB/team context, and stored season metadata are present.
 - Position-relative True Value preview, value delta, expected-wins preview, Team Hub display, and durable expected-wins baseline snapshots remain read-only and untrusted for final designations, salary movement, morale automation, awards, and Mode 3.
 - The Mode 2 technical foundation is safe to build on, but manual smoke feedback shows the user-facing Mode 1/Mode 2 playable UI/UX is not complete.
-- Mode 1/2 playable hardening has now committed core launch/persistence smoke fixes, generated data policy cleanup, roster scan table improvements, MVP/Ace active designation promotion, salary baseline visibility, stadium source-of-truth copy, dense UI hardening, Almanac continuity, archived WPA visibility, fame-event continuity, a safe visual-smoke preview route, populated fixture coverage, schedule editing/import hardening, trade/FARM hidden-safety and movement continuity, park-factor archive trust tightening, the dynamic designation policy matrix/TWO-WAY boundary, manual final-score/score-only UX polish, hidden FARM salary/reveal safety, player profile position/pitching integrity, GameTracker substitution full-name display, Almanac Franchise access/save import clarity, Manager WPA lineup-delta visibility in Game Detail, and Team Hub spray chart full filters.
+- Mode 1/2 playable hardening has now committed core launch/persistence smoke fixes, generated data policy cleanup, roster scan table improvements, MVP/Ace active designation promotion, salary baseline visibility, stadium source-of-truth copy, dense UI hardening, Almanac continuity, archived WPA visibility, fame-event continuity, a safe visual-smoke preview route, populated fixture coverage, schedule editing/import hardening, trade/FARM hidden-safety and movement continuity, park-factor archive trust tightening, the dynamic designation policy matrix/TWO-WAY boundary, manual final-score/score-only UX polish, hidden FARM salary/reveal safety, player profile position/pitching integrity, GameTracker substitution full-name display, Almanac Franchise access/save import clarity, Manager WPA lineup-delta visibility in Game Detail, Team Hub spray chart full filters, and playoff seeding/bracket confirmation with run-differential tiebreaker review.
+- Franchise playoff creation is now confirmation-gated: standings review resolves W-L ties by run differential where possible, preserves eliminated-team evidence, creates brackets only from confirmed qualified teams, and requires bracket/start confirmation before playoff play begins.
 - Schedule editing/import is hardened for the current manual/CSV non-generated policy, but production populated schedule visual smoke remains fixture-backed rather than proven from arbitrary user local data.
 - Trade/FARM continuity is hardened for v1-safe hidden-safety and movement boundaries, while full trade UX, AI trades, salary matching, and offseason trade systems remain deferred.
 - The safe visual-smoke preview covers shell/foundation/finance/stadium, populated fixture rows, Game Detail WPA/fame, Player Instance Card WPA, and GameTracker long-name visibility, but real populated production Team Hub/schedule visual smoke remains a future confidence check.
@@ -47,14 +48,14 @@ Latest working checkpoint: Spray Chart Full Filter Set.
 
 ## Current Active Slice
 
-Spray Chart Full Filter Set.
+Playoff Confirmation + Tiebreaker Resolution.
 
-Goal: complete session-local read-only filters and sorting over actual scoped Team Hub stadium spray evidence without fabricating rows or promoting stadium analytics consumers.
+Goal: verify the newly implemented season-end standings review, run-differential tiebreaker confirmation, confirmed bracket creation, and playoff start confirmation in real-app smoke without adding Mode 3/offseason behavior.
 
 ## Next Queue
 
-1. User reruns the manual smoke checklist in the real app.
-2. If stadium spray data is still missing from real Team Hub, implement **Stadium Spray Evidence Visibility In Real Team Hub**.
+1. User reruns the manual smoke checklist in the real app, including the new playoff seeding/bracket confirmation path.
+2. If playoff confirmation smoke fails, patch the smallest standings/tiebreaker/bracket issue before moving on.
 3. Recheck Manager WPA lineup-delta visibility in Game Detail during smoke; it should now show archived evidence when records exist and unavailable copy when they do not.
 4. Keep playable v1 unapproved until the blocker set is cleared and the user approves it.
 5. Keep Product UX Cleanup queued after remaining critical data flows unless UI wording/layout blocks comprehension or causes wrong action.

@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   mockUseFranchiseData: vi.fn(),
   mockUseScheduleData: vi.fn(),
   mockUsePlayoffData: vi.fn(),
+  mockPreparePlayoffSeedingReview: vi.fn(),
   mockCreateNewPlayoff: vi.fn(),
   mockUseSeasonStats: vi.fn(),
 }));
@@ -202,6 +203,7 @@ describe('SeasonSummary Pass 5 persisted-summary fidelity', () => {
       hasActivePlayoff: false,
       isLoading: false,
       error: null,
+      preparePlayoffSeedingReview: mocks.mockPreparePlayoffSeedingReview,
       createNewPlayoff: mocks.mockCreateNewPlayoff,
     });
     mocks.mockUseSeasonStats.mockReturnValue({
@@ -236,25 +238,15 @@ describe('SeasonSummary Pass 5 persisted-summary fidelity', () => {
     expect(liveStats.getFieldingLeaders).not.toHaveBeenCalled();
   });
 
-  test('starts playoffs with stored no-DH franchise rules from the season summary route', async () => {
-    mocks.mockCreateNewPlayoff.mockResolvedValue({ id: 'playoff-created' });
-
+  test('routes to confirmed playoff seeding review instead of creating a bracket from the season summary route', async () => {
     render(<SeasonSummary />);
 
     await screen.findByText('SEASON 1 SUMMARY');
-    fireEvent.click(screen.getByRole('button', { name: /START PLAYOFFS/i }));
+    fireEvent.click(screen.getByRole('button', { name: /REVIEW PLAYOFF SEEDING/i }));
 
-    await waitFor(() =>
-      expect(mocks.mockCreateNewPlayoff).toHaveBeenCalledWith(expect.objectContaining({
-        franchiseId: 'franchise-1',
-        seasonId: 'franchise-1-season-1',
-        seasonNumber: 1,
-        teamsQualifying: 2,
-        inningsPerGame: 7,
-        useDH: false,
-      })),
-    );
     expect(mocks.mockNavigate).toHaveBeenCalledWith('/franchise/franchise-1?tab=bracket');
+    expect(mocks.mockPreparePlayoffSeedingReview).not.toHaveBeenCalled();
+    expect(mocks.mockCreateNewPlayoff).not.toHaveBeenCalled();
   });
 
   test('labels live WAR-derived awards fallback as read-only leader previews, not finalized awards', async () => {

@@ -58,6 +58,8 @@ export interface PlayoffConfig {
 
   // Seeding
   teams: PlayoffTeam[];
+  seedingConfirmation?: PlayoffSeedingConfirmation;
+  bracketConfirmation?: PlayoffBracketConfirmation;
 
   // State
   currentRound: number;
@@ -73,6 +75,42 @@ export interface PlayoffConfig {
   createdAt: number;
   startedAt?: number;
   completedAt?: number;
+}
+
+export interface PlayoffSeedingConfirmationTeam {
+  teamId: string;
+  teamName: string;
+  seed: number | null;
+  wins: number;
+  losses: number;
+  runDiff: number;
+  qualifying: boolean;
+  eliminated: boolean;
+  tiebreakerNote: string;
+}
+
+export interface PlayoffSeedingConfirmation {
+  confirmedAt: number;
+  confirmedBy: 'user';
+  source: 'season-end-review';
+  tiebreakerPolicy: 'record-then-run-differential';
+  teamsQualifying: number;
+  teams: PlayoffSeedingConfirmationTeam[];
+  tieGroups: {
+    wins: number;
+    losses: number;
+    teamIds: string[];
+    resolvedByRunDifferential: boolean;
+    unresolved: boolean;
+  }[];
+}
+
+export interface PlayoffBracketConfirmation {
+  confirmedAt: number;
+  confirmedBy: 'user';
+  source: 'confirmed-seeding';
+  teamCount: number;
+  seriesCount: number;
 }
 
 export interface PlayoffTeam {

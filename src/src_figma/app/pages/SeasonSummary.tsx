@@ -495,72 +495,10 @@ export function SeasonSummary() {
   // HANDLE START PLAYOFFS
   // ============================================
 
-  const [isCreatingPlayoff, setIsCreatingPlayoff] = useState(false);
-  const [playoffCreationError, setPlayoffCreationError] = useState<string | null>(null);
-
-  const handleStartPlayoffs = async () => {
-    // If playoff already exists, just navigate to the bracket tab
-    if (playoffData.hasActivePlayoff) {
-      navigate(`/franchise/${franchiseId}?tab=bracket`);
-      return;
-    }
-
-    setIsCreatingPlayoff(true);
-    setPlayoffCreationError(null);
-    try {
-      const playoffConfig = franchiseData.franchiseConfig?.playoffSetupSnapshot
-        ?? franchiseData.franchiseConfig?.playoffs;
-      const teamsQualifying = playoffConfig?.teamsQualifying ?? 8;
-
-      // Convert seriesLengths strings (e.g. "Best-of-5") to gamesPerRound numbers
-      const parseSeriesLength = (val: string): number => {
-        const match = val?.match(/(\d+)/);
-        return match ? parseInt(match[1], 10) : 7;
-      };
-
-      const gamesPerRound: number[] = [];
-      if (playoffConfig?.seriesLengths) {
-        const sl = playoffConfig.seriesLengths;
-        // Only include wildCard round if we have enough qualifying teams to need it
-        if (teamsQualifying > 4 && sl.wildCard) {
-          gamesPerRound.push(parseSeriesLength(sl.wildCard));
-        }
-        if (sl.divisionSeries) gamesPerRound.push(parseSeriesLength(sl.divisionSeries));
-        if (sl.championship) gamesPerRound.push(parseSeriesLength(sl.championship));
-        if (sl.worldSeries) gamesPerRound.push(parseSeriesLength(sl.worldSeries));
-      }
-
-      // Fallback if no config
-      if (gamesPerRound.length === 0) {
-        gamesPerRound.push(5, 7, 7);
-      }
-
-      const inningsPerGame = franchiseData.franchiseConfig?.seasonLength?.inningsPerGame
-        ?? franchiseData.franchiseConfig?.rulesSnapshot?.inningsPerGame
-        ?? franchiseData.franchiseConfig?.season?.inningsPerGame
-        ?? 9;
-      const useDH = franchiseData.franchiseConfig?.rulesSnapshot?.useDH
-        ?? franchiseData.franchiseConfig?.season?.useDH
-        ?? true;
-
-      await playoffData.createNewPlayoff({
-        seasonNumber: currentSeason,
-        seasonId,
-        franchiseId,
-        teamsQualifying,
-        gamesPerRound,
-        inningsPerGame,
-        useDH,
-      });
-
-      navigate(`/franchise/${franchiseId}?tab=bracket`);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to create playoff.';
-      setPlayoffCreationError(message);
-      console.error('Failed to create playoff:', err);
-    } finally {
-      setIsCreatingPlayoff(false);
-    }
+  const handleStartPlayoffs = () => {
+    // Bracket creation is intentionally review-first. FranchiseHome's bracket
+    // tab owns confirmed standings/tiebreaker review and playoff start.
+    navigate(`/franchise/${franchiseId}?tab=bracket`);
   };
 
   // ============================================
@@ -925,16 +863,15 @@ export function SeasonSummary() {
         <div className="pt-4 pb-8">
           <button
             onClick={handleStartPlayoffs}
-            disabled={isCreatingPlayoff}
             className="w-full bg-[#C4A853] border-[6px] border-[#9A7B2C] py-4 px-8 text-lg text-[#1a1a1a] hover:bg-[#D4B863] active:scale-[0.98] transition-transform shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)] flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ textShadow: '1px 1px 0px rgba(255,255,255,0.3)' }}
           >
-            <span>{isCreatingPlayoff ? 'CREATING BRACKET...' : playoffData.hasActivePlayoff ? 'VIEW PLAYOFFS' : 'START PLAYOFFS'}</span>
-            {!isCreatingPlayoff && <ArrowRight className="w-5 h-5" />}
+            <span>{playoffData.hasActivePlayoff ? 'VIEW PLAYOFFS' : 'REVIEW PLAYOFF SEEDING'}</span>
+            <ArrowRight className="w-5 h-5" />
           </button>
-          {(playoffCreationError || playoffData.error) && (
+          {playoffData.error && (
             <div className="mt-3 border-[3px] border-[#A3483D] bg-[#4A1F1B]/80 px-3 py-2 text-[10px] text-[#FFD7D2]">
-              {playoffCreationError || playoffData.error}
+              {playoffData.error}
             </div>
           )}
 

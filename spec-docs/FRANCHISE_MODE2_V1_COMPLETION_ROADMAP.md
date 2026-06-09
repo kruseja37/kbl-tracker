@@ -12,7 +12,7 @@ Manual smoke feedback remains a bug and feature backlog. The build order for Mod
 
 Latest committed checkpoint: `366064a Define v1 dynamic designation policy`.
 
-Latest working checkpoint: Spray Chart Full Filter Set.
+Latest working checkpoint: Playoff Confirmation + Tiebreaker Resolution.
 
 Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved. The technical foundation is safe, and the first Mode 1/2 playable hardening waves through schedule/trade/FARM/stadium/designation policy plus the latest smoke-response patches are complete, but user-facing playable v1 still requires another real-app smoke pass and explicit user approval.
 
@@ -65,16 +65,18 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Almanac Franchise access and save import clarity are hardened: archive-backed franchise games/player instances/team links are reachable, and save import/upload is explicitly not implemented yet.
 - Product UX cleanup lane is captured: current app surfaces still contain too much implementation/audit/progress wording and many panels behave like trust-boundary documentation instead of product-grade UX.
 - Team Hub stadium spray chart is provisional functional visualization, not final design.
+- Playoff Confirmation + Tiebreaker Resolution is implemented for v1: FranchiseHome reviews final standings, resolves W-L ties by run differential where possible, blocks unresolved same-record/same-run-differential qualifying ties, creates brackets only from confirmed seedings, records bracket confirmation before playoff start, and keeps eliminated teams out of the bracket.
 
 ## Active Priority Order
 
 1. Manual Smoke Verification Gate
    - User reruns the real-app manual smoke checklist.
+   - Include playoff seeding/bracket confirmation in the smoke pass: final standings, run-differential tie evidence, confirmed bracket creation, and playoff launch readiness.
    - Do not declare playable v1 approved until the blocker set is cleared and the user explicitly approves it.
    - Keep Mode 1 and Mode 2 as the only active playable-v1 priority.
    - No auto-draft, generated schedules, AI simulation, awards finalization, story automation, production storage mutation, or Mode 3/offseason execution until separately approved.
 2. Next Implementation If Smoke Still Fails
-   - First candidate: Stadium Spray Evidence Visibility In Real Team Hub.
+   - First candidate: any failed playoff confirmation/tiebreaker/bracket issue found during smoke.
    - Second candidate: any remaining Manager WPA lineup delta visibility issue found during smoke; Game Detail now has archive-backed display for stored evidence.
    - Save import/upload remains deferred unless separately approved.
 3. Approval Decision
@@ -103,7 +105,7 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
   - Player profile primary/secondary positions and non-pitcher pitching ratings should now be correct.
 - Remaining open implementation candidates if smoke still fails:
   - FARM prospect grade mismatch versus Player Analyzer.
-  - Stadium spray evidence did not appear in Team Hub real-app smoke.
+  - Playoff confirmation/tiebreaker/bracket flow should now work from confirmed standings; smoke should verify it before approval.
   - Manager WPA lineup delta should now be visible in Game Detail when completed-game archives contain stored manager lineup-delta records; smoke should verify this with a real archive.
 - Get explicit user approval before declaring Mode 1/2 playable v1 complete.
 - Track any non-blocking production visual-smoke, roster/schedule readability, or transaction drilldown polish as follow-up after the approval decision.

@@ -10,6 +10,7 @@ import {
   generateBracket,
   getEliminationRoundName,
   getAllPlayoffs,
+  getPlayoff,
   getPlayoffLeaders,
   getPlayoffStats,
   getPlayoffByElimination,
@@ -20,6 +21,7 @@ import {
   resetPlayoffDbConnection,
   deletePlayoffBySeason,
   startPlayoff,
+  updatePlayoff,
   type PlayoffConfig,
   type PlayoffTeam,
 } from "../playoffStorage";
@@ -435,6 +437,72 @@ describe("playoffStorage elimination wiring", () => {
     await expect(getPlayoffBySeason(1, "franchise", "franchise-a")).resolves.toBeNull();
     await expect(getPlayoffByElimination("elim-same-season")).resolves.toMatchObject({
       id: eliminationPlayoff.id,
+    });
+  });
+
+  test("franchise playoff seeding and bracket confirmations persist across reload reads", async () => {
+    const teams = [buildTeam(1), buildTeam(2), buildTeam(3), buildTeam(4)];
+    const playoff = await createPlayoff({
+      seasonNumber: 1,
+      seasonId: "franchise-confirmed-season-1",
+      status: "NOT_STARTED",
+      teamsQualifying: 4,
+      rounds: 2,
+      gamesPerRound: [5, 7],
+      inningsPerGame: 9,
+      useDH: false,
+      leagues: ["Eastern", "Western"],
+      conferenceChampionship: true,
+      teams,
+      currentRound: 0,
+      sourceType: "franchise",
+      franchiseId: "franchise-confirmed",
+      seedingConfirmation: {
+        confirmedAt: 1700000000000,
+        confirmedBy: "user",
+        source: "season-end-review",
+        tiebreakerPolicy: "record-then-run-differential",
+        teamsQualifying: 4,
+        teams: [
+          { teamId: "team-1", teamName: "Team 1", seed: 1, wins: 10, losses: 2, runDiff: 21, qualifying: true, eliminated: false, tiebreakerNote: "Ordered by regular-season record." },
+          { teamId: "team-2", teamName: "Team 2", seed: 2, wins: 9, losses: 3, runDiff: 12, qualifying: true, eliminated: false, tiebreakerNote: "Ordered by regular-season record." },
+          { teamId: "team-3", teamName: "Team 3", seed: 3, wins: 8, losses: 4, runDiff: 3, qualifying: true, eliminated: false, tiebreakerNote: "Ordered by regular-season record." },
+          { teamId: "team-4", teamName: "Team 4", seed: 4, wins: 7, losses: 5, runDiff: -5, qualifying: true, eliminated: false, tiebreakerNote: "Ordered by regular-season record." },
+        ],
+        tieGroups: [],
+      },
+    });
+
+    await expect(getPlayoff(playoff.id)).resolves.toMatchObject({
+      id: playoff.id,
+      seedingConfirmation: expect.objectContaining({
+        confirmedBy: "user",
+        source: "season-end-review",
+        tiebreakerPolicy: "record-then-run-differential",
+        teams: expect.arrayContaining([
+          expect.objectContaining({ teamId: "team-1", seed: 1 }),
+        ]),
+      }),
+    });
+
+    await updatePlayoff(playoff.id, {
+      bracketConfirmation: {
+        confirmedAt: 1700000000500,
+        confirmedBy: "user",
+        source: "confirmed-seeding",
+        teamCount: 4,
+        seriesCount: 2,
+      },
+    });
+
+    await expect(getPlayoff(playoff.id)).resolves.toMatchObject({
+      bracketConfirmation: {
+        confirmedAt: 1700000000500,
+        confirmedBy: "user",
+        source: "confirmed-seeding",
+        teamCount: 4,
+        seriesCount: 2,
+      },
     });
   });
 
