@@ -391,3 +391,215 @@ FAILURE PROTOCOL:
 - Never touch useFanMorale.ts or fanMoraleEngine.ts
 
 Use high reasoning effort. Two-line fix. Do not change anything else.
+
+
+---
+
+## PROMPT CONTRACT: T1 — IV Curve & Trait Pricing Data Extraction
+**Date:** 2026-06-09 | **Route:** Claude Code CLI | Fable 5 | high reasoning effort
+**Spec:** spec-docs/IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md §3, §13 (T1)
+
+---
+
+You are the IV Curve Data Extraction Specialist.
+
+GOAL:
+Extract the complete salary-curve parameter tables, trait rating-equivalents, pitch/arsenal
+pricing, and auxiliary pricing from the XBL workbook into two typed TypeScript data files —
+data only, zero logic.
+
+SOURCE OF TRUTH:
+spec-docs/reference/Team_Builder_Archetype_Logic_Template.xlsx (committed 64da95b)
+spec-docs/IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md §3.2–§3.6 (schema + verified samples)
+Key facts from the spec you must honor:
+- Position→row mapping (Lists!AN2:AO19): C→5, 1B→11, 2B→17, SS→23, 3B→29, LF→35, CF→41,
+  RF→47, IF→53, OF→59, IF/OF→65, "-"→71, SP→77, SP/RP→85, RP→93, CP→101, 1B/OF→109, EXTRA→117
+- Each position block on the "Salary Cap" sheet: hitters carry 5 attribute rows
+  (POW/CON/SPD/FLD/ARM), pitchers carry 7 (POW/CON/SPD/FLD/VEL/JNK/ACC)
+- Columns C–H per attribute row = primary curve {min, curve1, mid, midSal, curve2, sal100}
+- Columns I–N per attribute row = SUB-MINIMUM REVERSE curve params (pitchers) — extract these
+  too; they are a P1 fidelity requirement per spec §3.4
+- "Traits" sheet = trait rating-equivalents (L2 values) + chemistry type + flat fees
+- PitchCalcs / LeagueSettings = pitch type costs, bullpen arsenal tax table, aux pricing
+  (switch hitter, secondary positions, arm angle)
+
+CONSTRAINTS:
+- Create only these new files:
+    src/data/ivCurves.ts
+    src/data/traitPricing.ts
+    scripts/extract-iv-data.py        (the extraction script — committed for reproducibility)
+- Do NOT touch:
+    src/engines/** (engine implementation is T4, a separate prompt)
+    src/data/rosterEngineConstants.ts (does not exist yet; created in T6)
+    Any existing salary system files
+- Do NOT add npm dependencies. Python openpyxl for extraction is fine (script only).
+- Data files must contain ONLY typed constants — no functions, no React, no computation.
+- Use the AttributeCurve interface shape from spec §3.2 verbatim.
+- Extraction must be SCRIPT-DRIVEN from the workbook, not hand-transcribed. The spec's
+  §3.3/§3.6 tables are verification anchors, not the source — read the workbook itself.
+
+SPECIFIC REQUIRED CHECKS:
+1. Verify the four trait-table blank cells flagged "·" in spec §3.6 (e.g., Bad Jumps POW,
+   Big Hack CON, Little Hack POW, Crossed Up POW, Rally Stopper hitter cols, Easy Target
+   pitcher cols, Two Way variants, Wild Thrower ACC, Metal Head POW/CON, Elite-pitch
+   VEL/JNK/ACC cols). For each: report whether the source cell is truly empty (→ 0) or
+   contains a value the earlier extraction missed. List every resolution in your response.
+2. Confirm C-position curve params match spec §3.3 exactly (POW 0/1/50/8000/1.5/56000 etc.).
+   Any mismatch → STOP and report; do not "correct" the spec silently.
+3. Count check: 18 position blocks extracted; hitter blocks have 5 attribute entries,
+   pitcher blocks 7; every pitcher attribute has both primary AND sub-min curve params
+   (sub-min may be null/absent for some attributes — record what the workbook actually has,
+   do not invent).
+
+EXPECTED OUTPUT:
+- src/data/ivCurves.ts: exported `IV_CURVES: Record<PositionKey, PositionCurveBlock>` where
+  PositionCurveBlock = { attributes: Record<Attr, { primary: AttributeCurve;
+  subMin?: AttributeCurve }> }; plus POSITION_ROW_MAP as a documented comment.
+- src/data/traitPricing.ts: exported `TRAIT_PRICING: TraitPricingEntry[]` (name, chemistry,
+  polarity, per-attribute deltas, flatFee), plus PITCH_COSTS, ARSENAL_TAX_TABLE,
+  AUX_PRICING (switch/secondary-position/arm-angle), each as typed constants.
+- scripts/extract-iv-data.py: rerunnable; regenerates both files deterministically from
+  the workbook path.
+- A header comment in both .ts files: source workbook path, extraction date, script name,
+  spec section references.
+
+VERIFICATION:
+Run these exact commands and paste the output:
+1. python3 scripts/extract-iv-data.py && git diff --stat src/data/
+   (second run must produce no diff — determinism check)
+2. npm run build  (or npx tsc --noEmit if data files aren't yet imported anywhere)
+3. node -e "const c=require('./src/data/ivCurves.ts')" — if ESM/TS prevents this, instead:
+   npx tsx -e "import {IV_CURVES} from './src/data/ivCurves'; console.log(Object.keys(IV_CURVES).length, IV_CURVES.C.attributes.POW.primary)"
+   (expect: 18, and {min:0,curve1:1,mid:50,midSal:8000,curve2:1.5,sal100:56000})
+4. npx tsx -e "import {TRAIT_PRICING} from './src/data/traitPricing'; console.log(TRAIT_PRICING.length)"
+   (expect: ~75; report exact count)
+
+FORMAT — Your response must contain exactly these sections:
+1. FILES CHANGED
+2. CHANGES MADE (reference spec §3.2–§3.6; include the blank-cell resolution list from
+   SPECIFIC REQUIRED CHECKS #1)
+3. VERIFICATION OUTPUT (paste exact output of all 4 commands)
+4. STATUS: "T1 complete" OR "BLOCKED: [exact reason and what you need]"
+
+FAILURE PROTOCOL:
+- If the workbook structure differs from the spec's described layout → quote what you see
+  (sheet, cell range) and STOP
+- If C-position verification anchors mismatch → STOP, report both values
+- If any required change is outside the three listed files → STOP and report
+- Never summarize — list every position block and trait extracted (counts + spot samples)
+- Never assume intent — ask
+
+Use high reasoning effort. Think step-by-step. Data fidelity is the entire job —
+a wrong curve parameter silently corrupts every salary in the app.
+
+
+---
+
+## PROMPT CONTRACT: T1-AUDIT — Independent Audit of IV Data Extraction
+**Date:** 2026-06-10 | **Route:** Codex 5.5 | high reasoning effort
+**Spec:** spec-docs/IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md §3.2–§3.6, §13 audit gate
+**Builder:** Fable 5 CLI (T1). You are the independent auditor — different model family by design.
+
+---
+
+You are the T1 Extraction Auditor.
+
+GOAL:
+Independently verify that src/data/ivCurves.ts and src/data/traitPricing.ts are a faithful,
+deterministic, logic-free extraction of the XBL workbook, WITHOUT trusting the builder's
+report. Evidence = the workbook, the files, and commands you run yourself.
+
+AUDIT PRINCIPLE (non-negotiable):
+The builder's session report is a CLAIM, not evidence. Do not grade it. Re-derive every
+verdict from primary sources: the workbook at
+spec-docs/reference/Team_Builder_Archetype_Logic_Template.xlsx, the three files under audit,
+and the spec. Where your findings disagree with the builder's claims, report the disagreement —
+do not reconcile silently in either direction.
+
+FILES UNDER AUDIT (read-only — you change NOTHING in this task):
+  src/data/ivCurves.ts
+  src/data/traitPricing.ts
+  scripts/extract-iv-data.py
+
+CONSTRAINTS:
+- Modify NO files. This is a read-and-execute audit. You may write throwaway scripts to
+  /tmp only.
+- Do NOT "fix" anything you find — findings go in the report; fixes are a separate
+  builder ticket.
+- python3 + openpyxl for workbook reads is expected.
+
+AUDIT CHECKLIST (execute every item; paste command output as evidence):
+
+A. SCOPE INTEGRITY
+A1. git status --porcelain — confirm the only NEW files are the three under audit.
+    Pre-existing modified spec-docs (PROMPT_CONTRACTS.md, SPECIAL_EVENTS_SPEC.md,
+    TRAIT_INTEGRATION_SPEC.md) are expected and out of scope.
+A2. grep -n "function\|=>\|import React\|useState" src/data/ivCurves.ts src/data/traitPricing.ts
+    — expect zero logic (type/interface declarations and const exports only).
+
+B. DETERMINISM & BUILD
+B1. shasum src/data/ivCurves.ts src/data/traitPricing.ts && python3 scripts/extract-iv-data.py
+    && shasum src/data/ivCurves.ts src/data/traitPricing.ts — hashes must be identical
+    before/after rerun.
+B2. npm run build — exit 0.
+
+C. WORKBOOK FIDELITY — independent random sampling (the heart of this audit)
+C1. Write your own /tmp spot-check script (do NOT reuse scripts/extract-iv-data.py logic —
+    independent read path). From the "Salary Cap" sheet, sample AT MINIMUM:
+    - All 5 C-position attribute rows (rows 5–9, cols C–H) vs IV_CURVES.C — must also match
+      spec §3.3 anchors (POW 0/1/50/8000/1.5/56000, CON, SPD, FLD, ARM).
+    - 10 RANDOM (position, attribute) pairs you choose across other blocks, incl. at least
+      2 pitcher blocks and the EXTRA block, vs the .ts values.
+    - Sub-min claim: verify cols I–N carry curve params ONLY on the VEL rows of SP/SP-RP/RP/CP
+      ("Below Midpoint Velo"), and that ivCurves.ts has subMin exactly there and nowhere else.
+      Spot-verify SP subMin {0,1.2,30,7500,1.3,18000} against the source cells.
+    - EXTRA block shape: confirm from the workbook it is pitcher-shaped (7 attr rows incl.
+      VEL/JNK/ACC) as the .ts records.
+C2. Traits sheet: confirm exactly 75 trait rows (A3:U77). Sample 8 random traits' delta
+    columns vs TRAIT_PRICING entries, plus these specific high-value checks:
+    - Cannon Arm ARM=+45; Workhorse VEL/JNK/ACC=14/14/14 flat 2000
+    - MULTIPLIER COLUMNS (L–S): independently read Elite 4F (expect VEL×1.9, ACC×1.1,
+      flat 22000), Reverse Splits (×1.45/×1.4/×1.4), Specialist (×1.3/×1.4/×1.3),
+      Rally Stopper (VEL×1.15) — confirm the .ts multipliers match the source. This was the
+      builder's headline discovery; verify it is real and complete (scan ALL 75 rows' L–S for
+      any non-1 multiplier the .ts might have missed).
+    - BLANK-CELL RESOLUTIONS: independently confirm 6 of the flagged cells are truly empty
+      in the source (your choice, e.g. Bad Jumps C5, Big Hack D9, Metal Head C47/D47,
+      Rally Stopper C57, Wild Thrower J76).
+C3. PITCH_COSTS (Traits rows 81–88): 8 pitch types, flat 500 each, spot-check 4F and SB
+    multipliers. ARSENAL_TAX_TABLE vs LeagueSettings!A47:B59 (13 rows, 8→−12000 … 20→+24000).
+    AUX_PRICING: switch +5/+5; spot-check 3 secondary positions; Sub arm angle flat 4000
+    + VEL×1.075/JNK×1.2.
+
+D. TEST-SUITE CLAIM
+D1. npx vitest run (or project test command) — record pass/fail counts. The builder claims
+    4 pre-existing failures (wpaRuntimeBoundary, franchiseNarrativeEventEligibility,
+    franchiseManualSmokeFixture, franchiseOffseasonGuards) unrelated to T1. Verify
+    unrelatedness cheaply: git stash -u (stashing the three new files), rerun ONLY those 4
+    test files, git stash pop. Same failures without the files = claim confirmed.
+
+E. SPEC CONFORMANCE
+E1. AttributeCurve interface verbatim vs spec §3.2; IV_CURVES covers all 18 POSITION_ROW_MAP
+    keys; TRAIT_PRICING field shape covers name/chemistry/polarity/deltas/flatFee (+
+    multipliers — an addition beyond contract minimum; assess whether it is spec-grounded
+    per §3.5's "multiplier terms (attrCost × mult − attrCost)" or scope creep).
+E2. File header comments present: source path, date, script name, spec refs.
+
+FORMAT — Your response must contain exactly these sections:
+1. EVIDENCE LOG: per checklist item (A1…E2): command(s) run + pasted output + PASS/FAIL
+2. DISAGREEMENTS WITH BUILDER REPORT: any finding where your evidence contradicts the
+   builder's claims (or "none")
+3. FINDINGS REQUIRING ACTION: anything wrong/missing, each with severity
+   (BLOCKER / MAJOR / MINOR) and the exact cell/line evidence
+4. VERDICT: "T1 AUDIT: CONFORMS — ready for JK sign-off" OR
+   "T1 AUDIT: DEVIATIONS — [count] findings above" OR "BLOCKED: [exact reason]"
+
+FAILURE PROTOCOL:
+- If the workbook or any audited file is missing → STOP, report path.
+- If you cannot independently read the workbook → STOP (do not fall back to trusting
+  the builder's extraction script as your read path).
+- If a stash/restore step fails → restore the tree first (git stash pop), then report.
+- Never patch files to make checks pass. Auditors do not fix.
+
+Use high reasoning effort. Think step-by-step. Your value is independence: every number you
+confirm must trace to a workbook cell or a command you ran, not to the builder's prose.
