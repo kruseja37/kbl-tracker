@@ -603,3 +603,181 @@ FAILURE PROTOCOL:
 
 Use high reasoning effort. Think step-by-step. Your value is independence: every number you
 confirm must trace to a workbook cell or a command you ran, not to the builder's prose.
+
+
+---
+
+## PROMPT CONTRACT: T2 — TraitInteractionMatrix Authoring
+**Date:** 2026-06-10 | **Route:** Claude Code CLI | Fable 5 | MAX reasoning effort
+**Spec:** spec-docs/IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md §4.3, §13 (T2 — judgment-artifact exception: Fable builds)
+
+---
+
+You are the Trait Interaction Matrix Author.
+
+GOAL:
+Author src/data/traitInteractionMatrix.ts — the machine-evaluable activation predicate,
+target, delta vector, and per-tier scaling for ALL 75 traits — derived from the guide's
+prose, with a guide citation on every predicate.
+
+SOURCE OF TRUTH (in precedence order):
+1. spec-docs/reference/BillyYank_Super_Mega_Baseball_Guide_3rd_Edition.docx — predicate
+   semantics (WHEN does each trait fire, on WHOM). Read it in full before authoring.
+2. src/data/traitPricing.ts (committed 8ce3b04) — the 75-trait name list (exact names,
+   polarity, chemistry) and L2 delta/multiplier magnitudes. Your matrix must cover exactly
+   these 75 names, no more, no fewer.
+3. spec §4.3 — schema intent, known predicate examples (Ace Exterminator, Specialist,
+   Mind Gamer, Pinch Perfect, Rally Stopper, Clutch/Choker, 2-strike family, splits,
+   Stimulated, Durable/Injury Prone, Workhorse), and guide-explicit per-tier values
+   (K Collector +8/+15/+30; First Pitch Slayer +5/+8 → +10/+15 → +20/+30).
+4. spec §3.5 potency rule: default per-tier scale 0.5×/1.0×/2.0× of L2 values UNLESS the
+   guide states explicit per-tier numbers — then use those verbatim with a citation.
+
+THIS IS A JUDGMENT TASK:
+You are not transcribing a table — you are deciding, from prose, the precise predicate for
+each trait. Where the guide is ambiguous, choose the most defensible reading, cite the
+passage, and add the trait name to an AMBIGUITIES list in the file header for JK
+adjudication. NEVER silently guess without flagging.
+
+CONSTRAINTS:
+- Create only this file: src/data/traitInteractionMatrix.ts
+- Do NOT touch: src/data/traitPricing.ts, src/data/ivCurves.ts, src/engines/** (the
+  evaluator that consumes this matrix is T6, a separate prompt)
+- Data only: typed constants, no functions beyond none, no React.
+- Every entry MUST have a non-empty `citation` field: guide section/heading + a short
+  quoted fragment (<15 words) supporting the predicate. Entries grounded only in
+  spec §4.3 or traitPricing.ts cite those instead — but prefer the guide.
+
+SCHEMA (define these types in the file, then the data):
+```typescript
+type PredicateCondition =
+  | { kind: 'always' }
+  | { kind: 'count'; balls?: number; strikes?: number }          // exact-count traits (0-0, 2-strike)
+  | { kind: 'twoStrikes' } | { kind: 'firstPitch' }
+  | { kind: 'pressure'; level: 'high' | 'extreme' }
+  | { kind: 'runnersOn' } | { kind: 'risp' }
+  | { kind: 'vsHand'; hand: 'L' | 'R' | 'same' | 'opposite' }
+  | { kind: 'opponentTier'; minGrade: string }                    // e.g. Ace Exterminator 'A-'
+  | { kind: 'substitutionAB' }
+  | { kind: 'inningRange'; from?: number; final?: boolean; lastNInnings?: number }
+  | { kind: 'onBasePath' }                                        // steal/baserunning traits
+  | { kind: 'fieldingChance' };                                   // fielding-context traits
+
+interface TraitMatrixEntry {
+  name: string;                       // EXACT match to traitPricing.ts
+  target: 'self' | 'opponent';
+  effect:
+    | { kind: 'ratingDelta'; deltas: Partial<Record<Attr, number>>;  // L2 values
+        perTier?: { l1: Partial<Record<Attr, number>>; l3: Partial<Record<Attr, number>> } } // only when guide-explicit
+    | { kind: 'mojoTransitionRate'; factor: number }               // Volatile/Consistent
+    | { kind: 'fitnessDecayRate'; factor: number }                 // Durable/Injury Prone
+    | { kind: 'staminaModifier'; pitches: number }                 // Workhorse
+    | { kind: 'expectedValueNote'; description: string };          // randomized traits (Stimulated) — model as EV, document
+  predicates: PredicateCondition[];   // AND-combined; [{kind:'always'}] for unconditional
+  potency: 'standard' | 'guideExplicit';   // standard = 0.5/1/2 scaling of effect deltas
+  citation: string;                   // REQUIRED — guide heading + <15-word fragment
+  notes?: string;                     // interpretation rationale where non-obvious
+}
+
+export const TRAIT_INTERACTION_MATRIX: TraitMatrixEntry[] = [ /* exactly 75 */ ];
+```
+If a trait genuinely needs a condition kind not listed, ADD it to the union with a comment —
+do not shoehorn. Traits with no in-game conditional behavior (pure rating identity already
+priced in traitPricing) still get entries with [{kind:'always'}] so coverage is total.
+
+KNOWN HARD CASES (give these explicit care + notes):
+- Mind Gamer: target='opponent', −ACC on opposing pitcher (spec §4.3)
+- Rally Stopper: pitcher trait, runnersOn predicate, self VEL/JNK/ACC
+- Ace Exterminator: opponentTier predicate; guide says persists vs fatigued ace — capture in notes
+- Clutch/Choker: pressure predicate; doubled at extreme per spec — use perTier? No: model the
+  extreme doubling via TWO entries or a notes-documented pressure interaction; choose and justify
+- Specialist: vsHand 'same' — confirm batter-vs-pitcher direction from guide and cite
+- Stimulated: random late-game fitness juice → expectedValueNote with inningRange predicate
+- Volatile/Consistent/Durable/Injury Prone/Workhorse: non-ratingDelta effect kinds above
+- Splits traits (POW/CON vs LHP/RHP): vsHand with explicit hand, NOT 'same'/'opposite'
+
+VERIFICATION:
+1. npm run build (or npx tsc --noEmit)
+2. npx tsx -e "import {TRAIT_INTERACTION_MATRIX as M} from './src/data/traitInteractionMatrix';
+   console.log(M.length, M.filter(e=>!e.citation?.trim()).length, M.filter(e=>e.target==='opponent').map(e=>e.name))"
+   (expect: 75, 0, and the opponent-target list — report it)
+3. npx tsx cross-check: every M name exists in TRAIT_PRICING and vice versa (paste the script + output)
+4. Paste the full AMBIGUITIES list from the file header.
+
+FORMAT:
+1. FILES CHANGED
+2. CHANGES MADE — per-trait coverage summary by predicate kind (counts), the opponent-target
+   list, the hard-cases decisions with rationale, the AMBIGUITIES list
+3. VERIFICATION OUTPUT (all 4)
+4. STATUS: "T2 complete" OR "BLOCKED: [exact reason]"
+
+FAILURE PROTOCOL:
+- Guide unreadable/missing → STOP, report path
+- A traitPricing name with no guide coverage at all → entry from spec/traitPricing grounds,
+  cite accordingly, add to AMBIGUITIES
+- Never leave citation empty; never invent guide quotes — quote only text actually present
+
+Use MAX reasoning effort. Re-read the guide section for every single trait before writing
+its predicate. A subtly wrong predicate ships wrong recommendations to every surface.
+
+---
+
+## PROMPT CONTRACT: T2-AUDIT — Structural Audit of TraitInteractionMatrix
+**Date:** 2026-06-10 | **Route:** Codex 5.5 | high reasoning effort
+**Spec:** spec-docs/IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md §4.3, §13
+**Builder:** Fable 5 CLI (T2). This audit is STRUCTURAL ONLY — predicate-interpretation
+judgment is explicitly OUT of audit scope (flag, never adjudicate; JK is the tiebreaker).
+
+---
+
+You are the T2 Structural Auditor.
+
+GOAL:
+Verify src/data/traitInteractionMatrix.ts is complete, schema-valid, magnitude-consistent
+with committed pricing data, citation-covered, and free of obviously unsupported predicates —
+WITHOUT re-deriving predicate interpretations yourself.
+
+AUDIT PRINCIPLE:
+The builder's report is a claim. Evidence = the file, traitPricing.ts, the guide (for
+citation spot-checks only), and commands you run. Required section: DISAGREEMENTS WITH
+BUILDER REPORT.
+
+CONSTRAINTS:
+- Modify NOTHING. Throwaway scripts to /tmp only. Auditors do not fix.
+
+CHECKLIST:
+S1. COVERAGE: exactly 75 entries; name set identical to TRAIT_PRICING (both directions);
+    no duplicates. Script it.
+S2. SCHEMA: every entry parses against the declared types; predicates non-empty; every
+    perTier presence has potency='guideExplicit'; every potency='guideExplicit' has either
+    perTier or a notes justification.
+S3. MAGNITUDE CONSISTENCY: for every ratingDelta entry whose trait has nonzero deltas in
+    TRAIT_PRICING, the matrix L2 deltas must equal the pricing deltas OR carry a notes field
+    explaining the divergence (guide-explicit values may differ — e.g. K Collector pricing
+    9/9/4 vs guide +15/+15 at L2; divergence + citation + note = acceptable; silent
+    divergence = MAJOR finding). Script the comparison, paste all divergences found.
+S4. TIER RULE: potency='standard' entries must NOT carry perTier. Spot-check 3
+    guideExplicit entries' citations against the guide (K Collector, First Pitch Slayer,
+    + 1 of your choice) — the quoted fragment must exist in the docx text.
+S5. CITATIONS: zero empty citations; sample 10 random entries, confirm each quoted fragment
+    actually appears in the guide (python-docx text search). Fabricated quote = BLOCKER.
+S6. FLAG PASS (flag, don't judge): list any entry where the citation text does not on its
+    face mention the predicate's condition (e.g. predicate says twoStrikes but quote says
+    nothing about counts). Output as FLAGGED FOR JK with entry name + quote + predicate.
+S7. CONSUMPTION SMOKE: npm run build; npx tsx import + count check; confirm no engine
+    files reference the matrix yet (T6 is the consumer — grep).
+S8. Paste the builder's AMBIGUITIES list alongside your S6 flags so JK adjudicates once.
+
+FORMAT:
+1. EVIDENCE LOG (S1–S8: commands + output + PASS/FAIL)
+2. DISAGREEMENTS WITH BUILDER REPORT
+3. FLAGGED FOR JK (S6 + S8 merged, deduped)
+4. FINDINGS REQUIRING ACTION (severity-rated)
+5. VERDICT: "T2 AUDIT: STRUCTURALLY CONFORMS — N items flagged for JK adjudication" OR
+   "T2 AUDIT: DEVIATIONS — [count]" OR "BLOCKED: [reason]"
+
+FAILURE PROTOCOL:
+- Guide or matrix file missing → STOP. Never patch. Never adjudicate interpretation —
+  predicate-vs-guide judgment calls belong to JK, not you.
+
+Use high reasoning effort. Your job is completeness and consistency, not baseball judgment.

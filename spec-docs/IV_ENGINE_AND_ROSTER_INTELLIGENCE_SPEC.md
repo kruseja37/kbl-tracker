@@ -1,12 +1,13 @@
 # IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md
 *(renamed 2026-06-09 from ROSTER_ANALYZER_ARCHETYPE_ENGINE_SPEC.md — scope grew beyond the original feature pair to the full player-valuation core and all three roster-intelligence surfaces)*
-**Version:** 1.1.4 | **Date:** 2026-06-09 | **Status:** CANONICAL — approved by JK in spec session 2026-06-09
+**Version:** 1.1.5 | **Date:** 2026-06-09 | **Status:** CANONICAL — approved by JK in spec session 2026-06-09
 **Owner:** JK | **Drafted by:** Claude (Fable 5) from XBL Roster Tool workbook analysis + Billy Yank SMB4 Guide (3rd Ed.) + 10-question design session
 **v1.1 (2026-06-09):** added §5.3 tax semantics clarification, §5.4 balanceMode toggle, T3 EV-flatness acceptance criterion, registry entry — per JK archetype-purpose review.
 **v1.1.1 (2026-06-09):** §7.3 snake-draft solvency guardrail (hard block) + per-team green/yellow/red/blocked pick signals; `solvencyRedMargin` registry constant — closed gap JK identified (auction solvency rule was not extended to snake draft).
 **v1.1.2 (2026-06-09):** auction endgame anti-exploit package (D14): percentile reserve curve, probabilistic hidden-valuation shills (no deterministic floor), declared-budget expectation anchor, collusion sunlight note, pool-size guidance + league-inflation report + nerfed-tail regeneration option — per JK auction-sandbagging review.
 **v1.1.3 (2026-06-09):** §13 routing updated for Fable 5 CLI + Codex 5.5 builder/auditor decorrelation pattern; audit gate defined.
 **v1.1.4 (2026-06-10):** T1 COMPLETE (Fable 5 built, Codex 5.5 audited: CONFORMS). Audit-confirmed workbook facts folded in: §3.4 sub-min scope note, §3.6 multiplier columns. §13 economic routing pattern (Fable plans/prompts/audits, Codex builds; T2 exception; diff-not-self-report rule; UI-build addendum).
+**v1.1.5 (2026-06-10):** T2 COMPLETE (Fable 5 max built, Codex 5.5 structural audit; 1 MAJOR remediated; JK adjudicated flags). A1 ruling: NEGATIVE traits use INVERTED tier scaling 2.0×/1.0×/0.5× (high chemistry dampens flaws) — 'standardInverted' canonical. A12: Rally Stopper/Surrounded = AT LEAST TWO runners on (guide-explicit). Matrix at src/data/traitInteractionMatrix.ts is authoritative for predicates.
 
 ---
 
@@ -134,7 +135,7 @@ For pitcher attributes below `min`, the workbook prices a MIRRORED curve using c
 ### 3.5 Trait Marginal Pricing
 Each trait carries per-attribute **rating-equivalents** (workbook `Traits` sheet, values = Chemistry Level 2). Trait cost = Σ over affected attributes of `attributeCost(rating + Δ) − attributeCost(rating)` + flat fee + multiplier terms `(attrCost × mult − attrCost)`. Negative traits refund by the same mechanism. Consequence (intended): the same trait costs more on an already-elite player (convexity), and trait values are wildly unequal — Cannon Arm ≈ +45 ARM vs Sprinter ≈ +5 SPD.
 
-Chemistry potency scales the Δ before pricing: **L1 0.5× / L2 1.0× / L3 2.0×** (consistent with game's x1/x2/x4 and salary spec's tiers; workbook values are L2 baseline — verified via LeagueSettings "Restrict to Level 2 Chemistry = True").
+Chemistry potency scales the Δ before pricing: positives **L1 0.5× / L2 1.0× / L3 2.0×**; negatives INVERTED **L1 2.0× / L2 1.0× / L3 0.5×** (high chemistry dampens flaws — JK ruling 2026-06-10, 'standardInverted') (consistent with game's x1/x2/x4 and salary spec's tiers; workbook values are L2 baseline — verified via LeagueSettings "Restrict to Level 2 Chemistry = True").
 
 ### 3.6 Trait Rating-Equivalents Table (extracted & verified from workbook; L2 values)
 Columns: POW/CON/SPD/FLD/ARM/VEL/JNK/ACC rating-deltas, FLAT = flat $ fee. Blank source cells noted `·` — treat as 0 but verify in Build Task T1.
@@ -288,7 +289,7 @@ Six states: Rattled < Tense < Normal < Locked In < On Fire < Jacked.
 Between tracked games, **last-3-games performance is KBL's observable proxy for mojo trajectory** (Mode 2 one-button optimize input).
 
 ### 4.3 TraitInteractionMatrix (the insight engine)
-Every trait = `{ predicate over GameContext, target self|opponent, deltaVector, perTierScale }`. Shipped as a DATA TABLE consumed by all surfaces (`src/data/traitInteractionMatrix.ts`). Magnitudes: workbook L2 values (§3.6) where conditional traits exist there; guide-explicit values where published (e.g. K Collector +8/+15/+30 VEL&JNK at L1/L2/L3 on 2-strike counts; First Pitch Slayer +5POW+8CON / +10+15 / +20+30 on 0-0). Predicates per guide: Ace Exterminator (opposing pitcher A− tier or better, persists vs fatigue), Specialist (same-handed batter), Mind Gamer (target=OPPONENT pitcher, −ACC), Pinch Perfect (substitution AB), Rally Stopper (runners on), Clutch/Choker (pressure, doubled at extreme), Tough Out/Little Hack/K Collector/K Neglector (2-strike), splits traits (handedness), Stimulated (random Juiced fitness final 2.5 innings — model as expected value), Durable/Injury Prone (fitness decay rate, §4.4), Workhorse (stamina), Sprinter (run-out-of-box SPD), Bunter synergy, Bad Ball Hitter + First Pitch Slayer synergy. Trait-vs-trait collisions resolve by summing both sides' active deltas (our Tough Out vs their K Collector at 0-2 is a computable standoff).
+Every trait = `{ predicate over GameContext, target self|opponent, deltaVector, perTierScale }`. Shipped as a DATA TABLE consumed by all surfaces (`src/data/traitInteractionMatrix.ts`). Magnitudes: workbook L2 values (§3.6) where conditional traits exist there; guide-explicit values where published (e.g. K Collector +8/+15/+30 VEL&JNK at L1/L2/L3 on 2-strike counts; First Pitch Slayer +5POW+8CON / +10+15 / +20+30 on 0-0). Predicates per guide: Ace Exterminator (opposing pitcher A− tier or better, persists vs fatigue), Specialist (same-handed batter), Mind Gamer (target=OPPONENT pitcher, −ACC), Pinch Perfect (substitution AB), Rally Stopper (AT LEAST TWO runners on — guide-explicit, v1.1.5), Clutch/Choker (pressure, doubled at extreme), Tough Out/Little Hack/K Collector/K Neglector (2-strike), splits traits (handedness), Stimulated (random Juiced fitness final 2.5 innings — model as expected value), Durable/Injury Prone (fitness decay rate, §4.4), Workhorse (stamina), Sprinter (run-out-of-box SPD), Bunter synergy, Bad Ball Hitter + First Pitch Slayer synergy. Trait-vs-trait collisions resolve by summing both sides' active deltas (our Tough Out vs their K Collector at 0-2 is a computable standoff).
 **Build Task T2 = exhaustively enumerate all ~75 traits into this schema** (tedious-for-human, mechanical-for-engine; guide text is the predicate source of truth).
 
 ### 4.4 Fitness / Fatigue
@@ -583,7 +584,7 @@ Per SESSION_RULES Prompt Contract template (spec-docs/PROMPT_CONTRACTS.md) for e
 | # | Task | ROUTE |
 |---|---|---|
 | T1 ✅ COMPLETE 2026-06-10 | Extract FULL Salary Cap curve table (all 18 position blocks, A:N incl. sub-min I–N columns) + verify trait-table blanks from workbook → `src/data/ivCurves.ts`, `src/data/traitPricing.ts` | Fable 5 CLI built; Codex 5.5 audit: CONFORMS (PROMPT_CONTRACTS T1 + T1-AUDIT) |
-| T2 | TraitInteractionMatrix: enumerate all ~75 traits {predicate, target, deltas, perTierScale} from guide + workbook → `src/data/traitInteractionMatrix.ts` | ROUTE: Claude Code CLI \| Fable 5 \| max (cross-source reasoning vs guide+workbook; the audit-critical data table) |
+| T2 ✅ COMPLETE 2026-06-10 | TraitInteractionMatrix: all 75 traits {predicate, target, deltas, perTierScale} → `src/data/traitInteractionMatrix.ts` | Fable 5 max built; Codex 5.5 structural audit: CONFORMS after 1 MAJOR remediation; JK adjudicated A1/A12 + flags (PROMPT_CONTRACTS T2 + T2-AUDIT) |
 | T3 | Empirical pool analysis: IV + grade distribution of 440-player DB; derive tier shift params, tier caps (percentile method §5.3), luxury cap scaling, farm-draft nerf params; **EV-flatness verification across composed identities (±10%, §5.3)** → analysis doc + `src/data/tierParams.ts` | ROUTE: Claude Code CLI \| Fable 5 \| max (analysis-heavy; EV-flatness verification) |
 | T4 | IV Engine (`ivEngine.ts`) incl. sub-min reverse curve + golden tests against workbook cached values (Eovaldi $54,582; deGrom $71,609; PitchCalcs rows) | ROUTE: Codex 5.5 \| very high → Fable 5 CLI audit (core engine, golden-test gated) |
 | T5 | Salary spec integration seam (replace Steps 1/2/trait-tiers; wire potency; rookie-scale override) + regression tests on True Value/designations | ROUTE: Codex 5.5 \| very high → Fable 5 CLI audit (persistence-adjacent salary state; audit non-negotiable) |
@@ -614,4 +615,4 @@ Order: T1→T2→T3 (parallel-safe) → T4 → T5 → T6 → {T7, T8} → T9 →
 5. (v1.1) balanceMode default — `taxed` specced; revisit after T3 EV-flatness results and first construction playtest.
 
 ---
-*End IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md v1.1.4*
+*End IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md v1.1.5*
