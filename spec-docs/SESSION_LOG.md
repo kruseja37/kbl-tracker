@@ -3118,3 +3118,41 @@ JK browser-test R5 fixes:
 
 ### Next Action
 Build implementation plan from truth map findings. 12 prioritized fix items.
+
+
+---
+
+## SESSION: 2026-06-09 — Roster Analyzer / Team Builder / Archetype Engine Spec Session (Claude Fable 5, chat)
+
+**Type:** Spec design + authoring (no code changes)
+**Output:** `spec-docs/ROSTER_ANALYZER_ARCHETYPE_ENGINE_SPEC.md` v1.0 (574 lines, verified on disk: 16 sections, trait table, 44-modification table, luxury params, routing table)
+
+**Inputs analyzed:**
+- `Team_Builder_Archetype_Logic_Template.xlsx` (XBL Roster Tool Season XIX Cup v1.0) — full formula decode: two-segment salary curves, sub-min reverse curve, trait marginal pricing (L2 values), 44 luxury-cap modifications, luxury penalty curves, league settings, pitch/arsenal pricing. Verified against cached values (PitchCalcs ↔ Roster cells match).
+- BillyYank SMB4 Guide 3rd Ed. (.docx, 784 paragraphs) — mojo 6-state model, fitness/stamina by role, chemistry potency x1/x2/x4, trait activation predicates.
+
+**Key decisions (full register in spec §2, D1–D12):** IV Engine replaces salary-spec Steps 1/2/trait-tiers (relativity stack survives); league tiers Juiced/Standard/Nerfed = pool shift + derived cap; scout-obscured IV for farm; season ledger w/ 75% dead money (configurable) + rookie scale replacing age factor; mojo/fitness/traits = deterministic Effective Ratings (dissolves ratings-vs-form); two-level identity system (6 bands over 44 modifications); v1 snake draft + empirical pick-value chart; auction + AI shill bidders = v1.5; GameTracker sub recs rebuilt on shared engines.
+
+**JK canonical addenda captured in spec:** fielding moves mojo (dives/jumps/slides up, misses down, errors ≈ −1 step); trait-vs-trait and trait-vs-player-type interactions are the core insight engine (TraitInteractionMatrix, §4.3).
+
+**Verification performed (NFL):** spreadsheet formulas decoded from raw XML + cross-checked against cached computed values; potency ratios cross-verified across 3 sources (game x1/x2/x4 = salary spec 0.5/1/2 = workbook L2 baseline); dead-money scenarios modeled numerically (75% kills exploit at −5.4% payroll savings vs −14.3% at 50%); spec file read back after write.
+
+**Remaining uncertainties (flagged in spec §15):** trait-table blank cells (verify in T1); mojo per-state deltas are estimates pending playtest; batting-order constants drafted-not-approved; band-priority UI input style.
+
+**Next session starts with:** Build Task T1 (full curve-table extraction → ivCurves.ts; ROUTE: Claude Code CLI | sonnet), then T2 (TraitInteractionMatrix; ROUTE: Claude Code CLI | opus) and T3 (empirical 440-player pool analysis; ROUTE: Claude Code CLI | opus). Also: commit workbook + guide to `spec-docs/reference/` per spec §0.
+
+
+### 2026-06-09 addendum — Spec amended to v1.1 (archetype-purpose review)
+JK challenged how archetypes serve the IV/draft/cap system and whether XBL constants are too nerfed. Resolved and codified as D13: tax = budget drain/soft cap (never hard wall); XBL ratios/shapes port but constants re-derived per tier (percentile method, `luxuryCapPercentile` 0.65); asymmetric win-equity pricing = the anti-"optimal archetype" mechanism; T3 gains EV-flatness acceptance criterion (±10% across composed identities); new `balanceMode` league toggle taxed/advisory/off (default taxed). Spec now v1.1, 591 lines, verified on disk. NOTE: Desktop Commander edit_block hung (4-min timeout) mid-amendment — file confirmed unmodified by failed call; amendment applied via Filesystem MCP full rewrite instead. DC may need restart; start_process/write_file functional.
+
+### 2026-06-09 addendum 2 — Spec v1.1.1 (draft guardrails)
+JK probed tax-vs-roster-completion interaction and caught a gap: §7.5 auction solvency rule was never extended to the snake draft. Fixed: §7.3 now specifies a hard-block solvency guardrail (committed salaries + projected taxes + pick cost + marginal tax ≤ budget − slotsRemaining × live-pool cheapestFillCost, recomputed per pick) and per-team GREEN/YELLOW/RED/BLOCKED pick signals; new registry constant solvencyRedMargin (0.10). Clarified: 0.5× floor is auction opening bids only; snake picks cost full IV salary. Applied via DC start_process python in-place edit (edit_block still avoided); verified by grep — spec now v1.1.1, 596 lines.
+
+### 2026-06-09 addendum 3 — Spec v1.1.2 (auction anti-sandbagging package, D14)
+JK probed auction endgame exploit (hoard budget, scoop stars at 50% floor when tax-mismatched teams won't bid) and league inflation from accumulated deals. Approved package applied: reservePriceCurve 0.5→0.7 by IV percentile (replaces flat auctionFloor); shill policy rewritten as hidden valuation + probabilistic bargain interest with HARD REQUIREMENT against deterministic floors (reserve = law, shills = market); §8.4 expectation anchor moved to DECLARED budget (closes cheap-bid → low-salary → low-expectations double reward); sunlight remedy defined in §7.5; pool-size guidance in §7.2 (talent is supply-controlled, poolSurplusMax 1.2×slots, grade-round restrictions explicitly REJECTED); league-inflation report line + optional nerfed-tail regeneration. 4 new registry constants. Spec now v1.1.2, 608 lines, grep-verified.
+
+### 2026-06-09 addendum 4 — Spec renamed
+`ROSTER_ANALYZER_ARCHETYPE_ENGINE_SPEC.md` → `IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md` (scope grew beyond the original feature pair to the full player-valuation core + three roster-intelligence surfaces). Rename annotation added to spec header; CURRENT_STATE reference updated (a double-substitution bug in the first rename pass was caught by grep verification and fixed — NFL working as intended). Earlier SESSION_LOG entries above retain the historical filename intentionally. Repo-wide grep confirms no other files reference the old name.
+
+### 2026-06-09 addendum 5 — Spec v1.1.3 (routing modernization)
+§13 updated for current model lineup: builder/auditor decorrelation pattern codified (different model families build vs audit; same-model self-audit finds its own choices plausible). T1–T3 → Fable 5 CLI builds (high/max effort; cross-source fidelity is the work). T4–T11 → Codex 5.5 builds (high/very high per state rule) → Fable 5 CLI audit gate: golden tests pass, NFL with documented falsification attempts, section-by-section spec conformance, plus migration-safety/IndexedDB key-scope review on state tasks (T5/T7/T8/T9 audits non-negotiable). Spec now v1.1.3, 612 lines, grep-verified. NOTE for JK: userPreferences routing table still tops out at opus/Codex 5.3 — update separately when convenient.
