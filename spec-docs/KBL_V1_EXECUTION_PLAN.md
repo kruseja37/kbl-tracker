@@ -301,31 +301,57 @@ Key files: `franchiseAwardsEngine.ts`, `franchiseAwardsStorage.ts`, `AwardsWatch
 
 ---
 
-### 1.10 — Mode 2 → Mode 3 Handoff Contract
+### 1.10A — Mode 2 Season Summary / Handoff Manifest Without Awards
 
-**Status:** Season handoff plan exists as a "pure read-only blocked migration manifest." Mode 3 execution is deferred, but the handoff contract — what Mode 2 produces at season end — is Mode 2's responsibility and is not fully built.
+**Status:** Implemented as a narrowed no-awards v1 season-complete output package. The existing franchise season summary store now carries a scoped read-only manifest for what Mode 2 can currently prove, while awards/watchlists and Mode 3/offseason execution remain blocked.
 
-**Dependency:** Requires all of Phase 1 to be complete. The handoff output package includes: salary/payroll (1.2), designation statuses (1.3), roster/farm state (1.4), transaction history (1.5), award winners (1.9), playoff results (1.8). Do not start this ticket until 1.1–1.9 are all passing smoke.
+**Why narrowed:** 1.9 Awards / Watchlists is blocked by the Final WAR / Award Trust Promotion Gate. The original awards-dependent 1.10 handoff cannot be completed yet, so v1 now produces a no-awards Mode 2 season summary/manifest instead of waiting on awards or drifting into Mode 3/offseason behavior.
 
-**What's needed:**
-- Season-end output package written to IndexedDB: final standings, stats, roster/farm state, salary/payroll, transaction history, award winners, playoff results, designation statuses
-- Handoff stored as a scoped season-complete record — one record per season, keyed by franchiseId + seasonId
-- Season Summary view: read-only display of what happened and what carries forward; no Mode 3 execution from this surface
-- Clear "Season Complete" state in franchise hub
-- Mode 3 execution: remains blocked and deferred — this ticket produces the data contract only
+**Included in the no-awards manifest:**
+- Final standings.
+- Completed regular-season schedule summary, with score-only rows preserved as standings/schedule-only context.
+- Playoff bracket/results when the scoped playoff bracket is completed.
+- Roster/FARM state.
+- Current salary/payroll proof.
+- Transaction history count.
+- Active persisted TEAM_MVP/ACE designation state.
+- Blocked/deferred designation families.
+- Almanac/completed-game continuity summary.
+- Stadium/spray evidence summary.
+- Manager WPA visibility summary.
+- Save/export/delete portability scope.
 
-**Gate:** After full season + playoffs, Season Summary shows correct final data for all categories. Handoff record written to IndexedDB. Mode 3 execution button/path does not exist.
+**Explicitly blocked/omitted:**
+- Awards/watchlists.
+- Final True Value/value delta.
+- Fan Favorite, Albatross, Cornerstone, Captain, and Fan Hopeful promotion.
+- Morale automation.
+- Relationship mutation.
+- Mode 3/offseason execution.
+- Season rollover.
+
+**Persistence strategy:** Reuse `franchiseSeasonSummaries`, keyed by franchiseId + seasonId/statsScopeId. No new Mode 3 storage path is created.
+
+**Gate:** After full season + playoffs, Season Summary shows scoped Mode 2 evidence and blocked categories clearly. The no-awards manifest is written to the existing season summary record. Mode 3 execution button/path does not exist.
 
 **ROUTE: Codex 5.5 | very high**
-Key files: `franchiseSeasonHandoffEngine.ts`, `franchiseSeasonHandoffStorage.ts`, `SeasonSummary.tsx`
+Key files: `franchiseSeasonSummaryStorage.ts`, `SeasonSummary.tsx`
+
+---
+
+### 1.10B — Full Mode 2 → Mode 3 Handoff Contract
+
+**Status:** Deferred. Do not start until awards/watchlists and final carryover policies are approved. This future slice is the original awards-dependent Mode 2-to-Mode 3 handoff contract, not part of the current no-awards v1 package.
+
+**Still required before 1.10B:** Final award-consumer WAR trust, award-specific True Value/value-delta policy if needed, awards/watchlists storage, season-end locking/carryover policy, Mode 3/offseason storage policy, and user approval to start Mode 3/offseason work.
 
 ---
 
 ### Phase 1 Gate — Full Manual Smoke Before Phase 2
 
-After 1.1–1.10 are complete:
+After 1.1–1.10A are complete:
 1. Run full manual smoke checklist on iPad
-2. Verify: salary, designations, trades, farm, WPA lineup delta, spray charts, playoffs, awards, handoff all work end-to-end
+2. Verify: salary, designations, trades, farm, WPA lineup delta, spray charts, playoffs, and the no-awards season summary/manifest all work end-to-end
 3. Verify: no hardcoded MLB-length assumptions remain (`grep -r "/ 162" src/` outside adaptive standards file = zero)
 4. Verify: all typed events (DesignationEvent, RosterMoveEvent, TradeEvent) are emitted but morale mutation is not yet connected — no phantom morale changes
 5. Get explicit approval before starting Phase 2
@@ -491,9 +517,11 @@ Locked out until a separate approval decision after v1 ships:
 | 1.6 | Manager WPA lineup delta | 1 | Codex 5.5 very high | — |
 | 1.7 | Spray chart full filters | 1 | Codex 5.5 very high | — |
 | 1.8 | Playoff confirmation + tiebreaker | 1 | Codex 5.5 very high | 1.1 |
-| 1.9 | Awards / watchlists | 1 | Codex 5.5 very high | 1.1, 1.2, 1.3, WAR trusted |
-| 1.10 | Mode 2 → 3 handoff contract | 1 | Codex 5.5 very high | All Phase 1 |
-| ☑ | Phase 1 gate: full smoke | — | Manual | 1.10 |
+| 1.8.5 | Final WAR / award trust promotion gate | 1 | Codex 5.5 extra high | 1.1, 1.2, 1.3 |
+| 1.9 | Awards / watchlists | 1 | Codex 5.5 very high | Blocked until 1.8.5 passes |
+| 1.10A | No-awards Mode 2 season summary/manifest | 1 | Codex 5.5 very high | 1.1–1.8, 1.9 blocked gate |
+| 1.10B | Full Mode 2 → 3 handoff contract | 1 | Codex 5.5 very high | Deferred; requires awards/carryover approval |
+| ☑ | Phase 1 gate: full smoke | — | Manual | 1.10A |
 | 2.1 | Player morale engine | 2 | Codex 5.5 very high | Phase 1 ✓ |
 | 2.2 | Fan morale engine automated | 2 | Codex 5.5 very high | 2.1 |
 | 2.3 | Milestone + event wiring | 2 | Codex 5.5 very high | 2.1, 2.2 |

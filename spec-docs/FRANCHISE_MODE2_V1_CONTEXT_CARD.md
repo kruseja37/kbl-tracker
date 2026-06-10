@@ -10,7 +10,7 @@ Canonical roadmap: `FRANCHISE_MODE2_V1_COMPLETION_ROADMAP.md`.
 
 Latest committed checkpoint: `366064a Define v1 dynamic designation policy`.
 
-Latest working checkpoint: Playoff Confirmation + Tiebreaker Resolution.
+Latest working checkpoint: Mode 2 Season Summary / Handoff Manifest Without Awards.
 
 ## Current Completed
 
@@ -22,6 +22,7 @@ Latest working checkpoint: Playoff Confirmation + Tiebreaker Resolution.
 - Team Hub player profiles include compact read-only relationship context/proposal boundaries using the draft-only manual override validator.
 - Season-end readiness checks can classify scoped Mode 2 evidence for review before future handoff while keeping Mode 3/offseason execution blocked.
 - Season handoff planning can produce a read-only blocked migration manifest for future carry-forward decisions without rollover/carryover writes.
+- Season Summary now includes a scoped no-awards Mode 2 season-complete manifest in the existing `franchiseSeasonSummaries` store: final standings, schedule completion, playoff status/results when complete, roster/FARM state, salary/payroll proof, transactions, TEAM_MVP/ACE state, blocked designation families, Almanac continuity, stadium/spray evidence, Manager WPA visibility, and save/export/delete scope.
 - Durable random-event log supports generated prompts, confirmation/dismissal, idempotent safe-effect application, and Team Hub workflow.
 - Canonical fan/player morale storage uses 0-99 scale; player morale starts at neutral `50`; manual scoped adjustments exist.
 - Fan morale prompt formulas cover game result, streaks, 7+ run blowouts, archive-backed no-hitter/perfect-game fame events, and performance-gap team fan morale prompts from durable expected-wins baseline evidence.
@@ -49,14 +50,14 @@ Latest working checkpoint: Playoff Confirmation + Tiebreaker Resolution.
 
 ## Current Active Slice
 
-Playoff Confirmation + Tiebreaker Resolution.
+Mode 2 Season Summary / Handoff Manifest Without Awards.
 
-Goal: verify the newly implemented season-end standings review, run-differential tiebreaker confirmation, confirmed bracket creation, and playoff start confirmation in real-app smoke without adding Mode 3/offseason behavior.
+Goal: verify the no-awards season-complete summary/manifest in real-app smoke. It should show trusted Mode 2 evidence and explicitly blocked categories without adding awards, season rollover, or Mode 3/offseason behavior.
 
 ## Next Queue
 
-1. User reruns the manual smoke checklist in the real app, including the new playoff seeding/bracket confirmation path.
-2. If playoff confirmation smoke fails, patch the smallest standings/tiebreaker/bracket issue before moving on.
+1. User reruns the manual smoke checklist in the real app, including playoff seeding/bracket confirmation and the new Season Summary manifest.
+2. If the no-awards manifest omits trusted evidence or implies awards/Mode 3 execution, patch the smallest summary/manifest issue.
 3. Recheck Manager WPA lineup-delta visibility in Game Detail during smoke; it should now show archived evidence when records exist and unavailable copy when they do not.
 4. Keep playable v1 unapproved until the blocker set is cleared and the user approves it.
 5. Keep Product UX Cleanup queued after remaining critical data flows unless UI wording/layout blocks comprehension or causes wrong action.
@@ -70,6 +71,7 @@ Goal: verify the newly implemented season-end standings review, run-differential
 - No final True Value, value-delta trust, final designations, salary movement, or Fan Favorite/Albatross finalization yet.
 - No final awards persistence or awards automation.
 - No award/watchlist implementation until the Final WAR / Award Trust Promotion Gate passes; the current TEAM_MVP/ACE WAR gate is not award authority.
+- No-awards Season Summary manifests are review packages only and must not be treated as awards, season rollover, or Mode 3 handoff execution.
 - TWO-WAY designation routing is pitcher-only for internal v1; stricter two-way Team MVP criteria are deferred.
 - Older full-system designation lock/carryover wording is subordinate to the v1 matrix until a separate final-designation promotion slice is approved.
 - No relationship mutation.

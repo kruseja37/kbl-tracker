@@ -183,7 +183,8 @@ Commit hygiene:
 | Fame events | Trusted no-hitter/perfect-game context preserved with franchise/season/team/opponent scope and confirmation-gated fan morale prompts. Score-only rows blocked. | Broader fame categories and awards deferred. | Accept scoped trusted fame for v1. |
 | Visual smoke tooling | Safe visual smoke preview route and populated fixture exist. Dev-only manual smoke setup route seeds disposable smoke league after click. | Full production-shaped harness remains limited. User still needs real-app smoke. | Keep as internal tooling, not product feature. |
 | Product UX | A cleanup lane is documented. | App currently reads too much like implementation/audit/progress documentation. Stadium chart design is inadequate. Team Hub/Finance/Morale/Designation/Random Event/Schedule/Almanac need simplification. | Decide whether UX cleanup is required before playable-v1 approval or immediately after functionality approval. |
-| Mode 3/offseason | Read-only readiness and handoff planning contracts exist. | Execution is blocked. | Do not start until user approves after v1. |
+| Season Summary / handoff manifest | Existing `franchiseSeasonSummaries` now carries a no-awards Mode 2 season-complete manifest: standings, schedule completion, playoff status/results when complete, roster/FARM, salary/payroll, transactions, active TEAM_MVP/ACE, blocked designation families, Almanac continuity, stadium/spray, Manager WPA, and save/export/delete scope. | Awards/watchlists, final True Value/value delta, non-MVP/Ace designations, morale automation, relationships, season rollover, and Mode 3/offseason execution remain blocked. | Smoke the Season Summary manifest in real app; do not treat it as Mode 3 execution. |
+| Mode 3/offseason | Read-only readiness and handoff planning contracts exist, plus the no-awards Mode 2 summary manifest. | Execution is blocked. Full awards-dependent Mode 2-to-Mode 3 handoff remains deferred. | Do not start until user approves after v1 and the awards/carryover gates pass. |
 
 ## Current Practical Roadmap
 
@@ -641,7 +642,7 @@ Expected approach:
 
 ## Final Current-State Summary
 
-The repo is no longer in early foundation mode. Most core Mode 1/2 data contracts have been hardened: launch, schedule boundaries, GameTracker archive, Almanac continuity, playoff seeding/bracket confirmation, hidden FARM safety, profile integrity, salary baselines, active persisted TEAM_MVP/ACE designations, still-preview/deferred designation and value systems, random-event confirmation, stadium source/trust, spray persistence, and save-slot export/delete all have meaningful coverage.
+The repo is no longer in early foundation mode. Most core Mode 1/2 data contracts have been hardened: launch, schedule boundaries, GameTracker archive, Almanac continuity, playoff seeding/bracket confirmation, hidden FARM safety, profile integrity, salary baselines, active persisted TEAM_MVP/ACE designations, still-preview/deferred designation and value systems, random-event confirmation, stadium source/trust, spray persistence, no-awards Season Summary manifest, and save-slot export/delete all have meaningful coverage.
 
 The revised v1 is not approved because the team still needs a final real-app smoke pass and at least one explicit roadmap decision around Product UX Cleanup. The remaining work is now less about discovering whether the foundation exists and more about deciding the acceptance threshold:
 

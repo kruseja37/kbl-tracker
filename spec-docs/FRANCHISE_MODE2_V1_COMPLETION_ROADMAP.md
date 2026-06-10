@@ -12,7 +12,7 @@ Manual smoke feedback remains a bug and feature backlog. The build order for Mod
 
 Latest committed checkpoint: `366064a Define v1 dynamic designation policy`.
 
-Latest working checkpoint: Playoff Confirmation + Tiebreaker Resolution.
+Latest working checkpoint: Mode 2 Season Summary / Handoff Manifest Without Awards.
 
 Mode 2 is currently a reliability-first internal v1 track: many systems are scoped, durable, read-only, preview-only, or confirmation-gated, while final automation remains blocked until trusted inputs and lifecycle rules are approved. The technical foundation is safe, and the first Mode 1/2 playable hardening waves through schedule/trade/FARM/stadium/designation policy plus the latest smoke-response patches are complete, but user-facing playable v1 still requires another real-app smoke pass and explicit user approval.
 
@@ -42,6 +42,7 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Team Hub player profiles surface read-only relationship context/proposal boundaries for player-player, fan/team, and hidden-safe scout/prospect contexts using the draft-only manual override validator.
 - Season-end readiness report exists as a pure read-only review contract for scoped game archives, random-event review state, morale evidence, daily summaries, expected-wins baselines, stadium records, designation readiness, relationship context, and blocked future systems.
 - Season handoff plan exists as a pure read-only blocked migration manifest that lists eligible review evidence, blocked carryover categories, unresolved blockers, warnings, and future decisions required before any Mode 3/offseason execution.
+- Season Summary now persists/displays a no-awards Mode 2 season-complete manifest in the existing `franchiseSeasonSummaries` store. It includes final standings, schedule completion, playoff status/results when complete, roster/FARM state, salary/payroll proof, transactions, active TEAM_MVP/ACE state, blocked designation families, Almanac continuity, stadium/spray evidence, Manager WPA visibility, and save/export/delete scope while explicitly blocking awards/watchlists, final True Value, non-MVP/Ace designation promotion, morale automation, relationship mutation, season rollover, and Mode 3/offseason execution.
 - `FRANCHISE_MODE1_MODE2_PLAYABLE_V1_GAP_ANALYSIS.md` reconciles the current foundation, manual smoke feedback, and Mode 2 worksheet into the active Mode 1/Mode 2 playable hardening plan.
 - Mode 1/2 Core Launch And Persistence Smoke Hardening is committed.
 - Franchise Data Generation Policy Cleanup is committed: generated Franchise prospects/scouts no longer use DH identities, SMB4 name sources are used where present, and salary/payroll baselines are covered for generated data.
@@ -123,7 +124,7 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - Story persistence beyond the random-event log and full narrative engine integration.
 - Adaptive park-factor persistence, stadium historical records, and final park-adjusted value/WAR consumers.
 - Custom stadium factor entry and custom/adaptive factor persistence.
-- Awards persistence, playoffs/finals summaries, complete season handoff, and Mode 3/offseason execution.
+- Awards persistence, full awards-dependent Mode 2-to-Mode 3 handoff, season rollover, and Mode 3/offseason execution. The no-awards Mode 2 season summary/manifest exists as a review-only v1 package.
 - Auto-draft remains deferred/excluded from the active playable-v1 plan unless separately approved as tooling.
 
 ## Locked V1 Boundaries
@@ -138,6 +139,7 @@ Mode 2 is currently a reliability-first internal v1 track: many systems are scop
 - True Value, value deltas, and expected wins are currently preview-only and not trusted for final designations, salary movement, morale automation, automatic drift/recovery, or Mode 3.
 - WAR trust is consumer-specific: TEAM_MVP/ACE input gating may trust rows that pass the scoped completed-archive/stat/metadata contract, but that does not promote Fan Favorite, Albatross, awards, True Value, salary movement, morale, or Mode 3.
 - Awards/watchlists must not be implemented from preview WAR or preview True Value. First add a dedicated Final WAR / Award Trust Promotion Gate and keep `finalWarTrusted`, `trustedForAwards`, final True Value/value-delta trust, score-only exclusion, and hidden FARM exclusion explicit.
+- The no-awards season summary/manifest must remain subordinate to that gate: it can list awards/watchlists as blocked, but must not invent winners or promote watchlists.
 - Fan Favorite and Albatross final behavior requires an explicit promotion decision for trusted True Value/value-delta inputs.
 - Captain morale amplification remains blocked until hidden-charisma reveal/safety policy is approved.
 - Fan Hopeful morale boosts must be prospect-safe and must not expose hidden FARM truth.

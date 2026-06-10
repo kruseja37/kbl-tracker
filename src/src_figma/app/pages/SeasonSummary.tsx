@@ -544,6 +544,13 @@ export function SeasonSummary() {
     );
   }
 
+  function manifestStatusClass(status: string): string {
+    if (status === 'trusted' || status === 'included') return 'text-[#BFE6A8]';
+    if (status === 'blocked') return 'text-[#FFD7D2]';
+    if (status === 'incomplete') return 'text-[#F4D27A]';
+    return 'text-[#E8E8D8]/70';
+  }
+
   // ============================================
   // RENDER
   // ============================================
@@ -858,7 +865,65 @@ export function SeasonSummary() {
         )}
 
         {/* ============================================ */}
-        {/* 5. START PLAYOFFS BUTTON */}
+        {/* 5. NO-AWARDS HANDOFF MANIFEST */}
+        {/* ============================================ */}
+        <SectionHeader title="Season Complete Manifest" section="manifest" />
+        {expandedSection === "manifest" && (
+          <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4 space-y-3">
+            {persistedSummary?.manifest ? (
+              <>
+                <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-[9px] text-[#C4A853] uppercase">Read-only no-awards handoff package</div>
+                    <div className={`text-[9px] uppercase ${manifestStatusClass(persistedSummary.manifest.status)}`}>
+                      {persistedSummary.manifest.status.replace(/-/g, ' ')}
+                    </div>
+                  </div>
+                  <div className="mt-2 text-[10px] text-[#E8E8D8]/70 leading-relaxed">
+                    This summary records Mode 2 season evidence for review only. Awards, final True Value, salary movement,
+                    morale automation, relationship mutation, season rollover, and Mode 3/offseason execution remain blocked.
+                  </div>
+                </div>
+
+                {persistedSummary.manifest.blockers.length > 0 && (
+                  <div className="bg-[#4A1F1B]/70 border-[3px] border-[#A3483D] p-3">
+                    <div className="text-[9px] text-[#FFD7D2] uppercase mb-1">Completion blockers</div>
+                    {persistedSummary.manifest.blockers.map((blocker) => (
+                      <div key={blocker} className="text-[9px] text-[#FFD7D2]/90">- {blocker}</div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {persistedSummary.manifest.categories.map((category) => (
+                    <div key={category.key} className="bg-[#5A8352] border-[3px] border-[#4A6844] p-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="text-[9px] text-[#E8E8D8] uppercase">{category.label}</div>
+                        <div className={`text-[8px] uppercase whitespace-nowrap ${manifestStatusClass(category.status)}`}>
+                          {category.status.replace(/-/g, ' ')}
+                        </div>
+                      </div>
+                      <div className="mt-1 text-[9px] text-[#E8E8D8]/65 leading-relaxed">{category.detail}</div>
+                      {category.blockers.slice(0, 1).map((blocker) => (
+                        <div key={blocker} className="mt-1 text-[8px] text-[#FFD7D2]/90">{blocker}</div>
+                      ))}
+                      {category.warnings.slice(0, 1).map((warning) => (
+                        <div key={warning} className="mt-1 text-[8px] text-[#F4D27A]/90">{warning}</div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="text-[10px] text-[#E8E8D8]/50 italic text-center py-4">
+                No persisted no-awards handoff manifest is available yet.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ============================================ */}
+        {/* 6. START PLAYOFFS BUTTON */}
         {/* ============================================ */}
         <div className="pt-4 pb-8">
           <button

@@ -154,6 +154,61 @@ function makeSummary() {
       fielding: [],
     },
     playoffs: { status: 'none' },
+    manifest: {
+      contractVersion: 'franchise-season-summary-no-awards-manifest-v1',
+      generatedAt: 1,
+      franchiseId: 'franchise-1',
+      seasonId: 'franchise-1-season-1',
+      statsScopeId: 'franchise-1-season-1',
+      seasonNumber: 1,
+      status: 'season-complete',
+      readOnly: true,
+      hiddenSafe: true,
+      categories: [
+        {
+          key: 'final-standings',
+          label: 'Final standings',
+          status: 'trusted',
+          detail: '1 team standing row(s) captured from the scoped season.',
+          count: 1,
+          blockers: [],
+          warnings: [],
+        },
+        {
+          key: 'awards-watchlists',
+          label: 'Awards and watchlists',
+          status: 'blocked',
+          detail: 'Awards/watchlists are omitted from the v1 season-complete manifest until the Final WAR / Award Trust Promotion Gate passes.',
+          blockers: ['finalWarTrusted and trustedForAwards remain false.'],
+          warnings: [],
+        },
+        {
+          key: 'mode3-offseason-rollover',
+          label: 'Mode 3/offseason and season rollover',
+          status: 'blocked',
+          detail: 'No Mode 3 execution, offseason execution, or season rollover path is enabled by this summary.',
+          blockers: ['Season rollover storage and carryover policy are future work.'],
+          warnings: [],
+        },
+      ],
+      blockers: [],
+      warnings: [],
+      policyFlags: {
+        awardsImplemented: false,
+        watchlistsImplemented: false,
+        finalTrueValueAllowed: false,
+        valueDeltaTrusted: false,
+        blockedDesignationPromotionAllowed: false,
+        moraleAutomationAllowed: false,
+        relationshipMutationAllowed: false,
+        salaryMovementAllowed: false,
+        mode3ExecutionAllowed: false,
+        seasonRolloverAllowed: false,
+        generatedSchedulesAllowed: false,
+        aiSimulationAllowed: false,
+        aiTradesAllowed: false,
+      },
+    },
     offseasonStateId: 'offseason-franchise-1-season-1',
     awards: {
       status: 'placeholder',
@@ -247,6 +302,20 @@ describe('SeasonSummary Pass 5 persisted-summary fidelity', () => {
     expect(mocks.mockNavigate).toHaveBeenCalledWith('/franchise/franchise-1?tab=bracket');
     expect(mocks.mockPreparePlayoffSeedingReview).not.toHaveBeenCalled();
     expect(mocks.mockCreateNewPlayoff).not.toHaveBeenCalled();
+  });
+
+  test('renders persisted no-awards season-complete manifest without Mode 3 execution controls', async () => {
+    render(<SeasonSummary />);
+
+    await screen.findByText('SEASON 1 SUMMARY');
+    fireEvent.click(screen.getByRole('button', { name: /Season Complete Manifest/i }));
+
+    expect(screen.getByText(/Read-only no-awards handoff package/i)).toBeInTheDocument();
+    expect(screen.getByText(/Awards and watchlists/i)).toBeInTheDocument();
+    expect(screen.getByText(/Awards\/watchlists are omitted/i)).toBeInTheDocument();
+    expect(screen.getByText(/Mode 3\/offseason and season rollover/i)).toBeInTheDocument();
+    expect(screen.getByText(/No Mode 3 execution/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Mode 3|Offseason|Season Rollover/i })).not.toBeInTheDocument();
   });
 
   test('labels live WAR-derived awards fallback as read-only leader previews, not finalized awards', async () => {

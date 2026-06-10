@@ -217,6 +217,21 @@ describe('Wave 4 franchise season summary handoff', () => {
         playoffId: playoff.id,
         status: 'present',
       },
+      manifest: {
+        contractVersion: 'franchise-season-summary-no-awards-manifest-v1',
+        franchiseId,
+        seasonId,
+        statsScopeId: seasonId,
+        readOnly: true,
+        hiddenSafe: true,
+        policyFlags: {
+          awardsImplemented: false,
+          mode3ExecutionAllowed: false,
+          seasonRolloverAllowed: false,
+          salaryMovementAllowed: false,
+          relationshipMutationAllowed: false,
+        },
+      },
       awards: { status: 'placeholder' },
       fanMorale: { status: 'placeholder' },
     });
@@ -227,6 +242,44 @@ describe('Wave 4 franchise season summary handoff', () => {
     });
     expect(persisted?.completedGames.gameIds).toEqual([gameId]);
     expect(persisted?.seasonStats.batting).toHaveLength(1);
+    expect(persisted?.manifest.categories.map((category) => category.key)).toContain('awards-watchlists');
+    expect(persisted?.manifest.categories.find((category) => category.key === 'awards-watchlists')).toMatchObject({
+      status: 'blocked',
+    });
+    expect(persisted?.manifest.categories.find((category) => category.key === 'mode3-offseason-rollover')).toMatchObject({
+      status: 'blocked',
+    });
+  });
+
+  test('marks no-awards manifest incomplete when regular-season schedule rows remain unresolved', async () => {
+    const franchiseId = nextId('summary-incomplete-manifest');
+    const seasonNumber = 10;
+    const seasonId = getFranchiseSeasonId(franchiseId, seasonNumber);
+    await seedFranchiseGame({
+      franchiseId,
+      seasonNumber,
+      awayTeamId: 'done-away',
+      homeTeamId: 'done-home',
+      awayScore: 4,
+      homeScore: 6,
+    });
+    await addGame({
+      franchiseId,
+      seasonNumber,
+      awayTeamId: 'pending-away',
+      homeTeamId: 'pending-home',
+    });
+
+    const summary = await createFranchiseSeasonSummary({ franchiseId, seasonNumber });
+
+    expect(summary.seasonId).toBe(seasonId);
+    expect(summary.manifest.status).toBe('incomplete');
+    expect(summary.manifest.blockers.join(' ')).toMatch(/regular-season schedule row/i);
+    expect(summary.manifest.categories.find((category) => category.key === 'regular-season-schedule')).toMatchObject({
+      status: 'incomplete',
+    });
+    expect(summary.manifest.policyFlags.awardsImplemented).toBe(false);
+    expect(summary.manifest.policyFlags.mode3ExecutionAllowed).toBe(false);
   });
 
   test('excludes incomplete fallback archives from durable summary completed-game snapshots', async () => {
