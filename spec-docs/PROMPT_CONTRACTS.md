@@ -1047,3 +1047,82 @@ STOP with specifics. Never invent data. Never reintroduce salary. Never touch fr
 
 Use high reasoning effort. This file is the substrate every engine prices — a silent
 mismatch here corrupts every downstream constant twice over.
+
+
+---
+
+## PROMPT CONTRACT: DB1-AUDIT — Independent Audit of Player DB Regeneration
+**Date:** 2026-06-10 | **Route:** Claude Code CLI | Fable 5 | high reasoning effort
+**Builder:** Codex 5.5 (DB1). You are the independent auditor — different model family by design.
+**Spec/context:** PROMPT_CONTRACTS DB1; SESSION_LOG 2026-06-10 reconciliation entries.
+
+---
+
+You are the DB1 Audit Specialist.
+
+GOAL:
+Independently verify the regenerated src/data/playerDatabase.ts is a faithful, complete,
+schema-correct transcription of the SOT workbook — via your OWN extraction path, never the
+builder's script or report.
+
+AUDIT PRINCIPLE (non-negotiable):
+The builder's report is a CLAIM. Evidence = the SOT workbook, the regenerated file, git,
+and commands you run. Do NOT reuse scripts/regenerate-player-db.py for your comparison —
+write your own /tmp extractor (header-aware: the Overdogs sheet has a different column
+layout — no spacer columns; pitcher blocks have their own header row with Arsenal and
+Arm Slot). Mandatory report section: DISAGREEMENTS WITH BUILDER REPORT.
+Modify NOTHING. /tmp only. Auditors do not fix.
+
+CHECKLIST:
+
+D1. SCOPE: git status/diff — changed files are exactly src/data/playerDatabase.ts +
+    scripts/regenerate-player-db.py (+ known pre-existing dirty files untouched).
+    tierParams.ts and analyze-pool.py must show NO diff (builder restored them per
+    contract — verify the restoration actually happened).
+D2. FULL-FIELD COMPARISON (the heart — note: the prior reconciliation compared RATINGS
+    only; you compare EVERYTHING): for all 440 team players, SOT vs regenerated DB on:
+    batting POW/CON/SPD/FLD/ARM (hitters; pitchers have no ARM in SOT — confirm DB arm
+    handling is consistent and documented), pitching VEL/JNK/ACC, primaryPosition/
+    pitcherRole/role (CRITICAL: position/role corruption was NOT counted before — e.g.
+    verify Norm Fenomeno is now SP/RP + isPitcher:true + armSlot 'Sub'), grade, age,
+    bats/throws, chemistry (full-name -> code mapping: Competitive CMP, Crafty CRA,
+    Disciplined DIS, Scholarly SCH, Spirited SPI), traits (normalized; '-'/'None' absent),
+    arsenal arrays, armSlot (179/179, values in High/Mid/Low/Sub only, NEVER on hitters).
+    Expected mismatches: ZERO. Each mismatch = MAJOR.
+D3. ANCHOR SET: independently confirm the 9 JK rulings — 6 arm slots (Dot Dacornas High,
+    Swirly Cutstiff High, Slick Pickman Low, Sergio Slider Low, Danny Deals Low, Cutter
+    Crackebarrel High) + 3 traits (Gem Qualita Composed ONLY, Brawn Thunderchump Clutch
+    ONLY, Kara Kawaguchi Pinch Perfect ONLY) + 9 Overdogs chem fills.
+D4. NAME DIRECTION: final names must be SOT spellings. Verify Geoffrey Jenkins, Kent
+    Ratherswell, Danny Deals, and the 4 ID-mapped players (Danno Yoshida, Seymour Socks,
+    Lars Stadkleef, Pex Flexi) carry SOT spellings in the file with their ORIGINAL ids
+    (bzd-yoshida, htc-socks, htc-stadkleef, swt-flexi). Old-DB typo spellings surviving =
+    MAJOR.
+D5. ID & FA INTEGRITY: id set identical to pre-DB1 HEAD (no ids created/dropped); all 66
+    free-agent entries byte-identical vs pre-DB1 HEAD (script the diff yourself).
+D6. SCHEMA & HYGIENE: armSlot type union exact; no salary-like fields anywhere in PLAYERS
+    (grep salary/Sal/\$); interface change is additive only; grep confirms no logic added
+    to the data file.
+D7. DETERMINISM + BUILD: regenerate twice, identical hashes; npm run build exit 0
+    (node at ~/.nvm/versions/node/v20.20.0/bin if PATH lacks it).
+D8. TEST CLAIM: confirm suite failures are exactly the 3 known baseline items and zero
+    player-data-dependent failures (builder claims none — verify by reading the 3
+    failures' assertions yourself).
+D9. CONSTANTS PREVIEW SANITY: rerun scripts/analyze-pool.py once YOURSELF (then
+    git checkout -- src/data/tierParams.ts to restore); confirm the builder's reported
+    new caps (J/S/N $1,323,633/$1,169,013/$1,048,489, shifts x0.8832/x0.7921) reproduce.
+    Spot-sanity Fenomeno's new IV from the analyzer output and report it (expected: large
+    increase from $101k; this previews the A12/two-way discussion, do not judge it).
+
+FORMAT: 1. EVIDENCE LOG (D1–D9) · 2. DISAGREEMENTS WITH BUILDER REPORT · 3. FINDINGS
+REQUIRING ACTION (severity) · 4. VERDICT: "DB1 AUDIT: CONFORMS — ready for JK sign-off" /
+"DEVIATIONS — [n]" / "BLOCKED: [reason]"
+
+FAILURE PROTOCOL: SOT unreadable -> STOP. Comparison mismatch -> report the exact cell vs
+line, both values; never decide which is right (the SOT is right by definition; a DB
+divergence is a build defect). Restore any file you touched in D9 before reporting.
+Never patch. Never fix.
+
+Use high reasoning effort. Independence of your extraction path is the entire value here —
+the builder already believes the file is correct; your job is to give that belief teeth
+or break it.
