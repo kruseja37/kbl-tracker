@@ -966,3 +966,84 @@ protocol-mandated, not scope creep; verify the entry exists and matches the work
 Everything else in the base contract stands, including: independence of your IV read path,
 determinism rerun, formula-fidelity recomputation (P4), doc-honesty check (P6), and the
 rule that interpretation judgment terminates with JK.
+
+
+---
+
+## PROMPT CONTRACT: DB1 — playerDatabase.ts Regeneration from Source of Truth
+**Date:** 2026-06-10 | **Route:** Codex 5.5 | high reasoning effort → Fable 5 CLI audit
+**Spec:** spec-docs/IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md (consumes); T3_POOL_ANALYSIS.md F1
+**Context:** Three-way reconciliation (2026-06-10) proved src/data/playerDatabase.ts is
+pervasively corrupted: 276/430 matched players carry >=1 wrong rating (~895 field errors,
+all attributes affected), 88 pitchers missing batterRatings, 10 name mismatches. The
+cleaned workbook is authoritative and CSV-corroborated (0 rating mismatches across 440).
+
+---
+
+You are the Player Database Regenerator.
+
+GOAL:
+Regenerate the 440 team-rostered players in src/data/playerDatabase.ts from the Source of
+Truth workbook — script-driven, deterministic, schema-preserving — adding the new armSlot
+field. Free agents are preserved untouched.
+
+SOURCE OF TRUTH (precedence order):
+1. reference-docs/SOURCE_OF_TRUTH_Super Mega Baseball 4 Rosters.xlsx (canonical: names,
+   ratings, traits, positions, roles, bats/throws, age, chemistry, arsenal, arm slot;
+   salary columns deliberately deleted — NEVER reintroduce salary data)
+2. spec-docs/data/players_final.csv — ONLY for the 9 Overdogs chemistry cells empty in
+   the workbook (larry la'joy Scholarly, chasey kim Scholarly, werner bergenberg Scholarly,
+   carrie wayward Crafty, slick pickman Scholarly, brawn thunderchump Scholarly,
+   david diggler Spirited, rocket ramon Spirited, doug nerdwerd Spirited)
+3. JK rulings (2026-06-10, already written into the workbook — listed here as verification
+   anchors): arm slots Dot Dacornas=High, Swirly Cutstiff=High, Slick Pickman=Low,
+   Sergio Slider=Low, Danny Deals=Low, Cutter Crackebarrel=High. Trait disputes: Gem
+   Qualita=Composed only; Brawn Thunderchump=Clutch only; Kara Kawaguchi=Pinch Perfect only.
+4. Authoritative name spellings (SOT wins): Geoffrey Jenkins, Kent Ratherswell, Danny Deals.
+
+CONSTRAINTS:
+- Create: scripts/regenerate-player-db.py (rerunnable, deterministic)
+- Modify: src/data/playerDatabase.ts ONLY. Nothing else.
+- SCHEMA: preserve the existing interface exactly, PLUS add `armSlot?: 'High'|'Mid'|'Low'|'Sub'`
+  to the player interface (pitchers only carry it). Preserve existing field conventions:
+  chemistry as the existing abbreviation codes (map full names from SOT to the DB's codes —
+  enumerate the mapping you derive from existing entries and print it), traits as
+  { trait1?, trait2? } with existing trait-name spellings (normalize SOT variants: '-' /
+  '' / 'None' = absent; 'Slowpoke' -> 'Slow Poke'; verify every SOT trait name resolves to
+  a name in src/data/traitPricing.ts — unresolvable names are a STOP, not a guess),
+  arsenal as string[] from the SOT comma list, positions/roles per existing enums.
+- ID PRESERVATION: keep every existing player id. Match SOT->DB by (team, name) after the
+  3 spelling fixes; for the ~10 known hard cases (incl. danno yoshida, lars stadkleef,
+  seymour socks, pex flexi and the entries whose DB name field differs), produce an
+  EXPLICIT mapping table in your report (old DB name -> SOT name -> id kept). NO silent
+  fuzzy matching: any SOT player you cannot map to exactly one DB id is a STOP-and-report.
+- FREE AGENTS: every free-agent entry passes through byte-identical.
+- Ratings, traits, grades, ages, bats/throws, positions, roles: SOT values overwrite DB
+  values in ALL cases (the DB is presumed wrong wherever they differ — that is the point).
+
+VERIFICATION (run all, paste output):
+1. Determinism: run script twice, identical file hash.
+2. Independent check: a verification mode in the script (or second script) that re-reads
+   the SOT and the regenerated DB and asserts: 440 team players; 0 missing batterRatings
+   on pitchers; 0 rating mismatches on any field; 179/179 pitcher armSlot coverage;
+   arsenal non-empty for all pitchers; 9 Overdogs chem fills present; 3 trait rulings hold.
+3. npm run build (node at ~/.nvm/versions/node/v20.20.0/bin if PATH lacks it).
+4. Full test suite: report deltas vs the known baseline (2 reproducible pre-existing
+   failures + 1 suite-order flake). Player-data-dependent test failures are EXPECTED if
+   tests assert old corrupted values — list each, with the old-vs-new value, do NOT "fix"
+   tests by reverting data; flag them for a follow-up ticket.
+5. Re-run scripts/analyze-pool.py and paste the NEW tier caps + shifts alongside the old
+   (J/S/N were $1,251,237/$981,174/$850,671; shifts x0.7842/x0.6799). Do not edit
+   tierParams.ts by hand — the script regenerates it. Report the 8 previously-disabled
+   pitcher-batting luxury rows: with the data gap closed, flip the disablement rule and
+   report the derived caps (this is the F1 closure).
+
+FORMAT: 1. FILES CHANGED · 2. CHANGES MADE (chem mapping, name mapping table, trait
+normalizations applied) · 3. VERIFICATION OUTPUT (all 5) · 4. STATUS: "DB1 complete" /
+"DB1 complete WITH FLAGS: [...]" / "BLOCKED: [exact reason]"
+
+FAILURE PROTOCOL: unresolvable trait name, unmappable player, or SOT structure surprise ->
+STOP with specifics. Never invent data. Never reintroduce salary. Never touch free agents.
+
+Use high reasoning effort. This file is the substrate every engine prices — a silent
+mismatch here corrupts every downstream constant twice over.
