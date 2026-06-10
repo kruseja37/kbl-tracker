@@ -1,6 +1,6 @@
 # IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md
 *(renamed 2026-06-09 from ROSTER_ANALYZER_ARCHETYPE_ENGINE_SPEC.md — scope grew beyond the original feature pair to the full player-valuation core and all three roster-intelligence surfaces)*
-**Version:** 1.1.5 | **Date:** 2026-06-09 | **Status:** CANONICAL — approved by JK in spec session 2026-06-09
+**Version:** 1.1.6 | **Date:** 2026-06-09 | **Status:** CANONICAL — approved by JK in spec session 2026-06-09
 **Owner:** JK | **Drafted by:** Claude (Fable 5) from XBL Roster Tool workbook analysis + Billy Yank SMB4 Guide (3rd Ed.) + 10-question design session
 **v1.1 (2026-06-09):** added §5.3 tax semantics clarification, §5.4 balanceMode toggle, T3 EV-flatness acceptance criterion, registry entry — per JK archetype-purpose review.
 **v1.1.1 (2026-06-09):** §7.3 snake-draft solvency guardrail (hard block) + per-team green/yellow/red/blocked pick signals; `solvencyRedMargin` registry constant — closed gap JK identified (auction solvency rule was not extended to snake draft).
@@ -8,6 +8,7 @@
 **v1.1.3 (2026-06-09):** §13 routing updated for Fable 5 CLI + Codex 5.5 builder/auditor decorrelation pattern; audit gate defined.
 **v1.1.4 (2026-06-10):** T1 COMPLETE (Fable 5 built, Codex 5.5 audited: CONFORMS). Audit-confirmed workbook facts folded in: §3.4 sub-min scope note, §3.6 multiplier columns. §13 economic routing pattern (Fable plans/prompts/audits, Codex builds; T2 exception; diff-not-self-report rule; UI-build addendum).
 **v1.1.5 (2026-06-10):** T2 COMPLETE (Fable 5 max built, Codex 5.5 structural audit; 1 MAJOR remediated; JK adjudicated flags). A1 ruling: NEGATIVE traits use INVERTED tier scaling 2.0×/1.0×/0.5× (high chemistry dampens flaws) — 'standardInverted' canonical. A12: Rally Stopper/Surrounded = AT LEAST TWO runners on (guide-explicit). Matrix at src/data/traitInteractionMatrix.ts is authoritative for predicates.
+**v1.1.6 (2026-06-10):** T3 COMPLETE (Fable 5 max built; Codex 5.5 audit: 1 MAJOR remediated — bullpen role-set; all 4 headline amendment claims CONFIRMED from formula text). Amendments applied: A1 sub-min denominator = primary.min − subMin.min; A2 arsenal tax is TEAM-level (out of computeIV); A3 SP/RP negative traits price on RP curves; A4 ROUNDUP is PER-COMPONENT; A5 modification table = 42 entries. JK rulings: SP/RP counts toward BULLPEN concentration groups (derivation AND tax — exploit-aware: no role-misuse mojo penalty + SP-class stamina makes hybrids the premier pen asset); §4.2 mojo penalties canonical (RP starts −1, CP starts −2, SP relieves −1, SP/RP immune both ways; CP penalty −1 if entering before the SECOND-TO-LAST inning, game-length-relative). tierParams.ts authoritative for tier constants.
 
 ---
 
@@ -112,7 +113,7 @@ function attributeCost(r: number, c: AttributeCurve): number {
              / Math.pow(c.mid - c.min, c.curve1);
   const seg2 = topCoef * Math.pow(Math.max(r - c.mid, 0), c.curve2)
              / Math.pow(100 - c.mid, c.curve2);
-  return seg1 + seg2;   // ROUNDUP at player-total level, not per attribute
+  return seg1 + seg2;   // ROUNDUP PER-COMPONENT (v1.1.6/A4): every component cell (each attribute, each trait, each pitch, handed, 2nd-pos, angle) rounds away-from-zero; salary = Σ rounded components; multiplier terms consume ROUNDED attribute cells, delta terms consume exact curve math. T4 golden tests pass only with these semantics.
 }
 ```
 This is an exact decode of the workbook formula (verified against cached values, e.g. PitchCalcs costs match Roster cells).
@@ -129,11 +130,11 @@ This is an exact decode of the workbook formula (verified against cached values,
 Position→row mapping in workbook (Lists!AN2:AO19): C→5, 1B→11, 2B→17, SS→23, 3B→29, LF→35, CF→41, RF→47, IF→53, OF→59, IF/OF→65, "-"→71, SP→77, SP/RP→85, RP→93, CP→101, 1B/OF→109, EXTRA→117. Hitters carry 5 attribute rows (POW/CON/SPD/FLD/ARM); pitchers 7 (POW/CON/SPD/FLD/VEL/JNK/ACC). The formula's row-offset gates (`<77` → ARM applies, `>72` → VEL/JNK/ACC apply) implement hitter-vs-pitcher attribute sets.
 
 ### 3.4 Sub-Minimum Reverse Curve (pitchers)
-For pitcher attributes below `min`, the workbook prices a MIRRORED curve using columns I–N of the position block (a second `{min,curve1,mid,midSal,curve2,sal100}` set applied to the reflected rating `100 − 100·(r − min2)/(mid2 − min2)`). **Design meaning (per JK):** very low velocity disrupts hitter timing and has genuine positive value. Implement exactly as the workbook's `AE`-column formula. This is a P1 fidelity requirement, not an optional nicety.
+For pitcher attributes below `min`, the workbook prices a MIRRORED curve using columns I–N of the position block (a second `{min,curve1,mid,midSal,curve2,sal100}` set applied to the reflected rating `100 − 100·(r − subMin.min)/(primary.min − subMin.min)` — denominator CORRECTED v1.1.6/A1 from formula text, audit-confirmed; T4 must use primary.min). **Design meaning (per JK):** very low velocity disrupts hitter timing and has genuine positive value. Implement exactly as the workbook's `AE`-column formula. This is a P1 fidelity requirement, not an optional nicety.
 **Workbook reality (T1-verified, 2026-06-10):** sub-min I–N curve params exist ONLY on the VEL rows of SP `{0,1.2,30,7500,1.3,18000}`, SP/RP `{0,1.2,30,20000,1.3,50000}`, RP `{0,1.2,30,9000,1.3,20000}`, CP `{0,1.2,30,7000,1.3,17000}` — no other attribute carries them; `subMin` is optional in the type accordingly. Also T1-verified: the EXTRA block (row 117) is PITCHER-shaped (7 attrs incl. VEL/JNK/ACC, nonzero min floors) — T4 `computeIV` must expect both facts. Source of truth for all curve values: `src/data/ivCurves.ts` (generated by `scripts/extract-iv-data.py`).
 
 ### 3.5 Trait Marginal Pricing
-Each trait carries per-attribute **rating-equivalents** (workbook `Traits` sheet, values = Chemistry Level 2). Trait cost = Σ over affected attributes of `attributeCost(rating + Δ) − attributeCost(rating)` + flat fee + multiplier terms `(attrCost × mult − attrCost)`. Negative traits refund by the same mechanism. Consequence (intended): the same trait costs more on an already-elite player (convexity), and trait values are wildly unequal — Cannon Arm ≈ +45 ARM vs Sprinter ≈ +5 SPD.
+Each trait carries per-attribute **rating-equivalents** (workbook `Traits` sheet, values = Chemistry Level 2). Trait cost = Σ over affected attributes of `attributeCost(rating + Δ) − attributeCost(rating)` + flat fee + multiplier terms `(attrCost × mult − attrCost)`. Negative traits refund by the same mechanism. **SP/RP asymmetry (v1.1.6/A3, audit-confirmed):** NEGATIVE traits on SP/RP players price their delta-marginals on the RP curves, not the SP/RP curves (workbook anti-refund-farming guard; golden test: Jon Gray Injury Prone = −$2,136). T4 must implement. Consequence (intended): the same trait costs more on an already-elite player (convexity), and trait values are wildly unequal — Cannon Arm ≈ +45 ARM vs Sprinter ≈ +5 SPD.
 
 Chemistry potency scales the Δ before pricing: positives **L1 0.5× / L2 1.0× / L3 2.0×**; negatives INVERTED **L1 2.0× / L2 1.0× / L3 0.5×** (high chemistry dampens flaws — JK ruling 2026-06-10, 'standardInverted') (consistent with game's x1/x2/x4 and salary spec's tiers; workbook values are L2 baseline — verified via LeagueSettings "Restrict to Level 2 Chemistry = True").
 
@@ -232,7 +233,7 @@ function computeIV(p: Player, curves: CurveTable, traits: TraitTable,
                    potency: ChemistryPotencyMap): IVResult
 // totalIV = SUM attributeCost(rating_i) [+ subMin reverse terms for pitchers]
 //         + SUM traitMarginalCost(trait_j x potencyScale)
-//         + SUM pitchCost(pitch_k, role) + arsenalTax(role)
+//         + SUM pitchCost(pitch_k, role)   [arsenalTax REMOVED v1.1.6/A2: it is TEAM-level (whole-pen pitch count), applied in roster construction accounting (T8), NOT per-player IV — anchor-proven]
 //         + auxCost(handedness, secondaryPos, armAngle)
 ```
 Pure function. No React imports. Lives in `src/engines/ivEngine.ts`. Per-player ROUNDUP applied at component sums exactly as workbook does.
@@ -280,7 +281,7 @@ function effectiveRatings(p: Player, state: PlayerState, ctx: GameContext): Rati
 Six states: Rattled < Tense < Normal < Locked In < On Fire < Jacked.
 - Movement events (batters): hits ↑ (XBH ↑↑), steals ↑; outs ↓ (K ↓↓), errors ↓, CS ↓. Pitchers: outs/K ↑; BB/H/R ↓.
 - **JK addendum (canonical, not in guide):** fielding moves mojo — successful dive/jump/slide catches ↑; missed attempts ↓; errors of any kind ≈ always one step ↓.
-- Role-misuse penalties: SP relieving ↓; RP starting ↓; CP entering before 8th ↓; SP/RP immune.
+- Role-misuse penalties (CANONICAL magnitudes, JK 2026-06-10): SP relieving −1 mojo level; RP starting −1; CP starting −2; CP entering before the SECOND-TO-LAST inning −1 (game-length-relative: 8th in a 9-inning game, 6th in a 7-inning game — NOT a fixed inning); SP/RP immune both directions (start or relieve, no penalty — combined with SP-class stamina this makes SP/RP the premier pen asset and a watched exploit surface).
 - Trait modulation: Volatile = faster transitions both ways; Consistent = slower both ways.
 - Higher mojo slows fatigue decay (couples 4.2 → 4.4).
 - Pressure amplifies the rating effect of current mojo state.
@@ -355,6 +356,8 @@ Port the workbook's luxury system as the balance enforcer WITHIN a tier: per sta
 
 JK note honored: these XBL numbers may feel "nerfed" — they are TIER-SCALED in KBL (caps scale with the tier's pool distribution in T3, not used raw). What ports from XBL is the RATIOS AND SHAPES (which stats are precious, penalty convexities, relative modification magnitudes) — proven under multi-season adversarial min-maxing in a competitive human league. The calibration is re-derived per tier: T3 sets each neutral cap at a percentile (default 65th, `luxuryCapPercentile` in registry §12) of the pool's best-plausible top-N sum distribution, and modification deltas rescale proportionally ("+337 FLD" becomes "+X% of tier FLD cap"). All values in registry §12.
 
+**Bullpen role-set ruling (v1.1.6, JK):** SP/RP players count toward the BULLPEN concentration groups (top-N sums) in BOTH cap derivation and tax assessment, alongside RP/CP. Rationale: workbook-faithful (XBL pen = SP/RP + RPs + CP), consistent with A3's hybrid-as-pen-adjacent treatment, and exploit-resistant (untaxed hybrid stacking would dodge pen concentration). SP/RP also counts toward ROTATION groups with SP — dual membership is intended.
+
 **Tax semantics (D13, clarified 2026-06-09):** the tax is a BUDGET DRAIN, not a hard wall. Construction constraint: `Σ salaries + Σ luxuryTaxes ≤ teamBudget`. Overage never blocks a pick; it converts to dollars via the convex penalty curve — a soft cap with exponentially stiffening resistance (20 over ≈ pocket change; 200 over ≈ a bullpen). Balance mechanism: same total budget per team, different SHAPE of resistance per composed identity → parity in total strength, divergence in identity; no two teams can affordably build the same roster shape from the same pool. Anti-hack property: win-deterministic stats (POW/VEL) are doubly expensive (steep salary curves AND stiffest tax parameters) while less win-deterministic stats (FLD) get cheap curves and generous allowances — asymmetric pricing of win-equity flattens expected value across archetypes so no single "optimal archetype" exists. **T3 acceptance criterion:** VERIFY EV-flatness against the actual pool — simulate the best-achievable roster per composed identity; flag any identity whose optimal roster total IV deviates >10% from the cross-identity mean and adjust tier scaling before release.
 
 ### 5.4 balanceMode (D13 — league config, League Builder + Franchise Setup Wizard)
@@ -371,7 +374,7 @@ Implementation: the tax is one function at the pipeline end; advisory/off short-
 ### 6.1 Surface: Six Identity Bands
 Power / Contact / Speed / Defense / Rotation / Bullpen. User expresses priorities across bands (UI: point-allocation, spec'd in §7; rank-order acceptable alternate flagged for JK).
 
-### 6.2 Vocabulary: 44 Cap Modifications (verified, workbook `Luxury Cap` AT:BE)
+### 6.2 Vocabulary: 42 Cap Modifications (verified, workbook `Luxury Cap` AT:BE — count corrected v1.1.6/A5; earlier "44" included the null '--' row and a duplicate; references to "44" elsewhere in this doc are historical)
 Each = 11 deltas (POW CON SPD FLD ARM RotVEL RotJNK RotACC PenVEL PenJNK PenACC) applied to luxury caps. Team composition: up to 2 INCREASE + 2 DECREASE selections; net per stat = inc1+inc2−dec1−dec2 (exact workbook mechanic). Deltas rescale proportionally with tier-derived caps per §5.3.
 
 | Modification | POW | CON | SPD | FLD | ARM | RVEL | RJNK | RACC | PVEL | PJNK | PACC |
@@ -585,7 +588,7 @@ Per SESSION_RULES Prompt Contract template (spec-docs/PROMPT_CONTRACTS.md) for e
 |---|---|---|
 | T1 ✅ COMPLETE 2026-06-10 | Extract FULL Salary Cap curve table (all 18 position blocks, A:N incl. sub-min I–N columns) + verify trait-table blanks from workbook → `src/data/ivCurves.ts`, `src/data/traitPricing.ts` | Fable 5 CLI built; Codex 5.5 audit: CONFORMS (PROMPT_CONTRACTS T1 + T1-AUDIT) |
 | T2 ✅ COMPLETE 2026-06-10 | TraitInteractionMatrix: all 75 traits {predicate, target, deltas, perTierScale} → `src/data/traitInteractionMatrix.ts` | Fable 5 max built; Codex 5.5 structural audit: CONFORMS after 1 MAJOR remediation; JK adjudicated A1/A12 + flags (PROMPT_CONTRACTS T2 + T2-AUDIT) |
-| T3 | Empirical pool analysis: IV + grade distribution of 440-player DB; derive tier shift params, tier caps (percentile method §5.3), luxury cap scaling, farm-draft nerf params; **EV-flatness verification across composed identities (±10%, §5.3)** → analysis doc + `src/data/tierParams.ts` | ROUTE: Claude Code CLI \| Fable 5 \| max (analysis-heavy; EV-flatness verification) |
+| T3 ✅ COMPLETE 2026-06-10 | Empirical pool analysis: 21/21 golden anchors ±$0; tier caps J/S/N $1,251,237/$981,174/$850,671; shifts ×0.7842/×0.6799; luxury caps p65 of stock-roster concentration; EV-flatness PASS at tierCap (structural) + sensitivity documented → `src/data/tierParams.ts` + spec-docs/T3_POOL_ANALYSIS.md | Fable 5 max built; Codex 5.5 audit: CONFORMS after bullpen role-set remediation; 4 spec amendments confirmed (PROMPT_CONTRACTS T3 + T3-AUDIT + addendum) |
 | T4 | IV Engine (`ivEngine.ts`) incl. sub-min reverse curve + golden tests against workbook cached values (Eovaldi $54,582; deGrom $71,609; PitchCalcs rows) | ROUTE: Codex 5.5 \| very high → Fable 5 CLI audit (core engine, golden-test gated) |
 | T5 | Salary spec integration seam (replace Steps 1/2/trait-tiers; wire potency; rookie-scale override) + regression tests on True Value/designations | ROUTE: Codex 5.5 \| very high → Fable 5 CLI audit (persistence-adjacent salary state; audit non-negotiable) |
 | T6 | Effective Ratings Engine + DefensivePlacementRisk + constants registry | ROUTE: Codex 5.5 \| high → Fable 5 CLI audit |
@@ -615,4 +618,4 @@ Order: T1→T2→T3 (parallel-safe) → T4 → T5 → T6 → {T7, T8} → T9 →
 5. (v1.1) balanceMode default — `taxed` specced; revisit after T3 EV-flatness results and first construction playtest.
 
 ---
-*End IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md v1.1.5*
+*End IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md v1.1.6*

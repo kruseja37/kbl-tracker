@@ -781,3 +781,188 @@ FAILURE PROTOCOL:
   predicate-vs-guide judgment calls belong to JK, not you.
 
 Use high reasoning effort. Your job is completeness and consistency, not baseball judgment.
+
+
+---
+
+## PROMPT CONTRACT: T3 — Empirical Pool Analysis & Tier Parameter Derivation
+**Date:** 2026-06-10 | **Route:** Claude Code CLI | Fable 5 | MAX reasoning effort
+**Spec:** spec-docs/IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md §5.1–§5.3, §7.4, §13 (T3)
+**Depends on:** T1 (8ce3b04: ivCurves.ts, traitPricing.ts), T2 (cc09dde: traitInteractionMatrix.ts)
+
+---
+
+You are the Pool Analyst.
+
+GOAL:
+Compute the IV distribution of the full 440-player SMB4 database, then derive every
+empirical constant the spec defers to T3: tier shift parameters (Juiced/Standard/Nerfed),
+tier caps, tier-scaled luxury caps, farm-draft nerf parameters — and run the EV-flatness
+verification across composed identities. Deliver data + a findings doc.
+
+SOURCE OF TRUTH:
+- Player DB: locate the committed 440-player TypeScript dataset (search src/ for the
+  SMB4 player database — report the exact path you used; if absent or <440 players, STOP).
+- Curves/pricing: src/data/ivCurves.ts, src/data/traitPricing.ts (NEVER re-extract from
+  the workbook; the .ts files are authoritative post-T1).
+- Formulas: spec §3.2 (two-segment curve), §3.4 (sub-min), §3.5 (trait marginal pricing,
+  potency 0.5/1/2 positives, INVERTED 2.0/1.0/0.5 negatives per v1.1.5), §3.6 (pitch/
+  arsenal/aux), §5.2 (cap derivation), §5.3 (percentile method + modification rescaling),
+  §6.2 (44 modifications), §6.3 (composition).
+
+THE BOOTSTRAP RULE (important):
+src/engines/ivEngine.ts does NOT exist yet (T4). You implement the IV formula INSIDE your
+analysis script only — do NOT create anything under src/engines/. Your script's IV math
+must validate against the workbook's cached golden players before any analysis runs:
+open spec-docs/reference/Team_Builder_Archetype_Logic_Template.xlsx Roster sheet, locate
+at least 4 priced players incl. Eovaldi ($54,582) and deGrom ($71,609), reproduce their
+salaries within ±$5 (rounding). Anchors fail → STOP and report the per-component breakdown
+(attribute/trait/pitch/aux) for the worst mismatch. Do not proceed on broken IV math.
+
+CONSTRAINTS:
+- Create only: scripts/analyze-pool.py (or .ts via node — your call, must be rerunnable
+  + deterministic), src/data/tierParams.ts, spec-docs/T3_POOL_ANALYSIS.md
+- Do NOT touch: src/engines/**, existing data files, the spec itself (findings that imply
+  spec changes go in the doc's "SPEC AMENDMENT CANDIDATES" section for JK)
+- Every derived number in tierParams.ts must trace to a formula + inputs shown in the doc.
+  No hand-picked values (spec §5.1: "do NOT hand-pick the means").
+
+REQUIRED ANALYSES (doc sections mirror these):
+R1. IV DISTRIBUTION: per-player IV for all 440; histogram stats (mean/median/p10/p25/p75/
+    p90/max) overall, by role (hitter/SP/RP/CP), by position. Grade overlay: distribution
+    of letter grades and IV-by-grade (the DB carries SMB4 grades — confirm and use).
+R2. TIER DERIVATION (§5.1): Juiced = observed distribution. Standard/Nerfed = leftward
+    shifts targeting ~1 and ~2 grade-step drops in mean. Express shifts as IV-space
+    transforms the Player Generator can apply (e.g. quantile mapping or mean/sd shift —
+    justify the choice). Farm-draft nerf params (§7.4) derived the same way.
+R3. TIER CAPS (§5.2): tierCap = max(maxIV/0.33, 22 × medianIV × 1.15) per tier. Show both
+    branches; flag if maxIV-branch dominates by >1.5× (signals starBudgetShare retune).
+R4. LUXURY CAP SCALING (§5.3): per stat group, distribution of best-plausible top-N sums
+    in the pool; neutral cap = 65th percentile (luxuryCapPercentile); rescale all 44
+    modification deltas proportionally ("+337 FLD" → +X% of tier FLD cap). Emit the full
+    tier-scaled tables into tierParams.ts.
+R5. EV-FLATNESS (§5.3 acceptance criterion): for each composed identity (at minimum: the
+    6 single-band identities + 6 representative crosses you justify), greedy-build the
+    best-achievable 22-man roster under tierCap with taxes at balanceMode='taxed';
+    report optimal roster total IV per identity. PASS = all within ±10% of cross-identity
+    mean (evFlatnessTolerance). Any identity outside band: report which stats/taxes bind
+    and a proposed scaling adjustment — do NOT silently retune; JK decides.
+R6. SANITY NARRATIVE: 5 named-player spot checks a human can argue with (e.g. "X grades
+    A- but IVs in the p65 because his value sits on cheap FLD curves") — the doc must be
+    readable by JK, not just parseable.
+
+VERIFICATION:
+1. Golden anchors output (≥4 players, ±$5)
+2. Determinism: run twice, diff tierParams.ts (empty) or identical hashes
+3. npm run build (tierParams.ts compiles; imported nowhere yet — expected)
+4. Paste R5 EV-flatness table verbatim
+
+FORMAT: 1. FILES CHANGED · 2. CHANGES MADE (R1–R6 summaries + SPEC AMENDMENT CANDIDATES)
+· 3. VERIFICATION OUTPUT · 4. STATUS: "T3 complete" / "T3 complete WITH FLAGS: [...]" /
+"BLOCKED: [reason]"
+
+FAILURE PROTOCOL: DB missing/short → STOP. Anchors fail → STOP with breakdown. EV-flatness
+fails → NOT a blocker; complete with flags + proposed adjustments for JK. Never tune
+constants to force a PASS.
+
+Use MAX reasoning effort. Every number you emit becomes a league-balance constant —
+show your work like it will be audited, because it will be.
+
+---
+
+## PROMPT CONTRACT: T3-AUDIT — Independent Audit of Pool Analysis
+**Date:** 2026-06-10 | **Route:** Codex 5.5 | high reasoning effort
+**Builder:** Fable 5 CLI (T3). Audit = reproduce-and-verify; analytical judgment calls
+(shift method choice, identity selection) are flag-for-JK, not adjudicate.
+
+---
+
+You are the T3 Analysis Auditor.
+
+GOAL:
+Independently verify the pool analysis is reproducible, anchor-valid, formula-faithful,
+and that tierParams.ts contains exactly what the analysis derives — without trusting the
+builder's report or reusing its code paths where independence matters.
+
+AUDIT PRINCIPLE: builder report = claim. Evidence = files, workbook, commands you run.
+Mandatory section: DISAGREEMENTS WITH BUILDER REPORT. Modify NOTHING; /tmp only;
+auditors do not fix.
+
+CHECKLIST:
+P1. SCOPE: git status — only the three T3 files new/changed (+ known pre-existing dirty
+    spec docs). No src/engines/** created. Grep: tierParams imported nowhere.
+P2. ANCHOR INDEPENDENCE (the heart): write your OWN /tmp IV calculator from spec §3.2/
+    §3.5/§3.6 + the committed data files (do not import the builder's script). Reproduce
+    the ≥4 golden players within ±$5 against workbook cached values YOU read yourself.
+    Then compute IV for 20 seeded-random DB players and compare to the builder's per-player
+    output (require a dump or rerun their script to get it): mismatches >±$5 = MAJOR.
+P3. DETERMINISM: rerun builder script twice; identical tierParams.ts hashes.
+P4. FORMULA FIDELITY: recompute from the builder's own R1 stats: tierCap branches (§5.2
+    formula, exact); 3 seeded-random luxury caps from the top-N sum distributions (65th
+    pct); 3 modification rescalings. Mismatch vs tierParams.ts = MAJOR.
+P5. EV-FLATNESS REPRODUCTION: rerun the builder's R5 path; confirm the table reproduces.
+    Then ONE independent probe: your own greedy best-roster for ONE identity of your
+    choice; if your optimum beats the builder's by >5%, the builder's greedy is leaving
+    value on the table — flag (MAJOR if it flips a PASS/FAIL band).
+P6. DOC HONESTY: every constant in tierParams.ts appears in the doc with formula+inputs;
+    no constant in the file absent from the doc (and vice versa). Spot-read R6 narratives
+    against the data (grades/IVs as claimed for those 5 players).
+P7. npm run build.
+
+FORMAT: 1. EVIDENCE LOG (P1–P7) · 2. DISAGREEMENTS WITH BUILDER REPORT · 3. FLAGGED FOR JK
+(method judgment calls + any EV-flatness band issues) · 4. FINDINGS REQUIRING ACTION
+(severity) · 5. VERDICT: "T3 AUDIT: CONFORMS — ready for JK sign-off" / "DEVIATIONS — [n]"
+/ "BLOCKED: [reason]"
+
+FAILURE PROTOCOL: cannot build independent IV calculator that hits the workbook anchors →
+report YOUR breakdown vs the builder's; one of you is wrong and the evidence decides —
+do not assume it's you. Never patch. Never retune.
+
+Use high reasoning effort. Independence of the P2 read path is the entire value of this audit.
+
+
+---
+
+## T3-AUDIT ADDENDUM (read together with T3-AUDIT contract above)
+**Date:** 2026-06-10 | applies to the Codex 5.5 audit of the completed T3 build
+
+The builder's report changes audit priorities. Execute the base T3-AUDIT checklist with
+these modifications:
+
+AD1. SPEC-AMENDMENT CLAIMS ARE NOW THE HIGHEST-STAKES AUDIT TARGET. The builder asserts
+the spec's formula text is wrong in ways that will define T4's golden tests. Independently
+verify each against the workbook formulas (read the ArrayFormula text yourself):
+  - A1 claim: sub-min reflection denominator = primary.min − subMin.min (spec §3.4 says
+    (mid2−min2)). Read the SP VEL AE-column formula and decide from the formula text.
+  - A4 claim: ROUNDUP is per-component, not per-player-total (spec §3.7 says total).
+    Locate the ROUNDUP calls in the cost formulas; report exactly where rounding occurs.
+  - A2 claim: arsenal tax is team-level, not part of computeIV. Verify which sheet/row
+    consumes the arsenal count.
+  - A5 claim: modification table has 42 real entries, not 44. Count the AT:BE rows yourself.
+  Each: CONFIRMED / REFUTED / INCONCLUSIVE with formula-text evidence. These verdicts gate
+  spec v1.1.6 — do not soft-pedal an INCONCLUSIVE into a CONFIRMED.
+
+AD2. P2 scope update: anchors are now 21 cached players, not 4. Your independent calculator
+must reproduce ALL 21 (±$5; builder claims ±$0 — report your exact deltas). NOTE: to hit
+the anchors your calculator must implement the builder's A1/A3/A4 interpretations — doing
+so and PASSING is itself evidence FOR those amendments; document this circularity
+explicitly in your AD1 verdicts (formula-text reading remains the primary evidence).
+
+AD3. P5 update: the tierCap EV-flatness table is structurally trivial (salary=IV ⇒
+full-budget tax-free rosters tie — verify this reasoning holds, then move on). The
+meaningful reproduction target is the SENSITIVITY runs: reproduce the 1.5× and 2.0×
+tierCap results, confirm the two identities that fail at 2.0× and the −11.8% figure,
+and run your independent greedy probe at 2.0× (not 1.0×) where the optimizer actually
+faces binding constraints.
+
+AD4. DATA-GAP VERIFICATION: independently count pitchers lacking batterRatings in
+src/data/playerDatabase.ts (builder: 89/178) and confirm exactly 8 pitcher-batting luxury
+rows are disabled in tierParams.ts with the disablement visibly marked (not silently
+dropped).
+
+AD5. The builder appended its own SESSION_LOG entry (4th changed file) — this is
+protocol-mandated, not scope creep; verify the entry exists and matches the work.
+
+Everything else in the base contract stands, including: independence of your IV read path,
+determinism rerun, formula-fidelity recomputation (P4), doc-honesty check (P6), and the
+rule that interpretation judgment terminates with JK.
