@@ -1126,3 +1126,238 @@ Never patch. Never fix.
 Use high reasoning effort. Independence of your extraction path is the entire value here —
 the builder already believes the file is correct; your job is to give that belief teeth
 or break it.
+
+
+---
+
+## PROMPT CONTRACT: V117 — kblIV Usage Layer + F1 Row Flip + Final Tier Constants
+**Date:** 2026-06-10 | **Route:** Codex 5.5 | high reasoning effort → Fable 5 CLI audit
+**Spec:** IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md **§3.9 (read it in full — it IS this ticket's design)**, §12 registry v1.1.7 rows, §13 V117.
+**Context:** DB1 (a2d245d) made the player DB trustworthy. The analyzer still prices pitcher batting on raw workbook semantics, producing the A12 anomaly (Drake C+ at $219k for a bat he never uses; Fenomeno $436,799 overshoot). §3.9 defines the corrective usage model, JK-designed.
+
+---
+
+You are the Usage Layer Implementer.
+
+GOAL:
+Implement the kblIV usage layer in scripts/analyze-pool.py per spec §3.9, flip the 8
+previously-disabled pitcher-batting luxury rows (data gap closed by DB1), regenerate
+tierParams.ts (third and FINAL derivation), and verify the named acceptance ordering.
+
+CONSTRAINTS:
+- Modify: scripts/analyze-pool.py, src/data/tierParams.ts (generated output only — never
+  hand-edit), spec-docs/T3_POOL_ANALYSIS.md (APPEND a "V117 ADDENDUM" section only).
+- Do NOT touch: src/engines/**, src/data/playerDatabase.ts, ivCurves.ts, traitPricing.ts,
+  traitInteractionMatrix.ts, the spec.
+- TWO-LAYER RULE (non-negotiable): rawIV (workbook-exact) stays intact and the 21 golden
+  anchors + Jon Gray −$2,136 MUST still pass against it — they validate raw semantics.
+  kblIV = rawIV transformed per §3.9; ALL pool analysis (distributions, tier caps, shifts,
+  luxury derivation, EV-flatness, pick-value inputs) switches to kblIV.
+
+IMPLEMENT (per §3.9 — do not re-derive the design, it is settled):
+V1. Usage weight vectors from registry-style inputs (startShare/paRatio/phFloor per role;
+    4-man rotation): POW/CON ≈ SP 0.20 / SP-RP 0.15 / RP 0.08 / CP 0.05; SPD adds PR
+    floor; FLD always 1.00. Emit the derived weights table to stdout + addendum.
+V2. ALL pitcher batting reprices on HITTER curves × usage weight: Two Way trait players
+    at their TRAIT POSITION's curve block; non-trait pitchers on the neutral IF/OF block.
+    Pitcher-block batting curves retire from kblIV (remain in rawIV).
+V3. Two Way trait reprices as the usage unlock: hitterCurveCost(bat, traitPos) ×
+    (1.00 − roleBatWeight) + tier-laddered defense: FLD via potency machinery; ARM via
+    twoWayArmByTier {60/80/99} at the trait position's ARM curve. Flat +15/15/15/10
+    deltas removed from kblIV trait pricing for Two Way (C)/(IF)/(OF) only.
+V4. IV stays potency-neutral at L2 for ALL traits (no change — assert it).
+V5. F1 flip: with DB1 data (179/179 batterRatings), enable the 8 pitcher-batting luxury
+    rows; derive their caps from the now-real distributions (per the §5.3 percentile
+    method); update the DISABLED_LUXURY_ROWS mechanism + stale 89/178 wording.
+V6. Regenerate tierParams.ts; rerun the EV-flatness suite (1.0×/1.5×/2.0×).
+
+VERIFICATION (paste all):
+1. Golden anchors: 21/21 at ±$0 on rawIV + Jon Gray −$2,136 (UNCHANGED — if any anchor
+   moves, your layering leaked; STOP).
+2. ACCEPTANCE ORDERING (spec-named): kblIV Fenomeno > Pastimm > Drake. Paste all three
+   with component breakdowns (Fenomeno expected well below $436,799; Drake expected to
+   crash — his POW-92 now weighs ≈0.15).
+3. Determinism: two runs, identical tierParams.ts hashes.
+4. Old-vs-new constants table: caps/shifts (old: $1,323,633/$1,169,013/$1,048,489,
+   ×0.8832/×0.7921 — those were pre-usage-model previews) + the 8 newly-enabled luxury
+   rows' caps.
+5. EV-flatness verdicts at 1.0×/1.5×/2.0× (report; do not tune).
+6. npm run build exit 0 (node: ~/.nvm/versions/node/v20.20.0/bin). Test suite: 3 known
+   baseline failures only.
+
+FORMAT: 1. FILES CHANGED · 2. CHANGES MADE (V1–V6) · 3. VERIFICATION OUTPUT (all 6) ·
+4. STATUS: "V117 complete" / "V117 complete WITH FLAGS: [...]" / "BLOCKED: [reason]"
+
+FAILURE PROTOCOL: anchor regression → STOP (layering defect). Acceptance ordering fails →
+STOP and report the three breakdowns — do NOT tune weights to force it (the ordering is
+JK's gameplay oracle; a failure means the implementation diverged from §3.9, or the model
+needs JK review — either way, his call). Never touch files outside the three listed.
+
+Use high reasoning effort. The two-layer separation is the whole game: rawIV proves we
+decoded the workbook; kblIV proves we understand the sport.
+
+---
+
+## V117 ADDENDUM (V118) — SP/RP Arm Interpolation + Revised Acceptance
+**Date:** 2026-06-10 | applies to the V117 contract above; Codex 5.5 | high → Fable 5 audit
+**Spec:** §3.9 v1.1.8 additions (READ THE UPDATED §3.9 — the SP/RP arm pricing block and
+the rewritten acceptance test), D16, registry rows spRpStartShare/spRpFlexPremium/parityBand.
+**Context:** Your first run correctly BLOCKED — the oracle failure was diagnostic, not a
+defect. JK ruled: A12 had a second half (SP/RP pitching curves carry the same crude
+roster-scarcity premium the batting curves did). Your V1–V6 work stands; add:
+
+V7. SP/RP ARM INTERPOLATION (kblIV only): for every SP/RP pitcher, VEL/JNK/ACC and the
+    sub-min mirror price as `spRpStartShare × SPcurveCost + (1 − spRpStartShare) ×
+    RPcurveCost`, then × spRpFlexPremium. Registry defaults: α=0.30, premium=1.12.
+    Multiplier traits (Specialist, Elite-pitch, etc.) stack on the INTERPOLATED base.
+    rawIV stays workbook-exact — all 21 anchors + Jon Gray must still pass untouched.
+
+V8. ACCEPTANCE TEST (replaces the strict ordering — read §3.9 v1.1.8 verbatim, as
+    CORRECTED post-DB1; the earlier "Drake crashes" criterion was corrupted-era data
+    folklore — true Drake is VEL 92, a trait-less elite arm):
+    (1) REQUIRED (crash): Lad Bradwick (SP, CON 97, no Two Way trait) kblIV ≤ 50% of
+        his rawIV.
+    (2) OBSERVED (parity): report |Fenomeno − Pastimm| / mean vs parityBand ±20%.
+        In-band = HYPOTHESIS CONFIRMED. Out-of-band = "V117 complete WITH FLAGS" + full
+        component breakdowns for JK — do NOT tune any constant toward the band.
+    (3) OBSERVED (arm probe): Pastimm vs Drake on the interpolated curves — the gap
+        isolates the trait-stack contribution. Report both with breakdowns.
+
+Then complete the original V117 verification suite in full (determinism, old-vs-new
+constants table incl. the 8 enabled luxury rows, EV-flatness 1.0×/1.5×/2.0×, build, tests,
+T3_POOL_ANALYSIS "V117 ADDENDUM" section). Same constraints, same failure protocol;
+anchor regression remains a hard STOP.
+
+---
+
+## PROMPT CONTRACT: V117-AUDIT — Independent Audit of kblIV Usage Layer
+**Date:** 2026-06-10 | **Route:** Claude Code CLI | Fable 5 | high reasoning effort
+**Builder:** Codex 5.5 (V117 + V118 addendum). Status: "complete WITH FLAGS" — parity
+hypothesis FAILED (Fenomeno $137,183 vs Pastimm $199,054, gap 36.8% vs ±20% band; no
+tuning applied, correctly). JK adjudicates the flag AFTER this audit verifies the numbers.
+**Spec:** §3.9 v1.1.8 (incl. corrected acceptance test), D15/D16/D17, registry v1.1.7/8 rows.
+
+---
+
+You are the V117 Audit Specialist.
+
+GOAL:
+Verify the kblIV implementation is accounting-correct (nothing counted twice, nothing
+retired-but-surviving, nothing dropped), spec-faithful, and reproducible — then decompose
+the Fenomeno-Pastimm gap into named causes so JK can rule on the parity flag with
+verified numbers. The builder's report is a CLAIM; evidence = code, data files, spec,
+and commands you run. Mandatory section: DISAGREEMENTS WITH BUILDER REPORT.
+Modify NOTHING (except git checkout restores of files you re-dirty). /tmp only.
+
+CHECKLIST:
+
+W1. SCOPE & BASELINE: git diff names = analyze-pool.py, tierParams.ts, T3_POOL_ANALYSIS.md
+    (+ known dirty files + spec/PROMPT_CONTRACTS/SESSION_LOG which carry v1.1.7/8 edits —
+    those are Claude's, not the builder's; confirm builder didn't touch the spec).
+    Rerun the script twice yourself: anchors 21/21 ±$0 + Jon Gray −$2,136 on rawIV;
+    identical tierParams hashes (builder: ae7eb4de…); build green; 3 baseline test
+    failures only.
+
+W2. DOUBLE-COUNT AUDIT (the heart — JK's explicit concern):
+  a. UNLOCK IDENTITY, numerically: for Fenomeno AND one more two-way if the pool has one,
+     verify base battingAttributes + twoWayUnlock batting term = hitterCurveCost(bat,
+     traitPos) × exactly 1.00 per attribute (POW/CON/SPD). Any attribute summing ≠ 1.00× = MAJOR.
+  b. RETIRED COMPONENTS REALLY RETIRED, in kblIV: no pitcher-block batting cost anywhere;
+     no workbook Two Way +15/15/15-20 POW/CON/SPD deltas (FLD delta SHOULD survive as the
+     quality marginal); flat fees confirmed 0 in data so nothing dropped.
+  c. SECONDARY-POSITION deltas on pitchers: determine whether FLD/ARM bonuses are
+     usage-weighted or always-on. Per doctrine (FLD always-on), weighting them = MINOR
+     under-count; report what the code does with line evidence.
+  d. ARM-SLOT multipliers (Sub: VEL×1.075/JNK×1.2): verify they consume the INTERPOLATED
+     SP/RP pitch cells, not raw cells (Fenomeno is Sub — check his actual numbers).
+  e. A3-IN-kblIV DIVERGENCE: builder routes SP/RP negative-trait deltas onto interpolated
+     curves instead of A3's RP-curve rule (rawIV keeps A3 — anchors prove it). Confirm
+     the code comment + behavior, and confirm NO SP/RP negative-trait player creates a
+     refund larger in kblIV than rawIV would give (the exploit A3 guarded). Flag for JK
+     sign-off either way.
+  f. CONSERVATION RECOMPUTE: pick Fenomeno + Bradwick + 1 seeded-random pitcher + 1
+     seeded-random hitter; recompute kblIV BY HAND in /tmp from ivCurves/traitPricing/
+     tierParams registry constants and §3.9 formulas (your own code, not the builder's
+     functions); match the script's per-player output to the dollar. Mismatch = MAJOR.
+
+W3. ACCEPTANCE REPRODUCTION: rerun and confirm Bradwick crash ($58,417 ≤ 50% of
+    $124,115), parity numbers ($137,183 / $199,054 / 36.8%), arm probe ($199,054 vs
+    $100,975). Confirm NO constant in the diff differs from the registry defaults
+    (α=0.30, premium=1.12, weights inputs) — i.e., verify no covert tuning.
+
+W4. PARITY GAP DECOMPOSITION (for JK's adjudication — analyze, do NOT judge):
+    Build a side-by-side component table for Fenomeno vs Pastimm: interpolated arm cost,
+    pitch/arsenal, arm-slot effect, batting (which curve BLOCK and why), trait terms
+    (unlock vs multiplier stack, itemized per trait). Then answer specifically:
+  a. CURVE-BLOCK QUESTION: Fenomeno's bat prices on the generic IF block. Quantify the
+     counterfactual: his batting + unlock if priced on SS curves and on 2B curves instead
+     (the IF block is the flat/cheap utility set — mid 65, curve2 1 — this choice may be
+     the single largest gap contributor; measure it).
+  b. MULTIPLIER STACK SHARE: what fraction of Pastimm's kblIV is Specialist + Elite 4F
+     multiplier terms on the interpolated base? (Arm probe says ~$98k vs Drake.)
+  c. Report the gap as: gap = Σ(named contributors), so JK can see exactly which design
+     choice(s) would close it and decide whether the model or the hypothesis is wrong.
+
+FORMAT: 1. EVIDENCE LOG (W1–W4) · 2. DISAGREEMENTS WITH BUILDER REPORT · 3. FLAGGED FOR
+JK (A3-divergence sign-off + parity decomposition + anything from W2c) · 4. FINDINGS
+REQUIRING ACTION (severity) · 5. VERDICT: "V117 AUDIT: CONFORMS (accounting verified) —
+parity flag ready for JK adjudication" / "DEVIATIONS — [n]" / "BLOCKED: [reason]"
+
+FAILURE PROTOCOL: conservation mismatch or identity break → MAJOR with the exact terms;
+never patch; never tune; never adjudicate the parity flag yourself — decompose it.
+Restore tierParams.ts (git checkout) after your reruns so the tree matches the builder's
+delivered state before you report.
+
+Use high reasoning effort. JK asked one question: "did we count anything twice?" —
+answer it with arithmetic, not assurance.
+
+---
+
+## PROMPT CONTRACT: V117-FIX — Audit Remediations + Final Constants (4th derivation)
+**Date:** 2026-06-10 | **Route:** Codex 5.5 | high reasoning effort → Fable 5 delta re-verify
+**Spec:** §3.9 v1.1.8 AS AMENDED 2026-06-10 (FLD carve-out, parity retirement, A3 symmetry
+ratified, registry spdFloors + armSlot rows) — read the amended sections before coding.
+**Context:** V117 audit verdict CONFORMS (accounting verified 440/440, no double-counts).
+JK ratified all four flagged rulings. This ticket executes the remediations.
+
+---
+
+You are the V117 Remediation Implementer.
+
+CHANGES (all in scripts/analyze-pool.py + regenerated src/data/tierParams.ts +
+T3_POOL_ANALYSIS.md addendum updates — nothing else):
+
+X1. WIRE armSlot: parse_players() reads the DB's armSlot field; pool rawIV AND kblIV price
+    arm angle per workbook §3.6 (Sub = flat $4,000 + VEL×1.075/JNK×1.2; High/Mid/Low $0).
+    kblIV multipliers consume the player's kbl pitch cells (interpolated for SP/RP);
+    rawIV consumes raw cells. Fix the stale comment at ~line 300. Expected: 5 Sub players
+    (Slinger, Rhubarb, Biggsworth, Fenomeno, Lapada); audit counterfactual says Fenomeno
+    kblIV → ~$143,641.
+X2. SP/RP FLD interpolates (D16 consistency): non-two-way SP/RP mound FLD = α-blend of
+    SP and RP FLD cells × flexPremium, same as other pitch-block attrs. (Audit: Pastimm
+    $596 → ~$668.) All other roles' mound FLD unchanged (own block).
+X3. Delete the dead A3 pitch_delta_block assignment (~lines 586-590); fold its rationale
+    into the D16 comment. Behavior must NOT change (A3 symmetry was ratified as-built).
+X4. SPD floors move to named module-level registry constants matching spec §12 spdFloors
+    row exactly (.02/.10, .02/.08, .02/.06, .01/.05) — consumed, not inlined.
+X5. ACCEPTANCE updated per amended spec: Bradwick crash gate KEPT (kblIV ≤ 50% rawIV;
+    re-verify with arm slots wired — Bradwick has no Sub so should be unchanged);
+    parity band REMOVED — instead print the Fenomeno/Pastimm component bridge (the
+    audit's W4 table format) as a REPORT, no pass/fail. Arm probe print kept.
+X6. Regenerate tierParams.ts (4th + final derivation). Update T3_POOL_ANALYSIS V117
+    ADDENDUM: record the FLD carve-out ruling, armSlot wiring, A3 ratification, final
+    constants, and the bridge table (closes audit F6).
+
+VERIFICATION (paste all): anchors 21/21 ±$0 + Jon Gray −$2,136 (rawIV anchor gate uses
+workbook rows which carry their own angle column — UNCHANGED expected); Bradwick gate;
+the bridge report; determinism (two runs, hashes); old→new constants table (from
+$1,205,836/$1,064,108/$954,058); EV-flatness 1.0×/1.5×/2.0×; npm run build; tests = 3
+baseline failures only.
+
+FORMAT: FILES CHANGED · CHANGES MADE (X1-X6) · VERIFICATION OUTPUT · STATUS.
+FAILURE PROTOCOL: anchor movement → STOP (X1 wired angle into the wrong layer). Never
+tune. Nothing outside the three files.
+
+Note: pool rawIV gains arm-slot pricing (X1) — this changes pool rawIV values vs the T3
+era; that is CORRECT (T3 simply lacked the data) and does not touch the anchor gate,
+whose 21 workbook rows are priced from workbook columns, not the DB.

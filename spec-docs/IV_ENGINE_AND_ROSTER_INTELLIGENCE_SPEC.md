@@ -1,6 +1,6 @@
 # IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md
 *(renamed 2026-06-09 from ROSTER_ANALYZER_ARCHETYPE_ENGINE_SPEC.md — scope grew beyond the original feature pair to the full player-valuation core and all three roster-intelligence surfaces)*
-**Version:** 1.1.6 | **Date:** 2026-06-09 | **Status:** CANONICAL — approved by JK in spec session 2026-06-09
+**Version:** 1.1.8 | **Date:** 2026-06-09 | **Status:** CANONICAL — approved by JK in spec session 2026-06-09
 **Owner:** JK | **Drafted by:** Claude (Fable 5) from XBL Roster Tool workbook analysis + Billy Yank SMB4 Guide (3rd Ed.) + 10-question design session
 **v1.1 (2026-06-09):** added §5.3 tax semantics clarification, §5.4 balanceMode toggle, T3 EV-flatness acceptance criterion, registry entry — per JK archetype-purpose review.
 **v1.1.1 (2026-06-09):** §7.3 snake-draft solvency guardrail (hard block) + per-team green/yellow/red/blocked pick signals; `solvencyRedMargin` registry constant — closed gap JK identified (auction solvency rule was not extended to snake draft).
@@ -9,6 +9,8 @@
 **v1.1.4 (2026-06-10):** T1 COMPLETE (Fable 5 built, Codex 5.5 audited: CONFORMS). Audit-confirmed workbook facts folded in: §3.4 sub-min scope note, §3.6 multiplier columns. §13 economic routing pattern (Fable plans/prompts/audits, Codex builds; T2 exception; diff-not-self-report rule; UI-build addendum).
 **v1.1.5 (2026-06-10):** T2 COMPLETE (Fable 5 max built, Codex 5.5 structural audit; 1 MAJOR remediated; JK adjudicated flags). A1 ruling: NEGATIVE traits use INVERTED tier scaling 2.0×/1.0×/0.5× (high chemistry dampens flaws) — 'standardInverted' canonical. A12: Rally Stopper/Surrounded = AT LEAST TWO runners on (guide-explicit). Matrix at src/data/traitInteractionMatrix.ts is authoritative for predicates.
 **v1.1.6 (2026-06-10):** T3 COMPLETE (Fable 5 max built; Codex 5.5 audit: 1 MAJOR remediated — bullpen role-set; all 4 headline amendment claims CONFIRMED from formula text). Amendments applied: A1 sub-min denominator = primary.min − subMin.min; A2 arsenal tax is TEAM-level (out of computeIV); A3 SP/RP negative traits price on RP curves; A4 ROUNDUP is PER-COMPONENT; A5 modification table = 42 entries. JK rulings: SP/RP counts toward BULLPEN concentration groups (derivation AND tax — exploit-aware: no role-misuse mojo penalty + SP-class stamina makes hybrids the premier pen asset); §4.2 mojo penalties canonical (RP starts −1, CP starts −2, SP relieves −1, SP/RP immune both ways; CP penalty −1 if entering before the SECOND-TO-LAST inning, game-length-relative). tierParams.ts authoritative for tier constants.
+**v1.1.7 (2026-06-10):** DB1 complete (player DB regenerated from SOT; armSlot field added). Two-way & pitcher-batting USAGE MODEL (D15, JK-designed): kblIV layer prices pitcher batting at hitter curves × per-role usage weight vectors (derived from SMB4's FOUR-man rotation); Two Way trait = everyday usage 1.00 + trait reprices as the usage unlock + tier-laddered defense (twoWayArmByTier); pitcherAssumedArm=99 simulation-only; chemistry potency: IV stays L2-reference forever, draft board gains potency overlay + marginal synergy (T8), realized potency flows through Effective Ratings/True Value, salary never reprices for it. A12 CLOSED (anomaly was the missing usage model). New ticket V117 implements; acceptance test: Fenomeno > Pastimm > Drake.
+**v1.1.8 (2026-06-10):** V117 first run correctly BLOCKED on the acceptance oracle — diagnosis: A12 had a second half. SP/RP PITCHING curves carry the same crude roster-scarcity premium (~3.2× SP sal100) the batting curves did. Fix (D16): kblIV prices SP/RP arms as innings-expectancy interpolation between SP and RP curves × a flexibility option premium. Acceptance test REWRITTEN from strict ordering to crash-plus-parity HYPOTHESIS — and CORRECTED post-DB1 (JK catch): "bat-first Drake" was corrupted-era folklore (pre-DB1 column scramble gave him POW 92/VEL 4; true SOT line is VEL 92/JNK 24/ACC 45, bat 6/12). Crash anchor is now Lad Bradwick (SP, CON 97/POW 3, no Two Way trait — the genuine bat-first pitcher in clean data); Drake is redefined as the trait-less-elite-arm probe vs Pastimm's trait-stacked arm. Design principle enshrined: "No no-brainers between comparable talents" — comparability must be PROVEN by usage math against SMB4's real-time reality, not inferred from grades; grade-vs-IV divergence is the strategic surface that makes draft night original and feeds every downstream system (True Value, morale, fan dynamics, narrative).
 
 ---
 
@@ -85,6 +87,9 @@ Data flow: Pool Registration (§7.2) → IV computed per player → Relative Pri
 | D12 | GameTracker sub rec engine rebuilt on shared core (replace, not patch) |
 | D13 | (v1.1) Luxury tax = budget drain (soft cap), never a hard wall; `balanceMode` league toggle taxed/advisory/off, default taxed; XBL ratios/shapes port, constants re-derived per tier (T3) with EV-flatness verification |
 | D14 | (v1.1.2) Auction anti-sandbagging: hard rules bound exploits (reserve curve, solvency, declared-budget anchor), soft agents create texture (probabilistic shills). League talent is SUPPLY-controlled (pool), not price-controlled — no round/grade restrictions |
+| D15 | (v1.1.7) Pitcher batting = usage-weighted (non-DH reality: a pitcher's bat is worth its expected PAs). Two Way trait = the everyday-usage unlock, NOT flat rating deltas. IV potency-neutral at L2 reference forever; realized potency = construction surplus captured by True Value, never a salary reprice |
+| D17 | (v1.1.8) SEPARABILITY RULING — division of labor: kblIV corrects USAGE (who plays, how often — the dimension XBL's fixed league structure never had to model); the WORKBOOK owns QUALITY (what ratings are worth). Its asymmetric curves already encode extreme-value dynamics from competitive play: POW/CON cost ratio 1.26× mid-range → ~2× at extremes ("POW matters more at the extremes, less toward the middle" — JK); ACC/JNK ≈ 1.7-1.85× at all levels (location is the premium pitching skill). NO attribute-interaction terms (POW×CON gating, ACC×JNK) in kblIV — second-order split effects (weak-contact frustration, feast-or-famine) are mutual and direction-ambiguous per JK; DEFERRED to the Mode 2 empirical loop: test whether extreme-split players (Bradwick 3/97, Oxensocksen 11/96, Rush 89/12) systematically over/underperform IV against real season stats; fit a correction ONLY if data demands. Do not overengineer a battle-tested model |
+| D16 | (v1.1.8) kblIV prices EVERYTHING by expected usage — the unified doctrine. SP/RP arms = innings interpolation (α × SP-curve + (1−α) × RP-curve) × spRpFlexPremium (no-penalty switching + long-relief insurance behind starters 2-4 = real option value, ~12% kicker, NOT a 3.2× curve). Acceptance criteria are hypothesis tests, never tuning targets; "no no-brainers between comparable talents" — proven by math, not grades. RATIFIED 2026-06-10: flex premium applies symmetrically to negative-trait deltas (a flaw degrading a 1.12×-valuable asset costs 1.12× more; ≤$166/player vs old A3 rule; the A3 exploit died with the raw curves) |
 
 ---
 
@@ -249,6 +254,34 @@ Pure function. No React imports. Lives in `src/engines/ivEngine.ts`. Per-player 
 | DH-aware batting bonus | **RETIRED as a special case**; DH context becomes a usage-weighting on pitcher batting-attribute IV (tunable constant `pitcherBattingUsageWeight`, default 0.25 non-DH) |
 
 Updated pipeline: `salary = computeIV(p) × ageFactor × perfMod × fameMod × personalityMod(FA only)`, then relativity/True Value exactly per existing spec.
+
+### 3.9 kblIV Usage Layer (v1.1.7 / D15) — two-way players & pitcher batting
+**Architecture: two layers.** `rawIV` = exact workbook semantics, golden-anchor-tested (21 anchors + Jon Gray −$2,136) — NEVER modified. `kblIV` = rawIV with the KBL usage model applied to pitcher batting — the number ALL downstream systems consume. Same divergence pattern as chemistry potency.
+
+**The model (non-DH league truth):** a pitcher's batting-block attributes are worth their EXPECTED USAGE, per-attribute:
+- POW/CON: PA-gated. `roleBatWeight = startShare × paRatio + phFloor` — derived, not hand-picked. SMB4 runs a FOUR-man rotation (canonical): SP startShare 0.25, in-game PAs ≈ 2.5 of an everyday 4 → SP ≈ 0.20 with PH floor; SP/RP (no Two Way trait) ≈ 0.15; RP ≈ 0.08; CP ≈ 0.05.
+- SPD: PA weight + pinch-runner floor + on-mound range → higher than POW/CON per role.
+- FLD: ALWAYS 1.00 for every pitcher (they field every inning they pitch). **CARVE-OUT (ratified 2026-06-10, V117 audit W2b):** a non-two-way pitcher's FLD is MOUND fielding and prices on his PITCHER block's FLD curve (SP/RP interpolated per D16) — NOT on hitter curves; pricing position-player range he never uses would re-inflate the pool (~$930k phantom). Two Way trait holders price FLD on the trait position's curve. "ALL pitcher batting on hitter curves" means POW/CON/SPD.
+- Registry stores the INPUTS (startShare/paRatio/phFloor per role), not opaque weights. All CALIBRATE.
+
+**Pricing curves:** ALL pitcher batting prices on HITTER curves × usage weight. Two Way trait players price at their TRAIT POSITION's curves (Two Way (C) → catcher block); non-trait pitchers on the neutral IF/OF block. The pitcher-block batting curves RETIRE from the kblIV layer (they were XBL's crude usage premium, now modeled directly; they remain in rawIV for anchor fidelity).
+
+**Two Way trait reprices as the USAGE UNLOCK (flat +15/+15/+15/+10 deltas retire in kblIV):**
+`traitValue = hitterCurveCost(bat, traitPos) × (1.00 − roleBatWeight) + tierLadderedDefense`
+Usage for trait holders = 1.00 ALL attributes (everyday player: pitching+batting or fielding the trait position — complete partition; JK ruling, no shave). Trait price automatically tracks bat quality: enormous on Fenomeno, near-zero on a 20-POW pitcher.
+
+**Tier-laddered two-way defense (JK ruling: potency = defensive QUALITY, not playing time):** FLD via the potency-scaled delta machinery (0.5/1/2); ARM via `twoWayArmByTier` {L1: 60, L2: 80, L3: 99} — CALIBRATE (L3 anchored to JK's in-game observation; L1/L2 pending eyeball). Priced on the trait position's curves. A Level 1 Two Way (C) is NOT a 99-arm catcher and never prices like one.
+
+**Ordinary pitchers' fielding arm:** `pitcherAssumedArm = 99` consumed by SIMULATION ONLY (Effective Ratings / DefensivePlacementRisk / GameTracker when a pitcher fields). UNPRICED in IV — a uniform constant differentiates nothing.
+
+**Chemistry potency vs construction (resolves the draft-time unknowability):** IV is potency-NEUTRAL at the L2 reference, permanently (workbook-faithful: XBL restricted its league to L2 — why the anchors balance). Realized potency NEVER reprices salary: building synergy is construction skill and keeps its surplus, which True Value captures as over/underperformance; fan expectations stay declared-budget-anchored. The DRAFT BOARD carries a live potency overlay (§7.3): current per-team chemistry counts → realized-tier preview per candidate + marginal synergy insight ("this Spirited pick takes you 2→3, upgrading N existing traits a tier"). Mid-season chem shifts (trades/call-ups) realize automatically via effectiveRatings potencyTier(p, team).
+
+**SP/RP arm pricing (v1.1.8 / D16 — completes A12's second half):** the workbook's SP/RP pitching curves (VEL sal100 $200,000 vs SP $63,000, and the rich sub-min mirror) are roster-scarcity premiums, same class as the retired SP/RP batting curves. In kblIV, an SP/RP's VEL/JNK/ACC (and sub-min) price as **innings-expectancy interpolation**: `armCost = spRpStartShare × SPcurveCost + (1 − spRpStartShare) × RPcurveCost`, all × **spRpFlexPremium**. Rationale (JK canonical): SP/RP stamina sits BETWEEN SP and RP — pitches more often than an SP, not as long; elite relievers are inherently leverage-dependent (zeroes in a deficit are worthless until the offense scores), which is why RP innings price below SP innings; and the flexibility premium prices what interpolation can't — penalty-free role switching plus the long-relief insurance that stops one bad start by starters 2-4 from cascading into a wrecked pen and a lost week. Multiplier traits stack on the interpolated (honest) base. rawIV untouched.
+
+**ACCEPTANCE TEST (v1.1.8, corrected post-DB1 — crash + parity HYPOTHESIS + arm probe, JK gameplay oracle):**
+1. REQUIRED (crash): **Lad Bradwick** (SP, CON 97/POW 3, no Two Way trait — the pool's true bat-first pitcher) deflates: kblIV ≤ 50% of his rawIV. A monster bat on a pitcher who bats ~20% of everyday PAs must stop pricing like an everyday bat. [Drake was the corrupted-era stand-in for this role; his true line is VEL 92 — see (3).]
+2. RETIRED (2026-06-10 adjudication): the ±20% parity band was the wrong operationalization of "no no-brainers" — V117's audited bridge showed the 36.8%→~32% gap is built from honest parts (VEL 87-vs-54 compounded by quality-tracking multipliers; even the IF-block suspicion INVERTED, +$14,773 to Fenomeno). Draft equipoise requires arguable VALUE-PER-DOLLAR, not equal prices: the elite arm at ~$199k vs the everyday two-way at ~$144k + $55k of additional pool talent is a genuine roster-construction fork resolved by context (identity, rotation fragility, chemistry counts) — which is the replayability goal. REPLACEMENT criterion: the Fenomeno-Pastimm gap is REPORTED with its full component bridge (the adjudication artifact), no band — an elite flexible arm vs an elite everyday bat on an average arm should be a genuine draft-night debate, with context (composed identity, rotation fragility, chemistry counts, remaining pool) breaking the tie differently every draft. If honest math lands them OUTSIDE the band, that is a FINDING reported to JK — weights are never adjusted to force the band.
+3. OBSERVED (arm probe): Pastimm (trait-stacked elite arm) vs Drake (trait-less elite arm, VEL 92) — both price on the same interpolated SP/RP curves; their gap isolates the multiplier-trait contribution on the honest base. Expected Pastimm > Drake with both in the same neighborhood; report both with breakdowns. Comparability is proven by usage math against SMB4's real-time reality, never inferred from grades (Norm A, Buzz B+): grade-vs-IV divergence is the engine's product — the strategic surface that makes team building original and replayable, and the seed for every downstream story (True Value, roster movement, player/fan morale, beat-reporter narratives) that carries from draft night through the season into the offseason.
 
 ---
 
@@ -453,6 +486,7 @@ Registration computes IV for every pool player once; relative pricing layer (exi
 - **Pick value chart derives empirically**: value(pickN) = expected IV of best-available at pick N given this pool's sorted IV distribution (Jimmy Johnson shape, grounded in actual pool; steeper for Juiced, flatter for Nerfed). Regenerated per league.
 - Trade validator: Σ pickValue(side A) vs Σ pickValue(side B); flag if imbalance > `tradeToleranceBand` (default 15%, registry §12). ADVISORY — sunlight, not enforcement; users may override with confirmation.
 - Draft board recommendations weighted by team's composed identity (§6.3) + positional scarcity in remaining pool. In taxed/advisory balanceMode the board shows per-pick cap headroom or would-be tax for YOUR team specifically.
+- **Potency overlay (v1.1.7):** live per-team chemistry counts drive a realized-tier preview on every candidate's traits + marginal synergy insights ("drafting this Spirited player takes you 2→3 Spirited, upgrading N of your existing traits a tier"). Chemistry-stacking becomes visible draft strategy. IV display stays L2-reference (§3.9).
 - **Draft solvency guardrail (v1.1.1):** before pick confirmation, enforce `committedSalaries + projectedTaxes + pickCost + pickMarginalTax <= budget - (slotsRemaining x cheapestFillCost)`, where `cheapestFillCost` = actual minimum-cost player satisfying each remaining positional need IN THE LIVE REMAINING POOL (recomputed per pick). Strict violations are HARD-BLOCKED with an explanation. NOTE: snake-draft players cost full IV-derived salary (no bidding); the 0.5x auctionFloor applies to auction opening bids only.
 - **Per-team pick signals (v1.1.1):** GREEN = identity fit, no meaningful tax, solvency safe. YELLOW = triggers tax; display actual $ figure + post-pick budget/floor math. RED = severe tax relative to remaining budget OR within `solvencyRedMargin` of the solvency line (warning, pickable). BLOCKED = strict solvency violation (not confirmable). Signals are PER TEAM (same player can be green for one team, red for another) — this is the archetype system surfacing in UI.
 
@@ -564,7 +598,15 @@ All engines: pure functions, no React imports, unit-testable outside the app (en
 | poolSurplusMax | 1.2 × totalSlots | D14, design choice |
 | leagueInflationBand | tier-expected total IV ±10% | D14, report flag threshold |
 | tradeToleranceBand | 0.15 | design choice |
-| pitcherBattingUsageWeight | 0.25 non-DH | salary spec rotation factor |
+| usageWeights inputs (startShare/paRatio/phFloor per role: SP/SP-RP/RP/CP) | SP .25/.625/.04 → ≈0.20 POW-CON; SP/RP ≈0.15; RP ≈0.08; CP ≈0.05; SPD adds PR floor; FLD 1.00 | D15, 4-man rotation — CALIBRATE |
+| twoWayUsage | 1.00 all attributes | D15, JK ruling |
+| twoWayArmByTier | L1 60 / L2 80 / L3 99 | D15 — CALIBRATE (L3 JK-observed) |
+| pitcherAssumedArm | 99 (simulation-only, unpriced) | D15, JK-observed |
+| spRpStartShare (α) | 0.30 | D16 innings interpolation — CALIBRATE |
+| spRpFlexPremium | 1.12 | D16 option value — CALIBRATE |
+| parityBand | RETIRED 2026-06-10 (see §3.9 acceptance) | — |
+| spdFloors (prFloor/rangeFloor per role: SP/SP-RP/RP/CP) | .02/.10, .02/.08, .02/.06, .01/.05 | D15 SPD usage — CALIBRATE (ratified from V117 build) |
+| armSlot pricing | WIRED into pool kblIV (ratified 2026-06-10): Sub = flat $4,000 + VEL×1.075/JNK×1.2 on the player's kbl pitch cells (interpolated for SP/RP); High/Mid/Low = $0 | workbook §3.6; 5 Sub players in stock pool |
 | balanceMode | 'taxed' (taxed/advisory/off) | D13 |
 | luxuryCapPercentile | 0.65 | D13, design choice — CALIBRATE in T3 |
 | evFlatnessTolerance | 0.10 | D13, T3 acceptance criterion |
@@ -598,7 +640,11 @@ Per SESSION_RULES Prompt Contract template (spec-docs/PROMPT_CONTRACTS.md) for e
 | T10 | Lineup Delta WPA standard wiring + constants snapshotting | ROUTE: Codex 5.5 \| high → Fable 5 CLI audit |
 | T11 (v1.5) | Auction module + AI shill bidders | ROUTE: Codex 5.5 \| high → Fable 5 CLI audit |
 
-Order: T1→T2→T3 (parallel-safe) → T4 → T5 → T6 → {T7, T8} → T9 → T10. T11 on green-light.
+| V117 | kblIV usage layer in analyze-pool.py (per §3.9): usage weight vectors, two-way unlock pricing, tier-laddered defense, F1 disabled-row flip (8 pitcher-batting luxury rows), tierParams regeneration (3rd+final), acceptance ordering Fenomeno>Pastimm>Drake | ROUTE: Codex 5.5 \| high → Fable 5 CLI audit |
+
+| T12 | POOL RECALIBRATION TOOL (JK directive 2026-06-10): given ANY player pool (custom leagues, non-stock distributions), re-run the §5.2/§5.3 derivation pipeline (IV distribution → Juiced/Standard/Nerfed tier params → caps → luxury tables) and present the three tiers WITH concrete "average team at this tier" examples (illustrative 22-man rosters near median, total payroll vs cap, star/depth shape) so league creators see what each tier feels like before committing. Machinery exists in analyze-pool.py (proven across 4 derivations); ticket = productize as an in-app Mode 1 league-creation step + engine module. NOTE: per the absolute-IV architecture, player IVs never change with the pool — only the league-environment constants recalibrate | ROUTE: post-T8 (consumes T6 engine + T8 UI surfaces) — Codex 5.5 \| high → Fable audit |
+
+Order: T1→T2→T3 (parallel-safe) → DB1 ✅ → V117 → T4 → T5 → T6 → {T7, T8} → T9 → T10. T11 on green-light. T4's computeIV implements BOTH layers (rawIV anchor-tested + kblIV per §3.9).
 
 ---
 
@@ -615,7 +661,9 @@ Order: T1→T2→T3 (parallel-safe) → T4 → T5 → T6 → {T7, T8} → T9 →
 2. Batting-order slot weighting constants (§8.1) — Claude drafts, JK approves.
 3. Trait-table blank cells (§3.6 `·`) — verify against workbook in T1.
 4. Mojo delta estimates (§4.2) — playtest calibration.
+6. (v1.1.7) usageWeights inputs + twoWayArmByTier L1/L2 — playtest/in-game calibration.
+7. (v1.1.7) A12 SP/RP pricing review — CLOSED by §3.9 usage model.
 5. (v1.1) balanceMode default — `taxed` specced; revisit after T3 EV-flatness results and first construction playtest.
 
 ---
-*End IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md v1.1.6*
+*End IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md v1.1.8*

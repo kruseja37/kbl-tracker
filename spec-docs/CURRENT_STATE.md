@@ -155,3 +155,11 @@ Current priorities:
 - Pending named future spec: ROSTER_MOVEMENT_GAME_THEORY_SPEC (morale fallout for roster churn) — deliberately deferred.
 - Next actions: Build Tasks T1–T3 per spec §13 (data extraction, TraitInteractionMatrix enumeration, empirical pool analysis). Commit source workbook + BillyYank guide to spec-docs/reference/.
 - Priorities from 2026-04-13 entry (iPad playtest, Elimination Mode Steps 6–14, season stats/WAR wiring, Beat Reporter Phase 1) remain open; JK to sequence against T1–T10.
+
+---
+## CURRENT STATE — 2026-06-10 (IV Engine data-foundation arc CLOSED)
+**Branch:** codex/franchise-v1-next. **Committed through:** T1 (8ce3b04) → T2 (cc09dde) → T3 (e7c6fec) → SOT canonization (9047970) → DB1 (a2d245d) → V117 closure (this commit).
+**What exists & is trustworthy:** playerDatabase.ts (SOT-regenerated, audited 440/440, armSlot field); ivCurves.ts + traitPricing.ts (T1, workbook-exact); traitInteractionMatrix.ts (T2, 75 traits, citations); analyze-pool.py (rawIV anchor-gated 21/21 ±$0 + Jon Gray −$2,136; kblIV usage layer per §3.9); tierParams.ts FINAL (J/S/N caps $1,205,836/$1,064,387/$954,874; shifts ×0.8825/×0.7912; all 42+8 luxury rows live).
+**Spec:** IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md v1.1.8 — D1-D17 all JK-ratified; §3.9 = kblIV usage doctrine (pitcher batting weights via 4-man rotation, two-way unlock, SP/RP interpolation ×1.12, FLD carve-out, armSlot, potency-neutral L2); acceptance = Bradwick crash + bridge report (parity band retired with reasoning).
+**NEXT TASK: T4 — IV Engine (src/engines/ivEngine.ts), Codex 5.5 very high → Fable 5 audit.** computeIV implements BOTH layers (rawIV: A1 sub-min denominator primary.min−subMin.min, A3 RP-curve negatives, A4 per-component ROUNDUP, golden tests = 21 anchors + Jon Gray; kblIV: §3.9 verbatim, validate against analyze-pool's 440 values). Contract NOT yet drafted — first action of next session.
+**Open non-blocking:** F2 SOT cell typos (~15); F4 FA trait spellings (4); 2 pre-existing test failures (wpaRuntimeBoundary allowlist, franchiseNarrativeEventEligibility) + 1 suite-order flake; T12 recalibration tool (post-T8); pitching-gate question (ACC×JNK) deferred to Mode 2 empirical loop per D17.

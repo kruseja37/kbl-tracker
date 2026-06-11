@@ -358,3 +358,180 @@ Bookends (auto-included): pool max **Buzz Pastimm** (bee-pastimm, SP/RP, B+, **$
 5. **R5 table:** §R5 primary table above is the verbatim script output.
 
 *End T3_POOL_ANALYSIS.md*
+
+## V117 ADDENDUM — kblIV usage layer + F1 row flip + final tier constants
+
+Date: 2026-06-10.
+
+This addendum supersedes the stale pitcher-batting and F1-disablement notes above without
+rewriting the historical analysis. DB1 closed the pitcher batter-ratings data gap
+(179/179 present), so V117 switches pool analysis from workbook-exact `rawIV` to the
+usage-adjusted `kblIV` layer while preserving `rawIV` for the golden anchor gate.
+
+### Layering and anchor gate
+
+- `rawIV`: workbook-exact semantics. Golden anchors remained unchanged: **21/21 PASS at
+  ±$0**, and Jon Gray's isolated Injury Prone trait remained **-$2,136**.
+- `kblIV`: pool-analysis layer. Pitcher batting prices on hitter curves with role usage
+  weights; SP/RP arm costs interpolate between SP/RP curves per §3.9 v1.1.8.
+- Pitcher-batting luxury rows are now enabled. `DISABLED_LUXURY_ROWS` is empty for the
+  final generated constants.
+
+### Usage weights emitted by `scripts/analyze-pool.py`
+
+| Role | startShare | paRatio | phFloor | POW/CON weight | PR floor | range floor | SPD weight | FLD weight |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| SP | 0.250 | 0.625 | 0.0400 | 0.1963 | 0.020 | 0.100 | 0.3163 | 1.0000 |
+| SP/RP | 0.180 | 0.625 | 0.0375 | 0.1500 | 0.020 | 0.080 | 0.2500 | 1.0000 |
+| RP | 0.000 | 0.625 | 0.0800 | 0.0800 | 0.020 | 0.060 | 0.1600 | 1.0000 |
+| CP | 0.000 | 0.625 | 0.0500 | 0.0500 | 0.010 | 0.050 | 0.1100 | 1.0000 |
+
+SP/RP arm interpolation is `0.30 * SP + 0.70 * RP`, then `* 1.12` flex premium. The
+Fenomeno/Pastimm parity band remains an observation gate at ±20%, not a tuning target.
+
+### V117/V118 acceptance output
+
+| Probe | Result |
+|---|---|
+| Lad Bradwick crash gate | **PASS**: kblIV $58,417 <= 50% of rawIV $124,115 ($62,058) |
+| Fenomeno/Pastimm parity | **FLAG**: $137,183 vs $199,054 = 36.80% gap vs ±20% band |
+| Pastimm/Drake arm probe | Pastimm $199,054 vs Drake $100,975; trait-stack gap $98,079 |
+
+Component breakdowns for the flagged/probe players:
+
+| Player | rawIV | kblIV | Pitch attrs | Usage bat/field | Traits | Two Way unlock | Pitches |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Norm Fenomeno | $436,799 | $137,183 | $31,486 | $17,293 | $78,455 | $51,912 | $9,949 |
+| Buzz Pastimm | $402,039 | $199,054 | $76,379 | $1,552 | $102,122 | $0 | $19,001 |
+| Donovan Drake | $227,550 | $100,975 | $82,587 | $2,249 | $0 | $0 | $16,139 |
+| Lad Bradwick | $124,115 | $58,417 | $40,759 | $9,797 | $0 | $0 | $7,861 |
+
+Status: **V117 complete WITH FLAGS** because Fenomeno/Pastimm fell outside the ±20% parity
+band. Per §3.9 v1.1.8 this is reported for JK review and is not tuned here.
+
+### Final tier constants
+
+Old pre-usage-model preview constants from the V117 contract were:
+
+| Tier | Old cap | New cap | Old shift | New shift |
+|---|---:|---:|---:|---:|
+| Juiced | $1,323,633 | $1,205,836 | 1.0000 | 1.000000 |
+| Standard | $1,169,013 | $1,064,108 | 0.8832 | 0.882465 |
+| Nerfed | $1,048,489 | $954,058 | 0.7921 | 0.791201 |
+
+New generated tier cap inputs:
+
+| Tier | maxIV | medianIV | star branch | roster branch | tierCap | dominant |
+|---|---:|---:|---:|---:|---:|---|
+| Juiced | $218,122 | $47,662 | $660,976 | $1,205,836 | $1,205,836 | roster |
+| Standard | $192,485 | $42,060 | $583,288 | $1,064,108 | $1,064,108 | roster |
+| Nerfed | $172,578 | $37,710 | $522,964 | $954,058 | $954,058 | roster |
+
+### F1 row flip: newly enabled pitcher-batting luxury rows
+
+| Row | Juiced cap |
+|---|---:|
+| rotation/POW | 98.0 |
+| rotation/CON | 98.3 |
+| rotation/SPD | 118.7 |
+| rotation/FLD | 273.1 |
+| bullpen/POW | 80.0 |
+| bullpen/CON | 77.1 |
+| bullpen/SPD | 131.4 |
+| bullpen/FLD | 277.4 |
+
+### EV-flatness rerun
+
+| Budget | Mean roster IV | Verdict |
+|---|---:|---|
+| 1.0x tierCap ($1,205,836) | $1,195,066 | all identities PASS within ±10% |
+| 1.5x tierCap ($1,808,754) | $1,695,817 | all identities PASS within ±10% |
+| 2.0x tierCap ($2,411,672) | $1,909,604 | all identities PASS within ±10% |
+
+The 2.0x run no longer shows the earlier Contact+Defense outlier after SP/RP arm
+interpolation and pitcher-batting row enablement. No retune was applied.
+
+## V117-FIX ADDENDUM — audit remediations and fourth final derivation
+
+Date: 2026-06-10.
+
+This addendum records the Fable 5 delta re-verify remediations after JK ratified the
+V117 audit rulings. The analyzer remains two-layered: `rawIV` is workbook-exact for the
+anchor gate, while pool analysis uses `kblIV`.
+
+### Ratified remediation changes
+
+- **armSlot wired:** DB arm slots now feed pool `rawIV` and `kblIV`. Sub arm slots price as
+  flat `$4,000` plus `VEL x 1.075` and `JNK x 1.2`; High/Mid/Low remain `$0`.
+- **Sub coverage:** 179/179 team-rostered pitchers carry armSlot. The 5 Sub pitchers are
+  Sal Slinger, Rachel Rhubarb, Boris Biggsworth, Norm Fenomeno, and Chico Lapada.
+- **SP/RP FLD carve-out:** non-two-way SP/RP mound FLD now uses the same D16 interpolation
+  as SP/RP VEL/JNK/ACC. Two Way holders still price FLD on the trait-position curve.
+- **A3 symmetry ratified:** kblIV does not mirror the old rawIV SP/RP negative-trait RP
+  delta route. SP/RP deltas consume the interpolated D16 base symmetrically.
+- **SPD floors named:** `spdFloors` are now registry constants: SP `.02/.10`, SP/RP
+  `.02/.08`, RP `.02/.06`, CP `.01/.05`.
+- **Parity retired:** the Fenomeno/Pastimm parity band is no longer a pass/fail. The
+  analyzer prints the component bridge as a report-only audit artifact.
+
+### Verification snapshot
+
+- Golden anchors: **21/21 PASS at ±$0**.
+- Jon Gray Injury Prone rawIV anchor: **-$2,136**.
+- Lad Bradwick crash gate: **PASS**, `$58,417 <= $62,058` (50% of rawIV `$124,115`).
+- Deterministic `tierParams.ts` SHA-256: `05606a7f1a84ab2834ea16823c8e702fc851b6b4c4c1604d32c199ca24835b16`.
+
+### Fenomeno/Pastimm bridge report
+
+| Component | Fenomeno | Pastimm | Pastimm - Fenomeno |
+|---|---:|---:|---:|
+| pitch attrs | $31,486 | $76,379 | +$44,893 |
+| usage bat/field | $17,293 | $1,624 | -$15,669 |
+| traits total | $78,455 | $102,122 | +$23,667 |
+| two-way unlock | $51,912 | $0 | -$51,912 |
+| pitches | $9,949 | $19,001 | +$9,052 |
+| arm slot | $6,458 | $0 | -$6,458 |
+| total | $143,641 | $199,126 | +$55,485 |
+
+Arm probe: Buzz Pastimm `$199,126` vs Donovan Drake `$101,003`; trait-stack gap `$98,123`.
+
+### Fourth final tier constants
+
+Old V117 constants from the third derivation:
+
+| Tier | Third-derivation cap | Fourth-derivation cap | Third shift | Fourth shift |
+|---|---:|---:|---:|---:|
+| Juiced | $1,205,836 | $1,205,836 | 1.000000 | 1.000000 |
+| Standard | $1,064,108 | $1,064,387 | 0.882465 | 0.882696 |
+| Nerfed | $954,058 | $954,874 | 0.791201 | 0.791877 |
+
+Final generated tier cap inputs:
+
+| Tier | maxIV | medianIV | star branch | roster branch | tierCap | dominant |
+|---|---:|---:|---:|---:|---:|---|
+| Juiced | $218,122 | $47,662 | $660,976 | $1,205,836 | $1,205,836 | roster |
+| Standard | $192,535 | $42,071 | $583,441 | $1,064,387 | $1,064,387 | roster |
+| Nerfed | $172,726 | $37,742 | $523,411 | $954,874 | $954,874 | roster |
+
+Pitcher-batting luxury rows remain enabled with unchanged juiced caps:
+
+| Row | Juiced cap |
+|---|---:|
+| rotation/POW | 98.0 |
+| rotation/CON | 98.3 |
+| rotation/SPD | 118.7 |
+| rotation/FLD | 273.1 |
+| bullpen/POW | 80.0 |
+| bullpen/CON | 77.1 |
+| bullpen/SPD | 131.4 |
+| bullpen/FLD | 277.4 |
+
+### EV-flatness rerun
+
+| Budget | Mean roster IV | Verdict |
+|---|---:|---|
+| 1.0x tierCap ($1,205,836) | $1,195,091 | all identities PASS within ±10% |
+| 1.5x tierCap ($1,808,754) | $1,703,940 | all identities PASS within ±10% |
+| 2.0x tierCap ($2,411,672) | $1,907,231 | all identities PASS within ±10% |
+
+Status: **V117-FIX complete**.

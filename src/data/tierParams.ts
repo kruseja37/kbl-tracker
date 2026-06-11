@@ -10,7 +10,9 @@
  * Derivations (full work shown in spec-docs/T3_POOL_ANALYSIS.md):
  *   - tier scales: grade-ladder method (§5.1) - median IV per SMB4 letter grade,
  *     piecewise-linear ladder; scale = ladder(meanOrdinal - steps) / ladder(meanOrdinal).
- *     Multiplicative transform: tierIV = juicedIV x scale.
+ *     Multiplicative transform: tierIV = juiced kblIV x scale.
+ *   - V117 kblIV usage layer (§3.9): rawIV remains workbook-exact for anchors; pool
+ *     analysis uses pitcher batting repriced on hitter curves with role usage weights.
  *   - tierCap = max(maxPoolIV / starBudgetShare, 22 x medianPoolIV x rosterHeadroom) (§5.2)
  *   - luxury caps: 65th percentile (luxuryCapPercentile) of the STOCK-TEAM top-N sum
  *     distribution - the 20 real SMB4 rosters' observed concentrations (§5.3; the
@@ -32,24 +34,24 @@ export interface TierShiftParams {
 }
 
 export const TIER_SHIFTS: Record<TierKey, TierShiftParams> = {
-  juiced: { scale: 1.000000, gradeStepsLeft: 0, impliedMeanIV: 60225 },
-  standard: { scale: 0.784163, gradeStepsLeft: 1, impliedMeanIV: 47226 },
-  nerfed: { scale: 0.679864, gradeStepsLeft: 2, impliedMeanIV: 40945 },
+  juiced: { scale: 1.000000, gradeStepsLeft: 0, impliedMeanIV: 54854 },
+  standard: { scale: 0.882696, gradeStepsLeft: 1, impliedMeanIV: 48420 },
+  nerfed: { scale: 0.791877, gradeStepsLeft: 2, impliedMeanIV: 43438 },
 };
 
 /** First-order uniform rating multiplier that reproduces each tier's IV scale through
  *  the attribute curves on this pool (bisection-solved; Player Generator convenience). */
 export const TIER_RATING_SCALES: Record<TierKey, number> = {
   juiced: 1.000000,
-  standard: 0.913779,
-  nerfed: 0.862636,
+  standard: 0.954274,
+  nerfed: 0.914213,
 };
 
 /** §7.4 farm-draft nerf: farm pool IV scale RELATIVE TO its league tier (one grade step). */
 export const FARM_NERF_SCALES: Record<TierKey, number> = {
-  juiced: 0.784163,
-  standard: 0.866993,
-  nerfed: 0.915129,
+  juiced: 0.882696,
+  standard: 0.897111,
+  nerfed: 0.875197,
 };
 
 export interface TierCapParams {
@@ -61,9 +63,9 @@ export interface TierCapParams {
 }
 
 export const TIER_CAPS: Record<TierKey, TierCapParams> = {
-  juiced: { tierCap: 1251237, starBranch: 1218382, rosterBranch: 1251237, maxPoolIV: 402066, medianPoolIV: 49456 },
-  standard: { tierCap: 981174, starBranch: 955411, rosterBranch: 981174, maxPoolIV: 315285, medianPoolIV: 38782 },
-  nerfed: { tierCap: 850671, starBranch: 828334, rosterBranch: 850671, maxPoolIV: 273350, medianPoolIV: 33623 },
+  juiced: { tierCap: 1205836, starBranch: 660976, rosterBranch: 1205836, maxPoolIV: 218122, medianPoolIV: 47662 },
+  standard: { tierCap: 1064387, starBranch: 583441, rosterBranch: 1064387, maxPoolIV: 192535, medianPoolIV: 42071 },
+  nerfed: { tierCap: 954874, starBranch: 523411, rosterBranch: 954874, maxPoolIV: 172726, medianPoolIV: 37742 },
 };
 
 export interface LuxuryCapRow {
@@ -78,60 +80,74 @@ export interface LuxuryCapRow {
 
 export const LUXURY_CAP_TABLES: Record<TierKey, LuxuryCapRow[]> = {
   juiced: [
-    { group: 'hitters', stat: 'POW', topN: 8, cap: 609.4, penaltyCurve: 1.5, penaltyPer100: 1707971, minAdder: 3416 },
-    { group: 'hitters', stat: 'CON', topN: 8, cap: 624.5, penaltyCurve: 1.8, penaltyPer100: 1138647, minAdder: 2277 },
-    { group: 'hitters', stat: 'SPD', topN: 8, cap: 583.8, penaltyCurve: 1.8, penaltyPer100: 1138647, minAdder: 2277 },
-    { group: 'hitters', stat: 'FLD', topN: 8, cap: 626.4, penaltyCurve: 2, penaltyPer100: 797053, minAdder: 683 },
-    { group: 'hitters', stat: 'ARM', topN: 8, cap: 593.8, penaltyCurve: 1.8, penaltyPer100: 1024782, minAdder: 1025 },
-    { group: 'rotation', stat: 'VEL', topN: 4, cap: 261.0, penaltyCurve: 1.5, penaltyPer100: 1707971, minAdder: 2277 },
-    { group: 'rotation', stat: 'JNK', topN: 4, cap: 239.1, penaltyCurve: 2, penaltyPer100: 455459, minAdder: 1139 },
-    { group: 'rotation', stat: 'ACC', topN: 4, cap: 293.9, penaltyCurve: 1.9, penaltyPer100: 910918, minAdder: 1366 },
-    { group: 'bullpen', stat: 'VEL', topN: 3, cap: 228.5, penaltyCurve: 1.1, penaltyPer100: 3415941, minAdder: 5693 },
-    { group: 'bullpen', stat: 'JNK', topN: 3, cap: 231.1, penaltyCurve: 2, penaltyPer100: 569324, minAdder: 1139 },
-    { group: 'bullpen', stat: 'ACC', topN: 3, cap: 195.7, penaltyCurve: 1.9, penaltyPer100: 1138647, minAdder: 3416 },
+    { group: 'hitters', stat: 'POW', topN: 8, cap: 613.8, penaltyCurve: 1.5, penaltyPer100: 1645997, minAdder: 3292 },
+    { group: 'hitters', stat: 'CON', topN: 8, cap: 607.2, penaltyCurve: 1.8, penaltyPer100: 1097332, minAdder: 2195 },
+    { group: 'hitters', stat: 'SPD', topN: 8, cap: 617.1, penaltyCurve: 1.8, penaltyPer100: 1097332, minAdder: 2195 },
+    { group: 'hitters', stat: 'FLD', topN: 8, cap: 612.7, penaltyCurve: 2, penaltyPer100: 768132, minAdder: 658 },
+    { group: 'hitters', stat: 'ARM', topN: 8, cap: 597.4, penaltyCurve: 1.8, penaltyPer100: 987598, minAdder: 988 },
+    { group: 'rotation', stat: 'POW', topN: 4, cap: 98.0, penaltyCurve: 1, penaltyPer100: 2194663, minAdder: 3292 },
+    { group: 'rotation', stat: 'CON', topN: 4, cap: 98.3, penaltyCurve: 1, penaltyPer100: 1316798, minAdder: 2743 },
+    { group: 'rotation', stat: 'SPD', topN: 4, cap: 118.7, penaltyCurve: 2, penaltyPer100: 1097332, minAdder: 2743 },
+    { group: 'rotation', stat: 'FLD', topN: 4, cap: 273.1, penaltyCurve: 2, penaltyPer100: 713266, minAdder: 1097 },
+    { group: 'rotation', stat: 'VEL', topN: 4, cap: 272.9, penaltyCurve: 1.5, penaltyPer100: 1645997, minAdder: 2195 },
+    { group: 'rotation', stat: 'JNK', topN: 4, cap: 264.4, penaltyCurve: 2, penaltyPer100: 438933, minAdder: 1097 },
+    { group: 'rotation', stat: 'ACC', topN: 4, cap: 299.0, penaltyCurve: 1.9, penaltyPer100: 877865, minAdder: 1317 },
+    { group: 'bullpen', stat: 'POW', topN: 4, cap: 80.0, penaltyCurve: 1, penaltyPer100: 2304396, minAdder: 5487 },
+    { group: 'bullpen', stat: 'CON', topN: 4, cap: 77.1, penaltyCurve: 1, penaltyPer100: 1426531, minAdder: 3292 },
+    { group: 'bullpen', stat: 'SPD', topN: 4, cap: 131.4, penaltyCurve: 2, penaltyPer100: 1207065, minAdder: 3292 },
+    { group: 'bullpen', stat: 'FLD', topN: 4, cap: 277.4, penaltyCurve: 2, penaltyPer100: 822999, minAdder: 1097 },
+    { group: 'bullpen', stat: 'VEL', topN: 3, cap: 234.1, penaltyCurve: 1.1, penaltyPer100: 3291995, minAdder: 5487 },
+    { group: 'bullpen', stat: 'JNK', topN: 3, cap: 235.3, penaltyCurve: 2, penaltyPer100: 548666, minAdder: 1097 },
+    { group: 'bullpen', stat: 'ACC', topN: 3, cap: 197.8, penaltyCurve: 1.9, penaltyPer100: 1097332, minAdder: 3292 },
   ],
   standard: [
-    { group: 'hitters', stat: 'POW', topN: 8, cap: 556.8, penaltyCurve: 1.5, penaltyPer100: 1339328, minAdder: 2679 },
-    { group: 'hitters', stat: 'CON', topN: 8, cap: 570.7, penaltyCurve: 1.8, penaltyPer100: 892886, minAdder: 1786 },
-    { group: 'hitters', stat: 'SPD', topN: 8, cap: 533.5, penaltyCurve: 1.8, penaltyPer100: 892886, minAdder: 1786 },
-    { group: 'hitters', stat: 'FLD', topN: 8, cap: 572.4, penaltyCurve: 2, penaltyPer100: 625020, minAdder: 536 },
-    { group: 'hitters', stat: 'ARM', topN: 8, cap: 542.6, penaltyCurve: 1.8, penaltyPer100: 803597, minAdder: 804 },
-    { group: 'rotation', stat: 'VEL', topN: 4, cap: 238.5, penaltyCurve: 1.5, penaltyPer100: 1339328, minAdder: 1786 },
-    { group: 'rotation', stat: 'JNK', topN: 4, cap: 218.4, penaltyCurve: 2, penaltyPer100: 357154, minAdder: 893 },
-    { group: 'rotation', stat: 'ACC', topN: 4, cap: 268.5, penaltyCurve: 1.9, penaltyPer100: 714308, minAdder: 1071 },
-    { group: 'bullpen', stat: 'VEL', topN: 3, cap: 208.8, penaltyCurve: 1.1, penaltyPer100: 2678657, minAdder: 4464 },
-    { group: 'bullpen', stat: 'JNK', topN: 3, cap: 211.2, penaltyCurve: 2, penaltyPer100: 446443, minAdder: 893 },
-    { group: 'bullpen', stat: 'ACC', topN: 3, cap: 178.8, penaltyCurve: 1.9, penaltyPer100: 892886, minAdder: 2679 },
+    { group: 'hitters', stat: 'POW', topN: 8, cap: 585.7, penaltyCurve: 1.5, penaltyPer100: 1452916, minAdder: 2906 },
+    { group: 'hitters', stat: 'CON', topN: 8, cap: 579.4, penaltyCurve: 1.8, penaltyPer100: 968610, minAdder: 1937 },
+    { group: 'hitters', stat: 'SPD', topN: 8, cap: 588.9, penaltyCurve: 1.8, penaltyPer100: 968610, minAdder: 1937 },
+    { group: 'hitters', stat: 'FLD', topN: 8, cap: 584.7, penaltyCurve: 2, penaltyPer100: 678027, minAdder: 581 },
+    { group: 'hitters', stat: 'ARM', topN: 8, cap: 570.0, penaltyCurve: 1.8, penaltyPer100: 871749, minAdder: 872 },
+    { group: 'rotation', stat: 'POW', topN: 4, cap: 93.5, penaltyCurve: 1, penaltyPer100: 1937221, minAdder: 2906 },
+    { group: 'rotation', stat: 'CON', topN: 4, cap: 93.9, penaltyCurve: 1, penaltyPer100: 1162333, minAdder: 2422 },
+    { group: 'rotation', stat: 'SPD', topN: 4, cap: 113.3, penaltyCurve: 2, penaltyPer100: 968610, minAdder: 2422 },
+    { group: 'rotation', stat: 'FLD', topN: 4, cap: 260.6, penaltyCurve: 2, penaltyPer100: 629597, minAdder: 969 },
+    { group: 'rotation', stat: 'VEL', topN: 4, cap: 260.4, penaltyCurve: 1.5, penaltyPer100: 1452916, minAdder: 1937 },
+    { group: 'rotation', stat: 'JNK', topN: 4, cap: 252.3, penaltyCurve: 2, penaltyPer100: 387444, minAdder: 969 },
+    { group: 'rotation', stat: 'ACC', topN: 4, cap: 285.3, penaltyCurve: 1.9, penaltyPer100: 774888, minAdder: 1162 },
+    { group: 'bullpen', stat: 'POW', topN: 4, cap: 76.3, penaltyCurve: 1, penaltyPer100: 2034082, minAdder: 4843 },
+    { group: 'bullpen', stat: 'CON', topN: 4, cap: 73.6, penaltyCurve: 1, penaltyPer100: 1259194, minAdder: 2906 },
+    { group: 'bullpen', stat: 'SPD', topN: 4, cap: 125.4, penaltyCurve: 2, penaltyPer100: 1065472, minAdder: 2906 },
+    { group: 'bullpen', stat: 'FLD', topN: 4, cap: 264.7, penaltyCurve: 2, penaltyPer100: 726458, minAdder: 969 },
+    { group: 'bullpen', stat: 'VEL', topN: 3, cap: 223.4, penaltyCurve: 1.1, penaltyPer100: 2905831, minAdder: 4843 },
+    { group: 'bullpen', stat: 'JNK', topN: 3, cap: 224.6, penaltyCurve: 2, penaltyPer100: 484305, minAdder: 969 },
+    { group: 'bullpen', stat: 'ACC', topN: 3, cap: 188.7, penaltyCurve: 1.9, penaltyPer100: 968610, minAdder: 2906 },
   ],
   nerfed: [
-    { group: 'hitters', stat: 'POW', topN: 8, cap: 525.6, penaltyCurve: 1.5, penaltyPer100: 1161188, minAdder: 2322 },
-    { group: 'hitters', stat: 'CON', topN: 8, cap: 538.8, penaltyCurve: 1.8, penaltyPer100: 774126, minAdder: 1548 },
-    { group: 'hitters', stat: 'SPD', topN: 8, cap: 503.6, penaltyCurve: 1.8, penaltyPer100: 774126, minAdder: 1548 },
-    { group: 'hitters', stat: 'FLD', topN: 8, cap: 540.4, penaltyCurve: 2, penaltyPer100: 541888, minAdder: 464 },
-    { group: 'hitters', stat: 'ARM', topN: 8, cap: 512.2, penaltyCurve: 1.8, penaltyPer100: 696713, minAdder: 697 },
-    { group: 'rotation', stat: 'VEL', topN: 4, cap: 225.1, penaltyCurve: 1.5, penaltyPer100: 1161188, minAdder: 1548 },
-    { group: 'rotation', stat: 'JNK', topN: 4, cap: 206.2, penaltyCurve: 2, penaltyPer100: 309650, minAdder: 774 },
-    { group: 'rotation', stat: 'ACC', topN: 4, cap: 253.5, penaltyCurve: 1.9, penaltyPer100: 619300, minAdder: 929 },
-    { group: 'bullpen', stat: 'VEL', topN: 3, cap: 197.1, penaltyCurve: 1.1, penaltyPer100: 2322377, minAdder: 3871 },
-    { group: 'bullpen', stat: 'JNK', topN: 3, cap: 199.4, penaltyCurve: 2, penaltyPer100: 387063, minAdder: 774 },
-    { group: 'bullpen', stat: 'ACC', topN: 3, cap: 168.8, penaltyCurve: 1.9, penaltyPer100: 774126, minAdder: 2322 },
+    { group: 'hitters', stat: 'POW', topN: 8, cap: 561.1, penaltyCurve: 1.5, penaltyPer100: 1303427, minAdder: 2607 },
+    { group: 'hitters', stat: 'CON', topN: 8, cap: 555.1, penaltyCurve: 1.8, penaltyPer100: 868952, minAdder: 1738 },
+    { group: 'hitters', stat: 'SPD', topN: 8, cap: 564.2, penaltyCurve: 1.8, penaltyPer100: 868952, minAdder: 1738 },
+    { group: 'hitters', stat: 'FLD', topN: 8, cap: 560.1, penaltyCurve: 2, penaltyPer100: 608266, minAdder: 521 },
+    { group: 'hitters', stat: 'ARM', topN: 8, cap: 546.1, penaltyCurve: 1.8, penaltyPer100: 782056, minAdder: 782 },
+    { group: 'rotation', stat: 'POW', topN: 4, cap: 89.6, penaltyCurve: 1, penaltyPer100: 1737903, minAdder: 2607 },
+    { group: 'rotation', stat: 'CON', topN: 4, cap: 89.9, penaltyCurve: 1, penaltyPer100: 1042742, minAdder: 2172 },
+    { group: 'rotation', stat: 'SPD', topN: 4, cap: 108.5, penaltyCurve: 2, penaltyPer100: 868952, minAdder: 2172 },
+    { group: 'rotation', stat: 'FLD', topN: 4, cap: 249.7, penaltyCurve: 2, penaltyPer100: 564818, minAdder: 869 },
+    { group: 'rotation', stat: 'VEL', topN: 4, cap: 249.5, penaltyCurve: 1.5, penaltyPer100: 1303427, minAdder: 1738 },
+    { group: 'rotation', stat: 'JNK', topN: 4, cap: 241.7, penaltyCurve: 2, penaltyPer100: 347581, minAdder: 869 },
+    { group: 'rotation', stat: 'ACC', topN: 4, cap: 273.3, penaltyCurve: 1.9, penaltyPer100: 695161, minAdder: 1043 },
+    { group: 'bullpen', stat: 'POW', topN: 4, cap: 73.1, penaltyCurve: 1, penaltyPer100: 1824798, minAdder: 4345 },
+    { group: 'bullpen', stat: 'CON', topN: 4, cap: 70.5, penaltyCurve: 1, penaltyPer100: 1129637, minAdder: 2607 },
+    { group: 'bullpen', stat: 'SPD', topN: 4, cap: 120.1, penaltyCurve: 2, penaltyPer100: 955847, minAdder: 2607 },
+    { group: 'bullpen', stat: 'FLD', topN: 4, cap: 253.6, penaltyCurve: 2, penaltyPer100: 651714, minAdder: 869 },
+    { group: 'bullpen', stat: 'VEL', topN: 3, cap: 214.0, penaltyCurve: 1.1, penaltyPer100: 2606855, minAdder: 4345 },
+    { group: 'bullpen', stat: 'JNK', topN: 3, cap: 215.2, penaltyCurve: 2, penaltyPer100: 434476, minAdder: 869 },
+    { group: 'bullpen', stat: 'ACC', topN: 3, cap: 180.8, penaltyCurve: 1.9, penaltyPer100: 868952, minAdder: 2607 },
   ],
 };
 
-/** Pitcher-BATTING luxury rows (rotation/bullpen POW CON SPD FLD): DISABLED for v1.
- *  89/178 stock pitchers carry no batterRatings, so stock-team top-N sums for these
- *  stats are corrupted toward 0 and 65th-pct caps would megatax any pitcher that HAS
- *  batting data. XBL penalty shapes preserved verbatim below (caps in XBL rating units,
- *  $ unscaled) - re-derive via scripts/analyze-pool.py after the DB gap is filled. */
+/** Pitcher-BATTING luxury rows (rotation/bullpen POW CON SPD FLD) are ACTIVE after DB1.
+ *  The stock pool now has 179/179 pitcher batterRatings, so no v1 luxury rows are disabled.
+ *  Kept as an explicit empty registry for callers that check legacy disabled rows. */
 export const DISABLED_LUXURY_ROWS: Array<Omit<LuxuryCapRow, 'cap'> & { xblCap: number; disabledReason: string }> = [
-  { group: 'rotation', stat: 'POW', topN: 4, xblCap: 120, penaltyCurve: 1, penaltyPer100: 2000000, minAdder: 3000, disabledReason: 'pitcher batterRatings data gap (89/178)' },
-  { group: 'rotation', stat: 'CON', topN: 4, xblCap: 160, penaltyCurve: 1, penaltyPer100: 1200000, minAdder: 2500, disabledReason: 'pitcher batterRatings data gap (89/178)' },
-  { group: 'rotation', stat: 'SPD', topN: 4, xblCap: 300, penaltyCurve: 2, penaltyPer100: 1000000, minAdder: 2500, disabledReason: 'pitcher batterRatings data gap (89/178)' },
-  { group: 'rotation', stat: 'FLD', topN: 4, xblCap: 396, penaltyCurve: 2, penaltyPer100: 650000, minAdder: 1000, disabledReason: 'pitcher batterRatings data gap (89/178)' },
-  { group: 'bullpen', stat: 'POW', topN: 4, xblCap: 120, penaltyCurve: 1, penaltyPer100: 2100000, minAdder: 5000, disabledReason: 'pitcher batterRatings data gap (89/178)' },
-  { group: 'bullpen', stat: 'CON', topN: 4, xblCap: 120, penaltyCurve: 1, penaltyPer100: 1300000, minAdder: 3000, disabledReason: 'pitcher batterRatings data gap (89/178)' },
-  { group: 'bullpen', stat: 'SPD', topN: 4, xblCap: 260, penaltyCurve: 2, penaltyPer100: 1100000, minAdder: 3000, disabledReason: 'pitcher batterRatings data gap (89/178)' },
-  { group: 'bullpen', stat: 'FLD', topN: 4, xblCap: 396, penaltyCurve: 2, penaltyPer100: 750000, minAdder: 1000, disabledReason: 'pitcher batterRatings data gap (89/178)' },
 ];
 
 /** §6.2 modification deltas as FRACTIONS of the XBL cap of the luxury row each shifts.
@@ -186,11 +202,11 @@ export const CAP_MODIFICATION_FRACTIONS: Record<string, Record<ModStat, number>>
 
 export const T3_DERIVATION_INPUTS = {
   poolSize: 440,
-  poolMeanIV: 60225,
-  poolMeanGradeOrdinal: 5.7705,  // ladder D=0 .. S=11
+  poolMeanIV: 54854,
+  poolMeanGradeOrdinal: 5.7455,  // ladder D=0 .. S=11
   luxuryCapPercentile: 0.65,
   starBudgetShare: 0.33,
   rosterHeadroom: 1.15,
-  penaltySigmaJuiced: 1.138647,  // pool median IV / XBL anchor median salary
+  penaltySigmaJuiced: 1.097332,  // pool median IV / XBL anchor median salary
   contentionLadderTeams: 20,
 } as const;

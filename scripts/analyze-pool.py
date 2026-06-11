@@ -45,6 +45,19 @@ OUT_TS = os.path.join(ROOT, "src", "data", "tierParams.ts")
 ATTRS8 = ["POW", "CON", "SPD", "FLD", "ARM", "VEL", "JNK", "ACC"]
 HITTER_POS = ["C", "1B", "2B", "SS", "3B", "LF", "CF", "RF"]
 PITCHER_ROLES = ["SP", "SP/RP", "RP", "CP"]
+PITCH_ATTRS = ["VEL", "JNK", "ACC"]
+BAT_USAGE_ATTRS = ["POW", "CON", "SPD", "FLD"]
+PITCHER_NEUTRAL_HITTER_BLOCK = "IF/OF"
+TWO_WAY_TRAIT_POS = {"Two Way (C)": "C", "Two Way (IF)": "IF", "Two Way (OF)": "OF"}
+TWO_WAY_ARM_BY_TIER = {"L1": 60, "L2": 80, "L3": 99}
+SP_RP_START_SHARE = 0.30
+SP_RP_FLEX_PREMIUM = 1.12
+SPD_USAGE_FLOORS = {
+    "SP": {"prFloor": 0.02, "rangeFloor": 0.10},
+    "SP/RP": {"prFloor": 0.02, "rangeFloor": 0.08},
+    "RP": {"prFloor": 0.02, "rangeFloor": 0.06},
+    "CP": {"prFloor": 0.01, "rangeFloor": 0.05},
+}
 GRADE_ORDER = ["D", "D+", "C-", "C", "C+", "B-", "B", "B+", "A-", "A", "A+", "S"]
 GRADE_ORD = {g: i for i, g in enumerate(GRADE_ORDER)}
 
@@ -62,6 +75,41 @@ ROSTER_HEADROOM = 1.15
 LUXURY_CAP_PERCENTILE = 0.65
 EV_FLATNESS_TOLERANCE = 0.10
 N_TEAMS = 20  # contention ladder depth = league size the 440 pool implies (440/22)
+
+
+# §3.9 registry-style inputs. The script stores the derivation inputs, then emits the
+# calibrated weights; downstream kblIV never consumes opaque hand-picked role weights.
+USAGE_WEIGHT_INPUTS = {
+    # startShare * paRatio + phFloor gives POW/CON exposure. SPD adds PR/range floors.
+    "SP": {"startShare": 0.25, "paRatio": 0.625, "phFloor": 0.04, **SPD_USAGE_FLOORS["SP"]},
+    "SP/RP": {"startShare": 0.18, "paRatio": 0.625, "phFloor": 0.0375, **SPD_USAGE_FLOORS["SP/RP"]},
+    "RP": {"startShare": 0.0, "paRatio": 0.625, "phFloor": 0.08, **SPD_USAGE_FLOORS["RP"]},
+    "CP": {"startShare": 0.0, "paRatio": 0.625, "phFloor": 0.05, **SPD_USAGE_FLOORS["CP"]},
+}
+
+
+def role_usage_weights(role):
+    inp = USAGE_WEIGHT_INPUTS[role]
+    bat = inp["startShare"] * inp["paRatio"] + inp["phFloor"]
+    spd = min(1.0, bat + inp["prFloor"] + inp["rangeFloor"])
+    return {"POW": bat, "CON": bat, "SPD": spd, "FLD": 1.0}
+
+
+def emit_usage_weights():
+    print("\n" + "=" * 100)
+    print("D15/V117. kblIV pitcher-batting usage weights (§3.9) - derived from registry inputs")
+    print("=" * 100)
+    print("| Role  | startShare | paRatio | phFloor | POW/CON weight | PR floor | range floor | SPD weight | FLD weight |")
+    print("|-------|------------|---------|---------|----------------|----------|-------------|------------|------------|")
+    for role in PITCHER_ROLES:
+        inp = USAGE_WEIGHT_INPUTS[role]
+        w = role_usage_weights(role)
+        print(f"| {role:<5} | {inp['startShare']:>10.3f} | {inp['paRatio']:>7.3f} | {inp['phFloor']:>7.4f} | "
+              f"{w['POW']:>14.4f} | {inp['prFloor']:>8.3f} | {inp['rangeFloor']:>11.3f} | "
+              f"{w['SPD']:>10.4f} | {w['FLD']:>10.4f} |")
+    print("Pitcher-block batting curves remain rawIV-only; kblIV prices pitcher batting on hitter curves.")
+    print(f"SP/RP arm interpolation (D16): alpha={SP_RP_START_SHARE:.2f} SP + "
+          f"{1 - SP_RP_START_SHARE:.2f} RP, flexPremium={SP_RP_FLEX_PREMIUM:.2f}.")
 
 
 def fail(msg):
@@ -204,8 +252,9 @@ def parse_players():
             p["bat"] = dict(zip(["POW", "CON", "SPD", "FLD", "ARM"], map(int, br.groups())))
             p["hasBat"] = True
         elif p["isPitcher"]:
-            # 89/204 stock pitchers carry no batterRatings (DB data gap, flagged in the
-            # T3 doc). 0 is the only non-invented default; prices their batting at $0.
+            # Legacy guard only. DB1 closed the stock-pitcher batterRatings gap; if a
+            # future DB drops one, rawIV keeps the old non-invented zero default and
+            # the analysis reports the regression before F1 luxury derivation.
             p["bat"] = {a: 0 for a in ["POW", "CON", "SPD", "FLD", "ARM"]}
             p["hasBat"] = False
         else:
@@ -218,11 +267,15 @@ def parse_players():
             p["role"] = g("pitcherRole")
             if p["role"] not in PITCHER_ROLES:
                 fail(f"pitcher {pid}: unknown pitcherRole {p['role']!r}")
+            p["armSlot"] = g("armSlot")
+            if p["armSlot"] not in {"High", "Mid", "Low", "Sub"} and team != "free-agent":
+                fail(f"pitcher {pid}: unknown or missing armSlot {p['armSlot']!r}")
             am = re.search(r"arsenal: \[([^\]]*)\]", body)
             p["arsenal"] = re.findall(r"'([^']+)'", am.group(1)) if am else []
         else:
             p["pos"] = g("primaryPosition")
-            p["arsenal"] = []  # one stock hitter (crc-fenomeno) carries an arsenal; unpriced (no pitching block) - doc'd
+            p["armSlot"] = None
+            p["arsenal"] = []
         p["secondary"] = g("secondaryPosition")
         traits = [g("trait1"), g("trait2")]
         p["traits"] = [TRAIT_NAME_FIXES.get(t, t) for t in traits if t]
@@ -252,8 +305,8 @@ def parse_players():
 #  - Switch hitter (Roster!L7): ROUNDUP(exact marginals of HANDED 'S' deltas), same gates.
 #  - Pitch cells (PitchCalcs!R2:Y2): per pitch ROUNDUP(flat + sum ROUNDED-CELL
 #    multiplier terms over VEL/JNK/ACC), summed per player.
-#  - Arm angle (Roster!BT23): 0 unless 'Sub' (flat + rounded-cell mult terms). The
-#    SMB4 DB carries no arm-angle field -> contributes $0 to every pool player.
+#  - Arm angle (Roster!BT23): 0 unless 'Sub' (flat + rounded-cell mult terms). DB1
+#    added armSlot, so pool rawIV/kblIV now price Sub slots; High/Mid/Low stay $0.
 #  - Bullpen arsenal tax (LeagueSettings table): TEAM-level (sums the whole pen's
 #    pitch count) - NOT part of any player's salary cell; excluded from IV here.
 #  - Player salary = SUM of the (already-rounded) component cells. Integer.
@@ -354,17 +407,175 @@ class IVEngine:
             parts["attributes"] + parts["handed"] + parts["traits"] + parts["pitches"] + parts["secondary"] + parts["angle"]
         return parts
 
-    def pool_iv(self, p):
+    def pool_raw_iv(self, p):
         if p["isPitcher"]:
             ratings = dict(p["bat"], **p["pit"])
             ratings.pop("ARM", None)  # pitchers carry no priced ARM (workbook block shape)
             # secondary=None: the workbook prices secondary positions for hitters only
             # (pitcher Roster rows have no slot); no DB pitcher carries one anyway.
-            return self.compute(p["role"], ratings, p["bats"], p["traits"], p["arsenal"])
+            return self.compute(p["role"], ratings, p["bats"], p["traits"], p["arsenal"], angle=p["armSlot"])
         block_key = "1B" if p["pos"] == "DH" else p["pos"]  # all 8 hitter blocks share identical
         # params in the workbook (T1 data), so the DH->1B mapping is value-neutral; doc'd.
         return self.compute(block_key, dict(p["bat"]), p["bats"], p["traits"], [],
                             secondary=p["secondary"])
+
+    def pool_iv(self, p):
+        """Downstream pool IV = kblIV. Non-pitchers remain workbook-exact; pitchers use
+        the §3.9 usage layer for batting/fielding while preserving raw pitcher pricing."""
+        if not p["isPitcher"]:
+            return self.pool_raw_iv(p)
+        return self.pool_kbl_iv(p)
+
+    def hitter_block_for_pitcher(self, p):
+        for t in p["traits"]:
+            if t in TWO_WAY_TRAIT_POS:
+                return TWO_WAY_TRAIT_POS[t]
+        return PITCHER_NEUTRAL_HITTER_BLOCK
+
+    def pitcher_attr_cell_kbl(self, role, attr, rating):
+        if role != "SP/RP":
+            return attr_cell(rating, self.curves[role][attr])
+        sp = attr_cell(rating, self.curves["SP"][attr])
+        rp = attr_cell(rating, self.curves["RP"][attr])
+        return roundup((SP_RP_START_SHARE * sp + (1.0 - SP_RP_START_SHARE) * rp) * SP_RP_FLEX_PREMIUM)
+
+    def pitcher_attr_marginal_kbl(self, role, attr, rating, delta):
+        if role != "SP/RP":
+            return marginal(rating, delta, self.curves[role][attr])
+        sp = marginal(rating, delta, self.curves["SP"][attr])
+        rp = marginal(rating, delta, self.curves["RP"][attr])
+        return (SP_RP_START_SHARE * sp + (1.0 - SP_RP_START_SHARE) * rp) * SP_RP_FLEX_PREMIUM
+
+    def pitcher_kbl_cells(self, p):
+        pitch_block = self.curves[p["role"]]
+        hitter_block = self.curves[self.hitter_block_for_pitcher(p)]
+        is_two_way = any(t in TWO_WAY_TRAIT_POS for t in p["traits"])
+        pitch_cells = {a: self.pitcher_attr_cell_kbl(p["role"], a, p["pit"][a]) for a in PITCH_ATTRS}
+        bat_cells = {a: attr_cell(p["bat"][a], hitter_block[a]) for a in ["POW", "CON", "SPD"]}
+        # POW/CON/SPD are batting usage. FLD is full-use pitcher fielding unless the
+        # Two Way trait explicitly unlocks position defense at the trait-position curve.
+        fielding_block = hitter_block if is_two_way else pitch_block
+        fielding_interpolated = (p["role"] == "SP/RP" and not is_two_way)
+        bat_cells["FLD"] = (
+            self.pitcher_attr_cell_kbl(p["role"], "FLD", p["bat"]["FLD"])
+            if fielding_interpolated
+            else attr_cell(p["bat"]["FLD"], fielding_block["FLD"])
+        )
+        return pitch_block, hitter_block, fielding_block, fielding_interpolated, pitch_cells, bat_cells
+
+    def weighted_component(self, deltas, multipliers, flat, ratings, pitch_block, hitter_block,
+                           fielding_block, fielding_interpolated, pitch_cells, bat_cells, weights, role):
+        """kblIV trait/switch component for pitchers.
+
+        Raw workbook semantics price pitcher batting on pitcher blocks. The kbl layer
+        routes POW/CON/SPD through hitter curves with usage weights, keeps FLD as full-use
+        mound fielding unless Two Way unlocks position defense, and routes SP/RP pitching
+        deltas through the same D16 interpolation used by base cells. The old rawIV A3
+        negative-trait asymmetry is intentionally not mirrored here; JK ratified the D16
+        symmetric flex-premium treatment. Ordinary pitcher ARM remains unpriced.
+        """
+        total = flat
+        for a in ["POW", "CON", "SPD"]:
+            if deltas.get(a, 0) != 0:
+                total += marginal(ratings[a], deltas[a], hitter_block[a]) * weights[a]
+        if deltas.get("FLD", 0) != 0:
+            if fielding_interpolated:
+                total += self.pitcher_attr_marginal_kbl(role, "FLD", ratings["FLD"], deltas["FLD"])
+            else:
+                total += marginal(ratings["FLD"], deltas["FLD"], fielding_block["FLD"])
+        for a in PITCH_ATTRS:
+            if deltas.get(a, 0) != 0:
+                if role == "SP/RP":
+                    total += self.pitcher_attr_marginal_kbl(role, a, ratings[a], deltas[a])
+                else:
+                    total += marginal(ratings[a], deltas[a], pitch_block[a])
+        if multipliers:
+            for a in ["POW", "CON", "SPD"]:
+                m = multipliers.get(a, 1)
+                if m != 1:
+                    total += (bat_cells[a] * m - bat_cells[a]) * weights[a]
+            m = multipliers.get("FLD", 1)
+            if m != 1:
+                total += bat_cells["FLD"] * m - bat_cells["FLD"]
+            for a in PITCH_ATTRS:
+                m = multipliers.get(a, 1)
+                if m != 1:
+                    total += pitch_cells[a] * m - pitch_cells[a]
+        return roundup(total)
+
+    def two_way_trait_component(self, trait_name, p, hitter_block, bat_cells, weights):
+        """§3.9 Two Way as usage unlock, not the workbook's flat +rating delta row.
+
+        Base pitcher kblIV already prices role-expected batting use and full pitcher
+        fielding. The Two Way trait buys the remaining everyday hitting usage plus
+        quality-scaled defensive capability at the trait position: L2 FLD delta from the
+        trait row and L2 ARM = 80 on the trait-position ARM curve.
+        """
+        tr = self.traits[trait_name]
+        total = 0.0
+        for a in ["POW", "CON", "SPD"]:
+            total += bat_cells[a] * (1.0 - weights[a])
+        fld_delta = tr["deltas"].get("FLD", 0)
+        if fld_delta:
+            total += marginal(p["bat"]["FLD"], fld_delta, hitter_block["FLD"])
+        total += attr_cell(TWO_WAY_ARM_BY_TIER["L2"], hitter_block["ARM"])
+        return roundup(total)
+
+    def pool_kbl_iv(self, p):
+        pitch_block, hitter_block, fielding_block, fielding_interpolated, pitch_cells, bat_cells = self.pitcher_kbl_cells(p)
+        weights = role_usage_weights(p["role"])
+        parts = {
+            "pitchingAttributes": sum(pitch_cells.values()),
+            "battingAttributes": roundup(sum(bat_cells[a] * weights[a] for a in BAT_USAGE_ATTRS)),
+            "attributes": 0,
+            "handed": 0,
+            "traits": 0,
+            "twoWayUnlock": 0,
+            "pitches": 0,
+            "secondary": 0,
+            "angle": 0,
+        }
+        parts["attributes"] = parts["pitchingAttributes"] + parts["battingAttributes"]
+        ratings = dict(p["bat"], **p["pit"])
+        if p["bats"] == "S":
+            parts["handed"] = self.weighted_component(self.switch["deltas"], None, self.switch["flatFee"],
+                                                      ratings, pitch_block, hitter_block, fielding_block,
+                                                      fielding_interpolated, pitch_cells, bat_cells, weights, p["role"])
+        for t in p["traits"]:
+            if t not in self.traits:
+                fail(f"trait {t!r} not in traitPricing.ts")
+            if t in TWO_WAY_TRAIT_POS:
+                v = self.two_way_trait_component(t, p, hitter_block, bat_cells, weights)
+                parts["twoWayUnlock"] += v
+                parts["traits"] += v
+                continue
+            tr = self.traits[t]
+            parts["traits"] += self.weighted_component(tr["deltas"], tr["multipliers"], tr["flatFee"],
+                                                       ratings, pitch_block, hitter_block, fielding_block,
+                                                       fielding_interpolated, pitch_cells, bat_cells, weights, p["role"])
+        for code in p["arsenal"]:
+            pc = self.pitches[code]
+            cost = pc["flatFee"]
+            for a in PITCH_ATTRS:
+                m = pc["multipliers"].get(a, 1)
+                if m != 1:
+                    cost += pitch_cells[a] * m - pitch_cells[a]
+            parts["pitches"] += roundup(cost)
+        if p["armSlot"] == "Sub":
+            an = self.angles["Sub"]
+            cost = an["flatFee"]
+            for a in PITCH_ATTRS:
+                m = an["multipliers"].get(a, 1)
+                if m != 1:
+                    cost += pitch_cells[a] * m - pitch_cells[a]
+            parts["angle"] = roundup(cost)
+        parts["total"] = parts["attributes"] + parts["handed"] + parts["traits"] + parts["pitches"] + parts["angle"]
+        parts["usageWeights"] = weights
+        parts["hitterCurveBlock"] = next(k for k, v in self.curves.items() if v is hitter_block)
+        parts["fieldingCurveBlock"] = "SP/RP interpolated" if fielding_interpolated else (
+            parts["hitterCurveBlock"] if any(t in TWO_WAY_TRAIT_POS for t in p["traits"]) else p["role"]
+        )
+        return parts
 
 
 # ---------------------------------------------------------------------------
@@ -436,12 +647,22 @@ def run_anchor_gate(engine, anchors):
     for nm, expected in must.items():
         if seen.get(nm) != expected:
             fail(f"contract anchor {nm} (${expected:,}) not found in Roster sheet as expected (saw {seen.get(nm)})")
+    gray = next((a for a in anchors if a["name"] == "Jon Gray"), None)
+    if gray is None:
+        fail("Jon Gray rawIV Injury Prone anchor not found")
+    block = engine.curves["SP/RP"]
+    cells = {a: attr_cell(gray["ratings"][a], block[a]) for a in block if a in gray["ratings"]}
+    injury = engine.traits["Injury Prone"]
+    gray_injury = priced_component(injury["deltas"], injury["multipliers"], injury["flatFee"],
+                                   gray["ratings"], block, cells, delta_block=engine.curves["RP"])
+    if gray_injury != -2136:
+        fail(f"Jon Gray rawIV Injury Prone anchor moved: expected -$2,136, saw {gray_injury}")
     if n_pass != len(rows):
         name, blk, exp, got, diff, parts = worst
         print(f"\nWorst mismatch: {name} ({blk}) expected {exp:,} got {got:,} (diff {diff:+})")
         print("Per-component breakdown:", {k: v for k, v in parts.items()})
         fail("golden anchors FAILED - IV math is broken; no analysis was run (bootstrap rule)")
-    print(f"\nANCHOR GATE: {n_pass}/{len(rows)} PASS (incl. Eovaldi $54,582, deGrom $71,609)\n")
+    print(f"\nANCHOR GATE: {n_pass}/{len(rows)} PASS (incl. Eovaldi $54,582, deGrom $71,609; Jon Gray Injury Prone -$2,136)\n")
     return len(rows)
 
 
@@ -474,13 +695,8 @@ def load_luxury(wbpath):
             r += 1
     if len(rows) != 19:
         fail(f"Luxury Cap sheet: expected 19 penalty rows, got {len(rows)}")
-    # The 8 pitcher-BATTING rows (rotation/bullpen POW CON SPD FLD) cannot be derived from
-    # this DB: 89/178 pitchers carry no batterRatings (data gap), so stock-team sums for
-    # those stats are corrupted toward 0 (several teams' rotations price FLD sums of 0).
-    # They are DISABLED for v1 and re-derivable after DB cleanup; XBL shapes preserved.
     for r in rows:
-        r["enabled"] = not (r["group"] in ("rotation", "bullpen") and
-                            r["stat"] in ("POW", "CON", "SPD", "FLD"))
+        r["enabled"] = True
     spec_pins = {("hitters", "POW"): (1.5, 8, 500, 1500000, 3000),
                  ("bullpen", "VEL"): (1.1, 3, 65, 3000000, 5000)}
     for (g, s), (cv, n, cap, p100, ma) in spec_pins.items():
@@ -531,7 +747,7 @@ STAT_HDR = ("| Segment        |   n |       mean |     median |       p10 |     
 
 def r1_distribution(pool):
     print("=" * 100)
-    print("R1. IV DISTRIBUTION - 440-player stock SMB4 pool (Juiced tier by definition, D3)")
+    print("R1. kblIV DISTRIBUTION - 440-player stock SMB4 pool (Juiced tier by definition, D3 + §3.9)")
     print("=" * 100)
     ivs = [p["iv"] for p in pool]
     print("\n### R1a. Overall + by role\n")
@@ -749,20 +965,23 @@ def r4_luxury(pool, lux_rows, mods, mod_stats, scales, anchors_median):
         cap_ladder = percentile(sorted(ladder), LUXURY_CAP_PERCENTILE)
         derived.append(dict(row, teamSums=team_sums, ladder=ladder, capJuiced=cap_j,
                             capLadderAlt=cap_ladder))
-        status = "ACTIVE" if row["enabled"] else "DISABLED (data gap)"
+        status = "ACTIVE" if row["enabled"] else "DISABLED"
         print(f"| {row['group']:<8} | {row['stat']:<4} | {row['topN']:>4} | {row['xblCap']:>7,.0f} | "
               f"{team_sums[0]:>9,.0f} | {percentile(team_sums, .5):>9,.1f} | {cap_j:>24,.1f} | "
               f"{team_sums[-1]:>9,.0f} | {cap_ladder:>12,.1f} | {cap_j / row['xblCap']:>6.3f} | {status} |")
-    print("\nDISABLED rows: the 8 rotation/bullpen POW-CON-SPD-FLD (pitcher batting) caps cannot be")
-    print("derived while 89/178 pitchers lack batterRatings - several stock rotations sum FLD = 0,")
-    print("so 65th-pct caps land near zero and megatax any pitcher who HAS batting data. The rows")
-    print("ship disabled with XBL shapes preserved; re-derive after DB cleanup (doc §R4 + flags).")
+    disabled = [d for d in derived if not d["enabled"]]
+    if disabled:
+        print("\nDISABLED rows remain:")
+        for d in disabled:
+            print(f"  - {d['group']}/{d['stat']}")
+    else:
+        print("\nDISABLED rows: none. DB1 closed the pitcher batterRatings gap, so the 8")
+        print("rotation/bullpen POW-CON-SPD-FLD rows are active and derived from real stock-team")
+        print("pitcher-batting distributions (F1 closed).")
     print("\nSensitivity (adopted stock-team caps at alternate percentiles, ACTIVE rows, for JK calibration):")
     print("| Group/Stat | 50th | 65th (default) | 75th | 90th |")
     print("|------------|------|----------------|------|------|")
     for d in derived:
-        if not d["enabled"]:
-            continue
         ts = d["teamSums"]
         print(f"| {d['group']}/{d['stat']:<4} | {percentile(ts, .5):>4,.0f} | {d['capJuiced']:>14,.1f} | "
               f"{percentile(ts, .75):>4,.0f} | {percentile(ts, .9):>4,.0f} |")
@@ -773,19 +992,16 @@ def invert_mean_rating_ratio(pool, engine, scales):
     """First-order rating-scale per tier: invert the IV transform through the pool's
     attribute-cost composition. Empirical: find f such that scaling every rating by f
     scales total pool IV by s. Solved by bisection on the actual pool (deterministic)."""
-    base_total = sum(p["iv"] for p in pool)
-
     def scaled_total(f):
         tot = 0
         for p in pool:
+            q = dict(p)
+            q["bat"] = {k: v * f for k, v in p["bat"].items()}
             if p["isPitcher"]:
-                ratings = {k: v * f for k, v in dict(p["bat"], **p["pit"]).items() if k != "ARM"}
-                block = p["role"]
+                q["pit"] = {k: v * f for k, v in p["pit"].items()}
+                tot += engine.pool_iv(q)["attributes"]
             else:
-                ratings = {k: v * f for k, v in p["bat"].items()}
-                block = "1B" if p["pos"] == "DH" else p["pos"]
-            blk = engine.curves[block]
-            tot += sum(attr_cell(ratings[a], blk[a]) for a in blk if a in ratings)
+                tot += engine.pool_iv(q)["attributes"]
         return tot
 
     # baseline at f=1 uses attribute IV only (traits/pitches excluded - they ride along)
@@ -1092,7 +1308,7 @@ runs below show where the tax layer actually starts to shape outcomes.""")
 # R6 - named-player spot checks
 # ---------------------------------------------------------------------------
 
-SPOT_CHECK_IDS = ["sir-longballo", "hrb-filthwick", "crc-fenomeno", "wpg-drake", "wdl-deals"]
+SPOT_CHECK_IDS = ["sir-longballo", "hrb-filthwick", "crc-fenomeno", "bee-pastimm", "wpg-drake", "blf-bradwick", "wdl-deals"]
 
 
 def r6_spot_checks(pool, engine):
@@ -1112,13 +1328,20 @@ def r6_spot_checks(pool, engine):
         if p is None:
             print(f"  (spot-check id {pid!r} not found - skipped)")
             continue
-        parts = engine.pool_iv(p)
+        parts = p.get("parts") or engine.pool_iv(p)
         pctl = sum(1 for v in ivs if v <= p["iv"]) / len(ivs)
         pos = p["role"] if p["isPitcher"] else p["pos"]
-        print(f"- {p['name']} ({p['id']}, {pos}, grade {p['grade']}, bats {p['bats']}): IV ${p['iv']:,} (p{pctl:.0%})")
-        print(f"    components: attrs ${parts['attributes']:,} | traits ${parts['traits']:,} "
-              f"({', '.join(p['traits']) or 'none'}) | pitches ${parts['pitches']:,} | "
-              f"switch ${parts['handed']:,} | 2nd-pos ${parts['secondary']:,} ({p['secondary'] or '-'})")
+        raw_note = f", rawIV ${p['rawIV']:,}" if "rawIV" in p and p["rawIV"] != p["iv"] else ""
+        print(f"- {p['name']} ({p['id']}, {pos}, grade {p['grade']}, bats {p['bats']}): kblIV ${p['iv']:,}{raw_note} (p{pctl:.0%})")
+        if p["isPitcher"]:
+            print(f"    components: pitch-attrs ${parts['pitchingAttributes']:,} | usage-bat/field ${parts['battingAttributes']:,} "
+                  f"(bat {parts['hitterCurveBlock']} curves; FLD {parts['fieldingCurveBlock']} curve; w={parts['usageWeights']}) | traits ${parts['traits']:,} "
+                  f"({', '.join(p['traits']) or 'none'}; two-way unlock ${parts['twoWayUnlock']:,}) | "
+                  f"pitches ${parts['pitches']:,} | switch ${parts['handed']:,}")
+        else:
+            print(f"    components: attrs ${parts['attributes']:,} | traits ${parts['traits']:,} "
+                  f"({', '.join(p['traits']) or 'none'}) | pitches ${parts['pitches']:,} | "
+                  f"switch ${parts['handed']:,} | 2nd-pos ${parts['secondary']:,} ({p['secondary'] or '-'})")
         if p["isPitcher"]:
             print(f"    ratings: POW {p['bat']['POW']} CON {p['bat']['CON']} SPD {p['bat']['SPD']} "
                   f"FLD {p['bat']['FLD']} | VEL {p['pit']['VEL']} JNK {p['pit']['JNK']} ACC {p['pit']['ACC']} "
@@ -1126,6 +1349,37 @@ def r6_spot_checks(pool, engine):
         else:
             print(f"    ratings: POW {p['bat']['POW']} CON {p['bat']['CON']} SPD {p['bat']['SPD']} "
                   f"FLD {p['bat']['FLD']} ARM {p['bat']['ARM']}")
+    by_id = {p["id"]: p for p in pool}
+    oracle = [by_id["crc-fenomeno"], by_id["bee-pastimm"], by_id["wpg-drake"]]
+    lad = by_id["blf-bradwick"]
+    print("\nV117-FIX acceptance checks and reports (kblIV):")
+    for p in oracle:
+        print(f"  {p['name']}: ${p['iv']:,} (rawIV ${p['rawIV']:,})")
+    lad_limit = 0.50 * lad["rawIV"]
+    print(f"  {lad['name']}: ${lad['iv']:,} (rawIV ${lad['rawIV']:,})")
+    if lad["iv"] > lad_limit:
+        fail(f"V118 required crash failed: Lad Bradwick ${lad['iv']:,} > 50% of rawIV ${round(lad_limit):,}")
+    print(f"  Lad crash gate: ${lad['iv']:,} <= ${round(lad_limit):,} PASS")
+    print("\n  Fenomeno/Pastimm component bridge (report-only; parity band retired):")
+    print("  | Component | Fenomeno | Pastimm | Pastimm - Fenomeno |")
+    print("  |---|---:|---:|---:|")
+    bridge_rows = [
+        ("pitch attrs", "pitchingAttributes"),
+        ("usage bat/field", "battingAttributes"),
+        ("traits total", "traits"),
+        ("two-way unlock", "twoWayUnlock"),
+        ("pitches", "pitches"),
+        ("arm slot", "angle"),
+        ("total", "total"),
+    ]
+    fen_parts = oracle[0]["parts"]
+    pas_parts = oracle[1]["parts"]
+    for label, key in bridge_rows:
+        f = fen_parts.get(key, 0)
+        b = pas_parts.get(key, 0)
+        print(f"  | {label} | ${f:,} | ${b:,} | ${b - f:+,} |")
+    print(f"  Arm probe Pastimm vs Drake: ${oracle[1]['iv']:,} vs ${oracle[2]['iv']:,}; "
+          f"trait-stack gap ${oracle[1]['iv'] - oracle[2]['iv']:,}")
 
 
 # ---------------------------------------------------------------------------
@@ -1155,7 +1409,9 @@ def emit_tier_params(scales, farm, caps, lux_derived, sigma, mods, mod_stats, me
     a(" * Derivations (full work shown in spec-docs/T3_POOL_ANALYSIS.md):")
     a(" *   - tier scales: grade-ladder method (§5.1) - median IV per SMB4 letter grade,")
     a(" *     piecewise-linear ladder; scale = ladder(meanOrdinal - steps) / ladder(meanOrdinal).")
-    a(" *     Multiplicative transform: tierIV = juicedIV x scale.")
+    a(" *     Multiplicative transform: tierIV = juiced kblIV x scale.")
+    a(" *   - V117 kblIV usage layer (§3.9): rawIV remains workbook-exact for anchors; pool")
+    a(" *     analysis uses pitcher batting repriced on hitter curves with role usage weights.")
     a(" *   - tierCap = max(maxPoolIV / starBudgetShare, 22 x medianPoolIV x rosterHeadroom) (§5.2)")
     a(" *   - luxury caps: 65th percentile (luxuryCapPercentile) of the STOCK-TEAM top-N sum")
     a(" *     distribution - the 20 real SMB4 rosters' observed concentrations (§5.3; the")
@@ -1236,11 +1492,9 @@ def emit_tier_params(scales, farm, caps, lux_derived, sigma, mods, mod_stats, me
         a("  ],")
     a("};")
     a("")
-    a("/** Pitcher-BATTING luxury rows (rotation/bullpen POW CON SPD FLD): DISABLED for v1.")
-    a(" *  89/178 stock pitchers carry no batterRatings, so stock-team top-N sums for these")
-    a(" *  stats are corrupted toward 0 and 65th-pct caps would megatax any pitcher that HAS")
-    a(" *  batting data. XBL penalty shapes preserved verbatim below (caps in XBL rating units,")
-    a(" *  $ unscaled) - re-derive via scripts/analyze-pool.py after the DB gap is filled. */")
+    a("/** Pitcher-BATTING luxury rows (rotation/bullpen POW CON SPD FLD) are ACTIVE after DB1.")
+    a(" *  The stock pool now has 179/179 pitcher batterRatings, so no v1 luxury rows are disabled.")
+    a(" *  Kept as an explicit empty registry for callers that check legacy disabled rows. */")
     a("export const DISABLED_LUXURY_ROWS: Array<Omit<LuxuryCapRow, 'cap'> & { xblCap: number; disabledReason: string }> = [")
     for d in lux_derived:
         if d["enabled"]:
@@ -1286,11 +1540,17 @@ def main():
     pool, fa = parse_players()
     print(f"[load] pool: 440 stock players (20 teams x 22) + {len(fa)} free agents (excluded per spec D3/§5.1)")
     nobat = [p for p in pool if p["isPitcher"] and not p["hasBat"]]
-    print(f"[load] DATA GAP: {len(nobat)}/{sum(1 for p in pool if p['isPitcher'])} pitchers lack "
-          f"batterRatings -> batting attrs priced $0 (see doc, DB-cleanup flag)")
+    pitcher_count = sum(1 for p in pool if p["isPitcher"])
+    sub_pitchers = [p for p in pool if p["isPitcher"] and p["armSlot"] == "Sub"]
+    print(f"[load] F1 pitcher batterRatings coverage: {pitcher_count - len(nobat)}/{pitcher_count} present")
+    print(f"[load] armSlot coverage: {pitcher_count}/{pitcher_count} present; Sub pitchers: "
+          f"{len(sub_pitchers)} ({', '.join(p['name'] for p in sub_pitchers)})")
+    if nobat:
+        fail(f"F1 luxury-row flip requires complete pitcher batterRatings; missing {len(nobat)}")
     print(f"[load] curves: 18 blocks | traits: {len(traits)} | DB trait-name fixes applied: {TRAIT_NAME_FIXES}")
 
     engine = IVEngine(curves, traits, pitches, switch, secpos, angles)
+    emit_usage_weights()
 
     # BOOTSTRAP GATE - abort before analysis if the workbook anchors don't reproduce
     anchors = load_anchors()
@@ -1298,7 +1558,10 @@ def main():
     anchors_median = percentile(sorted(a["expected"] for a in anchors), 0.5)
 
     for p in pool:
-        p["iv"] = engine.pool_iv(p)["total"]
+        p["rawParts"] = engine.pool_raw_iv(p)
+        p["rawIV"] = p["rawParts"]["total"]
+        p["parts"] = engine.pool_iv(p)
+        p["iv"] = p["parts"]["total"]
 
     ivs = r1_distribution(pool)
     scales, farm, ladder, mean_ord, mean_iv = r2_tiers(pool, ivs)
