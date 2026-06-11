@@ -34,6 +34,10 @@ import os
 import re
 import sys
 import math
+import json
+import argparse
+import hashlib
+import subprocess
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WORKBOOK = os.path.join(ROOT, "spec-docs", "reference", "Team_Builder_Archetype_Logic_Template.xlsx")
@@ -664,6 +668,121 @@ def run_anchor_gate(engine, anchors):
         fail("golden anchors FAILED - IV math is broken; no analysis was run (bootstrap rule)")
     print(f"\nANCHOR GATE: {n_pass}/{len(rows)} PASS (incl. Eovaldi $54,582, deGrom $71,609; Jon Gray Injury Prone -$2,136)\n")
     return len(rows)
+
+
+# ---------------------------------------------------------------------------
+# T4 oracle dump (serialization-only; reuses the engine objects above)
+# ---------------------------------------------------------------------------
+
+def _git_sha():
+    try:
+        return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    except Exception:
+        return "unknown"
+
+
+def _sha256_file(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _parts_json(parts):
+    out = {}
+    for k in sorted(parts):
+        v = parts[k]
+        if isinstance(v, dict):
+            out[k] = {kk: v[kk] for kk in sorted(v)}
+        else:
+            out[k] = v
+    return out
+
+
+def _player_profile(p):
+    return {
+        "id": p["id"],
+        "name": p["name"],
+        "team": p["team"],
+        "grade": p["grade"],
+        "isPitcher": p["isPitcher"],
+        "position": p["role"] if p["isPitcher"] else p["pos"],
+        "role": p["role"] if p["isPitcher"] else None,
+        "primaryPosition": None if p["isPitcher"] else p["pos"],
+        "secondaryPosition": p.get("secondary"),
+        "bats": p["bats"],
+        "traits": list(p["traits"]),
+        "arsenal": list(p["arsenal"]),
+        "armSlot": p.get("armSlot"),
+        "batterRatings": dict(p["bat"]),
+        "pitcherRatings": dict(p["pit"]) if p["isPitcher"] else None,
+    }
+
+
+def _anchor_profile(a):
+    return {
+        "name": a["name"],
+        "position": a["block"],
+        "role": a["block"] if a["block"] in PITCHER_ROLES else None,
+        "primaryPosition": None if a["block"] in PITCHER_ROLES else a["block"],
+        "ratings": dict(a["ratings"]),
+        "bats": a["bats"],
+        "traits": list(a["traits"]),
+        "arsenal": list(a["arsenal"]),
+        "secondaryPosition": a["secondary"],
+        "armSlot": a["angle"],
+    }
+
+
+def build_iv_oracle(engine, anchors, pool, anchor_count):
+    gray = next((a for a in anchors if a["name"] == "Jon Gray"), None)
+    if gray is None:
+        fail("Jon Gray rawIV Injury Prone anchor not found for oracle serialization")
+    block = engine.curves["SP/RP"]
+    cells = {a: attr_cell(gray["ratings"][a], block[a]) for a in block if a in gray["ratings"]}
+    injury = engine.traits["Injury Prone"]
+    gray_injury = priced_component(injury["deltas"], injury["multipliers"], injury["flatFee"],
+                                   gray["ratings"], block, cells, delta_block=engine.curves["RP"])
+    return {
+        "meta": {
+            "gitSha": _git_sha(),
+            "analyzePoolSha256": _sha256_file(os.path.abspath(__file__)),
+            "anchorGate": {"passed": True, "count": anchor_count, "jonGrayInjuryProneDelta": gray_injury},
+        },
+        "anchors": [
+            {
+                "name": a["name"],
+                "expected": a["expected"],
+                "computedRawIV": engine.compute(a["block"], a["ratings"], a["bats"], a["traits"], a["arsenal"],
+                                                secondary=a["secondary"], angle=a["angle"])["total"],
+                "input": _anchor_profile(a),
+            }
+            for a in anchors
+        ],
+        "players": [
+            {
+                "id": p["id"],
+                "name": p["name"],
+                "position": p["role"] if p["isPitcher"] else p["pos"],
+                "role": p["role"] if p["isPitcher"] else None,
+                "rawIV": p["rawIV"],
+                "kblIV": p["iv"],
+                "rawComponents": _parts_json(p["rawParts"]),
+                "kblComponents": _parts_json(p["parts"]),
+                "input": _player_profile(p),
+            }
+            for p in sorted(pool, key=lambda x: x["id"])
+        ],
+    }
+
+
+def write_iv_oracle(path, oracle):
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(oracle, f, indent=2, sort_keys=True)
+        f.write("\n")
+    print(f"[write] IV oracle: {os.path.relpath(path, ROOT)} ({len(oracle['players'])} players)")
 
 
 # ---------------------------------------------------------------------------
@@ -1535,6 +1654,10 @@ def emit_tier_params(scales, farm, caps, lux_derived, sigma, mods, mod_stats, me
 # ---------------------------------------------------------------------------
 
 def main():
+    parser = argparse.ArgumentParser(description="Analyze the KBL stock player pool and derive tier parameters.")
+    parser.add_argument("--dump-oracle", help="Write a frozen T4 IV oracle JSON after the golden anchor gate passes.")
+    args = parser.parse_args()
+
     curves = parse_curves()
     traits, pitches, switch, secpos, angles = parse_traits()
     pool, fa = parse_players()
@@ -1554,7 +1677,7 @@ def main():
 
     # BOOTSTRAP GATE - abort before analysis if the workbook anchors don't reproduce
     anchors = load_anchors()
-    run_anchor_gate(engine, anchors)
+    anchor_count = run_anchor_gate(engine, anchors)
     anchors_median = percentile(sorted(a["expected"] for a in anchors), 0.5)
 
     for p in pool:
@@ -1562,6 +1685,10 @@ def main():
         p["rawIV"] = p["rawParts"]["total"]
         p["parts"] = engine.pool_iv(p)
         p["iv"] = p["parts"]["total"]
+
+    if args.dump_oracle:
+        write_iv_oracle(args.dump_oracle, build_iv_oracle(engine, anchors, pool, anchor_count))
+        return
 
     ivs = r1_distribution(pool)
     scales, farm, ladder, mean_ord, mean_iv = r2_tiers(pool, ivs)

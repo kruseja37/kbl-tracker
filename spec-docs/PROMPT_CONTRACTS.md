@@ -1361,3 +1361,259 @@ tune. Nothing outside the three files.
 Note: pool rawIV gains arm-slot pricing (X1) — this changes pool rawIV values vs the T3
 era; that is CORRECT (T3 simply lacked the data) and does not touch the anchor gate,
 whose 21 workbook rows are priced from workbook columns, not the DB.
+
+
+---
+
+## PROMPT CONTRACT: T4 — IV Engine (`src/engines/ivEngine.ts`, BOTH layers)
+**Date:** 2026-06-10 | **Route:** Codex 5.5 | very high reasoning effort → Fable 5 CLI audit (T4-AUDIT below)
+**Spec:** IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md v1.1.8 — §3.1–3.9 (read §3.9 VERBATIM), §11, §12.
+**Context:** T1–T3 + DB1 + V117/V117-FIX arc CLOSED. `scripts/analyze-pool.py` is the
+anchor-gated (21/21 ±$0 + Jon Gray −$2,136), deterministic, audited reference
+implementation of both IV layers. T4 ports that math to a pure TypeScript engine,
+validated to the dollar against a frozen oracle generated from the script.
+**Scope decisions (JK-confirmed 2026-06-10):** (1) oracle dump = serialization-only
+addition to analyze-pool.py; (2) rosterEngineConstants.ts created NOW with IV-layer
+constants only (T6 extends it); (3) golden tests hard-encode the FINAL oracle numbers.
+
+---
+
+You are the IV Engine Implementer (TypeScript, pure functions).
+
+GOAL:
+Implement `computeIV` producing BOTH layers — rawIV (exact workbook semantics) and
+kblIV (§3.9 usage model) — with golden tests proving dollar-exact parity with
+analyze-pool.py across all 440 stock players plus the workbook anchors.
+
+SOURCE OF TRUTH:
+Spec §3 as amended v1.1.8. WHERE PROSE IS AMBIGUOUS, `scripts/analyze-pool.py`'s
+behavior is the arbiter (it is anchor-proven); oracle parity is the acceptance test.
+Never resolve an ambiguity by choosing what makes a test pass — match the script.
+
+STEP 0 — FROZEN ORACLE (serialization-only change to analyze-pool.py):
+Add `--dump-oracle <path>` flag. It must REUSE the existing engine objects (zero
+pricing-logic changes; the diff to this file must contain ONLY serialization code and
+flag plumbing) and must run the anchor gate FIRST — no oracle is written if the gate
+fails. JSON contents:
+- meta: generatedAt, git sha, sha256 of analyze-pool.py
+- anchors: per workbook Roster anchor — name, cached expected $, computed rawIV, AND
+  the FULL INPUT PROFILE as parsed from the workbook (position/role, all ratings,
+  traits, pitches, handedness, secondary pos, arm angle) so the TS tests can construct
+  these players and reprice them independently. Include Jon Gray with the isolated
+  injuryProneDelta: -2136.
+- players: all 440 — id, name, role/position, rawIV, kblIV, and component breakdowns
+  for both layers (attributes, traits itemized, pitches, aux, armSlot, sub-min terms,
+  unlock term where applicable).
+Run it once: output to `spec-docs/reference/iv_oracle.json`. Record the JSON's sha256
+in your report. The oracle is then FROZEN — if the engine disagrees with it, the
+engine is wrong or you report a FINDING; you never regenerate to converge.
+
+STEP 1 — CONSTANTS REGISTRY (`src/data/rosterEngineConstants.ts`, NEW):
+IV-layer constants ONLY, values copied from analyze-pool.py EXACTLY (parity arbiter);
+every row commented with its spec §12 source and CALIBRATE flag where marked:
+- USAGE_INPUTS per role {startShare, paRatio, phFloor, prFloor, rangeFloor}:
+  SP .25/.625/.04/.02/.10 · SP/RP .18/.625/.0375/.02/.08 · RP 0/.625/.08/.02/.06 ·
+  CP 0/.625/.05/.01/.05. POW/CON weight = startShare×paRatio+phFloor; SPD adds floors
+  capped at 1.0; FLD handled by carve-out (never a batting weight).
+- SP_RP_INNINGS_ALPHA = 0.30 (D16 arm interpolation). NAMED DISTINCTLY — this is NOT
+  the SP/RP batting startShare (0.18). Conflating these two constants is the #1
+  foreseeable implementation error in this ticket.
+- SP_RP_FLEX_PREMIUM = 1.12 (D16)
+- TWO_WAY_ARM_BY_TIER = {L1: 60, L2: 80, L3: 99} (D15, CALIBRATE)
+- TWO_WAY_USAGE = 1.00 (D15, JK ruling — all attributes)
+- POTENCY_SCALE: positives {L1 0.5, L2 1.0, L3 2.0}; negatives standardInverted
+  {L1 2.0, L2 1.0, L3 0.5} (JK ruling 2026-06-10)
+- PITCHER_ASSUMED_ARM = 99 — exported for simulation consumers; ivEngine pricing must
+  NEVER consume it (unpriced by design, §3.9)
+
+STEP 2 — ENGINE (`src/engines/ivEngine.ts`, NEW):
+Pure module: no React, no IndexedDB, no DOM, no side effects, deterministic. Exports
+per spec §11: `computeIV(p, curves, traits, potency): IVResult`, with IVResult carrying
+BOTH layers' totals and component breakdowns (mirror the oracle JSON shape so parity
+tests diff per-component). Consumes ivCurves.ts, traitPricing.ts,
+rosterEngineConstants.ts. Does NOT import traitInteractionMatrix.ts (T6 territory),
+tierParams.ts (league environment), or playerDatabase.ts (callers supply players;
+tests may import it).
+
+MUST-IMPLEMENT SEMANTICS — rawIV (each item gets a dedicated test beyond parity):
+R1. §3.2 two-segment curve exactly; per-COMPONENT ROUNDUP away-from-zero (A4): every
+    component cell (each attribute, each trait, each pitch, handed, 2nd-pos, angle)
+    rounds; total = Σ rounded components. Multiplier terms consume ROUNDED attribute
+    cells; delta terms consume exact curve math.
+R2. §3.4 sub-min reverse curve per v1.1.6/A1 semantics — match analyze-pool's exact
+    reflection formula (anchor-proven). Sub-min params exist ONLY on SP/SP-RP/RP/CP
+    VEL rows (optional in type). EXTRA block (row 117) is PITCHER-shaped — handle it.
+R3. §3.5/A3: NEGATIVE-trait delta-marginals on SP/RP players price on RP curves
+    (anti-refund-farming). Golden: Jon Gray Injury Prone = −$2,136 exactly.
+R4. A2: NO arsenal tax anywhere in computeIV (team-level, lands in T8).
+R5. Aux: switch-hitter +5 POW/+5 CON; pitch flats + their multiplier terms; secondary
+    positions per §3.6; armSlot Sub = flat $4,000 + VEL×1.075/JNK×1.2 on RAW cells.
+
+MUST-IMPLEMENT SEMANTICS — kblIV (§3.9 verbatim; each gets a dedicated test):
+K1. Non-pitchers: kblIV ≡ rawIV (identity, all 262 hitters).
+K2. Pitcher batting POW/CON/SPD prices on HITTER curves × per-attribute usage weights
+    derived from USAGE_INPUTS. Non-trait pitchers → neutral IF block; Two Way trait
+    holders → their TRAIT POSITION's block. Pitcher-block batting curves retire from
+    kblIV (remain in rawIV).
+K3. FLD carve-out (V117 W2b, ratified): non-two-way pitcher FLD = MOUND fielding on
+    his PITCHER block's FLD curve; SP/RP FLD interpolated per D16. Two Way holders'
+    FLD on the trait position's curve via potency-scaled delta machinery.
+K4. Two Way unlock: traitValue = hitterCurveCost(bat, traitPos) × (1.00 − roleBatWeight)
+    + tier-laddered defense (ARM via TWO_WAY_ARM_BY_TIER, priced on trait-position
+    curves). Flat +15/+15/+15/+10 deltas retire in kblIV. Usage for holders = 1.00
+    ALL attributes.
+K5. D16 SP/RP arm: VEL/JNK/ACC (and sub-min terms) = SP_RP_INNINGS_ALPHA-blend of SP
+    and RP curve costs × SP_RP_FLEX_PREMIUM. Multiplier traits stack on the
+    interpolated base. Sub armSlot multipliers consume the kbl (interpolated) pitch
+    cells in this layer.
+K6. Potency: IV is potency-NEUTRAL at L2 reference; the potency parameter scales trait
+    Δ per POTENCY_SCALE (standardInverted for negatives) — L2 input must reproduce the
+    oracle exactly.
+
+STEP 3 — GOLDEN TESTS (`src/engines/__tests__/ivEngine.test.ts`, vitest):
+G1. Workbook anchors: construct each anchor from the oracle's input profiles; rawIV
+    matches cached salary ±$0 for all 21 (incl. Eovaldi $54,582, deGrom $71,609).
+G2. Jon Gray Injury Prone isolated delta = −$2,136 exactly (A3 gate).
+G3. Full parity: for ALL 440 players, rawIV AND kblIV equal the frozen oracle to the
+    dollar — assert per-component, not just totals.
+G4. FINAL oracle four (hard-coded): Fenomeno $143,641 · Pastimm $199,126 ·
+    Drake $101,003 · Bradwick $58,417 (kblIV).
+G5. Bradwick crash gate: kblIV ≤ 50% of rawIV (acceptance §3.9.1).
+G6. Two Way unlock identity: holders' usage = 1.00 all attributes (assert via
+    component breakdown; pick a holder, e.g. Fenomeno).
+G7. Hitter invariance: kblIV === rawIV for every non-pitcher.
+G8. Purity gate: test asserts ivEngine.ts source contains no react/idb/dom imports.
+G9. Determinism: two full-pool passes produce identical totals.
+
+CONSTRAINTS:
+- Only create/edit: src/engines/ivEngine.ts, src/engines/__tests__/ivEngine.test.ts,
+  src/data/rosterEngineConstants.ts, scripts/analyze-pool.py (dump flag ONLY),
+  spec-docs/reference/iv_oracle.json (generated once, then frozen).
+- Do NOT touch: src/data/ivCurves.ts, traitPricing.ts, tierParams.ts,
+  traitInteractionMatrix.ts, playerDatabase.ts; any spec doc; anything under
+  src/src_figma/ or GameTracker. Work on codex/franchise-v1-next, no new worktrees.
+- NEVER tune a constant, formula, or oracle value to make a test pass. Any
+  engine-vs-oracle mismatch = FINDING: report player id, layer, component-level diff
+  (expected vs actual), then STOP.
+- Quote the spec §/A-rule ID for every semantic you implement.
+
+EXPECTED OUTPUT:
+computeIV reproduces analyze-pool.py to the dollar on both layers for all 440 players
+and all 21 anchors; G1–G9 green.
+
+VERIFICATION (paste exact output):
+1. npx vitest run src/engines/__tests__/ivEngine.test.ts — all green, G1–G9 named
+2. npm run build — exit 0
+3. Full suite: ONLY the 3 known baseline failures (wpaRuntimeBoundary,
+   franchiseNarrativeEventEligibility, franchiseManualSmokeFixture flake) — zero new
+4. git diff scripts/analyze-pool.py — paste it (must read as serialization-only)
+5. sha256 of iv_oracle.json + confirmation the anchor gate ran during the dump
+
+FORMAT:
+1. FILES CHANGED (exact paths) · 2. CHANGES MADE (per R/K/G item, spec ID quoted) ·
+3. VERIFICATION OUTPUT (all 5 pasted) · 4. "T4 complete" OR "BLOCKED: [exact reason]"
+
+FAILURE PROTOCOL:
+Ambiguity → quote the exact spec section and analyze-pool lines, ask. Parity mismatch
+→ FINDING + STOP (never converge by editing the oracle or constants). Anchor movement
+in Step 0 → STOP immediately (the dump touched pricing logic). File outside the list
+needed → STOP and report. Never summarize or batch. Never assume intent.
+
+Use very high reasoning effort. Think step-by-step.
+
+---
+
+## PROMPT CONTRACT: T4-AUDIT — IV Engine Audit (Fable 5 CLI)
+**Date:** 2026-06-10 | **Route:** Claude Code CLI | Fable 5 | high reasoning effort
+**Pattern:** builder/auditor decorrelation (spec §13 v1.1.4). Audit the `git diff` and
+rerun verification yourself — NEVER grade the builder's self-report.
+
+---
+
+You are the T4 Auditor. The builder's report is a claim, not evidence.
+
+W1. ORACLE INTEGRITY: verify the diff to scripts/analyze-pool.py is serialization-only
+    — read it line-by-line; any touched pricing path = MAJOR. Rerun the script WITHOUT
+    the flag: anchors 21/21 ±$0 + Jon Gray −$2,136 + determinism hash must hold. Rerun
+    WITH the flag to a temp path; sha256 must match the committed iv_oracle.json — a
+    mismatch means the oracle was regenerated mid-build to converge (MAJOR).
+W2. TEST HONESTY: read ivEngine.test.ts assertions against the contract. Confirm G4
+    hard-codes $143,641/$199,126/$101,003/$58,417; G3 asserts per-component across all
+    440 on BOTH layers (not a sampled subset, not totals-only); G1 reprices anchors
+    from input profiles (not echoing oracle rawIV back at itself).
+W3. NFL FALSIFICATION (document every attempt): (a) mutate SP_RP_FLEX_PREMIUM to 1.0
+    → G3/G4 must fail; restore. (b) Swap SP_RP_INNINGS_ALPHA (0.30) with SP/RP batting
+    startShare (0.18) → tests must fail (the conflation trap). (c) Craft a synthetic
+    player exercising ROUNDUP semantics (component sums vs total-rounding diverge) and
+    confirm the engine matches workbook semantics. (d) Synthetic SP/RP with a negative
+    trait → confirm RP-curve pricing (A3) by hand-computing the delta. (e) Confirm
+    arsenal tax absent (grep + a pitcher-heavy synthetic).
+W4. SPEC CONFORMANCE: section-by-section read of ivEngine.ts against §3.9 (K1–K6) and
+    §3.2–3.7 (R1–R5); quote file lines per claim. Verify PITCHER_ASSUMED_ARM is
+    exported but never consumed in pricing. Verify purity (no react/idb/dom).
+W5. RERUN: vitest target file + npm run build + full suite (3 baseline failures only)
+    yourself; paste outputs.
+
+FORMAT: 1. EVIDENCE LOG (W1–W5) · 2. DISAGREEMENTS WITH BUILDER REPORT (mandatory
+section) · 3. FINDINGS REQUIRING ACTION (severity) · 4. VERDICT: "T4 AUDIT: CONFORMS"
+/ "DEVIATIONS — [n]" / "BLOCKED: [reason]"
+
+FAILURE PROTOCOL: never patch the engine yourself; never tune; oracle regeneration or
+weakened assertions = MAJOR regardless of green tests. Restore any files you mutated
+during NFL before reporting.
+
+Use high reasoning effort.
+
+
+---
+
+## PROMPT CONTRACT: T4-FIX — Audit LOW Remediations (F2/F3/F4)
+**Date:** 2026-06-11 | **Route:** Codex 5.5 | medium reasoning effort → Fable 5 delta verify
+**Context:** T4 audit verdict CONFORMS (zero MAJOR). JK approved remediation of the three
+LOW findings. T4 is CLOSED; this is a scoped hardening pass. The frozen-oracle and
+never-tune rules from the T4 contract remain in force.
+
+---
+
+You are the T4 Remediation Implementer.
+
+CHANGES (only: src/engines/ivEngine.ts, src/engines/__tests__/ivEngine.test.ts,
+scripts/analyze-pool.py [X2 meta-serialization only], spec-docs/reference/iv_oracle.json
+[regenerated once under X2] — nothing else):
+
+X1 (F2). PIN RAW LAYER TO L2: the raw layer's trait pricing must structurally ignore
+    the `potency` parameter (force L2/identity scale on the raw path; the kbl layer
+    continues consuming potency per K6). "rawIV = exact workbook semantics, NEVER
+    modified" becomes true by construction, not by caller convention. NEW TEST G10:
+    for a trait-carrying player, computeIV at L1 and at L3 → rawIV identical to L2
+    (kblIV MAY differ where two-way/trait machinery consumes potency).
+X2 (F3). BYTE-EXACT ORACLE FREEZE: remove `meta.generatedAt` from the oracle payload
+    (keep gitSha + analyzePoolSha256 + anchorGate meta). Serialization-only change.
+    Regenerate iv_oracle.json ONCE; the anchors and players blocks must be
+    BYTE-IDENTICAL to the current committed oracle (diff limited to the meta block) —
+    paste proof. Future freeze checks are then plain sha256.
+X3 (F4). HITTER armSlot EDGE: do NOT change behavior (parity with analyze-pool is the
+    arbiter and the path is unreachable in current data — no hitter carries armSlot,
+    DB1-verified). Add an explanatory comment at the armSlot pricing site + a test
+    documenting current behavior (synthetic hitter with armSlot 'Sub' → flat $4,000
+    charged, multiplier terms vacuous), marked as a documented edge pending spec §15
+    review. If you believe a guard is safer, STOP and ask — do not diverge from the
+    script unilaterally.
+
+VERIFICATION (paste all):
+1. npx vitest run src/engines/__tests__/ivEngine.test.ts — G1–G10 + X3 test green
+2. Mutation self-check: temporarily remove the X1 pin → G10 must FAIL; restore, rerun
+   green (paste both runs)
+3. Oracle regen proof: diff old vs new iv_oracle.json — meta block only; sha256 of new
+   file recorded
+4. npm run build exit 0; full suite = 3 known baseline failures only
+5. git diff scripts/analyze-pool.py — serialization-only
+
+FORMAT: FILES CHANGED · CHANGES (X1–X3) · VERIFICATION OUTPUT · STATUS.
+FAILURE PROTOCOL: any anchors/players byte in the oracle changes under X2 → STOP (the
+meta removal touched more than meta). Never tune. Nothing outside the four files.
+
+FABLE 5 DELTA VERIFY (not a full audit): read the diff; rerun verification items 1–4
+yourself; confirm G10 is mutation-sensitive (re-perform item 2 independently); confirm
+oracle anchors/players blocks byte-identical pre/post. Verdict: DELTA VERIFIED /
+DEVIATIONS.

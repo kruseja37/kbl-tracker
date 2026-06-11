@@ -1,7 +1,7 @@
 # CURRENT_STATE.md
 
-**Last Updated:** 2026-04-13
-**Phase:** GameTracker visual theme COMPLETE + Beat Reporter spec COMPLETE — pre-implementation
+**Last Updated:** 2026-06-11
+**Phase:** IV Engine workstream — T4 + T4-FIX COMPLETE (audit CONFORMS, delta verified); next: closure commit → T5
 
 ---
 
@@ -163,3 +163,18 @@ Current priorities:
 **Spec:** IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md v1.1.8 — D1-D17 all JK-ratified; §3.9 = kblIV usage doctrine (pitcher batting weights via 4-man rotation, two-way unlock, SP/RP interpolation ×1.12, FLD carve-out, armSlot, potency-neutral L2); acceptance = Bradwick crash + bridge report (parity band retired with reasoning).
 **NEXT TASK: T4 — IV Engine (src/engines/ivEngine.ts), Codex 5.5 very high → Fable 5 audit.** computeIV implements BOTH layers (rawIV: A1 sub-min denominator primary.min−subMin.min, A3 RP-curve negatives, A4 per-component ROUNDUP, golden tests = 21 anchors + Jon Gray; kblIV: §3.9 verbatim, validate against analyze-pool's 440 values). Contract NOT yet drafted — first action of next session.
 **Open non-blocking:** F2 SOT cell typos (~15); F4 FA trait spellings (4); 2 pre-existing test failures (wpaRuntimeBoundary allowlist, franchiseNarrativeEventEligibility) + 1 suite-order flake; T12 recalibration tool (post-T8); pitching-gate question (ACC×JNK) deferred to Mode 2 empirical loop per D17.
+
+
+---
+
+## 2026-06-11 — IV Engine status
+
+- **T4 COMPLETE:** ivEngine.ts (both layers) + rosterEngineConstants.ts + frozen oracle
+  + golden tests G1–G9. Audit: CONFORMS, zero MAJOR (see SESSION_LOG 2026-06-11).
+- **NEXT ACTION: T4-FIX** — Codex 5.5 | medium → Fable delta verify. Contract in
+  PROMPT_CONTRACTS.md (X1 pin raw layer to L2 + test G10; X2 byte-exact oracle freeze;
+  X3 hitter-armSlot comment + documenting test, no behavior change).
+- **Then:** commit T4 + T4-FIX together → T5 (salary spec integration seam).
+- Sequence remaining: T4-FIX → T5 → T6 → {T7, T8} → T9 → T10 (T11 v1.5; T12 post-T8).
+- Open non-blocking: F2 SOT typos (~15), F4 FA trait spellings (4), 2 baseline test
+  failures + 1 flake, T12 recalibration tool.

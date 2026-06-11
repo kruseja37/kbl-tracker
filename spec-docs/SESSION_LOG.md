@@ -3249,3 +3249,70 @@ Claude's chat analysis wrongly assumed secondaries are penalty-free and Utility 
 
 ### 2026-06-10 final addendum 2 — fielder out-of-position mojo rule (JK canonical)
 Playing neither-primary-nor-secondary position = −1 mojo level ON TOP of the severe fielding penalty; secondaries = fielding penalty only (Utility-reducible), no mojo hit; Two Way trait position = secondary-equivalent (flagged inference). Spec §4.2 updated; §4.5 DefensivePlacementRisk must price both costs. Completes the placement-cost model: primary free → secondary moderate-FLD → out-of-position severe-FLD + mojo.
+
+
+---
+
+## 2026-06-11 — T4 COMPLETE (build → audit CONFORMS) · T4-FIX queued
+
+**Branch:** codex/franchise-v1-next · **Workstream:** IV Engine (spec v1.1.8)
+
+**T4 delivered (Codex 5.5 | very high):** `src/engines/ivEngine.ts` — pure `computeIV`,
+BOTH layers (rawIV workbook-exact, kblIV §3.9). New: `src/data/rosterEngineConstants.ts`
+(IV-layer constants, T6 extends); frozen oracle `spec-docs/reference/iv_oracle.json`
+(serialization-only `--dump-oracle` flag in analyze-pool.py, anchor-gated); golden tests
+G1–G9.
+
+**T4-AUDIT (Fable 5 CLI, 2026-06-11): CONFORMS, zero MAJOR.** Evidence highlights:
+diff to analyze-pool.py read line-by-line = serialization-only; anchors 21/21 ±$0 +
+Jon Gray −$2,136 rerun; oracle content-identical on re-dump (440 players + 21 anchors
+byte-identical; sha delta = generatedAt only); G3 confirmed per-component over all 440
+on both layers; mutation tests: flexPremium 1.12→1.0 and the α/startShare conflation
+trap (0.30→0.18) both break G3/G4; A3 proven on synthetic SP/RP (−$2,033 = auditor's
+independent hand calc on RP curves; SP/RP-curve counterfactual −$6,879); A4 ROUNDUP
+proven divergent from total-rounding on crafted input (58,309 vs 58,307); arsenal tax
+absent both layers. Full suite 3 baseline failures only; build green. Oracle four
+hard-coded and green: Fenomeno $143,641 · Pastimm $199,126 · Drake $101,003 ·
+Bradwick $58,417.
+
+**Findings → JK rulings (approved 2026-06-11):** F2 LOW (raw layer consumed potency —
+workbook-exact only at L2) → PIN raw layer to L2 structurally; F3 LOW → drop
+meta.generatedAt for byte-exact freeze; F4 LOW (hitter+Sub armSlot edge, unreachable) →
+comment + documenting test, NO behavior change (script parity). All three bundled as
+**T4-FIX** (Codex 5.5 | medium → Fable delta verify), contract in PROMPT_CONTRACTS.md.
+
+**Doc state:** spec §13 T4 row marked COMPLETE; CURRENT_STATE header de-staled
+(2026-04-13 → 2026-06-11) + phase updated. **Next session starts with:** JK runs T4-FIX
+→ Fable delta verify → commit T4+T4-FIX together → T5 (salary integration seam,
+Codex 5.5 | very high; persistence-adjacent, audit non-negotiable).
+
+### 2026-06-11 addendum — fielding→mojo flux ruled unpriced (D17 extension, minimal)
+JK raised post-workbook SMB4 mechanic: spectacular catches raise mojo / misses lower it
+— could glove-first/noodle-bat players at high-chance positions farm mojo into batting
+boosts (strategic asymmetry)? RULED: unpriced, folded into D17 in place (no new D-number).
+Rationale: mojo equilibrium PA-dominated; curve convexity damps the payoff exactly where
+the archetype lives; FLD/SPD marginal sign-unstable + user-skill confound (attempts are
+player-controlled); uncalibratable thresholds. Spec D17 row extended with the ruling +
+the §4.5 distinction (placement COST priced vs performance-FLUX unpriced — asymmetry is
+deliberate) + Mode 2 empirical roster gains mojo-engine AND mojo-sink archetypes.
+Documentation kept minimal per JK (risk addressed = future-session re-litigation, the
+Drake-ghost/Utility-misread failure mode). T8 qualitative board flag deliberately NOT
+ruled — separate call when T8 specs up.
+
+### 2026-06-11 — T4-FIX delta verified → T4 arc ready for closure commit
+**Build (Codex 5.5 | medium):** X1 raw layer structurally pinned to L2 (call-site
+literal; potency nowhere else in raw path; K6 intact) + G10; X2 generatedAt removed,
+oracle regenerated once, freeze now byte-exact (sha a0b501b1…); X3 comment + documenting
+test, zero behavior change.
+**Fable delta verify: DELTA VERIFIED, no disagreements.** Mutation check independently
+reproduced (382,305 vs 450,056, exactly G10, 10/11 selective); X2 delta isolated to two
+removed lines; re-dump sha byte-exact vs committed; anchors/players content-equal vs
+Fable's own T4-audit baseline (NOTE: contract wrongly said prior oracle was "in git
+history" — T4 was never committed; Fable correctly substituted its /tmp baseline);
+X3 script-parity proven by driving analyze-pool's engine with the same synthetic
+($4,000 both sides); suite disambiguated = 374 files/7,170 tests, exact 3-failure
+baseline. Cosmetic (no action): computeRawLayer carries an unused potency param —
+fold into next T5/T6 touch of the file.
+**T4 + T4-FIX both COMPLETE.** Spec §13 row finalized; CURRENT_STATE phase updated.
+Next: closure commit (engine + tests + constants + oracle + script flag + contracts +
+session docs + spec amendments incl. D17 mojo extension), then T5.
