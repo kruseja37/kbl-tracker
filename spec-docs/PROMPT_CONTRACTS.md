@@ -4082,3 +4082,29 @@ Use very high reasoning effort. Think step-by-step.
 ```
 
 **Execution record:** [pending]
+
+
+**Execution record (TV1-FIX, 2026-06-12):** Codex 5.5 | high. R-7: True
+Value store relocated into shared kbl-tracker DB (TRACKER_DB_VERSION 13,
+additive guarded store franchiseTrueValueRows; standalone DB opener
+deleted; no-migration comment). R-6: inferred remaps deleted; strict
+12-label canonical-primary validator; skips name the offending label.
+X1: trackerDb.ts:16-17 centralized single-handler convention confirmed.
+X3: valuePosition = profile primaryPosition (franchiseValueInputs.ts:502)
+→ FINDING-143 (CONFIRMED-OPEN, closes via R-8/EP1). Suite 7,122/7,125,
+build green. Codex self-BLOCKED on the same audit-tool misread (build
+complete).
+
+**Audit record (TV1-FIX-AUDIT, 2026-06-12):** Fable 5 CLI verdict:
+**"TV1-FIX DELTA VERIFIED."** 7/7 directives; full 314-line upgrade-handler
+read (not diff-only): all ~25 pre-existing stores contains-guarded, zero
+deleteObjectStore, v13 block additive-only, zero second openers of
+kbl-tracker (Feb-11 class cleared). Mutation (P→SP/RP remap reintroduced)
+RED on exactly the skip test; restore hash-verified. Gate exact: 7,125/382
+(+3/+0); flake fired, solo 4/4. D6 reachability proven: UTIL/BENCH could
+never reach getPositionPeerPool post-R-6. Disagreements 2 MINOR / 0 MAJOR:
+(1) builder deleted the dead UTIL/BENCH merge rows — beyond contract
+letter, behavior-neutral by D6 proof, pre-completes TV2's folded cleanup;
+Captain recommends RATIFY (JK confirmation pending); TV2's cleanup item is
+hereby pre-completed. (2) R-6 residue in the salary-calculation path →
+FINDING-144.

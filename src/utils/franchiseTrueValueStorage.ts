@@ -9,6 +9,7 @@ import {
   buildFranchiseValueInputRows,
   type FranchiseValueInputRow,
 } from './franchiseValueInputs';
+import { getTrackerDb, resetTrackerDbForTests } from './trackerDb';
 
 export interface FranchiseTrueValueScopeInput {
   franchiseId: string;
@@ -42,15 +43,10 @@ export interface CalculateAndPersistFranchiseTrueValueResult {
   blockers: string[];
 }
 
-const DB_NAME = 'kbl-franchise-true-values';
-const DB_VERSION = 1;
 const STORE_NAME = 'franchiseTrueValueRows';
 
-let dbInstance: IDBDatabase | null = null;
-
 export function resetFranchiseTrueValueDatabaseForTests(): void {
-  dbInstance?.close();
-  dbInstance = null;
+  resetTrackerDbForTests();
 }
 
 export async function clearFranchiseTrueValueDatabaseForTests(): Promise<void> {
@@ -75,45 +71,10 @@ function transactionToPromise(tx: IDBTransaction): Promise<void> {
   });
 }
 
-function ensureIndex(
-  store: IDBObjectStore,
-  name: string,
-  keyPath: string | string[],
-  options?: IDBIndexParameters,
-): void {
-  if (!store.indexNames.contains(name)) {
-    store.createIndex(name, keyPath, options);
-  }
-}
-
 export async function initFranchiseTrueValueDatabase(): Promise<IDBDatabase> {
-  if (dbInstance) return dbInstance;
-
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onerror = () => reject(request.error);
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-      let store: IDBObjectStore;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        store = db.createObjectStore(STORE_NAME, {
-          keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'],
-        });
-      } else {
-        store = (event.target as IDBOpenDBRequest).transaction!.objectStore(STORE_NAME);
-      }
-      ensureIndex(store, 'by_scope', ['franchiseId', 'seasonId', 'statsScopeId'], { unique: false });
-      ensureIndex(store, 'by_player_scope', ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'], { unique: true });
-    };
-    request.onsuccess = () => {
-      dbInstance = request.result;
-      dbInstance.onversionchange = () => {
-        dbInstance?.close();
-        dbInstance = null;
-      };
-      resolve(dbInstance);
-    };
-  });
+  // TV1-FIX R-7: use the shared kbl-tracker DB. The old standalone
+  // pre-release DB is intentionally not migrated; completed games regenerate rows.
+  return getTrackerDb();
 }
 
 function finiteNumber(value: unknown): value is number {
@@ -171,7 +132,11 @@ function skippedReasons(row: FranchiseValueInputRow): string[] {
   const reasons: string[] = [];
   if (row.rosterStatus !== 'MLB') reasons.push('Current MLB roster status is required.');
   if (!row.currentTeamId) reasons.push('Current team id is required.');
-  if (!normalizeTrueValuePosition(row.valuePosition)) reasons.push('Supported True Value position is required.');
+  if (!normalizeTrueValuePosition(row.valuePosition)) {
+    reasons.push(
+      `Non-canonical True Value position "${String(row.valuePosition)}" is a data defect; R-6 requires a canonical primary position.`,
+    );
+  }
   if (!finiteNumber(row.salary) || !row.salaryBaselineAvailable) reasons.push('Canonical salary baseline is required.');
   if (!row.warInputAvailability.any || !finiteNumber(row.warPreviewValues.totalWar)) reasons.push('Persisted numeric season WAR is required.');
   return reasons;

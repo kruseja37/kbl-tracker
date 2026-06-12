@@ -20,6 +20,7 @@ import {
   clearFranchiseTrueValueDatabaseForTests,
   getFranchiseTrueValueRow,
   getFranchiseTrueValueRows,
+  initFranchiseTrueValueDatabase,
   resetFranchiseTrueValueDatabaseForTests,
 } from '../franchiseTrueValueStorage';
 
@@ -187,6 +188,76 @@ describe('franchise True Value storage', () => {
       calculationVersion: 'true-value-step-percentile-v1',
       computedAt: '2026-06-12T00:00:00.000Z',
     });
+  });
+
+  test('round-trips rows through the shared tracker database', async () => {
+    mocks.buildFranchiseValueInputRows.mockResolvedValue(report(peerLadder(1)));
+
+    await calculateAndPersistFranchiseTrueValueForSeason({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+      seasonNumber: 1,
+    });
+
+    const db = await initFranchiseTrueValueDatabase();
+    expect(db.name).toBe('kbl-tracker');
+    expect(Array.from(db.objectStoreNames)).toContain('franchiseTrueValueRows');
+    await expect(getFranchiseTrueValueRow({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+      playerId: 'target',
+    })).resolves.toMatchObject({
+      playerId: 'target',
+      position: 'SS',
+    });
+  });
+
+  test('skips non-canonical position labels with a reason naming the defect label', async () => {
+    mocks.buildFranchiseValueInputRows.mockResolvedValue(report(peerLadder(1).map((candidate, index) =>
+      index === 0 ? row({ playerId: 'pitcher-label', valuePosition: 'P' }) : candidate,
+    )));
+
+    const result = await calculateAndPersistFranchiseTrueValueForSeason({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+      seasonNumber: 1,
+    });
+
+    expect(result.rows.some((candidate) => candidate.playerId === 'pitcher-label')).toBe(false);
+    expect(result.skippedRows).toContainEqual({
+      playerId: 'pitcher-label',
+      reasons: [
+        'Non-canonical True Value position "P" is a data defect; R-6 requires a canonical primary position.',
+      ],
+    });
+  });
+
+  test('accepts every R-6 canonical primary position', async () => {
+    const canonicalPrimaries = ['SP', 'SP/RP', 'RP', 'CP', 'C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF'];
+    mocks.buildFranchiseValueInputRows.mockResolvedValue(report(canonicalPrimaries.map((position, index) =>
+      row({
+        playerId: `canonical-${position}`,
+        valuePosition: position,
+        salary: 1000 + index,
+        warPreviewValues: {
+          ...row().warPreviewValues,
+          totalWar: index,
+        },
+      }),
+    )));
+
+    const result = await calculateAndPersistFranchiseTrueValueForSeason({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+      seasonNumber: 1,
+    });
+
+    expect(result.skippedRows).toEqual([]);
+    expect(result.rows.map((candidate) => candidate.position).sort()).toEqual([...canonicalPrimaries].sort());
   });
 
   test('replaces scoped rows when a later completed game recomputes True Value', async () => {

@@ -522,3 +522,34 @@ FINDINGS_142_onwards.md batch opened.
 reference-docs/Super Mega Baseball 4 Rosters.csv (commit or gitignore);
 ASG WPA→Fame; Signature Moment card line; fame tier names; F2 SOT typos;
 F4 FA trait spellings; order-flake cleanup (3 members).
+
+
+---
+
+## CURRENT STATE — 2026-06-12 (TV1-FIX arc CLOSED; R-8 ratified)
+**Branch:** codex/franchise-v1-next. **This commit:** TV1-FIX code + tests
++ contracts/records + FINDINGS 143/144 + session docs.
+**What exists & is trustworthy:** True Value storage lives in the SHARED
+kbl-tracker DB (v13 additive, Feb-11 hazard class cleared by full-handler
+audit); position handling is strict 12-label canonical validation with
+loud skip reasons — zero remapping in the True Value path. RULING R-8
+(38ef25a) is canonical: plurality-with-incumbency effective positions,
+league-wide Reserve pool (CALIBRATE threshold), pitchers profile-role v1,
+compositional two-way valuation, trait-group resolution scopes.
+**Suite baseline:** 7,125 tests / 382 files. Characterized set unchanged.
+CLI: prefix `NODE_ENV= `; node ~/.nvm/versions/node/v20.20.0/bin.
+**NEXT TASK: TV2 — designation slice** (contract committed 56f3592, ready
+to hand off): shared-DB designation storage + projected MVP/Ace/FanFav/
+Albatross per §17 gospel; Phase 0 discovery STOP-gate over the 5 existing
+designation files (Codex reports, Captain signs off before build); FanFav/
+Albatross = the NEW valueDelta consumer reading canonical True Value rows;
+trust flips projected-only with documented profile-pool limitation.
+ROUTE: Codex 5.5 | very high → Fable 5 CLI audit. NOTE: TV2's folded
+UTIL/BENCH cleanup is PRE-COMPLETED by TV1-FIX (audit-verified).
+**Then:** EP1 (R-8 engine, closes FINDING-143) → T6 → {T7,T8} → T9 → T10
+→ D0 (sequencing ruling F-141 holds).
+**Open pending-JK:** ratify TV1-FIX MINOR #1 (dead merge-row deletion —
+Captain recommends yes); FINDING-144 → taxonomy spec-cleanup batch (with
+R-6/R-8 gospel blocks); untracked SMB4 Rosters.csv; ASG WPA→Fame;
+Signature Moment card line; fame tier names; F2 SOT typos; F4 FA trait
+spellings; order-flake cleanup (3 members).

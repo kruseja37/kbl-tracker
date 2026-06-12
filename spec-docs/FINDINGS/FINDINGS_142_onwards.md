@@ -25,3 +25,16 @@ Albatross selections) are profile-label-driven. A player spending the
 season at his secondary position is pooled with the wrong peers. Requires
 a played-position detection source (season fielding/appearance data)
 before in-season franchise decisions meet the doctrine.
+
+### FINDING-144
+**Date:** 2026-06-12 | **Phase:** TV1-FIX-AUDIT (MINOR #2) | **Status:** CONFIRMED-OPEN (queued: taxonomy spec-cleanup batch, with R-6/R-8 blocks)
+**File:** src/engines/salaryCalculator.ts:693-694, :59-61, :249-254
+**Evidence:** Fable audit — the salary-calculation path still maps
+UTIL/BENCH → 'IF/OF' and TWO-WAY → 'OF', and the type/multiplier tables
+retain DH/UTIL/BENCH/TWO-WAY entries. Out of TV1-FIX scope (correctly
+untouched).
+**Impact:** R-6 "no normalize-away" doctrine violated in the sibling
+subsystem. Mitigations: position multipliers are RETIRED-to-1.0 tuning
+knobs per IV §3.8, and DH is dead per standing ruling — residue is mostly
+legacy surface, but it is exactly the label-laundering class R-6 bans and
+must not survive the cleanup batch.

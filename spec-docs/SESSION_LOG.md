@@ -3847,3 +3847,49 @@ layout ruled correct (append-only; readers tail the file).
 storage + projected, audit slices 3-4) with two carried inputs: the
 separate-DB ruling and position-mapping ratification, plus DISCOVERY 2's
 no-valueDelta-consumer gap. Then T6. Design track: D0 next.
+
+
+## 2026-06-12 (cont.) — TV1-FIX ARC + R-8 DESIGN SESSION: both landed
+
+**TV1-FIX (Codex 5.5 | high):** R-7 store relocation into shared trackerDb
+(v13 additive, standalone DB deleted) + R-6 strict 12-label validation
+(remaps deleted, loud skip reasons). X3 discovery → FINDING-143:
+valuePosition is profile-driven, not played-position (violates the
+data-driven doctrine). **Fable verdict: "TV1-FIX DELTA VERIFIED"** — full
+upgrade-handler read cleared the Feb-11 hazard class (all stores
+contains-guarded, zero destructive paths, zero second kbl-tracker openers);
+mutation RED on exactly the skip test; gate exact 7,125/382 (+3).
+2 MINOR / 0 MAJOR: dead UTIL/BENCH merge rows deleted beyond contract
+letter (behavior-neutral, ratification recommended, pre-completes TV2
+cleanup); FINDING-144 — R-6 residue in the salary path (UTIL/BENCH→IF/OF,
+TWO-WAY→OF, DH tables) → taxonomy cleanup batch.
+
+**R-8 DESIGN SESSION (chat, JK + Captain — no council tooling exists;
+multi-angle analysis in one seat):** JK reframed F-143 — market-peer
+pooling is a ROLE question (profile-default), distinct from defensive
+analysis (pure data). Bench players exposed a structural trap: percentile
+pools assume comparable volume; talent-priced salaries vs volume-measured
+WAR brands good bench players Albatrosses. Two-way players exposed the
+inverse: no single pool can price a two-job player. RULING R-8 (committed
+38ef25a): effective position = plurality-with-incumbency (day-zero
+incumbent = profile primary; incumbent holds ties; universal for position
+players); league-wide Reserve pool below a CALIBRATE starts-share
+threshold (expensive-benched-player cratering is a FEATURE); pitchers
+profile-role v1 (CP undetectable; IV usage model is role-priced); two-ways
+EXCLUDED from single pools, valued compositionally (arm TV vs role pool +
+bat TV vs resolved trait position, consuming orchestrator WAR rows
+UNCOMBINED); Two Way (IF)/(OF) are resolution SCOPES over their position
+groups, never positions; emergency cross-domain cameos excluded.
+FINDING-143 closes via EP1.
+
+**Sequencing ruled (JK):** TV1-FIX → TV2 (designations, profile-pool with
+documented limitation) → EP1 (R-8 engine, closes F-143) → T6. TV2 contract
+drafted + committed 56f3592 (Phase 0 discovery STOP-gate over the five
+existing designation files; §17 gospel quoted; below-floor = no holder;
+trust flips projected-only).
+
+**Process:** pipelining held — TV2 drafted while TV1-FIX audit ran; ruling
+batches answered from gospel first (Q3/Q4 withdrawn as already-specced).
+
+**NEXT:** TV1-FIX closure commit (this commit) → JK runs TV2 (Codex 5.5 |
+very high; Phase 0 report comes back for Captain sign-off before build).

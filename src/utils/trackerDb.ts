@@ -14,7 +14,7 @@
  */
 
 const DB_NAME = 'kbl-tracker';
-export const TRACKER_DB_VERSION = 12; // Must be the highest version any consumer ever used
+export const TRACKER_DB_VERSION = 13; // Must be the highest version any consumer ever used
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -108,6 +108,20 @@ export async function getTrackerDb(): Promise<IDBDatabase> {
         summaryStore.createIndex('franchiseId', 'franchiseId', { unique: false });
         summaryStore.createIndex('seasonNumber', 'seasonNumber', { unique: false });
         summaryStore.createIndex('franchiseId_seasonNumber', ['franchiseId', 'seasonNumber'], {
+          unique: true,
+        });
+      }
+
+      // v13 / TV1-FIX R-7: True Value rows live in the shared DB. No migration
+      // from the pre-release standalone DB; rows regenerate on completed games.
+      if (!db.objectStoreNames.contains('franchiseTrueValueRows')) {
+        const trueValueStore = db.createObjectStore('franchiseTrueValueRows', {
+          keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'],
+        });
+        trueValueStore.createIndex('by_scope', ['franchiseId', 'seasonId', 'statsScopeId'], {
+          unique: false,
+        });
+        trueValueStore.createIndex('by_player_scope', ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'], {
           unique: true,
         });
       }

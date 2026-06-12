@@ -1083,3 +1083,5 @@ Still unresolved. FINDING-047 fallback path only has base state, not full scoreb
 | FINDING-142 | 2026-06-12 | FIXED-AND-VERIFIED | franchiseValueInputs.ts | Value-input WAR composition dropped persisted pWAR; fixed in TV1, verified by M-142 probe | Full text: FINDINGS_142_onwards.md |
 
 | FINDING-143 | 2026-06-12 | CONFIRMED-OPEN | franchiseValueInputs.ts | valuePosition is profile primaryPosition, not positions actually played (violates R-6 doctrine); TV2/D1 | Full text: FINDINGS_142_onwards.md |
+
+| FINDING-144 | 2026-06-12 | CONFIRMED-OPEN | salaryCalculator.ts | R-6 residue in salary path: UTIL/BENCH→IF/OF + TWO-WAY→OF remaps, DH in tables; taxonomy cleanup batch | Full text: FINDINGS_142_onwards.md |

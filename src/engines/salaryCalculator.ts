@@ -908,34 +908,29 @@ export const TRUE_VALUE_CALCULATION_VERSION = 'true-value-step-percentile-v1';
 export const TRUE_VALUE_MIN_PEER_POOL_SIZE = 6;
 
 export const TRUE_VALUE_PLAYER_POSITIONS: readonly PlayerPosition[] = [
-  'C',
-  'SS',
-  'CF',
-  '2B',
-  '3B',
-  'RF',
-  'LF',
-  '1B',
-  'DH',
   'SP',
+  'SP/RP',
   'RP',
   'CP',
-  'SP/RP',
-  'UTIL',
-  'BENCH',
-  'TWO-WAY',
+  'C',
+  '1B',
+  '2B',
+  'SS',
+  '3B',
+  'LF',
+  'CF',
+  'RF',
 ];
 
 const TRUE_VALUE_PLAYER_POSITION_SET = new Set<string>(TRUE_VALUE_PLAYER_POSITIONS);
 
 export function normalizeTrueValuePosition(position: unknown): PlayerPosition | null {
+  // TV1-FIX R-6: True Value accepts only canonical primary positions.
+  // Non-canonical labels are data defects for callers to surface, not inputs
+  // to normalize into an inferred peer pool.
   if (typeof position !== 'string') return null;
   const normalized = position.trim().toUpperCase();
   if (TRUE_VALUE_PLAYER_POSITION_SET.has(normalized)) return normalized as PlayerPosition;
-  if (normalized === 'P') return 'SP/RP';
-  if (normalized === 'IF' || normalized === 'OF' || normalized === 'IF/OF' || normalized === '1B/OF') {
-    return 'UTIL';
-  }
   return null;
 }
 
@@ -982,8 +977,6 @@ const POSITION_MERGE_GROUPS: Partial<Record<PlayerPosition, PlayerPosition[]>> =
   'LF': ['LF', 'RF', 'CF'],
   'RF': ['RF', 'LF', 'CF'],
   'CF': ['CF', 'LF', 'RF'],
-  'UTIL': ['UTIL', 'BENCH'],
-  'BENCH': ['BENCH', 'UTIL'],
 };
 
 /**
