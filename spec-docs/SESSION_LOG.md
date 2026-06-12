@@ -3582,3 +3582,118 @@ single commit, post-verdict — T5 pattern), then **FINDING-134 discovery slot**
 fixes Codex 5.5 high) now ALSO carrying FINDING-135 (totalGames consumer inventory).
 Then TV1 → T6 per the 5-session milestone (T5 ✅ W1 ✅ + TV1 + D1 + D2). Design
 track: D0 scope session still next.
+
+
+## 2026-06-12 — F134/F135 DISCOVERY + F135-T1 ARC: live WAR defect found and killed same-day
+
+**Discovery slot (Fable 5 CLI | high, spec-ui-alignment + franchise-button-audit):**
+READ-ONLY pass produced spec-docs/F134_F135_DISCOVERY_REPORT.md. Headline:
+ZERO $M-scale sites LIVE-BROKEN today — two structural gates neutralize all 25
+(FRANCHISE_V1_OFFSEASON_EXECUTION_ENABLED=false at FranchiseHome:148 kills
+FinalizeAdvance/Awards/FreeAgency; TradeFlow:1096 franchiseId branch routes all
+franchise renders to FranchiseTransactionConsole, stranding legacy ActiveTradeFlow
+with every TradeFlow $M site). 16 sites latent LIVE-BROKEN on flag flip (worst:
+FreeAgencyFlow:541 PERSISTS salary×1e6 as contractValue); 10 sites NEW vs the
+F-134 known list (7 raw-`M` formatters invisible to the 1000000 grep). Part B:
+18 totalGames consumers — 3 config-truth-needed, 6 row-count-correct, 9 dead;
+ONE LIVE DEFECT: useSeasonStats:331/:366 leader WAR scaled by league-total
+schedule rows (±Infinity at 0; mis-scaled partial AND full — totalGames is
+league rows, WAR wants per-team games; ~numTeams/2 × error). Captain
+spot-checked 4 load-bearing claims by independent grep, incl. the `??`-doesn't-
+catch-0 mechanism. **FINDINGS LOGGED: F-136** (resolves F-134 severity),
+**F-137** (resolves F-135 + the live defect), **F-138** (C-1 promoted:
+useOffseasonData serves STOCK playerDatabase — denomination fixes necessary but
+NOT sufficient for flag flip; named precondition). Captain post-report catch:
+dead duplicate src/src_figma/app/hooks/useSeasonStats.ts (zero importers, no
+defect) → report C-7, folds into F135-T2.
+
+**JK rulings this session:** fix queue order confirmed (F135-T1 first — live
+defect, runs ahead of TV1 so TV1 doesn't verify against corrupted WAR);
+T4 = DELETE ActiveTradeFlow (Fable + Captain concur); T2 vote-divisor and
+T3 rookie-table design inputs deferred to those drafts. **R1' RULING:** WAR
+season-length = gamesPerTeam (>0) → 162 with warn-once; totalGames PERMANENTLY
+BANNED from the chain (display math ≠ persistence, so W1's strict skip-no-
+default not applied — fallback preserves non-franchise behavior).
+
+**F135-T1 (Codex 5.5 | high):** resolveSeasonGamesForWAR exported pure resolver;
+zero functional totalGames reads remain (grep-verified); finiteWAR clamps at
+all 6 WAR assignment points (try/catch+isNaN never caught ±Infinity); 6
+mutation-honest tests incl. hook-level mock assertions (toHaveBeenCalledWith
+(…, 64) kills M1 at the wiring layer). ONE deviation: state widened to
+SeasonMetadata|null|undefined (init undefined), :350 ternary bypasses resolver
+pre-load (warn-noise control).
+
+**Fable F135-T1-AUDIT verdict: "F135-T1 DELTA VERIFIED."** Deviation ruled LOW
+(single state write :401 from Promise<SeasonMetadata|null>; undefined provably
+transient-pre-load; pre-load stats arrays empty so silent 162 never scales a
+real row; return re-narrows ?? null). M1/M2/M3 re-run RED, restored hash-
+verified byte-identical ×2. Suite 7,192/3 (characterized set; GameTrackerLaunch
+State didn't flake), build green, +6 test delta (7,189→7,195). Disagreements
+4/0-MAJOR: #2 M2b mutant survives — no test pins gamesPerTeam 0/negative/NaN
+(one-line resolver test → F135-T2); #4 warn once-per-module-lifetime, quieter
+than spec'd.
+
+**Process catch (Captain, self-NFL):** F135-T1 build contract went chat→Codex
+without landing in PROMPT_CONTRACTS.md first — write-first violation; retro-
+logged verbatim with execution record. PROPOSED standing-rule addition
+(pending JK, alongside the 2026-06-12 reasoning-effort rule): no contract is
+handed off until it exists in PROMPT_CONTRACTS.md.
+
+**NEXT SESSION:** F135-T1 closure commit (code + tests + contracts + findings
+F-136/137/138 + discovery report + session docs — single commit, post-verdict,
+T5/W1 pattern). Then **F134-T1: FreeAgencyFlow canonical pass** (delete ×1e6
+at :541, swap 7 raw-`M` formatters to engine formatSalary, leave ±10% ratio
+math) — ROUTE: Codex 5.5 | high → Fable 5 audit (FA persistence). Then F134-T2
+(needs vote-divisor ruling) → T3 (needs rookie-table ruling) → T4 (DELETE
+ActiveTradeFlow) → F135-T2 (cleanup batch incl. C-7 duplicate + M2b test
+one-liner). TV1 unblocked after F134 batch or in parallel per JK. Design
+track: D0 still next.
+
+
+## 2026-06-12 (cont.) — F134-T1 ARC: FreeAgencyFlow canonical, BLOCK→flake-triage→VERIFIED
+
+**Rulings opening this arc:** standing Contract Readiness Rule RATIFIED and
+written to SESSION_RULES.md (reasoning effort ×2 + contract-in-file-before-
+handoff); Fable disagreement #1 (F135-T1) RULED sanctioned — spec-docs fold
+into closure commits, and audit contracts now carry an explicit spec-docs
+carve-out (first used in F134-T1-AUDIT). JK workflow preference recorded:
+continue long sessions; new session only on context degradation or natural
+arc boundary.
+
+**F134-T1 (Codex 5.5 | high):** contractValue persists raw canonical dollars
+via new pure buildFreeAgentSigningFromMove; 7 raw-M formatter sites → engine
+formatSalary (9 call sites in final form); ±10% window extracted to pure
+getFreeAgencyExchangeSalaryWindow (bit-identical math, pinned by T-C/M3);
+new test dir src/src_figma/__tests__/offseason/. Codex correctly BLOCKED:
+one outside-baseline suite failure (franchiseOffseasonGuards.component,
+a TradeFlow preview assertion in a file F134-T1 never touched).
+
+**Captain flake triage (protocol win — no code bent to the suite):**
+solo 24/24 green → pairwise with the new test file green both orders →
+diff adds zero module-scope mutable state → full-suite re-run fails on
+EXACTLY the characterized 3 with guards green. RULING: order-flake, third
+family member. Baseline re-characterized: fixed failures wpaRuntimeBoundary
++ franchiseNarrativeEventEligibility; order-flakes franchiseManualSmoke
+Fixture + GameTrackerLaunchState + franchiseOffseasonGuards.component
+(conditional: must pass solo when it fires). Test count 7,198.
+
+**Fable F134-T1-AUDIT verdict: "F134-T1 DELTA VERIFIED."** Highlight — D3
+consumer sweep (F-134 root-lesson pointed at our own fix): FreeAgentSigning.
+contractValue has ZERO product readers; write-only field; scale flip
+forward-safe; dead-data one-liner parked to F135-T2. D4 refactor ruled
+sanctioned (pure additions only; fallback banner "N/A" replaces malformed
+"($M)" — improvement). All mutants killed by exactly their intended tests,
+no cross-talk; restoration hash-verified twice. Disagreements 4/0-MAJOR;
+#1 = uncommitted F135-T1 sibling residue → commit-cadence ruling for JK.
+
+**F135-T2 cleanup list grew this arc:** + write-only contractValue field;
++ M2b resolver test one-liner (from F135-T1 audit); + C-7 dead duplicate
+useSeasonStats; + dead consumers B-5/6/7/11-15; + C-4 `?? 64` re-source.
+
+**NEXT:** closure commit (Captain recommends ONE combined commit covering
+both verified arcs — F135-T1 + F134-T1 + discovery report + all session
+docs — since doc appends interleave in the same files; splitting would
+require partial staging). Then F134-T2 (Awards) — BLOCKED ON JK vote-
+divisor ruling; F134-T3 (FinalizeAdvance) — BLOCKED ON JK rookie-salary
+ruling (Captain recommendations presented in-session). T4 (DELETE
+ActiveTradeFlow) ready to draft any time. Design track: D0 still next.

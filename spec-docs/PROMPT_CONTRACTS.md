@@ -2441,3 +2441,712 @@ pre-verify state before reporting.
 
 Use high reasoning effort. Think step-by-step.
 ```
+
+
+---
+
+## CONTRACT: F134-F135-DISCOVERY (drafted 2026-06-12, JK-confirmed)
+
+**ROUTE: Fable 5 CLI | discovery/audit | high reasoning effort**
+
+```
+You are the Discovery Auditor for the KBL Tracker denomination and
+season-metadata sweep. This is a READ-ONLY discovery pass. You produce
+evidence and classification — you change NOTHING.
+
+GOAL:
+Produce a per-site wiring-evidence report for (A) all residual $M-scale
+salary logic in four Figma flows (FINDING-134) and (B) every consumer of
+SeasonMetadata.totalGames (FINDING-135), classified so fix contracts can
+be cut directly from the report.
+
+SOURCE OF TRUTH:
+- spec-docs/FINDINGS/FINDINGS_056_onwards.md — FINDING-134 (:2241) and
+  FINDING-135 (:2251), including known sites and the data-field-consumer
+  sweep doctrine
+- spec-docs/MODE2_SYSTEMS_INTEGRATION_MAP.md §4.4 (totalGames anti-pattern)
+- Canonical denomination state: salaries are kblIV CANONICAL DOLLARS
+  (T5 arc; BRIDGE=300.032521 in scripts/t5-denomination-bridge.ts)
+- W1 closure: gamesPerTeam is config-sourced metadata; totalGames
+  semantics deliberately UNCHANGED by W1
+- Skills: spec-ui-alignment, franchise-button-audit — use their
+  dual-direction methodology (top-down from component render path +
+  bottom-up from data layer) for wiring verdicts
+
+ENV:
+- All CLI verification commands MUST be prefixed `NODE_ENV= `
+- Non-interactive shells: node at ~/.nvm/versions/node/v20.20.0/bin
+
+SCOPE — PART A (FINDING-134):
+Components (known sites from F-134; you must ALSO re-grep fresh — do not
+trust the line numbers, the tree has moved since 2026-06-11):
+1. src/src_figma/app/components/FinalizeAdvanceFlow.tsx
+2. src/src_figma/app/components/TradeFlow.tsx
+3. src/src_figma/app/components/AwardsCeremonyFlow.tsx
+4. src/src_figma/app/components/FreeAgencyFlow.tsx
+
+For EACH component answer with evidence:
+A1. Is it reachable from the active app? (route/import chain from
+    App.tsx or an active page — quote the chain)
+A2. Does it read live franchise data (player.salary from
+    leagueBuilderStorage/franchise stores) or dummy/local data? Quote
+    the data-source line(s).
+A3. Enumerate EVERY $M-scale site: x1e6 conversions, /1e6 formatters,
+    grade-to-dollar tables, absolute dollar thresholds. Exact line + code.
+A4. For each site classify: LIVE-BROKEN (wired to canonical dollars,
+    math is wrong) | DUMMY-INERT (dummy data, wrong but no user impact)
+    | DEAD (unreachable code).
+A5. Sweep completeness check: grep the four files for `1000000`, `1e6`,
+    `/ 1000`, M-suffix formatters, and any hardcoded dollar literal
+    >= 100000. Report anything beyond the F-134 known sites.
+
+SCOPE — PART B (FINDING-135):
+B1. Enumerate EVERY consumer of SeasonMetadata.totalGames (grep
+    totalGames across src/, trace each read site). Exact file:line +
+    surrounding code for each.
+B2. For each consumer classify: ROW-COUNT-CORRECT (counting scheduled
+    rows is the right semantics for this use) | CONFIG-TRUTH-NEEDED
+    (should read gamesPerTeam instead) | DEAD.
+B3. Confirm deriveSeasonTotalGames call sites and whether any consumer
+    breaks on totalGames=0 (empty schedule) or partial counts.
+
+
+---
+
+## CONTRACT: F135-T1 — useSeasonStats season-length source (drafted 2026-06-12; RETRO-LOGGED post-handoff — executed by Codex from chat before this file write; text verbatim from handoff)
+
+**ROUTE: Codex 5.5 | high → Fable 5 CLI audit | high reasoning effort**
+
+```
+You are the Season-Length Resolution Engineer for KBL Tracker's leader-board
+WAR pipeline.
+
+GOAL:
+Replace SeasonMetadata.totalGames as the WAR season-length source in
+useSeasonStats with a gamesPerTeam-first resolution, guarded so that
+zero/absent values can never produce +/-Infinity or mis-scaled WAR.
+
+SOURCE OF TRUTH:
+- FINDING-137 (spec-docs/FINDINGS/FINDINGS_056_onwards.md) + discovery
+  report B-1/B-2 (spec-docs/F134_F135_DISCOVERY_REPORT.md section 2)
+- W1 canon: SeasonMetadata.gamesPerTeam (seasonStorage.ts:162,
+  number|null, normalized at every read/write) is the config-truth
+  per-team season length
+- R1' RULING (JK 2026-06-12, this contract): WAR season-length
+  resolution = gamesPerTeam (non-null, > 0) -> DEFAULT_TOTAL_GAMES (162)
+  with a single console.warn per season load. SeasonMetadata.totalGames
+  is NEVER consulted for WAR scaling — it is league-total schedule rows,
+  not per-team games, and is wrong even when the schedule is complete.
+
+ENV:
+- CLI verification MUST be prefixed `NODE_ENV= `
+- node at ~/.nvm/versions/node/v20.20.0/bin on non-interactive shells
+
+CONSTRAINTS:
+- Only edit: src/hooks/useSeasonStats.ts
+- Only create: src/hooks/__tests__/useSeasonStats.seasonLength.test.ts
+- Do NOT touch: src/src_figma/app/hooks/useSeasonStats.ts (dead
+  duplicate, C-7 — cleanup belongs to F135-T2), bwarCalculator.ts,
+  rwarCalculator.ts, pwarCalculator.ts, fwar paths,
+  franchiseAdaptiveStandards.ts, seasonStorage.ts, useFranchiseData.ts,
+  TeamHubContent.tsx, any W1-frozen file
+- totalGames semantics elsewhere UNCHANGED (W1 constraint stands)
+- Quote FINDING-137 for every change
+
+EXPECTED OUTPUT:
+1. New exported pure function resolveSeasonGamesForWAR(metadata) —
+   implements R1' exactly; single warn on fallback.
+2. Lines :331 and :366 both consume resolveSeasonGamesForWAR. No other
+   read of metadata.totalGames remains (grep zero functional hits).
+3. Belt-and-braces: every WAR component assignment passes through
+   Number.isFinite(x) ? x : 0 (try/catch + isNaN does not catch
+   +/-Infinity).
+4. Tests T-A..T-E (mutation-honest) + mutations M1-M3 each shown RED
+   then restored:
+   T-A: {gamesPerTeam: 64, totalGames: 512} -> 64 (NOT 512)
+   T-B: {gamesPerTeam: null, totalGames: 512} -> 162 (NOT 512)
+   T-C: {gamesPerTeam: null, totalGames: 0} -> 162 (NOT 0)
+   T-D: null metadata -> 162
+   T-E: seasonGames forced to 0 yields finite WAR (0), not Infinity
+   M1: resolver reads totalGames first -> T-A/T-B RED
+   M2: remove zero-guard -> T-C RED
+   M3: remove isFinite clamp -> T-E RED
+
+VERIFICATION:
+- NODE_ENV= npx vitest run (focused file) -> green
+- NODE_ENV= npm run build -> passes
+- NODE_ENV= full suite -> failures confined to characterized baseline
+- grep -n "totalGames" src/hooks/useSeasonStats.ts -> zero functional hits
+
+FORMAT: files changed · changes (citing FINDING-137/R1') · mutation log
+RED/restored · verification output · "F135-T1 complete" OR "BLOCKED".
+FAILURE PROTOCOL: stop on forbidden-file need; stop on out-of-baseline
+suite failures; never assume intent — ask.
+
+Use high reasoning effort. Think step-by-step.
+```
+
+**Execution record (2026-06-12):** Codex 5.5 high reported "F135-T1
+complete" — resolver + finiteWAR clamps + 6 tests, M1-M3 all RED/restored,
+focused 6/6 green, build green, full suite 3 fails (characterized set),
+grep zero hits. ONE DEVIATION for audit: state widened to
+SeasonMetadata | null | undefined (init undefined), :350 ternary bypasses
+resolver while undefined (warn-noise control) — D2 in the audit contract.
+Captain spot-check 2026-06-12: resolver R1'-exact, clamps at 6 assignment
+points, focused tests independently re-run 6/6 green.
+
+---
+
+## CONTRACT: F135-T1-AUDIT (drafted 2026-06-12)
+
+**ROUTE: Fable 5 CLI | audit | high reasoning effort**
+
+```
+You are the Delta Auditor for F135-T1 (useSeasonStats season-length
+resolution). Audit the change against its contract. You may run tests
+and apply temporary mutations; every mutation MUST be restored
+byte-identical before you report.
+
+SOURCE OF TRUTH:
+- CONTRACT F135-T1 (this file, above) including R1' ruling
+- FINDING-137 + spec-docs/F134_F135_DISCOVERY_REPORT.md §2 (B-1/B-2)
+- Codex completion report (SESSION_LOG 2026-06-12 entry, pending)
+
+SCOPE OF DIFF: git diff on src/hooks/useSeasonStats.ts +
+src/hooks/__tests__/useSeasonStats.seasonLength.test.ts. Anything
+outside these two files in the diff is an automatic MAJOR.
+
+ENV: prefix `NODE_ENV= `; node at ~/.nvm/versions/node/v20.20.0/bin.
+
+DELTAS TO VERIFY:
+D1. R1' CONFORMANCE: resolveSeasonGamesForWAR = gamesPerTeam
+    (non-null, finite, > 0) else warn-once-per-seasonKey + 162.
+    `grep -n totalGames src/hooks/useSeasonStats.ts` → zero hits.
+    Confirm DEFAULT_TOTAL_GAMES is still 162 and the warn cannot spam
+    (Set-based dedupe survives re-renders; check module-level scope).
+D2. DEVIATION RULING — the undefined ternary (:350): Codex widened
+    state to SeasonMetadata | null | undefined (init undefined) so the
+    unloaded render silently uses 162 without the resolver/warn.
+    Trace every setSeasonMetadata call: after load completes, can the
+    state EVER be undefined again (re-load path, error path, season
+    switch)? If yes, loaded metadata could bypass the resolver —
+    MAJOR. If undefined is provably transient-pre-load only, classify
+    LOW (sanctioned noise-control) and say so explicitly.
+D3. MUTATION RE-RUNS (apply, show RED, restore byte-identical,
+    confirm via git status/diff):
+    M1 resolver reads totalGames first → resolver tests + hook mock
+       assertions RED
+    M2 remove zero fallback → zero-row test RED
+    M3 remove finiteWAR clamp → Infinity test RED
+D4. CLAMP COVERAGE: enumerate every WAR field assignment in entry
+    builders (bWAR, rWAR, fWAR, pWAR, totalWAR, fielding map) —
+    each passes finiteWAR. Flag any numeric WAR output path that
+    does not.
+D5. SCOPE & FROZEN: forbidden files untouched (bwar/rwar/pwar
+    calculators, franchiseAdaptiveStandards, seasonStorage,
+    useFranchiseData, TeamHubContent, src_figma dead duplicate).
+    totalGames semantics elsewhere unchanged.
+D6. SUITE & BUILD: NODE_ENV= full suite — failures confined to the
+    characterized baseline set (wpaRuntimeBoundary,
+    franchiseNarrativeEventEligibility + order-flakes
+    franchiseManualSmokeFixture, GameTrackerLaunchState).
+    NODE_ENV= npm run build passes. Test count delta consistent with
+    +6 new tests.
+
+FORMAT: EVIDENCE LOG D1-D6 · DISAGREEMENTS (mandatory) · VERDICT:
+"F135-T1 DELTA VERIFIED" / "DEVIATIONS — [n]" / "BLOCKED: [reason]"
+FAILURE PROTOCOL: never patch; restore all mutations; confirm git
+status matches pre-audit state before reporting.
+
+Use high reasoning effort. Think step-by-step.
+```
+
+**Audit record (2026-06-12):** Fable F135-T1-AUDIT verdict: **"F135-T1 DELTA
+VERIFIED."** D1 R1'-exact (warn-dedupe module-level, survives re-renders);
+D2 undefined ternary ruled LOW — single state write at :401 from a
+Promise<SeasonMetadata|null>, undefined provably transient-pre-load, return
+re-narrows via ?? null; D3 M1/M2/M3 all RED, restored hash-verified
+byte-identical twice; D4 clamp coverage 6/6 assignment points; D5 frozen
+files clean; D6 suite 7,192/3 (characterized set), build green, +6 delta
+holds. Disagreements (4, none MAJOR): #1 spec-docs in working tree =
+Captain documentation-cycle writes (JK scope ruling: fold into closure
+commit); #2 M2b mutant survives — no test pins gamesPerTeam 0/negative/NaN
+(one-line resolver test PARKED to F135-T2); #3 T-E implemented stronger
+than written (conforms); #4 warn quieter than spec'd (no action).
+
+
+---
+
+## CONTRACT: F134-T1 — FreeAgencyFlow canonical pass (drafted 2026-06-12)
+
+**ROUTE: Codex 5.5 | high → Fable 5 CLI audit | high reasoning effort**
+
+```
+You are the Denomination Engineer for KBL Tracker's Free Agency flow.
+
+GOAL:
+Remove all $M-scale salary logic from FreeAgencyFlow so that, when the
+offseason flag flips, the flow persists and displays canonical kblIV
+dollars correctly.
+
+SOURCE OF TRUTH:
+- FINDING-136 (spec-docs/FINDINGS/FINDINGS_056_onwards.md) +
+  spec-docs/F134_F135_DISCOVERY_REPORT.md section 1.4 (site table,
+  line numbers fresh as of 2026-06-12 — re-verify before editing)
+- Canonical denomination: player.salary entering this flow is ALREADY
+  canonical T5 dollars (useOffseasonData.ts:38; convertToLocalPlayer
+  at FreeAgencyFlow:69-77 passes it RAW — no conversion exists or is
+  needed)
+- Canonical formatter: formatSalary (src/engines/salaryCalculator.ts
+  :1337) — precedent: TeamHubContent adoption under T5-FIX-2
+
+ENV:
+- CLI verification MUST be prefixed `NODE_ENV= `
+- node at ~/.nvm/versions/node/v20.20.0/bin on non-interactive shells
+
+CONSTRAINTS:
+- Only edit: src/src_figma/app/components/FreeAgencyFlow.tsx
+- Only create: src/src_figma/__tests__/offseason/
+  FreeAgencyFlowDenomination.test.tsx (adjust dir to suite convention
+  if an offseason test dir already exists — report which)
+- Do NOT touch: useOffseasonData.ts (F-138 is a SEPARATE ticket),
+  offseasonStorage.ts, leagueBuilderStorage.ts, salaryCalculator.ts,
+  TradeFlow.tsx, AwardsCeremonyFlow.tsx, FinalizeAdvanceFlow.tsx,
+  FranchiseHome.tsx (the flag stays FALSE), ivEngine/tierParams/oracle
+  (frozen)
+- The +-10% return-player matching block (:1353-1382) is RATIO MATH —
+  scale-invariant and CORRECT. Do NOT modify its logic; only its
+  display strings change via the formatter swap.
+- Quote FINDING-136 for every change
+
+EXPECTED OUTPUT:
+1. :541 `contractValue: m.player.salary * 1000000` -> contractValue:
+   m.player.salary (canonical dollars persisted as-is)
+2. All 7 raw-`M` formatter sites (:1457, :1472, :1495, :1496, :1508,
+   :1542, :1587) render via formatSalary imported from
+   src/engines/salaryCalculator — zero remaining
+   `.toFixed(1)}M`-style salary strings in the file
+3. Sweep proof: grep the file for `1000000`, `1e6`, and
+   `toFixed(1)}M`-pattern salary strings -> zero functional hits
+4. Tests (mutation-honest; component-level or extracted-helper level,
+   whichever the file structure supports without refactor creep):
+   T-A: a signing built from salary S persists contractValue === S
+        (NOT S*1e6)
+   T-B: salary display for a canonical value (e.g. 143641) renders the
+        formatSalary output, not "143641.0M"
+   T-C: the +-10% match window for incoming salary S is [0.9S, 1.1S]
+        computed in canonical dollars (pins the ratio block unchanged)
+   MUTATIONS (run each, show RED, restore):
+   M1: reinstate * 1000000 at the contractValue site -> T-A RED
+   M2: revert one display site to raw toFixed(1)+"M" -> T-B RED
+   M3: scale the match window by 1e6 -> T-C RED
+
+VERIFICATION:
+- NODE_ENV= npx vitest run (focused new test file) -> green
+- NODE_ENV= npm run build -> passes
+- NODE_ENV= full suite -> failures confined to characterized baseline
+  (wpaRuntimeBoundary, franchiseNarrativeEventEligibility + order-
+  flakes franchiseManualSmokeFixture, GameTrackerLaunchState)
+- grep -nE "1000000|1e6" src/src_figma/app/components/FreeAgencyFlow.tsx
+  -> zero functional hits
+
+FORMAT:
+1. Files changed (exact paths)
+2. Changes made (each citing FINDING-136)
+3. Mutation log: M1-M3 each shown RED then restored
+4. Verification result (paste exact output)
+5. "F134-T1 complete" OR "BLOCKED: [exact reason]"
+
+FAILURE PROTOCOL:
+- If formatSalary's import path or signature differs from cited -> stop
+  and report (do not write a local formatter)
+- If any line number from the site table has drifted -> re-locate by
+  code content, report old->new, proceed only on exact code match
+- If the change would require touching a forbidden file -> stop and
+  report
+- Never assume intent — ask
+
+Use high reasoning effort. Think step-by-step.
+```
+
+
+---
+
+## CONTRACT: F134-T1-AUDIT (drafted 2026-06-12)
+
+**ROUTE: Fable 5 CLI | audit | high reasoning effort**
+
+```
+You are the Delta Auditor for F134-T1 (FreeAgencyFlow canonical pass).
+Audit the change against its contract. You may run tests and apply
+temporary mutations; every mutation MUST be restored byte-identical
+before you report.
+
+SOURCE OF TRUTH:
+- CONTRACT F134-T1 (this file, above)
+- FINDING-136 + spec-docs/F134_F135_DISCOVERY_REPORT.md section 1.4
+- Codex completion report + Captain triage (SESSION_LOG 2026-06-12,
+  pending): the BLOCK on franchiseOffseasonGuards.component.test.tsx
+  was resolved as a newly observed ORDER-FLAKE (solo 24/24 green;
+  pairwise with the new test file green both orders; full-suite re-run
+  failed on exactly the prior characterized set with guards green;
+  diff adds zero module-scope mutable state)
+
+SCOPE OF DIFF: git diff on
+src/src_figma/app/components/FreeAgencyFlow.tsx + the new
+src/src_figma/__tests__/offseason/FreeAgencyFlowDenomination.test.tsx.
+CARVE-OUT: spec-docs/ changes by the Captain documentation cycle are
+expected in the working tree and are NOT scope violations. Any OTHER
+file in the diff is an automatic MAJOR.
+
+ENV: prefix `NODE_ENV= `; node at ~/.nvm/versions/node/v20.20.0/bin.
+
+DELTAS TO VERIFY:
+D1. SITE CONFORMANCE: contractValue persists raw canonical salary
+    (no *1e6); all 7 formatter sites (:1457/:1472/:1495/:1496/:1508/
+    :1542/:1587 pre-diff numbering) render via engine formatSalary;
+    grep -nE "1000000|1e6" -> zero functional hits; no remaining
+    raw `.toFixed(1)}M`-style salary strings anywhere in the file.
+D2. RATIO BLOCK UNCHANGED: the +-10% return-player matching logic is
+    behavior-identical — the extracted
+    getFreeAgencyExchangeSalaryWindow returns exactly
+    [0.9*S, 1.1*S] and the match filter consumes it equivalently to
+    the pre-diff inline math. Only display strings changed.
+D3. CONSUMER SWEEP (F-134 root-lesson, data-field doctrine): we
+    changed the WRITE scale of FreeAgentSigning.contractValue.
+    Enumerate every READER of contractValue (and of
+    saveFreeAgentSignings output) across src/ — for each, verify it
+    does not assume $M units (e.g., a /1e6 display or threshold
+    elsewhere would now be wrong in the OTHER direction). Any $M-
+    assuming reader is a DEVIATION with a finding-candidate note.
+D4. REFACTOR-CREEP RULING: Codex extracted pure helpers
+    (getFreeAgencyExchangeSalaryWindow, buildFreeAgentSigningFromMove)
+    and exported previously-internal types for testability. Verify:
+    sanctioned under the contract's "extracted-helper level" clause;
+    all additions pure (no module-scope mutable state); component
+    behavior unchanged for equal inputs. Classify creep beyond that.
+D5. MUTATION RE-RUNS (apply, show RED, restore byte-identical via
+    hash + git status):
+    M1 reinstate *1000000 at contractValue -> RED
+    M2 revert one display site to raw toFixed(1)+"M" -> RED
+    M3 scale the match window by 1e6 -> RED
+D6. SCOPE & FROZEN: forbidden files untouched (useOffseasonData.ts,
+    offseasonStorage.ts, leagueBuilderStorage.ts, salaryCalculator.ts,
+    TradeFlow.tsx, AwardsCeremonyFlow.tsx, FinalizeAdvanceFlow.tsx,
+    FranchiseHome.tsx — flag still FALSE, ivEngine/tierParams/oracle).
+D7. SUITE & BUILD: NODE_ENV= full suite — failures confined to:
+    wpaRuntimeBoundary, franchiseNarrativeEventEligibility (fixed
+    failures) + order-flakes franchiseManualSmokeFixture,
+    GameTrackerLaunchState, franchiseOffseasonGuards.component
+    (CONDITIONAL: if guards fires, it must pass solo to stay
+    characterized — run it solo and report). NODE_ENV= npm run build
+    passes. Test count 7,198 (+3 vs 7,195).
+
+FORMAT: EVIDENCE LOG D1-D7 · DISAGREEMENTS (mandatory) · VERDICT:
+"F134-T1 DELTA VERIFIED" / "DEVIATIONS — [n]" / "BLOCKED: [reason]"
+FAILURE PROTOCOL: never patch; restore all mutations; confirm git
+status matches pre-audit state before reporting.
+
+Use high reasoning effort. Think step-by-step.
+```
+
+**Audit record (2026-06-12):** Fable F134-T1-AUDIT verdict: **"F134-T1 DELTA
+VERIFIED."** D1 sites conform (9 formatSalary calls, zero 1e6/raw-M hits;
+remaining toFixed sites are percentages); D2 ratio block bit-identical via
+pure helper; D3 consumer sweep — contractValue has ZERO product readers
+(write-only field; forward-safe; dead-data one-liner → F135-T2 list);
+D4 refactor sanctioned (pure helpers, type exports, zero module-scope
+mutable state; two micro-deltas equivalent-or-better); D5 M1/M2/M3 each
+killed by exactly its intended test, restored hash-verified ×2; D6 frozen
+clean (incl. corrected paths for rosterEngineConstants/tierParams/oracle);
+D7 suite 7,195/3 = characterized set, guards didn't fire + 24/24 solo,
+build green, count 7,198 exact. Disagreements 4/0-MAJOR: #1 uncommitted
+F135-T1 sibling residue (hash-verified untouched; ruling → commit cadence);
+#2 test-dir placement cosmetic; #3 fallback banner now "N/A" vs malformed
+"($M)" (improvement); #4 write-only contractValue (parked).
+
+**Captain triage record (pre-audit, 2026-06-12):** Codex BLOCKED on an
+outside-baseline failure (franchiseOffseasonGuards.component.test.tsx,
+TradeFlow preview assertion). Triage evidence chain: solo 24/24 green;
+pairwise with the new test file green BOTH orders; F134-T1 diff adds zero
+module-scope mutable state (pure helpers + type exports only); full-suite
+re-run failed on EXACTLY the prior characterized 3 with guards green
+(failure moved = flake). RULING: newly observed order-flake, third family
+member (with franchiseManualSmokeFixture, GameTrackerLaunchState).
+F134-T1 unblocked by baseline re-characterization — zero code changed to
+appease the suite.
+
+
+---
+
+## CONTRACT: F134-T2 — AwardsCeremonyFlow canonical pass (drafted 2026-06-12)
+
+**ROUTE: Codex 5.5 | high → Fable 5 CLI audit | high reasoning effort**
+
+```
+You are the Denomination Engineer for KBL Tracker's Awards Ceremony flow.
+
+GOAL:
+Remove all $M-scale salary logic from AwardsCeremonyFlow: canonical
+salaries pass through unconverted, displays use the engine formatter,
+and vote-percentage math is re-based per FINDING-139.
+
+SOURCE OF TRUTH:
+- FINDING-136 + spec-docs/F134_F135_DISCOVERY_REPORT.md section 1.3
+  (site table; line numbers fresh 2026-06-12 — re-verify before edit)
+- FINDING-139 RULING (JK 2026-06-12): vote divisor 500000 -> 1666
+  (= Math.round(500000 / 300.032521), BRIDGE per
+  scripts/t5-denomination-bridge.ts) — faithful translation of the
+  original sensitivity. Define ONE named constant
+  (e.g., VOTE_PCT_SALARY_SPREAD_DIVISOR = 1666) with a comment citing
+  FINDING-139 + BRIDGE; both vote sites consume it.
+- Salary entering the flow is ALREADY canonical (useOffseasonData.ts:38)
+- Canonical formatter: formatSalary (src/engines/salaryCalculator.ts
+  :1337; T5-FIX-2 precedent)
+
+ENV: prefix `NODE_ENV= `; node ~/.nvm/versions/node/v20.20.0/bin.
+
+CONSTRAINTS:
+- Only edit: src/src_figma/app/components/AwardsCeremonyFlow.tsx
+- Only create: src/src_figma/__tests__/offseason/
+  AwardsCeremonyFlowDenomination.test.tsx
+- Do NOT touch: useOffseasonData.ts (F-138 separate), offseasonStorage,
+  salaryCalculator.ts, the other three flows, FranchiseHome.tsx (flag
+  stays FALSE), frozen IV files
+- OUT OF SCOPE: salary-as-merit-proxy in winner selection (report C-6)
+  — ranking is monotonic and JK-parked; selection logic UNCHANGED
+- Quote FINDING-136/139 for every change
+
+EXPECTED OUTPUT:
+1. :116 `salary: p.salary * 1000000` -> salary: p.salary (canonical
+   pass-through)
+2. Vote-pct sites (:1335 Cy Young, :1480 MVP): /500000 -> the named
+   1666 constant; clamps (55-97 / 55-92-style bounds) UNCHANGED
+3. Display sites :1364, :1513, :1800, :1915 -> formatSalary; zero
+   remaining raw-`M`/÷1e6 salary strings in the file
+4. Sweep: grep -nE "1000000|1e6|500000" -> zero functional hits
+5. Tests (mutation-honest):
+   T-A: convertToAwardPlayer keeps salary === input (no *1e6)
+   T-B: vote pct for winner 80000 vs runner-up 63340 (spread 16660)
+        = base + 10 pts via the 1666 divisor (pin exact number)
+   T-C: a winner display renders formatSalary output, not raw "M"
+   MUTATIONS: M1 reinstate *1e6 -> T-A RED; M2 revert divisor to
+   500000 -> T-B RED; M3 revert one display site -> T-C RED
+   (each shown RED, restored)
+
+VERIFICATION: focused tests green; NODE_ENV= npm run build passes;
+NODE_ENV= full suite confined to characterized baseline (fixed:
+wpaRuntimeBoundary, franchiseNarrativeEventEligibility; order-flakes:
+franchiseManualSmokeFixture, GameTrackerLaunchState,
+franchiseOffseasonGuards.component — if one fires it must pass solo);
+sweep grep zero hits.
+
+FORMAT: files changed · changes (citing F-136/139) · mutation log ·
+verification output · "F134-T2 complete" OR "BLOCKED: [exact reason]".
+FAILURE PROTOCOL: line drift -> relocate by code content, report
+old->new, proceed only on exact match; forbidden-file need -> stop;
+formatSalary mismatch -> stop, never write a local formatter; never
+assume intent — ask.
+
+Use high reasoning effort. Think step-by-step.
+```
+
+---
+
+## CONTRACT: F134-T3 — FinalizeAdvanceFlow canonical pass (drafted 2026-06-12)
+
+**ROUTE: Codex 5.5 | high → Fable 5 CLI audit | high reasoning effort**
+
+```
+You are the Denomination Engineer for KBL Tracker's Finalize & Advance
+flow. CARE: this file hosts the season-transition trigger — your scope
+is roster-UI salary logic ONLY.
+
+GOAL:
+Remove all $M-scale salary logic from FinalizeAdvanceFlow and bring its
+call-up salary handling into F-127 canon: salary is set at draft and
+UNCHANGED at call-up — no recompute.
+
+SOURCE OF TRUTH:
+- FINDING-136 + spec-docs/F134_F135_DISCOVERY_REPORT.md section 1.1
+  (site table; re-verify line numbers before edit)
+- FINDING-140 RULING (JK 2026-06-12): DELETE calculateRookieSalary and
+  its grade table (:376-380). The call-up path (:302) carries
+  selectedPlayer.salary AS-IS. Recompute-at-call-up contradicted
+  FINDING-127 canon (draft-set, locked, unchanged at call-up)
+  independent of scale.
+- Retirement-risk thresholds re-base by BRIDGE 300.032521:
+  10000000 -> 33330, 5000000 -> 16665 (Math.round(X / BRIDGE)).
+  Define named constants citing FINDING-136 + BRIDGE; the :2071
+  threshold display text consumes the SAME constants.
+- Fallback :130: `player.salary || 1000000` -> `player.salary ?? 0`
+  (nullish — a legitimate 0 passes; no wrong-scale literal)
+- Canonical formatter: formatSalary (salaryCalculator.ts:1337)
+
+ENV: prefix `NODE_ENV= `; node ~/.nvm/versions/node/v20.20.0/bin.
+
+CONSTRAINTS:
+- Only edit: src/src_figma/app/components/FinalizeAdvanceFlow.tsx
+- Only create: src/src_figma/__tests__/offseason/
+  FinalizeAdvanceFlowDenomination.test.tsx
+- Do NOT touch: the season-transition/Phase-11 logic in this file,
+  the isFranchiseContext gates (:219, :261, :270, :279, :314,
+  disabled buttons :783/:835 — behavior preserved exactly),
+  useOffseasonData.ts, getAllFranchisePlayers usage, the other three
+  flows, FranchiseHome.tsx, frozen IV files
+- Quote FINDING-136/140 for every change
+
+EXPECTED OUTPUT:
+1. calculateRookieSalary + grade table DELETED; :302 call-up path uses
+   selectedPlayer.salary unchanged; all display sites that rendered
+   the computed rookie salary (:1446, :1486, :1983 pre-diff) render
+   the player's actual salary via formatSalary
+2. Retirement-risk thresholds (:396-397) -> named canonical constants
+   (33330 / 16665); :2071 display text consumes the same constants
+3. Fallback :130 -> `?? 0`
+4. Formatters :793, :2071 -> formatSalary; zero remaining raw-`M`/÷1e6
+   salary strings
+5. Sweep: grep -nE "1000000|1e6|10000000|5000000|1500000" -> zero
+   functional hits
+6. Tests (mutation-honest):
+   T-A: call-up result salary === selectedPlayer.salary for a player
+        whose grade-table value would have differed (kills the table)
+   T-B: retirement risk crosses +15%/+10% at exactly 33330/16665
+   T-C: a roster-list salary renders formatSalary output
+   MUTATIONS: M1 reinstate grade-table recompute -> T-A RED;
+   M2 revert thresholds to 10000000/5000000 -> T-B RED;
+   M3 revert one formatter -> T-C RED (each shown RED, restored)
+
+VERIFICATION: focused tests green; NODE_ENV= npm run build passes;
+NODE_ENV= full suite confined to characterized baseline (same set as
+F134-T2, incl. conditional solo-pass rule for order-flakes); sweep
+grep zero hits.
+
+FORMAT: files changed · changes (citing F-136/140) · mutation log ·
+verification output · "F134-T3 complete" OR "BLOCKED: [exact reason]".
+FAILURE PROTOCOL: if any deletion would touch season-transition or
+gate logic -> STOP and report; line drift -> relocate by content,
+report old->new; never assume intent — ask.
+
+Use high reasoning effort. Think step-by-step.
+```
+
+
+---
+
+## ADDENDUM: F134-T2 + F134-T3 PARALLEL EXECUTION (JK-approved 2026-06-12)
+
+Applies to both contracts above. T2 and T3 MAY run as parallel Codex 5.5 |
+high agents in the same worktree (files disjoint; no git worktrees — the
+template ban stands). Modified verification:
+1. Each agent runs ONLY: focused test file, mutation runs M1-M3, and its
+   sweep greps. Each agent SKIPS the full suite and the build.
+2. Report format gains a line: "PARALLEL MODE: full suite + build deferred
+   to combined gate."
+3. After BOTH agents report complete, the COMBINED GATE runs ONCE
+   (Captain): NODE_ENV= npm run build + NODE_ENV= full suite over the
+   combined diff, judged against the characterized baseline (fixed:
+   wpaRuntimeBoundary, franchiseNarrativeEventEligibility; order-flakes
+   conditional-solo: franchiseManualSmokeFixture, GameTrackerLaunchState,
+   franchiseOffseasonGuards.component). Neither ticket is complete until
+   the combined gate passes.
+4. PRECONDITION: the F135-T1 + F134-T1 closure commit lands BEFORE
+   parallel execution starts, so the tree carries only T2+T3 deltas.
+
+---
+
+## CONTRACT: F134-T2-AUDIT (drafted 2026-06-12)
+
+**ROUTE: Fable 5 CLI | audit | high reasoning effort** (run in the same
+session as F134-T3-AUDIT, sequentially; restore all mutations between)
+
+```
+You are the Delta Auditor for F134-T2 (AwardsCeremonyFlow canonical pass).
+Audit against CONTRACT F134-T2 + the PARALLEL EXECUTION ADDENDUM above.
+
+SCOPE OF DIFF: AwardsCeremonyFlow.tsx + the new
+AwardsCeremonyFlowDenomination.test.tsx.
+CARVE-OUTS (NOT scope violations): spec-docs/ Captain documentation-cycle
+writes; the F134-T3 sibling diff (FinalizeAdvanceFlow.tsx + its test) —
+verify by hash/diff that T2 did not edit the T3 files, then treat as
+expected residue. Any OTHER file in the diff is an automatic MAJOR.
+
+ENV: prefix `NODE_ENV= `; node ~/.nvm/versions/node/v20.20.0/bin.
+
+DELTAS:
+D1. SITES: :116 canonical pass-through (no *1e6); both vote sites consume
+    ONE named divisor constant = 1666 with FINDING-139 + BRIDGE citation;
+    clamp bounds unchanged; 4 display sites on engine formatSalary; grep
+    -nE "1000000|1e6|500000" -> zero functional hits; no raw-M strings.
+D2. SELECTION UNCHANGED: winner-selection / ranking logic (salary-as-
+    proxy, C-6) byte-equivalent to pre-diff — only conversion, divisor,
+    and display strings changed.
+D3. VOTE MATH: verify T-B pins the exact divisor arithmetic (spread
+    16660 -> +10 pts) and that the 1666 constant = Math.round(500000 /
+    300.032521) — recompute it yourself.
+D4. MUTATIONS M1-M3: re-run each, RED, restore byte-identical
+    (hash + git status).
+D5. PERSISTENCE UNCHANGED: saveAwards payload shape carries no salary
+    field (offseasonStorage AwardWinner) — confirm the diff did not add
+    one.
+D6. COMBINED GATE (run once, covers T3 audit too — cross-reference):
+    NODE_ENV= npm run build; NODE_ENV= full suite vs characterized
+    baseline (conditional-solo rule for the 3 order-flakes); test count
+    delta consistent with both new test files.
+
+FORMAT: EVIDENCE LOG D1-D6 · DISAGREEMENTS (mandatory) · VERDICT:
+"F134-T2 DELTA VERIFIED" / "DEVIATIONS — [n]" / "BLOCKED: [reason]"
+FAILURE PROTOCOL: never patch; restore mutations; pre-audit git state
+re-verified before reporting.
+
+Use high reasoning effort. Think step-by-step.
+```
+
+---
+
+## CONTRACT: F134-T3-AUDIT (drafted 2026-06-12)
+
+**ROUTE: Fable 5 CLI | audit | high reasoning effort** (same session as
+F134-T2-AUDIT)
+
+```
+You are the Delta Auditor for F134-T3 (FinalizeAdvanceFlow canonical pass
++ F-127 canon conformance). Audit against CONTRACT F134-T3 + the PARALLEL
+EXECUTION ADDENDUM.
+
+SCOPE OF DIFF: FinalizeAdvanceFlow.tsx + the new
+FinalizeAdvanceFlowDenomination.test.tsx.
+CARVE-OUTS: spec-docs/ Captain writes; the F134-T2 sibling diff
+(AwardsCeremonyFlow.tsx + its test) — hash-verify T3 did not edit them,
+then treat as residue. Any OTHER file: automatic MAJOR.
+
+ENV: prefix `NODE_ENV= `; node ~/.nvm/versions/node/v20.20.0/bin.
+
+DELTAS:
+D1. F-140 CANON: calculateRookieSalary + grade table fully deleted (grep
+    the file for the function name and any 1500000-class grade literal:
+    zero hits); call-up path carries selectedPlayer.salary unchanged;
+    the pre-diff display sites of the computed value now render actual
+    salary via formatSalary.
+D2. THRESHOLDS: named constants 33330/16665 = Math.round(X /
+    300.032521) — recompute yourself; logic (:396-class) AND display
+    (:2071-class) consume the SAME constants (no text/logic split).
+D3. FALLBACK: `?? 0` (nullish) — verify a salary of 0 passes through
+    and no 1e6-class literal remains; sweep grep
+    "1000000|1e6|10000000|5000000|1500000" -> zero functional hits.
+D4. GATES PRESERVED (critical): isFranchiseContext early-returns and
+    disabled-button gates byte-equivalent; season-transition / Phase-11
+    logic untouched by the diff — enumerate the diff hunks and confirm
+    every hunk is roster-UI salary scope.
+D5. MUTATIONS M1-M3: re-run each, RED, restore byte-identical.
+D6. COMBINED GATE: if F134-T2-AUDIT already ran it this session,
+    cross-reference its result; otherwise run it here (build + full
+    suite vs characterized baseline, conditional-solo rule).
+
+FORMAT: EVIDENCE LOG D1-D6 · DISAGREEMENTS (mandatory) · VERDICT:
+"F134-T3 DELTA VERIFIED" / "DEVIATIONS — [n]" / "BLOCKED: [reason]"
+FAILURE PROTOCOL: never patch; restore mutations; pre-audit git state
+re-verified before reporting.
+
+Use high reasoning effort. Think step-by-step.
+```

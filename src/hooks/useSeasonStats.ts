@@ -36,6 +36,25 @@ const DEFAULT_SEASON_ID = 'season-1';
 const DEFAULT_SEASON_NUMBER = 1;
 const DEFAULT_SEASON_NAME = 'Season 1';
 const DEFAULT_TOTAL_GAMES = 162;
+const warnedWarSeasonFallbacks = new Set<string>();
+
+export function resolveSeasonGamesForWAR(metadata: SeasonMetadata | null): number {
+  if (metadata && metadata.gamesPerTeam !== null && Number.isFinite(metadata.gamesPerTeam) && metadata.gamesPerTeam > 0) {
+    return metadata.gamesPerTeam;
+  }
+
+  const seasonKey = metadata?.seasonId ?? 'missing-season-metadata';
+  if (!warnedWarSeasonFallbacks.has(seasonKey)) {
+    warnedWarSeasonFallbacks.add(seasonKey);
+    console.warn(`[FINDING-137] WAR season length missing for ${seasonKey}; falling back to ${DEFAULT_TOTAL_GAMES}.`);
+  }
+
+  return DEFAULT_TOTAL_GAMES;
+}
+
+function finiteWAR(value: number): number {
+  return Number.isFinite(value) ? value : 0;
+}
 
 // ============================================
 // TYPES
@@ -204,20 +223,20 @@ function toBattingLeaderEntry(
 
   // Compute WAR components
   let bWAR = 0;
-  const fWAR = fieldingWAR;
+  const fWAR = finiteWAR(fieldingWAR);
   let rWAR = 0;
 
   try {
     if (stats.pa > 0) {
       const bwarResult = calculateBWARSimplified(seasonBattingToWAR(stats), seasonGames);
-      bWAR = bwarResult.bWAR;
+      bWAR = finiteWAR(bwarResult.bWAR);
     }
   } catch { /* WAR calc may fail for edge cases — default to 0 */ }
 
   try {
     if (stats.stolenBases > 0 || stats.caughtStealing > 0 || stats.gidp > 0) {
       const rwarResult = calculateRWARSimplified(seasonBattingToBaserunning(stats), seasonGames);
-      rWAR = rwarResult.rWAR;
+      rWAR = finiteWAR(rwarResult.rWAR);
     }
   } catch { /* rWAR calc may fail — default to 0 */ }
 
@@ -231,7 +250,7 @@ function toBattingLeaderEntry(
     bWAR,
     fWAR,
     rWAR,
-    totalWAR: bWAR + fWAR + rWAR,
+    totalWAR: finiteWAR(bWAR + fWAR + rWAR),
   };
 }
 
@@ -249,7 +268,7 @@ function toPitchingLeaderEntry(
   try {
     if (stats.outsRecorded > 0) {
       const pwarResult = calculatePWARSimplified(seasonPitchingToWAR(stats), seasonGames);
-      pWAR = pwarResult.pWAR;
+      pWAR = finiteWAR(pwarResult.pWAR);
     }
   } catch { /* pWAR calc may fail — default to 0 */ }
 
@@ -320,7 +339,7 @@ function getPitchingSortValue(entry: PitchingLeaderEntry, sortBy: PitchingSortKe
 export function useSeasonStats(seasonId: string = DEFAULT_SEASON_ID): UseSeasonStatsReturn {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [seasonMetadata, setSeasonMetadata] = useState<SeasonMetadata | null>(null);
+  const [seasonMetadata, setSeasonMetadata] = useState<SeasonMetadata | null | undefined>(undefined);
 
   // Raw stats from storage
   const [battingStats, setBattingStats] = useState<PlayerSeasonBatting[]>([]);
@@ -328,7 +347,7 @@ export function useSeasonStats(seasonId: string = DEFAULT_SEASON_ID): UseSeasonS
   const [fieldingStats, setFieldingStats] = useState<PlayerSeasonFielding[]>([]);
   const [fieldingWARByPlayer, setFieldingWARByPlayer] = useState<Map<string, number>>(new Map());
 
-  const seasonGames = seasonMetadata?.totalGames ?? DEFAULT_TOTAL_GAMES;
+  const seasonGames = seasonMetadata === undefined ? DEFAULT_TOTAL_GAMES : resolveSeasonGamesForWAR(seasonMetadata);
 
   // Load all stats for the season
   const loadStats = useCallback(async () => {
@@ -363,7 +382,7 @@ export function useSeasonStats(seasonId: string = DEFAULT_SEASON_ID): UseSeasonS
           stats.playerId,
           position,
           stats.games,
-          metadata?.totalGames ?? DEFAULT_TOTAL_GAMES,
+          resolveSeasonGamesForWAR(metadata),
           {
             teamId: stats.teamId,
             fallbackStats: {
@@ -376,7 +395,7 @@ export function useSeasonStats(seasonId: string = DEFAULT_SEASON_ID): UseSeasonS
         );
         if (!result) return null;
 
-        return [stats.playerId, result.fWAR] as const;
+        return [stats.playerId, finiteWAR(result.fWAR)] as const;
       }));
 
       setSeasonMetadata(metadata);
@@ -478,7 +497,7 @@ export function useSeasonStats(seasonId: string = DEFAULT_SEASON_ID): UseSeasonS
     isLoading,
     error,
     seasonId,
-    seasonMetadata,
+    seasonMetadata: seasonMetadata ?? null,
     battingLeaders,
     getBattingLeaders,
     pitchingLeaders,

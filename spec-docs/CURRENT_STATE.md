@@ -297,3 +297,91 @@ bounds); whole engines/index.ts barrel deadness (zero importers — cited cleanu
 mid-season gamesPerTeam edit semantics (snapshot-at-creation canonical); seasonId
 divergence note (archiveOptions-only caller would split aggregation/WAR scopes —
 unreachable today, Fable W1-FIX-VERIFY).
+
+
+---
+
+## CURRENT STATE — 2026-06-12 (F134/F135 discovery + F135-T1 arc CLOSED)
+**Branch:** codex/franchise-v1-next. **This commit:** F135-T1 + tests +
+contracts (F134-F135-DISCOVERY / F135-T1 / F135-T1-AUDIT) + FINDINGS
+F-136/137/138 + F134_F135_DISCOVERY_REPORT.md + session docs (single closure
+commit, post "F135-T1 DELTA VERIFIED").
+**What exists & is trustworthy:** Leader-board WAR season length is config-
+truth — resolveSeasonGamesForWAR (useSeasonStats.ts, exported pure):
+gamesPerTeam (>0) → 162 warn-once fallback; SeasonMetadata.totalGames
+PERMANENTLY BANNED from WAR scaling (R1' ruling — it is league-total rows,
+wrong even on full schedules); finiteWAR clamps every WAR output (±Infinity
+impossible); 6 mutation-pinned tests. Discovery canon (report §1-2): all 25
+$M sites in the four offseason flows are DEAD today behind two gates
+(offseason flag false; TradeFlow franchiseId branch); 16 latent on flag flip,
+FreeAgencyFlow:541 the only persisting one. totalGames consumers fully
+inventoried (18 clusters; B-1/B-2 fixed by this arc; 9 dead).
+**Suite baseline:** unchanged — wpaRuntimeBoundary +
+franchiseNarrativeEventEligibility fixed failures; franchiseManualSmokeFixture
++ GameTrackerLaunchState order-flakes. Test count 7,195 (+6). CLI: prefix
+`NODE_ENV= `; node at ~/.nvm/versions/node/v20.20.0/bin.
+**NEXT TASK: F134-T1 — FreeAgencyFlow canonical pass.** Delete ×1e6 at :541
+(persists wrong-scale contractValue on flag flip); swap 7 raw-`M` formatters
+(:1457/:1472/:1495/:1496/:1508/:1542/:1587) to engine formatSalary
+(salaryCalculator.ts:1337, TeamHubContent precedent); ±10% ratio math
+(:1353-1359) is scale-safe — DO NOT touch. ROUTE: Codex 5.5 | high →
+Fable 5 audit. Contract not yet drafted — first action of next session.
+**Then:** F134-T2 (Awards — NEEDS JK vote-divisor ruling) → F134-T3
+(FinalizeAdvance — NEEDS JK rookie-table ruling, T5 rookie-scale hook) →
+F134-T4 (DELETE ActiveTradeFlow, JK-ruled) → F135-T2 cleanup batch (dead
+consumers B-5/6/7/11-15, C-7 dead duplicate useSeasonStats, M2b resolver
+test one-liner, C-4 `?? 64` re-source). TV1 unblocked (leader WAR now
+trustworthy). 5-session milestone: T5 ✅ W1 ✅ F135-T1 ✅ + TV1 + D1/D2.
+Design track: D0 scope session next (chat-only, parallel).
+**FLAG-FLIP PRECONDITION (F-138, standing):** offseason flows read STOCK
+playerDatabase via useOffseasonData — denomination fixes are NOT sufficient
+to enable FRANCHISE_V1_OFFSEASON_EXECUTION_ENABLED; a franchise-data-source
+ticket must be scoped first.
+**Open pending-JK:** standing rule v2 — reasoning effort in every ROUTE
+header + closing directive AND no handoff until the contract exists in
+PROMPT_CONTRACTS.md (write-first; proposed after this session's retro-log);
+vote-divisor sensitivity (T2); rookie grade table → T5 rookie-scale (T3);
+ASG WPA→Fame; Signature Moment card line; fame tier names; F2 SOT typos
+(~15); F4 FA trait spellings (4); order-flake cleanup (standalone,
+opportunistic).
+
+
+---
+
+## CURRENT STATE — 2026-06-12 (F134-T1 arc CLOSED; same-day as F135-T1)
+**Branch:** codex/franchise-v1-next. **Pending commit:** ONE combined closure
+commit recommended — F135-T1 + F134-T1 + discovery report + contracts +
+findings + session docs (doc appends interleave; partial staging not worth it).
+**What exists & is trustworthy (this arc):** FreeAgencyFlow is denomination-
+canonical — contractValue persists raw kblIV dollars (buildFreeAgentSigning
+FromMove, pure); all salary displays via engine formatSalary; ±10% exchange
+window = pure getFreeAgencyExchangeSalaryWindow, bit-identical math, mutation-
+pinned. D3 consumer sweep: contractValue has ZERO product readers (write-only;
+forward-safe). 3 mutation-pinned tests. Fable: "F134-T1 DELTA VERIFIED."
+**Suite baseline (RE-CHARACTERIZED this arc):** fixed failures wpaRuntime
+Boundary + franchiseNarrativeEventEligibility; order-flakes franchiseManual
+SmokeFixture + GameTrackerLaunchState + franchiseOffseasonGuards.component
+(NEW third member — conditional: must pass solo when it fires). Test count
+7,198. CLI: prefix `NODE_ENV= `; node ~/.nvm/versions/node/v20.20.0/bin.
+**Standing rule (ratified 2026-06-12, in SESSION_RULES.md):** Contract
+Readiness Rule — reasoning effort in ROUTE header AND closing directive;
+no handoff until the contract exists in PROMPT_CONTRACTS.md.
+**NEXT TASK: F134-T2 (AwardsCeremonyFlow) — BLOCKED ON JK RULING:** vote-
+divisor sensitivity under canonical dollars (Captain rec: divisor 500000 →
+~1666 ≈ 500000/BRIDGE to preserve original design sensitivity; or JK names
+a designed canonical $-per-vote-pt). **F134-T3 (FinalizeAdvanceFlow) —
+BLOCKED ON JK RULING:** rookie call-up salary (Captain rec: DELETE the grade
+table entirely — F-127 canon says salary is set at draft and UNCHANGED at
+call-up, so call-up should carry player.salary as-is; no recompute).
+**F134-T4 ready to draft** (DELETE ActiveTradeFlow, JK-ruled 2026-06-12).
+**F135-T2 cleanup list:** dead consumers B-5/6/7/11-15; C-7 dead duplicate
+useSeasonStats; C-4 `?? 64`; M2b resolver test one-liner; write-only
+contractValue dead-data note. TV1 unblocked. 5-session milestone: T5 ✅
+W1 ✅ F135-T1 ✅ F134-T1 ✅ + TV1 + D1/D2. Design track: D0 next.
+**FLAG-FLIP PRECONDITION (F-138, standing):** offseason flows still read
+STOCK playerDatabase — franchise-data-source ticket required before
+FRANCHISE_V1_OFFSEASON_EXECUTION_ENABLED flips.
+**Open pending-JK:** vote-divisor (T2); rookie-salary disposition (T3);
+commit cadence (combined vs split closure commit); ASG WPA→Fame; Signature
+Moment card line; fame tier names; F2 SOT typos; F4 FA trait spellings;
+order-flake cleanup (now 3 members — priority arguably rising).

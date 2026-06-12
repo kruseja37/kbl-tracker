@@ -3,6 +3,7 @@ import { Lock, Dice1, Dice2, Dice3, Dice4, Dice5, Dice6, Trophy, Heart, Frown, S
 import { useOffseasonData, type OffseasonPlayer, type OffseasonTeam } from "@/hooks/useOffseasonData";
 import { useOffseasonState, type FreeAgentSigning } from "../../hooks/useOffseasonState";
 import { useLeagueBuilderData } from "../../hooks/useLeagueBuilderData";
+import { formatSalary } from "../../../engines/salaryCalculator";
 import { transferPlayer, retirePlayer } from "../../../utils/leagueBuilderStorage";
 import {
   FRANCHISE_OFFSEASON_TEMPLATE_MUTATION_MESSAGE,
@@ -16,11 +17,11 @@ import {
 import type { FranchiseOffseasonAdapterIssue } from "../../../utils/franchiseOffseasonAdapters";
 
 // Types
-type Personality = "COMPETITIVE" | "RELAXED" | "DROOPY" | "JOLLY" | "TOUGH" | "TIMID" | "EGOTISTICAL";
-type Grade = "S" | "A+" | "A" | "A-" | "B+" | "B" | "B-" | "C+" | "C" | "C-" | "D+" | "D";
-type Position = "SP" | "RP" | "CP" | "C" | "1B" | "2B" | "3B" | "SS" | "LF" | "CF" | "RF";
+export type Personality = "COMPETITIVE" | "RELAXED" | "DROOPY" | "JOLLY" | "TOUGH" | "TIMID" | "EGOTISTICAL";
+export type Grade = "S" | "A+" | "A" | "A-" | "B+" | "B" | "B-" | "C+" | "C" | "C-" | "D+" | "D";
+export type Position = "SP" | "RP" | "CP" | "C" | "1B" | "2B" | "3B" | "SS" | "LF" | "CF" | "RF";
 
-interface Player {
+export interface Player {
   id: string;
   name: string;
   position: Position;
@@ -30,7 +31,7 @@ interface Player {
   teamId: string;
 }
 
-interface Team {
+export interface Team {
   id: string;
   name: string;
   shortName: string;
@@ -45,7 +46,7 @@ interface DiceAssignment {
   probability: number;
 }
 
-interface Move {
+export interface Move {
   player: Player;
   fromTeam: Team;
   toTeam: Team | null;
@@ -61,6 +62,29 @@ type Screen = "PROTECTION" | "DICE_ROLL" | "DESTINATION" | "EXCHANGE" | "ROUND_S
 const EMPTY_TEAMS: Team[] = [];
 
 const EMPTY_PLAYERS: Player[] = [];
+
+export function getFreeAgencyExchangeSalaryWindow(incomingSalary: number): { salaryMin: number; salaryMax: number } {
+  return {
+    salaryMin: incomingSalary * 0.9,
+    salaryMax: incomingSalary * 1.1,
+  };
+}
+
+export function buildFreeAgentSigningFromMove(move: Move, signedAt: number = Date.now()): FreeAgentSigning {
+  if (!move.toTeam) {
+    throw new Error("Cannot build a free-agent signing without a destination team");
+  }
+
+  return {
+    playerId: move.player.id,
+    playerName: move.player.name,
+    previousTeamId: move.fromTeam.id,
+    newTeamId: move.toTeam.id,
+    contractYears: 1,
+    contractValue: move.player.salary,
+    signedAt,
+  };
+}
 
 /**
  * Convert OffseasonPlayer to local Player format
@@ -532,15 +556,7 @@ function PrototypeFreeAgencyFlow({ onClose, seasonId = 'season-1', seasonNumber 
       // Convert moves to FreeAgentSigning format
       const signings: FreeAgentSigning[] = allMoves
         .filter(m => m.outcome === 'MOVED' && m.toTeam)
-        .map(m => ({
-          playerId: m.player.id,
-          playerName: m.player.name,
-          previousTeamId: m.fromTeam.id,
-          newTeamId: m.toTeam!.id,
-          contractYears: 1, // Default 1 year
-          contractValue: m.player.salary * 1000000, // Convert to full value
-          signedAt: Date.now(),
-        }));
+        .map(m => buildFreeAgentSigningFromMove(m));
 
       const declinedPlayers = allMoves
         .filter(m => m.outcome === 'RETIRED')
@@ -1332,7 +1348,7 @@ function DestinationScreen({
 }
 
 // Exchange Screen Component
-function ExchangeScreen({
+export function ExchangeScreen({
   incomingPlayer,
   fromTeam,
   toTeam,
@@ -1351,8 +1367,7 @@ function ExchangeScreen({
 }) {
   const toTeamRoster = allPlayers.filter(p => p.teamId === toTeam.id);
   const incomingTrueValue = incomingPlayer.salary;
-  const salaryMin = incomingTrueValue * 0.9;
-  const salaryMax = incomingTrueValue * 1.1;
+  const { salaryMin, salaryMax } = getFreeAgencyExchangeSalaryWindow(incomingTrueValue);
   
   // Calculate salary-based eligibility (±10%)
   const eligiblePlayers = toTeamRoster.filter(p => {
@@ -1454,7 +1469,7 @@ function ExchangeScreen({
           </div>
           <div className="text-sm text-[#E8E8D8]">{incomingPlayer.name}</div>
           <div className="text-xs text-[#E8E8D8]/60">{incomingPlayer.position} • {incomingPlayer.grade}</div>
-          <div className="text-xs text-[#E8E8D8]/80 mt-2">True Value: ${incomingTrueValue.toFixed(1)}M</div>
+          <div className="text-xs text-[#E8E8D8]/80 mt-2">True Value: {formatSalary(incomingTrueValue)}</div>
           <div className="text-xs text-[#E8E8D8]/40">FROM: {fromTeam.shortName}</div>
         </div>
 
@@ -1469,7 +1484,7 @@ function ExchangeScreen({
               </div>
               <div className="text-sm text-[#E8E8D8]">{selectedReturn.name}</div>
               <div className="text-xs text-[#E8E8D8]/60">{selectedReturn.position} • {selectedReturn.grade}</div>
-              <div className="text-xs text-[#E8E8D8]/80 mt-2">True Value: ${selectedReturn.salary.toFixed(1)}M</div>
+              <div className="text-xs text-[#E8E8D8]/80 mt-2">True Value: {formatSalary(selectedReturn.salary)}</div>
               <div className="text-xs text-[#E8E8D8]/40">TO: {fromTeam.shortName}</div>
             </>
           ) : (
@@ -1492,8 +1507,8 @@ function ExchangeScreen({
             <div>
               <div className="font-bold mb-1">FALLBACK RULE TRIGGERED</div>
               <div className="text-[#E8E8D8]/90">
-                No players meet the ±10% salary threshold (${salaryMin.toFixed(1)}M - ${salaryMax.toFixed(1)}M). 
-                You must give your CLOSEST-VALUE player on roster: <span className="font-bold">{closestPlayer?.name}</span> (${closestPlayer?.salary.toFixed(1)}M).
+                No players meet the ±10% salary threshold ({formatSalary(salaryMin)} - {formatSalary(salaryMax)}).
+                You must give your CLOSEST-VALUE player on roster: <span className="font-bold">{closestPlayer?.name}</span> ({closestPlayer ? formatSalary(closestPlayer.salary) : "N/A"}).
               </div>
             </div>
           </div>
@@ -1505,7 +1520,7 @@ function ExchangeScreen({
         
         {!fallbackTriggered && (
           <div className="bg-[#4169E1]/20 border-l-4 border-[#4169E1] p-3 mb-4 text-sm text-[#E8E8D8]">
-            ℹ️ Salary threshold: <span className="font-bold">${salaryMin.toFixed(1)}M - ${salaryMax.toFixed(1)}M</span> (±10% of ${incomingTrueValue.toFixed(1)}M)
+            ℹ️ Salary threshold: <span className="font-bold">{formatSalary(salaryMin)} - {formatSalary(salaryMax)}</span> (±10% of {formatSalary(incomingTrueValue)})
           </div>
         )}
 
@@ -1539,7 +1554,7 @@ function ExchangeScreen({
                 
                 <div className="flex-1">
                   <div className="text-base text-[#E8E8D8]">{player.name}</div>
-                  <div className="text-xs text-[#E8E8D8]/60">{player.position} • ${player.salary.toFixed(1)}M</div>
+                  <div className="text-xs text-[#E8E8D8]/60">{player.position} • {formatSalary(player.salary)}</div>
                 </div>
                 
                 <div
@@ -1584,7 +1599,7 @@ function ExchangeScreen({
                 
                 <div className="flex-1">
                   <div className="text-base text-[#E8E8D8]">{player.name}</div>
-                  <div className="text-xs text-[#E8E8D8]/60">{player.position} • ${player.salary.toFixed(1)}M</div>
+                  <div className="text-xs text-[#E8E8D8]/60">{player.position} • {formatSalary(player.salary)}</div>
                 </div>
                 
                 <div

@@ -241,3 +241,24 @@ to match OOTP patterns.
 Required justification: "follows OOTP pattern AND preserves SMB4 asset intact."
 If Claude cannot show how the SMB4 asset survives the change, the change
 does not happen. Full stop.
+
+
+---
+
+## Contract Readiness Rule (Non-Negotiable — ratified by JK 2026-06-12)
+
+A prompt contract — builder or auditor, Codex or Fable — is NOT ready to
+hand off unless BOTH conditions hold:
+
+1. **Reasoning effort is explicit twice:** in the ROUTE header
+   (e.g., `Codex 5.5 | high`, `Fable 5 CLI | high reasoning effort`)
+   AND in the closing directive (`Use high reasoning effort.`).
+2. **The contract exists in spec-docs/PROMPT_CONTRACTS.md BEFORE the
+   handoff.** Chat is ephemeral; a contract that has only been pasted
+   into chat does not exist. If a contract is ever executed from chat
+   first (protocol failure), it must be retro-logged verbatim with an
+   explicit RETRO-LOGGED marker and an execution record.
+
+Origin: reasoning-effort drift caught by JK in the W1 arc (2026-06-12);
+chat-only handoff caught by Captain self-NFL in the F135-T1 arc
+(2026-06-12). Both clauses are mechanical pre-handoff checks.

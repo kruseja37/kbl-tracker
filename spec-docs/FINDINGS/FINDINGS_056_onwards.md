@@ -2254,3 +2254,31 @@ PLAYOFF_STATS store has no write path (confirmed in FINDING-113). WorldSeries.ts
 **Evidence:** `deriveSeasonTotalGames = getAllGamesByFranchise(franchiseId, seasonNumber).length` — SeasonMetadata.totalGames is populated by schedule-row counting, the exact MODE2_SYSTEMS_INTEGRATION_MAP §4.4 anti-pattern, live in production today. Discovered during W1-AUDIT root-cause (Captain grep 2026-06-12). W1 deliberately threaded gamesPerTeam BESIDE totalGames without touching its semantics (W1-FIX constraint: "totalGames semantics UNCHANGED").
 **Impact:** WAR/milestone/adaptive-standards scaling is now safe (they read gamesPerTeam, config-sourced, W1/W1-FIX). But every OTHER consumer of SeasonMetadata.totalGames inherits row-count semantics: empty-schedule franchises get totalGames=0; partially-generated schedules get partial counts. Consumer inventory unaudited.
 **Action:** Fold into the FINDING-134 discovery slot (Fable 5 CLI): enumerate totalGames consumers, classify row-count-correct vs config-truth-needed, then Codex 5.5 high fixes if any. Do not batch-edit blind.
+
+
+---
+
+### FINDING-136
+**Date:** 2026-06-12 | **Phase:** F-134/F-135 discovery slot | **Status:** CONFIRMED — RESOLVES FINDING-134 severity
+**Files:** FinalizeAdvanceFlow.tsx, TradeFlow.tsx, AwardsCeremonyFlow.tsx, FreeAgencyFlow.tsx (full per-site tables in spec-docs/F134_F135_DISCOVERY_REPORT.md §1)
+**Evidence:** Fable 5 CLI read-only discovery (dual-direction wiring audit, fresh line numbers), Captain spot-checked 4 load-bearing claims by independent grep. 25 $M-scale sites total — 10 NEW beyond the F-134 known list (7 FreeAgencyFlow raw-`M` formatters invisible to the 1000000 grep; 2 AwardsCeremony /500000 vote divisors; TradeFlow:1255 mock). Two structural gates neutralize all 25 today: (1) FRANCHISE_V1_OFFSEASON_EXECUTION_ENABLED = false (FranchiseHome.tsx:148, :1159) makes FinalizeAdvance/Awards/FreeAgency unreachable; (2) TradeFlow export branch (:1096) routes all franchise renders to FranchiseTransactionConsole (live stores, no $M math, salaryMatchingApplied: false) — legacy ActiveTradeFlow with every TradeFlow $M site requires falsy franchiseId, which no caller produces.
+**Impact:** ZERO LIVE-BROKEN sites today. But 16 sites are latent LIVE-BROKEN the day the offseason flag flips (useOffseasonData feeds canonical T5 dollars); worst is FreeAgencyFlow:541, which PERSISTS salary×1e6 as contractValue (canonical $143,641 → stored $143.6B). ±10% FA return-match math (:1353-1359) is ratio-based and scale-safe; only its labels are broken.
+**Action:** Fix queue F134-T1..T4 per report §3 (Codex 5.5 | high). T4 recommendation: DELETE ActiveTradeFlow rather than re-denominate. Two JK design inputs needed: vote-divisor sensitivity (T2) and rookie grade table → T5 rookie-scale values (T3).
+
+---
+
+### FINDING-137
+**Date:** 2026-06-12 | **Phase:** F-134/F-135 discovery slot | **Status:** CONFIRMED — RESOLVES FINDING-135 inventory; ONE LIVE DEFECT
+**Files:** src/hooks/useSeasonStats.ts:331/:366 (defect); full 18-cluster consumer table in spec-docs/F134_F135_DISCOVERY_REPORT.md §2
+**Evidence:** Full-src totalGames sweep, per-site caller tracing. Writers: franchise seasons created with totalGames=0; repairFranchisePersistence (runs on FranchiseHome load, :272) continuously overwrites totalGames with LEAGUE-WIDE schedule row count via deriveSeasonTotalGames (single call site, franchiseInitializer.ts:312). Consumers: 3 CONFIG-TRUTH-NEEDED (B-1/B-2 live, B-3 un-rendered), 6 ROW-COUNT-CORRECT, 9 DEAD, 0 UNVERIFIED. The live defect: useSeasonStats feeds seasonMetadata?.totalGames ?? DEFAULT into bWAR/rWAR/pWAR/fWAR scaling on three routed surfaces (TeamHubContent, SeasonSummary page, FranchiseHome leaders). Captain-verified: ?? does not catch 0.
+**Impact:** Leader-board WAR breaks three ways: (a) totalGames=0 → runsPerWinForSeason(0)=0 (no zero-guard, franchiseAdaptiveStandards.ts:116-117/:177) → bWAR = RAR/0 = ±Infinity (isNaN-only guard at :212 passes 0); (b) partial schedules mis-scale continuously as repair re-asserts row counts; (c) NEW SHARPENING of F-135 — even a FULL schedule is wrong: totalGames is league-total rows, WAR scaling expects per-team games (~numTeams/2 × error). gamesPerTeam (W1 field) is the only correct source. Dead-code tail: useWARCalculations + 3 GameTracker display components, SeasonEndFlow, calendarEngine, calibrationService, tradeEngine deadline fns — all orphaned.
+**Action:** F135-T1 (Codex 5.5 | high): gamesPerTeam-first resolution + zero-guard + regression tests (0/partial/league-total). FIRST in fix queue — only live defect in the sweep. F135-T2 dead-code cleanup batch optional (LOW, JK call).
+
+---
+
+### FINDING-138
+**Date:** 2026-06-12 | **Phase:** F-134/F-135 discovery slot | **Status:** CONFIRMED — out-of-scope candidate C-1, promoted (gates F134-T1..T3 sufficiency)
+**File:** src/src_figma/hooks/useOffseasonData.ts:15, :292-298
+**Evidence:** useOffseasonData reads getAllTeams()/getAllPlayers() from static playerDatabase — the STOCK 440-player league — not franchise stores. All three flag-gated offseason flows (FinalizeAdvance, Awards, FreeAgency) consume it. Related dummy-data patterns inside the same hook: war = salary/20000, careerStats synthesized from salary arithmetic (:233-238). Report §4 C-2/C-3 document further fabricated fields (FinalizeAdvanceFlow random WAR/chemistry per render).
+**Impact:** When FRANCHISE_V1_OFFSEASON_EXECUTION_ENABLED flips, the offseason flows will show STOCK rosters regardless of franchise state. The F134-T1..T3 denomination fixes are necessary but NOT sufficient — these flows need a franchise-data source before reactivation. Sequencing implication: denomination fixes can proceed now (cheap, latent-bug removal), but flag-flip readiness requires a data-source ticket not yet scoped.
+**Action:** Hold as a named precondition on any future offseason-flag-flip ticket. Candidates C-4 (dual totalGames fallback 64 vs 162), C-5 (dual milestoneAggregator copies), C-6 (salary as universal award-merit proxy) remain logged in report §4, not chased.
