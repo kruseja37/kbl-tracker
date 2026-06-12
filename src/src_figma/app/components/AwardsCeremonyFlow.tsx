@@ -4,15 +4,16 @@ import { useOffseasonData, type OffseasonPlayer, type OffseasonTeam } from "../.
 import { useOffseasonState, type AwardWinner } from "../../hooks/useOffseasonState";
 import { getAllManagerSeasonStatsForSeason } from '../../../utils/managerStorage';
 import { calculateMOYVotes, formatMWAR, getMWARRating } from '../../../engines/mwarCalculator';
+import { formatSalary } from '../../../engines/salaryCalculator';
 import type { ManagerSeasonStats } from '../../../engines/mwarCalculator';
 
 // Types
-type Position = "C" | "1B" | "2B" | "3B" | "SS" | "LF" | "CF" | "RF" | "P" | "DH";
-type League = "AL" | "NL";
-type Grade = "S" | "A+" | "A" | "A-" | "B+" | "B" | "B-" | "C+" | "C" | "C-" | "D+" | "D";
+export type Position = "C" | "1B" | "2B" | "3B" | "SS" | "LF" | "CF" | "RF" | "P" | "DH";
+export type League = "AL" | "NL";
+export type Grade = "S" | "A+" | "A" | "A-" | "B+" | "B" | "B-" | "C+" | "C" | "C-" | "D+" | "D";
 type Trait = string;
 
-interface Player {
+export interface Player {
   id: string;
   name: string;
   team: string;
@@ -69,6 +70,35 @@ const EMPTY_PLAYERS: Player[] = [];
 
 const EMPTY_TEAMS: OffseasonTeam[] = [];
 
+// FINDING-139 + BRIDGE: faithful translation of original vote sensitivity to canonical salary dollars.
+export const VOTE_PCT_SALARY_SPREAD_DIVISOR = 1666;
+
+export function calculateAwardWinnerVotePct(
+  winnerSalary: number,
+  runnerUpSalary: number | undefined,
+  basePct: number,
+  minPct: number,
+  maxPct: number,
+  fallbackPct: number,
+): number {
+  if (runnerUpSalary === undefined) {
+    return fallbackPct;
+  }
+
+  return Math.min(
+    maxPct,
+    Math.max(
+      minPct,
+      Math.round(basePct + (winnerSalary - runnerUpSalary) / VOTE_PCT_SALARY_SPREAD_DIVISOR),
+    ),
+  );
+}
+
+// FINDING-136: AwardsCeremonyFlow receives canonical salaries; display through engine formatter.
+function formatAwardSalary(salary: number): string {
+  return formatSalary(salary);
+}
+
 /**
  * Helper: pick the top N players from an array sorted by a numeric key (descending).
  */
@@ -100,7 +130,7 @@ function abbrevName(name: string): string {
 }
 
 // Convert OffseasonPlayer to local Player type
-function convertToAwardPlayer(p: OffseasonPlayer, teamShortName: string): Player {
+export function convertToAwardPlayer(p: OffseasonPlayer, teamShortName: string): Player {
   const isPitcher = ["SP", "RP", "CP"].includes(p.position);
   // Assign league based on team for simplicity (real implementation would have proper league data)
   const nlTeams = ["NYM", "ATL", "LAD", "CHC", "MIL", "STL", "PIT", "CIN", "PHI", "WSN", "MIA", "ARI", "SF", "SD", "COL"];
@@ -113,7 +143,7 @@ function convertToAwardPlayer(p: OffseasonPlayer, teamShortName: string): Player
     position: isPitcher ? "P" : (p.position as Position),
     grade: p.grade as Grade,
     age: p.age,
-    salary: p.salary * 1000000, // Convert from millions
+    salary: p.salary, // FINDING-136: useOffseasonData salaries are already canonical T5 dollars.
     league,
     traits: [],
   };
@@ -1285,7 +1315,7 @@ function RookieYearScreen({ league, onContinue, allPlayers }: { league: League; 
 }
 
 // Screen 9: Cy Young Award
-function CyYoungScreen({ league, onContinue, allPlayers = [] }: { league: League; onContinue: () => void; allPlayers?: Player[] }) {
+export function CyYoungScreen({ league, onContinue, allPlayers = [] }: { league: League; onContinue: () => void; allPlayers?: Player[] }) {
   const [traitRevealed, setTraitRevealed] = useState<Record<League, boolean>>({ AL: false, NL: false });
   const [isRolling, setIsRolling] = useState(false);
   const [selectedTrait, setSelectedTrait] = useState<Record<League, string>>({ AL: "ACE", NL: "ACE" });
@@ -1331,8 +1361,8 @@ function CyYoungScreen({ league, onContinue, allPlayers = [] }: { league: League
     salary: winnerPlayer.salary,
   };
 
-  // Simulated vote percentages from salary differential
-  const winnerPct = runnerUp ? Math.min(97, Math.max(55, Math.round(70 + (winner.salary - runnerUp.salary) / 500000))) : 87;
+  // FINDING-139 + BRIDGE: vote sensitivity uses canonical salary spread divisor.
+  const winnerPct = calculateAwardWinnerVotePct(winner.salary, runnerUp?.salary, 70, 55, 97, 87);
   const runnerUpPct = runnerUp ? Math.max(20, 100 - winnerPct - 5) : 0;
 
   return (
@@ -1361,7 +1391,7 @@ function CyYoungScreen({ league, onContinue, allPlayers = [] }: { league: League
             </div>
             <div>
               <div className="text-xs text-[#E8E8D8]/60 mb-1">Salary</div>
-              <div className="text-base text-[#E8E8D8]">${(winner.salary / 1000000).toFixed(1)}M</div>
+              <div className="text-base text-[#E8E8D8]">{formatAwardSalary(winner.salary)}</div>
             </div>
             <div>
               <div className="text-xs text-[#E8E8D8]/60 mb-1">Position</div>
@@ -1476,8 +1506,8 @@ function MVPScreen({ league, onContinue, allPlayers = [] }: { league: League; on
     age: winnerPlayer.age,
   };
 
-  // Simulated vote percentages from salary differential
-  const winnerPct = runnerUp ? Math.min(98, Math.max(55, Math.round(75 + (winner.salary - runnerUp.salary) / 500000))) : 92;
+  // FINDING-139 + BRIDGE: vote sensitivity uses canonical salary spread divisor.
+  const winnerPct = calculateAwardWinnerVotePct(winner.salary, runnerUp?.salary, 75, 55, 98, 92);
   const runnerUpPct = runnerUp ? Math.max(20, 100 - winnerPct - 3) : 0;
 
   return (
@@ -1510,7 +1540,7 @@ function MVPScreen({ league, onContinue, allPlayers = [] }: { league: League; on
             </div>
             <div>
               <div className="text-xs text-[#E8E8D8]/60 mb-1">Salary</div>
-              <div className="text-lg text-[#E8E8D8]">${(winner.salary / 1000000).toFixed(1)}M</div>
+              <div className="text-lg text-[#E8E8D8]">{formatAwardSalary(winner.salary)}</div>
             </div>
             <div>
               <div className="text-xs text-[#E8E8D8]/60 mb-1">Age</div>
@@ -1797,7 +1827,7 @@ function SpecialAwardsScreen({ awardType, onContinue, allPlayers = [] }: { award
             <div className="space-y-2 text-sm text-[#E8E8D8]">
               <div className="flex justify-between">
                 <span className="text-[#E8E8D8]/60">Salary:</span>
-                <span>${(bestValue.salary / 1000000).toFixed(1)}M</span>
+                <span>{formatAwardSalary(bestValue.salary)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[#E8E8D8]/60">Salary %ile:</span>
@@ -1912,7 +1942,7 @@ function SpecialAwardsScreen({ awardType, onContinue, allPlayers = [] }: { award
             <div className="space-y-2 text-sm text-[#E8E8D8]">
               <div className="flex justify-between">
                 <span className="text-[#E8E8D8]/60">Salary:</span>
-                <span>${(worstValue.salary / 1000000).toFixed(1)}M</span>
+                <span>{formatAwardSalary(worstValue.salary)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[#E8E8D8]/60">Salary %ile:</span>

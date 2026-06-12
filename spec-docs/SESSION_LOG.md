@@ -3697,3 +3697,44 @@ require partial staging). Then F134-T2 (Awards) — BLOCKED ON JK vote-
 divisor ruling; F134-T3 (FinalizeAdvance) — BLOCKED ON JK rookie-salary
 ruling (Captain recommendations presented in-session). T4 (DELETE
 ActiveTradeFlow) ready to draft any time. Design track: D0 still next.
+
+
+## 2026-06-12 (cont.) — F134-T2 + F134-T3 PARALLEL ARC: both DELTA VERIFIED, first parallel Codex execution
+
+**Process milestone:** first parallel two-agent Codex execution under the
+PARALLEL EXECUTION ADDENDUM (disjoint files; per-agent focused tests +
+mutations + sweeps; ONE combined build/suite gate; closure commit 5fc192f
+landed first as precondition). Worked cleanly — both agents completed,
+zero cross-contamination (Fable hash-verified all four files stable through
+both audits). ONE process deviation: Codex ran the combined gate that the
+addendum assigned to Captain; no harm (Captain spot-check + Fable D6 re-ran
+it) but the lesson is logged — future parallel addenda assign the combined
+gate to Captain or auditor, NEVER a builder.
+
+**F134-T2 (Codex 5.5 | high):** Awards canonical — pass-through conversion,
+VOTE_PCT_SALARY_SPREAD_DIVISOR=1666 (F-139) consumed by one extracted
+calculateAwardWinnerVotePct serving BOTH Cy Young and MVP paths
+(base/clamp/fallback values preserved parameter-by-parameter), 4 display
+sites → formatSalary via trivial wrapper.
+
+**F134-T3 (Codex 5.5 | high):** FinalizeAdvance canonical + F-127 CANON —
+calculateRookieSalary grade table DELETED (F-140); call-up salary carried
+AS-IS (buildFinalizeAdvanceCallUpPlayer; modal literally renders
+"(unchanged at call-up)"); retirement thresholds 33330/16665 as named
+constants consumed by BOTH logic and display (the text/logic split that
+caused the original drift is structurally closed); fallback ?? 0; alias
+preserved internal call sites.
+
+**Fable dual audit (one session): "F134-T2 DELTA VERIFIED" + "F134-T3
+DELTA VERIFIED."** All three BRIDGE constants recomputed independently
+(1666, 33330, 16665 — exact); T2-D2 selection logic byte-equivalent;
+T3-D4 critical hunk enumeration: zero gate/season-transition lines in the
+diff. Six mutations, each killed by exactly its intended test, restored
+hash-identical. Combined gate: build green; suite 7,201/4 of 7,205 (+7
+exact); BOTH order-flakes fired AND passed solo (4/4, 9/9) — conditional-
+solo rule's first live exercise, baseline holds. Disagreements 3+3/0-MAJOR.
+
+**FINDING-136 now 3-of-4 cleared.** Remaining: TradeFlow legacy branch —
+F134-T4 (DELETE ActiveTradeFlow, JK-ruled). Then F135-T2 cleanup batch.
+
+**NEXT:** T2+T3 closure commit (Captain-run), then draft F134-T4.

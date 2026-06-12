@@ -23,6 +23,7 @@ import {
   getAllFranchisePlayers,
   type Player as FranchiseStoredPlayer,
 } from "../../../utils/franchisePlayerStorage";
+import { formatSalary } from "../../../engines/salaryCalculator";
 
 type Screen =
   | "roster-management"
@@ -36,9 +37,9 @@ type Screen =
   | "post-advance-welcome";
 
 type Position = "SP" | "RP" | "C" | "1B" | "2B" | "3B" | "SS" | "LF" | "CF" | "RF" | "IF" | "OF";
-type Grade = "A+" | "A" | "A-" | "B+" | "B" | "B-" | "C+" | "C" | "C-" | "D+" | "D" | "D-";
+export type Grade = "A+" | "A" | "A-" | "B+" | "B" | "B-" | "C+" | "C" | "C-" | "D+" | "D" | "D-";
 
-interface Player {
+export interface Player {
   id: string;
   name: string;
   position: Position;
@@ -108,6 +109,47 @@ interface FinalizeAdvanceFlowProps {
   playoffId?: string;
 }
 
+// FINDING-136 + BRIDGE 300.032521: old $10M/$5M risk thresholds re-base to canonical kblIV dollars.
+export const FINALIZE_ADVANCE_HIGH_SALARY_RETIREMENT_RISK_THRESHOLD = 33330;
+export const FINALIZE_ADVANCE_MODERATE_SALARY_RETIREMENT_RISK_THRESHOLD = 16665;
+
+export function buildFinalizeAdvanceCallUpPlayer(selectedPlayer: Player): Player {
+  // FINDING-140: call-up carries selectedPlayer.salary AS-IS; salary is draft-set, locked, unchanged at call-up.
+  return { ...selectedPlayer, isRookie: true };
+}
+
+export function calculateFinalizeAdvanceRetirementRisk(player: Player): number {
+  let risk = 0;
+
+  // Age factor
+  if (player.age >= 35) risk += 20;
+  else if (player.age >= 32) risk += 10;
+  else if (player.age >= 30) risk += 5;
+
+  // Years of service
+  if (player.yearsOfService && player.yearsOfService >= 10) risk += 15;
+  else if (player.yearsOfService && player.yearsOfService >= 7) risk += 10;
+
+  // FINDING-136 + BRIDGE 300.032521: salary risk uses canonical thresholds, not $M-scale literals.
+  if (player.salary >= FINALIZE_ADVANCE_HIGH_SALARY_RETIREMENT_RISK_THRESHOLD) risk += 15;
+  else if (player.salary >= FINALIZE_ADVANCE_MODERATE_SALARY_RETIREMENT_RISK_THRESHOLD) risk += 10;
+
+  // Prior demotions
+  if (player.priorDemotions) risk += player.priorDemotions * 10;
+
+  // High-grade players
+  if (["A+", "A", "A-"].includes(player.grade)) risk += 25;
+
+  return Math.min(risk, 95);
+}
+
+export function getFinalizeAdvanceSalaryRetirementRiskBonus(salary: number): number {
+  // FINDING-136 + BRIDGE 300.032521: display text consumes the same canonical thresholds as risk math.
+  if (salary >= FINALIZE_ADVANCE_HIGH_SALARY_RETIREMENT_RISK_THRESHOLD) return 15;
+  if (salary >= FINALIZE_ADVANCE_MODERATE_SALARY_RETIREMENT_RISK_THRESHOLD) return 10;
+  return 0;
+}
+
 // Helper to convert OffseasonPlayer to local Player format
 function convertToLocalPlayer(player: OffseasonPlayer, index: number): Player {
   const gradeMap: Record<string, Grade> = {
@@ -127,7 +169,8 @@ function convertToLocalPlayer(player: OffseasonPlayer, index: number): Player {
     position: positionMap[player.position] || 'IF',
     grade: gradeMap[player.grade] || 'B',
     age: player.age,
-    salary: player.salary || 1000000,
+    // FINDING-136: use canonical-dollar feed; nullish fallback avoids old $M-scale literals and preserves legitimate 0.
+    salary: player.salary ?? 0,
     war: 1.0 + Math.random() * 4,
     yearsOfService: Math.max(0, player.age - 22),
     ceiling: gradeMap[player.grade] || 'B',
@@ -299,7 +342,7 @@ export function FinalizeAdvanceFlow({
       if (t.id === selectedTeamId) {
         return {
           ...t,
-          mlbRoster: [...t.mlbRoster, { ...selectedPlayer, isRookie: true, salary: calculateRookieSalary(selectedPlayer.grade) }],
+          mlbRoster: [...t.mlbRoster, buildFinalizeAdvanceCallUpPlayer(selectedPlayer)],
           farmRoster: t.farmRoster.filter(p => p.id !== selectedPlayer.id),
         };
       }
@@ -371,39 +414,7 @@ export function FinalizeAdvanceFlow({
     setSelectedPlayer(null);
   };
 
-  const calculateRookieSalary = (grade: Grade): number => {
-    const salaries: Record<string, number> = {
-      "A+": 1500000, "A": 1400000, "A-": 1300000,
-      "B+": 1200000, "B": 1200000, "B-": 1100000,
-      "C+": 1000000, "C": 900000, "C-": 800000,
-    };
-    return salaries[grade] || 1000000;
-  };
-
-  const calculateRetirementRisk = (player: Player): number => {
-    let risk = 0;
-    
-    // Age factor
-    if (player.age >= 35) risk += 20;
-    else if (player.age >= 32) risk += 10;
-    else if (player.age >= 30) risk += 5;
-    
-    // Years of service
-    if (player.yearsOfService && player.yearsOfService >= 10) risk += 15;
-    else if (player.yearsOfService && player.yearsOfService >= 7) risk += 10;
-    
-    // Salary (higher salary = less willing to accept demotion)
-    if (player.salary >= 10000000) risk += 15;
-    else if (player.salary >= 5000000) risk += 10;
-    
-    // Prior demotions
-    if (player.priorDemotions) risk += player.priorDemotions * 10;
-    
-    // High-grade players
-    if (["A+", "A", "A-"].includes(player.grade)) risk += 25;
-    
-    return Math.min(risk, 95);
-  };
+  const calculateRetirementRisk = calculateFinalizeAdvanceRetirementRisk;
 
   const undoLastTransaction = () => {
     if (transactions.length === 0) return;
@@ -790,7 +801,7 @@ export function FinalizeAdvanceFlow({
                         )}
                       </div>
                       <div className="text-[#E8E8D8]/60 text-xs">
-                        ${(player.salary / 1000000).toFixed(1)}M • WAR: {player.war.toFixed(1)}
+                        {formatSalary(player.salary)} • WAR: {player.war.toFixed(1)}
                       </div>
                     </div>
                   ))}
@@ -1443,7 +1454,7 @@ export function FinalizeAdvanceFlow({
                                 <>
                                   <div>⬆️ CALL UP: {txn.player.name} ({txn.player.position}, {txn.player.grade}) → MLB</div>
                                   <div className="text-[#E8E8D8]/60 pl-4">
-                                    💰 Salary: ${calculateRookieSalary(txn.player.grade).toLocaleString()}
+                                    💰 Salary: {formatSalary(txn.player.salary)}
                                   </div>
                                   <div className="text-[#E8E8D8]/60 pl-4">🌟 Status: ROOKIE</div>
                                 </>
@@ -1483,7 +1494,7 @@ export function FinalizeAdvanceFlow({
                                 <>
                                   <div>⬆️ CALL UP: {txn.player.name} ({txn.player.position}, {txn.player.grade}) → MLB</div>
                                   <div className="text-[#E8E8D8]/60 pl-4">
-                                    💰 Salary: ${calculateRookieSalary(txn.player.grade).toLocaleString()}
+                                    💰 Salary: {formatSalary(txn.player.salary)}
                                   </div>
                                   <div className="text-[#E8E8D8]/60 pl-4">🌟 Status: ROOKIE</div>
                                 </>
@@ -1980,7 +1991,7 @@ export function FinalizeAdvanceFlow({
                   <div className="text-lg text-[#E8E8D8] font-bold mb-4">CALL-UP DETAILS</div>
                   <div className="space-y-2 text-sm text-[#E8E8D8]">
                     <div>📍 Destination: MLB Roster ({selectedTeam.mlbRoster.length}/22 → {selectedTeam.mlbRoster.length + 1}/22)</div>
-                    <div>💰 Salary: ${calculateRookieSalary(selectedPlayer.grade).toLocaleString()} (Grade {selectedPlayer.grade} rookie rate)</div>
+                    <div>💰 Salary: {formatSalary(selectedPlayer.salary)} (unchanged at call-up)</div>
                     <div>🌟 Status: Will be designated ROOKIE for Season {nextSeason}</div>
                   </div>
                 </div>
@@ -2048,7 +2059,7 @@ export function FinalizeAdvanceFlow({
                     {selectedPlayer.position} │ Grade: {selectedPlayer.grade} │ Age: {selectedPlayer.age}
                   </div>
                   <div className="space-y-1 text-sm text-[#E8E8D8]/70">
-                    <div>💰 Salary: ${selectedPlayer.salary.toLocaleString()}</div>
+                    <div>💰 Salary: {formatSalary(selectedPlayer.salary)}</div>
                     <div>📊 Last Season WAR: {selectedPlayer.war.toFixed(1)}</div>
                     <div>📅 Years of Service: {selectedPlayer.yearsOfService}</div>
                   </div>
@@ -2068,7 +2079,7 @@ export function FinalizeAdvanceFlow({
                     <div className="space-y-1 text-xs text-[#E8E8D8]/80">
                       <div>• Age ({selectedPlayer.age}): {selectedPlayer.age >= 35 ? "+20%" : selectedPlayer.age >= 32 ? "+10%" : selectedPlayer.age >= 30 ? "+5%" : "+0%"}</div>
                       <div>• Years of Service ({selectedPlayer.yearsOfService}): {(selectedPlayer.yearsOfService || 0) >= 10 ? "+15%" : (selectedPlayer.yearsOfService || 0) >= 7 ? "+10%" : "+0%"}</div>
-                      <div>• Salary (${(selectedPlayer.salary / 1000000).toFixed(1)}M): {selectedPlayer.salary >= 10000000 ? "+15%" : selectedPlayer.salary >= 5000000 ? "+10%" : "+0%"}</div>
+                      <div>• Salary ({formatSalary(selectedPlayer.salary)}): +{getFinalizeAdvanceSalaryRetirementRiskBonus(selectedPlayer.salary)}%</div>
                       {selectedPlayer.priorDemotions && <div>• Prior Demotions ({selectedPlayer.priorDemotions}): +{selectedPlayer.priorDemotions * 10}%</div>}
                       <div className="border-t border-[#E8E8D8]/20 pt-1 mt-1">TOTAL RISK: {calculateRetirementRisk(selectedPlayer)}%</div>
                     </div>

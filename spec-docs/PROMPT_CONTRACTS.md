@@ -3150,3 +3150,28 @@ re-verified before reporting.
 
 Use high reasoning effort. Think step-by-step.
 ```
+
+**Audit record (2026-06-12):** Fable dual verdict: **"F134-T2 DELTA VERIFIED"
++ "F134-T3 DELTA VERIFIED"** (one session, sequential, mutations restored
+between; all six mutants killed by exactly their intended tests; hashes
+verified across both audits — zero cross-contamination between sibling
+diffs). T2 highlights: both vote paths route through one
+calculateAwardWinnerVotePct consuming VOTE_PCT_SALARY_SPREAD_DIVISOR=1666
+(Fable recomputed 500000/300.032521 independently); selection/ranking
+byte-equivalent (C-6 stays parked); persisted AwardWinner shape unchanged.
+T3 highlights: calculateRookieSalary + grade table fully deleted (zero
+grade-literal hits); call-up carries salary AS-IS via
+buildFinalizeAdvanceCallUpPlayer, modal renders "(unchanged at call-up)";
+thresholds 33330/16665 recomputed independently, consumed by BOTH logic and
+display; D4 critical check — zero diff lines touch isFranchiseContext /
+season-transition / disabled gates, every hunk roster-UI salary scope.
+Combined gate: build green; suite 7,201/4 of 7,205 (+7 exact); both
+order-flakes FIRED and PASSED SOLO (4/4, 9/9) — first live exercise of the
+conditional-solo rule, characterized status holds. Disagreements 3+3, none
+MAJOR: T2 #3 formatAwardSalary = trivial wrapper (OK); T3 #2 extra :2062
+display swap (in-spirit); T3 #3 T-A pins canon at helper level (helper is
+the single salary authority — acceptable).
+**Process note:** Codex ran the combined gate the addendum assigned to
+Captain; harmless here (Captain spot-checked + Fable re-ran the gate), but
+future parallel addenda will state: the combined gate is run by Captain or
+the auditor, NEVER by a builder agent.

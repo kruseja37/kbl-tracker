@@ -385,3 +385,38 @@ FRANCHISE_V1_OFFSEASON_EXECUTION_ENABLED flips.
 commit cadence (combined vs split closure commit); ASG WPA→Fame; Signature
 Moment card line; fame tier names; F2 SOT typos; F4 FA trait spellings;
 order-flake cleanup (now 3 members — priority arguably rising).
+
+
+---
+
+## CURRENT STATE — 2026-06-12 (F134-T2 + T3 parallel arc CLOSED)
+**Branch:** codex/franchise-v1-next. **This commit:** T2 + T3 + tests + doc
+updates (combined closure, post dual "DELTA VERIFIED").
+**What exists & is trustworthy (this arc):** AwardsCeremonyFlow canonical
+(pass-through; divisor 1666 per F-139 via one shared vote function;
+formatSalary displays; selection logic untouched, C-6 parked).
+FinalizeAdvanceFlow canonical + F-127 CANON (grade table DELETED per F-140;
+call-up salary unchanged-by-construction; thresholds 33330/16665 shared by
+logic AND display; ?? 0 fallback; gates/season-transition provably
+untouched). 7 new mutation-pinned tests. First parallel Codex execution
+succeeded under the addendum.
+**Suite baseline:** 7,205 tests / 383 files. Characterized set unchanged:
+fixed wpaRuntimeBoundary + franchiseNarrativeEventEligibility; order-flakes
+(conditional-solo) franchiseManualSmokeFixture + GameTrackerLaunchState +
+franchiseOffseasonGuards.component. CLI: prefix `NODE_ENV= `; node
+~/.nvm/versions/node/v20.20.0/bin.
+**Parallel-execution doctrine (proven this arc):** disjoint files → parallel
+builders OK; per-agent focused tests/mutations/sweeps; ONE combined
+build+suite gate run by Captain or auditor (NEVER a builder — lesson logged);
+closure commit precedes parallel start; audits in one Fable session with
+mutual sibling carve-outs.
+**NEXT TASK: F134-T4 — DELETE ActiveTradeFlow** (JK-ruled 2026-06-12):
+remove the unreachable legacy branch from TradeFlow.tsx (+convertToLocal*,
+mock-AI block, local formatSalary, ~1,200 lines), killing the last 4
+FINDING-136 sites. ROUTE: Codex 5.5 | high → Fable 5 audit (HIGH-by-rule:
+trade state file). Contract not yet drafted.
+**Then:** F135-T2 cleanup batch (dead consumers B-5/6/7/11-15; C-7 duplicate
+useSeasonStats; C-4 ?? 64; M2b resolver test; write-only contractValue note)
+→ TV1 → D1/D2. F-138 flag-flip precondition standing. Design track: D0 next.
+**Open pending-JK:** ASG WPA→Fame; Signature Moment card line; fame tier
+names; F2 SOT typos; F4 FA trait spellings; order-flake cleanup (3 members).
