@@ -235,12 +235,18 @@ function buildWarPreviewValues(
   const statRowTotalWar = finiteOrNull(batting?.totalWar);
 
   if (statRowTotalWar !== null) {
+    // TV1 R-4/DISCOVERY 1: True Value consumes persisted season WAR rows
+    // after WAR storage succeeds. The batting row total carries batting,
+    // fielding, and baserunning WAR; pitching WAR is persisted separately.
+    const totalWar = pitchingWar !== null
+      ? Number((statRowTotalWar + pitchingWar).toFixed(3))
+      : statRowTotalWar;
     return {
       battingWar,
       pitchingWar,
       fieldingWar,
       baserunningWar,
-      totalWar: statRowTotalWar,
+      totalWar,
       totalWarSource: 'stat-row',
       trustedForFinalValue: false,
     };

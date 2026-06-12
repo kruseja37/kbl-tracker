@@ -17,6 +17,7 @@ import { describe, test, expect } from 'vitest';
 import {
   // Types
   type BatterRatings,
+  type LeagueContext,
   type PitcherRatings,
   type PlayerPosition,
 
@@ -37,6 +38,8 @@ import {
   MIN_SALARY,
   PERSONALITY_MODIFIERS,
   ROI_THRESHOLDS,
+  TRUE_VALUE_CALCULATION_VERSION,
+  TRUE_VALUE_MIN_PEER_POOL_SIZE,
 
   // Rating functions
   isPitcherRatings,
@@ -54,6 +57,7 @@ import {
   calculateAgeFactor,
   getPositionMultiplier,
   calculateFameModifier,
+  calculateTrueValue,
 } from '../../../engines/salaryCalculator';
 
 // ============================================
@@ -76,11 +80,84 @@ const createPitcherRatings = (overrides: Partial<PitcherRatings> = {}): PitcherR
   ...overrides,
 });
 
+const trueValuePeer = (
+  id: string,
+  detectedPosition: PlayerPosition,
+  salary: number,
+  seasonWAR: number,
+): LeagueContext['allPlayers'][number] => ({
+  id,
+  detectedPosition,
+  salary,
+  seasonWAR,
+});
+
 // ============================================
 // CONSTANTS TESTS
 // ============================================
 
 describe('Salary Constants', () => {
+  describe('True Value Canon', () => {
+    test('uses the spec step-percentile lookup for a Rookie Star-style surplus case', () => {
+      const rookie = trueValuePeer('rookie-star', 'SS', 1200, 3.5);
+      const result = calculateTrueValue(rookie, {
+        allPlayers: [
+          trueValuePeer('replacement-ss', 'SS', 4000, 0.5),
+          trueValuePeer('average-ss', 'SS', 8200, 2),
+          trueValuePeer('fair-ss', 'SS', 10100, 2.5),
+          rookie,
+          trueValuePeer('upper-ss', 'SS', 14000, 4.2),
+          trueValuePeer('star-ss', 'SS', 28000, 5),
+        ],
+      });
+
+      expect(TRUE_VALUE_CALCULATION_VERSION).toBe('true-value-step-percentile-v1');
+      expect(result.trueValue).toBe(14000);
+      expect(result.contractValue).toBe(1200);
+      expect(result.valueDelta).toBe(12800);
+      expect(result.warPercentile).toBeCloseTo(4 / 6, 5);
+      expect(result.peerPoolSize).toBe(TRUE_VALUE_MIN_PEER_POOL_SIZE);
+    });
+
+    test('merges sparse relief pools and falls back to whole league only after merge remains sparse', () => {
+      const closer = trueValuePeer('closer', 'CP', 2000, 3);
+      const reliefPool: LeagueContext['allPlayers'] = [
+        closer,
+        trueValuePeer('rp-1', 'RP', 1000, 0),
+        trueValuePeer('rp-2', 'RP', 3000, 1),
+        trueValuePeer('rp-3', 'RP', 4000, 2),
+        trueValuePeer('rp-4', 'RP', 5000, 4),
+        trueValuePeer('rp-5', 'RP', 6000, 5),
+      ];
+      const wholeLeagueOnlyPeers: LeagueContext['allPlayers'] = [
+        trueValuePeer('ss-1', 'SS', 7000, 0.2),
+        trueValuePeer('ss-2', 'SS', 8000, 0.4),
+        trueValuePeer('ss-3', 'SS', 9000, 0.6),
+        trueValuePeer('ss-4', 'SS', 10000, 0.8),
+      ];
+
+      const merged = calculateTrueValue(closer, {
+        allPlayers: [...reliefPool, ...wholeLeagueOnlyPeers],
+      });
+      expect(merged.peerPoolSize).toBe(TRUE_VALUE_MIN_PEER_POOL_SIZE);
+      expect(merged.trueValue).toBe(5000);
+
+      const catcher = trueValuePeer('catcher', 'C', 4500, 2.5);
+      const fallback = calculateTrueValue(catcher, {
+        allPlayers: [
+          catcher,
+          trueValuePeer('one-b', '1B', 1200, 0.2),
+          trueValuePeer('two-b', '2B', 2400, 0.4),
+          trueValuePeer('third-b', '3B', 3600, 0.6),
+          trueValuePeer('left-f', 'LF', 4800, 0.8),
+          trueValuePeer('starter', 'SP', 6000, 3),
+        ],
+      });
+      expect(fallback.peerPoolSize).toBe(TRUE_VALUE_MIN_PEER_POOL_SIZE);
+      expect(fallback.trueValue).toBe(6000);
+    });
+  });
+
   describe('Position Player Weights (3:3:2:1:1)', () => {
     test('power is 30%', () => {
       expect(POSITION_PLAYER_WEIGHTS.power).toBe(0.30);

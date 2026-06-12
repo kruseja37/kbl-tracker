@@ -323,6 +323,58 @@ describe('franchise value input contract', () => {
     expect(row.limitations.join(' ')).toMatch(/Scoped WAR is trusted only for TEAM_MVP\/ACE/i);
   });
 
+  test('combines persisted batting total WAR with persisted pitching WAR for True Value input rows', async () => {
+    mocks.getAllPitchingStats.mockResolvedValue([{
+      seasonId: 'season-1',
+      playerId: 'player-1',
+      playerName: 'Canon Input',
+      teamId: 'team-1',
+      games: 1,
+      gamesStarted: 1,
+      outsRecorded: 18,
+      hitsAllowed: 4,
+      runsAllowed: 1,
+      earnedRuns: 1,
+      walksAllowed: 1,
+      strikeouts: 5,
+      homeRunsAllowed: 0,
+      hitBatters: 0,
+      wildPitches: 0,
+      wins: 1,
+      losses: 0,
+      saves: 0,
+      holds: 0,
+      blownSaves: 0,
+      qualityStarts: 1,
+      completeGames: 0,
+      shutouts: 0,
+      noHitters: 0,
+      perfectGames: 0,
+      fameBonuses: 0,
+      fameBoners: 0,
+      fameNet: 0,
+      pwar: 0.7,
+      lastUpdated: 1,
+    }]);
+
+    const report = await buildFranchiseValueInputRows({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      seasonNumber: 1,
+    });
+
+    expect(report.rows[0].warPreviewValues).toEqual({
+      battingWar: 0.2,
+      pitchingWar: 0.7,
+      fieldingWar: 0.1,
+      baserunningWar: 0.1,
+      totalWar: 1.1,
+      totalWarSource: 'stat-row',
+      trustedForFinalValue: false,
+    });
+    expect(report.rows[0].warConsumerTrust?.trueValue).toBe(false);
+  });
+
   test('derives total WAR preview only from existing finite component values when no stat-row total is present', async () => {
     mocks.getAllBattingStats.mockResolvedValue([{
       seasonId: 'season-1',

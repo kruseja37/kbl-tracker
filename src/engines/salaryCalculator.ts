@@ -904,6 +904,41 @@ export function calculateExpectedWAR(
 // TRUE VALUE CALCULATION (Position-Relative)
 // ============================================
 
+export const TRUE_VALUE_CALCULATION_VERSION = 'true-value-step-percentile-v1';
+export const TRUE_VALUE_MIN_PEER_POOL_SIZE = 6;
+
+export const TRUE_VALUE_PLAYER_POSITIONS: readonly PlayerPosition[] = [
+  'C',
+  'SS',
+  'CF',
+  '2B',
+  '3B',
+  'RF',
+  'LF',
+  '1B',
+  'DH',
+  'SP',
+  'RP',
+  'CP',
+  'SP/RP',
+  'UTIL',
+  'BENCH',
+  'TWO-WAY',
+];
+
+const TRUE_VALUE_PLAYER_POSITION_SET = new Set<string>(TRUE_VALUE_PLAYER_POSITIONS);
+
+export function normalizeTrueValuePosition(position: unknown): PlayerPosition | null {
+  if (typeof position !== 'string') return null;
+  const normalized = position.trim().toUpperCase();
+  if (TRUE_VALUE_PLAYER_POSITION_SET.has(normalized)) return normalized as PlayerPosition;
+  if (normalized === 'P') return 'SP/RP';
+  if (normalized === 'IF' || normalized === 'OF' || normalized === 'IF/OF' || normalized === '1B/OF') {
+    return 'UTIL';
+  }
+  return null;
+}
+
 /**
  * Get percentile of a value within an array
  */
@@ -958,13 +993,13 @@ function getPositionPeerPool(
   position: PlayerPosition,
   allPlayers: LeagueContext['allPlayers']
 ): LeagueContext['allPlayers'] {
-  const MIN_POOL_SIZE = 6;
-
   // Direct position matches
   let pool = allPlayers.filter(p => p.detectedPosition === position);
 
-  // Merge with similar positions if pool too small
-  if (pool.length < MIN_POOL_SIZE) {
+  // SALARY_SYSTEM_SPEC_UPDATED.md True Value Calculation + R-3:
+  // merge sparse position pools first, then fall back to whole league only
+  // when the merged pool is still below the canonical peer floor.
+  if (pool.length < TRUE_VALUE_MIN_PEER_POOL_SIZE) {
     const mergeGroup = POSITION_MERGE_GROUPS[position];
     if (mergeGroup) {
       pool = allPlayers.filter(p => mergeGroup.includes(p.detectedPosition));
@@ -972,7 +1007,7 @@ function getPositionPeerPool(
   }
 
   // If still too small, return all players
-  if (pool.length < MIN_POOL_SIZE) {
+  if (pool.length < TRUE_VALUE_MIN_PEER_POOL_SIZE) {
     return allPlayers;
   }
 
@@ -981,7 +1016,8 @@ function getPositionPeerPool(
 
 /**
  * Calculate True Value (position-relative percentile approach)
- * Per spec Section "True Value Calculation"
+ * Per SALARY_SYSTEM_SPEC_UPDATED.md "True Value Calculation" and TV1 R-2:
+ * this is the canonical step-percentile implementation for True Value.
  */
 export function calculateTrueValue(
   player: { salary: number; seasonWAR: number; detectedPosition: PlayerPosition },

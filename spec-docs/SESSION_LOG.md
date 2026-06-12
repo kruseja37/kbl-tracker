@@ -3794,3 +3794,56 @@ forced test/mock adjustments."
 **NEXT:** batch closure commit (Captain-run), then **TV1 — True Value
 canonical pass** opens the pure-execution T-stack run (TV1 → T6 → {T7,T8}
 → T9 → T10 → D0).
+
+
+## 2026-06-12 (cont.) — TV1 ARC: True Value canonical pass, DELTA VERIFIED
+
+**Session open (new thread):** full 5-doc protocol read off main; JK named
+TV1 directly. Pre-draft evidence pass found: canonical calculateTrueValue
+(salaryCalculator.ts:986) ORPHANED (zero product callers); live surface =
+untrusted preview chain with a SECOND, divergent implementation
+(interpolation + average-rank vs the spec's step method); WAR persistence
+live (W1) but value-input WAR sourcing unverified. Local MCP bridge died
+mid-evidence (two greps deferred to builder discovery), recovered later.
+
+**JK rulings R-1..R-5 (plain-language round):** R-1 TV1 = True Value only,
+designation slice = TV2; R-2 OPTION A — spec-faithful step method canonical,
+preview interpolation deleted; R-3 whole-league fallback stays as
+never-expected safety net (RP pools absorb CP); R-4 auto recompute+persist
+after WAR persist on every completed game; R-5 displayed numbers become
+canonical, no consumer acts until TV2. Contract written to
+PROMPT_CONTRACTS.md BEFORE handoff (readiness rule honored, no retro-log)
+and committed 4b10a76.
+
+**TV1 (Codex 5.5 | very high):** one implementation (preview delegates to
+engine); franchiseTrueValueStorage.ts rows keyed franchise/season/scope/
+player; processCompletedGame persist gated on successful WAR persistence;
+trust flags hard false. DISCOVERY 1 caught a REAL pre-existing defect —
+value-input WAR composition dropped persisted pWAR (FINDING-142, fixed
+in-scope). DISCOVERY 2: TeamHub display sites at TeamHubContent.tsx:1641;
+franchiseDesignations.ts:31 takes trueValue but NO valueDelta consumer
+exists — TV2 must add it. Codex self-BLOCKED on a procedural misread
+(tried to run the Fable audit itself); build side complete.
+
+**Fable TV1-AUDIT verdict: "TV1 DELTA VERIFIED."** 8/8 directives; 6
+mutations each killed by exactly its intended test, restores hash-verified.
+Standout: M-142 revert probe proved zero pre-existing expectations depend
+on the F-142 fix — method-shift test changes isolated to sanctioned R-2.
+Double-count ruled out at orchestrator write level. D6 "expected wins"
+oddity = downstream test arithmetic, logic diff-CLEAN. Gate exact:
+7,122/382 (7,113+9, 380+2); one flake fired, solo-green. 3 MINOR / 0 MAJOR:
+separate IndexedDB DB (JK ruling needed before TV2 adds stores);
+position-normalization mapping needs one ratifying line in TV2's contract;
+computedAt nondeterminism noted.
+
+**Process notes:** pipelining doctrine adopted (draft N+1 while N builds;
+batch JK rulings forward); JK ruled triangle PERMANENT — Fable never audits
+its own builds; Wave-2 process architecture added to D0's closing agenda
+(FRANCHISE_ENGINE_MAP append). FINDINGS_142_onwards.md batch file opened
+(056 file was 4x over split threshold). PROMPT_CONTRACTS newest-at-bottom
+layout ruled correct (append-only; readers tail the file).
+
+**NEXT:** TV1 closure commit (this commit) → draft TV2 (designation slice:
+storage + projected, audit slices 3-4) with two carried inputs: the
+separate-DB ruling and position-mapping ratification, plus DISCOVERY 2's
+no-valueDelta-consumer gap. Then T6. Design track: D0 next.

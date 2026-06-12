@@ -431,3 +431,23 @@ no design session interleaves with the T-stack. Order: T-stack completion
 D0's ruling, each producing its own v1/v2 split. The §6 session queue
 order stands but its START is gated on T-stack completion. F-138 scoped
 post-D0.
+
+
+---
+
+## D0 AGENDA ADDITION — 2026-06-12 (JK-ratified, logged by Captain)
+
+D0 gains a closing agenda item: **"Process architecture for Wave 2."**
+After the v1 cut line is ruled, decide the build-pipeline shape going
+forward. Inputs to that discussion (banked this session):
+- Triangle stays: Fable plans → Codex executes → Fable audits. JK ruling:
+  Fable never audits its own builds (fresh-session separation deemed
+  insufficient; hallucination risk outweighs speed).
+- Speed levers already proven and to be formalized: phase pipelining
+  (Captain drafts ticket N+1 while Codex builds N; JK rules on N+1 while
+  Fable audits N); forward-batched JK rulings (multi-question blocks before
+  arcs start); parallel Codex on disjoint files under the addendum ({T7,T8}
+  is the named candidate); ADDENDUM-1-class direct Captain execution for
+  below-threshold mechanical changes.
+- Decision deliberately DEFERRED until T-stack completion + D0 cut line —
+  pipeline design follows cargo shape.

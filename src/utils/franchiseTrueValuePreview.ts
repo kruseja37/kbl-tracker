@@ -1,10 +1,15 @@
+import {
+  calculateTrueValue,
+  normalizeTrueValuePosition,
+  type LeagueContext,
+} from '../engines/salaryCalculator';
 import type {
   FranchiseValueInputReport,
   FranchiseValueInputRow,
 } from './franchiseValueInputs';
 
 export const FRANCHISE_TRUE_VALUE_PREVIEW_CONTRACT_VERSION =
-  'franchise-true-value-preview-v1-readonly';
+  'franchise-true-value-preview-v2-canonical-readonly';
 
 export type FranchiseTrueValuePreviewStatus = 'preview-only' | 'blocked';
 
@@ -142,64 +147,62 @@ function isPeerEligible(report: FranchiseValueInputReport, row: FranchiseValueIn
   return baseBlockReasons(report, row).length === 0 && finiteNumber(row.salary);
 }
 
-function positionPeerPools(report: FranchiseValueInputReport): Map<string, FranchiseValueInputRow[]> {
-  const pools = new Map<string, FranchiseValueInputRow[]>();
-  for (const row of report.rows) {
-    if (!isPeerEligible(report, row) || !row.valuePosition) continue;
-    const rows = pools.get(row.valuePosition) ?? [];
-    rows.push(row);
-    pools.set(row.valuePosition, rows);
+function leaguePlayerFromRow(
+  report: FranchiseValueInputReport,
+  row: FranchiseValueInputRow,
+): LeagueContext['allPlayers'][number] | null {
+  const detectedPosition = normalizeTrueValuePosition(row.valuePosition);
+  if (!detectedPosition || !isPeerEligible(report, row) || !finiteNumber(row.salary) || !finiteNumber(row.warPreviewValues.totalWar)) {
+    return null;
   }
-  return pools;
+  return {
+    id: row.playerId,
+    detectedPosition,
+    salary: row.salary,
+    seasonWAR: row.warPreviewValues.totalWar,
+  };
 }
 
-function rankPercentileByWar(row: FranchiseValueInputRow, peerPool: FranchiseValueInputRow[]): number | null {
-  if (peerPool.length < 2 || !finiteNumber(row.warPreviewValues.totalWar)) return null;
-  const sorted = [...peerPool].sort((left, right) => {
-    const warDelta = (left.warPreviewValues.totalWar ?? 0) - (right.warPreviewValues.totalWar ?? 0);
-    return warDelta !== 0 ? warDelta : left.playerId.localeCompare(right.playerId);
-  });
-  const matchingIndexes = sorted
-    .map((candidate, index) => ({ candidate, index }))
-    .filter(({ candidate }) => candidate.warPreviewValues.totalWar === row.warPreviewValues.totalWar)
-    .map(({ index }) => index);
-  if (matchingIndexes.length === 0) return null;
-  const averageIndex = matchingIndexes.reduce((sum, index) => sum + index, 0) / matchingIndexes.length;
-  return averageIndex / (sorted.length - 1);
-}
-
-function salaryAtPercentile(peerPool: FranchiseValueInputRow[], percentile: number): number | null {
-  const salaries = peerPool
-    .map((row) => row.salary)
-    .filter((salary): salary is number => finiteNumber(salary))
-    .sort((left, right) => left - right);
-  if (salaries.length < 2) return null;
-  const boundedPercentile = Math.min(1, Math.max(0, percentile));
-  const position = boundedPercentile * (salaries.length - 1);
-  const lowerIndex = Math.floor(position);
-  const upperIndex = Math.ceil(position);
-  const lower = salaries[lowerIndex];
-  const upper = salaries[upperIndex];
-  if (!finiteNumber(lower) || !finiteNumber(upper)) return null;
-  const estimate = lower + (upper - lower) * (position - lowerIndex);
-  return Number(estimate.toFixed(3));
+function buildLeagueContext(report: FranchiseValueInputReport): LeagueContext {
+  return {
+    allPlayers: report.rows
+      .map((row) => leaguePlayerFromRow(report, row))
+      .filter((player): player is LeagueContext['allPlayers'][number] => player !== null),
+  };
 }
 
 function previewRow(
   report: FranchiseValueInputReport,
   row: FranchiseValueInputRow,
-  peerPool: FranchiseValueInputRow[],
+  leagueContext: LeagueContext,
 ): FranchiseTrueValuePreviewPlayerRow {
   const reasons = baseBlockReasons(report, row);
-  if (reasons.length === 0 && peerPool.length < 2) {
-    reasons.push(`At least two current MLB ${row.valuePosition ?? 'position'} peers with salary and numeric WAR preview totals are required for position-relative True Value preview.`);
+  const detectedPosition = normalizeTrueValuePosition(row.valuePosition);
+  if (row.valuePosition && !detectedPosition) {
+    reasons.push(`Supported True Value position is required; found ${row.valuePosition}.`);
   }
-  const warPercentile = reasons.length === 0 ? rankPercentileByWar(row, peerPool) : null;
-  const previewValueEstimate = warPercentile !== null
-    ? salaryAtPercentile(peerPool, warPercentile)
+  if (reasons.length === 0 && leagueContext.allPlayers.length < 2) {
+    reasons.push('At least two current MLB players with canonical salary and numeric scoped WAR are required for position-relative True Value preview.');
+  }
+
+  // TV1 R-2/R-5: displayed True Value uses the canonical engine step-percentile
+  // method, while preview/designation trust remains blocked until TV2.
+  const result = reasons.length === 0 &&
+    detectedPosition &&
+    finiteNumber(row.salary) &&
+    finiteNumber(row.warPreviewValues.totalWar)
+    ? calculateTrueValue(
+        {
+          salary: row.salary,
+          seasonWAR: row.warPreviewValues.totalWar,
+          detectedPosition,
+        },
+        leagueContext,
+      )
     : null;
+  const previewValueEstimate = result?.trueValue ?? null;
   if (reasons.length === 0 && previewValueEstimate === null) {
-    reasons.push('Comparable position salary percentile could not be derived from the peer pool.');
+    reasons.push('Comparable canonical salary percentile could not be derived from the peer context.');
   }
   const valueDeltaEstimate = previewValueEstimate !== null && row.salary !== null
     ? Number((previewValueEstimate - row.salary).toFixed(3))
@@ -232,12 +235,12 @@ function previewRow(
     reasons: reasons.length > 0
       ? reasons
       : [
-        'Position-relative True Value preview is available from current MLB peer salary percentiles and scoped numeric WAR preview totals.',
+        'Canonical position-relative True Value is available from current MLB peer salary percentiles and scoped numeric WAR totals.',
       ],
     limitations: unique([
       ...row.limitations,
-      'Position-relative percentile estimate is preview-only; upstream WAR completeness is not final.',
-      'Value delta estimate is preview-only and is not trusted for Fan Favorite, Albatross, expected wins, salary movement, or designation finalization.',
+      'Position-relative step-percentile True Value is canonical, but preview policy stays read-only until TV2.',
+      'Value delta is not trusted for Fan Favorite, Albatross, expected wins, salary movement, or designation finalization until TV2.',
       'No True Value, value delta, salary, morale, designation, relationship, offseason, or Mode 3 state is persisted by this preview contract.',
     ]),
   };
@@ -287,9 +290,9 @@ function teamSummaries(
 export function buildFranchiseTrueValuePreviewReport(
   valueInputReport: FranchiseValueInputReport,
 ): FranchiseTrueValuePreviewReport {
-  const peerPools = positionPeerPools(valueInputReport);
+  const leagueContext = buildLeagueContext(valueInputReport);
   const playerRows = valueInputReport.rows.map((row) =>
-    previewRow(valueInputReport, row, row.valuePosition ? peerPools.get(row.valuePosition) ?? [] : []),
+    previewRow(valueInputReport, row, leagueContext),
   );
   const teams = teamSummaries(valueInputReport, playerRows);
 
@@ -315,8 +318,8 @@ export function buildFranchiseTrueValuePreviewReport(
     },
     limitations: unique([
       ...valueInputReport.limitations,
-      'True Value preview is read-only and position-relative; final WAR, market valuation, park adjustment, and lifecycle rules remain untrusted.',
-      'Preview value delta is not trusted for Fan Favorite, Albatross, expected wins, salary movement, morale, or designation finalization.',
+      'True Value display uses the canonical step-percentile engine, while downstream trust remains blocked until TV2.',
+      'Value delta is not trusted for Fan Favorite, Albatross, expected wins, salary movement, morale, or designation finalization.',
     ]),
   };
 }

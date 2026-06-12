@@ -1124,8 +1124,8 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(valueWinsRegion).getByText('Preview value delta')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('8.0')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Expected wins estimate')).toBeInTheDocument();
-    expect(within(valueWinsRegion).getByText('14.0')).toBeInTheDocument();
-    expect(within(valueWinsRegion).getByText(/League average preview value baseline: 6.0/i)).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('12.0')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText(/League average preview value baseline: 10.0/i)).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText(/Blocked: expected-wins persistence, final designations, salary movement, morale\/relationship mutation, offseason, Mode 3/i)).toBeInTheDocument();
     expect(within(valueWinsRegion).queryByText(/Blocked: At least two teams/i)).not.toBeInTheDocument();
     expect(within(valueWinsRegion).queryByRole('button')).not.toBeInTheDocument();

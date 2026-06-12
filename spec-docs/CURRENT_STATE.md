@@ -479,3 +479,46 @@ every changed file must appear in builder reports incl. mechanically-forced
 test/mock adjustments (template update pending next contract).
 **Open pending-JK:** ASG WPA→Fame; Signature Moment card line; fame tier
 names; F2 SOT typos; F4 FA trait spellings.
+
+
+---
+
+## CURRENT STATE — 2026-06-12 (TV1 arc CLOSED)
+**Branch:** codex/franchise-v1-next. **This commit:** TV1 code + tests +
+contracts (TV1 / TV1-AUDIT + execution records) + FINDING-142 + session docs
+(single closure commit, post "TV1 DELTA VERIFIED").
+**What exists & is trustworthy:** True Value is CANONICAL — one
+implementation (calculateTrueValue, spec-faithful step-percentile per R-2;
+preview interpolation deleted, preview delegates to engine);
+franchiseTrueValueStorage.ts persists rows keyed franchiseId/seasonId/
+statsScopeId/playerId with calculationVersion; persist trigger =
+processCompletedGame AFTER successful WAR persistence, same seasonId scope,
+WAR-fail → skip+warn (R-4); salary input = T5 canonical path, WAR input =
+W1 persisted rows, totalGames grep-pinned absent. FINDING-142 FIXED-AND-
+VERIFIED: value-input WAR composition now combines persisted bWAR + pWAR
+(was silently dropping pWAR — pre-existing defect caught by DISCOVERY 1).
+Trust flags remain hard-typed false per R-5 — numbers are canonical, no
+consumer acts on them until TV2.
+**Suite baseline:** 7,122 tests / 382 files (+9/+2 exact). Characterized
+set unchanged: fixed wpaRuntimeBoundary + franchiseNarrativeEventEligibility;
+order-flakes (conditional-solo) franchiseManualSmokeFixture +
+GameTrackerLaunchState + franchiseOffseasonGuards.component. CLI: prefix
+`NODE_ENV= `; node ~/.nvm/versions/node/v20.20.0/bin.
+**NEXT TASK: TV2 — designation slice** (audit slices 3-4: canonical
+designation storage + projected designations recalc). Contract not yet
+drafted. Carried inputs: (1) JK RULING NEEDED — separate IndexedDB database
+kbl-franchise-true-values vs shared-DB convention, before TV2 adds stores;
+(2) ratify position-normalization mapping (P→SP/RP, IF/OF→UTIL) in the
+contract; (3) DISCOVERY 2 gap — franchiseDesignations.ts takes trueValue
+but NO valueDelta consumer exists; spec makes valueDelta THE Fan Favorite/
+Albatross criterion, so TV2 adds it. ROUTE: Codex 5.5 | very high → Fable 5
+CLI audit (designation persistence).
+**Then:** T6 → {T7, T8} → T9 → T10 → D0 cut line (sequencing ruling F-141).
+**Process canon added this arc:** pipelining (draft N+1 while N builds;
+batch JK rulings forward); triangle PERMANENT — Fable never audits its own
+builds (JK ruling); Wave-2 process architecture = D0 closing agenda item;
+FINDINGS_142_onwards.md batch opened.
+**Open pending-JK:** separate-DB ruling (TV2-blocking); untracked
+reference-docs/Super Mega Baseball 4 Rosters.csv (commit or gitignore);
+ASG WPA→Fame; Signature Moment card line; fame tier names; F2 SOT typos;
+F4 FA trait spellings; order-flake cleanup (3 members).

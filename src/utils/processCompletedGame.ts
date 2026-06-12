@@ -34,6 +34,7 @@ import { registerAlmanacPlayers } from './registerAlmanacPlayers';
 import { deriveAdaptiveStandardsConfig, type AdaptiveStandardsConfigInput } from './franchiseAdaptiveStandards';
 import { getSeasonMetadata, saveSeasonMetadata } from './seasonStorage';
 import { calculateAndPersistSeasonWAR } from '../src_figma/app/engines/warOrchestrator';
+import { calculateAndPersistFranchiseTrueValueForSeason } from './franchiseTrueValueStorage';
 
 export interface ProcessGameResult {
   aggregation: GameAggregationResult;
@@ -48,6 +49,10 @@ export interface CompletedGameArchiveOptions {
 
 type ProcessCompletedGameAggregationOptions = GameAggregationOptions & AdaptiveStandardsConfigInput;
 type WarMetadataSource = ProcessCompletedGameAggregationOptions;
+type PersistedWarScope = {
+  seasonId: string;
+  statsScopeId: string;
+};
 
 function positiveFiniteNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
@@ -161,22 +166,65 @@ async function persistSeasonWarAfterAggregation(
   options: ProcessCompletedGameAggregationOptions | undefined,
   archiveOptions: CompletedGameArchiveOptions | undefined,
   leagueId: string | null,
-): Promise<void> {
+): Promise<PersistedWarScope | null> {
   const seasonId = getCompletedGameSeasonId(gameState, options, archiveOptions);
   if (!seasonId) {
     console.warn('[WAR] skipped: seasonId unresolved for completed game ' + gameState.gameId);
-    return;
+    return null;
   }
 
   const seasonGames = await resolveSeasonGamesForWar(seasonId, options);
   if (seasonGames === null) {
     console.warn('[WAR] skipped: gamesPerTeam unresolved for season ' + seasonId);
-    return;
+    return null;
   }
 
   const participantIds = getParticipantIds(gameState);
   const playerPositions = await buildWarPlayerPositions(gameState, participantIds, leagueId);
   await calculateAndPersistSeasonWAR(seasonId, seasonGames, participantIds, playerPositions);
+  return {
+    seasonId,
+    statsScopeId: seasonId,
+  };
+}
+
+function getCompletedGameFranchiseId(
+  gameState: PersistedGameState,
+  archiveOptions?: CompletedGameArchiveOptions,
+): string | null {
+  const competitionType = archiveOptions?.context?.competitionType ?? gameState.competitionType;
+  const competitionId = archiveOptions?.context?.competitionId ?? gameState.competitionId;
+  return (
+    archiveOptions?.context?.franchiseId ??
+    gameState.franchiseId ??
+    (competitionType === 'franchise' ? competitionId : null) ??
+    null
+  );
+}
+
+async function persistTrueValueAfterWar(
+  gameState: PersistedGameState,
+  warScope: PersistedWarScope,
+  archiveOptions?: CompletedGameArchiveOptions,
+): Promise<void> {
+  const franchiseId = getCompletedGameFranchiseId(gameState, archiveOptions);
+  if (!franchiseId) {
+    console.warn('[TrueValue] skipped: franchiseId unresolved for completed game ' + gameState.gameId);
+    return;
+  }
+  if (!Number.isInteger(gameState.seasonNumber) || gameState.seasonNumber <= 0) {
+    console.warn('[TrueValue] skipped: seasonNumber unresolved for completed game ' + gameState.gameId);
+    return;
+  }
+
+  // TV1 R-4: True Value recomputes immediately after successful WAR storage,
+  // using the same season scope; WAR failures skip this path in processCompletedGame.
+  await calculateAndPersistFranchiseTrueValueForSeason({
+    franchiseId,
+    seasonId: warScope.seasonId,
+    statsScopeId: warScope.statsScopeId,
+    seasonNumber: gameState.seasonNumber,
+  });
 }
 
 export function shouldAggregateToRegularSeasonStats(
@@ -348,10 +396,18 @@ export async function processCompletedGame(
       );
     }
 
+    let warScope: PersistedWarScope | null = null;
     try {
-      await persistSeasonWarAfterAggregation(gameState, options, archiveOptions, resolvedLeagueId ?? null);
+      warScope = await persistSeasonWarAfterAggregation(gameState, options, archiveOptions, resolvedLeagueId ?? null);
     } catch (error) {
       console.warn('[WAR] failed to persist season WAR for completed game ' + gameState.gameId + ':', error);
+    }
+    if (warScope) {
+      try {
+        await persistTrueValueAfterWar(gameState, warScope, archiveOptions);
+      } catch (error) {
+        console.warn('[TrueValue] failed to persist True Value for completed game ' + gameState.gameId + ':', error);
+      }
     }
   }
 

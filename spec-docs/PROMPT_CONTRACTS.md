@@ -3734,3 +3734,31 @@ Use high reasoning effort. Think step-by-step.
 ```
 
 **Execution record:** [pending — Fable verdict logged here]
+
+
+**Execution record (TV1, 2026-06-12):** Codex 5.5 | very high. Report:
+5 product files + 5 test files; canonical step method sole implementation
+(preview helpers deleted, preview delegates to engine); storage module
+keyed franchise/season/scope/player; post-game persist gated on successful
+WAR persistence; trust flags hard false. DISCOVERY 1 found + fixed a real
+pre-existing defect (pWAR dropped from value-input WAR composition →
+FINDING-142). DISCOVERY 2 inventory delivered (TeamHubContent.tsx:1641
+display sites; franchiseDesignations.ts:31 trueValue input, NO valueDelta
+consumer exists yet — TV2 must add it). Codex self-BLOCKED only on
+audit-tool availability (procedural misread; build complete). Suite
+7,119/7,122, build green, +9 tests / +2 files exact.
+
+**Audit record (TV1-AUDIT, 2026-06-12):** Fable 5 CLI verdict:
+**"TV1 DELTA VERIFIED."** All 8 directives pass; 6 mutations each killed by
+exactly its intended test, restores hash-verified; M-142 revert probe
+proved zero pre-existing expectations depend on the F-142 fix (method-shift
+changes isolated to sanctioned R-2). Double-count ruled out at the
+orchestrator write level (pwar never reaches batting totalWar). D6 oddity
+resolved: "expected wins" values were downstream test arithmetic of the
+step-method shift; expected-wins logic diff-CLEAN. Gate reconciled exactly
+(7,113+9 / 380+2); one flake fired, solo-green. Disagreements 3 MINOR /
+0 MAJOR: (1) separate IndexedDB database kbl-franchise-true-values vs
+shared-DB convention — JK ruling needed before TV2 adds stores;
+(2) position-normalization mapping (P→SP/RP, IF/OF→UTIL) is inferred
+policy — ratify one line in TV2's contract; (3) computedAt wall-clock
+nondeterminism — noted, no action.

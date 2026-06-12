@@ -3,7 +3,7 @@
 # threshold; new batch per SESSION_RULES Documentation Routing)
 
 ### FINDING-142
-**Date:** 2026-06-12 | **Phase:** TV1 build (DISCOVERY 1) | **Status:** FIXED-UNVERIFIED (pending TV1-AUDIT)
+**Date:** 2026-06-12 | **Phase:** TV1 build (DISCOVERY 1) | **Status:** FIXED-AND-VERIFIED (TV1-AUDIT 2026-06-12: M-142 revert probe RED on exactly the new composition test; double-count ruled out at orchestrator write level)
 **File:** src/utils/franchiseValueInputs.ts:237 (pre-fix)
 **Evidence:** Codex DISCOVERY 1 trace — value-input WAR composition read
 orchestrator-persisted rows but used batting totalWar ALONE when present,

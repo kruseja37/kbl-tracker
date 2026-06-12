@@ -123,7 +123,7 @@ describe('franchise true value preview contract', () => {
       row({
         playerId: 'high-war-low-salary',
         playerName: 'High WAR Low Salary',
-        salary: 2,
+        salary: 2000,
         warPreviewValues: {
           battingWar: 2,
           pitchingWar: null,
@@ -137,13 +137,69 @@ describe('franchise true value preview contract', () => {
       row({
         playerId: 'low-war-high-salary',
         playerName: 'Low WAR High Salary',
-        salary: 10,
+        salary: 10000,
         warPreviewValues: {
           battingWar: 0.4,
           pitchingWar: null,
           fieldingWar: 0.1,
           baserunningWar: 0,
           totalWar: 0.5,
+          totalWarSource: 'stat-row',
+          trustedForFinalValue: false,
+        },
+      }),
+      row({
+        playerId: 'peer-one',
+        playerName: 'Peer One',
+        salary: 4000,
+        warPreviewValues: {
+          battingWar: 0.8,
+          pitchingWar: null,
+          fieldingWar: 0.1,
+          baserunningWar: 0.1,
+          totalWar: 1,
+          totalWarSource: 'stat-row',
+          trustedForFinalValue: false,
+        },
+      }),
+      row({
+        playerId: 'peer-two',
+        playerName: 'Peer Two',
+        salary: 6000,
+        warPreviewValues: {
+          battingWar: 1.6,
+          pitchingWar: null,
+          fieldingWar: 0.2,
+          baserunningWar: 0.2,
+          totalWar: 2,
+          totalWarSource: 'stat-row',
+          trustedForFinalValue: false,
+        },
+      }),
+      row({
+        playerId: 'peer-three',
+        playerName: 'Peer Three',
+        salary: 8000,
+        warPreviewValues: {
+          battingWar: 3.2,
+          pitchingWar: null,
+          fieldingWar: 0.4,
+          baserunningWar: 0.4,
+          totalWar: 4,
+          totalWarSource: 'stat-row',
+          trustedForFinalValue: false,
+        },
+      }),
+      row({
+        playerId: 'peer-four',
+        playerName: 'Peer Four',
+        salary: 12000,
+        warPreviewValues: {
+          battingWar: 4,
+          pitchingWar: null,
+          fieldingWar: 0.5,
+          baserunningWar: 0.5,
+          totalWar: 5,
           totalWarSource: 'stat-row',
           trustedForFinalValue: false,
         },
@@ -165,11 +221,11 @@ describe('franchise true value preview contract', () => {
 
     expect(highWar).toMatchObject({
       status: 'preview-only',
-      salary: 2,
+      salary: 2000,
       valuePosition: 'SS',
       warPreviewTotal: 3,
-      previewValueEstimate: 10,
-      valueDeltaEstimate: 8,
+      previewValueEstimate: 10000,
+      valueDeltaEstimate: 8000,
       valueDeltaTrustedForDesignations: false,
       expectedWinsTrusted: false,
       salaryMovementAllowed: false,
@@ -178,11 +234,88 @@ describe('franchise true value preview contract', () => {
     });
     expect(lowWar).toMatchObject({
       status: 'preview-only',
-      salary: 10,
-      previewValueEstimate: 2,
-      valueDeltaEstimate: -8,
+      salary: 10000,
+      previewValueEstimate: 4000,
+      valueDeltaEstimate: -6000,
     });
-    expect(highWar?.limitations.join(' ')).toMatch(/position-relative percentile estimate is preview-only/i);
+    expect(highWar?.limitations.join(' ')).toMatch(/step-percentile.*canonical/i);
+  });
+
+  test('documents the canonical step shift from the old interpolated preview behavior', () => {
+    const output = buildFranchiseTrueValuePreviewReport(report([
+      row({
+        playerId: 'step-shift',
+        salary: 20000,
+        warPreviewValues: {
+          battingWar: 0.8,
+          pitchingWar: null,
+          fieldingWar: 0.1,
+          baserunningWar: 0.1,
+          totalWar: 1,
+          totalWarSource: 'stat-row',
+          trustedForFinalValue: false,
+        },
+      }),
+      row({
+        playerId: 'war-zero',
+        salary: 10000,
+        warPreviewValues: {
+          battingWar: 0,
+          pitchingWar: null,
+          fieldingWar: 0,
+          baserunningWar: 0,
+          totalWar: 0,
+          totalWarSource: 'stat-row',
+          trustedForFinalValue: false,
+        },
+      }),
+      row({
+        playerId: 'war-two',
+        salary: 40000,
+        warPreviewValues: {
+          battingWar: 1.6,
+          pitchingWar: null,
+          fieldingWar: 0.2,
+          baserunningWar: 0.2,
+          totalWar: 2,
+          totalWarSource: 'stat-row',
+          trustedForFinalValue: false,
+        },
+      }),
+      row({
+        playerId: 'war-three',
+        salary: 80000,
+        warPreviewValues: {
+          battingWar: 2.4,
+          pitchingWar: null,
+          fieldingWar: 0.3,
+          baserunningWar: 0.3,
+          totalWar: 3,
+          totalWarSource: 'stat-row',
+          trustedForFinalValue: false,
+        },
+      }),
+      row({
+        playerId: 'war-four',
+        salary: 160000,
+        warPreviewValues: {
+          battingWar: 3.2,
+          pitchingWar: null,
+          fieldingWar: 0.4,
+          baserunningWar: 0.4,
+          totalWar: 4,
+          totalWarSource: 'stat-row',
+          trustedForFinalValue: false,
+        },
+      }),
+    ]));
+
+    const shifted = output.playerRows.find((previewRow) => previewRow.playerId === 'step-shift');
+    expect(shifted).toMatchObject({
+      status: 'preview-only',
+      previewValueEstimate: 40000,
+      valueDeltaEstimate: 20000,
+    });
   });
 
   test('blocks missing salary missing numeric WAR missing team position season metadata FARM unassigned and small peer pool rows', () => {
@@ -224,7 +357,7 @@ describe('franchise true value preview contract', () => {
     expect(output.playerRows.find((previewRow) => previewRow.playerId === 'missing-season')?.reasons.join(' ')).toMatch(/season length and innings metadata/i);
     expect(output.playerRows.find((previewRow) => previewRow.playerId === 'farm')?.reasons.join(' ')).toMatch(/Current MLB roster status/i);
     expect(output.playerRows.find((previewRow) => previewRow.playerId === 'unassigned')?.reasons.join(' ')).toMatch(/Current team id/i);
-    expect(output.playerRows.find((previewRow) => previewRow.playerId === 'small-peer-pool')?.reasons.join(' ')).toMatch(/At least two current MLB C peers/i);
+    expect(output.playerRows.find((previewRow) => previewRow.playerId === 'small-peer-pool')?.reasons.join(' ')).toMatch(/At least two current MLB players/i);
   });
 
   test('blocks missing and mismatched scope', () => {
@@ -249,7 +382,7 @@ describe('franchise true value preview contract', () => {
     const output = buildFranchiseTrueValuePreviewReport(report([
       row({
         playerId: 'one',
-        salary: 8.5,
+        salary: 8500,
         warPreviewValues: {
           battingWar: 2,
           pitchingWar: null,
@@ -262,7 +395,7 @@ describe('franchise true value preview contract', () => {
       }),
       row({
         playerId: 'two',
-        salary: 3.5,
+        salary: 3500,
         warPreviewValues: {
           battingWar: 0.8,
           pitchingWar: null,
@@ -273,17 +406,69 @@ describe('franchise true value preview contract', () => {
           trustedForFinalValue: false,
         },
       }),
+      row({
+        playerId: 'three',
+        salary: 5000,
+        warPreviewValues: {
+          battingWar: 0.4,
+          pitchingWar: null,
+          fieldingWar: 0.1,
+          baserunningWar: 0,
+          totalWar: 0.5,
+          totalWarSource: 'stat-row',
+          trustedForFinalValue: false,
+        },
+      }),
+      row({
+        playerId: 'four',
+        salary: 6500,
+        warPreviewValues: {
+          battingWar: 1.6,
+          pitchingWar: null,
+          fieldingWar: 0.2,
+          baserunningWar: 0.2,
+          totalWar: 2,
+          totalWarSource: 'stat-row',
+          trustedForFinalValue: false,
+        },
+      }),
+      row({
+        playerId: 'five',
+        salary: 7500,
+        warPreviewValues: {
+          battingWar: 3.2,
+          pitchingWar: null,
+          fieldingWar: 0.4,
+          baserunningWar: 0.4,
+          totalWar: 4,
+          totalWarSource: 'stat-row',
+          trustedForFinalValue: false,
+        },
+      }),
+      row({
+        playerId: 'six',
+        salary: 10000,
+        warPreviewValues: {
+          battingWar: 4,
+          pitchingWar: null,
+          fieldingWar: 0.5,
+          baserunningWar: 0.5,
+          totalWar: 5,
+          totalWarSource: 'stat-row',
+          trustedForFinalValue: false,
+        },
+      }),
       row({ playerId: 'blocked', salary: null, salaryBaselineAvailable: false }),
     ]));
 
     expect(output.teamSummaries).toHaveLength(1);
     expect(output.teamSummaries[0]).toMatchObject({
       teamId: 'team-1',
-      previewPlayerCount: 2,
+      previewPlayerCount: 6,
       blockedPlayerCount: 1,
-      salaryTotal: 12,
-      previewValueEstimateTotal: 12,
-      valueDeltaEstimateTotal: 0,
+      salaryTotal: 41000,
+      previewValueEstimateTotal: 47500,
+      valueDeltaEstimateTotal: 6500,
       expectedWinsTrusted: false,
       valueDeltaTrustedForDesignations: false,
       salaryMovementAllowed: false,
