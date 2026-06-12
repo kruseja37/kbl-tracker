@@ -3522,3 +3522,135 @@ underreporting of the FranchiseHomeLaunch mock removal flagged as a builder
 reporting-discipline gap (change itself sanctioned); NEW CANDIDATE C-8 —
 second orphan useWARCalculations copy in src_figma/app/hooks (zero importers,
 correctly out-of-scope, F135-T3-class). **FINDING-136 FULLY RESOLVED.**
+
+
+---
+
+# TV1 — TRUE VALUE CANONICAL PASS (build contract)
+**Drafted:** 2026-06-12 | **Ratified rulings:** R-1..R-5 (JK, 2026-06-12, this session)
+**ROUTE: Codex 5.5 | very high → Fable 5 CLI audit**
+(persists new franchise state; standing rule: state/persistence = minimum
+high; new persistence shape + post-game pipeline wiring justifies very high.
+Audit non-negotiable.)
+
+## Ratified rulings (binding inputs to this contract)
+- **R-1 (scope):** TV1 = True Value canonical pass ONLY (audit slice 2).
+  Designation slice (storage + projected, audit slices 3-4) = **TV2**,
+  drafted immediately after TV1 verifies.
+- **R-2 (method):** OPTION A — spec-faithful step-percentile lookup
+  (salaryCalculator.ts calculateTrueValue) is THE canonical method. The
+  preview's interpolated/average-rank math was never a deliberate design
+  and is DELETED. Smoothing, if ever wanted, is a future spec amendment.
+- **R-3 (peer-pool floor):** merge groups per spec; if a merged pool is
+  still < 6, the existing whole-league fallback STAYS as a never-expected
+  safety net (JK: RP pools will always be big enough to absorb CP), with
+  a documenting test.
+- **R-4 (trigger):** True Value recomputes + persists automatically on
+  every completed regular-season game, immediately after successful WAR
+  persistence, same seasonId scope. No manual trigger.
+- **R-5 (trust):** after TV1, displayed True Value numbers ARE canonical,
+  but NO consumer acts on them yet — designation/morale trust flags stay
+  hard-typed false until TV2 flips them deliberately.
+
+## Contract (handoff text)
+
+```
+You are a senior TypeScript engineer executing the True Value canonical pass
+(TV1) for KBL Tracker.
+
+GOAL:
+Make True Value / Value Delta canonical: ONE spec-faithful implementation,
+persisted per-player rows computed from canonical salary (T5) and persisted
+season WAR (W1), wired into the post-game pipeline.
+
+SOURCE OF TRUTH:
+- SALARY_SYSTEM_SPEC_UPDATED.md, "True Value Calculation" (lines 516-658) —
+  percentile machinery, merge groups, Value Delta classifications
+- IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md §3.8 — True Value applies
+  downstream of canonical salary, unchanged; potency surplus is captured BY
+  True Value, never an input to it (D15)
+- MODE2_SYSTEMS_INTEGRATION_MAP.md §3.2 and §6 step 3
+- R1' ruling: season length = gamesPerTeam config-truth; totalGames BANNED
+- Ratified rulings R-1..R-5 (header above, JK 2026-06-12)
+
+CONSTRAINTS:
+- Only edit: src/engines/salaryCalculator.ts (True Value section only),
+  src/utils/processCompletedGame.ts (one wiring hunk after the
+  calculateAndPersistSeasonWAR call), src/utils/franchiseTrueValuePreview.ts,
+  src/utils/franchiseValueInputs.ts (ONLY if WAR-source rewiring is required
+  per DISCOVERY 1), ONE new persistence module
+  (src/utils/franchiseTrueValueStorage.ts), and their test files.
+- Do NOT touch: src/engines/ivEngine.ts, rosterEngineConstants.ts, the
+  frozen IV oracle, tierParams.ts, warOrchestrator.ts internals,
+  franchiseDesignations*.ts (TV2 scope), fanMoraleEngine.ts,
+  fanFavoriteEngine.ts, any offseason flow.
+- The canonical implementation is calculateTrueValue
+  (src/engines/salaryCalculator.ts:986), step-percentile method per R-2.
+  The preview's private math (rankPercentileByWar, salaryAtPercentile) is
+  DELETED; the preview consumes the engine function. Trust flags in the
+  preview/value-input contracts remain hard-typed false (R-5) — designation
+  trust flips in TV2, not here.
+- Persisted row shape: { franchiseId, seasonId, statsScopeId, playerId,
+  trueValue, contractValue, valueDelta, warPercentile, position,
+  peerPoolSize, calculationVersion, computedAt }. Salary input = canonical
+  franchise salary (T5 path, getVisibleSafeFranchisePlayerSalary). WAR
+  input = persisted season WAR rows written by calculateAndPersistSeasonWAR
+  — never recomputed ad hoc, never scaled by totalGames.
+- Persist trigger per R-4: in processCompletedGame, after successful WAR
+  persistence, same seasonId scope. WAR persist failure → skip True Value
+  persist and warn — never persist True Value from stale WAR.
+- DISCOVERY 1 (report BEFORE implementing): trace whether
+  franchiseValueInputs' warPreviewValues rows are the orchestrator-persisted
+  WAR values or an independent derivation. Independent → rewire to persisted
+  rows; identical → cite file:line proving it.
+- DISCOVERY 2 (report only, NO changes): list every TeamHubContent.tsx
+  True Value / value-delta display site and every franchiseDesignations.ts
+  valueDelta consumption point (file:line). TV2 input.
+- Quote spec section or ruling ID (R-1..R-5) for every change.
+- Work directly on codex/franchise-v1-next. No new worktrees.
+- EVERY changed file must appear in the report, including mechanically-
+  forced test/mock adjustments.
+
+EXPECTED OUTPUT:
+- ONE True Value implementation in the codebase (grep for the deleted
+  preview helpers returns zero); preview surface behavior preserved except
+  where its interpolated numbers shift to the canonical step method —
+  document the shift with one before/after example.
+- New storage module with get/save keyed by franchise/season/scope/player;
+  rows written on completed regular-season games after WAR persist.
+- Mutation-pinned tests: (a) step-percentile golden cases consistent with
+  the spec's True Value Examples table semantics; (b) merge-group +
+  whole-league-fallback documenting test (R-3); (c) WAR-persist-failure →
+  no True Value row; (d) totalGames never read (grep-pinned); (e) persisted
+  row recomputes after a new completed game.
+
+VERIFICATION:
+- NODE_ENV= npm run build (node ~/.nvm/versions/node/v20.20.0/bin)
+- NODE_ENV= npx vitest run [new + touched test files] — all green
+- Full suite green except the characterized set (fixed failures:
+  wpaRuntimeBoundary, franchiseNarrativeEventEligibility; order-flakes,
+  conditional-solo: franchiseManualSmokeFixture, GameTrackerLaunchState,
+  franchiseOffseasonGuards.component). Baseline 7,113/380; report exact
+  new-test delta.
+- grep -rn "rankPercentileByWar\|salaryAtPercentile" src → zero hits
+- grep -rn "totalGames" src/utils/franchiseTrueValue* → zero hits
+
+FORMAT:
+1. Files changed (exact paths, incl. forced test/mock adjustments)
+2. Changes made (each with spec/ruling ID)
+3. DISCOVERY 1 + 2 findings (file:line evidence)
+4. Verification result (paste exact output)
+5. "TV1 complete" OR "BLOCKED: [exact reason]"
+
+FAILURE PROTOCOL:
+- Ambiguity → quote the exact section and ask
+- Cannot open a file → stop and report the filename
+- Change requires a file not listed above → stop and report
+- Suite failure outside the characterized set → BLOCK; never bend code or
+  tests to the suite
+- Never summarize or batch changes. Never assume intent — ask.
+
+Use very high reasoning effort. Think step-by-step.
+```
+
+**Execution record:** [pending — Codex run + Fable audit verdict logged here]
