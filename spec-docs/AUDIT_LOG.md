@@ -1081,3 +1081,5 @@ Still unresolved. FINDING-047 fallback path only has base state, not full scoreb
 | FINDING-137 | 2026-06-12 | FIXED + CLEANUP COMPLETE (F135-T2) | 9 files deleted + 2 live-file surgeries | Cleanup tail closed: orphan trio + useWARCalculations + SeasonEndFlow + C-7 duplicate + FranchiseStats (ADDENDUM 1, JK-ruled: type + contract-test block) + un-rendered totalGames; M2b mutant re-run RED against new test; exclusions held; suite 7,113/380 exact reconciliation; Fable "F135-T2 DELTA VERIFIED"; new candidate C-8 (orphan useWARCalculations copy in src_figma) logged |
 
 | FINDING-142 | 2026-06-12 | FIXED-AND-VERIFIED | franchiseValueInputs.ts | Value-input WAR composition dropped persisted pWAR; fixed in TV1, verified by M-142 probe | Full text: FINDINGS_142_onwards.md |
+
+| FINDING-143 | 2026-06-12 | CONFIRMED-OPEN | franchiseValueInputs.ts | valuePosition is profile primaryPosition, not positions actually played (violates R-6 doctrine); TV2/D1 | Full text: FINDINGS_142_onwards.md |

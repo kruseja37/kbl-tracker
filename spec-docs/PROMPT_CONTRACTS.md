@@ -3861,3 +3861,59 @@ Use high reasoning effort. Think step-by-step.
 ```
 
 **Execution record:** [pending]
+
+
+---
+
+# TV1-FIX-AUDIT — Fable 5 CLI delta audit (contract)
+**Drafted:** 2026-06-12 | **ROUTE: Fable 5 CLI | high reasoning effort**
+
+```
+You are the independent auditor for TV1-FIX. You did not write this code.
+Assume failure until proven otherwise. Audit the git diff of the TV1-FIX
+changeset (uncommitted, on codex/franchise-v1-next, post-1f3f2cc/163a756).
+
+GOAL:
+Verify TV1-FIX against its contract (rulings R-6/R-7). Verdict:
+"TV1-FIX DELTA VERIFIED" or itemized MAJOR/MINOR disagreements.
+
+DIRECTIVES:
+D1 — trackerDb v13 upgrade safety (THE risk center; Feb-11 hazard class).
+  Verify the bump follows the centralized single-upgrade-handler
+  convention; all pre-existing stores preserved; franchiseTrueValueRows
+  registration additive only; no destructive paths. Prove by reading the
+  full upgrade handler, not the diff alone.
+D2 — Storage delegation (R-7): franchiseTrueValueStorage delegates to
+  getTrackerDb(); zero references to kbl-franchise-true-values (re-run the
+  grep yourself); no-migration comment present; TV1 row-shape and
+  processCompletedGame trigger semantics UNCHANGED (both files diff-CLEAN
+  except sanctioned storage edits).
+D3 — Strict validation (R-6): canonical-primary set exactly {SP, SP/RP,
+  RP, CP, C, 1B, 2B, SS, 3B, LF, CF, RF}; non-canonical labels skip with
+  a reason NAMING the label; zero remapping logic anywhere in the True
+  Value path. Mutation: reintroduce a P→SP/RP remap → must go RED on
+  exactly the skip test.
+D4 — Suite reconciliation: baseline 7,122/382 → expect 7,125 total
+  (+3: skip test, canonical-accept test, shared-DB round-trip), 382 files.
+  Reconcile EXACTLY; characterized-set failures only; fired flakes pass
+  solo.
+D5 — No-touch sweep: processCompletedGame.ts trigger logic,
+  calculateTrueValue step machinery, franchiseTrueValuePreview.ts,
+  franchiseValueInputs.ts (X3 was report-only), all TV1 frozen files.
+D6 — Captain pre-audit note to confirm: with R-6 enforcement, the salary
+  spec's UTIL/BENCH merge-group rows become unreachable in the True Value
+  path. Confirm dead-but-harmless (or refute); TV2 cleanup input either
+  way.
+D7 — FINDING-143 scope check: confirm the X3 fix was NOT attempted
+  (valuePosition source unchanged) — deferred per contract.
+
+CARVE-OUTS: sibling spec-doc appends (PROMPT_CONTRACTS, FINDINGS_142,
+AUDIT_LOG) are sanctioned session documentation.
+
+FORMAT: verdict line first; per-directive evidence (commands + output);
+disagreements MAJOR/MINOR with file:line; new finding candidates.
+
+Use high reasoning effort. Think step-by-step.
+```
+
+**Execution record:** [pending]

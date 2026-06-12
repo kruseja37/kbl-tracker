@@ -13,3 +13,15 @@ persisted batting + pitching WAR.
 players) understated WAR in the value-input chain → wrong percentiles →
 wrong True Value for everyone sharing their peer pools. Blast radius of the
 FIX is the TV1-AUDIT's primary scrutiny target (D1).
+
+### FINDING-143
+**Date:** 2026-06-12 | **Phase:** TV1-FIX (X3 discovery) | **Status:** CONFIRMED-OPEN (deferred to TV2 or D1 — JK to place)
+**File:** src/utils/franchiseValueInputs.ts:502
+**Evidence:** Codex X3 trace — valuePosition is derived from profile
+player.primaryPosition, NOT from positions actually played this season.
+**Impact:** Violates R-6 data-driven doctrine: True Value peer pools (and
+therefore every True Value / Value Delta output, and TV2's Fan Favorite /
+Albatross selections) are profile-label-driven. A player spending the
+season at his secondary position is pooled with the wrong peers. Requires
+a played-position detection source (season fielding/appearance data)
+before in-season franchise decisions meet the doctrine.
