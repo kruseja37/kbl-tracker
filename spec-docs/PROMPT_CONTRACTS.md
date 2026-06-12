@@ -3917,3 +3917,50 @@ Use high reasoning effort. Think step-by-step.
 ```
 
 **Execution record:** [pending]
+
+
+---
+
+# RULING R-8 — Effective Position & Peer-Pool Taxonomy (JK-ratified 2026-06-12)
+**Canonical for True Value, TV2 designations, and the FINDING-143 fix.
+Supersedes the TV1-FIX strict-label-only approach as the END STATE
+(R-6 taxonomy remains the label vocabulary).**
+
+1. **Effective position (ALL position players):** plurality-with-incumbency
+   over position-player games actually played this season. Day-zero
+   incumbent = profile primary position. The incumbent holds on any tie;
+   re-resolution only when another position takes an OUTRIGHT plurality
+   lead. Deterministic, recomputed per completed game, self-correcting.
+2. **Peer pools:** position players pool by effective position; spec merge
+   groups apply below MIN_POOL_SIZE as today.
+3. **Reserve pool:** position players below a starts-share threshold
+   (CALIBRATE constant, ~"started <40% of team games to date") pool in ONE
+   league-wide Reserve pool — bench roles are fungible; per-position bench
+   pools would be too thin. Expensive benched players cratering vs reserve
+   salaries is a FEATURE (true Albatross story). §17 minimum-games floors
+   stack on top.
+4. **Pitchers:** pool by PROFILE role (SP, SP/RP, RP, CP) in v1 — role
+   identity is sticky and the IV usage model (startShare) is role-priced;
+   usage-based role re-resolution is CALIBRATE/v2 (CP undetectable from
+   appearance data without save-situation inference). CP↔RP merge absorbs
+   edge unfairness.
+5. **Two-way players (the trait):** EXCLUDED from all single-position peer
+   pools (hybrid salaries would pollute distributions). Valued
+   COMPOSITIONALLY: arm True Value = pWAR percentile vs profile-role pool's
+   salaries; bat True Value = batting+fielding+baserunning WAR percentile
+   vs the RESOLVED trait position's pool; True Value = arm TV + bat TV
+   (mirrors IV's compositional pricing; consumes the orchestrator's
+   already-separate persisted WAR rows UNCOMBINED).
+6. **Trait-group resolution:** Two Way (C) → C. Two Way (IF) → plurality-
+   with-incumbency over {1B, 2B, SS, 3B}; Two Way (OF) → over {LF, CF, RF}.
+   IF/OF are resolution SCOPES, never positions. Pre-data day-zero anchor
+   per group (e.g. IF→2B, OF→CF) = CALIBRATE; build contract must include
+   a discovery step on what trait holders' profiles actually carry.
+7. **Emergency appearances excluded:** cross-domain cameos (position player
+   mop-up pitching; pitcher pinch-running) never count toward effective
+   position; only the Two Way trait unlocks dual valuation.
+
+**Placement:** FINDING-143 closes via this ruling. Implementation home
+(TV2 vs D1 vs its own ticket) = JK decision at TV2 drafting; R-8 is the
+quoted source of truth either way. Taxonomy block queued for the next
+spec-cleanup batch alongside R-6.
