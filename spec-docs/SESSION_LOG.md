@@ -3479,3 +3479,26 @@ REMOVE, zero importers). Also open: order-flake cleanup (low priority).
 (SEPARATE ticket per vision ruling; the gating fix for the value spine).
 ROUTE: Codex 5.5 | high → Fable 5 CLI audit. Then TV1 → T6 per the 5-session
 milestone (T5 ✅ + W1 + TV1 + D1 + D2).
+
+
+### 2026-06-11 addendum (post-close) — JK rulings on parked items + armSlot/generator disposition
+**JK rulings (all Captain recommendations APPROVED):** F5 + F7 fold into W1;
+F6 defers to T6/T9 (heuristic dies when display paths rebuild on Effective
+Ratings); FINDING-134 discovery = next small slot after W1 (Fable CLI,
+spec-ui-alignment/franchise-button-audit → fixes Codex 5.5 high); order-flake
+cleanup = standalone Codex 5.5 medium, opportunistic; F2/F4 stay parked.
+**DH RULING (canonical): no DH appears ANYWHERE in v1** — including Mode 1
+league config. The parked TRAIT_INTEGRATION DH-row deletion is hereby APPROVED
+as a cited cleanup (cite: this ruling + D15/§3.9 non-DH canon); execute in the
+next spec-cleanup batch alongside a DH-surface grep (PlayerPosition type 'DH',
+POSITION_MULTIPLIERS 'DH' knob row, any UI strings) — scope that batch
+deliberately, do not drive-by.
+**armSlot disposition (Captain-verified by grep):** stock 440 have armSlot in
+playerDatabase (DB1); franchise Player interface lacks the field (types/
+index.ts:10, leagueBuilderStorage.ts:189) → W1 X-item = field + migration +
+reprice threading. Generators (smb4PlayerGenerator, prospectScoutingDraftEngine,
+franchiseStartupProspectDraft) assign NO armSlot — W1 adds an explicit
+`armSlot: null` generation default (financially correct: ivEngine prices only
+'Sub'; null ≡ non-Sub). NEW DESIGN HOOK → D8 Scouting/prospect generation:
+should generated prospects carry a Sub-slot chance (frequency? scout-obscured?)
+— a hidden submariner is on-doctrine draft-night texture.

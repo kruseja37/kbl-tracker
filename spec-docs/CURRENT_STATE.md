@@ -242,13 +242,19 @@ row). ivEngine/oracle/tierParams untouched and frozen.
 franchiseNarrativeEventEligibility) + ≥2 order-flakes (franchiseManualSmokeFixture,
 GameTrackerLaunchState — pass solo). **CLI verification MUST prefix `NODE_ENV= `**
 (login shell exports NODE_ENV=production; poisons vitest with ~1,800 false fails).
-**NEXT TASK: W1 — WAR orchestrator persistence + gamesPerTeam metadata.**
+**NEXT TASK: W1 — WAR orchestrator persistence + gamesPerTeam metadata,
+PLUS folded X-items (JK-approved 2026-06-11): F5 armSlot (franchise Player
+field + migration + reprice threading + explicit `armSlot: null` generator
+default) and F7 (delete dead barrel re-export engines/index.ts:690).**
 ROUTE: Codex 5.5 | high → Fable 5 CLI audit. Contract not yet drafted — first
 action of next session (read MODE2_SYSTEMS_INTEGRATION_MAP.md §4.4 first).
-Then TV1 → T6. Design track: D0 scope session next.
-**Open pending-JK:** F5 armSlot franchise-data gap (fold into W1?); F6 PlayerCard
-isTwoWay heuristic (defer to T6/T9?); F7 remove dead barrel re-export (recommended);
-FINDING-134 residual $M flows (TradeFlow/FA/Awards/FinalizeAdvance — Fable
-discovery → Codex 5.5 high, wiring unverified); parked TRAIT_INTEGRATION DH-row
-deletion; order-flake cleanup; ASG WPA→Fame; Signature Moment card line; fame
-tier names; F2 SOT typos (~15); F4 FA trait spellings (4).
+Then TV1 → T6. Design track: D0 scope session next; D8 gains a hook (generated
+prospects: Sub-slot chance? scout-obscured?).
+**JK RULING (canonical): NO DH anywhere in v1** — TRAIT_INTEGRATION DH-row
+deletion approved as cited cleanup (next spec-cleanup batch, with deliberate
+DH-surface grep).
+**Open pending-JK:** F6 PlayerCard isTwoWay heuristic (RULED: defer to T6/T9);
+FINDING-134 residual $M flows (RULED: discovery slot after W1 — Fable CLI →
+Codex 5.5 high); order-flake cleanup (RULED: standalone, opportunistic); ASG
+WPA→Fame; Signature Moment card line; fame tier names; F2 SOT typos (~15); F4
+FA trait spellings (4).
