@@ -1617,3 +1617,174 @@ FABLE 5 DELTA VERIFY (not a full audit): read the diff; rerun verification items
 yourself; confirm G10 is mutation-sensitive (re-perform item 2 independently); confirm
 oracle anchors/players blocks byte-identical pre/post. Verdict: DELTA VERIFIED /
 DEVIATIONS.
+
+
+---
+
+## PROMPT CONTRACT: T5 — Salary Spec Integration Seam (kblIV becomes the salary base)
+**Date:** 2026-06-11 | **Route:** Codex 5.5 | very high reasoning effort → Fable 5 CLI audit (T5-AUDIT, persistence-adjacent salary state; audit non-negotiable)
+**Spec:** IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md v1.1.8 — §3.8 (seam map), §3.9, §8.4 (rookie scale), D15/D16/D17. SALARY_SYSTEM_SPEC_UPDATED.md (surviving components). FINDING-127 (rookie salary lock).
+**Context:** T4 CLOSED (d696eb6): `src/engines/ivEngine.ts` computeIV is oracle-proven
+(440/440 + 21 anchors ±$0 + Jon Gray −$2,136). T5 makes kblIV the base of the live
+salary pipeline, retires the old Steps 1/2/trait-tier machinery, enforces D15
+potency-neutrality in salary, and adds the §8.4 rookie-scale override hook.
+
+---
+
+You are the Salary Integration Engineer (TypeScript, pure functions where possible).
+
+GOAL:
+Replace the base of the salary pipeline with `computeIV(...).kblIV` per spec §3.8,
+retire Steps 1/2 and the trait-tier tables, enforce D15 potency-neutrality, add the
+§8.4 rookie-scale override, and prove True Value / designation machinery survives
+the re-denomination — without touching the IV engine or its oracle.
+
+SOURCE OF TRUTH:
+IV spec §3.8 disposition table + §3.9 + §8.4 + D15. Where the old salary spec and
+the IV spec conflict, the IV spec wins (it is the declared amending document).
+`src/engines/ivEngine.ts` + `spec-docs/reference/iv_oracle.json` are FROZEN
+upstream truth — if salary output disagrees with kblIV at neutral modifiers, the
+salary seam is wrong, never the engine.
+
+STEP 0 — SPEC AMENDMENTS (pre-build, JK-ratified at 2026-06-11 vision session):
+A1. SALARY_SYSTEM_SPEC_UPDATED.md "Chemistry-Tier Trait Potency Factor" section
+    (~lines 872–941): DELETE the Salary Multiplier column, the entire "Salary
+    Wiring" block (calculateTraitModifierWithPotency), and the update-summary
+    bullet claiming potency scales salary. REPLACE with the D15 doctrine, verbatim
+    intent: "IV and salary are potency-neutral at the L2 reference forever.
+    Realized potency is construction surplus captured downstream by Effective
+    Ratings → True Value (T6+). Salary never reprices for chemistry composition."
+    Potency's gameplay-tier table (L1/L2/L3 mechanical impact) SURVIVES.
+A2. MODE_2_V1_FINAL.md §15.5 wiring point 3 AND
+    MODE_2_CANON_FRANCHISE_SEASON_UPDATED.md §15.5 wiring point 3 ("Salary
+    Impact: ... higher salary valuation"): REPLACE with the same D15 statement.
+    Points 1–2 (aggregate contribution, global activation) survive unchanged.
+A3. IV spec §3.8 final row (stale): replace "tunable constant
+    `pitcherBattingUsageWeight`, default 0.25 non-DH" with a pointer to §3.9
+    USAGE_INPUTS per-role derived weights (startShare × paRatio + phFloor) —
+    the single-constant model was superseded by D15/v1.1.7.
+Quote D15 as the finding ID for all three edits.
+
+STEP 1 — DENOMINATION BRIDGE (one-off script, documented constants):
+The old pipeline is $M-scale (MIN 0.5 / MAX 50); kblIV is absolute dollars
+(per-player ~$5k–$120k; Juiced team cap $1,205,836 per tierParams.ts). Dollars
+become the ONLY canonical denomination after T5.
+- Write `scripts/t5-denomination-bridge.ts`: for all 440 stock players, compute
+  oldSalary via the legacy pipeline (neutral age/perf/fame, no personality) and
+  kblIV via computeIV. Output median(old), median(kblIV), and
+  BRIDGE = median(old $) / median(kblIV $) with old expressed in raw dollars
+  (×1,000,000). Paste the output in your report.
+- Re-denominate every scale-dependent constant in salaryCalculator.ts via BRIDGE,
+  each flagged `// CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)`:
+  MIN_SALARY, MAX_SALARY, ROI_THRESHOLDS (re-expressed as WAR per $100k),
+  BASE_DRAFT_ALLOCATION, STANDINGS_BONUS_PER_POSITION, getSalaryTier /
+  getSalaryColor bands, getRatingSalaryScale, formatSalary (display $X,XXX /
+  $X.XXM as magnitude warrants), calculateSwapRequirement tolerances if absolute.
+- True Value percentile machinery (calculateTrueValue, getPercentile,
+  getValueAtPercentile, peer pools) must NOT be edited for scale — it is
+  scale-invariant by construction and the regression tests prove it.
+
+STEP 2 — PIPELINE REPLACEMENT (src/engines/salaryCalculator.ts):
+New base per §3.8: `salary = kblIV(p) × ageFactor × perfMod × fameMod ×
+personalityMod(FA only)`, then relativity / True Value exactly per existing spec.
+- calculateSalary / calculateSalaryWithBreakdown: base = computeIV(p).kblIV.
+  SalaryBreakdown gains `ivBase` (+ optional component detail passed through from
+  ivEngine's breakdown); baseSalary/positionMultiplier/traitModifier fields are
+  preserved in the type for back-compat but populated as ivBase / 1.0 / 1.0.
+- RETIRED FROM PIPELINE (mark @deprecated, do NOT delete — legacy needed by the
+  bridge script and matrix tests): calculateBaseRatingSalary,
+  calculatePositionPlayerBaseSalary, calculatePitcherBaseSalary,
+  calculatePitcherBattingBonus, calculateTwoWayBaseSalary,
+  calculateTraitModifier + the ELITE/GOOD/MINOR/SEVERE/MODERATE trait arrays,
+  TRAIT_SALARY_IMPACT, PITCHER_BATTING_BONUS, TWO_WAY_PREMIUM.
+- POSITION_MULTIPLIERS: keep exported, RESET ALL VALUES TO 1.0 (spec §3.8 "tuning
+  knobs defaulted 1.0"), still applied in the pipeline as a knob.
+- POTENCY: the salary path must contain ZERO chemistry-count logic. kblIV is
+  L2-pinned upstream (T4 G10 mutation gate). Do not import POTENCY_SCALE here.
+
+STEP 3 — ROOKIE-SCALE OVERRIDE (§8.4, D6, FINDING-127):
+- Add `rookieScaleActive?: boolean` to the salary-calculation options (threaded
+  through calculateSalaryWithBreakdown). When true: ageFactor is REPLACED by
+  `ROOKIE_SCALE_FACTOR = 0.50` (new constant, spec §8.4 / D6 — no double
+  discount; perf/fame/personality still apply).
+- T5 wires the HOOK + constant + tests only. The call-up ledger, dead-money rates,
+  and Phase 3 reprice triggers are T7 scope — do not build them here. Callers
+  default rookieScaleActive to false/undefined everywhere in T5.
+
+STEP 4 — CALL-SITE SWEEP (signature-compatible; behavior change = new numbers):
+Update to compile and stay semantically correct under dollar denomination:
+src/utils/franchiseSalary.ts (hidden-farm-prospect safety logic must remain
+hidden-safe — scout-obscured IV display is T8, keep current concealment),
+src/utils/franchiseRatingsSalaryAdapter.ts, src/src_figma/hooks/useOffseasonData.ts,
+src/utils/leagueBuilderStorage.ts, src/engines/seasonTransitionEngine.ts,
+src/engines/ratingsAdjustmentEngine.ts, src/components/GameTracker/
+SalaryDisplay.tsx + PlayerCard.tsx (display formatting only).
+If any consumer hardcodes $M-scale assumptions (literals like 50, 0.5, "M"),
+re-denominate and list each in the report.
+
+STEP 5 — REGRESSION TESTS (new file src/engines/__tests__/salarySeam.t5.test.ts
++ update the two salaryCalculator test files):
+R1 NEUTRAL-PIPELINE GOLDEN: pick ≥3 players from iv_oracle.json's `players`
+   array (one hitter, one SP, one RP) and hard-encode their oracle kblIV values:
+   salary at neutral modifiers (prime age band, perf 1.0, fame 1.0, no
+   personality) === oracle kblIV exactly, to the dollar. (NOTE: Eovaldi $54,582 /
+   deGrom $71,609 are RAWIV workbook anchors, NOT in the 440 stock pool — do not
+   use them here; that layer is already gated by ivEngine.test.ts G1–G10.)
+R2 POTENCY-NEUTRALITY (D15): same player on a roster with 7 shared-chemistry
+   players vs 0 → identical salary. Assert no chemistry-count import in the
+   salary path (grep-style structural test acceptable).
+R3 ROOKIE SCALE: rookieScaleActive → base × 0.50 × perf × fame, ageFactor NOT
+   applied (prove no double discount with a non-prime age fixture).
+R4 TRUE VALUE SCALE-INVARIANCE: fixture league; multiply every salary by k=10 →
+   warPercentile identical, trueValue scales by exactly k, ROI tier stable under
+   the re-denominated thresholds.
+R5 DESIGNATION REGRESSION: run franchiseDesignationEligibility fixtures under
+   dollar salaries — expectations derived from the designation RULES applied to
+   the new numbers (rank/threshold semantics preserved), not from old outputs.
+R6 POSITION_MULTIPLIERS knob: all values 1.0; a structural test asserts the
+   pipeline still applies the knob (set one to 1.1 in-test → salary ×1.1).
+
+CONSTRAINTS:
+- Only edit: the 4 spec files in STEP 0, src/engines/salaryCalculator.ts, the
+  STEP 4 call-site list, scripts/t5-denomination-bridge.ts (new), the test files
+  named in STEP 5, IV spec §13 (T5 row status only, at completion).
+- Do NOT touch: src/engines/ivEngine.ts, src/engines/__tests__/ivEngine.test.ts,
+  spec-docs/reference/iv_oracle.json, scripts/analyze-pool.py,
+  src/data/tierParams.ts, src/data/rosterEngineConstants.ts (import-only),
+  src/data/playerDatabase.ts. The oracle and golden tests G1–G10 are FROZEN.
+- Work directly on codex/franchise-v1-next (no new worktrees).
+- Quote the spec section or D-ruling ID for every change you make.
+- Known pre-existing baseline: 2 failing tests (wpaRuntimeBoundary allowlist,
+  franchiseNarrativeEventEligibility) + 1 suite-order flake. Do not fix, do not
+  worsen — report their status unchanged.
+
+EXPECTED OUTPUT:
+Salary pipeline base = kblIV in absolute dollars; old Steps 1/2/trait-tiers
+deprecated out of the live path; POSITION_MULTIPLIERS all 1.0; zero potency logic
+in salary; rookie-scale hook present and tested; all scale-dependent constants
+re-denominated via a documented BRIDGE; R1–R6 green; specs amended per STEP 0.
+
+VERIFICATION:
+1. npm run build → passes
+2. npx vitest run → R1–R6 pass; ivEngine.test.ts untouched and green; only the
+   2 known baseline failures (+1 flake) remain
+3. node scripts (or ts-node) t5-denomination-bridge.ts → paste full output
+4. grep -rn "calculateBaseRatingSalary" src/ → only deprecated definition, bridge
+   script, and legacy matrix tests; zero live-pipeline callers
+5. grep -n "POTENCY\|countChemistryType" src/engines/salaryCalculator.ts → empty
+
+FORMAT:
+1. Files changed (exact paths) 2. Changes per file w/ spec/D-ruling citation
+3. BRIDGE computation output + every re-denominated constant (old → new)
+4. Verification outputs pasted verbatim
+5. "T5 complete" OR "BLOCKED: [exact reason]"
+
+FAILURE PROTOCOL:
+- Ambiguity in spec or seam → quote the exact section, STOP, ask. Never resolve
+  an ambiguity by choosing what makes a test pass.
+- A constant with no mechanical BRIDGE conversion → STOP, report as
+  FIX-DECISION for JK.
+- Any change that would require touching a protected file → STOP and report.
+- Never summarize or batch changes. Never assume intent — ask.
+
+Use very high reasoning effort. Think step-by-step.
