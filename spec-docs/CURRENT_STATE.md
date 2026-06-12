@@ -420,3 +420,62 @@ useSeasonStats; C-4 ?? 64; M2b resolver test; write-only contractValue note)
 → TV1 → D1/D2. F-138 flag-flip precondition standing. Design track: D0 next.
 **Open pending-JK:** ASG WPA→Fame; Signature Moment card line; fame tier
 names; F2 SOT typos; F4 FA trait spellings; order-flake cleanup (3 members).
+
+
+---
+
+## SEQUENCING RULING — 2026-06-12 (JK, canonical)
+**The entire T-stack is v1 and runs to completion FIRST:** current batch
+(F134-T4 + F135-T2) → TV1 → T6 → {T7, T8} → T9 → T10 (T11 = v1.5; T12
+post-T8). The T-stack needs no design input (IV spec D1-D17 ratified) —
+pure execution, no interleaved design sessions.
+**Then D0 runs as THE cut line:** with F-136/137 closed and the value
+spine finished, D0 produces FRANCHISE_PLAYABLE_V1_DEFINITION.md ruling
+on everything beyond the T-stack (incl. Elimination Mode 6-14 and the
+iPad playtest placement). D1-D8 follow D0; every design session outputs
+its own v1/v2 split against D0's definition. Vision rulings remain
+destination, not build order.
+**F-138 is scoped AFTER D0** (not part of F-13x closure): the offseason
+data-source ticket waits for D0's ruling on what the flows should show;
+the flag stays FALSE throughout the T-stack.
+**AMENDS the 5-session milestone:** was T5+W1+TV1+D1+D2; D1/D2 now
+follow D0, which follows T-stack completion.
+
+
+---
+
+## CURRENT STATE — 2026-06-12 (F134-T4 + F135-T2 arc CLOSED — F-13x DEBT RETIRED)
+**Branch:** codex/franchise-v1-next. **This commit:** T4 + F135-T2 +
+ADDENDUM 1 + sequencing-ruling docs + session docs (combined closure, post
+dual "DELTA VERIFIED").
+**MILESTONE:** FINDING-136 FULLY RESOLVED (25/25 $M sites canonicalized or
+deleted) + FINDING-137 FIXED-AND-CLEANED. ActiveTradeFlow gone (−1,306;
+TradeFlow renders the console unconditionally, franchiseId required). 9 dead
+files deleted incl. the C-7 duplicate; FranchiseStats + its contract-test
+block excised (ADDENDUM 1, JK-ruled); un-rendered totalGames removed from
+useFranchiseData; M2b resolver gap closed (mutant re-run RED).
+**Suite baseline:** 7,113 tests / 380 files. Characterized set unchanged:
+fixed wpaRuntimeBoundary + franchiseNarrativeEventEligibility; order-flakes
+(conditional-solo) franchiseManualSmokeFixture + GameTrackerLaunchState +
+franchiseOffseasonGuards.component. CLI: prefix `NODE_ENV= `; node
+~/.nvm/versions/node/v20.20.0/bin.
+**SEQUENCING RULING IN EFFECT (FINDING-141):** T-stack to completion as
+pure execution → D0 cut line → D1-D8 → F-138 → flag flip → iPad playtest
+exit gate. Amendment notices live in KBL_V1_EXECUTION_PLAN.md +
+FRANCHISE_ENGINE_MAP.md.
+**NEXT TASK: TV1 — True Value canonical pass.** First ticket of the
+T-stack run (TV1 → T6 → {T7, T8} → T9 → T10). Contract not yet drafted —
+first action of next session: read IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC
+§3.8 (salary-spec seam) + SALARY_SYSTEM_SPEC relativity/True Value
+sections, then draft. ROUTE: Codex 5.5 | high (or very high if TV math
+touches state) → Fable 5 CLI audit.
+**Cleanup candidates (F135-T3-class, opportunistic):** C-8 orphan
+useWARCalculations copy (src_figma/app/hooks); C-5 dual milestoneAggregator;
+order-flake root-cause (3 members); engines/index.ts barrel deadness;
+excluded engines wake with their design sessions (calibration→T12,
+calendar/trade-deadline→schedule design, fanMorale params→D3).
+**Process canon added:** auditor runs combined gates (never builders);
+every changed file must appear in builder reports incl. mechanically-forced
+test/mock adjustments (template update pending next contract).
+**Open pending-JK:** ASG WPA→Fame; Signature Moment card line; fame tier
+names; F2 SOT typos; F4 FA trait spellings.

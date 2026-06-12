@@ -32,7 +32,6 @@ import {
   type FranchiseId,
   type FranchiseMetadata,
   type FranchiseSummary,
-  type FranchiseStats,
   type SeasonSummary,
   type AppSettings,
 } from '../../../utils/franchiseManager';
@@ -151,16 +150,6 @@ describe('Franchise Manager API Contract', () => {
       };
       expect(summary.id).toBe('test-1');
       expect(summary.storageUsedBytes).toBe(0);
-    });
-
-    test('FranchiseStats has expected shape', () => {
-      const stats: FranchiseStats = {
-        totalGames: 0,
-        totalAtBats: 0,
-        totalFameEvents: 0,
-        seasons: [],
-      };
-      expect(stats.seasons).toEqual([]);
     });
 
     test('SeasonSummary has expected shape', () => {

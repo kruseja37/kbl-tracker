@@ -1406,7 +1406,7 @@ export function FranchiseHome() {
           <LeagueLeadersContent />
         )}
         {activeTab === "rosters" && (
-          <TradeFlow seasonId={activeSeasonId} seasonNumber={currentSeason} franchiseId={franchiseId} />
+          <TradeFlow seasonId={activeSeasonId} seasonNumber={currentSeason} franchiseId={franchiseId!} />
         )}
         {activeTab === "allstar" && (
           <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-6">

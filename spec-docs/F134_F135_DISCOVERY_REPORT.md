@@ -169,6 +169,7 @@ Shared precondition for tickets 2-4: the canonical formatter already exists — 
 | C-5 | Dual `milestoneAggregator` copies both call isLeaderTrackingActive (src/utils/ + src/src_figma/utils/, :714 in each) — known dual-copy hazard class | both files :45/:714 |
 | C-6 | AwardsCeremonyFlow uses salary as a universal WAR/merit proxy for every award (B-16 table rows :403-:1454) — award integrity issue independent of denomination | AwardsCeremonyFlow.tsx:403-413 etc. |
 | C-7 | Dead duplicate hook: src/src_figma/app/hooks/useSeasonStats.ts (214 lines, "MAJ-01" header) — zero importers (Captain grep 2026-06-12, all 7 import sites resolve to src/hooks/useSeasonStats.ts); no totalGames reference, so carries no F-135 defect. Fold into F135-T2 cleanup. | Captain verification batch, post-report |
+| C-8 | Second orphan copy: src/src_figma/app/hooks/useWARCalculations.ts (~300 lines, zero importers) — sibling of the deleted src/hooks/useWARCalculations.ts, outside F135-T2's named scope, correctly untouched. F135-T3-class cleanup candidate. (C-7 itself DELETED under F135-T2, 2026-06-12.) | Fable F135-T2-AUDIT disagreement #2 |
 
 ---
 

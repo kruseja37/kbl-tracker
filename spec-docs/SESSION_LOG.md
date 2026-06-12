@@ -3738,3 +3738,59 @@ solo rule's first live exercise, baseline holds. Disagreements 3+3/0-MAJOR.
 F134-T4 (DELETE ActiveTradeFlow, JK-ruled). Then F135-T2 cleanup batch.
 
 **NEXT:** T2+T3 closure commit (Captain-run), then draft F134-T4.
+
+
+## 2026-06-12 (cont.) — F134-T4 + F135-T2 PARALLEL ARC: both VERIFIED; FINDING-136 + 137 CLOSED
+
+**SEQUENCING RULING (JK, canonical — logged this arc):** full T-stack = v1,
+runs to completion first as pure execution; D0 then rules as THE cut line on
+everything beyond; F-138 scoped post-D0; 5-session milestone amended.
+FINDING-141 + amendment notices appended to KBL_V1_EXECUTION_PLAN.md and
+FRANCHISE_ENGINE_MAP.md (any doc claiming sequencing authority got the
+pointer).
+
+**F134-T4 (Codex 5.5 | high):** ActiveTradeFlow DELETED — TradeFlow.tsx
+2,312 → 1,006 (+22/−1,328); export unconditional, franchiseId required;
+one compiler-demanded type-only FranchiseHome hunk (franchiseId!). Last 4
+F-136 sites died with the branch.
+
+**F135-T2 (Codex 5.5 | high):** 9 dead files deleted (useWARCalculations,
+GameTracker orphan trio + their 3 test files [92 tests], SeasonEndFlow, C-7
+duplicate useSeasonStats); un-rendered totalGames removed from
+useFranchiseData (zero readers, six touch points); M2b regression test added.
+Codex correctly BLOCKED D-5: FranchiseStats had a contract-test consumer —
+the per-symbol grep discipline catching what discovery's "non-test: only the
+definition line" phrasing concealed. JK RULING: delete interface + test
+block (test was defending dead API surface; no named future claim).
+Captain executed as ADDENDUM 1 (three excisions; grep zero / 19/19 / tsc
+clean) — below the threshold where a Codex round-trip adds safety.
+
+**Captain spot-check catches (pre-audit):** (1) unreported
+FranchiseHomeLaunch.test.tsx hunk = stale vi.mock of deleted SeasonEndFlow
+— mechanically necessary, D-6-class, builder underreported; (2)
+RetirementFlow = FOURTH stock-data flow (denomination-clean; F-138 scope
+addendum logged); (3) T4 contract's totality grep was Captain-overbroad
+(same-named file-local converters exist in 4 flows — audit note issued).
+
+**Fable dual audit: "F134-T4 DELTA VERIFIED" + "F135-T2 DELTA VERIFIED."**
+Console region byte-identical by hunk arithmetic; every deadness grep
+re-proven independently; name-collision guard held (live SeasonSummary page
+untouched + routed); M2b mutant re-applied → RED, killed by exactly the new
+test; suite count reconciled EXACTLY (7,205 − 92 + 1 − 1 = 7,113/380).
+Disagreements 2+3/0-MAJOR. NEW CANDIDATE C-8: second orphan
+useWARCalculations copy (src_figma/app/hooks, zero importers) →
+F135-T3-class list.
+
+**MILESTONE: FINDING-136 FULLY RESOLVED (all 25 sites) + FINDING-137
+FIXED-AND-CLEANED. The F-13x denomination/metadata debt is CLOSED** (F-138
+deliberately post-D0 per the sequencing ruling).
+
+**Process lessons banked:** gate assignment enforced in ADDENDUM v2 wording
+(auditor runs the gate — held this arc); builder reporting-discipline gap
+(unreported-but-necessary file changes) → next contract template gains
+"EVERY changed file must appear in the report, including mechanically-
+forced test/mock adjustments."
+
+**NEXT:** batch closure commit (Captain-run), then **TV1 — True Value
+canonical pass** opens the pure-execution T-stack run (TV1 → T6 → {T7,T8}
+→ T9 → T10 → D0).

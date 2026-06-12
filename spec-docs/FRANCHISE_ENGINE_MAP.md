@@ -419,3 +419,15 @@ The reporter revisiting his own wrong grade is free, earned narrative.
 
 ---
 *End FRANCHISE_ENGINE_MAP.md v0.2 — DRAFT pending JK review/commit*
+
+
+---
+
+## AMENDMENT — 2026-06-12 SEQUENCING RULING (JK, canonical)
+§7 (Relationship to the Current Build Sequence) and §8 (Operating Plan)
+are AMENDED by the sequencing ruling in CURRENT_STATE.md (2026-06-12):
+no design session interleaves with the T-stack. Order: T-stack completion
+(→T10) → D0 cut line (FRANCHISE_PLAYABLE_V1_DEFINITION.md) → D1-D8 per
+D0's ruling, each producing its own v1/v2 split. The §6 session queue
+order stands but its START is gated on T-stack completion. F-138 scoped
+post-D0.

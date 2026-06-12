@@ -57,13 +57,6 @@ export interface FranchiseSummary {
   controlledTeamName?: string;
 }
 
-export interface FranchiseStats {
-  totalGames: number;
-  totalAtBats: number;
-  totalFameEvents: number;
-  seasons: SeasonSummary[];
-}
-
 export interface SeasonSummary {
   seasonId: string;
   seasonNumber: number;

@@ -3175,3 +3175,350 @@ the single salary authority — acceptable).
 Captain; harmless here (Captain spot-checked + Fable re-ran the gate), but
 future parallel addenda will state: the combined gate is run by Captain or
 the auditor, NEVER by a builder agent.
+
+
+---
+
+## CONTRACT: F134-T4 — DELETE ActiveTradeFlow legacy branch (drafted 2026-06-12)
+
+**ROUTE: Codex 5.5 | high → Fable 5 CLI audit | high reasoning effort**
+(HIGH-by-rule: trade state file, though the deleted code is unreachable)
+
+```
+You are the Dead-Code Surgeon for KBL Tracker's TradeFlow. This ticket
+is a DELETION: remove the unreachable legacy trade UI in its entirety.
+You add no features and re-denominate nothing — dead code does not get
+fixed, it gets removed.
+
+GOAL:
+Delete ActiveTradeFlow and everything that exists only to serve it,
+killing the last 4 FINDING-136 sites and ~1,200 lines of drift risk,
+while leaving the live FranchiseTransactionConsole path byte-untouched.
+
+SOURCE OF TRUTH:
+- FINDING-136 + spec-docs/F134_F135_DISCOVERY_REPORT.md section 1.2
+  (R5/R6 reachability proof: export branch at TradeFlow.tsx:1096;
+  ActiveTradeFlow requires falsy franchiseId, which no caller produces
+  — FranchiseHome:1409 always passes it)
+- JK RULING (2026-06-12): DELETE rather than re-denominate; recommended
+  disposition of the export branch = franchiseId becomes a REQUIRED
+  prop and the falsy branch is removed entirely
+
+ENV: prefix `NODE_ENV= `; node ~/.nvm/versions/node/v20.20.0/bin.
+
+CONSTRAINTS:
+- Only edit: src/src_figma/app/components/TradeFlow.tsx
+- Permitted IF REQUIRED by the prop-type tightening: a caller-side type
+  adjustment in FranchiseHome.tsx ONLY if the compiler demands it
+  (report the exact error first; expected: none, since FranchiseHome
+  already passes franchiseId)
+- Do NOT touch: FranchiseTransactionConsole and the entire live console
+  region — zero diff lines inside it; franchiseTradeAdapter.ts;
+  useOffseasonState.ts; useOffseasonData.ts; the other three flows;
+  frozen IV files
+- Quote FINDING-136 for every deletion block
+
+DELETION SCOPE (verify each is legacy-only by fresh grep before
+deleting; anything with a live consumer gets REPORTED, not deleted):
+1. ActiveTradeFlow function + every screen/section local to it
+2. convertToLocalPlayer / convertToLocalTeam (legacy ×1e6 converters)
+3. The mock-AI proposals block (incl. salaryImpact literals)
+4. The local formatSalary (legacy ÷1e6) + the beat-reporter salary
+   warning threshold
+5. Legacy-only local types/constants/state hooks orphaned by 1-4
+6. The export-branch conditional: TradeFlow renders the console path
+   unconditionally; franchiseId becomes required in TradeFlowProps
+
+EXPECTED OUTPUT:
+1. grep -n "ActiveTradeFlow|convertToLocalPlayer|convertToLocalTeam"
+   src/ -r -> zero hits anywhere
+2. grep -nE "1000000|1e6|/ 1000000" TradeFlow.tsx -> zero functional
+   hits (the last F-136 sites die with the branch)
+3. Reported line-count delta (expect roughly -1,100 to -1,300)
+4. The live console region byte-identical: produce a diff proof that
+   no hunk falls inside the console code span
+5. No new tests REQUIRED (deletion is pinned by grep + build + the
+   existing guards coverage); if the prop tightening breaks any
+   existing test, that test was pinning dead code -> BLOCK and report
+   the test name + assertion, do NOT modify the test
+
+VERIFICATION:
+- NODE_ENV= npm run build -> passes (the compiler is the primary
+  deletion-correctness check)
+- NODE_ENV= npx vitest run src/src_figma/__tests__/franchiseMode/
+  franchiseOffseasonGuards.component.test.tsx -> 24/24 (the live
+  TradeFlow console canary)
+- NODE_ENV= full suite -> characterized baseline only (fixed:
+  wpaRuntimeBoundary, franchiseNarrativeEventEligibility; order-flakes
+  conditional-solo: franchiseManualSmokeFixture, GameTrackerLaunchState,
+  franchiseOffseasonGuards.component); count expected UNCHANGED at
+  7,205 (no test files added or removed)
+
+FORMAT: files changed · deletion blocks (each citing F-136 + the fresh
+grep proving legacy-only) · console-region untouched proof ·
+verification output · "F134-T4 complete" OR "BLOCKED: [exact reason]"
+FAILURE PROTOCOL: any symbol in the deletion scope with a live consumer
+-> report, do not delete; any test failure from prop tightening ->
+BLOCK with specifics; any temptation to edit console code -> STOP;
+never assume intent — ask.
+
+Use high reasoning effort. Think step-by-step.
+```
+
+
+---
+
+## ADDENDUM v2: F134-T4 + F135-T2 PARALLEL EXECUTION (2026-06-12)
+
+Same pattern as the T2+T3 addendum with ONE correction baked in from that
+arc's lesson: **the combined gate (build + full suite) is run by Captain or
+the auditor, NEVER by a builder agent.** Each builder runs only its focused
+verification (greps, focused tests, mutation runs where applicable) and
+reports "PARALLEL MODE: combined gate deferred." Files are disjoint
+(TradeFlow.tsx vs the F135-T2 list — verified no overlap). PRECONDITION
+satisfied: closure commit 2dfc2d6 landed; tree carries only this pair's
+deltas during execution. Expected suite-count movement is NONZERO this
+time (F135-T2 adds one test and may remove dead-module test files) — the
+combined gate reconciles the exact delta against both reports.
+
+---
+
+## CONTRACT: F135-T2 — dead-code cleanup batch (drafted 2026-06-12)
+
+**ROUTE: Codex 5.5 | high → Fable 5 CLI audit | high reasoning effort**
+
+```
+You are the Dead-Code Surgeon for the F135 cleanup batch. Every deletion
+in this contract must be INDEPENDENTLY re-proven dead by fresh grep
+before you delete it. The discovery report's verdicts are your map, not
+your evidence — anything with a live consumer gets REPORTED, not deleted.
+
+SOURCE OF TRUTH:
+- FINDING-137 + spec-docs/F134_F135_DISCOVERY_REPORT.md section 2
+  (consumer table B-5..B-18) and section 4 (C-4, C-7)
+- F135-T1 audit disagreement #2 (M2b test-strength gap)
+
+ENV: prefix `NODE_ENV= `; node ~/.nvm/versions/node/v20.20.0/bin.
+
+SCOPE — DELETE (each item: fresh grep for importers/references across
+src/ excluding archived-* and the item's own files; zero hits required;
+paste the grep; then delete):
+D-1. src/hooks/useWARCalculations.ts (B-5)
+D-2. src/components/GameTracker/PlayerCard.tsx,
+     src/components/GameTracker/SeasonSummary.tsx,
+     src/components/GameTracker/WARDisplay.tsx (B-5/B-6 orphan trio —
+     careful: SeasonSummary name collides with the LIVE
+     src/src_figma/app/pages/SeasonSummary.tsx; verify paths exactly)
+D-3. src/src_figma/app/components/SeasonEndFlow.tsx (B-7)
+D-4. src/src_figma/app/hooks/useSeasonStats.ts (C-7 dead duplicate —
+     NOT src/hooks/useSeasonStats.ts, the live one)
+D-5. The unused FranchiseStats interface in src/utils/
+     franchiseManager.ts (B-12) — type-only deletion from a LIVE file;
+     zero references required, file otherwise untouched
+D-6. Test files belonging EXCLUSIVELY to modules deleted above (fresh
+     grep each; report names + test-count impact)
+
+SCOPE — CHANGE:
+C-1. src/src_figma/hooks/useFranchiseData.ts (~:580): the computed
+     totalGames (`?? 64`) is un-rendered per B-3. Fresh-grep every
+     reader of the hook's totalGames return field AND nextGame
+     .totalGames. ZERO readers -> delete the field from the return +
+     the nextGame object + the computation. ANY reader -> BLOCK and
+     report (do not re-source; that becomes a JK decision).
+C-2. Add ONE test to src/hooks/__tests__/useSeasonStats.seasonLength
+     .test.ts: resolveSeasonGamesForWAR({ gamesPerTeam: 0, ... })
+     === 162 (closes the M2b surviving-mutant gap; gamesPerTeam <= 0
+     and non-finite now pinned)
+
+EXPLICITLY OUT OF SCOPE (documented exclusions — do NOT delete):
+calibrationService.ts (candidate T12 recalibration seed);
+tradeEngine.ts deadline fns (future trade-window design);
+calendarEngine.ts (future schedule design); fanMoraleEngine.ts
+(D3 design pending; protected class); FreeAgentSigning.contractValue
+(forward-use field); archived-* dirs.
+
+EXPECTED OUTPUT:
+1. Per-item: the fresh grep (verbatim) proving zero consumers, then
+   the deletion
+2. C-1 resolution (deleted with grep proof, or BLOCKED with the reader)
+3. C-2 test added; run focused: 7/7 (6 existing + 1 new)
+4. Line-count delta per file; total files deleted
+5. PARALLEL MODE: combined gate deferred
+
+FOCUSED VERIFICATION (builder-scope only):
+- NODE_ENV= npx vitest run src/hooks/__tests__/useSeasonStats
+  .seasonLength.test.ts -> 7/7
+- NODE_ENV= npx tsc --noEmit (type-level deletion check; full build
+  belongs to the combined gate)
+- grep sweeps: zero references to every deleted symbol/file
+
+FORMAT: per-item evidence blocks · C-1/C-2 results · deltas ·
+"F135-T2 complete" OR "BLOCKED: [exact item + reason]"
+FAILURE PROTOCOL: ANY live consumer -> report, do not delete, continue
+with remaining items, list partials at the end; name-collision doubt
+(D-2) -> stop and report paths; never assume intent — ask.
+
+Use high reasoning effort. Think step-by-step.
+```
+
+
+---
+
+## CONTRACT: F134-T4-AUDIT (drafted 2026-06-12)
+
+**ROUTE: Fable 5 CLI | audit | high reasoning effort** (same session as
+F135-T2-AUDIT, sequential; the combined gate runs ONCE in this session
+and covers both — per ADDENDUM v2 the gate is the auditor's, not a
+builder's)
+
+```
+You are the Delta Auditor for F134-T4 (ActiveTradeFlow deletion). Audit
+against CONTRACT F134-T4 + ADDENDUM v2.
+
+SCOPE OF DIFF: TradeFlow.tsx (+ FranchiseHome.tsx ONLY if the contract's
+compiler-demanded exception was exercised — if so, verify the hunk is
+type-only). CARVE-OUTS: spec-docs/ Captain writes; the F135-T2 sibling
+diff (its full file list) — hash/diff-verify T4 touched none of them.
+Any OTHER file: automatic MAJOR.
+
+ENV: prefix `NODE_ENV= `; node ~/.nvm/versions/node/v20.20.0/bin.
+
+DELTAS:
+D1. TOTALITY: grep -rn "ActiveTradeFlow|convertToLocalPlayer|
+    convertToLocalTeam" src/ -> zero hits; grep -nE "1000000|1e6"
+    TradeFlow.tsx -> zero functional hits. The last 4 FINDING-136
+    sites are dead — FINDING-136 fully resolved pending your verdict.
+D2. CONSOLE UNTOUCHED (critical): the live FranchiseTransactionConsole
+    region is byte-identical — verify via diff hunk spans; zero hunks
+    inside the console code. franchiseTradeAdapter.ts CLEAN.
+D3. EXPORT SHAPE: TradeFlow renders the console path unconditionally;
+    franchiseId required in props; FranchiseHome:1409-class call site
+    type-checks; no orphaned legacy types/constants remain (sweep the
+    file for unused declarations the deletion stranded).
+D4. NO TEST PINNED DEAD CODE: confirm no existing test was modified or
+    deleted by T4; guards canary 24/24.
+D5. DELETION-ONLY CHARACTER: the diff contains no added logic beyond
+    the prop-type tightening — enumerate added lines; anything beyond
+    types/exports is a DEVIATION.
+D6. COMBINED GATE (run once, covers F135-T2 too): NODE_ENV= npm run
+    build; NODE_ENV= full suite vs characterized baseline (fixed:
+    wpaRuntimeBoundary, franchiseNarrativeEventEligibility;
+    order-flakes conditional-solo: franchiseManualSmokeFixture,
+    GameTrackerLaunchState, franchiseOffseasonGuards.component).
+    Reconcile the EXACT test-count delta against both builders'
+    reports (T4 expects zero count change; F135-T2 reports +1 new test
+    and any dead test files removed).
+
+FORMAT: EVIDENCE LOG D1-D6 · DISAGREEMENTS (mandatory) · VERDICT:
+"F134-T4 DELTA VERIFIED" / "DEVIATIONS — [n]" / "BLOCKED: [reason]"
+FAILURE PROTOCOL: never patch; pre-audit git state re-verified before
+reporting.
+
+Use high reasoning effort. Think step-by-step.
+```
+
+---
+
+## CONTRACT: F135-T2-AUDIT (drafted 2026-06-12)
+
+**ROUTE: Fable 5 CLI | audit | high reasoning effort** (same session as
+F134-T4-AUDIT)
+
+```
+You are the Delta Auditor for F135-T2 (dead-code cleanup batch). Audit
+against CONTRACT F135-T2 + ADDENDUM v2.
+
+SCOPE OF DIFF: the contract's D-1..D-6 + C-1/C-2 file list. CARVE-OUTS:
+spec-docs/ Captain writes; the F134-T4 sibling diff (TradeFlow.tsx) —
+hash-verify untouched by this ticket. Any OTHER file: automatic MAJOR.
+
+ENV: prefix `NODE_ENV= `; node ~/.nvm/versions/node/v20.20.0/bin.
+
+DELTAS:
+D1. DEADNESS RE-PROVEN: for EVERY deleted file/symbol, re-run the
+    zero-consumer grep YOURSELF (do not trust the builder's paste);
+    special attention to the D-2 name collision — the LIVE
+    src/src_figma/app/pages/SeasonSummary.tsx must be untouched and
+    still imported by its route.
+D2. LIVE-FILE SURGERY: franchiseManager.ts diff = the FranchiseStats
+    interface removal ONLY; useFranchiseData.ts diff = the un-rendered
+    totalGames removal ONLY (or BLOCKED per contract) — verify no
+    behavioral hunk in either live file beyond the sanctioned ones,
+    and that useFranchiseData's hook return type change breaks no
+    consumer (compile + grep its destructuring sites).
+D3. EXCLUSIONS HELD: calibrationService.ts, tradeEngine.ts,
+    calendarEngine.ts, fanMoraleEngine.ts all CLEAN (git diff --quiet
+    each) — the conservative-exclusion ruling was respected.
+D4. M2b CLOSED: the new resolver test pins gamesPerTeam: 0 -> 162;
+    re-run the previously-surviving mutant (relax the resolver guard
+    to bare `!== null`) -> now RED; restore byte-identical.
+D5. TEST-FILE ACCOUNTING: every removed test file belonged exclusively
+    to a deleted module (re-grep); focused seasonLength run 7/7.
+D6. COMBINED GATE: if F134-T4-AUDIT already ran it this session,
+    cross-reference; otherwise run here. Reconcile exact count delta.
+
+FORMAT: EVIDENCE LOG D1-D6 · DISAGREEMENTS (mandatory) · VERDICT:
+"F135-T2 DELTA VERIFIED" / "DEVIATIONS — [n]" / "BLOCKED: [reason]"
+FAILURE PROTOCOL: never patch; restore the D4 mutant byte-identical;
+pre-audit git state re-verified before reporting.
+
+Use high reasoning effort. Think step-by-step.
+```
+
+
+---
+
+## F135-T2 ADDENDUM 1 — D-5 resolution (JK-approved 2026-06-12, Captain-executed)
+
+Codex correctly BLOCKED D-5: FranchiseStats had one consumer — the
+'FranchiseStats has expected shape' block in franchiseManager.contract
+.test.ts (a contract test pinning dead API surface; zero production
+consumers, triple-confirmed: discovery B-12, Codex fresh grep, Captain
+grep). JK RULING: delete BOTH the interface and its test block (the test
+was defending dead code against cleanup; no named future claim, unlike
+the four excluded engines). Captain executed three surgical excisions:
+the interface (franchiseManager.ts), the type import line, and the test
+block (other 19 contract tests untouched). Verified: grep zero
+FranchiseStats hits anywhere; contract test 19/19; tsc --noEmit clean.
+
+## AUDIT NOTES for F134-T4-AUDIT + F135-T2-AUDIT (Captain, pre-handoff)
+
+1. D-5 status for F135-T2-AUDIT D2/D3: franchiseManager.ts now carries
+   the sanctioned FranchiseStats removal (ADDENDUM 1) — the audit's
+   "BLOCKED-held, file CLEAN" expectation is superseded; verify the
+   three excisions instead, and that contract test = 19 tests.
+2. EXPECTED ARTIFACT: FranchiseHomeLaunch.test.tsx hunk = removal of a
+   stale vi.mock stub for the deleted SeasonEndFlow (mock of a
+   nonexistent module errors at resolution; build green post-deletion
+   proves FranchiseHome never imported it). D-6-class. Codex
+   UNDERREPORTED this file — flag the reporting gap, not the change.
+3. T4 totality grep nuance: convertToLocalPlayer/convertToLocalTeam
+   hits in FinalizeAdvanceFlow.tsx and RetirementFlow.tsx are
+   independent same-named LOCAL functions of those flows, not TradeFlow
+   references — zero ActiveTradeFlow hits anywhere is the real
+   totality check. (Captain's T4 contract wording was over-broad.)
+4. RetirementFlow swept clean for $M (Captain 2026-06-12); F-138 scope
+   addendum logged (four stock-data flows, not three).
+5. Combined-gate count expectation: 7,113 (7,205 - 3 dead test files
+   [~92 tests] + 1 M2b test - 1 FranchiseStats contract test = exact
+   reconciliation is the audit's D5/D6 job).
+6. FranchiseHome.tsx T4 hunk = `franchiseId!` non-null assertion
+   (compiler-demanded, type-only, single line).
+
+**Audit record (2026-06-12):** Fable dual verdict: **"F134-T4 DELTA VERIFIED" +
+"F135-T2 DELTA VERIFIED."** T4: totality proven (zero ActiveTradeFlow hits
+anywhere; convertToLocal* survivors are independent file-local functions per
+audit note 3); console region byte-identical by three-hunk arithmetic
+(lines 162-1093 untouched); export unconditional, franchiseId required;
+stranded-declaration sweep zero; numstat +22/−1,328; zero TradeFlow tests
+touched. T2: every deadness grep re-proven by Fable itself; name-collision
+guard held (live SeasonSummary page untouched + still routed); both live-file
+surgeries exactly sanctioned (incl. ADDENDUM 1 three excisions, contract test
+19/19); exclusions all CLEAN; M2b mutant re-applied -> RED, killed by exactly
+the new test, restored hash-identical; 92 deleted tests accounted (21+41+30).
+Combined gate: build green; suite 7,110/3 of 7,113 — EXACT reconciliation
+(7,205 − 92 + 1 − 1); one flake fired, solo-green. Disagreements 2+3/0-MAJOR:
+underreporting of the FranchiseHomeLaunch mock removal flagged as a builder
+reporting-discipline gap (change itself sanctioned); NEW CANDIDATE C-8 —
+second orphan useWARCalculations copy in src_figma/app/hooks (zero importers,
+correctly out-of-scope, F135-T3-class). **FINDING-136 FULLY RESOLVED.**

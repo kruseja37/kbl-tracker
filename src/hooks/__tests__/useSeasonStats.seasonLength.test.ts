@@ -175,6 +175,14 @@ describe('useSeasonStats WAR season-length resolution', () => {
     }))).toBe(64);
   });
 
+  test('FINDING-137/M2b: non-positive gamesPerTeam falls back to the default', () => {
+    expect(resolveSeasonGamesForWAR(metadata({
+      seasonId: 'resolver-zero-games-per-team',
+      gamesPerTeam: 0,
+      totalGames: 512,
+    }))).toBe(162);
+  });
+
   test('FINDING-137/R1: missing gamesPerTeam ignores nonzero league-row counts', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 

@@ -73,7 +73,6 @@ export interface NextGameInfo {
   awayRecord: string;
   homeRecord: string;
   gameNumber: number;
-  totalGames: number;
   date?: string;
 }
 
@@ -91,7 +90,6 @@ export interface UseFranchiseDataReturn {
   seasonName: string;
   currentWeek: number;
   gamesPlayed: number;
-  totalGames: number;
 
   // Data
   standings: LeagueStandings;
@@ -577,7 +575,6 @@ export function useFranchiseData(franchiseId?: string, currentSeason: number = 1
   const seasonNumber = seasonData.seasonMetadata?.seasonNumber ?? 1;
   const seasonName = seasonData.seasonMetadata?.seasonName ?? 'Season 1';
   const gamesPlayed = seasonData.seasonMetadata?.gamesPlayed ?? 0;
-  const totalGames = seasonData.seasonMetadata?.totalGames ?? 64;
   const currentWeek = calculateWeek(gamesPlayed);
 
   // Next game info — loaded from franchise schedule
@@ -603,7 +600,6 @@ export function useFranchiseData(franchiseId?: string, currentSeason: number = 1
             awayRecord: awayStanding ? `${awayStanding.wins}-${awayStanding.losses}` : '0-0',
             homeRecord: homeStanding ? `${homeStanding.wins}-${homeStanding.losses}` : '0-0',
             gameNumber: game.gameNumber,
-            totalGames: totalGames,
           });
         } else if (!cancelled) {
           setNextGame(null);
@@ -614,7 +610,7 @@ export function useFranchiseData(franchiseId?: string, currentSeason: number = 1
     }
     loadNextGame();
     return () => { cancelled = true; };
-  }, [currentSeason, franchiseId, totalGames, gamesPlayed, realStandings]);
+  }, [currentSeason, franchiseId, gamesPlayed, realStandings]);
 
   // Refresh function
   const refresh = useCallback(async () => {
@@ -640,7 +636,6 @@ export function useFranchiseData(franchiseId?: string, currentSeason: number = 1
     seasonName,
     currentWeek,
     gamesPlayed,
-    totalGames,
     standings,
     battingLeaders,
     pitchingLeaders,

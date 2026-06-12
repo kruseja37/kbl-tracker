@@ -159,10 +159,6 @@ vi.mock('@/app/components/FreeAgencyFlow', () => ({
   FreeAgencyFlow: () => <div data-testid="free-agency-flow" />,
 }));
 
-vi.mock('@/app/components/SeasonEndFlow', () => ({
-  SeasonEndFlow: () => <div data-testid="season-end-flow" />,
-}));
-
 vi.mock('@/app/components/PlayoffSeedingFlow', () => ({
   PlayoffSeedingFlow: () => <div data-testid="playoff-seeding-flow" />,
 }));

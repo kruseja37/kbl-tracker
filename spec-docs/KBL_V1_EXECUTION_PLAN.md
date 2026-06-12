@@ -548,3 +548,16 @@ Per SESSION_RULES.md operating protocol (all routes use Codex 5.5):
 3. Read the feature-specific spec being touched
 4. State current slice, phase, routing, hard boundaries, and typed event contract in the prompt
 5. After implementation: build passes, tests pass, smoke in real app, explicit confirm before closing ticket
+
+
+---
+
+## AMENDMENT — 2026-06-12 SEQUENCING RULING (JK, canonical)
+This plan's phase ordering is AMENDED by the sequencing ruling logged in
+CURRENT_STATE.md (2026-06-12): the IV/value-spine T-stack (current batch →
+TV1 → T6 → {T7,T8} → T9 → T10) runs to completion FIRST as pure execution;
+THEN the D0 scope session produces FRANCHISE_PLAYABLE_V1_DEFINITION.md as
+the cut line for everything beyond the T-stack — including re-ratifying or
+re-sequencing the items in THIS plan. Until D0 closes, treat this plan's
+item list as candidate scope, not committed order. F-138 (offseason
+data-source) is scoped post-D0; the offseason flag stays FALSE.
