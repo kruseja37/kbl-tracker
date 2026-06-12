@@ -4108,3 +4108,35 @@ letter, behavior-neutral by D6 proof, pre-completes TV2's folded cleanup;
 Captain recommends RATIFY (JK confirmation pending); TV2's cleanup item is
 hereby pre-completed. (2) R-6 residue in the salary-calculation path →
 FINDING-144.
+
+**PHASE 0 SIGN-OFF (Captain, 2026-06-12) — TV2 PHASE 1 ADDENDUM:**
+REBUILD direction APPROVED. Binding decisions:
+1. Canonical projected designation rows in shared trackerDb (additive v14,
+   same hazard discipline as v13) are the SINGLE source of designation
+   truth. Player-embedded designation persistence RETIRES.
+2. syncActiveTeamMvpAceDesignationsFromEligibility and its TeamHub
+   load-time call (TeamHubContent.tsx:1605) are REMOVED, not bypassed —
+   display surfaces never write state (one-directional-writes ruling).
+   TeamHub READS canonical rows; badges per §17.8 projected semantics.
+3. Stale player-embedded designation fields: stop writing, leave inert
+   (pre-release, regenerable); scrubbing them is a logged cleanup
+   candidate, NOT TV2 scope.
+4. Per Phase 0 classifications: franchiseDesignations.ts REBUILD around
+   canonical storage ('projected'|'locked' statuses only — 'active'
+   retires); Eligibility AMEND (add §17 floors via gamesPerTeam pattern
+   + batting games / pitching appearances+starts rows cited in Phase 0;
+   unblock FanFav/Albatross via valueDelta from getFranchiseTrueValueRows);
+   ReadinessReport AMEND (trust flips projected-only + limitation string);
+   morale bridges ADOPT as guardrails — effects stay OFF;
+   fanFavoriteEngine remains NO-TOUCH (retirement = future cleanup once
+   unreferenced).
+5. Explicit Phase 1 only-edit list: franchiseDesignations.ts,
+   franchiseDesignationEligibility.ts,
+   franchiseDesignationReadinessReport.ts, trackerDb.ts (v14 additive
+   block only), processCompletedGame.ts (extend the gate chain hunk),
+   TeamHubContent.tsx (sync removal + badge read wiring), ONE new storage
+   module (franchiseDesignationStorage.ts), and their test files. All
+   other Phase 0-inventoried files: read-only.
+6. Added test pin: zero designation writes occur on TeamHub mount
+   (mutation: reintroduce the sync call → RED).
+All other TV2 contract terms unchanged. Proceed to Phase 1.
