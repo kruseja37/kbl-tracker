@@ -3654,3 +3654,83 @@ Use very high reasoning effort. Think step-by-step.
 ```
 
 **Execution record:** [pending — Codex run + Fable audit verdict logged here]
+
+
+---
+
+# TV1-AUDIT — Fable 5 CLI audit of the TV1 build (contract)
+**Drafted:** 2026-06-12 | **Builder report:** Codex 5.5, "BLOCKED" only on
+audit-tool availability (procedural misread — audit is this separate stage);
+build side complete with full verification pasted.
+**ROUTE: Fable 5 CLI | high reasoning effort**
+
+```
+You are the independent auditor for TV1 (True Value canonical pass).
+You did not write this code. Assume failure until proven otherwise.
+
+GOAL:
+Verify the TV1 build against its contract (PROMPT_CONTRACTS.md, TV1 section,
+rulings R-1..R-5) using fresh evidence. Verdict: "TV1 DELTA VERIFIED" or
+itemized MAJOR/MINOR disagreements.
+
+SOURCE OF TRUTH:
+- TV1 contract + ratified rulings R-1..R-5 (PROMPT_CONTRACTS.md)
+- SALARY_SYSTEM_SPEC_UPDATED.md "True Value Calculation" (516-658)
+- IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md §3.8 / D15
+- FINDING-142 (FINDINGS_142_onwards.md) — the DISCOVERY-1 pWAR fix
+- Audit against: git diff of the TV1 changeset on codex/franchise-v1-next
+
+AUDIT DIRECTIVES (in priority order):
+D1 — FINDING-142 blast radius. The pWAR-composition fix changes WAR preview
+  totals for pitchers/two-way players, shifting percentiles and True Value
+  across shared peer pools. Verify: (a) the combination math is
+  bWAR + pWAR persisted rows, no double-count when a stat-row totalWar
+  already includes both; (b) enumerate which existing tests' expected
+  values changed because of it and confirm each change is this mechanism,
+  not test-bending; (c) confirm the fix is minimal — no other value-input
+  semantics altered.
+D2 — Canonical method (R-2). calculateTrueValue is the ONLY implementation;
+  step-percentile per spec; deleted helpers gone (re-run the greps
+  yourself). Preview consumes the engine function; preview-only behavior
+  otherwise preserved.
+D3 — Persistence + trigger (R-4). Row shape per contract; written in
+  processCompletedGame strictly AFTER successful WAR persistence, same
+  seasonId scope; WAR failure → skip + warn, no stale-WAR rows. Mutation:
+  force WAR persist failure, prove no TV row.
+D4 — Trust flags (R-5). valueDeltaTrustedForDesignations and friends remain
+  hard-typed false; zero new consumers act on TV (grep designations/
+  morale/fanFavorite for new reads).
+D5 — No-touch sweep. ivEngine.ts, frozen oracle, tierParams.ts,
+  warOrchestrator.ts internals, franchiseDesignations*.ts, fanMoraleEngine,
+  fanFavoriteEngine, offseason flows: prove untouched by the diff.
+D6 — Builder report oddity: the before/after example cites "expected wins /
+  baseline" fixture values (14.0/6.0 → 12.0/10.0). TV1 must not touch
+  expected wins. Confirm this is fixture nomenclature in a TeamHub test,
+  not scope creep; name the file:line.
+D7 — Combined gate (auditor runs it, never the builder):
+  NODE_ENV= npm run build; full suite. Reconcile counts EXACTLY:
+  7,113 + 9 = 7,122 tests, 380 + 2 = 382 files; failures limited to the
+  characterized set (fixed: wpaRuntimeBoundary,
+  franchiseNarrativeEventEligibility; order-flakes conditional-solo:
+  franchiseManualSmokeFixture, GameTrackerLaunchState,
+  franchiseOffseasonGuards.component).
+D8 — Mutation re-runs on the five contracted test categories (step-
+  percentile goldens; merge-group/whole-league fallback; WAR-fail-no-row;
+  totalGames grep-pin; recompute-on-new-game). Each mutant RED, killed by
+  exactly its intended test; restore hash-verified.
+
+CARVE-OUTS:
+- Sibling spec-doc appends (PROMPT_CONTRACTS, FINDINGS_142_onwards,
+  FRANCHISE_ENGINE_MAP D0-agenda note) are sanctioned session documentation,
+  not build-diff violations.
+
+FORMAT:
+1. Verdict line first.
+2. Per-directive evidence (commands + exact output).
+3. Disagreements: MAJOR/MINOR, each with file:line.
+4. New finding candidates if any.
+
+Use high reasoning effort. Think step-by-step.
+```
+
+**Execution record:** [pending — Fable verdict logged here]
