@@ -153,6 +153,12 @@ export async function recalculateSalaries(
       name: `${player.firstName} ${player.lastName}`,
       isPitcher,
       primaryPosition: player.primaryPosition as PlayerForSalary['primaryPosition'],
+      secondaryPosition: player.secondaryPosition,
+      pitcherRole: isPitcher
+        ? (player.primaryPosition === 'RP' || player.primaryPosition === 'CP' || player.primaryPosition === 'SP/RP'
+          ? player.primaryPosition
+          : 'SP')
+        : undefined,
       ratings: isPitcher
         ? { velocity: player.velocity, junk: player.junk, accuracy: player.accuracy }
         : { power: player.power, contact: player.contact, speed: player.speed, fielding: player.fielding, arm: player.arm },
@@ -160,9 +166,11 @@ export async function recalculateSalaries(
         ? { power: player.power, contact: player.contact, speed: player.speed, fielding: player.fielding, arm: player.arm }
         : undefined,
       age: player.age,
+      bats: player.bats,
       personality: player.personality as PlayerForSalary['personality'],
       fame: player.fame,
       traits: [player.trait1, player.trait2].filter((t): t is string => !!t),
+      arsenal: player.arsenal,
     };
 
     const newSalary = calculateSalary(salaryPlayer);

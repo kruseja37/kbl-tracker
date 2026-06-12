@@ -2236,3 +2236,11 @@ Gap 2 — WorldSeries data gap:
 PLAYOFF_STATS store has no write path (confirmed in FINDING-113). WorldSeries.tsx reads from `playoffStorage` but the playoff stats it attempts to read are never written — display will always be empty.
 
 **Pattern Map update:** Row 24 → Follows Pattern: PARTIAL | Finding: FINDING-123
+
+
+### FINDING-134
+**Date:** 2026-06-11 | **Phase:** T5 arc (salary seam) | **Status:** CONFIRMED (code read + grep; no test coverage)
+**Files:** src/src_figma/app/components/FinalizeAdvanceFlow.tsx (:130, :378-380, :396, :793, :2071), TradeFlow.tsx (:128, :1185), AwardsCeremonyFlow.tsx (:116, :1364, :1513, :1800, :1915), FreeAgencyFlow.tsx (:541)
+**Evidence:** grep for `/ 1000000` and `* 1000000` after T5 re-denomination. Four Figma-app components carry bespoke $M-scale salary logic invisible to the T5 call-site sweep (they read `player.salary` from the data layer without importing salaryCalculator): bidirectional conversions ("Convert from millions to dollars" ×1e6 in TradeFlow trade matching and FreeAgencyFlow contractValue; ÷1e6 display formatters), hardcoded grade→dollar tables (C+ = 1,000,000), and absolute thresholds (salary ≥ 10,000,000 → +15% risk). TeamHubContent.tsx had the same pattern (:270, :591) but HAS failing test coverage and is fixed under T5-FIX-2.
+**Impact:** Under canonical kblIV dollars, ×1e6 conversions inflate values ~10⁶ in trade salary-matching and FA contract flows; ÷1e6 formatters render real salaries as "$0.0M"; grade tables and thresholds are ~300× off (BRIDGE=300.032521). Severity depends on whether each flow is wired to live franchise data or still dummy-data (UNVERIFIED per component — these are src_figma flows; see dummy-data-scrubber skill). Root lesson: the $M assumption lives wherever `player.salary` is CONSUMED, not just where salaryCalculator is imported; future denomination work must sweep by data-field consumers, not engine importers.
+**Action:** Dedicated verified pass per component (wiring evidence first, then fix): ROUTE: Fable 5 CLI discovery (spec-ui-alignment) → Codex 5.5 | high (TradeFlow/FreeAgencyFlow touch trade/FA state). Do NOT batch-edit blind.

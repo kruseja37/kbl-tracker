@@ -657,7 +657,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
 
     expect(within(rosterTable).getByText('Copied Player')).toBeInTheDocument();
     expect(within(rosterTable).getByText('MLB')).toBeInTheDocument();
-    expect(within(rosterTable).getByText('$3.0M')).toBeInTheDocument();
+    expect(within(rosterTable).getByText('$3.00M')).toBeInTheDocument();
     expect(within(rosterTable).getAllByText('50').length).toBeGreaterThan(0);
     expect(within(rosterTable).getAllByText('Neutral').length).toBeGreaterThan(0);
     expect(within(rosterTable).getByText('1.6 WAR · 7 HR · 21 RBI')).toBeInTheDocument();
@@ -707,7 +707,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(farmRow).not.toBeNull();
     expect(within(farmRow as HTMLElement).getByText('FARM')).toBeInTheDocument();
     expect(within(farmRow as HTMLElement).getAllByText('Hidden').length).toBeGreaterThanOrEqual(2);
-    expect(within(farmRow as HTMLElement).getByText('$1.2M')).toBeInTheDocument();
+    expect(within(farmRow as HTMLElement).getByText('$4.0K')).toBeInTheDocument();
     expect(within(farmRow as HTMLElement).getByText('50')).toBeInTheDocument();
     expect(farmRow as HTMLElement).not.toHaveTextContent(/A-|trueGrade|leadership|92|Sprinter|B scout|scout truth/i);
     expect(within(rosterTable).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
@@ -859,9 +859,9 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(valueWinsRegion).getByText('CURRENT SALARY CONTEXT')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('NO SALARY MOVEMENT')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Team payroll proof')).toBeInTheDocument();
-    expect(within(valueWinsRegion).getByText('$4.0M')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('$4.00M')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Roster salary sum')).toBeInTheDocument();
-    expect(within(valueWinsRegion).getByText('$3.0M')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('$3.00M')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Current salary rows')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Contract years proof')).toBeInTheDocument();
     expect(within(valueWinsRegion).getAllByText('1/1').length).toBeGreaterThanOrEqual(2);
@@ -953,7 +953,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
           playerId: 'farm-hidden',
           playerName: 'Farm Hidden',
           rosterStatus: 'FARM',
-          salary: 1.2,
+          salary: 3999.57,
         }),
       ],
       teamRecords: [{
@@ -963,7 +963,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
         statsScopeId: 'franchise-1-season-2',
         seasonNumber: 2,
         teamId: 'team-1',
-        payrollBaseline: 3000001.2,
+        payrollBaseline: 3003999.57,
         playerCount: 2,
         payrollBaselineState: {
           status: 'stable-baseline',
@@ -981,10 +981,10 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     const rosterTable = await screen.findByRole('table', { name: /Franchise roster scan table/i });
     const valueWinsRegion = await screen.findByRole('region', { name: /Team True Value and Expected Wins Preview/i });
 
-    expect(within(rosterTable).getByText('$3.0M')).toBeInTheDocument();
-    expect(within(rosterTable).getByText('$1.2M')).toBeInTheDocument();
+    expect(within(rosterTable).getByText('$3.00M')).toBeInTheDocument();
+    expect(within(rosterTable).getByText('$4.0K')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Team payroll proof')).toBeInTheDocument();
-    expect(within(valueWinsRegion).getAllByText('$3.0M').length).toBeGreaterThanOrEqual(2);
+    expect(within(valueWinsRegion).getAllByText('$3.00M').length).toBeGreaterThanOrEqual(2);
     expect(within(valueWinsRegion).getByText('Roster salary sum')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('MATCHES PAYROLL BASELINE')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Current salary rows')).toBeInTheDocument();
@@ -1942,12 +1942,12 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(farmRegion).getByText(/Potential:/i)).toBeInTheDocument();
     expect(within(farmRegion).getByText('A-')).toBeInTheDocument();
     expect(within(farmRegion).getByText(/Confidence: medium/i)).toBeInTheDocument();
-    expect(within(farmRegion).getByText(/Salary: \$1\.2M/i)).toBeInTheDocument();
+    expect(within(farmRegion).getByText(/Salary: \$4\.0K/i)).toBeInTheDocument();
     expect(within(farmRegion).queryByText(/Salary: \$1\.0M/i)).not.toBeInTheDocument();
     expect(within(farmRegion).getByText(/Chemistry: Spirited/i)).toBeInTheDocument();
     expect(within(farmRegion).getByText(/Personality: Jolly/i)).toBeInTheDocument();
     expect(within(farmRegion).getByText(/Traits: Sprinter/i)).toBeInTheDocument();
-    expect(within(farmRegion).getByText(/Salary: \$1\.2M/i)).toBeInTheDocument();
+    expect(within(farmRegion).getByText(/Salary: \$4\.0K/i)).toBeInTheDocument();
     expect(within(farmRegion).getByText(/Options used: 1/i)).toBeInTheDocument();
     expect(within(farmRegion).getByText(/Option dates: None/i)).toBeInTheDocument();
     expect(within(farmRegion).getAllByText(/^HIDDEN$/i).length).toBeGreaterThan(0);
@@ -2116,7 +2116,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(dialog).queryByText('ACC')).not.toBeInTheDocument();
     expect(within(dialog).queryByText('ARSENAL')).not.toBeInTheDocument();
     expect(within(dialog).getByText(/Pitching ratings hidden for non-pitcher/i)).toBeInTheDocument();
-    expect(within(dialog).getByText(/\$3\.0M/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/\$3\.00M/i)).toBeInTheDocument();
     expect(within(dialog).getByText('PROFILE EDIT HISTORY')).toBeInTheDocument();
     expect(within(dialog).getByText(/No player-local profile edits recorded/i)).toBeInTheDocument();
     const moraleRegion = within(dialog).getByRole('region', { name: /Player morale spec alignment/i });
@@ -2580,7 +2580,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(dialog).getByText('B')).toBeInTheDocument();
     expect(within(dialog).getByText('A-')).toBeInTheDocument();
     expect(within(dialog).getByText('medium')).toBeInTheDocument();
-    expect(within(dialog).getByText(/\$1\.2M/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/\$4\.0K/i)).toBeInTheDocument();
     expect(within(dialog).getByText('PROFILE EDIT HISTORY')).toBeInTheDocument();
     expect(within(dialog).getByText(/No player-local profile edits recorded/i)).toBeInTheDocument();
     expect(within(dialog).getByText('MANUAL OVERRIDE PREVIEW')).toBeInTheDocument();

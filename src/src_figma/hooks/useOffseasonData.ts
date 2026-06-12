@@ -35,7 +35,7 @@ export interface OffseasonPlayer {
   position: Position;
   grade: Grade;
   personality: Personality;
-  salary: number; // In millions
+  salary: number; // Canonical T5 dollars
   teamId: string;
   age: number;
   seasons: number;
@@ -181,6 +181,8 @@ function calculatePlayerSalary(player: PlayerData): number {
     name: player.name,
     isPitcher: player.isPitcher,
     primaryPosition: mapPositionToSalaryPosition(player.primaryPosition, player.isPitcher),
+    secondaryPosition: player.secondaryPosition,
+    pitcherRole: player.isPitcher ? (player.pitcherRole ?? 'SP') : undefined,
     ratings,
     battingRatings: player.batterRatings ? {
       power: player.batterRatings.power,
@@ -190,14 +192,16 @@ function calculatePlayerSalary(player: PlayerData): number {
       arm: player.batterRatings.arm,
     } : undefined,
     age: player.age,
+    bats: player.bats,
     fame: 0, // Could be loaded from career stats
     traits: [player.traits.trait1, player.traits.trait2].filter(Boolean) as string[],
+    arsenal: player.arsenal,
+    armSlot: player.armSlot,
   };
 
   try {
     const result = calculateSalary(salaryPlayer);
-    // calculateSalary returns a number directly (in dollars)
-    return Math.round(result / 100000) / 10; // Convert to millions
+    return result;
   } catch {
     // Fallback calculation
     const avgRating = player.isPitcher
@@ -226,12 +230,12 @@ function convertToOffseasonPlayer(player: PlayerData): OffseasonPlayer {
     teamId: player.teamId,
     age: player.age,
     seasons: Math.max(1, Math.floor((player.age - 20) * 0.7)), // Estimate
-    war: salary * 0.5, // WAR estimate from salary
+    war: salary / 20_000, // T5 dollar-denominated rough display estimate
     jerseyNumber: parseInt(player.id.slice(-2), 36) % 99 + 1, // Generate from ID
     awards: [],
     careerStats: player.isPitcher
-      ? `${Math.round(salary * 10)} Wins | ${(4.0 - salary * 0.1).toFixed(2)} ERA`
-      : `.${Math.round(280 + salary * 2)} AVG | ${Math.round(salary * 3)} HR`,
+      ? `${Math.round(salary / 2_000)} Wins | ${(4.0 - salary / 100_000).toFixed(2)} ERA`
+      : `.${Math.round(280 + salary / 5_000)} AVG | ${Math.round(salary / 10_000)} HR`,
     // Include ratings for display
     power: player.batterRatings?.power,
     contact: player.batterRatings?.contact,

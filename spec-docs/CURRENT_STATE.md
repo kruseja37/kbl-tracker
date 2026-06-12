@@ -223,3 +223,32 @@ Stats/Recognition specs.
 **Open pending-JK:** ASG WPA→Fame; Signature Moment on card; fame tier names.
 **Stale-data flags:** SUBSYSTEM_MAP Feb-era (Transaction/Farm rows predate
 May–Jun checkpoints); F-086 vs F-119 Relationships disagreement → D6.
+
+
+---
+
+## CURRENT STATE — 2026-06-11 (T5 arc CLOSED)
+**Branch:** codex/franchise-v1-next. **This commit:** T5 + T5-FIX + T5-FIX-2 +
+contracts + FINDING-134 + session docs (single closure commit, post
+T5-FIX-VERIFY: "T5-FIX DELTA VERIFIED").
+**What exists & is trustworthy:** salary pipeline base = computeIV().kblIV in
+CANONICAL DOLLARS (old $M scale dead; BRIDGE=300.032521 documented in
+scripts/t5-denomination-bridge.ts); D15 potency-neutral salary; rookie-scale
+hook (0.50× replaces age factor; ledger = T7); prospect placeholders bridged;
+TeamHub on canonical formatSalary; regression suite R1–R6 mutation-pinned;
+specs amended (salary-spec potency reprice killed, MODE_2 §15.5 ×2, IV §3.8 DH
+row). ivEngine/oracle/tierParams untouched and frozen.
+**Suite baseline:** 2 fixed failures (wpaRuntimeBoundary,
+franchiseNarrativeEventEligibility) + ≥2 order-flakes (franchiseManualSmokeFixture,
+GameTrackerLaunchState — pass solo). **CLI verification MUST prefix `NODE_ENV= `**
+(login shell exports NODE_ENV=production; poisons vitest with ~1,800 false fails).
+**NEXT TASK: W1 — WAR orchestrator persistence + gamesPerTeam metadata.**
+ROUTE: Codex 5.5 | high → Fable 5 CLI audit. Contract not yet drafted — first
+action of next session (read MODE2_SYSTEMS_INTEGRATION_MAP.md §4.4 first).
+Then TV1 → T6. Design track: D0 scope session next.
+**Open pending-JK:** F5 armSlot franchise-data gap (fold into W1?); F6 PlayerCard
+isTwoWay heuristic (defer to T6/T9?); F7 remove dead barrel re-export (recommended);
+FINDING-134 residual $M flows (TradeFlow/FA/Awards/FinalizeAdvance — Fable
+discovery → Codex 5.5 high, wiring unverified); parked TRAIT_INTEGRATION DH-row
+deletion; order-flake cleanup; ASG WPA→Fame; Signature Moment card line; fame
+tier names; F2 SOT typos (~15); F4 FA trait spellings (4).

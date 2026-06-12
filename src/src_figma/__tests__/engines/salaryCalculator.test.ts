@@ -4,7 +4,7 @@
  * Tests the salary calculation engine including:
  * - Position player weight calculations (3:3:2:1:1)
  * - Pitcher weight calculations (1:1:1)
- * - Position multipliers (C, SS premium, etc.)
+ * - T5 position multiplier knobs (defaulted to 1.0)
  * - Trait modifiers (Clutch, Choker, etc.)
  * - Pitcher batting bonus
  * - Two-way player premium
@@ -133,24 +133,24 @@ describe('Salary Constants', () => {
   });
 
   describe('Position Multipliers', () => {
-    test('catcher has highest multiplier (1.15)', () => {
-      expect(POSITION_MULTIPLIERS['C']).toBe(1.15);
+    test('catcher multiplier defaults to neutral T5 knob', () => {
+      expect(POSITION_MULTIPLIERS['C']).toBe(1.00);
     });
 
-    test('shortstop is premium (1.12)', () => {
-      expect(POSITION_MULTIPLIERS['SS']).toBe(1.12);
+    test('shortstop multiplier defaults to neutral T5 knob', () => {
+      expect(POSITION_MULTIPLIERS['SS']).toBe(1.00);
     });
 
-    test('center field is above average (1.08)', () => {
-      expect(POSITION_MULTIPLIERS['CF']).toBe(1.08);
+    test('center field multiplier defaults to neutral T5 knob', () => {
+      expect(POSITION_MULTIPLIERS['CF']).toBe(1.00);
     });
 
-    test('DH is lowest for position players (0.88)', () => {
-      expect(POSITION_MULTIPLIERS['DH']).toBe(0.88);
+    test('DH multiplier defaults to neutral T5 knob', () => {
+      expect(POSITION_MULTIPLIERS['DH']).toBe(1.00);
     });
 
-    test('reliever is discounted (0.85)', () => {
-      expect(POSITION_MULTIPLIERS['RP']).toBe(0.85);
+    test('reliever multiplier defaults to neutral T5 knob', () => {
+      expect(POSITION_MULTIPLIERS['RP']).toBe(1.00);
     });
 
     test('starter is baseline (1.00)', () => {
@@ -207,12 +207,12 @@ describe('Salary Constants', () => {
   });
 
   describe('Salary Bounds', () => {
-    test('max salary is 50M', () => {
-      expect(MAX_SALARY).toBe(50);
+    test('max salary is bridge-denominated kblIV dollars', () => {
+      expect(MAX_SALARY).toBe(166648.6);
     });
 
-    test('min salary is 0.5M', () => {
-      expect(MIN_SALARY).toBe(0.5);
+    test('min salary is bridge-denominated kblIV dollars', () => {
+      expect(MIN_SALARY).toBe(1666.49);
     });
   });
 
@@ -263,15 +263,15 @@ describe('Salary Constants', () => {
   });
 
   describe('ROI Thresholds', () => {
-    test('elite value is 1.0 WAR per $1M', () => {
-      expect(ROI_THRESHOLDS.ELITE_VALUE).toBe(1.0);
+    test('elite value is bridge-denominated WAR per $100k', () => {
+      expect(ROI_THRESHOLDS.ELITE_VALUE).toBe(30.003);
     });
 
-    test('great value is 0.5 WAR per $1M', () => {
-      expect(ROI_THRESHOLDS.GREAT_VALUE).toBe(0.5);
+    test('great value is bridge-denominated WAR per $100k', () => {
+      expect(ROI_THRESHOLDS.GREAT_VALUE).toBe(15.002);
     });
 
-    test('bust is 0 WAR per $1M', () => {
+    test('bust is 0 WAR per $100k', () => {
       expect(ROI_THRESHOLDS.BUST).toBe(0);
     });
   });
@@ -589,32 +589,32 @@ describe('Age Factor', () => {
 // ============================================
 
 describe('Position Multiplier', () => {
-  test('returns catcher premium', () => {
-    expect(getPositionMultiplier('C')).toBe(1.15);
+  test('returns neutral catcher knob', () => {
+    expect(getPositionMultiplier('C')).toBe(1.00);
   });
 
-  test('returns shortstop premium', () => {
-    expect(getPositionMultiplier('SS')).toBe(1.12);
+  test('returns neutral shortstop knob', () => {
+    expect(getPositionMultiplier('SS')).toBe(1.00);
   });
 
-  test('returns center field premium', () => {
-    expect(getPositionMultiplier('CF')).toBe(1.08);
+  test('returns neutral center field knob', () => {
+    expect(getPositionMultiplier('CF')).toBe(1.00);
   });
 
-  test('returns first base discount', () => {
-    expect(getPositionMultiplier('1B')).toBe(0.92);
+  test('returns neutral first base knob', () => {
+    expect(getPositionMultiplier('1B')).toBe(1.00);
   });
 
-  test('returns DH discount', () => {
-    expect(getPositionMultiplier('DH')).toBe(0.88);
+  test('returns neutral DH knob', () => {
+    expect(getPositionMultiplier('DH')).toBe(1.00);
   });
 
   test('returns starter baseline', () => {
     expect(getPositionMultiplier('SP')).toBe(1.00);
   });
 
-  test('returns reliever discount', () => {
-    expect(getPositionMultiplier('RP')).toBe(0.85);
+  test('returns neutral reliever knob', () => {
+    expect(getPositionMultiplier('RP')).toBe(1.00);
   });
 
   test('returns 1.0 for undefined position', () => {

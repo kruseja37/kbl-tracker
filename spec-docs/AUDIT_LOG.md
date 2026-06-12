@@ -1064,3 +1064,5 @@ Still unresolved. FINDING-047 fallback path only has base state, not full scoreb
 | FINDING-131 | 2026-02-21 | DECISION | SCOUTING_SYSTEM_SPEC | Scout grade deviation: fat-tail distribution. Keep max-deviation-by-position structure; replace uniform probability with fat-tail model — small misses most common, rare outliers beyond current hard cap possible. |
 | FINDING-132 | 2026-02-21 | DECISION | DYNAMIC_DESIGNATIONS_SPEC / PERSONALITY_SYSTEM_SPEC | Team captain: v1 scope. Formal designation driven by Charisma hidden modifier. Needs full spec. |
 | FINDING-133 | 2026-02-21 | DECISION | NARRATIVE_SYSTEM_SPEC / new UI flow spec | Beat reporter pre-decision warning: v1 scope. Blocking modal before call-up/send-down executes. Conditional on relationship/narrative data. Needs UI flow spec. |
+
+| FINDING-134 | 2026-06-11 | CONFIRMED | FinalizeAdvanceFlow/TradeFlow/AwardsCeremonyFlow/FreeAgencyFlow .tsx | Residual $M-scale salary logic (×/÷1e6 conversions, grade tables, thresholds) in 4 Figma flows invisible to T5 sweep; full text in FINDINGS_056_onwards.md |

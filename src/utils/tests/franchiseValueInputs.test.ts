@@ -635,7 +635,7 @@ describe('franchise value input contract', () => {
       seasonLength: { gamesPerTeam: 24, inningsPerGame: 6 },
       salaryBaseline: {
         calculationVersion: 'salary-baseline-v1',
-        teamPayrolls: { 'team-1': 1.2 },
+        teamPayrolls: { 'team-1': 3999.57 },
       },
     });
     mocks.getAllFranchisePlayers.mockResolvedValue([
@@ -672,7 +672,7 @@ describe('franchise value input contract', () => {
     });
     const row = report.rows.find((candidate) => candidate.playerId === 'hidden-high');
 
-    expect(row?.salary).toBe(1.2);
+    expect(row?.salary).toBe(3999.57);
     expect(row?.salaryBaselineAvailable).toBe(true);
     expect(row?.limitations).toContain(
       'Hidden FARM prospect salary uses draft/scouting-safe public context; true ratings and true grade are not salary inputs.',

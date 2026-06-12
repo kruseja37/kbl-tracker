@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { MAX_SALARY, MIN_SALARY } from '../../engines/salaryCalculator';
 import type { Player } from '../franchisePlayerStorage';
 import {
   calculateFranchiseCurrentSalary,
@@ -8,6 +9,7 @@ import {
   getVisibleSafeFranchisePlayerSalary,
   withInitialFranchiseSalary,
 } from '../franchiseSalary';
+import { prospectSalaryForDraftRound } from '../prospectSalary';
 
 function makePlayer(overrides: Partial<Player> = {}): Player {
   return {
@@ -46,6 +48,20 @@ function makePlayer(overrides: Partial<Player> = {}): Player {
 }
 
 describe('franchise salary helpers', () => {
+  test('bridges hidden FARM prospect draft placeholders into canonical salary dollars', () => {
+    const values = [1, 2, 3, 4].map(prospectSalaryForDraftRound);
+
+    expect(values).toEqual([6665.94, 3999.57, 2333.08, MIN_SALARY]);
+    expect(prospectSalaryForDraftRound(4)).toBe(MIN_SALARY);
+    for (const value of values) {
+      expect(value).toBeGreaterThanOrEqual(MIN_SALARY);
+      expect(value).toBeLessThanOrEqual(MAX_SALARY);
+    }
+    expect(values[0]).toBeGreaterThan(values[1]);
+    expect(values[1]).toBeGreaterThan(values[2]);
+    expect(values[2]).toBeGreaterThan(values[3]);
+  });
+
   test('calculates deterministic ratings-only salary for initial franchise persistence', () => {
     const player = makePlayer();
 
@@ -78,9 +94,10 @@ describe('franchise salary helpers', () => {
     expect(withPerformance.calculationVersion).toBe(FRANCHISE_CURRENT_SALARY_CALCULATION_VERSION);
     expect(withPerformance.status).toBe('calculated');
     expect(withPerformance.adaptiveStandards.gamesPerSeason).toBe(32);
-    expect(withPerformance.breakdown?.baseSalary).toBeGreaterThan(0.5);
-    expect(withPerformance.breakdown?.positionMultiplier).toBeGreaterThan(1);
-    expect(withPerformance.breakdown?.traitModifier).toBeGreaterThan(1);
+    expect(withPerformance.breakdown?.ivBase).toBe(withPerformance.breakdown?.baseSalary);
+    expect(withPerformance.breakdown?.baseSalary).toBeGreaterThan(1666.49);
+    expect(withPerformance.breakdown?.positionMultiplier).toBe(1);
+    expect(withPerformance.breakdown?.traitModifier).toBe(1);
     expect(withPerformance.breakdown?.ageFactor).toBe(1.1);
     expect(withPerformance.breakdown?.performanceModifier).toBeGreaterThan(1);
     expect(withPerformance.breakdown?.personalityModifier).toBe(1.05);
@@ -149,16 +166,16 @@ describe('franchise salary helpers', () => {
       },
     } as Partial<Player> & Record<string, unknown>);
 
-    expect(calculateHiddenFarmProspectSalaryFromPublicContext(highTrueRatings)).toBe(1.2);
-    expect(calculateHiddenFarmProspectSalaryFromPublicContext(lowTrueRatings)).toBe(1.2);
-    expect(withInitialFranchiseSalary(highTrueRatings).salary).toBe(1.2);
-    expect(withInitialFranchiseSalary(lowTrueRatings).salary).toBe(1.2);
+    expect(calculateHiddenFarmProspectSalaryFromPublicContext(highTrueRatings)).toBe(3999.57);
+    expect(calculateHiddenFarmProspectSalaryFromPublicContext(lowTrueRatings)).toBe(3999.57);
+    expect(withInitialFranchiseSalary(highTrueRatings).salary).toBe(3999.57);
+    expect(withInitialFranchiseSalary(lowTrueRatings).salary).toBe(3999.57);
     expect(withInitialFranchiseSalary(highTrueRatings).salary).not.toBe(calculateFranchisePlayerSalary({
       ...highTrueRatings,
       ratingRevealState: 'revealed',
     }));
-    expect(getVisibleSafeFranchisePlayerSalary(highTrueRatings)).toBe(1.2);
-    expect(calculateFranchiseCurrentSalary(highTrueRatings).salary).toBe(1.2);
+    expect(getVisibleSafeFranchisePlayerSalary(highTrueRatings)).toBe(3999.57);
+    expect(calculateFranchiseCurrentSalary(highTrueRatings).salary).toBe(3999.57);
   });
 
   test('revealed FARM players keep known salary context instead of hidden prospect fallback', () => {

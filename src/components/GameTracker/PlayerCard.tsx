@@ -108,14 +108,19 @@ function toSalaryFormat(player: PlayerData, fame: number): PlayerForSalary {
     isTwoWay: player.isPitcher && player.batterRatings !== undefined &&
               (player.batterRatings.contact >= 40 || player.batterRatings.power >= 40),
     primaryPosition: player.primaryPosition as PlayerForSalary['primaryPosition'],
+    secondaryPosition: player.secondaryPosition,
+    pitcherRole: player.isPitcher ? (player.pitcherRole ?? 'SP') : undefined,
     ratings: player.isPitcher
       ? player.pitcherRatings!
       : player.batterRatings!,
     battingRatings: player.batterRatings,
     age: player.age,
+    bats: player.bats,
     personality: undefined,
     fame,
     traits: [player.traits.trait1, player.traits.trait2].filter(Boolean) as string[],
+    arsenal: player.arsenal,
+    armSlot: player.armSlot,
   };
 }
 
@@ -489,7 +494,7 @@ export function PlayerCard({
             {showSalaryBreakdown && stats.salaryBreakdown && (
               <div className="border-t-2 border-retro-blue p-2 bg-retro-cream text-xs space-y-1">
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Base (from ratings)</span>
+                  <span className="text-gray-600">Base (kblIV)</span>
                   <span>{formatSalary(stats.salaryBreakdown.baseSalary)}</span>
                 </div>
                 {stats.salaryBreakdown.positionMultiplier !== 1.0 && (

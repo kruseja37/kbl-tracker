@@ -186,7 +186,7 @@ describe('startup prospect draft', () => {
     const prospects = players.filter((player) => player.sourceDatabase === 'startup-prospect-draft');
     expect(prospects).toHaveLength(20);
     expect(prospects.every((player) => player.ratingRevealState === 'hidden')).toBe(true);
-    expect(prospects.every((player) => player.salary >= 0.5 && player.salary <= 2)).toBe(true);
+    expect(prospects.every((player) => player.salary >= 1666.49 && player.salary <= 6665.94)).toBe(true);
     expect(prospects.every((player) =>
       player.leagueAssignments?.some((assignment) =>
         assignment.leagueId === LEAGUE_ID &&

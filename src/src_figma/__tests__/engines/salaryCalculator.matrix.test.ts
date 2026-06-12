@@ -76,12 +76,8 @@ describe('Salary Calculator — Boundary-Value Matrix', () => {
     });
     const salary = calculateSalary(player);
     expect(Number.isFinite(salary)).toBe(true);
-    // FINDING: Salary exceeds MAX_SALARY=50 for max-rated players (~54.7)
-    // Engine does not clamp calculateSalary output to MAX_SALARY
-    expect(salary).toBeGreaterThan(30); // should be high
-    if (salary > MAX_SALARY) {
-      console.warn(`FLAGGED: SAL-02 salary ${salary.toFixed(1)} exceeds MAX_SALARY=${MAX_SALARY}`);
-    }
+    expect(salary).toBeGreaterThan(MIN_SALARY);
+    expect(salary).toBeLessThanOrEqual(MAX_SALARY);
   });
 
   // ─── Case 3: Minimum rated pitcher ───────────────
@@ -102,25 +98,26 @@ describe('Salary Calculator — Boundary-Value Matrix', () => {
     const salary = calculateSalary(player);
     expect(Number.isFinite(salary)).toBe(true);
     expect(salary).toBeLessThanOrEqual(MAX_SALARY);
-    expect(salary).toBeGreaterThan(25);
+    expect(salary).toBeGreaterThan(MIN_SALARY);
   });
 
   // ─── Case 5: Position multipliers ────────────────
-  it('SAL-05: C > DH position multiplier', () => {
+  it('SAL-05: position multiplier knobs default to neutral T5 values', () => {
     const cMult = getPositionMultiplier('C' as any);
     const dhMult = getPositionMultiplier('DH' as any);
-    expect(cMult).toBeGreaterThan(dhMult);
-    expect(cMult).toBe(1.15);
-    expect(dhMult).toBe(0.88);
+    expect(cMult).toBe(1.0);
+    expect(dhMult).toBe(1.0);
+    expect(POSITION_MULTIPLIERS['SP']).toBe(1.0);
+    expect(POSITION_MULTIPLIERS['RP']).toBe(1.0);
   });
 
   // ─── Case 6: Same player, different positions ────
-  it('SAL-06: SS salary > 1B salary (same ratings)', () => {
+  it('SAL-06: same synthetic ratings are not repriced by position knobs', () => {
     const ssPlayer = makeBatter({ primaryPosition: 'SS' as any });
     const firstBPlayer = makeBatter({ primaryPosition: '1B' as any });
     const ssSalary = calculateSalary(ssPlayer);
     const firstBSalary = calculateSalary(firstBPlayer);
-    expect(ssSalary).toBeGreaterThan(firstBSalary);
+    expect(ssSalary).toBe(firstBSalary);
   });
 
   // ─── Case 7: Weighted rating formula (batter) ────
@@ -201,12 +198,8 @@ describe('Salary Calculator — Boundary-Value Matrix', () => {
     const maxSalary = calculateSalary(maxPlayer);
 
     expect(minSalary).toBeGreaterThanOrEqual(MIN_SALARY);
-    // FINDING: calculateSalary does NOT clamp to MAX_SALARY
-    // maxSalary for all-99 C player is ~56.1
-    if (maxSalary > MAX_SALARY) {
-      console.warn(`FLAGGED: SAL-12 max salary ${maxSalary.toFixed(1)} exceeds MAX_SALARY=${MAX_SALARY}`);
-    }
-    expect(maxSalary).toBeGreaterThan(0);
+    expect(maxSalary).toBeLessThanOrEqual(MAX_SALARY);
+    expect(maxSalary).toBeGreaterThan(MIN_SALARY);
   });
 
   // ─── Case 13: Expected WAR ───────────────────────

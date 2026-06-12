@@ -2072,7 +2072,7 @@ Each player is assigned one of the five Chemistry Types (Competitive, Spirited, 
 **System Wiring:**
 1. **Aggregate Contribution:** Every player's assigned Chemistry type contributes to the team's total count for that category.
 2. **Global Activation:** The Potency Level applies to *all* traits within a category team-wide. If a team has 7 players in a category, every player on that team possessing a trait tied to that category operates at Level 3 Maximum Potency.
-3. **Salary Impact:** Trait Potency is calculated at the moment of salary generation. A higher Potency Level results in a higher salary valuation for traits in that category, reflecting the significant competitive advantage provided by maximized chemistry.
+3. **Salary Impact (D15):** IV and salary are potency-neutral at the L2 reference forever. Realized potency is construction surplus captured downstream by Effective Ratings → True Value (T6+); salary never reprices for chemistry composition.
 
 ---
 

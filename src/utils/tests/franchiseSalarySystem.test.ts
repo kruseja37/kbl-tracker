@@ -351,14 +351,14 @@ describe('franchise salary system persistence', () => {
     mocks.saveFranchisePlayer.mockImplementation(async (_franchiseId, nextPlayer) => nextPlayer);
 
     await upsertFranchiseSeasonSalariesFromValueInputReport(report([
-      row({ playerId: 'hidden-high', rosterStatus: 'FARM', salary: 1.2 }),
-      row({ playerId: 'hidden-low', rosterStatus: 'FARM', salary: 1.2 }),
+      row({ playerId: 'hidden-high', rosterStatus: 'FARM', salary: 3999.57 }),
+      row({ playerId: 'hidden-low', rosterStatus: 'FARM', salary: 3999.57 }),
     ]));
 
     const savedSalaries = mocks.saveFranchisePlayer.mock.calls.map((call) => (call[1] as Player).salary);
     const savedFactors = mocks.saveFranchisePlayer.mock.calls.map((call) => (call[1] as Player).salaryFactors);
     const savedHigh = mocks.saveFranchisePlayer.mock.calls[0]?.[1] as Player & { prospectProfile?: Record<string, unknown> };
-    expect(savedSalaries).toEqual([1.2, 1.2]);
+    expect(savedSalaries).toEqual([3999.57, 3999.57]);
     expect(savedHigh.prospectProfile?.trueGrade).toBe('A');
     expect(savedHigh.salaryFactors).toEqual({
       source: 'hidden-farm-public-context',
@@ -450,7 +450,7 @@ describe('franchise salary system persistence', () => {
       player({ id: 'mlb', salary: 4, leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'MLB' }] }),
       player({
         id: 'farm',
-        salary: 1.2,
+        salary: 3999.57,
         ratingRevealState: 'hidden',
         leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'FARM' }],
         prospectProfile: {
@@ -463,8 +463,8 @@ describe('franchise salary system persistence', () => {
 
     expect(proof.playerCount).toBe(3);
     expect(proof.salariedPlayerCount).toBe(3);
-    expect(proof.teamPayrolls['team-1']).toBeCloseTo(5.2);
-    expect(proof.totalSalary).toBeCloseTo(5.2);
+    expect(proof.teamPayrolls['team-1']).toBeCloseTo(4003.57, 2);
+    expect(proof.totalSalary).toBeCloseTo(4003.57, 2);
   });
 
   test('missing report scope blocks persistence without writes', async () => {

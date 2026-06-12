@@ -1657,6 +1657,8 @@ function computeInitialSalary(player: PlayerData, primaryPosition: Position): nu
     name: player.name,
     isPitcher: player.isPitcher,
     primaryPosition: posMap[primaryPosition] || 'UTIL',
+    secondaryPosition: player.secondaryPosition,
+    pitcherRole: player.isPitcher ? (player.pitcherRole ?? 'SP') : undefined,
     ratings: player.isPitcher
       ? { velocity: player.pitcherRatings?.velocity ?? 50, junk: player.pitcherRatings?.junk ?? 50, accuracy: player.pitcherRatings?.accuracy ?? 50 }
       : { power: player.batterRatings?.power ?? 50, contact: player.batterRatings?.contact ?? 50, speed: player.batterRatings?.speed ?? 50, fielding: player.batterRatings?.fielding ?? 50, arm: player.batterRatings?.arm ?? 50 },
@@ -1664,9 +1666,12 @@ function computeInitialSalary(player: PlayerData, primaryPosition: Position): nu
       ? { power: player.batterRatings.power, contact: player.batterRatings.contact, speed: player.batterRatings.speed, fielding: player.batterRatings.fielding, arm: player.batterRatings.arm }
       : undefined,
     age: player.age,
+    bats: player.bats,
     personality: 'Competitive',
     fame: 0,
     traits: [player.traits.trait1, player.traits.trait2].filter((t): t is string => !!t),
+    arsenal: player.arsenal,
+    armSlot: player.armSlot,
   };
   return calculateSalary(salaryPlayer);
 }

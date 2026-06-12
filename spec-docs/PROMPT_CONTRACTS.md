@@ -1788,3 +1788,280 @@ FAILURE PROTOCOL:
 - Never summarize or batch changes. Never assume intent — ask.
 
 Use very high reasoning effort. Think step-by-step.
+
+
+---
+
+## PROMPT CONTRACT: T5-AUDIT — Salary Seam Audit (Fable 5 CLI)
+**Date:** 2026-06-11 | **Route:** Claude Code CLI | Fable 5 | high reasoning effort
+**Pattern:** builder/auditor decorrelation. Audit the working-tree `git diff 165a78a`
+and rerun verification yourself — NEVER grade the builder's self-report.
+**ENV WARNING (Captain-verified 2026-06-11):** this machine's login shell exports
+`NODE_ENV=production`, which silently breaks vitest (production React, node: builtin
+resolution). Prefix EVERY node/vitest/tsx command with `NODE_ENV= ` or your runs
+will produce ~1,800 false failures. Treat any mass failure as harness suspicion
+FIRST.
+
+---
+
+You are the T5 Auditor. The builder's report is a claim, not evidence. T5 work is
+UNCOMMITTED — audit `git diff 165a78a` plus untracked
+scripts/t5-denomination-bridge.ts and src/engines/__tests__/salarySeam.t5.test.ts.
+
+W1. FROZEN-BOUNDARY INTEGRITY: `git diff 165a78a --name-only` must NOT contain
+    src/engines/ivEngine.ts, src/engines/__tests__/ivEngine.test.ts,
+    spec-docs/reference/iv_oracle.json, scripts/analyze-pool.py,
+    src/data/tierParams.ts, src/data/rosterEngineConstants.ts,
+    src/data/playerDatabase.ts. Any hit = MAJOR, stop. Then rerun
+    `NODE_ENV= npx vitest run src/engines/__tests__/ivEngine.test.ts` — 11/11 or
+    the seam corrupted the engine's inputs somehow (MAJOR).
+W2. PIPELINE TRUTH (read salaryCalculator.ts line-by-line against IV spec §3.8):
+    base must be computeIV(p).kblIV — confirm rawIV is NOT consumed anywhere in
+    the live path. Modifier order: kblIV × ageFactor × perfMod × fameMod ×
+    personalityMod(FA only); relativity/True Value machinery structurally
+    unchanged. POSITION_MULTIPLIERS all 1.0 AND still applied as a knob. Zero
+    chemistry/potency logic (grep POTENCY, countChemistryType, chemistry — must
+    be empty in the live path). Deprecated functions present but unreferenced by
+    the pipeline.
+W3. BRIDGE HONESTY: read scripts/t5-denomination-bridge.ts — it must call the
+    LEGACY deprecated functions for the old side (with the OLD position
+    multipliers, which are now 1.0 in the live table — verify the script carries
+    its own legacy-multiplier copy and that copy matches the pre-T5 git values
+    via `git show 165a78a:src/engines/salaryCalculator.ts`). Rerun it:
+    BRIDGE=300.032521 must reproduce. Then verify every re-denominated constant
+    in salaryCalculator.ts is old-value × or ÷ BRIDGE (hand-check at least
+    MIN_SALARY, MAX_SALARY, ROI_THRESHOLDS, BASE_DRAFT_ALLOCATION against the
+    pre-T5 values from git show) and carries the CALIBRATE flag. Any constant
+    that is hand-tuned rather than bridged = MAJOR (silent rebalancing).
+W4. TEST HONESTY (salarySeam.t5.test.ts vs contract R1–R6): R1 uses stock-pool
+    players from iv_oracle.json `players` (NOT Eovaldi/deGrom anchors) with
+    hard-coded oracle kblIV values — verify the hard-coded dollars against the
+    oracle JSON yourself. R2 potency-neutrality is a real behavioral test, not
+    only a grep. R3 proves ageFactor is REPLACED (non-prime fixture), not
+    stacked. R4 uses k=10 and asserts exact ×k trueValue + identical percentile.
+    R5 designation expectations derive from rules, not from old outputs. R6
+    knob test mutates one multiplier and asserts proportional effect. Map each
+    of the 8 tests to an R-id; an R-id with no covering test = MAJOR.
+
+W5. NFL FALSIFICATION (document every attempt, restore after each):
+    (a) In a scratch copy of the pipeline call, feed a roster with 7
+        shared-chemistry players vs 0 → identical salary (D15 live proof beyond
+        the test). (b) Mutate ROOKIE_SCALE_FACTOR to 1.0 → R3 must fail.
+    (c) Set one POSITION_MULTIPLIER to 1.5 → R6 must fail (knob is live).
+    (d) Temporarily point the base at rawIV instead of kblIV → at least one of
+        R1/R4 must fail for a pitcher-bearing fixture (proves tests can tell the
+        layers apart). (e) Hand-compute one stock player's full salary
+        (oracle kblIV × known modifiers) and match the engine to the dollar.
+W6. CALL-SITE & SCALE SWEEP: for each changed consumer (franchiseSalary,
+    useOffseasonData, leagueBuilderStorage, seasonTransitionEngine,
+    ratingsAdjustmentEngine, PlayerCard, SalaryDisplay) confirm no surviving
+    $M-scale literal or formatting assumption. EXPLICITLY audit the UNCHANGED
+    src/utils/franchiseRatingsSalaryAdapter.ts for $M assumptions the builder
+    may have missed (builder left it unedited; compiling ≠ correct). Audit the
+    two beyond-contract test edits (SalaryDisplay.test.tsx,
+    franchiseSalary.test.ts) for weakened assertions — loosened tolerances or
+    deleted expectations = MAJOR.
+W7. OPEN QUESTION TO ADJUDICATE: src/engines/index.ts:690 still re-exports
+    calculateBaseRatingSalary (compat surface; legacy CJS fixture also uses
+    it). Recommend KEEP-DEPRECATED or REMOVE with evidence of external
+    consumers; this is a finding for JK, not a unilateral edit.
+W8. SPEC AMENDMENTS: confirm A1/A2/A3 exactly per the T5 contract STEP 0 —
+    D15 text present, potency salary-multiplier table/JS/bullet gone, both
+    MODE_2 §15.5 point-3 rewrites, IV §3.8 DH row cites §3.9. Gameplay potency
+    tiers must SURVIVE in all three docs (over-deletion = MAJOR).
+W9. RERUN YOURSELF (paste outputs): `NODE_ENV= npx vitest run` full suite —
+    exactly 3 baseline failures (wpaRuntimeBoundary,
+    franchiseNarrativeEventEligibility, franchiseManualSmokeFixture order-flake
+    which passes solo); `npm run build`; the W3 bridge run.
+
+FORMAT: 1. EVIDENCE LOG (W1–W9) · 2. DISAGREEMENTS WITH BUILDER REPORT (mandatory
+section) · 3. FINDINGS REQUIRING ACTION (severity MAJOR/LOW) · 4. VERDICT:
+"T5 AUDIT: CONFORMS" / "DEVIATIONS — [n]" / "BLOCKED: [reason]"
+
+FAILURE PROTOCOL: never patch the seam yourself; never tune constants; weakened
+assertions or hand-tuned bridge constants = MAJOR regardless of green tests.
+Restore every file you mutated during NFL before reporting (verify with
+`git status` + the untracked-file list unchanged).
+
+Use high reasoning effort.
+
+
+---
+
+## PROMPT CONTRACT: T5-FIX — Audit Remediations (MAJOR-1, MAJOR-2, LOW-3, LOW-4)
+**Date:** 2026-06-11 | **Route:** Codex 5.5 | medium reasoning effort → Fable 5 delta verify
+**Source:** T5-AUDIT verdict "DEVIATIONS — 2 MAJOR, 4 LOW" (2026-06-11). Findings 5
+(armSlot franchise data gap), 6 (PlayerCard isTwoWay heuristic), 7 (barrel
+re-export) are PENDING JK RULINGS — do not touch them in this ticket.
+**ENV:** prefix every node/vitest/tsx command with `NODE_ENV= ` (login shell
+exports NODE_ENV=production, which breaks vitest with ~1,800 false failures).
+
+---
+
+You are the T5-FIX Implementer.
+
+GOAL:
+Remediate the two MAJORs and two mechanical LOWs from T5-AUDIT. Surgical edits
+only; no architecture changes.
+
+SOURCE OF TRUTH:
+T5-AUDIT report findings 1–4 (PROMPT_CONTRACTS T5-AUDIT). BRIDGE=300.032521 from
+scripts/t5-denomination-bridge.ts (do not re-derive).
+
+X1 — MAJOR-1, prospect placeholders ($M-scale → bridged dollars):
+  src/utils/prospectSalary.ts currently returns 2.0/1.2/0.7/0.5 ($M). Convert
+  each via oldM × 1,000,000 ÷ BRIDGE using the SAME rounding convention as the
+  bridged constants in salaryCalculator.ts (2 decimals):
+  round 1 → 6665.94 · round 2 → 3999.57 · round 3 → 2333.08 · round 4 → 1666.49.
+  Flag each `// CALIBRATE (T5 bridge)`. Round 4 must equal MIN_SALARY exactly —
+  add a test asserting `prospectSalaryForDraftRound(4) === MIN_SALARY` plus one
+  asserting all four values are within [MIN_SALARY, MAX_SALARY] and strictly
+  descending. Concealment semantics in franchiseSalary.ts unchanged. Note: this
+  function also feeds leagueBuilderStartupFarmDraft.ts and
+  prospectScoutingDraftEngine.ts (Captain-verified) — fixing the source covers
+  them; do NOT edit those files.
+
+X2 — MAJOR-2, R3 falsification gap:
+  In src/engines/__tests__/salarySeam.t5.test.ts R3, add the literal pin
+  `expect(ROOKIE_SCALE_FACTOR).toBe(0.5);` (spec §8.4 / D6) so a mutated
+  constant kills the suite. Keep the existing replace-not-stack assertions.
+
+X3 — LOW-3: add a comment block at the top of scripts/t5-denomination-bridge.ts
+  documenting WHY it reimplements the legacy pipeline instead of importing the
+  deprecated exports (salaryCalculator import chain drags supabase
+  `import.meta.env` into tsx and crashes) and that equivalence was
+  audit-verified against `git show 165a78a` (strict-legacy variant produced the
+  identical BRIDGE).
+
+X4 — LOW-4: add individual `@deprecated T5/D15` tags to ELITE/GOOD/MINOR
+  positive trait arrays, SEVERE/MODERATE/MINOR negative arrays,
+  TRAIT_SALARY_IMPACT, PITCHER_BATTING_BONUS, TWO_WAY_PREMIUM in
+  salaryCalculator.ts. Comments only — zero behavior change.
+
+CONSTRAINTS:
+- Only edit: src/utils/prospectSalary.ts, src/engines/__tests__/
+  salarySeam.t5.test.ts, scripts/t5-denomination-bridge.ts (comment only),
+  src/engines/salaryCalculator.ts (tags only), and ONE test location for the X1
+  assertions (new block in salarySeam.t5.test.ts or
+  src/utils/tests/franchiseSalary.test.ts — pick one, state which).
+- Do NOT touch findings 5/6/7 surfaces (PlayerCard.tsx, engines/index.ts,
+  franchise Player data model). All T5 frozen files remain frozen.
+
+VERIFICATION (paste outputs):
+1. NODE_ENV= npx vitest run src/engines/__tests__/salarySeam.t5.test.ts
+   src/utils/tests/franchiseSalary.test.ts → green incl. new assertions
+2. Mutation self-check: temporarily set ROOKIE_SCALE_FACTOR=1.0 → suite must
+   FAIL; restore; rerun green. State this was performed with the failing output.
+3. NODE_ENV= npx vitest run → exactly the 3 baseline failures
+4. npm run build → passes
+5. git diff --stat → only the allowed files
+
+FORMAT: 1. Files changed 2. Changes w/ finding ID 3. Verification outputs
+verbatim 4. "T5-FIX complete" OR "BLOCKED: [exact reason]"
+
+FAILURE PROTOCOL: ambiguity → quote and stop. Any edit outside the allowed list
+→ stop and report. Never adjust BRIDGE or any other bridged constant.
+
+
+---
+
+## T5-FIX-2 ADDENDUM (read together with T5-FIX above) — unblock full-suite verification
+**Date:** 2026-06-11 | **Route:** Codex 5.5 | medium → Fable 5 delta verify (same pass as T5-FIX)
+**Context:** T5-FIX correctly BLOCKED — X1 exposed stale $M assumptions downstream.
+Captain classified the 5 new failing suites: 4 are stale test constants (engine
+output verified correct); 1 (TeamHubContent) is live bespoke $M formatters with
+test coverage. Four MORE components carry uncovered $M logic — those are
+FINDING-134, explicitly OUT OF SCOPE here (wiring must be verified before edits).
+
+The allowed-file list is EXTENDED by exactly these six files:
+
+Y1 — TeamHubContent.tsx live fix:
+  Lines 270 and 591: delete both bespoke `(salary / 1000000).toFixed(1)M`
+  formatters; import and use the canonical `formatSalary` from
+  src/engines/salaryCalculator.ts (already bridged in T5). No other changes in
+  the file. Update src/src_figma/__tests__/franchiseMode/
+  TeamHubContent.franchiseReads.test.tsx expectations to the canonical
+  formatter's output (hand-derive from the fixture salaries; do not snapshot).
+
+Y2 — Mechanical re-denomination of stale test constants (values only):
+  src/utils/tests/franchiseSalarySystem.test.ts ($1.2→3999.57, payroll sums
+  recomputed from bridged components; toBeCloseTo precision may move to
+  2-decimal dollars but NEVER looser in relative terms),
+  src/utils/tests/franchiseValueInputs.test.ts (1.2→3999.57),
+  src/utils/tests/prospectScoutingDraftEngine.test.ts (2→6665.94),
+  src/utils/tests/franchiseStartupProspectDraft.test.ts (re-derive the boolean's
+  underlying comparison: if it gates on an old $M constant, re-express via the
+  X1 bridged values; if it encodes BEHAVIOR beyond denomination → STOP and
+  report the exact assertion).
+  RULE: only numeric constants re-expressed in bridged dollars. Deleting
+  assertions, loosening relative tolerances, or changing what is asserted =
+  forbidden.
+
+Y3 — FORBIDDEN: FinalizeAdvanceFlow.tsx, TradeFlow.tsx, AwardsCeremonyFlow.tsx,
+  FreeAgencyFlow.tsx (FINDING-134 — separate verified pass). If suite-green
+  requires touching ANY of them, STOP and report which test forces it.
+
+VERIFICATION (paste outputs):
+1. NODE_ENV= npx vitest run [the 6 files above + salarySeam.t5.test.ts] → green
+2. NODE_ENV= npx vitest run → EXACTLY the 3 baseline failures
+3. npm run build → passes
+4. Re-state the X2 mutation self-check remains intact (no re-run needed if the
+   pin line is untouched; show the line)
+
+FORMAT/FAILURE PROTOCOL: identical to T5-FIX.
+
+
+---
+
+## PROMPT CONTRACT: T5-FIX-VERIFY — Delta Verify (Fable 5 CLI)
+**Date:** 2026-06-11 | **Route:** Claude Code CLI | Fable 5 | high reasoning effort
+**Scope:** verify X1–X4 (T5-FIX) + Y1–Y2 (T5-FIX-2) ONLY. The T5 seam itself was
+already audited (T5-AUDIT: DEVIATIONS — 2 MAJOR, 4 LOW); do not re-audit it.
+**ENV:** prefix every node/vitest command with `NODE_ENV= `.
+**No commit boundary exists between T5 and T5-FIX** (both uncommitted) — verify
+by reading the enumerated changes below, not by diffing a base.
+
+---
+
+You are the T5-FIX Delta Verifier. Builder and Captain reports are claims.
+
+V1. X1: src/utils/prospectSalary.ts returns 6665.94/3999.57/2333.08/1666.49
+    with CALIBRATE flags. Recompute each as oldM×1e6÷300.032521 yourself and
+    confirm round-4 === MIN_SALARY in salaryCalculator.ts. Confirm the new
+    bounds/descending/MIN_SALARY tests exist in franchiseSalary.test.ts and
+    actually import the constants they compare (not re-hardcoded duplicates of
+    the implementation — at minimum the MIN_SALARY assertion must import it).
+V2. X2: the pin `expect(ROOKIE_SCALE_FACTOR).toBe(0.5)` exists inside R3
+    (salarySeam.t5.test.ts ~line 228). Rerun the mutation yourself:
+    ROOKIE_SCALE_FACTOR=1.0 → suite must fail on the pin; RESTORE; rerun green.
+V3. X3/X4: bridge-script provenance comment present; @deprecated T5/D15 tags on
+    the trait arrays, TRAIT_SALARY_IMPACT, PITCHER_BATTING_BONUS,
+    TWO_WAY_PREMIUM; confirm X3/X4 diffs are comment-only (no token outside
+    comments changed in those hunks).
+V4. Y1: TeamHubContent.tsx — ALL FOUR bespoke $M formatters replaced with
+    canonical formatSalary (≈ lines 271/592/690/3444; the Y1 contract named
+    two; Captain ruled the two siblings a justified same-pattern fix — confirm
+    they ARE the same pattern and nothing else in the file changed beyond the
+    import + 4 call sites). grep `1000000` in the file → zero hits.
+V5. Y2: diff the four re-denominated test files — ONLY numeric constants moved
+    to bridged dollars; no deleted assertions; no loosened relative tolerances;
+    franchiseStartupProspectDraft's boolean re-derivation encodes denomination
+    only. TeamHubContent.franchiseReads expectations hand-check against
+    formatSalary's actual output for the fixture salaries.
+V6. FORBIDDEN-SURFACE CHECK: git diff --name-only contains NO FINDING-134 files
+    (TradeFlow/FreeAgencyFlow/AwardsCeremonyFlow/FinalizeAdvanceFlow), and
+    engines/index.ts unchanged. GameTracker PlayerCard.tsx changes must be
+    T5-original only (its diff must contain nothing prospect/TeamHub/bridge-
+    related).
+V7. RERUN YOURSELF: focused 7-file suite green; full suite — baseline is now
+    characterized as 2 fixed failures (wpaRuntimeBoundary,
+    franchiseNarrativeEventEligibility) + ≥2 ORDER-FLAKES
+    (franchiseManualSmokeFixture, GameTrackerLaunchState — each passes solo;
+    Captain observed GameTrackerLaunchState flake on 2026-06-11). A run with 3
+    or 4 failures drawn ONLY from those four files = baseline; anything else =
+    investigate. npm run build passes.
+
+FORMAT: EVIDENCE LOG V1–V7 · DISAGREEMENTS (mandatory) · VERDICT:
+"T5-FIX DELTA VERIFIED" / "DEVIATIONS — [n]" / "BLOCKED: [reason]"
+FAILURE PROTOCOL: never patch; restore all mutations; verify git status matches
+pre-verify state before reporting.

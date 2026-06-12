@@ -3413,3 +3413,69 @@ contract: read existing gospels in full → VERIFY wiring with fresh evidence
 franchise-engine-discovery / spec-ui-alignment skills) → classify assets
 ADOPT/AMEND/WIRE/REBUILD before new design → every session outputs its own
 v1/v2 split. Design-track order is now D0 → D1 → … → D8.
+
+
+## 2026-06-11 — T5 ARC COMPLETE: salary seam on kblIV, audited + delta-verified
+
+**Build (Codex 5.5 very high):** pipeline base = computeIV().kblIV in canonical
+dollars; Steps 1/2/trait-tiers deprecated out of the live path (kept for bridge/
+matrix tests); POSITION_MULTIPLIERS → 1.0 knobs (still applied); D15 potency-
+neutrality enforced (zero chemistry logic in the salary path); rookie-scale hook
+(ROOKIE_SCALE_FACTOR 0.50 REPLACES age factor, §8.4/D6/F-127, ledger = T7);
+denomination bridge: dollars canonical, BRIDGE=300.032521 (median old $14.3M /
+median kblIV $47,661.50), all scale constants re-denominated + CALIBRATE-flagged
+(MIN/MAX, ROI→WAR/$100k, draft constants, tier bands, 24 GRADE_SALARY_BOUNDS);
+Step 0 spec amendments landed (A1 salary-spec potency salary-multiplier killed →
+D15 doctrine; A2 both MODE_2 §15.5 point-3 rewrites; A3 IV §3.8 DH row → §3.9).
+
+**Captain verification (fresh evidence, not builder report):** scope/frozen-file
+check, greps, bridge reproduced, build, full suite at baseline. NFL catch #1: my
+first full-suite run showed 1,837 failures — falsified as harness:
+**JK's login shell exports NODE_ENV=production**, breaking vitest (production
+React, node: builtin resolution). ALL future CLI verification must prefix
+`NODE_ENV= ` (baked into T5-AUDIT/FIX/VERIFY contracts). NFL catch #2: T5
+contract's R1 originally cited Eovaldi/deGrom dollars — those are RAWIV anchors,
+not stock-pool kblIV; corrected pre-Codex.
+
+**Fable T5-AUDIT verdict: DEVIATIONS — 2 MAJOR, 4 LOW.** MAJOR-1 prospect
+placeholders still $M (blast radius: payroll aggregation, trade matching,
+TeamHub); MAJOR-2 R3 self-referential (survived ROOKIE_SCALE_FACTOR=1.0
+mutation). LOW-3 bridge reimplementation (equivalence proven), LOW-4 missing
+@deprecated tags, F5 armSlot franchise-data gap, F6 PlayerCard isTwoWay
+heuristic, F7 dead barrel re-export.
+
+**T5-FIX (Codex 5.5 medium) correctly BLOCKED:** X1 exposed stale downstream $M
+assumptions. Captain classified: 4 stale-test-constant files + TeamHubContent
+live bespoke formatters (4 sites, not 2 — same pattern, ruled in-scope) +
+**FINDING-134** logged (TradeFlow ×1e6 trade matching, FreeAgencyFlow,
+AwardsCeremonyFlow, FinalizeAdvanceFlow grade tables/thresholds — uncovered,
+wiring unverified, fenced for a dedicated pass: Fable discovery → Codex 5.5
+high). Root lesson in the finding: denomination sweeps must follow the DATA
+FIELD (player.salary consumers), not engine importers. T5-FIX-2 addendum
+unblocked with a six-file extension + no-weakening rules.
+
+**Fable T5-FIX-VERIFY verdict: T5-FIX DELTA VERIFIED.** Both MAJORs closed
+(mutation now kills the suite), comment-only X3/X4 confirmed by byte-diff, Y2
+assertion-honest (precision not loosened), forbidden surfaces clean.
+
+**Suite baseline RE-CHARACTERIZED:** 2 fixed failures (wpaRuntimeBoundary,
+franchiseNarrativeEventEligibility) + ≥2 ORDER-FLAKES (franchiseManualSmokeFixture,
+GameTrackerLaunchState — each passes solo; both observed flaking 2026-06-11).
+A full-suite run failing only within that four-file set = baseline.
+
+**Strays (JK rulings 2026-06-11):** SPECIAL_EVENTS blank line + TRAIT_INTEGRATION
+DH-row deletion reverted pre-T5 (parked change for a future cited cleanup:
+delete `| DH | Hitting, Baserunning |` from the §position-group eligibility
+table — relates to §3.8 DH retirement); SMB4 Rosters.csv held untracked.
+
+**OPEN — PENDING JK RULINGS:** F5 armSlot missing from franchise Player model
+(~$6.5k reprice drift on Sub-slot arms; candidate: fold into W1 or data-model
+pass); F6 PlayerCard isTwoWay heuristic (POW/CON ≥ 40 ⇒ Two Way pricing in
+display path; recommend defer to T6/T9, contradicts D15 trait-as-unlock);
+F7 remove dead barrel re-export engines/index.ts:690 (Fable+Captain recommend
+REMOVE, zero importers). Also open: order-flake cleanup (low priority).
+
+**NEXT SESSION:** W1 — WAR orchestrator persistence + gamesPerTeam metadata
+(SEPARATE ticket per vision ruling; the gating fix for the value spine).
+ROUTE: Codex 5.5 | high → Fable 5 CLI audit. Then TV1 → T6 per the 5-session
+milestone (T5 ✅ + W1 + TV1 + D1 + D2).

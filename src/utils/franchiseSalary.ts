@@ -125,6 +125,11 @@ export function mapFranchiseSalaryPosition(position?: Position): SalaryPosition 
   return POSITION_MAP[position] ?? 'UTIL';
 }
 
+function mapFranchiseSalaryPitcherRole(position?: Position): PlayerForSalary['pitcherRole'] {
+  if (position === 'RP' || position === 'CP' || position === 'SP/RP') return position;
+  return 'SP';
+}
+
 export function buildFranchiseSalaryPlayer(player: Player): PlayerForSalary {
   const pitcher = isFranchiseSalaryPitcher(player);
 
@@ -134,6 +139,9 @@ export function buildFranchiseSalaryPlayer(player: Player): PlayerForSalary {
     isPitcher: pitcher,
     isTwoWay: isFranchiseSalaryTwoWay(player),
     primaryPosition: mapFranchiseSalaryPosition(player.primaryPosition),
+    secondaryPosition: player.secondaryPosition ? mapFranchiseSalaryPosition(player.secondaryPosition) : undefined,
+    pitcherRole: pitcher ? mapFranchiseSalaryPitcherRole(player.primaryPosition) : undefined,
+    bats: player.bats,
     ratings: pitcher
       ? {
           velocity: rating(player.velocity),
@@ -162,6 +170,7 @@ export function buildFranchiseSalaryPlayer(player: Player): PlayerForSalary {
     // neutral field until fame authority is approved.
     fame: 0,
     traits: [player.trait1, player.trait2].filter((trait): trait is string => Boolean(trait)),
+    arsenal: player.arsenal,
   };
 }
 

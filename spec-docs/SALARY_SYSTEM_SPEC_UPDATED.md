@@ -871,46 +871,19 @@ Salary also recalculates immediately during the season when:
 
 ## Chemistry-Tier Trait Potency Factor
 
-Traits have a POTENCY that scales with the team's aggregate count of players sharing the trait's Chemistry type. This determines the trait's financial value and gameplay impact.
+Traits have a POTENCY that scales with the team's aggregate count of players sharing the trait's Chemistry type. Per D15, potency determines realized gameplay impact and downstream construction surplus; it does not reprice IV or salary.
 
 ### Potency Tiers
 Team counts determine which Potency Level is active for all traits in a given Chemistry category.
 
-| Tier | Team Chemistry Count | Potency Level | Salary Multiplier |
+| Tier | Team Chemistry Count | Potency Level | Mechanical Impact |
 | :--- | :--- | :--- | :--- |
-| **1** | **< 3 players** | **Level 1 (Minor)** | 0.50x (Reduced impact) |
-| **2** | **3 – 6 players** | **Level 2 (Standard)** | 1.00x (Baseline impact) |
-| **3** | **> 6 players** | **Level 3 (Maximum)** | 2.00x (Doubled impact) |
+| **1** | **< 3 players** | **Level 1 (Minor)** | Reduced realized trait impact. |
+| **2** | **3 – 6 players** | **Level 2 (Standard)** | SMB4 baseline trait impact. |
+| **3** | **> 6 players** | **Level 3 (Maximum)** | Increased realized trait impact. |
 
 ### Salary Wiring
-At the moment of salary generation (Season Start or Offseason Phases), the engine calculates the team's chemistry aggregates to determine the active Potency Level for each category.
-
-```javascript
-function calculateTraitModifierWithPotency(player, team) {
-  let modifier = 1.0;
-
-  for (const trait of player.traits) {
-    const baseImpact = getTraitBaseImpact(trait); // e.g., 1.05 for a +5% trait
-    const traitCategory = getTraitChemistryCategory(trait);
-    const teamCount = countChemistryType(team.roster, traitCategory);
-    
-    const potencyLevel = getPotencyLevel(teamCount);
-    const salaryMultiplier = getPotencySalaryMultiplier(potencyLevel);
-    
-    // Apply multiplier to the bonus/penalty portion of the trait
-    const adjustedImpact = 1.0 + (baseImpact - 1.0) * salaryMultiplier;
-    modifier *= adjustedImpact;
-  }
-
-  return modifier;
-}
-```
-
--------|------------|---------------------|-------------|----------------|
-| Clutch (Spirited) | +10% | 2 Spirited players | Tier 1 | +10% (base) |
-| Clutch (Spirited) | +10% | 5 Spirited players | Tier 2 | +12.5% |
-| Clutch (Spirited) | +10% | 9 Spirited players | Tier 3 | +15% |
-| Choker (Spirited) | -10% | 5 Spirited players | Tier 2 | -12.5% |
+Per D15, IV and salary are potency-neutral at the L2 reference forever. Realized potency is construction surplus captured downstream by Effective Ratings → True Value (T6+). Salary never reprices for chemistry composition.
 
 > **Cross-reference**: See TRAIT_INTEGRATION_SPEC.md for the full Chemistry mechanics, including how traits can come from ANY Chemistry type and how player Chemistry contributes to team counts.
 
@@ -938,7 +911,7 @@ function calculateExpansionSalaryLimits(leagueData) {
 
 - ✅ Contraction system REMOVED (on Feature Wishlist for v2)
 - ✅ Triple salary recalculation (Phases 3, 8, 10) during offseason
-- ✅ Chemistry-tier trait potency factor (traits scale with team Chemistry composition)
+- ✅ Chemistry-tier trait potency factor (gameplay potency scales with team Chemistry composition; D15 keeps salary potency-neutral)
 - ✅ Expansion draft simplified (see OFFSEASON_SYSTEM_SPEC.md Phase 4)
 - ✅ Fan morale thresholds updated (no contraction risk references)
 - Must stay within salary ceiling

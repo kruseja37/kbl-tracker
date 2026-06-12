@@ -56,7 +56,7 @@ export function SalaryBadge({ salary, showTier = true }: SalaryBadgeProps) {
 
 export function SalaryBreakdownDisplay({ breakdown, playerName }: SalaryBreakdownDisplayProps) {
   const modifiers = [
-    { label: 'Base (from ratings)', value: breakdown.baseSalary, multiplier: null },
+    { label: 'Base (kblIV)', value: breakdown.baseSalary, multiplier: null },
     { label: 'Position', value: breakdown.components.afterPosition, multiplier: breakdown.positionMultiplier },
     { label: 'Traits', value: breakdown.components.afterTraits, multiplier: breakdown.traitModifier },
     { label: 'Age', value: breakdown.components.afterAge, multiplier: breakdown.ageFactor },
@@ -172,7 +172,7 @@ export function SalarySection({ salary, war, showBreakdown = false, breakdown }:
 
         {roi && (
           <div style={styles.roiSection}>
-            <span style={styles.roiLabel}>WAR/$M:</span>
+            <span style={styles.roiLabel}>WAR/$100K:</span>
             <span style={{
               ...styles.roiValue,
               color: roi.roiTier === 'ELITE_VALUE' || roi.roiTier === 'GREAT_VALUE'
@@ -181,7 +181,7 @@ export function SalarySection({ salary, war, showBreakdown = false, breakdown }:
                 ? '#ef4444'
                 : '#f59e0b'
             }}>
-              {roi.roiWARPerMillion.toFixed(2)}
+              {roi.roiWARPer100k.toFixed(2)}
             </span>
             <span style={styles.roiTierLabel}>{getROITierDisplay(roi.roiTier)}</span>
           </div>

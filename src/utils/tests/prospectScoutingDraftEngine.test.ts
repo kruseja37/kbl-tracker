@@ -293,9 +293,9 @@ describe('shared deterministic prospect/scouting draft engine', () => {
       byTeam.set(assignment.teamId, (byTeam.get(assignment.teamId) ?? 0) + 1);
     }
 
-    expect(output.generatedPlayers.every((player) => player.salary >= 0.5)).toBe(true);
+    expect(output.generatedPlayers.every((player) => player.salary >= 1666.49)).toBe(true);
     expect(output.generatedPlayers[0].prospectProfile.draftRound).toBe(1);
-    expect(output.generatedPlayers[0].salary).toBe(2.0);
+    expect(output.generatedPlayers[0].salary).toBe(6665.94);
     expect(byTeam.get('team-a')).toBe(10);
     expect(byTeam.get('team-b')).toBe(10);
     expect(output.farmAssignments.every((assignment) => assignment.ratingRevealState === 'hidden')).toBe(true);
@@ -308,10 +308,10 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     const thirdRound = output.selectedPicks.find((pick) => pick.round === 3);
     const laterRound = output.selectedPicks.find((pick) => pick.round === 4);
 
-    expect(prospectSalaryForDraftRound(1)).toBe(2.0);
-    expect(prospectSalaryForDraftRound(2)).toBe(1.2);
-    expect(prospectSalaryForDraftRound(3)).toBe(0.7);
-    expect(prospectSalaryForDraftRound(4)).toBe(0.5);
+    expect(prospectSalaryForDraftRound(1)).toBe(6665.94);
+    expect(prospectSalaryForDraftRound(2)).toBe(3999.57);
+    expect(prospectSalaryForDraftRound(3)).toBe(2333.08);
+    expect(prospectSalaryForDraftRound(4)).toBe(1666.49);
     for (const pick of [firstRound, secondRound, thirdRound, laterRound]) {
       expect(pick?.salary).toBe(prospectSalaryForDraftRound(pick!.round));
       expect(pick?.player.salary).toBe(pick?.salary);

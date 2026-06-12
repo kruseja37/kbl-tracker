@@ -160,6 +160,7 @@ import type {
   Team,
 } from "../../../utils/leagueBuilderStorage";
 import type { RosterAnalyzerReport } from "../../../engines/rosterAnalyzerEngine";
+import { formatSalary } from "../../../engines/salaryCalculator";
 import {
   buildLineupSnapshotFromSlots,
   buildOptimalLineupSnapshot,
@@ -267,7 +268,7 @@ interface FranchiseProfileEditForm {
 // Helper to convert OffseasonPlayer to roster format
 function convertToRosterItem(player: OffseasonPlayer): RosterTableItem {
   const salary = player.salary || 0;
-  const contractStr = salary > 0 ? `$${(salary / 1000000).toFixed(1)}M` : '—';
+  const contractStr = salary > 0 ? formatSalary(salary) : '—';
 
   return {
     name: player.name.split(' ').map((n, i) => i === 0 ? n[0] + '.' : n).join(' '),
@@ -588,7 +589,7 @@ function prospectMetadata(player: Player): ProspectMetadata {
 function formatFarmSalary(player: Player): string {
   const salary = getVisibleSafeFranchisePlayerSalary(player) ?? 0;
   if (salary <= 0) return '—';
-  return salary >= 10000 ? `$${(salary / 1000000).toFixed(1)}M` : `$${salary.toFixed(1)}M`;
+  return formatSalary(salary);
 }
 
 function formatFarmOptionDates(optionDates: string[]): string {
@@ -686,7 +687,7 @@ function franchisePlayerRosterStatus(player: Player, leagueId?: string): string 
 function formatRosterSalary(salary: number | null | undefined): string {
   const value = Number(salary);
   if (!Number.isFinite(value) || value <= 0) return '—';
-  return value >= 10000 ? `$${(value / 1000000).toFixed(1)}M` : `$${value.toFixed(1)}M`;
+  return formatSalary(value);
 }
 
 function moraleStateLabel(value: number): string {
@@ -3440,7 +3441,7 @@ interface FranchisePlayerProfileModalProps {
 
 function formatProfileSalary(salary: number | null): string {
   if (salary == null || salary <= 0) return '—';
-  return salary >= 10000 ? `$${(salary / 1000000).toFixed(1)}M` : `$${salary.toFixed(1)}M`;
+  return formatSalary(salary);
 }
 
 function formatProfileValue(value: unknown): string {
