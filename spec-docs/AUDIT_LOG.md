@@ -1066,3 +1066,4 @@ Still unresolved. FINDING-047 fallback path only has base state, not full scoreb
 | FINDING-133 | 2026-02-21 | DECISION | NARRATIVE_SYSTEM_SPEC / new UI flow spec | Beat reporter pre-decision warning: v1 scope. Blocking modal before call-up/send-down executes. Conditional on relationship/narrative data. Needs UI flow spec. |
 
 | FINDING-134 | 2026-06-11 | CONFIRMED | FinalizeAdvanceFlow/TradeFlow/AwardsCeremonyFlow/FreeAgencyFlow .tsx | Residual $M-scale salary logic (×/÷1e6 conversions, grade tables, thresholds) in 4 Figma flows invisible to T5 sweep; full text in FINDINGS_056_onwards.md |
+| FINDING-135 | 2026-06-12 | DEFERRED | franchiseInitializer.ts | deriveSeasonTotalGames = schedule-row counting feeds SeasonMetadata.totalGames (§4.4 anti-pattern, pre-existing); WAR/milestones now safe via gamesPerTeam (W1); other totalGames consumers unaudited — fold into FINDING-134 discovery slot; full text in FINDINGS_056_onwards.md |

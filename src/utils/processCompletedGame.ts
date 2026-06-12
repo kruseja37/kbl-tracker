@@ -31,6 +31,9 @@ import {
 import { getGameHeader, markAggregationFailed, markGameAggregated } from './eventLog';
 import { getEffectivePlayer } from './playerOverrides';
 import { registerAlmanacPlayers } from './registerAlmanacPlayers';
+import { deriveAdaptiveStandardsConfig, type AdaptiveStandardsConfigInput } from './franchiseAdaptiveStandards';
+import { getSeasonMetadata, saveSeasonMetadata } from './seasonStorage';
+import { calculateAndPersistSeasonWAR } from '../src_figma/app/engines/warOrchestrator';
 
 export interface ProcessGameResult {
   aggregation: GameAggregationResult;
@@ -41,6 +44,139 @@ export interface CompletedGameArchiveOptions {
   inningScores?: { away: number; home: number }[];
   seasonId?: string;
   context?: Parameters<typeof archiveCompletedGame>[4];
+}
+
+type ProcessCompletedGameAggregationOptions = GameAggregationOptions & AdaptiveStandardsConfigInput;
+type WarMetadataSource = ProcessCompletedGameAggregationOptions;
+
+function positiveFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function getCompletedGameSeasonId(
+  gameState: PersistedGameState,
+  options?: ProcessCompletedGameAggregationOptions,
+  archiveOptions?: CompletedGameArchiveOptions,
+): string | null {
+  // X5: WAR must use the same season scope aggregateGameToSeason receives.
+  return (
+    options?.seasonId ??
+    archiveOptions?.seasonId ??
+    gameState.statsScopeId ??
+    gameState.seasonId ??
+    null
+  );
+}
+
+function getParticipantIds(gameState: PersistedGameState): string[] {
+  return Array.from(new Set([
+    ...Object.keys(gameState.playerStats),
+    ...gameState.pitcherGameStats.map((stats) => stats.pitcherId),
+  ])).filter(Boolean).sort();
+}
+
+function collectLineupPositions(gameState: PersistedGameState): Map<string, string> {
+  const positions = new Map<string, string>();
+  const add = (playerId: unknown, position: unknown) => {
+    if (typeof playerId === 'string' && playerId.trim() && typeof position === 'string' && position.trim()) {
+      positions.set(playerId, position);
+    }
+  };
+
+  for (const entry of gameState.awayLineup ?? []) add(entry.playerId, entry.position);
+  for (const entry of gameState.homeLineup ?? []) add(entry.playerId, entry.position);
+  for (const entry of gameState.awayLineupState?.lineup ?? []) add(entry.playerId, entry.position);
+  for (const entry of gameState.homeLineupState?.lineup ?? []) add(entry.playerId, entry.position);
+  add(gameState.awayLineupState?.currentPitcher?.playerId, gameState.awayLineupState?.currentPitcher?.position);
+  add(gameState.homeLineupState?.currentPitcher?.playerId, gameState.homeLineupState?.currentPitcher?.position);
+
+  return positions;
+}
+
+async function buildWarPlayerPositions(
+  gameState: PersistedGameState,
+  participantIds: string[],
+  leagueId: string | null,
+): Promise<Map<string, string>> {
+  const positions = collectLineupPositions(gameState);
+  if (!leagueId) return positions;
+
+  for (const playerId of participantIds) {
+    if (positions.has(playerId)) continue;
+    try {
+      const player = await getEffectivePlayer(playerId, leagueId);
+      if (player?.primaryPosition) positions.set(playerId, player.primaryPosition);
+    } catch (error) {
+      console.warn(`[WAR] player position unresolved for ${playerId}:`, error);
+    }
+  }
+
+  return positions;
+}
+
+function explicitGamesPerTeamFromAdaptiveInput(input: WarMetadataSource | undefined): number | null {
+  if (!input) return null;
+
+  return (
+    positiveFiniteNumber(input.gamesPerTeam) ??
+    positiveFiniteNumber(input.milestoneConfig?.gamesPerSeason) ??
+    positiveFiniteNumber(input.gamesPerSeason) ??
+    positiveFiniteNumber(input.seasonLength?.gamesPerTeam) ??
+    positiveFiniteNumber(input.seasonLength?.expectedRegularSeasonGamesPerTeam) ??
+    positiveFiniteNumber(input.season?.gamesPerSeason) ??
+    positiveFiniteNumber(input.season?.gamesPerTeam) ??
+    positiveFiniteNumber(input.rulesSnapshot?.gamesPerTeam)
+  );
+}
+
+async function resolveSeasonGamesForWar(
+  seasonId: string,
+  options?: ProcessCompletedGameAggregationOptions,
+): Promise<number | null> {
+  const metadata = await getSeasonMetadata(seasonId);
+  const metadataGamesPerTeam = positiveFiniteNumber(metadata?.gamesPerTeam);
+  if (metadataGamesPerTeam !== null) return metadataGamesPerTeam;
+
+  const explicitGamesPerTeam = explicitGamesPerTeamFromAdaptiveInput(options as WarMetadataSource | undefined);
+  if (explicitGamesPerTeam === null) return null;
+
+  // W1-B: use the shared adaptive standards resolver, but only after a non-default
+  // season-length source is present so WAR never silently inherits default games.
+  const adaptive = deriveAdaptiveStandardsConfig({
+    ...(options as AdaptiveStandardsConfigInput | undefined),
+    gamesPerTeam: explicitGamesPerTeam,
+    gamesPerSeason: options?.milestoneConfig?.gamesPerSeason ?? explicitGamesPerTeam,
+    inningsPerGame: options?.milestoneConfig?.inningsPerGame ?? (options as WarMetadataSource | undefined)?.inningsPerGame,
+  });
+
+  if (metadata) {
+    await saveSeasonMetadata({ ...metadata, gamesPerTeam: adaptive.gamesPerSeason });
+  }
+
+  return positiveFiniteNumber(adaptive.gamesPerSeason);
+}
+
+async function persistSeasonWarAfterAggregation(
+  gameState: PersistedGameState,
+  options: ProcessCompletedGameAggregationOptions | undefined,
+  archiveOptions: CompletedGameArchiveOptions | undefined,
+  leagueId: string | null,
+): Promise<void> {
+  const seasonId = getCompletedGameSeasonId(gameState, options, archiveOptions);
+  if (!seasonId) {
+    console.warn('[WAR] skipped: seasonId unresolved for completed game ' + gameState.gameId);
+    return;
+  }
+
+  const seasonGames = await resolveSeasonGamesForWar(seasonId, options);
+  if (seasonGames === null) {
+    console.warn('[WAR] skipped: gamesPerTeam unresolved for season ' + seasonId);
+    return;
+  }
+
+  const participantIds = getParticipantIds(gameState);
+  const playerPositions = await buildWarPlayerPositions(gameState, participantIds, leagueId);
+  await calculateAndPersistSeasonWAR(seasonId, seasonGames, participantIds, playerPositions);
 }
 
 export function shouldAggregateToRegularSeasonStats(
@@ -138,7 +274,7 @@ async function capturePlayerRatingsSnapshots(
  */
 export async function processCompletedGame(
   gameState: PersistedGameState,
-  options?: GameAggregationOptions,
+  options?: ProcessCompletedGameAggregationOptions,
   leagueId?: string,
   archiveOptions?: CompletedGameArchiveOptions,
 ): Promise<ProcessGameResult> {
@@ -210,6 +346,12 @@ export async function processCompletedGame(
         aggregation.error ||
           `Failed to aggregate completed game ${gameState.gameId} to season stats`,
       );
+    }
+
+    try {
+      await persistSeasonWarAfterAggregation(gameState, options, archiveOptions, resolvedLeagueId ?? null);
+    } catch (error) {
+      console.warn('[WAR] failed to persist season WAR for completed game ' + gameState.gameId + ':', error);
     }
   }
 

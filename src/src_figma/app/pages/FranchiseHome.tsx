@@ -3592,7 +3592,10 @@ function GameDayContent({
 
     // Process through real pipeline (runs while animation plays)
     try {
-      await processCompletedGame(game, { seasonId: activeSeasonId });
+      await processCompletedGame(game, {
+        seasonId: activeSeasonId,
+        gamesPerTeam: franchiseData.franchiseConfig?.season?.gamesPerTeam || undefined,
+      });
     } catch (err) {
       console.error('[handleSimulate] processCompletedGame failed:', err);
     }
@@ -3700,7 +3703,10 @@ function GameDayContent({
         });
 
         // Process through full stats pipeline (batting, pitching, fielding, fame)
-        await processCompletedGame(syntheticGame, { seasonId: batchSeasonId });
+        await processCompletedGame(syntheticGame, {
+          seasonId: batchSeasonId,
+          gamesPerTeam: franchiseData.franchiseConfig?.season?.gamesPerTeam || undefined,
+        });
 
         // Update schedule with result
         const winningTeam = syntheticGame.homeScore > syntheticGame.awayScore ? game.homeTeamId : game.awayTeamId;

@@ -55,6 +55,7 @@ export interface Smb4StandardTeamRosterTemplate {
 }
 
 export interface Smb4GeneratedPlayer extends Smb4PlayerInput {
+  armSlot?: null;
   targetGrade: Smb4Grade;
   generatedGrade: Smb4Grade;
   numericScore: number;
@@ -823,6 +824,7 @@ function finalizeGeneratedPlayer(
   return {
     ...player,
     name: generatedName,
+    armSlot: null,
     targetGrade,
     generatedGrade: result.grade,
     numericScore: Number(result.numericScore.toFixed(4)),

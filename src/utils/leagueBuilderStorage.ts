@@ -201,6 +201,7 @@ export interface Player {
   age: number;
   bats: 'L' | 'R' | 'S';
   throws: 'L' | 'R';
+  armSlot?: 'High' | 'Mid' | 'Low' | 'Sub' | null;
   primaryPosition: Position;
   secondaryPosition?: Position;
   // Batting ratings
@@ -278,6 +279,7 @@ export type PlayerAttributes = Pick<
   | 'age'
   | 'bats'
   | 'throws'
+  | 'armSlot'
   | 'nickname'
   | 'hometown'
 >;
@@ -1719,6 +1721,7 @@ function convertPlayer(player: PlayerData, leagueId = 'sml'): Omit<Player, 'crea
     age: player.age,
     bats: player.bats,
     throws: player.throws,
+    armSlot: player.armSlot ?? null,
     primaryPosition,
     secondaryPosition: player.secondaryPosition as Position | undefined,
     // Batting ratings (default to 50 if not present)

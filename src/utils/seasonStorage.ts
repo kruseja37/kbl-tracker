@@ -159,6 +159,7 @@ export interface SeasonMetadata {
   endDate?: number;
   gamesPlayed: number;
   totalGames: number;  // Scheduled games
+  gamesPerTeam: number | null; // W1-B: per-team season length snapshot for WAR scaling
 }
 
 // ============================================
@@ -482,6 +483,17 @@ export async function updateFieldingStats(stats: PlayerSeasonFielding): Promise<
 // SEASON METADATA
 // ============================================
 
+function normalizeGamesPerTeam(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function normalizeSeasonMetadata(metadata: SeasonMetadata): SeasonMetadata {
+  return {
+    ...metadata,
+    gamesPerTeam: normalizeGamesPerTeam((metadata as SeasonMetadata & { gamesPerTeam?: unknown }).gamesPerTeam),
+  };
+}
+
 /**
  * Get or create season metadata
  */
@@ -489,9 +501,11 @@ export async function getOrCreateSeason(
   seasonId: string,
   seasonNumber: number,
   seasonName: string,
-  totalGames: number
+  totalGames: number,
+  gamesPerTeam: number | null = null
 ): Promise<SeasonMetadata> {
   const db = await initSeasonDatabase();
+  const normalizedGamesPerTeam = normalizeGamesPerTeam(gamesPerTeam);
 
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORES.SEASON_METADATA, 'readwrite');
@@ -502,7 +516,18 @@ export async function getOrCreateSeason(
 
     request.onsuccess = () => {
       if (request.result) {
-        resolve(request.result);
+        const existing = normalizeSeasonMetadata(request.result);
+        if (normalizedGamesPerTeam !== null && existing.gamesPerTeam === null) {
+          const updated = { ...existing, gamesPerTeam: normalizedGamesPerTeam };
+          const putRequest = store.put(updated);
+          putRequest.onerror = () => reject(putRequest.error);
+          putRequest.onsuccess = () => {
+            if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-tracker', 'seasonMetadata', seasonId, updated);
+            resolve(updated);
+          };
+          return;
+        }
+        resolve(existing);
       } else {
         const newSeason: SeasonMetadata = {
           seasonId,
@@ -512,6 +537,7 @@ export async function getOrCreateSeason(
           startDate: Date.now(),
           gamesPlayed: 0,
           totalGames,
+          gamesPerTeam: normalizedGamesPerTeam,
         };
         const putRequest = store.put(newSeason);
         putRequest.onerror = () => reject(putRequest.error);
@@ -529,16 +555,17 @@ export async function getOrCreateSeason(
  */
 export async function saveSeasonMetadata(metadata: SeasonMetadata): Promise<SeasonMetadata> {
   const db = await initSeasonDatabase();
+  const normalized = normalizeSeasonMetadata(metadata);
 
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORES.SEASON_METADATA, 'readwrite');
     const store = transaction.objectStore(STORES.SEASON_METADATA);
-    const request = store.put(metadata);
+    const request = store.put(normalized);
 
     request.onerror = () => reject(request.error);
     request.onsuccess = () => {
-      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-tracker', 'seasonMetadata', metadata.seasonId, metadata);
-      resolve(metadata);
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-tracker', 'seasonMetadata', normalized.seasonId, normalized);
+      resolve(normalized);
     };
   });
 }
@@ -577,7 +604,7 @@ export async function incrementSeasonGames(seasonId: string): Promise<void> {
 
     request.onsuccess = () => {
       if (request.result) {
-        const updated = { ...request.result, gamesPlayed: request.result.gamesPlayed + 1 };
+        const updated = { ...normalizeSeasonMetadata(request.result), gamesPlayed: request.result.gamesPlayed + 1 };
         const putRequest = store.put(updated);
         putRequest.onerror = () => reject(putRequest.error);
         putRequest.onsuccess = () => {
@@ -608,7 +635,7 @@ export async function markSeasonComplete(seasonId: string): Promise<void> {
     request.onsuccess = () => {
       if (request.result) {
         const updated: SeasonMetadata = {
-          ...request.result,
+          ...normalizeSeasonMetadata(request.result),
           status: 'completed' as const,
           endDate: Date.now(),
         };
@@ -638,7 +665,7 @@ export async function getActiveSeason(): Promise<SeasonMetadata | null> {
     const request = index.get('active');
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result || null);
+    request.onsuccess = () => resolve(request.result ? normalizeSeasonMetadata(request.result) : null);
   });
 }
 
@@ -749,7 +776,7 @@ export async function getSeasonMetadata(seasonId: string): Promise<SeasonMetadat
     const request = store.get(seasonId);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result || null);
+    request.onsuccess = () => resolve(request.result ? normalizeSeasonMetadata(request.result) : null);
   });
 }
 

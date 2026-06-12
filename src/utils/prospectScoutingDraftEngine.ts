@@ -149,6 +149,7 @@ export interface LeagueBuilderProspectPlayerDto {
   age: number;
   bats: 'L' | 'R' | 'S';
   throws: 'L' | 'R';
+  armSlot: null;
   primaryPosition: DraftPosition;
   secondaryPosition?: DraftPosition | 'P';
   power: number;
@@ -612,6 +613,7 @@ function buildPlayerDto(input: {
     age: 18 + Math.floor(randomUnit(`${seed}:age`) * 6),
     bats: pick(`${seed}:bats`, ['L', 'R', 'S'] as const),
     throws: pick(`${seed}:throws`, ['L', 'R'] as const),
+    armSlot: null,
     primaryPosition: candidate.position,
     secondaryPosition: isPitcher(candidate.position) ? 'P' : undefined,
     power: candidate.ratings.power,

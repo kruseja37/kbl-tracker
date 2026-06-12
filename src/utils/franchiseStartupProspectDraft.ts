@@ -241,6 +241,7 @@ function toBridgeProspectPlayer(player: LeagueBuilderProspectPlayerDto): BridgeP
     ...player,
     primaryPosition: player.primaryPosition as Position,
     secondaryPosition: player.secondaryPosition as Position | undefined,
+    armSlot: player.armSlot ?? null,
     arsenal: player.arsenal as PitchType[],
     overallGrade: player.overallGrade as Grade,
     personality: player.personality as Personality,

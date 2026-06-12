@@ -228,6 +228,7 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
       1,
       'Season 1',
       0,
+      1,
     );
     expect(mocks.deepCopyLeagueToFranchise.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.setActiveFranchise.mock.invocationCallOrder[0],
@@ -295,6 +296,7 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
       2,
       'Season 2',
       0,
+      null,
     );
     expect(mocks.carryOverFranchiseFarmRecordsToSeason).toHaveBeenCalledWith({
       franchiseId: 'franchise-1',
@@ -348,6 +350,7 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
       1,
       'Season 1',
       3,
+      1,
     );
   });
 
@@ -376,6 +379,7 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
       1,
       'Season 1',
       0,
+      1,
     );
     expect(mocks.generateSchedule).not.toHaveBeenCalled();
   });

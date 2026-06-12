@@ -2065,3 +2065,379 @@ FORMAT: EVIDENCE LOG V1–V7 · DISAGREEMENTS (mandatory) · VERDICT:
 "T5-FIX DELTA VERIFIED" / "DEVIATIONS — [n]" / "BLOCKED: [reason]"
 FAILURE PROTOCOL: never patch; restore all mutations; verify git status matches
 pre-verify state before reporting.
+
+
+---
+
+## PROMPT CONTRACT: W1 — WAR Orchestrator Persistence + gamesPerTeam Metadata (+ F5 armSlot, F7 barrel)
+**Date:** 2026-06-12 | **Route:** Codex 5.5 | high reasoning effort → Fable 5 CLI audit (persistence-adjacent; audit non-negotiable)
+**Source:** MODE2_SYSTEMS_INTEGRATION_MAP.md §4.4 (gating fix for value spine); FINDING-103; IV spec §3.9; SESSION_LOG 2026-06-11 addendum (JK rulings: F5+F7 fold into W1).
+**JK ratifications (2026-06-12):** (R1) WAR reads gamesPerTeam from Franchise Setup
+Wizard config via SeasonMetadata snapshot; unresolvable → skip-and-warn, NEVER a
+silent default. (R2) F7 = salaryCalculator re-export block only, not the whole barrel.
+**Parked (logged, not in scope):** wizard free-input gamesPerTeam UI (replace static
+button list [16,32,40,80,128,162] in FranchiseSetup.tsx — Codex 5.5 medium,
+opportunistic; needs validation bounds); whole-barrel src/engines/index.ts deadness
+(fresh grep 2026-06-12: zero importers of any engines barrel import — future cited
+cleanup, no drive-by); mid-season gamesPerTeam edits (snapshot-at-creation is
+canonical semantics; changing that is a deliberate future design decision).
+**ENV:** prefix every node/vitest/tsx command with `NODE_ENV= ` (login shell exports
+NODE_ENV=production; poisons vitest with ~1,800 false failures).
+
+```
+You are a senior TypeScript engineer executing ticket W1 on the KBL Tracker franchise value spine.
+
+GOAL:
+Wire season-WAR persistence into the post-game pipeline with trustworthy season-length
+metadata, add the armSlot field to the franchise Player model (F5), and delete the dead
+salaryCalculator barrel re-export block (F7).
+
+SOURCE OF TRUTH:
+- MODE2_SYSTEMS_INTEGRATION_MAP.md §4.4 (gating dependency: WAR persistence + gamesPerTeam metadata)
+- FINDING-103 (warOrchestrator has zero product callers)
+- IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md §3.9 (armSlot pricing: only 'Sub' prices; null ≡ non-Sub)
+- SESSION_LOG.md 2026-06-11 addendum (JK rulings: F5+F7 fold into W1; armSlot:null generator default)
+
+CONSTRAINTS:
+- Only edit these files:
+  src/utils/processCompletedGame.ts
+  src/utils/seasonStorage.ts
+  src/utils/leagueBuilderStorage.ts
+  src/engines/smb4PlayerGenerator.ts
+  src/utils/prospectScoutingDraftEngine.ts
+  src/utils/franchiseStartupProspectDraft.ts
+  src/engines/index.ts
+  src/types/index.ts (ONLY if the W1-C type addition requires it; report if touched)
+  plus NEW test files under src/utils/tests/ or src/engines/__tests__/
+- Do NOT touch: src/engines/ivEngine.ts, src/engines/rosterEngineConstants.ts,
+  src/engines/__tests__/ivEngine.test.ts oracle fixtures, src/engines/tierParams.ts,
+  src/engines/salaryCalculator.ts, src/src_figma/app/engines/warOrchestrator.ts
+  (call it; do not modify it), any spec-docs.
+- Work directly on branch codex/franchise-v1-next (no new worktrees).
+- Quote the W1 sub-item ID (W1-A/B/C/D) for every change.
+- ENV: prefix every node/vitest/tsx command with `NODE_ENV= `.
+
+W1-A — WIRE WAR PERSISTENCE:
+In src/utils/processCompletedGame.ts, after aggregateGameToSeason succeeds (and only
+when shouldAggregateToRegularSeasonStats returned true), call
+calculateAndPersistSeasonWAR(seasonId, seasonGames, participantIds, playerPositions).
+- participantIds: union of Object.keys(gameState.playerStats) and
+  gameState.pitcherGameStats[].pitcherId (same set capturePlayerRatingsSnapshots uses).
+- playerPositions: derive primary position per participant. If PersistedGameState
+  carries lineup/defensive position data, use it; otherwise use
+  getEffectivePlayer(playerId, leagueId).primaryPosition. Report which source you used.
+  If neither is available for a player, omit that player from the map (orchestrator
+  handles missing positions) — do not invent positions.
+- WAR failure must NOT fail the game pipeline: wrap in try/catch, console.warn on error,
+  game completion proceeds. Aggregation failure handling is unchanged.
+
+W1-B — gamesPerTeam METADATA:
+1. Add `gamesPerTeam: number | null` to SeasonMetadata (src/utils/seasonStorage.ts:153).
+   This is per-team season length. Do NOT conflate with the existing totalGames field
+   (league-wide scheduled count); do not modify totalGames semantics.
+2. Populate gamesPerTeam at getOrCreateSeason time from franchise config
+   (franchiseConfig.season.gamesPerTeam), threaded from the caller. Existing stored
+   seasons without the field read as null (no destructive migration).
+3. At the W1-A call site, resolve seasonGames: SeasonMetadata.gamesPerTeam first, then
+   the franchiseAdaptiveStandards resolution chain as fallback. NEVER derive it from
+   schedule-row counting and NEVER silently default (no hardcoded 50). If unresolvable
+   → skip the WAR call entirely + console.warn('[WAR] skipped: gamesPerTeam unresolved
+   for season ' + seasonId).
+
+W1-C — F5 armSlot:
+1. Add `armSlot?: 'High' | 'Mid' | 'Low' | 'Sub' | null` to the franchise Player
+   interface (src/utils/leagueBuilderStorage.ts:189). Stored records without the field
+   normalize to null on load if a load-time normalization site exists; otherwise
+   undefined ≡ null is acceptable (financially identical per IV §3.9 — only 'Sub' prices).
+2. Thread player.armSlot through every site that builds a salary/IV input from the
+   franchise Player and currently omits or hardcodes it. Use explicit `armSlot:
+   player.armSlot ?? null`. List every site touched.
+3. Generators: smb4PlayerGenerator.ts, prospectScoutingDraftEngine.ts,
+   franchiseStartupProspectDraft.ts — add explicit `armSlot: null` to every generated
+   player construction site (JK ruling 2026-06-11: null is the correct financial
+   default; Sub-slot prospect generation is a D8 design question, NOT this ticket).
+
+W1-D — F7 BARREL RE-EXPORT:
+Delete the salaryCalculator re-export block in src/engines/index.ts (begins line 686
+`export {` under the "Salary Calculator - Player Value System" banner; line 690 =
+calculateBaseRatingSalary). Delete the whole block including its type re-exports if
+part of the same dead block. Do NOT delete anything else in the file. Pre-deletion
+verification required: grep proving zero importers of the removed names via the barrel
+path — paste the (empty) output.
+
+EXPECTED OUTPUT:
+- Completing a regular-season franchise game persists WAR rows for all season
+  participants (bWAR/rWAR/fWAR/pWAR per orchestrator) without blocking game completion.
+- SeasonMetadata carries gamesPerTeam from config; a manual-schedule franchise can
+  never feed 0 or a row-count into WAR scaling — it skips with a warning instead.
+- Franchise Player type-checks with armSlot; all generators emit armSlot: null;
+  Sub-slot players entering the franchise layer reprice through the existing
+  salaryCalculator threading.
+- src/engines/index.ts no longer re-exports salaryCalculator names; build is clean.
+
+VERIFICATION (run all, paste exact output):
+1. NODE_ENV= npm run build — passes
+2. NODE_ENV= npx vitest run src/utils/tests/processCompletedGame.statBoundary.test.ts
+   plus your NEW tests — pass
+3. NEW TEST (W1-A, mutation-honest): completes a game through processCompletedGame and
+   asserts WAR rows exist in persistence afterward. Must FAIL if the
+   calculateAndPersistSeasonWAR call is removed — state how you confirmed this
+   (comment the call out, run, show red, restore).
+4. NEW TEST (W1-B): gamesPerTeam unresolvable → WAR call skipped, pipeline still
+   succeeds; gamesPerTeam present → passed through verbatim (no 50 default).
+5. NEW TEST (W1-C): a generated player carries armSlot: null; a Player with
+   armSlot:'Sub' produces a different salary than armSlot:null through the franchise
+   reprice path.
+6. W1-D grep (zero barrel importers) — paste output.
+7. NODE_ENV= npx vitest run (full suite) — baseline = failures confined to
+   wpaRuntimeBoundary, franchiseNarrativeEventEligibility, and order-flakes
+   franchiseManualSmokeFixture / GameTrackerLaunchState (each passes solo). Any failure
+   outside that four-file set = report and stop.
+
+FORMAT:
+1. Files changed (exact paths)
+2. Changes made (each tagged W1-A/B/C/D)
+3. Verification results (paste exact output for items 1–7)
+4. "W1 complete" OR "BLOCKED: [exact reason]"
+
+FAILURE PROTOCOL:
+- If anything is ambiguous → quote the exact section and ask
+- If position derivation (W1-A) has no clean source → stop and report what
+  PersistedGameState actually carries
+- If a change would require touching a file not listed → stop and report
+- Never summarize or batch changes; never assume intent
+
+Use high reasoning effort. Think step-by-step.
+```
+
+*End W1 contract — appended 2026-06-12, JK-ratified R1/R2 in header.*
+
+---
+
+## W1 ADDENDUM 1 (2026-06-12) — allowed-file list correction (Codex BLOCKED, Captain-verified, APPROVED)
+**Trigger:** Codex correctly BLOCKED per failure protocol: W1-C threading requires
+`src/utils/franchiseSalary.ts`, absent from the allowed-file list.
+**Captain verification (fresh grep):** buildFranchiseSalaryPlayer (franchiseSalary.ts:133)
+builds PlayerForSalary with zero armSlot occurrences in file; 9 production importers
+confirm it is THE live franchise reprice path. Block accurate. List omission was a
+Captain drafting error — W1-C's "every site" mandate already covered this site.
+**Amendment:** ADD to allowed files: `src/utils/franchiseSalary.ts` — SURGICAL scope:
+exactly one threading line `armSlot: player.armSlot ?? null,` inside
+buildFranchiseSalaryPlayer. Nothing else in that file may change (it neighbors
+FINDING-134-adjacent consumers; keep the diff to that one line).
+**Verification unchanged:** existing test #5 (armSlot:'Sub' vs null produce different
+salaries through the franchise reprice path) is the acceptance gate for this line.
+All other W1 constraints, forbidden files, and verification items unchanged.
+
+---
+
+## PROMPT CONTRACT: W1-AUDIT — WAR Persistence + Metadata Audit (Fable 5 CLI)
+**Date:** 2026-06-12 | **Route:** Claude Code CLI | Fable 5 | high reasoning effort | audit against git diff
+*(Note: ran 2026-06-12 without the explicit effort directive — Captain drafting omission, caught by JK; restored here for the record and for any re-run.)*
+**Source:** W1 contract + ADDENDUM 1 above. Codex reported "W1 complete" 2026-06-12.
+Captain pre-verified: scope clean, frozen files untouched, focused suite 11/11,
+build green, franchiseSalary.ts diff = exactly 1 line.
+**ENV:** prefix every node/vitest/tsx command with `NODE_ENV= `. Node is at
+~/.nvm/versions/node/v20.20.0/bin (non-interactive shells lack it on PATH).
+
+```
+You are the auditing engineer for ticket W1. You audit the UNCOMMITTED git diff on
+branch codex/franchise-v1-next against the W1 contract + ADDENDUM 1 in
+spec-docs/PROMPT_CONTRACTS.md. You verify with fresh evidence; you never trust the
+builder's report. You never patch code — you report.
+
+SCOPE: git diff (9 modified files) + 3 new test files. Read the W1 contract first.
+
+V1. SCOPE & FROZEN: git diff --name-only matches the W1 allowed list (+ Addendum 1
+    franchiseSalary.ts). ivEngine.ts, rosterEngineConstants.ts, tierParams.ts,
+    salaryCalculator.ts, warOrchestrator.ts, oracle fixtures: UNTOUCHED.
+    franchiseSalary.ts diff = exactly one line (armSlot threading), nothing else.
+V2. W1-A LOGIC REVIEW (processCompletedGame.ts, +140 lines): WAR call fires ONLY
+    after successful regular-season aggregation (gated by
+    shouldAggregateToRegularSeasonStats); try/catch never blocks game completion;
+    participantIds = batting keys ∪ pitcher ids; position derivation = lineup state
+    first, getEffectivePlayer fallback, OMITS unresolved (never invents). Confirm no
+    behavior change to existing aggregation/archive/almanac paths.
+V3. W1-B METADATA: SeasonMetadata.gamesPerTeam added; legacy records normalize to
+    null; BACKFILL writes ONLY when stored value is null — prove it can never
+    overwrite a non-null value. Resolution order at the WAR call site: stored
+    metadata first, then fallback. DEVIATION CHECK: contract specified the
+    franchiseAdaptiveStandards resolution chain as fallback; builder described
+    "explicit adaptive/milestone input" — determine what was implemented and verdict
+    whether it satisfies contract intent (config-truth, never schedule-row counts).
+    Grep-prove: no hardcoded 50 (or any default) anywhere in the new resolution path;
+    unresolved → skip + warn.
+V4. W1-C COVERAGE: enumerate EVERY player-construction site in smb4PlayerGenerator
+    (Captain flagged lines ~636/660 vs the single armSlot at ~827 — prove all
+    constructed players carry armSlot or flow through the 827 assembly),
+    prospectScoutingDraftEngine, franchiseStartupProspectDraft (threads
+    player.armSlot ?? null — verify source pool type legitimately carries armSlot).
+    Player interface union exact: 'High'|'Mid'|'Low'|'Sub'|null.
+V5. W1-D DELETION: the 81 deleted lines in src/engines/index.ts are confined to the
+    "Salary Calculator - Player Value System" banner (value + type re-exports).
+    Re-run the zero-importers grep yourself. Nothing else removed.
+V6. MUTATION RE-CHECK: comment out the calculateAndPersistSeasonWAR call →
+    warPersistence test goes RED; restore → green. Set gamesPerTeam resolution to a
+    hardcoded 50 → warMetadata test goes RED; restore. Set franchiseSalary armSlot
+    line to null → franchiseArmSlot Sub-vs-null test goes RED; restore. git status
+    must match pre-audit state after restores.
+V7. SUITE: NODE_ENV= full suite — baseline = failures confined to wpaRuntimeBoundary,
+    franchiseNarrativeEventEligibility, franchiseManualSmokeFixture,
+    GameTrackerLaunchState (order-flakes pass solo). NODE_ENV= npm run build passes.
+
+FORMAT: EVIDENCE LOG V1–V7 · DISAGREEMENTS (mandatory section, "none" if none) ·
+VERDICT: "W1 VERIFIED" / "DEVIATIONS — [n] MAJOR, [n] LOW" / "BLOCKED: [reason]"
+FAILURE PROTOCOL: never patch; restore all mutations; verify git status matches
+pre-audit state before reporting.
+```
+
+---
+
+## PROMPT CONTRACT: W1-FIX — Audit Remediations (MAJOR-1 fuel line, LOW-2 seasonId)
+**Date:** 2026-06-12 | **Route:** Codex 5.5 | high reasoning effort → Fable 5 delta verify
+**Source:** W1-AUDIT verdict "DEVIATIONS — 1 MAJOR, 1 LOW" (2026-06-12). MAJOR-1: WAR
+persistence live-dead — no production caller supplies a gamesPerTeam source. LOW-2:
+WAR seasonId resolution prefers archiveOptions.seasonId; aggregation writes under
+options.seasonId. Captain root-cause (fresh greps 2026-06-12): franchiseInitializer
+deriveSeasonTotalGames = schedule-row counting (§4.4 anti-pattern, pre-existing);
+config.season.gamesPerTeam already in hand at initializeFranchise; repair path runs
+on franchise load → null-only backfill heals existing seasons; useGameState has zero
+config access → metadata-first fix means it needs NO changes.
+**ENV:** prefix every node/vitest/tsx command with `NODE_ENV= `. Node:
+~/.nvm/versions/node/v20.20.0/bin on non-interactive shells.
+
+```
+You are a senior TypeScript engineer executing W1-FIX on branch codex/franchise-v1-next.
+W1 built a correct WAR-persistence engine with no production fuel line. You connect it.
+
+GOAL:
+Make SeasonMetadata.gamesPerTeam live in production (creation + repair paths +
+FranchiseHome call sites) and fix WAR seasonId resolution to mirror aggregation.
+
+SOURCE OF TRUTH:
+W1 + ADDENDUM 1 + W1-AUDIT report (this file). R1 ruling: config truth only,
+skip-and-warn, NEVER a silent default, NEVER schedule-row counts for gamesPerTeam.
+
+CONSTRAINTS:
+- Only edit: src/utils/franchiseInitializer.ts, src/utils/processCompletedGame.ts,
+  src/src_figma/app/pages/FranchiseHome.tsx, plus existing/new W1 test files.
+- Do NOT touch: src/src_figma/hooks/useGameState.ts (X4 below is a deliberate
+  non-change), src/utils/seasonStorage.ts (W1 invariants frozen: null-only backfill,
+  normalization), warOrchestrator.ts, all W1 frozen files, any spec-docs.
+- totalGames semantics UNCHANGED — do not modify deriveSeasonTotalGames or any
+  totalGames flow. gamesPerTeam is threaded BESIDE it, never derived from it.
+- Quote X-item IDs for every change.
+
+X1 — CREATION PATH: extend ensureFranchiseSeasonMetadata to accept gamesPerTeam:
+number | null and pass it to getOrCreateSeason (5th param). initializeFranchise
+threads config.season.gamesPerTeam. createFranchiseSeasonMetadata callers thread
+whatever config value they hold; if a caller has no config source, pass null
+explicitly (never a derived count).
+
+X2 — REPAIR/HEAL PATH: repairFranchisePersistence loads the franchise config
+(franchiseId is in hand) and threads config.season.gamesPerTeam into
+ensureFranchiseSeasonMetadata. The existing-metadata branch backfills gamesPerTeam
+ONLY when the stored value is null; a non-null stored value is NEVER overwritten,
+including when config disagrees (snapshot-at-creation is canonical per W1 R1).
+If config is unavailable, pass null — no fallback derivation.
+
+X3 — FRANCHISEHOME CALL SITES: both processCompletedGame calls (handleSimulate
+~:3595, batch sim ~:3703) add the W1 options gamesPerTeam source from
+franchiseData.franchiseConfig?.season?.gamesPerTeam (pass undefined/omit when
+absent — never 0, never a row count). This is belt-and-braces: it also triggers
+the W1 WAR-site backfill for existing null-metadata seasons immediately.
+
+X4 — DELIBERATE NON-CHANGE: useGameState is NOT edited. After X1/X2, its
+processCompletedGame calls resolve gamesPerTeam via stored SeasonMetadata
+(metadata-first resolution already built in W1). State this in your report.
+
+X5 — LOW-2 SEASONID: WAR-site season-id resolution mirrors the aggregation target:
+options.seasonId FIRST, then archiveOptions.seasonId. The orchestrator must load
+and persist under the same scope aggregateGameToSeason wrote to.
+
+X6 — LIVENESS TEST (mutation-honest, production-shaped): a test that (a) creates
+season metadata WITH gamesPerTeam populated, (b) calls processCompletedGame with
+options = { seasonId } ONLY (the exact useGameState/FranchiseHome shape — no
+milestoneConfig), (c) asserts WAR rows persisted. Must go RED if metadata
+gamesPerTeam is null (skip-and-warn proven in the same file). Plus a test pinning
+X5: when options.seasonId ≠ archiveOptions.seasonId, WAR loads/persists under
+options.seasonId — flipping the preference goes RED.
+
+VERIFICATION (run all, paste exact output):
+1. NODE_ENV= npm run build — passes
+2. NODE_ENV= npx vitest run on statBoundary + all W1/W1-FIX test files — pass
+3. X6 mutation evidence: show the RED runs (null metadata; flipped preference),
+   restore, show green
+4. Full suite — baseline = failures confined to the characterized four-file set
+5. git diff --name-only — exactly the allowed files
+
+FORMAT:
+1. Files changed (exact paths)
+2. Changes made (each tagged X1–X6; X4 = explicit non-change statement)
+3. Verification results (paste exact output 1–5)
+4. "W1-FIX complete" OR "BLOCKED: [exact reason]"
+
+FAILURE PROTOCOL:
+- If repairFranchisePersistence has no clean config accessor → stop and report
+  what franchiseManager/storage actually exposes
+- If the W1 options shape doesn't accept a gamesPerTeam source at the
+  processCompletedGame boundary → quote the actual options type and ask
+- If a change needs an unlisted file → stop and report
+- Never summarize or batch changes; never assume intent
+
+Use high reasoning effort. Think step-by-step.
+```
+
+---
+
+## PROMPT CONTRACT: W1-FIX-VERIFY — Delta Verify (Fable 5 CLI)
+**Date:** 2026-06-12 | **Route:** Claude Code CLI | Fable 5 | high reasoning effort | delta verify
+**Source:** W1-AUDIT "DEVIATIONS — 1 MAJOR, 1 LOW" → W1-FIX (Codex 5.5 high) reported
+complete 2026-06-12. Captain pre-verified: 6 files/22 tests green, X1/X2 null-only
+backfill condition explicit, X3 zero-safe (`|| undefined`), X5 in place, useGameState
+untouched. Workspace flag (adjudicated, expected): worktree carries the combined
+W1 + W1-FIX diff + PROMPT_CONTRACTS.md appends + untracked CSV — the commit unit is
+the combined diff; evaluate it as such.
+**ENV:** `NODE_ENV= ` prefix mandatory. Node: ~/.nvm/versions/node/v20.20.0/bin.
+
+```
+You are the delta-verifying engineer for W1-FIX. You previously audited W1 and
+issued MAJOR-1 (WAR live-dead, no production gamesPerTeam source) and LOW-2
+(seasonId resolution divergence). Verify the fix delta with fresh evidence. Never
+trust the builder report. Never patch.
+
+D1. MAJOR-1 CLOSED — FUEL LINE LIVE: trace all three production ignition paths:
+    (a) creation — initializeFranchise → ensureFranchiseSeasonMetadata →
+    getOrCreateSeason carries config.season.gamesPerTeam; (b) heal —
+    repairFranchisePersistence loads config and backfills ONLY when stored
+    gamesPerTeam === null (prove non-null is never overwritten, including when
+    config disagrees); (c) belt-and-braces — both FranchiseHome call sites pass a
+    config-sourced value, zero-safe, never row counts. Confirm the X6 liveness test
+    is production-shaped: options = { seasonId } only, WAR rows persist via
+    metadata-first resolution.
+D2. X4 NON-CHANGE: git diff contains NO useGameState.ts changes. Reason through
+    (do not just assert) why useGameState's call now produces live WAR: its
+    seasonId reaches metadata that X1/X2 populated. Flag if any franchise flow
+    exists where metadata is never populated and no options source fires (e.g.
+    a path that bypasses both initializeFranchise and repairFranchisePersistence).
+D3. LOW-2 CLOSED: WAR scope resolution = options.seasonId ?? archiveOptions.seasonId
+    (mirrors aggregation). Archive call sites unchanged (archiveOptions-first is
+    correct for archiving). Mutation: flip the WAR-site preference → X6 scope test
+    RED; restore.
+D4. MUTATION RE-RUN: null-metadata skip test RED when metadata gamesPerTeam nulled;
+    restore. All restores verified — git status byte-identical to pre-verify state.
+D5. FROZEN/INVARIANT CHECK: seasonStorage.ts diff unchanged from your W1-AUDIT
+    snapshot (W1-FIX did not touch it); totalGames semantics and
+    deriveSeasonTotalGames untouched; W1 frozen files still clean; FranchiseHome
+    diff contains ONLY the two X3 option additions (no drive-bys in a 4k-line page).
+D6. SUITE & BUILD: NODE_ENV= full suite — baseline = failures confined to the
+    characterized four-file set. NODE_ENV= npm run build passes. New-test count
+    delta consistent with X6 additions.
+
+FORMAT: EVIDENCE LOG D1–D6 · DISAGREEMENTS (mandatory) · VERDICT:
+"W1-FIX DELTA VERIFIED" / "DEVIATIONS — [n]" / "BLOCKED: [reason]"
+FAILURE PROTOCOL: never patch; restore all mutations; confirm git status matches
+pre-verify state before reporting.
+
+Use high reasoning effort. Think step-by-step.
+```

@@ -3502,3 +3502,83 @@ franchiseStartupProspectDraft) assign NO armSlot — W1 adds an explicit
 'Sub'; null ≡ non-Sub). NEW DESIGN HOOK → D8 Scouting/prospect generation:
 should generated prospects carry a Sub-slot chance (frequency? scout-obscured?)
 — a hidden submariner is on-doctrine draft-night texture.
+
+
+## 2026-06-12 — W1 ARC COMPLETE: WAR fuel line live, audited + delta-verified
+
+**Ticket:** W1 — WAR orchestrator persistence + gamesPerTeam metadata, with folded
+X-items F5 (armSlot franchise field) and F7 (dead barrel re-export). ROUTE executed:
+Codex 5.5 high → Fable 5 audit → Codex 5.5 high fix → Fable 5 delta verify.
+
+**Build (Codex 5.5 high):** processCompletedGame calls calculateAndPersistSeasonWAR
+after successful regular-season aggregation only (try/catch, never blocks completion);
+SeasonMetadata gains gamesPerTeam: number|null (normalized at every read/write site,
+null-only backfill, never conflated with totalGames); resolution = stored metadata
+first → explicit config-shaped options → skip + warn, NO silent default (R1 ruling,
+JK 2026-06-12: config truth from Setup Wizard; wizard free-input UI parked); franchise
+Player gains armSlot 'High'|'Mid'|'Low'|'Sub'|null with full generator coverage
+(armSlot: null default per 2026-06-11 ruling) and franchiseSalary threading; dead
+salaryCalculator barrel block (81 lines) deleted from engines/index.ts.
+
+**Mid-build BLOCK (protocol worked):** Codex correctly stopped — W1-C threading needed
+franchiseSalary.ts, absent from the allowed list. Captain verified (fresh grep:
+buildFranchiseSalaryPlayer omitted armSlot; 9 production importers = THE live reprice
+path), owned the list omission, issued ADDENDUM 1 (one surgical line). The contract's
+own mutation-honest test #5 would have caught the omission at verification regardless.
+
+**Fable W1-AUDIT verdict: DEVIATIONS — 1 MAJOR, 1 LOW.** Code itself fully conformed
+(scope, null-only backfill overwrite-proof, generator enumeration, mutations all
+re-run RED→green). MAJOR-1: WAR live-dead — NO production caller supplied a
+gamesPerTeam source (Captain contract-scoping error: every caller that could carry
+config was off the allowed list — same failure class as the franchiseSalary block;
+lesson: scope the fuel line, not just the engine). LOW-2: WAR seasonId resolution
+preferred archiveOptions.seasonId while aggregation writes under options.seasonId —
+latent until MAJOR-1 fixed. Audit bonus root-cause: deriveSeasonTotalGames =
+schedule-row counting live in production → **FINDING-135** (deferred to F-134 slot).
+
+**W1-FIX (Codex 5.5 high):** metadata-first architecture — X1 creation
+(initializeFranchise threads config.season.gamesPerTeam into getOrCreateSeason 5th
+param), X2 heal (repairFranchisePersistence — runs on FranchiseHome mount — backfills
+ONLY null; disagreeing config never overwrites a non-null snapshot, proven by test
+asserting saveSeasonMetadata NOT called), X3 belt-and-braces (both FranchiseHome
+processCompletedGame sites pass config gamesPerTeam, || undefined zero-safe), X4
+DELIBERATE NON-CHANGE (useGameState untouched — its options.seasonId =
+getFranchiseSeasonId output, the same key X1/X2 populate; Fable traced and ratified),
+X5 (WAR scope = options.seasonId first, mirrors aggregation; archive semantics
+untouched), X6 (production-shaped liveness test: options = { seasonId } only, WAR
+persists via metadata alone; mutation-killed both directions).
+
+**Fable W1-FIX-VERIFY verdict: W1-FIX DELTA VERIFIED.** All three fuel lines traced
+config-sourced; non-null-never-overwritten proven; D3/D4 mutations re-run RED and
+restored sha-identical; seasonStorage byte-stable vs audit snapshot; FranchiseHome
+diff = exactly 10 lines; suite at baseline (3 fails, characterized set); build green.
+Forward-looking note (not a deviation): if a future call site sets
+archiveOptions.seasonId WITHOUT options.seasonId, aggregation targets
+DEFAULT_SEASON_ID while WAR targets the archive id — unreachable today.
+
+**Process corrections this arc:** (1) JK caught reasoning-effort drift — both Fable
+contracts (W1-AUDIT, W1-FIX-VERIFY) had dropped the "high reasoning effort"
+route-header + closing directive that T4/T5 carried; patched in PROMPT_CONTRACTS.md
+(W1-AUDIT ran without it — noted in-file; output quality did not visibly suffer but
+the directive is protocol). PROPOSED standing rule for SESSION_RULES (pending JK):
+every contract, builder or auditor, carries reasoning effort in ROUTE header AND
+closing directive, else not ready to hand off. (2) ENV lesson institutionalized:
+non-interactive shells lack node (nvm) — path baked into contract ENV lines.
+
+**Suite baseline (re-confirmed 3×):** wpaRuntimeBoundary +
+franchiseNarrativeEventEligibility fixed failures; franchiseManualSmokeFixture +
+GameTrackerLaunchState order-flakes (GameTrackerLaunchState did not flake in either
+Fable run). Test count 7,189 (+5 W1 + +5 W1-FIX over pre-arc).
+
+**Parked this arc:** wizard free-input gamesPerTeam UI (Codex 5.5 medium,
+opportunistic, needs validation bounds); whole engines/index.ts barrel deadness
+(fresh grep: zero importers anywhere — future cited cleanup); mid-season
+gamesPerTeam edit semantics (snapshot-at-creation canonical); Fable's
+forward-looking seasonId note above.
+
+**NEXT SESSION:** W1 arc closure commit (W1 + W1-FIX + contracts + session docs,
+single commit, post-verdict — T5 pattern), then **FINDING-134 discovery slot**
+(JK-ruled 2026-06-11: Fable 5 CLI, spec-ui-alignment/franchise-button-audit skills →
+fixes Codex 5.5 high) now ALSO carrying FINDING-135 (totalGames consumer inventory).
+Then TV1 → T6 per the 5-session milestone (T5 ✅ W1 ✅ + TV1 + D1 + D2). Design
+track: D0 scope session still next.

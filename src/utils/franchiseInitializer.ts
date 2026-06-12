@@ -189,6 +189,8 @@ async function ensureFranchiseSeasonMetadata(
   franchiseId: string,
   seasonNumber: number,
   totalGames: number,
+  // X1/X2: config-sourced per-team season length; never derived from schedule row count.
+  gamesPerTeam: number | null,
 ): Promise<{ metadata: SeasonMetadata; created: boolean; updated: boolean }> {
   const seasonId = getFranchiseSeasonId(franchiseId, seasonNumber);
   const seasonName = getFranchiseSeasonName(seasonNumber);
@@ -200,20 +202,25 @@ async function ensureFranchiseSeasonMetadata(
       seasonNumber,
       seasonName,
       totalGames,
+      gamesPerTeam,
     );
     return { metadata, created: true, updated: false };
   }
 
+  // X2: repair/heal only fills missing metadata; existing non-null snapshots remain canonical.
+  const shouldBackfillGamesPerTeam = gamesPerTeam !== null && existing.gamesPerTeam === null;
   if (
     existing.seasonNumber !== seasonNumber ||
     existing.seasonName !== seasonName ||
-    existing.totalGames !== totalGames
+    existing.totalGames !== totalGames ||
+    shouldBackfillGamesPerTeam
   ) {
     const updated = await saveSeasonMetadata({
       ...existing,
       seasonNumber,
       seasonName,
       totalGames,
+      gamesPerTeam: shouldBackfillGamesPerTeam ? gamesPerTeam : existing.gamesPerTeam,
     });
     return { metadata: updated, created: false, updated: true };
   }
@@ -225,8 +232,9 @@ async function createFranchiseSeasonMetadata(
   franchiseId: string,
   seasonNumber: number,
   totalGames: number,
+  gamesPerTeam: number | null,
 ): Promise<void> {
-  await ensureFranchiseSeasonMetadata(franchiseId, seasonNumber, totalGames);
+  await ensureFranchiseSeasonMetadata(franchiseId, seasonNumber, totalGames, gamesPerTeam);
 }
 
 async function deriveSeasonTotalGames(
@@ -306,6 +314,7 @@ export async function repairFranchisePersistence(
     franchiseId,
     seasonNumber,
     totalGames,
+    config.season?.gamesPerTeam ?? null,
   );
 
   return {
@@ -411,7 +420,7 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
     await initScheduleDatabase();
 
     // 8. Create the season metadata record franchise mode reads later.
-    await createFranchiseSeasonMetadata(franchiseId, 1, 0);
+    await createFranchiseSeasonMetadata(franchiseId, 1, 0, config.season.gamesPerTeam);
 
     // 9. Set as active franchise
     await setActiveFranchise(franchiseId);
@@ -452,7 +461,7 @@ export async function initializeEmptyFranchiseSeasonSchedule(
   await initScheduleDatabase();
 
   // 3. Create season metadata with no scheduled games by default.
-  await createFranchiseSeasonMetadata(franchiseId, newSeasonNumber, 0);
+  await createFranchiseSeasonMetadata(franchiseId, newSeasonNumber, 0, null);
 
   // 4. Carry farm holding records forward so FARM assignments remain durable
   // in the new franchise season scope. Farm players still do not play games.

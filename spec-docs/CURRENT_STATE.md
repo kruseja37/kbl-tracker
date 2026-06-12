@@ -258,3 +258,42 @@ FINDING-134 residual $M flows (RULED: discovery slot after W1 — Fable CLI →
 Codex 5.5 high); order-flake cleanup (RULED: standalone, opportunistic); ASG
 WPA→Fame; Signature Moment card line; fame tier names; F2 SOT typos (~15); F4
 FA trait spellings (4).
+
+
+---
+
+## CURRENT STATE — 2026-06-12 (W1 arc CLOSED)
+**Branch:** codex/franchise-v1-next. **This commit:** W1 + W1-FIX + ADDENDUM 1 +
+contracts (W1/W1-AUDIT/W1-FIX/W1-FIX-VERIFY) + FINDING-135 + session docs (single
+closure commit, post "W1-FIX DELTA VERIFIED").
+**What exists & is trustworthy:** WAR persistence LIVE — processCompletedGame →
+calculateAndPersistSeasonWAR after successful regular-season aggregation, scope =
+options.seasonId (mirrors aggregation); SeasonMetadata.gamesPerTeam config-sourced
+via three fuel lines (creation/initializeFranchise, heal/repairFranchisePersistence
+on FranchiseHome mount, belt-and-braces FranchiseHome call sites), null-only
+backfill provably never overwrites a non-null snapshot, unresolved → skip+warn,
+NEVER silent default or schedule-row counts (R1); useGameState deliberately
+untouched (metadata-first covers it, Fable-traced); franchise Player.armSlot
+('High'|'Mid'|'Low'|'Sub'|null) with full generator null-default coverage +
+franchiseSalary threading (F5 closed); dead salaryCalculator barrel removed from
+engines/index.ts (F7 closed). All W1/W1-FIX tests mutation-honest (re-run by Fable).
+**Suite baseline:** unchanged — 2 fixed failures (wpaRuntimeBoundary,
+franchiseNarrativeEventEligibility) + ≥2 order-flakes (franchiseManualSmokeFixture,
+GameTrackerLaunchState). CLI: prefix `NODE_ENV= `; node at
+~/.nvm/versions/node/v20.20.0/bin on non-interactive shells.
+**NEXT TASK: FINDING-134 + FINDING-135 discovery slot.** ROUTE: Fable 5 CLI
+(spec-ui-alignment / franchise-button-audit skills) — wiring evidence per component
+(TradeFlow ×1e6 trade matching, FreeAgencyFlow, AwardsCeremonyFlow,
+FinalizeAdvanceFlow $M tables/thresholds) + totalGames consumer inventory (F-135) →
+fixes Codex 5.5 | high. Contract not yet drafted — first action of next session.
+**Then:** TV1 (True Value canonical pass) → T6. 5-session milestone: T5 ✅ W1 ✅ +
+TV1 + D1 + D2. Design track: D0 scope session next (chat-only, parallel).
+**Open pending-JK:** SESSION_RULES standing rule — reasoning effort mandatory in
+every contract ROUTE header + closing directive (proposed 2026-06-12); ASG WPA→Fame;
+Signature Moment card line; fame tier names; F2 SOT typos (~15); F4 FA trait
+spellings (4); order-flake cleanup (standalone, opportunistic).
+**Parked (W1 arc):** wizard free-input gamesPerTeam UI (Codex 5.5 medium + validation
+bounds); whole engines/index.ts barrel deadness (zero importers — cited cleanup);
+mid-season gamesPerTeam edit semantics (snapshot-at-creation canonical); seasonId
+divergence note (archiveOptions-only caller would split aggregation/WAR scopes —
+unreachable today, Fable W1-FIX-VERIFY).

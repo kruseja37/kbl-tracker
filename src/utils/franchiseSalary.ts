@@ -142,6 +142,7 @@ export function buildFranchiseSalaryPlayer(player: Player): PlayerForSalary {
     secondaryPosition: player.secondaryPosition ? mapFranchiseSalaryPosition(player.secondaryPosition) : undefined,
     pitcherRole: pitcher ? mapFranchiseSalaryPitcherRole(player.primaryPosition) : undefined,
     bats: player.bats,
+    armSlot: player.armSlot ?? null,
     ratings: pitcher
       ? {
           velocity: rating(player.velocity),
