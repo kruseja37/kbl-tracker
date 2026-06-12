@@ -3964,3 +3964,121 @@ Supersedes the TV1-FIX strict-label-only approach as the END STATE
 (TV2 vs D1 vs its own ticket) = JK decision at TV2 drafting; R-8 is the
 quoted source of truth either way. Taxonomy block queued for the next
 spec-cleanup batch alongside R-6.
+
+
+---
+
+# TV2 — DESIGNATION SLICE: canonical storage + projected designations (contract)
+**Drafted:** 2026-06-12 | **ROUTE: Codex 5.5 | very high → Fable 5 CLI audit**
+(new persistence + post-game state pipeline; audit non-negotiable)
+**Scope = audit slices 3+4 ONLY.** Season-end locking (slice 5) and
+Captain/Fan Hopeful (slice 6) are LATER tickets. EP1 (R-8 effective
+positions) follows TV2; until then peer pools are profile-position — a
+DOCUMENTED LIMITATION, not a defect (FINDING-143 closes with EP1).
+
+## Quoted gospel (MODE_2_CANON_FRANCHISE_SEASON_UPDATED.md §17 — verbatim authority)
+- All performance designations (MVP, Ace, Fan Favorite, Albatross)
+  "recalculate after every completed game"; mid-season values are ALWAYS
+  projected (dotted badge); locking ONLY at season end (NOT this ticket).
+- §17.1 Team MVP: highest total WAR on team; min games 20% of season
+  (min 5).
+- §17.2 Ace: highest pWAR among team pitchers; min 20% of season as
+  pitcher (min 4); min pWAR 0.5.
+- §17.3 Fan Favorite: HIGHEST POSITIVE Value Delta (True Value − Contract);
+  min games 10% of season (min 3); carries over until 10% of new season.
+- §17.4 Albatross: MOST NEGATIVE Value Delta; same floors; same carryover;
+  15% trade discount per C-056 (discount wiring is NOT this ticket —
+  offseason flows flag-gated per F-138).
+- §17.8 badge visuals: dotted border + "Proj." prefix for all mid-season
+  badges; colors per the §17.8 table.
+
+## Contract (handoff text)
+
+```
+You are a senior TypeScript engineer executing TV2 (designation slice) for
+KBL Tracker.
+
+GOAL:
+Canonical designation storage + projected MVP/Ace/Fan Favorite/Albatross
+recalculated after every completed game, consuming persisted WAR and
+canonical True Value rows. Projected-only: zero locked effects.
+
+SOURCE OF TRUTH:
+- TV2 header above: quoted §17 gospel (criteria, cadence, floors,
+  carryover, badge rules) — cite per change
+- Rulings R-5 (trust flips deliberately HERE for projected designations),
+  R-6/R-7 (taxonomy, shared DB), R-8 noted as EP1's future input
+- FRANCHISE_V1_AUDIT_SALARY_DESIGNATIONS_ANALYTICS.md slices 3-4 (record
+  shape)
+- R1' ruling: season-length floors derive from gamesPerTeam config-truth;
+  totalGames BANNED
+
+PHASE 0 — DISCOVERY (report and STOP for Captain sign-off before building):
+- Inventory the existing designation surface: franchiseDesignations.ts,
+  franchiseDesignationEligibility.ts, franchiseDesignationMoraleBridge.ts,
+  franchiseDesignationMoraleContextAdapter.ts,
+  franchiseDesignationReadinessReport.ts (+ any others grep finds).
+  Classify each ADOPT / AMEND / WIRE / REBUILD with file:line evidence —
+  "it exists" is a grep result, not a memory.
+- Confirm per-player games-played counts (batting games; pitching
+  appearances) are derivable from persisted season stat rows for the §17
+  floors; cite file:line.
+- Confirm the trueValue input at franchiseDesignations.ts:31 and the
+  ABSENCE of any valueDelta consumer (TV1 DISCOVERY 2 baseline).
+
+PHASE 1 — BUILD (after sign-off):
+- Storage: designation records in the SHARED trackerDb (R-7; additive
+  store, version bump follows the centralized upgrade-handler convention —
+  the v13 hazard discipline applies). Record shape per audit slice 3:
+  { franchiseId, seasonId, teamId, playerId, type, status
+  ('projected'|'locked'), sourceInputs, calculationVersion, lockedAt
+  (null this ticket), carryover metadata }.
+- Engine: projected recalc per §17 criteria. MVP/Ace from persisted WAR
+  rows (team-scoped). Fan Favorite/Albatross from CANONICAL valueDelta —
+  read persisted True Value rows (franchiseTrueValueStorage); this is the
+  new valueDelta consumer. Floors from gamesPerTeam config-truth (reuse
+  the resolveSeasonGamesForWAR pattern; NEVER totalGames). Below-floor →
+  no projected holder (not a default holder).
+- Trigger: processCompletedGame, after True Value persistence succeeds
+  (extending the TV1 gate chain: WAR → TV → designations; any upstream
+  failure skips downstream with a warn).
+- Trust: flip valueDeltaTrustedForDesignations TRUE for the PROJECTED path
+  only, with a documented limitation string: "peer pools are
+  profile-position until EP1 (R-8)". Locked effects (Fame writes, morale
+  writes, trade discount) remain OFF — grep-pinned absent.
+- Cleanup (folded): remove the unreachable UTIL/BENCH merge-group rows
+  from POSITION_MERGE_GROUPS (dead under R-6 enforcement; cite TV1-FIX
+  audit D6).
+- Badges: projected badge data exposed per §17.8 (dotted/"Proj." semantics)
+  for TeamHub display sites (TV1 DISCOVERY 2 inventory); display wiring
+  minimal — data contract first.
+
+CONSTRAINTS:
+- Do NOT touch: ivEngine.ts, frozen oracle, tierParams.ts,
+  warOrchestrator.ts internals, calculateTrueValue step machinery,
+  fanMoraleEngine.ts, fanFavoriteEngine.ts (legacy — Phase 0 classifies
+  it), offseason flows, season-end/locking logic.
+- Mutation-pinned tests: each §17 criterion; each floor (incl. Ace
+  pWAR≥0.5); below-floor → no holder; upstream-failure → no designation
+  write; carryover metadata round-trip; locked-effects-absent grep-pin;
+  totalGames grep-pin.
+
+VERIFICATION:
+- NODE_ENV= npm run build green; focused tests green; full suite =
+  characterized set only (report exact delta vs post-TV1-FIX baseline).
+
+FORMAT:
+Phase 0 report → STOP. Then: files changed (all); changes (cite §17
+line/ruling per change); verification output (exact); "TV2 complete" OR
+"BLOCKED: [exact reason]".
+
+FAILURE PROTOCOL:
+- Phase 0 reveals a REBUILD-class conflict with existing designation code
+  → STOP, report, await ruling
+- Ambiguity → quote the exact section and ask
+- Suite failure outside the characterized set → BLOCK; never bend tests
+
+Use very high reasoning effort. Think step-by-step.
+```
+
+**Execution record:** [pending]
