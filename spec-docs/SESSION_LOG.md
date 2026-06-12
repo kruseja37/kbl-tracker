@@ -3316,3 +3316,100 @@ fold into next T5/T6 touch of the file.
 **T4 + T4-FIX both COMPLETE.** Spec §13 row finalized; CURRENT_STATE phase updated.
 Next: closure commit (engine + tests + constants + oracle + script flag + contracts +
 session docs + spec amendments incl. D17 mojo extension), then T5.
+
+## 2026-06-11 — VISION/INTEGRATION SESSION (no build) — engine architecture + 14 design rulings
+
+**Session type:** vision, per JK directive. No code touched; no Codex tickets run.
+
+**Deliverable 1 — MODE2_SYSTEMS_INTEGRATION_MAP.md (new):** mapped the chain
+IV → salary → True Value → roster decisions → expected wins → morale/
+milestones/reporter → Mode 2→3 handoff. Key findings: (4.1) expected-wins has
+THREE competing definitions (payroll percentile / declared budget / roster TV)
+— ruling needed, now routed to the D3 Morale design session as H11; (4.2) two
+fan-morale formulas coexist — MODE_2 §20 ruled canonical, manager-firing
+consequence SURVIVES per DQ6; (4.3) MODE_2 §15.5 + salary spec potency text
+CONTRADICTS D15 potency-neutrality — pre-build amendment folded into T5
+contract; (4.4) WAR persistence + gamesPerTeam metadata = the single gating
+fix for TV/designations/morale factors; (4.5) IV §3.8 stale DH row; (4.6)
+SeasonSummary payload gaps (fame, ledger/rookie-scale flags, playerMorale,
+declared budget) — field pass queued. WAR smoke-test explosion attributed
+(UNVERIFIED — needs repro) to season-scaling metadata, not stat design.
+
+**Deliverable 2 — FRANCHISE_ENGINE_VISION_QA.md (new):** 14 design rulings +
+2 amendments (JK = design authority; Claude = engineering owner per JK
+directive this session). Headlines: all controlled teams are the user
+(protagonist per controlledBy, never teamId); columnist doctrine (reporters
+write angles, never stenography; FEED/ALERT/INTERRUPT delivery tiers,
+~2-interrupt cap); fame FULLY VISIBLE (tier+number), player morale band+trend
+only (number + response curve hidden) — fame is a scoreboard, the clubhouse
+is a mystery read through journalism; relationships capped at sports-drama
+(romance = context, never dramatized); LIVING PROFILES (frequent ±1 ratings
+moves, queued + batch-applied at series boundaries); FULL TEETH fan morale
+(mid-season manager firing returns + NEW attendance/revenue + rebuild
+mandates); playable All-Star Game (exhibition mode, stats quarantined),
+fame/morale-weighted fan vote with systemic snubs; card = abstract front /
+Savant back / per-season collectible binder; almanac search = curated →
+filters → NL magic tier; LIGHT CHAOS (flavor only, never season-wrecking).
+Engineering rulings (Claude): 3-layer engine architecture (Truth → Judgment →
+Story → Continuity), strict typed contracts between layers / pure-function
+calls within, writes one-directional, user always the bridge; Story engines
+are SIBLINGS (Relationships/Morale/Narrative/Recognition).
+
+**Deliverable 3 — FRANCHISE_ENGINE_MAP.md v0.2 (new):** 15-engine inventory
+with charters + build status; value channel (WAR→TV→economy) vs memory
+channel (WPA→Fame→narrative) — a player's story is the gap between channels;
+§4.5 existing-asset crosswalk added after JK course-correction (tie-together,
+not boil-the-ocean): net holes = 3 genuinely NEW specs (fan economy [large],
+exhibition mode, card spec), 3 consolidations (Recognition ≈190KB of existing
+specs, Development, Scouting), rest amendments/wiring. Discipline rule: every
+engine design session BEGINS by reading that engine's existing gospels in
+full — output is consolidate-and-amend, never parallel-spec. §8 operating
+plan: build track (Fable contract → Codex 5.5 → Fable audit) unchanged;
+design track (JK+Claude chat, no Codex) runs parallel; W1 (WAR/metadata
+hardening) ruled a SEPARATE ticket from T5, Codex 5.5 high → Fable audit.
+Session math: Wave 1 Judgment ~10-12 build sessions; design track ~8-10;
+Wave 2 Story builds ~8-12 (firm after specs). 5-session near-term milestone:
+T5 + W1 + TV1 + D1(Stats audit) + D2(Recognition).
+
+**Process lessons logged:** (1) Claude initially asked JK engineering
+questions — corrected: architecture = Claude's call, design = JK's; (2)
+engine map v0.1 under-weighted existing specs (drafted without reading the
+per-system gospels) — corrected in v0.2 with crosswalk + the read-first rule.
+
+**Stale-data flags for future sessions:** SUBSYSTEM_MAP is Feb-era —
+Transaction + Scouting/Farm rows predate May–Jun checkpoint work; F-086 vs
+F-119 disagree on Relationships wiring (resolve at D6).
+
+**Open pending-JK items:** ASG big-WPA-moments→Fame; Signature Moment line on
+card back; fame tier names.
+
+**NEXT SESSION (new thread):** T4 arc closure commit → Claude drafts T5
+prompt contract (Codex 5.5 | very high → Fable 5 CLI audit) INCLUDING the
+4.3/4.5 pre-build spec amendments.
+
+### 2026-06-11 addendum (post-close) — Draft placed in the engine map
+JK question: where does the draft fit? Answer added as FRANCHISE_ENGINE_MAP
+§9: the draft is the FLAGSHIP SURFACE, not an engine — the maximum-convergence
+point of IV + Scouting + Economy + Identity + Effective Ratings, already
+specced (IV §7.3/§7.4 + DRAFT_FIGMA_SPEC), builds in T8, recurs annually via
+the Offseason conductor. New design hook logged for D5/T8: morning-after
+reporter DRAFT GRADES with season-long receipts (draft position vs True Value
+divergence auto-generates steal/bust stories).
+
+### 2026-06-11 addendum 2 (post-close) — scope governance + anti-reinvention protocol
+JK raised ballooning concern; both adopted into FRANCHISE_ENGINE_MAP §8:
+(1) **D0 SCOPE SESSION** now precedes D1 — consolidates existing scope docs
+(V2_DEFERRED_BACKLOG, V1 stability/cut-list, scope decision board) into
+FRANCHISE_PLAYABLE_V1_DEFINITION.md: v1 = the LOOP (draft → season →
+playoffs/awards → offseason → Season 2 with clean carryover; two completed
+seasons = done), item-by-item cut line, memorability-per-session tiebreaker.
+Staging principle: rulings are the destination, not the build order — DQ
+maximalist answers (full teeth, living-profile cadence, ASG, NL search) stage
+to v1.5/v2 without dying; the soul (reporter voice, visible fame, snubs,
+card, draft night) is cheap expression on computed data and stays v1.
+(2) **Mandatory session-opening protocol** for every D-session and build
+contract: read existing gospels in full → VERIFY wiring with fresh evidence
+(never trust Feb SUBSYSTEM_MAP; route heavy verification to Fable CLI via
+franchise-engine-discovery / spec-ui-alignment skills) → classify assets
+ADOPT/AMEND/WIRE/REBUILD before new design → every session outputs its own
+v1/v2 split. Design-track order is now D0 → D1 → … → D8.

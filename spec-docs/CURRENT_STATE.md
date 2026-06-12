@@ -1,7 +1,7 @@
 # CURRENT_STATE.md
 
-**Last Updated:** 2026-06-11
-**Phase:** IV Engine workstream — T4 + T4-FIX COMPLETE (audit CONFORMS, delta verified); next: closure commit → T5
+**Last Updated:** 2026-06-11 (vision session close)
+**Phase:** Two tracks — BUILD: IV workstream, T4+T4-FIX COMPLETE, next = closure commit → T5. DESIGN: franchise engine architecture established (FRANCHISE_ENGINE_MAP.md v0.2), design-session queue D1–D8 opened.
 
 ---
 
@@ -178,3 +178,48 @@ Current priorities:
 - Sequence remaining: T4-FIX → T5 → T6 → {T7, T8} → T9 → T10 (T11 v1.5; T12 post-T8).
 - Open non-blocking: F2 SOT typos (~15), F4 FA trait spellings (4), 2 baseline test
   failures + 1 flake, T12 recalibration tool.
+
+---
+
+## 2026-06-11 — VISION SESSION CLOSE: franchise engine architecture established
+
+**New canonical docs (this session, ALL UNCOMMITTED — JK to review + commit):**
+1. `MODE2_SYSTEMS_INTEGRATION_MAP.md` — IV→salary→TV→morale→Mode 3 chain;
+   conflicts 4.1–4.7 logged; W1 (WAR orchestrator + gamesPerTeam metadata)
+   identified as the gating fix for the value spine.
+2. `FRANCHISE_ENGINE_VISION_QA.md` — 14 JK design rulings + 2 amendments
+   (controlled-teams-are-the-user; columnist doctrine; fame visible / morale
+   curve hidden; sports-drama ceiling; living profiles; full-teeth fan
+   morale; playable ASG + fan-vote snubs; card binder; 3-tier almanac
+   search; light chaos). Binding authority for all engine specs.
+3. `FRANCHISE_ENGINE_MAP.md` v0.2 — 15 engines / 4 layers; value vs memory
+   channels; §4.5 existing-asset crosswalk; §5 reclassified holes (3 NEW:
+   fan economy, exhibition mode, card spec; 3 CONSOLIDATE: Recognition,
+   Development, Scouting; rest AMEND/WIRE); §8 operating plan.
+
+**Key engineering rulings:** 3-layer engine architecture, strict typed
+contracts between layers, writes one-directional, user is the bridge; W1 is
+a SEPARATE ticket from T5; design sessions read existing gospels first,
+consolidate-and-amend only.
+
+**Pre-build amendments folded into the T5 contract:** kill potency-reprices-
+salary text (MODE_2 §15.5 + salary spec) per D15; fix IV §3.8 stale DH row.
+
+**Design-session queue (parallel track, chat-only):** **D0 SCOPE SESSION
+FIRST** (consolidate existing scope docs → FRANCHISE_PLAYABLE_V1_DEFINITION.md:
+v1 loop + cut line; rulings = destination, not build order) → D1 Stats
+data-contract audit → D2 Recognition → D3 Morale+fan economy (incl. H11
+expected-wins ruling) → D4 Development → D5 Narrative → D6 Relationships →
+D7 Almanac+card → D8 Scouting. Every session opens: read gospels in full →
+verify wiring with fresh evidence (Fable CLI + discovery skills for heavy
+passes) → classify ADOPT/AMEND/WIRE/REBUILD → output its own v1/v2 split.
+
+**NEXT ACTION (new thread):** T4 arc closure commit → Claude drafts T5 prompt
+contract — ROUTE: Codex 5.5 | very high → Fable 5 CLI audit (persistence-
+adjacent; audit non-negotiable). After T5: W1 → TV1 → T6.
+**5-session milestone:** T5 + W1 + TV1 + D1 + D2 = trustworthy value spine +
+Stats/Recognition specs.
+
+**Open pending-JK:** ASG WPA→Fame; Signature Moment on card; fame tier names.
+**Stale-data flags:** SUBSYSTEM_MAP Feb-era (Transaction/Farm rows predate
+May–Jun checkpoints); F-086 vs F-119 Relationships disagreement → D6.
