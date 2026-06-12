@@ -3762,3 +3762,102 @@ shared-DB convention — JK ruling needed before TV2 adds stores;
 (2) position-normalization mapping (P→SP/RP, IF/OF→UTIL) is inferred
 policy — ratify one line in TV2's contract; (3) computedAt wall-clock
 nondeterminism — noted, no action.
+
+
+---
+
+# TV1-FIX — resolve TV1 audit MINORs 1+2 per JK rulings R-6/R-7 (contract)
+**Drafted:** 2026-06-12 | **ROUTE: Codex 5.5 | high → Fable 5 audit**
+(persistence relocation + computation change feeding persisted rows)
+
+## Ratified rulings (JK, 2026-06-12 — CANONICAL, cite verbatim)
+- **R-6 (position taxonomy + data-driven doctrine):** NO player may carry
+  "P" as a position anywhere, and "IF/OF" is never a PRIMARY position.
+  Pitcher primaries: SP, SP/RP, RP, CP. Position-player primaries: C, 1B,
+  2B, SS, 3B, LF, CF, RF. Secondary-only additions: 1B/OF, OF, IF, IF/OF.
+  No DH anywhere (standing ruling). In-season franchise decisions are
+  DATA-DRIVEN: positions players ACTUALLY played during the season, never
+  profile-label assumptions (a player may play most of a season at his
+  secondary position, or many positions). Non-canonical labels reaching an
+  engine are a DATA DEFECT to surface (skip-with-reason), NEVER to
+  normalize away. Taxonomy block queued for next spec-cleanup batch
+  (DH-row precedent).
+- **R-7 (storage):** shared-DB convention confirmed (Elimination Mode
+  key-prefix precedent). TV1's separate kbl-franchise-true-values DB was
+  a divergence; True Value rows relocate to the shared database, and TV2's
+  designation storage goes there too.
+
+## Contract (handoff text)
+
+```
+You are a senior TypeScript engineer executing TV1-FIX for KBL Tracker.
+
+GOAL:
+Resolve TV1-AUDIT MINORs 1 and 2 per rulings R-6/R-7: relocate True Value
+storage to the shared database, and replace position normalization with
+strict canonical-label validation (skip-with-reason, never normalize).
+
+SOURCE OF TRUTH:
+- Rulings R-6/R-7 (TV1-FIX header above, JK 2026-06-12)
+- TV1-AUDIT disagreements 1+2 (PROMPT_CONTRACTS.md, TV1-AUDIT record)
+- TV1 contract row-shape and trigger semantics (unchanged by this fix)
+
+CONSTRAINTS:
+- Only edit: src/utils/franchiseTrueValueStorage.ts,
+  src/engines/salaryCalculator.ts (normalizeTrueValuePosition site only),
+  and their test files. Plus the shared-DB module ONLY for the additive
+  store registration (X1 discovery names the exact file/pattern).
+- Do NOT touch: processCompletedGame.ts trigger logic, calculateTrueValue
+  step machinery, franchiseTrueValuePreview.ts, franchiseValueInputs.ts,
+  all TV1 no-touch files.
+
+X1 — Storage relocation (R-7): move True Value rows into the shared
+  database following the existing store-addition pattern (DISCOVERY:
+  identify the shared-DB module and its versioning convention FIRST;
+  report file:line before implementing — the Feb-11 version-conflict
+  class is the known hazard). Delete the kbl-franchise-true-values DB
+  creation. NO data migration: pre-release, rows regenerate on the next
+  completed game; state this in a code comment.
+X2 — Position validation (R-6): DELETE normalizeTrueValuePosition's
+  inferred mapping (P→SP/RP, IF/OF→UTIL). Replace with validation against
+  the R-6 canonical PRIMARY set {SP, SP/RP, RP, CP, C, 1B, 2B, SS, 3B,
+  LF, CF, RF}. Any other label → row skipped with an explicit reason
+  naming the offending label (loud data-defect surfacing). No silent
+  drops, no remapping, no DH.
+X3 — DISCOVERY (report only, no changes): trace the source of
+  franchiseValueInputs' valuePosition — is it derived from positions
+  ACTUALLY PLAYED this season (R-6 data-driven doctrine) or from the
+  profile primary label? Cite file:line. If profile-only, report as a
+  finding candidate for TV2/D1; do not fix here.
+
+EXPECTED OUTPUT:
+- Zero references to kbl-franchise-true-values; True Value store lives in
+  the shared DB; existing TV1 trigger/row-shape tests still green.
+- grep -rn "normalizeTrueValuePosition" src → only the strict validator
+  (or zero if renamed); no P/IF/OF/UTIL remapping logic anywhere in the
+  True Value path.
+- Mutation-pinned tests: (a) non-canonical label (e.g. "P") → skipped with
+  reason naming the label; (b) every canonical primary accepted;
+  (c) storage round-trip against the shared DB.
+
+VERIFICATION:
+- NODE_ENV= npm run build green
+- NODE_ENV= npx vitest run [touched test files] green
+- Full suite: characterized set only (baseline 7,122/382; report delta)
+
+FORMAT:
+1. Files changed (all, incl. forced test/mock adjustments)
+2. Changes made (cite R-6/R-7 per change)
+3. X1 + X3 discovery findings (file:line)
+4. Verification output (exact)
+5. "TV1-FIX complete" OR "BLOCKED: [exact reason]"
+
+FAILURE PROTOCOL:
+- Shared-DB versioning ambiguity → STOP and report before touching it
+- Ambiguity elsewhere → quote the exact section and ask
+- Suite failure outside the characterized set → BLOCK; never bend tests
+
+Use high reasoning effort. Think step-by-step.
+```
+
+**Execution record:** [pending]
