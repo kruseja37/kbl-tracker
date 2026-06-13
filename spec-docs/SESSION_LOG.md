@@ -4065,3 +4065,65 @@ before generating the pre/post table. Then D8-ONLY re-audit (9 directives
 already passed, tree pristine — no full re-run). Then single closure commit
 (build + tests + MINOR #2 mock fix + contracts/records + FINDING-143 closed
 + session/state docs).
+
+
+## 2026-06-12 (cont.) — EP1 ARC CLOSED: D8 verified, FINDING-146 closed, F-143 delta-certified
+
+**EP1 (R-8 effective-position engine) is fully audit-cleared and closed
+in a single commit.** Build code (12 paths) + golden artifacts + MINOR #2
+fix + all contracts/records + findings + session/state docs.
+
+**The golden-regression saga (and its lesson):** D8 (the whole-league
+attribution table) blocked EP1. Captain over-read D8 as needing REAL
+played data → a multi-turn detour (EXTRACT browser IndexedDB → script a
+season → Playwright game-player) that JK + Captain recognized as scope
+creep. Root cause named: D8 needs COVERAGE, not empirical realism; a
+deterministic ADVERSARIAL SYNTHETIC fixture satisfies it (synthetic
+INPUTS fine; engine computes outputs). EXTRACT + original GOLDEN
+superseded (reasoning trail kept). EP1-GOLDEN-R delivered it.
+
+**Two verification events worth remembering — the chain has teeth BOTH
+ways:** (1) EP1-AUDIT (Opus) BLOCKED the build on the missing D8 table.
+(2) At EP1-GOLDEN-R Phase 0, Codex BLOCKED the CAPTAIN — refusing to
+generate a table matching a wrong tw_if target (280k) the Captain had
+introduced at sign-off by forgetting R-8 pt5 two-way self-exclusion.
+Captain verified the engine, conceded, reversed to 260k/+80k. A downstream
+builder declining to manufacture agreement with an authority's error is
+the stop-gate working in its hardest direction.
+
+**EP1-GOLDEN-R-AUDIT (Opus 4.8 Max, D8-only): "EP1 D8 VERIFIED —
+FINDING-146 CLOSED."** Precondition confirmed (engine diff byte-unchanged
+58,403). All 5 binding + 8 support deltas hand-derived; refusal gate
+tamper-proven; 0 unattributed. tw_if correctly 260k. 3 observations:
+OBS-1 = Captain prose error (res_5 salary 130k not 800k; 800k was a
+pre-EP1 1B→3B merge artifact — auditor surfaced the merge the Captain
+missed; deliverable correct, prose corrected). OBS-2 = support-row
+attribution heuristic is fixture-specific (make mechanistic if reused).
+OBS-3 = cosmetic (binding gate checks values not labels; value gate real).
+
+**MINOR #2 FIXED in closure:** getGameHeadersForScope added to the
+processCompletedGame.warMetadata + warPersistence test mocks; 5/5 pass,
+swallowed [TrueValue] mock-error noise gone.
+
+**Carry-forward (open):** FINDING-144 (salary-path R-6 residue) +
+FINDING-145 (designation 'active' vocabulary) + FINDING-147 (stale
+peerPoolLimitation string written live into designation rows) → all to
+the F-144 taxonomy/spec-cleanup batch (F-147 couples to F-145, placed
+slice 5 per R-9). MINOR #3 (builder reporting underreport, now 4 instances
+across TV2→EP1) → D0 process-architecture agenda: standing template line
+"enumerate every git-status path; report total AND passing counts."
+Stray reference-docs/Super Mega Baseball 4 Rosters.csv still untracked
+(EXCLUDED from the EP1 closure commit; standing pending-JK commit/gitignore).
+
+**Process note — auditor substitution:** both EP1 audit legs (EP1-AUDIT,
+EP1-GOLDEN-R-AUDIT) ran on Opus 4.8 Max because Fable was unavailable.
+Logged as deliberate, triangle preserved (auditor≠builder). Uncharacterized
+config — JK browser pass on real franchise data carries extra weight as
+the final real-world confirmation.
+
+**NEXT TASK: T6.** Per sequencing ruling F-141 the full T-stack runs to
+completion before D0. EP1 closed the R-8 engine (FINDING-143); next is
+T6 → {T7,T8} → T9 → T10 → D0 cut line. Slices 5 (locking) + 6 (Captain/
+Fan Hopeful) remain queued post-T-stack or per D0. Browser-verify
+outstanding (JK): TeamHub projected badges (TV2) + now EP1 effective-
+position pooling on real data.

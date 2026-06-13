@@ -19,6 +19,7 @@ vi.mock('../eventLog', () => ({
   markAggregationFailed: mocks.markAggregationFailed,
   markGameAggregated: mocks.markGameAggregated,
   getFieldingEventsForScope: vi.fn().mockResolvedValue([]),
+  getGameHeadersForScope: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('../registerAlmanacPlayers', () => ({

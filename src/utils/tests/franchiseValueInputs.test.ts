@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import type { GameHeader } from '../eventLog';
 import type { Player, Team } from '../franchisePlayerStorage';
 import { buildFranchiseValueInputRows } from '../franchiseValueInputs';
 
@@ -13,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   getSeasonMetadata: vi.fn(),
   getAllGamesByFranchise: vi.fn(),
   getRecentGames: vi.fn(),
+  getGameHeadersForScope: vi.fn(),
 }));
 
 vi.mock('../franchiseManager', () => ({
@@ -37,6 +39,10 @@ vi.mock('../scheduleStorage', () => ({
 
 vi.mock('../gameStorage', () => ({
   getRecentGames: mocks.getRecentGames,
+}));
+
+vi.mock('../eventLog', () => ({
+  getGameHeadersForScope: mocks.getGameHeadersForScope,
 }));
 
 function makePlayer(overrides: Partial<Player> = {}): Player {
@@ -100,6 +106,45 @@ function makeTeam(overrides: Partial<Team> = {}): Team {
     createdDate: '2026-01-01T00:00:00.000Z',
     lastModified: '2026-01-01T00:00:00.000Z',
     ...overrides,
+  };
+}
+
+function header(
+  gameId: string,
+  date: number,
+  homeLineup: NonNullable<GameHeader['startingLineups']>['home'] = [],
+): GameHeader {
+  return {
+    gameId,
+    seasonId: 'season-1',
+    statsScopeId: 'season-1',
+    franchiseId: 'franchise-1',
+    date,
+    awayTeamId: `away-${gameId}`,
+    awayTeamName: `Away ${gameId}`,
+    homeTeamId: 'team-1',
+    homeTeamName: 'Input Club',
+    startingLineups: {
+      away: [],
+      home: homeLineup,
+    },
+    finalScore: { away: 0, home: 1 },
+    finalInning: 9,
+    isComplete: true,
+    aggregated: true,
+    aggregatedAt: date + 1,
+    aggregationError: null,
+    eventCount: 1,
+    checksum: gameId,
+  };
+}
+
+function starter(playerId: string, position: string, battingOrder = 1): NonNullable<GameHeader['startingLineups']>['home'][number] {
+  return {
+    playerId,
+    playerName: playerId,
+    position,
+    battingOrder,
   };
 }
 
@@ -181,6 +226,7 @@ function seedBaseMocks() {
   });
   mocks.getAllGamesByFranchise.mockResolvedValue([]);
   mocks.getRecentGames.mockResolvedValue([]);
+  mocks.getGameHeadersForScope.mockResolvedValue([]);
 }
 
 describe('franchise value input contract', () => {
@@ -290,6 +336,117 @@ describe('franchise value input contract', () => {
       mode3Handoff: false,
     });
     expect(row.warConsumerTrust?.blockers.join(' ')).toMatch(/completed GameTracker archive evidence/i);
+  });
+
+  test('derives valuePosition from completed-game starting-lineup replay instead of profile primary', async () => {
+    mocks.getAllFranchisePlayers.mockResolvedValue([makePlayer({
+      id: 'effective-ss',
+      primaryPosition: '2B',
+    })]);
+    mocks.getGameHeadersForScope.mockResolvedValue([
+      header('ep1-1', 1, [starter('effective-ss', 'SS')]),
+      header('ep1-2', 2, [starter('effective-ss', 'SS')]),
+    ]);
+
+    const report = await buildFranchiseValueInputRows({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+      seasonNumber: 1,
+    });
+
+    expect(mocks.getGameHeadersForScope).toHaveBeenCalledWith({
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+      isComplete: true,
+    });
+    expect(report.rows[0]).toMatchObject({
+      playerId: 'effective-ss',
+      valuePosition: 'SS',
+      trueValuePositioning: {
+        effectivePosition: 'SS',
+        poolPosition: 'SS',
+        starts: 2,
+        currentTeamStarts: 2,
+        startsSource: 'game-header-starting-lineups',
+      },
+    });
+  });
+
+  test('excludes sub-only fielding and bench data from effective-position plurality', async () => {
+    mocks.getAllFranchisePlayers.mockResolvedValue([makePlayer({
+      id: 'sub-only',
+      primaryPosition: '2B',
+    })]);
+    mocks.getAllFieldingStats.mockResolvedValue([{
+      seasonId: 'season-1',
+      playerId: 'sub-only',
+      playerName: 'Sub Only',
+      teamId: 'team-1',
+      games: 8,
+      putouts: 12,
+      assists: 10,
+      errors: 1,
+      doublePlays: 3,
+      gamesByPosition: { SS: 8 },
+      putoutsByPosition: { SS: 12 },
+      assistsByPosition: { SS: 10 },
+      errorsByPosition: { SS: 1 },
+      lastUpdated: 1,
+    }]);
+    mocks.getGameHeadersForScope.mockResolvedValue([
+      {
+        ...header('bench-only', 1, [starter('other-player', 'SS')]),
+        benchRosters: {
+          away: [],
+          home: [{ playerId: 'sub-only', playerName: 'Sub Only', positions: ['SS'] }],
+        },
+      },
+    ]);
+
+    const report = await buildFranchiseValueInputRows({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+      seasonNumber: 1,
+    });
+
+    expect(report.rows[0]).toMatchObject({
+      playerId: 'sub-only',
+      valuePosition: '2B',
+      trueValuePositioning: {
+        starts: 0,
+        teamCompletedGames: 1,
+        valuationMode: 'reserve',
+        poolPosition: 'RESERVE',
+      },
+    });
+  });
+
+  test('anchors zero-start Two Way (IF) holders to 2B for True Value inputs', async () => {
+    mocks.getAllFranchisePlayers.mockResolvedValue([makePlayer({
+      id: 'two-way-if',
+      primaryPosition: 'SP/RP',
+      trait1: 'Two Way (IF)',
+    })]);
+
+    const report = await buildFranchiseValueInputRows({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+      seasonNumber: 1,
+    });
+
+    expect(report.rows[0]).toMatchObject({
+      playerId: 'two-way-if',
+      valuePosition: '2B',
+      trueValuePositioning: {
+        valuationMode: 'two-way-composite',
+        twoWayTrait: 'Two Way (IF)',
+        twoWayBatPosition: '2B',
+        twoWayArmPosition: 'SP/RP',
+      },
+    });
   });
 
   test('trusts scoped WAR only for TEAM_MVP or ACE designation input gates when completed archive evidence exists', async () => {

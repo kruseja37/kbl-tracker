@@ -5259,3 +5259,65 @@ Use high reasoning effort. Think step-by-step.
 ```
 
 **Execution record:** [pending]
+
+
+---
+
+# EP1 — CLOSURE RECORDS (2026-06-12)
+
+**Execution record (EP1-GOLDEN-R, 2026-06-12):** Codex 5.5 | high.
+Two-phase. Phase 0 fixture design returned twice: first numerically
+toothless (every adversarial player bottom-percentile → ~0 deltas;
+Captain revision request), then re-spec'd with interior percentiles +
+asymmetric paired pools. Captain Phase-0 sign-off (242697c) wrongly
+raised tw_if to 280k/+100k by including the holder in its own arm pool;
+Codex BLOCKED at Phase 1 — correctly citing R-8 pt5 self-exclusion
+(franchiseTrueValuePreview.ts:253, franchiseTrueValueStorage.ts:430).
+Captain reversed (d13a350): tw_if = 260k/+80k, Codex's original figure.
+Phase 1 then produced scripts/ep1-golden-regression.mjs + spec-docs/
+EP1_GOLDEN_REGRESSION.md: pre-EP1 via git show f8d5f82, post via working
+tree, both through canonical buildFranchiseTrueValuePreviewReport; script
+self-refuses to write unless the 5 binding rows match. Result: 52 players,
+13 changed (effective≠profile 8 / Reserve 3 / two-way-composite 2),
+UNATTRIBUTED 0; all binding rows matched incl tw_if 180k→260k/+80k.
+
+**Audit record (EP1-GOLDEN-R-AUDIT, 2026-06-12):** Opus 4.8 Max
+(substituted for Fable; triangle preserved). **Verdict: "EP1 D8 VERIFIED
+— FINDING-146 CLOSED."** D8-only scope (precondition confirmed: engine
+diff byte-unchanged at 58,403; effPos sha b0aedcf). G1 PASS (pre from git
+show f8d5f82; canonical path; refusal gate killed a tamper-mutation —
+target 400k→401k → throw + exit 1 + .md unwritten; deterministic .md sha
+b472cdda). G2 PASS — all 5 binding rows re-derived by hand against the
+engine formula; tw_if correctly 260k (arm pool excludes holder, 6
+members → 160k; NOT the reverted 280k). G3 PASS (3 causes, nonzero
+signed). G4 PASS — all 13 rows hand-verified incl the res_4 (+570k) /
+res_5 (−100k) Reserve mechanism. G5 PASS (build green, no import-cycle).
+No MAJOR/MINOR against correctness. 3 observations (logged below).
+
+**EP1 BUILD record — CLOSED.** EP1-AUDIT 9/10 + 4 mutations killed;
+D8 closed by EP1-GOLDEN-R-AUDIT. FINDING-143 DELTA-CERTIFIED on the
+deterministic synthetic fixture (the agreed D8 bar). MINOR #2 (sibling
+eventLog mocks) FIXED in the closure changeset (getGameHeadersForScope
+added to processCompletedGame.warMetadata + warPersistence test mocks;
+5/5 pass, swallowed-error noise gone). Build code committed in the EP1
+closure commit. CAVEAT (standing): both EP1 audit legs ran on Opus-as-
+auditor (Fable unavailable) — uncharacterized config; JK browser pass on
+real franchise data is the final real-world confirmation.
+
+## EP1-GOLDEN-R-AUDIT observations (non-blocking)
+- OBS-1 (Captain prose error, CORRECTED): the G4 hint called res_5 "an
+  800k-salary reserve player." res_5's SALARY is 130k; its 800k was a
+  pre-EP1 True Value artifact from the 1B→3B pool MERGE (1B pool <6
+  members pre-EP1). The Reserve pool holds ONE large salary (reserve_rf
+  700k), not "700k+800k." Deltas engine-correct + correctly attributed;
+  only the Captain's prose was wrong. Auditor also surfaced the 1B→3B
+  merge as the source of res_5's pre-value — a mechanism the Captain had
+  missed.
+- OBS-2 (forward note): the script's support-row attributionFor
+  (ep1-golden-regression.mjs:281-292) is profile-bucket-based, not
+  per-row mechanistic. Correct for THIS fixture (all 13 proven); if the
+  generator is ever re-run on a different fixture, make attribution
+  mechanistic first.
+- OBS-3 (cosmetic): assertTargets binding-row attribution is self-
+  referential; only the pre/post/delta VALUE check gates (that gate is
+  real — tamper-proven). Fine as-is.

@@ -1091,3 +1091,6 @@ Still unresolved. FINDING-047 fallback path only has base state, not full scoreb
 | FINDING-146 | 2026-06-12 | OPEN-BLOCKING | EP1 changeset (deliverable) | EP1-AUDIT MAJOR: golden-regression attribution table ABSENT (contract-required 3×); engine logic mutation-proven but fixture-league delta UNPROVEN; F-143 not delta-certified; remedy EP1-GOLDEN → D8 re-audit → closure | Full text: FINDINGS_142_onwards.md |
 
 | FINDING-147 | 2026-06-12 | CONFIRMED-OPEN | franchiseDesignations.ts:13/:223 | EP1-AUDIT MINOR #1: stale 'peer pools profile-position until EP1' string written live into every designation record's peerPoolLimitation, now FALSE post-EP1; outside only-edit list; couples to F-145; F-144/cleanup batch | Full text: FINDINGS_142_onwards.md |
+
+| FINDING-146 | 2026-06-12 | CLOSED | EP1 golden artifacts | D8 deliverable produced + D8-only re-audit (Opus 4.8 Max) "EP1 D8 VERIFIED"; 52 players/13 changed/0 unattributed, all hand-verified, tw_if 260k/+80k (R-8 pt5) | Full text: FINDINGS_142_onwards.md |
+| FINDING-143 | 2026-06-12 | DELTA-CERTIFIED | franchiseEffectivePosition.ts | EP1 effective-position engine resolves valuePosition by starts-plurality, not profile; mutation-proven + delta-certified; R-6 violation closed | Full text: FINDINGS_142_onwards.md |

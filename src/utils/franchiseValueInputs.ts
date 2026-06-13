@@ -17,6 +17,11 @@ import {
 import { getAllGamesByFranchise } from './scheduleStorage';
 import { getRecentGames } from './gameStorage';
 import { getVisibleSafeFranchisePlayerSalary } from './franchiseSalary';
+import {
+  FRANCHISE_TRUE_VALUE_RESERVE_POOL,
+  buildFranchiseEffectivePositionReport,
+  type FranchiseTrueValuePositioning,
+} from './franchiseEffectivePosition';
 
 export const FRANCHISE_VALUE_INPUT_CONTRACT_VERSION = 'franchise-mode2-value-inputs-v1-readonly';
 
@@ -66,6 +71,7 @@ export interface FranchiseValueInputRow {
   playerId: string;
   playerName: string;
   valuePosition: string | null;
+  trueValuePositioning?: FranchiseTrueValuePositioning;
   currentTeamId: string | null;
   rosterStatus: string | null;
   salary: number | null;
@@ -349,6 +355,23 @@ function hasTeamPayrollBaseline(
   return Boolean(teamId && finiteNumber(config?.salaryBaseline?.teamPayrolls?.[teamId]));
 }
 
+function buildEffectivePositionLimitations(
+  positioning: FranchiseTrueValuePositioning | undefined,
+): string[] {
+  if (!positioning) return ['EP1 R-8/R-10 effective-position replay was unavailable for this row.'];
+  const limitations = [
+    'EP1 R-8/R-10: True Value valuePosition is derived from ordered completed-game starting-lineup replay.',
+  ];
+  if (positioning.poolPosition === FRANCHISE_TRUE_VALUE_RESERVE_POOL) {
+    limitations.push('EP1 R-8/R-9: True Value uses the Reserve pool because starts-share is below 0.40 of completed team games.');
+  }
+  if (positioning.valuationMode === 'two-way-composite') {
+    limitations.push('EP1 R-8 pt 5/6: Two-way trait holders use compositional arm/bat True Value instead of a single peer pool.');
+  }
+  limitations.push(...positioning.reasons);
+  return limitations;
+}
+
 export async function buildFranchiseValueInputRows(
   input: BuildFranchiseValueInputRowsInput,
 ): Promise<FranchiseValueInputReport> {
@@ -403,9 +426,27 @@ export async function buildFranchiseValueInputRows(
   const battingByPlayerId = mapByPlayerId(battingStats);
   const pitchingByPlayerId = mapByPlayerId(pitchingStats);
   const fieldingByPlayerId = mapByPlayerId(fieldingStats);
+  const assignmentsByPlayerId = new Map(players.map((player) => [
+    player.id,
+    findCurrentAssignment(player, config?.league ?? null),
+  ]));
+  const effectivePositionReport = await buildFranchiseEffectivePositionReport({
+    franchiseId: input.franchiseId,
+    seasonId: input.seasonId,
+    statsScopeId,
+    players: players.map((player) => ({
+      playerId: player.id,
+      profilePosition: player.primaryPosition,
+      currentTeamId: assignmentsByPlayerId.get(player.id)?.teamId ?? null,
+      trait1: player.trait1 ?? null,
+      trait2: player.trait2 ?? null,
+      pitcherRole: player.primaryPosition,
+    })),
+  });
 
   const rows = players.map((player): FranchiseValueInputRow => {
-    const assignment = findCurrentAssignment(player, config?.league ?? null);
+    const assignment = assignmentsByPlayerId.get(player.id) ?? null;
+    const trueValuePositioning = effectivePositionReport.playerPositions[player.id];
     const currentTeamId = assignment?.teamId ?? null;
     const currentTeam = currentTeamId ? teamsById.get(currentTeamId) : undefined;
     const stadiumSnapshot = getStadiumSnapshot(config, currentTeamId);
@@ -490,6 +531,7 @@ export async function buildFranchiseValueInputRows(
     if (assignment?.rosterStatus === 'FARM' && player.ratingRevealState !== 'revealed') {
       limitations.push('Hidden FARM prospect salary uses draft/scouting-safe public context; true ratings and true grade are not salary inputs.');
     }
+    limitations.push(...buildEffectivePositionLimitations(trueValuePositioning));
 
     return {
       contractVersion: FRANCHISE_VALUE_INPUT_CONTRACT_VERSION,
@@ -499,7 +541,8 @@ export async function buildFranchiseValueInputRows(
       seasonNumber: input.seasonNumber,
       playerId: player.id,
       playerName: playerName(player),
-      valuePosition: player.primaryPosition ?? null,
+      valuePosition: trueValuePositioning?.valuePosition ?? player.primaryPosition ?? null,
+      trueValuePositioning,
       currentTeamId,
       rosterStatus: assignment?.rosterStatus ?? null,
       salary: visibleSafeSalary,

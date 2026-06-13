@@ -318,6 +318,139 @@ describe('franchise true value preview contract', () => {
     });
   });
 
+  test('previews Reserve rows against the EP1 Reserve peer pool', () => {
+    const reservePositioning: FranchiseValueInputRow['trueValuePositioning'] = {
+      valuationMode: 'reserve',
+      valuePosition: 'SS',
+      effectivePosition: 'SS',
+      poolPosition: 'RESERVE',
+      profilePosition: 'SS',
+      profilePitcherRole: null,
+      starts: 1,
+      currentTeamStarts: 1,
+      teamCompletedGames: 5,
+      startsShare: 0.2,
+      isReserve: true,
+      twoWayTrait: null,
+      twoWayBatPosition: null,
+      twoWayArmPosition: null,
+      startsSource: 'game-header-starting-lineups',
+      reasons: [],
+    };
+    const output = buildFranchiseTrueValuePreviewReport(report([
+      row({
+        playerId: 'reserve-target',
+        salary: 1000,
+        valuePosition: 'SS',
+        trueValuePositioning: reservePositioning,
+        warPreviewValues: { ...row().warPreviewValues, totalWar: 3 },
+      }),
+      ...[0, 1, 2, 4, 5].map((war, index) => row({
+        playerId: `reserve-peer-${index}`,
+        salary: 2000 + (index * 1000),
+        valuePosition: '2B',
+        trueValuePositioning: {
+          ...reservePositioning,
+          valuePosition: '2B',
+          effectivePosition: '2B',
+        },
+        warPreviewValues: { ...row().warPreviewValues, totalWar: war },
+      })),
+      ...[0, 1, 2, 3, 4, 5].map((war, index) => row({
+        playerId: `ss-peer-${index}`,
+        salary: 10000 + (index * 1000),
+        valuePosition: 'SS',
+        warPreviewValues: { ...row().warPreviewValues, totalWar: war },
+      })),
+    ]));
+
+    expect(output.playerRows.find((previewRow) => previewRow.playerId === 'reserve-target')).toMatchObject({
+      status: 'preview-only',
+      previewValueEstimate: 5000,
+      valueDeltaEstimate: 4000,
+      effectivePosition: 'SS',
+      poolPosition: 'RESERVE',
+      valuationMode: 'reserve',
+    });
+  });
+
+  test('previews two-way rows as arm plus bat-side True Value components', () => {
+    const twoWayPositioning: FranchiseValueInputRow['trueValuePositioning'] = {
+      valuationMode: 'two-way-composite',
+      valuePosition: 'CF',
+      effectivePosition: 'CF',
+      poolPosition: null,
+      profilePosition: 'SP/RP',
+      profilePitcherRole: 'SP/RP',
+      starts: 0,
+      currentTeamStarts: 0,
+      teamCompletedGames: 0,
+      startsShare: null,
+      isReserve: false,
+      twoWayTrait: 'Two Way (OF)',
+      twoWayBatPosition: 'CF',
+      twoWayArmPosition: 'SP/RP',
+      startsSource: 'game-header-starting-lineups',
+      reasons: [],
+    };
+    const output = buildFranchiseTrueValuePreviewReport(report([
+      row({
+        playerId: 'two-way-holder',
+        salary: 750,
+        valuePosition: 'CF',
+        trueValuePositioning: twoWayPositioning,
+        warInputAvailability: {
+          battingWar: true,
+          pitchingWar: true,
+          fieldingWar: true,
+          baserunningWar: true,
+          any: true,
+          trustedForFinalValue: false,
+        },
+        warPreviewValues: {
+          battingWar: 1.5,
+          pitchingWar: 3,
+          fieldingWar: 0.3,
+          baserunningWar: 0.2,
+          totalWar: 5,
+          totalWarSource: 'stat-row',
+          trustedForFinalValue: false,
+        },
+      }),
+      ...[0, 1, 2, 3, 4, 5].map((war, index) => row({
+        playerId: `arm-peer-${index}`,
+        salary: 1000 + (index * 1000),
+        valuePosition: 'SP/RP',
+        warPreviewValues: {
+          ...row().warPreviewValues,
+          pitchingWar: war,
+          totalWar: war,
+        },
+      })),
+      ...[0, 1, 2, 3, 4, 5].map((war, index) => row({
+        playerId: `bat-peer-${index}`,
+        salary: 100 + (index * 100),
+        valuePosition: 'CF',
+        warPreviewValues: {
+          ...row().warPreviewValues,
+          battingWar: war,
+          fieldingWar: 0,
+          baserunningWar: 0,
+          totalWar: war,
+        },
+      })),
+    ]));
+
+    expect(output.playerRows.find((previewRow) => previewRow.playerId === 'two-way-holder')).toMatchObject({
+      status: 'preview-only',
+      previewValueEstimate: 5400,
+      valueDeltaEstimate: 4650,
+      effectivePosition: 'CF',
+      poolPosition: null,
+      valuationMode: 'two-way-composite',
+    });
+  });
+
   test('blocks missing salary missing numeric WAR missing team position season metadata FARM unassigned and small peer pool rows', () => {
     const output = buildFranchiseTrueValuePreviewReport(report([
       row({ playerId: 'missing-salary', salary: null, salaryBaselineAvailable: false }),

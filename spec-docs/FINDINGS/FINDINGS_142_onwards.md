@@ -115,3 +115,27 @@ blocks and the F-145 work.
 - **MINOR #4 (stray CSV):** reference-docs/Super Mega Baseball 4
   Rosters.csv — pre-existing untracked, unchanged by EP1; remains the
   standing pending-JK commit/gitignore decision.
+
+
+### FINDING-146 — UPDATE 2026-06-12: CLOSED
+**Status:** CLOSED (EP1-GOLDEN-R-AUDIT, Opus 4.8 Max: "EP1 D8 VERIFIED —
+FINDING-146 CLOSED"). The golden-regression table + generator now exist
+(scripts/ep1-golden-regression.mjs, spec-docs/EP1_GOLDEN_REGRESSION.md):
+pre-EP1 via git show f8d5f82, post via working tree, both through the
+canonical buildFranchiseTrueValuePreviewReport; self-refuses to write
+unless 5 binding rows match (tamper-proven). 52 players / 13 changed /
+UNATTRIBUTED 0; all 13 hand-verified by the auditor against the engine
+formula incl the res_4(+570k)/res_5(−100k) Reserve mechanism. tw_if
+correctly 260k/+80k (R-8 pt5 self-exclusion — NOT the reverted 280k).
+FINDING-143 thereby DELTA-CERTIFIED on the deterministic synthetic
+fixture (the agreed D8 bar). Note OBS-1: Captain prose mischaracterized
+res_5 salary (130k, not 800k — the 800k was a pre-EP1 1B→3B merge
+artifact); deliverable correct, prose corrected in PROMPT_CONTRACTS.
+
+### FINDING-143 — UPDATE 2026-06-12: DELTA-CERTIFIED (was CONFIRMED-OPEN)
+**Status:** RESOLVED / DELTA-CERTIFIED. EP1 effective-position engine
+implemented (franchiseEffectivePosition.ts), code-verified + mutation-
+proven (EP1-AUDIT 4 mutations killed), and delta-certified (EP1-GOLDEN-R
+zero unattributed across the adversarial fixture). valuePosition now
+resolves to effective position (plurality-with-incumbency over starts),
+not profile primaryPosition. Closes the R-6 doctrine violation.

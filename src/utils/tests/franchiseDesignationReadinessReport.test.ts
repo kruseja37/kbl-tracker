@@ -351,7 +351,7 @@ describe('franchise designation readiness report', () => {
     expect(report.hiddenSafe).toBe(true);
     expect(report.readOnly).toBe(true);
     expect(report.limitations.join(' ')).toMatch(/projected value-delta designation trust is enabled/i);
-    expect(report.limitations.join(' ')).toContain('peer pools are profile-position until EP1 (R-8)');
+    expect(report.limitations.join(' ')).toContain('EP1 R-8/R-9/R-10: projected readiness consumes starts-derived effective-position True Value with Reserve and two-way composite handling.');
   });
 
   test('utility imports no storage save set persist or mutation APIs', () => {

@@ -111,7 +111,7 @@ describe('Salary Constants', () => {
         ],
       });
 
-      expect(TRUE_VALUE_CALCULATION_VERSION).toBe('true-value-step-percentile-v1');
+      expect(TRUE_VALUE_CALCULATION_VERSION).toBe('true-value-effective-position-v2');
       expect(result.trueValue).toBe(14000);
       expect(result.contractValue).toBe(1200);
       expect(result.valueDelta).toBe(12800);
@@ -155,6 +155,48 @@ describe('Salary Constants', () => {
       });
       expect(fallback.peerPoolSize).toBe(TRUE_VALUE_MIN_PEER_POOL_SIZE);
       expect(fallback.trueValue).toBe(6000);
+    });
+
+    test('uses EP1 caller-supplied Reserve pools and excludes non-peer rows from pool construction', () => {
+      const reserveTarget = {
+        ...trueValuePeer('reserve-target', 'SS', 1000, 3),
+        trueValuePool: 'RESERVE' as const,
+      };
+      const reservePool: LeagueContext['allPlayers'] = [
+        reserveTarget,
+        { ...trueValuePeer('reserve-0', '2B', 2000, 0), trueValuePool: 'RESERVE' },
+        { ...trueValuePeer('reserve-1', '2B', 3000, 1), trueValuePool: 'RESERVE' },
+        { ...trueValuePeer('reserve-2', '2B', 4000, 2), trueValuePool: 'RESERVE' },
+        { ...trueValuePeer('reserve-4', '2B', 5000, 4), trueValuePool: 'RESERVE' },
+        { ...trueValuePeer('reserve-5', '2B', 6000, 5), trueValuePool: 'RESERVE' },
+      ];
+      const regularShortstops: LeagueContext['allPlayers'] = [
+        trueValuePeer('ss-0', 'SS', 10000, 0),
+        trueValuePeer('ss-1', 'SS', 11000, 1),
+        trueValuePeer('ss-2', 'SS', 12000, 2),
+        trueValuePeer('ss-3', 'SS', 13000, 3),
+        trueValuePeer('ss-4', 'SS', 14000, 4),
+        trueValuePeer('ss-5', 'SS', 15000, 5),
+        { ...trueValuePeer('two-way-composite-shadow', 'SS', 99999, 99), excludeFromPeerPools: true },
+      ];
+
+      const reserveResult = calculateTrueValue(reserveTarget, {
+        allPlayers: [...reservePool, ...regularShortstops],
+      });
+      const regularResult = calculateTrueValue(regularShortstops[3], {
+        allPlayers: [...reservePool, ...regularShortstops],
+      });
+
+      expect(reserveResult).toMatchObject({
+        trueValue: 5000,
+        position: 'RESERVE',
+        peerPoolSize: 6,
+      });
+      expect(regularResult).toMatchObject({
+        trueValue: 14000,
+        position: 'SS',
+        peerPoolSize: 6,
+      });
     });
   });
 

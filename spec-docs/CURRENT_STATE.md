@@ -620,3 +620,47 @@ dark variants.
 **Open pending-JK:** F-145 placement (EP1 vs slice 5); untracked SMB4
 Rosters.csv; ASG WPA→Fame; Signature Moment card line; fame tier names;
 F2 SOT typos; F4 FA trait spellings; order-flake cleanup (3 members).
+
+
+---
+
+## CURRENT STATE — 2026-06-12 (EP1 ARC CLOSED — R-8 effective-position engine live)
+**Branch:** codex/franchise-v1-next. **This commit:** EP1 closure — build
+(12 paths: franchiseEffectivePosition.ts + .test, salaryCalculator pool
+construction, value-inputs/storage/preview/readiness + their tests,
+salaryCalculator.test) + golden artifacts (scripts/ep1-golden-regression
+.mjs, spec-docs/EP1_GOLDEN_REGRESSION.md) + MINOR #2 mock fix (2
+processCompletedGame test files) + contracts/records + FINDING-146 CLOSED
+/ FINDING-143 DELTA-CERTIFIED + session/state docs. Single commit.
+**What exists & is trustworthy:** EP1 is CANONICAL. valuePosition resolves
+to EFFECTIVE position — plurality-with-incumbency over per-game STARTS
+(GameHeader.startingLineups, ordered date,gameId), recomputed each call,
+no persisted incumbency state. League-wide Reserve pool below
+RESERVE_STARTS_SHARE_THRESHOLD=0.40 (strict <). Two-way trait holders
+EXCLUDED from single pools, valued compositionally (arm pWAR vs profile-
+role pool + bat WAR vs trait-anchor pool; anchors C→C/IF→2B/OF→CF).
+Pitchers profile-role v1. Step-percentile machinery untouched. FINDING-143
+closed; the R-6 profile-position violation is resolved. Audit: EP1-AUDIT
+9/10 + 4 mutations killed; EP1-GOLDEN-R-AUDIT "D8 VERIFIED" (52 players/13
+changed/0 unattributed, all hand-verified, tamper-proven refusal gate).
+**Both audit legs ran on Opus 4.8 Max (Fable unavailable)** — deliberate
+substitution, triangle preserved, UNCHARACTERIZED config; JK browser pass
+on real data is the final confirmation.
+**Suite baseline:** 7,140 tests / 383 files (EP1 +13/+1 vs 7,127/382;
+0 deletions). The MINOR #2 mock fix adds no test count (mock-only). CLI:
+prefix `NODE_ENV= `; node ~/.nvm/versions/node/v20.20.0/bin.
+**Browser-verify outstanding (JK):** (1) EP1 effective-position pooling on
+real franchise data — does a player who shifts positions get repooled;
+do bench players land in Reserve. (2) TV2 TeamHub projected badges (dotted
+"Proj.", fewer early-season badges is correct).
+**NEXT TASK: T6** (sequencing ruling F-141 holds: full T-stack to
+completion before D0). Then {T7,T8} → T9 → T10 → D0 cut line. Slices 5
+(season-end locking) + 6 (Captain/Fan Hopeful) queued post-T-stack/per D0.
+**Open pending-JK / cleanup batch:** F-144 (salary-path R-6 residue) +
+F-145 (designation 'active' vocabulary) + F-147 (stale peerPoolLimitation
+written live into designation rows; couples F-145; slice 5) → taxonomy/
+spec-cleanup batch with R-6/R-8/§17.8 blocks. MINOR #3 (builder reporting
+underreport — 4 instances) → D0 process agenda (standing template line).
+Stray Rosters.csv (commit/gitignore). ASG WPA→Fame; Signature Moment card
+line; fame tier names; F2 SOT typos; F4 FA trait spellings; order-flake
+cleanup (3 members).

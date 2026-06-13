@@ -34,6 +34,7 @@ function row(overrides: Partial<FranchiseValueInputRow> = {}): FranchiseValueInp
     playerId: 'player-1',
     playerName: 'True Value Player',
     valuePosition: 'SS',
+    trueValuePositioning: undefined,
     currentTeamId: 'team-1',
     rosterStatus: 'MLB',
     salary: 1000,
@@ -185,7 +186,7 @@ describe('franchise True Value storage', () => {
       warPercentile: 2 / 6,
       position: 'SS',
       peerPoolSize: 6,
-      calculationVersion: 'true-value-step-percentile-v1',
+      calculationVersion: 'true-value-effective-position-v2',
       computedAt: '2026-06-12T00:00:00.000Z',
     });
   });
@@ -258,6 +259,172 @@ describe('franchise True Value storage', () => {
 
     expect(result.skippedRows).toEqual([]);
     expect(result.rows.map((candidate) => candidate.position).sort()).toEqual([...canonicalPrimaries].sort());
+  });
+
+  test('uses the EP1 Reserve peer pool when starts-share marks a position player reserve', async () => {
+    const reservePositioning: FranchiseValueInputRow['trueValuePositioning'] = {
+      valuationMode: 'reserve',
+      valuePosition: 'SS',
+      effectivePosition: 'SS',
+      poolPosition: 'RESERVE',
+      profilePosition: 'SS',
+      profilePitcherRole: null,
+      starts: 1,
+      currentTeamStarts: 1,
+      teamCompletedGames: 5,
+      startsShare: 0.2,
+      isReserve: true,
+      twoWayTrait: null,
+      twoWayBatPosition: null,
+      twoWayArmPosition: null,
+      startsSource: 'game-header-starting-lineups',
+      reasons: [],
+    };
+    mocks.buildFranchiseValueInputRows.mockResolvedValue(report([
+      row({
+        playerId: 'reserve-target',
+        salary: 1000,
+        valuePosition: 'SS',
+        trueValuePositioning: reservePositioning,
+        warPreviewValues: { ...row().warPreviewValues, totalWar: 3 },
+      }),
+      ...[0, 1, 2, 4, 5].map((war, index) => row({
+        playerId: `reserve-peer-${index}`,
+        salary: 2000 + (index * 1000),
+        valuePosition: '2B',
+        trueValuePositioning: {
+          ...reservePositioning,
+          valuePosition: '2B',
+          effectivePosition: '2B',
+        },
+        warPreviewValues: { ...row().warPreviewValues, totalWar: war },
+      })),
+      ...[0, 1, 2, 3, 4, 5].map((war, index) => row({
+        playerId: `ss-peer-${index}`,
+        salary: 10000 + (index * 1000),
+        valuePosition: 'SS',
+        warPreviewValues: { ...row().warPreviewValues, totalWar: war },
+      })),
+    ]));
+
+    const result = await calculateAndPersistFranchiseTrueValueForSeason({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+      seasonNumber: 1,
+    });
+
+    expect(result.rows.find((candidate) => candidate.playerId === 'reserve-target')).toMatchObject({
+      trueValue: 5000,
+      valueDelta: 4000,
+      position: 'SS',
+      effectivePosition: 'SS',
+      poolPosition: 'RESERVE',
+      valuationMode: 'reserve',
+      peerPoolSize: 6,
+    });
+  });
+
+  test('stores two-way True Value as arm plus bat-side components and excludes the holder from single peer pools', async () => {
+    const twoWayPositioning: FranchiseValueInputRow['trueValuePositioning'] = {
+      valuationMode: 'two-way-composite',
+      valuePosition: 'CF',
+      effectivePosition: 'CF',
+      poolPosition: null,
+      profilePosition: 'SP/RP',
+      profilePitcherRole: 'SP/RP',
+      starts: 0,
+      currentTeamStarts: 0,
+      teamCompletedGames: 0,
+      startsShare: null,
+      isReserve: false,
+      twoWayTrait: 'Two Way (OF)',
+      twoWayBatPosition: 'CF',
+      twoWayArmPosition: 'SP/RP',
+      startsSource: 'game-header-starting-lineups',
+      reasons: [],
+    };
+    mocks.buildFranchiseValueInputRows.mockResolvedValue(report([
+      row({
+        playerId: 'two-way-holder',
+        salary: 750,
+        valuePosition: 'CF',
+        trueValuePositioning: twoWayPositioning,
+        warInputAvailability: {
+          battingWar: true,
+          pitchingWar: true,
+          fieldingWar: true,
+          baserunningWar: true,
+          any: true,
+          trustedForFinalValue: false,
+        },
+        warPreviewValues: {
+          battingWar: 1.5,
+          pitchingWar: 3,
+          fieldingWar: 0.3,
+          baserunningWar: 0.2,
+          totalWar: 5,
+          totalWarSource: 'stat-row',
+          trustedForFinalValue: false,
+        },
+      }),
+      ...[0, 1, 2, 3, 4, 5].map((war, index) => row({
+        playerId: `arm-peer-${index}`,
+        salary: 1000 + (index * 1000),
+        valuePosition: 'SP/RP',
+        warPreviewValues: {
+          ...row().warPreviewValues,
+          pitchingWar: war,
+          totalWar: war,
+        },
+      })),
+      ...[0, 1, 2, 3, 4, 5].map((war, index) => row({
+        playerId: `bat-peer-${index}`,
+        salary: 100 + (index * 100),
+        valuePosition: 'CF',
+        warPreviewValues: {
+          ...row().warPreviewValues,
+          battingWar: war,
+          fieldingWar: 0,
+          baserunningWar: 0,
+          totalWar: war,
+        },
+      })),
+    ]));
+
+    const result = await calculateAndPersistFranchiseTrueValueForSeason({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+      seasonNumber: 1,
+    });
+
+    const twoWay = result.rows.find((candidate) => candidate.playerId === 'two-way-holder');
+    expect(twoWay).toMatchObject({
+      trueValue: 5400,
+      contractValue: 750,
+      valueDelta: 4650,
+      position: 'CF',
+      effectivePosition: 'CF',
+      valuationMode: 'two-way-composite',
+      peerPoolSize: 12,
+      trueValueComponents: {
+        arm: {
+          trueValue: 5000,
+          position: 'SP/RP',
+          poolPosition: 'SP/RP',
+          seasonWAR: 3,
+          peerPoolSize: 6,
+        },
+        bat: {
+          trueValue: 400,
+          position: 'CF',
+          poolPosition: 'CF',
+          seasonWAR: 2,
+          peerPoolSize: 6,
+        },
+      },
+    });
   });
 
   test('replaces scoped rows when a later completed game recomputes True Value', async () => {

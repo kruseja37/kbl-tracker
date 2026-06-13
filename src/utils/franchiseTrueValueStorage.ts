@@ -4,11 +4,17 @@ import {
   normalizeTrueValuePosition,
   type LeagueContext,
   type PlayerPosition,
+  type TrueValueLeaguePlayer,
+  type TrueValuePoolKey,
 } from '../engines/salaryCalculator';
 import {
   buildFranchiseValueInputRows,
   type FranchiseValueInputRow,
 } from './franchiseValueInputs';
+import {
+  FRANCHISE_TRUE_VALUE_RESERVE_POOL,
+  type FranchiseTrueValueValuationMode,
+} from './franchiseEffectivePosition';
 import { getTrackerDb, resetTrackerDbForTests } from './trackerDb';
 
 export interface FranchiseTrueValueScopeInput {
@@ -28,9 +34,26 @@ export interface FranchiseTrueValueRow extends FranchiseTrueValueScopeInput {
   valueDelta: number;
   warPercentile: number;
   position: PlayerPosition;
+  effectivePosition?: PlayerPosition | null;
+  poolPosition?: TrueValuePoolKey | null;
+  valuationMode?: FranchiseTrueValueValuationMode;
+  trueValueComponents?: {
+    arm?: FranchiseTrueValueComponent;
+    bat?: FranchiseTrueValueComponent;
+  };
   peerPoolSize: number;
   calculationVersion: typeof TRUE_VALUE_CALCULATION_VERSION;
   computedAt: string;
+}
+
+export interface FranchiseTrueValueComponent {
+  trueValue: number;
+  valueDelta: number;
+  warPercentile: number;
+  position: PlayerPosition;
+  poolPosition: TrueValuePoolKey;
+  seasonWAR: number;
+  peerPoolSize: number;
 }
 
 export interface CalculateAndPersistFranchiseTrueValueResult {
@@ -81,6 +104,10 @@ function finiteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
+function rounded(value: number): number {
+  return Number(value.toFixed(3));
+}
+
 function scopeKey(scope: FranchiseTrueValueScopeInput): [string, string, string] {
   return [scope.franchiseId, scope.seasonId, scope.statsScopeId];
 }
@@ -98,19 +125,104 @@ function hasExplicitScope(scope: FranchiseTrueValueScopeInput & { seasonNumber?:
   );
 }
 
-function canonicalPlayerFromValueRow(
-  row: FranchiseValueInputRow,
-): {
-  player: LeagueContext['allPlayers'][number];
+type SingleTrueValueEntry = {
+  kind: 'single';
+  row: FranchiseValueInputRow;
+  player: TrueValueLeaguePlayer;
   position: PlayerPosition;
+  effectivePosition: PlayerPosition | null;
+  poolPosition: TrueValuePoolKey;
+  valuationMode: 'single-position' | 'reserve';
+};
+
+type CompositeTrueValueEntry = {
+  kind: 'two-way';
+  row: FranchiseValueInputRow;
+  armPosition: PlayerPosition;
+  batPosition: PlayerPosition;
+  salary: number;
+  armWar: number;
+  batWar: number;
+};
+
+type TrueValueEntry = SingleTrueValueEntry | CompositeTrueValueEntry;
+
+function baseSkippedReasons(row: FranchiseValueInputRow): string[] {
+  const reasons: string[] = [];
+  if (row.rosterStatus !== 'MLB') reasons.push('Current MLB roster status is required.');
+  if (!row.currentTeamId) reasons.push('Current team id is required.');
+  if (!finiteNumber(row.salary) || !row.salaryBaselineAvailable) reasons.push('Canonical salary baseline is required.');
+  return reasons;
+}
+
+function singlePositioningFromValuePosition(row: FranchiseValueInputRow): {
+  position: PlayerPosition;
+  effectivePosition: PlayerPosition | null;
+  poolPosition: TrueValuePoolKey;
+  valuationMode: 'single-position' | 'reserve';
 } | null {
-  const detectedPosition = normalizeTrueValuePosition(row.valuePosition);
+  const position = normalizeTrueValuePosition(row.valuePosition);
+  if (!position) return null;
+  return {
+    position,
+    effectivePosition: position,
+    poolPosition: position,
+    valuationMode: 'single-position',
+  };
+}
+
+function singlePositioningFromMetadata(row: FranchiseValueInputRow): ReturnType<typeof singlePositioningFromValuePosition> {
+  const positioning = row.trueValuePositioning;
+  if (!positioning) return singlePositioningFromValuePosition(row);
+  if (positioning.valuationMode === 'invalid' || positioning.valuationMode === 'two-way-composite') return null;
+  const position = normalizeTrueValuePosition(positioning.valuePosition);
+  if (!position) return null;
+  const poolPosition = positioning.poolPosition === FRANCHISE_TRUE_VALUE_RESERVE_POOL
+    ? FRANCHISE_TRUE_VALUE_RESERVE_POOL
+    : normalizeTrueValuePosition(positioning.poolPosition);
+  if (!poolPosition) return null;
+  return {
+    position,
+    effectivePosition: normalizeTrueValuePosition(positioning.effectivePosition),
+    poolPosition,
+    valuationMode: poolPosition === FRANCHISE_TRUE_VALUE_RESERVE_POOL ? 'reserve' : 'single-position',
+  };
+}
+
+function battingSideWar(row: FranchiseValueInputRow): number | null {
+  const components = [
+    row.warPreviewValues.battingWar,
+    row.warPreviewValues.fieldingWar,
+    row.warPreviewValues.baserunningWar,
+  ].filter(finiteNumber);
+  if (components.length === 0) return null;
+  return rounded(components.reduce((sum, value) => sum + value, 0));
+}
+
+function trueValueEntryFromRow(row: FranchiseValueInputRow): TrueValueEntry | null {
+  if (baseSkippedReasons(row).length > 0 || !finiteNumber(row.salary)) return null;
+
+  const positioning = row.trueValuePositioning;
+  if (positioning?.valuationMode === 'two-way-composite') {
+    const armPosition = normalizeTrueValuePosition(positioning.twoWayArmPosition);
+    const batPosition = normalizeTrueValuePosition(positioning.twoWayBatPosition);
+    const armWar = finiteNumber(row.warPreviewValues.pitchingWar) ? row.warPreviewValues.pitchingWar : null;
+    const batWar = battingSideWar(row);
+    if (!armPosition || !batPosition || armWar === null || batWar === null) return null;
+    return {
+      kind: 'two-way',
+      row,
+      armPosition,
+      batPosition,
+      salary: row.salary,
+      armWar,
+      batWar,
+    };
+  }
+
+  const single = singlePositioningFromMetadata(row);
   if (
-    !detectedPosition ||
-    row.rosterStatus !== 'MLB' ||
-    !row.currentTeamId ||
-    !finiteNumber(row.salary) ||
-    !row.salaryBaselineAvailable ||
+    !single ||
     !row.warInputAvailability.any ||
     !finiteNumber(row.warPreviewValues.totalWar)
   ) {
@@ -118,28 +230,112 @@ function canonicalPlayerFromValueRow(
   }
 
   return {
+    kind: 'single',
+    row,
+    position: single.position,
+    effectivePosition: single.effectivePosition,
+    poolPosition: single.poolPosition,
+    valuationMode: single.valuationMode,
     player: {
       id: row.playerId,
-      detectedPosition,
+      detectedPosition: single.position,
+      trueValuePool: single.poolPosition,
       salary: row.salary,
       seasonWAR: row.warPreviewValues.totalWar,
     },
-    position: detectedPosition,
   };
 }
 
 function skippedReasons(row: FranchiseValueInputRow): string[] {
-  const reasons: string[] = [];
-  if (row.rosterStatus !== 'MLB') reasons.push('Current MLB roster status is required.');
-  if (!row.currentTeamId) reasons.push('Current team id is required.');
-  if (!normalizeTrueValuePosition(row.valuePosition)) {
+  const reasons = baseSkippedReasons(row);
+  const positioning = row.trueValuePositioning;
+  if (positioning?.valuationMode === 'invalid') {
+    reasons.push(...positioning.reasons);
+  }
+  if (positioning?.valuationMode === 'two-way-composite') {
+    if (!normalizeTrueValuePosition(positioning.twoWayArmPosition)) {
+      reasons.push('Canonical two-way arm profile position is required.');
+    }
+    if (!normalizeTrueValuePosition(positioning.twoWayBatPosition)) {
+      reasons.push('Canonical two-way trait batting position is required.');
+    }
+    if (!finiteNumber(row.warPreviewValues.pitchingWar)) {
+      reasons.push('Persisted numeric pitching WAR is required for two-way arm True Value.');
+    }
+    if (battingSideWar(row) === null) {
+      reasons.push('Persisted numeric batting, fielding, or baserunning WAR is required for two-way bat True Value.');
+    }
+    return reasons;
+  }
+  if (!singlePositioningFromMetadata(row)) {
     reasons.push(
       `Non-canonical True Value position "${String(row.valuePosition)}" is a data defect; R-6 requires a canonical primary position.`,
     );
   }
-  if (!finiteNumber(row.salary) || !row.salaryBaselineAvailable) reasons.push('Canonical salary baseline is required.');
-  if (!row.warInputAvailability.any || !finiteNumber(row.warPreviewValues.totalWar)) reasons.push('Persisted numeric season WAR is required.');
+  if (!row.warInputAvailability.any || !finiteNumber(row.warPreviewValues.totalWar)) {
+    reasons.push('Persisted numeric season WAR is required.');
+  }
   return reasons;
+}
+
+function componentFromResult(
+  result: ReturnType<typeof calculateTrueValue>,
+  poolPosition: TrueValuePoolKey,
+  seasonWAR: number,
+): FranchiseTrueValueComponent {
+  return {
+    trueValue: result.trueValue,
+    valueDelta: result.valueDelta,
+    warPercentile: result.warPercentile,
+    position: result.position as PlayerPosition,
+    poolPosition,
+    seasonWAR,
+    peerPoolSize: result.peerPoolSize,
+  };
+}
+
+function calculateCompositeTrueValueRow(
+  entry: CompositeTrueValueEntry,
+  scope: FranchiseTrueValueScopeInput,
+  leagueContext: LeagueContext,
+  computedAt: string,
+): FranchiseTrueValueRow {
+  // EP1 R-8 pt 5/6: two-way holders are valued compositionally from
+  // uncombined persisted pitching WAR and batting/fielding/running WAR.
+  const armResult = calculateTrueValue({
+    id: `${entry.row.playerId}:arm`,
+    detectedPosition: entry.armPosition,
+    trueValuePool: entry.armPosition,
+    salary: entry.salary,
+    seasonWAR: entry.armWar,
+  }, leagueContext);
+  const batResult = calculateTrueValue({
+    id: `${entry.row.playerId}:bat`,
+    detectedPosition: entry.batPosition,
+    trueValuePool: entry.batPosition,
+    salary: entry.salary,
+    seasonWAR: entry.batWar,
+  }, leagueContext);
+  const trueValue = rounded(armResult.trueValue + batResult.trueValue);
+  return {
+    ...scope,
+    playerId: entry.row.playerId,
+    trueValue,
+    contractValue: entry.salary,
+    valueDelta: rounded(trueValue - entry.salary),
+    warPercentile: Number(((armResult.warPercentile + batResult.warPercentile) / 2).toFixed(6)),
+    position: entry.batPosition,
+    effectivePosition: entry.batPosition,
+    poolPosition: null,
+    valuationMode: 'two-way-composite',
+    trueValueComponents: {
+      arm: componentFromResult(armResult, entry.armPosition, entry.armWar),
+      bat: componentFromResult(batResult, entry.batPosition, entry.batWar),
+    },
+    peerPoolSize: armResult.peerPoolSize + batResult.peerPoolSize,
+    calculationVersion: TRUE_VALUE_CALCULATION_VERSION,
+    computedAt,
+  };
 }
 
 export async function saveFranchiseTrueValueRows(
@@ -229,17 +425,15 @@ export async function calculateAndPersistFranchiseTrueValueForSeason(
 
   const valueInputReport = await buildFranchiseValueInputRows(input);
   const canonicalEntries = valueInputReport.rows
-    .map((row) => ({ row, entry: canonicalPlayerFromValueRow(row) }))
-    .filter((candidate): candidate is {
-      row: FranchiseValueInputRow;
-      entry: NonNullable<ReturnType<typeof canonicalPlayerFromValueRow>>;
-    } => candidate.entry !== null);
+    .map((row) => trueValueEntryFromRow(row))
+    .filter((entry): entry is TrueValueEntry => entry !== null);
+  const singleEntries = canonicalEntries.filter((entry): entry is SingleTrueValueEntry => entry.kind === 'single');
   const leagueContext: LeagueContext = {
-    allPlayers: canonicalEntries.map(({ entry }) => entry.player),
+    allPlayers: singleEntries.map((entry) => entry.player),
   };
 
   const skippedRows = valueInputReport.rows
-    .filter((row) => !canonicalEntries.some((candidate) => candidate.row.playerId === row.playerId))
+    .filter((row) => !canonicalEntries.some((entry) => entry.row.playerId === row.playerId))
     .map((row) => ({
       playerId: row.playerId,
       reasons: skippedReasons(row),
@@ -255,18 +449,26 @@ export async function calculateAndPersistFranchiseTrueValueForSeason(
   }
 
   const computedAt = options.computedAt ?? new Date().toISOString();
-  const rows = canonicalEntries.map(({ row, entry }): FranchiseTrueValueRow => {
-    // TV1 R-2/R-4/R-5: compute canonical True Value from persisted season WAR
-    // and canonical salary, then store rows without flipping designation trust.
+  const rows = canonicalEntries.map((entry): FranchiseTrueValueRow => {
+    if (entry.kind === 'two-way') {
+      return calculateCompositeTrueValueRow(entry, scope, leagueContext, computedAt);
+    }
+
+    // TV1 R-2/R-4/R-5 + EP1 R-8/R-9/R-10: compute canonical True Value
+    // from persisted season WAR and canonical salary, using effective-position
+    // or Reserve peer pools supplied by the value-input replay.
     const result = calculateTrueValue(entry.player, leagueContext);
     return {
       ...scope,
-      playerId: row.playerId,
+      playerId: entry.row.playerId,
       trueValue: result.trueValue,
       contractValue: result.contractValue,
       valueDelta: result.valueDelta,
       warPercentile: result.warPercentile,
       position: entry.position,
+      effectivePosition: entry.effectivePosition,
+      poolPosition: entry.poolPosition,
+      valuationMode: entry.valuationMode,
       peerPoolSize: result.peerPoolSize,
       calculationVersion: TRUE_VALUE_CALCULATION_VERSION,
       computedAt,

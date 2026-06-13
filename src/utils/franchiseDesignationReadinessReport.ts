@@ -213,7 +213,7 @@ function readinessRow(
       ...row.limitations,
       'Fan Favorite/Albatross readiness is projected-designation context only.',
       'R-5: value delta is trusted for projected designations only; random-event morale prompts, salary movement, relationships, offseason, and Mode 3 remain blocked.',
-      'peer pools are profile-position until EP1 (R-8)',
+      'EP1 R-8/R-9/R-10: value delta is backed by starts-derived effective-position pools, Reserve pooling, and compositional two-way True Value.',
     ]),
   };
 }
@@ -275,7 +275,7 @@ export function buildFranchiseDesignationReadinessReport(
       eligibilityReport ? 'Designation eligibility report was included as read-only context only.' : 'No designation eligibility report was provided; readiness is based on True Value preview rows only.',
       'Fan Favorite and Albatross are promoted only to projected designation trust; final designation behavior and random-event morale prompts remain blocked.',
       'R-5: projected value-delta designation trust is enabled here; salary movement, morale mutation, relationships, story persistence, offseason, and Mode 3 remain blocked.',
-      'peer pools are profile-position until EP1 (R-8)',
+      'EP1 R-8/R-9/R-10: projected readiness consumes starts-derived effective-position True Value with Reserve and two-way composite handling.',
     ]),
     hiddenSafe: true,
     readOnly: true,

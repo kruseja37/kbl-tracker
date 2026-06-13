@@ -196,13 +196,19 @@ export interface DraftBudget {
   total: number;
 }
 
+export type TrueValuePoolKey = PlayerPosition | 'RESERVE';
+
+export interface TrueValueLeaguePlayer {
+  id: string;
+  detectedPosition: PlayerPosition;
+  trueValuePool?: TrueValuePoolKey;
+  excludeFromPeerPools?: boolean;
+  salary: number;
+  seasonWAR: number;
+}
+
 export interface LeagueContext {
-  allPlayers: Array<{
-    id: string;
-    detectedPosition: PlayerPosition;
-    salary: number;
-    seasonWAR: number;
-  }>;
+  allPlayers: TrueValueLeaguePlayer[];
 }
 
 // ============================================
@@ -904,7 +910,7 @@ export function calculateExpectedWAR(
 // TRUE VALUE CALCULATION (Position-Relative)
 // ============================================
 
-export const TRUE_VALUE_CALCULATION_VERSION = 'true-value-step-percentile-v1';
+export const TRUE_VALUE_CALCULATION_VERSION = 'true-value-effective-position-v2';
 export const TRUE_VALUE_MIN_PEER_POOL_SIZE = 6;
 
 export const TRUE_VALUE_PLAYER_POSITIONS: readonly PlayerPosition[] = [
@@ -983,25 +989,31 @@ const POSITION_MERGE_GROUPS: Partial<Record<PlayerPosition, PlayerPosition[]>> =
  * Get peer pool for a position
  */
 function getPositionPeerPool(
-  position: PlayerPosition,
+  position: TrueValuePoolKey,
   allPlayers: LeagueContext['allPlayers']
 ): LeagueContext['allPlayers'] {
+  const poolEligiblePlayers = allPlayers.filter(p => !p.excludeFromPeerPools);
+  const poolKey = (player: LeagueContext['allPlayers'][number]) =>
+    player.trueValuePool ?? player.detectedPosition;
+
   // Direct position matches
-  let pool = allPlayers.filter(p => p.detectedPosition === position);
+  let pool = poolEligiblePlayers.filter(p => poolKey(p) === position);
 
   // SALARY_SYSTEM_SPEC_UPDATED.md True Value Calculation + R-3:
   // merge sparse position pools first, then fall back to whole league only
   // when the merged pool is still below the canonical peer floor.
-  if (pool.length < TRUE_VALUE_MIN_PEER_POOL_SIZE) {
+  // EP1 R-8/R-9: effective-position and Reserve callers provide trueValuePool;
+  // Reserve is a distinct sparse pool with only the whole-league safety net.
+  if (position !== 'RESERVE' && pool.length < TRUE_VALUE_MIN_PEER_POOL_SIZE) {
     const mergeGroup = POSITION_MERGE_GROUPS[position];
     if (mergeGroup) {
-      pool = allPlayers.filter(p => mergeGroup.includes(p.detectedPosition));
+      pool = poolEligiblePlayers.filter(p => mergeGroup.includes(poolKey(p) as PlayerPosition));
     }
   }
 
   // If still too small, return all players
   if (pool.length < TRUE_VALUE_MIN_PEER_POOL_SIZE) {
-    return allPlayers;
+    return poolEligiblePlayers;
   }
 
   return pool;
@@ -1013,10 +1025,10 @@ function getPositionPeerPool(
  * this is the canonical step-percentile implementation for True Value.
  */
 export function calculateTrueValue(
-  player: { salary: number; seasonWAR: number; detectedPosition: PlayerPosition },
+  player: { id?: string; salary: number; seasonWAR: number; detectedPosition: PlayerPosition; trueValuePool?: TrueValuePoolKey },
   leagueContext: LeagueContext
 ): TrueValueResult {
-  const position = player.detectedPosition;
+  const position = player.trueValuePool ?? player.detectedPosition;
   const actualWAR = player.seasonWAR;
 
   // Get peer pool for this position
