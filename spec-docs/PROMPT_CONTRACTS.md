@@ -5174,3 +5174,88 @@ pre-EP1 via git f8d5f82; every generated delta must match this table;
 deviation → STOP. Then STOP for D8-only re-audit.
 
 Use high reasoning effort. Think step-by-step.
+
+
+---
+
+# EP1-GOLDEN-R-AUDIT — D8-only re-audit of the golden-regression table
+**Drafted:** 2026-06-12 | **ROUTE: Opus 4.8 Max | high reasoning effort**
+(independent auditor; Fable unavailable — same substitution as EP1-AUDIT,
+triangle preserved auditor≠builder. NARROW SCOPE: D8 only — EP1-AUDIT D1-D7,
+D9-D10 already PASSED and the engine diff is unchanged since.)
+
+## Why narrow
+EP1-AUDIT returned 9/10 PASS + 4 mutations killed; the ONLY block was D8
+(golden-regression table absent → FINDING-146). EP1-GOLDEN-R produced the
+table. This re-audit verifies ONLY that the table genuinely closes D8. Do
+NOT re-run D1-D7/D9-D10 — the EP1 engine changeset is byte-unchanged
+(confirm that first; if it changed, STOP — scope is void).
+
+```
+You are the independent auditor for the EP1 golden-regression deliverable.
+You did not write it. Assume failure until proven otherwise. Audit
+spec-docs/EP1_GOLDEN_REGRESSION.md + scripts/ep1-golden-regression.mjs
+against EP1-AUDIT D8 + the EP1-GOLDEN-R sign-off/reversal entries
+(PROMPT_CONTRACTS.md) + RULING R-8/R-9/R-10.
+
+GOAL: verdict "EP1 D8 VERIFIED — FINDING-146 CLOSED" or itemized
+MAJOR/MINOR.
+
+PRECONDITION (confirm, else STOP):
+- The EP1 engine changeset is unchanged since EP1-AUDIT: `git diff --stat`
+  shows the SAME 12 build paths (10 modified + 2 untracked
+  franchiseEffectivePosition.ts/.test.ts) plus now the 2 EP1-GOLDEN-R
+  artifacts (script + .md). No EP1 ENGINE file may have moved since
+  EP1-AUDIT. If an engine file changed, the prior 9/10 pass is stale →
+  STOP and report.
+
+DIRECTIVES (D8 facets):
+G1 — Script integrity: ep1-golden-regression.mjs obtains pre-EP1 from
+  git f8d5f82 (NOT hand-reconstructed — confirm the git show/archive
+  invocation), runs the SAME synthetic fixture through pre and post
+  canonical TV paths (buildFranchiseTrueValuePreviewReport, NOT a
+  reimplementation), and REFUSES to write the .md unless the 5 binding
+  rows match. Mutation: change a binding target in the script → it must
+  refuse to write (or fail loudly). Confirm the refusal is real.
+G2 — Binding rows match the reversed sign-off (d13a350): near_2b_ss
+  +300k, clean_lf_cf +500k, boundary_3b 0, reserve_rf −570k, tw_if
+  180k→260k +80k. tw_if MUST be 260k (R-8 pt5 self-exclusion — NOT the
+  reverted 280k). Re-derive all 5 by hand against the engine formula
+  (getPercentile = count(≤)/n; getValueAtPercentile = floor(pct·n)
+  clamp). Any mismatch → MAJOR.
+G3 — Coverage: all THREE sanctioned causes appear with nonzero,
+  correctly-signed, correctly-attributed deltas (effective≠profile,
+  Reserve, two-way-composite). A cause with only zero-deltas = hollow
+  fixture = MAJOR.
+G4 — Zero UNATTRIBUTED: every one of the 13 changed rows carries a
+  non-UNATTRIBUTED attribution AND that attribution is CORRECT (not just
+  present). PRIORITY hand-checks (Captain-flagged as least intuitive):
+  * res_4 (130k→700k, +570k, Reserve) and res_5 (800k→700k, −100k,
+    Reserve): verify these are arithmetic consequences of reserve_rf
+    (700k salary) entering the league-wide Reserve pool and reshaping
+    its salary distribution — NOT a bug. Note res_5 is an 800k-salary
+    "reserve" player (a second Albatross-shaped row); confirm the pool
+    composition (700k + 800k among ~100k benchwarmers) explains both
+    deltas exactly.
+  * 2b_5/2b_6 (−350k) and lf_5/lf_6 (−600k): verify these are the
+    switchers LEAVING those pools (near_2b_ss 450k left 2B; clean_lf_cf
+    900k left LF), dropping the pool salary ceiling.
+  * ss_4 (+50k), cf_4 (+100k): switchers ARRIVING.
+  * sprp_4 (−20k): tw_if EXITING the SP/RP single pool.
+  Any row whose stated attribution does not mechanically explain its
+  delta → MAJOR (mislabeled delta is exactly what D8 hunts).
+G5 — Build: NODE_ENV= npm run build green with the script present; the
+  script does not import-cycle into shipping paths.
+
+CARVE-OUTS: spec-doc appends sanctioned. The 2 new artifacts (script +
+.md) are the expected additions; they are NOT EP1 engine files.
+
+FORMAT: verdict first; per-G evidence (commands + output); the 5 binding
+rows re-derived by hand; the res_4/res_5 mechanism shown explicitly;
+disagreements MAJOR/MINOR; explicit statement whether FINDING-146 is
+CLOSED and FINDING-143 is now DELTA-CERTIFIED.
+
+Use high reasoning effort. Think step-by-step.
+```
+
+**Execution record:** [pending]
