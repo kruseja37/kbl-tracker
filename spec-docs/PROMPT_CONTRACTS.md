@@ -4434,3 +4434,58 @@ Use very high reasoning effort. Think step-by-step.
 ```
 
 **Execution record:** [pending]
+
+
+---
+
+# RULING R-10 — Effective-Position Plurality Unit = STARTS (JK-ratified 2026-06-12)
+**Refines R-8 pt 1 for EP1.** The plurality count runs over per-game
+STARTING positions (GameHeader.startingLineups), not all appearances.
+Rationale: a start is the manager's deliberate role assignment (the
+R-8 role framing); sub cameos must not flip peer pools; the Reserve
+pool already keys on starts — one ordered data source. Players the
+distinction "misses" (many sub appearances, few starts) land in the
+Reserve pool, where exact position is moot. Appearances-based
+plurality is the documented CALIBRATE upgrade path — the plurality
+input is a single swap point in the effective-position module; pay
+the event-scan cost later only if real play shows mispooling.
+
+**PHASE 0 SIGN-OFF (Captain, 2026-06-12) — EP1 PHASE 1 ADDENDUM:**
+Codex Phase 0 report VERIFIED (Captain re-checked every load-bearing
+citation: eventLog.ts GameHeader startingLineups/startingPitchers/
+isComplete/date + getGameHeadersForScope; TWO_WAY_TRAIT_POSITION +
+hasTwoWayTrait; bwar/rwar/fwar/totalWar + pwar row shapes; two-way
+holder profiles). Binding decisions:
+1. D-A: DERIVE approved. Starts counted from persisted
+   GameHeader.startingLineups via getGameHeadersForScope
+   ({ isComplete: true }), scoped per season. Replay ordered by
+   (date, gameId). ZERO new persistence.
+2. R-10 governs the plurality unit (STARTS). Captain-surfaced basis:
+   incumbency is history-dependent, so resolution REPLAYS the season
+   in game order each recalc; starting lineups are the only ordered
+   per-game position source — per-game sub positions would require
+   full event-stream scans every recalc (rejected as the default).
+3. D-B: two-way detection = canonical trait labels via
+   TWO_WAY_TRAIT_POSITION only. salaryCalculator.ts:700-701 inventing
+   path is NOT a detection source; residue stays untouched (F-144
+   cleanup batch).
+4. D-E anchors RATIFIED: Two Way (C)→C, Two Way (IF)→2B,
+   Two Way (OF)→CF (pre-data day-zero anchors per R-8 pt 6).
+5. D-F: incumbency derived FRESH each recalc by ordered replay from
+   day-zero anchor; NO persisted incumbency state. Determinism: same
+   headers + same WAR/fielding rows + same anchors → same effective
+   position.
+6. Only-edit list FINAL: franchiseValueInputs.ts,
+   franchiseTrueValueStorage.ts, franchiseTrueValuePreview.ts,
+   salaryCalculator.ts (pool construction ONLY — step-percentile
+   machinery untouched), NEW src/utils/franchiseEffectivePosition.ts,
+   franchiseDesignationReadinessReport.ts, and their test files.
+   eventLog.ts is READ-ONLY (consume getGameHeadersForScope as-is).
+   All other Phase 0-inventoried files: read-only.
+7. Added test pins: (a) incumbency path-dependence — profile 2B,
+   early outright SS lead, later 3-3 tie → SS holds (replay
+   correctness; mutation: tie falls to profile primary → RED);
+   (b) sub-appearance exclusion — plurality counts starts only
+   (mutation: count gamesByPosition appearances → RED);
+   (c) anchor pin — zero-start Two Way (IF) resolves to 2B.
+All other EP1 contract terms unchanged. Proceed to Phase 1.
