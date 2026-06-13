@@ -4657,6 +4657,13 @@ table) → D8-only re-audit → closure.
 ---
 
 # EP1-GOLDEN — TV golden-regression table (closes FINDING-146 D8 block)
+**SUPERSEDED 2026-06-12 by EP1-GOLDEN-R — NEVER EXECUTED.** Its Phase 0
+(harness discovery) ran and correctly found no ready fixture; but its
+fixture question ("reuse harness vs minimal overlay vs real data") spun
+into the EXTRACT detour. EP1-GOLDEN-R resolves it: deterministic
+ADVERSARIAL SYNTHETIC fixture, Node script, no browser. Text retained for
+the reasoning trail; the Phase 0 finding (no existing full-league TV
+harness) carries forward into R.
 **Drafted:** 2026-06-12 | **ROUTE: Codex 5.5 | high**
 (scoped artifact generation, NOT logic — engine already mutation-proven;
 this produces the contract-required PRIORITY deliverable the EP1 build
@@ -4771,6 +4778,17 @@ Use high reasoning effort. Think step-by-step.
 ---
 
 # EP1-GOLDEN-EXTRACT — pull real franchise data from the preview app
+**SUPERSEDED 2026-06-12 — NEVER EXECUTED.** Abandoned after a scope-creep
+recognition (JK + Captain): chasing real played-season data for D8 walked
+the plan from "write a table" → "extract browser IndexedDB" → "script a
+season" → "Playwright game-player." Root cause: Captain over-read D8's
+"fixture league" as demanding EMPIRICAL realism when it needs only
+COVERAGE (the three sanctioned causes exercised). A deterministic
+ADVERSARIAL SYNTHETIC fixture satisfies D8 — the synthetic concern was
+ever only about the engine hand-authoring ANSWERS, never about synthetic
+INPUTS. Absent Fable (which would likely have accepted a synthetic
+coverage fixture directly), the real-data road was a detour. Superseded by
+EP1-GOLDEN-R below. Contract text retained for the reasoning trail.
 **Drafted:** 2026-06-12 | **ROUTE: Codex 5.5 | high**
 (infrastructure + inventory only — NO table generation, NO engine edits;
 resolves the EP1-GOLDEN H-B fixture gap with REAL played-season data
@@ -4878,6 +4896,127 @@ FAILURE PROTOCOL:
 - Any cause ABSENT in the inventory → report it as the finding; JK
   decides whether to play more games (this is success, not failure —
   the inventory did its job)
+
+Use high reasoning effort. Think step-by-step.
+```
+
+**Execution record:** [pending]
+
+
+---
+
+# EP1-GOLDEN-R — adversarial synthetic fixture golden regression (closes FINDING-146 D8)
+**Drafted:** 2026-06-12 | **ROUTE: Codex 5.5 | high → audit by current independent auditor (Opus 4.8 Max while Fable unavailable)**
+(scoped artifact generation, NOT engine logic — engine mutation-proven;
+supersedes EP1-GOLDEN + EP1-GOLDEN-EXTRACT)
+
+## Why this, and why synthetic is correct
+EP1-AUDIT passed 9/10 + killed 4 mutations; the ONLY block is D8 — no
+golden-regression table. D8 needs COVERAGE (every TV delta attributes to
+a sanctioned cause), not empirical realism. A DETERMINISTIC ADVERSARIAL
+SYNTHETIC fixture satisfies it: synthetic INPUTS are fine; the engine —
+not the fixture author — computes the True Values, so no answer is hand-
+authored. The honesty guarantee is that the fixture is built to PROBE the
+engine (boundary + conflict cases), its construction is logged, and the
+auditor judges whether it was a fair test. No browser, no played season.
+
+## The three sanctioned causes the fixture MUST exercise (adversarially)
+1. EFFECTIVE-POSITION ≠ PROFILE: a position player whose plurality of
+   STARTS is at a position different from profile primaryPosition —
+   INCLUDING a near-tie case (e.g. profile 2B, 4 SS starts vs 3 2B
+   starts) to stress incumbency, and a clean-flip case.
+2. RESERVE: a player whose starts-share is below 0.40 of team completed
+   games — INCLUDING one sitting exactly AT the 0.40 boundary (must NOT
+   be Reserve, strict `<`) and one clearly below.
+3. TWO-WAY COMPOSITE: a Two Way trait holder (real label, e.g. Two Way
+   (IF)/(OF)) with BOTH arm (pWAR) and bat (bwar/rwar/fwar) WAR rows, so
+   compositional valuation fires and the holder is excluded from single
+   pools.
+
+## Contract (handoff text)
+
+```
+You are a senior TypeScript engineer producing the EP1 golden-regression
+deliverable for KBL Tracker via a DETERMINISTIC ADVERSARIAL SYNTHETIC
+fixture. This is an EVIDENCE artifact, NOT an engine change, and runs as
+a Node script — NO browser, NO Playwright, NO IndexedDB.
+
+GOAL:
+Build a synthetic fixture that adversarially exercises EP1's three
+sanctioned causes, run the canonical True Value path over it at pre-EP1
+(git f8d5f82) and post-EP1 (working tree), and emit a pre/post
+attribution table proving EVERY changed row attributes to a sanctioned
+cause. Any UNATTRIBUTED delta is the finding the table exists to surface.
+
+SOURCE OF TRUTH:
+- EP1-AUDIT D8 (three causes; "zero unattributed delta" bar)
+- RULING R-8/R-9/R-10 + Phase 0 sign-off addendum (cause definitions)
+- FINDING-146 (the deliverable gap)
+- The three-causes block in the EP1-GOLDEN-R header above (adversarial
+  cases REQUIRED: near-tie incumbency, 0.40 boundary, clean flip,
+  two-way with both WAR sides)
+
+PHASE 0 — FIXTURE DESIGN (report and STOP for Captain sign-off before
+generating):
+- Specify the EXACT fixture: list each synthetic player (id, name,
+  profile primaryPosition, trait labels, salary), each player's
+  per-game STARTING position sequence (so plurality + starts-share are
+  computable by hand), and each player's WAR rows (bwar/rwar/fwar for
+  bats, pwar for arms). Show by hand-calc that the fixture produces:
+  the near-tie switcher, the clean-flip switcher, the 0.40-boundary
+  non-Reserve, the sub-0.40 Reserve, and the two-way composite holder.
+- Identify the CANONICAL entry point the script will call (the same
+  calculateTrueValue path via franchise storage/preview that production
+  uses — NOT a reimplementation); cite file:line.
+- Identify how the script obtains the pre-EP1 engine (git show/
+  worktree at f8d5f82 — NOT hand-reconstructed) and runs BOTH versions
+  against the SAME fixture.
+- Name the exact files to add. Report and STOP.
+
+PHASE 1 — GENERATE (after sign-off):
+- Add scripts/ep1-golden-regression.mjs (Node, no browser): construct
+  the signed-off fixture, run the canonical TV path pre + post, diff by
+  playerId.
+- Add spec-docs/EP1_GOLDEN_REGRESSION.md: a table keyed by playerId
+  (playerName, profile primary, EP1 effective/Reserve/two-way, pre-EP1
+  trueValue, post-EP1 trueValue, delta, ATTRIBUTION ∈ {UNCHANGED,
+  effective≠profile, Reserve, two-way-composite, UNATTRIBUTED}), plus a
+  summary (N players, N changed, breakdown, UNATTRIBUTED count) AND a
+  FIXTURE-DESIGN section restating the adversarial cases so the auditor
+  can judge whether the fixture probes or flatters.
+- Every nonzero delta MUST carry a non-UNATTRIBUTED attribution. Any
+  UNATTRIBUTED row → STOP and report it (player + unexplained delta) —
+  this is the real defect the table hunts; do not paper over it.
+
+CONSTRAINTS:
+- Do NOT modify any EP1 engine/source file. The script + the .md are
+  the only additions; the script must not import-cycle into shipping
+  paths.
+- Do NOT commit the EP1 build code (stays uncommitted for the D8
+  re-audit against the live diff).
+- Pre-EP1 numbers come from the real f8d5f82 engine via git, NOT memory.
+- The fixture is SYNTHETIC INPUTS only; the engine computes all True
+  Values. If producing the table appears to require an engine edit →
+  STOP, report (that is a finding, not a license to edit).
+
+VERIFICATION:
+- NODE_ENV= npm run build green; the table .md exists and is internally
+  consistent (every nonzero delta attributed); report the UNATTRIBUTED
+  count explicitly (target: 0) and confirm all three causes appear with
+  nonzero, correctly-attributed deltas.
+
+FORMAT:
+Phase 0 fixture design → STOP. Then: files added (exact paths); how
+pre/post engines were obtained (git commands); the attribution summary
+(N total / N changed / breakdown / UNATTRIBUTED count); the three causes
+confirmed present; "EP1-GOLDEN-R complete" OR "BLOCKED: [reason]" OR
+"UNATTRIBUTED DELTA FOUND: [rows]".
+
+FAILURE PROTOCOL:
+- A sanctioned cause cannot be exercised by the fixture → fix the
+  fixture design at Phase 0 (the whole point is coverage)
+- Producing the table needs an engine edit → STOP, report
+- Any UNATTRIBUTED delta → STOP after Phase 1, report the rows
 
 Use high reasoning effort. Think step-by-step.
 ```
