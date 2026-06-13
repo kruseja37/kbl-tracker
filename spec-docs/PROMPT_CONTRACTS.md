@@ -4652,3 +4652,117 @@ FINDING-143: implemented + code-verified + mutation-proven, NOT delta-
 certified (gated on D8). Working tree left pristine (diff 58,403 B, 13
 paths, both probed files restored). NEXT: EP1-GOLDEN (Codex produces the
 table) → D8-only re-audit → closure.
+
+
+---
+
+# EP1-GOLDEN — TV golden-regression table (closes FINDING-146 D8 block)
+**Drafted:** 2026-06-12 | **ROUTE: Codex 5.5 | high**
+(scoped artifact generation, NOT logic — engine already mutation-proven;
+this produces the contract-required PRIORITY deliverable the EP1 build
+omitted)
+
+## Why this exists
+EP1-AUDIT (Opus 4.8 Max) returned NOT VERIFIED on ONE ground: the TV-level
+golden-regression attribution table (contract D8 / FINDING-146) was never
+produced. Engine logic is code-verified + mutation-proven (D1-D7, D9-D10
+PASS; 4 mutations killed). This ticket delivers ONLY that table, then a
+D8-only re-audit closes EP1. No engine changes.
+
+## Contract (handoff text)
+
+```
+You are a senior TypeScript engineer producing the EP1 golden-regression
+deliverable for KBL Tracker. This is an EVIDENCE artifact, not a logic
+change.
+
+GOAL:
+Produce a pre/post True Value attribution table over the fixture league
+that proves EVERY True Value row that changed between pre-EP1 (HEAD
+f8d5f82) and post-EP1 (current working tree) attributes to a SANCTIONED
+cause: (1) effective position ≠ profile position, (2) Reserve-pool
+membership, (3) two-way compositional valuation. Any UNATTRIBUTED delta
+is the finding the whole table exists to surface — report it, do not
+hide it.
+
+SOURCE OF TRUTH:
+- EP1-AUDIT contract D8 (PROMPT_CONTRACTS.md) — the three sanctioned
+  causes and the "zero unattributed delta" bar
+- RULING R-8 / R-9 / R-10 + Phase 0 sign-off addendum — what each
+  sanctioned cause means
+- FINDING-146 (FINDINGS_142_onwards.md) — the exact deliverable gap
+
+PHASE 0 — HARNESS DISCOVERY (report and STOP for Captain sign-off before
+generating):
+- H-A Does a runnable harness exist to compute True Value rows over the
+  fixture league OUTSIDE React? Search: existing test fixtures that build
+  a LeagueContext / full-league player set; any season-simulator or
+  franchise-engine-discovery output; scripts under spec-docs or repo root
+  that already drive calculateTrueValue / getFranchiseTrueValueRows over
+  many players. Report file:line for anything found.
+- H-B What is the canonical FIXTURE LEAGUE for this regression? Identify
+  the player dataset the existing TV tests already use (or the most
+  representative full-league fixture). It MUST contain: position players
+  whose played-starts differ from profile primary; at least one likely
+  Reserve member (low starts-share); at least one Two Way trait holder
+  (the audit found Fenomeno IF, Hall/Ankiel OF). Confirm coverage of all
+  three sanctioned causes exists in the chosen fixture; if a cause is
+  unrepresented, report it (the table cannot prove what the fixture
+  cannot exercise).
+- H-C Build path decision: if H-A finds a usable harness → REUSE it
+  (name it). If NOT → propose a MINIMAL standalone extraction script
+  (Node, reads the fixture, runs the canonical TV path pre and post,
+  emits a row-keyed diff) — name the exact file you would add and where.
+  Do NOT write it until sign-off.
+
+PHASE 1 — GENERATE (after sign-off):
+- Run the canonical True Value path over the fixture league at pre-EP1
+  state and post-EP1 state. Pre-EP1 = the logic at f8d5f82 (use git to
+  obtain the prior engine; do NOT hand-reconstruct it). Post-EP1 =
+  current working tree.
+- Emit a table keyed by playerId with columns: playerName, profile
+  primaryPosition, EP1 effective position (or Reserve / two-way),
+  pre-EP1 trueValue, post-EP1 trueValue, delta, ATTRIBUTION
+  (one of: UNCHANGED / effective≠profile / Reserve / two-way-composite /
+  UNATTRIBUTED).
+- Every nonzero delta MUST carry a non-UNATTRIBUTED attribution. Any
+  UNATTRIBUTED row is a BLOCKING finding — list it explicitly with the
+  player and the unexplained delta.
+- Save the table as a committed artifact:
+  spec-docs/EP1_GOLDEN_REGRESSION.md (human-readable table + a one-
+  paragraph summary: N players, N changed, breakdown by attribution,
+  count of UNATTRIBUTED).
+
+CONSTRAINTS:
+- Do NOT modify any EP1 engine/source file. If generating the table
+  requires a NEW script only, that script is the sole code addition and
+  must not import-cycle into shipping code paths. If you believe an
+  engine file MUST change to produce the table, STOP — that is a finding,
+  not a license to edit.
+- Do NOT commit the EP1 build code (it stays uncommitted for the D8 re-
+  audit against the live diff).
+- The fixture-league run must use the CANONICAL TV path (calculateTrueValue
+  via the franchise storage/preview entry), not a reimplementation.
+
+VERIFICATION:
+- NODE_ENV= npm run build green (if a script was added); the table
+  artifact exists and is internally consistent (every nonzero delta
+  attributed); report the UNATTRIBUTED count explicitly (target: 0).
+
+FORMAT:
+Phase 0 report → STOP. Then: files added (exact paths); how the pre/post
+states were obtained (git commands); the attribution summary (N total /
+N changed / breakdown / UNATTRIBUTED count); "EP1-GOLDEN complete" OR
+"BLOCKED: [exact reason]" OR "UNATTRIBUTED DELTA FOUND: [rows]".
+
+FAILURE PROTOCOL:
+- Fixture cannot exercise a sanctioned cause → report at Phase 0, await
+  ruling (table would be incomplete)
+- Producing the table appears to require an engine edit → STOP, report
+- Any UNATTRIBUTED delta → STOP after Phase 1, report the rows (this is
+  the real defect the table hunts; do not paper over it)
+
+Use high reasoning effort. Think step-by-step.
+```
+
+**Execution record:** [pending]
