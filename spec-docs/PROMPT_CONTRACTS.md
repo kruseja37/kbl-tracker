@@ -4140,3 +4140,70 @@ REBUILD direction APPROVED. Binding decisions:
 6. Added test pin: zero designation writes occur on TeamHub mount
    (mutation: reintroduce the sync call → RED).
 All other TV2 contract terms unchanged. Proceed to Phase 1.
+
+
+---
+
+# TV2-AUDIT — Fable 5 CLI audit of the TV2 build (contract)
+**Drafted:** 2026-06-12 | **ROUTE: Fable 5 CLI | high reasoning effort**
+
+```
+You are the independent auditor for TV2 (designation slice). You did not
+write this code. Assume failure until proven otherwise. Audit the git diff
+of the TV2 changeset (uncommitted, post-7b8b031) against the TV2 contract
++ Phase 0 sign-off addendum (PROMPT_CONTRACTS.md).
+
+GOAL: verdict "TV2 DELTA VERIFIED" or itemized MAJOR/MINOR disagreements.
+
+DIRECTIVES:
+D1 — trackerDb v14: full-handler read (v13 discipline). Additive only,
+  contains-guarded, zero destructive paths, no second kbl-tracker opener.
+D2 — Sync removal pin: syncActiveTeamMvpAceDesignationsFromEligibility and
+  its TeamHubContent.tsx:1605 call GONE; zero designation writes on
+  TeamHub mount. Mutation: reintroduce the sync call → must go RED on
+  exactly the mount pin test.
+D3 — §17 fidelity vs the QUOTED gospel in the TV2 header: MVP highest team
+  WAR / floor 20% (min 5); Ace highest team pWAR / 20% as pitcher (min 4)
+  / pWAR≥0.5; FanFav highest POSITIVE valueDelta / Albatross most NEGATIVE
+  / floors 10% (min 3); below-floor → NO holder (never a default);
+  CARRYOVER METADATA present on FanFav/Albatross rows and round-trip
+  tested (builder report silent on this — verify or flag). Floors derive
+  from gamesPerTeam config-truth + the batting-games / pitching
+  appearances+starts rows cited in Phase 0; totalGames grep-pinned absent.
+D4 — Gate chain: WAR → True Value → projected designations in
+  processCompletedGame; each upstream failure skips downstream with warn.
+  Mutation: force TV-persist failure → no designation write.
+D5 — valueDelta consumer: FanFav/Albatross read PERSISTED canonical rows
+  via getFranchiseTrueValueRows — never recomputed, never preview values.
+D6 — Trust scope: readiness flips projected-only WITH the limitation
+  string "peer pools are profile-position until EP1 (R-8)"; locked
+  effects (Fame/morale/trade-discount writes) grep-pinned absent;
+  morale bridges still guardrail-only.
+D7 — Suite reconciliation, FULL enumeration (PRIORITY — Captain flag):
+  net +2 (7,125→7,127) cannot be netted. Enumerate every ADDED and every
+  DELETED test from the diff; each deletion must be a test defending the
+  retired 'active'/player-embedded path (sanctioned by the REBUILD) —
+  any other deletion is a MAJOR. Reconcile totals exactly.
+D8 — File enumeration (Captain flag): list every changed file from the
+  diff; builder named ~6 of "12 paths" — the gap repeats the logged
+  reporting-discipline lesson; adjudicate each unnamed change.
+D9 — Eligibility disposition (Captain flag): addendum point 4 said AMEND
+  franchiseDesignationEligibility.ts (floors + valueDelta unblock);
+  builder's list omits it. Determine: logic relocated into the rebuilt
+  franchiseDesignations.ts (adjudicate as deviation, possibly sanctioned)
+  or amendment skipped (MAJOR — §17 gates would be bypassable via the
+  old eligibility surface).
+D10 — No-touch sweep: fanFavoriteEngine.ts, fanMoraleEngine.ts,
+  calculateTrueValue machinery, warOrchestrator internals, ivEngine/
+  oracle/tierParams, offseason flows, season-end/locking logic — all
+  diff-CLEAN. Stale embedded fields: writes stopped, fields inert (no
+  scrub attempted).
+
+CARVE-OUTS: sibling spec-doc appends are sanctioned session documentation.
+FORMAT: verdict first; per-directive evidence (commands + output);
+disagreements MAJOR/MINOR with file:line; new finding candidates.
+
+Use high reasoning effort. Think step-by-step.
+```
+
+**Execution record:** [pending]
