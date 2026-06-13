@@ -4766,3 +4766,120 @@ Use high reasoning effort. Think step-by-step.
 ```
 
 **Execution record:** [pending]
+
+
+---
+
+# EP1-GOLDEN-EXTRACT — pull real franchise data from the preview app
+**Drafted:** 2026-06-12 | **ROUTE: Codex 5.5 | high**
+(infrastructure + inventory only — NO table generation, NO engine edits;
+resolves the EP1-GOLDEN H-B fixture gap with REAL played-season data
+instead of a synthetic overlay)
+
+## Why this exists
+EP1-GOLDEN Phase 0 found no fixture exercising all three sanctioned
+causes; the synthetic player pool has no game history (no effective-
+position or Reserve cases). JK has real franchise data in the deployed
+preview app (https://kbl-tracker.vercel.app/), but it lives in that
+browser profile's IndexedDB — unreachable from the filesystem. This
+ticket extracts it via a Playwright attach to JK's own Chrome, then
+INVENTORIES coverage. The table itself is the next ticket, only after we
+confirm the data exercises the three causes. Env pinned (Captain-
+verified): node/npx at ~/.nvm/versions/node/v20.20.0/bin; Chrome at
+/Applications/Google Chrome.app; Playwright 1.60 + chromium installed.
+
+## Contract (handoff text)
+
+```
+You are a senior TypeScript engineer building a data-extraction +
+inventory tool for KBL Tracker. This is INFRASTRUCTURE, not a logic
+change and not the golden table.
+
+GOAL:
+Extract the real franchise data from JK's running Chrome (preview app
+IndexedDB) to a committed JSON fixture, then report an INVENTORY of
+whether that data exercises EP1's three sanctioned causes. STOP after
+the inventory — do not generate the golden-regression table.
+SETUP (JK performs; script depends on it):
+- JK fully quits Chrome, then relaunches with remote debugging against
+  the DEFAULT profile (so the existing IndexedDB is visible):
+  /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
+    --remote-debugging-port=9222
+  Do NOT pass a fresh --user-data-dir — that opens an empty profile
+  WITHOUT the franchise data (the per-profile-storage trap).
+- JK navigates to https://kbl-tracker.vercel.app/, opens the franchise
+  so its stores populate, confirms in DevTools > Application >
+  IndexedDB that franchise data is present, then tells you to proceed.
+
+PHASE 0 — DISCOVERY (report and STOP before writing the script):
+- Identify EVERY IndexedDB database + object store the EP1 True Value
+  path depends on: event-log game headers (startingLineups — the
+  starts source), season stat rows (batting bwar/rwar/fwar/totalWar,
+  pitching pwar), franchise players (profile primaryPosition, isTwoWay,
+  trait labels), franchise config (gamesPerTeam). Cite the DB names +
+  store names from the codebase (initEventLogDB, seasonStorage,
+  franchisePlayerStorage, etc.) with file:line — "it exists" is a grep
+  result, not a memory.
+- Confirm the Playwright connectOverCDP attach pattern against
+  endpoint http://localhost:9222 (NOT a fresh chromium launch — the
+  whole point is JK's existing IndexedDB).
+- Name the exact files you will add. Report and STOP.
+
+PHASE 1 — BUILD + EXTRACT + INVENTORY (after sign-off):
+- Add scripts/ep1-extract-preview-data.mjs: connectOverCDP to
+  localhost:9222, find the app page/context, read ALL stores
+  identified in Phase 0 via page.evaluate over IndexedDB, write the
+  raw dump to spec-docs/data/ep1-preview-fixture.json (gitignored if
+  large; otherwise committed). Deterministic, read-only — the script
+  NEVER writes to the app's IndexedDB.
+- Add scripts/ep1-inventory.mjs (or fold into the same script): from
+  the dumped fixture, compute and print an INVENTORY:
+  * total completed games (headers with isComplete + startingLineups)
+  * per-player START COUNTS by position (from startingLineups, ordered
+    by date,gameId) — flag any player whose plurality start position
+    != profile primaryPosition (EFFECTIVE-POSITION cause present?)
+  * per-player starts-share vs team completed games — flag any below
+    0.40 (RESERVE cause present?)
+  * each Two Way trait holder (Fenomeno/Hall/Ankiel or others) — do
+    they appear with game history + WAR rows? (TWO-WAY cause present?)
+  * whether persisted WAR rows exist at all (bwar/pwar populated)
+- Write the inventory as spec-docs/EP1_FIXTURE_INVENTORY.md: the three
+  cause-coverage verdicts (PRESENT / ABSENT, with the specific
+  players), game count, WAR-row presence. This is the deliverable that
+  decides whether the golden table can run on real data or needs JK to
+  play more games.
+
+CONSTRAINTS:
+- Do NOT generate the golden-regression table (next ticket, gated on
+  this inventory).
+- Do NOT modify any EP1 engine/source file or the app's IndexedDB.
+- Do NOT commit the EP1 build code (still uncommitted for D8 re-audit).
+- The script is the only code addition; it must not import-cycle into
+  shipping paths.
+- If connectOverCDP finds no app page or an EMPTY franchise DB → STOP,
+  report (likely the wrong Chrome profile per the SETUP note); do not
+  fabricate a fixture.
+
+VERIFICATION:
+- The fixture JSON exists and is non-empty; the inventory .md exists
+  with the three cause-coverage verdicts explicitly stated. Report the
+  game count and the three PRESENT/ABSENT verdicts in the handoff.
+
+FORMAT:
+Phase 0 report → STOP. Then: files added (exact paths); how the attach
+was made (CDP endpoint, page found); the INVENTORY (game count, WAR-row
+presence, three cause verdicts with named players); "EP1-GOLDEN-EXTRACT
+complete — [N] games, causes [X/Y/Z]" OR "BLOCKED: [exact reason]".
+
+FAILURE PROTOCOL:
+- Empty/missing franchise DB on attach → STOP (wrong profile)
+- connectOverCDP cannot reach localhost:9222 → STOP (Chrome not
+  launched with the debug flag, or already running without it)
+- Any cause ABSENT in the inventory → report it as the finding; JK
+  decides whether to play more games (this is success, not failure —
+  the inventory did its job)
+
+Use high reasoning effort. Think step-by-step.
+```
+
+**Execution record:** [pending]
