@@ -3929,3 +3929,30 @@ cleanup, EP1/slice-5 home TBD).
 **NEXT:** TV2 closure commit (this commit) → draft EP1 (R-8 effective-
 position engine, closes FINDING-143). Pending-JK ratifications: TV1-FIX
 MINOR #1 (dead merge-row deletion) + TV2 MINOR #4 (badge dark backgrounds).
+
+
+## 2026-06-12 — SESSION CLOSE (ratifications + end protocol)
+
+**JK RATIFICATIONS (session close):**
+1. TV1-FIX audit MINOR #1 RATIFIED — builder's deletion of the provably-
+   dead UTIL/BENCH merge-group rows is sanctioned (beyond contract letter,
+   behavior-neutral per D6 reachability proof).
+2. TV2 audit MINOR #4 RATIFIED — badge backgrounds stay dark-palette
+   variants (deliberate for the chalkboard UI); §17.8 "Light X" prose is
+   the stale side → amendment queued to the spec-cleanup batch (with the
+   R-6/R-8 taxonomy blocks and FINDING-144).
+No code changes; both MINORs CLOSED.
+
+**Session summary:** one thread, three verified arcs (TV1, TV1-FIX, TV2),
+three rulings batches (R-1..R-5, R-6/R-7, R-8), four findings (F-142
+fixed-and-verified; F-143/144/145 open with named homes), the R-8 design
+session, pipelining + triangle-permanence process canon, and the Phase 0
+stop-gate's first live save. Value spine canonical through projected
+designations. New baseline 7,127/382.
+
+**NEXT SESSION STARTS WITH:** draft EP1 (R-8 effective-position engine,
+closes FINDING-143; FINDING-145 placement argued in the draft). ROUTE:
+Codex 5.5 | very high → Fable 5 CLI audit. Read CURRENT_STATE.md
+2026-06-12 TV2-close entry + RULING R-8 (PROMPT_CONTRACTS.md) before
+drafting. JK browser-verify note outstanding: TeamHub projected badges
+(fewer early-season badges is CORRECT).

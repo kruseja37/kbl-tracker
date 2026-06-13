@@ -590,3 +590,33 @@ prose — likely deliberate for dark UI); F-145 placement; F-144 → taxonomy
 cleanup batch; untracked SMB4 Rosters.csv; ASG WPA→Fame; Signature Moment
 card line; fame tier names; F2 SOT typos; F4 FA trait spellings;
 order-flake cleanup (3 members).
+
+
+---
+
+## CURRENT STATE — 2026-06-12 (SESSION CLOSED post-TV2; ratifications final)
+**Branch:** codex/franchise-v1-next. **This commit:** session-end docs
+(ratifications of TV1-FIX MINOR #1 and TV2 MINOR #4 — both CLOSED, no
+code; §17.8 prose amendment queued to spec-cleanup batch).
+**NEXT SESSION FIRST ACTION: draft EP1** — R-8 effective-position engine
+(plurality-with-incumbency, Reserve pool CALIBRATE threshold,
+compositional two-way valuation, trait-group scopes; closes FINDING-143;
+argues FINDING-145 placement in the draft). ROUTE: Codex 5.5 | very high
+→ Fable 5 CLI audit. Heaviest ticket since T5 — touches True Value
+inputs; audit requires TV-level golden regression. Read this entry +
+RULING R-8 (PROMPT_CONTRACTS.md) + the TV2-close entry above before
+drafting.
+**Suite baseline:** 7,127 / 382. Characterized set unchanged (fixed:
+wpaRuntimeBoundary, franchiseNarrativeEventEligibility; order-flakes
+conditional-solo: franchiseManualSmokeFixture, GameTrackerLaunchState,
+franchiseOffseasonGuards.component). CLI: prefix `NODE_ENV= `; node
+~/.nvm/versions/node/v20.20.0/bin.
+**Browser-verify outstanding (JK):** TeamHub projected badges — dotted
+"Proj.", post-game recalc, fewer early-season badges is CORRECT.
+**Then:** EP1 → T6 → {T7,T8} → T9 → T10 → D0 cut line (F-141 holds).
+**Spec-cleanup batch (queued, one ticket):** R-6 + R-8 taxonomy gospel
+blocks; FINDING-144 salary-path remap residue; §17.8 background prose →
+dark variants.
+**Open pending-JK:** F-145 placement (EP1 vs slice 5); untracked SMB4
+Rosters.csv; ASG WPA→Fame; Signature Moment card line; fame tier names;
+F2 SOT typos; F4 FA trait spellings; order-flake cleanup (3 members).
