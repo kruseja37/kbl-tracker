@@ -149,3 +149,26 @@ accurate post-EP1 wording (effective-position/Reserve pools; pitcher
 profile-role v1; two-way CALIBRATE anchors); field + record shape kept
 (Option 1). grep-zero on the old literal confirmed; 3 files; suite
 7140/383 zero delta. No calculationVersion bump.
+
+
+### FINDING-144 — UPDATE 2026-06-12: DEFERRED to post-pause architectural plan (NOT low-risk)
+**Status:** CONFIRMED-OPEN, DEFERRED. Captain (Opus 4.8 high) traced the
+call graph during Fable-less low-risk triage: resolveHitterPosition
+(salaryCalculator.ts:698) has ONE caller — buildSalaryIvInput:722 →
+computeIV → IV BASE SALARY. So the residue is LIVE code in the IV-salary
+subsystem (NOT dead, NOT in EP1's True Value path). The UTIL/BENCH→'IF/OF'
+and TWO-WAY→'OF' laundering branches feed position into IV salary
+computation; the sibling normalizeSalaryTraitsForIV:731-733 invents
+'Two Way (OF)' (the same R-6 invention the EP1 audit flagged here).
+**Why deferred (not low-risk):** removing/changing these branches alters
+what positions reach computeIV → potentially changes IV salaries. Safety
+hinges on an unproven data-coverage question: do the UTIL/BENCH/TWO-WAY
+branches EVER fire on the real 440-player DB? If never-fire → removal is
+behavior-preserving (mechanically provable via an IV-salary golden diff,
+real DB pre/post byte-identical). If they fire → real semantic change.
+Either way this needs a golden-diff verification, not a checklist — out
+of the clean low-risk bucket we committed to during the Fable gap.
+**Disposition:** carry into the post-pause architectural plan as a
+discovery-first ticket (Phase 0: do the branches fire on real data? +
+IV-salary golden diff), routed/audited per the decorrelation-rebuild
+plan. Do NOT force it during the Fable-less low-risk run.
