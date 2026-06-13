@@ -5085,3 +5085,46 @@ step-percentile engine in Phase 0):
 - Then STOP again for Captain sign-off.
 
 Use high reasoning effort. Think step-by-step.
+
+
+---
+
+# EP1-GOLDEN-R — PHASE 0 SIGN-OFF (Captain, 2026-06-12)
+**Revised fixture APPROVED. Proceed to Phase 1.** Captain re-ran ALL five
+adversarial cases through the EXACT engine step-percentile formula
+(getPercentile = count(WAR ≤ value)/n; getValueAtPercentile =
+floor(pct×n) clamped) — salaryCalculator.ts:944-969. Pool-size verified:
+every pool = 6 cohort + adversarial player = 7 members, above the merge
+floor, so NO merge-group contamination. Reserve post-pool = res_1..5 +
+reserve_rf = 6 members.
+
+## Verified deltas (engine-exact) — four MATCH, one CORRECTED
+| player | cause | pre TV | post TV | delta | vs Codex |
+|---|---|---:|---:|---:|---|
+| near_2b_ss | effective≠profile (near-tie SS) | 100k | 400k | +300k | MATCH |
+| clean_lf_cf | effective≠profile (clean CF) | 300k | 800k | +500k | MATCH |
+| boundary_3b | 0.40 boundary NON-Reserve | 800k | 800k | 0 | MATCH |
+| reserve_rf | Reserve (expensive low-WAR) | 700k | 130k | −570k | MATCH |
+| tw_if | two-way composite | 180k | **280k** | **+100k** | **CORRECTED** (Codex said 260k/+80k) |
+
+## The one correction (binding for the generated table)
+Codex's tw_if hand-calc put arm TV at 160k; the engine gives 180k. Arm
+side prices pWAR 1.25 vs the SP/RP pool: pct = 0.571, index =
+floor(0.571×7) = 4; sorted arm salaries [100,120,140,160,180,200,200]k →
+index 4 = **180k** (not 160k). Bat side = 100k (correct). Post total =
+arm 180k + bat 100k = **280k**; delta = +100k. The EP1_GOLDEN_REGRESSION
+.md MUST use 280k / +100k as tw_if's expected post/delta. This is an
+arithmetic fix, not a fixture change — do NOT alter the fixture numbers.
+
+## Phase 1 authorization
+Generate exactly the signed-off fixture (revised table, this entry's
+corrected tw_if target). Files: scripts/ep1-golden-regression.mjs +
+spec-docs/EP1_GOLDEN_REGRESSION.md. Pre-EP1 via git f8d5f82 (NOT memory;
+two-way confirmed single SP/RP pre-EP1 per Codex's franchiseValueInputs
+.ts:502 + preview:150-163 trace). Every nonzero delta must attribute to a
+sanctioned cause and MATCH this table; any deviation between generated and
+expected → STOP and report (it means the engine or the fixture differs
+from this hand-calc, which is exactly what the table must surface). Then
+STOP for D8-only re-audit.
+
+Use high reasoning effort. Think step-by-step.
