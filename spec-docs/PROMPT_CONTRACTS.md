@@ -5321,3 +5321,79 @@ real franchise data is the final real-world confirmation.
 - OBS-3 (cosmetic): assertTargets binding-row attribution is self-
   referential; only the pre/post/delta VALUE check gates (that gate is
   real — tamper-proven). Fine as-is.
+
+
+---
+
+# CLEANUP-F147 — retire stale EP1 limitation string (post-EP1 accuracy)
+**Drafted:** 2026-06-12 | **ROUTE: Codex 5.5 | high**
+**Planner: Opus 4.8, high.** (Mechanical; correctness grep- + suite-
+checkable. Low-risk per Fable-less triage — verification is external to
+planner judgment.)
+
+## Why
+EP1 shipped (commit 27e277a): peer pools are now EFFECTIVE-position, not
+profile-position. The constant FRANCHISE_DESIGNATION_EP1_LIMITATION =
+'peer pools are profile-position until EP1 (R-8)' (franchiseDesignations
+.ts:13) is now FALSE and is stamped into EVERY designation record's
+sourceInputs.peerPoolLimitation (:223). FINDING-147. Option 1 (JK-ratified):
+KEEP the field, make the string accurate (do NOT drop the field / change
+record shape).
+
+## Contract (handoff text)
+```
+You are a senior TypeScript engineer making a mechanical accuracy fix to
+KBL Tracker. NOT a logic change.
+
+GOAL:
+Replace the now-false EP1 peer-pool limitation string with accurate
+post-EP1 wording. Keep the field and record shape unchanged. Closes
+FINDING-147.
+
+SOURCE OF TRUTH:
+- FINDING-147 (FINDINGS_142_onwards.md)
+- EP1 is live (27e277a): pools are effective-position (R-8); remaining v1
+  limitations are pitcher profile-role pooling and two-way CALIBRATE
+  anchors (C→C/IF→2B/OF→CF).
+
+EDIT (exactly these, nothing else):
+- franchiseDesignations.ts:13 — replace the constant VALUE. Rename the
+  constant for accuracy if trivial (e.g. FRANCHISE_DESIGNATION_POOL_NOTE)
+  ONLY if every reference is updated in the same change; otherwise keep
+  the existing export name and change only its string value. New value
+  states: peer pools are effective-position per R-8 EP1; pitchers pool by
+  profile role (v1); two-way holders valued compositionally with CALIBRATE
+  trait anchors. Keep it one concise sentence.
+- franchiseDesignations.ts:223 — no change needed if the constant name is
+  kept; if renamed, update this reference.
+- Update the two test references to match the new string/name:
+  src/utils/tests/franchiseDesignations.test.ts:58 (asserts the value
+  includes 'EP1' — keep an EP1 reference in the new string so this still
+  holds, OR update the assertion to match new wording)
+  src/src_figma/__tests__/franchiseMode/TeamHubContent.franchiseReads
+  .test.tsx:443 (hardcoded old string in a fixture — update to new value)
+
+CONSTRAINTS:
+- Do NOT change the record shape: peerPoolLimitation stays a string field
+  on sourceInputs. (Option 2 / field removal is explicitly OUT.)
+- Do NOT touch any other file. Do NOT bump calculationVersion (the
+  designation logic is unchanged; only a descriptive caveat string moves).
+- Do NOT touch EP1 engine files, §17 criteria, eligibility semantics
+  (F-145), or salary-path residue (F-144).
+
+VERIFICATION:
+- grep: the literal 'peer pools are profile-position until EP1 (R-8)'
+  returns ZERO hits across src/ after the change.
+- NODE_ENV= npm run build green.
+- The two named test files pass; full suite delta vs 7,140/383 is ZERO
+  (mechanical string change adds/removes no tests).
+
+FORMAT:
+Files changed (every path in git status); the old vs new string verbatim;
+grep-zero proof; build + test output; "CLEANUP-F147 complete" OR
+"BLOCKED: [reason]".
+
+Use high reasoning effort. Think step-by-step.
+```
+
+**Execution record:** [pending]
