@@ -1,12 +1,4 @@
-import {
-  getAllFranchisePlayers,
-  saveFranchisePlayer,
-  type Player,
-} from './franchisePlayerStorage';
-import type {
-  FranchiseDesignationEligibilityRecord,
-  FranchiseDesignationEligibilityReport,
-} from './franchiseDesignationEligibility';
+import type { Player } from './franchisePlayerStorage';
 
 export type FranchiseDesignationType =
   | 'TEAM_MVP'
@@ -14,402 +6,143 @@ export type FranchiseDesignationType =
   | 'FAN_FAVORITE'
   | 'ALBATROSS';
 
-export type FranchiseActiveDesignationType = 'TEAM_MVP' | 'ACE';
+export type FranchiseCanonicalDesignationStatus = 'projected' | 'locked';
+export type FranchiseDesignationStatus = FranchiseCanonicalDesignationStatus | 'active';
 
-export type FranchiseDesignationStatus = 'projected' | 'locked' | 'active';
-
-export const FRANCHISE_DESIGNATION_CALCULATION_VERSION = 'franchise-designations-v1-stable-inputs';
-export const FRANCHISE_ACTIVE_DESIGNATION_CALCULATION_VERSION = 'franchise-designations-v1-active-team-mvp-ace';
-export const FRANCHISE_ALBATROSS_TRADE_VALUE_MULTIPLIER = 0.85;
+export const FRANCHISE_DESIGNATION_CALCULATION_VERSION = 'franchise-designations-v2-projected-canonical';
+export const FRANCHISE_DESIGNATION_EP1_LIMITATION = 'peer pools are profile-position until EP1 (R-8)';
 
 export interface FranchiseDesignationPlayerInput {
   playerId: string;
   playerName: string;
   teamId: string;
   position: string;
-  salary?: number;
-  trueValue?: number;
-  gamesPlayed?: number;
-  totalWAR?: number;
-  pWAR?: number;
+  gamesPlayed: number;
+  pitchingAppearances: number;
+  totalWAR?: number | null;
+  pWAR?: number | null;
+  trueValue?: number | null;
+  contractValue?: number | null;
+  valueDelta?: number | null;
 }
 
 export interface FranchiseDesignationContext {
   franchiseId: string;
   seasonId: string;
+  statsScopeId: string;
   seasonNumber: number;
   gamesPerTeam: number;
-  leagueMinSalary?: number;
-  seasonProgress: number;
   calculatedAt?: string;
+}
+
+export interface FranchiseDesignationCarryoverMetadata {
+  carriesOver: boolean;
+  untilSeasonProgress: number | null;
+  previousSeasonId: string | null;
+  previousPlayerId: string | null;
+  note: string | null;
 }
 
 export interface FranchisePlayerDesignationRecord {
   franchiseId: string;
   seasonId: string;
-  statsScopeId?: string;
+  statsScopeId: string;
   seasonNumber: number;
   teamId: string;
   playerId: string;
   playerName: string;
   type: FranchiseDesignationType;
   status: FranchiseDesignationStatus;
-  sourceInputs: Record<string, number | string | null>;
+  sourceInputs: Record<string, number | string | boolean | null>;
   sourceEvidence?: string[];
   calculationVersion: string;
   calculatedAt: string;
-  lockedAt?: string;
+  lockedAt: string | null;
+  carryover: FranchiseDesignationCarryoverMetadata;
 }
 
-type PlayerWithDesignations = Player & {
-  franchiseDesignations?: FranchisePlayerDesignationRecord[];
+export interface FranchiseProjectedDesignationBadge {
+  type: FranchiseDesignationType;
+  label: string;
+  prefix: 'Proj.';
+  borderStyle: 'dotted';
+  status: 'projected';
+  colorHex: string;
+  backgroundHex: string;
+}
+
+const PITCHER_PRIMARY_POSITIONS = new Set(['SP', 'SP/RP', 'RP', 'CP']);
+
+const PROJECTED_BADGES: Record<FranchiseDesignationType, FranchiseProjectedDesignationBadge> = {
+  TEAM_MVP: {
+    type: 'TEAM_MVP',
+    label: 'Proj. MVP',
+    prefix: 'Proj.',
+    borderStyle: 'dotted',
+    status: 'projected',
+    colorHex: '#FFD700',
+    backgroundHex: '#4A3F16',
+  },
+  ACE: {
+    type: 'ACE',
+    label: 'Proj. Ace',
+    prefix: 'Proj.',
+    borderStyle: 'dotted',
+    status: 'projected',
+    colorHex: '#4169E1',
+    backgroundHex: '#1C2F64',
+  },
+  FAN_FAVORITE: {
+    type: 'FAN_FAVORITE',
+    label: 'Proj. Fan Favorite',
+    prefix: 'Proj.',
+    borderStyle: 'dotted',
+    status: 'projected',
+    colorHex: '#22C55E',
+    backgroundHex: '#16452A',
+  },
+  ALBATROSS: {
+    type: 'ALBATROSS',
+    label: 'Proj. Albatross',
+    prefix: 'Proj.',
+    borderStyle: 'dotted',
+    status: 'projected',
+    colorHex: '#EF4444',
+    backgroundHex: '#5A1F1F',
+  },
 };
 
-export interface DesignationEvent {
-  id: string;
-  franchiseId: string;
-  seasonId: string;
-  statsScopeId: string;
-  seasonNumber: number;
-  teamId: string;
-  playerId: string;
-  designationType: FranchiseActiveDesignationType;
-  previousState: FranchisePlayerDesignationRecord | null;
-  newState: FranchisePlayerDesignationRecord;
-  sourceEvidence: string[];
-  trustReason: string;
-  effectCategory: 'designation-earned' | 'designation-changed';
-  createdAt: string;
-  sourceGameId?: string;
-  sourceArchiveId?: string;
+function finiteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
 }
 
-export interface FranchiseActiveDesignationSyncResult {
-  franchiseId: string;
-  seasonId: string;
-  statsScopeId: string;
-  seasonNumber: number;
-  activeDesignations: FranchisePlayerDesignationRecord[];
-  designationEvents: DesignationEvent[];
-  savedPlayers: Player[];
-  skippedRecords: Array<{
-    playerId: string;
-    designationType: string;
-    reasons: string[];
-  }>;
-  moraleMutationApplied: false;
-  relationshipMutationApplied: false;
-  salaryMovementApplied: false;
-  mode3HandoffApplied: false;
+function canonicalPosition(position: string): string {
+  return String(position).trim().toUpperCase();
 }
 
-const PITCHING_POSITIONS = new Set(['SP', 'RP', 'CP', 'SP/RP', 'P', 'TWO-WAY']);
-
-function finite(value: unknown): number | undefined {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
+export function isFranchiseDesignationPitcher(position: string): boolean {
+  return PITCHER_PRIMARY_POSITIONS.has(canonicalPosition(position));
 }
 
-function isPitchingPosition(position: string): boolean {
-  return PITCHING_POSITIONS.has(String(position).trim().toUpperCase());
+export function minimumTeamMvpGames(gamesPerTeam: number): number {
+  // MODE_2_CANON §17.1: Team MVP uses 20% of season, minimum 5 games.
+  return Math.max(5, Math.ceil(gamesPerTeam * 0.2));
 }
 
-function statusFor(progress: number): FranchiseDesignationStatus {
-  return progress >= 1 ? 'locked' : 'projected';
+export function minimumAcePitchingAppearances(gamesPerTeam: number): number {
+  // MODE_2_CANON §17.2: Ace uses 20% of season as pitcher, minimum 4.
+  return Math.max(4, Math.ceil(gamesPerTeam * 0.2));
 }
 
-function makeRecord(
-  player: FranchiseDesignationPlayerInput,
-  context: FranchiseDesignationContext,
+export function minimumValueDesignationGames(gamesPerTeam: number): number {
+  // MODE_2_CANON §17.3-§17.4: Fan Favorite/Albatross use 10%, minimum 3.
+  return Math.max(3, Math.ceil(gamesPerTeam * 0.1));
+}
+
+export function getProjectedDesignationBadge(
   type: FranchiseDesignationType,
-  sourceInputs: FranchisePlayerDesignationRecord['sourceInputs'],
-): FranchisePlayerDesignationRecord {
-  const status = statusFor(context.seasonProgress);
-  const calculatedAt = context.calculatedAt ?? new Date().toISOString();
-
-  return {
-    franchiseId: context.franchiseId,
-    seasonId: context.seasonId,
-    seasonNumber: context.seasonNumber,
-    teamId: player.teamId,
-    playerId: player.playerId,
-    playerName: player.playerName,
-    type,
-    status,
-    sourceInputs,
-    calculationVersion: FRANCHISE_DESIGNATION_CALCULATION_VERSION,
-    calculatedAt,
-    lockedAt: status === 'locked' ? calculatedAt : undefined,
-  };
-}
-
-function isActiveDesignationType(
-  designationType: string,
-): designationType is FranchiseActiveDesignationType {
-  return designationType === 'TEAM_MVP' || designationType === 'ACE';
-}
-
-function activeDesignationKey(designation: {
-  franchiseId: string;
-  seasonId: string;
-  statsScopeId?: string;
-  seasonNumber: number;
-  teamId: string;
-  type: string;
-}): string {
-  return [
-    designation.franchiseId,
-    designation.seasonId,
-    designation.statsScopeId ?? '',
-    designation.seasonNumber,
-    designation.teamId,
-    designation.type,
-  ].join(':');
-}
-
-function playerDesignationRecords(player: Player): FranchisePlayerDesignationRecord[] {
-  return ((player as PlayerWithDesignations).franchiseDesignations ?? [])
-    .filter((designation): designation is FranchisePlayerDesignationRecord => Boolean(designation));
-}
-
-function activeRecordFromEligibility(
-  record: FranchiseDesignationEligibilityRecord,
-  calculatedAt: string,
-): FranchisePlayerDesignationRecord | null {
-  if (!isActiveDesignationType(record.designationType)) return null;
-  if (record.status !== 'active' || !record.persistable || !record.teamId) return null;
-
-  const sourceInputs: FranchisePlayerDesignationRecord['sourceInputs'] = {
-    status: record.status,
-    trust: record.designationType === 'ACE' ? 'ace-war-consumer-trust' : 'team-mvp-war-consumer-trust',
-    seasonStatsAvailable: record.sourceInputs.seasonStatsAvailable ? 'true' : 'false',
-    seasonMetadataAvailable: record.sourceInputs.seasonMetadataAvailable ? 'true' : 'false',
-    seedParkFactorsAvailable: record.sourceInputs.seedParkFactorsAvailable ? 'true' : 'false',
-    totalWAR: record.sourceInputs.totalWar ?? null,
-    pWAR: record.sourceInputs.pitchingWar ?? null,
-  };
-
-  return {
-    franchiseId: record.franchiseId,
-    seasonId: record.seasonId,
-    statsScopeId: record.statsScopeId,
-    seasonNumber: record.seasonNumber,
-    teamId: record.teamId,
-    playerId: record.playerId,
-    playerName: record.playerName,
-    type: record.designationType,
-    status: 'active',
-    sourceInputs,
-    sourceEvidence: [
-      ...record.reasons,
-      ...record.limitations,
-    ],
-    calculationVersion: FRANCHISE_ACTIVE_DESIGNATION_CALCULATION_VERSION,
-    calculatedAt,
-  };
-}
-
-function hasSameDesignationState(
-  previous: FranchisePlayerDesignationRecord | null,
-  next: FranchisePlayerDesignationRecord,
-): boolean {
-  return Boolean(
-    previous &&
-    previous.franchiseId === next.franchiseId &&
-    previous.seasonId === next.seasonId &&
-    (previous.statsScopeId ?? '') === (next.statsScopeId ?? '') &&
-    previous.seasonNumber === next.seasonNumber &&
-    previous.playerId === next.playerId &&
-    previous.teamId === next.teamId &&
-    previous.type === next.type &&
-    previous.status === next.status &&
-    previous.calculationVersion === next.calculationVersion &&
-    hasSameSourceInputs(previous.sourceInputs, next.sourceInputs) &&
-    hasSameSourceEvidence(previous.sourceEvidence, next.sourceEvidence),
-  );
-}
-
-function normalizedSourceInputs(
-  sourceInputs: FranchisePlayerDesignationRecord['sourceInputs'],
-): string {
-  return JSON.stringify(
-    Object.keys(sourceInputs)
-      .sort()
-      .map((key) => [key, sourceInputs[key] ?? null]),
-  );
-}
-
-function hasSameSourceInputs(
-  previous: FranchisePlayerDesignationRecord['sourceInputs'],
-  next: FranchisePlayerDesignationRecord['sourceInputs'],
-): boolean {
-  return normalizedSourceInputs(previous) === normalizedSourceInputs(next);
-}
-
-function hasSameSourceEvidence(
-  previous: FranchisePlayerDesignationRecord['sourceEvidence'],
-  next: FranchisePlayerDesignationRecord['sourceEvidence'],
-): boolean {
-  return JSON.stringify(previous ?? []) === JSON.stringify(next ?? []);
-}
-
-function designationEvent(
-  previousState: FranchisePlayerDesignationRecord | null,
-  newState: FranchisePlayerDesignationRecord,
-  createdAt: string,
-): DesignationEvent {
-  const effectCategory = previousState ? 'designation-changed' : 'designation-earned';
-  return {
-    id: [
-      'designation-event',
-      newState.franchiseId,
-      newState.seasonId,
-      newState.statsScopeId ?? newState.seasonId,
-      newState.seasonNumber,
-      newState.teamId,
-      newState.type,
-      previousState?.playerId ?? 'none',
-      newState.playerId,
-      createdAt,
-    ].join(':'),
-    franchiseId: newState.franchiseId,
-    seasonId: newState.seasonId,
-    statsScopeId: newState.statsScopeId ?? newState.seasonId,
-    seasonNumber: newState.seasonNumber,
-    teamId: newState.teamId,
-    playerId: newState.playerId,
-    designationType: newState.type as FranchiseActiveDesignationType,
-    previousState,
-    newState,
-    sourceEvidence: newState.sourceEvidence ?? [],
-    trustReason: String(newState.sourceInputs.trust ?? 'trusted scoped WAR consumer gate'),
-    effectCategory,
-    createdAt,
-  };
-}
-
-function activeRecordsFromEligibility(
-  report: FranchiseDesignationEligibilityReport,
-  calculatedAt: string,
-): {
-  records: FranchisePlayerDesignationRecord[];
-  skippedRecords: FranchiseActiveDesignationSyncResult['skippedRecords'];
-} {
-  const records: FranchisePlayerDesignationRecord[] = [];
-  const skippedRecords: FranchiseActiveDesignationSyncResult['skippedRecords'] = [];
-
-  for (const record of report.records) {
-    if (!isActiveDesignationType(record.designationType)) {
-      if (record.status !== 'blocked') {
-        skippedRecords.push({
-          playerId: record.playerId,
-          designationType: record.designationType,
-          reasons: [`${record.designationType} is not promoted in this v1 active designation slice.`],
-        });
-      }
-      continue;
-    }
-
-    const active = activeRecordFromEligibility(record, calculatedAt);
-    if (active) {
-      records.push(active);
-    } else {
-      skippedRecords.push({
-        playerId: record.playerId,
-        designationType: record.designationType,
-        reasons: record.reasons.length > 0 ? record.reasons : ['Eligibility record is not active/persistable.'],
-      });
-    }
-  }
-
-  return { records, skippedRecords };
-}
-
-function mergeActiveDesignationsForPlayer(
-  player: Player,
-  activeRecords: FranchisePlayerDesignationRecord[],
-  replacementKeys: Set<string>,
-): Player {
-  const activeByKey = new Map<string, FranchisePlayerDesignationRecord>();
-  for (const designation of activeRecords) {
-    activeByKey.set(activeDesignationKey(designation), designation);
-  }
-
-  const usedKeys = new Set<string>();
-  const current = playerDesignationRecords(player);
-  const nextDesignations: FranchisePlayerDesignationRecord[] = [];
-
-  for (const designation of current) {
-    if (!isActiveDesignationType(designation.type) || designation.status !== 'active') {
-      nextDesignations.push(designation);
-      continue;
-    }
-
-    const key = activeDesignationKey(designation);
-    if (!replacementKeys.has(key)) {
-      nextDesignations.push(designation);
-      continue;
-    }
-
-    const replacement = activeByKey.get(key);
-    if (replacement && replacement.playerId === player.id) {
-      nextDesignations.push(replacement);
-      usedKeys.add(key);
-    }
-  }
-
-  for (const designation of activeRecords) {
-    if (designation.playerId !== player.id) continue;
-    const key = activeDesignationKey(designation);
-    if (usedKeys.has(key)) continue;
-    nextDesignations.push(designation);
-  }
-
-  return {
-    ...player,
-    franchiseDesignations: nextDesignations,
-  } as Player;
-}
-
-function replacementKeysFromEligibility(report: FranchiseDesignationEligibilityReport): Set<string> {
-  return new Set(
-    report.records
-      .filter((record) => isActiveDesignationType(record.designationType) && record.teamId)
-      .map((record) => activeDesignationKey({
-        franchiseId: record.franchiseId,
-        seasonId: record.seasonId,
-        statsScopeId: record.statsScopeId,
-        seasonNumber: record.seasonNumber,
-        teamId: record.teamId!,
-        type: record.designationType,
-      })),
-  );
-}
-
-function previousActiveByKey(players: Player[]): Map<string, FranchisePlayerDesignationRecord> {
-  const previous = new Map<string, FranchisePlayerDesignationRecord>();
-  for (const player of players) {
-    for (const designation of playerDesignationRecords(player)) {
-      if (!isActiveDesignationType(designation.type) || designation.status !== 'active') continue;
-      previous.set(activeDesignationKey(designation), designation);
-    }
-  }
-  return previous;
-}
-
-function preserveUnchangedActiveDesignationMetadata(
-  designations: FranchisePlayerDesignationRecord[],
-  previousByKey: Map<string, FranchisePlayerDesignationRecord>,
-): FranchisePlayerDesignationRecord[] {
-  return designations.map((designation) => {
-    const previous = previousByKey.get(activeDesignationKey(designation)) ?? null;
-    return hasSameDesignationState(previous, designation) ? previous! : designation;
-  });
-}
-
-function playerChanged(left: Player, right: Player): boolean {
-  return JSON.stringify((left as PlayerWithDesignations).franchiseDesignations ?? []) !==
-    JSON.stringify((right as PlayerWithDesignations).franchiseDesignations ?? []);
+): FranchiseProjectedDesignationBadge {
+  return PROJECTED_BADGES[type];
 }
 
 function byTeam(players: FranchiseDesignationPlayerInput[]): Map<string, FranchiseDesignationPlayerInput[]> {
@@ -424,14 +157,77 @@ function byTeam(players: FranchiseDesignationPlayerInput[]): Map<string, Franchi
 
 function selectHighest(
   players: FranchiseDesignationPlayerInput[],
-  value: (player: FranchiseDesignationPlayerInput) => number | undefined,
+  value: (player: FranchiseDesignationPlayerInput) => number | null | undefined,
 ): FranchiseDesignationPlayerInput | null {
   return [...players]
-    .filter((player) => value(player) != null)
+    .filter((player) => finiteNumber(value(player)))
     .sort((left, right) => {
       const diff = (value(right) ?? 0) - (value(left) ?? 0);
       return diff || left.playerId.localeCompare(right.playerId);
     })[0] ?? null;
+}
+
+function selectLowest(
+  players: FranchiseDesignationPlayerInput[],
+  value: (player: FranchiseDesignationPlayerInput) => number | null | undefined,
+): FranchiseDesignationPlayerInput | null {
+  return [...players]
+    .filter((player) => finiteNumber(value(player)))
+    .sort((left, right) => {
+      const diff = (value(left) ?? 0) - (value(right) ?? 0);
+      return diff || left.playerId.localeCompare(right.playerId);
+    })[0] ?? null;
+}
+
+function baseCarryover(type: FranchiseDesignationType): FranchiseDesignationCarryoverMetadata {
+  if (type === 'FAN_FAVORITE' || type === 'ALBATROSS') {
+    return {
+      carriesOver: false,
+      untilSeasonProgress: 0.1,
+      previousSeasonId: null,
+      previousPlayerId: null,
+      note: 'MODE_2_CANON §17.3-§17.4 carryover metadata reserved for season-end locking slice.',
+    };
+  }
+
+  return {
+    carriesOver: false,
+    untilSeasonProgress: null,
+    previousSeasonId: null,
+    previousPlayerId: null,
+    note: null,
+  };
+}
+
+function makeRecord(
+  player: FranchiseDesignationPlayerInput,
+  context: FranchiseDesignationContext,
+  type: FranchiseDesignationType,
+  sourceInputs: FranchisePlayerDesignationRecord['sourceInputs'],
+  sourceEvidence: string[],
+): FranchisePlayerDesignationRecord {
+  const calculatedAt = context.calculatedAt ?? new Date().toISOString();
+  return {
+    franchiseId: context.franchiseId,
+    seasonId: context.seasonId,
+    statsScopeId: context.statsScopeId,
+    seasonNumber: context.seasonNumber,
+    teamId: player.teamId,
+    playerId: player.playerId,
+    playerName: player.playerName,
+    type,
+    status: 'projected',
+    sourceInputs: {
+      ...sourceInputs,
+      statusAuthority: 'MODE_2_CANON §17 projected-only; locking is out of scope for TV2.',
+      peerPoolLimitation: FRANCHISE_DESIGNATION_EP1_LIMITATION,
+    },
+    sourceEvidence,
+    calculationVersion: FRANCHISE_DESIGNATION_CALCULATION_VERSION,
+    calculatedAt,
+    lockedAt: null,
+    carryover: baseCarryover(type),
+  };
 }
 
 export function calculateFranchiseDesignations(
@@ -439,59 +235,89 @@ export function calculateFranchiseDesignations(
   context: FranchiseDesignationContext,
 ): FranchisePlayerDesignationRecord[] {
   const records: FranchisePlayerDesignationRecord[] = [];
+  const mvpFloor = minimumTeamMvpGames(context.gamesPerTeam);
+  const aceFloor = minimumAcePitchingAppearances(context.gamesPerTeam);
+  const valueFloor = minimumValueDesignationGames(context.gamesPerTeam);
 
   for (const teamPlayers of byTeam(players).values()) {
-    const mvp = selectHighest(
-      teamPlayers.filter((player) => !isPitchingPosition(player.position)),
-      (player) => finite(player.totalWAR),
+    const teamMvp = selectHighest(
+      teamPlayers.filter((player) => player.gamesPlayed >= mvpFloor),
+      (player) => player.totalWAR,
     );
-    if (mvp && (finite(mvp.totalWAR) ?? 0) > 0) {
-      records.push(makeRecord(mvp, context, 'TEAM_MVP', {
-        totalWAR: finite(mvp.totalWAR) ?? null,
-      }));
+    if (teamMvp) {
+      records.push(makeRecord(teamMvp, context, 'TEAM_MVP', {
+        totalWAR: finiteNumber(teamMvp.totalWAR) ? teamMvp.totalWAR : null,
+        gamesPlayed: teamMvp.gamesPlayed,
+        gamesFloor: mvpFloor,
+      }, [
+        'MODE_2_CANON §17.1: Team MVP is highest total WAR on team with 20% season/minimum 5 games.',
+      ]));
     }
 
     const ace = selectHighest(
-      teamPlayers.filter((player) => isPitchingPosition(player.position)),
-      (player) => finite(player.pWAR),
+      teamPlayers.filter((player) =>
+        isFranchiseDesignationPitcher(player.position) &&
+        player.pitchingAppearances >= aceFloor &&
+        finiteNumber(player.pWAR) &&
+        player.pWAR >= 0.5,
+      ),
+      (player) => player.pWAR,
     );
-    if (ace && (finite(ace.pWAR) ?? 0) >= 0.5) {
+    if (ace) {
       records.push(makeRecord(ace, context, 'ACE', {
-        pWAR: finite(ace.pWAR) ?? null,
-      }));
+        pWAR: finiteNumber(ace.pWAR) ? ace.pWAR : null,
+        pitchingAppearances: ace.pitchingAppearances,
+        pitchingAppearancesFloor: aceFloor,
+        pWARFloor: 0.5,
+      }, [
+        'MODE_2_CANON §17.2: Ace is highest pWAR among team pitchers with 20%/minimum 4 pitcher games and pWAR >= 0.5.',
+      ]));
+    }
+
+    const fanFavorite = selectHighest(
+      teamPlayers.filter((player) =>
+        player.gamesPlayed >= valueFloor &&
+        finiteNumber(player.valueDelta) &&
+        player.valueDelta > 0,
+      ),
+      (player) => player.valueDelta,
+    );
+    if (fanFavorite) {
+      records.push(makeRecord(fanFavorite, context, 'FAN_FAVORITE', {
+        trueValue: finiteNumber(fanFavorite.trueValue) ? fanFavorite.trueValue : null,
+        contractValue: finiteNumber(fanFavorite.contractValue) ? fanFavorite.contractValue : null,
+        valueDelta: fanFavorite.valueDelta ?? null,
+        gamesPlayed: fanFavorite.gamesPlayed,
+        gamesFloor: valueFloor,
+      }, [
+        'MODE_2_CANON §17.3: Fan Favorite is highest positive Value Delta with 10% season/minimum 3 games.',
+        'R-5: valueDelta trust flips only for projected designations in TV2.',
+      ]));
+    }
+
+    const albatross = selectLowest(
+      teamPlayers.filter((player) =>
+        player.gamesPlayed >= valueFloor &&
+        finiteNumber(player.valueDelta) &&
+        player.valueDelta < 0,
+      ),
+      (player) => player.valueDelta,
+    );
+    if (albatross) {
+      records.push(makeRecord(albatross, context, 'ALBATROSS', {
+        trueValue: finiteNumber(albatross.trueValue) ? albatross.trueValue : null,
+        contractValue: finiteNumber(albatross.contractValue) ? albatross.contractValue : null,
+        valueDelta: albatross.valueDelta ?? null,
+        gamesPlayed: albatross.gamesPlayed,
+        gamesFloor: valueFloor,
+      }, [
+        'MODE_2_CANON §17.4: Albatross is most negative Value Delta with 10% season/minimum 3 games.',
+        'R-5: valueDelta trust flips only for projected designations in TV2.',
+      ]));
     }
   }
 
   return records;
-}
-
-export function applyFranchiseDesignationsToPlayers(
-  players: Player[],
-  designations: FranchisePlayerDesignationRecord[],
-): Player[] {
-  const designationsByPlayer = new Map<string, FranchisePlayerDesignationRecord[]>();
-  for (const designation of designations) {
-    const rows = designationsByPlayer.get(designation.playerId) ?? [];
-    rows.push(designation);
-    designationsByPlayer.set(designation.playerId, rows);
-  }
-
-  return players.map((player) => {
-    const current = (player as PlayerWithDesignations).franchiseDesignations ?? [];
-    const replacementKeys = new Set(
-      designations
-        .filter((designation) => designation.playerId === player.id)
-        .map((designation) => `${designation.seasonId}:${designation.type}`),
-    );
-    const retained = current.filter(
-      (designation) => !replacementKeys.has(`${designation.seasonId}:${designation.type}`),
-    );
-    const next = designationsByPlayer.get(player.id) ?? [];
-    return {
-      ...player,
-      franchiseDesignations: [...retained, ...next],
-    } as Player;
-  });
 }
 
 export function updateFranchiseDesignationTeamForTrade(
@@ -499,9 +325,11 @@ export function updateFranchiseDesignationTeamForTrade(
   fromTeamId: string,
   toTeamId: string,
 ): Player {
-  const designations = (player as PlayerWithDesignations).franchiseDesignations;
+  const designations = (player as Player & { franchiseDesignations?: FranchisePlayerDesignationRecord[] }).franchiseDesignations;
   if (!designations?.length) return player;
 
+  // TV2 addendum: shared storage is the canonical designation source. This
+  // compatibility path only carries stale embedded metadata through trade saves.
   return {
     ...player,
     franchiseDesignations: designations.map((designation) =>
@@ -517,70 +345,4 @@ export function updateFranchiseDesignationTeamForTrade(
         : designation,
     ),
   } as Player;
-}
-
-export async function persistFranchiseDesignationsForPlayers(
-  franchiseId: string,
-  players: Player[],
-  designations: FranchisePlayerDesignationRecord[],
-): Promise<Player[]> {
-  const updatedPlayers = applyFranchiseDesignationsToPlayers(players, designations);
-  const designationPlayerIds = new Set(designations.map((designation) => designation.playerId));
-  const saved: Player[] = [];
-
-  for (const player of updatedPlayers) {
-    if (!designationPlayerIds.has(player.id)) continue;
-    saved.push(await saveFranchisePlayer(franchiseId, player));
-  }
-
-  return saved;
-}
-
-export async function syncActiveTeamMvpAceDesignationsFromEligibility(
-  report: FranchiseDesignationEligibilityReport,
-  options: {
-    franchiseId?: string;
-    players?: Player[];
-    calculatedAt?: string;
-  } = {},
-): Promise<FranchiseActiveDesignationSyncResult> {
-  const calculatedAt = options.calculatedAt ?? new Date().toISOString();
-  const franchiseId = options.franchiseId ?? report.franchiseId;
-  const players = options.players ?? await getAllFranchisePlayers(franchiseId);
-  const { records: candidateActiveDesignations, skippedRecords } = activeRecordsFromEligibility(report, calculatedAt);
-  const replacementKeys = replacementKeysFromEligibility(report);
-  const previousByKey = previousActiveByKey(players);
-  const activeDesignations = preserveUnchangedActiveDesignationMetadata(
-    candidateActiveDesignations,
-    previousByKey,
-  );
-  const designationEvents = activeDesignations
-    .map((designation) => {
-      const previous = previousByKey.get(activeDesignationKey(designation)) ?? null;
-      if (hasSameDesignationState(previous, designation)) return null;
-      return designationEvent(previous, designation, calculatedAt);
-    })
-    .filter((event): event is DesignationEvent => Boolean(event));
-
-  const savedPlayers: Player[] = [];
-  for (const player of players) {
-    const next = mergeActiveDesignationsForPlayer(player, activeDesignations, replacementKeys);
-    if (!playerChanged(player, next)) continue;
-    savedPlayers.push(await saveFranchisePlayer(franchiseId, next));
-  }
-
-  return {
-    franchiseId,
-    seasonId: report.seasonId,
-    statsScopeId: report.statsScopeId,
-    seasonNumber: report.seasonNumber,
-    activeDesignations,
-    designationEvents,
-    savedPlayers,
-    skippedRecords,
-    moraleMutationApplied: false,
-    relationshipMutationApplied: false,
-    salaryMovementApplied: false,
-    mode3HandoffApplied: false,
-  };
 }

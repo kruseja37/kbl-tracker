@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   saveSeasonMetadata: vi.fn(),
   calculateAndPersistSeasonWAR: vi.fn(),
   calculateAndPersistFranchiseTrueValueForSeason: vi.fn(),
+  calculateAndPersistProjectedFranchiseDesignationsForSeason: vi.fn(),
 }));
 
 vi.mock('../seasonAggregator', () => ({
@@ -52,6 +53,10 @@ vi.mock('../../src_figma/app/engines/warOrchestrator', () => ({
 
 vi.mock('../franchiseTrueValueStorage', () => ({
   calculateAndPersistFranchiseTrueValueForSeason: mocks.calculateAndPersistFranchiseTrueValueForSeason,
+}));
+
+vi.mock('../franchiseDesignationStorage', () => ({
+  calculateAndPersistProjectedFranchiseDesignationsForSeason: mocks.calculateAndPersistProjectedFranchiseDesignationsForSeason,
 }));
 
 import { processCompletedGame } from '../processCompletedGame';
@@ -172,10 +177,11 @@ describe('processCompletedGame True Value persistence gate', () => {
     mocks.getSeasonMetadata.mockResolvedValue({ seasonId: 'season-1', gamesPerTeam: 32 });
     mocks.saveSeasonMetadata.mockResolvedValue(undefined);
     mocks.calculateAndPersistSeasonWAR.mockResolvedValue(undefined);
-    mocks.calculateAndPersistFranchiseTrueValueForSeason.mockResolvedValue({ rows: [], skippedRows: [], persisted: false, blockers: [] });
+    mocks.calculateAndPersistFranchiseTrueValueForSeason.mockResolvedValue({ rows: [{ playerId: 'batter-1' }], skippedRows: [], persisted: true, blockers: [] });
+    mocks.calculateAndPersistProjectedFranchiseDesignationsForSeason.mockResolvedValue({ rows: [], skippedRows: [], persisted: true, blockers: [] });
   });
 
-  test('persists True Value immediately after successful season WAR persistence', async () => {
+  test('persists True Value and projected designations immediately after successful season WAR persistence', async () => {
     await processCompletedGame(gameState(), {
       seasonId: 'season-1',
       detectMilestones: false,
@@ -195,6 +201,14 @@ describe('processCompletedGame True Value persistence gate', () => {
     });
     expect(mocks.calculateAndPersistSeasonWAR.mock.invocationCallOrder[0])
       .toBeLessThan(mocks.calculateAndPersistFranchiseTrueValueForSeason.mock.invocationCallOrder[0]);
+    expect(mocks.calculateAndPersistProjectedFranchiseDesignationsForSeason).toHaveBeenCalledWith({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+      seasonNumber: 1,
+    });
+    expect(mocks.calculateAndPersistFranchiseTrueValueForSeason.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.calculateAndPersistProjectedFranchiseDesignationsForSeason.mock.invocationCallOrder[0]);
   });
 
   test('skips True Value persistence when season WAR persistence fails', async () => {
@@ -207,9 +221,32 @@ describe('processCompletedGame True Value persistence gate', () => {
     });
 
     expect(mocks.calculateAndPersistFranchiseTrueValueForSeason).not.toHaveBeenCalled();
+    expect(mocks.calculateAndPersistProjectedFranchiseDesignationsForSeason).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalledWith(
       '[WAR] failed to persist season WAR for completed game tv-game-war-fail:',
       expect.any(Error),
+    );
+    warn.mockRestore();
+  });
+
+  test('skips projected designations when True Value persistence does not write rows', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mocks.calculateAndPersistFranchiseTrueValueForSeason.mockResolvedValueOnce({
+      rows: [],
+      skippedRows: [],
+      persisted: false,
+      blockers: ['No current MLB players had canonical salary and persisted numeric season WAR inputs for True Value.'],
+    });
+
+    await processCompletedGame(gameState({ gameId: 'tv-game-no-tv' }), {
+      seasonId: 'season-1',
+      detectMilestones: false,
+    });
+
+    expect(mocks.calculateAndPersistProjectedFranchiseDesignationsForSeason).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      '[Designations] skipped: True Value did not persist for completed game tv-game-no-tv',
+      ['No current MLB players had canonical salary and persisted numeric season WAR inputs for True Value.'],
     );
     warn.mockRestore();
   });

@@ -35,6 +35,7 @@ import { deriveAdaptiveStandardsConfig, type AdaptiveStandardsConfigInput } from
 import { getSeasonMetadata, saveSeasonMetadata } from './seasonStorage';
 import { calculateAndPersistSeasonWAR } from '../src_figma/app/engines/warOrchestrator';
 import { calculateAndPersistFranchiseTrueValueForSeason } from './franchiseTrueValueStorage';
+import { calculateAndPersistProjectedFranchiseDesignationsForSeason } from './franchiseDesignationStorage';
 
 export interface ProcessGameResult {
   aggregation: GameAggregationResult;
@@ -52,6 +53,10 @@ type WarMetadataSource = ProcessCompletedGameAggregationOptions;
 type PersistedWarScope = {
   seasonId: string;
   statsScopeId: string;
+};
+type PersistedTrueValueScope = PersistedWarScope & {
+  franchiseId: string;
+  seasonNumber: number;
 };
 
 function positiveFiniteNumber(value: unknown): number | null {
@@ -206,25 +211,44 @@ async function persistTrueValueAfterWar(
   gameState: PersistedGameState,
   warScope: PersistedWarScope,
   archiveOptions?: CompletedGameArchiveOptions,
-): Promise<void> {
+): Promise<PersistedTrueValueScope | null> {
   const franchiseId = getCompletedGameFranchiseId(gameState, archiveOptions);
   if (!franchiseId) {
     console.warn('[TrueValue] skipped: franchiseId unresolved for completed game ' + gameState.gameId);
-    return;
+    return null;
   }
   if (!Number.isInteger(gameState.seasonNumber) || gameState.seasonNumber <= 0) {
     console.warn('[TrueValue] skipped: seasonNumber unresolved for completed game ' + gameState.gameId);
-    return;
+    return null;
   }
 
   // TV1 R-4: True Value recomputes immediately after successful WAR storage,
   // using the same season scope; WAR failures skip this path in processCompletedGame.
-  await calculateAndPersistFranchiseTrueValueForSeason({
+  const result = await calculateAndPersistFranchiseTrueValueForSeason({
     franchiseId,
     seasonId: warScope.seasonId,
     statsScopeId: warScope.statsScopeId,
     seasonNumber: gameState.seasonNumber,
   });
+  if (!result.persisted) {
+    console.warn('[Designations] skipped: True Value did not persist for completed game ' + gameState.gameId, result.blockers);
+    return null;
+  }
+  return {
+    franchiseId,
+    seasonId: warScope.seasonId,
+    statsScopeId: warScope.statsScopeId,
+    seasonNumber: gameState.seasonNumber,
+  };
+}
+
+async function persistProjectedDesignationsAfterTrueValue(
+  gameState: PersistedGameState,
+  trueValueScope: PersistedTrueValueScope,
+): Promise<void> {
+  // TV2 MODE_2_CANON §17 + R-4 extension: projected designations recompute
+  // after True Value rows persist. Upstream WAR/True Value failure skips this.
+  await calculateAndPersistProjectedFranchiseDesignationsForSeason(trueValueScope);
 }
 
 export function shouldAggregateToRegularSeasonStats(
@@ -403,10 +427,18 @@ export async function processCompletedGame(
       console.warn('[WAR] failed to persist season WAR for completed game ' + gameState.gameId + ':', error);
     }
     if (warScope) {
+      let trueValueScope: PersistedTrueValueScope | null = null;
       try {
-        await persistTrueValueAfterWar(gameState, warScope, archiveOptions);
+        trueValueScope = await persistTrueValueAfterWar(gameState, warScope, archiveOptions);
       } catch (error) {
         console.warn('[TrueValue] failed to persist True Value for completed game ' + gameState.gameId + ':', error);
+      }
+      if (trueValueScope) {
+        try {
+          await persistProjectedDesignationsAfterTrueValue(gameState, trueValueScope);
+        } catch (error) {
+          console.warn('[Designations] failed to persist projected designations for completed game ' + gameState.gameId + ':', error);
+        }
       }
     }
   }

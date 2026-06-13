@@ -15,11 +15,11 @@ export type FranchiseDesignationReadinessDirection =
   | 'neutral-no-context';
 
 export interface FranchiseDesignationReadinessPolicies {
-  finalTrueValueTrusted: false;
-  valueDeltaTrustedForDesignations: false;
+  finalTrueValueTrusted: boolean;
+  valueDeltaTrustedForDesignations: boolean;
   fanFavoriteFinalizationAllowed: false;
   albatrossFinalizationAllowed: false;
-  designationPersistenceAllowed: false;
+  designationPersistenceAllowed: boolean;
   randomEventPromptAllowed: false;
   moraleMutationAllowed: false;
   salaryMovementAllowed: false;
@@ -80,11 +80,11 @@ function hasText(value: string | null | undefined): value is string {
 
 function policies(): FranchiseDesignationReadinessPolicies {
   return {
-    finalTrueValueTrusted: false,
-    valueDeltaTrustedForDesignations: false,
+    finalTrueValueTrusted: true,
+    valueDeltaTrustedForDesignations: true,
     fanFavoriteFinalizationAllowed: false,
     albatrossFinalizationAllowed: false,
-    designationPersistenceAllowed: false,
+    designationPersistenceAllowed: true,
     randomEventPromptAllowed: false,
     moraleMutationAllowed: false,
     salaryMovementAllowed: false,
@@ -211,9 +211,9 @@ function readinessRow(
     blockers: unique(blockers),
     limitations: unique([
       ...row.limitations,
-      'Fan Favorite/Albatross readiness is read-only preview context only.',
-      'Preview value delta is not trusted for final designations, random-event morale prompts, salary movement, relationships, offseason, or Mode 3.',
-      'Trusted True Value/value-delta promotion remains a future explicit decision.',
+      'Fan Favorite/Albatross readiness is projected-designation context only.',
+      'R-5: value delta is trusted for projected designations only; random-event morale prompts, salary movement, relationships, offseason, and Mode 3 remain blocked.',
+      'peer pools are profile-position until EP1 (R-8)',
     ]),
   };
 }
@@ -273,8 +273,9 @@ export function buildFranchiseDesignationReadinessReport(
     limitations: unique([
       ...trueValuePreviewReport.limitations,
       eligibilityReport ? 'Designation eligibility report was included as read-only context only.' : 'No designation eligibility report was provided; readiness is based on True Value preview rows only.',
-      'Fan Favorite and Albatross are not promoted to final designation behavior or random-event morale prompts in this slice.',
-      'Final True Value, trusted value delta, designation persistence, salary movement, morale mutation, relationships, story persistence, offseason, and Mode 3 remain blocked.',
+      'Fan Favorite and Albatross are promoted only to projected designation trust; final designation behavior and random-event morale prompts remain blocked.',
+      'R-5: projected value-delta designation trust is enabled here; salary movement, morale mutation, relationships, story persistence, offseason, and Mode 3 remain blocked.',
+      'peer pools are profile-position until EP1 (R-8)',
     ]),
     hiddenSafe: true,
     readOnly: true,

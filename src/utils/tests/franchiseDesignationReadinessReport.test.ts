@@ -139,11 +139,11 @@ describe('franchise designation readiness report', () => {
     });
     expect(albatross.readinessStatus).toBe('blocked');
     expect(report.policies).toEqual({
-      finalTrueValueTrusted: false,
-      valueDeltaTrustedForDesignations: false,
+      finalTrueValueTrusted: true,
+      valueDeltaTrustedForDesignations: true,
       fanFavoriteFinalizationAllowed: false,
       albatrossFinalizationAllowed: false,
-      designationPersistenceAllowed: false,
+      designationPersistenceAllowed: true,
       randomEventPromptAllowed: false,
       moraleMutationAllowed: false,
       salaryMovementAllowed: false,
@@ -335,13 +335,23 @@ describe('franchise designation readiness report', () => {
     expect(JSON.stringify(report.rows)).toMatch(/Preview value-delta estimate is required/);
   });
 
-  test('report policy flags are all false for trust mutation persistence and prompts', () => {
+  test('policy trusts projected designations only while mutation and prompt gates stay false', () => {
     const report = buildFranchiseDesignationReadinessReport(previewReport());
 
-    expect(Object.values(report.policies).every((value) => value === false)).toBe(true);
+    expect(report.policies).toMatchObject({
+      finalTrueValueTrusted: true,
+      valueDeltaTrustedForDesignations: true,
+      designationPersistenceAllowed: true,
+      randomEventPromptAllowed: false,
+      moraleMutationAllowed: false,
+      salaryMovementAllowed: false,
+      relationshipMutationAllowed: false,
+      mode3HandoffAllowed: false,
+    });
     expect(report.hiddenSafe).toBe(true);
     expect(report.readOnly).toBe(true);
-    expect(report.limitations.join(' ')).toMatch(/not promoted to final designation behavior or random-event morale prompts/i);
+    expect(report.limitations.join(' ')).toMatch(/projected value-delta designation trust is enabled/i);
+    expect(report.limitations.join(' ')).toContain('peer pools are profile-position until EP1 (R-8)');
   });
 
   test('utility imports no storage save set persist or mutation APIs', () => {

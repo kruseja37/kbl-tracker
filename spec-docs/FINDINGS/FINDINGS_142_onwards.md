@@ -38,3 +38,20 @@ subsystem. Mitigations: position multipliers are RETIRED-to-1.0 tuning
 knobs per IV §3.8, and DH is dead per standing ruling — residue is mostly
 legacy surface, but it is exactly the label-laundering class R-6 bans and
 must not survive the cleanup batch.
+
+### FINDING-145
+**Date:** 2026-06-12 | **Phase:** TV2-AUDIT (MINOR #1 + candidates) | **Status:** CONFIRMED-OPEN (cleanup class; EP1/slice-5 input)
+**File:** src/utils/franchiseDesignationEligibility.ts; franchiseDesignations.ts:10, :323-348
+**Evidence:** Fable audit — eligibility module retains pre-§17 'active'/
+persistable semantics (no floors, no valueDelta) feeding read-only context
+surfaces (readiness, morale-context adapter, narrative eligibility,
+TeamHub display) that can now disagree with canonical projected rows.
+Bypass risk REFUTED (zero write paths remain). Related residue:
+'active' member in FranchiseDesignationStatus is read-compat-only with
+zero writers; trade-compat shim carries existing embedded designation
+metadata; embedded-field scrub already a logged candidate (TV2 addendum
+point 3).
+**Impact:** Consistency debt, not a defect — context surfaces may
+contradict canonical badges until cleaned. One cleanup: re-point or
+retire eligibility's status vocabulary + remove 'active' member + scrub
+embedded fields. Home: EP1 or slice 5, JK to place at drafting.

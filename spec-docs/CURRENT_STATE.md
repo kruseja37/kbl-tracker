@@ -553,3 +553,40 @@ Captain recommends yes); FINDING-144 → taxonomy spec-cleanup batch (with
 R-6/R-8 gospel blocks); untracked SMB4 Rosters.csv; ASG WPA→Fame;
 Signature Moment card line; fame tier names; F2 SOT typos; F4 FA trait
 spellings; order-flake cleanup (3 members).
+
+
+---
+
+## CURRENT STATE — 2026-06-12 (TV2 arc CLOSED — designation slice live)
+**Branch:** codex/franchise-v1-next. **This commit:** TV2 code + tests +
+contracts/records + FINDING-145 + session docs.
+**What exists & is trustworthy:** Projected designations are CANONICAL —
+shared-DB v14 franchiseDesignationRows (one holder per team per type);
+§17-exact engine (MVP/Ace from persisted WAR; FanFav/Albatross from
+canonical valueDelta rows — the first valueDelta consumer; floors from
+gamesPerTeam config-truth; below-floor = no holder; carryover metadata
+round-trip proven); post-game gate chain WAR → True Value → designations,
+skip+warn per link; TeamHub READS canonical rows (load-time 'active'
+write side effect DELETED, pinned by 22 distributed write-pins); trust
+projected-only with limitation "peer pools are profile-position until
+EP1 (R-8)". Locked effects (Fame/morale/trade discount) grep-pinned
+absent — slice 5 territory.
+**Suite baseline:** 7,127 tests / 382 files. Characterized set unchanged.
+CLI: prefix `NODE_ENV= `; node ~/.nvm/versions/node/v20.20.0/bin.
+**USER-VISIBLE CHANGE (browser-verify note):** TeamHub badges are now
+dotted "Proj." driven by post-game recalc; early-season teams may show
+FEWER badges than before (below-floor = no holder, per spec — correct
+behavior replacing incorrect).
+**NEXT TASK: EP1 — R-8 effective-position engine** (closes FINDING-143):
+plurality-with-incumbency resolution, Reserve pool (CALIBRATE threshold),
+compositional two-way valuation, trait-group scopes. Contract not yet
+drafted — first action. ROUTE: Codex 5.5 | very high → Fable 5 CLI audit.
+FINDING-145 cleanup home (EP1 vs slice 5) = JK call at drafting.
+**Then:** T6 → {T7,T8} → T9 → T10 → D0 (F-141 holds). Slices 5 (locking)
+and 6 (Captain/Fan Hopeful) remain queued post-T-stack or per D0.
+**Open pending-JK:** ratify TV1-FIX MINOR #1 (dead merge-row deletion —
+recommended yes); ratify TV2 MINOR #4 (badge dark backgrounds vs "Light X"
+prose — likely deliberate for dark UI); F-145 placement; F-144 → taxonomy
+cleanup batch; untracked SMB4 Rosters.csv; ASG WPA→Fame; Signature Moment
+card line; fame tier names; F2 SOT typos; F4 FA trait spellings;
+order-flake cleanup (3 members).

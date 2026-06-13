@@ -14,7 +14,6 @@ import {
 
 const mocks = vi.hoisted(() => ({
   buildFranchiseValueInputRows: vi.fn(),
-  persistFranchiseDesignationsForPlayers: vi.fn(),
   saveFranchisePlayer: vi.fn(),
 }));
 
@@ -24,10 +23,6 @@ vi.mock('../franchiseValueInputs', () => {
     buildFranchiseValueInputRows: mocks.buildFranchiseValueInputRows,
   };
 });
-
-vi.mock('../franchiseDesignations', () => ({
-  persistFranchiseDesignationsForPlayers: mocks.persistFranchiseDesignationsForPlayers,
-}));
 
 vi.mock('../franchisePlayerStorage', () => ({
   saveFranchisePlayer: mocks.saveFranchisePlayer,
@@ -743,7 +738,6 @@ describe('franchise designation eligibility adapter', () => {
     const report = await buildFranchiseDesignationEligibility(input);
 
     expect(mocks.buildFranchiseValueInputRows).toHaveBeenCalledWith(input);
-    expect(mocks.persistFranchiseDesignationsForPlayers).not.toHaveBeenCalled();
     expect(mocks.saveFranchisePlayer).not.toHaveBeenCalled();
     expect(report.records.every((record) => record.persistable === false)).toBe(true);
     expect(report.anyPersistable).toBe(false);

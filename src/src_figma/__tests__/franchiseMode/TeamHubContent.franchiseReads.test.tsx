@@ -29,7 +29,7 @@ const mocks = vi.hoisted(() => ({
   mockBuildFranchiseValueInputRows: vi.fn(),
   mockBuildFranchiseSalaryLifecycle: vi.fn(),
   mockBuildFranchiseDesignationEligibility: vi.fn(),
-  mockSyncActiveTeamMvpAceDesignationsFromEligibility: vi.fn(),
+  mockGetFranchiseDesignationRows: vi.fn(),
   mockSaveFranchiseTeam: vi.fn(),
 }));
 
@@ -86,8 +86,8 @@ vi.mock('../../../utils/franchiseDesignationEligibility', () => ({
   buildFranchiseDesignationEligibility: mocks.mockBuildFranchiseDesignationEligibility,
 }));
 
-vi.mock('../../../utils/franchiseDesignations', () => ({
-  syncActiveTeamMvpAceDesignationsFromEligibility: mocks.mockSyncActiveTeamMvpAceDesignationsFromEligibility,
+vi.mock('../../../utils/franchiseDesignationStorage', () => ({
+  getFranchiseDesignationRows: mocks.mockGetFranchiseDesignationRows,
 }));
 
 import { TeamHubContent } from '../../app/components/TeamHubContent';
@@ -428,6 +428,44 @@ function designationEligibilityReport(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function projectedDesignationRow(type: string, overrides: Record<string, unknown> = {}) {
+  return {
+    franchiseId: 'franchise-1',
+    seasonId: 'franchise-1-season-2',
+    statsScopeId: 'franchise-1-season-2',
+    seasonNumber: 2,
+    teamId: 'team-1',
+    playerId: 'copied-player',
+    playerName: 'Copied Player',
+    type,
+    status: 'projected',
+    sourceInputs: {
+      peerPoolLimitation: 'peer pools are profile-position until EP1 (R-8)',
+    },
+    sourceEvidence: [`MODE_2_CANON §17 ${type} projected fixture.`],
+    calculationVersion: 'franchise-designations-v2-projected-canonical',
+    calculatedAt: '2026-06-12T00:00:00.000Z',
+    lockedAt: null,
+    carryover: {
+      carriesOver: false,
+      untilSeasonProgress: type === 'FAN_FAVORITE' || type === 'ALBATROSS' ? 0.1 : null,
+      previousSeasonId: null,
+      previousPlayerId: null,
+      note: null,
+    },
+    ...overrides,
+  };
+}
+
+function projectedDesignationRows(overrides: Record<string, unknown> = {}) {
+  return [
+    projectedDesignationRow('TEAM_MVP'),
+    projectedDesignationRow('ACE'),
+    projectedDesignationRow('FAN_FAVORITE'),
+    projectedDesignationRow('ALBATROSS'),
+  ].map((row) => ({ ...row, ...overrides }));
+}
+
 describe('TeamHubContent franchise-owned visible reads', () => {
   beforeEach(async () => {
     resetFranchiseRandomEventLogDatabaseForTests();
@@ -582,20 +620,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     mocks.mockBuildFranchiseValueInputRows.mockResolvedValue(valueInputReport());
     mocks.mockBuildFranchiseSalaryLifecycle.mockResolvedValue(salaryLifecycleReport());
     mocks.mockBuildFranchiseDesignationEligibility.mockResolvedValue(designationEligibilityReport());
-    mocks.mockSyncActiveTeamMvpAceDesignationsFromEligibility.mockResolvedValue({
-      franchiseId: 'franchise-1',
-      seasonId: 'franchise-1-season-2',
-      statsScopeId: 'franchise-1-season-2',
-      seasonNumber: 2,
-      activeDesignations: [],
-      designationEvents: [],
-      savedPlayers: [],
-      skippedRecords: [],
-      moraleMutationApplied: false,
-      relationshipMutationApplied: false,
-      salaryMovementApplied: false,
-      mode3HandoffApplied: false,
-    });
+    mocks.mockGetFranchiseDesignationRows.mockResolvedValue(projectedDesignationRows());
     mocks.mockSaveFranchiseTeam.mockImplementation(async (_franchiseId: string, team: unknown) => team);
   });
 
@@ -618,7 +643,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(mlbTable).queryByText('TRUE VAL')).not.toBeInTheDocument();
     expect(within(mlbTable).queryByText('NET DIFF')).not.toBeInTheDocument();
     expect(screen.getByTestId('franchise-v1-roster-value-gate')).toHaveTextContent(
-      'safe salary, morale, stats, and active TEAM_MVP/ACE designation context only',
+      'safe salary, morale, stats, and projected canonical designation context only',
     );
     expect(await screen.findByText('READ-ONLY ROSTER ANALYZER')).toBeInTheDocument();
     expect(screen.getByText('MLB 1')).toBeInTheDocument();
@@ -630,7 +655,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
   });
 
-  test('roster scan displays salary, neutral morale, safe stats, and active designation summaries', async () => {
+  test('roster scan displays salary, neutral morale, safe stats, and projected designation summaries', async () => {
     mocks.mockUseSeasonStats.mockReturnValue({
       isLoading: false,
       getBattingLeaders: vi.fn(() => [{
@@ -661,7 +686,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(rosterTable).getAllByText('50').length).toBeGreaterThan(0);
     expect(within(rosterTable).getAllByText('Neutral').length).toBeGreaterThan(0);
     expect(within(rosterTable).getByText('1.6 WAR · 7 HR · 21 RBI')).toBeInTheDocument();
-    expect(within(rosterTable).getByText('TEAM_MVP, ACE active')).toBeInTheDocument();
+    expect(within(rosterTable).getByText('Proj. MVP, Proj. Ace, Proj. Fan Favorite, Proj. Albatross projected')).toBeInTheDocument();
   });
 
   test('roster scan sorts salary and morale deterministically', async () => {
@@ -723,12 +748,11 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(truthRegion).getByText(/Team payroll proof: STABLE BASELINE/i)).toBeInTheDocument();
     expect(within(truthRegion).getByText(/Performance salary formula: ACTIVE/i)).toBeInTheDocument();
     expect(within(truthRegion).getByText(/Offseason salary recalculation: DEFERRED/i)).toBeInTheDocument();
-    expect(within(truthRegion).getByText(/True Value \/ value delta: DEFERRED/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/True Value \/ value delta: TRUSTED for projected designations only/i)).toBeInTheDocument();
     expect(within(truthRegion).getByText(/Luxury tax, salary matching, and AI salary valuation: BLOCKED \/ INACTIVE/i)).toBeInTheDocument();
-    expect(within(truthRegion).getByText(/TEAM_MVP, ACE active v1 designation\(s\); season-end locking and carryover remain blocked/i)).toBeInTheDocument();
-    expect(within(truthRegion).getByText(/FAN_FAVORITE blocked: FAN_FAVORITE requires canonical True Value and value-delta inputs/i)).toBeInTheDocument();
-    expect(within(truthRegion).getByText(/ALBATROSS blocked: ALBATROSS requires canonical True Value and value-delta inputs/i)).toBeInTheDocument();
-    expect(within(truthRegion).getByText(/Designation persistence: ACTIVE for TEAM_MVP\/ACE only/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/Proj. MVP, Proj. Ace, Proj. Fan Favorite, Proj. Albatross canonical projected designation\(s\); season-end locking and carryover remain blocked/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/Designation persistence: PROJECTED rows only/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/Captain, Fan Hopeful, season-end locks, morale effects, and trade discounts remain blocked/i)).toBeInTheDocument();
     expect(within(truthRegion).queryByText(/MVP winner/i)).not.toBeInTheDocument();
     expect(within(truthRegion).queryByText(/Ace winner/i)).not.toBeInTheDocument();
     expect(within(truthRegion).queryByText(/Fan Favorite designation/i)).not.toBeInTheDocument();
@@ -844,7 +868,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(foundationRegion).getByText('SALARY LIFECYCLE')).toBeInTheDocument();
     expect(within(foundationRegion).getByText(/1\/1 current salary row\(s\)/i)).toBeInTheDocument();
     expect(within(foundationRegion).getByText('DESIGNATION ELIGIBILITY')).toBeInTheDocument();
-    expect(within(foundationRegion).getByText(/2 TEAM_MVP\/ACE active row\(s\)/i)).toBeInTheDocument();
+    expect(within(foundationRegion).getByText(/4 projected canonical row\(s\)/i)).toBeInTheDocument();
     expect(within(foundationRegion).getByText('MORALE / RELATIONSHIPS')).toBeInTheDocument();
     expect(within(foundationRegion).getByText(/Morale state changes: BLOCKED/i)).toBeInTheDocument();
     expect(within(foundationRegion).getByText(/Relationship state changes: BLOCKED/i)).toBeInTheDocument();
@@ -1919,7 +1943,8 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     const valueWinsRegion = await screen.findByRole('region', { name: /Team True Value and Expected Wins Preview/i });
 
     expect(within(truthRegion).getByText(/FARM player salary context uses public draft\/scouting-safe salary/i)).toBeInTheDocument();
-    expect(within(truthRegion).getByText(/FAN_FAVORITE blocked: FAN_FAVORITE requires canonical True Value and value-delta inputs/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/Proj. Fan Favorite/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/Proj. Albatross/i)).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Roster salary sum')).toBeInTheDocument();
     expect(within(valueWinsRegion).queryByText(/trueGrade/i)).not.toBeInTheDocument();
     expect(within(truthRegion).queryByText(/trueGrade/i)).not.toBeInTheDocument();
@@ -2047,48 +2072,6 @@ describe('TeamHubContent franchise-owned visible reads', () => {
   });
 
   test('opens read-only player profile from MLB roster row', async () => {
-    mocks.mockSyncActiveTeamMvpAceDesignationsFromEligibility.mockResolvedValueOnce({
-      franchiseId: 'franchise-1',
-      seasonId: 'franchise-1-season-2',
-      statsScopeId: 'franchise-1-season-2',
-      seasonNumber: 2,
-      activeDesignations: [],
-      designationEvents: [],
-      savedPlayers: [
-        franchisePlayer('copied-player', 'Copied', 'Player', 'SS', {
-          secondaryPosition: '2B',
-          power: 60,
-          contact: 60,
-          speed: 70,
-          fielding: 80,
-          arm: 75,
-          overallGrade: 'B+',
-          salary: 3000000,
-          franchiseDesignations: [
-            {
-              franchiseId: 'franchise-1',
-              seasonId: 'franchise-1-season-2',
-              statsScopeId: 'franchise-1-season-2',
-              seasonNumber: 2,
-              teamId: 'team-1',
-              playerId: 'copied-player',
-              playerName: 'Copied Player',
-              type: 'TEAM_MVP',
-              status: 'active',
-              sourceInputs: { totalWAR: 1.6 },
-              calculationVersion: 'franchise-designations-v1-active-team-mvp-ace',
-              calculatedAt: '2026-06-08T00:00:00.000Z',
-            },
-          ],
-        }),
-      ],
-      skippedRecords: [],
-      moraleMutationApplied: false,
-      relationshipMutationApplied: false,
-      salaryMovementApplied: false,
-      mode3HandoffApplied: false,
-    });
-
     render(<TeamHubContent />);
 
     fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
@@ -2098,8 +2081,10 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(dialog).getByText('FRANCHISE PLAYER PROFILE')).toBeInTheDocument();
     expect(within(dialog).getByText('Copied Player')).toBeInTheDocument();
     expect(within(dialog).getByText(/MLB · REVEALED · Read-only/i)).toBeInTheDocument();
-    expect(within(dialog).getByText('ACTIVE DESIGNATIONS')).toBeInTheDocument();
-    expect(within(dialog).getByText('TEAM_MVP ACTIVE')).toBeInTheDocument();
+    expect(within(dialog).getByText('PROJECTED DESIGNATIONS')).toBeInTheDocument();
+    expect(within(dialog).getByText('Proj. MVP')).toBeInTheDocument();
+    expect(within(dialog).getByText('Proj. Ace')).toBeInTheDocument();
+    expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
     expect(within(dialog).getByText('BASEBALL DETAILS')).toBeInTheDocument();
     expect(within(dialog).getByText('PRIMARY POSITION')).toBeInTheDocument();
     expect(within(dialog).getByText('SECONDARY POSITION')).toBeInTheDocument();

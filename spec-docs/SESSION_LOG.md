@@ -3893,3 +3893,39 @@ batches answered from gospel first (Q3/Q4 withdrawn as already-specced).
 
 **NEXT:** TV1-FIX closure commit (this commit) → JK runs TV2 (Codex 5.5 |
 very high; Phase 0 report comes back for Captain sign-off before build).
+
+
+## 2026-06-12 (cont.) — TV2 ARC: designation slice DELTA VERIFIED; legacy 'active' path retired
+
+**Phase 0 stop-gate earned its keep:** Codex's discovery report surfaced a
+REBUILD-class conflict before any code — TeamHub LOAD was writing 'active'
+MVP/Ace onto player records (display-surface mutation, UI-load trigger, no
+floors, no projected/locked). Captain sign-off addendum (7b8b031): REBUILD
+approved, sync side effect REMOVED not bypassed, canonical rows = single
+truth, explicit only-edit list, stale embedded fields inert not scrubbed.
+
+**TV2 Phase 1 (Codex 5.5 | very high):** shared-DB v14
+franchiseDesignationRows; §17 projected engine (gospel-exact criteria +
+floors, below-floor = no holder); gate chain WAR → TV → designations with
+skip+warn at each link; TeamHub reads canonical rows, renders dotted
+"Proj." badges; trust projected-only with the EP1 limitation string;
+FanFav/Albatross = the first valueDelta consumer (canonical persisted rows
+only).
+
+**Fable TV2-AUDIT verdict: "TV2 DELTA VERIFIED" — 4 MINOR / 0 MAJOR.**
+Captain flags resolved: D7 net +2 = 13 added / 11 deleted, every deletion
+adjudicated sanctioned (3 rename-subsumptions verified line-by-line);
+D8 = six underreported test files, all clean (reporting lesson RECURS —
+template gains "list every path in git status"); D9 = relocation not
+bypass, write-path refutation affirmative → consistency debt FINDING-145.
+D2 mount-write mutant died loudly (22 RED distributed write-pins). §17.8
+borders hex-exact; backgrounds dark variants (JK ratification pending).
+Carryover round-trip proven despite builder silence.
+
+**New suite baseline: 7,127 / 382.** FINDING-145 logged (eligibility
+'active' semantics + 'active' status member + embedded scrub = one
+cleanup, EP1/slice-5 home TBD).
+
+**NEXT:** TV2 closure commit (this commit) → draft EP1 (R-8 effective-
+position engine, closes FINDING-143). Pending-JK ratifications: TV1-FIX
+MINOR #1 (dead merge-row deletion) + TV2 MINOR #4 (badge dark backgrounds).

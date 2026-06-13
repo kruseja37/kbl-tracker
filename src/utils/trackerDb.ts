@@ -14,7 +14,7 @@
  */
 
 const DB_NAME = 'kbl-tracker';
-export const TRACKER_DB_VERSION = 13; // Must be the highest version any consumer ever used
+export const TRACKER_DB_VERSION = 14; // Must be the highest version any consumer ever used
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -123,6 +123,24 @@ export async function getTrackerDb(): Promise<IDBDatabase> {
         });
         trueValueStore.createIndex('by_player_scope', ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'], {
           unique: true,
+        });
+      }
+
+      // v14 / TV2 R-7 + MODE_2_CANON §17: projected designation rows live in
+      // the shared DB. Player-embedded pre-release designation fields are not
+      // migrated; rows recalculate after completed games.
+      if (!db.objectStoreNames.contains('franchiseDesignationRows')) {
+        const designationStore = db.createObjectStore('franchiseDesignationRows', {
+          keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'teamId', 'type'],
+        });
+        designationStore.createIndex('by_scope', ['franchiseId', 'seasonId', 'statsScopeId'], {
+          unique: false,
+        });
+        designationStore.createIndex('by_team_scope', ['franchiseId', 'seasonId', 'statsScopeId', 'teamId'], {
+          unique: false,
+        });
+        designationStore.createIndex('by_player_scope', ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'], {
+          unique: false,
         });
       }
 

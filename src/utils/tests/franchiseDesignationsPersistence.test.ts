@@ -1,393 +1,217 @@
+import 'fake-indexeddb/auto';
+import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  saveFranchisePlayer: vi.fn(),
-  savePlayer: vi.fn(),
+  buildFranchiseValueInputRows: vi.fn(),
+  getAllBattingStats: vi.fn(),
+  getAllPitchingStats: vi.fn(),
+  getFranchiseTrueValueRows: vi.fn(),
 }));
 
-vi.mock('../franchisePlayerStorage', () => ({
-  saveFranchisePlayer: mocks.saveFranchisePlayer,
+vi.mock('../franchiseValueInputs', () => ({
+  buildFranchiseValueInputRows: mocks.buildFranchiseValueInputRows,
 }));
 
-vi.mock('../leagueBuilderStorage', () => ({
-  savePlayer: mocks.savePlayer,
+vi.mock('../seasonStorage', () => ({
+  getAllBattingStats: mocks.getAllBattingStats,
+  getAllPitchingStats: mocks.getAllPitchingStats,
+}));
+
+vi.mock('../franchiseTrueValueStorage', () => ({
+  getFranchiseTrueValueRows: mocks.getFranchiseTrueValueRows,
 }));
 
 import {
-  FRANCHISE_ACTIVE_DESIGNATION_CALCULATION_VERSION,
-  persistFranchiseDesignationsForPlayers,
-  syncActiveTeamMvpAceDesignationsFromEligibility,
-  type FranchisePlayerDesignationRecord,
-} from '../franchiseDesignations';
-import {
-  FRANCHISE_DESIGNATION_ELIGIBILITY_CONTRACT_VERSION,
-  type FranchiseDesignationEligibilityRecord,
-  type FranchiseDesignationEligibilityReport,
-} from '../franchiseDesignationEligibility';
-import type { Player } from '../franchisePlayerStorage';
-import * as leagueBuilderStorage from '../leagueBuilderStorage';
+  calculateAndPersistProjectedFranchiseDesignationsForSeason,
+  clearFranchiseDesignationDatabaseForTests,
+  getFranchiseDesignationRow,
+  getFranchiseDesignationRows,
+  replaceFranchiseDesignationRowsForScope,
+  resetFranchiseDesignationDatabaseForTests,
+  saveFranchiseDesignationRows,
+} from '../franchiseDesignationStorage';
+import type { FranchisePlayerDesignationRecord } from '../franchiseDesignations';
 
-function makePlayer(id: string): Player {
-  return {
-    id,
-    firstName: id,
-    lastName: 'Persist',
-    gender: 'M',
-    age: 27,
-    bats: 'R',
-    throws: 'R',
-    primaryPosition: 'SS',
-    power: 70,
-    contact: 70,
-    speed: 70,
-    fielding: 70,
-    arm: 70,
-    velocity: 0,
-    junk: 0,
-    accuracy: 0,
-    arsenal: [],
-    overallGrade: 'B',
-    personality: 'Competitive',
-    chemistry: 'Competitive',
-    morale: 50,
-    mojo: 'Normal',
-    fame: 0,
-    salary: 5,
-    leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-a', rosterStatus: 'MLB' }],
-    createdDate: '2026-01-01T00:00:00.000Z',
-    lastModified: '2026-01-01T00:00:00.000Z',
-    isCustom: false,
-    editHistory: [],
-  };
-}
+const scope = {
+  franchiseId: 'franchise-a',
+  seasonId: 'franchise-a-season-1',
+  statsScopeId: 'franchise-a-season-1',
+};
 
-function designation(playerId: string): FranchisePlayerDesignationRecord {
+function designation(overrides: Partial<FranchisePlayerDesignationRecord> = {}): FranchisePlayerDesignationRecord {
   return {
-    franchiseId: 'franchise-a',
-    seasonId: 'franchise-a-season-1',
+    ...scope,
     seasonNumber: 1,
     teamId: 'team-a',
-    playerId,
-    playerName: playerId,
+    playerId: 'player-a',
+    playerName: 'Player A',
     type: 'FAN_FAVORITE',
     status: 'projected',
-    sourceInputs: { valueDelta: 5 },
-    calculationVersion: 'test',
-    calculatedAt: '2026-05-27T00:00:00.000Z',
-  };
-}
-
-function activeEligibilityRecord(overrides: Partial<FranchiseDesignationEligibilityRecord> = {}): FranchiseDesignationEligibilityRecord {
-  return {
-    contractVersion: FRANCHISE_DESIGNATION_ELIGIBILITY_CONTRACT_VERSION,
-    franchiseId: 'franchise-a',
-    seasonId: 'franchise-a-season-1',
-    statsScopeId: 'franchise-a-season-1',
-    seasonNumber: 1,
-    playerId: 'player-a',
-    playerName: 'player-a Persist',
-    teamId: 'team-a',
-    rosterStatus: 'MLB',
-    designationType: 'TEAM_MVP',
-    status: 'active',
-    persistable: true,
-    reasons: ['TEAM_MVP ranked active v1 designation has positive team-relative performance evidence and scoped WAR consumer trust.'],
-    limitations: ['Season-end locking/carryover, awards, morale mutation, relationships, salary movement, and Mode 3 remain blocked.'],
     sourceInputs: {
-      salaryBaselineAvailable: true,
-      teamSalaryBaselineAvailable: true,
-      seasonStatsAvailable: true,
-      warPreviewInputAvailable: true,
-      pitchingWarPreviewInputAvailable: false,
-      totalWar: 1.8,
-      pitchingWar: null,
-      teamMvpWarTrusted: true,
-      aceWarTrusted: false,
-      wpaAvailable: false,
-      wpaTrustedForFinalValue: false,
-      trueValueAvailable: false,
-      moraleAvailable: false,
-      relationshipInputsAvailable: false,
-      awardInputsFinalized: false,
-      seedParkFactorsAvailable: true,
-      parkAdjustedValueInputsAvailable: false,
-      seasonMetadataAvailable: true,
+      valueDelta: 5,
+    },
+    sourceEvidence: ['MODE_2_CANON §17.3 fixture'],
+    calculationVersion: 'test-designations',
+    calculatedAt: '2026-06-12T00:00:00.000Z',
+    lockedAt: null,
+    carryover: {
+      carriesOver: true,
+      untilSeasonProgress: 0.1,
+      previousSeasonId: 'franchise-a-season-0',
+      previousPlayerId: 'player-a',
+      note: 'fixture carryover metadata',
     },
     ...overrides,
   };
 }
 
-function eligibilityReport(records: FranchiseDesignationEligibilityRecord[]): FranchiseDesignationEligibilityReport {
+function valueRow(overrides: Record<string, unknown> = {}) {
   return {
-    contractVersion: FRANCHISE_DESIGNATION_ELIGIBILITY_CONTRACT_VERSION,
-    franchiseId: 'franchise-a',
-    seasonId: 'franchise-a-season-1',
-    statsScopeId: 'franchise-a-season-1',
+    franchiseId: scope.franchiseId,
+    seasonId: scope.seasonId,
+    statsScopeId: scope.statsScopeId,
     seasonNumber: 1,
-    valueInputContractVersion: 'franchise-mode2-value-inputs-v1-readonly',
-    generatedAt: 1,
-    records,
-    anyPersistable: records.some((record) => record.persistable),
-    limitations: [],
+    playerId: 'player-a',
+    playerName: 'Player A',
+    valuePosition: 'SS',
+    currentTeamId: 'team-a',
+    rosterStatus: 'MLB',
+    warPreviewValues: {
+      totalWar: 1,
+      pitchingWar: null,
+    },
+    ...overrides,
   };
 }
 
-describe('franchise designation persistence', () => {
-  beforeEach(() => {
+function valueReport(rows: Array<Record<string, unknown>>, gamesPerTeam = 20) {
+  return {
+    franchiseId: scope.franchiseId,
+    seasonId: scope.seasonId,
+    statsScopeId: scope.statsScopeId,
+    seasonNumber: 1,
+    seasonContext: {
+      gamesPerTeam,
+    },
+    rows,
+  };
+}
+
+describe('franchise projected designation storage', () => {
+  beforeEach(async () => {
+    resetFranchiseDesignationDatabaseForTests();
+    await clearFranchiseDesignationDatabaseForTests();
     vi.clearAllMocks();
   });
 
-  test('writes only franchise-owned player records and never League Builder/global players', async () => {
-    mocks.saveFranchisePlayer.mockImplementation(async (_franchiseId: string, player: Player) => player);
+  test('round-trips projected rows and carryover metadata in the shared DB', async () => {
+    const row = designation();
 
-    const saved = await persistFranchiseDesignationsForPlayers(
-      'franchise-a',
-      [makePlayer('player-a'), makePlayer('player-b')],
-      [designation('player-a')],
-    );
+    await saveFranchiseDesignationRows([row]);
 
-    expect(saved).toHaveLength(1);
-    expect(mocks.saveFranchisePlayer).toHaveBeenCalledWith(
-      'franchise-a',
-      expect.objectContaining({
-        id: 'player-a',
-        franchiseDesignations: [expect.objectContaining({ playerId: 'player-a' })],
-      }),
-    );
-    expect(mocks.saveFranchisePlayer).not.toHaveBeenCalledWith(
-      'franchise-a',
-      expect.objectContaining({ id: 'player-b' }),
-    );
-    expect(leagueBuilderStorage.savePlayer).not.toHaveBeenCalled();
+    expect(await getFranchiseDesignationRows(scope)).toEqual([row]);
+    await expect(getFranchiseDesignationRow({ ...scope, teamId: 'team-a', type: 'FAN_FAVORITE' }))
+      .resolves.toEqual(row);
   });
 
-  test('syncs active TEAM_MVP/ACE designations onto franchise players and emits typed events without morale mutation', async () => {
-    mocks.saveFranchisePlayer.mockImplementation(async (_franchiseId: string, player: Player) => player);
-
-    const saved = await syncActiveTeamMvpAceDesignationsFromEligibility(
-      eligibilityReport([
-        activeEligibilityRecord(),
-        activeEligibilityRecord({
-          playerId: 'player-b',
-          playerName: 'player-b Persist',
-          designationType: 'ACE',
-          sourceInputs: {
-            ...activeEligibilityRecord().sourceInputs,
-            totalWar: 1.1,
-            pitchingWar: 1.1,
-            teamMvpWarTrusted: false,
-            aceWarTrusted: true,
-            pitchingWarPreviewInputAvailable: true,
-          },
-        }),
-        activeEligibilityRecord({
-          playerId: 'player-a',
-          designationType: 'FAN_FAVORITE',
-          status: 'blocked',
-          persistable: false,
-          reasons: ['FAN_FAVORITE requires canonical True Value and value-delta inputs.'],
-        }),
-      ]),
-      {
-        players: [makePlayer('player-a'), makePlayer('player-b')],
-        calculatedAt: '2026-06-08T00:00:00.000Z',
-      },
-    );
-
-    expect(saved.activeDesignations).toHaveLength(2);
-    expect(saved.activeDesignations.map((designation) => [designation.type, designation.playerId])).toEqual([
-      ['TEAM_MVP', 'player-a'],
-      ['ACE', 'player-b'],
+  test('recomputes after a completed game and clears stale rows when every holder falls below §17 floors', async () => {
+    mocks.buildFranchiseValueInputRows.mockResolvedValueOnce(valueReport([
+      valueRow({ playerId: 'mvp', playerName: 'MVP', valuePosition: 'SS', warPreviewValues: { totalWar: 3.2, pitchingWar: null } }),
+      valueRow({ playerId: 'ace', playerName: 'Ace', valuePosition: 'SP', warPreviewValues: { totalWar: 1.1, pitchingWar: 1.1 } }),
+      valueRow({ playerId: 'fan', playerName: 'Fan', valuePosition: 'CF', warPreviewValues: { totalWar: 0.8, pitchingWar: null } }),
+      valueRow({ playerId: 'alb', playerName: 'Alb', valuePosition: '1B', warPreviewValues: { totalWar: 0.2, pitchingWar: null } }),
+    ]));
+    mocks.getAllBattingStats.mockResolvedValueOnce([
+      { playerId: 'mvp', games: 5 },
+      { playerId: 'fan', games: 3 },
+      { playerId: 'alb', games: 3 },
     ]);
-    expect(saved.activeDesignations[0]).toMatchObject({
-      status: 'active',
-      statsScopeId: 'franchise-a-season-1',
-      calculationVersion: FRANCHISE_ACTIVE_DESIGNATION_CALCULATION_VERSION,
+    mocks.getAllPitchingStats.mockResolvedValueOnce([
+      { playerId: 'ace', games: 4, pwar: 1.1 },
+    ]);
+    mocks.getFranchiseTrueValueRows.mockResolvedValueOnce([
+      { playerId: 'mvp', trueValue: 8, contractValue: 5, valueDelta: 3 },
+      { playerId: 'ace', trueValue: 7, contractValue: 5, valueDelta: 2 },
+      { playerId: 'fan', trueValue: 10, contractValue: 2, valueDelta: 8 },
+      { playerId: 'alb', trueValue: 2, contractValue: 11, valueDelta: -9 },
+    ]);
+
+    const first = await calculateAndPersistProjectedFranchiseDesignationsForSeason({
+      ...scope,
+      seasonNumber: 1,
+    }, { calculatedAt: '2026-06-12T00:00:00.000Z' });
+
+    expect(first.persisted).toBe(true);
+    expect(first.rows.map((row) => [row.type, row.playerId])).toEqual([
+      ['TEAM_MVP', 'mvp'],
+      ['ACE', 'ace'],
+      ['FAN_FAVORITE', 'fan'],
+      ['ALBATROSS', 'alb'],
+    ]);
+    expect(await getFranchiseDesignationRows(scope)).toHaveLength(4);
+
+    mocks.buildFranchiseValueInputRows.mockResolvedValueOnce(valueReport([
+      valueRow({ playerId: 'short', playerName: 'Short', valuePosition: 'SS', warPreviewValues: { totalWar: 9, pitchingWar: null } }),
+    ]));
+    mocks.getAllBattingStats.mockResolvedValueOnce([{ playerId: 'short', games: 1 }]);
+    mocks.getAllPitchingStats.mockResolvedValueOnce([]);
+    mocks.getFranchiseTrueValueRows.mockResolvedValueOnce([{ playerId: 'short', trueValue: 9, contractValue: 1, valueDelta: 8 }]);
+
+    const second = await calculateAndPersistProjectedFranchiseDesignationsForSeason({
+      ...scope,
+      seasonNumber: 1,
+    }, { calculatedAt: '2026-06-13T00:00:00.000Z' });
+
+    expect(second.persisted).toBe(true);
+    expect(second.rows).toEqual([]);
+    expect(await getFranchiseDesignationRows(scope)).toEqual([]);
+  });
+
+  test('surfaces non-canonical position labels as R-6 data defects', async () => {
+    mocks.buildFranchiseValueInputRows.mockResolvedValue(valueReport([
+      valueRow({ playerId: 'bad-pos', valuePosition: 'P' }),
+    ]));
+    mocks.getAllBattingStats.mockResolvedValue([{ playerId: 'bad-pos', games: 5 }]);
+    mocks.getAllPitchingStats.mockResolvedValue([{ playerId: 'bad-pos', games: 5, pwar: 1 }]);
+    mocks.getFranchiseTrueValueRows.mockResolvedValue([{ playerId: 'bad-pos', trueValue: 8, contractValue: 5, valueDelta: 3 }]);
+
+    const result = await calculateAndPersistProjectedFranchiseDesignationsForSeason({
+      ...scope,
+      seasonNumber: 1,
     });
-    expect(saved.designationEvents).toEqual([
+
+    expect(result.persisted).toBe(true);
+    expect(result.rows).toEqual([]);
+    expect(result.skippedRows).toEqual([
       expect.objectContaining({
-        franchiseId: 'franchise-a',
-        seasonId: 'franchise-a-season-1',
-        statsScopeId: 'franchise-a-season-1',
-        teamId: 'team-a',
-        playerId: 'player-a',
-        designationType: 'TEAM_MVP',
-        previousState: null,
-        effectCategory: 'designation-earned',
-        createdAt: '2026-06-08T00:00:00.000Z',
-      }),
-      expect.objectContaining({
-        playerId: 'player-b',
-        designationType: 'ACE',
+        playerId: 'bad-pos',
+        reasons: [expect.stringContaining('P')],
       }),
     ]);
-    expect(saved.moraleMutationApplied).toBe(false);
-    expect(saved.relationshipMutationApplied).toBe(false);
-    expect(saved.salaryMovementApplied).toBe(false);
-    expect(saved.mode3HandoffApplied).toBe(false);
-    expect(mocks.saveFranchisePlayer).toHaveBeenCalledTimes(2);
-    expect(leagueBuilderStorage.savePlayer).not.toHaveBeenCalled();
   });
 
-  test('re-running identical active TEAM_MVP/ACE sync preserves metadata and performs no writes or events', async () => {
-    mocks.saveFranchisePlayer.mockImplementation(async (_franchiseId: string, player: Player) => player);
-    const report = eligibilityReport([
-      activeEligibilityRecord(),
-      activeEligibilityRecord({
-        playerId: 'player-b',
-        playerName: 'player-b Persist',
-        designationType: 'ACE',
-        sourceInputs: {
-          ...activeEligibilityRecord().sourceInputs,
-          totalWar: 1.1,
-          pitchingWar: 1.1,
-          teamMvpWarTrusted: false,
-          aceWarTrusted: true,
-          pitchingWarPreviewInputAvailable: true,
-        },
-      }),
+  test('replace semantics remove old team/type winners in the same scope', async () => {
+    await saveFranchiseDesignationRows([designation({ playerId: 'old-player' })]);
+    await replaceFranchiseDesignationRowsForScope(scope, [
+      designation({ playerId: 'new-player', playerName: 'New Player' }),
     ]);
 
-    const first = await syncActiveTeamMvpAceDesignationsFromEligibility(
-      report,
-      {
-        players: [makePlayer('player-a'), makePlayer('player-b')],
-        calculatedAt: '2026-06-08T00:00:00.000Z',
-      },
-    );
-
-    expect(first.savedPlayers).toHaveLength(2);
-    expect(first.designationEvents).toHaveLength(2);
-    expect(first.activeDesignations.map((designation) => designation.calculatedAt)).toEqual([
-      '2026-06-08T00:00:00.000Z',
-      '2026-06-08T00:00:00.000Z',
-    ]);
-
-    mocks.saveFranchisePlayer.mockClear();
-
-    const second = await syncActiveTeamMvpAceDesignationsFromEligibility(
-      report,
-      {
-        players: first.savedPlayers,
-        calculatedAt: '2026-06-09T00:00:00.000Z',
-      },
-    );
-
-    expect(second.savedPlayers).toEqual([]);
-    expect(second.designationEvents).toEqual([]);
-    expect(second.activeDesignations.map((designation) => designation.calculatedAt)).toEqual([
-      '2026-06-08T00:00:00.000Z',
-      '2026-06-08T00:00:00.000Z',
-    ]);
-    expect(mocks.saveFranchisePlayer).not.toHaveBeenCalled();
-    expect(leagueBuilderStorage.savePlayer).not.toHaveBeenCalled();
+    expect((await getFranchiseDesignationRows(scope)).map((row) => row.playerId)).toEqual(['new-player']);
   });
 
-  test('changed active designation evidence updates the player and emits a changed event', async () => {
-    mocks.saveFranchisePlayer.mockImplementation(async (_franchiseId: string, player: Player) => player);
-    const first = await syncActiveTeamMvpAceDesignationsFromEligibility(
-      eligibilityReport([activeEligibilityRecord()]),
-      {
-        players: [makePlayer('player-a')],
-        calculatedAt: '2026-06-08T00:00:00.000Z',
-      },
-    );
+  test('keeps locked effects and aggregate season-total fallbacks out of the projected storage path', () => {
+    const storageSource = readFileSync('src/utils/franchiseDesignationStorage.ts', 'utf8');
+    const engineSource = readFileSync('src/utils/franchiseDesignations.ts', 'utf8');
+    const combined = `${storageSource}\n${engineSource}`;
 
-    mocks.saveFranchisePlayer.mockClear();
-
-    const changed = await syncActiveTeamMvpAceDesignationsFromEligibility(
-      eligibilityReport([
-        activeEligibilityRecord({
-          reasons: ['TEAM_MVP ranked active v1 designation moved after updated scoped WAR evidence.'],
-          sourceInputs: {
-            ...activeEligibilityRecord().sourceInputs,
-            totalWar: 2.4,
-          },
-        }),
-      ]),
-      {
-        players: first.savedPlayers,
-        calculatedAt: '2026-06-09T00:00:00.000Z',
-      },
-    );
-
-    expect(changed.savedPlayers).toHaveLength(1);
-    expect(changed.activeDesignations[0]).toMatchObject({
-      playerId: 'player-a',
-      calculatedAt: '2026-06-09T00:00:00.000Z',
-      sourceInputs: expect.objectContaining({ totalWAR: 2.4 }),
-    });
-    expect(changed.designationEvents).toEqual([
-      expect.objectContaining({
-        playerId: 'player-a',
-        designationType: 'TEAM_MVP',
-        effectCategory: 'designation-changed',
-        previousState: expect.objectContaining({
-          playerId: 'player-a',
-          calculatedAt: '2026-06-08T00:00:00.000Z',
-        }),
-        newState: expect.objectContaining({
-          playerId: 'player-a',
-          calculatedAt: '2026-06-09T00:00:00.000Z',
-          sourceInputs: expect.objectContaining({ totalWAR: 2.4 }),
-        }),
-      }),
-    ]);
-    expect(mocks.saveFranchisePlayer).toHaveBeenCalledTimes(1);
-  });
-
-  test('changed active designation winner removes the old holder and persists the new holder', async () => {
-    mocks.saveFranchisePlayer.mockImplementation(async (_franchiseId: string, player: Player) => player);
-    const first = await syncActiveTeamMvpAceDesignationsFromEligibility(
-      eligibilityReport([activeEligibilityRecord()]),
-      {
-        players: [makePlayer('player-a'), makePlayer('player-c')],
-        calculatedAt: '2026-06-08T00:00:00.000Z',
-      },
-    );
-    const playerAAfterFirst = first.savedPlayers.find((player) => player.id === 'player-a')!;
-    const playerCAfterFirst = makePlayer('player-c');
-
-    mocks.saveFranchisePlayer.mockClear();
-
-    const changed = await syncActiveTeamMvpAceDesignationsFromEligibility(
-      eligibilityReport([
-        activeEligibilityRecord({
-          playerId: 'player-c',
-          playerName: 'player-c Persist',
-          sourceInputs: {
-            ...activeEligibilityRecord().sourceInputs,
-            totalWar: 2.8,
-          },
-        }),
-      ]),
-      {
-        players: [playerAAfterFirst, playerCAfterFirst],
-        calculatedAt: '2026-06-09T00:00:00.000Z',
-      },
-    );
-
-    expect(changed.savedPlayers.map((player) => player.id).sort()).toEqual(['player-a', 'player-c']);
-    expect((changed.savedPlayers.find((player) => player.id === 'player-a') as Player & {
-      franchiseDesignations?: FranchisePlayerDesignationRecord[];
-    }).franchiseDesignations ?? []).toEqual([]);
-    expect((changed.savedPlayers.find((player) => player.id === 'player-c') as Player & {
-      franchiseDesignations?: FranchisePlayerDesignationRecord[];
-    }).franchiseDesignations).toEqual([
-      expect.objectContaining({
-        playerId: 'player-c',
-        type: 'TEAM_MVP',
-        calculatedAt: '2026-06-09T00:00:00.000Z',
-      }),
-    ]);
-    expect(changed.designationEvents).toEqual([
-      expect.objectContaining({
-        playerId: 'player-c',
-        designationType: 'TEAM_MVP',
-        effectCategory: 'designation-changed',
-        previousState: expect.objectContaining({ playerId: 'player-a' }),
-        newState: expect.objectContaining({ playerId: 'player-c' }),
-      }),
-    ]);
+    const retiredMoraleEngine = ['fan', 'Morale', 'Engine'].join('');
+    const retiredFavoriteEngine = ['fan', 'Favorite', 'Engine'].join('');
+    const retiredApplyMorale = ['apply', 'Franchise', 'Morale', 'Effect'].join('');
+    const retiredSavePlayer = ['save', 'Franchise', 'Player'].join('');
+    const retiredAlbatrossMultiplier = ['FRANCHISE', 'ALBATROSS', 'TRADE', 'VALUE', 'MULTIPLIER'].join('_');
+    const retiredTradeDiscountPhrase = ['trade', 'discount'].join(' ');
+    expect(combined).not.toMatch(new RegExp(`${retiredMoraleEngine}|${retiredFavoriteEngine}|${retiredApplyMorale}|${retiredSavePlayer}|${retiredAlbatrossMultiplier}|${retiredTradeDiscountPhrase}`, 'i'));
+    expect(combined).not.toMatch(new RegExp(['total', 'Games'].join('')));
   });
 });

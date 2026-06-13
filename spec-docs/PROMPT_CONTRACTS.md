@@ -4207,3 +4207,32 @@ Use high reasoning effort. Think step-by-step.
 ```
 
 **Execution record:** [pending]
+
+
+**Execution record (TV2, 2026-06-12):** Codex 5.5 | very high, two-phase.
+Phase 0 caught the REBUILD-class conflict (TeamHub load-time writes
+'active' MVP/Ace onto player records) → Captain sign-off addendum 7b8b031.
+Phase 1: shared-DB v14 franchiseDesignationRows (one holder per team per
+type); §17 projected engine (MVP/Ace from persisted WAR, FanFav/Albatross
+from canonical valueDelta rows, floors from gamesPerTeam, below-floor = no
+holder); gate chain WAR → TV → designations; TeamHub sync side effect
+REMOVED, badges read canonical rows; trust flipped projected-only with the
+EP1 limitation string. Builder report named ~6 of 12 paths (gap → audit
+D8) and was silent on carryover (resolved by audit D3).
+
+**Audit record (TV2-AUDIT, 2026-06-12):** Fable 5 CLI verdict:
+**"TV2 DELTA VERIFIED."** 10/10 directives; 2 mutations killed (D2
+mount-write mutant: 22 RED across distributed write-pins; D4 gate mutant:
+exactly its test), restores hash-verified 12/12. D7 full enumeration:
+13 added / 11 deleted = +2 exact (7,127/382 new baseline); all 11
+deletions sanctioned (3 rename-subsumptions verified line-by-line, 8
+defended the retired 'active'/embedded path). D9: AMEND-eligibility
+implemented as RELOCATION; bypass risk REFUTED (zero write paths remain
+through eligibility) but stale 'active'/persistable semantics still feed
+context surfaces → FINDING-145. Disagreements 4 MINOR / 0 MAJOR:
+(1) eligibility consistency debt (F-145); (2) builder reporting gap
+REPEAT — next contract template gains "list every path in git status";
+(3) mount pin distributed across 22 write-pins vs one named test —
+invariant stronger in practice, phrasing mismatch only; (4) §17.8 badge
+backgrounds are dark-palette variants of the table's "Light X" prose —
+JK ratification pending.

@@ -76,8 +76,12 @@ import {
   buildFranchiseDesignationMoraleContextAdapterReport,
 } from "../../../utils/franchiseDesignationMoraleContextAdapter";
 import {
-  syncActiveTeamMvpAceDesignationsFromEligibility,
+  getProjectedDesignationBadge,
+  type FranchisePlayerDesignationRecord,
 } from "../../../utils/franchiseDesignations";
+import {
+  getFranchiseDesignationRows,
+} from "../../../utils/franchiseDesignationStorage";
 import {
   buildFranchiseSalaryLifecycle,
   type FranchiseSalaryLifecycleReport,
@@ -722,23 +726,15 @@ function rosterStatSummary(input: {
 function rosterDesignationSummary(input: {
   playerId: string;
   hiddenSafe: boolean;
-  report: FranchiseDesignationEligibilityReport | null;
+  projectedDesignationRows: FranchisePlayerDesignationRecord[];
 }): string {
   if (input.hiddenSafe) return 'Hidden';
-  const records = (input.report?.records ?? []).filter((record) => record.playerId === input.playerId);
-  const active = uniqueStrings(
-    records
-      .filter((record) => record.status === 'active')
-      .map((record) => record.designationType),
+  const projected = uniqueStrings(
+    input.projectedDesignationRows
+      .filter((record) => record.playerId === input.playerId && record.status === 'projected')
+      .map((record) => getProjectedDesignationBadge(record.type).label),
   );
-  if (active.length > 0) return `${active.join(', ')} active`;
-  const preview = uniqueStrings(
-    records
-      .filter((record) => record.status === 'preview-only')
-      .map((record) => record.designationType),
-  );
-  if (preview.length > 0) return `${preview.join(', ')} preview`;
-  if (records.some((record) => record.status === 'blocked')) return 'Blocked';
+  if (projected.length > 0) return `${projected.join(', ')} projected`;
   return '—';
 }
 
@@ -749,7 +745,7 @@ function convertFranchisePlayerToRosterItem(input: {
   moraleSnapshot?: FranchiseMoraleSnapshot;
   batting?: BattingLeaderEntry;
   pitching?: PitchingLeaderEntry;
-  designationEligibilityReport: FranchiseDesignationEligibilityReport | null;
+  projectedDesignationRows: FranchisePlayerDesignationRecord[];
   farmRecordByPlayerId: Map<string, FranchiseFarmRecord>;
   originalIndex: number;
 }): RosterTableItem {
@@ -795,7 +791,7 @@ function convertFranchisePlayerToRosterItem(input: {
     designationSummary: rosterDesignationSummary({
       playerId: player.id,
       hiddenSafe,
-      report: input.designationEligibilityReport,
+      projectedDesignationRows: input.projectedDesignationRows,
     }),
     hiddenSafe,
     originalIndex: input.originalIndex,
@@ -1263,6 +1259,7 @@ export function TeamHubContent() {
   const [valueInputReport, setValueInputReport] = useState<FranchiseValueInputReport | null>(null);
   const [salaryLifecycleReport, setSalaryLifecycleReport] = useState<FranchiseSalaryLifecycleReport | null>(null);
   const [designationEligibilityReport, setDesignationEligibilityReport] = useState<FranchiseDesignationEligibilityReport | null>(null);
+  const [projectedDesignationRows, setProjectedDesignationRows] = useState<FranchisePlayerDesignationRecord[]>([]);
   const [valueTruthLoading, setValueTruthLoading] = useState(false);
   const [valueTruthError, setValueTruthError] = useState<string | null>(null);
   const [randomEventRecords, setRandomEventRecords] = useState<FranchiseRandomEventLogRecord[]>([]);
@@ -1584,6 +1581,7 @@ export function TeamHubContent() {
       setValueInputReport(null);
       setSalaryLifecycleReport(null);
       setDesignationEligibilityReport(null);
+      setProjectedDesignationRows([]);
       setValueTruthLoading(false);
       setValueTruthError(null);
       return;
@@ -1602,27 +1600,22 @@ export function TeamHubContent() {
       setValueTruthError(null);
       try {
         const salaryReport = await buildFranchiseSalaryLifecycle(input, { syncCurrentSalaries: true });
-        const [valueReport, designationReport] = await Promise.all([
+        const [valueReport, designationReport, designationRows] = await Promise.all([
           buildFranchiseValueInputRows(input),
           buildFranchiseDesignationEligibility(input),
+          getFranchiseDesignationRows(input),
         ]);
-        const designationSync = await syncActiveTeamMvpAceDesignationsFromEligibility(designationReport);
-        if (designationSync.savedPlayers.length > 0) {
-          const savedById = new Map(designationSync.savedPlayers.map((player) => [player.id, player]));
-          if (!cancelled) {
-            setFranchiseAllPlayers((players) => players.map((player) => savedById.get(player.id) ?? player));
-            setFranchiseRosterPlayers((players) => players.map((player) => savedById.get(player.id) ?? player));
-          }
-        }
         if (cancelled) return;
         setValueInputReport(valueReport);
         setSalaryLifecycleReport(salaryReport);
         setDesignationEligibilityReport(designationReport);
+        setProjectedDesignationRows(designationRows);
       } catch (err) {
         if (!cancelled) {
           setValueInputReport(null);
           setSalaryLifecycleReport(null);
           setDesignationEligibilityReport(null);
+          setProjectedDesignationRows([]);
           setValueTruthError(err instanceof Error ? err.message : 'Failed to load Franchise v1 value truth labels.');
         }
       } finally {
@@ -2048,6 +2041,15 @@ export function TeamHubContent() {
     selectedTeamId,
   ]);
 
+  const selectedProfileProjectedDesignations = useMemo(() => {
+    if (!selectedProfile) return [];
+    return projectedDesignationRows.filter((designation) =>
+      designation.playerId === selectedProfile.playerId &&
+      designation.status === 'projected' &&
+      (!selectedProfile.teamId || designation.teamId === selectedProfile.teamId),
+    );
+  }, [projectedDesignationRows, selectedProfile]);
+
   const selectedProfileContinuity = useMemo(() => {
     if (!franchiseId || !selectedProfilePlayer) return null;
     return buildFranchisePlayerContinuity({
@@ -2273,7 +2275,7 @@ export function TeamHubContent() {
           moraleSnapshot: moraleSnapshotByPlayerId.get(player.id),
           batting: battingByPlayer.get(player.id),
           pitching: pitchingByPlayer.get(player.id),
-          designationEligibilityReport,
+          projectedDesignationRows,
           farmRecordByPlayerId: rosterFarmRecordByPlayerId,
           originalIndex: index,
         }));
@@ -2297,7 +2299,7 @@ export function TeamHubContent() {
     moraleSnapshotByPlayerId,
     battingByPlayer,
     pitchingByPlayer,
-    designationEligibilityReport,
+    projectedDesignationRows,
     rosterFarmRecordByPlayerId,
     realPlayers,
     realTeams,
@@ -2744,6 +2746,7 @@ export function TeamHubContent() {
             analyticsTrustReport={analyticsTrustReport}
             salaryLifecycleReport={salaryLifecycleReport}
             designationEligibilityReport={designationEligibilityReport}
+            projectedDesignationRows={projectedDesignationRows}
             moraleRelationshipTrustReport={moraleRelationshipTrustReport}
             narrativeEventEligibilityReport={narrativeEventEligibilityReport}
             isLoading={valueTruthLoading || continuityLoading}
@@ -2766,6 +2769,7 @@ export function TeamHubContent() {
             selectedTeamId={selectedTeamId}
             salaryLifecycleReport={salaryLifecycleReport}
             designationEligibilityReport={designationEligibilityReport}
+            projectedDesignationRows={projectedDesignationRows}
             isLoading={valueTruthLoading}
             error={valueTruthError}
           />
@@ -3285,6 +3289,7 @@ export function TeamHubContent() {
       {selectedProfile && (
         <FranchisePlayerProfileModal
           profile={selectedProfile}
+          projectedDesignations={selectedProfileProjectedDesignations}
           continuity={selectedProfileContinuity}
           relationshipContext={selectedProfileRelationshipContext}
           continuityLoading={continuityLoading}
@@ -3332,6 +3337,7 @@ interface FranchiseValueTruthPanelProps {
   selectedTeamId: string;
   salaryLifecycleReport: FranchiseSalaryLifecycleReport | null;
   designationEligibilityReport: FranchiseDesignationEligibilityReport | null;
+  projectedDesignationRows: FranchisePlayerDesignationRecord[];
   isLoading: boolean;
   error: string | null;
 }
@@ -3345,6 +3351,7 @@ interface FranchiseMode2FoundationStatusPanelProps {
   analyticsTrustReport: FranchiseAnalyticsTrustReport | null;
   salaryLifecycleReport: FranchiseSalaryLifecycleReport | null;
   designationEligibilityReport: FranchiseDesignationEligibilityReport | null;
+  projectedDesignationRows: FranchisePlayerDesignationRecord[];
   moraleRelationshipTrustReport: FranchiseMoraleRelationshipTrustReport | null;
   narrativeEventEligibilityReport: FranchiseNarrativeEventEligibilityReport | null;
   isLoading: boolean;
@@ -3414,6 +3421,7 @@ interface FranchisePlayerDirectoryPanelProps {
 
 interface FranchisePlayerProfileModalProps {
   profile: FranchisePlayerProfileViewModel;
+  projectedDesignations: FranchisePlayerDesignationRecord[];
   continuity: FranchisePlayerContinuityReport | null;
   relationshipContext: FranchiseRelationshipContextPreviewReport | null;
   continuityLoading: boolean;
@@ -4188,6 +4196,7 @@ function ProfileSelectInput<T extends string>({
 
 function FranchisePlayerProfileModal({
   profile,
+  projectedDesignations,
   continuity,
   relationshipContext,
   continuityLoading,
@@ -4300,21 +4309,30 @@ function FranchisePlayerProfileModal({
           </div>
         )}
 
-        {profile.activeDesignations.length > 0 && (
+        {projectedDesignations.length > 0 && (
           <section className="mb-3 border-[4px] border-[#4A6844] bg-[#3F563F] p-3">
-            <div className="text-[9px] font-bold text-[#C4A853]">ACTIVE DESIGNATIONS</div>
+            <div className="text-[9px] font-bold text-[#C4A853]">PROJECTED DESIGNATIONS</div>
             <div className="mt-1 text-[8px] text-[#E8E8D8]/65">
-              TEAM_MVP and ACE are active v1 designations only. Season-end locking, morale, salary, awards, and Mode 3 effects remain blocked.
+              Mid-season badges are projected only. Season-end locking, morale, salary, awards, and Mode 3 effects remain blocked.
             </div>
             <div className="mt-2 flex flex-wrap gap-2">
-              {profile.activeDesignations.map((designation) => (
+              {projectedDesignations.map((designation) => {
+                const badge = getProjectedDesignationBadge(designation.type);
+                return (
                 <span
                   key={`${designation.type}:${designation.teamId}:${designation.calculatedAt}`}
-                  className="border-2 border-[#9DFFB0]/60 bg-[#4A6844] px-2 py-1 text-[8px] font-bold text-[#9DFFB0]"
+                  className="border-2 bg-[#4A6844] px-2 py-1 text-[8px] font-bold"
+                  style={{
+                    borderColor: badge.colorHex,
+                    borderStyle: badge.borderStyle,
+                    color: badge.colorHex,
+                    backgroundColor: badge.backgroundHex,
+                  }}
                 >
-                  {designation.type} ACTIVE
+                  {badge.label}
                 </span>
-              ))}
+                );
+              })}
             </div>
           </section>
         )}
@@ -5312,6 +5330,7 @@ function FranchiseMode2FoundationStatusPanel({
   analyticsTrustReport,
   salaryLifecycleReport,
   designationEligibilityReport,
+  projectedDesignationRows,
   moraleRelationshipTrustReport,
   narrativeEventEligibilityReport,
   isLoading,
@@ -5325,10 +5344,9 @@ function FranchiseMode2FoundationStatusPanel({
   const blockedSalaryRows = salaryLifecycleReport?.playerRecords.filter((record) =>
     record.initialSalaryBaseline.status !== 'stable-baseline',
   ).length ?? 0;
-  const activeDesignationCount = designationEligibilityReport?.records.filter((record) =>
-    record.status === 'active' &&
-    (record.designationType === 'TEAM_MVP' || record.designationType === 'ACE'),
-  ).length ?? 0;
+  const projectedDesignationCount = projectedDesignationRows.filter((record) =>
+    record.status === 'projected' && (!selectedTeamId || record.teamId === selectedTeamId),
+  ).length;
   const blockedDesignationCount = designationEligibilityReport?.records.filter((record) =>
     record.status === 'blocked',
   ).length ?? 0;
@@ -5341,9 +5359,9 @@ function FranchiseMode2FoundationStatusPanel({
   const salaryStatus = stableSalaryRows > 0 && blockedSalaryRows === 0
     ? 'trusted'
     : (stableSalaryRows > 0 ? 'partial' : 'blocked');
-  const designationStatus = activeDesignationCount > 0 && blockedDesignationCount === 0
-    ? 'active'
-    : (activeDesignationCount > 0 ? 'partial' : 'blocked');
+  const designationStatus = projectedDesignationCount > 0
+    ? 'preview-only'
+    : (blockedDesignationCount > 0 ? 'blocked' : 'preview-only');
   const moraleStatus = moraleRelationshipTrustReport?.scope.status ?? 'blocked';
   const narrativeStatus = narrativeEventEligibilityReport?.downstreamConsumers.readOnlySummaries.status ?? 'blocked';
 
@@ -5390,7 +5408,7 @@ function FranchiseMode2FoundationStatusPanel({
         <FoundationStatusCard
           title="DESIGNATION ELIGIBILITY"
           status={designationStatus}
-          body={`${activeDesignationCount} TEAM_MVP/ACE active row(s), ${blockedDesignationCount} blocked row(s). Season-end locking, awards, morale, salary, and Mode 3 effects stay blocked.`}
+          body={`${projectedDesignationCount} projected canonical row(s), ${blockedDesignationCount} blocked eligibility row(s). Season-end locking, awards, morale, salary, and Mode 3 effects stay blocked.`}
         />
         <FoundationStatusCard
           title="MORALE / RELATIONSHIPS"
@@ -5853,6 +5871,7 @@ function FranchiseValueTruthPanel({
   selectedTeamId,
   salaryLifecycleReport,
   designationEligibilityReport,
+  projectedDesignationRows,
   isLoading,
   error,
 }: FranchiseValueTruthPanelProps) {
@@ -5877,15 +5896,15 @@ function FranchiseValueTruthPanel({
   const designationRecords = (designationEligibilityReport?.records ?? []).filter((record) =>
     !selectedTeamId || record.teamId === selectedTeamId,
   );
-  const activeDesignationTypes = uniqueStrings(
-    designationRecords
-      .filter((record) => record.status === 'active' && (record.designationType === 'TEAM_MVP' || record.designationType === 'ACE'))
-      .map((record) => record.designationType),
+  const projectedDesignationLabels = uniqueStrings(
+    projectedDesignationRows
+      .filter((record) => record.status === 'projected' && (!selectedTeamId || record.teamId === selectedTeamId))
+      .map((record) => getProjectedDesignationBadge(record.type).label),
   );
   const blockedDesignationSummaries = uniqueStrings(
     designationRecords
       .filter((record) => record.status === 'blocked')
-      .filter((record) => ['FAN_FAVORITE', 'ALBATROSS', 'CAPTAIN', 'FAN_HOPEFUL', 'CORNERSTONE'].includes(record.designationType))
+      .filter((record) => ['CAPTAIN', 'FAN_HOPEFUL', 'CORNERSTONE'].includes(record.designationType))
       .map((record) => `${record.designationType} ${record.status}: ${record.reasons[0]}`),
   ).slice(0, 5);
 
@@ -5937,19 +5956,19 @@ function FranchiseValueTruthPanel({
           <div className="mb-1 font-bold text-[#C4A853]">VALUE MOVEMENT</div>
           <div>Performance salary formula: {formatTruthStatus(performanceStatus)}</div>
           <div>Offseason salary recalculation: {formatTruthStatus(offseasonStatus)}</div>
-          <div>True Value / value delta: DEFERRED until canonical inputs exist.</div>
+          <div>True Value / value delta: TRUSTED for projected designations only.</div>
           <div>Luxury tax, salary matching, and AI salary valuation: BLOCKED / INACTIVE.</div>
         </div>
 
         <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[8px] text-[#E8E8D8]/75">
           <div className="mb-1 font-bold text-[#C4A853]">DYNAMIC DESIGNATIONS</div>
-          {activeDesignationTypes.length > 0 ? (
-            <div>{activeDesignationTypes.join(', ')} active v1 designation(s); season-end locking and carryover remain blocked.</div>
+          {projectedDesignationLabels.length > 0 ? (
+            <div>{projectedDesignationLabels.join(', ')} canonical projected designation(s); season-end locking and carryover remain blocked.</div>
           ) : (
-            <div>No active TEAM_MVP or ACE designation for the current inputs.</div>
+            <div>No projected designation rows for the current inputs.</div>
           )}
-          <div>Designation persistence: ACTIVE for TEAM_MVP/ACE only.</div>
-          <div>Fan Favorite, Albatross, Captain, Fan Hopeful, and Cornerstone remain blocked.</div>
+          <div>Designation persistence: PROJECTED rows only.</div>
+          <div>Captain, Fan Hopeful, season-end locks, morale effects, and trade discounts remain blocked.</div>
         </div>
       </div>
 
@@ -5975,7 +5994,7 @@ function FranchiseValueTruthPanel({
       )}
 
       <div className="mt-3 text-[8px] text-[#E8E8D8]/55">
-        The roster scan is read-only and shows safe salary, morale, stats, and active TEAM_MVP/ACE designation context only.
+        The roster scan is read-only and shows safe salary, morale, stats, and projected canonical designation context only.
       </div>
     </section>
   );
