@@ -5396,4 +5396,15 @@ grep-zero proof; build + test output; "CLEANUP-F147 complete" OR
 Use high reasoning effort. Think step-by-step.
 ```
 
-**Execution record:** [pending]
+**Execution record (CLEANUP-F147, 2026-06-12):** Codex 5.5 | high.
+Complete. Constant name KEPT (FRANCHISE_DESIGNATION_EP1_LIMITATION),
+value replaced → "EP1 R-8 peer pools use starts-derived effective
+positions/Reserve; pitchers pool by profile role in v1; two-way holders
+are valued compositionally with CALIBRATE trait anchors." 3 files
+(franchiseDesignations.ts:13 + 2 test refs). Captain VERIFICATION (Opus
+4.8 high, mechanical — NO independent audit needed, oracle is grep +
+suite count): grep-zero on the old literal CONFIRMED independently; only
+the 3 intended files modified; new string in place at :13; suite 7140/383
+zero delta (run showed 7137 pass / 3 fail — one order-flake didn't trip;
+franchiseManualSmokeFixture solo 4/4; characterized, not regression).
+FINDING-147 CLOSED. No calculationVersion bump (descriptive caveat only).

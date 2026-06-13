@@ -139,3 +139,13 @@ proven (EP1-AUDIT 4 mutations killed), and delta-certified (EP1-GOLDEN-R
 zero unattributed across the adversarial fixture). valuePosition now
 resolves to effective position (plurality-with-incumbency over starts),
 not profile primaryPosition. Closes the R-6 doctrine violation.
+
+
+### FINDING-147 — UPDATE 2026-06-12: CLOSED
+**Status:** CLOSED (CLEANUP-F147, Codex 5.5 high; Captain Opus 4.8 high
+mechanical verification — no independent audit, oracle = grep + suite).
+The false constant value at franchiseDesignations.ts:13 was replaced with
+accurate post-EP1 wording (effective-position/Reserve pools; pitcher
+profile-role v1; two-way CALIBRATE anchors); field + record shape kept
+(Option 1). grep-zero on the old literal confirmed; 3 files; suite
+7140/383 zero delta. No calculationVersion bump.

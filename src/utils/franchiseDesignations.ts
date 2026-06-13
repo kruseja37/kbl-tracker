@@ -10,7 +10,7 @@ export type FranchiseCanonicalDesignationStatus = 'projected' | 'locked';
 export type FranchiseDesignationStatus = FranchiseCanonicalDesignationStatus | 'active';
 
 export const FRANCHISE_DESIGNATION_CALCULATION_VERSION = 'franchise-designations-v2-projected-canonical';
-export const FRANCHISE_DESIGNATION_EP1_LIMITATION = 'peer pools are profile-position until EP1 (R-8)';
+export const FRANCHISE_DESIGNATION_EP1_LIMITATION = 'EP1 R-8 peer pools use starts-derived effective positions/Reserve; pitchers pool by profile role in v1; two-way holders are valued compositionally with CALIBRATE trait anchors.';
 
 export interface FranchiseDesignationPlayerInput {
   playerId: string;

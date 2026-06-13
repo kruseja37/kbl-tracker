@@ -440,7 +440,7 @@ function projectedDesignationRow(type: string, overrides: Record<string, unknown
     type,
     status: 'projected',
     sourceInputs: {
-      peerPoolLimitation: 'peer pools are profile-position until EP1 (R-8)',
+      peerPoolLimitation: 'EP1 R-8 peer pools use starts-derived effective positions/Reserve; pitchers pool by profile role in v1; two-way holders are valued compositionally with CALIBRATE trait anchors.',
     },
     sourceEvidence: [`MODE_2_CANON §17 ${type} projected fixture.`],
     calculationVersion: 'franchise-designations-v2-projected-canonical',

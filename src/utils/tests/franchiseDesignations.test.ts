@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import type { Player } from '../franchisePlayerStorage';
 import {
   calculateFranchiseDesignations,
+  FRANCHISE_DESIGNATION_EP1_LIMITATION,
   getProjectedDesignationBadge,
   minimumAcePitchingAppearances,
   minimumTeamMvpGames,
@@ -55,7 +56,7 @@ describe('franchise projected designations', () => {
     expect(designations.every((designation) => designation.status === 'projected')).toBe(true);
     expect(designations.every((designation) => designation.lockedAt === null)).toBe(true);
     expect(designations.every((designation) =>
-      String(designation.sourceInputs.peerPoolLimitation).includes('EP1'),
+      designation.sourceInputs.peerPoolLimitation === FRANCHISE_DESIGNATION_EP1_LIMITATION,
     )).toBe(true);
   });
 

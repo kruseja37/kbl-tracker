@@ -1094,3 +1094,4 @@ Still unresolved. FINDING-047 fallback path only has base state, not full scoreb
 
 | FINDING-146 | 2026-06-12 | CLOSED | EP1 golden artifacts | D8 deliverable produced + D8-only re-audit (Opus 4.8 Max) "EP1 D8 VERIFIED"; 52 players/13 changed/0 unattributed, all hand-verified, tw_if 260k/+80k (R-8 pt5) | Full text: FINDINGS_142_onwards.md |
 | FINDING-143 | 2026-06-12 | DELTA-CERTIFIED | franchiseEffectivePosition.ts | EP1 effective-position engine resolves valuePosition by starts-plurality, not profile; mutation-proven + delta-certified; R-6 violation closed | Full text: FINDINGS_142_onwards.md |
+| FINDING-147 | 2026-06-12 | CLOSED | franchiseDesignations.ts:13 | CLEANUP-F147: stale EP1 limitation string replaced with accurate post-EP1 wording (Option 1, field kept); grep-zero confirmed, suite zero delta | Full text: FINDINGS_142_onwards.md |
