@@ -1087,3 +1087,7 @@ Still unresolved. FINDING-047 fallback path only has base state, not full scoreb
 | FINDING-144 | 2026-06-12 | CONFIRMED-OPEN | salaryCalculator.ts | R-6 residue in salary path: UTIL/BENCH→IF/OF + TWO-WAY→OF remaps, DH in tables; taxonomy cleanup batch | Full text: FINDINGS_142_onwards.md |
 
 | FINDING-145 | 2026-06-12 | CONFIRMED-OPEN | franchiseDesignationEligibility.ts | Stale pre-§17 'active' semantics feed context surfaces (no write bypass); one-cleanup with 'active' member + embedded-field scrub; EP1/slice-5 | Full text: FINDINGS_142_onwards.md |
+
+| FINDING-146 | 2026-06-12 | OPEN-BLOCKING | EP1 changeset (deliverable) | EP1-AUDIT MAJOR: golden-regression attribution table ABSENT (contract-required 3×); engine logic mutation-proven but fixture-league delta UNPROVEN; F-143 not delta-certified; remedy EP1-GOLDEN → D8 re-audit → closure | Full text: FINDINGS_142_onwards.md |
+
+| FINDING-147 | 2026-06-12 | CONFIRMED-OPEN | franchiseDesignations.ts:13/:223 | EP1-AUDIT MINOR #1: stale 'peer pools profile-position until EP1' string written live into every designation record's peerPoolLimitation, now FALSE post-EP1; outside only-edit list; couples to F-145; F-144/cleanup batch | Full text: FINDINGS_142_onwards.md |

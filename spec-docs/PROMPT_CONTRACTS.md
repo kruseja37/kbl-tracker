@@ -4493,6 +4493,21 @@ All other EP1 contract terms unchanged. Proceed to Phase 1.
 
 ---
 
+# EP1 — EXECUTION RECORD (Codex 5.5 | very high, Phase 1 build)
+**2026-06-12.** New franchiseEffectivePosition.ts (ordered starts-replay,
+incumbent tie-hold, Reserve threshold 0.40, cameo exclusion, anchors
+C→C/IF→2B/OF→CF) + pool-construction changes in salaryCalculator (step-
+percentile machinery untouched) + value-inputs/storage/preview/readiness
+wiring; TRUE_VALUE_CALCULATION_VERSION → v2. Self-reported green (focused
+151/151, tsc clean, build green, suite "7,136/383"). Captain reconciliation
+NFL flagged the builder file/count underreport (FOURTH instance) pre-audit.
+Build code UNCOMMITTED pending audit verdict. Audited by Opus 4.8 Max
+(Fable unavailable) — verdict NOT VERIFIED, D8 BLOCK (see EP1-AUDIT record
+below). Closure deferred to post-EP1-GOLDEN.
+
+
+---
+
 # EP1-AUDIT — Fable 5 CLI audit of the EP1 build (contract)
 **Drafted:** 2026-06-12 | **ROUTE: Fable 5 CLI | high reasoning effort**
 (True Value input semantics changed; golden regression + replay
@@ -4613,3 +4628,27 @@ Use high reasoning effort. Think step-by-step.
 ```
 
 **Execution record:** [pending]
+ — see verdict below.
+
+**Execution record (EP1-AUDIT, 2026-06-12):** Opus 4.8 | Max
+(substituted for Fable, JK-ratified; triangle preserved auditor≠builder).
+**VERDICT: NOT "EP1 DELTA VERIFIED" — 1 MAJOR (BLOCK) / 4 MINOR.**
+Engine logic correct + well-architected; ALL FOUR mutations killed
+RED→restore→GREEN (byte-identical sha restores verified): D3 starts-only
+plurality, D4 incumbency tie-hold (SS→3B flip under mutation), D5 Reserve
+strict-`<` boundary, D6 two-way uncombined composition (bat WAR 2→5 fold
+caught). D1 PASS (13 paths, all in only-edit list; eventLog absent — read-
+only pin holds). D2 PASS (7,140 total = baseline 7,127 +13 / 0 deletions;
+383 files = +1; 4 failures = characterized set, both hard failures
+reproduce on CLEAN HEAD → EP1-independent, both order-flakes pass solo).
+D7 PASS (step-percentile fns byte-clean; only pool construction changed).
+D9 PASS (version → 'true-value-effective-position-v2', persisted both
+paths). D10 PASS (all no-touch surfaces diff-clean; F-144 invented path
+untouched). **D8 ❌ MAJOR/BLOCK:** golden-regression attribution table
+ABSENT (repo/+/tmp/fixtures searched; builder conceded) → FINDING-146.
+MINOR #1 → FINDING-147 (live stale limitation string in designation rows).
+MINOR #2/#3/#4 → non-finding dispositions (FINDINGS_142_onwards.md).
+FINDING-143: implemented + code-verified + mutation-proven, NOT delta-
+certified (gated on D8). Working tree left pristine (diff 58,403 B, 13
+paths, both probed files restored). NEXT: EP1-GOLDEN (Codex produces the
+table) → D8-only re-audit → closure.

@@ -4009,3 +4009,59 @@ browser pass weighted accordingly on the audit leg.
 single closure commit (build + tests + 3 contracts/records + FINDING-
 143 closed + session docs). MAJORs → route fixes before any commit.
 EP1 build code remains UNCOMMITTED in the working tree pending verdict.
+
+
+## 2026-06-12 (cont.) — EP1-AUDIT: NOT VERIFIED, D8 BLOCK (golden regression absent)
+
+**Auditor: Opus 4.8 | Max** (Fable unavailable; JK-ratified substitution,
+triangle preserved auditor≠builder). **Verdict: 1 MAJOR (BLOCK) / 4 MINOR.**
+
+**The engine is sound; the proof is missing.** All four mutation probes
+killed RED→restore→GREEN with byte-identical sha restores — including the
+two hard ones: D4 incumbency tie-hold (mutation flipped valuePosition
+SS→3B on the path-dependence test) and D6 two-way uncombined composition
+(folding arm WAR into the bat side moved bat WAR 2→5, caught). D1/D2/D7/D9/
+D10 all PASS. D2 was proven adversarially: both hard failures reproduce on
+CLEAN HEAD (EP1-independent), both order-flakes pass solo; suite 7,140
+total (baseline +13, 0 deletions), 383 files.
+
+**D8 ❌ MAJOR/BLOCK → FINDING-146.** The contract-required TV-level golden-
+regression attribution table is ABSENT (repo + untracked + /tmp + fixtures
+searched; builder execution record conceded it). Auditor hand-spot-checked
+3 rows against the engine — all attribute to sanctioned causes, but on
+synthetic fixtures, not the real fixture league. The whole-league diff is
+exactly what catches deltas hand-tracing misses; the contract refuses
+"very likely" for the True Value semantics change. Correct refusal —
+Captain would have overruled a wave-through here.
+
+**Captain NFL on the MINORs (two are sharper than 'minor'):**
+- **MINOR #1 → FINDING-147:** the stale 'peer pools are profile-position
+  until EP1' string is written LIVE into every designation record's
+  peerPoolLimitation (franchiseDesignations.ts:223), now FALSE post-EP1.
+  Not cosmetic — persisted-data consistency defect. Outside EP1's only-
+  edit list (no scope breach); couples to FINDING-145; F-144/cleanup home.
+- **MINOR #2 (non-finding):** two sibling processCompletedGame tests mock
+  eventLog without getGameHeadersForScope → EP1's call throws + is
+  swallowed; their TV/designation leg silently no-ops. Latent fragility;
+  remedy folds into the EP1 closure changeset (add the mock export).
+- **MINOR #3 (non-finding, FOURTH instance):** builder file/count
+  underreport is now a recurring PROCESS defect, not a per-ticket nit →
+  D0 process-architecture agenda (standing template line: enumerate every
+  git-status path; report total AND passing counts).
+- **MINOR #4:** stray Rosters.csv — standing pending-JK decision.
+
+**FINDING-143 status:** implemented + code-verified + mutation-proven, NOT
+delta-certified. The mechanism is real; "zero unattributed value movement
+across the fixture league" is unproven until the D8 table exists.
+
+**Working tree left PRISTINE by the auditor** (diff 58,403 B, 13 paths,
+both probed files restored to original sha). EP1 build code remains
+UNCOMMITTED.
+
+**NEXT: draft EP1-GOLDEN** (Codex 5.5 | high — scoped artifact generation,
+not logic). Phase 0 discovers whether a TV-over-fixture-league harness
+already exists; if not, the contract has Codex build the extraction script
+before generating the pre/post table. Then D8-ONLY re-audit (9 directives
+already passed, tree pristine — no full re-run). Then single closure commit
+(build + tests + MINOR #2 mock fix + contracts/records + FINDING-143 closed
++ session/state docs).

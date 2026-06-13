@@ -55,3 +55,63 @@ point 3).
 contradict canonical badges until cleaned. One cleanup: re-point or
 retire eligibility's status vocabulary + remove 'active' member + scrub
 embedded fields. Home: EP1 or slice 5, JK to place at drafting.
+
+
+### FINDING-146
+**Date:** 2026-06-12 | **Phase:** EP1-AUDIT (MAJOR — BLOCK) | **Status:** OPEN-BLOCKING (closes when EP1-GOLDEN delivers the table + D8 re-audit passes)
+**File:** EP1 changeset (uncommitted, post-f8d5f82) — deliverable gap, not a code site
+**Evidence:** Opus 4.8 Max audit (substituted for Fable, JK-ratified) —
+the contract-required TV-level GOLDEN REGRESSION attribution table is
+ABSENT. Exhaustive search (repo grep, untracked files, /tmp, test
+fixtures) found no pre/post True Value diff over the fixture league.
+Builder execution record conceded it was never produced. Contract
+mandates it in three places (CONSTRAINTS "Unattributed delta =
+BLOCKED"; VERIFICATION "artifact attached"; FORMAT "attribution
+table"). Auditor hand-spot-checked 3 rows against the engine
+(effective≠profile, Reserve, two-way) — all attribute to SANCTIONED
+causes, but on synthetic fixtures, NOT the real fixture league.
+**Impact:** EP1 engine logic is code-verified and mutation-proven (D1-
+D7, D9-D10 all PASS; 4 mutations killed RED→restore→GREEN), but
+"zero unattributed True Value delta across the fixture league" is
+UNPROVEN. FINDING-143 is implemented + code-verified but NOT delta-
+certified until this table exists. Whole-league regression catches
+deltas hand-tracing misses by construction. Remedy: EP1-GOLDEN
+contract (Codex produces the pre/post fixture-league TV diff, every
+changed row attributed) → D8-only re-audit → closure. Build code stays
+uncommitted throughout.
+
+### FINDING-147
+**Date:** 2026-06-12 | **Phase:** EP1-AUDIT (MINOR #1) | **Status:** CONFIRMED-OPEN (coupled to FINDING-145 — same module/cleanup; F-144/spec-cleanup batch home)
+**File:** src/utils/franchiseDesignations.ts:13 (const), :223 (write site)
+**Evidence:** Opus audit — FRANCHISE_DESIGNATION_EP1_LIMITATION =
+'peer pools are profile-position until EP1 (R-8)' is written into the
+peerPoolLimitation field of EVERY persisted designation record at :223.
+Post-EP1 the string is FALSE — pools are now effective-position. File
+is correctly OUTSIDE EP1's only-edit list (no scope breach); this is
+consistency debt EP1's F-143 closure surfaces. Live persisted data, not
+just a test string (a TeamHub test also references it).
+**Impact:** Persisted designation rows claim profile-position pooling
+that no longer holds. Couples to FINDING-145 (same module, same status/
+vocabulary cleanup class). Remedy: update or remove the constant + its
+:223 write in the F-144/spec-cleanup batch alongside R-6/R-8/§17.8
+blocks and the F-145 work.
+
+### EP1-AUDIT — non-finding dispositions (logged for completeness)
+- **MINOR #2 (sibling test mocks):** processCompletedGame.warMetadata
+  .test.ts + .warPersistence.test.ts mock '../eventLog' without
+  getGameHeadersForScope → EP1's new TV-path call throws there, swallowed
+  by the TV-gate warn (3 console errors in-suite, suite stays green, no
+  coverage lost — those tests assert WAR persistence only). Latent
+  fragility: their TV/designation leg silently no-ops. NOT a new finding;
+  remedy = add the export to those two mocks, folded into the EP1 closure
+  changeset (test-only, inside the spirit of the EP1 surface).
+- **MINOR #3 (builder reporting gap — FOURTH instance):** file list
+  ("6 source + tests" vs actual 13 paths) + test count ("+9"/"7,136" =
+  passing conflated with total; actual +13 cases / 7,140 total / 7,136
+  pass). Benign on inspection every time, but now a recurring PROCESS
+  defect, not a per-ticket nit. Escalate to a standing PROMPT_CONTRACTS
+  template line ("enumerate EVERY path from git status; report total AND
+  passing counts") — D0 process-architecture agenda item.
+- **MINOR #4 (stray CSV):** reference-docs/Super Mega Baseball 4
+  Rosters.csv — pre-existing untracked, unchanged by EP1; remains the
+  standing pending-JK commit/gitignore decision.
