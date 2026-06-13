@@ -4236,3 +4236,201 @@ REPEAT — next contract template gains "list every path in git status";
 invariant stronger in practice, phrasing mismatch only; (4) §17.8 badge
 backgrounds are dark-palette variants of the table's "Light X" prose —
 JK ratification pending.
+
+
+---
+
+# RULING R-9 — Reserve-Pool Starts Source + F-145 Placement (JK-ratified 2026-06-12)
+**Canonical for EP1 and the R-8 pt-3 Reserve pool.**
+
+1. "Starts" means actual starting-lineup membership — NEVER an innings
+   or appearances proxy. The defensive-replacement bench player (many
+   appearances, few starts) is exactly who the Reserve pool must
+   capture; appearance/innings proxies misclassify him. Innings-based
+   approximations REJECTED.
+2. Source hierarchy (build executes in order; choice is pre-ruled):
+   a. DERIVE — if starting lineups are recoverable from persisted game
+      records (GameTracker sets the starting nine pre-game), count
+      starts from existing data. Zero new persistence.
+   b. SNAPSHOT — otherwise, persist a starters snapshot at game
+      completion (both teams' starter playerIds + positions on the
+      completed-game record). Pre-release: no backfill; old fixtures
+      regenerate.
+3. Starts-share denominator = that team's COMPLETED games to date
+   (count of completed game records; NOT totalGames, NOT schedule
+   rows). RESERVE_STARTS_SHARE_THRESHOLD stays CALIBRATE (default
+   0.40).
+4. Codex STOPs only if BOTH paths hit a structural conflict — the
+   path choice itself is already ruled here.
+
+**Also ruled (same session): FINDING-145 placement = SLICE 5** —
+season-end locking rewrites designation status vocabulary; the
+'active' retirement + embedded-field scrub belong there. EP1 stays
+single-purpose.
+
+
+---
+
+# EP1 — R-8 EFFECTIVE-POSITION ENGINE (contract)
+**Drafted:** 2026-06-12 | **ROUTE: Codex 5.5 | very high → Fable 5 CLI audit**
+(True Value input semantics change; TV-level golden regression
+non-negotiable; heaviest ticket since T5)
+**Closes FINDING-143.** FINDING-145 = slice 5 per R-9 (NOT this
+ticket). FINDING-144 salary-path remaps = spec-cleanup batch (NOT this
+ticket). EP1-AUDIT contract drafted during Phase 1 build (pipelining).
+
+## Quoted source of truth — RULING R-8 points 1-7 + RULING R-9
+(both above in this file, verbatim authority; cite point per change)
+R-8 governs: (1) plurality-with-incumbency effective position for ALL
+position players (day-zero incumbent = profile primary; incumbent
+holds ties; re-resolution only on OUTRIGHT plurality lead; recomputed
+per completed game); (2) pools by effective position, merge groups
+below the peer floor as today; (3) league-wide Reserve pool below the
+starts-share threshold; (4) pitchers pool by PROFILE role v1; (5)
+two-way trait holders EXCLUDED from single pools, valued
+compositionally (arm TV vs profile-role pool + bat TV vs resolved
+trait position, consuming orchestrator WAR rows UNCOMBINED); (6) Two
+Way (C)→C, (IF)→plurality over {1B,2B,SS,3B}, (OF)→over {LF,CF,RF} —
+resolution SCOPES, never positions; day-zero anchors CALIBRATE; (7)
+emergency cross-domain cameos never count. R-9 governs the starts
+source (DERIVE → SNAPSHOT hierarchy, innings proxies rejected,
+completed-games denominator).
+
+## Pinned anatomy (Captain-verified 2026-06-12; Codex re-verifies and cites)
+- franchiseValueInputs.ts:502 — valuePosition = player.primaryPosition
+  (THE FINDING-143 site)
+- franchiseTrueValueStorage.ts:107 — valuePosition → detectedPosition
+  (strict R-6 validation); TRUE_VALUE_CALCULATION_VERSION lives here
+- salaryCalculator.ts:969 POSITION_MERGE_GROUPS / :985
+  getPositionPeerPool / :1015 calculateTrueValue (step-percentile
+  machinery NO-TOUCH; pool construction IS in scope)
+- seasonStorage.ts PlayerSeasonFielding.gamesByPosition — played-
+  position APPEARANCES source (plurality input)
+- salaryCalculator.ts:700-701 — invents 'Two Way (OF)' when
+  player.isTwoWay carries no trait label (R-6-class inventing remap
+  inside the detection path — D-B flags it)
+
+## Contract (handoff text)
+
+```
+You are a senior TypeScript engineer executing EP1 (R-8 effective-
+position engine) for KBL Tracker.
+
+GOAL:
+Replace profile-position peer pooling with R-8 effective-position
+pooling in the True Value pipeline: plurality-with-incumbency for
+position players, league-wide Reserve pool per R-9 starts-share,
+compositional two-way valuation, trait-group resolution scopes.
+Closes FINDING-143.
+
+SOURCE OF TRUTH:
+- RULING R-8 points 1-7 + RULING R-9 (PROMPT_CONTRACTS.md) — cite the
+  point per change
+- R-6 taxonomy (label vocabulary unchanged; strict validation stands)
+- R1' ruling: totalGames BANNED; season-length denominators from
+  gamesPerTeam config-truth; R-9 starts-share denominator = team
+  COMPLETED games to date
+- Pinned anatomy in the EP1 header above (re-verify, then cite)
+
+PHASE 0 — DISCOVERY (report and STOP for Captain sign-off before
+building):
+- D-A Starts source (R-9 hierarchy): determine whether starting
+  lineups are recoverable from persisted game records — file:line
+  evidence either way. Report DERIVE or SNAPSHOT as the build path.
+  If SNAPSHOT: name the exact completed-game record type and the
+  write site, for the sign-off only-edit list. Innings/appearance
+  proxies are REJECTED (R-9 pt 1) — do not propose them.
+- D-B Two-way detection: inventory what trait holders ACTUALLY carry —
+  trait label strings, player.isTwoWay flag, profile primaryPosition
+  values. Flag salaryCalculator.ts:700-701 (invented 'Two Way (OF)').
+  Report the canonical detection source EP1 should use.
+- D-C Persisted WAR row shape: confirm batting and pitching WAR rows
+  are retrievable UNCOMBINED per player (R-8 pt 5 requires it);
+  file:line.
+- D-D Pool-construction blast radius: every caller of
+  calculateTrueValue / getPositionPeerPool beyond the canonical
+  persistence path; every consumer of
+  FranchiseValueInputRow.valuePosition.
+- D-E Day-zero anchors: report profile primaryPosition distribution
+  of current Two Way (IF)/(OF) holders so JK can set CALIBRATE
+  anchors at sign-off.
+- D-F Recalc determinism: confirm effective-position resolution can
+  run inside the post-game gate chain (WAR → TV → designations) with
+  inputs available at that point; identify where incumbency state
+  lives (derived fresh each recalc from season rows + profile anchor
+  vs persisted) — propose, with the determinism argument, for
+  sign-off.
+
+PHASE 1 — BUILD (after sign-off; only-edit list finalized in the
+sign-off addendum):
+- Effective-position resolution module (new): position players only;
+  plurality-with-incumbency per R-8 pt 1; cameo exclusion per pt 7
+  (position-player pitching appearances and pitcher position
+  appearances never count); deterministic — same inputs, same output.
+- Starts counting per the D-A path (R-9): DERIVE from existing
+  records, or SNAPSHOT starter playerIds + positions on game
+  completion. Starts-share = player starts / team completed games to
+  date.
+- valuePosition (franchiseValueInputs.ts:502) becomes effective
+  position for position players; PROFILE role for pitchers (pt 4,
+  behavior unchanged); two-way holders tagged for the compositional
+  path (pt 5), never assigned a single-pool valuePosition.
+- Pool construction: Reserve membership (starts-share <
+  RESERVE_STARTS_SHARE_THRESHOLD, CALIBRATE constant, default 0.40)
+  routes to ONE league-wide Reserve pool; otherwise effective-
+  position pool with existing merge-group + league fallback below
+  TRUE_VALUE_MIN_PEER_POOL_SIZE. Step-percentile machinery
+  (getPercentile/getValueAtPercentile) UNTOUCHED.
+- Two-way compositional valuation: arm TV = pWAR percentile vs
+  profile-role pool salaries; bat TV = batting+fielding+baserunning
+  WAR percentile vs resolved trait-position pool; True Value =
+  arm TV + bat TV; consumes persisted WAR rows UNCOMBINED (pt 5);
+  trait-group scopes per pt 6.
+- TRUE_VALUE_CALCULATION_VERSION bumped; rows persist the effective
+  position used; readiness/limitation strings drop "peer pools are
+  profile-position until EP1 (R-8)" and document Reserve/two-way
+  semantics + the D-A starts-source path taken.
+- Designation engine criteria (§17) UNCHANGED — it consumes upgraded
+  True Value rows automatically.
+
+CONSTRAINTS:
+- Do NOT touch: ivEngine.ts, frozen oracle, tierParams.ts,
+  warOrchestrator.ts internals, step-percentile machinery, §17
+  designation criteria/floors, fanMoraleEngine.ts, offseason flows,
+  salary-path remaps (FINDING-144 — cleanup batch), eligibility
+  'active' semantics (FINDING-145 — slice 5 per R-9).
+- TV-level GOLDEN REGRESSION: capture pre-EP1 True Value rows for the
+  fixture league; post-EP1 diff must attribute EVERY changed row to a
+  sanctioned cause (effective ≠ profile position, Reserve membership,
+  two-way compositional). Unattributed delta = BLOCKED.
+- Mutation-pinned tests: incumbency tie-hold; outright-plurality
+  flip; day-zero anchor; cameo exclusion (both directions); Reserve
+  threshold boundary; defensive-replacement case (high appearances,
+  low starts → Reserve); two-way single-pool exclusion; compositional
+  sum; trait-scope resolution per group; pitcher profile-role
+  stability; calculationVersion bump; totalGames grep-pin.
+
+VERIFICATION:
+- NODE_ENV= npm run build green; focused tests green; full suite =
+  characterized set only (exact delta vs 7,127/382); golden
+  regression artifact attached to the report.
+
+FORMAT:
+Phase 0 report → STOP. Then: files changed (list EVERY path in git
+status, including mechanically-forced test/mock adjustments); changes
+(cite the R-8/R-9 point per change); verification output (exact);
+golden regression attribution table; "EP1 complete" OR "BLOCKED:
+[exact reason]".
+
+FAILURE PROTOCOL:
+- BOTH R-9 starts paths structurally blocked → STOP at Phase 0,
+  await ruling
+- Any REBUILD-class conflict with existing code → STOP, report
+- Ambiguity → quote the exact R-8/R-9 point and ask
+- Suite failure outside the characterized set → BLOCK; never bend
+  tests
+
+Use very high reasoning effort. Think step-by-step.
+```
+
+**Execution record:** [pending]
