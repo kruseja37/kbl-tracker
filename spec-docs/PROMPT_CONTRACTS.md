@@ -5022,3 +5022,66 @@ Use high reasoning effort. Think step-by-step.
 ```
 
 **Execution record:** [pending]
+
+
+---
+
+# EP1-GOLDEN-R — PHASE 0 REVISION REQUEST (Captain, 2026-06-12)
+**NOT signed off. Fixture is structurally correct but numerically
+TOOTHLESS — re-spec required, then re-report Phase 0.** Cite drift noted
+(non-blocking): resolver export is franchiseEffectivePosition.ts:171, not
+:141; preview composite arm/bat at :290/:296. Entry point + strict-`<0.4`
+boundary logic VERIFIED correct.
+
+## Why the current fixture proves nothing
+True Value is a PERCENTILE within a pool: warPercentile of the player's
+WAR among pool WARs → salary at that percentile among pool salaries. The
+draft put EVERY adversarial player at WAR 0.05-0.20 — DEAD LAST in its
+pools both pre and post. At the bottom percentile, TV maps to the pool
+floor; with the cohort salary ladders as drafted, the deltas collapse to
+~zero. The table would render "cause present, ~0 delta" — coverage in
+appearance, proof in substance NONE. This is the flatter-not-probe
+failure this checkpoint exists to catch.
+
+## Required fixes (keep structure; re-number WAR + salaries)
+Captain pre-verified the following produce nonzero, hand-predictable,
+correctly-signed deltas (rank-percentile model; confirm against the real
+step-percentile engine in Phase 0):
+
+1. **Switchers land INTERIOR + paired pools get ASYMMETRIC salary shapes.**
+   - near_2b_ss + clean_lf_cf: set WAR so each sits mid-pack in its pools
+     (e.g. total WAR 1.25 against cohorts laddered 1.00-1.50).
+   - 2B cohort cheap+flat (all 100k); SS cohort expensive+spread
+     (200k-450k) → 2B→SS switch moves TV ~+200k (pre 100k → post 300k).
+   - LF cohort flat (300k); CF cohort spread (400k-900k) → LF→CF switch
+     moves TV ~+300k.
+   - Hand-calc MUST now show expected delta MAGNITUDE + DIRECTION, not
+     just the resolved position.
+
+2. **Reserve player is EXPENSIVE + LOW-WAR (the Albatross story), NOT
+   interior.** A high-salary player (~700k) with low WAR (~0.30) and
+   <0.40 starts: pre-EP1 pools with its profile cohort (RF, expensive)
+   → bottom percentile → high pool salary (~700k); post-EP1 drops to the
+   league-wide Reserve pool (cheap bench mix ~90-130k) where its 0.30 WAR
+   is MID/HIGH percentile → ~120k. Delta ~ −580k. THIS is what proves
+   Reserve repositioning moves value. (An interior-WAR reserve player
+   nets ~0 — Captain verified — so do NOT make this one interior.)
+
+3. **Two-way composite lands INTERIOR on BOTH sides.** tw_if: arm WAR
+   interior vs the SP/RP cohort (laddered salaries 100k-200k → arm TV
+   ~140k), bat WAR interior vs the 2B anchor cohort → bat TV. Post total
+   = arm + bat. CRITICAL pre/post framing: pre-EP1 has NO two-way path —
+   the holder is valued as a SINGLE pool (its profile SP/RP, one WAR
+   figure); post-EP1 splits into arm+bat composite. The delta to show is
+   single-value(pre) vs composite(post). Confirm in Phase 0 exactly how
+   pre-EP1 treats a Two Way (IF) holder (profile SP/RP single pool?) so
+   the composite delta is real, not an artifact of mismatched inputs.
+
+## Re-report Phase 0 with
+- The re-numbered fixture table (WAR + salary per player/cohort).
+- Hand-calc per adversarial player: pre TV, post TV, expected delta
+  (magnitude + sign), and which sanctioned cause it demonstrates.
+- Phase 0 confirmation of the pre-EP1 two-way treatment (point 3).
+- Then STOP again for Captain sign-off.
+
+Use high reasoning effort. Think step-by-step.
