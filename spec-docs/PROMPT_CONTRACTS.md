@@ -5128,3 +5128,49 @@ from this hand-calc, which is exactly what the table must surface). Then
 STOP for D8-only re-audit.
 
 Use high reasoning effort. Think step-by-step.
+
+
+---
+
+# EP1-GOLDEN-R — SIGN-OFF CORRECTION REVERSED (Captain, 2026-06-12)
+**Codex BLOCK was CORRECT. Captain's tw_if "correction" was the error.**
+The prior sign-off (242697c) wrongly raised tw_if's target to 280k/+100k
+by including tw_if in its own arm peer pool (7 members → 180k arm TV).
+That violates R-8 pt 5: two-way holders are EXCLUDED from single-position
+pools. Engine verified self-exclusion at franchiseTrueValuePreview.ts:253
+(allPlayers filters kind==='single') and franchiseTrueValueStorage.ts:430
+(singleEntries only). Codex refused to hand-author around the canonical
+path to hit a wrong target — the stop-gate working exactly as designed.
+
+## Corrected (engine-exact, self-exclusion applied)
+- ARM: pWAR 1.25 vs 6-member sprp pool (excl tw_if): pct 0.500, index 3,
+  salaries [100,120,140,160,180,200]k → armTV **160k**.
+- BAT: bat WAR 1.25 (1.10+0.05+0.10) vs 6-member 2B anchor pool (excl
+  tw_if): pct 0.500, index 3, salaries all 100k → batTV **100k**.
+- POST = 160k + 100k = **260k**.
+- PRE: pre-EP1 has no two-way path → tw_if is a single SP/RP row, IN its
+  own 7-member pool, total WAR 2.50: pct 0.571 → **180k**.
+- DELTA = +80k. (Codex's original Phase 0 figure was correct.)
+
+Note the instructive asymmetry: pre-EP1 the holder sits IN its pool;
+post-EP1 it is EXCLUDED from both — the exclusion itself is part of the
+value change. Good two-way coverage; magnitude +80k, not +100k.
+
+## BINDING TARGETS for the generated table (this entry supersedes 242697c's tw_if row)
+| player | cause | pre TV | post TV | delta |
+|---|---|---:|---:|---:|
+| near_2b_ss | effective≠profile (near-tie) | 100k | 400k | +300k |
+| clean_lf_cf | effective≠profile (clean) | 300k | 800k | +500k |
+| boundary_3b | 0.40 boundary NON-Reserve | 800k | 800k | 0 |
+| reserve_rf | Reserve | 700k | 130k | −570k |
+| tw_if | two-way composite | 180k | **260k** | **+80k** |
+
+## Phase 1 RE-AUTHORIZED — generate now
+Proceed with the signed-off fixture (UNCHANGED numbers) and the table
+above as the binding expected column. tw_if = 260k / +80k. All other rows
+unchanged from 242697c (those four were verified MATCH). Generate
+scripts/ep1-golden-regression.mjs + spec-docs/EP1_GOLDEN_REGRESSION.md;
+pre-EP1 via git f8d5f82; every generated delta must match this table;
+deviation → STOP. Then STOP for D8-only re-audit.
+
+Use high reasoning effort. Think step-by-step.
