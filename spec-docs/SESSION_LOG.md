@@ -3956,3 +3956,56 @@ Codex 5.5 | very high → Fable 5 CLI audit. Read CURRENT_STATE.md
 2026-06-12 TV2-close entry + RULING R-8 (PROMPT_CONTRACTS.md) before
 drafting. JK browser-verify note outstanding: TeamHub projected badges
 (fewer early-season badges is CORRECT).
+
+
+## 2026-06-12 (cont.) — EP1 ARC: Phase 0 → Phase 1 build → audit routing
+
+**EP1 (R-8 effective-position engine) — heaviest ticket since T5.**
+Drafted + committed the EP1 contract (557ded9) carrying RULING R-9
+(starts-source DERIVE→SNAPSHOT hierarchy, innings proxies rejected,
+completed-games denominator; F-145 placed at slice 5). Codex Phase 0
+(very high) returned DERIVE: starting lineups persist on
+GameHeader.startingLineups (eventLog.ts), retrievable via
+getGameHeadersForScope({isComplete:true}) — zero new persistence.
+Captain VERIFIED every load-bearing citation against the code before
+sign-off.
+
+**Sign-off surfaced a Captain-caught wrinkle → RULING R-10
+(f8d5f82):** incumbency is history-dependent, so resolution must
+replay the season in game order each recalc; starting lineups are the
+only ordered per-game position source (sub positions would need
+event-stream scans every recalc). Ruled plurality unit = STARTS, with
+appearances-based plurality as the documented CALIBRATE upgrade path
+(single swap point in the new module). Anchors ratified C→C, IF→2B,
+OF→CF; incumbency derived fresh (no persisted state); final only-edit
+list + 3 test pins (path-dependence, sub-exclusion, anchor) set in the
+Phase 0 addendum.
+
+**Codex Phase 1 build (very high):** new franchiseEffectivePosition.ts
++ pool-construction changes in salaryCalculator (step-percentile
+machinery untouched) + value-inputs/storage/preview/readiness wiring.
+Self-reported green: focused 151/151, tsc clean, build green, suite
+7,136/383 (+9/+1 vs baseline), 4 failures = characterized set, order-
+flake solos green. Captain reconciliation NFL: builder underreported
+its file list a THIRD time ("6 source + tests for the same surfaces"
+vs actual 6 source + new module + 5 test files) — nothing out of
+scope on inspection, but D1 of the audit adjudicates each path
+independently. Golden-regression table NOT mentioned in the build
+report → audit D8 blocks on its absence.
+
+**EP1-AUDIT contract drafted + committed (667fccf):** ten directives,
+golden regression (D8) + incumbency replay (D4) as priority targets,
+file-enumeration (D1) flagged as the third reporting-gap repeat.
+
+**AUDITOR SUBSTITUTION (JK-ratified):** Fable 5 CLI unavailable. EP1
+audit routed to Opus 4.8 | Max — triangle preserved (auditor ≠
+builder; the rule protects separation, not Fable-identity). Same
+contract verbatim, same adversarial stance, block-on-missing-golden-
+table holds. Logged as deliberate substitution, NOT silent. Caveat:
+Opus-as-auditor is uncharacterized — first verdict of its kind; JK
+browser pass weighted accordingly on the audit leg.
+
+**NEXT:** JK runs the EP1 audit on Opus 4.8 | Max. Clean verdict →
+single closure commit (build + tests + 3 contracts/records + FINDING-
+143 closed + session docs). MAJORs → route fixes before any commit.
+EP1 build code remains UNCOMMITTED in the working tree pending verdict.

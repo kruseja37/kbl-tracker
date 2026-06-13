@@ -4498,6 +4498,17 @@ All other EP1 contract terms unchanged. Proceed to Phase 1.
 (True Value input semantics changed; golden regression + replay
 correctness are the primary targets; audit non-negotiable)
 
+**AUDITOR SUBSTITUTION (JK-ratified 2026-06-12):** Fable 5 CLI
+UNAVAILABLE this session. EP1 audit routed to **Opus 4.8 | Max** as
+the independent auditor. Triangle PRESERVED — auditor (Opus) ≠ builder
+(Codex); the rule protects auditor-≠-builder, not Fable-identity.
+Conditions: SAME contract verbatim (this block, commit 667fccf); same
+ten directives + mutations; block-on-missing-golden-table holds;
+adversarial stance ("assume failure") carries over unchanged. CAVEAT:
+Opus-as-auditor is UNCHARACTERIZED — a "DELTA VERIFIED" verdict here is
+this configuration's first; JK browser pass carries extra weight on
+the audit leg accordingly.
+
 ```
 You are the independent auditor for EP1 (R-8 effective-position
 engine). You did not write this code. Assume failure until proven
