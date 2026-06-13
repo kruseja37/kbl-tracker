@@ -4489,3 +4489,116 @@ holder profiles). Binding decisions:
    (mutation: count gamesByPosition appearances → RED);
    (c) anchor pin — zero-start Two Way (IF) resolves to 2B.
 All other EP1 contract terms unchanged. Proceed to Phase 1.
+
+
+---
+
+# EP1-AUDIT — Fable 5 CLI audit of the EP1 build (contract)
+**Drafted:** 2026-06-12 | **ROUTE: Fable 5 CLI | high reasoning effort**
+(True Value input semantics changed; golden regression + replay
+correctness are the primary targets; audit non-negotiable)
+
+```
+You are the independent auditor for EP1 (R-8 effective-position
+engine). You did not write this code. Assume failure until proven
+otherwise. Audit the git diff of the EP1 changeset (uncommitted,
+post-f8d5f82) against the EP1 contract + RULING R-8 + R-9 + R-10 +
+the Phase 0 sign-off addendum (PROMPT_CONTRACTS.md).
+
+GOAL: verdict "EP1 DELTA VERIFIED" or itemized MAJOR/MINOR
+disagreements.
+
+DIRECTIVES:
+
+D1 — File enumeration (PRIORITY — third repeat of the reporting gap):
+  List EVERY changed path from `git status --short` (modified, new,
+  untracked-but-staged). Builder named 6 source files + "tests for the
+  same surfaces"; actual is 6 source + new franchiseEffectivePosition.ts
+  + 5 test files (incl. src_figma/__tests__/engines/salaryCalculator
+  .test.ts). Adjudicate each path: in the addendum point-6 only-edit
+  list, or a MAJOR scope breach. eventLog.ts MUST be absent from the
+  diff (read-only pin); any edit there is a MAJOR.
+
+D2 — Suite reconciliation, FULL enumeration: baseline 7,127/382 →
+  reported 7,136/383 (+9 tests / +1 file). Enumerate every ADDED test;
+  the +1 file is franchiseEffectivePosition.test.ts (confirm). Confirm
+  all 4 reported failures are the CHARACTERIZED set only
+  (wpaRuntimeBoundary, franchiseNarrativeEventEligibility, order-flakes
+  franchiseManualSmokeFixture + GameTrackerLaunchState) — re-run each
+  order-flake solo to confirm green in isolation. Any non-characterized
+  failure → BLOCK.
+
+D3 — R-10 plurality unit = STARTS (mutation-pinned): effective position
+  counts GameHeader.startingLineups membership ONLY, never
+  gamesByPosition appearances. Mutation: repoint the plurality count at
+  fielding gamesByPosition → must go RED on the sub-appearance-exclusion
+  test. Confirm the test exists and is real (not a tautology).
+
+D4 — Incumbency replay correctness (R-8 pt 1, the hardest logic):
+  resolution replays completed games in (date, gameId) order; day-zero
+  incumbent = profile primary (or trait anchor); incumbent HOLDS on any
+  tie; re-resolution ONLY on an OUTRIGHT plurality lead. Mutation: make
+  a tie fall to current-plurality-leader (or profile) instead of the
+  incumbent → must go RED on the path-dependence test (profile 2B,
+  early outright SS lead, later 3-3 tie → SS holds). Confirm
+  determinism: no persisted incumbency state (grep-pin); same inputs →
+  same output.
+
+D5 — Reserve pool (R-8 pt 3 / R-9): starts-share < 0.40 (CALIBRATE
+  constant, confirm the name + default) routes to ONE league-wide
+  Reserve pool; denominator = team COMPLETED games to date (NOT
+  totalGames — grep-pin absent; NOT schedule rows). Mutation: flip the
+  comparator or swap the denominator → RED on the threshold-boundary
+  test. Confirm the defensive-replacement case (high appearances, low
+  starts) lands in Reserve.
+
+D6 — Two-way compositional valuation (R-8 pt 5/6): trait holders
+  EXCLUDED from single-position pools; detection via
+  TWO_WAY_TRAIT_POSITION labels ONLY (NOT player.isTwoWay; NOT the
+  salaryCalculator.ts:700-701 invented path — confirm that path is
+  untouched). True Value = arm TV (pWAR percentile vs profile-role pool
+  salaries) + bat TV (batting+fielding+baserunning WAR percentile vs
+  resolved trait-position pool), consuming persisted WAR rows
+  UNCOMBINED. Trait scopes: (C)→C, (IF)→plurality over {1B,2B,SS,3B}
+  anchor 2B, (OF)→over {LF,CF,RF} anchor CF. Mutation: combine the two
+  WAR sources before percentile, or assign a two-way holder a single
+  pool → RED on the composite/exclusion tests. Confirm zero-start
+  Two Way (IF) resolves to 2B (anchor pin).
+
+D7 — Step-percentile machinery UNTOUCHED (contract NO-TOUCH): the
+  percentile fns (getPercentile/getValueAtPercentile) are byte-clean in
+  the diff; only pool CONSTRUCTION (getPositionPeerPool +
+  trueValuePool/RESERVE/exclusion plumbing) changed. Confirm via diff
+  that calculation internals were not edited.
+
+D8 — TV-level GOLDEN REGRESSION (PRIORITY): obtain the builder's
+  pre/post True Value attribution table (contract-required artifact). If
+  ABSENT → MAJOR (contract deliverable missing). If present: every
+  changed True Value row must attribute to a SANCTIONED cause
+  (effective ≠ profile position, Reserve membership, two-way
+  compositional). Spot-check ≥3 rows against the engine by hand:
+  one position player whose effective ≠ profile, one Reserve member,
+  one two-way holder. Any UNATTRIBUTED delta → BLOCK/MAJOR.
+
+D9 — calculationVersion bump: TRUE_VALUE_CALCULATION_VERSION changed
+  (semantics changed → version must move). Confirm the new value is
+  persisted on rows and the readiness limitation string dropped "peer
+  pools are profile-position until EP1 (R-8)" and now documents
+  Reserve/two-way + the starts-source path.
+
+D10 — No-touch sweep: ivEngine.ts, frozen oracle, tierParams.ts,
+  warOrchestrator internals, §17 designation criteria/floors,
+  fanMoraleEngine.ts, offseason flows, salary-path remaps (F-144),
+  eligibility 'active' semantics (F-145) — all diff-CLEAN.
+
+CARVE-OUTS: sibling spec-doc appends are sanctioned session
+documentation.
+
+FORMAT: verdict first; per-directive evidence (commands + output);
+disagreements MAJOR/MINOR with file:line; new finding candidates;
+explicit confirmation that FINDING-143 is closed by this changeset.
+
+Use high reasoning effort. Think step-by-step.
+```
+
+**Execution record:** [pending]
