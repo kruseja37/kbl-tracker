@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { optimizeLineup } from '../rosterAnalyzer';
+import { optimizeLineup, recommendRosterMoves } from '../rosterAnalyzer';
 import { effectiveRatings } from '../effectiveRatings';
 import { computeIV, type IVPlayerInput } from '../ivEngine';
 import type { Team } from '../../utils/leagueBuilderStorage';
@@ -101,7 +101,7 @@ describe('rosterAnalyzer optimizeLineup', () => {
   test('exports optimizeLineup only', async () => {
     const module = await import('../rosterAnalyzer');
 
-    expect(Object.keys(module)).toEqual(['optimizeLineup']);
+    expect(Object.keys(module).sort()).toEqual(['optimizeLineup', 'recommendRosterMoves']);
   });
 
   test('hitter effective ratings override reaches kblIV through input.ratings', () => {
@@ -288,5 +288,85 @@ describe('rosterAnalyzer optimizeLineup', () => {
     const source = readFileSync('src/engines/rosterAnalyzer.ts', 'utf8');
 
     expect(source).not.toMatch(/salaryCalculator|tierParams|playerDatabase|React|Date\.now|Math\.random|indexedDB|gameStorage/);
+  });
+
+  test('recommendRosterMoves is advisory-only and does not import or call roster movement executors', () => {
+    const source = readFileSync('src/engines/rosterAnalyzer.ts', 'utf8');
+
+    expect(source).not.toMatch(/franchiseRosterMovement|callUpFranchisePlayer|sendDownFranchisePlayer/);
+  });
+
+  test('recommendRosterMoves is leak-safe for hidden farm prospects', () => {
+    const teamInput = {
+      players: [{
+        id: 'known-underperformer',
+        name: 'Known Underperformer',
+        primaryPosition: 'SS',
+        valueDelta: -2_000,
+        eligibleForSendDown: true,
+      }],
+    };
+    const hiddenProspect = {
+      id: 'hidden-prospect',
+      name: 'Hidden Prospect',
+      primaryPosition: 'SS',
+      scoutedGrade: 'B+',
+      scoutConfidence: 'medium',
+      scoutVisibleSalary: 2_000,
+      trueRatings: { power: 1, contact: 1, speed: 1 },
+      trueOverall: 'D-' as const,
+      trueIV: 1,
+    };
+
+    const base = recommendRosterMoves(teamInput, [hiddenProspect], { valueDeltas: { 'known-underperformer': -2_000 } });
+    const trueRatingsChanged = recommendRosterMoves(teamInput, [{
+      ...hiddenProspect,
+      trueRatings: { power: 99, contact: 99, speed: 99 },
+      trueOverall: 'S' as const,
+      trueIV: 999_999,
+    }], { valueDeltas: { 'known-underperformer': -2_000 } });
+    const scoutedGradeChanged = recommendRosterMoves(teamInput, [{
+      ...hiddenProspect,
+      scoutedGrade: 'D',
+    }], { valueDeltas: { 'known-underperformer': -2_000 } });
+
+    expect(trueRatingsChanged).toEqual(base);
+    expect(scoutedGradeChanged).not.toEqual(base);
+    expect(base[0]).toMatchObject({
+      kind: 'call_up',
+      playerId: 'hidden-prospect',
+      replacesPlayerId: 'known-underperformer',
+      scoutConfidence: 'medium',
+      positionalFit: true,
+    });
+    expect(base[0].justification).toContain('projects as a positive-surplus replacement');
+    expect(base[0].justification).not.toMatch(/\b(true|IV|overall|rating|ratings)\b/i);
+  });
+
+  test('recommendRosterMoves gates positional fit and ranks by surplus gap', () => {
+    const result = recommendRosterMoves({
+      players: [
+        { id: 'ss-known', name: 'SS Known', primaryPosition: 'SS', valueDelta: -1_000, eligibleForSendDown: true },
+        { id: 'cf-known', name: 'CF Known', primaryPosition: 'CF', valueDelta: 500, eligibleForSendDown: true },
+      ],
+    }, [
+      { id: 'ss-prospect', name: 'SS Prospect', primaryPosition: 'SS', scoutedGrade: 'A', scoutConfidence: 'high', scoutVisibleSalary: 2_000 },
+      { id: 'of-prospect', name: 'OF Prospect', primaryPosition: 'LF', secondaryPositions: ['CF'], scoutedGrade: 'B', scoutConfidence: 'low', scoutVisibleSalary: 2_000 },
+      { id: 'bad-fit', name: 'Bad Fit', primaryPosition: 'C', scoutedGrade: 'S', scoutConfidence: 'high', scoutVisibleSalary: 1_000 },
+    ], {
+      calloutThreshold: 500,
+      valueDeltas: {
+        'ss-known': -1_000,
+        'cf-known': 500,
+      },
+    });
+
+    expect(result.map((recommendation) => recommendation.playerId)).not.toContain('bad-fit');
+    expect(result[0]).toMatchObject({
+      playerId: 'ss-prospect',
+      replacesPlayerId: 'ss-known',
+      surplusGap: expect.any(Number),
+    });
+    expect(result[0].surplusGap).toBeGreaterThan(result[result.length - 1].surplusGap);
   });
 });

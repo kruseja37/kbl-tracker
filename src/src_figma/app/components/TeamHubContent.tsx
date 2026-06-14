@@ -65,6 +65,10 @@ import {
   type FranchiseTrueValuePreviewReport,
 } from "../../../utils/franchiseTrueValuePreview";
 import {
+  getFranchiseTrueValueRows,
+  type FranchiseTrueValueRow,
+} from "../../../utils/franchiseTrueValueStorage";
+import {
   buildFranchiseExpectedWinsPreviewReport,
   type FranchiseExpectedWinsPreviewReport,
 } from "../../../utils/franchiseExpectedWinsPreview";
@@ -1282,6 +1286,7 @@ export function TeamHubContent() {
   const [continuityLoading, setContinuityLoading] = useState(false);
   const [continuityError, setContinuityError] = useState<string | null>(null);
   const [valueInputReport, setValueInputReport] = useState<FranchiseValueInputReport | null>(null);
+  const [franchiseTrueValueRows, setFranchiseTrueValueRows] = useState<FranchiseTrueValueRow[]>([]);
   const [salaryLifecycleReport, setSalaryLifecycleReport] = useState<FranchiseSalaryLifecycleReport | null>(null);
   const [designationEligibilityReport, setDesignationEligibilityReport] = useState<FranchiseDesignationEligibilityReport | null>(null);
   const [projectedDesignationRows, setProjectedDesignationRows] = useState<FranchisePlayerDesignationRecord[]>([]);
@@ -1604,6 +1609,7 @@ export function TeamHubContent() {
   useEffect(() => {
     if (!franchiseId || !seasonId) {
       setValueInputReport(null);
+      setFranchiseTrueValueRows([]);
       setSalaryLifecycleReport(null);
       setDesignationEligibilityReport(null);
       setProjectedDesignationRows([]);
@@ -1625,19 +1631,22 @@ export function TeamHubContent() {
       setValueTruthError(null);
       try {
         const salaryReport = await buildFranchiseSalaryLifecycle(input, { syncCurrentSalaries: true });
-        const [valueReport, designationReport, designationRows] = await Promise.all([
+        const [valueReport, designationReport, designationRows, trueValueRows] = await Promise.all([
           buildFranchiseValueInputRows(input),
           buildFranchiseDesignationEligibility(input),
           getFranchiseDesignationRows(input),
+          getFranchiseTrueValueRows(input),
         ]);
         if (cancelled) return;
         setValueInputReport(valueReport);
+        setFranchiseTrueValueRows(trueValueRows);
         setSalaryLifecycleReport(salaryReport);
         setDesignationEligibilityReport(designationReport);
         setProjectedDesignationRows(designationRows);
       } catch (err) {
         if (!cancelled) {
           setValueInputReport(null);
+          setFranchiseTrueValueRows([]);
           setSalaryLifecycleReport(null);
           setDesignationEligibilityReport(null);
           setProjectedDesignationRows([]);
@@ -1949,11 +1958,13 @@ export function TeamHubContent() {
       team: franchiseTeam,
       players: franchiseAllPlayers,
       farmRecords: franchiseFarmRecords,
+      trueValueRows: franchiseTrueValueRows,
       generatedAt: 'franchise-team-hub',
     });
   }, [
     franchiseAllPlayers,
     franchiseFarmRecords,
+    franchiseTrueValueRows,
     franchiseId,
     franchiseLeagueId,
     franchiseTeam,
@@ -6395,7 +6406,11 @@ function FranchiseRosterAnalyzerPanel({ report }: FranchiseRosterAnalyzerPanelPr
     .slice(0, 3);
   const limitations = report.profile.limitations.slice(0, 3);
   const farmAdvice = report.recommendations
-    .filter((recommendation) => recommendation.kind === 'farm_monitor')
+    .filter((recommendation) =>
+      recommendation.kind === 'farm_monitor' ||
+      recommendation.kind === 'call_up_advice' ||
+      recommendation.kind === 'send_down_advice',
+    )
     .slice(0, 2);
   const advisoryCount = report.recommendations.filter((recommendation) =>
     recommendation.execution === 'read_only' || recommendation.execution === 'blocked_future_work',

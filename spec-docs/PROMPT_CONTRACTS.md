@@ -6019,3 +6019,217 @@ CURRENT_STATE BROWSER-VERIFY; JK browser sign-off on real franchise data is the
 close). T7a = built + audited CONFORMS, COMMITTED. Standing mode adopted (JK):
 auto-commit verified-complete tickets + proceed; pause only for scope/design/asset
 decisions + browser-batch.
+
+
+---
+
+## CONTRACT: T7b — Call-up / send-down recommendations (advisory, leak-safe) (drafted 2026-06-14)
+
+**ROUTE: Codex 5.5 | very high → audit (Fable 5 CLI per spec; Opus 4.8 while Fable unavailable — auditor ≠ builder) | very high reasoning effort**
+
+**STATUS: DRAFTED + JK-APPROVED for handoff (2026-06-14)** (design decisions
+resolved with JK below; per the standing mode this goes straight to Codex).
+
+### Ratified rulings (binding inputs — JK 2026-06-14)
+- **R-T7-SPLIT:** T7b = §8.3 call-up/send-down RECS only. T7a ✅ done; T7c = §8.4 ledger.
+- **R-T7b-ADVISORY:** T7b surfaces ranked, READ-ONLY advisory recs. It MUST NOT
+  execute moves (does NOT call `callUpFranchisePlayer`/`sendDownFranchisePlayer`),
+  MUST NOT mutate roster/ledger state. Executing a rec + the ledger consequence is
+  T7c.
+- **R-T7b-LEAK (no-oracle-leak principle — DECISIONS_LOG 2026-06-14):** the rec
+  engine may consume ONLY scout-visible information when valuing a player whose
+  true ratings are HIDDEN. Farm prospects are valued from `scoutedGrade` +
+  `scoutConfidence` (scout-visible), NEVER from true ratings / true overall / true
+  IV. MLB players (known commodities) use true TV2 value. A rec built on true value
+  is an oracle that leaks hidden ratings — forbidden.
+- **Golden/frozen consume-only:** ivEngine, salaryCalculator, effectiveRatings, and
+  the persisted TV2 rows (READ `getFranchiseTrueValueRows` / `calculateTrueValue`;
+  never recompute or wire ratings into persisted TrueValue — R-T6-2).
+
+### What is already built (consume / unblock — do NOT rebuild) — Captain-verified 2026-06-14
+- **The recs are stubbed, not missing:** `rosterAnalyzerEngine.ts` (1108 lines)
+  defines `call_up_advice`/`send_down_advice` kinds; FOUR emitters (~:947, :975,
+  :1004, :1050) emit `kind:'farm_monitor'`, `execution:'blocked_future_work'`,
+  `blockedBy:['call_up_send_down_execution_not_in_mvp']`. The rec factory already
+  defaults `execution: input.execution ?? 'read_only'` (:466-471). T7b UNBLOCKS
+  these four sites.
+- **Executors exist (do NOT call — advisory-only):** `franchiseRosterMovement.ts`
+  `callUpFranchisePlayer` (:576) / `sendDownFranchisePlayer` (:417).
+- **MLB surplus exists:** TV2 `calculateTrueValue` `valueDelta` (TrueValue − salary);
+  persisted `franchiseTrueValueRows` via `getFranchiseTrueValueRows`. READ.
+- **Scout-visible farm valuation EXISTS (no T8 dependency):** `franchisePlayerProfile.ts`
+  carries `scoutedGrade` + `scoutConfidence`; `franchiseSalary.ts:108`
+  `prospectSalaryForDraftRound(safeRoundFromScoutedGrade(profile.scoutedGrade))`
+  already derives a prospect salary from the scouted grade. The §7.4 CONTINUOUS
+  scout-obscured trueIV range is T8 — NOT needed here.
+- **Adapter:** `rosterAnalyzerFranchiseAdapter.ts` hardcodes `eligibleForSendDown:
+  false` (:218) — T7b computes real eligibility. `FranchiseFarmRecord` carries
+  `ratingRevealState: 'hidden'|'revealed'`.
+- **Rec surface exists:** the analyzer recs render through the existing
+  FranchiseRosterAnalyzerPanel / Team Hub — T7b's unblocked recs flow through it,
+  no new panel.
+
+```
+You are the Roster-Move Recommendation Implementer (TypeScript). Very high
+reasoning effort. LEAK-SAFETY is the load-bearing correctness property of this
+ticket — read R-T7b-LEAK twice.
+
+GOAL:
+Make call-up/send-down recommendations LIVE as ranked, READ-ONLY, leak-safe
+advisory (§8.3). Add `recommendRosterMoves(team, farm, league): MoveRecommendation[]`
+to the EXISTING src/engines/rosterAnalyzer.ts (keep optimizeLineup), unblock the
+four stubbed emitters in rosterAnalyzerEngine.ts, extend the franchise adapter to
+compute real send-down eligibility + feed SCOUT-VISIBLE farm valuation, and add
+calloutThreshold (CALIBRATE). NO execution, NO ledger, NO state mutation.
+
+SOURCE OF TRUTH: IV spec §8.3 (recs), §7.4 (scout leak rule), §11
+(recommendRosterMoves signature); DECISIONS_LOG "no-oracle-leak principle".
+ENV: prefix every CLI with `NODE_ENV= `; node at ~/.nvm/versions/node/v20.20.0/bin.
+
+THE RECOMMENDATION LOGIC (§8.3, leak-safe per R-T7b-LEAK):
+- MLB player surplus = TrueValue − salary = TV2 valueDelta (READ persisted
+  franchiseTrueValueRows via getFranchiseTrueValueRows, or calculateTrueValue with
+  already-known inputs). KNOWN/certain side.
+- Farm player projected surplus = projectedValue(scoutedGrade) − rookieScaleSalary,
+  where projectedValue derives ONLY from the SCOUT-VISIBLE `scoutedGrade` (NEVER
+  true ratings/overall/IV), and rookieScaleSalary = ROOKIE_SCALE_FACTOR (0.50) ×
+  the prospect's scout-visible salary (franchiseSalary prospectSalaryForDraftRound).
+  UNCERTAIN side.
+- Recommend swaps where (farmSurplus − mlbSurplus) > calloutThreshold AND positional
+  fit holds; rank by the surplus gap.
+- LEAK-SAFE DISPLAY: rec message = "projects as a positive-surplus replacement"
+  plus a scout-confidence label derived from `scoutConfidence`. NEVER expose the
+  prospect's hidden ratings, true overall, or true IV pre-call-up. Send-down recs
+  (MLB → farm, known under-performers) are the certain side.
+
+STEP 1 — ENGINE (src/engines/rosterAnalyzer.ts, ADD recommendRosterMoves; keep
+optimizeLineup; pure: no React/IndexedDB/DOM/Date.now/random):
+- Define MoveRecommendation { kind:'call_up'|'send_down'; playerId; replacesPlayerId?;
+  surplusGap:number; scoutConfidence?:string; positionalFit:boolean; justification:string }
+  and PlayerStates/FarmRoster usage per §11. recommendRosterMoves(team, farm, league)
+  returns ranked MoveRecommendation[].
+- MUST NOT import or call the franchiseRosterMovement executors (advisory-only).
+- MUST NOT read a hidden farm player's true ratings/overall/IV — only scoutedGrade/
+  scoutConfidence. (Structure the inputs so true ratings are not even in scope for
+  hidden-state farm players.)
+
+STEP 2 — UNBLOCK rosterAnalyzerEngine.ts (the 4 emitters): grep the literal
+'call_up_send_down_execution_not_in_mvp' to find every site; flip
+kind 'farm_monitor' → 'call_up_advice'/'send_down_advice' (as appropriate),
+execution 'blocked_future_work' → 'read_only', remove the blockedBy stub. Recs
+carry the leak-safe message + scout-confidence. Do not otherwise change analyzeRoster.
+
+STEP 3 — ADAPTER rosterAnalyzerFranchiseAdapter.ts: replace the hardcoded
+`eligibleForSendDown: false` (:218) with real eligibility (option/roster rules —
+e.g. on MLB roster, options remaining); feed scoutedGrade/scoutConfidence into the
+rec inputs for farm players. For hidden-state farm players NEVER pass true ratings.
+
+STEP 4 — CONSTANTS rosterEngineConstants.ts (ADD-ONLY): calloutThreshold (CALIBRATE,
+TBD playtest — deferred from T6 R-T6-3). If a grade→projectedValue mapping constant
+is needed, add it CALIBRATE with a rationale comment (reuse an existing grade→value/
+salary curve if one exists — grep first). FLAG both (F1/F2).
+
+STEP 5 — SURFACE: the unblocked recs render through the existing analyzer rec panel
+(FranchiseRosterAnalyzerPanel / Team Hub). Confirm they display read-only + leak-safe;
+do NOT build a new panel and do NOT add an execute button (R-T7b-ADVISORY).
+
+STEP 6 — TESTS:
+- LEAK TEST (the load-bearing one): for a hidden-state farm prospect, changing the
+  TRUE ratings/overall while holding scoutedGrade/scoutConfidence constant produces
+  the SAME recommendation; changing scoutedGrade DOES change it. Proves the rec
+  consumes only scout-visible info.
+- ADVISORY TEST: recommendRosterMoves source does NOT import/call
+  callUpFranchisePlayer/sendDownFranchisePlayer (no execution).
+- LOGIC: a low-cost high-scouted-surplus prospect is recommended over a high-cost
+  underperforming MLB player when the gap exceeds calloutThreshold; positional fit
+  gate works; ranking by surplus gap.
+- PURITY: rosterAnalyzer.ts stays free of salaryCalculator/tierParams/playerDatabase/
+  React/storage imports for the new code (it may already import computeIV/effectiveRatings
+  from T7a — that is fine; recommendRosterMoves itself reads TV2 via a passed-in
+  league/rows input, NOT by importing storage).
+- The four unblocked emitters now emit read_only call_up_advice/send_down_advice
+  (no blocked_future_work / blockedBy remains for these).
+
+CONSTRAINTS — do NOT touch: ivEngine.ts, salaryCalculator.ts, effectiveRatings.ts,
+the franchiseRosterMovement executors (no calls), traitInteractionMatrix.ts. NO new
+IndexedDB store / DB version bump (T7c). NO ledger. NO persisted-TrueValue recompute
+(read only; R-T6-2). rosterEngineConstants ADD-ONLY. Do NOT expose hidden ratings.
+
+VERIFICATION (run + paste):
+- NODE_ENV= npx vitest run <new tests> → green
+- NODE_ENV= npx tsc --noEmit → clean
+- NODE_ENV= npm run build → exit 0
+- NODE_ENV= npx vitest run (full) → no new RED outside the characterized set (baseline 7,160/385 + your new tests)
+- GOLDEN/SMB4 byte-unchanged: git diff --name-only lists none of ivEngine/
+  salaryCalculator/effectiveRatings/iv_oracle.json
+- git diff --stat → enumerate every changed path (rosterAnalyzer.ts, rosterAnalyzerEngine.ts,
+  rosterAnalyzerFranchiseAdapter.ts, rosterEngineConstants.ts, tests, any surface file)
+
+FLAGGED FOR JK:
+  F1 grade→projectedValue mapping for farm = CALIBRATE draft — approve.
+  F2 calloutThreshold = CALIBRATE placeholder (TBD playtest).
+  F3 proactive call-up notification hook stays stubbed / default-off (§8.3) — deferred.
+  F4 advisory-only — executing a rec + the ledger consequence is T7c.
+  F5 scout-confidence label surfaced on each rec (risk/reward made visible, leak-safe).
+
+FORMAT: (1) files changed (every path) (2) per-file changes citing §/ruling
+(3) the leak-safety implementation (how hidden ratings are kept out of scope)
+(4) verification output (5) FLAGGED FOR JK (6) "T7b complete" OR "BLOCKED: [reason]".
+
+FAILURE PROTOCOL: a change needing a do-NOT-touch edit → STOP and report. If real
+send-down eligibility cannot be computed from available roster/option data → report
+what's missing, do not guess. If valuing a farm prospect would require its true
+(hidden) ratings → STOP (that violates R-T7b-LEAK) and report. Enumerate every path.
+
+Use very high reasoning effort. Think step-by-step. Do NOT commit — leave changes
+in the working tree for audit.
+```
+
+
+---
+
+## T7b-AUDIT + EXECUTION RECORD (2026-06-14)
+
+**ROUTE actual:** Codex 5.5 | very high (codex CLI, workspace-write,
+model_reasoning_effort=high) BUILT → Opus 4.8 AUDIT (Fable unavailable; auditor ≠
+builder — Captain wrote the contract, not the code).
+
+### Builder result (Codex 5.5)
+ADDED `recommendRosterMoves` to src/engines/rosterAnalyzer.ts (advisory §11);
+UNBLOCKED the 4 stubbed emitters in rosterAnalyzerEngine.ts (→ read_only
+call_up_advice/send_down_advice); EXTENDED rosterAnalyzerFranchiseAdapter.ts (real
+eligibleForSendDown + scout-visible farm valuation + hidden-rating strip); add-only
+rosterEngineConstants (ROSTER_MOVE_CALLOUT_THRESHOLD, ROOKIE_SCALE_FACTOR,
+FARM_SCOUTED_GRADE_PROJECTED_VALUE); TeamHubContent reads TV2 rows + displays the
+recs (no new panel, no execute button). 11 files, +751/−55.
+
+### AUDIT VERDICT: CONFORMS
+Independent re-verification (every command rerun):
+- tsc 0; build 0 (7.82s); focused 70/70; full suite 7,161 pass / 3 fail —
+  reconciles 7,160 + 4 new = 7,164 / 385; the 3 fails are the characterized set.
+  NO new RED.
+- Golden/SMB4 byte-unchanged (ivEngine / salaryCalculator / effectiveRatings /
+  iv_oracle.json).
+- rosterEngineConstants ADD-ONLY (0 removed lines).
+- LEAK-SAFETY (load-bearing, R-T7b-LEAK) implemented + PROVEN: farm surplus =
+  FARM_SCOUTED_GRADE_PROJECTED_VALUE[scoutedGrade] − scoutVisibleSalary×rookieScale
+  (scout-visible ONLY); the adapter strips hidden-farm ratings to `{}`. The leak
+  test asserts flipping a hidden prospect's trueRatings/trueOverall/trueIV is INERT
+  (`.toEqual(base)`) while scoutedGrade changes the rec; the justification never
+  matches `/true|IV|overall|rating/`.
+- ADVISORY-ONLY (R-T7b-ADVISORY): no executor import in rosterAnalyzer.ts (grep +
+  source-guard test). No state mutation, no ledger.
+- §8.3 logic correct: MLB surplus (TV2 valueDelta, KNOWN) vs farm scout-visible
+  surplus (UNCERTAIN), gap > calloutThreshold, positional fit, ranked by gap.
+
+### Findings (LOW, ratified by JK 2026-06-14)
+1. ROOKIE_SCALE_FACTOR duplicated (salaryCalculator.ts:380 + rosterEngineConstants
+   .ts:213, both 0.50) — benign now; SINGLE-SOURCE in T7c (which owns the ledger /
+   rookie-scale registry constants).
+2. eligibleForSendDown/eligibleForCallUp default `true` in the engine if unset — the
+   adapter supplies the real gate; acceptable.
+Builder F1–F6 valid (F6: rec ranking is naturally limited until TV2 rows exist — expected).
+
+### JK ratification (2026-06-14)
+Findings + F1–F6 ratified. **BROWSER-PENDING** (recs panel renders read-only +
+leak-safe). T7b = built + audited CONFORMS, COMMITTED.

@@ -204,6 +204,36 @@ export const BATTING_ORDER_SLOT_WEIGHTS: Record<1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 
 };
 
 /**
+ * §8.3, CALIBRATE draft: farm recommendation threshold in TV2 salary/value units.
+ * This is intentionally playtest-tunable; T7b only makes the advisory live.
+ */
+export const ROSTER_MOVE_CALLOUT_THRESHOLD = 500;
+
+/** §8.4/D6 rookie-scale factor consumed by T7b advisory math; ledger writes are T7c. */
+export const ROOKIE_SCALE_FACTOR = 0.50;
+
+/**
+ * §8.3/R-T7b-LEAK, CALIBRATE draft: scout-visible projected value by scouted grade.
+ * The curve is monotonic and aligned to the existing prospect salary unit family,
+ * but remains a playtest placeholder pending JK approval.
+ */
+export const FARM_SCOUTED_GRADE_PROJECTED_VALUE: Record<string, number> = {
+  S: 14_500,
+  'A+': 13_000,
+  A: 11_500,
+  'A-': 10_000,
+  'B+': 8_500,
+  B: 7_000,
+  'B-': 5_800,
+  'C+': 4_600,
+  C: 3_500,
+  'C-': 2_700,
+  'D+': 2_100,
+  D: 1_600,
+  'D-': 1_200,
+};
+
+/**
  * §8.1/§15.2, CALIBRATE draft: local lineup optimizer scales for comparing
  * IV dollars, defensive placement risk, and legacy snapshot comparison fields.
  */

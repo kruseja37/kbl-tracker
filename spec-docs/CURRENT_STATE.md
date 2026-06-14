@@ -15,27 +15,29 @@
 - **Phase:** T-stack execution. Sequencing ruling F-141 holds: the full T-stack
   runs to completion as pure execution, THEN D0 cut line → D1–D8 → F-138 →
   flag flip → iPad playtest exit gate.
-- **Last completed:** **T7a — optimal lineups vs L/R + one-button re-optimize
-  (IV-of-effectiveRatings)** LIVE. Codex 5.5 | very high BUILT → Opus 4.8 audit
-  **CONFORMS** (auditor ≠ builder). NEW pure `src/engines/rosterAnalyzer.ts:
-  optimizeLineup` scores by IV-of-effectiveRatings — the R-T6-2 seam, with the
-  hitter/pitcher split PROVEN by test (pitcher attrs in `input.ratings` are a
-  no-op; only `pitcherRatings` moves kblIV). `optimalLineup.ts` scoring swapped
-  in-place (API stable, ALGORITHM_VERSION bumped); BATTING_ORDER_SLOT_WEIGHTS +
-  CALIBRATE drafted (F2). Independently re-verified: tsc 0 / build 0 / 8 new tests
-  / suite 7,160 with only the 3 characterized fails / golden+SMB4 byte-unchanged.
-  **F1 behavior change** (lineup recs differ) → BROWSER-PENDING (batched). 5 LOW
-  ratified. Record: PROMPT_CONTRACTS "T7a-AUDIT". **COMMITTED.** (T6 — effective
-  ratings engine, audit CONFORMS — also COMMITTED earlier this session.)
-- **NEXT TASK: T7b — Call-up/send-down recs (§8.3).** Feature split (R-T7-SPLIT):
-  T7a ✅ → **T7b** (unblock the stubbed `call_up_advice`/`send_down_advice` in
-  `rosterAnalyzerEngine.ts`; surplus = TV2 `valueDelta`; honor the §7.4 leak rule
-  — never reveal hidden ratings/true IV pre-call-up; wire to existing
-  `callUpFranchisePlayer`/`sendDownFranchisePlayer` executors) → **T7c** (§8.4
-  season salary ledger: new IndexedDB store via trackerDb v14→15 + LedgerEntry
-  state machine + deadMoneyRate/rookieScaleFactor + capCharge→expectation baseline;
-  PRIORITIZE in the browser-batch as a persistence/data-shape ticket). ROUTE both:
-  Codex 5.5 | very high → Opus audit. Then **T8** (Mode 1 suite), T9, T10 → D0.
+- **Last completed:** **T7b — call-up/send-down recommendations (advisory,
+  leak-safe)** LIVE. Codex 5.5 | very high BUILT → Opus 4.8 audit **CONFORMS**.
+  `recommendRosterMoves` (added to rosterAnalyzer.ts) ranks MLB surplus (TV2
+  `valueDelta`, KNOWN) vs farm scout-visible surplus (`scoutedGrade` only,
+  UNCERTAIN) — leak-safe per **R-T7b-LEAK** (the no-oracle-leak ruling,
+  DECISIONS_LOG); the 4 stubbed emitters unblocked to read_only advice; the
+  adapter computes real send-down eligibility + strips hidden-farm ratings.
+  **No execution, no ledger (R-T7b-ADVISORY).** Independently re-verified: tsc 0 /
+  build 0 / suite 7,164 (3 characterized fails) / golden+SMB4 byte-unchanged /
+  **leak test PROVEN** (true ratings inert, scoutedGrade drives, justification
+  leak-free). 1 LOW (ROOKIE_SCALE_FACTOR dup → reconcile in T7c). BROWSER-PENDING.
+  **COMMITTED.** (T6, T7a — audit CONFORMS — also COMMITTED.)
+- **NEXT TASK: T7c — Season Salary Ledger (§8.4).** ⚠️ **CAPTAIN PAUSES HERE** for
+  JK persistence-design rulings BEFORE drafting: new IndexedDB store via
+  `trackerDb` v14→15 (the v-conflict-hang landmine — only `trackerDb.ts` may open
+  `kbl-tracker`); `LedgerEntry`/`LedgerStatus` state machine (first call-up →
+  active; demotion → deadMoney at `deadMoneyRate`; re-call-up → active, no
+  stacking); `rookieScaleActive` producer (flip on call-up; replaces age factor,
+  no double-discount); `capCharge` → soft payroll-expectation baseline (anchored to
+  DECLARED budget); ledger resets at offseason Phase 3; `deadMoneyRate` league-
+  config (presets 100/75/50). Also single-source the ROOKIE_SCALE_FACTOR dup. ROUTE
+  Codex 5.5 | very high → Opus audit (persistence/migration audit NON-NEGOTIABLE).
+  Then **T8** (Mode 1 suite), T9, T10 → D0.
 - **STANDING MODE (JK 2026-06-14):** per ticket = build → independent ENGINEERING
   audit → auto-commit verified-complete (browser-pending) → proceed. Captain
   surfaces only the audit verdict, the browser backlog, and genuine scope/design/
@@ -48,8 +50,8 @@
 
 ## SUITE BASELINE
 
-7,160 tests / 385 files (T7a added rosterAnalyzer.test.ts = 8 tests / 1 file;
-T6 added 12; prior baseline 7,140 / 383). Characterized set (a new RED outside
+7,164 tests / 385 files (T7b added 4 tests, no new file; T7a +8 / +1 file;
+T6 +12; prior baseline 7,140 / 383). Characterized set (a new RED outside
 this set is a real regression): fixed failures wpaRuntimeBoundary +
 franchiseNarrativeEventEligibility; conditional-solo order-flakes
 franchiseManualSmokeFixture + GameTrackerLaunchState +
@@ -70,6 +72,10 @@ franchiseOffseasonGuards.component (each passes solo).
    (was raw heuristic) — verify vs-RHP / vs-LHP lineups look sensible on real
    franchise data, and one-button RECALC produces a coherent lineup + defensive
    arrangement (low-glove players kept off high-traffic spots).
+4. **T7b** call-up/send-down advisory recs render in the analyzer panel — ranked,
+   read-only, leak-safe (no hidden prospect ratings/true IV shown; "projects as a
+   positive-surplus replacement" + scout-confidence label); a low-cost high-surplus
+   prospect surfaces over a high-cost MLB underperformer.
 
 ## OPEN PENDING-JK (rolling)
 

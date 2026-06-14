@@ -19,6 +19,8 @@ import {
   getFranchiseFarmRoster,
   type FranchiseFarmRecord,
 } from './franchiseFarmStorage';
+import { getFranchiseTrueValueRows } from './franchiseTrueValueStorage';
+import { getVisibleSafeFranchisePlayerSalary } from './franchiseSalary';
 import type { LeagueAssignment } from './leagueBuilderStorage';
 
 export type FranchiseAnalyzerRosterStatus = NonNullable<AnalyzerPlayer['rosterStatus']>;
@@ -32,6 +34,7 @@ export interface FranchiseTeamAnalyzerAdapterInput {
   team: Pick<Team, 'id' | 'name'> & Partial<Team>;
   players: Player[];
   farmRecords?: FranchiseFarmRecord[];
+  trueValueRows?: Array<{ playerId: string; valueDelta: number }>;
   generatedAt?: string;
   config?: Partial<RosterAnalyzerConfig>;
 }
@@ -170,14 +173,44 @@ function latestOptionCount(player: Player): number | undefined {
   return values.length > 0 ? Math.max(...values) : undefined;
 }
 
+function seasonOptionCount(player: Player, seasonId: string): number | undefined {
+  const value = player.optionsUsedBySeason?.[seasonId];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function eligibleForSendDown(player: Player, status: FranchiseAnalyzerRosterStatus, seasonId: string): boolean {
+  const optionsUsed = seasonOptionCount(player, seasonId) ?? 0;
+  return (status === 'MLB' || status === 'UNKNOWN') && optionsUsed < 3;
+}
+
+function prospectMetadata(player: Player): { scoutedGrade?: string; scoutConfidence?: string } {
+  const carrier = player as Player & {
+    prospectProfile?: {
+      scoutedGrade?: unknown;
+      scoutConfidence?: unknown;
+    };
+    scoutedGrade?: unknown;
+    scoutConfidence?: unknown;
+  };
+  const scoutedGrade = carrier.prospectProfile?.scoutedGrade ?? carrier.scoutedGrade;
+  const scoutConfidence = carrier.prospectProfile?.scoutConfidence ?? carrier.scoutConfidence;
+  return {
+    scoutedGrade: typeof scoutedGrade === 'string' ? scoutedGrade : undefined,
+    scoutConfidence: typeof scoutConfidence === 'string' ? scoutConfidence : undefined,
+  };
+}
+
 function mapFranchisePlayer(
   player: Player,
   input: FranchiseTeamAnalyzerAdapterInput,
   farmRecordByPlayerId: Map<string, FranchiseFarmRecord>,
+  trueValueDeltaByPlayerId: Map<string, number>,
 ): AnalyzerPlayer {
   const status = normalizeFranchisePlayerStatus(player, input.team.id, input.leagueId);
   const farmRecord = farmRecordByPlayerId.get(player.id);
   const ratingRevealState = farmRecord?.ratingRevealState ?? player.ratingRevealState;
+  const hiddenFarmPlayer = status === 'FARM' && ratingRevealState !== 'revealed';
+  const scoutReport = prospectMetadata(player);
 
   return {
     id: player.id,
@@ -191,22 +224,25 @@ function mapFranchisePlayer(
     isPitcher: isPitcherPosition(player.primaryPosition),
     rosterStatus: status,
     rosterLevel: status === 'MLB' || status === 'FARM' ? status : undefined,
-    ratings: {
-      power: player.power,
-      contact: player.contact,
-      speed: player.speed,
-      fielding: player.fielding,
-      arm: player.arm,
-      velocity: player.velocity,
-      junk: player.junk,
-      accuracy: player.accuracy,
-    },
+    ratings: hiddenFarmPlayer
+      ? {}
+      : {
+        power: player.power,
+        contact: player.contact,
+        speed: player.speed,
+        fielding: player.fielding,
+        arm: player.arm,
+        velocity: player.velocity,
+        junk: player.junk,
+        accuracy: player.accuracy,
+      },
     arsenal: player.arsenal,
     traits: [player.trait1, player.trait2].filter((trait): trait is string => Boolean(trait)),
     chemistry: player.chemistry,
     personality: player.personality,
     mojo: player.mojo,
     salary: player.salary,
+    valueDelta: status === 'MLB' ? trueValueDeltaByPlayerId.get(player.id) : undefined,
     contractYears: player.contractYears,
     age: player.age,
     optionState: status === 'FARM'
@@ -216,8 +252,17 @@ function mapFranchisePlayer(
         ratingRevealState: ratingRevealState === 'revealed' ? 'revealed' : 'hidden',
         eligibleForCallUp: true,
         eligibleForSendDown: false,
+        scoutedGrade: scoutReport.scoutedGrade,
+        scoutConfidence: scoutReport.scoutConfidence,
+        scoutVisibleSalary: getVisibleSafeFranchisePlayerSalary(player) ?? undefined,
       }
-      : undefined,
+      : status === 'MLB' ? {
+        seasonOptionsUsed: seasonOptionCount(player, input.seasonId) ?? latestOptionCount(player),
+        maxSeasonOptions: 3,
+        ratingRevealState: ratingRevealState === 'hidden' ? 'hidden' : 'revealed',
+        eligibleForCallUp: false,
+        eligibleForSendDown: eligibleForSendDown(player, status, input.seasonId),
+      } : undefined,
     stats: {
       source: 'unavailable',
       trust: 'unavailable',
@@ -239,12 +284,17 @@ function includeRosterIdForAnalyzerIntegrity(
 export function buildFranchiseTeamAnalyzerInput(input: FranchiseTeamAnalyzerAdapterInput): RosterAnalyzerInput {
   const farmRecords = input.farmRecords ?? [];
   const farmRecordByPlayerId = new Map(farmRecords.map((record) => [record.playerId, record]));
+  const trueValueDeltaByPlayerId = new Map(
+    (input.trueValueRows ?? [])
+      .filter((row) => row.playerId && typeof row.valueDelta === 'number' && Number.isFinite(row.valueDelta))
+      .map((row) => [row.playerId, row.valueDelta]),
+  );
   const farmPlayerIdsFromRecords = new Set(farmRecords.map((record) => record.playerId));
   const snapshotIds = teamSnapshotPlayerIds(input.team);
   const snapshotPlayerIds = new Set(snapshotIds);
   const mappedPlayers = input.players
     .filter((player) => playerRelatedToTeam(player, input.team.id, farmPlayerIdsFromRecords, snapshotPlayerIds, input.leagueId))
-    .map((player) => mapFranchisePlayer(player, input, farmRecordByPlayerId));
+    .map((player) => mapFranchisePlayer(player, input, farmRecordByPlayerId, trueValueDeltaByPlayerId));
   const playerById = new Map(mappedPlayers.map((player) => [player.id, player]));
   const mlbAssignedIds = mappedPlayers
     .filter((player) => player.rosterStatus === 'MLB')
@@ -301,10 +351,15 @@ export function analyzeFranchiseTeamRoster(input: FranchiseTeamAnalyzerAdapterIn
 export async function analyzeFranchiseTeamRosterFromStorage(
   input: AnalyzeFranchiseTeamRosterFromStorageInput,
 ): Promise<RosterAnalyzerReport> {
-  const [team, players, farmRecords] = await Promise.all([
+  const [team, players, farmRecords, trueValueRows] = await Promise.all([
     getFranchiseTeam(input.franchiseId, input.teamId),
     getAllFranchisePlayers(input.franchiseId),
     getFranchiseFarmRoster(input.franchiseId, input.seasonId, input.teamId),
+    getFranchiseTrueValueRows({
+      franchiseId: input.franchiseId,
+      seasonId: input.seasonId,
+      statsScopeId: input.statsScopeId ?? input.seasonId,
+    }),
   ]);
 
   if (!team) {
@@ -320,6 +375,7 @@ export async function analyzeFranchiseTeamRosterFromStorage(
     team,
     players,
     farmRecords,
+    trueValueRows,
     generatedAt: input.generatedAt,
     config: input.config,
   });

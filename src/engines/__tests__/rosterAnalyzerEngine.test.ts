@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { readFileSync } from 'node:fs';
 
 import {
   analyzeRoster,
@@ -136,6 +137,14 @@ function deepFreeze<T>(value: T): T {
 }
 
 describe('roster analyzer engine MVP', () => {
+  test('T7b call-up/send-down emitters are unblocked read-only advice', () => {
+    const source = readFileSync('src/engines/rosterAnalyzerEngine.ts', 'utf8');
+
+    expect(source).not.toContain('call_up_send_down_execution_not_in_mvp');
+    expect(source).not.toMatch(/kind:\s*'call_up_advice'[\s\S]{0,220}blocked_future_work/);
+    expect(source).not.toMatch(/kind:\s*'send_down_advice'[\s\S]{0,220}blocked_future_work/);
+  });
+
   test('returns a read-only report for a balanced roster without warning-level findings', () => {
     const report = analyzeRoster(balancedInput());
 
@@ -224,7 +233,7 @@ describe('roster analyzer engine MVP', () => {
     );
   });
 
-  test('keeps farm recommendations low-trust and blocked from execution when farm data is partial', () => {
+  test('keeps farm recommendations low-trust and read-only when farm data is partial', () => {
     const players = makeBalancedPlayers().map((player) =>
       player.rosterLevel === 'FARM'
         ? {
@@ -234,6 +243,9 @@ describe('roster analyzer engine MVP', () => {
             maxSeasonOptions: 3,
             ratingRevealState: 'hidden' as const,
             eligibleForCallUp: true,
+            scoutedGrade: 'B',
+            scoutConfidence: 'medium',
+            scoutVisibleSalary: 2_000,
           },
         }
         : player,
@@ -252,10 +264,13 @@ describe('roster analyzer engine MVP', () => {
     expect(report.recommendations).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          kind: 'farm_monitor',
-          execution: 'blocked_future_work',
+          kind: 'call_up_advice',
+          execution: 'read_only',
           trust: 'low',
-          blockedBy: expect.arrayContaining(['call_up_send_down_execution_not_in_mvp']),
+          rationale: expect.stringContaining('medium scout confidence'),
+          caveats: expect.arrayContaining([
+            expect.stringContaining('hidden farm internals are not used'),
+          ]),
         }),
       ]),
     );
@@ -276,6 +291,9 @@ describe('roster analyzer engine MVP', () => {
         seasonOptionsUsed: 1,
         maxSeasonOptions: 3,
         ratingRevealState: 'hidden',
+        scoutedGrade: 'B',
+        scoutConfidence: 'medium',
+        scoutVisibleSalary: 2_000,
       },
     });
     const report = analyzeRoster(balancedInput({
@@ -315,11 +333,11 @@ describe('roster analyzer engine MVP', () => {
     expect(report.recommendations).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          kind: 'farm_monitor',
-          execution: 'blocked_future_work',
-          title: 'Review farm C coverage',
+          kind: 'call_up_advice',
+          execution: 'read_only',
+          title: 'Call-up advice: review farm C coverage',
           playerIds: ['farm-catcher'],
-          blockedBy: expect.arrayContaining(['call_up_send_down_execution_not_in_mvp']),
+          rationale: expect.stringContaining('medium scout confidence'),
         }),
       ]),
     );
@@ -340,6 +358,9 @@ describe('roster analyzer engine MVP', () => {
           seasonOptionsUsed: 2,
           maxSeasonOptions: 3,
           ratingRevealState: 'partial',
+          scoutedGrade: 'C+',
+          scoutConfidence: 'medium',
+          scoutVisibleSalary: 2_000,
         },
       }),
       makePlayer({
@@ -352,6 +373,9 @@ describe('roster analyzer engine MVP', () => {
           seasonOptionsUsed: 3,
           maxSeasonOptions: 3,
           ratingRevealState: 'hidden',
+          scoutedGrade: 'B',
+          scoutConfidence: 'low',
+          scoutVisibleSalary: 2_000,
         },
       }),
     ];
@@ -391,13 +415,15 @@ describe('roster analyzer engine MVP', () => {
         expect.objectContaining({ title: 'Farm flavor systems are not active inputs', trust: 'low' }),
       ]),
     );
-    expect(report.recommendations.every((recommendation) => recommendation.execution !== 'read_only' || !recommendation.title.toLowerCase().includes('call up'))).toBe(true);
+    expect(report.recommendations
+      .filter((recommendation) => recommendation.kind === 'call_up_advice' || recommendation.kind === 'send_down_advice')
+      .every((recommendation) => recommendation.execution === 'read_only' && !recommendation.blockedBy)).toBe(true);
     expect(report.recommendations).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          title: "Review Out Options's option status",
-          execution: 'blocked_future_work',
-          blockedBy: expect.arrayContaining(['call_up_send_down_execution_not_in_mvp']),
+          kind: 'send_down_advice',
+          title: "Send-down advice: review Out Options's option status",
+          execution: 'read_only',
         }),
       ]),
     );

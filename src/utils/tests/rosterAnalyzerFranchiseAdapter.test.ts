@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   mockGetFranchiseTeam: vi.fn(),
   mockGetAllFranchisePlayers: vi.fn(),
   mockGetFranchiseFarmRoster: vi.fn(),
+  mockGetFranchiseTrueValueRows: vi.fn(),
 }));
 
 vi.mock('../franchisePlayerStorage', () => ({
@@ -13,6 +14,10 @@ vi.mock('../franchisePlayerStorage', () => ({
 
 vi.mock('../franchiseFarmStorage', () => ({
   getFranchiseFarmRoster: mocks.mockGetFranchiseFarmRoster,
+}));
+
+vi.mock('../franchiseTrueValueStorage', () => ({
+  getFranchiseTrueValueRows: mocks.mockGetFranchiseTrueValueRows,
 }));
 
 import {
@@ -223,6 +228,7 @@ describe('rosterAnalyzerFranchiseAdapter', () => {
     mocks.mockGetFranchiseTeam.mockResolvedValue(team);
     mocks.mockGetAllFranchisePlayers.mockResolvedValue(players);
     mocks.mockGetFranchiseFarmRoster.mockResolvedValue(farmRecords);
+    mocks.mockGetFranchiseTrueValueRows.mockResolvedValue([{ playerId: 'active-1', valueDelta: -500 }]);
 
     const report = await analyzeFranchiseTeamRosterFromStorage({
       franchiseId: 'franchise-1',
@@ -237,6 +243,11 @@ describe('rosterAnalyzerFranchiseAdapter', () => {
     expect(mocks.mockGetFranchiseTeam).toHaveBeenCalledWith('franchise-1', 'team-1');
     expect(mocks.mockGetAllFranchisePlayers).toHaveBeenCalledWith('franchise-1');
     expect(mocks.mockGetFranchiseFarmRoster).toHaveBeenCalledWith('franchise-1', 'franchise-1-season-2', 'team-1');
+    expect(mocks.mockGetFranchiseTrueValueRows).toHaveBeenCalledWith({
+      franchiseId: 'franchise-1',
+      seasonId: 'franchise-1-season-2',
+      statsScopeId: 'franchise-1-season-2',
+    });
     expect(report.summary.readOnly).toBe(true);
     expect(report.identity).toMatchObject({
       mode: 'franchise',
@@ -273,9 +284,17 @@ describe('rosterAnalyzerFranchiseAdapter', () => {
       makeFarmRecord({
         playerId: 'status-1',
         optionsUsed: 2,
-        ratingRevealState: 'revealed',
+        ratingRevealState: 'hidden',
       }),
     ];
+    players[1] = {
+      ...players[1],
+      ratingRevealState: 'hidden',
+      prospectProfile: {
+        scoutedGrade: 'B+',
+        scoutConfidence: 'high',
+      },
+    } as Player;
 
     const input = buildFranchiseTeamAnalyzerInput({
       franchiseId: 'franchise-1',
@@ -303,8 +322,15 @@ describe('rosterAnalyzerFranchiseAdapter', () => {
     expect(input.players.find((player) => player.id === 'status-1')?.optionState).toMatchObject({
       seasonOptionsUsed: 2,
       maxSeasonOptions: 3,
-      ratingRevealState: 'revealed',
+      ratingRevealState: 'hidden',
       eligibleForCallUp: true,
+      eligibleForSendDown: false,
+      scoutedGrade: 'B+',
+      scoutConfidence: 'high',
+    });
+    expect(input.players.find((player) => player.id === 'status-1')?.ratings).toEqual({});
+    expect(input.players.find((player) => player.id === 'status-0')?.optionState).toMatchObject({
+      eligibleForSendDown: true,
     });
   });
 });

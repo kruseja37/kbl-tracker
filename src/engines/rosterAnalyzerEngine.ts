@@ -1,3 +1,5 @@
+import { recommendRosterMoves, type MoveRecommendation } from './rosterAnalyzer';
+
 export type RosterAnalyzerMode = 'builder' | 'franchise';
 
 export type RosterAnalyzerSurface =
@@ -31,6 +33,9 @@ export interface AnalyzerFarmOptionState {
   ratingRevealState?: 'hidden' | 'partial' | 'revealed';
   eligibleForCallUp?: boolean;
   eligibleForSendDown?: boolean;
+  scoutedGrade?: string;
+  scoutConfidence?: string;
+  scoutVisibleSalary?: number;
 }
 
 export interface AnalyzerPlayerStats {
@@ -75,6 +80,7 @@ export interface AnalyzerPlayer {
   mojo?: string;
   fitness?: string;
   salary?: number;
+  valueDelta?: number;
   contractYears?: number;
   age?: number;
   handedLineupRole?: 'vsL' | 'vsR' | 'both';
@@ -508,6 +514,57 @@ function optionUsageLabel(player: AnalyzerPlayer): { used?: number; max?: number
   return { used, max, remaining: Math.max(0, max - used) };
 }
 
+function rosterMoveRecommendations(activePlayers: AnalyzerPlayer[], farmPlayers: AnalyzerPlayer[]): MoveRecommendation[] {
+  return recommendRosterMoves({
+    players: activePlayers.map((player) => ({
+      id: player.id,
+      name: player.name,
+      primaryPosition: player.primaryPosition,
+      secondaryPositions: player.secondaryPositions,
+      valueDelta: player.valueDelta,
+      eligibleForSendDown: player.optionState?.eligibleForSendDown,
+    })),
+  }, {
+    players: farmPlayers.map((player) => ({
+      id: player.id,
+      name: player.name,
+      primaryPosition: player.primaryPosition,
+      secondaryPositions: player.secondaryPositions,
+      scoutedGrade: player.optionState?.scoutedGrade,
+      scoutConfidence: player.optionState?.scoutConfidence,
+      scoutVisibleSalary: player.optionState?.scoutVisibleSalary,
+      eligibleForCallUp: player.optionState?.eligibleForCallUp,
+    })),
+  }, {
+    valueDeltas: activePlayers
+      .filter((player) => typeof player.valueDelta === 'number' && Number.isFinite(player.valueDelta))
+      .map((player) => ({ playerId: player.id, valueDelta: player.valueDelta as number })),
+  });
+}
+
+function moveRecommendationForPlayer(
+  recommendations: MoveRecommendation[],
+  playerId: string,
+  kind?: MoveRecommendation['kind'],
+): MoveRecommendation | undefined {
+  return recommendations.find((recommendation) =>
+    (recommendation.playerId === playerId || recommendation.replacesPlayerId === playerId) &&
+    (!kind || recommendation.kind === kind),
+  );
+}
+
+function scoutConfidenceLabel(player: AnalyzerPlayer, recommendation?: MoveRecommendation): string {
+  return recommendation?.scoutConfidence ?? player.optionState?.scoutConfidence ?? 'unknown';
+}
+
+function callUpAdviceRationale(playerNames: string, confidence: string): string {
+  return `${playerNames} projects as a positive-surplus replacement candidate based only on scout-visible farm grade data (${confidence} scout confidence).`;
+}
+
+function sendDownAdviceRationale(playerName: string): string {
+  return `${playerName} is a known-commodity option-risk case; send-down advice is read-only and no roster move is executed by this report.`;
+}
+
 function buildProfile(activePlayers: AnalyzerPlayer[], farmPlayers: AnalyzerPlayer[], config: RosterAnalyzerConfig): AnalyzerRosterProfile {
   const hitters = activePlayers.filter((player) => !isPitcher(player));
   const pitchers = activePlayers.filter(isPitcher);
@@ -909,6 +966,7 @@ export function analyzeRoster(input: RosterAnalyzerInput): RosterAnalyzerReport 
   if (hasConstraint(config, 'farm_options') && farmPlayers.length > 0) {
     const farmPitchers = farmPlayers.filter(isPitcher);
     const farmPositionPlayers = farmPlayers.filter((player) => !isPitcher(player));
+    const moveRecommendations = rosterMoveRecommendations(activePlayers, farmPlayers);
 
     if (farmPitchers.length === 0 || farmPositionPlayers.length === 0) {
       addFinding(findings, {
@@ -943,17 +1001,20 @@ export function analyzeRoster(input: RosterAnalyzerInput): RosterAnalyzerReport 
           evidence('farm_record', `${position}FarmCoverage`, candidates.length, 'farm roster positions', trust),
         ],
       });
+      const candidateNames = candidates.map((player) => player.name).join(', ');
+      const candidateRecommendation = candidates
+        .map((player) => moveRecommendationForPlayer(moveRecommendations, player.id, 'call_up'))
+        .find(Boolean);
       addRecommendation(recommendations, {
-        kind: 'farm_monitor',
+        kind: 'call_up_advice',
         severity: 'info',
         trust,
-        execution: 'blocked_future_work',
-        title: `Review farm ${position} coverage`,
-        rationale: `Farm player(s) ${candidates.map((player) => player.name).join(', ')} may cover a roster-planning gap, but this analyzer does not execute moves.`,
+        execution: 'read_only',
+        title: `Call-up advice: review farm ${position} coverage`,
+        rationale: callUpAdviceRationale(candidateNames, scoutConfidenceLabel(candidates[0], candidateRecommendation)),
         playerIds: candidates.map((player) => player.id),
         evidence: finding.evidence,
-        caveats: ['Evaluate manually before any roster move.', 'No call-up or send-down is executed by this report.'],
-        blockedBy: ['call_up_send_down_execution_not_in_mvp'],
+        caveats: ['Scout-visible advisory only; hidden farm internals are not used.', 'No call-up or send-down is executed by this report.'],
       });
     }
 
@@ -972,16 +1033,18 @@ export function analyzeRoster(input: RosterAnalyzerInput): RosterAnalyzerReport 
         evidence: [evidence('farm_record', 'farmStarterCandidates', farmStarterCandidates.length, 'farm roster positions', 'medium')],
       });
       addRecommendation(recommendations, {
-        kind: 'farm_monitor',
+        kind: 'call_up_advice',
         severity: 'info',
         trust: 'medium',
-        execution: 'blocked_future_work',
-        title: 'Review farm starter depth',
-        rationale: 'Farm starter depth may help roster planning, but ratings, role fit, and movement eligibility should be checked manually.',
+        execution: 'read_only',
+        title: 'Call-up advice: review farm starter depth',
+        rationale: callUpAdviceRationale(
+          farmStarterCandidates.map((player) => player.name).join(', '),
+          scoutConfidenceLabel(farmStarterCandidates[0], moveRecommendationForPlayer(moveRecommendations, farmStarterCandidates[0]?.id ?? '', 'call_up')),
+        ),
         playerIds: farmStarterCandidates.map((player) => player.id),
         evidence: finding.evidence,
-        caveats: ['No rotation or roster move is applied by the analyzer.'],
-        blockedBy: ['call_up_send_down_execution_not_in_mvp'],
+        caveats: ['Scout-visible advisory only; hidden farm internals are not used.', 'No rotation or roster move is applied by the analyzer.'],
       });
     }
 
@@ -1001,16 +1064,15 @@ export function analyzeRoster(input: RosterAnalyzerInput): RosterAnalyzerReport 
             evidence: [evidence('farm_record', 'seasonOptionsUsed', optionUsage.used, 'player.optionState', 'high')],
           });
           addRecommendation(recommendations, {
-            kind: 'farm_monitor',
+            kind: 'send_down_advice',
             severity: 'warning',
             trust: 'high',
-            execution: 'blocked_future_work',
-            title: `Review ${farmPlayer.name}'s option status`,
-            rationale: 'Out-of-options status should be reviewed manually before any future roster planning.',
+            execution: 'read_only',
+            title: `Send-down advice: review ${farmPlayer.name}'s option status`,
+            rationale: sendDownAdviceRationale(farmPlayer.name),
             playerIds: [farmPlayer.id],
             evidence: finding.evidence,
             caveats: ['The analyzer does not execute send-downs or releases.'],
-            blockedBy: ['call_up_send_down_execution_not_in_mvp'],
           });
         } else if (optionUsage.remaining === 1) {
           addFinding(findings, {
@@ -1047,16 +1109,18 @@ export function analyzeRoster(input: RosterAnalyzerInput): RosterAnalyzerReport 
           evidence: [evidence('farm_record', 'ratingRevealState', ratingRevealState ?? 'unknown', 'player.optionState', trust)],
         });
         addRecommendation(recommendations, {
-          kind: 'farm_monitor',
+          kind: 'call_up_advice',
           severity: 'info',
           trust,
-          execution: 'blocked_future_work',
-          title: `Monitor ${farmPlayer.name}`,
-          rationale: 'Farm recommendation is advisory only because ratings/options/offseason execution may be incomplete.',
+          execution: 'read_only',
+          title: `Call-up advice: monitor ${farmPlayer.name}`,
+          rationale: callUpAdviceRationale(
+            farmPlayer.name,
+            scoutConfidenceLabel(farmPlayer, moveRecommendationForPlayer(moveRecommendations, farmPlayer.id, 'call_up')),
+          ),
           playerIds: [farmPlayer.id],
           evidence: finding.evidence,
-          caveats: ['The analyzer does not execute call-ups or send-downs.'],
-          blockedBy: ['call_up_send_down_execution_not_in_mvp'],
+          caveats: ['Scout-visible advisory only; hidden farm internals are not used.', 'The analyzer does not execute call-ups or send-downs.'],
         });
       }
     }

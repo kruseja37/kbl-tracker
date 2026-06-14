@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   mockBuildFranchiseSalaryLifecycle: vi.fn(),
   mockBuildFranchiseDesignationEligibility: vi.fn(),
   mockGetFranchiseDesignationRows: vi.fn(),
+  mockGetFranchiseTrueValueRows: vi.fn(),
   mockSaveFranchiseTeam: vi.fn(),
 }));
 
@@ -88,6 +89,10 @@ vi.mock('../../../utils/franchiseDesignationEligibility', () => ({
 
 vi.mock('../../../utils/franchiseDesignationStorage', () => ({
   getFranchiseDesignationRows: mocks.mockGetFranchiseDesignationRows,
+}));
+
+vi.mock('../../../utils/franchiseTrueValueStorage', () => ({
+  getFranchiseTrueValueRows: mocks.mockGetFranchiseTrueValueRows,
 }));
 
 import { TeamHubContent } from '../../app/components/TeamHubContent';
@@ -621,6 +626,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     mocks.mockBuildFranchiseSalaryLifecycle.mockResolvedValue(salaryLifecycleReport());
     mocks.mockBuildFranchiseDesignationEligibility.mockResolvedValue(designationEligibilityReport());
     mocks.mockGetFranchiseDesignationRows.mockResolvedValue(projectedDesignationRows());
+    mocks.mockGetFranchiseTrueValueRows.mockResolvedValue([{ playerId: 'copied-player', valueDelta: -2000 }]);
     mocks.mockSaveFranchiseTeam.mockImplementation(async (_franchiseId: string, team: unknown) => team);
   });
 
@@ -650,8 +656,14 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(screen.getByText('FARM 1')).toBeInTheDocument();
     expect(screen.getByText(/No call-ups, send-downs, or roster writes are executed here/)).toBeInTheDocument();
     expect(screen.getByText('Farm advisory only')).toBeInTheDocument();
-    expect(screen.getAllByText(/Review farm OF coverage|Monitor Farm Hidden/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Call-up advice: review farm OF coverage|Call-up advice: monitor Farm Hidden/).length).toBeGreaterThan(0);
     expect(mocks.mockGetFranchiseFarmRoster).toHaveBeenCalledWith('franchise-1', 'franchise-1-season-2', 'team-1');
+    expect(mocks.mockGetFranchiseTrueValueRows).toHaveBeenCalledWith({
+      franchiseId: 'franchise-1',
+      seasonId: 'franchise-1-season-2',
+      statsScopeId: 'franchise-1-season-2',
+      seasonNumber: 2,
+    });
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
   });
 

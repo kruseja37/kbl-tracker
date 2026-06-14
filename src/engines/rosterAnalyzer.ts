@@ -1,8 +1,11 @@
 import {
   BATTING_ORDER_SLOT_WEIGHTS,
   CALIBRATE,
+  FARM_SCOUTED_GRADE_PROJECTED_VALUE,
   type EffectiveMojoState,
   type PitcherRoleKey,
+  ROOKIE_SCALE_FACTOR,
+  ROSTER_MOVE_CALLOUT_THRESHOLD,
 } from '../data/rosterEngineConstants';
 import { computeIV, type IVPlayerInput } from './ivEngine';
 import { defensivePlacementRisk, effectiveRatings } from './effectiveRatings';
@@ -70,9 +73,74 @@ interface LineupRecommendation {
   totalScore: number;
 }
 
+export interface MoveRecommendation {
+  kind: 'call_up' | 'send_down';
+  playerId: string;
+  replacesPlayerId?: string;
+  surplusGap: number;
+  scoutConfidence?: string;
+  positionalFit: boolean;
+  justification: string;
+}
+
+export interface RosterMovePlayer {
+  playerId?: string;
+  id?: string;
+  playerName?: string;
+  name?: string;
+  primaryPosition?: string;
+  secondaryPosition?: string;
+  secondaryPositions?: string[];
+  valueDelta?: number;
+  eligibleForSendDown?: boolean;
+  optionState?: {
+    eligibleForSendDown?: boolean;
+  };
+}
+
+export interface FarmRosterMovePlayer {
+  playerId?: string;
+  id?: string;
+  playerName?: string;
+  name?: string;
+  primaryPosition?: string;
+  secondaryPosition?: string;
+  secondaryPositions?: string[];
+  scoutedGrade?: string;
+  scoutConfidence?: string;
+  scoutVisibleSalary?: number;
+  eligibleForCallUp?: boolean;
+  optionState?: {
+    eligibleForCallUp?: boolean;
+    scoutedGrade?: string;
+    scoutConfidence?: string;
+    scoutVisibleSalary?: number;
+  };
+}
+
+export interface RosterMoveTeam {
+  players?: RosterMovePlayer[];
+  rosterPlayers?: RosterMovePlayer[];
+  activeRoster?: RosterMovePlayer[];
+}
+
+export type FarmRoster = FarmRosterMovePlayer[] | {
+  players?: FarmRosterMovePlayer[];
+  rosterPlayers?: FarmRosterMovePlayer[];
+  farmPlayers?: FarmRosterMovePlayer[];
+};
+
+export interface LeagueContext {
+  valueDeltas?: Record<string, number> | Array<{ playerId: string; valueDelta: number }>;
+  calloutThreshold?: number;
+  rookieScaleFactor?: number;
+}
+
 const FIELD_POSITIONS: FieldPosition[] = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'];
 const DEFENSIVE_PRIORITY: FieldPosition[] = ['C', 'SS', 'CF', '2B', '3B', 'RF', 'LF', '1B'];
 const PITCHER_POSITIONS = new Set(['P', 'SP', 'RP', 'CP', 'SP/RP']);
+const OUTFIELD_POSITIONS = new Set(['LF', 'CF', 'RF', 'OF', 'IF/OF', '1B/OF']);
+
 export function optimizeLineup(team: Team, vs: VsHand, states: PlayerStates): LineupRecommendation {
   const analysisTeam = team as AnalysisTeam;
   const players = rosterPlayers(analysisTeam).filter((player) => !isUnavailable(player));
@@ -111,6 +179,60 @@ export function optimizeLineup(team: Team, vs: VsHand, states: PlayerStates): Li
   };
 }
 
+export function recommendRosterMoves(
+  team: RosterMoveTeam,
+  farm: FarmRoster,
+  league: LeagueContext,
+): MoveRecommendation[] {
+  const valueDeltas = valueDeltaMap(league.valueDeltas);
+  const calloutThreshold = finiteNumber(league.calloutThreshold) ? league.calloutThreshold : ROSTER_MOVE_CALLOUT_THRESHOLD;
+  const rookieScaleFactor = finiteNumber(league.rookieScaleFactor) ? league.rookieScaleFactor : ROOKIE_SCALE_FACTOR;
+  const mlbPlayers = rosterMovePlayers(team).filter((player) => eligibleForSendDown(player));
+  const farmPlayers = farmMovePlayers(farm).filter((player) => eligibleForCallUp(player));
+  const recommendations: MoveRecommendation[] = [];
+
+  for (const farmPlayer of farmPlayers) {
+    const farmSurplus = farmProjectedSurplus(farmPlayer, rookieScaleFactor);
+    if (farmSurplus === null) continue;
+    for (const mlbPlayer of mlbPlayers) {
+      const mlbSurplus = finiteNumber(mlbPlayer.valueDelta)
+        ? mlbPlayer.valueDelta
+        : valueDeltas.get(rosterMovePlayerId(mlbPlayer));
+      if (!finiteNumber(mlbSurplus)) continue;
+      const positionalFit = rosterMovePositionFits(farmPlayer, mlbPlayer);
+      if (!positionalFit) continue;
+      const surplusGap = farmSurplus - mlbSurplus;
+      if (surplusGap <= calloutThreshold) continue;
+      const confidence = scoutConfidenceFor(farmPlayer);
+      const roundedGap = round(surplusGap);
+      recommendations.push({
+        kind: 'call_up',
+        playerId: farmMovePlayerId(farmPlayer),
+        replacesPlayerId: rosterMovePlayerId(mlbPlayer),
+        surplusGap: roundedGap,
+        scoutConfidence: confidence,
+        positionalFit,
+        justification: `${farmMovePlayerName(farmPlayer)} projects as a positive-surplus replacement for ${rosterMovePlayerName(mlbPlayer)} (${confidence} scout confidence).`,
+      });
+      recommendations.push({
+        kind: 'send_down',
+        playerId: rosterMovePlayerId(mlbPlayer),
+        replacesPlayerId: farmMovePlayerId(farmPlayer),
+        surplusGap: roundedGap,
+        scoutConfidence: confidence,
+        positionalFit,
+        justification: `${rosterMovePlayerName(mlbPlayer)} is the known lower-surplus side of a read-only swap; ${farmMovePlayerName(farmPlayer)} projects as the replacement (${confidence} scout confidence).`,
+      });
+    }
+  }
+
+  return recommendations.sort((left, right) =>
+    right.surplusGap - left.surplusGap ||
+    left.kind.localeCompare(right.kind) ||
+    left.playerId.localeCompare(right.playerId),
+  );
+}
+
 type AssignmentEntry = {
   player: AnalysisPlayer;
   defensivePosition: LineupPosition;
@@ -128,6 +250,90 @@ type OrderedEntry = AssignmentEntry & {
 
 function rosterPlayers(team: AnalysisTeam): AnalysisPlayer[] {
   return team.rosterPlayers ?? team.players ?? team.roster ?? team.activeRoster ?? team.candidates ?? [];
+}
+
+function rosterMovePlayers(team: RosterMoveTeam): RosterMovePlayer[] {
+  return team.players ?? team.rosterPlayers ?? team.activeRoster ?? [];
+}
+
+function farmMovePlayers(farm: FarmRoster): FarmRosterMovePlayer[] {
+  return Array.isArray(farm) ? farm : farm.players ?? farm.rosterPlayers ?? farm.farmPlayers ?? [];
+}
+
+function valueDeltaMap(rows: LeagueContext['valueDeltas']): Map<string, number> {
+  if (!rows) return new Map();
+  if (Array.isArray(rows)) {
+    return new Map(rows
+      .filter((row) => row.playerId && finiteNumber(row.valueDelta))
+      .map((row) => [row.playerId, row.valueDelta]));
+  }
+  return new Map(Object.entries(rows).filter((entry): entry is [string, number] => finiteNumber(entry[1])));
+}
+
+function eligibleForSendDown(player: RosterMovePlayer): boolean {
+  return player.eligibleForSendDown ?? player.optionState?.eligibleForSendDown ?? true;
+}
+
+function eligibleForCallUp(player: FarmRosterMovePlayer): boolean {
+  return player.eligibleForCallUp ?? player.optionState?.eligibleForCallUp ?? true;
+}
+
+function farmProjectedSurplus(player: FarmRosterMovePlayer, rookieScaleFactor: number): number | null {
+  const projectedValue = FARM_SCOUTED_GRADE_PROJECTED_VALUE[scoutedGradeFor(player).toUpperCase()];
+  const scoutVisibleSalary = player.scoutVisibleSalary ?? player.optionState?.scoutVisibleSalary;
+  if (!finiteNumber(projectedValue) || !finiteNumber(scoutVisibleSalary)) return null;
+  return projectedValue - scoutVisibleSalary * rookieScaleFactor;
+}
+
+function rosterMovePositionFits(farmPlayer: FarmRosterMovePlayer, mlbPlayer: RosterMovePlayer): boolean {
+  const farmPositions = normalizedRosterMovePositions(farmPlayer);
+  const mlbPositions = normalizedRosterMovePositions(mlbPlayer);
+  if (farmPositions.length === 0 || mlbPositions.length === 0) return false;
+  if (farmPositions.some((position) => mlbPositions.includes(position))) return true;
+  if (farmPositions.some((position) => OUTFIELD_POSITIONS.has(position)) && mlbPositions.some((position) => OUTFIELD_POSITIONS.has(position))) {
+    return true;
+  }
+  return farmPositions.some((position) => PITCHER_POSITIONS.has(position)) && mlbPositions.some((position) => PITCHER_POSITIONS.has(position));
+}
+
+function normalizedRosterMovePositions(player: {
+  primaryPosition?: string;
+  secondaryPosition?: string;
+  secondaryPositions?: string[];
+}): string[] {
+  return [
+    player.primaryPosition,
+    player.secondaryPosition,
+    ...(player.secondaryPositions ?? []),
+  ]
+    .map((position) => String(position ?? '').toUpperCase())
+    .filter((position) => position.length > 0);
+}
+
+function rosterMovePlayerId(player: RosterMovePlayer): string {
+  return player.id ?? player.playerId ?? player.name ?? player.playerName ?? 'unknown-player';
+}
+
+function farmMovePlayerId(player: FarmRosterMovePlayer): string {
+  return player.id ?? player.playerId ?? player.name ?? player.playerName ?? 'unknown-player';
+}
+
+function rosterMovePlayerName(player: RosterMovePlayer): string {
+  return player.playerName ?? player.name ?? rosterMovePlayerId(player);
+}
+
+function farmMovePlayerName(player: FarmRosterMovePlayer): string {
+  return player.playerName ?? player.name ?? farmMovePlayerId(player);
+}
+
+function scoutedGradeFor(player: FarmRosterMovePlayer): string {
+  return String(player.scoutedGrade ?? player.optionState?.scoutedGrade ?? '').toUpperCase();
+}
+
+function scoutConfidenceFor(player: FarmRosterMovePlayer): string {
+  const confidence = String(player.scoutConfidence ?? player.optionState?.scoutConfidence ?? 'unknown').toLowerCase();
+  if (confidence === 'high' || confidence === 'medium' || confidence === 'low') return confidence;
+  return 'unknown';
 }
 
 function optimizePlayers(
@@ -424,6 +630,10 @@ function normalizeFitness(value: unknown): FitnessState {
 function clampRating(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(99, value));
+}
+
+function finiteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
 }
 
 function round(value: number): number {

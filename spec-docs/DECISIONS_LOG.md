@@ -457,3 +457,15 @@ Actual legacy API:       processEndOfSeasonAging(age, {overall: rating}, fame, m
 **Rationale:** Excluding preserves git history and allows future reference. Deleting would be cleaner but irreversible without git archaeology.
 
 **Trade-offs:** The files still exist on disk and could confuse future contributors. A comment in tsconfig.app.json explains why they're excluded.
+
+---
+
+## Jun 14, 2026 — Recommendation surfaces may never consume hidden information (no-oracle-leak principle)
+
+**Decision:** Any KBL recommendation surface (Mode 2 call-up/send-down recs = T7b; in-game sub recs = T9; any future advisory surface) may consume ONLY scout-visible / user-visible information when valuing a player whose true ratings are hidden. Farm prospects are valued from `scoutedGrade` + `scoutConfidence` (the scouted view), NEVER from true ratings / true IV. MLB players (known commodities) use the true TV2 value.
+
+**Context:** Drafting T7b (§8.3 call-up/send-down recs), the proposed v1 valued farm prospects on their internal trueIV. JK caught that this leaks: a rec built on true value is an oracle — an astute user back-calculates relative value, and thereby the hidden ratings, regardless of scouting accuracy.
+
+**Rationale:** (1) Preserves §7.4 (scout-obscured farm IV) — the rec adds no information the user doesn't already have. (2) Preserves the risk/reward asymmetry: MLB players are KNOWN (true value); farm prospects are UNCERTAIN (scouted estimate carries noise w = scoutNoiseBase × (1 − scoutAccuracy)) — so calling up a prospect is a genuine gamble and sending down a known commodity is the certain side. (3) Preserves call-up excitement: true ratings reveal ONLY at call-up; the rec never knew them.
+
+**Trade-offs:** The rec is only as good as the scouting (it can be wrong) — which is the intended design, not a defect. A richer scouted-distribution / expected-value model (vs the v1 scouted point-estimate + confidence label) is a flagged follow-up. Governs T7b; cite in T9.
