@@ -699,3 +699,29 @@ instruction/config/doc changes.
 **Next product action:** Draft/run the T6 contract. Before that, future
 sessions should read `CLAUDE.md`, `spec-docs/AI_TEAM_OPERATING_MODEL.md`,
 the latest EP1 close entries, and the relevant T6 source specs/contracts.
+
+---
+
+## ARC SNAPSHOT — 2026-06-14 (session end): T6 + T7 stack complete
+
+**Outgoing live-header state:** T-stack execution. Last completed = **T7c (Season
+Salary Ledger)** — the T7 stack (T7a/T7b/T7c) is COMPLETE; T6 also done. Four feature
+commits this session, each Codex-built → Opus-audited CONFORMS → committed:
+- 6c6aa14 T6 — Effective Ratings Engine + DefensivePlacementRisk
+- a28a6d2 T7a — optimal lineups vs L/R rescored on IV-of-effectiveRatings
+- bb877d8 T7b — call-up/send-down advisory recs (leak-safe)
+- 055cfb8 T7c — Season Salary Ledger (trackerDb v15; migration safety proven)
+
+Suite 7,140 → 7,171 / 386; only the 3 characterized fails throughout; golden / SMB4 /
+oracle / salaryCalculator byte-unchanged on every ticket.
+
+**Next action:** **T8 — Mode 1 Suite (§6 + §7)** → T9 (GameTracker sub-rec rebuild) →
+T10 (Lineup Delta WPA) → D0.
+
+**Workflow rulings (JK 2026-06-14):** standing auto-commit mode; batched browser
+verification (SESSION_RULES pen); no-oracle-leak principle (DECISIONS_LOG).
+
+**Browser-batch backlog (one pass pre-D0):** EP1, TV2, T7a, T7b, T7c.
+
+**Deferred/open:** FINDING-148 (AUX_PRICING L/R, oracle regen); payroll-expectation →
+fan-morale (declared-budget design); execute-from-rec; deadMoneyRate league presets.

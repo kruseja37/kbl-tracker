@@ -4305,3 +4305,71 @@ based skill sync incl. auto-fire hook + delete propagation; codex-ideation
 peer loop read-only). Ready for the single closure commit. Remaining tracked
 items are non-blocking: spec-assembler 176-line dup deletion (pending pen),
 stray mode2-pilot YAML, Rosters.csv commit/gitignore call.
+
+
+---
+
+## 2026-06-14 — T-stack execution: T6 + T7a/T7b/T7c built, audited CONFORMS, committed
+
+**Type:** Product code. Branch codex/franchise-v1-next. Four feature commits
+(6c6aa14 T6, a28a6d2 T7a, bb877d8 T7b, 055cfb8 T7c). Roles: Codex 5.5 BUILT each
+(codex CLI, workspace-write, high reasoning); Opus 4.8 (Captain) wrote every contract
++ AUDITED every diff independently (Fable unavailable; auditor ≠ builder — Captain
+did NOT write the code). JK ruled product/scope/design; browser sign-off BATCHED.
+
+**Workflow established this session (JK rulings):**
+- **Standing auto-commit mode:** per ticket = Codex build → independent Opus
+  engineering audit (rerun build/tsc/suite + seam/correctness/golden checks +
+  falsification) → auto-commit verified-complete (browser-pending) → proceed.
+  Captain surfaces only the audit verdict, the browser backlog, and genuine
+  scope/design/asset decisions when drafting each contract.
+- **Batched browser verification** (SESSION_RULES pen, pending ratification): the
+  engineering audit is per-ticket + non-deferrable; JK's browser sign-off is BATCHED
+  into one pass before the D0/flag-flip/playtest gate, never waived; persistence/
+  data-shape tickets prioritized.
+- **No-oracle-leak principle** (DECISIONS_LOG): recommendation surfaces may consume
+  ONLY scout-visible info when valuing hidden-rating players (governs T7b + T9).
+
+**T6 (6c6aa14) — Effective Ratings Engine.** New pure src/engines/effectiveRatings.ts
+(effectiveRatings + defensivePlacementRisk per IV §4) + add-only rosterEngineConstants;
+first reader of the T2 trait matrix; legacy mojoEngine/fitnessEngine UNTOUCHED
+(R-T6-1 asset gate). Audit CONFORMS; oracle spot-check MATCH. Finding #1
+(handednessBonus) → reframed as FINDING-148.
+
+**T7 (split T7a/T7b/T7c per R-T7-SPLIT):**
+- **T7a (a28a6d2)** — optimal lineups vs L/R rescored on IV-of-effectiveRatings.
+  Load-bearing seam: the effectiveRatings vector is SPLIT into computeIV's hitter
+  (input.ratings) + pitcher (input.pitcherRatings) channels — proven by test (pitcher
+  attrs in input.ratings are a no-op). optimalLineup.ts scoring swapped in-place, API
+  stable. BEHAVIOR CHANGE (lineup recs differ) → browser-pending.
+- **T7b (bb877d8)** — call-up/send-down ADVISORY recs (no execution, no ledger).
+  recommendRosterMoves: MLB surplus = TV2 valueDelta (known) vs farm surplus =
+  scoutedGrade only (leak-safe per the no-oracle-leak ruling). 4 stubbed emitters
+  unblocked to read_only. Leak test proves hidden true ratings are inert.
+- **T7c (055cfb8)** — Season Salary Ledger. trackerDb v14→15 + guarded
+  franchiseSeasonLedgerRows store; LedgerEntry state machine + ledgerCapCharge;
+  call-up/demotion producer (rookieScale flip, no double-discount, no stacking);
+  salaryCalculator BYTE-UNCHANGED. Migration safety PROVEN (all 31 prior stores
+  preserved at v15). DEFERRED: payroll-expectation→fan-morale (needs declared-budget),
+  execute-from-rec, league presets.
+
+**Suite:** 7,140 → 7,171 / 386 files; only the 3 characterized fails throughout
+(wpaRuntimeBoundary, franchiseNarrativeEventEligibility, franchiseManualSmokeFixture
+order-flake). golden/SMB4/oracle/salaryCalculator byte-unchanged on every ticket.
+
+**BROWSER-VERIFY BACKLOG (JK, one pass before D0):** EP1, TV2, T7a (lineup recs),
+T7b (call-up/send-down recs), T7c (rookie-scale/dead-money).
+
+**OPEN/DEFERRED:** FINDING-148 (AUX_PRICING L/R, JK-gated, oracle regen); payroll-
+expectation→fan-morale (declared-budget design); execute-from-rec; deadMoneyRate
+presets; ROOKIE_SCALE_FACTOR single-sourced to salaryCalculator:380.
+
+**NEXT SESSION STARTS AT: T8 — Mode 1 Suite (§6 + §7)** — pool registration, snake
+draft, pick chart + trade validator, identity composition UI, scout-obscured farm
+pricing, luxuryTax + balanceMode. ROUTE Codex 5.5 | very high → Opus audit
+(persistence: pool/league state, audit non-negotiable). BIG ticket — map it + likely
+split (like T7) + surface scope decisions before drafting. Then T9 → T10 → D0.
+**Codex invocation mechanism (proven this session):** Captain runs
+`~/.local/bin/codex exec --skip-git-repo-check -s workspace-write -c model_reasoning_effort=high -o <out> - < <promptfile>`
+as a background task (harness sandbox disabled for that one call so codex's own
+workspace-write sandbox governs), then audits the diff.
