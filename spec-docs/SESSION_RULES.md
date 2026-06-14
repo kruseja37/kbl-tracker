@@ -204,13 +204,16 @@ Run commands → paste output → log findings to correct file → commit → ne
 
 ## Session End Protocol (mandatory)
 Before ending any session, rewrite CURRENT_STATE.md completely:
-1. Update "Current Phase and Step"
-2. Update "Last Completed Action" to what was just done
-3. Update "Next Action" to exactly what next session starts with
-4. Update "Key Decisions Made" if any new decisions were reached
-5. Commit CURRENT_STATE.md with message: "docs: session end — update CURRENT_STATE.md"
+1. Append the OUTGOING live-header snapshot to CURRENT_STATE_HISTORY.md
+   (append-only, newest at the bottom) — this preserves the arc trail.
+2. Rewrite the CURRENT_STATE.md LIVE HEADER in place (do not append to it):
+   - Update "RIGHT NOW" (phase / last completed / next action)
+   - Update "SUITE BASELINE" if test count or characterized set changed
+   - Update "BROWSER-VERIFY OUTSTANDING" and "OPEN PENDING-JK"
+3. Commit with message: "docs: session end — update CURRENT_STATE.md"
 
-CURRENT_STATE.md is the single file that makes new threads work. If it is stale, new threads will be disoriented. There are no exceptions.
+CURRENT_STATE.md (the live header) is the single file that makes new threads
+work. If it is stale, new threads will be disoriented. There are no exceptions.
 
 ---
 
@@ -262,3 +265,92 @@ hand off unless BOTH conditions hold:
 Origin: reasoning-effort drift caught by JK in the W1 arc (2026-06-12);
 chat-only handoff caught by Captain self-NFL in the F135-T1 arc
 (2026-06-12). Both clauses are mechanical pre-handoff checks.
+
+---
+
+## AI Team Addendum (Non-Negotiable - added 2026-06-14)
+
+The repo now supports a three-seat operating model: JK, Claude Opus 4.8, and
+Codex. The purpose is faster execution with stronger audit separation, not
+looser process.
+
+Rules:
+- `CLAUDE.md` remains the canonical instruction file.
+- `AGENTS.md` is a short Codex bridge into `CLAUDE.md`; do not duplicate the
+  canonical instructions there.
+- `spec-docs/AI_TEAM_OPERATING_MODEL.md` defines routing, handoffs, and the
+  builder/auditor triangle.
+- Codex project skills are discovered from `.agents/skills/`; keep those as
+  symlinks to source skills where possible.
+- Codex MCP config lives in `.codex/config.toml`; Claude MCP config remains
+  `.mcp.json`.
+- The agent that builds a meaningful change cannot be the final auditor for
+  that same change.
+- Claude Opus 4.8 may fill the Fable-style audit role when Fable is
+  unavailable, provided it did not build the diff.
+- Codex may review contracts, plans, or diffs when it was not the builder.
+- JK remains the final product and scope authority.
+
+
+---
+
+## CLI Verification Environment (Non-Negotiable — poisons the suite if skipped)
+
+All vitest/CLI verification MUST prefix `NODE_ENV= ` (login shell exports
+NODE_ENV=production, which poisons vitest with ~1,800 false failures). Node
+lives at `~/.nvm/versions/node/v20.20.0/bin` on non-interactive shells.
+
+**Characterized suite baseline** is maintained in CURRENT_STATE.md and updated
+on change. As of the EP1 close it was 7,140 tests / 383 files, with a known
+characterized set: fixed failures wpaRuntimeBoundary +
+franchiseNarrativeEventEligibility, and conditional-solo order-flakes
+franchiseManualSmokeFixture + GameTrackerLaunchState +
+franchiseOffseasonGuards.component (each passes when run solo). A new RED that
+is NOT in the characterized set is a real regression — never silently relabel
+it as baseline.
+
+---
+
+## Builder Reporting Completeness (Non-Negotiable — MINOR #3, 4 instances TV2→EP1)
+
+Every changed file MUST appear in the builder report — including
+mechanically-forced test/mock/doc adjustments the builder considers trivial.
+The report enumerates every `git status` path AND states the total changed-path
+count and the passing-test count. Underreporting a "trivial" mock edit is the
+exact failure this rule closes.
+
+---
+
+## Browser Verification Gate (Non-Negotiable — JK ruling 2026-06-14)
+
+Codex MAY run Playwright browser/user-flow pre-checks and MUST report results.
+A browser pre-check by any agent NEVER closes a ticket on its own. JK's manual
+browser sign-off on real franchise data remains the SOLE real-world acceptance
+gate. An agent's browser pass is a fourth screen before JK's eyes, not a
+replacement for them.
+
+---
+
+## Lessons Learned (pending JK ratification)
+
+Auto-capture pen for the Self-Improvement Loop (see CLAUDE.md). Rules here are
+PROPOSALS, written the moment a JK correction happens (Write-First), in the form
+"When [situation], always [action] because [reason]." They are NOT yet in force.
+
+Promotion: JK says "ratify [item]" → the rule moves up into the non-negotiable
+rules above and is struck from this pen. No agent promotes its own rule, and no
+agent edits the ratified rules without JK. (JK ruling 2026-06-14.)
+
+_(no behavioral rule proposals pending)_
+
+### Pending cleanup (not a rule — a tracked repo action)
+- **spec-assembler duplicate:** two divergent copies exist —
+  `.claude/skills/spec-assembler/SKILL.md` (511 lines, CANONICAL per JK
+  2026-06-14) and `spec-docs/skills/spec-assembler/SKILL.md` (176 lines, stale).
+  The Codex mirror correctly uses the canonical copy. ACTION: delete or rename
+  the 176-line spec-docs copy to end the name collision, then grep the four
+  docs that reference `spec-docs/skills/spec-assembler` (GAMETRACKER_REDESIGN_
+  PIPELINE, PHASE2_HANDOFF, SCOPE_LOCK_IMPLEMENTATION_REFERENCE,
+  GAMETRACKER_SCOPE_LOCK_WORKING) and repoint if needed. JK does the deletion.
+  (`spec-simplifier` also dupes across both sources but is byte-identical —
+  harmless, optional dedup.)

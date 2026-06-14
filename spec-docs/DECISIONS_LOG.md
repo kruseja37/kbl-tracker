@@ -5,6 +5,75 @@
 
 ---
 
+## June 2026
+
+### 2026-06-14: AI-team setup reconciliation (Captain pass over Codex's setup)
+
+**Context**: Codex built the shared operating setup (entry below). A Captain
+review against existing canon (SESSION_RULES + AUDIT_PLAN + the prompt-contract
+pipeline) found it ~85% aligned, with one conflict, stale facts, and three new
+policies needing a JK ruling. Reconciled in one session; committed with the
+setup.
+
+**Decisions (JK-ruled 2026-06-14)**:
+1. **One session-start ritual.** CLAUDE.md's startup block was reading 3 files
+   (CURRENT_STATE/SESSION_LOG/DECISIONS); corrected to the canonical 5
+   (SESSION_RULES → AUDIT_LOG → AUDIT_PLAN → SESSION_LOG → CURRENT_STATE) so
+   every runtime boots identically. AI_TEAM_OPERATING_MODEL's build-loop opener
+   aligned to the same list.
+2. **Stale facts purged from CLAUDE.md.** useGameState.ts corrected to ~12,585
+   lines (both prior figures — 4,647 and 2,344 — were wrong); test count no
+   longer hardcoded (pointed at CURRENT_STATE live baseline, currently
+   7,140/383); skill counts de-hardcoded (dirs are source of truth).
+3. **Browser-verification gate.** Codex pre-checks via Playwright and reports,
+   but JK's manual sign-off on real data is the SOLE closing gate. A browser
+   pre-check never closes a ticket on its own.
+4. **Self-Improvement Loop uses a pending-ratification pen.** Agents WRITE the
+   proposed rule immediately into a `Lessons Learned (pending JK ratification)`
+   section of SESSION_RULES (Write-First), but it is a PROPOSAL until JK says
+   "ratify." No agent promotes its own rule or edits ratified rules without JK.
+   (Chosen over fully-automatic to prevent unsupervised edits to the governing
+   rulebook — the canon-drift failure mode.)
+5. **Subagent strategy kept as-is** (low-risk, no conflict).
+6. **CURRENT_STATE split.** The 693-line file became a ~40-line live header +
+   CURRENT_STATE_HISTORY.md (full arc trail, verified byte-identical on split).
+   Session-end protocol updated to match (append outgoing snapshot to history,
+   rewrite live header in place).
+
+**Rationale**: The existing system is mature; the goal was to close drift, not
+add a framework. The conflict (#1) was the only true partnership-breaker — a
+fresh runtime would otherwise skip its own rules file. The footgun blocks
+(NODE_ENV= prefix + characterized baseline; builder-reporting completeness)
+were folded into SESSION_RULES because they had been living only in scattered
+CURRENT_STATE notes.
+
+**Implications**:
+- Three docs now agree on the session-start ritual; no second source of truth.
+- Roles/routing/loops live in AI_TEAM_OPERATING_MODEL.md (resolves the stale
+  3-role table in SESSION_RULES' Accountability section by reference).
+- The current Codex session that authored the setup is now stale (files changed
+  underneath it); T6 should start in a FRESH Codex session reading committed
+  canon — this is a sanctioned exception to "continue long sessions" (arc
+  boundary).
+
+---
+
+### 2026-06-14: Shared Codex / Claude Opus 4.8 Operating Model (initial setup)
+
+**Context**: JK wants Codex, Claude Opus 4.8, and himself working as a tighter build/audit team on KBL Tracker, with less setup drift and stronger handoffs.
+
+**Decision**: Keep `CLAUDE.md` as the canonical repo instruction file. Add `AGENTS.md` as a short Codex bridge, add `spec-docs/AI_TEAM_OPERATING_MODEL.md` as the shared team protocol, mirror selected Claude/project skills into `.agents/skills/` by symlink for Codex discovery, and mirror Playwright MCP into `.codex/config.toml`.
+
+**Rationale**: One canonical instruction source prevents Claude/Codex drift. Symlinked skills let both runtimes share workflow definitions without copying. Separate MCP configs let both runtimes use browser tooling. The builder/auditor triangle keeps speed from eroding verification quality.
+
+**Implications**:
+- Future Codex sessions should read `AGENTS.md`, then `CLAUDE.md`, then the team operating model for multi-agent work.
+- Future Claude sessions should treat Codex as the default builder/local verifier unless JK routes otherwise.
+- Claude Opus 4.8 can audit Codex work when Fable is unavailable, but no agent audits its own diff.
+- New shared skills should be added to the source skill folder and mirrored into `.agents/skills/` when Codex should discover them.
+
+---
+
 ## Deferred Technical Debt Register
 > Items explicitly deferred during Phase 1/2 audit (2026-02-18). Each has a trigger condition — the event that makes it worth picking up.
 

@@ -1,0 +1,11 @@
+# Repo-local Codex configuration for trusted KBL Tracker sessions.
+# Claude's corresponding MCP config is .mcp.json.
+
+project_doc_max_bytes = 65536
+project_doc_fallback_filenames = ["CLAUDE.md"]
+
+[mcp_servers.playwright]
+command = "npx"
+args = ["-y", "@executeautomation/playwright-mcp-server"]
+startup_timeout_sec = 20
+tool_timeout_sec = 120

@@ -4,12 +4,16 @@
 - Active state hook: src/src_figma/hooks/useGameState.ts
 - Inactive (never route here): src/components/GameTracker/index.tsx
 - Spec docs: spec-docs/
+- Shared AI team protocol: spec-docs/AI_TEAM_OPERATING_MODEL.md
+- Codex bridge instructions: AGENTS.md
+- Codex repo skills: .agents/skills/ (derived COPY mirror of .claude/skills/ + spec-docs/skills/; never edit by hand — run scripts/sync-codex-skills.sh)
+- Codex MCP config: .codex/config.toml
 - Always work on main unless JK says otherwise
 
 ## Critical Architecture Facts (Phase 0 Confirmed)
 - App.tsx routes GameTracker to src/src_figma/app/pages/GameTracker.tsx ONLY
 - src/components/GameTracker/index.tsx is NOT routed — do not treat as active
-- useGameState.ts (4,647 lines) is the active state system — not deprecated
+- useGameState.ts (~12,585 lines) is the active state system — not deprecated
 - useGamePersistence.ts is wired to the inactive path only
 - 718 useState calls in src/src_figma + src/components/GameTracker/
 
@@ -18,12 +22,22 @@
 # Project Instructions for Claude Code
 
 ## Session Start Protocol
-**BEFORE doing any work on KBL Tracker, READ these files:**
-1. `spec-docs/CURRENT_STATE.md` — Architecture, build status, what's implemented, known issues
-2. `spec-docs/SESSION_LOG.md` — Work history (read from the end for most recent)
-3. `spec-docs/DECISIONS_LOG.md` — Key design decisions with rationale
+**BEFORE doing any work on KBL Tracker, READ these files in order via the Read
+tool on exact paths — do NOT rely on compaction/summaries.** This is the single
+canonical startup ritual for EVERY runtime (Claude Code, Codex, Claude chat).
+It must stay identical to the one in `spec-docs/SESSION_RULES.md`:
+1. `spec-docs/SESSION_RULES.md` — non-negotiable rules, roles, the triangle
+2. `spec-docs/AUDIT_LOG.md` — where we are in the audit (index for findings 056+)
+3. `spec-docs/AUDIT_PLAN.md` — what we're auditing and how
+4. `spec-docs/SESSION_LOG.md` — last session's work (read from the end if large)
+5. `spec-docs/CURRENT_STATE.md` — LIVE HEADER: phase / last done / next action
 
-Confirm understanding before proceeding: "Based on docs, we're at X point. Correct?"
+After reading, RESTATE: current phase, what was last completed, and the next
+action. WAIT for JK to confirm or correct before any work starts.
+
+(Roles, routing, and build/audit loops live in
+`spec-docs/AI_TEAM_OPERATING_MODEL.md`. Full-history arc log lives in
+`spec-docs/CURRENT_STATE_HISTORY.md`.)
 
 ---
 
@@ -59,7 +73,7 @@ kbl-tracker/
 │   │   │   ├── engines/         # 15 integration wrappers (adapt base engines for UI)
 │   │   │   ├── hooks/           # 8 app-level hooks
 │   │   │   └── types/           # App-level type definitions
-│   │   ├── hooks/               # 8 core UI hooks (useGameState: 2,344 lines)
+│   │   ├── hooks/               # core UI hooks (useGameState: ~12,585 lines)
 │   │   └── utils/               # 3 Figma-specific utils
 │   ├── engines/                 # ⚙️ CORE: 36 calculation engines (WAR, mojo, salary, etc.)
 │   │   └── __tests__/           # Engine unit tests
@@ -87,7 +101,7 @@ kbl-tracker/
 │   └── [~50 active spec docs]  # Feature specs, Figma specs, system specs
 ├── test-utils/                  # Test infrastructure (golden cases, simulators)
 ├── reference-docs/              # SMB4 game guides (external reference material)
-├── .claude/skills/              # 20 custom Claude Code skills (audit, fix, test pipeline)
+├── .claude/skills/              # Claude Code skills (audit, fix, test pipeline) — dir is source of truth
 ├── .mcp.json                    # Playwright MCP for browser testing
 ├── CLAUDE.md                    # This file
 └── [standard config files]      # vite, tsconfig, tailwind, eslint, postcss, package.json
@@ -104,7 +118,7 @@ Always reason from first principles. Break problems down to fundamental truths r
 **Assume failure until proven otherwise.** After any code change:
 
 **Tier 1**: Build succeeds — `npm run build` exits 0
-**Tier 2**: All tests pass — 5,653 tests across 134 files
+**Tier 2**: All tests pass — current suite baseline lives in `spec-docs/CURRENT_STATE.md` (do NOT hardcode a count here; it rots). A new RED that is not in the documented characterized set is a real regression.
 **Tier 3**: No runtime errors — 0 console errors
 **Tier 4**: Spec alignment verified — constants, types, formulas match spec docs
 
@@ -167,7 +181,9 @@ Maintain **spec-docs/** as the single source of truth.
 
 ## Custom Skills (.claude/skills/)
 
-20 specialized skills installed. They form pipelines for different workflows:
+Specialized skills are installed in `.claude/skills/` (that directory is the
+source of truth for the current set; Codex sees a mirror in `.agents/skills/`).
+They form pipelines for different workflows:
 
 **Audit → Fix Pipeline:**
 spec-ui-alignment → batch-fix-protocol → gametracker-logic-tester → dummy-data-scrubber
@@ -180,11 +196,38 @@ franchise-engine-discovery → franchise-button-audit → data-pipeline-tracer �
 
 **Other:** codebase-reverse-engineer, safe-fix-protocol, ui-flow-crawler, phase-b-builder, exhaustive-spec-auditor, spec-consolidation-protocol
 
+**Codex mirror:** Repo-scoped Codex skills live in `.agents/skills/` as a
+DERIVED COPY mirror of the two canonical sources `.claude/skills/` and selected
+`spec-docs/skills/` folders. Never edit the `.agents/skills/` copy by hand —
+edit the source, then the mirror updates: automatically via the Claude Code
+PostToolUse hook when changes happen inside a Claude Code session, or manually
+by running `scripts/sync-codex-skills.sh` (required after any skill change made
+by Codex or by hand, since the hook only fires inside Claude Code). The sync is
+copy-based, not symlinks, so the mirror survives fresh clones and Codex Cloud
+checkouts.
+
+## Multi-Agent Team Protocol
+
+For JK + Claude Opus 4.8 + Codex workflows, read `spec-docs/AI_TEAM_OPERATING_MODEL.md`.
+
+Defaults:
+- JK owns product rulings, manual/browser acceptance, and scope decisions.
+- Claude Opus 4.8 is Captain/spec lead/primary auditor unless it wrote the change.
+- Codex is the default builder and local verifier for precise repo edits.
+- The builder/auditor triangle is mandatory: the agent that wrote a meaningful change does not audit its own diff.
+- Contracts and audit prompts must exist in `spec-docs/PROMPT_CONTRACTS.md` before handoff.
+
 ---
 
 ## Browser Testing (Playwright MCP)
 
-Configured in `.mcp.json`. Start dev server first: `npm run dev` → open `http://localhost:5173`
+Configured for Claude in `.mcp.json` and for Codex in `.codex/config.toml`. Start dev server first: `npm run dev` -> open `http://localhost:5173`
+
+**Browser verification gate (JK ruling 2026-06-14):** Codex MAY run Playwright
+browser/user-flow pre-checks and MUST report results — but a browser pre-check
+NEVER closes a ticket on its own. JK's manual browser sign-off on real data
+remains the sole real-world acceptance gate. Codex's pass is a fourth screen
+before JK's eyes, not a replacement for them.
 
 ---
 
@@ -224,11 +267,15 @@ If JK pastes new CLI output without a prior commit, Claude must say "Log first" 
 ---
 
 ### Self-Improvement Loop
-- After ANY correction from JK: add a rule to `spec-docs/SESSION_RULES.md`
-  under a "Lessons Learned" section that prevents the same mistake
+- After ANY correction from JK: immediately WRITE the proposed rule into the
+  `## Lessons Learned (pending JK ratification)` section of
+  `spec-docs/SESSION_RULES.md` (Write-First — capture it the moment it happens).
+- It is a PROPOSAL until JK says "ratify"; only then does it move into the
+  non-negotiable rules above it. No agent promotes its own rule to canon, and
+  no agent edits the ratified rules without JK. (JK ruling 2026-06-14.)
 - Write the rule in the form: "When [situation], always [action] because [reason]"
 - Ruthlessly iterate — if the same mistake recurs, the rule wasn't specific enough; rewrite it
-- Review lessons at session start alongside the other required files
+- Review both ratified rules and the pending pen at session start alongside the other required files
 
 ### Subagent Strategy
 - Use subagents to keep main context window clean

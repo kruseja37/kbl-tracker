@@ -4127,3 +4127,181 @@ T6 → {T7,T8} → T9 → T10 → D0 cut line. Slices 5 (locking) + 6 (Captain/
 Fan Hopeful) remain queued post-T-stack or per D0. Browser-verify
 outstanding (JK): TeamHub projected badges (TV2) + now EP1 effective-
 position pooling on real data.
+
+
+## 2026-06-14 — AI TEAM OPERATING SETUP: Codex + Claude Opus 4.8 + JK
+
+**Goal:** Set up the KBL Tracker repo so Codex, Claude Opus 4.8, and JK can
+work as a tighter build/audit team with shared instructions, shared skills,
+and explicit handoff rules.
+
+**Setup added:**
+- `AGENTS.md` created as a short Codex bridge to canonical `CLAUDE.md`.
+- `spec-docs/AI_TEAM_OPERATING_MODEL.md` created with role definitions,
+  default routing, build/audit loops, parallel-work rules, MCP/skill notes,
+  and handoff templates.
+- `.codex/config.toml` created with Playwright MCP config and a larger
+  project-doc instruction budget.
+- `.agents/skills/` created with symlinks to the existing `.claude/skills/`
+  folders plus selected `spec-docs/skills/` workflows (`gametracker-
+  functional-audit`, `gametracker-scope-resolver`, `gametracker-design-spec`,
+  `safe-fix-protocol`).
+- `CLAUDE.md`, `SESSION_RULES.md`, `DECISIONS_LOG.md`, and
+  `CURRENT_STATE.md` updated to reference the shared team model.
+
+**Decision recorded:** `CLAUDE.md` remains the canonical instruction source.
+`AGENTS.md` is intentionally short and should not duplicate long-lived rules.
+The builder/auditor triangle is mandatory: Codex can build and Claude Opus
+4.8 can audit, or vice versa, but the same agent does not final-audit its own
+diff.
+
+**Verification:** Repo setup files and symlinks were verified locally. This
+was a docs/config/agent-setup change only; no runtime source files changed and
+no app build/test was required.
+
+**Next product action remains:** T6, per the EP1 close and F-141 sequencing
+ruling. Future sessions should start from `CLAUDE.md`,
+`spec-docs/AI_TEAM_OPERATING_MODEL.md`, latest `CURRENT_STATE.md`, and the
+T6 source specs/contracts.
+
+
+---
+
+## 2026-06-14 — AI-team operating setup: Codex setup + Captain reconciliation + copy-based skill sync + codex-ideation
+
+**Type:** Docs / config / tooling only. No app code. No build/test suite run
+(non-runtime change). Branch: codex/franchise-v1-next. Single intended closure
+commit (see below).
+
+**Context.** Codex was asked to set up the shared JK + Claude Opus 4.8 + Codex
+workflow and produced: AGENTS.md bridge, spec-docs/AI_TEAM_OPERATING_MODEL.md,
+.codex/config.toml (Playwright MCP), .agents/skills/ (31 symlinks), and edits
+to CLAUDE.md / SESSION_RULES.md / DECISIONS_LOG.md / CURRENT_STATE.md. A Captain
+pass reconciled it against existing canon, then a second article ("make Codex +
+Claude one OS") drove a skill-sync correction.
+
+**Reconciliation findings + fixes (all applied this session):**
+1. CONFLICT — CLAUDE.md session-start read 3 files (CURRENT_STATE/SESSION_LOG/
+   DECISIONS) vs the canonical 5 in SESSION_RULES. Fixed: CLAUDE.md now reads
+   SESSION_RULES → AUDIT_LOG → AUDIT_PLAN → SESSION_LOG → CURRENT_STATE and
+   restates phase/last/next. AI_TEAM_OPERATING_MODEL build-loop opener aligned.
+2. STALE FACTS in CLAUDE.md — useGameState listed as 4,647 AND 2,344; real =
+   ~12,585 (grep-verified). Test count hardcoded 5,653/134; real = 7,140/383 —
+   now points at CURRENT_STATE live baseline instead of a hardcoded number.
+   Skill count 20 → de-hardcoded (dirs are source of truth).
+3. JK RULINGS (2026-06-14): (a) browser verification — Codex pre-checks via
+   Playwright + reports, JK manual sign-off is the SOLE closing gate; (b) Self-
+   Improvement Loop — agents WRITE proposed rules into a "Lessons Learned
+   (pending JK ratification)" pen in SESSION_RULES, promoted only on JK "ratify"
+   (chosen over fully-automatic to prevent unsupervised edits to the rulebook);
+   (c) subagent strategy kept as-is.
+4. CURRENT_STATE split — 693-line file → ~40-line live header +
+   CURRENT_STATE_HISTORY.md (full prior content, verified byte-identical via
+   sha256 at split). Session-end protocol updated to match.
+5. SESSION_RULES additive blocks folded from scattered CURRENT_STATE notes:
+   CLI Verification Environment (NODE_ENV= prefix + characterized baseline),
+   Builder Reporting Completeness, Browser Verification Gate, the pen.
+
+**Skill sync (JK ruling: two sources, one mirror, copy-based — NOT symlinks):**
+- Discovery: .agents/skills had 31 RELATIVE symlinks; git tracked 0 of them →
+  the mirror did not survive clone or Codex Cloud. Article's symlink-fragility
+  warning (Windows/git/cloud) partly applies; the git/cloud leg is real here.
+- Built scripts/sync-codex-skills.sh: rebuilds .agents/skills as real COPIES of
+  the union of .claude/skills/ + spec-docs/skills/ (idempotent; deletes
+  propagate; name collisions flagged loudly, first-source wins).
+- Wired .claude/settings.json PostToolUse hook (Write|Edit|MultiEdit|Bash;
+  Bash fires only when the command mentions .claude/skills or spec-docs/skills).
+- TESTED end-to-end: 33 real entries / 0 symlinks / matches dedup union;
+  add→sync→present then delete→sync→absent both PASS.
+- COLLISION SURFACED: spec-assembler exists in both sources and DIVERGES
+  (.claude 511 lines vs spec-docs 176). JK ruled .claude copy CANONICAL; mirror
+  uses it. 176-line spec-docs dup queued for deletion in the pending pen (4 docs
+  reference that path — repoint on delete). spec-simplifier also dupes but is
+  byte-identical (harmless).
+
+**codex-ideation skill (Claude consults Codex CLI as read-only peer reviewer):**
+- Files: .claude/skills/codex-ideation/SKILL.md + scripts/codex.py + AGENTS.md
+  note. Peer-not-tool framing; start/--reply/--read/--reset; Temp/.codex_active
+  flag; resume-fail falls back to fresh session; stdin closed (no hang);
+  CODEX_BIN → PATH → common dirs → VS Code ext discovery.
+- NFL caught + fixed a real bug: binary-check ran before brief-validation, so a
+  missing brief gave "codex not found" instead of "provide a brief". Reordered;
+  re-tested clean; py_compile OK; mirror copy matches edited canonical.
+
+**Doc consistency:** AGENTS.md + CLAUDE.md (×2 lines) de-symlinked to describe
+the copy-mirror + manual-sync requirement. Only remaining "symlink" mention in
+CLAUDE.md is the correct "copy-based, not symlinks."
+
+**STATUS / UNVERIFIED (require live Claude Code, per Evidence-over-Assertion):**
+- VERIFIED by Captain: sync script (incl. delete propagation), codex.py
+  arg-handling/not-found/CODEX_BIN/compile, mirror is real copies, all docs
+  consistent, diff --check clean, nothing gitignored.
+- UNVERIFIED — needs ONE live JK check each: (1) the PostToolUse hook actually
+  auto-fires inside a Claude Code session (env-var names CLAUDE_TOOL_INPUT /
+  CLAUDE_PROJECT_DIR and settings.json hook schema are Claude-Code runtime
+  specifics not confirmable from chat); (2) codex-ideation live round-trip
+  (codex binary is NOT on the non-interactive shell PATH — JK's interactive
+  shell may differ; set CODEX_BIN if needed).
+
+**COMMIT (intended, single):** CLAUDE.md, AGENTS.md, .codex/, .agents/,
+.claude/settings.json, .claude/skills/codex-ideation, scripts/
+sync-codex-skills.sh, spec-docs/{AI_TEAM_OPERATING_MODEL, SESSION_RULES,
+CURRENT_STATE, CURRENT_STATE_HISTORY, DECISIONS_LOG, SESSION_LOG}.md.
+Stray reference-docs/Super Mega Baseball 4 Rosters.csv DELIBERATELY EXCLUDED
+(standing commit/gitignore decision).
+
+**NEXT TASK (unchanged): T6.** Per F-141 the full T-stack runs to completion
+before D0. T6 contract not yet drafted — first action of next session; ROUTE
+Codex 5.5 | high (very high if state-touching) → Fable 5 CLI audit. **Process
+note:** the Codex session that authored this setup is now STALE (files changed
+underneath it); start T6 in a FRESH Codex session reading committed canon —
+sanctioned exception to "continue long sessions" (arc boundary).
+
+
+### ADDENDUM (same session, 2026-06-14) — live verification results + two fixes
+
+After the main entry above was written, the CLI was installed and the two
+UNVERIFIED items were tested live. Updated status:
+
+**Codex CLI installed:** codex-cli 0.139.0 at ~/.local/bin/codex (on PATH,
+signed in via ChatGPT account). The wrapper's flags (`-s read-only`,
+`--skip-git-repo-check`, `resume --last`) are all valid in v0.139 — no
+compat changes needed.
+
+**codex-ideation: VERIFIED end-to-end.** Live round-trip ran on gpt-5.5:
+opening call replied, and `--reply` resumed the SAME session id and built on
+the prior turn (true back-and-forth loop, not one-shot). Smoke turns
+ACKNOWLEDGED→CONFIRMED confirm resume works.
+
+**FIX #1 (sandbox leak, caught by NFL during verification):** `codex exec
+resume` does NOT inherit the opening call's `-s read-only` — it fell back to
+the user config.toml default (workspace-write), so `--reply` turns silently
+gained WRITE access. For a read-only thinking aid that is a boundary leak
+(could write files mid-loop, outside any contract). FIXED: wrapper now passes
+`-s read-only` on the resume command too (codex.py line 117); re-tested — both
+turns now show `sandbox: read-only`. Mirror re-synced to match.
+
+**FIX #2 (skill-sync hook, root-caused):** the first hook test FAILED because
+the hook command used `$CLAUDE_TOOL_INPUT` (a non-existent env var) — Claude
+Code passes tool data as STDIN JSON, not env. Rewrote .claude/settings.json to
+parse stdin via `jq` (`.tool_input.file_path` for Write/Edit/MultiEdit,
+`.tool_input.command` for Bash). Parsing logic proven locally (skills path →
+match → sync; non-skills path → correctly skipped). Live retest in Claude Code:
+**HOOK FIRED** — auto-sync confirmed working. NOTE: the fail-then-pass across
+two runs in one session was NOT intermittency — the config was broken on run 1
+and fixed between runs; Claude Code reloaded hooks without restart. (Optional:
+a 3×-consecutive run would prove stability beyond the single pass.)
+
+**jq dependency:** the hook requires jq; confirmed present at /usr/bin/jq
+(jq-1.7.1-apple). If this repo is ever used on a machine without jq, the hook
+no-ops silently and the manual sync remains the backstop.
+
+**Unrelated finding (not ours):** Codex logs a startup error loading
+~/.codex/skills/mode2-pilot/SKILL.md (invalid YAML, line 2). User-level skill,
+separate from this repo; harmless to our work; fix/delete at leisure.
+
+**FINAL STATUS:** all three workstreams VERIFIED (canon reconciliation; copy-
+based skill sync incl. auto-fire hook + delete propagation; codex-ideation
+peer loop read-only). Ready for the single closure commit. Remaining tracked
+items are non-blocking: spec-assembler 176-line dup deletion (pending pen),
+stray mode2-pilot YAML, Rosters.csv commit/gitignore call.

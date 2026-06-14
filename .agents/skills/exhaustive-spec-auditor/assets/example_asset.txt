@@ -1,0 +1,10 @@
+# Exhaustive Spec Auditor — Assets
+
+No binary assets required. All audit artifacts are generated as markdown files
+in spec-docs/ during execution.
+
+Generated files:
+- spec-docs/EXHAUSTIVE_AUDIT_PROGRESS.md (from references/PROGRESS_TEMPLATE.md)
+- spec-docs/SPEC_CONTRADICTIONS.md (created during Phase 1)
+- spec-docs/SPEC_INDEX.md (created during Phase 2)
+- Consolidated spec files in category folders (Phase 2)
