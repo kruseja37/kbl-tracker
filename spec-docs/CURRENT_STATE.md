@@ -15,42 +15,41 @@
 - **Phase:** T-stack execution. Sequencing ruling F-141 holds: the full T-stack
   runs to completion as pure execution, THEN D0 cut line → D1–D8 → F-138 →
   flag flip → iPad playtest exit gate.
-- **Last completed:** T6 — Effective Ratings Engine (`src/engines/
-  effectiveRatings.ts`: `effectiveRatings` + `defensivePlacementRisk`) +
-  constants-registry extension (`rosterEngineConstants.ts`, add-only) + first
-  production reader of the trait matrix. Codex 5.5 | high BUILT (Captain invoked
-  the codex CLI) → Opus 4.8 audit **CONFORMS** (Fable unavailable; auditor ≠
-  builder — Captain wrote the contract, not the code). Independently re-verified:
-  tsc 0 / build 0 / 12 new tests / full suite 7,152 (7,140+12) with only the 3
-  characterized fails / golden + SMB4 byte-unchanged / add-only constants /
-  oracle spot-check MATCH. Finding #1 (handednessBonus) RESOLVED → reframed as
-  FINDING-148 (base AUX_PRICING L/R premium gap, separate JK-gated ticket); 5 LOW
-  + builder F1–F5 ratified by JK for v1. Full record: PROMPT_CONTRACTS.md
-  "T6-AUDIT + EXECUTION RECORD". **NOT COMMITTED yet** — T6's 3 code files + these
-  doc updates sit in the working tree pending JK's commit word. Browser sign-off
-  N/A for T6 (no surface, R-T6-2) — attaches at T7+.
-- **NEXT TASK: {T7, T8}** per F-141 sequencing (both consume the T6 engine).
-  - **T7** = Mode 2 Analyzer: optimal lineups vs L/R, one-button re-optimize,
-    call-up/send-down recs, season salary ledger. ROUTE: Codex 5.5 | **very high**
-    → audit (reducer/persistence: ledger state — audit non-negotiable). IV spec
-    §8 + §11; consumes effectiveRatings/defensivePlacementRisk.
-  - **T8** = Mode 1 suite: pool registration, snake draft, pick chart + trade
-    validator, identity composition UI, scout-obscured farm pricing, luxuryTax +
-    balanceMode wiring. ROUTE: Codex 5.5 | **very high** → audit (persistence:
-    pool/league state — audit non-negotiable). IV spec §6 + §7.
-  - First action: draft the T7 (and/or T8) contract INTO PROMPT_CONTRACTS.md
-    before handoff (Contract Readiness Rule), reusing the T6 pure exports.
-- **Then:** T9 → T10 → D0. Slices 5 (season-end locking) + 6 (Captain/Fan
-  Hopeful) queued post-T-stack or per D0.
-- **NEW non-T-stack ticket — FINDING-148 (JK-gated):** base AUX_PRICING L/R batter
-  premium gap (switch>left>right; lefty premium missing; T1 contract-scope gap).
-  Touches FROZEN base-IV → requires oracle regen + golden re-validation. JK to
-  sequence vs the T-stack; do NOT auto-insert. ROUTE Codex 5.5 | high → Opus audit.
+- **Last completed:** **T7a — optimal lineups vs L/R + one-button re-optimize
+  (IV-of-effectiveRatings)** LIVE. Codex 5.5 | very high BUILT → Opus 4.8 audit
+  **CONFORMS** (auditor ≠ builder). NEW pure `src/engines/rosterAnalyzer.ts:
+  optimizeLineup` scores by IV-of-effectiveRatings — the R-T6-2 seam, with the
+  hitter/pitcher split PROVEN by test (pitcher attrs in `input.ratings` are a
+  no-op; only `pitcherRatings` moves kblIV). `optimalLineup.ts` scoring swapped
+  in-place (API stable, ALGORITHM_VERSION bumped); BATTING_ORDER_SLOT_WEIGHTS +
+  CALIBRATE drafted (F2). Independently re-verified: tsc 0 / build 0 / 8 new tests
+  / suite 7,160 with only the 3 characterized fails / golden+SMB4 byte-unchanged.
+  **F1 behavior change** (lineup recs differ) → BROWSER-PENDING (batched). 5 LOW
+  ratified. Record: PROMPT_CONTRACTS "T7a-AUDIT". **COMMITTED.** (T6 — effective
+  ratings engine, audit CONFORMS — also COMMITTED earlier this session.)
+- **NEXT TASK: T7b — Call-up/send-down recs (§8.3).** Feature split (R-T7-SPLIT):
+  T7a ✅ → **T7b** (unblock the stubbed `call_up_advice`/`send_down_advice` in
+  `rosterAnalyzerEngine.ts`; surplus = TV2 `valueDelta`; honor the §7.4 leak rule
+  — never reveal hidden ratings/true IV pre-call-up; wire to existing
+  `callUpFranchisePlayer`/`sendDownFranchisePlayer` executors) → **T7c** (§8.4
+  season salary ledger: new IndexedDB store via trackerDb v14→15 + LedgerEntry
+  state machine + deadMoneyRate/rookieScaleFactor + capCharge→expectation baseline;
+  PRIORITIZE in the browser-batch as a persistence/data-shape ticket). ROUTE both:
+  Codex 5.5 | very high → Opus audit. Then **T8** (Mode 1 suite), T9, T10 → D0.
+- **STANDING MODE (JK 2026-06-14):** per ticket = build → independent ENGINEERING
+  audit → auto-commit verified-complete (browser-pending) → proceed. Captain
+  surfaces only the audit verdict, the browser backlog, and genuine scope/design/
+  asset decisions when drafting each contract. Browser sign-off BATCHED (see
+  BROWSER-VERIFY), never waived; clears before D0.
+- **FINDING-148 (JK-gated, non-T-stack):** base AUX_PRICING L/R premium gap
+  (switch>left>right; lefty missing; T1 contract-scope gap). Touches FROZEN base-IV
+  → oracle regen + golden re-validation required. JK to sequence; do NOT
+  auto-insert. ROUTE Codex 5.5 | high → Opus audit.
 
 ## SUITE BASELINE
 
-7,152 tests / 384 files (T6 added effectiveRatings.test.ts = 12 tests / 1 file,
-2026-06-14; prior baseline 7,140 / 383). Characterized set (a new RED outside
+7,160 tests / 385 files (T7a added rosterAnalyzer.test.ts = 8 tests / 1 file;
+T6 added 12; prior baseline 7,140 / 383). Characterized set (a new RED outside
 this set is a real regression): fixed failures wpaRuntimeBoundary +
 franchiseNarrativeEventEligibility; conditional-solo order-flakes
 franchiseManualSmokeFixture + GameTrackerLaunchState +
@@ -59,17 +58,26 @@ franchiseOffseasonGuards.component (each passes solo).
 
 ## BROWSER-VERIFY OUTSTANDING (JK)
 
+> BATCHED per the SESSION_RULES pen (JK 2026-06-14) — cleared in one pass before
+> the D0 / flag-flip / playtest gate; persistence/data-shape items prioritized.
+> Engineering audits already passed per ticket; these verify experience/feel.
+
 1. EP1 effective-position pooling on real franchise data — does a position-
    shifting player get repooled; do bench players land in Reserve.
 2. TV2 TeamHub projected badges — dotted "Proj.", post-game recalc, fewer
    early-season badges is CORRECT (below-floor = no holder).
+3. **T7a** optimal-lineup recommendations now score by IV-of-effectiveRatings
+   (was raw heuristic) — verify vs-RHP / vs-LHP lineups look sensible on real
+   franchise data, and one-button RECALC produces a coherent lineup + defensive
+   arrangement (low-glove players kept off high-traffic spots).
 
 ## OPEN PENDING-JK (rolling)
 
 **FINDING-148** (base AUX_PRICING L/R batter premium gap — new JK-gated ticket;
-sequence vs T-stack; regen frozen oracle). **T6 close-out:** built + audit
-CONFORMS; F1–F5 + 5 LOW findings ratified; T6 code (3 files) + this session's doc
-updates UNCOMMITTED pending JK commit word.
+sequence vs T-stack; regen frozen oracle). **T6 + T7a: COMMITTED** (audit CONFORMS,
+flags ratified; T7a browser-pending). Standing auto-commit mode adopted (JK
+2026-06-14) — Captain commits verified-complete tickets + proceeds, browser tests
+batched.
 F-144 (salary-path R-6 residue) + F-145 (designation 'active' vocabulary) +
 F-147 (stale peerPoolLimitation written live) → taxonomy/spec-cleanup batch
 (with R-6/R-8/§17.8 blocks). MINOR #3 builder-reporting → now ratified into

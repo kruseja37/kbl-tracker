@@ -897,11 +897,36 @@ function toOptimalCandidate(player: Player): OptimalLineupCandidate {
     speed: player.speed,
     fielding: player.fielding,
     arm: player.arm,
+    velocity: player.velocity,
+    junk: player.junk,
+    accuracy: player.accuracy,
+    arsenal: player.arsenal,
+    armSlot: player.armSlot,
     mojo: player.mojo,
     trait1: player.trait1,
     trait2: player.trait2,
     unavailable: false,
   };
+}
+
+function buildOptimalPlayerStates(players: Player[]) {
+  return Object.fromEntries(
+    players.map((player) => [
+      player.id,
+      {
+        mojo: toEffectiveMojo(player.mojo),
+        fitness: "FIT" as const,
+      },
+    ]),
+  );
+}
+
+function toEffectiveMojo(mojo: Player["mojo"]) {
+  if (mojo === "On Fire") return "On Fire" as const;
+  if (mojo === "Hot") return "Locked In" as const;
+  if (mojo === "Cold") return "Tense" as const;
+  if (mojo === "Ice Cold") return "Rattled" as const;
+  return "Normal" as const;
 }
 
 function lineupSlotsFromOptimalSnapshot(snapshot: OptimalLineupSnapshot): LineupSlot[] {
@@ -2503,6 +2528,7 @@ export function TeamHubContent() {
       instanceId: franchiseId,
       opposingPitcherHand: hand,
       candidates: franchiseRosterPlayers.map(toOptimalCandidate),
+      playerStates: buildOptimalPlayerStates(franchiseRosterPlayers),
       dhEnabled: useDH,
       generatedAt: Date.now(),
       generatedFrom: "team_hub",
@@ -2521,6 +2547,7 @@ export function TeamHubContent() {
       instanceId: franchiseId,
       opposingPitcherHand: hand,
       candidates: franchiseRosterPlayers.map(toOptimalCandidate),
+      playerStates: buildOptimalPlayerStates(franchiseRosterPlayers),
       dhEnabled: useDH,
       generatedAt: Date.now(),
       generatedFrom: "user_registered_smb4_optimal",
@@ -2548,6 +2575,7 @@ export function TeamHubContent() {
       instanceId: franchiseId,
       opposingPitcherHand: hand,
       candidates: franchiseRosterPlayers.map(toOptimalCandidate),
+      playerStates: buildOptimalPlayerStates(franchiseRosterPlayers),
       dhEnabled: useDH,
       generatedAt: Date.now(),
       generatedFrom: "game_lock",

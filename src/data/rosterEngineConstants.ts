@@ -186,3 +186,29 @@ export const DEFENSIVE_MOJO_DRIFT_STEPS = {
   up: 1,
   down: 1,
 } as const;
+
+/**
+ * §8.1/§15.2, CALIBRATE draft: lineup slot opportunity weights bias IV toward
+ * high-PA/high-leverage lineup jobs without claiming T10 Lineup Delta WPA.
+ */
+export const BATTING_ORDER_SLOT_WEIGHTS: Record<1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9, number> = {
+  1: 1.06,
+  2: 1.04,
+  3: 1.08,
+  4: 1.10,
+  5: 1.02,
+  6: 0.98,
+  7: 0.94,
+  8: 0.91,
+  9: 0.88,
+};
+
+/**
+ * §8.1/§15.2, CALIBRATE draft: local lineup optimizer scales for comparing
+ * IV dollars, defensive placement risk, and legacy snapshot comparison fields.
+ */
+export const CALIBRATE = {
+  lineupDefensiveRiskIvPenalty: 300_000,
+  lineupSnapshotIvDisplayDivisor: 10_000,
+  lineupSnapshotWpaDivisor: 10_000_000,
+} as const;

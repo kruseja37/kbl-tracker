@@ -5766,3 +5766,256 @@ cleanup-class). Finding #1 RESOLVED via FINDING-148. **T6 = built + audited
 CONFORMS.** Browser sign-off N/A for T6 itself (no user-visible surface, R-T6-2);
 attaches when a T7+ surface consumes the engine. SMB4-asset gate satisfied by
 R-T6-1 approval + audit confirming the legacy mojo/fitness engines are untouched.
+
+
+---
+
+## CONTRACT: T7a — Optimal Lineups vs L/R + one-button re-optimize (IV-of-effectiveRatings) (drafted 2026-06-14)
+
+**ROUTE: Codex 5.5 | very high → audit (Fable 5 CLI per spec; Opus 4.8 while Fable unavailable — auditor ≠ builder) | very high reasoning effort**
+
+**STATUS: DRAFTED + JK-APPROVED for handoff (2026-06-14).** Flag rulings ratified:
+**F1** behavior-change acknowledged → JK browser-verify on real data is the close;
+**F2** BATTING_ORDER_SLOT_WEIGHTS drafted, JK approves at audit; **F3** §8.2
+last-3-games mojo-trajectory proxy **DEFERRED** (v1 = live mojo/fitness if present,
+else neutral { mojo:'Normal', fitness:'FIT' }); **F4** in-place optimalLineup.ts
+scoring swap + ALGORITHM_VERSION bump **confirmed**.
+
+### Ratified rulings (binding inputs)
+- **R-T7-SPLIT (JK 2026-06-14):** T7 is sliced into THREE feature tickets —
+  **T7a** = §8.1/§8.2 optimal lineups + re-optimize (THIS), **T7b** = §8.3
+  call-up/send-down recs, **T7c** = §8.4 season salary ledger. T7a does NOT
+  build the ledger, call-up/send-down recs, `recommendRosterMoves`, or
+  `ledgerCapCharge` — those are T7b/T7c.
+- **R-T6-2 (carried, load-bearing):** IV-of-effectiveRatings here is the
+  TRANSIENT lineup-optimizer score ONLY. It MUST NOT be wired into the persisted
+  True Value pipeline (`calculateTrueValue` / `franchiseTrueValueStorage` /
+  `FranchiseValueInputRow`). No persisted-TrueValue change in T7a.
+- **Golden-frozen consume-only:** `ivEngine.ts` (`computeIV`) and
+  `salaryCalculator.ts` are called, NEVER edited (oracle `iv_oracle.json`;
+  `ivEngine.test.ts:184`). `effectiveRatings.ts` (T6) consume-only.
+
+### What is already built (CONSUME / refactor — do NOT rebuild) — Captain-verified 2026-06-14
+- **The optimizer machinery exists:** `src/utils/optimalLineup.ts` (750 lines) —
+  `buildOptimalLineupSnapshot` (:229), `buildSnapshot` (:432), `buildSlot`
+  (:467), `platoonBonus` (:626), the snapshot field helpers, comparison, and
+  persistence. The per-candidate SCORE today is `offense + defense +
+  platoonBonus(candidate, hand) + fitness + mojo + traits` (~:520, :543) — a RAW-
+  rating heuristic. T7a SWAPS this scoring core to IV-of-effectiveRatings and
+  KEEPS the public API + snapshot/persistence shape stable.
+- **The UI exists:** `TeamHubContent.tsx` OPTIMAL LINEUP BENCHMARKS vs RHP/LHP
+  (:2949–3054) with COMPARE/APPLY/RECALC/SET + DH toggle; handler
+  `handleRecalculateFranchiseOptimal`. T7a feeds it PlayerStates and the new
+  scoring; it does NOT redesign the panel.
+- **Persistence sink exists:** `Team.optimalLineupVs{R,L}HP{With,Without}DH`
+  (`leagueBuilderStorage.ts:95`, `OptimalLineupSnapshot`). Reuse — no new store.
+- **The engines exist:** T6 `effectiveRatings(p,state,ctx)` /
+  `defensivePlacementRisk(p,pos)` + T4 `computeIV` — all audited CONFORMS.
+
+```
+You are the Mode 2 Lineup Optimizer Implementer (TypeScript). HIGH-RISK ticket:
+you are changing the SCORING of a LIVE, persisted, user-visible optimizer. Very
+high reasoning effort. Think step-by-step.
+
+GOAL:
+Make the optimal-lineup optimizer score by IV spec §8.1 — "maximize Σ IV-of-
+effectiveRatings over lineup slots" — instead of the current raw-rating heuristic.
+Create the §11 pure engine `src/engines/rosterAnalyzer.ts` exporting
+`optimizeLineup(team, vs, states): LineupRecommendation`, refactor
+`src/utils/optimalLineup.ts` to score through it (public API UNCHANGED), and feed
+the existing Team Hub RECALC/re-optimize path the player states it needs. NO new
+persistence, NO True Value wiring, NO edits to the golden engines.
+
+SOURCE OF TRUTH:
+- IV spec §8.1 (optimal lineups vs L/R), §8.2 (one-button re-optimize), §11
+  (rosterAnalyzer signatures). §9 (Lineup Delta WPA) is T10 — OUT of scope here.
+- T6 engine: src/engines/effectiveRatings.ts (effectiveRatings, defensivePlacementRisk).
+- THE IV SEAM (verified — implement EXACTLY): src/engines/ivEngine.ts —
+  `mapBatterRatings` (:166) returns `{...input.ratings}` when `input.ratings` is
+  set (full override); for NON-pitchers `computeIV` (:646-648) sets
+  `kbl = cloneBreakdown(raw)` so the hitter override reaches kblIV.
+  `mapPitcherRatings` (:183) reads `input.pitcherRatings` EXCLUSIVELY (VEL/JNK/ACC)
+  and NEVER `input.ratings`.
+
+ENV: prefix every CLI with `NODE_ENV= `; node at ~/.nvm/versions/node/v20.20.0/bin.
+
+THE LOAD-BEARING SEAM (get this exactly right or pitcher scoring is silently wrong):
+To price IV-of-effectiveRatings for a candidate at a slot:
+  1. Build the slot's GameContext: opposingHand = vs ('L'|'R'), plus the player's
+     state (mojo/fitness/workload) from `states`. (Lineup optimization is a
+     pre-game, full-PA evaluation — use neutral count/pressure/runners; handedness
+     + mojo/fitness/fatigue + handedness-split traits are the active inputs.)
+  2. eff = effectiveRatings(player, state, ctx)  // Ratings over POW..ACC
+  3. Construct the player's IVPlayerInput AND SPLIT eff into BOTH channels:
+       input.ratings        = { POW, CON, SPD, FLD, ARM }   // hitter path
+       input.pitcherRatings = { velocity: VEL, junk: JNK, accuracy: ACC } // pitcher path
+     — because input.ratings is read on the hitter path only and pitcherRatings on
+     the pitcher path only. input.ratings is a FULL override: pass all five hitter
+     attrs (unset attrs zero out). Preserve the rest of IVPlayerInput (isPitcher,
+     primaryPosition, pitcherRole, traits, arsenal, armSlot, secondaryPosition)
+     from the player so curve-block resolution is correct.
+  4. slotScore = computeIV(input).kblIV
+Sum slotScore across the batting order; solve the defensive arrangement JOINTLY
+using defensivePlacementRisk(player, pos) (a low-FLD player at a high-traffic
+position is penalized). Assignment problem: greedy + local-swap is acceptable v1
+(exact Hungarian optional). Verify no out-of-curve-range blowup when effective
+ratings are clamped/extreme.
+
+STEP 1 — NEW ENGINE src/engines/rosterAnalyzer.ts (pure: no React/IndexedDB/DOM/
+Date.now/random):
+- Define §11 types: LineupRecommendation (recommended batting order [slot→player],
+  defensive assignment [pos→player], per-slot justification strings, totalScore),
+  PlayerStates (Record<playerId, PlayerState> reusing the T6 PlayerState).
+- export optimizeLineup(team: Team, vs: 'L'|'R', states: PlayerStates):
+  LineupRecommendation — the IV-of-effectiveRatings scorer + joint assignment above.
+- Justification strings per §8.2 cite the dominant factor ("Tense mojo",
+  "POW vs RHP active", "fitness low / catcher rest"). Derive from the
+  effectiveRatings inputs, not invented.
+- Do NOT add recommendRosterMoves or ledgerCapCharge (T7b/T7c).
+- Use the salaryCalculator `Team` (leagueBuilderStorage.ts:95) — NOT types/index Team.
+
+STEP 2 — REFACTOR src/utils/optimalLineup.ts scoring (KEEP PUBLIC API STABLE):
+- Replace the raw per-candidate score (`offense + defense + platoonBonus + fitness
+  + mojo + traits`, ~:520/:543 in buildSlot/buildSnapshot) with the IV-of-
+  effectiveRatings score from STEP 1 (call rosterAnalyzer or a shared scoring fn).
+- effectiveRatings ALREADY composes platoon/mojo/fitness/traits — do NOT double-
+  count by also adding the old heuristic terms. The old platoonBonus/fitness/mojo/
+  traits scoring is SUBSUMED; remove from the score (keep the functions only if
+  still referenced elsewhere — grep first).
+- buildOptimalLineupSnapshot signature, OptimalLineupSnapshot shape, snapshot
+  fields, persistence, comparison helpers, OPTIMAL_LINEUP_ALGORITHM_VERSION
+  (BUMP it — the algorithm changed) MUST stay API-compatible. Existing callers
+  (TeamHub, GameTracker launch) keep working.
+- optimalLineup.ts must now thread PlayerStates through to the scorer. Where the
+  caller has no live states, default each to { mojo:'Normal', fitness:'FIT' }
+  (neutral) — see FLAG F3.
+
+STEP 3 — BATTING-ORDER SLOT WEIGHTS (§8.1 / §15.2 — "Claude drafts, JK approves"):
+- Add BATTING_ORDER_SLOT_WEIGHTS to src/data/rosterEngineConstants.ts (ADD-ONLY,
+  CALIBRATE) — a drafted per-slot weight vector (leadoff/2-hole/3/cleanup/... )
+  with a one-line rationale comment. These are NOT yet user-approved — FLAG F2.
+
+STEP 4 — WIRE Team Hub re-optimize:
+- `handleRecalculateFranchiseOptimal` (TeamHubContent.tsx) must supply PlayerStates
+  to the optimize/snapshot call. v1: best-available mojo/fitness per player, else
+  neutral default (F3). Keep COMPARE/APPLY/SET behavior intact.
+
+STEP 5 — TESTS (src/engines/__tests__/rosterAnalyzer.test.ts + optimalLineup
+scoring tests):
+- SEAM: a player whose effectiveRatings differ from base produces a DIFFERENT
+  computeIV().kblIV via the override; specifically a PITCHER's effective VEL/JNK/ACC
+  changes kblIV ONLY because they are written to input.pitcherRatings (prove the
+  split — a test that writes pitcher attrs to input.ratings alone does NOT move
+  pitcher kblIV).
+- HITTER override reaches kblIV (non-pitcher kbl = clone(raw)).
+- optimizeLineup ranks a high-effectiveRatings player above a low one; vs-L vs
+  vs-R differ when a handedness-split trait is present; defensivePlacementRisk
+  pulls a low-FLD player off a high-traffic position in the arrangement.
+- PURITY SEAM: rosterAnalyzer.ts source does NOT import salaryCalculator/
+  tierParams/playerDatabase/storage/React; determinism.
+- API-STABILITY: buildOptimalLineupSnapshot still returns the documented shape;
+  registry add-only (snapshot pre-existing exports unchanged).
+
+CONSTRAINTS — do NOT touch: src/engines/ivEngine.ts, src/engines/salaryCalculator.ts,
+src/engines/effectiveRatings.ts, src/data/traitInteractionMatrix.ts, the golden
+oracle/cases (must stay byte-unchanged). No new IndexedDB store, no DB version bump
+(that's T7c). rosterEngineConstants.ts ADD-ONLY. Do NOT extend the pre-existing
+`rosterAnalyzerEngine.ts` (advisory report — that is T7b territory); author the new
+`rosterAnalyzer.ts`. Do NOT wire effectiveRatings into persisted TrueValue (R-T6-2).
+
+VERIFICATION (run and paste actual output):
+- NODE_ENV= npx vitest run src/engines/__tests__/rosterAnalyzer.test.ts (+ optimalLineup tests) → green
+- NODE_ENV= npx tsc --noEmit → clean
+- NODE_ENV= npm run build → exit 0
+- NODE_ENV= npx vitest run (full) → no new RED outside the characterized set (baseline 7,152/384 + your new tests)
+- GOLDEN BYTE-UNCHANGED: ivEngine/salaryCalculator/effectiveRatings/iv_oracle.json/
+  golden cases appear in NO diff (git diff --stat + a grep)
+- git diff --stat → only rosterAnalyzer.ts (+test), optimalLineup.ts,
+  rosterEngineConstants.ts, TeamHubContent.tsx (and any test mocks — enumerate ALL)
+- (Encouraged, not closing) a Playwright pre-check that RECALC produces a lineup
+  and the panel renders — report it; JK's browser sign-off on real franchise data
+  is the SOLE close (this ticket CHANGES recommended lineups — F1).
+
+FLAGGED FOR JK:
+  F1 BEHAVIOR CHANGE: recommended lineups WILL differ from today (raw → IV-of-
+     effectiveRatings, spec-mandated §8.1). Requires JK browser-verify on real data.
+  F2 BATTING_ORDER_SLOT_WEIGHTS drafted (§15.2) — needs JK approval.
+  F3 PlayerStates source: v1 uses live mojo/fitness if present else neutral default;
+     the §8.2 "last-3-games mojo-trajectory proxy" is NOT implemented here — confirm
+     defer to a follow-up, or in-scope for T7a.
+  F4 optimalLineup.ts refactor approach: in-place scoring swap with stable API +
+     ALGORITHM_VERSION bump — confirm acceptable (vs a larger consolidation).
+
+FORMAT:
+1. Files changed (every git status path, incl. test mocks)
+2. Per-file changes citing the §/ruling each implements
+3. The seam implementation (how eff splits into ratings + pitcherRatings) quoted
+4. Verification results (actual output for every line above)
+5. FLAGGED FOR JK (F1–F4 + anything new)
+6. "T7a complete" OR "BLOCKED: [exact reason]"
+
+FAILURE PROTOCOL:
+- A change needing an edit to any do-NOT-touch file → STOP and report.
+- If the API-stable refactor of optimalLineup.ts is not achievable without breaking
+  a caller → STOP and report the caller, do not break it.
+- A magnitude not derivable from spec/workbook and not in the CALIBRATE set →
+  STOP and ask; never invent a precise number.
+- Enumerate every changed path; never summarize or batch.
+
+Use very high reasoning effort. Think step-by-step.
+```
+
+
+---
+
+## T7a-AUDIT + EXECUTION RECORD (2026-06-14)
+
+**ROUTE actual:** Codex 5.5 | very high (codex CLI, workspace-write,
+model_reasoning_effort=high = codex's top tier; "very high" is our max-effort +
+audit-non-negotiable class) BUILT → Opus 4.8 AUDIT (Fable unavailable; auditor ≠
+builder — Captain wrote the contract, not the code).
+
+### Builder result (Codex 5.5)
+CREATED src/engines/rosterAnalyzer.ts (431 lines, `optimizeLineup` ONLY) +
+rosterAnalyzer.test.ts (8 tests). MODIFIED optimalLineup.ts (scoring swapped to
+IV-of-effectiveRatings via rosterAnalyzer; public API stable; ALGORITHM_VERSION
+bumped; optional playerStates threaded), optimalLineup.test.ts (version
+expectation), rosterEngineConstants.ts (add-only BATTING_ORDER_SLOT_WEIGHTS +
+CALIBRATE), TeamHubContent.tsx (RECALC/current/compare pass player states).
+
+### AUDIT VERDICT: CONFORMS
+Independent re-verification (every command rerun):
+- tsc rc=0; build rc=0 (7.79s); focused 22/22; full suite 7,157 pass / 3 fail —
+  reconciles as 7,152 baseline + 8 new = 7,160 / 385; the 3 fails are the
+  characterized set. NO new RED.
+- Golden/SMB4 byte-unchanged: git diff names none of ivEngine / salaryCalculator /
+  effectiveRatings / iv_oracle.json.
+- rosterEngineConstants ADD-ONLY (0 removed lines).
+- THE SEAM (load-bearing) verified + strongly tested: a test proves pitcher
+  effective VEL/JNK/ACC written to input.ratings are a NO-OP (=== base) and ONLY
+  input.pitcherRatings moves kblIV (> base) — the split is necessary and correct.
+  A full-loop test (real effectiveRatings(On Fire) → split → computeIV) > base.
+- R-T7-SPLIT boundary proven: `Object.keys(module) === ['optimizeLineup']` (no
+  recommendRosterMoves / ledgerCapCharge).
+- No double-count: buildSlot uses `input.projectedValueScore ?? fallback`
+  (either/or, NOT a sum); the old heuristic remains a fallback for legacy paths.
+- Purity seam test passes; potency L2-neutral; defensivePlacementRisk drives the
+  defensive arrangement (low-FLD pulled off SS).
+- Audit gate: (1) tests ✓ (2) NFL + falsification ✓ (3) §8.1/§8.2/§11 conformance ✓
+  (4) persistence migration N/A — no new store (that is T7c).
+
+### Findings (LOW, ratified by JK 2026-06-14)
+1. Codex added a CALIBRATE object (lineupDefensiveRiskIvPenalty 300_000, display +
+   WPA divisors) beyond BATTING_ORDER_SLOT_WEIGHTS — optimizer tuning constants,
+   add-only; extends F2 (JK approves). lineupSnapshotWpaDivisor feeds a PRE-EXISTING
+   snapshot display field, NOT the T10 Lineup-Delta-WPA standard (boundary held).
+2. Old projectedValueScore heuristic retained as a fallback (not a double-count).
+3. Permissive AnalysisTeam/AnalysisPlayer input typing (pragmatic; like T6).
+Builder F1–F4 valid; "Playwright not run" honestly flagged.
+
+### JK ratification (2026-06-14)
+Findings + F2/F3/F4 ratified. **F1 BEHAVIOR CHANGE → BROWSER-PENDING** (batched in
+CURRENT_STATE BROWSER-VERIFY; JK browser sign-off on real franchise data is the
+close). T7a = built + audited CONFORMS, COMMITTED. Standing mode adopted (JK):
+auto-commit verified-complete tickets + proceed; pause only for scope/design/asset
+decisions + browser-batch.

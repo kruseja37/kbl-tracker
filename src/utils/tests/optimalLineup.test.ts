@@ -140,7 +140,7 @@ describe("optimal lineup engine", () => {
       sourceConfidence: "engine_calculated",
     });
 
-    expect(snapshot.algorithmVersion).toBe("kbl-optimal-lineup-v2-greedy-traits-1");
+    expect(snapshot.algorithmVersion).toBe("kbl-optimal-lineup-v3-iv-effective-ratings-1");
     expect(snapshot.slots).toHaveLength(9);
     expect(snapshot.slots.some((slot) => slot.playerId === "pitcher")).toBe(false);
     expect(snapshot.slots.some((slot) => slot.playerId === "bench-cf")).toBe(true);

@@ -341,7 +341,23 @@ Promotion: JK says "ratify [item]" → the rule moves up into the non-negotiable
 rules above and is struck from this pen. No agent promotes its own rule, and no
 agent edits the ratified rules without JK. (JK ruling 2026-06-14.)
 
-_(no behavioral rule proposals pending)_
+- **Batched browser verification (JK directive 2026-06-14 — refines the
+  non-negotiable Browser Verification Gate above):** When a verified-complete
+  ticket has a user-visible surface, BATCH its JK browser sign-off into a later
+  dedicated browser-test session rather than blocking the build plan inline,
+  PROVIDED: (a) the per-ticket ENGINEERING audit (independent rerun: build/tsc/
+  suite, seam/correctness checks, golden byte-unchanged, falsification) still runs
+  and PASSES — that gate is never deferred; (b) the browser scenario is logged in
+  CURRENT_STATE "BROWSER-VERIFY OUTSTANDING" (the batch backlog); (c) no downstream
+  ticket has a hard correctness/build dependency on the deferred result — the
+  Captain HALTS and flags to JK the moment one arises; (d) PERSISTENCE / saved-
+  data-shape tickets are PRIORITIZED in the batch (a deferred data-corruption
+  discovery is costlier than a visual one); (e) the batch CLEARS before the
+  D0 / flag-flip / iPad-playtest gate (F-141). Tickets stay "verified-complete,
+  browser-pending" — NOT "closed." Browser sign-off remains the SOLE real-world
+  acceptance gate: batched, never waived. Rationale: separates the per-ticket
+  engineering gate (non-deferrable) from the human experience gate (batchable) so
+  JK's time is spent efficiently without weakening either.
 
 ### Pending cleanup (not a rule — a tracked repo action)
 - **spec-assembler duplicate:** two divergent copies exist —
