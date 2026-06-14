@@ -75,3 +75,114 @@ export function deriveUsageWeights(role: PitcherRoleKey): Record<UsageAttr, numb
     FLD: 1,
   };
 }
+
+// §4.2 Effective Ratings mojo states, ordered from worst to best.
+export const MOJO_STATES = ['Rattled', 'Tense', 'Normal', 'Locked In', 'On Fire', 'Jacked'] as const;
+
+export type EffectiveMojoState = typeof MOJO_STATES[number];
+
+/** §4.2/§12 Effective Ratings, CALIBRATE: additive rating delta applied to all attributes. */
+export const MOJO_DELTAS: Record<EffectiveMojoState, number> = {
+  Rattled: -10,
+  Tense: -5,
+  Normal: 0,
+  'Locked In': 5,
+  'On Fire': 10,
+  Jacked: 15,
+};
+
+/** §4.2/§12 Effective Ratings, CALIBRATE: pressure amplifies current-mojo rating effects. */
+export const PRESSURE_MULTIPLIER: Record<'high' | 'extreme', number> = {
+  high: 1.5,
+  extreme: 2.0,
+};
+
+/** §4.2 JK 2026-06-10 canonical role-misuse penalties, encoded as mojo levels. */
+export const ROLE_MISUSE_MOJO_PENALTY = {
+  spRelieving: 1,
+  rpStarting: 1,
+  cpStarting: 2,
+  cpEnteringBeforeSecondToLastInning: 1,
+  spRpAnyRole: 0,
+} as const;
+
+/** §4.2/§4.5 JK 2026-06-10 canonical out-of-position cost, encoded as mojo levels. */
+export const OUT_OF_POSITION_MOJO_PENALTY = 1;
+
+/** §4.4 Effective Ratings, CALIBRATE: local fatigue/decay model inputs. */
+export const FATIGUE_MODEL = {
+  rolePitchThresholds: {
+    SP: 70,
+    'SP/RP': 45,
+    RP: 25,
+    CP: 20,
+  },
+  recoveryGames: {
+    SP: 3,
+    'SP/RP': 2,
+    RP: 1,
+    CP: 1,
+  },
+  fitnessRatingPenalty: {
+    JUICED: -5,
+    FIT: 0,
+    WELL: 3,
+    STRAINED: 8,
+    WEAK: 15,
+    HURT: 25,
+  },
+  overThresholdPenaltyPerPitch: 0.4,
+  catcherRestEveryGames: 4,
+  catcherOverplayPenalty: 5,
+  durableFactor: 0.75,
+  injuryProneFactor: 1.25,
+  mojoDecayMultiplier: {
+    Rattled: 1.15,
+    Tense: 1.05,
+    Normal: 1.0,
+    'Locked In': 0.9,
+    'On Fire': 0.8,
+    Jacked: 0.7,
+  },
+} as const;
+
+/** §4.5 DefensivePlacementRisk, CALIBRATE: per-position defensive traffic. */
+export const POSITION_CHANCE_FREQUENCY = {
+  C: 0.75,
+  '1B': 0.3,
+  '2B': 0.65,
+  SS: 0.8,
+  '3B': 0.6,
+  LF: 0.35,
+  CF: 0.7,
+  RF: 0.45,
+  DH: 0,
+  SP: 0.15,
+  RP: 0.08,
+  CP: 0.08,
+} as const;
+
+/** §4.5 DefensivePlacementRisk, CALIBRATE: fielding-eligibility penalty multipliers. */
+export const DEFENSIVE_POSITION_PENALTY_MULTIPLIER = {
+  primary: 1.0,
+  secondary: 1.2,
+  other: 1.85,
+} as const;
+
+/** §4.5 DefensivePlacementRisk, CALIBRATE: low-FLD/ARM error and high-FLD/SPD spectacular scaling. */
+export const DEFENSIVE_PLACEMENT_SCALING = {
+  errorBase: 0.02,
+  errorFieldingWeight: 0.006,
+  errorArmWeight: 0.002,
+  spectacularBase: 0.01,
+  spectacularFieldingWeight: 0.0035,
+  spectacularSpeedWeight: 0.0025,
+  minLikelihood: 0,
+  maxLikelihood: 0.95,
+} as const;
+
+/** §4.5 DefensivePlacementRisk, CALIBRATE: expected mojo drift step values. */
+export const DEFENSIVE_MOJO_DRIFT_STEPS = {
+  up: 1,
+  down: 1,
+} as const;

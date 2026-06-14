@@ -172,3 +172,51 @@ of the clean low-risk bucket we committed to during the Fable gap.
 discovery-first ticket (Phase 0: do the branches fire on real data? +
 IV-salary golden diff), routed/audited per the decorrelation-rebuild
 plan. Do NOT force it during the Fable-less low-risk run.
+
+
+---
+
+### FINDING-148 — AUX_PRICING scope gap: left-handed-over-right batter base premium absent
+**Date:** 2026-06-14 | **Status:** CONFIRMED-OPEN (new ticket queued; JK-gated)
+**Files/area:** `src/data/traitPricing.ts` (AUX_PRICING) + `scripts/extract-iv-data.py`
++ IV spec §3.x aux pricing (~line 227); T1 contract scope (`PROMPT_CONTRACTS.md` ~line 398).
+**Surfaced by:** T6 audit finding #1 (handednessBonus). The T6 audit separated two
+distinct handedness concepts: (a) the CONTEXT platoon term (batter vs L/R pitcher) —
+correctly handled in T6 via the matrix `vsHand` split traits, no change needed; and
+(b) the STATIC base-value premium for the batter's OWN handedness — this finding.
+
+**Finding (JK, 2026-06-14):** SMB4 applies base value premiums for batter handedness:
+**switch > left > right**, two distinct bumps. The SWITCH case is correctly priced
+(AUX_PRICING, +5 POW / +5 CON, IV spec §3.x ~line 227 / traitPricing.ts). The
+**left-handed-over-right premium is ABSENT.**
+
+**Root cause (scope gap — NOT an extraction or audit failure):** the T1 contract
+(`PROMPT_CONTRACTS.md` ~line 398) enumerated aux pricing as "switch hitter, secondary
+positions, arm angle" in ALL THREE scope references — the L/R batter premium was never
+in T1's scope. Fable extracted exactly what was specified; T1-AUDIT correctly returned
+CONFORMS against that contract. This is a CONTRACT SCOPE GAP. **No blame attaches to the
+T1 build/audit chain.**
+
+**Fix scope (new ticket — depends on T1's extraction script):**
+1. Locate the L/R batter handedness premium in the XBL workbook
+   (`Team_Builder_Archetype_Logic_Template.xlsx`, aux-pricing region — PitchCalcs /
+   LeagueSettings per the T1 contract).
+2. Extend `scripts/extract-iv-data.py` to pull it; add to AUX_PRICING in
+   `traitPricing.ts` + document in §3.x. Magnitude comes from the workbook — NEVER
+   hand-picked.
+3. INVENTORY the entire aux-pricing region against the workbook while there — since the
+   switch/secondary/arm-angle enumeration proved incomplete (it missed lefty), verify
+   nothing else in that region was omitted.
+4. Re-run T1's determinism + verification checks; confirm a known LHB and a comparable
+   RHB now price apart by the workbook amount.
+
+**Risk:** changes BASE IV → flows to salary / True Value / draft valuations league-wide.
+**Critical amplifier (Captain):** a base-IV change re-prices every left-handed batter,
+which invalidates the FROZEN oracle (`spec-docs/reference/iv_oracle.json`) and the T4
+golden tests — the ticket MUST include oracle regeneration + golden re-validation +
+downstream salary/TV/draft re-verification, not just an extract-script extension.
+JK-gated; not a mechanical fix.
+
+**ROUTE:** Codex 5.5 | high → Opus 4.8 audit (auditor ≠ builder).
+**Sequencing:** NOT yet scheduled. JK to sequence vs the T-stack (F-141) — a new
+non-T-stack ticket touching frozen base-IV; do NOT auto-insert into the T-stack run.

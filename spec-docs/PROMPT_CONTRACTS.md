@@ -5408,3 +5408,361 @@ the 3 intended files modified; new string in place at :13; suite 7140/383
 zero delta (run showed 7137 pass / 3 fail — one order-flake didn't trip;
 franchiseManualSmokeFixture solo 4/4; characterized, not regression).
 FINDING-147 CLOSED. No calculationVersion bump (descriptive caveat only).
+
+
+---
+
+## CONTRACT: T6 — Effective Ratings Engine + DefensivePlacementRisk + constants registry (drafted 2026-06-14)
+
+**ROUTE: Codex 5.5 | high → audit (Fable 5 CLI per spec; Opus 4.8 while Fable unavailable — auditor ≠ builder) | high reasoning effort**
+
+**STATUS: DRAFTED — NOT YET HANDED OFF. Pending JK final review.** Asset gate
+satisfied (R-T6-1 approved by JK 2026-06-14); do not send to Codex until JK OKs
+this drafted text.
+
+### Ratified rulings (binding inputs — JK 2026-06-14)
+- **R-T6-1 (SMB4 asset gate — APPROVED):** T6 builds the §4.2 6-state ADDITIVE
+  mojo model (Rattled/Tense/Normal/Locked In/On Fire/Jacked = −10/−5/0/+5/+10/+15)
+  and the §4.4 fatigue-decay deltas as a NEW model living entirely inside the new
+  `effectiveRatings.ts`, with FRESH constants in the registry. It MUST NOT modify,
+  import, or mutate `src/engines/mojoEngine.ts` or `src/engines/fitnessEngine.ts`
+  (the live 5-state multiplicative SMB4 assets stay intact). Reconciling the
+  legacy multiplicative mojo with this additive model is **explicitly deferred to
+  T9** (GameTracker sub-rec rebuild). "Follows the OOTP/spec pattern AND preserves
+  the SMB4 asset intact" is satisfied because the legacy engines are untouched.
+- **R-T6-2 (scope line — PURE ENGINE ONLY):** T6 delivers the two pure engine
+  functions + the constants-registry extension + becomes the FIRST production
+  reader of `traitInteractionMatrix.ts`. It MUST NOT wire effective ratings into
+  the persisted True Value / IV pipeline and MUST NOT modify the golden-frozen
+  `ivEngine.ts` or `salaryCalculator.ts`. The "Ratings → True Value" wiring and
+  every consuming surface (lineup optimizer, sub recs, call-up/send-down) are
+  T7–T9. This keeps T6 a pure-function engine → route stays `high` (no state/
+  persistence touch).
+- **R-T6-3 (registry thresholds — DEFER):** `subRecThreshold` / `calloutThreshold`
+  (spec line 615, "TBD in T6/T7") are SURFACE thresholds; they are NOT added in
+  T6. They belong to the T7 (call-up/send-down) and T9 (in-game subs) tickets.
+
+### Why this exists / what is already built (do NOT duplicate — Captain-verified 2026-06-14)
+- **Greenfield confirmed:** 0 grep hits for `effectiveRating(s)` / `EffectiveRatings`
+  / `DefensivePlacementRisk` symbols/types/files anywhere in `src/`. The only
+  `DefensivePlacementRisk` occurrences are 4 spec-breadcrumb comments inside
+  `traitInteractionMatrix.ts` (:123 predicate comment, :222/:543/:835
+  expectedValueNote text) describing the intended errorLikelihood/
+  spectacularLikelihood model. No engine exists.
+- **EP1 (`src/utils/franchiseEffectivePosition.ts`) — DONE, do not re-derive:**
+  owns starts-by-position topology / valuePosition / Reserve pooling / two-way
+  anchoring. T6 is about effective RATINGS (a different axis), not effective
+  position.
+- **TV1/TV2 — DONE, do not re-wire:** `franchiseValueInputs.ts` +
+  `franchiseTrueValueStorage.ts` + `calculateTrueValue` (`salaryCalculator.ts:1027`).
+  True Value today is 100% WAR+salary; ratings never enter it. Per R-T6-2 that
+  wiring stays deferred.
+- **Golden-frozen — forbidden to touch:** `ivEngine.ts` (oracle `iv_oracle.json`;
+  `ivEngine.test.ts:184` asserts it must NEVER import the trait matrix),
+  `salaryCalculator.ts`. The TV value-input row is a versioned read-only contract
+  with 7 consumers.
+- **Naming trap:** `src/utils/effectiveValues.ts` is a fame-only helper —
+  UNRELATED to Effective Ratings; do not overload it. `ratingsAdjustmentEngine.ts`
+  is WAR/percentile salary adjustment — distinct from T6; do not conflate.
+
+```
+You are the Effective Ratings Engine Implementer (TypeScript, pure functions).
+
+GOAL:
+Implement the Effective Ratings Engine per IV spec §4 as a NEW pure module
+`src/engines/effectiveRatings.ts` exporting exactly:
+  - effectiveRatings(p, state, ctx, potency?='L2'): Ratings        (§4.1–§4.4)
+  - defensivePlacementRisk(p, pos): PlacementRisk                  (§4.5)
+plus EXTEND `src/data/rosterEngineConstants.ts` with the §4/§4.5/§12
+effective-ratings + placement constants. This module is the FIRST production
+consumer of `src/data/traitInteractionMatrix.ts` (T2 artifact). No surfaces, no
+persistence, no edits to the golden IV/salary/mojo/fitness engines.
+
+SOURCE OF TRUTH:
+- IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md §4 (4.1–4.5), §11 (interface
+  signatures), §12 (constants registry), §13 row T6. READ §4 VERBATIM.
+- src/data/traitInteractionMatrix.ts — its POTENCY RULING header, the A1–A16
+  ambiguity rulings (esp. A14 Clutch/Choker), the "T6 NOTE" predicate-kinds list
+  (lines ~87–91), and the TraitMatrixEntry / PredicateCondition schema
+  (lines ~98–141). This is BOTH the data and the spec for how to consume it.
+- Conflict rule: where the IV spec prose and the matrix disagree on a MAGNITUDE,
+  the matrix's documented value wins (A13: the matrix carries in-game effect
+  values; traitPricing carries salary equivalents). Where either is silent, the
+  value is a CALIBRATE placeholder — name it, comment it, do not invent precision.
+
+ENV: prefix every CLI with `NODE_ENV= `; node at ~/.nvm/versions/node/v20.20.0/bin.
+
+CONSTRAINTS — FILES:
+- CREATE only:
+    src/engines/effectiveRatings.ts
+    src/engines/__tests__/effectiveRatings.test.ts
+- MODIFY only (ADD-ONLY):
+    src/data/rosterEngineConstants.ts  (append new constants; do NOT change,
+    rename, reorder, or re-type ANY existing export — they are consumed by the
+    golden ivEngine and a test snapshots them)
+- Do NOT touch (read-only consume where noted, otherwise hands off):
+    src/engines/ivEngine.ts, src/engines/salaryCalculator.ts,
+    src/engines/mojoEngine.ts, src/engines/fitnessEngine.ts,
+    src/data/traitInteractionMatrix.ts (consume read-only — never edit),
+    src/data/traitPricing.ts, src/data/ivCurves.ts, src/data/tierParams.ts,
+    src/data/playerDatabase.ts, src/utils/franchiseEffectivePosition.ts,
+    src/utils/franchiseValueInputs.ts, src/utils/franchiseTrueValueStorage.ts,
+    src/utils/franchiseTrueValuePreview.ts, src/utils/effectiveValues.ts,
+    src/engines/ratingsAdjustmentEngine.ts
+
+CONSTRAINTS — PURITY (mirror the ivEngine discipline):
+- Pure module: no React, no IndexedDB/storage, no DOM, no I/O, no Date.now/random,
+  deterministic. No new npm dependencies.
+- effectiveRatings.ts MUST NOT import: ivEngine.ts, salaryCalculator.ts,
+  tierParams.ts, playerDatabase.ts, mojoEngine.ts, fitnessEngine.ts, or any
+  storage/util that touches IndexedDB. Allowed imports: traitInteractionMatrix.ts,
+  traitPricing.ts (types), rosterEngineConstants.ts, and a type-only import of the
+  canonical Player shape (src/utils/leagueBuilderStorage.ts Player, line 189) — if
+  that type-only import drags runtime code, define a local minimal input interface
+  instead and FLAG it.
+
+STEP 1 — CONSTANTS REGISTRY EXTENSION (src/data/rosterEngineConstants.ts, ADD-ONLY):
+Append the §4/§4.5 effective-ratings constants below the existing IV-layer block.
+Every new export carries a `// §<n> <source>` comment and a `CALIBRATE` marker
+where the spec marks the magnitude unpublished. Add EXACTLY these (and only these
+— the other §12 rows like starBudgetShare/deadMoneyRate/rookieScaleFactor belong
+to T5/T7/T8/T11 surfaces, NOT T6):
+  1. MOJO_STATES: the ordered 6 states (§4.2).
+  2. MOJO_DELTAS: per-state additive delta applied to ALL attributes —
+     Rattled −10 / Tense −5 / Normal 0 / Locked In +5 / On Fire +10 / Jacked +15.
+     CALIBRATE (§4.2 honest constraint, §12, §15.4).
+  3. PRESSURE_MULTIPLIER: { high: 1.5, extreme: 2.0 } — pressure amplifies the
+     rating effect of current mojo (§4.2). CALIBRATE magnitude.
+  4. ROLE_MISUSE_MOJO_PENALTY: mojo-LEVEL penalties (§4.2, CANONICAL JK 2026-06-10)
+     — SP-relieving −1, RP-starting −1, CP-starting −2, CP-entering-before-second-
+     to-last-inning −1 (game-length-relative, NOT a fixed inning), SP/RP immune
+     both directions. Encode levels, not rating points.
+  5. OUT_OF_POSITION_MOJO_PENALTY = 1 (mojo level) — playing a position that is
+     NEITHER primary NOR secondary (§4.2/§4.5, CANONICAL). Secondary = 0 mojo
+     penalty; Two Way trait position = secondary-equivalent (0 mojo penalty).
+  6. FATIGUE_MODEL (§4.4): per-role stamina thresholds + decay (SP ~70 pitches /
+     3-game recovery; SP/RP ~45; RP ~25 fast recovery; CP ~20 fastest), catcher
+     fastest fitness decay (~1-in-4 rest), Durable/Injury Prone factors 0.75/1.25
+     (A9 PLACEHOLDER), and the mojo→decay coupling factor (higher mojo slows
+     decay). ALL CALIBRATE.
+  7. DefensivePlacementRisk constants (§4.5): POSITION_CHANCE_FREQUENCY per
+     position (SS/C/CF high, LF/1B low), the secondary/other-position fielding
+     penalty multipliers, the errorLikelihood/spectacularLikelihood base scaling,
+     and the mojo-drift up/down step constants. ALL CALIBRATE.
+
+STEP 2 — TYPES (define in effectiveRatings.ts; reuse where one already exists):
+- Attr = the 8 PricedAttr (POW/CON/SPD/FLD/ARM/VEL/JNK/ACC) — reuse from
+  traitInteractionMatrix.ts / traitPricing.ts.
+- MojoState = the 6-state union (from MOJO_STATES).
+- FitnessState = local union by the SMB4 names (JUICED/FIT/WELL/STRAINED/WEAK/HURT)
+  — defined locally with T6's OWN decay inputs; do NOT import fitnessEngine.
+- PlayerState = { mojo: MojoState; fitness: FitnessState; workload?: <role/usage
+  inputs §4.4> }.
+- GameContext = §4.1 base fields (count?, pressure:'none'|'high'|'extreme',
+  runnersOn, risp, opposingHand:'L'|'R', opposingPlayer?, inning, isSubstitutionAB?)
+  EXTENDED with every datum needed to evaluate all 26 PredicateCondition kinds in
+  the matrix (the "T6 NOTE" list: stealAttempt, roundingBase, runningOutOfBox,
+  buntAttempt, pitchType, pitchLocation, countIn, teamLosing, basesEmpty,
+  consecutiveBaserunnersAllowed, comebackerToPitcher, playingPosition,
+  onBasePath.nextBaseOpen). Reuse PredicateCondition from the matrix.
+- Ratings = Record<Attr, number> (the effective output vector).
+- PlacementRisk = { chanceFrequency; errorLikelihood; spectacularLikelihood;
+  expectedMojoDriftPerGame } (§4.5 EXACT field names).
+- Position = local union of concrete positions (C/1B/2B/SS/3B/LF/CF/RF/DH/SP/RP/CP).
+  Do NOT import PlayerPosition from salaryCalculator (golden file). Unifying the
+  position vocabularies is a known follow-up — FLAG it.
+
+STEP 3 — effectiveRatings(p, state, ctx, potency='L2') (§4.1):
+Compose deterministically (this DISSOLVES "ratings vs form" — D9):
+  baseRatings(p)                                   // map Player flat fields → Ratings
+    + traitDeltas(p, ctx, potency)                 // §4.3 self-target trait matrix
+    + opponentImposedDeltas(ctx.opposingPlayer,ctx)// §4.1 opponent-target traits
+    + mojoModifier(state.mojo, ctx.pressure)       // §4.2
+    − fatigueDecay(state.fitness, p.role, workload)// §4.4
+    + handednessBonus(p, ctx.opposingHand)         // §4.1 splits
+Required semantics:
+  - PREDICATE EVALUATOR: a pure evaluatePredicate(cond, ctx) covering ALL 26
+    PredicateCondition kinds; the matrix's `predicates` array is AND-combined; a
+    predicate whose required ctx datum is absent evaluates FALSE (conservative).
+  - POTENCY: scale each active ratingDelta by POTENCY_SCALE — positives use
+    `positives[tier]`, negatives flagged `standardInverted` use
+    `standardInverted[tier]`; `guideExplicit` uses perTier {l1,l3} for L1/L3 and
+    `deltas` for L2. `potency` param defaults 'L2' (the neutral reference; realized
+    team-chemistry tier is supplied by callers — surfaces, T7/T8).
+  - A14: for Clutch and Choker, at ctx.pressure==='extreme', DOUBLE the active
+    deltas (per the matrix A14 note — single-entry integrity preserved).
+  - EFFECT-KIND ROUTING (be explicit; do not silently drop): `ratingDelta` →
+    attribute deltas here; `fitnessDecayRate` + `staminaModifier` → inputs to
+    fatigueDecay (Durable/Injury Prone/Workhorse); `fieldingPenaltyReduction` →
+    consumed by defensivePlacementRisk (Step 4), NOT here; `mojoTransitionRate`
+    (Volatile/Consistent) is a BETWEEN-EVENTS dynamic — expose it but do NOT apply
+    it to a single effective-ratings call (mojo state is an input here); FLAG.
+    `expectedValueNote` + `pitchQualityModifier` magnitudes are unpublished — model
+    as documented no-op/EV in v1 with a clear comment; FLAG.
+  - mojoModifier applies MOJO_DELTAS[state.mojo] to all attributes, scaled by
+    PRESSURE_MULTIPLIER[ctx.pressure] when pressure is high/extreme.
+
+STEP 4 — defensivePlacementRisk(p, pos) (§4.5):
+Return { chanceFrequency: POSITION_CHANCE_FREQUENCY[pos];
+  errorLikelihood: from p FLD + position-eligibility penalty (primary full / NONE
+    — secondary small / other severe, per guide) + p ARM for throws, REDUCED by
+    Utility/Two-Way fieldingPenaltyReduction from the trait matrix;
+  spectacularLikelihood: from p FLD + p SPD range;
+  expectedMojoDriftPerGame: chanceFrequency × (spectacularLikelihood×upStep −
+    errorLikelihood×downStep) }.
+Honor §4.2/§4.5 BOTH costs: a position neither primary nor secondary incurs the
+severe fielding penalty AND the −1 mojo level (OUT_OF_POSITION_MOJO_PENALTY);
+secondary = small fielding penalty, NO mojo level; Two-Way trait position =
+secondary-equivalent; Utility reduces the secondary fielding penalty (its
+fieldingPenaltyReduction) but does NOT help out-of-position and does NOT prevent
+the mojo hit. Positional value is a VECTOR across eligible positions — the function
+prices ONE (p,pos) cell; callers sweep positions. All magnitudes from STEP 1
+CALIBRATE constants.
+
+STEP 5 — TESTS (src/engines/__tests__/effectiveRatings.test.ts):
+No oracle exists (unlike T4) — these are unit/property tests:
+  E1 baseRatings maps Player flat fields → correct Attr vector.
+  E2 mojoModifier: each of 6 states applies its additive delta; pressure scales it
+     (×1.5 high, ×2.0 extreme).
+  E3 predicate evaluator: ≥1 activate-vs-not case per predicate-kind family
+     (always/count/twoStrikes/pressure/runnersOn min2/vsHand/opponentTier/
+     substitutionAB/playingPosition + a sample of the ADDED kinds).
+  E4 potency scaling: a positive trait ascends L1<L2<L3; a standardInverted trait
+     descends; a guideExplicit trait uses perTier at L1/L3.
+  E5 A14: Clutch (and Choker) deltas double at pressure='extreme'.
+  E6 opponentImposedDeltas: Mind Gamer (target opponent) lowers OUR ACC.
+  E7 handednessBonus applied by opposingHand (a splits trait).
+  E8 fatigueDecay: decay past role threshold; Durable slows, Injury Prone
+     accelerates; higher mojo reduces decay.
+  E9 defensivePlacementRisk: high-traffic + low-FLD ⇒ high errorLikelihood +
+     negative expectedMojoDriftPerGame; out-of-position adds the mojo-level cost;
+     secondary adds none; Two-Way = secondary-equivalent; Utility reduces the
+     secondary fielding penalty but not out-of-position.
+  E10 PURITY SEAM (mirror ivEngine.test.ts:184): assert effectiveRatings.ts source
+     does NOT match /ivEngine|salaryCalculator|tierParams|playerDatabase|
+     mojoEngine|fitnessEngine|indexedDB|gameStorage/; assert determinism (same
+     inputs → identical output twice).
+  E11 REGISTRY NON-MUTATION: snapshot every PRE-EXISTING rosterEngineConstants
+     export (USAGE_INPUTS, SP_RP_INNINGS_ALPHA, SP_RP_FLEX_PREMIUM,
+     TWO_WAY_ARM_BY_TIER, TWO_WAY_USAGE, POTENCY_SCALE, PITCHER_ASSUMED_ARM,
+     TWO_WAY_TRAIT_POSITION, deriveUsageWeights output) and assert unchanged; assert
+     the new constants exist with expected shapes.
+  E12 FIRST-CONSUMER: assert effectiveRatings.ts imports TRAIT_INTERACTION_MATRIX
+     (the wire now exists).
+
+VERIFICATION (run and paste actual output):
+- NODE_ENV= npx vitest run src/engines/__tests__/effectiveRatings.test.ts  → all green
+- NODE_ENV= npx tsc --noEmit  → clean
+- NODE_ENV= npm run build  → exit 0
+- git diff --stat  → ONLY the 3 intended files (effectiveRatings.ts,
+  effectiveRatings.test.ts, rosterEngineConstants.ts) appear
+- grep proof that ivEngine.ts / salaryCalculator.ts / mojoEngine.ts /
+  fitnessEngine.ts are byte-unchanged (git diff names them: nothing)
+- Full suite: NODE_ENV= npx vitest run  → baseline 7,140/383 + the new
+  effectiveRatings tests; NO new RED outside the documented characterized set
+  (wpaRuntimeBoundary, franchiseNarrativeEventEligibility, + the 3 order-flakes).
+
+FLAGGED FOR JK (flag, don't block):
+  F1 effectiveRatings takes a 4th defaulted `potency='L2'` param, extending §11's
+     3-arg signature (consistent with ivEngine's defaulted-param pattern). Confirm
+     or constrain to strictly 3 args.
+  F2 ALL magnitudes (MOJO_DELTAS, PRESSURE_MULTIPLIER, FATIGUE_MODEL,
+     POSITION_CHANCE_FREQUENCY, error/spectacular scaling) are CALIBRATE
+     placeholders per §4.2/§4.4/§15.4 — shipped with spec estimates, playtest-tuned.
+  F3 expectedValueNote + pitchQualityModifier traits have unpublished magnitudes →
+     documented no-op/EV in v1 effective ratings.
+  F4 FitnessState + Position vocabularies are defined LOCALLY (purity) and not yet
+     unified with fitnessEngine / salaryCalculator — known follow-up.
+  F5 mojoTransitionRate (Volatile/Consistent) modeled as a between-events dynamic,
+     not applied per effective-ratings call.
+
+FORMAT:
+1. Files changed (every path in git status)
+2. Changes made per file, each citing the §/finding/ruling it implements
+3. The 5 STEP-2 type definitions + the predicate-evaluator coverage list
+4. Verification results (paste actual command output for every VERIFICATION line)
+5. FLAGGED FOR JK (F1–F5 + anything new you hit)
+6. "T6 complete" OR "BLOCKED: [exact reason]"
+
+FAILURE PROTOCOL:
+- A change that would require editing any do-NOT-touch file → STOP and report.
+- Any matrix predicate kind you cannot satisfy from a definable GameContext field
+  → implement the field, or if genuinely impossible, FLAG (do not silently make it
+  always-false without noting it).
+- A magnitude the spec/matrix leaves unpublished AND not in the CALIBRATE list →
+  STOP and ask; never invent a precise number.
+- Never summarize or batch; enumerate every changed path.
+
+Use high reasoning effort. Think step-by-step.
+```
+
+
+---
+
+## T6-AUDIT + EXECUTION RECORD (2026-06-14)
+
+**ROUTE actual:** Codex 5.5 | high BUILT (invoked by Captain via the codex CLI,
+`codex exec`, workspace-write sandbox, `model_reasoning_effort=high`) → Opus 4.8
+AUDIT (Fable unavailable; auditor ≠ builder — Captain wrote the T6 contract but
+NOT the code, so the decorrelated triangle holds: builder gpt-5.5 family ≠
+auditor Opus family).
+
+### Builder result (Codex 5.5)
+Created `src/engines/effectiveRatings.ts` (535 lines, 2 pure exports:
+`effectiveRatings`, `defensivePlacementRisk`) + `src/engines/__tests__/
+effectiveRatings.test.ts` (267 lines, E1–E12); extended
+`src/data/rosterEngineConstants.ts` (+114 lines, ADD-ONLY). First production
+reader of `traitInteractionMatrix.ts`. Did not commit.
+
+### AUDIT VERDICT: CONFORMS
+Independent re-verification by the auditor (every command rerun — NOT graded
+from the builder self-report):
+- `NODE_ENV= npx tsc --noEmit` → rc=0, 0 TS errors
+- `NODE_ENV= npm run build` → rc=0 (built in 7.90s)
+- focused `vitest run effectiveRatings.test.ts` → 12/12
+- full `vitest run` → 7,149 pass / 3 fail; reconciles EXACTLY as 7,140 baseline
+  + 12 new T6 tests = 7,152 / 384 files; the 3 fails are the documented
+  characterized set (wpaRuntimeBoundary, franchiseNarrativeEventEligibility,
+  franchiseManualSmokeFixture order-flake). NO new RED.
+- Golden/SMB4-asset files BYTE-UNCHANGED: `git diff --name-only` names none of
+  ivEngine / salaryCalculator / mojoEngine / fitnessEngine / traitInteractionMatrix
+  / traitPricing / ivCurves / tierParams / playerDatabase; only the 2 new engine
+  files are untracked.
+- `rosterEngineConstants.ts` ADD-ONLY (0 removed lines; E11 snapshots every
+  pre-existing export by exact value).
+- Independent oracle spot-check (hand math, not the suite): Clutch + Jacked +
+  extreme → POW 90 = MATCH (base 50 + Clutch +5×2 A14 + mojo +15×2 pressure).
+- Audit gate (T4–T11): (1) tests pass ✓ (2) NFL + documented falsification ✓
+  (3) §4 section-by-section conformance ✓ (4) state/persistence migration N/A —
+  pure engine, no persistence/IndexedDB.
+
+### Disagreements with builder / findings (severity-rated)
+1. [MEDIUM → RESOLVED] `handednessBonus` is not a discrete §4.1 term; handedness
+   applied only via matrix `vsHand` split traits (consistent with the contract's
+   "§4.1 splits" gloss; no published universal-platoon magnitude). **JK ruling
+   2026-06-14:** T6 splits-handling is correct AS-IS; the STATIC switch>left>right
+   base premium belongs in base IV pricing (AUX_PRICING) → tracked as **FINDING-148**
+   (separate JK-gated ticket). Finding #1 closed for T6.
+2. [LOW] opponent traits scale by the SUBJECT's potency tier (effectiveRatings.ts
+   line 493), not the opponent's — moot at L2 default; flag for T7/T8 surfaces.
+3. [LOW] pitcher ARM=99 hardcoded inline in `defensivePlacementRisk` (line 510)
+   instead of importing `PITCHER_ASSUMED_ARM` (correct value, wrong source).
+4. [LOW] unconsumed registry constants: `ROLE_MISUSE_MOJO_PENALTY` (legit T9 /
+   between-events data) + `FATIGUE_MODEL.{recoveryGames,durableFactor,
+   injuryProneFactor}` (last two duplicate the matrix's Durable/Injury-Prone
+   factor the engine actually uses — dead duplicates; wire or drop).
+5. [LOW under-flag] `Player` → local `EffectiveRatingsPlayer` structural-type
+   substitution not explicitly flagged (contract permitted it "and FLAG it").
+6. [INFO] mojo delta applied to all 8 attrs incl. pitcher attrs for hitters —
+   harmless; §4.2 says "all attributes".
+Builder F1–F5 all valid; builder verification claims reproduced exactly. The
+builder's "dirty-worktree git diff --stat" caveat is fair (Captain's uncommitted
+doc edits + untracked new files mean `--stat` alone can't show "only 3 files";
+the golden-unchanged grep + untracked-file list confirm the real 3-file scope).
+
+### JK ratification (2026-06-14)
+Findings #2–#6 + builder F1–F5 RATIFIED for v1 (all CALIBRATE / surface /
+cleanup-class). Finding #1 RESOLVED via FINDING-148. **T6 = built + audited
+CONFORMS.** Browser sign-off N/A for T6 itself (no user-visible surface, R-T6-2);
+attaches when a T7+ surface consumes the engine. SMB4-asset gate satisfied by
+R-T6-1 approval + audit confirming the legacy mojo/fitness engines are untouched.

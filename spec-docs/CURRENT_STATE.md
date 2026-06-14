@@ -15,37 +15,43 @@
 - **Phase:** T-stack execution. Sequencing ruling F-141 holds: the full T-stack
   runs to completion as pure execution, THEN D0 cut line → D1–D8 → F-138 →
   flag flip → iPad playtest exit gate.
-- **Last completed:** EP1 — R-8 effective-position engine LIVE (FINDING-143
-  closed; FINDING-146 closed). Both audit legs ran on Opus 4.8 Max (Fable
-  unavailable) — triangle preserved, uncharacterized config, so JK's browser
-  pass on real data carries extra weight. Single closure commit.
-- **NEXT TASK: T6 — Effective Ratings Engine + DefensivePlacementRisk +
-  constants registry.** Contract not yet drafted — first action of next session.
-  ROUTE: Codex 5.5 | high (very high if T6 math touches state) → audit (Opus 4.8
-  while Fable unavailable; auditor ≠ builder). (Reasoning effort must appear in
-  both the ROUTE header and the closing directive — Contract Readiness Rule.)
-  - **WHERE T6 IS DEFINED (read these before drafting):**
-    - `IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md` line ~637 — the §13 build-task
-      table row for T6 (the authoritative one-line scope + route).
-    - Same spec line ~648 — the full T-stack order (T1→…→T6→{T7,T8}→T9→T10).
-    - Same spec line ~615 — `subRecThreshold / calloutThreshold` are TBD in
-      T6/T7 (playtest-tuned).
-    - `PROMPT_CONTRACTS.md` T6 forward-references: T6 CREATES
-      `src/data/rosterEngineConstants.ts` (currently constants-only from T4/EP1;
-      T6 extends it), T6 is the CONSUMER of `traitInteractionMatrix.ts` (grep for
-      readers — none yet), and T6 feeds Ratings → True Value. Grep `T6` in
-      PROMPT_CONTRACTS.md for the exact seams.
-    - Drafting steps: read the §13 T6 row + §3.x effective-ratings sections of
-      the IV spec → check what EP1/TV1/TV2 already built (don't re-implement) →
-      write the contract INTO PROMPT_CONTRACTS.md before handoff (Contract
-      Readiness Rule).
-- **Then:** {T7, T8} → T9 → T10 → D0. Slices 5 (season-end locking) + 6
-  (Captain/Fan Hopeful) queued post-T-stack or per D0.
+- **Last completed:** T6 — Effective Ratings Engine (`src/engines/
+  effectiveRatings.ts`: `effectiveRatings` + `defensivePlacementRisk`) +
+  constants-registry extension (`rosterEngineConstants.ts`, add-only) + first
+  production reader of the trait matrix. Codex 5.5 | high BUILT (Captain invoked
+  the codex CLI) → Opus 4.8 audit **CONFORMS** (Fable unavailable; auditor ≠
+  builder — Captain wrote the contract, not the code). Independently re-verified:
+  tsc 0 / build 0 / 12 new tests / full suite 7,152 (7,140+12) with only the 3
+  characterized fails / golden + SMB4 byte-unchanged / add-only constants /
+  oracle spot-check MATCH. Finding #1 (handednessBonus) RESOLVED → reframed as
+  FINDING-148 (base AUX_PRICING L/R premium gap, separate JK-gated ticket); 5 LOW
+  + builder F1–F5 ratified by JK for v1. Full record: PROMPT_CONTRACTS.md
+  "T6-AUDIT + EXECUTION RECORD". **NOT COMMITTED yet** — T6's 3 code files + these
+  doc updates sit in the working tree pending JK's commit word. Browser sign-off
+  N/A for T6 (no surface, R-T6-2) — attaches at T7+.
+- **NEXT TASK: {T7, T8}** per F-141 sequencing (both consume the T6 engine).
+  - **T7** = Mode 2 Analyzer: optimal lineups vs L/R, one-button re-optimize,
+    call-up/send-down recs, season salary ledger. ROUTE: Codex 5.5 | **very high**
+    → audit (reducer/persistence: ledger state — audit non-negotiable). IV spec
+    §8 + §11; consumes effectiveRatings/defensivePlacementRisk.
+  - **T8** = Mode 1 suite: pool registration, snake draft, pick chart + trade
+    validator, identity composition UI, scout-obscured farm pricing, luxuryTax +
+    balanceMode wiring. ROUTE: Codex 5.5 | **very high** → audit (persistence:
+    pool/league state — audit non-negotiable). IV spec §6 + §7.
+  - First action: draft the T7 (and/or T8) contract INTO PROMPT_CONTRACTS.md
+    before handoff (Contract Readiness Rule), reusing the T6 pure exports.
+- **Then:** T9 → T10 → D0. Slices 5 (season-end locking) + 6 (Captain/Fan
+  Hopeful) queued post-T-stack or per D0.
+- **NEW non-T-stack ticket — FINDING-148 (JK-gated):** base AUX_PRICING L/R batter
+  premium gap (switch>left>right; lefty premium missing; T1 contract-scope gap).
+  Touches FROZEN base-IV → requires oracle regen + golden re-validation. JK to
+  sequence vs the T-stack; do NOT auto-insert. ROUTE Codex 5.5 | high → Opus audit.
 
 ## SUITE BASELINE
 
-7,140 tests / 383 files. Characterized set (a new RED outside this set is a
-real regression): fixed failures wpaRuntimeBoundary +
+7,152 tests / 384 files (T6 added effectiveRatings.test.ts = 12 tests / 1 file,
+2026-06-14; prior baseline 7,140 / 383). Characterized set (a new RED outside
+this set is a real regression): fixed failures wpaRuntimeBoundary +
 franchiseNarrativeEventEligibility; conditional-solo order-flakes
 franchiseManualSmokeFixture + GameTrackerLaunchState +
 franchiseOffseasonGuards.component (each passes solo).
@@ -60,6 +66,10 @@ franchiseOffseasonGuards.component (each passes solo).
 
 ## OPEN PENDING-JK (rolling)
 
+**FINDING-148** (base AUX_PRICING L/R batter premium gap — new JK-gated ticket;
+sequence vs T-stack; regen frozen oracle). **T6 close-out:** built + audit
+CONFORMS; F1–F5 + 5 LOW findings ratified; T6 code (3 files) + this session's doc
+updates UNCOMMITTED pending JK commit word.
 F-144 (salary-path R-6 residue) + F-145 (designation 'active' vocabulary) +
 F-147 (stale peerPoolLimitation written live) → taxonomy/spec-cleanup batch
 (with R-6/R-8/§17.8 blocks). MINOR #3 builder-reporting → now ratified into
