@@ -19,10 +19,26 @@
   closed; FINDING-146 closed). Both audit legs ran on Opus 4.8 Max (Fable
   unavailable) — triangle preserved, uncharacterized config, so JK's browser
   pass on real data carries extra weight. Single closure commit.
-- **NEXT TASK: T6.** Contract not yet drafted — first action of next session.
-  ROUTE: Codex 5.5 | high (very high if T6 math touches state) → Fable 5 CLI
-  audit. (Reasoning effort must appear in both the ROUTE header and the closing
-  directive — Contract Readiness Rule.)
+- **NEXT TASK: T6 — Effective Ratings Engine + DefensivePlacementRisk +
+  constants registry.** Contract not yet drafted — first action of next session.
+  ROUTE: Codex 5.5 | high (very high if T6 math touches state) → audit (Opus 4.8
+  while Fable unavailable; auditor ≠ builder). (Reasoning effort must appear in
+  both the ROUTE header and the closing directive — Contract Readiness Rule.)
+  - **WHERE T6 IS DEFINED (read these before drafting):**
+    - `IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md` line ~637 — the §13 build-task
+      table row for T6 (the authoritative one-line scope + route).
+    - Same spec line ~648 — the full T-stack order (T1→…→T6→{T7,T8}→T9→T10).
+    - Same spec line ~615 — `subRecThreshold / calloutThreshold` are TBD in
+      T6/T7 (playtest-tuned).
+    - `PROMPT_CONTRACTS.md` T6 forward-references: T6 CREATES
+      `src/data/rosterEngineConstants.ts` (currently constants-only from T4/EP1;
+      T6 extends it), T6 is the CONSUMER of `traitInteractionMatrix.ts` (grep for
+      readers — none yet), and T6 feeds Ratings → True Value. Grep `T6` in
+      PROMPT_CONTRACTS.md for the exact seams.
+    - Drafting steps: read the §13 T6 row + §3.x effective-ratings sections of
+      the IV spec → check what EP1/TV1/TV2 already built (don't re-implement) →
+      write the contract INTO PROMPT_CONTRACTS.md before handoff (Contract
+      Readiness Rule).
 - **Then:** {T7, T8} → T9 → T10 → D0. Slices 5 (season-end locking) + 6
   (Captain/Fan Hopeful) queued post-T-stack or per D0.
 
