@@ -5,6 +5,20 @@ import type { FranchiseFarmRecord, FranchiseFarmRosterLevel } from './franchiseF
 import type { Player } from './franchisePlayerStorage';
 import type { GamePhase, TransactionLogEntry } from './transactionStorage';
 import { V1_MLB_PLAYERS_PER_TEAM } from './leagueBuilderFarmScoutingHandoff';
+import {
+  FRANCHISE_SEASON_LEDGER_CALCULATION_VERSION,
+  getFranchiseSeasonLedgerRow,
+  upsertFranchiseSeasonLedgerRow,
+} from './franchiseSeasonLedgerStorage';
+import {
+  calculateFranchiseCurrentSalary,
+} from './franchiseSalary';
+import { getFranchiseSeasonId } from './franchisePersistenceContract';
+import {
+  transitionLedgerForCallUp,
+  transitionLedgerForDemotion,
+} from '../engines/rosterAnalyzer';
+import { DEAD_MONEY_RATE } from '../data/rosterEngineConstants';
 
 const MAX_OPTIONS_PER_SEASON = 3;
 
@@ -36,6 +50,7 @@ export type FranchiseRosterMovementErrorCode =
   | 'PLAYER_SAVE_FAILED'
   | 'FARM_SAVE_FAILED'
   | 'FARM_DELETE_FAILED'
+  | 'SALARY_LEDGER_FAILED'
   | 'TRANSACTION_LOG_FAILED'
   | 'ROLLBACK_FAILED';
 
@@ -82,7 +97,7 @@ export interface RosterMoveEvent {
   transactionId?: string;
   moraleMutationApplied: false;
   relationshipMutationApplied: false;
-  salaryMovementApplied: false;
+  salaryMovementApplied: boolean;
   mode3HandoffApplied: false;
 }
 
@@ -222,6 +237,7 @@ function buildRosterMoveEvent(params: {
   optionsUsed?: number;
   ratingRevealState?: 'hidden' | 'revealed';
   transactionId?: string;
+  salaryMovementApplied?: boolean;
 }): RosterMoveEvent {
   return {
     id: [
@@ -252,9 +268,125 @@ function buildRosterMoveEvent(params: {
     transactionId: params.transactionId,
     moraleMutationApplied: false,
     relationshipMutationApplied: false,
-    salaryMovementApplied: false,
+    salaryMovementApplied: params.salaryMovementApplied === true,
     mode3HandoffApplied: false,
   };
+}
+
+function ledgerScope(input: FranchiseRosterMovementInput): {
+  franchiseId: string;
+  seasonId: string;
+  statsScopeId: string;
+} {
+  const seasonId = getFranchiseSeasonId(input.franchiseId, input.seasonNumber);
+  return {
+    franchiseId: input.franchiseId,
+    seasonId,
+    statsScopeId: input.statsScopeId ?? seasonId,
+  };
+}
+
+function withSalaryFields(
+  player: Player,
+  salaryResult: ReturnType<typeof calculateFranchiseCurrentSalary>,
+  input: FranchiseRosterMovementInput,
+  computedAt: string,
+): Player {
+  const seasonId = getFranchiseSeasonId(input.franchiseId, input.seasonNumber);
+  return {
+    ...player,
+    salary: salaryResult.salary ?? player.salary,
+    salaryCalculationVersion: salaryResult.calculationVersion,
+    salarySeasonId: seasonId,
+    salaryStatsScopeId: input.statsScopeId ?? seasonId,
+    salarySeasonNumber: input.seasonNumber,
+    salaryUpdatedAt: computedAt,
+    rookieScaleActiveBySeason: {
+      ...(player.rookieScaleActiveBySeason ?? {}),
+      [seasonId]: true,
+    },
+    salaryFactors: salaryResult.breakdown
+      ? {
+          source: salaryResult.source === 'hidden-farm-public-context' ? 'hidden-farm-public-context' : 'multifactor-current-season',
+          baseSalary: salaryResult.breakdown.baseSalary,
+          positionMultiplier: salaryResult.breakdown.positionMultiplier,
+          traitModifier: salaryResult.breakdown.traitModifier,
+          ageFactor: salaryResult.breakdown.ageFactor,
+          performanceModifier: salaryResult.breakdown.performanceModifier,
+          fameModifier: salaryResult.breakdown.fameModifier,
+          personalityModifier: salaryResult.breakdown.personalityModifier,
+          actualWar: null,
+          expectedWar: salaryResult.expectedPerformance?.total ?? null,
+          gamesPerSeason: salaryResult.adaptiveStandards.gamesPerSeason,
+          inningsPerGame: salaryResult.adaptiveStandards.inningsPerGame,
+          rookieScaleActive: true,
+        }
+      : player.salaryFactors,
+  };
+}
+
+async function buildCallUpSalaryLedgerUpdate(input: FranchiseRosterMovementInput, player: Player, computedAt: string): Promise<{
+  player: Player;
+  row: Parameters<typeof upsertFranchiseSeasonLedgerRow>[0];
+}> {
+  const scope = ledgerScope(input);
+  const existing = await getFranchiseSeasonLedgerRow({ ...scope, playerId: input.playerId });
+  const transition = transitionLedgerForCallUp(existing, {
+    playerId: input.playerId,
+    salary: player.salary,
+  });
+  const salaryPlayer = transition.firstCallUp
+    ? withSalaryFields(player, calculateFranchiseCurrentSalary(player, { rookieScaleActive: true }), input, computedAt)
+    : {
+        ...player,
+        salary: transition.entry.salary,
+        salarySeasonId: scope.seasonId,
+        salaryStatsScopeId: scope.statsScopeId,
+        salarySeasonNumber: input.seasonNumber,
+        salaryUpdatedAt: computedAt,
+        rookieScaleActiveBySeason: {
+          ...(player.rookieScaleActiveBySeason ?? {}),
+          [scope.seasonId]: true,
+        },
+      };
+  const entry = transition.firstCallUp
+    ? transitionLedgerForCallUp(null, {
+        playerId: input.playerId,
+        salary: salaryPlayer.salary,
+      }).entry
+    : transition.entry;
+
+  return {
+    player: salaryPlayer,
+    row: {
+      ...scope,
+      playerId: input.playerId,
+      salary: entry.salary,
+      status: entry.status,
+      capCharge: entry.capCharge,
+      calculationVersion: FRANCHISE_SEASON_LEDGER_CALCULATION_VERSION,
+      computedAt,
+    },
+  };
+}
+
+async function applySendDownSalaryLedger(input: FranchiseRosterMovementInput, player: Player, computedAt: string): Promise<void> {
+  const scope = ledgerScope(input);
+  const existing = await getFranchiseSeasonLedgerRow({ ...scope, playerId: input.playerId });
+  const entry = transitionLedgerForDemotion(existing, {
+    playerId: input.playerId,
+    salary: existing?.salary ?? player.salary,
+    deadMoneyRate: DEAD_MONEY_RATE,
+  });
+  await upsertFranchiseSeasonLedgerRow({
+    ...scope,
+    playerId: input.playerId,
+    salary: entry.salary,
+    status: entry.status,
+    capCharge: entry.capCharge,
+    calculationVersion: FRANCHISE_SEASON_LEDGER_CALCULATION_VERSION,
+    computedAt,
+  });
 }
 
 function buildRosterMovementTransactionId(params: {
@@ -496,6 +628,9 @@ export async function sendDownFranchisePlayer(
     });
     farmMutated = true;
 
+    failureCode = 'SALARY_LEDGER_FAILED';
+    await applySendDownSalaryLedger(input, updatedPlayer, timestamp);
+
     failureCode = 'TRANSACTION_LOG_FAILED';
     const rosterMovementPhase = input.rosterMovementPhase ?? 'OFFSEASON';
     const transactionId = buildRosterMovementTransactionId({
@@ -515,6 +650,7 @@ export async function sendDownFranchisePlayer(
       optionsUsed: nextOptions,
       ratingRevealState: normalizeRevealState(farmRecord.ratingRevealState),
       transactionId,
+      salaryMovementApplied: true,
     });
     const transaction = await transactionStorage.logMode2V1Transaction({
       id: transactionId,
@@ -631,6 +767,14 @@ export async function callUpFranchisePlayer(
     await franchiseFarmStorage.deleteFranchiseFarmRecord(input.franchiseId, input.seasonId, input.teamId, input.playerId);
     farmMutated = true;
 
+    failureCode = 'SALARY_LEDGER_FAILED';
+    const callUpSalaryLedger = await buildCallUpSalaryLedgerUpdate(input, updatedPlayer, timestamp);
+    const salaryAdjustedPlayer = await franchisePlayerStorage.saveFranchisePlayer(
+      input.franchiseId,
+      callUpSalaryLedger.player,
+    );
+    await upsertFranchiseSeasonLedgerRow(callUpSalaryLedger.row);
+
     failureCode = 'TRANSACTION_LOG_FAILED';
     const rosterMovementPhase = input.rosterMovementPhase ?? 'OFFSEASON';
     const transactionId = buildRosterMovementTransactionId({
@@ -641,13 +785,14 @@ export async function callUpFranchisePlayer(
     const rosterMoveEvent = buildRosterMoveEvent({
       movementType: 'call_up',
       input,
-      player: updatedPlayer,
+      player: salaryAdjustedPlayer,
       sourceRosterStatus: 'FARM',
       targetRosterStatus: 'MLB',
       rosterMovementPhase,
       createdAt: timestamp,
-      ratingRevealState: normalizeRevealState(updatedPlayer.ratingRevealState),
+      ratingRevealState: normalizeRevealState(salaryAdjustedPlayer.ratingRevealState),
       transactionId,
+      salaryMovementApplied: true,
     });
     const transaction = await transactionStorage.logMode2V1Transaction({
       id: transactionId,
@@ -663,13 +808,13 @@ export async function callUpFranchisePlayer(
         movementType: 'call_up',
         playerId: input.playerId,
         playerIds: [input.playerId],
-        playerName: playerName(updatedPlayer),
+        playerName: playerName(salaryAdjustedPlayer),
         teamId: input.teamId,
         sourceTeamId: input.teamId,
         targetTeamId: input.teamId,
         sourceRosterStatus: 'FARM',
         targetRosterStatus: 'MLB',
-        ratingRevealState: updatedPlayer.ratingRevealState,
+        ratingRevealState: salaryAdjustedPlayer.ratingRevealState,
         rosterMovementPhase,
         rosterMoveEvent,
       },
@@ -679,7 +824,7 @@ export async function callUpFranchisePlayer(
       success: true,
       affectedPlayerId: input.playerId,
       affectedTeamId: input.teamId,
-      player: updatedPlayer,
+      player: salaryAdjustedPlayer,
       farmRecord: null,
       transaction,
       transactionId: transaction.id,

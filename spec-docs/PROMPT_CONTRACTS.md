@@ -6233,3 +6233,226 @@ Builder F1–F6 valid (F6: rec ranking is naturally limited until TV2 rows exist
 ### JK ratification (2026-06-14)
 Findings + F1–F6 ratified. **BROWSER-PENDING** (recs panel renders read-only +
 leak-safe). T7b = built + audited CONFORMS, COMMITTED.
+
+
+---
+
+## CONTRACT: T7c — Season Salary Ledger (§8.4) (drafted 2026-06-14)
+
+**ROUTE: Codex 5.5 | very high → audit (Fable 5 CLI per spec; Opus 4.8 while Fable unavailable — auditor ≠ builder) | very high reasoning effort. PERSISTENCE/MIGRATION AUDIT NON-NEGOTIABLE** (new IndexedDB store + DB version bump + producer wiring into live executors).
+
+**STATUS: DRAFTED + JK-APPROVED for handoff (2026-06-14)** (scope decisions
+resolved with JK below; per the standing mode this goes straight to Codex).
+
+### Ratified rulings (binding inputs — JK 2026-06-14)
+- **R-T7-SPLIT:** T7c = §8.4 ledger. T7a/T7b ✅ done.
+- **R-T7c-SCOPE:** T7c builds the ledger store + LedgerEntry/LedgerStatus state
+  machine + capCharge + the call-up/demotion PRODUCER + `rookieScaleActive` flip +
+  Phase-3 reset + constants. **DEFER** (do NOT build): the payroll-expectation
+  baseline, the capCharge→fan-morale consequence, the declared-budget concept, and
+  one-click execute-from-rec. Rationale: the consumer machinery is orphaned
+  (`calculateFanExpectations` 0 callers) / hard-gated (`fanMoraleMutationAllowed:
+  false`), and the declared-budget anchor (v1.1.2) does not exist yet. capCharge
+  persists, ready for that future ticket. Execution stays the user's existing
+  manual roster action.
+- **R-T7c-MIGRATION:** the ledger store goes in the shared `kbl-tracker` DB via
+  `src/utils/trackerDb.ts` ONLY (the v-conflict-hang landmine — never open
+  `kbl-tracker` elsewhere). Bump `TRACKER_DB_VERSION` 14→15 with a
+  `contains()`-guarded add-only `createObjectStore` block appended at the END of
+  `onupgradeneeded` (clone the v13/v14 pattern); NO destructive migration, NO
+  data backfill.
+- **Golden/frozen:** ivEngine + the frozen oracle untouched (capCharge is a
+  downstream multiplier of an already-priced salary — keep it OUT of the IV layer).
+  salaryCalculator's ENGINE is not edited — T7c is a CALLER that passes
+  `rookieScaleActive: true` to its existing option (:104-106, consumed :790).
+
+### What is already built (consume / clone — do NOT rebuild) — Captain-verified 2026-06-14
+- `trackerDb.ts:17` `TRACKER_DB_VERSION = 14`; the v13 (`franchiseTrueValueRows`
+  :117-127) and v14 (`franchiseDesignationRows` :132-145) add-only store blocks are
+  the EXACT template (guarded createObjectStore + composite keyPath + by_scope
+  index). T7c bumps to 15 + appends one block.
+- `franchiseTrueValueStorage.ts` is the storage-module precedent to CLONE:
+  `initX() => getTrackerDb()`, `scopeKey` → `[franchiseId,seasonId,statsScopeId]`,
+  `rowKey` → `[...,playerId]`, replace-for-scope, STORE_NAME const, test reset helpers.
+- `franchisePersistenceContract.ts` `getFranchiseSeasonId(fid,n)` =
+  `${fid}-season-${n}`, `statsScopeId === seasonId`. Phase-3 reset = a fresh
+  seasonNumber → fresh seasonId → naturally empty ledger scope (no row deletion).
+- PRODUCER seam: `franchiseRosterMovement.ts` `callUpFranchisePlayer` (:576, hook
+  after the successful txn ~:676) / `sendDownFranchisePlayer` (:417, ~:546). Both
+  carry `RosterMoveEvent.salaryMovementApplied` hardcoded `false` (:86,:256) — the
+  flag T7c flips to true.
+- `salaryCalculator.ts` `rookieScaleActive?` option (:104-106) consumed at :790 as
+  `ageFactor = rookieScaleActive ? ROOKIE_SCALE_FACTOR : calculateAgeFactor(age)`
+  (REPLACES age factor — NO stacking/double-discount, D6/FINDING-127).
+  `ROOKIE_SCALE_FACTOR` (:380) is canonical (consumed internally); the
+  `rosterEngineConstants.ts:213` copy (T7b) is the redundant one to remove.
+- `franchiseSalaryLifecycle.ts` is a stateless STATUS CLASSIFIER, NOT a ledger —
+  naming-collision trap; do NOT extend it.
+
+```
+You are the Season Salary Ledger Implementer (TypeScript). PERSISTENCE-CRITICAL,
+very high reasoning effort. The IndexedDB version-conflict-hang is the #1 landmine
+(see R-T7c-MIGRATION) — get the store registration exactly right.
+
+GOAL:
+Build the §8.4 Season Salary Ledger: a new season-scoped IndexedDB store (trackerDb
+v14→15) + LedgerEntry/LedgerStatus state machine + capCharge + the call-up/demotion
+PRODUCER hooked into the existing executors (first call-up→active + flip
+rookieScaleActive; demotion→deadMoney at deadMoneyRate; re-call-up→active, NO
+stacking) + ledgerCapCharge engine fn (§11) + constants + Phase-3 reset. DEFER the
+payroll-expectation baseline, fan-morale consequence, declared-budget, and one-click
+execute (R-T7c-SCOPE).
+
+SOURCE OF TRUTH: IV spec §8.4 (ledger), §11 (ledgerCapCharge); DECISIONS_LOG.
+ENV: prefix every CLI with `NODE_ENV= `; node at ~/.nvm/versions/node/v20.20.0/bin.
+
+STEP 1 — STORE (src/utils/trackerDb.ts): bump TRACKER_DB_VERSION 14→15; append ONE
+contains()-guarded createObjectStore block at the END of onupgradeneeded for the
+ledger store (e.g. 'franchiseSeasonLedgerRows') keyPath [franchiseId,seasonId,
+statsScopeId,playerId] + a 'by_scope' index [franchiseId,seasonId,statsScopeId].
+Mirror the v13/v14 blocks EXACTLY — no destructive migration, no backfill. NEVER
+open 'kbl-tracker' anywhere but trackerDb.ts.
+
+STEP 2 — STORAGE MODULE (new src/utils/franchiseSeasonLedgerStorage.ts, clone
+franchiseTrueValueStorage.ts): LedgerRow { franchiseId; seasonId; statsScopeId;
+playerId; salary; status: LedgerStatus; capCharge; calculationVersion; computedAt }.
+save / get-for-scope / replace-for-scope / upsert-one via getTrackerDb; hasExplicitScope
+guard; STORE_NAME const; a test reset helper. Pure async storage — no React.
+
+STEP 3 — STATE MACHINE + ledgerCapCharge:
+- Types: LedgerStatus = 'active'|'deadMoney'|'unrostered'; LedgerEntry per §8.4.
+- Pure transition fns: firstCallUp → active; demotion → deadMoney (at deadMoneyRate);
+  re-call-up → active, NO stacking / NO per-transaction charge (idempotent).
+- ledgerCapCharge(entries: LedgerEntry[], rate: number): number = Σ salary ×
+  (active 1.0 / deadMoney rate / unrostered 0). ADD to src/engines/rosterAnalyzer.ts
+  (the §11 home; keep optimizeLineup + recommendRosterMoves). Pure.
+
+STEP 4 — PRODUCER (wire into the existing executors; persistence-sensitive):
+- callUpFranchisePlayer (after the successful txn ~:676): upsert the player's
+  LedgerEntry → status active for the current season scope; if this is the player's
+  FIRST call-up this season (a prospect), set rookieScaleActive=true for the salary
+  recompute (REPLACES age factor — verify NO double-discount with deadMoney). Flip
+  RosterMoveEvent.salaryMovementApplied → true.
+- sendDownFranchisePlayer (after the successful txn ~:546): transition the player's
+  LedgerEntry active → deadMoney at deadMoneyRate; flip salaryMovementApplied → true.
+- Idempotent: re-call-up flips deadMoney → active, same salary, NO stacking.
+- The ledger write MUST be scoped to the current franchise/season (getFranchiseSeasonId).
+  If the executor lacks the season scope, thread it from the existing inputs; do NOT
+  invent a key format — reuse franchisePersistenceContract.
+
+STEP 5 — CONSTANTS (src/data/rosterEngineConstants.ts): ADD-ONLY deadMoneyRate
+(0.75 default, CALIBRATE; the 100/75/50 league-config presets are DEFERRED with the
+wizard). SINGLE-SOURCE the ROOKIE_SCALE_FACTOR dup: REMOVE the rosterEngineConstants
+:213 copy and repoint its consumer (rosterAnalyzer.ts recommendRosterMoves) to import
+ROOKIE_SCALE_FACTOR from salaryCalculator (the canonical :380; importing a const is
+not an engine edit). This is the documented reconciliation — it is the ONLY removal
+allowed in this add-only file.
+
+STEP 6 — PHASE-3 RESET: confirm the ledger is season-scoped so offseason Phase-3
+advance (new seasonNumber → new seasonId) yields a fresh empty ledger scope with NO
+deletion (old-season rows persist under their scope, like trueValue). If a Phase-3
+transition explicitly should stamp/seal the prior ledger, wire that minimally; else
+document that fresh-scope-on-advance is the reset mechanism.
+
+STEP 7 — DEFERRED (do NOT build, per R-T7c-SCOPE): payroll-expectation baseline;
+capCharge→fan-morale; declaredBudget field/UI; one-click execute-from-rec. Leave
+capCharge persisted + ledgerCapCharge available for the future consumer.
+
+STEP 8 — TESTS:
+- MIGRATION SAFETY (load-bearing): opening the DB at v15 creates the ledger store AND
+  preserves every v12/v13/v14 store (no data loss); only trackerDb.ts opens the DB.
+- STATE MACHINE: first call-up→active; demotion→deadMoney (capCharge = salary×rate);
+  re-call-up→active, NO stacking; capCharge math for all three statuses; ledgerCapCharge
+  sums correctly.
+- ROOKIE-SCALE: call-up sets rookieScaleActive→ salary uses 0.50× REPLACING age factor
+  (NO double-discount); demotion/dead-money does not double-apply.
+- PRODUCER: callUp/sendDown update the ledger + flip salaryMovementApplied; idempotent.
+- SINGLE-SOURCE: ROOKIE_SCALE_FACTOR defined in exactly ONE place after T7c (grep).
+- PERSISTENCE round-trip: save → get-for-scope returns the rows.
+
+CONSTRAINTS — do NOT touch: src/engines/ivEngine.ts, the frozen oracle, salaryCalculator's
+ENGINE logic (pass the option, don't edit), traitInteractionMatrix.ts. Open 'kbl-tracker'
+ONLY via trackerDb.ts. Do NOT extend franchiseSalaryLifecycle.ts. NO fan-morale /
+expectation / declared-budget code. rosterEngineConstants ADD-ONLY except the documented
+ROOKIE_SCALE_FACTOR dup removal.
+
+VERIFICATION (run + paste):
+- NODE_ENV= npx vitest run <new tests> → green (incl. migration-safety + state machine + rookie-scale)
+- NODE_ENV= npx tsc --noEmit → clean
+- NODE_ENV= npm run build → exit 0
+- NODE_ENV= npx vitest run (full) → no new RED outside the characterized set (baseline 7,164/385 + new tests)
+- GOLDEN/SMB4 byte-unchanged: git diff --name-only lists none of ivEngine/salaryCalculator/effectiveRatings/iv_oracle.json (salaryCalculator must be byte-unchanged — T7c only CALLS it)
+- git diff --stat → enumerate EVERY changed path
+
+FLAGGED FOR JK:
+  F1 deadMoneyRate = 0.75 default (CALIBRATE); the 100/75/50 league-config presets +
+     the Setup-Wizard control are DEFERRED with the declared-budget ticket.
+  F2 DEFERRED FUTURE TICKET (needs a declared-budget design): payroll-expectation
+     baseline + capCharge→fan-morale consequence (extend the existing gated
+     franchiseFanMoralePerformanceGapFormula → franchiseRandomEventGenerator draft path).
+  F3 Phase-3 reset mechanism = fresh-seasonId-scope (confirm vs an explicit seal).
+  F4 ROOKIE_SCALE_FACTOR single-sourced to salaryCalculator:380.
+
+FORMAT: (1) files changed (every path) (2) per-file changes citing §/ruling
+(3) the store-registration diff + the producer hook points quoted (4) verification
+output (5) FLAGGED FOR JK (6) "T7c complete" OR "BLOCKED: [reason]".
+
+FAILURE PROTOCOL: a change needing a do-NOT-touch edit (esp. salaryCalculator engine,
+ivEngine, oracle) → STOP and report. If wiring the producer would require opening
+'kbl-tracker' outside trackerDb.ts → STOP (v-conflict landmine). If the executor lacks
+the season scope needed for the ledger key → report what's missing, do not invent a key.
+Enumerate every changed path; never summarize or batch.
+
+Use very high reasoning effort. Think step-by-step. Do NOT commit — leave changes in
+the working tree for audit.
+```
+
+
+---
+
+## T7c-AUDIT + EXECUTION RECORD (2026-06-14) — completes the T7 stack
+
+**ROUTE actual:** Codex 5.5 | very high BUILT → Opus 4.8 AUDIT (Fable unavailable;
+auditor ≠ builder). Persistence/migration audit.
+
+### Builder result (Codex 5.5)
+trackerDb v14→15 + guarded `franchiseSeasonLedgerRows` store; NEW
+`franchiseSeasonLedgerStorage.ts` (clone of the True Value pattern, getTrackerDb);
+LedgerStatus/LedgerEntry + pure transitions + `ledgerCapCharge` in rosterAnalyzer.ts;
+producer hooks in franchiseRosterMovement.ts (call-up→active+rookieScaleActive,
+send-down→deadMoney, flip salaryMovementApplied); franchiseSalary.ts caller option;
+leagueBuilderStorage.ts persisted rookieScaleActiveBySeason (additive); REMOVED the
+ROOKIE_SCALE_FACTOR dup + added DEAD_MONEY_RATE=0.75. 10 files (8 mod + 2 new).
+
+### AUDIT VERDICT: CONFORMS
+Independent re-verification:
+- tsc 0; build 0 (7.97s); focused 44/44; full suite 7,168 pass / 3 fail —
+  reconciles 7,164 + 7 new = 7,171 / 386; the 3 fails are the characterized set. NO new RED.
+- MIGRATION SAFETY (load-bearing, R-T7c-MIGRATION) PROVEN: a test opens the DB at v15
+  and asserts objectStoreNames === all 31 prior stores + franchiseSeasonLedgerRows (no
+  store dropped / no data loss) + the by_scope index; a source test asserts the ledger
+  module uses getTrackerDb and never indexedDB.open('kbl-tracker').
+- salaryCalculator.ts BYTE-UNCHANGED (T7c only CALLS the rookieScaleActive option);
+  ivEngine/effectiveRatings/iv_oracle byte-unchanged.
+- STATE MACHINE correct: ledgerCapCharge = active×1.0 / deadMoney×rate / unrostered×0;
+  transitionLedgerForCallUp returns firstCallUp:true ONLY when no entry exists (re-call-up
+  uses recallLedgerEntry — active, NO stacking, NO rookie-scale re-trigger → no
+  double-discount). Producer hooks rollback-safe (existing executor rollback tests pass).
+- ROOKIE_SCALE_FACTOR single-sourced to salaryCalculator:380 (+ a guard test asserting
+  exactly one definition). leagueBuilderStorage change additive (0 removed, no DB version bump).
+- DEFERRED per R-T7c-SCOPE: payroll-expectation baseline, capCharge→fan-morale,
+  declared-budget, one-click execute — NOT built. capCharge persists for the future consumer.
+
+### Findings (LOW, ratified by JK 2026-06-14)
+1. rookieScaleActiveBySeason persisted on the player (leagueBuilderStorage) rather than
+   derived from the ledger — additive design choice, tested; acceptable.
+2. Builder's "other files open kbl-tracker" flag = VERIFIED NON-ISSUE: the other
+   open(DB_NAME) sites are SEPARATE DBs (schedule/museum/farm/relationship/playoff/etc.),
+   not 'kbl-tracker'; the migration test passing (no v-conflict hang) confirms trackerDb
+   is the sole opener of 'kbl-tracker'.
+Builder F1–F4 valid.
+
+### JK ratification (2026-06-14)
+Findings + F1–F4 ratified. BROWSER-PENDING. T7c = built + audited CONFORMS, COMMITTED.
+**T7 STACK COMPLETE (T7a/T7b/T7c).** DEFERRED future ticket logged: payroll-expectation
+baseline → fan-morale consequence (needs a declared-budget design).

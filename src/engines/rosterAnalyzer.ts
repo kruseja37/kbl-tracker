@@ -4,11 +4,11 @@ import {
   FARM_SCOUTED_GRADE_PROJECTED_VALUE,
   type EffectiveMojoState,
   type PitcherRoleKey,
-  ROOKIE_SCALE_FACTOR,
   ROSTER_MOVE_CALLOUT_THRESHOLD,
 } from '../data/rosterEngineConstants';
 import { computeIV, type IVPlayerInput } from './ivEngine';
 import { defensivePlacementRisk, effectiveRatings } from './effectiveRatings';
+import { ROOKIE_SCALE_FACTOR } from './salaryCalculator';
 import type { Player, Team } from '../utils/leagueBuilderStorage';
 
 type FitnessState = 'JUICED' | 'FIT' | 'WELL' | 'STRAINED' | 'WEAK' | 'HURT';
@@ -124,6 +124,15 @@ export interface RosterMoveTeam {
   activeRoster?: RosterMovePlayer[];
 }
 
+export type LedgerStatus = 'active' | 'deadMoney' | 'unrostered';
+
+export interface LedgerEntry {
+  playerId: string;
+  salary: number;
+  status: LedgerStatus;
+  capCharge: number;
+}
+
 export type FarmRoster = FarmRosterMovePlayer[] | {
   players?: FarmRosterMovePlayer[];
   rosterPlayers?: FarmRosterMovePlayer[];
@@ -231,6 +240,68 @@ export function recommendRosterMoves(
     left.kind.localeCompare(right.kind) ||
     left.playerId.localeCompare(right.playerId),
   );
+}
+
+export function ledgerCapCharge(entries: LedgerEntry[], rate: number): number {
+  const deadMoneyRate = finiteNumber(rate) ? rate : 0;
+  return round(entries.reduce((sum, entry) => {
+    if (entry.status === 'active') return sum + entry.salary;
+    if (entry.status === 'deadMoney') return sum + entry.salary * deadMoneyRate;
+    return sum;
+  }, 0));
+}
+
+function ledgerEntry(playerId: string, salary: number, status: LedgerStatus, rate: number): LedgerEntry {
+  const safeSalary = finiteNumber(salary) ? salary : 0;
+  const capCharge = status === 'active'
+    ? safeSalary
+    : status === 'deadMoney'
+      ? safeSalary * (finiteNumber(rate) ? rate : 0)
+      : 0;
+  return {
+    playerId,
+    salary: safeSalary,
+    status,
+    capCharge: round(capCharge),
+  };
+}
+
+export function firstCallUpLedgerEntry(params: {
+  playerId: string;
+  salary: number;
+}): LedgerEntry {
+  return ledgerEntry(params.playerId, params.salary, 'active', 1);
+}
+
+export function demoteLedgerEntry(entry: LedgerEntry, deadMoneyRate: number): LedgerEntry {
+  return ledgerEntry(entry.playerId, entry.salary, 'deadMoney', deadMoneyRate);
+}
+
+export function recallLedgerEntry(entry: LedgerEntry): LedgerEntry {
+  return ledgerEntry(entry.playerId, entry.salary, 'active', 1);
+}
+
+export function transitionLedgerForCallUp(
+  existing: LedgerEntry | null,
+  params: { playerId: string; salary: number },
+): { entry: LedgerEntry; firstCallUp: boolean } {
+  if (!existing) {
+    return {
+      entry: firstCallUpLedgerEntry(params),
+      firstCallUp: true,
+    };
+  }
+  return {
+    entry: recallLedgerEntry(existing),
+    firstCallUp: false,
+  };
+}
+
+export function transitionLedgerForDemotion(
+  existing: LedgerEntry | null,
+  params: { playerId: string; salary: number; deadMoneyRate: number },
+): LedgerEntry {
+  return demoteLedgerEntry(existing ?? firstCallUpLedgerEntry(params), params.deadMoneyRate);
 }
 
 type AssignmentEntry = {

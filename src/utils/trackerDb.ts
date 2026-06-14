@@ -14,7 +14,7 @@
  */
 
 const DB_NAME = 'kbl-tracker';
-export const TRACKER_DB_VERSION = 14; // Must be the highest version any consumer ever used
+export const TRACKER_DB_VERSION = 15; // Must be the highest version any consumer ever used
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -314,6 +314,17 @@ export async function getTrackerDb(): Promise<IDBDatabase> {
         commentaryStore.createIndex('timestamp', 'timestamp', { unique: false });
         commentaryStore.createIndex('changed_at', 'changed_at', { unique: false });
         commentaryStore.createIndex('gameId_timestamp', ['gameId', 'timestamp'], {
+          unique: false,
+        });
+      }
+
+      // v15 / T7c R-T7c-MIGRATION + IV §8.4: season salary ledger rows live in
+      // the shared DB. Rows are season-scoped; old-season rows are not migrated.
+      if (!db.objectStoreNames.contains('franchiseSeasonLedgerRows')) {
+        const ledgerStore = db.createObjectStore('franchiseSeasonLedgerRows', {
+          keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'],
+        });
+        ledgerStore.createIndex('by_scope', ['franchiseId', 'seasonId', 'statsScopeId'], {
           unique: false,
         });
       }

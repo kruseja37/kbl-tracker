@@ -35,6 +35,12 @@ import {
 import { getTransactionsByFranchiseSeason } from '../transactionStorage';
 import * as transactionStorage from '../transactionStorage';
 import * as leagueBuilderStorage from '../leagueBuilderStorage';
+import {
+  clearFranchiseSeasonLedgerDatabaseForTests,
+  getFranchiseSeasonLedgerRow,
+  resetFranchiseSeasonLedgerDatabaseForTests,
+} from '../franchiseSeasonLedgerStorage';
+import { ROOKIE_SCALE_FACTOR } from '../../engines/salaryCalculator';
 
 let counter = 0;
 
@@ -81,9 +87,12 @@ function makePlayer(overrides: Partial<Player> & { id: string }): Player {
 describe('franchise roster movement boundary', () => {
   beforeEach(() => {
     counter = 0;
+    resetFranchiseSeasonLedgerDatabaseForTests();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await clearFranchiseSeasonLedgerDatabaseForTests();
+    resetFranchiseSeasonLedgerDatabaseForTests();
     vi.restoreAllMocks();
   });
 
@@ -308,7 +317,7 @@ describe('franchise roster movement boundary', () => {
       transactionId: sendDown.transactionId,
       moraleMutationApplied: false,
       relationshipMutationApplied: false,
-      salaryMovementApplied: false,
+      salaryMovementApplied: true,
       mode3HandoffApplied: false,
     }));
     const farmRoster = await getFranchiseFarmRoster(franchiseId, seasonId, 'team-1');
@@ -354,7 +363,7 @@ describe('franchise roster movement boundary', () => {
       transactionId: callUp.transactionId,
       moraleMutationApplied: false,
       relationshipMutationApplied: false,
-      salaryMovementApplied: false,
+      salaryMovementApplied: true,
       mode3HandoffApplied: false,
     }));
     expect(updatedPlayer?.ratingRevealState).toBe('revealed');
@@ -475,6 +484,107 @@ describe('franchise roster movement boundary', () => {
     );
   });
 
+  test('call-up and send-down produce season salary ledger rows with rookie-scale salary and dead money', async () => {
+    const franchiseId = nextId('franchise-ledger-producer');
+    const seasonId = `${franchiseId}-season-1`;
+    const playerId = 'rookie-ledger-player';
+    await saveFranchisePlayer(franchiseId, makePlayer({
+      id: playerId,
+      age: 21,
+      power: 90,
+      contact: 90,
+      speed: 75,
+      fielding: 80,
+      arm: 80,
+      salary: 1_000_000,
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'FARM' }],
+      ratingRevealState: 'hidden',
+    }));
+    await saveFranchiseFarmRecord({
+      franchiseId,
+      seasonId,
+      seasonNumber: 1,
+      teamId: 'team-1',
+      playerId,
+      optionsUsed: 0,
+      ratingRevealState: 'hidden',
+    });
+
+    const callUp = await callUpFranchisePlayer({
+      franchiseId,
+      seasonId,
+      seasonNumber: 1,
+      teamId: 'team-1',
+      playerId,
+      leagueId: 'league-1',
+      rosterMovementPhase: 'REGULAR_SEASON',
+    });
+
+    expect(callUp.success).toBe(true);
+    expect(callUp.rosterMoveEvent?.salaryMovementApplied).toBe(true);
+    expect(callUp.player?.rookieScaleActiveBySeason?.[seasonId]).toBe(true);
+    expect(callUp.player?.salaryFactors?.rookieScaleActive).toBe(true);
+    expect(callUp.player?.salaryFactors?.ageFactor).toBe(ROOKIE_SCALE_FACTOR);
+    const activeLedger = await getFranchiseSeasonLedgerRow({
+      franchiseId,
+      seasonId,
+      statsScopeId: seasonId,
+      playerId,
+    });
+    expect(activeLedger).toEqual(expect.objectContaining({
+      playerId,
+      salary: callUp.player?.salary,
+      status: 'active',
+      capCharge: callUp.player?.salary,
+    }));
+
+    const sendDown = await sendDownFranchisePlayer({
+      franchiseId,
+      seasonId,
+      seasonNumber: 1,
+      teamId: 'team-1',
+      playerId,
+      leagueId: 'league-1',
+      rosterMovementPhase: 'REGULAR_SEASON',
+    });
+    expect(sendDown.success).toBe(true);
+    expect(sendDown.rosterMoveEvent?.salaryMovementApplied).toBe(true);
+    const deadLedger = await getFranchiseSeasonLedgerRow({
+      franchiseId,
+      seasonId,
+      statsScopeId: seasonId,
+      playerId,
+    });
+    expect(deadLedger).toEqual(expect.objectContaining({
+      salary: activeLedger?.salary,
+      status: 'deadMoney',
+      capCharge: (activeLedger?.salary ?? 0) * 0.75,
+    }));
+
+    const recall = await callUpFranchisePlayer({
+      franchiseId,
+      seasonId,
+      seasonNumber: 1,
+      teamId: 'team-1',
+      playerId,
+      leagueId: 'league-1',
+      rosterMovementPhase: 'REGULAR_SEASON',
+    });
+    expect(recall.success).toBe(true);
+    expect(recall.player?.salary).toBe(activeLedger?.salary);
+    const recalledLedger = await getFranchiseSeasonLedgerRow({
+      franchiseId,
+      seasonId,
+      statsScopeId: seasonId,
+      playerId,
+    });
+    expect(recalledLedger).toEqual(expect.objectContaining({
+      salary: activeLedger?.salary,
+      status: 'active',
+      capCharge: activeLedger?.salary,
+    }));
+  });
+
 
   test('send-down blocks a fourth option in the same franchise season', async () => {
     const franchiseId = nextId('franchise-options');
@@ -589,7 +699,7 @@ describe('franchise roster movement boundary', () => {
       targetRosterStatus: 'FARM',
       moraleMutationApplied: false,
       relationshipMutationApplied: false,
-      salaryMovementApplied: false,
+      salaryMovementApplied: true,
       mode3HandoffApplied: false,
     });
     expect((await getFranchisePlayer(franchiseId, mlbPlayerId))?.leagueAssignments?.[0].rosterStatus).toBe('FARM');

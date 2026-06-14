@@ -194,6 +194,7 @@ export interface FranchiseCurrentSalaryOptions {
   seasonContext?: FranchiseSalarySeasonContextInput | null;
   expectedPerformance?: ExpectedPerformance | null;
   isNewTeam?: boolean;
+  rookieScaleActive?: boolean;
 }
 
 export interface FranchiseCurrentSalaryCalculation {
@@ -266,6 +267,8 @@ export function calculateFranchiseCurrentSalary(
     seasonStats ?? undefined,
     expectedPerformance ?? undefined,
     options.isNewTeam ?? false,
+    undefined,
+    { rookieScaleActive: options.rookieScaleActive === true },
   );
 
   return {

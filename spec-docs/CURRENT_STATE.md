@@ -15,29 +15,24 @@
 - **Phase:** T-stack execution. Sequencing ruling F-141 holds: the full T-stack
   runs to completion as pure execution, THEN D0 cut line → D1–D8 → F-138 →
   flag flip → iPad playtest exit gate.
-- **Last completed:** **T7b — call-up/send-down recommendations (advisory,
-  leak-safe)** LIVE. Codex 5.5 | very high BUILT → Opus 4.8 audit **CONFORMS**.
-  `recommendRosterMoves` (added to rosterAnalyzer.ts) ranks MLB surplus (TV2
-  `valueDelta`, KNOWN) vs farm scout-visible surplus (`scoutedGrade` only,
-  UNCERTAIN) — leak-safe per **R-T7b-LEAK** (the no-oracle-leak ruling,
-  DECISIONS_LOG); the 4 stubbed emitters unblocked to read_only advice; the
-  adapter computes real send-down eligibility + strips hidden-farm ratings.
-  **No execution, no ledger (R-T7b-ADVISORY).** Independently re-verified: tsc 0 /
-  build 0 / suite 7,164 (3 characterized fails) / golden+SMB4 byte-unchanged /
-  **leak test PROVEN** (true ratings inert, scoutedGrade drives, justification
-  leak-free). 1 LOW (ROOKIE_SCALE_FACTOR dup → reconcile in T7c). BROWSER-PENDING.
-  **COMMITTED.** (T6, T7a — audit CONFORMS — also COMMITTED.)
-- **NEXT TASK: T7c — Season Salary Ledger (§8.4).** ⚠️ **CAPTAIN PAUSES HERE** for
-  JK persistence-design rulings BEFORE drafting: new IndexedDB store via
-  `trackerDb` v14→15 (the v-conflict-hang landmine — only `trackerDb.ts` may open
-  `kbl-tracker`); `LedgerEntry`/`LedgerStatus` state machine (first call-up →
-  active; demotion → deadMoney at `deadMoneyRate`; re-call-up → active, no
-  stacking); `rookieScaleActive` producer (flip on call-up; replaces age factor,
-  no double-discount); `capCharge` → soft payroll-expectation baseline (anchored to
-  DECLARED budget); ledger resets at offseason Phase 3; `deadMoneyRate` league-
-  config (presets 100/75/50). Also single-source the ROOKIE_SCALE_FACTOR dup. ROUTE
-  Codex 5.5 | very high → Opus audit (persistence/migration audit NON-NEGOTIABLE).
-  Then **T8** (Mode 1 suite), T9, T10 → D0.
+- **Last completed:** **T7c — Season Salary Ledger (§8.4)** LIVE — **the T7 stack
+  (T7a/T7b/T7c) is COMPLETE.** Codex 5.5 | very high BUILT → Opus 4.8 audit
+  **CONFORMS**. New season-scoped IndexedDB store (trackerDb v14→15, guarded) +
+  LedgerEntry state machine (active/deadMoney/unrostered; capCharge) + the call-up/
+  demotion producer hooked into the existing executors (call-up→active + rookieScale
+  flip; demotion→deadMoney; re-call-up no stacking, no double-discount) +
+  `ledgerCapCharge` (§11) + DEAD_MONEY_RATE; ROOKIE_SCALE_FACTOR single-sourced.
+  **DEFERRED (R-T7c-SCOPE):** payroll-expectation baseline + capCharge→fan-morale +
+  declared-budget + execute-from-rec. Independently re-verified: tsc 0 / build 0 /
+  suite 7,171 (3 characterized fails) / golden + salaryCalculator BYTE-UNCHANGED /
+  **migration-safety PROVEN** (all 31 prior stores preserved at v15). BROWSER-PENDING.
+  **COMMITTED.** (T6, T7a, T7b — all CONFORMS — COMMITTED.)
+- **NEXT TASK: T8 — Mode 1 Suite (§6 + §7).** Pool registration, snake draft, pick
+  chart + trade validator, identity composition UI, scout-obscured farm pricing,
+  luxuryTax + balanceMode wiring. ROUTE Codex 5.5 | very high → Opus audit
+  (persistence: pool/league state — audit NON-NEGOTIABLE). BIG ticket — Captain will
+  map it + surface its design decisions (likely a split, like T7). Then **T9**
+  (GameTracker sub-rec rebuild on shared engines), **T10** (Lineup Delta WPA), → D0.
 - **STANDING MODE (JK 2026-06-14):** per ticket = build → independent ENGINEERING
   audit → auto-commit verified-complete (browser-pending) → proceed. Captain
   surfaces only the audit verdict, the browser backlog, and genuine scope/design/
@@ -50,7 +45,7 @@
 
 ## SUITE BASELINE
 
-7,164 tests / 385 files (T7b added 4 tests, no new file; T7a +8 / +1 file;
+7,171 tests / 386 files (T7c added 7 tests / 1 file; T7b +4; T7a +8 / +1 file;
 T6 +12; prior baseline 7,140 / 383). Characterized set (a new RED outside
 this set is a real regression): fixed failures wpaRuntimeBoundary +
 franchiseNarrativeEventEligibility; conditional-solo order-flakes
@@ -76,9 +71,20 @@ franchiseOffseasonGuards.component (each passes solo).
    read-only, leak-safe (no hidden prospect ratings/true IV shown; "projects as a
    positive-surplus replacement" + scout-confidence label); a low-cost high-surplus
    prospect surfaces over a high-cost MLB underperformer.
+5. **T7c** salary ledger: calling up a prospect applies rookie-scale salary (0.50×,
+   replacing age factor); sending down a player applies dead-money capCharge; the
+   ledger persists per season and resets at offseason Phase 3 (fresh scope). No
+   double-discount; re-call-up doesn't stack.
 
 ## OPEN PENDING-JK (rolling)
 
+**DEFERRED FUTURE TICKET (T7c spillover, JK 2026-06-14):** capCharge → soft
+payroll-expectation baseline → fan-morale consequence. BLOCKED on a declared-budget
+design (no `declaredBudget` field/UI exists; v1.1.2 requires declared ≠ realized
+spend). The consumer machinery is orphaned (`calculateFanExpectations` 0 callers) /
+hard-gated (`fanMoraleMutationAllowed:false`). T7c persisted capCharge + ledgerCapCharge
+ready for it. Also deferred: one-click execute-from-rec; deadMoneyRate league presets
+(100/75/50) + Setup-Wizard control.
 **FINDING-148** (base AUX_PRICING L/R batter premium gap — new JK-gated ticket;
 sequence vs T-stack; regen frozen oracle). **T6 + T7a: COMMITTED** (audit CONFORMS,
 flags ratified; T7a browser-pending). Standing auto-commit mode adopted (JK

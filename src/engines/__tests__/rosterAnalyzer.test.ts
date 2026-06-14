@@ -1,6 +1,15 @@
 import { describe, expect, test } from 'vitest';
 
-import { optimizeLineup, recommendRosterMoves } from '../rosterAnalyzer';
+import {
+  demoteLedgerEntry,
+  firstCallUpLedgerEntry,
+  ledgerCapCharge,
+  optimizeLineup,
+  recallLedgerEntry,
+  recommendRosterMoves,
+  transitionLedgerForCallUp,
+  transitionLedgerForDemotion,
+} from '../rosterAnalyzer';
 import { effectiveRatings } from '../effectiveRatings';
 import { computeIV, type IVPlayerInput } from '../ivEngine';
 import type { Team } from '../../utils/leagueBuilderStorage';
@@ -101,7 +110,16 @@ describe('rosterAnalyzer optimizeLineup', () => {
   test('exports optimizeLineup only', async () => {
     const module = await import('../rosterAnalyzer');
 
-    expect(Object.keys(module).sort()).toEqual(['optimizeLineup', 'recommendRosterMoves']);
+    expect(Object.keys(module).sort()).toEqual([
+      'demoteLedgerEntry',
+      'firstCallUpLedgerEntry',
+      'ledgerCapCharge',
+      'optimizeLineup',
+      'recallLedgerEntry',
+      'recommendRosterMoves',
+      'transitionLedgerForCallUp',
+      'transitionLedgerForDemotion',
+    ]);
   });
 
   test('hitter effective ratings override reaches kblIV through input.ratings', () => {
@@ -287,7 +305,8 @@ describe('rosterAnalyzer optimizeLineup', () => {
   test('rosterAnalyzer remains pure and does not import forbidden subsystems', () => {
     const source = readFileSync('src/engines/rosterAnalyzer.ts', 'utf8');
 
-    expect(source).not.toMatch(/salaryCalculator|tierParams|playerDatabase|React|Date\.now|Math\.random|indexedDB|gameStorage/);
+    expect(source).not.toMatch(/tierParams|playerDatabase|React|Date\.now|Math\.random|indexedDB|gameStorage/);
+    expect(source).toMatch(/import \{ ROOKIE_SCALE_FACTOR \} from '\.\/salaryCalculator';/);
   });
 
   test('recommendRosterMoves is advisory-only and does not import or call roster movement executors', () => {
@@ -368,5 +387,56 @@ describe('rosterAnalyzer optimizeLineup', () => {
       surplusGap: expect.any(Number),
     });
     expect(result[0].surplusGap).toBeGreaterThan(result[result.length - 1].surplusGap);
+  });
+
+  test('season salary ledger state machine is idempotent and computes cap charge', () => {
+    const first = firstCallUpLedgerEntry({ playerId: 'rookie', salary: 10_000 });
+    expect(first).toEqual({
+      playerId: 'rookie',
+      salary: 10_000,
+      status: 'active',
+      capCharge: 10_000,
+    });
+
+    const demoted = demoteLedgerEntry(first, 0.75);
+    expect(demoted).toEqual({
+      playerId: 'rookie',
+      salary: 10_000,
+      status: 'deadMoney',
+      capCharge: 7_500,
+    });
+
+    const recalled = recallLedgerEntry(demoted);
+    expect(recalled).toEqual({
+      playerId: 'rookie',
+      salary: 10_000,
+      status: 'active',
+      capCharge: 10_000,
+    });
+
+    expect(transitionLedgerForCallUp(null, { playerId: 'rookie', salary: 10_000 })).toMatchObject({
+      firstCallUp: true,
+      entry: first,
+    });
+    expect(transitionLedgerForCallUp(demoted, { playerId: 'rookie', salary: 99_999 })).toMatchObject({
+      firstCallUp: false,
+      entry: recalled,
+    });
+    expect(transitionLedgerForDemotion(null, { playerId: 'rookie', salary: 10_000, deadMoneyRate: 0.75 })).toEqual(demoted);
+    expect(ledgerCapCharge([
+      recalled,
+      demoted,
+      { playerId: 'gone', salary: 50_000, status: 'unrostered', capCharge: 0 },
+    ], 0.75)).toBe(17_500);
+  });
+
+  test('ROOKIE_SCALE_FACTOR is single-sourced to salaryCalculator', () => {
+    const constantsSource = readFileSync('src/data/rosterEngineConstants.ts', 'utf8');
+    const salarySource = readFileSync('src/engines/salaryCalculator.ts', 'utf8');
+    const rosterSource = readFileSync('src/engines/rosterAnalyzer.ts', 'utf8');
+
+    expect(constantsSource).not.toMatch(/ROOKIE_SCALE_FACTOR\s*=/);
+    expect(salarySource.match(/export const ROOKIE_SCALE_FACTOR\s*=/g)).toHaveLength(1);
+    expect(rosterSource).toMatch(/import \{ ROOKIE_SCALE_FACTOR \} from '\.\/salaryCalculator';/);
   });
 });

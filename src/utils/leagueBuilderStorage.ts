@@ -228,6 +228,7 @@ export interface Player {
   salarySeasonId?: string;
   salaryStatsScopeId?: string;
   salarySeasonNumber?: number;
+  rookieScaleActiveBySeason?: Record<string, boolean>;
   salaryUpdatedAt?: string;
   salaryFactors?: {
     source: 'multifactor-current-season' | 'hidden-farm-public-context';
@@ -242,6 +243,7 @@ export interface Player {
     expectedWar?: number | null;
     gamesPerSeason?: number | null;
     inningsPerGame?: number | null;
+    rookieScaleActive?: boolean;
   };
   contractYears?: number;
   leagueAssignments?: LeagueAssignment[];

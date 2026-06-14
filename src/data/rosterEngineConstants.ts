@@ -209,8 +209,8 @@ export const BATTING_ORDER_SLOT_WEIGHTS: Record<1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 
  */
 export const ROSTER_MOVE_CALLOUT_THRESHOLD = 500;
 
-/** §8.4/D6 rookie-scale factor consumed by T7b advisory math; ledger writes are T7c. */
-export const ROOKIE_SCALE_FACTOR = 0.50;
+/** §8.4, CALIBRATE: dead-money cap charge after a season ledger demotion. */
+export const DEAD_MONEY_RATE = 0.75;
 
 /**
  * §8.3/R-T7b-LEAK, CALIBRATE draft: scout-visible projected value by scouted grade.
