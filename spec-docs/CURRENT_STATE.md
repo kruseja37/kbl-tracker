@@ -15,7 +15,7 @@
 - **Phase:** T-stack execution. Sequencing ruling F-141 holds: the full T-stack
   runs to completion as pure execution, THEN D0 cut line → D1–D8 → F-138 →
   flag flip → iPad playtest exit gate.
-- **Last completed:** **T9b — GameTracker sub-rec integration** (commit `<pending>`). Codex 5.5 BUILT →
+- **Last completed:** **T9b — GameTracker sub-rec integration** (commit `93763ee`). Codex 5.5 BUILT →
   Opus 4.8 audit **CONFORMS** → **JK APPROVED** (user-visible + GameTracker-state, not auto-committed).
   Wired T9a `recommendSubs` into the live in-game rec surface: the 3 generators in
   `managerWpaRecommendations.ts` rebuilt onto the engine (adapters → EffectiveRatingsPlayer + PlayerState +

@@ -4512,3 +4512,48 @@ resolver) — tracked fast-follows. FINDING-148 (AUX_PRICING L/R, JK-gated, orac
 "cite in T9"). NOT yet mapped — Captain to MAP (focused workflow over the in-game decision surfaces +
 effectiveRatings/leverage-WPA/mojo-fitness) + propose split + surface scope BEFORE drafting. Then T10
 (Lineup Delta WPA) → D0.
+
+
+---
+
+## 2026-06-15 — T9 COMPLETE: mapped + split 2-way + T9a engine + T9b integration, audited CONFORMS, committed
+
+**Type:** Product code. Branch codex/franchise-v1-next. Two feature commits (ef85c80 T9a, 93763ee T9b) + doc
+commits (955bbc0). Roles: Captain (Opus 4.8) mapped + authored every contract + AUDITED every diff
+independently; Codex 5.5 BUILT each (codex CLI, workspace-write, high reasoning); auditor ≠ builder (Fable
+unavailable). JK ruled product/scope/design + approved the T9b user-visible/GameTracker-state commit.
+
+**Mapping + rulings.** T9 (IV §10 — rebuild the in-game `generateManagerRecommendations` placeholder onto
+effectiveRatings, the "third surface") mapped via a 4-agent decorrelated fan-out → `T9_SCOPE_MAP.md`.
+Decisive finding: full ratings + traits are ALREADY in live state (the rec call-site just strips them), so
+T9 needs no deep useGameState plumbing — only a widened call-site mapping + a derived pressure band +
+subRecThreshold. JK ruled 4 forks (DECISIONS_LOG 2026-06-14/15): delta = IV-of-effectiveRatings (kblIV, "one
+truth" with T7a); subRecThreshold PER-TYPE; new pure engine module; 2-ticket split. + firing-gate ruling:
+PURE IV-delta gate (remove situational heuristics).
+
+**T9a (ef85c80) — pure engine.** New `src/engines/subRecommendations.ts` (`recommendSubs`): scores eligible
+subs vs current on `computeIV(effectiveRatings(...)).kblIV` (same recipe + byte-identical clamp as
+`rosterAnalyzer.ts:546-571` — audit-diffed for equivalence; rosterAnalyzer NOT touched); role-misuse mojo
+down-shift (pitcher); DefensivePlacementRisk fold (defensive); per-type `SUB_REC_THRESHOLD` {5k/7.5k/12k};
+justification precedence. ADDITIVE to effectiveRatings.ts (export 7 shapes + `activeTraitNames`, no behavior
+change). 7 tests; suite 7,217. Pure → standing auto-commit.
+
+**T9b (93763ee) — GameTracker integration.** 3 generators in `managerWpaRecommendations.ts` rebuilt onto
+recommendSubs (adapters → EffectiveRatingsPlayer + PlayerState + live GameContext incl. opposing player);
+`GameTracker.tsx` rec useMemo widened to feed full ratings/traits/hands/mojo (getMojoForPlayer 6-level
+normalize)/fitness/pitchCount/count/bases/opposing player. `PRESSURE_LEVERAGE_BANDS {1.5/3.0}`. PURE IV-delta
+gate (situational heuristics removed). Output type + watch/decision plumbing + NewsBoard UI UNCHANGED;
+plumbing tests stay green. Orphan trace RESOLVED (data flows UI→engine). Suite 7,220. User-visible +
+GameTracker-state → JK surfaced + APPROVED. LOW findings: vestigial unused input fields; stale 5-level mojo
+in global kbl-gotchas.md (code is 6-level).
+
+**Suite:** 7,210 → 7,220 / 391 files; only the 3 characterized fails throughout (wpaRuntimeBoundary
+unchanged — scoring moved off WPA but leverageIndex stays a read-only input). T9a engine + rosterAnalyzer +
+ivEngine byte-unchanged on T9b. Every gate (tsc/build/full-suite/diff/orphan-trace) independently re-run by
+the Captain.
+
+**NEXT SESSION STARTS AT: T10 — Lineup Delta WPA** (the LAST T-stack ticket before D0). NOT yet mapped —
+Captain to MAP (WPA/leverage engines: wpaCalculator/winExpectancyTable/leverageCalculator + the lineup/
+decision surfaces + the wpaRuntimeBoundary allowlist) + propose split + surface scope BEFORE drafting. Then
+D0 cut line → D1–D8 → F-138 → flag flip → iPad playtest. DEFERRED fast-follows: R9 scout-obscured farm IV +
+R12 potency overlay.
