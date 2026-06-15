@@ -615,3 +615,54 @@ via mojo/pressure, so the IV-delta self-limits — spec-literal "replace, do not
 situational meltdown with no ratings drop (e.g. a pitcher walking the bases loaded) won't trigger a rec, and
 recs may surface in low-leverage spots; revisit in playtest if the firing cadence feels off. (Captain had
 recommended a situational-gate + IV-delta hybrid; JK chose the pure gate.)
+
+---
+
+## Jun 15, 2026 — T10 scope rulings (Lineup Delta WPA standard + constants snapshotting)
+
+**Context:** Captain mapped T10 (IV §9 Lineup Delta WPA standard + §12 per-season constants snapshot) via a
+6-agent decorrelated fan-out + 2 critics (`T10_SCOPE_MAP.md`). All decision-determining claims independently
+Captain-verified (file:line). Decisive findings: (1) the §8.1 optimizer (`optimizeLineup`) and the lineup-lock
+snapshots are already built; (2) the LITERAL §9 delta already exists but display-only —
+`summarizeLineupSnapshotComparison` (`optimalLineup.ts:416-429`) returns
+`projectedOpportunityCostTotal = chosen.projectedTeamLineupKblWpa − optimal.projectedTeamLineupKblWpa`; (3) the
+ALREADY-PERSISTED `ManagerLineupDeltaRecord.managerWpa` (`managerWpaGameState.ts:929-941`) is a DIFFERENT
+number — realized-vs-projected (`actualChosenKblWpa` realized in-game WPA − projected IV), a unit mix; (4)
+"WPA" is a misnomer — per D9 the values are IV-of-effectiveRatings dollars rescaled by a ÷10,000,000 divisor
+(`rosterEngineConstants.ts:260`); (5) no constants-snapshot mechanism exists (greenfield); (6) a pre-existing
+defect: `backupRestore.ts` is stale at v12 and silently drops the v13/v14/v15 stores (separate ticket).
+
+**JK rulings (3 forks, recommendations adopted):**
+1. **§9 semantics = IV-of-effectiveRatings (NOT literal win-probability).** Per D9 + all shipped code. "WPA"
+   is legacy branding; the misnomer is documented in spec + code comment, and any field rename is DEFERRED to
+   a v2 ticket (renaming would touch persisted records + ~30 readers).
+2. **The §9 standard = the LITERAL pure projected-vs-projected scalar, persisted additively; the existing
+   realized-vs-projected `managerWpa` is KEPT SEPARATE and UNTOUCHED.** They measure two legitimately
+   different things (ex-ante opportunity cost vs ex-post manager credit). The new §9 scalar is sourced from
+   `summarizeLineupSnapshotComparison` and persisted as a NEW, additive, audit-only field — it does NOT fold
+   into the `managerValue` rollup (would double-count the per-slot deltas already summed there) and MUST NOT
+   regress any of the 5 live surfaces or `almanacManagerWpa.test.ts`.
+3. **Constants snapshot = full-dependency CONTENT HASH stamped on `SeasonMetadata`; single "high" T10 ticket.**
+   Hash the full optimizer dependency set — the optimizer subset of `rosterEngineConstants` + `ivCurves` +
+   `traitPricing` + `traitInteractionMatrix`; **`tierParams` EXCLUDED** (not imported by any of the 3 optimizer
+   engines, verified). Stamp `optimizerConstantsVersion`/`optimizerConstantsHash` additively on `SeasonMetadata`
+   (precedent: `gamesPerTeam`; no DB bump; travels in backup since `seasonMetadata` IS registered). Mechanism =
+   prove-no-change (hash + version), NOT a value-copy blob (the per-game §9 scalar is already persisted, so the
+   value is recoverable; the snapshot only certifies WHICH constants produced it). Write-once per season,
+   assert-immutable with a LOUD warn on divergence (never silent overwrite).
+
+**Split (auto-resolved by ruling 3):** single **T10** build ticket — Codex 5.5 | high → Opus 4.8 audit
+(auditor ≠ builder). NOT split, because the SeasonMetadata-hash mechanism adds NO DB migration. (Would have
+split T10a/T10b only if a dedicated season store or value-copy had been chosen.)
+
+**Captain default (proceed-unless-vetoed, Q5):** persist the §9 scalar whenever an optimizer baseline is
+computed (all modes that lock a lineup); require/stamp the season constants snapshot only for games carrying a
+`seasonId`; for snapshot-less modes (exhibition/elimination) record the live constants `version` string so the
+delta stays traceable.
+
+**Asset gate:** T10 reads mojo/fitness/traits only as optimizer INPUTS and snapshots constants READ-ONLY — it
+modifies none of the SMB4-protected engines. No asset-gate approval required beyond these rulings.
+
+**Persistence note:** T10 adds new persisted fields (per-game §9 summary + per-season constants hash) → it is a
+persistence / saved-data-shape change → per the risk-scoped ruling it SURFACES to JK before commit (NOT
+auto-commit) and is prioritized in the browser-verify batch.

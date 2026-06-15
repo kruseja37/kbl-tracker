@@ -10,6 +10,7 @@ import { getTrackerDb } from './trackerDb';
 import { syncEngine } from './syncEngine';
 import { getScoreOnlyCompletedGamesBySeason } from './scheduleStorage';
 import { getRecentGames, type CompletedGameRecord } from './gameStorage';
+import { captureOptimizerConstantsSnapshot } from '../engines/optimizerConstantsSnapshot';
 
 // Store names
 const STORES = {
@@ -160,6 +161,8 @@ export interface SeasonMetadata {
   gamesPlayed: number;
   totalGames: number;  // Scheduled games
   gamesPerTeam: number | null; // W1-B: per-team season length snapshot for WAR scaling
+  optimizerConstantsVersion?: string;
+  optimizerConstantsHash?: string;
 }
 
 // ============================================
@@ -494,6 +497,38 @@ function normalizeSeasonMetadata(metadata: SeasonMetadata): SeasonMetadata {
   };
 }
 
+const optimizerConstantsDriftWarnedSeasonIds = new Set<string>();
+
+function stampOptimizerConstantsSnapshot(metadata: SeasonMetadata): {
+  metadata: SeasonMetadata;
+  changed: boolean;
+} {
+  const snapshot = captureOptimizerConstantsSnapshot();
+
+  if (!metadata.optimizerConstantsHash) {
+    return {
+      metadata: {
+        ...metadata,
+        optimizerConstantsVersion: snapshot.version,
+        optimizerConstantsHash: snapshot.hash,
+      },
+      changed: true,
+    };
+  }
+
+  if (
+    metadata.optimizerConstantsHash !== snapshot.hash &&
+    !optimizerConstantsDriftWarnedSeasonIds.has(metadata.seasonId)
+  ) {
+    optimizerConstantsDriftWarnedSeasonIds.add(metadata.seasonId);
+    console.warn(
+      `optimizer constants changed mid-season for season ${metadata.seasonId}; §9 lineup-delta benchmark may be non-comparable`,
+    );
+  }
+
+  return { metadata, changed: false };
+}
+
 /**
  * Get or create season metadata
  */
@@ -517,8 +552,15 @@ export async function getOrCreateSeason(
     request.onsuccess = () => {
       if (request.result) {
         const existing = normalizeSeasonMetadata(request.result);
+        let updated = existing;
         if (normalizedGamesPerTeam !== null && existing.gamesPerTeam === null) {
-          const updated = { ...existing, gamesPerTeam: normalizedGamesPerTeam };
+          updated = { ...updated, gamesPerTeam: normalizedGamesPerTeam };
+        }
+
+        const stamped = stampOptimizerConstantsSnapshot(updated);
+        updated = stamped.metadata;
+
+        if (updated !== existing || stamped.changed) {
           const putRequest = store.put(updated);
           putRequest.onerror = () => reject(putRequest.error);
           putRequest.onsuccess = () => {
@@ -539,11 +581,12 @@ export async function getOrCreateSeason(
           totalGames,
           gamesPerTeam: normalizedGamesPerTeam,
         };
-        const putRequest = store.put(newSeason);
+        const stamped = stampOptimizerConstantsSnapshot(newSeason);
+        const putRequest = store.put(stamped.metadata);
         putRequest.onerror = () => reject(putRequest.error);
         putRequest.onsuccess = () => {
-          if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-tracker', 'seasonMetadata', seasonId, newSeason);
-          resolve(newSeason);
+          if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-tracker', 'seasonMetadata', seasonId, stamped.metadata);
+          resolve(stamped.metadata);
         };
       }
     };

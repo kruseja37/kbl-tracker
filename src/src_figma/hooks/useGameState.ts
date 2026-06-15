@@ -11097,6 +11097,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           managerDeploymentStints:
             committedManagerDecisionState.managerDeploymentStints,
           managerLineupDeltas: committedManagerDecisionState.managerLineupDeltas,
+          managerLineupDeltaSummaries:
+            committedManagerDecisionState.managerLineupDeltaSummaries,
           managerRecommendationWatches:
             committedManagerDecisionState.managerRecommendationWatches,
           optimalLineupSnapshots: gameHeader?.optimalLineupSnapshots,
@@ -12124,6 +12126,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         managerDeploymentStints:
           committedManagerDecisionState.managerDeploymentStints,
         managerLineupDeltas: committedManagerDecisionState.managerLineupDeltas,
+        managerLineupDeltaSummaries:
+          committedManagerDecisionState.managerLineupDeltaSummaries,
         managerRecommendationWatches:
           committedManagerDecisionState.managerRecommendationWatches,
         optimalLineupSnapshots: endGameHeader?.optimalLineupSnapshots,

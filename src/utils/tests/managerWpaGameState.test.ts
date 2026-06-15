@@ -21,10 +21,12 @@ import {
   calculateManagerDeploymentWpa,
   deriveCommittedManagerDecisionState,
   deriveManagerLineupDeltaRecords,
+  deriveManagerLineupDeltaSummaries,
   MANAGER_DEPLOYMENT_CAP_BY_ROLE,
   MANAGER_DEPLOYMENT_SHARE_BY_ROLE,
   refreshCurrentGameManagerDecisionState,
 } from "../managerWpaGameState";
+import { summarizeLineupSnapshotComparison } from "../optimalLineup";
 import {
   archiveCompletedGame,
   clearCurrentGame,
@@ -34,6 +36,7 @@ import {
   type PersistedGameState,
 } from "../gameStorage";
 import { rankPlayersOfTheGame } from "../playersOfTheGame";
+import { getGamePogAwardSet } from "../pogAwards";
 
 function createAtBat(overrides: Partial<AtBatEvent> = {}): AtBatEvent {
   const halfInning = overrides.halfInning ?? "TOP";
@@ -2492,6 +2495,21 @@ describe("committed manager WPA game state", () => {
         confidence: "medium",
       },
     ];
+    const lineupDeltaSummaries: NonNullable<
+      PersistedGameState["managerLineupDeltaSummaries"]
+    > = [
+      {
+        gameId,
+        managerId: "away-manager",
+        teamId: "away",
+        side: "away",
+        chosenProjectedTeamLineupKblWpa: 0.2,
+        optimalProjectedTeamLineupKblWpa: 0.3,
+        lineupDeltaWpaStandard: -0.1,
+        algorithmVersion: "test-optimal-v2",
+        optimizerConstantsVersion: "kbl-optimizer-constants-v1",
+      },
+    ];
 
     await archiveCompletedGame(
       {
@@ -2499,6 +2517,7 @@ describe("committed manager WPA game state", () => {
         managerDecisions: tacticalState.managerDecisions,
         managerDeploymentStints: deploymentStints,
         managerLineupDeltas: lineupDeltas,
+        managerLineupDeltaSummaries: lineupDeltaSummaries,
       },
       { away: 3, home: 2 },
       [],
@@ -2509,6 +2528,7 @@ describe("committed manager WPA game state", () => {
     expect(archived?.managerDecisions).toEqual(tacticalState.managerDecisions);
     expect(archived?.managerDeploymentStints).toEqual(deploymentStints);
     expect(archived?.managerLineupDeltas).toEqual(lineupDeltas);
+    expect(archived?.managerLineupDeltaSummaries).toEqual(lineupDeltaSummaries);
   });
 
   test("completed Franchise manager records use assigned manager IDs instead of team defaults", () => {
@@ -3176,6 +3196,132 @@ describe("committed manager WPA game state", () => {
     });
 
     expect(state.managerLineupDeltas).toEqual([]);
+    expect(state.managerLineupDeltaSummaries).toEqual([]);
+  });
+
+  test("derives the IV §9 lineup-delta summary once per side with locked snapshots", () => {
+    const snapshots = defaultLineupDeltaSnapshots();
+    const state = deriveCommittedManagerDecisionState({
+      gameId: "game-1",
+      atBatEvents: [
+        createSparseKblWpaEvent({
+          eventId: "game-1_wpa_summary",
+          playerId: "away-starter-1",
+          playerName: "Away Starter 1",
+          teamId: "away",
+          wpa: 0.4,
+        }),
+      ],
+      betweenPlayEvents: [],
+      fieldingEvents: [],
+      startingLineups,
+      ...snapshots,
+      awayTeamId: "away",
+      homeTeamId: "home",
+      awayManagerId: "away-manager",
+      homeManagerId: "home-manager",
+      totalInnings: 9,
+      gameEnded: true,
+    });
+    const awayComparison = summarizeLineupSnapshotComparison({
+      chosen: snapshots.chosenLineupSnapshots.away,
+      optimal: snapshots.optimalLineupSnapshots.away,
+    });
+
+    expect(state.managerLineupDeltaSummaries).toHaveLength(2);
+    expect(state.managerLineupDeltaSummaries[0]).toMatchObject({
+      gameId: "game-1",
+      managerId: "away-manager",
+      teamId: "away",
+      side: "away",
+      chosenProjectedTeamLineupKblWpa:
+        awayComparison.chosenProjectedTeamLineupKblWpa,
+      optimalProjectedTeamLineupKblWpa:
+        awayComparison.optimalProjectedTeamLineupKblWpa,
+      lineupDeltaWpaStandard: awayComparison.projectedOpportunityCostTotal,
+      algorithmVersion: snapshots.optimalLineupSnapshots.away.algorithmVersion,
+      optimizerConstantsVersion: "kbl-optimizer-constants-v1",
+    });
+    expect(
+      state.managerLineupDeltaSummaries.map((summary) => summary.side),
+    ).toEqual(["away", "home"]);
+  });
+
+  test("skips lineup-delta summaries for sides missing either snapshot", () => {
+    const snapshots = defaultLineupDeltaSnapshots();
+    const summaries = deriveManagerLineupDeltaSummaries({
+      gameId: "game-1",
+      atBatEvents: [],
+      betweenPlayEvents: [],
+      fieldingEvents: [],
+      startingLineups,
+      optimalLineupSnapshots: { away: snapshots.optimalLineupSnapshots.away },
+      chosenLineupSnapshots: snapshots.chosenLineupSnapshots,
+      awayTeamId: "away",
+      homeTeamId: "home",
+      awayManagerId: "away-manager",
+      homeManagerId: "home-manager",
+      totalInnings: 9,
+      gameEnded: true,
+    });
+
+    expect(summaries.map((summary) => summary.side)).toEqual(["away"]);
+  });
+
+  test("keeps IV §9 lineup-delta summaries out of existing manager rollups", () => {
+    const atBatEvents = [
+      createSparseKblWpaEvent({
+        eventId: "game-1_wpa_rollup",
+        playerId: "away-starter-1",
+        playerName: "Away Starter 1",
+        teamId: "away",
+        wpa: 0.4,
+      }),
+    ];
+    const state = deriveCommittedManagerDecisionState({
+      gameId: "game-1",
+      atBatEvents,
+      betweenPlayEvents: [],
+      fieldingEvents: [],
+      startingLineups,
+      ...defaultLineupDeltaSnapshots(),
+      awayTeamId: "away",
+      homeTeamId: "home",
+      awayManagerId: "away-manager",
+      homeManagerId: "home-manager",
+      totalInnings: 9,
+      gameEnded: true,
+    });
+    const legacyLineupDeltas = deriveManagerLineupDeltaRecords({
+      gameId: "game-1",
+      atBatEvents,
+      betweenPlayEvents: [],
+      fieldingEvents: [],
+      startingLineups,
+      ...defaultLineupDeltaSnapshots(),
+      awayTeamId: "away",
+      homeTeamId: "home",
+      awayManagerId: "away-manager",
+      homeManagerId: "home-manager",
+      totalInnings: 9,
+      gameEnded: true,
+    });
+    const awards = getGamePogAwardSet({
+      managerLineupDeltas: state.managerLineupDeltas,
+      eventLogAvailable: true,
+    });
+    const awayTotal = awards.managerTotals.find(
+      (total) => total.managerId === "away-manager",
+    );
+
+    expect(state.managerLineupDeltas).toEqual(legacyLineupDeltas);
+    expect(state.managerLineupDeltaSummaries.length).toBeGreaterThan(0);
+    expect(awayTotal?.lineupDeltaWpa).toBe(
+      legacyLineupDeltas
+        .filter((delta) => delta.managerId === "away-manager")
+        .reduce((sum, delta) => sum + delta.managerWpa, 0),
+    );
+    expect(awayTotal?.managerValue).toBe(awayTotal?.lineupDeltaWpa);
   });
 
   test("keeps lineup delta separate from collapsed player KBL WPA leaderboard totals", () => {

@@ -7155,3 +7155,96 @@ effectiveRatings — a clearly-better bench bat surfaces a pinch-hit rec with a 
 tiring pitcher surfaces a fresh-arm rec; the situational-only triggers no longer fire on their own;
 keep/decline actions + watch persistence still work.
 
+---
+
+## T10 CONTRACT (2026-06-15) — Lineup Delta WPA standard wiring + constants snapshotting — IV §9/§12
+
+**ROUTE:** Codex 5.5 | high reasoning effort → Opus 4.8 audit (Fable unavailable; auditor ≠ builder).
+Persistence / saved-data-shape ticket (new per-game §9 summary field + per-season constants hash on
+SeasonMetadata) → NOT auto-commit; JK SURFACE before commit; prioritized in the browser-verify batch. Single
+"high" ticket (NOT split) because the SeasonMetadata-hash mechanism adds NO DB migration. JK rulings
+(DECISIONS_LOG 2026-06-15): R1 §9 = IV-of-effectiveRatings ("WPA" misnomer documented, rename→v2); R2 = PURE
+projected-vs-projected scalar (reuse `summarizeLineupSnapshotComparison.projectedOpportunityCostTotal`,
+`optimalLineup.ts:416-429`), persisted ADDITIVE + audit-only, existing realized `managerWpa` BYTE-UNCHANGED +
+NOT in the managerValue rollup; R3 = full-dependency CONTENT HASH (rosterEngineConstants optimizer-subset +
+ivCurves + traitPricing + traitInteractionMatrix; tierParams EXCLUDED) stamped on `SeasonMetadata` (no DB
+bump, write-once, loud-warn on divergence).
+
+```
+[identical to Temp/t10-contract.md — the builder prompt fed to Codex this session]
+```
+Full contract text: `Temp/t10-contract.md` (self-contained). Part A: new `ManagerLineupDeltaSummary` type +
+`deriveManagerLineupDeltaSummaries` (managerWpaGameState.ts, gameEnded gate, both managers) + additive
+persistence mirror of `managerLineupDeltas` (PersistedGameState + CompletedGameRecord + useGameState end-game
+plumbing); field `lineupDeltaWpaStandard` (distinct from the existing aggregate `lineupDeltaWpa`); camelCase
+clears the wpaRuntimeBoundary `\bwpa:` pattern → zero allowlist edits. Part B: new pure
+`src/engines/optimizerConstantsSnapshot.ts` (`OPTIMIZER_CONSTANTS_VERSION` + deterministic FNV-1a content
+hash over the optimizer dependency set; no Date.now) + additive `optimizerConstantsVersion`/
+`optimizerConstantsHash` on SeasonMetadata, stamped write-once in `getOrCreateSeason`. Do-not-touch: the 5
+optimizer/data engines, optimalLineup.ts (reuse only), the realized managerWpa derivation, trackerDb,
+backupRestore, salaryCalculator, the iv_oracle/golden fixtures. Verify = tsc0/build0/full-suite-no-new-RED
+(baseline 7,220/391 +N) + wpaRuntimeBoundary unchanged + `git diff --name-only` scoped. Captain-owned
+(post-build, not Codex): a one-line §9 spec note documenting the IV-not-WP misnomer.
+
+**Status:** contract drafted → JK go → Codex build complete → audited CONFORMS → AWAITING JK APPROVAL to
+commit (persistence ticket; record below).
+
+### T10-AUDIT + EXECUTION RECORD (2026-06-15)
+
+**ROUTE actual:** Codex 5.5 | high (knob max) BUILT (background `codex exec`, workspace-write) → Opus 4.8
+(Captain) independent AUDIT (auditor ≠ builder; Captain did NOT write the code). Persistence / saved-data-shape
+→ NOT auto-committed; surfaced for JK approval.
+
+**Builder result (Codex 5.5):** 9 paths (6 edited + 3 new). NEW `src/engines/optimizerConstantsSnapshot.ts`
+(`OPTIMIZER_CONSTANTS_VERSION` + `captureOptimizerConstantsSnapshot` → {version, FNV-1a hash} over the
+optimizer dependency set). `managerWpa.ts` += `ManagerLineupDeltaSummary` (units comment). `managerWpaGameState.ts`
++= `deriveManagerLineupDeltaSummaries` (gameEnded gate, both managers, sourced from
+`summarizeLineupSnapshotComparison`) + refresh mirror. `gameStorage.ts` + `useGameState.ts` (×2 end-game sites):
+`managerLineupDeltaSummaries` persisted sibling to `managerLineupDeltas`. `seasonStorage.ts`: additive
+`optimizerConstantsVersion`/`Hash` on SeasonMetadata + write-once stamp in `getOrCreateSeason` + warn-once
+no-overwrite on drift. +10 tests / +2 files.
+
+**AUDIT VERDICT: CONFORMS.** Independent re-verification (Opus, reran — not graded from builder paste):
+- `tsc -b` exit 0; `npm run build` exit 0 (PWA artifacts generated). Full suite (independent rerun)
+  **7,227 pass / 3 fail / 393 files** — the 3 are EXACTLY the characterized trio (wpaRuntimeBoundary,
+  franchiseManualSmokeFixture, franchiseNarrativeEventEligibility; full failing-file list captured). NO new
+  RED; arithmetic reconciles 7,217 prior-passing + 10 new = 7,227. wpaRuntimeBoundary unchanged (still only
+  the 2 franchiseAnalyticsTrust.ts lines; the new camelCase `lineupDeltaWpaStandard`/`managerLineupDeltaSummaries`
+  clear the `\bwpa:` pattern → ZERO allowlist edits).
+- R2 verified: `lineupDeltaWpaStandard = summarizeLineupSnapshotComparison(...).projectedOpportunityCostTotal`
+  (managerWpaGameState.ts), both sides, under the same `gameEnded` gate as `managerLineupDeltas`. REGRESSION
+  GUARD test proves the existing realized `managerWpa` records are byte-identical (`toEqual(legacyLineupDeltas)`)
+  AND the POG `managerValue`/`lineupDeltaWpa` rollup is unchanged (the new summary does NOT enter it — no
+  double-count).
+- R3 verified: hash module imports the precise optimizer-objective subset (effectiveRatings + rosterAnalyzer
+  objective consts + IV_CURVES + traitPricing-4 + TRAIT_INTERACTION_MATRIX); correctly EXCLUDES
+  FARM_SCOUTED_GRADE/ROSTER_MOVE_CALLOUT (T7b, not the lineup objective) and tierParams. Canonical sorted-key
+  serialize + FNV-1a, NO Date.now. Snapshot test is a real mutation-kill across all 4 dependency files incl.
+  the trait matrix (hash CHANGES on each mutation). SeasonMetadata stamp: write-once, warn-once-no-overwrite on
+  drift (test seeds 'old-hash' → both reads stay 'old-hash', console.warn called exactly once). NO DB version
+  bump (additive field; getOrCreateSeason refactor verified to not spuriously re-write).
+- A3 ORPHAN TRACE RESOLVED: `managerLineupDeltaSummaries` reaches every site `managerLineupDeltas` is
+  persisted/copied (PersistedGameState, CompletedGameRecord, archiveCompletedGame `|| []`, refresh path, both
+  useGameState end-game writes). Additive plumbing only; no reducer/game-flow change.
+- DO-NOT-TOUCH byte-unchanged (`git diff --name-only` empty): rosterAnalyzer, effectiveRatings, ivEngine,
+  subRecommendations, optimalLineup, ivCurves, traitPricing, traitInteractionMatrix, rosterEngineConstants,
+  tierParams, trackerDb, backupRestore, salaryCalculator.
+
+**Disagreements with builder report:** none material. Codex's file count (9) and suite counts (7,227/3/7,230)
+match the independent rerun exactly.
+
+**Findings (LOW, non-blocking):** (1) `deriveManagerLineupDeltaSummaries` calls
+`captureOptimizerConstantsSnapshot().version`, recomputing the full content hash just to read the constant
+`version` string — could use `OPTIMIZER_CONSTANTS_VERSION` directly; negligible (game-end only), cleanup
+candidate. (2) Pre-existing (surfaced, NOT T10): `backupRestore.ts` stale at v12 drops the v13/v14/v15 stores —
+separate backup-hardening ticket; T10 correctly avoided a new store so it does NOT inherit the defect.
+(3) Captain-owned (done): §9 spec note documenting the IV-not-WP misnomer added to
+IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md.
+
+**Status:** T10 = built + audited CONFORMS — **AWAITING JK APPROVAL to commit** (persistence / saved-data-shape).
+This COMPLETES the T-stack → next is D0. BROWSER-VERIFY (batched, prioritized as persistence): start a seasoned
+(franchise) game, set a deliberately sub-optimal lineup, play to completion → confirm a per-game §9
+`lineupDeltaWpaStandard` persists (≤ 0) for both managers and survives reload, the existing Manager-WPA
+overlay/almanac totals are UNCHANGED (no double-count), and the season carries an `optimizerConstantsHash` that
+survives backup/restore.
+

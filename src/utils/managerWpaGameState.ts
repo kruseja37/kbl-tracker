@@ -21,6 +21,7 @@ import type {
   ManagerDecisionRecord,
   GameLockLineupSnapshots,
   ManagerLineupDeltaRecord,
+  ManagerLineupDeltaSummary,
   ManagerRecommendationWatchRecord,
   OptimalLineupSnapshot,
 } from "../types/managerWpa";
@@ -33,6 +34,7 @@ import {
 import {
   isOfficialOptimalLineupSnapshot,
   mapLineupSnapshotDeviations,
+  summarizeLineupSnapshotComparison,
 } from "./optimalLineup";
 import {
   aggregateKblWpaCredits,
@@ -41,6 +43,7 @@ import {
   type KblWpaStartingLineups,
 } from "./kblWpaAttribution";
 import { WPA_MODEL_VERSION } from "../engines/wpaV2";
+import { captureOptimizerConstantsSnapshot } from "../engines/optimizerConstantsSnapshot";
 
 type ManagerStartingLineups = NonNullable<GameHeader["startingLineups"]>;
 type ManagerStartingPitchers = NonNullable<GameHeader["startingPitchers"]>;
@@ -139,6 +142,7 @@ export interface CommittedManagerDecisionState {
   managerDecisions: ManagerDecisionRecord[];
   managerDeploymentStints: ManagerDeploymentStintRecord[];
   managerLineupDeltas: ManagerLineupDeltaRecord[];
+  managerLineupDeltaSummaries: ManagerLineupDeltaSummary[];
   managerRecommendationWatches: ManagerRecommendationWatchRecord[];
 }
 
@@ -182,8 +186,45 @@ export function deriveCommittedManagerDecisionState(
     managerLineupDeltas: input.gameEnded
       ? deriveManagerLineupDeltaRecords(input)
       : [],
+    managerLineupDeltaSummaries: input.gameEnded
+      ? deriveManagerLineupDeltaSummaries(input)
+      : [],
     managerRecommendationWatches: deriveManagerRecommendationWatchRecords(input),
   };
+}
+
+export function deriveManagerLineupDeltaSummaries(
+  input: DeriveCommittedManagerDecisionStateInput,
+): ManagerLineupDeltaSummary[] {
+  const optimizerConstantsVersion = captureOptimizerConstantsSnapshot().version;
+
+  return (["away", "home"] as const).flatMap((side) => {
+    const optimal = input.optimalLineupSnapshots?.[side];
+    const chosen = input.chosenLineupSnapshots?.[side];
+
+    if (!optimal || !chosen) {
+      return [];
+    }
+
+    const comparison = summarizeLineupSnapshotComparison({ chosen, optimal });
+    const teamId = side === "away" ? input.awayTeamId : input.homeTeamId;
+
+    return [
+      {
+        gameId: input.gameId,
+        managerId: resolveManagerId(teamId, input),
+        teamId,
+        side,
+        chosenProjectedTeamLineupKblWpa:
+          comparison.chosenProjectedTeamLineupKblWpa,
+        optimalProjectedTeamLineupKblWpa:
+          comparison.optimalProjectedTeamLineupKblWpa,
+        lineupDeltaWpaStandard: comparison.projectedOpportunityCostTotal,
+        algorithmVersion: optimal.algorithmVersion,
+        optimizerConstantsVersion,
+      },
+    ];
+  });
 }
 
 export function deriveManagerLineupDeltaRecords(
@@ -1555,6 +1596,7 @@ export async function refreshCurrentGameManagerDecisionState(
       managerDecisions: nextState.managerDecisions,
       managerDeploymentStints: nextState.managerDeploymentStints,
       managerLineupDeltas: nextState.managerLineupDeltas,
+      managerLineupDeltaSummaries: nextState.managerLineupDeltaSummaries,
       managerRecommendationWatches: nextState.managerRecommendationWatches,
     };
     await saveCurrentGame(updatedCurrentGame);

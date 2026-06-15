@@ -548,6 +548,20 @@ interface LedgerEntry { playerId: string; salary: number; status: LedgerStatus; 
 ## 9. Lineup Delta WPA Standard
 The consistent standard for judging managerial lineup decisions: `lineupDeltaWPA = expectedValue(actualLineup) − expectedValue(optimizerLineup)` computed at lineup-lock using §8.1 machinery with identical context inputs. Persisted per game; feeds existing WPA delta surfaces. The optimizer output is the auditable benchmark — never silently change its constants mid-season (constants snapshot stored with each season).
 
+> **NOTE (T10, JK ruling 2026-06-15 — naming):** "WPA" here is **legacy branding for a rescaled IV
+> delta**, NOT win probability. Per D9 the optimizer maximizes **IV-of-effectiveRatings**; `expectedValue()`
+> is `Σ computeIV(effectiveRatings()).kblIV` over slots, and the "`KblWpa`" fields are that IV ÷
+> `CALIBRATE.lineupSnapshotWpaDivisor` (10,000,000). A field rename to honest IV names is DEFERRED to v2.
+> **Implementation (T10):** the standard is the PURE projected-vs-projected scalar
+> `summarizeLineupSnapshotComparison(...).projectedOpportunityCostTotal` = `chosen.projectedTeamLineupKblWpa −
+> optimal.projectedTeamLineupKblWpa`, persisted per game as the ADDITIVE, audit-only
+> `ManagerLineupDeltaSummary.lineupDeltaWpaStandard` (one per manager, both teams) — kept SEPARATE from the
+> pre-existing realized-vs-projected `ManagerLineupDeltaRecord.managerWpa` and NOT folded into `managerValue`.
+> The §12 constants snapshot is a per-season content **hash** (`optimizerConstantsHash`) over the optimizer
+> dependency set (rosterEngineConstants optimizer-subset + ivCurves + traitPricing + traitInteractionMatrix;
+> tierParams excluded), stamped write-once on `SeasonMetadata`; algorithm-structure drift is separately
+> certified by `algorithmVersion` on each snapshot.
+
 ---
 
 ## 10. GameTracker Sub Recommendation Rebuild (D12)

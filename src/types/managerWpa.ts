@@ -443,6 +443,19 @@ export interface ManagerLineupDeltaRecord {
   capApplied?: number;
 }
 
+// 'KblWpa' here denotes rescaled IV (÷CALIBRATE.lineupSnapshotWpaDivisor), NOT win probability (IV §9 / D9).
+export interface ManagerLineupDeltaSummary {
+  gameId: string;
+  managerId: string;
+  teamId: string;
+  side: "away" | "home";
+  chosenProjectedTeamLineupKblWpa: number;
+  optimalProjectedTeamLineupKblWpa: number;
+  lineupDeltaWpaStandard: number;
+  algorithmVersion: string;
+  optimizerConstantsVersion: string;
+}
+
 export type ManagerDeploymentRole =
   | "pinch_hitter_remaining"
   | "pinch_runner"

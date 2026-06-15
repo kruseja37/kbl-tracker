@@ -18,6 +18,7 @@ import type {
   ManagerDecisionRecord,
   GameLockLineupSnapshots,
   ManagerLineupDeltaRecord,
+  ManagerLineupDeltaSummary,
   ManagerRecommendationWatchRecord,
 } from "../types/managerWpa";
 import type { ParkFactors } from "../types/war";
@@ -207,6 +208,7 @@ export interface PersistedGameState {
   managerDecisions?: ManagerDecisionRecord[];
   managerDeploymentStints?: ManagerDeploymentStintRecord[];
   managerLineupDeltas?: ManagerLineupDeltaRecord[];
+  managerLineupDeltaSummaries?: ManagerLineupDeltaSummary[];
   managerRecommendationWatches?: ManagerRecommendationWatchRecord[];
   playerWpaTotals?: KblWpaPlayerTotal[];
   managerWpaTotals?: PogManagerValueTotal[];
@@ -617,6 +619,7 @@ export interface CompletedGameRecord {
   managerDecisions?: PersistedGameState["managerDecisions"];
   managerDeploymentStints?: PersistedGameState["managerDeploymentStints"];
   managerLineupDeltas?: PersistedGameState["managerLineupDeltas"];
+  managerLineupDeltaSummaries?: PersistedGameState["managerLineupDeltaSummaries"];
   managerRecommendationWatches?: PersistedGameState["managerRecommendationWatches"];
   playerWpaTotals?: PersistedGameState["playerWpaTotals"];
   managerWpaTotals?: PersistedGameState["managerWpaTotals"];
@@ -927,6 +930,7 @@ export async function archiveCompletedGame(
     managerDecisions: gameState.managerDecisions || [],
     managerDeploymentStints: gameState.managerDeploymentStints || [],
     managerLineupDeltas: gameState.managerLineupDeltas || [],
+    managerLineupDeltaSummaries: gameState.managerLineupDeltaSummaries || [],
     managerRecommendationWatches: gameState.managerRecommendationWatches || [],
     playerWpaTotals: context?.playerWpaTotals ?? gameState.playerWpaTotals ?? [],
     managerWpaTotals: context?.managerWpaTotals ?? gameState.managerWpaTotals ?? [],
