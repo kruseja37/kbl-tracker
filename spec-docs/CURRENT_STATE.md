@@ -15,7 +15,7 @@
 - **Phase:** T-stack execution. Sequencing ruling F-141 holds: the full T-stack
   runs to completion as pure execution, THEN D0 cut line → D1–D8 → F-138 →
   flag flip → iPad playtest exit gate.
-- **Last completed:** **T9a — Pure in-game sub-recommendation engine** (commit `<pending>`). Codex 5.5
+- **Last completed:** **T9a — Pure in-game sub-recommendation engine** (commit `ef85c80`). Codex 5.5
   BUILT → Opus 4.8 audit **CONFORMS** → COMMITTED (pure engine, no user-visible surface → standing
   auto-commit). NEW `src/engines/subRecommendations.ts` (`recommendSubs`): scores eligible subs vs the
   current player on **IV-of-effectiveRatings** (`computeIV(effectiveRatings(...)).kblIV`, the same recipe +
