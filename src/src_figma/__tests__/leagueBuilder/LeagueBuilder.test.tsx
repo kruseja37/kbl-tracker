@@ -132,7 +132,13 @@ describe('LeagueBuilder Component', () => {
     test('renders DRAFT module card', () => {
       render(<LeagueBuilder />);
       expect(screen.getByText('DRAFT')).toBeInTheDocument();
-      expect(screen.getByText('Fantasy snake draft configuration')).toBeInTheDocument();
+      expect(screen.getByText('Farm prospect draft')).toBeInTheDocument();
+    });
+
+    test('renders MLB DRAFT module card', () => {
+      render(<LeagueBuilder />);
+      expect(screen.getByText('MLB DRAFT')).toBeInTheDocument();
+      expect(screen.getByText('22-man registered-pool snake draft')).toBeInTheDocument();
     });
 
     test('renders RULES module card', () => {

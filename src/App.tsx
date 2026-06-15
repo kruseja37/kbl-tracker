@@ -100,6 +100,11 @@ const LeagueBuilderDraft = lazy(() =>
     default: module.LeagueBuilderDraft,
   })),
 );
+const LeagueBuilderSnakeDraft = lazy(() =>
+  import("./src_figma/app/pages/LeagueBuilderSnakeDraft").then((module) => ({
+    default: module.LeagueBuilderSnakeDraft,
+  })),
+);
 const LeagueBuilderRules = lazy(() =>
   import("./src_figma/app/pages/LeagueBuilderRules").then((module) => ({
     default: module.LeagueBuilderRules,
@@ -281,6 +286,10 @@ function App() {
           element={<LeagueBuilderRosters />}
         />
         <Route path="/league-builder/draft" element={<LeagueBuilderDraft />} />
+        <Route
+          path="/league-builder/snake-draft"
+          element={<LeagueBuilderSnakeDraft />}
+        />
         <Route path="/league-builder/rules" element={<LeagueBuilderRules />} />
 
         {/* Almanac - Figma Design */}

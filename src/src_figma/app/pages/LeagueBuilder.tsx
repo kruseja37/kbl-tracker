@@ -205,10 +205,19 @@ export function LeagueBuilder() {
           <ModuleCard
             icon={<Shuffle className="w-8 h-8" />}
             title="DRAFT"
-            description="Fantasy snake draft configuration"
+            description="Farm prospect draft"
             count="Configure"
             color="#7733DD"
             onClick={() => navigate("/league-builder/draft")}
+          />
+
+          <ModuleCard
+            icon={<Shuffle className="w-8 h-8" />}
+            title="MLB DRAFT"
+            description="22-man registered-pool snake draft"
+            count="Draft"
+            color="#3B7DD8"
+            onClick={() => navigate("/league-builder/snake-draft")}
           />
 
           <ModuleCard

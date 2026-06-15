@@ -6905,3 +6905,73 @@ needed). COMMITTED. NEXT: **T8d-2** (draft-session persistence kbl-league-builde
 `LeagueBuilderSnakeDraft.tsx` board shell + snake mechanics + dual-write 22+10 output + handoff carry-
 through verify) — PERSISTENCE + user-visible → audit non-negotiable + JK surface before commit.
 
+---
+
+## T8d-2 CONTRACT (2026-06-14) — MLB snake-draft board shell + draft-session persistence — IV §7.3
+
+**ROUTE:** Codex 5.5 | very high reasoning effort → Opus 4.8 audit (Fable unavailable; auditor ≠ builder).
+PERSISTENCE (kbl-league-builder v6→v7 ADDITIVE) + user-visible (new draft board) → **audit
+non-negotiable + JK SURFACE before commit (NOT auto-commit).** JK rulings: budget=tierCap;
+position-agnostic solvency; composition = TWO separate steps (this board fills 22 MLB; existing farm draft
+fills 10 — untouched). Integration map: `T8d2 integration-map` workflow (wf_358cc133-a06). Captain
+implementation rulings R-A..R-D baked into the contract (re-derive ratings via a pure `toConstructionPlayer`
+adapter in the hook; engine stays pure; composite-id session store keyed by id+leagueId index mirroring the
+farm; per-pick immediate dual-write). Single storage module (no src_figma dup) → v6→v7 low-risk on the
+singleton axis; migration safety still proven by a seed-v6→upgrade test.
+
+```
+[identical to Temp/t8d2-contract.md — the builder prompt fed to Codex this session]
+```
+Full contract text: `Temp/t8d2-contract.md` (self-contained: v6→v7 additive migration + new
+`mlbDraftSessions` store + `LeagueBuilderMlbDraftSession` + CRUD; `toConstructionPlayer` adapter; new
+`LeagueBuilderSnakeDraft.tsx` page + route + tile relabel; buildSnakeOrder + assessSolvency mechanics;
+mandatory dual-write (mlbRoster + leagueAssignments rosterStatus:'MLB') mirroring LeagueBuilderRosters;
+22+10 handoff shape; T8d-3 overlays explicitly scoped OUT; migration + adapter + board tests; do-not-touch
+list incl. the farm draft + handoff; verify = tsc0/build0/suite-no-new-RED + DB v7 only version change).
+
+**Status:** contract drafted → Codex build complete → audited CONFORMS → **SURFACED to JK, awaiting
+approval before commit** (record below).
+
+### T8d-2-AUDIT + EXECUTION RECORD (2026-06-14)
+
+**ROUTE actual:** Codex 5.5 | high (knob max) BUILT → Opus 4.8 (Captain) independent AUDIT (auditor ≠
+builder). PERSISTENCE + user-visible → NOT auto-committed; surfaced for JK approval.
+
+**Builder result (Codex 5.5):** 12 files (9 modified + 3 new). leagueBuilderStorage.ts: DB_VERSION 6→7,
+`MLB_DRAFT_SESSIONS` store (keyPath 'id', leagueId index, idempotent guarded create), `LeagueBuilderMlb
+DraftSession` interface, create/get/save/delete CRUD (syncEngine upsert/remove + createdDate/lastModified),
+clearAll additions. Collateral: syncConfig (+mlbDraftSessions:'id'), backupRestore (schema v7 + included
+Stores). useLeagueBuilderData: `toConstructionPlayer` adapter + session CRUD exposed. NEW
+`LeagueBuilderSnakeDraft.tsx` board + `/league-builder/snake-draft` route + "MLB DRAFT" tile + farm-tile
+relabel. Tests: v7 migration (+seedV6 helper), adapter unit test, board RTL smoke.
+
+**AUDIT VERDICT: CONFORMS.** Independent re-verification (Opus, not trusting builder paste):
+- tsc -b 0; `npm run build` exit 0; full suite (independent rerun) 7,203 pass / 3 fail / 390 files — the 3
+  are EXACTLY the characterized set; NO new RED. 7,206 = 7,199 + 7.
+- ADDITIVE MIGRATION PROVEN: DB_VERSION = 7 is the ONLY version change (trackerDb still 15). Migration test
+  ('raw v6 database upgrades additively to v7 and preserves all nine prior stores with data', test :243)
+  seeds a real v6 DB (9 stores incl. registeredPools w/ data), upgrades, asserts version 7 + all 10 stores
+  + prior data preserved. New store create is `if (!objectStoreNames.contains)` guarded. backupRestore +
+  syncConfig collateral correct (add-only).
+- DUAL-WRITE CORRECT: pure `buildMlbDraftCommitPayloads` (LeagueBuilderSnakeDraft.tsx:113) writes BOTH
+  mlbRoster append AND leagueAssignments {leagueId,teamId,rosterStatus:'MLB'} + advances currentPickIndex;
+  confirm handler (:335) gates on `assessment.confirmable`, re-reads the roster before commit, then
+  updateRoster + updatePlayer + saveMlbDraftSession. Satisfies the 22+10 handoff count + sameIdSet cross-
+  check.
+- SOLVENCY WIRED CORRECTLY: rosterSize = MLB_DRAFT_ROUNDS = 22 (not 32); budget = pool.tierCap; mode =
+  pool.balanceMode; caps = capIdentity ? shiftLuxuryCaps(...) : pool.luxuryCaps; committedRoster via
+  toConstructionPlayer; IV display from pool.iv (L2). Adapter (useLeagueBuilderData.ts:218) maps
+  power→POW…accuracy→ACC, isPitcher/role correct.
+- BYTE-UNCHANGED (do-not-touch verified via git diff --name-only = empty): leagueConstruction.ts (T8d-1
+  engine), LeagueBuilderDraft.tsx (farm draft), LeagueBuilderRosters.tsx, leagueBuilderStartupFarmDraft.ts,
+  franchisePlayerStorage.ts + leagueBuilderFarmScoutingHandoff.ts (handoff), FranchiseSetup.tsx, tierParams,
+  ivEngine, salaryCalculator, leagueConstruction.test.ts. No T8d-3 overlays built (correct scope).
+
+**Findings:** none (LOW or above). Note: Codex's RTL board smoke ran; in-app browser was unavailable (JK
+browser sign-off is the batched gate regardless).
+
+**Status:** T8d-2 = built + audited CONFORMS — **AWAITING JK APPROVAL to commit** (persistence + UI).
+BROWSER-VERIFY (batched): the MLB snake-draft board — start draft, snake order, per-candidate solvency
+signal, BLOCKED gate, confirm a pick (roster + assignment persist), reload resumes, 22-per-team completes,
+existing farm draft still fills 10, Franchise Setup handoff accepts the league.
+

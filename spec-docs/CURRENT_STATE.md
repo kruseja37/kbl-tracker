@@ -1,6 +1,6 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-14 (T8d mapped + split 3-way; T8d-1 engine built + audited CONFORMS + committed; T8d-2 next)
+**Last Updated:** 2026-06-14 (T8d split 3-way; T8d-1 engine + T8d-2 board/persistence built + audited CONFORMS + committed; T8d-3 next)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.
@@ -15,29 +15,26 @@
 - **Phase:** T-stack execution. Sequencing ruling F-141 holds: the full T-stack
   runs to completion as pure execution, THEN D0 cut line → D1–D8 → F-138 →
   flag flip → iPad playtest exit gate.
-- **Last completed:** **T8d-1 — Snake-draft + Solvency engine (pure)** (commit `9f94412`). Codex 5.5
-  BUILT → Opus 4.8 audit **CONFORMS** → COMMITTED (pure engine, no user-visible surface → standing
-  auto-commit, no browser item). Added to `leagueConstruction.ts`: `buildSnakeOrder` (22-man MLB snake
-  order), `cheapestFillCost`, `pickMarginalTax`, `assessSolvency` → GREEN/YELLOW/RED/BLOCKED. budget =
-  tierCap (JK Q1); position-agnostic fill cost (JK Q2); **mode-aware / charge-faithful** solvency (tax
-  drains budget only in `taxed`; `advisory` warns via wouldBe & never blocks; `off` = pure tier cap, no
-  tax signal — JK ruling). +2 constants (`SOLVENCY_RED_MARGIN` 0.10, `SOLVENCY_SEVERE_TAX_FRAC` 0.20).
-  +10 tests incl. the mode-ruling differential. Independently re-verified: tsc 0 / build 0 / targeted
-  24/24 / full suite 7,199 (only the 3 characterized fails) / diff = 3 files, DB still v6, all 8 existing
-  exports intact. **T8d mapped (7-agent fan-out → `T8d_SCOPE_MAP.md`); JK ruled 5 design forks (Q1/Q2 +
-  defer R12 + defer R9 + mode-aware solvency) → T8d split = 3 tickets; R9 + R12 = tracked fast-follows.**
-  (T8a/T8b/T8c + T6/T7-stack — all CONFORMS — COMMITTED.)
-- **NEXT TASK: T8d-2 — Draft-session persistence + snake-board shell.** New `mlbDraftSessions` store
-  (kbl-league-builder **v6→v7 ADDITIVE**, migration-audited) + new `LeagueBuilderSnakeDraft.tsx` page +
-  new route + tile relabel (the `/league-builder/draft` "DRAFT" tile is mislabeled "Fantasy snake draft"
-  but routes to the FARM draft) + snake mechanics (consume T8d-1 `buildSnakeOrder` + `assessSolvency`) +
-  dual-write output (`mlbRoster/farmRoster` + `leagueAssignments.rosterStatus`, **22+10 exact**) +
-  Mode1→Mode2 handoff carry-through verify (tier/balanceMode/capIdentity). **PERSISTENCE + user-visible →
-  audit non-negotiable + JK surface before commit** (NOT auto-commit). One genuine pre-build scope
-  decision PENDING JK: how the MLB snake board composes with the existing (untouched, Q4) farm draft into
-  the 22+10 league. Captain default = two separate steps (MLB snake tile/route + existing farm draft),
-  existing farm flow untouched. ROUTE Codex 5.5 | very high → Opus audit. Then **T8d-3** (overlays:
-  pick chart + trade validator + per-team signals) → **T9** → **T10** → D0. Full map: `T8d_SCOPE_MAP.md`.
+- **Last completed:** **T8d-2 — MLB snake-draft board shell + draft-session persistence** (commit
+  `<pending>`). Codex 5.5 BUILT → Opus 4.8 audit **CONFORMS** → **JK APPROVED** (persistence + user-visible,
+  not auto-committed). New `LeagueBuilderSnakeDraft.tsx` board at a NEW route `/league-builder/snake-draft`
+  + new "MLB DRAFT" tile (existing farm-draft tile relabeled "Farm prospect draft"; farm draft UNTOUCHED).
+  Drafts 22-man rosters from the league RegisteredPool; per-candidate solvency via T8d-1 `assessSolvency`
+  (rosterSize 22, budget=tierCap, identity-shifted caps); GREEN/YELLOW/RED/BLOCKED signal + BLOCKED disables
+  confirm; user-arranged snake order (`buildSnakeOrder`). **Persistence: kbl-league-builder v6→v7 ADDITIVE**
+  — new `mlbDraftSessions` store (keyPath id, leagueId index) + `LeagueBuilderMlbDraftSession` + CRUD +
+  sync/backup collateral; **DB_VERSION 7 is the only version change** (migration test seeds raw v6 → proves
+  all 9 prior stores + data survive). Each confirmed pick does the **dual-write** (`mlbRoster` append +
+  `leagueAssignments rosterStatus:'MLB'`) satisfying the 22+10 handoff. `toConstructionPlayer` adapter added
+  (hook layer; engine pure). Independently re-verified: tsc 0 / build 0 / full suite 7,206 (only the 3
+  characterized fails) / all do-not-touch incl. the farm draft + handoff BYTE-UNCHANGED. BROWSER-PENDING.
+  (T8d-1 `9f94412` + T8a/T8b/T8c + T6/T7-stack — all CONFORMS — COMMITTED.)
+- **NEXT TASK: T8d-3 — Board intelligence overlays.** Wire the last two ORPHANED T8a engine fns into the
+  board: pick-value chart display (`derivePickValueChart`, already on `RegisteredPool.pickValueChart`) +
+  standalone trade-validator panel (`validateTrade`, advisory-only/no-persistence per Q7) + per-team
+  cross-comparison signal overlay (the on-the-clock signal already lands in T8d-2). User-visible → audit
+  non-negotiable + JK surface before commit. Then **T9** → **T10** → D0. (R9 scout-obscured farm IV + R12
+  potency overlay remain DEFERRED fast-follows.) Full map: `T8d_SCOPE_MAP.md`.
 - **STANDING MODE (JK 2026-06-14):** per ticket = build → independent ENGINEERING
   audit → auto-commit verified-complete (browser-pending) → proceed. Captain
   surfaces only the audit verdict, the browser backlog, and genuine scope/design/
@@ -50,7 +47,7 @@
 
 ## SUITE BASELINE
 
-7,199 tests / 388 files (T8d-1 +10; T8c +1; T8b +8 / +1; T8a +9 / +1; T7c +7 / +1; T7b +4;
+7,206 tests / 390 files (T8d-2 +7 / +2; T8d-1 +10; T8c +1; T8b +8 / +1; T8a +9 / +1; T7c +7 / +1; T7b +4;
 T7a +8 / +1; T6 +12; prior baseline 7,140 / 383). Characterized set (a new RED outside
 this set is a real regression): fixed failures wpaRuntimeBoundary +
 franchiseNarrativeEventEligibility; conditional-solo order-flakes
@@ -88,6 +85,13 @@ franchiseOffseasonGuards.component (each passes solo).
    (composeIdentity fills the increase stack), manually edit increase/decrease mods, watch the live
    cap-shift % preview update, save + reopen the team → the identity persists. A team with no
    identity opens cleanly.
+8. **T8d-2** MLB snake-draft board (new "MLB DRAFT" tile → `/league-builder/snake-draft`): start draft
+   (registers pool if needed), snake order advances, per-candidate GREEN/YELLOW/RED/BLOCKED solvency
+   signal shows for the team on the clock, BLOCKED disables DRAFT, confirming a pick persists (roster +
+   player MLB assignment) and survives reload, 22-per-team completes; the existing farm/prospect draft
+   (relabeled "Farm prospect draft") still fills the 10; Franchise Setup handoff accepts the league.
+   Backup/restore + sync round-trip with the new `mlbDraftSessions` store. (PERSISTENCE/data-shape →
+   prioritized in the batch.)
 
 ## OPEN PENDING-JK (rolling)
 

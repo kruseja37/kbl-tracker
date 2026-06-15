@@ -33,6 +33,9 @@ import {
   deleteTeamRoster,
   saveRegisteredPool,
   getRegisteredPool as getRegisteredPoolFromStorage,
+  getMlbDraftSession as getMlbDraftSessionFromStorage,
+  saveMlbDraftSession as saveMlbDraftSessionToStorage,
+  deleteMlbDraftSession as deleteMlbDraftSessionFromStorage,
   seedFromSMB4Database,
   isSMB4DatabaseSeeded,
   seedFromMLBDatabase,
@@ -43,8 +46,9 @@ import {
   type Player,
   type RulesPreset,
   type TeamRoster,
+  type LeagueBuilderMlbDraftSession,
 } from '../../utils/leagueBuilderStorage';
-import { registerPool, type RegisteredPool } from '../../engines/leagueConstruction';
+import { registerPool, type ConstructionPlayer, type RegisteredPool } from '../../engines/leagueConstruction';
 import {
   calculateIvBaseSalary,
   type PlayerForSalary,
@@ -71,8 +75,9 @@ export type {
   RosterStatus,
   LineupSlot,
   DepthChart,
+  LeagueBuilderMlbDraftSession,
 } from '../../utils/leagueBuilderStorage';
-export type { RegisteredPool } from '../../engines/leagueConstruction';
+export type { ConstructionPlayer, RegisteredPool } from '../../engines/leagueConstruction';
 
 // ============================================
 // HOOK INTERFACE
@@ -95,6 +100,14 @@ export interface UseLeagueBuilderDataReturn {
   duplicateLeague: (id: string) => Promise<LeagueTemplate>;
   registerLeaguePool: (leagueId: string) => Promise<RegisteredPool>;
   getRegisteredPool: (leagueId: string) => Promise<RegisteredPool | null>;
+  getMlbDraftSession: (leagueId: string, seasonNumber?: number) => Promise<LeagueBuilderMlbDraftSession | null>;
+  saveMlbDraftSession: (
+    session: Omit<LeagueBuilderMlbDraftSession, 'createdDate' | 'lastModified'> & {
+      createdDate?: string;
+      lastModified?: string;
+    },
+  ) => Promise<LeagueBuilderMlbDraftSession>;
+  deleteMlbDraftSession: (leagueId: string, seasonNumber?: number) => Promise<void>;
 
   // Team operations
   getTeamById: (id: string) => Promise<Team | null>;
@@ -199,6 +212,34 @@ function toSalaryPlayer(player: Player): PlayerForSalary {
     traits: [player.trait1, player.trait2].filter((trait): trait is string => Boolean(trait)),
     arsenal: player.arsenal,
     armSlot: player.armSlot ?? null,
+  };
+}
+
+export function toConstructionPlayer(player: Player): ConstructionPlayer {
+  const isPitcher = player.primaryPosition === 'SP'
+    || player.primaryPosition === 'RP'
+    || player.primaryPosition === 'CP'
+    || player.primaryPosition === 'SP/RP'
+    || player.primaryPosition === 'P';
+
+  return {
+    id: player.id,
+    isPitcher,
+    role: isPitcher ? toPitcherRole(player.primaryPosition) : undefined,
+    bat: {
+      POW: player.power,
+      CON: player.contact,
+      SPD: player.speed,
+      FLD: player.fielding,
+      ARM: player.arm,
+    },
+    pit: isPitcher
+      ? {
+          VEL: player.velocity,
+          JNK: player.junk,
+          ACC: player.accuracy,
+        }
+      : undefined,
   };
 }
 
@@ -382,6 +423,23 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
       setError(message);
       throw err;
     }
+  }, []);
+
+  const getMlbDraftSession = useCallback(async (leagueId: string, seasonNumber = 1) => {
+    return getMlbDraftSessionFromStorage(leagueId, seasonNumber);
+  }, []);
+
+  const saveMlbDraftSession = useCallback(async (
+    session: Omit<LeagueBuilderMlbDraftSession, 'createdDate' | 'lastModified'> & {
+      createdDate?: string;
+      lastModified?: string;
+    },
+  ) => {
+    return saveMlbDraftSessionToStorage(session);
+  }, []);
+
+  const deleteMlbDraftSession = useCallback(async (leagueId: string, seasonNumber = 1) => {
+    return deleteMlbDraftSessionFromStorage(leagueId, seasonNumber);
   }, []);
 
   // ============================================
@@ -609,6 +667,9 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
     duplicateLeague,
     registerLeaguePool,
     getRegisteredPool,
+    getMlbDraftSession,
+    saveMlbDraftSession,
+    deleteMlbDraftSession,
 
     // Team operations
     getTeamById,
