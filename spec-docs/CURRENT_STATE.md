@@ -15,7 +15,7 @@
 - **Phase:** T-stack execution. Sequencing ruling F-141 holds: the full T-stack
   runs to completion as pure execution, THEN D0 cut line → D1–D8 → F-138 →
   flag flip → iPad playtest exit gate.
-- **Last completed:** **T8d-3 — Board intelligence overlays** (commit `<pending>`). Codex 5.5 BUILT →
+- **Last completed:** **T8d-3 — Board intelligence overlays** (commit `2738cf5`). Codex 5.5 BUILT →
   Opus 4.8 audit **CONFORMS** → **JK APPROVED** (user-visible, not auto-committed). Three display-only
   overlays on `LeagueBuilderSnakeDraft.tsx`: pick-value chart panel (`pool.pickValueChart` + on-clock pick
   value) + advisory trade-validator panel (`validateTrade`, try/catch friendly out-of-range, no
