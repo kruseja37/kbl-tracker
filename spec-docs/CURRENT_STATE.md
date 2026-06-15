@@ -1,6 +1,6 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-14 (T8a/T8b/T8c built + audited CONFORMS + committed; T8d next)
+**Last Updated:** 2026-06-14 (T8d mapped + split 3-way; T8d-1 engine built + audited CONFORMS + committed; T8d-2 next)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.
@@ -15,27 +15,29 @@
 - **Phase:** T-stack execution. Sequencing ruling F-141 holds: the full T-stack
   runs to completion as pure execution, THEN D0 cut line → D1–D8 → F-138 →
   flag flip → iPad playtest exit gate.
-- **Last completed:** **T8c — Team Identity Composition UI** — Codex 5.5 BUILT → Opus 4.8 audit
-  **CONFORMS**; **JK APPROVED** (user-visible surface, not auto-committed). Collapsible "Team Identity
-  (Cap)" section in the LeagueBuilderTeams modal: 6 band 0–5 priorities → `composeIdentity` Suggest;
-  2 increase + 2 decrease mod dropdowns (42 keys), FREELY editable (decreases OPTIONAL per JK);
-  `applyIdentitySelection` validation GUARDS the save; live `identityCapShift` % + `shiftLuxuryCaps`
-  preview; tier from team's league (default juiced). Persisted as an **additive `Team.capIdentity?`
-  field — NO DB_VERSION bump, NO migration, NO backup/sync change** (rides on globalTeams; round-trip
-  test proves present→persists / absent→undefined). Independently re-verified: tsc 0 / build 0 / test
-  4/4 / suite 7,189 (3 characterized fails) / all do-not-touch incl. the editorial-identity systems
-  (manager/almanac/reporter) BYTE-UNCHANGED. COMMITTED. BROWSER-PENDING. (T8a/T8b + T6/T7-stack — all
-  CONFORMS — COMMITTED.)
-- **NEXT TASK: T8d — the LAST T8 ticket (the big one).** Snake draft (Path B, all-user, no AI) +
-  empirical per-pool pick-value chart (`derivePickValueChart` already in T8a) + pick-value trade
-  validator UI (`validateTrade` in T8a) + per-team solvency guardrail & GREEN/YELLOW/RED/BLOCKED pick
-  signals (consume `luxuryTax` + RegisteredPool) + chemistry potency overlay (T6 `effectiveRatings`
-  potencyTier) + farm scout-obscured IV (§7.4: true IV internal, displayed range
-  `[trueIV(1−w),trueIV(1+w)]`, w=`scoutNoiseBase×(1−scoutAccuracy)`, reuse the T7b no-oracle-leak
-  pattern + the existing LeagueBuilderDraft/leagueBuilderStartupFarmDraft scaffold). BIG — Captain
-  will map its 6 sub-surfaces (likely a focused workflow) + surface scope before drafting. ROUTE
-  Codex 5.5 | very high → Opus audit (UI + persistence). Then **T9** → **T10** → D0. Full T8 map:
-  `T8_SCOPE_MAP.md`.
+- **Last completed:** **T8d-1 — Snake-draft + Solvency engine (pure)** (commit `9f94412`). Codex 5.5
+  BUILT → Opus 4.8 audit **CONFORMS** → COMMITTED (pure engine, no user-visible surface → standing
+  auto-commit, no browser item). Added to `leagueConstruction.ts`: `buildSnakeOrder` (22-man MLB snake
+  order), `cheapestFillCost`, `pickMarginalTax`, `assessSolvency` → GREEN/YELLOW/RED/BLOCKED. budget =
+  tierCap (JK Q1); position-agnostic fill cost (JK Q2); **mode-aware / charge-faithful** solvency (tax
+  drains budget only in `taxed`; `advisory` warns via wouldBe & never blocks; `off` = pure tier cap, no
+  tax signal — JK ruling). +2 constants (`SOLVENCY_RED_MARGIN` 0.10, `SOLVENCY_SEVERE_TAX_FRAC` 0.20).
+  +10 tests incl. the mode-ruling differential. Independently re-verified: tsc 0 / build 0 / targeted
+  24/24 / full suite 7,199 (only the 3 characterized fails) / diff = 3 files, DB still v6, all 8 existing
+  exports intact. **T8d mapped (7-agent fan-out → `T8d_SCOPE_MAP.md`); JK ruled 5 design forks (Q1/Q2 +
+  defer R12 + defer R9 + mode-aware solvency) → T8d split = 3 tickets; R9 + R12 = tracked fast-follows.**
+  (T8a/T8b/T8c + T6/T7-stack — all CONFORMS — COMMITTED.)
+- **NEXT TASK: T8d-2 — Draft-session persistence + snake-board shell.** New `mlbDraftSessions` store
+  (kbl-league-builder **v6→v7 ADDITIVE**, migration-audited) + new `LeagueBuilderSnakeDraft.tsx` page +
+  new route + tile relabel (the `/league-builder/draft` "DRAFT" tile is mislabeled "Fantasy snake draft"
+  but routes to the FARM draft) + snake mechanics (consume T8d-1 `buildSnakeOrder` + `assessSolvency`) +
+  dual-write output (`mlbRoster/farmRoster` + `leagueAssignments.rosterStatus`, **22+10 exact**) +
+  Mode1→Mode2 handoff carry-through verify (tier/balanceMode/capIdentity). **PERSISTENCE + user-visible →
+  audit non-negotiable + JK surface before commit** (NOT auto-commit). One genuine pre-build scope
+  decision PENDING JK: how the MLB snake board composes with the existing (untouched, Q4) farm draft into
+  the 22+10 league. Captain default = two separate steps (MLB snake tile/route + existing farm draft),
+  existing farm flow untouched. ROUTE Codex 5.5 | very high → Opus audit. Then **T8d-3** (overlays:
+  pick chart + trade validator + per-team signals) → **T9** → **T10** → D0. Full map: `T8d_SCOPE_MAP.md`.
 - **STANDING MODE (JK 2026-06-14):** per ticket = build → independent ENGINEERING
   audit → auto-commit verified-complete (browser-pending) → proceed. Captain
   surfaces only the audit verdict, the browser backlog, and genuine scope/design/
@@ -48,7 +50,7 @@
 
 ## SUITE BASELINE
 
-7,189 tests / 388 files (T8c +1; T8b +8 / +1; T8a +9 / +1; T7c +7 / +1; T7b +4;
+7,199 tests / 388 files (T8d-1 +10; T8c +1; T8b +8 / +1; T8a +9 / +1; T7c +7 / +1; T7b +4;
 T7a +8 / +1; T6 +12; prior baseline 7,140 / 383). Characterized set (a new RED outside
 this set is a real regression): fixed failures wpaRuntimeBoundary +
 franchiseNarrativeEventEligibility; conditional-solo order-flakes
