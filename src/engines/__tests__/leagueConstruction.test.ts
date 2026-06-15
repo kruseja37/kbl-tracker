@@ -1,0 +1,266 @@
+import { describe, expect, test } from 'vitest';
+
+import { TRADE_TOLERANCE_BAND } from '../../data/rosterEngineConstants';
+import {
+  CAP_MODIFICATION_FRACTIONS,
+  LUXURY_CAP_TABLES,
+  type LuxuryCapRow,
+  type ModStat,
+} from '../../data/tierParams';
+import {
+  MOD_STAT_TO_LUX,
+  type BandPriorities,
+  type ConstructionPlayer,
+  applyIdentitySelection,
+  composeIdentity,
+  derivePickValueChart,
+  identityCapShift,
+  luxuryTax,
+  shiftLuxuryCaps,
+  validateTrade,
+} from '../leagueConstruction';
+
+const MOD_STATS = Object.keys(MOD_STAT_TO_LUX) as ModStat[];
+
+const zeroPriorities: BandPriorities = {
+  Power: 0,
+  Contact: 0,
+  Speed: 0,
+  Defense: 0,
+  Rotation: 0,
+  Bullpen: 0,
+};
+
+const composeGoldens: Array<{ name: string; priorities: BandPriorities; increase: string[] }> = [
+  { name: 'power_only', priorities: { ...zeroPriorities, Power: 5 }, increase: ['Great Bambino', 'Fence Swingers'] },
+  { name: 'contact_only', priorities: { ...zeroPriorities, Contact: 5 }, increase: ['Bloop Hitters', 'Warning Track'] },
+  { name: 'speed_only', priorities: { ...zeroPriorities, Speed: 5 }, increase: ['Run Like the Wind', 'Warning Track'] },
+  { name: 'defense_only', priorities: { ...zeroPriorities, Defense: 5 }, increase: ['Catch the Ball!', 'Defense First'] },
+  { name: 'rotation_only', priorities: { ...zeroPriorities, Rotation: 5 }, increase: ['JNK', 'Rotation Boost'] },
+  { name: 'bullpen_only', priorities: { ...zeroPriorities, Bullpen: 5 }, increase: ['Junk Ballers', 'JNK'] },
+  { name: 'power_rotation', priorities: { ...zeroPriorities, Power: 4, Rotation: 4 }, increase: ['POW', 'JNK'] },
+  { name: 'defense_speed_contact', priorities: { ...zeroPriorities, Contact: 2, Speed: 3, Defense: 4 }, increase: ['Catch the Ball!', 'Run Like the Wind'] },
+  { name: 'all_equal', priorities: { Power: 1, Contact: 1, Speed: 1, Defense: 1, Rotation: 1, Bullpen: 1 }, increase: ['Junk Ballers', 'Bloop Hitters'] },
+  { name: 'pitching_equal', priorities: { ...zeroPriorities, Rotation: 3, Bullpen: 3 }, increase: ['Junk Ballers', 'JNK'] },
+];
+
+const shiftGoldens: Array<{ identity: { increase: string[]; decrease: string[] }; shift: Record<ModStat, number> }> = [
+  {
+    identity: { increase: ['POW', 'CON'], decrease: [] },
+    shift: { POW: 0.02, CON: 0.045871559633027525, SPD: 0, FLD: 0, ARM: 0, RVEL: 0, RJNK: 0, RACC: 0, PVEL: 0, PJNK: 0, PACC: 0 },
+  },
+  {
+    identity: { increase: ['Defense First', 'Bullpen Boost'], decrease: ['Call Your Shot'] },
+    shift: {
+      POW: -0.22, CON: -0.07339449541284404, SPD: 0.23636363636363636, FLD: 0.6102564102564103, ARM: 0.3008849557522124,
+      RVEL: -0.2, RJNK: -0.15384615384615385, RACC: -0.09615384615384616, PVEL: -0.03076923076923077, PJNK: 0.03333333333333333, PACC: 0.09090909090909091,
+    },
+  },
+  {
+    identity: { increase: ['Fireballers', 'Junk Ballers'], decrease: ['Pinpoint Pitchers', 'We Got Gas'] },
+    shift: {
+      POW: 0.074, CON: 0.06788990825688074, SPD: 0.06727272727272728, FLD: 0.06324786324786325, ARM: 0.06548672566371681,
+      RVEL: 0.02, RJNK: 0.45, RACC: -0.6346153846153846, PVEL: 0.15384615384615385, PJNK: 0.78, PACC: -0.696969696969697,
+    },
+  },
+  {
+    identity: { increase: ['Well Rounded', "Run n' Gun"], decrease: ['Big and Clumsy'] },
+    shift: {
+      POW: -0.07, CON: 0.009174311926605505, SPD: 0.07272727272727272, FLD: 0.3247863247863248, ARM: 0.20353982300884957,
+      RVEL: 0.05, RJNK: 0.019230769230769232, RACC: 0.019230769230769232, PVEL: 0.07692307692307693, PJNK: 0.03333333333333333, PACC: 0.030303030303030304,
+    },
+  },
+];
+
+function directShift(identity: { increase: string[]; decrease: string[] }): Record<ModStat, number> {
+  const net = Object.fromEntries(MOD_STATS.map((stat) => [stat, 0])) as Record<ModStat, number>;
+  for (const name of identity.increase.filter((item) => item !== '--')) {
+    for (const stat of MOD_STATS) net[stat] += CAP_MODIFICATION_FRACTIONS[name][stat];
+  }
+  for (const name of identity.decrease.filter((item) => item !== '--')) {
+    for (const stat of MOD_STATS) net[stat] -= CAP_MODIFICATION_FRACTIONS[name][stat];
+  }
+  return net;
+}
+
+function expectShiftClose(actual: Record<ModStat, number>, expected: Record<ModStat, number>, precision = 5) {
+  for (const stat of MOD_STATS) {
+    expect(actual[stat], stat).toBeCloseTo(expected[stat], precision);
+  }
+}
+
+function hitter(id: string, ratings: Partial<ConstructionPlayer['bat']>): ConstructionPlayer {
+  return {
+    id,
+    isPitcher: false,
+    bat: { POW: 50, CON: 50, SPD: 50, FLD: 50, ARM: 50, ...ratings },
+  };
+}
+
+function pitcher(
+  id: string,
+  role: NonNullable<ConstructionPlayer['role']>,
+  pit: Partial<NonNullable<ConstructionPlayer['pit']>>,
+  bat: Partial<ConstructionPlayer['bat']> = {},
+): ConstructionPlayer {
+  return {
+    id,
+    isPitcher: true,
+    role,
+    bat: { POW: 20, CON: 20, SPD: 20, FLD: 50, ARM: 50, ...bat },
+    pit: { VEL: 50, JNK: 50, ACC: 50, ...pit },
+  };
+}
+
+function expectedTax(roster: ConstructionPlayer[], caps: LuxuryCapRow[]) {
+  const hitters = roster.filter((player) => !player.isPitcher);
+  const rotation = roster.filter((player) => player.isPitcher && (player.role === 'SP' || player.role === 'SP/RP'));
+  const bullpen = roster.filter((player) => player.isPitcher && (player.role === 'RP' || player.role === 'CP' || player.role === 'SP/RP'));
+  const binding: Array<{ group: string; stat: string; over: number; tax: number }> = [];
+  let wouldBeTax = 0;
+  for (const row of caps) {
+    const group = row.group === 'hitters' ? hitters : row.group === 'rotation' ? rotation : bullpen;
+    const vals = group
+      .map((player) => (row.stat === 'VEL' || row.stat === 'JNK' || row.stat === 'ACC') ? player.pit?.[row.stat] ?? 0 : player.bat[row.stat])
+      .sort((left, right) => right - left)
+      .slice(0, row.topN);
+    const over = vals.reduce((sum, val) => sum + val, 0) - Math.max(row.cap, 0);
+    if (over > 0) {
+      const tax = row.penaltyPer100 * (over / 100) ** row.penaltyCurve + row.minAdder;
+      wouldBeTax += tax;
+      binding.push({ group: row.group, stat: row.stat, over, tax });
+    }
+  }
+  binding.sort((left, right) => right.tax - left.tax);
+  return { charged: wouldBeTax, wouldBeTax, binding };
+}
+
+describe('leagueConstruction T8a pure engine', () => {
+  test('composeIdentity matches Python compose_identity oracle for golden priority vectors', () => {
+    // Goldens were obtained by importing scripts/analyze-pool.py, loading the workbook mods via
+    // load_luxury(WORKBOOK), computing band_scores(...), and calling compose_identity(...) for
+    // these exact vectors. This exercises the Python L1175-L1214 greedy/tiebreak behavior.
+    for (const golden of composeGoldens) {
+      const actual = composeIdentity(golden.priorities);
+      expect(actual.increase, golden.name).toEqual(golden.increase);
+      expect(actual.increase.length).toBeLessThanOrEqual(2);
+      expect(actual.increase.every((name) => name in CAP_MODIFICATION_FRACTIONS)).toBe(true);
+      expect(actual.decrease).toEqual([]);
+    }
+  });
+
+  test('applyIdentitySelection validates vocabulary, count, and neutral drops', () => {
+    expect(applyIdentitySelection({ increase: ['POW', '--'], decrease: ['--', 'CON'] })).toEqual({
+      increase: ['POW'],
+      decrease: ['CON'],
+    });
+    expect(() => applyIdentitySelection({ increase: ['POW', 'CON', 'SPD'], decrease: [] })).toThrow(/at most 2/);
+    expect(() => applyIdentitySelection({ increase: ['Not A Mod'], decrease: [] })).toThrow(/Unknown identity modification/);
+  });
+
+  test('identityCapShift matches direct CAP_MODIFICATION_FRACTIONS math and Python identity_cap_shift goldens', () => {
+    for (const golden of shiftGoldens) {
+      const actual = identityCapShift(golden.identity);
+      expect(actual).toEqual(directShift(golden.identity));
+      expectShiftClose(actual, golden.shift);
+    }
+  });
+
+  test('shiftLuxuryCaps returns new rows, applies routed cap fractions, and clamps below zero', () => {
+    const caps = LUXURY_CAP_TABLES.juiced;
+    const shifted = shiftLuxuryCaps(caps, { increase: ['POW'], decrease: [] });
+    const pow = shifted.find((row) => row.group === 'hitters' && row.stat === 'POW');
+    const sourcePow = caps.find((row) => row.group === 'hitters' && row.stat === 'POW');
+    expect(shifted).not.toBe(caps);
+    expect(pow).not.toBe(sourcePow);
+    expect(pow?.cap).toBeCloseTo((sourcePow?.cap ?? 0) * 1.02, 10);
+
+    const bullpenJnk = caps.find((row) => row.group === 'bullpen' && row.stat === 'JNK');
+    const clamped = shiftLuxuryCaps([{ ...bullpenJnk!, cap: 100 }], { increase: [], decrease: ['JNK', 'Junk Ballers'] });
+    expect(clamped[0].cap).toBe(0);
+  });
+
+  test('luxuryTax matches §5.3 formula for hitter overages and advisory/off charge semantics', () => {
+    const roster = Array.from({ length: 8 }, (_, index) => hitter(`h${index}`, { POW: 95, CON: 90, SPD: 85, FLD: 84, ARM: 83 }));
+    const caps = LUXURY_CAP_TABLES.juiced.filter((row) => row.group === 'hitters');
+    const actual = luxuryTax(roster, caps, 'taxed');
+    const expected = expectedTax(roster, caps);
+
+    expect(actual.wouldBeTax).toBeCloseTo(expected.wouldBeTax, 8);
+    expect(actual.charged).toBeCloseTo(expected.charged, 8);
+    expect(actual.binding).toEqual(expected.binding);
+    expect(luxuryTax(roster, caps, 'advisory').charged).toBe(0);
+    expect(luxuryTax(roster, caps, 'advisory').wouldBeTax).toBeGreaterThan(0);
+    expect(luxuryTax(roster, caps, 'off').charged).toBe(0);
+    expect(luxuryTax(roster, caps, 'off').wouldBeTax).toBeGreaterThan(0);
+  });
+
+  test('luxuryTax matches §5.3 formula for pitcher batting and rotation concentration rows', () => {
+    const roster = [
+      pitcher('sp1', 'SP', { VEL: 95, JNK: 85, ACC: 80 }, { POW: 40, CON: 35, SPD: 45, FLD: 80 }),
+      pitcher('sp2', 'SP', { VEL: 92, JNK: 80, ACC: 78 }, { POW: 35, CON: 34, SPD: 42, FLD: 78 }),
+      pitcher('sp3', 'SP', { VEL: 90, JNK: 78, ACC: 76 }, { POW: 33, CON: 32, SPD: 41, FLD: 76 }),
+      pitcher('sp4', 'SP', { VEL: 88, JNK: 76, ACC: 74 }, { POW: 31, CON: 31, SPD: 40, FLD: 74 }),
+    ];
+    const caps = LUXURY_CAP_TABLES.juiced.filter((row) => row.group === 'rotation');
+    const actual = luxuryTax(roster, caps, 'taxed');
+    const expected = expectedTax(roster, caps);
+
+    expect(actual.wouldBeTax).toBeCloseTo(expected.wouldBeTax, 8);
+    expect(actual.binding).toEqual(expected.binding);
+    expect(actual.binding.some((row) => row.group === 'rotation' && row.stat === 'VEL' && row.over > 0)).toBe(true);
+    expect(actual.binding.some((row) => row.group === 'rotation' && row.stat === 'FLD' && row.over > 0)).toBe(true);
+  });
+
+  test('luxuryTax counts SP/RP VEL in both rotation and bullpen binding rows', () => {
+    const roster = [
+      pitcher('hybrid', 'SP/RP', { VEL: 99, JNK: 50, ACC: 50 }),
+      pitcher('sp2', 'SP', { VEL: 96, JNK: 50, ACC: 50 }),
+      pitcher('sp3', 'SP', { VEL: 94, JNK: 50, ACC: 50 }),
+      pitcher('sp4', 'SP', { VEL: 92, JNK: 50, ACC: 50 }),
+      pitcher('rp1', 'RP', { VEL: 98, JNK: 50, ACC: 50 }),
+      pitcher('rp2', 'RP', { VEL: 97, JNK: 50, ACC: 50 }),
+    ];
+    const caps = LUXURY_CAP_TABLES.juiced.filter((row) => row.stat === 'VEL');
+    const actual = luxuryTax(roster, caps, 'taxed');
+
+    const rotationVel = actual.binding.find((row) => row.group === 'rotation' && row.stat === 'VEL');
+    const bullpenVel = actual.binding.find((row) => row.group === 'bullpen' && row.stat === 'VEL');
+    expect(rotationVel?.over).toBeCloseTo((99 + 96 + 94 + 92) - 272.9, 10);
+    expect(bullpenVel?.over).toBeCloseTo((99 + 98 + 97) - 234.1, 10);
+  });
+
+  test('derivePickValueChart sorts descending, preserves length, and reflects steeper juiced-shaped pools', () => {
+    const chart = derivePickValueChart([20, 100, 50, 50, 5]);
+    expect(chart).toEqual([
+      { pick: 1, value: 100 },
+      { pick: 2, value: 50 },
+      { pick: 3, value: 50 },
+      { pick: 4, value: 20 },
+      { pick: 5, value: 5 },
+    ]);
+    expect(chart).toHaveLength(5);
+    for (let i = 1; i < chart.length; i += 1) {
+      expect(chart[i].value).toBeLessThanOrEqual(chart[i - 1].value);
+    }
+
+    const juiced = derivePickValueChart([240, 180, 130, 95, 70]);
+    const nerfed = derivePickValueChart([120, 105, 95, 88, 82]);
+    expect((juiced[0].value - juiced[4].value) / juiced[0].value).toBeGreaterThan((nerfed[0].value - nerfed[4].value) / nerfed[0].value);
+  });
+
+  test('validateTrade applies the §7.3 15% advisory tolerance and favored side', () => {
+    const chart = derivePickValueChart([100, 90, 80, 70, 60]);
+    const balanced = validateTrade([{ pick: 1 }], [{ pick: 2 }], chart);
+    expect(balanced.imbalancePct).toBeCloseTo(0.10, 10);
+    expect(balanced.imbalancePct).toBeLessThanOrEqual(TRADE_TOLERANCE_BAND);
+    expect(balanced).toMatchObject({ balanced: true, favored: 'none', overridable: true });
+
+    const imbalanced = validateTrade([{ pick: 1 }], [{ pick: 4 }], chart);
+    expect(imbalanced.imbalancePct).toBeCloseTo(0.30, 10);
+    expect(imbalanced).toMatchObject({ balanced: false, favored: 'A', overridable: true });
+
+    const sideB = validateTrade([{ pick: 5 }], [{ pick: 2 }], chart);
+    expect(sideB).toMatchObject({ balanced: false, favored: 'B', overridable: true });
+  });
+});

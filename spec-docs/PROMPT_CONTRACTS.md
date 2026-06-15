@@ -6456,3 +6456,212 @@ Builder F1–F4 valid.
 Findings + F1–F4 ratified. BROWSER-PENDING. T7c = built + audited CONFORMS, COMMITTED.
 **T7 STACK COMPLETE (T7a/T7b/T7c).** DEFERRED future ticket logged: payroll-expectation
 baseline → fan-morale consequence (needs a declared-budget design).
+
+
+---
+
+## T8a CONTRACT (2026-06-14) — Mode 1 League Construction Engine (pure core)
+
+**ROUTE:** Codex 5.5 | very high reasoning effort → Opus 4.8 audit (Fable unavailable;
+auditor ≠ builder). Pure engine — no persistence, no UI, BELOW the risk-halt line.
+First ticket of the T8 stack (split per DECISIONS_LOG 2026-06-14; see `T8_SCOPE_MAP.md`).
+
+```
+You are the KBL Tracker BUILDER (Codex 5.5).
+
+GOAL:
+Create the pure, spec-faithful CORE of the Mode 1 League Construction engine —
+src/engines/leagueConstruction.ts — by porting the §6.3 identity composition, §5.3
+luxury tax, §7.3 pick-value chart, and the trade validator from the proven Python
+reference scripts/analyze-pool.py, DECISION-IDENTICAL. Plus add the §12 tunable
+constants this engine consumes. This is T8a ONLY: no persistence, no UI, no pool
+sourcing, no salary relativity, no registerPool body (those are T8b–T8d).
+
+SOURCE OF TRUTH:
+- spec-docs/IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md §5.2, §5.3, §5.4, §6.1, §6.2,
+  §6.3, §7.2, §7.3, §11, §12.
+- Python ORACLE you port (decision-identical): scripts/analyze-pool.py — BANDS/
+  BAND_STATS/MOD_STAT_TO_LUX (L1149-1159), band_scores (L1162-1172), compose_identity
+  (L1175-1214), identity_cap_shift (L1217-1226), roster_tax (L1238-1264).
+- Read-only DATA you CONSUME: src/data/tierParams.ts — TierKey, TIER_CAPS,
+  LUXURY_CAP_TABLES (LuxuryCapRow), CAP_MODIFICATION_FRACTIONS (ModStat), FARM_NERF_SCALES.
+- spec-docs/T8_SCOPE_MAP.md (full T8 context; this is the T8a slice).
+- JK RULING (2026-06-14): identity DECREASES are OPTIONAL — composeIdentity must NOT
+  force decreases; default decrease = [] (empty). Max customizability is the goal.
+
+CONSTRAINTS:
+- CREATE ONLY: src/engines/leagueConstruction.ts
+                src/engines/__tests__/leagueConstruction.test.ts
+                src/engines/__tests__/leagueConstruction.golden.json (if you emit a fixture)
+- EDIT ONLY (add-only, append; do not reorder/modify existing exports):
+    src/data/rosterEngineConstants.ts — append TRADE_TOLERANCE_BAND=0.15,
+    BALANCE_MODE_DEFAULT='taxed', EV_FLATNESS_TOLERANCE=0.10 with §12 doc comments.
+- DO NOT TOUCH: src/data/tierParams.ts (generated, read-only), src/engines/ivEngine.ts,
+  salaryCalculator.ts, effectiveRatings.ts, rosterAnalyzer.ts, scripts/analyze-pool.py,
+  spec-docs/reference/iv_oracle.json, ANY UI (src/src_figma/**), ANY storage/IndexedDB
+  (trackerDb.ts, *Storage.ts), playerDatabase.ts.
+- PURE functions only — NO React, NO IndexedDB/persistence, NO runtime file I/O
+  (engine-discovery/season-simulator compatible, like ivEngine/effectiveRatings).
+- NO registerPool body / NO RegisteredPool persistence / NO Path A salary re-pricing —
+  those are T8b. (You MAY declare boundary TYPES if helpful, but implement nothing
+  that touches storage or salaryCalculator.)
+
+WHAT TO BUILD (src/engines/leagueConstruction.ts):
+TYPES: BalanceMode='taxed'|'advisory'|'off'; Band='Power'|'Contact'|'Speed'|'Defense'|
+'Rotation'|'Bullpen'; BandPriorities=Record<Band,number>; IdentityComposition=
+{increase:string[]; decrease:string[]} (each ≤2, names ∈ CAP_MODIFICATION_FRACTIONS keys);
+TaxResult={charged:number; wouldBeTax:number; binding:{group:string;stat:string;over:number;
+tax:number}[]}; PickValue={pick:number; value:number}; Pick={pick:number}; TradeVerdict=
+{balanced:boolean; imbalancePct:number; favored:'A'|'B'|'none'; overridable:true};
+ConstructionPlayer={id:string; isPitcher:boolean; role?:'SP'|'SP/RP'|'RP'|'CP';
+bat:{POW:number;CON:number;SPD:number;FLD:number;ARM:number}; pit?:{VEL:number;JNK:number;
+ACC:number}}; ConstructionRoster=ConstructionPlayer[].
+
+STRUCTURAL CONSTANTS (module-level in this file; port Python L1149-1159):
+BANDS; BAND_STATS (Power→[POW], Contact→[CON], Speed→[SPD], Defense→[FLD,ARM],
+Rotation→[RVEL,RJNK,RACC], Bullpen→[PVEL,PJNK,PACC]); MOD_STAT_TO_LUX (ModStat→{group,stat}).
+
+FUNCTIONS:
+1. bandScores(...) [internal] — port band_scores. KEY PORTING NOTE: the Python normalizes
+   raw deltas by xbl_caps; but CAP_MODIFICATION_FRACTIONS[name][stat] IS ALREADY the
+   normalized fraction (rawDelta / xblCap). So port composeIdentity/identityCapShift to
+   operate DIRECTLY on CAP_MODIFICATION_FRACTIONS (the normalization is already applied);
+   Σ fractions == Python's net/xbl_caps. You MUST verify this equivalence with the golden
+   fixture, not assume it.
+2. composeIdentity(priorities: BandPriorities): IdentityComposition — port compose_identity:
+   round-robin over priority bands (desc priority, name tiebreak), pick_increase greedy
+   val = Σ_b weight_b·pos_b + Σ_b min(net_b,0); on a val tie, break by RAW-DELTA magnitude DESC
+   then name ASC (NOT fraction magnitude — see TIEBREAK NOTE in FAILURE PROTOCOL); skip '--'
+   and already-taken. Return increase (1–2 names) and decrease=[] (EMPTY per JK ruling — NOT
+   ['--','--']). DECISION-IDENTICAL to Python on the increase selection.
+3. applyIdentitySelection(sel:{increase:string[];decrease:string[]}): IdentityComposition —
+   validate ≤2 each + all names ∈ vocabulary (throw on invalid/over-count); drop '--'. (For
+   the T8c free-edit UI.)
+4. identityCapShift(identity): Record<ModStat,number> — net[st]=Σ_inc fractions[name][st] −
+   Σ_dec fractions[name][st]. Equals Python identity_cap_shift (verify via golden).
+5. shiftLuxuryCaps(caps: LuxuryCapRow[], identity): LuxuryCapRow[] — per row, route via
+   MOD_STAT_TO_LUX (group,stat)→ModStat, shiftedCap = cap × (1 + netFraction), clamp ≥0;
+   return NEW rows (no mutation).
+6. luxuryTax(roster, caps: LuxuryCapRow[], mode): TaxResult — port roster_tax: hitters top-8;
+   rotation = SP+SP/RP top-4; bullpen = RP+CP+SP/RP top-N (SP/RP DUAL membership, §5.3 v1.1.6).
+   Per row: sum top-N base ratings (hitters + rotation/bullpen POW/CON/SPD/FLD from .bat;
+   VEL/JNK/ACC from .pit); over = sum − cap; tax = per100×(over/100)^curve + minAdder when
+   over>0. wouldBeTax = Σ tax; charged = mode==='taxed' ? wouldBeTax : 0 (advisory/off
+   short-circuit the CHARGE, never the COMPUTATION); binding sorted desc by tax.
+7. derivePickValueChart(ivsDesc: number[]): PickValue[] — accept pool player IVs; sort desc;
+   value(pickN)=sorted[n-1]; pick 1..length; monotonic non-increasing. (Pool-type-agnostic so
+   T8b registerPool passes pool.players' IVs.)
+8. validateTrade(sideA: Pick[], sideB: Pick[], chart: PickValue[]): TradeVerdict — sumX =
+   Σ chart[pick-1].value; imbalancePct = |sumA−sumB| / max(sumA,sumB,ε); balanced =
+   imbalancePct ≤ TRADE_TOLERANCE_BAND; favored = larger side ('none' if balanced);
+   overridable:true.
+
+TESTS (src/engines/__tests__/leagueConstruction.test.ts) — ORACLE-VALIDATED, exhaustive:
+- composeIdentity: golden fixture of ≥8 BandPriorities vectors → expected increase[]
+  (DERIVE expected values from the Python reference compose_identity for those exact
+  vectors; in a comment, document HOW each golden was obtained). Assert TS == golden +
+  structural (≤2 increases, all ∈ vocabulary, decrease===[]).
+- identityCapShift: ≥4 identities → assert net == direct Σinc−Σdec of CAP_MODIFICATION_
+  FRACTIONS (computed in-test from tierParams) AND == Python identity_cap_shift (golden).
+- luxuryTax: ≥3 hand-constructed rosters vs LUXURY_CAP_TABLES.juiced → charged/wouldBeTax
+  match the §5.3 formula computed in-test; advisory/off → charged===0 but wouldBeTax>0 when
+  over; an SP/RP player's VEL counts in BOTH a rotation and a bullpen binding row.
+- derivePickValueChart: monotonic non-increasing; length === input; a juiced-shaped IV list
+  steeper than a nerfed-shaped one.
+- validateTrade: balanced (≤15%) and imbalanced (>15%); favored correct; overridable true.
+- shiftLuxuryCaps: shiftedCap === cap×(1+net) for a known identity; clamp ≥0 on big decrease.
+
+VERIFICATION (run; paste ACTUAL outputs):
+- NODE_ENV= npx tsc --noEmit  → 0 errors
+- NODE_ENV= npm run build  → exit 0
+- NODE_ENV= npx vitest run src/engines/__tests__/leagueConstruction.test.ts  → all pass
+- NODE_ENV= npx vitest run  → full suite; ONLY the 3 characterized fails (wpaRuntimeBoundary,
+  franchiseNarrativeEventEligibility, franchiseManualSmokeFixture order-flake); NO new RED;
+  report pass/fail counts (baseline 7,171/386 → expect 7,171 + new tests).
+- git diff --stat MUST show NO change to: src/data/tierParams.ts, src/engines/ivEngine.ts,
+  src/engines/salaryCalculator.ts, spec-docs/reference/iv_oracle.json.
+- Node at ~/.nvm/versions/node/v20.20.0/bin (login shell exports NODE_ENV=production — the
+  NODE_ENV= prefix is MANDATORY or vitest emits ~1,800 false failures).
+
+FORMAT (your report):
+1. Files changed — EVERY git status path (incl. trivial), with the total changed-path count.
+2. Changes per file, citing the spec/Python line ported from.
+3. Verification — paste actual tsc/build/vitest outputs + full-suite counts.
+4. composeIdentity golden derivation method (exactly how expected values were obtained).
+5. "T8a complete" OR "BLOCKED: <exact reason>".
+
+FAILURE PROTOCOL:
+- Any change requiring a DO-NOT-TOUCH edit → STOP and report.
+- If the band_scores/identity_cap_shift port is NOT decision-identical to the Python on any
+  test vector → STOP and report the divergence; do NOT silently "fix" the Python or fudge a
+  golden value.
+- composeIdentity ties → follow the Python tiebreak (RAW-DELTA magnitude DESC, then name
+  ASC) EXACTLY — see TIEBREAK NOTE.
+- Never summarize or batch changes.
+
+TIEBREAK NOTE (resolves the normalization subtlety Codex flagged 2026-06-14): Python's
+primary key `val` IS fraction-based (band_scores normalizes by xbl_caps, == CAP_MODIFICATION_
+FRACTIONS), so val ports directly with no change. BUT Python's tiebreak magnitude(name) =
+Σ|RAW delta| uses RAW workbook deltas, NOT fractions — and fraction-magnitude orders
+DIFFERENTLY (stats have different xblCaps). Reconstruct raw for the tiebreak only:
+rawDelta[st] = fraction[st] × MOD_STAT_XBL_CAP[st], where
+MOD_STAT_XBL_CAP = {POW:500, CON:545, SPD:550, FLD:585, ARM:565, RVEL:100, RJNK:260,
+RACC:260, PVEL:65, PJNK:150, PACC:165} (spec §5.3 workbook 'Luxury Cap' A:F caps).
+magnitude = Σ|rawDelta|. Confirm decision-identical to the Python on EVERY golden vector
+including ties; if any vector diverges, STOP and report (do not fudge a golden).
+
+Use very high reasoning effort. Think step-by-step. Do NOT commit — leave changes in the
+working tree for audit.
+```
+
+### T8a-AUDIT + EXECUTION RECORD (2026-06-14)
+
+**ROUTE actual:** Codex 5.5 | high (codex knob max) BUILT → Opus 4.8 (Captain) AUDIT
+(Fable unavailable; auditor ≠ builder). Pure engine, below the risk-halt line.
+
+**Pre-build contract fix (triangle working):** the first launch was paused (JK battery)
+and BEFORE writing any code Codex flagged a genuine contract flaw — the §6.3 tiebreak
+`magnitude()` uses RAW workbook deltas, but the contract had said normalized fractions
+(they order differently). Captain fixed the contract (reconstruct raw via `MOD_STAT_XBL_CAP`,
+decision-identical to Python) and relaunched. The fix is validated below.
+
+**Builder result (Codex 5.5):** NEW `src/engines/leagueConstruction.ts` (pure, no React/IDB):
+types + BANDS/BAND_STATS/MOD_STAT_TO_LUX + bandScores/rawDeltaMagnitude/pickIncrease +
+composeIdentity (`decrease:[]` per JK) + applyIdentitySelection + identityCapShift +
+shiftLuxuryCaps + luxuryTax (SP/RP dual membership; advisory/off short-circuit) +
+derivePickValueChart + validateTrade. NEW test (9 cases, oracle-backed).
+`rosterEngineConstants.ts` add-only: TRADE_TOLERANCE_BAND=0.15, BALANCE_MODE_DEFAULT='taxed',
+EV_FLATNESS_TOLERANCE=0.10. 3 files.
+
+**AUDIT VERDICT: CONFORMS.** Independent re-verification (Opus, not trusting the report):
+- **INDEPENDENT ORACLE CROSS-CHECK:** ran the ACTUAL `scripts/analyze-pool.py` `compose_identity`
+  against the real workbook for all 10 golden priority vectors → **10/10 MATCH** the TS goldens.
+  The workbook `xbl_caps` (POW 500 / CON 545 / SPD 550 / FLD 585 / ARM 565 / RVEL 100 / RJNK 260
+  / RACC 260 / PVEL 65 / PJNK 150 / PACC 165) EXACTLY match the engine's hardcoded
+  `MOD_STAT_XBL_CAP` → the tiebreak fix is correct AND the goldens are genuine (not self-fulfilling).
+- tsc --noEmit: 0. build: exit 0 (dist generated). new test: 9/9 (independent run).
+- full suite: 7,177 pass / 3 fail / 387 files — the 3 fails are EXACTLY the characterized set
+  (wpaRuntimeBoundary, franchiseManualSmokeFixture, franchiseNarrativeEventEligibility); NO new
+  RED. 7,180 = 7,171 baseline + 9 new.
+- BYTE-UNCHANGED confirmed (git diff empty): tierParams.ts, ivEngine.ts, salaryCalculator.ts,
+  iv_oracle.json.
+- CODE review: bandScores correctly uses the already-normalized fractions (== Python pos/net,
+  since fraction = delta/xblCap); pickIncrease replicates Python's (val, magnitude)-lexicographic +
+  name tiebreak; identityCapShift == Python (Σ fractions = net/xbl_caps); luxuryTax == roster_tax
+  (SP/RP dual rotation+bullpen, advisory/off short-circuit CHARGE not COMPUTATION). JK ruling
+  honored: composeIdentity `decrease:[]`; applyIdentitySelection enables the T8c free-edit stack.
+
+**Findings (LOW, non-blocking):**
+1. luxuryTax does not check a per-row `enabled` flag (Python roster_tax skips disabled rows).
+   NON-ISSUE for v1: DISABLED_LUXURY_ROWS is empty post-DB1 and LuxuryCapRow has no `enabled`
+   field — all rows active. If a future ticket disables rows, add the guard.
+2. The magnitude-tiebreak branch is correct-by-construction (xbl_caps verified == workbook) but
+   may not be forced by a val-tie in the 10 goldens — correctness rests on the xbl_caps match, not
+   only golden coverage. Optional forced-tie test later.
+3. BALANCE_MODE_DEFAULT + EV_FLATNESS_TOLERANCE added but not yet consumed (forward-looking §12
+   constants for T8b / EV-flatness). TRADE_TOLERANCE_BAND IS consumed (validateTrade). Acceptable —
+   authoritative §12 values the contract requested.
+
+**Status:** T8a = built + audited CONFORMS. Pure engine, NO user-visible surface (no browser-verify
+needed). COMMITTED. NEXT: T8b (tier/luxuryTax/balanceMode wiring + RegisteredPool persistence
+kbl-league-builder v5→6 + Path A IV re-pricing).

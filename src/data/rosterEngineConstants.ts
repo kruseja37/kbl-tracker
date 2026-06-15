@@ -242,3 +242,12 @@ export const CALIBRATE = {
   lineupSnapshotIvDisplayDivisor: 10_000,
   lineupSnapshotWpaDivisor: 10_000_000,
 } as const;
+
+/** §12/§7.3 tradeToleranceBand: pick-trade imbalance above 15% is advisory-flagged. */
+export const TRADE_TOLERANCE_BAND = 0.15;
+
+/** §12/§5.4 balanceMode default for Mode 1 league construction. */
+export const BALANCE_MODE_DEFAULT = 'taxed' as const;
+
+/** §12/§5.3 T3 acceptance criterion: flag identity EV drift above 10%. */
+export const EV_FLATNESS_TOLERANCE = 0.10;

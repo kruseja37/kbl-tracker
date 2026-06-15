@@ -15,24 +15,26 @@
 - **Phase:** T-stack execution. Sequencing ruling F-141 holds: the full T-stack
   runs to completion as pure execution, THEN D0 cut line → D1–D8 → F-138 →
   flag flip → iPad playtest exit gate.
-- **Last completed:** **T7c — Season Salary Ledger (§8.4)** LIVE — **the T7 stack
-  (T7a/T7b/T7c) is COMPLETE.** Codex 5.5 | very high BUILT → Opus 4.8 audit
-  **CONFORMS**. New season-scoped IndexedDB store (trackerDb v14→15, guarded) +
-  LedgerEntry state machine (active/deadMoney/unrostered; capCharge) + the call-up/
-  demotion producer hooked into the existing executors (call-up→active + rookieScale
-  flip; demotion→deadMoney; re-call-up no stacking, no double-discount) +
-  `ledgerCapCharge` (§11) + DEAD_MONEY_RATE; ROOKIE_SCALE_FACTOR single-sourced.
-  **DEFERRED (R-T7c-SCOPE):** payroll-expectation baseline + capCharge→fan-morale +
-  declared-budget + execute-from-rec. Independently re-verified: tsc 0 / build 0 /
-  suite 7,171 (3 characterized fails) / golden + salaryCalculator BYTE-UNCHANGED /
-  **migration-safety PROVEN** (all 31 prior stores preserved at v15). BROWSER-PENDING.
-  **COMMITTED.** (T6, T7a, T7b — all CONFORMS — COMMITTED.)
-- **NEXT TASK: T8 — Mode 1 Suite (§6 + §7).** Pool registration, snake draft, pick
-  chart + trade validator, identity composition UI, scout-obscured farm pricing,
-  luxuryTax + balanceMode wiring. ROUTE Codex 5.5 | very high → Opus audit
-  (persistence: pool/league state — audit NON-NEGOTIABLE). BIG ticket — Captain will
-  map it + surface its design decisions (likely a split, like T7). Then **T9**
-  (GameTracker sub-rec rebuild on shared engines), **T10** (Lineup Delta WPA), → D0.
+- **Last completed:** **T8a — League Construction Engine (pure core)** — Codex 5.5 BUILT →
+  Opus 4.8 audit **CONFORMS**. NEW pure `src/engines/leagueConstruction.ts` (composeIdentity /
+  applyIdentitySelection / identityCapShift / shiftLuxuryCaps / luxuryTax / derivePickValueChart /
+  validateTrade) ported decision-identical from `analyze-pool.py`; `decrease:[]` per JK (decreases
+  OPTIONAL); SP/RP dual rotation+bullpen membership; advisory/off short-circuit the CHARGE not the
+  COMPUTATION. + 3 §12 constants (rosterEngineConstants add-only). Pre-build, Codex caught a real
+  contract flaw (tiebreak magnitude must use RAW deltas, not fractions); Captain fixed it
+  (reconstruct via `MOD_STAT_XBL_CAP`) and re-verified. Independently re-verified: tsc 0 / build 0 /
+  9 new tests pass / suite 7,180 (only the 3 characterized fails) / tierParams+ivEngine+
+  salaryCalculator+iv_oracle BYTE-UNCHANGED / **independent oracle cross-check: 10/10 composeIdentity
+  goldens match the real Python `analyze-pool.py`**. NO user-visible surface (no browser-verify).
+  COMMITTED. (T6/T7a/T7b/T7c — all CONFORMS — COMMITTED; T7 stack complete.)
+- **NEXT TASK: T8b — tier/economy wiring + RegisteredPool persistence + Path A IV pricing.**
+  Wire tier-select + `balanceMode` + `luxuryTax` into the League Builder; build `registerPool` +
+  persist `RegisteredPool` (extend `kbl-league-builder` v5→v6 — migration audit NON-NEGOTIABLE);
+  cut Path A pool pricing from the old salaryCalculator to `computeIV`. Consumes the T8a engine.
+  ROUTE Codex 5.5 | very high → Opus audit (persistence). Then **T8c** identity UI
+  (point-allocation; decreases OPTIONAL per JK) → **T8d** snake draft + pick chart + trade
+  validator + solvency + potency + farm scout-obscured IV. Pool scope = **STOCK ONLY** (custom →
+  T12). Then **T9** → **T10** → D0. Full T8 map + reuse contracts: `T8_SCOPE_MAP.md`.
 - **STANDING MODE (JK 2026-06-14):** per ticket = build → independent ENGINEERING
   audit → auto-commit verified-complete (browser-pending) → proceed. Captain
   surfaces only the audit verdict, the browser backlog, and genuine scope/design/
@@ -45,7 +47,7 @@
 
 ## SUITE BASELINE
 
-7,171 tests / 386 files (T7c added 7 tests / 1 file; T7b +4; T7a +8 / +1 file;
+7,180 tests / 387 files (T8a added 9 tests / 1 file; T7c +7 / +1; T7b +4; T7a +8 / +1;
 T6 +12; prior baseline 7,140 / 383). Characterized set (a new RED outside
 this set is a real regression): fixed failures wpaRuntimeBoundary +
 franchiseNarrativeEventEligibility; conditional-solo order-flakes

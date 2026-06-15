@@ -7,6 +7,49 @@
 
 ## June 2026
 
+### 2026-06-14: T8 (Mode 1 League Construction Suite) — scope rulings + split (JK)
+
+**Context**: Opening the T8 ticket (IV spec §5/§6/§7 — pool registration, snake
+draft, pick chart + trade validator, identity composition UI, scout-obscured farm
+pricing, luxuryTax + balanceMode). Captain mapped scope across 6 surfaces
+(`T8_SCOPE_MAP.md`) and surfaced 4 genuine decisions; JK ruled.
+
+**Decisions (JK, 2026-06-14):**
+1. **Split** — T8 ships as **four engine-first sub-tickets** (mirrors T6→T7):
+   **T8a** pure `leagueConstruction.ts` engine + §12 constants → **T8b** tier/luxuryTax/
+   balanceMode wiring + RegisteredPool persistence (`kbl-league-builder` v5→v6) + Path A
+   IV re-pricing → **T8c** identity-composition UI → **T8d** snake draft (Path B) + pick
+   chart + trade validator + solvency signals + potency overlay + farm scout-obscured IV.
+2. **Pool scope** — T8 supports the **stock 440-pool only**; in-app custom/non-stock
+   tier derivation is **deferred to T12** (Pool Recalibration Tool). T8 consumes the
+   precomputed `tierParams.ts` (Juiced/Standard/Nerfed); spec §13 favors this.
+3. **Identity composition — decreases are OPTIONAL, maximize customizability.** JK:
+   "allow all-increase but also allow decreases … less requirements, better to allow
+   the user to customize league texture." So `composeIdentity` does NOT force 2
+   decreases (the §6.3 reference impl already defaults decreases to none); the T8c UI
+   lets the creator freely edit the increase/decrease stack within the §6.2 envelope
+   (≤2 increase + ≤2 decrease). The luxury tax + tier cap remain the balancers.
+   Supersedes the open ID-9 design flag in `analyze-pool.py:1185-1188`.
+4. **Identity band-priority input** — **point-allocation** (the spec'd input), not
+   rank-order.
+
+**Rationale**: Engine-first isolates the highest-correctness-risk surface (a port of
+the spec-faithful Python oracle `analyze-pool.py`) for hard audit before any consumer
+wires onto it; the data layer (`tierParams.ts`) already exists and is the first
+production consumer here. Stock-only keeps T8 bounded and avoids duplicating T12.
+Optional decreases makes identity a creative texture tool rather than a forced
+trade-off, per JK's product taste.
+
+**Trade-offs**: Optional decreases means a rational creator may take pure-upside
+identities; the luxury concentration tax (not the identity stack) is then the sole
+balancer of those gains — acceptable and intended. Custom-pool leagues are not
+tier-calibrated until T12.
+
+**Routing**: each sub-ticket Codex 5.5 | very high → Opus 4.8 audit (Fable unavailable;
+auditor ≠ builder). T8b/T8c/T8d persistence/UI audits non-negotiable per §13.
+
+---
+
 ### 2026-06-14: AI-team setup reconciliation (Captain pass over Codex's setup)
 
 **Context**: Codex built the shared operating setup (entry below). A Captain
