@@ -605,3 +605,13 @@ justification; no-oracle-leak N/A for T9 (active known 22-man roster).
 **Trade-offs:** kblIV for a pitcher-change compares two pitchers' arsenal-dominated kblIV — a coarse but
 consistent in-game signal; refine via T10 if playtest shows need. Reimplementing the scorer duplicates ~15
 lines of clamp+assemble mapping (audit-diffed) rather than refactoring T7 — chosen to keep T9a isolated.
+
+**T9b firing-gate addendum (JK 2026-06-14):** in-game sub recs fire on a **PURE IV-delta gate** — emit
+whenever the best sub's per-type IV-delta > `SUB_REC_THRESHOLD[type]`, with NO separate situational
+pre-filter. The rebuild REMOVES the placeholder's situational firing heuristics entirely (leverage floor,
+batting-order 7-9 pinch-hit gate, pitcher meltdown triggers: consecutive baserunners / runs-allowed-in-
+inning). Rationale (JK): fatigue is baked into the tiring player's effectiveRatings and leverage amplifies
+via mojo/pressure, so the IV-delta self-limits — spec-literal "replace, do not patch." Accepted tradeoff: a
+situational meltdown with no ratings drop (e.g. a pitcher walking the bases loaded) won't trigger a rec, and
+recs may surface in low-leverage spots; revisit in playtest if the firing cadence feels off. (Captain had
+recommended a situational-gate + IV-delta hybrid; JK chose the pure gate.)
