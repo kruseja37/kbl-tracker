@@ -6665,3 +6665,103 @@ EV_FLATNESS_TOLERANCE=0.10. 3 files.
 **Status:** T8a = built + audited CONFORMS. Pure engine, NO user-visible surface (no browser-verify
 needed). COMMITTED. NEXT: T8b (tier/luxuryTax/balanceMode wiring + RegisteredPool persistence
 kbl-league-builder v5→6 + Path A IV re-pricing).
+
+
+---
+
+## T8b CONTRACT (2026-06-14) — Tier/balanceMode wiring + Pool Registration + persistence
+
+**ROUTE:** Codex 5.5 | very high reasoning effort → Opus 4.8 audit (Fable unavailable;
+auditor ≠ builder). PERSISTENCE ticket (kbl-league-builder v5→v6) — ABOVE the risk-halt line:
+Captain surfaces the migration-safety proof + verdict to JK BEFORE commit (no silent auto-commit);
+batched browser-verify item (tier/balanceMode selectors + register-pool persist/reload).
+JK rulings: additive migration (existing leagues untouched); balanceMode in League Builder only
+(wizard inherits). SCOPE CORRECTION: Path A salary is already IV-based (T5/D15) — NOT rewritten here.
+
+```
+[identical to Temp/t8b-contract.md — the builder prompt fed to Codex this session]
+GOAL: T8b — add the pure registerPool assembler to the T8a engine, persist a RegisteredPool per
+league (ADDITIVE kbl-league-builder v5→v6), and surface tier + balanceMode selectors in the League
+Builder. Consumes T8a + the existing IV-based salary stack. Path A salary is already IV-based
+(salaryCalculator.ts:739-776) — do NOT rewrite it.
+
+ENGINE (add to leagueConstruction.ts, do not edit T8a exports): PoolPlayerPriced{id,iv,salary};
+PoolConfig{leagueId,tier,balanceMode,totalSlots,players}; RegisteredPool{...,tierCap=
+TIER_CAPS[tier].tierCap, luxuryCaps=LUXURY_CAP_TABLES[tier], pickValueChart=derivePickValueChart(
+players.iv), poolSurplusWarning = players.length > totalSlots*POOL_SURPLUS_MAX}; registerPool(cfg)
+PURE (no IDB/React/Date/random). Add POOL_SURPLUS_MAX=1.2 to rosterEngineConstants (add-only).
+
+PERSISTENCE (leagueBuilderStorage.ts, ADDITIVE v5→6): DB_VERSION 5→6; LeagueTemplate += optional
+tier?/balanceMode?; STORES += REGISTERED_POOLS:'registeredPools' created via if(!contains) keyPath
+'leagueId' (no oldVersion gate); saveRegisteredPool/getRegisteredPool/deleteRegisteredPool; NO
+rewrite of existing records; do NOT touch trackerDb.
+
+UI (LeagueBuilderLeagues.tsx + useLeagueBuilderData): tier + balanceMode <select>s on the league
+create/edit form (mirror defaultRulesPreset select, default balanceMode='taxed'); registerLeaguePool(
+leagueId) sources the league's stock players, iv=calculateIvBaseSalary(player).ivBase, reuse stored
+salary, totalSlots=teamIds.length*22, registerPool→saveRegisteredPool; "Register Pool" button +
+minimal confirmation (tier/tierCap/count/surplus warning). Rich pool VIEW deferred to T8d. Do NOT
+touch FranchiseSetup.tsx (wizard inherits).
+
+TESTS: registerPool unit (tierCap/luxuryCaps per tier, chart sorted desc, surplus boundary, purity);
+MIGRATION-SAFETY (NON-NEGOTIABLE, fake-indexeddb, mirror T7c pattern): open at v6 → all 8 prior stores
++ registeredPools; a v5 LeagueTemplate without tier/balanceMode loads intact (defaults); save/get/
+delete RegisteredPool round-trips.
+
+DO NOT TOUCH: tierParams.ts, ivEngine.ts, salaryCalculator.ts, iv_oracle.json, trackerDb.ts, the
+existing T8a functions, FranchiseSetup.tsx. Migration additive (no rewrite). registerPool pure.
+
+VERIFY: tsc 0 / build 0 / leagueConstruction test / migration test / full suite (only the 3
+characterized fails, no new RED; baseline 7,180/387) / git diff --stat shows none of the do-not-touch
+files. NODE_ENV= prefix; node at ~/.nvm/versions/node/v20.20.0/bin.
+
+REPORT: every changed path+count; per-file changes; actual tsc/build/vitest output + migration result;
+the additive v5→6 approach (prove additive); "T8b complete" OR "BLOCKED: <reason>".
+FAILURE PROTOCOL: DO-NOT-TOUCH edit needed / additive migration impossible without rewrite / pool
+source ambiguous → STOP and report. Never summarize or batch.
+
+Use very high reasoning effort. Think step-by-step. Do NOT commit — leave changes in the working tree for audit.
+```
+
+### T8b-AUDIT + EXECUTION RECORD (2026-06-14)
+
+**ROUTE actual:** Codex 5.5 | high (codex knob max) BUILT → Opus 4.8 (Captain) AUDIT
+(Fable unavailable; auditor ≠ builder). PERSISTENCE ticket — JK APPROVED the commit after the
+migration-safety surface (risk-gated; NOT auto-committed, per the 2026-06-14 risk ruling).
+
+**Builder result (Codex 5.5):** `registerPool` (pure assembler) + Pool types added to
+leagueConstruction.ts (T8a exports untouched); `POOL_SURPLUS_MAX` add-only; leagueBuilderStorage
+v5→v6 ADDITIVE (`registeredPools` store keyPath leagueId via `if(!contains)`, no oldVersion gate;
+LeagueTemplate += optional tier/balanceMode; `normalizeLeagueTemplateRecord` read-time defaults;
+save/get/deleteRegisteredPool with syncEngine mirroring the existing per-store pattern); UI
+tier+balanceMode selects + Register Pool button (LeagueBuilderLeagues) + `registerLeaguePool` in
+useLeagueBuilderData (iv=calculateIvBaseSalary.ivBase, reuse stored salary, totalSlots=teamIds×22);
+NEW v6 migration test. NECESSARY collateral (a new store's ripple): backupRestore schema (v6 +
+registeredPools optional + includedStores), syncConfig SYNC_REGISTRY (registeredPools:'leagueId'),
+editorialSchema test (version 5→6 + store assertion). 10 files (9 mod + 1 new).
+
+**AUDIT VERDICT: CONFORMS.** Independent re-verification (Opus):
+- tsc 0; build 0; new tests 17/17 (leagueConstruction 14 + migration 3); full suite 7,185 pass /
+  3 fail / 388 files — the 3 fails are EXACTLY the characterized set; NO new RED (7,188 = 7,180 + 8).
+- **MIGRATION SAFETY PROVEN (the risk gate):** the v6 test seeds a REAL v5 DB (8 stores + a
+  tier/balanceMode-less LeagueTemplate), upgrades, asserts all 9 stores present (none dropped), the
+  template loads with read-time defaults (tier 'juiced' / balanceMode 'taxed'), AND — reading the
+  RAW on-disk record — that tier/balanceMode are STILL undefined in storage (NO rewrite; defaults
+  are read-time only). save/get/delete RegisteredPool round-trips.
+- BYTE-UNCHANGED: tierParams, ivEngine, salaryCalculator, iv_oracle, trackerDb, FranchiseSetup.
+- registerPool PURE (no IDB/React/Date/random); tierCap=TIER_CAPS[tier], luxuryCaps=
+  LUXURY_CAP_TABLES[tier], pickValueChart=derivePickValueChart(players.iv), surplus boundary correct.
+- 3 OUT-OF-CONTRACT-LIST files AUDITED + JUSTIFIED: backupRestore (new store must be in the backup
+  schema or restore drops it), syncConfig (registeredPools must be in SYNC_REGISTRY for the
+  syncEngine.upsert calls, which mirror the pre-existing leagueTemplates/globalTeams/globalPlayers
+  pattern), editorialSchema test (asserts db.version, forced 5→6). Necessary + minimal; disclosed.
+- toSalaryPlayer mapping correct; iv depends only on ratings/role/traits/arsenal/armSlot
+  (fame/personality inert — salary is reused from storage, not recomputed).
+
+**Findings (LOW, non-blocking):** registerPool returns `LUXURY_CAP_TABLES[tier]` by reference
+(shared array) — harmless (persisted via structured clone; downstream `shiftLuxuryCaps` copies).
+
+**Status:** T8b = built + audited CONFORMS; JK APPROVED the persistence change. COMMITTED.
+BROWSER-PENDING (batched): tier/balanceMode selectors + Register-Pool persist/reload. NEXT: T8c
+(Identity Composition UI — point-allocation; decreases optional per JK; wires to T8a
+composeIdentity/applyIdentitySelection).

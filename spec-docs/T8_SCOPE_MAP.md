@@ -153,9 +153,15 @@ Engine-first, mirroring the T6→T7 pattern (pure engine before consumers):
   `src/engines/leagueConstruction.ts` (all 5 fns) by porting analyze-pool.py
   decision-identical; add the §12 constants. Exhaustively unit-tested vs the Python oracle +
   `tierParams` data. NO UI, NO new persistence shape. De-orphans `tierParams.ts`. Foundation.
-- **T8b — Tier/economy wiring + RegisteredPool persistence + Path A IV re-pricing.**
-  tier-select + balanceMode + luxuryTax wired into League Builder; persist RegisteredPool
-  (kbl-league-builder v5→6, migration-audited); cut Path A pool pricing to `computeIV`.
+- **T8b — Tier/economy wiring + RegisteredPool persistence.**
+  tier-select + balanceMode + luxuryTax wired into League Builder; build `registerPool` + persist
+  RegisteredPool (kbl-league-builder v5→v6, ADDITIVE migration per JK — existing leagues untouched);
+  balanceMode in League Builder only, wizard inherits (JK).
+  **SCOPE CORRECTION (verified 2026-06-14):** "Path A IV re-pricing" is LARGELY ALREADY DONE —
+  T5/D15 rebuilt `calculateSalary` on `computeIV().kblIV` (`salaryCalculator.ts:739-776`;
+  `computeInitialSalary→calculateSalary` at `leagueBuilderStorage.ts:1653-1680`). Pool salaries are
+  already IV-based + tier-invariant. T8b is registerPool assembly + persistence + tier/balanceMode UI,
+  NOT a salary rewrite. (Mapping agent E's "priced by the OLD salaryCalculator" was imprecise.)
 - **T8c — Identity Composition UI.** Band input + composed-stack/shifted-cap preview wired
   to T8a `composeIdentity`, persisted per-team. The named "identity composition UI."
 - **T8d — Snake Draft (Path B) + pick chart + trade validator + solvency signals + potency

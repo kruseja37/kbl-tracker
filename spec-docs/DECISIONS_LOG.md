@@ -48,6 +48,21 @@ tier-calibrated until T12.
 **Routing**: each sub-ticket Codex 5.5 | very high → Opus 4.8 audit (Fable unavailable;
 auditor ≠ builder). T8b/T8c/T8d persistence/UI audits non-negotiable per §13.
 
+**T8b rulings + scope refinement (2026-06-14):**
+- (a) **Migration is ADDITIVE-ONLY** (JK): the `kbl-league-builder` v5→v6 upgrade adds
+  `tier`/`balanceMode` (optional, on `LeagueTemplate`) + a `RegisteredPool` store; existing
+  saved leagues are NOT re-priced — re-pricing applies to new construction only. No data rewrite.
+- (b) **balanceMode lives in the League Builder only** (JK); the Franchise Setup Wizard
+  INHERITS it (no wizard control — honors §7.1 "no wizard changes").
+- (c) **SCOPE FINDING (Captain, first-hand verified):** "Path A IV re-pricing" is LARGELY
+  ALREADY DONE. T5/D15 rebuilt `calculateSalary` on `computeIV().kblIV`
+  (`salaryCalculator.ts:739-776`; `leagueBuilderStorage.computeInitialSalary → calculateSalary`
+  at `:1653-1680`). Pool salaries are already IV-based AND tier-invariant (a player's IV never
+  changes with tier; tier only shifts caps + the generated-player nerf). So T8b shrinks to:
+  `registerPool` assembly (IV + tierCap + luxuryCaps + pickValueChart + balanceMode) + additive
+  v5→v6 persistence + tier/balanceMode League-Builder UI — NOT a salary rewrite. The mapping
+  agent's "pool priced by the OLD salaryCalculator" was imprecise; corrected here.
+
 ---
 
 ### 2026-06-14: AI-team setup reconciliation (Captain pass over Codex's setup)

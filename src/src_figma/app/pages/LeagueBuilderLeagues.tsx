@@ -22,6 +22,9 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { useLeagueBuilderData, type LeagueTemplate } from "../../hooks/useLeagueBuilderData";
+import { BALANCE_MODE_DEFAULT } from "../../../data/rosterEngineConstants";
+import type { BalanceMode, RegisteredPool } from "../../../engines/leagueConstruction";
+import type { TierKey } from "../../../data/tierParams";
 
 // ============================================
 // TYPES
@@ -32,6 +35,8 @@ interface LeagueFormData {
   description: string;
   teamIds: string[];
   defaultRulesPreset: string;
+  tier: TierKey;
+  balanceMode: BalanceMode;
   color: string;
 }
 
@@ -40,8 +45,30 @@ const DEFAULT_FORM_DATA: LeagueFormData = {
   description: "",
   teamIds: [],
   defaultRulesPreset: "",
+  tier: "juiced",
+  balanceMode: BALANCE_MODE_DEFAULT,
   color: "#5A8352",
 };
+
+const TIER_OPTIONS: Array<{ value: TierKey; label: string }> = [
+  { value: "juiced", label: "Juiced" },
+  { value: "standard", label: "Standard" },
+  { value: "nerfed", label: "Nerfed" },
+];
+
+const BALANCE_MODE_OPTIONS: Array<{ value: BalanceMode; label: string }> = [
+  { value: "taxed", label: "Taxed" },
+  { value: "advisory", label: "Advisory" },
+  { value: "off", label: "Off" },
+];
+
+function formatTier(value: TierKey | undefined): string {
+  return TIER_OPTIONS.find((option) => option.value === (value ?? "juiced"))?.label ?? "Juiced";
+}
+
+function formatBalanceMode(value: BalanceMode | undefined): string {
+  return BALANCE_MODE_OPTIONS.find((option) => option.value === (value ?? BALANCE_MODE_DEFAULT))?.label ?? "Taxed";
+}
 
 // ============================================
 // MAIN COMPONENT
@@ -59,6 +86,7 @@ export function LeagueBuilderLeagues() {
     updateLeague,
     removeLeague,
     duplicateLeague,
+    registerLeaguePool,
   } = useLeagueBuilderData();
 
   // UI State
@@ -67,6 +95,8 @@ export function LeagueBuilderLeagues() {
   const [formData, setFormData] = useState<LeagueFormData>(DEFAULT_FORM_DATA);
   const [isSaving, setIsSaving] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [registeringPoolId, setRegisteringPoolId] = useState<string | null>(null);
+  const [registeredPoolResult, setRegisteredPoolResult] = useState<RegisteredPool | null>(null);
 
   // Set default rules preset when data loads
   useEffect(() => {
@@ -96,6 +126,8 @@ export function LeagueBuilderLeagues() {
       description: league.description || "",
       teamIds: league.teamIds,
       defaultRulesPreset: league.defaultRulesPreset,
+      tier: league.tier ?? "juiced",
+      balanceMode: league.balanceMode ?? BALANCE_MODE_DEFAULT,
       color: league.color || "#5A8352",
     });
     setIsModalOpen(true);
@@ -119,6 +151,8 @@ export function LeagueBuilderLeagues() {
           description: formData.description.trim() || undefined,
           teamIds: formData.teamIds,
           defaultRulesPreset: formData.defaultRulesPreset,
+          tier: formData.tier,
+          balanceMode: formData.balanceMode,
           color: formData.color,
         });
       } else {
@@ -129,6 +163,8 @@ export function LeagueBuilderLeagues() {
           conferences: [],
           divisions: [],
           defaultRulesPreset: formData.defaultRulesPreset,
+          tier: formData.tier,
+          balanceMode: formData.balanceMode,
           color: formData.color,
         });
       }
@@ -154,6 +190,18 @@ export function LeagueBuilderLeagues() {
       await duplicateLeague(id);
     } catch (err) {
       console.error("Failed to duplicate league:", err);
+    }
+  };
+
+  const handleRegisterPool = async (leagueId: string) => {
+    setRegisteringPoolId(leagueId);
+    try {
+      const pool = await registerLeaguePool(leagueId);
+      setRegisteredPoolResult(pool);
+    } catch (err) {
+      console.error("Failed to register pool:", err);
+    } finally {
+      setRegisteringPoolId(null);
     }
   };
 
@@ -211,6 +259,24 @@ export function LeagueBuilderLeagues() {
           </div>
         )}
 
+        {registeredPoolResult && (
+          <div className="bg-[#4A6844] border-4 border-[#E8E8D8] p-4 mb-6 flex items-start gap-3">
+            <Check className="w-5 h-5 text-[#9DFF7A] mt-0.5" />
+            <div>
+              <div className="font-bold">Pool Registered</div>
+              <div className="text-sm text-[#E8E8D8]/80">
+                {formatTier(registeredPoolResult.tier)} tier · Cap ${registeredPoolResult.tierCap.toLocaleString()} ·{" "}
+                {registeredPoolResult.players.length} players
+              </div>
+              {registeredPoolResult.poolSurplusWarning && (
+                <div className="text-sm text-[#FFD166] mt-1">
+                  Surplus warning: pool is above 120% of roster slots.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Create Button */}
         <div className="mb-6">
           <button
@@ -253,6 +319,8 @@ export function LeagueBuilderLeagues() {
                           <Users className="w-3 h-3" />
                           {league.teamIds.length} team{league.teamIds.length !== 1 ? "s" : ""}
                         </span>
+                        <span>{formatTier(league.tier)}</span>
+                        <span>{formatBalanceMode(league.balanceMode)}</span>
                         <span>
                           Created:{" "}
                           {new Date(league.createdDate).toLocaleDateString()}
@@ -262,6 +330,21 @@ export function LeagueBuilderLeagues() {
                   </div>
 
                   <div className="flex items-center gap-2">
+                    {/* Register Pool */}
+                    <button
+                      onClick={() => handleRegisterPool(league.id)}
+                      disabled={registeringPoolId === league.id}
+                      className="px-3 py-2 bg-[#5599FF] hover:bg-[#3366FF] border-[3px] border-[#E8E8D8]/70 transition disabled:opacity-60 flex items-center gap-2"
+                      title="Register pool"
+                    >
+                      {registeringPoolId === league.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Database className="w-4 h-4" />
+                      )}
+                      <span className="text-xs font-bold">Register Pool</span>
+                    </button>
+
                     {/* Edit */}
                     <button
                       onClick={() => openEditModal(league)}
@@ -396,6 +479,42 @@ export function LeagueBuilderLeagues() {
                   {rulesPresets.map((preset) => (
                     <option key={preset.id} value={preset.id}>
                       {preset.name} {preset.isDefault ? "(Default)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* League Tier */}
+              <div>
+                <label className="block text-sm font-bold mb-2">League Tier</label>
+                <select
+                  value={formData.tier}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, tier: e.target.value as TierKey }))
+                  }
+                  className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                >
+                  {TIER_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Balance Mode */}
+              <div>
+                <label className="block text-sm font-bold mb-2">Balance Mode</label>
+                <select
+                  value={formData.balanceMode}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, balanceMode: e.target.value as BalanceMode }))
+                  }
+                  className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                >
+                  {BALANCE_MODE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
                     </option>
                   ))}
                 </select>

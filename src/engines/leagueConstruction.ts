@@ -1,8 +1,11 @@
-import { TRADE_TOLERANCE_BAND } from '../data/rosterEngineConstants';
+import { POOL_SURPLUS_MAX, TRADE_TOLERANCE_BAND } from '../data/rosterEngineConstants';
 import {
   CAP_MODIFICATION_FRACTIONS,
+  LUXURY_CAP_TABLES,
+  TIER_CAPS,
   type LuxuryCapRow,
   type ModStat,
+  type TierKey,
 } from '../data/tierParams';
 
 export type BalanceMode = 'taxed' | 'advisory' | 'off';
@@ -13,6 +16,25 @@ export type TaxBinding = { group: string; stat: string; over: number; tax: numbe
 export type TaxResult = { charged: number; wouldBeTax: number; binding: TaxBinding[] };
 export type PickValue = { pick: number; value: number };
 export type Pick = { pick: number };
+export type PoolPlayerPriced = { id: string; iv: number; salary: number };
+export type PoolConfig = {
+  leagueId: string;
+  tier: TierKey;
+  balanceMode: BalanceMode;
+  totalSlots: number;
+  players: PoolPlayerPriced[];
+};
+export type RegisteredPool = {
+  leagueId: string;
+  tier: TierKey;
+  balanceMode: BalanceMode;
+  players: PoolPlayerPriced[];
+  tierCap: number;
+  luxuryCaps: LuxuryCapRow[];
+  pickValueChart: PickValue[];
+  totalSlots: number;
+  poolSurplusWarning: boolean;
+};
 export type TradeVerdict = {
   balanced: boolean;
   imbalancePct: number;
@@ -237,6 +259,20 @@ export function derivePickValueChart(ivsDesc: number[]): PickValue[] {
   return [...ivsDesc]
     .sort((left, right) => right - left)
     .map((value, index) => ({ pick: index + 1, value }));
+}
+
+export function registerPool(cfg: PoolConfig): RegisteredPool {
+  return {
+    leagueId: cfg.leagueId,
+    tier: cfg.tier,
+    balanceMode: cfg.balanceMode,
+    players: cfg.players,
+    tierCap: TIER_CAPS[cfg.tier].tierCap,
+    luxuryCaps: LUXURY_CAP_TABLES[cfg.tier],
+    pickValueChart: derivePickValueChart(cfg.players.map((player) => player.iv)),
+    totalSlots: cfg.totalSlots,
+    poolSurplusWarning: cfg.players.length > cfg.totalSlots * POOL_SURPLUS_MAX,
+  };
 }
 
 export function validateTrade(sideA: Pick[], sideB: Pick[], chart: PickValue[]): TradeVerdict {

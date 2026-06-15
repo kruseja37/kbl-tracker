@@ -12,6 +12,9 @@
  */
 
 import { generateHometown } from '../data/usCities';
+import { BALANCE_MODE_DEFAULT } from '../data/rosterEngineConstants';
+import type { BalanceMode, RegisteredPool } from '../engines/leagueConstruction';
+import type { TierKey } from '../data/tierParams';
 import type { OptimalLineupSnapshot } from '../types/managerWpa';
 import type { ParkFactors } from '../types/war';
 import type { EraFlavor, FameTier, PlayerArchetype } from '../types/reporter';
@@ -27,7 +30,7 @@ export type { EraFlavor, FameTier, PlayerArchetype } from '../types/reporter';
 export { FAME_TIER_LABEL } from '../types/reporter';
 
 const DB_NAME = 'kbl-league-builder';
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 const STORES = {
   LEAGUE_TEMPLATES: 'leagueTemplates',
@@ -38,6 +41,7 @@ const STORES = {
   TEAM_ROSTERS: 'teamRosters',
   SCOUT_PROFILES: 'scoutProfiles',
   STARTUP_DRAFT_SESSIONS: 'startupDraftSessions',
+  REGISTERED_POOLS: 'registeredPools',
 } as const;
 
 // ============================================
@@ -87,6 +91,8 @@ export interface LeagueTemplate {
   conferences: Conference[];
   divisions: Division[];
   defaultRulesPreset: string;
+  tier?: TierKey;
+  balanceMode?: BalanceMode;
   logoUrl?: string;
   color?: string;
 }
@@ -397,6 +403,7 @@ type LegacyPlayerRecord = Player & {
   rosterStatus?: LegacyRosterStatus;
 };
 
+type LegacyLeagueTemplateRecord = LeagueTemplate;
 type LegacyLeaguePlayerOverrideRecord = LeaguePlayerOverrideRecord;
 
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
@@ -524,6 +531,14 @@ function normalizePlayerRecord(player: LegacyPlayerRecord): Player {
   delete normalized.rosterStatus;
 
   return normalized;
+}
+
+function normalizeLeagueTemplateRecord(template: LegacyLeagueTemplateRecord): LeagueTemplate {
+  return {
+    ...template,
+    tier: template.tier ?? 'juiced',
+    balanceMode: template.balanceMode ?? BALANCE_MODE_DEFAULT,
+  };
 }
 
 function migratePlayerBaseFameTier(store: IDBObjectStore): void {
@@ -698,6 +713,10 @@ export async function initLeagueBuilderDatabase(): Promise<IDBDatabase> {
         store.createIndex('leagueId', 'leagueId', { unique: false });
       }
 
+      if (!db.objectStoreNames.contains(STORES.REGISTERED_POOLS)) {
+        db.createObjectStore(STORES.REGISTERED_POOLS, { keyPath: 'leagueId' });
+      }
+
       // League Player Overrides store
       if (oldVersion < 2 && !db.objectStoreNames.contains(STORES.LEAGUE_PLAYER_OVERRIDES)) {
         const store = db.createObjectStore(STORES.LEAGUE_PLAYER_OVERRIDES, { keyPath: 'id' });
@@ -732,7 +751,7 @@ export async function getAllLeagueTemplates(): Promise<LeagueTemplate[]> {
     const store = tx.objectStore(STORES.LEAGUE_TEMPLATES);
     const request = store.getAll();
 
-    request.onsuccess = () => resolve(request.result || []);
+    request.onsuccess = () => resolve((request.result || []).map((template) => normalizeLeagueTemplateRecord(template)));
     request.onerror = () => reject(request.error);
   });
 }
@@ -745,7 +764,7 @@ export async function getLeagueTemplate(id: string): Promise<LeagueTemplate | nu
     const store = tx.objectStore(STORES.LEAGUE_TEMPLATES);
     const request = store.get(id);
 
-    request.onsuccess = () => resolve(request.result || null);
+    request.onsuccess = () => resolve(request.result ? normalizeLeagueTemplateRecord(request.result) : null);
     request.onerror = () => reject(request.error);
   });
 }
@@ -785,6 +804,52 @@ export async function deleteLeagueTemplate(id: string): Promise<void> {
 
     request.onsuccess = () => {
       if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-league-builder', 'leagueTemplates', id);
+      resolve();
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function saveRegisteredPool(pool: RegisteredPool): Promise<void> {
+  const db = await initLeagueBuilderDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.REGISTERED_POOLS, 'readwrite');
+    const store = tx.objectStore(STORES.REGISTERED_POOLS);
+    const request = store.put(pool);
+
+    request.onerror = () => reject(request.error);
+    tx.oncomplete = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-league-builder', 'registeredPools', pool.leagueId, pool);
+      resolve();
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function getRegisteredPool(leagueId: string): Promise<RegisteredPool | null> {
+  const db = await initLeagueBuilderDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.REGISTERED_POOLS, 'readonly');
+    const store = tx.objectStore(STORES.REGISTERED_POOLS);
+    const request = store.get(leagueId);
+
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function deleteRegisteredPool(leagueId: string): Promise<void> {
+  const db = await initLeagueBuilderDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.REGISTERED_POOLS, 'readwrite');
+    const store = tx.objectStore(STORES.REGISTERED_POOLS);
+    const request = store.delete(leagueId);
+
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-league-builder', 'registeredPools', leagueId);
       resolve();
     };
     request.onerror = () => reject(request.error);

@@ -15,26 +15,27 @@
 - **Phase:** T-stack execution. Sequencing ruling F-141 holds: the full T-stack
   runs to completion as pure execution, THEN D0 cut line → D1–D8 → F-138 →
   flag flip → iPad playtest exit gate.
-- **Last completed:** **T8a — League Construction Engine (pure core)** — Codex 5.5 BUILT →
-  Opus 4.8 audit **CONFORMS**. NEW pure `src/engines/leagueConstruction.ts` (composeIdentity /
-  applyIdentitySelection / identityCapShift / shiftLuxuryCaps / luxuryTax / derivePickValueChart /
-  validateTrade) ported decision-identical from `analyze-pool.py`; `decrease:[]` per JK (decreases
-  OPTIONAL); SP/RP dual rotation+bullpen membership; advisory/off short-circuit the CHARGE not the
-  COMPUTATION. + 3 §12 constants (rosterEngineConstants add-only). Pre-build, Codex caught a real
-  contract flaw (tiebreak magnitude must use RAW deltas, not fractions); Captain fixed it
-  (reconstruct via `MOD_STAT_XBL_CAP`) and re-verified. Independently re-verified: tsc 0 / build 0 /
-  9 new tests pass / suite 7,180 (only the 3 characterized fails) / tierParams+ivEngine+
-  salaryCalculator+iv_oracle BYTE-UNCHANGED / **independent oracle cross-check: 10/10 composeIdentity
-  goldens match the real Python `analyze-pool.py`**. NO user-visible surface (no browser-verify).
-  COMMITTED. (T6/T7a/T7b/T7c — all CONFORMS — COMMITTED; T7 stack complete.)
-- **NEXT TASK: T8b — tier/economy wiring + RegisteredPool persistence + Path A IV pricing.**
-  Wire tier-select + `balanceMode` + `luxuryTax` into the League Builder; build `registerPool` +
-  persist `RegisteredPool` (extend `kbl-league-builder` v5→v6 — migration audit NON-NEGOTIABLE);
-  cut Path A pool pricing from the old salaryCalculator to `computeIV`. Consumes the T8a engine.
-  ROUTE Codex 5.5 | very high → Opus audit (persistence). Then **T8c** identity UI
-  (point-allocation; decreases OPTIONAL per JK) → **T8d** snake draft + pick chart + trade
-  validator + solvency + potency + farm scout-obscured IV. Pool scope = **STOCK ONLY** (custom →
-  T12). Then **T9** → **T10** → D0. Full T8 map + reuse contracts: `T8_SCOPE_MAP.md`.
+- **Last completed:** **T8b — Tier/balanceMode wiring + Pool Registration + persistence** — Codex 5.5
+  BUILT → Opus 4.8 audit **CONFORMS**; **JK APPROVED the persistence change** (risk-gated surface,
+  not auto-committed). Pure `registerPool` added to leagueConstruction.ts (tierCap + luxuryCaps +
+  pickValueChart + balanceMode + surplus warning) + `POOL_SURPLUS_MAX`; **additive `kbl-league-builder`
+  v5→v6** (new `registeredPools` store + optional tier/balanceMode on LeagueTemplate; read-time
+  defaults; ZERO rewrite — proven by a migration test that reads the raw on-disk v5 record); tier +
+  balanceMode selects + Register-Pool button (League Builder); `registerLeaguePool` (iv via
+  calculateIvBaseSalary, salary reused). 3 necessary collateral files (backupRestore/syncConfig/
+  editorialSchema test) audited + justified. **SCOPE NOTE:** Path A salary was ALREADY IV-based (T5)
+  — not rewritten. Independently re-verified: tsc 0 / build 0 / 17 new tests / suite 7,188 (3
+  characterized fails) / tierParams+ivEngine+salaryCalculator+iv_oracle+trackerDb+FranchiseSetup
+  BYTE-UNCHANGED. COMMITTED. BROWSER-PENDING. (T8a + T6/T7a/T7b/T7c — all CONFORMS — COMMITTED.)
+- **NEXT TASK: T8c — Identity Composition UI.** Band point-allocation across the 6 Identity Bands
+  (Power/Contact/Speed/Defense/Rotation/Bullpen) → `composeIdentity` suggests an inc/dec stack;
+  the creator can FREELY edit it within the §6.2 envelope (≤2 inc + ≤2 dec) — **decreases OPTIONAL
+  per JK** ("more customizable, less requirements"). Wires to the T8a engine
+  (`composeIdentity`/`applyIdentitySelection`/`identityCapShift`/`shiftLuxuryCaps`); preview the
+  shifted luxury caps; persist the composed identity **per team** (additive). Host: LeagueBuilderTeams.
+  ROUTE Codex 5.5 | very high → Opus audit (UI + persistence). Then **T8d** snake draft + pick chart
+  + trade validator + solvency + potency + farm scout-obscured IV → **T9** → **T10** → D0.
+  Full T8 map + reuse contracts: `T8_SCOPE_MAP.md`.
 - **STANDING MODE (JK 2026-06-14):** per ticket = build → independent ENGINEERING
   audit → auto-commit verified-complete (browser-pending) → proceed. Captain
   surfaces only the audit verdict, the browser backlog, and genuine scope/design/
@@ -47,8 +48,8 @@
 
 ## SUITE BASELINE
 
-7,180 tests / 387 files (T8a added 9 tests / 1 file; T7c +7 / +1; T7b +4; T7a +8 / +1;
-T6 +12; prior baseline 7,140 / 383). Characterized set (a new RED outside
+7,188 tests / 388 files (T8b added 8 tests / 1 file; T8a +9 / +1; T7c +7 / +1; T7b +4;
+T7a +8 / +1; T6 +12; prior baseline 7,140 / 383). Characterized set (a new RED outside
 this set is a real regression): fixed failures wpaRuntimeBoundary +
 franchiseNarrativeEventEligibility; conditional-solo order-flakes
 franchiseManualSmokeFixture + GameTrackerLaunchState +
@@ -77,6 +78,10 @@ franchiseOffseasonGuards.component (each passes solo).
    replacing age factor); sending down a player applies dead-money capCharge; the
    ledger persists per season and resets at offseason Phase 3 (fresh scope). No
    double-discount; re-call-up doesn't stack.
+6. **T8b** League Builder tier + balanceMode selectors persist on the league (create/edit form);
+   the "Register Pool" button builds + persists a RegisteredPool that survives reload (shows tier,
+   tierCap, player count, surplus warning). An existing pre-T8b league still opens fine (additive
+   migration). Backup/restore + sync still round-trip with the new `registeredPools` store.
 
 ## OPEN PENDING-JK (rolling)
 

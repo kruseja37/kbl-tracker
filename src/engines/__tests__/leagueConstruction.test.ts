@@ -1,11 +1,13 @@
 import { describe, expect, test } from 'vitest';
 
-import { TRADE_TOLERANCE_BAND } from '../../data/rosterEngineConstants';
+import { POOL_SURPLUS_MAX, TRADE_TOLERANCE_BAND } from '../../data/rosterEngineConstants';
 import {
   CAP_MODIFICATION_FRACTIONS,
   LUXURY_CAP_TABLES,
+  TIER_CAPS,
   type LuxuryCapRow,
   type ModStat,
+  type TierKey,
 } from '../../data/tierParams';
 import {
   MOD_STAT_TO_LUX,
@@ -16,6 +18,7 @@ import {
   derivePickValueChart,
   identityCapShift,
   luxuryTax,
+  registerPool,
   shiftLuxuryCaps,
   validateTrade,
 } from '../leagueConstruction';
@@ -262,5 +265,103 @@ describe('leagueConstruction T8a pure engine', () => {
 
     const sideB = validateTrade([{ pick: 5 }], [{ pick: 2 }], chart);
     expect(sideB).toMatchObject({ balanced: false, favored: 'B', overridable: true });
+  });
+});
+
+describe('registerPool T8b assembler', () => {
+  const tiers: TierKey[] = ['juiced', 'standard', 'nerfed'];
+  const players = [
+    { id: 'mid', iv: 50_000, salary: 51_000 },
+    { id: 'top', iv: 90_000, salary: 91_000 },
+    { id: 'low', iv: 10_000, salary: 11_000 },
+  ];
+
+  test('assembles tier caps and luxury caps from tier parameters for each tier', () => {
+    for (const tier of tiers) {
+      const pool = registerPool({
+        leagueId: `league-${tier}`,
+        tier,
+        balanceMode: 'taxed',
+        totalSlots: 22,
+        players,
+      });
+
+      expect(pool.tierCap).toBe(TIER_CAPS[tier].tierCap);
+      expect(pool.luxuryCaps).toBe(LUXURY_CAP_TABLES[tier]);
+      expect(pool.tier).toBe(tier);
+    }
+  });
+
+  test('derives pick value chart from player IV sorted descending', () => {
+    const pool = registerPool({
+      leagueId: 'league-chart',
+      tier: 'juiced',
+      balanceMode: 'taxed',
+      totalSlots: 22,
+      players,
+    });
+
+    expect(pool.pickValueChart).toEqual([
+      { pick: 1, value: 90_000 },
+      { pick: 2, value: 50_000 },
+      { pick: 3, value: 10_000 },
+    ]);
+  });
+
+  test('passes through leagueId, balanceMode, totalSlots, and players', () => {
+    const pool = registerPool({
+      leagueId: 'league-pass',
+      tier: 'standard',
+      balanceMode: 'advisory',
+      totalSlots: 44,
+      players,
+    });
+
+    expect(pool.leagueId).toBe('league-pass');
+    expect(pool.balanceMode).toBe('advisory');
+    expect(pool.totalSlots).toBe(44);
+    expect(pool.players).toBe(players);
+  });
+
+  test('poolSurplusWarning is true iff players exceed total slots times surplus max', () => {
+    const totalSlots = 10;
+    const boundaryCount = Math.floor(totalSlots * POOL_SURPLUS_MAX);
+    const boundaryPlayers = Array.from({ length: boundaryCount }, (_, index) => ({
+      id: `boundary-${index}`,
+      iv: index,
+      salary: index,
+    }));
+    const surplusPlayers = [
+      ...boundaryPlayers,
+      { id: 'surplus', iv: 1, salary: 1 },
+    ];
+
+    expect(registerPool({
+      leagueId: 'league-boundary',
+      tier: 'nerfed',
+      balanceMode: 'off',
+      totalSlots,
+      players: boundaryPlayers,
+    }).poolSurplusWarning).toBe(false);
+
+    expect(registerPool({
+      leagueId: 'league-surplus',
+      tier: 'nerfed',
+      balanceMode: 'off',
+      totalSlots,
+      players: surplusPlayers,
+    }).poolSurplusWarning).toBe(true);
+  });
+
+  test('is pure for the same input', () => {
+    const cfg = {
+      leagueId: 'league-pure',
+      tier: 'juiced' as const,
+      balanceMode: 'taxed' as const,
+      totalSlots: 22,
+      players,
+    };
+
+    expect(registerPool(cfg)).toEqual(registerPool(cfg));
   });
 });

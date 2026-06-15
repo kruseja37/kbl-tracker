@@ -140,9 +140,10 @@ describe('leagueBuilderStorage editorial schema migration', () => {
     await seedLegacyLeagueBuilderDatabase();
 
     const db = await initLeagueBuilderDatabase();
-    expect(db.version).toBe(5);
+    expect(db.version).toBe(6);
     expect(db.objectStoreNames.contains('scoutProfiles')).toBe(true);
     expect(db.objectStoreNames.contains('startupDraftSessions')).toBe(true);
+    expect(db.objectStoreNames.contains('registeredPools')).toBe(true);
 
     const scoutTx = db.transaction(['scoutProfiles', 'startupDraftSessions'], 'readonly');
     const scoutStore = scoutTx.objectStore('scoutProfiles');
