@@ -753,3 +753,44 @@ T10 → D0.
 
 **Browser-batch (pre-D0):** + T8b, T8c (added). **Deferred:** FINDING-148; payroll-expectation →
 fan-morale; T11 auction; T12 pool recalibration.
+
+---
+
+## 2026-06-15 — T8d COMPLETE + T9 COMPLETE (single session)
+
+Two full arcs mapped → split → built → independently audited CONFORMS → committed. Per ticket: Captain
+(Opus 4.8) mapped via decorrelated workflow + authored every contract + AUDITED every diff; Codex 5.5 BUILT;
+auditor ≠ builder. Pure tickets auto-committed; persistence/user-visible tickets JK-approved before commit.
+
+**T8d — snake-draft suite** (`T8d_SCOPE_MAP.md`; 7-agent map; JK ruled 5 forks: budget=tierCap,
+position-agnostic cheapestFillCost, defer R12 + R9, mode-aware solvency → 3-ticket split):
+- **T8d-1 (9f94412)** pure snake + solvency engine (`buildSnakeOrder`, `cheapestFillCost`, `pickMarginalTax`,
+  `assessSolvency` → GREEN/YELLOW/RED/BLOCKED; mode-aware charge-faithful). +SOLVENCY_RED_MARGIN/SEVERE_TAX_FRAC.
+- **T8d-2 (2a5cd95)** MLB snake-draft board + `kbl-league-builder` v6→v7 ADDITIVE (`mlbDraftSessions` store;
+  raw-v6 migration test proves 9 prior stores survive); dual-write (mlbRoster + leagueAssignments) for the
+  22+10 handoff; new route/tile; farm draft untouched. JK approved.
+- **T8d-3 (2738cf5)** board overlays (pick-value chart + advisory trade validator + on-demand cross-team
+  signals) — closes the last 2 T8a engine orphans. JK approved.
+
+**T9 — in-game sub-recommendation rebuild** (`T9_SCOPE_MAP.md`; 4-agent map; decisive finding: ratings+traits
+already in live state — no deep useGameState plumbing; JK ruled 4 forks: IV-of-effectiveRatings delta /
+per-type threshold / new pure engine / 2-ticket split; + pure IV-delta firing gate):
+- **T9a (ef85c80)** pure `subRecommendations.ts` (`recommendSubs`): IV-of-effectiveRatings scoring (same
+  recipe + byte-identical clamp as rosterAnalyzer — audit-diffed; T7 untouched); role-misuse mojo shift;
+  DefensivePlacementRisk fold; per-type `SUB_REC_THRESHOLD`. +additive effectiveRatings exports +
+  `activeTraitNames`.
+- **T9b (93763ee)** GameTracker integration — 3 generators rebuilt onto recommendSubs; rec call-site widened
+  to feed full ratings/traits/mojo/fitness/opposing-player (orphan trace verified); `PRESSURE_LEVERAGE_BANDS`;
+  pure IV-delta gate (situational heuristics removed); output type + watch/UI unchanged. JK approved.
+
+Suite 7,189 → 7,220 / 391; only the 3 characterized fails throughout (wpaRuntimeBoundary unchanged). All
+frozen/engine/handoff surfaces byte-unchanged per ticket; every gate independently re-run by the Captain.
+
+**NEXT:** **T10 — Lineup Delta WPA** (last T-stack ticket; map first — wpaCalculator/winExpectancyTable/
+leverageCalculator + lineup surfaces + wpaRuntimeBoundary allowlist) → **D0** cut line → D1–D8 → F-138 →
+flag flip → iPad playtest.
+
+**Browser-batch (pre-D0):** + T8d-2 (snake board), T8d-3 (overlays), T9 (in-game recs). **Deferred:** R9
+scout-obscured farm IV-range; R12 chemistry potency overlay; FINDING-148; payroll-expectation → fan-morale;
+T11 auction; T12 pool recalibration. **LOW doc cleanups:** vestigial rec-input fields; kbl-gotchas.md stale
+5-level mojo (code is 6-level).
