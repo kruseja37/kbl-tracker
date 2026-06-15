@@ -4557,3 +4557,53 @@ Captain to MAP (WPA/leverage engines: wpaCalculator/winExpectancyTable/leverageC
 decision surfaces + the wpaRuntimeBoundary allowlist) + propose split + surface scope BEFORE drafting. Then
 D0 cut line → D1–D8 → F-138 → flag flip → iPad playtest. DEFERRED fast-follows: R9 scout-obscured farm IV +
 R12 potency overlay.
+
+
+---
+
+## 2026-06-15 — T10 COMPLETE: mapped + 3 JK rulings + built + audited CONFORMS + committed (T-STACK COMPLETE)
+
+**Type:** Product code. Branch codex/franchise-v1-next. One feature commit (`5010126` T10) + this session-end
+doc update. Roles: Captain (Opus 4.8) mapped + authored the contract + AUDITED the diff independently; Codex
+5.5 BUILT (codex CLI, workspace-write, high reasoning); auditor ≠ builder (Fable unavailable). JK ruled
+product/scope/design (3 forks) + approved the persistence commit.
+
+**Mapping + rulings.** T10 (IV §9 Lineup Delta WPA standard + §12 per-season constants snapshot) mapped via a
+6-agent decorrelated fan-out + 2 critics → `T10_SCOPE_MAP.md`; every decision-critical claim independently
+Captain-verified (file:line). **Decisive finding:** the §8.1 optimizer (`optimizeLineup`), the lineup-lock
+snapshots, and even the LITERAL §9 delta (`summarizeLineupSnapshotComparison.projectedOpportunityCostTotal`)
+were ALREADY built — but display-only, never persisted; and the already-PERSISTED
+`ManagerLineupDeltaRecord.managerWpa` is a DIFFERENT, realized-vs-projected number (mixes realized in-game WPA
+with projected IV). "WPA" is a misnomer — per D9 the values are IV-of-effectiveRatings ÷10,000,000. JK ruled 3
+forks (DECISIONS_LOG 2026-06-15): R1 §9 = IV-of-effectiveRatings (document misnomer, rename→v2); R2 = the PURE
+projected-vs-projected scalar persisted ADDITIVE, the realized `managerWpa` kept separate/untouched; R3 =
+full-dependency content HASH on `SeasonMetadata`, single "high" ticket (no split — no DB migration).
+
+**T10 (`5010126`).** Part A: NEW `ManagerLineupDeltaSummary` type + `deriveManagerLineupDeltaSummaries`
+(managerWpaGameState.ts, `gameEnded` gate, BOTH managers, sourced from `summarizeLineupSnapshotComparison`);
+additive persistence mirror of `managerLineupDeltas` (PersistedGameState + CompletedGameRecord +
+archiveCompletedGame + refresh + both useGameState end-game writes); field `lineupDeltaWpaStandard` (distinct
+from the existing aggregate `lineupDeltaWpa`; camelCase clears the `wpaRuntimeBoundary` `\bwpa:` pattern → zero
+allowlist edits); NOT folded into `managerValue` (regression-guard test). Part B: NEW pure
+`src/engines/optimizerConstantsSnapshot.ts` (`OPTIMIZER_CONSTANTS_VERSION` + deterministic FNV-1a content hash
+over the optimizer dependency set — rosterEngineConstants objective-subset + ivCurves + traitPricing +
+traitInteractionMatrix; tierParams EXCLUDED; no Date.now) + additive `optimizerConstantsVersion/Hash` on
+`SeasonMetadata`, stamped write-once in `getOrCreateSeason`, warn-once-no-overwrite on drift. §9 spec note
+added documenting the IV-not-WP misnomer. +10 tests / +2 files.
+
+**Audit (Opus, independent rerun — not graded from builder paste): CONFORMS.** tsc 0 / build 0 / full suite
+**7,227 pass / 3 fail / 393 files (7,230 total)** — the 3 are EXACTLY the characterized trio
+(wpaRuntimeBoundary, franchiseManualSmokeFixture, franchiseNarrativeEventEligibility; full failing-file list
+captured; no new RED; reconciles as 7,217 prior-passing + 10 new = 7,227). wpaRuntimeBoundary unchanged. Snapshot hash is a real mutation-kill across all 4 dependency files incl. the trait matrix.
+SeasonMetadata stamp write-once + warn-once verified. Orphan trace RESOLVED. DO-NOT-TOUCH (rosterAnalyzer,
+effectiveRatings, ivEngine, optimalLineup, the 5 data files, trackerDb, backupRestore, salaryCalculator)
+byte-unchanged. **Findings (LOW):** (1) summary stamps `version` via a full hash recompute (cleanup); (2)
+pre-existing `backupRestore.ts` v12 stale-schema (drops v13/v14/v15 stores) — SEPARATE backup-hardening ticket
+(T10 avoided a new store → does not inherit it).
+
+**Suite:** 7,220 → 7,230 / 393 files; only the 3 characterized fails throughout.
+
+**NEXT SESSION STARTS AT: D0 — `FRANCHISE_PLAYABLE_V1_DEFINITION` cut line.** The T-stack (T4→T10) is COMPLETE.
+Per F-141: D0 → D1–D8 → F-138 → flag flip → iPad playtest. Captain to read the D0 definition + propose D-stack
+sequencing/scope to JK before any build. BROWSER-VERIFY batch (pre-D0, persistence-prioritized) now includes
+T10. Deferred: R9 + R12 fast-follows; FINDING-148; backupRestore hardening; the LOW cleanups.

@@ -1,6 +1,6 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-15 (T8d + T9 COMPLETE — T9a engine + T9b GameTracker integration built + audited CONFORMS + committed; T10 next)
+**Last Updated:** 2026-06-15 (T10 COMPLETE — Lineup Delta WPA standard + per-season optimizer-constants snapshot built + audited CONFORMS + committed `5010126`; **T-STACK COMPLETE** → D0 next)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.
@@ -12,10 +12,27 @@
 
 ## RIGHT NOW
 
-- **Phase:** T-stack execution. Sequencing ruling F-141 holds: the full T-stack
-  runs to completion as pure execution, THEN D0 cut line → D1–D8 → F-138 →
+- **Phase:** **T-STACK COMPLETE** (T4→T10 all built / audited CONFORMS / committed). Per
+  sequencing ruling F-141, **D0 is now the active gate**: D0 cut line → D1–D8 → F-138 →
   flag flip → iPad playtest exit gate.
-- **Last completed:** **T9b — GameTracker sub-rec integration** (commit `93763ee`). Codex 5.5 BUILT →
+- **Last completed:** **T10 — Lineup Delta WPA standard + per-season constants snapshot** (commit `5010126`).
+  Codex 5.5 BUILT → Opus 4.8 audit **CONFORMS** → **JK APPROVED** (persistence / saved-data-shape; not
+  auto-committed). §9 standard = the PURE projected-vs-projected scalar `ManagerLineupDeltaSummary.
+  lineupDeltaWpaStandard` (= `summarizeLineupSnapshotComparison`'s `projectedOpportunityCostTotal` =
+  `chosen.projectedTeamLineupKblWpa − optimal.projectedTeamLineupKblWpa`), derived at game-end for BOTH
+  managers, persisted ADDITIVE as a sibling of `managerLineupDeltas`. The pre-existing realized-vs-projected
+  `managerWpa` is BYTE-UNCHANGED and the new scalar is NOT folded into the `managerValue` rollup (regression-
+  guard test proves no double-count). §12 snapshot = a full-dependency FNV-1a content hash (NEW
+  `src/engines/optimizerConstantsSnapshot.ts`; optimizer subset of `rosterEngineConstants` + `ivCurves` +
+  `traitPricing` + `traitInteractionMatrix`; `tierParams` EXCLUDED) stamped write-once on `SeasonMetadata`
+  (NO DB bump; warn-once on mid-season drift; travels in backup). "WPA" documented as rescaled IV per D9
+  (§9 spec note added; field rename → v2). Independently re-verified: tsc 0 / build 0 / suite 7,230 (only the
+  3 characterized fails) / `wpaRuntimeBoundary` unchanged (camelCase clears the pattern → ZERO allowlist
+  edits) / optimizer engines + data files BYTE-UNCHANGED / orphan trace RESOLVED. BROWSER-PENDING
+  (persistence-prioritized). LOW: micro-inefficiency (summary stamps `version` via a full hash recompute —
+  cleanup); pre-existing `backupRestore.ts` v12 staleness surfaced as a SEPARATE backup-hardening ticket
+  (T10 avoided a new store → does NOT inherit it). Map: `T10_SCOPE_MAP.md`.
+- **Prior (committed) this arc:** **T9b — GameTracker sub-rec integration** (commit `93763ee`). Codex 5.5 BUILT →
   Opus 4.8 audit **CONFORMS** → **JK APPROVED** (user-visible + GameTracker-state, not auto-committed).
   Wired T9a `recommendSubs` into the live in-game rec surface: the 3 generators in
   `managerWpaRecommendations.ts` rebuilt onto the engine (adapters → EffectiveRatingsPlayer + PlayerState +
@@ -67,15 +84,14 @@
   (hook layer; engine pure). Independently re-verified: tsc 0 / build 0 / full suite 7,206 (only the 3
   characterized fails) / all do-not-touch incl. the farm draft + handoff BYTE-UNCHANGED. BROWSER-PENDING.
   (T8d-1 `9f94412` + T8a/T8b/T8c + T6/T7-stack — all CONFORMS — COMMITTED.)
-- **NEXT TASK: T10 — Lineup Delta WPA** (IV spec §13 line 640; the LAST T-stack ticket before D0). NOT yet
-  mapped/scoped. Captain to MAP it (focused workflow over the WPA/leverage engines — `wpaCalculator`,
-  `winExpectancyTable`, `leverageCalculator` — + the lineup/decision surfaces it feeds + the
-  `wpaRuntimeBoundary` allowlist it must respect) + propose a split + surface scope decisions to JK BEFORE
-  drafting any build contract, same discipline as T8d/T9. ROUTE Codex 5.5 | very high → Opus audit. Then
-  **D0** cut line (FRANCHISE_PLAYABLE_V1_DEFINITION) → D1–D8 → F-138 → flag flip → iPad playtest.
+- **NEXT TASK: D0 — `FRANCHISE_PLAYABLE_V1_DEFINITION` cut line** (the T-stack is DONE). Per F-141:
+  D0 → D1–D8 → F-138 → flag flip → iPad playtest exit gate. Captain to read the D0 definition + propose the
+  D-stack sequencing/scope to JK BEFORE any build (same map→ruling→contract discipline as the T-stack).
   **DEFERRED fast-follows (tracked):** R9 scout-obscured farm IV-range (needs `scoutNoiseBase`) + R12
-  chemistry potency overlay (needs SMB4 count→tier thresholds + `potencyTier(p,team)` resolver). Maps:
-  `T9_SCOPE_MAP.md`, `T8d_SCOPE_MAP.md`.
+  chemistry potency overlay (needs SMB4 count→tier thresholds + `potencyTier(p,team)` resolver); **NEW
+  backupRestore.ts v12 stale-schema hardening** (separate ticket — see OPEN PENDING-JK). **FINDING-148**
+  (base AUX_PRICING L/R premium gap, JK-gated, oracle regen). Maps: `T10_SCOPE_MAP.md`, `T9_SCOPE_MAP.md`,
+  `T8d_SCOPE_MAP.md`.
 - **STANDING MODE (JK 2026-06-14):** per ticket = build → independent ENGINEERING
   audit → auto-commit verified-complete (browser-pending) → proceed. Captain
   surfaces only the audit verdict, the browser backlog, and genuine scope/design/
@@ -88,7 +104,7 @@
 
 ## SUITE BASELINE
 
-7,220 tests / 391 files (T9b +3 net; T9a +7; T8d-3 +4; T8d-2 +7 / +2; T8d-1 +10; T8c +1; T8b +8 / +1;
+7,230 tests / 393 files (T10 +10 / +2; T9b +3 net; T9a +7; T8d-3 +4; T8d-2 +7 / +2; T8d-1 +10; T8c +1; T8b +8 / +1;
 T8a +9 / +1; T7c +7 / +1; T7b +4; T7a +8 / +1; T6 +12; prior baseline 7,140 / 383). Characterized set (a new RED outside
 this set is a real regression): fixed failures wpaRuntimeBoundary +
 franchiseNarrativeEventEligibility; conditional-solo order-flakes
@@ -141,6 +157,10 @@ franchiseOffseasonGuards.component (each passes solo).
    bench bat surfaces a pinch-hit rec with a trait/mojo justification; a tiring pitcher surfaces a fresh-arm
    rec; situational-only triggers (e.g. a meltdown with no ratings drop) no longer fire on their own (pure
    IV-delta gate); keep/decline actions + watch persistence still work; recs feel sensibly-timed vs leverage.
+11. **T10** (PERSISTENCE — prioritized) lineup-delta WPA standard: start a seasoned (franchise) game, set a
+   deliberately sub-optimal lineup, play to completion → a per-game `lineupDeltaWpaStandard` (≤ 0) persists
+   for BOTH managers and survives reload; the existing Manager-WPA overlay/almanac totals are UNCHANGED (no
+   double-count); the season carries an `optimizerConstantsHash` that survives backup/restore.
 
 ## OPEN PENDING-JK (rolling)
 
@@ -163,6 +183,11 @@ SESSION_RULES. Stray reference-docs/Super Mega Baseball 4 Rosters.csv
 (commit or gitignore). ASG WPA→Fame; Signature Moment card line; fame tier
 names; F2 SOT typos (~15); F4 FA trait spellings (4); order-flake root-cause
 (3 members).
+**NEW (T10): backupRestore.ts stale-schema hardening** — the `trackerStores` registry is pinned at
+`version: 12` and omits `franchiseTrueValueRows` (v13) / `franchiseDesignationRows` (v14) /
+`franchiseSeasonLedgerRows` (v15); those silently drop on backup/restore and `getSchemaIssues` won't flag the
+omission (it iterates the schema, not `db.objectStoreNames`). Separate backup-hardening ticket; T10 avoided a
+new store so the §9 snapshot rides `seasonMetadata` (already registered) and does NOT inherit the defect.
 
 ## RECENT NON-PRODUCT CHANGE (2026-06-14)
 

@@ -794,3 +794,27 @@ flag flip → iPad playtest.
 scout-obscured farm IV-range; R12 chemistry potency overlay; FINDING-148; payroll-expectation → fan-morale;
 T11 auction; T12 pool recalibration. **LOW doc cleanups:** vestigial rec-input fields; kbl-gotchas.md stale
 5-level mojo (code is 6-level).
+
+---
+
+## 2026-06-15 — T10 COMPLETE → T-STACK COMPLETE → D0 next
+
+**T10 — Lineup Delta WPA standard + per-season constants snapshot** (commit `5010126`). Mapped via a 6-agent
+decorrelated fan-out + 2 critics (`T10_SCOPE_MAP.md`, all decision-critical claims Captain-verified); 3 JK
+rulings (DECISIONS_LOG 2026-06-15); single "high" ticket (no split — the SeasonMetadata-hash mechanism adds no
+DB migration). Codex 5.5 BUILT → Opus 4.8 audit CONFORMS (auditor ≠ builder) → JK APPROVED (persistence) →
+committed. **Decisive map finding:** the §8.1 optimizer + lineup-lock snapshots + the literal §9 delta
+(`summarizeLineupSnapshotComparison`) were ALREADY built but display-only, and the already-PERSISTED
+`managerWpa` is a DIFFERENT realized-vs-projected number. So T10 = persist the pure projected-vs-projected
+scalar additively (`ManagerLineupDeltaSummary.lineupDeltaWpaStandard`, both managers) WITHOUT touching the
+realized `managerWpa` or the `managerValue` rollup, + a §12 full-dependency FNV-1a content hash
+(`optimizerConstantsSnapshot.ts`; tierParams excluded) stamped write-once on `SeasonMetadata` (no DB bump,
+warn-once on drift). "WPA" documented as rescaled IV per D9 (§9 spec note; rename→v2). Verify: tsc 0 / build 0
+/ suite 7,230 / 393 (only the 3 characterized fails) / wpaRuntimeBoundary unchanged / engines+data
+byte-unchanged. **T-STACK (T4→T10) COMPLETE.** Next = **D0** cut line (FRANCHISE_PLAYABLE_V1_DEFINITION) →
+D1–D8 → F-138 → flag flip → iPad playtest.
+
+**Browser-batch (pre-D0):** + T10 (persistence-prioritized: per-game `lineupDeltaWpaStandard` persists for both
+managers + survives reload; overlay/almanac totals unchanged; season `optimizerConstantsHash` survives
+backup/restore). **New deferred ticket:** backupRestore.ts v12 stale-schema hardening (drops v13/v14/v15
+stores). **LOW:** summary stamps version via a full hash recompute (cleanup).
