@@ -13,7 +13,7 @@
 
 import { generateHometown } from '../data/usCities';
 import { BALANCE_MODE_DEFAULT } from '../data/rosterEngineConstants';
-import type { BalanceMode, RegisteredPool } from '../engines/leagueConstruction';
+import type { BalanceMode, RegisteredPool, TeamCapIdentity } from '../engines/leagueConstruction';
 import type { TierKey } from '../data/tierParams';
 import type { OptimalLineupSnapshot } from '../types/managerWpa';
 import type { ParkFactors } from '../types/war';
@@ -127,6 +127,7 @@ export interface Team {
   ballparkNickname?: string;
   heritageFacts?: string[];
   rivalries?: TeamRivalry[];
+  capIdentity?: TeamCapIdentity;
   lineupWithDH?: LineupSlot[];
   lineupWithoutDH?: LineupSlot[];
   startingRotation?: string[];

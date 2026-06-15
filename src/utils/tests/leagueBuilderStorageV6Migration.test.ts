@@ -14,9 +14,11 @@ import { LUXURY_CAP_TABLES, TIER_CAPS } from '../../data/tierParams';
 import {
   __resetLeagueBuilderDatabaseForTests,
   deleteRegisteredPool,
+  getTeam,
   getLeagueTemplate,
   getRegisteredPool,
   initLeagueBuilderDatabase,
+  saveTeam,
   saveRegisteredPool,
 } from '../leagueBuilderStorage';
 import type { RegisteredPool } from '../../engines/leagueConstruction';
@@ -182,5 +184,49 @@ describe('leagueBuilderStorage v6 registered pool migration', () => {
 
     await deleteRegisteredPool(pool.leagueId);
     await expect(getRegisteredPool(pool.leagueId)).resolves.toBeNull();
+  });
+
+  test('capIdentity is an additive Team field that round-trips when present and stays undefined when absent', async () => {
+    const savedWithoutIdentity = await saveTeam({
+      name: 'No Identity Club',
+      abbreviation: 'NIC',
+      location: 'Nowhere',
+      nickname: 'Blank',
+      colors: { primary: '#111111', secondary: '#eeeeee' },
+      stadium: 'Plain Park',
+      leagueIds: ['league-a'],
+    });
+
+    await expect(getTeam(savedWithoutIdentity.id)).resolves.toEqual(
+      expect.not.objectContaining({ capIdentity: expect.anything() }),
+    );
+
+    const capIdentity = {
+      bandPriorities: {
+        Power: 5,
+        Contact: 1,
+        Speed: 0,
+        Defense: 3,
+        Rotation: 4,
+        Bullpen: 2,
+      },
+      increase: ['Defense First', 'Fireballers'],
+      decrease: ['Small Ballers'],
+    };
+
+    const savedWithIdentity = await saveTeam({
+      name: 'Identity Club',
+      abbreviation: 'IDC',
+      location: 'Texture',
+      nickname: 'Stack',
+      colors: { primary: '#224466', secondary: '#ffee99' },
+      stadium: 'Cap Yard',
+      leagueIds: ['league-a'],
+      capIdentity,
+    });
+
+    await expect(getTeam(savedWithIdentity.id)).resolves.toEqual(
+      expect.objectContaining({ capIdentity }),
+    );
   });
 });

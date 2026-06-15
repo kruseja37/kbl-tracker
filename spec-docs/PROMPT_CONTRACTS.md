@@ -6765,3 +6765,83 @@ editorialSchema test (version 5→6 + store assertion). 10 files (9 mod + 1 new)
 BROWSER-PENDING (batched): tier/balanceMode selectors + Register-Pool persist/reload. NEXT: T8c
 (Identity Composition UI — point-allocation; decreases optional per JK; wires to T8a
 composeIdentity/applyIdentitySelection).
+
+
+---
+
+## T8c CONTRACT (2026-06-14) — Team Identity Composition UI (IV §6 / D11)
+
+**ROUTE:** Codex 5.5 | very high reasoning effort → Opus 4.8 audit (Fable unavailable;
+auditor ≠ builder). UI + (trivial additive) persistence — user-visible → Captain surfaces the
+verdict + browser item; not auto-committed silently. JK: identity is MAX-CUSTOMIZABLE, decreases
+OPTIONAL. Persistence is an OPTIONAL field on the existing globalTeams store — NO version bump,
+NO migration, NO backup/sync change. NAME-COLLISION: do NOT touch ManagerTeamIdentity /
+almanacTeamIdentity / reporter PlayerArchetype (unrelated editorial identities) — use `capIdentity`.
+
+```
+[identical to Temp/t8c-contract.md — the builder prompt fed to Codex this session]
+GOAL: T8c — Team Identity Composition UI. In the League Builder team-edit modal: 6-band point-
+allocation → composeIdentity suggests a ≤2-inc/≤2-dec stack (decreases OPTIONAL) → creator freely
+edits (manual mod selectors over the 42 CAP_MODIFICATION_FRACTIONS keys) → live preview of
+identityCapShift % per stat → persist team.capIdentity. Consumes the T8a engine; builds no new math.
+
+TYPE: add TeamCapIdentity = {bandPriorities?: BandPriorities; increase: string[]; decrease: string[]}
+to leagueConstruction.ts (don't modify T8a exports).
+PERSISTENCE (additive, NO version bump): Team += optional capIdentity?: TeamCapIdentity; saveTeam
+already persists the whole record — verify it flows through; old teams just lack the field.
+UI (LeagueBuilderTeams team-edit modal, mirror heritage/rivalries collapsible): 6 band 0–5 inputs;
+"Suggest from priorities" → composeIdentity; 2 increase + 2 decrease mod dropdowns (42 keys + none),
+free edit, validate via applyIdentitySelection; live preview = identityCapShift non-zero stats as
+signed %; persist on save (createTeam/updateTeam); hydrate from team.capIdentity on open. Tier for
+preview = team.leagueIds[0]→getLeagueTemplate.tier (default 'juiced'). Do NOT touch the editorial
+identity systems.
+TESTS: capIdentity round-trips saveTeam→getTeam; a team WITHOUT capIdentity loads fine (additive).
+Engine math already T8a-tested — don't duplicate.
+DO NOT TOUCH: T8a/T8b engine code, tierParams, ivEngine, salaryCalculator, iv_oracle, trackerDb,
+backupRestore, syncConfig, managerIdentityStorage, almanacTeamIdentity, reporter identity,
+FranchiseSetup, leagueBuilderStorage DB_VERSION (stays 6). No migration.
+VERIFY: tsc 0 / build 0 / new tests / full suite (only the 3 characterized fails, no new RED;
+baseline 7,188/388) / git diff --stat shows none of the do-not-touch files + DB_VERSION still 6.
+REPORT: changed paths+count; per-file; actual tsc/build/vitest; confirm additive (no version bump/
+migration/backup-sync change); "T8c complete" OR "BLOCKED: <reason>".
+FAILURE PROTOCOL: DO-NOT-TOUCH edit needed / capIdentity would need a version bump or migration /
+tier unresolvable → STOP and report (tier defaults 'juiced'). Never summarize or batch.
+
+Use very high reasoning effort. Think step-by-step. Do NOT commit — leave changes in the working tree for audit.
+```
+
+### T8c-AUDIT + EXECUTION RECORD (2026-06-14)
+
+**ROUTE actual:** Codex 5.5 | high (codex knob max) BUILT → Opus 4.8 (Captain) AUDIT (Fable
+unavailable; auditor ≠ builder). UI + trivial-additive persistence — JK APPROVED the commit after
+the surface (user-visible → surfaced, not auto-committed).
+
+**Builder result (Codex 5.5):** `TeamCapIdentity` type added to leagueConstruction.ts (T8a/T8b
+exports untouched); `Team += optional capIdentity?` (ADDITIVE field on globalTeams — NO DB_VERSION
+bump, NO migration, NO new store, NO backup/sync change); LeagueBuilderTeams team-edit modal gains a
+collapsible "Team Identity (Cap)" section (6 band 0–5 priorities → composeIdentity "Suggest"; 2
+increase + 2 decrease dropdowns over the 42 CAP_MODIFICATION_FRACTIONS keys; applyIdentitySelection
+validation; identityCapShift signed-% preview + shiftLuxuryCaps shifted-cap preview; tier from
+team.leagueIds[0]→league.tier default 'juiced'; hydrate/save via team.capIdentity); migration test +=
+capIdentity round-trip + additive old-team load. 4 files.
+
+**AUDIT VERDICT: CONFORMS.** Independent re-verification (Opus):
+- tsc 0; build 0; capIdentity test 4/4; full suite 7,186 pass / 3 fail / 388 files — the 3 fails are
+  EXACTLY the characterized set; NO new RED (7,189 = 7,188 + 1).
+- ADDITIVE PROVEN: DB_VERSION still 6 (no bump); leagueBuilderStorage diff = ONLY the TeamCapIdentity
+  import + the optional capIdentity field; the round-trip test asserts capIdentity persists when
+  present and is undefined when absent. NO migration, NO backup/sync change.
+- BYTE-UNCHANGED: tierParams, ivEngine, salaryCalculator, iv_oracle, trackerDb, backupRestore,
+  syncConfig, FranchiseSetup, AND the editorial-identity systems (managerIdentityStorage,
+  almanacTeamIdentity, reporter) — name collision avoided.
+- ENGINE REUSE correct: composeIdentity (suggest), applyIdentitySelection (memoized validation that
+  GUARDS the save — `if (!validation.identity) return`, so an invalid >2 / unknown-mod stack cannot
+  persist), identityCapShift (% preview), shiftLuxuryCaps (cap preview). T8a/T8b code untouched.
+- JK ruling honored: decreases OPTIONAL; full manual mod editing; band point-allocation guided input.
+
+**Findings:** none (LOW or above).
+
+**Status:** T8c = built + audited CONFORMS; JK APPROVED. COMMITTED. BROWSER-PENDING (batched): the
+Team Identity section — band priorities → Suggest → manual edit → cap-shift preview → save/reload.
+NEXT: **T8d** (the LAST T8 ticket — snake draft + empirical pick chart + pick-value trade validator +
+per-team solvency signals + chemistry potency overlay + farm scout-obscured IV).

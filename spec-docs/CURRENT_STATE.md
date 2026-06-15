@@ -15,27 +15,27 @@
 - **Phase:** T-stack execution. Sequencing ruling F-141 holds: the full T-stack
   runs to completion as pure execution, THEN D0 cut line → D1–D8 → F-138 →
   flag flip → iPad playtest exit gate.
-- **Last completed:** **T8b — Tier/balanceMode wiring + Pool Registration + persistence** — Codex 5.5
-  BUILT → Opus 4.8 audit **CONFORMS**; **JK APPROVED the persistence change** (risk-gated surface,
-  not auto-committed). Pure `registerPool` added to leagueConstruction.ts (tierCap + luxuryCaps +
-  pickValueChart + balanceMode + surplus warning) + `POOL_SURPLUS_MAX`; **additive `kbl-league-builder`
-  v5→v6** (new `registeredPools` store + optional tier/balanceMode on LeagueTemplate; read-time
-  defaults; ZERO rewrite — proven by a migration test that reads the raw on-disk v5 record); tier +
-  balanceMode selects + Register-Pool button (League Builder); `registerLeaguePool` (iv via
-  calculateIvBaseSalary, salary reused). 3 necessary collateral files (backupRestore/syncConfig/
-  editorialSchema test) audited + justified. **SCOPE NOTE:** Path A salary was ALREADY IV-based (T5)
-  — not rewritten. Independently re-verified: tsc 0 / build 0 / 17 new tests / suite 7,188 (3
-  characterized fails) / tierParams+ivEngine+salaryCalculator+iv_oracle+trackerDb+FranchiseSetup
-  BYTE-UNCHANGED. COMMITTED. BROWSER-PENDING. (T8a + T6/T7a/T7b/T7c — all CONFORMS — COMMITTED.)
-- **NEXT TASK: T8c — Identity Composition UI.** Band point-allocation across the 6 Identity Bands
-  (Power/Contact/Speed/Defense/Rotation/Bullpen) → `composeIdentity` suggests an inc/dec stack;
-  the creator can FREELY edit it within the §6.2 envelope (≤2 inc + ≤2 dec) — **decreases OPTIONAL
-  per JK** ("more customizable, less requirements"). Wires to the T8a engine
-  (`composeIdentity`/`applyIdentitySelection`/`identityCapShift`/`shiftLuxuryCaps`); preview the
-  shifted luxury caps; persist the composed identity **per team** (additive). Host: LeagueBuilderTeams.
-  ROUTE Codex 5.5 | very high → Opus audit (UI + persistence). Then **T8d** snake draft + pick chart
-  + trade validator + solvency + potency + farm scout-obscured IV → **T9** → **T10** → D0.
-  Full T8 map + reuse contracts: `T8_SCOPE_MAP.md`.
+- **Last completed:** **T8c — Team Identity Composition UI** — Codex 5.5 BUILT → Opus 4.8 audit
+  **CONFORMS**; **JK APPROVED** (user-visible surface, not auto-committed). Collapsible "Team Identity
+  (Cap)" section in the LeagueBuilderTeams modal: 6 band 0–5 priorities → `composeIdentity` Suggest;
+  2 increase + 2 decrease mod dropdowns (42 keys), FREELY editable (decreases OPTIONAL per JK);
+  `applyIdentitySelection` validation GUARDS the save; live `identityCapShift` % + `shiftLuxuryCaps`
+  preview; tier from team's league (default juiced). Persisted as an **additive `Team.capIdentity?`
+  field — NO DB_VERSION bump, NO migration, NO backup/sync change** (rides on globalTeams; round-trip
+  test proves present→persists / absent→undefined). Independently re-verified: tsc 0 / build 0 / test
+  4/4 / suite 7,189 (3 characterized fails) / all do-not-touch incl. the editorial-identity systems
+  (manager/almanac/reporter) BYTE-UNCHANGED. COMMITTED. BROWSER-PENDING. (T8a/T8b + T6/T7-stack — all
+  CONFORMS — COMMITTED.)
+- **NEXT TASK: T8d — the LAST T8 ticket (the big one).** Snake draft (Path B, all-user, no AI) +
+  empirical per-pool pick-value chart (`derivePickValueChart` already in T8a) + pick-value trade
+  validator UI (`validateTrade` in T8a) + per-team solvency guardrail & GREEN/YELLOW/RED/BLOCKED pick
+  signals (consume `luxuryTax` + RegisteredPool) + chemistry potency overlay (T6 `effectiveRatings`
+  potencyTier) + farm scout-obscured IV (§7.4: true IV internal, displayed range
+  `[trueIV(1−w),trueIV(1+w)]`, w=`scoutNoiseBase×(1−scoutAccuracy)`, reuse the T7b no-oracle-leak
+  pattern + the existing LeagueBuilderDraft/leagueBuilderStartupFarmDraft scaffold). BIG — Captain
+  will map its 6 sub-surfaces (likely a focused workflow) + surface scope before drafting. ROUTE
+  Codex 5.5 | very high → Opus audit (UI + persistence). Then **T9** → **T10** → D0. Full T8 map:
+  `T8_SCOPE_MAP.md`.
 - **STANDING MODE (JK 2026-06-14):** per ticket = build → independent ENGINEERING
   audit → auto-commit verified-complete (browser-pending) → proceed. Captain
   surfaces only the audit verdict, the browser backlog, and genuine scope/design/
@@ -48,7 +48,7 @@
 
 ## SUITE BASELINE
 
-7,188 tests / 388 files (T8b added 8 tests / 1 file; T8a +9 / +1; T7c +7 / +1; T7b +4;
+7,189 tests / 388 files (T8c +1; T8b +8 / +1; T8a +9 / +1; T7c +7 / +1; T7b +4;
 T7a +8 / +1; T6 +12; prior baseline 7,140 / 383). Characterized set (a new RED outside
 this set is a real regression): fixed failures wpaRuntimeBoundary +
 franchiseNarrativeEventEligibility; conditional-solo order-flakes
@@ -82,6 +82,10 @@ franchiseOffseasonGuards.component (each passes solo).
    the "Register Pool" button builds + persists a RegisteredPool that survives reload (shows tier,
    tierCap, player count, surplus warning). An existing pre-T8b league still opens fine (additive
    migration). Backup/restore + sync still round-trip with the new `registeredPools` store.
+7. **T8c** Team Identity (Cap) section in the team-edit modal: set band priorities, click Suggest
+   (composeIdentity fills the increase stack), manually edit increase/decrease mods, watch the live
+   cap-shift % preview update, save + reopen the team → the identity persists. A team with no
+   identity opens cleanly.
 
 ## OPEN PENDING-JK (rolling)
 

@@ -12,6 +12,7 @@ export type BalanceMode = 'taxed' | 'advisory' | 'off';
 export type Band = 'Power' | 'Contact' | 'Speed' | 'Defense' | 'Rotation' | 'Bullpen';
 export type BandPriorities = Record<Band, number>;
 export type IdentityComposition = { increase: string[]; decrease: string[] };
+export type TeamCapIdentity = { bandPriorities?: BandPriorities; increase: string[]; decrease: string[] };
 export type TaxBinding = { group: string; stat: string; over: number; tax: number };
 export type TaxResult = { charged: number; wouldBeTax: number; binding: TaxBinding[] };
 export type PickValue = { pick: number; value: number };

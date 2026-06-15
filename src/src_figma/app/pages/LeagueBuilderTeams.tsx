@@ -37,6 +37,22 @@ import {
 } from "../../../utils/managerIdentityStorage";
 import { getDefaultManagerIdForTeam } from "../../../utils/managerWpaDerivation";
 import { getParkByName } from "../../../data/parkLookup";
+import {
+  applyIdentitySelection,
+  BANDS,
+  composeIdentity,
+  identityCapShift,
+  shiftLuxuryCaps,
+  type Band,
+  type BandPriorities,
+  type TeamCapIdentity,
+} from "../../../engines/leagueConstruction";
+import {
+  CAP_MODIFICATION_FRACTIONS,
+  LUXURY_CAP_TABLES,
+  type ModStat,
+  type TierKey,
+} from "../../../data/tierParams";
 
 const ERA_FLAVORS: EraFlavor[] = ['GOLDEN_AGE', 'CLASSIC_TV', 'MODERN_LOCAL'];
 
@@ -50,6 +66,31 @@ const TEAM_BACKSTORY_LIMIT = 500;
 const HERITAGE_FACT_LIMIT = 5;
 const RIVALRY_INTENSITY_MIN = 0;
 const RIVALRY_INTENSITY_MAX = 10;
+const CAP_IDENTITY_PRIORITY_MIN = 0;
+const CAP_IDENTITY_PRIORITY_MAX = 5;
+const CAP_IDENTITY_MOD_OPTIONS = Object.keys(CAP_MODIFICATION_FRACTIONS)
+  .filter((name) => name !== "--")
+  .sort((a, b) => a.localeCompare(b));
+
+const CAP_IDENTITY_STAT_GROUPS: Array<{ label: string; stats: ModStat[] }> = [
+  { label: "Hitters", stats: ["POW", "CON", "SPD", "FLD", "ARM"] },
+  { label: "Rotation", stats: ["RVEL", "RJNK", "RACC"] },
+  { label: "Bullpen", stats: ["PVEL", "PJNK", "PACC"] },
+];
+
+const CAP_IDENTITY_STAT_LABELS: Record<ModStat, string> = {
+  POW: "POW",
+  CON: "CON",
+  SPD: "SPD",
+  FLD: "FLD",
+  ARM: "ARM",
+  RVEL: "VEL",
+  RJNK: "JNK",
+  RACC: "ACC",
+  PVEL: "VEL",
+  PJNK: "JNK",
+  PACC: "ACC",
+};
 
 // ============================================
 // TYPES
@@ -79,6 +120,38 @@ interface TeamFormData {
   managerAge: string;
   managerHometown: string;
   managerStyleLabel: string;
+  capIdentity: TeamCapIdentity;
+}
+
+function createEmptyBandPriorities(): BandPriorities {
+  return Object.fromEntries(BANDS.map((band) => [band, 0])) as BandPriorities;
+}
+
+function normalizeIdentityMods(mods: string[] | undefined): string[] {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const mod of mods ?? []) {
+    if (!mod || mod === "--" || seen.has(mod)) continue;
+    seen.add(mod);
+    normalized.push(mod);
+    if (normalized.length === 2) break;
+  }
+  return normalized;
+}
+
+function normalizeCapIdentity(identity?: TeamCapIdentity): TeamCapIdentity {
+  return {
+    bandPriorities: {
+      ...createEmptyBandPriorities(),
+      ...(identity?.bandPriorities ?? {}),
+    },
+    increase: normalizeIdentityMods(identity?.increase),
+    decrease: normalizeIdentityMods(identity?.decrease),
+  };
+}
+
+function createEmptyCapIdentity(): TeamCapIdentity {
+  return normalizeCapIdentity();
 }
 
 const DEFAULT_FORM_DATA: TeamFormData = {
@@ -105,7 +178,17 @@ const DEFAULT_FORM_DATA: TeamFormData = {
   managerAge: "",
   managerHometown: "",
   managerStyleLabel: "",
+  capIdentity: createEmptyCapIdentity(),
 };
+
+function createDefaultFormData(): TeamFormData {
+  return {
+    ...DEFAULT_FORM_DATA,
+    heritageFacts: [],
+    rivalries: [],
+    capIdentity: createEmptyCapIdentity(),
+  };
+}
 
 function normalizeHeritageFacts(heritageFacts: string[]): string[] {
   return heritageFacts
@@ -143,6 +226,12 @@ function teamMetadataMatches(
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+function formatSignedPercent(value: number): string {
+  const percent = value * 100;
+  const sign = percent >= 0 ? "+" : "";
+  return `${sign}${percent.toFixed(1)}%`;
+}
+
 // ============================================
 // MAIN COMPONENT
 // ============================================
@@ -162,9 +251,10 @@ export function LeagueBuilderTeams() {
   // UI State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
-  const [formData, setFormData] = useState<TeamFormData>(DEFAULT_FORM_DATA);
+  const [formData, setFormData] = useState<TeamFormData>(() => createDefaultFormData());
   const [isSaving, setIsSaving] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [isCapIdentityOpen, setIsCapIdentityOpen] = useState(true);
   const [isHeritageFactsOpen, setIsHeritageFactsOpen] = useState(true);
   const [isRivalriesOpen, setIsRivalriesOpen] = useState(true);
   const [managerProfiles, setManagerProfiles] = useState<ManagerProfile[]>([]);
@@ -253,7 +343,8 @@ export function LeagueBuilderTeams() {
 
   const openCreateModal = () => {
     setEditingTeam(null);
-    setFormData(DEFAULT_FORM_DATA);
+    setFormData(createDefaultFormData());
+    setIsCapIdentityOpen(true);
     setIsHeritageFactsOpen(true);
     setIsRivalriesOpen(true);
     autosavedTeamMetadataRef.current = null;
@@ -288,6 +379,7 @@ export function LeagueBuilderTeams() {
       managerAge: managerProfile?.age?.toString() || "",
       managerHometown: managerProfile?.hometown || "",
       managerStyleLabel: managerProfile?.managementStyle?.label || "",
+      capIdentity: normalizeCapIdentity(team.capIdentity),
     });
     autosavedTeamMetadataRef.current = {
       heritageFacts: normalizeHeritageFacts(team.heritageFacts || []),
@@ -295,13 +387,14 @@ export function LeagueBuilderTeams() {
     };
     setIsHeritageFactsOpen(true);
     setIsRivalriesOpen(true);
+    setIsCapIdentityOpen(true);
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingTeam(null);
-    setFormData(DEFAULT_FORM_DATA);
+    setFormData(createDefaultFormData());
     autosavedTeamMetadataRef.current = null;
   };
 
@@ -429,11 +522,20 @@ export function LeagueBuilderTeams() {
 
   const handleSave = async () => {
     if (!formData.name.trim() || !formData.abbreviation.trim()) return;
+    if (!capIdentityValidation.identity) return;
 
     setIsSaving(true);
     try {
       const normalizedHeritageFacts = normalizeHeritageFacts(formData.heritageFacts);
       const normalizedRivalries = normalizeRivalries(formData.rivalries);
+      const capIdentity: TeamCapIdentity = {
+        bandPriorities: {
+          ...createEmptyBandPriorities(),
+          ...(formData.capIdentity.bandPriorities ?? {}),
+        },
+        increase: capIdentityValidation.identity.increase,
+        decrease: capIdentityValidation.identity.decrease,
+      };
       const teamData = {
         name: formData.name.trim(),
         abbreviation: formData.abbreviation.trim().toUpperCase(),
@@ -464,6 +566,7 @@ export function LeagueBuilderTeams() {
         rivalries: normalizedRivalries.length
           ? normalizedRivalries
           : undefined,
+        capIdentity,
         leagueIds: editingTeam?.leagueIds || [],
         retiredNumbers: editingTeam?.retiredNumbers || [],
       };
@@ -535,6 +638,97 @@ export function LeagueBuilderTeams() {
     const stadiumName = formData.stadium.trim();
     return stadiumName ? getParkByName(stadiumName) : undefined;
   }, [formData.stadium]);
+  const capIdentityValidation = useMemo(() => {
+    try {
+      return {
+        identity: applyIdentitySelection({
+          increase: formData.capIdentity.increase,
+          decrease: formData.capIdentity.decrease,
+        }),
+        error: "",
+      };
+    } catch (err) {
+      return {
+        identity: null,
+        error: err instanceof Error ? err.message : "Invalid team identity selection",
+      };
+    }
+  }, [formData.capIdentity.decrease, formData.capIdentity.increase]);
+  const previewTier = useMemo<TierKey>(() => {
+    const leagueId = editingTeam?.leagueIds?.[0];
+    if (!leagueId) return "juiced";
+    return leagues.find((league) => league.id === leagueId)?.tier ?? "juiced";
+  }, [editingTeam?.leagueIds, leagues]);
+  const capShiftPreview = useMemo(() => {
+    if (!capIdentityValidation.identity) return null;
+    return identityCapShift(capIdentityValidation.identity);
+  }, [capIdentityValidation.identity]);
+  const shiftedCapPreviewRows = useMemo(() => {
+    if (!capIdentityValidation.identity) return [];
+    const baseCaps = LUXURY_CAP_TABLES[previewTier];
+    const shiftedCaps = shiftLuxuryCaps(baseCaps, capIdentityValidation.identity);
+    return shiftedCaps
+      .map((row, index) => ({ base: baseCaps[index], shifted: row }))
+      .filter(({ base, shifted }) => base && Math.abs(shifted.cap - base.cap) >= 0.01)
+      .slice(0, 2);
+  }, [capIdentityValidation.identity, previewTier]);
+
+  const updateCapIdentityPriority = (band: Band, value: number) => {
+    const nextValue = Math.max(
+      CAP_IDENTITY_PRIORITY_MIN,
+      Math.min(CAP_IDENTITY_PRIORITY_MAX, Math.round(value)),
+    );
+    setFormData((prev) => ({
+      ...prev,
+      capIdentity: {
+        ...prev.capIdentity,
+        bandPriorities: {
+          ...createEmptyBandPriorities(),
+          ...(prev.capIdentity.bandPriorities ?? {}),
+          [band]: nextValue,
+        },
+      },
+    }));
+  };
+
+  const updateCapIdentityMod = (
+    kind: "increase" | "decrease",
+    index: number,
+    value: string,
+  ) => {
+    setFormData((prev) => {
+      const slots = [
+        prev.capIdentity[kind][0] ?? "",
+        prev.capIdentity[kind][1] ?? "",
+      ];
+      slots[index] = value;
+      return {
+        ...prev,
+        capIdentity: {
+          ...prev.capIdentity,
+          [kind]: normalizeIdentityMods(slots),
+        },
+      };
+    });
+  };
+
+  const suggestCapIdentityFromPriorities = () => {
+    setFormData((prev) => {
+      const bandPriorities = {
+        ...createEmptyBandPriorities(),
+        ...(prev.capIdentity.bandPriorities ?? {}),
+      };
+      const suggested = composeIdentity(bandPriorities);
+      return {
+        ...prev,
+        capIdentity: {
+          ...prev.capIdentity,
+          bandPriorities,
+          increase: suggested.increase,
+        },
+      };
+    });
+  };
 
   const addHeritageFact = () => {
     setFormData((prev) => {
@@ -1323,6 +1517,194 @@ export function LeagueBuilderTeams() {
                 </div>
               </section>
 
+              <section className="bg-[#4A6844]/55 border-[4px] border-[#3F5A3A] p-4 space-y-4">
+                <div className="border-[3px] border-[#2d3d2f] bg-[#3F5A3A]/70">
+                  <button
+                    type="button"
+                    onClick={() => setIsCapIdentityOpen((prev) => !prev)}
+                    className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[#4A6844]/70 transition"
+                  >
+                    <div>
+                      <h3 className="text-sm font-bold tracking-[0.16em] uppercase">
+                        Team Identity (Cap)
+                      </h3>
+                      <p className="mt-1 text-xs text-[#E8E8D8]/60">
+                        Band priority, cap-mod stack, and shifted luxury-cap preview.
+                      </p>
+                    </div>
+                    {isCapIdentityOpen ? (
+                      <ChevronDown className="w-4 h-4 text-[#D4A020]" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-[#D4A020]" />
+                    )}
+                  </button>
+
+                  {isCapIdentityOpen && (
+                    <div className="space-y-4 border-t-[3px] border-[#2d3d2f] px-4 py-4">
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        {BANDS.map((band) => {
+                          const priority = formData.capIdentity.bandPriorities?.[band] ?? 0;
+                          return (
+                            <div
+                              key={band}
+                              className="border-[3px] border-[#243124] bg-[#2d3d2f]/70 p-3"
+                            >
+                              <div className="mb-2 flex items-center justify-between gap-3">
+                                <label className="text-xs font-bold uppercase tracking-[0.16em] text-[#E8E8D8]/75">
+                                  {band}
+                                </label>
+                                <input
+                                  type="number"
+                                  min={CAP_IDENTITY_PRIORITY_MIN}
+                                  max={CAP_IDENTITY_PRIORITY_MAX}
+                                  step={1}
+                                  value={priority}
+                                  onChange={(e) =>
+                                    updateCapIdentityPriority(band, Number(e.target.value))
+                                  }
+                                  className="w-14 bg-[#3F5A3A] border-[3px] border-[#2d3d2f] p-1 text-center text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                                />
+                              </div>
+                              <input
+                                type="range"
+                                min={CAP_IDENTITY_PRIORITY_MIN}
+                                max={CAP_IDENTITY_PRIORITY_MAX}
+                                step={1}
+                                value={priority}
+                                onChange={(e) =>
+                                  updateCapIdentityPriority(band, Number(e.target.value))
+                                }
+                                className="w-full accent-[#D4A020]"
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={suggestCapIdentityFromPriorities}
+                          className="inline-flex items-center gap-2 bg-[#5A8352] hover:bg-[#4A6844] border-[3px] border-[#E8E8D8]/70 px-4 py-2 text-sm font-bold transition"
+                        >
+                          <Check className="w-4 h-4" />
+                          Suggest from priorities
+                        </button>
+                        <span className="text-xs font-bold uppercase tracking-[0.14em] text-[#D4A020]">
+                          Tier {previewTier.toUpperCase()}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        {(["increase", "decrease"] as const).map((kind) => {
+                          const selected = [
+                            formData.capIdentity[kind][0] ?? "",
+                            formData.capIdentity[kind][1] ?? "",
+                          ];
+                          return (
+                            <div
+                              key={kind}
+                              className="space-y-3 border-[3px] border-[#243124] bg-[#2d3d2f]/70 p-3"
+                            >
+                              <h4 className="text-xs font-bold uppercase tracking-[0.16em] text-[#E8E8D8]/75">
+                                {kind === "increase" ? "Increase" : "Decrease"}
+                              </h4>
+                              {[0, 1].map((slotIndex) => (
+                                <select
+                                  key={`${kind}-${slotIndex}`}
+                                  value={selected[slotIndex]}
+                                  onChange={(e) =>
+                                    updateCapIdentityMod(kind, slotIndex, e.target.value)
+                                  }
+                                  className="w-full bg-[#3F5A3A] border-[3px] border-[#2d3d2f] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                                  aria-label={`${kind} cap modification ${slotIndex + 1}`}
+                                >
+                                  <option value="">-- none --</option>
+                                  {CAP_IDENTITY_MOD_OPTIONS.map((modName) => (
+                                    <option
+                                      key={modName}
+                                      value={modName}
+                                      disabled={
+                                        selected.some(
+                                          (candidate, candidateIndex) =>
+                                            candidateIndex !== slotIndex && candidate === modName,
+                                        )
+                                      }
+                                    >
+                                      {modName}
+                                    </option>
+                                  ))}
+                                </select>
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {capIdentityValidation.error && (
+                        <div className="border-[3px] border-red-400/60 bg-red-950/40 px-3 py-2 text-sm text-red-100">
+                          {capIdentityValidation.error}
+                        </div>
+                      )}
+
+                      <div className="border-[3px] border-[#243124] bg-[#2d3d2f]/70 p-3">
+                        <h4 className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-[#E8E8D8]/75">
+                          Cap Shift Preview
+                        </h4>
+                        {capShiftPreview && CAP_IDENTITY_STAT_GROUPS.some((group) =>
+                          group.stats.some((stat) => Math.abs(capShiftPreview[stat]) > 0.000001),
+                        ) ? (
+                          <div className="space-y-2">
+                            {CAP_IDENTITY_STAT_GROUPS.map((group) => {
+                              if (!capShiftPreview) return null;
+                              const entries = group.stats.filter(
+                                (stat) => Math.abs(capShiftPreview[stat]) > 0.000001,
+                              );
+                              if (entries.length === 0) return null;
+                              return (
+                                <div key={group.label} className="flex flex-wrap items-center gap-2">
+                                  <span className="w-20 text-[10px] font-bold uppercase tracking-[0.14em] text-[#D4A020]">
+                                    {group.label}
+                                  </span>
+                                  {entries.map((stat) => (
+                                    <span
+                                      key={stat}
+                                      className="border border-[#E8E8D8]/25 bg-[#3F5A3A] px-2 py-1 text-xs font-bold"
+                                    >
+                                      {CAP_IDENTITY_STAT_LABELS[stat]} {formatSignedPercent(capShiftPreview[stat])}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-[#E8E8D8]/55">No cap shifts selected.</p>
+                        )}
+
+                        {shiftedCapPreviewRows.length > 0 && (
+                          <div className="mt-4 grid gap-2 md:grid-cols-2">
+                            {shiftedCapPreviewRows.map(({ base, shifted }) => (
+                              <div
+                                key={`${shifted.group}-${shifted.stat}`}
+                                className="border border-[#E8E8D8]/20 bg-[#3F5A3A]/80 px-3 py-2 text-xs"
+                              >
+                                <div className="font-bold uppercase tracking-[0.12em] text-[#E8E8D8]/75">
+                                  {shifted.group} {shifted.stat}
+                                </div>
+                                <div className="mt-1 text-[#D4A020]">
+                                  {base.cap.toFixed(1)} → {shifted.cap.toFixed(1)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </section>
+
               {/* Colors */}
               <div>
                 <label className="block text-sm font-bold mb-2">Team Colors</label>
@@ -1415,7 +1797,12 @@ export function LeagueBuilderTeams() {
               </button>
               <button
                 onClick={handleSave}
-                disabled={!formData.name.trim() || !formData.abbreviation.trim() || isSaving}
+                disabled={
+                  !formData.name.trim() ||
+                  !formData.abbreviation.trim() ||
+                  Boolean(capIdentityValidation.error) ||
+                  isSaving
+                }
                 className="px-6 py-2 bg-[#5599FF] hover:bg-[#3366FF] border-[3px] border-[#E8E8D8] transition font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {isSaving ? (
