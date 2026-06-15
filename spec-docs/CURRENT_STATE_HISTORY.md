@@ -725,3 +725,31 @@ verification (SESSION_RULES pen); no-oracle-leak principle (DECISIONS_LOG).
 
 **Deferred/open:** FINDING-148 (AUX_PRICING L/R, oracle regen); payroll-expectation →
 fan-morale (declared-budget design); execute-from-rec; deadMoneyRate league presets.
+
+---
+
+## 2026-06-14 — T8 arc (T8a / T8b / T8c committed; T8d pending)
+
+T8 (IV §5/§6/§7 — Mode 1 League Construction Suite) mapped via a 6-agent decorrelated workflow
+(→ `T8_SCOPE_MAP.md`), split into 4 engine-first tickets (JK-ratified), 3 of 4 built + audited
+CONFORMS + committed:
+- **T8a (a4ec4fb)** pure `leagueConstruction.ts` engine (composeIdentity / applyIdentitySelection /
+  identityCapShift / shiftLuxuryCaps / luxuryTax / derivePickValueChart / validateTrade) ported
+  decision-identical from `analyze-pool.py` — independent oracle cross-check 10/10. Decreases optional
+  per JK. Pre-build, Codex caught a real tiebreak flaw (RAW vs fraction magnitude); Captain fixed the
+  contract (MOD_STAT_XBL_CAP) during the battery pause.
+- **T8b (8fdf2c0)** tier/balanceMode wiring + `registerPool` + ADDITIVE `kbl-league-builder` v5→v6
+  (`registeredPools` store; ZERO rewrite, proven by a raw-record migration test). JK approved.
+- **T8c (d54724d)** Team Identity Composition UI (band point-allocation + free mod edit + cap-shift
+  preview), additive `Team.capIdentity` field (no migration). JK approved.
+
+Suite 7,171 → 7,189 / 388; the frozen surfaces (tierParams / ivEngine / salaryCalculator / iv_oracle)
+byte-unchanged throughout. Scope correction: Path A salary already IV-based (T5/D15) — not rewritten.
+Standing auto-commit for pure tickets; risk-gated surface-before-commit for persistence/UI tickets.
+
+**NEXT:** **T8d** — snake draft + pick-value chart + trade validator UI + per-team solvency signals +
+chemistry potency overlay + farm scout-obscured IV (the big one; likely splits; map first) → T9 →
+T10 → D0.
+
+**Browser-batch (pre-D0):** + T8b, T8c (added). **Deferred:** FINDING-148; payroll-expectation →
+fan-morale; T11 auction; T12 pool recalibration.

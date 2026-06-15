@@ -1,6 +1,6 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-14 (AI-team setup reconciled + CURRENT_STATE split)
+**Last Updated:** 2026-06-14 (T8a/T8b/T8c built + audited CONFORMS + committed; T8d next)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.

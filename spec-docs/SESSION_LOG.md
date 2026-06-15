@@ -4373,3 +4373,78 @@ split (like T7) + surface scope decisions before drafting. Then T9 → T10 → D
 `~/.local/bin/codex exec --skip-git-repo-check -s workspace-write -c model_reasoning_effort=high -o <out> - < <promptfile>`
 as a background task (harness sandbox disabled for that one call so codex's own
 workspace-write sandbox governs), then audits the diff.
+
+
+---
+
+## 2026-06-14 — T8 stack: mapping + split (JK-ratified) + T8a/T8b/T8c built, audited CONFORMS, committed
+
+**Type:** Product code. Branch codex/franchise-v1-next. Three feature commits (a4ec4fb T8a,
+8fdf2c0 T8b, d54724d T8c). Roles: Captain (Opus 4.8) mapped + authored every contract + AUDITED
+every diff independently; Codex 5.5 BUILT each (codex CLI, workspace-write, high reasoning);
+auditor ≠ builder (Fable unavailable). JK ruled product/scope/design; approved the two
+persistence/UI commits (T8b, T8c) after the migration/verdict surface.
+
+**T8 = IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC §6 (Team Identity / D11) + §7 (Mode 1 Construction)
++ §5 (tier/cap/luxury/balanceMode)** — the build ticket mounting the T4 IV engine + T6/T7 engines
+onto Mode 1 league construction.
+
+**Mapping (6-agent decorrelated workflow → T8_SCOPE_MAP.md).** Core gap: `src/engines/
+leagueConstruction.ts` (the §11 engine: registerPool/derivePickValueChart/validateTrade/
+composeIdentity/luxuryTax) was MISSING; the algorithms exist as a Python oracle in
+`scripts/analyze-pool.py`; the tier/cap/luxury/42-mod DATA exists (tierParams.ts) but was fully
+ORPHANED (T8 is its first consumer). Auction (§7.5) + AI shills (§7.6) confirmed v1.5 (→ T11);
+custom-pool derivation → T12.
+
+**JK rulings (DECISIONS_LOG 2026-06-14):** (1) split into 4 engine-first tickets T8a→T8d;
+(2) stock pool only, custom → T12; (3) identity decreases OPTIONAL ("max customizable, less
+requirements"); (4) point-allocation input; (5) T8b migration ADDITIVE-only (existing leagues
+untouched); (6) balanceMode in League Builder only (wizard inherits). SCOPE CORRECTION (Captain,
+first-hand): "Path A IV re-pricing" was ALREADY DONE — T5/D15 rebuilt calculateSalary on
+computeIV().kblIV; salaries already IV-based + tier-invariant (mapping agent E was imprecise).
+
+**T8a (a4ec4fb) — pure engine.** leagueConstruction.ts: composeIdentity / applyIdentitySelection /
+identityCapShift / shiftLuxuryCaps / luxuryTax / derivePickValueChart / validateTrade + 3 §12
+constants, ported decision-identical from analyze-pool.py; `decrease:[]` per JK. PRE-BUILD, Codex
+caught a real contract flaw (tiebreak magnitude uses RAW deltas, not fractions); Captain fixed the
+contract (reconstruct via MOD_STAT_XBL_CAP) during the battery pause and re-fired. AUDIT: independent
+oracle cross-check ran the REAL analyze-pool.py compose_identity → 10/10 goldens match; workbook
+xbl_caps == the engine's hardcoded caps. 9 tests; suite 7,180.
+
+**T8b (8fdf2c0) — tier/balanceMode wiring + Pool Registration + persistence.** registerPool pure
+assembler + POOL_SURPLUS_MAX; ADDITIVE kbl-league-builder v5→v6 (registeredPools store + optional
+tier/balanceMode on LeagueTemplate, read-time defaults, ZERO rewrite); tier+balanceMode selects +
+Register-Pool button; registerLeaguePool (iv via calculateIvBaseSalary, salary reused). 3 necessary
+collateral files (backupRestore/syncConfig/editorialSchema test). MIGRATION SAFETY PROVEN — the v6
+test seeds a real v5 DB, upgrades, reads the RAW on-disk record to confirm tier/balanceMode stay
+undefined in storage (defaults read-time only). JK approved the persistence change. 17 tests; suite 7,188.
+
+**T8c (d54724d) — Team Identity Composition UI.** Collapsible "Team Identity (Cap)" section in the
+LeagueBuilderTeams modal: 6-band point-allocation → composeIdentity Suggest; freely-editable 2 inc /
+2 dec dropdowns (decreases optional); applyIdentitySelection validation GUARDS the save;
+identityCapShift % + shiftLuxuryCaps preview; persisted as an ADDITIVE Team.capIdentity field (NO
+version bump, NO migration, NO backup/sync change). Editorial-identity systems (manager/almanac/
+reporter) untouched — name collision avoided. JK approved. 1 test; suite 7,189.
+
+**Suite:** 7,171 → 7,189 / 388 files; only the 3 characterized fails throughout (wpaRuntimeBoundary,
+franchiseManualSmokeFixture, franchiseNarrativeEventEligibility). tierParams / ivEngine /
+salaryCalculator / iv_oracle BYTE-UNCHANGED on every ticket.
+
+**Workflow notes:** standing auto-commit for pure/non-user-visible tickets (T8a); risk-gated
+SURFACE-before-commit for persistence/user-visible tickets (T8b, T8c — JK approved each). Battery
+pause mid-T8a was clean (Codex hadn't written src/) and productive (surfaced the tiebreak contract
+fix). Codex "very high" route = codex knob "high" (its max). GOTCHA: `calculateSalary` is already
+IV-based since T5/D15 — do NOT assume seed salary is pre-IV.
+
+**BROWSER-VERIFY BACKLOG (JK, one pass pre-D0):** + T8b (tier/balanceMode selectors + Register-Pool
+persist/reload; backup/sync round-trip), T8c (Team Identity section: band priorities → Suggest →
+manual edit → cap-shift preview → save/reload). (Prior: EP1, TV2, T7a, T7b, T7c.)
+
+**NEXT SESSION STARTS AT: T8d — the LAST T8 ticket (the big one).** 6 sub-surfaces: snake draft
+(Path B, all-user, no AI) + empirical pick-value chart (derivePickValueChart done) + pick-value
+trade validator UI (validateTrade done) + per-team solvency guardrail & GREEN/YELLOW/RED/BLOCKED
+signals (consume luxuryTax + RegisteredPool + live cheapestFillCost) + chemistry potency overlay
+(T6 effectiveRatings) + farm scout-obscured IV (§7.4, reuse T7b no-leak + existing
+LeagueBuilderDraft/leagueBuilderStartupFarmDraft scaffold). LIKELY SPLITS (like T7→T8). Captain to
+MAP it (focused workflow over the 6 surfaces + the existing draft scaffold) + propose the split +
+surface scope BEFORE drafting. Then T9 → T10 → D0.
