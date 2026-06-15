@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router";
-import { ArrowLeft, CheckCircle2, ClipboardList, RefreshCw, ShieldAlert, Shuffle, UserCheck, Users } from "lucide-react";
+import { ArrowLeft, BarChart3, CheckCircle2, ClipboardList, GitCompare, RefreshCw, Scale, ShieldAlert, Shuffle, UserCheck, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   toConstructionPlayer,
@@ -15,6 +15,8 @@ import {
   buildSnakeOrder,
   shiftLuxuryCaps,
   type SolvencyAssessment,
+  type TradeVerdict,
+  validateTrade,
 } from "../../../engines/leagueConstruction";
 import { createMlbDraftSessionId } from "../../../utils/leagueBuilderStorage";
 
@@ -26,6 +28,11 @@ const MLB_DRAFT_ENGINE_METHOD_VERSION = "leagueConstruction.t8d-1";
 type DraftCandidate = {
   poolPlayer: RegisteredPool["players"][number];
   player: Player;
+  assessment: SolvencyAssessment | null;
+};
+
+type TeamSolvencyComparison = {
+  team: Team;
   assessment: SolvencyAssessment | null;
 };
 
@@ -76,6 +83,58 @@ function assessmentMessage(assessment: SolvencyAssessment | null): string {
     return `Tax warning: marginal tax ${formatMoney(assessment.wouldBePickMarginalTax)}; slack ${formatMoney(assessment.slack)}.`;
   }
   return `Safe: ${formatMoney(assessment.slack)} slack after reserved fill.`;
+}
+
+export function parseTradePickList(value: string): { pick: number }[] {
+  return value
+    .split(/[,\s]+/)
+    .map((token) => token.trim())
+    .filter(Boolean)
+    .map((token) => Number(token))
+    .filter((pick) => Number.isFinite(pick))
+    .map((pick) => ({ pick }));
+}
+
+function buildTeamSolvencyComparison(input: {
+  candidate: DraftCandidate;
+  team: Team;
+  completedByTeam: Map<string, string[]>;
+  completedPlayerIds: Set<string>;
+  playerById: Map<string, Player>;
+  pool: RegisteredPool;
+  poolById: Map<string, RegisteredPool["players"][number]>;
+}): TeamSolvencyComparison {
+  const teamPickIds = input.completedByTeam.get(input.team.id) ?? [];
+  const committedRoster = teamPickIds
+    .map((playerId) => input.playerById.get(playerId))
+    .filter(Boolean)
+    .map((player) => toConstructionPlayer(player as Player));
+  const committedSalaries = teamPickIds.reduce((sum, playerId) => sum + (input.poolById.get(playerId)?.salary ?? 0), 0);
+  const caps = input.team.capIdentity
+    ? shiftLuxuryCaps(input.pool.luxuryCaps, input.team.capIdentity)
+    : input.pool.luxuryCaps;
+  const remainingPoolSalaries = input.pool.players
+    .filter((poolPlayer) => poolPlayer.id !== input.candidate.poolPlayer.id && !input.completedPlayerIds.has(poolPlayer.id))
+    .map((poolPlayer) => poolPlayer.salary);
+
+  try {
+    return {
+      team: input.team,
+      assessment: assessSolvency({
+        committedRoster,
+        committedSalaries,
+        candidate: toConstructionPlayer(input.candidate.player),
+        candidateSalary: input.candidate.poolPlayer.salary,
+        caps,
+        mode: input.pool.balanceMode,
+        tierCap: input.pool.tierCap,
+        rosterSize: MLB_DRAFT_ROUNDS,
+        remainingPoolSalaries,
+      }),
+    };
+  } catch {
+    return { team: input.team, assessment: null };
+  }
 }
 
 export function createEmptyMlbDraftRoster(teamId: string): TeamRoster {
@@ -168,6 +227,11 @@ export function LeagueBuilderSnakeDraft() {
   const [session, setSession] = useState<LeagueBuilderMlbDraftSession | null>(null);
   const [isWorking, setIsWorking] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [tradeSideA, setTradeSideA] = useState("");
+  const [tradeSideB, setTradeSideB] = useState("");
+  const [tradeVerdict, setTradeVerdict] = useState<TradeVerdict | null>(null);
+  const [tradeError, setTradeError] = useState<string | null>(null);
+  const [comparisonPlayerId, setComparisonPlayerId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!activeLeagueId && leagues.length > 0) {
@@ -215,6 +279,7 @@ export function LeagueBuilderSnakeDraft() {
 
   const currentPick = session?.pickOrder[session.currentPickIndex] ?? null;
   const currentTeam = currentPick ? teams.find((team) => team.id === currentPick.teamId) ?? null : null;
+  const currentPickValue = currentPick && pool ? pool.pickValueChart[currentPick.pick - 1]?.value : undefined;
   const completedPlayerIds = useMemo(
     () => new Set(session?.completedPicks.map((pick) => pick.playerId) ?? []),
     [session],
@@ -353,6 +418,22 @@ export function LeagueBuilderSnakeDraft() {
     const savedSession = await saveMlbDraftSession(payloads.session);
     setSession(savedSession);
   });
+
+  const handleEvaluateTrade = () => {
+    if (!pool) return;
+    setTradeError(null);
+    setTradeVerdict(null);
+    try {
+      setTradeVerdict(validateTrade(parseTradePickList(tradeSideA), parseTradePickList(tradeSideB), pool.pickValueChart));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setTradeError(
+        message.includes("outside the pick value chart")
+          ? `One or more picks are outside this pool's chart. Use pick numbers 1-${pool.pickValueChart.length}.`
+          : message,
+      );
+    }
+  };
 
   if (isLoading) {
     return (
@@ -514,6 +595,84 @@ export function LeagueBuilderSnakeDraft() {
           </section>
         </div>
 
+        {pool && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+            <section className="bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
+              <div className="flex items-center gap-2 mb-2">
+                <BarChart3 className="w-5 h-5 text-[#FFD27A]" />
+                <h2 className="font-bold text-lg">PICK VALUE CHART</h2>
+              </div>
+              <div className="text-xs text-[#E8E8D8]/65 mb-4">Registration-time snapshot from this pool.</div>
+              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                {pool.pickValueChart.map((row) => {
+                  const maxValue = pool.pickValueChart[0]?.value || row.value || 1;
+                  const width = `${Math.max(4, Math.min(100, (row.value / maxValue) * 100))}%`;
+                  return (
+                    <div key={row.pick} className="grid grid-cols-[72px_1fr_96px] items-center gap-3 text-sm">
+                      <div className="font-bold">Pick {row.pick}</div>
+                      <div className="h-3 bg-[#2d3d2f] border border-[#E8E8D8]/20">
+                        <div className="h-full bg-[#3B7DD8]" style={{ width }} />
+                      </div>
+                      <div className="text-right text-[#FFD27A] font-bold">{formatMoney(row.value)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
+              <div className="flex items-center gap-2 mb-2">
+                <Scale className="w-5 h-5 text-[#FFD27A]" />
+                <h2 className="font-bold text-lg">TRADE VALIDATOR</h2>
+              </div>
+              <div className="text-xs text-[#E8E8D8]/65 mb-4">Advisory only — overridable. Enter raw pick numbers.</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                <label className="block">
+                  <span className="block text-xs text-[#E8E8D8]/70 mb-1">SIDE A</span>
+                  <input
+                    value={tradeSideA}
+                    onChange={(event) => setTradeSideA(event.target.value)}
+                    placeholder="1, 24 25"
+                    className="w-full bg-[#4A6844] border-4 border-[#E8E8D8]/30 px-3 py-2 text-[#E8E8D8] font-bold focus:border-[#E8E8D8]/60 outline-none"
+                  />
+                </label>
+                <label className="block">
+                  <span className="block text-xs text-[#E8E8D8]/70 mb-1">SIDE B</span>
+                  <input
+                    value={tradeSideB}
+                    onChange={(event) => setTradeSideB(event.target.value)}
+                    placeholder="2 23"
+                    className="w-full bg-[#4A6844] border-4 border-[#E8E8D8]/30 px-3 py-2 text-[#E8E8D8] font-bold focus:border-[#E8E8D8]/60 outline-none"
+                  />
+                </label>
+              </div>
+              <button
+                onClick={handleEvaluateTrade}
+                className="px-4 py-2 bg-[#3B7DD8] hover:bg-[#4B8DE8] border-4 border-[#E8E8D8] transition font-bold mb-4"
+              >
+                EVALUATE
+              </button>
+              {tradeError ? (
+                <div className="bg-[#6B3A3A] border-4 border-[#FFD27A] p-3 text-sm text-[#FFE8B0] font-bold">{tradeError}</div>
+              ) : null}
+              {tradeVerdict ? (
+                <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4 text-sm">
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <span className={`px-2 py-0.5 font-bold ${tradeVerdict.balanced ? "bg-[#2F7D46] text-[#E8E8D8]" : "bg-[#9B2F2F] text-[#FFE8B0]"}`}>
+                      {tradeVerdict.balanced ? "BALANCED" : "IMBALANCED"}
+                    </span>
+                    <span>Imbalance {(tradeVerdict.imbalancePct * 100).toFixed(1)}% vs 15% band</span>
+                    <span>Favored {tradeVerdict.favored === "none" ? "none" : `Side ${tradeVerdict.favored}`}</span>
+                  </div>
+                  <div className="text-[#FFD27A] font-bold">
+                    Advisory — overridable: {tradeVerdict.overridable ? "yes" : "no"}
+                  </div>
+                </div>
+              ) : null}
+            </section>
+          </div>
+        )}
+
         {session && (
           <section className="mt-6 bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
             <div className="flex items-center justify-between mb-4">
@@ -521,6 +680,7 @@ export function LeagueBuilderSnakeDraft() {
               {currentPick && currentTeam ? (
                 <div className="font-bold text-[#FFD27A]">
                   ON THE CLOCK: {teamDisplayName(currentTeam)} · Round {currentPick.round}, Pick {currentPick.pick}
+                  {currentPickValue !== undefined ? ` · Chart ${formatMoney(currentPickValue)}` : ""}
                 </div>
               ) : (
                 <div className="font-bold text-[#9DFFB0]">DRAFT COMPLETE</div>
@@ -556,6 +716,40 @@ export function LeagueBuilderSnakeDraft() {
                       </div>
                       <div className="text-[#E8E8D8]/75">{assessmentMessage(candidate.assessment)}</div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setComparisonPlayerId((openId) => openId === candidate.player.id ? null : candidate.player.id)}
+                      className="w-full mb-3 px-3 py-2 bg-[#2d3d2f] border-2 border-[#E8E8D8]/30 font-bold flex items-center justify-center gap-2"
+                    >
+                      <GitCompare className="w-4 h-4 text-[#FFD27A]" />
+                      COMPARE TEAMS
+                    </button>
+                    {comparisonPlayerId === candidate.player.id && pool ? (
+                      <div className="mb-3 bg-[#2d3d2f] border-2 border-[#E8E8D8]/20 p-2">
+                        <div className="text-xs font-bold text-[#FFD27A] mb-2">CROSS-TEAM SOLVENCY</div>
+                        <div className="grid grid-cols-1 gap-2">
+                          {leagueTeams.map((team) => {
+                            const comparison = buildTeamSolvencyComparison({
+                              candidate,
+                              team,
+                              completedByTeam,
+                              completedPlayerIds,
+                              playerById,
+                              pool,
+                              poolById,
+                            });
+                            return (
+                              <div key={team.id} className="flex items-center justify-between gap-2 text-xs">
+                                <span className="truncate">{teamDisplayName(comparison.team)}</span>
+                                <span className={`px-2 py-0.5 font-bold ${signalClass(comparison.assessment?.signal ?? "BLOCKED")}`}>
+                                  {comparison.assessment?.signal ?? "BLOCKED"}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
                     <button
                       onClick={() => handleDraftPlayer(candidate.player.id, candidate.assessment)}
                       disabled={isWorking || !candidate.assessment?.confirmable}

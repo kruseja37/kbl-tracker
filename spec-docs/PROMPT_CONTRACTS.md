@@ -6970,8 +6970,62 @@ relabel. Tests: v7 migration (+seedV6 helper), adapter unit test, board RTL smok
 **Findings:** none (LOW or above). Note: Codex's RTL board smoke ran; in-app browser was unavailable (JK
 browser sign-off is the batched gate regardless).
 
-**Status:** T8d-2 = built + audited CONFORMS — **AWAITING JK APPROVAL to commit** (persistence + UI).
-BROWSER-VERIFY (batched): the MLB snake-draft board — start draft, snake order, per-candidate solvency
-signal, BLOCKED gate, confirm a pick (roster + assignment persist), reload resumes, 22-per-team completes,
-existing farm draft still fills 10, Franchise Setup handoff accepts the league.
+**Status:** T8d-2 = built + audited CONFORMS — JK APPROVED. COMMITTED (`2a5cd95`). BROWSER-PENDING
+(batched): the MLB snake-draft board — start draft, snake order, per-candidate solvency signal, BLOCKED
+gate, confirm a pick (roster + assignment persist), reload resumes, 22-per-team completes, existing farm
+draft still fills 10, Franchise Setup handoff accepts the league.
+
+---
+
+## T8d-3 CONTRACT (2026-06-14) — Board intelligence overlays — IV §7.3
+
+**ROUTE:** Codex 5.5 | very high reasoning effort → Opus 4.8 audit (Fable unavailable; auditor ≠ builder).
+User-visible (display overlays) but NO persistence / NO routes / NO engine change → audit non-negotiable +
+JK SURFACE before commit (NOT auto-commit). The LAST T8d ticket — wires the final two ORPHANED T8a engine
+fns (derivePickValueChart output via pool.pickValueChart; validateTrade) + extends the solvency signal to a
+cross-team comparison. Q7: trade validator advisory-only, no persistence/execution. R9 + R12 stay DEFERRED.
+
+```
+[identical to Temp/t8d3-contract.md — the builder prompt fed to Codex this session]
+```
+Full contract text: `Temp/t8d3-contract.md` (self-contained: pick-value chart panel from
+pool.pickValueChart; advisory trade-validator panel calling validateTrade w/ try-catch on out-of-range;
+on-demand per-candidate cross-team GREEN/YELLOW/RED/BLOCKED via assessSolvency; ALL in
+LeagueBuilderSnakeDraft.tsx; do-not-touch incl. engine/persistence/routes; verify = tsc0/build0/
+suite-no-new-RED + diff scoped to the board + its test, DB stays 7, IV display stays pool.iv/L2).
+
+**Status:** contract drafted → Codex build complete → audited CONFORMS → **SURFACED to JK, awaiting
+approval before commit** (record below).
+
+### T8d-3-AUDIT + EXECUTION RECORD (2026-06-14)
+
+**ROUTE actual:** Codex 5.5 | high (knob max) BUILT → Opus 4.8 (Captain) independent AUDIT (auditor ≠
+builder). User-visible overlays, NO persistence → NOT auto-committed; surfaced for JK approval.
+
+**Builder result (Codex 5.5):** 2 files. LeagueBuilderSnakeDraft.tsx += pick-value chart panel (renders
+pool.pickValueChart + on-clock pick value) + advisory trade-validator panel (validateTrade in try/catch,
+out-of-range → friendly message) + on-demand per-candidate cross-team solvency chips
+(buildTeamSolvencyComparison via assessSolvency across all teams, toggled by comparisonPlayerId). Its test
++= chart rows, balanced/imbalanced/out-of-range trade, cross-team rows, pick-list parsing.
+
+**AUDIT VERDICT: CONFORMS.** Independent re-verification (Opus):
+- tsc -b 0; `npm run build` exit 0; full suite (independent rerun) 7,207 pass / 3 fail / 390 files — the 3
+  are EXACTLY the characterized set; NO new RED. 7,210 = 7,206 + 4. (GameTrackerLaunchState passed in this
+  run; it is the conditional-solo order-flake in the characterized set either way.)
+- WIRING correct: pick-value chart from pool.pickValueChart (display-only, registration snapshot);
+  validateTrade wrapped in try/catch with a friendly out-of-range message (advisory, overridable, NO
+  persistence per Q7); parseTradePickList filters non-finite tokens; buildTeamSolvencyComparison builds
+  per-team committedRoster/committedSalaries + identity-shifted caps + rosterSize 22, on-demand per selected
+  candidate (not precomputed for all × all). Closes the last 2 T8a engine orphans (derivePickValueChart
+  output + validateTrade now have UI consumers).
+- SCOPE clean: git diff = ONLY LeagueBuilderSnakeDraft.tsx + its test (+ Captain docs). do-not-touch
+  byte-unchanged (git diff --name-only empty): leagueConstruction.ts, leagueBuilderStorage.ts,
+  useLeagueBuilderData.ts, App.tsx, LeagueBuilder.tsx, farm draft, rosters, handoff, tierParams, ivEngine,
+  salaryCalculator. DB_VERSION still 7. No R9/R12. Candidate IV display stays pool.iv (L2).
+
+**Findings:** none (LOW or above).
+
+**Status:** T8d-3 = built + audited CONFORMS — **AWAITING JK APPROVAL to commit** (user-visible). This
+COMPLETES T8d (R9 + R12 deferred fast-follows). BROWSER-VERIFY (batched): pick-value chart panel; trade
+validator (balanced/imbalanced/out-of-range); "Compare teams" per-candidate cross-team signal chips.
 

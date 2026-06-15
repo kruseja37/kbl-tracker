@@ -1,6 +1,6 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-14 (T8d split 3-way; T8d-1 engine + T8d-2 board/persistence built + audited CONFORMS + committed; T8d-3 next)
+**Last Updated:** 2026-06-14 (T8d COMPLETE — T8d-1/T8d-2/T8d-3 built + audited CONFORMS + committed; T9 next)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.
@@ -15,8 +15,17 @@
 - **Phase:** T-stack execution. Sequencing ruling F-141 holds: the full T-stack
   runs to completion as pure execution, THEN D0 cut line → D1–D8 → F-138 →
   flag flip → iPad playtest exit gate.
-- **Last completed:** **T8d-2 — MLB snake-draft board shell + draft-session persistence** (commit
-  `<pending>`). Codex 5.5 BUILT → Opus 4.8 audit **CONFORMS** → **JK APPROVED** (persistence + user-visible,
+- **Last completed:** **T8d-3 — Board intelligence overlays** (commit `<pending>`). Codex 5.5 BUILT →
+  Opus 4.8 audit **CONFORMS** → **JK APPROVED** (user-visible, not auto-committed). Three display-only
+  overlays on `LeagueBuilderSnakeDraft.tsx`: pick-value chart panel (`pool.pickValueChart` + on-clock pick
+  value) + advisory trade-validator panel (`validateTrade`, try/catch friendly out-of-range, no
+  persistence per Q7) + on-demand per-candidate cross-team solvency chips (`assessSolvency` across all
+  teams, §7.3 "green for one team, red for another"). Closes the last 2 T8a engine orphans
+  (`derivePickValueChart` output + `validateTrade` now have UI consumers). Independently re-verified: tsc 0
+  / build 0 / suite 7,210 (only the 3 characterized fails) / diff = 2 files / do-not-touch byte-unchanged /
+  DB still 7 / no R9/R12 / IV display stays pool.iv (L2). BROWSER-PENDING. **→ T8d COMPLETE.**
+  (T8d-1 `9f94412` + T8d-2 `2a5cd95` + T8a/T8b/T8c + T6/T7-stack — all CONFORMS — COMMITTED.)
+- **T8d-2 — MLB snake-draft board shell + draft-session persistence** (commit `2a5cd95`). Codex 5.5 BUILT → Opus 4.8 audit **CONFORMS** → **JK APPROVED** (persistence + user-visible,
   not auto-committed). New `LeagueBuilderSnakeDraft.tsx` board at a NEW route `/league-builder/snake-draft`
   + new "MLB DRAFT" tile (existing farm-draft tile relabeled "Farm prospect draft"; farm draft UNTOUCHED).
   Drafts 22-man rosters from the league RegisteredPool; per-candidate solvency via T8d-1 `assessSolvency`
@@ -29,12 +38,14 @@
   (hook layer; engine pure). Independently re-verified: tsc 0 / build 0 / full suite 7,206 (only the 3
   characterized fails) / all do-not-touch incl. the farm draft + handoff BYTE-UNCHANGED. BROWSER-PENDING.
   (T8d-1 `9f94412` + T8a/T8b/T8c + T6/T7-stack — all CONFORMS — COMMITTED.)
-- **NEXT TASK: T8d-3 — Board intelligence overlays.** Wire the last two ORPHANED T8a engine fns into the
-  board: pick-value chart display (`derivePickValueChart`, already on `RegisteredPool.pickValueChart`) +
-  standalone trade-validator panel (`validateTrade`, advisory-only/no-persistence per Q7) + per-team
-  cross-comparison signal overlay (the on-the-clock signal already lands in T8d-2). User-visible → audit
-  non-negotiable + JK surface before commit. Then **T9** → **T10** → D0. (R9 scout-obscured farm IV + R12
-  potency overlay remain DEFERRED fast-follows.) Full map: `T8d_SCOPE_MAP.md`.
+- **NEXT TASK: T9** — in-game substitution recommendations (governed by the no-oracle-leak principle,
+  DECISIONS_LOG 2026-06-14; "cite in T9"). NOT yet mapped/scoped. Captain to MAP it (focused workflow over
+  the in-game decision surfaces + the engines it consumes — effectiveRatings, leverage/WPA, mojo/fitness)
+  + propose a split + surface scope decisions to JK BEFORE drafting any build contract, same discipline as
+  T8d. ROUTE Codex 5.5 | very high → Opus audit. Then **T10** (Lineup Delta WPA) → D0. **T8d-stack DEFERRED
+  fast-follows (tracked):** R9 scout-obscured farm IV-range (needs `scoutNoiseBase` 0.6; resolves the
+  scoutedGrade-vs-IV-range model collision) + R12 chemistry potency overlay (needs SMB4 count→tier
+  thresholds + a `potencyTier(p,team)` resolver). Maps: `T8d_SCOPE_MAP.md`, `T8_SCOPE_MAP.md`.
 - **STANDING MODE (JK 2026-06-14):** per ticket = build → independent ENGINEERING
   audit → auto-commit verified-complete (browser-pending) → proceed. Captain
   surfaces only the audit verdict, the browser backlog, and genuine scope/design/
@@ -47,8 +58,8 @@
 
 ## SUITE BASELINE
 
-7,206 tests / 390 files (T8d-2 +7 / +2; T8d-1 +10; T8c +1; T8b +8 / +1; T8a +9 / +1; T7c +7 / +1; T7b +4;
-T7a +8 / +1; T6 +12; prior baseline 7,140 / 383). Characterized set (a new RED outside
+7,210 tests / 390 files (T8d-3 +4; T8d-2 +7 / +2; T8d-1 +10; T8c +1; T8b +8 / +1; T8a +9 / +1; T7c +7 / +1;
+T7b +4; T7a +8 / +1; T6 +12; prior baseline 7,140 / 383). Characterized set (a new RED outside
 this set is a real regression): fixed failures wpaRuntimeBoundary +
 franchiseNarrativeEventEligibility; conditional-solo order-flakes
 franchiseManualSmokeFixture + GameTrackerLaunchState +
@@ -92,6 +103,10 @@ franchiseOffseasonGuards.component (each passes solo).
    (relabeled "Farm prospect draft") still fills the 10; Franchise Setup handoff accepts the league.
    Backup/restore + sync round-trip with the new `mlbDraftSessions` store. (PERSISTENCE/data-shape →
    prioritized in the batch.)
+9. **T8d-3** snake-draft board overlays: the pick-value chart panel renders (+ current pick's value on the
+   on-the-clock banner); the trade-validator panel flags balanced vs imbalanced (imbalance % vs 15% band,
+   favored side, "advisory — overridable") and shows a friendly message for out-of-range pick numbers; the
+   per-candidate "Compare teams" toggle shows a GREEN/YELLOW/RED/BLOCKED chip per league team.
 
 ## OPEN PENDING-JK (rolling)
 

@@ -1,7 +1,7 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 
-import { LeagueBuilderSnakeDraft } from '../../app/pages/LeagueBuilderSnakeDraft';
+import { LeagueBuilderSnakeDraft, parseTradePickList } from '../../app/pages/LeagueBuilderSnakeDraft';
 import { useLeagueBuilderData } from '../../hooks/useLeagueBuilderData';
 import type {
   LeagueBuilderMlbDraftSession,
@@ -123,7 +123,12 @@ const pool: RegisteredPool = {
   ],
   tierCap: 1_000_000,
   luxuryCaps: [],
-  pickValueChart: [{ pick: 1, value: 200 }],
+  pickValueChart: [
+    { pick: 1, value: 200 },
+    { pick: 2, value: 190 },
+    { pick: 3, value: 120 },
+    { pick: 4, value: 50 },
+  ],
   totalSlots: 44,
   poolSurplusWarning: false,
 };
@@ -222,8 +227,63 @@ describe('LeagueBuilderSnakeDraft', () => {
 
     expect(screen.getByText('MLB SNAKE DRAFT')).toBeInTheDocument();
     expect(await screen.findByText(/ON THE CLOCK: Boston Sox/i)).toBeInTheDocument();
+    expect(screen.getByText(/Chart \$200/i)).toBeInTheDocument();
     expect(screen.getByText('Ari Banks')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /DRAFT TO MLB/i })).toBeEnabled();
+  });
+
+  test('pick-value chart renders rows from the registered pool snapshot', async () => {
+    render(<LeagueBuilderSnakeDraft />);
+
+    const panel = await screen.findByText('PICK VALUE CHART');
+    const section = panel.closest('section');
+    expect(section).not.toBeNull();
+    expect(within(section as HTMLElement).getByText('Pick 1')).toBeInTheDocument();
+    expect(within(section as HTMLElement).getByText('$200')).toBeInTheDocument();
+    expect(within(section as HTMLElement).getByText('Pick 4')).toBeInTheDocument();
+    expect(within(section as HTMLElement).getByText('$50')).toBeInTheDocument();
+  });
+
+  test('trade validator renders balanced, imbalanced, and out-of-range advisory results', async () => {
+    render(<LeagueBuilderSnakeDraft />);
+
+    await screen.findByText('TRADE VALIDATOR');
+    const sideA = screen.getByLabelText('SIDE A');
+    const sideB = screen.getByLabelText('SIDE B');
+    const evaluate = screen.getByRole('button', { name: /EVALUATE/i });
+
+    fireEvent.change(sideA, { target: { value: '1' } });
+    fireEvent.change(sideB, { target: { value: '2' } });
+    fireEvent.click(evaluate);
+    expect(screen.getByText('BALANCED')).toBeInTheDocument();
+    expect(screen.getByText(/Imbalance 5\.0% vs 15% band/i)).toBeInTheDocument();
+
+    fireEvent.change(sideB, { target: { value: '4' } });
+    fireEvent.click(evaluate);
+    expect(screen.getByText('IMBALANCED')).toBeInTheDocument();
+    expect(screen.getByText(/Imbalance 75\.0% vs 15% band/i)).toBeInTheDocument();
+    expect(screen.getByText(/Favored Side A/i)).toBeInTheDocument();
+
+    fireEvent.change(sideA, { target: { value: '99' } });
+    fireEvent.change(sideB, { target: { value: '1' } });
+    fireEvent.click(evaluate);
+    expect(screen.getByText(/Use pick numbers 1-4/i)).toBeInTheDocument();
+  });
+
+  test('cross-team comparison renders one signal row for each league team on demand', async () => {
+    render(<LeagueBuilderSnakeDraft />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /COMPARE TEAMS/i }));
+
+    const panel = screen.getByText('CROSS-TEAM SOLVENCY').parentElement;
+    expect(panel).not.toBeNull();
+    expect(within(panel as HTMLElement).getByText('Boston Sox')).toBeInTheDocument();
+    expect(within(panel as HTMLElement).getByText('Detroit Tigers')).toBeInTheDocument();
+    expect(within(panel as HTMLElement).getAllByText('GREEN')).toHaveLength(2);
+  });
+
+  test('parseTradePickList ignores blanks and NaN tokens', () => {
+    expect(parseTradePickList('1, 2   nope 4')).toEqual([{ pick: 1 }, { pick: 2 }, { pick: 4 }]);
   });
 
   test('confirmed pick performs roster write, player assignment write, and session cursor advance', async () => {
