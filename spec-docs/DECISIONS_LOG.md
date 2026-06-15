@@ -564,3 +564,44 @@ for the RED "severe tax" band, proceed-unless-vetoed); `scoutNoiseBase` defers w
 **Trade-offs:** Position-agnostic `cheapestFillCost` can theoretically let a team overspend and be unable
 to fill a specific position — acceptable for v1 (tax+cap are the real guardrails; revisit if playtest shows
 position starvation). MLB-first defers the farm IV-range, leaving two farm-value models un-unified until R9.
+
+---
+
+## Jun 14, 2026 — T9 scope rulings (GameTracker sub-recommendation rebuild)
+
+**Decision (4 rulings, JK via AskUserQuestion):** For T9 (IV spec §10 — rebuild the in-game
+`generateManagerRecommendations` placeholder onto effectiveRatings, the "third surface"):
+1. **Delta metric = IV-of-effectiveRatings (kblIV).** `delta = computeIV(effectiveRatings(sub)).kblIV −
+   computeIV(effectiveRatings(current)).kblIV`, identical to T7a `optimizeLineup` / §8.1 — "one truth,
+   three surfaces." Leverage enters via pressure→mojo amplification inside effectiveRatings; the dedicated
+   leverage-weighted surface is T10 (Lineup Delta WPA), kept separate.
+2. **`subRecThreshold` = per-type** (pinch-hit / defensive-replacement / pitcher-change), in kblIV-dollar
+   units, CALIBRATE/playtest-tunable. (kblIV magnitudes differ by rec type, so a single global threshold
+   would over/under-fire by type.)
+3. **New pure engine module** `src/engines/subRecommendations.ts` (`recommendSubs` → neutral
+   `SubRecommendation[]`); `managerWpaRecommendations.ts` becomes a thin adapter mapping
+   `SubRecommendation → ManagerRecommendation`. Matches §11's pure-engine boundary.
+4. **Split = 2 tickets** (engine-first): **T9a** pure engine (+ `subRecThreshold`), exhaustively unit-tested,
+   standing auto-commit; **T9b** GameTracker integration (widen the call-site mapping, derive the pressure
+   band, rebuild the 3 generators to call the engine, rewrite generation tests) — user-visible +
+   GameTracker-state → audit non-negotiable + JK surface before commit.
+
+**Context:** Captain mapped T9 via a 4-agent decorrelated fan-out (`T9_SCOPE_MAP.md`). Decisive finding:
+full ratings + traits are ALREADY in live state (the rec call-site just strips them), so T9 needs no deep
+`useGameState` plumbing — only a widened call-site mapping + a derived pressure band + `subRecThreshold`.
+
+**Implications:** T9a is a clean isolated engine addition (new file + additive type exports + an
+`activeTraitNames` helper on effectiveRatings.ts for justification naming + the per-type constant);
+rosterAnalyzer/T7 stays byte-unchanged (the scorer is reimplemented and the audit diffs it for
+equivalence vs `rosterAnalyzer.ts:535-571`). The `ManagerRecommendation` output type + watch/decision
+plumbing + NewsBoard UI are preserved by T9b.
+
+**Captain defaults (proceed-unless-vetoed):** pressure band none<1.5≤high<3.0≤extreme (builds on the
+existing isClutch LI≥1.5 precedent, CALIBRATE); role-misuse applied as a mojo-LEVEL down-shift on the
+candidate before scoring (CP early-entry inning derived from totalInnings); defensive-sub folds
+DefensivePlacementRisk into the kblIV delta (mirrors T7a `assignmentEntry`) AND surfaces it as
+justification; no-oracle-leak N/A for T9 (active known 22-man roster).
+
+**Trade-offs:** kblIV for a pitcher-change compares two pitchers' arsenal-dominated kblIV — a coarse but
+consistent in-game signal; refine via T10 if playtest shows need. Reimplementing the scorer duplicates ~15
+lines of clamp+assemble mapping (audit-diffed) rather than refactoring T7 — chosen to keep T9a isolated.

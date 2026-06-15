@@ -209,6 +209,17 @@ export const BATTING_ORDER_SLOT_WEIGHTS: Record<1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 
  */
 export const ROSTER_MOVE_CALLOUT_THRESHOLD = 500;
 
+/**
+ * §12:615 subRecThreshold, CALIBRATE/playtest placeholder in kblIV-dollar units.
+ * T9a uses per-type gates because pinch-hit, defensive, and pitcher-change deltas
+ * sit on different practical ranges.
+ */
+export const SUB_REC_THRESHOLD = {
+  pinch_hit: 5_000,
+  defensive_replacement: 7_500,
+  pitcher_change: 12_000,
+} as const;
+
 /** §8.4, CALIBRATE: dead-money cap charge after a season ledger demotion. */
 export const DEAD_MONEY_RATE = 0.75;
 

@@ -1,6 +1,6 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-14 (T8d COMPLETE — T8d-1/T8d-2/T8d-3 built + audited CONFORMS + committed; T9 next)
+**Last Updated:** 2026-06-14 (T8d COMPLETE; T9 mapped + split 2-way; T9a engine built + audited CONFORMS + committed; T9b next)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.
@@ -15,7 +15,20 @@
 - **Phase:** T-stack execution. Sequencing ruling F-141 holds: the full T-stack
   runs to completion as pure execution, THEN D0 cut line → D1–D8 → F-138 →
   flag flip → iPad playtest exit gate.
-- **Last completed:** **T8d-3 — Board intelligence overlays** (commit `2738cf5`). Codex 5.5 BUILT →
+- **Last completed:** **T9a — Pure in-game sub-recommendation engine** (commit `<pending>`). Codex 5.5
+  BUILT → Opus 4.8 audit **CONFORMS** → COMMITTED (pure engine, no user-visible surface → standing
+  auto-commit). NEW `src/engines/subRecommendations.ts` (`recommendSubs`): scores eligible subs vs the
+  current player on **IV-of-effectiveRatings** (`computeIV(effectiveRatings(...)).kblIV`, the same recipe +
+  byte-identical clamp as `rosterAnalyzer.ts:546-571` — "one truth, three surfaces"), recommends when the
+  per-type delta > `SUB_REC_THRESHOLD` {pinch_hit 5k / defensive 7.5k / pitcher_change 12k, CALIBRATE}.
+  Role-misuse mojo down-shift for pitcher changes; DefensivePlacementRisk folded into the delta for
+  defensive subs; justification strings (mojo/fitness/trait activations/standoffs/fatigue/IV). ADDITIVE to
+  `effectiveRatings.ts` (export the 7 shapes + new `activeTraitNames`; no behavior change). Independently
+  re-verified: tsc 0 / build 0 / suite 7,217 (only the 3 characterized fails) / rosterAnalyzer + ivEngine +
+  managerWpa + GameTracker BYTE-UNCHANGED. **T9 mapped (4-agent fan-out → `T9_SCOPE_MAP.md`); JK ruled 4
+  forks (IV-of-effectiveRatings delta / per-type threshold / new pure engine / 2-ticket split).**
+  (T8d-1/2/3 + T8a/b/c + T6/T7-stack — all CONFORMS — COMMITTED.)
+- **T8d-3 — Board intelligence overlays** (commit `2738cf5`). Codex 5.5 BUILT →
   Opus 4.8 audit **CONFORMS** → **JK APPROVED** (user-visible, not auto-committed). Three display-only
   overlays on `LeagueBuilderSnakeDraft.tsx`: pick-value chart panel (`pool.pickValueChart` + on-clock pick
   value) + advisory trade-validator panel (`validateTrade`, try/catch friendly out-of-range, no
@@ -38,14 +51,18 @@
   (hook layer; engine pure). Independently re-verified: tsc 0 / build 0 / full suite 7,206 (only the 3
   characterized fails) / all do-not-touch incl. the farm draft + handoff BYTE-UNCHANGED. BROWSER-PENDING.
   (T8d-1 `9f94412` + T8a/T8b/T8c + T6/T7-stack — all CONFORMS — COMMITTED.)
-- **NEXT TASK: T9** — in-game substitution recommendations (governed by the no-oracle-leak principle,
-  DECISIONS_LOG 2026-06-14; "cite in T9"). NOT yet mapped/scoped. Captain to MAP it (focused workflow over
-  the in-game decision surfaces + the engines it consumes — effectiveRatings, leverage/WPA, mojo/fitness)
-  + propose a split + surface scope decisions to JK BEFORE drafting any build contract, same discipline as
-  T8d. ROUTE Codex 5.5 | very high → Opus audit. Then **T10** (Lineup Delta WPA) → D0. **T8d-stack DEFERRED
-  fast-follows (tracked):** R9 scout-obscured farm IV-range (needs `scoutNoiseBase` 0.6; resolves the
-  scoutedGrade-vs-IV-range model collision) + R12 chemistry potency overlay (needs SMB4 count→tier
-  thresholds + a `potencyTier(p,team)` resolver). Maps: `T8d_SCOPE_MAP.md`, `T8_SCOPE_MAP.md`.
+- **NEXT TASK: T9b — GameTracker sub-rec integration.** Widen the rec call-site mapping
+  (`GameTracker.tsx:10207`) to feed full ratings + traits + mojo/fitness + opposing player (all ALREADY in
+  live state — just stripped today) into an expanded `ManagerRecommendationInput`; derive the `pressure`
+  band from `getCurrentLeverageIndex` (Captain default none<1.5≤high<3.0≤extreme); rebuild the 3 generators
+  in `managerWpaRecommendations.ts` (getPitching/getPinchHitter/getDefensiveReplacement) to call T9a
+  `recommendSubs` and map `SubRecommendation → ManagerRecommendation`; rewrite the ~8 generation tests
+  (plumbing tests stay GREEN). KEEP the `ManagerRecommendation` output type + watch/prompted-decision
+  plumbing + NewsBoard UI. User-visible + GameTracker-state → audit non-negotiable + JK surface before
+  commit. ROUTE Codex 5.5 | very high → Opus audit. Then **T10** (Lineup Delta WPA) → D0. **T8d-stack
+  DEFERRED fast-follows (tracked):** R9 scout-obscured farm IV-range (needs `scoutNoiseBase`) + R12
+  chemistry potency overlay (needs SMB4 count→tier thresholds + `potencyTier(p,team)` resolver). Maps:
+  `T9_SCOPE_MAP.md`, `T8d_SCOPE_MAP.md`.
 - **STANDING MODE (JK 2026-06-14):** per ticket = build → independent ENGINEERING
   audit → auto-commit verified-complete (browser-pending) → proceed. Captain
   surfaces only the audit verdict, the browser backlog, and genuine scope/design/
@@ -58,8 +75,8 @@
 
 ## SUITE BASELINE
 
-7,210 tests / 390 files (T8d-3 +4; T8d-2 +7 / +2; T8d-1 +10; T8c +1; T8b +8 / +1; T8a +9 / +1; T7c +7 / +1;
-T7b +4; T7a +8 / +1; T6 +12; prior baseline 7,140 / 383). Characterized set (a new RED outside
+7,217 tests / 391 files (T9a +7; T8d-3 +4; T8d-2 +7 / +2; T8d-1 +10; T8c +1; T8b +8 / +1; T8a +9 / +1;
+T7c +7 / +1; T7b +4; T7a +8 / +1; T6 +12; prior baseline 7,140 / 383). Characterized set (a new RED outside
 this set is a real regression): fixed failures wpaRuntimeBoundary +
 franchiseNarrativeEventEligibility; conditional-solo order-flakes
 franchiseManualSmokeFixture + GameTrackerLaunchState +

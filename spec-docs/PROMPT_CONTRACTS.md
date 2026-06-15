@@ -7025,7 +7025,70 @@ out-of-range → friendly message) + on-demand per-candidate cross-team solvency
 
 **Findings:** none (LOW or above).
 
-**Status:** T8d-3 = built + audited CONFORMS — **AWAITING JK APPROVAL to commit** (user-visible). This
-COMPLETES T8d (R9 + R12 deferred fast-follows). BROWSER-VERIFY (batched): pick-value chart panel; trade
-validator (balanced/imbalanced/out-of-range); "Compare teams" per-candidate cross-team signal chips.
+**Status:** T8d-3 = built + audited CONFORMS — JK APPROVED. COMMITTED (`2738cf5`). This COMPLETES T8d
+(R9 + R12 deferred fast-follows). BROWSER-PENDING (batched): pick-value chart panel; trade validator
+(balanced/imbalanced/out-of-range); "Compare teams" per-candidate cross-team signal chips.
+
+---
+
+## T9a CONTRACT (2026-06-14) — Pure in-game sub-recommendation engine — IV §10/§11
+
+**ROUTE:** Codex 5.5 | very high reasoning effort → Opus 4.8 audit (Fable unavailable; auditor ≠ builder).
+PURE engine, NO GameTracker wiring / NO UI / NO persistence → standing auto-commit on CONFORMS. T9 split =
+2 tickets (T9a engine → T9b GameTracker integration). JK rulings (DECISIONS_LOG 2026-06-14): delta =
+IV-of-effectiveRatings (kblIV, "one truth" with T7a); subRecThreshold PER-TYPE; new pure engine module
+`src/engines/subRecommendations.ts`; rosterAnalyzer/T7 stays byte-unchanged (scorer reimplemented, audit
+diffs equivalence vs `rosterAnalyzer.ts:535-571`). Captain defaults: role-misuse = mojo-level down-shift;
+defensive-sub folds DefensivePlacementRisk into the kblIV delta; no-oracle-leak N/A (active known roster).
+
+```
+[identical to Temp/t9a-contract.md — the builder prompt fed to Codex this session]
+```
+Full contract text: `Temp/t9a-contract.md` (self-contained: new `subRecommendations.ts` with
+`recommendSubs` + the exact ivOfEffectiveRatings recipe under LIVE ctx + per-type SUB_REC_THRESHOLD +
+role-misuse mojo shift + defensive-risk fold + justification precedence; ADDITIVE exports + `activeTraitNames`
+helper on effectiveRatings.ts (no behavior change); do-not-touch incl. rosterAnalyzer/managerWpa/GameTracker;
+verify = tsc0/build0/suite-no-new-RED + diff scoped to the new file + effectiveRatings additive + constant +
+test).
+
+**Status:** contract drafted → Codex build complete → audited CONFORMS (record below).
+
+### T9a-AUDIT + EXECUTION RECORD (2026-06-14)
+
+**ROUTE actual:** Codex 5.5 | high (knob max) BUILT → Opus 4.8 (Captain) independent AUDIT (auditor ≠
+builder). Pure engine → standing auto-commit on CONFORMS.
+
+**Builder result (Codex 5.5):** 4 files. NEW `src/engines/subRecommendations.ts` (`recommendSubs` +
+SubRecType/SubCandidate/SubRecInput/SubCandidateScore/SubRecommendation; `scoreEffectiveRatingsIv` recipe;
+role-misuse mojo shift; defensive-risk fold; justification precedence; confidence bands). `effectiveRatings.ts`
+ADDITIVE (export FitnessState/Position/Ratings/PlayerState/GameContext/PlacementRisk/EffectiveRatingsPlayer +
+new `activeTraitNames`). `rosterEngineConstants.ts` += `SUB_REC_THRESHOLD` {pinch_hit 5_000,
+defensive_replacement 7_500, pitcher_change 12_000} (CALIBRATE placeholders, kblIV dollars). NEW test (7).
+
+**AUDIT VERDICT: CONFORMS.** Independent re-verification (Opus):
+- tsc -b 0; `npm run build` exit 0; full suite (independent rerun) 7,214 pass / 3 fail / 391 files — the 3
+  are EXACTLY the characterized set; NO new RED. 7,217 = 7,210 + 7.
+- "ONE TRUTH" verified: `scoreEffectiveRatingsIv` (subRecommendations.ts:131-158) reproduces the
+  `rosterAnalyzer.ts:546-571` recipe field-for-field (effectiveRatings default L2 → IVPlayerInput → computeIV
+  .kblIV); `clampRating` is BYTE-IDENTICAL to rosterAnalyzer's (`!isFinite→0; max(0,min(99,v))` — NO rounding;
+  Codex correctly mirrored the actual code over the contract's imprecise "round then clamp"). Live ctx is
+  passed in (not the neutral lineup ctx).
+- Mechanics match spec/rulings: role-misuse via `shiftMojo` down N MOJO_STATES (SP relieving/RP starting −1,
+  CP starting −2, CP early-entry −1 with `secondToLastInning = (gameLengthInnings ?? 9) − 1`, SP/RP immune);
+  defensive fold = `chanceFreq × errorLik × CALIBRATE.lineupDefensiveRiskIvPenalty` applied to BOTH current
+  and candidate (risk-consistent delta); per-type threshold; confidence ≥2×→high/≥1.25×→medium/>→low.
+- effectiveRatings.ts diff is PURELY ADDITIVE (7 `export` keywords + `activeTraitNames` which reuses the
+  same predicatesActive+matrix loop, read-only — `void potency` since activation is potency-independent). NO
+  behavior change to effectiveRatings/defensivePlacementRisk/traitDeltas.
+- BYTE-UNCHANGED (git diff --name-only empty): rosterAnalyzer.ts (scorer reimplemented, NOT edited),
+  ivEngine.ts, managerWpaRecommendations.ts, GameTracker.tsx, useGameState.ts, tierParams, salaryCalculator.
+
+**Findings:** none (LOW or above).
+
+**Status:** T9a = built + audited CONFORMS. Pure engine, NO user-visible surface. COMMITTED. NEXT: **T9b**
+(GameTracker integration — widen the `GameTracker.tsx:10207` call-site mapping to feed full ratings/traits/
+mojo/fitness + derive the pressure band from leverageIndex + rebuild the 3 generators in
+`managerWpaRecommendations.ts` to call `recommendSubs` and map SubRecommendation→ManagerRecommendation +
+rewrite the generation tests) — user-visible + GameTracker-state → audit non-negotiable + JK surface before
+commit.
 

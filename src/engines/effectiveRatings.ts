@@ -21,11 +21,11 @@ import {
 } from '../data/traitInteractionMatrix';
 
 type MojoState = EffectiveMojoState;
-type FitnessState = 'JUICED' | 'FIT' | 'WELL' | 'STRAINED' | 'WEAK' | 'HURT';
-type Position = 'C' | '1B' | '2B' | 'SS' | '3B' | 'LF' | 'CF' | 'RF' | 'DH' | 'SP' | 'RP' | 'CP';
-type Ratings = Record<Attr, number>;
+export type FitnessState = 'JUICED' | 'FIT' | 'WELL' | 'STRAINED' | 'WEAK' | 'HURT';
+export type Position = 'C' | '1B' | '2B' | 'SS' | '3B' | 'LF' | 'CF' | 'RF' | 'DH' | 'SP' | 'RP' | 'CP';
+export type Ratings = Record<Attr, number>;
 
-interface PlayerState {
+export interface PlayerState {
   mojo: MojoState;
   fitness: FitnessState;
   workload?: {
@@ -36,7 +36,7 @@ interface PlayerState {
   };
 }
 
-interface GameContext {
+export interface GameContext {
   count?: { balls: number; strikes: number };
   pressure: 'none' | 'high' | 'extreme';
   runnersOn: boolean | number;
@@ -63,14 +63,14 @@ interface GameContext {
   pitcherHand?: 'L' | 'R';
 }
 
-interface PlacementRisk {
+export interface PlacementRisk {
   chanceFrequency: number;
   errorLikelihood: number;
   spectacularLikelihood: number;
   expectedMojoDriftPerGame: number;
 }
 
-interface EffectiveRatingsPlayer {
+export interface EffectiveRatingsPlayer {
   id?: string;
   name?: string;
   primaryPosition?: string | null;
@@ -362,6 +362,21 @@ function traitDeltas(
     // mojoTransitionRate is a between-events dynamic, not an immediate rating delta.
   }
   return deltas;
+}
+
+export function activeTraitNames(
+  player: EffectiveRatingsPlayer,
+  ctx: GameContext,
+  potency: PotencyTier = 'L2',
+): string[] {
+  void potency;
+  const traits = new Set(playerTraits(player));
+  const active = new Set<string>();
+  for (const entry of TRAIT_INTERACTION_MATRIX) {
+    if (!traits.has(entry.name) || !predicatesActive(entry, ctx)) continue;
+    active.add(entry.name);
+  }
+  return [...active];
 }
 
 function traitFatigueInputs(
