@@ -97,6 +97,12 @@ export const PRESSURE_MULTIPLIER: Record<'high' | 'extreme', number> = {
   extreme: 2.0,
 };
 
+/** §4.2/§10 T9b, CALIBRATE: leverage-index bands mapped into effectiveRatings pressure. */
+export const PRESSURE_LEVERAGE_BANDS = {
+  high: 1.5,
+  extreme: 3.0,
+} as const;
+
 /** §4.2 JK 2026-06-10 canonical role-misuse penalties, encoded as mojo levels. */
 export const ROLE_MISUSE_MOJO_PENALTY = {
   spRelieving: 1,

@@ -1,4 +1,15 @@
-import { getManagerDecisionStandards } from "./managerWpaDerivation";
+import { PRESSURE_LEVERAGE_BANDS, type PitcherRoleKey } from "../data/rosterEngineConstants";
+import {
+  recommendSubs,
+  type SubCandidate,
+  type SubRecommendation,
+} from "../engines/subRecommendations";
+import type {
+  EffectiveRatingsPlayer,
+  GameContext,
+  PlayerState,
+  Position,
+} from "../engines/effectiveRatings";
 import type {
   PromptedManagerDecisionEvent,
   PromptedManagerDecisionType,
@@ -54,10 +65,35 @@ export interface ManagerRecommendation {
 interface RecommendationPlayerBase {
   playerId: string;
   playerName: string;
+  power?: number;
+  contact?: number;
+  speed?: number;
+  fieldingRating?: number;
+  fielding?: number;
+  arm?: number;
+  velocity?: number;
+  junk?: number;
+  accuracy?: number;
+  trait1?: string | null;
+  trait2?: string | null;
+  traits?: string[];
+  battingHand?: "L" | "R" | "S";
+  bats?: "L" | "R" | "S";
+  throws?: "L" | "R";
+  throwingHand?: "L" | "R";
+  position?: string;
+  primaryPosition?: string;
+  secondaryPosition?: string;
+  secondaryPositions?: string[];
+  mojo?: PlayerState["mojo"];
+  fitness?: PlayerState["fitness"];
+  role?: PitcherRoleKey;
+  pitcherRole?: PitcherRoleKey;
+  pitchCount?: number;
+  isAvailable?: boolean;
 }
 
 export interface PitchingRecommendationPlayer extends RecommendationPlayerBase {
-  pitchCount?: number;
   isStarter?: boolean;
   runsAllowedInInning?: number;
   consecutiveBaserunners?: number;
@@ -66,26 +102,15 @@ export interface PitchingRecommendationPlayer extends RecommendationPlayerBase {
 
 export interface HitterRecommendationPlayer extends RecommendationPlayerBase {
   battingOrder?: number;
-  contact?: number;
-  power?: number;
-  battingHand?: "L" | "R" | "S";
-  isAvailable?: boolean;
 }
 
 export interface DefenderRecommendationPlayer extends RecommendationPlayerBase {
-  position?: string;
   fieldingErrors?: number;
-  fieldingRating?: number;
-  arm?: number;
-  isAvailable?: boolean;
 }
 
 export interface BenchDefenderRecommendationPlayer
   extends RecommendationPlayerBase {
   positions?: string[];
-  fieldingRating?: number;
-  arm?: number;
-  isAvailable?: boolean;
 }
 
 export interface ManagerRecommendationInput {
@@ -100,16 +125,22 @@ export interface ManagerRecommendationInput {
   offensiveManagerId: string;
   defensiveManagerId: string;
   scoreDifferentialForFieldingTeam?: number;
+  count?: { balls: number; strikes: number };
+  bases?: { first?: unknown; second?: unknown; third?: unknown };
+  runnersOn?: boolean | number;
+  risp?: boolean;
+  opposingHand?: "L" | "R";
+  opposingPitcher?: PitchingRecommendationPlayer;
+  opposingBatter?: HitterRecommendationPlayer;
+  isSubstitutionAB?: boolean;
   currentPitcher?: PitchingRecommendationPlayer;
-  availablePitchers?: RecommendationPlayerBase[];
+  availablePitchers?: PitchingRecommendationPlayer[];
   currentBatter?: HitterRecommendationPlayer;
   benchHitters?: HitterRecommendationPlayer[];
   defenders?: DefenderRecommendationPlayer[];
   benchDefenders?: BenchDefenderRecommendationPlayer[];
   suppressedRecommendationKeys?: Iterable<string>;
 }
-
-const DEFAULT_RATING = 50;
 
 function confidenceToSurface(
   confidence: ManagerRecommendationConfidence,
@@ -123,10 +154,6 @@ function confidenceToSurface(
   }
 
   return "feed_passive";
-}
-
-function playerKey(playerId: string | undefined, playerName: string | undefined) {
-  return playerId || playerName || "unknown";
 }
 
 export function buildManagerRecommendationSuppressKey(
@@ -227,16 +254,6 @@ function createRecommendation(
   };
 }
 
-function batterScore(player: HitterRecommendationPlayer): number {
-  return (player.contact ?? DEFAULT_RATING) * 0.6 + (player.power ?? DEFAULT_RATING) * 0.4;
-}
-
-function defenderScore(
-  player: DefenderRecommendationPlayer | BenchDefenderRecommendationPlayer,
-): number {
-  return (player.fieldingRating ?? DEFAULT_RATING) + (player.arm ?? DEFAULT_RATING) * 0.2;
-}
-
 function isBenchOptionAvailable<T extends { isAvailable?: boolean }>(
   player: T,
 ): boolean {
@@ -250,6 +267,173 @@ function positionMatches(benchPlayer: BenchDefenderRecommendationPlayer, positio
 
   const positions = benchPlayer.positions ?? [];
   return positions.includes(position) || positions.includes("UT");
+}
+
+function pressureFromLeverage(leverageIndex: number | undefined): GameContext["pressure"] {
+  const leverage = leverageIndex ?? 1;
+  if (leverage >= PRESSURE_LEVERAGE_BANDS.extreme) return "extreme";
+  if (leverage >= PRESSURE_LEVERAGE_BANDS.high) return "high";
+  return "none";
+}
+
+function runnerCount(input: ManagerRecommendationInput): number {
+  if (typeof input.runnersOn === "number") {
+    return input.runnersOn;
+  }
+  if (typeof input.runnersOn === "boolean") {
+    return input.runnersOn ? 1 : 0;
+  }
+  return [
+    input.bases?.first,
+    input.bases?.second,
+    input.bases?.third,
+  ].filter(Boolean).length;
+}
+
+function hasRisp(input: ManagerRecommendationInput): boolean {
+  return input.risp ?? Boolean(input.bases?.second || input.bases?.third);
+}
+
+function normalizeHand(hand: string | undefined, fallback: "L" | "R" = "R"): "L" | "R" {
+  return hand === "L" || hand === "R" ? hand : fallback;
+}
+
+function normalizePitcherRole(player: RecommendationPlayerBase): PitcherRoleKey | undefined {
+  const value = player.pitcherRole ?? player.role;
+  if (value === "SP" || value === "SP/RP" || value === "RP" || value === "CP") {
+    return value;
+  }
+  const position = (player.primaryPosition ?? player.position ?? "").toUpperCase();
+  if (position === "SP" || position === "SP/RP" || position === "RP" || position === "CP") {
+    return position;
+  }
+  return undefined;
+}
+
+function normalizePosition(position: string | undefined): Position | undefined {
+  if (!position) return undefined;
+  const normalized = position.toUpperCase();
+  if (
+    normalized === "C" ||
+    normalized === "1B" ||
+    normalized === "2B" ||
+    normalized === "SS" ||
+    normalized === "3B" ||
+    normalized === "LF" ||
+    normalized === "CF" ||
+    normalized === "RF" ||
+    normalized === "DH" ||
+    normalized === "SP" ||
+    normalized === "RP" ||
+    normalized === "CP"
+  ) {
+    return normalized;
+  }
+  if (normalized === "P") return "SP";
+  return undefined;
+}
+
+function toEffectiveRatingsPlayer(player: RecommendationPlayerBase): EffectiveRatingsPlayer {
+  const traits = [
+    ...(player.traits ?? []),
+    player.trait1,
+    player.trait2,
+  ].filter((trait): trait is string => typeof trait === "string" && trait.trim().length > 0);
+
+  return {
+    id: player.playerId,
+    name: player.playerName,
+    primaryPosition: player.primaryPosition ?? player.position ?? normalizePitcherRole(player) ?? null,
+    secondaryPosition: player.secondaryPosition ?? null,
+    secondaryPositions: player.secondaryPositions,
+    position: player.position ?? player.primaryPosition ?? null,
+    role: normalizePitcherRole(player),
+    bats: player.bats ?? player.battingHand,
+    throws: player.throws ?? player.throwingHand,
+    traits,
+    trait1: player.trait1,
+    trait2: player.trait2,
+    power: player.power,
+    contact: player.contact,
+    speed: player.speed,
+    fielding: player.fielding ?? player.fieldingRating,
+    arm: player.arm,
+    velocity: player.velocity,
+    junk: player.junk,
+    accuracy: player.accuracy,
+  };
+}
+
+function toPlayerState(player: RecommendationPlayerBase): PlayerState {
+  return {
+    mojo: player.mojo ?? "Normal",
+    fitness: player.fitness ?? "FIT",
+    workload: {
+      role: normalizePitcherRole(player),
+      pitchesThrown: player.pitchCount,
+    },
+  };
+}
+
+function toSubCandidate(
+  player: RecommendationPlayerBase,
+  options: { position?: Position; enteringInRelief?: boolean } = {},
+): SubCandidate {
+  return {
+    player: toEffectiveRatingsPlayer(player),
+    state: toPlayerState(player),
+    position: options.position,
+    enteringInRelief: options.enteringInRelief,
+  };
+}
+
+function buildGameContext(input: ManagerRecommendationInput, params: {
+  type: "pinch_hit" | "defensive_replacement" | "pitcher_change";
+  opposingPlayer?: RecommendationPlayerBase;
+  opposingHand?: "L" | "R";
+  batterHand?: "L" | "R" | "S";
+  pitcherHand?: "L" | "R";
+  playingPosition?: Position;
+}): GameContext {
+  const runners = runnerCount(input);
+  return {
+    count: input.count,
+    pressure: pressureFromLeverage(input.leverageIndex),
+    runnersOn: runners,
+    risp: hasRisp(input),
+    opposingHand:
+      params.opposingHand ??
+      input.opposingHand ??
+      normalizeHand(params.opposingPlayer?.battingHand ?? params.opposingPlayer?.bats ?? params.opposingPlayer?.throws),
+    opposingPlayer: params.opposingPlayer
+      ? toEffectiveRatingsPlayer(params.opposingPlayer)
+      : undefined,
+    inning: input.inning,
+    gameLengthInnings: input.totalInnings ?? 9,
+    isSubstitutionAB: params.type === "pinch_hit" ? true : input.isSubstitutionAB,
+    basesEmpty: runners === 0,
+    batterHand: params.batterHand,
+    pitcherHand: params.pitcherHand,
+    playingPosition: params.playingPosition,
+  };
+}
+
+function bestCandidateName(result: SubRecommendation): string {
+  return result.rankedCandidates.find(
+    (candidate) => candidate.candidateId === result.bestCandidateId,
+  )?.candidateName ?? "the replacement";
+}
+
+function formatDelta(delta: number | undefined): string {
+  return `$${Math.round(delta ?? 0).toLocaleString()}`;
+}
+
+function trackedPlayers(currentId: string, bestCandidateId: string | undefined): string[] {
+  return [currentId, bestCandidateId].filter((id): id is string => Boolean(id));
+}
+
+function resultConfidence(result: SubRecommendation): ManagerRecommendationConfidence {
+  return result.confidence ?? "low";
 }
 
 function addIfUnique(
@@ -282,65 +466,42 @@ function getPitchingRecommendation(
     return null;
   }
 
-  const standards = getManagerDecisionStandards(input.totalInnings ?? 9);
-  const leverage = input.leverageIndex ?? 1;
-  const pitchCount = pitcher.pitchCount ?? 0;
-  const fatigueWatch = pitcher.isStarter
-    ? standards.starterFatigueWatchPitches
-    : standards.relieverFatigueWatchPitches;
-  const fatigueUrgent = pitcher.isStarter
-    ? standards.starterFatigueUrgentPitches
-    : standards.relieverFatigueUrgentPitches;
-  const hasRunStress =
-    (pitcher.runsAllowedInInning ?? 0) >= standards.runsAllowedInInningWatch;
-  const hasTrafficStress =
-    (pitcher.consecutiveBaserunners ?? 0) >=
-    standards.consecutiveBaserunnersWatch;
-  const hasWalkStress =
-    (pitcher.consecutiveWalks ?? 0) >= standards.consecutiveWalksWatch;
-  const isLate = input.inning >= standards.lateInningStart;
-  const isCriticalLeverage = leverage >= standards.criticalLeverageIndex;
-  const isLateLeverage = leverage >= standards.lateLeverageIndex;
-  const isUrgent = pitchCount >= fatigueUrgent || hasRunStress || hasWalkStress;
-  const isWatch = pitchCount >= fatigueWatch || hasTrafficStress;
+  const batter = input.opposingBatter ?? input.currentBatter;
+  const result = recommendSubs({
+    type: "pitcher_change",
+    current: toSubCandidate(pitcher),
+    candidates: availablePitchers.map((candidate) =>
+      toSubCandidate(candidate, { enteringInRelief: true }),
+    ),
+    ctx: buildGameContext(input, {
+      type: "pitcher_change",
+      opposingPlayer: batter,
+      opposingHand: normalizeHand(batter?.battingHand ?? batter?.bats),
+      batterHand: batter?.battingHand ?? batter?.bats,
+      pitcherHand: normalizeHand(pitcher.throws ?? pitcher.throwingHand),
+    }),
+  });
 
-  let confidence: ManagerRecommendationConfidence | null = null;
-  if (isCriticalLeverage && isUrgent) {
-    confidence = "high";
-  } else if ((isLate || isLateLeverage) && (isWatch || isUrgent)) {
-    confidence = "medium";
-  } else if ((isWatch || isUrgent) && leverage >= 1) {
-    confidence = "low";
-  }
-
-  if (!confidence) {
+  if (!result.recommend || !result.bestCandidateId) {
     return null;
   }
 
   const suppressKey = buildManagerRecommendationSuppressKey(
     "consider_pitching_change",
-    playerKey(pitcher.playerId, pitcher.playerName),
+    result.bestCandidateId,
     input.inning,
     input.half,
   );
-  const stressLabels = [
-    pitchCount >= fatigueWatch ? `${pitchCount} pitches` : null,
-    hasRunStress ? "runs mounting" : null,
-    hasTrafficStress ? "traffic building" : null,
-    hasWalkStress ? "walks piling up" : null,
-  ].filter(Boolean);
+  const replacementName = bestCandidateName(result);
 
   return createRecommendation(input, {
     type: "consider_pitching_change",
     managerId: input.defensiveManagerId,
     teamId: input.fieldingTeamId,
-    confidence,
-    trackedPlayerIds: [pitcher.playerId],
+    confidence: resultConfidence(result),
+    trackedPlayerIds: trackedPlayers(pitcher.playerId, result.bestCandidateId),
     title: `Check on ${pitcher.playerName}`,
-    rationale:
-      stressLabels.length > 0
-        ? `${stressLabels.join(", ")} with leverage at ${leverage.toFixed(1)}.`
-        : `Leverage is ${leverage.toFixed(1)} and a fresh arm is available.`,
+    rationale: `${replacementName} grades as the best fresh-arm upgrade (${formatDelta(result.bestDelta)} IV delta). ${result.justification ?? "Pure IV-delta clears the pitcher-change threshold."}`,
     primaryAction: "open_pitching_change",
     noChangeAction: "keep_pitcher",
     suppressKey,
@@ -356,39 +517,29 @@ function getPinchHitterRecommendation(
     return null;
   }
 
-  const battingOrder = batter.battingOrder ?? 0;
-  if (battingOrder < 7 || battingOrder > 9) {
+  const pitcher = input.opposingPitcher ?? input.currentPitcher;
+  const result = recommendSubs({
+    type: "pinch_hit",
+    current: toSubCandidate(batter),
+    candidates: benchHitters.map((candidate) => toSubCandidate(candidate)),
+    ctx: buildGameContext(input, {
+      type: "pinch_hit",
+      opposingPlayer: pitcher,
+      opposingHand: normalizeHand(pitcher?.throws ?? pitcher?.throwingHand),
+      batterHand: batter.battingHand ?? batter.bats,
+      pitcherHand: normalizeHand(pitcher?.throws ?? pitcher?.throwingHand),
+    }),
+  });
+
+  if (!result.recommend || !result.bestCandidateId) {
     return null;
   }
 
-  const standards = getManagerDecisionStandards(input.totalInnings ?? 9);
-  const leverage = input.leverageIndex ?? 1;
-  if (leverage < standards.lateLeverageIndex) {
-    return null;
-  }
-
-  const currentScore = batterScore(batter);
-  const bestBenchHitter = benchHitters
-    .slice()
-    .sort((left, right) => batterScore(right) - batterScore(left))[0];
-  const improvement = batterScore(bestBenchHitter) - currentScore;
-
-  let confidence: ManagerRecommendationConfidence | null = null;
-  if (leverage >= standards.criticalLeverageIndex && improvement >= 12) {
-    confidence = "high";
-  } else if (improvement >= 8) {
-    confidence = "medium";
-  } else if (improvement > 0) {
-    confidence = "low";
-  }
-
-  if (!confidence) {
-    return null;
-  }
+  const replacementName = bestCandidateName(result);
 
   const suppressKey = buildManagerRecommendationSuppressKey(
     "consider_pinch_hitter",
-    playerKey(batter.playerId, batter.playerName),
+    result.bestCandidateId,
     input.inning,
     input.half,
   );
@@ -397,10 +548,10 @@ function getPinchHitterRecommendation(
     type: "consider_pinch_hitter",
     managerId: input.offensiveManagerId,
     teamId: input.battingTeamId,
-    confidence,
-    trackedPlayerIds: [batter.playerId, bestBenchHitter.playerId],
+    confidence: resultConfidence(result),
+    trackedPlayerIds: trackedPlayers(batter.playerId, result.bestCandidateId),
     title: `Pinch-hit spot for ${batter.playerName}`,
-    rationale: `${bestBenchHitter.playerName} grades as a stronger bat in a ${leverage.toFixed(1)} LI spot.`,
+    rationale: `${replacementName} grades as the best bench-bat upgrade (${formatDelta(result.bestDelta)} IV delta). ${result.justification ?? "Pure IV-delta clears the pinch-hit threshold."}`,
     primaryAction: "open_pinch_hit",
     noChangeAction: "let_batter_hit",
     suppressKey,
@@ -418,84 +569,54 @@ function getDefensiveReplacementRecommendation(
     return null;
   }
 
-  const standards = getManagerDecisionStandards(input.totalInnings ?? 9);
-  const isLateLead =
-    input.inning >= standards.finalPhaseStart &&
-    typeof input.scoreDifferentialForFieldingTeam === "number" &&
-    input.scoreDifferentialForFieldingTeam > 0 &&
-    input.scoreDifferentialForFieldingTeam <= 3;
-
-  const candidates = defenders.flatMap((defender) => {
-    const repeatedErrors = (defender.fieldingErrors ?? 0) >= 2;
-    if (!repeatedErrors && !isLateLead) {
-      return [];
-    }
-
-    const benchDefender = benchDefenders
+  const evaluated = defenders.flatMap((defender) => {
+    const position = normalizePosition(defender.position);
+    const candidates = benchDefenders
       .filter((candidate) => positionMatches(candidate, defender.position))
-      .sort((left, right) => defenderScore(right) - defenderScore(left))[0];
-    if (!benchDefender) {
-      return [];
-    }
+      .map((candidate) => toSubCandidate(candidate, { position }));
+    if (!position || candidates.length === 0) return [];
 
-    return [
-      {
-        defender,
-        benchDefender,
-        improvement: defenderScore(benchDefender) - defenderScore(defender),
-        repeatedErrors,
-      },
-    ];
-  });
+    const result = recommendSubs({
+      type: "defensive_replacement",
+      current: toSubCandidate(defender, { position }),
+      candidates,
+      ctx: buildGameContext(input, {
+        type: "defensive_replacement",
+        opposingPlayer: input.opposingBatter ?? input.currentBatter,
+        opposingHand: normalizeHand(input.opposingBatter?.battingHand ?? input.currentBatter?.battingHand),
+        playingPosition: position,
+      }),
+    });
 
-  const bestCandidate = candidates.sort(
-    (left, right) => right.improvement - left.improvement,
-  )[0];
+    return result.recommend && result.bestCandidateId
+      ? [{ defender, position, result, bestCandidateId: result.bestCandidateId }]
+      : [];
+  }).sort((left, right) => (right.result.bestDelta ?? 0) - (left.result.bestDelta ?? 0));
 
+  const bestCandidate = evaluated[0];
   if (!bestCandidate) {
-    return null;
-  }
-
-  let confidence: ManagerRecommendationConfidence | null = null;
-  if (
-    (bestCandidate.repeatedErrors && bestCandidate.improvement >= 10) ||
-    (isLateLead && bestCandidate.improvement >= 15)
-  ) {
-    confidence = "high";
-  } else if (
-    bestCandidate.repeatedErrors ||
-    (isLateLead && bestCandidate.improvement >= 8)
-  ) {
-    confidence = "medium";
-  } else if (isLateLead && bestCandidate.improvement > 0) {
-    confidence = "low";
-  }
-
-  if (!confidence) {
     return null;
   }
 
   const suppressKey = buildManagerRecommendationSuppressKey(
     "consider_defensive_replacement",
-    playerKey(bestCandidate.defender.playerId, bestCandidate.defender.playerName),
+    bestCandidate.bestCandidateId,
     input.inning,
     input.half,
   );
-  const reason = bestCandidate.repeatedErrors
-    ? `${bestCandidate.defender.playerName} has multiple errors.`
-    : `Protecting a ${input.scoreDifferentialForFieldingTeam}-run lead late.`;
+  const replacementName = bestCandidateName(bestCandidate.result);
 
   return createRecommendation(input, {
     type: "consider_defensive_replacement",
     managerId: input.defensiveManagerId,
     teamId: input.fieldingTeamId,
-    confidence,
+    confidence: resultConfidence(bestCandidate.result),
     trackedPlayerIds: [
       bestCandidate.defender.playerId,
-      bestCandidate.benchDefender.playerId,
+      bestCandidate.bestCandidateId,
     ],
     title: `Defensive look at ${bestCandidate.defender.position ?? "the field"}`,
-    rationale: `${reason} ${bestCandidate.benchDefender.playerName} is the cleaner glove.`,
+    rationale: `${replacementName} grades as the best defensive upgrade at ${bestCandidate.position} (${formatDelta(bestCandidate.result.bestDelta)} IV delta). ${bestCandidate.result.justification ?? "Pure IV-delta clears the defensive-replacement threshold."}`,
     primaryAction: "open_defensive_sub",
     noChangeAction: "decline_defensive_sub",
     suppressKey,

@@ -7085,10 +7085,73 @@ defensive_replacement 7_500, pitcher_change 12_000} (CALIBRATE placeholders, kbl
 
 **Findings:** none (LOW or above).
 
-**Status:** T9a = built + audited CONFORMS. Pure engine, NO user-visible surface. COMMITTED. NEXT: **T9b**
-(GameTracker integration — widen the `GameTracker.tsx:10207` call-site mapping to feed full ratings/traits/
-mojo/fitness + derive the pressure band from leverageIndex + rebuild the 3 generators in
-`managerWpaRecommendations.ts` to call `recommendSubs` and map SubRecommendation→ManagerRecommendation +
-rewrite the generation tests) — user-visible + GameTracker-state → audit non-negotiable + JK surface before
-commit.
+**Status:** T9a = built + audited CONFORMS. Pure engine, NO user-visible surface. COMMITTED (`ef85c80`).
+NEXT: **T9b** (GameTracker integration). 
+
+---
+
+## T9b CONTRACT (2026-06-14) — GameTracker sub-rec integration — IV §10
+
+**ROUTE:** Codex 5.5 | very high reasoning effort → Opus 4.8 audit (Fable unavailable; auditor ≠ builder).
+User-visible + GameTracker-state → audit NON-NEGOTIABLE + JK SURFACE before commit (NOT auto-commit). Wires
+T9a `recommendSubs` into the live rec surface: widen the `GameTracker.tsx:10207` call-site mapping (full
+ratings/traits/mojo/fitness/opposing-player — all ALREADY in live state) + derive the pressure band from
+`getCurrentLeverageIndex` + rebuild the 3 generators in `managerWpaRecommendations.ts` to call recommendSubs
+and map SubRecommendation→ManagerRecommendation + rewrite the generation tests. JK firing-gate ruling: PURE
+IV-delta gate — REMOVE the situational firing heuristics (leverage floor, batting-order gate, pitcher
+meltdown triggers). Output type + watch/decision plumbing + NewsBoard UI STAY.
+
+```
+[identical to Temp/t9b-contract.md — the builder prompt fed to Codex this session]
+```
+Full contract text: `Temp/t9b-contract.md` (self-contained: add-only input expansion + PRESSURE_LEVERAGE_
+BANDS {high 1.5, extreme 3.0} + 3 generators rebuilt onto recommendSubs (live GameContext + SubCandidate
+mapping; pure IV-delta gate) + widened GameTracker call-site mapping + generation-test rewrite (plumbing
+tests stay green); do-not-touch incl. the T9a engine + output contract; verify = tsc0/build0/suite-no-new-
+RED + wpaRuntimeBoundary still the same characterized fail + diff scoped to managerWpa/GameTracker/constants/
+test).
+
+**Status:** contract drafted → Codex build complete → audited CONFORMS → **SURFACED to JK, awaiting
+approval before commit** (record below).
+
+### T9b-AUDIT + EXECUTION RECORD (2026-06-14)
+
+**ROUTE actual:** Codex 5.5 | high (knob max) BUILT → Opus 4.8 (Captain) independent AUDIT (auditor ≠
+builder). User-visible + GameTracker-state → NOT auto-committed; surfaced for JK approval.
+
+**Builder result (Codex 5.5):** 4 files. `managerWpaRecommendations.ts` — input contract expanded (add-only),
+3 generators rebuilt onto `recommendSubs` (toEffectiveRatingsPlayer/toPlayerState/toSubCandidate adapters +
+buildGameContext + SubRecommendation→ManagerRecommendation mapping). `GameTracker.tsx` — rec useMemo mapping
+widened to feed full ratings/traits/hands/positions/mojo/fitness/pitchCount/count/bases/runners/opposing
+player. `rosterEngineConstants.ts` — `PRESSURE_LEVERAGE_BANDS {high 1.5, extreme 3.0}`. Test rewritten (16).
+
+**AUDIT VERDICT: CONFORMS.** Independent re-verification (Opus):
+- tsc -b 0; `npm run build` exit 0; full suite (independent rerun) 7,217 pass / 3 fail / 391 files — the 3
+  are EXACTLY the characterized set; NO new RED. `wpaRuntimeBoundary` still the SAME characterized fail
+  (only the 2 franchiseAnalyticsTrust.ts allowlist lines — scoring moved off WPA but leverageIndex stays a
+  read-only input; allowlist not newly tripped).
+- ORPHAN TRACE RESOLVED (the #1 risk): the widened call-site ACTUALLY feeds the engine — `toEffectiveRatings
+  Player` maps traits (trait1/trait2/traits[]) + ratings + hands + positions; `toPlayerState` maps mojo/
+  fitness/workload; `buildGameContext` passes opposingPlayer (current pitcher for hitter recs / current
+  batter for pitcher recs) so trait-vs-trait + handedness activate; GameTracker maps mojo via
+  getMojoForPlayer (6-level numeric→state normalize, matching MojoLevelLabel), fitness via getFitnessForPlayer,
+  pitchCount via pitcherStats. No defaults-only no-op.
+- PURE IV-DELTA GATE (JK ruling): the only firing condition is `recommendSubs(...).recommend`; the
+  situational heuristics are removed (no leverage floor, no batting-order gate, no consecutiveBaserunners/
+  runsAllowedInInning meltdown triggers; no batterScore/defenderScore/improvement-gate).
+- OUTPUT CONTRACT preserved: ManagerRecommendation unchanged; createRecommendation + suppressKey +
+  watch-event + prompted-decision builders + NewsBoard plumbing untouched; the ~5 plumbing tests stay GREEN.
+- BYTE-UNCHANGED (git diff --name-only empty): subRecommendations.ts + effectiveRatings.ts (T9a engine),
+  rosterAnalyzer, ivEngine, tierParams, salaryCalculator, trackerDb, leagueBuilderStorage.
+
+**Findings (LOW, non-blocking):** (1) vestigial input fields `runsAllowedInInning`/`consecutiveBaserunners`/
+`battingOrder` remain in the input types but are no longer consumed as firing gates (harmless; cleanup
+candidate). (2) Doc nit: the global `kbl-gotchas.md` says mojo is "5 levels (−2..+2)" but the code is
+6-level (`MojoLevelLabel` incl. 'On Fire'); the T9b normalize is correct vs the code — flag the stale doc.
+
+**Status:** T9b = built + audited CONFORMS — **AWAITING JK APPROVAL to commit** (user-visible + GameTracker-
+state). This COMPLETES T9. BROWSER-VERIFY (batched): in-game NewsBoard sub recs now fire on IV-of-
+effectiveRatings — a clearly-better bench bat surfaces a pinch-hit rec with a trait/mojo justification; a
+tiring pitcher surfaces a fresh-arm rec; the situational-only triggers no longer fire on their own;
+keep/decline actions + watch persistence still work.
 

@@ -1,6 +1,6 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-14 (T8d COMPLETE; T9 mapped + split 2-way; T9a engine built + audited CONFORMS + committed; T9b next)
+**Last Updated:** 2026-06-15 (T8d + T9 COMPLETE — T9a engine + T9b GameTracker integration built + audited CONFORMS + committed; T10 next)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.
@@ -15,7 +15,23 @@
 - **Phase:** T-stack execution. Sequencing ruling F-141 holds: the full T-stack
   runs to completion as pure execution, THEN D0 cut line → D1–D8 → F-138 →
   flag flip → iPad playtest exit gate.
-- **Last completed:** **T9a — Pure in-game sub-recommendation engine** (commit `ef85c80`). Codex 5.5
+- **Last completed:** **T9b — GameTracker sub-rec integration** (commit `<pending>`). Codex 5.5 BUILT →
+  Opus 4.8 audit **CONFORMS** → **JK APPROVED** (user-visible + GameTracker-state, not auto-committed).
+  Wired T9a `recommendSubs` into the live in-game rec surface: the 3 generators in
+  `managerWpaRecommendations.ts` rebuilt onto the engine (adapters → EffectiveRatingsPlayer + PlayerState +
+  live GameContext incl. opposing player); the `GameTracker.tsx` rec useMemo mapping widened to feed full
+  ratings/traits/hands/positions/mojo (`getMojoForPlayer`, 6-level normalize)/fitness/pitchCount/count/
+  bases/opposing player (the data was already in live state, just stripped). **PURE IV-delta firing gate**
+  (JK ruling) — situational heuristics removed (no leverage floor / batting-order gate / pitcher meltdown
+  triggers); fires IFF best per-type delta > `SUB_REC_THRESHOLD`. `PRESSURE_LEVERAGE_BANDS {high 1.5,
+  extreme 3.0}` added. ManagerRecommendation output + watch/decision plumbing + NewsBoard UI UNCHANGED.
+  Independently re-verified: tsc 0 / build 0 / suite 7,220 (only the 3 characterized fails;
+  `wpaRuntimeBoundary` unchanged) / orphan trace RESOLVED (traits/mojo/fitness/opposing-player flow UI→
+  engine) / T9a engine + rosterAnalyzer + ivEngine BYTE-UNCHANGED. **→ T9 COMPLETE.** BROWSER-PENDING.
+  (T9a `ef85c80` + T8d-1/2/3 + T8a/b/c + T6/T7-stack — all CONFORMS — COMMITTED.) LOW findings: vestigial
+  unused input fields (cleanup candidate); global `kbl-gotchas.md` says 5-level mojo but code is 6-level
+  (stale doc — fix when convenient).
+- **T9a — Pure in-game sub-recommendation engine** (commit `ef85c80`). Codex 5.5
   BUILT → Opus 4.8 audit **CONFORMS** → COMMITTED (pure engine, no user-visible surface → standing
   auto-commit). NEW `src/engines/subRecommendations.ts` (`recommendSubs`): scores eligible subs vs the
   current player on **IV-of-effectiveRatings** (`computeIV(effectiveRatings(...)).kblIV`, the same recipe +
@@ -51,16 +67,13 @@
   (hook layer; engine pure). Independently re-verified: tsc 0 / build 0 / full suite 7,206 (only the 3
   characterized fails) / all do-not-touch incl. the farm draft + handoff BYTE-UNCHANGED. BROWSER-PENDING.
   (T8d-1 `9f94412` + T8a/T8b/T8c + T6/T7-stack — all CONFORMS — COMMITTED.)
-- **NEXT TASK: T9b — GameTracker sub-rec integration.** Widen the rec call-site mapping
-  (`GameTracker.tsx:10207`) to feed full ratings + traits + mojo/fitness + opposing player (all ALREADY in
-  live state — just stripped today) into an expanded `ManagerRecommendationInput`; derive the `pressure`
-  band from `getCurrentLeverageIndex` (Captain default none<1.5≤high<3.0≤extreme); rebuild the 3 generators
-  in `managerWpaRecommendations.ts` (getPitching/getPinchHitter/getDefensiveReplacement) to call T9a
-  `recommendSubs` and map `SubRecommendation → ManagerRecommendation`; rewrite the ~8 generation tests
-  (plumbing tests stay GREEN). KEEP the `ManagerRecommendation` output type + watch/prompted-decision
-  plumbing + NewsBoard UI. User-visible + GameTracker-state → audit non-negotiable + JK surface before
-  commit. ROUTE Codex 5.5 | very high → Opus audit. Then **T10** (Lineup Delta WPA) → D0. **T8d-stack
-  DEFERRED fast-follows (tracked):** R9 scout-obscured farm IV-range (needs `scoutNoiseBase`) + R12
+- **NEXT TASK: T10 — Lineup Delta WPA** (IV spec §13 line 640; the LAST T-stack ticket before D0). NOT yet
+  mapped/scoped. Captain to MAP it (focused workflow over the WPA/leverage engines — `wpaCalculator`,
+  `winExpectancyTable`, `leverageCalculator` — + the lineup/decision surfaces it feeds + the
+  `wpaRuntimeBoundary` allowlist it must respect) + propose a split + surface scope decisions to JK BEFORE
+  drafting any build contract, same discipline as T8d/T9. ROUTE Codex 5.5 | very high → Opus audit. Then
+  **D0** cut line (FRANCHISE_PLAYABLE_V1_DEFINITION) → D1–D8 → F-138 → flag flip → iPad playtest.
+  **DEFERRED fast-follows (tracked):** R9 scout-obscured farm IV-range (needs `scoutNoiseBase`) + R12
   chemistry potency overlay (needs SMB4 count→tier thresholds + `potencyTier(p,team)` resolver). Maps:
   `T9_SCOPE_MAP.md`, `T8d_SCOPE_MAP.md`.
 - **STANDING MODE (JK 2026-06-14):** per ticket = build → independent ENGINEERING
@@ -75,8 +88,8 @@
 
 ## SUITE BASELINE
 
-7,217 tests / 391 files (T9a +7; T8d-3 +4; T8d-2 +7 / +2; T8d-1 +10; T8c +1; T8b +8 / +1; T8a +9 / +1;
-T7c +7 / +1; T7b +4; T7a +8 / +1; T6 +12; prior baseline 7,140 / 383). Characterized set (a new RED outside
+7,220 tests / 391 files (T9b +3 net; T9a +7; T8d-3 +4; T8d-2 +7 / +2; T8d-1 +10; T8c +1; T8b +8 / +1;
+T8a +9 / +1; T7c +7 / +1; T7b +4; T7a +8 / +1; T6 +12; prior baseline 7,140 / 383). Characterized set (a new RED outside
 this set is a real regression): fixed failures wpaRuntimeBoundary +
 franchiseNarrativeEventEligibility; conditional-solo order-flakes
 franchiseManualSmokeFixture + GameTrackerLaunchState +
@@ -124,6 +137,10 @@ franchiseOffseasonGuards.component (each passes solo).
    on-the-clock banner); the trade-validator panel flags balanced vs imbalanced (imbalance % vs 15% band,
    favored side, "advisory — overridable") and shows a friendly message for out-of-range pick numbers; the
    per-candidate "Compare teams" toggle shows a GREEN/YELLOW/RED/BLOCKED chip per league team.
+10. **T9 (T9b)** in-game NewsBoard sub recommendations now fire on IV-of-effectiveRatings: a clearly-better
+   bench bat surfaces a pinch-hit rec with a trait/mojo justification; a tiring pitcher surfaces a fresh-arm
+   rec; situational-only triggers (e.g. a meltdown with no ratings drop) no longer fire on their own (pure
+   IV-delta gate); keep/decline actions + watch persistence still work; recs feel sensibly-timed vs leverage.
 
 ## OPEN PENDING-JK (rolling)
 

@@ -96,6 +96,7 @@ import {
   type HitterRecommendationPlayer,
   type ManagerRecommendation,
   type ManagerRecommendationAction,
+  type PitchingRecommendationPlayer,
 } from "../../../utils/managerWpaRecommendations";
 import type {
   GameLockLineupSnapshots,
@@ -10210,7 +10211,88 @@ export function GameTracker() {
     }
 
     const leverageIndex = getCurrentLeverageIndex();
-    const currentPitcherStats = pitcherStats.get(currentPitcherData.id);
+    const normalizeRecommendationMojo = (mojo: unknown) => {
+      if (mojo === -2 || mojo === "Rattled") return "Rattled" as const;
+      if (mojo === -1 || mojo === "Tense") return "Tense" as const;
+      if (mojo === 1 || mojo === "Locked In") return "Locked In" as const;
+      if (mojo === 2 || mojo === "On Fire") return "On Fire" as const;
+      if (mojo === 3 || mojo === "Jacked") return "Jacked" as const;
+      return "Normal" as const;
+    };
+    const normalizeRecommendationFitness = (
+      fitness: unknown,
+    ): "JUICED" | "FIT" | "WELL" | "STRAINED" | "WEAK" | "HURT" => {
+      if (
+        fitness === "JUICED" ||
+        fitness === "FIT" ||
+        fitness === "WELL" ||
+        fitness === "STRAINED" ||
+        fitness === "WEAK" ||
+        fitness === "HURT"
+      ) {
+        return fitness;
+      }
+      return "FIT" as const;
+    };
+    const pitcherRoleForRecommendation = (pitcher: Pitcher): "SP" | "SP/RP" | "RP" | "CP" => {
+      const rawPosition = pitcher.secondaryPosition ?? "";
+      if (rawPosition === "SP/RP" || rawPosition === "RP" || rawPosition === "CP") {
+        return rawPosition;
+      }
+      return pitcher.isStarter ? "SP" : "RP";
+    };
+    const commonPlayerRecommendationFields = (
+      player: Player | Pitcher | undefined,
+      playerId: string,
+    ) => ({
+      power: player?.power,
+      contact: player?.contact,
+      speed: player?.speed,
+      fieldingRating: player?.fieldingRating,
+      arm: player?.arm,
+      velocity: player?.velocity,
+      junk: player?.junk,
+      accuracy: player?.accuracy,
+      trait1: player?.trait1,
+      trait2: player?.trait2,
+      throws: player?.throws ?? ("throwingHand" in (player ?? {}) ? (player as Pitcher).throwingHand : undefined),
+      secondaryPosition: player?.secondaryPosition,
+      mojo: normalizeRecommendationMojo(getMojoForPlayer(playerId) ?? player?.mojo),
+      fitness: normalizeRecommendationFitness(getFitnessForPlayer(playerId) ?? player?.fitness),
+    });
+    const buildHitterRecommendationPlayer = (
+      player: Player | undefined,
+      fallback: { playerId: string; playerName: string; battingOrder?: number },
+    ): HitterRecommendationPlayer => ({
+      playerId: fallback.playerId,
+      playerName: player?.name ?? fallback.playerName,
+      battingOrder: player?.battingOrder ?? fallback.battingOrder,
+      battingHand: player?.battingHand,
+      bats: player?.battingHand,
+      position: player?.position,
+      primaryPosition: player?.primaryPosition ?? player?.position,
+      ...commonPlayerRecommendationFields(player, fallback.playerId),
+    });
+    const buildPitchingRecommendationPlayer = (
+      pitcher: Pitcher,
+    ): PitchingRecommendationPlayer => {
+      const playerId = getRosterEntityId(pitcher, fieldingTeam);
+      const role = pitcherRoleForRecommendation(pitcher);
+      return {
+        ...commonPlayerRecommendationFields(pitcher, playerId),
+        playerId,
+        playerName: pitcher.name,
+        role,
+        pitcherRole: role,
+        position: role,
+        primaryPosition: role,
+        throws: pitcher.throws ?? pitcher.throwingHand,
+        throwingHand: pitcher.throwingHand,
+        pitchCount: pitcherStats.get(playerId)?.pitchCount,
+        isStarter: pitcher.isStarter,
+        isAvailable: !pitcher.isOutOfGame,
+      };
+    };
     const currentLineupBatter =
       currentLineup.find((player) => player.batting) ||
       currentLineup.find(
@@ -10224,34 +10306,34 @@ export function GameTracker() {
     );
     const currentBatter: HitterRecommendationPlayer | undefined =
       currentLineupBatter || currentBatterRoster
-        ? {
+        ? buildHitterRecommendationPlayer(currentBatterRoster, {
             playerId:
-              currentLineupBatter?.playerId ||
-              (currentBatterRoster
-                ? getRosterEntityId(currentBatterRoster, battingTeam)
-                : gameState.currentBatterId),
+                currentLineupBatter?.playerId ||
+                (currentBatterRoster
+                  ? getRosterEntityId(currentBatterRoster, battingTeam)
+                  : gameState.currentBatterId),
             playerName:
-              currentLineupBatter?.name ||
-              currentBatterRoster?.name ||
-              resolvedCurrentBatterName,
+                currentLineupBatter?.name ||
+                currentBatterRoster?.name ||
+                resolvedCurrentBatterName,
             battingOrder:
-              currentBatterRoster?.battingOrder ??
-              currentLineupBatter?.battingOrder,
-            contact: currentBatterRoster?.contact,
-            power: currentBatterRoster?.power,
-            battingHand: currentBatterRoster?.battingHand,
-          }
+                currentBatterRoster?.battingOrder ??
+                currentLineupBatter?.battingOrder,
+          })
         : undefined;
     const benchHitters: HitterRecommendationPlayer[] = battingTeamPlayersRaw
       .filter((player) => player.battingOrder === undefined)
-      .map((player) => ({
-        playerId: getRosterEntityId(player, battingTeam),
-        playerName: player.name,
-        contact: player.contact,
-        power: player.power,
-        battingHand: player.battingHand,
-        isAvailable: !player.isOutOfGame,
-      }));
+      .map((player) => {
+        const playerId = getRosterEntityId(player, battingTeam);
+        return {
+          ...buildHitterRecommendationPlayer(player, {
+            playerId,
+            playerName: player.name,
+            battingOrder: player.battingOrder,
+          }),
+          isAvailable: !player.isOutOfGame,
+        };
+      });
 
     const defenders: DefenderRecommendationPlayer[] = defensiveColumnPlayers
       .filter((player) => !player.isPitcher)
@@ -10261,13 +10343,16 @@ export function GameTracker() {
             getRosterEntityId(candidate, fieldingTeam) === player.playerId ||
             candidate.name === player.name,
         );
+        const playerId = player.playerId;
         return {
-          playerId: player.playerId,
+          playerId,
           playerName: player.name,
           position: player.position,
+          primaryPosition: rosterPlayer?.primaryPosition ?? rosterPlayer?.position ?? player.position,
           fieldingErrors: playerStats.get(player.playerId)?.fieldingErrors ?? 0,
-          fieldingRating: rosterPlayer?.fieldingRating,
-          arm: rosterPlayer?.arm,
+          battingHand: rosterPlayer?.battingHand,
+          bats: rosterPlayer?.battingHand,
+          ...commonPlayerRecommendationFields(rosterPlayer, playerId),
         };
       });
     const fieldingSnapshot = getLineupStateSnapshot()[fieldingTeam];
@@ -10291,8 +10376,11 @@ export function GameTracker() {
             playerId: benchPlayer.playerId,
             playerName: benchPlayer.playerName,
             positions,
-            fieldingRating: rosterPlayer?.fieldingRating,
-            arm: rosterPlayer?.arm,
+            position: rosterPlayer?.position,
+            primaryPosition: rosterPlayer?.primaryPosition ?? rosterPlayer?.position,
+            battingHand: rosterPlayer?.battingHand,
+            bats: rosterPlayer?.battingHand,
+            ...commonPlayerRecommendationFields(rosterPlayer, benchPlayer.playerId),
             isAvailable: benchPlayer.isAvailable,
           };
         })
@@ -10306,6 +10394,9 @@ export function GameTracker() {
       fieldingTeam === "home"
         ? gameState.homeScore - gameState.awayScore
         : gameState.awayScore - gameState.homeScore;
+    const currentPitcherRecommendation = activePitcher
+      ? buildPitchingRecommendationPlayer(activePitcher)
+      : undefined;
 
     return generateManagerRecommendations({
       gameId: gameState.gameId,
@@ -10314,26 +10405,25 @@ export function GameTracker() {
       outs: gameState.outs,
       totalInnings: hookTotalInningsRef.current || navigationState?.totalInnings || 9,
       leverageIndex,
+      count: { balls: gameState.balls, strikes: gameState.strikes },
+      bases: gameState.bases,
+      runnersOn:
+        (gameState.bases.first ? 1 : 0) +
+        (gameState.bases.second ? 1 : 0) +
+        (gameState.bases.third ? 1 : 0),
+      risp: Boolean(gameState.bases.second || gameState.bases.third),
       battingTeamId,
       fieldingTeamId,
       offensiveManagerId: battingTeam === "away" ? awayManagerId : homeManagerId,
       defensiveManagerId: fieldingTeam === "away" ? awayManagerId : homeManagerId,
       scoreDifferentialForFieldingTeam,
-      currentPitcher: activePitcher
-        ? {
-            playerId: currentPitcherData.id,
-            playerName: currentPitcherData.name,
-            pitchCount: currentPitcherStats?.pitchCount,
-            isStarter: activePitcher.isStarter,
-          }
-        : undefined,
+      currentPitcher: currentPitcherRecommendation,
       availablePitchers: fieldingTeamPitchersRaw
         .filter((pitcher) => !pitcher.isActive && !pitcher.isOutOfGame)
-        .map((pitcher) => ({
-          playerId: getRosterEntityId(pitcher, fieldingTeam),
-          playerName: pitcher.name,
-        })),
+        .map(buildPitchingRecommendationPlayer),
       currentBatter,
+      opposingPitcher: currentPitcherRecommendation,
+      opposingBatter: currentBatter,
       benchHitters,
       defenders,
       benchDefenders,
@@ -10346,14 +10436,16 @@ export function GameTracker() {
     battingTeamId,
     battingTeamPlayersRaw,
     currentLineup,
-    currentPitcherData.id,
-    currentPitcherData.name,
     defensiveColumnPlayers,
     fieldingTeam,
     fieldingTeamId,
     fieldingTeamPitchersRaw,
     fieldingTeamPlayersRaw,
     gameState.awayScore,
+    gameState.balls,
+    gameState.bases.first,
+    gameState.bases.second,
+    gameState.bases.third,
     gameState.currentBatterId,
     gameState.gameId,
     gameState.gamePhase,
@@ -10361,8 +10453,11 @@ export function GameTracker() {
     gameState.inning,
     gameState.isTop,
     gameState.outs,
+    gameState.strikes,
     getCurrentLeverageIndex,
+    getFitnessForPlayer,
     getLineupStateSnapshot,
+    getMojoForPlayer,
     getRosterEntityId,
     homeManagerId,
     hookTotalInningsRef,
