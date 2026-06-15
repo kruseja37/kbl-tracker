@@ -4448,3 +4448,67 @@ signals (consume luxuryTax + RegisteredPool + live cheapestFillCost) + chemistry
 LeagueBuilderDraft/leagueBuilderStartupFarmDraft scaffold). LIKELY SPLITS (like T7→T8). Captain to
 MAP it (focused workflow over the 6 surfaces + the existing draft scaffold) + propose the split +
 surface scope BEFORE drafting. Then T9 → T10 → D0.
+
+
+---
+
+## 2026-06-14 — T8d COMPLETE: mapped + split 3-way + T8d-1/T8d-2/T8d-3 built, audited CONFORMS, committed
+
+**Type:** Product code. Branch codex/franchise-v1-next. Three feature commits (9f94412 T8d-1, 2a5cd95
+T8d-2, 2738cf5 T8d-3) + two doc commits (be81267, 61be685). Roles: Captain (Opus 4.8) mapped + authored
+every contract + AUDITED every diff independently; Codex 5.5 BUILT each (codex CLI, workspace-write, high
+reasoning); auditor ≠ builder (Fable unavailable). JK ruled product/scope/design + approved the two
+user-visible/persistence commits (T8d-2, T8d-3).
+
+**Mapping + rulings.** T8d (the §7.3 snake-draft surface) mapped via a 7-agent decorrelated fan-out →
+`T8d_SCOPE_MAP.md`. Found the engine half-built+orphaned (derivePickValueChart/validateTrade/luxuryTax all
+exist, zero UI callers) and FIVE things entirely MISSING (snake state machine, solvency guardrail, scout-
+obscured farm IV, potencyTier resolver, the board). Caught a prior-map error: `effectiveRatings.potencyTier`
+does NOT exist (type only). JK ruled 6 design forks (DECISIONS_LOG 2026-06-14): budget=tierCap; position-
+agnostic cheapestFillCost; DEFER R12 (potency overlay — count→tier thresholds undefined) + R9 (scout-
+obscured farm IV); mode-aware/charge-faithful solvency; composition = two separate steps (MLB board fills
+22, existing farm draft fills 10, untouched). → split collapsed from 4 to **3 tickets**.
+
+**T8d-1 (9f94412) — snake + solvency engine (pure).** leagueConstruction.ts += buildSnakeOrder,
+cheapestFillCost, pickMarginalTax, assessSolvency (GREEN/YELLOW/RED/BLOCKED). Mode-aware: drain via
+luxuryTax.charged (0 in advisory/off), warning via wouldBe, off=no tax signal. +2 constants
+(SOLVENCY_RED_MARGIN 0.10, SOLVENCY_SEVERE_TAX_FRAC 0.20). +10 tests incl. the mode-ruling differential
+(mutation-sensitive). Pure → standing auto-commit. Suite 7,199.
+
+**T8d-2 (2a5cd95) — board + persistence.** New LeagueBuilderSnakeDraft.tsx at /league-builder/snake-draft
++ "MLB DRAFT" tile (farm tile relabeled). kbl-league-builder v6→v7 ADDITIVE: mlbDraftSessions store +
+LeagueBuilderMlbDraftSession + CRUD + sync/backup collateral; DB_VERSION 7 the only version change
+(migration test seeds raw v6, proves 9 prior stores+data survive — kbl-league-builder is single-module, no
+src_figma dup, so no Feb-11 hang risk). toConstructionPlayer adapter (hook layer; engine pure). Per-pick
+DUAL-WRITE (mlbRoster + leagueAssignments rosterStatus:'MLB') satisfies the 22+10 handoff. Persistence +
+user-visible → JK surfaced + APPROVED before commit. Suite 7,206.
+
+**T8d-3 (2738cf5) — board overlays.** pick-value chart panel (pool.pickValueChart) + advisory trade
+validator (validateTrade, try/catch, no persistence per Q7) + on-demand per-candidate cross-team solvency
+chips (assessSolvency across all teams). Closes the last 2 T8a engine orphans. Display-only (no
+persistence/route/engine change). User-visible → JK surfaced + APPROVED. Suite 7,210.
+
+**Suite:** 7,189 → 7,210 / 390 files; only the 3 characterized fails throughout (wpaRuntimeBoundary,
+franchiseManualSmokeFixture, franchiseNarrativeEventEligibility; GameTrackerLaunchState order-flake also
+appeared in one Codex run, passes solo). All do-not-touch (engine post-T8d-1, farm draft, handoff, tierParams,
+ivEngine, salaryCalculator, trackerDb) byte-unchanged per ticket. Each gate (tsc/build/full-suite/diff-scope)
+independently re-run by the Captain, not trusted from the builder paste.
+
+**Workflow notes.** Codex invocation (proven): `~/.local/bin/codex exec --skip-git-repo-check -s
+workspace-write -c model_reasoning_effort=high -o <out> - < <promptfile>` as a background bash task with the
+harness sandbox disabled for that one call. Two focused integration-mapping workflows (T8d sub-surfaces;
+T8d-2 exact signatures) kept Captain context clean. Standing mode worked cleanly: pure ticket auto-committed;
+persistence/user-visible tickets surfaced-before-commit.
+
+**BROWSER-VERIFY BACKLOG (JK, one pass pre-D0):** + T8d-2 (snake board: start/order/signal/BLOCKED/confirm-
+persist/reload/22-complete/farm-still-10/handoff-accepts) + T8d-3 (chart panel, trade validator incl. out-of-
+range, Compare-teams chips). (Prior: EP1, TV2, T7a, T7b, T7c, T8b, T8c.)
+
+**OPEN/DEFERRED:** R9 scout-obscured farm IV-range (needs scoutNoiseBase 0.6; resolves scoutedGrade-vs-IV-
+range collision) + R12 chemistry potency overlay (needs SMB4 count→tier thresholds + a potencyTier(p,team)
+resolver) — tracked fast-follows. FINDING-148 (AUX_PRICING L/R, JK-gated, oracle regen) still open.
+
+**NEXT SESSION STARTS AT: T9** — in-game substitution recommendations (no-oracle-leak principle governs;
+"cite in T9"). NOT yet mapped — Captain to MAP (focused workflow over the in-game decision surfaces +
+effectiveRatings/leverage-WPA/mojo-fitness) + propose split + surface scope BEFORE drafting. Then T10
+(Lineup Delta WPA) → D0.
