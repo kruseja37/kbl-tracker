@@ -246,6 +246,12 @@ export const CALIBRATE = {
 /** §12/§7.3 tradeToleranceBand: pick-trade imbalance above 15% is advisory-flagged. */
 export const TRADE_TOLERANCE_BAND = 0.15;
 
+/** §12/§7.3:492 RED when slack is at or below this fraction of remaining budget. */
+export const SOLVENCY_RED_MARGIN = 0.10;
+
+/** §7.3:492 RED "severe tax" warning threshold; Captain default, JK-tunable. */
+export const SOLVENCY_SEVERE_TAX_FRAC = 0.20;
+
 /** §12/§5.4 balanceMode default for Mode 1 league construction. */
 export const BALANCE_MODE_DEFAULT = 'taxed' as const;
 

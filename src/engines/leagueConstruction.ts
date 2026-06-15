@@ -1,4 +1,9 @@
-import { POOL_SURPLUS_MAX, TRADE_TOLERANCE_BAND } from '../data/rosterEngineConstants';
+import {
+  POOL_SURPLUS_MAX,
+  SOLVENCY_RED_MARGIN,
+  SOLVENCY_SEVERE_TAX_FRAC,
+  TRADE_TOLERANCE_BAND,
+} from '../data/rosterEngineConstants';
 import {
   CAP_MODIFICATION_FRACTIONS,
   LUXURY_CAP_TABLES,
@@ -292,4 +297,123 @@ export function validateTrade(sideA: Pick[], sideB: Pick[], chart: PickValue[]):
   const favored: TradeVerdict['favored'] = balanced ? 'none' : sumA > sumB ? 'A' : sumB > sumA ? 'B' : 'none';
 
   return { balanced, imbalancePct, favored, overridable: true };
+}
+
+// ---- Snake order ----
+export type SnakePickSlot = { round: number; pick: number; teamId: string };
+
+export function buildSnakeOrder(teamIds: string[], rounds: number): SnakePickSlot[] {
+  const order: SnakePickSlot[] = [];
+  let pick = 0;
+
+  for (let round = 1; round <= rounds; round += 1) {
+    const roundOrder = round % 2 === 1 ? teamIds : [...teamIds].reverse();
+    for (const teamId of roundOrder) {
+      pick += 1;
+      order.push({ round, pick, teamId });
+    }
+  }
+
+  return order;
+}
+
+// ---- Solvency guardrail ----
+export type SolvencySignal = 'GREEN' | 'YELLOW' | 'RED' | 'BLOCKED';
+export type SolvencyInput = {
+  committedRoster: ConstructionRoster;
+  committedSalaries: number;
+  candidate: ConstructionPlayer;
+  candidateSalary: number;
+  caps: LuxuryCapRow[];
+  mode: BalanceMode;
+  tierCap: number;
+  rosterSize: number;
+  remainingPoolSalaries: number[];
+};
+export type SolvencyAssessment = {
+  signal: SolvencySignal;
+  confirmable: boolean;
+  budget: number;
+  committedSalaries: number;
+  projectedTaxes: number;
+  pickCost: number;
+  pickMarginalTax: number;
+  wouldBeProjectedTaxes: number;
+  wouldBePickMarginalTax: number;
+  slotsRemaining: number;
+  cheapestFillCost: number;
+  reserve: number;
+  remainingBudget: number;
+  totalAfterPick: number;
+  slack: number;
+};
+
+export function cheapestFillCost(remainingPoolSalaries: number[]): number {
+  return remainingPoolSalaries.length === 0 ? Number.POSITIVE_INFINITY : Math.min(...remainingPoolSalaries);
+}
+
+export function pickMarginalTax(
+  committedRoster: ConstructionRoster,
+  candidate: ConstructionPlayer,
+  caps: LuxuryCapRow[],
+  mode: BalanceMode,
+): number {
+  return luxuryTax([...committedRoster, candidate], caps, mode).charged - luxuryTax(committedRoster, caps, mode).charged;
+}
+
+export function assessSolvency(input: SolvencyInput): SolvencyAssessment {
+  const {
+    committedRoster,
+    committedSalaries,
+    candidate,
+    candidateSalary,
+    caps,
+    mode,
+    tierCap,
+    rosterSize,
+    remainingPoolSalaries,
+  } = input;
+
+  const slotsRemaining = Math.max(0, rosterSize - committedRoster.length - 1);
+  const fill = slotsRemaining > 0 ? cheapestFillCost(remainingPoolSalaries) : 0;
+  const reserve = slotsRemaining * fill;
+
+  const currentTax = luxuryTax(committedRoster, caps, mode);
+  const nextTax = luxuryTax([...committedRoster, candidate], caps, mode);
+  const projectedTaxes = currentTax.charged;
+  const marginalTax = nextTax.charged - projectedTaxes;
+  const wouldBeProjectedTaxes = currentTax.wouldBeTax;
+  const wouldBePickMarginalTax = nextTax.wouldBeTax - wouldBeProjectedTaxes;
+  const budget = tierCap;
+  const remainingBudget = Math.max(0, budget - committedSalaries - projectedTaxes);
+  const totalAfterPick = committedSalaries + projectedTaxes + candidateSalary + marginalTax;
+  const slack = (budget - reserve) - totalAfterPick;
+  const signalTax = mode === 'off' ? 0 : wouldBePickMarginalTax;
+
+  let signal: SolvencySignal;
+  if (slack < 0) {
+    signal = 'BLOCKED';
+  } else {
+    const severeTax = signalTax > 0 && signalTax >= SOLVENCY_SEVERE_TAX_FRAC * remainingBudget;
+    const nearLine = slack <= SOLVENCY_RED_MARGIN * remainingBudget;
+    signal = severeTax || nearLine ? 'RED' : signalTax > 0 ? 'YELLOW' : 'GREEN';
+  }
+
+  return {
+    signal,
+    confirmable: signal !== 'BLOCKED',
+    budget,
+    committedSalaries,
+    projectedTaxes,
+    pickCost: candidateSalary,
+    pickMarginalTax: marginalTax,
+    wouldBeProjectedTaxes,
+    wouldBePickMarginalTax,
+    slotsRemaining,
+    cheapestFillCost: fill,
+    reserve,
+    remainingBudget,
+    totalAfterPick,
+    slack,
+  };
 }

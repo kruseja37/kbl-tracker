@@ -527,3 +527,40 @@ Actual legacy API:       processEndOfSeasonAging(age, {overall: rating}, fame, m
 **Rationale:** (1) Preserves §7.4 (scout-obscured farm IV) — the rec adds no information the user doesn't already have. (2) Preserves the risk/reward asymmetry: MLB players are KNOWN (true value); farm prospects are UNCERTAIN (scouted estimate carries noise w = scoutNoiseBase × (1 − scoutAccuracy)) — so calling up a prospect is a genuine gamble and sending down a known commodity is the certain side. (3) Preserves call-up excitement: true ratings reveal ONLY at call-up; the rec never knew them.
 
 **Trade-offs:** The rec is only as good as the scouting (it can be wrong) — which is the intended design, not a defect. A richer scouted-distribution / expected-value model (vs the v1 scouted point-estimate + confidence label) is a flagged follow-up. Governs T7b; cite in T9.
+
+---
+
+## Jun 14, 2026 — T8d scope rulings (snake-draft suite)
+
+**Decision (4 rulings, JK via AskUserQuestion):** For T8d (the §7.3 snake-draft surface):
+1. **Solvency budget source = tierCap for every team.** No new per-team budget field is added in v1.
+   `budget` in the §7.3:491 solvency inequality = `TIER_CAPS[tier].tierCap`. Per-team divergence in the
+   GREEN/YELLOW/RED/BLOCKED signals comes ONLY from identity-shifted luxury caps + each team's drafted
+   roster, not from per-team budgets. (§5.2's "budgets may be set below tier cap" is NOT implemented in v1.)
+2. **`cheapestFillCost` = position-agnostic for v1.** The reserve term is `slotsRemaining × (cheapest
+   available salary in the live remaining pool)`, ignoring the 22-man positional skeleton (which the spec
+   never enumerates). Luxury tax + tier cap remain the real balancers.
+3. **Potency overlay (R12) DEFERRED to a fast-follow.** The chemistry count→tier (L1/L2/L3) numeric
+   mapping is undefined anywhere (not §12, not constants, not any SMB4 reference doc). Building it now would
+   mean inventing thresholds (a spec-discipline violation). T8d ships without the potency overlay; R12
+   returns once the SMB4 in-game thresholds are known. Note: the prior `T8_SCOPE_MAP.md` claim that an
+   `effectiveRatings.potencyTier` function exists is FALSE — `potencyTier` is a TYPE only
+   (`rosterEngineConstants.ts:11`); the resolver function must be built when R12 is undeferred.
+4. **Farm scope = MLB board only; §7.4 scout-obscured farm IV (R9) DEFERRED to a fast-follow.** T8d builds
+   ONLY the 22-man MLB snake board. The existing farm/prospect draft (`LeagueBuilderDraft.tsx`, scoutedGrade
+   model) stays exactly as-is, protecting the working farm-scouting handoff. The §7.4 trueIV-range display
+   becomes a clean follow-on (which will then resolve the scoutedGrade-vs-trueIV-range model collision).
+
+**Context:** Captain mapped T8d via a 7-agent decorrelated fan-out (`T8d_SCOPE_MAP.md`). Four design forks
+genuinely gated the build (no defensible default existed). JK ruled all four to the recommended (leanest)
+option.
+
+**Implications:** T8d collapses from 4 sub-tickets to **3**: T8d-1 (snake + solvency engine, pure),
+T8d-2 (draft-session persistence v6→v7 + snake-board shell + dual-write + handoff verify), T8d-3 (board
+overlays: pick chart + trade validator + per-team signals). R9 + R12 are tracked fast-follows. Two
+constants enter the registry now (`solvencyRedMargin` 0.10; `solvencySevereTaxFrac` ≈ 0.20 Captain default
+for the RED "severe tax" band, proceed-unless-vetoed); `scoutNoiseBase` defers with R9.
+
+**Trade-offs:** Position-agnostic `cheapestFillCost` can theoretically let a team overspend and be unable
+to fill a specific position — acceptable for v1 (tax+cap are the real guardrails; revisit if playtest shows
+position starvation). MLB-first defers the farm IV-range, leaving two farm-value models un-unified until R9.

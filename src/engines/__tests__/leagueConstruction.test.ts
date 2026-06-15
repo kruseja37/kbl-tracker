@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'vitest';
 
-import { POOL_SURPLUS_MAX, TRADE_TOLERANCE_BAND } from '../../data/rosterEngineConstants';
+import {
+  POOL_SURPLUS_MAX,
+  SOLVENCY_RED_MARGIN,
+  SOLVENCY_SEVERE_TAX_FRAC,
+  TRADE_TOLERANCE_BAND,
+} from '../../data/rosterEngineConstants';
 import {
   CAP_MODIFICATION_FRACTIONS,
   LUXURY_CAP_TABLES,
@@ -14,10 +19,14 @@ import {
   type BandPriorities,
   type ConstructionPlayer,
   applyIdentitySelection,
+  assessSolvency,
+  buildSnakeOrder,
+  cheapestFillCost,
   composeIdentity,
   derivePickValueChart,
   identityCapShift,
   luxuryTax,
+  pickMarginalTax,
   registerPool,
   shiftLuxuryCaps,
   validateTrade,
@@ -91,6 +100,20 @@ function expectShiftClose(actual: Record<ModStat, number>, expected: Record<ModS
     expect(actual[stat], stat).toBeCloseTo(expected[stat], precision);
   }
 }
+
+function powTaxCaps(cap = 50, penaltyPer100 = 500): LuxuryCapRow[] {
+  return [{
+    group: 'hitters',
+    stat: 'POW',
+    topN: 1,
+    cap,
+    penaltyCurve: 1,
+    penaltyPer100,
+    minAdder: 0,
+  }];
+}
+
+const noTaxCaps: LuxuryCapRow[] = powTaxCaps(1_000, 500);
 
 function hitter(id: string, ratings: Partial<ConstructionPlayer['bat']>): ConstructionPlayer {
   return {
@@ -265,6 +288,198 @@ describe('leagueConstruction T8a pure engine', () => {
 
     const sideB = validateTrade([{ pick: 5 }], [{ pick: 2 }], chart);
     expect(sideB).toMatchObject({ balanced: false, favored: 'B', overridable: true });
+  });
+});
+
+describe('T8d-1 snake draft and solvency guardrail', () => {
+  test('buildSnakeOrder mirrors the farm draft snake pattern with global picks', () => {
+    expect(buildSnakeOrder(['A', 'B', 'C'], 2)).toEqual([
+      { round: 1, pick: 1, teamId: 'A' },
+      { round: 1, pick: 2, teamId: 'B' },
+      { round: 1, pick: 3, teamId: 'C' },
+      { round: 2, pick: 4, teamId: 'C' },
+      { round: 2, pick: 5, teamId: 'B' },
+      { round: 2, pick: 6, teamId: 'A' },
+    ]);
+  });
+
+  test('buildSnakeOrder handles a single team and zero rounds', () => {
+    expect(buildSnakeOrder(['Solo'], 3)).toEqual([
+      { round: 1, pick: 1, teamId: 'Solo' },
+      { round: 2, pick: 2, teamId: 'Solo' },
+      { round: 3, pick: 3, teamId: 'Solo' },
+    ]);
+    expect(buildSnakeOrder(['A', 'B'], 0)).toEqual([]);
+  });
+
+  test('cheapestFillCost returns the pool minimum and Infinity for an empty pool', () => {
+    expect(cheapestFillCost([42, 12, 99, 12])).toBe(12);
+    expect(cheapestFillCost([])).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  test('assessSolvency returns GREEN for a cheap no-tax pick with ample budget', () => {
+    const assessment = assessSolvency({
+      committedRoster: [],
+      committedSalaries: 0,
+      candidate: hitter('cheap', { POW: 55 }),
+      candidateSalary: 100,
+      caps: noTaxCaps,
+      mode: 'taxed',
+      tierCap: 1_000,
+      rosterSize: 2,
+      remainingPoolSalaries: [100],
+    });
+
+    expect(assessment.signal).toBe('GREEN');
+    expect(assessment.confirmable).toBe(true);
+    expect(assessment.slotsRemaining).toBe(1);
+    expect(assessment.cheapestFillCost).toBe(100);
+    expect(assessment.reserve).toBe(100);
+    expect(assessment.pickMarginalTax).toBe(0);
+    expect(assessment.totalAfterPick).toBe(100);
+    expect(assessment.slack).toBe(800);
+  });
+
+  test('assessSolvency returns YELLOW in taxed mode when tax triggers but solvency is safe', () => {
+    const candidate = hitter('taxed-yellow', { POW: 60 });
+    const caps = powTaxCaps();
+    const assessment = assessSolvency({
+      committedRoster: [],
+      committedSalaries: 0,
+      candidate,
+      candidateSalary: 100,
+      caps,
+      mode: 'taxed',
+      tierCap: 1_000,
+      rosterSize: 2,
+      remainingPoolSalaries: [100],
+    });
+
+    expect(pickMarginalTax([], candidate, caps, 'taxed')).toBeCloseTo(50, 10);
+    expect(assessment.signal).toBe('YELLOW');
+    expect(assessment.confirmable).toBe(true);
+    expect(assessment.pickMarginalTax).toBeCloseTo(50, 10);
+    expect(assessment.wouldBePickMarginalTax).toBeCloseTo(50, 10);
+    expect(assessment.slack).toBeGreaterThan(SOLVENCY_RED_MARGIN * assessment.remainingBudget);
+    expect(assessment.wouldBePickMarginalTax).toBeLessThan(SOLVENCY_SEVERE_TAX_FRAC * assessment.remainingBudget);
+  });
+
+  test('assessSolvency returns RED when slack is within the red margin of remaining budget', () => {
+    const assessment = assessSolvency({
+      committedRoster: [],
+      committedSalaries: 0,
+      candidate: hitter('near-line', { POW: 55 }),
+      candidateSalary: 850,
+      caps: noTaxCaps,
+      mode: 'taxed',
+      tierCap: 1_000,
+      rosterSize: 2,
+      remainingPoolSalaries: [100],
+    });
+
+    expect(assessment.signal).toBe('RED');
+    expect(assessment.confirmable).toBe(true);
+    expect(assessment.slack).toBe(50);
+    expect(assessment.slack).toBeLessThanOrEqual(SOLVENCY_RED_MARGIN * assessment.remainingBudget);
+    expect(assessment.wouldBePickMarginalTax).toBe(0);
+  });
+
+  test('assessSolvency returns RED when marginal would-be tax is severe', () => {
+    const assessment = assessSolvency({
+      committedRoster: [],
+      committedSalaries: 0,
+      candidate: hitter('severe-tax', { POW: 90 }),
+      candidateSalary: 100,
+      caps: powTaxCaps(),
+      mode: 'taxed',
+      tierCap: 1_000,
+      rosterSize: 2,
+      remainingPoolSalaries: [100],
+    });
+
+    expect(assessment.signal).toBe('RED');
+    expect(assessment.confirmable).toBe(true);
+    expect(assessment.wouldBePickMarginalTax).toBeCloseTo(200, 10);
+    expect(assessment.wouldBePickMarginalTax).toBeGreaterThanOrEqual(SOLVENCY_SEVERE_TAX_FRAC * assessment.remainingBudget);
+    expect(assessment.slack).toBeGreaterThan(SOLVENCY_RED_MARGIN * assessment.remainingBudget);
+  });
+
+  test('assessSolvency BLOCKS strict overspend beyond budget minus reserve', () => {
+    const assessment = assessSolvency({
+      committedRoster: [],
+      committedSalaries: 0,
+      candidate: hitter('overspend', { POW: 55 }),
+      candidateSalary: 901,
+      caps: noTaxCaps,
+      mode: 'taxed',
+      tierCap: 1_000,
+      rosterSize: 2,
+      remainingPoolSalaries: [100],
+    });
+
+    expect(assessment.signal).toBe('BLOCKED');
+    expect(assessment.confirmable).toBe(false);
+    expect(assessment.totalAfterPick).toBe(901);
+    expect(assessment.slack).toBe(-1);
+  });
+
+  test('assessSolvency BLOCKS infeasible fill when slots remain and the remaining pool is empty', () => {
+    const assessment = assessSolvency({
+      committedRoster: [],
+      committedSalaries: 0,
+      candidate: hitter('no-fill', { POW: 55 }),
+      candidateSalary: 100,
+      caps: noTaxCaps,
+      mode: 'taxed',
+      tierCap: 1_000,
+      rosterSize: 2,
+      remainingPoolSalaries: [],
+    });
+
+    expect(assessment.signal).toBe('BLOCKED');
+    expect(assessment.confirmable).toBe(false);
+    expect(assessment.cheapestFillCost).toBe(Number.POSITIVE_INFINITY);
+    expect(assessment.reserve).toBe(Number.POSITIVE_INFINITY);
+    expect(assessment.slack).toBe(Number.NEGATIVE_INFINITY);
+  });
+
+  test('assessSolvency is mode-aware: taxed drain can block, advisory warns, off has no tax signal', () => {
+    const candidate = hitter('mode-ruling', { POW: 80 });
+    const input = {
+      committedRoster: [],
+      committedSalaries: 0,
+      candidate,
+      candidateSalary: 890,
+      caps: powTaxCaps(),
+      tierCap: 1_000,
+      rosterSize: 1,
+      remainingPoolSalaries: [],
+    };
+
+    const taxed = assessSolvency({ ...input, mode: 'taxed' });
+    const advisory = assessSolvency({ ...input, mode: 'advisory' });
+    const off = assessSolvency({ ...input, mode: 'off' });
+
+    expect(taxed.signal).toBe('BLOCKED');
+    expect(taxed.confirmable).toBe(false);
+    expect(taxed.pickMarginalTax).toBeCloseTo(150, 10);
+    expect(taxed.totalAfterPick).toBeCloseTo(1_040, 10);
+    expect(taxed.slack).toBeCloseTo(-40, 10);
+
+    expect(advisory.signal).toBe('YELLOW');
+    expect(advisory.confirmable).toBe(true);
+    expect(advisory.pickMarginalTax).toBe(0);
+    expect(advisory.wouldBePickMarginalTax).toBeCloseTo(150, 10);
+    expect(advisory.totalAfterPick).toBe(890);
+    expect(advisory.slack).toBe(110);
+
+    expect(off.signal).toBe('GREEN');
+    expect(off.confirmable).toBe(true);
+    expect(off.pickMarginalTax).toBe(0);
+    expect(off.wouldBePickMarginalTax).toBeCloseTo(150, 10);
+    expect(off.signal).not.toBe('YELLOW');
+    expect(off.totalAfterPick).toBe(890);
+    expect(off.slack).toBe(110);
   });
 });
 

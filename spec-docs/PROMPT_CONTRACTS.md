@@ -6845,3 +6845,63 @@ capIdentity round-trip + additive old-team load. 4 files.
 Team Identity section — band priorities → Suggest → manual edit → cap-shift preview → save/reload.
 NEXT: **T8d** (the LAST T8 ticket — snake draft + empirical pick chart + pick-value trade validator +
 per-team solvency signals + chemistry potency overlay + farm scout-obscured IV).
+
+---
+
+## T8d-1 CONTRACT (2026-06-14) — Snake-draft + solvency engine (pure) — IV §7.3
+
+**ROUTE:** Codex 5.5 | very high reasoning effort → Opus 4.8 audit (Fable unavailable; auditor ≠
+builder). PURE engine, NO UI / NO persistence / NO DB version change → standing auto-commit on CONFORMS.
+T8d split = 3 tickets (T8d-1 engine / T8d-2 persistence+board shell / T8d-3 overlays); R9 + R12 deferred
+(DECISIONS_LOG 2026-06-14). JK rulings governing T8d-1: budget = tierCap for all teams; cheapestFillCost
+POSITION-AGNOSTIC; solvency MODE-AWARE / charge-faithful (tax drains budget only in 'taxed'; advisory
+warns via wouldBe, never blocks on tax; off = pure tier cap, no tax signal). RED "severe tax" frac =
+SOLVENCY_SEVERE_TAX_FRAC 0.20 (Captain default, JK-tunable).
+
+```
+[identical to Temp/t8d1-contract.md — the builder prompt fed to Codex this session]
+```
+Full contract text: `Temp/t8d1-contract.md` (self-contained: exact API for buildSnakeOrder +
+cheapestFillCost + pickMarginalTax + assessSolvency with the GREEN/YELLOW/RED/BLOCKED decision tree and
+the mode-aware drain-vs-warning split; 2 new constants SOLVENCY_RED_MARGIN 0.10 + SOLVENCY_SEVERE_TAX_FRAC
+0.20; tests incl. the mode-ruling assertions; do-not-touch list; verify = tsc0/build0/suite-no-new-RED +
+git diff --stat limited to leagueConstruction.ts + rosterEngineConstants.ts + leagueConstruction.test.ts;
+DB stays v6).
+
+**Status:** contract drafted → Codex build complete → audited CONFORMS (record below).
+
+### T8d-1-AUDIT + EXECUTION RECORD (2026-06-14)
+
+**ROUTE actual:** Codex 5.5 | high (codex knob max = "very high") BUILT → Opus 4.8 (Captain) independent
+AUDIT (Fable unavailable; auditor ≠ builder — Captain did NOT write the code). Pure engine → standing
+auto-commit on CONFORMS.
+
+**Builder result (Codex 5.5):** 3 files. `leagueConstruction.ts` += `SnakePickSlot`/`buildSnakeOrder`,
+`SolvencySignal`/`SolvencyInput`/`SolvencyAssessment`, `cheapestFillCost`, `pickMarginalTax`,
+`assessSolvency` (existing 8 exports untouched). `rosterEngineConstants.ts` += `SOLVENCY_RED_MARGIN` 0.10
++ `SOLVENCY_SEVERE_TAX_FRAC` 0.20 (add-only). `leagueConstruction.test.ts` += 10 T8d-1 tests.
+
+**AUDIT VERDICT: CONFORMS.** Independent re-verification (Opus, not trusting the builder paste):
+- Code decision-identical to contract: drain uses `luxuryTax(...).charged` (0 in advisory/off), warning
+  uses `wouldBeTax`; `signalTax = mode==='off' ? 0 : wouldBePickMarginalTax`; slack = (budget − reserve) −
+  totalAfterPick; classify slack<0→BLOCKED, else severeTax(≥0.20×remBudget)‖nearLine(≤0.10×remBudget)→RED,
+  else signalTax>0→YELLOW, else GREEN; confirmable = signal≠BLOCKED. budget = tierCap (Q1); position-
+  agnostic cheapestFillCost (Q2, +Infinity on empty → reserve Infinity → BLOCKED).
+- tsc -b 0 (independent); `npm run build` exit 0 (independent — PWA generated); targeted suite 24/24.
+- Full suite (independent rerun): 7,196 pass / 3 fail / 388 files. The 3 fails are EXACTLY the
+  characterized set — `wpaRuntimeBoundary`, `franchiseManualSmokeFixture`, `franchiseNarrativeEvent
+  Eligibility` (verified by ANSI-stripped FAIL-line extraction). NO new RED. 7,199 = 7,189 + 10 new.
+- Diff scope clean: `git diff --stat` = only the 3 intended files (+ Captain's own DECISIONS_LOG /
+  PROMPT_CONTRACTS / T8d_SCOPE_MAP doc edits). DB_VERSION still 6; no new store; no persistence; no UI;
+  no do-not-touch edits (trackerDb/tierParams/ivEngine/salaryCalculator/iv_oracle/leagueBuilderStorage).
+- Falsification: hand-verified the mode-ruling test (line 446) arithmetic — taxed BLOCKED(slack −40) /
+  advisory YELLOW(slack 110, wouldBe 150) / off GREEN — and confirmed it is mutation-sensitive (pins
+  `pickMarginalTax:0` charged vs `wouldBePickMarginalTax:150`), so a drain/warning swap fails it.
+
+**Findings:** none (LOW or above).
+
+**Status:** T8d-1 = built + audited CONFORMS. Pure engine, NO user-visible surface (no browser-verify
+needed). COMMITTED. NEXT: **T8d-2** (draft-session persistence kbl-league-builder v6→v7 ADDITIVE +
+`LeagueBuilderSnakeDraft.tsx` board shell + snake mechanics + dual-write 22+10 output + handoff carry-
+through verify) — PERSISTENCE + user-visible → audit non-negotiable + JK surface before commit.
+
