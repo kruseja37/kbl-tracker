@@ -840,3 +840,30 @@ overload** hit mid-§18.3 (lost 2 salary mappers + 2 verifiers; core 3-way corro
 `wf_1c5ff7c9-da3` hardening). The builder/auditor triangle stayed dormant (nothing built to audit). **Next =
 §18(4) Manager WPA for MOY** (run fresh against a recovered API), then the Phase-2 "living-season D-stack"
 sequencing folding in the build tickets these reads unblocked.
+
+---
+
+## 2026-06-16 — §18 VERIFICATION READ (4): MANAGER-WPA / MOY (the LAST §18 read)
+
+**Outgoing header at this arc's start:** §18 reads 1-3 COMPLETE; only §18(4) Manager-WPA-for-MOY remains; next then =
+Phase-2 D-stack sequencing. Suite 7,230 / 393 (unchanged — no product code).
+
+**This arc (2026-06-16, reads + design + docs only — NO product code):** §18(4) COMPLETE via a `moy-reconciliation-read`
+Workflow (5 decorrelated mappers + 3 adversarial verifiers + 1 completeness critic; the critic's 3 headline findings
+re-verified by the Captain at file:line) → `MANAGER_WPA_MOY_CERTIFICATION.md` + **MOY-1..7** (DECISIONS_LOG 2026-06-16).
+Certified: the v2 Manager-WPA truth-layer is real/live-wired/persisted (decision-WPA = true team win-prob delta × share,
+`managerWpaDerivation.ts:1734-1747`); the three §23.7 reconciliations (denomination / weighting / salary-drop) are all
+real and all UNIMPLEMENTED. The read CORRECTED AWARD-7's framing three ways: (i) the live composite is FOUR quantities
+(tactical + **deployment** + lineup), not three, and team record is NOT in the sum; (ii) MOY is NOT greenfield — a live,
+persisted, displayed per-game `best_manager` award already ships the exact composite (`pogAwards.ts:589-590`, gate
+`MIN_POSITIVE_WPA=0.005`), so season MOY is a season-grain aggregation of it; (iii) name/scale trap — the live composite
+sums the CAPPED REALIZED record `delta.managerWpa`, while §23.7 names the ORPHANED T10 `lineupDeltaWpaStandard`.
+Rulings: **MOY-1** inputs = 4 (decision + deployment + lineup + record); **MOY-2** lineup-quantity DEFERRED to build;
+**MOY-3** record = expectation-relative on the **D6 trusted artifact** (MOY HARD-couples to D6, sequences POST-D6/D8 in
+D9); **MOY-4** NO fame tilt v1; **MOY-5/6/7** (Captain) build = season aggregation of the `pogAwards` composite into a
+NEW `franchiseAwardsEngine`/`Storage` (retire the dead-gated salary `mwarCalculator`/`calculateMOYVotes`), pool-relative
+normalization dissolves the denomination, weights → Sim Gate (§16). The deprecated salary MOY was already dead-gated
+behind `FRANCHISE_V1_OFFSEASON_EXECUTION_ENABLED=false` → retiring it re-points, never breaks. Builder/auditor triangle
+stayed dormant (nothing built). **ALL FOUR §18 PREREQUISITE READS DONE. Next = the Phase-2 "living-season D-stack"
+sequencing for JK ratification** (fold in the §18-unblocked tickets incl. the MOY engine; reconcile the D9/D7 couplings;
+D0 ratification still PROPOSED/pending).

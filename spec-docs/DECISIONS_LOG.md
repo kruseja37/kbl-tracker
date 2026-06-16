@@ -855,3 +855,54 @@ farm-10) + scout-obscuring (R9) are LIVE; the in-season franchise draft is dry-r
 (read + design); the build ticket touches salary/tier economics (not an SMB4-protected engine) but is
 persistence/economics → SURFACES to JK per the risk rule when drafted. Next: §18 read (4) — Manager WPA
 reconciliation for MOY (the last §18 read).
+
+---
+
+### 2026-06-16: Manager-WPA / Manager-of-the-Year (§18(4) + AWARD-7) — MOY rulings (JK + Captain)
+
+**Context**: Fourth and LAST §18 read (`moy-reconciliation-read` workflow — 5 mappers + 3 adversarial verifiers + a
+completeness critic; full doc `MANAGER_WPA_MOY_CERTIFICATION.md`). Certified: the v2 Manager-WPA truth-layer is real,
+live-wired, and persisted — decision-WPA = a true team win-probability delta × per-type manager share
+(`managerWpaDerivation.ts:1734-1747`). The three §23.7 reconciliations are all real and all UNIMPLEMENTED. The read
+forced three corrections to AWARD-7's framing: (i) the live composite is FOUR quantities (tactical decision-WPA +
+**deployment-WPA** + lineup-delta), not three, and **team record is not in the live sum at all**; (ii) MOY is NOT
+greenfield — `pogAwards.ts:589-590` ships a live, persisted, displayed per-game `best_manager` award on the exact
+composite (gated `MIN_POSITIVE_WPA = 0.005`), so season MOY is a season-grain aggregation of it; (iii) a name/scale
+trap — the live composite sums the CAPPED REALIZED record `delta.managerWpa`, while §23.7 literally names the T10
+`ManagerLineupDeltaSummary.lineupDeltaWpaStandard` (built + persisted but **orphaned**, read nowhere). The deprecated
+salary MOY (`calculateMOYVotes`, `getExpectedWinPct = 0.35 + salaryScore×0.30`) is dead-gated behind
+`FRANCHISE_V1_OFFSEASON_EXECUTION_ENABLED = false` → retiring it re-points, never breaks.
+
+**Decisions — JK (the design/scope forks):**
+1. **MOY-1 — Input set = FOUR.** Season MOY = decision-WPA + deployment-WPA + lineup-delta + team record. Deployment
+   kept as a distinct scored term (already built/capped/shown); team record ADDED as the new fourth input. (Closes
+   AWARD-7's undercount.)
+2. **MOY-2 — Lineup quantity DEFERRED to build time.** Capped realized record (`delta.managerWpa`, the live composite
+   input) vs T10's pure projected `lineupDeltaWpaStandard` (the §23.7-named, currently-orphaned Summary field) is
+   resolved when the MOY engine is drafted, both on the table; structure locked around the open slot. (Realized record
+   is already aggregated + commensurate; the T10 standard needs a new aggregator + denomination fix.)
+3. **MOY-3 — Record term = EXPECTATION-RELATIVE on the D6 trusted-value artifact.** Wins-above-roster-strength-
+   expectation, expectation = the D6/D8 trusted True-Value projection (NOT raw W-L, NOT the untrusted
+   `franchiseExpectedWinsPreview`). Drops the salary-based expectation per (c). **HARD-couples the MOY build to D6** —
+   consistent with the D-stack order (D9 → D8 → D6); MOY cannot be built before the value-trust gate.
+4. **MOY-4 — No fame tilt for v1.** MOY is a PURE truth-layer computation; managers sit outside the player fame
+   economy; legacy = the Almanac record. (Diverges deliberately from §21/RACE-4's player merit-award fame tilt.)
+   Manager-fame is a post-v1 revisit.
+
+**Decisions — Captain (engineering / architecture / sim-deferred; JK-overridable):**
+5. **MOY-5 (architecture) — Build as a season aggregation of the existing `pogAwards` per-game composite.** Reuse
+   `PogManagerValueTotal` → extend to season grain; wrap in the absent `franchiseAwardsEngine`/`franchiseAwardsStorage`;
+   NOT a parallel engine. Retire `calculateMOYVotes` + the deprecated `mwarCalculator` salary path + the orphaned
+   `useMWARCalculations` hooks. Re-point `AwardsCeremonyFlow`/`RatingsAdjustmentFlow` off `calculateMOYVotes` BEFORE any
+   offseason flag flip.
+6. **MOY-6 (common-scale, reconciliation a) — Pool-relative normalization for the SEASON award.** Normalize each of the
+   4 inputs across the manager pool (rank/z-score) BEFORE weighting — dissolves the denomination mismatch without
+   inventing an IV→WP constant or touching the frozen value layer. The per-game `pogAwards` raw-sum + caps stay unchanged.
+7. **MOY-7 (weighting, reconciliation b — sim-deferred) — Composite weights → Simulation Gate (§16).** Lock structure
+   now (4 pool-normalized inputs, record expectation-relative on D6); the weight split (the 60/40's 4-way successor) is
+   a sim-tuned starting guess.
+
+**Status:** §18(4) verification read COMPLETE → **all four §18 reads DONE.** Asset gate: none (read + design); the MOY
+build ticket is greenfield awards + persistence + a D6 dependency → SURFACES to JK per the risk rule when drafted, and
+sequences POST-D6/D8 inside D9. Next: Captain drafts the Phase-2 "living-season D-stack" sequencing (fold in the §18-
+unblocked tickets; reconcile the D9/D7 couplings) for JK ratification.

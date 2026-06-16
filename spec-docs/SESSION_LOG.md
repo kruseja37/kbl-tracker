@@ -4657,3 +4657,67 @@ T10. Deferred: R9 + R12 fast-follows; FINDING-148; backupRestore hardening; the 
 **Docs touched (no app code):** NEW `REPORTER_CERTIFICATION.md`, `TRAIT_SIGNAL_CERTIFICATION.md`, `DRAFT_SALARY_FARM_CERTIFICATION.md`; `DECISIONS_LOG.md` (REP/SEA, TS, DSF 2026-06-16 entries); `SESSION_RULES.md` (pen: full-cadence-scoping lesson); `CURRENT_STATE.md` (live header rewritten); this entry. Nothing committed (JK commits).
 
 **NEXT SESSION STARTS AT: §18 read (4) — Manager WPA reconciliation for MOY** (the LAST §18 read; run FRESH against a recovered API). Denomination (decision-WPA vs lineup-delta rescaled-IV → common scale) + composite weighting (decision-WPA + lineup-delta + record) + drop salary-based win expectation; retire the @deprecated fixed-value `mwarCalculator`; sources `managerWpaDerivation.ts` / `ManagerLineupDeltaSummary` (T10) / `ManagerSeasonStats`. THEN Captain drafts the Phase-2 "living-season D-stack" sequencing — folding in the build tickets these reads unblocked (reporter publish-bus EARLY; §9 trait engine; unified relative-to-pool salary scale + tradeable draft-pick trading + farmGradeMode) + reconciling the D9/D7 couplings. Optional: fold the hardened §18.3 salary verification (`wf_1c5ff7c9-da3`) into `DRAFT_SALARY_FARM_CERTIFICATION.md` if it landed.
+
+
+---
+
+## 2026-06-16 — §18 read (4) COMPLETE: Manager-WPA / MOY reconciliation — certified + MOY-1..7 ruled + locked (reads + design + docs only; NO product code)
+
+**Type:** Captain verification read + JK design rulings + doc authoring. Branch codex/franchise-v1-next. **No product
+code, no build, no audit-of-build, no commit** (JK commits). This is the LAST §18 prerequisite read. Roles: Captain
+(Opus 4.8) ran the read + synthesized + authored docs; JK ruled the design/scope forks. The builder/auditor triangle
+stayed dormant (nothing built to audit) — it activates when the first MOY build ticket is drafted (Codex builds → Opus
+audits → JK browser sign-off). Method: a `moy-reconciliation-read` Workflow (`wf_1692b888-d04`; 9 agents, ~958k tokens)
+— 5 decorrelated mappers (v2 decision truth-layer / lineup-delta scalar / deprecated mWAR / MOY surface+record+greenfield
+/ the denomination crux) + 3 adversarial verifiers (denomination-refute, salary-drop-refute, greenfield-refute, all
+CONFIRMED — refutations failed) + 1 completeness critic. The critic's 3 headline findings were re-verified by the Captain
+directly against code before any ruling.
+
+**Certified (file:line-grounded, multiply corroborated, adversarially verified):**
+- The **v2 Manager-WPA truth-layer is real, live-wired, and persisted.** Decision-WPA = `roundWpa(teamWinProbAfter −
+  teamWinProbBefore) × managerShare` — a true team win-probability delta in [−1,+1] (`managerWpaDerivation.ts:1734-1747`);
+  per-type shares 0.1–1.0 (`managerDecisionRegistry.ts`); wired via GameTracker/useGameState, persisted on
+  `PersistedGameState`, displayed via `ManagerWpaOverlay` through `managerValueTrace.ts`.
+- The **three §23.7 reconciliations are all real and all UNIMPLEMENTED:** (a) denomination — the composite raw-sums
+  win-prob terms with a rescaled-IV term (lineup = IV ÷ 10,000,000, a CALIBRATE playtest-tunable; ~50–90× scale gap;
+  caps are band-aids, no unit bridge); (b) weighting — only the deprecated salary 60/40 exists, no successor; (c)
+  salary-drop — `getExpectedWinPct = 0.35 + salaryScore×0.30` (`mwarCalculator.ts:601-603`) lives only in the
+  `@deprecated` engine, reachable only behind `FRANCHISE_V1_OFFSEASON_EXECUTION_ENABLED=false` → retire re-points, never breaks.
+
+**The read CORRECTED AWARD-7's framing three ways (each verified by the Captain at file:line):**
+1. **FOUR quantities, not three.** The live composite (`pogAwards.ts:589-590` AND `almanacQueries.ts:1228`) =
+   `tacticalManagerWpa + deploymentWpa + lineupDeltaWpa`. **Deployment-WPA is a silent 2nd win-prob term** (team-cap
+   ±0.5, `managerWpaGameState.ts:82-98`) that AWARD-7 omitted; **team record is NOT in the live sum** (carried alongside).
+2. **MOY is NOT greenfield-from-scratch.** `pogAwards.ts` ships a live, persisted (`managerWpaTotals`,
+   `useGameState.ts:11151/11206/12180`, `gameStorage.ts:214/936`), displayed (`GameDetail.tsx`) per-game `best_manager`
+   award on the exact composite, gated `MIN_POSITIVE_WPA=0.005` (`pogAwards.ts:633-651`). Season MOY = a season-grain
+   aggregation of it. (The franchise season-award files — `franchiseAwardsEngine`/`Storage`, `AwardsWatchlist` — ARE
+   genuinely absent; no season rollup exists.)
+3. **Name/scale trap.** The live composite sums the CAPPED REALIZED record `delta.managerWpa` (±0.25/±0.75); §23.7
+   literally names the T10 `ManagerLineupDeltaSummary.lineupDeltaWpaStandard`, which is built+persisted but **read
+   nowhere** (`managerWpaGameState.ts:222`, zero downstream reads). Different math, different scale.
+
+**Rulings — JK (design/scope forks):** MOY-1 inputs = **4** (decision + deployment + lineup + record); MOY-2 lineup
+quantity (capped realized record vs orphaned T10 standard) **DEFERRED to build**; MOY-3 record = **expectation-relative
+on the D6 trusted artifact** → MOY **HARD-couples to D6** (sequences POST-D6/D8 inside D9); MOY-4 **NO fame tilt** v1.
+**Rulings — Captain (engineering/architecture/sim-deferred, JK-overridable):** MOY-5 build = season aggregation of the
+`pogAwards` composite into a NEW `franchiseAwardsEngine`/`Storage`, retiring `mwarCalculator`/`calculateMOYVotes` +
+re-pointing the dead-gated ceremony BEFORE any flag flip; MOY-6 **pool-relative normalization** for the denomination
+(no IV→WP constant, frozen value layer untouched); MOY-7 composite weights → **Simulation Gate (§16)**.
+
+**Honest scope note:** a read — no product code changed, so no build/test was run (none applicable). Magnitudes are from
+code constants + committed test assertions, not a fresh execution; the certification rests on file:line evidence + the
+3-verifier adversarial pass + the Captain's direct re-verification of the critic's findings.
+
+**Docs touched (no app code):** NEW `MANAGER_WPA_MOY_CERTIFICATION.md`; `DECISIONS_LOG.md` (MOY-1..7, 2026-06-16);
+`CURRENT_STATE.md` (live header → §18 4-of-4 complete; next = Phase-2 D-stack sequencing); `CURRENT_STATE_HISTORY.md`
+(§18(4) arc snapshot); this entry. Nothing committed (JK commits).
+
+**NEXT SESSION STARTS AT: Captain drafts the Phase-2 "living-season D-stack" sequencing** for JK ratification — sequence
+`FRANCHISE_V1_LIVING_SEASON_SPEC.md` §5-§24 into dependency-ordered tickets, FOLDING IN the §18-unblocked builds (reporter
+publish-bus EARLY; §9 trait engine; unified relative-to-pool salary scale + tradeable draft-pick trading + `farmGradeMode`;
+the **MOY award engine** per MOY-1..7, POST-D6/D8) + reconciling the Phase-1↔Phase-2 D9/D7 couplings. **D0 ratification
+(`FRANCHISE_PLAYABLE_V1_DEFINITION.md`) is still PROPOSED/pending** — the held "what would you like to adjust?" D0 message
+maps 1:1 to the unchanged doc but is overtaken; ratify cleaner after the D-stack sequencing settles the awards picture.
+All four §18 prerequisite reads are DONE. Deferred/optional: fold the hardened §18.3 salary verification
+(`wf_1c5ff7c9-da3`) into `DRAFT_SALARY_FARM_CERTIFICATION.md` if it landed.
