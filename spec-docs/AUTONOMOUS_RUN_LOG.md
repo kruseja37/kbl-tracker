@@ -8,6 +8,30 @@
 
 ---
 
+## SESSION SUMMARY (TL;DR on return)
+
+**Committed (3 tickets, all VERIFIED via the Codex-build / Opus-audit triangle; on `codex/franchise-v1-next`,
+nothing pushed):**
+- `d48ab3c` **L1** — hidden-modifier rename (loyalty/ambition/resilience/charisma) + typed on `Player`.
+- `752882f` **D1** — `useSeasonStats` 162 hardcode → canonical `MLB_BASELINE_GAMES` (zero behavior change).
+- `2fab709` **D2** — backup parity: 3 franchise stores registered + pin 12→15 + a structural parity-guard +
+  round-trip test (the silent-drop data-integrity defect is closed).
+
+**The honest finding:** beyond those three, the Tier-0 foundations are **design/value/product-laden**, not
+mechanical — so per your AUTH-2 guardrails I built the safe set and **surfaced the rest rather than gambling
+unwatched** on the value/SMB4/UX spine. Over-halting was the safe direction. **Four decisions now gate further
+progress** (below). Rule them and the loop resumes fast — most are small builds once decided.
+
+**What's set aside (and why):**
+- **L1.5** (Captain) — blocked on **OD-1** (MLB players carry no hidden modifiers).
+- **L-ECON1** (salary scale) — **OD-2** (value-design + must sequence with unbuilt D4/D6).
+- **L2** (mutable layer), **L4a** (reporter/bus), **L9a** (trait capture) — genuine product/UX decisions
+  (**OD-3/4/5**); maps are in workflow `wf_7b56fa48-a58`, decisions below.
+- **D4** (salary-live UI de-gate) — recommended as the **first build of a WATCHED session** (user-visible UI
+  surgery you can browser-verify immediately); D5 is confirm-only; D6+ are the value gate (surface).
+
+---
+
 ## OPEN DECISIONS FOR JK (read these first)
 
 - **OD-1 (HIGH — blocks L1.5 + the morale/development layer for MLB players) — How do imported MLB players
@@ -24,11 +48,49 @@
   rather than defaulted. **L1.5 is SET ASIDE until you rule OD-1.** (Once ruled, OD-1 itself is a small build, then
   L1.5 follows.)
 
+- **OD-2 (MED — L-ECON1 salary scale) — sequencing + taper + frozen-anchor scope.** DSF-1 re-prices the same
+  `computeIV` curve-block the frozen draft-IV baseline + D4 salary + D6 trusted-value read. Decisions: **(i)**
+  scope L-ECON1 to **new-league construction only** (never re-prices an already-frozen franchise) vs land it
+  **before** the v1 franchise's draft/salary freeze (ahead of D4/D6 in the build calendar) — *Captain lean:
+  new-league-construction-only is the safest, but it must still precede the freeze for the v1 league*; **(ii)**
+  taper = the `pickValueChart` IS the taper (pick N → chart[N-1]) vs a separate MLB/farm taper — *Captain lean:
+  the chart IS the taper*; **(iii)** confirm IV-curve tier sensitivity = scale raw IVs before the chart (NOT a
+  computeIV input — keeps §3.9 / the frozen oracle untouched). Rookie/farm pricing pegs to the tier-scaled
+  `chart[0]`. Not built (value-sensitive + sequencing-coupled to unbuilt D4/D6).
+
+- **OD-3 (L2 mutable layer — two-tier confirmation UX).** Greenfield; the product-UX is the crux: **(i)** does a
+  pending ratings/trait confirmation **BLOCK** further games or run **async-background**? *(Captain lean: async,
+  non-blocking — a 100-game season can't gate on a confirm)*; **(ii)** console-edit instruction format — plain
+  text ("Power 65→70 on X") vs structured vs clipboard command? *(lean: plain text)*; **(iii)** temp-overlay
+  expiry = **game-count** (re-evaluated on load) vs absolute timestamp? *(lean: game-count — the season clock is
+  games, not wall-time)*; **(iv)** overlays season-scoped vs carry-forward. The store/read-path/parity are
+  mechanical once these are ruled. Map in `wf_7b56fa48-a58`.
+
+- **OD-4 (L4a reporter base-connect + publish bus).** **(i)** franchiseId-vs-leagueId reporter scope rule
+  (exclusive vs franchiseId-precedence cascade)? *(lean: cascade — franchiseId wins for franchise games)*;
+  **(ii)** `ReporterAssignmentPanel` UI placement — season-setup modal vs pregame screen? *(your UX call)*;
+  **(iii)** `SeasonNewsItem.facts` schema (the §5 fact dict the reporter renders). SEA-3 already ruled
+  (SeasonNewsItem + reuse rivalryScores). Map in `wf_7b56fa48-a58`.
+
+- **OD-5 (L9a trait enrichment capture).** **(i)** manual vs auto capture for pitch-zone / pitch-type /
+  OF-extra-base-credit — manual = sparse data → "Franchise-lite" (some enrichment-detail traits stay dormant via
+  the §VI.1 min-sample valve); auto needs a reliable SMB4 read. *(Captain lean: manual/opt-in is spec-consistent —
+  L9a just ENABLES capture; L9b gates on min-sample — so sparse is acceptable, no blocker)*; **(ii)** injury
+  accumulator = cumulative season tally (for Durable/Injury-Prone) vs per-event snapshot? *(lean: cumulative
+  season tally)*. Touches the live game path (useGameState/GameTracker) → wanted your eyes before building.
+  Map in `wf_7b56fa48-a58`.
+
 ---
 
-## CONSERVATIVE DEFAULTS TAKEN (AUTH-2 — documented, continued)
+## CONSERVATIVE DEFAULTS TAKEN (AUTH-2 — documented, continued; override any on return)
 
-*(none yet)*
+- **L1:** no data-migration for old saved data (pre-launch; live consumers are presence-only; no by-key reader
+  exists until the unbuilt L3). Field typed fully as `HiddenPersonalityModifiers`.
+- **D1:** left the season-CREATION game count (`getOrCreateSeason` line 359) out of scope — it's a separate
+  concern from WAR-scaling and would need franchise-schedule threading.
+- **D2:** `KBL_BACKUP_VERSION` left at 2 (bumping breaks existing backups via the restore guard); parity-guard
+  scoped to the `kbl-tracker` DB only (the all-DB extension + syncConfig/manifest reconciliation = a separate
+  hardening ticket).
 
 ---
 
@@ -99,3 +161,15 @@
   silent-drop defect). Independent gates: tsc 0; parity (2) + elimination (10) = 12 passed. SMB4 assets untouched;
   backup/restore still orphaned (UI wiring + all-DB guard = the separate hardening ticket). **→ NEXT: L-ECON1
   (build + HOLD — value-sensitive, do NOT commit).**
+
+- **2026-06-16 — L-ECON1 SET ASIDE (revised from build-and-hold) → OD-2.** On reflection: it re-prices the
+  frozen draft-IV anchor on the IV/salary value spine, carries value-design open questions, and is
+  sequencing-coupled to the unbuilt D4/D6 — no urgency, and building it unwatched would bake value defaults on
+  the protected spine. Set aside with OD-2.
+
+- **2026-06-16 — AUTONOMOUS BUILD PHASE WRAPPED.** Safe-mechanical set complete: **L1 + D1 + D2 committed** (all
+  VERIFIED). Remaining Tier-0 work is design/value/product-laden → 5 open decisions (OD-1..5) surfaced for JK; the
+  loop resumes on his rulings. No pushes; tree clean except the pre-existing `Temp/` + roster CSV. Triangle held
+  throughout (Codex built every diff; Opus audited every diff independently — tsc/tests re-run, not trusted from
+  the builder paste). Next watched session: D4 (salary-live UI de-gate) is the natural first build (browser-
+  verifiable), and OD-1 (the cheapest unblock) lets L1.5 + the modifier-consuming layer proceed.
