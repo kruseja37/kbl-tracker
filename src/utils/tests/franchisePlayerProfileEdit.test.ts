@@ -301,7 +301,7 @@ describe('franchise player profile manual edit utility', () => {
         arsenal: ['4F'],
         overallGrade: 'A+',
         trueGrade: 'S',
-        hiddenPersonalityModifiers: { leadership: 99 },
+        hiddenPersonalityModifiers: { loyalty: 99 },
         hiddenScoutTruth: { trueGrade: 'S' },
         prospectProfile: { scoutedGrade: 'A' },
         salary: 10_000_000,

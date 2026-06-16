@@ -85,7 +85,7 @@ const players = [
       trueGrade: "S",
       hiddenScoutTruth: { accuracy: 99 },
     },
-    hiddenPersonalityModifiers: { leadership: 99 },
+    hiddenPersonalityModifiers: { loyalty: 99 },
     leagueAssignments: [{ leagueId: "league-a", teamId: "team-a", rosterStatus: "FARM" }],
   },
   {
@@ -287,7 +287,7 @@ describe("TradeFlow franchise regular-season transactions", () => {
 
     expect(screen.getByText(/farm-a \/ SP \/ FARM \/ Scouted B/i)).toBeInTheDocument();
     expect(screen.queryByText(/Grade S/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/trueGrade|hiddenScoutTruth|hiddenPersonalityModifiers|leadership|accuracy/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/trueGrade|hiddenScoutTruth|hiddenPersonalityModifiers|loyalty|accuracy/i)).not.toBeInTheDocument();
     expect(mocks.mockExecuteManualFranchiseTrade).not.toHaveBeenCalled();
     expect(mocks.mockSaveTeamRoster).not.toHaveBeenCalled();
     expect(mocks.mockSavePlayer).not.toHaveBeenCalled();

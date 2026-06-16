@@ -196,10 +196,10 @@ describe('shared deterministic prospect/scouting draft engine', () => {
       personality: 'Competitive',
       chemistry: 'Competitive',
       hiddenPersonalityModifiers: {
-        leadership: 50,
-        volatility: 50,
-        adaptability: 50,
-        pressure: 50,
+        loyalty: 50,
+        ambition: 50,
+        resilience: 50,
+        charisma: 50,
       },
     };
     const seeds = Array.from({ length: 80 }, (_, index) => `accuracy-seed-${index}`);
@@ -242,10 +242,10 @@ describe('shared deterministic prospect/scouting draft engine', () => {
       personality: 'Competitive',
       chemistry: 'Competitive',
       hiddenPersonalityModifiers: {
-        leadership: 50,
-        volatility: 50,
-        adaptability: 50,
-        pressure: 50,
+        loyalty: 50,
+        ambition: 50,
+        resilience: 50,
+        charisma: 50,
       },
     };
     const seeds = Array.from({ length: 80 }, (_, index) => `weakness-seed-${index}`);
@@ -275,8 +275,10 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     expect(player.prospectProfile.trueGrade).toBe(player.overallGrade);
     expect(player.hiddenPersonalityModifiers).toEqual(
       expect.objectContaining({
-        leadership: expect.any(Number),
-        volatility: expect.any(Number),
+        loyalty: expect.any(Number),
+        ambition: expect.any(Number),
+        resilience: expect.any(Number),
+        charisma: expect.any(Number),
       }),
     );
     expect(visibleReport).not.toHaveProperty('power');

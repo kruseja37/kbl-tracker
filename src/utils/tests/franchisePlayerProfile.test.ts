@@ -134,8 +134,8 @@ describe('franchise player profile view model', () => {
         hiddenScoutTruth: { accuracy: 99 },
       },
       hiddenPersonalityModifiers: {
-        leadership: 99,
-        volatility: 1,
+        loyalty: 99,
+        ambition: 1,
       },
     });
 
@@ -175,8 +175,8 @@ describe('franchise player profile view model', () => {
     expect(serialized).not.toContain('94');
     expect(serialized).not.toContain('95');
     expect(serialized).not.toContain('"S"');
-    expect(serialized).not.toContain('leadership');
-    expect(serialized).not.toContain('volatility');
+    expect(serialized).not.toContain('loyalty');
+    expect(serialized).not.toContain('ambition');
     expect(serialized).not.toContain('hiddenScoutTruth');
     expect(serialized).not.toContain('hiddenPersonalityModifiers');
     expect(profile.limitations.join(' ')).toContain('true ratings');
@@ -279,8 +279,8 @@ describe('franchise player profile view model', () => {
           {
             date: '2026-04-04T00:00:00.000Z',
             field: 'hiddenPersonalityModifiers',
-            oldValue: { leadership: 10 },
-            newValue: { leadership: 99 },
+            oldValue: { loyalty: 10 },
+            newValue: { loyalty: 99 },
             context: 'base',
           },
         ],
@@ -302,7 +302,7 @@ describe('franchise player profile view model', () => {
     expect(serialized).not.toContain('99');
     expect(serialized).not.toContain('trueGrade');
     expect(serialized).not.toContain('hiddenPersonalityModifiers');
-    expect(serialized).not.toContain('leadership');
+    expect(serialized).not.toContain('loyalty');
   });
 
   test('revealed or called-up prospect exposes full details', () => {

@@ -212,10 +212,10 @@ describe('startup prospect draft', () => {
       scoutWeaknessesVisible: expect.any(Array),
     }));
     expect(generatedProspect.hiddenPersonalityModifiers).toEqual(expect.objectContaining({
-      leadership: expect.any(Number),
-      volatility: expect.any(Number),
-      adaptability: expect.any(Number),
-      pressure: expect.any(Number),
+      loyalty: expect.any(Number),
+      ambition: expect.any(Number),
+      resilience: expect.any(Number),
+      charisma: expect.any(Number),
     }));
   });
 

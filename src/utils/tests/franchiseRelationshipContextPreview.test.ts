@@ -113,7 +113,7 @@ describe('franchise relationship context preview', () => {
     expect(report.rows.find((row) => row.kind === 'scout-prospect')?.status).toBe('needs-approval');
     expect(report.hiddenTruthGuard?.status).toBe('invalid');
     expect(report.hiddenTruthGuard?.blockers.join(' ')).toMatch(/hidden truth cannot be used/i);
-    expect(JSON.stringify(report)).not.toContain('"leadership":92');
+    expect(JSON.stringify(report)).not.toContain('"loyalty":92');
     expect(JSON.stringify(report)).not.toContain('"trueGrade":"A"');
   });
 

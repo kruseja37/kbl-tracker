@@ -1033,7 +1033,7 @@ describe('franchise random event generator core', () => {
       targetPlayerRevealState: 'hidden',
       hiddenProspectTruth: false,
     });
-    expect(JSON.stringify(candidate)).not.toMatch(/true ratings|trueGrade|hiddenScoutTruth|hiddenPersonalityModifiers|leadership/i);
+    expect(JSON.stringify(candidate)).not.toMatch(/true ratings|trueGrade|hiddenScoutTruth|hiddenPersonalityModifiers|loyalty/i);
   });
 
   test('missing or mismatched designation scope produces no designation prompt candidates', () => {
@@ -1063,7 +1063,7 @@ describe('franchise random event generator core', () => {
         scoutedGrade: 'C',
         hiddenScoutTruth: { accuracy: 90 },
       },
-      hiddenPersonalityModifiers: { leadership: 92 },
+      hiddenPersonalityModifiers: { loyalty: 92 },
     } as Partial<Player>);
     const report = buildFranchiseRandomEventCandidates({
       ...scope,
@@ -1082,7 +1082,7 @@ describe('franchise random event generator core', () => {
 
     expect(report.candidates).toHaveLength(2);
     expect(report.candidates.every((candidate) => candidate.triggerCategory === 'archive-backed-team-fan-reaction')).toBe(true);
-    expect(JSON.stringify(report)).not.toMatch(/hiddenPersonalityModifiers|leadership|trueGrade|hiddenScoutTruth|accuracy: 90/);
+    expect(JSON.stringify(report)).not.toMatch(/hiddenPersonalityModifiers|loyalty|trueGrade|hiddenScoutTruth|accuracy: 90/);
     expect(report.warnings.join(' ')).toMatch(/Hidden FARM\/prospect truth is excluded/i);
   });
 

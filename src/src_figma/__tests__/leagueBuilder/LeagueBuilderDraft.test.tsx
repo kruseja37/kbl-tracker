@@ -357,7 +357,7 @@ describe('LeagueBuilderDraft scout and prospect draft UI', () => {
     expect(screen.getByText(/Scouted B\+/i)).toBeInTheDocument();
     expect(screen.queryByText(/true grade/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/leadership/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/loyalty/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Detroit Tigers Scout/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /DRAFT TO FARM/i }));

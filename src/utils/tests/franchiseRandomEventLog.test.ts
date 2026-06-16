@@ -321,7 +321,7 @@ describe('franchise random event log foundation', () => {
       expect(entry.evidenceReferences.every((reference) => reference.hiddenProspectTruth === false)).toBe(true);
       expect(JSON.stringify(entry)).not.toContain('hiddenPersonalityModifiers');
       expect(JSON.stringify(entry)).not.toContain('trueGrade');
-      expect(JSON.stringify(entry)).not.toContain('leadership');
+      expect(JSON.stringify(entry)).not.toContain('loyalty');
     }
   });
 });

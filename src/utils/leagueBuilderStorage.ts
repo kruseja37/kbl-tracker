@@ -19,6 +19,7 @@ import type { OptimalLineupSnapshot } from '../types/managerWpa';
 import type { ParkFactors } from '../types/war';
 import type { EraFlavor, FameTier, PlayerArchetype } from '../types/reporter';
 import { trackFieldChanges, type EditHistoryEntry } from './editHistoryTracker';
+import type { HiddenPersonalityModifiers } from './prospectScoutingDraftEngine';
 import {
   markOptimalLineupSnapshotsStaleForChange,
   OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
@@ -245,6 +246,7 @@ export interface Player {
   trait2?: string;
   personality: Personality;
   chemistry: Chemistry;
+  hiddenPersonalityModifiers?: HiddenPersonalityModifiers;
   morale: number;
   mojo: MojoState;
   fame: number;

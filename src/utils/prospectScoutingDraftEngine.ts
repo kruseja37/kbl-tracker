@@ -67,10 +67,10 @@ export interface ProspectScoutingDraftInput {
 }
 
 export interface HiddenPersonalityModifiers {
-  leadership: number;
-  volatility: number;
-  adaptability: number;
-  pressure: number;
+  loyalty: number;
+  ambition: number;
+  resilience: number;
+  charisma: number;
 }
 
 export interface ProspectProfile {
@@ -540,10 +540,10 @@ function buildCandidate(input: ProspectScoutingDraftInput, index: number, totalP
     personality: pick(`${seed}:personality`, PERSONALITY_POOL),
     chemistry: pick(`${seed}:chemistry`, CHEMISTRY_POOL),
     hiddenPersonalityModifiers: {
-      leadership: clamp(50 + normal(`${seed}:leadership`) * 20, 0, 100),
-      volatility: clamp(50 + normal(`${seed}:volatility`) * 20, 0, 100),
-      adaptability: clamp(50 + normal(`${seed}:adaptability`) * 20, 0, 100),
-      pressure: clamp(50 + normal(`${seed}:pressure`) * 20, 0, 100),
+      loyalty: clamp(50 + normal(`${seed}:loyalty`) * 20, 0, 100),
+      ambition: clamp(50 + normal(`${seed}:ambition`) * 20, 0, 100),
+      resilience: clamp(50 + normal(`${seed}:resilience`) * 20, 0, 100),
+      charisma: clamp(50 + normal(`${seed}:charisma`) * 20, 0, 100),
     },
   };
 }

@@ -245,8 +245,10 @@ describe('League Builder startup farm draft persistence', () => {
       scoutedGrade: expect.any(String),
     }));
     expect(storedProspect.hiddenPersonalityModifiers).toEqual(expect.objectContaining({
-      leadership: expect.any(Number),
-      volatility: expect.any(Number),
+      loyalty: expect.any(Number),
+      ambition: expect.any(Number),
+      resilience: expect.any(Number),
+      charisma: expect.any(Number),
     }));
     expect(handoff.status).toBe('blocked');
     expect(handoff.blockers.join(' ')).toMatch(/expected 2 hired scouts/i);

@@ -271,9 +271,9 @@ describe('franchise morale/relationship trust contract', () => {
       primaryPosition: 'CF',
       ratingRevealState: 'hidden',
       leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'FARM' }],
-      hiddenPersonalityModifiers: { leadership: 99, volatility: 1 },
+      hiddenPersonalityModifiers: { loyalty: 99, ambition: 1 },
       editHistory: [
-        { date: '2026-01-01', field: 'hiddenPersonalityModifiers', oldValue: null, newValue: { leadership: 99 } },
+        { date: '2026-01-01', field: 'hiddenPersonalityModifiers', oldValue: null, newValue: { loyalty: 99 } },
       ],
     } as Partial<Player>);
 
@@ -291,8 +291,8 @@ describe('franchise morale/relationship trust contract', () => {
       trustedForMoraleMutation: false,
       trustedForRelationshipMutation: false,
     });
-    expect(JSON.stringify(report)).not.toContain('"leadership":99');
-    expect(JSON.stringify(report)).not.toContain('"volatility":1');
+    expect(JSON.stringify(report)).not.toContain('"loyalty":99');
+    expect(JSON.stringify(report)).not.toContain('"ambition":1');
     expect(record.limitations.join(' ')).toMatch(/hidden-safe/i);
   });
 

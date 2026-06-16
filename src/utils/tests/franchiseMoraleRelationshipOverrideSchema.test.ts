@@ -186,7 +186,7 @@ describe('franchise morale/relationship manual override schema', () => {
         targetRosterStatus: 'FARM',
         targetRevealState: 'hidden',
         includesHiddenTruthEvidence: true,
-        hiddenFieldsReferenced: ['trueGrade', 'hiddenPersonalityModifiers.leadership'],
+        hiddenFieldsReferenced: ['trueGrade', 'hiddenPersonalityModifiers.loyalty'],
       },
       evidenceReferences: [
         {

@@ -184,7 +184,7 @@ describe('franchise designation morale bridge', () => {
       }),
     });
     const serialized = JSON.stringify(report);
-    expect(serialized).not.toMatch(/true ratings|trueGrade|hiddenScoutTruth|hiddenPersonalityModifiers|leadership/i);
+    expect(serialized).not.toMatch(/true ratings|trueGrade|hiddenScoutTruth|hiddenPersonalityModifiers|loyalty/i);
   });
 
   test('missing scope returns blocked with no candidates', () => {

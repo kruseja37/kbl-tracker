@@ -591,8 +591,8 @@ describe('TeamHubContent franchise-owned visible reads', () => {
           scoutConfidence: 'medium',
         },
         hiddenPersonalityModifiers: {
-          leadership: 92,
-          volatility: 12,
+          loyalty: 92,
+          ambition: 12,
         },
         trait1: 'Sprinter',
         createdDate: '2026-01-01T00:00:00.000Z',
@@ -746,7 +746,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(farmRow as HTMLElement).getAllByText('Hidden').length).toBeGreaterThanOrEqual(2);
     expect(within(farmRow as HTMLElement).getByText('$4.0K')).toBeInTheDocument();
     expect(within(farmRow as HTMLElement).getByText('50')).toBeInTheDocument();
-    expect(farmRow as HTMLElement).not.toHaveTextContent(/A-|trueGrade|leadership|92|Sprinter|B scout|scout truth/i);
+    expect(farmRow as HTMLElement).not.toHaveTextContent(/A-|trueGrade|loyalty|92|Sprinter|B scout|scout truth/i);
     expect(within(rosterTable).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
   });
 
@@ -905,7 +905,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(valueWinsRegion).getByText(/Blocked: expected-wins persistence, final designations, salary movement, morale\/relationship mutation, offseason, Mode 3/i)).toBeInTheDocument();
     expect(within(valueWinsRegion).queryByRole('button')).not.toBeInTheDocument();
     expect(within(foundationRegion).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
-    expect(within(foundationRegion).queryByText(/leadership: 92/i)).not.toBeInTheDocument();
+    expect(within(foundationRegion).queryByText(/loyalty: 92/i)).not.toBeInTheDocument();
     expect(within(foundationRegion).queryByRole('button')).not.toBeInTheDocument();
     await waitFor(() => expect(within(randomEventRegion).getByText('RANDOM EVENT LOG')).toBeInTheDocument());
     expect(within(randomEventRegion).getByText(/Durable Franchise v1 prompt records/i)).toBeInTheDocument();
@@ -951,7 +951,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(randomEventRegion).getAllByRole('button', { name: 'CONFIRM' }).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).getAllByRole('button', { name: 'DISMISS' }).length).toBeGreaterThan(0);
     expect(within(randomEventRegion).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
-    expect(within(randomEventRegion).queryByText(/leadership: 92/i)).not.toBeInTheDocument();
+    expect(within(randomEventRegion).queryByText(/loyalty: 92/i)).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
     expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
 
@@ -2618,7 +2618,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(preview).getByText(/Hidden ratings, true grade, hidden scout truth, and hidden personality modifiers are blocked as evidence/i)).toBeInTheDocument();
     expect(within(preview).getByText(/Unrevealed FARM\/prospect hidden truth cannot be used/i)).toBeInTheDocument();
     expect(within(preview).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
-    expect(within(preview).queryByText(/leadership/i)).not.toBeInTheDocument();
+    expect(within(preview).queryByText(/loyalty/i)).not.toBeInTheDocument();
     expect(within(preview).queryByText(/trueGrade/i)).not.toBeInTheDocument();
     expect(within(preview).queryByText(/^A$/)).not.toBeInTheDocument();
     expect(within(preview).queryByRole('button')).not.toBeInTheDocument();
@@ -2642,7 +2642,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
           potentialGrade: 'A-',
           scoutConfidence: 'medium',
         },
-        hiddenPersonalityModifiers: { leadership: 92 },
+        hiddenPersonalityModifiers: { loyalty: 92 },
         editHistory: [
           {
             date: '2026-04-01T12:00:00.000Z',
@@ -2668,8 +2668,8 @@ describe('TeamHubContent franchise-owned visible reads', () => {
           {
             date: '2026-04-04T12:00:00.000Z',
             field: 'hiddenPersonalityModifiers',
-            oldValue: { leadership: 10 },
-            newValue: { leadership: 99 },
+            oldValue: { loyalty: 10 },
+            newValue: { loyalty: 99 },
             context: 'base',
           },
         ],
@@ -2692,7 +2692,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(dialog).queryByText(/trueGrade/i)).not.toBeInTheDocument();
     expect(within(dialog).queryByText(/^S$/i)).not.toBeInTheDocument();
     expect(within(dialog).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
-    expect(within(dialog).queryByText(/leadership/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/loyalty/i)).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
   });
 
@@ -2709,7 +2709,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
         potentialGrade: 'A-',
         scoutConfidence: 'medium',
       },
-      hiddenPersonalityModifiers: { leadership: 92 },
+      hiddenPersonalityModifiers: { loyalty: 92 },
       editHistory: [],
     });
     mocks.mockGetFranchisePlayer.mockResolvedValueOnce(freshFarmPlayer);

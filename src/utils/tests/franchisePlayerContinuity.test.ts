@@ -419,12 +419,12 @@ describe('franchise player continuity projection', () => {
           trueGrade: 'S',
           hiddenScoutTruth: { exact: 99 },
         },
-        hiddenPersonalityModifiers: { leadership: 99 },
+        hiddenPersonalityModifiers: { loyalty: 99 },
         editHistory: [
           { field: 'firstName', oldValue: 'Farm', newValue: 'Visible', date: '2026-01-01T00:00:00.000Z', context: 'base' },
           { field: 'power', oldValue: 20, newValue: 99, date: '2026-01-02T00:00:00.000Z', context: 'base' },
           { field: 'trueGrade', oldValue: 'C', newValue: 'S', date: '2026-01-03T00:00:00.000Z', context: 'base' },
-          { field: 'hiddenPersonalityModifiers', oldValue: { leadership: 10 }, newValue: { leadership: 99 }, date: '2026-01-04T00:00:00.000Z', context: 'base' },
+          { field: 'hiddenPersonalityModifiers', oldValue: { loyalty: 10 }, newValue: { loyalty: 99 }, date: '2026-01-04T00:00:00.000Z', context: 'base' },
         ],
       } as Partial<Player>),
       farmRecord: {
@@ -455,7 +455,7 @@ describe('franchise player continuity projection', () => {
     ]);
     expect(serialized).not.toContain('trueGrade');
     expect(serialized).not.toContain('hiddenPersonalityModifiers');
-    expect(serialized).not.toContain('leadership');
+    expect(serialized).not.toContain('loyalty');
     expect(serialized).not.toContain('99');
     expect(report.limitations.join(' ')).toMatch(/hidden-safe/i);
   });

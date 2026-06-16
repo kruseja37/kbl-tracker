@@ -878,7 +878,7 @@ describe('franchise trade dry-run adapter', () => {
             trueGrade: 'S',
             hiddenScoutTruth: { accuracy: 98 },
           },
-          hiddenPersonalityModifiers: { leadership: 99 },
+          hiddenPersonalityModifiers: { loyalty: 99 },
           leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-a', rosterStatus: 'FARM' }],
         } as Partial<Player> & Record<string, unknown> & { id: string; teamId: string })
         : player,
@@ -916,7 +916,7 @@ describe('franchise trade dry-run adapter', () => {
     );
     expect(result.data?.requestedPreview?.outgoingPlayer).not.toHaveProperty('overallGrade');
     expect(JSON.stringify(result.data?.requestedPreview?.outgoingPlayer)).not.toMatch(
-      /"S"|trueGrade|hiddenScoutTruth|hiddenPersonalityModifiers|leadership|accuracy/i,
+      /"S"|trueGrade|hiddenScoutTruth|hiddenPersonalityModifiers|loyalty|accuracy/i,
     );
     expectNoWrites();
   });

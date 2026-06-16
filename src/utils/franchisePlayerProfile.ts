@@ -8,6 +8,7 @@ import type {
 } from './leagueBuilderStorage';
 import type { FranchiseFarmRecord } from './franchiseFarmStorage';
 import type { FranchisePlayerDesignationRecord } from './franchiseDesignations';
+import type { HiddenPersonalityModifiers } from './prospectScoutingDraftEngine';
 import { getVisibleSafeFranchisePlayerSalary } from './franchiseSalary';
 import {
   calculateFranchisePlayerRatingModelGrade,
@@ -37,7 +38,7 @@ interface ProspectProfileCarrier {
     hiddenRatingFields?: unknown;
     [key: string]: unknown;
   };
-  hiddenPersonalityModifiers?: unknown;
+  hiddenPersonalityModifiers?: HiddenPersonalityModifiers;
 }
 
 export interface BuildFranchisePlayerProfileInput {

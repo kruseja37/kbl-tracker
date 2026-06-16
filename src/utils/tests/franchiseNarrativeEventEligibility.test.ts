@@ -387,7 +387,7 @@ describe('franchise narrative/random-event eligibility gate', () => {
       lastName: 'Prospect',
       ratingRevealState: 'hidden',
       leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'FARM' }],
-      hiddenPersonalityModifiers: { leadership: 99, volatility: 1 },
+      hiddenPersonalityModifiers: { loyalty: 99, ambition: 1 },
     } as Partial<Player>);
     const reports = foundationReports({
       valueInputReport: valueReport({ rows: [farmRow] }),
@@ -408,8 +408,8 @@ describe('franchise narrative/random-event eligibility gate', () => {
       eligibleForRandomEventGeneration: false,
     });
     expect(report.hiddenSafe).toBe(true);
-    expect(JSON.stringify(report)).not.toContain('"leadership":99');
-    expect(JSON.stringify(report)).not.toContain('"volatility":1');
+    expect(JSON.stringify(report)).not.toContain('"loyalty":99');
+    expect(JSON.stringify(report)).not.toContain('"ambition":1');
   });
 
   test('missing franchise/season/stats scope blocks narrative eligibility', () => {

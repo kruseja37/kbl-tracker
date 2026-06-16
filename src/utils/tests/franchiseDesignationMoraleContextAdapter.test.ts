@@ -136,7 +136,7 @@ describe('franchise designation morale context adapter', () => {
     expect(output.blocked[0].reasons.join(' ')).toMatch(/Current revealed MLB roster status is required/i);
     expect(output.blocked[1].reasons.join(' ')).toMatch(/Current team id is required/i);
     const serialized = JSON.stringify(output);
-    expect(serialized).not.toMatch(/trueGrade|hiddenScoutTruth|hiddenPersonalityModifiers|leadership/i);
+    expect(serialized).not.toMatch(/trueGrade|hiddenScoutTruth|hiddenPersonalityModifiers|loyalty/i);
   });
 
   test('blocks Fan Favorite and Albatross because True Value value delta is not trusted', () => {

@@ -7248,3 +7248,37 @@ This COMPLETES the T-stack → next is D0. BROWSER-VERIFY (batched, prioritized 
 overlay/almanac totals are UNCHANGED (no double-count), and the season carries an `optimizerConstantsHash` that
 survives backup/restore.
 
+---
+
+## L1 — Personality & hidden-modifier substrate (Phase-2 L-stack) — 2026-06-16 (autonomous run)
+
+**ROUTE:** Codex | high reasoning effort → Opus 4.8 audit (auditor ≠ builder). Autonomous run per
+`AUTONOMOUS_RUN_PROTOCOL.md`; auto-commit on VERIFIED (AUTH-1).
+
+**GOAL:** Rename the four HIDDEN personality modifiers to spec-canonical names, type the field on the Player
+schema, update all test data. Rename: leadership→loyalty, volatility→ambition, adaptability→resilience,
+pressure→charisma.
+
+**SOURCE OF TRUTH:** `FRANCHISE_V1_LIVING_SEASON_DSTACK.md` L1 + `FRANCHISE_V1_LIVING_SEASON_SPEC.md` §6 / LS-10.
+
+**ALLOWED:** `prospectScoutingDraftEngine.ts` (HiddenPersonalityModifiers interface ~69-74 + generated literal
+~542-547; keep EXPORTED) · `leagueBuilderStorage.ts` (add `hiddenPersonalityModifiers?: HiddenPersonalityModifiers`
+to Player ~285) · `franchisePlayerProfile.ts` (carrier field ~40 `unknown`→concrete type) · the test files
+referencing old keys (prospectScoutingDraftEngine, leagueBuilderStartupFarmDraft, franchisePlayerContinuity,
+franchiseMoraleRelationshipTrust, franchiseNarrativeEventEligibility, franchiseRandomEventGenerator,
+franchiseStartupProspectDraft, franchiseMoraleRelationshipOverrideSchema).
+
+**DO NOT TOUCH:** the 7 visible personalities (~247, 540) · franchisePlayerStorage.ts logic (generic persistence)
+· the presence-only consumers' logic · any value/IV/salary/WAR/golden file. **No data-migration code.**
+
+**CONSERVATIVE DEFAULTS (pre-decided, AUTH-2):** no migration (pre-launch; presence-only live consumers; no
+by-key reader until the unbuilt L3) · field fully typed `HiddenPersonalityModifiers` · carrier → concrete type.
+
+**VERIFICATION (prefix `NODE_ENV= `):** `tsc --noEmit` 0 · `npm run build` 0 · per-file vitest (note the
+pre-existing characterized franchiseNarrativeEventEligibility fail is NOT a new break) · grep gate:
+`grep -rn "hiddenPersonalityModifiers" src/ | grep -E "\.(leadership|volatility|adaptability|pressure)\b"` = 0.
+
+**STOP IF:** any out-of-ALLOWED edit · a visible-personality/oracle touch · a NEW (non-characterized) test fail.
+
+**Status:** contract issued; Codex invoked. Audit + verdict to follow in `AUTONOMOUS_RUN_LOG.md`.
+
