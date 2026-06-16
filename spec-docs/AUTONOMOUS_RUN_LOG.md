@@ -80,3 +80,22 @@
   gates: tsc 0; grep `= 162|/ 162|* 162` in useSeasonStats = 0; seasonLength 7/7; Codex's 5-file WAR gate 305/305
   (it found the real pwar/fwar/rwar paths under `src_figma/__tests__/statCalculations/`). Season-creation game
   count (line 359) left out-of-scope (separate concern). **→ NEXT: D2 (backup parity, scoped).**
+
+- **2026-06-16 — STARTED: D2.** Pre-contract reads pinned the exact mirror (trackerDb.ts 3 store defs) + the
+  registry shape + the version anchors. **Key ruling (documented):** do NOT bump `KBL_BACKUP_VERSION` (stays 2) —
+  restore REJECTS backups whose version ≠ KBL_BACKUP_VERSION (`backupRestore.ts:1232/1253`), and the file FORMAT
+  is unchanged (only store COVERAGE grows); bumping would break every existing backup. Only the kbl-tracker
+  SCHEMA pin goes 12→15. Scope: register the 3 stores + the pin + a parity-guard (kbl-tracker only) + round-trip
+  test. OUT of D2 (→ separate hardening ticket): the all-DB guard extension, syncConfig/manifest reconciliation,
+  export/restore UI wiring, the L2-expiry test. Contract in PROMPT_CONTRACTS.md; Codex invoked.
+
+- **2026-06-16 — D2 COMMITTED.** Codex built (exit 0); Captain audit = **VERIFIED**. Diff = `backupRestore.ts`
+  (3 stores added to `trackerStores` mirroring trackerDb EXACTLY — keyPaths + indexes +
+  `franchiseTrueValueRows.by_player_scope` unique via `options:{unique:true}`; pin `12→15` line 298) + NEW
+  `backupRestore.franchiseParity.test.ts`. **`KBL_BACKUP_VERSION` UNCHANGED at 2** (confirmed — the ruling held).
+  Test is mutation-honest: parity-guard = real `objectStoreNames === registry-keys` set comparison (would've
+  failed pre-D2); round-trip seeds → exports → **WIPES the DB** → restores → reads each row back by composite key.
+  Parity-guard passed without revealing other missing stores → the 3 were the COMPLETE gap (D2 fully closes the
+  silent-drop defect). Independent gates: tsc 0; parity (2) + elimination (10) = 12 passed. SMB4 assets untouched;
+  backup/restore still orphaned (UI wiring + all-DB guard = the separate hardening ticket). **→ NEXT: L-ECON1
+  (build + HOLD — value-sensitive, do NOT commit).**

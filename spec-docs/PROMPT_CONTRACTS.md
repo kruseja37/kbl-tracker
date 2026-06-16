@@ -7306,4 +7306,36 @@ constants) · WAR engines · lines 350/359 (leave; they alias the constant) · a
 change) · `grep -nE "= 162|/ 162|\* 162" src/hooks/useSeasonStats.ts` = 0.
 
 **Status:** contract issued; Codex invoked.
+**Result:** VERIFIED + committed `752882f`.
+
+---
+
+## D2 — Backup/restore parity (register 3 franchise stores + pin + parity-guard) — 2026-06-16 (autonomous run)
+
+**ROUTE:** Codex | high → Opus audit. Autonomous (AUTH-1, auto-commit on VERIFIED). Persistence/data-integrity.
+
+**GOAL:** `backupRestore.ts` pins `kbl-tracker` at v12 while `trackerDb.ts` is v15 → `franchiseTrueValueRows`(v13)
+/`franchiseDesignationRows`(v14)/`franchiseSeasonLedgerRows`(v15) silently drop on export/restore. Register them
+in `trackerStores` (mirror trackerDb keyPaths+indexes+unique exactly), bump the pin 12→15, add a parity-guard +
+round-trip test.
+
+**SOURCE OF TRUTH:** `FRANCHISE_PLAYABLE_V1_DEFINITION.md` D2; mirror `trackerDb.ts:117/132/323`.
+
+**ALLOWED:** `backupRestore.ts` (3 store entries in `trackerStores`; pin line 275 12→15) + NEW
+`src/utils/tests/backupRestore.franchiseParity.test.ts` (parity-guard: trackerDb objectStoreNames === registry
+keys; round-trip: 3 stores survive export→restore; harness per `backupRestore.elimination.test.ts`).
+
+**DO NOT TOUCH:** `trackerDb.ts` (source of truth) · **`KBL_BACKUP_VERSION` stays 2** (restore rejects on
+mismatch, lines 1232/1253 — bumping breaks existing backups; format unchanged) · `syncConfig.ts` /
+`franchiseSaveSlotManifest.ts` (all-DB guard + reconciliation = separate hardening ticket, OUT) · export/restore
+UI wiring (OUT) · any other DB / value file.
+
+**CONSERVATIVE RULINGS:** KBL_BACKUP_VERSION untouched; parity-guard scoped to kbl-tracker only; no L2-expiry test.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · the new parity+round-trip test passes ·
+`backupRestore.elimination.test.ts` still passes · pin === 15, KBL_BACKUP_VERSION === 2.
+
+**STOP IF:** parity-guard reveals stores missing beyond the 3 (report them); out-of-ALLOWED edit; test fail.
+
+**Status:** contract issued; Codex invoked.
 

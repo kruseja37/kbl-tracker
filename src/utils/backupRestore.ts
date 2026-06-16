@@ -128,6 +128,25 @@ const trackerStores: Record<string, StoreSchema> = {
       },
     ],
   },
+  franchiseTrueValueRows: {
+    keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'],
+    indexes: [
+      { name: 'by_scope', keyPath: ['franchiseId', 'seasonId', 'statsScopeId'] },
+      {
+        name: 'by_player_scope',
+        keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'],
+        options: { unique: true },
+      },
+    ],
+  },
+  franchiseDesignationRows: {
+    keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'teamId', 'type'],
+    indexes: [
+      { name: 'by_scope', keyPath: ['franchiseId', 'seasonId', 'statsScopeId'] },
+      { name: 'by_team_scope', keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'teamId'] },
+      { name: 'by_player_scope', keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'] },
+    ],
+  },
   playerCareerBatting: {
     keyPath: 'playerId',
     indexes: [
@@ -268,11 +287,15 @@ const trackerStores: Record<string, StoreSchema> = {
       { name: 'gameId_timestamp', keyPath: ['gameId', 'timestamp'] },
     ],
   },
+  franchiseSeasonLedgerRows: {
+    keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'],
+    indexes: [{ name: 'by_scope', keyPath: ['franchiseId', 'seasonId', 'statsScopeId'] }],
+  },
 };
 
 export const STATIC_DATABASE_SCHEMAS: Record<string, DatabaseSchema> = {
   'kbl-tracker': {
-    version: 12,
+    version: 15,
     stores: trackerStores,
   },
   'kbl-playoffs': {
