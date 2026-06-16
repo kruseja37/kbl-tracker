@@ -30,12 +30,13 @@ import { calculateRWARSimplified, type BaserunningStats } from '../engines/rwarC
 import type { BattingStatsForWAR } from '../types/war';
 import type { CompetitionType } from '../utils/gameStorage';
 import { getFieldingEventsForScope } from '../utils/eventLog';
+import { MLB_BASELINE_GAMES } from '../utils/franchiseAdaptiveStandards';
 
 // Default season
 const DEFAULT_SEASON_ID = 'season-1';
 const DEFAULT_SEASON_NUMBER = 1;
 const DEFAULT_SEASON_NAME = 'Season 1';
-const DEFAULT_TOTAL_GAMES = 162;
+const DEFAULT_TOTAL_GAMES = MLB_BASELINE_GAMES;
 const warnedWarSeasonFallbacks = new Set<string>();
 
 export function resolveSeasonGamesForWAR(metadata: SeasonMetadata | null): number {

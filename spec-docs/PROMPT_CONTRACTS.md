@@ -7281,4 +7281,29 @@ pre-existing characterized franchiseNarrativeEventEligibility fail is NOT a new 
 **STOP IF:** any out-of-ALLOWED edit · a visible-personality/oracle touch · a NEW (non-characterized) test fail.
 
 **Status:** contract issued; Codex invoked. Audit + verdict to follow in `AUTONOMOUS_RUN_LOG.md`.
+**Result:** VERIFIED + committed `d48ab3c`.
+
+---
+
+## D1 — Close the `useSeasonStats.ts:38 DEFAULT_TOTAL_GAMES=162` WAR-scaling hardcode — 2026-06-16 (autonomous run)
+
+**ROUTE:** Codex | high → Opus audit. Autonomous (AUTH-1, auto-commit on VERIFIED).
+
+**GOAL:** Point `useSeasonStats.ts:38` `DEFAULT_TOTAL_GAMES = 162` at the canonical `MLB_BASELINE_GAMES`
+(franchiseAdaptiveStandards), per the `seasonAggregator.ts:39` pattern. **ZERO behavior change** —
+`MLB_BASELINE_GAMES === 162`; WAR scaling already routes through stored `gamesPerTeam` via
+`resolveSeasonGamesForWAR` (falls back to this constant only when gamesPerTeam is null).
+
+**SOURCE OF TRUTH:** `FRANCHISE_PLAYABLE_V1_DEFINITION.md` D1.
+
+**ALLOWED:** `src/hooks/useSeasonStats.ts` line 38 only (+ extend the existing franchiseAdaptiveStandards import
+for `MLB_BASELINE_GAMES` if needed).
+
+**DO NOT TOUCH:** `war.ts` (`| 162` type literal) · `seasonAggregator.ts` / `useSeasonData.ts` (separate
+constants) · WAR engines · lines 350/359 (leave; they alias the constant) · any value/oracle file.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · the 5 WAR-scaling test files all pass (zero behavior
+change) · `grep -nE "= 162|/ 162|\* 162" src/hooks/useSeasonStats.ts` = 0.
+
+**Status:** contract issued; Codex invoked.
 
