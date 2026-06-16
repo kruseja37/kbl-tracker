@@ -1,6 +1,6 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-15 (T10 COMPLETE — Lineup Delta WPA standard + per-season optimizer-constants snapshot built + audited CONFORMS + committed `5010126`; **T-STACK COMPLETE** → D0 next)
+**Last Updated:** 2026-06-16 (§18 VERIFICATION READS 3-of-4 DONE — reporter / traits-from-reality / draft-salary-farm all certified + JK-ruled + locked to cert docs + DECISIONS_LOG; only §18(4) Manager-WPA-for-MOY remains. No product code this session — reads + design + docs only. NOTE: a live Anthropic 529-overload hit mid-session; §18.3 salary verification is re-running to harden, rulings already locked.)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.
@@ -12,9 +12,26 @@
 
 ## RIGHT NOW
 
-- **Phase:** **T-STACK COMPLETE** (T4→T10 all built / audited CONFORMS / committed). Per
-  sequencing ruling F-141, **D0 is now the active gate**: D0 cut line → D1–D8 → F-138 →
-  flag flip → iPad playtest exit gate.
+- **§18 VERIFICATION READS — 3 of 4 COMPLETE (this session, 2026-06-16; reads + design + docs only, NO product code):**
+  (1) **reporter** → `REPORTER_CERTIFICATION.md` + **REP-1..4** (in-game cadence = POST-GAME COLUMNS ONLY, live
+  GameStory canonical, franchiseId-keyed, accuracy model built in §24) + **SEA-1..5** (season-long narrative = a
+  sim-tunable "PUBLISH BUS" built EARLY in Phase-2; most beats gated on their unbuilt Phase-2 event source);
+  (2) **traits-from-reality (§9)** → `TRAIT_SIGNAL_CERTIFICATION.md` + **TS-1..13** (acquisition = reality-percentile
+  × personality × morale, min-sample valve = Franchise-lite toggle, role-eligibility 25 pitcher / 39 position / 7
+  universal / 1 cut [Sign Stealer], four personality "image" axes; net-new capture = pitch-ZONE + OF-extra-base-credit
+  + injury accumulator, rest reuses existing fields; §9 engine builds on `traitInteractionMatrix`);
+  (3) **draft/salary/farm (§18.3)** → `DRAFT_SALARY_FARM_CERTIFICATION.md` + **DSF-1..4** (UNIFY rookie+farm on a
+  tier-scaled RELATIVE-TO-POOL scale via the orphaned `TIER_SHIFTS`; tradeable asset = DRAFT PICKS; `farmGradeMode`
+  multiplicative skew; in-season annual draft DEFERRED post-v1). All design rulings in `DECISIONS_LOG.md` (2026-06-16
+  entries). **Only §18(4) — Manager WPA reconciliation for MOY — remains.** (§18.3 salary verification was re-running
+  post-529 to harden — rulings already locked; transcript `wf_1c5ff7c9-da3`.)
+- **Phase:** **T-STACK COMPLETE** (T4→T10 all built / audited CONFORMS / committed) +
+  **LIVING-SEASON (PHASE-2) DESIGN COMPLETE** (`FRANCHISE_V1_LIVING_SEASON_SPEC.md`, §0-24, locked
+  this session). TWO SEQUENCED LAYERS now exist: **Phase-1 = the D-stack** (value-spine LIVE + real
+  awards on trusted value — the SOUL-LAYER-EXCLUDED cut line in `FRANCHISE_PLAYABLE_V1_DEFINITION.md`,
+  still PROPOSED/pending-ratification); **Phase-2 = the living-season spec** (morale / development /
+  fame / the morale-gated designations / races / relationships / rebrand — exactly what the D0 doc's
+  D6/D7 explicitly deferred). Per F-141 the D-stack (D1-D13) still ships FIRST; Phase-2 layers on top.
 - **Last completed:** **T10 — Lineup Delta WPA standard + per-season constants snapshot** (commit `5010126`).
   Codex 5.5 BUILT → Opus 4.8 audit **CONFORMS** → **JK APPROVED** (persistence / saved-data-shape; not
   auto-committed). §9 standard = the PURE projected-vs-projected scalar `ManagerLineupDeltaSummary.
@@ -84,14 +101,9 @@
   (hook layer; engine pure). Independently re-verified: tsc 0 / build 0 / full suite 7,206 (only the 3
   characterized fails) / all do-not-touch incl. the farm draft + handoff BYTE-UNCHANGED. BROWSER-PENDING.
   (T8d-1 `9f94412` + T8a/T8b/T8c + T6/T7-stack — all CONFORMS — COMMITTED.)
-- **NEXT TASK: D0 — `FRANCHISE_PLAYABLE_V1_DEFINITION` cut line** (the T-stack is DONE). Per F-141:
-  D0 → D1–D8 → F-138 → flag flip → iPad playtest exit gate. Captain to read the D0 definition + propose the
-  D-stack sequencing/scope to JK BEFORE any build (same map→ruling→contract discipline as the T-stack).
-  **DEFERRED fast-follows (tracked):** R9 scout-obscured farm IV-range (needs `scoutNoiseBase`) + R12
-  chemistry potency overlay (needs SMB4 count→tier thresholds + `potencyTier(p,team)` resolver); **NEW
-  backupRestore.ts v12 stale-schema hardening** (separate ticket — see OPEN PENDING-JK). **FINDING-148**
-  (base AUX_PRICING L/R premium gap, JK-gated, oracle regen). Maps: `T10_SCOPE_MAP.md`, `T9_SCOPE_MAP.md`,
-  `T8d_SCOPE_MAP.md`.
+- **NEXT TASK — §18 read (4): Manager WPA reconciliation for MOY** (the LAST §18 read; best run in a FRESH session against a recovered API, given the mid-session 529 overload). Three build-time reconciliations: (a) **denomination** — decision-WPA is win-probability, lineup-delta is rescaled-IV → put on a common scale before summing; (b) **composite weighting** of decision-WPA + lineup-delta + team record (old 60/40 is a starting point, sim-tuned); (c) **DROP the salary-based win expectation** (mirrors the §23.9 award-voting fame-swap). Sources: `managerWpaDerivation.ts` (v2 WPA), `ManagerLineupDeltaSummary` (the T10 §9 scalar), `ManagerSeasonStats`; the @deprecated fixed-value `mwarCalculator` retires. Same map→ruling→contract discipline; produce a cert doc + AWARD-7/MOY rulings.
+  - **THEN: Captain drafts the Phase-2 "living-season D-stack"** — sequence `FRANCHISE_V1_LIVING_SEASON_SPEC.md` §5-§24 into dependency-ordered tickets for JK ratification, **FOLDING IN the build tickets these §18 reads unblocked**: the **reporter-foundation publish-bus (built EARLY)** + its per-source event taps; the **§9 trait engine** (on `traitInteractionMatrix`) + the pitch-zone / OF-arm / injury captures; the **unified relative-to-pool salary scale** + **tradeable draft-pick trading** + **`farmGradeMode`**. Reconcile the Phase-1↔Phase-2 COUPLINGS: **D9 awards** (MVP = TOTAL WAR; Gold Glove = fWAR + DEFENSIVE fame; vote-weighting = FAME not salary — adopt-now vs build-then-rework) and **D7 Fan Favorite** (deferred morale-gated half now designed). **The existing D-stack (D1-D13) is Phase-1 and can proceed in parallel** once JK ratifies D0.
+  **Reconciliation carried into Phase-2 planning:** re-triage the deferred fast-follows against the new design — R9 scout-obscured farm IV (feeds the draft/farm read), R12 chemistry overlay (overlaps relationships-lite), FINDING-148 (base AUX_PRICING L/R premium, JK-gated, oracle regen — affects the True Value that fame/awards now lean on); the **D2 backup-parity + backupRestore.ts v12 hardening GROW** to cover Phase-2's new persisted state (morale ledger, fame Heat + Reach floor, relationship edges, race standings, Comeback TV-snapshots). Tech-debt surfaced this session lives in the spec: §20.8 (fame: 3 ladders->1, cumulative->recency+reach, Elimination-scoped->franchise) and §23.9 (awards: offseason-decouple, fame-weighting, remove mechanical rewards, retire deprecated mWAR). Planning-doc sprawl (~45 franchise docs) -> collapse the authoritative set to D0 + the living-season spec + this file. Maps: `T10_SCOPE_MAP.md`, `T9_SCOPE_MAP.md`, `T8d_SCOPE_MAP.md`.
 - **STANDING MODE (JK 2026-06-14):** per ticket = build → independent ENGINEERING
   audit → auto-commit verified-complete (browser-pending) → proceed. Captain
   surfaces only the audit verdict, the browser backlog, and genuine scope/design/

@@ -818,3 +818,25 @@ D1–D8 → F-138 → flag flip → iPad playtest.
 managers + survives reload; overlay/almanac totals unchanged; season `optimizerConstantsHash` survives
 backup/restore). **New deferred ticket:** backupRestore.ts v12 stale-schema hardening (drops v13/v14/v15
 stores). **LOW:** summary stamps version via a full hash recompute (cleanup).
+
+---
+
+## 2026-06-15 → 2026-06-16 — LIVING-SEASON DESIGN + §18 VERIFICATION READS (1)–(3)
+
+**Outgoing header at this arc's start:** T-STACK (T4→T10) COMPLETE + LIVING-SEASON (Phase-2) DESIGN COMPLETE
+(`FRANCHISE_V1_LIVING_SEASON_SPEC.md` §0-24); next = §18 verification reads, reporter first. Suite 7,230 / 393.
+
+**This arc (2026-06-16, reads + design + docs only — NO product code):** §18 verification reads (1)–(3) COMPLETE,
+each certified by a parallel-mapper + adversarial-verifier Workflow and ruled by JK. (1) **Reporter** →
+`REPORTER_CERTIFICATION.md` + REP-1..4 (in-game cadence = post-game columns only; live GameStory canonical;
+franchiseId-keyed; accuracy in §24) + SEA-1..5 (season-long narrative = a sim-tunable "publish bus" built EARLY in
+Phase-2; most beats gated on their unbuilt Phase-2 event source). (2) **Traits-from-reality (§9)** →
+`TRAIT_SIGNAL_CERTIFICATION.md` + TS-1..13 (acquisition = reality-percentile × personality × morale; min-sample
+valve = Franchise-lite; role-eligibility 25 pitcher / 39 position / 7 universal / 1 cut; §9 engine on
+`traitInteractionMatrix`; net-new capture = pitch-zone + OF-arm + injury accumulator). (3) **Draft/salary/farm
+(§18.3)** → `DRAFT_SALARY_FARM_CERTIFICATION.md` + DSF-1..4 (unify rookie+farm on a tier-scaled relative-to-pool
+scale; tradeable DRAFT PICKS; `farmGradeMode` skew; in-season draft deferred post-v1). A live Anthropic **529
+overload** hit mid-§18.3 (lost 2 salary mappers + 2 verifiers; core 3-way corroborated, rulings locked; re-resume
+`wf_1c5ff7c9-da3` hardening). The builder/auditor triangle stayed dormant (nothing built to audit). **Next =
+§18(4) Manager WPA for MOY** (run fresh against a recovered API), then the Phase-2 "living-season D-stack"
+sequencing folding in the build tickets these reads unblocked.

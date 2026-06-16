@@ -666,3 +666,192 @@ modifies none of the SMB4-protected engines. No asset-gate approval required bey
 **Persistence note:** T10 adds new persisted fields (per-game §9 summary + per-season constants hash) → it is a
 persistence / saved-data-shape change → per the risk-scoped ruling it SURFACES to JK before commit (NOT
 auto-commit) and is prioritized in the browser-verify batch.
+
+---
+
+### 2026-06-16: Reporter (§18.1 verification read) — franchise wiring rulings (JK)
+
+**Context**: First of the four `FRANCHISE_V1_LIVING_SEASON_SPEC.md` §18 verification reads. Captain ran a
+`reporter-certification-read` workflow (8 dimension-mappers + 5 adversarial verifiers; full doc
+`spec-docs/REPORTER_CERTIFICATION.md`). Certified: the base reporter is a **certify-and-connect** job for
+franchise (downstream engine is already franchise-aware, no mode gate), with one genuine **build** gap (the
+accuracy model). Key facts behind the forks: (a) only two of five cadence beats fire live in any mode —
+between-inning summaries + post-game columns; per-play + preamble are orphaned everywhere; (b) TWO reporter
+systems coexist — the live `GameStory`/`PostGameColumns` system (wired into Exhibition/Elimination) vs the
+legacy `narrativeEngine.ts` template that FranchiseHome's hub actually shows; (c) assignment + lookup key on
+`leagueId` only, but franchise scope is `franchiseId/seasonId`; (d) the ~10% inaccuracy model §24.5/§24.7 needs
+exists only on the legacy engine — flag-only (never distorts text), orphaned at consumption, absent from the
+live pipeline. §5 invariant (LLM narrates, never decides) CONFIRMED safe; reporter persistence CONFIRMED
+backup-safe (the v12 defect drops only the v13-15 franchise-economy stores, not reporter data).
+
+**Decisions (JK, 2026-06-16):**
+1. **REP-1 — Franchise reporter cadence v1 = POST-GAME COLUMNS ONLY.** Leaner than the Captain's "match
+   Exhibition/Elimination" recommendation: franchise v1 skips live in-game commentary entirely (no
+   between-inning summaries, no per-play, no preamble) — the reporter speaks only after the game. Implication:
+   the `liveBeatReporterEnabled` flag is not needed for franchise; only `postGameColumnsEnabled` must be set on
+   franchise launch. Smallest connect surface + lowest LLM cost.
+2. **REP-2 — Canonical franchise news = the LIVE `GameStory`/`PostGameColumns` system.** Rewrite
+   `FranchiseHome.BeatReporterNews` to read the persisted `GameStory` records; retire the legacy
+   `generateGameRecap` template path for franchise. One system, the real reporter columns.
+3. **REP-3 — Franchise reporters keyed by `franchiseId`** (stable across the franchise's life, not per-season).
+   Avoids collision with Exhibition reporters that share `teamId+leagueId`. Requires reconciling
+   assignment/`getReporterForTeam` (currently `leagueId`-keyed) to a `franchiseId` scope for franchise games.
+4. **REP-4 — The ~10% inaccuracy model is BUILT FRESH inside the §24 relationships-lite ticket, not the base
+   reporter-connect ticket.** Base reporter ships WITHOUT it. The §24 build adds a reusable **seeded**
+   inaccuracy primitive + a persisted accuracy field; meaning recommended as hedge/flag in v1 with
+   content-distortion deferred (final meaning ruled when §24 is drafted). Unblocks the base reporter now.
+
+**Non-blocking (noted, not gating cadence):** the whole backup/restore feature + the reporter-almanac
+"living-memory" writer are both orphaned (no user trigger today); Claude column spend has no client-side rail
+(Grok-only 500/day); the reporter is server-key/network-dependent (no offline fallback). Bump the
+`backupRestore` v12 pin → 15 remains a separate tracked ticket.
+
+**Asset gate:** none required — this is a read + design ruling; no SMB4-protected engine is touched. The build
+tickets these rulings unblock are persistence/user-visible → they SURFACE to JK before commit per the
+risk-scoped rule.
+
+---
+
+### 2026-06-16: Reporter SEASON-LONG cadence (§18.1b) — publish-bus model + rulings (JK)
+
+**Context**: JK flagged that the REP-1 ruling settled only the IN-GAME cadence (post-game columns); the
+SEASON-LONG narrative cadence — how the reporter tells the morale / relationship / race / designation story
+BETWEEN games — was never addressed (logged as a scoping lesson in SESSION_RULES pen). Captain ran a second
+read (`reporter-season-cadence-read` workflow, 7 mappers + 5 adversarial verifiers; full doc
+`REPORTER_CERTIFICATION.md` Part 2 §K-O). **Decisive finding:** unlike the in-game half (certify-and-connect),
+the season-long narrative is **overwhelmingly UNBUILT** and is a downstream consumer of nearly every Phase-2
+system — the reporter narrates what the deterministic matrix produces, and most of those event SOURCES (live
+designations/flips, races, random events §10, the auto/logged morale ledger, relationships, manager firings)
+ARE the unbuilt Phase-2 features. Certified gaps: no season-news record type (only game-bound `GameStory` +
+`CommentaryFeedEntryRecord`); the season-memory substrate (almanac/legacy-summary) is half-wired (read-back
+live, write/regen orphaned → prompt input always empty); no sim-tunable emission gate; pre-action hooks
+(§24.5/§24.7) are build-from-scratch (the revenge substrate in `tradeEngine.ts`/`headlineEngine.ts` exists but
+orphaned; relationship data source empty). Today only game-end drives a take; trade/roster moves fire as bare
+transactions with morale/relationship riders hardcoded `false`.
+
+**Decisions (JK, 2026-06-16):**
+1. **SEA-1 — Accept the PUBLISH-BUS cadence model; build the reporter foundation EARLY.** The season-long
+   cadence is event-driven, not a clock: a Phase-2 system produces a narratable outcome → emits a
+   `NarrativeEvent` → a sim-tunable emission gate (marquee-only default) decides if it warrants a take → the
+   canonical reporter renders it into a persisted `SeasonNewsItem` → seeds reporter season-memory → surfaces on
+   the franchise hub feed + Almanac. The foundation (news record + emission gate + a non-game generation method
+   on the canonical live reporter + hub season-feed + wiring the orphaned season-memory) is built EARLY as
+   Phase-2 infrastructure; each later soul-layer system then adds its event tap as it lands. The reporter is
+   near the FRONT of the Phase-2 dependency order, not a late standalone ticket.
+2. **SEA-2 — Separate season-emission-config.** The sim-tunable emission gate is a NEW config keyed by the
+   season-event taxonomy (per-event-type base rate + per-race Top-N depth + global marquee-only flag),
+   sim-writable, kept DISTINCT from the player-facing in-game `narrativeIntensity` dial. (The season analog of
+   the in-game `notabilityScorer`; emission volume settled by the Simulation Gate §16 per the 2026-06-16
+   "let the sim decide" ruling.)
+3. **SEA-3 (deferred to data-model design)** — whether to fold season news into one `SeasonNewsItem` vs reuse
+   the two reserved-but-dead stores (`narrativeContext` for storyline/momentum state, `rivalryScores` for §24
+   relationship-edge state). Captain lean: one `SeasonNewsItem` for news + `rivalryScores` for relationship
+   edges; finalized when the record is designed.
+4. **SEA-4 (Captain reconciliation, JK did not veto) — pre-move heads-up is ADVISORY, never a hard gate.**
+   §24.5 ("a pre-commit heads-up, NEVER a hard gate") supersedes the older `FARM_SYSTEM_SPEC` blocking-modal
+   wording (FINDING-133, which has zero code anyway).
+5. **SEA-5 (Captain reconciliation, JK did not veto) — REP-2 holds for season takes.** Generation lives on the
+   canonical LIVE reporter; the orphaned legacy `generateTradeNarrative`/`generateMilestoneNarrative` templates
+   are NOT revived — their `NarrativeEventType` vocabulary is reused, the generation is rebuilt on the live
+   system.
+
+**Status:** §18.1 (reporter) verification read is now COMPLETE — both the in-game cadence (REP-1..4) and the
+season-long narrative cadence (SEA-1..5) are settled. The reporter-foundation build ticket + the per-source
+event taps fold into the Phase-2 "living-season D-stack" sequencing the Captain drafts after the remaining §18
+reads. Asset gate: none (read + design only).
+
+---
+
+### 2026-06-16: Traits-from-reality (§18.2 / §9) — full trait→signal model (JK)
+
+**Context**: Second §18 verification read. Captain ran a `trait-to-signal-mapping` workflow (4 ground-truth readers
++ 5 per-chemistry mappers covering all 72 traits + 3 adversarial verifiers) → `TRAIT_SIGNAL_CERTIFICATION.md`.
+Certified the crux (`typed ≠ populated`): the pressure spine (leverage/WPA/clutch/runners/RBI) is auto-populated,
+but the discriminating signals (count, pitch type, pitch location, fielding difficulty, chase, handedness, mojo)
+are absent / typed-but-unwritten / manual-opt-in. Initial triage 13 A / 24 B / 35 C; then a JK design session
+worked the 33-deep C bucket down to **1 cut + everything else buildable**. Also certified: the §9 *engine* (3
+layers — log-reconstructed activation context, strength scoring, trait grant/write-back) is entirely UNBUILT, but
+`traitInteractionMatrix.ts` already encodes every activation predicate (the foundation).
+
+**Decisions (JK, 2026-06-16):**
+1. **TS-1 — Acquisition formula:** P(gain/lose) = f(reality-percentile-vs-peers, personality-tilt, current-morale),
+   min-sample gated, gain-high/lose-low hysteresis, 2-trait cap (strength-ranked displacement, no offsetting pair).
+2. **TS-2 — Peer-relative is mandatory** for both valences (anti-dilution + it IS the strength score; rides the
+   Adaptive Standards machinery; auto-scales by season length + pool talent).
+3. **TS-3 — Min-sample safety valve** ⇒ enrichment is opt-in ("Franchise-lite"); thin data = trait dormant, never
+   flickers; also guards against confirmation spam (trait changes are confirmed per §11).
+4. **TS-4 — Season-length-scaled thresholds** for count-based triggers (mirrors WAR's `RUNS_PER_WIN` scaling;
+   percentile model handles most for free). E.g. Injury Prone: 40g→2 injuries, 80g→3, 120g→4.
+5. **TS-5 — Personality weighting** in two layers: universal (Ambition↑ positive-gain, low-Resilience↑
+   negative-catch) + four "image" axes (Composure / Hustle / Big-game / Approach — see cert §VI.3). Personality is
+   PRIMARY where the measured signal is thin (Stimulated, Gets Ahead/Falls Behind, Big/Little Hack), a TILT where
+   strong. Mechanical splits (vs L/RHP, Specialist, Reverse Splits, Pick Officer, K Neglecter, Utility) = no
+   personality image.
+6. **TS-6 — Role eligibility (crystal):** 24 pitcher-only, 40 position-player-only (25 batting / 7 baserunning /
+   8 fielding), 7 universal (Clutch, Choker, Durable, Injury Prone, Consistent, Volatile, Stimulated), 1 cut.
+   Full lists in cert §VI.2. Two Way is pitcher-only and the GATEWAY (a pitcher who hits elite-for-a-pitcher →
+   everyday player → then eligible for batting traits). Captain-default edge cases (veto open): Wild Thrower +
+   Pinch Perfect = position-player-only.
+7. **TS-7 — Sign Stealer CUT** entirely, including from draft-class generation (least-valuable, no signal).
+8. **TS-8 — Reclassified from C via JK rulings:** Easy Target = chase-for-OUTS (negative mirror of Bad Ball
+   Hitter = chase-for-HITS, same signal split by outcome); the steal-vulnerability trait is **Easy Jumps**
+   (SB-allowed/IP percentile, pitcher); Metal Head = pitcher hit by KP+nut-shot ≥2 combined → protective grant;
+   Mind Gamer = high walk + pitch-grinding rate (batter); Distractor = high rWAR (baserunner); Crossed Up =
+   passed-ball-on-advance (catcher); Wild Thing = wild-pitch-on-advance (pitcher); Consistent/Volatile =
+   mojo-change frequency vs peers; Stimulated = late-game performance vs peers + PED-personality.
+9. **TS-9 — Two Way corrected** to pitcher-batting-excellence (super-rare); Dive Wizard += `beat_runner`;
+   Sprinter += `beat_throw`, Slow Poke += `beat_runner`; Sprinter/Slow Poke stay event-driven (not profile).
+10. **TS-10 — Big/Little Hack** = the one "not earned from a log event" trait: profile-weighted (POW/CON ratio) +
+    personality, probabilistically applied.
+11. **TS-11 — Capture surface:** net-new = pitch zone, OF extra-base-credit (bWAR expected-extra-bases), injury
+    accumulator (folds into fitness/dev engine); everything else reuses existing fields/events; handedness JOIN
+    (`bats`/`throws`) is a low-cost win unlocking 6 split traits.
+12. **TS-12 — Build the §9 engine on `traitInteractionMatrix`** (log-reconstructed context + peer-relative
+    strength scorer + grant/write-back to the franchise-instance `traits` field). All thresholds/bands/weights →
+    Simulation Gate (§16).
+
+13. **TS-13 — Role-eligibility corrections + refinements (JK, same session):** **Crossed Up is PITCHER-ONLY**
+    (a pitcher trait whose effect manifests as the catcher dropping the pitch — attribute the passed-ball signal
+    to the PITCHER). Revised counts: **25 pitcher-only / 39 position-player-only (25 batting / 7 baserunning /
+    7 fielding) / 7 universal / 1 cut.** Wild Thrower + Pinch Perfect confirmed position-player-only. **Two-Way
+    grant** (evolution or generation) randomly assigns the pitcher a two-way fielding position (IF / OF / C).
+    **Roster-role tilt:** bench classification raises acquisition likelihood for **Pinch Perfect** and **Utility**
+    (starter lowers it) — a role input separate from personality.
+
+**Status:** §18.2 (traits-from-reality) verification read COMPLETE. Asset gate: none yet (read + design); the
+build ticket touches the SMB4-protected trait/mojo/fitness systems → SURFACES to JK per the asset rule when drafted.
+Next: §18 read (3) — draft/salary/farm economics.
+
+---
+
+### 2026-06-16: Draft/Salary/Farm economics (§18.3) — DSF rulings (JK)
+
+**Context**: Third §18 read (`draft-salary-farm-economics-read` workflow; full doc `DRAFT_SALARY_FARM_CERTIFICATION.md`).
+Certified (salary core 3-way corroborated; the 2 dedicated salary mappers + verifiers 529'd mid-run and are
+re-running to harden): 22-man salary = IV-based + tier-invariant; farm-prospect = a flat 4-row draft-round table
+(CALIBRATE bridge), unchanged at call-up (F-127); rookie scale = absolute 0.50× age-replacement — so the two
+scales are DISCONNECTED today. The pick-value chart is already relative-to-pool but MLB-22-only and unconsumed by
+salary; the IVs it ranks are RAW (the tier-scale constants TIER_SHIFTS/FARM_NERF_SCALES exist in tierParams.ts but
+are ORPHANED); pick-trade execution does NOT exist (validateTrade is advisory-only); per-draft grade distribution
+has no knob (round-keyed, tier-independent). Startup drafts (LeagueBuilderSnakeDraft MLB-22 + LeagueBuilderDraft
+farm-10) + scout-obscuring (R9) are LIVE; the in-season franchise draft is dry-run only.
+
+**Decisions (JK, 2026-06-16):**
+1. **DSF-1 — UNIFY on the tier-scaled pool anchor.** Connect TIER_SHIFTS[tier].scale into the pool-IV feed
+   (useLeagueBuilderData.ts:414) so pickValueChart[0] becomes tier-sensitive; then peg BOTH 22-man rookie pricing
+   AND farm-prospect pricing to that tier-scaled pool top, tapering down the slots — REPLACING the absolute 0.50×
+   rookie factor AND the flat farm-round table. One coherent relative-to-pool, tier-sensitive scale (nerfed pool →
+   lower top-slot price; "is this pick worth it?" stays live).
+2. **DSF-2 — Tradeable asset = DRAFT PICKS (order positions).** Build a pick-ownership model + a pick-trade
+   executor that mutates/persists pickOrder (gated behind validateTrade), and extend derivePickValueChart +
+   validateTrade to the farm round. (Not roster-vacancies, not the prospects-via-player-trade.)
+3. **DSF-3 — Farm grade mode = MULTIPLICATIVE SHIFT.** Add farmGradeMode (Juiced/Standard/Nerfed) that skews the
+   existing round-keyed roundGradeWeights tables via FARM_NERF_SCALES, independent of the 22-man pool tier
+   (enables nerfed-22-man + juiced-farm). Reuses the validated bell curve; sim-tunable.
+4. **DSF-4 (Captain default, not vetoed) — in-season annual draft DEFERRED to the offseason (post-v1, per LS-1).**
+   The League Builder startup draft suffices for v1; the dry-run franchiseDraftAdapter apply path is post-v1.
+
+**Status:** §18.3 verification read COMPLETE (salary verification hardening re-running post-529). Asset gate: none
+(read + design); the build ticket touches salary/tier economics (not an SMB4-protected engine) but is
+persistence/economics → SURFACES to JK per the risk rule when drafted. Next: §18 read (4) — Manager WPA
+reconciliation for MOY (the last §18 read).

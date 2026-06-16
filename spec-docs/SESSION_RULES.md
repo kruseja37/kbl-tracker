@@ -359,6 +359,18 @@ agent edits the ratified rules without JK. (JK ruling 2026-06-14.)
   engineering gate (non-deferrable) from the human experience gate (batchable) so
   JK's time is spent efficiently without weakening either.
 
+- **Full-cadence scoping for narrative systems (JK correction 2026-06-16):** When asked to
+  "settle the cadence" of the reporter / any narrative system, always certify and settle the
+  FULL cadence surface — per-game recap, per-EVENT takes (trade / call-up / send-down /
+  morale-flashpoint / designation-flip / firing / random-event / relationship-flare),
+  per-CHECKPOINT (ratings shift + race standings, every 20% of games), PRE-ACTION intel
+  (§24.5 pre-move heads-up, §24.7 charged matchup), and the season-ARC summary — NOT just the
+  in-game beats, because the season-long narrative is the soul anchor and the in-game cadence
+  is the small part; scoping "cadence" to in-game beats silently drops the most important half.
+  (Origin: the REP-1 ruling settled only the in-game/post-game cadence; JK flagged that the
+  season-long narrative cadence — how the reporter tells the morale / relationship / race story
+  between games — was never addressed.)
+
 ### Pending cleanup (not a rule — a tracked repo action)
 - **spec-assembler duplicate:** two divergent copies exist —
   `.claude/skills/spec-assembler/SKILL.md` (511 lines, CANONICAL per JK
