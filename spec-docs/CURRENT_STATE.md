@@ -1,6 +1,6 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-16 (§18 VERIFICATION READS 4-of-4 COMPLETE — reporter / traits-from-reality / draft-salary-farm / Manager-WPA-for-MOY all certified + JK-ruled + locked to cert docs + DECISIONS_LOG. §18 prerequisite reads DONE; NEXT is the Phase-2 living-season D-stack sequencing for JK ratification. No product code this session — reads + design + docs only.)
+**Last Updated:** 2026-06-16 (PHASE-2 LIVING-SEASON "L-STACK" SEQUENCING DRAFTED + audit-hardened (12-agent workflow `wf_b5734e06-e2c`) + FORKS RULED by JK (LSD-1..5) + folded into docs. **LSD-6 (JK ruling B): the living season IS part of v1** (v1 = D-stack + L-stack + L-SIM gate; D13 "Playable-V1" = internal Phase-1 checkpoint). Deliverable: `FRANCHISE_V1_LIVING_SEASON_DSTACK.md` (Status: PROPOSED). Structure signed off; NEXT is D0 ratification (reconciled for B, clean to ratify), then contract the Tier-0 opener L1. No product code this session — design + docs only. Prior: §18 reads 4-of-4 complete.)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.
@@ -12,6 +12,26 @@
 
 ## RIGHT NOW
 
+- **PHASE-2 "L-STACK" SEQUENCING DRAFTED + FORKS RULED (2026-06-16; design + docs only, NO product code):**
+  `FRANCHISE_V1_LIVING_SEASON_DSTACK.md` (Status: PROPOSED) sequences the living-season spec §5–§24 into
+  dependency-ordered tickets **L1–L14 + L-SIM + an economy track**, hardened by a 12-agent decorrelated
+  workflow (`wf_b5734e06-e2c`: 7 grounding code-readers + 5 adversarial ordering critics, ~1.26M tokens).
+  Audit-forced corrections folded in: **MOY → Phase-1 D9** (not a Phase-2 ticket; MOY-4 bars manager fame);
+  **new L1.5** Captain Mode-1-handoff (BLOCKER gap — unbuilt in both stacks); **L1** is a real build (hidden
+  modifiers generated mis-named + un-persisted); **L4a/L9a hoisted to Tier 0**; **DSF-1 coupled to the value/IV
+  spine** (re-prices the frozen draft-IV anchor → land before the salary freeze); **backup-parity escalated**
+  (D2 guard covers only `kbl-tracker`; export/restore orphaned + stale-pin restore destroys newer stores);
+  **floating TV built but no trough history** → new `franchiseTrueValueSnapshots` store from game 1. **Rule:
+  BUILD Phase-2 dark in parallel with the late D-stack, ACTIVATE strictly after D13** (§5 no-phantom-morale +
+  D12 gate). **Five forks RULED by JK (LSD-1..5, DECISIONS_LOG):** LSD-1 D9 fame-ready seam checklist ratified
+  (build the award engine ONCE, fame hooks empty, L12 fills them); LSD-2 FA-attraction → v1.1 (keep only
+  in-season trade-requests in L5); LSD-3 Cornerstone CUT; LSD-4 budget pressure CUT; LSD-5 stadium change =
+  pick from the existing SMB pool (pull dimensions/name/park-factors). **+ LSD-6 (JK ruling B, 2026-06-16): the
+  living season IS part of v1** — v1 = D-stack + L-stack + the L-SIM gate (one release); D0's "Playable-V1" (D13)
+  is an INTERNAL Phase-1 checkpoint, not the v1 release; the soul layer is v1-Phase-2 (NOT v1.1); only the
+  offseason + the 3 LSD cuts stay post-v1. D0 reconciled for (B) (D9 now carries the LSD-1 seams + MOY-1..7).
+  **NEXT:** D0 ratification (now clean to ratify), then contract the Tier-0 opener **L1** (personality/modifier
+  substrate). Structure signed off (JK "move forward as recommended").
 - **§18 VERIFICATION READS — 4 of 4 COMPLETE (2026-06-16; reads + design + docs only, NO product code):**
   (1) **reporter** → `REPORTER_CERTIFICATION.md` + **REP-1..4** (in-game cadence = POST-GAME COLUMNS ONLY, live
   GameStory canonical, franchiseId-keyed, accuracy model built in §24) + **SEA-1..5** (season-long narrative = a
@@ -107,7 +127,7 @@
   characterized fails) / all do-not-touch incl. the farm draft + handoff BYTE-UNCHANGED. BROWSER-PENDING.
   (T8d-1 `9f94412` + T8a/T8b/T8c + T6/T7-stack — all CONFORMS — COMMITTED.)
 - **§18 read (4) — Manager WPA reconciliation for MOY: COMPLETE** (this session) → `MANAGER_WPA_MOY_CERTIFICATION.md` + **MOY-1..7** (DECISIONS_LOG 2026-06-16). All four §18 prerequisite reads DONE. The MOY build ticket = greenfield awards + persistence + a HARD D6 dependency → sequences POST-D6/D8 inside D9 (surfaces to JK per the risk rule when drafted).
-- **NEXT TASK — Captain drafts the Phase-2 "living-season D-stack"** — sequence `FRANCHISE_V1_LIVING_SEASON_SPEC.md` §5-§24 into dependency-ordered tickets for JK ratification, **FOLDING IN the build tickets these §18 reads unblocked**: the **reporter-foundation publish-bus (built EARLY)** + its per-source event taps; the **§9 trait engine** (on `traitInteractionMatrix`) + the pitch-zone / OF-arm / injury captures; the **unified relative-to-pool salary scale** + **tradeable draft-pick trading** + **`farmGradeMode`**; the **MOY award engine** (MOY-1..7, season aggregation of the `pogAwards` composite, POST-D6/D8). Reconcile the Phase-1↔Phase-2 COUPLINGS: **D9 awards** (MVP = TOTAL WAR; Gold Glove = fWAR + DEFENSIVE fame; vote-weighting = FAME not salary — adopt-now vs build-then-rework; **+ MOY now contracted via MOY-1..7, sequenced POST-D6/D8**) and **D7 Fan Favorite** (deferred morale-gated half now designed). **The existing D-stack (D1-D13) is Phase-1 and can proceed in parallel** once JK ratifies D0.
+- **DONE (2026-06-16) → see the RIGHT-NOW top entry + `FRANCHISE_V1_LIVING_SEASON_DSTACK.md`. (Historical scope of the task that produced the L-stack:)** Captain sequenced `FRANCHISE_V1_LIVING_SEASON_SPEC.md` §5-§24 into dependency-ordered tickets for JK ratification, **FOLDING IN the build tickets these §18 reads unblocked**: the **reporter-foundation publish-bus (built EARLY)** + its per-source event taps; the **§9 trait engine** (on `traitInteractionMatrix`) + the pitch-zone / OF-arm / injury captures; the **unified relative-to-pool salary scale** + **tradeable draft-pick trading** + **`farmGradeMode`**; the **MOY award engine** (MOY-1..7, season aggregation of the `pogAwards` composite, POST-D6/D8). Reconcile the Phase-1↔Phase-2 COUPLINGS: **D9 awards** (MVP = TOTAL WAR; Gold Glove = fWAR + DEFENSIVE fame; vote-weighting = FAME not salary — adopt-now vs build-then-rework; **+ MOY now contracted via MOY-1..7, sequenced POST-D6/D8**) and **D7 Fan Favorite** (deferred morale-gated half now designed). **The existing D-stack (D1-D13) is Phase-1 and can proceed in parallel** once JK ratifies D0.
   **Reconciliation carried into Phase-2 planning:** re-triage the deferred fast-follows against the new design — R9 scout-obscured farm IV (feeds the draft/farm read), R12 chemistry overlay (overlaps relationships-lite), FINDING-148 (base AUX_PRICING L/R premium, JK-gated, oracle regen — affects the True Value that fame/awards now lean on); the **D2 backup-parity + backupRestore.ts v12 hardening GROW** to cover Phase-2's new persisted state (morale ledger, fame Heat + Reach floor, relationship edges, race standings, Comeback TV-snapshots). Tech-debt surfaced this session lives in the spec: §20.8 (fame: 3 ladders->1, cumulative->recency+reach, Elimination-scoped->franchise) and §23.9 (awards: offseason-decouple, fame-weighting, remove mechanical rewards, retire deprecated mWAR). Planning-doc sprawl (~45 franchise docs) -> collapse the authoritative set to D0 + the living-season spec + this file. Maps: `T10_SCOPE_MAP.md`, `T9_SCOPE_MAP.md`, `T8d_SCOPE_MAP.md`.
 - **STANDING MODE (JK 2026-06-14):** per ticket = build → independent ENGINEERING
   audit → auto-commit verified-complete (browser-pending) → proceed. Captain

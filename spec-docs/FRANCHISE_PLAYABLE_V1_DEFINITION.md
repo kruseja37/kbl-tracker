@@ -1,15 +1,29 @@
 # FRANCHISE PLAYABLE V1 — DEFINITION (D0 cut line)
 
 **Created:** 2026-06-15 (D0 scope session — the deliverable F-141 required before the D-stack)
-**Status:** PROPOSED — pending JK final ratification. Produced by: Captain re-baseline (6-reader decorrelated
+**Status:** **RATIFIED (JK, 2026-06-16)** — the canonical Phase-1 cut line (a checkpoint INSIDE v1 per LSD-6, not
+the v1 release). Produced by: Captain re-baseline (6-reader decorrelated
 fan-out, every status Captain-verified file:line) + a 3-round Codex peer-review (idea-box) + 4 JK scope
 rulings (2026-06-15). On ratification this becomes the canonical cut line that supersedes the candidate
 ordering in `KBL_V1_EXECUTION_PLAN.md` (per that doc's 2026-06-12 amendment).
+**Ratification-ready update (2026-06-16):** the Phase-2 "L-stack" sequencing (`FRANCHISE_V1_LIVING_SEASON_DSTACK.md`)
++ the LSD-1..5 rulings have settled the awards/designation couplings that were the held reason to wait — D9 now
+carries the LSD-1 fame-ready seams + the MOY-1..7 contract; Fan Favorite stays Phase-2 (v1.1); Cornerstone is cut.
+D0 is now clean to ratify.
 **Branch:** codex/franchise-v1-next.
 
 > **F-141 sequencing context:** the IV/value-spine T-stack (T4→T10) is COMPLETE. This doc is the D0 cut line.
 > After D0 ratifies → D-stack (D1–D13) → F-138 (offseason data-source) scoped → offseason flag flips →
 > iPad playtest exit gate. Mode 3 / offseason stays OUT of v1.
+>
+> **RELEASE-BOUNDARY RECONCILIATION (LSD-6, JK 2026-06-16):** under JK's ruling (B), the **living season is part
+> of v1**, so **this whole D-stack (D1–D13) is the Phase-1 CHECKPOINT *inside* v1, not the v1 release.** After D13
+> the Phase-2 "L-stack" (`FRANCHISE_V1_LIVING_SEASON_DSTACK.md`) builds + activates, and the **v1 exit playtest is
+> of the FULL living season** (D-stack + L-stack + the L-SIM gate). The "→ v1.1" deferral language in §1/§4 below
+> is SUPERSEDED for the soul layer (morale/fame/development/traits/relationships/managers/rebrand + the morale-gated
+> designations incl. **Fan Favorite** are v1-Phase-2, not v1.1); only the offseason/Season-2 bridge + the LSD cuts
+> (Cornerstone, FA-attraction, budget pressure) + tracked fast-follows remain genuinely post-v1. The offseason flag
+> stays FALSE through all of v1.
 
 ---
 
@@ -87,7 +101,7 @@ surface to JK before commit; browser sign-off batched.
 | **D6** | **True Value / value-delta TRUST PROMOTION gate (NEW).** Flip `trustedForTrueValue` + `valueDeltaTrustedForDesignations` from literal-false to computed, with the peer-pool audit. D6 PERSISTS/FREEZES a trusted-value artifact (explicit roster/season/stats scope, peer-pool policy, blocked-row reasons, contract version); D7/D8 consume that artifact and never recompute it. **`>=2 MLB peers must BLOCK, not fudge** (no fallback pool unless ratified). Hidden-FARM + score-only rows stay excluded. Frozen-snapshot rule: which roster state, season vs playoff inclusion, when values lock. Re-triggers the D2 backup guard if it changes stored row shape/version. **Boundary: promotes value trust for explicit v1 consumers ONLY — does NOT promote salary movement, morale, relationships, Captain/Fan Hopeful/Cornerstone, Mode 3, or offseason execution.** | REAL-BUILD / GATE | D1, D5 |
 | **D7** | 1.3 designations LIVE — reconcile to ONE canonical designation path (Captain rec: persisted path canonical, upgraded to `active` + events; eligibility = its ranking input), promote TEAM_MVP/ACE to live (non-'Proj.') badges, **add Albatross** (unblocked by D6; Fan Favorite NOT — Phase-2 morale gated), emit `DesignationEvent`, wire only explicitly-approved salary-weighting + FA-destination effects. Regression: DesignationEvent emission produces NO morale mutation. | REAL-BUILD | D2, D6 |
 | **D8** | 1.8.5 award-trust gate — the make-or-break gate. A WRITTEN award-trust contract + tests: promote `trustedForAwards`/`finalWarTrusted` to computed booleans consuming D6's frozen value artifact; award-specific milestone weighting + adaptive award thresholds via `scaledThreshold()` (no hardcoded 162/9); score-only + hidden-FARM exclusion; deterministic stored winners. NOT a boolean flip. | GATE (REAL-BUILD) | D1, D6, D7 |
-| **D9** | 1.9 real awards — internally split: (a) award-value policy on the trusted spine → (b) `franchiseAwardsEngine.ts` (6 categories: MVP/Cy Young/RoY/Gold Glove/Silver Slugger/Mgr of Year) + `franchiseAwardsStorage.ts` (new store, trackerDb v16 migration REGISTERED in backupRestore) → (c) `AwardsWatchlist.tsx` + per-game recompute → (d) season-end finalize + franchise history + profile/Almanac display. New Mode-2 surfaces; do NOT flip the offseason flag. | REAL-BUILD | D8 |
+| **D9** | 1.9 real awards — internally split: (a) award-value policy on the trusted spine → (b) `franchiseAwardsEngine.ts` (6 categories: MVP/Cy Young/RoY/Gold Glove/Silver Slugger/Mgr of Year) + `franchiseAwardsStorage.ts` (new store, trackerDb v16 migration REGISTERED in backupRestore) → (c) `AwardsWatchlist.tsx` + per-game recompute → (d) season-end finalize + franchise history + profile/Almanac display. **Build with the LSD-1 fame-ready seams** (per-award candidate **margins** not winner-only; **fWAR/total-WAR split** on Gold Glove; **pluggable/nullable** ceremony vote-weight; reserved **KK/Bust/Comeback** slots + the `franchiseTrueValueSnapshots` store captured from game 1) so the Phase-2 L12 fame layer is purely additive — NO rebuild. **MOY contract = MOY-1..7** (season aggregation of the `pogAwards` composite; 4 pool-normalized inputs; record = expectation-relative on the D6 artifact; retire `mwarCalculator`/`calculateMOYVotes` + re-point the dead-gated ceremony first; no fame tilt). New Mode-2 surfaces; do NOT flip the offseason flag. | REAL-BUILD | D8 |
 | **D10** | 1.10 handoff — finalize the Mode-2 season summary/manifest now WITH awards + active designations (was the no-awards 1.10A stopgap). | REAL-BUILD | D2, D7, D9 |
 | **D11** | UI live-label sweep — remove remaining preview/READ-ONLY vocabulary across the now-promoted surfaces (salary, True Value/Expected Wins [value trust promoted in D6], designations, awards). Spray stays functional-but-provisional. Minimal/cosmetic. | CONFIRM-ONLY | D4, D6, D7, D9, D10 |
 | **D12** | Full Phase-1 manual smoke (iPad) — the gap-analysis Final Checklist on real local franchise state: salary/designations/trades/farm/WPA/spray/playoffs/awards/summary all live; zero hardcoded-162; all three typed events emitted, no phantom morale. | CONFIRM-ONLY | D3, D11 |

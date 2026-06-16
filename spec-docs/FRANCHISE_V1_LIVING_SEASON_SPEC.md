@@ -74,7 +74,7 @@ Designations are continuous, automatic, in-season labels — "the market talking
 | Ace | Highest pWAR (>= 0.5 floor) | Pitcher equivalent |
 | Fan Favorite | Highest positive value delta (TV - contract) | Overperformer vs pay; carries over briefly |
 | Albatross | Most negative value delta | Overpaid underperformer; carries over briefly |
-| Cornerstone | Last season's Team MVP | Permanent while on team; accumulates |
+| Cornerstone | Last season's Team MVP | Permanent while on team; accumulates · **CUT from v1 (LSD-3, 2026-06-16) — single-season has no "last season"; revisit at the offseason bridge** |
 | Team Captain | Highest Loyalty + Charisma (Charisma >= 70) | A morale *router*, not a development modifier |
 | Fan Hopeful | A called-up prospect | A countable timed cushion |
 
@@ -229,6 +229,8 @@ Fan morale is **not cosmetic.** It earns weight through real, balance-safe teeth
 
 **Supporting teeth:** free-agent gravity (high-morale franchises attract, hostile ones repel — self-correcting under the cap); the **GM hot seat** (sustained low fan morale = a stated mandate, "make the playoffs or else"; pure pressure, zero balance risk); reporter intensity (low morale = the press turns up the heat). **Optional / capped:** budget pressure (fan morale nudges next season's spending room — real runaway risk, so hard-capped + mean-reverting if used; tune last, after the league is proven).
 
+> **v1 amendments (2026-06-16):** **FA-gravity / free-agent attraction is DEFERRED to v1.1** and struck from the v1 "live teeth" (LSD-2) — free agency is an offseason concept incompatible with the one-season v1; only the **in-season trade-request generation** (the inversions below) ships in v1. **Budget pressure is CUT from v1** (LSD-4) — next-season spending room = offseason. Both revisit v1.1.
+
 **Free-agency / trade inversions (sharper than the obvious version):**
 - **Loyal players are MORE likely to leave when fans are angry** — their bond was to the *fans and city*; when that turns toxic, the thing they were loyal to is gone, so they are *more* likely to walk than a mercenary who never cared. A hostile fanbase costs you exactly the players you would most want to keep.
 - **Angry fans -> more trade requests** (scaled by personality + morale; low-loyalty / low-morale players bolt first). A fan-morale collapse does not just sit there — it actively *destabilizes the roster* and forces action.
@@ -243,7 +245,7 @@ The floor that turns total failure into a fresh start — and the cleanest way t
 - **RESETS on relocation:** fan morale -> ~70 (a fresh, excited fanbase); **all badges except Captain** (everything else is tied to the old team/fanbase; Captain travels with the *player's* leadership); **manager auto-fired** ("new regime wants their own guy" — just the existing firing event, triggered automatically; the rebrand cascades cleanly: relocation -> firing -> its morale ripple -> fresh fanbase); **stadium changes**; **dead money cleared** (the financial half of the fresh start — a relocated team is almost certainly in last place and *needs* to churn its roster; the dead-money tax is the very thing that would otherwise prevent the rebuild).
 - **PERSISTS (because it is mid-season):** player stats, team record, player development to date. (Wiping these mid-season would feel like a save-wipe; the rebrand is a fresh start with *earned progress intact*.)
 - **History:** **one continuous franchise history with a relocation marker** (do NOT split into eras — less work, and the better story: "the franchise formerly known as the X, who relocated and became the Y").
-- **Stadium dual-path:** relocation changes the stadium AND stadium can change independently via the random-events table at a *low* rate that is *suppressed by high fan morale.*
+- **Stadium dual-path:** relocation changes the stadium AND stadium can change independently via the random-events table at a *low* rate that is *suppressed by high fan morale.* **v1 (LSD-5, 2026-06-16):** both paths **pick from the existing Super Mega stadium pool in League Builder — NO custom stadiums**; the build **pulls the full stadium record (dimensions, name, park factors)** into the franchise so stadium analytics recompute correctly after the change.
 - **Exploit watch:** "tank to wipe dead money" is a *painful* escape hatch, not a free one (you must bottom out fan morale for a sustained stretch, lose the team's identity / stadium / badges, and spend a chunk of season in the cellar — nobody tanks a season they are enjoying just to clear cap space). The Simulation Gate watches for deliberate-bottoming abuse; recommendation is a full wipe unless the sim shows a problem. The rebrand is meant to incentivize *not* tanking (you lose your branding and stadium), while still giving a genuinely failed franchise a floor.
 
 ---

@@ -906,3 +906,86 @@ salary MOY (`calculateMOYVotes`, `getExpectedWinPct = 0.35 + salaryScore×0.30`)
 build ticket is greenfield awards + persistence + a D6 dependency → SURFACES to JK per the risk rule when drafted, and
 sequences POST-D6/D8 inside D9. Next: Captain drafts the Phase-2 "living-season D-stack" sequencing (fold in the §18-
 unblocked tickets; reconcile the D9/D7 couplings) for JK ratification.
+
+---
+
+### 2026-06-16: Phase-2 "Living-Season D-stack" (the L-stack) — sequencing draft + five fork rulings (JK)
+
+**Context**: Captain drafted the dependency-ordered Phase-2 build sequence (`FRANCHISE_V1_LIVING_SEASON_DSTACK.md`,
+tickets L1–L14 + L-SIM + an economy track) from `FRANCHISE_V1_LIVING_SEASON_SPEC.md` §5–§24 + the four §18 certs,
+then hardened it with a 12-agent decorrelated verification workflow (`wf_b5734e06-e2c`: 7 grounding code-readers +
+5 adversarial ordering critics, ~1.26M tokens). The audit forced structural corrections folded into the doc:
+**(i)** MOY is a Phase-1 **D9** sub-ticket (the §18(4) read specifies the D9 manager-award contract — MOY-1..7), NOT
+a Phase-2 ticket (MOY-4 bars manager fame → no Phase-2 layer); removed from L12c. **(ii)** New ticket **L1.5** (Team
+Captain initial assignment at Mode-1 league finalization) closes a BLOCKER gap — the handoff is unbuilt in both
+stacks (`franchiseInitializer.ts:335-433` has zero Captain assignment; CAPTAIN hard-blocked at
+`franchiseDesignationEligibility.ts:151-157`). **(iii)** L1's hidden modifiers are generated mis-named + un-persisted
+(`prospectScoutingDraftEngine.ts:542-547` emits leadership/volatility/adaptability/pressure, not loyalty/ambition/
+resilience/charisma) → L1 is a real build. **(iv)** Reporter base split out (L4a, no morale-matrix dep) + hoisted to
+Tier 0 per SEA-1; trait-capture (L9a) hoisted to Tier 0 (longest data lead). **(v)** DSF-1 is COUPLED to the value/IV
+spine (re-prices the frozen draft-IV anchor) → sequence before the v1 franchise's draft/salary freeze. **(vi)** Backup
+parity escalated — the D2 guard covers only `kbl-tracker`; Phase-2 stores land in separate DBs; export/restore is
+orphaned + a stale-pin restore destroys newer stores → re-scope the guard to all DBs + a prerequisite hardening ticket
++ a per-ticket backup DoD. **(vii)** Floating TV is built but overwrites one cumulative row → KK/Comeback need a NEW
+`franchiseTrueValueSnapshots` store captured from game 1. **Parallelism rule:** BUILD Phase-2 foundations dark in
+parallel with the late D-stack, ACTIVATE strictly after D13 (the §5 "no phantom morale" + D12 smoke gate).
+
+**Five fork rulings (JK, 2026-06-16):**
+
+1. **LSD-1 (F1) — D9 fame-ready seam checklist RATIFIED; build the award engine ONCE.** Fame IS in full v1 (Phase-2
+   L6), but the award *engine* is built at the Phase-1 checkpoint before fame exists, so build it once with the fame
+   hooks left empty and let L12 fill them — no rebuild. The four seams baked into the D9 contract NOW: (1) store
+   per-award **candidate margins** (not winner-only) for the close-race fame tilt; (2) store the **fWAR vs total-WAR
+   split** on Gold Glove for the later defensive-fame blend (~15–25%); (3) make the ceremony **vote-weight field
+   pluggable/nullable** (salary→fame swap without migration); (4) reserve the **KK/Bust/Comeback award-type slots +
+   the `franchiseTrueValueSnapshots` store**, capturing TV from game 1 (or season-1 Comeback data is lost). Fame's
+   award role is a **merit-led TILT** (§21.4 — flips only a genuinely-close race), **defensive-fame** on Gold Glove,
+   **fame-weighted** ceremony votes (replacing salary), **fame-led** All-Star *starters* (the one exception); the
+   TV-family runs on True Value, not fame; awards pay fame+morale+badge only (no rating rewards). *(Captain rec'd (a);
+   (b) build-then-rework = two builds, (c) hold-D9-for-fame reopens the D0 "real awards in Phase-1" ruling — both declined.)*
+2. **LSD-2 (F2) — FA-attraction DEFERRED to v1.1; FA-gravity struck from §13 "live teeth."** Keep only the in-season
+   **trade-request generation** (loyalty/morale-scaled roster destabilization) in L5 (+ an L10 event tap + an L13
+   trade-demander flashpoint). Free-agent attraction/destination weighting is an offseason concept incompatible with
+   the one-season v1 (LS-1) → v1.1.
+3. **LSD-3 (F3) — Cornerstone CUT from v1.** Matches the D0 deferral; L7 drops it. ("Last season's MVP; accumulates"
+   is structurally impossible in a single-season v1.) Revisit at the offseason/multi-season bridge.
+4. **LSD-4 (F4) — Budget pressure CUT from v1.** The §13 "optional/capped" tooth is next-season spending room =
+   offseason = post-v1. Revisit v1.1.
+5. **LSD-5 (F5) — Stadium change = pick from the EXISTING Super Mega stadium pool in League Builder; NO custom
+   stadiums.** On relocation (L14) the user chooses from the built-in stadium list; the build must **pull the full
+   stadium record (dimensions, name, park factors) into the franchise** so stadium analytics recompute correctly
+   after the move. The L10 independent random-event stadium-change leg (fan-morale-suppressed rate) uses the same
+   pool-pick mechanism. (No custom-stadium entry — consistent with the standing hard exclusion.)
+
+**Status:** Phase-2 sequencing DRAFTED + all 5 forks RULED + folded into `FRANCHISE_V1_LIVING_SEASON_DSTACK.md`
+(Status: PROPOSED). No product code, nothing committed (JK commits). Asset gate: none (design/docs only) — each L-ticket
+re-gates when contracted (Codex builds → Opus audits → JK browser sign-off). Remaining ratification gates before any
+build contract: (a) JK explicit sign-off on the L-stack structure; (b) D0 ratification (still PROPOSED). First Tier-0
+critical-path opener to contract = **L1** (personality/modifier substrate). Living-season spec §4/§13/§14 carry
+amendment notes for the cuts (Cornerstone, FA-attraction, budget pressure, stadium pool-pick).
+
+---
+
+### 2026-06-16 (follow-up): Release-boundary ruling — the living season IS part of v1 (LSD-6)
+
+**Context**: With the L-stack sequenced + LSD-1..5 ruled, JK was asked whether (a) Phase-1 "Playable-V1" (the
+D-stack, soul-layer-excluded) ships as a standalone milestone with the living season as a true follow-on, or (b)
+the living season is part of "v1" proper — v1 isn't done until both stacks + the sim gate complete. This reconciles
+the D0 doc's older "Phase-2 automation → v1.1" deferral language with the week's living-season design.
+
+**Ruling — JK (2026-06-16): (B).** The living season (Phase-2 L-stack) is **PART OF v1**, not v1.1.
+- **v1 = Phase-1 (D-stack D1–D13) + Phase-2 (L-stack L1–L14 + economy track) + the L-SIM gate.** One release — the
+  full living, playable season (draft → champion *with* the soul layer).
+- **"Playable-V1" (D0's D13) is reframed as an INTERNAL Phase-1 checkpoint**, NOT the v1 release. D13 approves the
+  value-spine-live milestone; the v1 release sign-off comes after the L-stack + the L-SIM gate.
+- **Sequencing UNCHANGED:** the D-stack still builds first; Phase-2 foundations build dark in parallel; the soul
+  layer activates after D13; every magnitude is sim-gated.
+- **D0's "Phase-2 automation → v1.1" deferral is SUPERSEDED for the soul layer** — morale / fame / development /
+  traits / relationships / managers / rebrand / the morale-gated designations are **v1** (Phase-2), not v1.1.
+- **Genuinely post-v1 / v1.1 (unchanged):** the offseason / Season-2 bridge (LS-1); the three LSD cuts (Cornerstone
+  LSD-3, FA-attraction LSD-2, budget pressure LSD-4); the tracked JK-gated fast-follows (R9, R12, FINDING-148).
+- **The v1 exit gate (iPad playtest) is of the FULL living season** (after L-stack + L-SIM), not the stats-only D13
+  checkpoint; the offseason flag stays FALSE throughout v1 (offseason remains post-v1).
+
+**Status:** Release boundary RULED. Reconciliation notes added to `FRANCHISE_PLAYABLE_V1_DEFINITION.md` (D0),
+`FRANCHISE_V1_LIVING_SEASON_DSTACK.md`, and `CURRENT_STATE.md`. No code impact (labeling/scope-boundary only).
