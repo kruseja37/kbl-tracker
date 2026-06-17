@@ -131,6 +131,7 @@ export interface Team {
   rivalries?: TeamRivalry[];
   capIdentity?: TeamCapIdentity;
   captainPlayerId?: string | null;
+  fanHopefulPlayerId?: string | null;
   lineupWithDH?: LineupSlot[];
   lineupWithoutDH?: LineupSlot[];
   startingRotation?: string[];

@@ -32,6 +32,7 @@ import {
   setActiveFranchise,
 } from './franchiseManager';
 import { getLeagueTemplate, getTeam, type LeagueTemplate } from './leagueBuilderStorage';
+import { FRANCHISE_PROFILE_GRADES } from './franchisePlayerProfileEdit';
 import type { ScheduleTeam } from './scheduleGenerator';
 import {
   getAllGamesByFranchise,
@@ -64,6 +65,7 @@ import {
 import {
   carryOverFranchiseFarmRecordsToSeason,
   deleteFranchiseFarmRecordsForSeason,
+  getFranchiseFarmRoster,
 } from './franchiseFarmStorage';
 
 interface FranchiseLeagueTeams {
@@ -177,6 +179,11 @@ export interface TeamCaptainAssignment {
   captainPlayerId: string | null;
 }
 
+export interface TeamFanHopefulAssignment {
+  teamId: string;
+  fanHopefulPlayerId: string | null;
+}
+
 function isMlbPlayerForTeam(player: Player, teamId: string): boolean {
   return player.leagueAssignments?.some(
     (assignment) =>
@@ -222,7 +229,6 @@ export function computeTeamCaptains(
         const modifiers = player.hiddenPersonalityModifiers;
         return (
           modifiers !== undefined &&
-          modifiers.charisma >= 70 &&
           isMlbPlayerForTeam(player, team.id)
         );
       })
@@ -269,6 +275,109 @@ export async function assignTeamCaptains(
     await saveFranchiseTeam(franchiseId, {
       ...team,
       captainPlayerId: assignment.captainPlayerId,
+    });
+  }
+
+  return assignments;
+}
+
+function hashString(input: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function randomUnit(seed: string): number {
+  return hashString(seed) / 0xffffffff;
+}
+
+function scoutedGradeRank(grade: unknown): number {
+  const normalized = String(grade ?? '').toUpperCase();
+  const index = FRANCHISE_PROFILE_GRADES.indexOf(normalized as (typeof FRANCHISE_PROFILE_GRADES)[number]);
+  return index >= 0 ? index : Number.POSITIVE_INFINITY;
+}
+
+function getVisibleScoutedGrade(player: Player): unknown {
+  return (player as { prospectProfile?: { scoutedGrade?: unknown } }).prospectProfile?.scoutedGrade;
+}
+
+export function computeTeamFanHopefuls(
+  teams: Team[],
+  players: Player[],
+  farmPlayerIdsByTeamId: Map<string, string[]>,
+  seasonId: string,
+): TeamFanHopefulAssignment[] {
+  const playersById = new Map(players.map((player) => [player.id, player]));
+
+  return teams.map((team) => {
+    const topProspects = (farmPlayerIdsByTeamId.get(team.id) ?? [])
+      .map((playerId) => playersById.get(playerId))
+      .filter((player): player is Player => Boolean(player))
+      .map((player) => ({
+        player,
+        scoutedGrade: getVisibleScoutedGrade(player),
+      }))
+      .filter(({ scoutedGrade }) => Number.isFinite(scoutedGradeRank(scoutedGrade)))
+      .sort((left, right) => {
+        const gradeDiff = scoutedGradeRank(left.scoutedGrade) - scoutedGradeRank(right.scoutedGrade);
+        if (gradeDiff !== 0) return gradeDiff;
+        return left.player.id.localeCompare(right.player.id);
+      })
+      .slice(0, 3);
+
+    const selectedIndex = topProspects.length > 0
+      ? Math.min(
+        topProspects.length - 1,
+        Math.floor(randomUnit(`${team.id}:${seasonId}:fan-hopeful`) * topProspects.length),
+      )
+      : -1;
+
+    return {
+      teamId: team.id,
+      fanHopefulPlayerId: selectedIndex >= 0 ? topProspects[selectedIndex].player.id : null,
+    };
+  });
+}
+
+export async function assignTeamFanHopefuls(
+  franchiseId: string,
+  seasonId: string,
+  teams?: Team[],
+  players?: Player[],
+): Promise<TeamFanHopefulAssignment[]> {
+  const [resolvedTeams, resolvedPlayers] = await Promise.all([
+    teams ? Promise.resolve(teams) : getAllFranchiseTeams(franchiseId),
+    players ? Promise.resolve(players) : getAllFranchisePlayers(franchiseId),
+  ]);
+  const farmRosterEntries = await Promise.all(
+    resolvedTeams.map(async (team) => [
+      team.id,
+      (await getFranchiseFarmRoster(franchiseId, seasonId, team.id)).map((record) => record.playerId),
+    ] as const),
+  );
+  const assignments = computeTeamFanHopefuls(
+    resolvedTeams,
+    resolvedPlayers,
+    new Map(farmRosterEntries),
+    seasonId,
+  );
+
+  for (const assignment of assignments) {
+    const team = resolvedTeams.find((candidate) => candidate.id === assignment.teamId);
+    if (!team) continue;
+
+    if (assignment.fanHopefulPlayerId === null) {
+      console.warn(
+        `[franchiseInitializer] No eligible Fan Hopeful found for team ${team.id}; fanHopefulPlayerId set to null.`,
+      );
+    }
+
+    await saveFranchiseTeam(franchiseId, {
+      ...team,
+      fanHopefulPlayerId: assignment.fanHopefulPlayerId,
     });
   }
 
@@ -534,9 +643,11 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
     // Franchise v1 schedules are empty/manual/user-supplied only.
     await initScheduleDatabase();
 
-    // 8. Backfill hidden modifiers and assign build-dark Team Captains before season state exists.
+    // 8. Backfill hidden modifiers and assign season-start team roles before season state exists.
     const hiddenModifierBackfill = await generateFranchiseHiddenModifierBackfill(franchiseId);
+    const initialSeasonId = getFranchiseSeasonId(franchiseId, 1);
     await assignTeamCaptains(franchiseId, undefined, hiddenModifierBackfill.players);
+    await assignTeamFanHopefuls(franchiseId, initialSeasonId, undefined, hiddenModifierBackfill.players);
 
     // 9. Create the season metadata record franchise mode reads later.
     await createFranchiseSeasonMetadata(franchiseId, 1, 0, config.season.gamesPerTeam);
@@ -592,6 +703,12 @@ export async function initializeEmptyFranchiseSeasonSchedule(
       toSeasonNumber: newSeasonNumber,
     });
   }
+
+  await assignTeamFanHopefuls(
+    franchiseId,
+    getFranchiseSeasonId(franchiseId, newSeasonNumber),
+    franchiseTeams,
+  );
 
   return 0;
 }

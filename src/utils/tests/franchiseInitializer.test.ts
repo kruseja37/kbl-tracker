@@ -3,10 +3,16 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import type { Player, Team } from '../leagueBuilderStorage';
 import {
+  assignTeamFanHopefuls,
   assignTeamCaptains,
+  computeTeamFanHopefuls,
   computeTeamCaptains,
   generateFranchiseHiddenModifierBackfill,
 } from '../franchiseInitializer';
+import {
+  deleteFranchiseFarmRecordsForSeason,
+  saveFranchiseFarmRecord,
+} from '../franchiseFarmStorage';
 import {
   deleteFranchiseDatabase,
   getAllFranchisePlayers,
@@ -15,7 +21,11 @@ import {
   saveFranchiseTeam,
 } from '../franchisePlayerStorage';
 
-function makePlayer(overrides: Partial<Player> & Pick<Player, 'id'>): Player {
+function makePlayer(
+  overrides: Partial<Player> & Pick<Player, 'id'> & {
+    prospectProfile?: { scoutedGrade?: string };
+  },
+): Player {
   return {
     id: overrides.id,
     firstName: 'Test',
@@ -75,6 +85,10 @@ describe('franchiseInitializer hidden modifiers and Team Captain assignment', ()
       deleteFranchiseDatabase('franchise-backfill'),
       deleteFranchiseDatabase('franchise-captains'),
       deleteFranchiseDatabase('franchise-no-captain'),
+      deleteFranchiseDatabase('franchise-fan-hopeful'),
+      deleteFranchiseDatabase('franchise-no-fan-hopeful'),
+      deleteFranchiseFarmRecordsForSeason('franchise-fan-hopeful', 'season-1'),
+      deleteFranchiseFarmRecordsForSeason('franchise-no-fan-hopeful', 'season-1'),
     ]);
   });
 
@@ -112,7 +126,7 @@ describe('franchiseInitializer hidden modifiers and Team Captain assignment', ()
       });
   });
 
-  test('computeTeamCaptains picks max loyalty plus charisma among MLB players with charisma at least 70', () => {
+  test('computeTeamCaptains picks max loyalty plus charisma among MLB players with no charisma floor', () => {
     const assignments = computeTeamCaptains(
       [makeTeam({ id: 'team-a' })],
       [
@@ -132,7 +146,7 @@ describe('franchiseInitializer hidden modifiers and Team Captain assignment', ()
           hiddenPersonalityModifiers: { loyalty: 100, ambition: 50, resilience: 50, charisma: 100 },
         }),
         makePlayer({
-          id: 'charisma-gate-fails',
+          id: 'low-charisma-high-score',
           leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-a', rosterStatus: 'MLB' }],
           hiddenPersonalityModifiers: { loyalty: 100, ambition: 50, resilience: 50, charisma: 69 },
         }),
@@ -142,18 +156,18 @@ describe('franchiseInitializer hidden modifiers and Team Captain assignment', ()
     expect(assignments).toEqual([
       {
         teamId: 'team-a',
-        captainPlayerId: 'eligible-higher-score',
+        captainPlayerId: 'low-charisma-high-score',
       },
     ]);
   });
 
-  test('assignTeamCaptains writes null and warns when no MLB player clears the charisma gate', async () => {
+  test('assignTeamCaptains writes null and warns when a team has no MLB players', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     await saveFranchiseTeam('franchise-no-captain', makeTeam({ id: 'team-a' }));
     await saveFranchisePlayer('franchise-no-captain', makePlayer({
-      id: 'not-charismatic',
-      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-a', rosterStatus: 'MLB' }],
-      hiddenPersonalityModifiers: { loyalty: 99, ambition: 50, resilience: 50, charisma: 69 },
+      id: 'farm-player',
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-a', rosterStatus: 'FARM' }],
+      hiddenPersonalityModifiers: { loyalty: 99, ambition: 50, resilience: 50, charisma: 99 },
     }));
 
     await expect(assignTeamCaptains('franchise-no-captain')).resolves.toEqual([
@@ -168,6 +182,72 @@ describe('franchiseInitializer hidden modifiers and Team Captain assignment', ()
     );
     expect(warnSpy).toHaveBeenCalledWith(
       '[franchiseInitializer] No eligible Team Captain found for team team-a; captainPlayerId set to null.',
+    );
+  });
+
+  test('computeTeamFanHopefuls deterministically picks one top-3 farm prospect by visible scoutedGrade', () => {
+    const farmPlayerIdsByTeamId = new Map([
+      ['team-a', ['scouted-b', 'scouted-a', 'scouted-c', 'scouted-a-minus', 'hidden-overall-s']],
+    ]);
+    const teams = [makeTeam({ id: 'team-a' })];
+    const players = [
+      makePlayer({ id: 'scouted-b', prospectProfile: { scoutedGrade: 'B' } }),
+      makePlayer({ id: 'scouted-a', prospectProfile: { scoutedGrade: 'A' } }),
+      makePlayer({ id: 'scouted-c', prospectProfile: { scoutedGrade: 'C' } }),
+      makePlayer({ id: 'scouted-a-minus', prospectProfile: { scoutedGrade: 'A-' } }),
+      makePlayer({ id: 'hidden-overall-s', overallGrade: 'S', prospectProfile: { scoutedGrade: 'D' } }),
+    ];
+
+    const first = computeTeamFanHopefuls(teams, players, farmPlayerIdsByTeamId, 'season-1');
+    const second = computeTeamFanHopefuls(teams, players, farmPlayerIdsByTeamId, 'season-1');
+
+    expect(second).toEqual(first);
+    expect(['scouted-a', 'scouted-a-minus', 'scouted-b']).toContain(first[0].fanHopefulPlayerId);
+    expect(first[0].fanHopefulPlayerId).not.toBe('hidden-overall-s');
+  });
+
+  test('assignTeamFanHopefuls persists a visible-safe farm assignment', async () => {
+    await saveFranchiseTeam('franchise-fan-hopeful', makeTeam({ id: 'team-a' }));
+    for (const player of [
+      makePlayer({ id: 'farm-a', prospectProfile: { scoutedGrade: 'A' } }),
+      makePlayer({ id: 'farm-b', prospectProfile: { scoutedGrade: 'B' } }),
+      makePlayer({ id: 'farm-c', prospectProfile: { scoutedGrade: 'C' } }),
+      makePlayer({ id: 'farm-d', overallGrade: 'S', prospectProfile: { scoutedGrade: 'D' } }),
+    ]) {
+      await saveFranchisePlayer('franchise-fan-hopeful', player);
+      await saveFranchiseFarmRecord({
+        franchiseId: 'franchise-fan-hopeful',
+        seasonId: 'season-1',
+        seasonNumber: 1,
+        teamId: 'team-a',
+        playerId: player.id,
+      });
+    }
+
+    const assignments = await assignTeamFanHopefuls('franchise-fan-hopeful', 'season-1');
+
+    expect(['farm-a', 'farm-b', 'farm-c']).toContain(assignments[0].fanHopefulPlayerId);
+    await expect(getFranchiseTeam('franchise-fan-hopeful', 'team-a')).resolves.toEqual(
+      expect.objectContaining({ fanHopefulPlayerId: assignments[0].fanHopefulPlayerId }),
+    );
+  });
+
+  test('assignTeamFanHopefuls writes null and warns when a team has no farm prospects', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await saveFranchiseTeam('franchise-no-fan-hopeful', makeTeam({ id: 'team-a' }));
+
+    await expect(assignTeamFanHopefuls('franchise-no-fan-hopeful', 'season-1')).resolves.toEqual([
+      {
+        teamId: 'team-a',
+        fanHopefulPlayerId: null,
+      },
+    ]);
+
+    await expect(getFranchiseTeam('franchise-no-fan-hopeful', 'team-a')).resolves.toEqual(
+      expect.objectContaining({ fanHopefulPlayerId: null }),
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[franchiseInitializer] No eligible Fan Hopeful found for team team-a; fanHopefulPlayerId set to null.',
     );
   });
 

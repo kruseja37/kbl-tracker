@@ -17,12 +17,14 @@ const mocks = vi.hoisted(() => ({
   deleteFranchiseDatabase: vi.fn(),
   getAllFranchisePlayers: vi.fn(),
   getAllFranchiseTeams: vi.fn(),
+  saveFranchiseTeam: vi.fn(),
   getOrCreateSeason: vi.fn(),
   getSeasonMetadata: vi.fn(),
   saveSeasonMetadata: vi.fn(),
   deleteSeasonMetadata: vi.fn(),
   carryOverFranchiseFarmRecordsToSeason: vi.fn(),
   deleteFranchiseFarmRecordsForSeason: vi.fn(),
+  getFranchiseFarmRoster: vi.fn(),
 }));
 
 vi.mock('../../../utils/franchiseManager', () => ({
@@ -53,6 +55,7 @@ vi.mock('../../../utils/franchisePlayerStorage', () => ({
   deleteFranchiseDatabase: mocks.deleteFranchiseDatabase,
   getAllFranchisePlayers: mocks.getAllFranchisePlayers,
   getAllFranchiseTeams: mocks.getAllFranchiseTeams,
+  saveFranchiseTeam: mocks.saveFranchiseTeam,
 }));
 
 vi.mock('../../../utils/seasonStorage', () => ({
@@ -65,6 +68,7 @@ vi.mock('../../../utils/seasonStorage', () => ({
 vi.mock('../../../utils/franchiseFarmStorage', () => ({
   carryOverFranchiseFarmRecordsToSeason: mocks.carryOverFranchiseFarmRecordsToSeason,
   deleteFranchiseFarmRecordsForSeason: mocks.deleteFranchiseFarmRecordsForSeason,
+  getFranchiseFarmRoster: mocks.getFranchiseFarmRoster,
 }));
 
 import {
@@ -200,9 +204,11 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
       carriedPlayerIds: [],
     });
     mocks.deleteFranchiseFarmRecordsForSeason.mockResolvedValue(0);
+    mocks.getFranchiseFarmRoster.mockResolvedValue([]);
     mocks.getAllGamesByFranchise.mockResolvedValue([]);
     mocks.getAllFranchisePlayers.mockResolvedValue([]);
     mocks.getAllFranchiseTeams.mockResolvedValue([]);
+    mocks.saveFranchiseTeam.mockImplementation(async (_franchiseId: string, team: unknown) => team);
   });
 
   test('initial setup copies league data into the franchise DB, writes zero schedule rows, and creates season metadata', async () => {

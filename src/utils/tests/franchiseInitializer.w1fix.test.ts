@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   saveSeasonMetadata: vi.fn(),
   carryOverFranchiseFarmRecordsToSeason: vi.fn(),
   deleteFranchiseFarmRecordsForSeason: vi.fn(),
+  getFranchiseFarmRoster: vi.fn(),
 }));
 
 vi.mock('../franchiseManager', () => ({
@@ -63,6 +64,7 @@ vi.mock('../seasonStorage', () => ({
 vi.mock('../franchiseFarmStorage', () => ({
   carryOverFranchiseFarmRecordsToSeason: mocks.carryOverFranchiseFarmRecordsToSeason,
   deleteFranchiseFarmRecordsForSeason: mocks.deleteFranchiseFarmRecordsForSeason,
+  getFranchiseFarmRoster: mocks.getFranchiseFarmRoster,
 }));
 
 import { initializeFranchise, repairFranchisePersistence } from '../franchiseInitializer';
@@ -132,6 +134,7 @@ describe('W1-FIX franchise season metadata gamesPerTeam fuel line', () => {
     }));
     mocks.saveSeasonMetadata.mockImplementation((metadata) => Promise.resolve(metadata));
     mocks.getAllGamesByFranchise.mockResolvedValue([{}, {}, {}]);
+    mocks.getFranchiseFarmRoster.mockResolvedValue([]);
     mocks.getAllFranchisePlayers.mockResolvedValue([{
       id: 'player-1',
       hiddenPersonalityModifiers: {
