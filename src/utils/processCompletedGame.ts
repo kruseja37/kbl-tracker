@@ -54,7 +54,11 @@ import {
   applyFranchiseMoraleMatrixConsequence,
   getFranchiseMoraleSnapshot,
 } from './franchiseMoraleState';
-import { isFranchisePhase2MoraleEnabled } from './franchisePhase2Flags';
+import {
+  isFranchisePhase2FameEnabled,
+  isFranchisePhase2MoraleEnabled,
+} from './franchisePhase2Flags';
+import { persistDarkFameRecordsForCompletedGame } from './franchiseFameCompute';
 import type { HiddenModifiers } from '../types/game';
 
 export interface ProcessGameResult {
@@ -595,6 +599,13 @@ export async function processCompletedGame(
           await persistTrueValueSnapshotsForCompletedGame(gameState, trueValueScope, archiveOptions);
         } catch (error) {
           console.warn('[TrueValueSnapshots] failed to persist True Value snapshots for completed game ' + gameState.gameId + ':', error);
+        }
+        if (isFranchisePhase2FameEnabled()) {
+          try {
+            await persistDarkFameRecordsForCompletedGame(gameState, trueValueScope, archiveOptions);
+          } catch (e) {
+            console.warn('[Fame] dark fame compute skipped for completed game ' + gameState.gameId + ':', e);
+          }
         }
         try {
           const designationScope: PersistedTrueValueScope = {
