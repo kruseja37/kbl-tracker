@@ -1,11 +1,14 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-16 (AUTONOMOUS BUILD RUN COMPLETE — **7 feature commits + D5 confirm**: L1, D1, D2,
-L1.5+OD-1, L4a-connect, L4a-bus, **D6a** (the make-or-break True-Value trust gate, LIVE half). D0 RATIFIED; Phase-2
-L-stack sequenced + LSD-1..6 ruled. **NEXT = D6b (season-end freeze) → D7 (designations live, incl. Albatross +
-Fan Favorite)** — resume in a FRESH context (value-spine work deserves fresh audit rigor). Open decisions: OD-2..5,
-the D4 salary/value-preview scope snag, the soul-layer design rulings. **Detailed per-ticket trail in
-`AUTONOMOUS_RUN_LOG.md`** (read it for the build run). Branch codex/franchise-v1-next; nothing pushed.)
+**Last Updated:** 2026-06-17 (AUTONOMOUS OVERNIGHT RUN CONTINUING under AUTH-4 — **10 feature commits + D5 confirm**:
+L1, D1, D2, L1.5+OD-1, L4a-connect, L4a-bus, D6a, **D6b** (`6559a19`, season-end value freeze), **D7a** (`abfa167`,
+designations live: TEAM_MVP/ACE → active + DesignationEvent), **D7b** (`013d886`, Albatross live + the D6 trust-leak
+fix) → **D7 COMPLETE**. Every diff Codex-built → Opus-audited independently (tsc/build/suite re-run, diff read,
+firewall/invariants grep'd, key claims mutation-proven). **NEXT = D8 (award-trust gate)** → D9 (awards + LSD-1 seams +
+MOY-1..7) → D10–D13 → soul layer. Infra: a 6h40m Codex hang was root-caused (stalled model-API stream) + fixed — every
+`codex exec` dispatch now runs under a 30-min watchdog so a stall self-recovers. Open decisions: OD-2..5, the D4
+scope snag, the soul-layer greenlight. **Per-ticket trail in `AUTONOMOUS_RUN_LOG.md`.** Branch codex/franchise-v1-next;
+nothing pushed.)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.
@@ -17,6 +20,18 @@ the D4 salary/value-preview scope snag, the soul-layer design rulings. **Detaile
 
 ## RIGHT NOW
 
+- **OVERNIGHT CONTINUATION (2026-06-17, AUTH-4) — 3 more feature commits, D7 COMPLETE:** `6559a19` **D6b**
+  (season-end FREEZE of the trusted-value artifact: frozen-flag + idempotent freeze helper + a Layer-A anti-thaw
+  guard in the sole writer + a Layer-B recompute early-return that locks BOTH the artifact and the
+  `franchiseTrueValueRows` numbers; freeze triggered at season-complete via `checkSeasonComplete` AND the
+  `isSeasonOver` effect; mutation-proven) · `abfa167` **D7a** (reconcile the dual designation path → persisted store
+  canonical: TEAM_MVP/ACE promoted 'projected'→'active' ONLY when the eligibility path marks the exact holder active;
+  live non-'Proj.' badge; ephemeral changed-only `DesignationEvent` with the morale/fame firewall intact) · `013d886`
+  **D7b** (Albatross live + **closed the untrusted-value LEAK** — the canonical selection now filters to the D6
+  per-player ≥2-peer trusted set, so an untrusted worst-value player is never branded Albatross; mutation-proven; -1
+  fame stays dormant; Fan Favorite stays projected/morale-gated). Suite **7,260 pass / 3 characterized fail (7,263
+  total)** throughout; trackerDb stays **v17**, KBL_BACKUP_VERSION 2 (D6b/D7 added NO store — the freeze is a field on
+  the existing artifact, DesignationEvents are ephemeral). **NEXT = D8.**
 - **AUTONOMOUS BUILD RUN COMPLETE (2026-06-16) — 7 feature commits + D5 confirm on `codex/franchise-v1-next`
   (nothing pushed); every diff Codex-built → Opus-audited independently (tsc/tests re-run, substance read,
   invariants grep'd).** In order: `d48ab3c` **L1** (hidden-modifier rename + typed on Player) · `752882f` **D1**
@@ -38,12 +53,13 @@ the D4 salary/value-preview scope snag, the soul-layer design rulings. **Detaile
   after which the loop moves to the next ticket. Everything → `AUTONOMOUS_RUN_LOG.md` for JK's morning review;
   rework is the accepted cost of momentum. **A fresh thread: do the session-start reads, RESTATE the state, and
   PROCEED IMMEDIATELY — do NOT wait for JK's start-of-session confirmation (JK is unattended overnight; AUTH-4 is
-  the standing "go"). Start at D6b and keep dispatching the Queue** (`AUTONOMOUS_RUN_PROTOCOL.md`) until it is
-  exhausted or everything left is set-aside on a safety wall.
-- **NEXT (fresh thread, overnight under AUTH-4):** **D6b** (season-end freeze of the trusted-value artifact →
-  deterministic D8/D9 awards) → **D7** (designations LIVE: promote TEAM_MVP/ACE to non-'Proj.' + **add Albatross**;
-  reconcile the dual designation path; emit `DesignationEvent` w/ NO morale mutation; Fan Favorite stays Phase-2) →
-  **D8** (award-trust gate) → **D9** (awards, with the LSD-1 fame-ready seams + MOY-1..7) → **D10–D13** → then the
+  the standing "go"). Start at D8 and keep dispatching the Queue** (`AUTONOMOUS_RUN_PROTOCOL.md`) until it is
+  exhausted or everything left is set-aside on a safety wall. (D6b/D7a/D7b already committed this run — see the
+  OVERNIGHT CONTINUATION bullet above + `AUTONOMOUS_RUN_LOG.md`.)
+- **NEXT (fresh thread, overnight under AUTH-4):** **D8** (award-trust gate — consume D6's frozen artifact; promote
+  `trustedForAwards`/`finalWarTrusted` to computed; adaptive award thresholds via `scaledThreshold()`; score-only +
+  hidden-FARM exclusion; deterministic stored winners; NOT a boolean flip) → **D9** (awards, with the LSD-1 fame-ready
+  seams + MOY-1..7) → **D10–D13** → then the
   **soul layer** (L3 morale matrix → L6 fame → L7 effects → L8/L9b development → L10–L14 → the L-SIM gate; L2 lands
   with its first consumer). Take the **OD-3/4/5** leans + continue. **SET ASIDE (the one safety wall): L-ECON1**
   (re-prices the frozen draft-IV anchor → oracle touch) + F-144. The **D4** scope snag: take the conservative call
@@ -177,14 +193,14 @@ the D4 salary/value-preview scope snag, the soul-layer design rulings. **Detaile
 
 ## SUITE BASELINE
 
-**7,254 tests / 400 files** — full suite re-run 2026-06-16 at the autonomous-run close: **7,251 pass / 3 fail**,
-the 3 being EXACTLY the characterized set. (+24 tests / +7 files over the prior 7,230 / 393 from this run's new
-tests: L1/L1.5/D2/L4a/L4a-bus/D6a.) `trackerDb` is now **v17** (L4a-bus→16, D6a→17); `KBL_BACKUP_VERSION` stays 2.
-The autonomous run added 5 IndexedDB stores (seasonNewsItems, seasonEmissionConfig at v16; franchiseTrustedValue-
-Artifacts at v17; + the D2-registered franchise-economy stores) — all in trackerDb + backup registry + the
-parity-guard. Characterized set (a new RED OUTSIDE it is a real regression): **wpaRuntimeBoundary +
-franchiseManualSmokeFixture + franchiseNarrativeEventEligibility** (GameTrackerLaunchState +
-franchiseOffseasonGuards.component are conditional-solo order-flakes that passed in this full run).
+**7,263 tests / 400 files** — full suite re-run 2026-06-17 after D7b: **7,260 pass / 3 fail**, the 3 being EXACTLY
+the characterized set. (+9 tests / +0 files over the prior 7,254 / 400 — D6b/D7a/D7b added tests to existing files,
+no new store.) `trackerDb` stays **v17** and `KBL_BACKUP_VERSION` stays 2 through D6b/D7/D7b — the value freeze is a
+field on the existing `franchiseTrustedValueArtifacts` record, and `DesignationEvent`s are EPHEMERAL (in-memory,
+no store), so neither added a store or a version bump. Characterized set (a new RED OUTSIDE it is a real regression):
+**wpaRuntimeBoundary + franchiseManualSmokeFixture + franchiseNarrativeEventEligibility** (the last is a PRE-EXISTING
+stale-assertion RED — D7a deliberately left it untouched; its cleanup is a separate narrative-gate ticket).
+(GameTrackerLaunchState + franchiseOffseasonGuards.component are conditional-solo order-flakes that passed here.)
 **CLI:** prefix `NODE_ENV= `; node at `~/.nvm/versions/node/v20.20.0/bin`.
 
 ## BROWSER-VERIFY OUTSTANDING (JK)
