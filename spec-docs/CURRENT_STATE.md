@@ -1,26 +1,24 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-17 (SESSION ENDED — JK-directed close after **D9 COMPLETE**; a fresh session resumes at **D10**.
-**16 feature commits + D5 confirm** this autonomous overnight run under AUTH-4. The D-stack value→awards spine is now
-LIVE end-to-end: **D9 COMPLETE** via `c229733` **D9d-2** (the awards UI — `AwardsWatchlist.tsx` Mode-2 regular+playoff
-tab reading `getFranchiseAwardRowsByScope` + the read-only `computeFranchiseAwardsPreview` [looser `warLikePreview
-Available` gate, `finalized:false`, NEVER persisted] + the gated manifest flip [awards-watchlists blocked→included +
-`awardsImplemented`, gated on rows existing, contractVersion bumped off the stale 'no-awards-manifest-v1']; separate
-from the dead-gated offseason ceremony, NO flag flip; USER-VISIBLE → browser-batch). The full D9 arc this run:
-`53ffd4c` **D9a** (awards persistence, trackerDb **v18**) · `9fa540d` **D9b** (5 WAR-category engine) · `443c86c`
-**D9c** (Manager of the Year → the **6-category awards engine COMPLETE**, dark) · `d814c52` **D9d-1** (engine WIRED:
-season-end finalize trigger + game-1 snapshot capture on the live game path) · `c229733` **D9d-2** (the UI → **D9
-COMPLETE**). Earlier this run:
-L1, D1, D2, L1.5+OD-1, L4a-connect, L4a-bus, D6a, **D6b** (`6559a19`, season-end value freeze), **D7a** (`abfa167`,
-designations live: TEAM_MVP/ACE → active + DesignationEvent), **D7b** (`013d886`, Albatross live + the D6 trust-leak
-fix → **D7 COMPLETE**), **D8** (`14c90fd`, award-trust GATE: trustedForAwards/finalWarTrusted computed off the D6
-FROZEN artifact + adaptive thresholds + the written contract). Every diff Codex-built → Opus-audited independently
-(tsc/build/suite re-run, diff read, firewall/invariants grep'd, key claims mutation-proven). Suite **7,288 pass / 3
-characterized fail (7,291 total, 406 files)** — zero new reds across the whole run. trackerDb **v18** / KBL_BACKUP_
-VERSION **2**. **NEXT = D10 (Mode-2 season summary/manifest finalize WITH awards + active designations — supersedes
-the no-awards 1.10A stopgap)** → D11–D13 → soul layer (L-stack). Infra: a 6h40m Codex hang was root-caused (stalled
-model-API stream) + fixed — every `codex exec` dispatch now runs under a 30-min watchdog. Open decisions: OD-2..5, the
-D4 scope snag, the soul-layer greenlight. **Per-ticket trail in `AUTONOMOUS_RUN_LOG.md`.** Branch codex/franchise-v1-next;
+**Last Updated:** 2026-06-17 (ATTENDED SESSION, JK present — D10 SHIPPED + the DESIG-RECON arc COMPLETE; rolling into
+**D11**. This session, on top of the overnight D9-COMPLETE state: cleared the skipped-step design forks (OD-2..5 + D4;
+incl. the IV≠TV correction), reconciled + RULED the full team-designation model (6 designations, all live in v1), then
+built **5 feature commits**, every code diff Codex-built → Opus-audited independently (tsc/build/full-suite re-run,
+diff read, invariants grep'd, key claims test-proven): `51e487a` **D10** (Mode-2 season summary shows finalized LEAGUE
+awards via AwardsWatchlist inline + manifest active-designation canonical-source fix + de-"no-awards" copy; summary.awards
+stays placeholder, no contractVersion bump) → **DESIG-RECON build DR-1..4:** `b48b450` **DR-1** (Albatross spec-guards
+[2× salary floor + 25% materiality, inline] + Fan Favorite promote-to-live [no floor, ≥2-peer trust] + Cornerstone
+removed + orphan `fanFavoriteEngine` deleted — cleared the stale narrative RED, characterized set **3→2**) · `9d1db40`
+**DR-2** (Captain charisma≥70 gate removed [§17.6 no-minimum] + Fan Hopeful visible-safe season-start assignment to
+`team.fanHopefulPlayerId` [random top-3 by SCOUTED grade, test-proven no hidden leak]) · `bd6b43c` **DR-3** (team-hub
+six-designation strip under the 'team' tab, display-only) · `6e1df3c` **DR-4** (spec reconciliation to MODE_2_V1_FINAL
+§17 — Captain no-min, MVP intra-team, Albatross discount deferred). **All six team designations now LIVE in v1**
+(Captain/MVP/Ace/Fan Favorite/Albatross/Fan Hopeful); designation EFFECTS (fame/morale) stay DORMANT until the Phase-2
+morale layer. Suite **7,243 pass / 2 characterized fail (7,245 total, 405 files)** — characterized set now
+**wpaRuntimeBoundary + franchiseManualSmokeFixture** (the narrative RED was legitimately cleared by DR-1). trackerDb
+**v18** / KBL_BACKUP_VERSION **2** (no bump this session). **NEXT = D11** (UI live-label sweep across salary / True
+Value / designations / awards — the D4 salary de-gate folds in here) → D12 (manual smoke, iPad) → D13 (Playable-V1
+checkpoint) → the soul layer (L-stack). Browser-verify backlog: #12 (D10) + #13 (DR-3). Branch codex/franchise-v1-next;
 nothing pushed.)
 **Branch:** codex/franchise-v1-next
 
