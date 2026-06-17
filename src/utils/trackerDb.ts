@@ -14,7 +14,7 @@
  */
 
 const DB_NAME = 'kbl-tracker';
-export const TRACKER_DB_VERSION = 18; // Must be the highest version any consumer ever used
+export const TRACKER_DB_VERSION = 19; // Must be the highest version any consumer ever used
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -372,6 +372,16 @@ export async function getTrackerDb(): Promise<IDBDatabase> {
           keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId', 'checkpoint'],
         });
         trueValueSnapshotStore.createIndex('by_scope', ['franchiseId', 'seasonId', 'statsScopeId'], {
+          unique: false,
+        });
+      }
+
+      // v19 / L6b-1: dark fame running-state records. L6b-2 wires writers.
+      if (!db.objectStoreNames.contains('franchiseFameRecords')) {
+        const fameStore = db.createObjectStore('franchiseFameRecords', {
+          keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'],
+        });
+        fameStore.createIndex('by_scope', ['franchiseId', 'seasonId', 'statsScopeId'], {
           unique: false,
         });
       }

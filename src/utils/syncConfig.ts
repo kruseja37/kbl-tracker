@@ -12,6 +12,7 @@ export const SYNC_REGISTRY: Record<string, Record<string, string | string[]>> = 
     franchiseSeasonSummaries: 'seasonId',
     franchiseTrustedValueArtifacts: ['franchiseId', 'seasonId', 'statsScopeId'],
     franchiseAwardsRows: ['franchiseId', 'seasonId', 'statsScopeId', 'category'],
+    franchiseFameRecords: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'],
     franchiseTrueValueSnapshots: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId', 'checkpoint'],
     // playerGameStats and pitcherGameStats NOT synced — stores exist in schema
     // but are never written to. Stats are embedded in completedGames records.

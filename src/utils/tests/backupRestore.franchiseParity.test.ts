@@ -97,6 +97,27 @@ const awardsRow = {
   computedAt: "2026-06-16T00:00:00.000Z",
 };
 
+const fameRecordRow = {
+  franchiseId: "franchise-d2",
+  seasonId: "season-d2",
+  statsScopeId: "scope-d2",
+  playerId: "player-fame",
+  heat: 4.5,
+  reachFloor: 2,
+  wasNegative: false,
+  channelTotal: 6.75,
+  channelByChannel: {
+    wpa_spine: 3,
+    iconic_event: 1,
+    status: 1,
+    defensive: 1,
+    role_player: 0.75,
+  },
+  defensiveFame: 1,
+  rolePlayerFame: 0.75,
+  updatedAtCheckpoint: "2026-06-17T00:00:00.000Z",
+};
+
 const trueValueSnapshotRow = {
   franchiseId: "franchise-d2",
   seasonId: "season-d2",
@@ -154,6 +175,7 @@ async function seedFranchiseEconomyRows(): Promise<void> {
       "franchiseSeasonLedgerRows",
       "franchiseTrustedValueArtifacts",
       "franchiseAwardsRows",
+      "franchiseFameRecords",
       "franchiseTrueValueSnapshots",
     ],
     "readwrite",
@@ -164,6 +186,7 @@ async function seedFranchiseEconomyRows(): Promise<void> {
   tx.objectStore("franchiseSeasonLedgerRows").put(ledgerRow);
   tx.objectStore("franchiseTrustedValueArtifacts").put(trustedValueArtifact);
   tx.objectStore("franchiseAwardsRows").put(awardsRow);
+  tx.objectStore("franchiseFameRecords").put(fameRecordRow);
   tx.objectStore("franchiseTrueValueSnapshots").put(trueValueSnapshotRow);
 
   await transactionToPromise(tx);
@@ -224,7 +247,7 @@ describe("backup/restore kbl-tracker franchise economy parity", () => {
     expect(backupRegistryStores).toEqual(moraleDbStores);
   });
 
-  test("round-trips franchise True Value, designation, ledger, trusted-value artifact, awards, and TV snapshot rows", async () => {
+  test("round-trips franchise True Value, designation, ledger, trusted-value artifact, awards, fame records, and TV snapshot rows", async () => {
     await seedFranchiseEconomyRows();
 
     const backup = await exportThenWipeAndRestore();
@@ -234,6 +257,7 @@ describe("backup/restore kbl-tracker franchise economy parity", () => {
     expect(backup.databases[TRACKER_DB_NAME].franchiseSeasonLedgerRows).toEqual([ledgerRow]);
     expect(backup.databases[TRACKER_DB_NAME].franchiseTrustedValueArtifacts).toEqual([trustedValueArtifact]);
     expect(backup.databases[TRACKER_DB_NAME].franchiseAwardsRows).toEqual([awardsRow]);
+    expect(backup.databases[TRACKER_DB_NAME].franchiseFameRecords).toEqual([fameRecordRow]);
     expect(backup.databases[TRACKER_DB_NAME].franchiseTrueValueSnapshots).toEqual([trueValueSnapshotRow]);
 
     await expect(
@@ -276,6 +300,14 @@ describe("backup/restore kbl-tracker franchise economy parity", () => {
         awardsRow.category,
       ]),
     ).resolves.toEqual(awardsRow);
+    await expect(
+      readRecord("franchiseFameRecords", [
+        fameRecordRow.franchiseId,
+        fameRecordRow.seasonId,
+        fameRecordRow.statsScopeId,
+        fameRecordRow.playerId,
+      ]),
+    ).resolves.toEqual(fameRecordRow);
     await expect(
       readRecord("franchiseTrueValueSnapshots", [
         trueValueSnapshotRow.franchiseId,
