@@ -225,6 +225,18 @@ const EMPTY_STATS_DATA: { name: string; pos: string; war: number; pwar: number; 
 const FRANCHISE_FIELD_POSITIONS: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF'];
 const FRANCHISE_PITCHER_POSITIONS = new Set<Position>(['SP', 'RP', 'CP', 'SP/RP', 'P', 'TWO-WAY']);
 const FRANCHISE_ROTATION_POSITIONS = new Set<Position>(['SP', 'SP/RP']);
+const TEAM_HUB_CAPTAIN_BADGE = {
+  label: 'Captain',
+  borderStyle: 'solid' as const,
+  colorHex: '#C4A853',
+  backgroundHex: '#4A3F16',
+};
+const TEAM_HUB_FAN_HOPEFUL_BADGE = {
+  label: 'Fan Hopeful',
+  borderStyle: 'solid' as const,
+  colorHex: '#38BDF8',
+  backgroundHex: '#123A4A',
+};
 const FRANCHISE_TEAM_HUB_HISTORY_TYPES = new Set<Mode2V1TransactionType>([
   'trade',
   'call_up',
@@ -247,6 +259,22 @@ interface FranchiseDirectoryRow {
   hiddenSafe: boolean;
   gradeLabel: string;
   gradeSortValue: number;
+}
+
+interface TeamDesignationStripBadge {
+  label: string;
+  borderStyle: 'solid' | 'dotted';
+  colorHex: string;
+  backgroundHex: string;
+}
+
+interface TeamDesignationStripSlot {
+  key: string;
+  title: string;
+  playerName: string | null;
+  badge: TeamDesignationStripBadge | null;
+  detail: string;
+  stateLabel: string;
 }
 
 interface FranchiseProfileEditForm {
@@ -593,6 +621,29 @@ interface ProspectMetadata {
 function prospectMetadata(player: Player): ProspectMetadata {
   const carrier = player as Player & { prospectProfile?: ProspectMetadata };
   return carrier.prospectProfile ?? {};
+}
+
+function resolveTeamDesignationPlayerName(
+  playerId: string | null | undefined,
+  playerById: Map<string, Player>,
+  fallbackName?: string | null,
+): string | null {
+  if (!playerId) return null;
+  const player = playerById.get(playerId);
+  if (player) return getFranchisePlayerName(player) || player.id;
+  const fallback = fallbackName?.trim();
+  return fallback || playerId;
+}
+
+function isPreferredTeamDesignationRow(
+  candidate: FranchisePlayerDesignationRecord,
+  current: FranchisePlayerDesignationRecord | undefined,
+): boolean {
+  if (!current) return true;
+  const candidateStatusRank = candidate.status === 'active' ? 2 : 1;
+  const currentStatusRank = current.status === 'active' ? 2 : 1;
+  if (candidateStatusRank !== currentStatusRank) return candidateStatusRank > currentStatusRank;
+  return candidate.calculatedAt.localeCompare(current.calculatedAt) > 0;
 }
 
 function formatFarmSalary(player: Player): string {
@@ -1372,6 +1423,10 @@ export function TeamHubContent() {
     () => new Map(franchiseRosterPlayers.map((player) => [player.id, player])),
     [franchiseRosterPlayers],
   );
+  const franchisePlayerById = useMemo(
+    () => new Map(franchiseAllPlayers.map((player) => [player.id, player])),
+    [franchiseAllPlayers],
+  );
   const manualLineupPlayerOptions = useMemo(
     () => franchiseRosterPlayers.filter((player) => !isFranchisePitcher(player)),
     [franchiseRosterPlayers],
@@ -2005,6 +2060,72 @@ export function TeamHubContent() {
   const orphanFarmRecords = useMemo(() => {
     return franchiseFarmRecords.filter((record) => !farmPlayerById.has(record.playerId));
   }, [farmPlayerById, franchiseFarmRecords]);
+
+  const teamDesignationStripSlots = useMemo<TeamDesignationStripSlot[]>(() => {
+    const rowByType = new Map<string, FranchisePlayerDesignationRecord>();
+    for (const row of projectedDesignationRows) {
+      if (row.teamId !== selectedTeamId) continue;
+      if (!['TEAM_MVP', 'ACE', 'FAN_FAVORITE', 'ALBATROSS'].includes(row.type)) continue;
+      if (isPreferredTeamDesignationRow(row, rowByType.get(row.type))) {
+        rowByType.set(row.type, row);
+      }
+    }
+
+    const buildEngineSlot = (type: 'TEAM_MVP' | 'ACE' | 'FAN_FAVORITE' | 'ALBATROSS', title: string): TeamDesignationStripSlot => {
+      const row = rowByType.get(type);
+      if (!row) {
+        return {
+          key: type,
+          title,
+          playerName: null,
+          badge: null,
+          detail: 'No holder',
+          stateLabel: 'Valid null designation',
+        };
+      }
+      const badge = row.status === 'active'
+        ? (getLiveDesignationBadge(row.type) ?? getProjectedDesignationBadge(row.type))
+        : getProjectedDesignationBadge(row.type);
+      return {
+        key: type,
+        title,
+        playerName: resolveTeamDesignationPlayerName(row.playerId, franchisePlayerById, row.playerName),
+        badge,
+        detail: row.status === 'active' ? 'Final holder' : 'Projected mid-season',
+        stateLabel: row.status === 'active' ? 'Final' : 'Projected',
+      };
+    };
+
+    const captainName = resolveTeamDesignationPlayerName(franchiseTeam?.captainPlayerId, franchisePlayerById);
+    const fanHopefulPlayerId = franchiseTeam?.fanHopefulPlayerId ?? null;
+    const fanHopefulPlayer = fanHopefulPlayerId ? franchisePlayerById.get(fanHopefulPlayerId) : undefined;
+    const fanHopefulScoutedGrade = fanHopefulPlayer ? prospectMetadata(fanHopefulPlayer).scoutedGrade : undefined;
+
+    return [
+      {
+        key: 'CAPTAIN',
+        title: 'Captain',
+        playerName: captainName,
+        badge: captainName ? TEAM_HUB_CAPTAIN_BADGE : null,
+        detail: 'Season-start assignment',
+        stateLabel: captainName ? 'Set' : 'Valid null designation',
+      },
+      buildEngineSlot('TEAM_MVP', 'Team MVP'),
+      buildEngineSlot('ACE', 'Ace'),
+      buildEngineSlot('FAN_FAVORITE', 'Fan Favorite'),
+      buildEngineSlot('ALBATROSS', 'Albatross'),
+      {
+        key: 'FAN_HOPEFUL',
+        title: 'Fan Hopeful',
+        playerName: resolveTeamDesignationPlayerName(fanHopefulPlayerId, franchisePlayerById),
+        badge: fanHopefulPlayerId ? TEAM_HUB_FAN_HOPEFUL_BADGE : null,
+        detail: fanHopefulPlayerId
+          ? `Scouted ${fanHopefulScoutedGrade ?? 'grade unavailable'}`
+          : 'No holder',
+        stateLabel: fanHopefulPlayerId ? 'Set' : 'Valid null designation',
+      },
+    ];
+  }, [franchisePlayerById, franchiseTeam, projectedDesignationRows, selectedTeamId]);
 
   const franchiseDirectoryRows = useMemo(() => {
     const search = directorySearch.trim().toLowerCase();
@@ -2739,14 +2860,57 @@ export function TeamHubContent() {
           </div>
 
           {selectedTeam && (
-            <div className="mt-6 p-4 bg-[#4A6844] border-[3px] border-[#3F5A3A] max-w-2xl mx-auto">
-              <div className="text-[10px] text-[#E8E8D8] text-center">
-                Currently viewing: <span className="font-bold">{selectedTeam}</span>
+            <>
+              <div className="mt-6 p-4 bg-[#4A6844] border-[3px] border-[#3F5A3A] max-w-2xl mx-auto">
+                <div className="text-[10px] text-[#E8E8D8] text-center">
+                  Currently viewing: <span className="font-bold">{selectedTeam}</span>
+                </div>
+                <div className="text-[8px] text-[#E8E8D8]/60 text-center mt-1">
+                  Use the tabs above to explore team details
+                </div>
               </div>
-              <div className="text-[8px] text-[#E8E8D8]/60 text-center mt-1">
-                Use the tabs above to explore team details
-              </div>
-            </div>
+
+              <section
+                aria-label={`${selectedTeam} team designations`}
+                className="mt-3 max-w-5xl mx-auto border-[4px] border-[#4A6844] bg-[#5A8352] p-3"
+              >
+                <div className="text-[9px] font-bold text-[#FFEFB5]">TEAM DESIGNATIONS</div>
+                <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+                  {teamDesignationStripSlots.map((slot) => (
+                    <div key={slot.key} className="min-h-[92px] border-2 border-[#4A6844] bg-[#3F563F] p-2">
+                      <div className="text-[7px] font-bold uppercase text-[#E8E8D8]/60">{slot.title}</div>
+                      {slot.playerName ? (
+                        <>
+                          <div className="mt-1 text-[9px] font-bold text-[#E8E8D8] leading-tight">{slot.playerName}</div>
+                          {slot.badge && (
+                            <span
+                              className="mt-2 inline-flex border-2 px-2 py-1 text-[7px] font-bold leading-none"
+                              style={{
+                                borderColor: slot.badge.colorHex,
+                                borderStyle: slot.badge.borderStyle,
+                                color: slot.badge.colorHex,
+                                backgroundColor: slot.badge.backgroundHex,
+                              }}
+                            >
+                              {slot.badge.label}
+                            </span>
+                          )}
+                          <div className="mt-2 text-[7px] text-[#E8E8D8]/65">{slot.detail}</div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="mt-2 text-[9px] font-bold text-[#E8E8D8]/45">— none</div>
+                          <div className="mt-2 text-[7px] text-[#E8E8D8]/50">{slot.stateLabel}</div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 text-[7px] text-[#E8E8D8]/60">
+                  Solid badges are final/live holders. Dotted Proj. badges are mid-season projections. Captain and Fan Hopeful are season-start assignments.
+                </div>
+              </section>
+            </>
           )}
         </div>
       )}
