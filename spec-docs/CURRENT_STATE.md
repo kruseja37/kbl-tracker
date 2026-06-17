@@ -1,6 +1,8 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-17 (AUTONOMOUS OVERNIGHT RUN CONTINUING under AUTH-4 — **14 feature commits + D5 confirm**
+**Last Updated:** 2026-06-17 (AUTONOMOUS OVERNIGHT RUN CONTINUING under AUTH-4 — **15 feature commits + D5 confirm**
+[… `443c86c` **D9c** (6-category engine complete) · `d814c52` **D9d-1** (engine WIRED to the app: season-end finalize
+trigger + game-1 snapshot capture, on the live game path); **NEXT = D9d-2** (the awards UI → completes D9)]; earlier:
 [… `53ffd4c` **D9a** (awards persistence, trackerDb **v18**) · `9fa540d` **D9b** (5 WAR-category engine) · `443c86c`
 **D9c** (Manager of the Year → the **6-category awards engine is COMPLETE**, deterministic off the frozen spine,
 mutation-proven, dark); **NEXT = D9d** (AwardsWatchlist UI + per-game recompute + game-1 snapshot capture + season-end
@@ -56,7 +58,13 @@ nothing pushed.)
   gamesPerTeam, derived ONLY from the frozen artifact — no trusted expected-wins source exists), pool-normalized;
   folded into `computeAndPersistFranchiseWarAwards` (one finalize, all 6); additive nullable
   managerActualWins/ExpectedWins (no store/version bump). Record-term determinism mutation-proven; mwar retirement
-  deferred (safe). Suite **7,281 pass / 3 characterized fail (7,284 total)**. **NEXT = D9d (the final D9 piece).**
+  deferred (safe). Suite **7,281 pass / 3 characterized fail (7,284 total)** at D9c. **+ `d814c52` D9d-1** (D9d split
+  D9d-1 wiring / D9d-2 UI): the season-end finalize TRIGGER calls `computeAndPersistFranchiseWarAwards` after the D6b
+  freeze on BOTH season-complete paths (awaited in checkSeasonComplete; `.then`-chained on the isSeasonOver effect;
+  computedAt=frozenAt byte-stable) + the game-1 `franchiseTrueValueSnapshots` capture on `processCompletedGame`
+  (deterministic checkpoint = scheduled gameNumber ?? gameId, idempotent, own try/catch, regular-season-only — LIVE
+  GAME PATH → browser-batch). Suite **7,285 pass / 3 characterized fail (7,288 total, 405 files)**. **NEXT = D9d-2
+  (the awards UI).**
 - **AUTONOMOUS BUILD RUN COMPLETE (2026-06-16) — 7 feature commits + D5 confirm on `codex/franchise-v1-next`
   (nothing pushed); every diff Codex-built → Opus-audited independently (tsc/tests re-run, substance read,
   invariants grep'd).** In order: `d48ab3c` **L1** (hidden-modifier rename + typed on Player) · `752882f` **D1**
@@ -78,18 +86,19 @@ nothing pushed.)
   after which the loop moves to the next ticket. Everything → `AUTONOMOUS_RUN_LOG.md` for JK's morning review;
   rework is the accepted cost of momentum. **A fresh thread: do the session-start reads, RESTATE the state, and
   PROCEED IMMEDIATELY — do NOT wait for JK's start-of-session confirmation (JK is unattended overnight; AUTH-4 is
-  the standing "go"). Start at D9d and keep dispatching the Queue** (`AUTONOMOUS_RUN_PROTOCOL.md`) until it is
+  the standing "go"). Start at D9d-2 and keep dispatching the Queue** (`AUTONOMOUS_RUN_PROTOCOL.md`) until it is
   exhausted or everything left is set-aside on a safety wall. (D6b/D7a/D7b/D8 already committed this run — see the
   OVERNIGHT CONTINUATION bullet above + `AUTONOMOUS_RUN_LOG.md`.)
-- **NEXT (fresh thread, overnight under AUTH-4):** **D9d — the FINAL D9 piece** (D9a persistence + D9b WAR engine + D9c
-  MOY all committed → the 6-category engine is complete; D9d wires it to the app + UI): (1) the season-end **finalize
-  TRIGGER** that calls `computeAndPersistFranchiseWarAwards` (hang off the same season-complete path D6b's freeze uses
-  in FranchiseHome `checkSeasonComplete`/`isSeasonOver`, AFTER the artifact is frozen); (2) the **game-1
-  `franchiseTrueValueSnapshots` capture** on the `processCompletedGame` chain (the D9a snapshot store, dark since D9a —
-  LIVE GAME PATH touch → browser-batch); (3) a **per-game watchlist recompute** (idempotent, watchlist-only, never a
-  stored winner mid-season); (4) the **AwardsWatchlist.tsx** new Mode-2 surface (NOT the dead-gated offseason
-  ceremony — do NOT flip the flag); (5) flip the `franchiseSeasonSummaryStorage` `awards-watchlists` manifest
-  blocked→live; (6) profile/Almanac display via the orphaned `awardEmblems.ts` catalog. → **D10–D13** → then the
+- **NEXT (fresh thread, overnight under AUTH-4):** **D9d-2 — the awards UI (final D9 piece)** (D9d-1 wired the engine:
+  finalize trigger + snapshot capture committed): (1) **AwardsWatchlist.tsx** — a NEW Mode-2 regular+playoff tab in
+  FranchiseHome (NOT the dead-gated offseason `AwardsCeremonyFlow`; do NOT flip the flag), reading
+  `getFranchiseAwardRowsByScope` + rendering the 6 categories + winner + candidate margins via the orphaned
+  `awardEmblems.ts` catalog (resolve player/manager names); (2) the **per-game watchlist PREVIEW** — the pure engine
+  returns [] mid-season by design, so use the looser `warLikePreviewAvailable` path / an on-read derivation, NEVER a
+  mid-season `franchiseAwardsRows` write; (3) the **manifest flip** — `franchiseSeasonSummaryStorage` awards-watchlists
+  blocked→included + `awardsImplemented`, GATED on award rows existing (not blind), coordinating the contract-version
+  literal + the `franchiseSeasonSummary.wave4` test pin; (4) profile/Almanac display (PlayerInstanceCard / almanac).
+  → **D10–D13** → then the
   **soul layer** (L3 morale matrix → L6 fame → L7 effects → L8/L9b development → L10–L14 → the L-SIM gate; L2 lands
   with its first consumer). Take the **OD-3/4/5** leans + continue. **SET ASIDE (the one safety wall): L-ECON1**
   (re-prices the frozen draft-IV anchor → oracle touch) + F-144. The **D4** scope snag: take the conservative call
@@ -223,8 +232,8 @@ nothing pushed.)
 
 ## SUITE BASELINE
 
-**7,284 tests / 404 files** — full suite re-run 2026-06-17 after D9c: **7,281 pass / 3 fail**, the 3 being EXACTLY
-the characterized set. (+30 tests / +4 files over the prior 7,254 / 400 — D6b/D7/D8 added tests to existing files +
+**7,288 tests / 405 files** — full suite re-run 2026-06-17 after D9d-1: **7,285 pass / 3 fail**, the 3 being EXACTLY
+the characterized set. (+34 tests / +5 files over the prior 7,254 / 400 — D6b/D7/D8 added tests to existing files +
 `franchiseAwardTrust.test.ts`; D9a added `franchiseAwardsStorage.test.ts` + `franchiseTrueValueSnapshotsStorage.test.ts`;
 D9b/D9c grew `franchiseAwardsEngine.test.ts`.) **trackerDb is now v18** — only D9a bumped it (its 2 dark stores); D6b→D8
 added NO store (D6b's freeze is a field on the existing artifact, DesignationEvents are ephemeral, D8 stores nothing,
