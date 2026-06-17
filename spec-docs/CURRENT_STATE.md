@@ -1,6 +1,11 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-16 (PHASE-2 LIVING-SEASON "L-STACK" SEQUENCING DRAFTED + audit-hardened (12-agent workflow `wf_b5734e06-e2c`) + FORKS RULED by JK (LSD-1..5) + folded into docs. **LSD-6 (JK ruling B): the living season IS part of v1** (v1 = D-stack + L-stack + L-SIM gate; D13 "Playable-V1" = internal Phase-1 checkpoint). Deliverable: `FRANCHISE_V1_LIVING_SEASON_DSTACK.md` (Status: PROPOSED). Structure signed off; NEXT is D0 ratification (reconciled for B, clean to ratify), then contract the Tier-0 opener L1. No product code this session — design + docs only. Prior: §18 reads 4-of-4 complete.)
+**Last Updated:** 2026-06-16 (AUTONOMOUS BUILD RUN COMPLETE — **7 feature commits + D5 confirm**: L1, D1, D2,
+L1.5+OD-1, L4a-connect, L4a-bus, **D6a** (the make-or-break True-Value trust gate, LIVE half). D0 RATIFIED; Phase-2
+L-stack sequenced + LSD-1..6 ruled. **NEXT = D6b (season-end freeze) → D7 (designations live, incl. Albatross +
+Fan Favorite)** — resume in a FRESH context (value-spine work deserves fresh audit rigor). Open decisions: OD-2..5,
+the D4 salary/value-preview scope snag, the soul-layer design rulings. **Detailed per-ticket trail in
+`AUTONOMOUS_RUN_LOG.md`** (read it for the build run). Branch codex/franchise-v1-next; nothing pushed.)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.
@@ -12,6 +17,25 @@
 
 ## RIGHT NOW
 
+- **AUTONOMOUS BUILD RUN COMPLETE (2026-06-16) — 7 feature commits + D5 confirm on `codex/franchise-v1-next`
+  (nothing pushed); every diff Codex-built → Opus-audited independently (tsc/tests re-run, substance read,
+  invariants grep'd).** In order: `d48ab3c` **L1** (hidden-modifier rename + typed on Player) · `752882f` **D1**
+  (WAR-scaling 162 de-dup, zero behavior change) · `2fab709` **D2** (backup parity + structural parity-guard —
+  silent-drop defect closed) · `2f4f3e5` **L1.5+OD-1** (backfill the 4 hidden modifiers for ALL franchise players
+  at init [MLB players had none — OD-1 ruled: generate at init] + assign Team Captains; 54 tests; browser-confirmed
+  in the real runtime) · `0cf4ca2` **L4a-connect** (franchise reporter wired to live GameStory; browser-pending,
+  Supabase) · `8074976` **L4a-bus** (the SEA-1 season-narrative publish-bus core; build-dark; §5-firewall-correct)
+  · `4a1bd36` **D6a** (the make-or-break True-Value TRUST gate, LIVE half: peer-pool audit ≥2 hard-block + the
+  trusted-value artifact + the 4 flag-flips to computed; RIGOROUSLY audited — oracle untouched, real no-leak
+  boundary test, parity-guard green). **D5 CONFIRMED** (TEAM_MVP/ACE trust engine, 51 tests). **D6 ruled:
+  SEASON-END FREEZE** (D6a = live half; D6b adds the freeze).
+- **NEXT (resume in a FRESH context — value-spine work deserves fresh audit rigor):** **D6b** (season-end freeze of
+  the trusted-value artifact → deterministic D8/D9 awards) → **D7** (designations LIVE: promote TEAM_MVP/ACE to
+  non-'Proj.' + **add Albatross**; reconcile the dual designation path; emit `DesignationEvent` w/ NO morale
+  mutation; Fan Favorite stays Phase-2). Then D8 → D9 (awards, with the LSD-1 fame-ready seams + MOY-1..7) → D10–D13.
+  **Still needs JK:** OD-2..5 (L-ECON1/L2/L4a-reporter-UI/L9a — leans in `AUTONOMOUS_RUN_LOG.md`) · the **D4**
+  salary/value-preview scope snag (chips live on the combined TrueValue+ExpectedWins panel) · the **soul-layer
+  design rulings** (L3 morale matrix / L6 fame / L8 development — JK's vision; "build to spec" greenlights them).
 - **PHASE-2 "L-STACK" SEQUENCING DRAFTED + FORKS RULED (2026-06-16; design + docs only, NO product code):**
   `FRANCHISE_V1_LIVING_SEASON_DSTACK.md` (Status: PROPOSED) sequences the living-season spec §5–§24 into
   dependency-ordered tickets **L1–L14 + L-SIM + an economy track**, hardened by a 12-agent decorrelated
@@ -141,12 +165,14 @@
 
 ## SUITE BASELINE
 
-7,230 tests / 393 files (T10 +10 / +2; T9b +3 net; T9a +7; T8d-3 +4; T8d-2 +7 / +2; T8d-1 +10; T8c +1; T8b +8 / +1;
-T8a +9 / +1; T7c +7 / +1; T7b +4; T7a +8 / +1; T6 +12; prior baseline 7,140 / 383). Characterized set (a new RED outside
-this set is a real regression): fixed failures wpaRuntimeBoundary +
-franchiseNarrativeEventEligibility; conditional-solo order-flakes
-franchiseManualSmokeFixture + GameTrackerLaunchState +
-franchiseOffseasonGuards.component (each passes solo).
+**7,254 tests / 400 files** — full suite re-run 2026-06-16 at the autonomous-run close: **7,251 pass / 3 fail**,
+the 3 being EXACTLY the characterized set. (+24 tests / +7 files over the prior 7,230 / 393 from this run's new
+tests: L1/L1.5/D2/L4a/L4a-bus/D6a.) `trackerDb` is now **v17** (L4a-bus→16, D6a→17); `KBL_BACKUP_VERSION` stays 2.
+The autonomous run added 5 IndexedDB stores (seasonNewsItems, seasonEmissionConfig at v16; franchiseTrustedValue-
+Artifacts at v17; + the D2-registered franchise-economy stores) — all in trackerDb + backup registry + the
+parity-guard. Characterized set (a new RED OUTSIDE it is a real regression): **wpaRuntimeBoundary +
+franchiseManualSmokeFixture + franchiseNarrativeEventEligibility** (GameTrackerLaunchState +
+franchiseOffseasonGuards.component are conditional-solo order-flakes that passed in this full run).
 **CLI:** prefix `NODE_ENV= `; node at `~/.nvm/versions/node/v20.20.0/bin`.
 
 ## BROWSER-VERIFY OUTSTANDING (JK)
@@ -154,6 +180,14 @@ franchiseOffseasonGuards.component (each passes solo).
 > BATCHED per the SESSION_RULES pen (JK 2026-06-14) — cleared in one pass before
 > the D0 / flag-flip / playtest gate; persistence/data-shape items prioritized.
 > Engineering audits already passed per ticket; these verify experience/feel.
+
+> **NEW from the 2026-06-16 autonomous run** (NOTE: creating a franchise needs the League Builder startup farm
+> draft + scout hiring first — the 22+10 handoff gate, pre-existing): **(A) L1.5** — a created franchise's teams
+> each get a `captainPlayerId` (highest Loyalty+Charisma MLB player, Charisma≥70; null+warn if none); all players
+> carry the 4 hidden modifiers (OD-1 backfill). [The shipped logic was browser-confirmed in the runtime; this is
+> the real-franchise pass.] **(B) L4a reporter** — with a reporter assigned + Supabase configured, the franchise
+> hub `BeatReporterNews` shows live post-game `GameStory` columns (not the legacy template). Reporter text is
+> Supabase/network-dependent (D-R5).
 
 1. EP1 effective-position pooling on real franchise data — does a position-
    shifting player get repooled; do bench players land in Reserve.
@@ -200,6 +234,21 @@ franchiseOffseasonGuards.component (each passes solo).
    double-count); the season carries an `optimizerConstantsHash` that survives backup/restore.
 
 ## OPEN PENDING-JK (rolling)
+
+**FROM THE 2026-06-16 AUTONOMOUS RUN (decisions that resume the build loop — full text + Captain leans in
+`AUTONOMOUS_RUN_LOG.md`):**
+- **OD-2** — L-ECON1 salary scale: scope (new-league-only vs before-the-freeze) + the pickValueChart-is-the-taper
+  model. Value-sensitive (frozen draft-IV anchor); held.
+- **OD-3** — L2 mutable-layer confirmation UX: blocking-vs-async (lean async) · console-edit format · game-count
+  expiry. (L2 also premature — its consumers L3/L8/L9b are design-gated.)
+- **OD-4** — L4a reporter: franchiseId-vs-leagueId scope (lean cascade) · ReporterAssignmentPanel UI placement.
+- **OD-5** — L9a trait capture: manual-vs-auto enrichment (lean manual/opt-in). Live-game-path → watched session.
+- **D4 SCOPE SNAG** — the salary preview chips live on the COMBINED "TrueValue+ExpectedWins" panel (`TeamHubContent
+  .tsx:4623-4648`); D0's "de-gate salary, don't touch the D6-gated value preview" needs a presentation ruling.
+  (D4 is NOT a D6 dependency — left as a flagged browser-session UI item.)
+- **SOUL-LAYER "BUILD TO SPEC" GREENLIGHT** — L3 morale matrix / L5 fan teeth / L6 fame / L7 designation effects /
+  L8 ratings dev / L9b traits / L10–L14: the SMB4 soul-layer engines are JK's design vision. They build to the
+  ratified living-season spec (with sim-tunable placeholder magnitudes) once JK greenlights "build to spec."
 
 **DEFERRED FUTURE TICKET (T7c spillover, JK 2026-06-14):** capCharge → soft
 payroll-expectation baseline → fan-morale consequence. BLOCKED on a declared-budget

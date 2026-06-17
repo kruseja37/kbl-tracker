@@ -4721,3 +4721,79 @@ the **MOY award engine** per MOY-1..7, POST-D6/D8) + reconciling the Phase-1↔P
 maps 1:1 to the unchanged doc but is overtaken; ratify cleaner after the D-stack sequencing settles the awards picture.
 All four §18 prerequisite reads are DONE. Deferred/optional: fold the hardened §18.3 salary verification
 (`wf_1c5ff7c9-da3`) into `DRAFT_SALARY_FARM_CERTIFICATION.md` if it landed.
+
+
+---
+
+## 2026-06-16 — Phase-2 D-stack sequenced + ratified + AUTONOMOUS BUILD RUN to the D6a value gate (7 commits)
+
+**Type:** Design + a long autonomous build run. Branch `codex/franchise-v1-next`. **8 commits this session** (7
+feature + several docs); nothing pushed. Roles: Captain (Opus 4.8) = architect + auditor of every diff; Codex 5.5 =
+builder; JK = product/design rulings + direction. The Codex-builds / Opus-audits triangle held on every diff
+(builder ≠ auditor; Captain re-ran tsc/tests + read the substance + grep'd invariants, never trusted the paste).
+
+**Part 1 — DESIGN (reads + docs).** Drafted the Phase-2 living-season build sequence `FRANCHISE_V1_LIVING_SEASON_
+DSTACK.md` (the "L-stack": L1–L14 + L-SIM + an economy track), sequencing the living-season spec §5–§24 + folding in
+the §18-unblocked builds. Audit-hardened by a 12-agent workflow (`wf_b5734e06-e2c`: 7 grounding code-readers + 5
+adversarial ordering critics) — which caught MOY belongs in Phase-1 D9 (not a Phase-2 ticket; MOY-4 bars manager
+fame), a missing L1.5 Captain-handoff, that L1's hidden modifiers are mis-named + un-persisted, and the backup-parity
+escalation. **JK ruled LSD-1..5** (D9 fame-ready seams ratified · FA-attraction→v1.1 · Cornerstone CUT · budget
+pressure CUT · stadium = SMB-pool pick) **+ LSD-6 (ruling B: the living season IS part of v1**, not a follow-on; v1 =
+D-stack + L-stack + the L-SIM gate; D13 "Playable-V1" = an internal Phase-1 checkpoint). **D0 RATIFIED**
+(`FRANCHISE_PLAYABLE_V1_DEFINITION.md`); its D9 now carries the LSD-1 seams + the MOY-1..7 contract. Authored
+`AUTONOMOUS_RUN_PROTOCOL.md` (the loop + JK's AUTH-1 auto-commit + AUTH-2 build-to-spec + hard halt triggers).
+
+**Part 2 — AUTONOMOUS BUILD RUN (7 feature commits + D5 confirm).** Each ticket: Captain map/contract → Codex
+`codex exec` build (background) → Captain independent audit → commit.
+- `d48ab3c` **L1** — hidden-modifier rename (leadership/volatility/adaptability/pressure → loyalty/ambition/
+  resilience/charisma) + typed on `Player`. Zero behavior change; tsc 0; grep gate 0.
+- `752882f` **D1** — `useSeasonStats:38` `DEFAULT_TOTAL_GAMES=162` → canonical `MLB_BASELINE_GAMES` (WAR scaling
+  already routed through `gamesPerTeam`; zero behavior change).
+- `2fab709` **D2** — backup parity: register the 3 v13-15 franchise stores + pin 12→15 + a structural parity-guard
+  (objectStoreNames === registry keys) + round-trip test. The silent-drop data-integrity defect is closed.
+- `2f4f3e5` **L1.5 + OD-1** — pre-contract verification caught that MLB pool players carry NO hidden modifiers (only
+  the prospect path generates them) → L1.5 would be a no-op. **OD-1 ruled (Captain default, JK-overridable on
+  return): generate the 4 modifiers for all franchise players at init** (seed=player.id, same distribution as
+  prospects, no SOT touch). + L1.5: assign each Team Captain = max(loyalty+charisma) among MLB players with
+  charisma≥70 (null+warn if none). 21 unit + 33 integration tests; designation eligibility left blocked (L7's job).
+- `0cf4ca2` **L4a-connect** (REP-1..3) — franchise reporter wired: auto-assign a franchiseId-scoped reporter on
+  launch + `postGameColumnsEnabled` + `BeatReporterNews` reads live `GameStory` (legacy `generateGameRecap`
+  retired). Browser-pending (reporter text is Supabase-dependent, D-R5).
+- `8074976` **L4a-bus** (SEA-1..5) — the season-long narrative publish-bus core: `SeasonNewsItem` store +
+  sim-tunable `SeasonEmissionConfig` + emission gate + `generateSeasonNewsTake` on the canonical reporter.
+  Build-dark (no event taps yet — SEA-1 ruled built-early); §5 firewall upheld (the generator narrates strictly
+  from `event.facts`, imports no morale/value engine).
+- `4a1bd36` **D6a** — the make-or-break True-Value TRUST gate, LIVE half. Peer-pool audit (≥2 MLB peers HARD-block,
+  no fudge/fallback; two-way full-block; FARM/score-only excluded) → persist a live `franchiseTrustedValueArtifacts`
+  record → flip the 4 True-Value trust flags from literal-false to COMPUTED. Reconciled a real inconsistency the
+  map caught (`franchiseDesignationReadinessReport.ts:84` hardcoded true). **JK ruled the lock-timing fork:
+  SEASON-END FREEZE** (D6a = live; D6b adds the freeze). RIGOROUSLY audited — base-IV oracle untouched, flags
+  genuinely computed (not hardcoded), a real all-source no-leak boundary test, D8 flags stay false.
+- **D5 CONFIRMED** (confirm-only): the TEAM_MVP/ACE `warConsumerTrust` trust engine is green (51 tests).
+- **D6 mapped** via workflow `wf_3c443a04-35e` (4 agents) before contracting.
+
+**Process notes.** JK corrected an over-cautious first wrap (I'd set aside OD-1 — which had an obvious default —
+under AUTH-2's "set aside" branch when JK meant the "make a conservative choice and continue" branch). Recalibrated
++ built OD-1/L1.5/L4a-connect/L4a-bus/D6a. JK then BATCHED the browser verification ("keep rolling") and directed
+"D-stack to the value gate." A browser pre-check (preview MCP) confirmed the app loads clean + verified the shipped
+L1.5+OD-1 logic in the real runtime (full franchise creation is gated by the pre-existing 22+10 farm-draft handoff).
+
+**Verification at close.** Full suite re-run (the first full run of the session) = **7,251 pass / 3 fail / 400
+files (7,254 total)** — the 3 are EXACTLY the characterized set (wpaRuntimeBoundary, franchiseManualSmokeFixture,
+franchiseNarrativeEventEligibility). It caught ONE self-inflicted regression (`franchiseSeasonLedgerStorage.test.ts`
+hardcoded `TRACKER_DB_VERSION===15` + a store list missing the 3 new stores — stale after my v15→17 bumps);
+fixed (`8ba0538`) + re-verified 4/4. `trackerDb` is now **v17**, `KBL_BACKUP_VERSION` stays 2.
+
+**Docs updated:** `FRANCHISE_V1_LIVING_SEASON_DSTACK.md` (NEW), `AUTONOMOUS_RUN_PROTOCOL.md` (NEW),
+`AUTONOMOUS_RUN_LOG.md` (NEW — the per-ticket trail + OPEN DECISIONS OD-1..5), `DECISIONS_LOG.md` (LSD-1..6, D6
+lock-timing), `PROMPT_CONTRACTS.md` (every ticket contract), `FRANCHISE_PLAYABLE_V1_DEFINITION.md` (RATIFIED + the
+LSD-1/MOY seams), `FRANCHISE_V1_LIVING_SEASON_SPEC.md` (amendment notes), `CURRENT_STATE.md` (live header rewritten),
+`CURRENT_STATE_HISTORY.md` (arc snapshot), this entry.
+
+**NEXT SESSION STARTS AT: D6b** (the season-end freeze of the trusted-value artifact → deterministic D8/D9 awards),
+then **D7** (designations LIVE: promote TEAM_MVP/ACE to non-'Proj.' + add Albatross; reconcile the dual designation
+path; emit `DesignationEvent` with NO morale mutation; Fan Favorite stays Phase-2). Then D8 → D9 (awards w/ the
+LSD-1 fame seams + MOY-1..7) → D10–D13. **Resume in a FRESH context** — the value-spine work deserves fresh audit
+rigor. Open decisions for JK: OD-2..5, the D4 salary/value-preview scope snag, the soul-layer "build to spec"
+greenlight. Batched browser: L1.5 captain + L4a reporter on real franchise data (needs the farm-draft handoff +
+Supabase). All on `codex/franchise-v1-next`; nothing pushed.
