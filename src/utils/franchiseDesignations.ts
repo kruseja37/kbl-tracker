@@ -24,6 +24,7 @@ export interface FranchiseDesignationPlayerInput {
   trueValue?: number | null;
   contractValue?: number | null;
   valueDelta?: number | null;
+  valueTrusted?: boolean;
 }
 
 export interface FranchiseDesignationContext {
@@ -154,6 +155,14 @@ const LIVE_DESIGNATION_BADGES: Partial<Record<FranchiseDesignationType, Franchis
     status: 'active',
     colorHex: '#4169E1',
     backgroundHex: '#1C2F64',
+  },
+  ALBATROSS: {
+    type: 'ALBATROSS',
+    label: 'Albatross',
+    borderStyle: 'solid',
+    status: 'active',
+    colorHex: '#EF4444',
+    backgroundHex: '#5A1F1F',
   },
 };
 
@@ -416,6 +425,7 @@ export function calculateFranchiseDesignations(
 
     const albatross = selectLowest(
       teamPlayers.filter((player) =>
+        player.valueTrusted === true &&
         player.gamesPlayed >= valueFloor &&
         finiteNumber(player.valueDelta) &&
         player.valueDelta < 0,
@@ -430,8 +440,8 @@ export function calculateFranchiseDesignations(
         gamesPlayed: albatross.gamesPlayed,
         gamesFloor: valueFloor,
       }, [
-        'MODE_2_CANON §17.4: Albatross is most negative Value Delta with 10% season/minimum 3 games.',
-        'R-5: valueDelta trust flips only for projected designations in TV2.',
+        'MODE_2_CANON §17.4 and FRANCHISE_PLAYABLE_V1_DEFINITION D7: Albatross is most negative trusted Value Delta with 10% season/minimum 3 games.',
+        'D6: hidden-FARM, score-only, and <2 MLB-peer blocked rows are excluded from trusted Albatross selection.',
       ]));
     }
   }

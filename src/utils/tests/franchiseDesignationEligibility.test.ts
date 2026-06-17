@@ -14,6 +14,7 @@ import {
 
 const mocks = vi.hoisted(() => ({
   buildFranchiseValueInputRows: vi.fn(),
+  getFranchiseTrueValueRows: vi.fn(),
   saveFranchisePlayer: vi.fn(),
 }));
 
@@ -26,6 +27,10 @@ vi.mock('../franchiseValueInputs', () => {
 
 vi.mock('../franchisePlayerStorage', () => ({
   saveFranchisePlayer: mocks.saveFranchisePlayer,
+}));
+
+vi.mock('../franchiseTrueValueStorage', () => ({
+  getFranchiseTrueValueRows: mocks.getFranchiseTrueValueRows,
 }));
 
 function makeSeasonContext(overrides: Partial<FranchiseValueInputRow['seasonContext']> = {}): FranchiseValueInputRow['seasonContext'] {
@@ -173,6 +178,7 @@ function findRecord(
 describe('franchise designation eligibility adapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.getFranchiseTrueValueRows.mockResolvedValue([]);
   });
 
   test('stable salary baseline alone does not make any designation persistable', () => {
@@ -188,7 +194,7 @@ describe('franchise designation eligibility adapter', () => {
     expect(findRecord(report.records, 'player-1', 'TEAM_MVP').reasons.join(' ')).toContain('WAR-like season inputs');
   });
 
-  test('policy matrix documents every designation family and promotes only MVP/Ace as active', () => {
+  test('policy matrix documents every designation family and promotes MVP/Ace/Albatross as active', () => {
     expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.map((policy) => policy.designationType)).toEqual([
       'TEAM_MVP',
       'ACE',
@@ -201,14 +207,16 @@ describe('franchise designation eligibility adapter', () => {
     expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.filter((policy) => policy.status === 'active').map((policy) => policy.designationType)).toEqual([
       'TEAM_MVP',
       'ACE',
+      'ALBATROSS',
     ]);
     expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.filter((policy) => policy.persistable).map((policy) => policy.designationType)).toEqual([
       'TEAM_MVP',
       'ACE',
+      'ALBATROSS',
     ]);
     expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.find((policy) => policy.designationType === 'TEAM_MVP')?.blockers.join(' ')).toMatch(/TWO-WAY.*ACE/i);
     expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.find((policy) => policy.designationType === 'FAN_FAVORITE')?.summary).toMatch(/True Value\/value-delta/i);
-    expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.find((policy) => policy.designationType === 'ALBATROSS')?.summary).toMatch(/salary\/value/i);
+    expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.find((policy) => policy.designationType === 'ALBATROSS')?.summary).toMatch(/worst negative trusted Value Delta/i);
     expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.find((policy) => policy.designationType === 'CORNERSTONE')?.summary).toMatch(/durable designation state/i);
     expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.find((policy) => policy.designationType === 'CAPTAIN')?.summary).toMatch(/hidden charisma\/leadership/i);
     expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.find((policy) => policy.designationType === 'FAN_HOPEFUL')?.summary).toMatch(/visible-safe prospect/i);
@@ -568,7 +576,7 @@ describe('franchise designation eligibility adapter', () => {
     )).toHaveLength(0);
   });
 
-  test('FAN_FAVORITE and ALBATROSS block without canonical True Value and value delta', () => {
+  test('FAN_FAVORITE and ALBATROSS block without persisted canonical True Value and value delta', () => {
     const report = classifyFranchiseDesignationEligibility(makeReport([
       makeRow({
         seasonStatsAvailability: { batting: true, pitching: false, fielding: true, any: true },
@@ -587,10 +595,68 @@ describe('franchise designation eligibility adapter', () => {
     const albatross = findRecord(report.records, 'player-1', 'ALBATROSS');
 
     expect(fanFavorite.status).toBe('blocked');
-    expect(fanFavorite.reasons.join(' ')).toContain('True Value and value-delta inputs');
+    expect(fanFavorite.reasons.join(' ')).toContain('persisted canonical True Value and Value Delta rows');
     expect(fanFavorite.reasons.join(' ')).toContain('fan/morale systems');
     expect(albatross.status).toBe('blocked');
-    expect(albatross.reasons.join(' ')).toContain('True Value and value-delta inputs');
+    expect(albatross.reasons.join(' ')).toContain('persisted canonical True Value and Value Delta rows');
+  });
+
+  test('ALBATROSS becomes active only for the worst trusted negative value-delta player on a team', () => {
+    const trustedWorst = makeRow({
+      playerId: 'trusted-worst',
+      playerName: 'Trusted Worst',
+      currentTeamId: 'team-1',
+      warConsumerTrust: {
+        ...warConsumerTrust(makeRow()),
+        fanFavoriteAlbatrossDesignations: true,
+        trueValue: true,
+        blockers: [],
+      },
+    });
+    const untrustedWorst = makeRow({
+      playerId: 'untrusted-worst',
+      playerName: 'Untrusted Worst',
+      currentTeamId: 'team-1',
+      warConsumerTrust: {
+        ...warConsumerTrust(makeRow()),
+        fanFavoriteAlbatrossDesignations: false,
+        trueValue: false,
+        blockers: ['D6 blocked fixture'],
+      },
+    });
+    const trustedPositive = makeRow({
+      playerId: 'trusted-positive',
+      playerName: 'Trusted Positive',
+      currentTeamId: 'team-2',
+      warConsumerTrust: {
+        ...warConsumerTrust(makeRow()),
+        fanFavoriteAlbatrossDesignations: true,
+        trueValue: true,
+        blockers: [],
+      },
+    });
+    const report = classifyFranchiseDesignationEligibility(makeReport([
+      trustedWorst,
+      untrustedWorst,
+      trustedPositive,
+    ]), [
+      { franchiseId: 'franchise-1', seasonId: 'season-1', statsScopeId: 'season-1', playerId: 'trusted-worst', trueValue: 4, contractValue: 18, valueDelta: -14, warPercentile: 0.2, position: 'SS', peerPoolSize: 4, calculationVersion: 'true-value-v1', computedAt: 'now' },
+      { franchiseId: 'franchise-1', seasonId: 'season-1', statsScopeId: 'season-1', playerId: 'untrusted-worst', trueValue: 2, contractValue: 30, valueDelta: -28, warPercentile: 0.1, position: 'SS', peerPoolSize: 1, calculationVersion: 'true-value-v1', computedAt: 'now' },
+      { franchiseId: 'franchise-1', seasonId: 'season-1', statsScopeId: 'season-1', playerId: 'trusted-positive', trueValue: 20, contractValue: 10, valueDelta: 10, warPercentile: 0.9, position: 'SS', peerPoolSize: 4, calculationVersion: 'true-value-v1', computedAt: 'now' },
+    ]);
+
+    expect(findRecord(report.records, 'trusted-worst', 'ALBATROSS')).toMatchObject({
+      status: 'active',
+      persistable: true,
+    });
+    expect(findRecord(report.records, 'untrusted-worst', 'ALBATROSS')).toMatchObject({
+      status: 'blocked',
+      persistable: false,
+    });
+    expect(findRecord(report.records, 'untrusted-worst', 'ALBATROSS').reasons.join(' ')).toMatch(/D6 trusted-value artifact membership/i);
+    expect(findRecord(report.records, 'trusted-positive', 'ALBATROSS').status).toBe('blocked');
+    expect(findRecord(report.records, 'trusted-positive', 'ALBATROSS').reasons.join(' ')).toMatch(/negative team-relative Value Delta/i);
+    expect(findRecord(report.records, 'trusted-worst', 'FAN_FAVORITE').status).toBe('blocked');
   });
 
   test('future narrative/value designations are blocked with deferred input reasons', () => {
@@ -601,7 +667,7 @@ describe('franchise designation eligibility adapter', () => {
     expect(findRecord(report.records, 'player-1', 'CORNERSTONE').reasons.join(' ')).toContain('durable designation state and roster-move consequence policy');
   });
 
-  test('every designation family is evaluated but only TEAM_MVP and ACE can become active in v1', () => {
+  test('every designation family is evaluated but only trusted TEAM_MVP, ACE, and ALBATROSS can become active in v1', () => {
     const report = classifyFranchiseDesignationEligibility(makeReport([
       makeRow({
         playerId: 'position-leader',
@@ -662,7 +728,7 @@ describe('franchise designation eligibility adapter', () => {
       expect(findRecord(report.records, 'position-leader', designationType).status).toBe('blocked');
       expect(findRecord(report.records, 'two-way-ace', designationType).status).toBe('blocked');
     }
-    expect(report.limitations.join(' ')).toMatch(/Only TEAM_MVP and ACE can persist as active v1 designations/i);
+    expect(report.limitations.join(' ')).toMatch(/Only TEAM_MVP, ACE, and ALBATROSS can persist as active v1 designations/i);
     expect(report.limitations.join(' ')).toMatch(/TWO-WAY players are routed as pitcher-only/i);
   });
 
@@ -734,10 +800,16 @@ describe('franchise designation eligibility adapter', () => {
         },
       }),
     ]));
+    mocks.getFranchiseTrueValueRows.mockResolvedValue([]);
 
     const report = await buildFranchiseDesignationEligibility(input);
 
     expect(mocks.buildFranchiseValueInputRows).toHaveBeenCalledWith(input);
+    expect(mocks.getFranchiseTrueValueRows).toHaveBeenCalledWith({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+    });
     expect(mocks.saveFranchisePlayer).not.toHaveBeenCalled();
     expect(report.records.every((record) => record.persistable === false)).toBe(true);
     expect(report.anyPersistable).toBe(false);

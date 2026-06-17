@@ -7657,3 +7657,77 @@ independent AUDIT (auditor ≠ builder). Build #1 clean (no hang this time).
 
 **Status:** VERIFIED → committed (branch `codex/franchise-v1-next`, not pushed). **→ NEXT: D7b (Albatross live + D6 trust filter).**
 
+---
+
+## D7b — designations LIVE, part 2: Albatross live + the D6 trusted-value gate — 2026-06-17 (autonomous overnight, AUTH-4)
+
+**ROUTE:** Codex | high reasoning effort → Opus 4.8 audit (auditor ≠ builder). Autonomous overnight (AUTH-4; AUTH-1).
+Asset-protected designation + a value-boundary CORRECTNESS fix → audit the leak-closure + firewall HARDEST.
+
+**WHY (map `wf_fde440e6-dd3`, Captain-verified):** the canonical Albatross selection names the most-negative
+`valueDelta` player per team with NO peer-pool check → a <2-MLB-peer player (a D6 `blockedRow`, NOT in
+`artifact.trustedPlayerIds`) can be branded Albatross, violating the D0 boundary ">=2 MLB peers must BLOCK." D7b
+closes that leak AND promotes Albatross to live (D6 unblocked it). Verified: `warConsumerTrust.
+fanFavoriteAlbatrossDesignations` is HARDCODED false (franchiseValueInputs.ts:47/:341) — D7b wires it to the
+authoritative per-player `isPlayerTrustedForValue(artifact, player.id)` (same source as `trustedForTrueValue` :469).
+
+**CAPTAIN DEFAULTS (AUTH-4):** trust source = `isPlayerTrustedForValue` on the live/frozen artifact (per-player ≥2-peer,
+read-only — never recompute TV); trust filter binds at the SELECTION site (calculator) so an untrusted player is never
+named Albatross even projected; Albatross promotes via the SAME D7a eligibility-verdict gate (ACTIVE_PROMOTION_TYPES +=
+ALBATROSS); v1 Albatross policy = most-negative TRUSTED valueDelta, NO salary floor (the orphaned fanFavoriteEngine's
+-25%/2x-salary/trade/happiness policy is NOT adopted); -1 fame stays DORMANT; Fan Favorite stays projected/blocked
+(morale-gated). FF selection left UNCHANGED (its untrusted-value preview is a labeled morale-gated preview, not a
+trusted consumer — documented; FF trust-filter = follow-up if JK wants it).
+
+**ALLOWED:** `franchiseValueInputs.ts` (wire fanFavoriteAlbatrossDesignations ← isPlayerTrustedForValue) ·
+`franchiseDesignations.ts` (FranchiseDesignationPlayerInput.valueTrusted; filter Albatross selection to valueTrusted;
+ALBATROSS live badge) · `franchiseDesignationStorage.ts` (set valueTrusted on the input; ALBATROSS ∈
+ACTIVE_PROMOTION_TYPES) · `franchiseDesignationEligibility.ts` (de-gate Albatross → 'active' for trusted + negative +
+worst-on-team; FF stays blocked; fix valueDesignationBlockers stale reason for Albatross only) · designation/value
+tests (leak-closed mutation-honest / promotion / FF stays projected / no-morale).
+
+**DO NOT:** Fan Favorite promotion · Captain/FanHopeful/Cornerstone · import fanFavoriteEngine · fame (game.ts
+ALBATROSS_NAMED -1 stays dormant / fameEngine / teamMVP) · morale (fanMoraleEngine; bridge/adapter read-only) ·
+recompute TV / oracle / computeIV / frozen-artifact write · salary floor or any salary/trade/morale EFFECT on
+Albatross · new store / TRACKER_DB_VERSION (17) / KBL_BACKUP_VERSION (2) · narrative gate + its test.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · full suite within the 3 characterized fails (no new reds) ·
+grep: no morale/fame/teamMVP/fanFavoriteEngine import in the designation path; ALBATROSS_NAMED has no live emitter;
+versions unchanged.
+
+**STOP IF:** out-of-ALLOWED edit; must touch fame/morale/narrative/fanFavoriteEngine to compile; must recompute TV or
+touch the oracle/frozen write; new store/version bump needed.
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited.
+
+**Status:** contract issued; Codex invoked (under 30-min watchdog).
+
+### D7b-AUDIT + EXECUTION RECORD (2026-06-17, autonomous overnight AUTH-4)
+
+**ROUTE actual:** Codex (high, background `codex exec` under watchdog) BUILT → Opus 4.8 (Captain) independent AUDIT
+(auditor ≠ builder). Build clean (no hang).
+
+**AUDIT VERDICT: CONFORMS / VERIFIED → D7 COMPLETE.** Independent re-verification (Opus — re-ran):
+- Diff = 9 files (4 product + 5 test). Substance: `franchiseValueInputs.ts` wires
+  `warConsumerTrust.fanFavoriteAlbatrossDesignations` ← `params.trustedForTrueValue` (the per-player
+  `isPlayerTrustedForValue` ≥2-peer membership; was hardcoded false) · `franchiseDesignations.ts` adds `valueTrusted`
+  to the input, **filters the Albatross selection to `valueTrusted === true`** (closes the leak at the naming site),
+  adds the ALBATROSS live red badge · `franchiseDesignationStorage.ts` sets `valueTrusted` from the row flag + adds
+  ALBATROSS to `ACTIVE_PROMOTION_TYPES` · `franchiseDesignationEligibility.ts` de-gates Albatross to 'active' (ranked
+  worst negative valueDelta, gated on `fanFavoriteAlbatrossDesignations`, reads `getFranchiseTrueValueRows` read-only),
+  FAN_FAVORITE stays blocked.
+- `tsc --noEmit` 0 (Opus) · `npm run build` success (Opus) · full suite **7,260 pass / 3 fail (7,263 total)** =
+  EXACTLY the characterized set, ZERO new reds.
+- **LEAK CLOSURE MUTATION-PROVEN:** removing the `valueTrusted` filter turns 4 persistence tests RED. The eligibility
+  test proves it from the other side: an UNTRUSTED worst-value player (valueDelta −28, peer pool 1) is BLOCKED
+  ("D6 trusted-value artifact membership"), while the TRUSTED worst (−14, peer pool 4) goes active.
+- **FIREWALL INTACT:** grep — no morale/fame/teamMVP/fanFavoriteEngine import in the 3 designation files;
+  `ALBATROSS_NAMED` (−1 fame) has NO live emitter on the designation path (dormant); FF stays blocked.
+- Invariants: TRACKER_DB_VERSION 17, KBL_BACKUP_VERSION 2, no new store; True Value read-only (no recompute / oracle
+  touch). The 2 extra test files (franchiseTrueValuePreview, franchiseValueInputs) = mechanical fixture updates from
+  the trust-flag wiring (all 13 paths reported).
+- **BROWSER-PENDING (batched):** an Albatross is named only for a ≥2-MLB-peer player with the worst negative valueDelta
+  (untrusted/positive get none); solid red live badge; no morale/salary effect.
+
+**Status:** VERIFIED → committed (branch `codex/franchise-v1-next`, not pushed). **→ NEXT: D8 (award-trust gate).**
+

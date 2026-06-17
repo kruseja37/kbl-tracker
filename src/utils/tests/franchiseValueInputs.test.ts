@@ -457,7 +457,7 @@ describe('franchise value input contract', () => {
     });
   });
 
-  test('trusts scoped WAR only for TEAM_MVP or ACE designation input gates when completed archive evidence exists', async () => {
+  test('trusts scoped WAR only for TEAM_MVP or ACE while Albatross reads D6 artifact membership', async () => {
     mocks.getRecentGames.mockResolvedValue([{
       gameId: 'completed-1',
       seasonId: 'season-1',
@@ -465,6 +465,9 @@ describe('franchise value input contract', () => {
       franchiseId: 'franchise-1',
       aggregationStatus: 'aggregated',
     }]);
+    mocks.getTrustedValueArtifact.mockResolvedValue({
+      trustedPlayerIds: ['player-1'],
+    });
 
     const report = await buildFranchiseValueInputRows({
       franchiseId: 'franchise-1',
@@ -476,15 +479,15 @@ describe('franchise value input contract', () => {
     expect(row.warConsumerTrust).toMatchObject({
       teamMvpDesignations: true,
       aceDesignations: false,
-      fanFavoriteAlbatrossDesignations: false,
+      fanFavoriteAlbatrossDesignations: true,
       awards: false,
       salaryMovement: false,
-      trueValue: false,
+      trueValue: true,
       morale: false,
       mode3Handoff: false,
     });
-    expect(row.warInputAvailability.trustedForFinalValue).toBe(false);
-    expect(row.warPreviewValues.trustedForFinalValue).toBe(false);
+    expect(row.warInputAvailability.trustedForFinalValue).toBe(true);
+    expect(row.warPreviewValues.trustedForFinalValue).toBe(true);
     expect(row.limitations.join(' ')).toMatch(/Scoped WAR is trusted only for TEAM_MVP\/ACE/i);
   });
 

@@ -74,7 +74,7 @@ describe('franchise projected designations', () => {
       player({ playerId: 'mvp-runner-up', playerName: 'Runner Up', totalWAR: 2.8, gamesPlayed: 12 }),
       player({ playerId: 'ace', playerName: 'Ace Pitcher', position: 'SP', pWAR: 1.1, pitchingAppearances: 4 }),
       player({ playerId: 'fan', playerName: 'Fan Bargain', gamesPlayed: 3, trueValue: 12, contractValue: 2, valueDelta: 10 }),
-      player({ playerId: 'alb', playerName: 'Heavy Contract', gamesPlayed: 3, trueValue: 3, contractValue: 12, valueDelta: -9 }),
+      player({ playerId: 'alb', playerName: 'Heavy Contract', gamesPlayed: 3, trueValue: 3, contractValue: 12, valueDelta: -9, valueTrusted: true }),
     ], context);
 
     expect(designations.map((designation) => [designation.type, designation.playerId])).toEqual([
@@ -88,6 +88,42 @@ describe('franchise projected designations', () => {
     expect(designations.every((designation) =>
       designation.sourceInputs.peerPoolLimitation === FRANCHISE_DESIGNATION_EP1_LIMITATION,
     )).toBe(true);
+  });
+
+  test('excludes untrusted negative value-delta rows when selecting Albatross', () => {
+    const designations = calculateFranchiseDesignations([
+      player({
+        playerId: 'untrusted-worst',
+        playerName: 'Untrusted Worst',
+        gamesPlayed: 3,
+        trueValue: 1,
+        contractValue: 31,
+        valueDelta: -30,
+        valueTrusted: false,
+      }),
+      player({
+        playerId: 'trusted-worst',
+        playerName: 'Trusted Worst',
+        gamesPlayed: 3,
+        trueValue: 7,
+        contractValue: 18,
+        valueDelta: -11,
+        valueTrusted: true,
+      }),
+      player({
+        playerId: 'trusted-less-bad',
+        playerName: 'Trusted Less Bad',
+        gamesPlayed: 3,
+        trueValue: 10,
+        contractValue: 14,
+        valueDelta: -4,
+        valueTrusted: true,
+      }),
+    ], context);
+
+    const albatross = designations.find((designation) => designation.type === 'ALBATROSS');
+    expect(albatross?.playerId).toBe('trusted-worst');
+    expect(designations.some((designation) => designation.playerId === 'untrusted-worst')).toBe(false);
   });
 
   test('honors §17 floors and Ace pWAR minimum without default holders', () => {
@@ -127,8 +163,16 @@ describe('franchise projected designations', () => {
       status: 'active',
       colorHex: '#4169E1',
     });
+    expect(getLiveDesignationBadge('ALBATROSS')).toMatchObject({
+      label: 'Albatross',
+      borderStyle: 'solid',
+      status: 'active',
+      colorHex: '#EF4444',
+    });
     expect(getLiveDesignationBadge('TEAM_MVP')?.label).not.toMatch(/Proj\./);
     expect(getLiveDesignationBadge('ACE')?.label).not.toMatch(/Proj\./);
+    expect(getLiveDesignationBadge('ALBATROSS')?.label).not.toMatch(/Proj\./);
+    expect(getLiveDesignationBadge('FAN_FAVORITE')).toBeNull();
     expect(getProjectedDesignationBadge('TEAM_MVP').label).toBe('Proj. MVP');
     expect(getProjectedDesignationBadge('ACE').label).toBe('Proj. Ace');
   });

@@ -44,7 +44,7 @@ export interface FranchiseWarPreviewValues {
 export interface FranchiseWarConsumerTrust {
   teamMvpDesignations: boolean;
   aceDesignations: boolean;
-  fanFavoriteAlbatrossDesignations: false;
+  fanFavoriteAlbatrossDesignations: boolean;
   awards: false;
   salaryMovement: false;
   trueValue: boolean;
@@ -306,7 +306,7 @@ function buildWarConsumerTrust(params: {
 }): FranchiseWarConsumerTrust {
   const blockers: string[] = [];
   const limitations = [
-    'WAR consumer trust is limited to TEAM_MVP/ACE designation input gating; True Value trust is read only from the D6 trusted-value artifact.',
+    'WAR consumer trust is limited to TEAM_MVP/ACE designation input gating; Albatross value trust is read only from the D6 trusted-value artifact.',
   ];
   if (!params.currentTeamId) {
     blockers.push('Current MLB team id is required before WAR can be trusted for designation inputs.');
@@ -338,7 +338,7 @@ function buildWarConsumerTrust(params: {
   return {
     teamMvpDesignations: commonReady && teamMvpBlockers.length === 0,
     aceDesignations: commonReady && aceBlockers.length === 0,
-    fanFavoriteAlbatrossDesignations: false,
+    fanFavoriteAlbatrossDesignations: params.trustedForTrueValue,
     awards: false,
     salaryMovement: false,
     trueValue: params.trustedForTrueValue,

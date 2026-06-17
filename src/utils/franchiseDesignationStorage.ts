@@ -57,7 +57,7 @@ export interface CalculateAndPersistProjectedFranchiseDesignationsResult {
 
 const STORE_NAME = 'franchiseDesignationRows';
 const CANONICAL_PRIMARY_POSITIONS = new Set(['SP', 'SP/RP', 'RP', 'CP', 'C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF']);
-const ACTIVE_PROMOTION_TYPES = new Set<FranchiseDesignationType>(['TEAM_MVP', 'ACE']);
+const ACTIVE_PROMOTION_TYPES = new Set<FranchiseDesignationType>(['TEAM_MVP', 'ACE', 'ALBATROSS']);
 
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -132,7 +132,7 @@ function upgradeRowsWithActiveEligibility(
       lockedAt: null,
       sourceInputs: {
         ...row.sourceInputs,
-        statusAuthority: 'FRANCHISE_PLAYABLE_V1_DEFINITION D7a: persisted canonical TEAM_MVP/ACE row promoted to active only when the eligibility path classifies the exact holder active.',
+        statusAuthority: 'FRANCHISE_PLAYABLE_V1_DEFINITION D7a/D7b: persisted canonical TEAM_MVP/ACE/ALBATROSS row promoted to active only when the eligibility path classifies the exact holder active.',
       },
     };
   });
@@ -179,6 +179,7 @@ function sourceRowFromValueRow(
       trueValue: numericOrNull(trueValue?.trueValue),
       contractValue: numericOrNull(trueValue?.contractValue),
       valueDelta: numericOrNull(trueValue?.valueDelta),
+      valueTrusted: row.warConsumerTrust?.fanFavoriteAlbatrossDesignations === true,
     },
     reasons: trueValue
       ? []
@@ -357,7 +358,7 @@ export async function calculateAndPersistProjectedFranchiseDesignationsForSeason
     eligibilityReport.records
       .filter((record) =>
         record.status === 'active' &&
-        (record.designationType === 'TEAM_MVP' || record.designationType === 'ACE') &&
+        ACTIVE_PROMOTION_TYPES.has(record.designationType as FranchiseDesignationType) &&
         record.teamId !== null,
       )
       .map((record) => activeEligibilityKey({

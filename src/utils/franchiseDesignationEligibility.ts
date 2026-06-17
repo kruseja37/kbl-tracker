@@ -4,6 +4,10 @@ import {
   type FranchiseValueInputReport,
   type FranchiseValueInputRow,
 } from './franchiseValueInputs';
+import {
+  getFranchiseTrueValueRows,
+  type FranchiseTrueValueRow,
+} from './franchiseTrueValueStorage';
 
 export const FRANCHISE_DESIGNATION_ELIGIBILITY_CONTRACT_VERSION = 'franchise-designation-eligibility-v1-readonly';
 
@@ -57,9 +61,11 @@ export interface FranchiseDesignationEligibilityRecord {
     pitchingWar: number | null;
     teamMvpWarTrusted: boolean;
     aceWarTrusted: boolean;
+    valueDesignationTrusted: boolean;
     wpaAvailable: boolean;
     wpaTrustedForFinalValue: false;
-    trueValueAvailable: false;
+    trueValueAvailable: boolean;
+    valueDelta: number | null;
     moraleAvailable: false;
     relationshipInputsAvailable: false;
     awardInputsFinalized: false;
@@ -92,7 +98,13 @@ const ALL_DESIGNATION_TYPES: FranchiseDesignationEligibilityType[] = [
   'CORNERSTONE',
 ];
 
-type RankedDesignationType = 'TEAM_MVP' | 'ACE';
+type RankedDesignationType = 'TEAM_MVP' | 'ACE' | 'ALBATROSS';
+
+type EligibilityValueRow = FranchiseValueInputRow & {
+  trueValue?: number | null;
+  contractValue?: number | null;
+  valueDelta?: number | null;
+};
 
 interface RankedCandidate {
   key: string;
@@ -138,13 +150,13 @@ export const FRANCHISE_DESIGNATION_V1_POLICY_MATRIX: readonly FranchiseDesignati
   },
   {
     designationType: 'ALBATROSS',
-    status: 'blocked',
-    persistable: false,
-    promptAuthority: 'explicit-trusted-bridge-input-only',
-    summary: 'Blocked until trusted True Value/value-delta and salary/value policy exist.',
+    status: 'active',
+    persistable: true,
+    promptAuthority: 'none',
+    summary: 'Ranked/selective active v1 designation for current MLB players with the worst negative trusted Value Delta on each team.',
     blockers: [
-      'Canonical True Value/value-delta is unavailable.',
-      'Salary/value designation policy is not trusted for internal v1.',
+      'Season-end locking/carryover remains blocked.',
+      'ALBATROSS does not create salary, morale, relationship, award, or Mode 3 effects automatically.',
     ],
   },
   {
@@ -192,6 +204,10 @@ function unique(values: string[]): string[] {
   return Array.from(new Set(values));
 }
 
+function finiteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
 function candidateKey(teamId: string | null, designationType: RankedDesignationType): string {
   return `${teamId ?? 'missing-team'}:${designationType}`;
 }
@@ -200,14 +216,23 @@ function isPitcherPosition(position: string | null): boolean {
   return FRANCHISE_PITCHER_DESIGNATION_POSITIONS.has(String(position ?? '').trim().toUpperCase());
 }
 
-function rankedScore(row: FranchiseValueInputRow, designationType: RankedDesignationType): number | null {
+function rankedScore(row: EligibilityValueRow, designationType: RankedDesignationType): number | null {
+  if (designationType === 'ALBATROSS') return row.valueDelta ?? null;
   if (designationType === 'ACE') return row.warPreviewValues.pitchingWar;
   return row.warPreviewValues.totalWar;
 }
 
-function rankingBlockers(row: FranchiseValueInputRow, designationType: RankedDesignationType): string[] {
+function rankingBlockers(row: EligibilityValueRow, designationType: RankedDesignationType): string[] {
   const reasons: string[] = [];
   const score = rankedScore(row, designationType);
+  if (designationType === 'ALBATROSS') {
+    if (score === null) {
+      reasons.push('ALBATROSS active designation requires a numeric persisted Value Delta row, not only input readiness.');
+    } else if (score >= 0) {
+      reasons.push('ALBATROSS active designation requires negative team-relative Value Delta evidence.');
+    }
+    return reasons;
+  }
   if (score === null) {
       reasons.push(`${designationType} active designation requires a numeric WAR value from scoped season stats, not only input readiness.`);
   } else if (designationType === 'ACE' && score < 0.5) {
@@ -226,18 +251,29 @@ function rankingBlockers(row: FranchiseValueInputRow, designationType: RankedDes
 }
 
 function buildRankedCandidates(
-  rows: FranchiseValueInputRow[],
+  rows: EligibilityValueRow[],
   designationType: RankedDesignationType,
 ): Map<string, RankedCandidate> {
   const best = new Map<string, RankedCandidate>();
   for (const row of rows) {
-    if (stableWarPreviewBlockers(row, designationType).length > 0) continue;
+    if (designationType === 'ALBATROSS') {
+      if (valueDesignationBlockers(row, designationType).length > 0) continue;
+    } else if (stableWarPreviewBlockers(row, designationType).length > 0) {
+      continue;
+    }
     if (rankingBlockers(row, designationType).length > 0) continue;
     const score = rankedScore(row, designationType);
     if (score === null) continue;
     const key = candidateKey(row.currentTeamId, designationType);
     const existing = best.get(key);
-    if (!existing || score > existing.score || (score === existing.score && row.playerName.localeCompare(existing.row.playerName) < 0)) {
+    if (!existing) {
+      best.set(key, { key, row, score });
+      continue;
+    }
+    const isBetter = designationType === 'ALBATROSS'
+      ? score < existing.score
+      : score > existing.score;
+    if (isBetter || (score === existing.score && row.playerName.localeCompare(existing.row.playerName) < 0)) {
       best.set(key, { key, row, score });
     }
   }
@@ -259,7 +295,7 @@ function mlbBlockers(row: FranchiseValueInputRow): string[] {
   return reasons;
 }
 
-function sourceInputs(row: FranchiseValueInputRow): FranchiseDesignationEligibilityRecord['sourceInputs'] {
+function sourceInputs(row: EligibilityValueRow): FranchiseDesignationEligibilityRecord['sourceInputs'] {
   return {
     salaryBaselineAvailable: row.salaryBaselineAvailable,
     teamSalaryBaselineAvailable: row.teamSalaryBaseline !== null,
@@ -270,9 +306,11 @@ function sourceInputs(row: FranchiseValueInputRow): FranchiseDesignationEligibil
     pitchingWar: row.warPreviewValues.pitchingWar,
     teamMvpWarTrusted: row.warConsumerTrust?.teamMvpDesignations === true,
     aceWarTrusted: row.warConsumerTrust?.aceDesignations === true,
+    valueDesignationTrusted: row.warConsumerTrust?.fanFavoriteAlbatrossDesignations === true,
     wpaAvailable: row.wpaInputAvailability.archiveBacked,
     wpaTrustedForFinalValue: false,
-    trueValueAvailable: false,
+    trueValueAvailable: finiteNumber(row.trueValue) && finiteNumber(row.contractValue) && finiteNumber(row.valueDelta),
+    valueDelta: finiteNumber(row.valueDelta) ? row.valueDelta : null,
     moraleAvailable: false,
     relationshipInputsAvailable: false,
     awardInputsFinalized: false,
@@ -282,7 +320,7 @@ function sourceInputs(row: FranchiseValueInputRow): FranchiseDesignationEligibil
   };
 }
 
-function commonLimitations(row: FranchiseValueInputRow): string[] {
+function commonLimitations(row: EligibilityValueRow): string[] {
   const limitations = [...row.limitations];
   if (!row.parkFactorAvailability.seedParkFactorsAvailable || !row.parkFactorAvailability.parkAdjustedValueInputsAvailable) {
     limitations.push('Park-factor state is not trusted for final designation or value output in internal v1.');
@@ -296,7 +334,7 @@ function commonLimitations(row: FranchiseValueInputRow): string[] {
   return unique(limitations);
 }
 
-function stableWarPreviewBlockers(row: FranchiseValueInputRow, type: 'TEAM_MVP' | 'ACE'): string[] {
+function stableWarPreviewBlockers(row: EligibilityValueRow, type: 'TEAM_MVP' | 'ACE'): string[] {
   const reasons = [...mlbBlockers(row)];
   const consumerTrust = row.warConsumerTrust;
   if (!hasSeasonMetadata(row)) {
@@ -326,7 +364,7 @@ function stableWarPreviewBlockers(row: FranchiseValueInputRow, type: 'TEAM_MVP' 
 }
 
 function classifyTeamMvpOrAce(
-  row: FranchiseValueInputRow,
+  row: EligibilityValueRow,
   designationType: 'TEAM_MVP' | 'ACE',
   rankedCandidates: Map<string, RankedCandidate>,
 ): Pick<FranchiseDesignationEligibilityRecord, 'status' | 'reasons'> {
@@ -358,7 +396,7 @@ function classifyTeamMvpOrAce(
 }
 
 function valueDesignationBlockers(
-  row: FranchiseValueInputRow,
+  row: EligibilityValueRow,
   designationType: 'FAN_FAVORITE' | 'ALBATROSS',
 ): string[] {
   const reasons = [...mlbBlockers(row)];
@@ -368,11 +406,48 @@ function valueDesignationBlockers(
   if (row.teamSalaryBaseline === null) {
     reasons.push('Team payroll baseline is required for salary/value designation context.');
   }
-  reasons.push(`${designationType} requires canonical True Value and value-delta inputs, which are unavailable in internal v1.`);
+  if (!finiteNumber(row.trueValue) || !finiteNumber(row.contractValue) || !finiteNumber(row.valueDelta)) {
+    reasons.push(`${designationType} requires persisted canonical True Value and Value Delta rows.`);
+  }
+  if (designationType === 'ALBATROSS' && row.warConsumerTrust?.fanFavoriteAlbatrossDesignations !== true) {
+    reasons.push('ALBATROSS active designation requires D6 trusted-value artifact membership with at least two MLB peers.');
+  }
   if (designationType === 'FAN_FAVORITE') {
+    reasons.push('FAN_FAVORITE requires the morale-gated value-designation trust path; D7b only de-gates Albatross.');
     reasons.push('FAN_FAVORITE also depends on fan/morale systems that are not canonical in internal v1.');
   }
   return reasons;
+}
+
+function classifyAlbatross(
+  row: EligibilityValueRow,
+  rankedCandidates: Map<string, RankedCandidate>,
+): Pick<FranchiseDesignationEligibilityRecord, 'status' | 'reasons'> {
+  const blockers = valueDesignationBlockers(row, 'ALBATROSS');
+  if (blockers.length > 0) {
+    return { status: 'blocked', reasons: blockers };
+  }
+  const rankingReasons = rankingBlockers(row, 'ALBATROSS');
+  if (rankingReasons.length > 0) {
+    return { status: 'blocked', reasons: rankingReasons };
+  }
+  const rankedCandidate = rankedCandidates.get(candidateKey(row.currentTeamId, 'ALBATROSS'));
+  if (!rankedCandidate || rankedCandidate.row.playerId !== row.playerId) {
+    return {
+      status: 'blocked',
+      reasons: [
+        'ALBATROSS active designation is ranked/selective; this input-ready player is not the worst trusted team Value Delta candidate.',
+      ],
+    };
+  }
+
+  return {
+    status: 'active',
+    reasons: [
+      'ALBATROSS ranked active v1 designation has negative team-relative Value Delta evidence and D6 scoped trusted-value artifact membership.',
+      'Season-end locking/carryover, awards, morale mutation, relationships, salary movement, and Mode 3 remain blocked.',
+    ],
+  };
 }
 
 function deferredNarrativeBlockers(designationType: 'CAPTAIN' | 'FAN_HOPEFUL' | 'CORNERSTONE'): string[] {
@@ -395,21 +470,24 @@ function deferredNarrativeBlockers(designationType: 'CAPTAIN' | 'FAN_HOPEFUL' | 
 }
 
 function classifyDesignation(
-  row: FranchiseValueInputRow,
+  row: EligibilityValueRow,
   designationType: FranchiseDesignationEligibilityType,
   rankedCandidates: Map<string, RankedCandidate>,
 ): Pick<FranchiseDesignationEligibilityRecord, 'status' | 'reasons'> {
   if (designationType === 'TEAM_MVP' || designationType === 'ACE') {
     return classifyTeamMvpOrAce(row, designationType, rankedCandidates);
   }
-  if (designationType === 'FAN_FAVORITE' || designationType === 'ALBATROSS') {
+  if (designationType === 'ALBATROSS') {
+    return classifyAlbatross(row, rankedCandidates);
+  }
+  if (designationType === 'FAN_FAVORITE') {
     return { status: 'blocked', reasons: valueDesignationBlockers(row, designationType) };
   }
   return { status: 'blocked', reasons: [...mlbBlockers(row), ...deferredNarrativeBlockers(designationType)] };
 }
 
 function recordFor(
-  row: FranchiseValueInputRow,
+  row: EligibilityValueRow,
   designationType: FranchiseDesignationEligibilityType,
   rankedCandidates: Map<string, RankedCandidate>,
 ): FranchiseDesignationEligibilityRecord {
@@ -426,7 +504,7 @@ function recordFor(
     rosterStatus: row.rosterStatus,
     designationType,
     status: classification.status,
-    persistable: classification.status === 'active' && (designationType === 'TEAM_MVP' || designationType === 'ACE'),
+    persistable: classification.status === 'active' && (designationType === 'TEAM_MVP' || designationType === 'ACE' || designationType === 'ALBATROSS'),
     reasons: unique(classification.reasons),
     limitations: commonLimitations(row),
     sourceInputs: sourceInputs(row),
@@ -435,12 +513,24 @@ function recordFor(
 
 export function classifyFranchiseDesignationEligibility(
   valueInputReport: FranchiseValueInputReport,
+  trueValueRows: FranchiseTrueValueRow[] = [],
 ): FranchiseDesignationEligibilityReport {
+  const trueValueByPlayer = new Map(trueValueRows.map((row) => [row.playerId, row]));
+  const rows: EligibilityValueRow[] = valueInputReport.rows.map((row) => {
+    const trueValue = trueValueByPlayer.get(row.playerId);
+    return {
+      ...row,
+      trueValue: trueValue?.trueValue ?? null,
+      contractValue: trueValue?.contractValue ?? null,
+      valueDelta: trueValue?.valueDelta ?? null,
+    };
+  });
   const rankedCandidates = new Map<string, RankedCandidate>([
-    ...buildRankedCandidates(valueInputReport.rows, 'TEAM_MVP'),
-    ...buildRankedCandidates(valueInputReport.rows, 'ACE'),
+    ...buildRankedCandidates(rows, 'TEAM_MVP'),
+    ...buildRankedCandidates(rows, 'ACE'),
+    ...buildRankedCandidates(rows, 'ALBATROSS'),
   ]);
-  const records = valueInputReport.rows.flatMap((row) =>
+  const records = rows.flatMap((row) =>
     ALL_DESIGNATION_TYPES.map((designationType) => recordFor(row, designationType, rankedCandidates)),
   );
 
@@ -457,8 +547,8 @@ export function classifyFranchiseDesignationEligibility(
     limitations: unique([
       ...valueInputReport.limitations,
       ...records.flatMap((record) => record.limitations),
-      'Only TEAM_MVP and ACE can persist as active v1 designations from trusted scoped WAR input gates.',
-      'Fan Favorite, Albatross, Cornerstone, Captain, and Fan Hopeful remain blocked/deferred by policy matrix.',
+      'Only TEAM_MVP, ACE, and ALBATROSS can persist as active v1 designations from trusted scoped input gates.',
+      'Fan Favorite, Cornerstone, Captain, and Fan Hopeful remain blocked/deferred by policy matrix.',
       'TWO-WAY players are routed as pitcher-only for internal v1 designations and can only appear through ACE when pitcher evidence qualifies.',
     ]),
   };
@@ -468,5 +558,10 @@ export async function buildFranchiseDesignationEligibility(
   input: BuildFranchiseValueInputRowsInput,
 ): Promise<FranchiseDesignationEligibilityReport> {
   const valueInputReport = await buildFranchiseValueInputRows(input);
-  return classifyFranchiseDesignationEligibility(valueInputReport);
+  const trueValueRows = await getFranchiseTrueValueRows({
+    franchiseId: valueInputReport.franchiseId,
+    seasonId: valueInputReport.seasonId,
+    statsScopeId: valueInputReport.statsScopeId,
+  });
+  return classifyFranchiseDesignationEligibility(valueInputReport, trueValueRows);
 }

@@ -403,3 +403,29 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   firewall test) · promotion mutation-honest (pinned both sides) · no new store/version bump. **BROWSER-PENDING
   (batched):** trusted MVP/ACE shows solid live badge; untrusted/non-top stays 'Proj.'; FF/Albatross still 'Proj.'.
   **→ NEXT: D7b (Albatross live + the D6 trustedPlayerIds trust filter — the untrusted-value-leak fix).**
+
+- **2026-06-17 (overnight, AUTH-4) — STARTED: D7b (Albatross live + close the untrusted-value leak).** Grounding from
+  the D7 map (`wf_fde440e6-dd3`) + Captain code-verification: (a) the canonical Albatross selection names the
+  most-negative valueDelta player per team with NO peer-pool check → an untrusted (<2-MLB-peer) player can be branded
+  Albatross, violating the D0 ">=2 MLB peers BLOCK" boundary (the leak); (b) `warConsumerTrust.
+  fanFavoriteAlbatrossDesignations` is HARDCODED false (franchiseValueInputs.ts:47/:341) — not yet wired to trust; (c)
+  `isPlayerTrustedForValue(artifact, player.id)` (per-player ≥2-peer membership) is the authoritative source, already
+  used for trustedForTrueValue (:469). **D7b** = wire that flag real + filter the Albatross SELECTION to trusted (close
+  the leak at the naming site) + de-gate Albatross in eligibility → 'active' for trusted+negative+worst-on-team + add
+  ALBATROSS to ACTIVE_PROMOTION_TYPES (reuse D7a's promotion/event/badge machinery) + ALBATROSS live badge. Contract in
+  PROMPT_CONTRACTS.md; Codex invoked under the 30-min watchdog. **DEFAULTS-TAKEN:** trust = isPlayerTrustedForValue
+  (read-only live/frozen artifact, never recompute TV) / filter at the selection site / v1 policy = most-negative
+  trusted valueDelta, NO salary floor (orphaned fanFavoriteEngine policy NOT adopted) / -1 fame DORMANT / Fan Favorite
+  stays projected-blocked (morale-gated) / FF selection unchanged (follow-up if JK wants its preview trust-filtered).
+
+- **2026-06-17 (overnight, AUTH-4) — D7b COMMITTED → D7 COMPLETE.** Build clean (watchdog held). Captain (Opus)
+  RIGOROUS independent audit = **VERIFIED**. Diff = 9 files (4 product + 5 test). The untrusted-value LEAK is CLOSED at
+  the selection site (`valueTrusted` filter) AND the eligibility de-gate; both bind the D6 per-player ≥2-peer
+  membership (`isPlayerTrustedForValue` → `warConsumerTrust.fanFavoriteAlbatrossDesignations`, previously hardcoded
+  false). Albatross promotes via the same D7a eligibility-verdict gate; FF stays blocked. **Gates (re-ran):** tsc 0 ·
+  build 0 · full suite **7,260 pass / 3 fail (7,263 total)** = EXACTLY the characterized set, ZERO new reds ·
+  **LEAK CLOSURE MUTATION-PROVEN** (remove `valueTrusted` → 4 tests RED; eligibility test: untrusted worst −28/1-peer
+  BLOCKED, trusted worst −14/4-peer active) · **FIREWALL INTACT** (no morale/fame import; ALBATROSS_NAMED −1 dormant;
+  no live emitter) · no new store/version bump · TV read-only. **BROWSER-PENDING (batched):** Albatross named only for
+  a ≥2-peer worst-negative-value player; solid red live badge; no morale/salary effect. **→ NEXT: D8 (award-trust
+  gate) — consume D6's frozen artifact; promote trustedForAwards/finalWarTrusted to computed; adaptive thresholds.**

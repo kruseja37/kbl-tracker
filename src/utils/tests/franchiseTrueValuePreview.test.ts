@@ -615,9 +615,9 @@ describe('franchise true value preview contract', () => {
 
     expect(preview.policies.valueDeltaTrustedForDesignations).toBe(false);
     expect(findDesignation(eligibility.records, 'FAN_FAVORITE').status).toBe('blocked');
-    expect(findDesignation(eligibility.records, 'FAN_FAVORITE').reasons.join(' ')).toMatch(/True Value and value-delta inputs/i);
+    expect(findDesignation(eligibility.records, 'FAN_FAVORITE').reasons.join(' ')).toMatch(/persisted canonical True Value and Value Delta rows/i);
     expect(findDesignation(eligibility.records, 'ALBATROSS').status).toBe('blocked');
-    expect(findDesignation(eligibility.records, 'ALBATROSS').reasons.join(' ')).toMatch(/True Value and value-delta inputs/i);
+    expect(findDesignation(eligibility.records, 'ALBATROSS').reasons.join(' ')).toMatch(/persisted canonical True Value and Value Delta rows/i);
   });
 
   test('computes value-delta designation trust from artifact-backed value input rows', () => {
