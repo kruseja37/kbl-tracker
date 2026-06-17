@@ -37,6 +37,7 @@ const expectedTrackerStores = [
   'franchiseSeasonLedgerRows',
   'franchiseSeasonSummaries',
   'franchiseTrueValueRows',
+  'franchiseTrustedValueArtifacts',
   'gameStories',
   'llmUsageLog',
   'mojoFitnessSnapshots',
@@ -56,7 +57,9 @@ const expectedTrackerStores = [
   'reporters',
   'rivalryScores',
   'rosterSnapshots',
+  'seasonEmissionConfig',
   'seasonMetadata',
+  'seasonNewsItems',
   'userPreferences',
 ];
 
@@ -94,12 +97,12 @@ describe('franchise season salary ledger storage', () => {
     await deleteDatabase(DB_NAME);
   });
 
-  test('trackerDb v15 creates the ledger store and preserves every prior tracker store', async () => {
+  test('trackerDb migration creates the ledger store and preserves every prior tracker store', async () => {
     const db = await initFranchiseSeasonLedgerDatabase();
 
-    expect(TRACKER_DB_VERSION).toBe(15);
+    expect(TRACKER_DB_VERSION).toBe(17);
     expect(db.name).toBe(DB_NAME);
-    expect(db.version).toBe(15);
+    expect(db.version).toBe(TRACKER_DB_VERSION);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(expectedTrackerStores);
 
     const tx = db.transaction(FRANCHISE_SEASON_LEDGER_STORE_NAME, 'readonly');
