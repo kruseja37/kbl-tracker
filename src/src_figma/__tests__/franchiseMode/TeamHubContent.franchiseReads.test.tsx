@@ -344,6 +344,7 @@ function valueInputReport(overrides: Record<string, unknown> = {}) {
     seasonNumber: 2,
     generatedAt: 1,
     seasonContext: valueInputRow().seasonContext,
+    trustedValueArtifactFrozen: false,
     rows,
     trueValuePolicy: {
       finalTrueValueCalculated: false,
@@ -748,6 +749,14 @@ describe('TeamHubContent franchise-owned visible reads', () => {
   });
 
   test('shows read-only value salary and designation truth labels from lifecycle gates', async () => {
+    mocks.mockBuildFranchiseValueInputRows.mockResolvedValue(valueInputReport({
+      trustedValueArtifactFrozen: true,
+      trueValuePolicy: {
+        finalTrueValueCalculated: true,
+        persistedTrueValueCreated: true,
+      },
+    }));
+
     render(<TeamHubContent />);
 
     fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
@@ -757,11 +766,11 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(truthRegion).getByText(/Team payroll proof: STABLE BASELINE/i)).toBeInTheDocument();
     expect(within(truthRegion).getByText(/Performance salary formula: ACTIVE/i)).toBeInTheDocument();
     expect(within(truthRegion).getByText(/Offseason salary recalculation: DEFERRED/i)).toBeInTheDocument();
-    expect(within(truthRegion).getByText(/True Value \/ value delta: TRUSTED for projected designations only/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/True Value \/ value delta: TRUSTED \(frozen artifact; now also feeds Albatross\/Fan Favorite \+ awards\)/i)).toBeInTheDocument();
     expect(within(truthRegion).getByText(/Luxury tax, salary matching, and AI salary valuation: BLOCKED \/ INACTIVE/i)).toBeInTheDocument();
     expect(within(truthRegion).getByText(/Proj. MVP, Proj. Ace, Proj. Fan Favorite, Proj. Albatross canonical projected designation\(s\); season-end locking and carryover remain blocked/i)).toBeInTheDocument();
-    expect(within(truthRegion).getByText(/Designation persistence: PROJECTED rows only/i)).toBeInTheDocument();
-    expect(within(truthRegion).getByText(/Captain, Fan Hopeful, season-end locks, morale effects, and trade discounts remain blocked/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/Designation persistence: live engine designation rows can be ACTIVE; non-live rows remain PROJECTED/i)).toBeInTheDocument();
+    expect(within(truthRegion).getByText(/Season-end locks, morale effects, and trade discounts remain blocked/i)).toBeInTheDocument();
     expect(within(truthRegion).queryByText(/MVP winner/i)).not.toBeInTheDocument();
     expect(within(truthRegion).queryByText(/Ace winner/i)).not.toBeInTheDocument();
     expect(within(truthRegion).queryByText(/Fan Favorite designation/i)).not.toBeInTheDocument();
@@ -883,12 +892,12 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(foundationRegion).getByText(/Relationship state changes: BLOCKED/i)).toBeInTheDocument();
     expect(within(foundationRegion).getByText(/Narrative\/random event generation: BLOCKED/i)).toBeInTheDocument();
     expect(within(foundationRegion).getByText(/Story persistence: BLOCKED/i)).toBeInTheDocument();
-    expect(within(foundationRegion).getByText(/Awards persistence: BLOCKED/i)).toBeInTheDocument();
+    expect(within(foundationRegion).getByText(/Awards persistence: LIVE \(finalized at season end; effects dormant\)/i)).toBeInTheDocument();
     expect(within(foundationRegion).getByText(/Mode 3\/offseason execution: DEFERRED/i)).toBeInTheDocument();
     expect(within(foundationRegion).getByText(/True ratings, true grade, hidden scout truth, and hidden personality modifiers are not surfaced/i)).toBeInTheDocument();
-    const valueWinsRegion = within(foundationRegion).getByRole('region', { name: /Team True Value and Expected Wins Preview/i });
-    expect(within(valueWinsRegion).getByText('TRUE VALUE + EXPECTED WINS PREVIEW')).toBeInTheDocument();
-    expect(within(valueWinsRegion).getByText('PREVIEW ONLY')).toBeInTheDocument();
+    const valueWinsRegion = within(foundationRegion).getByRole('region', { name: /Team True Value and Expected Wins/i });
+    expect(within(valueWinsRegion).getByText('TRUE VALUE + EXPECTED WINS')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('EXPECTED WINS ESTIMATE')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('CURRENT SALARY CONTEXT')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('NO SALARY MOVEMENT')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Team payroll proof')).toBeInTheDocument();
@@ -899,7 +908,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(valueWinsRegion).getByText('Contract years proof')).toBeInTheDocument();
     expect(within(valueWinsRegion).getAllByText('1/1').length).toBeGreaterThanOrEqual(2);
     expect(within(valueWinsRegion).getByText(/Blocked: .*At least two teams/i)).toBeInTheDocument();
-    expect(within(valueWinsRegion).getByText(/Blocked: expected-wins persistence, final designations, salary movement, morale\/relationship mutation, offseason, Mode 3/i)).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText(/Blocked: expected-wins persistence, final True Value handoff authority, salary movement, morale\/relationship mutation, offseason, Mode 3/i)).toBeInTheDocument();
     expect(within(valueWinsRegion).queryByRole('button')).not.toBeInTheDocument();
     expect(within(foundationRegion).queryByText(/hiddenPersonalityModifiers/i)).not.toBeInTheDocument();
     expect(within(foundationRegion).queryByText(/loyalty: 92/i)).not.toBeInTheDocument();
@@ -1012,7 +1021,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
     const rosterTable = await screen.findByRole('table', { name: /Franchise roster scan table/i });
-    const valueWinsRegion = await screen.findByRole('region', { name: /Team True Value and Expected Wins Preview/i });
+    const valueWinsRegion = await screen.findByRole('region', { name: /Team True Value and Expected Wins/i });
 
     expect(within(rosterTable).getByText('$3.00M')).toBeInTheDocument();
     expect(within(rosterTable).getByText('$4.0K')).toBeInTheDocument();
@@ -1046,7 +1055,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     render(<TeamHubContent />);
 
     fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
-    const valueWinsRegion = await screen.findByRole('region', { name: /Team True Value and Expected Wins Preview/i });
+    const valueWinsRegion = await screen.findByRole('region', { name: /Team True Value and Expected Wins/i });
 
     expect(within(valueWinsRegion).getByText('Current salary rows')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('1/1')).toBeInTheDocument();
@@ -1105,6 +1114,10 @@ describe('TeamHubContent franchise-owned visible reads', () => {
       stadiumMap: { 'team-1': 'Copied Park', 'team-2': 'Beta Park' },
     });
     mocks.mockBuildFranchiseValueInputRows.mockResolvedValue(valueInputReport({
+      trueValuePolicy: {
+        finalTrueValueCalculated: true,
+        persistedTrueValueCreated: true,
+      },
       rows: [
         valueInputRow({
           playerId: 'team-1-high-war-low-salary',
@@ -1144,22 +1157,24 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     render(<TeamHubContent />);
 
     fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
-    const valueWinsRegion = await screen.findByRole('region', { name: /Team True Value and Expected Wins Preview/i });
+    const valueWinsRegion = await screen.findByRole('region', { name: /Team True Value and Expected Wins/i });
 
-    expect(within(valueWinsRegion).getAllByText('PREVIEW ONLY').length).toBeGreaterThanOrEqual(1);
+    expect(within(valueWinsRegion).getByText('TRUE VALUE PROJECTED')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('PROJECTED')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('EXPECTED WINS ESTIMATE')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('CURRENT SALARY CONTEXT')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('NO SALARY MOVEMENT')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Copied Alpha')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Team salary total')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('2.0')).toBeInTheDocument();
-    expect(within(valueWinsRegion).getByText('Preview value total')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('Value total')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('10.0')).toBeInTheDocument();
-    expect(within(valueWinsRegion).getByText('Preview value delta')).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText('Value delta')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('8.0')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('Expected wins estimate')).toBeInTheDocument();
     expect(within(valueWinsRegion).getByText('12.0')).toBeInTheDocument();
-    expect(within(valueWinsRegion).getByText(/League average preview value baseline: 10.0/i)).toBeInTheDocument();
-    expect(within(valueWinsRegion).getByText(/Blocked: expected-wins persistence, final designations, salary movement, morale\/relationship mutation, offseason, Mode 3/i)).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText(/League average value baseline: 10.0/i)).toBeInTheDocument();
+    expect(within(valueWinsRegion).getByText(/Blocked: expected-wins persistence, final True Value handoff authority, salary movement, morale\/relationship mutation, offseason, Mode 3/i)).toBeInTheDocument();
     expect(within(valueWinsRegion).queryByText(/Blocked: At least two teams/i)).not.toBeInTheDocument();
     expect(within(valueWinsRegion).queryByRole('button')).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchisePlayer).not.toHaveBeenCalled();
@@ -1904,7 +1919,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(within(truthRegion).getByText(/Team payroll proof: BLOCKED/i)).toBeInTheDocument();
     expect(within(truthRegion).getByText(/Team payroll proof limitation: missing handoff payroll proof/i)).toBeInTheDocument();
     expect(within(truthRegion).getByText(/Team payroll baseline is unavailable for salary\/value designation checks/i)).toBeInTheDocument();
-    const valueWinsRegion = await screen.findByRole('region', { name: /Team True Value and Expected Wins Preview/i });
+    const valueWinsRegion = await screen.findByRole('region', { name: /Team True Value and Expected Wins/i });
     expect(within(valueWinsRegion).getByText('Team payroll proof')).toBeInTheDocument();
     expect(valueWinsRegion).toHaveTextContent(/Salary blocker:/i);
     expect(valueWinsRegion).toHaveTextContent(/Team payroll proof is missing for this selected team/i);
@@ -1949,7 +1964,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
     const truthRegion = await screen.findByRole('region', { name: /Franchise v1 value salary designation truth labels/i });
-    const valueWinsRegion = await screen.findByRole('region', { name: /Team True Value and Expected Wins Preview/i });
+    const valueWinsRegion = await screen.findByRole('region', { name: /Team True Value and Expected Wins/i });
 
     expect(within(truthRegion).getByText(/FARM player salary context uses public draft\/scouting-safe salary/i)).toBeInTheDocument();
     expect(within(truthRegion).getByText(/Proj. Fan Favorite/i)).toBeInTheDocument();

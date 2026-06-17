@@ -251,15 +251,15 @@ describe('FranchiseHome Component', () => {
       expect(screen.queryByRole('button', { name: /START FINALIZE/i })).not.toBeInTheDocument();
     });
 
-    test('regular-season league leaders gate deferred awards and voting surfaces', () => {
+    test('regular-season league leaders report live awards/watchlists without enabling offseason ceremony controls', () => {
       render(<FranchiseHome />);
 
       fireEvent.click(screen.getByRole('button', { name: /LEAGUE LEADERS/i }));
 
       expect(screen.getByText('SEASON 1 LEAGUE LEADERS')).toBeInTheDocument();
       expect(screen.getByText('REAL BATTING AND PITCHING LEADERBOARDS')).toBeInTheDocument();
-      expect(screen.getByTestId('franchise-v1-awards-deferred')).toHaveTextContent(
-        'AWARDS AND VOTING DEFERRED',
+      expect(screen.getByTestId('franchise-v1-awards-live')).toHaveTextContent(
+        'AWARDS AND WATCHLISTS LIVE',
       );
       expect(screen.queryByText('CURRENT LEADERS & VOTING TRACKER')).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /GLOVES RACE/i })).not.toBeInTheDocument();

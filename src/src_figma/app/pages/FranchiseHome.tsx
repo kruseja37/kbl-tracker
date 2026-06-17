@@ -4545,12 +4545,12 @@ function LeagueLeadersContent() {
       </div>
 
       <div
-        data-testid="franchise-v1-awards-deferred"
+        data-testid="franchise-v1-awards-live"
         className="bg-[#4A6844] border-[4px] border-[#5A8352] p-4 text-center"
       >
-        <div className="text-[10px] text-[#C4A853] font-bold mb-1">AWARDS AND VOTING DEFERRED</div>
+        <div className="text-[10px] text-[#C4A853] font-bold mb-1">AWARDS AND WATCHLISTS LIVE</div>
         <div className="text-[9px] text-[#E8E8D8]/80">
-          Internal v1 shows stat leaderboards only. Gloves, Silver Sluggers, major award races, and voting trackers are not active.
+          Season award watchlists and finalized award rows are active when eligible; offseason ceremony effects remain separate and dormant.
         </div>
       </div>
     </div>

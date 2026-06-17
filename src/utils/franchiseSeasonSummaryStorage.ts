@@ -426,12 +426,12 @@ function buildAwardsAwareManifest(input: {
 
   categories.push(manifestCategory(
     'blocked-designation-families',
-    'Blocked/deferred designation families',
+    'Designation effect and carryover limits',
     'blocked',
-    'Fan Favorite, Albatross, Cornerstone, Captain, and Fan Hopeful remain blocked/deferred for v1.',
+    'Live v1 designation records are reported separately; designation effects and durable carryover remain deferred.',
     {
       blockers: [
-        'Final True Value/value delta, fan attachment, hidden charisma/leadership safety, and durable carryover policy are not approved.',
+        'Fan attachment effects, hidden-safety effect mutations, and durable carryover policy are not approved.',
       ],
     },
   ));
@@ -505,7 +505,7 @@ function buildAwardsAwareManifest(input: {
     'blocked',
     'Position-relative True Value and expected wins remain preview/read-only and are not final handoff authority.',
     {
-      blockers: ['Final True Value, persisted value delta, Fan Favorite, and Albatross promotion remain blocked.'],
+      blockers: ['Final True Value handoff authority and persisted expected-wins/value-delta authority remain blocked.'],
     },
   ));
 
