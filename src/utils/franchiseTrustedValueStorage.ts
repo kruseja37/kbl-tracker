@@ -28,7 +28,7 @@ export interface FranchiseTrustedValueArtifact extends FranchiseTrustedValueScop
     teamId: string;
     rosterStatus: string;
   }>;
-  frozen: false;
+  frozen: boolean;
   frozenAt: number | null;
   computedAt: number;
 }
@@ -77,6 +77,11 @@ export async function persistTrustedValueArtifact(
   if (!hasExplicitScope(artifact)) {
     throw new Error('Explicit franchiseId, seasonId, and statsScopeId are required for trusted value artifacts.');
   }
+  const existing = await getTrustedValueArtifact(artifact.franchiseId, artifact.seasonId, artifact.statsScopeId);
+  if (existing?.frozen === true && artifact.frozen !== true) {
+    console.warn('[TrustedValue] refused to overwrite a frozen artifact', scopeKey(artifact));
+    return existing;
+  }
   const db = await initFranchiseTrustedValueDatabase();
   const tx = db.transaction(STORE_NAME, 'readwrite');
   tx.objectStore(STORE_NAME).put(artifact);
@@ -87,6 +92,23 @@ export async function persistTrustedValueArtifact(
   }
 
   return artifact;
+}
+
+export async function freezeTrustedValueArtifactForSeason(
+  scope: FranchiseTrustedValueScopeInput,
+): Promise<FranchiseTrustedValueArtifact | null> {
+  const existing = await getTrustedValueArtifact(scope.franchiseId, scope.seasonId, scope.statsScopeId);
+  if (!existing) {
+    console.warn('[TrustedValue] freeze skipped: no artifact for scope', scope);
+    return null;
+  }
+  if (existing.frozen === true) return existing;
+
+  return persistTrustedValueArtifact({
+    ...existing,
+    frozen: true,
+    frozenAt: Date.now(),
+  });
 }
 
 export async function getTrustedValueArtifact(

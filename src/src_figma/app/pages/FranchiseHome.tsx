@@ -29,6 +29,7 @@ import {
 } from "../../../utils/syntheticGameFactory";
 import { processCompletedGame } from "../../../utils/processCompletedGame";
 import { markSeasonComplete } from "../../../utils/seasonStorage";
+import { freezeTrustedValueArtifactForSeason } from "../../../utils/franchiseTrustedValueStorage";
 import { getAllGames, getAllGamesByFranchise } from "../../../utils/scheduleStorage";
 import { getSeasonIdForScope } from "../../../utils/franchisePersistenceContract";
 import { startOffseason, OFFSEASON_PHASES, type OffseasonPhase } from "../../../utils/offseasonStorage";
@@ -3287,7 +3288,16 @@ function GameDayContent({
     if (isSeasonOver && !seasonComplete) {
       setSeasonComplete(true);
     }
-  }, [isSeasonOver]);
+    if (isSeasonOver && franchiseId && activeSeasonId) {
+      void freezeTrustedValueArtifactForSeason({
+        franchiseId,
+        seasonId: activeSeasonId,
+        statsScopeId: activeSeasonId,
+      }).catch((err) => {
+        console.warn('Failed to freeze trusted value artifact after season completion:', err);
+      });
+    }
+  }, [activeSeasonId, franchiseId, isSeasonOver, seasonComplete]);
 
   /**
    * Check if season is now complete after a game action.
@@ -3305,6 +3315,13 @@ function GameDayContent({
       const stillScheduled = freshGames.filter(g => g.status === 'SCHEDULED').length;
       if (stillScheduled === 0) {
         await markSeasonComplete(activeSeasonId);
+        if (franchiseId) {
+          await freezeTrustedValueArtifactForSeason({
+            franchiseId,
+            seasonId: activeSeasonId,
+            statsScopeId: activeSeasonId,
+          });
+        }
         setSeasonComplete(true);
         setToastMessage('REGULAR SEASON COMPLETE!');
       }

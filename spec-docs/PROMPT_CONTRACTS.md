@@ -7467,3 +7467,110 @@ TRACKER_DB_VERSION 17, pin 17, KBL_BACKUP_VERSION 2; 4 flags computed; salaryMov
 
 **Status:** contract issued; Codex invoked.
 
+---
+
+## D6b — True-Value TRUST gate (part 2: SEASON-END FREEZE) — 2026-06-16 (autonomous overnight run, AUTH-4)
+
+**ROUTE:** Codex | high reasoning effort → Opus 4.8 audit (auditor ≠ builder). Autonomous overnight (AUTH-4 standing
+go; AUTH-1 auto-commit on VERIFIED). THE MAKE-OR-BREAK value-spine ticket (freeze half). Persistence / saved-data-shape
+→ audit RIGOROUSLY.
+
+**SOURCE OF TRUTH:** `FRANCHISE_PLAYABLE_V1_DEFINITION.md:101` (D6 row) + `:129` boundary ("**D6 freezes one
+trusted-value artifact; D7/D8 consume it, never recompute True Value**"). JK lock-timing ruling (D6 map `wf_3c443a04-35e`):
+**SEASON-END FREEZE** — the artifact stays live each game (D6a) and **locks at the last regular-season game** so D8/D9
+awards compute on a deterministic frozen spine; **regular-season-only**. D6b map: `wf_6f52f76d-cf6` (5 grounded
+readers; every claim file:line-verified by the Captain before this contract).
+
+**CAPTAIN DEFAULTS (AUTH-4 — documented, JK-overridable on review; logged in AUTONOMOUS_RUN_LOG.md):**
+1. **Freeze BOTH stores, not just the artifact.** Spec says "the artifact" (singular), but D9 RANKS winners on the
+   numbers in the separate `franchiseTrueValueRows` store — freezing membership while letting ranking numbers drift
+   = a determinism hole. So the freeze gates the WHOLE per-game recompute: once frozen, neither the artifact nor the
+   rows are rewritten. (Both are written together in `calculateAndPersistFranchiseTrueValueForSeason`.)
+2. **Freeze-in-place** (flip the flag on the artifact the last game's recompute already wrote) — NOT recompute-then-freeze.
+   The artifact's `trustedPlayerIds`/`rosterStateSnapshot` are already current as of the last aggregated game; skipped /
+   score-only finales add no aggregated stats. Lower blast radius, no recompute-input re-assembly in the UI layer.
+3. **Idempotent freeze; `frozenAt` stamped exactly once** (re-fires must no-op, never re-stamp).
+4. **HARD anti-thaw for v1** — no unfreeze/re-open affordance; a frozen scope is immutable for the season.
+5. **No `contractVersion` bump** (stays `'d6-v1'`) — `frozen:true`+`frozenAt` is sufficient signal; the schema/policy
+   is unchanged.
+6. **Trigger BOTH paths** — `checkSeasonComplete` (sim/batch/skip handlers) AND the `isSeasonOver` effect (the
+   live-played-finale + load-into-complete-season path). Both call the same idempotent helper. (The map flagged that
+   wiring only `checkSeasonComplete` MISSES a season ended by a live-played final game, which returns via the effect.)
+
+**GOAL:** Lock the D6a `franchiseTrustedValueArtifacts` record (+ its `franchiseTrueValueRows` numbers) at the last
+regular-season game: set `frozen:true`/`frozenAt`, and make the per-game recompute REFUSE to overwrite a frozen scope.
+D6b STRICTLY ADDS THE FREEZE — it does NOT flip any award flag (that is D8) and does NOT recompute True Value.
+
+**ALLOWED (exact edits):**
+- `src/utils/franchiseTrustedValueStorage.ts`: (a) widen `FranchiseTrustedValueArtifact.frozen` from the literal
+  `false` (line 31) → `boolean`; (b) NEW idempotent `freezeTrustedValueArtifactForSeason(scope: FranchiseTrustedValueScopeInput)`:
+  `getTrustedValueArtifact` → if null `console.warn`+return null (NO phantom record) → if `frozen===true` return as-is
+  (no re-stamp) → else set `frozen:true`+`frozenAt:Date.now()` and persist; (c) **Layer-A anti-thaw guard** inside
+  `persistTrustedValueArtifact` (the SOLE writer): read existing by scopeKey first; if `existing?.frozen===true &&
+  incoming.frozen!==true` → `console.warn`+return existing UNCHANGED (refuse to un-freeze); otherwise put as today.
+- `src/utils/franchiseTrueValueStorage.ts`: **Layer-B guard** at the top of `calculateAndPersistFranchiseTrueValueForSeason`
+  (after the scope-validation block ~line 503): read `getTrustedValueArtifact(scope...)`; if `existing?.frozen===true`
+  → early-return `{ rows: [], skippedRows: [], persisted: false, blockers: ['Trusted value artifact frozen for scope
+  (D6b); recompute skipped.'] }` WITHOUT calling `auditTrustedValuePeerPools` / `persistTrustedValueArtifact` /
+  `replaceFranchiseTrueValueRowsForScope`. (Caller `persistTrueValueAfterWar` already tolerates `!persisted` → skips
+  designations gracefully.) `auditTrustedValuePeerPools` keeps returning `frozen:false` (live default) — unchanged.
+- `src/src_figma/app/pages/FranchiseHome.tsx`: (a) in `checkSeasonComplete` after `markSeasonComplete(activeSeasonId)`
+  (~line 3307) `if (franchiseId) await freezeTrustedValueArtifactForSeason({ franchiseId, seasonId: activeSeasonId,
+  statsScopeId: activeSeasonId })` inside the existing try; (b) in the `isSeasonOver` effect (3286-3290) fire the same
+  idempotent freeze (fire-and-forget, guarded on franchiseId+activeSeasonId) when `isSeasonOver`. Keep
+  `setSeasonComplete(true)` as-is.
+- Tests: `franchiseTrustedValueStorage.test.ts` (freeze idempotency: stamp-once; Layer-A refusal) + a freeze/anti-thaw
+  test (seed→freeze→`calculateAndPersistFranchiseTrueValueForSeason` again → artifact STILL frozen, same `frozenAt`,
+  same `trustedPlayerIds`, rows UNCHANGED — must go RED without the guards) + `backupRestore.franchiseParity.test.ts`
+  (a `frozen:true` round-trip case; parity-guard stays green).
+
+**DO NOT:** flip `trustedForAwards`/`finalWarTrusted` or touch `franchiseAnalyticsTrust.ts` (D8) · create
+`franchiseAwardsEngine`/`Storage` (D9) · base-IV oracle / `computeIV` / `ivEngine` / golden / frozen-value oracle ·
+add any new store or bump `TRACKER_DB_VERSION` (stays 17) · change `KBL_BACKUP_VERSION` (stays 2) · bump
+`contractVersion` (stays `'d6-v1'`) · add any unfreeze/thaw path · D7 designation promotion / UI labels · salary
+movement / morale / Captain-Fan Hopeful-Cornerstone / Mode-3 / offseason · the `franchiseTrueValueSnapshots`
+game-1 trough store (that is D9 LSD-1, a different artifact).
+
+**VERIFICATION (prefix `NODE_ENV= `, node at `~/.nvm/versions/node/v20.20.0/bin`):** `tsc --noEmit` 0 · `npm run build`
+0 · the new freeze/anti-thaw tests + the D2 parity-guard (`backupRestore.franchiseParity.test.ts`) + the existing
+`franchiseTrustedValueStorage` / `franchiseTrueValue*` suites pass · grep: `TRACKER_DB_VERSION` still 17, backup pin
+still 17, `KBL_BACKUP_VERSION` still 2, `contractVersion` still `'d6-v1'`, ZERO edits to `franchiseAnalyticsTrust.ts`.
+
+**STOP IF:** an out-of-ALLOWED edit becomes necessary; any oracle/golden/`computeIV` touch is implied; a new store or
+DB version bump becomes necessary; the parity-guard reveals other missing stores; the `frozen` type widen ripples to
+a consumer that relied on the `false` literal in a way that needs an out-of-scope edit.
+
+**FORMAT:** files changed (every `git status` path + total count) · changes per file (cite the default # each satisfies)
+· verification output pasted · "D6b complete" or "BLOCKED: <reason>".
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited.
+
+**Status:** contract issued; Codex invoked.
+
+### D6b-AUDIT + EXECUTION RECORD (2026-06-17, autonomous overnight AUTH-4)
+
+**ROUTE actual:** Codex (high reasoning, background `codex exec`, workspace-write) BUILT → Opus 4.8 (Captain)
+independent AUDIT (auditor ≠ builder). **Build #1 HUNG** (~6h40m on a stalled model-API call before any edit; repo
+clean) → killed → **re-dispatched inside a 30-min watchdog** → Build #2 exit 0.
+
+**AUDIT VERDICT: CONFORMS / VERIFIED.** Independent re-verification (Opus — re-ran, not graded from the builder paste):
+- Diff = 6 files, all within ALLOWED: `franchiseTrustedValueStorage.ts` (frozen literal→`boolean`; idempotent
+  `freezeTrustedValueArtifactForSeason`; Layer-A anti-thaw guard in the sole writer `persistTrustedValueArtifact`)
+  · `franchiseTrueValueStorage.ts` (Layer-B early-return before `buildFranchiseValueInputRows` when frozen — locks
+  BOTH the artifact AND `franchiseTrueValueRows`) · `FranchiseHome.tsx` (freeze after `markSeasonComplete` + the
+  `isSeasonOver` effect for live-played finales; effect dep-array correctly widened) · 3 test files.
+- `tsc --noEmit` 0 (Opus) · `npm run build` success (Opus) · full suite **7,254 pass / 3 fail / 400 files** — the 3
+  are EXACTLY the characterized set (wpaRuntimeBoundary + franchiseManualSmokeFixture + franchiseNarrativeEventEligibility);
+  ZERO new reds; +3 new D6b tests pass.
+- **Mutation-honesty PROVEN:** disabling the Layer-B guard turns the anti-thaw test RED (it feeds a different recompute
+  input post-freeze and asserts `buildFranchiseValueInputRows` was never called + rows/artifact byte-unchanged).
+- Invariants: TRACKER_DB_VERSION 17, backup pin 17, KBL_BACKUP_VERSION 2, contractVersion `'d6-v1'` all unchanged;
+  `franchiseAnalyticsTrust.ts` (D8 award flags) UNTOUCHED; no new store; scope `{franchiseId, activeSeasonId,
+  activeSeasonId}` matches the artifact's stored key (games are stamped seasonId===statsScopeId===activeSeasonId);
+  sole recompute caller (`processCompletedGame:227`) tolerates the frozen `!persisted` early-return.
+- **BROWSER-PENDING (batched):** on real franchise data, finishing a regular season (last game played, simmed, OR
+  skipped) freezes the trusted-value artifact (frozen:true + frozenAt), and a subsequent completed game does not
+  un-freeze it. (Backend freeze logic; the user-visible label promotion is D7/D11.)
+
+**Status:** VERIFIED → committed (branch `codex/franchise-v1-next`, not pushed).
+

@@ -321,3 +321,54 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   false · KBL_BACKUP_VERSION 2 · no freeze (D6b). Independent gates: tsc 0; 68 tests pass incl. the D2 parity-guard
   green with the new store + the boundary no-leak. NOT browser-pending (backend trust computation; the user-visible
   label flip is D7/D11). **→ NEXT: D6b (season-end freeze) → D7 (designations live, incl. Albatross + Fan Favorite).**
+
+- **2026-06-16 (overnight, AUTH-4) — STARTED: D6b (season-end freeze).** Fresh thread resumed under the AUTH-4
+  start-of-session waiver (did the 5-file reads + both run docs, restated, proceeded — no JK wait). Mapped via
+  workflow `wf_6f52f76d-cf6` (5 grounded readers: artifact store + write path / season-end trigger / D8-D9
+  consumption / persistence-parity / adversarial failure-modes). Every decision-critical claim Captain-verified at
+  file:line before contracting. **The freeze is data-cheap but correctness-critical:** D6a's per-game recompute
+  (`calculateAndPersistFranchiseTrueValueForSeason` → `persistTrustedValueArtifact`, unconditional put) hardcodes
+  `frozen:false` every game (`franchiseTrueValueStorage.ts:317-318`), so a freeze is meaningless unless the recompute
+  RESPECTS it — the central guard. Design: type-widen `frozen` literal→boolean; idempotent
+  `freezeTrustedValueArtifactForSeason` helper; Layer-A anti-thaw guard in the sole writer + Layer-B early-return in
+  the recompute orchestrator (locks BOTH the artifact and the `franchiseTrueValueRows` numbers); trigger in BOTH
+  `checkSeasonComplete` and the `isSeasonOver` effect. NO new store, NO DB bump (stays v17), KBL_BACKUP_VERSION 2,
+  contractVersion `'d6-v1'` — confirmed migration-free (parity-guard compares store NAMES only). Contract in
+  PROMPT_CONTRACTS.md; Codex invoked (high reasoning). Will audit RIGOROUSLY (value spine; D7/D8/MOY consume it).
+
+  **DEFAULTS-TAKEN (AUTH-4, JK-overridable on review):**
+  - **Freeze BOTH stores** (artifact + `franchiseTrueValueRows`), not just the artifact — D9 ranks on the row
+    numbers; freezing membership alone = a determinism hole. Gated by one read of the artifact's `frozen` flag.
+  - **Freeze-in-place**, not recompute-then-freeze (artifact already current as of the last aggregated game).
+  - **Hard anti-thaw v1** — no unfreeze affordance; a frozen scope is immutable for the season.
+  - **No `contractVersion` bump** (`'d6-v1'` stays); `frozen:true`+`frozenAt` is the signal.
+  - **Trigger BOTH** `checkSeasonComplete` + the `isSeasonOver` effect (the second covers a live-PLAYED finale that
+    returns to FranchiseHome via the effect, not the sim/batch/skip handlers — a real gap the map caught).
+  - **KNOWN LIMITATION (documented):** the read path never recomputes, so reload is safe; but a season completed
+    under PRE-D6b code (no freeze ever triggered) stays unfrozen until something re-enters the trigger — not a
+    concern for new v1 franchises. No back-fill freeze in scope.
+
+- **2026-06-17 (overnight, AUTH-4) — D6b BUILD #1 HUNG → killed + re-dispatched (infra stall, NOT a safety wall).**
+  The first `codex exec` dispatch (PID 97560) stalled mid-run: ran its exploration greps, made the next model-API
+  call, and the stream never returned — process alive in `S` (I/O sleep) for ~6h40m with the run log frozen
+  (292,193 bytes, unchanged) and **ZERO product files written** (repo clean: only the 2 doc edits). Diagnosed via
+  etime + a live no-growth sample + `git status`. Killed (TERM, no survivors); repo intact (nothing half-written →
+  no revert needed). Cause: transient model-API/stream hang AFTER several successful tool calls (codex auth/API
+  worked initially), so a fresh retry is the correct call — the contract is unchanged (NOT a fix iteration). **Guard
+  added:** re-dispatched inside a 30-min watchdog (`kill -9` if codex outlives 1800s) so any repeat hang becomes a
+  completion notification instead of a silent multi-hour stall. Build #2 running (task `bi0hfc44x`, run2.log/out2).
+
+- **2026-06-17 (overnight, AUTH-4) — D6b COMMITTED.** Build #2 exit 0; Captain (Opus) RIGOROUS independent audit =
+  **VERIFIED** (make-or-break value spine — audited hardest per AUTH-4). Diff = 6 files (3 product + 3 test), all
+  within ALLOWED. Substance: `frozen` literal→`boolean`; idempotent `freezeTrustedValueArtifactForSeason` (no-op +
+  warn if no artifact; never re-stamps `frozenAt`); **Layer-A** anti-thaw guard in the sole writer
+  `persistTrustedValueArtifact` (refuses to overwrite a frozen record with a non-frozen one); **Layer-B** early-return
+  in `calculateAndPersistFranchiseTrueValueForSeason` (skips the whole recompute when frozen → locks BOTH the artifact
+  AND `franchiseTrueValueRows`); freeze triggered from `checkSeasonComplete` AND the `isSeasonOver` effect (covers a
+  live-PLAYED finale). **Independent gates (re-ran, not trusted from paste):** tsc 0 · build 0 · full suite **7,254
+  pass / 3 fail** = EXACTLY the characterized set, ZERO new reds, +3 new D6b tests pass · **mutation-proven** (Layer-B
+  disabled → anti-thaw test RED) · TRACKER_DB_VERSION 17 / pin 17 / KBL_BACKUP_VERSION 2 / contractVersion `'d6-v1'`
+  unchanged · `franchiseAnalyticsTrust.ts` (D8 flags) UNTOUCHED · scope matches the stored key · sole recompute
+  caller tolerates the `!persisted` early-return. **BROWSER-PENDING (batched):** finish a regular season on real
+  franchise data → artifact freezes; a later game doesn't un-freeze. **→ NEXT: D7 (designations LIVE incl.
+  Albatross).** Hang-guard lesson: wrap every `codex exec` dispatch in a watchdog so a stalled call self-recovers.

@@ -25,6 +25,7 @@ import {
 } from '../franchiseTrueValueStorage';
 import {
   clearFranchiseTrustedValueDatabaseForTests,
+  freezeTrustedValueArtifactForSeason,
   getTrustedValueArtifact,
 } from '../franchiseTrustedValueStorage';
 
@@ -607,6 +608,51 @@ describe('franchise True Value storage', () => {
       valueDelta: 5000,
       computedAt: '2026-06-12T00:01:00.000Z',
     });
+  });
+
+  test('does not recompute or rewrite True Value rows after the trusted artifact is frozen', async () => {
+    const scope = {
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+      seasonNumber: 1,
+    };
+    mocks.buildFranchiseValueInputRows.mockResolvedValueOnce(report(peerLadder(1)));
+    await calculateAndPersistFranchiseTrueValueForSeason(scope, {
+      computedAt: '2026-06-12T00:00:00.000Z',
+    });
+    const rowsBeforeFreeze = await getFranchiseTrueValueRows(scope);
+    const artifactBeforeFreeze = await getTrustedValueArtifact('franchise-1', 'season-1', 'season-1');
+    expect(artifactBeforeFreeze).toMatchObject({
+      frozen: false,
+      frozenAt: null,
+      trustedPlayerIds: ['peer-0', 'peer-2', 'peer-3', 'peer-4', 'peer-5', 'target'],
+    });
+
+    vi.spyOn(Date, 'now').mockReturnValue(1781654400000);
+    await freezeTrustedValueArtifactForSeason(scope);
+    const frozenArtifact = await getTrustedValueArtifact('franchise-1', 'season-1', 'season-1');
+    expect(frozenArtifact).toMatchObject({
+      frozen: true,
+      frozenAt: 1781654400000,
+      trustedPlayerIds: artifactBeforeFreeze?.trustedPlayerIds,
+    });
+
+    mocks.buildFranchiseValueInputRows.mockClear();
+    mocks.buildFranchiseValueInputRows.mockResolvedValueOnce(report(peerLadder(4.5)));
+    const result = await calculateAndPersistFranchiseTrueValueForSeason(scope, {
+      computedAt: '2026-06-12T00:01:00.000Z',
+    });
+
+    expect(result).toEqual({
+      rows: [],
+      skippedRows: [],
+      persisted: false,
+      blockers: ['Trusted value artifact frozen for scope (D6b); recompute skipped.'],
+    });
+    expect(mocks.buildFranchiseValueInputRows).not.toHaveBeenCalled();
+    await expect(getTrustedValueArtifact('franchise-1', 'season-1', 'season-1')).resolves.toEqual(frozenArtifact);
+    await expect(getFranchiseTrueValueRows(scope)).resolves.toEqual(rowsBeforeFreeze);
   });
 
   test('source never reads schedule total game fields for True Value calculation', () => {

@@ -68,8 +68,8 @@ const trustedValueArtifact = {
     { playerId: "player-tv", teamId: "team-d2", rosterStatus: "MLB" },
     { playerId: "player-blocked", teamId: "team-d2", rosterStatus: "MLB" },
   ],
-  frozen: false,
-  frozenAt: null,
+  frozen: true,
+  frozenAt: 1781654400000,
   computedAt: 1781568000000,
 };
 

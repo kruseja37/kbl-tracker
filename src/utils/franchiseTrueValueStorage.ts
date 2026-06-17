@@ -18,6 +18,7 @@ import {
 import {
   FRANCHISE_TRUSTED_VALUE_CONTRACT_VERSION,
   FRANCHISE_TRUSTED_VALUE_PEER_POOL_MIN_THRESHOLD,
+  getTrustedValueArtifact,
   persistTrustedValueArtifact,
   type FranchiseTrustedValueArtifact,
 } from './franchiseTrustedValueStorage';
@@ -500,6 +501,20 @@ export async function calculateAndPersistFranchiseTrueValueForSeason(
   }
   if (blockers.length > 0) {
     return { rows: [], skippedRows: [], persisted: false, blockers };
+  }
+
+  const existingTrustedValueArtifact = await getTrustedValueArtifact(
+    scope.franchiseId,
+    scope.seasonId,
+    scope.statsScopeId,
+  );
+  if (existingTrustedValueArtifact?.frozen === true) {
+    return {
+      rows: [],
+      skippedRows: [],
+      persisted: false,
+      blockers: ['Trusted value artifact frozen for scope (D6b); recompute skipped.'],
+    };
   }
 
   const valueInputReport = await buildFranchiseValueInputRows(input);
