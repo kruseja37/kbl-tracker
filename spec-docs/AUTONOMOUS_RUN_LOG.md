@@ -273,3 +273,17 @@ salary-live, the L4a publish-bus). D5 is confirm-only; D6 is the value-trust gat
   surface this increment). DEFERRED within L4a-bus: event taps, memory writer/regen, hub season-feed UI.
   **→ Pausing for JK direction: D4 scope ruling · soul-layer "build to spec" greenlight · L-ECON1 held · L2
   premature · L9a live-path (browser-batchable).**
+
+- **2026-06-16 — JK DIRECTION: "D-stack to the value gate."** Re-ordered: D4 (salary UI) is NOT a D6 dependency
+  + has the presentation snag → left as a flagged browser-session UI item; route **D5 → D6**.
+- **2026-06-16 — D5 CONFIRMED** (confirm-only, no build). TEAM_MVP/ACE `warConsumerTrust` trust engine green:
+  51 tests across `franchiseValueInputs` + `franchiseAnalyticsTrust` + `franchiseDesignationEligibility` pass.
+  D6 precondition clear.
+- **2026-06-16 — D6 MAPPING (workflow `wf_3c443a04-35e`, 4 mappers).** D6 = the make-or-break value-trust gate
+  (its frozen artifact feeds D7/D8/MOY). Trust flags (`trustedForTrueValue`, `valueDeltaTrustedForDesignations`,
+  `finalTrueValueCalculated`, `persistedTrueValueCreated`) are literal-false across franchiseAnalyticsTrust/
+  TrueValuePreview/ValueInputs; peerPoolSize already computes; values recompute-each-game today (no freeze). D0
+  specified the core policy (≥2 peers BLOCK, no fudge, hidden-FARM/score-only excluded) but left D6 to DEFINE the
+  frozen-snapshot rules (which roster state / season-vs-playoff / when values lock) — genuine value-design forks.
+  Mapping → then surface the contract + those forks to JK before building (the make-or-break ticket warrants the
+  map→ruling→build discipline; risk-rule says value-design judgment calls surface).
