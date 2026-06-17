@@ -10,32 +10,37 @@
 
 ## SESSION SUMMARY (TL;DR on return)
 
-**Committed — 5 feature tickets, all VERIFIED via the Codex-build / Opus-audit triangle (`codex/franchise-v1-next`,
-nothing pushed):**
+**Committed — 7 feature tickets + D5 confirm, all VERIFIED via the Codex-build / Opus-audit triangle
+(`codex/franchise-v1-next`, nothing pushed):**
 - `d48ab3c` **L1** — hidden-modifier rename (loyalty/ambition/resilience/charisma) + typed on `Player`.
 - `752882f` **D1** — `useSeasonStats` 162 hardcode → canonical `MLB_BASELINE_GAMES` (zero behavior change).
 - `2fab709` **D2** — backup parity: 3 franchise stores + pin 12→15 + a structural parity-guard (silent-drop defect closed).
-- `2f4f3e5` **L1.5 + OD-1** — backfill the 4 hidden modifiers for all franchise players at init (the spec-mandated
-  default; MLB players had none) + assign Team Captains. 21 unit + 33 integration tests.
+- `2f4f3e5` **L1.5 + OD-1** — backfill the 4 hidden modifiers for all franchise players at init + assign Team
+  Captains. 21 unit + 33 integration tests. (Also browser-verified in the real runtime — see BROWSER PRE-CHECK.)
 - `0cf4ca2` **L4a-connect** — franchise reporter wired (auto-assign + post-game-columns + BeatReporterNews reads
-  live GameStory). **Browser-pending** — reporter text is Supabase-dependent; verify the hub when configured.
+  live GameStory). **Browser-pending** (reporter text is Supabase-dependent).
+- `8074976` **L4a-bus** — the SEA-1 season-long narrative publish-bus core (SeasonNewsItem store + emission config
+  + `generateSeasonNewsTake`). Build-dark; §5-firewall-correct; parity-guard green.
+- `4a1bd36` **D6a** — the make-or-break True-Value TRUST gate, live half: peer-pool audit (≥2 hard-block) +
+  the live trusted-value artifact + the 4 flag-flips to computed. RIGOROUSLY audited; oracle untouched; real
+  no-leak boundary test. **JK ruled season-end-freeze** (D6b adds the freeze).
+- **D5 CONFIRMED** (confirm-only) — TEAM_MVP/ACE `warConsumerTrust` trust engine green (51 tests).
 
-**Course-correction:** my first wrap was too conservative (set aside OD-1, which had an obvious default). You
-flagged it; I recalibrated and built OD-1 + L1.5 + L4a. Net: everything with a clear conservative default and
-imminent/self-contained value is now built.
+**Process arc this session:** my first wrap was too conservative (set aside OD-1, an obvious default) → JK flagged
+it → recalibrated and built OD-1/L1.5/L4a-connect → JK batched browser verification ("keep rolling") → built
+L4a-bus → JK directed "D-stack to the value gate" → D5 confirmed + D6 mapped + ruled + D6a built. The
+Codex-builds / Opus-audits triangle held throughout (every diff independently re-verified: tsc/tests re-run,
+substance read, invariants grep'd — never trusted from the builder paste).
 
-**Why I'm pausing here (genuinely needs you — NOT the earlier over-caution):**
-- **L9a** (trait capture) — touches the live `useGameState`/`GameTracker` hot path + activates a dead code path;
-  a break is user-visible gameplay → wants a **watched session** with browser verification.
-- **L-ECON1** (salary scale) — touches the **frozen draft-IV anchor** (a real hard-halt) + sequences with unbuilt D4/D6 (**OD-2**).
-- **L2** (mutable layer) — its only consumers (L3/L8/L9b) are design-gated soul-layer systems, so building it
-  build-dark now would design a read-path API ahead of consumers you haven't shaped → likely rework. Premature.
-- **L3 / L5 / L6 / L7 / L8 / L9b / L10–L14** (morale matrix, fame, development, designations, relationships,
-  rebrand) — these are **your vision/design** (the SMB4 soul layer), needing design rulings, not engineering defaults.
+**WRAPPED HERE (clean milestone + honest context call):** D6a is the value-gate's live half, rigorously audited.
+The next steps — **D6b** (season-end freeze) and **D7** (designations live, incl. Albatross + Fan Favorite) — are
+continued high-stakes value-spine work, and this session has run very long. Per my own stated rule, the
+make-or-break value work deserves fresh audit rigor → **resume D6b/D7 in a fresh context** (everything's captured
+in PROMPT_CONTRACTS.md + this log + the D6 decisions, so it resumes cleanly).
 
-**To resume the loop:** rule **OD-2..5** (mostly small leans below), or give the soul-layer design rulings (the
-morale-matrix structure, fame model, etc.), or open a **watched session** for the live/UI builds (**L9a**, **D4**
-salary-live, the L4a publish-bus). D5 is confirm-only; D6 is the value-trust gate (surface).
+**Still genuinely needs JK (unchanged):** OD-2..5 (below) · the **D4** salary/value-preview scope snag · **L-ECON1**
+(frozen anchor) · the **soul-layer design rulings** (L3 morale matrix / L6 fame / L8 development / … — your vision).
+**Browser backlog (batched):** L1.5 captain + L4a reporter (Supabase) on real franchise data.
 
 ---
 
