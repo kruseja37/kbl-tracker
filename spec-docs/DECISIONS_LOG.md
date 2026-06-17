@@ -1131,3 +1131,30 @@ DISPLAY is the team-hub ticket.
 of the DESIG-RECON build ticket (DECISIONS_LOG is the authority until then). Next action: **draft + dispatch the D10
 build** (league awards inline via AwardsWatchlist + manifest canonical-source fix + page copy + pass5 test update),
 then the DESIG-RECON build ticket.
+
+---
+
+### 2026-06-17: DESIG-RECON build split + fork rulings (attended; build map `wf_9ea0e360-d00`)
+
+D10 shipped (`51e487a`); the DESIG-RECON build was mapped (4 readers) and split into **4 tickets**:
+- **DR-1** (engine logic, no forks) — Albatross spec-guards ported INLINE (2× salary floor via injected
+  `salaryCalculator.MIN_SALARY`; 25% materiality `valueDelta/contractValue ≤ -0.25`) into BOTH selection +
+  eligibility; Fan Favorite promoted to live (ACTIVE_PROMOTION_TYPES + LIVE_DESIGNATION_BADGES + eligibility de-gate,
+  NO salary floor, +≥2-peer trust); Cornerstone fully removed (+4 stale stubs, NOT the FAME `FRANCHISE_CORNERSTONE`
+  in teamMVP/legacyDynastyTracker); delete the orphan `fanFavoriteEngine.ts`. Effects stay dormant (firewall flags
+  false). DISPATCHED to Codex.
+- **DR-2** (assignment logic) — remove Captain's `charisma ≥ 70` gate (`franchiseInitializer`, canonical §17.6 =
+  no minimum); build Fan Hopeful season-start assignment (random top-3 by SCOUTED grade, visible-safe).
+- **DR-3** (display) — the compact six-designation strip on the team hub. Depends on DR-1/DR-2.
+- **DR-4** (docs) — reconcile DYNAMIC_DESIGNATIONS_SPEC / PERSONALITY_SYSTEM_SPEC / FAN_FAVORITE_SYSTEM_SPEC to
+  MODE_2_V1_FINAL §17.
+
+**Fork rulings (JK, attended 2026-06-17):**
+- **Team-hub strip placement = under the 'team' tab**, below the "Currently viewing: <team>" card (the at-a-glance
+  team-identity row; leaves the analytic 'roster' panels untouched).
+- **Fan Hopeful persistence = a `team.fanHopefulPlayerId` field** on the Team record (mirrors `captainPlayerId`;
+  simplest, naturally one-per-team; single-season v1, overwritten each season like Captain) — NOT a new store.
+- **Captain wiring = render directly from `team.captainPlayerId`** with a UI-only badge (option a) — Captain is
+  personality-based/assigned-at-init, so it does NOT fold into the WAR-ranked designation engine (1 file vs ~6).
+- **Year-end semantics = always-visible strip** with a "projected mid-season / final" caption — true season-end
+  locking is an unbuilt later slice; gating on it now would render an empty/cosmetic "final."

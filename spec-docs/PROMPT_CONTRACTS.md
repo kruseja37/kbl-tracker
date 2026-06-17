@@ -8246,3 +8246,138 @@ COMPLETE.** USER-VISIBLE → JK browser sign-off batched (sole real-world accept
 build ticket** (Albatross spec guards / Fan Favorite promote no-floor / Captain badge no-min / Fan Hopeful visible-safe
 / Cornerstone removal / spec reconciliation to MODE_2_V1_FINAL §17 + the team-hub year-end designation display).
 
+---
+
+## DR-1 — designation engine pass: Albatross spec-guards + Fan Favorite promote-to-live + Cornerstone removal — 2026-06-17 (attended)
+
+**ROUTE:** Codex | high reasoning effort → Opus 4.8 audit (auditor ≠ builder). Attended. Asset-protected (designation
+logic) — design RULED in DECISIONS_LOG DESIG-RECON (2026-06-17); this executes to that ruling. Grounding: build map
+`wf_9ea0e360-d00` (reader 1). Effects stay DORMANT (no morale/fame mutation) — pure selection/eligibility logic.
+
+**SCOPE (one cohesive engine pass over the designation files):**
+1. **ALBATROSS — port the two missing spec guards INLINE** into the live selection (`franchiseDesignations.ts`
+   selectLowest ~:426-446) AND mirror them into the eligibility classifier (`franchiseDesignationEligibility.ts`
+   rankingBlockers ALBATROSS ~:228-235 + valueDesignationBlockers ~:398-420) for active-promotion parity: (a) **2×
+   salary floor** — `salary >= 2 * context.leagueMinimumSalary`; (b) **materiality** — `valueDelta / contractValue
+   <= -0.25` (guard `contractValue > 0`). Add an explicit `salary` field to `FranchiseDesignationPlayerInput`
+   (thread `row.salary` through `sourceRowFromValueRow`), and a `leagueMinimumSalary` field to
+   `FranchiseDesignationContext` set from `salaryCalculator.MIN_SALARY` (import it) at the storage call site
+   (`franchiseDesignationStorage.ts` context build ~:343-350). Inline a local `ALBATROSS_UNDERPERFORMANCE_THRESHOLD
+   = -0.25` — do NOT import `fanFavoriteEngine` (guard test `franchiseDesignationsPersistence.test.ts:484-485`
+   forbids it). Record both gate inputs in the makeRecord sourceInputs/sourceEvidence.
+2. **FAN FAVORITE — promote to LIVE, NO salary floor:** add `'FAN_FAVORITE'` to `ACTIVE_PROMOTION_TYPES`
+   (`franchiseDesignationStorage.ts:60`); add a `FAN_FAVORITE` entry to `LIVE_DESIGNATION_BADGES`
+   (`franchiseDesignations.ts:142-167`, mirror PROJECTED_BADGES.FAN_FAVORITE colors, borderStyle 'solid', status
+   'active'); de-gate eligibility — flip the policy-matrix FAN_FAVORITE to active/persistable (~:140-150), remove the
+   two morale-block pushes (~:415-418), add `classifyFanFavorite` mirroring `classifyAlbatross` (~:422-451) BUT
+   selectHIGHEST **positive** valueDelta and **NO salary floor / NO materiality gate**, seed FAN_FAVORITE into
+   `buildRankedCandidates` + rankedScore/rankingBlockers (positive valueDelta), include it in recordFor persistable.
+   **ADD `valueTrusted === true` to the FF selection filter** (`franchiseDesignations.ts` selectHighest ~:406-410 —
+   it currently lacks it; the ruling keeps the ≥2-peer trust on FF). Keep the morale/fame firewall: FF active
+   promotion emits the ephemeral changed-only DesignationEvent like Albatross with moraleMutationApplied/
+   relationshipMutationApplied/salaryMovementApplied = false (+2 fame DORMANT).
+3. **CORNERSTONE — full removal** from the team-designation system: `franchiseDesignationEligibility.ts` (union :21,
+   ALL_DESIGNATION_TYPES :98, policy matrix :185-194, deferredNarrativeBlockers :453/:466-469, limitations :551);
+   the blocked-truth UI row `TeamHubContent.tsx:5971`; and the stale stubs in
+   `franchiseDesignationMoraleContextAdapter.ts:193`, `franchiseNarrativeEventEligibility.ts:39/:371-372/:402-403`,
+   `franchiseDesignationMoraleBridge.ts:395-426/:481-483/:508`. **DO NOT touch `teamMVP.ts` or
+   `legacyDynastyTracker.ts`** — their `FRANCHISE_CORNERSTONE` is a SEPARATE FAME legacy tier, NOT the team
+   designation.
+4. **DELETE the orphan `src/engines/fanFavoriteEngine.ts` + its test** AFTER porting its gates — but FIRST grep-verify
+   zero non-test importers; STOP and report if any live importer exists.
+
+**ALLOWED:** `franchiseDesignations.ts` · `franchiseDesignationEligibility.ts` · `franchiseDesignationStorage.ts` ·
+the Cornerstone-stub files listed above (Cornerstone-token removal only) · `TeamHubContent.tsx` (ONLY the :5971
+blocked-truth Cornerstone removal — NO display-strip work, that's DR-3) · delete `fanFavoriteEngine.ts` + its test ·
+update `franchiseDesignations.test.ts` + any designation tests the changes break.
+
+**DO NOT:** touch `teamMVP.ts`/`legacyDynastyTracker.ts` · activate any morale/fame EFFECT (FF +2 / Albatross −1 stay
+dormant; firewall flags stay false) · flip the offseason flag · add a new store / bump TRACKER_DB_VERSION (18) /
+KBL_BACKUP_VERSION (2) (FF already persists as projected — promotion is a status flip, no new store) · do Captain
+(DR-2), Fan Hopeful (DR-2), or the team-hub display strip (DR-3) · import `fanFavoriteEngine` anywhere.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · FULL `vitest run` = only the 3 characterized fails + any
+designation tests you intentionally updated (mutation-honest), ZERO new reds; grep: no `fanFavoriteEngine` import
+anywhere, `fanFavoriteEngine.ts` deleted, no Cornerstone in the team-designation union/matrix, FF in
+ACTIVE_PROMOTION_TYPES + LIVE_DESIGNATION_BADGES, Albatross filter has the 2 new gates in BOTH selection + eligibility,
+no version bump, firewall flags still false.
+
+**STOP IF:** the 2× floor / materiality can't be computed from existing inputs (they can — contractValue===salary,
+valueDelta===trueValue−salary) · `fanFavoriteEngine` has a live importer · FF promotion needs a store/version bump ·
+de-gating FF requires touching morale-mutation machinery · removing Cornerstone ripples into the FAME
+`FRANCHISE_CORNERSTONE` system.
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited.
+
+**Status:** VERIFIED + COMMITTED `b48b450` (2026-06-17). Effects-dormant; browser-pending.
+
+**AUDIT + EXECUTION RECORD (Opus 4.8, auditor ≠ builder):** Codex (high, watchdog) BUILT → Opus independently re-ran:
+tsc 0 · build 0 · FULL suite **7,240 pass / 2 fail (7,242 total, 405 files)**. **BASELINE CHANGE (documented, not
+silent): characterized fails 3 → 2** — `franchiseNarrativeEventEligibility` is now GREEN. Verified legitimate: the
+source diff ONLY removed the `cornerstone` field; the `teamMvpAcePreview` assertion was a PRE-EXISTING stale
+expectation (the long-deferred "separate narrative-gate cleanup"), and was aligned to the verified pre-existing
+`not-applicable`/0 output — the cornerstone-field removal forced the test edit (it broke the `cornerstone.status`
+line), and Codex cleaned the stale assertion in the same pass. NOT gutting. New characterized set: **wpaRuntimeBoundary
++ franchiseManualSmokeFixture**. The −50 test delta is the deleted orphan `fanFavoriteEngine.test` (351 lines).
+**Read the diff + grepped invariants:** Albatross 2× floor (`salary >= 2*context.leagueMinimumSalary`, leagueMin =
+injected `salaryCalculator.MIN_SALARY`) + 25% materiality (`valueDelta/contractValue <= -0.25`) ported INLINE into
+BOTH the selection filter and the eligibility `valueDesignationBlockers` (parity), gate inputs recorded in
+sourceInputs; FF promoted via `LIVE_DESIGNATION_BADGES` + `ACTIVE_PROMOTION_TYPES` + a ranked-selective
+`classifyFanFavorite` (highest positive valueDelta, NO floor, keeps the ≥2-peer `valueTrusted` gate) whose active
+reason explicitly keeps fame/morale/relationship/salary/Mode3 blocked; Cornerstone fully removed from the eligibility
+union/matrix + narrative-eligibility + morale-bridge/context-adapter + the TeamHubContent:5971 blocked-truth row,
+with `teamMVP.ts`/`legacyDynastyTracker.ts` FAME `FRANCHISE_CORNERSTONE` UNTOUCHED; orphan `fanFavoriteEngine.ts`+test
+deleted (grep: zero importers); no `fanFavoriteEngine` import anywhere; no version bump; firewall flags false. Tests
+mutation-honest (franchiseDesignations.test fixtures given real salaries + `valueTrusted` to genuinely satisfy the new
+gates, FF badge assertion flipped to the real active badge; the rest are Cornerstone-token removals). **DR-1 COMPLETE.**
+**NEXT: DR-2** (Captain charisma≥70 gate removal + Fan Hopeful visible-safe season-start assignment).
+
+---
+
+## DR-2 — Captain no-minimum + Fan Hopeful visible-safe season-start assignment — 2026-06-17 (attended)
+
+**ROUTE:** Codex | high reasoning effort → Opus 4.8 audit (auditor ≠ builder). Attended. Asset-protected (designation
++ personality) — RULED in DECISIONS_LOG DESIG-RECON (2026-06-17). Grounding: build map `wf_9ea0e360-d00` (readers 2+3).
+Assignment logic only; effects (Fan Hopeful +5 morale, Captain charisma-double-morale) stay DORMANT. Display = DR-3.
+
+**SCOPE:**
+1. **CAPTAIN — remove the `charisma >= 70` gate** in `franchiseInitializer.ts` `computeTeamCaptains` (~:225): per
+   canonical §17.6, Captain = highest combined (Loyalty + Charisma) with **NO minimum** (every team with ≥1 MLB
+   player gets a captain). Keep the existing deterministic sort/tiebreak (loyalty+charisma desc, then a stable final
+   tiebreak); the canonical "more seasons on team, then current-season WAR" tiebreak is degenerate at franchise init
+   (all 0) so the existing stable tiebreak stands. The null path (team has zero MLB players → null + warn) stays.
+   NO display work here (DR-3 renders from `team.captainPlayerId`); do NOT touch the eligibility CAPTAIN policy entry
+   (cosmetic; DR-4 spec-reconciles it).
+2. **FAN HOPEFUL — build the visible-safe season-start assignment:** add an optional `fanHopefulPlayerId?: string |
+   null` field to the `Team` interface (`leagueBuilderStorage.ts:133`, mirroring `captainPlayerId` — additive
+   optional, NO DB version bump). In `franchiseInitializer.ts`, alongside the captain assignment step (~:537-539), add
+   a Fan Hopeful assignment: for each team, take its FARM prospects, rank by **SCOUTED grade** (visible-safe —
+   `prospectProfile.scoutedGrade`, NEVER the hidden true rating/grade), take the top 3, and pick ONE via a SEEDED
+   deterministic RNG (reuse `hashString`/`randomUnit` from `prospectScoutingDraftEngine.ts:261-272`, seed off a
+   stable key e.g. `teamId+seasonId`), then persist the winner's id to `team.fanHopefulPlayerId` via
+   `saveFranchiseTeam`. Source the team's farm prospects + scoutedGrade from whichever is populated at init
+   (`getFranchiseFarmRoster`/`franchiseFarmStorage` or `TeamRoster.farmRoster`); rank with the existing
+   `FRANCHISE_GRADE_ORDER`/`gradeIndex` helper. One per team; null + warn if a team has no farm prospects. The +5
+   morale boost stays DORMANT (assignment + persistence only — no morale write).
+
+**ALLOWED:** `franchiseInitializer.ts` · `leagueBuilderStorage.ts` (add the optional Team field only) · a small new
+helper module if cleaner for the Fan Hopeful pick (pure) · the relevant init/captain/farm tests.
+
+**DO NOT:** do the team-hub display strip (DR-3) · expose any hidden FARM true rating/grade/scout-truth/personality
+modifier (rank ONLY on visible `scoutedGrade`) · write any morale/fame value (effects dormant) · bump a DB version /
+add a store (the Team field is additive-optional) · touch the designation engine/eligibility (DR-1 done) · flip the
+offseason flag · reconcile the eligibility CAPTAIN policy entry (DR-4).
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · FULL suite = only the 2 characterized fails (+ honestly
+updated init/captain/farm tests), ZERO new reds; grep: no `charisma >= 70` gate remains; `fanHopefulPlayerId` is an
+additive optional Team field; Fan Hopeful ranks on `scoutedGrade` only (no hidden-rating read); no morale/fame write;
+no DB version bump.
+
+**STOP IF:** the farm prospects + scoutedGrade are NOT available at the franchise-init assignment hook · ranking
+visible-safe requires reading a hidden field · persisting `fanHopefulPlayerId` needs a DB version bump · Captain
+no-minimum requires touching the eligibility/designation engine.
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited.
+
+**Status:** DISPATCHED to Codex (background, watchdog). Audit pending.
+

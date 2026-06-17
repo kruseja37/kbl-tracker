@@ -55,6 +55,11 @@ nothing pushed.)
   **NEXT = the DESIG-RECON build ticket** (Albatross guards / FF promote no-floor / Captain badge no-min / Fan Hopeful
   visible-safe / Cornerstone removal / spec reconciliation to MODE_2_V1_FINAL §17 + the year-end team-designation
   display on the **TEAM HUB**). Maps: `wf_4e882441-17c` (D10) + `wf_a7edf687-814` (designations).
+  (4) **DESIG-RECON BUILD** (split via `wf_9ea0e360-d00` into DR-1..4; fork rulings logged): **DR-1 COMMITTED
+  `b48b450`** (Albatross spec-guards + FF promote-to-live + Cornerstone removal + orphan delete; Opus-audited VERIFIED,
+  characterized set 3→2). **DR-2 dispatched** (Captain charisma≥70 removal + Fan Hopeful visible-safe season-start
+  assignment to `team.fanHopefulPlayerId`). **NEXT after DR-2: DR-3** (team-hub six-designation strip under the 'team'
+  tab) → **DR-4** (spec reconciliation to MODE_2_V1_FINAL §17).
 - **OVERNIGHT CONTINUATION (2026-06-17, AUTH-4) — 3 more feature commits, D7 COMPLETE:** `6559a19` **D6b**
   (season-end FREEZE of the trusted-value artifact: frozen-flag + idempotent freeze helper + a Layer-A anti-thaw
   guard in the sole writer + a Layer-B recompute early-return that locks BOTH the artifact and the
@@ -271,14 +276,17 @@ nothing pushed.)
 
 ## SUITE BASELINE
 
-**7,292 tests / 406 files** — full suite re-run 2026-06-17 after D10: **7,289 pass / 3 fail**, the 3 being EXACTLY
-the characterized set (zero new reds; D10 added a wave4 canonical-designation-count test + reworked pass5). (+34 tests / +5 files over the prior 7,254 / 400 — D6b/D7/D8 added tests to existing files +
+**7,242 tests / 405 files** — full suite re-run 2026-06-17 after DR-1: **7,240 pass / 2 fail**, the 2 being EXACTLY
+the (now-shrunk) characterized set. (Was 7,292/406 after D10; DR-1 deleted the orphan `fanFavoriteEngine.test`
+[−1 file / ~−50 tests] AND legitimately CLEARED the `franchiseNarrativeEventEligibility` RED — see below.) (+34 tests / +5 files over the prior 7,254 / 400 — D6b/D7/D8 added tests to existing files +
 `franchiseAwardTrust.test.ts`; D9a added `franchiseAwardsStorage.test.ts` + `franchiseTrueValueSnapshotsStorage.test.ts`;
 D9b/D9c grew `franchiseAwardsEngine.test.ts`.) **trackerDb is now v18** — only D9a bumped it (its 2 dark stores); D6b→D8
 added NO store (D6b's freeze is a field on the existing artifact, DesignationEvents are ephemeral, D8 stores nothing,
-D9b is a pure engine). `KBL_BACKUP_VERSION` stays 2. Characterized set (a new RED OUTSIDE it is a real regression):
-**wpaRuntimeBoundary + franchiseManualSmokeFixture + franchiseNarrativeEventEligibility** (the last is a PRE-EXISTING
-stale-assertion RED — D7a deliberately left it untouched; its cleanup is a separate narrative-gate ticket).
+D9b is a pure engine). `KBL_BACKUP_VERSION` stays 2. Characterized set (a new RED OUTSIDE it is a real regression) is now **wpaRuntimeBoundary + franchiseManualSmokeFixture**
+(2, down from 3). **`franchiseNarrativeEventEligibility` was CLEARED by DR-1** (2026-06-17): it was the PRE-EXISTING
+stale "TEAM_MVP/ACE preview-only" assertion (the deferred narrative-gate cleanup); DR-1's Cornerstone-field removal
+forced the test edit, and the stale `teamMvpAcePreview` assertion was aligned to the verified pre-existing
+`not-applicable` output (NOT gutting — source `teamMvpAcePreview` logic unchanged). No longer a known RED.
 (GameTrackerLaunchState + franchiseOffseasonGuards.component are conditional-solo order-flakes that passed here.)
 **CLI:** prefix `NODE_ENV= `; node at `~/.nvm/versions/node/v20.20.0/bin`.
 
