@@ -8558,3 +8558,57 @@ blocked"×6, "preview-only"×7 [spray], "remain deferred", Mode 3×13, morale×1
 de-gated.** USER-VISIBLE → JK browser sign-off batched (scenarios #14/#15). NEXT = D12 (manual smoke on real franchise
 data, iPad) → D13 (Playable-V1 internal checkpoint) → the soul layer (L-stack).
 
+---
+
+## L3a — the pure Master Morale Matrix engine (the math) — 2026-06-17 (attended)
+
+**ROUTE:** Codex | high reasoning effort → Opus 4.8 audit (auditor ≠ builder). Attended. SMB4-asset (morale) — RULED
+in DECISIONS_LOG "SOUL-LAYER greenlight" + "L3 STRUCTURAL RULINGS" (2026-06-17). Grounding: map `wf_04a84b30-ef5`.
+**PURE engine only** — no store, no wiring, no narrative, no live consumer (the store/subscription/build-dark flag are
+L3b). First soul-layer build; the spine.
+
+**SCOPE — NEW `src/engines/masterMoraleMatrix.ts` (greenfield, pure, deterministic):**
+1. **The ONE event-keyed table** (§5: one table, not three; "every outcome looked up, never invented"). Each event →
+   a base consequence record `{ selfPlayerMoraleDelta, teamFanMoraleDelta, otherTouched: [{relation, delta}], reason }`.
+   Reuse/extend the event taxonomy from `fanMoraleEngine.ts` (type-only — import `MoraleEventType`, add the
+   player-centric + cross-effect events the fan table lacks). This new engine IS the single authoritative table;
+   `fanMoraleEngine`'s narrative is NOT imported (firewall).
+2. **The pure composer** `composeMoraleConsequence(event, personality, modifiers, currentPlayerMorale, currentFanMorale)
+   → resolved consequence` — looks up the base row, then applies deterministic multipliers (never invents). Per §6/§7:
+   **7 canonical personalities** (COMPETITIVE/RELAXED/DROOPY/JOLLY/TOUGH/TIMID/EGOTISTICAL) set response multipliers;
+   **4 hidden modifiers** — **Ambition scales UP-moves, Resilience scales DOWN-moves** (clean division, no
+   double-count), **Charisma drives the `otherTouched` teammate deltas** (lifts teammates; does NOT move his own
+   ratings), **Loyalty scales the fan-morale→player-morale sensitivity** (§13 personality-scaled link). Reconcile the
+   non-canonical names in `playerMorale.ts` (GRUMPY/FIERY/SPIRITED) to the canonical 7.
+3. **EXCLUDE the §8 fan-morale RATINGS dampener** — that primitive is L5-owned; L3 takes morale as INPUT only (do not
+   implement or apply it here).
+4. **Magnitudes = a single SIM-TUNED `MORALE_TUNING` config object** (mirror the `FAN_MORALE_CONFIG` pattern at
+   `fanMoraleEngine.ts:388`) — every delta/multiplier is a named placeholder constant the Sim Gate (§16) will sweep.
+   The STRUCTURE is what L3a locks; the numbers are explicitly placeholder.
+5. **Typed default-neutral tap interface** (§L3:73): a typed `MoraleMatrixEvent` input union + a tap registry where
+   fame/designation/race/relationship inputs return NEUTRAL (0) until their owner engines land. Adding a new event
+   type must not silently skip the matrix (unmatched → `{0,0}` neutral, never throw).
+6. **Unit tests** (pure, deterministic): same input → same output; an event's base lookup; personality changes the
+   multiplier; Ambition scales a positive delta while Resilience scales a negative one (and not vice-versa);
+   Charisma moves `otherTouched` not self; a default-neutral tap returns 0; an unknown event → neutral.
+
+**ALLOWED:** NEW `src/engines/masterMoraleMatrix.ts` + its NEW test file · a type-only import from `fanMoraleEngine.ts`
+(no runtime/narrative coupling) · OPTIONALLY a tiny shared morale-types file if cleaner. NOTHING else.
+
+**DO NOT:** touch any store / `franchiseMoraleState` / IndexedDB / persistence (L3b) · wire to game-end /
+processCompletedGame / useGameState (L3b) · import or call any reporter / narrative / LLM / `generateEventNarrative`
+(firewall — math only) · implement the §8 ratings dampener (L5) · apply any live morale mutation (build-dark; this is
+a pure engine) · reconcile/bump any DB · alter `fanMoraleEngine`'s runtime behavior (type-only import).
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · FULL suite = only the 2 characterized fails + the new
+masterMoraleMatrix tests, ZERO new reds; grep: the new engine imports no store/persistence, no reporter/narrative/LLM,
+no §8 dampener; magnitudes are named `MORALE_TUNING` constants (not scattered literals).
+
+**STOP IF:** the composer can't stay deterministic/pure without a store or live state · honoring "one table" forces
+importing `fanMoraleEngine`'s narrative runtime · the 4-modifier division (Ambition-up/Resilience-down) needs design
+input beyond the spec · representing the matrix needs a new persisted shape (that's L3b).
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited.
+
+**Status:** DISPATCHED to Codex (background, watchdog). Audit pending.
+

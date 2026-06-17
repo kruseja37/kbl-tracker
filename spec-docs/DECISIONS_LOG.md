@@ -1185,3 +1185,28 @@ standing "SOUL-LAYER BUILD TO SPEC GREENLIGHT" pending-JK item.
 Morale Matrix)** is the spine, depends only on L1 (done), and is the first soul-layer build. Mapping L3 now; structural
 decisions (matrix representation, ledger store shape, the event taxonomy/default-neutral taps) surface to JK before the
 build contract.
+
+**L3 STRUCTURAL RULINGS (JK, attended 2026-06-17; map `wf_04a84b30-ef5`, 4 readers):**
+- **Matrix engine = a FRESH clean engine that IS the one table** (`NEW src/engines/masterMoraleMatrix.ts`): an
+  event-keyed base table + a pure composer function (personality×4-modifier multipliers → player+fan morale deltas +
+  cross-effects). It subsumes the fan event taxonomy but leaves the reporter's word-generation OUT (firewall: math
+  only) — NOT a literal widen of the 1,366-line narrative-laden `fanMoraleEngine`. Magnitudes = a single SIM-TUNED
+  `MORALE_TUNING` config (Sim Gate owns the numbers). §8 dampener is L5's, not L3's.
+- **Morale store = REUSE the existing `franchiseMoraleState` (`kbl-franchise-morale`)** — it already models player +
+  fan + per-change history. Add a new non-confirmation `sourceKind` ('matrix-auto') + an automatic+logged apply path
+  (the LS-9 reversal), idempotent dedupe kept. NOT a second store (avoids the two-sources-of-truth hazard §5 warns of).
+  Verified the store is ALREADY in `backupRestore.ts:637` + `syncConfig.ts:108` (backed up + synced); the only gap is
+  the parity-GUARD test covers only `kbl-tracker` — **L3 extends the parity guard to cover `kbl-franchise-morale`**
+  (closes the C-4 deficit for this DB). Likely no DB version bump (new sourceKind is a value, not a schema change).
+- **Defaults (consensus, conservative): one ledger discriminated by player/fan (reuse the existing model); a typed
+  default-neutral tap interface** (fame/designation/race/relationship return neutral until their owners land);
+  **subscribe to the D7 `DesignationEvent` stream** at the current void-ignore site (`processCompletedGame.ts:303`);
+  **build DARK behind a Phase-2 flag** (compute + dark-ledger only; NO live morale mutation/consumer until after D13 —
+  the §5 no-phantom-morale invariant); **firewall** (engine imports no reporter/LLM); reconcile the non-canonical
+  personality names (playerMorale.ts GRUMPY/FIERY/SPIRITED → the canonical 7).
+- **UI cleanup (JK ask, tracked): remove the endless confirmation gates from the Team Hub roster tab** and replace
+  with the morale log/history view. This is the USER-VISIBLE half of LS-9; it **pairs with L3 ACTIVATION (post-D13)**
+  because auto+logged delivery replaces the gates (removing them before the replacement is live would strand the
+  current morale path). A standalone earlier UX ticket is possible if JK wants gate relief sooner.
+- **L3 SPLIT: L3a** = the pure matrix engine (math; testable; no store/wiring/narrative) → **L3b** = reuse+un-gate the
+  store + D7 subscription (dark) + build-dark flag + parity-guard extension.
