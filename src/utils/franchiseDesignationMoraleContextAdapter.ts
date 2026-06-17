@@ -190,7 +190,7 @@ export function buildFranchiseDesignationMoraleContextAdapterReport(
       'Adapter emits only read-only bridge contexts; it does not create random-event records or apply morale.',
       'Only preview-only TEAM_MVP/ACE records for current MLB players are converted.',
       'Active TEAM_MVP/ACE designations are not converted here to avoid duplicate recognition prompts.',
-      'Fan Favorite, Albatross, Cornerstone, Captain, and Fan Hopeful remain blocked until their upstream trust sources exist.',
+      'Fan Favorite, Albatross, Captain, and Fan Hopeful remain blocked until their upstream trust sources exist.',
       'Hidden FARM/prospect truth is not accepted or exposed by this adapter.',
     ]),
     persistable: false,

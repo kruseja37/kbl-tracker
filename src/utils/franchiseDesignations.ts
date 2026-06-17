@@ -17,6 +17,7 @@ export interface FranchiseDesignationPlayerInput {
   playerName: string;
   teamId: string;
   position: string;
+  salary: number | null;
   gamesPlayed: number;
   pitchingAppearances: number;
   totalWAR?: number | null;
@@ -33,6 +34,7 @@ export interface FranchiseDesignationContext {
   statsScopeId: string;
   seasonNumber: number;
   gamesPerTeam: number;
+  leagueMinimumSalary: number;
   calculatedAt?: string;
 }
 
@@ -156,6 +158,14 @@ const LIVE_DESIGNATION_BADGES: Partial<Record<FranchiseDesignationType, Franchis
     colorHex: '#4169E1',
     backgroundHex: '#1C2F64',
   },
+  FAN_FAVORITE: {
+    type: 'FAN_FAVORITE',
+    label: 'Fan Favorite',
+    borderStyle: 'solid',
+    status: 'active',
+    colorHex: '#22C55E',
+    backgroundHex: '#16452A',
+  },
   ALBATROSS: {
     type: 'ALBATROSS',
     label: 'Albatross',
@@ -165,6 +175,8 @@ const LIVE_DESIGNATION_BADGES: Partial<Record<FranchiseDesignationType, Franchis
     backgroundHex: '#5A1F1F',
   },
 };
+
+const ALBATROSS_UNDERPERFORMANCE_THRESHOLD = -0.25;
 
 function finiteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
@@ -404,6 +416,7 @@ export function calculateFranchiseDesignations(
 
     const fanFavorite = selectHighest(
       teamPlayers.filter((player) =>
+        player.valueTrusted === true &&
         player.gamesPlayed >= valueFloor &&
         finiteNumber(player.valueDelta) &&
         player.valueDelta > 0,
@@ -413,13 +426,14 @@ export function calculateFranchiseDesignations(
     if (fanFavorite) {
       records.push(makeRecord(fanFavorite, context, 'FAN_FAVORITE', {
         trueValue: finiteNumber(fanFavorite.trueValue) ? fanFavorite.trueValue : null,
+        salary: finiteNumber(fanFavorite.salary) ? fanFavorite.salary : null,
         contractValue: finiteNumber(fanFavorite.contractValue) ? fanFavorite.contractValue : null,
         valueDelta: fanFavorite.valueDelta ?? null,
         gamesPlayed: fanFavorite.gamesPlayed,
         gamesFloor: valueFloor,
       }, [
-        'MODE_2_CANON §17.3: Fan Favorite is highest positive Value Delta with 10% season/minimum 3 games.',
-        'R-5: valueDelta trust flips only for projected designations in TV2.',
+        'MODE_2_CANON §17.3 and DESIG-RECON DR-1: Fan Favorite is highest positive trusted Value Delta with 10% season/minimum 3 games; no salary floor or materiality gate applies.',
+        'D6: hidden-FARM, score-only, and <2 MLB-peer blocked rows are excluded from trusted Fan Favorite selection.',
       ]));
     }
 
@@ -427,20 +441,32 @@ export function calculateFranchiseDesignations(
       teamPlayers.filter((player) =>
         player.valueTrusted === true &&
         player.gamesPlayed >= valueFloor &&
+        finiteNumber(player.salary) &&
+        player.salary >= 2 * context.leagueMinimumSalary &&
+        finiteNumber(player.contractValue) &&
+        player.contractValue > 0 &&
         finiteNumber(player.valueDelta) &&
-        player.valueDelta < 0,
+        player.valueDelta / player.contractValue <= ALBATROSS_UNDERPERFORMANCE_THRESHOLD,
       ),
       (player) => player.valueDelta,
     );
     if (albatross) {
+      const albatrossValueDeltaOverContract = finiteNumber(albatross.valueDelta) && finiteNumber(albatross.contractValue) && albatross.contractValue > 0
+        ? albatross.valueDelta / albatross.contractValue
+        : null;
       records.push(makeRecord(albatross, context, 'ALBATROSS', {
         trueValue: finiteNumber(albatross.trueValue) ? albatross.trueValue : null,
+        salary: finiteNumber(albatross.salary) ? albatross.salary : null,
         contractValue: finiteNumber(albatross.contractValue) ? albatross.contractValue : null,
         valueDelta: albatross.valueDelta ?? null,
+        valueDeltaOverContract: albatrossValueDeltaOverContract,
+        valueDeltaOverContractThreshold: ALBATROSS_UNDERPERFORMANCE_THRESHOLD,
+        leagueMinimumSalary: context.leagueMinimumSalary,
+        albatrossSalaryFloor: 2 * context.leagueMinimumSalary,
         gamesPlayed: albatross.gamesPlayed,
         gamesFloor: valueFloor,
       }, [
-        'MODE_2_CANON §17.4 and FRANCHISE_PLAYABLE_V1_DEFINITION D7: Albatross is most negative trusted Value Delta with 10% season/minimum 3 games.',
+        'MODE_2_CANON §17.4 and DESIG-RECON DR-1: Albatross is most negative trusted Value Delta with 10% season/minimum 3 games, salary >= 2x league minimum, and valueDelta/contractValue <= -25%.',
         'D6: hidden-FARM, score-only, and <2 MLB-peer blocked rows are excluded from trusted Albatross selection.',
       ]));
     }

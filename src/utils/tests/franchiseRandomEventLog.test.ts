@@ -79,7 +79,6 @@ function narrativeReport(
       albatross: area('blocked', false),
       captain: area('deferred', false),
       fanHopeful: area('deferred', false),
-      cornerstone: area('deferred', false),
     },
     personalityChemistryContext: {
       ...area(),

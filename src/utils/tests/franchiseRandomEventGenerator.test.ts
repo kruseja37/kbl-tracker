@@ -956,32 +956,6 @@ describe('franchise random event generator core', () => {
     });
   });
 
-  test('trusted Cornerstone move generates stronger fan and player candidates while untrusted durable state blocks', () => {
-    const report = buildFranchiseRandomEventCandidates({
-      ...scope,
-      seed: 'designation-cornerstone-seed',
-      designationMoraleContexts: [
-        designationContext({
-          designationType: 'CORNERSTONE',
-          triggerKind: 'trade',
-          durableDesignationStateTrusted: false,
-        }),
-        designationContext({
-          designationType: 'CORNERSTONE',
-          triggerKind: 'trade',
-          durableDesignationStateTrusted: true,
-        }),
-      ],
-      generatedAt: 123,
-    });
-    const designationCandidates = report.candidates.filter((candidate) => candidate.triggerCategory === 'designation-morale-reaction');
-
-    expect(designationCandidates).toHaveLength(2);
-    expect(report.warnings.join(' ')).toMatch(/CORNERSTONE designation morale context blocked/i);
-    expect(designationCandidates.find((candidate) => candidate.targetType === 'team-fan')?.safeEffectPreview.delta).toBe(-5);
-    expect(designationCandidates.find((candidate) => candidate.targetType === 'player')?.safeEffectPreview.delta).toBe(-3);
-  });
-
   test('Captain remains blocked when hidden-charisma safety is false', () => {
     const report = buildFranchiseRandomEventCandidates({
       ...scope,

@@ -36,7 +36,6 @@ export interface FranchiseNarrativeDesignationPrerequisiteEligibility {
   albatross: FranchiseNarrativeEventEligibilityArea;
   captain: FranchiseNarrativeEventEligibilityArea;
   fanHopeful: FranchiseNarrativeEventEligibilityArea;
-  cornerstone: FranchiseNarrativeEventEligibilityArea;
 }
 
 export interface FranchiseNarrativeEventConsumerEligibility {
@@ -368,9 +367,6 @@ function designationPrerequisites(
       fanHopeful: designationStatusArea('blocked', [
         'Fan Hopeful prerequisites require matching franchise/season/stats scope before deferred lifecycle rules can be evaluated.',
       ]),
-      cornerstone: designationStatusArea('blocked', [
-        'Cornerstone prerequisites require matching franchise/season/stats scope before deferred lifecycle rules can be evaluated.',
-      ]),
     };
   }
 
@@ -398,9 +394,6 @@ function designationPrerequisites(
     ]),
     fanHopeful: designationStatusArea('deferred', [
       'Fan Hopeful prerequisites depend on fan, morale, relationship, and True Value rules that are deferred.',
-    ]),
-    cornerstone: designationStatusArea('deferred', [
-      'Cornerstone prerequisites depend on future value, contract trajectory, morale, relationship, and Mode 3 rules that are deferred.',
     ]),
   };
 }

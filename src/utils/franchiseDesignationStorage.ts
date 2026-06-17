@@ -25,6 +25,7 @@ import {
   getFranchiseTrueValueRows,
   type FranchiseTrueValueRow,
 } from './franchiseTrueValueStorage';
+import { MIN_SALARY } from '../engines/salaryCalculator';
 import { getTrackerDb, resetTrackerDbForTests } from './trackerDb';
 
 export interface FranchiseDesignationScopeInput {
@@ -57,7 +58,7 @@ export interface CalculateAndPersistProjectedFranchiseDesignationsResult {
 
 const STORE_NAME = 'franchiseDesignationRows';
 const CANONICAL_PRIMARY_POSITIONS = new Set(['SP', 'SP/RP', 'RP', 'CP', 'C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF']);
-const ACTIVE_PROMOTION_TYPES = new Set<FranchiseDesignationType>(['TEAM_MVP', 'ACE', 'ALBATROSS']);
+const ACTIVE_PROMOTION_TYPES = new Set<FranchiseDesignationType>(['TEAM_MVP', 'ACE', 'FAN_FAVORITE', 'ALBATROSS']);
 
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -132,7 +133,7 @@ function upgradeRowsWithActiveEligibility(
       lockedAt: null,
       sourceInputs: {
         ...row.sourceInputs,
-        statusAuthority: 'FRANCHISE_PLAYABLE_V1_DEFINITION D7a/D7b: persisted canonical TEAM_MVP/ACE/ALBATROSS row promoted to active only when the eligibility path classifies the exact holder active.',
+        statusAuthority: 'DESIG-RECON DR-1: persisted canonical TEAM_MVP/ACE/FAN_FAVORITE/ALBATROSS row promoted to active only when the eligibility path classifies the exact holder active.',
       },
     };
   });
@@ -169,6 +170,7 @@ function sourceRowFromValueRow(
       playerName: row.playerName,
       teamId: row.currentTeamId,
       position,
+      salary: numericOrNull(row.salary),
       // MODE_2_CANON §17.1/§17.3/§17.4: position-player floors use games
       // from persisted season batting rows; EP1 will replace profile-position peers.
       gamesPlayed: battingGames,
@@ -346,6 +348,7 @@ export async function calculateAndPersistProjectedFranchiseDesignationsForSeason
     statsScopeId: input.statsScopeId,
     seasonNumber: input.seasonNumber,
     gamesPerTeam: source.gamesPerTeam,
+    leagueMinimumSalary: MIN_SALARY,
     calculatedAt: options.calculatedAt,
   };
   const rows = calculateFranchiseDesignations(source.rows, context);

@@ -5968,7 +5968,7 @@ function FranchiseValueTruthPanel({
   const blockedDesignationSummaries = uniqueStrings(
     designationRecords
       .filter((record) => record.status === 'blocked')
-      .filter((record) => ['CAPTAIN', 'FAN_HOPEFUL', 'CORNERSTONE'].includes(record.designationType))
+      .filter((record) => ['CAPTAIN', 'FAN_HOPEFUL'].includes(record.designationType))
       .map((record) => `${record.designationType} ${record.status}: ${record.reasons[0]}`),
   ).slice(0, 5);
 

@@ -151,16 +151,14 @@ describe('franchise designation morale context adapter', () => {
     expect(output.blocked[1].reasons.join(' ')).toMatch(/True Value\/value-delta/i);
   });
 
-  test('blocks Captain Cornerstone and Fan Hopeful with explicit deferred reasons', () => {
+  test('blocks Captain and Fan Hopeful with explicit deferred reasons', () => {
     const output = buildFranchiseDesignationMoraleContextAdapterReport(report([
       record({ designationType: 'CAPTAIN', status: 'blocked' }),
-      record({ designationType: 'CORNERSTONE', status: 'blocked' }),
       record({ designationType: 'FAN_HOPEFUL', status: 'blocked', rosterStatus: 'FARM' }),
     ]));
 
     expect(output.contexts).toHaveLength(0);
     expect(output.blocked.find((blocked) => blocked.designationType === 'CAPTAIN')?.reasons.join(' ')).toMatch(/hidden-charisma\/leadership safety/i);
-    expect(output.blocked.find((blocked) => blocked.designationType === 'CORNERSTONE')?.reasons.join(' ')).toMatch(/durable designation state/i);
     expect(output.blocked.find((blocked) => blocked.designationType === 'FAN_HOPEFUL')?.reasons.join(' ')).toMatch(/visible-safe prospect assignment/i);
   });
 

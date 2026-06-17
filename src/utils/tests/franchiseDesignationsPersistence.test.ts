@@ -81,6 +81,7 @@ function valueRow(overrides: Record<string, unknown> = {}) {
     valuePosition: 'SS',
     currentTeamId: 'team-a',
     rosterStatus: 'MLB',
+    salary: 5_000,
     salaryBaselineAvailable: true,
     teamSalaryBaseline: 100,
     seasonStatsAvailability: {
@@ -174,7 +175,18 @@ describe('franchise projected designation storage', () => {
           blockers: [],
         },
       }),
-      valueRow({ playerId: 'fan', playerName: 'Fan', valuePosition: 'CF', warPreviewValues: { totalWar: 0.8, pitchingWar: null } }),
+      valueRow({
+        playerId: 'fan',
+        playerName: 'Fan',
+        valuePosition: 'CF',
+        warPreviewValues: { totalWar: 0.8, pitchingWar: null },
+        warConsumerTrust: {
+          teamMvpDesignations: false,
+          aceDesignations: false,
+          fanFavoriteAlbatrossDesignations: true,
+          blockers: [],
+        },
+      }),
       valueRow({
         playerId: 'alb',
         playerName: 'Alb',
@@ -234,7 +246,7 @@ describe('franchise projected designation storage', () => {
     expect(await getFranchiseDesignationRows(scope)).toEqual([]);
   });
 
-  test('promotes exact trusted TEAM_MVP, ACE, and ALBATROSS holders to active while Fan Favorite stays projected', async () => {
+  test('promotes exact trusted TEAM_MVP, ACE, FAN_FAVORITE, and ALBATROSS holders to active', async () => {
     queueValueInputReport(valueReport([
       valueRow({ playerId: 'mvp', playerName: 'Trusted MVP', teamId: 'team-a', valuePosition: 'SS', currentTeamId: 'team-a', warPreviewValues: { totalWar: 3.2, pitchingWar: null } }),
       valueRow({
@@ -252,7 +264,20 @@ describe('franchise projected designation storage', () => {
           blockers: [],
         },
       }),
-      valueRow({ playerId: 'fan', playerName: 'Fan', teamId: 'team-a', valuePosition: 'CF', currentTeamId: 'team-a', warPreviewValues: { totalWar: 0.4, pitchingWar: null } }),
+      valueRow({
+        playerId: 'fan',
+        playerName: 'Fan',
+        teamId: 'team-a',
+        valuePosition: 'CF',
+        currentTeamId: 'team-a',
+        warPreviewValues: { totalWar: 0.4, pitchingWar: null },
+        warConsumerTrust: {
+          teamMvpDesignations: false,
+          aceDesignations: false,
+          fanFavoriteAlbatrossDesignations: true,
+          blockers: [],
+        },
+      }),
       valueRow({
         playerId: 'alb',
         playerName: 'Alb',
@@ -291,8 +316,8 @@ describe('franchise projected designation storage', () => {
         warConsumerTrust: {
           teamMvpDesignations: false,
           aceDesignations: false,
-          fanFavoriteAlbatrossDesignations: true,
-          blockers: [],
+          fanFavoriteAlbatrossDesignations: false,
+          blockers: ['fixture trust blocker'],
         },
       }),
       valueRow({
@@ -342,10 +367,10 @@ describe('franchise projected designation storage', () => {
     queueTrueValueRows([
       { playerId: 'mvp', trueValue: 8, contractValue: 8, valueDelta: null },
       { playerId: 'ace', trueValue: 8, contractValue: 8, valueDelta: null },
-      { playerId: 'fan', trueValue: 10, contractValue: 2, valueDelta: 8 },
-      { playerId: 'alb', trueValue: 2, contractValue: 11, valueDelta: -9 },
-      { playerId: 'untrusted-alb', trueValue: 2, contractValue: 30, valueDelta: -28 },
-      { playerId: 'positive-alb', trueValue: 18, contractValue: 10, valueDelta: 8 },
+      { playerId: 'fan', trueValue: 10_000, contractValue: 5_000, valueDelta: 5_000 },
+      { playerId: 'alb', trueValue: 3_000, contractValue: 5_000, valueDelta: -2_000 },
+      { playerId: 'untrusted-alb', trueValue: 1_000, contractValue: 6_000, valueDelta: -5_000 },
+      { playerId: 'positive-alb', trueValue: 9_000, contractValue: 5_000, valueDelta: 4_000 },
       { playerId: 'untrusted-mvp', trueValue: 9, contractValue: 9, valueDelta: null },
       { playerId: 'pitcher-mvp', trueValue: 9, contractValue: 9, valueDelta: null },
       { playerId: 'position-runner-up', trueValue: 8, contractValue: 8, valueDelta: null },
@@ -359,7 +384,7 @@ describe('franchise projected designation storage', () => {
     const statusByTypeTeam = new Map(result.rows.map((row) => [`${row.type}:${row.teamId}`, row.status]));
     expect(statusByTypeTeam.get('TEAM_MVP:team-a')).toBe('active');
     expect(statusByTypeTeam.get('ACE:team-a')).toBe('active');
-    expect(statusByTypeTeam.get('FAN_FAVORITE:team-a')).toBe('projected');
+    expect(statusByTypeTeam.get('FAN_FAVORITE:team-a')).toBe('active');
     expect(statusByTypeTeam.get('ALBATROSS:team-a')).toBe('active');
     expect(statusByTypeTeam.has('ALBATROSS:team-b')).toBe(false);
     expect(statusByTypeTeam.has('ALBATROSS:team-d')).toBe(false);
@@ -368,6 +393,7 @@ describe('franchise projected designation storage', () => {
     expect(result.designationEvents.map((event) => [event.transition, event.designationType, event.playerId])).toEqual([
       ['granted', 'ACE', 'ace'],
       ['granted', 'ALBATROSS', 'alb'],
+      ['granted', 'FAN_FAVORITE', 'fan'],
       ['granted', 'TEAM_MVP', 'mvp'],
     ]);
     expect(result.designationEvents.every((event) =>

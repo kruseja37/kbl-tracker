@@ -512,9 +512,9 @@ describe('franchise narrative/random-event eligibility gate', () => {
     const report = buildFranchiseNarrativeEventEligibilityReport(reports);
 
     expect(report.designationPrerequisites.teamMvpAcePreview).toMatchObject({
-      status: 'preview-only',
-      previewRecords: 1,
-      eligibleForReadOnlySummaryContext: true,
+      status: 'not-applicable',
+      previewRecords: 0,
+      eligibleForReadOnlySummaryContext: false,
       eligibleForNarrativeGeneration: false,
       persistable: false,
     });
@@ -522,7 +522,6 @@ describe('franchise narrative/random-event eligibility gate', () => {
     expect(report.designationPrerequisites.albatross.status).toBe('blocked');
     expect(report.designationPrerequisites.captain.status).toBe('deferred');
     expect(report.designationPrerequisites.fanHopeful.status).toBe('deferred');
-    expect(report.designationPrerequisites.cornerstone.status).toBe('deferred');
   });
 
   test('scope-blocked TEAM_MVP and ACE previews cannot create read-only eligibility', () => {

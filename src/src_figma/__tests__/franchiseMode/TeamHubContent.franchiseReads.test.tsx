@@ -423,9 +423,6 @@ function designationEligibilityReport(overrides: Record<string, unknown> = {}) {
       designationEligibilityRecord('FAN_HOPEFUL', {
         reasons: ['FAN_HOPEFUL is deferred because fan, morale, and True Value inputs are not canonical in internal v1.'],
       }),
-      designationEligibilityRecord('CORNERSTONE', {
-        reasons: ['CORNERSTONE is deferred because future value, contract trajectory, morale, and relationship inputs are not canonical in internal v1.'],
-      }),
     ],
     anyPersistable: true,
     limitations: [],

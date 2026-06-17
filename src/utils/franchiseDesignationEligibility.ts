@@ -8,6 +8,7 @@ import {
   getFranchiseTrueValueRows,
   type FranchiseTrueValueRow,
 } from './franchiseTrueValueStorage';
+import { MIN_SALARY } from '../engines/salaryCalculator';
 
 export const FRANCHISE_DESIGNATION_ELIGIBILITY_CONTRACT_VERSION = 'franchise-designation-eligibility-v1-readonly';
 
@@ -17,8 +18,7 @@ export type FranchiseDesignationEligibilityType =
   | 'FAN_FAVORITE'
   | 'ALBATROSS'
   | 'CAPTAIN'
-  | 'FAN_HOPEFUL'
-  | 'CORNERSTONE';
+  | 'FAN_HOPEFUL';
 
 export type FranchiseDesignationEligibilityStatus = 'eligible' | 'preview-only' | 'active' | 'blocked';
 
@@ -95,10 +95,11 @@ const ALL_DESIGNATION_TYPES: FranchiseDesignationEligibilityType[] = [
   'ALBATROSS',
   'CAPTAIN',
   'FAN_HOPEFUL',
-  'CORNERSTONE',
 ];
 
-type RankedDesignationType = 'TEAM_MVP' | 'ACE' | 'ALBATROSS';
+type RankedDesignationType = 'TEAM_MVP' | 'ACE' | 'FAN_FAVORITE' | 'ALBATROSS';
+
+const ALBATROSS_UNDERPERFORMANCE_THRESHOLD = -0.25;
 
 type EligibilityValueRow = FranchiseValueInputRow & {
   trueValue?: number | null;
@@ -139,13 +140,13 @@ export const FRANCHISE_DESIGNATION_V1_POLICY_MATRIX: readonly FranchiseDesignati
   },
   {
     designationType: 'FAN_FAVORITE',
-    status: 'blocked',
-    persistable: false,
-    promptAuthority: 'explicit-trusted-bridge-input-only',
-    summary: 'Blocked until trusted True Value/value-delta and fan attachment policy exist.',
+    status: 'active',
+    persistable: true,
+    promptAuthority: 'none',
+    summary: 'Ranked/selective active v1 designation for current MLB players with the highest positive trusted Value Delta on each team.',
     blockers: [
-      'Canonical True Value/value-delta is unavailable.',
-      'Fan attachment and durable designation state are not trusted for internal v1.',
+      'Season-end locking/carryover remains blocked.',
+      'FAN_FAVORITE does not create fame, morale, relationship, salary, or Mode 3 effects automatically.',
     ],
   },
   {
@@ -181,17 +182,6 @@ export const FRANCHISE_DESIGNATION_V1_POLICY_MATRIX: readonly FranchiseDesignati
       'Unrevealed FARM true ratings, true grade, hidden scout truth, and hidden personality modifiers are blocked.',
     ],
   },
-  {
-    designationType: 'CORNERSTONE',
-    status: 'blocked',
-    persistable: false,
-    promptAuthority: 'explicit-trusted-bridge-input-only',
-    summary: 'Blocked until durable designation state and roster-move consequence policy exist.',
-    blockers: [
-      'Durable designation state is not trusted.',
-      'Roster-move consequence policy is deferred.',
-    ],
-  },
 ] as const;
 
 export function franchiseDesignationV1Policy(
@@ -217,7 +207,7 @@ function isPitcherPosition(position: string | null): boolean {
 }
 
 function rankedScore(row: EligibilityValueRow, designationType: RankedDesignationType): number | null {
-  if (designationType === 'ALBATROSS') return row.valueDelta ?? null;
+  if (designationType === 'FAN_FAVORITE' || designationType === 'ALBATROSS') return row.valueDelta ?? null;
   if (designationType === 'ACE') return row.warPreviewValues.pitchingWar;
   return row.warPreviewValues.totalWar;
 }
@@ -230,6 +220,14 @@ function rankingBlockers(row: EligibilityValueRow, designationType: RankedDesign
       reasons.push('ALBATROSS active designation requires a numeric persisted Value Delta row, not only input readiness.');
     } else if (score >= 0) {
       reasons.push('ALBATROSS active designation requires negative team-relative Value Delta evidence.');
+    }
+    return reasons;
+  }
+  if (designationType === 'FAN_FAVORITE') {
+    if (score === null) {
+      reasons.push('FAN_FAVORITE active designation requires a numeric persisted Value Delta row, not only input readiness.');
+    } else if (score <= 0) {
+      reasons.push('FAN_FAVORITE active designation requires positive team-relative Value Delta evidence.');
     }
     return reasons;
   }
@@ -256,7 +254,7 @@ function buildRankedCandidates(
 ): Map<string, RankedCandidate> {
   const best = new Map<string, RankedCandidate>();
   for (const row of rows) {
-    if (designationType === 'ALBATROSS') {
+    if (designationType === 'FAN_FAVORITE' || designationType === 'ALBATROSS') {
       if (valueDesignationBlockers(row, designationType).length > 0) continue;
     } else if (stableWarPreviewBlockers(row, designationType).length > 0) {
       continue;
@@ -412,11 +410,56 @@ function valueDesignationBlockers(
   if (designationType === 'ALBATROSS' && row.warConsumerTrust?.fanFavoriteAlbatrossDesignations !== true) {
     reasons.push('ALBATROSS active designation requires D6 trusted-value artifact membership with at least two MLB peers.');
   }
-  if (designationType === 'FAN_FAVORITE') {
-    reasons.push('FAN_FAVORITE requires the morale-gated value-designation trust path; D7b only de-gates Albatross.');
-    reasons.push('FAN_FAVORITE also depends on fan/morale systems that are not canonical in internal v1.');
+  if (designationType === 'FAN_FAVORITE' && row.warConsumerTrust?.fanFavoriteAlbatrossDesignations !== true) {
+    reasons.push('FAN_FAVORITE active designation requires D6 trusted-value artifact membership with at least two MLB peers.');
+  }
+  if (designationType === 'ALBATROSS') {
+    if (!finiteNumber(row.salary)) {
+      reasons.push('ALBATROSS active designation requires an explicit player salary for the 2x league-minimum floor.');
+    } else if (row.salary < 2 * MIN_SALARY) {
+      reasons.push('ALBATROSS active designation requires salary at least 2x the league minimum.');
+    }
+    if (finiteNumber(row.contractValue) && row.contractValue > 0 && finiteNumber(row.valueDelta)) {
+      const valueDeltaOverContract = row.valueDelta / row.contractValue;
+      if (valueDeltaOverContract > ALBATROSS_UNDERPERFORMANCE_THRESHOLD) {
+        reasons.push('ALBATROSS active designation requires valueDelta divided by contractValue to be <= -25%.');
+      }
+    } else if (!finiteNumber(row.contractValue) || row.contractValue <= 0) {
+      reasons.push('ALBATROSS active designation requires positive contractValue for the material underperformance gate.');
+    }
   }
   return reasons;
+}
+
+function classifyFanFavorite(
+  row: EligibilityValueRow,
+  rankedCandidates: Map<string, RankedCandidate>,
+): Pick<FranchiseDesignationEligibilityRecord, 'status' | 'reasons'> {
+  const blockers = valueDesignationBlockers(row, 'FAN_FAVORITE');
+  if (blockers.length > 0) {
+    return { status: 'blocked', reasons: blockers };
+  }
+  const rankingReasons = rankingBlockers(row, 'FAN_FAVORITE');
+  if (rankingReasons.length > 0) {
+    return { status: 'blocked', reasons: rankingReasons };
+  }
+  const rankedCandidate = rankedCandidates.get(candidateKey(row.currentTeamId, 'FAN_FAVORITE'));
+  if (!rankedCandidate || rankedCandidate.row.playerId !== row.playerId) {
+    return {
+      status: 'blocked',
+      reasons: [
+        'FAN_FAVORITE active designation is ranked/selective; this input-ready player is not the best trusted team Value Delta candidate.',
+      ],
+    };
+  }
+
+  return {
+    status: 'active',
+    reasons: [
+      'FAN_FAVORITE ranked active v1 designation has positive team-relative Value Delta evidence and D6 scoped trusted-value artifact membership.',
+      'Season-end locking/carryover, awards, fame mutation, morale mutation, relationships, salary movement, and Mode 3 remain blocked.',
+    ],
+  };
 }
 
 function classifyAlbatross(
@@ -450,7 +493,7 @@ function classifyAlbatross(
   };
 }
 
-function deferredNarrativeBlockers(designationType: 'CAPTAIN' | 'FAN_HOPEFUL' | 'CORNERSTONE'): string[] {
+function deferredNarrativeBlockers(designationType: 'CAPTAIN' | 'FAN_HOPEFUL'): string[] {
   if (designationType === 'CAPTAIN') {
     return [
       'CAPTAIN is blocked until hidden charisma/leadership safety policy is approved.',
@@ -463,10 +506,7 @@ function deferredNarrativeBlockers(designationType: 'CAPTAIN' | 'FAN_HOPEFUL' | 
       'Unrevealed FARM true ratings, true grade, hidden scout truth, and hidden personality modifiers remain blocked.',
     ];
   }
-  return [
-    'CORNERSTONE is blocked until durable designation state and roster-move consequence policy are trusted.',
-    'Future value, contract trajectory, morale, relationship, True Value, and awards inputs are unavailable for final designation persistence.',
-  ];
+  return [];
 }
 
 function classifyDesignation(
@@ -481,7 +521,7 @@ function classifyDesignation(
     return classifyAlbatross(row, rankedCandidates);
   }
   if (designationType === 'FAN_FAVORITE') {
-    return { status: 'blocked', reasons: valueDesignationBlockers(row, designationType) };
+    return classifyFanFavorite(row, rankedCandidates);
   }
   return { status: 'blocked', reasons: [...mlbBlockers(row), ...deferredNarrativeBlockers(designationType)] };
 }
@@ -504,7 +544,7 @@ function recordFor(
     rosterStatus: row.rosterStatus,
     designationType,
     status: classification.status,
-    persistable: classification.status === 'active' && (designationType === 'TEAM_MVP' || designationType === 'ACE' || designationType === 'ALBATROSS'),
+    persistable: classification.status === 'active' && (designationType === 'TEAM_MVP' || designationType === 'ACE' || designationType === 'FAN_FAVORITE' || designationType === 'ALBATROSS'),
     reasons: unique(classification.reasons),
     limitations: commonLimitations(row),
     sourceInputs: sourceInputs(row),
@@ -528,6 +568,7 @@ export function classifyFranchiseDesignationEligibility(
   const rankedCandidates = new Map<string, RankedCandidate>([
     ...buildRankedCandidates(rows, 'TEAM_MVP'),
     ...buildRankedCandidates(rows, 'ACE'),
+    ...buildRankedCandidates(rows, 'FAN_FAVORITE'),
     ...buildRankedCandidates(rows, 'ALBATROSS'),
   ]);
   const records = rows.flatMap((row) =>
@@ -547,8 +588,8 @@ export function classifyFranchiseDesignationEligibility(
     limitations: unique([
       ...valueInputReport.limitations,
       ...records.flatMap((record) => record.limitations),
-      'Only TEAM_MVP, ACE, and ALBATROSS can persist as active v1 designations from trusted scoped input gates.',
-      'Fan Favorite, Cornerstone, Captain, and Fan Hopeful remain blocked/deferred by policy matrix.',
+      'Only TEAM_MVP, ACE, FAN_FAVORITE, and ALBATROSS can persist as active v1 designations from trusted scoped input gates.',
+      'Captain and Fan Hopeful remain blocked/deferred by policy matrix.',
       'TWO-WAY players are routed as pitcher-only for internal v1 designations and can only appear through ACE when pitcher evidence qualifies.',
     ]),
   };

@@ -20,6 +20,7 @@ const context = {
   statsScopeId: 'franchise-a-season-1',
   seasonNumber: 1,
   gamesPerTeam: 20,
+  leagueMinimumSalary: 1,
   calculatedAt: '2026-06-12T00:00:00.000Z',
 };
 
@@ -29,6 +30,7 @@ function player(overrides: Partial<FranchiseDesignationPlayerInput>): FranchiseD
     playerName: 'Player A',
     teamId: 'team-a',
     position: 'SS',
+    salary: null,
     gamesPlayed: 5,
     pitchingAppearances: 0,
     totalWAR: 0,
@@ -73,8 +75,8 @@ describe('franchise projected designations', () => {
       player({ playerId: 'mvp', playerName: 'Most Value', totalWAR: 3.2, gamesPlayed: 5 }),
       player({ playerId: 'mvp-runner-up', playerName: 'Runner Up', totalWAR: 2.8, gamesPlayed: 12 }),
       player({ playerId: 'ace', playerName: 'Ace Pitcher', position: 'SP', pWAR: 1.1, pitchingAppearances: 4 }),
-      player({ playerId: 'fan', playerName: 'Fan Bargain', gamesPlayed: 3, trueValue: 12, contractValue: 2, valueDelta: 10 }),
-      player({ playerId: 'alb', playerName: 'Heavy Contract', gamesPlayed: 3, trueValue: 3, contractValue: 12, valueDelta: -9, valueTrusted: true }),
+      player({ playerId: 'fan', playerName: 'Fan Bargain', salary: 2, gamesPlayed: 3, trueValue: 12, contractValue: 2, valueDelta: 10, valueTrusted: true }),
+      player({ playerId: 'alb', playerName: 'Heavy Contract', salary: 12, gamesPlayed: 3, trueValue: 3, contractValue: 12, valueDelta: -9, valueTrusted: true }),
     ], context);
 
     expect(designations.map((designation) => [designation.type, designation.playerId])).toEqual([
@@ -96,6 +98,7 @@ describe('franchise projected designations', () => {
         playerId: 'untrusted-worst',
         playerName: 'Untrusted Worst',
         gamesPlayed: 3,
+        salary: 31,
         trueValue: 1,
         contractValue: 31,
         valueDelta: -30,
@@ -105,6 +108,7 @@ describe('franchise projected designations', () => {
         playerId: 'trusted-worst',
         playerName: 'Trusted Worst',
         gamesPlayed: 3,
+        salary: 18,
         trueValue: 7,
         contractValue: 18,
         valueDelta: -11,
@@ -114,6 +118,7 @@ describe('franchise projected designations', () => {
         playerId: 'trusted-less-bad',
         playerName: 'Trusted Less Bad',
         gamesPlayed: 3,
+        salary: 14,
         trueValue: 10,
         contractValue: 14,
         valueDelta: -4,
@@ -172,7 +177,13 @@ describe('franchise projected designations', () => {
     expect(getLiveDesignationBadge('TEAM_MVP')?.label).not.toMatch(/Proj\./);
     expect(getLiveDesignationBadge('ACE')?.label).not.toMatch(/Proj\./);
     expect(getLiveDesignationBadge('ALBATROSS')?.label).not.toMatch(/Proj\./);
-    expect(getLiveDesignationBadge('FAN_FAVORITE')).toBeNull();
+    expect(getLiveDesignationBadge('FAN_FAVORITE')).toMatchObject({
+      label: 'Fan Favorite',
+      borderStyle: 'solid',
+      status: 'active',
+      colorHex: '#22C55E',
+    });
+    expect(getLiveDesignationBadge('FAN_FAVORITE')?.label).not.toMatch(/Proj\./);
     expect(getProjectedDesignationBadge('TEAM_MVP').label).toBe('Proj. MVP');
     expect(getProjectedDesignationBadge('ACE').label).toBe('Proj. Ace');
   });

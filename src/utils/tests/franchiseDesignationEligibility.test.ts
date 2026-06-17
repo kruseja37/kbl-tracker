@@ -195,7 +195,7 @@ describe('franchise designation eligibility adapter', () => {
     expect(findRecord(report.records, 'player-1', 'TEAM_MVP').reasons.join(' ')).toContain('WAR-like season inputs');
   });
 
-  test('policy matrix documents every designation family and promotes MVP/Ace/Albatross as active', () => {
+  test('policy matrix documents every designation family and promotes MVP/Ace/Fan Favorite/Albatross as active', () => {
     expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.map((policy) => policy.designationType)).toEqual([
       'TEAM_MVP',
       'ACE',
@@ -203,22 +203,22 @@ describe('franchise designation eligibility adapter', () => {
       'ALBATROSS',
       'CAPTAIN',
       'FAN_HOPEFUL',
-      'CORNERSTONE',
     ]);
     expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.filter((policy) => policy.status === 'active').map((policy) => policy.designationType)).toEqual([
       'TEAM_MVP',
       'ACE',
+      'FAN_FAVORITE',
       'ALBATROSS',
     ]);
     expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.filter((policy) => policy.persistable).map((policy) => policy.designationType)).toEqual([
       'TEAM_MVP',
       'ACE',
+      'FAN_FAVORITE',
       'ALBATROSS',
     ]);
     expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.find((policy) => policy.designationType === 'TEAM_MVP')?.blockers.join(' ')).toMatch(/TWO-WAY.*ACE/i);
-    expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.find((policy) => policy.designationType === 'FAN_FAVORITE')?.summary).toMatch(/True Value\/value-delta/i);
+    expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.find((policy) => policy.designationType === 'FAN_FAVORITE')?.summary).toMatch(/highest positive trusted Value Delta/i);
     expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.find((policy) => policy.designationType === 'ALBATROSS')?.summary).toMatch(/worst negative trusted Value Delta/i);
-    expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.find((policy) => policy.designationType === 'CORNERSTONE')?.summary).toMatch(/durable designation state/i);
     expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.find((policy) => policy.designationType === 'CAPTAIN')?.summary).toMatch(/hidden charisma\/leadership/i);
     expect(FRANCHISE_DESIGNATION_V1_POLICY_MATRIX.find((policy) => policy.designationType === 'FAN_HOPEFUL')?.summary).toMatch(/visible-safe prospect/i);
   });
@@ -597,16 +597,16 @@ describe('franchise designation eligibility adapter', () => {
 
     expect(fanFavorite.status).toBe('blocked');
     expect(fanFavorite.reasons.join(' ')).toContain('persisted canonical True Value and Value Delta rows');
-    expect(fanFavorite.reasons.join(' ')).toContain('fan/morale systems');
     expect(albatross.status).toBe('blocked');
     expect(albatross.reasons.join(' ')).toContain('persisted canonical True Value and Value Delta rows');
   });
 
-  test('ALBATROSS becomes active only for the worst trusted negative value-delta player on a team', () => {
+  test('value designations become active only for trusted ranked candidates with Albatross floor and materiality gates', () => {
     const trustedWorst = makeRow({
       playerId: 'trusted-worst',
       playerName: 'Trusted Worst',
       currentTeamId: 'team-1',
+      salary: 5_000,
       warConsumerTrust: {
         ...warConsumerTrust(makeRow()),
         fanFavoriteAlbatrossDesignations: true,
@@ -618,6 +618,7 @@ describe('franchise designation eligibility adapter', () => {
       playerId: 'untrusted-worst',
       playerName: 'Untrusted Worst',
       currentTeamId: 'team-1',
+      salary: 6_000,
       warConsumerTrust: {
         ...warConsumerTrust(makeRow()),
         fanFavoriteAlbatrossDesignations: false,
@@ -629,6 +630,7 @@ describe('franchise designation eligibility adapter', () => {
       playerId: 'trusted-positive',
       playerName: 'Trusted Positive',
       currentTeamId: 'team-2',
+      salary: 1_000,
       warConsumerTrust: {
         ...warConsumerTrust(makeRow()),
         fanFavoriteAlbatrossDesignations: true,
@@ -641,9 +643,9 @@ describe('franchise designation eligibility adapter', () => {
       untrustedWorst,
       trustedPositive,
     ]), [
-      { franchiseId: 'franchise-1', seasonId: 'season-1', statsScopeId: 'season-1', playerId: 'trusted-worst', trueValue: 4, contractValue: 18, valueDelta: -14, warPercentile: 0.2, position: 'SS', peerPoolSize: 4, calculationVersion: 'true-value-v1', computedAt: 'now' },
-      { franchiseId: 'franchise-1', seasonId: 'season-1', statsScopeId: 'season-1', playerId: 'untrusted-worst', trueValue: 2, contractValue: 30, valueDelta: -28, warPercentile: 0.1, position: 'SS', peerPoolSize: 1, calculationVersion: 'true-value-v1', computedAt: 'now' },
-      { franchiseId: 'franchise-1', seasonId: 'season-1', statsScopeId: 'season-1', playerId: 'trusted-positive', trueValue: 20, contractValue: 10, valueDelta: 10, warPercentile: 0.9, position: 'SS', peerPoolSize: 4, calculationVersion: 'true-value-v1', computedAt: 'now' },
+      { franchiseId: 'franchise-1', seasonId: 'season-1', statsScopeId: 'season-1', playerId: 'trusted-worst', trueValue: 3_000, contractValue: 5_000, valueDelta: -2_000, warPercentile: 0.2, position: 'SS', peerPoolSize: 4, calculationVersion: 'true-value-v1', computedAt: 'now' },
+      { franchiseId: 'franchise-1', seasonId: 'season-1', statsScopeId: 'season-1', playerId: 'untrusted-worst', trueValue: 1_000, contractValue: 6_000, valueDelta: -5_000, warPercentile: 0.1, position: 'SS', peerPoolSize: 1, calculationVersion: 'true-value-v1', computedAt: 'now' },
+      { franchiseId: 'franchise-1', seasonId: 'season-1', statsScopeId: 'season-1', playerId: 'trusted-positive', trueValue: 6_000, contractValue: 1_000, valueDelta: 5_000, warPercentile: 0.9, position: 'SS', peerPoolSize: 4, calculationVersion: 'true-value-v1', computedAt: 'now' },
     ]);
 
     expect(findRecord(report.records, 'trusted-worst', 'ALBATROSS')).toMatchObject({
@@ -656,7 +658,11 @@ describe('franchise designation eligibility adapter', () => {
     });
     expect(findRecord(report.records, 'untrusted-worst', 'ALBATROSS').reasons.join(' ')).toMatch(/D6 trusted-value artifact membership/i);
     expect(findRecord(report.records, 'trusted-positive', 'ALBATROSS').status).toBe('blocked');
-    expect(findRecord(report.records, 'trusted-positive', 'ALBATROSS').reasons.join(' ')).toMatch(/negative team-relative Value Delta/i);
+    expect(findRecord(report.records, 'trusted-positive', 'ALBATROSS').reasons.join(' ')).toMatch(/valueDelta divided by contractValue/i);
+    expect(findRecord(report.records, 'trusted-positive', 'FAN_FAVORITE')).toMatchObject({
+      status: 'active',
+      persistable: true,
+    });
     expect(findRecord(report.records, 'trusted-worst', 'FAN_FAVORITE').status).toBe('blocked');
   });
 
@@ -665,10 +671,10 @@ describe('franchise designation eligibility adapter', () => {
 
     expect(findRecord(report.records, 'player-1', 'CAPTAIN').reasons.join(' ')).toContain('hidden charisma/leadership safety policy');
     expect(findRecord(report.records, 'player-1', 'FAN_HOPEFUL').reasons.join(' ')).toContain('visible-safe prospect assignment source');
-    expect(findRecord(report.records, 'player-1', 'CORNERSTONE').reasons.join(' ')).toContain('durable designation state and roster-move consequence policy');
+    expect(report.records.map((record) => String(record.designationType))).not.toContain('CORNERSTONE');
   });
 
-  test('every designation family is evaluated but only trusted TEAM_MVP, ACE, and ALBATROSS can become active in v1', () => {
+  test('every live designation family is evaluated but only trusted ranked inputs can become active in v1', () => {
     const report = classifyFranchiseDesignationEligibility(makeReport([
       makeRow({
         playerId: 'position-leader',
@@ -719,17 +725,17 @@ describe('franchise designation eligibility adapter', () => {
       }),
     ]));
 
-    expect(report.records).toHaveLength(14);
+    expect(report.records).toHaveLength(12);
     expect(report.records.filter((record) => record.status === 'active').map((record) => `${record.playerId}:${record.designationType}`).sort()).toEqual([
       'position-leader:TEAM_MVP',
       'two-way-ace:ACE',
     ]);
     expect(findRecord(report.records, 'two-way-ace', 'TEAM_MVP').reasons.join(' ')).toMatch(/TWO-WAY players are routed as pitcher-only/i);
-    for (const designationType of ['FAN_FAVORITE', 'ALBATROSS', 'CAPTAIN', 'FAN_HOPEFUL', 'CORNERSTONE'] as const) {
+    for (const designationType of ['FAN_FAVORITE', 'ALBATROSS', 'CAPTAIN', 'FAN_HOPEFUL'] as const) {
       expect(findRecord(report.records, 'position-leader', designationType).status).toBe('blocked');
       expect(findRecord(report.records, 'two-way-ace', designationType).status).toBe('blocked');
     }
-    expect(report.limitations.join(' ')).toMatch(/Only TEAM_MVP, ACE, and ALBATROSS can persist as active v1 designations/i);
+    expect(report.limitations.join(' ')).toMatch(/Only TEAM_MVP, ACE, FAN_FAVORITE, and ALBATROSS can persist as active v1 designations/i);
     expect(report.limitations.join(' ')).toMatch(/TWO-WAY players are routed as pitcher-only/i);
   });
 

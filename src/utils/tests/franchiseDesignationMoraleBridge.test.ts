@@ -126,27 +126,6 @@ describe('franchise designation morale bridge', () => {
     });
   });
 
-  test('Cornerstone moved produces stronger negative fan/player morale prompts only when durable designation state is trusted', () => {
-    const blocked = buildFranchiseDesignationMoraleBridgeReport(input({
-      designationType: 'CORNERSTONE',
-      triggerKind: 'trade',
-      durableDesignationStateTrusted: false,
-    }));
-
-    expect(blocked.candidates).toHaveLength(0);
-    expect(blocked.blockers.join(' ')).toMatch(/trusted durable designation state/i);
-
-    const trusted = buildFranchiseDesignationMoraleBridgeReport(input({
-      designationType: 'CORNERSTONE',
-      triggerKind: 'trade',
-      durableDesignationStateTrusted: true,
-    }));
-
-    expect(trusted.candidates).toHaveLength(2);
-    expect(trusted.candidates.find((candidate) => candidate.targetType === 'team-fan')?.safeEffectPreview.delta).toBe(-5);
-    expect(trusted.candidates.find((candidate) => candidate.targetType === 'player')?.safeEffectPreview.delta).toBe(-3);
-  });
-
   test('Captain returns blocked when hidden-charisma safety is not approved', () => {
     const report = buildFranchiseDesignationMoraleBridgeReport(input({
       designationType: 'CAPTAIN',

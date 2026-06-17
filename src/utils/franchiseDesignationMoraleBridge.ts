@@ -392,43 +392,6 @@ function albatrossCandidates(
   return candidates;
 }
 
-function cornerstoneCandidates(
-  scope: FranchiseDesignationMoraleBridgeScope,
-  input: FranchiseDesignationMoraleBridgeInput,
-): FranchiseDesignationMoraleBridgeCandidate[] {
-  if (!durableDesignationTrusted(input) || input.triggerKind !== 'trade' && input.triggerKind !== 'send_down' && input.triggerKind !== 'roster_move') {
-    return [];
-  }
-  const candidates: FranchiseDesignationMoraleBridgeCandidate[] = [];
-  if (input.teamId) {
-    candidates.push(baseCandidate(scope, input, {
-      suffix: 'cornerstone-fan-reaction',
-      promptKind: 'designation-fan-reaction',
-      title: 'Cornerstone moved fan morale prompt',
-      targetType: 'team-fan',
-      targetId: input.teamId,
-      targetName: input.teamName,
-      delta: -5,
-      summary: 'Review a stronger team fan morale reaction because durable Cornerstone state is trusted.',
-      reason: 'Trusted durable Cornerstone movement context can create a stronger negative fan reaction after confirmation.',
-    }));
-  }
-  if (input.playerId && input.ratingRevealState !== 'hidden' && input.playerCurrent !== false) {
-    candidates.push(baseCandidate(scope, input, {
-      suffix: 'cornerstone-player-reaction',
-      promptKind: 'designation-player-reaction',
-      title: 'Cornerstone moved player morale prompt',
-      targetType: 'player',
-      targetId: input.playerId,
-      targetName: input.playerName,
-      delta: -3,
-      summary: 'Review a stronger revealed player morale reaction because durable Cornerstone state is trusted.',
-      reason: 'Trusted durable Cornerstone movement context can create a stronger negative player morale prompt after confirmation.',
-    }));
-  }
-  return candidates;
-}
-
 function fanHopefulCandidates(
   scope: FranchiseDesignationMoraleBridgeScope,
   input: FranchiseDesignationMoraleBridgeInput,
@@ -478,13 +441,6 @@ function designationBlockers(input: FranchiseDesignationMoraleBridgeInput): stri
     blockers.push(...teamBlockers(input));
   }
 
-  if (input.designationType === 'CORNERSTONE') {
-    if (!durableDesignationTrusted(input)) {
-      blockers.push('CORNERSTONE morale prompts require trusted durable designation state.');
-    }
-    blockers.push(...teamBlockers(input));
-  }
-
   if (input.designationType === 'CAPTAIN') {
     blockers.push('CAPTAIN morale bridge is blocked until hidden-charisma/leadership safety is approved.');
   }
@@ -505,7 +461,6 @@ function buildCandidates(
   if (input.designationType === 'TEAM_MVP' || input.designationType === 'ACE') return recognitionCandidates(scope, input);
   if (input.designationType === 'FAN_FAVORITE') return fanFavoriteCandidates(scope, input);
   if (input.designationType === 'ALBATROSS') return albatrossCandidates(scope, input);
-  if (input.designationType === 'CORNERSTONE') return cornerstoneCandidates(scope, input);
   if (input.designationType === 'FAN_HOPEFUL') return fanHopefulCandidates(scope, input);
   return [];
 }
