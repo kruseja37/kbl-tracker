@@ -1194,6 +1194,19 @@ describe('franchise save-slot manifest contract', () => {
     });
 
     expect(SYNC_REGISTRY['kbl-tracker']).toHaveProperty('franchiseSeasonSummaries', 'seasonId');
+    expect(SYNC_REGISTRY['kbl-tracker']).toHaveProperty('franchiseAwardsRows', [
+      'franchiseId',
+      'seasonId',
+      'statsScopeId',
+      'category',
+    ]);
+    expect(SYNC_REGISTRY['kbl-tracker']).toHaveProperty('franchiseTrueValueSnapshots', [
+      'franchiseId',
+      'seasonId',
+      'statsScopeId',
+      'playerId',
+      'checkpoint',
+    ]);
     expect(SYNC_REGISTRY['kbl-playoffs']).toHaveProperty('playoffGames', 'id');
     expect(SYNC_REGISTRY['kbl-franchise-farm']).toHaveProperty('franchiseFarmRecords', 'id');
     expect(SYNC_REGISTRY['kbl-franchise-random-events']).toHaveProperty('randomEventEntries', 'id');
@@ -1211,6 +1224,14 @@ describe('franchise save-slot manifest contract', () => {
       expect.arrayContaining(['franchiseList', 'franchiseConfigs', 'eliminationList']),
     );
     expect(STATIC_DATABASE_SCHEMAS['kbl-tracker'].stores).toHaveProperty('franchiseSeasonSummaries');
+    expect(STATIC_DATABASE_SCHEMAS['kbl-tracker'].stores.franchiseAwardsRows).toMatchObject({
+      keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'category'],
+      optional: true,
+    });
+    expect(STATIC_DATABASE_SCHEMAS['kbl-tracker'].stores.franchiseTrueValueSnapshots).toMatchObject({
+      keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId', 'checkpoint'],
+      optional: true,
+    });
     expect(STATIC_DATABASE_SCHEMAS['kbl-playoffs'].stores).toHaveProperty('playoffGames');
     expect(STATIC_DATABASE_SCHEMAS['kbl-franchise-farm'].stores).toHaveProperty('franchiseFarmRecords');
     expect(STATIC_DATABASE_SCHEMAS['kbl-franchise-random-events'].stores).toHaveProperty('randomEventEntries');

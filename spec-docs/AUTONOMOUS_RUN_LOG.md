@@ -457,3 +457,33 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   **BROWSER-PENDING (batched):** awards preview-only until freeze, then 'trusted' (no winners — D9). **→ NEXT: D9
   (real awards: franchiseAwardsEngine/Storage [NEW store + migration + backup parity] + AwardsWatchlist + MOY-1..7 +
   LSD-1 fame seams — the biggest ticket; will likely SPLIT like D6/D7).**
+
+- **2026-06-17 (overnight, AUTH-4) — D9 mapped + SPLIT; STARTED: D9a (persistence spine).** Mapped via
+  `wf_1a49cc24-8d7` (5 readers, Captain-verified). All of franchiseAwardsEngine/Storage/AwardsWatchlist/
+  franchiseTrueValueSnapshots confirmed GREENFIELD (0 files). **D9 SPLIT (D6/D7 precedent):** D9a = the persistence
+  dark-store diff (highest data-shape risk, isolated first) → D9b = the 5 WAR-category engine (off D6 frozen artifact +
+  D8 gate) → D9c = MOY (season-aggregate pogAwards + record=wins-above-D6-expectation + retire calculateMOYVotes,
+  re-point AwardsCeremonyFlow/RatingsAdjustmentFlow first) → D9d = AwardsWatchlist UI + per-game watchlist recompute +
+  game-1 snapshot capture + season-end finalize + display. **D9a** = 2 stores (franchiseAwardsRows
+  [LSD-1 seams: candidate margins / fWAR-total split / nullable voteWeight / reserved KK-Bust-Comeback] +
+  franchiseTrueValueSnapshots [trough history from game 1]) at **trackerDb v17→v18** + backup-parity lockstep
+  (register both + pin 18, optional:true, KBL_BACKUP_VERSION stays 2) + CRUD + the round-trip/parity/PIN-TRAP tests.
+  Contract in PROMPT_CONTRACTS.md; Codex invoked under the 30-min watchdog. **DEFAULTS-TAKEN:** v18 (spec "v16" stale)
+  · dark stores (writers = D9b/c/d) · optional:true (don't brick pre-D9 backups) · getTrackerDb delegation (no SIM-hang)
+  · seam fields nullable (L12 additive). **THE TRAP TO CATCH:** `franchiseSeasonLedgerStorage.test.ts` hardcodes the
+  version literal + store list (broke the v15→v17 bump, commit 8ba0538) — D9a must update it; the full suite is the net.
+  **D9b/c/d QUEUED.**
+
+- **2026-06-17 (overnight, AUTH-4) — D9a COMMITTED.** Build clean. Captain (Opus) RIGOROUS independent audit =
+  **VERIFIED** (data-shape migration — audited hardest). Diff = 6 edited + 4 new (2 dark storage modules + 2 tests).
+  **Migration lockstep BYTE-PERFECT:** trackerDb v17→18 + 2 idempotent stores; backupRestore registers both
+  (byte-mirrored keyPath+by_scope, optional:true) + pin 18; syncConfig both — 3 places each. KBL_BACKUP_VERSION 2.
+  **The proven PIN-TRAP handled** (franchiseSeasonLedgerStorage.test.ts 17→18 + store list). **Gates (re-ran):**
+  tsc 0 · build 0 · full suite **7,271 pass / 3 fail (7,274 total)** = EXACTLY characterized, ZERO new reds ·
+  round-trip proves both stores survive export→wipe→restore by exact composite key (keyPath fidelity) · parity-guard
+  GREEN · franchiseAwardRow carries ALL LSD-1 seams · getTrackerDb delegation (no SIM-hang) · optional:true (pre-D9
+  backups safe) · stores DARK (zero engine writers). **→ NEXT: D9b (the 5 WAR-category engine: MVP=total WAR /
+  Cy Young / RoY / Gold Glove=fWAR+def split / Silver Slugger — off the D6 FROZEN artifact + frozen TV rows, gated on
+  D8 trustedForAwards + awardQualifierThresholds; populate franchiseAwardsRows + candidate margins; determinism
+  mutation-kill test [perturb live TV → winners don't move]). RoY rookie source = careerStorage.seasonsPlayed===0
+  [Captain default]. Then D9c MOY, D9d UI/finalize.**

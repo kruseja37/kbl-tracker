@@ -302,11 +302,21 @@ const trackerStores: Record<string, StoreSchema> = {
   franchiseTrustedValueArtifacts: {
     keyPath: ['franchiseId', 'seasonId', 'statsScopeId'],
   },
+  franchiseAwardsRows: {
+    keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'category'],
+    indexes: [{ name: 'by_scope', keyPath: ['franchiseId', 'seasonId', 'statsScopeId'] }],
+    optional: true,
+  },
+  franchiseTrueValueSnapshots: {
+    keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId', 'checkpoint'],
+    indexes: [{ name: 'by_scope', keyPath: ['franchiseId', 'seasonId', 'statsScopeId'] }],
+    optional: true,
+  },
 };
 
 export const STATIC_DATABASE_SCHEMAS: Record<string, DatabaseSchema> = {
   'kbl-tracker': {
-    version: 17,
+    version: 18,
     stores: trackerStores,
   },
   'kbl-playoffs': {

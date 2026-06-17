@@ -7813,3 +7813,71 @@ Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff
 
 **Status:** VERIFIED → committed (branch `codex/franchise-v1-next`, not pushed). **→ NEXT: D9 (real awards engine + MOY-1..7 + LSD-1 seams).**
 
+---
+
+## D9a — awards PERSISTENCE spine (2 new dark stores + v18 migration + backup-parity lockstep) — 2026-06-17 (autonomous overnight, AUTH-4)
+
+**ROUTE:** Codex | high reasoning effort → Opus 4.8 audit (auditor ≠ builder). Autonomous overnight (AUTH-4; AUTH-1).
+**PERSISTENCE / DATA-SHAPE — the highest-risk category; audit HARDEST.** Map: `wf_1a49cc24-8d7` (5 readers,
+Captain-verified). D9 split into D9a (persistence) → D9b (WAR-category engine) → D9c (MOY + mwar retirement) → D9d
+(UI/recompute/finalize). **D9a = the pure DARK-STORE diff** (D6a precedent: ship the store separately from the writer).
+
+**SCOPE:** two NEW IndexedDB stores at trackerDb **v17→v18** + the full backup-parity lockstep + storage CRUD + row
+TYPES with the LSD-1 fame-ready seam fields baked in (dark — no engine writes them in D9a):
+- **franchiseAwardsRows** keyPath `[franchiseId,seasonId,statsScopeId,category]` + `by_scope` index; row carries the
+  LSD-1 seams: `candidates[]` w/ marginToWinner (SEAM-1), `goldGloveSplit{fWar,totalWar}` (SEAM-2), nullable
+  `voteWeight` (SEAM-3), reserved KK/Bust/Comeback categories (SEAM-4), `winnerPlayerId`/`finalized`/`computedAt`.
+- **franchiseTrueValueSnapshots** keyPath `[franchiseId,seasonId,statsScopeId,playerId,checkpoint]` + `by_scope` index
+  (SEAM-4/C5 trough history, dark; the game-1 capture write is D9c).
+
+**CAPTAIN DEFAULTS (AUTH-4):** v18 (spec's "v16" is stale — DB already v17); BOTH stores `optional:true` in
+backupRestore (so pre-D9 v2 backups still restore — don't brick them); KBL_BACKUP_VERSION stays 2; storage modules
+delegate to `getTrackerDb()` (NO own onupgradeneeded — avoids the SIM-hang); seam fields nullable/empty (L12 additive).
+
+**ALLOWED:** trackerDb.ts (v18 + 2 createObjectStore blocks) · backupRestore.ts (register both + pin 18 + optional:true)
+· syncConfig.ts (both keyPaths) · NEW franchiseAwardsStorage.ts (+ snapshots module): types + CRUD via getTrackerDb,
+dark · tests: parity round-trip extended for both stores + **the PROVEN TRAP** `franchiseSeasonLedgerStorage.test.ts`
+(hardcoded `.toBe(17)`→18 + add both store names to the store-list) + franchiseSaveSlotManifest coverage + unit
+round-trips.
+
+**DO NOT:** the awards ENGINE / MOY / AwardsWatchlist UI / per-game recompute / season-end finalize / any real writer
+(D9b/c/d — stores are DARK) · D6 artifact/TV recompute/oracle · offseason (AwardsCeremonyFlow/offseasonStorage/
+mwarCalculator/the flag) · KBL_BACKUP_VERSION · own onupgradeneeded · fame/morale wiring.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · parity-guard GREEN with both new stores · round-trip
+(seed→export→wipe→restore) for both · FULL suite = only the 3 characterized fails (ZERO new reds — the net that
+catches the pin trap) · grep: TRACKER_DB_VERSION 18, pin 18, KBL_BACKUP_VERSION 2, both stores in trackerDb +
+backupRestore + syncConfig.
+
+**STOP IF:** storage module needs its own DB connection; parity/round-trip can't go green in 2 tries; an
+engine/UI/offseason edit becomes necessary; a pre-D9 backup would break (fix = optional:true, don't widen scope).
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — this is a data-shape migration; get the
+trackerDb↔backupRestore lockstep exact.
+
+**Status:** contract issued; Codex invoked (under 30-min watchdog).
+
+### D9a-AUDIT + EXECUTION RECORD (2026-06-17, autonomous overnight AUTH-4)
+
+**ROUTE actual:** Codex (high, background `codex exec` under watchdog) BUILT → Opus 4.8 (Captain) RIGOROUS independent
+AUDIT (auditor ≠ builder; data-shape migration → audited hardest). Build clean.
+
+**AUDIT VERDICT: CONFORMS / VERIFIED.** Independent re-verification (Opus — re-ran):
+- Diff = 6 edited (trackerDb +23, backupRestore +12, syncConfig +2, 3 lockstep tests) + 4 NEW (2 storage modules +
+  2 module tests). **Migration lockstep BYTE-PERFECT:** trackerDb v17→18 + 2 idempotent createObjectStore blocks;
+  backupRestore registers BOTH (keyPath+`by_scope` index byte-mirroring trackerDb, `optional:true`) + pin 17→18;
+  syncConfig both keyPaths — all 3 places, both stores. KBL_BACKUP_VERSION stays 2.
+- **THE PROVEN PIN-TRAP HANDLED:** `franchiseSeasonLedgerStorage.test.ts` `toBe(17)`→`18` + both store names added to
+  the sorted `expectedTrackerStores` (the exact omission that broke v15→v17, commit 8ba0538).
+- `tsc --noEmit` 0 (Opus) · `npm run build` success (Opus) · full suite **7,271 pass / 3 fail (7,274 total)** =
+  EXACTLY the characterized set, ZERO new reds.
+- **Round-trip PROVES keyPath fidelity:** seeds both stores → export (both present) → wipe → restore → read back by
+  exact composite key (`toEqual`). The D2 structural parity-guard stays GREEN with both new stores.
+- `franchiseAwardRow` type carries ALL LSD-1 seams (candidates+`marginToWinner` / `goldGloveSplit` / nullable
+  `voteWeight` / reserved KK/Comeback/Bust categories) so D9b/c + L12 fame are additive. Both modules delegate to
+  `getTrackerDb()` (no own onupgradeneeded → no SIM-hang). `optional:true` → pre-D9 backups don't break.
+- **DARK confirmed:** grep shows ZERO engine/recompute writers of either store outside the storage modules/schema
+  files — the writers are D9b/c/d. No D6 artifact/TV/oracle/offseason/flag touch.
+
+**Status:** VERIFIED → committed (branch `codex/franchise-v1-next`, not pushed). **→ NEXT: D9b (5 WAR-category engine off the frozen artifact).**
+

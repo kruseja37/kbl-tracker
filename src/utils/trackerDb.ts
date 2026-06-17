@@ -14,7 +14,7 @@
  */
 
 const DB_NAME = 'kbl-tracker';
-export const TRACKER_DB_VERSION = 17; // Must be the highest version any consumer ever used
+export const TRACKER_DB_VERSION = 18; // Must be the highest version any consumer ever used
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -352,6 +352,27 @@ export async function getTrackerDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('franchiseTrustedValueArtifacts')) {
         db.createObjectStore('franchiseTrustedValueArtifacts', {
           keyPath: ['franchiseId', 'seasonId', 'statsScopeId'],
+        });
+      }
+
+      // v18 / D9a: dark awards spine rows. D9b/D9c populate winners later;
+      // D9a only creates the persistence shape and backup/sync parity.
+      if (!db.objectStoreNames.contains('franchiseAwardsRows')) {
+        const awardsStore = db.createObjectStore('franchiseAwardsRows', {
+          keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'category'],
+        });
+        awardsStore.createIndex('by_scope', ['franchiseId', 'seasonId', 'statsScopeId'], {
+          unique: false,
+        });
+      }
+
+      // v18 / D9a + LSD-1 SEAM-4: per-game True Value trough snapshots.
+      if (!db.objectStoreNames.contains('franchiseTrueValueSnapshots')) {
+        const trueValueSnapshotStore = db.createObjectStore('franchiseTrueValueSnapshots', {
+          keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId', 'checkpoint'],
+        });
+        trueValueSnapshotStore.createIndex('by_scope', ['franchiseId', 'seasonId', 'statsScopeId'], {
+          unique: false,
         });
       }
     };
