@@ -331,6 +331,35 @@ replacement for them.
 
 ---
 
+## WAITING-ON-JK PROTOCOL (Non-Negotiable)
+
+When you hit a decision you cannot make under your current AUTH level and genuinely need JK:
+
+1. Append one line per question to `./WAITING_ON_JK.md` at the repo root (create the file if absent). Format each line **exactly**:
+   ```
+   [<ISO8601 timestamp>] [thread:<short-thread-name>] [ticket:<id-or-none>] <the question, phrased so a yes/no or one-line answer unblocks you>
+   ```
+2. Do NOT add any `[NOTIFIED ...]` marker yourself — the watcher appends that.
+3. After writing the line, continue any other queued work you CAN do without the answer. Only go fully idle if nothing else is workable.
+4. When JK's answer is relayed into this thread, act on it, then append ` [RESOLVED <ISO timestamp>]` to the resolved line.
+
+---
+
+## CONTEXT-HANDOFF PROTOCOL (Non-Negotiable)
+
+When your context is approaching its limit (compaction near or imminent):
+
+1. Run the existing Session End Protocol in full (log to AUDIT_LOG.md + SESSION_LOG.md, update CURRENT_STATE.md and the phase tracker).
+2. Then write a file named `HANDOFF_NEEDED` at the repo root containing **exactly**:
+   ```
+   next_ticket: <id or short description of what the next session should start on>
+   branch: <active branch, e.g. codex/franchise-v1-next>
+   resume_note: <one line the fresh session must know that isn't already in CURRENT_STATE.md>
+   ```
+3. Do not start new work after writing `HANDOFF_NEEDED`; a fresh session is launched automatically to continue.
+
+---
+
 ## Lessons Learned (pending JK ratification)
 
 Auto-capture pen for the Self-Improvement Loop (see CLAUDE.md). Rules here are
