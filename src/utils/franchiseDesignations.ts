@@ -71,6 +71,32 @@ export interface FranchiseProjectedDesignationBadge {
   backgroundHex: string;
 }
 
+export interface FranchiseLiveDesignationBadge {
+  type: FranchiseDesignationType;
+  label: string;
+  borderStyle: 'solid';
+  status: 'active';
+  colorHex: string;
+  backgroundHex: string;
+}
+
+export interface DesignationEvent {
+  eventType: 'designation';
+  designationType: FranchiseDesignationType;
+  transition: 'granted' | 'changed' | 'lost';
+  playerId: string;
+  previousPlayerId: string | null;
+  teamId: string;
+  franchiseId: string;
+  seasonId: string;
+  statsScopeId: string;
+  status: FranchiseDesignationStatus;
+  calculatedAt: string;
+  moraleMutationApplied: false;
+  relationshipMutationApplied: false;
+  salaryMovementApplied: false;
+}
+
 const PITCHER_PRIMARY_POSITIONS = new Set(['SP', 'SP/RP', 'RP', 'CP']);
 
 const PROJECTED_BADGES: Record<FranchiseDesignationType, FranchiseProjectedDesignationBadge> = {
@@ -112,6 +138,25 @@ const PROJECTED_BADGES: Record<FranchiseDesignationType, FranchiseProjectedDesig
   },
 };
 
+const LIVE_DESIGNATION_BADGES: Partial<Record<FranchiseDesignationType, FranchiseLiveDesignationBadge>> = {
+  TEAM_MVP: {
+    type: 'TEAM_MVP',
+    label: 'MVP',
+    borderStyle: 'solid',
+    status: 'active',
+    colorHex: '#FFD700',
+    backgroundHex: '#4A3F16',
+  },
+  ACE: {
+    type: 'ACE',
+    label: 'Ace',
+    borderStyle: 'solid',
+    status: 'active',
+    colorHex: '#4169E1',
+    backgroundHex: '#1C2F64',
+  },
+};
+
 function finiteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
@@ -143,6 +188,80 @@ export function getProjectedDesignationBadge(
   type: FranchiseDesignationType,
 ): FranchiseProjectedDesignationBadge {
   return PROJECTED_BADGES[type];
+}
+
+export function getLiveDesignationBadge(
+  type: FranchiseDesignationType,
+): FranchiseLiveDesignationBadge | null {
+  return LIVE_DESIGNATION_BADGES[type] ?? null;
+}
+
+function activeHolderKey(row: Pick<FranchisePlayerDesignationRecord, 'teamId' | 'type'>): string {
+  return `${row.teamId}\u0000${row.type}`;
+}
+
+function activeHolderMap(
+  rows: FranchisePlayerDesignationRecord[],
+): Map<string, FranchisePlayerDesignationRecord> {
+  const activeRows = rows
+    .filter((row) => row.status === 'active')
+    .sort((left, right) =>
+      left.teamId.localeCompare(right.teamId) ||
+      left.type.localeCompare(right.type) ||
+      left.playerId.localeCompare(right.playerId),
+    );
+  return new Map(activeRows.map((row) => [activeHolderKey(row), row]));
+}
+
+function designationEvent(
+  transition: DesignationEvent['transition'],
+  prior: FranchisePlayerDesignationRecord | null,
+  next: FranchisePlayerDesignationRecord | null,
+): DesignationEvent {
+  const source = next ?? prior;
+  if (!source) {
+    throw new Error('DesignationEvent requires a prior or next active holder.');
+  }
+  return {
+    eventType: 'designation',
+    designationType: source.type,
+    transition,
+    playerId: next?.playerId ?? source.playerId,
+    previousPlayerId: prior?.playerId ?? null,
+    teamId: source.teamId,
+    franchiseId: source.franchiseId,
+    seasonId: source.seasonId,
+    statsScopeId: source.statsScopeId,
+    status: source.status,
+    calculatedAt: source.calculatedAt,
+    moraleMutationApplied: false,
+    relationshipMutationApplied: false,
+    salaryMovementApplied: false,
+  };
+}
+
+export function diffActiveDesignationHolders(
+  prior: FranchisePlayerDesignationRecord[],
+  next: FranchisePlayerDesignationRecord[],
+): DesignationEvent[] {
+  const priorActive = activeHolderMap(prior);
+  const nextActive = activeHolderMap(next);
+  const keys = Array.from(new Set([...priorActive.keys(), ...nextActive.keys()])).sort();
+  const events: DesignationEvent[] = [];
+
+  for (const key of keys) {
+    const priorHolder = priorActive.get(key) ?? null;
+    const nextHolder = nextActive.get(key) ?? null;
+    if (!priorHolder && nextHolder) {
+      events.push(designationEvent('granted', null, nextHolder));
+    } else if (priorHolder && !nextHolder) {
+      events.push(designationEvent('lost', priorHolder, null));
+    } else if (priorHolder && nextHolder && priorHolder.playerId !== nextHolder.playerId) {
+      events.push(designationEvent('changed', priorHolder, nextHolder));
+    }
+  }
+
+  return events;
 }
 
 function byTeam(players: FranchiseDesignationPlayerInput[]): Map<string, FranchiseDesignationPlayerInput[]> {

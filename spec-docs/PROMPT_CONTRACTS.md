@@ -7574,3 +7574,86 @@ clean) → killed → **re-dispatched inside a 30-min watchdog** → Build #2 ex
 
 **Status:** VERIFIED → committed (branch `codex/franchise-v1-next`, not pushed).
 
+---
+
+## D7a — designations LIVE, part 1: dual-path reconcile + TEAM_MVP/ACE → 'active' + DesignationEvent — 2026-06-17 (autonomous overnight, AUTH-4)
+
+**ROUTE:** Codex | high reasoning effort → Opus 4.8 audit (auditor ≠ builder). Autonomous overnight (AUTH-4; AUTH-1
+auto-commit on VERIFIED). Touches the SMB4 designation asset → audit the morale/fame firewall HARDEST.
+
+**SPLIT RATIONALE (Captain, AUTH-4):** D7 is large + multi-surface (3 designation surfaces, a characterized-test
+entanglement, dormant-consumer wake-ups, the morale firewall). Split like D6a/D6b: **D7a = reconcile + promote
+TEAM_MVP/ACE + DesignationEvent infra; D7b = Albatross de-gate + the D6 trustedPlayerIds trust filter** (the
+untrusted-value-leak correctness fix). Map: `wf_fde440e6-dd3` (6 readers, file:line-verified by the Captain).
+
+**CAPTAIN DEFAULTS (AUTH-4, documented, JK-overridable):**
+1. **Persisted store canonical; eligibility = ranking input.** Promote a persisted TEAM_MVP/ACE row to 'active' ONLY
+   when the eligibility path classifies that SAME (type, team, player) 'active' — else keep 'projected' (conservative:
+   promote only when both paths agree on the holder; no parallel ranker invented). Rankers-unification = follow-up.
+2. **DesignationEvent EPHEMERAL** (in-memory return, NO store, NO v18 bump) — matches the RosterMoveEvent/TradeEvent
+   precedent; minimal firewall-safe surface; a durable event stream for Phase-2 L3 is a separate ticket.
+3. **Changed-only emission** (diff prior vs new active holders per team/type) — no per-game event spam.
+4. **Do NOT touch the narrative gate / its characterized "TEAM_MVP/ACE preview-only" test** — that RED is
+   PRE-EXISTING (a prior eligibility-promotion slice left it stale), owned by a separate narrative cleanup; D7a leaves
+   the baseline unchanged (3 characterized fails stay).
+5. **Embedded `player.franchiseDesignations` stays dormant** — D7a writes the STORE, not the embedded array, so the
+   profile/trade 'active' consumers keep matching zero (no double-count). Repoint = follow-up.
+6. **Albatross / FAN_FAVORITE / CAPTAIN / FAN_HOPEFUL / CORNERSTONE stay projected/blocked/deferred** (FF needs
+   Phase-2 morale; Cornerstone CUT per LSD-3; Albatross = D7b).
+
+**GOAL:** persisted TEAM_MVP/ACE rows 'projected'→'active' (gated on the eligibility verdict) + a live non-'Proj.'
+badge + TeamHubContent render + an ephemeral changed-only DesignationEvent, with emission mutating NO morale/fame.
+
+**ALLOWED:** `franchiseDesignations.ts` (LIVE badge map + getter; DesignationEvent type; pure diff helper) ·
+`franchiseDesignationStorage.ts` (consult eligibility → stamp 'active'; read-prior → diff → return events; replace) ·
+`TeamHubContent.tsx` (render live badges for 'active', keep 'Proj.' for projected; update status filters so active
+rows are surfaced not dropped) · `processCompletedGame.ts` (capture/ignore the returned events; no morale wire) ·
+designation tests (promotion / changed-only event / no-morale regression / badge).
+
+**DO NOT:** Albatross (D7b) · narrative gate + its characterized test · fame (teamMVP/fameEngine/game.ts) · morale
+(fanMoraleEngine; keep the morale bridge/adapter read-only all-false; do NOT import fanFavoriteEngine) · promote
+FF/Captain/FanHopeful/Cornerstone · populate the embedded array with 'active' · new store / TRACKER_DB_VERSION (17) /
+KBL_BACKUP_VERSION (2) · salary-weighting / FA-destination (LSD-2 deferred) · Mode-3/offseason/locking (lockedAt null).
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · designation + TeamHubContent + new tests pass; the
+narrative "preview-only" characterized RED UNCHANGED (untouched) → baseline still 3 characterized fails · grep: no new
+fame/morale/teamMVP/fanFavoriteEngine import in the designation path; no new store; TRACKER_DB_VERSION 17; KBL_BACKUP_VERSION 2.
+
+**STOP IF:** out-of-ALLOWED edit; must touch fame/morale/narrative to compile; new store/version bump needed; canonical
+direction would invert.
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited.
+
+**Status:** contract issued; Codex invoked (under 30-min watchdog).
+
+### D7a-AUDIT + EXECUTION RECORD (2026-06-17, autonomous overnight AUTH-4)
+
+**ROUTE actual:** Codex (high reasoning, background `codex exec` under the 30-min watchdog) BUILT → Opus 4.8 (Captain)
+independent AUDIT (auditor ≠ builder). Build #1 clean (no hang this time).
+
+**AUDIT VERDICT: CONFORMS / VERIFIED.** Independent re-verification (Opus — re-ran, not graded from the paste):
+- Diff = 6 files within ALLOWED: `franchiseDesignations.ts` (LIVE badge map [TEAM_MVP 'MVP' / ACE 'Ace', solid] +
+  `getLiveDesignationBadge`; `DesignationEvent` type w/ the 3 firewall markers; pure `diffActiveDesignationHolders`) ·
+  `franchiseDesignationStorage.ts` (consult `buildFranchiseDesignationEligibility` → promote a persisted TEAM_MVP/ACE
+  row to 'active' ONLY when eligibility marks the EXACT (type,team,player) active; read-prior → diff → return ephemeral
+  `designationEvents`) · `TeamHubContent.tsx` (surface 'active' rows — `status==='projected'||'active'` filter fix so
+  active rows don't vanish; live solid badge vs 'Proj.' dotted; firewall language kept) · `processCompletedGame.ts`
+  (`void result.designationEvents` — captured, ignored, no Phase-1 consumer) · 2 test files.
+- `tsc --noEmit` 0 (Opus) · `npm run build` success (Opus) · full suite **7,258 pass / 3 fail / 400 files (7,261
+  total, +4 D7a tests)** — the 3 are EXACTLY the characterized set; **the narrative "TEAM_MVP/ACE preview-only" RED is
+  UNCHANGED** (D7a did not touch it — baseline preserved); ZERO new reds.
+- **FIREWALL INTACT (the hard gate):** grep confirms NO morale/fame/teamMVP/fanFavoriteEngine import in
+  `franchiseDesignations.ts`/`franchiseDesignationStorage.ts`; the `DesignationEvent` carries
+  moraleMutationApplied/relationshipMutationApplied/salaryMovementApplied = false; Codex extended the existing source
+  firewall test to statically guard against morale/fame imports.
+- **Mutation-honesty:** the promotion test pins the gate from BOTH sides (trusted TEAM_MVP/ACE → 'active'; untrusted
+  team-b MVP + FAN_FAVORITE + ALBATROSS stay 'projected'); the changed-only test proves same-holder → [] across
+  recomputes, holder-change → one 'changed' event. A broken gate (promote-all or promote-none) fails these.
+- Invariants: TRACKER_DB_VERSION 17, KBL_BACKUP_VERSION 2, NO new store (events ephemeral); Albatross/FF/Captain/
+  FanHopeful/Cornerstone NOT promoted; embedded `player.franchiseDesignations` not populated with 'active' (consumers
+  stay dormant — no double-count).
+- **BROWSER-PENDING (batched):** on real franchise data, a trusted top-WAR TEAM_MVP/ACE shows a solid live badge
+  (not 'Proj.'); a non-top/untrusted player stays 'Proj.'; FAN_FAVORITE/Albatross still 'Proj.'.
+
+**Status:** VERIFIED → committed (branch `codex/franchise-v1-next`, not pushed). **→ NEXT: D7b (Albatross live + D6 trust filter).**
+

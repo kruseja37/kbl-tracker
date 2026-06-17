@@ -80,6 +80,7 @@ import {
   buildFranchiseDesignationMoraleContextAdapterReport,
 } from "../../../utils/franchiseDesignationMoraleContextAdapter";
 import {
+  getLiveDesignationBadge,
   getProjectedDesignationBadge,
   type FranchisePlayerDesignationRecord,
 } from "../../../utils/franchiseDesignations";
@@ -733,12 +734,21 @@ function rosterDesignationSummary(input: {
   projectedDesignationRows: FranchisePlayerDesignationRecord[];
 }): string {
   if (input.hiddenSafe) return 'Hidden';
+  const active = uniqueStrings(
+    input.projectedDesignationRows
+      .filter((record) => record.playerId === input.playerId && record.status === 'active')
+      .map((record) => (getLiveDesignationBadge(record.type) ?? getProjectedDesignationBadge(record.type)).label),
+  );
   const projected = uniqueStrings(
     input.projectedDesignationRows
       .filter((record) => record.playerId === input.playerId && record.status === 'projected')
       .map((record) => getProjectedDesignationBadge(record.type).label),
   );
-  if (projected.length > 0) return `${projected.join(', ')} projected`;
+  const parts = [
+    active.length > 0 ? `${active.join(', ')} live` : null,
+    projected.length > 0 ? `${projected.join(', ')} projected` : null,
+  ].filter(Boolean);
+  if (parts.length > 0) return parts.join('; ');
   return '—';
 }
 
@@ -2081,7 +2091,7 @@ export function TeamHubContent() {
     if (!selectedProfile) return [];
     return projectedDesignationRows.filter((designation) =>
       designation.playerId === selectedProfile.playerId &&
-      designation.status === 'projected' &&
+      (designation.status === 'projected' || designation.status === 'active') &&
       (!selectedProfile.teamId || designation.teamId === selectedProfile.teamId),
     );
   }, [projectedDesignationRows, selectedProfile]);
@@ -4352,11 +4362,13 @@ function FranchisePlayerProfileModal({
           <section className="mb-3 border-[4px] border-[#4A6844] bg-[#3F563F] p-3">
             <div className="text-[9px] font-bold text-[#C4A853]">PROJECTED DESIGNATIONS</div>
             <div className="mt-1 text-[8px] text-[#E8E8D8]/65">
-              Mid-season badges are projected only. Season-end locking, morale, salary, awards, and Mode 3 effects remain blocked.
+              Solid badges are live TEAM_MVP/ACE designations. Dotted Proj. badges are mid-season projections. Season-end locking, morale, salary, awards, and Mode 3 effects remain blocked.
             </div>
             <div className="mt-2 flex flex-wrap gap-2">
               {projectedDesignations.map((designation) => {
-                const badge = getProjectedDesignationBadge(designation.type);
+                const badge = designation.status === 'active'
+                  ? (getLiveDesignationBadge(designation.type) ?? getProjectedDesignationBadge(designation.type))
+                  : getProjectedDesignationBadge(designation.type);
                 return (
                 <span
                   key={`${designation.type}:${designation.teamId}:${designation.calculatedAt}`}
@@ -5383,6 +5395,9 @@ function FranchiseMode2FoundationStatusPanel({
   const blockedSalaryRows = salaryLifecycleReport?.playerRecords.filter((record) =>
     record.initialSalaryBaseline.status !== 'stable-baseline',
   ).length ?? 0;
+  const activeDesignationCount = projectedDesignationRows.filter((record) =>
+    record.status === 'active' && (!selectedTeamId || record.teamId === selectedTeamId),
+  ).length;
   const projectedDesignationCount = projectedDesignationRows.filter((record) =>
     record.status === 'projected' && (!selectedTeamId || record.teamId === selectedTeamId),
   ).length;
@@ -5398,9 +5413,14 @@ function FranchiseMode2FoundationStatusPanel({
   const salaryStatus = stableSalaryRows > 0 && blockedSalaryRows === 0
     ? 'trusted'
     : (stableSalaryRows > 0 ? 'partial' : 'blocked');
-  const designationStatus = projectedDesignationCount > 0
+  const designationStatus = activeDesignationCount > 0
+    ? 'active'
+    : projectedDesignationCount > 0
     ? 'preview-only'
     : (blockedDesignationCount > 0 ? 'blocked' : 'preview-only');
+  const designationBody = activeDesignationCount > 0
+    ? `${activeDesignationCount} live canonical row(s), ${projectedDesignationCount} projected canonical row(s), ${blockedDesignationCount} blocked eligibility row(s). Season-end locking, awards, morale, salary, and Mode 3 effects stay blocked.`
+    : `${projectedDesignationCount} projected canonical row(s), ${blockedDesignationCount} blocked eligibility row(s). Season-end locking, awards, morale, salary, and Mode 3 effects stay blocked.`;
   const moraleStatus = moraleRelationshipTrustReport?.scope.status ?? 'blocked';
   const narrativeStatus = narrativeEventEligibilityReport?.downstreamConsumers.readOnlySummaries.status ?? 'blocked';
 
@@ -5447,7 +5467,7 @@ function FranchiseMode2FoundationStatusPanel({
         <FoundationStatusCard
           title="DESIGNATION ELIGIBILITY"
           status={designationStatus}
-          body={`${projectedDesignationCount} projected canonical row(s), ${blockedDesignationCount} blocked eligibility row(s). Season-end locking, awards, morale, salary, and Mode 3 effects stay blocked.`}
+          body={designationBody}
         />
         <FoundationStatusCard
           title="MORALE / RELATIONSHIPS"
@@ -5935,6 +5955,11 @@ function FranchiseValueTruthPanel({
   const designationRecords = (designationEligibilityReport?.records ?? []).filter((record) =>
     !selectedTeamId || record.teamId === selectedTeamId,
   );
+  const activeDesignationLabels = uniqueStrings(
+    projectedDesignationRows
+      .filter((record) => record.status === 'active' && (!selectedTeamId || record.teamId === selectedTeamId))
+      .map((record) => (getLiveDesignationBadge(record.type) ?? getProjectedDesignationBadge(record.type)).label),
+  );
   const projectedDesignationLabels = uniqueStrings(
     projectedDesignationRows
       .filter((record) => record.status === 'projected' && (!selectedTeamId || record.teamId === selectedTeamId))
@@ -6001,12 +6026,15 @@ function FranchiseValueTruthPanel({
 
         <div className="border-2 border-[#4A6844] bg-[#4A6844] p-2 text-[8px] text-[#E8E8D8]/75">
           <div className="mb-1 font-bold text-[#C4A853]">DYNAMIC DESIGNATIONS</div>
+          {activeDesignationLabels.length > 0 && (
+            <div>{activeDesignationLabels.join(', ')} live canonical designation(s); morale, salary, awards, and relationship effects are not applied.</div>
+          )}
           {projectedDesignationLabels.length > 0 ? (
             <div>{projectedDesignationLabels.join(', ')} canonical projected designation(s); season-end locking and carryover remain blocked.</div>
           ) : (
-            <div>No projected designation rows for the current inputs.</div>
+            <div>{activeDesignationLabels.length > 0 ? 'No mid-season projection rows for the current inputs.' : 'No projected designation rows for the current inputs.'}</div>
           )}
-          <div>Designation persistence: PROJECTED rows only.</div>
+          <div>Designation persistence: PROJECTED rows only for non-live rows; TEAM_MVP/ACE can be ACTIVE.</div>
           <div>Captain, Fan Hopeful, season-end locks, morale effects, and trade discounts remain blocked.</div>
         </div>
       </div>

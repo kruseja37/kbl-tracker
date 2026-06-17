@@ -1,11 +1,16 @@
 import {
   calculateFranchiseDesignations,
+  diffActiveDesignationHolders,
   FRANCHISE_DESIGNATION_CALCULATION_VERSION,
+  type DesignationEvent,
   type FranchiseDesignationContext,
   type FranchiseDesignationPlayerInput,
   type FranchiseDesignationType,
   type FranchisePlayerDesignationRecord,
 } from './franchiseDesignations';
+import {
+  buildFranchiseDesignationEligibility,
+} from './franchiseDesignationEligibility';
 import {
   buildFranchiseValueInputRows,
   type FranchiseValueInputRow,
@@ -47,10 +52,12 @@ export interface CalculateAndPersistProjectedFranchiseDesignationsResult {
   skippedRows: FranchiseDesignationSourceRowsResult['skippedRows'];
   blockers: string[];
   persisted: boolean;
+  designationEvents: DesignationEvent[];
 }
 
 const STORE_NAME = 'franchiseDesignationRows';
 const CANONICAL_PRIMARY_POSITIONS = new Set(['SP', 'SP/RP', 'RP', 'CP', 'C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF']);
+const ACTIVE_PROMOTION_TYPES = new Set<FranchiseDesignationType>(['TEAM_MVP', 'ACE']);
 
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -105,6 +112,30 @@ function canonicalPosition(position: unknown): string | null {
 
 function numericOrNull(value: unknown): number | null {
   return finiteNumber(value) ? value : null;
+}
+
+function activeEligibilityKey(row: Pick<FranchisePlayerDesignationRecord, 'type' | 'teamId' | 'playerId'>): string {
+  return `${row.type}\u0000${row.teamId}\u0000${row.playerId}`;
+}
+
+function upgradeRowsWithActiveEligibility(
+  rows: FranchisePlayerDesignationRecord[],
+  activeEligibilityKeys: Set<string>,
+): FranchisePlayerDesignationRecord[] {
+  return rows.map((row) => {
+    if (!ACTIVE_PROMOTION_TYPES.has(row.type) || !activeEligibilityKeys.has(activeEligibilityKey(row))) {
+      return row;
+    }
+    return {
+      ...row,
+      status: 'active',
+      lockedAt: null,
+      sourceInputs: {
+        ...row.sourceInputs,
+        statusAuthority: 'FRANCHISE_PLAYABLE_V1_DEFINITION D7a: persisted canonical TEAM_MVP/ACE row promoted to active only when the eligibility path classifies the exact holder active.',
+      },
+    };
+  });
 }
 
 function sourceRowFromValueRow(
@@ -304,6 +335,7 @@ export async function calculateAndPersistProjectedFranchiseDesignationsForSeason
       skippedRows: source.skippedRows,
       blockers: source.blockers,
       persisted: false,
+      designationEvents: [],
     };
   }
 
@@ -320,15 +352,33 @@ export async function calculateAndPersistProjectedFranchiseDesignationsForSeason
     ...row,
     calculationVersion: FRANCHISE_DESIGNATION_CALCULATION_VERSION,
   }));
+  const eligibilityReport = await buildFranchiseDesignationEligibility(input);
+  const activeEligibilityKeys = new Set(
+    eligibilityReport.records
+      .filter((record) =>
+        record.status === 'active' &&
+        (record.designationType === 'TEAM_MVP' || record.designationType === 'ACE') &&
+        record.teamId !== null,
+      )
+      .map((record) => activeEligibilityKey({
+        type: record.designationType as FranchiseDesignationType,
+        teamId: record.teamId ?? '',
+        playerId: record.playerId,
+      })),
+  );
+  const upgradedRows = upgradeRowsWithActiveEligibility(stampedRows, activeEligibilityKeys);
+  const priorRows = await getFranchiseDesignationRows(input);
+  const designationEvents = diffActiveDesignationHolders(priorRows, upgradedRows);
 
   // MODE_2_CANON §17: every completed regular-season game recalculates projected
   // holders; a below-floor result still clears stale projected rows.
-  await replaceFranchiseDesignationRowsForScope(input, stampedRows);
+  await replaceFranchiseDesignationRowsForScope(input, upgradedRows);
 
   return {
-    rows: stampedRows,
+    rows: upgradedRows,
     skippedRows: source.skippedRows,
     blockers: [],
     persisted: true,
+    designationEvents,
   };
 }

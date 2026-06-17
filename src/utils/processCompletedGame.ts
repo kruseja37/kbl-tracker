@@ -248,7 +248,8 @@ async function persistProjectedDesignationsAfterTrueValue(
 ): Promise<void> {
   // TV2 MODE_2_CANON §17 + R-4 extension: projected designations recompute
   // after True Value rows persist. Upstream WAR/True Value failure skips this.
-  await calculateAndPersistProjectedFranchiseDesignationsForSeason(trueValueScope);
+  const result = await calculateAndPersistProjectedFranchiseDesignationsForSeason(trueValueScope);
+  void result.designationEvents;
 }
 
 export function shouldAggregateToRegularSeasonStats(

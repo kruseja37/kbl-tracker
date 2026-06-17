@@ -2,13 +2,16 @@ import { describe, expect, test } from 'vitest';
 import type { Player } from '../franchisePlayerStorage';
 import {
   calculateFranchiseDesignations,
+  diffActiveDesignationHolders,
   FRANCHISE_DESIGNATION_EP1_LIMITATION,
+  getLiveDesignationBadge,
   getProjectedDesignationBadge,
   minimumAcePitchingAppearances,
   minimumTeamMvpGames,
   minimumValueDesignationGames,
   updateFranchiseDesignationTeamForTrade,
   type FranchiseDesignationPlayerInput,
+  type FranchisePlayerDesignationRecord,
 } from '../franchiseDesignations';
 
 const context = {
@@ -33,6 +36,33 @@ function player(overrides: Partial<FranchiseDesignationPlayerInput>): FranchiseD
     trueValue: null,
     contractValue: null,
     valueDelta: null,
+    ...overrides,
+  };
+}
+
+function record(overrides: Partial<FranchisePlayerDesignationRecord> = {}): FranchisePlayerDesignationRecord {
+  return {
+    franchiseId: context.franchiseId,
+    seasonId: context.seasonId,
+    statsScopeId: context.statsScopeId,
+    seasonNumber: context.seasonNumber,
+    teamId: 'team-a',
+    playerId: 'player-a',
+    playerName: 'Player A',
+    type: 'TEAM_MVP',
+    status: 'active',
+    sourceInputs: {},
+    sourceEvidence: [],
+    calculationVersion: 'test-designations',
+    calculatedAt: context.calculatedAt,
+    lockedAt: null,
+    carryover: {
+      carriesOver: false,
+      untilSeasonProgress: null,
+      previousSeasonId: null,
+      previousPlayerId: null,
+      note: null,
+    },
     ...overrides,
   };
 }
@@ -82,6 +112,49 @@ describe('franchise projected designations', () => {
     expect(getProjectedDesignationBadge('ACE').label).toBe('Proj. Ace');
     expect(getProjectedDesignationBadge('FAN_FAVORITE').label).toBe('Proj. Fan Favorite');
     expect(getProjectedDesignationBadge('ALBATROSS').label).toBe('Proj. Albatross');
+  });
+
+  test('exposes D7a live solid badge metadata without changing projected labels', () => {
+    expect(getLiveDesignationBadge('TEAM_MVP')).toMatchObject({
+      label: 'MVP',
+      borderStyle: 'solid',
+      status: 'active',
+      colorHex: '#FFD700',
+    });
+    expect(getLiveDesignationBadge('ACE')).toMatchObject({
+      label: 'Ace',
+      borderStyle: 'solid',
+      status: 'active',
+      colorHex: '#4169E1',
+    });
+    expect(getLiveDesignationBadge('TEAM_MVP')?.label).not.toMatch(/Proj\./);
+    expect(getLiveDesignationBadge('ACE')?.label).not.toMatch(/Proj\./);
+    expect(getProjectedDesignationBadge('TEAM_MVP').label).toBe('Proj. MVP');
+    expect(getProjectedDesignationBadge('ACE').label).toBe('Proj. Ace');
+  });
+
+  test('diffs active holder transitions without any morale relationship or salary mutation', () => {
+    const events = diffActiveDesignationHolders(
+      [record({ playerId: 'old-mvp', playerName: 'Old MVP' })],
+      [record({ playerId: 'new-mvp', playerName: 'New MVP', calculatedAt: '2026-06-13T00:00:00.000Z' })],
+    );
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        eventType: 'designation',
+        designationType: 'TEAM_MVP',
+        transition: 'changed',
+        playerId: 'new-mvp',
+        previousPlayerId: 'old-mvp',
+        moraleMutationApplied: false,
+        relationshipMutationApplied: false,
+        salaryMovementApplied: false,
+      }),
+    ]);
+    expect(diffActiveDesignationHolders(
+      [record({ playerId: 'same-mvp' })],
+      [record({ playerId: 'same-mvp', calculatedAt: '2026-06-13T00:00:00.000Z' })],
+    )).toEqual([]);
   });
 
   test('carries stale player-embedded designation metadata through trade compatibility only', () => {

@@ -372,3 +372,34 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   caller tolerates the `!persisted` early-return. **BROWSER-PENDING (batched):** finish a regular season on real
   franchise data → artifact freezes; a later game doesn't un-freeze. **→ NEXT: D7 (designations LIVE incl.
   Albatross).** Hang-guard lesson: wrap every `codex exec` dispatch in a watchdog so a stalled call self-recovers.
+
+- **2026-06-17 (overnight, AUTH-4) — D7 SPLIT into D7a + D7b; STARTED: D7a.** JK ruled (mid-run) "Map D7, build
+  autonomously" = full AUTH-4 unattended. Mapped via `wf_fde440e6-dd3` (6 readers; Captain file:line-verified the
+  riskiest claims). Map findings drove the split + defaults: (1) THREE designation surfaces (persisted store /
+  read-only eligibility report [ALREADY at status:'active' for TEAM_MVP/ACE from a prior slice] / dormant
+  player-embedded array); (2) the persisted path still hardcodes 'projected' → the reconcile is "make the persisted
+  STORE emit 'active' matching eligibility, add a live badge, mint the event"; (3) the characterized
+  franchiseNarrativeEventEligibility "TEAM_MVP/ACE preview-only" RED is PRE-EXISTING (eligibility already 'active',
+  consumer/test never updated) — a separate narrative cleanup, NOT D7a; (4) Albatross is a DE-GATE not a build
+  (selection logic exists) but has an UNTRUSTED-VALUE LEAK (named off live valueDelta with no peer-pool check) →
+  fixing it (the D6 trustedPlayerIds filter) is D7b's correctness payload; (5) DesignationEvent is greenfield
+  (precedent: RosterMoveEvent/TradeEvent are ephemeral, no store). **D7a** = persisted TEAM_MVP/ACE → 'active'
+  (gated on the eligibility verdict) + live non-'Proj.' badge + TeamHubContent render + ephemeral changed-only
+  DesignationEvent (no morale/fame). Contract in PROMPT_CONTRACTS.md; Codex invoked under the 30-min watchdog.
+  **DEFAULTS-TAKEN:** persisted canonical / promote-only-when-both-paths-agree / event ephemeral+changed-only /
+  narrative gate untouched (baseline unchanged) / embedded array stays dormant / FF+Captain+FanHopeful+Cornerstone
+  deferred. Audit the morale/fame firewall HARDEST (asset-protected). **D7b QUEUED:** Albatross de-gate + trust filter.
+
+- **2026-06-17 (overnight, AUTH-4) — D7a COMMITTED.** Build #1 clean (watchdog held; no hang). Captain (Opus) RIGOROUS
+  independent audit = **VERIFIED** (asset-protected designations — firewall audited hardest). Diff = 6 files (4 product
+  + 2 test). Substance: live solid TEAM_MVP/ACE badge + `getLiveDesignationBadge`; `DesignationEvent` type (3 firewall
+  markers); pure `diffActiveDesignationHolders`; the persisted store now stamps TEAM_MVP/ACE 'active' ONLY when the
+  eligibility path marks the EXACT (type,team,player) active (conservative both-paths-agree gate); ephemeral
+  changed-only event returned from the persist fn (`void`-ignored in processCompletedGame); TeamHubContent surfaces
+  active rows (the `||'active'` filter fix) with live vs 'Proj.' badges. **Gates (re-ran, not from paste):** tsc 0 ·
+  build 0 · full suite **7,258 pass / 3 fail (7,261 total, +4)** = EXACTLY the characterized set, **narrative
+  preview-only RED UNCHANGED** (untouched — baseline preserved), ZERO new reds · **FIREWALL INTACT** (grep: no
+  morale/fame/teamMVP/fanFavoriteEngine import in the designation path; event flags false; Codex hardened the source
+  firewall test) · promotion mutation-honest (pinned both sides) · no new store/version bump. **BROWSER-PENDING
+  (batched):** trusted MVP/ACE shows solid live badge; untrusted/non-top stays 'Proj.'; FF/Albatross still 'Proj.'.
+  **→ NEXT: D7b (Albatross live + the D6 trustedPlayerIds trust filter — the untrusted-value-leak fix).**

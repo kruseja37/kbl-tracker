@@ -72,30 +72,66 @@ function valueRow(overrides: Record<string, unknown> = {}) {
     seasonId: scope.seasonId,
     statsScopeId: scope.statsScopeId,
     seasonNumber: 1,
+    seasonContext: {
+      gamesPerTeam: 20,
+      inningsPerGame: 9,
+    },
     playerId: 'player-a',
     playerName: 'Player A',
     valuePosition: 'SS',
     currentTeamId: 'team-a',
     rosterStatus: 'MLB',
+    salaryBaselineAvailable: true,
+    teamSalaryBaseline: 100,
+    seasonStatsAvailability: {
+      any: true,
+    },
+    warInputAvailability: {
+      any: true,
+      pitchingWar: false,
+    },
     warPreviewValues: {
       totalWar: 1,
       pitchingWar: null,
     },
+    warConsumerTrust: {
+      teamMvpDesignations: true,
+      aceDesignations: false,
+      fanFavoriteAlbatrossDesignations: false,
+      blockers: [],
+    },
+    wpaInputAvailability: {
+      archiveBacked: true,
+    },
+    parkFactorAvailability: {
+      seedParkFactorsAvailable: true,
+      parkAdjustedValueInputsAvailable: true,
+    },
+    limitations: [],
     ...overrides,
   };
 }
 
 function valueReport(rows: Array<Record<string, unknown>>, gamesPerTeam = 20) {
   return {
+    contractVersion: 'test-value-input-contract',
     franchiseId: scope.franchiseId,
     seasonId: scope.seasonId,
     statsScopeId: scope.statsScopeId,
     seasonNumber: 1,
     seasonContext: {
       gamesPerTeam,
+      inningsPerGame: 9,
     },
     rows,
+    limitations: [],
   };
+}
+
+function queueValueInputReport(report: ReturnType<typeof valueReport>): void {
+  mocks.buildFranchiseValueInputRows
+    .mockResolvedValueOnce(report)
+    .mockResolvedValueOnce(report);
 }
 
 describe('franchise projected designation storage', () => {
@@ -116,9 +152,21 @@ describe('franchise projected designation storage', () => {
   });
 
   test('recomputes after a completed game and clears stale rows when every holder falls below §17 floors', async () => {
-    mocks.buildFranchiseValueInputRows.mockResolvedValueOnce(valueReport([
+    queueValueInputReport(valueReport([
       valueRow({ playerId: 'mvp', playerName: 'MVP', valuePosition: 'SS', warPreviewValues: { totalWar: 3.2, pitchingWar: null } }),
-      valueRow({ playerId: 'ace', playerName: 'Ace', valuePosition: 'SP', warPreviewValues: { totalWar: 1.1, pitchingWar: 1.1 } }),
+      valueRow({
+        playerId: 'ace',
+        playerName: 'Ace',
+        valuePosition: 'SP',
+        warPreviewValues: { totalWar: 1.1, pitchingWar: 1.1 },
+        warInputAvailability: { any: true, pitchingWar: true },
+        warConsumerTrust: {
+          teamMvpDesignations: false,
+          aceDesignations: true,
+          fanFavoriteAlbatrossDesignations: false,
+          blockers: [],
+        },
+      }),
       valueRow({ playerId: 'fan', playerName: 'Fan', valuePosition: 'CF', warPreviewValues: { totalWar: 0.8, pitchingWar: null } }),
       valueRow({ playerId: 'alb', playerName: 'Alb', valuePosition: '1B', warPreviewValues: { totalWar: 0.2, pitchingWar: null } }),
     ]));
@@ -151,7 +199,7 @@ describe('franchise projected designation storage', () => {
     ]);
     expect(await getFranchiseDesignationRows(scope)).toHaveLength(4);
 
-    mocks.buildFranchiseValueInputRows.mockResolvedValueOnce(valueReport([
+    queueValueInputReport(valueReport([
       valueRow({ playerId: 'short', playerName: 'Short', valuePosition: 'SS', warPreviewValues: { totalWar: 9, pitchingWar: null } }),
     ]));
     mocks.getAllBattingStats.mockResolvedValueOnce([{ playerId: 'short', games: 1 }]);
@@ -168,8 +216,163 @@ describe('franchise projected designation storage', () => {
     expect(await getFranchiseDesignationRows(scope)).toEqual([]);
   });
 
+  test('promotes only exact trusted TEAM_MVP and ACE holders to active while value designations stay projected', async () => {
+    queueValueInputReport(valueReport([
+      valueRow({ playerId: 'mvp', playerName: 'Trusted MVP', teamId: 'team-a', valuePosition: 'SS', currentTeamId: 'team-a', warPreviewValues: { totalWar: 3.2, pitchingWar: null } }),
+      valueRow({
+        playerId: 'ace',
+        playerName: 'Trusted Ace',
+        teamId: 'team-a',
+        valuePosition: 'SP',
+        currentTeamId: 'team-a',
+        warPreviewValues: { totalWar: 0.8, pitchingWar: 1.3 },
+        warInputAvailability: { any: true, pitchingWar: true },
+        warConsumerTrust: {
+          teamMvpDesignations: false,
+          aceDesignations: true,
+          fanFavoriteAlbatrossDesignations: false,
+          blockers: [],
+        },
+      }),
+      valueRow({ playerId: 'fan', playerName: 'Fan', teamId: 'team-a', valuePosition: 'CF', currentTeamId: 'team-a', warPreviewValues: { totalWar: 0.4, pitchingWar: null } }),
+      valueRow({ playerId: 'alb', playerName: 'Alb', teamId: 'team-a', valuePosition: '1B', currentTeamId: 'team-a', warPreviewValues: { totalWar: 0.2, pitchingWar: null } }),
+      valueRow({
+        playerId: 'untrusted-mvp',
+        playerName: 'Untrusted MVP',
+        teamId: 'team-b',
+        valuePosition: 'SS',
+        currentTeamId: 'team-b',
+        warPreviewValues: { totalWar: 4.1, pitchingWar: null },
+        warConsumerTrust: {
+          teamMvpDesignations: false,
+          aceDesignations: false,
+          fanFavoriteAlbatrossDesignations: false,
+          blockers: ['fixture trust blocker'],
+        },
+      }),
+      valueRow({
+        playerId: 'pitcher-mvp',
+        playerName: 'Pitcher MVP',
+        teamId: 'team-c',
+        valuePosition: 'SP',
+        currentTeamId: 'team-c',
+        warPreviewValues: { totalWar: 5.2, pitchingWar: null },
+      }),
+      valueRow({
+        playerId: 'position-runner-up',
+        playerName: 'Position Runner Up',
+        teamId: 'team-c',
+        valuePosition: 'SS',
+        currentTeamId: 'team-c',
+        warPreviewValues: { totalWar: 4.8, pitchingWar: null },
+      }),
+    ]));
+    mocks.getAllBattingStats.mockResolvedValueOnce([
+      { playerId: 'mvp', games: 5 },
+      { playerId: 'fan', games: 3 },
+      { playerId: 'alb', games: 3 },
+      { playerId: 'untrusted-mvp', games: 5 },
+      { playerId: 'pitcher-mvp', games: 5 },
+      { playerId: 'position-runner-up', games: 5 },
+    ]);
+    mocks.getAllPitchingStats.mockResolvedValueOnce([
+      { playerId: 'ace', games: 4, pwar: 1.3 },
+    ]);
+    mocks.getFranchiseTrueValueRows.mockResolvedValueOnce([
+      { playerId: 'mvp', trueValue: 8, contractValue: 8, valueDelta: null },
+      { playerId: 'ace', trueValue: 8, contractValue: 8, valueDelta: null },
+      { playerId: 'fan', trueValue: 10, contractValue: 2, valueDelta: 8 },
+      { playerId: 'alb', trueValue: 2, contractValue: 11, valueDelta: -9 },
+      { playerId: 'untrusted-mvp', trueValue: 9, contractValue: 9, valueDelta: null },
+      { playerId: 'pitcher-mvp', trueValue: 9, contractValue: 9, valueDelta: null },
+      { playerId: 'position-runner-up', trueValue: 8, contractValue: 8, valueDelta: null },
+    ]);
+
+    const result = await calculateAndPersistProjectedFranchiseDesignationsForSeason({
+      ...scope,
+      seasonNumber: 1,
+    }, { calculatedAt: '2026-06-12T00:00:00.000Z' });
+
+    const statusByTypeTeam = new Map(result.rows.map((row) => [`${row.type}:${row.teamId}`, row.status]));
+    expect(statusByTypeTeam.get('TEAM_MVP:team-a')).toBe('active');
+    expect(statusByTypeTeam.get('ACE:team-a')).toBe('active');
+    expect(statusByTypeTeam.get('FAN_FAVORITE:team-a')).toBe('projected');
+    expect(statusByTypeTeam.get('ALBATROSS:team-a')).toBe('projected');
+    expect(statusByTypeTeam.get('TEAM_MVP:team-b')).toBe('projected');
+    expect(statusByTypeTeam.get('TEAM_MVP:team-c')).toBe('projected');
+    expect(result.designationEvents.map((event) => [event.transition, event.designationType, event.playerId])).toEqual([
+      ['granted', 'ACE', 'ace'],
+      ['granted', 'TEAM_MVP', 'mvp'],
+    ]);
+    expect(result.designationEvents.every((event) =>
+      event.moraleMutationApplied === false &&
+      event.relationshipMutationApplied === false &&
+      event.salaryMovementApplied === false,
+    )).toBe(true);
+  });
+
+  test('emits changed-only active designation events across recomputes', async () => {
+    const firstReport = valueReport([
+      valueRow({ playerId: 'mvp-a', playerName: 'MVP A', warPreviewValues: { totalWar: 3, pitchingWar: null } }),
+      valueRow({ playerId: 'mvp-b', playerName: 'MVP B', warPreviewValues: { totalWar: 2, pitchingWar: null } }),
+    ]);
+    queueValueInputReport(firstReport);
+    mocks.getAllBattingStats.mockResolvedValueOnce([
+      { playerId: 'mvp-a', games: 5 },
+      { playerId: 'mvp-b', games: 5 },
+    ]);
+    mocks.getAllPitchingStats.mockResolvedValueOnce([]);
+    mocks.getFranchiseTrueValueRows.mockResolvedValueOnce([]);
+
+    const first = await calculateAndPersistProjectedFranchiseDesignationsForSeason({
+      ...scope,
+      seasonNumber: 1,
+    }, { calculatedAt: '2026-06-12T00:00:00.000Z' });
+    expect(first.designationEvents.map((event) => [event.transition, event.playerId])).toEqual([
+      ['granted', 'mvp-a'],
+    ]);
+
+    queueValueInputReport(firstReport);
+    mocks.getAllBattingStats.mockResolvedValueOnce([
+      { playerId: 'mvp-a', games: 5 },
+      { playerId: 'mvp-b', games: 5 },
+    ]);
+    mocks.getAllPitchingStats.mockResolvedValueOnce([]);
+    mocks.getFranchiseTrueValueRows.mockResolvedValueOnce([]);
+
+    const second = await calculateAndPersistProjectedFranchiseDesignationsForSeason({
+      ...scope,
+      seasonNumber: 1,
+    }, { calculatedAt: '2026-06-13T00:00:00.000Z' });
+    expect(second.designationEvents).toEqual([]);
+
+    queueValueInputReport(valueReport([
+      valueRow({ playerId: 'mvp-a', playerName: 'MVP A', warPreviewValues: { totalWar: 3, pitchingWar: null } }),
+      valueRow({ playerId: 'mvp-b', playerName: 'MVP B', warPreviewValues: { totalWar: 4, pitchingWar: null } }),
+    ]));
+    mocks.getAllBattingStats.mockResolvedValueOnce([
+      { playerId: 'mvp-a', games: 5 },
+      { playerId: 'mvp-b', games: 5 },
+    ]);
+    mocks.getAllPitchingStats.mockResolvedValueOnce([]);
+    mocks.getFranchiseTrueValueRows.mockResolvedValueOnce([]);
+
+    const third = await calculateAndPersistProjectedFranchiseDesignationsForSeason({
+      ...scope,
+      seasonNumber: 1,
+    }, { calculatedAt: '2026-06-14T00:00:00.000Z' });
+    expect(third.designationEvents).toEqual([
+      expect.objectContaining({
+        transition: 'changed',
+        designationType: 'TEAM_MVP',
+        playerId: 'mvp-b',
+        previousPlayerId: 'mvp-a',
+      }),
+    ]);
+  });
+
   test('surfaces non-canonical position labels as R-6 data defects', async () => {
-    mocks.buildFranchiseValueInputRows.mockResolvedValue(valueReport([
+    queueValueInputReport(valueReport([
       valueRow({ playerId: 'bad-pos', valuePosition: 'P' }),
     ]));
     mocks.getAllBattingStats.mockResolvedValue([{ playerId: 'bad-pos', games: 5 }]);
@@ -212,6 +415,8 @@ describe('franchise projected designation storage', () => {
     const retiredAlbatrossMultiplier = ['FRANCHISE', 'ALBATROSS', 'TRADE', 'VALUE', 'MULTIPLIER'].join('_');
     const retiredTradeDiscountPhrase = ['trade', 'discount'].join(' ');
     expect(combined).not.toMatch(new RegExp(`${retiredMoraleEngine}|${retiredFavoriteEngine}|${retiredApplyMorale}|${retiredSavePlayer}|${retiredAlbatrossMultiplier}|${retiredTradeDiscountPhrase}`, 'i'));
+    expect(combined).not.toMatch(/from '\.\/(fanMoraleEngine|fameEngine|teamMVP|fanFavoriteEngine)'/);
+    expect(combined).not.toMatch(/\b(applyFranchiseMoraleEffect|calculateFame|applyFame|TEAM_MVP_FAME|fanFavoriteEngine)\b/);
     expect(combined).not.toMatch(new RegExp(['total', 'Games'].join('')));
   });
 });
