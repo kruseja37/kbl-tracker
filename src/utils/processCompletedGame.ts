@@ -30,6 +30,7 @@ import {
 } from './gameStorage';
 import { getGameHeader, markAggregationFailed, markGameAggregated } from './eventLog';
 import { getEffectivePlayer } from './playerOverrides';
+import { getFranchisePlayer } from './franchisePlayerStorage';
 import { registerAlmanacPlayers } from './registerAlmanacPlayers';
 import { deriveAdaptiveStandardsConfig, type AdaptiveStandardsConfigInput } from './franchiseAdaptiveStandards';
 import { getSeasonMetadata, saveSeasonMetadata } from './seasonStorage';
@@ -44,6 +45,17 @@ import {
 } from './franchiseTrueValueSnapshotsStorage';
 import { calculateAndPersistProjectedFranchiseDesignationsForSeason } from './franchiseDesignationStorage';
 import { getGame as getScheduledGame } from './scheduleStorage';
+import type { DesignationEvent, FranchiseDesignationType } from './franchiseDesignations';
+import {
+  composeMoraleConsequence,
+  type MasterMoraleEventType,
+} from '../engines/masterMoraleMatrix';
+import {
+  applyFranchiseMoraleMatrixConsequence,
+  getFranchiseMoraleSnapshot,
+} from './franchiseMoraleState';
+import { isFranchisePhase2MoraleEnabled } from './franchisePhase2Flags';
+import type { HiddenModifiers } from '../types/game';
 
 export interface ProcessGameResult {
   aggregation: GameAggregationResult;
@@ -68,6 +80,13 @@ type PersistedTrueValueScope = PersistedWarScope & {
 };
 type PersistedTrueValueResult = PersistedTrueValueScope & {
   rows: FranchiseTrueValueRow[];
+};
+
+const NEUTRAL_HIDDEN_MODIFIERS: HiddenModifiers = {
+  loyalty: 50,
+  ambition: 50,
+  resilience: 50,
+  charisma: 50,
 };
 
 function positiveFiniteNumber(value: unknown): number | null {
@@ -300,7 +319,93 @@ async function persistProjectedDesignationsAfterTrueValue(
   // TV2 MODE_2_CANON §17 + R-4 extension: projected designations recompute
   // after True Value rows persist. Upstream WAR/True Value failure skips this.
   const result = await calculateAndPersistProjectedFranchiseDesignationsForSeason(trueValueScope);
-  void result.designationEvents;
+  await persistDesignationMoraleConsequencesAfterTrueValue(result.designationEvents, trueValueScope);
+}
+
+function designationEventToMoraleEvent(
+  event: DesignationEvent,
+): MasterMoraleEventType | null {
+  if (event.transition === 'lost') {
+    return null;
+  }
+
+  const designationTypeToMoraleEvent: Partial<Record<FranchiseDesignationType, MasterMoraleEventType>> = {
+    TEAM_MVP: 'TEAMMATE_AWARD',
+    ACE: 'TEAMMATE_AWARD',
+    FAN_FAVORITE: 'FAN_FAVORITE_LOCKED',
+    ALBATROSS: 'ALBATROSS_LOCKED',
+  };
+
+  return designationTypeToMoraleEvent[event.designationType] ?? null;
+}
+
+function resolveHiddenModifiers(modifiers: Partial<HiddenModifiers> | null | undefined): HiddenModifiers {
+  return {
+    loyalty: Number.isFinite(modifiers?.loyalty) ? Number(modifiers?.loyalty) : NEUTRAL_HIDDEN_MODIFIERS.loyalty,
+    ambition: Number.isFinite(modifiers?.ambition) ? Number(modifiers?.ambition) : NEUTRAL_HIDDEN_MODIFIERS.ambition,
+    resilience: Number.isFinite(modifiers?.resilience) ? Number(modifiers?.resilience) : NEUTRAL_HIDDEN_MODIFIERS.resilience,
+    charisma: Number.isFinite(modifiers?.charisma) ? Number(modifiers?.charisma) : NEUTRAL_HIDDEN_MODIFIERS.charisma,
+  };
+}
+
+async function currentMoraleValue(
+  scope: Pick<PersistedTrueValueScope, 'franchiseId' | 'seasonId' | 'statsScopeId'>,
+  targetType: 'player' | 'team-fan',
+  targetId: string,
+  fallback: number,
+): Promise<number> {
+  const snapshot = await getFranchiseMoraleSnapshot(scope, targetType, targetId);
+  return snapshot?.currentValue ?? fallback;
+}
+
+async function persistDesignationMoraleConsequencesAfterTrueValue(
+  designationEvents: DesignationEvent[],
+  trueValueScope: PersistedTrueValueScope,
+): Promise<void> {
+  if (!isFranchisePhase2MoraleEnabled() || designationEvents.length === 0) return;
+
+  for (const event of designationEvents) {
+    const moraleEventType = designationEventToMoraleEvent(event);
+    if (!moraleEventType) continue;
+
+    try {
+      const player = await getFranchisePlayer(event.franchiseId, event.playerId);
+      const currentPlayerMorale = await currentMoraleValue(event, 'player', event.playerId, player?.morale ?? 50);
+      const currentFanMorale = await currentMoraleValue(event, 'team-fan', event.teamId, 50);
+      const consequence = composeMoraleConsequence(
+        { type: moraleEventType },
+        player?.personality,
+        resolveHiddenModifiers(player?.hiddenPersonalityModifiers),
+        currentPlayerMorale,
+        currentFanMorale,
+      );
+
+      await applyFranchiseMoraleMatrixConsequence({
+        franchiseId: event.franchiseId,
+        seasonId: event.seasonId,
+        statsScopeId: event.statsScopeId,
+        seasonNumber: trueValueScope.seasonNumber,
+        playerId: event.playerId,
+        teamId: event.teamId,
+        consequence,
+        sourceEventId: [
+          'designation',
+          event.franchiseId,
+          event.seasonId,
+          event.statsScopeId,
+          event.teamId,
+          event.designationType,
+          event.transition,
+          event.playerId,
+          event.previousPlayerId ?? 'none',
+          event.calculatedAt,
+        ].join(':'),
+        timestamp: event.calculatedAt,
+      });
+    } catch (error) {
+      console.warn('[MoraleMatrix] designation event skipped:', error);
+    }
+  }
 }
 
 export function shouldAggregateToRegularSeasonStats(

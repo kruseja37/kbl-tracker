@@ -1,9 +1,11 @@
 import { syncEngine } from './syncEngine';
+import type { ResolvedMoraleConsequence } from '../engines/masterMoraleMatrix';
+import { isFranchisePhase2MoraleEnabled } from './franchisePhase2Flags';
 
 export const FRANCHISE_MORALE_STATE_CONTRACT_VERSION = 'franchise-morale-state-v1';
 
 export type FranchiseMoraleTargetType = 'team-fan' | 'player';
-export type FranchiseMoraleSourceKind = 'random-event-confirmation' | 'manual-override';
+export type FranchiseMoraleSourceKind = 'random-event-confirmation' | 'manual-override' | 'matrix-auto';
 
 export interface FranchiseMoraleScope {
   franchiseId: string;
@@ -54,6 +56,25 @@ export interface ApplyFranchiseMoraleEffectResult {
   previousValue: number | null;
   currentValue: number | null;
   delta: number;
+  reason: string;
+  blockers: string[];
+}
+
+export interface ApplyFranchiseMoraleMatrixConsequenceInput extends FranchiseMoraleScope {
+  consequence: ResolvedMoraleConsequence;
+  playerId: string;
+  teamId: string;
+  sourceEventId: string;
+  actorDisplayName?: string;
+  timestamp?: string;
+  otherTouchedPlayerIds?: string[];
+}
+
+export interface ApplyFranchiseMoraleMatrixConsequenceResult {
+  status: 'applied' | 'skipped' | 'failed' | 'dark-noop';
+  applied: ApplyFranchiseMoraleEffectResult[];
+  skipped: ApplyFranchiseMoraleEffectResult[];
+  failed: ApplyFranchiseMoraleEffectResult[];
   reason: string;
   blockers: string[];
 }
@@ -319,4 +340,135 @@ export async function applyFranchiseMoraleEffect(
     reason: input.reason,
     blockers: [],
   };
+}
+
+function sourceEventIdPart(value: string): string {
+  return value.replace(/[^a-zA-Z0-9._:-]/g, '_');
+}
+
+function summarizeMatrixReason(consequence: ResolvedMoraleConsequence): string {
+  return `Master morale matrix: ${consequence.reason}`;
+}
+
+function mergeMatrixResult(
+  applied: ApplyFranchiseMoraleEffectResult[],
+  skipped: ApplyFranchiseMoraleEffectResult[],
+  failed: ApplyFranchiseMoraleEffectResult[],
+): ApplyFranchiseMoraleMatrixConsequenceResult {
+  if (failed.length > 0) {
+    return {
+      status: 'failed',
+      applied,
+      skipped,
+      failed,
+      reason: 'One or more matrix morale ledger writes failed.',
+      blockers: failed.flatMap((result) => result.blockers),
+    };
+  }
+  if (applied.length > 0) {
+    return {
+      status: 'applied',
+      applied,
+      skipped,
+      failed,
+      reason: 'Matrix morale consequence applied.',
+      blockers: [],
+    };
+  }
+  return {
+    status: 'skipped',
+    applied,
+    skipped,
+    failed,
+    reason: 'Matrix morale consequence had no writable non-zero deltas or was already applied.',
+    blockers: [],
+  };
+}
+
+export async function applyFranchiseMoraleMatrixConsequence(
+  input: ApplyFranchiseMoraleMatrixConsequenceInput,
+): Promise<ApplyFranchiseMoraleMatrixConsequenceResult> {
+  if (!isFranchisePhase2MoraleEnabled()) {
+    return {
+      status: 'dark-noop',
+      applied: [],
+      skipped: [],
+      failed: [],
+      reason: 'Phase-2 morale is disabled; matrix consequence was not written.',
+      blockers: [],
+    };
+  }
+
+  const blockers: string[] = [];
+  if (!input.playerId) blockers.push('Player id is required for matrix morale consequence.');
+  if (!input.teamId) blockers.push('Team id is required for matrix morale consequence.');
+  if (!input.sourceEventId) blockers.push('Source event id is required for matrix morale consequence.');
+
+  if (blockers.length > 0) {
+    return {
+      status: 'failed',
+      applied: [],
+      skipped: [],
+      failed: [],
+      reason: blockers.join(' '),
+      blockers,
+    };
+  }
+
+  const writes: ApplyFranchiseMoraleEffectInput[] = [];
+  const reason = summarizeMatrixReason(input.consequence);
+  const actorDisplayName = input.actorDisplayName ?? 'Master Morale Matrix';
+  const timestamp = input.timestamp;
+
+  if (input.consequence.totalPlayerMoraleDelta !== 0) {
+    writes.push({
+      ...input,
+      targetType: 'player',
+      playerId: input.playerId,
+      delta: input.consequence.totalPlayerMoraleDelta,
+      reason,
+      sourceEventId: input.sourceEventId,
+      sourceKind: 'matrix-auto',
+      actorDisplayName,
+      timestamp,
+    });
+  }
+
+  if (input.consequence.teamFanMoraleDelta !== 0) {
+    writes.push({
+      ...input,
+      targetType: 'team-fan',
+      teamId: input.teamId,
+      delta: input.consequence.teamFanMoraleDelta,
+      reason,
+      sourceEventId: input.sourceEventId,
+      sourceKind: 'matrix-auto',
+      actorDisplayName,
+      timestamp,
+    });
+  }
+
+  input.consequence.otherTouched.forEach((other, index) => {
+    const otherPlayerId = input.otherTouchedPlayerIds?.[index];
+    if (!otherPlayerId || other.delta === 0) return;
+    writes.push({
+      ...input,
+      targetType: 'player',
+      playerId: otherPlayerId,
+      teamId: undefined,
+      delta: other.delta,
+      reason: `${reason}; ${other.relation}`,
+      sourceEventId: `${input.sourceEventId}:other:${index}:${sourceEventIdPart(otherPlayerId)}`,
+      sourceKind: 'matrix-auto',
+      actorDisplayName,
+      timestamp,
+    });
+  });
+
+  const results = await Promise.all(writes.map((write) => applyFranchiseMoraleEffect(write)));
+  return mergeMatrixResult(
+    results.filter((result) => result.status === 'applied'),
+    results.filter((result) => result.status === 'skipped'),
+    results.filter((result) => result.status === 'failed'),
+  );
 }

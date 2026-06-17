@@ -3,14 +3,22 @@ import "fake-indexeddb/auto";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
+  applyFranchiseMoraleEffect,
+  getFranchiseMoraleSnapshot,
+  initFranchiseMoraleDatabase,
+  resetFranchiseMoraleDatabaseForTests,
+} from "../franchiseMoraleState";
+import {
   exportAllData,
   restoreAllData,
   STATIC_DATABASE_SCHEMAS,
   type BackupData,
 } from "../backupRestore";
 import { getTrackerDb, resetTrackerDbForTests } from "../trackerDb";
+import { syncEngine } from "../syncEngine";
 
 const TRACKER_DB_NAME = "kbl-tracker";
+const MORALE_DB_NAME = "kbl-franchise-morale";
 
 const trueValueRow = {
   franchiseId: "franchise-d2",
@@ -131,6 +139,12 @@ async function wipeTrackerDb(): Promise<void> {
   resetTrackerDbForTests();
 }
 
+async function wipeMoraleDb(): Promise<void> {
+  resetFranchiseMoraleDatabaseForTests();
+  await deleteDatabase(MORALE_DB_NAME);
+  resetFranchiseMoraleDatabaseForTests();
+}
+
 async function seedFranchiseEconomyRows(): Promise<void> {
   const db = await getTrackerDb();
   const tx = db.transaction(
@@ -166,22 +180,28 @@ async function readRecord<T>(storeName: string, key: IDBValidKey): Promise<T | u
 async function exportThenWipeAndRestore(): Promise<BackupData> {
   const backup = await exportAllData();
   resetTrackerDbForTests();
+  resetFranchiseMoraleDatabaseForTests();
   await wipeTrackerDb();
+  await wipeMoraleDb();
   const result = await restoreAllData(backup);
   expect(result).toMatchObject({ success: true });
   resetTrackerDbForTests();
+  resetFranchiseMoraleDatabaseForTests();
   return backup;
 }
 
 describe("backup/restore kbl-tracker franchise economy parity", () => {
   beforeEach(async () => {
     vi.restoreAllMocks();
+    vi.spyOn(syncEngine, "isSuppressed").mockReturnValue(true);
     await wipeTrackerDb();
+    await wipeMoraleDb();
   });
 
   afterEach(async () => {
     vi.restoreAllMocks();
     await wipeTrackerDb();
+    await wipeMoraleDb();
   });
 
   test("keeps the static kbl-tracker backup registry structurally aligned with trackerDb", async () => {
@@ -192,6 +212,16 @@ describe("backup/restore kbl-tracker franchise economy parity", () => {
     const backupRegistryStores = Object.keys(STATIC_DATABASE_SCHEMAS[TRACKER_DB_NAME].stores).sort();
 
     expect(backupRegistryStores).toEqual(trackerDbStores);
+  });
+
+  test("keeps the static kbl-franchise-morale backup registry structurally aligned with the morale DB", async () => {
+    resetFranchiseMoraleDatabaseForTests();
+    const db = await initFranchiseMoraleDatabase();
+
+    const moraleDbStores = Array.from(db.objectStoreNames).sort();
+    const backupRegistryStores = Object.keys(STATIC_DATABASE_SCHEMAS[MORALE_DB_NAME].stores).sort();
+
+    expect(backupRegistryStores).toEqual(moraleDbStores);
   });
 
   test("round-trips franchise True Value, designation, ledger, trusted-value artifact, awards, and TV snapshot rows", async () => {
@@ -255,5 +285,45 @@ describe("backup/restore kbl-tracker franchise economy parity", () => {
         trueValueSnapshotRow.checkpoint,
       ]),
     ).resolves.toEqual(trueValueSnapshotRow);
+  });
+
+  test("round-trips kbl-franchise-morale snapshots and embedded history", async () => {
+    const result = await applyFranchiseMoraleEffect({
+      franchiseId: "franchise-d2",
+      seasonId: "season-d2",
+      statsScopeId: "scope-d2",
+      seasonNumber: 1,
+      targetType: "player",
+      playerId: "morale-player",
+      delta: 7,
+      reason: "Parity guard morale row.",
+      sourceEventId: "morale:parity:one",
+      sourceKind: "matrix-auto",
+      actorDisplayName: "Master Morale Matrix",
+      timestamp: "2026-06-17T00:00:00.000Z",
+    });
+    expect(result.status).toBe("applied");
+
+    const backup = await exportThenWipeAndRestore();
+    const restored = await getFranchiseMoraleSnapshot(
+      { franchiseId: "franchise-d2", seasonId: "season-d2", statsScopeId: "scope-d2" },
+      "player",
+      "morale-player",
+    );
+
+    expect(backup.databases[MORALE_DB_NAME].moraleSnapshots).toHaveLength(1);
+    expect(restored).toMatchObject({
+      franchiseId: "franchise-d2",
+      seasonId: "season-d2",
+      statsScopeId: "scope-d2",
+      playerId: "morale-player",
+      currentValue: 57,
+      history: [
+        expect.objectContaining({
+          sourceEventId: "morale:parity:one",
+          sourceKind: "matrix-auto",
+        }),
+      ],
+    });
   });
 });
