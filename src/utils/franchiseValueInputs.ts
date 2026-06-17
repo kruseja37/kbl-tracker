@@ -22,6 +22,10 @@ import {
   buildFranchiseEffectivePositionReport,
   type FranchiseTrueValuePositioning,
 } from './franchiseEffectivePosition';
+import {
+  getTrustedValueArtifact,
+  isPlayerTrustedForValue,
+} from './franchiseTrustedValueStorage';
 
 export const FRANCHISE_VALUE_INPUT_CONTRACT_VERSION = 'franchise-mode2-value-inputs-v1-readonly';
 
@@ -34,7 +38,7 @@ export interface FranchiseWarPreviewValues {
   baserunningWar: number | null;
   totalWar: number | null;
   totalWarSource: 'stat-row' | 'derived-from-components' | 'unavailable';
-  trustedForFinalValue: false;
+  trustedForFinalValue: boolean;
 }
 
 export interface FranchiseWarConsumerTrust {
@@ -43,7 +47,7 @@ export interface FranchiseWarConsumerTrust {
   fanFavoriteAlbatrossDesignations: false;
   awards: false;
   salaryMovement: false;
-  trueValue: false;
+  trueValue: boolean;
   morale: false;
   mode3Handoff: false;
   blockers: string[];
@@ -91,7 +95,7 @@ export interface FranchiseValueInputRow {
     fieldingWar: boolean;
     baserunningWar: boolean;
     any: boolean;
-    trustedForFinalValue: false;
+    trustedForFinalValue: boolean;
   };
   warPreviewValues: FranchiseWarPreviewValues;
   warConsumerTrust?: FranchiseWarConsumerTrust;
@@ -123,8 +127,8 @@ export interface FranchiseValueInputReport {
   seasonContext: FranchiseValueInputSeasonContext;
   rows: FranchiseValueInputRow[];
   trueValuePolicy: {
-    finalTrueValueCalculated: false;
-    persistedTrueValueCreated: false;
+    finalTrueValueCalculated: boolean;
+    persistedTrueValueCreated: boolean;
   };
   designationPolicy: {
     finalDesignationsCalculated: false;
@@ -296,12 +300,13 @@ function buildWarConsumerTrust(params: {
   seasonContext: FranchiseValueInputSeasonContext;
   seasonStatsAvailable: boolean;
   scopedCompletedArchiveAvailable: boolean;
+  trustedForTrueValue: boolean;
   warInputAvailability: FranchiseValueInputRow['warInputAvailability'];
   warPreviewValues: FranchiseWarPreviewValues;
 }): FranchiseWarConsumerTrust {
   const blockers: string[] = [];
   const limitations = [
-    'WAR consumer trust is limited to TEAM_MVP/ACE designation input gating; it does not trust final True Value, value delta, awards, salary movement, morale, relationships, or Mode 3.',
+    'WAR consumer trust is limited to TEAM_MVP/ACE designation input gating; True Value trust is read only from the D6 trusted-value artifact.',
   ];
   if (!params.currentTeamId) {
     blockers.push('Current MLB team id is required before WAR can be trusted for designation inputs.');
@@ -336,7 +341,7 @@ function buildWarConsumerTrust(params: {
     fanFavoriteAlbatrossDesignations: false,
     awards: false,
     salaryMovement: false,
-    trueValue: false,
+    trueValue: params.trustedForTrueValue,
     morale: false,
     mode3Handoff: false,
     blockers: unique([...teamMvpBlockers, ...aceBlockers]),
@@ -386,6 +391,7 @@ export async function buildFranchiseValueInputRows(
     seasonMetadata,
     scheduleRows,
     completedGames,
+    trustedValueArtifact,
   ] = await Promise.all([
     getFranchiseConfig(input.franchiseId),
     getAllFranchisePlayers(input.franchiseId),
@@ -400,6 +406,7 @@ export async function buildFranchiseValueInputRows(
       seasonId: input.seasonId,
       statsScopeId,
     }),
+    getTrustedValueArtifact(input.franchiseId, input.seasonId, statsScopeId),
   ]);
 
   const gamesPerTeam = finiteNumber(config?.seasonLength?.gamesPerTeam)
@@ -459,14 +466,18 @@ export async function buildFranchiseValueInputRows(
     const pitchingWar = hasPitchingWarInput(pitching);
     const fieldingWar = hasFieldingWarInput(fielding, batting);
     const baserunningWar = hasBaserunningWarInput(batting);
-    const warPreviewValues = buildWarPreviewValues(batting, pitching);
+    const trustedForTrueValue = isPlayerTrustedForValue(trustedValueArtifact, player.id);
+    const warPreviewValues = {
+      ...buildWarPreviewValues(batting, pitching),
+      trustedForFinalValue: trustedForTrueValue,
+    };
     const warInputAvailability: FranchiseValueInputRow['warInputAvailability'] = {
       battingWar,
       pitchingWar,
       fieldingWar,
       baserunningWar,
       any: battingWar || pitchingWar || fieldingWar || baserunningWar,
-      trustedForFinalValue: false,
+      trustedForFinalValue: trustedForTrueValue,
     };
     const scopedCompletedArchiveAvailable = completedGames.some((game) =>
       game.franchiseId === input.franchiseId &&
@@ -480,6 +491,7 @@ export async function buildFranchiseValueInputRows(
       seasonContext,
       seasonStatsAvailable: Boolean(batting || pitching || fielding),
       scopedCompletedArchiveAvailable,
+      trustedForTrueValue,
       warInputAvailability,
       warPreviewValues,
     });
@@ -590,8 +602,8 @@ export async function buildFranchiseValueInputRows(
     seasonContext,
     rows,
     trueValuePolicy: {
-      finalTrueValueCalculated: false,
-      persistedTrueValueCreated: false,
+      finalTrueValueCalculated: Boolean(trustedValueArtifact && trustedValueArtifact.trustedPlayerIds.length > 0),
+      persistedTrueValueCreated: Boolean(trustedValueArtifact && trustedValueArtifact.trustedPlayerIds.length > 0),
     },
     designationPolicy: {
       finalDesignationsCalculated: false,

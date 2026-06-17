@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import {
   buildFranchiseDesignationReadinessReport,
@@ -17,6 +17,14 @@ import {
   type FranchiseTrueValuePreviewReport,
 } from '../franchiseTrueValuePreview';
 import { FRANCHISE_VALUE_INPUT_CONTRACT_VERSION } from '../franchiseValueInputs';
+
+const mocks = vi.hoisted(() => ({
+  getTrustedValueArtifact: vi.fn(),
+}));
+
+vi.mock('../franchiseTrustedValueStorage', () => ({
+  getTrustedValueArtifact: mocks.getTrustedValueArtifact,
+}));
 
 function playerRow(overrides: Partial<FranchiseTrueValuePreviewPlayerRow> = {}): FranchiseTrueValuePreviewPlayerRow {
   return {
@@ -115,8 +123,38 @@ function row(
 }
 
 describe('franchise designation readiness report', () => {
-  test('positive preview value delta creates Fan Favorite preview context but finalization remains blocked', () => {
-    const report = buildFranchiseDesignationReadinessReport(previewReport({
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getTrustedValueArtifact.mockResolvedValue({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+      seasonNumber: 1,
+      contractVersion: 'd6-v1',
+      peerPoolMinThreshold: 2,
+      trustedPlayerIds: [
+        'player-1',
+        'surplus-player',
+        'deficit-player',
+        'neutral-player',
+        'blocked-player',
+        'valid-player',
+        'missing-team',
+        'farm-player',
+        'missing-salary',
+        'missing-value',
+        'missing-delta',
+      ],
+      blockedRows: [],
+      rosterStateSnapshot: [],
+      frozen: false,
+      frozenAt: null,
+      computedAt: 1,
+    });
+  });
+
+  test('positive preview value delta creates Fan Favorite preview context but finalization remains blocked', async () => {
+    const report = await buildFranchiseDesignationReadinessReport(previewReport({
       playerRows: [playerRow({
         playerId: 'surplus-player',
         salary: 2,
@@ -152,8 +190,8 @@ describe('franchise designation readiness report', () => {
     });
   });
 
-  test('negative preview value delta creates Albatross preview context but finalization remains blocked', () => {
-    const report = buildFranchiseDesignationReadinessReport(previewReport({
+  test('negative preview value delta creates Albatross preview context but finalization remains blocked', async () => {
+    const report = await buildFranchiseDesignationReadinessReport(previewReport({
       playerRows: [playerRow({
         playerId: 'deficit-player',
         salary: 12,
@@ -176,8 +214,8 @@ describe('franchise designation readiness report', () => {
     });
   });
 
-  test('neutral zero delta creates no actionable readiness', () => {
-    const report = buildFranchiseDesignationReadinessReport(previewReport({
+  test('neutral zero delta creates no actionable readiness', async () => {
+    const report = await buildFranchiseDesignationReadinessReport(previewReport({
       playerRows: [playerRow({
         playerId: 'neutral-player',
         salary: 5,
@@ -197,8 +235,8 @@ describe('franchise designation readiness report', () => {
     expect(report.rows.map((candidate) => candidate.blockers.join(' ')).join(' ')).toMatch(/requires .* preview value-delta context/i);
   });
 
-  test('blocked True Value preview row remains blocked', () => {
-    const report = buildFranchiseDesignationReadinessReport(previewReport({
+  test('blocked True Value preview row remains blocked', async () => {
+    const report = await buildFranchiseDesignationReadinessReport(previewReport({
       playerRows: [playerRow({
         playerId: 'blocked-player',
         status: 'blocked',
@@ -212,8 +250,8 @@ describe('franchise designation readiness report', () => {
     expect(row(report, 'blocked-player', 'FAN_FAVORITE').blockers.join(' ')).toMatch(/True Value preview row must be preview-only/i);
   });
 
-  test('missing or mismatched scope blocks readiness', () => {
-    const missing = buildFranchiseDesignationReadinessReport(previewReport({
+  test('missing or mismatched scope blocks readiness', async () => {
+    const missing = await buildFranchiseDesignationReadinessReport(previewReport({
       franchiseId: '',
       seasonId: '',
       statsScopeId: '',
@@ -222,14 +260,14 @@ describe('franchise designation readiness report', () => {
     expect(missing.blockers.join(' ')).toMatch(/Explicit franchise, season, stats scope/i);
     expect(missing.rows[0].readinessStatus).toBe('blocked');
 
-    const mismatched = buildFranchiseDesignationReadinessReport(previewReport({
+    const mismatched = await buildFranchiseDesignationReadinessReport(previewReport({
       playerRows: [playerRow({ seasonId: 'other-season' })],
     }));
     expect(row(mismatched, 'player-1', 'FAN_FAVORITE').blockers.join(' ')).toMatch(/row scope does not match/i);
   });
 
-  test('whitespace-only report franchise id blocks all readiness rows', () => {
-    const report = buildFranchiseDesignationReadinessReport(previewReport({
+  test('whitespace-only report franchise id blocks all readiness rows', async () => {
+    const report = await buildFranchiseDesignationReadinessReport(previewReport({
       franchiseId: '   ',
       playerRows: [playerRow({ franchiseId: '   ' })],
     }));
@@ -239,8 +277,8 @@ describe('franchise designation readiness report', () => {
     expect(row(report, 'player-1', 'FAN_FAVORITE').blockers.join(' ')).toMatch(/row requires explicit franchise/i);
   });
 
-  test('whitespace-only report season id blocks all readiness rows', () => {
-    const report = buildFranchiseDesignationReadinessReport(previewReport({
+  test('whitespace-only report season id blocks all readiness rows', async () => {
+    const report = await buildFranchiseDesignationReadinessReport(previewReport({
       seasonId: '  ',
       playerRows: [playerRow({ seasonId: '  ' })],
     }));
@@ -249,8 +287,8 @@ describe('franchise designation readiness report', () => {
     expect(report.rows.every((candidate) => candidate.readinessStatus === 'blocked')).toBe(true);
   });
 
-  test('whitespace-only report stats scope id blocks all readiness rows', () => {
-    const report = buildFranchiseDesignationReadinessReport(previewReport({
+  test('whitespace-only report stats scope id blocks all readiness rows', async () => {
+    const report = await buildFranchiseDesignationReadinessReport(previewReport({
       statsScopeId: '\t',
       playerRows: [playerRow({ statsScopeId: '\t' })],
     }));
@@ -259,8 +297,8 @@ describe('franchise designation readiness report', () => {
     expect(report.rows.every((candidate) => candidate.readinessStatus === 'blocked')).toBe(true);
   });
 
-  test('matching whitespace-only report and row scope does not produce preview readiness', () => {
-    const report = buildFranchiseDesignationReadinessReport(previewReport({
+  test('matching whitespace-only report and row scope does not produce preview readiness', async () => {
+    const report = await buildFranchiseDesignationReadinessReport(previewReport({
       franchiseId: ' ',
       seasonId: ' ',
       statsScopeId: ' ',
@@ -278,8 +316,8 @@ describe('franchise designation readiness report', () => {
     expect(row(report, 'player-1', 'FAN_FAVORITE').blockers.join(' ')).toMatch(/row requires explicit franchise/i);
   });
 
-  test('optional eligibility-report whitespace scope does not make the readiness report valid', () => {
-    const report = buildFranchiseDesignationReadinessReport(
+  test('optional eligibility-report whitespace scope does not make the readiness report valid', async () => {
+    const report = await buildFranchiseDesignationReadinessReport(
       previewReport(),
       eligibilityReport({
         franchiseId: ' ',
@@ -293,8 +331,8 @@ describe('franchise designation readiness report', () => {
     expect(report.policies.randomEventPromptAllowed).toBe(false);
   });
 
-  test('fully valid non-whitespace scope still produces expected preview context', () => {
-    const report = buildFranchiseDesignationReadinessReport(previewReport({
+  test('fully valid non-whitespace scope still produces expected preview context', async () => {
+    const report = await buildFranchiseDesignationReadinessReport(previewReport({
       franchiseId: 'franchise-valid',
       seasonId: 'season-valid',
       statsScopeId: 'scope-valid',
@@ -314,8 +352,8 @@ describe('franchise designation readiness report', () => {
     expect(row(report, 'valid-player', 'ALBATROSS').readinessStatus).toBe('blocked');
   });
 
-  test('missing player team salary value and value delta block readiness', () => {
-    const report = buildFranchiseDesignationReadinessReport(previewReport({
+  test('missing player team salary value and value delta block readiness', async () => {
+    const report = await buildFranchiseDesignationReadinessReport(previewReport({
       playerRows: [
         playerRow({ playerId: '', playerName: 'Missing Player' }),
         playerRow({ playerId: 'missing-team', teamId: null }),
@@ -335,8 +373,8 @@ describe('franchise designation readiness report', () => {
     expect(JSON.stringify(report.rows)).toMatch(/Preview value-delta estimate is required/);
   });
 
-  test('policy trusts projected designations only while mutation and prompt gates stay false', () => {
-    const report = buildFranchiseDesignationReadinessReport(previewReport());
+  test('policy trusts projected designations only while mutation and prompt gates stay false', async () => {
+    const report = await buildFranchiseDesignationReadinessReport(previewReport());
 
     expect(report.policies).toMatchObject({
       finalTrueValueTrusted: true,
@@ -354,7 +392,36 @@ describe('franchise designation readiness report', () => {
     expect(report.limitations.join(' ')).toContain('EP1 R-8/R-9/R-10: projected readiness consumes starts-derived effective-position True Value with Reserve and two-way composite handling.');
   });
 
-  test('utility imports no storage save set persist or mutation APIs', () => {
+  test('blocks readiness when the D6 artifact does not trust the player', async () => {
+    mocks.getTrustedValueArtifact.mockResolvedValue({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+      seasonNumber: 1,
+      contractVersion: 'd6-v1',
+      peerPoolMinThreshold: 2,
+      trustedPlayerIds: [],
+      blockedRows: [{ playerId: 'player-1', reasons: ['Position SS peer pool size 1 (< 2 required)'] }],
+      rosterStateSnapshot: [],
+      frozen: false,
+      frozenAt: null,
+      computedAt: 1,
+    });
+
+    const report = await buildFranchiseDesignationReadinessReport(previewReport());
+
+    expect(report.policies).toMatchObject({
+      finalTrueValueTrusted: false,
+      valueDeltaTrustedForDesignations: false,
+      designationPersistenceAllowed: false,
+      moraleMutationAllowed: false,
+      salaryMovementAllowed: false,
+    });
+    expect(row(report, 'player-1', 'FAN_FAVORITE').readinessStatus).toBe('blocked');
+    expect(row(report, 'player-1', 'FAN_FAVORITE').blockers.join(' ')).toMatch(/D6 trusted-value artifact/i);
+  });
+
+  test('utility imports no storage save set persist or mutation APIs', async () => {
     const source = readFileSync('src/utils/franchiseDesignationReadinessReport.ts', 'utf8');
 
     expect(source).not.toMatch(/indexedDB|syncEngine|save[A-Z]|set[A-Z]|persist[A-Z]|put\(|delete\(|confirmFranchiseRandomEvent|applyFranchiseMoraleEffect|franchiseRandomEventGenerator/);

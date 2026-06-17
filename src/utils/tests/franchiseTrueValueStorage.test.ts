@@ -23,6 +23,10 @@ import {
   initFranchiseTrueValueDatabase,
   resetFranchiseTrueValueDatabaseForTests,
 } from '../franchiseTrueValueStorage';
+import {
+  clearFranchiseTrustedValueDatabaseForTests,
+  getTrustedValueArtifact,
+} from '../franchiseTrustedValueStorage';
 
 function row(overrides: Partial<FranchiseValueInputRow> = {}): FranchiseValueInputRow {
   return {
@@ -151,9 +155,11 @@ describe('franchise True Value storage', () => {
     vi.clearAllMocks();
     resetFranchiseTrueValueDatabaseForTests();
     await clearFranchiseTrueValueDatabaseForTests();
+    await clearFranchiseTrustedValueDatabaseForTests();
   });
 
   afterEach(async () => {
+    await clearFranchiseTrustedValueDatabaseForTests();
     await clearFranchiseTrueValueDatabaseForTests();
     resetFranchiseTrueValueDatabaseForTests();
   });
@@ -212,6 +218,147 @@ describe('franchise True Value storage', () => {
     })).resolves.toMatchObject({
       playerId: 'target',
       position: 'SS',
+    });
+  });
+
+  test('persists D6 live trust artifact with hard peer-pool blocks and hidden/score-only exclusions', async () => {
+    const hiddenFarm = row({
+      playerId: 'hidden-farm',
+      currentTeamId: 'farm-team',
+      rosterStatus: 'FARM',
+      limitations: ['Hidden FARM prospect salary uses draft/scouting-safe public context; true ratings and true grade are not salary inputs.'],
+    });
+    const scoreOnly = row({
+      playerId: 'score-only-row',
+      seasonStatsAvailability: { batting: false, pitching: false, fielding: false, any: false },
+      warInputAvailability: {
+        battingWar: false,
+        pitchingWar: false,
+        fieldingWar: false,
+        baserunningWar: false,
+        any: false,
+        trustedForFinalValue: false,
+      },
+      warPreviewValues: {
+        battingWar: null,
+        pitchingWar: null,
+        fieldingWar: null,
+        baserunningWar: null,
+        totalWar: null,
+        totalWarSource: 'unavailable',
+        trustedForFinalValue: false,
+      },
+      limitations: ['Score-only rows do not create player stats, WPA, WAR, awards, designations, or narrative/random-event inputs.'],
+    });
+    mocks.buildFranchiseValueInputRows.mockResolvedValue(report([
+      row({ playerId: 'trusted-ss', valuePosition: 'SS' }),
+      row({ playerId: 'ss-peer-1', valuePosition: 'SS', salary: 2000 }),
+      row({ playerId: 'ss-peer-2', valuePosition: 'SS', salary: 3000 }),
+      row({ playerId: 'blocked-c', valuePosition: 'C', salary: 4000 }),
+      row({ playerId: 'c-peer-1', valuePosition: 'C', salary: 5000 }),
+      hiddenFarm,
+      scoreOnly,
+    ]));
+
+    await calculateAndPersistFranchiseTrueValueForSeason({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+      seasonNumber: 1,
+    }, {
+      computedAt: '2026-06-16T00:00:00.000Z',
+    });
+
+    const artifact = await getTrustedValueArtifact('franchise-1', 'season-1', 'season-1');
+    expect(artifact).toMatchObject({
+      contractVersion: 'd6-v1',
+      peerPoolMinThreshold: 2,
+      trustedPlayerIds: ['ss-peer-1', 'ss-peer-2', 'trusted-ss'],
+      blockedRows: [
+        {
+          playerId: 'blocked-c',
+          reasons: ['Position C peer pool size 1 (< 2 required)'],
+        },
+        {
+          playerId: 'c-peer-1',
+          reasons: ['Position C peer pool size 1 (< 2 required)'],
+        },
+      ],
+      frozen: false,
+      frozenAt: null,
+      computedAt: Date.parse('2026-06-16T00:00:00.000Z'),
+    });
+    expect(artifact?.trustedPlayerIds).not.toContain('hidden-farm');
+    expect(artifact?.trustedPlayerIds).not.toContain('score-only-row');
+    expect(artifact?.blockedRows.map((blocked) => blocked.playerId)).not.toContain('hidden-farm');
+    expect(artifact?.blockedRows.map((blocked) => blocked.playerId)).not.toContain('score-only-row');
+    expect(artifact?.rosterStateSnapshot).toContainEqual({
+      playerId: 'hidden-farm',
+      teamId: 'farm-team',
+      rosterStatus: 'FARM',
+    });
+  });
+
+  test('full-player blocks a two-way holder when any audited position has fewer than two peers', async () => {
+    const twoWayPositioning: FranchiseValueInputRow['trueValuePositioning'] = {
+      valuationMode: 'two-way-composite',
+      valuePosition: 'CF',
+      effectivePosition: 'CF',
+      poolPosition: null,
+      profilePosition: 'SP/RP',
+      profilePitcherRole: 'SP/RP',
+      starts: 0,
+      currentTeamStarts: 0,
+      teamCompletedGames: 0,
+      startsShare: null,
+      isReserve: false,
+      twoWayTrait: 'Two Way (OF)',
+      twoWayBatPosition: 'CF',
+      twoWayArmPosition: 'SP/RP',
+      startsSource: 'game-header-starting-lineups',
+      reasons: [],
+    };
+    mocks.buildFranchiseValueInputRows.mockResolvedValue(report([
+      row({
+        playerId: 'two-way-holder',
+        salary: 750,
+        valuePosition: 'CF',
+        trueValuePositioning: twoWayPositioning,
+        warInputAvailability: {
+          battingWar: true,
+          pitchingWar: true,
+          fieldingWar: true,
+          baserunningWar: true,
+          any: true,
+          trustedForFinalValue: false,
+        },
+        warPreviewValues: {
+          battingWar: 1.5,
+          pitchingWar: 3,
+          fieldingWar: 0.3,
+          baserunningWar: 0.2,
+          totalWar: 5,
+          totalWarSource: 'stat-row',
+          trustedForFinalValue: false,
+        },
+      }),
+      row({ playerId: 'arm-peer-1', valuePosition: 'SP/RP', salary: 1000 }),
+      row({ playerId: 'arm-peer-2', valuePosition: 'SP/RP', salary: 2000 }),
+      row({ playerId: 'bat-peer-1', valuePosition: 'CF', salary: 3000 }),
+    ]));
+
+    await calculateAndPersistFranchiseTrueValueForSeason({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+      seasonNumber: 1,
+    });
+
+    const artifact = await getTrustedValueArtifact('franchise-1', 'season-1', 'season-1');
+    expect(artifact?.trustedPlayerIds).not.toContain('two-way-holder');
+    expect(artifact?.blockedRows).toContainEqual({
+      playerId: 'two-way-holder',
+      reasons: ['Position CF peer pool size 1 (< 2 required)'],
     });
   });
 

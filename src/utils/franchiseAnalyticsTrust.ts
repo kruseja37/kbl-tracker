@@ -43,10 +43,10 @@ export interface FranchiseWarTrust extends FranchiseAnalyticsTrustArea {
   warLikePreviewAvailable: boolean;
   trustedForTeamMvpDesignations: boolean;
   trustedForAceDesignations: boolean;
-  trustedForFanFavoriteAlbatrossDesignations: false;
+  trustedForFanFavoriteAlbatrossDesignations: boolean;
   trustedForAwards: false;
   trustedForSalaryMovement: false;
-  trustedForTrueValue: false;
+  trustedForTrueValue: boolean;
   trustedForMorale: false;
   trustedForMode3Handoff: false;
   finalWarTrusted: false;
@@ -143,6 +143,10 @@ function hasTeamMvpWarTrust(rows: FranchiseValueInputRow[]): boolean {
 
 function hasAceWarTrust(rows: FranchiseValueInputRow[]): boolean {
   return rows.some((row) => row.warConsumerTrust?.aceDesignations === true);
+}
+
+function hasTrustedTrueValue(rows: FranchiseValueInputRow[]): boolean {
+  return rows.some((row) => row.warConsumerTrust?.trueValue === true || row.warInputAvailability.trustedForFinalValue === true);
 }
 
 function hasAnyWpa(rows: FranchiseValueInputRow[]): boolean {
@@ -318,27 +322,30 @@ function buildWarTrust(rows: FranchiseValueInputRow[]): FranchiseWarTrust {
   const trustedForTeamMvpDesignations = hasTeamMvpWarTrust(rows);
   const trustedForAceDesignations = hasAceWarTrust(rows);
   const trustedForTeamMvpAce = trustedForTeamMvpDesignations || trustedForAceDesignations;
+  const trustedForTrueValue = hasTrustedTrueValue(rows);
 
   return {
     ...area(
-      trustedForTeamMvpAce ? 'trusted' : warLikePreviewAvailable ? 'preview-only' : 'blocked',
+      trustedForTeamMvpAce || trustedForTrueValue ? 'trusted' : warLikePreviewAvailable ? 'preview-only' : 'blocked',
       trustedForTeamMvpAce
-        ? ['Scoped WAR inputs are trusted only for TEAM_MVP/ACE designation input gating.']
+        ? ['Scoped WAR inputs are trusted for TEAM_MVP/ACE designation input gating; D6 artifact rows may also trust True Value/value-delta consumers.']
+        : trustedForTrueValue
+          ? ['D6 trusted-value artifact rows are available for True Value/value-delta consumers.']
         : warLikePreviewAvailable
           ? ['WAR-like component inputs are available, but no row meets the consumer-specific TEAM_MVP/ACE trust gate.']
         : ['No WAR-like component inputs are available.'],
       [
-        'Final WAR remains untrusted for True Value, value delta, awards, salary movement, morale, relationships, and Mode 3.',
-        'Fan Favorite and Albatross remain blocked because True Value/value-delta trust is not promoted by WAR input trust.',
+        'Final WAR remains untrusted for awards, salary movement, morale, relationships, and Mode 3.',
+        'Fan Favorite and Albatross consume only the D6 trusted-value artifact signal; WAR input trust alone does not promote them.',
       ],
     ),
     warLikePreviewAvailable,
     trustedForTeamMvpDesignations,
     trustedForAceDesignations,
-    trustedForFanFavoriteAlbatrossDesignations: false,
+    trustedForFanFavoriteAlbatrossDesignations: trustedForTrueValue,
     trustedForAwards: false,
     trustedForSalaryMovement: false,
-    trustedForTrueValue: false,
+    trustedForTrueValue,
     trustedForMorale: false,
     trustedForMode3Handoff: false,
     finalWarTrusted: false,

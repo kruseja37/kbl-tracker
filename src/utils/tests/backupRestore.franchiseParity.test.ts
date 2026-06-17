@@ -55,6 +55,24 @@ const ledgerRow = {
   computedAt: "2026-06-16T00:00:00.000Z",
 };
 
+const trustedValueArtifact = {
+  franchiseId: "franchise-d2",
+  seasonId: "season-d2",
+  statsScopeId: "scope-d2",
+  seasonNumber: 1,
+  contractVersion: "d6-v1",
+  peerPoolMinThreshold: 2,
+  trustedPlayerIds: ["player-tv"],
+  blockedRows: [{ playerId: "player-blocked", reasons: ["Position SS peer pool size 1 (< 2 required)"] }],
+  rosterStateSnapshot: [
+    { playerId: "player-tv", teamId: "team-d2", rosterStatus: "MLB" },
+    { playerId: "player-blocked", teamId: "team-d2", rosterStatus: "MLB" },
+  ],
+  frozen: false,
+  frozenAt: null,
+  computedAt: 1781568000000,
+};
+
 function deleteDatabase(name: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.deleteDatabase(name);
@@ -88,13 +106,14 @@ async function wipeTrackerDb(): Promise<void> {
 async function seedFranchiseEconomyRows(): Promise<void> {
   const db = await getTrackerDb();
   const tx = db.transaction(
-    ["franchiseTrueValueRows", "franchiseDesignationRows", "franchiseSeasonLedgerRows"],
+    ["franchiseTrueValueRows", "franchiseDesignationRows", "franchiseSeasonLedgerRows", "franchiseTrustedValueArtifacts"],
     "readwrite",
   );
 
   tx.objectStore("franchiseTrueValueRows").put(trueValueRow);
   tx.objectStore("franchiseDesignationRows").put(designationRow);
   tx.objectStore("franchiseSeasonLedgerRows").put(ledgerRow);
+  tx.objectStore("franchiseTrustedValueArtifacts").put(trustedValueArtifact);
 
   await transactionToPromise(tx);
 }
@@ -138,7 +157,7 @@ describe("backup/restore kbl-tracker franchise economy parity", () => {
     expect(backupRegistryStores).toEqual(trackerDbStores);
   });
 
-  test("round-trips franchise True Value, designation, and season ledger rows", async () => {
+  test("round-trips franchise True Value, designation, season ledger, and trusted-value artifact rows", async () => {
     await seedFranchiseEconomyRows();
 
     const backup = await exportThenWipeAndRestore();
@@ -146,6 +165,7 @@ describe("backup/restore kbl-tracker franchise economy parity", () => {
     expect(backup.databases[TRACKER_DB_NAME].franchiseTrueValueRows).toEqual([trueValueRow]);
     expect(backup.databases[TRACKER_DB_NAME].franchiseDesignationRows).toEqual([designationRow]);
     expect(backup.databases[TRACKER_DB_NAME].franchiseSeasonLedgerRows).toEqual([ledgerRow]);
+    expect(backup.databases[TRACKER_DB_NAME].franchiseTrustedValueArtifacts).toEqual([trustedValueArtifact]);
 
     await expect(
       readRecord("franchiseTrueValueRows", [
@@ -172,5 +192,12 @@ describe("backup/restore kbl-tracker franchise economy parity", () => {
         ledgerRow.playerId,
       ]),
     ).resolves.toEqual(ledgerRow);
+    await expect(
+      readRecord("franchiseTrustedValueArtifacts", [
+        trustedValueArtifact.franchiseId,
+        trustedValueArtifact.seasonId,
+        trustedValueArtifact.statsScopeId,
+      ]),
+    ).resolves.toEqual(trustedValueArtifact);
   });
 });

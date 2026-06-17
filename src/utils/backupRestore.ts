@@ -299,11 +299,14 @@ const trackerStores: Record<string, StoreSchema> = {
     ],
   },
   seasonEmissionConfig: { keyPath: 'id' },
+  franchiseTrustedValueArtifacts: {
+    keyPath: ['franchiseId', 'seasonId', 'statsScopeId'],
+  },
 };
 
 export const STATIC_DATABASE_SCHEMAS: Record<string, DatabaseSchema> = {
   'kbl-tracker': {
-    version: 16,
+    version: 17,
     stores: trackerStores,
   },
   'kbl-playoffs': {

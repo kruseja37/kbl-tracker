@@ -3,6 +3,7 @@ import type {
   FranchiseTrueValuePreviewPlayerRow,
   FranchiseTrueValuePreviewReport,
 } from './franchiseTrueValuePreview';
+import { getTrustedValueArtifact } from './franchiseTrustedValueStorage';
 
 export const FRANCHISE_DESIGNATION_READINESS_REPORT_VERSION =
   'franchise-designation-readiness-v1-readonly';
@@ -78,13 +79,13 @@ function hasText(value: string | null | undefined): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
-function policies(): FranchiseDesignationReadinessPolicies {
+function policies(valueDeltaTrustedForDesignations: boolean): FranchiseDesignationReadinessPolicies {
   return {
-    finalTrueValueTrusted: true,
-    valueDeltaTrustedForDesignations: true,
+    finalTrueValueTrusted: valueDeltaTrustedForDesignations,
+    valueDeltaTrustedForDesignations,
     fanFavoriteFinalizationAllowed: false,
     albatrossFinalizationAllowed: false,
-    designationPersistenceAllowed: true,
+    designationPersistenceAllowed: valueDeltaTrustedForDesignations,
     randomEventPromptAllowed: false,
     moraleMutationAllowed: false,
     salaryMovementAllowed: false,
@@ -183,9 +184,13 @@ function readinessRow(
   report: FranchiseTrueValuePreviewReport,
   row: FranchiseTrueValuePreviewPlayerRow,
   designationType: FranchiseValueDesignationReadinessType,
+  trustedForValueDelta: boolean,
 ): FranchiseDesignationReadinessRow {
   const blockers = baseBlockers(report, row);
   const candidateDirection = rowDirection(designationType, row.valueDeltaEstimate);
+  if (!trustedForValueDelta) {
+    blockers.push('D6 trusted-value artifact must include this player before Fan Favorite/Albatross readiness can trust value delta.');
+  }
   if (candidateDirection === 'neutral-no-context') {
     blockers.push(`${designationType} readiness requires ${designationType === 'FAN_FAVORITE' ? 'a positive surplus' : 'a negative deficit'} preview value-delta context.`);
   }
@@ -248,15 +253,22 @@ function reportBlockers(
   return unique(blockers);
 }
 
-export function buildFranchiseDesignationReadinessReport(
+export async function buildFranchiseDesignationReadinessReport(
   trueValuePreviewReport: FranchiseTrueValuePreviewReport,
   eligibilityReport?: FranchiseDesignationEligibilityReport | null,
-): FranchiseDesignationReadinessReport {
+): Promise<FranchiseDesignationReadinessReport> {
   const blockers = reportBlockers(trueValuePreviewReport, eligibilityReport);
+  const trustedValueArtifact = await getTrustedValueArtifact(
+    trueValuePreviewReport.franchiseId,
+    trueValuePreviewReport.seasonId,
+    trueValuePreviewReport.statsScopeId,
+  );
+  const trustedPlayerIds = new Set(trustedValueArtifact?.trustedPlayerIds ?? []);
   const rows = trueValuePreviewReport.playerRows.flatMap((row) => [
-    readinessRow(trueValuePreviewReport, row, 'FAN_FAVORITE'),
-    readinessRow(trueValuePreviewReport, row, 'ALBATROSS'),
+    readinessRow(trueValuePreviewReport, row, 'FAN_FAVORITE', trustedPlayerIds.has(row.playerId)),
+    readinessRow(trueValuePreviewReport, row, 'ALBATROSS', trustedPlayerIds.has(row.playerId)),
   ]);
+  const valueDeltaTrustedForDesignations = trustedPlayerIds.size > 0;
 
   return {
     contractVersion: FRANCHISE_DESIGNATION_READINESS_REPORT_VERSION,
@@ -268,7 +280,7 @@ export function buildFranchiseDesignationReadinessReport(
     sourceContractVersion: trueValuePreviewReport.contractVersion,
     eligibilityContractVersion: eligibilityReport?.contractVersion ?? null,
     rows,
-    policies: policies(),
+    policies: policies(valueDeltaTrustedForDesignations),
     blockers,
     limitations: unique([
       ...trueValuePreviewReport.limitations,

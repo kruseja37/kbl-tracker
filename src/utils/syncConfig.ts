@@ -10,6 +10,7 @@ export const SYNC_REGISTRY: Record<string, Record<string, string | string[]>> = 
   'kbl-tracker': {
     completedGames: 'gameId',
     franchiseSeasonSummaries: 'seasonId',
+    franchiseTrustedValueArtifacts: ['franchiseId', 'seasonId', 'statsScopeId'],
     // playerGameStats and pitcherGameStats NOT synced — stores exist in schema
     // but are never written to. Stats are embedded in completedGames records.
     almanacCanonicalPlayers: 'canonicalId',

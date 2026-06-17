@@ -287,3 +287,26 @@ salary-live, the L4a publish-bus). D5 is confirm-only; D6 is the value-trust gat
   frozen-snapshot rules (which roster state / season-vs-playoff / when values lock) — genuine value-design forks.
   Mapping → then surface the contract + those forks to JK before building (the make-or-break ticket warrants the
   map→ruling→build discipline; risk-rule says value-design judgment calls surface).
+
+- **2026-06-16 — D6 DECISIONS RULED + D6a STARTED.** Map complete (4 agents). **JK ruled the lock-timing fork:
+  SEASON-END FREEZE** (artifact live each game for live designations + floating value; locks at the last
+  regular-season game so D8/D9 awards compute on a deterministic frozen spine; regular-season-only). Captain
+  conservative defaults (in the contract): hard-block <2 peers · full-player block · new dedicated
+  `franchiseTrustedValueArtifacts` store · boundary via assertion + no-leak test · reconcile the
+  `franchiseDesignationReadinessReport.ts:84` inconsistency the map caught. **Split D6 for safety on the
+  make-or-break gate: D6a = the LIVE artifact + peer-pool audit + flag-flips + exclusions + reconcile + backup
+  (unblocks D7); D6b = the season-end freeze (for D8/D9).** D6a contract in PROMPT_CONTRACTS.md; Codex invoked
+  (trackerDb v16→17). Will audit RIGOROUSLY (value spine; high blast radius — D7/D8/MOY consume the artifact).
+
+- **2026-06-16 — D6a COMMITTED.** Codex built (exit 0); Captain RIGOROUS audit = **VERIFIED** (make-or-break value
+  spine). Diff = NEW `franchiseTrustedValueStorage` (artifact store, frozen:false) + `franchiseTrueValueStorage`
+  (peer-pool audit) + the 4 flag-flips (`franchiseValueInputs`/`TrueValuePreview`/`AnalyticsTrust`) + readiness-
+  report reconcile + `trackerDb` v16→17 + `backupRestore` (pin 17) + `syncConfig` + tests. **Substance verified by
+  reading:** audit = per-pool ≥2 MLB peers HARD-block (no fudge/fallback), two-way FULL-block if either arm/bat
+  pool fails, FARM/score-only excluded, deterministic sorted artifact; flags GENUINELY COMPUTED from the artifact
+  (not hardcoded-true; null-safe→false); NO existing trust assertion removed/weakened. **Invariants:** base-IV
+  oracle UNTOUCHED · boundary intact (a REAL no-leak test scans all source: no file mixes `trustedForTrueValue`
+  with salary/morale/Captain/FanHopeful/Cornerstone → []) · D8 award flags stay false · salaryMovement/morale stay
+  false · KBL_BACKUP_VERSION 2 · no freeze (D6b). Independent gates: tsc 0; 68 tests pass incl. the D2 parity-guard
+  green with the new store + the boundary no-leak. NOT browser-pending (backend trust computation; the user-visible
+  label flip is D7/D11). **→ NEXT: D6b (season-end freeze) → D7 (designations live, incl. Albatross + Fan Favorite).**

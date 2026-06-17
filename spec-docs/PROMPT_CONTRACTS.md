@@ -7432,4 +7432,38 @@ stores) + elimination test pass · TRACKER_DB_VERSION 16, pin 16, KBL_BACKUP_VER
 **STOP IF:** out-of-ALLOWED edit; parity-guard reveals other missing stores; transport can't be mirrored.
 
 **Status:** contract issued; Codex invoked.
+**Result:** VERIFIED + committed `8074976`.
+
+---
+
+## D6a — True-Value TRUST PROMOTION gate (part 1: live artifact) — 2026-06-16 (autonomous run)
+
+**ROUTE:** Codex | high → Opus audit. Autonomous (AUTH-1/AUTH-2). THE MAKE-OR-BREAK value-spine ticket.
+
+**JK DECISIONS (2026-06-16, map workflow `wf_3c443a04-35e`):** SEASON-END freeze (this ticket = the LIVE half,
+`frozen:false`; D6b locks at last regular-season game) · regular-season-only · HARD-BLOCK <2 MLB peers (no
+fudge/fallback) · FULL-PLAYER block (not per-position) · NEW dedicated `franchiseTrustedValueArtifacts` store ·
+boundary via assertion + no-leak test. The map also caught a real inconsistency to reconcile
+(`franchiseDesignationReadinessReport.ts:84` hardcodes `valueDeltaTrustedForDesignations:true`).
+
+**GOAL:** Peer-pool audit → persist a LIVE trusted-value artifact (trust verdict per scope) → flip the 4 True-Value
+trust flags from literal-false to COMPUTED (read from the artifact). Excludes hidden-FARM + score-only. Does NOT
+touch the base-IV oracle; does NOT promote salary/morale/Captain/Mode-3 (boundary); freeze = D6b.
+
+**ALLOWED:** NEW `franchiseTrustedValueStorage.ts` (the artifact store) · `franchiseTrueValueStorage.ts` (the audit
++ persist in calculateAndPersistFranchiseTrueValueForSeason) · `franchiseValueInputs.ts` /
+`franchiseTrueValuePreview.ts` / `franchiseAnalyticsTrust.ts` (flip the 4 flags computed; NOT the D8 award flags) ·
+`franchiseDesignationReadinessReport.ts` (reconcile :84) · `trackerDb.ts` (store, v16→17) · `backupRestore.ts`
+(register, pin 17, KBL_BACKUP_VERSION stays 2) · `syncConfig.ts` · tests (audit + flags + reconcile + boundary +
+parity-guard stays green).
+
+**DO NOT:** the freeze (D6b) · base-IV oracle/computeIV/golden · D7/D8 promotion + UI labels · salaryMovement/
+morale/Captain-Fan Hopeful-Cornerstone/Mode-3/offseason · KBL_BACKUP_VERSION.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · new tests + the trust tests + the D2 parity-guard pass ·
+TRACKER_DB_VERSION 17, pin 17, KBL_BACKUP_VERSION 2; 4 flags computed; salaryMovement/morale unchanged-false.
+
+**STOP IF:** out-of-ALLOWED edit; oracle touch; freeze needed; parity-guard reveals other missing stores.
+
+**Status:** contract issued; Codex invoked.
 

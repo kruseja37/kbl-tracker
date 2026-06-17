@@ -435,6 +435,44 @@ describe('franchise analytics trust report', () => {
     expect(report.war.limitations.join(' ')).toMatch(/Final WAR remains untrusted/i);
   });
 
+  test('D6 artifact-backed rows promote True Value and value-delta trust but not awards or final WAR', () => {
+    const trustedRow = valueRow({
+      warInputAvailability: {
+        battingWar: true,
+        pitchingWar: false,
+        fieldingWar: true,
+        baserunningWar: true,
+        any: true,
+        trustedForFinalValue: true,
+      },
+      warConsumerTrust: {
+        teamMvpDesignations: false,
+        aceDesignations: false,
+        fanFavoriteAlbatrossDesignations: false,
+        awards: false,
+        salaryMovement: false,
+        trueValue: true,
+        morale: false,
+        mode3Handoff: false,
+        blockers: [],
+        limitations: ['True Value trust is read only from the D6 trusted-value artifact.'],
+      },
+    });
+    const report = buildFranchiseAnalyticsTrustReport({
+      valueInputReport: valueReport({ rows: [trustedRow] }),
+    });
+
+    expect(report.war).toMatchObject({
+      status: 'trusted',
+      trustedForFanFavoriteAlbatrossDesignations: true,
+      trustedForTrueValue: true,
+      trustedForAwards: false,
+      trustedForSalaryMovement: false,
+      trustedForMorale: false,
+      finalWarTrusted: false,
+    });
+  });
+
   test('missing season metadata blocks adaptive and final analytics trust', () => {
     const missingMetadataRow = valueRow({
       seasonContext: {

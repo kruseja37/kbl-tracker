@@ -42,7 +42,7 @@ export interface FranchiseTrueValuePreviewPlayerRow {
   status: FranchiseTrueValuePreviewStatus;
   previewValueEstimate: number | null;
   valueDeltaEstimate: number | null;
-  valueDeltaTrustedForDesignations: false;
+  valueDeltaTrustedForDesignations: boolean;
   expectedWinsTrusted: false;
   salaryMovementAllowed: false;
   designationFinalizationAllowed: false;
@@ -65,7 +65,7 @@ export interface FranchiseTrueValuePreviewTeamSummary {
   valueDeltaEstimateTotal: number;
   status: 'preview-only';
   expectedWinsTrusted: false;
-  valueDeltaTrustedForDesignations: false;
+  valueDeltaTrustedForDesignations: boolean;
   salaryMovementAllowed: false;
   limitations: string[];
 }
@@ -82,9 +82,9 @@ export interface FranchiseTrueValuePreviewReport {
   playerRows: FranchiseTrueValuePreviewPlayerRow[];
   teamSummaries: FranchiseTrueValuePreviewTeamSummary[];
   policies: {
-    finalTrueValueCalculated: false;
-    persistedTrueValueCreated: false;
-    valueDeltaTrustedForDesignations: false;
+    finalTrueValueCalculated: boolean;
+    persistedTrueValueCreated: boolean;
+    valueDeltaTrustedForDesignations: boolean;
     expectedWinsTrusted: false;
     salaryMovementAllowed: false;
     designationFinalizationAllowed: false;
@@ -365,7 +365,7 @@ function previewRow(
     status: reasons.length === 0 ? 'preview-only' : 'blocked',
     previewValueEstimate,
     valueDeltaEstimate,
-    valueDeltaTrustedForDesignations: false,
+    valueDeltaTrustedForDesignations: row.warInputAvailability.trustedForFinalValue,
     expectedWinsTrusted: false,
     salaryMovementAllowed: false,
     designationFinalizationAllowed: false,
@@ -400,6 +400,8 @@ function teamSummaries(
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([teamId, rows]) => {
       const previewRows = rows.filter((row) => row.status === 'preview-only');
+      const valueDeltaTrustedForDesignations = previewRows.length > 0 &&
+        previewRows.every((row) => row.valueDeltaTrustedForDesignations);
       const salaryTotal = previewRows.reduce((total, row) => total + (row.salary ?? 0), 0);
       const previewValueEstimateTotal = previewRows.reduce((total, row) => total + (row.previewValueEstimate ?? 0), 0);
       return {
@@ -416,7 +418,7 @@ function teamSummaries(
         valueDeltaEstimateTotal: previewValueEstimateTotal - salaryTotal,
         status: 'preview-only',
         expectedWinsTrusted: false,
-        valueDeltaTrustedForDesignations: false,
+        valueDeltaTrustedForDesignations,
         salaryMovementAllowed: false,
         limitations: [
           'Team summary aggregates preview-only player rows and remains untrusted for expected wins, Fan Favorite, Albatross, salary movement, or final designations.',
@@ -446,9 +448,9 @@ export function buildFranchiseTrueValuePreviewReport(
     playerRows,
     teamSummaries: teams,
     policies: {
-      finalTrueValueCalculated: false,
-      persistedTrueValueCreated: false,
-      valueDeltaTrustedForDesignations: false,
+      finalTrueValueCalculated: valueInputReport.trueValuePolicy.finalTrueValueCalculated,
+      persistedTrueValueCreated: valueInputReport.trueValuePolicy.persistedTrueValueCreated,
+      valueDeltaTrustedForDesignations: playerRows.some((row) => row.valueDeltaTrustedForDesignations),
       expectedWinsTrusted: false,
       salaryMovementAllowed: false,
       designationFinalizationAllowed: false,

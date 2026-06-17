@@ -15,6 +15,12 @@ import {
   FRANCHISE_TRUE_VALUE_RESERVE_POOL,
   type FranchiseTrueValueValuationMode,
 } from './franchiseEffectivePosition';
+import {
+  FRANCHISE_TRUSTED_VALUE_CONTRACT_VERSION,
+  FRANCHISE_TRUSTED_VALUE_PEER_POOL_MIN_THRESHOLD,
+  persistTrustedValueArtifact,
+  type FranchiseTrustedValueArtifact,
+} from './franchiseTrustedValueStorage';
 import { getTrackerDb, resetTrackerDbForTests } from './trackerDb';
 
 export interface FranchiseTrueValueScopeInput {
@@ -246,6 +252,79 @@ function trueValueEntryFromRow(row: FranchiseValueInputRow): TrueValueEntry | nu
   };
 }
 
+function rosterStateSnapshot(rows: FranchiseValueInputRow[]): FranchiseTrustedValueArtifact['rosterStateSnapshot'] {
+  return rows
+    .filter((row) => Boolean(row.playerId))
+    .map((row) => ({
+      playerId: row.playerId,
+      teamId: row.currentTeamId ?? '',
+      rosterStatus: row.rosterStatus ?? 'UNASSIGNED',
+    }))
+    .sort((left, right) => left.playerId.localeCompare(right.playerId));
+}
+
+function auditedPoolPositions(entry: TrueValueEntry): TrueValuePoolKey[] {
+  if (entry.kind === 'single') return [entry.poolPosition];
+  return [entry.armPosition, entry.batPosition];
+}
+
+function peerPoolReason(poolPosition: TrueValuePoolKey, peerPoolSize: number): string {
+  return `Position ${poolPosition} peer pool size ${peerPoolSize} (< ${FRANCHISE_TRUSTED_VALUE_PEER_POOL_MIN_THRESHOLD} required)`;
+}
+
+function auditTrustedValuePeerPools(params: {
+  scope: FranchiseTrueValueScopeInput;
+  seasonNumber: number;
+  valueRows: FranchiseValueInputRow[];
+  canonicalEntries: TrueValueEntry[];
+  singleEntries: SingleTrueValueEntry[];
+  computedAt: number;
+}): FranchiseTrustedValueArtifact {
+  const trustedPlayerIds: string[] = [];
+  const blockedRows: FranchiseTrustedValueArtifact['blockedRows'] = [];
+
+  for (const entry of params.canonicalEntries) {
+    const reasons = auditedPoolPositions(entry)
+      .map((poolPosition) => {
+        const peerPoolSize = params.singleEntries.filter((candidate) =>
+          candidate.player.id !== entry.row.playerId &&
+          candidate.player.trueValuePool === poolPosition,
+        ).length;
+        return peerPoolSize >= FRANCHISE_TRUSTED_VALUE_PEER_POOL_MIN_THRESHOLD
+          ? null
+          : peerPoolReason(poolPosition, peerPoolSize);
+      })
+      .filter((reason): reason is string => reason !== null);
+
+    if (reasons.length > 0) {
+      blockedRows.push({
+        playerId: entry.row.playerId,
+        reasons,
+      });
+    } else {
+      trustedPlayerIds.push(entry.row.playerId);
+    }
+  }
+
+  return {
+    ...params.scope,
+    seasonNumber: params.seasonNumber,
+    contractVersion: FRANCHISE_TRUSTED_VALUE_CONTRACT_VERSION,
+    peerPoolMinThreshold: FRANCHISE_TRUSTED_VALUE_PEER_POOL_MIN_THRESHOLD,
+    trustedPlayerIds: Array.from(new Set(trustedPlayerIds)).sort(),
+    blockedRows: blockedRows.sort((left, right) => left.playerId.localeCompare(right.playerId)),
+    rosterStateSnapshot: rosterStateSnapshot(params.valueRows),
+    frozen: false,
+    frozenAt: null,
+    computedAt: params.computedAt,
+  };
+}
+
+function computedAtMillis(computedAt: string): number {
+  const parsed = Date.parse(computedAt);
+  return Number.isFinite(parsed) ? parsed : Date.now();
+}
+
 function skippedReasons(row: FranchiseValueInputRow): string[] {
   const reasons = baseSkippedReasons(row);
   const positioning = row.trueValuePositioning;
@@ -431,6 +510,16 @@ export async function calculateAndPersistFranchiseTrueValueForSeason(
   const leagueContext: LeagueContext = {
     allPlayers: singleEntries.map((entry) => entry.player),
   };
+  const computedAt = options.computedAt ?? new Date().toISOString();
+  const trustedValueArtifact = auditTrustedValuePeerPools({
+    scope,
+    seasonNumber: input.seasonNumber,
+    valueRows: valueInputReport.rows,
+    canonicalEntries,
+    singleEntries,
+    computedAt: computedAtMillis(computedAt),
+  });
+  await persistTrustedValueArtifact(trustedValueArtifact);
 
   const skippedRows = valueInputReport.rows
     .filter((row) => !canonicalEntries.some((entry) => entry.row.playerId === row.playerId))
@@ -448,7 +537,6 @@ export async function calculateAndPersistFranchiseTrueValueForSeason(
     };
   }
 
-  const computedAt = options.computedAt ?? new Date().toISOString();
   const rows = canonicalEntries.map((entry): FranchiseTrueValueRow => {
     if (entry.kind === 'two-way') {
       return calculateCompositeTrueValueRow(entry, scope, leagueContext, computedAt);

@@ -620,6 +620,46 @@ describe('franchise true value preview contract', () => {
     expect(findDesignation(eligibility.records, 'ALBATROSS').reasons.join(' ')).toMatch(/True Value and value-delta inputs/i);
   });
 
+  test('computes value-delta designation trust from artifact-backed value input rows', () => {
+    const trustedRow = row({
+      playerId: 'trusted-player',
+      warInputAvailability: {
+        battingWar: true,
+        pitchingWar: false,
+        fieldingWar: true,
+        baserunningWar: true,
+        any: true,
+        trustedForFinalValue: true,
+      },
+      warPreviewValues: {
+        ...row().warPreviewValues,
+        trustedForFinalValue: true,
+      },
+    });
+    const valueReport = report([
+      trustedRow,
+      row({ playerId: 'blocked-player', salary: 9 }),
+      row({ playerId: 'trusted-peer-1', salary: 10 }),
+      row({ playerId: 'trusted-peer-2', salary: 11 }),
+    ]);
+    valueReport.trueValuePolicy = {
+      finalTrueValueCalculated: true,
+      persistedTrueValueCreated: true,
+    };
+
+    const preview = buildFranchiseTrueValuePreviewReport(valueReport);
+
+    expect(preview.policies).toEqual(expect.objectContaining({
+      finalTrueValueCalculated: true,
+      persistedTrueValueCreated: true,
+      valueDeltaTrustedForDesignations: true,
+      salaryMovementAllowed: false,
+      moraleMutationAllowed: false,
+    }));
+    expect(preview.playerRows.find((candidate) => candidate.playerId === 'trusted-player')?.valueDeltaTrustedForDesignations).toBe(true);
+    expect(preview.playerRows.find((candidate) => candidate.playerId === 'blocked-player')?.valueDeltaTrustedForDesignations).toBe(false);
+  });
+
   test('utility imports no storage save set persist or mutation APIs', () => {
     const source = readFileSync('src/utils/franchiseTrueValuePreview.ts', 'utf8');
     const output = buildFranchiseTrueValuePreviewReport(report([row()]));

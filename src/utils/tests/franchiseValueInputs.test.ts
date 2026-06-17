@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   getAllGamesByFranchise: vi.fn(),
   getRecentGames: vi.fn(),
   getGameHeadersForScope: vi.fn(),
+  getTrustedValueArtifact: vi.fn(),
 }));
 
 vi.mock('../franchiseManager', () => ({
@@ -43,6 +44,12 @@ vi.mock('../gameStorage', () => ({
 
 vi.mock('../eventLog', () => ({
   getGameHeadersForScope: mocks.getGameHeadersForScope,
+}));
+
+vi.mock('../franchiseTrustedValueStorage', () => ({
+  getTrustedValueArtifact: mocks.getTrustedValueArtifact,
+  isPlayerTrustedForValue: (artifact: { trustedPlayerIds?: string[] } | null | undefined, playerId: string | null | undefined) =>
+    Boolean(artifact && playerId && artifact.trustedPlayerIds?.includes(playerId)),
 }));
 
 function makePlayer(overrides: Partial<Player> = {}): Player {
@@ -227,6 +234,7 @@ function seedBaseMocks() {
   mocks.getAllGamesByFranchise.mockResolvedValue([]);
   mocks.getRecentGames.mockResolvedValue([]);
   mocks.getGameHeadersForScope.mockResolvedValue([]);
+  mocks.getTrustedValueArtifact.mockResolvedValue(null);
 }
 
 describe('franchise value input contract', () => {
@@ -936,6 +944,75 @@ describe('franchise value input contract', () => {
       seedParkFactorsAvailable: false,
       status: 'unadjusted',
       parkAdjustedValueInputsAvailable: false,
+    }));
+  });
+
+  test('computes True Value trust from the D6 artifact without promoting salary or morale', async () => {
+    mocks.getTrustedValueArtifact.mockResolvedValue({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+      seasonNumber: 1,
+      contractVersion: 'd6-v1',
+      peerPoolMinThreshold: 2,
+      trustedPlayerIds: ['player-1'],
+      blockedRows: [],
+      rosterStateSnapshot: [],
+      frozen: false,
+      frozenAt: null,
+      computedAt: 1,
+    });
+
+    const trusted = await buildFranchiseValueInputRows({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+      seasonNumber: 1,
+    });
+
+    expect(trusted.trueValuePolicy).toEqual({
+      finalTrueValueCalculated: true,
+      persistedTrueValueCreated: true,
+    });
+    expect(trusted.rows[0].warInputAvailability.trustedForFinalValue).toBe(true);
+    expect(trusted.rows[0].warPreviewValues.trustedForFinalValue).toBe(true);
+    expect(trusted.rows[0].warConsumerTrust).toEqual(expect.objectContaining({
+      trueValue: true,
+      salaryMovement: false,
+      morale: false,
+    }));
+
+    mocks.getTrustedValueArtifact.mockResolvedValue({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+      seasonNumber: 1,
+      contractVersion: 'd6-v1',
+      peerPoolMinThreshold: 2,
+      trustedPlayerIds: [],
+      blockedRows: [{ playerId: 'player-1', reasons: ['Position SS peer pool size 1 (< 2 required)'] }],
+      rosterStateSnapshot: [],
+      frozen: false,
+      frozenAt: null,
+      computedAt: 2,
+    });
+
+    const blocked = await buildFranchiseValueInputRows({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+      seasonNumber: 1,
+    });
+
+    expect(blocked.trueValuePolicy).toEqual({
+      finalTrueValueCalculated: false,
+      persistedTrueValueCreated: false,
+    });
+    expect(blocked.rows[0].warInputAvailability.trustedForFinalValue).toBe(false);
+    expect(blocked.rows[0].warConsumerTrust).toEqual(expect.objectContaining({
+      trueValue: false,
+      salaryMovement: false,
+      morale: false,
     }));
   });
 

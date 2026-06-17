@@ -14,7 +14,7 @@
  */
 
 const DB_NAME = 'kbl-tracker';
-export const TRACKER_DB_VERSION = 16; // Must be the highest version any consumer ever used
+export const TRACKER_DB_VERSION = 17; // Must be the highest version any consumer ever used
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -345,6 +345,14 @@ export async function getTrackerDb(): Promise<IDBDatabase> {
 
       if (!db.objectStoreNames.contains('seasonEmissionConfig')) {
         db.createObjectStore('seasonEmissionConfig', { keyPath: 'id' });
+      }
+
+      // v17 / D6a: live trusted-value artifact per franchise/season/stats
+      // scope. D6b freezes the same artifact at season end.
+      if (!db.objectStoreNames.contains('franchiseTrustedValueArtifacts')) {
+        db.createObjectStore('franchiseTrustedValueArtifacts', {
+          keyPath: ['franchiseId', 'seasonId', 'statsScopeId'],
+        });
       }
     };
   });
