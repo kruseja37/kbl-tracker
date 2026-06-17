@@ -10,25 +10,32 @@
 
 ## SESSION SUMMARY (TL;DR on return)
 
-**Committed (3 tickets, all VERIFIED via the Codex-build / Opus-audit triangle; on `codex/franchise-v1-next`,
+**Committed — 5 feature tickets, all VERIFIED via the Codex-build / Opus-audit triangle (`codex/franchise-v1-next`,
 nothing pushed):**
 - `d48ab3c` **L1** — hidden-modifier rename (loyalty/ambition/resilience/charisma) + typed on `Player`.
 - `752882f` **D1** — `useSeasonStats` 162 hardcode → canonical `MLB_BASELINE_GAMES` (zero behavior change).
-- `2fab709` **D2** — backup parity: 3 franchise stores registered + pin 12→15 + a structural parity-guard +
-  round-trip test (the silent-drop data-integrity defect is closed).
+- `2fab709` **D2** — backup parity: 3 franchise stores + pin 12→15 + a structural parity-guard (silent-drop defect closed).
+- `2f4f3e5` **L1.5 + OD-1** — backfill the 4 hidden modifiers for all franchise players at init (the spec-mandated
+  default; MLB players had none) + assign Team Captains. 21 unit + 33 integration tests.
+- `0cf4ca2` **L4a-connect** — franchise reporter wired (auto-assign + post-game-columns + BeatReporterNews reads
+  live GameStory). **Browser-pending** — reporter text is Supabase-dependent; verify the hub when configured.
 
-**The honest finding:** beyond those three, the Tier-0 foundations are **design/value/product-laden**, not
-mechanical — so per your AUTH-2 guardrails I built the safe set and **surfaced the rest rather than gambling
-unwatched** on the value/SMB4/UX spine. Over-halting was the safe direction. **Four decisions now gate further
-progress** (below). Rule them and the loop resumes fast — most are small builds once decided.
+**Course-correction:** my first wrap was too conservative (set aside OD-1, which had an obvious default). You
+flagged it; I recalibrated and built OD-1 + L1.5 + L4a. Net: everything with a clear conservative default and
+imminent/self-contained value is now built.
 
-**What's set aside (and why):**
-- **L1.5** (Captain) — blocked on **OD-1** (MLB players carry no hidden modifiers).
-- **L-ECON1** (salary scale) — **OD-2** (value-design + must sequence with unbuilt D4/D6).
-- **L2** (mutable layer), **L4a** (reporter/bus), **L9a** (trait capture) — genuine product/UX decisions
-  (**OD-3/4/5**); maps are in workflow `wf_7b56fa48-a58`, decisions below.
-- **D4** (salary-live UI de-gate) — recommended as the **first build of a WATCHED session** (user-visible UI
-  surgery you can browser-verify immediately); D5 is confirm-only; D6+ are the value gate (surface).
+**Why I'm pausing here (genuinely needs you — NOT the earlier over-caution):**
+- **L9a** (trait capture) — touches the live `useGameState`/`GameTracker` hot path + activates a dead code path;
+  a break is user-visible gameplay → wants a **watched session** with browser verification.
+- **L-ECON1** (salary scale) — touches the **frozen draft-IV anchor** (a real hard-halt) + sequences with unbuilt D4/D6 (**OD-2**).
+- **L2** (mutable layer) — its only consumers (L3/L8/L9b) are design-gated soul-layer systems, so building it
+  build-dark now would design a read-path API ahead of consumers you haven't shaped → likely rework. Premature.
+- **L3 / L5 / L6 / L7 / L8 / L9b / L10–L14** (morale matrix, fame, development, designations, relationships,
+  rebrand) — these are **your vision/design** (the SMB4 soul layer), needing design rulings, not engineering defaults.
+
+**To resume the loop:** rule **OD-2..5** (mostly small leans below), or give the soul-layer design rulings (the
+morale-matrix structure, fame model, etc.), or open a **watched session** for the live/UI builds (**L9a**, **D4**
+salary-live, the L4a publish-bus). D5 is confirm-only; D6 is the value-trust gate (surface).
 
 ---
 
