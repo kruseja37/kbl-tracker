@@ -56,10 +56,12 @@ nothing pushed.)
   visible-safe / Cornerstone removal / spec reconciliation to MODE_2_V1_FINAL §17 + the year-end team-designation
   display on the **TEAM HUB**). Maps: `wf_4e882441-17c` (D10) + `wf_a7edf687-814` (designations).
   (4) **DESIG-RECON BUILD** (split via `wf_9ea0e360-d00` into DR-1..4; fork rulings logged): **DR-1 COMMITTED
-  `b48b450`** (Albatross spec-guards + FF promote-to-live + Cornerstone removal + orphan delete; Opus-audited VERIFIED,
-  characterized set 3→2). **DR-2 dispatched** (Captain charisma≥70 removal + Fan Hopeful visible-safe season-start
-  assignment to `team.fanHopefulPlayerId`). **NEXT after DR-2: DR-3** (team-hub six-designation strip under the 'team'
-  tab) → **DR-4** (spec reconciliation to MODE_2_V1_FINAL §17).
+  `b48b450`** (Albatross spec-guards + FF promote-to-live + Cornerstone removal + orphan delete; characterized set
+  3→2). **DR-2 COMMITTED `9d1db40`** (Captain charisma≥70 removal + Fan Hopeful visible-safe season-start assignment
+  to `team.fanHopefulPlayerId`; visible-safe PROVEN by test). **DR-3 dispatched** (team-hub six-designation strip
+  under the 'team' tab — display-only, USER-VISIBLE → browser-batch). **NEXT after DR-3: DR-4** (spec reconciliation
+  to MODE_2_V1_FINAL §17 — docs-only). Both DR-1/DR-2 Opus-audited VERIFIED (suite now 7,243 pass / 2 characterized
+  fail).
 - **OVERNIGHT CONTINUATION (2026-06-17, AUTH-4) — 3 more feature commits, D7 COMPLETE:** `6559a19` **D6b**
   (season-end FREEZE of the trusted-value artifact: frozen-flag + idempotent freeze helper + a Layer-A anti-thaw
   guard in the sole writer + a Layer-B recompute early-return that locks BOTH the artifact and the

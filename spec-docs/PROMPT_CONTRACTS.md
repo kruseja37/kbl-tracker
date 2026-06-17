@@ -8379,5 +8379,63 @@ no-minimum requires touching the eligibility/designation engine.
 
 Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited.
 
+**Status:** VERIFIED + COMMITTED `9d1db40` (2026-06-17). Effects-dormant; browser-pending.
+
+**AUDIT + EXECUTION RECORD (Opus 4.8, auditor ≠ builder):** Codex (high, watchdog) BUILT → Opus independently re-ran:
+tsc 0 · build 0 · FULL suite **7,243 pass / 2 fail (7,245 total, 405 files)** = exactly the characterized set, ZERO
+new reds; all 16 franchiseInitializer tests green. Diff = 2 product + 3 test. **Verified:** Captain `charisma >= 70`
+gate removed (test proves a low-charisma/high-loyalty player now wins); Fan Hopeful = additive-optional
+`Team.fanHopefulPlayerId`, `computeTeamFanHopefuls` ranks the team's FARM prospects by VISIBLE
+`prospectProfile.scoutedGrade` (`FRANCHISE_PROFILE_GRADES`, best-first), top-3, seeded-deterministic pick (key
+`teamId:seasonId`), persisted via `saveFranchiseTeam`; assigned at franchise init AND each new-season schedule init.
+**Visible-safe PROVEN** — the test seeds a hidden `overallGrade:'S'`/scouted-`'D'` prospect and asserts it is NOT
+picked (ranking uses scouted grade only). No morale/fame write, no DB version bump, no designation-engine touch.
+**DR-2 COMPLETE. NEXT: DR-3** (team-hub six-designation display strip).
+
+---
+
+## DR-3 — team-hub six-designation strip (the year-end team-identity display) — 2026-06-17 (attended)
+
+**ROUTE:** Codex | high reasoning effort → Opus 4.8 audit (auditor ≠ builder). Attended. USER-VISIBLE → browser-batch.
+Grounding: build map `wf_9ea0e360-d00` (reader 4). Display-only; reads existing state, writes nothing. Depends on
+DR-1 (FF live, Cornerstone gone) + DR-2 (`captainPlayerId` no-min, `fanHopefulPlayerId`) — both committed.
+
+**SCOPE:** add a compact per-team **six-designation strip** to `TeamHubContent.tsx`, **under the 'team' tab, directly
+below the "Currently viewing: <team>" card (~:2741)** (the ruled placement). It shows the selected team's six team
+designations: **Captain · Team MVP · Ace · Fan Favorite · Albatross · Fan Hopeful**.
+- **MVP / Ace / Fan Favorite / Albatross:** read from the already-loaded `projectedDesignationRows` state (~:1302),
+  filtered to `selectedTeamId` (~:1356); badge via `getLiveDesignationBadge(type)` when the row is `status:'active'`
+  else `getProjectedDesignationBadge(type)` (both already imported ~:83-84) — matching the existing per-player render
+  pattern (~:4360-4388). Resolve the holder name from the row (`playerName`) or `franchiseAllPlayers`.
+- **Captain:** render directly from `franchiseTeam.captainPlayerId` (~:1277) — resolve the name via
+  `getFranchisePlayerName`/`franchiseAllPlayers` (~:386/:1278). Author a small **UI-only Captain badge constant** in
+  TeamHubContent (no engine change — Captain is personality-based, option (a)).
+- **Fan Hopeful:** render from `franchiseTeam.fanHopefulPlayerId` (DR-2) — resolve the name; author a **UI-only Fan
+  Hopeful badge constant**; it's a FARM prospect so show its visible `prospectProfile.scoutedGrade` (e.g. "Scouted A-")
+  and NEVER any hidden true rating/grade.
+- Each of the six slots renders the holder + badge, or a muted "—/none" when the slot is empty (designation null this
+  season — valid). Add a small caption distinguishing **projected (mid-season)** vs **final** holders based on the row
+  `status` (the engine designations carry 'active'/'projected'; Captain + Fan Hopeful are season-start assignments so
+  treat as set). Always-visible once a team is selected (true season-end LOCKING is an unbuilt later slice — do NOT
+  gate on season-complete).
+
+**ALLOWED:** `src/src_figma/app/components/TeamHubContent.tsx` only (+ a TeamHubContent render test if you add one).
+
+**DO NOT:** change any designation engine/storage/eligibility (DR-1/DR-2 done) · write/persist anything (display-only)
+· read or show any hidden FARM true rating/true grade/scout-truth/hidden modifier (Fan Hopeful shows scouted grade
+only) · fold CAPTAIN/FAN_HOPEFUL into the engine badge maps (UI-only constants — option a) · gate the strip on
+season-complete / offseason · touch the existing per-player designation column or the value panels · flip any flag ·
+add a store/version bump.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · FULL suite = only the 2 characterized fails, ZERO new reds;
+grep: no hidden-grade/true-rating read in the new strip (scouted grade only), no persistence write, no engine/eligibility
+edit, no flag flip.
+
+**STOP IF:** rendering the strip needs new state not already loaded in TeamHubContent · Captain/Fan Hopeful require
+engine badge-map changes to display · showing Fan Hopeful visible-safe needs a hidden field · the strip can't mount
+under the 'team' tab without restructuring unrelated chrome.
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited.
+
 **Status:** DISPATCHED to Codex (background, watchdog). Audit pending.
 
