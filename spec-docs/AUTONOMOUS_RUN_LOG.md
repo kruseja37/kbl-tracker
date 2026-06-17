@@ -104,6 +104,24 @@ salary-live, the L4a publish-bus). D5 is confirm-only; D6 is the value-trust gat
 
 ---
 
+## BROWSER PRE-CHECK (2026-06-16 — Captain, via preview MCP on :5199; NOT a sign-off — JK's manual pass is the gate)
+
+- **App loads cleanly** with all 5 commits (title "Super Mega Baseball", root mounts, zero server/console errors).
+- **Franchise area renders end-to-end:** select screen → 6-step New-Franchise flow (League/Season/Playoffs/Teams/
+  Rosters/Confirm) all render + advance; no crash from any commit.
+- **L1.5+OD-1 shipped code VERIFIED in the real browser runtime** (dynamic-imported the actual modules, not the
+  test env): `generateHiddenPersonalityModifiers` → 4 canonical keys, all in [0,100]; `computeTeamCaptains` →
+  picked the max-(loyalty+charisma) MLB player with charisma≥70, **excluded the FARM player** (higher raw score)
+  + the **charisma-69** player. Logic discriminates exactly as designed.
+- **BLOCKED (pre-existing, NOT my code):** full franchise CREATION is gated by the 22+10 handoff validation
+  ("0/10 FARM players; run the League Builder startup prospect draft; expected 2 hired scouts") — the default
+  SUPER MEGA LEAGUE has only MLB rosters. To create a franchise (and thus exercise the backfill on real rosters +
+  reach FranchiseHome for L4a), the League Builder startup farm draft + scout hiring must run first. So end-to-end
+  L1.5/L4a on a live franchise is **deferred to JK's session** (run the farm draft → create → verify).
+- **L4a reporter:** logic test-verified (30 tests); BeatReporterNews/FranchiseHome not reached live (no franchise
+  created); reporter TEXT needs Supabase regardless (D-R5). JK browser-verifies when a franchise + Supabase exist.
+- Dev server left running on :5199 for JK.
+
 ## TICKET LOG
 
 - **2026-06-16 — RUN INITIALIZED.** Baseline committed (design docs + this protocol). Codex CLI verified.
