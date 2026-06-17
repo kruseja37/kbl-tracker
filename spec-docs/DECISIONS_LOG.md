@@ -1158,3 +1158,30 @@ D10 shipped (`51e487a`); the DESIG-RECON build was mapped (4 readers) and split 
   personality-based/assigned-at-init, so it does NOT fold into the WAR-ranked designation engine (1 file vs ~6).
 - **Year-end semantics = always-visible strip** with a "projected mid-season / final" caption — true season-end
   locking is an unbuilt later slice; gating on it now would render an empty/cosmetic "final."
+
+---
+
+### 2026-06-17: SOUL-LAYER "BUILD TO SPEC" GREENLIGHT (JK, attended) — the L-stack opens
+
+**Context**: D11 closed the autonomously-buildable D-stack (D1–D11 done; D12 manual smoke + D13 checkpoint are JK
+gates). JK was asked the next arc and **greenlit the soul layer (the Phase-2 L-stack)**.
+
+**Ruling — JK (2026-06-17):** GREENLIT. Build the Phase-2 soul-layer engines (L3 morale matrix → L5/L6 fan-teeth/fame
+→ L7 designation effects → L8/L9b development → L10–L14) **to the ratified living-season spec** (`FRANCHISE_V1_
+LIVING_SEASON_SPEC.md` §5–§24 + the L-stack sequence in `FRANCHISE_V1_LIVING_SEASON_DSTACK.md`), with **sim-tunable
+placeholder magnitudes** and **documented conservative defaults where the spec is silent**. This satisfies the
+standing "SOUL-LAYER BUILD TO SPEC GREENLIGHT" pending-JK item.
+
+**Constraints (unchanged, from the L-stack rules):**
+- **Build DARK, activate strictly after D13** (§E parallelism rule): Phase-2 foundations build behind a Phase-2 flag;
+  NO live morale/relationship consumer rides alongside D7 (the §5 "no phantom morale" invariant + the D12 smoke gate).
+- Per-ticket: Codex builds → Opus audits (auditor ≠ builder) → JK browser sign-off batched. Every store-creating
+  ticket carries the C-4 backup DoD (register byte-mirrored + version pin + KBL_BACKUP_VERSION bump + all-DB
+  parity-guard + syncConfig + round-trip test).
+- The LSD-1..5 forks stay ruled; LSD-6 (the living season IS v1) governs; safety walls hold (L-ECON1 stays
+  watched/oracle-adjacent per OD-2; L9a is live-game-path).
+
+**Starting point:** the critical path is `{L1✓, L1.5✓, L4a✓, L2, L9a, L-ECON1} → L3 → {L5,L6} → …`. **L3 (Master
+Morale Matrix)** is the spine, depends only on L1 (done), and is the first soul-layer build. Mapping L3 now; structural
+decisions (matrix representation, ledger store shape, the event taxonomy/default-neutral taps) surface to JK before the
+build contract.
