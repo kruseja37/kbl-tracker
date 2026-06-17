@@ -6,7 +6,9 @@ const mocks = vi.hoisted(() => ({
   buildFranchiseValueInputRows: vi.fn(),
   getAllBattingStats: vi.fn(),
   getAllPitchingStats: vi.fn(),
+  calculateStandings: vi.fn(),
   getCareerStats: vi.fn(),
+  getRecentGames: vi.fn(),
   syncEngine: {
     isSuppressed: vi.fn(() => true),
     upsert: vi.fn(),
@@ -19,8 +21,13 @@ vi.mock('../franchiseValueInputs', () => ({
 }));
 
 vi.mock('../seasonStorage', () => ({
+  calculateStandings: mocks.calculateStandings,
   getAllBattingStats: mocks.getAllBattingStats,
   getAllPitchingStats: mocks.getAllPitchingStats,
+}));
+
+vi.mock('../gameStorage', () => ({
+  getRecentGames: mocks.getRecentGames,
 }));
 
 vi.mock('../careerStorage', () => ({
@@ -33,8 +40,11 @@ vi.mock('../syncEngine', () => ({
 
 import { deriveAdaptiveStandardsConfig } from '../franchiseAdaptiveStandards';
 import {
+  aggregateManagerAwardInputsFromGames,
   computeAndPersistFranchiseWarAwards,
+  computeFranchiseManagerOfYear,
   computeFranchiseWarAwards,
+  type FranchiseManagerAwardAggregate,
   type FranchiseWarAwardQualifierFacts,
 } from '../franchiseAwardsEngine';
 import {
@@ -58,7 +68,9 @@ import type {
 import type {
   PlayerSeasonBatting,
   PlayerSeasonPitching,
+  TeamStanding,
 } from '../seasonStorage';
+import type { CompletedGameRecord } from '../gameStorage';
 
 const DB_NAME = 'kbl-tracker';
 const computedAt = '2026-06-17T12:00:00.000Z';
@@ -202,6 +214,27 @@ function artifact(playerIds: string[]): FranchiseTrustedValueArtifact {
     rosterStateSnapshot: playerIds.map((playerId) => ({
       playerId,
       teamId: 'team-a',
+      rosterStatus: 'MLB',
+    })),
+    frozen: true,
+    frozenAt: 1781654400000,
+    computedAt: 1781654300000,
+  };
+}
+
+function artifactWithTeams(
+  entries: Array<{ playerId: string; teamId: string }>,
+): FranchiseTrustedValueArtifact {
+  return {
+    ...scope,
+    seasonNumber: 1,
+    contractVersion: 'd6-v1',
+    peerPoolMinThreshold: 2,
+    trustedPlayerIds: entries.map((entry) => entry.playerId).sort(),
+    blockedRows: [],
+    rosterStateSnapshot: entries.map((entry) => ({
+      playerId: entry.playerId,
+      teamId: entry.teamId,
       rosterStatus: 'MLB',
     })),
     frozen: true,
@@ -370,6 +403,44 @@ function pitchingStats(playerId: string, innings = 25): PlayerSeasonPitching {
   };
 }
 
+function standing(teamId: string, wins: number, losses = 0): TeamStanding {
+  return {
+    teamId,
+    teamName: teamId,
+    wins,
+    losses,
+    winPct: wins + losses > 0 ? wins / (wins + losses) : 0,
+    runsScored: 0,
+    runsAllowed: 0,
+    runDiff: 0,
+    streak: { type: 'W', count: 0 },
+    lastTenWins: 0,
+    homeRecord: { wins: 0, losses: 0 },
+    awayRecord: { wins: 0, losses: 0 },
+    gamesBack: 0,
+  };
+}
+
+function completedGame(managerWpaTotals?: CompletedGameRecord['managerWpaTotals']): CompletedGameRecord {
+  return {
+    gameId: 'game-test',
+    date: 1781654300000,
+    homeTeamId: 'team-a',
+    awayTeamId: 'team-b',
+    homeTeamName: 'Team A',
+    awayTeamName: 'Team B',
+    finalScore: { home: 1, away: 0 },
+    duration: 1,
+    totalPlays: 1,
+    isComplete: true,
+    aggregationStatus: 'complete',
+    franchiseId: scope.franchiseId,
+    seasonId: scope.seasonId,
+    statsScopeId: scope.statsScopeId,
+    managerWpaTotals,
+  } as CompletedGameRecord;
+}
+
 describe('franchise WAR awards engine', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -498,6 +569,182 @@ describe('franchise WAR awards engine', () => {
     })).toEqual([]);
   });
 
+  test('season-aggregates manager WPA totals across games and null-guards missing manager totals', () => {
+    const aggregates = aggregateManagerAwardInputsFromGames([
+      completedGame([
+        {
+          managerId: 'mgr-a',
+          managerName: 'Manager A',
+          teamId: 'team-a',
+          tacticalManagerWpa: 0.125,
+          deploymentWpa: 0.0625,
+          lineupDeltaWpa: -0.03125,
+          managerValue: 0.15625,
+        },
+        {
+          managerId: 'mgr-b',
+          managerName: 'Manager B',
+          teamId: 'team-b',
+          tacticalManagerWpa: 0.25,
+          deploymentWpa: 0.125,
+          lineupDeltaWpa: 0.0625,
+          managerValue: 0.4375,
+        },
+      ]),
+      completedGame(undefined),
+      completedGame([
+        {
+          managerId: 'mgr-a',
+          managerName: 'Manager A',
+          teamId: 'team-a',
+          tacticalManagerWpa: 0.375,
+          deploymentWpa: -0.03125,
+          lineupDeltaWpa: 0.09375,
+          managerValue: 0.4375,
+        },
+      ]),
+    ]);
+
+    expect(aggregates).toEqual([
+      {
+        managerId: 'mgr-a',
+        teamId: 'team-a',
+        tacticalManagerWpa: 0.5,
+        deploymentWpa: 0.03125,
+        lineupDeltaWpa: 0.0625,
+      },
+      {
+        managerId: 'mgr-b',
+        teamId: 'team-b',
+        tacticalManagerWpa: 0.25,
+        deploymentWpa: 0.125,
+        lineupDeltaWpa: 0.0625,
+      },
+    ]);
+  });
+
+  test('computes Manager of the Year from frozen value-share expected wins and ignores non-frozen live value rows', () => {
+    const managerAggregates: FranchiseManagerAwardAggregate[] = [
+      {
+        managerId: 'mgr-a',
+        teamId: 'team-a',
+        tacticalManagerWpa: 2,
+        deploymentWpa: 1,
+        lineupDeltaWpa: 0,
+      },
+      {
+        managerId: 'mgr-b',
+        teamId: 'team-b',
+        tacticalManagerWpa: 0,
+        deploymentWpa: 1,
+        lineupDeltaWpa: 1,
+      },
+    ];
+    const frozenArtifact = artifactWithTeams([
+      { playerId: 'a-1', teamId: 'team-a' },
+      { playerId: 'a-2', teamId: 'team-a' },
+      { playerId: 'b-1', teamId: 'team-b' },
+    ]);
+    const trueValueRows = [
+      trueValueRow('a-1', 40),
+      trueValueRow('a-2', 30),
+      trueValueRow('b-1', 30),
+      trueValueRow('live-non-frozen', 999),
+    ];
+
+    const award = computeFranchiseManagerOfYear({
+      ...scope,
+      managerAggregates,
+      trueValueRows,
+      trustedValueArtifact: frozenArtifact,
+      standings: [
+        standing('team-a', 12, 8),
+        standing('team-b', 8, 12),
+      ],
+      gamesPerTeam: 20,
+      trustedForAwards: true,
+      computedAt,
+    });
+    const perturbed = computeFranchiseManagerOfYear({
+      ...scope,
+      managerAggregates,
+      trueValueRows: trueValueRows.map((row) =>
+        row.playerId === 'live-non-frozen'
+          ? { ...row, trueValue: 1_000_000 }
+          : row,
+      ),
+      trustedValueArtifact: frozenArtifact,
+      standings: [
+        standing('team-a', 12, 8),
+        standing('team-b', 8, 12),
+      ],
+      gamesPerTeam: 20,
+      trustedForAwards: true,
+      computedAt,
+    });
+
+    expect(perturbed).toEqual(award);
+    expect(award).toMatchObject({
+      category: 'MANAGER_OF_YEAR',
+      winnerPlayerId: 'mgr-b',
+      goldGloveSplit: null,
+      managerActualWins: 8,
+      managerExpectedWins: 6,
+      voteWeight: null,
+      finalized: false,
+    });
+    expect(award?.candidates).toEqual([
+      { playerId: 'mgr-b', score: 0.625, marginToWinner: 0 },
+      { playerId: 'mgr-a', score: 0.375, marginToWinner: -0.25 },
+    ]);
+    expect(award).not.toHaveProperty('fameWeight');
+  });
+
+  test('Manager of the Year uses midpoint normalization for flat or single-manager pools', () => {
+    const award = computeFranchiseManagerOfYear({
+      ...scope,
+      managerAggregates: [{
+        managerId: 'mgr-only',
+        teamId: 'team-a',
+        tacticalManagerWpa: 0.2,
+        deploymentWpa: 0.2,
+        lineupDeltaWpa: 0.2,
+      }],
+      trueValueRows: [trueValueRow('only-player', 50)],
+      trustedValueArtifact: artifactWithTeams([{ playerId: 'only-player', teamId: 'team-a' }]),
+      standings: [standing('team-a', 9, 1)],
+      gamesPerTeam: 20,
+      trustedForAwards: true,
+      computedAt,
+    });
+
+    expect(award?.winnerPlayerId).toBe('mgr-only');
+    expect(award?.candidates).toEqual([
+      { playerId: 'mgr-only', score: 0.5, marginToWinner: 0 },
+    ]);
+    expect(award?.managerActualWins).toBe(9);
+    expect(award?.managerExpectedWins).toBe(9);
+  });
+
+  test('returns no Manager of the Year row when the D8 trustedForAwards gate is off', () => {
+    expect(computeFranchiseManagerOfYear({
+      ...scope,
+      managerAggregates: [{
+        managerId: 'mgr-a',
+        teamId: 'team-a',
+        tacticalManagerWpa: 1,
+        deploymentWpa: 1,
+        lineupDeltaWpa: 1,
+      }],
+      trueValueRows: [trueValueRow('player-a', 10)],
+      trustedValueArtifact: artifactWithTeams([{ playerId: 'player-a', teamId: 'team-a' }]),
+      standings: [standing('team-a', 10)],
+      gamesPerTeam: 20,
+      trustedForAwards: false,
+      computedAt,
+    })).toBeNull();
+  });
+
   test('uses rookiePlayerIds for Rookie of the Year and carries the Gold Glove split seam', () => {
     const awards = compute();
     const roy = awards.find((row) => row.category === 'ROOKIE_OF_YEAR');
@@ -534,6 +781,20 @@ describe('franchise WAR awards engine', () => {
     mocks.buildFranchiseValueInputRows.mockResolvedValue(report(rows));
     mocks.getAllBattingStats.mockResolvedValue(rows.map((row) => battingStats(row.playerId)));
     mocks.getAllPitchingStats.mockResolvedValue([pitchingStats('pitcher')]);
+    mocks.getRecentGames.mockResolvedValue([
+      completedGame([{
+        managerId: 'team-a-manager',
+        managerName: 'Team A Manager',
+        teamId: 'team-a',
+        tacticalManagerWpa: 0.25,
+        deploymentWpa: 0.125,
+        lineupDeltaWpa: 0.0625,
+        managerValue: 0.4375,
+      }]),
+    ]);
+    mocks.calculateStandings.mockResolvedValue([
+      standing('team-a', 18, 14),
+    ]);
     mocks.getCareerStats.mockImplementation(async (playerId: string) => ({
       batting: playerId === 'rookie' ? { seasonsPlayed: 0 } : { seasonsPlayed: 1 },
       pitching: null,
@@ -550,16 +811,29 @@ describe('franchise WAR awards engine', () => {
     const stored = await getFranchiseAwardRowsByScope(scope);
 
     expect([...persisted].sort((left, right) => left.category.localeCompare(right.category))).toEqual(stored);
-    expect(stored).toHaveLength(5);
+    expect(stored).toHaveLength(6);
     expect(stored.every((row) => row.finalized)).toBe(true);
     expect(stored.find((row) => row.category === 'MVP')?.winnerPlayerId).toBe('mvp');
     expect(stored.find((row) => row.category === 'GOLD_GLOVE')?.goldGloveSplit).toEqual({
       fWar: 2.9,
       totalWar: 4.2,
     });
+    expect(stored.find((row) => row.category === 'MANAGER_OF_YEAR')).toMatchObject({
+      winnerPlayerId: 'team-a-manager',
+      managerActualWins: 18,
+      managerExpectedWins: 18,
+      voteWeight: null,
+      finalized: true,
+    });
     expect(mocks.buildFranchiseValueInputRows).toHaveBeenCalledWith({
       ...scope,
       seasonNumber: 1,
     });
+    expect(mocks.getRecentGames).toHaveBeenCalledWith(1000, {
+      franchiseId: scope.franchiseId,
+      seasonId: scope.seasonId,
+      statsScopeId: scope.statsScopeId,
+    });
+    expect(mocks.calculateStandings).toHaveBeenCalledWith(scope.seasonId);
   });
 });

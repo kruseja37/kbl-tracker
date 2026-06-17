@@ -513,3 +513,35 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   salary expectation]; no fame tilt [MOY-4]; RETIRE calculateMOYVotes/mwarCalculator salary path + RE-POINT
   AwardsCeremonyFlow.tsx + RatingsAdjustmentFlow.tsx off it FIRST [MOY-5]; weights sim-deferred [MOY-7]; lineup
   quantity = capped realized record [MOY-2 Captain default]). Then D9d (UI/finalize/recompute).**
+
+- **2026-06-17 (overnight, AUTH-4) — STARTED: D9c (Manager of the Year).** Mapped via `wf_0cec26a0-9be` (5 readers,
+  Captain-verified). MOY = a season aggregation of the live per-game `pogAwards.PogManagerValueTotal` (read
+  `getRecentGames(1000,scope)` → group `managerWpaTotals` by `managerId` → sum tactical/deployment/lineup), + the 4th
+  input = wins-above-D6-expectation. **The one modeling fork RESOLVED (FORK-A):** no trusted expected-wins source
+  exists (both `franchiseExpectedWinsPreview` + the baseline store are `expectedWinsTrusted:false`, MOY-3-forbidden),
+  so expected wins is DERIVED from the frozen artifact: `valueShare × gamesPerTeam` (team value = Σ frozen `trueValue`
+  over `trustedPlayerIds` via the frozen `rosterStateSnapshot.teamId` — denomination-free, .500-anchored, sim-tunable);
+  actual wins from `calculateStandings`; record = actual − expected (persisted on the row for reproducibility since
+  standings read live). Pool-normalize all 4 (min-max [0,1], degenerate→0.5) + equal 0.25 weights (MOY-6/7
+  sim-deferred). Gate = D8 trustedForAwards + D6 frozen. Contract in PROMPT_CONTRACTS.md; Codex invoked under the
+  30-min watchdog. **DEFAULTS-TAKEN:** FORK-A expected-wins · frozen rosterStateSnapshot team map · capped-realized
+  lineup (MOY-2) · min-max norm + 0.25 weights · no fame tilt (MOY-4) · managerId as winnerPlayerId · persist
+  actual/expected. **RETIREMENT DEFERRED (confirmed SAFE):** `calculateMOYVotes`'s only 2 call sites
+  (AwardsCeremonyFlow:1620, RatingsAdjustmentFlow:388) are triple-gated behind `FRANCHISE_V1_OFFSEASON_EXECUTION_
+  ENABLED=false` → no live salary-MOY path; D9c does NOT touch mwar/the Flows; the retire+re-point goes to the
+  pre-flag-flip cleanup batch (caveat: re-point BEFORE any flag flip; 2-line grep confirm at cleanup). **D9d QUEUED.**
+
+- **2026-06-17 (overnight, AUTH-4) — D9c COMMITTED → the 6-category awards engine is COMPLETE.** Build clean. Captain
+  (Opus) independent audit = **VERIFIED**. Diff = engine +269 (MANAGER_OF_YEAR: season-aggregate the live per-game
+  manager composite + the FORK-A wins-above-D6-expectation record term [expected = frozen value-share × gamesPerTeam,
+  derived ONLY from the frozen artifact] + min-max pool-norm + equal 0.25 sim-gate weights; folded into
+  computeAndPersistFranchiseWarAwards → all 6 categories) + storage +2 (additive nullable managerActualWins/Expected
+  Wins) + test +276. **Gates (re-ran):** tsc 0 · build 0 · full suite **7,281 pass / 3 fail (7,284 total)** = EXACTLY
+  characterized, ZERO new reds, D9a parity survived the additive fields · **RECORD-TERM DETERMINISM MUTATION-PROVEN**
+  (perturb a non-frozen trueValue → MOY unchanged) · degenerate-pool 0.5 / trust-off→null / persist-6 tested · mwar/
+  Flows untouched (retirement deferred, safe) · frozen rosterStateSnapshot (not live) · no preview / no TV recompute /
+  no flag flip · versions unchanged. **→ NEXT: D9d — the FINAL D9 sub-ticket (AwardsWatchlist UI [new Mode-2 surface,
+  NOT the dead-gated offseason ceremony] + per-game watchlist recompute + game-1 franchiseTrueValueSnapshots capture
+  on the processCompletedGame chain + the season-end finalize TRIGGER calling computeAndPersistFranchiseWarAwards +
+  flip the franchiseSeasonSummary awards-watchlists manifest blocked→live + profile/Almanac display via awardEmblems;
+  do NOT flip the offseason flag). Completes D9 → then D10–D13 → soul layer.**

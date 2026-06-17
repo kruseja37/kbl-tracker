@@ -42,6 +42,8 @@ export interface FranchiseAwardRow extends FranchiseAwardsScopeInput {
   winnerPlayerId: string | null;
   candidates: FranchiseAwardCandidate[];
   goldGloveSplit?: FranchiseAwardGoldGloveSplit | null;
+  managerActualWins?: number | null;
+  managerExpectedWins?: number | null;
   voteWeight: number | null;
   finalized: boolean;
   computedAt: string;

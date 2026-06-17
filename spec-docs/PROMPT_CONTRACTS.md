@@ -7950,3 +7950,72 @@ Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff
 
 **Status:** VERIFIED → committed (branch `codex/franchise-v1-next`, not pushed). **→ NEXT: D9c (MOY: season-aggregate pogAwards + record=wins-above-D6-expectation + retire mwarCalculator/calculateMOYVotes).**
 
+---
+
+## D9c — Manager of the Year (the 6th award category, MOY-1..7) — 2026-06-17 (autonomous overnight, AUTH-4)
+
+**ROUTE:** Codex | high reasoning effort → Opus 4.8 audit (auditor ≠ builder). Autonomous overnight (AUTH-4; AUTH-1).
+The record term must be a deterministic function of the FROZEN artifact + standings. Map: `wf_0cec26a0-9be` (5 readers,
+Captain file:line-verified).
+
+**SCOPE:** extend `franchiseAwardsEngine.ts` with MANAGER_OF_YEAR — a SEASON AGGREGATION of the live per-game
+`pogAwards.PogManagerValueTotal` (NOT a parallel engine). Read `getRecentGames(1000,{franchiseId,seasonId,statsScopeId})`
+→ group `managerWpaTotals` by `managerId` → sum tactical/deployment/lineup. 4th input = **record = wins-above-D6-
+expectation**: actual from `calculateStandings`, expected DERIVED from the frozen artifact (FORK-A: `valueShare ×
+gamesPerTeam`, team value = Σ frozen `trueValue` over `trustedPlayerIds` via the frozen `rosterStateSnapshot.teamId`).
+Pool-normalize all 4 (min-max [0,1], `scaleToRange` mirror, degenerate→0.5) then equal 0.25 placeholder weights
+(sim-deferred). Emit the MOY row (winnerPlayerId = managerId; voteWeight null; persist actual/expected for
+reproducibility). Fold into `computeAndPersistFranchiseWarAwards` (one finalize, all 6 categories). Gate = the same D8
+`trustedForAwards && frozen`. No fame tilt (MOY-4).
+
+**CAPTAIN DEFAULTS (AUTH-4):** expected-wins = FORK-A value-share model (denomination-free, .500-anchored, sim-tunable;
+NO trusted expected-wins source exists, preview is `expectedWinsTrusted:false`) · team map = frozen rosterStateSnapshot
+(not live currentTeamId) · lineup input = capped realized record (MOY-2) · min-max norm + equal 0.25 weights (MOY-6/7
+sim-deferred) · **mwarCalculator/calculateMOYVotes retirement DEFERRED to a cleanup ticket** (SAFE — both call sites
+triple-gated behind the false offseason flag; D9c does NOT touch them) · persist actual/expected wins on the row for
+determinism (standings read live).
+
+**ALLOWED:** `franchiseAwardsEngine.ts` (+ additive MOY fields on the `franchiseAwardsStorage` row type if needed —
+no new store, no version bump, D2 parity stays green) + its test.
+
+**DO NOT:** mwarCalculator/calculateMOYVotes/AwardsCeremonyFlow/RatingsAdjustmentFlow (deferred retirement) · flip the
+offseason flag · season-end TRIGGER / UI / per-game recompute (D9d) · recompute TV / oracle · use
+franchiseExpectedWinsPreview (untrusted) · fame tilt · new store / TRACKER_DB_VERSION (18) / KBL_BACKUP_VERSION (2) ·
+raw 162/9.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · FULL suite = only the 3 characterized fails (zero new reds);
+D9a parity/round-trip green · MOY tests (aggregation / record-term-off-frozen / determinism / pool-norm + degenerate
+guard / trust-off→no-MOY / persist 6 categories) · grep: no mwar/Flow edit, no expected-wins-preview import, no TV
+recompute, versions unchanged.
+
+**STOP IF:** must touch mwar/the Flows to compile; must recompute TV or use the untrusted preview; new store/version
+bump needed; the record term lacks a deterministic frozen-spine derivation.
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited.
+
+**Status:** contract issued; Codex invoked (under 30-min watchdog).
+
+### D9c-AUDIT + EXECUTION RECORD (2026-06-17, autonomous overnight AUTH-4)
+
+**ROUTE actual:** Codex (high, background `codex exec` under watchdog) BUILT → Opus 4.8 (Captain) independent AUDIT
+(auditor ≠ builder). Build clean.
+
+**AUDIT VERDICT: CONFORMS / VERIFIED → the 6-category awards engine is COMPLETE.** Independent re-verification (Opus):
+- Diff = `franchiseAwardsEngine.ts` (+269: MANAGER_OF_YEAR — season-aggregate `managerWpaTotals` via
+  `getRecentGames(1000)`; `managerRecordTermByTeam` = FORK-A expected wins from the frozen artifact
+  [`rosterStateSnapshot` team-map + `trustedPlayerIds` + frozen `trueValue`] × gamesPerTeam, record = actual−expected;
+  min-max pool-norm with `max===min→0.5`; equal 0.25 sim-gate weights; folded into `computeAndPersistFranchiseWarAwards`
+  → all 6 categories finalized) + `franchiseAwardsStorage.ts` (+2 additive nullable `managerActualWins`/
+  `managerExpectedWins`) + test (+276).
+- `tsc --noEmit` 0 (Opus) · `npm run build` success (Opus) · full suite **7,281 pass / 3 fail (7,284 total)** = EXACTLY
+  characterized, ZERO new reds; **the D9a parity round-trip survived the additive row fields** (no store/version bump).
+- **RECORD-TERM DETERMINISM MUTATION-PROVEN:** perturbing a non-frozen `trueValue` (999→1,000,000) leaves the MOY
+  winner + margins byte-identical (`perturbed.toEqual(award)`) — the record reads ONLY the frozen/trusted spine. Plus
+  degenerate-pool midpoint (0.5), trust-off→null, aggregation/null-guard, 6-category persist.
+- **INVARIANTS (Opus grep):** mwarCalculator / AwardsCeremonyFlow / RatingsAdjustmentFlow UNTOUCHED (retirement
+  deferred — safe, triple-gated behind the false offseason flag); no `currentTeamId` in the engine (frozen snapshot
+  only); no `franchiseExpectedWinsPreview`; no TV recompute; offseason flag untouched; TRACKER_DB_VERSION 18,
+  KBL_BACKUP_VERSION 2.
+
+**Status:** VERIFIED → committed (branch `codex/franchise-v1-next`, not pushed). **→ NEXT: D9d (AwardsWatchlist UI + per-game watchlist recompute + game-1 snapshot capture + season-end finalize TRIGGER + display) — completes D9.**
+

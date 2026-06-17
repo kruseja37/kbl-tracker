@@ -23,15 +23,26 @@ import {
 import { buildFranchiseAnalyticsTrustReport } from './franchiseAnalyticsTrust';
 import { getCareerStats } from './careerStorage';
 import {
+  getRecentGames,
+  type CompletedGameRecord,
+} from './gameStorage';
+import {
+  calculateStandings,
   getAllBattingStats,
   getAllPitchingStats,
   type PlayerSeasonBatting,
   type PlayerSeasonPitching,
+  type TeamStanding,
 } from './seasonStorage';
 
 export type FranchiseWarAwardCategory = Extract<
   FranchiseAwardCategory,
   'MVP' | 'CY_YOUNG' | 'ROOKIE_OF_YEAR' | 'GOLD_GLOVE' | 'SILVER_SLUGGER'
+>;
+
+export type FranchiseManagerAwardCategory = Extract<
+  FranchiseAwardCategory,
+  'MANAGER_OF_YEAR'
 >;
 
 export interface FranchiseWarAwardQualifierFacts {
@@ -51,6 +62,24 @@ export interface ComputeFranchiseWarAwardsInput extends FranchiseAwardsScopeInpu
   computedAt: string;
 }
 
+export interface FranchiseManagerAwardAggregate {
+  managerId: string;
+  teamId: string;
+  tacticalManagerWpa: number;
+  deploymentWpa: number;
+  lineupDeltaWpa: number;
+}
+
+export interface ComputeFranchiseManagerOfYearInput extends FranchiseAwardsScopeInput {
+  managerAggregates: FranchiseManagerAwardAggregate[];
+  trueValueRows: FranchiseTrueValueRow[];
+  trustedValueArtifact: FranchiseTrustedValueArtifact | null;
+  standings: TeamStanding[];
+  gamesPerTeam: number | null;
+  trustedForAwards: boolean;
+  computedAt: string;
+}
+
 export interface ComputeAndPersistFranchiseWarAwardsScope extends FranchiseAwardsScopeInput {
   seasonNumber: number;
   computedAt?: string;
@@ -65,6 +94,17 @@ const WAR_AWARD_CATEGORIES: readonly FranchiseWarAwardCategory[] = [
   'GOLD_GLOVE',
   'SILVER_SLUGGER',
 ];
+
+const MANAGER_OF_YEAR_CATEGORY: FranchiseManagerAwardCategory = 'MANAGER_OF_YEAR';
+const MANAGER_OF_YEAR_GAME_LIMIT = 1000;
+
+// MOY-7: Simulation-Gate placeholder. Equal weights are intentionally temporary.
+const MANAGER_OF_YEAR_SIM_GATE_PLACEHOLDER_WEIGHTS = {
+  tacticalManagerWpa: 0.25,
+  deploymentWpa: 0.25,
+  lineupDeltaWpa: 0.25,
+  recordWinsAboveExpectation: 0.25,
+} as const;
 
 function finiteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
@@ -84,6 +124,114 @@ function trueValueRowsByPlayerId(
   rows: FranchiseTrueValueRow[],
 ): Map<string, FranchiseTrueValueRow> {
   return new Map(rows.map((row) => [row.playerId, row]));
+}
+
+function scaleToUnitRange(values: number[]): number[] {
+  if (values.length === 0) return [];
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  if (max === min) {
+    return values.map(() => 0.5);
+  }
+  return values.map((value) => (value - min) / (max - min));
+}
+
+export function aggregateManagerAwardInputsFromGames(
+  games: CompletedGameRecord[],
+): FranchiseManagerAwardAggregate[] {
+  const byManager = new Map<string, FranchiseManagerAwardAggregate>();
+
+  for (const game of games) {
+    for (const total of game.managerWpaTotals ?? []) {
+      const existing = byManager.get(total.managerId);
+      if (existing) {
+        existing.tacticalManagerWpa += finiteNumber(total.tacticalManagerWpa) ? total.tacticalManagerWpa : 0;
+        existing.deploymentWpa += finiteNumber(total.deploymentWpa) ? total.deploymentWpa : 0;
+        existing.lineupDeltaWpa += finiteNumber(total.lineupDeltaWpa) ? total.lineupDeltaWpa : 0;
+        if (!existing.teamId && total.teamId) {
+          existing.teamId = total.teamId;
+        }
+      } else {
+        byManager.set(total.managerId, {
+          managerId: total.managerId,
+          teamId: total.teamId,
+          tacticalManagerWpa: finiteNumber(total.tacticalManagerWpa) ? total.tacticalManagerWpa : 0,
+          deploymentWpa: finiteNumber(total.deploymentWpa) ? total.deploymentWpa : 0,
+          lineupDeltaWpa: finiteNumber(total.lineupDeltaWpa) ? total.lineupDeltaWpa : 0,
+        });
+      }
+    }
+  }
+
+  return Array.from(byManager.values())
+    .sort((left, right) => left.managerId.localeCompare(right.managerId));
+}
+
+function managerRecordTermByTeam(params: {
+  trustedValueArtifact: FranchiseTrustedValueArtifact;
+  trueValueRows: FranchiseTrueValueRow[];
+  standings: TeamStanding[];
+  gamesPerTeam: number | null;
+}): Map<string, { actualWins: number | null; expectedWins: number | null; recordTerm: number }> {
+  const actualWinsByTeamId = new Map(
+    params.standings.map((standing) => [standing.teamId, standing.wins]),
+  );
+  const neutralRecords = new Map<string, { actualWins: number | null; expectedWins: number | null; recordTerm: number }>();
+  for (const teamId of actualWinsByTeamId.keys()) {
+    const actualWins = actualWinsByTeamId.get(teamId) ?? null;
+    neutralRecords.set(teamId, {
+      actualWins,
+      expectedWins: actualWins,
+      recordTerm: 0,
+    });
+  }
+
+  if (!finiteNumber(params.gamesPerTeam) || params.gamesPerTeam <= 0) {
+    return neutralRecords;
+  }
+
+  const trueValueByPlayerId = trueValueRowsByPlayerId(params.trueValueRows);
+  const rosterTeamByPlayerId = new Map(
+    params.trustedValueArtifact.rosterStateSnapshot.map((row) => [row.playerId, row.teamId]),
+  );
+  const trustedPlayerIds = params.trustedValueArtifact.trustedPlayerIds;
+  const teamTrustedValue = new Map<string, number>();
+
+  for (const playerId of trustedPlayerIds) {
+    const teamId = rosterTeamByPlayerId.get(playerId);
+    if (!teamId) {
+      return neutralRecords;
+    }
+    const trueValueRow = trueValueByPlayerId.get(playerId);
+    const trueValue = trueValueRow?.trueValue;
+    if (!finiteNumber(trueValue)) {
+      continue;
+    }
+    teamTrustedValue.set(teamId, (teamTrustedValue.get(teamId) ?? 0) + trueValue);
+  }
+
+  if (teamTrustedValue.size <= 1) {
+    return neutralRecords;
+  }
+
+  const totalTrustedValue = Array.from(teamTrustedValue.values())
+    .reduce((sum, value) => sum + value, 0);
+  if (!finiteNumber(totalTrustedValue) || totalTrustedValue <= 0) {
+    return neutralRecords;
+  }
+
+  const records = new Map<string, { actualWins: number | null; expectedWins: number | null; recordTerm: number }>();
+  for (const [teamId, teamValue] of teamTrustedValue.entries()) {
+    const actualWins = actualWinsByTeamId.get(teamId);
+    const expectedWins = (teamValue / totalTrustedValue) * params.gamesPerTeam;
+    records.set(teamId, {
+      actualWins: finiteNumber(actualWins) ? actualWins : null,
+      expectedWins,
+      recordTerm: finiteNumber(actualWins) ? actualWins - expectedWins : 0,
+    });
+  }
+
+  return records;
 }
 
 function scoreForCategory(
@@ -247,6 +395,87 @@ export function computeFranchiseWarAwards(
     .filter((row): row is FranchiseAwardRow => row !== null);
 }
 
+export function computeFranchiseManagerOfYear(
+  input: ComputeFranchiseManagerOfYearInput,
+): FranchiseAwardRow | null {
+  const trustedValueArtifact = input.trustedValueArtifact;
+  if (
+    !input.trustedForAwards ||
+    trustedValueArtifact?.frozen !== true
+  ) {
+    return null;
+  }
+
+  const managers = input.managerAggregates
+    .filter((manager) => manager.managerId && manager.teamId)
+    .sort((left, right) => left.managerId.localeCompare(right.managerId));
+  if (managers.length === 0) {
+    return null;
+  }
+
+  const recordByTeamId = managerRecordTermByTeam({
+    trustedValueArtifact,
+    trueValueRows: input.trueValueRows,
+    standings: input.standings,
+    gamesPerTeam: input.gamesPerTeam,
+  });
+  const tacticalNormalized = scaleToUnitRange(managers.map((manager) => manager.tacticalManagerWpa));
+  const deploymentNormalized = scaleToUnitRange(managers.map((manager) => manager.deploymentWpa));
+  const lineupNormalized = scaleToUnitRange(managers.map((manager) => manager.lineupDeltaWpa));
+  const recordNormalized = scaleToUnitRange(managers.map((manager) =>
+    recordByTeamId.get(manager.teamId)?.recordTerm ?? 0,
+  ));
+
+  const candidates = managers
+    .map((manager, index) => {
+      const record = recordByTeamId.get(manager.teamId) ?? {
+        actualWins: null,
+        expectedWins: null,
+        recordTerm: 0,
+      };
+      const score =
+        (tacticalNormalized[index] * MANAGER_OF_YEAR_SIM_GATE_PLACEHOLDER_WEIGHTS.tacticalManagerWpa) +
+        (deploymentNormalized[index] * MANAGER_OF_YEAR_SIM_GATE_PLACEHOLDER_WEIGHTS.deploymentWpa) +
+        (lineupNormalized[index] * MANAGER_OF_YEAR_SIM_GATE_PLACEHOLDER_WEIGHTS.lineupDeltaWpa) +
+        (recordNormalized[index] * MANAGER_OF_YEAR_SIM_GATE_PLACEHOLDER_WEIGHTS.recordWinsAboveExpectation);
+      return {
+        managerId: manager.managerId,
+        score,
+        actualWins: record.actualWins,
+        expectedWins: record.expectedWins,
+      };
+    })
+    .sort((left, right) =>
+      right.score - left.score ||
+      left.managerId.localeCompare(right.managerId),
+    );
+  const winner = candidates[0];
+  if (!winner) return null;
+
+  const winnerScore = rounded(winner.score);
+  return {
+    franchiseId: input.franchiseId,
+    seasonId: input.seasonId,
+    statsScopeId: input.statsScopeId,
+    category: MANAGER_OF_YEAR_CATEGORY,
+    winnerPlayerId: winner.managerId,
+    candidates: candidates.map((candidate) => {
+      const score = rounded(candidate.score);
+      return {
+        playerId: candidate.managerId,
+        score,
+        marginToWinner: rounded(score - winnerScore),
+      };
+    }),
+    goldGloveSplit: null,
+    managerActualWins: winner.actualWins,
+    managerExpectedWins: finiteNumber(winner.expectedWins) ? rounded(winner.expectedWins) : null,
+    voteWeight: null,
+    finalized: false,
+    computedAt: input.computedAt,
+  };
+}
+
 function qualifierFactsFromStats(
   battingRows: PlayerSeasonBatting[],
   pitchingRows: PlayerSeasonPitching[],
@@ -297,32 +526,58 @@ export async function computeAndPersistFranchiseWarAwards(
     battingRows,
     pitchingRows,
     rookiePlayerIds,
+    managerGames,
+    standings,
   ] = await Promise.all([
     getTrustedValueArtifact(scope.franchiseId, scope.seasonId, scope.statsScopeId),
     getFranchiseTrueValueRows(scope),
     getAllBattingStats(scope.statsScopeId),
     getAllPitchingStats(scope.statsScopeId),
     loadRookiePlayerIds(valueInputReport.rows.map((row) => row.playerId)),
+    getRecentGames(MANAGER_OF_YEAR_GAME_LIMIT, {
+      franchiseId: scope.franchiseId,
+      seasonId: scope.seasonId,
+      statsScopeId: scope.statsScopeId,
+    }),
+    calculateStandings(scope.seasonId),
   ]);
   const trustReport = buildFranchiseAnalyticsTrustReport({
     valueInputReport,
   });
-  const awards = computeFranchiseWarAwards({
+  const adaptiveStandardsConfig = deriveAdaptiveStandardsConfig({
+    gamesPerTeam: valueInputReport.seasonContext.gamesPerTeam,
+    inningsPerGame: valueInputReport.seasonContext.inningsPerGame,
+  });
+  const computedAt = scope.computedAt ?? new Date().toISOString();
+  const warAwards = computeFranchiseWarAwards({
     franchiseId: scope.franchiseId,
     seasonId: scope.seasonId,
     statsScopeId: scope.statsScopeId,
     valueRows: valueInputReport.rows,
     trueValueRows,
     trustedValueArtifact,
-    adaptiveStandardsConfig: deriveAdaptiveStandardsConfig({
-      gamesPerTeam: valueInputReport.seasonContext.gamesPerTeam,
-      inningsPerGame: valueInputReport.seasonContext.inningsPerGame,
-    }),
+    adaptiveStandardsConfig,
     qualifierFacts: qualifierFactsFromStats(battingRows, pitchingRows),
     rookiePlayerIds,
     trustedForAwards: trustReport.war.trustedForAwards,
-    computedAt: scope.computedAt ?? new Date().toISOString(),
-  }).map((row) => ({
+    computedAt,
+  });
+  const managerAward = computeFranchiseManagerOfYear({
+    franchiseId: scope.franchiseId,
+    seasonId: scope.seasonId,
+    statsScopeId: scope.statsScopeId,
+    managerAggregates: aggregateManagerAwardInputsFromGames(managerGames),
+    trueValueRows,
+    trustedValueArtifact,
+    standings,
+    gamesPerTeam: adaptiveStandardsConfig.gamesPerSeason,
+    trustedForAwards: trustReport.war.trustedForAwards,
+    computedAt,
+  });
+  const awards = [
+    ...warAwards,
+    ...(managerAward ? [managerAward] : []),
+  ].map((row) => ({
     ...row,
     finalized: true,
   }));
