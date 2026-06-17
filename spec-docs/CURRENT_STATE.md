@@ -1,8 +1,10 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-17 (AUTONOMOUS OVERNIGHT RUN CONTINUING under AUTH-4 — **13 feature commits + D5 confirm**
-[… `53ffd4c` **D9a** (awards persistence spine, trackerDb **v18**) · `9fa540d` **D9b** (the 5 WAR-category awards
-engine — deterministic off the frozen spine, mutation-proven, dark); **NEXT = D9c** (MOY) → D9d (UI/finalize)]:
+**Last Updated:** 2026-06-17 (AUTONOMOUS OVERNIGHT RUN CONTINUING under AUTH-4 — **14 feature commits + D5 confirm**
+[… `53ffd4c` **D9a** (awards persistence, trackerDb **v18**) · `9fa540d` **D9b** (5 WAR-category engine) · `443c86c`
+**D9c** (Manager of the Year → the **6-category awards engine is COMPLETE**, deterministic off the frozen spine,
+mutation-proven, dark); **NEXT = D9d** (AwardsWatchlist UI + per-game recompute + game-1 snapshot capture + season-end
+finalize TRIGGER + display → completes D9)]:
 L1, D1, D2, L1.5+OD-1, L4a-connect, L4a-bus, D6a, **D6b** (`6559a19`, season-end value freeze), **D7a** (`abfa167`,
 designations live: TEAM_MVP/ACE → active + DesignationEvent), **D7b** (`013d886`, Albatross live + the D6 trust-leak
 fix → **D7 COMPLETE**), **D8** (`14c90fd`, award-trust GATE: trustedForAwards/finalWarTrusted computed off the D6
@@ -48,7 +50,13 @@ nothing pushed.)
   RoY=top totalWar∩rookies / Gold Glove=fWAR+split seam / Silver Slugger=bWAR) off the D6 FROZEN artifact + D8 gate +
   adaptive qualifiers; deterministic (mutation-kill proven: untrusted 99-WAR row can't win; qualifier scales with
   season length); `computeAndPersistFranchiseWarAwards` writes the D9a store finalized:true. Never recomputes TV.
-  Suite **7,277 pass / 3 characterized fail (7,280 total, 404 files)**. **NEXT = D9c (MOY).**
+  Suite **7,277 pass / 3 characterized fail (7,280 total, 404 files)** at D9b. **+ `443c86c` D9c** (Manager of the
+  Year → the **6-category awards engine is COMPLETE**): MANAGER_OF_YEAR = a season aggregation of the live per-game
+  pogAwards manager composite + the wins-above-D6-expectation record term (expected = frozen value-share ×
+  gamesPerTeam, derived ONLY from the frozen artifact — no trusted expected-wins source exists), pool-normalized;
+  folded into `computeAndPersistFranchiseWarAwards` (one finalize, all 6); additive nullable
+  managerActualWins/ExpectedWins (no store/version bump). Record-term determinism mutation-proven; mwar retirement
+  deferred (safe). Suite **7,281 pass / 3 characterized fail (7,284 total)**. **NEXT = D9d (the final D9 piece).**
 - **AUTONOMOUS BUILD RUN COMPLETE (2026-06-16) — 7 feature commits + D5 confirm on `codex/franchise-v1-next`
   (nothing pushed); every diff Codex-built → Opus-audited independently (tsc/tests re-run, substance read,
   invariants grep'd).** In order: `d48ab3c` **L1** (hidden-modifier rename + typed on Player) · `752882f` **D1**
@@ -70,18 +78,18 @@ nothing pushed.)
   after which the loop moves to the next ticket. Everything → `AUTONOMOUS_RUN_LOG.md` for JK's morning review;
   rework is the accepted cost of momentum. **A fresh thread: do the session-start reads, RESTATE the state, and
   PROCEED IMMEDIATELY — do NOT wait for JK's start-of-session confirmation (JK is unattended overnight; AUTH-4 is
-  the standing "go"). Start at D9c and keep dispatching the Queue** (`AUTONOMOUS_RUN_PROTOCOL.md`) until it is
+  the standing "go"). Start at D9d and keep dispatching the Queue** (`AUTONOMOUS_RUN_PROTOCOL.md`) until it is
   exhausted or everything left is set-aside on a safety wall. (D6b/D7a/D7b/D8 already committed this run — see the
   OVERNIGHT CONTINUATION bullet above + `AUTONOMOUS_RUN_LOG.md`.)
-- **NEXT (fresh thread, overnight under AUTH-4):** **D9c — MOY** (D9a persistence + D9b WAR engine committed): add the
-  6th category (MANAGER_OF_YEAR) as a SEASON AGGREGATION of the live per-game `pogAwards` `PogManagerValueTotal`
-  composite (managerWpaTotals on PersistedGameState); 4 **pool-normalized** inputs (MOY-6, dissolves the
-  win-prob-vs-rescaled-IV denomination — no IV→WP constant); the 4th input = **record = wins-above-D6-expectation**
-  (MOY-3, hard D6 couple, drops the salary expectation); **no fame tilt** (MOY-4); **RETIRE** `calculateMOYVotes`/the
-  `mwarCalculator` salary path + **RE-POINT** `AwardsCeremonyFlow.tsx:1620` + `RatingsAdjustmentFlow.tsx:388` off it
-  FIRST then delete (MOY-5); lineup quantity = capped realized record (MOY-2 Captain default); weights sim-deferred
-  (MOY-7). Do NOT flip the offseason flag. → **D9d** (AwardsWatchlist UI + per-game watchlist recompute + game-1
-  snapshot capture + season-end finalize TRIGGER + display). → **D10–D13** → then the
+- **NEXT (fresh thread, overnight under AUTH-4):** **D9d — the FINAL D9 piece** (D9a persistence + D9b WAR engine + D9c
+  MOY all committed → the 6-category engine is complete; D9d wires it to the app + UI): (1) the season-end **finalize
+  TRIGGER** that calls `computeAndPersistFranchiseWarAwards` (hang off the same season-complete path D6b's freeze uses
+  in FranchiseHome `checkSeasonComplete`/`isSeasonOver`, AFTER the artifact is frozen); (2) the **game-1
+  `franchiseTrueValueSnapshots` capture** on the `processCompletedGame` chain (the D9a snapshot store, dark since D9a —
+  LIVE GAME PATH touch → browser-batch); (3) a **per-game watchlist recompute** (idempotent, watchlist-only, never a
+  stored winner mid-season); (4) the **AwardsWatchlist.tsx** new Mode-2 surface (NOT the dead-gated offseason
+  ceremony — do NOT flip the flag); (5) flip the `franchiseSeasonSummaryStorage` `awards-watchlists` manifest
+  blocked→live; (6) profile/Almanac display via the orphaned `awardEmblems.ts` catalog. → **D10–D13** → then the
   **soul layer** (L3 morale matrix → L6 fame → L7 effects → L8/L9b development → L10–L14 → the L-SIM gate; L2 lands
   with its first consumer). Take the **OD-3/4/5** leans + continue. **SET ASIDE (the one safety wall): L-ECON1**
   (re-prices the frozen draft-IV anchor → oracle touch) + F-144. The **D4** scope snag: take the conservative call
@@ -215,10 +223,10 @@ nothing pushed.)
 
 ## SUITE BASELINE
 
-**7,280 tests / 404 files** — full suite re-run 2026-06-17 after D9b: **7,277 pass / 3 fail**, the 3 being EXACTLY
-the characterized set. (+26 tests / +4 files over the prior 7,254 / 400 — D6b/D7/D8 added tests to existing files +
+**7,284 tests / 404 files** — full suite re-run 2026-06-17 after D9c: **7,281 pass / 3 fail**, the 3 being EXACTLY
+the characterized set. (+30 tests / +4 files over the prior 7,254 / 400 — D6b/D7/D8 added tests to existing files +
 `franchiseAwardTrust.test.ts`; D9a added `franchiseAwardsStorage.test.ts` + `franchiseTrueValueSnapshotsStorage.test.ts`;
-D9b added `franchiseAwardsEngine.test.ts`.) **trackerDb is now v18** — only D9a bumped it (its 2 dark stores); D6b→D8
+D9b/D9c grew `franchiseAwardsEngine.test.ts`.) **trackerDb is now v18** — only D9a bumped it (its 2 dark stores); D6b→D8
 added NO store (D6b's freeze is a field on the existing artifact, DesignationEvents are ephemeral, D8 stores nothing,
 D9b is a pure engine). `KBL_BACKUP_VERSION` stays 2. Characterized set (a new RED OUTSIDE it is a real regression):
 **wpaRuntimeBoundary + franchiseManualSmokeFixture + franchiseNarrativeEventEligibility** (the last is a PRE-EXISTING
