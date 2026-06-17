@@ -888,3 +888,64 @@ self-inflicted regression (a stale v15 version-pin test) → suite back to the c
 (7,251/3 of 7,254 / 400 files; trackerDb v17). (3) **WRAPPED at D6a** for fresh-context continuation. **NEXT =
 D6b (season-end freeze) → D7 (designations live incl. Albatross) → D8 → D9.** Open: OD-2..5, the D4 scope snag,
 the soul-layer "build to spec" greenlight. Detailed per-ticket trail in `AUTONOMOUS_RUN_LOG.md`.
+
+---
+
+## 2026-06-16 → 2026-06-17 — OVERNIGHT AUTONOMOUS CONTINUATION (AUTH-4): D6b → D9 COMPLETE (9 more commits)
+
+**This run's arc:** Picking up at D6b under AUTH-4 (overnight unattended — the Captain makes every call, takes
+documented conservative defaults where the spec is silent, never stops for JK, only SET-ASIDE-AND-CONTINUEs on a
+genuine safety wall), the Codex-builds/Opus-audits triangle held on every diff (auditor re-runs tsc/build/full-suite,
+reads the diff, greps invariants, mutation-tests load-bearing logic). **9 feature commits** completed the D-stack
+value→awards spine:
+
+- **`6559a19` D6b** — season-end FREEZE of the trusted-value artifact (frozen flag + idempotent freeze helper +
+  Layer-A anti-thaw guard + Layer-B recompute early-return that locks both the artifact and the
+  `franchiseTrueValueRows`; freeze on both season-complete paths; mutation-proven).
+- **`abfa167` D7a** — designations LIVE: the dual path reconciled to the persisted store canonical; TEAM_MVP/ACE
+  promoted 'projected'→'active' only when the eligibility path marks the exact holder active; ephemeral
+  `DesignationEvent` with the morale/fame firewall intact.
+- **`013d886` D7b** — Albatross live + **closed the untrusted-value LEAK** (canonical selection filters to the D6
+  ≥2-peer trusted set; mutation-proven) → **D7 COMPLETE**.
+- **`14c90fd` D8** — award-trust GATE: `trustedForAwards`/`finalWarTrusted`/`consumerThresholdsProven` promoted to
+  COMPUTED off the D6 FROZEN artifact (requires `artifact.frozen===true` — a deliberate tightening vs D7) + the
+  adaptive qualifier helper via `scaledThreshold` (no hardcoded 162/9) + the written `AWARD_TRUST_CONTRACT.md`.
+  Frozen-gate mutation-proven. (trackerDb stayed v17 for D6b/D7/D8.)
+- **`53ffd4c` D9a** — D9 SPLIT (D9a/b/c/d). The pure dark-store persistence diff: 2 new IndexedDB stores at trackerDb
+  **v17→v18** — `franchiseAwardsRows` (LSD-1 fame seams baked in: candidate margins / fWAR-total split / nullable
+  voteWeight / reserved KK-Bust-Comeback) + `franchiseTrueValueSnapshots` (per-game trough history) — with the full
+  backup-parity lockstep (register both byte-mirrored, pin 18, optional:true; KBL_BACKUP_VERSION stays 2) + round-trip
+  + the proven pin-trap test updated. Stores DARK.
+- **`9fa540d` D9b** — the 5 WAR-category awards ENGINE (additive/dark): pure `computeFranchiseWarAwards`
+  (MVP=totalWar / Cy Young=pWAR / RoY=top totalWar∩rookies / Gold Glove=fWAR+split seam / Silver Slugger=bWAR) off the
+  frozen artifact + D8 gate + adaptive qualifiers; deterministic (mutation-kill proven). `computeAndPersist…` writes
+  the D9a store finalized:true. Never recomputes TV.
+- **`443c86c` D9c** — Manager of the Year → the **6-category engine COMPLETE**: MANAGER_OF_YEAR = season aggregation
+  of the live per-game pogAwards manager composite + the wins-above-D6-expectation record term (expected = frozen
+  value-share × gamesPerTeam, derived only from the frozen artifact — no trusted expected-wins source exists),
+  pool-normalized; one finalize, all 6. Record-term determinism mutation-proven; mwar retirement deferred (safe).
+- **`d814c52` D9d-1** — engine WIRED to the app (D9d split D9d-1 wiring / D9d-2 UI): the season-end finalize TRIGGER
+  calls `computeAndPersistFranchiseWarAwards` after the D6b freeze on BOTH paths (awaited in checkSeasonComplete;
+  `.then`-chained on the isSeasonOver effect; computedAt=frozenAt byte-stable) + the game-1
+  `franchiseTrueValueSnapshots` capture on `processCompletedGame` (deterministic checkpoint = scheduled gameNumber ??
+  gameId, idempotent, own try/catch, regular-season-only — LIVE GAME PATH).
+- **`c229733` D9d-2** — the awards UI → **D9 COMPLETE**: NEW `AwardsWatchlist.tsx` Mode-2 regular+playoff tab (gated
+  `seasonPhase !== "offseason"`, separate from the dead-gated offseason ceremony, NO flag flip; read-only; renders the
+  6 categories + winner + candidate margins; finalized rows when present, else the in-season PREVIEW) + the pure
+  read-only `computeFranchiseAwardsPreview` (looser `warLikePreviewAvailable` gate, finalized:false, never persisted;
+  the frozen-gated finalize path byte-unchanged) + the gated manifest flip (awards-watchlists blocked→included +
+  awardsImplemented, gated on finalized rows, contractVersion bumped → `…-v2-awards-manifest-v1`, wave4 pin updated as
+  a sanctioned baseline shift + a new blocked-when-absent case).
+
+**Infra:** a 6h40m Codex hang (first D6b dispatch) was root-caused (stalled model-API stream, no edits written) +
+killed clean + re-dispatched — every `codex exec` dispatch now runs under a 30-min watchdog so a stall self-recovers.
+**Verification at close:** the full suite was independently re-run at every ticket and ended at **7,288 pass / 3
+characterized fail (7,291 total, 406 files)** — the only fails the documented trio (wpaRuntimeBoundary /
+franchiseManualSmokeFixture / franchiseNarrativeEventEligibility); ZERO new reds across the whole run. trackerDb
+**v18** / KBL_BACKUP_VERSION **2**. **WRAPPED at D9 COMPLETE** (JK-directed close — JK returns to drive D10). **NEXT =
+D10** (Mode-2 season summary/manifest finalize WITH awards + active designations) → D11–D13 → soul layer (L-stack).
+Browser sign-off (the sole real-world acceptance gate) batched for JK across the live-game/UI surfaces (D6b freeze,
+D7 designations, D9d-1 snapshot/finalize, D9d-2 AwardsWatchlist). Tracked D9 follow-ups: per-player profile/Almanac
+award display; the mwarCalculator/calculateMOYVotes retirement (pre-flag-flip cleanup). Open: OD-2..5, the D4 scope
+snag, the L-ECON1 + F-144 safety-wall set-aside. Detailed per-ticket trail in `AUTONOMOUS_RUN_LOG.md`. All on
+`codex/franchise-v1-next`; nothing pushed.

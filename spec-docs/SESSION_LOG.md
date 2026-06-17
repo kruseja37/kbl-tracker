@@ -4797,3 +4797,66 @@ LSD-1 fame seams + MOY-1..7) → D10–D13. **Resume in a FRESH context** — th
 rigor. Open decisions for JK: OD-2..5, the D4 salary/value-preview scope snag, the soul-layer "build to spec"
 greenlight. Batched browser: L1.5 captain + L4a reporter on real franchise data (needs the farm-draft handoff +
 Supabase). All on `codex/franchise-v1-next`; nothing pushed.
+
+---
+## Session: 2026-06-16 → 2026-06-17 (overnight, AUTH-4) — D6b → D9 COMPLETE (9 feature commits)
+
+### What Was Accomplished
+Resumed the autonomous build run at D6b under AUTH-4 (overnight unattended: Captain makes every call, documented
+conservative defaults where the spec is silent, never stops for JK, only SET-ASIDE-AND-CONTINUE on a genuine safety
+wall). The Codex-builds → Opus-audits triangle held on every diff (auditor independently re-ran tsc/build/full-suite,
+read the diff, grepped invariants, mutation-tested load-bearing logic). **9 feature commits completed the D-stack
+value→awards spine:**
+- ✅ `6559a19` **D6b** — season-end FREEZE of the trusted-value artifact (frozen flag + idempotent freeze helper +
+  Layer-A anti-thaw guard + Layer-B recompute early-return locking artifact + `franchiseTrueValueRows`; both
+  season-complete paths; mutation-proven).
+- ✅ `abfa167` **D7a** — designations LIVE (persisted path canonical; TEAM_MVP/ACE 'projected'→'active' only on the
+  exact eligible holder; ephemeral `DesignationEvent`, morale/fame firewall intact).
+- ✅ `013d886` **D7b** — Albatross live + **closed the untrusted-value LEAK** (filter to the D6 ≥2-peer trusted set;
+  mutation-proven) → **D7 COMPLETE**.
+- ✅ `14c90fd` **D8** — award-trust GATE (trustedForAwards/finalWarTrusted/consumerThresholdsProven computed off the D6
+  FROZEN artifact, requires `frozen===true`; adaptive qualifier via `scaledThreshold`; written `AWARD_TRUST_CONTRACT.md`).
+- ✅ `53ffd4c` **D9a** — D9 split (a/b/c/d); 2 new dark IndexedDB stores at trackerDb **v17→v18** (`franchiseAwardsRows`
+  with the LSD-1 fame seams + `franchiseTrueValueSnapshots`) + full backup-parity lockstep (pin 18, optional:true,
+  KBL_BACKUP_VERSION stays 2) + round-trip + pin-trap test updated.
+- ✅ `9fa540d` **D9b** — the 5 WAR-category awards engine (MVP/Cy Young/RoY/Gold Glove/Silver Slugger) off the frozen
+  artifact + D8 gate + adaptive qualifiers; deterministic, mutation-kill proven; writes finalized:true. Never recomputes TV.
+- ✅ `443c86c` **D9c** — Manager of the Year → **6-category engine COMPLETE** (season aggregation of the live pogAwards
+  manager composite + wins-above-D6-expectation record term, pool-normalized; one finalize, all 6).
+- ✅ `d814c52` **D9d-1** — engine WIRED: season-end finalize TRIGGER after the D6b freeze on both paths (computedAt=
+  frozenAt byte-stable) + game-1 `franchiseTrueValueSnapshots` capture on `processCompletedGame` (deterministic
+  checkpoint, idempotent, regular-season-only — live game path).
+- ✅ `c229733` **D9d-2** — the awards UI → **D9 COMPLETE**: `AwardsWatchlist.tsx` Mode-2 tab (separate from the
+  dead-gated offseason ceremony, NO flag flip; read-only; finalized rows or the in-season PREVIEW) + the read-only
+  `computeFranchiseAwardsPreview` (looser gate, never persisted; finalize path byte-unchanged) + the gated manifest
+  flip (gated on finalized rows; contractVersion bumped; wave4 pin updated + a new blocked-when-absent case).
+
+### Process / Infra
+- A **6h40m Codex hang** on the first D6b dispatch (stalled model-API stream, no edits written) was root-caused, killed
+  clean (repo intact), and re-dispatched. Every `codex exec` dispatch now runs under a **30-min watchdog** so a stall
+  self-recovers — made standard for the run.
+- A separate Codex (JK's v16 fix) made a correct one-line edit to `FRANCHISE_PLAYABLE_V1_DEFINITION.md:104`
+  (trackerDb "v16 migration" → "bump (v17→v18)"), carried in this session-end docs commit (not bundled into the D9d-2
+  feature commit, per explicit-path staging discipline).
+
+### Verification at Close
+Full suite independently re-run at every ticket; final = **7,288 pass / 3 characterized fail (7,291 total, 406 files)**
+— the only fails the documented trio (wpaRuntimeBoundary, franchiseManualSmokeFixture, franchiseNarrativeEventEligibility);
+ZERO new reds across the entire run. tsc 0, `npm run build` exit 0. trackerDb **v18**, KBL_BACKUP_VERSION **2**.
+
+### Docs Updated
+`CURRENT_STATE.md` (live header rewritten → SESSION ENDED / D9 COMPLETE / NEXT=D10), `CURRENT_STATE_HISTORY.md` (the
+D6b→D9 arc snapshot), `AUTONOMOUS_RUN_LOG.md` (per-ticket STARTED/COMMITTED trail through D9d-2), `PROMPT_CONTRACTS.md`
+(every ticket contract + AUDIT+EXECUTION RECORD), `AWARD_TRUST_CONTRACT.md` (NEW, D8), `FRANCHISE_PLAYABLE_V1_
+DEFINITION.md` (the v16→v18 one-line fix), this entry.
+
+### NEXT SESSION STARTS AT: D10
+**D10** — Mode-2 season-summary / manifest HANDOFF finalize WITH awards (D9) + active designations (D7); supersedes the
+no-awards 1.10A stopgap; touch the SeasonSummary PAGE copy (D9d-2 deliberately did not). Then **D11** (UI live-label
+sweep) → **D12** (full Phase-1 manual smoke, iPad) → **D13** (Playable-V1 internal checkpoint) → the **soul layer**
+(L-stack: L3 morale → L6 fame → … → L-SIM gate). **Batched browser sign-off for JK** (the sole real-world acceptance
+gate) across this run's live-game/UI surfaces: D6b freeze, D7 designations, D9d-1 snapshot/finalize, D9d-2
+AwardsWatchlist. Tracked D9 follow-ups: per-player profile/Almanac award display; the mwarCalculator/calculateMOYVotes
+retirement (pre-flag-flip cleanup — re-point AwardsCeremonyFlow:1620 + RatingsAdjustmentFlow:388 BEFORE any flag flip).
+Open: OD-2..5, the D4 scope snag, the L-ECON1 + F-144 safety-wall set-aside. All on `codex/franchise-v1-next`; nothing
+pushed.

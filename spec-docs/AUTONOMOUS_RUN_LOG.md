@@ -577,3 +577,32 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   mid-season store write] + the season-summary manifest flip [awards-watchlists blocked→included + awardsImplemented,
   gated on award rows existing; coordinate the contract-version + the franchiseSeasonSummary.wave4 test pin] +
   profile/Almanac display; do NOT flip the offseason flag). Completes D9 → then D10–D13 → soul layer.**
+
+- **2026-06-17 (overnight, AUTH-4) — STARTED: D9d-2 (the awards UI → completes D9).** Contracted directly from the D9d
+  map (areas 3-4; no new map). Scope: NEW `AwardsWatchlist.tsx` (Mode-2 regular+playoff tab; reads
+  `getFranchiseAwardRowsByScope`; renders the 6 categories + winner + candidate margins via the orphaned `awardEmblems`
+  catalog, resolving player/manager names; finalized rows when present, else the in-season PREVIEW) + a read-only
+  `computeFranchiseAwardsPreview` (looser `warLikePreviewAvailable` gate, finalized:false, NEVER persisted — the
+  finalized engine returns [] mid-season by design) + the manifest flip (awards-watchlists blocked→included +
+  awardsImplemented, GATED on rows; bump the stale 'no-awards-manifest-v1' contractVersion; update the
+  franchiseSeasonSummary.wave4 test pin). Codex invoked under the 30-min watchdog. **DEFAULTS-TAKEN:** AwardsWatchlist
+  fully separate from the dead-gated offseason ceremony (NO flag flip) · preview = looser-gate read-only, no mid-season
+  write · manifest flip gated on rows + contractVersion coordinated + wave4 updated (sanctioned baseline shift) ·
+  per-player profile/Almanac display = FOLLOW-UP · SeasonSummary PAGE = D10. **USER-VISIBLE → BROWSER-BATCH.** On
+  VERIFIED + commit, **D9 COMPLETE** → D10–D13 → soul layer. **Tracked follow-ups:** per-player profile/Almanac award
+  display; the mwarCalculator retirement (pre-flag-flip cleanup).**
+
+- **2026-06-17 (overnight, AUTH-4) — COMMITTED: D9d-2 `c229733` → D9 COMPLETE.** 7 code/test files via explicit-path
+  staging (NO docs in the feature commit). Independent re-audit (auditor ≠ builder): tsc 0 · `npm run build` exit 0 ·
+  FULL suite **7,288 pass / 3 characterized fail (7,291 total, 406 files)** — the only fails are the documented trio
+  (wpaRuntimeBoundary / franchiseManualSmokeFixture / franchiseNarrativeEventEligibility); ZERO new reds. Invariant
+  greps confirmed: offseason flag UNTOUCHED in the FranchiseHome diff (the awards tab renders behind `seasonPhase !==
+  "offseason"`, fully separate from the dead-gated `AwardsCeremonyFlow`) · `AwardsWatchlist.tsx` has NO store write and
+  NO AwardsCeremonyFlow/offseason-flag reference (reads `getFranchiseAwardRowsByScope` + `computeFranchiseAwardsPreview`
+  only) · `computeFranchiseAwardsPreview` is read-only / looser-gated (`warLikePreviewAvailable`) / `finalized:false` /
+  never persisted, and the frozen-gated finalize path is byte-unchanged · manifest flip gated on `finalizedAwardRows.
+  length > 0` with the contractVersion coordinated (wave4 pin updated as a sanctioned baseline shift + a new
+  blocked-when-absent case) · TRACKER_DB_VERSION 18 / KBL_BACKUP_VERSION 2 unchanged. **D9 COMPLETE** (D9a→D9d-2 all
+  committed this run). **SESSION ENDED — JK-directed close after D9; a fresh session resumes at D10.** Tracked D9
+  follow-ups remain: per-player profile/Almanac award display; the mwarCalculator/calculateMOYVotes retirement
+  (pre-flag-flip cleanup — re-point AwardsCeremonyFlow:1620 + RatingsAdjustmentFlow:388 BEFORE any flag flip).

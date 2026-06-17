@@ -1,20 +1,26 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-17 (AUTONOMOUS OVERNIGHT RUN CONTINUING under AUTH-4 — **15 feature commits + D5 confirm**
-[… `443c86c` **D9c** (6-category engine complete) · `d814c52` **D9d-1** (engine WIRED to the app: season-end finalize
-trigger + game-1 snapshot capture, on the live game path); **NEXT = D9d-2** (the awards UI → completes D9)]; earlier:
-[… `53ffd4c` **D9a** (awards persistence, trackerDb **v18**) · `9fa540d` **D9b** (5 WAR-category engine) · `443c86c`
-**D9c** (Manager of the Year → the **6-category awards engine is COMPLETE**, deterministic off the frozen spine,
-mutation-proven, dark); **NEXT = D9d** (AwardsWatchlist UI + per-game recompute + game-1 snapshot capture + season-end
-finalize TRIGGER + display → completes D9)]:
+**Last Updated:** 2026-06-17 (SESSION ENDED — JK-directed close after **D9 COMPLETE**; a fresh session resumes at **D10**.
+**16 feature commits + D5 confirm** this autonomous overnight run under AUTH-4. The D-stack value→awards spine is now
+LIVE end-to-end: **D9 COMPLETE** via `c229733` **D9d-2** (the awards UI — `AwardsWatchlist.tsx` Mode-2 regular+playoff
+tab reading `getFranchiseAwardRowsByScope` + the read-only `computeFranchiseAwardsPreview` [looser `warLikePreview
+Available` gate, `finalized:false`, NEVER persisted] + the gated manifest flip [awards-watchlists blocked→included +
+`awardsImplemented`, gated on rows existing, contractVersion bumped off the stale 'no-awards-manifest-v1']; separate
+from the dead-gated offseason ceremony, NO flag flip; USER-VISIBLE → browser-batch). The full D9 arc this run:
+`53ffd4c` **D9a** (awards persistence, trackerDb **v18**) · `9fa540d` **D9b** (5 WAR-category engine) · `443c86c`
+**D9c** (Manager of the Year → the **6-category awards engine COMPLETE**, dark) · `d814c52` **D9d-1** (engine WIRED:
+season-end finalize trigger + game-1 snapshot capture on the live game path) · `c229733` **D9d-2** (the UI → **D9
+COMPLETE**). Earlier this run:
 L1, D1, D2, L1.5+OD-1, L4a-connect, L4a-bus, D6a, **D6b** (`6559a19`, season-end value freeze), **D7a** (`abfa167`,
 designations live: TEAM_MVP/ACE → active + DesignationEvent), **D7b** (`013d886`, Albatross live + the D6 trust-leak
 fix → **D7 COMPLETE**), **D8** (`14c90fd`, award-trust GATE: trustedForAwards/finalWarTrusted computed off the D6
 FROZEN artifact + adaptive thresholds + the written contract). Every diff Codex-built → Opus-audited independently
-(tsc/build/suite re-run, diff read, firewall/invariants grep'd, key claims mutation-proven). **NEXT = D9 (real awards
-engine + MOY-1..7 + LSD-1 fame seams — the biggest ticket; expect a D9a/b/c split)** → D10–D13 → soul layer. Infra: a 6h40m Codex hang was root-caused (stalled model-API stream) + fixed — every
-`codex exec` dispatch now runs under a 30-min watchdog so a stall self-recovers. Open decisions: OD-2..5, the D4
-scope snag, the soul-layer greenlight. **Per-ticket trail in `AUTONOMOUS_RUN_LOG.md`.** Branch codex/franchise-v1-next;
+(tsc/build/suite re-run, diff read, firewall/invariants grep'd, key claims mutation-proven). Suite **7,288 pass / 3
+characterized fail (7,291 total, 406 files)** — zero new reds across the whole run. trackerDb **v18** / KBL_BACKUP_
+VERSION **2**. **NEXT = D10 (Mode-2 season summary/manifest finalize WITH awards + active designations — supersedes
+the no-awards 1.10A stopgap)** → D11–D13 → soul layer (L-stack). Infra: a 6h40m Codex hang was root-caused (stalled
+model-API stream) + fixed — every `codex exec` dispatch now runs under a 30-min watchdog. Open decisions: OD-2..5, the
+D4 scope snag, the soul-layer greenlight. **Per-ticket trail in `AUTONOMOUS_RUN_LOG.md`.** Branch codex/franchise-v1-next;
 nothing pushed.)
 **Branch:** codex/franchise-v1-next
 
@@ -63,8 +69,16 @@ nothing pushed.)
   freeze on BOTH season-complete paths (awaited in checkSeasonComplete; `.then`-chained on the isSeasonOver effect;
   computedAt=frozenAt byte-stable) + the game-1 `franchiseTrueValueSnapshots` capture on `processCompletedGame`
   (deterministic checkpoint = scheduled gameNumber ?? gameId, idempotent, own try/catch, regular-season-only — LIVE
-  GAME PATH → browser-batch). Suite **7,285 pass / 3 characterized fail (7,288 total, 405 files)**. **NEXT = D9d-2
-  (the awards UI).**
+  GAME PATH → browser-batch). Suite **7,285 pass / 3 characterized fail (7,288 total, 405 files)** at D9d-1.
+  **+ `c229733` D9d-2** (the awards UI → **D9 COMPLETE**): NEW `AwardsWatchlist.tsx` — a Mode-2 regular+playoff tab in
+  FranchiseHome (gated `seasonPhase !== "offseason"`, SEPARATE from the dead-gated offseason ceremony, NO flag flip),
+  read-only, rendering the 6 categories + winner + candidate margins (finalized rows when present, else the in-season
+  PREVIEW) + a pure read-only `computeFranchiseAwardsPreview` (looser `warLikePreviewAvailable` gate, `finalized:false`,
+  NEVER persisted; the frozen-gated finalize path byte-unchanged) + the manifest flip (awards-watchlists blocked→included
+  + `awardsImplemented`, GATED on finalized rows existing, contractVersion bumped → `…-v2-awards-manifest-v1`, wave4 pin
+  updated as a sanctioned baseline shift + a new blocked-when-absent case). USER-VISIBLE → browser-batch. Independently
+  re-audited (tsc 0 / build 0 / FULL suite **7,288 pass / 3 characterized fail (7,291 total, 406 files)**, zero new
+  reds). **D9 COMPLETE — SESSION ENDED (JK-directed close); NEXT = D10.**
 - **AUTONOMOUS BUILD RUN COMPLETE (2026-06-16) — 7 feature commits + D5 confirm on `codex/franchise-v1-next`
   (nothing pushed); every diff Codex-built → Opus-audited independently (tsc/tests re-run, substance read,
   invariants grep'd).** In order: `d48ab3c` **L1** (hidden-modifier rename + typed on Player) · `752882f` **D1**
@@ -86,18 +100,21 @@ nothing pushed.)
   after which the loop moves to the next ticket. Everything → `AUTONOMOUS_RUN_LOG.md` for JK's morning review;
   rework is the accepted cost of momentum. **A fresh thread: do the session-start reads, RESTATE the state, and
   PROCEED IMMEDIATELY — do NOT wait for JK's start-of-session confirmation (JK is unattended overnight; AUTH-4 is
-  the standing "go"). Start at D9d-2 and keep dispatching the Queue** (`AUTONOMOUS_RUN_PROTOCOL.md`) until it is
-  exhausted or everything left is set-aside on a safety wall. (D6b/D7a/D7b/D8 already committed this run — see the
-  OVERNIGHT CONTINUATION bullet above + `AUTONOMOUS_RUN_LOG.md`.)
-- **NEXT (fresh thread, overnight under AUTH-4):** **D9d-2 — the awards UI (final D9 piece)** (D9d-1 wired the engine:
-  finalize trigger + snapshot capture committed): (1) **AwardsWatchlist.tsx** — a NEW Mode-2 regular+playoff tab in
-  FranchiseHome (NOT the dead-gated offseason `AwardsCeremonyFlow`; do NOT flip the flag), reading
-  `getFranchiseAwardRowsByScope` + rendering the 6 categories + winner + candidate margins via the orphaned
-  `awardEmblems.ts` catalog (resolve player/manager names); (2) the **per-game watchlist PREVIEW** — the pure engine
-  returns [] mid-season by design, so use the looser `warLikePreviewAvailable` path / an on-read derivation, NEVER a
-  mid-season `franchiseAwardsRows` write; (3) the **manifest flip** — `franchiseSeasonSummaryStorage` awards-watchlists
-  blocked→included + `awardsImplemented`, GATED on award rows existing (not blind), coordinating the contract-version
-  literal + the `franchiseSeasonSummary.wave4` test pin; (4) profile/Almanac display (PlayerInstanceCard / almanac).
+  the standing "go"). Start at D10 and keep dispatching the Queue** (`AUTONOMOUS_RUN_PROTOCOL.md`) until it is
+  exhausted or everything left is set-aside on a safety wall. (D6b/D7a/D7b/D8/D9a/D9b/D9c/D9d-1/D9d-2 all committed this
+  run — **D9 COMPLETE** — see the OVERNIGHT CONTINUATION bullet above + `AUTONOMOUS_RUN_LOG.md`.)
+- **NEXT (fresh session resumes here):** **D10 — Mode-2 season-summary / manifest HANDOFF finalize** (supersedes the
+  no-awards 1.10A stopgap): finalize the Mode-2 season summary + manifest now WITH awards (D9 just landed
+  `AwardsWatchlist` + the gated manifest flip) AND active designations (D7). Touch the SeasonSummary PAGE copy (D9d-2
+  deliberately did NOT — that was reserved for D10). Depends on D2, D7, D9 (all done). Then **D11** (UI live-label
+  sweep — strip residual preview/READ-ONLY vocabulary across salary / True Value / designations / awards) → **D12**
+  (full Phase-1 manual smoke on real local franchise state, iPad) → **D13** (Playable-V1 internal checkpoint) → the
+  **soul layer** (L3 morale matrix → L6 fame → L7 effects → L8/L9b development → L10–L14 → the L-SIM gate; L2 lands
+  with its first consumer). Take the **OD-3/4/5** leans + continue. **Tracked D9 FOLLOW-UPS** (logged in the run log):
+  per-player profile/Almanac award display (PlayerInstanceCard / almanac); the `mwarCalculator`/`calculateMOYVotes`
+  retirement (pre-flag-flip cleanup — re-point AwardsCeremonyFlow:1620 + RatingsAdjustmentFlow:388 BEFORE any flag
+  flip). **SET ASIDE (the one safety wall): L-ECON1** (re-prices the frozen draft-IV anchor → oracle touch) + F-144.
+  The **D4** scope snag: take the conservative call or leave for the browser session — either, just log it.
   → **D10–D13** → then the
   **soul layer** (L3 morale matrix → L6 fame → L7 effects → L8/L9b development → L10–L14 → the L-SIM gate; L2 lands
   with its first consumer). Take the **OD-3/4/5** leans + continue. **SET ASIDE (the one safety wall): L-ECON1**

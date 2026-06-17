@@ -8089,3 +8089,64 @@ Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff
 
 **Status:** VERIFIED → committed (branch `codex/franchise-v1-next`, not pushed). **→ NEXT: D9d-2 (AwardsWatchlist UI + per-game watchlist preview + manifest flip + display) — completes D9.**
 
+---
+
+## D9d-2 — the awards UI (AwardsWatchlist + on-read preview + manifest flip) → completes D9 — 2026-06-17 (autonomous overnight, AUTH-4)
+
+**ROUTE:** Codex | high reasoning effort → Opus 4.8 audit (auditor ≠ builder). Autonomous overnight (AUTH-4; AUTH-1).
+USER-VISIBLE surface → browser-batch. Grounding: the D9d map `wf_c235f00a-95e` (areas 3-4). Contracted directly (no
+new map). Per-player profile/Almanac award display = a documented FOLLOW-UP (kept out to keep D9d-2 a contained,
+browser-verifiable surface).
+
+**SCOPE:** (1) NEW `AwardsWatchlist.tsx` — a Mode-2 regular+playoff tab in FranchiseHome (TabType + both tab arrays +
+render branch, mirroring StandingsContent), reads `getFranchiseAwardRowsByScope`, renders the 6 categories + winner +
+candidate margins via the orphaned `awardEmblems.ts` catalog (resolve player/manager NAMES — rows carry only ids; MOY
+id = managerId); shows finalized awards when present, else the in-season PREVIEW labeled "Projected". (2) a read-only
+`computeFranchiseAwardsPreview` in the engine (looser `warLikePreviewAvailable` gate, `finalized:false`, NEVER
+persisted — the pure finalized engine returns [] mid-season by design). (3) the manifest flip in
+`franchiseSeasonSummaryStorage` (awards-watchlists blocked→included + awardsImplemented, GATED on award rows existing;
+bump the stale `'…no-awards-manifest-v1'` contractVersion; update the `franchiseSeasonSummary.wave4` test pin).
+
+**CAPTAIN DEFAULTS (AUTH-4):** AwardsWatchlist is a NEW Mode-2 surface, fully separate from the dead-gated offseason
+`AwardsCeremonyFlow` (NO flag flip) · in-season preview = looser-gate read-only, never a mid-season store write ·
+manifest flip gated on rows existing (not blind) + contractVersion coordinated + the wave4 test updated (sanctioned
+baseline shift) · profile/Almanac per-player award display = FOLLOW-UP (not D9d-2) · SeasonSummary PAGE = D10.
+
+**ALLOWED:** NEW `AwardsWatchlist.tsx` · `franchiseAwardsEngine.ts` (the read-only preview fn) · `FranchiseHome.tsx`
+(tab mount) · `franchiseSeasonSummaryStorage.ts` (manifest flip + version) · the wave4 test + new AwardsWatchlist/
+preview tests.
+
+**DO NOT:** offseason flag / AwardsCeremonyFlow / offseasonStorage · write franchiseAwardsRows from UI/mid-season ·
+recompute TV / oracle · new store / TRACKER_DB_VERSION (18) / KBL_BACKUP_VERSION (2) · SeasonSummary PAGE / D10 copy ·
+the per-player profile/Almanac display (follow-up) · break the 3 characterized tests (the wave4 manifest test is the
+ONE sanctioned update).
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · FULL suite = only the 3 characterized fails (+ the updated
+wave4 passes); AwardsWatchlist render test (finalized + preview states, no store write) + preview-fn test · grep: no
+offseason-flag edit, no mid-season award write, versions unchanged.
+
+**STOP IF:** must flip the flag / touch AwardsCeremonyFlow to mount; the preview needs recomputing/freezing TV; the
+manifest flip needs a store/version bump; the contractVersion rename ripples beyond the wave4 test.
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited.
+
+**Status:** VERIFIED + COMMITTED `c229733` (2026-06-17) → **D9 COMPLETE**.
+
+**AUDIT + EXECUTION RECORD (Opus 4.8, auditor ≠ builder):** Independently re-ran every gate — tsc `--noEmit` 0 ·
+`npm run build` exit 0 · FULL `vitest run` **7,288 pass / 3 characterized fail (7,291 total, 406 files)**, the fails
+being exactly the documented trio (wpaRuntimeBoundary / franchiseManualSmokeFixture / franchiseNarrativeEventEligibility),
+ZERO new reds. Read the diff + grepped invariants: (1) `AwardsWatchlist.tsx` is read-only — NO `franchiseAwardsRows`
+write, reads `getFranchiseAwardRowsByScope` + `computeFranchiseAwardsPreview` only, and has NO `AwardsCeremonyFlow` /
+offseason-flag reference; (2) the FranchiseHome tab mount renders behind `activeTab === "awards" && seasonPhase !==
+"offseason"` (a Mode-2 surface, separate from the dead-gated offseason ceremony) — the offseason flag/ceremony render
+is UNTOUCHED in the diff; (3) `computeFranchiseAwardsPreview` gates on the looser `warLikePreviewAvailable`, stamps
+`finalized:false`, is never called by `computeAndPersistFranchiseWarAwards`, and never persists — the frozen-gated
+finalize path is byte-unchanged; (4) the manifest flip is gated on `finalizedAwardRows.length > 0` (included when
+present, blocked when absent) with the contractVersion bumped off the stale `…no-awards-manifest-v1` →
+`franchise-season-summary-v2-awards-manifest-v1`, and the wave4 pin updated as a sanctioned baseline shift PLUS a new
+"keeps awards blocked when rows absent" case (mutation-honest, both sides covered); (5) TRACKER_DB_VERSION 18 /
+KBL_BACKUP_VERSION 2 unchanged, no new store. Committed the 7 code/test files via explicit-path staging (docs held for
+the session-end docs commit). **D9 COMPLETE.** USER-VISIBLE → JK browser sign-off batched (the sole real-world
+acceptance gate). Tracked D9 follow-ups: per-player profile/Almanac award display; the mwarCalculator/calculateMOYVotes
+retirement (pre-flag-flip cleanup).
+
