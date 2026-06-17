@@ -105,7 +105,10 @@ See OFFSEASON_SYSTEM_SPEC.md §15.2 for personality-specific morale triggers.
 
 ### 5.3 Team Captain Selection
 
-Highest combined (Loyalty + Charisma) among veterans (3+ seasons with team).
+Highest combined (Loyalty + Charisma) on the team, **NO minimum** — every team with ≥1 MLB player gets a Captain
+(DESIG-RECON 2026-06-17, canonical `MODE_2_V1_FINAL §17.6`). Tiebreak: more seasons on team, then current-season WAR
+(degenerate at franchise init). The prior "among veterans (3+ seasons)" gate is superseded — the captain is assigned
+at franchise creation (`team.captainPlayerId`) before any season is played, so a tenure minimum can't apply.
 
 ### 5.4 Retirement Probability
 

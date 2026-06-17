@@ -8437,5 +8437,34 @@ under the 'team' tab without restructuring unrelated chrome.
 
 Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited.
 
-**Status:** DISPATCHED to Codex (background, watchdog). Audit pending.
+**Status:** VERIFIED + COMMITTED `bd6b43c` (2026-06-17). USER-VISIBLE → browser-pending.
+
+**AUDIT + EXECUTION RECORD (Opus 4.8, auditor ≠ builder):** Codex (high, watchdog) BUILT → Opus independently re-ran:
+tsc 0 · build 0 · FULL suite **7,243 pass / 2 fail (7,245 total, 405 files)** = exactly the characterized set, ZERO
+new reds. Diff = 1 file (`TeamHubContent.tsx`, +171/−7), display-only. **Verified by reading + grep:** the strip
+mounts under the 'team' tab (fragment-wrapped with the "Currently viewing" card) with all six slots in order
+(Captain · MVP · Ace · Fan Favorite · Albatross · Fan Hopeful); engine designations read `projectedDesignationRows`
+(dedup per type, active>projected) badged via `getLiveDesignationBadge` (active) else `getProjectedDesignationBadge`;
+Captain + Fan Hopeful render from `team.captainPlayerId`/`team.fanHopefulPlayerId` with UI-only badge constants (no
+engine badge-map change); Fan Hopeful shows VISIBLE `Scouted <grade>` only (grep: zero hidden
+trueGrade/trueRating/overallGrade/potentialGrade/modifier reads added); empty slots render "— none"; always-visible
+with a projected/final caption. No persistence write, no engine/eligibility edit, no flag flip, no version bump.
+**DR-3 COMPLETE.** USER-VISIBLE → JK browser sign-off batched (scenario in CURRENT_STATE).
+
+---
+
+## DR-4 — designation spec reconciliation to canonical §17 (docs-only) — 2026-06-17 (attended, Captain-authored)
+
+**ROUTE:** Opus 4.8 (Captain/spec-lead) directly — docs-only, no code, no Codex/build/test gate. Per DECISIONS_LOG
+DESIG-RECON; canonical = `MODE_2_V1_FINAL §17`.
+
+**DONE:** added a "⚑ DESIG-RECON RECONCILIATION (2026-06-17 — CANONICAL)" banner to `DYNAMIC_DESIGNATIONS_SPEC.md` +
+`FAN_FAVORITE_SYSTEM_SPEC.md` (each enumerating the as-built corrections + pointing to §17/DECISIONS_LOG), and
+surgically corrected the flagged stale lines: Captain criterion → highest Loyalty+Charisma, NO minimum (both
+`DYNAMIC_DESIGNATIONS_SPEC.md` §17.6 area + `PERSONALITY_SYSTEM_SPEC.md` §5.3); Team MVP "league-wide" → INTRA-TEAM
+(the league-wide WAR award is the separate D9 system); Albatross trade discount 30% → 15% (C-056) **and** marked
+DEFERRED in v1 (no AI-trade/valuation consumer) in both the code-illustration and the summary table. Working tree =
+3 spec docs only (no code). **DR-4 COMPLETE → DESIG-RECON arc COMPLETE (DR-1..4).**
+
+**Status:** COMPLETE (docs-only) — committed with the DR-3 docs.
 

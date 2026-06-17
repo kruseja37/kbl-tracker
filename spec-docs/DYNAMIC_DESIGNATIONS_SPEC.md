@@ -1,5 +1,30 @@
 # Dynamic Designations System Spec
 
+> ## ⚑ DESIG-RECON RECONCILIATION (2026-06-17 — CANONICAL; supersedes conflicting text below)
+> Canonical authority = `MODE_2_V1_FINAL.md §17` + `DECISIONS_LOG.md` "DESIG-RECON" (2026-06-17). Where this doc
+> (incl. the June-2026 bridge checkpoints) conflicts, the following wins — it reflects what is now BUILT and live
+> (commits D10 + DR-1..3, 2026-06-17):
+> - **Six team designations, ALL live in v1** (the living season is part of v1 per LSD-6): **Team MVP, Ace,
+>   Fan Favorite, Albatross, Captain, Fan Hopeful.** Selection is always **INTRA-TEAM**. Designation EFFECTS
+>   (fame/morale/fan-happiness, Captain charisma-double-morale, Fan Hopeful +5 morale) stay **DORMANT** until the
+>   Phase-2 morale layer (still v1).
+> - **Captain** = highest combined **(Loyalty + Charisma)** on the team, **NO minimum** (every team with ≥1 MLB
+>   player gets one). The old "Charisma-only, ≥70" criterion is WRONG. Tiebreak: more seasons, then current-season
+>   WAR (degenerate at franchise init → stable id fallback). Badge is **shown** in v1 (rendered from
+>   `team.captainPlayerId`); only the morale-amplification EFFECT is dormant.
+> - **Fan Favorite** = highest **positive** Value Delta on the team, **NO salary floor** (deliberate asymmetry vs
+>   Albatross — the underpaid overperformer is the best fan-favorite story), among ≥2-MLB-peer trusted players.
+>   **Now LIVE** (not blocked/morale-gated); +2 fame dormant.
+> - **Albatross** = most-negative Value Delta on the team, gated by **salary ≥ 2× league minimum** ("can't blame the
+>   cheap guy") **AND** materially overpaid (`valueDelta/contractValue ≤ -25%`) **AND** ≥2-MLB-peer trusted. Can be
+>   null. −1 fame dormant. The 15% trade discount is **DEFERRED** in v1 (no AI-trade/valuation consumer; all trades
+>   manual).
+> - **Fan Hopeful** = random pick from the team's **top-3 farm prospects by SCOUTED grade** (visible-safe — never
+>   hidden true ratings/grade), assigned at season start; +5 morale dormant. **Now BUILT** (not blocked).
+> - **Cornerstone = CUT from v1** (LSD-3) — removed from the team-designation system. (The separate FAME
+>   `FRANCHISE_CORNERSTONE` legacy tier in `teamMVP.ts`/`legacyDynastyTracker.ts` is a DIFFERENT system, retained.)
+> - The **≥2-peer** rule is a True-Value RELIABILITY trust gate (is the value computable), NOT a league-peer ranking.
+
 ## Overview
 
 Player designations (Team MVP, Ace, Fan Favorite, Albatross) are tracked dynamically throughout the season with "projected" status, then locked in at season's end. This creates engaging storylines as players compete for designations during the season.
@@ -84,7 +109,7 @@ Current v1 exposes Fan Favorite/Albatross readiness as read-only preview context
 - **Accumulation**: Multiple Cornerstones can exist on a team (one per qualifying season)
 
 ### Team Captain (Special)
-- **Criteria**: Player with the highest Charisma hidden modifier on the team, provided Charisma ≥ 70. If no player exceeds 70, no Captain is designated.
+- **Criteria** (DESIG-RECON 2026-06-17, canonical §17.6): Player with the highest combined (Loyalty + Charisma) hidden modifier on the team, with **NO minimum** — every team with ≥1 MLB player gets a Captain. (The prior "highest Charisma, ≥70" rule is superseded.)
 - **Tiebreaker**: If two players share the highest Charisma, the one with more seasons on the team wins. If still tied, the one with higher WAR in the current season wins.
 - **Assignment**: Calculated at season start. Does not change mid-season (Captain badge is stable).
 - **Display**: Solid border badge, "Captain" — always visible regardless of Charisma being hidden

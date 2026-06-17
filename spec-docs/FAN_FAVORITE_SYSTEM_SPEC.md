@@ -1,5 +1,16 @@
 # KBL XHD Tracker - Fan Favorite & Albatross System Specification v1.1
 
+> ## ⚑ DESIG-RECON RECONCILIATION (2026-06-17 — CANONICAL; supersedes conflicting text below)
+> Canonical authority = `MODE_2_V1_FINAL.md §17` + `DECISIONS_LOG.md` "DESIG-RECON" (2026-06-17). As-built (DR-1):
+> - **Fan Favorite** = highest **positive** Value Delta on the team, **NO salary floor** (the underpaid overperformer
+>   is the best fan-favorite story), among ≥2-MLB-peer trusted players, min 10% games. **LIVE in v1**; +2 fame dormant.
+> - **Albatross** = most-negative Value Delta on the team, gated by **salary ≥ 2× league minimum** AND materially
+>   overpaid (`valueDelta/contractValue ≤ -25%`) AND ≥2-MLB-peer trusted, min 10% games. **Can be null.** −1 fame dormant.
+> - **Team MVP is INTRA-TEAM** ("highest WAR ON TEAM") — NOT league-wide. The league-wide WAR "MVP" is the separate
+>   **D9 awards** system (`franchiseAwardsEngine`), a different thing from the per-team Dynamic Designation.
+> - **Trade discounts/premiums are DEFERRED in v1** (no AI-trade/valuation consumer; all trades manual). The canonical
+>   Albatross discount is **15%** (C-056), not 30%, when it reactivates.
+
 ## Overview
 
 The Fan Favorite & Albatross system captures the emotional connection between fans and players—separate from pure performance metrics like MVP or Ace. A scrappy utility player making league minimum who overperforms can be more beloved than a high-paid star who merely meets expectations.
@@ -254,7 +265,7 @@ function calculateTradeValue(player, seasonStats, leagueContext, team) {
   if (albatross && albatross.playerId === player.id) {
     // Albatross has REDUCED trade value (damaged goods perception)
     // Sending team is motivated to move him, receiving team skeptical
-    tradeValue *= 0.70;  // 30% discount
+    tradeValue *= 0.85;  // 15% discount (C-056 canonical, was 30%) — DEFERRED in v1 (no AI-trade/valuation consumer)
   }
 
   return tradeValue;
@@ -414,7 +425,7 @@ earlier in the season.
 
 | Designation | Basis | Can Overlap? |
 |-------------|-------|--------------|
-| **MVP** | Highest WAR (league-wide) | Yes - MVP can be Fan Favorite |
+| **MVP** | Highest WAR **on team** (intra-team; the league-wide WAR award is the separate D9 system) | Yes - MVP can be Fan Favorite |
 | **Ace** | Highest pWAR on team | Yes - Ace can be Fan Favorite |
 | **Cornerstone** | Sustained production over seasons | Yes - Cornerstone can be Fan Favorite |
 | **Fan Favorite** | Highest Value Delta on team | Unique designation |
@@ -527,7 +538,7 @@ function processEndOfSeasonFanFavorite(team, seasonStats, leagueContext) {
 | **Value Delta** | True Value - Contract Value (position-relative) |
 | **Qualification** | 10% of season played; Albatross requires 2x league minimum salary |
 | **Happiness Impact** | Trading Fan Favorite: -15; Trading Albatross: +10 |
-| **Trade Value** | Fan Favorite: 15% premium; Albatross: 30% discount |
+| **Trade Value** | Fan Favorite: 15% premium; Albatross: 15% discount (C-056, was 30%) — DEFERRED in v1 (no AI-trade/valuation consumer) |
 | **Contract Impact** | Fan Favorite demands +15%; Albatross accepts -10% |
 | **Fame** | Fan Favorite: +2; Albatross: -1 |
 
