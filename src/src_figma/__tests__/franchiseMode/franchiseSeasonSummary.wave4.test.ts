@@ -29,6 +29,10 @@ import {
   saveFranchiseAwardRows,
   type FranchiseAwardRow,
 } from '../../../utils/franchiseAwardsStorage';
+import {
+  saveFranchiseDesignationRows,
+} from '../../../utils/franchiseDesignationStorage';
+import type { FranchisePlayerDesignationRecord } from '../../../utils/franchiseDesignations';
 import { getFranchiseSeasonId } from '../../../utils/franchisePersistenceContract';
 import { createPlayoff } from '../../../utils/playoffStorage';
 import { executeSeasonTransition, type PlayerStorageAdapter } from '../../../engines/seasonTransitionEngine';
@@ -109,6 +113,38 @@ function makeAwardRow(params: {
     voteWeight: null,
     finalized: true,
     computedAt: '2026-06-17T12:00:00.000Z',
+  };
+}
+
+function makeDesignationRow(params: {
+  franchiseId: string;
+  seasonId: string;
+  teamId: string;
+  playerId: string;
+  type: FranchisePlayerDesignationRecord['type'];
+  status: FranchisePlayerDesignationRecord['status'];
+}): FranchisePlayerDesignationRecord {
+  return {
+    franchiseId: params.franchiseId,
+    seasonId: params.seasonId,
+    statsScopeId: params.seasonId,
+    seasonNumber: 1,
+    teamId: params.teamId,
+    playerId: params.playerId,
+    playerName: params.playerId,
+    type: params.type,
+    status: params.status,
+    sourceInputs: {},
+    calculationVersion: 'test-designation-version',
+    calculatedAt: '2026-06-17T12:00:00.000Z',
+    lockedAt: null,
+    carryover: {
+      carriesOver: false,
+      untilSeasonProgress: null,
+      previousSeasonId: null,
+      previousPlayerId: null,
+      note: null,
+    },
   };
 }
 
@@ -314,6 +350,37 @@ describe('Wave 4 franchise season summary handoff', () => {
     });
     expect(summary.manifest.policyFlags.awardsImplemented).toBe(false);
     expect(summary.manifest.policyFlags.mode3ExecutionAllowed).toBe(false);
+  });
+
+  test('counts active designations from canonical designation rows, not embedded player records', async () => {
+    const franchiseId = nextId('summary-designation-count');
+    const seasonNumber = 11;
+    const { seasonId } = await seedFranchiseGame({
+      franchiseId,
+      seasonNumber,
+      awayTeamId: 'designations-away',
+      homeTeamId: 'designations-home',
+      awayScore: 2,
+      homeScore: 8,
+    });
+
+    await saveFranchiseDesignationRows([
+      makeDesignationRow({ franchiseId, seasonId, teamId: 'designations-home', playerId: 'mvp', type: 'TEAM_MVP', status: 'active' }),
+      makeDesignationRow({ franchiseId, seasonId, teamId: 'designations-home', playerId: 'ace', type: 'ACE', status: 'active' }),
+      makeDesignationRow({ franchiseId, seasonId, teamId: 'designations-home', playerId: 'albatross', type: 'ALBATROSS', status: 'active' }),
+      makeDesignationRow({ franchiseId, seasonId, teamId: 'designations-away', playerId: 'fan', type: 'FAN_FAVORITE', status: 'active' }),
+      makeDesignationRow({ franchiseId, seasonId, teamId: 'designations-away', playerId: 'projected', type: 'TEAM_MVP', status: 'projected' }),
+    ]);
+
+    const summary = await createFranchiseSeasonSummary({ franchiseId, seasonNumber });
+    const category = summary.manifest.categories.find((row) => row.key === 'active-designations');
+
+    expect(category).toMatchObject({
+      label: 'Active team designations',
+      status: 'included',
+      count: 4,
+      detail: '4 active canonical designation record(s) found for this season scope.',
+    });
   });
 
   test('excludes incomplete fallback archives from durable summary completed-game snapshots', async () => {

@@ -4,7 +4,7 @@
  * Displays after regular season is complete:
  * 1. Final standings by division/conference
  * 2. League leaders (batting, pitching, WAR)
- * 3. Awards status and read-only stat leader previews
+ * 3. League awards from the finalized awards store, with leader previews as fallback
  * 4. User's team summary
  * 5. "START PLAYOFFS" button
  *
@@ -38,6 +38,7 @@ import {
   calculateBattingDerived,
   calculatePitchingDerived,
 } from "../../../utils/seasonStorage";
+import AwardsWatchlist from "../components/AwardsWatchlist";
 
 // ============================================
 // TYPES
@@ -738,17 +739,24 @@ export function SeasonSummary() {
         )}
 
         {/* ============================================ */}
-        {/* 3. AWARDS STATUS / LEADER PREVIEW */}
+        {/* 3. AWARDS STATUS / LEAGUE AWARDS */}
         {/* ============================================ */}
         <SectionHeader title="Awards Status" section="awards" />
         {expandedSection === "awards" && (
           <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4 space-y-3">
             <div className="text-[10px] text-[#E8E8D8]/70 leading-relaxed">
-              Internal v1 does not finalize MVP, Cy Young, Gold Glove, or dynamic designation awards here. These are read-only stat leader previews when data is available.
+              League awards finalize from the season-end awards store when rows exist for this scope. Leader previews appear only when finalized award rows are not available.
             </div>
 
-            {/* Position player preview */}
-            {awards?.mvp && (
+            <AwardsWatchlist
+              franchiseId={franchiseId}
+              seasonId={seasonId}
+              statsScopeId={seasonId}
+              seasonNumber={currentSeason}
+            />
+
+            {/* Position player preview fallback */}
+            {!persistedSummary && awards?.mvp && (
               <div className="bg-[#5A8352] border-[3px] border-[#C4A853] p-3">
                 <div className="text-[9px] text-[#C4A853] mb-1">TOP POSITION PLAYER PREVIEW</div>
                 <div className="text-sm text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
@@ -760,8 +768,8 @@ export function SeasonSummary() {
               </div>
             )}
 
-            {/* Pitcher preview */}
-            {awards?.cyYoung && (
+            {/* Pitcher preview fallback */}
+            {!persistedSummary && awards?.cyYoung && (
               <div className="bg-[#5A8352] border-[3px] border-[#C4A853] p-3">
                 <div className="text-[9px] text-[#C4A853] mb-1">TOP PITCHER PREVIEW</div>
                 <div className="text-sm text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
@@ -773,8 +781,8 @@ export function SeasonSummary() {
               </div>
             )}
 
-            {/* Fielding previews */}
-            {awards?.goldGloves && awards.goldGloves.length > 0 && (
+            {/* Fielding preview fallback */}
+            {!persistedSummary && awards?.goldGloves && awards.goldGloves.length > 0 && (
               <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-3">
                 <div className="text-[9px] text-[#C4A853] mb-2">FIELDING LEADER PREVIEW</div>
                 <div className="grid grid-cols-2 gap-1">
@@ -791,11 +799,7 @@ export function SeasonSummary() {
             )}
 
             {/* No awards message */}
-            {persistedSummary ? (
-              <div className="text-[10px] text-[#E8E8D8]/50 italic text-center py-4">
-                {persistedSummary.awards.reason || 'Awards are not finalized in Mode 2 v1 persisted season summaries.'}
-              </div>
-            ) : !awards?.mvp && !awards?.cyYoung && (
+            {!persistedSummary && !awards?.mvp && !awards?.cyYoung && (
               <div className="text-[10px] text-[#E8E8D8]/50 italic text-center py-4">
                 No stat leader preview data available — play or score games to generate stats
               </div>
@@ -865,7 +869,7 @@ export function SeasonSummary() {
         )}
 
         {/* ============================================ */}
-        {/* 5. NO-AWARDS HANDOFF MANIFEST */}
+        {/* 5. SEASON HANDOFF MANIFEST */}
         {/* ============================================ */}
         <SectionHeader title="Season Complete Manifest" section="manifest" />
         {expandedSection === "manifest" && (
@@ -874,14 +878,14 @@ export function SeasonSummary() {
               <>
                 <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-[9px] text-[#C4A853] uppercase">Read-only no-awards handoff package</div>
+                    <div className="text-[9px] text-[#C4A853] uppercase">Read-only awards-aware handoff package</div>
                     <div className={`text-[9px] uppercase ${manifestStatusClass(persistedSummary.manifest.status)}`}>
                       {persistedSummary.manifest.status.replace(/-/g, ' ')}
                     </div>
                   </div>
                   <div className="mt-2 text-[10px] text-[#E8E8D8]/70 leading-relaxed">
-                    This summary records Mode 2 season evidence for review only. Awards, final True Value, salary movement,
-                    morale automation, relationship mutation, season rollover, and Mode 3/offseason execution remain blocked.
+                    This summary records Mode 2 season evidence for review only. Final True Value handoff authority,
+                    salary movement, morale automation, relationship mutation, season rollover, and Mode 3/offseason execution remain blocked.
                   </div>
                 </div>
 
@@ -916,7 +920,7 @@ export function SeasonSummary() {
               </>
             ) : (
               <div className="text-[10px] text-[#E8E8D8]/50 italic text-center py-4">
-                No persisted no-awards handoff manifest is available yet.
+                No persisted awards-aware handoff manifest is available yet.
               </div>
             )}
           </div>

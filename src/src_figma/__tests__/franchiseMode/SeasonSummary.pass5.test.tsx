@@ -10,6 +10,10 @@ const mocks = vi.hoisted(() => ({
   mockPreparePlayoffSeedingReview: vi.fn(),
   mockCreateNewPlayoff: vi.fn(),
   mockUseSeasonStats: vi.fn(),
+  mockGetFranchiseAwardRowsByScope: vi.fn(),
+  mockComputeFranchiseAwardsPreview: vi.fn(),
+  mockGetAllFranchisePlayers: vi.fn(),
+  mockListManagerProfiles: vi.fn(),
 }));
 
 vi.mock('react-router', () => ({
@@ -35,6 +39,22 @@ vi.mock('@/hooks/usePlayoffData', () => ({
 
 vi.mock('../../../hooks/useSeasonStats', () => ({
   useSeasonStats: mocks.mockUseSeasonStats,
+}));
+
+vi.mock('../../../utils/franchiseAwardsStorage', () => ({
+  getFranchiseAwardRowsByScope: mocks.mockGetFranchiseAwardRowsByScope,
+}));
+
+vi.mock('../../../utils/franchiseAwardsEngine', () => ({
+  computeFranchiseAwardsPreview: mocks.mockComputeFranchiseAwardsPreview,
+}));
+
+vi.mock('../../../utils/franchisePlayerStorage', () => ({
+  getAllFranchisePlayers: mocks.mockGetAllFranchisePlayers,
+}));
+
+vi.mock('../../../utils/managerIdentityStorage', () => ({
+  listManagerProfiles: mocks.mockListManagerProfiles,
 }));
 
 import { SeasonSummary } from '../../app/pages/SeasonSummary';
@@ -155,7 +175,7 @@ function makeSummary() {
     },
     playoffs: { status: 'none' },
     manifest: {
-      contractVersion: 'franchise-season-summary-no-awards-manifest-v1',
+      contractVersion: 'franchise-season-summary-v2-awards-manifest-v1',
       generatedAt: 1,
       franchiseId: 'franchise-1',
       seasonId: 'franchise-1-season-1',
@@ -177,9 +197,10 @@ function makeSummary() {
         {
           key: 'awards-watchlists',
           label: 'Awards and watchlists',
-          status: 'blocked',
-          detail: 'Awards/watchlists are omitted from the v1 season-complete manifest until the Final WAR / Award Trust Promotion Gate passes.',
-          blockers: ['finalWarTrusted and trustedForAwards remain false.'],
+          status: 'included',
+          detail: '1 finalized award row(s) captured for this season scope.',
+          count: 1,
+          blockers: [],
           warnings: [],
         },
         {
@@ -194,8 +215,8 @@ function makeSummary() {
       blockers: [],
       warnings: [],
       policyFlags: {
-        awardsImplemented: false,
-        watchlistsImplemented: false,
+        awardsImplemented: true,
+        watchlistsImplemented: true,
         finalTrueValueAllowed: false,
         valueDeltaTrusted: false,
         blockedDesignationPromotionAllowed: false,
@@ -267,6 +288,27 @@ describe('SeasonSummary Pass 5 persisted-summary fidelity', () => {
       getPitchingLeaders: vi.fn(() => [{ playerId: 'live-pitcher', playerName: 'Live Mutable Pitcher' }]),
       getFieldingLeaders: vi.fn(() => []),
     });
+    mocks.mockGetFranchiseAwardRowsByScope.mockResolvedValue([
+      {
+        franchiseId: 'franchise-1',
+        seasonId: 'franchise-1-season-1',
+        statsScopeId: 'franchise-1-season-1',
+        category: 'MVP',
+        winnerPlayerId: 'snapshot-batter',
+        candidates: [
+          { playerId: 'snapshot-batter', score: 7.25, marginToWinner: 0 },
+        ],
+        goldGloveSplit: null,
+        voteWeight: null,
+        finalized: true,
+        computedAt: '2026-06-17T12:00:00.000Z',
+      },
+    ]);
+    mocks.mockComputeFranchiseAwardsPreview.mockResolvedValue([]);
+    mocks.mockGetAllFranchisePlayers.mockResolvedValue([
+      { id: 'snapshot-batter', firstName: 'Snapshot', lastName: 'Slugger' },
+    ]);
+    mocks.mockListManagerProfiles.mockResolvedValue([]);
   });
 
   test('uses persisted summary snapshots/placeholders instead of live mutable leaders or awards', async () => {
@@ -287,7 +329,9 @@ describe('SeasonSummary Pass 5 persisted-summary fidelity', () => {
     expect(screen.queryByText(/Live Mutable/)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Awards/i }));
-    expect(screen.getByText('Awards are not finalized in Mode 2 v1 persisted season summaries.')).toBeInTheDocument();
+    await screen.findByTestId('awards-watchlist');
+    expect(await screen.findByText(/Final awards from the season-end D9 awards store/i)).toBeInTheDocument();
+    expect(screen.getByTestId('award-winner-MVP')).toHaveTextContent('Snapshot Slugger');
     expect(liveStats.getBattingLeaders).not.toHaveBeenCalled();
     expect(liveStats.getPitchingLeaders).not.toHaveBeenCalled();
     expect(liveStats.getFieldingLeaders).not.toHaveBeenCalled();
@@ -304,15 +348,15 @@ describe('SeasonSummary Pass 5 persisted-summary fidelity', () => {
     expect(mocks.mockCreateNewPlayoff).not.toHaveBeenCalled();
   });
 
-  test('renders persisted no-awards season-complete manifest without Mode 3 execution controls', async () => {
+  test('renders persisted awards-aware season-complete manifest without Mode 3 execution controls', async () => {
     render(<SeasonSummary />);
 
     await screen.findByText('SEASON 1 SUMMARY');
     fireEvent.click(screen.getByRole('button', { name: /Season Complete Manifest/i }));
 
-    expect(screen.getByText(/Read-only no-awards handoff package/i)).toBeInTheDocument();
+    expect(screen.getByText(/Read-only awards-aware handoff package/i)).toBeInTheDocument();
     expect(screen.getByText(/Awards and watchlists/i)).toBeInTheDocument();
-    expect(screen.getByText(/Awards\/watchlists are omitted/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 finalized award row\(s\) captured/i)).toBeInTheDocument();
     expect(screen.getByText(/Mode 3\/offseason and season rollover/i)).toBeInTheDocument();
     expect(screen.getByText(/No Mode 3 execution/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Mode 3|Offseason|Season Rollover/i })).not.toBeInTheDocument();
@@ -320,6 +364,8 @@ describe('SeasonSummary Pass 5 persisted-summary fidelity', () => {
 
   test('labels live WAR-derived awards fallback as read-only leader previews, not finalized awards', async () => {
     mocks.mockGetFranchiseSeasonSummary.mockResolvedValue(null);
+    mocks.mockGetFranchiseAwardRowsByScope.mockResolvedValue([]);
+    mocks.mockComputeFranchiseAwardsPreview.mockResolvedValue([]);
     mocks.mockUseSeasonStats.mockReturnValue({
       isLoading: false,
       getBattingLeaders: vi.fn((sortBy: string) => {
@@ -357,7 +403,8 @@ describe('SeasonSummary Pass 5 persisted-summary fidelity', () => {
     await screen.findByText('SEASON 1 SUMMARY');
     fireEvent.click(screen.getByRole('button', { name: /Awards Status/i }));
 
-    expect(screen.getByText(/Internal v1 does not finalize MVP, Cy Young, Gold Glove, or dynamic designation awards here/i)).toBeInTheDocument();
+    expect(screen.getByText(/League awards finalize from the season-end awards store/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Projected awards are pending WAR-like season evidence/i)).toBeInTheDocument();
     expect(screen.getByText('TOP POSITION PLAYER PREVIEW')).toBeInTheDocument();
     expect(screen.getByText('TOP PITCHER PREVIEW')).toBeInTheDocument();
     expect(screen.getByText('FIELDING LEADER PREVIEW')).toBeInTheDocument();

@@ -51,6 +51,10 @@ import {
   getFranchiseAwardRowsByScope,
   type FranchiseAwardRow,
 } from './franchiseAwardsStorage';
+import {
+  getFranchiseDesignationRows,
+} from './franchiseDesignationStorage';
+import type { FranchisePlayerDesignationRecord } from './franchiseDesignations';
 import { getTrackerDb } from './trackerDb';
 import { syncEngine } from './syncEngine';
 
@@ -258,25 +262,8 @@ function buildRosterCounts(players: Player[], franchiseId: string) {
   });
 }
 
-function countActiveDesignations(players: Player[], seasonId: string, statsScopeId: string) {
-  return players.reduce((counts, player) => {
-    const records = (player as Player & {
-      franchiseDesignations?: Array<{
-        type?: string;
-        status?: string;
-        seasonId?: string;
-        statsScopeId?: string;
-      }>;
-    }).franchiseDesignations ?? [];
-    for (const record of records) {
-      if (record.seasonId && record.seasonId !== seasonId) continue;
-      if (record.statsScopeId && record.statsScopeId !== statsScopeId) continue;
-      if (record.status !== 'active') continue;
-      if (record.type === 'TEAM_MVP') counts.teamMvp += 1;
-      if (record.type === 'ACE') counts.ace += 1;
-    }
-    return counts;
-  }, { teamMvp: 0, ace: 0 });
+function countActiveDesignations(rows: FranchisePlayerDesignationRecord[]): number {
+  return rows.filter((row) => row.status === 'active').length;
 }
 
 function isScheduleCompleteForSummary(game: ScheduledGame): boolean {
@@ -326,6 +313,7 @@ function buildAwardsAwareManifest(input: {
   transactionCount: number;
   stadiumReport: FranchiseStadiumFoundationReport;
   awardRows: FranchiseAwardRow[];
+  designationRows: FranchisePlayerDesignationRecord[];
 }): FranchiseSeasonSummaryManifest {
   const warnings: string[] = [];
   const blockers: string[] = [];
@@ -422,16 +410,16 @@ function buildAwardsAwareManifest(input: {
     { count: input.transactionCount },
   ));
 
-  const designationCounts = countActiveDesignations(input.players, input.seasonId, input.statsScopeId);
+  const activeDesignationCount = countActiveDesignations(input.designationRows);
   categories.push(manifestCategory(
     'active-designations',
-    'Active TEAM_MVP / ACE designations',
-    designationCounts.teamMvp + designationCounts.ace > 0 ? 'included' : 'incomplete',
-    `${designationCounts.teamMvp} TEAM_MVP and ${designationCounts.ace} ACE active designation record(s) found for this season.`,
+    'Active team designations',
+    activeDesignationCount > 0 ? 'included' : 'incomplete',
+    `${activeDesignationCount} active canonical designation record(s) found for this season scope.`,
     {
-      count: designationCounts.teamMvp + designationCounts.ace,
-      warnings: designationCounts.teamMvp + designationCounts.ace === 0
-        ? ['No active TEAM_MVP/ACE records are present; this may be valid before designation sync runs.']
+      count: activeDesignationCount,
+      warnings: activeDesignationCount === 0
+        ? ['No active canonical designation records are present; this may be valid before designation sync runs.']
         : [],
     },
   ));
@@ -663,6 +651,7 @@ export async function buildFranchiseSeasonSummary(params: {
     config,
     transactions,
     awardRows,
+    designationRows,
   ] = await Promise.all([
     getAllGamesByFranchise(params.franchiseId, params.seasonNumber),
     getRecentGames(1000, { franchiseId: params.franchiseId, seasonId }),
@@ -678,6 +667,11 @@ export async function buildFranchiseSeasonSummary(params: {
     getFranchiseConfig(params.franchiseId).catch(() => null),
     getTransactionsByFranchiseSeason(params.franchiseId, seasonId).catch(() => []),
     getFranchiseAwardRowsByScope({
+      franchiseId: params.franchiseId,
+      seasonId,
+      statsScopeId: seasonId,
+    }).catch(() => []),
+    getFranchiseDesignationRows({
       franchiseId: params.franchiseId,
       seasonId,
       statsScopeId: seasonId,
@@ -721,6 +715,7 @@ export async function buildFranchiseSeasonSummary(params: {
     transactionCount: transactions.length,
     stadiumReport,
     awardRows,
+    designationRows,
   });
 
   return {
