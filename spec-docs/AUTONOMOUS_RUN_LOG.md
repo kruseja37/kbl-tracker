@@ -615,3 +615,52 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   committed this run). **SESSION ENDED — JK-directed close after D9; a fresh session resumes at D10.** Tracked D9
   follow-ups remain: per-player profile/Almanac award display; the mwarCalculator/calculateMOYVotes retirement
   (pre-flag-flip cleanup — re-point AwardsCeremonyFlow:1620 + RatingsAdjustmentFlow:388 BEFORE any flag flip).
+
+---
+
+## 2026-06-17 (attended → AUTH-4 mid-session) — L6 COMPLETE; AUTH-4 resumed for the L-stack
+
+- **Session began ATTENDED** (JK present), resuming at L6b. Completed the full L6 (Fame) layer, every diff Codex-built →
+  Opus-audited independently (auditor ≠ builder; full-suite re-run, diff read, invariant greps — never the builder paste):
+  - **L6b-1 `3b36d35`** — `franchiseFameRecords` store + 3-place backup parity (trackerDb **v18→v19**, optional:true,
+    `KBL_BACKUP_VERSION` stays 2), dark/EMPTY (no writer; zero non-test callers). *Dispatch #1 BLOCKED correctly* on the
+    `franchiseSeasonLedgerStorage.test.ts` version-pin (a file my contract missed — swept all version/store-list pins,
+    added the one real file, captured the trap to memory). Suite 7,269/2-char-fail.
+  - **L6b-2 `5a7685a`** — Phase-2 fame flag (default OFF) + per-game DARK fame compute + `processCompletedGame` wiring
+    (decay-on-write, reach ratchet, wasNegative latch, re-entry guard; event-driven, **WAR-gravity DEFERRED per JK**;
+    inactive-player no-decay per JK). *One FIX round*: build #1 hand-rolled a raw `kbl-schedule` open (data-integrity
+    class) → Opus caught it in audit → replaced with the canonical `getScheduledGame` (mirrors D9d-1), locked by a
+    no-raw-open source-scan test. Suite **7,273 pass / 2 characterized fail (7,275 total, 409 files)**.
+  - **L6 COMPLETE** = L6a `7359cbf` + L6b-1 `3b36d35` + L6b-2 `5a7685a`, all dark behind `isFranchisePhase2FameEnabled()`.
+- **CHARACTERIZED SET is now 2** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`) — DR-1 cleared the third
+  (`franchiseNarrativeEventEligibility`) earlier this arc. Build baseline: **7,273 / 409**, trackerDb **v19**,
+  `KBL_BACKUP_VERSION` 2.
+- **BROWSER-BATCH added (persistence-prioritized):** (A) real franchise DB migrates v18→v19 cleanly + backup/restore
+  round-trips (L6b-1, empty store); (B) completing a real game with the fame flag OFF writes nothing + the game still
+  archives within PROCESSING_TIMEOUT (L6b-2 live-game-path).
+- **MID-SESSION: JK left → switched to AUTH-4 (fully autonomous overnight).** New non-negotiable protocols adopted from
+  SESSION_RULES.md: **WAITING-ON-JK** (genuine-need-JK items → one exact-format line in `./WAITING_ON_JK.md`, keep
+  working, never idle if other work exists) and **CONTEXT-HANDOFF** (compaction-near → full Session End + write
+  `HANDOFF_NEEDED`). No AskUserQuestion while unattended.
+- **NOW ROLLING: L5 (fan teeth).** Per DSTACK:75 — connect `fanMoraleEngine` + build the teeth; owns the **§8 dampener
+  PRIMITIVE** (L8 consumes) + the **flashpoint-decay accumulator** (new store) + **in-season trade-request generation**
+  (FA-attraction deferred LSD-2, budget pressure cut LSD-4) + a reporter-intensity tooth. Splitting like L6: **L5a** =
+  the pure §8 dampener primitive (started — directional counter-trend brake, personality × Resilience/Ambition,
+  sim-tuned, shape-locked) → **L5b** = flashpoint-decay store (dark, backup DoD) → **L5c** = trade-requests → **L5d** =
+  reporter tooth. Deps L1+L3 done.
+
+- **2026-06-17 (AUTH-4) — COMMITTED: L5a `428f7cb`** (the pure §8 fan-morale ratings dampener). Codex 5.5 built → Opus
+  independently audited: tsc 0 · build 0 · FULL suite **7,280 pass / 2 characterized fail (7,282 total, 410 files)**,
+  ZERO new reds (+7 tests / +1 file from 7,273/409). Engine read in full + grep-verified: pure (no Math.random/Date.now/
+  IO/store/reporter), brake invariant `|dampened| ≤ |delta|` + sign-preserved holds mathematically (dampenStrength
+  clamped to maxDampen 0.9 → factor ∈ [0.1,1]); counter-trend-only (with-trend passes through untouched); direction→
+  modifier routing (down→Resilience, up→Ambition) isolated; personality spread + Droopy up<down asymmetry; all
+  magnitudes in `FAN_DAMPENER_TUNING`; `masterMoraleMatrix.ts`/`fanMoraleEngine.ts` byte-unchanged. No consumer yet (L8
+  consumes it). DEFAULTS-TAKEN (§16-tunable): Loyalty-1.4 = loyalty-modifier amplification; Droopy {down:0.7,up:0.5};
+  baseStrength 0.6 / maxDampen 0.9 / resilience+ambition atZero 0.6.
+
+- **2026-06-17 (AUTH-4) — CONTEXT-HANDOFF at L5b.** Heavy session context (full session-start reads + the 6-reader L6b
+  grounding + three build/audit cycles), clean ticket boundary → ran the full Session End Protocol (CURRENT_STATE live
+  header rewritten, SESSION_LOG + CURRENT_STATE_HISTORY appended, this log) + wrote `HANDOFF_NEEDED`. **Fresh session
+  resumes at L5b under AUTH-4** (the standing go). Run so far this AUTH-4 stint: L6b-1 `3b36d35`, L6b-2 `5a7685a`
+  (→ L6 COMPLETE), L5a `428f7cb`. Nothing pushed.

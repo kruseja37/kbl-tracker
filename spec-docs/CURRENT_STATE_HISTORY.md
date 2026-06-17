@@ -981,3 +981,23 @@ trackerDb v18→v19, KBL_BACKUP_VERSION stays 2 per D9a precedent, C-4 backup Do
 fail (7,267 total, 407 files)** — characterized set shrank to wpaRuntimeBoundary + franchiseManualSmokeFixture (DR-1
 cleared the third). Browser-verify backlog #1–#15 (JK; the D10/DR-3/D11 surfaces added). All on
 `codex/franchise-v1-next`; nothing pushed.
+
+---
+
+## 2026-06-17 (attended → AUTH-4) — L6 (Fame) COMPLETE + L5a; CONTEXT-HANDOFF at L5b
+
+Session resumed ATTENDED at L6b, then JK left and switched to AUTH-4 mid-session. Every diff Codex 5.5-built → Opus
+4.8-audited independently (full-suite re-run, diff read, invariant greps — never the builder paste). Commits:
+**`3b36d35` L6b-1** (`franchiseFameRecords` store + 3-place backup parity, trackerDb **v18→v19**, optional:true,
+KBL_BACKUP_VERSION stays 2, dark/EMPTY — zero non-test callers; dispatch #1 correctly BLOCKED on the
+`franchiseSeasonLedgerStorage.test.ts` version-pin, swept + fixed + captured to the `trackerdb-version-bump-test-pins`
+memory) · **`5a7685a` L6b-2** (Phase-2 fame flag default-OFF + per-game DARK fame compute [decay-on-write, reach
+ratchet, wasNegative latch, re-entry guard; event-driven, WAR-gravity DEFERRED per JK; inactive-player no-decay per JK]
++ processCompletedGame wiring; one FIX round — build #1 hand-rolled a raw kbl-schedule open, Opus caught it, replaced
+with the canonical getScheduledGame, locked by a no-raw-open test) → **L6 COMPLETE** (with L6a `7359cbf`). ·
+**`428f7cb` L5a** (the pure §8 fan-morale ratings DAMPENER — directional counter-trend brake, personality ×
+Resilience/Ambition × Loyalty, sim-tuned/shape-locked; pure, no consumer until L8). Suite arc 7,267/407 → 7,280/410
+(2 characterized fails throughout, zero new reds). trackerDb **v19**, KBL_BACKUP_VERSION 2. Adopted two new
+SESSION_RULES protocols (WAITING-ON-JK, CONTEXT-HANDOFF). Browser-batch added: L6b-1 DB v18→v19 migration + backup
+round-trip; L6b-2 flag-OFF game-completion. ENDED via CONTEXT-HANDOFF (clean boundary, heavy context) → fresh session
+resumes at **L5b** under AUTH-4. All on `codex/franchise-v1-next`; nothing pushed.

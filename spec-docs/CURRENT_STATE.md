@@ -1,21 +1,23 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-17 (SESSION ENDED — JK-directed close after **L6a**; a fresh session resumes at **L6b**.
-This attended session: 9 feature commits on top of the overnight D9-COMPLETE state, every diff Codex-built →
-Opus-audited independently, zero new reds. **D-stack: D1–D11 DONE** (D12 manual smoke + D13 checkpoint are JK gates) —
-`51e487a` D10 (Mode-2 season summary WITH league awards) · DESIG-RECON `b48b450`/`9d1db40`/`bd6b43c`/`6e1df3c`
-(DR-1..4: the 6 team designations all live in v1 — Albatross spec-guards, Fan Favorite promoted no-floor, Captain
-no-min badge, Fan Hopeful visible-safe, Cornerstone cut, spec→§17) · `5eaf9d9` D11 (UI live-label sweep + smart-label
-D4 value panel). **Soul layer (L-stack) GREENLIT + underway, all DARK** (no live morale/fame until after D13): **L3
-COMPLETE** (`5b1431d` L3a pure Master Morale Matrix + `d46a071` L3b store wiring, build-dark behind a Phase-2 flag,
-parity-guard extended to kbl-franchise-morale) · **L6a** (`7359cbf`, the pure §20 Fame engine — Heat/Reach nine-tier,
-trade-reset, WAR-gravity, fame-vs-merit, channel aggregates, firewall-pure). **NEXT = L6b** (the fame STORE + dark
-wiring — NEW parity-guarded `franchiseFameRecords` at trackerDb v18→v19, **KBL_BACKUP_VERSION stays 2 per D9a
-precedent**, C-4 backup DoD + PIN-TRAP update, dark per-game compute, parallel-run vs the untouched live fame, L3
-fame-tap stays dark). **The L6b contract is already written in `PROMPT_CONTRACTS.md`.** Then L6 complete → {L5
-fan-teeth} → {L7 effects, L8 dev, L9b traits, L10 random} → {L11–L14} → the L-SIM gate (then post-D13 activation +
-the roster-tab confirmation-gate UI removal). Full session arc in `CURRENT_STATE_HISTORY.md` (2026-06-17 entry).
-trackerDb **v18** / KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next; nothing pushed.)
+**Last Updated:** 2026-06-17 (SESSION ENDED — **CONTEXT-HANDOFF** at a clean boundary; a fresh session resumes at
+**L5b** under **AUTH-4 autonomous mode** [JK away ~hours — AUTH-4 is the standing "go"; see `HANDOFF_NEEDED` +
+`AUTONOMOUS_RUN_LOG.md`; do the session-start reads, RESTATE, then PROCEED without waiting]. This session began
+ATTENDED (finished L6b) then switched to AUTH-4. Every diff Codex-built → Opus-audited independently (auditor ≠
+builder), zero new reds. **L6 (Fame) COMPLETE** — `7359cbf` L6a (pure §20 Heat/Reach engine) + `3b36d35` L6b-1 (the
+`franchiseFameRecords` store + 3-place backup parity, trackerDb **v18→v19**, dark/EMPTY) + `5a7685a` L6b-2 (Phase-2
+fame flag + per-game DARK compute + processCompletedGame wiring; event-driven, WAR-gravity deferred per JK; one fix
+round — a hand-rolled kbl-schedule open → the canonical getScheduledGame). **L5 STARTED: `428f7cb` L5a** (the pure §8
+fan-morale ratings DAMPENER — a directional counter-trend brake, personality × Resilience/Ambition × Loyalty,
+sim-tuned/shape-locked; L8 will consume it). **NEXT = L5b** (the flashpoint-decay accumulator: a NEW store + dark
+per-game fan-morale tax on locked-Albatross / trade-demanders — inputs are seam-neutral until L7/L10/L13 land; same
+store+parity+flag+wiring pattern as L6b; bumps trackerDb **v19→v20**, KBL_BACKUP_VERSION stays 2; the version-pin trap
+`franchiseSeasonLedgerStorage.test.ts` is a KNOWN must-update on every store add — see the `trackerdb-version-bump-
+test-pins` memory). Then L5c (in-season trade-requests) → L5d (reporter tooth) → {L7,L8,L9b,L10} → {L11–L14} →
+L-SIM gate (then post-D13 activation + the roster-tab confirmation-gate UI removal). **Two NEW non-negotiable
+protocols are in force** (SESSION_RULES §WAITING-ON-JK + §CONTEXT-HANDOFF — read them). Full arc in
+`CURRENT_STATE_HISTORY.md` + `AUTONOMOUS_RUN_LOG.md` (2026-06-17 L6/L5a entries). trackerDb **v19** /
+KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next; nothing pushed.)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.
@@ -274,7 +276,11 @@ trackerDb **v18** / KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next; no
 
 ## SUITE BASELINE
 
-**7,267 tests / 407 files** — full suite re-run 2026-06-17 after L6a: **7,265 pass / 2 fail**, the 2 being EXACTLY
+**7,282 tests / 410 files** — full suite re-run 2026-06-17 after **L5a**: **7,280 pass / 2 characterized fail**
+(`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds. Arc this session: 7,267/407 (post-L6a) →
++4/+1 L6b-1 (7,269/408) → +4/+1 L6b-2 (7,273/409) → +7/+1 L5a (7,280/410). **trackerDb now v19** (L6b-1's
+`franchiseFameRecords`; KBL_BACKUP_VERSION stays 2). *(Prior baseline retained below for the arc trail.)* **7,267
+tests / 407 files** — full suite re-run 2026-06-17 after L6a: **7,265 pass / 2 fail**, the 2 being EXACTLY
 the (now-shrunk) characterized set. (Arc this session: 7,292/406 after D10 → 7,242/405 after DR-1 [deleted the orphan
 `fanFavoriteEngine.test` + cleared the narrative RED, set 3→2] → +D11/L3a/L3b/L6a tests → 7,267/407. Build-dark
 soul-layer tests [matrix, morale-store, fame] all green.) (+34 tests / +5 files over the prior 7,254 / 400 — D6b/D7/D8 added tests to existing files +

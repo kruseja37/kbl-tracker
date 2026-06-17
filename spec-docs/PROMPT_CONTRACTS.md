@@ -8766,3 +8766,422 @@ freely; `applyHeatUpdate` is decay-on-write; `updateReachFloor` ratchets up via 
 present (the explicit L6 deliverables). All magnitudes in the SIM-TUNED `FAME_TUNING` block. **L6a COMPLETE.** NEXT =
 L6b (the fame store + dark wiring — bumps trackerDb v18→v19 + the C-4 backup DoD).
 
+---
+
+## L6b-1 — the Fame STORE + backup parity (`franchiseFameRecords` @ trackerDb v18→v19) — 2026-06-17 (attended)
+
+**ROUTE:** Codex 5.5 | high reasoning effort → Opus 4.8 audit (auditor ≠ builder). Attended. SMB4-asset (fame);
+§20 LOCKED design. RULED in DECISIONS_LOG "L6 (Fame) plan + defaults" (2026-06-17, lines 1219-1245) + the soul-layer
+"build to spec" GREENLIGHT. **JK split ruling (2026-06-17): L6b → L6b-1 (this — store + parity, dark/EMPTY, no
+live-game-path change) then L6b-2 (the Phase-2 fame flag + per-game dark compute + processCompletedGame wiring).**
+Grounding workflow `wf_57cb7d14-758` (6 readers). PERSISTENCE / data-shape ticket — NO live-game-path change (no
+writer wired) → no browser obligation for L6b-1. Mirrors D9a (`53ffd4c`: the dark-store + parity lockstep) and D2
+(`2fab709`: the backup-parity guard). The L6a pure engine (`src/engines/fameModel.ts`, `7359cbf`) is FROZEN — type-
+import only, never edit.
+
+You are the L6b-1 builder (Codex). Build ONLY the fame persistence layer + its backup/sync parity registration. NO
+flag, NO per-game compute, NO `processCompletedGame` edit, NO live writer — the store's CRUD lands with ZERO callers
+outside its own file + test (that is the "dark/empty" proof). The engine wiring is L6b-2.
+
+**GOAL:** Add a parity-guarded `franchiseFameRecords` IndexedDB store (shared `kbl-tracker` DB, v18→v19) holding
+per-player-season fame running state + snapshot channel display fields, registered in all THREE parity sites
+(trackerDb / backupRestore / syncConfig) with the pin-trap + round-trip tests green. The store ships EMPTY (no writer)
+— zero live behavior change.
+
+**SOURCE OF TRUTH:** DECISIONS_LOG.md:1238-1245 (L6b store shape) · the D9a `franchiseAwardsStorage.ts` precedent ·
+this contract for every concrete decision.
+
+### SCOPE — exactly these edits, nothing else
+
+**(1) NEW `src/utils/franchiseFameRecordsStorage.ts`** — a byte-structural copy of `src/utils/franchiseAwardsStorage.ts`
+(the 4-part-key twin), with:
+- `export const FRANCHISE_FAME_RECORDS_STORE_NAME = 'franchiseFameRecords';` and `DB_NAME = 'kbl-tracker'`.
+- A `FranchiseFameRecordsScopeInput` `{ franchiseId; seasonId; statsScopeId }` and the row interface:
+  `export interface FranchiseFameRecordRow { franchiseId: string; seasonId: string; statsScopeId: string;
+  playerId: string; heat: number; reachFloor: number; wasNegative: boolean; channelTotal: number;
+  channelByChannel: Record<FameAttributionChannel, number>; defensiveFame: number; rolePlayerFame: number;
+  updatedAtCheckpoint: string; }`. `heat/reachFloor/wasNegative` ARE the L6a `FameModelRecord` running state; the
+  channel fields are snapshot-at-compute display data (L6b-2 fills them). Import `FameAttributionChannel`
+  type-only from `../engines/fameModel` (alias if any `FameTier` is ever imported — it collides by NAME with
+  `reporter.ts`'s `FameTier`).
+- keyPath `['franchiseId','seasonId','statsScopeId','playerId']`; getTrackerDb()-delegated read/write helpers;
+  `scopeKey`/`rowKey`(4th segment = `playerId`)/`hasExplicitScope` helpers carried verbatim from awards;
+  `getByScope` WITH the in-memory re-filter (awards:163-169); `saveFranchiseFameRecordRows`/`upsert…`/
+  `replaceFranchiseFameRecordRowsForScope`/`getFranchiseFameRecord(scope, playerId)`/`deleteFranchiseFameRecordsForScope`;
+  each writer calls `syncEngine.upsert(DB_NAME, STORE_NAME, rowKey(...), row)` guarded by `!syncEngine.isSuppressed()`;
+  `resetFranchiseFameRecordsForTests`/`clearFranchiseFameRecordsForTests`/`initFranchiseFameRecordsDatabase` delegating
+  to the shared trackerDb helpers. NO `indexedDB.open` / `onupgradeneeded` in this file.
+
+**(2) Three-place schema registration:**
+- `src/utils/trackerDb.ts`: bump `TRACKER_DB_VERSION` **18→19** (line 17); append a v19 block at the END of the
+  `onupgradeneeded` handler (after the v18 `franchiseTrueValueSnapshots` block, ~line 377):
+  `if (!db.objectStoreNames.contains('franchiseFameRecords')) { const s = db.createObjectStore('franchiseFameRecords',
+  { keyPath: ['franchiseId','seasonId','statsScopeId','playerId'] }); s.createIndex('by_scope',
+  ['franchiseId','seasonId','statsScopeId'], { unique: false }); }`. Idempotent name-guard style ONLY — NO
+  `if (oldVersion < N)` branch.
+- `src/utils/backupRestore.ts`: add a `franchiseFameRecords` entry to the `trackerStores` object — keyPath +
+  the single `by_scope` index + **`optional: true`** (mandatory for a newly-added store; byte-identical keyPath/index
+  to trackerDb); AND bump `STATIC_DATABASE_SCHEMAS['kbl-tracker'].version` **18→19** (line 319). **DO NOT touch
+  `KBL_BACKUP_VERSION` — it STAYS 2** (adding a store grows coverage, not the file format; D9a/D2 precedent).
+- `src/utils/syncConfig.ts`: add `franchiseFameRecords: ['franchiseId','seasonId','statsScopeId','playerId']` under
+  `SYNC_REGISTRY['kbl-tracker']` (cloud-sync parity, matching D9a's two dark stores).
+
+**(3) Tests** (prefix `NODE_ENV= `):
+- NEW `src/utils/tests/franchiseFameRecordsStorage.test.ts` mirroring `franchiseAwardsStorage.test.ts`: (a) migration
+  creates the store + the **PIN-TRAP** `expect(Array.from(store.indexNames)).toEqual(['by_scope'])`; (b) round-trip by
+  scope + the exact 4-part composite key with a `syncEngine.upsert` assertion (mock `../syncEngine` identically);
+  (c) `upsert` + `replaceForScope` scope isolation (no cross-scope leak); (d) the source-scan guard:
+  `toMatch(/getTrackerDb/)` AND `.not.toMatch(/indexedDB\.open|onupgradeneeded/)`.
+- EXTEND `src/utils/tests/backupRestore.franchiseParity.test.ts`: in the round-trip test (≈227-288) add a
+  `franchiseFameRecords` seed row to the seeding tx + a `backup.databases[TRACKER_DB_NAME].franchiseFameRecords`
+  payload assertion + a post-restore readRecord assertion. The set-equality PIN-TRAP (≈207-215) needs NO edit once
+  both registries match.
+- EXTEND `src/utils/tests/franchiseSaveSlotManifest.test.ts` (≈1190-1254): add the matching
+  `SYNC_REGISTRY['kbl-tracker']` `toHaveProperty('franchiseFameRecords', [...])` + `STATIC_DATABASE_SCHEMAS`
+  `toMatchObject({ keyPath: [...], optional: true })` assertions.
+- EXTEND `src/utils/tests/franchiseSeasonLedgerStorage.test.ts` — the RECURRING version-pin trap (cf. `8ba0538`,
+  the prior v15→v17 bump that hit this exact file). It is the ONLY test with an exhaustive full-list equality on the
+  kbl-tracker stores AND a hard version literal: line ≈105 `expect(TRACKER_DB_VERSION).toBe(18)` → `.toBe(19)`; add
+  `'franchiseFameRecords'` to the `expectedTrackerStores` array (≈line 28, alphabetical position — after
+  `'franchiseDesignationRows'`, before `'franchiseSeasonLedgerRows'`). (The 3 reporter store-list tests use
+  `arrayContaining` (presence) so they need NO edit; `leagueBuilderStorageV6Migration.test.ts` is a different DB; the
+  `backupRestore.franchiseParity.test.ts` set-equality pin auto-greens once both registries match.)
+
+**ALLOWED files:** NEW `src/utils/franchiseFameRecordsStorage.ts` + NEW `src/utils/tests/franchiseFameRecordsStorage.test.ts`
+· EDIT `src/utils/trackerDb.ts`, `src/utils/backupRestore.ts`, `src/utils/syncConfig.ts` · EDIT
+`src/utils/tests/backupRestore.franchiseParity.test.ts` + `src/utils/tests/franchiseSaveSlotManifest.test.ts` +
+`src/utils/tests/franchiseSeasonLedgerStorage.test.ts`. Type-only import of `../engines/fameModel`. NOTHING else.
+
+**DO NOT:**
+- Touch `src/engines/fameModel.ts` / `fameEngine.ts` (FROZEN). · Add a flag, a per-game compute, or any
+  `processCompletedGame.ts` edit (that is L6b-2). · Wire ANY caller to the new store's writers — the CRUD must land
+  with ZERO callers outside its own file + test (the dark/empty proof).
+- Change `KBL_BACKUP_VERSION` (stays 2). · Add a second index (only `by_scope`). · Add an `if (oldVersion < N)`
+  migration branch. · Add `includedStores` to the kbl-tracker schema. · Use a separate DB (the ruling pins the shared
+  `kbl-tracker` DB; the parity lockstep IS the safety mechanism).
+- Touch the LIVE cumulative-fame paths (byte-unchanged): `seasonAggregator.ts` (`aggregateFameEvents`) ·
+  `salaryCalculator.ts` (`calculateFameModifier`, :98/:805) · `seasonTransitionEngine.ts` (:171/:176) ·
+  `fameEngine.ts` (`getFameTier` L349-374, `applyChampionshipFame` L896-906) · `useFameTracking.ts` ·
+  `GameTracker.tsx` fame UI · `fameIntegration.ts` · `reporter.ts` `FameTier` · `game.ts` `FameLevel` ·
+  `eliminationRunFameStorage.ts` (whole file). · Add any field to `PersistedGameState`.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · `npm run build` exit 0 · FULL suite = only the 2 characterized fails
+(`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`) + the new fame-store tests, ZERO new reds. Run specifically:
+`franchiseFameRecordsStorage.test.ts` · `backupRestore.franchiseParity.test.ts` · `franchiseSaveSlotManifest.test.ts`.
+Greps: `TRACKER_DB_VERSION === 19` AND `STATIC_DATABASE_SCHEMAS['kbl-tracker'].version === 19` AND
+`KBL_BACKUP_VERSION === 2`; the new store file imports `getTrackerDb` and NOT `indexedDB.open`/`onupgradeneeded`; the
+new store's writer functions have ZERO non-test callers (grep the function names across `src/`); `fameModel.ts` +
+`fameEngine.ts` + every do-not-touch live-fame file BYTE-UNCHANGED (`git diff` shows none of them).
+
+**STOP IF:** the keyPath/index can't byte-match across all three registries · the pin-trap or round-trip can't pass
+without touching a live store · adding the store forces a `KBL_BACKUP_VERSION` change to keep restore green · you find
+you need to edit `fameModel.ts` or wire a writer to make a test pass.
+
+**FORMAT:** 1. Files changed (every path + total changed-path count + passing-test count). 2. Each change w/ the
+contract item it satisfies. 3. Verification output pasted (tsc/build/full-suite + the 3 targeted tests + the
+byte-unchanged greps). 4. "L6b-1 complete" OR "BLOCKED: [reason]".
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited by Opus
+(full-suite re-run, store round-trip, the pin-trap + parity-guard green, both version constants at 19,
+`KBL_BACKUP_VERSION` still 2, zero non-test callers, live-fame byte-unchanged).
+
+**Status:** VERIFIED + COMMITTED `3b36d35` (2026-06-17, attended). Dark/EMPTY (store + parity only; no writer, no
+flag, no live behavior). L6b-2 (flag + per-game dark compute + spine wiring, the live-game-path/browser-batch half)
+follows next.
+
+**AUDIT + EXECUTION RECORD (Opus 4.8, auditor ≠ builder):** Dispatch #1 BLOCKED correctly — Codex refused to touch
+`franchiseSeasonLedgerStorage.test.ts` (a non-allowed file that hard-pins `TRACKER_DB_VERSION===18` + the full
+store-list). Captain swept ALL version/store-list pins (the 3 reporter tests use `arrayContaining`=presence/safe;
+`leagueBuilderStorageV6Migration` = different DB; `backupRestore.franchiseParity` set-equality auto-greens once both
+registries match), added the one real file to the allowed list, re-dispatched. Codex #2 built clean → Opus
+independently re-ran: **tsc 0 · build 0 · FULL suite 7,269 pass / 2 fail (7,271 total, 408 files)** = the characterized
+set ONLY (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds; EXACT reconciliation from 7,265/407
+(+4 new store tests, +1 file). **Read every diff + grep-verified:** store file imports `getTrackerDb` only (no
+`indexedDB.open`/`onupgradeneeded`), 4-part key + single `by_scope` index + defensive re-filter, `syncEngine`
+guarded; trackerDb v18→19 idempotent block (no `oldVersion` branch); backupRestore entry `optional:true` keyPath
+byte-matches trackerDb + `STATIC_DATABASE_SCHEMAS` version 18→19 lockstep; **`KBL_BACKUP_VERSION` stays 2**; syncConfig
+entry; ledger pin updated (18→19 + store added). **Dark/EMPTY PROVEN:** the writer fns have ZERO non-test callers.
+Pin-trap `toEqual(['by_scope'])` present; parity round-trip + manifest extended. **Live-fame byte-unchanged:**
+`fameModel`/`fameEngine`/`seasonAggregator`/`salaryCalculator`/`seasonTransitionEngine`/`useFameTracking`/
+`fameIntegration`/`GameTracker`/`reporter`/`game.ts`/`eliminationRunFameStorage`/`processCompletedGame`/
+`franchisePhase2Flags` all absent from the diff. **BROWSER-BATCH (persistence/data-shape, prioritized):** verify a
+real franchise DB migrates v18→v19 cleanly + backup/restore round-trips (no writer yet, so the store is empty — this
+is a schema-migration + backup-parity check, not a feature check). Lesson captured to memory (the
+`franchiseSeasonLedgerStorage.test.ts` version-pin trap, cf. `8ba0538`).
+
+---
+
+## L6b-2 — the Phase-2 fame flag + per-game DARK fame compute + post-game wiring — 2026-06-17 (attended)
+
+**ROUTE:** Codex 5.5 | high reasoning effort → Opus 4.8 audit (auditor ≠ builder). Attended. SMB4-asset (fame);
+§20 LOCKED design. Depends on **L6b-1 `3b36d35`** (the `franchiseFameRecords` store). RULED in DECISIONS_LOG "L6
+(Fame) plan + defaults" (2026-06-17, lines 1238-1245) + the soul-layer GREENLIGHT + **JK split ruling** (L6b-2 = the
+compute half) + **JK ruling (2026-06-17): DEFER the WAR-legitimacy gravity** — fame stays EVENT-DRIVEN in v1; the
+`applyWarLegitimacyGravity` function exists (L6a) and wires at the activation/sim-gate wave. Grounding workflow
+`wf_57cb7d14-758` (reader #4 phase-2 flag · reader #5 post-game spine · reader #1 engine surface). Mirrors L3b (a
+flag-gated DARK writer, defense-in-depth) + D9d-1 (the `if (trueValueScope)` post-game capture, idempotent +
+try/catch + regular-season-only). **LIVE-GAME-PATH ticket → BROWSER-BATCH** (the awaited compute extends the
+game-end critical path). The L6a engine (`src/engines/fameModel.ts`) + the L6b-1 store
+(`src/utils/franchiseFameRecordsStorage.ts`) are FROZEN as APIs — call them, do not edit.
+
+You are the L6b-2 builder (Codex). Wire a per-game fame compute that reads each active player's stored fame
+running-state, evolves it from THIS game's fame activity (decay-on-write), and persists it — but ONLY when a new
+Phase-2 fame flag is ON (default OFF, defense-in-depth at the writer AND the call site). With the flag at its false
+default, NOTHING writes and game-end behavior is byte-unchanged.
+
+**GOAL:** Build the DARK per-game fame compute + its Phase-2 flag + the `processCompletedGame` wiring such that:
+flag OFF (default) → zero fame writes, game-end unchanged; flag ON → each active player's `franchiseFameRecords` row
+is decay-on-write updated from the game's WPA-spine + iconic fame events. No WAR gravity. No live consumer (display/
+salary/morale stay on the legacy path). Firewall: no reporter/LLM import.
+
+**SOURCE OF TRUTH:** DECISIONS_LOG.md:1238-1245 + the JK WAR-nudge-defer ruling · §20.1/§20.3 · this contract.
+
+### SCOPE — exactly these edits
+
+**(1) The Phase-2 fame flag — EXTEND `src/utils/franchisePhase2Flags.ts`** (same file; mirror the morale block
+VERBATIM): `export const FRANCHISE_PHASE2_FAME_ENABLED_DEFAULT = false;` · module-private
+`let franchisePhase2FameEnabledOverride: boolean | null = null;` ·
+`export function isFranchisePhase2FameEnabled(): boolean { return franchisePhase2FameEnabledOverride ??
+FRANCHISE_PHASE2_FAME_ENABLED_DEFAULT; }` · `export function setFranchisePhase2FameEnabledForTests(enabled:
+boolean | null): void { franchisePhase2FameEnabledOverride = enabled; }`. DEFAULT MUST be `false`.
+
+**(2) The DARK per-game compute — NEW `src/utils/franchiseFameCompute.ts`:**
+- `export async function persistDarkFameRecordsForCompletedGame(gameState: PersistedGameState, fameScope:
+  PersistedTrueValueResult, archiveOptions?: CompletedGameArchiveOptions): Promise<{ status: 'dark-noop' | 'written';
+  written: number; reason?: string }>`.
+- GATE 1 (writer): FIRST line — `if (!isFranchisePhase2FameEnabled()) return { status: 'dark-noop', written: 0,
+  reason: 'Phase-2 fame disabled; per-game fame compute not written.' };` BEFORE any read/write.
+- Scope: read `franchiseId`/`seasonId`/`statsScopeId` from `fameScope` (the `PersistedTrueValueResult`, in hand at the
+  call site — do NOT re-derive). Checkpoint: MIRROR `resolveTrueValueSnapshotCheckpoint` (processCompletedGame.ts:280)
+  EXACTLY — `import { getGame as getScheduledGame } from './scheduleStorage'` (the SAME import D9d-1's helper uses),
+  resolve `scheduleGameId = archiveOptions?.context?.scheduleGameId ?? gameState.scheduleGameId`, then
+  `getScheduledGame(scheduleGameId)` in a non-fatal try/catch; return `String(scheduledGame.gameNumber)` when
+  `Number.isInteger(gameNumber) && gameNumber > 0`, else `gameState.gameId`. **DO NOT open any IndexedDB directly — NO
+  `indexedDB.open`/`onupgradeneeded` anywhere in this module** (hand-rolling the `kbl-schedule` schema is a
+  version-conflict / data-integrity landmine; the canonical `getGame` delegates to the shared schedule initializer).
+- Player set = the UNION of `gameState.playerWpaTotals?.[].playerId` and `gameState.fameEvents?.[].playerId` (players
+  with fame activity THIS game). Players with no activity are NOT written this game (decay-on-write — inactive-player
+  decay is a deferred sim-gate refinement; document it).
+- Per player: read the stored row via `getFranchiseFameRecord(fameScope, playerId)`; default to a neutral
+  `{ heat: 0, reachFloor: 0, wasNegative: false }` when absent. Build channel-tagged fame inputs
+  (`ChannelTaggedFameInput[]`): (a) the player's `playerWpaTotals.totalWpa` → `wpa_spine` channel, scaled by a NAMED
+  SIM-TUNE `FAME_INPUT_TUNING.wpaToHeatScale` constant LOCAL to this module (NO magic literal; mark §20.9-tunable);
+  (b) the player's `fameEvents` → `iconic_event` channel using each event's already-computed `fameValue` (map a
+  clearly-defensive fame eventType to the `defensive` channel + a clearly-bench/role one to `role_player` where the
+  mapping is unambiguous, else `iconic_event`). Then:
+  `gameHeatInput = aggregateChannelFame(inputs).total` →
+  `heat' = applyHeatUpdate(stored.heat, gameHeatInput)` →
+  `reachFloor' = updateReachFloor(stored.reachFloor, heat')` →
+  `wasNegative' = stored.wasNegative || heat' < FAME_TUNING.heat.neutral` (the engine's non-trade path does NOT
+  maintain wasNegative — L6b-2 MUST OR-in the negative check itself). **NO `applyWarLegitimacyGravity`** (JK-deferred).
+  Persist via `saveFranchiseFameRecordRows` (or upsert) a `FranchiseFameRecordRow`: the running state +
+  `channelTotal`/`channelByChannel` from the breakdown + `defensiveFame = aggregateDefensiveFame(inputs)` +
+  `rolePlayerFame = aggregateRolePlayerFame(inputs)` + `updatedAtCheckpoint = checkpoint`.
+- `status: 'written'`, `written: <row count>`. Idempotent: re-running the same game (same checkpoint) recomputes the
+  same row from the same stored input… NOTE: decay-on-write is NOT idempotent across re-runs (a second run would
+  decay again). Guard re-entry: skip if the stored row's `updatedAtCheckpoint === checkpoint` for that player (do NOT
+  double-apply decay for an already-processed checkpoint). State this guard explicitly.
+- Firewall: import only `fameModel` (engine) + `franchiseFameRecordsStorage` (L6b-1) + the flag + `getGame as
+  getScheduledGame` from `./scheduleStorage` (checkpoint only) + types. NO reporter/LLM/narrative import; NO raw
+  `indexedDB.open`.
+
+**(3) Wire (GATE 2 — call site) into `src/utils/processCompletedGame.ts`:** INSIDE the existing `if (trueValueScope) {`
+block, immediately AFTER the D9d-1 `persistTrueValueSnapshotsForCompletedGame` try/catch and BEFORE
+`persistProjectedDesignationsAfterTrueValue`:
+`if (isFranchisePhase2FameEnabled()) { try { await persistDarkFameRecordsForCompletedGame(gameState, trueValueScope,
+archiveOptions); } catch (e) { console.warn('[Fame] dark fame compute skipped for completed game ' +
+gameState.gameId + ':', e); } }`. Regular-season-only is ALREADY satisfied by the enclosing
+`shouldAggregateToRegularSeasonStats` block. NEVER throw into the pipeline (swallow + warn, like D9d-1).
+
+**(4) Tests** (prefix `NODE_ENV= `): NEW `src/utils/tests/franchiseFameCompute.test.ts`:
+- **DEFAULT-OFF PROOF (load-bearing, mirror `franchiseMoraleState.test.ts:95-116`):**
+  `setFranchisePhase2FameEnabledForTests(false)` → run `persistDarkFameRecordsForCompletedGame` with a populated
+  gameState → assert `result.status === 'dark-noop'` AND `getFranchiseFameRecord(scope, playerId)` **resolves to
+  null** for every would-be target (the no-write proof — status alone is insufficient). `afterEach`
+  `setFranchisePhase2FameEnabledForTests(null)`.
+- **FLAG-ON path:** `set(true)` → two-game sequence proves: rows are written; `heat` decays-on-write + accrues the
+  game input; `reachFloor` monotonic (never erodes across games); `wasNegative` latches true once `heat'` goes
+  negative; the checkpoint re-entry guard prevents a double-decay when the same game is processed twice.
+- **Firewall grep test:** the compute module source `.not.toMatch` reporter/LLM/narrative imports.
+- **No-raw-DB-open grep test:** the compute module source `.not.toMatch(/indexedDB\.open|onupgradeneeded/)` (locks the
+  checkpoint to the canonical `getScheduledGame`, no duplicated schedule schema).
+
+**ALLOWED files:** NEW `src/utils/franchiseFameCompute.ts` + NEW `src/utils/tests/franchiseFameCompute.test.ts` ·
+EDIT `src/utils/franchisePhase2Flags.ts`, `src/utils/processCompletedGame.ts`. Type/function imports of
+`../engines/fameModel` + `./franchiseFameRecordsStorage` + `getGame as getScheduledGame` from `./scheduleStorage`.
+NOTHING else.
+
+**DO NOT:**
+- Edit `src/engines/fameModel.ts` / `fameEngine.ts` / `src/utils/franchiseFameRecordsStorage.ts` (FROZEN — call only).
+- Apply `applyWarLegitimacyGravity` (JK-deferred — fame stays event-driven). · Flip the flag default to `true`. ·
+  Gate the PURE engine fns (only PERSISTENCE is gated). · Add a field to `PersistedGameState` (read existing
+  `fameEvents`/`playerWpaTotals` only — both gameStorage copies trap). · Recompute WPA (it is already on
+  `gameState.playerWpaTotals`).
+- Touch the LIVE cumulative-fame paths (byte-unchanged): `seasonAggregator.ts` (`aggregateFameEvents`) ·
+  `salaryCalculator.ts` (`calculateFameModifier`) · `seasonTransitionEngine.ts` · `useFameTracking.ts` ·
+  `GameTracker.tsx` · `fameIntegration.ts` · `fameEngine.ts` `getFameTier`/`applyChampionshipFame` · `reporter.ts` ·
+  `eliminationRunFameStorage.ts`. · Feed fame into any salary/morale/reporter/UI consumer (deferred post-D13). · Fill
+  the L3 `fame` morale tap. · Import any reporter/LLM/narrative module into the spine or the compute.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · FULL suite = only the 2 characterized fails + the new
+compute tests, ZERO new reds. Greps: `FRANCHISE_PHASE2_FAME_ENABLED_DEFAULT = false`; the compute module imports no
+reporter/LLM/narrative; no `applyWarLegitimacyGravity` call anywhere in the new code; `fameModel.ts`/`fameEngine.ts`/
+`franchiseFameRecordsStorage.ts` + every do-not-touch live-fame file BYTE-UNCHANGED (`git diff`); the
+`processCompletedGame` edit is the ONLY non-test/flag/compute change and is wrapped in `isFranchisePhase2FameEnabled()`
++ try/catch.
+
+**STOP IF:** the heat input can't be built from existing `gameState` fields without recomputing WPA · the default-OFF
+null-readback can't pass (a write is leaking past the gate) · `statsScopeId`/`seasonId` are NOT equal on
+`trueValueScope` (the store assumes equality) · you need to edit `fameModel.ts` or `franchiseFameRecordsStorage.ts` to
+make a test pass · the checkpoint re-entry guard can't prevent double-decay.
+
+**FORMAT:** 1. Files changed (every path + total count + passing-test count). 2. Each change w/ the contract item it
+satisfies. 3. Verification output pasted (tsc/build/full-suite + the new tests + the byte-unchanged greps + the
+default-OFF null-readback proof). 4. "L6b-2 complete" OR "BLOCKED: [reason]".
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited by Opus
+(full-suite re-run, the default-OFF null-readback proof, decay/ratchet/wasNegative-latch across two games, live-fame +
+engine + store byte-unchanged, the wiring gated + swallowing).
+
+**Status:** VERIFIED + COMMITTED `5a7685a` (2026-06-17, attended). Dark (flag OFF by default; no live behavior).
+JK ruled the one open fork: inactive-player heat does NOT decay (only active-player rows written per game — sim-gate
+refinement). Status-nudge + WAR-gravity channels deferred (event-driven v1: wpa_spine + iconic); `wpaToHeatScale` is a
+named SIM-TUNE placeholder (=10). **L6 (Fame) COMPLETE** (L6a `7359cbf` + L6b-1 `3b36d35` + L6b-2 `5a7685a`).
+
+**AUDIT + EXECUTION RECORD (Opus 4.8, auditor ≠ builder):** Codex built → Opus independently audited; one FIX round.
+**Build #1 correct EXCEPT one data-integrity defect:** the checkpoint resolver hand-rolled a raw
+`indexedDB.open('kbl-schedule', 2)` + duplicated `onupgradeneeded` schema (version-conflict / schema-drift class —
+the prior SIM-hang root cause) instead of the canonical `getGame` from `scheduleStorage` that D9d-1 uses. Latent (dark
++ untested path: fixtures carry no `scheduleGameId`), but never committed as-is. Root cause = the contract's import
+allow-list omitted `scheduleStorage`; contract corrected + a surgical fix re-dispatched. **Fix verified:**
+`resolveFameCheckpoint` now mirrors `resolveTrueValueSnapshotCheckpoint` exactly (`getScheduledGame`,
+`String(gameNumber)` when valid else `gameState.gameId`); zero `indexedDB.open`/`onupgradeneeded` in the module
+(locked by a new source-scan test); `scheduleStorage.ts` byte-unchanged. **The rest passed first audit:** flag mirrors
+the morale block (default false); per-game recipe correct — `applyHeatUpdate` decay-on-write, `updateReachFloor`
+ratchet, `wasNegative = stored || heat'<neutral` (engine-gap closed), re-entry guard skips an already-processed
+checkpoint; channel mapping (defensive/role_player/iconic) + named `wpaToHeatScale`; NO `applyWarLegitimacyGravity`;
+firewall (no reporter/LLM). Call site gated by `isFranchisePhase2FameEnabled()` + try/catch, after the D9d-1 snapshot
+capture, before designations, regular-season-only by the enclosing block. **Tests:** default-OFF null-readback proof
+(status dark-noop AND every would-be row reads null), flag-ON two-game decay/ratchet/latch/re-entry (math
+hand-verified: heat 0→10→−3.5, reachFloor ratchets, `wasNegative` latches, re-run writes 0), firewall +
+no-raw-open scans. **Independent re-run:** tsc 0 · build 0 · FULL suite **7,273 pass / 2 characterized fail (7,275
+total, 409 files)**, ZERO new reds (exact reconciliation +4 tests / +1 file from 7,269/408). `fameModel`/`fameEngine`/
+`franchiseFameRecordsStorage` + the live-fame paths byte-unchanged. **BROWSER-BATCH (live-game-path):** complete a real
+franchise game — confirm flag-OFF (production default) writes NOTHING + the game still archives within the
+PROCESSING_TIMEOUT; (post-D13, flag-ON) fame snapshots persist per game.
+
+---
+
+## L5a — the §8 Fan-Morale Ratings DAMPENER primitive (pure engine) — 2026-06-17 (AUTH-4 autonomous)
+
+**ROUTE:** Codex 5.5 | high reasoning effort → Opus 4.8 audit (auditor ≠ builder). **AUTH-4 unattended overnight** —
+spec-bounded build, documented conservative defaults where the spec is silent, no stop for JK. SMB4-asset (fan
+morale / personality); §8 + §6 design LOCKED ("shape locked, values sim-tuned"). DSTACK:75 (L5 owns the §8 dampener
+PRIMITIVE; L8 consumes it). Spec §8 (FRANCHISE_V1_LIVING_SEASON_SPEC.md:126-147) + §6 modifiers (:106-116) + §13 tooth
+#1 (:225). Mirrors L3a (`masterMoraleMatrix.ts`) / L6a (`fameModel.ts`): a PURE, deterministic, sim-tuned engine with
+NO IO, NO store, NO flag — its consumer (L8 ratings checkpoint) is built later; until then it has no live caller.
+
+You are the L5a builder (Codex). Build ONLY the pure §8 dampener engine + its unit tests. No store, no wiring, no flag,
+no consumer. The existing `fanMoraleEngine.ts` + `masterMoraleMatrix.ts` are reuse sources (type imports) — do NOT edit
+them.
+
+**GOAL:** A NEW pure `src/engines/fanMoraleDampener.ts` exporting `applyFanMoraleDampener(...)` — a DIRECTIONAL BRAKE
+that softens ONLY counter-trend ratings swings (never amplifies, never flips sign), with strength = directional fan
+morale × personality multiplier × (Resilience for down-moves / Ambition for up-moves) × Loyalty amplification. All
+magnitudes in a single SIM-TUNE `FAN_DAMPENER_TUNING` config; the SHAPE is locked, the VALUES are §16-sim-gate-owned
+placeholders.
+
+**SOURCE OF TRUTH:** §8 (:126-147) — esp. the formula (:134) + the personality matrix (:138-145) + the brake/
+counter-trend rules (:130-132); §6 (:110-116) — Loyalty amplifies, Ambition=up-moves, Resilience=down-moves; LS-11.
+
+### SCOPE — exactly these edits
+
+**(1) NEW `src/engines/fanMoraleDampener.ts`** (pure, deterministic — no `Date.now`/`Math.random`/IO/store/React):
+- Import `CanonicalPersonality` (TYPE) from `./masterMoraleMatrix` and `HiddenModifiers` (TYPE) from `../types/game`
+  (the 0-100 loyalty/ambition/resilience/charisma). Reuse — do NOT redefine the personality union; do NOT use the
+  salaryCalculator TitleCase `Personality` (the soul layer is UPPERCASE `CanonicalPersonality`).
+- `export interface FanDampenerTuning { baseStrength: number; neutralMorale: number; maxDampen: number;
+  personalityMultiplier: Record<CanonicalPersonality, { down: number; up: number }>; loyaltyAmplification: { atZero:
+  number; atFull: number }; resilienceWeight: { atZero: number; atFull: number }; ambitionWeight: { atZero: number;
+  atFull: number }; }` (or equivalent — the point is EVERY magnitude is a named field, not a scattered literal).
+- `export const FAN_DAMPENER_TUNING` with the §8 STARTING values (comment each as §16 SIM-TUNE):
+  `neutralMorale: 50` (fan morale is 0-99, CONTENT band 55-74); personality multipliers from §8 (symmetric except
+  Droopy's asymmetry): COMPETITIVE {down:1.0,up:1.0}, TOUGH {1.0,1.0}, RELAXED {1.15,1.15}, JOLLY {1.15,1.15}, TIMID
+  {0.85,0.85}, EGOTISTICAL {0.5,0.5}, **DROOPY {down:0.7, up:0.5}** (§8:145 "reduced AND asymmetric — quick to feel
+  the negative, slow to feel team-driven lift" → less up-shielding); `loyaltyAmplification {atZero:1.0, atFull:1.4}`
+  (§8 "High Loyalty ~1.4x" modeled as the LOYALTY-MODIFIER amplification, since Loyalty is a hidden modifier not a
+  personality type — DEFAULT-TAKEN, documented); `resilienceWeight`/`ambitionWeight {atZero:~0.6, atFull:~1.0}`
+  (a low-resilience player cracks → less down-shielding; low-ambition plateaus → less up-shielding); `baseStrength`
+  + `maxDampen` placeholders (e.g. baseStrength 0.6, maxDampen 0.9 — a hard ceiling so the brake never zeroes a swing).
+- `export interface FanDampenerResult { dampenedDelta: number; applied: boolean; dampenStrength: number; direction:
+  'with-trend' | 'counter-trend-up' | 'counter-trend-down'; reason: string; }`.
+- `export function applyFanMoraleDampener(ratingDelta: number, teamFanMorale: number, personality:
+  CanonicalPersonality, modifiers: Pick<HiddenModifiers,'loyalty'|'ambition'|'resilience'>, config: FanDampenerTuning =
+  FAN_DAMPENER_TUNING): FanDampenerResult`:
+  1. `teamTrend = teamFanMorale >= config.neutralMorale ? 'positive' : 'negative'` (fan morale proxies how the team is
+     playing). `moraleDistance = |teamFanMorale − neutralMorale| / neutralMorale` (0..~1, directional magnitude).
+  2. COUNTER-TREND test (the brake only ever softens the move running AGAINST the team trend): high morale (positive
+     trend) + `ratingDelta < 0` → counter-trend-down (soften a drop, use RESILIENCE); low morale (negative trend) +
+     `ratingDelta > 0` → counter-trend-up (soften a gain, use AMBITION). WITH-TREND (or `ratingDelta === 0`) → return
+     `{ dampenedDelta: ratingDelta, applied: false, dampenStrength: 0, direction: 'with-trend', ... }` UNCHANGED.
+  3. Counter-trend: `dampenStrength = clamp( baseStrength × moraleDistance × personalityMultiplier[personality][down|up]
+     × modifierWeight(down→resilience, up→ambition) × loyaltyAmp(loyalty), 0, maxDampen )` where the weight/amp helpers
+     lerp atZero→atFull over the 0-100 modifier. `dampenedDelta = ratingDelta × (1 − dampenStrength)` — SAME SIGN,
+     SMALLER magnitude (a brake). Return `applied: true` + the strength + direction + a human reason.
+- Pure helpers (`lerp01`, the counter-trend classifier) as needed; clamp everything.
+
+**(2) NEW `src/engines/__tests__/fanMoraleDampener.test.ts`** (deterministic):
+- WITH-TREND pass-through: high morale + positive delta → unchanged (applied:false); low morale + negative delta →
+  unchanged; `ratingDelta === 0` → unchanged.
+- COUNTER-TREND brake: high morale + negative delta → magnitude REDUCED, SAME sign, never below `(1−maxDampen)×delta`;
+  low morale + positive delta → reduced. NEVER flips sign, NEVER increases magnitude (assert `|dampened| <= |delta|`).
+- Direction routing: a down-move uses Resilience (vary resilience → changes the down-dampen), an up-move uses Ambition
+  (vary ambition → changes the up-dampen); Resilience does NOT affect an up-move and vice-versa.
+- Personality spread: a high-Loyalty COMPETITIVE on a hot team is shielded MORE from a counter-trend drop than an
+  EGOTISTICAL with the same morale/modifiers; Droopy's up-shield < its down-shield (asymmetry).
+- Loyalty amplification: higher loyalty → stronger dampen (more shielding).
+- Determinism: same inputs → same output; no `Math.random`/`Date.now`.
+
+**ALLOWED files:** NEW `src/engines/fanMoraleDampener.ts` + NEW `src/engines/__tests__/fanMoraleDampener.test.ts`.
+TYPE-only imports of `./masterMoraleMatrix` (`CanonicalPersonality`) + `../types/game` (`HiddenModifiers`). NOTHING
+else.
+
+**DO NOT:** edit `masterMoraleMatrix.ts` / `fanMoraleEngine.ts` / `fameModel.ts` / any store / any flag / any UI ·
+wire a consumer (L8 consumes this later) · touch persistence/IndexedDB · import a reporter/LLM · use the
+salaryCalculator `Personality` (TitleCase) · scatter magic numbers (every magnitude → a named `FAN_DAMPENER_TUNING`
+field) · make the brake able to flip a sign or amplify a swing.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · FULL suite = only the 2 characterized fails
+(`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`) + the new dampener tests, ZERO new reds. Greps: the new engine
+imports no store/persistence/React/reporter/LLM; no `Math.random`/`Date.now`; `masterMoraleMatrix.ts`/
+`fanMoraleEngine.ts` BYTE-UNCHANGED (`git diff` empty).
+
+**STOP IF:** the brake can't stay a pure sign-preserving magnitude-reducer · the counter-trend rule forces reading a
+team win/loss source not derivable from `teamFanMorale` · honoring the §8 shape needs editing a frozen engine.
+
+**FORMAT:** 1. Files changed (paths + count + passing-test count). 2. Each change w/ the §8/§6 line it satisfies.
+3. Verification output (tsc/build/full-suite + the new tests + the byte-unchanged greps). 4. "L5a complete" OR
+"BLOCKED: [reason]".
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited by Opus
+(full-suite re-run, the brake invariants `|dampened|<=|delta|` + sign-preserved + with-trend-untouched, direction→
+modifier routing, byte-unchanged frozen engines).
+
+**Status:** VERIFIED + COMMITTED `428f7cb` (2026-06-17, AUTH-4). Pure engine; no consumer until L8. DEFAULTS-TAKEN
+(§16-tunable): Loyalty-1.4 = loyalty-modifier amplification (not a personality row); Droopy {down:0.7,up:0.5};
+baseStrength 0.6 / maxDampen 0.9 / resilience+ambition atZero 0.6. L5b (flashpoint-decay store) + L5c (trade-requests)
++ L5d (reporter tooth) follow.
+
+**AUDIT + EXECUTION RECORD (Opus 4.8, auditor ≠ builder):** Codex built → Opus independently re-ran: tsc 0 · build 0 ·
+FULL suite **7,280 pass / 2 characterized fail (7,282 total, 410 files)** = characterized set only, ZERO new reds
+(exact reconciliation +7 tests / +1 file from 7,273/409). **Read the engine + test in full:** PURE (imports only the
+TYPE `CanonicalPersonality` + `HiddenModifiers`; no store/IO/React/reporter/LLM; no `Math.random`/`Date.now`). §8
+correct — `classifyCounterTrend` only dampens a counter-trend move (high morale + drop → resilience-routed; low morale
++ gain → ambition-routed; with-trend or zero-delta passes through `applied:false`); `dampenStrength` clamped to
+`maxDampen` so `dampenedDelta = delta × (1−strength)` is a **sign-preserving magnitude reducer** (the `maxDampen` clamp
+is load-bearing — high-loyalty RELAXED would otherwise exceed 0.9). Direction→modifier routing isolated (ambition
+doesn't touch down-moves, resilience doesn't touch up-moves — test-proven). Personality spread (COMPETITIVE > EGO),
+Droopy up<down asymmetry, loyalty amplification, determinism — all test-proven with real assertions
+(`expectBrakeInvariant` checks `|dampened| ≤ |delta|` + `Math.sign`). `masterMoraleMatrix.ts`/`fanMoraleEngine.ts`
+BYTE-UNCHANGED. No browser obligation (pure, no live surface).
+

@@ -4918,3 +4918,52 @@ claims test-proven), zero new reds across the whole session. All on `codex/franc
   checkpoint). Browser-verify backlog #1–#15 (the D10 awards / DR-3 designation strip / D11 labels surfaces added).
 - **Safety-wall set-asides (unchanged):** L-ECON1 (frozen draft-IV oracle, OD-2 ruled the design but the build stays
   watched) + F-144. L9a (live-game-path zone-input capture, OD-5 ruled) is a watched-session build.
+
+---
+## Session: 2026-06-17 (Tu) — ATTENDED→AUTH-4: L6 (Fame) COMPLETE + L5a; CONTEXT-HANDOFF at L5b
+
+### Context
+Resumed ATTENDED at L6b (Opus 4.8 Captain). JK confirmed L6b + attended; mid-session JK left and switched to AUTH-4
+autonomous. Every diff Codex 5.5-built → Opus 4.8-audited independently (auditor ≠ builder: full-suite re-run, diff
+read, invariant greps, key claims test-proven). On `codex/franchise-v1-next`; nothing pushed.
+
+### What was accomplished
+- **L6 (Fame) COMPLETE** (split build, mirrors L3a/L6a → L6b store → wiring):
+  - `3b36d35` **L6b-1** — `franchiseFameRecords` IndexedDB store (shared kbl-tracker DB, **trackerDb v18→v19**) +
+    3-place backup parity (trackerDb / backupRestore optional:true / syncConfig) + pin-trap & round-trip tests;
+    dark/EMPTY (no writer; zero non-test callers). KBL_BACKUP_VERSION stays 2. *Codex dispatch #1 correctly BLOCKED*
+    on `franchiseSeasonLedgerStorage.test.ts` (a version-pin file my contract missed — the recurring trap from
+    `8ba0538`); I swept all version/store-list pins, added the one real file, captured it to memory, re-dispatched.
+  - `5a7685a` **L6b-2** — Phase-2 fame flag (`isFranchisePhase2FameEnabled`, default OFF) + per-game DARK fame compute
+    (`franchiseFameCompute.ts`: decay-on-write heat, reach ratchet, wasNegative latch, re-entry guard; channel-tagged
+    wpa_spine + iconic inputs; **WAR-gravity deferred** + **inactive-player no-decay**, both JK-ruled) + the gated/
+    swallowing `processCompletedGame` wiring. *One FIX round*: build #1 hand-rolled a raw `kbl-schedule`
+    `indexedDB.open` (data-integrity class) → I caught it in audit → replaced with the canonical `getScheduledGame`
+    (mirrors D9d-1), locked by a no-raw-open source-scan test.
+- **L5 STARTED:** `428f7cb` **L5a** — the pure **§8 fan-morale ratings DAMPENER** (`fanMoraleDampener.ts`): a
+  directional counter-trend BRAKE (high morale softens drops via Resilience, low morale softens gains via Ambition),
+  strength = directional morale × personality multiplier × modifier weight × Loyalty amplification, clamped to
+  maxDampen — sign-preserving magnitude reducer (never flips/amplifies). All magnitudes in `FAN_DAMPENER_TUNING`
+  (§16 sim-tune, shape-locked). Pure; L8 consumes it later. 7 tests.
+
+### Decisions / defaults
+- JK ruled (attended): split L6b into L6b-1/L6b-2; **defer the WAR-legitimacy gravity** (fame event-driven in v1);
+  inactive-player heat does NOT decay (active-player rows only). KBL_BACKUP_VERSION stays 2 (D9a precedent; the
+  DECISIONS_LOG "bump" line was stale). AUTH-4 defaults-taken for L5a documented in PROMPT_CONTRACTS.md (Loyalty-1.4 =
+  modifier amplification; Droopy up<down; placeholder strengths).
+- Adopted two NEW non-negotiable SESSION_RULES protocols (JK added mid-session): **WAITING-ON-JK** + **CONTEXT-HANDOFF**.
+
+### NFL / verification
+- Independent re-runs throughout: tsc 0 / build 0 / full suite. Arc: 7,267/407 (post-L6a) → 7,269/408 (L6b-1) →
+  7,273/409 (L6b-2) → **7,280/410 (L5a)**. The 2 fails are the characterized set (`wpaRuntimeBoundary` +
+  `franchiseManualSmokeFixture`); ZERO new reds. trackerDb **v19**, KBL_BACKUP_VERSION 2.
+
+### Pending / next session (AUTH-4)
+- **NEXT = L5b** (flashpoint-decay accumulator: NEW store + dark per-game fan-morale tax on locked-Albatross /
+  trade-demanders; inputs seam-neutral until L7/L10/L13; same store+parity+flag+wiring pattern as L6b; bumps trackerDb
+  **v19→v20**, KBL_BACKUP_VERSION stays 2; the `franchiseSeasonLedgerStorage.test.ts` version-pin is a KNOWN
+  must-update — see the `trackerdb-version-bump-test-pins` memory). Then L5c (trade-requests) → L5d (reporter tooth) →
+  {L7,L8,L9b,L10} → {L11–L14} → L-SIM gate.
+- **Browser-batch added** (persistence-prioritized): L6b-1 DB v18→v19 migration + backup round-trip; L6b-2 flag-OFF
+  game completion writes nothing + game still archives.
+- Set-asides unchanged (L-ECON1, F-144, L9a watched build). `HANDOFF_NEEDED` written at repo root.
