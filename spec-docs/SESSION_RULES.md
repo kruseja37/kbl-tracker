@@ -383,7 +383,10 @@ agent edits the ratified rules without JK. (JK ruling 2026-06-14.)
   oracle touch · data-corruption/migration/saved-shape risk · a regression 2 fix-iterations can't
   clear · a runaway loop), after which the loop moves to the next independent ticket. (When JK is
   PRESENT/attended, the normal SMB4-asset gate + surface-the-fork rules apply; AUTH-4 is the
-  unattended exception JK switches on.)
+  unattended exception JK switches on.) **Start-of-session waiver:** under AUTH-4 the session-start
+  "John confirms or corrects before any work starts" gate is PRE-SATISFIED (AUTH-4 is the standing
+  go) — a fresh overnight thread does the required reads, RESTATES the state, then PROCEEDS
+  immediately without waiting for confirmation.
 
 ### Pending cleanup (not a rule — a tracked repo action)
 - **spec-assembler duplicate:** two divergent copies exist —

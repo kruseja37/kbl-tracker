@@ -36,7 +36,10 @@ the D4 salary/value-preview scope snag, the soul-layer design rulings. **Detaile
   SMB4-Asset gate + the "build to spec" greenlight. The run **never stops for JK**; the only pause is
   **SET-ASIDE-AND-CONTINUE** on a genuine safety wall (oracle/data-corruption/runaway/unresolvable-regression),
   after which the loop moves to the next ticket. Everything → `AUTONOMOUS_RUN_LOG.md` for JK's morning review;
-  rework is the accepted cost of momentum.
+  rework is the accepted cost of momentum. **A fresh thread: do the session-start reads, RESTATE the state, and
+  PROCEED IMMEDIATELY — do NOT wait for JK's start-of-session confirmation (JK is unattended overnight; AUTH-4 is
+  the standing "go"). Start at D6b and keep dispatching the Queue** (`AUTONOMOUS_RUN_PROTOCOL.md`) until it is
+  exhausted or everything left is set-aside on a safety wall.
 - **NEXT (fresh thread, overnight under AUTH-4):** **D6b** (season-end freeze of the trusted-value artifact →
   deterministic D8/D9 awards) → **D7** (designations LIVE: promote TEAM_MVP/ACE to non-'Proj.' + **add Albatross**;
   reconcile the dual designation path; emit `DesignationEvent` w/ NO morale mutation; Fan Favorite stays Phase-2) →
