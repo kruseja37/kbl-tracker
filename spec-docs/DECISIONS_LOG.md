@@ -989,3 +989,145 @@ the D0 doc's older "Phase-2 automation → v1.1" deferral language with the week
 
 **Status:** Release boundary RULED. Reconciliation notes added to `FRANCHISE_PLAYABLE_V1_DEFINITION.md` (D0),
 `FRANCHISE_V1_LIVING_SEASON_DSTACK.md`, and `CURRENT_STATE.md`. No code impact (labeling/scope-boundary only).
+
+---
+
+### 2026-06-17: Skipped-step forks cleared — OD-2..5 + D4 RULED (attended session, JK present)
+
+**Context**: A fresh attended session resumed at D10 after the overnight AUTH-4 run closed D9. The five open design
+forks the Captain had left at documented conservative defaults during the unattended run (OD-2..5 + the D4 scope
+snag) were walked one-by-one and ruled by JK. (OD-1 was already resolved 2026-06-16.) These settle the L-stack
+design + D4 scoping ahead of need; none blocked D10.
+
+**OD-2 — economy scale (L-ECON1 / DSF-1), the rookie/farm/draft IV pricing — NOT True Value.** First clarified a
+Captain conflation: there are THREE separate systems — **IV** (ratings-based intrinsic $, `ivEngine.computeIV().kblIV`
+→ drives salary + the pick-value chart), **TV** (performance-based, persisted WAR peer-compared at the actually-played
+position, `franchiseValueInputs.ts` → the D6 frozen artifact) and the **pick-value chart** (pool IVs sorted→slots).
+Verified in code: `franchiseValueInputs.ts` consumes `totalWar` stat rows and does **not** import `computeIV` — TV is
+100% performance-based and OD-2 does not touch it. OD-2 is ONLY the pricing of players with no game performance yet
+(22-man pool at construction, rookies, draft picks, farm prospects).
+- **A — scope: NEW-LEAGUE-CONSTRUCTION-ONLY, no retroactive.** JK: none of the currently-loaded leagues are
+  in-progress (they're templates to pull from); franchises will be deleted/recreated to browser-test the new features.
+  So nothing is re-priced retroactively; the new scale applies at construction for franchises built after it lands.
+- **B — ruler: reuse the existing pick-value chart, same machinery / different anchor.** 22-man-rookie/draft anchor =
+  `pickValueChart[0]` scaled by the league **tier** (`TIER_SHIFTS[tier].scale`); **farm anchor = that ×
+  `FARM_NERF_SCALES[tier]`** (§7.4 "one grade step left of the league tier") then tapered by slot/grade. This RESOLVES
+  JK's "will farm price like the 22-man?" concern: a juiced league's farm pool prices at 0.8827 = exactly the standard
+  tier — farm sits ~one grade-tier below its MLB pool, systematically. Only boundary overlap (elite A-prospect ≈
+  low-end MLB roster player) remains, which is realistic. `farmGradeMode` (DSF-3) skews farm grades further,
+  independent of the MLB tier. `FARM_NERF_SCALES`/`TIER_SHIFTS`/`TIER_RATING_SCALES` already exist in `tierParams.ts`
+  but are orphaned — the build wires them in. Replaces the absolute 0.50× rookie factor AND the flat 4-row farm table.
+- **C — tier sensitivity applied by scaling raw IVs BEFORE the chart (not a `computeIV` input)** so the frozen IV
+  oracle (`iv_oracle.json`) stays byte-untouched. Approach confirmed. The *build* therefore remains a watched /
+  safety-walled ticket (adjacent to the frozen anchor); this ruling settles only the design.
+- All magnitudes (nerf depth, taper steepness, grade skew) → Simulation Gate (§16).
+
+**OD-3 — L2 mutable ratings layer, confirmation UX.** (A) pending ratings/trait changes **queue quietly + clearly,
+async/non-blocking** — never gate the next game; users learn to check the queue before each game and confirm once
+they've applied the change in the SMB4 console so engine and console match. (B) edit instructions in **plain text**
+("Raise Joe's Power 65→70"). (C) temporary-overlay expiry = **game-count** (re-evaluated on load), not wall-time.
+(D) overlays **season-scoped** (reset each season, no carry-forward).
+
+**OD-4 — team-tied NPC assignment.** (A) league-vs-franchise reporter scope = **franchiseId-precedence cascade**
+(franchise reporter wins for franchise games; already shipped in L4a-connect). (B) **manager + reporter are assigned
+on the team-edit page in League Builder. SCOUTS are NOT** — scouts are **drafted during the league draft process**
+(they're unique to the *farm* draft; they add nothing functional to the 22-man), then **reflected/displayed on the
+team page** once drafted. **Scout drafting is FRONT-LOADED to before the 22-man draft** (better UX than mid-process:
+one front-office staffing step, then uninterrupted 22-man→farm drafting). This unlocks a **cosmetic** win: the scout's
+name rides each team's 22-man **draft-guide insider info** ("intel from your scout") — flavor only; scout
+abilities/specialties still apply only to the farm draft. NOTE: today scouts are hired *inside* the farm-draft flow
+(`LeagueBuilderDraft.tsx`), so this is a **re-sequence** of the League-Builder flow and shifts the 22+10+2-scout
+handoff-gate ordering → capture in the League-Builder draft-flow spec. (C) `SeasonNewsItem.facts` schema defined at
+first event-tap build.
+
+**OD-5 — L9a trait enrichment capture (live game path).** (A) **manual/opt-in capture, never forced** — but where
+the data IS present, it absolutely determines whether performance-warranted traits are granted; traits whose data is
+absent simply aren't awarded. **All performance-related (vs personality-weighted) trait determination needs
+GameTracker data → this requires OPTIONAL ZONE INPUTS for pitching/hitting in the GameTracker** (the net-new capture).
+(B) injury accumulator = **cumulative season running tally** (injuries are already tracked in the GameTracker, so the
+tally rides on top) → feeds Durable / Injury-Prone.
+
+**D4 — salary-live UI de-gate: RE-SCOPED, fold into D11.** The original snag (salary live but the True Value/Expected
+Wins preview still D6-gated on the combined `TeamHubContent.tsx:4623-4648` panel) is **MOOT** now that D6–D9 landed —
+the value preview is trusted/frozen, nothing left to gate. **Ruling: the whole combined panel goes live; fold the
+salary de-gate into D11** (the UI live-label sweep already covers salary / True Value / designations / awards on
+exactly this surface). D4 is no longer a standalone ticket.
+
+**Status:** OD-2..5 + D4 RULED. No product code this turn (decisions/docs only). OD-2 + OD-5 builds remain
+watched/safety-walled per their notes; the rest fold into their L-stack tickets. CURRENT_STATE "OPEN PENDING-JK" and
+AUTONOMOUS_RUN_LOG "OPEN DECISIONS" updated to reflect closure. Next action: **D10**.
+
+---
+
+### 2026-06-17: DESIG-RECON — team-designation model reconciled + ruled (attended session, JK present)
+
+**Context**: While scoping D10's awards/designation display, JK flagged possible drift in the committed D6/D7
+designation work. A 3-reader reconciliation workflow (`wf_a7edf687-814`: as-built code / spec / coverage) mapped the
+team-designation system against the spec (MODE_2_V1_FINAL §17 = canonical; DYNAMIC_DESIGNATIONS_SPEC /
+FAN_FAVORITE_SYSTEM_SPEC / PERSONALITY_SYSTEM_SPEC = gospel) and JK's intra-team six-per-team model.
+
+**Reconciliation finding (no bug on the axis JK worried about):** ALBATROSS is built INTRA-TEAM in both selection
+paths (`franchiseDesignations.ts:426` `selectLowest` inside the `byTeam` loop; eligibility candidateKey
+`teamId:type`) — it is the worst net Value-Delta player on the player's OWN team, NEVER a cross-team comparison. The
+"≥2 MLB peers" rule (`FRANCHISE_TRUSTED_VALUE_PEER_POOL_MIN_THRESHOLD=2`) is a True-Value RELIABILITY/trust gate
+(is this player's TV number even computable from enough peers), used only as a candidacy FILTER — it is NOT a
+selection rule and NOT a league ranking. Code does not conflate the two. v1 reality before this ruling: only 3 of 6
+were live (MVP/Ace/Albatross); FF projected-only, Captain assigned-but-no-badge, Fan Hopeful unbuilt, Cornerstone
+cut-but-lingering.
+
+**JK RULINGS (2026-06-17) — the full v1 team-designation set is SIX per team, ALL in v1 (LSD-6: the living season
+is v1, so "lights up with the Phase-2 morale layer" = later in v1, not deferred out of v1). Selection is always
+INTRA-TEAM. Designation EFFECTS (fame/morale/fan-happiness) stay DORMANT until the Phase-2 morale/fame layer.**
+
+1. **Team MVP** — LIVE (unchanged). Highest total WAR on team; games floor max(5, 20%). Intra-team.
+2. **Ace** — LIVE (unchanged). Highest pWAR among team pitchers; appearances floor max(4, 20%); pWAR ≥ 0.5.
+3. **Albatross** — LIVE, **spec guards RESTORED into the live path**: most-negative Value-Delta on team **AND**
+   salary ≥ 2× league minimum ("can't blame the cheap guy") **AND** materially overpaid (~≥25%) **AND** value-trusted
+   (≥2-peer); games floor 10%. **Can be null.** The 2×-salary + materiality gates currently exist only in the ORPHAN
+   `fanFavoriteEngine.ts` and must be ported into the live `franchiseDesignations.ts` path. −1 fame DORMANT.
+4. **Fan Favorite** — **PROMOTED to LIVE**: highest POSITIVE Value-Delta on team, **NO salary floor** (deliberate
+   asymmetry vs Albatross — JK ruling: the underpaid overperformer, e.g. Brock Purdy, is the *best* fan-favorite
+   story, so a floor would exclude exactly the players fans love); value-trusted (≥2-peer); games floor 10%. Add to
+   `ACTIVE_PROMOTION_TYPES` + `LIVE_DESIGNATION_BADGES` + de-gate eligibility for SELECTION/BADGE (drop the
+   morale-block on the badge; +2 fame/morale effect stays DORMANT until Phase-2).
+5. **Captain** — **LIVE BADGE**: highest combined (Loyalty + Charisma), **NO minimum** (every team gets one) —
+   remove L1.5's `charisma ≥ 70` gate (a stale-spec import; canonical §17.6 says no minimum); tiebreak more seasons
+   on team, then current-season WAR. **Clear the reveal-safety block** (the badge shows the ROLE, not the numeric
+   hidden modifier). Reconcile the split brain: Captain currently lives only as `team.captainPlayerId`
+   (`franchiseInitializer.ts`) and is NOT in the designation engine union → the build must surface it as a badge
+   (either fold CAPTAIN into the designation surface, or render directly from `team.captainPlayerId` on the team hub).
+   Charisma-double-morale effect DORMANT until Phase-2.
+6. **Fan Hopeful** — **BUILD it (visible-safe)**: each team's Fan Hopeful = a RANDOM pick from its top-3 farm
+   prospects ranked by **SCOUTED grade** (never hidden true ratings — clears the old hidden-farm-truth block);
+   assigned at season start, one per team, badge live; +5 morale boost DORMANT until Phase-2.
+
+**Cornerstone** — **fully CUT** (LSD-3): remove the blocked policy-matrix entry + the blocked-truth UI row + stale
+stubs (do not leave dead entries).
+
+**Cross-cutting rulings:**
+- **≥2-peer trust filter KEPT** on the value-delta designations (Albatross + Fan Favorite) as a candidacy filter —
+  don't brand a player on an unreliable TV number; accept the rare null (≥2 peers is near-always satisfied in a full
+  stock-MLB league). It is a reliability gate, NOT a league ranking.
+- **Albatross 15% trade discount → DORMANT/DEFERRED** (NOT "fixed to 15%"). JK: with all trades MANUAL and no AI
+  trade valuation in v1, the discount modifier has no live consumer; revisit if/when a trade-valuation surface
+  exists. (The 30% in `FAN_FAVORITE_SYSTEM_SPEC` is superseded regardless; the canonical value is 15% when it
+  reactivates.)
+- **Spec hygiene:** reconcile DYNAMIC_DESIGNATIONS_SPEC / PERSONALITY_SYSTEM_SPEC / FAN_FAVORITE_SYSTEM_SPEC to the
+  canonical MODE_2_V1_FINAL §17 (Captain = Loyalty+Charisma, no minimum; Team MVP is INTRA-TEAM not "league-wide" —
+  the league-wide WAR-MVP is the separate D9 AWARDS system; Albatross discount deferred; Cornerstone removed). After
+  porting Albatross's salary/materiality gates into the live path, the orphan `fanFavoriteEngine.ts` should be
+  deleted (single source of truth) unless a reason to keep surfaces at build time.
+
+**Sequencing (JK ruling D):** **D10 (league-awards season summary) ships FIRST** — unblocked, self-contained, and
+the league awards (MVP/Cy Young/etc. via `franchiseAwardsEngine`) are a SEPARATE system from team designations.
+Then a dedicated **team-designations build ticket ("DESIG-RECON build")** does items 3–6 + Cornerstone removal +
+spec reconciliation + the **year-end team-designation DISPLAY on the TEAM HUB** (placement ruling D: team hub, a
+compact per-team designation strip — NOT inline with league awards, NOT a separate team-by-team season-summary page).
+D10 still includes the manifest **active-designations canonical-source fix** (read `franchiseDesignationRows`, not the
+stale embedded `player.franchiseDesignations`) so the handoff-manifest COUNT is accurate; the user-facing designation
+DISPLAY is the team-hub ticket.
+
+**Status:** DESIG-RECON RULED. No product code this turn. Affected spec docs to be reconciled to canonical §17 as part
+of the DESIG-RECON build ticket (DECISIONS_LOG is the authority until then). Next action: **draft + dispatch the D10
+build** (league awards inline via AwardsWatchlist + manifest canonical-source fix + page copy + pass5 test update),
+then the DESIG-RECON build ticket.

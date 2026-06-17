@@ -8150,3 +8150,99 @@ the session-end docs commit). **D9 COMPLETE.** USER-VISIBLE → JK browser sign-
 acceptance gate). Tracked D9 follow-ups: per-player profile/Almanac award display; the mwarCalculator/calculateMOYVotes
 retirement (pre-flag-flip cleanup).
 
+---
+
+## D10 — finalize the Mode-2 season-summary/manifest WITH league awards (supersedes the no-awards 1.10A stopgap) — 2026-06-17 (attended session, JK present)
+
+**ROUTE:** Codex | high reasoning effort → Opus 4.8 audit (auditor ≠ builder). Attended (JK present). USER-VISIBLE
+surface → browser-batch. Grounding: D10 map `wf_4e882441-17c` (5 mappers). **RE-SCOPED per the 2026-06-17 DESIG-RECON
+ruling (DECISIONS_LOG): D10 = LEAGUE awards only on the season-summary page; TEAM designations (MVP/Ace/Albatross/Fan
+Favorite/Captain/Fan Hopeful) are a SEPARATE team-hub ticket and are NOT displayed here.** D9d-2 already made the
+storage manifest awards-aware; D10 is the PAGE + the manifest designation-count canonical-source fix.
+
+**SCOPE:**
+1. **SeasonSummary.tsx — render finalized LEAGUE awards inline by REUSING the existing `<AwardsWatchlist>` component**
+   (it already reads `getFranchiseAwardRowsByScope` by scope, resolves player/manager names — rows carry only ids; MOY
+   id = managerId — handles the gold-glove split + the finalized→preview fallback). Mount it in the Awards Status
+   section passing `{franchiseId, seasonId, statsScopeId: seasonId, seasonNumber}`. Ensure the awards render is NOT
+   gated behind `if (persistedSummary) return null` (the map flagged that at :331) so a finalized season actually
+   shows its awards. Keep the existing live WAR-leader preview ONLY as the no-AwardsWatchlist-rows fallback — do NOT
+   double-render finalized winners + WAR previews.
+2. **Rewrite the stale "no-awards" PAGE copy:** the Awards Status disclaimer (:746-748 "Internal v1 does not finalize
+   MVP, Cy Young, Gold Glove… read-only stat leader previews"); the manifest section title/labels "Read-only no-awards
+   handoff package" (:877) and "No persisted no-awards handoff manifest is available yet." (:919); narrow the "Awards…
+   remain blocked" paragraph (:882-885) to the families that ARE still blocked (final True Value, salary movement,
+   morale, Mode 3); header doc-comment (:7).
+3. **Manifest active-designations CANONICAL-SOURCE FIX:** `countActiveDesignations`
+   (franchiseSeasonSummaryStorage.ts:261-280) reads the STALE embedded `player.franchiseDesignations` (self-documented
+   non-canonical at franchiseDesignations.ts:460) → repoint to the canonical `getFranchiseDesignationRows({franchiseId,
+   seasonId, statsScopeId})` (franchiseDesignationStorage.ts:243), counting ALL `status==='active'` rows (NOT hardcoded
+   to TEAM_MVP/ACE — future-proof for the DESIG-RECON expanded set). Fetch the designation rows in
+   `buildFranchiseSeasonSummary`'s Promise.all (alongside `awardRows`) and pass into `buildAwardsAwareManifest`. This
+   fixes the handoff-manifest COUNT only — it is NOT a user-facing team-designation display (that's the team-hub ticket).
+4. **Update the STALE test SeasonSummary.pass5.test.tsx:** contractVersion `…no-awards-manifest-v1`→`…v2-awards-manifest-v1`
+   (:158); awards-watchlists fixture blocked→included + awardsImplemented true (:178-197); the page-copy assertions
+   "Read-only no-awards handoff package"/"Awards/watchlists are omitted"/"Internal v1 does not finalize…" (:313/:315/:360)
+   → the new awards-aware copy; add mocks for AwardsWatchlist's reads (`franchiseAwardsStorage`/`franchiseAwardsEngine`)
+   so the render doesn't hit IndexedDB; add a seeded-active-designation case proving the canonical-source count.
+
+**CAPTAIN DEFAULTS (all design decisions already RULED — DECISIONS_LOG 2026-06-17):** summary.awards STAYS a placeholder
+(read awards live via AwardsWatchlist; do NOT promote the payload) → wave4:267 + the contractVersion pin stay green, NO
+storage-shape change, **NO contractVersion bump** · team designations are NOT displayed on this page (team-hub ticket) —
+only the manifest active-designations CATEGORY remains (audit evidence) with the canonical-source COUNT fix · all
+still-blocked families stay visibly blocked, no flag flip · AwardsWatchlist reads the AWARDS store by scope (NOT the
+season-stats leaders), so the Pass5 "no live stats reads on the persisted path" invariant is preserved — do NOT add live
+`getBattingLeaders`/`getPitchingLeaders` calls.
+
+**ALLOWED:** `src/src_figma/app/pages/SeasonSummary.tsx` · `src/utils/franchiseSeasonSummaryStorage.ts` (the
+canonical-source designation count + the Promise.all fetch + pass into the manifest builder) ·
+`src/src_figma/__tests__/franchiseMode/SeasonSummary.pass5.test.tsx` (update) · OPTIONALLY
+`src/src_figma/__tests__/franchiseMode/franchiseSeasonSummary.wave4.test.ts` (ONLY to ADD a seeded-active-designation
+case; do NOT change its existing contractVersion/awards pins).
+
+**DO NOT:** promote summary.awards off `placeholder` · bump the manifest contractVersion (stays
+`franchise-season-summary-v2-awards-manifest-v1`) · flip the offseason flag / touch `AwardsCeremonyFlow` /
+offseasonStorage · loosen any `false` policyFlag or flip a blocked-by-design category (true-value-value-delta, mode3,
+morale-relationship, blocked-designation-families) · DISPLAY team designations on this page (team-hub ticket) · touch
+the orphaned `franchiseSeasonHandoffPlan.ts` / `franchiseSeasonEndReadiness.ts` (those are the deferred 1.10B contract) ·
+add live season-stats leader reads on the persisted path · new store / TRACKER_DB_VERSION (18) / KBL_BACKUP_VERSION (2) ·
+any DESIG-RECON change (Albatross guards / FF promote / Captain badge / Fan Hopeful — separate ticket) · the D11 app-wide
+preview/READ-ONLY label sweep.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc `--noEmit` 0 · `npm run build` exit 0 · FULL `vitest run` = only the 3
+characterized fails, ZERO new reds, with the updated **SeasonSummary.pass5** now PASSING its new assertions and **wave4**
+still green; grep gates: manifest contractVersion string unchanged, no `player.franchiseDesignations` read remaining in
+the manifest path, no offseason-flag edit, summary.awards still `placeholder`, no new `getBattingLeaders`/`getPitchingLeaders`
+on the persisted path, handoff/readiness builders untouched, versions unchanged.
+
+**STOP IF:** rendering finalized awards requires promoting summary.awards or bumping contractVersion · the
+canonical-source designation fix needs a store/version bump · AwardsWatchlist can't mount without touching the offseason
+flag/ceremony · the pass5 update ripples beyond pass5 (+ the optional wave4 seeded-designation case).
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited.
+
+**Status:** VERIFIED + COMMITTED `51e487a` (2026-06-17). USER-VISIBLE → browser-pending.
+
+**AUDIT + EXECUTION RECORD (Opus 4.8, auditor ≠ builder):** Codex (high, background `codex exec` under the 30-min
+watchdog) BUILT (exit 0) → Opus independently re-ran every gate (not trusted from the paste): `tsc --noEmit` 0 ·
+`npm run build` 0 · FULL `vitest run` **7,289 pass / 3 fail (7,292 total, 406 files)**, the fails being EXACTLY the
+characterized trio (wpaRuntimeBoundary / franchiseManualSmokeFixture / franchiseNarrativeEventEligibility), ZERO new
+reds; `SeasonSummary.pass5` ✓ (4) + `franchiseSeasonSummary.wave4` ✓ (8). Diff = 4 files (2 product + 2 test), all
+within ALLOWED. **Read the diff + grepped invariants:** (1) `SeasonSummary.tsx` mounts `<AwardsWatchlist>` inline
+(scope `statsScopeId: seasonId`), demotes the WAR-leader previews to `!persistedSummary` fallback (no double-render),
+and the awards render is no longer hidden by the `persistedSummary` placeholder branch; copy de-"no-awards"-ified
+(disclaimer, "Read-only awards-aware handoff package", "no persisted awards-aware handoff manifest", blocked-families
+paragraph narrowed to True Value / salary / morale / rollover / Mode 3). (2) `franchiseSeasonSummaryStorage.ts`:
+`countActiveDesignations` rewritten to count canonical `getFranchiseDesignationRows` rows with `status==='active'`
+(all types, future-proof), threaded through the Promise.all (`.catch(()=>[])`) + `buildAwardsAwareManifest`; the
+stale `player.franchiseDesignations` reader is GONE. (3) Invariants held: contractVersion still
+`franchise-season-summary-v2-awards-manifest-v1` (×2), `summary.awards` still `placeholder`, no offseason-flag /
+AwardsCeremonyFlow / handoff-plan / readiness-builder edits, no new persisted-path `getBattingLeaders`/`getPitchingLeaders`,
+TRACKER_DB_VERSION 18 / KBL_BACKUP_VERSION 2 unchanged, no new store. (4) Tests mutation-honest + STRENGTHENED: pass5
+still asserts the live stats-leaders are NEVER called on the persisted path AND now asserts the finalized MVP winner
+renders via `award-winner-MVP`; wave4 adds a canonical-count test (4 active across MVP/ACE/ALBATROSS/FAN_FAVORITE,
+projected excluded). The AwardsWatchlist testids/text pass5 depends on pre-exist (component unmodified). **D10
+COMPLETE.** USER-VISIBLE → JK browser sign-off batched (sole real-world acceptance gate). **NEXT: the DESIG-RECON
+build ticket** (Albatross spec guards / Fan Favorite promote no-floor / Captain badge no-min / Fan Hopeful visible-safe
+/ Cornerstone removal / spec reconciliation to MODE_2_V1_FINAL §17 + the team-hub year-end designation display).
+

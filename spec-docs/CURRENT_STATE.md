@@ -33,6 +33,28 @@ nothing pushed.)
 
 ## RIGHT NOW
 
+- **ATTENDED DESIGN SESSION (2026-06-17, JK present) — forks cleared + designation model reconciled; D10 build next.**
+  No product code yet this session. (1) **OD-2..5 + D4 RULED** (DECISIONS_LOG 2026-06-17): OD-2 economy scale =
+  new-league-construction-only / reuse pick-chart with farm anchor nerfed one grade-step via `FARM_NERF_SCALES` /
+  scale raw IVs pre-chart (oracle untouched; build safety-walled); corrected a Captain conflation — **IV (ratings→
+  salary) ≠ TV (performance/WAR)**, OD-2 never touches TV. OD-3 async/plain-text/game-count/season-scoped. OD-4
+  cascade + manager/reporter on team-edit page, **scouts drafted front-loaded before the 22-man** (cosmetic draft-
+  guide attribution), reflected on team page. OD-5 manual/opt-in + **requires optional GameTracker zone inputs** +
+  cumulative injury tally. D4 moot post-D6 → folded into D11. (2) **DESIG-RECON RULED** (DECISIONS_LOG 2026-06-17):
+  the full v1 team-designation set is **SIX per team, ALL in v1** (LSD-6) — Team MVP, Ace, **Albatross** (spec guards
+  restored: ≥2× salary + materially-overpaid + value-trusted, can be null), **Fan Favorite** (PROMOTED to live, NO
+  salary floor — underpaid-overperformer logic), **Captain** (live badge, Loyalty+Charisma NO minimum, reveal-safety
+  cleared, L1.5 charisma≥70 gate removed), **Fan Hopeful** (BUILD visible-safe = random from top-3 by scouted grade).
+  Cornerstone fully CUT. ≥2-peer = a TV-trust reliability gate (NOT a league comparison; Albatross confirmed correct/
+  intra-team as-built — no bug). Designation EFFECTS (fame/morale) stay dormant until the Phase-2 morale layer (still
+  v1). Albatross 15% trade discount = dormant/deferred (no AI-trade consumer in v1). (3) **D10 COMMITTED `51e487a`**
+  (Codex-built → Opus-audited VERIFIED: tsc 0 / build 0 / suite 7,289 pass / 3 characterized fail, zero new reds;
+  USER-VISIBLE → browser-pending, scenario #12) — re-scoped to LEAGUE awards only: AwardsWatchlist mounted inline on
+  the SeasonSummary page + manifest active-designation canonical-source fix + de-"no-awards" copy + pass5/wave4 tests;
+  summary.awards stays placeholder, no contractVersion bump, no flag flip; team designations NOT shown here.
+  **NEXT = the DESIG-RECON build ticket** (Albatross guards / FF promote no-floor / Captain badge no-min / Fan Hopeful
+  visible-safe / Cornerstone removal / spec reconciliation to MODE_2_V1_FINAL §17 + the year-end team-designation
+  display on the **TEAM HUB**). Maps: `wf_4e882441-17c` (D10) + `wf_a7edf687-814` (designations).
 - **OVERNIGHT CONTINUATION (2026-06-17, AUTH-4) — 3 more feature commits, D7 COMPLETE:** `6559a19` **D6b**
   (season-end FREEZE of the trusted-value artifact: frozen-flag + idempotent freeze helper + a Layer-A anti-thaw
   guard in the sole writer + a Layer-B recompute early-return that locks BOTH the artifact and the
@@ -249,8 +271,8 @@ nothing pushed.)
 
 ## SUITE BASELINE
 
-**7,288 tests / 405 files** — full suite re-run 2026-06-17 after D9d-1: **7,285 pass / 3 fail**, the 3 being EXACTLY
-the characterized set. (+34 tests / +5 files over the prior 7,254 / 400 — D6b/D7/D8 added tests to existing files +
+**7,292 tests / 406 files** — full suite re-run 2026-06-17 after D10: **7,289 pass / 3 fail**, the 3 being EXACTLY
+the characterized set (zero new reds; D10 added a wave4 canonical-designation-count test + reworked pass5). (+34 tests / +5 files over the prior 7,254 / 400 — D6b/D7/D8 added tests to existing files +
 `franchiseAwardTrust.test.ts`; D9a added `franchiseAwardsStorage.test.ts` + `franchiseTrueValueSnapshotsStorage.test.ts`;
 D9b/D9c grew `franchiseAwardsEngine.test.ts`.) **trackerDb is now v18** — only D9a bumped it (its 2 dark stores); D6b→D8
 added NO store (D6b's freeze is a field on the existing artifact, DesignationEvents are ephemeral, D8 stores nothing,
@@ -317,21 +339,29 @@ stale-assertion RED — D7a deliberately left it untouched; its cleanup is a sep
    deliberately sub-optimal lineup, play to completion → a per-game `lineupDeltaWpaStandard` (≤ 0) persists
    for BOTH managers and survives reload; the existing Manager-WPA overlay/almanac totals are UNCHANGED (no
    double-count); the season carries an `optimizerConstantsHash` that survives backup/restore.
+12. **D10** (USER-VISIBLE) Mode-2 SeasonSummary page: after a completed regular season with finalized awards, the
+   Awards Status section shows the real finalized LEAGUE awards (MVP/Cy Young/RoY/Gold Glove/Silver Slugger/Manager
+   of Year via the AwardsWatchlist) — not the old "Internal v1 does not finalize…" preview copy; before finalize it
+   shows the projected preview; the "Season Complete Manifest" reads "awards-aware handoff package" (not "no-awards")
+   and the still-blocked families (True Value/salary/morale/Mode 3) remain visibly blocked. Team designations are NOT
+   shown here (that's the DESIG-RECON team-hub ticket).
 
 ## OPEN PENDING-JK (rolling)
 
-**FROM THE 2026-06-16 AUTONOMOUS RUN (decisions that resume the build loop — full text + Captain leans in
-`AUTONOMOUS_RUN_LOG.md`):**
-- **OD-2** — L-ECON1 salary scale: scope (new-league-only vs before-the-freeze) + the pickValueChart-is-the-taper
-  model. Value-sensitive (frozen draft-IV anchor); held.
-- **OD-3** — L2 mutable-layer confirmation UX: blocking-vs-async (lean async) · console-edit format · game-count
-  expiry. (L2 also premature — its consumers L3/L8/L9b are design-gated.)
-- **OD-4** — L4a reporter: franchiseId-vs-leagueId scope (lean cascade) · ReporterAssignmentPanel UI placement.
-- **OD-5** — L9a trait capture: manual-vs-auto enrichment (lean manual/opt-in). Live-game-path → watched session.
-- **D4 SCOPE SNAG** — the salary preview chips live on the COMBINED "TrueValue+ExpectedWins" panel (`TeamHubContent
-  .tsx:4623-4648`); D0's "de-gate salary, don't touch the D6-gated value preview" needs a presentation ruling.
-  (D4 is NOT a D6 dependency — left as a flagged browser-session UI item.)
-- **SOUL-LAYER "BUILD TO SPEC" GREENLIGHT** — L3 morale matrix / L5 fan teeth / L6 fame / L7 designation effects /
+**✅ OD-2..5 + D4 ALL RULED 2026-06-17 (attended session) — full text in `DECISIONS_LOG.md` (2026-06-17 entry):**
+- **OD-2 (L-ECON1) — RULED:** new-league-construction-only (no retroactive — no in-progress leagues); reuse the
+  pick-value chart, **farm anchor nerfed one grade-step via `FARM_NERF_SCALES`** (resolves the farm≈22-man concern);
+  scale raw IVs pre-chart so the frozen IV oracle stays byte-untouched. *Build remains watched/safety-walled (oracle-
+  adjacent).* Captain conflation corrected: **IV (ratings→salary) ≠ TV (performance/WAR)** — OD-2 never touches TV.
+- **OD-3 (L2) — RULED:** queue async/non-blocking + clearly · plain-text edit instructions · game-count expiry ·
+  season-scoped overlays.
+- **OD-4 — RULED:** franchiseId-precedence cascade · manager+reporter assigned on the team-edit page · **scouts
+  DRAFTED front-loaded before the 22-man** (cosmetic draft-guide attribution; reflected on team page) — a re-sequence
+  of the League-Builder flow → capture in the draft-flow spec · facts schema at first event-tap build.
+- **OD-5 (L9a) — RULED:** manual/opt-in (never forced; used when data present) → **REQUIRES optional GameTracker zone
+  inputs for pitch/hit location** · cumulative season injury tally. *Build stays watched (live game path).*
+- **D4 — RULED:** moot post-D6 (value preview now trusted/frozen) → **folded into D11** (no standalone ticket).
+- **SOUL-LAYER "BUILD TO SPEC" GREENLIGHT** (still open) — L3 morale matrix / L5 fan teeth / L6 fame / L7 designation effects /
   L8 ratings dev / L9b traits / L10–L14: the SMB4 soul-layer engines are JK's design vision. They build to the
   ratified living-season spec (with sim-tunable placeholder magnitudes) once JK greenlights "build to spec."
 

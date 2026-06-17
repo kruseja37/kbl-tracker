@@ -52,6 +52,15 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
 
 ## OPEN DECISIONS FOR JK (read these first)
 
+> **✅ OD-1..5 + the D4 snag ALL RESOLVED.** OD-1 resolved 2026-06-16 (inline below). **OD-2, OD-3, OD-4, OD-5 + D4
+> ruled by JK in the attended 2026-06-17 session — full rulings in `DECISIONS_LOG.md` (2026-06-17 entry).** Highlights:
+> OD-2 = new-league-construction-only, reuse pick-chart with farm anchor nerfed one grade-step via `FARM_NERF_SCALES`,
+> scale raw IVs pre-chart (oracle untouched; build stays safety-walled) — and a Captain conflation corrected (IV≠TV;
+> OD-2 never touches performance-based True Value). OD-3 = async/plain-text/game-count/season-scoped. OD-4 = cascade;
+> manager+reporter on team-edit page, scouts DRAFTED front-loaded before the 22-man (cosmetic draft-guide
+> attribution), reflected on team page. OD-5 = manual/opt-in + REQUIRES optional GameTracker zone inputs; cumulative
+> injury tally. D4 = moot post-D6, folded into D11. The OD-2..5 text below is retained as the original fork context.
+
 - **OD-1 (HIGH — blocks L1.5 + the morale/development layer for MLB players) — How do imported MLB players
   acquire the 4 hidden modifiers?** Verified in code: `hiddenPersonalityModifiers` (loyalty/ambition/resilience/
   charisma) is assigned ONLY in `prospectScoutingDraftEngine.ts` (the prospect/farm path). The **22-man MLB pool
