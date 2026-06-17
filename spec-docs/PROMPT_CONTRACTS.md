@@ -8610,5 +8610,72 @@ input beyond the spec · representing the matrix needs a new persisted shape (th
 
 Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited.
 
+**Status:** VERIFIED + COMMITTED `5b1431d` (2026-06-17). Build-dark (pure engine; no consumer until L3b + post-D13).
+
+**AUDIT + EXECUTION RECORD (Opus 4.8, auditor ≠ builder):** Codex (high, watchdog) BUILT → Opus independently re-ran:
+tsc 0 · build 0 · FULL suite **7,252 pass / 2 fail (7,254 total, 406 files)** = characterized set only, ZERO new
+reds; 9 new matrix tests green. Diff = 2 NEW files. **Read the engine in full + grep-verified:** FIREWALL clean (only
+two TYPE-only imports — `MoraleEventType`, `HiddenModifiers`; zero store/persistence/reporter/narrative/LLM/dampener;
+no `Math.random`/`Date.now`/IO → pure + deterministic). The composer is correct: `applyAmbitionOrResilience` routes
+positive deltas through Ambition and negative through Resilience (the §6 no-double-count division, tested BOTH
+directions), personality multipliers layer on, the fan→player link is personality-sensitivity × Loyalty-scaled (§13),
+Charisma drives `otherTouched`, all clamped/rounded with a non-finite guard. The base table is completeness-enforced
+(`satisfies Record<MasterMoraleEventType, …>`); the tap registry returns NEUTRAL for all 4 future taps; unknown events
+→ neutral (never throw); legacy personality names reconciled. §8 dampener correctly EXCLUDED. Magnitudes all in the
+SIM-TUNED `MORALE_TUNING` block. **L3a COMPLETE.** NEXT = L3b (store wiring + dark).
+
+---
+
+## L3b — wire the matrix to the morale store (dark) + parity-guard extension — 2026-06-17 (attended)
+
+**ROUTE:** Codex | very-high reasoning effort (persistence + un-gating live behavior) → Opus 4.8 audit (auditor ≠
+builder). Attended. SMB4-asset (morale) + persistence. RULED in DECISIONS_LOG "L3 STRUCTURAL RULINGS". Grounding: map
+`wf_04a84b30-ef5`. **BUILD-DARK: NO live morale mutation/consumer until after D13** (§5 no-phantom-morale + the D12
+smoke gate). Completes L3 (L3a = the engine; L3b = persistence + wiring).
+
+**SCOPE:**
+1. **REUSE + extend `franchiseMoraleState.ts` (`kbl-franchise-morale`)** — it already models player + team-fan
+   targets + per-target history. Add a NEW non-confirmation `sourceKind` (e.g. `'matrix-auto'`) to
+   `FranchiseMoraleSourceKind` and an **automatic + logged** apply path that takes L3a's `ResolvedMoraleConsequence`
+   and writes the self/player + team-fan deltas + `otherTouched` into the player/fan ledgers + the history log (the
+   log IS the ledger, §5 LS-9). Keep the existing **idempotent dedupe** (sourceEventId). Do NOT remove or break the
+   existing confirmation-gated path (the UI gate-removal pairs with post-D13 activation — out of scope here).
+2. **Subscribe to the D7 `DesignationEvent` stream — DARK.** At the current void-ignore site
+   (`processCompletedGame.ts:303` `void result.designationEvents;`), map each DesignationEvent (granted/changed/lost
+   for TEAM_MVP/ACE/ALBATROSS/FAN_FAVORITE) to the corresponding concrete matrix event (e.g. FAN_FAVORITE granted →
+   `FAN_FAVORITE_LOCKED`, ALBATROSS → `ALBATROSS_LOCKED`, Captain → `CAPTAIN_*`), run `composeMoraleConsequence`, and
+   write to the dark ledger — **all gated behind the build-dark Phase-2 flag** (compute + dark-write only; the
+   DesignationEvent firewall flags stay false; no live morale mutation).
+3. **Build-dark Phase-2 flag.** Add a single central Phase-2 morale flag (e.g. `franchisePhase2Flags.ts`,
+   default OFF) that gates BOTH the auto-apply write path and the D7 subscription. With the flag OFF (the v1 default
+   until post-D13), the matrix can compute but writes go to a dark/no-op path — NO live morale state changes.
+4. **Parity-guard extension + backup DoD.** Extend the backup parity-guard
+   (`backupRestore.franchiseParity.test.ts`) to ALSO cover `kbl-franchise-morale` (close the C-4 deficit for this DB
+   — it's already registered in `backupRestore.ts:637` + `syncConfig.ts:108`). If you add any new field/index/store to
+   the morale DB, bump its `DB_VERSION` (additive) + update the backup registry byte-mirrored + add the round-trip
+   test; if you only add a `sourceKind` value (no schema change), no bump. Update the PIN-TRAP test if any version bumps.
+
+**ALLOWED:** `franchiseMoraleState.ts` · `processCompletedGame.ts` (the void-ignore site) · NEW
+`franchisePhase2Flags.ts` (or similar) · a NEW `franchiseMoraleMatrixApply` helper module if cleaner · `backupRestore.ts`
++ `backupRestore.franchiseParity.test.ts` + `syncConfig.ts` (parity/backup) · the relevant tests. Imports L3a's
+`masterMoraleMatrix` (the engine).
+
+**DO NOT:** go LIVE (build-dark — no live morale mutation/consumer before D13; the flag stays OFF) · remove or break
+the existing confirmation-gated morale path (gate-removal is post-D13 activation) · remove the existing roster-tab
+confirmation UI (post-D13) · implement the §8 dampener (L5) · import a reporter/LLM into the apply path (firewall) ·
+create a SECOND morale store (reuse the existing one) · touch the oracle/value spine · flip the offseason flag.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · FULL suite = only the 2 characterized fails (+ honest new
+L3b tests), ZERO new reds; grep: the build-dark flag defaults OFF and gates the write path + the D7 subscription; the
+existing confirmation path still present; parity-guard now covers `kbl-franchise-morale`; no second morale store; no
+reporter import in the apply path; the DesignationEvent firewall flags stay false. A test proving: flag-OFF → no live
+morale write (dark); the auto path writes to the ledger + history when exercised in test; idempotent dedupe holds.
+
+**STOP IF:** un-gating cleanly requires removing the existing confirmation path (it must stay until post-D13) · the
+dark flag can't gate both write paths without an engine change · reusing the store forces a destructive migration ·
+the parity-guard extension reveals a real backup drift in `kbl-franchise-morale` (surface it).
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited.
+
 **Status:** DISPATCHED to Codex (background, watchdog). Audit pending.
 

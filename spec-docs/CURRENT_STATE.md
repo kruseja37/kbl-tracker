@@ -21,8 +21,13 @@ smart-label D4 value panel [frozen-aware: PROJECTED mid-season → FINAL/TRUSTED
 stays an estimate]; promote-surface/keep-effect rule with the keep-list verified intact — no over-promotion; D4
 salary de-gate folded in). **NEXT = D12** (full manual smoke on real franchise data, iPad) → D13 (Playable-V1
 internal checkpoint) → the soul layer (L-stack). Browser-verify backlog: #12 (D10) + #13 (DR-3) + #14/#15 (D11).
-Branch codex/franchise-v1-next; nothing pushed. **6 feature commits this attended session** (D10 + DR-1..3 + D11;
-DR-4 docs).)
+Branch codex/franchise-v1-next; nothing pushed. **SOUL LAYER (L-stack) GREENLIT + STARTED (build-dark):** L3 (Master
+Morale Matrix) split L3a/L3b — **L3a COMMITTED `5b1431d`** (the pure deterministic matrix engine: one event-keyed
+table + composer, 7 personalities × 4 modifiers [Ambition-up/Resilience-down/Charisma→teammates/Loyalty→fan-link],
+SIM-TUNED magnitudes, default-neutral taps, firewall-clean); **L3b dispatched** (reuse+un-gate the existing
+`kbl-franchise-morale` store + D7 subscription DARK + a Phase-2 build-dark flag [default OFF] + parity-guard
+extension). D12/D13 remain JK gates; the soul layer activates strictly after D13. **7 feature commits this attended
+session** (D10 + DR-1..3 + D11 + L3a; DR-4 docs).)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.
