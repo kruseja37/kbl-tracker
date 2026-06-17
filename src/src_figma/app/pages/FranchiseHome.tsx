@@ -41,8 +41,9 @@ import { runJournaledFranchiseSeasonTransition } from "../../../utils/franchiseS
 import { getTeam } from "../../../utils/leagueBuilderStorage";
 import { getFranchiseTeam, saveFranchiseTeam } from "../../../utils/franchisePlayerStorage";
 import { syncEngine } from "../../../utils/syncEngine";
-import { getRecentGames } from "../../utils/gameStorage";
-import { generateGameRecap } from "../engines/narrativeIntegration";
+import { listGameStoriesForFranchiseSeason } from "../../../utils/gameStoriesStorage";
+import { autoGenerateReporterForTeam } from "../../../utils/reporterAssignment";
+import { getReporterForTeam } from "../../../utils/reporterStorage";
 import type { Player as TeamRosterPlayer, Pitcher as TeamRosterPitcher } from "@/app/components/TeamRoster";
 import { LineupPreview } from "@/app/components/LineupPreview";
 import { PregameBenchmarkChecklist } from "@/app/components/PregameBenchmarkChecklist";
@@ -91,6 +92,36 @@ export function useFranchiseDataContext() {
     throw new Error('useFranchiseDataContext must be used within FranchiseDataProvider');
   }
   return context;
+}
+
+async function ensureFranchiseReporterForTeam({
+  teamId,
+  teamName,
+  leagueId,
+  franchiseId,
+  colors,
+}: {
+  teamId: string;
+  teamName: string;
+  leagueId?: string;
+  franchiseId?: string;
+  colors?: {
+    primary?: string;
+    secondary?: string;
+  };
+}) {
+  const existing = await getReporterForTeam(teamId, leagueId, franchiseId);
+  if (existing) return;
+
+  await autoGenerateReporterForTeam(
+    {
+      id: teamId,
+      name: teamName,
+      colors,
+    },
+    leagueId,
+    franchiseId,
+  );
 }
 
 type TabType = "todays-game" | "team" | "schedule" | "standings" | "news" | "leaders" | "rosters" | "allstar" | "museum" | "awards" | "ratings-adj" | "contraction" | "retirements" | "free-agency" | "draft" | "farm-reconciliation" | "chemistry" | "spring-training" | "finalize" | "advance" | "bracket" | "series" | "playoff-stats" | "playoff-leaders";
@@ -971,6 +1002,32 @@ export function FranchiseHome() {
       away: selectOptimalLineupForOpposingPitcher(awayRoster.optimalLineups, homeStarter),
       home: selectOptimalLineupForOpposingPitcher(homeRoster.optimalLineups, awayStarter),
     };
+    await Promise.all([
+      ensureFranchiseReporterForTeam({
+        teamId: awayTeamId,
+        teamName: awayDisplayName,
+        leagueId: franchiseLeagueId,
+        franchiseId,
+        colors: {
+          primary: awayTeamData?.colors.primary,
+          secondary: awayTeamData?.colors.secondary,
+        },
+      }),
+      ensureFranchiseReporterForTeam({
+        teamId: homeTeamId,
+        teamName: homeDisplayName,
+        leagueId: franchiseLeagueId,
+        franchiseId,
+        colors: {
+          primary: homeTeamData?.colors.primary,
+          secondary: homeTeamData?.colors.secondary,
+        },
+      }),
+    ]);
+    sessionStorage.setItem(
+      "kbl-pending-post-game-columns-enabled",
+      JSON.stringify(true),
+    );
     navigate(`/game-tracker/playoff-${series.id}-g${nextGameNumber}`, {
       state: withPregameManagerNavigationState({
         gameMode: 'playoff' as const,
@@ -1001,6 +1058,8 @@ export function FranchiseHome() {
         playoffId: playoffData.playoff?.id,
         useDH: playoffUseDH,
         optimalLineupSnapshots,
+        liveBeatReporterEnabled: false,
+        postGameColumnsEnabled: true,
         stadiumName: homeTeamData?.stadium ?? franchiseData.stadiumMap?.[homeTeamId] ?? homeDisplayName.toUpperCase(),
         // T0-05: Pass season number for playoff persistence
         seasonNumber: currentSeason,
@@ -3518,6 +3577,32 @@ function GameDayContent({
       away: selectOptimalLineupForOpposingPitcher(preGameData.awayOptimalLineups, homeStarter),
       home: selectOptimalLineupForOpposingPitcher(preGameData.homeOptimalLineups, awayStarter),
     };
+    await Promise.all([
+      ensureFranchiseReporterForTeam({
+        teamId: preGameData.awayTeamId,
+        teamName: preGameData.awayTeamName,
+        leagueId: franchiseLeagueId,
+        franchiseId,
+        colors: {
+          primary: awayTeamData?.colors.primary,
+          secondary: awayTeamData?.colors.secondary,
+        },
+      }),
+      ensureFranchiseReporterForTeam({
+        teamId: preGameData.homeTeamId,
+        teamName: preGameData.homeTeamName,
+        leagueId: franchiseLeagueId,
+        franchiseId,
+        colors: {
+          primary: homeTeamData?.colors.primary,
+          secondary: homeTeamData?.colors.secondary,
+        },
+      }),
+    ]);
+    sessionStorage.setItem(
+      "kbl-pending-post-game-columns-enabled",
+      JSON.stringify(true),
+    );
     navigate(`/game-tracker/franchise-g${preGameData.gameNumber}`, {
       state: withPregameManagerNavigationState({
         gameMode: 'franchise' as const,
@@ -3546,6 +3631,8 @@ function GameDayContent({
         competitionId: franchiseId,
         useDH: preGameData.useDH,
         optimalLineupSnapshots,
+        liveBeatReporterEnabled: false,
+        postGameColumnsEnabled: true,
         scheduleGameId: preGameData.scheduleGameId,
         seasonNumber: currentSeason,
         gameNumber: preGameData.gameNumber,
@@ -4434,11 +4521,11 @@ function BeatReporterNews({
 }) {
   const [newsFilter, setNewsFilter] = useState<"all" | "league" | "team">("all");
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
-  const [expandedArticle, setExpandedArticle] = useState<number | null>(null);
+  const [expandedArticle, setExpandedArticle] = useState<string | null>(null);
 
-  // Load narratives from recent completed games
+  // REP-2: Franchise news reads persisted live GameStory columns, not legacy templates.
   const [newsArticles, setNewsArticles] = useState<{
-    id: number;
+    id: string;
     type: string;
     headline: string;
     excerpt: string;
@@ -4453,53 +4540,27 @@ function BeatReporterNews({
     let cancelled = false;
     (async () => {
       try {
-        const recentGames = await getRecentGames(20, { franchiseId, seasonId });
+        if (!franchiseId) {
+          if (!cancelled) setNewsArticles([]);
+          return;
+        }
+
+        const stories = await listGameStoriesForFranchiseSeason(franchiseId, seasonId);
         if (cancelled) return;
-        const articles = recentGames.flatMap((game, idx) => {
-          const results: typeof newsArticles = [];
-          // Generate home perspective narrative
-          const homeNarr = generateGameRecap({
-            teamName: game.homeTeamName,
-            opponentName: game.awayTeamName,
-            teamScore: game.finalScore.home,
-            opponentScore: game.finalScore.away,
-            isShutout: game.finalScore.away === 0 && game.finalScore.home > game.finalScore.away,
-          });
-          results.push({
-            id: idx * 2,
-            type: 'team',
-            headline: homeNarr.headline,
-            excerpt: homeNarr.body,
-            fullText: homeNarr.body + (homeNarr.quote ? `\n\n"${homeNarr.quote}"` : ''),
-            reporter: homeNarr.reporter.name,
-            team: game.homeTeamName,
-            timestamp: new Date(game.date).toLocaleDateString(),
-            category: game.finalScore.home > game.finalScore.away ? 'CLUBHOUSE' : 'STANDINGS',
-          });
-          // Generate away perspective narrative
-          const awayNarr = generateGameRecap({
-            teamName: game.awayTeamName,
-            opponentName: game.homeTeamName,
-            teamScore: game.finalScore.away,
-            opponentScore: game.finalScore.home,
-            isShutout: game.finalScore.home === 0 && game.finalScore.away > game.finalScore.home,
-          });
-          results.push({
-            id: idx * 2 + 1,
-            type: 'team',
-            headline: awayNarr.headline,
-            excerpt: awayNarr.body,
-            fullText: awayNarr.body + (awayNarr.quote ? `\n\n"${awayNarr.quote}"` : ''),
-            reporter: awayNarr.reporter.name,
-            team: game.awayTeamName,
-            timestamp: new Date(game.date).toLocaleDateString(),
-            category: game.finalScore.away > game.finalScore.home ? 'CLUBHOUSE' : 'STANDINGS',
-          });
-          return results;
-        });
+        const articles = stories.map((story) => ({
+          id: story.id,
+          type: 'team',
+          headline: story.headline,
+          excerpt: story.body,
+          fullText: story.body,
+          reporter: 'Beat Reporter',
+          team: story.teamId,
+          timestamp: new Date(story.gameDate).toLocaleDateString(),
+          category: story.competitionType === 'playoff' ? 'STANDINGS' : 'CLUBHOUSE',
+        }));
         if (!cancelled) setNewsArticles(articles);
       } catch (err) {
-        console.warn('[BeatReporterNews] Failed to load narratives:', err);
+        console.warn('[BeatReporterNews] Failed to load GameStory columns:', err);
       }
     })();
     return () => { cancelled = true; };
@@ -4680,7 +4741,7 @@ function BeatReporterNews({
 
       {filteredArticles.length === 0 && (
         <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-8 text-center">
-          <div className="text-[10px] text-[#E8E8D8]/60">NO ARTICLES FOUND</div>
+          <div className="text-[10px] text-[#E8E8D8]/60">NO POST-GAME COLUMNS YET</div>
         </div>
       )}
     </div>

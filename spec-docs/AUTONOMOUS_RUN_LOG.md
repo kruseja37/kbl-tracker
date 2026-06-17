@@ -195,4 +195,30 @@ progress** (below). Rule them and the loop resumes fast — most are small build
   score exclusion + a charisma-69 gate-out) + w1fix ordering test. **Invariants confirmed:** designation
   eligibility NOT unblocked (L7 owns activation) · playerDatabase SOT NOT touched · prospect output unchanged.
   Independent gates: tsc 0; my 3 unit files 21/21; **the 3 end-to-end initializeFranchise integration tests 33/33
-  (no regression to the init path)**. **→ NEXT: L9a (trait enrichment capture, manual/opt-in default).**
+  (no regression to the init path)**. **→ NEXT: L4a-connect (L9a deferred to a watched session — see below).**
+
+- **2026-06-16 — STARTED: L4a base reporter-connect (REP-1..3); L9a DEFERRED to a watched session.** Chose L4a
+  over L9a with an ENGINEERING (not over-caution) rationale: **L9a touches the LIVE GAME PATH**
+  (`useGameState`/`GameTracker`), **activates a dead code path** (`advanceCount`, 0 callers), and **needs new
+  in-game capture UI** — hard to unit-test, a break is user-visible gameplay corruption → genuinely warrants a
+  WATCHED session with browser verification. (Distinct from the OD-1 over-caution, which had an obvious default and
+  is now built.) **L4a-connect** is cert-specified, off the live game path, no new store: REP-1..3 = auto-assign a
+  franchiseId-scoped reporter on launch + the post-game-columns flag + rewrite `BeatReporterNews` to read
+  `GameStory`. DEFERRED within L4a: the publish bus (SeasonNewsItem / emission config / generateSeasonNewsTake) +
+  a manual assignment panel. Defaults: franchiseId-precedence cascade, auto-assign. Reporter TEXT is
+  Supabase/network-dependent (existing D-R5) — this WIRES it; JK browser-verifies when configured. Contract in
+  PROMPT_CONTRACTS.md; Codex invoked.
+
+- **2026-06-16 — L4a-connect COMMITTED (browser-pending).** Codex built (exit 0); Captain audit = **VERIFIED**.
+  Diff = 4 ALLOWED files: `reporterStorage` (getReporterForTeam += franchiseId, cascade precedence — franchiseId
+  filters & ignores leagueId when present, else leagueId fallback) · `reporterAssignment` (autoGenerate/assign +=
+  franchiseId) · `FranchiseHome` (both launch blocks auto-assign-if-missing a franchiseId reporter + write the
+  post-game-columns sessionStorage key + navigate state `liveBeat:false`/`postGame:true`; `BeatReporterNews`
+  rewritten to read `listGameStoriesForFranchiseSeason`, `generateGameRecap` RETIRED) · `useCommentaryFeed`
+  (franchiseId passed when gameMode==='franchise'). **Invariants:** NO publish-bus built (the 2 grep hits were my
+  contract-doc text) · NO new store/trackerDb/backup · NO value/oracle touch · liveBeat off. Independent gates:
+  tsc 0; reporter + franchise-launch tests 30/30 (Codex's broader run 83). **LOW (cleanup candidates):** the new
+  franchiseId-scope leans on existing tests (no new unit coverage added — diff-verified + browser-gated); franchiseId
+  rides a storage-layer intersection type, not the core `BeatReporter` type. **BROWSER-PENDING (JK): reporter TEXT
+  is Supabase/network-dependent (D-R5) — when configured, verify the franchise hub shows live GameStory columns
+  (not the legacy template).** **→ NEXT: assess L2 (greenfield mutable-layer).**

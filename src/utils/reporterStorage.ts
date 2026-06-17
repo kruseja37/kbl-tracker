@@ -7,6 +7,7 @@ const DB_NAME = "kbl-tracker";
 const STORE = "reporters";
 
 type ReporterCreateInput = Omit<BeatReporter, "id" | "changed_at">;
+type FranchiseScopedReporter = BeatReporter & { franchiseId?: string };
 
 export type ReporterMoodPatch = Partial<MoodState>;
 export type ReporterPatch = Partial<Omit<BeatReporter, "id" | "changed_at">>;
@@ -74,8 +75,9 @@ export async function getReporter(id: string): Promise<BeatReporter | null> {
 export async function getReporterForTeam(
   teamId: string,
   leagueId?: string,
+  franchiseId?: string,
 ): Promise<BeatReporter | null> {
-  const reporters = await listReporters({ teamId, leagueId });
+  const reporters = await listReporters({ teamId, leagueId, franchiseId });
   return reporters[0] ?? null;
 }
 
@@ -108,6 +110,7 @@ export async function updateReporter(
 }
 
 export async function listReporters(filter: {
+  franchiseId?: string;
   leagueId?: string;
   teamId?: string;
 } = {}): Promise<BeatReporter[]> {
@@ -115,7 +118,9 @@ export async function listReporters(filter: {
   const tx = db.transaction(STORE, "readonly");
   const store = tx.objectStore(STORE);
   const reporters = ((await requestToPromise(store.getAll())) as BeatReporter[]).filter((reporter) => {
-    if (filter.leagueId !== undefined && reporter.leagueId !== filter.leagueId) return false;
+    const scopedReporter = reporter as FranchiseScopedReporter;
+    if (filter.franchiseId !== undefined && scopedReporter.franchiseId !== filter.franchiseId) return false;
+    if (filter.franchiseId === undefined && filter.leagueId !== undefined && reporter.leagueId !== filter.leagueId) return false;
     if (filter.teamId !== undefined && reporter.teamId !== filter.teamId) return false;
     return !reporter.deleted;
   });

@@ -51,6 +51,7 @@ export interface UseCommentaryFeedDependencies {
   getReporterForTeam?: (
     teamId: string,
     leagueId?: string,
+    franchiseId?: string,
   ) => Promise<BeatReporter | null>;
   buildReporterContext?: (
     gameId: string,
@@ -389,7 +390,13 @@ export function useCommentaryFeed({
       return homeReporterRef.current.reporter;
     }
 
-    const reporter = await getReporterForTeamImpl(homeTeamId, leagueId);
+    const franchiseReporterScope =
+      gameMode === "franchise" ? reporterScope?.franchiseId : undefined;
+    const reporter = await getReporterForTeamImpl(
+      homeTeamId,
+      leagueId,
+      franchiseReporterScope,
+    );
     homeReporterRef.current = { gameId, reporter };
     setDisabledState((current) => ({
       ...current,
@@ -397,14 +404,20 @@ export function useCommentaryFeed({
       homeReporter: reporter,
     }));
     return reporter;
-  }, [gameId, getReporterForTeamImpl, homeTeamId, leagueId]);
+  }, [gameId, gameMode, getReporterForTeamImpl, homeTeamId, leagueId, reporterScope?.franchiseId]);
 
   const resolveAwayReporter = React.useCallback(async () => {
     if (awayReporterRef.current?.gameId === gameId) {
       return awayReporterRef.current.reporter;
     }
 
-    const reporter = await getReporterForTeamImpl(awayTeamId, leagueId);
+    const franchiseReporterScope =
+      gameMode === "franchise" ? reporterScope?.franchiseId : undefined;
+    const reporter = await getReporterForTeamImpl(
+      awayTeamId,
+      leagueId,
+      franchiseReporterScope,
+    );
     awayReporterRef.current = { gameId, reporter };
     setDisabledState((current) => ({
       ...current,
@@ -412,7 +425,7 @@ export function useCommentaryFeed({
       awayReporter: reporter,
     }));
     return reporter;
-  }, [awayTeamId, gameId, getReporterForTeamImpl, leagueId]);
+  }, [awayTeamId, gameId, gameMode, getReporterForTeamImpl, leagueId, reporterScope?.franchiseId]);
 
   React.useEffect(() => {
     void resolveIntensity();

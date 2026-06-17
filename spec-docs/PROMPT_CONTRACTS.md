@@ -7375,3 +7375,32 @@ tests pass (prospect output unchanged) · helper exported + used by buildCandida
 **Status:** contract issued; Codex invoked.
 **Result:** VERIFIED + committed (see git log).
 
+---
+
+## L4a — Base reporter-connect (REP-1..3) — 2026-06-16 (autonomous run)
+
+**ROUTE:** Codex | high → Opus audit. Autonomous (AUTH-1/AUTH-2). User-visible reporter-connect (no new engine).
+
+**GOAL:** Franchise produces ZERO reporter output today (no assignment, launch omits flags, BeatReporterNews uses
+the legacy `generateGameRecap`). Connect the EXISTING live reporter to franchise: auto-assign a franchiseId-scoped
+reporter on launch, pass `postGameColumnsEnabled` (REP-1: post-game columns ONLY), rewrite `BeatReporterNews` to
+read persisted `GameStory`. Publish-bus (SeasonNewsItem) + manual panel + REP-4 accuracy = DEFERRED.
+
+**SOURCE OF TRUTH:** REPORTER_CERTIFICATION §I (REP-1..3); mirror ExhibitionGame.tsx:703-735.
+
+**ALLOWED:** `reporterStorage.ts` · `reporterAssignment.ts` · `FranchiseHome.tsx` (navigate 974/3521 +
+BeatReporterNews 4428) · `useCommentaryFeed.ts`.
+
+**DO NOT TOUCH/BUILD:** publish bus · legacy narrativeEngine · REP-4 accuracy · liveBeat/between-inning · any new
+store/trackerDb/backup · any value/oracle file.
+
+**CONSERVATIVE DEFAULTS:** franchiseId cascade · auto-assign (no new panel) · postGameColumns default true ·
+reporter generation Supabase/network-dependent (D-R5), wired-only.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · reporter/franchise-home tests pass (no new break) ·
+franchise BeatReporterNews no longer calls generateGameRecap.
+
+**STOP IF:** out-of-ALLOWED edit; can't find the GameStory list fn; non-characterized regression.
+
+**Status:** contract issued; Codex invoked.
+

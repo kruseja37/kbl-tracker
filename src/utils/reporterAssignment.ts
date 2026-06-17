@@ -16,6 +16,13 @@ import {
   updateReporter,
 } from "./reporterStorage";
 
+type FranchiseScopedReporterInput = Parameters<typeof createReporter>[0] & {
+  franchiseId?: string;
+};
+type FranchiseScopedReporterPatch = Parameters<typeof updateReporter>[1] & {
+  franchiseId?: string;
+};
+
 export interface ReporterAssignmentTeam {
   id: string;
   name: string;
@@ -71,23 +78,25 @@ export function toReporterNameEra(era: EraFlavor | undefined): ReporterNameEra {
 export async function autoGenerateReporterForTeam(
   team: ReporterAssignmentTeam,
   leagueId?: string,
+  franchiseId?: string,
 ): Promise<BeatReporter> {
   const eraFlavor = team.era ?? "MODERN_LOCAL";
-  const existingNames = (await listReporters({ leagueId })).map((reporter) => reporter.name);
+  const existingNames = (await listReporters({ leagueId, franchiseId })).map((reporter) => reporter.name);
   const name = generateEraReporterName(toReporterNameEra(eraFlavor), existingNames);
   const palette = deriveReporterAvatarPalette({
     id: team.id,
     primaryColor: team.colors?.primary ?? DEFAULT_PRIMARY,
     secondaryColor: team.colors?.secondary ?? DEFAULT_SECONDARY,
   });
-  const profileSeed = hashString(`${team.id}:${leagueId ?? "global"}`);
+  const profileSeed = hashString(`${team.id}:${franchiseId ?? leagueId ?? "global"}`);
   const personality = PERSONALITIES[profileSeed % PERSONALITIES.length];
   const voiceStyle = VOICE_STYLES[Math.floor(profileSeed / PERSONALITIES.length) % VOICE_STYLES.length];
   const now = Date.now();
 
-  return createReporter({
+  const reporterInput: FranchiseScopedReporterInput = {
     teamId: team.id,
     leagueId,
+    franchiseId,
     name,
     personality,
     voiceStyle,
@@ -103,12 +112,19 @@ export async function autoGenerateReporterForTeam(
     moodMomentum: INITIAL_MOOD_STATE.moodMomentum,
     createdAt: now,
     updatedAt: now,
-  });
+  };
+
+  return createReporter(reporterInput);
 }
 
 export async function assignReporterToTeam(
   reporterId: string,
   teamId: string,
+  franchiseId?: string,
 ): Promise<BeatReporter> {
-  return updateReporter(reporterId, { teamId });
+  const patch: FranchiseScopedReporterPatch = { teamId };
+  if (franchiseId !== undefined) {
+    patch.franchiseId = franchiseId;
+  }
+  return updateReporter(reporterId, patch);
 }
