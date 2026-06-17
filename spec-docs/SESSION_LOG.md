@@ -4860,3 +4860,61 @@ AwardsWatchlist. Tracked D9 follow-ups: per-player profile/Almanac award display
 retirement (pre-flag-flip cleanup — re-point AwardsCeremonyFlow:1620 + RatingsAdjustmentFlow:388 BEFORE any flag flip).
 Open: OD-2..5, the D4 scope snag, the L-ECON1 + F-144 safety-wall set-aside. All on `codex/franchise-v1-next`; nothing
 pushed.
+
+---
+## Session: 2026-06-17 (Tu) — ATTENDED: D10 + DESIG-RECON + D11 + soul-layer opener (L3, L6a)
+
+### Context
+Resumed from the overnight D9-COMPLETE state with JK present (attended). JK available for design rulings; the
+normal surface-the-fork + SMB4-asset gates applied (AUTH-4 overnight mode off). 9 feature commits, every code diff
+Codex 5.5-built → Opus 4.8-audited independently (tsc/build/full-suite re-run, diff read, invariants grep'd, key
+claims test-proven), zero new reds across the whole session. All on `codex/franchise-v1-next`; nothing pushed.
+
+### What was accomplished
+- **Design rulings (DECISIONS_LOG 2026-06-17):** cleared the skipped-step forks **OD-2..5 + D4** — including
+  correcting a Captain-surfaced IV≠TV conflation (OD-2 economy/rookie/farm scale is ratings-based IV, never the
+  performance-based True Value). Reconciled + ruled the full **DESIG-RECON** team-designation model: 6 designations
+  all live in v1 — Albatross spec-guards (2× league-min salary + materially-overpaid + ≥2-peer trust), Fan Favorite
+  promoted to live with NO salary floor (the underpaid-overperformer / Brock-Purdy case), Captain no-minimum visible
+  badge, Fan Hopeful built visible-safe (random top-3 by scouted grade), Cornerstone CUT; effects dormant until
+  Phase-2. Verified Albatross was already intra-team (the ≥2-peer rule is a TV-trust gate, not a league comparison).
+  Then the **soul-layer "build to spec" GREENLIGHT**, the **L3** structural rulings, and the **L6** plan.
+- **D10** `51e487a` — Mode-2 SeasonSummary shows finalized LEAGUE awards (AwardsWatchlist inline) + the manifest
+  active-designation canonical-source fix + de-"no-awards" copy.
+- **DESIG-RECON build:** `b48b450` DR-1 (Albatross guards + FF promote + Cornerstone removal + orphan
+  `fanFavoriteEngine` deleted — cleared the stale `franchiseNarrativeEventEligibility` RED, characterized set 3→2) ·
+  `9d1db40` DR-2 (Captain charisma≥70 gate removed + Fan Hopeful visible-safe season-start assignment to
+  `team.fanHopefulPlayerId`) · `bd6b43c` DR-3 (team-hub six-designation strip) · `6e1df3c` DR-4 (spec reconciliation
+  to MODE_2_V1_FINAL §17).
+- **D11** `5eaf9d9` — UI live-label sweep (promote-surface / keep-effect, keep-list verified intact) + the
+  smart-label D4 value panel (frozen-aware: PROJECTED mid-season → FINAL when the value artifact freezes).
+- **Soul layer (greenlit, all build-DARK):** **L3 COMPLETE** = `5b1431d` L3a (pure Master Morale Matrix — one
+  event×personality×4-modifier table + composer, firewall-clean) + `d46a071` L3b (reuse+un-gate the
+  `kbl-franchise-morale` store, D7 subscription dark, Phase-2 flag default OFF gated defense-in-depth, parity-guard
+  extended). **L6a** `7359cbf` (pure §20 Fame engine — Heat/Reach nine-tier, trade-reset, WAR-gravity, fame-vs-merit,
+  channel aggregates).
+
+### Decisions made
+- See DECISIONS_LOG 2026-06-17 for the full set: OD-2..5 + D4; DESIG-RECON (6-designation model + the asymmetry
+  rulings); the soul-layer greenlight; the L3 structural rulings (fresh clean matrix engine, reuse the existing
+  morale store, build-dark); the L6 plan + defaults (§20 LOCKED, no new fork). Persistence note: store-creating
+  soul-layer tickets bump the trackerDb SCHEMA pin but **KBL_BACKUP_VERSION stays 2** (D9a/D2 precedent — adding a
+  store grows backup coverage, not the file format).
+
+### NFL / verification
+- Every code ticket: independent tsc 0 / build 0 / full-suite re-run by Opus (not trusted from the Codex paste) +
+  diff read + invariant greps + (for the pure engines) firewall/purity verification. Suite arc: 7,292/406 (D10) →
+  7,242/405 (DR-1) → 7,267/407 (L6a). End: **7,265 pass / 2 characterized fail** = wpaRuntimeBoundary +
+  franchiseManualSmokeFixture (DR-1 legitimately cleared the third). Soul-layer build-dark proven by test
+  (flag-OFF → no live morale/fame write).
+
+### Pending / next session
+- **NEXT = L6b** (the fame STORE + dark wiring — NEW parity-guarded `franchiseFameRecords` at trackerDb v18→v19,
+  KBL_BACKUP_VERSION stays 2, C-4 backup DoD + PIN-TRAP update, dark per-game compute, parallel-run vs the untouched
+  live fame, L3 fame-tap stays dark). **The L6b contract is already written in PROMPT_CONTRACTS.md.** Then L6
+  complete → {L5 fan-teeth} → {L7 effects, L8 dev, L9b traits, L10 random} → {L11–L14} → L-SIM gate → post-D13
+  activation (incl. the roster-tab confirmation-gate UI removal — JK flagged this as a required LS-9 cleanup).
+- **JK gates outstanding:** D12 (full Phase-1 manual smoke on real franchise data, iPad) + D13 (Playable-V1
+  checkpoint). Browser-verify backlog #1–#15 (the D10 awards / DR-3 designation strip / D11 labels surfaces added).
+- **Safety-wall set-asides (unchanged):** L-ECON1 (frozen draft-IV oracle, OD-2 ruled the design but the build stays
+  watched) + F-144. L9a (live-game-path zone-input capture, OD-5 ruled) is a watched-session build.

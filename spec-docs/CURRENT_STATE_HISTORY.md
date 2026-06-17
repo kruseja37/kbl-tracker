@@ -949,3 +949,35 @@ D7 designations, D9d-1 snapshot/finalize, D9d-2 AwardsWatchlist). Tracked D9 fol
 award display; the mwarCalculator/calculateMOYVotes retirement (pre-flag-flip cleanup). Open: OD-2..5, the D4 scope
 snag, the L-ECON1 + F-144 safety-wall set-aside. Detailed per-ticket trail in `AUTONOMOUS_RUN_LOG.md`. All on
 `codex/franchise-v1-next`; nothing pushed.
+
+---
+
+## 2026-06-17 — ATTENDED SESSION (JK present): D10 + DESIG-RECON + D11 + the soul-layer opener (L3, L6a)
+
+Resumed from the overnight D9-COMPLETE state. JK present throughout for design rulings. **9 feature commits**, every
+code diff Codex-built → Opus-audited independently (tsc/build/full-suite re-run, diff read, invariants grep'd, key
+claims test-proven), zero new reds across the whole session.
+
+**Design rulings (DECISIONS_LOG 2026-06-17):** OD-2..5 + D4 (incl. correcting an IV≠TV conflation — OD-2 economy
+scale never touches performance-based True Value); the full **DESIG-RECON** team-designation model (6 designations all
+live in v1: Albatross spec-guards [2× salary + materially-overpaid], Fan Favorite promoted no-floor [Brock-Purdy
+logic], Captain no-minimum badge, Fan Hopeful visible-safe [top-3 by scouted grade], Cornerstone CUT; effects dormant
+until Phase-2); the **soul-layer "build to spec" GREENLIGHT**; the **L3** structural rulings (fresh clean matrix engine,
+reuse the kbl-franchise-morale store, build-dark) and the **L6** plan (defaults, no new fork — §20 LOCKED).
+
+**Commits:** `51e487a` D10 (Mode-2 season summary WITH league awards + canonical designation count + de-"no-awards"
+copy) · `b48b450` DR-1 (Albatross guards + FF promote + Cornerstone removal + orphan delete — cleared the narrative
+RED, characterized set 3→2) · `9d1db40` DR-2 (Captain no-min + Fan Hopeful visible-safe assignment) · `bd6b43c` DR-3
+(team-hub six-designation strip) · `6e1df3c` DR-4 (spec reconciliation to MODE_2_V1_FINAL §17) · `5eaf9d9` D11 (UI
+live-label sweep + smart-label D4 value panel, promote-surface/keep-effect with the keep-list intact) · `5b1431d`
+L3a + `d46a071` L3b → **L3 COMPLETE** (the Master Morale Matrix spine: pure deterministic engine + the dark store
+wiring, build-dark behind a Phase-2 flag, defense-in-depth, parity-guard extended to kbl-franchise-morale) · `7359cbf`
+L6a (the pure Fame engine: §20.7 nine-tier Heat/Reach, trade-reset, WAR-gravity, fame-vs-merit, channel aggregates,
+firewall-pure).
+
+**End state:** D-stack D1–D11 done (D12 manual smoke + D13 checkpoint = JK gates). Soul layer underway, all DARK
+(no live morale/fame until after D13): **L3 COMPLETE**, **L6a done**, **NEXT = L6b** (the fame store + dark wiring —
+trackerDb v18→v19, KBL_BACKUP_VERSION stays 2 per D9a precedent, C-4 backup DoD). Suite **7,265 pass / 2 characterized
+fail (7,267 total, 407 files)** — characterized set shrank to wpaRuntimeBoundary + franchiseManualSmokeFixture (DR-1
+cleared the third). Browser-verify backlog #1–#15 (JK; the D10/DR-3/D11 surfaces added). All on
+`codex/franchise-v1-next`; nothing pushed.
