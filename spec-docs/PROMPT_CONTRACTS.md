@@ -8540,5 +8540,21 @@ to be the dead-gated offseason ceremony.
 
 Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited.
 
-**Status:** DISPATCHED to Codex (background, watchdog). Audit pending.
+**Status:** VERIFIED + COMMITTED `5eaf9d9` (2026-06-17). USER-VISIBLE → browser-pending.
+
+**AUDIT + EXECUTION RECORD (Opus 4.8, auditor ≠ builder):** Codex (high, watchdog) BUILT → Opus independently re-ran:
+tsc 0 · build 0 · FULL suite **7,243 pass / 2 fail (7,245 total, 405 files)** = exactly the characterized set, ZERO
+new reds; the 2 swept copy-pin files green (FranchiseHome 12, TeamHubContent.franchiseReads 47). Diff = 3 product
+(TeamHubContent.tsx, FranchiseHome.tsx, franchiseSeasonSummaryStorage.ts) + 2 test. **Verified by reading + grep:**
+(1) SMART-LABEL re-point correct — `panelStatus = trustedValueArtifactFrozen ? 'trusted' : (isAvailable ? 'projected'
+: 'blocked')`, `isAvailable` gated on `finalTrueValueCalculated`, title "TRUE VALUE PROJECTED"→"…FINAL" only when
+frozen, Expected Wins stays an estimate; never claims trusted mid-season. The VALUE INPUTS body / finalization /
+movement labels all frozen-gated (contradiction fixed). (2) PROMOTE sites done (manifest blocked-families drops the
+live six + Cornerstone; "Awards persistence BLOCKED"→LIVE on TeamHub + FranchiseHome; Captain/Fan Hopeful no longer
+blocked; designation caption generalized). (3) KEEP-list SURVIVED (grep: NO SALARY MOVEMENT, salary-matching, "stay
+blocked"×6, "preview-only"×7 [spray], "remain deferred", Mode 3×13, morale×108 all present) — no over-promotion.
+(4) NO policyFlag/version/flag/AwardsCeremonyFlow/offseasonStorage change. (5) Tests honest + STRENGTHENED (seed
+`trustedValueArtifactFrozen` false AND true → assert PROJECTED vs TRUSTED). **D11 COMPLETE → the D-stack UI is fully
+de-gated.** USER-VISIBLE → JK browser sign-off batched (scenarios #14/#15). NEXT = D12 (manual smoke on real franchise
+data, iPad) → D13 (Playable-V1 internal checkpoint) → the soul layer (L-stack).
 

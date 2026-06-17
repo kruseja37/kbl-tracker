@@ -16,10 +16,13 @@ six-designation strip under the 'team' tab, display-only) · `6e1df3c` **DR-4** 
 (Captain/MVP/Ace/Fan Favorite/Albatross/Fan Hopeful); designation EFFECTS (fame/morale) stay DORMANT until the Phase-2
 morale layer. Suite **7,243 pass / 2 characterized fail (7,245 total, 405 files)** — characterized set now
 **wpaRuntimeBoundary + franchiseManualSmokeFixture** (the narrative RED was legitimately cleared by DR-1). trackerDb
-**v18** / KBL_BACKUP_VERSION **2** (no bump this session). **NEXT = D11** (UI live-label sweep across salary / True
-Value / designations / awards — the D4 salary de-gate folds in here) → D12 (manual smoke, iPad) → D13 (Playable-V1
-checkpoint) → the soul layer (L-stack). Browser-verify backlog: #12 (D10) + #13 (DR-3). Branch codex/franchise-v1-next;
-nothing pushed.)
+**v18** / KBL_BACKUP_VERSION **2** (no bump this session). **D11 SHIPPED `5eaf9d9`** (UI live-label sweep + the
+smart-label D4 value panel [frozen-aware: PROJECTED mid-season → FINAL/TRUSTED at season-end freeze; Expected Wins
+stays an estimate]; promote-surface/keep-effect rule with the keep-list verified intact — no over-promotion; D4
+salary de-gate folded in). **NEXT = D12** (full manual smoke on real franchise data, iPad) → D13 (Playable-V1
+internal checkpoint) → the soul layer (L-stack). Browser-verify backlog: #12 (D10) + #13 (DR-3) + #14/#15 (D11).
+Branch codex/franchise-v1-next; nothing pushed. **6 feature commits this attended session** (D10 + DR-1..3 + D11;
+DR-4 docs).)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.
@@ -362,6 +365,16 @@ forced the test edit, and the stale `teamMvpAcePreview` assertion was aligned to
    the assigned players; switching teams updates the strip. (DR-1/DR-2 logic underneath: Albatross only on a
    ≥2×-min-salary materially-overpaid player; Fan Favorite on the best underpaid overperformer; no morale/fame effect
    yet — Phase-2.)
+14. **D11** (USER-VISIBLE) Team Hub → roster tab → the "TRUE VALUE + EXPECTED WINS" value panel (D4): mid-season it
+   reads **"TRUE VALUE PROJECTED"** (badge PROJECTED); after a season completes (the value artifact freezes) it reads
+   **"TRUE VALUE FINAL"** (badge TRUSTED). Salary shows as real (no "preview" framing); "NO SALARY MOVEMENT" + the
+   blocked families (expected-wins persistence, final-handoff, morale, Mode 3) STILL show blocked; Expected Wins reads
+   as an estimate. No internal contradiction (VALUE INPUTS card no longer says "deferred" while the badge says trusted).
+15. **D11** (USER-VISIBLE) label sweep elsewhere: the season-complete manifest no longer lists Fan Favorite/Albatross/
+   Captain/Fan Hopeful (or the cut Cornerstone) as "blocked"; "Awards persistence" reads LIVE (not BLOCKED) on the
+   Team Hub + the FranchiseHome league-leaders card — WITHOUT enabling any offseason ceremony/voting control; the
+   stadium-spray panels + all salary-movement/morale/Mode-3 lines REMAIN provisional/blocked (verify nothing
+   over-promoted).
 
 ## OPEN PENDING-JK (rolling)
 
