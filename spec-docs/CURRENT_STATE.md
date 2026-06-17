@@ -1,6 +1,8 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-17 (AUTONOMOUS OVERNIGHT RUN CONTINUING under AUTH-4 — **11 feature commits + D5 confirm**:
+**Last Updated:** 2026-06-17 (AUTONOMOUS OVERNIGHT RUN CONTINUING under AUTH-4 — **12 feature commits + D5 confirm**
+[+ `53ffd4c` **D9a**: awards persistence spine — 2 dark stores at trackerDb **v18** + byte-perfect backup-parity
+lockstep; **NEXT = D9b** (the 5 WAR-category engine)]:
 L1, D1, D2, L1.5+OD-1, L4a-connect, L4a-bus, D6a, **D6b** (`6559a19`, season-end value freeze), **D7a** (`abfa167`,
 designations live: TEAM_MVP/ACE → active + DesignationEvent), **D7b** (`013d886`, Albatross live + the D6 trust-leak
 fix → **D7 COMPLETE**), **D8** (`14c90fd`, award-trust GATE: trustedForAwards/finalWarTrusted computed off the D6
@@ -35,8 +37,13 @@ nothing pushed.)
   award trust requires `artifact.frozen===true` [a deliberate tightening vs D7, since awards are season-end
   finalizations]; new `franchiseAwardTrust.ts` adaptive qualifier helper via scaledThreshold; written
   `AWARD_TRUST_CONTRACT.md`; D8 is the GATE only — the engine/storage/UI/winners are D9). Frozen-gate mutation-proven.
-  Suite **7,263 pass / 3 characterized fail** throughout; trackerDb stays **v17**, KBL_BACKUP_VERSION 2 (D6b/D7/D8
-  added NO store — the freeze is a field, DesignationEvents are ephemeral, D8 stores nothing). **NEXT = D9.**
+  Suite **7,263 pass / 3 characterized fail** throughout; trackerDb stayed **v17** for D6b/D7/D8 (no store).
+  **+ `53ffd4c` D9a** (D9 SPLIT into D9a/b/c/d; D9a = the pure dark-store persistence diff — D6a precedent): 2 NEW
+  IndexedDB stores at **trackerDb v17→v18** — `franchiseAwardsRows` (LSD-1 fame seams baked in: candidate margins /
+  fWAR-total split / nullable voteWeight / reserved KK-Bust-Comeback) + `franchiseTrueValueSnapshots` (per-game trough
+  history) — with the FULL backup-parity lockstep (register both byte-mirrored + pin 18 + optional:true, KBL_BACKUP_
+  VERSION stays 2) + round-trip + the proven pin-trap test updated. Stores are DARK (no engine writers — D9b/c/d).
+  Suite **7,271 pass / 3 characterized fail (7,274 total, 403 files)**. **NEXT = D9b.**
 - **AUTONOMOUS BUILD RUN COMPLETE (2026-06-16) — 7 feature commits + D5 confirm on `codex/franchise-v1-next`
   (nothing pushed); every diff Codex-built → Opus-audited independently (tsc/tests re-run, substance read,
   invariants grep'd).** In order: `d48ab3c` **L1** (hidden-modifier rename + typed on Player) · `752882f` **D1**
@@ -58,16 +65,18 @@ nothing pushed.)
   after which the loop moves to the next ticket. Everything → `AUTONOMOUS_RUN_LOG.md` for JK's morning review;
   rework is the accepted cost of momentum. **A fresh thread: do the session-start reads, RESTATE the state, and
   PROCEED IMMEDIATELY — do NOT wait for JK's start-of-session confirmation (JK is unattended overnight; AUTH-4 is
-  the standing "go"). Start at D9 and keep dispatching the Queue** (`AUTONOMOUS_RUN_PROTOCOL.md`) until it is
+  the standing "go"). Start at D9b and keep dispatching the Queue** (`AUTONOMOUS_RUN_PROTOCOL.md`) until it is
   exhausted or everything left is set-aside on a safety wall. (D6b/D7a/D7b/D8 already committed this run — see the
   OVERNIGHT CONTINUATION bullet above + `AUTONOMOUS_RUN_LOG.md`.)
-- **NEXT (fresh thread, overnight under AUTH-4):** **D9 — real awards** (the biggest ticket; map it then expect a
-  D9a/b/c split): `franchiseAwardsEngine.ts` + `franchiseAwardsStorage.ts` (NEW IndexedDB store → trackerDb bump +
-  D2 backup-parity — the persistence/data-shape risk: audit HARDEST) + `AwardsWatchlist.tsx` + per-game recompute +
-  season-end finalize; **6 categories** (MVP=total WAR / Cy Young / RoY / Gold Glove=fWAR+def / Silver Slugger /
-  **MOY per MOY-1..7**); build with the **LSD-1 fame-ready seams** (per-award candidate margins · fWAR/total-WAR
-  split on GG · pluggable vote-weight · reserved KK/Bust/Comeback slots + the `franchiseTrueValueSnapshots` store).
-  Consume D8's frozen+trusted gate; do NOT flip the offseason flag. → **D10–D13** → then the
+- **NEXT (fresh thread, overnight under AUTH-4):** **D9b — the 5 WAR-category awards engine** (D9a persistence spine
+  is committed): NEW `franchiseAwardsEngine.ts` computing MVP=total WAR / Cy Young=pWAR / RoY / Gold Glove=fWAR (+the
+  fWAR/total split seam) / Silver Slugger=bWAR — off the **D6 FROZEN artifact + frozen TV rows**, gated on D8
+  `trustedForAwards` + `awardQualifierThresholds()`; populate `franchiseAwardsRows` with winner + candidate margins;
+  determinism MUTATION-KILL test (perturb a live TV row → winners don't move). RoY rookie source =
+  `careerStorage.seasonsPlayed===0` (Captain default). → **D9c** (MOY: season-aggregate pogAwards + record=
+  wins-above-D6-expectation + retire `calculateMOYVotes`, re-point AwardsCeremonyFlow/RatingsAdjustmentFlow first;
+  no fame tilt) → **D9d** (AwardsWatchlist UI + per-game watchlist recompute + game-1 snapshot capture + season-end
+  finalize + display; do NOT flip the offseason flag). → **D10–D13** → then the
   **soul layer** (L3 morale matrix → L6 fame → L7 effects → L8/L9b development → L10–L14 → the L-SIM gate; L2 lands
   with its first consumer). Take the **OD-3/4/5** leans + continue. **SET ASIDE (the one safety wall): L-ECON1**
   (re-prices the frozen draft-IV anchor → oracle touch) + F-144. The **D4** scope snag: take the conservative call
@@ -201,9 +210,10 @@ nothing pushed.)
 
 ## SUITE BASELINE
 
-**7,266 tests / 401 files** — full suite re-run 2026-06-17 after D8: **7,263 pass / 3 fail**, the 3 being EXACTLY
-the characterized set. (+12 tests / +1 file over the prior 7,254 / 400 — D6b/D7a/D7b added tests to existing files;
-D8 added `franchiseAwardTrust.test.ts`. No new IndexedDB store across D6b→D8.) `trackerDb` stays **v17** and `KBL_BACKUP_VERSION` stays 2 through D6b/D7/D7b — the value freeze is a
+**7,274 tests / 403 files** — full suite re-run 2026-06-17 after D9a: **7,271 pass / 3 fail**, the 3 being EXACTLY
+the characterized set. (+20 tests / +3 files over the prior 7,254 / 400 — D6b/D7/D8 added tests to existing files +
+`franchiseAwardTrust.test.ts`; D9a added `franchiseAwardsStorage.test.ts` + `franchiseTrueValueSnapshotsStorage.test.ts`.)
+**trackerDb is now v18** (D9a's 2 dark stores; D6b→D8 added none); `KBL_BACKUP_VERSION` stays 2. `trackerDb` stays **v17** and `KBL_BACKUP_VERSION` stays 2 through D6b/D7/D7b — the value freeze is a
 field on the existing `franchiseTrustedValueArtifacts` record, and `DesignationEvent`s are EPHEMERAL (in-memory,
 no store), so neither added a store or a version bump. Characterized set (a new RED OUTSIDE it is a real regression):
 **wpaRuntimeBoundary + franchiseManualSmokeFixture + franchiseNarrativeEventEligibility** (the last is a PRE-EXISTING
