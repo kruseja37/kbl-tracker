@@ -7881,3 +7881,72 @@ AUDIT (auditor ≠ builder; data-shape migration → audited hardest). Build cle
 
 **Status:** VERIFIED → committed (branch `codex/franchise-v1-next`, not pushed). **→ NEXT: D9b (5 WAR-category engine off the frozen artifact).**
 
+---
+
+## D9b — the 5 WAR-category awards ENGINE (compute + persist deterministic winners) — 2026-06-17 (autonomous overnight, AUTH-4)
+
+**ROUTE:** Codex | high reasoning effort → Opus 4.8 audit (auditor ≠ builder). Autonomous overnight (AUTH-4; AUTH-1).
+Determinism off the FROZEN spine is the make-or-break property. Grounding: the D9 map `wf_1a49cc24-8d7`.
+
+**SCOPE:** NEW `franchiseAwardsEngine.ts` (src/utils/) computing the 5 WAR-derived categories — MVP=`totalWar` /
+CY_YOUNG=`pitchingWar` / ROOKIE_OF_YEAR=top `totalWar` among `rookiePlayerIds` (= careerStorage.seasonsPlayed===0,
+Captain default) / GOLD_GLOVE=`fieldingWar` (+persist the `goldGloveSplit{fWar,totalWar}` seam) / SILVER_SLUGGER=
+`battingWar`. A PURE `computeFranchiseWarAwards(input)` (winner + ALL candidates + marginToWinner per category; no I/O)
++ `computeAndPersistFranchiseWarAwards(scope)` (loads frozen artifact + frozen TV rows + value rows + D8 report +
+rookie set → runs engine → writes `franchiseAwardsRows` finalized:true). MOY=D9c; UI/trigger/per-game recompute=D9d.
+
+**ELIGIBILITY (consume D8+D6, never recompute):** `trustedForAwards===true` (else no winners) AND
+`isPlayerTrustedForValue(frozenArtifact, id)` (inherits score-only/hidden-FARM/<2-peer exclusions) AND the adaptive
+qualifier (`awardQualifierThresholds(config)` minPA/minIP — no raw 162/9). Ranking quantities from the FROZEN TV rows
++ `warPreviewValues`; deterministic tie-break (score, then playerId).
+
+**CAPTAIN DEFAULTS (AUTH-4):** RoY rookie = careerStorage.seasonsPlayed===0 (input `rookiePlayerIds` set; no new
+field); the engine is a pure fn + a directly-callable persist fn — NOT wired to a trigger/UI in D9b (D9d wires it),
+the D9a-dark-store precedent; reserved KK/Comeback/Bust NOT emitted; voteWeight stays null; NO defensive-fame blend
+(Phase-2).
+
+**ALLOWED:** NEW `src/utils/franchiseAwardsEngine.ts` + its test. (Reads existing builders/storage read-only; writes
+only the D9a `franchiseAwardsRows` via its storage.)
+
+**DO NOT:** MOY (D9c) · wire processCompletedGame/FranchiseHome/UI/trigger (D9d) · recompute True Value / oracle /
+the D6 freeze write · offseason (AwardsCeremonyFlow/offseasonStorage/mwarCalculator/flag) · fame blend · new store /
+TRACKER_DB_VERSION (18) / KBL_BACKUP_VERSION (2) · raw 162/9.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · FULL suite = only the 3 characterized fails (zero new reds) ·
+new engine tests: determinism MUTATION-KILL (perturb a live row → winners unchanged), exclusions, qualifier scaling,
+trust-gate-off → no winners, RoY rookie, GG split, persist round-trip · grep: no TV recompute in the engine, no
+processCompletedGame/FranchiseHome edit, no raw 162/9.
+
+**STOP IF:** must recompute TV / read a non-frozen source to rank; must wire a trigger/UI to be testable; out-of-ALLOWED edit.
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited.
+
+**Status:** contract issued; Codex invoked (under 30-min watchdog).
+
+### D9b-AUDIT + EXECUTION RECORD (2026-06-17, autonomous overnight AUTH-4)
+
+**ROUTE actual:** Codex (high, background `codex exec` under watchdog) BUILT → Opus 4.8 (Captain) independent AUDIT
+(auditor ≠ builder). Build clean.
+
+**AUDIT VERDICT: CONFORMS / VERIFIED.** Independent re-verification (Opus — re-ran):
+- Diff = 2 NEW files only (`franchiseAwardsEngine.ts` + test); ZERO edits to existing files (additive, dark). Pure
+  `computeFranchiseWarAwards` gates on `trustedForAwards && artifact.frozen===true` → []; 5 categories (MVP=totalWar /
+  CY_YOUNG=pitchingWar / ROOKIE_OF_YEAR=top totalWar ∩ rookiePlayerIds / GOLD_GLOVE=fieldingWar +goldGloveSplit seam /
+  SILVER_SLUGGER=battingWar); eligibility = `isPlayerTrustedForValue(frozen)` + finite score + adaptive PA/IP qualifier;
+  deterministic sort (score, frozen trueValue, playerId); candidate margins (score−winnerScore); voteWeight null;
+  reserved KK/Comeback/Bust NOT emitted. `computeAndPersistFranchiseWarAwards` loads frozen artifact + frozen TV rows +
+  D8 report + rookie set (careerStorage.seasonsPlayed===0) → writes `franchiseAwardsRows` finalized:true.
+- `tsc --noEmit` 0 (Opus) · `npm run build` success (Opus) · full suite **7,277 pass / 3 fail (7,280 total)** = EXACTLY
+  the characterized set, ZERO new reds.
+- **DETERMINISM MUTATION-KILL:** a 99-WAR UNTRUSTED "live-only" row (not in trustedPlayerIds) does NOT win (membership
+  gate); mutating non-ranking fields of a trusted row → winners byte-identical (`toEqual`). **Adaptive qualifier
+  SCALES:** a sub-PA player excluded at a 32-game season WINS MVP at a 16-game season (no hardcoded 162/9). Plus
+  exclusions / trust-off→[] / RoY rookie-set / GG split / persist round-trip into the D9a store.
+- **INVARIANTS (Opus grep):** no `calculateAndPersistFranchiseTrueValueForSeason` in the engine (never recomputes TV);
+  no processCompletedGame/FranchiseHome edit; no raw 162/9; engine has ZERO app callers (DARK — D9d wires the
+  trigger/UI); TRACKER_DB_VERSION 18; KBL_BACKUP_VERSION 2.
+- NOTE (minor, for JK): the engine ranks WAR awards on `warPreviewValues` (season-final WAR) gated by frozen
+  membership — correct + deterministic at finalize (season over). Freezing raw WAR is out of D9 scope.
+
+**Status:** VERIFIED → committed (branch `codex/franchise-v1-next`, not pushed). **→ NEXT: D9c (MOY: season-aggregate pogAwards + record=wins-above-D6-expectation + retire mwarCalculator/calculateMOYVotes).**
+

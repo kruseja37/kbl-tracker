@@ -487,3 +487,29 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   D8 trustedForAwards + awardQualifierThresholds; populate franchiseAwardsRows + candidate margins; determinism
   mutation-kill test [perturb live TV → winners don't move]). RoY rookie source = careerStorage.seasonsPlayed===0
   [Captain default]. Then D9c MOY, D9d UI/finalize.**
+
+- **2026-06-17 (overnight, AUTH-4) — STARTED: D9b (the 5 WAR-category awards engine).** Contracted directly from the
+  D9 map (no new map). NEW `franchiseAwardsEngine.ts`: a PURE `computeFranchiseWarAwards` (winner + all candidates +
+  marginToWinner per category) + `computeAndPersistFranchiseWarAwards` (loads frozen artifact + frozen TV rows + D8
+  report + rookie set → writes the D9a `franchiseAwardsRows`, finalized:true). 5 categories: MVP=totalWar /
+  CyYoung=pitchingWar / RoY=top totalWar among rookies / GoldGlove=fieldingWar (+goldGloveSplit seam) /
+  SilverSlugger=battingWar. Gated on D8 trustedForAwards + isPlayerTrustedForValue(frozen) + awardQualifierThresholds.
+  Reads the FROZEN spine only — never recomputes TV (the determinism make-or-break). Contract in PROMPT_CONTRACTS.md;
+  Codex invoked under the 30-min watchdog. **DEFAULTS-TAKEN:** RoY = careerStorage.seasonsPlayed===0 (input set, no new
+  field) · engine is pure fn + directly-callable persist fn, NOT app-wired in D9b (D9d wires the trigger/UI — the
+  D9a-dark precedent) · reserved KK/Comeback/Bust not emitted · voteWeight null · no defensive-fame blend (Phase-2).
+  **D9c (MOY) + D9d (UI/finalize/recompute) QUEUED.**
+
+- **2026-06-17 (overnight, AUTH-4) — D9b COMMITTED.** Build clean. Captain (Opus) independent audit = **VERIFIED**.
+  Diff = 2 NEW files only (`franchiseAwardsEngine.ts` + test), ZERO existing-file edits (additive/dark). Pure
+  `computeFranchiseWarAwards` (5 WAR categories, gated on D8 + frozen membership + adaptive qualifier, deterministic
+  sort, candidate margins, GG split seam) + `computeAndPersistFranchiseWarAwards` (loads frozen spine → writes the D9a
+  store, finalized:true). **Gates (re-ran):** tsc 0 · build 0 · full suite **7,277 pass / 3 fail (7,280 total)** =
+  EXACTLY characterized, ZERO new reds · **DETERMINISM MUTATION-KILL** (99-WAR untrusted row can't win; non-ranking
+  mutations → identical winners) · adaptive qualifier SCALES (sub-PA wins MVP at 16g, not 32g — no 162/9) · exclusions
+  / trust-off→[] / RoY rookie-set / GG split / persist round-trip · engine never recomputes TV, no app wiring (DARK —
+  D9d wires it), versions unchanged. **→ NEXT: D9c (MOY — season-aggregate the live pogAwards PogManagerValueTotal
+  composite; 4 pool-normalized inputs [MOY-6]; record term = wins-above-D6-expectation [MOY-3, hard D6 couple, drops
+  salary expectation]; no fame tilt [MOY-4]; RETIRE calculateMOYVotes/mwarCalculator salary path + RE-POINT
+  AwardsCeremonyFlow.tsx + RatingsAdjustmentFlow.tsx off it FIRST [MOY-5]; weights sim-deferred [MOY-7]; lineup
+  quantity = capped realized record [MOY-2 Captain default]). Then D9d (UI/finalize/recompute).**
