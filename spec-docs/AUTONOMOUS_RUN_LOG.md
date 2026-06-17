@@ -247,3 +247,29 @@ salary-live, the L4a publish-bus). D5 is confirm-only; D6 is the value-trust gat
   rides a storage-layer intersection type, not the core `BeatReporter` type. **BROWSER-PENDING (JK): reporter TEXT
   is Supabase/network-dependent (D-R5) — when configured, verify the franchise hub shows live GameStory columns
   (not the legacy template).** **→ NEXT: assess L2 (greenfield mutable-layer).**
+
+- **2026-06-16 — BROWSER DEFERRED (JK) → keep rolling; D4 SNAG flagged; STARTED L4a publish-bus.** JK ruled to
+  BATCH the live-franchise + reporter-text browser checks (the ratified batched-browser process; engineering audits
+  already passed) so the loop continues. **D4 snag (genuine finding for JK):** the salary preview chips D0 cited
+  (`TeamHubContent.tsx:4623-4636`) sit on the COMBINED "TRUE VALUE + EXPECTED WINS PREVIEW" panel — salary numbers
+  are CONTEXT for the value preview, not a separable surface. D0's "de-gate salary, don't touch True-Value/Expected-
+  Wins (wait for D6)" can't be cleanly satisfied without a presentation decision (how to show live-salary in an
+  otherwise-D6-gated panel) → **D4 needs a JK scope clarification.** Rolled instead with **L4a publish-bus core**
+  (SEA-1: ruled built EARLY; off the live path; SEA-3 ruled): SeasonNewsItem store + SeasonEmissionConfig +
+  emission gate + generateSeasonNewsTake on the canonical reporter. BUILD-DARK (no event taps yet) + network-
+  dependent (returns null gracefully w/o Supabase). New stores → trackerDb v15→16 + backup (D2 pattern, KBL_BACKUP_
+  VERSION stays 2). Contract in PROMPT_CONTRACTS.md; Codex invoked.
+
+- **2026-06-16 — L4a publish-bus core COMMITTED.** Codex built (exit 0); Captain audit = **VERIFIED**. New:
+  `types/reporter` (SeasonNewsItem + SeasonEmissionConfig) · `seasonNewsStorage` (mirrors gameStoriesStorage) ·
+  `seasonEmissionConfigStorage` · `seasonNewsGenerator` (shouldEmitSeasonNews gate + generateSeasonNewsTake) ·
+  `trackerDb` v15→16 (2 stores) · `backupRestore` (register 2, pin 16) · `syncConfig`. **§5 INVARIANT UPHELD:** the
+  generator imports NO morale/value engine, narrates strictly from `event.facts`, the system prompt hard-codes
+  "matrix is the math, reporter narrates only, never invent, the gate already decided"; returns null gracefully on
+  gate-reject / parse-fail / transport-error (no throw w/o Supabase). Invariants: KBL_BACKUP_VERSION stays 2 ·
+  TRACKER_DB_VERSION 16 · no live-game-path / value / legacy-narrativeEngine touch. Independent gates: tsc 0; 12
+  tests pass incl. **the D2 parity-guard STILL GREEN with the 2 new stores** (data-integrity confirmed). BUILD-DARK
+  (no event taps yet — SEA-1 ruled built-early) + network-dependent. NOT browser-pending (backend; no user-visible
+  surface this increment). DEFERRED within L4a-bus: event taps, memory writer/regen, hub season-feed UI.
+  **→ Pausing for JK direction: D4 scope ruling · soul-layer "build to spec" greenlight · L-ECON1 held · L2
+  premature · L9a live-path (browser-batchable).**

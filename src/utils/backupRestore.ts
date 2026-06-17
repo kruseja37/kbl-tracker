@@ -291,11 +291,19 @@ const trackerStores: Record<string, StoreSchema> = {
     keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'],
     indexes: [{ name: 'by_scope', keyPath: ['franchiseId', 'seasonId', 'statsScopeId'] }],
   },
+  seasonNewsItems: {
+    keyPath: ['franchiseId', 'seasonId', 'id'],
+    indexes: [
+      { name: 'by_scope', keyPath: ['franchiseId', 'seasonId'] },
+      { name: 'by_event', keyPath: ['franchiseId', 'seasonId', 'eventType'] },
+    ],
+  },
+  seasonEmissionConfig: { keyPath: 'id' },
 };
 
 export const STATIC_DATABASE_SCHEMAS: Record<string, DatabaseSchema> = {
   'kbl-tracker': {
-    version: 15,
+    version: 16,
     stores: trackerStores,
   },
   'kbl-playoffs': {

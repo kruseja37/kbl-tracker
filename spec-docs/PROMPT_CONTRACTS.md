@@ -7403,4 +7403,33 @@ franchise BeatReporterNews no longer calls generateGameRecap.
 **STOP IF:** out-of-ALLOWED edit; can't find the GameStory list fn; non-characterized regression.
 
 **Status:** contract issued; Codex invoked.
+**Result:** VERIFIED, browser-pending + committed `0cf4ca2`.
+
+---
+
+## L4a publish-bus CORE (SEA-1..5) — 2026-06-16 (autonomous run, browser-deferred)
+
+**ROUTE:** Codex | high → Opus audit. Autonomous (AUTH-1/AUTH-2). Build-dark foundation, off the live path.
+
+**GOAL:** Stand up the SEA-1 season-long narrative "publish bus": `SeasonNewsItem` store + sim-tunable
+`SeasonEmissionConfig` + emission gate + `generateSeasonNewsTake` on the canonical reporter. No event SOURCES
+(later soul-layer systems tap in); memory writer + hub feed deferred.
+
+**SOURCE OF TRUTH:** REPORTER_CERTIFICATION Part 2 (SEA-1..5); SEA-3 = SeasonNewsItem store. Mirror
+`gameStoriesStorage.ts` + claudeClient/promptBuilder transport; reuse `NarrativeEventType`.
+
+**ALLOWED:** `types/reporter.ts` (+SeasonNewsItem, +SeasonEmissionConfig) · NEW `seasonNewsStorage.ts` (mirror
+gameStoriesStorage) · NEW `seasonEmissionConfigStorage.ts` · NEW `seasonNewsGenerator.ts`
+(shouldEmit + generateSeasonNewsTake; returns null gracefully w/o Supabase) · `trackerDb.ts` (2 stores, v15→16) ·
+`backupRestore.ts` (register 2 stores, pin 15→16, **KBL_BACKUP_VERSION stays 2**) · `syncConfig.ts` · tests.
+
+**DO NOT TOUCH/BUILD:** event sources/taps · memory writer / hub feed (deferred) · live game path · legacy
+narrativeEngine (reuse only the type) · KBL_BACKUP_VERSION · value/oracle/REP-4.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · new tests + the D2 parity-guard (still green w/ 2 new
+stores) + elimination test pass · TRACKER_DB_VERSION 16, pin 16, KBL_BACKUP_VERSION 2.
+
+**STOP IF:** out-of-ALLOWED edit; parity-guard reveals other missing stores; transport can't be mirrored.
+
+**Status:** contract issued; Codex invoked.
 

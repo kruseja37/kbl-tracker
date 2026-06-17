@@ -5,6 +5,8 @@
  * src/types/game.ts, which remains Franchise-only and out of scope here.
  */
 
+import type { NarrativeEventType } from "../engines/narrativeEngine";
+
 export type FameTier = 1 | 2 | 3 | 4 | 5;
 
 export const FAME_TIER_LABEL: Record<FameTier, string> = {
@@ -124,6 +126,32 @@ export interface GameStory {
   createdAt: number;
   changed_at: number;
   deleted?: boolean;
+}
+
+export interface SeasonNewsItem {
+  id: string;
+  franchiseId: string;
+  seasonId: string;
+  seasonNumber: number;
+  eventType: NarrativeEventType;
+  subjectIds: string[];
+  facts: Record<string, unknown>;
+  headline: string;
+  body: string;
+  reporterId: string;
+  dramaticWeight: number;
+  createdAt: number;
+  changed_at: number;
+  deleted?: boolean;
+}
+
+export interface SeasonEmissionConfig {
+  id: string;
+  marqueeOnly: boolean;
+  perEventRate: Partial<Record<NarrativeEventType, number>>;
+  raceTopN: number;
+  simWritable: boolean;
+  lastModified: number;
 }
 
 export interface NarrativeContext {

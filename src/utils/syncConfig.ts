@@ -34,7 +34,9 @@ export const SYNC_REGISTRY: Record<string, Record<string, string | string[]>> = 
     reporterLegacySummaryJobs: 'id',
     rivalryScores: 'id',
     rosterSnapshots: 'key',
+    seasonEmissionConfig: 'id',
     seasonMetadata: 'seasonId',
+    seasonNewsItems: ['franchiseId', 'seasonId', 'id'],
     userPreferences: 'key',
   },
   'kbl-league-builder': {

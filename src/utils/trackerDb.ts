@@ -14,7 +14,7 @@
  */
 
 const DB_NAME = 'kbl-tracker';
-export const TRACKER_DB_VERSION = 15; // Must be the highest version any consumer ever used
+export const TRACKER_DB_VERSION = 16; // Must be the highest version any consumer ever used
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -327,6 +327,24 @@ export async function getTrackerDb(): Promise<IDBDatabase> {
         ledgerStore.createIndex('by_scope', ['franchiseId', 'seasonId', 'statsScopeId'], {
           unique: false,
         });
+      }
+
+      // v16 / L4a SEA-1..5: season-long publish-bus foundation. News items
+      // are stored separately from relationship/rivalry edge state.
+      if (!db.objectStoreNames.contains('seasonNewsItems')) {
+        const seasonNewsStore = db.createObjectStore('seasonNewsItems', {
+          keyPath: ['franchiseId', 'seasonId', 'id'],
+        });
+        seasonNewsStore.createIndex('by_scope', ['franchiseId', 'seasonId'], {
+          unique: false,
+        });
+        seasonNewsStore.createIndex('by_event', ['franchiseId', 'seasonId', 'eventType'], {
+          unique: false,
+        });
+      }
+
+      if (!db.objectStoreNames.contains('seasonEmissionConfig')) {
+        db.createObjectStore('seasonEmissionConfig', { keyPath: 'id' });
       }
     };
   });
