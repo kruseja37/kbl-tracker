@@ -114,6 +114,7 @@ function report(rows: FranchiseValueInputRow[]): FranchiseValueInputReport {
       scheduleRowsUsedAsSeasonLength: false,
       seasonMetadataTotalGames: 0,
     },
+    trustedValueArtifactFrozen: false,
     rows,
     trueValuePolicy: {
       finalTrueValueCalculated: false,

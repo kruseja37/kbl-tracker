@@ -124,6 +124,7 @@ function valueReport(overrides: Partial<FranchiseValueInputReport> = {}): Franch
     seasonNumber: 1,
     generatedAt: 1,
     seasonContext: rows[0]?.seasonContext ?? valueRow().seasonContext,
+    trustedValueArtifactFrozen: false,
     rows,
     trueValuePolicy: {
       finalTrueValueCalculated: false,

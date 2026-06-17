@@ -7731,3 +7731,85 @@ Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff
 
 **Status:** VERIFIED → committed (branch `codex/franchise-v1-next`, not pushed). **→ NEXT: D8 (award-trust gate).**
 
+---
+
+## D8 — award-trust GATE (promote trustedForAwards/finalWarTrusted to computed; adaptive thresholds) — 2026-06-17 (autonomous overnight, AUTH-4)
+
+**ROUTE:** Codex | high reasoning effort → Opus 4.8 audit (auditor ≠ builder). Autonomous overnight (AUTH-4; AUTH-1).
+The make-or-break award-trust gate → audit determinism + exclusions + the D8/D9 boundary HARDEST. Map:
+`wf_6babf91f-7d4` (5 readers, Captain file:line-verified).
+
+**THE CUT (held firm):** D8 is the GATE ONLY — computed trust booleans + a written contract + an adaptive
+award-qualifier helper + tests. **D8 STORES NOTHING** (no IndexedDB store, no TRACKER_DB_VERSION bump, no
+KBL_BACKUP_VERSION change). The awards engine/storage/UI/stored-winners + mwar retirement are D9 (greenfield-confirmed:
+0 files). "Deterministic stored winners" = the OUTCOME D8's gate guarantees for D9, not a D8 deliverable.
+
+**CAPTAIN DEFAULTS (AUTH-4, documented, JK-overridable):**
+1. **Award trust REQUIRES `artifact.frozen === true`** (not just membership) — the determinism tightening. The
+   artifact re-persists every game until frozen (processCompletedGame:227); existing D6/D7 reads ignore `frozen`.
+   Awards are season-end finalized → reading a drifting artifact makes "deterministic" a lie. Award trust =
+   preview-only until frozen, trusted after. Stricter than D7 designation readiness — flagged for JK.
+2. **"NOT a boolean flip":** the booleans = `Boolean(frozen && trusted-member && thresholdsProven)`, proven by a
+   mutation-honest test that they stay FALSE when unfrozen/ungated.
+3. **Exclusions inherited:** score-only/hidden-FARM/<2-peer are already baked into `trustedPlayerIds` — gate on
+   `isPlayerTrustedForValue`; never build a separate candidate set.
+4. **Thresholds = STRUCTURE not magnitudes:** author the `awardQualifierThresholds(config)` helper via
+   `scaledThreshold` (baselines 502 PA / 162 IP, scaled — no raw 162/9 in gating); magnitudes sim-tunable (§16). D9
+   applies it per-player.
+5. **Leave the season-summary manifest to D10** (don't touch `awardsImplemented`/version); its blocker wording going
+   slightly stale is acceptable.
+
+**GOAL:** promote `trustedForAwards`/`finalWarTrusted`/`consumerThresholdsProven` (literal-false in
+franchiseAnalyticsTrust.ts) to COMPUTED booleans gated on the D6 FROZEN artifact + value trust + adaptive thresholds;
+flip the downstream awards consumer from hardcoded 'preview-only' to computed; author the qualifier helper + the
+written contract + tests.
+
+**ALLOWED:** `franchiseValueInputs.ts` (capture artifact.frozen; promote per-row `warConsumerTrust.awards` =
+membership && frozen; surface scope-level frozen on the report) · `franchiseAnalyticsTrust.ts` (widen the 3 literal
+types → boolean; `hasAwardTrust` helper; compute finalWarTrusted/trustedForAwards/consumerThresholdsProven; flip the
+downstream awards status) · NEW `franchiseAwardTrust.ts` (or extend franchiseAdaptiveStandards.ts) award-qualifier
+helper via scaledThreshold · NEW `spec-docs/AWARD_TRUST_CONTRACT.md` · tests (frozen-required / promoted / exclusions
+/ adaptive-scaling; update the existing award-trust pinning test).
+
+**DO NOT:** franchiseAwardsEngine/Storage/AwardsWatchlist/stored winners/per-game recompute (D9) · new store /
+TRACKER_DB_VERSION (17) / KBL_BACKUP_VERSION (2) · franchiseSeasonSummaryStorage policyFlags/version (D10) · mwar
+retirement (D9) · other Phase-2 trust flags · break the narrative characterized test · raw 162/9 in award gating.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · full suite within the 3 characterized fails (no new reds) ·
+grep: no new store, TRACKER_DB_VERSION 17, KBL_BACKUP_VERSION 2, no raw 162/9 in award gating, no franchiseAwards*
+file created.
+
+**STOP IF:** out-of-ALLOWED edit; must build the awards engine/store to compile; new store/version bump needed;
+promotion breaks the narrative characterized test.
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited.
+
+**Status:** contract issued; Codex invoked (under 30-min watchdog).
+
+### D8-AUDIT + EXECUTION RECORD (2026-06-17, autonomous overnight AUTH-4)
+
+**ROUTE actual:** Codex (high, background `codex exec` under watchdog) BUILT → Opus 4.8 (Captain) independent AUDIT
+(auditor ≠ builder). Build clean.
+
+**AUDIT VERDICT: CONFORMS / VERIFIED.** Independent re-verification (Opus — re-ran):
+- Diff = 2 product (`franchiseValueInputs.ts`: capture `trustedValueArtifactFrozen`, widen `awards`→boolean, set
+  `awards = trustedForTrueValue && frozen`; `franchiseAnalyticsTrust.ts`: widen 3 literal types→boolean, `hasAwardTrust`,
+  `finalWarTrusted = Boolean(frozen && trueValueTrust)`, `trustedForAwards = Boolean(finalWarTrusted &&
+  consumerThresholdsProven && hasAwardTrust)`, `consumerThresholdsProven = metadata present`, computed downstream
+  awards status) + 2 NEW (`franchiseAwardTrust.ts` qualifier helper via scaledThreshold; `AWARD_TRUST_CONTRACT.md`) +
+  tests. The 7 other test files = identical mechanical fixture additions (`trustedValueArtifactFrozen: false`,
+  required by the new report field) — the narrative characterized test got ONLY that, no assertion change.
+- `tsc --noEmit` 0 (Opus) · `npm run build` success (Opus) · full suite **7,263 pass / 3 fail (7,266 total)** = EXACTLY
+  the characterized set, ZERO new reds; the narrative "preview-only" RED unchanged (frozen gate keeps its unfrozen
+  fixture preview-only — baseline preserved).
+- **FROZEN-GATE DETERMINISM MUTATION-PROVEN:** dropping `report.trustedValueArtifactFrozen &&` from finalWarTrusted
+  turns the "keep awards preview-only when unfrozen" test RED. Tests pin the gate both sides (false-when-unfrozen +
+  true-when-frozen+trusted+thresholds) + exclusions (score-only/hidden-FARM/sub-peer → no award trust).
+- **BOUNDARY HELD:** trackerDb/backupRestore/franchiseSeasonSummaryStorage/mwarCalculator UNTOUCHED; no
+  franchiseAwardsEngine/Storage/AwardsWatchlist created; no new store; TRACKER_DB_VERSION 17; KBL_BACKUP_VERSION 2;
+  no raw 162/9 in award gating (only the named scaled `QUALIFIED_IP_BASELINE`); other Phase-2 flags stay false.
+- **BROWSER-PENDING (batched):** on real franchise data, awards stay preview-only until the season-end freeze, then
+  the analytics truth-map shows award trust 'trusted' (no winners yet — D9).
+
+**Status:** VERIFIED → committed (branch `codex/franchise-v1-next`, not pushed). **→ NEXT: D9 (real awards engine + MOY-1..7 + LSD-1 seams).**
+

@@ -94,6 +94,7 @@ function report(rows: FranchiseValueInputRow[]): FranchiseValueInputReport {
     seasonNumber: 1,
     generatedAt: 100,
     seasonContext: seasonContext(),
+    trustedValueArtifactFrozen: false,
     rows,
     trueValuePolicy: {
       finalTrueValueCalculated: false,

@@ -125,6 +125,7 @@ function valueReport(overrides: Partial<FranchiseValueInputReport> = {}): Franch
       scheduleRowsUsedAsSeasonLength: false,
       seasonMetadataTotalGames: 2,
     },
+    trustedValueArtifactFrozen: false,
     rows,
     trueValuePolicy: {
       finalTrueValueCalculated: false,
@@ -407,7 +408,7 @@ describe('franchise analytics trust report', () => {
     expect(report.downstreamConsumers.salaryMovement.status).toBe('blocked');
   });
 
-  test('WAR can be trusted only for MVP/Ace designation input gating while final consumers remain blocked', () => {
+  test('WAR can be trusted for MVP/Ace designation input gating while award consumers remain preview-only without a frozen artifact', () => {
     const report = buildFranchiseAnalyticsTrustReport({
       valueInputReport: valueReport(),
     });
@@ -432,10 +433,10 @@ describe('franchise analytics trust report', () => {
       },
     });
     expect(report.war.reasons.join(' ')).toMatch(/TEAM_MVP\/ACE designation input gating/i);
-    expect(report.war.limitations.join(' ')).toMatch(/Final WAR remains untrusted/i);
+    expect(report.war.limitations.join(' ')).toMatch(/artifact is frozen and adaptive award thresholds are proven/i);
   });
 
-  test('D6 artifact-backed rows promote True Value and value-delta trust but not awards or final WAR', () => {
+  test('D6 artifact-backed rows promote True Value and value-delta trust but keep awards preview-only when unfrozen', () => {
     const trustedRow = valueRow({
       warInputAvailability: {
         battingWar: true,
@@ -471,6 +472,138 @@ describe('franchise analytics trust report', () => {
       trustedForMorale: false,
       finalWarTrusted: false,
     });
+    expect(report.downstreamConsumers.awards.status).toBe('preview-only');
+    expect(report.downstreamConsumers.awards.reasons.join(' ')).toMatch(/artifact is frozen/i);
+  });
+
+  test('frozen D6 artifact members and season metadata promote final WAR and award trust', () => {
+    const trustedRow = valueRow({
+      warInputAvailability: {
+        battingWar: true,
+        pitchingWar: false,
+        fieldingWar: true,
+        baserunningWar: true,
+        any: true,
+        trustedForFinalValue: true,
+      },
+      warConsumerTrust: {
+        teamMvpDesignations: false,
+        aceDesignations: false,
+        fanFavoriteAlbatrossDesignations: true,
+        awards: true,
+        salaryMovement: false,
+        trueValue: true,
+        morale: false,
+        mode3Handoff: false,
+        blockers: [],
+        limitations: ['Award trust is gated by frozen D6 trusted-value artifact membership.'],
+      },
+    });
+    const report = buildFranchiseAnalyticsTrustReport({
+      valueInputReport: valueReport({
+        trustedValueArtifactFrozen: true,
+        rows: [trustedRow],
+      }),
+    });
+
+    expect(report.adaptiveStandards).toMatchObject({
+      status: 'trusted',
+      consumerThresholdsProven: true,
+    });
+    expect(report.war).toMatchObject({
+      status: 'trusted',
+      finalWarTrusted: true,
+      trustedForAwards: true,
+      trustedForTrueValue: true,
+      trustedForSalaryMovement: false,
+      trustedForMorale: false,
+      trustedForMode3Handoff: false,
+    });
+    expect(report.downstreamConsumers.awards).toMatchObject({
+      status: 'trusted',
+    });
+  });
+
+  test('score-only hidden-FARM and sub-peer rows never create award trust', () => {
+    const excludedRows = [
+      valueRow({
+        playerId: 'score-only-player',
+        seasonStatsAvailability: { batting: false, pitching: false, fielding: false, any: false },
+        warInputAvailability: {
+          battingWar: false,
+          pitchingWar: false,
+          fieldingWar: false,
+          baserunningWar: false,
+          any: false,
+          trustedForFinalValue: false,
+        },
+        warPreviewValues: {
+          battingWar: null,
+          pitchingWar: null,
+          fieldingWar: null,
+          baserunningWar: null,
+          totalWar: null,
+          totalWarSource: 'unavailable',
+          trustedForFinalValue: false,
+        },
+        warConsumerTrust: {
+          teamMvpDesignations: false,
+          aceDesignations: false,
+          fanFavoriteAlbatrossDesignations: false,
+          awards: false,
+          salaryMovement: false,
+          trueValue: false,
+          morale: false,
+          mode3Handoff: false,
+          blockers: ['Score-only rows have no trusted player archive.'],
+          limitations: [],
+        },
+      }),
+      valueRow({
+        playerId: 'hidden-farm-player',
+        rosterStatus: 'FARM',
+        warConsumerTrust: {
+          teamMvpDesignations: false,
+          aceDesignations: false,
+          fanFavoriteAlbatrossDesignations: false,
+          awards: false,
+          salaryMovement: false,
+          trueValue: false,
+          morale: false,
+          mode3Handoff: false,
+          blockers: ['Hidden FARM player is excluded from the trusted-value artifact.'],
+          limitations: [],
+        },
+      }),
+      valueRow({
+        playerId: 'sub-peer-player',
+        warConsumerTrust: {
+          teamMvpDesignations: false,
+          aceDesignations: false,
+          fanFavoriteAlbatrossDesignations: false,
+          awards: false,
+          salaryMovement: false,
+          trueValue: false,
+          morale: false,
+          mode3Handoff: false,
+          blockers: ['Position peer pool size 1 (< 2 required).'],
+          limitations: [],
+        },
+      }),
+    ];
+
+    const report = buildFranchiseAnalyticsTrustReport({
+      valueInputReport: valueReport({
+        trustedValueArtifactFrozen: true,
+        rows: excludedRows,
+      }),
+      scheduledGames: [scoreOnlyGame()],
+    });
+
+    expect(report.scoreOnlyBoundary.trustedForAwards).toBe(false);
+    expect(report.war.finalWarTrusted).toBe(false);
+    expect(report.war.trustedForAwards).toBe(false);
+    expect(report.downstreamConsumers.awards.status).toBe('preview-only');
   });
 
   test('missing season metadata blocks adaptive and final analytics trust', () => {

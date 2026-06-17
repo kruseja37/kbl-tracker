@@ -45,7 +45,7 @@ export interface FranchiseWarConsumerTrust {
   teamMvpDesignations: boolean;
   aceDesignations: boolean;
   fanFavoriteAlbatrossDesignations: boolean;
-  awards: false;
+  awards: boolean;
   salaryMovement: false;
   trueValue: boolean;
   morale: false;
@@ -125,6 +125,7 @@ export interface FranchiseValueInputReport {
   seasonNumber: number;
   generatedAt: number;
   seasonContext: FranchiseValueInputSeasonContext;
+  trustedValueArtifactFrozen: boolean;
   rows: FranchiseValueInputRow[];
   trueValuePolicy: {
     finalTrueValueCalculated: boolean;
@@ -300,13 +301,14 @@ function buildWarConsumerTrust(params: {
   seasonContext: FranchiseValueInputSeasonContext;
   seasonStatsAvailable: boolean;
   scopedCompletedArchiveAvailable: boolean;
+  trustedValueArtifactFrozen: boolean;
   trustedForTrueValue: boolean;
   warInputAvailability: FranchiseValueInputRow['warInputAvailability'];
   warPreviewValues: FranchiseWarPreviewValues;
 }): FranchiseWarConsumerTrust {
   const blockers: string[] = [];
   const limitations = [
-    'WAR consumer trust is limited to TEAM_MVP/ACE designation input gating; Albatross value trust is read only from the D6 trusted-value artifact.',
+    'WAR consumer trust is limited to TEAM_MVP/ACE designation input gating; Albatross and awards trust are read only from the D6 trusted-value artifact.',
   ];
   if (!params.currentTeamId) {
     blockers.push('Current MLB team id is required before WAR can be trusted for designation inputs.');
@@ -339,7 +341,7 @@ function buildWarConsumerTrust(params: {
     teamMvpDesignations: commonReady && teamMvpBlockers.length === 0,
     aceDesignations: commonReady && aceBlockers.length === 0,
     fanFavoriteAlbatrossDesignations: params.trustedForTrueValue,
-    awards: false,
+    awards: params.trustedForTrueValue && params.trustedValueArtifactFrozen,
     salaryMovement: false,
     trueValue: params.trustedForTrueValue,
     morale: false,
@@ -408,6 +410,7 @@ export async function buildFranchiseValueInputRows(
     }),
     getTrustedValueArtifact(input.franchiseId, input.seasonId, statsScopeId),
   ]);
+  const trustedValueArtifactFrozen = trustedValueArtifact?.frozen === true;
 
   const gamesPerTeam = finiteNumber(config?.seasonLength?.gamesPerTeam)
     ? config.seasonLength.gamesPerTeam
@@ -491,6 +494,7 @@ export async function buildFranchiseValueInputRows(
       seasonContext,
       seasonStatsAvailable: Boolean(batting || pitching || fielding),
       scopedCompletedArchiveAvailable,
+      trustedValueArtifactFrozen,
       trustedForTrueValue,
       warInputAvailability,
       warPreviewValues,
@@ -537,7 +541,9 @@ export async function buildFranchiseValueInputRows(
     if (hasWarPreviewValue(warPreviewValues)) {
       limitations.push('WAR preview values are read-only scoped season-stat inputs and are not final True Value authority.');
     }
-    if (warConsumerTrust.teamMvpDesignations || warConsumerTrust.aceDesignations) {
+    if (warConsumerTrust.awards) {
+      limitations.push('D8 award trust is limited to frozen D6 trusted-value artifact membership; D9 owns award ranking, storage, recompute, and winners.');
+    } else if (warConsumerTrust.teamMvpDesignations || warConsumerTrust.aceDesignations) {
       limitations.push('Scoped WAR is trusted only for TEAM_MVP/ACE designation input gating; final designations, value delta, awards, salary movement, morale, and Mode 3 remain blocked.');
     }
     if (assignment?.rosterStatus === 'FARM' && player.ratingRevealState !== 'revealed') {
@@ -600,6 +606,7 @@ export async function buildFranchiseValueInputRows(
     seasonNumber: input.seasonNumber,
     generatedAt: Date.now(),
     seasonContext,
+    trustedValueArtifactFrozen,
     rows,
     trueValuePolicy: {
       finalTrueValueCalculated: Boolean(trustedValueArtifact && trustedValueArtifact.trustedPlayerIds.length > 0),

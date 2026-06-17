@@ -977,9 +977,41 @@ describe('franchise value input contract', () => {
       finalTrueValueCalculated: true,
       persistedTrueValueCreated: true,
     });
+    expect(trusted.trustedValueArtifactFrozen).toBe(false);
     expect(trusted.rows[0].warInputAvailability.trustedForFinalValue).toBe(true);
     expect(trusted.rows[0].warPreviewValues.trustedForFinalValue).toBe(true);
     expect(trusted.rows[0].warConsumerTrust).toEqual(expect.objectContaining({
+      awards: false,
+      trueValue: true,
+      salaryMovement: false,
+      morale: false,
+    }));
+
+    mocks.getTrustedValueArtifact.mockResolvedValue({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+      seasonNumber: 1,
+      contractVersion: 'd6-v1',
+      peerPoolMinThreshold: 2,
+      trustedPlayerIds: ['player-1'],
+      blockedRows: [],
+      rosterStateSnapshot: [],
+      frozen: true,
+      frozenAt: 10,
+      computedAt: 2,
+    });
+
+    const frozenTrusted = await buildFranchiseValueInputRows({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+      seasonNumber: 1,
+    });
+
+    expect(frozenTrusted.trustedValueArtifactFrozen).toBe(true);
+    expect(frozenTrusted.rows[0].warConsumerTrust).toEqual(expect.objectContaining({
+      awards: true,
       trueValue: true,
       salaryMovement: false,
       morale: false,
@@ -995,9 +1027,9 @@ describe('franchise value input contract', () => {
       trustedPlayerIds: [],
       blockedRows: [{ playerId: 'player-1', reasons: ['Position SS peer pool size 1 (< 2 required)'] }],
       rosterStateSnapshot: [],
-      frozen: false,
-      frozenAt: null,
-      computedAt: 2,
+      frozen: true,
+      frozenAt: 11,
+      computedAt: 3,
     });
 
     const blocked = await buildFranchiseValueInputRows({
@@ -1013,6 +1045,7 @@ describe('franchise value input contract', () => {
     });
     expect(blocked.rows[0].warInputAvailability.trustedForFinalValue).toBe(false);
     expect(blocked.rows[0].warConsumerTrust).toEqual(expect.objectContaining({
+      awards: false,
       trueValue: false,
       salaryMovement: false,
       morale: false,

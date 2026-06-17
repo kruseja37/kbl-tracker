@@ -160,6 +160,7 @@ function report(rows: FranchiseValueInputRow[]): FranchiseValueInputReport {
     seasonNumber: 1,
     generatedAt: 1,
     seasonContext: rows[0]?.seasonContext ?? row().seasonContext,
+    trustedValueArtifactFrozen: false,
     rows,
     trueValuePolicy: {
       finalTrueValueCalculated: false,

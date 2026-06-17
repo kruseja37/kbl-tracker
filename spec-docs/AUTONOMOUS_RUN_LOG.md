@@ -429,3 +429,31 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   no live emitter) · no new store/version bump · TV read-only. **BROWSER-PENDING (batched):** Albatross named only for
   a ≥2-peer worst-negative-value player; solid red live badge; no morale/salary effect. **→ NEXT: D8 (award-trust
   gate) — consume D6's frozen artifact; promote trustedForAwards/finalWarTrusted to computed; adaptive thresholds.**
+
+- **2026-06-17 (overnight, AUTH-4) — STARTED: D8 (award-trust GATE).** Mapped via `wf_6babf91f-7d4` (5 readers,
+  Captain file:line-verified). Key findings: D8 is the GATE ONLY (booleans + written contract + adaptive-threshold
+  helper + tests) — the awards engine/storage/UI/stored-winners + mwar retirement are D9 (greenfield, 0 files). The
+  trust booleans (trustedForAwards/finalWarTrusted/consumerThresholdsProven) are literal-false in
+  franchiseAnalyticsTrust.ts; the D6 trustedForTrueValue promotion is the template (artifact→isPlayerTrustedForValue→
+  row flag→report). **Determinism crux:** the artifact re-persists every game until frozen (processCompletedGame:227);
+  existing D6/D7 reads ignore `frozen` → in-season drift. So D8 gates award trust on `artifact.frozen===true` (a
+  deliberate tightening vs D7). Exclusions (score-only/hidden-FARM/<2-peer) inherited via trustedPlayerIds. Contract
+  in PROMPT_CONTRACTS.md; Codex invoked under the 30-min watchdog. **DEFAULTS-TAKEN:** D8 stores nothing (no store/
+  bump) · frozen-required gate · "not a flip" (Boolean(frozen && member && thresholds), mutation-tested false-when-
+  ungated) · qualifier helper via scaledThreshold (502 PA / 162 IP baselines scaled; magnitudes sim-tunable) · manifest
+  left to D10 · narrative characterized test stays green (unfrozen fixtures stay preview-only). **D9 QUEUED** (awards
+  engine + MOY-1..7 + LSD-1 fame seams).
+
+- **2026-06-17 (overnight, AUTH-4) — D8 COMMITTED.** Build clean. Captain (Opus) RIGOROUS independent audit =
+  **VERIFIED**. Diff = 2 product + 2 new (`franchiseAwardTrust.ts` qualifier helper, `AWARD_TRUST_CONTRACT.md`) + tests
+  (incl. 7 mechanical `trustedValueArtifactFrozen:false` fixture additions). The award-trust booleans are now COMPUTED
+  off the D6 FROZEN artifact: `finalWarTrusted = frozen && trueValueTrust`; `trustedForAwards = finalWarTrusted &&
+  consumerThresholdsProven && hasAwardTrust`; downstream awards status computed; adaptive `awardQualifierThresholds`
+  via scaledThreshold (502 PA / 162 IP baselines scaled, no raw 162/9). **Gates (re-ran):** tsc 0 · build 0 · full
+  suite **7,263 pass / 3 fail (7,266 total)** = EXACTLY the characterized set, ZERO new reds, narrative RED unchanged ·
+  **FROZEN-GATE MUTATION-PROVEN** (drop frozen → test RED) · exclusions tested · BOUNDARY HELD (no store/DB bump/
+  manifest/mwar touch; no awards engine created). **DETERMINISM TIGHTENING (flagged for JK):** award trust requires
+  `artifact.frozen===true`, stricter than D7 designation readiness — awards are season-end finalizations.
+  **BROWSER-PENDING (batched):** awards preview-only until freeze, then 'trusted' (no winners — D9). **→ NEXT: D9
+  (real awards: franchiseAwardsEngine/Storage [NEW store + migration + backup parity] + AwardsWatchlist + MOY-1..7 +
+  LSD-1 fame seams — the biggest ticket; will likely SPLIT like D6/D7).**

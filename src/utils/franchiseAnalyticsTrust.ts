@@ -44,12 +44,12 @@ export interface FranchiseWarTrust extends FranchiseAnalyticsTrustArea {
   trustedForTeamMvpDesignations: boolean;
   trustedForAceDesignations: boolean;
   trustedForFanFavoriteAlbatrossDesignations: boolean;
-  trustedForAwards: false;
+  trustedForAwards: boolean;
   trustedForSalaryMovement: false;
   trustedForTrueValue: boolean;
   trustedForMorale: false;
   trustedForMode3Handoff: false;
-  finalWarTrusted: false;
+  finalWarTrusted: boolean;
   components: {
     batting: boolean;
     pitching: boolean;
@@ -68,7 +68,7 @@ export interface FranchiseParkFactorTrust extends FranchiseAnalyticsTrustArea {
 export interface FranchiseAdaptiveStandardsTrust extends FranchiseAnalyticsTrustArea {
   seasonLengthMetadataAvailable: boolean;
   inningsMetadataAvailable: boolean;
-  consumerThresholdsProven: false;
+  consumerThresholdsProven: boolean;
   sampleSizeReady: boolean;
 }
 
@@ -147,6 +147,10 @@ function hasAceWarTrust(rows: FranchiseValueInputRow[]): boolean {
 
 function hasTrustedTrueValue(rows: FranchiseValueInputRow[]): boolean {
   return rows.some((row) => row.warConsumerTrust?.trueValue === true || row.warInputAvailability.trustedForFinalValue === true);
+}
+
+function hasAwardTrust(rows: FranchiseValueInputRow[]): boolean {
+  return rows.some((row) => row.warConsumerTrust?.awards === true);
 }
 
 function hasAnyWpa(rows: FranchiseValueInputRow[]): boolean {
@@ -311,7 +315,15 @@ function buildWpaTrust(rows: FranchiseValueInputRow[]): FranchiseWpaTrust {
   };
 }
 
-function buildWarTrust(rows: FranchiseValueInputRow[]): FranchiseWarTrust {
+function positiveFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
+function buildWarTrust(
+  report: FranchiseValueInputReport,
+  consumerThresholdsProven: boolean,
+): FranchiseWarTrust {
+  const rows = report.rows;
   const components = {
     batting: rows.some((row) => row.warInputAvailability.battingWar),
     pitching: rows.some((row) => row.warInputAvailability.pitchingWar),
@@ -323,19 +335,25 @@ function buildWarTrust(rows: FranchiseValueInputRow[]): FranchiseWarTrust {
   const trustedForAceDesignations = hasAceWarTrust(rows);
   const trustedForTeamMvpAce = trustedForTeamMvpDesignations || trustedForAceDesignations;
   const trustedForTrueValue = hasTrustedTrueValue(rows);
+  const finalWarTrusted = Boolean(report.trustedValueArtifactFrozen && trustedForTrueValue);
+  const trustedForAwards = Boolean(finalWarTrusted && consumerThresholdsProven && hasAwardTrust(rows));
 
   return {
     ...area(
-      trustedForTeamMvpAce || trustedForTrueValue ? 'trusted' : warLikePreviewAvailable ? 'preview-only' : 'blocked',
-      trustedForTeamMvpAce
+      trustedForAwards || trustedForTeamMvpAce || trustedForTrueValue ? 'trusted' : warLikePreviewAvailable ? 'preview-only' : 'blocked',
+      trustedForAwards
+        ? ['D6 trusted-value artifact is frozen, adaptive award thresholds are proven, and at least one row is award-trusted.']
+        : trustedForTeamMvpAce
         ? ['Scoped WAR inputs are trusted for TEAM_MVP/ACE designation input gating; D6 artifact rows may also trust True Value/value-delta consumers.']
         : trustedForTrueValue
-          ? ['D6 trusted-value artifact rows are available for True Value/value-delta consumers.']
+          ? ['D6 trusted-value artifact rows are available for True Value/value-delta consumers, but the artifact is not frozen for award finalization.']
         : warLikePreviewAvailable
           ? ['WAR-like component inputs are available, but no row meets the consumer-specific TEAM_MVP/ACE trust gate.']
         : ['No WAR-like component inputs are available.'],
       [
-        'Final WAR remains untrusted for awards, salary movement, morale, relationships, and Mode 3.',
+        trustedForAwards
+          ? 'Final WAR is trusted only for D9 award candidate gating; salary movement, morale, relationships, and Mode 3 remain blocked.'
+          : 'Final WAR remains untrusted for awards until the D6 trusted-value artifact is frozen and adaptive award thresholds are proven.',
         'Fan Favorite and Albatross consume only the D6 trusted-value artifact signal; WAR input trust alone does not promote them.',
       ],
     ),
@@ -343,12 +361,12 @@ function buildWarTrust(rows: FranchiseValueInputRow[]): FranchiseWarTrust {
     trustedForTeamMvpDesignations,
     trustedForAceDesignations,
     trustedForFanFavoriteAlbatrossDesignations: trustedForTrueValue,
-    trustedForAwards: false,
+    trustedForAwards,
     trustedForSalaryMovement: false,
     trustedForTrueValue,
     trustedForMorale: false,
     trustedForMode3Handoff: false,
-    finalWarTrusted: false,
+    finalWarTrusted,
     components,
   };
 }
@@ -391,24 +409,27 @@ function buildParkFactorTrust(rows: FranchiseValueInputRow[]): FranchiseParkFact
 }
 
 function buildAdaptiveTrust(report: FranchiseValueInputReport): FranchiseAdaptiveStandardsTrust {
-  const seasonLengthMetadataAvailable = report.seasonContext.gamesPerTeam !== null;
-  const inningsMetadataAvailable = report.seasonContext.inningsPerGame !== null;
+  const seasonLengthMetadataAvailable = positiveFiniteNumber(report.seasonContext.gamesPerTeam);
+  const inningsMetadataAvailable = positiveFiniteNumber(report.seasonContext.inningsPerGame);
   const sampleSizeReady = hasAnySeasonStats(report.rows) && seasonLengthMetadataAvailable && inningsMetadataAvailable;
   const metadataAvailable = seasonLengthMetadataAvailable && inningsMetadataAvailable;
+  const consumerThresholdsProven = Boolean(metadataAvailable);
 
   return {
     ...area(
-      metadataAvailable ? 'preview-only' : 'blocked',
+      metadataAvailable ? 'trusted' : 'blocked',
       metadataAvailable
-        ? ['Stored season length and innings metadata are available.']
+        ? ['Stored season length and innings metadata are available for scaled award consumer thresholds.']
         : ['Stored season length or innings metadata is missing.'],
       [
-        'Consumer-specific adaptive thresholds are not yet proven, so adaptive/final analytics remain preview-only or blocked.',
+        metadataAvailable
+          ? 'Award qualifier thresholds must be derived from stored season metadata via scaledThreshold(), not fixed season or inning literals.'
+          : 'Consumer-specific adaptive thresholds are not proven without stored season length and innings metadata.',
       ],
     ),
     seasonLengthMetadataAvailable,
     inningsMetadataAvailable,
-    consumerThresholdsProven: false,
+    consumerThresholdsProven,
     sampleSizeReady,
   };
 }
@@ -457,9 +478,19 @@ function buildDownstreamConsumers(params: {
         'Fan Favorite, Albatross, Cornerstone, Captain, Fan Hopeful, awards, morale, and Mode 3 remain blocked.',
       ],
     ),
-    awards: area('preview-only', [
-      'Award-style output may be shown only as stat leader/preview reporting, not finalized awards.',
-    ]),
+    awards: area(
+      params.war.trustedForAwards ? 'trusted' : 'preview-only',
+      params.war.trustedForAwards
+        ? ['Award candidate inputs are trusted because the D6 artifact is frozen, value trust is present, and adaptive thresholds are proven.']
+        : [
+            params.war.finalWarTrusted
+              ? 'Award-style output remains preview-only until adaptive thresholds and per-row award trust are both proven.'
+              : 'Award-style output remains preview-only until the D6 trusted-value artifact is frozen and trusted player membership is present.',
+          ],
+      [
+        'D8 only gates award trust; D9 owns award engines, storage, watchlists, recompute, and stored winners.',
+      ],
+    ),
     moraleRelationships: area('blocked', [
       'Morale and relationship systems are not canonical analytics consumers in internal v1.',
     ]),
@@ -486,9 +517,9 @@ export function buildFranchiseAnalyticsTrustReport(
   const coreStats = buildCoreStatsTrust(report, completedGames, teamStints);
   const scoreOnlyBoundary = buildScoreOnlyBoundaryTrust(report, scheduledGames);
   const wpa = buildWpaTrust(report.rows);
-  const war = buildWarTrust(report.rows);
-  const parkFactors = buildParkFactorTrust(report.rows);
   const adaptiveStandards = buildAdaptiveTrust(report);
+  const war = buildWarTrust(report, adaptiveStandards.consumerThresholdsProven);
+  const parkFactors = buildParkFactorTrust(report.rows);
   const playoffBoundary = buildPlayoffBoundaryTrust(report, input.playoffStatsPresent);
   const downstreamConsumers = buildDownstreamConsumers({
     coreStats,
