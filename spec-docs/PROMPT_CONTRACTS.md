@@ -8468,3 +8468,77 @@ DEFERRED in v1 (no AI-trade/valuation consumer) in both the code-illustration an
 
 **Status:** COMPLETE (docs-only) — committed with the DR-3 docs.
 
+---
+
+## D11 — UI live-label sweep + the smart-label D4 panel de-gate — 2026-06-17 (attended)
+
+**ROUTE:** Codex | high reasoning effort → Opus 4.8 audit (auditor ≠ builder). Attended. USER-VISIBLE → browser-batch.
+Grounding: map `wf_5c3919ed-ff2` (4 readers). Folds in the D4 salary de-gate (DECISIONS_LOG D4 ruling). Small
+REAL-BUILD (the panel re-point) + a precise copy sweep. **No new store / version / flag flip / effect activation.**
+
+**GOVERNING RULE (apply to every label site):** PROMOTE a label where the *surface/data* is now live (the value
+spine when FROZEN, awards persistence via D9, the six live designations); KEEP a label where an *effect/mutation* is
+still dormant/blocked (morale automation, salary MOVEMENT, relationship mutation, Mode 3, season rollover,
+expected-wins persistence, final-True-Value handoff authority, stadium-spray adaptivity). When unsure → KEEP
+(over-promotion is the dangerous direction).
+
+**SCOPE A — the D4 combined "True Value + Expected Wins" panel = SMART LABEL** (`TeamHubContent.tsx`
+FranchiseValueExpectedWinsPreviewPanel def ~:4742): re-point the status badge + `isAvailable` (~:4785/:4812) OFF the
+never-'trusted' preview status and ONTO the real trust signal
+(`valueInputReport.trueValuePolicy.finalTrueValueCalculated` / `trustedValueArtifactFrozen` — the same flag
+`valueStatus` already uses at ~:5574). Render **TRUE VALUE as TRUSTED/Final when the artifact is FROZEN (season-end),
+else PROJECTED (mid-season)** — do NOT claim trusted mid-season. Drop "PREVIEW" from the title (~:4796) + the static
+'PREVIEW ONLY' chip (~:4798-4800); value cells "Preview value total/delta" → "Value total/delta" (~:4853/:4857);
+"READ-ONLY CROSS-CHECK" → "CROSS-CHECK" (~:4824). **Expected Wins stays labeled an ESTIMATE** (never frozen in v1).
+**KEEP** the 'NO SALARY MOVEMENT' chip (~:4807-4809), the salary-movement 'Blocked' card (~:4838-4839), and the
+footer blocked families incl. expected-wins persistence + final-handoff (~:4868). Fix the contradictions: VALUE INPUTS
+body (~:5624) make it conditional on `finalTrueValueCalculated` so it stops saying "deferred" while its badge says
+TRUSTED; `True Value/value delta: TRUSTED for projected designations only` (~:6187) → TRUSTED (frozen artifact; now
+also feeds Albatross/Fan Favorite + awards); drop the stale "True Value … remain deferred" clause (~:6150).
+
+**SCOPE B — copy sweep, PROMOTE these flatly-stale sites:** `franchiseSeasonSummaryStorage.ts:431` (blocked-
+designation-families detail — drop Cornerstone [cut] + stop calling the six live designations blocked) · `:508`
+(remove the FF/Albatross "promotion pending" clause — now live) · `TeamHubContent.tsx:5666` "Awards persistence:
+BLOCKED" → LIVE (finalized at season end; effects dormant) · `:5586-5587` (drop 'awards' from the stay-blocked list)
+· `:6202` (drop Captain + Fan Hopeful — now live) · `:6135-6136` (stop surfacing CAPTAIN/FAN_HOPEFUL as 'blocked' —
+live via team fields) · `:4529` (generalize "Solid badges are live TEAM_MVP/ACE" → all engine designations incl.
+FF/Albatross) · `FranchiseHome.tsx` "Awards persistence: BLOCKED" (~:4548 — stale, D9 made it live) IF it refers to
+the awards STORE (not the dead-gated offseason ceremony). For MIXED lines that bundle a now-live surface with a
+still-dormant effect (e.g. "…morale, salary, awards, and Mode 3 effects remain blocked"): SURGICALLY drop only the
+now-live SURFACE token (awards/designations exist & persist), KEEP the effect tokens (morale/salary/relationship/Mode3
+EFFECTS remain dormant).
+
+**SCOPE C — KEEP INTACT (do NOT promote — these are correct):** every salary-MOVEMENT/luxury-tax/AI-valuation blocked
+line; morale/relationship/Mode-3/rollover blocked lines; the SeasonSummary manifest still-blocked categories
+(`franchiseSeasonSummaryStorage.ts` true-value-value-delta final-handoff :504-510, mode3-offseason-rollover :514-518,
+morale-relationship-automation :523-528, salary warning :401); SeasonSummary.tsx:886-889 review-only/blocked families;
+ALL stadium-spray "preview-only / heat-map deferred / custom-dimensions blocked / adaptive-factors preview" labels
+(TeamHubContent ~:3470,:5026,:5073-5283 — spray stays functional-but-provisional per D0); the READ-ONLY roster
+analyzer (~:6615) + transaction history (~:6242); mid-season "Proj." PROJECTED_BADGES + the DR-3 strip caption
+(:2873-2912) + per-slot 'Projected' labels; AwardsCeremonyFlow (dead-gated offseason — do NOT touch/resurrect);
+`teamMVP.ts`/`legacyDynastyTracker.ts` FAME `FRANCHISE_CORNERSTONE` (different system).
+
+**ALLOWED:** `TeamHubContent.tsx` · `franchiseSeasonSummaryStorage.ts` · `FranchiseHome.tsx` · the tests that pin the
+swept copy (esp. `TeamHubContent.franchiseReads.test.tsx` which asserts 'TRUE VALUE + EXPECTED WINS PREVIEW' / 'PREVIEW
+ONLY' / 'Preview value total' etc., and `franchiseSeasonSummary.wave4`/`SeasonSummary.pass5` if a manifest detail
+string changes) — update assertions HONESTLY to the new copy.
+
+**DO NOT:** promote any KEEP-list (Scope C) label · activate any morale/fame/salary EFFECT · claim True Value trusted
+MID-SEASON (must be frozen-gated) · relabel Expected Wins as final/trusted · flip the offseason flag / touch
+AwardsCeremonyFlow / offseasonStorage · change any engine logic, store, or version · alter the manifest policyFlags
+(they stay false) · touch the season-summary still-blocked manifest categories.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · FULL suite = only the 2 characterized fails (+ honestly
+updated copy-pin tests), ZERO new reds; grep: no 'PREVIEW ONLY' on the value panel, the panel badge reads the
+`finalTrueValueCalculated`/frozen signal (not the preview status), 'NO SALARY MOVEMENT' + spray-provisional + Mode3/
+morale blocked labels all still present, no policyFlag/version/flag change, no AwardsCeremonyFlow edit.
+
+**STOP IF:** the panel can't read a frozen/trusted signal without an engine change beyond the UI re-point · promoting
+a label would require flipping a manifest policyFlag or activating an effect · the D4 re-point needs the preview
+engines rewritten (that's out of D11 scope — fall back to surfacing it) · a "stale" awards/designation label turns out
+to be the dead-gated offseason ceremony.
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited.
+
+**Status:** DISPATCHED to Codex (background, watchdog). Audit pending.
+
