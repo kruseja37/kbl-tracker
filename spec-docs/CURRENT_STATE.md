@@ -27,10 +27,15 @@ table + composer, 7 personalities × 4 modifiers [Ambition-up/Resilience-down/Ch
 SIM-TUNED magnitudes, default-neutral taps, firewall-clean) + **L3b `d46a071`** (reuse+un-gate the existing
 `kbl-franchise-morale` store [new 'matrix-auto' sourceKind, no second store, DB v1 unchanged] + D7 subscription DARK +
 a Phase-2 build-dark flag [default OFF, gated defense-in-depth at call-site AND store] + parity-guard now covers
-kbl-franchise-morale). **NO live morale until after D13** (§5 no-phantom-morale; flag OFF). NEXT soul-layer tickets:
-{L5 fan-teeth, L6 fame} → {L7 designation effects, L8 dev, L9b traits, L10 random events} → {L11–L14} → the L-SIM gate;
-the roster-tab confirmation-gate UI removal pairs with L3 activation (tracked). D12/D13 remain JK gates. **8 feature
-commits this attended session** (D10 + DR-1..3 + D11 + L3a + L3b; DR-4 docs).)
+kbl-franchise-morale). **NO live morale until after D13** (§5 no-phantom-morale; flag OFF). **L6 (Fame) UNDERWAY:** **L6a COMMITTED
+`7359cbf`** (the pure fame engine — §20.7 nine-tier ladder collapsing the 3 debt ladders, Heat recency-decay / Reach
+ratchet-floor / tier=Heat-floored-at-Reach, trade-reset, WAR-gravity, fame-vs-merit snub/bust, defensive+role-player
+channel aggregates, SIM-TUNE FAME_TUNING, firewall-pure; RETAINs FAME_VALUES/calculateFame/kblWpaAttribution/POG, does
+NOT extend the debt ladders). **NEXT = L6b** (the fame STORE + dark wiring — a NEW parity-guarded `franchiseFameRecords`
+store at trackerDb v18→v19 + the C-4 backup DoD [KBL_BACKUP_VERSION bump] + dark per-game compute, parallel-run vs the
+untouched live fame; the L3 fame morale-tap stays dark). Then {L5 fan-teeth} → {L7 effects, L8 dev, L9b traits, L10
+random} → {L11–L14} → the L-SIM gate. The roster-tab confirmation-gate UI removal pairs with L3 activation (tracked).
+D12/D13 remain JK gates. **9 feature commits this attended session** (D10 + DR-1..3 + D11 + L3a + L3b + L6a; DR-4 docs).)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.

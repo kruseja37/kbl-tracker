@@ -8751,5 +8751,18 @@ classifier needs a merit source not passable as a parameter.
 
 Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited.
 
-**Status:** DISPATCHED to Codex (background, watchdog). Audit pending.
+**Status:** VERIFIED + COMMITTED `7359cbf` (2026-06-17). Build-dark (pure engine; no consumer until L6b + post-D13).
+
+**AUDIT + EXECUTION RECORD (Opus 4.8, auditor ≠ builder):** Codex (high, watchdog) BUILT → Opus independently re-ran:
+tsc 0 · build 0 · FULL suite **7,265 pass / 2 fail (7,267 total, 407 files)** = characterized set only, ZERO new
+reds; 9 new fame tests green. Diff = 2 NEW files. **Read the engine in full + grep-verified:** FIREWALL/PURITY clean
+(imports only the RETAINED `FAME_VALUES` + `calculateFame`/`getLIMultiplier`/`getPlayoffMultiplier`; zero
+store/persistence/reporter/LLM; NO debt-ladder imports [`getFameTier`/`FameLevel`/reporter `FameTier`]; no
+`Math.random`/`Date.now` → pure/deterministic). §20.3 floor semantics CORRECT — `resolveFameTier` floors positive
+Heat at the Reach floor (a cold superstar cools but can't crater below his earned floor) while negative fame moves
+freely; `applyHeatUpdate` is decay-on-write; `updateReachFloor` ratchets up via `Math.max` (never erodes);
+`applyTradeReset` retains 35% Heat + drops the floor; `applyWarLegitimacyGravity` pulls toward the WAR target
+(gravity, not a direct add); `classifyFameVsMerit` → snub/bust/darling; defensive + role-player channel aggregates
+present (the explicit L6 deliverables). All magnitudes in the SIM-TUNED `FAME_TUNING` block. **L6a COMPLETE.** NEXT =
+L6b (the fame store + dark wiring — bumps trackerDb v18→v19 + the C-4 backup DoD).
 
