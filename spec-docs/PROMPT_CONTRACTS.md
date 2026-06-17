@@ -8694,3 +8694,62 @@ No reporter/LLM import in the apply path (firewall). **L3 COMPLETE — the moral
 layer): {L5 fan-teeth, L6 fame} → {L7, L8, L9b, L10} → … (after D13 activation). The roster-tab confirmation-gate UI
 removal pairs with L3 activation (tracked).
 
+---
+
+## L6a — the pure Fame model engine (Heat/Reach/tier + fame-vs-merit) — 2026-06-17 (attended)
+
+**ROUTE:** Codex | high reasoning effort → Opus 4.8 audit (auditor ≠ builder). Attended. SMB4-asset (fame); §20 is
+LOCKED design. RULED in DECISIONS_LOG "SOUL-LAYER greenlight" + "L6 plan + defaults" (2026-06-17). Grounding: map
+`wf_d44466a5-632`. **PURE engine only** — no store, no wiring, no L3-tap fill, no live-fame touch (those are L6b /
+deferred). Mirrors L3a / ivEngine (pure → audited → wired).
+
+**SCOPE — NEW `src/engines/fameModel.ts` (greenfield, pure, deterministic):**
+1. **The canonical §20.7 nine-tier ladder** — ONE type/enum + a SIM-TUNE threshold table (Immortal Legend > Global
+   Superstar > National Icon > Regional Star > Local Hero · **Unknown** (neutral pivot) · Polarizing > Notorious >
+   Despised). This replaces the 3 debt ladders (do NOT import their thresholds, §20.8).
+2. **Heat** (§20.3, recency-weighted, fickle): a pure `applyHeatUpdate(currentHeat, gameHeatInput, config)` — recency
+   exponential decay applied per update + the new nudge (decay-on-write model; the decay RATE is a SIM-TUNE constant,
+   §20.9). The `gameHeatInput` is the layer-1 WPA-spine contribution + the layer-3 `FAME_VALUES` bumps + status nudges
+   (the engine takes it as a parameter; the per-game builder that reads live WPA is L6b).
+3. **Reach** (§20.3, ratchets): an integer reach-floor that only increases in-season (`updateReachFloor`), never
+   erodes; **the displayed tier = Heat floored at Reach** (`resolveFameTier(heat, reachFloor)`). A `wasNegative`
+   boolean for the reporter. **Trade reset** (`applyTradeReset`): drops the reach floor + pulls Heat toward Unknown
+   (keeps SOME Heat — "reputation precedes him" — but loses the earned floor; §20.3/§20.4, v1 trade always dilutes).
+4. **WAR-legitimacy-floor gravity** (§20.1 layer-2): a pure function that pulls Heat toward a WAR-justified level
+   (gravity, NOT a direct contributor; strength is SIM-TUNE, §20.9).
+5. **Fame-vs-merit classifier** (§20.2): `classifyFameVsMerit(fameTier, meritLevel)` → snub / bust / darling /
+   aligned (the gap that makes snubs + busts emerge).
+6. **Fame-by-attribution-channel breakdown** (explicit L6 deliverable per the DSTACK): pure aggregation helpers for a
+   **defensive-fame** sub-aggregate (Gold Glove §23.2) + a **role-player fame** sub-aggregate (the bench award), from
+   channel-tagged fame inputs.
+7. **All magnitudes in a single SIM-TUNE `FAME_TUNING` config** (decay rate, WAR-floor gravity, tier thresholds,
+   channel weights, trade-reset retention) — §20.9 owns the numbers; L6a locks the structure.
+8. **RETAIN (type/function reuse, §20.8):** import `FAME_VALUES` + `calculateFame`/`getLIMultiplier`/
+   `getPlayoffMultiplier` (the √LI iconic-event bump SCORING) as the layer-3 input. Do NOT reuse/extend the debt tier
+   functions (`getFameTier`, `FameLevel`, reporter `FameTier`).
+9. **Unit tests** (pure, deterministic): Heat decays toward neutral over updates; Reach ratchets up + never erodes
+   in-season; tier = Heat floored at Reach; trade reset drops the floor + pulls Heat down but retains some;
+   WAR-floor gravity pulls Heat toward the WAR level; fame-vs-merit classifies snub (high merit/low fame) + bust (low
+   merit/high fame); channel aggregation sums; same input → same output.
+
+**ALLOWED:** NEW `src/engines/fameModel.ts` (or `fameLadder.ts`) + its NEW test file · type/function-only imports of
+`FAME_VALUES` (`src/types/game.ts`) + the `calculateFame` scoring (`src/engines/fameEngine.ts`). NOTHING else.
+
+**DO NOT:** touch any store / IndexedDB / persistence (L6b) · wire to game-end / processCompletedGame / seasonAggregator
+(L6b) · fill the L3 `fame` morale tap (deferred post-D13) · touch or modify the LIVE fame paths (`aggregateFameEvents`,
+`salaryCalculator` `player.fame` read, `useFameTracking`/GameTracker display) or the debt ladders (`getFameTier`,
+`FameLevel`, reporter `FameTier`) · extend the pure-cumulative model · import a reporter/LLM (firewall) · apply any
+live mutation (pure engine).
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · FULL suite = only the 2 characterized fails + the new
+fameModel tests, ZERO new reds; grep: the new engine imports no store/persistence, no reporter/LLM; does not import
+the debt tier functions; magnitudes are named `FAME_TUNING` constants (not scattered literals).
+
+**STOP IF:** the Heat/Reach model can't stay pure/deterministic without a store · honoring "one ladder" forces
+touching a live debt-ladder consumer · the channel breakdown needs a persisted shape (that's L6b) · the fame-vs-merit
+classifier needs a merit source not passable as a parameter.
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited.
+
+**Status:** DISPATCHED to Codex (background, watchdog). Audit pending.
+

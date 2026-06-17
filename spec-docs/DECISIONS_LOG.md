@@ -1210,3 +1210,36 @@ build contract.
   current morale path). A standalone earlier UX ticket is possible if JK wants gate relief sooner.
 - **L3 SPLIT: L3a** = the pure matrix engine (math; testable; no store/wiring/narrative) → **L3b** = reuse+un-gate the
   store + D7 subscription (dark) + build-dark flag + parity-guard extension.
+
+**L3 COMPLETE** (L3a `5b1431d` + L3b `d46a071`, 2026-06-17). **L3 ACTIVATION FOLLOW-UP (tracked):** the roster-tab
+confirmation-gate UI removal + the morale fame/race/relationship tap fills pair with post-D13 activation.
+
+---
+
+### 2026-06-17: L6 (Fame) plan + defaults (attended; map `wf_d44466a5-632`, greenlight covers it — no new fork)
+
+Next soul-layer ticket after L3 (JK "keep rolling"). §20 is LOCKED design; the L6 map (3 readers) found STRONG
+consensus and NO genuine design fork (every choice resolves to §20 + the established build-dark/pure-then-wire
+patterns), so proceeding under the soul-layer greenlight with documented conservative defaults:
+- **Split L6a (pure engine) / L6b (store + dark wiring)** — mirrors L3a/L3b + ivEngine (pure→audited→wired).
+- **L6a (pure, no IO):** the canonical §20.7 **nine-tier ladder** (ONE type + threshold table — Immortal Legend >
+  Global Superstar > National Icon > Regional Star > Local Hero · Unknown · Polarizing > Notorious > Despised —
+  collapsing the 3 debt ladders) + the pure **Heat** (recency exponential decay) / **Reach** (integer floor that
+  ratchets up, never erodes in-season; trade resets it + pulls Heat toward Unknown) / **tier = Heat floored at Reach**
+  + the **WAR-legitimacy-floor gravity** (pulls Heat toward a WAR-justified level; not a direct contributor) + the
+  **fame-vs-merit** (snub/bust/darling) classifier + the **fame-by-attribution-channel breakdown** (defensive-fame
+  sub-aggregate for Gold Glove §23.2 + role-player fame for the bench award — an explicit L6 deliverable per the
+  DSTACK). All magnitudes (decay rate, WAR-floor gravity, tier thresholds, channel weights) in a SIM-TUNED
+  `FAME_TUNING` config (§20.9 owns the numbers).
+- **RETAIN (reuse, not extend, §20.8):** `FAME_VALUES` iconic-event catalog + `calculateFame`/`getLIMultiplier`/
+  `getPlayoffMultiplier` (the √LI bump scoring) + `kblWpaAttribution` (the layer-1 WPA spine) + POG. **DEBT (collapse,
+  don't extend):** `getFameTier` (cumulative 9-tier), `FameLevel` (6-tier), reporter `FameTier` (5-tier),
+  `eliminationRunFameStorage`, `applyChampionshipFame` flat +1.
+- **L6b:** a NEW parity-guarded `franchiseFameRecords` store in **trackerDb v18→v19** (keyPath
+  [franchiseId,seasonId,statsScopeId,playerId] + by_scope; the C-4 backup DoD + PIN-TRAP update + KBL_BACKUP_VERSION
+  bump) — storing one decayed running Heat float + the integer Reach floor + wasNegative (+ the channel sub-aggregates);
+  decay-on-write per game; the dark per-game compute wired into the post-game spine behind a Phase-2 fame flag (reuse
+  the `franchisePhase2Flags` pattern). **Parallel-run:** the LIVE cumulative fame (`aggregateFameEvents`,
+  `salaryCalculator` `player.fame` read, the GameTracker/`useFameTracking` display) is NOT disturbed — reconcile/retire
+  post-D13. **The L3 `fame` morale tap stays DARK** (the §20.5/§20.6 fame→morale plug is a deferred post-D13
+  integration; note the seam, don't fill).
