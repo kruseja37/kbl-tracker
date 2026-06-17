@@ -8019,3 +8019,73 @@ Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff
 
 **Status:** VERIFIED → committed (branch `codex/franchise-v1-next`, not pushed). **→ NEXT: D9d (AwardsWatchlist UI + per-game watchlist recompute + game-1 snapshot capture + season-end finalize TRIGGER + display) — completes D9.**
 
+---
+
+## D9d-1 — wire the awards engine to the app (season-end finalize TRIGGER + game-1 snapshot capture) — 2026-06-17 (autonomous overnight, AUTH-4)
+
+**ROUTE:** Codex | high reasoning effort → Opus 4.8 audit (auditor ≠ builder). Autonomous overnight (AUTH-4; AUTH-1).
+Touches the LIVE GAME PATH (snapshot capture) → browser-batch. Map: `wf_c235f00a-95e` (5 readers, Captain-verified).
+
+**D9d SPLIT:** D9d-1 (THIS) = backend engine→app wiring (finalize trigger + per-game snapshot capture); D9d-2 = UI
+(AwardsWatchlist tab + per-game watchlist preview [the looser `warLikePreviewAvailable` path — the pure engine returns
+[] mid-season by design] + the season-summary manifest flip + profile/Almanac display via awardEmblems).
+
+**SCOPE:** (1) `processCompletedGame.ts`: surface `result.rows` from `persistTrueValueAfterWar`; in the post-WAR block
+(after a non-null `trueValueScope`) write `franchiseTrueValueSnapshots` rows (per TV row: trueValue/valueDelta/
+warPercentile/computedAt), **checkpoint = scheduled gameNumber (via scheduleGameId) ?? gameState.gameId** (deterministic
+→ idempotent put), ONE batched call, try/catch-isolated (non-blocking, never trips the 10s timeout), regular-season
+gate inherited. (2) `FranchiseHome.tsx` GameDayContent: in `checkSeasonComplete`, AFTER the awaited freeze + before
+setSeasonComplete, `await computeAndPersistFranchiseWarAwards({...scope, seasonNumber: currentSeason, computedAt:
+frozen.frozenAt→ISO})` (byte-stable); in the `isSeasonOver` effect, CHAIN finalize via `.then` on the freeze (NOT a
+parallel `void` — would race ahead + persist []).
+
+**CAPTAIN DEFAULTS (AUTH-4):** checkpoint = scheduled gameNumber ?? gameId (no counter/timestamp) · computedAt =
+frozenAt (byte-stable re-fires) · finalize via the awaited checkSeasonComplete + the chained effect path (mirrors D6b
+both-paths) · snapshot try/catch-isolated · manifest flip + UI = D9d-2 (the manifest has a contract-version/test-pin
+coordination that pairs with the handoff).
+
+**ALLOWED:** `processCompletedGame.ts` (surface rows + snapshot capture) · `franchiseAwardsEngine`/`persistTrueValueAfterWar`
+return-shape (additive) · `FranchiseHome.tsx` (finalize trigger, 2 paths) · a processCompletedGame snapshot test.
+
+**DO NOT:** AwardsWatchlist UI / per-game watchlist preview / manifest flip / display (D9d-2) · offseason flag /
+AwardsCeremonyFlow / offseasonStorage · recompute TV / oracle · persist award rows mid-season (snapshot-only per game)
+· new store / TRACKER_DB_VERSION (18) / KBL_BACKUP_VERSION (2) · non-deterministic checkpoint.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · FULL suite = only the 3 characterized fails (zero new reds);
+snapshot test (per-game write + idempotent re-completion + regular-season-only + failure-isolated); FranchiseHome +
+processCompletedGame tests green · grep: no UI/manifest/flag edit, checkpoint from gameId/gameNumber, versions unchanged.
+
+**STOP IF:** finalize could run before freeze resolves on any path; checkpoint can't be deterministic; must touch
+UI/manifest to compile; new store/version bump needed.
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited.
+
+**Status:** contract issued; Codex invoked (under 30-min watchdog).
+
+### D9d-1-AUDIT + EXECUTION RECORD (2026-06-17, autonomous overnight AUTH-4)
+
+**ROUTE actual:** Codex (high, background `codex exec` under watchdog) BUILT → Opus 4.8 (Captain) independent AUDIT
+(auditor ≠ builder). Build clean.
+
+**AUDIT VERDICT: CONFORMS / VERIFIED.** Independent re-verification (Opus — re-ran):
+- Diff = `FranchiseHome.tsx` (+26: finalize trigger, both season-complete paths) + `processCompletedGame.ts` (+70:
+  surface `persistTrueValueAfterWar` rows + the snapshot capture) + the trueValue test mock update + a NEW
+  `processCompletedGame.trueValueSnapshots.test.ts`.
+- **FREEZE→FINALIZE ORDERING correct on BOTH paths:** `checkSeasonComplete` awaits freeze → captures `frozen` → awaits
+  `computeAndPersistFranchiseWarAwards` (before setSeasonComplete); the `isSeasonOver` effect CHAINS finalize via
+  `.then((frozen)=>…)` on the freeze (NOT a parallel `void` — no race). Both pass `computedAt = frozen.frozenAt→ISO`
+  (byte-stable re-fires). Inside the existing `franchiseId` guards; lands in GameDayContent.
+- **SNAPSHOT CAPTURE:** deterministic checkpoint = scheduled `gameNumber` (via scheduleGameId→getScheduledGame) ??
+  `gameState.gameId` (no counter/timestamp → idempotent put); one batched `saveFranchiseTrueValueSnapshotRows`; OWN
+  try/catch (`[TrueValueSnapshots]` warn, non-blocking — never trips the 10s timeout); runs only on non-null
+  trueValueScope, inside the regular-season `shouldAggregateToRegularSeasonStats` gate.
+- `tsc --noEmit` 0 (Opus) · `npm run build` success (Opus) · full suite **7,285 pass / 3 fail (7,288 total)** = EXACTLY
+  characterized, ZERO new reds. Snapshot test (write+readback / re-completion idempotency / playoff+elimination
+  exclusion / failure-isolation) passes.
+- **INVARIANTS:** no AwardsWatchlist/manifest/offseason-flag edit; no mid-season award-row write (snapshot-only per
+  game); TRACKER_DB_VERSION 18, KBL_BACKUP_VERSION 2.
+- **BROWSER-PENDING (batched, LIVE GAME PATH):** finishing a regular season → the 6 awards finalize + persist; each
+  completed game captures a franchiseTrueValueSnapshots checkpoint; no game-completion regression.
+
+**Status:** VERIFIED → committed (branch `codex/franchise-v1-next`, not pushed). **→ NEXT: D9d-2 (AwardsWatchlist UI + per-game watchlist preview + manifest flip + display) — completes D9.**
+

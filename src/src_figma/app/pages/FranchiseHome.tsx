@@ -30,6 +30,7 @@ import {
 import { processCompletedGame } from "../../../utils/processCompletedGame";
 import { markSeasonComplete } from "../../../utils/seasonStorage";
 import { freezeTrustedValueArtifactForSeason } from "../../../utils/franchiseTrustedValueStorage";
+import { computeAndPersistFranchiseWarAwards } from "../../../utils/franchiseAwardsEngine";
 import { getAllGames, getAllGamesByFranchise } from "../../../utils/scheduleStorage";
 import { getSeasonIdForScope } from "../../../utils/franchisePersistenceContract";
 import { startOffseason, OFFSEASON_PHASES, type OffseasonPhase } from "../../../utils/offseasonStorage";
@@ -3203,6 +3204,10 @@ interface GameDayContentProps {
   onAddGame: () => void;
 }
 
+function awardComputedAtFromFreeze(frozen: { frozenAt: number | null } | null): string | undefined {
+  return frozen?.frozenAt ? new Date(frozen.frozenAt).toISOString() : undefined;
+}
+
 function GameDayContent({
   scheduleData,
   currentSeason,
@@ -3293,11 +3298,17 @@ function GameDayContent({
         franchiseId,
         seasonId: activeSeasonId,
         statsScopeId: activeSeasonId,
-      }).catch((err) => {
-        console.warn('Failed to freeze trusted value artifact after season completion:', err);
+      }).then((frozen) => computeAndPersistFranchiseWarAwards({
+        franchiseId,
+        seasonId: activeSeasonId,
+        statsScopeId: activeSeasonId,
+        seasonNumber: currentSeason,
+        computedAt: awardComputedAtFromFreeze(frozen),
+      })).catch((err) => {
+        console.warn('Failed to freeze trusted value artifact or finalize awards after season completion:', err);
       });
     }
-  }, [activeSeasonId, franchiseId, isSeasonOver, seasonComplete]);
+  }, [activeSeasonId, currentSeason, franchiseId, isSeasonOver, seasonComplete]);
 
   /**
    * Check if season is now complete after a game action.
@@ -3316,10 +3327,17 @@ function GameDayContent({
       if (stillScheduled === 0) {
         await markSeasonComplete(activeSeasonId);
         if (franchiseId) {
-          await freezeTrustedValueArtifactForSeason({
+          const frozen = await freezeTrustedValueArtifactForSeason({
             franchiseId,
             seasonId: activeSeasonId,
             statsScopeId: activeSeasonId,
+          });
+          await computeAndPersistFranchiseWarAwards({
+            franchiseId,
+            seasonId: activeSeasonId,
+            statsScopeId: activeSeasonId,
+            seasonNumber: currentSeason,
+            computedAt: awardComputedAtFromFreeze(frozen),
           });
         }
         setSeasonComplete(true);

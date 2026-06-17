@@ -34,8 +34,16 @@ import { registerAlmanacPlayers } from './registerAlmanacPlayers';
 import { deriveAdaptiveStandardsConfig, type AdaptiveStandardsConfigInput } from './franchiseAdaptiveStandards';
 import { getSeasonMetadata, saveSeasonMetadata } from './seasonStorage';
 import { calculateAndPersistSeasonWAR } from '../src_figma/app/engines/warOrchestrator';
-import { calculateAndPersistFranchiseTrueValueForSeason } from './franchiseTrueValueStorage';
+import {
+  calculateAndPersistFranchiseTrueValueForSeason,
+  type FranchiseTrueValueRow,
+} from './franchiseTrueValueStorage';
+import {
+  saveFranchiseTrueValueSnapshotRows,
+  type FranchiseTrueValueSnapshotCheckpoint,
+} from './franchiseTrueValueSnapshotsStorage';
 import { calculateAndPersistProjectedFranchiseDesignationsForSeason } from './franchiseDesignationStorage';
+import { getGame as getScheduledGame } from './scheduleStorage';
 
 export interface ProcessGameResult {
   aggregation: GameAggregationResult;
@@ -57,6 +65,9 @@ type PersistedWarScope = {
 type PersistedTrueValueScope = PersistedWarScope & {
   franchiseId: string;
   seasonNumber: number;
+};
+type PersistedTrueValueResult = PersistedTrueValueScope & {
+  rows: FranchiseTrueValueRow[];
 };
 
 function positiveFiniteNumber(value: unknown): number | null {
@@ -211,7 +222,7 @@ async function persistTrueValueAfterWar(
   gameState: PersistedGameState,
   warScope: PersistedWarScope,
   archiveOptions?: CompletedGameArchiveOptions,
-): Promise<PersistedTrueValueScope | null> {
+): Promise<PersistedTrueValueResult | null> {
   const franchiseId = getCompletedGameFranchiseId(gameState, archiveOptions);
   if (!franchiseId) {
     console.warn('[TrueValue] skipped: franchiseId unresolved for completed game ' + gameState.gameId);
@@ -239,7 +250,47 @@ async function persistTrueValueAfterWar(
     seasonId: warScope.seasonId,
     statsScopeId: warScope.statsScopeId,
     seasonNumber: gameState.seasonNumber,
+    rows: result.rows,
   };
+}
+
+async function resolveTrueValueSnapshotCheckpoint(
+  gameState: PersistedGameState,
+  archiveOptions?: CompletedGameArchiveOptions,
+): Promise<FranchiseTrueValueSnapshotCheckpoint> {
+  const scheduleGameId = archiveOptions?.context?.scheduleGameId ?? gameState.scheduleGameId;
+  if (scheduleGameId) {
+    try {
+      const scheduledGame = await getScheduledGame(scheduleGameId);
+      if (scheduledGame && Number.isInteger(scheduledGame.gameNumber) && scheduledGame.gameNumber > 0) {
+        return scheduledGame.gameNumber;
+      }
+    } catch {
+      // Fall back to the completed game id; snapshot persistence has its own non-fatal warning path.
+    }
+  }
+  return gameState.gameId;
+}
+
+async function persistTrueValueSnapshotsForCompletedGame(
+  gameState: PersistedGameState,
+  trueValueResult: PersistedTrueValueResult,
+  archiveOptions?: CompletedGameArchiveOptions,
+): Promise<void> {
+  const checkpoint = await resolveTrueValueSnapshotCheckpoint(gameState, archiveOptions);
+  await saveFranchiseTrueValueSnapshotRows(
+    trueValueResult.rows.map((row) => ({
+      franchiseId: trueValueResult.franchiseId,
+      seasonId: trueValueResult.seasonId,
+      statsScopeId: trueValueResult.statsScopeId,
+      playerId: row.playerId,
+      checkpoint,
+      trueValue: row.trueValue,
+      valueDelta: row.valueDelta,
+      warPercentile: row.warPercentile,
+      computedAt: row.computedAt,
+    })),
+  );
 }
 
 async function persistProjectedDesignationsAfterTrueValue(
@@ -428,7 +479,7 @@ export async function processCompletedGame(
       console.warn('[WAR] failed to persist season WAR for completed game ' + gameState.gameId + ':', error);
     }
     if (warScope) {
-      let trueValueScope: PersistedTrueValueScope | null = null;
+      let trueValueScope: PersistedTrueValueResult | null = null;
       try {
         trueValueScope = await persistTrueValueAfterWar(gameState, warScope, archiveOptions);
       } catch (error) {
@@ -436,7 +487,18 @@ export async function processCompletedGame(
       }
       if (trueValueScope) {
         try {
-          await persistProjectedDesignationsAfterTrueValue(gameState, trueValueScope);
+          await persistTrueValueSnapshotsForCompletedGame(gameState, trueValueScope, archiveOptions);
+        } catch (error) {
+          console.warn('[TrueValueSnapshots] failed to persist True Value snapshots for completed game ' + gameState.gameId + ':', error);
+        }
+        try {
+          const designationScope: PersistedTrueValueScope = {
+            franchiseId: trueValueScope.franchiseId,
+            seasonId: trueValueScope.seasonId,
+            statsScopeId: trueValueScope.statsScopeId,
+            seasonNumber: trueValueScope.seasonNumber,
+          };
+          await persistProjectedDesignationsAfterTrueValue(gameState, designationScope);
         } catch (error) {
           console.warn('[Designations] failed to persist projected designations for completed game ' + gameState.gameId + ':', error);
         }

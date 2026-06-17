@@ -15,7 +15,9 @@ const mocks = vi.hoisted(() => ({
   saveSeasonMetadata: vi.fn(),
   calculateAndPersistSeasonWAR: vi.fn(),
   calculateAndPersistFranchiseTrueValueForSeason: vi.fn(),
+  saveFranchiseTrueValueSnapshotRows: vi.fn(),
   calculateAndPersistProjectedFranchiseDesignationsForSeason: vi.fn(),
+  getScheduledGame: vi.fn(),
 }));
 
 vi.mock('../seasonAggregator', () => ({
@@ -55,8 +57,16 @@ vi.mock('../franchiseTrueValueStorage', () => ({
   calculateAndPersistFranchiseTrueValueForSeason: mocks.calculateAndPersistFranchiseTrueValueForSeason,
 }));
 
+vi.mock('../franchiseTrueValueSnapshotsStorage', () => ({
+  saveFranchiseTrueValueSnapshotRows: mocks.saveFranchiseTrueValueSnapshotRows,
+}));
+
 vi.mock('../franchiseDesignationStorage', () => ({
   calculateAndPersistProjectedFranchiseDesignationsForSeason: mocks.calculateAndPersistProjectedFranchiseDesignationsForSeason,
+}));
+
+vi.mock('../scheduleStorage', () => ({
+  getGame: mocks.getScheduledGame,
 }));
 
 import { processCompletedGame } from '../processCompletedGame';
@@ -178,7 +188,9 @@ describe('processCompletedGame True Value persistence gate', () => {
     mocks.saveSeasonMetadata.mockResolvedValue(undefined);
     mocks.calculateAndPersistSeasonWAR.mockResolvedValue(undefined);
     mocks.calculateAndPersistFranchiseTrueValueForSeason.mockResolvedValue({ rows: [{ playerId: 'batter-1' }], skippedRows: [], persisted: true, blockers: [] });
+    mocks.saveFranchiseTrueValueSnapshotRows.mockResolvedValue([]);
     mocks.calculateAndPersistProjectedFranchiseDesignationsForSeason.mockResolvedValue({ rows: [], skippedRows: [], persisted: true, blockers: [] });
+    mocks.getScheduledGame.mockResolvedValue(null);
   });
 
   test('persists True Value and projected designations immediately after successful season WAR persistence', async () => {

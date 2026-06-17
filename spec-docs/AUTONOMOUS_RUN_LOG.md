@@ -545,3 +545,35 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   on the processCompletedGame chain + the season-end finalize TRIGGER calling computeAndPersistFranchiseWarAwards +
   flip the franchiseSeasonSummary awards-watchlists manifest blocked→live + profile/Almanac display via awardEmblems;
   do NOT flip the offseason flag). Completes D9 → then D10–D13 → soul layer.**
+
+- **2026-06-17 (overnight, AUTH-4) — D9 SPLIT into D9d-1/D9d-2; STARTED: D9d-1 (engine→app wiring).** Mapped via
+  `wf_c235f00a-95e` (5 readers, Captain-verified). D9d is large + touches the LIVE game path + adds UI → split:
+  **D9d-1 = the backend wiring** (season-end finalize TRIGGER + game-1 snapshot capture); **D9d-2 = the surface**
+  (AwardsWatchlist tab + per-game watchlist PREVIEW [the pure engine returns [] mid-season by design — needs the
+  looser `warLikePreviewAvailable` path / on-read computation, NOT a mid-season store write] + the season-summary
+  manifest flip [contract-version + test-pin coordination] + profile/Almanac display via the orphaned awardEmblems
+  catalog). **D9d-1:** (1) `processCompletedGame` snapshot capture — surface `persistTrueValueAfterWar` rows, write
+  `franchiseTrueValueSnapshots` in the post-WAR block, checkpoint = scheduled gameNumber ?? gameId (deterministic →
+  idempotent), one batched put, try/catch-isolated (non-blocking, 10s budget), regular-season gate inherited; (2)
+  `FranchiseHome` GameDayContent finalize TRIGGER — `computeAndPersistFranchiseWarAwards` after the awaited freeze in
+  `checkSeasonComplete` (byte-stable computedAt=frozenAt) + chained via `.then` on the `isSeasonOver`-effect freeze.
+  Contract in PROMPT_CONTRACTS.md; Codex invoked under the 30-min watchdog. **DEFAULTS-TAKEN:** checkpoint = scheduled
+  gameNumber ?? gameId (no counter/timestamp) · computedAt = frozenAt · finalize on both season-complete paths
+  (mirrors D6b) · snapshot try/catch-isolated · manifest flip + UI deferred to D9d-2. **LIVE-GAME-PATH touch →
+  BROWSER-BATCH** (the snapshot capture + the finalize's runtime effect). **D9d-2 QUEUED.**
+
+- **2026-06-17 (overnight, AUTH-4) — D9d-1 COMMITTED.** Build clean. Captain (Opus) independent audit = **VERIFIED**.
+  Diff = FranchiseHome +26 (finalize trigger, both season-complete paths) + processCompletedGame +70 (surface TV rows +
+  snapshot capture) + new snapshot test. **FREEZE→FINALIZE ordering correct on BOTH paths** (awaited in
+  checkSeasonComplete; `.then`-chained on the isSeasonOver effect — no parallel race; computedAt=frozenAt byte-stable).
+  **Snapshot capture** deterministic (checkpoint = scheduled gameNumber ?? gameId), idempotent, own try/catch
+  (non-blocking, 10s-budget-safe), regular-season-only. **Gates (re-ran):** tsc 0 · build 0 · full suite **7,285 pass /
+  3 fail (7,288 total)** = EXACTLY characterized, ZERO new reds · snapshot test (write/readback + re-completion
+  idempotency + playoff/elimination exclusion + failure-isolation) · no UI/manifest/flag edit · no mid-season award
+  write · versions unchanged. **BROWSER-PENDING (batched, LIVE GAME PATH):** season-end awards finalize+persist;
+  per-game snapshot checkpoint captured; no completion regression. **→ NEXT: D9d-2 — the FINAL D9 piece (AwardsWatchlist
+  UI [new Mode-2 regular+playoff tab, reads getFranchiseAwardRowsByScope, renders 6 categories + winner + candidate
+  margins via the awardEmblems catalog] + the per-game watchlist PREVIEW [looser warLikePreviewAvailable / on-read, NO
+  mid-season store write] + the season-summary manifest flip [awards-watchlists blocked→included + awardsImplemented,
+  gated on award rows existing; coordinate the contract-version + the franchiseSeasonSummary.wave4 test pin] +
+  profile/Almanac display; do NOT flip the offseason flag). Completes D9 → then D10–D13 → soul layer.**
