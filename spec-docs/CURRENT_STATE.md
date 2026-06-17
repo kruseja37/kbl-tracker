@@ -29,13 +29,22 @@ the D4 salary/value-preview scope snag, the soul-layer design rulings. **Detaile
   trusted-value artifact + the 4 flag-flips to computed; RIGOROUSLY audited — oracle untouched, real no-leak
   boundary test, parity-guard green). **D5 CONFIRMED** (TEAM_MVP/ACE trust engine, 51 tests). **D6 ruled:
   SEASON-END FREEZE** (D6a = live half; D6b adds the freeze).
-- **NEXT (resume in a FRESH context — value-spine work deserves fresh audit rigor):** **D6b** (season-end freeze of
-  the trusted-value artifact → deterministic D8/D9 awards) → **D7** (designations LIVE: promote TEAM_MVP/ACE to
-  non-'Proj.' + **add Albatross**; reconcile the dual designation path; emit `DesignationEvent` w/ NO morale
-  mutation; Fan Favorite stays Phase-2). Then D8 → D9 (awards, with the LSD-1 fame-ready seams + MOY-1..7) → D10–D13.
-  **Still needs JK:** OD-2..5 (L-ECON1/L2/L4a-reporter-UI/L9a — leans in `AUTONOMOUS_RUN_LOG.md`) · the **D4**
-  salary/value-preview scope snag (chips live on the combined TrueValue+ExpectedWins panel) · the **soul-layer
-  design rulings** (L3 morale matrix / L6 fame / L8 development — JK's vision; "build to spec" greenlights them).
+- **⏰ OVERNIGHT MODE AUTHORIZED (AUTH-4, JK 2026-06-16) — a fresh thread should KEEP ROLLING, no stoppages.**
+  Per `AUTONOMOUS_RUN_PROTOCOL.md` AUTH-4: the Captain makes **every** call — engineering AND spec-bounded DESIGN
+  (incl. the soul-layer engines + value-design forks) — by building to the ratified spec + rulings, taking a
+  **documented conservative default** where the spec is silent, and **continuing**. This SUPERSEDES the per-change
+  SMB4-Asset gate + the "build to spec" greenlight. The run **never stops for JK**; the only pause is
+  **SET-ASIDE-AND-CONTINUE** on a genuine safety wall (oracle/data-corruption/runaway/unresolvable-regression),
+  after which the loop moves to the next ticket. Everything → `AUTONOMOUS_RUN_LOG.md` for JK's morning review;
+  rework is the accepted cost of momentum.
+- **NEXT (fresh thread, overnight under AUTH-4):** **D6b** (season-end freeze of the trusted-value artifact →
+  deterministic D8/D9 awards) → **D7** (designations LIVE: promote TEAM_MVP/ACE to non-'Proj.' + **add Albatross**;
+  reconcile the dual designation path; emit `DesignationEvent` w/ NO morale mutation; Fan Favorite stays Phase-2) →
+  **D8** (award-trust gate) → **D9** (awards, with the LSD-1 fame-ready seams + MOY-1..7) → **D10–D13** → then the
+  **soul layer** (L3 morale matrix → L6 fame → L7 effects → L8/L9b development → L10–L14 → the L-SIM gate; L2 lands
+  with its first consumer). Take the **OD-3/4/5** leans + continue. **SET ASIDE (the one safety wall): L-ECON1**
+  (re-prices the frozen draft-IV anchor → oracle touch) + F-144. The **D4** scope snag: take the conservative call
+  or leave for the browser session — either, just log it.
 - **PHASE-2 "L-STACK" SEQUENCING DRAFTED + FORKS RULED (2026-06-16; design + docs only, NO product code):**
   `FRANCHISE_V1_LIVING_SEASON_DSTACK.md` (Status: PROPOSED) sequences the living-season spec §5–§24 into
   dependency-ordered tickets **L1–L14 + L-SIM + an economy track**, hardened by a 12-agent decorrelated

@@ -371,6 +371,20 @@ agent edits the ratified rules without JK. (JK ruling 2026-06-14.)
   season-long narrative cadence — how the reporter tells the morale / relationship / race story
   between games — was never addressed.)
 
+- **AUTH-4 / unattended-overnight mode (JK directive 2026-06-16):** For an UNATTENDED / OVERNIGHT
+  run, the operative authorization lives in `AUTONOMOUS_RUN_PROTOCOL.md` (AUTH-4) and the live
+  CURRENT_STATE header. In that mode the Captain KEEPS ROLLING and makes EVERY call — engineering
+  AND spec-bounded DESIGN, incl. the SMB4-asset soul-layer engines and value-design forks — by
+  building to the ratified spec + rulings, taking a DOCUMENTED conservative default where the spec
+  is silent, and CONTINUING. This deliberately SUPERSEDES, for the overnight run only, the
+  per-change SMB4 Asset Protection gate above AND the per-ticket design-greenlight; JK reviews
+  everything in the morning via `AUTONOMOUS_RUN_LOG.md`. The run NEVER stops for JK — the only pause
+  is SET-ASIDE-AND-CONTINUE on a genuine SAFETY wall (golden/oracle byte-change or frozen-value-
+  oracle touch · data-corruption/migration/saved-shape risk · a regression 2 fix-iterations can't
+  clear · a runaway loop), after which the loop moves to the next independent ticket. (When JK is
+  PRESENT/attended, the normal SMB4-asset gate + surface-the-fork rules apply; AUTH-4 is the
+  unattended exception JK switches on.)
+
 ### Pending cleanup (not a rule — a tracked repo action)
 - **spec-assembler duplicate:** two divergent copies exist —
   `.claude/skills/spec-assembler/SKILL.md` (511 lines, CANONICAL per JK

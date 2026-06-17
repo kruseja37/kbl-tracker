@@ -32,15 +32,21 @@ L4a-bus → JK directed "D-stack to the value gate" → D5 confirmed + D6 mapped
 Codex-builds / Opus-audits triangle held throughout (every diff independently re-verified: tsc/tests re-run,
 substance read, invariants grep'd — never trusted from the builder paste).
 
-**WRAPPED HERE (clean milestone + honest context call):** D6a is the value-gate's live half, rigorously audited.
-The next steps — **D6b** (season-end freeze) and **D7** (designations live, incl. Albatross + Fan Favorite) — are
-continued high-stakes value-spine work, and this session has run very long. Per my own stated rule, the
-make-or-break value work deserves fresh audit rigor → **resume D6b/D7 in a fresh context** (everything's captured
-in PROMPT_CONTRACTS.md + this log + the D6 decisions, so it resumes cleanly).
+**⏰ OVERNIGHT MODE AUTHORIZED (AUTH-4, JK 2026-06-16) — a fresh thread KEEPS ROLLING, no stoppages.** This session
+hit a clean milestone at D6a (the value-gate's live half, rigorously audited). JK then authorized AUTH-4: an
+unattended/overnight run where the Captain makes **every** call (engineering AND spec-bounded design, incl. the
+soul-layer + value-design forks) by building to the ratified spec + rulings, taking a documented conservative
+default where the spec is silent, and CONTINUING — the run NEVER stops for JK; the only pause is
+SET-ASIDE-AND-CONTINUE on a genuine safety wall. **A fresh thread resumes from a clean context AND runs under
+AUTH-4** (see `AUTONOMOUS_RUN_PROTOCOL.md` AUTH-4 + the Queue, and the CURRENT_STATE ⏰ bullet). Everything's
+captured in PROMPT_CONTRACTS.md + this log + the D6 decisions, so it resumes cleanly.
 
-**Still genuinely needs JK (unchanged):** OD-2..5 (below) · the **D4** salary/value-preview scope snag · **L-ECON1**
-(frozen anchor) · the **soul-layer design rulings** (L3 morale matrix / L6 fame / L8 development / … — your vision).
-**Browser backlog (batched):** L1.5 captain + L4a reporter (Supabase) on real franchise data.
+**NEXT (overnight, in order):** **D6b** (season-end freeze) → **D7** (designations live incl. Albatross) → **D8**
+(award-trust) → **D9** (awards w/ LSD-1 seams + MOY-1..7) → **D10–D13** → the **soul layer** (L3 morale matrix → L6
+fame → L7 effects → L8/L9b → L10–L14 → L-SIM gate; L2 with its first consumer). **Take the OD-3/4/5 leans +
+continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-price → oracle touch) + F-144. The
+**D4** scope snag: take the conservative call or leave for the browser session — log it either way.
+**Browser backlog (batched, JK morning):** L1.5 captain + L4a reporter (Supabase) on real franchise data.
 
 ---
 
