@@ -8677,5 +8677,20 @@ the parity-guard extension reveals a real backup drift in `kbl-franchise-morale`
 
 Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited.
 
-**Status:** DISPATCHED to Codex (background, watchdog). Audit pending.
+**Status:** VERIFIED + COMMITTED `d46a071` (2026-06-17). Build-dark (flag OFF; activates post-D13). **→ L3 COMPLETE.**
+
+**AUDIT + EXECUTION RECORD (Opus 4.8, auditor ≠ builder):** Codex (very-high, watchdog) BUILT → Opus independently
+re-ran: tsc 0 · build 0 · FULL suite **7,256 pass / 2 fail (7,258 total, 406 files)** = characterized set only, ZERO
+new reds; morale (3) + parity-guard (4) tests green. Diff = 4 edited + 1 new. **Read the diff + verified:** BUILD-DARK
+is defense-in-depth — `franchisePhase2Flags.ts` defaults `FRANCHISE_PHASE2_MORALE_ENABLED_DEFAULT=false`, and BOTH the
+call site (`processCompletedGame` early-returns when off) AND the store (`applyFranchiseMoraleMatrixConsequence` →
+`'dark-noop'` when off) gate on it → zero live morale write with the v1 default (proven by a test asserting flag-OFF →
+null snapshots). Store REUSED (no second store) — new `'matrix-auto'` sourceKind + the matrix-apply path routes through
+the existing `applyFranchiseMoraleEffect` (idempotent dedupe + deterministic sourceEventIds); the existing
+confirmation-gated path is UNTOUCHED; `DB_VERSION` stays 1 (no schema change → no backup version bump). The D7
+subscription replaced the `void result.designationEvents` site (flag-gated dark, isolated try/catch, firewall flags
+stay false). The parity-guard now asserts `kbl-franchise-morale` registry alignment (closes the C-4 deficit; no drift).
+No reporter/LLM import in the apply path (firewall). **L3 COMPLETE — the morale spine is built, dark.** NEXT (soul
+layer): {L5 fan-teeth, L6 fame} → {L7, L8, L9b, L10} → … (after D13 activation). The roster-tab confirmation-gate UI
+removal pairs with L3 activation (tracked).
 

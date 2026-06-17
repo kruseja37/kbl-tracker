@@ -21,13 +21,16 @@ smart-label D4 value panel [frozen-aware: PROJECTED mid-season → FINAL/TRUSTED
 stays an estimate]; promote-surface/keep-effect rule with the keep-list verified intact — no over-promotion; D4
 salary de-gate folded in). **NEXT = D12** (full manual smoke on real franchise data, iPad) → D13 (Playable-V1
 internal checkpoint) → the soul layer (L-stack). Browser-verify backlog: #12 (D10) + #13 (DR-3) + #14/#15 (D11).
-Branch codex/franchise-v1-next; nothing pushed. **SOUL LAYER (L-stack) GREENLIT + STARTED (build-dark):** L3 (Master
-Morale Matrix) split L3a/L3b — **L3a COMMITTED `5b1431d`** (the pure deterministic matrix engine: one event-keyed
+Branch codex/franchise-v1-next; nothing pushed. **SOUL LAYER (L-stack) GREENLIT + UNDERWAY (build-dark): L3 COMPLETE (the morale spine).**
+L3 (Master Morale Matrix) split L3a/L3b — **L3a `5b1431d`** (the pure deterministic matrix engine: one event-keyed
 table + composer, 7 personalities × 4 modifiers [Ambition-up/Resilience-down/Charisma→teammates/Loyalty→fan-link],
-SIM-TUNED magnitudes, default-neutral taps, firewall-clean); **L3b dispatched** (reuse+un-gate the existing
-`kbl-franchise-morale` store + D7 subscription DARK + a Phase-2 build-dark flag [default OFF] + parity-guard
-extension). D12/D13 remain JK gates; the soul layer activates strictly after D13. **7 feature commits this attended
-session** (D10 + DR-1..3 + D11 + L3a; DR-4 docs).)
+SIM-TUNED magnitudes, default-neutral taps, firewall-clean) + **L3b `d46a071`** (reuse+un-gate the existing
+`kbl-franchise-morale` store [new 'matrix-auto' sourceKind, no second store, DB v1 unchanged] + D7 subscription DARK +
+a Phase-2 build-dark flag [default OFF, gated defense-in-depth at call-site AND store] + parity-guard now covers
+kbl-franchise-morale). **NO live morale until after D13** (§5 no-phantom-morale; flag OFF). NEXT soul-layer tickets:
+{L5 fan-teeth, L6 fame} → {L7 designation effects, L8 dev, L9b traits, L10 random events} → {L11–L14} → the L-SIM gate;
+the roster-tab confirmation-gate UI removal pairs with L3 activation (tracked). D12/D13 remain JK gates. **8 feature
+commits this attended session** (D10 + DR-1..3 + D11 + L3a + L3b; DR-4 docs).)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.
