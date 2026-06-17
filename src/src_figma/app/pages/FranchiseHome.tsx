@@ -13,6 +13,7 @@ import { DraftFlow } from "@/app/components/DraftFlow";
 import { FinalizeAdvanceFlow } from "@/app/components/FinalizeAdvanceFlow";
 import { TradeFlow } from "@/app/components/TradeFlow";
 import { SpringTrainingFlow } from "@/app/components/SpringTrainingFlow";
+import { AwardsWatchlist } from "@/app/components/AwardsWatchlist";
 import { AddGameModal, type GameFormData } from "@/app/components/AddGameModal";
 import { ScheduleContent } from "@/app/components/ScheduleContent";
 import { useFranchiseData, type UseFranchiseDataReturn } from "@/hooks/useFranchiseData";
@@ -1165,6 +1166,7 @@ export function FranchiseHome() {
     { id: "standings", label: "STANDINGS", icon: <BarChart3 className="w-4 h-4" /> },
     { id: "team", label: "TEAM HUB", icon: <Users className="w-4 h-4" /> },
     { id: "leaders", label: "LEAGUE LEADERS", icon: <TrendingUp className="w-4 h-4" /> },
+    { id: "awards", label: "AWARDS", icon: <Award className="w-4 h-4" /> },
     ...(MODE_2_V1_TRANSACTION_UI_ENABLED
       ? [{ id: "rosters", label: "ROSTER & TRADES", icon: <Folder className="w-4 h-4" /> }]
       : []),
@@ -1180,6 +1182,7 @@ export function FranchiseHome() {
     { id: "series", label: "SERIES RESULTS", icon: <BarChart3 className="w-4 h-4" /> },
     { id: "playoff-stats", label: "PLAYOFF STATS", icon: <TrendingUp className="w-4 h-4" /> },
     { id: "playoff-leaders", label: "PLAYOFF LEADERS", icon: <Star className="w-4 h-4" /> },
+    { id: "awards", label: "AWARDS", icon: <Award className="w-4 h-4" /> },
     { id: "team", label: "TEAM HUB", icon: <Users className="w-4 h-4" /> },
     { id: "advance", label: "ADVANCE TO OFFSEASON", icon: <ArrowRight className="w-4 h-4" /> },
     { id: "museum", label: "MUSEUM", icon: <Trophy className="w-4 h-4" /> },
@@ -1465,6 +1468,14 @@ export function FranchiseHome() {
         )}
         {activeTab === "leaders" && (
           <LeagueLeadersContent />
+        )}
+        {activeTab === "awards" && seasonPhase !== "offseason" && (
+          <AwardsWatchlist
+            franchiseId={franchiseId}
+            seasonId={activeSeasonId}
+            statsScopeId={activeSeasonId}
+            seasonNumber={currentSeason}
+          />
         )}
         {activeTab === "rosters" && (
           <TradeFlow seasonId={activeSeasonId} seasonNumber={currentSeason} franchiseId={franchiseId!} />

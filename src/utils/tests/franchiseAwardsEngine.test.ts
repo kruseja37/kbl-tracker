@@ -42,6 +42,7 @@ import { deriveAdaptiveStandardsConfig } from '../franchiseAdaptiveStandards';
 import {
   aggregateManagerAwardInputsFromGames,
   computeAndPersistFranchiseWarAwards,
+  computeFranchiseAwardsPreview,
   computeFranchiseManagerOfYear,
   computeFranchiseWarAwards,
   type FranchiseManagerAwardAggregate,
@@ -58,6 +59,7 @@ import {
 } from '../franchiseTrustedValueStorage';
 import {
   clearFranchiseTrueValueDatabaseForTests,
+  getFranchiseTrueValueRows,
   saveFranchiseTrueValueRows,
   type FranchiseTrueValueRow,
 } from '../franchiseTrueValueStorage';
@@ -835,5 +837,79 @@ describe('franchise WAR awards engine', () => {
       statsScopeId: scope.statsScopeId,
     });
     expect(mocks.calculateStandings).toHaveBeenCalledWith(scope.seasonId);
+  });
+
+  test('computeFranchiseAwardsPreview ranks current rows under the looser preview gate without persisting', async () => {
+    const rows = standardRows().map((row) => ({
+      ...row,
+      warConsumerTrust: {
+        ...row.warConsumerTrust,
+        awards: false,
+      },
+    }));
+    mocks.buildFranchiseValueInputRows.mockResolvedValue({
+      ...report(rows),
+      trustedValueArtifactFrozen: false,
+    });
+    mocks.getAllBattingStats.mockResolvedValue(rows.map((row) => battingStats(row.playerId)));
+    mocks.getAllPitchingStats.mockResolvedValue([pitchingStats('pitcher')]);
+    mocks.getRecentGames.mockResolvedValue([
+      completedGame([{
+        managerId: 'preview-manager',
+        managerName: 'Preview Manager',
+        teamId: 'team-a',
+        tacticalManagerWpa: 0.25,
+        deploymentWpa: 0.125,
+        lineupDeltaWpa: 0.0625,
+        managerValue: 0.4375,
+      }]),
+    ]);
+    mocks.calculateStandings.mockResolvedValue([
+      standing('team-a', 12, 4),
+    ]);
+    mocks.getCareerStats.mockImplementation(async (playerId: string) => ({
+      batting: playerId === 'rookie' ? { seasonsPlayed: 0 } : { seasonsPlayed: 1 },
+      pitching: null,
+      fielding: null,
+    }));
+    await persistTrustedValueArtifact({
+      ...artifact(rows.map((row) => row.playerId)),
+      frozen: false,
+      frozenAt: null,
+    });
+    await saveFranchiseTrueValueRows(rows.map((row, index) => trueValueRow(row.playerId, 100 - index)));
+    await expect(getFranchiseTrueValueRows(scope)).resolves.toHaveLength(rows.length);
+
+    expect(computeFranchiseWarAwards({
+      ...scope,
+      valueRows: rows,
+      trueValueRows: rows.map((row) => trueValueRow(row.playerId)),
+      trustedValueArtifact: {
+        ...artifact(rows.map((row) => row.playerId)),
+        frozen: false,
+        frozenAt: null,
+      },
+      adaptiveStandardsConfig: deriveAdaptiveStandardsConfig({
+        gamesPerTeam: 32,
+        inningsPerGame: 6,
+      }),
+      qualifierFacts: qualifierFacts(),
+      rookiePlayerIds: new Set(['rookie']),
+      trustedForAwards: false,
+      computedAt,
+    })).toEqual([]);
+
+    const preview = await computeFranchiseAwardsPreview({
+      ...scope,
+      seasonNumber: 1,
+      computedAt,
+    });
+    const stored = await getFranchiseAwardRowsByScope(scope);
+
+    expect(preview).toHaveLength(6);
+    expect(preview.every((row) => row.finalized === false)).toBe(true);
+    expect(preview.find((row) => row.category === 'MVP')?.winnerPlayerId).toBe('mvp');
+    expect(preview.find((row) => row.category === 'MANAGER_OF_YEAR')?.winnerPlayerId).toBe('preview-manager');
+    expect(stored).toEqual([]);
   });
 });

@@ -85,6 +85,11 @@ export interface ComputeAndPersistFranchiseWarAwardsScope extends FranchiseAward
   computedAt?: string;
 }
 
+export interface ComputeFranchiseAwardsPreviewScope extends FranchiseAwardsScopeInput {
+  seasonNumber: number;
+  computedAt?: string;
+}
+
 type ScoreSelector = (row: FranchiseValueInputRow) => number | null;
 
 const WAR_AWARD_CATEGORIES: readonly FranchiseWarAwardCategory[] = [
@@ -356,14 +361,11 @@ function buildAwardRow(params: {
   };
 }
 
-export function computeFranchiseWarAwards(
+function computeFranchiseWarAwardsFromEligibleInput(
   input: ComputeFranchiseWarAwardsInput,
 ): FranchiseAwardRow[] {
   const trustedValueArtifact = input.trustedValueArtifact;
-  if (
-    !input.trustedForAwards ||
-    trustedValueArtifact?.frozen !== true
-  ) {
+  if (!trustedValueArtifact) {
     return [];
   }
 
@@ -395,14 +397,25 @@ export function computeFranchiseWarAwards(
     .filter((row): row is FranchiseAwardRow => row !== null);
 }
 
-export function computeFranchiseManagerOfYear(
-  input: ComputeFranchiseManagerOfYearInput,
-): FranchiseAwardRow | null {
+export function computeFranchiseWarAwards(
+  input: ComputeFranchiseWarAwardsInput,
+): FranchiseAwardRow[] {
   const trustedValueArtifact = input.trustedValueArtifact;
   if (
     !input.trustedForAwards ||
     trustedValueArtifact?.frozen !== true
   ) {
+    return [];
+  }
+
+  return computeFranchiseWarAwardsFromEligibleInput(input);
+}
+
+function computeFranchiseManagerOfYearFromEligibleInput(
+  input: ComputeFranchiseManagerOfYearInput,
+): FranchiseAwardRow | null {
+  const trustedValueArtifact = input.trustedValueArtifact;
+  if (!trustedValueArtifact) {
     return null;
   }
 
@@ -474,6 +487,20 @@ export function computeFranchiseManagerOfYear(
     finalized: false,
     computedAt: input.computedAt,
   };
+}
+
+export function computeFranchiseManagerOfYear(
+  input: ComputeFranchiseManagerOfYearInput,
+): FranchiseAwardRow | null {
+  const trustedValueArtifact = input.trustedValueArtifact;
+  if (
+    !input.trustedForAwards ||
+    trustedValueArtifact?.frozen !== true
+  ) {
+    return null;
+  }
+
+  return computeFranchiseManagerOfYearFromEligibleInput(input);
 }
 
 function qualifierFactsFromStats(
@@ -583,4 +610,87 @@ export async function computeAndPersistFranchiseWarAwards(
   }));
 
   return replaceFranchiseAwardRowsForScope(scope, awards);
+}
+
+export async function computeFranchiseAwardsPreview(
+  scope: ComputeFranchiseAwardsPreviewScope,
+): Promise<FranchiseAwardRow[]> {
+  const valueInputReport = await buildFranchiseValueInputRows({
+    franchiseId: scope.franchiseId,
+    seasonId: scope.seasonId,
+    statsScopeId: scope.statsScopeId,
+    seasonNumber: scope.seasonNumber,
+  });
+  const trustReport = buildFranchiseAnalyticsTrustReport({
+    valueInputReport,
+  });
+
+  if (!trustReport.war.warLikePreviewAvailable) {
+    return [];
+  }
+
+  const [
+    trustedValueArtifact,
+    trueValueRows,
+    battingRows,
+    pitchingRows,
+    rookiePlayerIds,
+    managerGames,
+    standings,
+  ] = await Promise.all([
+    getTrustedValueArtifact(scope.franchiseId, scope.seasonId, scope.statsScopeId),
+    getFranchiseTrueValueRows(scope),
+    getAllBattingStats(scope.statsScopeId),
+    getAllPitchingStats(scope.statsScopeId),
+    loadRookiePlayerIds(valueInputReport.rows.map((row) => row.playerId)),
+    getRecentGames(MANAGER_OF_YEAR_GAME_LIMIT, {
+      franchiseId: scope.franchiseId,
+      seasonId: scope.seasonId,
+      statsScopeId: scope.statsScopeId,
+    }),
+    calculateStandings(scope.seasonId),
+  ]);
+
+  if (!trustedValueArtifact) {
+    return [];
+  }
+
+  const adaptiveStandardsConfig = deriveAdaptiveStandardsConfig({
+    gamesPerTeam: valueInputReport.seasonContext.gamesPerTeam,
+    inningsPerGame: valueInputReport.seasonContext.inningsPerGame,
+  });
+  const computedAt = scope.computedAt ?? new Date().toISOString();
+  const warAwards = computeFranchiseWarAwardsFromEligibleInput({
+    franchiseId: scope.franchiseId,
+    seasonId: scope.seasonId,
+    statsScopeId: scope.statsScopeId,
+    valueRows: valueInputReport.rows,
+    trueValueRows,
+    trustedValueArtifact,
+    adaptiveStandardsConfig,
+    qualifierFacts: qualifierFactsFromStats(battingRows, pitchingRows),
+    rookiePlayerIds,
+    trustedForAwards: true,
+    computedAt,
+  });
+  const managerAward = computeFranchiseManagerOfYearFromEligibleInput({
+    franchiseId: scope.franchiseId,
+    seasonId: scope.seasonId,
+    statsScopeId: scope.statsScopeId,
+    managerAggregates: aggregateManagerAwardInputsFromGames(managerGames),
+    trueValueRows,
+    trustedValueArtifact,
+    standings,
+    gamesPerTeam: adaptiveStandardsConfig.gamesPerSeason,
+    trustedForAwards: true,
+    computedAt,
+  });
+
+  return [
+    ...warAwards,
+    ...(managerAward ? [managerAward] : []),
+  ].map((row) => ({
+    ...row,
+    finalized: false,
+  }));
 }

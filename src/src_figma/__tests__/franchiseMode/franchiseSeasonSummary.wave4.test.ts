@@ -25,6 +25,10 @@ import {
   getFranchiseSeasonSummary,
   getFranchiseSeasonSummaryByFranchise,
 } from '../../../utils/franchiseSeasonSummaryStorage';
+import {
+  saveFranchiseAwardRows,
+  type FranchiseAwardRow,
+} from '../../../utils/franchiseAwardsStorage';
 import { getFranchiseSeasonId } from '../../../utils/franchisePersistenceContract';
 import { createPlayoff } from '../../../utils/playoffStorage';
 import { executeSeasonTransition, type PlayerStorageAdapter } from '../../../engines/seasonTransitionEngine';
@@ -82,6 +86,29 @@ function makeCompletedGame(params: {
     pitcherGameStats: [],
     activityLog: [],
     inningScores: [],
+  };
+}
+
+function makeAwardRow(params: {
+  franchiseId: string;
+  seasonId: string;
+  category?: FranchiseAwardRow['category'];
+  winnerPlayerId?: string;
+}): FranchiseAwardRow {
+  return {
+    franchiseId: params.franchiseId,
+    seasonId: params.seasonId,
+    statsScopeId: params.seasonId,
+    category: params.category ?? 'MVP',
+    winnerPlayerId: params.winnerPlayerId ?? 'player-1',
+    candidates: [
+      { playerId: params.winnerPlayerId ?? 'player-1', score: 7.25, marginToWinner: 0 },
+      { playerId: 'player-2', score: 6.5, marginToWinner: -0.75 },
+    ],
+    goldGloveSplit: null,
+    voteWeight: null,
+    finalized: true,
+    computedAt: '2026-06-17T12:00:00.000Z',
   };
 }
 
@@ -202,7 +229,13 @@ describe('Wave 4 franchise season summary handoff', () => {
       currentRound: 1,
       champion: 'team-a',
     });
+    await saveFranchiseAwardRows([
+      makeAwardRow({ franchiseId, seasonId, category: 'MVP', winnerPlayerId: 'player-1' }),
+      makeAwardRow({ franchiseId, seasonId, category: 'CY_YOUNG', winnerPlayerId: 'player-2' }),
+    ]);
 
+    // D9d-2 sanctioned baseline shift: finalized franchiseAwardsRows promote
+    // the manifest from awards-blocked to awards-aware included.
     await createFranchiseSeasonSummary({ franchiseId, seasonNumber, playoffId: playoff.id });
     const persisted = await getFranchiseSeasonSummaryByFranchise(franchiseId, seasonNumber);
 
@@ -218,14 +251,14 @@ describe('Wave 4 franchise season summary handoff', () => {
         status: 'present',
       },
       manifest: {
-        contractVersion: 'franchise-season-summary-no-awards-manifest-v1',
+        contractVersion: 'franchise-season-summary-v2-awards-manifest-v1',
         franchiseId,
         seasonId,
         statsScopeId: seasonId,
         readOnly: true,
         hiddenSafe: true,
         policyFlags: {
-          awardsImplemented: false,
+          awardsImplemented: true,
           mode3ExecutionAllowed: false,
           seasonRolloverAllowed: false,
           salaryMovementAllowed: false,
@@ -244,14 +277,15 @@ describe('Wave 4 franchise season summary handoff', () => {
     expect(persisted?.seasonStats.batting).toHaveLength(1);
     expect(persisted?.manifest.categories.map((category) => category.key)).toContain('awards-watchlists');
     expect(persisted?.manifest.categories.find((category) => category.key === 'awards-watchlists')).toMatchObject({
-      status: 'blocked',
+      status: 'included',
+      count: 2,
     });
     expect(persisted?.manifest.categories.find((category) => category.key === 'mode3-offseason-rollover')).toMatchObject({
       status: 'blocked',
     });
   });
 
-  test('marks no-awards manifest incomplete when regular-season schedule rows remain unresolved', async () => {
+  test('keeps awards blocked when rows are absent and marks manifest incomplete for unresolved schedule rows', async () => {
     const franchiseId = nextId('summary-incomplete-manifest');
     const seasonNumber = 10;
     const seasonId = getFranchiseSeasonId(franchiseId, seasonNumber);

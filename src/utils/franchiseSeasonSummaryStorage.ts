@@ -47,6 +47,10 @@ import {
   buildFranchiseStadiumFoundationReport,
   type FranchiseStadiumFoundationReport,
 } from './franchiseStadiumFoundation';
+import {
+  getFranchiseAwardRowsByScope,
+  type FranchiseAwardRow,
+} from './franchiseAwardsStorage';
 import { getTrackerDb } from './trackerDb';
 import { syncEngine } from './syncEngine';
 
@@ -112,7 +116,7 @@ export interface FranchiseSeasonSummaryManifestCategory {
 }
 
 export interface FranchiseSeasonSummaryManifest {
-  contractVersion: 'franchise-season-summary-no-awards-manifest-v1';
+  contractVersion: 'franchise-season-summary-v2-awards-manifest-v1';
   generatedAt: number;
   franchiseId: string;
   seasonId: string;
@@ -125,8 +129,8 @@ export interface FranchiseSeasonSummaryManifest {
   blockers: string[];
   warnings: string[];
   policyFlags: {
-    awardsImplemented: false;
-    watchlistsImplemented: false;
+    awardsImplemented: boolean;
+    watchlistsImplemented: boolean;
     finalTrueValueAllowed: false;
     valueDeltaTrusted: false;
     blockedDesignationPromotionAllowed: false;
@@ -301,7 +305,7 @@ function managerEvidenceCounts(completedGames: CompletedGameRecord[]) {
   });
 }
 
-function buildNoAwardsManifest(input: {
+function buildAwardsAwareManifest(input: {
   franchiseId: string;
   seasonId: string;
   statsScopeId: string;
@@ -321,12 +325,14 @@ function buildNoAwardsManifest(input: {
   } | null;
   transactionCount: number;
   stadiumReport: FranchiseStadiumFoundationReport;
+  awardRows: FranchiseAwardRow[];
 }): FranchiseSeasonSummaryManifest {
   const warnings: string[] = [];
   const blockers: string[] = [];
   const categories: FranchiseSeasonSummaryManifestCategory[] = [];
   const incompleteScheduleRows = input.scheduleGames.filter((game) => !isScheduleCompleteForSummary(game));
   const scoreOnlyRows = countScoreOnlyCompletedGames(input.scheduleGames);
+  const finalizedAwardRows = input.awardRows.filter((row) => row.finalized);
 
   if (input.scheduleGames.length === 0) {
     blockers.push('No regular-season schedule rows are available for season-complete review.');
@@ -493,10 +499,15 @@ function buildNoAwardsManifest(input: {
   categories.push(manifestCategory(
     'awards-watchlists',
     'Awards and watchlists',
-    'blocked',
-    'Awards/watchlists are omitted from the v1 season-complete manifest until the Final WAR / Award Trust Promotion Gate passes.',
+    finalizedAwardRows.length > 0 ? 'included' : 'blocked',
+    finalizedAwardRows.length > 0
+      ? `${finalizedAwardRows.length} finalized award row(s) captured for this season scope.`
+      : 'Awards/watchlists remain blocked in the season-complete manifest until finalized award rows exist for this scope.',
     {
-      blockers: ['finalWarTrusted and trustedForAwards remain false; award-specific True Value/milestone/adaptive thresholds are not proven.'],
+      count: finalizedAwardRows.length,
+      blockers: finalizedAwardRows.length > 0
+        ? []
+        : ['No finalized franchiseAwardsRows exist for this franchise/season/stats scope.'],
     },
   ));
 
@@ -531,7 +542,7 @@ function buildNoAwardsManifest(input: {
   ));
 
   return {
-    contractVersion: 'franchise-season-summary-no-awards-manifest-v1',
+    contractVersion: 'franchise-season-summary-v2-awards-manifest-v1',
     generatedAt: input.generatedAt,
     franchiseId: input.franchiseId,
     seasonId: input.seasonId,
@@ -544,8 +555,8 @@ function buildNoAwardsManifest(input: {
     blockers,
     warnings,
     policyFlags: {
-      awardsImplemented: false,
-      watchlistsImplemented: false,
+      awardsImplemented: finalizedAwardRows.length > 0,
+      watchlistsImplemented: finalizedAwardRows.length > 0,
       finalTrueValueAllowed: false,
       valueDeltaTrusted: false,
       blockedDesignationPromotionAllowed: false,
@@ -651,6 +662,7 @@ export async function buildFranchiseSeasonSummary(params: {
     teams,
     config,
     transactions,
+    awardRows,
   ] = await Promise.all([
     getAllGamesByFranchise(params.franchiseId, params.seasonNumber),
     getRecentGames(1000, { franchiseId: params.franchiseId, seasonId }),
@@ -665,6 +677,11 @@ export async function buildFranchiseSeasonSummary(params: {
     getAllFranchiseTeams(params.franchiseId).catch(() => []),
     getFranchiseConfig(params.franchiseId).catch(() => null),
     getTransactionsByFranchiseSeason(params.franchiseId, seasonId).catch(() => []),
+    getFranchiseAwardRowsByScope({
+      franchiseId: params.franchiseId,
+      seasonId,
+      statsScopeId: seasonId,
+    }).catch(() => []),
   ]);
 
   const playoffStats = playoff ? await getPlayoffStats(playoff.id) : undefined;
@@ -688,7 +705,7 @@ export async function buildFranchiseSeasonSummary(params: {
     stadiumSnapshots: config?.stadiums ?? [],
     completedGames,
   });
-  const manifest = buildNoAwardsManifest({
+  const manifest = buildAwardsAwareManifest({
     franchiseId: params.franchiseId,
     seasonId,
     statsScopeId: seasonId,
@@ -703,6 +720,7 @@ export async function buildFranchiseSeasonSummary(params: {
     salaryBaseline: config?.salaryBaseline ?? null,
     transactionCount: transactions.length,
     stadiumReport,
+    awardRows,
   });
 
   return {
