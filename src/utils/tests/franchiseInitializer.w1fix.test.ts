@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   deleteFranchiseDatabase: vi.fn(),
   getAllFranchisePlayers: vi.fn(),
   getAllFranchiseTeams: vi.fn(),
+  saveFranchisePlayer: vi.fn(),
+  saveFranchiseTeam: vi.fn(),
   deleteSeasonMetadata: vi.fn(),
   getOrCreateSeason: vi.fn(),
   getSeasonMetadata: vi.fn(),
@@ -47,6 +49,8 @@ vi.mock('../franchisePlayerStorage', () => ({
   deleteFranchiseDatabase: mocks.deleteFranchiseDatabase,
   getAllFranchisePlayers: mocks.getAllFranchisePlayers,
   getAllFranchiseTeams: mocks.getAllFranchiseTeams,
+  saveFranchisePlayer: mocks.saveFranchisePlayer,
+  saveFranchiseTeam: mocks.saveFranchiseTeam,
 }));
 
 vi.mock('../seasonStorage', () => ({
@@ -128,8 +132,25 @@ describe('W1-FIX franchise season metadata gamesPerTeam fuel line', () => {
     }));
     mocks.saveSeasonMetadata.mockImplementation((metadata) => Promise.resolve(metadata));
     mocks.getAllGamesByFranchise.mockResolvedValue([{}, {}, {}]);
-    mocks.getAllFranchisePlayers.mockResolvedValue([{ id: 'player-1' }]);
+    mocks.getAllFranchisePlayers.mockResolvedValue([{
+      id: 'player-1',
+      hiddenPersonalityModifiers: {
+        loyalty: 80,
+        ambition: 50,
+        resilience: 50,
+        charisma: 80,
+      },
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-a', rosterStatus: 'MLB' }],
+    }]);
     mocks.getAllFranchiseTeams.mockResolvedValue([{ id: 'team-a' }]);
+    mocks.saveFranchisePlayer.mockImplementation((_franchiseId, player) => Promise.resolve({
+      ...player,
+      id: player.id ?? 'player-saved',
+    }));
+    mocks.saveFranchiseTeam.mockImplementation((_franchiseId, team) => Promise.resolve({
+      ...team,
+      id: team.id ?? 'team-saved',
+    }));
   });
 
   test('initializeFranchise creates season metadata with config gamesPerTeam', async () => {
@@ -141,6 +162,19 @@ describe('W1-FIX franchise season metadata gamesPerTeam fuel line', () => {
       'Season 1',
       0,
       40,
+    );
+    expect(mocks.saveFranchiseTeam).toHaveBeenCalledWith(
+      'franchise-1',
+      expect.objectContaining({
+        id: 'team-a',
+        captainPlayerId: 'player-1',
+      }),
+    );
+    expect(mocks.initScheduleDatabase.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.getAllFranchisePlayers.mock.invocationCallOrder[0],
+    );
+    expect(mocks.saveFranchiseTeam.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.getOrCreateSeason.mock.invocationCallOrder[0],
     );
   });
 

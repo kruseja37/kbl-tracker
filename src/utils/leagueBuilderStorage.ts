@@ -130,6 +130,7 @@ export interface Team {
   heritageFacts?: string[];
   rivalries?: TeamRivalry[];
   capIdentity?: TeamCapIdentity;
+  captainPlayerId?: string | null;
   lineupWithDH?: LineupSlot[];
   lineupWithoutDH?: LineupSlot[];
   startingRotation?: string[];

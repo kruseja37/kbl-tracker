@@ -47,6 +47,9 @@ progress** (below). Rule them and the loop resumes fast — most are small build
   protected source-of-truth). This touches the SMB4 personality asset + possibly the SOT → flagged for your ruling
   rather than defaulted. **L1.5 is SET ASIDE until you rule OD-1.** (Once ruled, OD-1 itself is a small build, then
   L1.5 follows.)
+  **→ RESOLVED 2026-06-16 (built with default (a), commit below):** modifiers generated at franchise-init,
+  seeded by `player.id`, same distribution as prospects, no SOT touch; L1.5 Captain assignment shipped on top.
+  Override the distribution on return if you'd prefer (b) derive-from-personality or (c) SOT.
 
 - **OD-2 (MED — L-ECON1 salary scale) — sequencing + taper + frozen-anchor scope.** DSF-1 re-prices the same
   `computeIV` curve-block the frozen draft-IV baseline + D4 salary + D6 trusted-value read. Decisions: **(i)**
@@ -173,3 +176,23 @@ progress** (below). Rule them and the loop resumes fast — most are small build
   throughout (Codex built every diff; Opus audited every diff independently — tsc/tests re-run, not trusted from
   the builder paste). Next watched session: D4 (salary-live UI de-gate) is the natural first build (browser-
   verifiable), and OD-1 (the cheapest unblock) lets L1.5 + the modifier-consuming layer proceed.
+
+- **2026-06-16 — RUN RESUMED (recalibration).** JK flagged the wrap was too conservative: AUTH-2 authorized "make
+  a conservative choice AND CONTINUE (and document)" — I'd over-applied the "set aside" branch. Recalibrated: build
+  with documented conservative defaults; HALT only on genuine frozen-value-oracle touches or truly new design the
+  spec doesn't cover. **OD-1 reclassified "halt" → BUILD with default (a)** — the spec already says all players
+  carry the 4 modifiers, so generating them at init is building-to-spec (no SOT touch). Combined OD-1 + L1.5 into
+  ONE franchise-init ticket (shared file). **STARTED: L1.5+OD-1.** Contract in PROMPT_CONTRACTS.md; Codex invoked.
+  Queue after: L9a, L2, L4a with their logged leans; **L-ECON1 remains HELD** (frozen draft-IV anchor = a real
+  hard-halt trigger).
+
+- **2026-06-16 — L1.5+OD-1 COMMITTED.** Codex built (exit 0); Captain audit = **VERIFIED**. Diff:
+  `prospectScoutingDraftEngine.ts` (extract+export `generateHiddenPersonalityModifiers(seed)`, output-preserving
+  refactor of buildCandidate) · `franchiseInitializer.ts` (backfill = skip-if-present, seed=player.id; captains =
+  max(loyalty+charisma), charisma≥70, MLB-only, null+warn, deterministic ties; wired backfill→captains→season-
+  metadata, captains consume the backfilled players) · `leagueBuilderStorage.ts` (`captainPlayerId?: string|null`
+  on Team, additive) · NEW `franchiseInitializer.test.ts` (4 mutation-honest tests incl. a FARM-with-highest-raw-
+  score exclusion + a charisma-69 gate-out) + w1fix ordering test. **Invariants confirmed:** designation
+  eligibility NOT unblocked (L7 owns activation) · playerDatabase SOT NOT touched · prospect output unchanged.
+  Independent gates: tsc 0; my 3 unit files 21/21; **the 3 end-to-end initializeFranchise integration tests 33/33
+  (no regression to the init path)**. **→ NEXT: L9a (trait enrichment capture, manual/opt-in default).**

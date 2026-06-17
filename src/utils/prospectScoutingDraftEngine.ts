@@ -515,6 +515,15 @@ function buildPickOrder(input: ProspectScoutingDraftInput): ProspectScoutingDraf
   return order;
 }
 
+export function generateHiddenPersonalityModifiers(seed: string): HiddenPersonalityModifiers {
+  return {
+    loyalty: clamp(50 + normal(`${seed}:loyalty`) * 20, 0, 100),
+    ambition: clamp(50 + normal(`${seed}:ambition`) * 20, 0, 100),
+    resilience: clamp(50 + normal(`${seed}:resilience`) * 20, 0, 100),
+    charisma: clamp(50 + normal(`${seed}:charisma`) * 20, 0, 100),
+  };
+}
+
 function buildCandidate(input: ProspectScoutingDraftInput, index: number, totalPicks: number): GeneratedProspectCandidate {
   const seed = `${input.seed}:candidate:${index}`;
   const position = pick(`${seed}:position`, POSITION_POOL);
@@ -539,12 +548,7 @@ function buildCandidate(input: ProspectScoutingDraftInput, index: number, totalP
     trait2: trait2Raw === trait1 ? undefined : trait2Raw,
     personality: pick(`${seed}:personality`, PERSONALITY_POOL),
     chemistry: pick(`${seed}:chemistry`, CHEMISTRY_POOL),
-    hiddenPersonalityModifiers: {
-      loyalty: clamp(50 + normal(`${seed}:loyalty`) * 20, 0, 100),
-      ambition: clamp(50 + normal(`${seed}:ambition`) * 20, 0, 100),
-      resilience: clamp(50 + normal(`${seed}:resilience`) * 20, 0, 100),
-      charisma: clamp(50 + normal(`${seed}:charisma`) * 20, 0, 100),
-    },
+    hiddenPersonalityModifiers: generateHiddenPersonalityModifiers(seed),
   };
 }
 

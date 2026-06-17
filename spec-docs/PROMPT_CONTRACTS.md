@@ -7340,3 +7340,38 @@ UI wiring (OUT) · any other DB / value file.
 **Status:** contract issued; Codex invoked.
 **Result:** VERIFIED + committed `2fab709`.
 
+---
+
+## L1.5 + OD-1 — Hidden-modifier backfill + Team Captain assignment at franchise init — 2026-06-16 (autonomous run, resumed)
+
+**ROUTE:** Codex | high → Opus audit. Autonomous (AUTH-1). Resumed per JK "why did you stop" — building OD-1's
+conservative default (option a) + L1.5 rather than setting aside.
+
+**GOAL:** (A/OD-1) Backfill the 4 hidden modifiers for ALL franchise players at init — MLB pool players lack them
+(only the prospect path generates them); spec §6/§7 says all players carry them. Generate deterministically
+(`generateHiddenPersonalityModifiers(player.id)`, same `clamp(50+normal*20,0,100)` distribution as prospects;
+backfill-if-missing, no SOT touch). (B/L1.5) Assign each Team's Captain = `max(loyalty+charisma)` among MLB
+players with `charisma>=70`, persist `captainPlayerId` on Team; null+warn if none qualify.
+
+**SOURCE OF TRUTH:** FRANCHISE_V1_LIVING_SEASON_SPEC §4/§6/§7; DSTACK L1.5; RUN_LOG OD-1.
+
+**ALLOWED:** `prospectScoutingDraftEngine.ts` (extract+export `generateHiddenPersonalityModifiers(seed)`,
+output-preserving refactor of buildCandidate) · `franchiseInitializer.ts` (backfill + captain steps after
+deepCopy, before season metadata; export the helpers) · `leagueBuilderStorage.ts` (`captainPlayerId?: string` on
+Team) · franchiseInitializer test (+ keep prospect test green).
+
+**DO NOT TOUCH:** `franchiseDesignationEligibility.ts` (CAPTAIN policy stays blocked — L7 owns activation+effects)
+· playerDatabase SOT / any value/oracle file · the 7 visible personalities / prospect output values · trackerDb /
+backupRestore (Team field is additive optional, per-franchise DB).
+
+**CONSERVATIVE DEFAULTS:** backfill seed = player.id, distribution = prospect's, backfill-if-missing · captain =
+max(loyalty+charisma), charisma>=70, MLB-only, ties→charisma→id, null+warn if none · no eligibility unblock.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · franchiseInitializer + prospectScoutingDraftEngine
+tests pass (prospect output unchanged) · helper exported + used by buildCandidate.
+
+**STOP IF:** out-of-ALLOWED edit; can't find the franchise player/team write API; prospect output would change.
+
+**Status:** contract issued; Codex invoked.
+**Result:** VERIFIED + committed (see git log).
+

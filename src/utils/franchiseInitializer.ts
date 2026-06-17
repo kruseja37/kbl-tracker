@@ -42,7 +42,14 @@ import {
   deleteFranchiseDatabase,
   getAllFranchisePlayers,
   getAllFranchiseTeams,
+  saveFranchisePlayer,
+  saveFranchiseTeam,
+  type Player,
+  type Team,
 } from './franchisePlayerStorage';
+import {
+  generateHiddenPersonalityModifiers,
+} from './prospectScoutingDraftEngine';
 import {
   deleteSeasonMetadata,
   getOrCreateSeason,
@@ -158,6 +165,114 @@ export interface FranchisePersistenceRepairResult {
   seasonMetadataCreated: boolean;
   seasonMetadataUpdated: boolean;
   totalGames: number;
+}
+
+export interface FranchiseHiddenModifierBackfillResult {
+  players: Player[];
+  backfilledCount: number;
+}
+
+export interface TeamCaptainAssignment {
+  teamId: string;
+  captainPlayerId: string | null;
+}
+
+function isMlbPlayerForTeam(player: Player, teamId: string): boolean {
+  return player.leagueAssignments?.some(
+    (assignment) =>
+      assignment.teamId === teamId &&
+      assignment.rosterStatus === 'MLB',
+  ) ?? false;
+}
+
+export async function generateFranchiseHiddenModifierBackfill(
+  franchiseId: string,
+): Promise<FranchiseHiddenModifierBackfillResult> {
+  const players = await getAllFranchisePlayers(franchiseId);
+  const updatedPlayers: Player[] = [];
+  let backfilledCount = 0;
+
+  for (const player of players) {
+    if (player.hiddenPersonalityModifiers) {
+      updatedPlayers.push(player);
+      continue;
+    }
+
+    const updatedPlayer = await saveFranchisePlayer(franchiseId, {
+      ...player,
+      hiddenPersonalityModifiers: generateHiddenPersonalityModifiers(player.id),
+    });
+    updatedPlayers.push(updatedPlayer);
+    backfilledCount += 1;
+  }
+
+  return {
+    players: updatedPlayers,
+    backfilledCount,
+  };
+}
+
+export function computeTeamCaptains(
+  teams: Team[],
+  players: Player[],
+): TeamCaptainAssignment[] {
+  return teams.map((team) => {
+    const captain = players
+      .filter((player) => {
+        const modifiers = player.hiddenPersonalityModifiers;
+        return (
+          modifiers !== undefined &&
+          modifiers.charisma >= 70 &&
+          isMlbPlayerForTeam(player, team.id)
+        );
+      })
+      .sort((left, right) => {
+        const leftModifiers = left.hiddenPersonalityModifiers!;
+        const rightModifiers = right.hiddenPersonalityModifiers!;
+        const leftScore = leftModifiers.loyalty + leftModifiers.charisma;
+        const rightScore = rightModifiers.loyalty + rightModifiers.charisma;
+        if (rightScore !== leftScore) return rightScore - leftScore;
+        if (rightModifiers.charisma !== leftModifiers.charisma) {
+          return rightModifiers.charisma - leftModifiers.charisma;
+        }
+        return left.id.localeCompare(right.id);
+      })[0];
+
+    return {
+      teamId: team.id,
+      captainPlayerId: captain?.id ?? null,
+    };
+  });
+}
+
+export async function assignTeamCaptains(
+  franchiseId: string,
+  teams?: Team[],
+  players?: Player[],
+): Promise<TeamCaptainAssignment[]> {
+  const [resolvedTeams, resolvedPlayers] = await Promise.all([
+    teams ? Promise.resolve(teams) : getAllFranchiseTeams(franchiseId),
+    players ? Promise.resolve(players) : getAllFranchisePlayers(franchiseId),
+  ]);
+  const assignments = computeTeamCaptains(resolvedTeams, resolvedPlayers);
+
+  for (const assignment of assignments) {
+    const team = resolvedTeams.find((candidate) => candidate.id === assignment.teamId);
+    if (!team) continue;
+
+    if (assignment.captainPlayerId === null) {
+      console.warn(
+        `[franchiseInitializer] No eligible Team Captain found for team ${team.id}; captainPlayerId set to null.`,
+      );
+    }
+
+    await saveFranchiseTeam(franchiseId, {
+      ...team,
+      captainPlayerId: assignment.captainPlayerId,
+    });
+  }
+
+  return assignments;
 }
 
 async function loadScheduleTeamsForLeague(
@@ -419,10 +534,14 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
     // Franchise v1 schedules are empty/manual/user-supplied only.
     await initScheduleDatabase();
 
-    // 8. Create the season metadata record franchise mode reads later.
+    // 8. Backfill hidden modifiers and assign build-dark Team Captains before season state exists.
+    const hiddenModifierBackfill = await generateFranchiseHiddenModifierBackfill(franchiseId);
+    await assignTeamCaptains(franchiseId, undefined, hiddenModifierBackfill.players);
+
+    // 9. Create the season metadata record franchise mode reads later.
     await createFranchiseSeasonMetadata(franchiseId, 1, 0, config.season.gamesPerTeam);
 
-    // 9. Set as active franchise
+    // 10. Set as active franchise
     await setActiveFranchise(franchiseId);
   } catch (err) {
     await cleanupFailedFranchiseInitialization(franchiseId, 1);
