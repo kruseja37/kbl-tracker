@@ -853,3 +853,18 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   proven (store referenced only in storage/schema/registry) · pin-trap (toBe(21)+store-list) updated. Persistence →
   verified-complete, **browser-pending** (migration + backup round-trip PRIORITIZED in the JK batch). **NOW = L2b**
   (read-path merge + temporary auto-expiry). trackerDb **v21**; nothing pushed.
+
+- **2026-06-18 (AUTH-4, HOST RESUME — overnight) — L2b COMMITTED `e8ec0908`.** The ratings-overlay read-path MERGE math
+  (pure). Captain drafted the contract (PROMPT_CONTRACTS §L2b) → dispatched **Codex 5.5 | high** → Opus independently
+  audited. NEW `src/engines/ratingsOverlayMerge.ts` + an 11-test file: `resolveActiveOverlayDeltas` (net delta/ratingKey
+  from CONFIRMED + active overlays — pending excluded per §11 two-tier; temporary active iff `currentGameNumber <
+  expiresAtGameNumber`) + `mergeRatingsOverlays` (effective = frozen base + deltas, ONLY for keys present in base via a
+  hasOwnProperty guard; base never mutated — oracle stays locked; returns a copy) + `selectExpiredTemporaryOverlays`
+  (expired-temporary ids for the deferred on-load cleanup, regardless of confirmation). Pure (single type-only import of
+  `FranchiseRatingsOverlayRow`). Live wiring into value/designation/morale read paths DEFERRED (pointless with the empty
+  L2a store + touches live consumers). AUDIT VERIFIED: tsc 0 / build 0 / 11 focused tests; full suite **7,374 pass / 2
+  characterized fail**, ZERO new reds (+11 tests / +1 file); `franchiseRatingsOverlayStorage`/`ivEngine`/`effectiveRatings`
+  byte-unchanged; pure. (Codex's first full-suite run surfaced the documented `GameTrackerLaunchState` order-flake →
+  solo-pass confirmed + clean on rerun; the order-flake family is non-deterministic.) Auto-committed. **NOW = L2c**
+  (two-tier confirmation infra — confirm model + apply-confirm logic, pure/dark; the live confirm UI/flow deferred to
+  L8/L9b + post-D13). trackerDb v21; nothing pushed.

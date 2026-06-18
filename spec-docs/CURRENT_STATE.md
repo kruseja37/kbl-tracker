@@ -1,9 +1,9 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-18 (**AUTH-4 ACTIVE RUN (overnight, past midnight) — L7 COMPLETE + L2a `6fdeba11` COMMITTED;
-NOW L2b** [fresh session resumed at the L7c handoff, did the session-start reads + RESTATE, JK confirmed AUTH-4
-autonomous, then built→audited→committed L7c/L7d-1/L7d-2 + L7d-3 doc → L7 COMPLETE → then L2a, the mutable-overlay store
-L8 depends on]. trackerDb host-state v20→**v21** (L2a); KBL_BACKUP_VERSION stays **2**. ⚠ NEWLY-OBSERVED order-flake
+**Last Updated:** 2026-06-18 (**AUTH-4 ACTIVE RUN (overnight, past midnight) — L7 COMPLETE + L2a `6fdeba11` + L2b
+`e8ec0908` COMMITTED; NOW L2c** [fresh session resumed at the L7c handoff, did the session-start reads + RESTATE, JK
+confirmed AUTH-4 autonomous, then built→audited→committed L7c/L7d-1/L7d-2 + L7d-3 doc → L7 COMPLETE → then L2a (dark
+overlay store) + L2b (overlay merge math), the L2 layer L8 depends on]. trackerDb host-state v20→**v21** (L2a); KBL_BACKUP_VERSION stays **2**. ⚠ NEWLY-OBSERVED order-flake
 `AwardsWatchlist.test.tsx` (passes solo; non-deterministic — appeared in 1 of 6 full-suite runs across L7d/L2a; NOT a
 regression) — flagged for JK, see SUITE BASELINE + OPEN PENDING-JK. AUTH-4 host resume; the L5b handoff is CLEARED.
 **L5b COMMITTED `5ebb148`** —
@@ -29,8 +29,9 @@ L7d-1 `f61dcae0`** (Captain morale-router) **+ L7d-2 `aec5db99`** (Fan Hopeful c
 double-dependency reconciliation — value-half DR-1 + morale-half L7b/L7c already exist) → **L7 (designation Phase-2
 completion) COMPLETE.** **L8 depends on L2** (the mutable ratings-overlay layer) → L2 lands first, SPLIT L2a..c;
 **L2a COMMITTED `6fdeba11`** (dark `franchiseRatingsOverlays` store, trackerDb v20→v21, backup parity, migration-survival
-proven; oracle locked). **NOW: L2b** (read-path merge + temporary auto-expiry) under AUTH-4. trackerDb host-state
-**v21** / KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next; nothing pushed.)
+proven; oracle locked) **+ L2b COMMITTED `e8ec0908`** (pure overlay merge math: base + confirmed active deltas; temporary
+absolute-expiry; base never mutated). **NOW: L2c** (two-tier confirmation infra — pure/dark) under AUTH-4. trackerDb
+host-state **v21** / KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next; nothing pushed.)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.
@@ -141,7 +142,17 @@ proven; oracle locked). **NOW: L2b** (read-path merge + temporary auto-expiry) u
   locked. **Codex 5.5 built → Opus 4.8 independently audited VERIFIED (hardest — persistence class)** (tsc 0 / build 0 /
   full suite 7,363 pass / 2 characterized fail, ZERO new reds; **v20→v21 migration-survival + backup round-trip parity +
   DARK + byte-unchanged-oracle + KBL_BACKUP_VERSION-2 all PROVEN**). Auto-committed; persistence → browser-pending
-  (migration + round-trip prioritized, scenario #16). **NOW = L2b** under AUTH-4.
+  (migration + round-trip prioritized, scenario #16). L2b followed (below).
+- **✅ L2b COMMITTED `e8ec0908` (2026-06-18, AUTH-4 overnight) — ratings-overlay MERGE engine (pure read-path math; §11/L2).**
+  NEW pure `src/engines/ratingsOverlayMerge.ts`: `resolveActiveOverlayDeltas` (net delta/ratingKey from CONFIRMED + active
+  overlays — pending excluded per §11 two-tier; temporary active iff `currentGameNumber < expiresAtGameNumber`) +
+  `mergeRatingsOverlays` (effective = frozen base + deltas, only for keys in base via hasOwnProperty guard; base NEVER
+  mutated — oracle locked; returns a copy) + `selectExpiredTemporaryOverlays` (expired-temporary ids for the deferred
+  on-load cleanup). Single type-only import; live wiring into value/designation/morale read paths DEFERRED (pointless
+  with the empty L2a store + touches live consumers). **Codex 5.5 built → Opus 4.8 independently audited VERIFIED**
+  (tsc 0 / build 0 / full suite 7,374 pass / 2 characterized fail, ZERO new reds; filters/base-immutability/expiry-id
+  hand-verified; pure; frozen engines byte-unchanged). Auto-committed. **NOW = L2c** (two-tier confirmation infra —
+  pure/dark) under AUTH-4.
 - **ATTENDED DESIGN SESSION (2026-06-17, JK present) — forks cleared + designation model reconciled; D10 build next.**
   No product code yet this session. (1) **OD-2..5 + D4 RULED** (DECISIONS_LOG 2026-06-17): OD-2 economy scale =
   new-league-construction-only / reuse pick-chart with farm anchor nerfed one grade-step via `FARM_NERF_SCALES` /
@@ -389,7 +400,11 @@ proven; oracle locked). **NOW: L2b** (read-path merge + temporary auto-expiry) u
 
 ## SUITE BASELINE
 
-**7,365 tests / 420 files** — full suite independently re-run 2026-06-18 (AUTH-4 overnight) after **L2a** commit
+**7,376 tests / 421 files** — full suite independently re-run 2026-06-18 (AUTH-4 overnight) after **L2b** commit
+`e8ec0908`: **7,374 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds
+(+11 tests / +1 file = L2b's `ratingsOverlayMerge.test.ts`, over the post-L2a 7,363/420; trackerDb still **v21** — L2b is
+a pure engine, no store). *(Prior baseline retained below for the arc trail.)* **7,365 tests / 420 files** — full suite
+independently re-run 2026-06-18 (AUTH-4 overnight) after **L2a** commit
 `6fdeba11`: **7,363 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds
 (+8 tests / +1 file = L2a's `franchiseRatingsOverlayStorage.test.ts` [7] + the v20→v21 migration test [1]; the other 2
 pin/parity files gained assertions, not new test cases; over the post-L7d-2 7,355/419). **trackerDb now v21** (L2a's

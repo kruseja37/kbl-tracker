@@ -9644,3 +9644,39 @@ Round-trip (permanent + temporary), multiple overlays/player (distinct ids), sco
 Use high reasoning effort. Think step-by-step. Builder ≠ auditor — re-audited by Opus HARDEST (full-suite, v20→v21 + pin-trap reconciliation, migration-survival + backup round-trip parity, dark/empty proof, byte-unchanged oracle, KBL_BACKUP_VERSION still 2).
 
 **Status:** COMMITTED `6fdeba11` (2026-06-18, AUTH-4 host resume — overnight continuation past midnight). Codex 5.5 built → Opus 4.8 independently audited VERIFIED (hardest audit — persistence class): tsc 0 / build 0 / focused 30 tests (4 files); full suite 7,363 pass / 2 characterized fail (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+8 tests / +1 file; AwardsWatchlist did NOT appear this run). **Safety gates all PROVEN:** v20→v21 migration-survival test (legacy currentGame + flashpoint data reopened at v21 byte-intact + new store present) · backup round-trip parity row · `KBL_BACKUP_VERSION` still **2** · `TRACKER_DB_VERSION` **21** · frozen oracle (`ivEngine`/`playerDatabase`) byte-unchanged · **DARK proven** (store referenced ONLY in storage module + trackerDb/backupRestore/syncConfig — zero production writer/reader) · pin-trap (toBe(21) + store-list) updated. 8 files = exactly the allowed set. Persistence → verified-complete, **browser-pending** (migration + backup round-trip prioritized in the JK batch). **NOW = L2b.**
+
+### L2b — Ratings-overlay MERGE engine (PURE; read-path math; live wiring DEFERRED)
+
+**ROUTE:** Codex 5.5 | high reasoning effort (pure deterministic engine; no store/wiring) → Opus 4.8 audit (auditor ≠ builder) → standing auto-commit (pure primitive, no user surface; mirrors L7c/L7d-2).
+
+**ROLE:** Build the §11/L2 ratings-overlay read-path MERGE math as a PURE engine. Mirrors L7d-2 `fanHopefulCushion.ts`: single type-only import, no store/flag/wiring/persistence/React. Build-dark; the live wiring into value/designation/morale read paths is a deferred activation step (pointless while the L2a store is empty + touches live consumers).
+
+**GOAL:** NEW `src/engines/ratingsOverlayMerge.ts` exporting (1) `resolveActiveOverlayDeltas(overlays, currentGameNumber)` → `Record<string,number>` (net delta/ratingKey from confirmed+active overlays); (2) `mergeRatingsOverlays(baseRatings, overlays, currentGameNumber)` → effective ratings (base + deltas, only for keys in base; base never mutated, returns a copy); (3) `selectExpiredTemporaryOverlays(overlays, currentGameNumber)` → expired-temporary `id`s (for the deferred on-load cleanup). Plus its test file.
+
+**SOURCE OF TRUTH:** `FRANCHISE_V1_LIVING_SEASON_SPEC.md` §11 lines 203-205 (ratings changes require two-tier confirm; mutable layer over frozen base; oracle locked; permanent persisted + temporary auto-expired) + DSTACK L2 line 64 (read-path merge + temporary absolute-trigger auto-expiry re-evaluated on load). TYPE: `FranchiseRatingsOverlayRow` at `src/utils/franchiseRatingsOverlayStorage.ts` (L2a `6fdeba11`, TYPE-ONLY import). MIRROR: L7d-2.
+
+### DESIGN (AUTH-4 DEFAULTS-TAKEN — documented)
+
+Two filters define an adopted/active overlay (both required): **confirmed only** (`confirmationStatus==='confirmed'` — pending not yet adopted, §11); **not expired** (permanent always active; temporary active iff `expiresAtGameNumber===null || currentGameNumber < expiresAtGameNumber` — absolute trigger; `>=` expiry → expired; null expiry on a temporary → treated active).
+- `resolveActiveOverlayDeltas`: sum `delta` per `ratingKey` over confirmed+active.
+- `mergeRatingsOverlays`: new object = copy of base + deltas added ONLY for keys present in base (overlay for an unknown ratingKey ignored — never invent ratings); NEVER mutate `baseRatings` (oracle/base locked).
+- `selectExpiredTemporaryOverlays`: `id`s where `kind==='temporary' && expiresAtGameNumber!==null && currentGameNumber >= expiresAtGameNumber` (regardless of confirmationStatus).
+- PURE — no Math.random/Date.now/new Date()/IO/store/React; only import = the `FranchiseRatingsOverlayRow` type.
+- **Header doc:** the merge math; the DEFAULTS (confirmed-only, expiry boundary `>=`, null-expiry-active, unknown-key-ignored, base-never-mutated); WIRING deferred (live read path = load via L2a store + merge for value/designation/morale + delete expired on load — touches live consumers + pointless with an empty store).
+
+**ALLOWED files:** NEW `src/engines/ratingsOverlayMerge.ts` · NEW `src/engines/__tests__/ratingsOverlayMerge.test.ts`. NOTHING ELSE.
+
+**DO NOT:** read/write the L2a store (caller supplies overlays) · wire into value/designation/morale/`effectiveRatings` read paths · touch `franchiseRatingsOverlayStorage.ts` (type-only) / frozen oracle / `ivEngine` / `playerDatabase` / `effectiveRatings.ts` · mutate the `baseRatings`/`overlays` args · add store/flag/persistence/React · import IndexedDB/reporter/LLM/React · use Math.random/Date.now/new Date().
+
+### TESTS (NEW `src/engines/__tests__/ratingsOverlayMerge.test.ts`, pure/deterministic)
+No-overlays→base copy (deep-equal, different ref); confirmed permanent applied; confirmed temporary active applied / expired (at `>=`) not; pending excluded; multiple-same-key summed; unknown ratingKey ignored (no throw); base never mutated; resolveActiveOverlayDeltas correctness; selectExpiredTemporaryOverlays exact ids (permanents excluded, not-yet-expired excluded, expired included regardless of confirmation); determinism + node:fs purity self-scan.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · new test green · FULL suite — only the 2 characterized fails expected (+ known AwardsWatchlist flake may appear, passes solo). Greps: `ratingsOverlayMerge.ts` imports ONLY the row type, no store/IndexedDB/effectiveRatings/value/designation/morale/reporter/React, no Math.random/Date.now/new Date(); `franchiseRatingsOverlayStorage.ts`/`ivEngine.ts`/`effectiveRatings.ts` BYTE-UNCHANGED.
+
+**STOP IF:** purity can't hold · type-only import build/circular error (re-home + note) · a frozen engine must change · a NEW red (≠ 2 characterized, ≠ known AwardsWatchlist flake) past 2 fix-iterations (→ SET-ASIDE).
+
+**FORMAT:** 1. Files changed (paths + count + passing-test count). 2. Each change w/ the §11/L2 line. 3. Verification output (+ any AwardsWatchlist-solo). 4. "L2b complete" OR "BLOCKED: [reason]".
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — re-audited by Opus (confirmed-only + expiry-boundary filters, base-never-mutated, unknown-key ignored, expiry-id selection, purity + byte-unchanged frozen engines).
+
+**Status:** COMMITTED `e8ec0908` (2026-06-18, AUTH-4 overnight). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / build 0 / 11 focused tests; full suite 7,374 pass / 2 characterized fail (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+11 tests / +1 file). Confirmed-only + expiry-boundary (`>=`) filters + base-never-mutated (hasOwnProperty guard) + unknown-key-ignored + expired-id selection hand-verified; pure (single type-only import); `franchiseRatingsOverlayStorage`/`ivEngine`/`effectiveRatings` BYTE-UNCHANGED. (Codex's first full-suite run surfaced the `GameTrackerLaunchState` order-flake — another documented conditional-solo flake — confirmed solo-pass + clean on rerun; non-determinism.) Pure engine, no user surface → auto-committed. (Live read-path wiring deferred.) **NOW = L2c.**

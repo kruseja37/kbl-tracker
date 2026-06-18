@@ -5133,3 +5133,11 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   byte-unchanged-oracle + KBL_BACKUP_VERSION-2 all PROVEN; 8 files = exactly the allowed set. Persistence →
   verified-complete, browser-pending (migration + round-trip prioritized, scenario #16). Suite **7,365 / 420**; trackerDb
   **v21**. **NOW = L2b** (read-path merge + temporary auto-expiry). Nothing pushed.
+- **L2b COMMITTED `e8ec0908`** — pure ratings-overlay MERGE math (`ratingsOverlayMerge.ts`): `resolveActiveOverlayDeltas`
+  (confirmed + active only; pending excluded §11; temporary active iff before `expiresAtGameNumber`) +
+  `mergeRatingsOverlays` (base + deltas for keys present in base via hasOwnProperty; base never mutated, oracle locked;
+  returns copy) + `selectExpiredTemporaryOverlays` (expired-temporary ids for deferred cleanup). Single type-only import;
+  live read-path wiring deferred. Captain-contracted → Codex 5.5 built → Opus independently audited VERIFIED (tsc 0 /
+  build 0 / 11 focused tests; full suite **7,374 pass / 2 characterized fail**, ZERO new reds; pure; frozen engines
+  byte-unchanged). Auto-committed. Suite **7,376 / 421**; trackerDb v21. **NOW = L2c** (two-tier confirmation infra —
+  pure/dark). Nothing pushed.
