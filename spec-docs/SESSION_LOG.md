@@ -5255,6 +5255,17 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - **NEXT = L9b-3b** (the dark hook + PENDING write; PERSISTENCE class). BLOCKS on the JK store fork (reuse
   `franchiseRatingsOverlays` v21 = AUTH-4 default / new `franchiseTraitOverlays` v21→v22 = Captain's lean). Loop continues
   under AUTH-4.
+- **POST-COMMIT SEAM FIX (FINDING-149) — same session, follow-up commit.** After committing `54fae510`, I found Codex had
+  ALSO edited 2 more spec-docs I missed (AUDIT_LOG + FINDINGS_142) — they contained Codex's own self-audit FINDING-149
+  claiming a SEAM BREAK. I verified it from source (NOT taking Codex's word): L9b-3a emitted a FLAT `TraitCandidate`, but
+  L9b-2 `computeTraitAcquisition` consumes `candidate.score.*` (nested `{traitName, score}`) — REAL latent break (tsc
+  blind until L9b-3b wires them). This was a gap in my FIRST audit pass (within-file + full suite checked, cross-engine
+  seam NOT) — acknowledged. **Fix:** kept the outcome-weighted RATE model (Codex's "revert to count model" recommendation
+  REJECTED — count makes opposing pairs indistinguishable, fatally broken) and changed the output to
+  `SeasonTraitCandidate extends TraitCandidate` (the nested seam) + added a seam integration test feeding L9b-3a output
+  straight into `computeTraitAcquisition`. Reverted + re-authored FINDING-149 (AUDIT_LOG index + FINDINGS full) with the
+  corrected resolution. Re-verified: tsc 0; traitCandidateBuilder 22/22 + traitAcquisition 24/24; full suite **7,487 /
+  7,485 pass / 2 characterized fail**, ZERO new reds. Committed as the L9b-3a seam-fix follow-up.
 
 ## 2026-06-18 (AUTH-4 overnight, SANDBOX, fresh CONTEXT-HANDOFF thread) — L9b-3a INDEPENDENT ENGINEERING AUDIT → NOT-VERIFIED (blocking); FINDING-149
 - Resumed after the L9b-3a context-limit handoff (branch `codex/franchise-v1-next`). Did the full session-start reads

@@ -220,3 +220,47 @@ JK-gated; not a mechanical fix.
 **ROUTE:** Codex 5.5 | high → Opus 4.8 audit (auditor ≠ builder).
 **Sequencing:** NOT yet scheduled. JK to sequence vs the T-stack (F-141) — a new
 non-T-stack ticket touching frozen base-IV; do NOT auto-insert into the T-stack run.
+
+---
+
+### FINDING-149
+**Date:** 2026-06-18
+**Phase:** Phase-2 L-stack (L9b-3a — independent engineering audit + fix)
+**Status:** RESOLVED (fixed in the same commit cycle, before the corrected L9b-3a commit).
+**File:** `src/engines/traitCandidateBuilder.ts` (producer) ↔ `src/engines/traitAcquisition.ts` (consumer, L9b-2)
+
+**The break (real, latent, type-invisible):** L9b-3a's `computeSeasonTraitCandidates` originally emitted a FLAT
+`TraitCandidate { traitName, realityPercentile, sufficiency, signalValue, sampleSize, peerPoolSize }`. L9b-2
+`traitAcquisition.ts:25` defines `TraitCandidate { traitName: string; score: TraitRealityScore }` and
+`computeTraitAcquisition` reads `candidate.score.sufficient` / `candidate.score.realityPercentile` /
+`candidate.score.sufficiency` (`:211`/`:214`/`:219`). The flat output has NO `.score` member → L9b-3b (which must feed
+L9b-3a's output into `computeTraitAcquisition`) could not wire them without an adapter, and the two same-named
+`TraitCandidate` types collide. `tsc` did NOT catch it because the types only meet when actually wired (L9b-3b), so the
+break was latent.
+
+**How it was caught:** the decorrelated builder (Codex), in a self-audit turn, flagged the seam mismatch. The Captain
+(Opus, the auditor) did NOT take Codex's word — verified it directly from `traitAcquisition.ts` source (the `score.*`
+reads). This is exactly the Tier-2 (data-flow) check the anti-hallucination protocol mandates; the Captain's first audit
+pass had verified within-file correctness + the full suite but NOT the cross-engine seam — gap acknowledged and closed.
+
+**Correction to the builder's proposed resolution:** Codex's self-audit recommended REVERTING to its abandoned
+exposure-COUNT model (`traitContextReconstructor.ts`, which happened to emit the nested shape). That conclusion is WRONG:
+a bare predicate fire-COUNT makes every OPPOSING pair indistinguishable (Clutch≡Choker on `pressure:high`, RBI Hero≡Zero
+on `risp`, Stealer≡Bad Jumps on every steal attempt, Butter Fingers≡Cannon≡Noodle on every fielding chance) — the only
+differentiator is the OUTCOME, which the count model drops. The spec §B explicitly defines the signal as
+"predicate-active + OUTCOME" (e.g. Clutch = "high-leverage PA + positive/negative outcome"), and `wpa`/`rbiCount` are
+PERSISTED event fields, not "fabricated proxies." So the count model is the fatally-broken one.
+
+**The fix (applied):** keep the outcome-weighted RATE signal model (§B-faithful) AND change the output to
+`SeasonTraitCandidate extends TraitCandidate` (L9b-2's nested `{ traitName, score }`) plus debug `signalValue`/`sampleSize`
+— so an array of L9b-3a candidates feeds `computeTraitAcquisition` directly as a structural subtype. Added a SEAM
+INTEGRATION TEST that builds candidates and passes them straight into `computeTraitAcquisition` (the Tier-2 guard that was
+missing). Verified: tsc 0; `traitCandidateBuilder.test.ts` 22/22 + `traitAcquisition.test.ts` 24/24; full suite
+**7,487 tests, 7,485 pass / 2 characterized fail**, ZERO new reds; pure/build-dark; frozen engines byte-unchanged;
+trackerDb v21.
+
+**LESSON (for the pending pen / future builder contracts):** (1) an engine that PRODUCES a type another engine CONSUMES
+must import + emit that consumer's exact type (or a structural subtype), and the contract must say so explicitly; (2) every
+"pure engine" ticket whose output feeds a sibling engine needs a SEAM test in scope, not just within-file tests — tsc
+alone will not flag a producer/consumer shape drift until the wiring ticket; (3) builder contracts should forbid editing
+any spec-doc / git-add (the Captain owns docs) — this run the builder over-produced an abandoned file + edited 7 docs.

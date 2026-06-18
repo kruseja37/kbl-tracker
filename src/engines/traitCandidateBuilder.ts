@@ -14,8 +14,8 @@ import {
   computeTraitRealityScore,
   isTraitEligibleForRole,
   type PlayerRole,
-  type SignalSufficiency,
 } from './traitRealityScorer';
+import type { TraitCandidate } from './traitAcquisition';
 import type {
   EffectiveRatingsPlayer,
   GameContext,
@@ -59,13 +59,19 @@ for (const traitName of BUILDABLE_TRAITS) {
   }
 }
 
-export interface TraitCandidate {
-  traitName: string;
-  realityPercentile: number | null;
-  sufficiency: SignalSufficiency;
+/**
+ * L9b-3a's output = L9b-2's `TraitCandidate` ({ traitName, score: TraitRealityScore })
+ * PLUS the raw signal/sample (debug + L9b-3b logging). The {traitName, score}
+ * subset is the EXACT seam `computeTraitAcquisition` consumes (it reads
+ * `candidate.score.sufficient` / `.score.realityPercentile`), so an array of
+ * these feeds it directly as a structural subtype. DO NOT flatten the score
+ * onto the candidate — that breaks the L9b-2 seam (the bug FINDING-149 caught).
+ */
+export interface SeasonTraitCandidate extends TraitCandidate {
+  /** The raw reality signal value (rate) used for the percentile ranking. */
   signalValue: number;
+  /** The opportunity sample backing the signal. */
   sampleSize: number;
-  peerPoolSize: number;
 }
 
 export interface SeasonTraitPlayer {
@@ -506,14 +512,14 @@ function buildPeerPools(players: readonly SeasonTraitPlayer[], raw: RawSignalMap
 export function computeSeasonTraitCandidates(
   input: SeasonTraitCandidateInput,
   config: AdaptiveStandardsConfig = DEFAULT_ADAPTIVE_STANDARDS_CONFIG,
-): Map<string, TraitCandidate[]> {
+): Map<string, SeasonTraitCandidate[]> {
   const raw = buildRawSignals(input);
   const peerPools = buildPeerPools(input.players, raw);
-  const results = new Map<string, TraitCandidate[]>();
+  const results = new Map<string, SeasonTraitCandidate[]>();
   const sortedPlayers = [...input.players].sort((a, b) => a.playerId.localeCompare(b.playerId));
 
   for (const player of sortedPlayers) {
-    const candidates: TraitCandidate[] = [];
+    const candidates: SeasonTraitCandidate[] = [];
     const byTrait = raw.get(player.playerId);
     if (byTrait) {
       for (const traitName of BUILDABLE_TRAITS) {
@@ -528,13 +534,12 @@ export function computeSeasonTraitCandidates(
           peerValues: peerPools.get(roleKey(player.role, traitName)) ?? [],
           basis: 'none',
         }, config);
+        // Emit the L9b-2 seam shape ({ traitName, score }) + raw debug fields.
         candidates.push({
           traitName,
-          realityPercentile: score.realityPercentile,
-          sufficiency: score.sufficiency,
+          score,
           signalValue: signal.signalValue,
           sampleSize: signal.sampleSize,
-          peerPoolSize: score.peerPoolSize,
         });
       }
     }

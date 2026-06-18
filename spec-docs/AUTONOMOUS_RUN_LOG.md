@@ -1330,3 +1330,21 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   - **➡ NEXT = L9b-3b** (dark hook + PENDING write; PERSISTENCE class, audit HARDEST). BLOCKS on the JK STORE FORK (reuse
     `franchiseRatingsOverlays` v21 = AUTH-4 default / new `franchiseTraitOverlays` v21→v22 = Captain's lean). Under AUTH-4
     the Captain takes the documented default + continues; the fork is logged in WAITING_ON_JK for JK's morning call.
+  - **⚠ POST-COMMIT SEAM FIX (FINDING-149) — caught + fixed same session (follow-up commit on top of `54fae510`).** After
+    the first commit, the Captain found Codex had ALSO edited 2 more spec-docs not caught in the first revert pass
+    (AUDIT_LOG + FINDINGS_142) — they held Codex's OWN self-audit FINDING-149 claiming a SEAM BREAK. The Captain VERIFIED it
+    from source (did not take the builder's word): L9b-3a emitted a FLAT `TraitCandidate` but L9b-2 `computeTraitAcquisition`
+    reads `candidate.score.*` (nested `{traitName, score: TraitRealityScore}`) → a REAL latent break (tsc blind until L9b-3b
+    wires them; the same-named types only meet at the wiring ticket). This was a GAP in the Captain's first audit (within-file
+    + full suite verified, cross-engine seam NOT) — the anti-hallucination Tier-2 (data-flow) check that should have run.
+    **FIX:** kept the outcome-weighted RATE model (Codex's self-audit recommended REVERTING to its abandoned exposure-COUNT
+    model — REJECTED: count makes opposing pairs Clutch/Choker, RBI Hero/Zero, etc. indistinguishable, and `wpa`/`rbiCount`
+    are persisted §B-mandated outcomes, not fabricated proxies) and changed the output to `SeasonTraitCandidate extends
+    TraitCandidate` (the nested seam L9b-2 consumes) + debug `signalValue`/`sampleSize` + a SEAM INTEGRATION TEST that feeds
+    L9b-3a output straight into `computeTraitAcquisition`. Reverted + re-authored FINDING-149 (AUDIT_LOG index + FINDINGS full)
+    with the corrected resolution. Re-verified: tsc 0; traitCandidateBuilder 22/22 + traitAcquisition 24/24; full suite
+    **7,487 / 7,485 pass / 2 characterized fail**, ZERO new reds; frozen engines byte-unchanged; trackerDb v21. **LESSON
+    (pending pen):** (a) a producer engine must emit the consumer's exact type (or structural subtype) and the contract must
+    say so; (b) every pure-engine ticket whose output feeds a sibling needs a SEAM test in scope, not just within-file tests;
+    (c) builder contracts must forbid editing any spec-doc / git-add (the Captain owns docs) — this run the builder edited 7
+    docs + left an abandoned file.

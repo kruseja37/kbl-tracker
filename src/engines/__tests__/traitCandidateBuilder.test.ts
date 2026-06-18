@@ -5,11 +5,12 @@ import {
   computeSeasonTraitCandidates,
   reconstructAtBatContext,
   type AtBatContextRunningState,
+  type SeasonTraitCandidate,
   type SeasonTraitCandidateInput,
   type SeasonTraitPlayer,
-  type TraitCandidate,
 } from '../traitCandidateBuilder';
 import { CANONICAL_TRAIT_NAMES } from '../traitRealityScorer';
+import { computeTraitAcquisition } from '../traitAcquisition';
 import type { EffectiveRatingsPlayer, GameContext } from '../effectiveRatings';
 import type { AtBatEvent, BetweenPlayEvent, FieldingEvent, RunnerState } from '../../utils/eventLog';
 
@@ -117,7 +118,7 @@ function baseInput(overrides: Partial<SeasonTraitCandidateInput> = {}): SeasonTr
   };
 }
 
-function candidate(map: Map<string, TraitCandidate[]>, playerId: string, traitName: string): TraitCandidate | undefined {
+function candidate(map: Map<string, SeasonTraitCandidate[]>, playerId: string, traitName: string): SeasonTraitCandidate | undefined {
   return map.get(playerId)?.find((item) => item.traitName === traitName);
 }
 
@@ -398,8 +399,8 @@ describe('direct-source signals', () => {
     }));
     expect(candidate(result, 'b1', 'Injury Prone')?.signalValue).toBeCloseTo(0.1, 10);
     expect(candidate(result, 'b1', 'Durable')?.signalValue).toBeCloseTo(-0.1, 10);
-    expect(candidate(result, 'b2', 'Injury Prone')?.realityPercentile).toBeNull();
-    expect(candidate(result, 'b2', 'Injury Prone')?.sufficiency).toBe('thin_sample');
+    expect(candidate(result, 'b2', 'Injury Prone')?.score.realityPercentile).toBeNull();
+    expect(candidate(result, 'b2', 'Injury Prone')?.score.sufficiency).toBe('thin_sample');
   });
 });
 
@@ -435,8 +436,8 @@ describe('role eligibility, peer pools, valve, and determinism', () => {
       players: [...players(['p1', 'p2', 'p3'], 'pitcher'), ...players(['b1'], 'position')],
       atBatEvents: [...pitcherEvents, ...positionEvents],
     }));
-    expect(candidate(result, 'p1', 'Clutch')?.peerPoolSize).toBe(3);
-    expect(candidate(result, 'b1', 'Clutch')?.peerPoolSize).toBe(1);
+    expect(candidate(result, 'p1', 'Clutch')?.score.peerPoolSize).toBe(3);
+    expect(candidate(result, 'b1', 'Clutch')?.score.peerPoolSize).toBe(1);
   });
 
   it('lets the scorer valve mark thin samples dormant', () => {
@@ -444,8 +445,8 @@ describe('role eligibility, peer pools, valve, and determinism', () => {
       players: players(['b1'], 'position'),
       atBatEvents: [atBat({ batterId: 'b1', isClutch: true, battingTeamDelta: 0.2 })],
     }));
-    expect(candidate(result, 'b1', 'Clutch')?.realityPercentile).toBeNull();
-    expect(candidate(result, 'b1', 'Clutch')?.sufficiency).not.toBe('sufficient');
+    expect(candidate(result, 'b1', 'Clutch')?.score.realityPercentile).toBeNull();
+    expect(candidate(result, 'b1', 'Clutch')?.score.sufficiency).not.toBe('sufficient');
   });
 
   it('returns a stable sorted map and deterministic contents across calls', () => {
@@ -457,5 +458,40 @@ describe('role eligibility, peer pools, valve, and determinism', () => {
     const second = computeSeasonTraitCandidates(input);
     expect([...first.keys()]).toEqual(['a', 'z']);
     expect(first).toEqual(second);
+  });
+});
+
+describe('L9b-2 seam (output feeds computeTraitAcquisition directly)', () => {
+  it('emits the { traitName, score } shape computeTraitAcquisition consumes', () => {
+    // Enough clutch sample to clear the valve, plus peers for a real percentile.
+    const events = [
+      ...repeat(60, () => atBat({ batterId: 'b1', isClutch: true, battingTeamDelta: 0.2, wpa: 0.2 })),
+      ...repeat(60, () => atBat({ batterId: 'b2', isClutch: true, battingTeamDelta: -0.2, wpa: -0.2 })),
+      ...repeat(60, () => atBat({ batterId: 'b3', isClutch: true, battingTeamDelta: 0.05, wpa: 0.05 })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1', 'b2', 'b3'], 'position'),
+      atBatEvents: events,
+    }));
+    const b1 = candidate(result, 'b1', 'Clutch');
+    expect(b1).toBeDefined();
+    // The seam: each candidate carries a nested `score: TraitRealityScore`.
+    expect(b1?.score).toBeDefined();
+    expect(typeof b1?.score.sufficient).toBe('boolean');
+
+    // The actual seam call: L9b-3a output array → L9b-2 input WITHOUT an adapter.
+    const acquisition = computeTraitAcquisition({
+      playerRole: 'position',
+      personality: 'COMPETITIVE',
+      heldTraits: [],
+      candidates: result.get('b1') ?? [],
+    });
+    expect(acquisition).toHaveProperty('proposals');
+    expect(acquisition).toHaveProperty('skipped');
+    // A strong clutch performer in a real pool should not be dropped for a bad
+    // reason (ineligible/unknown); it is either proposed or dead-banded/thin.
+    const clutchSkip = acquisition.skipped.find((s) => s.traitName === 'Clutch');
+    expect(clutchSkip?.reason).not.toBe('ineligible_role');
+    expect(clutchSkip?.reason).not.toBe('unknown_trait');
   });
 });

@@ -96,14 +96,20 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
   Durable/Injury-Prone ∓injury-rate) → role-bucketed peer pools → feeds L9b-1 `computeTraitRealityScore` (basis `'none'`)
   → `TraitCandidate[]` per player. The 33 Bucket-C traits stay DORMANT (never in BUILDABLE_TRAITS; no proxy fabricated).
   PURE / build-DARK (no production importer; L9b-3b wires it). **Codex 5.5-built → Opus-4.8-INDEPENDENTLY-audited
-  VERIFIED:** tsc-0 / focused 21/21 / full suite **7,486 tests / 429 files, 7,484 pass / 2 characterized fail**, ZERO new
-  reds (+21 tests / +1 file = exactly this engine's test); purity + build-dark greps clean; frozen
+  VERIFIED:** tsc-0 / focused 22/22 / full suite **7,487 tests / 429 files, 7,485 pass / 2 characterized fail**, ZERO new
+  reds (+22 tests / +1 file = exactly this engine's test, incl. a seam test); purity + build-dark greps clean; frozen
   matrix/scorer/`traitAcquisition`/`percentile`/`traitPricing`/`rosterEngineConstants` BYTE-UNCHANGED; every per-trait
-  outcome direction re-derived by the auditor. **AUDIT DEVIATIONS HANDLED (the builder over-produced):** (1) Codex left an
+  outcome direction re-derived by the auditor. **SEAM FIX (FINDING-149):** the decorrelated builder self-audit caught — and
+  the Captain verified from source — that L9b-3a's output was a FLAT `TraitCandidate` incompatible with L9b-2's
+  `computeTraitAcquisition` (which reads `candidate.score.*`). The first commit `54fae510` shipped the flat shape; a
+  follow-up commit FIXED it: output is now `SeasonTraitCandidate extends TraitCandidate` (L9b-2's nested `{traitName,
+  score}`) + a seam integration test that feeds L9b-3a output straight into `computeTraitAcquisition`. (Codex's self-audit
+  recommended reverting to the count model — REJECTED: the count model is the fatally-broken one; the fix keeps the RATE
+  model AND fixes the seam.) **AUDIT DEVIATIONS HANDLED (the builder over-produced):** (1) Codex left an
   ABANDONED earlier-attempt pair `traitContextReconstructor.*` implementing a broken EXPOSURE-COUNT model (bare fire-count
   made opposing pairs indistinguishable — Clutch≡Choker, RBI Hero≡Zero, Stealer≡Bad Jumps, Butter≡Cannon≡Noodle) → the
   auditor DELETED it (nothing imported it; the contracted `traitCandidateBuilder.ts` is the correct rate-model file); (2)
-  Codex edited 5 Captain-owned spec-docs → REVERTED to HEAD + re-authored here. trackerDb stays **v21** (pure, no store).
+  Codex edited 7 Captain-owned spec-docs (incl. AUDIT_LOG + FINDINGS) → REVERTED to HEAD + re-authored here. trackerDb stays **v21** (pure, no store).
   **DEFAULTS-TAKEN (AUTH-4, flagged for JK — see OPEN PENDING-JK):** outcome-weighted RATE model (not bare fire-count);
   `pressure='high'` from the populated `isClutch` flag (finer extreme banding deferred); Cannon/Noodle share one
   OF-arm-per-GAME signal (no per-OF-chance denominator exists in v1); Durable/Injury-Prone = injuries/games; all signals
@@ -582,13 +588,13 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## SUITE BASELINE
 
-**7,486 tests / 429 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L9b-3a**: **7,484 pass /
-2 fail** — the 2 = EXACTLY the characterized baseline (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`, confirmed via
-FAIL-file grep on a clean re-run). A FIRST run showed 3 fails, the 3rd being the documented order-flake
-`EliminationTeamHub.test.tsx`, which did NOT reproduce on the immediate re-run (passes solo) — same worker-pool-reorder
-family, NOT a regression. **ZERO new reds** (+21 tests / +1 file = exactly L9b-3a's `traitCandidateBuilder.test.ts`; the
-engine is pure/build-dark, imported by nothing in production → cannot regress any UI/other test). trackerDb **v21**
-(L9b-3a added no store). *(Prior baseline retained below for the arc trail.)* **7,465 tests / 428 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L9b-2** commit
+**7,487 tests / 429 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L9b-3a + the FINDING-149
+seam fix**: **7,485 pass / 2 fail** — the 2 = EXACTLY the characterized baseline (`wpaRuntimeBoundary` +
+`franchiseManualSmokeFixture`, confirmed via FAIL-file grep). An earlier run (pre-fix) showed 3 fails, the 3rd being the
+documented order-flake `EliminationTeamHub.test.tsx`, which did NOT reproduce on re-runs (passes solo) — same
+worker-pool-reorder family, NOT a regression. **ZERO new reds** (+22 tests / +1 file = exactly L9b-3a's
+`traitCandidateBuilder.test.ts`, incl. the L9b-2 seam test; the engine is pure/build-dark, imported by nothing in
+production → cannot regress any UI/other test). trackerDb **v21** (L9b-3a added no store). *(Prior baseline retained below for the arc trail.)* **7,465 tests / 428 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L9b-2** commit
 `f616373a`: **7,463 pass / 2 fail** — the 2 = EXACTLY the characterized baseline (`wpaRuntimeBoundary` +
 `franchiseManualSmokeFixture`, confirmed via FAIL-line grep); the order-flakes did NOT surface this run. **ZERO new reds**
 (+24 tests / +1 file = exactly L9b-2's `traitAcquisition.test.ts`; the engine is pure/build-dark). trackerDb **v21**
