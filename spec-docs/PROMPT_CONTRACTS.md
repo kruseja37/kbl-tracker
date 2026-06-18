@@ -9837,3 +9837,39 @@ Use high reasoning effort. Think step-by-step. Builder ≠ auditor — re-audite
 Use high reasoning effort. Think step-by-step. Builder ≠ auditor — re-audited by Opus HARDEST (live-path no-op-when-off, deterministic boundary + idempotent overlay writes + correct scope, dark-safe morale fallback, no new store/version, no `new Date`, byte-unchanged frozen engines/store).
 
 **Status:** COMMITTED `cd9e4589` (2026-06-18, AUTH-4 overnight) → **L8 COMPLETE** (L8a `cfdd7752` + L8b `cd9e4589`). Codex 5.5 built → Opus 4.8 independently audited HARDEST VERIFIED: tsc 0 / build 0 / 9 focused tests; full suite 7,410 pass / 2 characterized fail, ZERO new reds (+9 tests / +1 file). Flag-OFF true no-op; deterministic 5×/season boundary (T=10/32/162 tested); MLB+TV-row join + normalizePersonality + dark-safe morale-50; `pending`+`permanent` idempotent overlays (replay → 1 row proven); `createdAt`=TV `computedAt` (no `new Date`). Pitcher classification via `primaryPosition` (exact `Position`-union match — more robust than `isPitcher`). NO new store (trackerDb v21) / KBL_BACKUP_VERSION 2; frozen engines/store byte-unchanged. LOW: `NEUTRAL_HIDDEN_MODIFIERS` re-declared to avoid an import cycle (documented). Live path + overlay writes → browser-pending (scenario #17). **NOW = L9a** (net-new reality capture layer).
+
+---
+
+## L9a — Net-new reality CAPTURE surface (§9 / OD-5 / TS-1,4,11; feeds the L9b trait engine). SPLIT L9a-1..4
+
+DSTACK L9a (line 66): explicit GameTracker/useGameState/eventLog capture edits, EACH verified to PERSIST ("typed-but-unwritten = lost"). ~90% of trait signals ALREADY persist; add ONLY the net-new. Full scope + anchors in `AUTONOMOUS_RUN_LOG.md` (2026-06-18 "L9a RECON DONE"). SPLIT: **L9a-1** pitch-zone capture (isolated, lowest-risk — THIS) · **L9a-2** ball-strike count persistence + pitchType reliability (touches the hook) · **L9a-3** handedness join at event-write (wiring) · **L9a-4** OF extra-base-credit season tally + injury accumulator (derive-on-read).
+
+### L9a-1 — Pitch-location (strike-zone) capture (USER-VISIBLE EnrichmentPanel + additive eventLog field; NO version bump)
+
+**ROUTE:** Codex 5.5 | high reasoning effort (USER-VISIBLE UI + live-path enrichment persistence; isolated to one component + one additive schema field + one handler) → Opus 4.8 audit (auditor ≠ builder) → auto-commit verified-complete, **browser-pending** (EnrichmentPanel UI). Mirrors the D9d-2/DR-3 user-visible-ticket pattern.
+
+**ROLE:** Add an OPTIONAL pitch-location (strike-zone) capture to the live GameTracker post-play EnrichmentPanel, persisted on the AtBatEvent, so the L9b trait engine can read it (unlocks Low/High/Inside/Outside Pitch traits). Mirror the EXISTING "Pitch Type" enrichment field exactly — same optional/skippable/undefined-when-skipped contract (OD-5A manual/opt-in). Do NOT touch the useGameState record* hot path, the spray/hit-location picker, or build the trait engine (L9b).
+
+**GOAL:**
+1. **EDIT `src/utils/eventLog.ts`** — add `pitchLocation?: 'low' | 'high' | 'inside' | 'outside' | 'outOfZone';` to the `AtBatEvent.enrichment` object type (near `pitchType` at `:437`). Name = `pitchLocation` to MATCH `effectiveRatings.ts:53` (`pitchLocation?: 'low'|'high'|'inside'|'outside'|'outOfZone'`, consumed at `:299-300` `ctx.pitchLocation === cond.zone`) → zero mapping for L9b. ADDITIVE optional; the enrichment merge at `eventLog.ts:1051` (`{...next.enrichment, ...updates.enrichment}`) passes it through, and `'enrichment'` is already in the updatable-field unions (`:1016/:1270/:1363`) → NO new field-union edit, NO `kbl-event-log` version bump (schemaless within the store).
+2. **EDIT `src/src_figma/app/components/EnrichmentPanel.tsx`** — add a "Pitch Location" button-grid section mirroring the existing "Pitch Type" section (`:1492-1502`): 5 buttons (Low/High/Inside/Outside/Out of Zone), rendered UNCONDITIONALLY for all enrichable plays (like Pitch Type — do NOT reuse the `spray:false` per-result gating at `:166-200`), each click sets `enrichment.pitchLocation` to that enum (toggle-to-clear if it matches the Pitch Type clear behavior), via the SAME enrichment-update handler the Pitch Type grid uses.
+3. **EDIT `src/src_figma/app/pages/GameTracker.tsx`** — if `handleEnrichmentUpdate` (`~:9421`) handles enrichment per-field (a `pitchType` branch), mirror it for `pitchLocation`; if it merges the whole enrichment object generically, NO branch is needed (confirm + state which in the report).
+
+**SOURCE OF TRUTH:** DSTACK L9a `:66` + OD-5(A) (`DECISIONS_LOG.md:1043` — optional zone inputs, never forced, undefined-when-skipped) + TS-11 (`DECISIONS_LOG.md:806`) + Cert VI.4 (`TRAIT_SIGNAL_CERTIFICATION.md:126`, pitch-zone low/high/inside/outside net of chases). Enum SOURCE: `effectiveRatings.ts:53`. MIRROR: the EnrichmentPanel "Pitch Type" field (`:1492-1502`) + its update handler. **DEFAULT-TAKEN (was a JK fork): pitch-zone = the COARSE strike-zone enum** (already wired downstream; NOT a fine x/y grid).
+
+**ALLOWED files:** EDIT `src/utils/eventLog.ts` (one optional field) · EDIT `src/src_figma/app/components/EnrichmentPanel.tsx` (the grid section) · EDIT `src/src_figma/app/pages/GameTracker.tsx` (only if a per-field branch is needed) · NEW/EDIT a test proving the capture PERSISTS (an `eventLog` round-trip: write an AtBatEvent with `enrichment.pitchLocation`, read it back, assert it survives; this is the "verified-to-persist" gate). NOTHING ELSE.
+
+**DO NOT:** bump any DB version / add a store · touch the `useGameState` record* hot path or `commitPlateAppearance`/`logAtBatEvent` signatures · gate the pitch-location selector by the `spray:false` config (render it unconditionally) · touch the hit-location `fieldLocation`/spray picker · build the trait engine / scorer / grant logic (L9b) · make the field required (it's optional, undefined when skipped) · touch the inactive `src/components/GameTracker/`.
+
+### TESTS
+A persistence round-trip (the DSTACK "verified-to-persist" gate): create an AtBatEvent with `enrichment.pitchLocation: 'low'`, persist + reload via the event-log API, assert `enrichment.pitchLocation === 'low'` survives; assert an event WITHOUT it reads back `undefined` (optional/skippable). If feasible, a light EnrichmentPanel render test (the 5 buttons render; clicking "Inside" fires the update with `pitchLocation:'inside'`); if RTL is too heavy for this 2k-line component, state so and rely on the persistence test + browser-pending.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · new/affected tests green · FULL suite — only the 2 characterized fails expected (+ known order-flakes may appear → solo-confirm); NO OTHER new reds. Greps: NO DB-version bump (`kbl-event-log` version unchanged; `TRACKER_DB_VERSION` 21); `effectiveRatings.ts`/`useGameState.ts` record* hot path byte-unchanged (only `GameTracker.tsx` handler edited, and only if needed); the new field is OPTIONAL.
+
+**STOP IF (→ SET-ASIDE):** the capture can't be proven to persist in a round-trip past 2 iterations · a DB-version bump turns out to be required (escalate — that changes the risk class) · the EnrichmentPanel change forces a useGameState hot-path edit · a NEW red past 2 fix-iterations.
+
+**FORMAT:** 1. Files changed (paths + count + passing-test count). 2. Each change w/ the §9/OD-5 line. 3. Verification output (+ the persistence round-trip proof + no-version-bump grep + whether handleEnrichmentUpdate needed a branch). 4. "L9a-1 complete" OR "BLOCKED: [reason]".
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — re-audited by Opus (the capture VERIFIED to persist [the typed-but-unwritten gate], optional/undefined-when-skipped, no version bump, no hot-path/spray-gating touch, enum matches the downstream consumer).
+
+**Status:** CONTRACTED 2026-06-18 (AUTH-4 overnight). Dispatching Codex.

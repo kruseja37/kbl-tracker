@@ -46,6 +46,16 @@ export const PITCH_TYPES = [
 
 export type PitchTypeAbbr = typeof PITCH_TYPES[number]['abbr'];
 
+export const PITCH_LOCATIONS = [
+  { value: 'low', label: 'Low' },
+  { value: 'high', label: 'High' },
+  { value: 'inside', label: 'Inside' },
+  { value: 'outside', label: 'Outside' },
+  { value: 'outOfZone', label: 'Out of Zone' },
+] as const;
+
+export type PitchLocationValue = typeof PITCH_LOCATIONS[number]['value'];
+
 // ──────────────────────────────────────────────────────────────
 // Layer C — Contact Type (§8.1) — renamed from exitType
 // ──────────────────────────────────────────────────────────────
@@ -108,6 +118,7 @@ export interface EnrichmentUpdate {
   rescuedThrow?: boolean;
   hrDistance?: number;
   pitchType?: string;
+  pitchLocation?: PitchLocationValue;
   pitchesInAtBat?: number;
 }
 
@@ -1503,6 +1514,27 @@ export function EnrichmentPanel({
                 title={pt.label}
               >
                 {pt.abbr}
+              </button>
+            ))}
+          </div>
+        </EnrichmentSection>
+
+        {/* Pitch Location (§9 / OD-5) — optional manual strike-zone capture */}
+        <EnrichmentSection label="Pitch Location" filled={!!currentEnrichment?.pitchLocation}>
+          <div className="flex flex-wrap gap-1.5">
+            {PITCH_LOCATIONS.map((location) => (
+              <button
+                key={location.value}
+                className={`text-xs min-h-[36px] px-3 py-2 rounded border transition-colors touch-manipulation
+                  ${currentEnrichment?.pitchLocation === location.value
+                    ? 'bg-[#C4A853]/30 border-[#C4A853] text-[#C4A853]'
+                    : 'bg-[#2a3530]/60 border-[#4a6a4a] text-[#88AA88] hover:bg-[#4a6a4a]/40'}`}
+                onClick={() => onUpdate(
+                  'pitchLocation',
+                  currentEnrichment?.pitchLocation === location.value ? undefined : location.value,
+                )}
+              >
+                {location.label}
               </button>
             ))}
           </div>

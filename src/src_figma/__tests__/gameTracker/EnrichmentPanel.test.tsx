@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
   ENRICHMENT_CONFIG,
   EnrichmentPanel,
+  PITCH_LOCATIONS,
   RunnerEnrichmentPanel,
   getSprayRegionsForResult,
   resolveSprayRegionForPoint,
@@ -328,6 +329,65 @@ describe('EnrichmentPanel', () => {
     );
 
     expect(screen.queryByRole('button', { name: '7+' })).not.toBeInTheDocument();
+  });
+
+  test('[L9a-1] shows pitch-location controls for spray-disabled plays and saves Inside', () => {
+    const onUpdate = vi.fn();
+
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('BB')}
+        currentEnrichment={{}}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.getByText('Pitch Location')).toBeInTheDocument();
+    for (const location of PITCH_LOCATIONS) {
+      expect(screen.getByRole('button', { name: location.label })).toBeInTheDocument();
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: 'Inside' }));
+
+    expect(onUpdate).toHaveBeenCalledWith('pitchLocation', 'inside');
+  });
+
+  test('[L9a-1] clears the selected pitch location when tapped again', () => {
+    const onUpdate = vi.fn();
+
+    render(
+      <EnrichmentPanel
+        entry={buildEntry('K')}
+        currentEnrichment={{ pitchLocation: 'inside' }}
+        onUpdate={onUpdate}
+        onClose={() => {}}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Inside' }));
+
+    expect(onUpdate).toHaveBeenCalledWith('pitchLocation', undefined);
+  });
+
+  test('[L9a-1] persists optional pitchLocation through the event-log round trip', async () => {
+    await logAtBatEvent({
+      ...buildAtBatEvent('K'),
+      gameId: 'game-l9a-1',
+      eventIndex: 101,
+      enrichment: { pitchLocation: 'low' },
+    });
+    await logAtBatEvent({
+      ...buildAtBatEvent('BB'),
+      gameId: 'game-l9a-1',
+      eventIndex: 102,
+    });
+
+    const withPitchLocation = await getAtBatEvent('event-K');
+    const withoutPitchLocation = await getAtBatEvent('event-BB');
+
+    expect(withPitchLocation?.enrichment?.pitchLocation).toBe('low');
+    expect(withoutPitchLocation?.enrichment?.pitchLocation).toBeUndefined();
   });
 
   test('shows fielding attempt controls for outs with attempt type and outcome', () => {

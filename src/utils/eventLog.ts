@@ -435,6 +435,7 @@ export interface AtBatEvent {
     rescuedThrow?: boolean;
     hrDistance?: number;
     pitchType?: string;
+    pitchLocation?: 'low' | 'high' | 'inside' | 'outside' | 'outOfZone';
     pitchesInAtBat?: number;
     modifiers?: string[];
     managerBuntIntent?: ManagerBuntIntent;
