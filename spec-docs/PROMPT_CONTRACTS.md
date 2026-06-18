@@ -9770,7 +9770,7 @@ DSTACK L8 (line 83): `every-20%-of-games league sweep; CONSUMES the L5 §8 dampe
 
 Use high reasoning effort. Think step-by-step. Builder ≠ auditor — re-audited by Opus (dampener consumed-not-rebuilt, NO personality/ambition/resilience double-count, brake-only/never-amplify pass-through, deterministic earned-magnitude shift gate, 0-99 clamp + integer appliedDelta, all magnitudes in TUNING, purity + byte-unchanged frozen engines).
 
-**Status:** CONTRACTED 2026-06-18 (AUTH-4 overnight). Dispatching Codex.
+**Status:** COMMITTED `cfdd7752` (2026-06-18, AUTH-4 overnight). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / build 0 / 17 focused tests; full suite 7,401 pass / 2 characterized fail (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+17 tests / +1 file). Diff read: dampener consumed-not-rebuilt, NO personality/ambition/resilience double-count, brake-only pass-through (hot-team positive = with-trend `applied:false`), deterministic earned-magnitude shift gate (`|dampenedDelta| >= shiftThreshold && appliedDelta !== 0` — gates on earned magnitude, not the rounding artifact), 0-99 integer clamp, all magnitudes in TUNING. `fanMoraleDampener`/`ivEngine`/`effectiveRatings`/`masterMoraleMatrix` byte-unchanged; pure. LOW (reconciled in L8b): `performanceSignalScale: 10` is a poor default for dollar `valueDelta` → L8b owns the scale via `CHECKPOINT_DEV_TUNING` (200000). Pure engine, no user surface → auto-committed. **NOW = L8b.**
 
 ### L8b — Dark checkpoint-sweep compute + overlay writer + processCompletedGame hook (live path + persistence; audited HARDEST; browser-pending)
 

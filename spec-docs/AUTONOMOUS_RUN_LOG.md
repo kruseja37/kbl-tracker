@@ -884,3 +884,68 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   × Ambition(up)/Resilience(down); proposes overlays via the L2 confirm with a per-team console change log; RATINGS ONLY,
   never traits). Likely SPLIT L8a (pure dev-math) / L8b (checkpoint cadence + writer wiring). trackerDb v21; nothing pushed.
   **CONTEXT-HANDOFF written → a fresh session continues at L8 with full context.**
+
+- **2026-06-18 (AUTH-4, FRESH SESSION — overnight; JK ran `caffeinate`, selected "Proceed with L8 (AUTH-4)") — L8
+  STARTED. L8a DISPATCHED (build in flight), L8b recon in flight.** Fresh thread did the 5-file session-start reads +
+  AUTONOMOUS_RUN_PROTOCOL + the L2 contracts, RESTATED (phase = Phase-2 L-stack; last = L2 COMPLETE; next = L8), and
+  PROCEEDED under AUTH-4. Ran a 6-agent recon workflow to ground the L8 surfaces, then SPLIT L8 → **L8a** (pure dev-math
+  engine, this dispatch) + **L8b** (dark checkpoint-sweep compute + overlay writer + processCompletedGame hook — live
+  path + persistence, will be audited HARDEST, browser-pending). Contract drafted (PROMPT_CONTRACTS §L8/§L8a). Codex 5.5
+  | high dispatched in background.
+  **THE L8 MODEL (DEFAULTS-TAKEN — the spec is SILENT on the raw-delta formula; §16:272 lists dampener strength +
+  personality multipliers as Sim-Gate-tuned, §9:158 grades EARNED+PACED drift not a fixed magnitude):**
+  - L8a per (player, ratingKey): `rawDelta = baseDeltaScale × normalizedPerformanceSignal × moraleAlignmentMultiplier`
+    (performance is the directional driver; the player's OWN morale is the strong direct weight, self-correcting — §10:195),
+    then push `rawDelta` through the L5a `applyFanMoraleDampener(rawDelta, teamFanMorale, personality, {loyalty,ambition,
+    resilience})` (CONSUMED, not rebuilt) and read `.dampenedDelta`, then clamp to a 0-99 integer; `shouldShift =
+    |dampenedDelta| >= shiftThreshold && appliedDelta !== 0`.
+  - **Personality + Ambition/Resilience + Loyalty enter ONLY via the dampener** (it already applies the §8 personality
+    table, ambition-weights up-moves / resilience-weights down-moves, loyalty-amplifies). L8a does NOT re-apply them →
+    no DOUBLE-COUNT. So the DSTACK "× personality × Ambition/Resilience" is realized inside the consumed dampener.
+  - **Fan morale = dampener-only** (§10:196, the rich-get-richer guard); the dampener is a BRAKE never an accelerator
+    (with-trend moves pass through; only counter-trend braked).
+  - **Probability-decides-who / no-headcount** realized DETERMINISTICALLY (run rule: no Math.random/Date.now) as an
+    earned-magnitude shift gate. RATINGS only never traits (§9:153). Raises ceiling never TV (§3:52). All magnitudes in
+    one `RATINGS_DEVELOPMENT_TUNING` (sim-tuned placeholders, shape locked).
+  - **OPEN DECISION for JK (logged, NOT blocking, NOT changed):** the L5a dampener weights a counter-trend-UP move
+    (a losing/cold-team gain) by AMBITION such that higher ambition = MORE brake; §6:111 frames ambition as an "upside
+    gas pedal." On a winning team up-moves are with-trend (unbraked) so ambition is moot there; the odd case is a
+    cold-team gain. L8 CONSUMES L5a as-built (L5 owns the §8 primitive — modifying it is an ownership + SMB4-asset
+    violation). Flagged for JK's review of the §6-flavor-vs-§8-mechanics ambition direction; not relitigated in L8.
+
+- **2026-06-18 (AUTH-4, overnight) — L8a COMMITTED `cfdd7752`; L8b DISPATCHED.** Pure ratings-development engine
+  `src/engines/ratingsDevelopment.ts` + 17-test file. Codex 5.5 built → Opus 4.8 INDEPENDENTLY audited VERIFIED (every
+  gate re-run by the auditor, builder ≠ auditor): tsc 0 / build 0 / full suite **7,401 pass / 2 characterized fail**
+  (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+17 tests / +1 file over the 7,384/422 L2c
+  baseline). Diff hand-read: dampener CONSUMED not rebuilt; NO personality/ambition/resilience double-count; brake-only
+  pass-through proven (hot-team positive raw = with-trend → `dampener.applied:false`, `dampenedDelta === rawDelta`);
+  deterministic earned-magnitude shift gate (gates on `|dampenedDelta|`, NOT the rounding artifact — verified by the
+  0.74→no-shift / 0.76→shift test); 0-99 integer clamp; all magnitudes in `RATINGS_DEVELOPMENT_TUNING`. Frozen engines
+  (`fanMoraleDampener`/`ivEngine`/`effectiveRatings`/`masterMoraleMatrix`) byte-unchanged; imports = the allowed set; pure.
+  **LOW (reconciled in L8b, NOT a blocker):** Codex's `performanceSignalScale: 10` default is wrong for dollar-denominated
+  `valueDelta` (~±$50k–$500k) — L8b owns the dollar→signal scale via `CHECKPOINT_DEV_TUNING = { ...RATINGS_DEVELOPMENT_TUNING,
+  performanceSignalScale: 200000 }`. Auto-committed (pure, no surface). **L8b contract finalized + dispatched** (Codex 5.5 |
+  high, background) — the dark checkpoint-sweep compute + overlay writer + processCompletedGame hook, per the plan below.
+  trackerDb stays v21 (L8b adds NO store).
+  **L8b PLAN (recon DONE; contract = PROMPT_CONTRACTS §L8b; mirrors `franchiseFlashpointDecayCompute.ts`):**
+  NEW default-OFF flag `isFranchisePhase2CheckpointEnabled()` (clone the 11-line flashpoint block in `franchisePhase2Flags.ts`).
+  NEW `src/utils/franchiseCheckpointSweepCompute.ts` → `persistDarkCheckpointSweepForCompletedGame(gameState, scope, archiveOptions)`:
+  (1) flag-gate-first dark-noop; (2) resolve league-wide gameNumber N via `getScheduledGame(scheduleGameId)` (same as
+  `resolveFlashpointCheckpoint`) + totalGames T via `getSeasonMetadata(seasonId).totalGames`; unresolved → dark-noop;
+  (3) DETERMINISTIC 20%-boundary test `Math.floor((N-1)*5/T) !== Math.floor(N*5/T)` (fires exactly 5×/season at the
+  20/40/60/80/100% crossings — verified for T=10 → N=2,4,6,8,10); not a boundary → dark-noop; (4) at a boundary, a
+  mockable `checkpointSweepSeam.resolveCheckpointRoster(scope, gameState)` enumerates MLB players: `getAllFranchiseTeams`
+  → `leagueId = teams[0].leagueIds[0]`; `getAllFranchisePlayers(franchiseId)` filter `getPlayerRosterStatusForLeague(p,
+  leagueId)==='MLB'`; project flat lowercase ratings (`power/contact/speed/fielding/arm` | `velocity/junk/accuracy`),
+  `normalizePersonality(p.personality)`→canonical-7, `p.hiddenPersonalityModifiers ?? NEUTRAL_HIDDEN_MODIFIERS`, `p.morale`;
+  (5) join perf signal = `trueValueScope.rows[].valueDelta` by playerId (already persisted at :595, before the ~618 hook);
+  team fan morale = `getFranchiseMoraleSnapshot(scope,'team-fan',teamId)?.currentValue ?? 50` (50 = proven dark-safe →
+  zero brake); (6) per player run L8a `computeCheckpointRatingDevelopment`; if `shouldShift`, write a `pending` `permanent`
+  overlay via `putFranchiseRatingsOverlay` (id `${scope}:${playerId}:${ratingKey}:checkpoint-${N}`, `sourceEventId
+  checkpoint-${N}`, `source 'ratings-development'`, `createdAtGameNumber N`, `createdAt` DETERMINISTIC — no `new Date()`);
+  (7) deterministic id = idempotent replay-safe; deltas STACK across checkpoints (per §11 permanent layer); (8) per-team
+  change log via `summarizeOverlayChangeLog`. Hook into `processCompletedGame.ts` after the flashpoint gate (~line 618),
+  flag-gated, in try/catch. WHICH-KEY DEFAULT-TAKEN: performance-typed, one key/shifter/checkpoint (pitcher→a PitcherRatings
+  key, hitter→a BatterRatings key, branch on `isPitcher`); `overall` is a letter grade → ruled out. `performanceSignalScale`
+  ≈ 200000 placeholder (valueDelta is signed dollars, ~±$50k–$500k). PENDING overlays are INERT in the merge until confirmed
+  (post-D13 UI) → doubly-dark. Live path + persistence → audited HARDEST, browser-pending.
