@@ -1452,3 +1452,20 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
     auto-committed.
   - **➡ NEXT = L10-2** (dark `franchiseL10Overlays` store, trackerDb v22→v23; the 8-site mirror incl. the
     `franchiseSeasonLedgerStorage` store-list PIN [MEMORY: broke L6b-1]; mirror L9b-3b-i `franchiseTraitOverlays` exactly).
+- **2026-06-18 (AUTH-4, "keep rolling") — L10-2 BUILT (Codex 5.5) → AUDITED (Opus, persistence-hardest) VERIFIED →
+  COMMITTED.** The dark `franchiseL10Overlays` store (persistence half of L10). NEW
+  `src/utils/franchiseL10OverlayStorage.ts` (mirror of `franchiseTraitOverlays` with the L10-event row + a `by_target`
+  index) + the 8-site mirror: trackerDb TRACKER_DB_VERSION 22→23 + store def; syncConfig 'id'; backupRestore optional +
+  STATIC schema v23 (KBL_BACKUP_VERSION stays 2); the store-list PIN (toBe(22)→23 ×2 + alpha-insert between
+  flashpoint & ratings + the index assertion + the legacy-seed retargeted v22→v23 proving the trait row AND the new L10
+  store survive); parity + save-slot-manifest tests; a new 8-test storage test. DARK/EMPTY (no production consumer — L10-3
+  writes it).
+  - **Tightened contract held (6th clean dispatch in a row):** Codex hit EXACTLY the 8 FILE LIST paths — no doc edits, no
+    git-add (the PROMPT_CONTRACTS "M" was the Captain's block).
+  - **INDEPENDENT AUDIT (Opus):** tsc-0; full suite **7,535/435, 7,533 pass / 2 characterized fail**, ZERO new reds (+8);
+    diffs verified (v22→v23 + store def + by_target index; backup optional + static v23 + KBL_BACKUP_VERSION 2; syncConfig);
+    migration-survival + parity proven; trait template + all prior stores byte-unchanged; DARK confirmed by grep. VERDICT
+    VERIFIED → auto-committed. Persistence → browser-pending (#23).
+  - **➡ NEXT = L10-3** (default-OFF `isFranchisePhase2L10Enabled` flag + `persistDarkL10ForCompletedGame` league-sweep
+    hook gated by flag AND `isCheckpointBoundary`, wiring L10-1 `computeFranchiseL10Events` → L10-2 store; mirror L9b-3b-ii
+    `franchiseTraitGrantCompute`; insert the 6th gate branch after processCompletedGame.ts:632).

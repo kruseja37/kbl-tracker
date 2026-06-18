@@ -15,6 +15,7 @@ export const SYNC_REGISTRY: Record<string, Record<string, string | string[]>> = 
     franchiseFameRecords: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'],
     franchiseFlashpointDecay: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'],
     franchiseRatingsOverlays: 'id',
+    franchiseL10Overlays: 'id',
     franchiseTraitOverlays: 'id',
     franchiseTrueValueSnapshots: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId', 'checkpoint'],
     // playerGameStats and pitcherGameStats NOT synced — stores exist in schema

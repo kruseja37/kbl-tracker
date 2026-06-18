@@ -37,6 +37,7 @@ const expectedTrackerStores = [
   'franchiseDesignationRows',
   'franchiseFameRecords',
   'franchiseFlashpointDecay',
+  'franchiseL10Overlays',
   'franchiseRatingsOverlays',
   'franchiseSeasonLedgerRows',
   'franchiseSeasonSummaries',
@@ -93,7 +94,7 @@ function transactionToPromise(tx: IDBTransaction): Promise<void> {
   });
 }
 
-async function seedLegacyV21TrackerDb(): Promise<{
+async function seedLegacyV22TrackerDb(): Promise<{
   currentGameRow: { id: string; gameId: string };
   flashpointRow: {
     franchiseId: string;
@@ -122,9 +123,27 @@ async function seedLegacyV21TrackerDb(): Promise<{
     createdAtGameNumber: number;
     createdAt: string;
   };
+  traitOverlayRow: {
+    id: string;
+    franchiseId: string;
+    seasonId: string;
+    statsScopeId: string;
+    playerId: string;
+    valence: string;
+    traitName: string;
+    displacesTraitName: string | null;
+    realityPercentile: number;
+    probability: number;
+    confirmationStatus: string;
+    applied: boolean;
+    source: string;
+    sourceEventId: string;
+    createdAtGameNumber: number;
+    createdAt: string;
+  };
 }> {
   const db = await new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 21);
+    const request = indexedDB.open(DB_NAME, 22);
     request.onerror = () => reject(request.error);
     request.onupgradeneeded = () => {
       const legacyDb = request.result;
@@ -150,11 +169,22 @@ async function seedLegacyV21TrackerDb(): Promise<{
           unique: false,
         });
       }
+      if (!legacyDb.objectStoreNames.contains('franchiseTraitOverlays')) {
+        const traitOverlayStore = legacyDb.createObjectStore('franchiseTraitOverlays', {
+          keyPath: 'id',
+        });
+        traitOverlayStore.createIndex('by_scope', ['franchiseId', 'seasonId', 'statsScopeId'], {
+          unique: false,
+        });
+        traitOverlayStore.createIndex('by_player', ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'], {
+          unique: false,
+        });
+      }
     };
     request.onsuccess = () => resolve(request.result);
   });
 
-  const currentGameRow = { id: 'current', gameId: 'legacy-v20-game' };
+  const currentGameRow = { id: 'current', gameId: 'legacy-v22-game' };
   const flashpointRow = {
     franchiseId: 'legacy-franchise',
     seasonId: 'legacy-season',
@@ -182,15 +212,37 @@ async function seedLegacyV21TrackerDb(): Promise<{
     createdAtGameNumber: 2,
     createdAt: '2026-06-17T00:00:00.000Z',
   };
+  const traitOverlayRow = {
+    id: 'legacy-franchise:legacy-season:legacy-scope:legacy-player:Clutch:legacy-traits',
+    franchiseId: 'legacy-franchise',
+    seasonId: 'legacy-season',
+    statsScopeId: 'legacy-scope',
+    playerId: 'legacy-player',
+    valence: 'gain',
+    traitName: 'Clutch',
+    displacesTraitName: 'Choker',
+    realityPercentile: 0.86,
+    probability: 0.78,
+    confirmationStatus: 'pending',
+    applied: false,
+    source: 'legacy-traits',
+    sourceEventId: 'legacy-traits',
+    createdAtGameNumber: 2,
+    createdAt: '2026-06-18T00:00:00.000Z',
+  };
 
-  const tx = db.transaction(['currentGame', 'franchiseFlashpointDecay', 'franchiseRatingsOverlays'], 'readwrite');
+  const tx = db.transaction(
+    ['currentGame', 'franchiseFlashpointDecay', 'franchiseRatingsOverlays', 'franchiseTraitOverlays'],
+    'readwrite',
+  );
   tx.objectStore('currentGame').put(currentGameRow);
   tx.objectStore('franchiseFlashpointDecay').put(flashpointRow);
   tx.objectStore('franchiseRatingsOverlays').put(ratingsOverlayRow);
+  tx.objectStore('franchiseTraitOverlays').put(traitOverlayRow);
   await transactionToPromise(tx);
   db.close();
 
-  return { currentGameRow, flashpointRow, ratingsOverlayRow };
+  return { currentGameRow, flashpointRow, ratingsOverlayRow, traitOverlayRow };
 }
 
 function row(overrides: Record<string, unknown> = {}) {
@@ -221,7 +273,7 @@ describe('franchise season salary ledger storage', () => {
   test('trackerDb migration creates the ledger store and preserves every prior tracker store', async () => {
     const db = await initFranchiseSeasonLedgerDatabase();
 
-    expect(TRACKER_DB_VERSION).toBe(22);
+    expect(TRACKER_DB_VERSION).toBe(23);
     expect(db.name).toBe(DB_NAME);
     expect(db.version).toBe(TRACKER_DB_VERSION);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(expectedTrackerStores);
@@ -230,17 +282,28 @@ describe('franchise season salary ledger storage', () => {
     expect(Array.from(tx.objectStore(FRANCHISE_SEASON_LEDGER_STORE_NAME).indexNames)).toEqual(['by_scope']);
   });
 
-  test('v21 to v22 migration adds trait overlays without losing prior stores or data', async () => {
-    const { currentGameRow, flashpointRow, ratingsOverlayRow } = await seedLegacyV21TrackerDb();
+  test('v22 to v23 migration adds L10 overlays without losing prior stores or data', async () => {
+    const {
+      currentGameRow,
+      flashpointRow,
+      ratingsOverlayRow,
+      traitOverlayRow,
+    } = await seedLegacyV22TrackerDb();
     resetFranchiseSeasonLedgerDatabaseForTests();
 
     const db = await initFranchiseSeasonLedgerDatabase();
 
-    expect(db.version).toBe(22);
+    expect(db.version).toBe(23);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(expectedTrackerStores);
 
     const tx = db.transaction(
-      ['currentGame', 'franchiseFlashpointDecay', 'franchiseRatingsOverlays', 'franchiseTraitOverlays'],
+      [
+        'currentGame',
+        'franchiseFlashpointDecay',
+        'franchiseRatingsOverlays',
+        'franchiseTraitOverlays',
+        'franchiseL10Overlays',
+      ],
       'readonly',
     );
     await expect(requestToPromise(tx.objectStore('currentGame').get('current'))).resolves.toEqual(currentGameRow);
@@ -259,6 +322,10 @@ describe('franchise season salary ledger storage', () => {
     const traitOverlayStore = tx.objectStore('franchiseTraitOverlays');
     expect(traitOverlayStore.keyPath).toBe('id');
     expect(Array.from(traitOverlayStore.indexNames)).toEqual(['by_player', 'by_scope']);
+    await expect(requestToPromise(traitOverlayStore.get(traitOverlayRow.id))).resolves.toEqual(traitOverlayRow);
+    const l10OverlayStore = tx.objectStore('franchiseL10Overlays');
+    expect(l10OverlayStore.keyPath).toBe('id');
+    expect(Array.from(l10OverlayStore.indexNames)).toEqual(['by_scope', 'by_target']);
     await transactionToPromise(tx);
   });
 

@@ -5392,3 +5392,18 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   dark + boundary all re-derived correct. VERDICT VERIFIED → auto-committed.
 - **NEXT = L10-2** (dark `franchiseL10Overlays` store, trackerDb v22→v23 — the 8-site mirror incl. the store-list PIN;
   mirror L9b-3b-i). Loop continues under AUTH-4.
+
+## 2026-06-18 (AUTH-4 overnight, host thread, "keep rolling") — L10-2 dark store Codex-built → Opus-audited VERIFIED → COMMITTED
+- **Deliverable:** NEW `src/utils/franchiseL10OverlayStorage.ts` (1:1 mirror of `franchiseTraitOverlayStorage` with the
+  L10-event row — targetId/targetKind player|team, family/eventType/valence/magnitude/probability, confirmationStatus/
+  applied; second index `by_target`) + the 8-site mirror (trackerDb v22→v23 store def; syncConfig 'id'; backupRestore
+  optional + static schema v23; the store-list PIN toBe(22)→23 + alpha-insert between flashpoint & ratings + the legacy-seed
+  v22→v23 migration-survival proof; parity + manifest + a new 8-test storage test). DARK/EMPTY; KBL_BACKUP_VERSION stays 2.
+- **Tightened contract held (6th clean dispatch):** Codex hit EXACTLY the 8 FILE LIST paths — no doc edits, no git-add.
+- **Independent audit (Opus, persistence-hardest):** tsc-0; full suite **7,535/435, 7,533 pass / 2 characterized fail**,
+  ZERO new reds (+8); the v22→v23 migration-survival + backup round-trip parity PROVEN; KBL_BACKUP_VERSION 2; trait
+  template + all prior stores byte-unchanged; DARK confirmed. VERDICT VERIFIED → auto-committed. Persistence →
+  browser-pending (#23).
+- **NEXT = L10-3** (default-OFF `isFranchisePhase2L10Enabled` flag + `persistDarkL10ForCompletedGame` league-sweep hook
+  gated by flag AND `isCheckpointBoundary`, wiring L10-1 → L10-2; mirror L9b-3b-ii; 6th gate branch after
+  processCompletedGame.ts:632). Loop continues under AUTH-4.

@@ -13,9 +13,9 @@ NO live caller (confirm UI = deferred post-D13 D-ticket). Codex-built → Opus-a
 activate post-D13 (the L9b-3b-ii hook flag default-OFF; L9b-3c orphaned-pending its confirm UI). **➡ NEXT = L10**
 (random events) per the L-stack: L10 → L11 managers → L12 races/All-Star/awards-fame → L13 relationships → L14 rebrand →
 the L-SIM gate. **L10 RECON DONE** (workflow `wf_b3129cd8-9e3`) → full scope/split/forks/seams/open-questions in
-`spec-docs/L10_SCOPE_MAP.md`. SPLIT: **L10-1** pure event-selection engine (✅ DONE — committed) · **L10-2** dark
-`franchiseL10Overlays` store (v23 — NEXT) · L10-3 flag + dark league-sweep hook · L10-4 stadium-change event · L10-5
-reporter tap. **L10-1 DONE** = `src/engines/franchiseL10EventEngine.ts` (`computeFranchiseL10Events`: pure deterministic
+`spec-docs/L10_SCOPE_MAP.md`. SPLIT: **L10-1** pure event-selection engine (✅ DONE) · **L10-2** dark
+`franchiseL10Overlays` store (✅ DONE, trackerDb v23) · **L10-3** flag + dark league-sweep hook (NEXT) · L10-4
+stadium-change event · L10-5 reporter tap. **L10-1 DONE** = `src/engines/franchiseL10EventEngine.ts` (`computeFranchiseL10Events`: pure deterministic
 league-sweep roll — `P = baseRate[family] × intensity dial × morale × personality`, FNV-1a-seeded fire, 8 families with
 personality-shift excluded, fan-morale-suppressed team/stadium; mirrors `tradeRequestGeneration`; build-DARK).
 Codex-built → Opus-audited VERIFIED (tsc-0 / suite **7,527/434, 7,525 pass / 2 characterized fail**, ZERO new reds).
@@ -117,6 +117,19 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## RIGHT NOW
 
+- **✅ L10-2 VERIFIED + COMMITTED (2026-06-18, AUTH-4 overnight) — the dark `franchiseL10Overlays` store (trackerDb
+  v22→v23; the persistence half of L10).** NEW `src/utils/franchiseL10OverlayStorage.ts` (1:1 mirror of
+  `franchiseTraitOverlayStorage` with the L10-event row: `targetId`/`targetKind` player|team + family/eventType/valence/
+  magnitude/probability + confirmationStatus/applied lifecycle; second index `by_target` not `by_player`) + the store
+  mirrored at all 8 sites (trackerDb v23 store def; syncConfig 'id'; backupRestore `optional:true` + static schema v23;
+  the `franchiseSeasonLedgerStorage` store-list PIN toBe(22)→23 + alpha-insert + the legacy-seed v22→v23 migration-survival
+  proof; parity + manifest + a new 8-test storage test). DARK/EMPTY (no production consumer; L10-3 writes it);
+  KBL_BACKUP_VERSION stays 2. **Codex-built → Opus-INDEPENDENTLY-audited VERIFIED:** tsc-0 / full suite **7,535/435, 7,533
+  pass / 2 characterized fail**, ZERO new reds (+8); v22→v23 migration-survival + backup parity PROVEN; trait template +
+  all prior stores byte-unchanged; Codex hit EXACTLY the 8 FILE LIST paths. Persistence → browser-pending (#23). **➡ NEXT
+  = L10-3** (default-OFF `isFranchisePhase2L10Enabled` flag + `persistDarkL10ForCompletedGame` league-sweep hook gated by
+  flag AND `isCheckpointBoundary`, wiring L10-1 → L10-2; mirror L9b-3b-ii; 6th gate branch after processCompletedGame.ts:632).
+  *(Prior L10-1 entry below.)*
 - **✅ L10-1 VERIFIED + COMMITTED (2026-06-18, AUTH-4 overnight) — the pure random-event SELECTION engine (first L10
   piece).** NEW `src/engines/franchiseL10EventEngine.ts` (`computeFranchiseL10Events`): a PURE, deterministic, build-DARK
   league-sweep roll. Per candidate × eligible family → `P = clamp01(baseRate[family] × intensityMultiplier[Juiced/Standard/
@@ -695,7 +708,11 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## SUITE BASELINE
 
-**7,527 tests / 434 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L10-1** (the pure
+**7,535 tests / 435 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L10-2** (the dark
+`franchiseL10Overlays` store; trackerDb v22→v23): **7,533 pass / 2 fail** = EXACTLY the characterized baseline
+(`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`). ZERO new reds (+8 tests / +1 file =
+`franchiseL10OverlayStorage.test.ts`). tsc 0; v22→v23 migration-survival + backup parity proven; KBL_BACKUP_VERSION 2.
+trackerDb **v23**. *(Prior baseline retained below for the arc trail.)* **7,527 tests / 434 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L10-1** (the pure
 random-event selection engine): **7,525 pass / 2 fail** = EXACTLY the characterized baseline (`wpaRuntimeBoundary` +
 `franchiseManualSmokeFixture`). ZERO new reds (+13 tests / +1 file = `franchiseL10EventEngine.test.ts`). tsc 0. trackerDb
 **v22** (L10-1 is a pure engine, no store). *(Prior baseline retained below for the arc trail.)* **7,514 tests / 433 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L9b-3c** (→ L9b
@@ -938,6 +955,11 @@ forced the test edit, and the stale `teamMvpAcePreview` assertion was aligned to
     franchise/season/team scope, canonical trait names, `valence` gain/lose, deterministic id `…:trait-grant-N`),
     idempotent on a replayed boundary (no dup rows), and that **nothing in the live UI changes** (pending rows don't mutate
     `trait1`/`trait2` until the L9b-3c confirm). Writes into the v22 store; rides the persistence batch.
+23. **L10-2** (PERSISTENCE — prioritized; trackerDb v22→v23) the new dark `franchiseL10Overlays` store: open an existing
+    pre-v23 franchise → it migrates cleanly (no data loss — prior stores/games/standings/value/ratings-overlays/
+    trait-overlays intact); the new store is empty (dark until L10-3 writes L10 event rows); backup → wipe → restore
+    round-trips with the new store present (empty). Saved-data-shape change, so it leads the batch. (Engine audit already
+    proved the v22→v23 migration-survival + backup parity in unit tests; this is the real-franchise confirmation.)
 
 ## OPEN PENDING-JK (rolling)
 

@@ -10120,3 +10120,17 @@ Use high reasoning effort. Think step-by-step. Builder ≠ auditor — Opus re-a
 **Full contract text (dispatched prompt):** `/tmp/l10_1_codex_prompt.md`.
 
 **Status:** VERIFIED + COMMITTED (2026-06-18, AUTH-4 overnight). Codex 5.5 built → Opus 4.8 independently audited VERIFIED (read line-by-line): tsc 0 / full suite 7,527 tests, 7,525 pass / 2 characterized fail, ZERO new reds (+13). Verified: 8 families with personality-shift EXCLUDED; eligibility map (team→team specs incl. stadium_change, pitching→pitcher-only, wildcard→players); `P = clamp01(baseRate × intensity × moraleFactor × personality × perfSignal)`; fan-morale SUPPRESSION for team/stadium; player morale-distance + a morale-tilted valence sub-roll; FNV-1a deterministic roll (local re-impl — boundary respected, no franchiseRandomEventGenerator import); deterministic sort; trade_demand proposed-only; name-change excluded; pure/build-dark. Codex hit EXACTLY the 2 FILE LIST files (no doc edits, no git-add). NEXT = L10-2 (dark `franchiseL10Overlays` store, trackerDb v23 — the 8-site mirror incl. the store-list PIN).
+
+---
+
+## CONTRACT — L10-2 (dark `franchiseL10Overlays` store) — 2026-06-18 (AUTH-4 overnight)
+
+**ROUTE: Codex 5.5 | high reasoning effort** (builder). Auditor = Opus 4.8 (independent; ≠ builder). PERSISTENCE / saved-data-shape → audited HARDEST. Branch codex/franchise-v1-next.
+
+**GOAL:** add a NEW dark, EMPTY store `franchiseL10Overlays` by MIRRORING `franchiseTraitOverlays` (commit `0cd75d9a`) at every site, with the L10-event row schema (`targetId`/`targetKind` + family/eventType/valence/magnitude/probability + confirmationStatus/applied lifecycle), bump `TRACKER_DB_VERSION` 22→23, keep `KBL_BACKUP_VERSION` 2, NO production writer/reader (L10-3 wires it). Second index `by_target` (events target player OR team) instead of `by_player`.
+
+**HARD CONSTRAINTS:** no spec-doc/`*.md` edits, no git-add; ONLY the FILE LIST; DARK/EMPTY; the `franchiseSeasonLedgerStorage.test.ts` store-list PIN (`toBe(22)`→23 + alphabetical insert of `franchiseL10Overlays` between `franchiseFlashpointDecay` and `franchiseRatingsOverlays` + the legacy-seed retarget v22→prove-survive-v23) is explicitly in scope (it broke a prior dispatch).
+
+**Full contract text (dispatched prompt):** `/tmp/l10_2_codex_prompt.md`.
+
+**Status:** VERIFIED + COMMITTED (2026-06-18, AUTH-4 overnight). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / full suite 7,535 tests, 7,533 pass / 2 characterized fail, ZERO new reds (+8). Diffs verified: TRACKER_DB_VERSION 22→23 + the new store block (by_scope + by_target); backupRestore optional registration + static schema 22→23; KBL_BACKUP_VERSION stays 2; syncConfig 'id'; the store-list PIN (toBe(22)→23 + alpha-insert between flashpoint and ratings + the by_scope/by_target index assertion + the legacy-seed v22→v23 migration-survival proof); `franchiseTraitOverlays` template byte-unchanged; DARK/EMPTY (no production consumer — L10-3 wires it). Codex hit EXACTLY the 8 FILE LIST paths (no doc edits, no git-add). Persistence → browser-pending (#23). trackerDb v23. NEXT = L10-3 (flag + dark league-sweep hook).
