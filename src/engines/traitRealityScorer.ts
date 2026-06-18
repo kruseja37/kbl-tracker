@@ -150,10 +150,10 @@ export function traitRole(traitName: string): TraitRole | null {
  * eligible; universal traits are open to both roles; otherwise the player's
  * role must match the trait's role. A non-canonical name is never eligible.
  *
- * Two Way is pitcher-only (a pitcher hitting elite for a pitcher); earning it
- * makes him an everyday player downstream — that role promotion is an L9b-3
- * write-back concern, NOT a scoring gate, so it is intentionally not modeled
- * here.
+ * Two Way is pitcher-only; a two-way player holds ONLY pitcher traits — there is
+ * NO gateway into the position-player trait pool (JK 2026-06-18). On grant a
+ * random IF/OF/C fielding position is assigned (defensive roster only); that is
+ * not a scoring gate, so it is intentionally not modeled here.
  */
 export function isTraitEligibleForRole(
   traitName: string,

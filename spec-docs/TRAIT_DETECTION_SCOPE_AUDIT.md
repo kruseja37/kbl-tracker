@@ -48,10 +48,11 @@ join, but the audit flags handedness only populates when `handednessById` is sup
 when the measured (count/mojo) signal is thin. This is the §VI.3:122 mechanism JK's Q12 override now
 mandates for v1. Build it once → all 6 light up.
 
-### Tier 4 — Two Way promotion (3 + gateway logic)
-**Two Way (C)/(IF)/(OF)** — `FieldingEvent.position` at non-primary spots persists, but earning the
-trait requires the §VI.2:111 "assign a random IF/OF/C position on grant + open the position-player
-trait pool" gateway. Build the gateway with these.
+### Tier 4 — Two Way (3; pitcher-only, NO batting gateway)
+**Two Way (C)/(IF)/(OF)** — `FieldingEvent.position` at non-primary spots persists; earn the trait from a
+pitcher's fielding performance there. **CORRECTED (JK 2026-06-18): Two Way is pitcher-only and a two-way
+player holds ONLY pitcher traits — do NOT build a gateway that opens the position-player trait pool.** The
+on-grant random IF/OF/C fielding-position assignment still applies (defensive roster only).
 
 ### Tier 5 — conditional/opt-in (build, but only fires when the player logs the enrichment; ~4)
 - **First Pitch Slayer / First Pitch Prayer** — `pitchesInAtBat==1` (opt-in via EnrichmentPanel)
@@ -88,10 +89,14 @@ trait pool" gateway. Build the gateway with these.
 ---
 
 ## RECOMMENDED v1 REBUILD SCOPE (sequence)
+> NOTE: the AUTHORITATIVE build sequence is now `TRAIT_MEASUREMENT_SPEC.md §0.4` (R-E → R1 → R2 → R3) and the
+> earnable set + proxies are §0.6. This earlier list is retained for the per-tier trait groupings only; where it
+> conflicts with §0.4/§0.6 (e.g. "personality-primary mechanism" is now "personality-tilt over a data proxy"; the
+> Two-Way gateway is removed; Noodle Arm is cut; Stimulated is dormant), §0.4/§0.6 win.
 1. **L9b-3a expansion — Tier 1 (the cheap ~13):** add the AB-outcome / steal-error / Base-Rounder proxies to `BUILDABLE_TRAITS` + their signal derivations. No new mechanism. Biggest bang for buck.
 2. **L9b-2 personality-primary mechanism (Q12) → Tier 3 (6):** the one new engine piece; unblocks the count-family without the count.
 3. **Tier 2 platoon (6):** verify the franchise path feeds handedness, then add the 6 splits.
-4. **Tier 4 Two Way gateway (3 + promotion logic).**
+4. **Tier 4 Two Way (3; pitcher-only — NO batting gateway, JK 2026-06-18):** add the 3 fielding-perf signals; do NOT build a position-player-trait gateway. The on-grant random IF/OF/C fielding-position assignment is defensive-roster only.
 5. **Tier 5 conditional (4):** add, documented as "fires only when the enrichment is logged."
 6. **Resolve the 2 reverse-flags** (Noodle Arm keep/cut; Meltdown approximation OK?) + the 2 uncertain (Sprinter proxy; Ace Exterminator join) — JK micro-rulings.
 7. **Leave the 24 correctly-dormant** pending their inputs (pitch-type, zone, difficulty, mojo-auto, stamina) — aligns with the Q1-deferred count + future enrichment work.

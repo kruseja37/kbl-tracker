@@ -7,6 +7,68 @@
 
 ## June 2026
 
+### 2026-06-18 (latest): No personality-only traits + spec-integrity fix (JK attended, R-E kickoff)
+
+**Context**: At the R-E (trait rebuild enabling pieces) kickoff, the Captain re-surfaced
+Big/Little Hack + the count-family as "personality-primary (no data proxy)" — reverting to the
+SUPERSEDED §C/§D table language and losing JK's ratified §0.2 data proxies (HR-AVG, walks-allowed).
+3rd recurrence of the soul-layer inference pattern. Root cause diagnosed: `TRAIT_MEASUREMENT_SPEC.md`
+is internally CONTRADICTORY — the ratified §0 decisions sit on top of un-updated §B/§C/§D tables that
+still say "personality-primary (no data proxy specified)" (e.g. `:125` BB Prone, `:168` Composed,
+`:172` Big Hack, `:175` Little Hack). Every fresh read risks anchoring on the stale half.
+
+**Rulings (JK, 2026-06-18 latest):**
+- **NO trait may be earned in v1 from personality ALONE.** Every earnable trait MUST have a documented
+  performance/data/ratings proxy; personality is influence (a tilt) on top. A trait with no proxy is
+  left dormant/out — never personality-only. Reason: only with a real proxy can a trait's acquisition
+  probability P be compared on the same currency as every other performance-based, personality-influenced
+  trait. (This REAFFIRMS the §0.2 data-proxy model and SUPERSEDES the "personality-primary" framing of
+  Q12/§VI.3:122/§C/§D wherever it implied a proxy-less trait. "Personality-primary" now means personality
+  is the DOMINANT influence over a real proxy floor — not the only input.)
+- **Stimulated → OUT of v1** (dormant until the mojo auto-derivation engine exists — it has no proxy today).
+- **First Pitch Slayer / First Pitch Prayer → IN for v1**, measured by **first-pitch hits/outs** (the
+  outcome on logged first-pitch PAs, `pitchesInAtBat==1`). If the user hasn't logged enough first-pitch
+  data to clear the min-sample threshold, they DON'T trigger — exactly like every other enrichment-gated
+  trait. So they are a data-proxy trait gated on opt-in enrichment, NOT personality-earnable.
+- **Player grades recompute on ANY profile change** — ratings, traits, handedness, primary/secondary
+  positions — APP-WIDE, not just for the Ace Exterminator trait. This is its own ticket (the displayed
+  grade card can currently go stale). The trait engine uses a freshly-recomputed grade so it is never stale.
+- **Charisma mirrors Resilience** in the acquisition combiner (E2); K Neglector's driver = **low Charisma
+  + Timid/Droopy** (restoring the Timid/Droopy half).
+- **Two-layer personality model CONFIRMED:** Layer 1 (universal, EVERY trait) — a positive-image trait gets a
+  high-Ambition tilt, a negative-image trait gets a low-Resilience tilt (`§VI.3:114`); Layer 2 (the image axes,
+  `§VI.3:116-122`) stacks on top. Personality is ALWAYS a tilt over a real proxy, NEVER an eligibility gate.
+- **Two Way:** tilt = **high Ambition + Egotistical** (`§VI.3:118`); ANY personality is eligible — it's earned by
+  a pitcher *hitting elite for a pitcher* (performance is the gate, not personality). [CORRECTION after the
+  reconciliation: the CODE is already right — "Ambitious" is the Layer-1 Ambition modifier (fires via
+  positive-image membership) and `IMAGE_DRIVER_SETS['Two Way (*)']=['EGOTISTICAL']` supplies Layer 2, so the code
+  already does ↑Amb + Egotistical. Only my §0.6 draft had dropped the ↑Amb half; no code change needed for Two Way.]
+- **Two Way gateway → REMOVED (JK ruling 2026-06-18 latest):** Two Way is **pitcher-only**, and a two-way player
+  **can only ever hold pitcher traits — there is NO gateway into the position-player (batting) trait pool.** This
+  REVERSES the prior model (`§VI.2:111` / TS-9: "hits elite → everyday player → eligible for batting traits"). The
+  on-grant random IF/OF/C fielding-position assignment still applies (defensive roster only). **Proxy RULED (JK):**
+  Two Way is earned by **elite HITTING for a pitcher** = high percentile of **wOBA per PA vs the PITCHER peer pool**,
+  valve-gated → naturally super-rare. **NOT fielding.** (The "fielding perf at non-primary positions" proxy belongs to
+  the distinct **Utility** trait — a position player fielding well at secondary spots.) The (C)/(IF)/(OF) label is just
+  the random fielding position assigned on grant, not a separate earning signal.
+- **Noodle Arm → CUT from v1 (dormant).** No clean reality signal exists: ARM rating alone is single-rating
+  (banned by §0.0); the OF-assist / runner-advance proxies are conflated/suspect (a low rate ≠ weak arm — could
+  just mean untested). Re-add only if throw-velocity or reliable per-throw fielder attribution is captured. Cannon
+  Arm stays (a HIGH assist rate is a defensible positive signal; only the negative end is ambiguous).
+- **Spec-over-code precedence (the recurring-miss fix):** when sources disagree, **§0.2 (latest ruling) > §VI.3 >
+  the code's `IMAGE_DRIVER_SETS`.** The code is known to be NARROWER than the spec (omits the Layer-1 universal
+  tilt; missing §0.2's added image drivers) and must be FIXED to match the spec — never the reverse. Root cause of
+  the two R-E-kickoff misses: the Captain sourced the personality data from the code instead of §VI.3 + decisions.
+
+**Action (spec-integrity, before any R-E build):** rewrite `TRAIT_MEASUREMENT_SPEC.md` so the §0 rulings
+are folded INTO each trait's row and the stale "personality-primary / no data proxy" language is DELETED —
+ONE consistent source, no contradiction left to misread. Verify every earnable trait names its proxy.
+
+**Process lessons** → written to the SESSION_RULES pending pen (Write-First): (1) when the spec is
+internally inconsistent, treat the ratified/latest section as authoritative AND purge the superseded text
+in the same pass — never present stale framing as the measurement; (2) when JK ratifies a decision that
+supersedes existing spec text, delete/rewrite the superseded text in the same pass.
+
 ### 2026-06-18 (later): L9b trait-from-reality MEASUREMENT model — RATIFIED (JK attended)
 
 **Context**: FINDING-150 found the trait detection scope was wrong; JK demanded "100% certain

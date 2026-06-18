@@ -430,6 +430,27 @@ agent edits the ratified rules without JK. (JK ruling 2026-06-14.)
   the revised spec; we need to be 100% certain of how we are measuring these." The per-trait measurement was
   in fact scattered across 4 sources and underspecified — FINDING-150 follow-up.)
 
+- **Ratified-section-wins + purge-on-supersede (JK correction 2026-06-18, R-E kickoff):** When the
+  authoritative spec is internally inconsistent — a newer RATIFIED decisions layer (e.g. §0) sitting over
+  older un-updated tables (e.g. §B/§C/§D) — always treat the ratified/latest ruling as authoritative AND
+  immediately flag and purge the superseded text; never read the stale table and present its framing as
+  the measurement. AND: when JK ratifies a decision that supersedes existing spec text, DELETE/rewrite the
+  superseded text IN THE SAME PASS (fold the ruling into the per-trait/per-item rows) — do not leave a thin
+  decisions layer over contradictory tables. Because an un-purged superseded layer is the exact mechanism by
+  which a ratified decision gets lost on the next fresh read. (Origin: at R-E kickoff the Captain re-surfaced
+  "personality-primary (no data proxy)" for Big/Little Hack + the count-family from the stale
+  `TRAIT_MEASUREMENT_SPEC.md` §C/§D rows, losing JK's ratified §0.2 HR-AVG/walks-allowed data proxies — the
+  3rd recurrence of the soul-layer inference pattern, this time from reading the stale HALF of a
+  self-contradictory spec rather than from raw inference.)
+
+- **No personality-only soul-layer metrics (JK ruling 2026-06-18 — product canon, also a build guard):**
+  No earnable trait (and by extension no soul-layer metric that must be COMPARED to peers) may be driven by
+  personality ALONE in v1. Every one must have a documented performance/data/ratings proxy, with personality
+  as influence on top; a metric with no proxy is left dormant/out, never personality-only. Because a
+  proxy-less metric cannot be put on the same comparison currency (P / percentile) as the performance-based,
+  personality-influenced ones — so it can never be ranked or displaced fairly. (Origin: JK at R-E kickoff,
+  correcting a personality-primary-only framing the Captain proposed for the count-family/Big-Little-Hack.)
+
 ### Pending cleanup (not a rule — a tracked repo action)
 - **spec-assembler duplicate:** two divergent copies exist —
   `.claude/skills/spec-assembler/SKILL.md` (511 lines, CANONICAL per JK
