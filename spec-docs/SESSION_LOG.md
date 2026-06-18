@@ -5206,3 +5206,20 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   OPEN PENDING-JK; AUTONOMOUS_RUN_LOG; this log). WAITING_ON_JK `[ticket:L9b-1]` RESOLVED. Transient audit prompt removed.
   trackerDb v21; nothing pushed.
 - **NEXT = L9b-2** (pure acquisition engine; model read from §VI.0/.1/.3 this session). Loop continues under AUTH-4.
+
+## 2026-06-18 (AUTH-4 overnight, host session) — L9b-2 acquisition engine Codex-built → Opus-audited → COMMITTED `f616373a`
+- Ran a 5-reader recon workflow (`wf_c4a097eb-838`) grounding every seam, then wrote the L9b-2 contract into
+  PROMPT_CONTRACTS.md (Contract Readiness Rule) and dispatched Codex 5.5|high via `codex exec` (background). Proper
+  triangle (Codex built, Opus audited).
+- NEW `src/engines/traitAcquisition.ts` (+ 24-test file): `computeTraitAcquisition` → trait-change PROPOSALS via the
+  VI.0 multiplicative combiner (percentile × ambition/resilience/image/morale/roster factors), min-sample valve, VI.2
+  eligibility, gain/lose hysteresis dead-band, no-offsetting-pair + 2-trait-cap weakest displacement. `TRAIT_OPPOSITES`
+  (14 pairs) + VI.3 image sets use canonical names; module-load guard. PURE, build-dark.
+- Opus independent audit: combiner directions + hysteresis + reconciliation hand-verified vs the 24 tests; removed one
+  dead import (`computeTraitRealityScore`, unused) + re-verified. Host gate: tsc-0 / build-0 / focused 24/24 / full suite
+  **7,465 tests, 7,463 pass / 2 characterized fail**, ZERO new reds. VERDICT VERIFIED → auto-committed `f616373a`.
+- Docs updated (CURRENT_STATE header + RIGHT NOW + SUITE BASELINE + OPEN PENDING-JK; AUTONOMOUS_RUN_LOG; PROMPT_CONTRACTS
+  status; this log). DEFAULTS-TAKEN flagged for JK: TRAIT_OPPOSITES (new trait-asset data) + personality-primary
+  thin-signal exception deferred. trackerDb v21; nothing pushed.
+- **NEXT = L9b-3** (grant/write-back — the FIRST real trait writer; persistence class, audit hardest; JK store fork
+  default=reuse `franchiseRatingsOverlays`). Loop continues under AUTH-4.

@@ -1,8 +1,14 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-18 (**L9b-1 VERIFIED + COMMITTED `398533d1` → NOW L9b-2 (acquisition)** [AUTH-4
-overnight; a fresh session does the session-start reads, RESTATEs, and PROCEEDs at L9b-2 under AUTH-4 WITHOUT waiting for
-JK — AUTH-4 is the standing go]. L9b-1 = the PURE trait-from-reality SCORER (TS-2): NEW `src/engines/percentile.ts`
+**Last Updated:** 2026-06-18 (**L9b-2 VERIFIED + COMMITTED `f616373a` → NOW L9b-3 (grant/write-back)** [AUTH-4
+overnight; a fresh session does the session-start reads, RESTATEs, and PROCEEDs at L9b-3 under AUTH-4 WITHOUT waiting for
+JK — AUTH-4 is the standing go]. **L9b-2** = the PURE acquisition engine `src/engines/traitAcquisition.ts` (the VI.0
+MULTIPLICATIVE combiner `P = realityPercentile × ambition/resilience/image/morale/roster factors` + gain-high/lose-low
+hysteresis dead-band + no-offsetting-pair + 2-trait-cap strength-ranked displacement; PROPOSALS only, build-dark; Codex
+5.5-built → Opus-4.8-independently-audited **VERIFIED**; 24 tests; tsc-0 / build-0 / full suite **7,465/428, 7,463 pass /
+2 characterized fail**, ZERO new reds; trackerDb stays **v21**, no store). **DEFAULTS-TAKEN flagged for JK:**
+`TRAIT_OPPOSITES` (14 pairs) authored as new trait-asset data + the VI.3:122 personality-primary thin-signal exception
+DEFERRED (valve dominates v1). *(L9b-1 detail preserved below.)* L9b-1 = the PURE trait-from-reality SCORER (TS-2): NEW `src/engines/percentile.ts`
 (getPercentile/getValueAtPercentile lifted verbatim out of salaryCalculator, math-identical) + salaryCalculator
 re-imports them + NEW `src/engines/traitRealityScorer.ts` (role-eligibility VI.2 + min-sample valve VI.1 +
 scaledThreshold scaling + percentile strength score; PURE, no IndexedDB/mutation) + 19-test file. **HOST GATE PASSED**
@@ -60,6 +66,28 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## RIGHT NOW
 
+- **✅ L9b-2 VERIFIED + COMMITTED `f616373a` (2026-06-18, AUTH-4 overnight) — the PURE trait-ACQUISITION engine.** L9b
+  SPLIT: L9b-1 scorer (DONE `398533d1`) · **L9b-2** acquisition (DONE, this entry) · **L9b-3** grant/write-back (NEXT —
+  persistence, audit hardest). NEW `src/engines/traitAcquisition.ts` (+ 24-test file): `computeTraitAcquisition` consumes
+  L9b-1 reality scores → trait-change PROPOSALS via the SPEC-FIXED MULTIPLICATIVE combiner `P = realityPercentile ×
+  ambitionTilt × resilienceTilt × imageAxisTilt × moraleFactor × rosterRoleFactor` (all factors neutral-at-1.0; §16
+  sim-tuned magnitudes in `TRAIT_ACQUISITION_TUNING`). Gates: min-sample valve (VI.1 — thin/null score → no proposal),
+  role-eligibility (VI.2, reuses L9b-1 `isTraitEligibleForRole`/`traitRole`), gain-high(≥0.75)/lose-low(≤0.35) hysteresis
+  dead-band; reconciliation = no-offsetting-pair (held opposite blocks gain / both-gain keeps higher-P) + 2-trait-cap
+  strength-ranked weakest displacement (strict-exceed; a LOSE frees a slot). VI.3 image-valence + driver sets + the new
+  `TRAIT_OPPOSITES` (14 pairs) use CANONICAL `TRAIT_PRICING` names (Two Way triplet, K Neglector); a module-load guard
+  asserts every opposite is canonical. PURE — no IndexedDB/mutation/Date.now/Math.random; no production caller (L9b-3
+  wires it). **Codex 5.5-built → Opus-4.8-independently-audited VERIFIED** (tsc-0 / build-0 / focused 24/24 / full suite
+  7,465/428 7,463 pass / 2 characterized fail, ZERO new reds; combiner directions + hysteresis + reconciliation
+  hand-verified vs tests; one dead import removed by the auditor + re-verified). trackerDb stays **v21** (pure, no store).
+  **DEFAULTS-TAKEN (AUTH-4, flagged for JK):** (1) `TRAIT_OPPOSITES` 14-pair list authored here = NEW trait-asset data;
+  (2) the VI.3:122 "personality-PRIMARY where signal thin" exception (Stimulated / Gets Ahead / Falls Behind / Big Hack /
+  Little Hack) NOT implemented v1 — the min-sample valve's thin→dormant default dominates (conservative; never wrong-fires);
+  (3) factor curves centered at neutral-50→1.0; (4) displacement = weakest-held strict-exceed; (5) absent
+  morale/modifiers/role → neutral. **➡ NEXT = L9b-3** (grant/write-back — the FIRST real trait writer: L8b-pattern dark
+  flag-gated hook + GameContext reconstructor + PENDING trait rows + §11 trait-confirm transform writing `trait1`/`trait2`
+  via `saveFranchisePlayer`; PERSISTENCE class → audit HARDEST; JK store fork in WAITING_ON_JK [default=reuse
+  `franchiseRatingsOverlays`]). *(Prior L9b-1 entry below.)*
 - **✅ L9b-1 VERIFIED + COMMITTED `398533d1` (2026-06-18, AUTH-4 overnight, host session) — the PURE trait-from-reality
   SCORER (TS-2).** L9b SPLIT (per the recon): **L9b-1** scorer (DONE, committed) · **L9b-2** acquisition (NEXT) · **L9b-3**
   grant/write-back (persistence, audit hardest). Committed 4 files (`398533d1`, branch codex/franchise-v1-next):
@@ -506,7 +534,11 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## SUITE BASELINE
 
-**7,441 tests / 427 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L9b-1** commit
+**7,465 tests / 428 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L9b-2** commit
+`f616373a`: **7,463 pass / 2 fail** — the 2 = EXACTLY the characterized baseline (`wpaRuntimeBoundary` +
+`franchiseManualSmokeFixture`, confirmed via FAIL-line grep); the order-flakes did NOT surface this run. **ZERO new reds**
+(+24 tests / +1 file = exactly L9b-2's `traitAcquisition.test.ts`; the engine is pure/build-dark). trackerDb **v21**
+(L9b-2 added no store). *(Prior baseline retained below for the arc trail.)* **7,441 tests / 427 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L9b-1** commit
 `398533d1`: **7,437 pass / 4 fail**. The 4 = the 2 FIXED characterized fails (`wpaRuntimeBoundary` +
 `franchiseManualSmokeFixture` — names personally confirmed via the FAIL-line grep) **+ 2 order-flakes**
 (`GameTrackerLaunchState` + **newly-surfaced `EliminationTeamHub`**), BOTH of which **PASS SOLO** (9/9 and 6/6) → they are
@@ -755,6 +787,14 @@ solo; non-deterministic full-suite order/worker-pool sensitivity [shared fake-In
 surfaced when L9b-1 added `traitRealityScorer.test.ts`, exactly the L7d-1/AwardsWatchlist pattern).
 **`Workhorse` trait role (L9b-1 DEFAULT-TAKEN):** classified PITCHER (staminaModifier, unlisted in VI.2) → confirm or
 re-classify; affects only which players are eligible to earn it (L9b-2+), not the scorer math.
+**L9b-2 DEFAULTS-TAKEN (AUTH-4, flagged):** (1) **`TRAIT_OPPOSITES`** — a NEW 14-pair canonical positive↔negative trait
+pairing list authored in `traitAcquisition.ts` (none existed in code/spec; derived from VI.3 +/− image groupings + the 2
+SMB4 mutual-exclusion examples). Touches the frozen trait system → JK review (add/remove pairs?). (2) **personality-PRIMARY
+thin-signal exception** (VI.3:122 — Stimulated / Gets Ahead / Falls Behind / Big Hack / Little Hack should let personality
+drive even when the measured signal is thin) is NOT implemented in v1; the min-sample valve's thin→dormant default
+dominates (conservative). JK: confirm deferral or prioritize. (3) sim-tuned magnitudes in `TRAIT_ACQUISITION_TUNING`
+(swings 0.25–0.35, gain 0.75 / lose 0.35) are §16 Simulation-Gate placeholders. (4) the 2-trait-cap displacement can
+emit multiple gains all referencing the same weakest-held trait — L9b-3 (atomic write) must pick one.
 **NEW (T10): backupRestore.ts stale-schema hardening** — the `trackerStores` registry is pinned at
 `version: 12` and omits `franchiseTrueValueRows` (v13) / `franchiseDesignationRows` (v14) /
 `franchiseSeasonLedgerRows` (v15); those silently drop on backup/restore and `getSchemaIssues` won't flag the

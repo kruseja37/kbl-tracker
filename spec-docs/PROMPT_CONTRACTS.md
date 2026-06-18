@@ -9950,3 +9950,89 @@ Use high reasoning effort. Think step-by-step. Builder ≠ auditor — re-audite
 Use high reasoning effort. Think step-by-step. Builder ≠ auditor — re-audited by Opus HARDEST on the no-version/no-pin claim (the pin stays green untouched), the OF-arm sourced from real FieldingEvent rows (not the dead gameStats pattern), the injury helper pure read-only, additive optional fields, no new store.
 
 **Status:** COMMITTED `acce899c` (2026-06-18, AUTH-4 overnight) → **L9a effectively COMPLETE**. Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / build 0 / focused 8 tests (OF-arm cross-game accumulation + injury derive incl. undone-excluded); full suite 7,420 pass / 2 characterized fail (names confirmed), ZERO new reds. Both parts purely additive — OF-arm from real `FieldingEvent` rows (not dead `gameStats.*`), injury pure read-only; `TRACKER_DB_VERSION` 21 / eventLog `DB_VERSION` 3 / NO new store / `franchiseSeasonLedgerStorage` pin GREEN untouched / trackerDb·backup·sync byte-unchanged. LOW: aggregator test-env fallback guards (harmless). Browser-pending (#20). **NOW = L9b** (trait-from-reality engine).
+
+---
+
+## L9b-1 — pure trait-from-reality SCORER (TS-2)  [RETRO-LOGGED — built sandbox-direct by Opus, host-gated + Codex-audited]
+
+**ROUTE:** Opus 4.8 (built) → Codex 5.5 | high (independent audit). **Status:** VERIFIED + COMMITTED `398533d1` (code) + `741f9fc1` (docs), 2026-06-18 AUTH-4. NEW `src/engines/percentile.ts` (verbatim lift of getPercentile/getValueAtPercentile out of salaryCalculator) + MOD `salaryCalculator.ts` (re-import) + NEW `src/engines/traitRealityScorer.ts` (`computeTraitRealityScore` → realityPercentile, role-eligibility VI.2 + min-sample valve VI.1 + scaledThreshold) + 19-test file. Host gate: tsc 0 / build 0 / suite 7,441 → 7,437 pass / 4 fail (2 characterized + 2 solo-passing order-flakes), 121/121 salary-family. Codex independent audit (decorrelated AST check: 28/39/7/1=75) → VERDICT VERIFIED, no real defect. DEFAULT-TAKEN flagged: Workhorse→PITCHER.
+
+---
+
+## L9b-2 — pure trait-ACQUISITION engine (VI.0 combiner: P = percentile × personality × morale)
+
+**ROUTE:** Codex 5.5 | high reasoning effort (builder) → Opus 4.8 independent audit. Branch `codex/franchise-v1-next`, work on main branch (no worktree), commit never push.
+
+You are the L9b-2 BUILDER (Codex 5.5 | high reasoning effort).
+
+**GOAL:** Add ONE new PURE, build-dark engine `src/engines/traitAcquisition.ts` (+ a vitest file) that turns L9b-1 per-trait reality scores into trait-change PROPOSALS via the spec-fixed multiplicative combiner, gated by hysteresis, filtered by the no-offsetting-pair rule, and annotated with 2-trait-cap strength-ranked displacement. PROPOSALS ONLY — no IndexedDB, no mutation, no write-back, no production caller (L9b-3 wires it). It is the SECOND of three L9b pieces.
+
+**SOURCE OF TRUTH:** spec-docs/TRAIT_SIGNAL_CERTIFICATION.md §VI.0/.1/.2/.3 + spec-docs/DECISIONS_LOG.md TS-1/TS-5/TS-12/TS-13 (2026-06-16). MULTIPLICATIVE combiner is SPEC-FIXED; EVERY magnitude (factor swings, hysteresis thresholds, displacement weights) is §16 SIM-TUNED placeholder.
+
+**CONSTRAINTS:**
+- CREATE ONLY: `src/engines/traitAcquisition.ts` + `src/engines/__tests__/traitAcquisition.test.ts`.
+- Do NOT touch: `traitRealityScorer.ts`, `percentile.ts`, `salaryCalculator.ts`, `traitInteractionMatrix.ts`, `traitPricing.ts`, `masterMoraleMatrix.ts`, `franchiseMoraleState.ts`, any storage/UI, trackerDb (stays v21). No new IndexedDB. No `Date.now`/`Math.random`/`new Date`.
+- CONSUME from L9b-1 (import, never re-implement): `computeTraitRealityScore`, `TraitRealityScore`, `isTraitEligibleForRole`, `traitRole`, `CANONICAL_TRAIT_NAMES`, `PlayerRole` from `./traitRealityScorer`. Reuse `normalizePersonality` + `CanonicalPersonality` from `./masterMoraleMatrix` (PURE — safe to import). Type modifiers as `HiddenModifiers` from `../types/game`.
+- Pure/synchronous. The engine ACCEPTS already-resolved inputs (the caller/L9b-3 resolves morale ledger, EP1 reserve, peer pools, and runs the scorer); L9b-2 does NOT query storage.
+
+**INPUT / OUTPUT CONTRACT (define exactly):**
+```
+type RosterRole = 'bench' | 'starter' | 'unknown';
+type TraitValence = 'positive' | 'negative' | 'neutral';
+interface HeldTrait { traitName: string; strength: number; }   // strength = last realityPercentile 0..1 (default 0.5 if unknown)
+interface TraitCandidate { traitName: string; score: TraitRealityScore; }  // score from L9b-1
+interface TraitAcquisitionInput {
+  playerRole: PlayerRole;
+  personality: string;                 // raw Player.personality; normalize internally
+  modifiers?: HiddenModifiers;         // default NEUTRAL (all 50) when absent
+  currentMorale?: number;              // 0..99; default 50 (dark-safe) when absent; clamp 0..99
+  rosterRole?: RosterRole;             // default 'unknown'
+  heldTraits: readonly HeldTrait[];    // current trait1/trait2 (≤2)
+  candidates: readonly TraitCandidate[];
+}
+interface TraitChangeProposal {
+  traitName: string; valence: 'gain' | 'lose'; imageValence: TraitValence;
+  probability: number;                 // clamped 0..1
+  realityPercentile: number; factors: { ambitionTilt:number; resilienceTilt:number; imageAxisTilt:number; moraleFactor:number; rosterRoleFactor:number };
+  displaces?: string;                  // gain-only, when player at the 2-trait cap
+}
+interface SkippedTrait { traitName: string; reason: 'ineligible_role'|'unknown_trait'|'thin_sample'|'thin_peer_pool'|'dead_band'|'offsetting_pair_held'|'cap_no_displacement'; }
+interface TraitAcquisitionResult { proposals: TraitChangeProposal[]; skipped: SkippedTrait[]; }
+export function computeTraitAcquisition(input: TraitAcquisitionInput, tuning?: TraitAcquisitionTuning): TraitAcquisitionResult
+```
+
+**ALGORITHM (per candidate, then a reconciliation pass):**
+1. If `score.sufficient !== true` or `score.realityPercentile == null` → skip with the matching reason (`score.sufficiency`). The min-sample valve (VI.1) means thin/ineligible → NO proposal. (DEFAULT-TAKEN: the VI.3:122 "personality-PRIMARY where signal thin" exception for 5 named traits is NOT implemented in v1 — documented + flagged; the valve's "thin→dormant" default is the conservative behavior.)
+2. `imageValence` = positive if the trait is in any VI.3 `+` list, negative if in any `−` list, else neutral. (Big-game axis is positive-only; no-image + unnamed traits = neutral.)
+3. `ambitionTilt` = positive-valence ? `1 + centered(ambition)*ambitionSwing` : 1. `resilienceTilt` = negative-valence ? `1 - centered(resilience)*resilienceSwing` : 1.  (`centered(v) = (clamp(v,0,100)-50)/50`.)
+4. `imageAxisTilt` = `(normalizedPersonality ∈ trait's image-driver set) ? 1 + imageSwing : 1`. Driver sets are CANONICAL personalities only (flavor words map: Disciplined→TOUGH, Composed→{TOUGH,COMPETITIVE}; the modifier-words Ambitious/Volatile/Consistent are handled by the universal layer, NOT image membership).
+5. `moraleFactor` = positive ? `1 + centered(morale)*moraleSwing` : negative ? `1 - centered(morale)*moraleSwing` : 1.
+6. `rosterRoleFactor` = (traitName ∈ {Pinch Perfect, Utility}) ? (bench → `1+rosterSwing` / starter → `1-rosterSwing` / unknown → 1) : 1.
+7. `probability = clamp01(realityPercentile × ambitionTilt × resilienceTilt × imageAxisTilt × moraleFactor × rosterRoleFactor)`.
+8. HYSTERESIS: held = traitName ∈ heldTraits. If NOT held && probability ≥ `gainThreshold` → candidate GAIN. If held && probability ≤ `loseThreshold` → candidate LOSE. Else skip `dead_band`.
+9. RECONCILIATION over the gain candidates: (a) no-offsetting-pair — drop a GAIN whose opposite (per `TRAIT_OPPOSITES`) is currently held → skip `offsetting_pair_held`; if BOTH members of a pair are gain candidates, keep only the higher-probability one (drop the other as `offsetting_pair_held`). (b) 2-trait-cap displacement — if `heldTraits.length >= 2` (after removing any LOSE-proposed held traits), a surviving GAIN must `displaces` the weakest held trait (lowest `strength`) AND only if `probability > weakestHeld.strength`; else skip `cap_no_displacement`. (If a slot is freed by a LOSE proposal, no displacement needed.)
+
+**TUNING (export `TRAIT_ACQUISITION_TUNING`, all §16 sim-tuned placeholders, shape-locked):**
+`{ ambitionSwing: 0.35, resilienceSwing: 0.35, imageSwing: 0.25, moraleSwing: 0.30, rosterSwing: 0.30, gainThreshold: 0.75, loseThreshold: 0.35 }` (mirror the `TRAIT_REALITY_SCORER_TUNING` exported-const pattern; 0.35 swings echo the existing morale-matrix ambition/resilience swing).
+
+**TRAIT_OPPOSITES (export; DEFAULT-TAKEN — derived from VI.3 +/− groupings + the 2 SMB4 mutual-exclusion examples; CANONICAL names; flagged to JK as new trait-asset data):** First Pitch Slayer↔First Pitch Prayer · Cannon Arm↔Noodle Arm · Clutch↔Choker · RBI Hero↔RBI Zero · Magic Hands↔Butter Fingers · Tough Out↔Whiffer · Big Hack↔Little Hack · Sprinter↔Slow Poke · Base Rounder↔Base Jogger · Stealer↔Bad Jumps · Consistent↔Volatile · Durable↔Injury Prone · Gets Ahead↔Falls Behind · K Collector↔K Neglector. (Symmetric map; names MUST be in CANONICAL_TRAIT_NAMES — add a test asserting that.)
+
+**VI.3 IMAGE-DRIVER + VALENCE LISTS (reconcile to canonical: Two Way → Two Way (C)/(IF)/(OF); K Neglecter → K Neglector):**
+- Composure + {TOUGH,COMPETITIVE}: Clutch, RBI Hero, Rally Starter, Pinch Perfect, Magic Hands, Rally Stopper. − {TIMID,DROOPY}: Choker, RBI Zero, Butter Fingers, Wild Thrower, Surrounded, Meltdown.
+- Hustle + {COMPETITIVE,TOUGH}: Stealer, Sprinter, Base Rounder. − {RELAXED,DROOPY}: Bad Jumps, Slow Poke, Base Jogger.
+- Big-game (positive only): Ace Exterminator {COMPETITIVE,EGOTISTICAL}, K Collector {COMPETITIVE,EGOTISTICAL}, Two Way (C)/(IF)/(OF) {EGOTISTICAL}, Stimulated {TOUGH,EGOTISTICAL}.
+- Approach: Tough Out {TOUGH}, Bunter {TOUGH} (positive); Whiffer {EGOTISTICAL} (negative); Consistent (positive, no canonical driver → universal only); Volatile (negative, universal only).
+- No-image (neutral, universal-only, imageAxisTilt always 1): CON vs LHP, CON vs RHP, POW vs LHP, POW vs RHP, Specialist, Reverse Splits, Pick Officer, K Neglector, Utility.
+- Any canonical trait NOT named above → neutral valence, no image driver.
+
+**DEFAULTS-TAKEN (AUTH-4; log all in AUTONOMOUS_RUN_LOG.md, flag for JK):** (1) personality-primary thin-signal exception NOT implemented v1 (valve dominates). (2) TRAIT_OPPOSITES list authored here (new trait-asset data). (3) morale/factor curves centered at neutral-50 → 1.0, sim-tuned. (4) displacement = weakest-held-by-strength, strict-exceed. (5) unknown rosterRole/absent morale/absent modifiers → neutral (1.0 / 50 / all-50). (6) lose-side gets the symmetric factors (same multiplicative product; a low probability ⇒ lose).
+
+**TESTS (≥18):** combiner math (neutral inputs → P==realityPercentile); each factor moves P the right direction; ambition only affects positive-valence, resilience only negative; image membership boost; roster-role only Pinch Perfect/Utility; hysteresis gain/lose/dead-band; null/thin score → skip with reason; no-offsetting-pair (held opposite blocks gain; both-gain keeps higher-P); 2-trait-cap displacement (weakest displaced, strict-exceed, freed-slot-by-lose); TRAIT_OPPOSITES names ⊂ CANONICAL_TRAIT_NAMES; clamp01.
+
+**VERIFICATION:** `NODE_ENV= npx tsc --noEmit -p tsconfig.app.json` (exit 0); `NODE_ENV= npx vitest run src/engines/__tests__/traitAcquisition.test.ts` (all green); grep proves NO production importer (build-dark) + no IndexedDB/Date.now/Math.random import.
+
+**FORMAT:** 1. Files changed (paths + count + passing-test count). 2. Each change w/ the VI.0/VI.3/TS-* ref. 3. Verification output (paste). 4. "L9b-2 complete" OR "BLOCKED: [reason]".
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — Opus re-audits independently (re-run tsc/tests, verify the combiner direction per factor, the hysteresis dead-band, the offsetting-pair + displacement reconciliation, purity/build-dark, and that the VI.3 lists + TRAIT_OPPOSITES use canonical names).
+
+**Status:** VERIFIED + COMMITTED `f616373a` (2026-06-18, AUTH-4 overnight). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / build 0 / focused 24/24 / full suite 7,465 tests, 7,463 pass / 2 characterized fail, ZERO new reds. Combiner directions + hysteresis dead-band + offsetting-pair/displacement reconciliation hand-verified vs tests; `TRAIT_OPPOSITES` + VI.3 sets canonical (module-load guard). Auditor removed one dead import (`computeTraitRealityScore`, unused) + re-verified. Pure/build-dark; trackerDb v21. DEFAULTS-TAKEN flagged for JK: TRAIT_OPPOSITES (new trait-asset data) + personality-primary thin-signal exception deferred. NEXT = L9b-3 (grant/write-back).

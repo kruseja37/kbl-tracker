@@ -1201,3 +1201,41 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   gain-high/lose-low HYSTERESIS (two thresholds); no-offsetting-pos/neg-pair; 2-trait-cap strength-ranked displacement
   SIGNAL (the actual write is L9b-3). PROPOSALS only — pure, no IndexedDB, no mutation, build-dark. Then L9b-3
   (grant/write-back — persistence, audit hardest; the FIRST real trait writer). The matrix stays FROZEN SMB4-asset data.
+
+- **2026-06-18 (AUTH-4, overnight, host session) — L9b-2 (pure trait-ACQUISITION engine) Codex-BUILT → Opus-AUDITED
+  VERIFIED → COMMITTED `f616373a`.** Proper triangle restored (Codex built, Opus audited — vs the L9b-1 inversion).
+  Flow: Captain ran a 5-reader recon workflow (`wf_c4a097eb-838`, ~434K tokens) grounding every seam (personality enum +
+  hidden modifiers, player-morale access, EP1 roster-role, reusable tilt tables, acquisition-spec shape) → wrote the full
+  L9b-2 contract into `PROMPT_CONTRACTS.md` (Contract Readiness Rule) → dispatched Codex 5.5|high via `codex exec`
+  (background) → independently audited the diff + re-ran every gate on the host.
+  **BUILT:** NEW `src/engines/traitAcquisition.ts` (+ 24-test file). `computeTraitAcquisition(input, tuning?)` consumes
+  L9b-1 `TraitRealityScore`s and emits `{proposals, skipped}`. Combiner (VI.0 SPEC-FIXED multiplicative):
+  `P = clamp01(realityPercentile × ambitionTilt × resilienceTilt × imageAxisTilt × moraleFactor × rosterRoleFactor)`,
+  every factor neutral-at-1.0, §16 magnitudes in `TRAIT_ACQUISITION_TUNING` (ambition/resilience 0.35, image 0.25,
+  morale/roster 0.30, gain 0.75 / lose 0.35). `centered(v)=(clamp(v,0,100)-50)/50`. Ambition only tilts POSITIVE-valence
+  traits, resilience only NEGATIVE (low-resilience↑ negative); morale by valence; roster-role only Pinch Perfect/Utility
+  (bench↑/starter↓). Gates: min-sample valve (thin/null score → skip w/ sufficiency reason), VI.2 role-eligibility (reuses
+  L9b-1 `isTraitEligibleForRole`/`traitRole`), gain≥/lose≤ hysteresis dead-band. Reconciliation: no-offsetting-pair (held
+  opposite blocks gain; both-gain keeps higher-P) + 2-trait-cap weakest-held strict-exceed displacement (a LOSE frees a
+  slot). VI.3 image valence/driver sets + `TRAIT_OPPOSITES` (14 pairs) use canonical names (Two Way triplet, K Neglector);
+  a module-load guard throws on a non-canonical opposite. PURE — no IndexedDB/mutation/Date.now/Math.random; build-dark
+  (grep: no production importer).
+  **AUDIT (Opus, independent):** read both files; combiner directions, hysteresis dead-band, and all reconciliation
+  branches hand-verified against the 24 tests (ambitionTilt 1.35/0.65, resilienceTilt 1.35/0.65, imageAxisTilt 1.25,
+  roster 1.3/0.7; displacement weakest+strict-exceed; freed-slot-by-lose). Found ONE nit — `computeTraitRealityScore`
+  imported but never called (the engine takes pre-computed `candidate.score`; tsc tolerated it because `tsconfig.app.json`
+  `noUnusedLocals:false`). Removed the dead import (zero-risk mechanical, below the risk line) + re-verified. Host gate:
+  tsc-0 / build-0 / focused 24/24 / **full suite 7,465 tests, 7,463 pass / 2 characterized fail** (`wpaRuntimeBoundary` +
+  `franchiseManualSmokeFixture`), ZERO new reds (+24 tests / +1 file). **VERDICT VERIFIED.** Auto-committed `f616373a`.
+  trackerDb stays v21; nothing pushed. `.codex-l9b2-build-prompt.txt` transient removed.
+  **DEFAULTS-TAKEN (flagged for JK):** (1) `TRAIT_OPPOSITES` 14-pair list = NEW trait-asset data (none existed; derived
+  from VI.3 +/− groupings + the 2 SMB4 examples) — JK to confirm pairs. (2) VI.3:122 personality-PRIMARY thin-signal
+  exception (5 named traits) NOT implemented v1 — valve dominates (conservative). (3) factor curves centered neutral-50→1.0.
+  (4) displacement weakest-held strict-exceed; can emit multiple gains vs the same weakest → L9b-3 picks one atomically.
+  (5) absent morale/modifiers/role → neutral. (6) `resolveImagePersonalities` special-cases the spec driver word 'Composed'
+  → {TOUGH,COMPETITIVE} (harmless; no real `Player.personality` is 'Composed').
+  **NOW = L9b-3** — grant/write-back (the FIRST real trait writer): mirror L8b's default-OFF Phase-2-flag-gated dark hook +
+  a GameContext reconstructor (populate the event flags `buildGameContext` leaves undefined → count `activeTraitNames`
+  fires per persisted AtBat) + PENDING trait rows + a §11 trait-confirm transform writing `trait1`/`trait2` (2-slot
+  displacement, ATOMIC) onto the franchise Player via `saveFranchisePlayer`. PERSISTENCE class → audit HARDEST. **JK store
+  fork (WAITING_ON_JK, default=reuse `franchiseRatingsOverlays` v21, no version bump).** The matrix stays FROZEN SMB4-asset data.
