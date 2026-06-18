@@ -868,3 +868,19 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   solo-pass confirmed + clean on rerun; the order-flake family is non-deterministic.) Auto-committed. **NOW = L2c**
   (two-tier confirmation infra — confirm model + apply-confirm logic, pure/dark; the live confirm UI/flow deferred to
   L8/L9b + post-D13). trackerDb v21; nothing pushed.
+
+- **2026-06-18 (AUTH-4, HOST RESUME — overnight) — L2c COMMITTED `a77e0ed5` → L2 COMPLETE.** The §11 two-tier
+  confirmation infra for ratings overlays (pure/dark). Captain drafted the contract (PROMPT_CONTRACTS §L2c) → dispatched
+  **Codex 5.5 | high** → Opus independently audited. NEW `src/engines/ratingsOverlayConfirmation.ts` + a 10-test file:
+  `buildOverlayConfirmationRequest` (SMB4-console edit instruction + resulting rating) + `confirmOverlay`
+  (`pending`→`confirmed`, idempotent + non-mutating; the store put is deferred wiring) + `buildExpiryRevertReminder`
+  (temporary console-revert text) + `summarizeOverlayChangeLog` (deterministic-ordered per-team change log, DSTACK L8).
+  Morale excluded (auto/logged §11:202); trait confirmation (L9b) reuses the pattern. Pure (single type-only import);
+  live confirm UI/flow deferred post-D13. AUDIT VERIFIED: tsc 0 / build 0 / 10 focused tests; full suite **7,384 pass / 2
+  characterized fail**, ZERO new reds (+10 tests / +1 file); frozen engines byte-unchanged; pure. Auto-committed.
+  **⇒ L2 (franchise-instance mutable ratings-overlay layer) COMPLETE: L2a store `6fdeba11` · L2b merge `e8ec0908` · L2c
+  confirm `a77e0ed5`.** **NOW = L8** (ratings development — the first real WRITER through L2: every-20%-of-season
+  checkpoint sweep; per-player delta = performance × the §8 `fanMoraleDampener` [L5a, CONSUMED not rebuilt] × personality
+  × Ambition(up)/Resilience(down); proposes overlays via the L2 confirm with a per-team console change log; RATINGS ONLY,
+  never traits). Likely SPLIT L8a (pure dev-math) / L8b (checkpoint cadence + writer wiring). trackerDb v21; nothing pushed.
+  **CONTEXT-HANDOFF written → a fresh session continues at L8 with full context.**

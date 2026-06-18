@@ -1,9 +1,10 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-18 (**AUTH-4 ACTIVE RUN (overnight, past midnight) — L7 COMPLETE + L2a `6fdeba11` + L2b
-`e8ec0908` COMMITTED; NOW L2c** [fresh session resumed at the L7c handoff, did the session-start reads + RESTATE, JK
-confirmed AUTH-4 autonomous, then built→audited→committed L7c/L7d-1/L7d-2 + L7d-3 doc → L7 COMPLETE → then L2a (dark
-overlay store) + L2b (overlay merge math), the L2 layer L8 depends on]. trackerDb host-state v20→**v21** (L2a); KBL_BACKUP_VERSION stays **2**. ⚠ NEWLY-OBSERVED order-flake
+**Last Updated:** 2026-06-18 (**SESSION ENDED — CONTEXT-HANDOFF → L8** [AUTH-4 overnight run; clean boundary after **L7
+COMPLETE + L2 COMPLETE**; a fresh session does the session-start reads, RESTATEs, and PROCEEDs at L8 under AUTH-4 WITHOUT
+waiting for JK — AUTH-4 is the standing go]. This run built→audited→committed, each Codex 5.5-built → Opus 4.8-audited:
+**L7 COMPLETE** (L7c `886d1dce` · L7d-1 `f61dcae0` · L7d-2 `aec5db99` · L7d-3 doc) + **L2 COMPLETE** (L2a store
+`6fdeba11` · L2b merge `e8ec0908` · L2c confirm `a77e0ed5`). trackerDb host-state v20→**v21** (L2a); KBL_BACKUP_VERSION stays **2**. ⚠ NEWLY-OBSERVED order-flake
 `AwardsWatchlist.test.tsx` (passes solo; non-deterministic — appeared in 1 of 6 full-suite runs across L7d/L2a; NOT a
 regression) — flagged for JK, see SUITE BASELINE + OPEN PENDING-JK. AUTH-4 host resume; the L5b handoff is CLEARED.
 **L5b COMMITTED `5ebb148`** —
@@ -30,8 +31,10 @@ double-dependency reconciliation — value-half DR-1 + morale-half L7b/L7c alrea
 completion) COMPLETE.** **L8 depends on L2** (the mutable ratings-overlay layer) → L2 lands first, SPLIT L2a..c;
 **L2a COMMITTED `6fdeba11`** (dark `franchiseRatingsOverlays` store, trackerDb v20→v21, backup parity, migration-survival
 proven; oracle locked) **+ L2b COMMITTED `e8ec0908`** (pure overlay merge math: base + confirmed active deltas; temporary
-absolute-expiry; base never mutated). **NOW: L2c** (two-tier confirmation infra — pure/dark) under AUTH-4. trackerDb
-host-state **v21** / KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next; nothing pushed.)
+absolute-expiry; base never mutated) **+ L2c COMMITTED `a77e0ed5`** (§11 two-tier confirmation infra — console
+instruction + idempotent confirm transform + revert reminder + change log; pure/dark) → **L2 COMPLETE.** **NOW: L8**
+(ratings development — the first real writer through L2) under AUTH-4. trackerDb host-state **v21** / KBL_BACKUP_VERSION
+**2**. Branch codex/franchise-v1-next; nothing pushed.)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.
@@ -151,8 +154,26 @@ host-state **v21** / KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next; n
   on-load cleanup). Single type-only import; live wiring into value/designation/morale read paths DEFERRED (pointless
   with the empty L2a store + touches live consumers). **Codex 5.5 built → Opus 4.8 independently audited VERIFIED**
   (tsc 0 / build 0 / full suite 7,374 pass / 2 characterized fail, ZERO new reds; filters/base-immutability/expiry-id
-  hand-verified; pure; frozen engines byte-unchanged). Auto-committed. **NOW = L2c** (two-tier confirmation infra —
-  pure/dark) under AUTH-4.
+  hand-verified; pure; frozen engines byte-unchanged). Auto-committed. L2c followed (below).
+- **✅ L2c COMMITTED `a77e0ed5` (2026-06-18, AUTH-4 overnight) — §11 two-tier confirmation infra → L2 COMPLETE.** NEW
+  pure `src/engines/ratingsOverlayConfirmation.ts`: `buildOverlayConfirmationRequest` (SMB4-console edit instruction +
+  resulting rating) + `confirmOverlay` (`pending`→`confirmed`, idempotent + non-mutating; store put deferred) +
+  `buildExpiryRevertReminder` (temporary console-revert text) + `summarizeOverlayChangeLog` (deterministic per-team
+  change log, DSTACK L8). Morale excluded (auto/logged §11:202); traits (L9b) reuse the pattern; live confirm UI/flow
+  deferred post-D13. **Codex 5.5 built → Opus 4.8 independently audited VERIFIED** (tsc 0 / build 0 / full suite 7,384
+  pass / 2 characterized fail, ZERO new reds; pure; frozen engines byte-unchanged). Auto-committed.
+  **⇒ L2 (franchise-instance mutable ratings-overlay layer) COMPLETE: L2a `6fdeba11` · L2b `e8ec0908` · L2c `a77e0ed5`.**
+- **➡ NEXT (fresh session resumes here): L8 — ratings development (the first real WRITER through L2).** DSTACK L8 (line 83)
+  + §8 (dampener) + §9 (line 155, checkpoint cadence). Build: an **every-20%-of-season league checkpoint sweep**; per
+  player a rating delta = on-field performance × the **§8 `fanMoraleDampener`** (L5a `428f7cb` — CONSUMED, do NOT rebuild)
+  × the personality dampener multiplier (§7/§8) × **Ambition on up-moves / Resilience on down-moves** (§6); the change is
+  proposed through the **L2 two-tier confirm** (write a `pending` overlay via `putFranchiseRatingsOverlay`, surface
+  `buildOverlayConfirmationRequest`) with a **per-team console change log** (`summarizeOverlayChangeLog`). **RATINGS ONLY,
+  never traits** (traits are L9b). Deps L2 ✓ / L5 ✓(L5a) / L3 ✓ / L1 ✓. Likely SPLIT **L8a** (pure dev-math engine,
+  consumes the dampener) / **L8b** (checkpoint cadence + the overlay-writer wiring — touches the live season path →
+  watched/browser-pending). Build-DARK behind the morale flag, activate post-D13. After L8 → L9a captures → L9b traits →
+  L10 random → L11 managers → L12 races/All-Star/awards-fame → L13 relationships → L14 rebrand → the L-SIM gate. (SET
+  ASIDE remains: L-ECON1 frozen draft-IV oracle + F-144.)
 - **ATTENDED DESIGN SESSION (2026-06-17, JK present) — forks cleared + designation model reconciled; D10 build next.**
   No product code yet this session. (1) **OD-2..5 + D4 RULED** (DECISIONS_LOG 2026-06-17): OD-2 economy scale =
   new-league-construction-only / reuse pick-chart with farm anchor nerfed one grade-step via `FARM_NERF_SCALES` /
@@ -400,7 +421,12 @@ host-state **v21** / KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next; n
 
 ## SUITE BASELINE
 
-**7,376 tests / 421 files** — full suite independently re-run 2026-06-18 (AUTH-4 overnight) after **L2b** commit
+**7,386 tests / 422 files** — full suite independently re-run 2026-06-18 (AUTH-4 overnight) after **L2c** commit
+`a77e0ed5`: **7,384 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds
+(+10 tests / +1 file = L2c's `ratingsOverlayConfirmation.test.ts`, over the post-L2b 7,374/421; trackerDb still **v21** —
+L2c is a pure engine, no store). **L2 trio all pure/dark + persistence-clean; trackerDb at v21 (only L2a bumped it).**
+*(Prior baseline retained below for the arc trail.)* **7,376 tests / 421 files** — full suite independently re-run
+2026-06-18 (AUTH-4 overnight) after **L2b** commit
 `e8ec0908`: **7,374 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds
 (+11 tests / +1 file = L2b's `ratingsOverlayMerge.test.ts`, over the post-L2a 7,363/420; trackerDb still **v21** — L2b is
 a pure engine, no store). *(Prior baseline retained below for the arc trail.)* **7,365 tests / 420 files** — full suite

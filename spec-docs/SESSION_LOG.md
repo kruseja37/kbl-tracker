@@ -5141,3 +5141,27 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   build 0 / 11 focused tests; full suite **7,374 pass / 2 characterized fail**, ZERO new reds; pure; frozen engines
   byte-unchanged). Auto-committed. Suite **7,376 / 421**; trackerDb v21. **NOW = L2c** (two-tier confirmation infra —
   pure/dark). Nothing pushed.
+- **L2c COMMITTED `a77e0ed5` → L2 COMPLETE** — pure §11 two-tier confirmation infra (`ratingsOverlayConfirmation.ts`):
+  `buildOverlayConfirmationRequest` (console edit instruction + resulting rating) + `confirmOverlay` (pending→confirmed,
+  idempotent/non-mutating) + `buildExpiryRevertReminder` + `summarizeOverlayChangeLog` (deterministic per-team change
+  log). Morale excluded (auto §11:202); traits reuse the pattern (L9b); live confirm UI/flow deferred post-D13.
+  Captain-contracted → Codex 5.5 built → Opus independently audited VERIFIED (tsc 0 / build 0 / 10 focused tests; full
+  suite **7,384 pass / 2 characterized fail**, ZERO new reds; pure; frozen engines byte-unchanged). Auto-committed.
+  **⇒ L2 (mutable ratings-overlay layer) COMPLETE: L2a `6fdeba11` · L2b `e8ec0908` · L2c `a77e0ed5`.** Suite **7,386 /
+  422**; trackerDb v21.
+
+### Session close — CONTEXT-HANDOFF → L8 (2026-06-18, AUTH-4 overnight)
+- **What this session accomplished (all Codex 5.5-built → Opus 4.8-audited → auto-committed on `codex/franchise-v1-next`,
+  nothing pushed):** resumed at the CONTEXT-HANDOFF→L7c boundary, did the canonical 5-file session-start reads + RESTATE,
+  JK confirmed **AUTH-4 autonomous**, then: **L7 COMPLETE** (L7c designation→fan-morale `886d1dce` · L7d-1 Captain router
+  `f61dcae0` · L7d-2 Fan Hopeful cushion `aec5db99` · L7d-3 FF double-dep doc-only) + **L2 COMPLETE** (L2a dark overlay
+  store `6fdeba11` [trackerDb v20→v21, migration-survival proven] · L2b merge `e8ec0908` · L2c confirm `a77e0ed5`).
+  7 feature commits + 7 docs commits. Suite 7,325→**7,384** pass / 2 characterized fail throughout, ZERO new reds.
+  trackerDb **v21**, KBL_BACKUP_VERSION **2**.
+- **Flagged for JK (not regressions):** the `AwardsWatchlist.test.tsx` + `GameTrackerLaunchState.test.tsx` order-flakes
+  (both pass solo; non-deterministic; surfaced by the new test files shifting vitest's worker ordering) — added to the
+  order-flake root-cause batch in CURRENT_STATE OPEN PENDING-JK. Browser-batch added scenario #16 (L2a v20→v21 migration
+  + backup round-trip, persistence-prioritized).
+- **NEXT = L8** (ratings development — the first real WRITER through L2; see CURRENT_STATE "NEXT" bullet for the full
+  build spec: every-20%-of-season checkpoint sweep × §8 dampener [L5a, consumed] × personality × Ambition/Resilience →
+  overlays via the L2 confirm; ratings only; likely SPLIT L8a pure-math / L8b cadence+writer). `HANDOFF_NEEDED` written.

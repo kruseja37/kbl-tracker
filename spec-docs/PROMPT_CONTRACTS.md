@@ -9680,3 +9680,38 @@ No-overlays→base copy (deep-equal, different ref); confirmed permanent applied
 Use high reasoning effort. Think step-by-step. Builder ≠ auditor — re-audited by Opus (confirmed-only + expiry-boundary filters, base-never-mutated, unknown-key ignored, expiry-id selection, purity + byte-unchanged frozen engines).
 
 **Status:** COMMITTED `e8ec0908` (2026-06-18, AUTH-4 overnight). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / build 0 / 11 focused tests; full suite 7,374 pass / 2 characterized fail (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+11 tests / +1 file). Confirmed-only + expiry-boundary (`>=`) filters + base-never-mutated (hasOwnProperty guard) + unknown-key-ignored + expired-id selection hand-verified; pure (single type-only import); `franchiseRatingsOverlayStorage`/`ivEngine`/`effectiveRatings` BYTE-UNCHANGED. (Codex's first full-suite run surfaced the `GameTrackerLaunchState` order-flake — another documented conditional-solo flake — confirmed solo-pass + clean on rerun; non-determinism.) Pure engine, no user surface → auto-committed. (Live read-path wiring deferred.) **NOW = L2c.**
+
+### L2c — Ratings-overlay two-tier confirmation infra (PURE/dark; live confirm UI/flow DEFERRED)
+
+**ROUTE:** Codex 5.5 | high reasoning effort (pure deterministic engine; no store/wiring/UI) → Opus 4.8 audit (auditor ≠ builder) → standing auto-commit (pure primitive, no user surface; mirrors L2b). Closes the L2 trio (L2a store + L2b merge + L2c confirm).
+
+**ROLE:** Build the §11 two-tier confirmation INFRA for ratings overlays as a PURE engine. Mirrors L2b `ratingsOverlayMerge.ts`: single type-only import, no store/flag/wiring/persistence/React. Build-dark; the live confirm UI/flow is a deferred activation step (needs L8/L9b writers + is user-visible → post-D13).
+
+**GOAL:** NEW `src/engines/ratingsOverlayConfirmation.ts` exporting (1) `OverlayConfirmationRequest` + `buildOverlayConfirmationRequest(overlay, baseRatingValue?)` (the confirm request + the SMB4-console edit instruction text); (2) `confirmOverlay(overlay)` → row with `confirmationStatus:'confirmed'` (pure, idempotent, non-mutating; the DB put is deferred wiring); (3) `buildExpiryRevertReminder(overlay, baseRatingValue?)` (console-revert text for an expired temporary); (4) `summarizeOverlayChangeLog(overlays)` (deterministic ordered per-change log — DSTACK L8). Plus its test file.
+
+**SOURCE OF TRUTH:** `FRANCHISE_V1_LIVING_SEASON_SPEC.md` §11 lines 200-205 (ratings/trait changes REQUIRE confirm → land in SMB4 console + app DB; morale silent/no-confirm; permanent persisted + temporary auto-expired w/ console revert reminder) + DSTACK L8 line 83 (per-team console change log). TYPE: `FranchiseRatingsOverlayRow` (L2a `6fdeba11`, type-only). MIRROR: L2b `e8ec0908`.
+
+### DESIGN (AUTH-4 DEFAULTS-TAKEN — documented)
+- `buildOverlayConfirmationRequest`: `resultingRating = base+delta` (or null if no base); `consoleInstruction` = a deterministic "Set/Apply … on your SMB4 console (+/−delta)" string, with a temporary revert/expiry note when `kind==='temporary'`.
+- `confirmOverlay` → `{...overlay, confirmationStatus:'confirmed'}` (idempotent, non-mutating; store put = deferred).
+- `buildExpiryRevertReminder` → "Revert … the temporary change (+/−delta) has expired[; set back to base]" (engine builds text; L2b owns expiry decision).
+- `summarizeOverlayChangeLog` → ordered (stable: playerId→ratingKey→sourceEventId→id, mirror L2a sort) display entries with a one-line summary.
+- Private `signDelta` helper; PURE — no Math.random/Date.now/new Date()/IO/store/React; only import = the row type; never mutate inputs.
+- **Header doc:** §11 two-tier (console instruction text + DB-adoption transform; morale excluded; traits reuse the pattern in L9b); DEFAULTS; WIRING deferred (live modal → `putFranchiseRatingsOverlay(confirmOverlay(...))` + console instruction + expiry reminder; user-visible → post-D13, needs L8/L9b writers).
+
+**ALLOWED files:** NEW `src/engines/ratingsOverlayConfirmation.ts` · NEW `src/engines/__tests__/ratingsOverlayConfirmation.test.ts`. NOTHING ELSE.
+
+**DO NOT:** read/write the L2a store · wire a UI/modal or the live confirm flow · touch `franchiseRatingsOverlayStorage.ts` (type-only) / `ratingsOverlayMerge.ts` / value/designation/morale paths / frozen oracle · mutate inputs · add store/flag/persistence/React · import IndexedDB/reporter/LLM/React · use Math.random/Date.now/new Date() · handle MORALE (auto, §11:202) · decide expiry (L2b owns it).
+
+### TESTS (NEW, pure/deterministic; mirror L2b)
+buildOverlayConfirmationRequest with base (resultingRating + `to 55`/`+5`) / without base (null + `+5`) / temporary (revert+`(game N)`) / negative sign (`-3`); confirmOverlay pending→confirmed + already-confirmed idempotent + input not mutated; buildExpiryRevertReminder text; summarizeOverlayChangeLog deterministic-ordered + empty→[]; determinism + input immutability + node:fs purity self-scan.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · new test green · FULL suite — only the 2 characterized fails expected (+ known non-deterministic order-flakes `AwardsWatchlist`/`GameTrackerLaunchState` may appear → run solo to confirm, NOT regressions). Greps: imports ONLY the row type, no store/merge/value/designation/morale/reporter/React, no Math.random/Date.now/new Date(); `franchiseRatingsOverlayStorage.ts`/`ratingsOverlayMerge.ts` BYTE-UNCHANGED.
+
+**STOP IF:** purity can't hold · type-only import build/circular error (re-home + note) · a frozen engine must change · a NEW red (≠ 2 characterized, ≠ known order-flakes) past 2 fix-iterations (→ SET-ASIDE).
+
+**FORMAT:** 1. Files changed (paths + count + passing-test count). 2. Each change w/ the §11 line. 3. Verification output (+ any order-flake-solo). 4. "L2c complete" OR "BLOCKED: [reason]".
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — re-audited by Opus (instruction-text correctness, idempotent non-mutating confirm, deterministic change-log ordering, purity + byte-unchanged frozen engines).
+
+**Status:** COMMITTED `a77e0ed5` (2026-06-18, AUTH-4 overnight). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / build 0 / 10 focused tests; full suite 7,384 pass / 2 characterized fail (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+10 tests / +1 file; AwardsWatchlist flake did not appear in the audit rerun). Instruction text (with/without base, temporary note, negative sign) + idempotent non-mutating `confirmOverlay` + revert reminder + deterministic-ordered change log hand-verified; pure (single type-only import); `franchiseRatingsOverlayStorage`/`ratingsOverlayMerge`/`ivEngine` BYTE-UNCHANGED. Pure engine, no user surface → auto-committed. (Live confirm UI/flow deferred post-D13.) **⇒ L2 (mutable ratings-overlay layer) COMPLETE: L2a store `6fdeba11` · L2b merge `e8ec0908` · L2c confirm `a77e0ed5`.** **NOW = L8** (ratings development — the first real writer through L2).

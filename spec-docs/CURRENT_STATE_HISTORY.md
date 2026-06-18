@@ -1041,3 +1041,30 @@ zero new reds). trackerDb **v20**, KBL_BACKUP_VERSION 2. Codex-build → Opus-au
 (perl alarm watchdog) worked cleanly on the host. ENDED via CONTEXT-HANDOFF (clean boundary after 5 tickets, heavy
 context) → fresh session resumes at **L7c** under AUTH-4. NEXT after L7c: **L7d** (Captain router effects + Fan Hopeful
 cushion + Fan Favorite double-dep) → {L8, L9b, L10} → {L11–L14} → L-SIM gate.
+
+---
+
+## 2026-06-18 — AUTH-4 overnight: L7 COMPLETE + L2 COMPLETE → CONTEXT-HANDOFF → L8
+
+Fresh session resumed at the L7c CONTEXT-HANDOFF, did the 5-file session-start reads + RESTATE, JK confirmed **AUTH-4
+autonomous**, then ran the build→audit→commit loop (every diff Codex 5.5-built → Opus 4.8-independently-audited →
+auto-committed on `codex/franchise-v1-next`; nothing pushed). Delivered, in order:
+- **L7 (designation Phase-2 completion) COMPLETE:** L7c designation→fan-morale steady sentiment + Channel-A tilt
+  `886d1dce` (double-count guard: Albatross steady = 0, §13 flashpoint owns it) · L7d-1 Captain morale-router (Charisma×2
+  + perf-swing amp) `f61dcae0` · L7d-2 Fan Hopeful call-up cushion `aec5db99` · L7d-3 FF double-dep reconciliation
+  (doc-only — value-half DR-1 + morale-half L7b/L7c already exist; no orphan composer).
+- **L2 (franchise-instance mutable ratings-overlay layer) COMPLETE:** L2a dark `franchiseRatingsOverlays` store
+  `6fdeba11` (trackerDb **v20→v21**, 3-place backup parity, **v20→v21 migration-survival proven**, KBL_BACKUP_VERSION
+  stays 2, oracle locked) · L2b overlay merge math `e8ec0908` (base + confirmed active deltas; temporary absolute-expiry;
+  base never mutated) · L2c two-tier confirmation infra `a77e0ed5` (console instruction + idempotent confirm transform +
+  revert reminder + change log). All three pure/dark; the live read-path/confirm wiring + the writers are later tickets.
+
+Suite arc **7,325/416 → 7,386/422** (2 characterized fails throughout: `wpaRuntimeBoundary` +
+`franchiseManualSmokeFixture`; ZERO new reds). trackerDb **v21** (only L2a bumped it), KBL_BACKUP_VERSION **2**.
+**Order-flake note (flagged for JK, not regressions):** `AwardsWatchlist.test.tsx` + `GameTrackerLaunchState.test.tsx`
+both surfaced once in full-suite runs but PASS SOLO — non-deterministic worker-pool ordering, same family as the
+documented conditional-solo flakes; added to the order-flake root-cause batch. Dispatch mechanism: `codex exec`
+background + a shell-native watchdog (macOS has no `timeout` — see the `codex-dispatch-watchdog` memory). ENDED via
+CONTEXT-HANDOFF (clean boundary after 7 feature commits + heavy context) → fresh session resumes at **L8** under AUTH-4.
+NEXT: **L8** ratings development (first real writer through L2; every-20% checkpoint × §8 dampener × personality ×
+Ambition/Resilience → overlays via L2 confirm; ratings only; likely SPLIT L8a/L8b) → L9a → L9b → L10 → L11–L14 → L-SIM gate.
