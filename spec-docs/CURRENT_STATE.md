@@ -126,13 +126,19 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
   SUPERSEDED §D "needs the ball-strike count" triage instead of the resolved §VI model. Detection-scope audit (workflow
   `wf_6643e635-9e3`, 7 agents, all 75 traits, code-grounded → `spec-docs/TRAIT_DETECTION_SCOPE_AUDIT.md`): **16
   correctly-built · 34 wrongly-dormant (buildable now) · 24 correctly-dormant (need still-missing inputs) · 1 cut.** The
-  ball-strike count (Q1) only blocks 1 otherwise-uncovered trait (Composed) → count DEFERRED v1. **➡ NOW = L9b trait-reality
-  rebuild, pass 1: Tier 1 (~13 free AB-outcome/steal-error/walk proxies in `BUILDABLE_TRAITS`) + Tier 3 (the Q12
-  personality-primary engine → 6 count-family traits).** Then verify the L9a-3 handedness feed (Tier 2 platoon splits, 6),
-  Tier 4 Two Way gateway (3), Tier 5 conditional (4), and 4 micro-rulings (Noodle Arm keep/cut · Meltdown approximation ·
-  Sprinter dead-signal · Ace Exterminator join). **L10 REWORK QUEUED** (Q5 continuous cadence reshapes L10-1/L10-3 firing;
-  Q8 adds name-change to L10's dark catalog) — sequence after the L9b rebuild. trackerDb v23; nothing pushed.
-  *(Prior L10-5 / L10-COMPLETE entry below.)*
+  ball-strike count (Q1) only blocks 1 otherwise-uncovered trait (Composed) → count DEFERRED v1. **MEASUREMENT MODEL NOW
+  RATIFIED + COMMITTED `703d78b9`** (DECISIONS_LOG 2026-06-18 "later" + `spec-docs/TRAIT_MEASUREMENT_SPEC.md §0`): per-trait
+  measurements consolidated (workflow `wf_368f24d0-78d`, 51 traits) → JK ruled all 15 open. Key rulings: **acquisition model
+  = P (acquisition probability) is the single comparison currency for displacement + lose-low, with RE-EVALUATE-TO-DROP**
+  (every held trait recomputes P each cycle from data>ratings>personality; nothing permanently sticky); strikeout-rate
+  family; **walks-allowed** pitcher count-family (Composed reclassified buildable); **Big/Little Hack = HR-rate/AVG**;
+  **Slow Poke/Sprinter = DP/FC** rate; **Noodle Arm = ARM<11+personality**; **Ace Exterminator = wire opposing-pitcher-grade
+  join**; first-pitch = personality+opt-in. **⏸ CHECKPOINTED HERE (JK) — build NOT started.** **➡ NEXT = the L9b rebuild
+  per `TRAIT_MEASUREMENT_SPEC.md §0.4`: R-E (enabling: thread ratings/grades into the builder · charisma factor in the
+  combiner · the re-evaluate-to-drop model) → R1 (clean outcome proxies) → R2 (data-proxy+personality) → R3 (ratings-gated:
+  Noodle Arm, Ace Exterminator).** Takes the earnable v1 set 16 → ~50; build-DARK; each sub-ticket build→audit→host-gate→
+  commit. **L10 REWORK ALSO QUEUED** (Q5 continuous cadence reshapes L10-1/L10-3; Q8 adds name-change to L10's dark catalog).
+  trackerDb v23; nothing pushed. *(Prior L10-5 / L10-COMPLETE entry below.)*
 - **✅ L10-5 VERIFIED + COMMITTED (2026-06-18, fresh attended session, AUTH-4 keep-rolling) → L10 COMPLETE (1-5) — the
   PURE reporter tap / news adapter (the final L10 piece).** NEW pure module
   `src/src_figma/app/engines/reporter/franchiseL10NewsAdapter.ts` (lives WITH the reporter — core `src/engines` must not
