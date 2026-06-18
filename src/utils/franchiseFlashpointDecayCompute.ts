@@ -6,10 +6,11 @@
  * locked Albatross, a trade-demander) who stays on the roster, accumulate a
  * compounding per-game fan-morale tax into the franchiseFlashpointDecay store.
  *
- * SEAM-NEUTRAL until L7/L10/L13: the "turned-on player" source list is resolved
- * by resolveTurnedOnPlayers(), which returns [] today (no Albatross /
- * trade-demander feed exists yet). So even with the Phase-2 flashpoint flag ON,
- * this writes NOTHING until those tickets fill the seam.
+ * SEAM-NEUTRAL for trade-demanders until L10/L13: the "turned-on player"
+ * source list is resolved by resolveTurnedOnPlayers(), which now reads active
+ * or locked Albatross designation holders for each team in the completed game.
+ * So even with the Phase-2 flashpoint flag ON, this writes NOTHING unless an
+ * active/locked Albatross exists for the home/away team.
  *
  * L5b ONLY accumulates the tax artifact (decay-on-write running state). It does
  * NOT mutate any fan-morale snapshot — applying the accumulated tax to live fan
@@ -18,6 +19,7 @@
 
 import { computeFlashpointGameTax, type FlashpointKind } from '../engines/flashpointDecay';
 import type { PersistedGameState } from './gameStorage';
+import { getFranchiseDesignationRow } from './franchiseDesignationStorage';
 import {
   getFranchiseFlashpointDecayRow,
   saveFranchiseFlashpointDecayRows,
@@ -51,21 +53,47 @@ export interface TurnedOnPlayer {
 
 /**
  * SEAM: resolve the players currently "turned on" (a locked Albatross or a
- * trade-demander) for this scope/game. Returns [] today — no Albatross /
- * trade-demander source exists until L7 (Albatross designation effect) and
- * L10/L13 (trade-demander generation) land. Keep this the single explicit
- * seam so L5b stays genuinely dark and seam-neutral.
+ * trade-demander) for this scope/game. Albatross is resolved from the persisted
+ * active|locked designation row; trade-demander stays empty until L10/L13 land.
+ * Keep this the single explicit seam so L5b stays gated and mockable.
  *
  * Exposed on `flashpointSeam` so the per-game compute (and tests) call it
  * through one mockable indirection.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function resolveTurnedOnPlayers(
-  _scope: FlashpointScope,
-  _gameState: PersistedGameState,
-): TurnedOnPlayer[] {
-  // SEAM: L7 Albatross + L10/L13 trade-demander fill this.
-  return [];
+export async function resolveTurnedOnPlayers(
+  scope: FlashpointScope,
+  gameState: PersistedGameState,
+): Promise<TurnedOnPlayer[]> {
+  const teamIds = Array.from(
+    new Set(
+      [gameState.homeTeamId, gameState.awayTeamId]
+        .map((teamId) => teamId?.trim())
+        .filter((teamId): teamId is string => Boolean(teamId)),
+    ),
+  );
+  const turnedOnPlayers: TurnedOnPlayer[] = [];
+
+  for (const teamId of teamIds) {
+    const row = await getFranchiseDesignationRow({
+      franchiseId: scope.franchiseId,
+      seasonId: scope.seasonId,
+      statsScopeId: scope.statsScopeId,
+      teamId,
+      type: 'ALBATROSS',
+    });
+
+    // AUTH-4 DEFAULTS-TAKEN: turned-on = a team's active|locked Albatross
+    // holder, not 'projected'. The per-GAME tax applies to the completed
+    // game's home+away Albatrosses; the active designation already implies
+    // roster membership ("who stays"), so there is no extra lineup-presence
+    // check here.
+    if (row && (row.status === 'active' || row.status === 'locked') && row.playerId) {
+      turnedOnPlayers.push({ playerId: row.playerId, kind: 'albatross' });
+    }
+  }
+
+  // SEAM (still empty): L10/L13 trade-demander fills 'trade_demander'.
+  return turnedOnPlayers;
 }
 
 /** Single indirection point so the seam is mockable from the compute path. */
@@ -86,7 +114,7 @@ export async function persistDarkFlashpointDecayForCompletedGame(
     };
   }
 
-  const turnedOn = flashpointSeam.resolveTurnedOnPlayers(scope, gameState);
+  const turnedOn = await flashpointSeam.resolveTurnedOnPlayers(scope, gameState);
   if (turnedOn.length === 0) {
     return {
       status: 'dark-noop',

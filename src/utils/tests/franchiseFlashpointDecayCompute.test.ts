@@ -8,6 +8,12 @@ import {
   type FlashpointScope,
 } from '../franchiseFlashpointDecayCompute';
 import {
+  clearFranchiseDesignationDatabaseForTests,
+  resetFranchiseDesignationDatabaseForTests,
+  saveFranchiseDesignationRows,
+} from '../franchiseDesignationStorage';
+import type { FranchisePlayerDesignationRecord } from '../franchiseDesignations';
+import {
   clearFranchiseFlashpointDecayForTests,
   getFranchiseFlashpointDecayRow,
   resetFranchiseFlashpointDecayForTests,
@@ -30,6 +36,34 @@ const scope: FlashpointScope = {
   statsScopeId: 'season-flashpoint-1',
   seasonNumber: 1,
 };
+
+function albatrossDesignation(
+  overrides: Partial<FranchisePlayerDesignationRecord> = {},
+): FranchisePlayerDesignationRecord {
+  return {
+    ...scope,
+    teamId: 'team-b',
+    playerId: 'player-albatross',
+    playerName: 'Al Batross',
+    type: 'ALBATROSS',
+    status: 'active',
+    sourceInputs: {
+      valueDelta: -12,
+    },
+    sourceEvidence: ['L7a fixture: active Albatross designation holder'],
+    calculationVersion: 'test-flashpoint-designations',
+    calculatedAt: '2026-06-17T00:00:00.000Z',
+    lockedAt: null,
+    carryover: {
+      carriesOver: false,
+      untilSeasonProgress: null,
+      previousSeasonId: null,
+      previousPlayerId: null,
+      note: null,
+    },
+    ...overrides,
+  };
+}
 
 function gameState(overrides: Partial<PersistedGameState> = {}): PersistedGameState {
   return {
@@ -77,6 +111,7 @@ function gameState(overrides: Partial<PersistedGameState> = {}): PersistedGameSt
 describe('franchise dark flashpoint-decay compute', () => {
   beforeEach(async () => {
     resetFranchiseFlashpointDecayForTests();
+    resetFranchiseDesignationDatabaseForTests();
     await deleteDatabase('kbl-tracker');
     vi.spyOn(syncEngine, 'isSuppressed').mockReturnValue(true);
   });
@@ -84,7 +119,9 @@ describe('franchise dark flashpoint-decay compute', () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     setFranchisePhase2FlashpointEnabledForTests(null);
+    await clearFranchiseDesignationDatabaseForTests();
     await clearFranchiseFlashpointDecayForTests();
+    resetFranchiseDesignationDatabaseForTests();
     resetFranchiseFlashpointDecayForTests();
   });
 
@@ -103,7 +140,7 @@ describe('franchise dark flashpoint-decay compute', () => {
   test('flag-ON but seam empty (no turned-on source until L7/L10/L13) STILL writes nothing', async () => {
     setFranchisePhase2FlashpointEnabledForTests(true);
 
-    // The real resolveTurnedOnPlayers seam returns [] today.
+    // No active|locked Albatross row is seeded; trade-demander stays empty until L10/L13.
     const result = await persistDarkFlashpointDecayForCompletedGame(gameState(), scope);
 
     expect(result.status).toBe('dark-noop');
@@ -117,7 +154,7 @@ describe('franchise dark flashpoint-decay compute', () => {
     // Inject the L7/L10/L13 seam locally (confined to this test).
     const seam = vi
       .spyOn(flashpointCompute.flashpointSeam, 'resolveTurnedOnPlayers')
-      .mockReturnValue([{ playerId: 'player-albatross', kind: 'albatross' }]);
+      .mockResolvedValue([{ playerId: 'player-albatross', kind: 'albatross' }]);
 
     const firstGame = gameState({ gameId: 'flashpoint-game-1' });
     const secondGame = gameState({ gameId: 'flashpoint-game-2' });
@@ -154,8 +191,56 @@ describe('franchise dark flashpoint-decay compute', () => {
     seam.mockRestore();
   });
 
-  test('the live seam resolveTurnedOnPlayers returns [] until L7/L10/L13', () => {
-    expect(flashpointCompute.resolveTurnedOnPlayers(scope, gameState())).toEqual([]);
+  test('the live seam resolveTurnedOnPlayers returns [] when no active or locked Albatross is seeded', async () => {
+    await expect(flashpointCompute.resolveTurnedOnPlayers(scope, gameState())).resolves.toEqual([]);
+  });
+
+  test('the live seam resolves active home-or-away Albatross designations but ignores projected rows', async () => {
+    await saveFranchiseDesignationRows([
+      albatrossDesignation({ playerId: 'home-albatross', teamId: 'team-b', status: 'active' }),
+      albatrossDesignation({ playerId: 'away-projected', teamId: 'team-a', status: 'projected' }),
+    ]);
+
+    await expect(flashpointCompute.resolveTurnedOnPlayers(scope, gameState())).resolves.toEqual([
+      { playerId: 'home-albatross', kind: 'albatross' },
+    ]);
+
+    await clearFranchiseDesignationDatabaseForTests();
+    await saveFranchiseDesignationRows([
+      albatrossDesignation({ playerId: 'home-projected', teamId: 'team-b', status: 'projected' }),
+    ]);
+
+    await expect(flashpointCompute.resolveTurnedOnPlayers(scope, gameState())).resolves.toEqual([]);
+  });
+
+  test('the live seam also treats a locked Albatross designation as turned-on', async () => {
+    await saveFranchiseDesignationRows([
+      albatrossDesignation({ playerId: 'away-locked', teamId: 'team-a', status: 'locked' }),
+    ]);
+
+    await expect(flashpointCompute.resolveTurnedOnPlayers(scope, gameState())).resolves.toEqual([
+      { playerId: 'away-locked', kind: 'albatross' },
+    ]);
+  });
+
+  test('flag-ON with a real active Albatross designation writes one dark albatross row for the holder', async () => {
+    setFranchisePhase2FlashpointEnabledForTests(true);
+    await saveFranchiseDesignationRows([
+      albatrossDesignation({ playerId: 'home-albatross', teamId: 'team-b', status: 'active' }),
+    ]);
+
+    const result = await persistDarkFlashpointDecayForCompletedGame(gameState(), scope);
+    const row = await getFranchiseFlashpointDecayRow(scope, 'home-albatross');
+
+    expect(result).toEqual({ status: 'written', written: 1 });
+    expect(row).toMatchObject({
+      playerId: 'home-albatross',
+      flashpointKind: 'albatross',
+      consecutiveGamesUnresolved: 1,
+      lastGameTax: -0.5,
+      accumulatedFanMoraleTax: -0.5,
+      updatedAtCheckpoint: 'flashpoint-game-1',
+    });
   });
 
   test('compute module source stays firewalled from reporter LLM and narrative imports', async () => {
