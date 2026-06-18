@@ -1,10 +1,11 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-17 (**AUTH-4 ACTIVE RUN — L7 COMPLETE (L7c `886d1dce` · L7d-1 `f61dcae0` · L7d-2 `aec5db99` ·
-L7d-3 doc-only); NOW L8** [fresh session resumed at the L7c handoff, did the session-start reads + RESTATE, JK confirmed
-AUTH-4 autonomous, then built→audited→committed L7c/L7d-1/L7d-2 and closed L7 via the L7d-3 doc reconciliation]. ⚠
-NEWLY-OBSERVED order-flake `AwardsWatchlist.test.tsx` (passes solo; non-deterministic — appeared in 1 of 4 full-suite
-runs; NOT a regression) — flagged for JK, see SUITE BASELINE + OPEN PENDING-JK. AUTH-4 host resume; the L5b handoff is CLEARED.
+**Last Updated:** 2026-06-18 (**AUTH-4 ACTIVE RUN (overnight, past midnight) — L7 COMPLETE + L2a `6fdeba11` COMMITTED;
+NOW L2b** [fresh session resumed at the L7c handoff, did the session-start reads + RESTATE, JK confirmed AUTH-4
+autonomous, then built→audited→committed L7c/L7d-1/L7d-2 + L7d-3 doc → L7 COMPLETE → then L2a, the mutable-overlay store
+L8 depends on]. trackerDb host-state v20→**v21** (L2a); KBL_BACKUP_VERSION stays **2**. ⚠ NEWLY-OBSERVED order-flake
+`AwardsWatchlist.test.tsx` (passes solo; non-deterministic — appeared in 1 of 6 full-suite runs across L7d/L2a; NOT a
+regression) — flagged for JK, see SUITE BASELINE + OPEN PENDING-JK. AUTH-4 host resume; the L5b handoff is CLEARED.
 **L5b COMMITTED `5ebb148`** —
 the flashpoint-decay accumulator was host-verified (`NODE_ENV= npm run build` exit 0 + full suite **7,298 pass / 2
 characterized fail** [`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`], ZERO new reds; the +18 tests / +3 files over
@@ -26,8 +27,10 @@ designation→fame nudge ENGINE — FF +2 / Albatross −1 / MVP·Ace sim; fame-
 ALBATROSS=0 — §13 flashpoint already owns it; morale-store + per-play wiring deferred post-D13). **L7d SPLIT L7d-1..3;
 L7d-1 `f61dcae0`** (Captain morale-router) **+ L7d-2 `aec5db99`** (Fan Hopeful cushion) **+ L7d-3 doc-only** (FF
 double-dependency reconciliation — value-half DR-1 + morale-half L7b/L7c already exist) → **L7 (designation Phase-2
-completion) COMPLETE.** **NOW: L8** (ratings development) per the soul-layer queue, under AUTH-4. trackerDb host-state
-**v20** / KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next; nothing pushed.)
+completion) COMPLETE.** **L8 depends on L2** (the mutable ratings-overlay layer) → L2 lands first, SPLIT L2a..c;
+**L2a COMMITTED `6fdeba11`** (dark `franchiseRatingsOverlays` store, trackerDb v20→v21, backup parity, migration-survival
+proven; oracle locked). **NOW: L2b** (read-path merge + temporary auto-expiry) under AUTH-4. trackerDb host-state
+**v21** / KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next; nothing pushed.)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.
@@ -126,7 +129,19 @@ completion) COMPLETE.** **NOW: L8** (ratings development) per the soul-layer que
   `designationFameNudge` FF +2 (L7b) + `designationFanMorale` FF +0.5 warmth & up×1.25 tilt (L7c). No new engine (both
   halves exist; morale-half is dark with deferred wiring; a composer would repeat the orphan DR-1 just deleted).
   **⇒ L7 COMPLETE: L7a `0a59a24` · L7b `77feeda3` · L7c `886d1dce` · L7d-1 `f61dcae0` · L7d-2 `aec5db99` · L7d-3 doc.**
-  **NOW = L8** (ratings development) per the AUTONOMOUS_RUN_PROTOCOL soul-layer queue, under AUTH-4.
+  **L8 (ratings dev) DEPENDS on L2** (the mutable ratings-overlay layer, greenfield) → L2 lands first (SPLIT L2a..c).
+- **✅ L2a COMMITTED `6fdeba11` (2026-06-18, AUTH-4 overnight) — dark `franchiseRatingsOverlays` store (§11 / L2; the
+  persistence half of the franchise-instance mutable layer).** L2 SPLIT: **L2a** dark store (DONE) · **L2b** read-path
+  merge + temporary absolute-trigger auto-expiry (re-evaluated on load) · **L2c** two-tier confirmation infra (console+DB;
+  ratings/trait changes confirm, morale stays silent). NEW `src/utils/franchiseRatingsOverlayStorage.ts` (mirrors L5b
+  flashpoint storage): the store (keyPath `id`; `by_scope` + `by_player` indexes) holds per-entry overlays over the FROZEN
+  base ratings — permanent + temporary (`expiresAtGameNumber`), with confirmationStatus/source/sourceEventId/caller-
+  supplied createdAt. trackerDb **v20→v21**; 3-place backup parity (`optional:true` + syncConfig `'id'`),
+  KBL_BACKUP_VERSION stays **2**. **DARK/EMPTY** — no production writer/reader (L2b/L2c/L8/L9b wire it); oracle stays
+  locked. **Codex 5.5 built → Opus 4.8 independently audited VERIFIED (hardest — persistence class)** (tsc 0 / build 0 /
+  full suite 7,363 pass / 2 characterized fail, ZERO new reds; **v20→v21 migration-survival + backup round-trip parity +
+  DARK + byte-unchanged-oracle + KBL_BACKUP_VERSION-2 all PROVEN**). Auto-committed; persistence → browser-pending
+  (migration + round-trip prioritized, scenario #16). **NOW = L2b** under AUTH-4.
 - **ATTENDED DESIGN SESSION (2026-06-17, JK present) — forks cleared + designation model reconciled; D10 build next.**
   No product code yet this session. (1) **OD-2..5 + D4 RULED** (DECISIONS_LOG 2026-06-17): OD-2 economy scale =
   new-league-construction-only / reuse pick-chart with farm anchor nerfed one grade-step via `FARM_NERF_SCALES` /
@@ -374,7 +389,13 @@ completion) COMPLETE.** **NOW: L8** (ratings development) per the soul-layer que
 
 ## SUITE BASELINE
 
-**7,357 tests / 419 files** — full suite independently re-run 2026-06-17 (AUTH-4 host resume) after **L7d-2** commit
+**7,365 tests / 420 files** — full suite independently re-run 2026-06-18 (AUTH-4 overnight) after **L2a** commit
+`6fdeba11`: **7,363 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds
+(+8 tests / +1 file = L2a's `franchiseRatingsOverlayStorage.test.ts` [7] + the v20→v21 migration test [1]; the other 2
+pin/parity files gained assertions, not new test cases; over the post-L7d-2 7,355/419). **trackerDb now v21** (L2a's
+`franchiseRatingsOverlays`; KBL_BACKUP_VERSION stays 2). AwardsWatchlist order-flake did NOT appear this run.
+*(Prior baseline retained below for the arc trail.)* **7,357 tests / 419 files** — full suite independently re-run
+2026-06-17 (AUTH-4 host resume) after **L7d-2** commit
 `aec5db99`: **7,355 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds
 (+11 tests / +1 file = L7d-2's `fanHopefulCushion.test.ts`, over the post-L7d-1 7,344/418; trackerDb still **v20** — L7d-2
 is a pure engine, no store). The AwardsWatchlist order-flake did NOT appear this run (1 of 4 full-suite runs across L7d).
@@ -504,6 +525,11 @@ forced the test edit, and the stale `teamMvpAcePreview` assertion was aligned to
    Team Hub + the FranchiseHome league-leaders card — WITHOUT enabling any offseason ceremony/voting control; the
    stadium-spray panels + all salary-movement/morale/Mode-3 lines REMAIN provisional/blocked (verify nothing
    over-promoted).
+16. **L2a** (PERSISTENCE — prioritized; trackerDb v20→v21) the new dark `franchiseRatingsOverlays` store: open an
+   existing pre-v21 franchise → it migrates cleanly (no data loss — prior stores/games/standings/value intact); the
+   store is empty (no overlays written yet — it's dark until L8/L9b); backup → wipe → restore round-trips with the new
+   store present (empty). This is a saved-data-shape change, so it leads the batch. (Engine audit already proved the
+   v20→v21 migration-survival + backup round-trip in unit tests; this is the real-franchise confirmation.)
 
 ## OPEN PENDING-JK (rolling)
 

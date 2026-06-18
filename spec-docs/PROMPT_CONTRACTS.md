@@ -9601,4 +9601,46 @@ Use high reasoning effort. Think step-by-step. Builder ≠ auditor — re-audite
 - **Morale-half:** `designationFameNudge` FF **+2** naming seed (L7b `77feeda3`, §20.6 Channel C) + `designationFanMorale` FF **+0.5** steady warmth (L7c `886d1dce`, §20.6 Channel B) + FF swing tilt **up ×1.25** (L7c, §20.6 Channel A). Dark; post-D13 wiring deferred.
 - **Why doc-only (not a composer engine):** both halves exist as independent pure primitives; the morale-half is intentionally dark with deferred wiring; a `fanFavoriteEffects` composer would have ZERO consumers today and would repeat exactly the orphan pattern DR-1 just removed (it deleted the 546-line orphan `fanFavoriteEngine.ts` + its 351-line test). When the post-D13 morale wiring lands it composes the FF half-engines naturally. If JK later wants a single FF-effects surface, it is a trivial pure add.
 
-**Status:** COMPLETE (doc-only, 2026-06-17 AUTH-4). **This closes L7d (L7d-1 Captain `f61dcae0` · L7d-2 Fan Hopeful `aec5db99` · L7d-3 FF reconciliation) and thus L7 (designation Phase-2 completion) entirely.** **NOW = L8** (ratings development) per the AUTONOMOUS_RUN_PROTOCOL soul-layer queue.
+**Status:** COMPLETE (doc-only, 2026-06-17 AUTH-4). **This closes L7d (L7d-1 Captain `f61dcae0` · L7d-2 Fan Hopeful `aec5db99` · L7d-3 FF reconciliation) and thus L7 (designation Phase-2 completion) entirely.** **NOW = L8** (ratings development) per the AUTONOMOUS_RUN_PROTOCOL soul-layer queue — which DEPENDS on **L2** (the mutable ratings-overlay layer), so L2 lands first.
+
+---
+
+## L2 — Franchise-instance mutable ratings-overlay layer (SPLIT L2a..c; L8/L9b depend on it)
+
+DSTACK L2 (line 64) is the greenfield mutable layer that L8 (ratings dev) + L9b (traits) write through. SPLIT (Captain, 2026-06-17 AUTH-4):
+- **L2a — the dark overlay STORE** (THIS): new `franchiseRatingsOverlays` IndexedDB store (trackerDb v20→v21) + 3-place backup parity + version-pin trap + round-trip test; DARK/EMPTY (no writer/reader). Mirrors L6b-1/L5b/D9a store-creation.
+- **L2b — the read-path merge + temporary auto-expiry**: merge confirmed overlays onto base ratings for value/designation/morale consumers; drop expired temporaries (absolute-trigger, re-evaluated on load). Oracle stays locked.
+- **L2c — the two-tier confirmation infra**: ratings/trait changes require user confirm (console + DB); morale stays silent (§5/§11).
+
+### L2a — Dark `franchiseRatingsOverlays` store (persistence; trackerDb v20→v21; KBL_BACKUP_VERSION stays 2)
+
+**ROUTE:** Codex 5.5 | high reasoning effort (PERSISTENCE class — new store, version bump, backup parity, pin-trap; audited HARDEST) → Opus 4.8 audit (auditor ≠ builder) → standing auto-commit (dark/empty store, no user surface; persistence → browser-batch the migration/round-trip). Mirrors L6b-1 `3b36d35` / L5b `5ebb148` / D9a `53ffd4c`.
+
+**ROLE:** Build the DARK franchise ratings-overlay STORE (the persistence half of L2). Mirrors L5b `franchiseFlashpointDecayStorage.ts` EXACTLY: new store on shared `kbl-tracker` DB, getTrackerDb (NO raw indexedDB.open), syncEngine.upsert on writes, full 3-place backup parity, version-pin trap update, round-trip + pin-trap test, DARK/EMPTY (no writer/reader). KBL_BACKUP_VERSION stays 2.
+
+**SOURCE OF TRUTH:** `FRANCHISE_V1_LIVING_SEASON_SPEC.md` §11 line 205 (mutable layer over frozen base ratings; permanent persisted + temporary time-boxed auto-expire; oracle stays locked) + DSTACK L2 line 64. MIRROR: L5b `franchiseFlashpointDecayStorage.ts` + the trackerDb v20 block (line 389-392) + the L5b parity/pin edits (`5ebb148`).
+
+### DESIGN (AUTH-4 DEFAULTS-TAKEN — the store SHAPE; documented; revisable while dark)
+
+- **Store** `franchiseRatingsOverlays`, `keyPath: 'id'` (many overlays per player → unique id, NOT the flashpoint composite keyPath); indexes `by_scope` `['franchiseId','seasonId','statsScopeId']` + `by_player` `['franchiseId','seasonId','statsScopeId','playerId']`.
+- **Row `FranchiseRatingsOverlayRow`** (per-entry, append-style; L2b folds): `id` (`scope:playerId:ratingKey:sourceEventId`), `franchiseId/seasonId/statsScopeId`, `playerId`, `ratingKey: string` (SMB4 field; plain string, decoupled), `delta: number` (signed, STACKS), `kind: 'permanent'|'temporary'`, `expiresAtGameNumber: number|null` (absolute trigger; L2b re-evaluates on load), `confirmationStatus: 'pending'|'confirmed'` (L2c drives), `source: string`, `sourceEventId: string` (idempotency — unique id enforces), `createdAtGameNumber: number`, `createdAt: string` (ISO, PASSED IN — no Date.now in storage).
+- **CRUD** (mirror flashpoint): `putFranchiseRatingsOverlay` (+ syncEngine.upsert), `getFranchiseRatingsOverlaysByPlayer`, `getFranchiseRatingsOverlaysByScope`, `deleteFranchiseRatingsOverlay`, `clear*/reset*ForTests`, export `FRANCHISE_RATINGS_OVERLAY_STORE_NAME`.
+- **DARK:** no production writer/reader. **trackerDb:** new store (guarded, both indexes) + `TRACKER_DB_VERSION` 20→21. **Parity:** backupRestore.ts (`optional:true`, mirror flashpoint ~line 155) + syncConfig.ts (keyPath ~line 16). **KBL_BACKUP_VERSION stays 2.**
+- **Pin-trap:** `franchiseSeasonLedgerStorage.test.ts` (`toBe(20)`→`toBe(21)` ~line 107 + add `'franchiseRatingsOverlays'` to the store-list ~line 39), `backupRestore.franchiseParity.test.ts`, `franchiseSaveSlotManifest.test.ts`.
+
+**ALLOWED files:** NEW `src/utils/franchiseRatingsOverlayStorage.ts` · NEW `src/utils/tests/franchiseRatingsOverlayStorage.test.ts` · EDIT `src/utils/trackerDb.ts` · EDIT `src/utils/backupRestore.ts` · EDIT `src/utils/syncConfig.ts` · EDIT `src/utils/tests/franchiseSeasonLedgerStorage.test.ts` · EDIT `src/utils/tests/backupRestore.franchiseParity.test.ts` · EDIT `src/utils/tests/franchiseSaveSlotManifest.test.ts`. NOTHING ELSE.
+
+**DO NOT:** add a production writer/reader (dark/empty — L2b/L2c/L8/L9b) · touch the frozen oracle / `ivEngine` / `playerDatabase` / any ratings-compute engine · change `KBL_BACKUP_VERSION` · raw `indexedDB.open` in the storage module (use `getTrackerDb`) · merge overlays onto base ratings (L2b) · implement expiry/confirmation logic (L2b/L2c) · `Date.now()`/`new Date()` in storage (take `createdAt` param) · import reporter/LLM/React/engine.
+
+### TESTS (`franchiseRatingsOverlayStorage.test.ts`, mirror `franchiseFlashpointDecayStorage.test.ts`)
+Round-trip (permanent + temporary), multiple overlays/player (distinct ids), scope/player isolation, `by_scope`, syncEngine.upsert-on-put, source-scan (getTrackerDb / no indexedDB.open / no Date.now); pin-trap file: `TRACKER_DB_VERSION===21` + store-list includes the new store + v20→v21 migration survives (prior stores+data intact).
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · the new+pin tests green · FULL suite — only the 2 characterized fails expected (+ the known AwardsWatchlist order-flake may appear, passes solo). Greps: storage module no `indexedDB.open`/reporter/React, no `Date.now`/`new Date`; `KBL_BACKUP_VERSION` 2; `TRACKER_DB_VERSION` 21; `ivEngine.ts`/`playerDatabase.ts` BYTE-UNCHANGED.
+
+**STOP IF (→ SET-ASIDE, persistence safety boundary):** a v20→v21 migration shows ANY prior store/data loss · a parity/round-trip red 2 fix-iterations can't clear · a pin failure you can't reconcile · the frozen oracle would change. Report BLOCKED with exact output — do NOT force it.
+
+**FORMAT:** 1. Files changed (EVERY path incl. each pin/parity edit + count + passing-test count). 2. Each change w/ the §11/L2 line. 3. Verification output (+ migration-survival proof + byte-unchanged-oracle + KBL_BACKUP_VERSION-2 greps + any AwardsWatchlist-solo). 4. "L2a complete" OR "BLOCKED: [reason]".
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — re-audited by Opus HARDEST (full-suite, v20→v21 + pin-trap reconciliation, migration-survival + backup round-trip parity, dark/empty proof, byte-unchanged oracle, KBL_BACKUP_VERSION still 2).
+
+**Status:** COMMITTED `6fdeba11` (2026-06-18, AUTH-4 host resume — overnight continuation past midnight). Codex 5.5 built → Opus 4.8 independently audited VERIFIED (hardest audit — persistence class): tsc 0 / build 0 / focused 30 tests (4 files); full suite 7,363 pass / 2 characterized fail (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+8 tests / +1 file; AwardsWatchlist did NOT appear this run). **Safety gates all PROVEN:** v20→v21 migration-survival test (legacy currentGame + flashpoint data reopened at v21 byte-intact + new store present) · backup round-trip parity row · `KBL_BACKUP_VERSION` still **2** · `TRACKER_DB_VERSION` **21** · frozen oracle (`ivEngine`/`playerDatabase`) byte-unchanged · **DARK proven** (store referenced ONLY in storage module + trackerDb/backupRestore/syncConfig — zero production writer/reader) · pin-trap (toBe(21) + store-list) updated. 8 files = exactly the allowed set. Persistence → verified-complete, **browser-pending** (migration + backup round-trip prioritized in the JK batch). **NOW = L2b.**

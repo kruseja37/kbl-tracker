@@ -835,3 +835,21 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   (designation→fame nudge, Channel C) · L7c `886d1dce` (designation→fan-morale, Channels A/B) · L7d-1 `f61dcae0` (Captain
   router) · L7d-2 `aec5db99` (Fan Hopeful cushion) · L7d-3 (FF reconciliation, doc-only). **NOW = L8** (ratings
   development) per the soul-layer queue. trackerDb still v20; nothing pushed.
+
+- **2026-06-18 (AUTH-4, HOST RESUME — overnight continuation past midnight) — L2a COMMITTED `6fdeba11`. (L8 depends on
+  L2; SPLIT L2a..c.)** L8 (ratings dev) writes through L2 (the franchise-instance mutable ratings-overlay layer), which
+  was greenfield → Captain landed L2 first, SPLIT into **L2a** dark store (DONE) · **L2b** read-path merge + temporary
+  absolute-trigger auto-expiry · **L2c** two-tier confirmation infra. **L2a:** Captain drafted the contract
+  (PROMPT_CONTRACTS §L2a) → dispatched **Codex 5.5 | high** → Opus independently audited HARDEST (persistence class). NEW
+  `src/utils/franchiseRatingsOverlayStorage.ts` (mirrors L5b flashpoint storage: getTrackerDb, no raw indexedDB.open,
+  syncEngine.upsert/remove) — the dark `franchiseRatingsOverlays` store (keyPath `id`; `by_scope` + `by_player` indexes)
+  holding per-entry overlays over frozen base ratings: permanent + temporary (absolute `expiresAtGameNumber`),
+  confirmationStatus/source/sourceEventId/createdAt(caller-supplied). trackerDb **v20→v21**; 3-place backup parity
+  (backupRestore `optional:true` + syncConfig `'id'`), **KBL_BACKUP_VERSION stays 2**. DARK/EMPTY — no production
+  writer/reader (L2b/L2c/L8/L9b wire it); oracle stays locked. 8 files = exactly the allowed set. AUDIT VERIFIED: tsc 0 /
+  build 0 / focused 30 tests (4 files); full suite **7,363 pass / 2 characterized fail**, ZERO new reds (+8 tests / +1
+  file). **Safety gates PROVEN:** v20→v21 migration-survival (legacy currentGame+flashpoint data byte-intact after
+  reopen + new store present) · backup round-trip parity row · KBL_BACKUP_VERSION 2 · frozen oracle byte-unchanged · DARK
+  proven (store referenced only in storage/schema/registry) · pin-trap (toBe(21)+store-list) updated. Persistence →
+  verified-complete, **browser-pending** (migration + backup round-trip PRIORITIZED in the JK batch). **NOW = L2b**
+  (read-path merge + temporary auto-expiry). trackerDb **v21**; nothing pushed.

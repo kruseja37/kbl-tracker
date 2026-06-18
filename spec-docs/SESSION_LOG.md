@@ -5120,3 +5120,16 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - **⇒ L7 (designation Phase-2 completion) COMPLETE:** L7a `0a59a24` · L7b `77feeda3` · L7c `886d1dce` · L7d-1 `f61dcae0`
   · L7d-2 `aec5db99` · L7d-3 doc. Suite **7,355 / 419**; trackerDb v20. **NOW = L8** (ratings development) per the
   AUTONOMOUS_RUN_PROTOCOL soul-layer queue. Nothing pushed.
+
+### Update (cont., 2026-06-18 past midnight) — L8 depends on L2 → L2a committed
+- L8 (ratings dev) writes through L2 (the franchise-instance mutable ratings-overlay layer), greenfield → Captain landed
+  L2 first, SPLIT L2a (dark store) · L2b (read-path merge + temporary auto-expiry) · L2c (two-tier confirm infra).
+- **L2a COMMITTED `6fdeba11`** — NEW `src/utils/franchiseRatingsOverlayStorage.ts`, the dark `franchiseRatingsOverlays`
+  store (keyPath `id`; `by_scope`+`by_player`) holding per-entry overlays over frozen base ratings: permanent + temporary
+  (`expiresAtGameNumber`), confirmationStatus/source/sourceEventId/caller-supplied createdAt. trackerDb **v20→v21**;
+  3-place backup parity, KBL_BACKUP_VERSION stays 2. DARK/EMPTY (no writer/reader; L2b/L2c/L8/L9b wire it); oracle locked.
+  Captain-contracted → Codex 5.5 built → Opus independently audited HARDEST (persistence): tsc 0 / build 0 / full suite
+  **7,363 pass / 2 characterized fail**, ZERO new reds; v20→v21 migration-survival + backup round-trip parity + DARK +
+  byte-unchanged-oracle + KBL_BACKUP_VERSION-2 all PROVEN; 8 files = exactly the allowed set. Persistence →
+  verified-complete, browser-pending (migration + round-trip prioritized, scenario #16). Suite **7,365 / 420**; trackerDb
+  **v21**. **NOW = L2b** (read-path merge + temporary auto-expiry). Nothing pushed.
