@@ -1541,3 +1541,27 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   explicitly asserted — both non-defects). Committed on codex/franchise-v1-next (2 code files + doc updates; not pushed).
 - **➡ NEXT = L10-5** (reporter tap: applied L10 event → `SeasonNewsEvent` `RANDOM_EVENT` via `seasonNewsGenerator.ts` →
   `seasonNewsItems`; risk low-med) per L10_SCOPE_MAP.md §3.
+
+## 2026-06-18 — L10-5 reporter tap: contract → subagent-built → Opus-audited VERIFIED → COMMITTED → L10 COMPLETE (attended)
+- **Grounding:** the reporter pipeline is `SeasonNewsEvent` (`seasonNewsGenerator.ts:11-19`) → `generateSeasonNewsTake`
+  (the LIVE LLM/Supabase reporter — byte-unchanged per L5d, seam deferred post-D13). `RANDOM_EVENT` is already a
+  `NarrativeEventType` (`narrativeEngine.ts:88`). So L10-5 is the PURE adapter: fired L10 event → `SeasonNewsEvent`.
+- **DESIGN CALL (AUTH-4 default, FLAGGED, same shape as L10-4):** pure adapter only; does NOT call the live reporter or
+  wire any emission path — the live emission (call `generateSeasonNewsTake` + persist the `SeasonNewsItem`) is the deferred
+  post-D13 seam (mirrors L5d + L10-4). **Layer note:** the adapter lives in `src/src_figma/app/engines/reporter/` (with the
+  reporter), because core `src/engines` must not depend on the UI-layer `SeasonNewsEvent` type — the only L10 piece outside
+  core, by correct dependency direction.
+- **Triangle:** Captain wrote the contract → delegated BUILD to a fresh subagent → Captain (Opus) independently audited
+  line-by-line (builder ≠ auditor).
+- **Deliverable (2 files):** NEW pure `src/src_figma/app/engines/reporter/franchiseL10NewsAdapter.ts`
+  (`buildFranchiseL10SeasonNewsEvent` → eventType 'RANDOM_EVENT', subjectIds [targetId], facts = deterministic ground-truth
+  event fields, conservative bounded `dramaticWeight = clamp(base[valence] + magnitudeScale×magnitude, 0, 1)` via
+  `L10_NEWS_DRAMATIC_WEIGHT`) + NEW `src/src_figma/__tests__/reporter/franchiseL10NewsAdapter.test.ts` (9 tests incl. an
+  exact-key-set lock on the SeasonNewsEvent shape). PURE (no LLM/network/IndexedDB/Date/Math.random/async); build-DARK
+  (no production caller, reporter byte-unchanged, trackerDb v23).
+- **Host gate:** `NODE_ENV= npm run build` exit 0; full suite **7,559/438, 7,557 pass / 2 characterized fail**
+  (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds, +9 / +1 file. **Audit VERDICT VERIFIED** (0 major /
+  0 minor). Committed on codex/franchise-v1-next (2 code files + doc updates; not pushed).
+- **⇒ L10 (random events) COMPLETE: L10-1 `607fa015` · L10-2 `a830a61f` · L10-3 `8a33d9d3` · L10-4 `057340ed` · L10-5 —
+  all build-DARK, activate post-D13.** **➡ NEXT = L11 (managers)** per the L-stack (L11 → L12 races/All-Star/awards-fame →
+  L13 relationships → L14 rebrand → the L-SIM gate); a fresh subsystem needing a grounding recon before contracting.

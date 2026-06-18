@@ -1,7 +1,7 @@
 # KBL TRACKER — SESSION LOG
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
-## Session: 2026-06-18 (fresh attended session, AUTH-4 keep-rolling) — L10-3 + L10-4 committed → NEXT L10-5
+## Session: 2026-06-18 (fresh attended session, AUTH-4 keep-rolling) — L10-3 + L10-4 + L10-5 committed → L10 COMPLETE, NEXT L11
 - **(THIS attended session)** JK started a fresh session, confirmed the restate, and ruled "host gate, commit, then
   continue L10-4" (AUTH-4 still on) + "fold the 3 session docs into the L10-3 commit". On the host (real node v20):
   re-verified the L10-3 diff against the contract (flag-gate-first / try/catch gate branch / no Date.now·random / no
@@ -24,8 +24,22 @@
   no production caller, no store, trackerDb v23. Host gate: `NODE_ENV= npm run build` exit 0; full suite **7,550/437,
   7,548 pass / 2 characterized fail**, ZERO new reds (+10 / +1 file). Audit: VERIFIED, 0 major / 2 trivial minors
   (single-park fallback + per-team divergence untested — non-defects). Committed on codex/franchise-v1-next (2 code files +
-  doc updates; not pushed). **➡ NEXT = L10-5** (reporter tap) per L10_SCOPE_MAP.md §3. *(The sandbox L10-3 build/audit
-  entry it closes is below.)*
+  doc updates; not pushed). Committed `057340ed`.
+- **L10-5 (reporter tap / news adapter) — DONE, same session → L10 COMPLETE.** JK chose "continue to L10-5" at the
+  checkpoint. Grounded the reporter seams (`SeasonNewsEvent` at `seasonNewsGenerator.ts:11-19`; `RANDOM_EVENT` in
+  `NarrativeEventType`; the live `generateSeasonNewsTake` is LLM/network-dependent + byte-unchanged per L5d). Design call
+  (AUTH-4 default, flagged, same shape as L10-4): pure adapter mapping a fired L10 event to a `SeasonNewsEvent`, NOT a live
+  reporter call — the live emission defers to the post-D13 seam. Layer note: the adapter lives in the reporter folder
+  (`src/src_figma/app/engines/reporter/`) because core `src/engines` must not depend on the UI-layer `SeasonNewsEvent`
+  type. Delegated build to a fresh subagent, then Captain (Opus) independently audited line-by-line (builder vs auditor).
+  Deliverable: NEW pure `franchiseL10NewsAdapter.ts` (`buildFranchiseL10SeasonNewsEvent` + `L10_NEWS_DRAMATIC_WEIGHT`) +
+  NEW `__tests__/reporter/franchiseL10NewsAdapter.test.ts` (9 tests incl. an exact-key-set lock on the SeasonNewsEvent
+  shape). PURE/build-DARK, no production caller, reporter byte-unchanged, trackerDb v23. Host gate: build exit 0; full
+  suite **7,559/438, 7,557 pass / 2 characterized fail**, ZERO new reds (+9 / +1 file). Audit VERIFIED, 0 major / 0 minor.
+  Committed on codex/franchise-v1-next (2 code files + doc updates; not pushed).
+- **L10 (random events) COMPLETE: L10-1 `607fa015` · L10-2 `a830a61f` · L10-3 `8a33d9d3` · L10-4 `057340ed` · L10-5 — all
+  build-DARK, activate post-D13.** NEXT = L11 (managers) per the L-stack (a fresh subsystem needing a grounding recon
+  before contracting). *(The sandbox L10-3 build/audit entry it closes is below.)*
 
 ---
 ## Session: 2026-06-18 (AUTH-4 overnight, fresh Captain thread) — L10-3 BUILT + INDEPENDENTLY AUDITED, HOST-GATE PENDING [CLOSED by the attended host-gate session above]

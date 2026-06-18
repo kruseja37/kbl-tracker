@@ -10189,3 +10189,34 @@ Use high reasoning effort. Think step-by-step. Builder ≠ auditor — Opus re-a
 **VERIFICATION (builder, report exact output):** `NODE_ENV= npx tsc --noEmit` (0 errors); `NODE_ENV= npx vitest run src/engines/__tests__/franchiseStadiumChangeResolver.test.ts` (all green); grep that the module has no Date.now/Math.random/IndexedDB import; report every `git status` path + total changed-path count + passing-test count.
 
 **Status:** ✅ VERIFIED + COMMITTED (2026-06-18, fresh attended session, AUTH-4 keep-rolling). Subagent built → Opus Captain independently audited (builder ≠ auditor) line-by-line: VERDICT VERIFIED, 0 major / 2 trivial minors (single-park-pool fallback untested without mocking the real pool; per-team divergence not explicitly asserted — non-defects). Host gate: `NODE_ENV= npm run build` exit 0 + full suite 7,550/437, 7,548 pass / 2 characterized fail, ZERO new reds (+10 / +1 file = `franchiseStadiumChangeResolver.test.ts`). Diff = EXACTLY the 2 FILE LIST files; pure (no IndexedDB/Date/Math.random/async); build-DARK (no production caller, no store, trackerDb v23). The pure-resolver/no-live-write design call is flagged for JK. Committed on codex/franchise-v1-next (2 code files + doc updates; not pushed). NEXT = L10-5 (reporter tap).
+
+---
+
+## CONTRACT — L10-5 (reporter tap / news adapter) — 2026-06-18 (AUTH-4, fresh attended session)
+
+**ROUTE: Builder = a fresh in-session subagent | high reasoning effort. Auditor = Opus 4.8 Captain (independent; ≠ builder). Use high reasoning effort.** PURE adapter, build-DARK (no live reporter call, no I/O, no wiring) → low risk. Branch codex/franchise-v1-next. The 5th and FINAL L10 piece (per `spec-docs/L10_SCOPE_MAP.md` §3 line 55 + §5 line 73). Completes the L10 split (1-5).
+
+**DESIGN CALL (AUTH-4 default, flagged for JK — same shape as L10-4):** L10-5 is the PURE adapter mapping a fired/applied L10 event → a `SeasonNewsEvent` (the input to the reporter). It does NOT call the live LLM reporter (`generateSeasonNewsTake`) and does NOT wire into any emission path — the live emission (calling the reporter with this event + persisting the `SeasonNewsItem`) is the deferred post-D13 seam, mirroring L5d (live reporter byte-unchanged) + L10-4 (orphaned-pending apply). Reporter heat stays hardcoded `'medium'` in v1 (already so at `seasonNewsGenerator.ts:165`) — do NOT touch it or `reporterIntensity.ts`.
+
+**GOAL:** NEW pure module `src/src_figma/app/engines/reporter/franchiseL10NewsAdapter.ts` (lives WITH the reporter — core `src/engines` must NOT depend on the UI-layer `SeasonNewsEvent` type). Exports:
+- `export function buildFranchiseL10SeasonNewsEvent(input: { event: FranchiseL10EventCandidate; franchiseId: string; seasonId: string; seasonNumber: number }): SeasonNewsEvent` — maps the L10 event to a `SeasonNewsEvent`:
+  - `eventType: 'RANDOM_EVENT'` (a `NarrativeEventType`).
+  - `subjectIds: [event.targetId]`.
+  - `facts: { family: event.family, eventType: event.eventType, valence: event.valence, magnitude: event.magnitude, probability: event.probability, targetKind: event.targetKind, targetId: event.targetId }` — the deterministic ground-truth the reporter narrates (NEVER fabricated; the reporter only narrates supplied facts).
+  - `dramaticWeight`: a deterministic, conservative number in [0,1] derived from the event — e.g. a small base by valence (neutral lowest, positive/negative higher) optionally scaled by `magnitude`, clamped to [0,1]. Put the magnitudes in a local `L10_NEWS_DRAMATIC_WEIGHT` const (SIM-tuned placeholder; conservative per scope-map fork §4 line 65). Same event → same weight.
+  - passthrough `franchiseId`, `seasonId`, `seasonNumber` from input.
+- Optionally `export const L10_NEWS_DRAMATIC_WEIGHT` (the tuning const).
+
+**REUSE (import, do NOT re-implement):** type `SeasonNewsEvent` from `./seasonNewsGenerator`; type `FranchiseL10EventCandidate` from `../../../../engines/franchiseL10EventEngine`; type `NarrativeEventType` from `../../../../engines/narrativeEngine` (or type the literal). Verify the exact relative depth against the sibling `seasonNewsGenerator.ts` imports (it uses `../../../../engines/narrativeEngine`).
+
+**HARD CONSTRAINTS:** PURE — no IndexedDB/store/flag/Date.now/Math.random/async/LLM/network call; build-DARK — NO production importer (orphaned-pending the post-D13 emission seam), NO wiring into `generateSeasonNewsTake` or any emission path, NO store, NO trackerDb/backup/syncConfig touch (stays **v23**); do NOT modify `seasonNewsGenerator.ts` (the live reporter stays byte-unchanged), do NOT touch `reporterIntensity.ts`; do NOT extend/import `franchiseRandomEventGenerator.ts` / `franchiseRandomEventLog*` (BOUNDARY — a DIFFERENT engine); naming uses `franchiseL10*`, avoid `franchiseRandomEvent*`. No spec-doc/`*.md` edits, no git-add. ONLY the 2 FILE LIST files.
+
+**FILE LIST (exactly these 2):**
+- NEW `src/src_figma/app/engines/reporter/franchiseL10NewsAdapter.ts`
+- NEW `src/src_figma/__tests__/reporter/franchiseL10NewsAdapter.test.ts`
+
+**TESTS (the new file):** maps a representative stadium_change/team event AND a representative player event (e.g. performance hot_streak) to a SeasonNewsEvent with eventType 'RANDOM_EVENT', subjectIds = [targetId], facts carrying the event fields, franchiseId/seasonId/seasonNumber passthrough; determinism (same event → identical SeasonNewsEvent incl. dramaticWeight); dramaticWeight bounded [0,1]; valence ordering sane (neutral ≤ positive/negative if you implement that); no Date/random leakage (calling twice yields byte-identical output incl. any id — note: the adapter must NOT generate an id or timestamp; that's `generateSeasonNewsTake`'s job).
+
+**VERIFICATION (builder, report exact output):** `NODE_ENV= npx tsc --noEmit` (0 errors); `NODE_ENV= npx vitest run src/src_figma/__tests__/reporter/franchiseL10NewsAdapter.test.ts` (all green); grep that the module has no Date.now/Math.random/await/generateSeasonNewsTake; report every `git status` path + total changed-path count + passing-test count.
+
+**Status:** ✅ VERIFIED + COMMITTED (2026-06-18, fresh attended session, AUTH-4 keep-rolling) → **L10 COMPLETE (1-5).** Subagent built → Opus Captain independently audited (builder ≠ auditor) line-by-line: VERDICT VERIFIED, 0 major / 0 minor. Host gate: `NODE_ENV= npm run build` exit 0 + full suite 7,559/438, 7,557 pass / 2 characterized fail, ZERO new reds (+9 / +1 file = `franchiseL10NewsAdapter.test.ts`). Diff = EXACTLY the 2 FILE LIST files; pure (no Date/Math.random/await/LLM); build-DARK (no production caller, reporter byte-unchanged, trackerDb v23). The pure-adapter/no-live-emission design call is flagged for JK (same shape as L10-4). Committed on codex/franchise-v1-next (2 code files + doc updates; not pushed). NEXT = L11 (managers) per the L-stack.

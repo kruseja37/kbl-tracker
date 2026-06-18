@@ -14,8 +14,8 @@ activate post-D13 (the L9b-3b-ii hook flag default-OFF; L9b-3c orphaned-pending 
 (random events) per the L-stack: L10 → L11 managers → L12 races/All-Star/awards-fame → L13 relationships → L14 rebrand →
 the L-SIM gate. **L10 RECON DONE** (workflow `wf_b3129cd8-9e3`) → full scope/split/forks/seams/open-questions in
 `spec-docs/L10_SCOPE_MAP.md`. SPLIT: **L10-1** pure event-selection engine (✅ DONE) · **L10-2** dark
-`franchiseL10Overlays` store (✅ DONE, trackerDb v23) · **L10-3** flag + dark league-sweep hook (✅ DONE, host-gate
-passed) · **L10-4** stadium-change resolver (✅ DONE, host-gate passed) · **L10-5** reporter tap (NEXT). **L10-1 DONE** = `src/engines/franchiseL10EventEngine.ts` (`computeFranchiseL10Events`: pure deterministic
+`franchiseL10Overlays` store (✅ DONE, trackerDb v23) · **L10-3** flag + dark league-sweep hook (✅ DONE) · **L10-4**
+stadium-change resolver (✅ DONE) · **L10-5** reporter tap (✅ DONE) → **L10 COMPLETE (1-5), all build-DARK.** ➡ NEXT = **L11** (managers). **L10-1 DONE** = `src/engines/franchiseL10EventEngine.ts` (`computeFranchiseL10Events`: pure deterministic
 league-sweep roll — `P = baseRate[family] × intensity dial × morale × personality`, FNV-1a-seeded fire, 8 families with
 personality-shift excluded, fan-morale-suppressed team/stadium; mirrors `tradeRequestGeneration`; build-DARK).
 Codex-built → Opus-audited VERIFIED (tsc-0 / suite **7,527/434, 7,525 pass / 2 characterized fail**, ZERO new reds).
@@ -117,6 +117,25 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## RIGHT NOW
 
+- **✅ L10-5 VERIFIED + COMMITTED (2026-06-18, fresh attended session, AUTH-4 keep-rolling) → L10 COMPLETE (1-5) — the
+  PURE reporter tap / news adapter (the final L10 piece).** NEW pure module
+  `src/src_figma/app/engines/reporter/franchiseL10NewsAdapter.ts` (lives WITH the reporter — core `src/engines` must not
+  depend on the UI-layer `SeasonNewsEvent` type): `buildFranchiseL10SeasonNewsEvent({event, franchiseId, seasonId,
+  seasonNumber})` maps a fired `FranchiseL10EventCandidate` → a `SeasonNewsEvent` with `eventType:'RANDOM_EVENT'`,
+  `subjectIds:[targetId]`, `facts` = the deterministic ground-truth event fields (never fabricated), and a conservative
+  bounded `dramaticWeight = clamp(L10_NEWS_DRAMATIC_WEIGHT.base[valence] + magnitudeScale×magnitude, 0, 1)`. **PURE** (no
+  LLM/network/IndexedDB/Date/Math.random/async) / **build-DARK** — NO production caller, does NOT call the live reporter
+  `generateSeasonNewsTake` (byte-unchanged) and does NOT wire any emission path (the live emission is the deferred post-D13
+  seam, mirroring L5d + L10-4); reporter heat stays hardcoded `'medium'`; trackerDb stays **v23**. **DESIGN CALL (AUTH-4
+  default, FLAGGED for JK — same shape as L10-4):** pure adapter only, no live emission now. **Subagent-BUILT →
+  Opus-Captain-INDEPENDENTLY-audited VERIFIED** (read line-by-line; builder ≠ auditor; 0 major / 0 minor): host build exit 0
+  + full suite **7,559/438, 7,557 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO
+  new reds (+9 / +1 file = `franchiseL10NewsAdapter.test.ts`; an exact-key-set assertion locks the `SeasonNewsEvent` shape).
+  Committed on codex/franchise-v1-next (2 code files + doc updates; not pushed). **⇒ L10 (random events) COMPLETE: L10-1
+  engine `607fa015` · L10-2 store `a830a61f` · L10-3 hook `8a33d9d3` · L10-4 resolver `057340ed` · L10-5 adapter — all
+  build-DARK, activate post-D13.** **➡ NEXT = L11 (managers)** per the L-stack (L11 → L12 races/All-Star/awards-fame → L13
+  relationships → L14 rebrand → the L-SIM gate); L11 is a FRESH subsystem needing a grounding recon before contracting.
+  *(Prior L10-4 entry below.)*
 - **✅ L10-4 VERIFIED + COMMITTED (2026-06-18, fresh attended session, AUTH-4 keep-rolling) — the PURE stadium-change
   resolver (the concrete-resolution step for a fired `stadium_change` team event).** NEW pure engine
   `src/engines/franchiseStadiumChangeResolver.ts`: (1) `pickStadiumFromPool(currentStadiumName, seed)` — the SHARED
@@ -764,7 +783,12 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## SUITE BASELINE
 
-**7,550 tests / 437 files** — full suite run 2026-06-18 (fresh attended session, real node v20, `NODE_ENV=`) after
+**7,559 tests / 438 files** — full suite run 2026-06-18 (fresh attended session, real node v20, `NODE_ENV=`) after
+**L10-5** (the pure reporter news adapter → **L10 COMPLETE**): **7,557 pass / 2 fail** = EXACTLY the characterized
+baseline (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` 5000ms timeout). ZERO new reds (+9 tests / +1 file =
+`franchiseL10NewsAdapter.test.ts`); delta over post-L10-4 is +9 pass / +0 fail = exactly the new test file (a pure
+orphaned adapter imported by no production code cannot affect any other test). Build exit 0. trackerDb **v23** unchanged.
+*(Prior baseline retained below for the arc trail.)* **7,550 tests / 437 files** — full suite run 2026-06-18 (fresh attended session, real node v20, `NODE_ENV=`) after
 **L10-4** (the pure stadium-change resolver): **7,548 pass / 2 fail** = EXACTLY the characterized baseline
 (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` 5000ms timeout). ZERO new reds (+10 tests / +1 file =
 `franchiseStadiumChangeResolver.test.ts`); delta over the post-L10-3 baseline is +10 pass / +0 fail = exactly the new
