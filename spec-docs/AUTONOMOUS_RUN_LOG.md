@@ -726,3 +726,17 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   VERIFIED: tsc 0 / build 0 / full suite 7,307 pass / 2 characterized fail, ZERO new reds (+9 tests / +1 file);
   inversion sign hand-verified in BOTH fan-morale directions; frozen engines byte-unchanged; purity confirmed.
   Auto-committed (pure engine, no user surface). **NOW = L5d** (reporter tooth). trackerDb still v20; nothing pushed.
+
+- **2026-06-17 (AUTH-4, HOST RESUME thread) — L5d COMMITTED `e061e51` → L5 COMPLETE (a–d).**
+  Pure §13-line-230 reporter-intensity tooth ("low morale = the press turns up the heat"). Captain drafted the L5d
+  contract (PROMPT_CONTRACTS §L5d) → dispatched **Codex 5.5 | high** as builder → Opus independently audited (auditor ≠
+  builder). NEW `src/engines/reporterIntensity.ts` + a 7-test file: `computeReporterHeat(teamFanMorale)` maps fan morale
+  → a press-heat `NarrativeIntensity` signal (heat scales with fan anger / morale below neutral; bands → low/medium/high;
+  tone tags press_calm/critical/scorching), all magnitudes in `REPORTER_INTENSITY_TUNING`. Build-DARK: the live
+  LLM/Supabase reporter (`generateSeasonNewsTake`) is BYTE-UNCHANGED — the seam (replacing the hardcoded `intensity:
+  "medium"` at `seasonNewsGenerator.ts:165`) is a deferred post-D13 activation. Codex touched exactly the 2 allowed files.
+  AUDIT VERIFIED: tsc 0 / build 0 / full suite 7,314 pass / 2 characterized fail, ZERO new reds (+7 tests / +1 file);
+  math hand-verified (monotonic + band crossings at morale 33.5/17 + clamp); live reporter + frozen engines byte-unchanged;
+  purity confirmed. Auto-committed. **L5 (fan-morale teeth) COMPLETE: L5a dampener `428f7cb` · L5b flashpoint-decay
+  `5ebb148` · L5c trade-requests `8cd2cc1` · L5d reporter-heat `e061e51`.** **NOW = L7** (designation effects — wire the
+  dormant designation fame/morale effects into the Phase-2 layer, build-dark until D13). trackerDb still v20; nothing pushed.

@@ -11,9 +11,11 @@ cleaned + gitignored). The prior AUTH-4 sandbox build + decorrelated independent
 engine (`flashpointDecay.ts`, magnitudes in `FLASHPOINT_DECAY_TUNING`) + a dark gated per-game compute in
 processCompletedGame (after the fame compute). **SEAM-NEUTRAL** — `resolveTurnedOnPlayers` returns [] until L7 Albatross
 + L10/L13 trade-demander land, so even flag-ON writes nothing today. KBL_BACKUP_VERSION stays **2**; backup-parity +
-syncConfig lockstep; version-pin trap `franchiseSeasonLedgerStorage.test.ts` at `toBe(20)`. **L5c COMMITTED `8cd2cc1`** (pure §13 in-season
-trade-request generation engine — Codex-built → Opus-audited VERIFIED). **NOW: L5d** (reporter tooth) under AUTH-4.
-trackerDb host-state **v20** / KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next; nothing pushed.)
+syncConfig lockstep; version-pin trap `franchiseSeasonLedgerStorage.test.ts` at `toBe(20)`. **L5c `8cd2cc1`** (pure §13 trade-request gen) +
+**L5d `e061e51`** (pure §13 reporter-intensity tooth, live reporter byte-unchanged) → **L5 COMPLETE** (a–d: dampener /
+flashpoint-decay / trade-requests / reporter-heat; all Codex-built → Opus-audited VERIFIED). **NOW: L7** (designation
+effects) under AUTH-4. trackerDb host-state **v20** / KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next; nothing
+pushed.)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.
@@ -40,7 +42,17 @@ trackerDb host-state **v20** / KBL_BACKUP_VERSION **2**. Branch codex/franchise-
   `resolveTurnedOnPlayers` seam). **Codex 5.5 built → Opus 4.8 independently audited VERIFIED** (tsc 0 / build 0 / full
   suite **7,307 pass / 2 characterized fail**, ZERO new reds [+9 tests / +1 file]; inversion sign hand-verified both
   directions; pure type-only imports; frozen engines byte-unchanged). Auto-committed (pure engine, no user surface).
-  **NOW = L5d** (reporter tooth) under AUTH-4.
+  L5d followed (committed `e061e51`, below).
+- **✅ L5d COMMITTED `e061e51` (2026-06-17, AUTH-4 host resume) — reporter-intensity tooth → L5 COMPLETE (a–d).** Pure
+  §13 line-230 engine `reporterIntensity.ts`: maps team fan morale → a press-heat `NarrativeIntensity` signal (low morale
+  = the press turns up the heat). Build-DARK — the live LLM/Supabase reporter (`generateSeasonNewsTake`) is BYTE-UNCHANGED;
+  the seam (replacing the hardcoded `intensity:"medium"` at `seasonNewsGenerator.ts:165`) is a deferred post-D13
+  activation step. Mirrors L5a/L5c (pure primitive). **Codex 5.5 built → Opus 4.8 independently audited VERIFIED** (tsc 0
+  / build 0 / full suite **7,314 pass / 2 characterized fail**, ZERO new reds [+7 tests / +1 file]; live reporter + frozen
+  engines byte-unchanged; pure single type-only import; math hand-verified — monotonic + band crossings + clamp).
+  Auto-committed. **L5 (fan-morale teeth) COMPLETE: a dampener `428f7cb` · b flashpoint-decay `5ebb148` · c trade-requests
+  `8cd2cc1` · d reporter-heat `e061e51`.** **NOW = L7** (designation effects — wire the dormant designation fame/morale
+  effects into the Phase-2 layer, build-dark until D13) under AUTH-4.
 - **ATTENDED DESIGN SESSION (2026-06-17, JK present) — forks cleared + designation model reconciled; D10 build next.**
   No product code yet this session. (1) **OD-2..5 + D4 RULED** (DECISIONS_LOG 2026-06-17): OD-2 economy scale =
   new-league-construction-only / reuse pick-chart with farm anchor nerfed one grade-step via `FARM_NERF_SCALES` /
@@ -288,8 +300,10 @@ trackerDb host-state **v20** / KBL_BACKUP_VERSION **2**. Branch codex/franchise-
 
 ## SUITE BASELINE
 
-**7,309 tests / 414 files** — full suite re-run 2026-06-17 (AUTH-4 host resume) after **L5c** commit `8cd2cc1`: **7,307
-pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+9 tests / +1 file =
+**7,316 tests / 415 files** — full suite re-run 2026-06-17 (AUTH-4 host resume) after **L5d** commit `e061e51` (**L5
+COMPLETE**): **7,314 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds
+(+7 tests / +1 file = L5d's `reporterIntensity.test.ts`, over the post-L5c 7,309/414; trackerDb still **v20** — L5d is a
+pure engine, no store). Prior step: L5c commit `8cd2cc1` = 7,309/414 (+9 tests / +1 file =
 L5c's `tradeRequestGeneration.test.ts`, over the post-L5b 7,300/413; **trackerDb still v20** — L5c is a pure engine, no
 store). Prior step: L5b commit `5ebb148` = 7,300/413 (+18 tests / +3 files over post-L5a 7,280/410). Arc this
 session: 7,267/407 (post-L6a) →

@@ -5043,3 +5043,12 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   reds; the loyalty-inversion sign hand-verified in BOTH fan-morale directions; pure type-only imports; frozen engines
   byte-unchanged; scope = exactly the 2 allowed files). Auto-committed (pure engine, no user surface). Suite now
   **7,309 / 414**; trackerDb still v20. **NOW = L5d** (reporter tooth). Nothing pushed.
+
+### Update (cont.) — L5d committed → L5 COMPLETE
+- **L5d COMMITTED `e061e51`** — pure §13 reporter-intensity tooth (`reporterIntensity.ts`): maps fan morale → a
+  press-heat `NarrativeIntensity` signal. Build-DARK (live LLM reporter byte-unchanged; seam deferred post-D13).
+  Captain-contracted → Codex 5.5 built → Opus independently audited VERIFIED (tsc 0 / build 0 / suite 7,314 pass / 2
+  characterized fail, ZERO new reds; math hand-verified; live reporter + frozen engines byte-unchanged; pure single
+  type-only import; scope = exactly the 2 allowed files). Auto-committed. **L5 (fan-morale teeth) COMPLETE (a–d):**
+  L5a `428f7cb` · L5b `5ebb148` · L5c `8cd2cc1` · L5d `e061e51`. Suite now **7,316 / 415**; trackerDb still v20.
+  **NOW = L7** (designation effects) under AUTH-4. Nothing pushed.

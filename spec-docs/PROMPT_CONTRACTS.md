@@ -9308,3 +9308,51 @@ Use very-high reasoning effort. Think step-by-step. Builder ≠ auditor — your
 Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited by Opus (full-suite re-run, the inversion sign-proof in BOTH fan-morale directions, purity + byte-unchanged frozen engines, the boundary/personality/intensity tests, clamp invariant).
 
 **Status:** COMMITTED `8cd2cc1` (2026-06-17, AUTH-4 host resume). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / build 0 / full suite 7,307 pass / 2 characterized fail (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+9 tests / +1 file); the loyalty-inversion sign hand-verified in BOTH fan-morale directions; pure (3 type-only imports, no random/time/IO/store/React); frozen engines byte-unchanged; scope = exactly the 2 allowed files. Pure engine, no user surface → auto-committed.
+
+---
+
+## L5d — Reporter-intensity tooth (PURE engine; live reporter wiring deferred to post-D13)
+
+**ROUTE:** Codex 5.5 | high reasoning effort (pure deterministic engine, no persistence/UI/live-reporter touch) → Opus 4.8 audit (auditor ≠ builder) → standing auto-commit (pure primitive, no user-visible surface — the live reporter is NOT touched; like L5a/L5c).
+
+**ROLE:** You are the L-stack builder (Codex). Build the L5d reporter-intensity tooth: a PURE, deterministic engine that maps a team's FAN morale to a reporter "press heat" intensity signal — *low fan morale = the press turns up the heat* (§13 supporting teeth, line 230). It mirrors the L5a `fanMoraleDampener.ts` / L5c `tradeRequestGeneration.ts` pure-primitive pattern EXACTLY: own TUNING table, type-only imports, NO store, NO flag, NO wiring, NO persistence, NO React, NO LLM/Supabase, and it DOES NOT touch the live reporter. The live reporter column (`generateSeasonNewsTake`, LLM/Supabase, user-visible) stays BYTE-UNCHANGED — wiring this signal into it is a post-D13 activation step (the explicit seam below), NOT part of this dark build.
+
+**GOAL:** Add ONE new pure engine `src/engines/reporterIntensity.ts` exporting `computeReporterHeat(teamFanMorale, config?)` → `{ intensity: NarrativeIntensity; heat: number /*0..1*/; toneDirective: string; components }` + a named `REPORTER_INTENSITY_TUNING` (shape-locked, §16 sim-tune). Plus its test file. Purely additive/dark; consumed at post-D13 activation.
+
+**SOURCE OF TRUTH:** `FRANCHISE_V1_LIVING_SEASON_SPEC.md` §13 "Fan morale — the teeth", the **Supporting teeth** line (230): *"reporter intensity (low morale = the press turns up the heat)."* `FRANCHISE_V1_LIVING_SEASON_DSTACK.md` L5 ticket (line 75, "Reporter-intensity tooth → wire fan-morale into the post-game column prompt (with L4)"). Build-DARK rule: DSTACK §E (no soul-layer consumer goes live until after D13). MIRROR PRECEDENT: L5a `428f7cb` / L5c `8cd2cc1` (pure engine, own `*_TUNING` table, type-only imports, consumed later). THE EXISTING TYPE: `NarrativeIntensity = "low" | "medium" | "high"` at `src/types/reporterPreferences.ts:1` (import type-only — output must be directly consumable by the reporter later). THE SEAM (document, do NOT wire): the live reporter hardcodes `intensity: "medium"` at `src/src_figma/app/engines/reporter/seasonNewsGenerator.ts:165`; at post-D13 activation that becomes `computeReporterHeat(fanMorale).intensity` — OUT OF SCOPE here.
+
+### DESIGN (build to spec; AUTH-4 DEFAULTS-TAKEN where §13 is silent on magnitudes — all sim-tunable)
+
+**`computeReporterHeat(teamFanMorale: number /*0-99*/, config = REPORTER_INTENSITY_TUNING): ReporterHeatResult`:**
+- `pressHeat = clamp((config.neutralMorale - teamFanMorale) / config.neutralMorale, 0, 1)` — heat rises as fans get ANGRIER (morale below neutral). At/above neutral → heat 0 (the press is calm when fans are content; §13 only specifies the LOW-morale → turn-up-the-heat direction — DEFAULT-TAKEN: high morale = calm press, not "heated").
+- `intensity: NarrativeIntensity` by band: `pressHeat < config.lowHeatBand` → `"low"`; `< config.highHeatBand` → `"medium"`; else `"high"`.
+- `toneDirective: string` = `config.toneDirectives[intensity]` — a stable tag the reporter prompt will use later (e.g. `press_calm` / `press_critical` / `press_scorching`).
+- `components: { teamFanMorale, pressHeat, band: intensity }`.
+
+**`ReporterHeatResult`** interface as above. **`REPORTER_INTENSITY_TUNING`** (shape-locked; §16 SIM-TUNE placeholders): `neutralMorale 50`, `lowHeatBand 0.33`, `highHeatBand 0.66`, `toneDirectives: Record<NarrativeIntensity, string>` = `{ low: 'press_calm', medium: 'press_critical', high: 'press_scorching' }`. PURE — no Math.random/Date.now/IO/store/reporter-call/LLM/React.
+
+**DEFAULTS-TAKEN (AUTH-4 — document in the engine header):** heat scales ONLY with fan anger (morale below neutral); at/above neutral → heat 0 / intensity `"low"` (calm press). Band thresholds 0.33/0.66 + the tone tags are §16-tunable placeholders. The engine emits the SIGNAL only; wiring it into the live LLM reporter (replacing the hardcoded `"medium"`) is a post-D13 activation step, deliberately deferred (the live reporter is user-visible + LLM/Supabase — build-dark forbids touching it now).
+
+**ALLOWED files:** NEW `src/engines/reporterIntensity.ts` · NEW `src/engines/__tests__/reporterIntensity.test.ts`. NOTHING ELSE.
+
+**DO NOT:** touch the live reporter (`src/src_figma/app/engines/reporter/seasonNewsGenerator.ts`, `claudeClient.ts`, `grokClient.ts`, `commentaryEngine*`, `promptBuilder*`, `src/engines/narrativeEngine.ts`) · wire into `generateSeasonNewsTake` or replace the hardcoded `"medium"` · add store/flag/persistence/Supabase/LLM/React/IndexedDB · mutate any morale snapshot · use `Math.random`/`Date.now`/`new Date()` (pure + deterministic) · scatter magic numbers (every magnitude → `REPORTER_INTENSITY_TUNING`) · let `heat` escape [0,1] · redefine `NarrativeIntensity` (import the existing type).
+
+### TESTS (NEW `src/engines/__tests__/reporterIntensity.test.ts`, pure/deterministic)
+
+- **Calm press at high morale:** teamFanMorale 85 → heat 0, intensity `"low"`, toneDirective `press_calm`.
+- **Neutral = calm:** teamFanMorale 50 (and 60) → heat 0, intensity `"low"` (at/above neutral).
+- **Heat rises as fans sour:** teamFanMorale 30 → mid-range heat / intensity `"medium"`; teamFanMorale 5 → high heat / intensity `"high"` / toneDirective `press_scorching`.
+- **Monotonic:** strictly lower morale → heat is non-decreasing (sweep e.g. 99→0).
+- **Band boundaries:** assert the low/medium/high transitions land at the tuned thresholds (compute the morale values at heat=0.33 and 0.66).
+- **Determinism:** identical input → identical output.
+- **Clamp / totality:** heat ∈ [0,1] across extremes (morale 0 and 99); intensity is always one of the 3 literals.
+
+**VERIFICATION (prefix `NODE_ENV= `; node `~/.nvm/versions/node/v20.20.0/bin`):** tsc 0 · build 0 · FULL suite = only the 2 characterized fails (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`) + the new L5d tests, ZERO new reds. Greps: `reporterIntensity.ts` imports ONLY the `NarrativeIntensity` type (`../types/reporterPreferences`) + its own TUNING — no store/IndexedDB/reporter-engine/LLM/Supabase/React, no `Math.random`/`Date.now`/`new Date()`; `seasonNewsGenerator.ts` / `narrativeEngine.ts` / `fanMoraleDampener.ts` / `flashpointDecay.ts` / `tradeRequestGeneration.ts` BYTE-UNCHANGED (`git diff` empty).
+
+**STOP IF:** honoring "low morale = turn up the heat" needs a non-monotonic mapping (rethink) · purity can't hold · a live reporter file must change · a suite red persists past 2 fix-iterations (→ SET-ASIDE per AUTH-4).
+
+**FORMAT:** 1. Files changed (paths + count + passing-test count). 2. Each change w/ the §13 line it satisfies. 3. Verification output (tsc/build/full-suite + the new tests + the purity/byte-unchanged greps). 4. "L5d complete" OR "BLOCKED: [reason]".
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited by Opus (full-suite re-run, the monotonic + band-boundary proofs, purity + byte-unchanged frozen engines AND the untouched live reporter, the calm-at-neutral default).
+
+**Status:** COMMITTED `e061e51` (2026-06-17, AUTH-4 host resume — completes L5). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / build 0 / full suite 7,314 pass / 2 characterized fail (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+7 tests / +1 file); math hand-verified (monotonic + band crossings + clamp); the live LLM reporter (`seasonNewsGenerator.ts`) + frozen engines BYTE-UNCHANGED (build-dark held); pure single type-only import; scope = exactly the 2 allowed files. Pure engine, no user surface → auto-committed.
