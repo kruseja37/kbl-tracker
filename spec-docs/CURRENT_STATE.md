@@ -188,10 +188,17 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
   (pitch-zone = coarse strike-zone enum; injury tally = derive-on-read, no new store), and every file:line anchor — is in
   `AUTONOMOUS_RUN_LOG.md` (the 2026-06-18 "L9a RECON DONE" entry). **✅ L9a-1 DONE `e28706e9`** (optional
   `enrichment.pitchLocation` strike-zone capture — additive, no version bump, verified-to-persist; EnrichmentPanel grid →
-  browser-pending #18). **➡ START with L9a-2** (ball-strike COUNT persistence: wire `advanceCount('ball')` [0 callers
-  today] + persist the per-AB count on `AtBatEvent` + make `enrichment.pitchType` reliably written — this one TOUCHES the
-  `useGameState` hook hot path, so audit it carefully). Then L9a-3 (handedness join, wiring) · L9a-4 (OF extra-base-credit
-  season tally + injury accumulator derive-on-read). Recon transcript: wf_f3e99cd3-8a8. Deps: L8 ✓ / L1 ✓. After L9a → **L9b**
+  browser-pending #18). **⏸ L9a-2 SET ASIDE for JK** (recon wf_e3ff7176-528: the per-AB ball/strike count is VESTIGIAL —
+  `advanceCount` 0 callers, never displayed, lone caller is dead code — so making it real needs a NEW per-pitch GameTracker
+  input UX = HIGH user-intensity, which tensions the `kbl-detection-philosophy` "non-user-intensive" principle + OD-5A;
+  a genuine product/UX fork beyond AUTH-4's bounded-rework envelope → `WAITING_ON_JK.md` + the run-log OPEN DECISION; the
+  persist seam [`finalBalls/finalStrikes` on `AtBatEvent` via `buildContextSnapshot:4005`] is ready for when JK rules;
+  Captain's lean = option (b) a low-intensity post-play "final count" on the EnrichmentPanel). **➡ START with L9a-3**
+  (handedness join, TS-4: populate `batterContext.handedness`/`pitcherContext.handedness` in `buildContextSnapshot`
+  [useGameState.ts:3905-4108, today omits them — explicit "no handedness data in hook" comment ~:4090] from roster
+  bats/throws; PURE event-write wiring, no UI, no new field, no version bump → unlocks 6 split traits). Then L9a-4 (OF
+  extra-base-credit season tally + injury accumulator derive-on-read). Recon: wf_f3e99cd3-8a8 / wf_e3ff7176-528. Deps:
+  L8 ✓ / L1 ✓. After L9a → **L9b**
   traits → **L10** random events →
   **L11** managers → **L12** races/All-Star/awards-fame → **L13** relationships → **L14** rebrand → the **L-SIM gate**.
   (SET ASIDE remains: **L-ECON1** frozen draft-IV oracle + **F-144**.)

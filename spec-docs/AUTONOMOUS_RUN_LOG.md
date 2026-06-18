@@ -1025,3 +1025,25 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   `effectiveRatings`/`useGameState` hot path/`GameTracker` byte-unchanged. USER-VISIBLE → browser-pending (#18).
   Auto-committed. **NOW = L9a-2** (ball-strike count persistence — wire `advanceCount('ball')` + persist the per-AB count
   + pitchType reliability; TOUCHES the useGameState hook hot path → audit carefully). trackerDb v21; nothing pushed.
+
+- **2026-06-18 (AUTH-4, overnight) — L9a-2 SET ASIDE for JK (OPEN DECISION — a genuine product/UX fork beyond the
+  bounded-rework envelope); loop CONTINUES to L9a-3.** A focused L9a-2 recon (wf_e3ff7176-528) revealed the ticket is
+  NOT the small "wire advanceCount('ball')" it appeared: the per-AB ball/strike count is ENTIRELY VESTIGIAL today —
+  `advanceCount` (useGameState.ts:9210, the 'ball' branch already works) has ZERO live callers, `resetCount` (:9223) has
+  zero callers, the count is NEVER displayed (read only at GameTracker.tsx:10408 for manager recs), and the lone
+  'strike'-on-foul caller is DEAD CODE (`buildPlateAppearanceActionFromPlayData` foul_ball arm has 0 page callers). So
+  persisting the count alone would persist 0/0 forever — meaningless without first DRIVING it. Driving it requires a
+  BRAND-NEW per-pitch input UX in the core live GameTracker (a B-S count display + Ball/Strike controls + reset-on-PA
+  semantics — `resetCount` is uncalled, so a naive Ball button would accumulate the count WRONG across at-bats). **Why
+  SET ASIDE (not an AUTH-4 documented-default build):** (1) it is a HIGH-user-intensity interaction (a tap every pitch)
+  that directly TENSIONS the auto-loaded `kbl-detection-philosophy.md` "non-user-intensive GameTracker" principle +
+  OD-5A "never forced"; (2) it is a structural UX decision in the screen JK plays on an iPad — high-visibility,
+  high-rework, OUTSIDE AUTH-4's "bounded/reversible sim-magnitude" rework envelope; (3) reset-on-PA is a real correctness
+  trap; (4) the count's survival depends on `gameState.balls/strikes` being in the dual-copy `PersistedGameState`
+  snapshot (saved-shape — unverified). The grounded recon INDEPENDENTLY recommended flagging to JK. **The clean half is
+  ready for when JK rules:** the persist seam = NEW top-level `finalBalls?/finalStrikes?` on `AtBatEvent` stamped once in
+  `buildContextSnapshot` (useGameState.ts:4005 — gameState in scope; covers all 5 terminal record* paths via the existing
+  spread), additive, no version bump. **JK FORK (WAITING_ON_JK.md):** per-pitch count tracking in v1 — (a) full per-pitch
+  taps, (b) a lighter post-play "final count" entry on the EnrichmentPanel (opt-in, low-intensity, mirrors L9a-1, still
+  feeds the count-traits — Captain's lean), or (c) skip count-traits in v1. **Loop continues → L9a-3** (handedness join —
+  pure event-write wiring, no UI, no new field; independent of the count fork). trackerDb v21; nothing pushed.
