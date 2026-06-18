@@ -1,10 +1,12 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-18 (**SESSION ENDED — CONTEXT-HANDOFF → L8** [AUTH-4 overnight run; clean boundary after **L7
-COMPLETE + L2 COMPLETE**; a fresh session does the session-start reads, RESTATEs, and PROCEEDs at L8 under AUTH-4 WITHOUT
-waiting for JK — AUTH-4 is the standing go]. This run built→audited→committed, each Codex 5.5-built → Opus 4.8-audited:
-**L7 COMPLETE** (L7c `886d1dce` · L7d-1 `f61dcae0` · L7d-2 `aec5db99` · L7d-3 doc) + **L2 COMPLETE** (L2a store
-`6fdeba11` · L2b merge `e8ec0908` · L2c confirm `a77e0ed5`). trackerDb host-state v20→**v21** (L2a); KBL_BACKUP_VERSION stays **2**. ⚠ NEWLY-OBSERVED order-flake
+**Last Updated:** 2026-06-18 (**L8 COMPLETE (L8a `cfdd7752` + L8b `cd9e4589`) → NOW L9a (captures)** [AUTH-4 overnight
+run; a fresh session does the session-start reads, RESTATEs, and PROCEEDs at L9a under AUTH-4 WITHOUT waiting for JK —
+AUTH-4 is the standing go]. This run built→audited→committed, each Codex 5.5-built → Opus 4.8-independently-audited:
+**L8 COMPLETE** (L8a pure dev-math engine `cfdd7752` + L8b dark checkpoint-sweep compute/overlay-writer `cd9e4589`) on
+top of the prior clean boundary **L7 COMPLETE** (L7c `886d1dce` · L7d-1 `f61dcae0` · L7d-2 `aec5db99` · L7d-3 doc) +
+**L2 COMPLETE** (L2a store `6fdeba11` · L2b merge `e8ec0908` · L2c confirm `a77e0ed5`). trackerDb host-state **v21** (L8
+added NO store); KBL_BACKUP_VERSION stays **2**. ⚠ NEWLY-OBSERVED order-flake
 `AwardsWatchlist.test.tsx` (passes solo; non-deterministic — appeared in 1 of 6 full-suite runs across L7d/L2a; NOT a
 regression) — flagged for JK, see SUITE BASELINE + OPEN PENDING-JK. AUTH-4 host resume; the L5b handoff is CLEARED.
 **L5b COMMITTED `5ebb148`** —
@@ -163,17 +165,28 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
   deferred post-D13. **Codex 5.5 built → Opus 4.8 independently audited VERIFIED** (tsc 0 / build 0 / full suite 7,384
   pass / 2 characterized fail, ZERO new reds; pure; frozen engines byte-unchanged). Auto-committed.
   **⇒ L2 (franchise-instance mutable ratings-overlay layer) COMPLETE: L2a `6fdeba11` · L2b `e8ec0908` · L2c `a77e0ed5`.**
-- **➡ NEXT (fresh session resumes here): L8 — ratings development (the first real WRITER through L2).** DSTACK L8 (line 83)
-  + §8 (dampener) + §9 (line 155, checkpoint cadence). Build: an **every-20%-of-season league checkpoint sweep**; per
-  player a rating delta = on-field performance × the **§8 `fanMoraleDampener`** (L5a `428f7cb` — CONSUMED, do NOT rebuild)
-  × the personality dampener multiplier (§7/§8) × **Ambition on up-moves / Resilience on down-moves** (§6); the change is
-  proposed through the **L2 two-tier confirm** (write a `pending` overlay via `putFranchiseRatingsOverlay`, surface
-  `buildOverlayConfirmationRequest`) with a **per-team console change log** (`summarizeOverlayChangeLog`). **RATINGS ONLY,
-  never traits** (traits are L9b). Deps L2 ✓ / L5 ✓(L5a) / L3 ✓ / L1 ✓. Likely SPLIT **L8a** (pure dev-math engine,
-  consumes the dampener) / **L8b** (checkpoint cadence + the overlay-writer wiring — touches the live season path →
-  watched/browser-pending). Build-DARK behind the morale flag, activate post-D13. After L8 → L9a captures → L9b traits →
-  L10 random → L11 managers → L12 races/All-Star/awards-fame → L13 relationships → L14 rebrand → the L-SIM gate. (SET
-  ASIDE remains: L-ECON1 frozen draft-IV oracle + F-144.)
+- **✅ L8 COMPLETE (ratings development — the first real WRITER through L2): L8a `cfdd7752` + L8b `cd9e4589`.** L8a =
+  pure `src/engines/ratingsDevelopment.ts` (rawDelta = on-field performance × player-morale alignment → the L5a §8
+  `fanMoraleDampener` CONSUMED [personality + Ambition/Resilience + Loyalty all live inside it → no double-count] →
+  0-99 integer clamp → deterministic earned-magnitude shift gate; all magnitudes in `RATINGS_DEVELOPMENT_TUNING`). L8b =
+  default-OFF `isFranchisePhase2CheckpointEnabled` flag + `src/utils/franchiseCheckpointSweepCompute.ts` + a flag-gated
+  dark hook in processCompletedGame (after the flashpoint gate): at each deterministic 20%-of-season boundary (fires 5×/
+  season) sweeps the MLB roster (perf signal = `valueDelta` ÷ 200000; team fan morale `?? 50` dark-safe) and writes one
+  `pending`+`permanent` ratings overlay per shifter through `putFranchiseRatingsOverlay` (deterministic idempotent id;
+  checkpoints stack). **Doubly-dark** (flag OFF + `pending` overlays inert in the merge until a post-D13 confirm UI); NO
+  new store / trackerDb stays **v21**. Both Codex-built → Opus-independently-audited VERIFIED (tsc/build 0; suite 7,401
+  then 7,410 pass / 2 characterized fail, zero new reds; frozen engines/store byte-unchanged). L8b = live game path +
+  overlay writes → **browser-pending** (scenario #17). **OPEN DECISION logged for JK** (`AUTONOMOUS_RUN_LOG.md`): the
+  L5a dampener weights a cold-team counter-trend-UP gain by AMBITION as MORE-brake vs §6:111's "upside gas pedal" framing
+  — L8 consumes L5a as-built (L5 owns the §8 primitive); flagged, not relitigated.
+- **➡ NEXT (fresh session resumes here): L9a — net-new reality CAPTURE layer (§9 / OD-5 / TS-1..13).** Per the JK ruling
+  (OD-5, DECISIONS_LOG 2026-06-17): **manual/opt-in, never forced, used when data present** → **REQUIRES optional
+  GameTracker zone inputs for pitch/hit location** + a **cumulative season injury tally**. Net-new captures per
+  `TRAIT_SIGNAL_CERTIFICATION.md` (TS-1..13): pitch-ZONE, OF-extra-base-credit (arm), the injury accumulator; everything
+  else reuses existing fields. This is the capture substrate L9b (the trait engine) consumes. **Build stays WATCHED**
+  (live GameTracker path → browser-pending). Deps: L8 ✓ / L1 ✓. After L9a → **L9b** traits → **L10** random events →
+  **L11** managers → **L12** races/All-Star/awards-fame → **L13** relationships → **L14** rebrand → the **L-SIM gate**.
+  (SET ASIDE remains: **L-ECON1** frozen draft-IV oracle + **F-144**.)
 - **ATTENDED DESIGN SESSION (2026-06-17, JK present) — forks cleared + designation model reconciled; D10 build next.**
   No product code yet this session. (1) **OD-2..5 + D4 RULED** (DECISIONS_LOG 2026-06-17): OD-2 economy scale =
   new-league-construction-only / reuse pick-chart with farm anchor nerfed one grade-step via `FARM_NERF_SCALES` /
@@ -421,7 +434,13 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## SUITE BASELINE
 
-**7,386 tests / 422 files** — full suite independently re-run 2026-06-18 (AUTH-4 overnight) after **L2c** commit
+**7,412 tests / 424 files** — full suite independently re-run 2026-06-18 (AUTH-4 overnight) after **L8b** commit
+`cd9e4589`: **7,410 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds
+(+26 tests / +2 files = L8a `ratingsDevelopment.test.ts` [17] + L8b `franchiseCheckpointSweepCompute.test.ts` [9], over
+the post-L2c 7,386/422). trackerDb stays **v21** (L8 added NO store); KBL_BACKUP_VERSION **2**. L8a auto-committed (pure);
+L8b → browser-pending (live game path + overlay writes). The known order-flakes did NOT appear in either L8 audit run.
+*(Prior baseline retained below for the arc trail.)* **7,386 tests / 422 files** — full suite independently re-run
+2026-06-18 (AUTH-4 overnight) after **L2c** commit
 `a77e0ed5`: **7,384 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds
 (+10 tests / +1 file = L2c's `ratingsOverlayConfirmation.test.ts`, over the post-L2b 7,374/421; trackerDb still **v21** —
 L2c is a pure engine, no store). **L2 trio all pure/dark + persistence-clean; trackerDb at v21 (only L2a bumped it).**
@@ -571,6 +590,14 @@ forced the test edit, and the stale `teamMvpAcePreview` assertion was aligned to
    store is empty (no overlays written yet — it's dark until L8/L9b); backup → wipe → restore round-trips with the new
    store present (empty). This is a saved-data-shape change, so it leads the batch. (Engine audit already proved the
    v20→v21 migration-survival + backup round-trip in unit tests; this is the real-franchise confirmation.)
+17. **L8b** (PERSISTENCE/live-path — prioritized; the first real WRITER through L2) the dark ratings-development
+    checkpoint sweep: with the **default-OFF** `isFranchisePhase2CheckpointEnabled` flag (normal play), confirm playing a
+    franchise season writes ZERO overlays and adds no perceptible overhead (the hook flag-gates first → true no-op). Then
+    (dev/QA only — flip the flag) play to a 20%-of-season boundary game and confirm the `franchiseRatingsOverlays` store
+    receives `pending`+`permanent` overlays for shifting MLB players (correct franchise/season/team scope, valid rating
+    key per player type, deterministic id `…:checkpoint-N`), idempotent on a replayed boundary (no dup rows), and that
+    **nothing in the live UI changes** (pending overlays stay inert in the merge until the post-D13 confirm UI). Saved-
+    data-shape adjacent (writes into the v21 store; no schema change), so it rides with the persistence batch.
 
 ## OPEN PENDING-JK (rolling)
 

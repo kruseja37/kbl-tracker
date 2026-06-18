@@ -949,3 +949,21 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   key, hitter→a BatterRatings key, branch on `isPitcher`); `overall` is a letter grade → ruled out. `performanceSignalScale`
   ≈ 200000 placeholder (valueDelta is signed dollars, ~±$50k–$500k). PENDING overlays are INERT in the merge until confirmed
   (post-D13 UI) → doubly-dark. Live path + persistence → audited HARDEST, browser-pending.
+
+- **2026-06-18 (AUTH-4, overnight) — L8b COMMITTED `cd9e4589` → L8 COMPLETE.** Dark checkpoint-sweep compute + overlay
+  writer + processCompletedGame hook, exactly to plan. 4 files: NEW `franchiseCheckpointSweepCompute.ts` + 9-test file,
+  EDIT `franchisePhase2Flags.ts` (4th default-OFF flag) + `processCompletedGame.ts` (flag-gated dark hook after the
+  flashpoint gate). Codex 5.5 built → Opus 4.8 INDEPENDENTLY audited HARDEST (live-path + first real writer through L2):
+  tsc 0 / build 0 / 9 focused tests; full suite **7,410 pass / 2 characterized fail**, ZERO new reds (+9 tests / +1 file
+  over the 7,401/423 L8a baseline). Full diff hand-read: flag-OFF is a TRUE no-op (seam + writer not called); the 20%
+  boundary is integer-only + fires exactly 5× (tested T=10/32/162); MLB+TV-row roster join correct (farm/no-TV excluded);
+  `normalizePersonality` applied (Spirited→JOLLY, Crafty→TOUGH); dark-safe morale fallback 50; per-team morale caching;
+  `pending`+`permanent` overlays with deterministic idempotent ids (replay → 1 row, proven); `createdAt` = the TV row's
+  `computedAt` (NO new Date). Pitcher classification uses `primaryPosition` against the exact `Position`-union pitcher set
+  (MORE robust than the contracted `isPitcher`-only — that field isn't reliable on the franchise Player). NO new store /
+  trackerDb stays **v21** / KBL_BACKUP_VERSION 2; `ratingsDevelopment`/`fanMoraleDampener`/`franchiseRatingsOverlayStorage`/
+  `ivEngine`/`playerDatabase` byte-unchanged. LOW (acceptable): `NEUTRAL_HIDDEN_MODIFIERS` re-declared locally to avoid an
+  import cycle (documented; 50s unlikely to drift). Auto-committed; live game path + overlay writes → **browser-pending**
+  (CURRENT_STATE scenario #17). **⇒ L8 COMPLETE: L8a `cfdd7752` + L8b `cd9e4589`. NOW = L9a** (net-new reality capture
+  layer — §9/OD-5/TS-1..13: optional GameTracker pitch/hit zone inputs + injury accumulator; manual/opt-in; watched/
+  browser-pending). trackerDb v21; nothing pushed.
