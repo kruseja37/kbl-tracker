@@ -57,3 +57,15 @@ export function isFranchisePhase2TraitsEnabled(): boolean {
 export function setFranchisePhase2TraitsEnabledForTests(enabled: boolean | null): void {
   franchisePhase2TraitsEnabledOverride = enabled;
 }
+
+export const FRANCHISE_PHASE2_L10_ENABLED_DEFAULT = false;
+
+let franchisePhase2L10EnabledOverride: boolean | null = null;
+
+export function isFranchisePhase2L10Enabled(): boolean {
+  return franchisePhase2L10EnabledOverride ?? FRANCHISE_PHASE2_L10_ENABLED_DEFAULT;
+}
+
+export function setFranchisePhase2L10EnabledForTests(enabled: boolean | null): void {
+  franchisePhase2L10EnabledOverride = enabled;
+}

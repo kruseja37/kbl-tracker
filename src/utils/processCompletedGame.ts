@@ -60,11 +60,13 @@ import {
   isFranchisePhase2FlashpointEnabled,
   isFranchisePhase2MoraleEnabled,
   isFranchisePhase2TraitsEnabled,
+  isFranchisePhase2L10Enabled,
 } from './franchisePhase2Flags';
 import { persistDarkFameRecordsForCompletedGame } from './franchiseFameCompute';
 import { persistDarkFlashpointDecayForCompletedGame } from './franchiseFlashpointDecayCompute';
 import { persistDarkCheckpointSweepForCompletedGame } from './franchiseCheckpointSweepCompute';
 import { persistDarkTraitGrantForCompletedGame } from './franchiseTraitGrantCompute';
+import { persistDarkL10ForCompletedGame } from './franchiseL10SweepCompute';
 import type { HiddenModifiers } from '../types/game';
 
 export interface ProcessGameResult {
@@ -632,6 +634,13 @@ export async function processCompletedGame(
             await persistDarkTraitGrantForCompletedGame(gameState, trueValueScope, archiveOptions);
           } catch (e) {
             console.warn('[Traits] dark trait-grant compute skipped for completed game ' + gameState.gameId + ':', e);
+          }
+        }
+        if (isFranchisePhase2L10Enabled()) {
+          try {
+            await persistDarkL10ForCompletedGame(gameState, trueValueScope, archiveOptions);
+          } catch (e) {
+            console.warn('[L10] dark random-event sweep skipped for completed game ' + gameState.gameId + ':', e);
           }
         }
         try {

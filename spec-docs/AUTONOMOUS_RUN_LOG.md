@@ -1469,3 +1469,50 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   - **➡ NEXT = L10-3** (default-OFF `isFranchisePhase2L10Enabled` flag + `persistDarkL10ForCompletedGame` league-sweep
     hook gated by flag AND `isCheckpointBoundary`, wiring L10-1 `computeFranchiseL10Events` → L10-2 store; mirror L9b-3b-ii
     `franchiseTraitGrantCompute`; insert the 6th gate branch after processCompletedGame.ts:632).
+
+## 2026-06-18 — L10-3 BUILT + INDEPENDENTLY AUDITED VERIFIED — HOST-GATE PENDING (AUTH-4 overnight)
+- **Ticket:** L10-3 (flag + dark league-sweep hook) on codex/franchise-v1-next. Wires L10-1 engine → L10-2 store.
+- **Fresh Captain thread** (prior thread hit context limit → HANDOFF_NEEDED consumed by kbl-thread-watch). Did the full
+  session-start reads (SESSION_RULES, AUDIT_LOG[partial+CURRENT_STATE/SESSION_LOG carry the live state], AUDIT_PLAN,
+  SESSION_LOG, CURRENT_STATE, CLAUDE.md, AI_TEAM_OPERATING_MODEL, L10_SCOPE_MAP). RESTATEd, proceeded under AUTH-4.
+- **SANDBOX REALITY:** isolated Linux, node v22 (NOT host v20), NO codex CLI, mount blocks git unlink/index.lock, >42s
+  processes killed. So the Captain (Opus) BUILT the diff directly (a tight mirror of the L9b-3b-ii trait hook), then
+  satisfied the triangle via an INDEPENDENT decorrelated-reader audit (a fresh subagent, ≠ builder). Full build + full
+  suite + commit are host-gated (logged in WAITING_ON_JK.md [ticket:L10-3]).
+- **WHAT WAS BUILT (5 files):** (1) `franchisePhase2Flags.ts` 6th flag block `isFranchisePhase2L10Enabled` (default OFF);
+  (2) NEW `franchiseL10SweepCompute.ts` (`persistDarkL10ForCompletedGame` + `resolveL10Candidates` + `l10SweepSeam`):
+  flag-gate-first → resolveGameNumber → totalGames → isCheckpointBoundary → build player+team L10 candidates (mirror
+  resolveCheckpointRoster) → computeFranchiseL10Events (intensity 'standard', seedBase franchise:season:gameNumber) →
+  write pending franchiseL10Overlays rows (idempotent id …:family:eventType:l10-gameNumber, applied:false, createdAt from
+  max at-bat ts); (3) `processCompletedGame.ts` 6th gate branch after the Traits gate (try/catch, never rethrows) + 2
+  imports; (4) NEW `tests/franchiseL10SweepCompute.test.ts` (5 tests incl. real producer→consumer seam test).
+- **NFL / VERIFICATION:** tsc --noEmit exit 0 (full project, twice); 5/5 targeted tests green. Engine probed: the seeded
+  candidate set fires exactly 3 events (2 player + 1 team via team-dd) under 'standard' → the written>0 / per-event / team-
+  target assertions are non-vacuous. Self-checks: 6 gate branches in correct order (Fame/Flashpoint/Checkpoint/Traits/L10
+  at processCompletedGame.ts:639); no Date.now/Math.random in the new compute; flag default false; NO trackerDb/backup/
+  syncConfig/ledger-PIN files touched (v23 unchanged, zero migration risk); no franchiseRandomEventGenerator import.
+- **INDEPENDENT AUDIT (decorrelated reader subagent, ≠ builder):** VERDICT VERIFIED, 0 major / 3 minor. M1 (seam test
+  never fired a team-target row) → CLOSED in-session by adding team-dd(fanMorale 0) so a targetKind:'team' row maps end-to-
+  end; re-ran 5/5 green + tsc-0. M2 (cosmetic single-sort divergence from the mirror) — left, behavior-correct. M3 (sandbox
+  probe artifacts probe_l10_*.mjs in repo root — mount blocked unlink) → host must delete, NOT commit.
+- **HOST GATE:** `NODE_ENV= npm run build` (exit 0) + full suite (7,535/435 → 7,533 pass / 2 characterized fail, ZERO new
+  reds, +5) → delete probe_l10_tmp.mjs / probe_l10_team.mjs / probe_l10_full.mjs / .watch_write_test /
+  .claude/settings.local.json → commit EXACTLY the 5 files (co-author trailer, never push). Live path → browser-pending #24.
+- **➡ NEXT (after host-commit) = L10-4** (stadium-change event) then L10-5 (reporter tap) per L10_SCOPE_MAP.md §3.
+
+## 2026-06-18 — L10-3 HOST GATE PASSED + COMMITTED (fresh attended session, AUTH-4 keep-rolling)
+- JK started a fresh session, confirmed the restate, ruled "host gate → commit → continue L10-4" (AUTH-4 still on) and
+  "fold the 3 session docs into the L10-3 commit". Real host (node v20), `NODE_ENV=` already clean.
+- Re-verified the L10-3 diff against the contract before committing: flag default OFF + flag-gate FIRST; the 6th gate
+  branch is try/catch-wrapped (only `console.warn`s, never blocks completion); `createdAt` from the max at-bat timestamp
+  (no Date.now/Math.random); NO store/DB/backup/PIN/syncConfig touch (trackerDb v23 unchanged); no
+  `franchiseRandomEventGenerator` import. Removed the stale `.git/index.lock`; deleted the sandbox junk
+  (probe_l10_tmp/team/full.mjs, .watch_write_test, .fuse_hidden0000000200000001). Left the untracked
+  `reference-docs/Super Mega Baseball 4 Rosters.csv` (separate pending item).
+- **`NODE_ENV= npm run build` exit 0** (`✓ built in 7.74s` + PWA → tsc clean). **Full suite `NODE_ENV= npm test`:
+  7,540/436, 7,538 pass / 2 fail** = EXACTLY the characterized baseline (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`),
+  ZERO new reds, +5 / +1 file = `franchiseL10SweepCompute.test.ts`.
+- **Committed** on codex/franchise-v1-next (5 contracted files + the 3 session docs folded in per JK; co-author trailer;
+  NOT pushed). WAITING_ON_JK [ticket:L10-3] marked RESOLVED. Live path → browser-pending #24.
+- **➡ NEXT = L10-4** (stadium-change event: low base rate suppressed by high fan morale, pool-pick from `parkLookup.ts`,
+  writes `FranchiseTeamStadiumSnapshot` so analytics recompute — persistence-adjacent, medium risk; needs a contract).

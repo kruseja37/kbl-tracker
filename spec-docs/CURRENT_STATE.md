@@ -14,8 +14,8 @@ activate post-D13 (the L9b-3b-ii hook flag default-OFF; L9b-3c orphaned-pending 
 (random events) per the L-stack: L10 → L11 managers → L12 races/All-Star/awards-fame → L13 relationships → L14 rebrand →
 the L-SIM gate. **L10 RECON DONE** (workflow `wf_b3129cd8-9e3`) → full scope/split/forks/seams/open-questions in
 `spec-docs/L10_SCOPE_MAP.md`. SPLIT: **L10-1** pure event-selection engine (✅ DONE) · **L10-2** dark
-`franchiseL10Overlays` store (✅ DONE, trackerDb v23) · **L10-3** flag + dark league-sweep hook (NEXT) · L10-4
-stadium-change event · L10-5 reporter tap. **L10-1 DONE** = `src/engines/franchiseL10EventEngine.ts` (`computeFranchiseL10Events`: pure deterministic
+`franchiseL10Overlays` store (✅ DONE, trackerDb v23) · **L10-3** flag + dark league-sweep hook (✅ DONE, host-gate
+passed) · **L10-4** stadium-change event (NEXT) · L10-5 reporter tap. **L10-1 DONE** = `src/engines/franchiseL10EventEngine.ts` (`computeFranchiseL10Events`: pure deterministic
 league-sweep roll — `P = baseRate[family] × intensity dial × morale × personality`, FNV-1a-seeded fire, 8 families with
 personality-shift excluded, fan-morale-suppressed team/stadium; mirrors `tradeRequestGeneration`; build-DARK).
 Codex-built → Opus-audited VERIFIED (tsc-0 / suite **7,527/434, 7,525 pass / 2 characterized fail**, ZERO new reds).
@@ -117,6 +117,40 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## RIGHT NOW
 
+- **✅ L10-3 VERIFIED + COMMITTED (2026-06-18, AUTH-4 overnight; host-gate passed in a fresh attended session) — the flag +
+  dark league-sweep hook that wires the L10-1 engine → the L10-2 store (the wiring half of L10).** (1) 6th default-OFF
+  Phase-2 flag `isFranchisePhase2L10Enabled` (cloned the TRAITS block in `franchisePhase2Flags.ts`). (2) NEW
+  `src/utils/franchiseL10SweepCompute.ts` `persistDarkL10ForCompletedGame(gameState, scope, archiveOptions)`: flag-gate
+  FIRST (normal play = zero-cost no-op, no loads) → resolve league `gameNumber` → `getSeasonMetadata().totalGames` →
+  `isCheckpointBoundary` (20%-of-season cadence, reused) → `resolveL10Candidates` (mirrors `resolveCheckpointRoster`:
+  MLB-only roster, per-team fan morale memoized via `getFranchiseMoraleSnapshot(scope,'team-fan',teamId)?.currentValue ??
+  50`, player morale, `normalizePersonality`, `performanceSignal` via `normalizePerformanceSignal(valueDelta)`; builds
+  BOTH player AND distinct-team candidates) → `computeFranchiseL10Events({candidates, intensity:'standard',
+  seedBase})` (L10-1; seedBase = `${franchiseId}:${seasonId}:${gameNumber}`) → writes each emitted event as a PENDING
+  `franchiseL10Overlays` row via `putFranchiseL10Overlay` (L10-2) — deterministic idempotent id
+  `${franchiseId}:${seasonId}:${statsScopeId}:${targetId}:${family}:${eventType}:l10-${gameNumber}`, `applied:false`,
+  `source:'l10-random-event'`, `createdAt` from the MAX persisted at-bat timestamp (NO Date.now). `l10SweepSeam` exposes
+  roster/compute for stubbing. (3) 6th gate branch `if (isFranchisePhase2L10Enabled()) { try { await
+  persistDarkL10ForCompletedGame(...) } catch (e) { console.warn('[L10] …') } }` inside `if (trueValueScope)` after the
+  Traits gate (processCompletedGame.ts:639). (4) NEW `franchiseL10SweepCompute.test.ts` (5 tests: flag-off dark-noop
+  loads-nothing · non-boundary not-checkpoint · boundary writes pending rows + idempotent replay · a REAL
+  producer→consumer SEAM test feeding live `computeFranchiseL10Events` · two-runs-identical determinism). **Doubly-dark**
+  (flag OFF + every row pending+applied:false). NO new store / trackerDb stays **v23** / KBL_BACKUP_VERSION stays **2**.
+  **Captain(Opus)-BUILT (no Codex CLI in sandbox) → INDEPENDENTLY decorrelated-reader-AUDITED VERIFIED** (0 major / 3
+  minor; M1 seam-team-path CLOSED in-session by seeding `team-dd` so a `targetKind:'team'` row is live-tested; M2
+  cosmetic; M3 = sandbox probe artifacts to delete host-side): tsc --noEmit exit 0 (full project) + 5/5 targeted green
+  (engine fires 3 events for the seed → non-vacuous); flag default OFF + flag-gate FIRST; gate branch try/catch never
+  rethrows; deterministic (no Date.now/random); MLB-roster + per-team morale faithful; NO store/DB/backup/PIN drift; no
+  `franchiseRandomEventGenerator` boundary violation; diff EXACTLY the 5 FILE LIST paths. **HOST GATE PASSED (2026-06-18,
+  fresh attended session, real node v20):** `NODE_ENV= npm run build` exit 0 (`✓ built in 7.74s` + PWA) + full suite
+  **7,540/436, 7,538 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds
+  (+5 / +1 file = `franchiseL10SweepCompute.test.ts`). Probe artifacts deleted; the diff was independently re-verified
+  against the contract (flag-gate-first, try/catch gate branch, no Date.now/random, no store/DB/PIN touch) before commit.
+  Committed on codex/franchise-v1-next (5 contracted files + the 3 session docs folded in per JK; never pushed). Live
+  path → browser-pending (#24). **➡ NEXT = L10-4** (stadium-
+  change event: low base rate suppressed by high fan morale, pool-pick from `parkLookup.ts`, writes
+  `FranchiseTeamStadiumSnapshot` so analytics recompute) then **L10-5** (reporter tap) per `L10_SCOPE_MAP.md` §3.
+  *(Prior L10-2 entry below.)*
 - **✅ L10-2 VERIFIED + COMMITTED (2026-06-18, AUTH-4 overnight) — the dark `franchiseL10Overlays` store (trackerDb
   v22→v23; the persistence half of L10).** NEW `src/utils/franchiseL10OverlayStorage.ts` (1:1 mirror of
   `franchiseTraitOverlayStorage` with the L10-event row: `targetId`/`targetKind` player|team + family/eventType/valence/
@@ -708,7 +742,11 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## SUITE BASELINE
 
-**7,535 tests / 435 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L10-2** (the dark
+**7,540 tests / 436 files** — full suite run 2026-06-18 (fresh attended session, real node v20, `NODE_ENV=`) after
+**L10-3** (the flag + dark league-sweep hook): **7,538 pass / 2 fail** = EXACTLY the characterized baseline
+(`wpaRuntimeBoundary` "stays-allowlisted" + `franchiseManualSmokeFixture` 5000ms timeout). ZERO new reds (+5 tests /
++1 file = `franchiseL10SweepCompute.test.ts`). Build exit 0 (`✓ built in 7.74s` + PWA → tsc clean). trackerDb **v23**
+unchanged (L10-3 added no store); KBL_BACKUP_VERSION 2. *(Prior baseline retained below for the arc trail.)* **7,535 tests / 435 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L10-2** (the dark
 `franchiseL10Overlays` store; trackerDb v22→v23): **7,533 pass / 2 fail** = EXACTLY the characterized baseline
 (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`). ZERO new reds (+8 tests / +1 file =
 `franchiseL10OverlayStorage.test.ts`). tsc 0; v22→v23 migration-survival + backup parity proven; KBL_BACKUP_VERSION 2.
