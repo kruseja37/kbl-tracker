@@ -1083,3 +1083,48 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   peer-relative strength/percentile scorer + P(gain/lose)=reality-percentile×personality×morale + grant/write-back with
   2-trait cap / hysteresis / no-offsetting-pair / role-eligibility / min-sample valve). DSTACK L9b:84; Cert VI.5. Likely
   a multi-part SPLIT — recon first. Build-DARK, activate post-D13. trackerDb v21; nothing pushed.
+
+- **2026-06-18 (AUTH-4, overnight) — L9b RECON DONE (wf_8a9e7769-576, 5 readers) → SCOPE CAPTURED → CONTEXT-HANDOFF.**
+  This thread is at its practical context limit after L8 + all of L9a (18 commits). L9b is the LARGEST/riskiest L-ticket
+  (a SMB4-asset trait engine that WRITES trait changes) → it gets a FRESH thread with full headroom + careful write-back
+  audit. The run log + CURRENT_STATE fully scope it so the fresh thread contracts L9b-1 directly without re-reconning.
+  **L9b SPLIT (converged across the 5 readers):**
+  - **L9b-1 — scorer (PURE, build FIRST, lowest risk):** a peer-relative strength/percentile scorer over the L9a-captured
+    logs. Lift the module-private `getPercentile` (`salaryCalculator.ts:946`, ASSUMES pre-sorted ascending) to a shared
+    `src/engines/percentile.ts` (export/lift, do NOT reimplement — drift risk). Build role-keyed peer pools (VI.2:
+    pitcher/position/universal — needs its OWN merge/floor policy, NOT `POSITION_MERGE_GROUPS`). SCALE counting signals
+    first via `scaledThreshold(threshold, config, basis)` (`franchiseAdaptiveStandards.ts:128`; basis 'season' for
+    PA/games, 'combined' for IP, 'none' for rate signals) — mirrors `franchiseAwardTrust.ts:14-21`. Per signal →
+    `realityPercentile` 0..1 (= the §9 strength score, TS-2). Pure engine, no IndexedDB.
+  - **L9b-2 — acquisition (PURE):** `P(gain/lose) = realityPercentile × personalityTilt(§6/VI.3) × morale(L3)` (the
+    DSTACK-canonical MULTIPLICATIVE shape; combiner shape is SPEC-FIXED, all coefficients SIM-TUNED §16). Gate by the
+    VI.1 min-sample valve (thin data → dormant, never flickers), gain-high/lose-low HYSTERESIS (two distinct thresholds,
+    widths sim-tuned), the no-offsetting-pair rule, role-eligibility VI.2 (25 pitcher / 39 position / 7 universal / 1 cut
+    [Sign Stealer]). CONTINUOUS cadence (vs ratings' 20%-checkpoint), but percentile is FULL-SEASON-pool (the valve is the
+    ordering guard) → effectively season-end/rolling. Produces trait-change PROPOSALS only.
+  - **L9b-3 — grant/write-back (PERSISTENCE CLASS, audit HARDEST):** mirror L8b — a default-OFF Phase-2-flag-gated dark
+    hook computes proposals + a CONTEXT RECONSTRUCTOR (populate the GameContext event flags `buildGameContext` leaves
+    undefined → call `activeTraitNames` per persisted AtBat to count fires) + writes PENDING trait rows + a TRAIT analog
+    of `ratingsOverlayConfirmation` (the §11 SMB4-console instruction). The post-D13 confirm transform writes `trait1`/
+    `trait2` (the 2-slot cap + strength-ranked DISPLACEMENT, atomic — a partial write is a data-integrity bug) onto the
+    franchise Player via `saveFranchisePlayer`. **L9b is the FIRST real trait writer** (greenfield — AwardsCeremonyFlow
+    gives NO trait rewards per AWARD-6/§23; RatingsAdjustmentFlow writes ratings only). Doubly-dark.
+  **KEY FACTS / GOTCHAS (durable):**
+  - The matrix `TRAIT_INTERACTION_MATRIX` (`traitInteractionMatrix.ts:143`, 75 entries === traitPricing set) is FROZEN
+    hand-authored SMB4-asset data with JK-ratified rulings embedded (potency inversion JK-CONFIRMED 2026-06-10; A1-A16) —
+    **CONSUME, never regenerate/re-derive/clean-up.** `evaluatePredicate` (`effectiveRatings.ts:237-315`) handles all 24
+    `PredicateCondition` kinds; `activeTraitNames` (`:367`) returns fired traits. L9b adds NO traits / NO predicate kinds.
+  - Traits are FREE-FORM strings `Player.trait1?`/`trait2?` (`leagueBuilderStorage.ts:247-248`; no `TraitName` type) — a
+    misspelled trait silently never fires; known drift: pricing/matrix 'K Neglector' vs SMB4-guide 'K Neglecter' + FA
+    'Off-speed Hitter' (data fix, NOT matrix). L9b-1 should add a name-validation guard.
+  - The numeric overlay merge (`ratingsOverlayMerge.ts`) is RATING-only + guards on base rating keys → it SILENTLY IGNORES
+    trait rows. So a confirmed trait MUST be applied by a SEPARATE trait-confirm transform writing trait1/trait2 — NOT the
+    delta merge (else orphaned write-back).
+  - 8 traits resolve to no-op effect kinds (expectedValueNote/pitchQualityModifier/etc.) in the single-call vector — L9b
+    does NOT need to activate them (that's a separate magnitude/spec question → JK, out of L9b scope).
+  **JK FORK (non-blocking — L9b-1/2 are pure; decide before L9b-3; documented default = REUSE):** the trait write-back
+  store — REUSE the existing `franchiseRatingsOverlays` v21 store for trait changes too (recommended; NO version bump, NO
+  pin change) vs a parallel `franchiseTraitOverlays` store (type-clean categorical-vs-numeric, but v21→v22 + 3-place
+  backup parity + the `franchiseSeasonLedgerStorage` store-list pin). Plain terms: "reuse the ratings-change ledger for
+  trait changes too, or give trait changes their own ledger?" Logged to WAITING_ON_JK; AUTH-4 default = reuse unless JK
+  rules. Full recon transcript: wf_8a9e7769-576. **NEXT THREAD: contract + build L9b-1 (the pure scorer) first.**

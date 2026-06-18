@@ -186,8 +186,16 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
   "game-changer feature"; built on `traitInteractionMatrix.ts`; consumes ALL the L9a captures): log-reconstructed
   activation context + a peer-relative strength/percentile scorer (rides Adaptive Standards) + P(gain/lose) acquisition
   = reality-percentile × personality × morale + the grant/write-back (2-trait cap, hysteresis, no-offsetting-pair,
-  role-eligibility VI.2, the min-sample valve). DSTACK L9b line 84; Cert VI.5; deps L9a ✓ / L2 ✓ / L3 ✓ / L1 ✓. LIKELY
-  a multi-part SPLIT (scorer / acquisition / grant-writeback) — recon it first. Build-DARK, activate post-D13.
+  role-eligibility VI.2, the min-sample valve). DSTACK L9b line 84; Cert VI.5; deps L9a ✓ / L2 ✓ / L3 ✓ / L1 ✓. **RECON DONE (wf_8a9e7769-576, 5 readers) — full
+  scope + the split + key gotchas in `AUTONOMOUS_RUN_LOG.md` (the 2026-06-18 "L9b RECON DONE" entry).** SPLIT: **L9b-1**
+  scorer (PURE — lift `getPercentile`→`src/engines/percentile.ts`, role peer-pools VI.2, scale via `scaledThreshold`;
+  build FIRST, lowest risk) → **L9b-2** acquisition (PURE — `P=percentile×personality×morale` + min-sample valve +
+  hysteresis + no-offsetting-pair + role-eligibility) → **L9b-3** grant/write-back (PERSISTENCE — L8b-pattern dark hook +
+  context reconstructor + PENDING trait rows + §11 trait-confirm → writes `trait1`/`trait2` 2-slot displacement via
+  `saveFranchisePlayer`; **L9b is the FIRST trait writer**; audit HARDEST). The matrix is FROZEN SMB4-asset data
+  (consume, never regenerate). **JK FORK (non-blocking, default=REUSE):** trait write-back store — reuse
+  `franchiseRatingsOverlays` (no version bump) vs new `franchiseTraitOverlays` (v21→v22 + pin) — in `WAITING_ON_JK.md`.
+  **➡ FRESH THREAD: contract + build L9b-1 first.** Build-DARK, activate post-D13.
   *(Historical L9a detail below for the arc trail.)* Per the JK ruling
   (OD-5, DECISIONS_LOG 2026-06-17): **manual/opt-in, never forced, used when data present** → **REQUIRES optional
   GameTracker zone inputs for pitch/hit location** + a **cumulative season injury tally**. Net-new captures per
