@@ -813,3 +813,25 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   characterized set (that needs JK ratification) — flagged here + in CURRENT_STATE for JK's order-flake-root-cause batch.
   Suite (deduped, solo-passing): **7,344 pass / 2 characterized fail** (+9 tests / +1 file = `captainMoraleRouter.test.ts`).
   **NOW = L7d-2** (Fan Hopeful cushion). trackerDb still v20; nothing pushed.
+
+- **2026-06-17 (AUTH-4, HOST RESUME thread) — L7d-2 COMMITTED `aec5db99`; L7d-3 doc-only → L7 COMPLETE.**
+  **L7d-2:** pure §4/LS-7 Fan Hopeful call-up cushion. Captain drafted the contract (PROMPT_CONTRACTS §L7d-2) →
+  dispatched **Codex 5.5 | high** → Opus independently audited (auditor ≠ builder). NEW `src/engines/fanHopefulCushion.ts`
+  + an 11-test file: `computeFanHopefulWindowState` (game-count window + measurable expiry), `computeFanHopefulCallUpLift`
+  (one-time hope lift), `applyFanHopefulSlumpCushion` (reduces NEGATIVE fan-morale swings while active; positives +
+  expired/inactive pass through; sign-preserving), magnitudes in `FAN_HOPEFUL_CUSHION_TUNING` (windowGames 10 /
+  fanMoraleLift 3 / slumpCushionFactor 0.5, all §16 placeholders). Pure (ZERO imports). Call-up + matrix wiring deferred
+  post-D13. AUDIT VERIFIED: tsc 0 / build 0 / 11 focused tests; full suite **7,355 pass / 2 characterized fail**, ZERO
+  new reds (+11 tests / +1 file); AwardsWatchlist did NOT appear this run (4th non-determinism data point); frozen
+  engines byte-unchanged; pure. Auto-committed.
+  **L7d-3 — Fan Favorite double-dependency reconciliation (DOC-ONLY, AUTH-4 default-taken; NO code, NO Codex build):**
+  the FF double-dependency (DSTACK L7: D6 value-half + L5/§20.6 morale-half) is ALREADY structurally complete — value-half
+  = `classifyFanFavorite` (`franchiseDesignationEligibility.ts`, DR-1 `b48b450`); morale-half = `designationFameNudge` FF
+  +2 (L7b, Channel C) + `designationFanMorale` FF +0.5 warmth (L7c, Channel B) + FF swing tilt up ×1.25 (L7c, Channel A).
+  No new engine built: both halves exist as pure primitives, the morale-half is intentionally dark with deferred wiring,
+  and a `fanFavoriteEffects` composer would have zero consumers + repeat the orphan pattern DR-1 just removed (deleted the
+  546-line `fanFavoriteEngine.ts`). When the post-D13 morale wiring lands it composes the FF half-engines naturally.
+  **⇒ L7 (designation Phase-2 completion) COMPLETE:** L7a `0a59a24` (Albatross→flashpoint seam) · L7b `77feeda3`
+  (designation→fame nudge, Channel C) · L7c `886d1dce` (designation→fan-morale, Channels A/B) · L7d-1 `f61dcae0` (Captain
+  router) · L7d-2 `aec5db99` (Fan Hopeful cushion) · L7d-3 (FF reconciliation, doc-only). **NOW = L8** (ratings
+  development) per the soul-layer queue. trackerDb still v20; nothing pushed.

@@ -9549,3 +9549,56 @@ L7d (the last L7 sub-stack) bundles three distinct mechanics → SPLIT (Captain,
 Use high reasoning effort. Think step-by-step. Builder ≠ auditor — re-audited by Opus (canonical ×2, sign-preserving swing amp, anti-double-count [no own-development / no §24.9 composite], purity + byte-unchanged frozen engines).
 
 **Status:** COMMITTED `f61dcae0` (2026-06-17, AUTH-4 host resume). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / build 0 / 9 focused tests green; engine is pure (ZERO imports, no Math.random/Date.now/new Date); canonical ×2 + sign-preserving swing amp + linear/general charisma routing hand-verified; anti-double-count confirmed (no own-development, no §24.9 composite); frozen engines (`designationFanMorale`/`designationFameNudge`/`masterMoraleMatrix`/`fanMoraleDampener`/`franchiseDesignations`/`processCompletedGame`) BYTE-UNCHANGED; scope = exactly the 2 allowed files. Pure engine, no user surface → auto-committed. **⚠ NEWLY-OBSERVED ORDER-FLAKE (NOT a regression):** my full-suite run showed 3 fails (added `AwardsWatchlist.test.tsx`); Codex's run on the IDENTICAL tree showed 2 (the characterized set). `AwardsWatchlist.test.tsx` PASSES SOLO (2/2) → non-deterministic order-flake (same family as the documented `GameTrackerLaunchState`/`franchiseOffseasonGuards.component` conditional-solo flakes), surfaced by the new test file shifting vitest's worker ordering. L7d-1 (zero-import pure engine, imported by nothing) has no coupling to it. Flagged for JK; NOT silently added to the characterized set. **NOW = L7d-2.**
+
+### L7d-2 — Fan Hopeful call-up cushion (PURE engine; matrix/call-up wiring DEFERRED post-D13)
+
+**ROUTE:** Codex 5.5 | high reasoning effort (pure deterministic engine; no persistence/wiring) → Opus 4.8 audit (auditor ≠ builder) → standing auto-commit (pure primitive, no user surface; mirrors L7d-1/L7c).
+
+**ROLE:** You are the L-stack builder (Codex). Build the §4/LS-7 Fan Hopeful timed CUSHION as a PURE engine. Mirrors L7d-1 `captainMoraleRouter.ts`: own TUNING, no store/flag/wiring/persistence/React, no imports (plain numbers). Build-dark.
+
+**GOAL:** NEW `src/engines/fanHopefulCushion.ts` exporting (1) `FAN_HOPEFUL_CUSHION_TUNING`; (2) `computeFanHopefulWindowState(callUpGameNumber, currentGameNumber, config?)` → `{ gamesSinceCallUp, active, expired, gamesRemaining }`; (3) `computeFanHopefulCallUpLift(config?)` → number (one-time hope lift); (4) `applyFanHopefulSlumpCushion(baseFanMoraleSwing, windowState, config?)` → number (cushions NEGATIVE swings while active; sign-preserving). Plus its test file.
+
+**SOURCE OF TRUTH:** `FRANCHISE_V1_LIVING_SEASON_SPEC.md` §4 line 87 (Fan Hopeful = a fully-countable timed cushion: attaches on a call-up, lasts a defined window, fixed fan-morale lift [hope] + fixed early-slump morale cushion [patience], expires on a measurable trigger) + §4 line 79 + LS-7 line 310. MIRROR: L7d-1 `f61dcae0`.
+
+### DESIGN (build to spec; AUTH-4 DEFAULTS-TAKEN — ALL magnitudes sim placeholders)
+
+- `FAN_HOPEFUL_CUSHION_TUNING` = `{ windowGames: 10, fanMoraleLift: 3, slumpCushionFactor: 0.5 }`. windowGames = the game-count window/expiry trigger (DEFAULT-TAKEN: game-count, not "until next checkpoint" — cleaner pure primitive); fanMoraleLift = one-time hope bump on call-up; slumpCushionFactor ∈ [0,1) = negative-swing multiplier while active (0.5 = halved).
+- `computeFanHopefulWindowState`: `gamesSinceCallUp = current - callUp`; `active = gamesSinceCallUp ≥ 0 && < windowGames`; `expired = gamesSinceCallUp ≥ windowGames`; `gamesRemaining = active ? windowGames - gamesSinceCallUp : 0`. (current < callUp → negative → not-yet: active/expired false.)
+- `computeFanHopefulCallUpLift` → `fanMoraleLift`.
+- `applyFanHopefulSlumpCushion(baseSwing, windowState)`: active AND baseSwing < 0 → `baseSwing × slumpCushionFactor` (reduced magnitude, still negative); else UNCHANGED (positive swings never dampened; expired/inactive → no cushion); 0 → 0. SIGN-PRESERVING.
+- PURE — no Math.random/Date.now/new Date()/IO/store/reporter/React; no imports; all magnitudes in the TUNING.
+- **Header doc:** the timed cushion (one-time LIFT on call-up + sustained slump CUSHION while active, expires after windowGames); DEFAULTS-TAKEN (lift one-time / cushion sustained / game-count window); WIRING deferred post-D13 (call-up event fires the lift; per-game FH swings pass through the cushion, gated by the Phase-2 morale flag; `team.fanHopefulPlayerId` window tracking is the consumer's job).
+
+**ALLOWED files:** NEW `src/engines/fanHopefulCushion.ts` · NEW `src/engines/__tests__/fanHopefulCushion.test.ts`. NOTHING ELSE.
+
+**DO NOT:** add store/flag/wiring/persistence · wire into `processCompletedGame.ts`/morale store/`masterMoraleMatrix.ts`/`franchiseInitializer.ts` · mutate any morale snapshot · touch `captainMoraleRouter.ts`/`designationFanMorale.ts`/`designationFameNudge.ts`/`flashpointDecay.ts`/`fanMoraleDampener.ts`/`masterMoraleMatrix.ts`/`fanMoraleEngine.ts`/`franchiseDesignations.ts`/`franchisePhase2Flags.ts` · import store/IndexedDB/reporter/LLM/React · use Math.random/Date.now/new Date() · scatter magic numbers · let the cushion flip a sign or dampen a POSITIVE swing.
+
+### TESTS (NEW `src/engines/__tests__/fanHopefulCushion.test.ts`, pure/deterministic)
+- Window math: callUp 5 → current 5 (active, remaining 10), 14 (active, remaining 1), 15 (expired), 20 (expired), 4 (not-yet, gamesSinceCallUp −1).
+- Call-up lift → positive `fanMoraleLift`.
+- Cushion active: −4 → −2 (×0.5, still negative); +4 → +4 (unchanged); 0 → 0.
+- Cushion expired/inactive: −4 → −4 (unchanged).
+- Sign-preserving across cushioned cases.
+- Determinism + config override.
+- Purity self-scan (node:fs, no Math.random/Date.now/new Date) — mirror L7d-1.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · new test green · FULL suite — only the 2 characterized fails expected; the known `AwardsWatchlist.test.tsx` order-flake may appear (passes solo — run solo to confirm, NOT a regression); NO OTHER new reds. Greps: `fanHopefulCushion.ts` no store/morale/fame/reporter/React import, no Math.random/Date.now/new Date(); `captainMoraleRouter.ts`/`designationFanMorale.ts`/`masterMoraleMatrix.ts`/`franchiseInitializer.ts` BYTE-UNCHANGED.
+
+**STOP IF:** purity can't hold · a frozen engine must change · cushion can't protect negatives without touching positives · a NEW red (≠ the 2 characterized, ≠ the known AwardsWatchlist flake) persists past 2 fix-iterations (→ SET-ASIDE).
+
+**FORMAT:** 1. Files changed (paths + count + passing-test count). 2. Each change w/ the §4/LS-7 line. 3. Verification output (+ any AwardsWatchlist-solo result). 4. "L7d-2 complete" OR "BLOCKED: [reason]".
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — re-audited by Opus (window expiry math, cushion protects negatives only + sign-preserving, purity + byte-unchanged frozen engines).
+
+**Status:** COMMITTED `aec5db99` (2026-06-17, AUTH-4 host resume). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / build 0 / 11 focused tests green; full suite 7,355 pass / 2 characterized fail (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+11 tests / +1 file); AwardsWatchlist did NOT appear this run (4th data point on the non-deterministic order-flake). Window expiry math + cushion-protects-negatives-only + sign-preserving + config overrides hand-verified; engine pure (ZERO imports); `captainMoraleRouter`/`designationFanMorale`/`masterMoraleMatrix`/`franchiseInitializer` BYTE-UNCHANGED; scope = exactly the 2 allowed files. Pure engine, no user surface → auto-committed. **NOW = L7d-3.**
+
+### L7d-3 — Fan Favorite double-dependency reconciliation (DOC-ONLY; AUTH-4 default-taken)
+
+**ROUTE:** Captain (Opus 4.8) doc reconciliation — NO code, NO Codex build (nothing to build; both halves already exist). No triangle needed (documentation synthesis, not a diff).
+
+**DECISION (AUTH-4 conservative default, documented):** The Fan Favorite "double dependency" (DSTACK L7: *D6 value-half + L5/§20.6 morale-half*) is **already structurally COMPLETE** — no new engine is built:
+- **Value-half:** `classifyFanFavorite` in `src/utils/franchiseDesignationEligibility.ts` (DR-1 `b48b450`; highest positive `valueDelta`, NO salary floor, D6-trusted-artifact-gated). Live.
+- **Morale-half:** `designationFameNudge` FF **+2** naming seed (L7b `77feeda3`, §20.6 Channel C) + `designationFanMorale` FF **+0.5** steady warmth (L7c `886d1dce`, §20.6 Channel B) + FF swing tilt **up ×1.25** (L7c, §20.6 Channel A). Dark; post-D13 wiring deferred.
+- **Why doc-only (not a composer engine):** both halves exist as independent pure primitives; the morale-half is intentionally dark with deferred wiring; a `fanFavoriteEffects` composer would have ZERO consumers today and would repeat exactly the orphan pattern DR-1 just removed (it deleted the 546-line orphan `fanFavoriteEngine.ts` + its 351-line test). When the post-D13 morale wiring lands it composes the FF half-engines naturally. If JK later wants a single FF-effects surface, it is a trivial pure add.
+
+**Status:** COMPLETE (doc-only, 2026-06-17 AUTH-4). **This closes L7d (L7d-1 Captain `f61dcae0` · L7d-2 Fan Hopeful `aec5db99` · L7d-3 FF reconciliation) and thus L7 (designation Phase-2 completion) entirely.** **NOW = L8** (ratings development) per the AUTONOMOUS_RUN_PROTOCOL soul-layer queue.

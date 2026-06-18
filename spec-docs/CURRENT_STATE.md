@@ -1,10 +1,10 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-17 (**AUTH-4 ACTIVE RUN — L7c `886d1dce` + L7d-1 `f61dcae0` COMMITTED; NOW L7d-2** [fresh
-session resumed at the L7c handoff, did the session-start reads + RESTATE, JK confirmed AUTH-4 autonomous, then
-built→audited→committed L7c and L7d-1]. ⚠ NEWLY-OBSERVED order-flake `AwardsWatchlist.test.tsx` (passes solo; surfaced
-by L7d-1's new test file shifting vitest ordering; NOT a regression) — flagged for JK, see SUITE BASELINE.
-AUTH-4 host resume; the L5b handoff is CLEARED.
+**Last Updated:** 2026-06-17 (**AUTH-4 ACTIVE RUN — L7 COMPLETE (L7c `886d1dce` · L7d-1 `f61dcae0` · L7d-2 `aec5db99` ·
+L7d-3 doc-only); NOW L8** [fresh session resumed at the L7c handoff, did the session-start reads + RESTATE, JK confirmed
+AUTH-4 autonomous, then built→audited→committed L7c/L7d-1/L7d-2 and closed L7 via the L7d-3 doc reconciliation]. ⚠
+NEWLY-OBSERVED order-flake `AwardsWatchlist.test.tsx` (passes solo; non-deterministic — appeared in 1 of 4 full-suite
+runs; NOT a regression) — flagged for JK, see SUITE BASELINE + OPEN PENDING-JK. AUTH-4 host resume; the L5b handoff is CLEARED.
 **L5b COMMITTED `5ebb148`** —
 the flashpoint-decay accumulator was host-verified (`NODE_ENV= npm run build` exit 0 + full suite **7,298 pass / 2
 characterized fail** [`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`], ZERO new reds; the +18 tests / +3 files over
@@ -24,9 +24,10 @@ active|locked Albatross; doubly-dark, no store/version touch). **L7b COMMITTED `
 designation→fame nudge ENGINE — FF +2 / Albatross −1 / MVP·Ace sim; fame-store WIRING deferred). **L7c COMMITTED
 `886d1dce`** (pure §20.6 Channel B FF-warmth +0.5 + Channel A asymmetric swing-tilt ENGINE; DOUBLE-COUNT GUARD
 ALBATROSS=0 — §13 flashpoint already owns it; morale-store + per-play wiring deferred post-D13). **L7d SPLIT L7d-1..3;
-L7d-1 COMMITTED `f61dcae0`** (pure Captain morale-router: Charisma×2 teammate routing + sign-preserving perf-swing amp;
-NOT the §24.9 leadership composite [L13]; matrix wiring deferred). **NOW: L7d-2** (Fan Hopeful call-up cushion) under
-AUTH-4. trackerDb host-state **v20** / KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next; nothing pushed.)
+L7d-1 `f61dcae0`** (Captain morale-router) **+ L7d-2 `aec5db99`** (Fan Hopeful cushion) **+ L7d-3 doc-only** (FF
+double-dependency reconciliation — value-half DR-1 + morale-half L7b/L7c already exist) → **L7 (designation Phase-2
+completion) COMPLETE.** **NOW: L8** (ratings development) per the soul-layer queue, under AUTH-4. trackerDb host-state
+**v20** / KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next; nothing pushed.)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.
@@ -110,8 +111,22 @@ AUTH-4. trackerDb host-state **v20** / KBL_BACKUP_VERSION **2**. Branch codex/fr
   **ANTI-DOUBLE-COUNT:** routes/amplifies the clubhouse MORALE channel ONLY — NOT the Captain's own ratings/development,
   and NOT the §24.9 leadership-effectiveness composite (→ L13). Matrix wiring deferred post-D13. **Codex 5.5 built →
   Opus 4.8 independently audited VERIFIED** (tsc 0 / build 0 / 9 focused tests green; canonical ×2 + sign-preserving
-  swing amp + linear charisma routing hand-verified; 6 frozen engines byte-unchanged; pure). Auto-committed. **NOW = L7d-2**
-  (Fan Hopeful cushion) under AUTH-4.
+  swing amp + linear charisma routing hand-verified; 6 frozen engines byte-unchanged; pure). Auto-committed. L7d-2 + L7d-3
+  followed (below).
+- **✅ L7d-2 COMMITTED `aec5db99` + L7d-3 doc-only → L7 (designation Phase-2 completion) COMPLETE (2026-06-17, AUTH-4).**
+  **L7d-2** = NEW pure `src/engines/fanHopefulCushion.ts` (§4/LS-7 Fan Hopeful timed cushion):
+  `computeFanHopefulWindowState` (game-count window + measurable expiry) + `computeFanHopefulCallUpLift` (one-time hope
+  lift) + `applyFanHopefulSlumpCushion` (reduces NEGATIVE fan-morale swings while active; positives/expired/inactive pass
+  through; sign-preserving), magnitudes in `FAN_HOPEFUL_CUSHION_TUNING` (windowGames 10 / fanMoraleLift 3 /
+  slumpCushionFactor 0.5 — §16 placeholders). Pure (ZERO imports). Call-up + matrix wiring deferred post-D13. **Codex 5.5
+  built → Opus 4.8 independently audited VERIFIED** (tsc 0 / build 0 / 11 focused tests; full suite 7,355 pass / 2
+  characterized fail, ZERO new reds; frozen engines byte-unchanged; pure). Auto-committed.
+  **L7d-3** = DOC-ONLY reconciliation (AUTH-4 default; NO code): the Fan Favorite double-dependency is already structurally
+  COMPLETE — value-half `classifyFanFavorite` (`franchiseDesignationEligibility.ts`, DR-1 `b48b450`) + morale-half
+  `designationFameNudge` FF +2 (L7b) + `designationFanMorale` FF +0.5 warmth & up×1.25 tilt (L7c). No new engine (both
+  halves exist; morale-half is dark with deferred wiring; a composer would repeat the orphan DR-1 just deleted).
+  **⇒ L7 COMPLETE: L7a `0a59a24` · L7b `77feeda3` · L7c `886d1dce` · L7d-1 `f61dcae0` · L7d-2 `aec5db99` · L7d-3 doc.**
+  **NOW = L8** (ratings development) per the AUTONOMOUS_RUN_PROTOCOL soul-layer queue, under AUTH-4.
 - **ATTENDED DESIGN SESSION (2026-06-17, JK present) — forks cleared + designation model reconciled; D10 build next.**
   No product code yet this session. (1) **OD-2..5 + D4 RULED** (DECISIONS_LOG 2026-06-17): OD-2 economy scale =
   new-league-construction-only / reuse pick-chart with farm anchor nerfed one grade-step via `FARM_NERF_SCALES` /
@@ -359,7 +374,12 @@ AUTH-4. trackerDb host-state **v20** / KBL_BACKUP_VERSION **2**. Branch codex/fr
 
 ## SUITE BASELINE
 
-**7,346 tests / 418 files** — full suite independently re-run 2026-06-17 (AUTH-4 host resume) after **L7d-1** commit
+**7,357 tests / 419 files** — full suite independently re-run 2026-06-17 (AUTH-4 host resume) after **L7d-2** commit
+`aec5db99`: **7,355 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds
+(+11 tests / +1 file = L7d-2's `fanHopefulCushion.test.ts`, over the post-L7d-1 7,344/418; trackerDb still **v20** — L7d-2
+is a pure engine, no store). The AwardsWatchlist order-flake did NOT appear this run (1 of 4 full-suite runs across L7d).
+*(Prior baseline retained below for the arc trail.)* **7,346 tests / 418 files** — full suite independently re-run
+2026-06-17 (AUTH-4 host resume) after **L7d-1** commit
 `f61dcae0`: **7,344 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`) on the
 deduped/solo-passing basis (+9 tests / +1 file = L7d-1's `captainMoraleRouter.test.ts`, over the post-L7c 7,335/417;
 trackerDb still **v20** — L7d-1 is a pure engine, no store). **⚠ NEWLY-OBSERVED ORDER-FLAKE (2026-06-17, flagged for

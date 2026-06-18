@@ -5102,3 +5102,21 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   component), surfaced by the new test file shifting vitest's worker ordering. L7d-1 (zero-import pure engine) has no
   coupling to it. Added to the order-flake root-cause batch in OPEN PENDING-JK; NOT folded into the characterized set.
   Suite (solo-passing basis): **7,344 / 418**; trackerDb still v20. **NOW = L7d-2** (Fan Hopeful cushion). Nothing pushed.
+
+### Update (cont.) — L7d-2 committed; L7d-3 doc-only → L7 COMPLETE
+- **L7d-2 COMMITTED `aec5db99`** — pure §4/LS-7 Fan Hopeful call-up cushion (`fanHopefulCushion.ts`):
+  `computeFanHopefulWindowState` (game-count window + expiry) + `computeFanHopefulCallUpLift` (one-time hope lift) +
+  `applyFanHopefulSlumpCushion` (reduces negative fan-morale swings while active; positives/expired pass through;
+  sign-preserving), magnitudes in `FAN_HOPEFUL_CUSHION_TUNING` (windowGames 10 / lift 3 / cushionFactor 0.5, all sim).
+  Pure (ZERO imports); call-up + matrix wiring deferred post-D13. Captain-contracted → Codex 5.5 built → Opus
+  independently audited VERIFIED (tsc 0 / build 0 / 11 focused tests; full suite 7,355 pass / 2 characterized fail, ZERO
+  new reds; AwardsWatchlist did NOT appear — 4th non-determinism data point; frozen engines byte-unchanged; pure).
+  Auto-committed.
+- **L7d-3 (DOC-ONLY, AUTH-4 default-taken; NO code)** — Fan Favorite double-dependency reconciliation: the FF
+  double-dependency (D6 value-half + L5/§20.6 morale-half) is already structurally complete — value-half
+  `classifyFanFavorite` (DR-1 `b48b450`) + morale-half `designationFameNudge` FF +2 (L7b) + `designationFanMorale` FF
+  +0.5 warmth & up×1.25 tilt (L7c). No new engine (both halves exist; morale-half dark with deferred wiring; a composer
+  would repeat the orphan DR-1 just deleted).
+- **⇒ L7 (designation Phase-2 completion) COMPLETE:** L7a `0a59a24` · L7b `77feeda3` · L7c `886d1dce` · L7d-1 `f61dcae0`
+  · L7d-2 `aec5db99` · L7d-3 doc. Suite **7,355 / 419**; trackerDb v20. **NOW = L8** (ratings development) per the
+  AUTONOMOUS_RUN_PROTOCOL soul-layer queue. Nothing pushed.
