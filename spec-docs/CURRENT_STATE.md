@@ -15,7 +15,7 @@ activate post-D13 (the L9b-3b-ii hook flag default-OFF; L9b-3c orphaned-pending 
 the L-SIM gate. **L10 RECON DONE** (workflow `wf_b3129cd8-9e3`) → full scope/split/forks/seams/open-questions in
 `spec-docs/L10_SCOPE_MAP.md`. SPLIT: **L10-1** pure event-selection engine (✅ DONE) · **L10-2** dark
 `franchiseL10Overlays` store (✅ DONE, trackerDb v23) · **L10-3** flag + dark league-sweep hook (✅ DONE, host-gate
-passed) · **L10-4** stadium-change event (NEXT) · L10-5 reporter tap. **L10-1 DONE** = `src/engines/franchiseL10EventEngine.ts` (`computeFranchiseL10Events`: pure deterministic
+passed) · **L10-4** stadium-change resolver (✅ DONE, host-gate passed) · **L10-5** reporter tap (NEXT). **L10-1 DONE** = `src/engines/franchiseL10EventEngine.ts` (`computeFranchiseL10Events`: pure deterministic
 league-sweep roll — `P = baseRate[family] × intensity dial × morale × personality`, FNV-1a-seeded fire, 8 families with
 personality-shift excluded, fan-morale-suppressed team/stadium; mirrors `tradeRequestGeneration`; build-DARK).
 Codex-built → Opus-audited VERIFIED (tsc-0 / suite **7,527/434, 7,525 pass / 2 characterized fail**, ZERO new reds).
@@ -117,6 +117,28 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## RIGHT NOW
 
+- **✅ L10-4 VERIFIED + COMMITTED (2026-06-18, fresh attended session, AUTH-4 keep-rolling) — the PURE stadium-change
+  resolver (the concrete-resolution step for a fired `stadium_change` team event).** NEW pure engine
+  `src/engines/franchiseStadiumChangeResolver.ts`: (1) `pickStadiumFromPool(currentStadiumName, seed)` — the SHARED
+  deterministic pool-pick helper (reused by L14 rebrand; do NOT fork): pool = `getAllParks()` (23 SMB parks), excludes the
+  current park by normalized `getStableParkId`, falls back to the full pool if exclusion empties the set, throws only on an
+  empty pool, index = `clamp(floor(franchiseL10DeterministicRoll(seed) × len))`. (2) `resolveFranchiseStadiumChange({event,
+  teamName, currentStadiumName?, seedBase?})` — guards `targetKind==='team' && eventType==='stadium_change'` (throws
+  otherwise), derives `pickSeed = ${seedBase}:${event.targetId}:stadium_change:${event.seed}`, returns `{newStadium,
+  snapshot}` where snapshot = `FranchiseTeamStadiumSnapshot {teamId: event.targetId, teamName, stadium, stadiumId, hasSeedParkFactors}`
+  (hasSeedParkFactors from `getDerivedParkFactorsIfAvailable`). **PURE** (no IndexedDB/Date/Math.random/async) / **build-DARK**
+  — NO production caller (orphaned-pending the post-D13 apply step that will write the snapshot + recompute analytics), NO
+  store / NO wiring / trackerDb stays **v23**. Fan-morale suppression is UPSTREAM (L10-1's `teamSuppressed`), so the resolver
+  takes no morale. **DESIGN CALL (AUTH-4 default, FLAGGED for JK):** L10-4 is the pure concrete-resolution step, NOT a live
+  persistence/analytics mutation — the snapshot WRITE + recompute defer to the post-D13 apply ticket (mirrors L9b-3c's
+  orphaned-pending applier). Open-question #4 (stadium change on the USER's team vs AI-only) only bites at that future apply
+  step → default `allowed/suppressed` taken upstream; not decided here. **Subagent-BUILT → Opus-Captain-INDEPENDENTLY-audited
+  VERIFIED** (read line-by-line; builder ≠ auditor): host build exit 0 + full suite **7,550/437, 7,548 pass / 2 characterized
+  fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+10 / +1 file =
+  `franchiseStadiumChangeResolver.test.ts`). 2 trivial non-blocking minors (single-park-pool fallback untested w/o mocking
+  the real pool; per-team divergence not explicitly asserted). Committed on codex/franchise-v1-next (2 code files + the doc
+  updates; not pushed). **➡ NEXT = L10-5** (reporter tap: applied L10 event → `SeasonNewsEvent` `RANDOM_EVENT` via
+  `seasonNewsGenerator.ts` → `seasonNewsItems`; risk low-med) per `L10_SCOPE_MAP.md` §3. *(Prior L10-3 entry below.)*
 - **✅ L10-3 VERIFIED + COMMITTED (2026-06-18, AUTH-4 overnight; host-gate passed in a fresh attended session) — the flag +
   dark league-sweep hook that wires the L10-1 engine → the L10-2 store (the wiring half of L10).** (1) 6th default-OFF
   Phase-2 flag `isFranchisePhase2L10Enabled` (cloned the TRAITS block in `franchisePhase2Flags.ts`). (2) NEW
@@ -742,7 +764,12 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## SUITE BASELINE
 
-**7,540 tests / 436 files** — full suite run 2026-06-18 (fresh attended session, real node v20, `NODE_ENV=`) after
+**7,550 tests / 437 files** — full suite run 2026-06-18 (fresh attended session, real node v20, `NODE_ENV=`) after
+**L10-4** (the pure stadium-change resolver): **7,548 pass / 2 fail** = EXACTLY the characterized baseline
+(`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` 5000ms timeout). ZERO new reds (+10 tests / +1 file =
+`franchiseStadiumChangeResolver.test.ts`); delta over the post-L10-3 baseline is +10 pass / +0 fail = exactly the new
+test file (a pure orphaned engine imported by no production code cannot affect any other test). Build exit 0 (PWA → tsc
+clean). trackerDb **v23** unchanged (L10-4 added no store). *(Prior baseline retained below for the arc trail.)* **7,540 tests / 436 files** — full suite run 2026-06-18 (fresh attended session, real node v20, `NODE_ENV=`) after
 **L10-3** (the flag + dark league-sweep hook): **7,538 pass / 2 fail** = EXACTLY the characterized baseline
 (`wpaRuntimeBoundary` "stays-allowlisted" + `franchiseManualSmokeFixture` 5000ms timeout). ZERO new reds (+5 tests /
 +1 file = `franchiseL10SweepCompute.test.ts`). Build exit 0 (`✓ built in 7.74s` + PWA → tsc clean). trackerDb **v23**

@@ -1516,3 +1516,28 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   NOT pushed). WAITING_ON_JK [ticket:L10-3] marked RESOLVED. Live path → browser-pending #24.
 - **➡ NEXT = L10-4** (stadium-change event: low base rate suppressed by high fan morale, pool-pick from `parkLookup.ts`,
   writes `FranchiseTeamStadiumSnapshot` so analytics recompute — persistence-adjacent, medium risk; needs a contract).
+
+## 2026-06-18 — L10-4 stadium-change resolver: contract → subagent-built → Opus-audited VERIFIED → COMMITTED (attended, AUTH-4)
+- **Grounding** resolved the architecture: L10-1 ALREADY emits a representative `stadium_change` team event
+  (`franchiseL10EventEngine.ts:147`) and L10-3 ALREADY persists it as a dark pending overlay; the recompute path
+  (`franchiseStadiumFoundation.ts buildStadiums`) merely READS `FranchiseTeamStadiumSnapshot[]`. So L10-4 is the PURE
+  concrete-resolution step — pick WHICH new park + build the snapshot payload — consumed by the deferred post-D13 apply
+  step. **Risk re-classified medium→low** by keeping it pure (no live write/recompute), faithful to the doubly-dark L10
+  model.
+- **DESIGN CALL (AUTH-4 default, FLAGGED for JK):** pure resolver only; the snapshot WRITE + analytics recompute defer to a
+  post-D13 apply ticket (mirrors L9b-3c's orphaned-pending applier). Open-Q#4 (user-team vs AI-only) bites only at that
+  apply step → default allowed/suppressed taken upstream; not decided here. The pure resolver is never-wasted regardless.
+- **Triangle:** Captain wrote the contract (PROMPT_CONTRACTS.md) → delegated the BUILD to a fresh subagent (builder) →
+  Captain (Opus) INDEPENDENTLY audited the diff line-by-line (builder ≠ auditor).
+- **Deliverable (2 files):** NEW pure `src/engines/franchiseStadiumChangeResolver.ts` — `pickStadiumFromPool`
+  (SHARED w/ L14 rebrand; `getAllParks` pool, exclude-current-by-`getStableParkId`, full-pool fallback, FNV-1a
+  `franchiseL10DeterministicRoll`-seeded clamped index) + `resolveFranchiseStadiumChange` (guards team/stadium_change,
+  `pickSeed` from `event.seed`, returns `{newStadium, snapshot}`) + `FranchiseStadiumChangeResolution`; NEW
+  `__tests__/franchiseStadiumChangeResolver.test.ts` (10 tests). PURE (no IndexedDB/Date/Math.random/async); build-DARK
+  (no production importer, no store, trackerDb v23, no wiring).
+- **Host gate:** `NODE_ENV= npm run build` exit 0 (PWA → tsc clean); full suite **7,550/437, 7,548 pass / 2 characterized
+  fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds, +10 / +1 file. **Audit VERDICT VERIFIED**
+  (0 major / 2 trivial minors: single-park-pool fallback untested without mocking the real pool; per-team divergence not
+  explicitly asserted — both non-defects). Committed on codex/franchise-v1-next (2 code files + doc updates; not pushed).
+- **➡ NEXT = L10-5** (reporter tap: applied L10 event → `SeasonNewsEvent` `RANDOM_EVENT` via `seasonNewsGenerator.ts` →
+  `seasonNewsItems`; risk low-med) per L10_SCOPE_MAP.md §3.

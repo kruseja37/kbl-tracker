@@ -1,7 +1,7 @@
 # KBL TRACKER — SESSION LOG
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
-## Session: 2026-06-18 (fresh attended session, AUTH-4 keep-rolling) — L10-3 HOST GATE PASSED + COMMITTED → continuing L10-4
+## Session: 2026-06-18 (fresh attended session, AUTH-4 keep-rolling) — L10-3 + L10-4 committed → NEXT L10-5
 - **(THIS attended session)** JK started a fresh session, confirmed the restate, and ruled "host gate, commit, then
   continue L10-4" (AUTH-4 still on) + "fold the 3 session docs into the L10-3 commit". On the host (real node v20):
   re-verified the L10-3 diff against the contract (flag-gate-first / try/catch gate branch / no Date.now·random / no
@@ -11,7 +11,21 @@
   (`wpaRuntimeBoundary` "stays-allowlisted" + `franchiseManualSmokeFixture` 5000ms timeout), ZERO new reds (+5 / +1 file
   = `franchiseL10SweepCompute.test.ts`). Committed on codex/franchise-v1-next: the 5 contracted files + the 3 session
   docs (CURRENT_STATE, SESSION_LOG, AUTONOMOUS_RUN_LOG) folded in per JK; never pushed. WAITING_ON_JK [ticket:L10-3]
-  marked RESOLVED. **➡ NEXT = L10-4** (stadium-change event). *(The sandbox build/audit entry it closes is below.)*
+  marked RESOLVED. **L10-3 DONE.**
+- **L10-4 (stadium-change resolver) — DONE, same session.** Grounded the seams (FranchiseTeamStadiumSnapshot
+  `franchise.ts:54-60`, park pool `parkLookup.ts`/`getAllParks`, `getDerivedParkFactorsIfAvailable`
+  `parkFactorDeriver.ts:116`, the L10-1 event carries a `seed`, `franchiseL10DeterministicRoll`). Wrote the L10-4 contract
+  to PROMPT_CONTRACTS. **Design call (AUTH-4 default, flagged):** L10-4 is the PURE concrete-resolution step (pick the new
+  park + build the snapshot) — NOT a live write; the snapshot write + analytics recompute defer to a post-D13 apply step,
+  faithful to the doubly-dark L10 model (mirrors L9b-3c's orphaned applier). Delegated the BUILD to a fresh subagent
+  (builder), then independently audited line-by-line (Captain/Opus = auditor; builder ≠ auditor). Deliverable: NEW pure
+  `src/engines/franchiseStadiumChangeResolver.ts` (`pickStadiumFromPool` shared w/ L14 + `resolveFranchiseStadiumChange` +
+  `FranchiseStadiumChangeResolution`) + NEW `__tests__/franchiseStadiumChangeResolver.test.ts` (10 tests). PURE/build-DARK,
+  no production caller, no store, trackerDb v23. Host gate: `NODE_ENV= npm run build` exit 0; full suite **7,550/437,
+  7,548 pass / 2 characterized fail**, ZERO new reds (+10 / +1 file). Audit: VERIFIED, 0 major / 2 trivial minors
+  (single-park fallback + per-team divergence untested — non-defects). Committed on codex/franchise-v1-next (2 code files +
+  doc updates; not pushed). **➡ NEXT = L10-5** (reporter tap) per L10_SCOPE_MAP.md §3. *(The sandbox L10-3 build/audit
+  entry it closes is below.)*
 
 ---
 ## Session: 2026-06-18 (AUTH-4 overnight, fresh Captain thread) — L10-3 BUILT + INDEPENDENTLY AUDITED, HOST-GATE PENDING [CLOSED by the attended host-gate session above]
