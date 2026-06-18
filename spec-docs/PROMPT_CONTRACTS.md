@@ -9873,3 +9873,39 @@ A persistence round-trip (the DSTACK "verified-to-persist" gate): create an AtBa
 Use high reasoning effort. Think step-by-step. Builder ≠ auditor — re-audited by Opus (the capture VERIFIED to persist [the typed-but-unwritten gate], optional/undefined-when-skipped, no version bump, no hot-path/spray-gating touch, enum matches the downstream consumer).
 
 **Status:** COMMITTED `e28706e9` (2026-06-18, AUTH-4 overnight). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / build 0 / focused 56 tests; full suite 7,413 pass / 2 characterized fail (names re-confirmed via a names-capturing rerun), ZERO new reds (+3 tests, same file). Additive `enrichment.pitchLocation` (exact `effectiveRatings:53` enum → zero mapping) + unconditional EnrichmentPanel grid (toggle-clear) + a real event-log round-trip (the verified-to-persist gate). NO version bump (`DB_VERSION` 3 / trackerDb 21); `effectiveRatings`/`useGameState`/`GameTracker` byte-unchanged (`handleEnrichmentUpdate` merges enrichment generically → no branch). USER-VISIBLE → browser-pending (#18). **NOW = L9a-2.**
+
+### L9a-3 — Handedness join at event-write (TS-4; pure wiring; no UI / no new field / no store)
+
+**ROUTE:** Codex 5.5 | high reasoning effort (live-path data wiring across the GameTracker↔useGameState boundary; not user-visible but touches the active hook + game-init → audit carefully) → Opus 4.8 audit (auditor ≠ builder) → auto-commit verified-complete, browser-pending (persistence on real games). Seam recon: wf_c8c43732-281.
+
+**ROLE:** Populate the EXISTING-but-omitted `batterContext.handedness` ('L'|'R'|'S') + `pitcherContext.handedness` ('L'|'R') on each persisted `AtBatEvent`, by threading roster handedness into the hook. The fields already exist (`eventLog.ts:322,344`) but `buildContextSnapshot` omits them ("no handedness data in hook" comment `useGameState.ts:4090`). Pure wiring — no UI, no new `AtBatEvent` field, no store/version. Unlocks 6 handedness-split traits (CON/POW vs LHP/RHP, Specialist, Reverse Splits) for L9b.
+
+**GOAL (the contained 5-edit seam — sources/types verified, exact-match, zero mapping):**
+1. **GameTracker.tsx (build the map, before `initializeGame` at `:4569`):** build `handednessById: Record<string,{bats?:'L'|'R'|'S';throws?:'L'|'R'}>` from the FULL rosters (NOT the 9-slot lineup — so pinch-hitters/relievers are covered): for each of `awayTeamPlayers`/`homeTeamPlayers` set `[getRosterEntityId(p, side)].bats = p.battingHand`; for each of `awayTeamPitchers`/`homeTeamPitchers` set `[getRosterEntityId(pt, side)].throws = pt.throwingHand` (merge so a two-way SP carries both). `Player.battingHand` (`TeamRoster.tsx:43`) + `Pitcher.throwingHand` (`:75`) match the eventLog enum EXACTLY.
+2. **useGameState.ts GameInitConfig:** add optional `handednessById?: Record<string,{bats?:'L'|'R'|'S';throws?:'L'|'R'}>` (after `:776`); pass it in the `initializeGame({...})` call (GameTracker.tsx, alongside `awayLineup,` ~`:4580`).
+3. **useGameState.ts new ref (mirror awayLineupRef at `:2469`):** `const handednessByIdRef = useRef<Record<string,{bats?:'L'|'R'|'S';throws?:'L'|'R'}>>({});` populated inside `initializeGame` at the lineup-ref site (`:4167-4168`): `handednessByIdRef.current = config.handednessById ?? {};`.
+4. **useGameState.ts buildContextSnapshot:** add `handedness: handednessByIdRef.current[gameState.currentBatterId]?.bats` to `batterContext` (`:4048-4063`) + `handedness: handednessByIdRef.current[gameState.currentPitcherId]?.throws` to `pitcherContext` (`:4066-4080`). Refs are read inside the callback body → **DO NOT change buildContextSnapshot's dependency array** (deps stay `[gameState, playerStats, pitcherStats, substitutionLog]` `:4107`; matches the awayLineupRef pattern).
+5. **matchupContext.platoonAdvantage** (`eventLog.ts:368-369` 'batter'|'pitcher'|'neutral'), replacing the empty comment at `:4090`: when BOTH handedness known → `bats==='S' → 'batter'`; `bats===throws → 'pitcher'` (same-handed favors pitcher); else → `'batter'` (opposite-handed favors batter). Emit `matchupContext: { platoonAdvantage }` only when both are known (standard platoon logic; documented default).
+
+**SOURCE OF TRUTH:** TS-4 / Cert VI.4 (`TRAIT_SIGNAL_CERTIFICATION.md:128` — "thread bats/throws onto the event context") + DSTACK L9a `:66`. Types: `Player.battingHand`/`Pitcher.throwingHand` (`TeamRoster.tsx:43,75`) ↔ `batterContext.handedness`/`pitcherContext.handedness` (`eventLog.ts:322,344`). Seam recon: wf_c8c43732-281.
+
+### DESIGN (AUTH-4 DEFAULTS-TAKEN)
+- **Happy-path only (fresh game → completion).** DOCUMENTED known limitation (do NOT expand scope): on a MID-GAME refresh, `loadExistingGame` does NOT re-call `initializeGame`, so `handednessByIdRef` resets to `{}` and events recorded AFTER a mid-game reload get `undefined` handedness (navigationState is null on refresh). This degrades GRACEFULLY (undefined → field absent → matches the L9b min-sample "thin data → dormant" valve); events recorded pre-refresh already carry handedness. Persisting the map into the snapshot + re-seeding in `loadExistingGame` is a LARGER deferred change — note it, don't build it.
+- Map built from FULL rosters (covers substitutions). id alignment via `getRosterEntityId` is load-bearing; a mismatch degrades gracefully (field stays absent — optional).
+
+**ALLOWED files:** EDIT `src/src_figma/app/pages/GameTracker.tsx` (map build + 1 init arg) · EDIT `src/src_figma/hooks/useGameState.ts` (GameInitConfig field + the ref + populate) · NEW/EDIT a test proving handedness PERSISTS (an event-log round-trip + ideally an initializeGame→record→logAtBatEvent path showing batterContext.handedness/pitcherContext.handedness populated). NOTHING ELSE.
+
+**DO NOT:** change any `record*`/`commitPlateAppearance` signature · change `buildContextSnapshot`'s dependency array · add a new `AtBatEvent` field / store / DB-version bump / UI · persist the handedness map into the game snapshot (deferred refresh-fidelity change) · build the trait engine (L9b) · break the live game hot path.
+
+### TESTS
+A round-trip proving handedness persists: drive a minimal init (`handednessById` for a batter + pitcher) → a terminal record* → `logAtBatEvent` → reload the event → assert `batterContext.handedness` + `pitcherContext.handedness` are set; assert a player absent from the map → handedness `undefined` (graceful). If the full hook path is too heavy to unit-test, test `buildContextSnapshot`'s handedness population directly + the eventLog round-trip; state the approach.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · new/affected tests green · FULL suite — only the 2 characterized fails expected (+ known order-flakes → solo-confirm); NO OTHER new reds. Greps: NO new `AtBatEvent` field / NO DB-version bump (`eventLog` DB_VERSION 3 / trackerDb 21); `buildContextSnapshot` deps array unchanged; no `record*` signature change.
+
+**STOP IF (→ SET-ASIDE/flag):** the threading requires changing a `record*`/init signature beyond the optional `GameInitConfig.handednessById` field + the ref · a sprawling refactor · handedness can't be proven to persist past 2 iterations · a NEW red past 2 fix-iterations.
+
+**FORMAT:** 1. Files changed (paths + count + passing-test count). 2. Each change w/ the TS-4 line. 3. Verification output (+ the handedness-persists round-trip proof + no-new-field/no-version greps + deps-array-unchanged). 4. "L9a-3 complete" OR "BLOCKED: [reason]".
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — re-audited by Opus (handedness threaded + VERIFIED to persist, FULL-roster keying [subs covered], no signature/deps churn, no new field/store/version, the refresh-edge limitation documented-not-expanded).
+
+**Status:** CONTRACTED 2026-06-18 (AUTH-4 overnight). Dispatching Codex.

@@ -101,4 +101,27 @@ describe('Mode 2 v1 at-bat outcome immutability', () => {
       }),
     ]);
   });
+
+  test('persists handedness context and platoon matchup through event-log round trip', async () => {
+    await logAtBatEvent(createAtBatEvent({
+      batterContext: {
+        playerId: 'away-batter',
+        playerName: 'Away Batter',
+        handedness: 'S',
+      },
+      pitcherContext: {
+        playerId: 'home-pitcher',
+        playerName: 'Home Pitcher',
+        handedness: 'R',
+      },
+      matchupContext: {
+        platoonAdvantage: 'batter',
+      },
+    }));
+
+    const persisted = await getAtBatEvent('immutability-game_1');
+    expect(persisted?.batterContext?.handedness).toBe('S');
+    expect(persisted?.pitcherContext?.handedness).toBe('R');
+    expect(persisted?.matchupContext?.platoonAdvantage).toBe('batter');
+  });
 });

@@ -4565,6 +4565,38 @@ export function GameTracker() {
           effectiveCompetitionType === "exhibition"
             ? generatedExhibitionGameIdRef.current
             : gameId || generatedExhibitionGameIdRef.current;
+        const handednessById: Record<
+          string,
+          { bats?: "L" | "R" | "S"; throws?: "L" | "R" }
+        > = {};
+        for (const player of awayTeamPlayers) {
+          const playerId = getRosterEntityId(player, "away");
+          handednessById[playerId] = {
+            ...(handednessById[playerId] || {}),
+            bats: player.battingHand,
+          };
+        }
+        for (const player of homeTeamPlayers) {
+          const playerId = getRosterEntityId(player, "home");
+          handednessById[playerId] = {
+            ...(handednessById[playerId] || {}),
+            bats: player.battingHand,
+          };
+        }
+        for (const pitcher of awayTeamPitchers) {
+          const pitcherId = getRosterEntityId(pitcher, "away");
+          handednessById[pitcherId] = {
+            ...(handednessById[pitcherId] || {}),
+            throws: pitcher.throwingHand,
+          };
+        }
+        for (const pitcher of homeTeamPitchers) {
+          const pitcherId = getRosterEntityId(pitcher, "home");
+          handednessById[pitcherId] = {
+            ...(handednessById[pitcherId] || {}),
+            throws: pitcher.throwingHand,
+          };
+        }
 
         await initializeGame({
           gameId: nextGameId,
@@ -4579,6 +4611,7 @@ export function GameTracker() {
           homeTeamName: homeTeamName,
           awayLineup,
           homeLineup,
+          handednessById,
           awayBench,
           homeBench,
           optimalLineupSnapshots,
@@ -4695,6 +4728,8 @@ export function GameTracker() {
     awayTeamId,
     awayTeamName,
     awayTeamPlayers,
+    awayTeamPitchers,
+    homeTeamPitchers,
   ]);
 
   // EXH-036: Register players with playerStateHook for mojo/fitness tracking

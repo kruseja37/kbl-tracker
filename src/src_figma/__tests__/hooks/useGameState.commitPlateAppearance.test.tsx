@@ -314,6 +314,71 @@ describe('useGameState commitPlateAppearance', () => {
     expect(mockLogAtBatEvent.mock.calls[0][0].leverageIndex).toBeGreaterThan(2.67);
   });
 
+  test('threads roster handedness into at-bat context and platoon matchup', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result, {
+      handednessById: {
+        'away-batter-1': { bats: 'L' },
+        'home-sp': { throws: 'L' },
+      },
+    });
+
+    await act(async () => {
+      await result.current.commitPlateAppearance({ type: 'hit', hitType: '1B', rbi: 0 });
+    });
+
+    expect(mockLogAtBatEvent).toHaveBeenCalledTimes(1);
+    expect(mockLogAtBatEvent.mock.calls[0][0]).toMatchObject({
+      batterContext: expect.objectContaining({
+        playerId: 'away-batter-1',
+        handedness: 'L',
+      }),
+      pitcherContext: expect.objectContaining({
+        playerId: 'home-sp',
+        handedness: 'L',
+      }),
+      matchupContext: {
+        platoonAdvantage: 'pitcher',
+      },
+    });
+  });
+
+  test('gives switch hitters the batter platoon advantage when hands are known', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result, {
+      handednessById: {
+        'away-batter-1': { bats: 'S' },
+        'home-sp': { throws: 'R' },
+      },
+    });
+
+    await act(async () => {
+      await result.current.commitPlateAppearance({ type: 'hit', hitType: '1B', rbi: 0 });
+    });
+
+    expect(mockLogAtBatEvent.mock.calls[0][0]).toMatchObject({
+      batterContext: expect.objectContaining({ handedness: 'S' }),
+      pitcherContext: expect.objectContaining({ handedness: 'R' }),
+      matchupContext: {
+        platoonAdvantage: 'batter',
+      },
+    });
+  });
+
+  test('omits matchup context when roster handedness is unavailable', async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result);
+
+    await act(async () => {
+      await result.current.commitPlateAppearance({ type: 'hit', hitType: '1B', rbi: 0 });
+    });
+
+    const event = mockLogAtBatEvent.mock.calls[0][0];
+    expect(event.batterContext?.handedness).toBeUndefined();
+    expect(event.pitcherContext?.handedness).toBeUndefined();
+    expect(event.matchupContext).toBeUndefined();
+  });
+
   test('marks high-LI dropped-third-strike events as clutch', async () => {
     const { result } = renderHook(() => useGameState());
     await initializeGame(result);

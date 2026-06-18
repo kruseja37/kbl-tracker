@@ -740,6 +740,10 @@ export interface GameInitConfig {
   homeStartingPitcherName: string;
   awayLineup: { playerId: string; playerName: string; position: string }[];
   homeLineup: { playerId: string; playerName: string; position: string }[];
+  handednessById?: Record<
+    string,
+    { bats?: "L" | "R" | "S"; throws?: "L" | "R" }
+  >;
   // MAJ-09: Optional bench rosters for substitution validation
   awayBench?: { playerId: string; playerName: string; positions: string[] }[];
   homeBench?: { playerId: string; playerName: string; positions: string[] }[];
@@ -2472,6 +2476,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const homeLineupRef = useRef<
     { playerId: string; playerName: string; position: string }[]
   >([]);
+  const handednessByIdRef = useRef<
+    Record<string, { bats?: "L" | "R" | "S"; throws?: "L" | "R" }>
+  >({});
   const optimalLineupSnapshotsRef = useRef<GameLockLineupSnapshots | undefined>(
     undefined,
   );
@@ -4001,6 +4008,18 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         result === "BB" || result === "IBB" || result === "HBP"
           ? undefined
           : mergedEnrichment;
+      const batterHand =
+        handednessByIdRef.current[gameState.currentBatterId]?.bats;
+      const pitcherHand =
+        handednessByIdRef.current[gameState.currentPitcherId]?.throws;
+      const platoonAdvantage =
+        batterHand && pitcherHand
+          ? batterHand === "S"
+            ? "batter"
+            : batterHand === pitcherHand
+              ? "pitcher"
+              : "batter"
+          : undefined;
 
       return {
         // 1.9: Identity
@@ -4050,6 +4069,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           playerName: gameState.currentBatterName,
           position: batterInLineup?.position,
           battingOrder: batterInLineup?.battingOrder,
+          handedness: batterHand,
           enteredAs,
           replacedPlayer: batterInLineup?.enteredFor,
           currentGameStats: bStats
@@ -4066,6 +4086,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         pitcherContext: {
           playerId: gameState.currentPitcherId,
           playerName: gameState.currentPitcherName,
+          handedness: pitcherHand,
           pitchCount: pStats?.pitchCount,
           currentGameStats: pStats
             ? {
@@ -4087,7 +4108,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
             }
           : undefined,
 
-        // 1.14: Matchup context — leave platoonAdvantage/isRivalry empty (no handedness/rivalry data in hook)
+        // 1.14: Matchup context — emit platoon only when roster handedness is known.
+        matchupContext: platoonAdvantage ? { platoonAdvantage } : undefined,
         // previousMatchupsThisGame left empty — requires querying event log
 
         // 1.15: Computed fields
@@ -4166,6 +4188,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
       // Store lineup refs
       awayLineupRef.current = awayLineupSnapshot;
       homeLineupRef.current = homeLineupSnapshot;
+      // TS-4 happy path: fresh-game events get handedness; mid-game reload re-seeding is deferred.
+      handednessByIdRef.current = config.handednessById ?? {};
       optimalLineupSnapshotsRef.current = cloneGameLockLineupSnapshots(
         config.optimalLineupSnapshots,
       );
