@@ -37,6 +37,7 @@ import {
   type IVLayerBreakdown,
   type IVPlayerInput,
 } from './ivEngine';
+import { getPercentile, getValueAtPercentile } from './percentile';
 
 // Re-export DHContext for consumers
 export type { DHContext } from '../utils/leagueConfig';
@@ -938,35 +939,6 @@ export function normalizeTrueValuePosition(position: unknown): PlayerPosition | 
   const normalized = position.trim().toUpperCase();
   if (TRUE_VALUE_PLAYER_POSITION_SET.has(normalized)) return normalized as PlayerPosition;
   return null;
-}
-
-/**
- * Get percentile of a value within an array
- */
-function getPercentile(value: number, sortedArray: number[]): number {
-  if (sortedArray.length === 0) return 0.5;
-
-  let count = 0;
-  for (const v of sortedArray) {
-    if (v <= value) count++;
-    else break;
-  }
-
-  return count / sortedArray.length;
-}
-
-/**
- * Get value at a percentile within an array
- */
-function getValueAtPercentile(percentile: number, sortedArray: number[]): number {
-  if (sortedArray.length === 0) return 0;
-
-  const index = Math.min(
-    Math.floor(percentile * sortedArray.length),
-    sortedArray.length - 1
-  );
-
-  return sortedArray[index];
 }
 
 /**
