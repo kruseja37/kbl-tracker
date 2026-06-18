@@ -5376,3 +5376,19 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - **⇒ L9b-3 COMPLETE (3a `54fae510`+`4e3ad01d` · 3b-i `0cd75d9a` · 3b-ii `e08be415` · 3c) ⇒ L9b (the trait-from-reality
   engine, the "game-changer feature") COMPLETE.** Whole L9b is build-DARK (activate post-D13). **NEXT = L10 (random
   events)** — a FRESH L-stack subsystem needing a grounding recon before contracting. Loop continues under AUTH-4.
+
+## 2026-06-18 (AUTH-4 overnight, host thread, "keep rolling") — L10 RECON (workflow) + L10-1 built/audited/committed
+- Ran the L10 grounding recon as a delegated WORKFLOW (`wf_b3129cd8-9e3`, 5 readers + synthesis, ~398K tokens — kept the
+  Captain's context lean). Scope map → `spec-docs/L10_SCOPE_MAP.md` (committed `b9b6822a`): subsystem surface + the
+  franchiseRandomEventGenerator boundary; v1 event catalog; split L10-1..5; AUTH-4 default forks; verified file:line seams;
+  cadence/rate model; 6 non-blocking JK questions.
+- **L10-1 deliverable:** NEW pure `src/engines/franchiseL10EventEngine.ts` (`computeFranchiseL10Events`): deterministic
+  league-sweep roll mirroring `tradeRequestGeneration` — `P = baseRate[family] × intensity dial × morale × personality ×
+  perfSignal`, FNV-1a-seeded fire, 8 families (personality-shift EXCLUDED), team/stadium fan-morale-suppressed, morale-
+  tilted valence, trade_demand proposed-only, name-change excluded. FNV-1a re-implemented locally (boundary respected).
+- **The tightened contract held (5th clean dispatch):** Codex hit EXACTLY the 2 FILE LIST files — no doc edits, no git-add.
+- **Independent audit (Opus, line-by-line):** tsc-0; full suite **7,527/434, 7,525 pass / 2 characterized fail**, ZERO new
+  reds (+13); formula + FNV-1a determinism + eligibility map + family-6 exclusion + fan-morale suppression + purity/build-
+  dark + boundary all re-derived correct. VERDICT VERIFIED → auto-committed.
+- **NEXT = L10-2** (dark `franchiseL10Overlays` store, trackerDb v22→v23 — the 8-site mirror incl. the store-list PIN;
+  mirror L9b-3b-i). Loop continues under AUTH-4.

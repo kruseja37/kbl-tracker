@@ -13,9 +13,13 @@ NO live caller (confirm UI = deferred post-D13 D-ticket). Codex-built → Opus-a
 activate post-D13 (the L9b-3b-ii hook flag default-OFF; L9b-3c orphaned-pending its confirm UI). **➡ NEXT = L10**
 (random events) per the L-stack: L10 → L11 managers → L12 races/All-Star/awards-fame → L13 relationships → L14 rebrand →
 the L-SIM gate. **L10 RECON DONE** (workflow `wf_b3129cd8-9e3`) → full scope/split/forks/seams/open-questions in
-`spec-docs/L10_SCOPE_MAP.md`. SPLIT: **L10-1** pure event-selection engine (NEXT — build first, lowest risk, no I/O) ·
-L10-2 dark `franchiseL10Overlays` store (v23) · L10-3 flag + dark league-sweep hook · L10-4 stadium-change event · L10-5
-reporter tap. Build-DARK; do NOT extend `franchiseRandomEventGenerator.ts` (boundary). 6 non-blocking open questions for
+`spec-docs/L10_SCOPE_MAP.md`. SPLIT: **L10-1** pure event-selection engine (✅ DONE — committed) · **L10-2** dark
+`franchiseL10Overlays` store (v23 — NEXT) · L10-3 flag + dark league-sweep hook · L10-4 stadium-change event · L10-5
+reporter tap. **L10-1 DONE** = `src/engines/franchiseL10EventEngine.ts` (`computeFranchiseL10Events`: pure deterministic
+league-sweep roll — `P = baseRate[family] × intensity dial × morale × personality`, FNV-1a-seeded fire, 8 families with
+personality-shift excluded, fan-morale-suppressed team/stadium; mirrors `tradeRequestGeneration`; build-DARK).
+Codex-built → Opus-audited VERIFIED (tsc-0 / suite **7,527/434, 7,525 pass / 2 characterized fail**, ZERO new reds).
+Build-DARK; do NOT extend `franchiseRandomEventGenerator.ts` (boundary). 6 non-blocking open questions for
 JK in the scope map §7 (AUTH-4 defaults taken meanwhile).
 *(Prior L9b-3b detail below.)* **L9b-3b DONE:** b-i = the dark
 `franchiseTraitOverlays` store (trackerDb v22) · b-ii = the default-OFF `isFranchisePhase2TraitsEnabled` flag +
@@ -113,6 +117,19 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## RIGHT NOW
 
+- **✅ L10-1 VERIFIED + COMMITTED (2026-06-18, AUTH-4 overnight) — the pure random-event SELECTION engine (first L10
+  piece).** NEW `src/engines/franchiseL10EventEngine.ts` (`computeFranchiseL10Events`): a PURE, deterministic, build-DARK
+  league-sweep roll. Per candidate × eligible family → `P = clamp01(baseRate[family] × intensityMultiplier[Juiced/Standard/
+  Nerfed] × moraleFactor × personalitySensitivity × perfSignal)`; fires iff `franchiseL10DeterministicRoll(seed) < P`
+  (FNV-1a, local re-impl — boundary respected). 8 families (`performance/pitching/trait/role/cosmetic/team/roster/wildcard`)
+  — **personality-shift EXCLUDED (arc-earned)**; eligibility (team→team specs incl. `stadium_change`, `pitching`→pitcher-
+  only, wildcard→players); HIGH fan morale SUPPRESSES team/stadium; morale-tilted valence sub-roll; trade_demand
+  proposed-only; name-change excluded. Mirrors `tradeRequestGeneration` (Tuning + §16 const + components + deterministic
+  sort). **Codex-built → Opus-INDEPENDENTLY-audited VERIFIED** (read line-by-line): tsc-0 / full suite **7,527/434, 7,525
+  pass / 2 characterized fail**, ZERO new reds (+13); pure (no IndexedDB/Date/random/async); build-dark (no production
+  importer; L10-3 wires it); Codex hit EXACTLY the 2 FILE LIST files. **➡ NEXT = L10-2** (dark `franchiseL10Overlays`
+  store, trackerDb v22→v23 — the 8-site mirror incl. the `franchiseSeasonLedgerStorage` store-list PIN; mirror
+  `franchiseTraitOverlays`/L9b-3b-i). *(Prior L9b-3c entry below.)*
 - **✅ L9b-3c VERIFIED + COMMITTED (2026-06-18, AUTH-4 overnight) → L9b-3 + L9b COMPLETE — the §11 trait-confirm transform
   + the ATOMIC trait1/trait2 displacement write (the LAST L9b piece; the first code that mutates a player's traits).**
   NEW PURE `src/engines/traitOverlayConfirmation.ts` (`applyTraitDisplacement` — the 2-slot categorical math: gain →
@@ -678,7 +695,10 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## SUITE BASELINE
 
-**7,514 tests / 433 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L9b-3c** (→ L9b
+**7,527 tests / 434 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L10-1** (the pure
+random-event selection engine): **7,525 pass / 2 fail** = EXACTLY the characterized baseline (`wpaRuntimeBoundary` +
+`franchiseManualSmokeFixture`). ZERO new reds (+13 tests / +1 file = `franchiseL10EventEngine.test.ts`). tsc 0. trackerDb
+**v22** (L10-1 is a pure engine, no store). *(Prior baseline retained below for the arc trail.)* **7,514 tests / 433 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L9b-3c** (→ L9b
 COMPLETE): **7,512 pass / 2 fail** = EXACTLY the characterized baseline (`wpaRuntimeBoundary` +
 `franchiseManualSmokeFixture`). ZERO new reds (+15 tests / +2 files = `traitOverlayConfirmation.test.ts` [10] +
 `franchiseTraitConfirmApply.test.ts` [5]). tsc 0. trackerDb **v22** (L9b-3c added no store; pure engine + a confirm

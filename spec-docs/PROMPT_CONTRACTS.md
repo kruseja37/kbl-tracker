@@ -10102,3 +10102,21 @@ Use high reasoning effort. Think step-by-step. Builder ≠ auditor — Opus re-a
 **Full contract text (the dispatched prompt):** `/tmp/l9b3c_codex_prompt.md`.
 
 **Status:** VERIFIED + COMMITTED (2026-06-18, AUTH-4 overnight). Codex 5.5 built → Opus 4.8 independently audited VERIFIED (read line-by-line): tsc 0 / full suite 7,514 tests, 7,512 pass / 2 characterized fail, ZERO new reds. PURE engine — all 6 displacement cases correct (gain: already-held→displaces-named→free-slot→cap; lose: held→not-held; canonical guard on both names); `confirmTraitOverlay` flips confirmed+applied; request builder + change log deterministic. IMPURE applier idempotent (DOUBLY: the `overlay.applied` guard for a confirmed re-call + the displacement's already-held/not-held for a stale re-call), writes FLAT trait1/trait2 via `saveFranchisePlayer` (null→undefined), player-first then overlay-mark, cross-DB note documented. NO live caller (confirm UI = deferred post-D13 D-ticket). Codex hit EXACTLY the 4 FILE LIST files (no doc edits, no git-add, no abandoned files). **⇒ L9b-3 COMPLETE (3a `54fae510`+`4e3ad01d` · 3b-i `0cd75d9a` · 3b-ii `e08be415` · 3c) ⇒ L9b (trait-from-reality engine) COMPLETE.** trackerDb v22. NEXT = L10 (random events).
+
+---
+
+## CONTRACT — L10-1 (pure random-event selection engine) — 2026-06-18 (AUTH-4 overnight)
+
+**ROUTE: Codex 5.5 | high reasoning effort** (builder). Auditor = Opus 4.8 (independent; ≠ builder). Branch codex/franchise-v1-next. The first L10 piece (per `spec-docs/L10_SCOPE_MAP.md`).
+
+**GOAL:** PURE, deterministic, build-DARK random-events SELECTION engine `src/engines/franchiseL10EventEngine.ts` (+ test) — a league-sweep roll deciding WHICH events fire for which candidates (morale/personality-weighted × Juiced/Standard/Nerfed dial × FNV-1a seed), emitting `FranchiseL10EventCandidate`s. NO IndexedDB/store/flag/Date/Math.random/async; NO production caller (L10-3 wires it).
+
+**MIRROR:** `tradeRequestGeneration.ts` (Tuning + §16 const + pure compute + components + deterministic sort + clamp). Reuse `TierKey` (juiced/standard/nerfed) + `CanonicalPersonality` (7) + the intensity dial `{1.3/1.0/0.6}` verbatim. Re-implement the FNV-1a `deterministicRoll` locally (pattern at franchiseRandomEventGenerator.ts:230-240) — do NOT import/extend that file (BOUNDARY); prefix exports `FranchiseL10*`.
+
+**MODEL:** per candidate × eligible family → `P = clamp01(baseRate[family] × intensityMultiplier × moraleFactor × personalitySensitivity)`; fires iff `deterministicRoll(`${seedBase}:${id}:${family}`) < P`. Player/team/role eligibility map; HIGH fan morale SUPPRESSES team/stadium; valence via a morale-tilted sub-roll. 8 families — **personality-shift (spec family 6) EXCLUDED (arc-earned)**; name-change excluded from cosmetic auto-roll; trade_demand proposed-only (propensity stays in tradeRequestGeneration). Within-family concrete resolution deferred downstream. All rates/magnitudes = §16 placeholders.
+
+**HARD CONSTRAINTS:** no spec-doc/`*.md` edits, no git-add; ONLY the 2 FILE LIST files; pure/deterministic/build-dark; respect the franchiseRandomEventGenerator boundary.
+
+**Full contract text (dispatched prompt):** `/tmp/l10_1_codex_prompt.md`.
+
+**Status:** VERIFIED + COMMITTED (2026-06-18, AUTH-4 overnight). Codex 5.5 built → Opus 4.8 independently audited VERIFIED (read line-by-line): tsc 0 / full suite 7,527 tests, 7,525 pass / 2 characterized fail, ZERO new reds (+13). Verified: 8 families with personality-shift EXCLUDED; eligibility map (team→team specs incl. stadium_change, pitching→pitcher-only, wildcard→players); `P = clamp01(baseRate × intensity × moraleFactor × personality × perfSignal)`; fan-morale SUPPRESSION for team/stadium; player morale-distance + a morale-tilted valence sub-roll; FNV-1a deterministic roll (local re-impl — boundary respected, no franchiseRandomEventGenerator import); deterministic sort; trade_demand proposed-only; name-change excluded; pure/build-dark. Codex hit EXACTLY the 2 FILE LIST files (no doc edits, no git-add). NEXT = L10-2 (dark `franchiseL10Overlays` store, trackerDb v23 — the 8-site mirror incl. the store-list PIN).

@@ -1436,3 +1436,19 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   ownership split; (3) single-cadence collapse vs traits-more-frequent; (4) stadium-change on the USER's team (product
   feel); (5) cosmetic-while-dark; (6) name-change opt-in UI now vs deferred. **➡ NEXT = contract + build L10-1** (the
   pure engine, lowest risk, independent of the store/version fork). Build-DARK, activate post-D13.
+- **2026-06-18 (AUTH-4, "keep rolling") — L10-1 BUILT (Codex 5.5) → AUDITED (Opus) VERIFIED → COMMITTED.** The pure
+  random-event SELECTION engine (first L10 piece). NEW `src/engines/franchiseL10EventEngine.ts` (`computeFranchiseL10Events`):
+  deterministic league-sweep roll mirroring `tradeRequestGeneration` — `P = clamp01(baseRate[family] ×
+  intensityMultiplier[juiced 1.3/standard 1.0/nerfed 0.6] × moraleFactor × personalitySensitivity × perfSignal)`; fires iff
+  `franchiseL10DeterministicRoll(seed) < P` (FNV-1a re-implemented locally — boundary respected). 8 families with
+  personality-shift EXCLUDED (arc-earned); eligibility map (team→front_office_mandate+stadium_change, pitching→pitcher-only,
+  wildcard→players); HIGH fan morale SUPPRESSES team/stadium; morale-tilted valence sub-roll; trade_demand proposed-only;
+  name-change excluded; placeholder rates/magnitudes (§16). Pure, build-DARK (no production importer — L10-3 wires it).
+  - **Tightened contract held (5th clean dispatch in a row):** Codex hit EXACTLY the 2 FILE LIST files — no doc edits, no
+    git-add (the PROMPT_CONTRACTS "M" was the Captain's block).
+  - **INDEPENDENT AUDIT (Opus, line-by-line):** tsc-0; full suite **7,527/434, 7,525 pass / 2 characterized fail**, ZERO
+    new reds (+13); formula + FNV-1a determinism + eligibility + family-6 exclusion + fan-morale suppression +
+    purity/build-dark + the franchiseRandomEventGenerator boundary all re-derived correct. VERDICT VERIFIED →
+    auto-committed.
+  - **➡ NEXT = L10-2** (dark `franchiseL10Overlays` store, trackerDb v22→v23; the 8-site mirror incl. the
+    `franchiseSeasonLedgerStorage` store-list PIN [MEMORY: broke L6b-1]; mirror L9b-3b-i `franchiseTraitOverlays` exactly).
