@@ -5165,3 +5165,44 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - **NEXT = L8** (ratings development — the first real WRITER through L2; see CURRENT_STATE "NEXT" bullet for the full
   build spec: every-20%-of-season checkpoint sweep × §8 dampener [L5a, consumed] × personality × Ambition/Resilience →
   overlays via the L2 confirm; ratings only; likely SPLIT L8a pure-math / L8b cadence+writer). `HANDOFF_NEEDED` written.
+
+## 2026-06-18 (AUTH-4 overnight, fresh thread post-L9b-handoff) — L9b-1 BUILT (pure trait scorer)
+- Session-start reads done (SESSION_RULES / AUDIT_LOG / AUDIT_PLAN / SESSION_LOG / CURRENT_STATE + the L9b RECON entry);
+  RESTATED phase = Phase-2 L-stack soul layer under AUTH-4, last done = L8 COMPLETE + L9a effectively complete,
+  next = L9b-1. Proceeded without waiting for JK (AUTH-4 standing go).
+- Built **L9b-1 — the PURE trait-from-reality SCORER** (the peer-relative strength score, TS-2). 4 files on disk,
+  uncommitted (sandbox cannot build/suite/commit — host gate queued in WAITING_ON_JK.md):
+  - NEW `src/engines/percentile.ts` (lifted getPercentile + getValueAtPercentile verbatim out of salaryCalculator;
+    byte-identical) · MODIFIED `src/engines/salaryCalculator.ts` (deleted inlined helpers, re-imports them).
+  - NEW `src/engines/traitRealityScorer.ts` (role-eligibility VI.2 + min-sample valve VI.1 + scaledThreshold scaling +
+    percentile; PURE, no IndexedDB/mutation; does NOT compute P or write back — those are L9b-2/3).
+  - NEW `src/engines/__tests__/traitRealityScorer.test.ts` (19 tests, incl. a 75-name completeness/role-count guard).
+- Name-drift reconciled to the canonical TRAIT_PRICING data (NOT the spec shorthand): `K Neglector` (not "Neglecter"),
+  `Two Way (C)/(IF)/(OF)` (not "Two Way"). DEFAULT-TAKEN + FLAGGED for JK: `Workhorse` (75th trait, unlisted in VI.2)
+  classified PITCHER → canonical pitcher count 28.
+- Verification (sandbox): tsc --noEmit -p tsconfig.app.json exit 0; traitRealityScorer.test.ts 19/19;
+  salaryCalculator + .matrix + salarySeam.t5 121/121 (percentile lift behavior-neutral). Full build/suite/commit = host.
+- Builder=Opus ≠ auditor → flagged the diff still needs an independent engineering audit before VERIFIED.
+- **NEXT = L9b-2** (pure acquisition: P = percentile × personalityTilt × morale, hysteresis, no-offsetting-pair,
+  2-trait cap; proposals only) → L9b-3 (grant/write-back, persistence). Matrix stays FROZEN SMB4 asset.
+
+## 2026-06-18 (AUTH-4 overnight, fresh HOST session) — L9b-1 host gate + independent audit → COMMITTED `398533d1`
+- Session-start reads done (SESSION_RULES / AUDIT_LOG / AUDIT_PLAN / SESSION_LOG / CURRENT_STATE + AUTONOMOUS_RUN_PROTOCOL
+  + the L9b RECON + L9b-1 BUILT run-log entries); RESTATED state; proceeded under AUTH-4 (standing go, no JK wait).
+- Picked up the L9b-1 host-handoff (prior sandbox thread could not run full build/suite/commit). Read the full diff
+  first (percentile.ts is a clean verbatim lift; role sets hand-counted 28/39/7/1 = 75; completeness guard pins 1:1 to
+  frozen TRAIT_PRICING).
+- **Host gate PASSED** (real node v20, `NODE_ENV=` prefix): tsc-0; `npm run build` success (PWA, ✓ 7.91s);
+  traitRealityScorer 19/19; salaryCalculator + .matrix + salarySeam.t5 121/121; **full suite 7,441 tests / 427 files,
+  7,437 pass / 4 fail** = 2 characterized (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`) + 2 order-flakes
+  (`GameTrackerLaunchState` + newly-surfaced `EliminationTeamHub`), BOTH pass SOLO (9/9, 6/6) → not regressions; ZERO
+  new reds. EliminationTeamHub added to the order-flake family (same worker-pool-reorder mechanism as AwardsWatchlist on
+  L7d-1).
+- **Independent audit (decorrelated, builder=Opus → auditor=Codex 5.5 | high):** dispatched `codex exec` over a focused
+  audit contract. Codex re-ran the gates, did its own AST check (counts 28/39/7/1=75, no dupes/missing/extra, workhorse
+  true), verified lift fidelity + gate ordering + purity/build-dark + no new traits. **VERDICT: VERIFIED**, no real
+  defect (non-blocking nits: "byte-identical" → math-identical; optional combined-basis / non-mutation / dup tests).
+- **Auto-committed `398533d1`** (4 code files). Docs updated (CURRENT_STATE header + RIGHT NOW + SUITE BASELINE +
+  OPEN PENDING-JK; AUTONOMOUS_RUN_LOG; this log). WAITING_ON_JK `[ticket:L9b-1]` RESOLVED. Transient audit prompt removed.
+  trackerDb v21; nothing pushed.
+- **NEXT = L9b-2** (pure acquisition engine; model read from §VI.0/.1/.3 this session). Loop continues under AUTH-4.

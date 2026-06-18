@@ -1128,3 +1128,76 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   backup parity + the `franchiseSeasonLedgerStorage` store-list pin). Plain terms: "reuse the ratings-change ledger for
   trait changes too, or give trait changes their own ledger?" Logged to WAITING_ON_JK; AUTH-4 default = reuse unless JK
   rules. Full recon transcript: wf_8a9e7769-576. **NEXT THREAD: contract + build L9b-1 (the pure scorer) first.**
+
+- **2026-06-18 (AUTH-4, overnight, fresh thread after the L9b CONTEXT-HANDOFF) — L9b-1 BUILT (PURE trait-from-reality
+  SCORER) → host-handoff for build/suite/commit.** Sandbox-built by Opus (this thread); sandbox CANNOT run full build /
+  full suite / commit, so the host gate is queued in `WAITING_ON_JK.md` (`[ticket:L9b-1]`). **Builder=Opus ≠ auditor →
+  the diff still needs an INDEPENDENT engineering audit before VERIFIED.**
+  **WHAT WAS BUILT (files on disk, uncommitted, branch codex/franchise-v1-next):**
+  - **NEW `src/engines/percentile.ts`** — lifted the module-private `getPercentile` + `getValueAtPercentile` VERBATIM out
+    of `salaryCalculator.ts` (recon said line 946; both are paired module-private helpers used by `computeTrueValue`).
+    Exported, byte-identical math, same pre-sorted-ascending contract documented. NOT a re-implementation (drift risk).
+  - **MODIFIED `src/engines/salaryCalculator.ts`** — deleted the two inlined helper bodies, added
+    `import { getPercentile, getValueAtPercentile } from './percentile'`. Behavior-neutral (proven: the 121
+    salaryCalculator-family tests still green).
+  - **NEW `src/engines/traitRealityScorer.ts`** — the §9/TS-2 scorer. `computeTraitRealityScore(input, config, tuning)`
+    → `realityPercentile` 0..1, gated in order by: unknown-trait → role-ineligible (VI.2) → thin counting sample (VI.1
+    valve, season-scaled via `scaledThreshold`) → thin peer pool → percentile (= `getPercentile` over the sorted peers).
+    Counting floors scale by basis ('season'/'combined' scale; 'none' rate floors do NOT). Exposes `traitRole`,
+    `isTraitEligibleForRole`, `CANONICAL_TRAIT_NAMES`, `TRAIT_REALITY_SCORER_TUNING` (§16 SIM-TUNE placeholders).
+    PURE — no IndexedDB, no mutation. Does NOT compute P(gain/lose) (that's L9b-2) and does NOT write back (L9b-3).
+  - **NEW `src/engines/__tests__/traitRealityScorer.test.ts`** — 19 tests incl. a completeness guard (every canonical
+    `TRAIT_PRICING` name resolves to a non-null role; set size === 75; role counts 28 pitcher / 39 position / 7 universal
+    / 1 cut), the SMB4 short-season floor-scaling, and all five gate branches.
+  **NOTE — paths in the recon were OFF:** `franchiseAdaptiveStandards.ts` + `franchiseAwardTrust.ts` live in
+  **`src/utils/`**, NOT `src/engines/`. `getPercentile` IS in `src/engines/salaryCalculator.ts` as the recon said. No
+  other recon facts changed.
+  **NAME-DRIFT RECONCILED (canonical TRAIT_PRICING names, NOT the VI.2 spec shorthand — a misspelled trait silently never
+  fires, so the role sets MUST match the data):** the spec writes `K Neglecter` but the frozen data is **`K Neglector`**;
+  the spec's single `Two Way` is the data triplet **`Two Way (C)` / `(IF)` / `(OF)`** (the random fielding-position grant
+  is baked into the name). These are the exact drifts the recon flagged.
+  **DEFAULT-TAKEN (AUTH-4, spec silent → FLAGGED for JK):** **`Workhorse`** is the 75th canonical trait (a
+  `staminaModifier` pitcher trait, matrix note A7) but is NOT enumerated in ANY VI.2 role list. A position player has no
+  stamina/pitch-count signal, so it is classified **PITCHER** here. This is why the canonical pitcher count is 28 (the
+  spec's 25 + the 2 extra Two Way variants + Workhorse) rather than 25. JK: confirm or re-classify.
+  **VERIFICATION (sandbox):** `NODE_ENV= npx tsc --noEmit -p tsconfig.app.json` → **exit 0**. Targeted vitest:
+  `traitRealityScorer.test.ts` **19/19 pass**; the percentile-regression set (salaryCalculator + .matrix + salarySeam.t5)
+  **121/121 pass** (the lift is behavior-neutral). Full build + full suite + commit are the HOST gate (queued).
+  **NEXT TICKET: L9b-2** — the PURE acquisition engine: `P(gain/lose) = realityPercentile × personalityTilt(§6/VI.3) ×
+  morale(L3)` (multiplicative, spec-fixed shape) + gain-high/lose-low hysteresis + the no-offsetting-pair rule + the
+  2-trait-cap displacement signal, producing trait-change PROPOSALS only. Then L9b-3 (grant/write-back, persistence,
+  audit hardest). The matrix stays FROZEN SMB4-asset data.
+
+- **2026-06-18 (AUTH-4, overnight, fresh HOST session) — L9b-1 HOST GATE PASSED + INDEPENDENTLY AUDITED (Codex) →
+  COMMITTED `398533d1`.** A fresh session on the real host picked up the L9b-1 host-handoff (the prior sandbox thread
+  could not run full build / full suite / commit). Did the session-start reads, RESTATEd, and PROCEEDED under AUTH-4
+  (standing go, no JK wait). **Host gate (real node v20, `NODE_ENV=` prefix):** `tsc --noEmit` exit 0; `npm run build`
+  (`tsc -b && vite build`) success (PWA generated, `✓ built in 7.91s`); focused `traitRealityScorer` **19/19**; the
+  percentile-regression family (`salaryCalculator` + `.matrix` + `salarySeam.t5`) **121/121** (the lift is
+  behavior-neutral); **full suite 7,441 tests / 427 files — 7,437 pass / 4 fail.** The 4 = the 2 FIXED characterized
+  (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`, names confirmed via FAIL-line grep) **+ 2 order-flakes**
+  (`GameTrackerLaunchState` + **newly-surfaced `EliminationTeamHub`**) that BOTH **PASS SOLO** (9/9 and 6/6) → not
+  regressions; EliminationTeamHub surfaced because L9b-1's new test file shifted vitest's worker-pool ordering (the same
+  phenomenon documented for `AwardsWatchlist` on L7d-1; added to the order-flake family in CURRENT_STATE OPEN PENDING-JK,
+  NOT relabeled into the characterized set). **ZERO new reds attributable to L9b-1.**
+  **INDEPENDENT AUDIT (decorrelated — builder=Opus, auditor=Codex 5.5 | high; the triangle the BUILT-by-Opus handoff
+  required):** dispatched `codex exec` over a focused audit contract. Codex re-ran tsc-0 + the trait 19/19 + the salary
+  121/121, did its OWN AST check of the role classification (`{canonicalCount:75, counts:{pitcher:28,position:39,
+  universal:7,cut:1}, dupes:[], missing:[], extra:[], workhorse:true}`), confirmed the percentile lift is math/behavior-
+  identical + both helpers still consumed (salaryCalculator:1014/1017), the gate ordering + scaledThreshold basis logic +
+  sorted-copy non-mutation, purity/build-dark (no production caller; no IndexedDB/Date.now/Math.random/trait1/trait2),
+  and that no new traits/predicate kinds were added. **VERDICT: VERIFIED — no real defect.** Non-blocking nits only:
+  the "byte-identical" wording is overstated (it's math-identical — the new file adds `export`/comments); optional extra
+  tests (combined-basis scaling, an explicit non-mutation assertion, a private-array duplicate test) — none block.
+  **Auto-committed `398533d1`** (4 files: NEW percentile.ts + traitRealityScorer.ts + its 19-test file, MOD
+  salaryCalculator.ts). `.codex-l9b1-audit-prompt.txt` transient artifact removed (not committed). WAITING_ON_JK
+  `[ticket:L9b-1]` line RESOLVED. trackerDb stays **v21**; nothing pushed.
+  **DEFAULT-TAKEN (carried forward for JK):** `Workhorse` → PITCHER (staminaModifier, unlisted in VI.2). Affects only
+  eligibility downstream (L9b-2+), not the scorer math.
+  **NOW = L9b-2** — the PURE acquisition engine. Model (TRAIT_SIGNAL_CERTIFICATION §VI.0/.1/.3, read this session):
+  `P(gain/lose) = f(realityPercentile [L9b-1], personality-tilt [§6/VI.3 four image axes + universal Ambition↑-pos /
+  low-Resilience↑-neg + roster-role bench-tilt for Pinch Perfect/Utility], current-morale [L3])`, MULTIPLICATIVE
+  spec-fixed shape, coefficients §16 sim-tuned; gated by the VI.1 min-sample valve (the scorer's `sufficient` flag);
+  gain-high/lose-low HYSTERESIS (two thresholds); no-offsetting-pos/neg-pair; 2-trait-cap strength-ranked displacement
+  SIGNAL (the actual write is L9b-3). PROPOSALS only — pure, no IndexedDB, no mutation, build-dark. Then L9b-3
+  (grant/write-back — persistence, audit hardest; the FIRST real trait writer). The matrix stays FROZEN SMB4-asset data.

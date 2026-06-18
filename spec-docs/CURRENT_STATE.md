@@ -1,6 +1,18 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-18 (**L8 COMPLETE (L8a `cfdd7752` + L8b `cd9e4589`) → NOW L9a (captures)** [AUTH-4 overnight
+**Last Updated:** 2026-06-18 (**L9b-1 VERIFIED + COMMITTED `398533d1` → NOW L9b-2 (acquisition)** [AUTH-4
+overnight; a fresh session does the session-start reads, RESTATEs, and PROCEEDs at L9b-2 under AUTH-4 WITHOUT waiting for
+JK — AUTH-4 is the standing go]. L9b-1 = the PURE trait-from-reality SCORER (TS-2): NEW `src/engines/percentile.ts`
+(getPercentile/getValueAtPercentile lifted verbatim out of salaryCalculator, math-identical) + salaryCalculator
+re-imports them + NEW `src/engines/traitRealityScorer.ts` (role-eligibility VI.2 + min-sample valve VI.1 +
+scaledThreshold scaling + percentile strength score; PURE, no IndexedDB/mutation) + 19-test file. **HOST GATE PASSED**
+(host session, real node v20): tsc-0 / build-0 / full suite **7,441 tests, 7,437 pass / 4 fail** = 2 characterized
+(`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`) + 2 solo-passing order-flakes (`GameTrackerLaunchState` +
+newly-surfaced `EliminationTeamHub`), **ZERO new reds**; 19/19 new + 121/121 salaryCalculator-family green (lift
+behavior-neutral). **Builder=Opus → INDEPENDENTLY audited by Codex 5.5: VERDICT VERIFIED** (decorrelated AST check
+confirmed 28/39/7/1=75, no dupes/missing/extra; no real defect; only non-blocking test-coverage nits). DEFAULT-TAKEN
+flagged for JK: `Workhorse` (unlisted in VI.2) classified PITCHER. trackerDb stays **v21** (pure engine, no store).
+NEXT=L9b-2. *(Prior status preserved below.)* **L8 COMPLETE (L8a `cfdd7752` + L8b `cd9e4589`)** [AUTH-4 overnight
 run; a fresh session does the session-start reads, RESTATEs, and PROCEEDs at L9a under AUTH-4 WITHOUT waiting for JK —
 AUTH-4 is the standing go]. This run built→audited→committed, each Codex 5.5-built → Opus 4.8-independently-audited:
 **L8 COMPLETE** (L8a pure dev-math engine `cfdd7752` + L8b dark checkpoint-sweep compute/overlay-writer `cd9e4589`) on
@@ -48,6 +60,30 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## RIGHT NOW
 
+- **✅ L9b-1 VERIFIED + COMMITTED `398533d1` (2026-06-18, AUTH-4 overnight, host session) — the PURE trait-from-reality
+  SCORER (TS-2).** L9b SPLIT (per the recon): **L9b-1** scorer (DONE, committed) · **L9b-2** acquisition (NEXT) · **L9b-3**
+  grant/write-back (persistence, audit hardest). Committed 4 files (`398533d1`, branch codex/franchise-v1-next):
+  NEW `src/engines/percentile.ts` (lifted getPercentile + getValueAtPercentile VERBATIM out of salaryCalculator —
+  byte-identical, exported; one truth, not re-implemented) + MODIFIED `salaryCalculator.ts` (deletes the inlined helpers,
+  re-imports them — behavior-neutral, the 121 salaryCalculator-family tests prove it) + NEW
+  `src/engines/traitRealityScorer.ts` (`computeTraitRealityScore` → realityPercentile 0..1, gated in order by
+  unknown-trait → role-ineligible VI.2 → thin sample VI.1 valve [season-scaled via `scaledThreshold`] → thin peer pool →
+  percentile over sorted peers; PURE, no IndexedDB/mutation; does NOT compute P [L9b-2] or write back [L9b-3]) + a
+  19-test file with a 75-name completeness/role-count guard. **PATH CORRECTION:** `franchiseAdaptiveStandards.ts` +
+  `franchiseAwardTrust.ts` are in `src/utils/` (the recon said engines/); `getPercentile` IS in
+  `src/engines/salaryCalculator.ts`. **NAME-DRIFT reconciled to canonical TRAIT_PRICING data** (a misspell silently never
+  fires): `K Neglector` (not the spec's "Neglecter"), `Two Way (C)/(IF)/(OF)` (not "Two Way"). **DEFAULT-TAKEN (AUTH-4,
+  spec silent → FLAGGED for JK):** `Workhorse` (75th canonical trait, a staminaModifier pitcher trait, unlisted in any
+  VI.2 role list) classified PITCHER → canonical pitcher count 28. **HOST GATE PASSED (host session):** tsc-0 / build-0 /
+  full suite 7,441 tests, 7,437 pass / 4 fail (2 characterized + 2 solo-passing order-flakes [`GameTrackerLaunchState` +
+  newly-surfaced `EliminationTeamHub`], ZERO new reds); traitRealityScorer 19/19; salaryCalculator + .matrix + salarySeam.t5
+  121/121. **Builder=Opus → INDEPENDENTLY audited by Codex 5.5 (decorrelated): VERDICT VERIFIED** — own AST check confirmed
+  28/39/7/1=75 with no dupes/missing/extra, no real defect (non-blocking nits: "byte-identical" overstated → math-identical;
+  optional combined-basis / non-mutation / dup-array tests). Auto-committed `398533d1`. trackerDb stays **v21** (pure engine,
+  no store). WAITING_ON_JK `[ticket:L9b-1]` host-gate line RESOLVED.
+  **➡ NEXT = L9b-2** (pure acquisition: `P(gain/lose) = realityPercentile × personalityTilt(§6/VI.3) × morale(L3)`,
+  multiplicative spec-fixed shape + gain-high/lose-low hysteresis + no-offsetting-pair + 2-trait-cap displacement;
+  PROPOSALS only). The matrix `traitInteractionMatrix.ts` stays FROZEN SMB4-asset data — consume, never regenerate.
 - **✅ L5b COMMITTED `5ebb148` (2026-06-17, AUTH-4 host resume) — handoff CLEARED.** The flashpoint-decay accumulator
   (§13 tooth #2 / LS-19) was host-verified (`NODE_ENV= npm run build` exit 0 + full suite **7,298 pass / 2 characterized
   fail**, ZERO new reds — the +18 tests / +3 files = L5b's new test files) and committed (14 code/test files). The prior
@@ -189,7 +225,7 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
   role-eligibility VI.2, the min-sample valve). DSTACK L9b line 84; Cert VI.5; deps L9a ✓ / L2 ✓ / L3 ✓ / L1 ✓. **RECON DONE (wf_8a9e7769-576, 5 readers) — full
   scope + the split + key gotchas in `AUTONOMOUS_RUN_LOG.md` (the 2026-06-18 "L9b RECON DONE" entry).** SPLIT: **L9b-1**
   scorer (PURE — lift `getPercentile`→`src/engines/percentile.ts`, role peer-pools VI.2, scale via `scaledThreshold`;
-  build FIRST, lowest risk) → **L9b-2** acquisition (PURE — `P=percentile×personality×morale` + min-sample valve +
+  build FIRST, lowest risk — **✅ BUILT 2026-06-18, host-gate queued, see the RIGHT-NOW top entry**) → **L9b-2** acquisition (PURE — `P=percentile×personality×morale` + min-sample valve +
   hysteresis + no-offsetting-pair + role-eligibility) → **L9b-3** grant/write-back (PERSISTENCE — L8b-pattern dark hook +
   context reconstructor + PENDING trait rows + §11 trait-confirm → writes `trait1`/`trait2` 2-slot displacement via
   `saveFranchisePlayer`; **L9b is the FIRST trait writer**; audit HARDEST). The matrix is FROZEN SMB4-asset data
@@ -470,7 +506,16 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## SUITE BASELINE
 
-**7,422 tests / 426 files** — full suite independently re-run 2026-06-18 (AUTH-4 overnight) after **L9a-4** commit
+**7,441 tests / 427 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L9b-1** commit
+`398533d1`: **7,437 pass / 4 fail**. The 4 = the 2 FIXED characterized fails (`wpaRuntimeBoundary` +
+`franchiseManualSmokeFixture` — names personally confirmed via the FAIL-line grep) **+ 2 order-flakes**
+(`GameTrackerLaunchState` + **newly-surfaced `EliminationTeamHub`**), BOTH of which **PASS SOLO** (9/9 and 6/6) → they are
+worker-pool-order flakes (shared fake-IndexedDB/global state), NOT regressions. **ZERO new reds attributable to L9b-1**
+(+19 tests / +1 file = exactly L9b-1's `traitRealityScorer.test.ts`; the salaryCalculator percentile lift is
+behavior-neutral → 121/121 family green, adds no tests). `EliminationTeamHub` is the SAME phenomenon documented for
+`AwardsWatchlist` on L7d-1 — a pre-existing latent flake surfaced when a new test file shifts vitest's worker ordering;
+added to the order-flake family in OPEN PENDING-JK (NOT silently relabeled into the characterized set). trackerDb **v21**
+(L9b-1 is a pure engine; no store, no version bump). *(Prior baseline retained below for the arc trail.)* **7,422 tests / 426 files** — full suite independently re-run 2026-06-18 (AUTH-4 overnight) after **L9a-4** commit
 `acce899c`: **7,420 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` — NAMES personally
 confirmed), ZERO new reds (+3 tests / +2 new files = `seasonAggregator.outfieldArm.test.ts` + `eventLog.injuryCounts.test.ts`).
 L9a-4 is purely additive: NO version bump (trackerDb **v21** / eventLog `DB_VERSION` 3), NO new store, the
@@ -704,9 +749,12 @@ F-147 (stale peerPoolLimitation written live) → taxonomy/spec-cleanup batch
 SESSION_RULES. Stray reference-docs/Super Mega Baseball 4 Rosters.csv
 (commit or gitignore). ASG WPA→Fame; Signature Moment card line; fame tier
 names; F2 SOT typos (~15); F4 FA trait spellings (4); order-flake root-cause
-(now 4 members: franchiseManualSmokeFixture [characterized] + GameTrackerLaunchState + franchiseOffseasonGuards.component
-+ **NEWLY-OBSERVED 2026-06-17 `AwardsWatchlist.test.tsx`** — all pass solo; non-deterministic full-suite order/worker-pool
-sensitivity [shared fake-IndexedDB/global state]; surfaced when L7d-1 added a test file).
+(now **5 members**: franchiseManualSmokeFixture [characterized] + GameTrackerLaunchState + franchiseOffseasonGuards.component
++ `AwardsWatchlist.test.tsx` [observed 2026-06-17] + **NEWLY-OBSERVED 2026-06-18 `EliminationTeamHub.test.tsx`** — all pass
+solo; non-deterministic full-suite order/worker-pool sensitivity [shared fake-IndexedDB/global state]; EliminationTeamHub
+surfaced when L9b-1 added `traitRealityScorer.test.ts`, exactly the L7d-1/AwardsWatchlist pattern).
+**`Workhorse` trait role (L9b-1 DEFAULT-TAKEN):** classified PITCHER (staminaModifier, unlisted in VI.2) → confirm or
+re-classify; affects only which players are eligible to earn it (L9b-2+), not the scorer math.
 **NEW (T10): backupRestore.ts stale-schema hardening** — the `trackerStores` registry is pinned at
 `version: 12` and omits `franchiseTrueValueRows` (v13) / `franchiseDesignationRows` (v14) /
 `franchiseSeasonLedgerRows` (v15); those silently drop on backup/restore and `getSchemaIssues` won't flag the
