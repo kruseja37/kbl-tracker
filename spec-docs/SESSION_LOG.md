@@ -5036,3 +5036,10 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 ### Pending / next session
 - **NOW = L5c** (in-season trade-requests) under AUTH-4 — drafting the contract. Then L5d (reporter tooth) →
   {L7,L8,L9b,L10} → {L11–L14} → L-SIM gate. trackerDb v20; nothing pushed.
+
+### Update (cont.) — L5c committed
+- **L5c COMMITTED `8cd2cc1`** — pure §13 in-season trade-request generation engine. Captain-contracted → Codex 5.5
+  built → Opus independently audited VERIFIED (tsc 0 / build 0 / suite 7,307 pass / 2 characterized fail, ZERO new
+  reds; the loyalty-inversion sign hand-verified in BOTH fan-morale directions; pure type-only imports; frozen engines
+  byte-unchanged; scope = exactly the 2 allowed files). Auto-committed (pure engine, no user surface). Suite now
+  **7,309 / 414**; trackerDb still v20. **NOW = L5d** (reporter tooth). Nothing pushed.

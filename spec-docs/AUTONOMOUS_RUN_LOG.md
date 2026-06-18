@@ -713,3 +713,16 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   HANDOFF_DONE_* + the tracked HANDOFF_NEEDED sentinel, .git_writetest_probe, WAITING_ON_JK.md). The stray
   `reference-docs/Super Mega Baseball 4 Rosters.csv` left untouched (JK's documented commit-or-gitignore call).
   **NOW = L5c** (in-season trade-requests) — drafting the contract. trackerDb **v20**; nothing pushed.
+
+- **2026-06-17 (AUTH-4, HOST RESUME thread) — L5c COMMITTED `8cd2cc1`.**
+  Pure §13 in-season trade-request generation engine (LS-19 / LSD-2). Captain drafted the L5c contract
+  (PROMPT_CONTRACTS §L5c) → dispatched **Codex 5.5 | high** as builder (`codex exec`, workspace-write, 45-min perl
+  watchdog) → Opus independently audited (auditor ≠ builder, triangle intact). NEW
+  `src/engines/tradeRequestGeneration.ts` + a 9-test file: computes per-player trade-request propensity from fan morale
+  + loyalty + player-morale + personality + a Juiced/Standard/Nerfed intensity dial; the §13 235-vs-236 inversion
+  encoded as a SIGNED loyalty term gated on fan sentiment (angry → loyal bolt MORE, content → protective; gated on fan
+  anger so happy fans → 0 requests). Pure/deterministic; own `TRADE_REQUEST_TUNING`; type-only imports; no
+  store/flag/wiring (mirrors L5a — consumed by L10/L13 later). Codex touched exactly the 2 allowed files. AUDIT
+  VERIFIED: tsc 0 / build 0 / full suite 7,307 pass / 2 characterized fail, ZERO new reds (+9 tests / +1 file);
+  inversion sign hand-verified in BOTH fan-morale directions; frozen engines byte-unchanged; purity confirmed.
+  Auto-committed (pure engine, no user surface). **NOW = L5d** (reporter tooth). trackerDb still v20; nothing pushed.

@@ -9247,3 +9247,64 @@ BYTE-UNCHANGED. No browser obligation (pure, no live surface).
 Use very-high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited by Opus (full-suite re-run, the v19→v20 + pin-trap reconciliation, the dark-noop + seam-neutral + re-entry-guard proofs, the compounding-but-clamped invariant, byte-unchanged frozen engines, backup round-trip parity).
 
 **Status:** COMMITTED `5ebb148` (2026-06-17, AUTH-4 host resume — host closed the 2 previously-unobserved gates: `NODE_ENV= npm run build` exit 0 + full suite 7,298 pass / 2 characterized fail [`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`], ZERO new reds [+18 tests / +3 files = L5b's 3 new test files]; the 14 code/test files committed; sandbox junk cleaned + gitignored). [Historical sandbox-resume detail follows.] BUILT + AUDITED VERIFIED, by the Captain thread directly (no codex CLI in-sandbox); decorrelated sub-agent auditor (≠ builder) returned VERDICT VERIFIED (10/10 checklist, zero defects, faithful L6b mirror, unobserved-gate risk LOW). Observable gates cleared: tsc 0 (×2), the 6 new/affected test files = 40 tests GREEN, frozen engines byte-unchanged, flag-defaults/backup-version greps. UNOBSERVED in-sandbox (process >42s killed): full `vite build` + the full ~7,290 suite. UNCOMMITTED: the repo mount blocks git unlink (`.git/index.lock` cannot be removed). → Host must run `NODE_ENV= npm run build` + full suite (confirm build-0 + 7,280/2-char-fail baseline) and COMMIT the 15 files on `codex/franchise-v1-next`. See `AUTONOMOUS_RUN_LOG.md` (2026-06-17 L5b entry) + `WAITING_ON_JK.md`.
+
+---
+
+## L5c — In-season trade-request generation (PURE engine; consumed by L10/L13 later)
+
+**ROUTE:** Codex 5.5 | high reasoning effort (pure deterministic engine, no persistence/UI) → Opus 4.8 audit (auditor ≠ builder) → standing auto-commit (no user-visible surface — pure primitive, like L5a `428f7cb` / T9a; no browser batch).
+
+**ROLE:** You are the L-stack builder (Codex). Build the L5c in-season trade-request generation engine: a PURE, deterministic function that scores each rostered player's trade-request propensity from team fan morale + the player's loyalty / player-morale / personality, applying the §13 "sharper than obvious" inversions. It mirrors the L5a `fanMoraleDampener.ts` pure-primitive pattern EXACTLY (own TUNING table, no store, no flag, no wiring — consumed by L10 event-tap + L13 trade-demander flashpoint later, which fill L5b's `resolveTurnedOnPlayers` seam).
+
+**GOAL:** Add ONE new pure engine `src/engines/tradeRequestGeneration.ts` exporting (1) `computeTradeRequestPropensity(player, teamFanMorale, intensity, config?)` → `{ propensity (0..1), wouldRequest, reason, components }`; (2) `rankTradeRequestCandidates(players, teamFanMorale, intensity, config?)` → the wouldRequest players sorted by propensity desc; (3) a named `TRADE_REQUEST_TUNING` config (shape-locked, §16 sim-tune). Plus its test file. NO store, NO flag, NO wiring, NO persistence — purely additive/dark, consumed later.
+
+**SOURCE OF TRUTH:** `FRANCHISE_V1_LIVING_SEASON_SPEC.md` §13 "Fan morale — the teeth," specifically the **"Free-agency / trade inversions (sharper than the obvious version)"** block (lines 234-236): (235) *"Loyal players are MORE likely to leave when fans are angry — their bond was to the fans and city; when that turns toxic … a hostile fanbase costs you exactly the players you would most want to keep"*; (236) *"Angry fans → more trade requests (scaled by personality + morale; low-loyalty / low-morale players bolt first)."* Plus the §10 intensity dial (line 192, "Juiced / Standard / Nerfed … scales the base rate, never a fixed count"), LS-19 (line 322), `FRANCHISE_V1_LIVING_SEASON_DSTACK.md` L5 ticket (line 75) + the F2/LSD-2 ruling (lines 181-183: "L5 keeps only the in-season trade-request generation (loyalty/morale-scaled destabilization), with an L10 event tap + an L13 trade-demander flashpoint"). MIRROR PRECEDENT: L5a `428f7cb` `src/engines/fanMoraleDampener.ts` (pure engine, own `FAN_DAMPENER_TUNING` table, `CanonicalPersonality`+`HiddenModifiers` type-only imports, consumed by L8 later). The §13 personality skeleton (egotistical ~1.5x, relaxed ~0.5x) = `MORALE_TUNING.personality.fanMoraleSensitivity` (`masterMoraleMatrix.ts:184-234`).
+
+### DESIGN (build to spec; AUTH-4 DEFAULTS-TAKEN where §13 is silent on magnitudes — all sim-tunable)
+
+**Inputs.** `computeTradeRequestPropensity(player, teamFanMorale, intensity, config = TRADE_REQUEST_TUNING)`:
+- `teamFanMorale: number` (0-99 — `FanMorale.current`, `fanMoraleEngine.ts`).
+- `player: { personality: CanonicalPersonality; playerMorale: number /*0-99*/; loyalty: number /*0-100, HiddenModifiers.loyalty*/ }`.
+- `intensity: TierKey` (`'juiced' | 'standard' | 'nerfed'` — type-only import from `src/data/tierParams.ts`; §10 "reusing the pool-tier vocabulary").
+
+**Math (encode the inversion as the headline).** Let `neutral = config.neutralMorale` (50):
+- `fanSentiment = clamp((teamFanMorale - neutral) / neutral, -1, 1)` — negative = angry.
+- `fanAnger = max(0, -fanSentiment)` ∈ [0,1].
+- `playerDiscontent = max(0, (neutral - playerMorale) / neutral)` ∈ [0,1] — the always-on base leave driver ("low-morale players bolt first", 236).
+- **Signed loyalty term (the reconciliation of 235 vs 236):** `loyaltyContribution = -(loyalty/100) * fanSentiment * config.loyaltyInversionWeight`. Fans ANGRY (fanSentiment<0) → POSITIVE → loyal players MORE likely to leave (235, the betrayed bond). Fans CONTENT (fanSentiment>0) → NEGATIVE → loyal players stay (protective). Low loyalty → ~0 either way → mercenaries driven by discontent.
+- `personalityScale = config.personalitySensitivity[personality]` (egotist amplifies, relaxed dampens).
+- `angerGate = config.baseAngerFloor + fanAnger * config.angerWeight` — the whole thing scales UP with fan anger (happy fans → near-zero requests overall).
+- `propensity = clamp((playerDiscontent * config.discontentWeight + loyaltyContribution) * angerGate * personalityScale * config.intensityMultiplier[intensity], 0, 1)`.
+- `wouldRequest = propensity >= config.requestThreshold`.
+- `reason`: a stable tag (e.g. `trade_request.angry_fans_betrayed_loyalty` vs `trade_request.low_morale_discontent` vs `trade_request.content_no_request`); `components`: `{ fanAnger, playerDiscontent, loyaltyContribution, personalityScale, angerGate, intensity }` for transparency.
+
+**`rankTradeRequestCandidates(players[], teamFanMorale, intensity, config?)`** — map each player through `computeTradeRequestPropensity`, keep `wouldRequest`, sort by `propensity` desc (stable tiebreak by playerId). Pure.
+
+**`TRADE_REQUEST_TUNING`** (shape-locked; values Sim-Gate-owned per §16): `neutralMorale 50`, `discontentWeight 0.6`, `loyaltyInversionWeight 0.5`, `angerWeight 1.0`, `baseAngerFloor 0.0`, `requestThreshold 0.5`, `personalitySensitivity: Record<CanonicalPersonality, number>` seeded from the §13 skeleton (COMPETITIVE 1.15, RELAXED 0.5, DROOPY 1.0, JOLLY 0.9, TOUGH 0.85, TIMID 1.1, EGOTISTICAL 1.5), `intensityMultiplier: Record<TierKey, number>` (juiced 1.3, standard 1.0, nerfed 0.6). PURE — no Math.random/Date.now/IO/store/reporter/React.
+
+**DEFAULTS-TAKEN (AUTH-4 — document in the engine header + the contract status):** the §13 235-vs-236 tension (235 "loyal leave when angry" vs 236 "low-loyalty bolt first") is reconciled by the SIGNED loyalty term gated on `fanSentiment` — loyalty PROTECTS when fans are content, INVERTS to amplify leaving when fans are hostile (honors the "sharper than obvious" headline + the stated goal "a hostile fanbase costs you exactly the players you'd most want to keep"); `loyaltyInversionWeight = 0` recovers the pure-discontent "obvious" model. The probabilistic WHO-actually-fires roll is the L10 consumer's job (seeded) — L5c emits PROPENSITY only, so it stays pure + deterministic. Placeholder magnitudes above are §16-tunable.
+
+**ALLOWED files:** NEW `src/engines/tradeRequestGeneration.ts` · NEW `src/engines/__tests__/tradeRequestGeneration.test.ts`. NOTHING ELSE.
+
+**DO NOT:** add a store / flag / wiring / persistence (L5c is a pure primitive consumed by L10/L13 later — like L5a) · mutate any morale/fame snapshot · touch `fanMoraleDampener.ts` / `flashpointDecay.ts` / `masterMoraleMatrix.ts` / `fanMoraleEngine.ts` / `franchiseFameCompute.ts` / `franchiseFlashpointDecay*` / `franchisePhase2Flags.ts` / `processCompletedGame.ts` · import a store / IndexedDB / reporter / LLM / React · use `Math.random` / `Date.now` / `new Date()` (pure + deterministic) · scatter magic numbers (every magnitude → `TRADE_REQUEST_TUNING`) · let `propensity` escape [0,1] (clamp) · build a real L10/L13 consumer (out of scope; L5c is generation only).
+
+### TESTS (NEW `src/engines/__tests__/tradeRequestGeneration.test.ts`, pure/deterministic)
+
+- **Happy-fans boundary:** high `teamFanMorale` (e.g. 85) → propensity ~0 / `wouldRequest=false` for all archetypes (happy fans → no requests).
+- **THE LOYALTY INVERSION (signature test):** at LOW fan morale (e.g. 15), a HIGH-loyalty player has HIGHER propensity than an otherwise-identical LOW-loyalty player (235 inversion); at HIGH fan morale (e.g. 85), the high-loyalty player has LOWER propensity than the low-loyalty one (protective). Both directions asserted.
+- **Low-morale bolts first:** holding all else equal, lower `playerMorale` → higher propensity.
+- **Personality spread:** EGOTISTICAL propensity > RELAXED propensity for identical inputs.
+- **Intensity dial:** juiced > standard > nerfed for identical inputs.
+- **Determinism:** identical inputs → identical output; assert no `Math.random`/`Date.now` (source scan).
+- **rankTradeRequestCandidates:** returns wouldRequest players sorted desc; empty when fans are happy.
+- **Clamp:** propensity ∈ [0,1] across extreme inputs (loyalty 100 + morale 0 + fanMorale 0 + juiced).
+
+**VERIFICATION (prefix `NODE_ENV= `; node `~/.nvm/versions/node/v20.20.0/bin`):** tsc 0 · build 0 · FULL suite = only the 2 characterized fails (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`) + the new L5c tests, ZERO new reds. Greps: `tradeRequestGeneration.ts` imports ONLY types (`CanonicalPersonality` from `./masterMoraleMatrix`, `HiddenModifiers` from `../types/game`, `TierKey` from `../data/tierParams`) + its own TUNING — no store/IndexedDB/reporter/React, no `Math.random`/`Date.now`/`new Date()`; `fanMoraleDampener.ts` / `flashpointDecay.ts` / `masterMoraleMatrix.ts` / `fanMoraleEngine.ts` BYTE-UNCHANGED (`git diff` empty).
+
+**STOP IF:** the signed-loyalty term can't satisfy BOTH the angry-fans inversion AND the happy-fans protective test without a sign error (rethink the sign, don't hack the test) · purity can't hold · a frozen engine must change · a parity/suite red persists past 2 fix-iterations (→ SET-ASIDE per AUTH-4).
+
+**FORMAT:** 1. Files changed (every path + total count + passing-test count). 2. Each change w/ the §13 line it satisfies. 3. Verification output (tsc/build/full-suite + the new tests + the purity/byte-unchanged greps). 4. "L5c complete" OR "BLOCKED: [reason]".
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited by Opus (full-suite re-run, the inversion sign-proof in BOTH fan-morale directions, purity + byte-unchanged frozen engines, the boundary/personality/intensity tests, clamp invariant).
+
+**Status:** COMMITTED `8cd2cc1` (2026-06-17, AUTH-4 host resume). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / build 0 / full suite 7,307 pass / 2 characterized fail (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+9 tests / +1 file); the loyalty-inversion sign hand-verified in BOTH fan-morale directions; pure (3 type-only imports, no random/time/IO/store/React); frozen engines byte-unchanged; scope = exactly the 2 allowed files. Pure engine, no user surface → auto-committed.

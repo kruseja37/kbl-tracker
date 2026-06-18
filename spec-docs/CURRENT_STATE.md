@@ -11,9 +11,9 @@ cleaned + gitignored). The prior AUTH-4 sandbox build + decorrelated independent
 engine (`flashpointDecay.ts`, magnitudes in `FLASHPOINT_DECAY_TUNING`) + a dark gated per-game compute in
 processCompletedGame (after the fame compute). **SEAM-NEUTRAL** — `resolveTurnedOnPlayers` returns [] until L7 Albatross
 + L10/L13 trade-demander land, so even flag-ON writes nothing today. KBL_BACKUP_VERSION stays **2**; backup-parity +
-syncConfig lockstep; version-pin trap `franchiseSeasonLedgerStorage.test.ts` at `toBe(20)`. **NOW: L5c** (in-season
-trade-requests) under AUTH-4 — contract being drafted. trackerDb host-state **v20** / KBL_BACKUP_VERSION **2**. Branch
-codex/franchise-v1-next; nothing pushed.)
+syncConfig lockstep; version-pin trap `franchiseSeasonLedgerStorage.test.ts` at `toBe(20)`. **L5c COMMITTED `8cd2cc1`** (pure §13 in-season
+trade-request generation engine — Codex-built → Opus-audited VERIFIED). **NOW: L5d** (reporter tooth) under AUTH-4.
+trackerDb host-state **v20** / KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next; nothing pushed.)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.
@@ -30,7 +30,17 @@ codex/franchise-v1-next; nothing pushed.)
   fail**, ZERO new reds — the +18 tests / +3 files = L5b's new test files) and committed (14 code/test files). The prior
   AUTH-4 sandbox build + decorrelated independent audit (VERDICT VERIFIED, 10/10, faithful L6b mirror) stands; the host
   run closed the 2 previously-unobserved gates (full build + full suite). Sandbox junk cleaned + gitignored (Temp/,
-  sentinels, probe). **NOW = L5c** (in-season trade-requests) under AUTH-4 — contract being drafted.
+  sentinels, probe). L5c followed (committed `8cd2cc1`, below).
+- **✅ L5c COMMITTED `8cd2cc1` (2026-06-17, AUTH-4 host resume) — in-season trade-request generation.** Pure §13
+  "trade inversions" (LS-19 / LSD-2) engine `tradeRequestGeneration.ts`: scores each player's trade-request propensity
+  from team fan morale + loyalty + player-morale + personality + a Juiced/Standard/Nerfed intensity dial. The signature
+  mechanic = the §13 235-vs-236 inversion as a SIGNED loyalty term gated on fan sentiment (angry fans → loyal players
+  bolt MORE / content fans → loyalty protective; whole thing gated on fan anger, so happy fans → 0 requests). Mirrors
+  L5a (pure primitive, no store/flag/wiring) — consumed by L10 event-tap + L13 flashpoint later (those fill L5b's
+  `resolveTurnedOnPlayers` seam). **Codex 5.5 built → Opus 4.8 independently audited VERIFIED** (tsc 0 / build 0 / full
+  suite **7,307 pass / 2 characterized fail**, ZERO new reds [+9 tests / +1 file]; inversion sign hand-verified both
+  directions; pure type-only imports; frozen engines byte-unchanged). Auto-committed (pure engine, no user surface).
+  **NOW = L5d** (reporter tooth) under AUTH-4.
 - **ATTENDED DESIGN SESSION (2026-06-17, JK present) — forks cleared + designation model reconciled; D10 build next.**
   No product code yet this session. (1) **OD-2..5 + D4 RULED** (DECISIONS_LOG 2026-06-17): OD-2 economy scale =
   new-league-construction-only / reuse pick-chart with farm anchor nerfed one grade-step via `FARM_NERF_SCALES` /
@@ -278,9 +288,10 @@ codex/franchise-v1-next; nothing pushed.)
 
 ## SUITE BASELINE
 
-**7,300 tests / 413 files** — full suite re-run 2026-06-17 (AUTH-4 host resume) after **L5b** commit `5ebb148`: **7,298
-pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+18 tests / +3 files
-over the post-L5a 7,280/410 = L5b's 3 new test files; **trackerDb now v20** — L5b `franchiseFlashpointDecay`). Arc this
+**7,309 tests / 414 files** — full suite re-run 2026-06-17 (AUTH-4 host resume) after **L5c** commit `8cd2cc1`: **7,307
+pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+9 tests / +1 file =
+L5c's `tradeRequestGeneration.test.ts`, over the post-L5b 7,300/413; **trackerDb still v20** — L5c is a pure engine, no
+store). Prior step: L5b commit `5ebb148` = 7,300/413 (+18 tests / +3 files over post-L5a 7,280/410). Arc this
 session: 7,267/407 (post-L6a) →
 +4/+1 L6b-1 (7,269/408) → +4/+1 L6b-2 (7,273/409) → +7/+1 L5a (7,280/410). **trackerDb now v19** (L6b-1's
 `franchiseFameRecords`; KBL_BACKUP_VERSION stays 2). *(Prior baseline retained below for the arc trail.)* **7,267
