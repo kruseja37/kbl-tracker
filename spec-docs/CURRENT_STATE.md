@@ -15,9 +15,10 @@ syncConfig lockstep; version-pin trap `franchiseSeasonLedgerStorage.test.ts` at 
 **L5d `e061e51`** (pure §13 reporter-intensity tooth, live reporter byte-unchanged) → **L5 COMPLETE** (a–d: dampener /
 flashpoint-decay / trade-requests / reporter-heat; all Codex-built → Opus-audited VERIFIED). **L7 SPLIT L7a–d;
 L7a COMMITTED `0a59a24`** (filled L5b's `resolveTurnedOnPlayers` seam — the per-game flashpoint-decay now taxes a team's
-active|locked Albatross; doubly-dark, no store/version touch). **NOW: L7b** (designation→fame nudge, §20.4 Channel C —
-greenfield) under AUTH-4. trackerDb host-state **v20** / KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next;
-nothing pushed.)
+active|locked Albatross; doubly-dark, no store/version touch). **L7b COMMITTED `77feeda3`** (pure §20.4 Channel-C
+designation→fame nudge ENGINE — FF +2 / Albatross −1 / MVP·Ace sim; fame-store WIRING deferred). **NOW: L7c**
+(designation→fan-morale steady sentiment, §20.6 Channel B/A) under AUTH-4. trackerDb host-state **v20** /
+KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next; nothing pushed.)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.
@@ -64,8 +65,19 @@ nothing pushed.)
   NO store/flag/version/backup touch. **Codex 5.5 built → Opus 4.8 independently audited VERIFIED** (tsc 0 / build 0 /
   full suite **7,317 pass / 2 characterized fail**, ZERO new reds [+3 tests, existing file]; flashpoint engine/store/flag +
   trackerDb/backup byte-unchanged; firewall source-scans green; real-designation-store tests; diff hand-verified).
-  Auto-committed. **NOW = L7b** (designation→fame nudge — extend the one-time naming fame seed [FF +2 / Albatross −1,
-  greenfield in code] to Captain/Ace/MVP; behind the fame flag, dark) under AUTH-4.
+  Auto-committed. L7b followed (committed `77feeda3`, below).
+- **✅ L7b COMMITTED `77feeda3` (2026-06-17, AUTH-4 host resume) — designation→fame nudge (pure §20.4 Channel C).** NEW
+  pure `src/engines/designationFameNudge.ts`: the one-time fame NAMING seed a player earns when named to a store-backed
+  team designation — `computeDesignationFameNudge(type)` + `summarizeDesignationFameNudges(types)` +
+  `DESIGNATION_FAME_NUDGE_TUNING` (FF **+2** / Albatross **−1** §20.4-canonical; TEAM_MVP/ACE **+1.5** §16 sim
+  placeholders; Captain/Fan Hopeful EXCLUDED — separate entities → L7d). Mirrors L5a/L5d (pure primitive, type-only
+  import, no store/flag/wiring). The fame-store WIRING (firing on naming, idempotent once-per-naming into the L6b fame
+  records) is a DEFERRED seam — documented, NOT built (it mutates the fame asset + needs idempotency; build-dark).
+  **Codex 5.5 built → Opus 4.8 independently audited VERIFIED** (tsc 0 / build 0 / full suite **7,325 pass / 2
+  characterized fail**, ZERO new reds [+8 tests / +1 file]; fame + designation engines byte-unchanged; pure single
+  type-only import). Auto-committed. **NOW = L7c** (designation→fan-morale steady sentiment — §20.6 Channel B "Fan
+  Favorite ongoing warmth / Albatross ongoing irritation" + Channel A fame-amplified swing tilt; builds on the existing
+  `processCompletedGame` designation-morale path, gated by `isFranchisePhase2MoraleEnabled`) under AUTH-4.
 - **ATTENDED DESIGN SESSION (2026-06-17, JK present) — forks cleared + designation model reconciled; D10 build next.**
   No product code yet this session. (1) **OD-2..5 + D4 RULED** (DECISIONS_LOG 2026-06-17): OD-2 economy scale =
   new-league-construction-only / reuse pick-chart with farm anchor nerfed one grade-step via `FARM_NERF_SCALES` /
@@ -313,7 +325,10 @@ nothing pushed.)
 
 ## SUITE BASELINE
 
-**7,319 tests / 415 files** — full suite re-run 2026-06-17 (AUTH-4 host resume) after **L7a** commit `0a59a24`: **7,317
+**7,327 tests / 416 files** — full suite re-run 2026-06-17 (AUTH-4 host resume) after **L7b** commit `77feeda3`: **7,325
+pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+8 tests / +1 file =
+L7b's `designationFameNudge.test.ts`, over the post-L7a 7,319/415; trackerDb still **v20** — L7b is a pure engine).
+Prior step: L7a commit `0a59a24`: **7,317
 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+3 tests in the
 existing `franchiseFlashpointDecayCompute.test.ts`, no new file, over the post-L5d 7,316/415; trackerDb still **v20** —
 L7a touched no store/version). Prior step: L5d commit `e061e51` (**L5

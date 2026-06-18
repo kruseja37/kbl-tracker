@@ -9413,3 +9413,44 @@ DSTACK L7 (line 82) is a sub-stack. SPLIT (Captain, 2026-06-17 AUTH-4 host resum
 Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited by Opus (full-suite re-run, the async-seam + Albatross-resolution proof, the dark-noop/seam-empty preservation, byte-unchanged store/flag/version, firewall source-scans).
 
 **Status:** COMMITTED `0a59a24` (2026-06-17, AUTH-4 host resume). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / build 0 / full suite 7,317 pass / 2 characterized fail, ZERO new reds (+3 tests, existing file); async-seam + active|locked-Albatross resolution diff hand-verified; flashpoint engine/store/flag + trackerDb/backup BYTE-UNCHANGED (no store/version/flag touch); firewall source-scans green; real-designation-store integration tests (active resolves / projected ignored / locked accepted / end-to-end dark accumulation). Wiring, no user surface → auto-committed.
+
+### L7b — Designation → fame nudge (PURE engine; §20.4 Channel C one-time naming seed; fame-store wiring DEFERRED)
+
+**ROUTE:** Codex 5.5 | high reasoning effort (pure deterministic engine; no persistence/fame-store touch) → Opus 4.8 audit (auditor ≠ builder) → standing auto-commit (pure primitive, no user surface; mirrors L5a/L5d).
+
+**ROLE:** You are the L-stack builder (Codex). Build the §20.4 Channel-C designation→fame nudge as a PURE engine: the one-time fame seed a player earns when NAMED to a store-backed team designation (Fan Favorite +2, Albatross −1; Team MVP / Ace sim placeholders). It mirrors the L5a `fanMoraleDampener.ts` / L5d `reporterIntensity.ts` pure-primitive pattern EXACTLY: own TUNING table, type-only imports, NO store/flag/wiring/persistence/React. The fame-store WIRING (firing on naming, idempotent once-per-naming into the L6b fame records) is a DEFERRED seam — documented, NOT built here (it mutates the SMB4 fame asset + needs one-time idempotency → its own follow-on / post-D13 activation, per build-dark).
+
+**GOAL:** Add ONE new pure engine `src/engines/designationFameNudge.ts` exporting (1) `computeDesignationFameNudge(type, config?)` → `{ type, fameNudge, sign, reason }`; (2) `summarizeDesignationFameNudges(types, config?)` → `{ totalNudge, perType }`; (3) `DESIGNATION_FAME_NUDGE_TUNING` (shape-locked, §16 sim-tune). Plus its test file. NO wiring; consumed at a later activation step.
+
+**SOURCE OF TRUTH:** `FRANCHISE_V1_LIVING_SEASON_SPEC.md` §20.6 Channel C (line 403: "Designation → fame is a one-time seed (the +2/−1 naming nudge, §20.4)") + line 391 (the fame table row: "One-time fame nudge on naming (Fan Favorite +2, Albatross −1 …); Extend to other designations (Captain, Ace, MVP …) as fame nudges — magnitudes TBD/sim"). The store-backed designation types = `FranchiseDesignationType = 'TEAM_MVP' | 'ACE' | 'FAN_FAVORITE' | 'ALBATROSS'` at `src/utils/franchiseDesignations.ts:3` (import TYPE-ONLY). **Captain + Fan Hopeful are NOT in this union (separate entities) — their nudges are L7d, NOT here.** MIRROR PRECEDENT: L5a `428f7cb` / L5d `e061e51` (pure engine, own `*_TUNING`, type-only imports, consumed later).
+
+### DESIGN (build to spec; AUTH-4 DEFAULTS-TAKEN where §20.4 is silent on magnitudes — sim-tunable)
+
+- `DESIGNATION_FAME_NUDGE_TUNING: { nudgeByType: Record<FranchiseDesignationType, number> }` = `{ FAN_FAVORITE: 2, ALBATROSS: -1, TEAM_MVP: 1.5, ACE: 1.5 }`. FF +2 / Albatross −1 are §20.4 SPEC-CANONICAL; TEAM_MVP / ACE are §16 SIM-TUNE placeholders (positive, magnitudes TBD/sim per line 391). Shape locked, values Sim-Gate-owned.
+- `computeDesignationFameNudge(type: FranchiseDesignationType, config = TUNING)` → `{ type; fameNudge: config.nudgeByType[type]; sign: 'positive' | 'negative' | 'neutral'; reason: string }` (reason = a stable tag, e.g. `designation_fame_nudge.fan_favorite_warmth` / `designation_fame_nudge.albatross_irritation` / `designation_fame_nudge.merit_honor`).
+- `summarizeDesignationFameNudges(types: FranchiseDesignationType[], config = TUNING)` → `{ totalNudge: number; perType: Array<{ type; fameNudge }> }` (sum of the per-type nudges; a player who holds multiple gets the sum). Pure.
+- PURE — no Math.random/Date.now/IO/store/reporter/React. Deterministic. Every magnitude in the TUNING (no scattered literals).
+- **Header comment must document:** this is the §20.4 ONE-TIME naming seed (a player earns it ONCE when named to a designation, NOT per game); the firing-on-naming + idempotency + fame-store write is a DEFERRED seam (a follow-on / post-D13 activation), deliberately NOT built here — build-dark, and it touches the fame store + needs once-per-naming idempotency.
+
+**ALLOWED files:** NEW `src/engines/designationFameNudge.ts` · NEW `src/engines/__tests__/designationFameNudge.test.ts`. NOTHING ELSE.
+
+**DO NOT:** wire into the fame compute / fame store / designation-event path · mutate any fame/morale snapshot · touch `franchiseFameCompute.ts` / `fameModel.ts` / `fameEngine.ts` / `franchiseFameRecordsStorage.ts` / `franchiseDesignations.ts` / `processCompletedGame.ts` · add a store/flag/persistence/React · include Captain or Fan Hopeful (L7d) · use `Math.random`/`Date.now`/`new Date()` · scatter magic numbers (all → the TUNING) · invent a firing/idempotency mechanism (deferred).
+
+### TESTS (NEW `src/engines/__tests__/designationFameNudge.test.ts`, pure/deterministic)
+
+- **Canonical magnitudes:** `FAN_FAVORITE` → +2 (sign positive); `ALBATROSS` → −1 (sign negative).
+- **MVP/Ace placeholders present + positive:** `TEAM_MVP` and `ACE` each return their tuned positive nudge (sign positive).
+- **All 4 store-backed types covered:** iterate the TUNING keys → every `FranchiseDesignationType` has a finite nudge; no extra/missing keys.
+- **Sign correctness:** positive nudge → 'positive', negative → 'negative', a 0 (if config overridden to 0) → 'neutral'.
+- **summarize:** `[FAN_FAVORITE]` → totalNudge 2; `[FAN_FAVORITE, TEAM_MVP]` → 3.5 (sum); `[]` → 0.
+- **Determinism + config override:** identical input → identical output; a custom config changes the result.
+
+**VERIFICATION (prefix `NODE_ENV= `; node `~/.nvm/versions/node/v20.20.0/bin`):** tsc 0 · build 0 · FULL suite = only the 2 characterized fails (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`) + the new L7b tests, ZERO new reds. Greps: `designationFameNudge.ts` imports ONLY the `FranchiseDesignationType` type (`../utils/franchiseDesignations`) + its own TUNING — no store/IndexedDB/fame-compute/React, no `Math.random`/`Date.now`/`new Date()`; `franchiseFameCompute.ts` / `fameModel.ts` / `fameEngine.ts` / `franchiseDesignations.ts` BYTE-UNCHANGED (`git diff` empty).
+
+**STOP IF:** the type-only import of `FranchiseDesignationType` into `src/engines/` creates a circular-type or build error (then re-home the engine in `src/utils/` and note it) · purity can't hold · a fame/designation file must change · a suite red persists past 2 fix-iterations.
+
+**FORMAT:** 1. Files changed (paths + count + passing-test count). 2. Each change w/ the §20.4 line it satisfies. 3. Verification output (tsc/build/full-suite + the new tests + the purity/byte-unchanged greps). 4. "L7b complete" OR "BLOCKED: [reason]".
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited by Opus (full-suite re-run, the magnitude/sign correctness, the all-4-types coverage, purity + byte-unchanged fame/designation files).
+
+**Status:** COMMITTED `77feeda3` (2026-06-17, AUTH-4 host resume). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / build 0 / full suite 7,325 pass / 2 characterized fail, ZERO new reds (+8 tests / +1 file); magnitudes + signs + exactly-4-types coverage verified; fame (`franchiseFameCompute`/`fameModel`/`fameEngine`) + `franchiseDesignations` BYTE-UNCHANGED; pure single type-only import. Pure engine, no user surface → auto-committed. (Fame-store wiring deferred seam.)

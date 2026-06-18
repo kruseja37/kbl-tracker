@@ -756,3 +756,15 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   file); flashpoint engine/store/flag + trackerDb/backup byte-unchanged; firewall source-scans green; the resolution
   tests use the REAL designation store (active resolves / projected ignored / locked accepted / end-to-end accumulation);
   diff hand-verified. Auto-committed. **NOW = L7b.** trackerDb still v20; nothing pushed.
+
+- **2026-06-17 (AUTH-4, HOST RESUME thread) — L7b COMMITTED `77feeda3`.**
+  Pure §20.4/§20.6 Channel-C designation→fame nudge engine — the one-time fame NAMING seed a player earns when named to
+  a store-backed team designation. Captain drafted the contract (PROMPT_CONTRACTS §L7b) → dispatched **Codex 5.5 | high**
+  → Opus independently audited (auditor ≠ builder). NEW `src/engines/designationFameNudge.ts`:
+  `computeDesignationFameNudge(type)` + `summarizeDesignationFameNudges(types)` + `DESIGNATION_FAME_NUDGE_TUNING` (FF +2 /
+  Albatross −1 §20.4-canonical; TEAM_MVP/ACE +1.5 §16 placeholders; Captain/Fan Hopeful EXCLUDED → L7d). Pure/deterministic,
+  type-only import of `FranchiseDesignationType`. The fame-store WIRING (firing on naming, idempotent once-per-naming) is a
+  DEFERRED seam — documented, NOT built (touches the fame asset + needs idempotency; build-dark). 8 tests. AUDIT VERIFIED:
+  tsc 0 / build 0 / full suite 7,325 pass / 2 characterized fail, ZERO new reds (+8 tests / +1 file); fame + designation
+  engines byte-unchanged; pure. Auto-committed. **NOW = L7c** (designation→fan-morale steady sentiment, §20.6 Channel B/A).
+  trackerDb still v20; nothing pushed.

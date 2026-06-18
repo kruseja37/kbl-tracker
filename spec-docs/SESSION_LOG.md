@@ -5062,3 +5062,10 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   independently audited VERIFIED (tsc 0 / build 0 / suite 7,317 pass / 2 characterized fail, ZERO new reds; byte-unchanged
   store/flag/version; firewall green; real-designation-store tests; diff hand-verified). Suite now **7,319 / 415**.
   **NOW = L7b** (designation→fame nudge). Nothing pushed.
+
+### Update (cont.) — L7b committed
+- **L7b COMMITTED `77feeda3`** — pure §20.4 Channel-C designation→fame nudge engine (`designationFameNudge.ts`): the
+  one-time fame naming seed (FF +2 / Albatross −1 canonical; MVP/Ace +1.5 sim; Captain/Fan Hopeful → L7d). Fame-store
+  wiring deferred seam. Captain-contracted → Codex 5.5 built → Opus independently audited VERIFIED (tsc 0 / build 0 /
+  suite 7,325 pass / 2 characterized fail, ZERO new reds; fame + designation byte-unchanged; pure single type-only
+  import). Suite now **7,327 / 416**. **NOW = L7c** (designation→fan-morale steady sentiment). Nothing pushed.
