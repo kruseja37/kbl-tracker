@@ -9454,3 +9454,51 @@ Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff
 Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited by Opus (full-suite re-run, the magnitude/sign correctness, the all-4-types coverage, purity + byte-unchanged fame/designation files).
 
 **Status:** COMMITTED `77feeda3` (2026-06-17, AUTH-4 host resume). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / build 0 / full suite 7,325 pass / 2 characterized fail, ZERO new reds (+8 tests / +1 file); magnitudes + signs + exactly-4-types coverage verified; fame (`franchiseFameCompute`/`fameModel`/`fameEngine`) + `franchiseDesignations` BYTE-UNCHANGED; pure single type-only import. Pure engine, no user surface → auto-committed. (Fame-store wiring deferred seam.)
+
+### L7c — Designation → fan-morale steady sentiment (Channel B, §20.6) + Channel-A amplifier tilt (PURE engine; morale-store wiring DEFERRED)
+
+**ROUTE:** Codex 5.5 | high reasoning effort (pure deterministic engine; no persistence/morale-store touch) → Opus 4.8 audit (auditor ≠ builder) → standing auto-commit (pure primitive, no user surface; mirrors L5a/L5d/L7b).
+
+**ROLE:** You are the L-stack builder (Codex). Build the §20.6 designation→fan-morale steady sentiment (Channel B) + the fame-amplifier designation tilt (Channel A) as a PURE engine. Mirrors the L7b `designationFameNudge.ts` pure-primitive pattern EXACTLY: own TUNING table, a single type-only import, NO store/flag/wiring/persistence/React. Build-dark; consumed at a later activation step.
+
+**GOAL:** Add ONE new pure engine `src/engines/designationFanMorale.ts` exporting (1) `DESIGNATION_FAN_MORALE_TUNING`; (2) `computeDesignationSteadyFanSentiment(type, config?)` → `{ type, sentiment, sign, reason }` (Channel B per-game steady delta for a HELD designation); (3) `summarizeDesignationSteadyFanSentiment(types, config?)` → `{ totalSentiment, perType }`; (4) `computeDesignationSwingTilt(type, swingDirection, config?)` → `{ type, swingDirection, tilt, reason }` (Channel A asymmetric multiplier); (5) `applyDesignationSwingTilt(type, baseSwing, config?)` → `number` (Channel A consumable, sign-preserving). Plus its test file. NO wiring.
+
+**SOURCE OF TRUTH:** `FRANCHISE_V1_LIVING_SEASON_SPEC.md` §20.6 — Channel A (line 401: per-event impact = base swing × fame × designation-tilt; FF ups hit harder, Albatross downs hit harder), Channel B (line 402: steady per-game sentiment — FF ongoing warmth; Albatross ongoing irritation **via the §13 decay-on-ignored-flashpoint**), no-double-count (line 405). Types = `FranchiseDesignationType = 'TEAM_MVP'|'ACE'|'FAN_FAVORITE'|'ALBATROSS'` at `src/utils/franchiseDesignations.ts:3` (TYPE-ONLY import; Captain/Fan Hopeful → L7d). MIRROR PRECEDENT: L7b `77feeda3` `src/engines/designationFameNudge.ts` + its test (copy structure: header doc, TUNING const, compute+summarize, private sign + reason helpers).
+
+### DESIGN (build to spec; AUTH-4 DEFAULTS-TAKEN where §20.6 is silent on magnitudes — sim-tunable)
+
+**THE DOUBLE-COUNT GUARD (headline):** §20.6 Channel B routes the Albatross "ongoing irritation, compounding" through the §13 flashpoint-decay — which is ALREADY built (L5b `flashpointDecay.ts` + `franchiseFlashpointDecayCompute.ts`) and ALREADY taxes a held Albatross every game (wired to the active|locked Albatross by L7a `0a59a24`). So this engine must NOT re-add Albatross steady sentiment: `ALBATROSS: 0` in the tuning, with a `reason` tag referencing the flashpoint deferral. This engine's Channel-B contribution is the **Fan Favorite warmth** (the positive counterpart the flashpoint tax — which only taxes "turned-on" negative players — doesn't cover).
+
+- `DESIGNATION_FAN_MORALE_TUNING.steadySentimentByType` = `{ FAN_FAVORITE: 0.5, ALBATROSS: 0, TEAM_MVP: 0, ACE: 0 }`. FF +0.5 = §20.6 ongoing warmth (sim placeholder); ALBATROSS 0 = double-count guard; TEAM_MVP/ACE 0 = §20.6 Channel B names only FF + Albatross (merit designations get their fame nudge via L7b Channel C, no steady fan warmth specified in v1) — placeholders.
+- `DESIGNATION_FAN_MORALE_TUNING.swingTiltByType` = `{ FAN_FAVORITE: {up:1.25,down:1.0}, ALBATROSS: {up:1.0,down:1.25}, TEAM_MVP: {up:1.0,down:1.0}, ACE: {up:1.0,down:1.0} }`. FF ups amplified; Albatross downs amplified; merit symmetric-neutral placeholders.
+- `computeDesignationSteadyFanSentiment` → sentiment = tuning value; sign >0/'positive' <0/'negative' 0/'neutral'; reason tags `designation_fan_morale.fan_favorite_warmth` / `…albatross_irritation_via_flashpoint` / `…merit_neutral`.
+- `summarizeDesignationSteadyFanSentiment(types)` → sum of per-type sentiments + perType array (mirror `summarizeDesignationFameNudges`).
+- `computeDesignationSwingTilt(type, swingDirection)` → tilt = `swingTiltByType[type][swingDirection]`; reason `swing_amplified`(>1)/`swing_neutral`(=1)/`swing_damped`(<1). `DesignationSwingDirection = 'up'|'down'` exported.
+- `applyDesignationSwingTilt(type, baseSwing)` → direction from sign of baseSwing (`>=0`→up, `<0`→down); return `baseSwing * tilt`; `baseSwing===0`→0; sign-preserving (tilt ≥ 1, never flips).
+- PURE — no Math.random/Date.now/new Date()/IO/store/reporter/LLM/React; every magnitude in the TUNING.
+- **Header doc must document:** Channel B + Channel A; the double-count guard (Albatross 0, §13 owns it); Channel A is the pure tilt multiplier only (full `base × fame × tilt` NOT wired — fame dark, no live per-play swing pipeline; wiring is a post-D13 seam); the Channel-B WIRING is a DEFERRED seam (at activation `processCompletedGame` fires the steady sentiment per game for each team's HELD Fan Favorite, gated by `isFranchisePhase2MoraleEnabled`, idempotent per game, NOT for Albatross — mirrors L7b deferring its fame-store wiring).
+
+**ALLOWED files:** NEW `src/engines/designationFanMorale.ts` · NEW `src/engines/__tests__/designationFanMorale.test.ts`. NOTHING ELSE.
+
+**DO NOT:** add store/flag/wiring/persistence · wire into `processCompletedGame.ts` / morale store / designation-event path · mutate any morale/fan-morale/fame snapshot · re-add an Albatross steady sentiment (keep `ALBATROSS: 0`) · touch `flashpointDecay.ts` / `franchiseFlashpointDecayCompute.ts` / `designationFameNudge.ts` / `fanMoraleDampener.ts` / `masterMoraleMatrix.ts` / `fanMoraleEngine.ts` / `franchiseFameCompute.ts` / `franchiseDesignations.ts` / `franchisePhase2Flags.ts` · include Captain/Fan Hopeful (L7d) · import store/IndexedDB/reporter/LLM/React · use Math.random/Date.now/new Date() · scatter magic numbers · let `applyDesignationSwingTilt` flip the swing's sign.
+
+### TESTS (NEW `src/engines/__tests__/designationFanMorale.test.ts`, pure/deterministic; mirror the L7b test)
+
+- Channel B FF warmth: FAN_FAVORITE → 0.5, 'positive', `…fan_favorite_warmth`.
+- Channel B DOUBLE-COUNT GUARD (signature): ALBATROSS → 0, 'neutral', `…albatross_irritation_via_flashpoint`.
+- Channel B merit neutral: TEAM_MVP + ACE → 0, 'neutral', `…merit_neutral`.
+- Both tuning maps cover exactly the 4 store-backed types (sorted-equal); neither has CAPTAIN/FAN_HOPEFUL; all values finite.
+- summarize: `['FAN_FAVORITE']`→0.5; `['FAN_FAVORITE','ALBATROSS']`→0.5; `[]`→0.
+- Channel A asymmetry: FF up>1 (amplified) + down=1 (neutral); Albatross down>1 + up=1; MVP/ACE both=1; assert reason tags.
+- Channel A apply: FF positive baseSwing amplified (>base, same sign); Albatross negative baseSwing amplified (<base, still negative); FF negative baseSwing unchanged (down 1.0); baseSwing 0→0; sign never flipped.
+- Determinism + config override.
+
+**VERIFICATION (prefix `NODE_ENV= `; node `~/.nvm/versions/node/v20.20.0/bin`):** tsc 0 · build 0 · the new test green · FULL suite = only the 2 characterized fails (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`) + the new L7c tests, ZERO new reds. Greps: `designationFanMorale.ts` imports ONLY the `FranchiseDesignationType` type + its own TUNING — no store/IndexedDB/fame/morale/reporter/React, no Math.random/Date.now/new Date(); `designationFameNudge.ts` / `flashpointDecay.ts` / `franchiseFlashpointDecayCompute.ts` / `fanMoraleDampener.ts` / `masterMoraleMatrix.ts` / `franchiseDesignations.ts` BYTE-UNCHANGED.
+
+**STOP IF:** the type-only import into `src/engines/` creates a circular-type/build error (re-home in `src/utils/` + note — but L7b did fine) · purity can't hold · a frozen engine (esp. flashpoint files) must change · a suite red persists past 2 fix-iterations (→ SET-ASIDE per AUTH-4).
+
+**FORMAT:** 1. Files changed (paths + count + passing-test count). 2. Each change w/ the §20.6 line. 3. Verification output. 4. "L7c complete" OR "BLOCKED: [reason]".
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited by Opus (full-suite re-run, the double-count guard `ALBATROSS:0`, the Channel-A asymmetry + sign-preserving apply, the 4-types coverage, purity + byte-unchanged frozen engines).
+
+**Status:** COMMITTED `886d1dce` (2026-06-17, AUTH-4 host resume). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / build 0 / full suite 7,335 pass / 2 characterized fail (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+10 tests / +1 file = `designationFanMorale.test.ts`, over post-L7b 7,325/416). Double-count guard verified (`ALBATROSS: 0`, reason → flashpoint; `summarize(['FAN_FAVORITE','ALBATROSS'])` = 0.5); Channel-A asymmetry (FF up 1.25 / Albatross down 1.25; merit neutral) + sign-preserving `applyDesignationSwingTilt` hand-verified; pure (single type-only import, no Math.random/Date.now/IO/store/React); frozen engines (`designationFameNudge`/`flashpointDecay`/`franchiseFlashpointDecayCompute`/`fanMoraleDampener`/`masterMoraleMatrix`/`franchiseDesignations`) BYTE-UNCHANGED; scope = exactly the 2 allowed files. Pure engine, no user surface → auto-committed. (Channel-B morale-store wiring + Channel-A per-play wiring = deferred post-D13 seams.) **NOW = L7d.**

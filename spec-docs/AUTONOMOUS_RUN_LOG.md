@@ -768,3 +768,22 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   tsc 0 / build 0 / full suite 7,325 pass / 2 characterized fail, ZERO new reds (+8 tests / +1 file); fame + designation
   engines byte-unchanged; pure. Auto-committed. **NOW = L7c** (designation→fan-morale steady sentiment, §20.6 Channel B/A).
   trackerDb still v20; nothing pushed.
+
+- **2026-06-17 (AUTH-4, HOST RESUME thread) — L7c COMMITTED `886d1dce`.**
+  Pure §20.6 Channel B (designation → fan-morale steady sentiment) + Channel A (the fame-amplifier designation tilt).
+  Captain drafted the contract (PROMPT_CONTRACTS §L7c) → dispatched **Codex 5.5 | high** → Opus independently audited
+  (auditor ≠ builder). NEW `src/engines/designationFanMorale.ts` + a 10-test file: `computeDesignationSteadyFanSentiment`
+  (Channel B), `summarizeDesignationSteadyFanSentiment`, `computeDesignationSwingTilt` + `applyDesignationSwingTilt`
+  (Channel A), all magnitudes in `DESIGNATION_FAN_MORALE_TUNING` (FF warmth +0.5; FF up-tilt 1.25 / Albatross down-tilt
+  1.25; merit neutral). **DOUBLE-COUNT GUARD (the headline):** `ALBATROSS` steady sentiment = 0 with reason
+  `…albatross_irritation_via_flashpoint`, because the §13 flashpoint-decay (L5b/L7a) already taxes a held Albatross every
+  game — re-adding it here would double-count. This engine's Channel-B contribution is the Fan Favorite ongoing warmth
+  (the positive counterpart the negative-only flashpoint tax doesn't cover). Channel A ships the pure tilt multiplier only
+  (full `base × fame × tilt` needs live fame [dark] + a live per-play swing pipeline → post-D13 seam); the Channel-B
+  per-game morale-store wiring is a deferred seam (mutates the SMB4 morale asset + needs per-game idempotency + HELD-
+  designation enumeration; mirrors L7b deferring its fame-store wiring). Codex touched exactly the 2 allowed files; no
+  store/flag/wiring/persistence. AUDIT VERIFIED: tsc 0 / build 0 / full suite **7,335 pass / 2 characterized fail**
+  (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+10 tests / +1 file); double-count guard +
+  Channel-A asymmetry + sign-preserving apply verified; pure (single type-only import); the 6 frozen engines
+  byte-unchanged. Auto-committed. **NOW = L7d** (Captain router effects: Charisma×2 to teammates + amplified swings ·
+  Fan Hopeful call-up cushion · Fan Favorite double-dependency). trackerDb still v20; nothing pushed.

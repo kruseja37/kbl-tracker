@@ -5069,3 +5069,19 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   wiring deferred seam. Captain-contracted → Codex 5.5 built → Opus independently audited VERIFIED (tsc 0 / build 0 /
   suite 7,325 pass / 2 characterized fail, ZERO new reds; fame + designation byte-unchanged; pure single type-only
   import). Suite now **7,327 / 416**. **NOW = L7c** (designation→fan-morale steady sentiment). Nothing pushed.
+
+### Update (cont.) — fresh session resumed at L7c handoff; L7c committed
+- Fresh Claude Code session (Opus 4.8 Captain) opened at the CONTEXT-HANDOFF → L7c boundary. Did the canonical
+  5-file session-start reads, RESTATEd the state (Phase-1 D-stack complete → Phase-2 L-stack; last = L7b `77feeda3`;
+  next = L7c), and JK confirmed **AUTH-4 autonomous** for the session. Continuing the L7 sub-stack under AUTH-4.
+- **L7c COMMITTED `886d1dce`** — pure §20.6 Channel B (designation→fan-morale steady sentiment) + Channel A
+  (fame-amplifier designation tilt) engine (`designationFanMorale.ts`): `computeDesignationSteadyFanSentiment`
+  (FF warmth +0.5) + `summarize…` + `computeDesignationSwingTilt`/`applyDesignationSwingTilt` (FF up ×1.25 / Albatross
+  down ×1.25, merit neutral, sign-preserving), magnitudes in `DESIGNATION_FAN_MORALE_TUNING`. **DOUBLE-COUNT GUARD:**
+  Albatross steady sentiment = 0 (the §13 flashpoint-decay from L5b/L7a already owns the Albatross irritation). Channel A
+  ships the pure tilt multiplier only; the Channel-B morale-store wiring + the Channel-A per-play wiring are deferred
+  post-D13 seams (mirrors L7b deferring its fame-store wiring). Captain-contracted → Codex 5.5 built → Opus independently
+  audited VERIFIED (tsc 0 / build 0 / full suite 7,335 pass / 2 characterized fail, ZERO new reds [+10 tests / +1 file];
+  double-count guard + Channel-A asymmetry + sign-preserving apply hand-verified; 6 frozen engines byte-unchanged; pure
+  single type-only import). Auto-committed (pure engine, no user surface). Suite now **7,337 / 417**; trackerDb still v20.
+  **NOW = L7d** (Captain router Charisma×2 + amplified swings · Fan Hopeful cushion · Fan Favorite double-dep). Nothing pushed.
