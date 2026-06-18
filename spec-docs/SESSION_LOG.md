@@ -1,7 +1,20 @@
 # KBL TRACKER — SESSION LOG
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
-## Session: 2026-06-18 (fresh attended session, AUTH-4 keep-rolling) — L10-3 + L10-4 + L10-5 committed → L10 COMPLETE, NEXT L11
+## Session: 2026-06-18 (fresh attended session) — L10 COMPLETE → FINDING-150 → trait measurement model RATIFIED → ROADMAP_TO_V1 → handoff for L9b rebuild
+- **SESSION ARC (newest first):** (1) finished **L10** (L10-3 `8a33d9d3` host-gated + L10-4 `057340ed` + L10-5 `52db0ade`,
+  each subagent/Codex-built → Opus-audited → host-gated → committed, build-DARK). (2) Surfaced all open forks; **JK ruled
+  Q1–Q12** (DECISIONS_LOG; 3 overrides Q5/Q8/Q12). (3) JK's Q1 challenge → **FINDING-150**: L9b built only 16 of ~50
+  buildable traits on the SUPERSEDED §D triage (foundations sound, scope wrong). (4) Detection-scope audit (`wf_6643e635`)
+  + measurement-consolidation (`wf_368f24d0`) → **JK ratified the trait-from-reality MEASUREMENT MODEL** (`703d78b9`,
+  `TRAIT_MEASUREMENT_SPEC.md §0`): P-common-currency + RE-EVALUATE-TO-DROP; strikeout-rate / walks-allowed / HR-AVG /
+  DP-FC / ARM-gate / opposing-grade proxies; data>ratings>personality. (5) Captured the rule *soul-layer measurement comes
+  from spec verbatim, never inference* (SESSION_RULES pending pen). (6) Built **ROADMAP_TO_V1.md** (`dc0ad199`,
+  workflow-verified: 22 done / 20 outstanding / 1 unverified; D-stack D1–D11 done, D12/D13 NOT reached; L4b/L11–L14/economy
+  not-started). **⏸ CHECKPOINTED — L9b rebuild build NOT started.** **➡ HANDOFF: a fresh session starts the L9b rebuild at
+  R-E** (enabling: thread ratings/grades into the candidate-builder · charisma factor in the combiner · the re-evaluate-to-
+  drop model) per `TRAIT_MEASUREMENT_SPEC.md §0.4`, then R1→R2→R3. Branch codex/franchise-v1-next; suite 7,559/438; nothing
+  pushed. *(The L10-3/4/5 detail for this session is below.)*
 - **(THIS attended session)** JK started a fresh session, confirmed the restate, and ruled "host gate, commit, then
   continue L10-4" (AUTH-4 still on) + "fold the 3 session docs into the L10-3 commit". On the host (real node v20):
   re-verified the L10-3 diff against the contract (flag-gate-first / try/catch gate branch / no Date.now·random / no

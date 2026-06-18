@@ -1,6 +1,12 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-18 (**✅ L9b COMPLETE — the trait-from-reality engine, the "game-changer feature." NOW L10**
+**Last Updated:** 2026-06-18 — **SESSION END / HANDOFF.** This session: **L10 COMPLETE** (random events, build-DARK) →
+JK ruled Q1–Q12 → **FINDING-150** (L9b built 16 of ~50 buildable traits) → **trait measurement model RATIFIED**
+(`TRAIT_MEASUREMENT_SPEC.md §0`, `703d78b9`) → **`ROADMAP_TO_V1.md` created** (`dc0ad199`, 22 done / 20 outstanding).
+**➡ NEXT SESSION STARTS THE L9b REBUILD at R-E** (enabling pieces) per `TRAIT_MEASUREMENT_SPEC.md §0.4` — see RIGHT NOW +
+`HANDOFF_NEEDED`. Suite 7,559/438; trackerDb v23; branch codex/franchise-v1-next; nothing pushed.
+*(Prior arc-narrative preserved below for context.)*
+*(Historical:* **✅ L9b COMPLETE — the trait-from-reality engine, the "game-changer feature." NOW L10**
 (random events). L9b-3c committed → L9b-3 COMPLETE → **L9b COMPLETE.** Full L9b chain: L9b-1 scorer `398533d1` ·
 L9b-2 acquisition `f616373a` · L9b-3a candidate-builder `54fae510`+`4e3ad01d` · L9b-3b-i dark store `0cd75d9a` ·
 L9b-3b-ii dark grant-hook `e08be415` · L9b-3c confirm/write. **L9b-3c** = the §11 trait-confirm transform + ATOMIC
