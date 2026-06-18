@@ -5358,3 +5358,21 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - **⇒ L9b-3b COMPLETE (b-i `0cd75d9a` + b-ii). NEXT = L9b-3c** (the LAST L9b piece: §11 trait-confirm transform + ATOMIC
   trait1/trait2 displacement via saveFranchisePlayer; mirror ratingsOverlayConfirmation [L2c] but categorical; do NOT route
   trait rows through ratingsOverlayMerge). Loop continues under AUTH-4.
+
+## 2026-06-18 (AUTH-4 overnight, host thread, "keep rolling") — L9b-3c Codex-built → Opus-audited VERIFIED → COMMITTED → L9b COMPLETE
+- Grounded the L2c template (`ratingsOverlayConfirmation`) + `saveFranchisePlayer`/`getFranchisePlayer` + confirmed the
+  franchise Player uses FLAT `trait1`/`trait2` (not nested). Wrote a precise contract → PROMPT_CONTRACTS +
+  `/tmp/l9b3c_codex_prompt.md`; dispatched Codex 5.5 | high.
+- **Deliverable:** NEW PURE `src/engines/traitOverlayConfirmation.ts` (`applyTraitDisplacement` 6-case categorical math +
+  canonical guard + `confirmTraitOverlay` + `buildTraitConfirmationRequest` + `summarizeTraitOverlayChangeLog`) + NEW impure
+  `src/utils/franchiseTraitConfirmApply.ts` (`applyConfirmedTraitOverlay`: idempotent → load player → displace →
+  `saveFranchisePlayer` FLAT trait1/trait2 → mark overlay confirmed+applied). NO live caller (confirm UI deferred post-D13).
+- **The tightened contract held (4th clean dispatch):** Codex hit EXACTLY the 4 FILE LIST files — no doc edits, no git-add,
+  no abandoned files.
+- **Independent audit (Opus, read line-by-line):** tsc-0; full suite **7,514/433, 7,512 pass / 2 characterized fail**, ZERO
+  new reds (+15 = the 2 new test files); all 6 displacement cases re-derived correct; double idempotency (overlay.applied
+  guard + displacement already-held/not-held); flat trait1/trait2 write; engine pure; no live caller. VERDICT VERIFIED →
+  auto-committed.
+- **⇒ L9b-3 COMPLETE (3a `54fae510`+`4e3ad01d` · 3b-i `0cd75d9a` · 3b-ii `e08be415` · 3c) ⇒ L9b (the trait-from-reality
+  engine, the "game-changer feature") COMPLETE.** Whole L9b is build-DARK (activate post-D13). **NEXT = L10 (random
+  events)** — a FRESH L-stack subsystem needing a grounding recon before contracting. Loop continues under AUTH-4.

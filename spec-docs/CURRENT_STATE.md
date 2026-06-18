@@ -1,7 +1,19 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-18 (**L9b-3b COMPLETE (b-i `0cd75d9a` + b-ii); L9b-3a done; NOW L9b-3c** — the §11
-trait-confirm transform + ATOMIC trait1/trait2 displacement write, the LAST L9b piece). **L9b-3b DONE:** b-i = the dark
+**Last Updated:** 2026-06-18 (**✅ L9b COMPLETE — the trait-from-reality engine, the "game-changer feature." NOW L10**
+(random events). L9b-3c committed → L9b-3 COMPLETE → **L9b COMPLETE.** Full L9b chain: L9b-1 scorer `398533d1` ·
+L9b-2 acquisition `f616373a` · L9b-3a candidate-builder `54fae510`+`4e3ad01d` · L9b-3b-i dark store `0cd75d9a` ·
+L9b-3b-ii dark grant-hook `e08be415` · L9b-3c confirm/write. **L9b-3c** = the §11 trait-confirm transform + ATOMIC
+trait1/trait2 displacement: PURE engine `src/engines/traitOverlayConfirmation.ts` (`applyTraitDisplacement` 6-case
+gain/lose/displace math + canonical guard + `confirmTraitOverlay` + `buildTraitConfirmationRequest` +
+`summarizeTraitOverlayChangeLog`) + impure applier `src/utils/franchiseTraitConfirmApply.ts` (`applyConfirmedTraitOverlay`:
+load player → displace → `saveFranchisePlayer` FLAT trait1/trait2 → mark overlay confirmed+applied; idempotent doubly).
+NO live caller (confirm UI = deferred post-D13 D-ticket). Codex-built → Opus-audited VERIFIED (tsc-0 / full suite
+**7,514/433, 7,512 pass / 2 characterized fail**, ZERO new reds). trackerDb **v22**. **Whole L9b is build-DARK** —
+activate post-D13 (the L9b-3b-ii hook flag default-OFF; L9b-3c orphaned-pending its confirm UI). **➡ NEXT = L10**
+(random events) per the L-stack: L10 → L11 managers → L12 races/All-Star/awards-fame → L13 relationships → L14 rebrand →
+the L-SIM gate. L10 is a FRESH subsystem → needs a grounding recon before contracting.
+*(Prior L9b-3b detail below.)* **L9b-3b DONE:** b-i = the dark
 `franchiseTraitOverlays` store (trackerDb v22) · b-ii = the default-OFF `isFranchisePhase2TraitsEnabled` flag +
 `persistDarkTraitGrantForCompletedGame` hook (flag-gate-first → 20%-checkpoint cadence → loads season events → enumerates
 MLB roster → L9b-3a `computeSeasonTraitCandidates` → L9b-2 `computeTraitAcquisition` per player → writes PENDING trait
@@ -97,6 +109,23 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## RIGHT NOW
 
+- **✅ L9b-3c VERIFIED + COMMITTED (2026-06-18, AUTH-4 overnight) → L9b-3 + L9b COMPLETE — the §11 trait-confirm transform
+  + the ATOMIC trait1/trait2 displacement write (the LAST L9b piece; the first code that mutates a player's traits).**
+  NEW PURE `src/engines/traitOverlayConfirmation.ts` (`applyTraitDisplacement` — the 2-slot categorical math: gain →
+  already-held no-op / displaces-named replaces that slot / free slot fills / cap+no-displaces → applied:false; lose →
+  remove held / not-held no-op; canonical-name guard on traitName + displacesTraitName) + `confirmTraitOverlay`
+  (pending→confirmed + applied) + `buildTraitConfirmationRequest` (SMB4-console instruction + resulting slots) +
+  `summarizeTraitOverlayChangeLog`. NEW impure `src/utils/franchiseTraitConfirmApply.ts` (`applyConfirmedTraitOverlay`:
+  idempotent guard → load player → displace → `saveFranchisePlayer` FLAT trait1/trait2 → mark overlay confirmed+applied;
+  player-write-first; cross-DB note). Mirrors `ratingsOverlayConfirmation` [L2c] but CATEGORICAL — traits have NO
+  read-merge (do NOT route through `ratingsOverlayMerge`), so the WRITE is the mechanism. **NO live caller** (the confirm UI
+  is a deferred post-D13 D-ticket — orphaned-pending-its-UI by design). **Codex 5.5-built → Opus-4.8-INDEPENDENTLY-audited
+  VERIFIED** (read line-by-line — all 6 displacement cases + double idempotency + flat-write re-derived): tsc-0 / full suite
+  **7,514/433, 7,512 pass / 2 characterized fail**, ZERO new reds (+15 = the 2 new test files); engine pure (no
+  IndexedDB/Date/random/async); Codex hit EXACTLY the 4 FILE LIST files (no doc edits, no abandoned files). **⇒ L9b
+  (trait-from-reality engine) COMPLETE** (1 scorer · 2 acquisition · 3a candidate-builder · 3b store+hook · 3c
+  confirm/write) — all build-DARK, activate post-D13. **➡ NEXT = L10 (random events)** — a FRESH L-stack subsystem; needs
+  a grounding recon before contracting. *(Prior L9b-3b-ii entry below.)*
 - **✅ L9b-3b-ii VERIFIED + COMMITTED (2026-06-18, AUTH-4 overnight) → L9b-3b COMPLETE — the flag + dark trait-grant hook
   (the first live-path trait WRITER, doubly-dark).** NEW `src/utils/franchiseTraitGrantCompute.ts` +
   `isFranchisePhase2TraitsEnabled` (default-OFF, 5th block in `franchisePhase2Flags.ts`) +
@@ -645,7 +674,11 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## SUITE BASELINE
 
-**7,499 tests / 431 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L9b-3b-ii** (the flag +
+**7,514 tests / 433 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L9b-3c** (→ L9b
+COMPLETE): **7,512 pass / 2 fail** = EXACTLY the characterized baseline (`wpaRuntimeBoundary` +
+`franchiseManualSmokeFixture`). ZERO new reds (+15 tests / +2 files = `traitOverlayConfirmation.test.ts` [10] +
+`franchiseTraitConfirmApply.test.ts` [5]). tsc 0. trackerDb **v22** (L9b-3c added no store; pure engine + a confirm
+applier with no live caller). *(Prior baseline retained below for the arc trail.)* **7,499 tests / 431 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L9b-3b-ii** (the flag +
 dark trait-grant hook → L9b-3b COMPLETE): **7,497 pass / 2 fail** = EXACTLY the characterized baseline
 (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`). ZERO new reds (+4 tests / +1 file =
 `franchiseTraitGrantCompute.test.ts`; the hook is flag-gated dark + the test stubs the L9b-3a→L9b-2 seam). tsc 0. trackerDb

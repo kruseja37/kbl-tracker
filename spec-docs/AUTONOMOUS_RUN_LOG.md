@@ -1398,3 +1398,23 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
     `ratingsOverlayConfirmation` [L2c] but CATEGORICAL — on confirm apply gain[/displace weakest held]/lose to the flat
     franchise `trait1`/`trait2`; emit only `CANONICAL_TRAIT_NAMES`; do NOT route trait rows through `ratingsOverlayMerge`;
     the live confirm UI is a deferred post-D13 D-ticket out of L9b-3c backend scope).
+- **2026-06-18 (AUTH-4, "keep rolling") — L9b-3c BUILT (Codex 5.5) → AUDITED (Opus) VERIFIED → COMMITTED → L9b COMPLETE.**
+  The §11 trait-confirm transform + the ATOMIC trait1/trait2 displacement write (the LAST L9b piece; first player-trait
+  mutation).
+  - **Deliverable:** NEW PURE `src/engines/traitOverlayConfirmation.ts` (`applyTraitDisplacement` 6-case math + canonical
+    guard + `confirmTraitOverlay` + `buildTraitConfirmationRequest` + `summarizeTraitOverlayChangeLog`) + NEW impure
+    `src/utils/franchiseTraitConfirmApply.ts` (`applyConfirmedTraitOverlay`: idempotent → load player → displace →
+    `saveFranchisePlayer` FLAT trait1/trait2 → mark overlay confirmed+applied; player-write-first; cross-DB note). Mirrors
+    L2c but CATEGORICAL (traits have no read-merge → the write is the mechanism; do NOT route through ratingsOverlayMerge).
+    NO live caller (confirm UI deferred post-D13).
+  - **Tightened contract held (4th clean dispatch in a row):** Codex hit EXACTLY the 4 FILE LIST files — no doc edits, no
+    git-add, no abandoned files; correctly called the PROMPT_CONTRACTS "M" the Captain's block.
+  - **INDEPENDENT AUDIT (Opus, line-by-line):** tsc-0; full suite **7,514/433, 7,512 pass / 2 characterized fail**, ZERO
+    new reds (+15); all 6 displacement cases + double idempotency + flat-write + canonical guard re-derived correct; engine
+    pure; no live caller. VERDICT VERIFIED → auto-committed.
+  - **⇒ L9b-3 COMPLETE ⇒ L9b (the trait-from-reality engine) COMPLETE.** Full chain: L9b-1 `398533d1` · L9b-2 `f616373a` ·
+    L9b-3a `54fae510`+`4e3ad01d` · L9b-3b-i `0cd75d9a` · L9b-3b-ii `e08be415` · L9b-3c. All build-DARK (activate post-D13:
+    the L9b-3b-ii hook flag default-OFF; L9b-3c orphaned-pending its confirm UI). trackerDb v22.
+  - **➡ NEXT = L10 (random events)** per the L-stack (L10 → L11 managers → L12 races/All-Star/awards-fame → L13
+    relationships → L14 rebrand → L-SIM gate). L10 is a FRESH subsystem → needs a grounding recon before contracting.
+    DSTACK line for L10; deps to confirm at recon.
