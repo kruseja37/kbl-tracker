@@ -9872,4 +9872,4 @@ A persistence round-trip (the DSTACK "verified-to-persist" gate): create an AtBa
 
 Use high reasoning effort. Think step-by-step. Builder ≠ auditor — re-audited by Opus (the capture VERIFIED to persist [the typed-but-unwritten gate], optional/undefined-when-skipped, no version bump, no hot-path/spray-gating touch, enum matches the downstream consumer).
 
-**Status:** CONTRACTED 2026-06-18 (AUTH-4 overnight). Dispatching Codex.
+**Status:** COMMITTED `e28706e9` (2026-06-18, AUTH-4 overnight). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / build 0 / focused 56 tests; full suite 7,413 pass / 2 characterized fail (names re-confirmed via a names-capturing rerun), ZERO new reds (+3 tests, same file). Additive `enrichment.pitchLocation` (exact `effectiveRatings:53` enum → zero mapping) + unconditional EnrichmentPanel grid (toggle-clear) + a real event-log round-trip (the verified-to-persist gate). NO version bump (`DB_VERSION` 3 / trackerDb 21); `effectiveRatings`/`useGameState`/`GameTracker` byte-unchanged (`handleEnrichmentUpdate` merges enrichment generically → no branch). USER-VISIBLE → browser-pending (#18). **NOW = L9a-2.**

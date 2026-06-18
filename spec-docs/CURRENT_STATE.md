@@ -186,9 +186,12 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
   else reuses existing fields. This is the capture substrate L9b (the trait engine) consumes. **Build stays WATCHED**
   (live GameTracker path → browser-pending). **The full L9a scope — recommended SPLIT L9a-1..4, the DEFAULT-TAKEN forks
   (pitch-zone = coarse strike-zone enum; injury tally = derive-on-read, no new store), and every file:line anchor — is in
-  `AUTONOMOUS_RUN_LOG.md` (the 2026-06-18 "L9a RECON DONE → CONTEXT-HANDOFF" entry). START with L9a-1 (pitch-zone capture:
-  EnrichmentPanel grid + one `eventLog` enrichment field + one `GameTracker` handler branch — isolated, lowest-risk, no
-  hook hot-path change, NO version bump).** Recon transcript: wf_f3e99cd3-8a8. Deps: L8 ✓ / L1 ✓. After L9a → **L9b**
+  `AUTONOMOUS_RUN_LOG.md` (the 2026-06-18 "L9a RECON DONE" entry). **✅ L9a-1 DONE `e28706e9`** (optional
+  `enrichment.pitchLocation` strike-zone capture — additive, no version bump, verified-to-persist; EnrichmentPanel grid →
+  browser-pending #18). **➡ START with L9a-2** (ball-strike COUNT persistence: wire `advanceCount('ball')` [0 callers
+  today] + persist the per-AB count on `AtBatEvent` + make `enrichment.pitchType` reliably written — this one TOUCHES the
+  `useGameState` hook hot path, so audit it carefully). Then L9a-3 (handedness join, wiring) · L9a-4 (OF extra-base-credit
+  season tally + injury accumulator derive-on-read). Recon transcript: wf_f3e99cd3-8a8. Deps: L8 ✓ / L1 ✓. After L9a → **L9b**
   traits → **L10** random events →
   **L11** managers → **L12** races/All-Star/awards-fame → **L13** relationships → **L14** rebrand → the **L-SIM gate**.
   (SET ASIDE remains: **L-ECON1** frozen draft-IV oracle + **F-144**.)
@@ -439,7 +442,12 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## SUITE BASELINE
 
-**7,412 tests / 424 files** — full suite independently re-run 2026-06-18 (AUTH-4 overnight) after **L8b** commit
+**7,415 tests / 424 files** — full suite independently re-run 2026-06-18 (AUTH-4 overnight) after **L9a-1** commit
+`e28706e9`: **7,413 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` — failing-test
+NAMES personally re-confirmed this run), ZERO new reds (+3 tests, SAME file `EnrichmentPanel.test.tsx`; no new file →
+424 unchanged). L9a-1 is additive: `eventLog` `DB_VERSION` stays 3, trackerDb stays **v21**, no new store. USER-VISIBLE
+(EnrichmentPanel) → browser-pending (#18). *(Prior baseline retained below for the arc trail.)* **7,412 tests / 424
+files** — full suite independently re-run 2026-06-18 (AUTH-4 overnight) after **L8b** commit
 `cd9e4589`: **7,410 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds
 (+26 tests / +2 files = L8a `ratingsDevelopment.test.ts` [17] + L8b `franchiseCheckpointSweepCompute.test.ts` [9], over
 the post-L2c 7,386/422). trackerDb stays **v21** (L8 added NO store); KBL_BACKUP_VERSION **2**. L8a auto-committed (pure);
@@ -603,6 +611,12 @@ forced the test edit, and the stale `teamMvpAcePreview` assertion was aligned to
     key per player type, deterministic id `…:checkpoint-N`), idempotent on a replayed boundary (no dup rows), and that
     **nothing in the live UI changes** (pending overlays stay inert in the merge until the post-D13 confirm UI). Saved-
     data-shape adjacent (writes into the v21 store; no schema change), so it rides with the persistence batch.
+18. **L9a-1** (USER-VISIBLE — GameTracker EnrichmentPanel) the new optional "Pitch Location" capture: during a tracked
+    at-bat, the post-play EnrichmentPanel shows a "Pitch Location" row of 5 buttons (Low / High / Inside / Outside / Out
+    of Zone) for ALL enrichable plays (incl. K/BB — it is NOT spray-gated); tapping one highlights it and tapping it again
+    clears it; skipping it leaves the play un-annotated (optional, undefined-when-skipped). The selection persists with the
+    play (reload mid-game → the chosen zone is still shown). It is dark-for-now from the user's view (no trait/rating effect
+    yet — L9b consumes it later). Confirms the OD-5 "manual/opt-in zone input" feels right and doesn't clutter the panel.
 
 ## OPEN PENDING-JK (rolling)
 

@@ -1010,3 +1010,18 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
     mirrored to syncEngine) → keep writes ADDITIVE; each field VERIFIED to round-trip (the "typed-but-unwritten" gate);
     USER-VISIBLE (EnrichmentPanel) → browser-pending. Recording path is NOT duplicated for the enrichment concern
     (inactive src/components/GameTracker has zero EnrichmentPanel refs). Full recon transcript: wf_f3e99cd3-8a8.
+
+- **2026-06-18 (AUTH-4, overnight) — L9a-1 COMMITTED `e28706e9`.** Optional pitch-location strike-zone capture. 3 files:
+  EDIT `eventLog.ts` (one additive optional `AtBatEvent.enrichment.pitchLocation: 'low'|'high'|'inside'|'outside'|'outOfZone'`
+  — the EXACT `effectiveRatings.ts:53` enum → zero mapping for L9b; NO DB-version bump) + EDIT `EnrichmentPanel.tsx`
+  (a "Pitch Location" 5-button grid mirroring "Pitch Type", rendered unconditionally, toggle-to-clear, undefined-when-skipped)
+  + EDIT `EnrichmentPanel.test.tsx` (render + toggle-clear + a real fake-indexeddb event-log ROUND-TRIP). `handleEnrichmentUpdate`
+  needed NO branch (it merges enrichment generically) → `GameTracker.tsx` byte-unchanged. Codex 5.5 built → Opus 4.8
+  INDEPENDENTLY audited VERIFIED: tsc 0 / build 0 / focused 56 tests; full suite **7,413 pass / 2 characterized fail**
+  (NAMES `wpaRuntimeBoundary` + `franchiseManualSmokeFixture` personally re-confirmed via a names-capturing rerun — the
+  first rerun was `tail`-truncated, so the auditor re-ran to read the failing-test identities rather than trust the count),
+  ZERO new reds (+3 tests, same file). The DSTACK "verified-to-persist" gate is MET (the round-trip test proves
+  `pitchLocation` survives + reads back `undefined` when omitted). `eventLog` `DB_VERSION` stays 3 / trackerDb v21;
+  `effectiveRatings`/`useGameState` hot path/`GameTracker` byte-unchanged. USER-VISIBLE → browser-pending (#18).
+  Auto-committed. **NOW = L9a-2** (ball-strike count persistence — wire `advanceCount('ball')` + persist the per-AB count
+  + pitchType reliability; TOUCHES the useGameState hook hot path → audit carefully). trackerDb v21; nothing pushed.
