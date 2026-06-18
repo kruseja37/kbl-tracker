@@ -193,12 +193,16 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
   input UX = HIGH user-intensity, which tensions the `kbl-detection-philosophy` "non-user-intensive" principle + OD-5A;
   a genuine product/UX fork beyond AUTH-4's bounded-rework envelope → `WAITING_ON_JK.md` + the run-log OPEN DECISION; the
   persist seam [`finalBalls/finalStrikes` on `AtBatEvent` via `buildContextSnapshot:4005`] is ready for when JK rules;
-  Captain's lean = option (b) a low-intensity post-play "final count" on the EnrichmentPanel). **➡ START with L9a-3**
-  (handedness join, TS-4: populate `batterContext.handedness`/`pitcherContext.handedness` in `buildContextSnapshot`
-  [useGameState.ts:3905-4108, today omits them — explicit "no handedness data in hook" comment ~:4090] from roster
-  bats/throws; PURE event-write wiring, no UI, no new field, no version bump → unlocks 6 split traits). Then L9a-4 (OF
-  extra-base-credit season tally + injury accumulator derive-on-read). Recon: wf_f3e99cd3-8a8 / wf_e3ff7176-528. Deps:
-  L8 ✓ / L1 ✓. After L9a → **L9b**
+  Captain's lean = option (b) a low-intensity post-play "final count" on the EnrichmentPanel). **✅ L9a-3 DONE `32244393`**
+  (handedness join, TS-4: `batterContext`/`pitcherContext.handedness` + `matchupContext.platoonAdvantage` now persist on
+  each AtBatEvent — threaded via a `handednessByIdRef` from the full rosters; no UI/field/store/version; happy-path,
+  refresh-edge documented-graceful → browser-pending #19). **➡ START with L9a-4** (the LAST L9a build piece): OF
+  extra-base-credit per-player SEASON tally (per-play `heldByOf`/`baseSaved` exist on FieldingEvent/EnrichmentPanel; add
+  ≤1 new field on PlayerSeasonFielding + wire in seasonAggregator — **if it touches a versioned trackerDb store, the
+  `franchiseSeasonLedgerStorage.test.ts` store-list PIN is in scope** [MEMORY: broke a prior L6b dispatch]) + injury
+  accumulator (DEFAULT-TAKEN: DERIVE-ON-READ from the persisted injury `BetweenPlayEvent`s — `comebackerInjuries` season
+  field exists `seasonStorage.ts:99` but has ZERO live writers — no new store). **L9a-2 remains SET ASIDE for JK**
+  (per-pitch count UX fork). Recon: wf_f3e99cd3-8a8. Deps: L8 ✓ / L1 ✓. After L9a → **L9b**
   traits → **L10** random events →
   **L11** managers → **L12** races/All-Star/awards-fame → **L13** relationships → **L14** rebrand → the **L-SIM gate**.
   (SET ASIDE remains: **L-ECON1** frozen draft-IV oracle + **F-144**.)
@@ -449,7 +453,12 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## SUITE BASELINE
 
-**7,415 tests / 424 files** — full suite independently re-run 2026-06-18 (AUTH-4 overnight) after **L9a-1** commit
+**7,419 tests / 424 files** — full suite independently re-run 2026-06-18 (AUTH-4 overnight) after **L9a-3** commit
+`32244393`: **7,417 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` — NAMES
+personally confirmed this run), ZERO new reds (+4 handedness tests across 2 EXISTING files; no new file → 424 unchanged).
+L9a-3 is pure wiring: `eventLog` `DB_VERSION` 3 / trackerDb **v21** / no new `AtBatEvent` field / `buildContextSnapshot`
+deps unchanged. Live game path → browser-pending (#19). *(Prior baseline retained below for the arc trail.)* **7,415
+tests / 424 files** — full suite independently re-run 2026-06-18 (AUTH-4 overnight) after **L9a-1** commit
 `e28706e9`: **7,413 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` — failing-test
 NAMES personally re-confirmed this run), ZERO new reds (+3 tests, SAME file `EnrichmentPanel.test.tsx`; no new file →
 424 unchanged). L9a-1 is additive: `eventLog` `DB_VERSION` stays 3, trackerDb stays **v21**, no new store. USER-VISIBLE
@@ -624,6 +633,11 @@ forced the test edit, and the stale `teamMvpAcePreview` assertion was aligned to
     clears it; skipping it leaves the play un-annotated (optional, undefined-when-skipped). The selection persists with the
     play (reload mid-game → the chosen zone is still shown). It is dark-for-now from the user's view (no trait/rating effect
     yet — L9b consumes it later). Confirms the OD-5 "manual/opt-in zone input" feels right and doesn't clutter the panel.
+19. **L9a-3** (DATA/live-path — no visible UI) handedness now persists on at-bat events: play a fresh franchise game to
+    completion and confirm (via the event log / a later L9b consumer) that recorded at-bats carry `batterContext.handedness`
+    + `pitcherContext.handedness` + `matchupContext.platoonAdvantage` (from the rosters' bats/throws). Edge to spot-check:
+    a mid-game page REFRESH — at-bats recorded AFTER the reload will have undefined handedness (known happy-path-only
+    limitation; degrades gracefully). No visible UI change; this is a data-capture verification.
 
 ## OPEN PENDING-JK (rolling)
 

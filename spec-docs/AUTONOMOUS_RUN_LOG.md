@@ -1047,3 +1047,19 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   taps, (b) a lighter post-play "final count" entry on the EnrichmentPanel (opt-in, low-intensity, mirrors L9a-1, still
   feeds the count-traits — Captain's lean), or (c) skip count-traits in v1. **Loop continues → L9a-3** (handedness join —
   pure event-write wiring, no UI, no new field; independent of the count fork). trackerDb v21; nothing pushed.
+
+- **2026-06-18 (AUTH-4, overnight) — L9a-3 COMMITTED `32244393` (handedness join, TS-4).** Seam recon wf_c8c43732-281 →
+  a contained 5-edit wiring. `batterContext.handedness`/`pitcherContext.handedness` + `matchupContext.platoonAdvantage`
+  now persist on each AtBatEvent. GameTracker builds a `handednessById` map from the FULL rosters (`Player.battingHand`/
+  `Pitcher.throwingHand` — exact-match types, keyed by `getRosterEntityId` → covers subs) → optional `GameInitConfig.
+  handednessById` → a new `handednessByIdRef` (mirrors `awayLineupRef`) → read in `buildContextSnapshot` INSIDE the
+  callback body (so NO deps-array/signature change). 4 files (2 prod + 2 existing test files). Codex 5.5 built → Opus 4.8
+  INDEPENDENTLY audited VERIFIED: tsc 0 / build 0 / focused 15 tests (event-log ROUND-TRIP proving handedness+platoon
+  persist; hook-path threading; same-handed→pitcher; switch-hitter→batter; graceful-undefined-when-map-absent); full
+  suite **7,417 pass / 2 characterized fail** (names personally confirmed), ZERO new reds (+4 tests). NO new AtBatEvent
+  field / `eventLog` DB_VERSION 3 / trackerDb v21 / `buildContextSnapshot` deps unchanged / no `record*` signature change.
+  Sandbox `.fuse_hidden` artifact cleaned. **DEFAULT-TAKEN:** happy-path (fresh game→completion); mid-game-refresh resets
+  the ref → post-reload events get undefined handedness (graceful = L9b min-sample dormancy); persisting the map into the
+  snapshot is a deferred larger change (documented, not built). Live game path → browser-pending (#19). Auto-committed.
+  **NOW = L9a-4** (OF extra-base-credit season tally + injury accumulator derive-on-read — the LAST L9a build piece;
+  L9a-2 stays SET ASIDE for JK). trackerDb v21; nothing pushed.

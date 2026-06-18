@@ -9908,4 +9908,4 @@ A round-trip proving handedness persists: drive a minimal init (`handednessById`
 
 Use high reasoning effort. Think step-by-step. Builder ≠ auditor — re-audited by Opus (handedness threaded + VERIFIED to persist, FULL-roster keying [subs covered], no signature/deps churn, no new field/store/version, the refresh-edge limitation documented-not-expanded).
 
-**Status:** CONTRACTED 2026-06-18 (AUTH-4 overnight). Dispatching Codex.
+**Status:** COMMITTED `32244393` (2026-06-18, AUTH-4 overnight). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / build 0 / focused 15 tests (event-log round-trip + threading + same-handed→pitcher + switch-hitter→batter + graceful-undefined); full suite 7,417 pass / 2 characterized fail (names confirmed), ZERO new reds (+4 tests). The 5-edit seam landed exactly; handedness via `handednessByIdRef` (no `buildContextSnapshot` deps/signature change), full-roster keying (subs covered), correct platoon logic. NO new `AtBatEvent` field / DB_VERSION 3 / trackerDb 21. Refresh-edge documented-graceful. Live path → browser-pending (#19). **NOW = L9a-4** (the last L9a build piece).
