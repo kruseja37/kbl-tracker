@@ -115,6 +115,11 @@ The acquisition engine's `POSITIVE_IMAGE_TRAITS` / `NEGATIVE_IMAGE_TRAITS` / `IM
 §0.6, so these traits' personality tilts **silently resolve to neutral and do not fire today.** Each R-phase fixes
 the code to match §0.6 — never the reverse. (Reconciled + grep-verified, wf_c4bac237-5d7.)
 
+> **APPLIED in R-E-a (2026-06-18):** the 3 LIVE latent bugs (Cannon Arm / Durable / Injury Prone) + the E2
+> **Charisma factor** + the **positive-Resilience path** are DONE (verified, suite 7,568/7,566 pass / 2 char fail).
+> The remaining rows (K Neglector / Big Hack / Little Hack / BB Prone / Composed / Gets Ahead / Falls Behind /
+> First Pitch Slayer / First Pitch Prayer image-set memberships) land with their R1/R2 trait tickets.
+
 | Trait (†) | Fix in `traitAcquisition.ts` | Severity |
 |---|---|---|
 | Cannon Arm | + `POSITIVE_IMAGE_TRAITS`; `IMAGE_DRIVER_SETS['Cannon Arm']=['COMPETITIVE']` | **LIVE latent bug** — built, tilt dead |

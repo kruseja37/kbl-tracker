@@ -46,6 +46,8 @@ export interface TraitChangeProposal {
     imageAxisTilt: number;
     moraleFactor: number;
     rosterRoleFactor: number;
+    charismaTilt: number;
+    resiliencePositiveTilt: number;
   };
   displaces?: string;
 }
@@ -73,6 +75,7 @@ export interface TraitAcquisitionTuning {
   imageSwing: number;
   moraleSwing: number;
   rosterSwing: number;
+  charismaSwing: number;
   gainThreshold: number;
   loseThreshold: number;
 }
@@ -84,6 +87,7 @@ export const TRAIT_ACQUISITION_TUNING: TraitAcquisitionTuning = {
   imageSwing: 0.25,
   moraleSwing: 0.30,
   rosterSwing: 0.30,
+  charismaSwing: 0.30,
   gainThreshold: 0.75,
   loseThreshold: 0.35,
 };
@@ -114,6 +118,8 @@ const POSITIVE_IMAGE_TRAITS = new Set([
   'Tough Out',
   'Bunter',
   'Consistent',
+  'Cannon Arm',
+  'Durable',
 ]);
 
 const NEGATIVE_IMAGE_TRAITS = new Set([
@@ -128,6 +134,7 @@ const NEGATIVE_IMAGE_TRAITS = new Set([
   'Base Jogger',
   'Whiffer',
   'Volatile',
+  'Injury Prone',
 ]);
 
 const IMAGE_DRIVER_SETS: Readonly<Record<string, readonly CanonicalPersonality[]>> = {
@@ -158,9 +165,17 @@ const IMAGE_DRIVER_SETS: Readonly<Record<string, readonly CanonicalPersonality[]
   'Tough Out': ['TOUGH'],
   Bunter: ['TOUGH'],
   Whiffer: ['EGOTISTICAL'],
+  'Cannon Arm': ['COMPETITIVE'],
 };
 
 const ROSTER_ROLE_TRAITS = new Set(['Pinch Perfect', 'Utility']);
+
+// §0.6: low-Charisma-driven traits (K Neglector). K Neglector enters BUILDABLE_TRAITS in R1 — dormant until then.
+const CHARISMA_SENSITIVE_TRAITS = new Set(['K Neglector']);
+
+// §0.6/§0.7: high-Resilience POSITIVE lean. Today resilienceTilt only down-tilts NEGATIVE traits; this adds
+// the symmetric positive path. Scoped to these two per §0.7; they enter BUILDABLE_TRAITS in R2 — dormant until then.
+const RESILIENCE_POSITIVE_TRAITS = new Set(['Composed', 'Gets Ahead']);
 
 const OPPOSITE_PAIRS: readonly (readonly [string, string])[] = [
   ['First Pitch Slayer', 'First Pitch Prayer'],
@@ -283,13 +298,21 @@ function buildProposalBase(args: {
   const rosterRoleFactor = ROSTER_ROLE_TRAITS.has(args.traitName)
     ? getRosterRoleFactor(args.rosterRole, args.tuning.rosterSwing)
     : 1;
+  const charismaTilt = CHARISMA_SENSITIVE_TRAITS.has(args.traitName)
+    ? 1 - centered(args.modifiers.charisma, 0, 100) * args.tuning.charismaSwing
+    : 1;
+  const resiliencePositiveTilt = RESILIENCE_POSITIVE_TRAITS.has(args.traitName)
+    ? 1 + centered(args.modifiers.resilience, 0, 100) * args.tuning.resilienceSwing
+    : 1;
   const probability = clamp01(
     args.realityPercentile
     * ambitionTilt
     * resilienceTilt
     * imageAxisTilt
     * moraleFactor
-    * rosterRoleFactor,
+    * rosterRoleFactor
+    * charismaTilt
+    * resiliencePositiveTilt,
   );
 
   return {
@@ -303,6 +326,8 @@ function buildProposalBase(args: {
       imageAxisTilt,
       moraleFactor,
       rosterRoleFactor,
+      charismaTilt,
+      resiliencePositiveTilt,
     },
   };
 }

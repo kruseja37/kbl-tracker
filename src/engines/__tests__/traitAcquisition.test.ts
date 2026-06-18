@@ -101,6 +101,8 @@ describe('traitAcquisition combiner (VI.0 / TS-1)', () => {
       imageAxisTilt: 1,
       moraleFactor: 1,
       rosterRoleFactor: 1,
+      charismaTilt: 1,
+      resiliencePositiveTilt: 1,
     });
   });
 
@@ -225,6 +227,117 @@ describe('traitAcquisition combiner (VI.0 / TS-1)', () => {
 
     expect(result.proposals[0].realityPercentile).toBe(1);
     expect(result.proposals[0].probability).toBe(1);
+  });
+});
+
+describe('traitAcquisition R-E-a latent-bug fixes + dormant tilts (§0.6/§0.7/§0.8)', () => {
+  // (a) Cannon Arm is now POSITIVE (POSITIVE_IMAGE_TRAITS) with a COMPETITIVE image driver.
+  test('Cannon Arm is positive: high ambition tilts up and COMPETITIVE drives the image axis', () => {
+    const ambitious = proposalFor('Cannon Arm', {
+      modifiers: { ...neutralModifiers, ambition: 100 },
+    });
+    const driven = proposalFor('Cannon Arm', {
+      personality: 'Competitive',
+    });
+
+    expect(ambitious.imageValence).toBe('positive');
+    expect(ambitious.factors.ambitionTilt).toBeGreaterThan(1);
+    expect(driven.factors.imageAxisTilt).toBeGreaterThan(1);
+  });
+
+  // (b) Durable is now POSITIVE (universal) with NO image driver.
+  test('Durable is positive: high ambition tilts up and there is no image driver', () => {
+    const ambitious = proposalFor('Durable', {
+      modifiers: { ...neutralModifiers, ambition: 100 },
+    });
+
+    expect(ambitious.imageValence).toBe('positive');
+    expect(ambitious.factors.ambitionTilt).toBeGreaterThan(1);
+    expect(ambitious.factors.imageAxisTilt).toBe(1);
+  });
+
+  // (c) Injury Prone is now NEGATIVE: low resilience raises the negative trait.
+  test('Injury Prone is negative: low resilience raises its probability', () => {
+    const fragile = proposalFor('Injury Prone', {
+      modifiers: { ...neutralModifiers, resilience: 0 },
+    });
+
+    expect(fragile.imageValence).toBe('negative');
+    expect(fragile.factors.resilienceTilt).toBeGreaterThan(1);
+  });
+
+  // (d) charismaTilt: K Neglector (canonical, pitcher-only, NOT in BUILDABLE) — low charisma > 1, high < 1.
+  test('charismaTilt rises for K Neglector at low charisma and falls at high charisma', () => {
+    const lowCharisma = proposalFor('K Neglector', {
+      playerRole: 'pitcher',
+      modifiers: { ...neutralModifiers, charisma: 0 },
+    });
+    const highCharisma = proposalFor('K Neglector', {
+      playerRole: 'pitcher',
+      modifiers: { ...neutralModifiers, charisma: 100 },
+    });
+
+    expect(lowCharisma.factors.charismaTilt).toBeGreaterThan(1);
+    expect(highCharisma.factors.charismaTilt).toBeLessThan(1);
+    expect(lowCharisma.probability).toBeGreaterThan(highCharisma.probability);
+  });
+
+  // (d-cont) charismaTilt defaults to 1 for every non-listed trait.
+  test('charismaTilt stays 1 for traits outside CHARISMA_SENSITIVE_TRAITS regardless of charisma', () => {
+    const lowCharismaClutch = proposalFor('Clutch', {
+      modifiers: { ...neutralModifiers, charisma: 0 },
+    });
+    const highCharismaClutch = proposalFor('Clutch', {
+      modifiers: { ...neutralModifiers, charisma: 100 },
+    });
+
+    expect(lowCharismaClutch.factors.charismaTilt).toBe(1);
+    expect(highCharismaClutch.factors.charismaTilt).toBe(1);
+  });
+
+  // (e) resiliencePositiveTilt: Composed / Gets Ahead (canonical, pitcher-only, NOT in BUILDABLE) — high resilience > 1.
+  test('resiliencePositiveTilt rises for Composed at high resilience', () => {
+    const resilient = proposalFor('Composed', {
+      playerRole: 'pitcher',
+      modifiers: { ...neutralModifiers, resilience: 100 },
+    });
+
+    expect(resilient.factors.resiliencePositiveTilt).toBeGreaterThan(1);
+  });
+
+  test('resiliencePositiveTilt rises for Gets Ahead at high resilience', () => {
+    const resilient = proposalFor('Gets Ahead', {
+      playerRole: 'pitcher',
+      modifiers: { ...neutralModifiers, resilience: 100 },
+    });
+
+    expect(resilient.factors.resiliencePositiveTilt).toBeGreaterThan(1);
+  });
+
+  // (e-cont) resiliencePositiveTilt defaults to 1 for every non-listed trait.
+  test('resiliencePositiveTilt stays 1 for traits outside RESILIENCE_POSITIVE_TRAITS', () => {
+    const resilientClutch = proposalFor('Clutch', {
+      modifiers: { ...neutralModifiers, resilience: 100 },
+    });
+
+    expect(resilientClutch.factors.resiliencePositiveTilt).toBe(1);
+  });
+
+  // (f) the factors object now carries both new keys.
+  test('factors object includes charismaTilt and resiliencePositiveTilt', () => {
+    const proposal = proposalFor('CON vs LHP');
+
+    expect(proposal.factors).toHaveProperty('charismaTilt');
+    expect(proposal.factors).toHaveProperty('resiliencePositiveTilt');
+    expect(Object.keys(proposal.factors).sort()).toEqual([
+      'ambitionTilt',
+      'charismaTilt',
+      'imageAxisTilt',
+      'moraleFactor',
+      'resiliencePositiveTilt',
+      'resilienceTilt',
+      'rosterRoleFactor',
+    ]);
   });
 });
 
