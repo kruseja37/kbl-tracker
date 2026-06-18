@@ -14,7 +14,7 @@
  */
 
 const DB_NAME = 'kbl-tracker';
-export const TRACKER_DB_VERSION = 21; // Must be the highest version any consumer ever used
+export const TRACKER_DB_VERSION = 22; // Must be the highest version any consumer ever used
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -407,6 +407,20 @@ export async function getTrackerDb(): Promise<IDBDatabase> {
           unique: false,
         });
         ratingsOverlayStore.createIndex('by_player', ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'], {
+          unique: false,
+        });
+      }
+
+      // v22 / L9b-3b-i: dark franchise-instance trait overlay store (§11 / L9b).
+      // Writers, readers, confirmation, and player-record application are later tickets.
+      if (!db.objectStoreNames.contains('franchiseTraitOverlays')) {
+        const traitOverlayStore = db.createObjectStore('franchiseTraitOverlays', {
+          keyPath: 'id',
+        });
+        traitOverlayStore.createIndex('by_scope', ['franchiseId', 'seasonId', 'statsScopeId'], {
+          unique: false,
+        });
+        traitOverlayStore.createIndex('by_player', ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'], {
           unique: false,
         });
       }

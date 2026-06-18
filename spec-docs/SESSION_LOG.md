@@ -5307,3 +5307,32 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   `franchiseTraitOverlays` v21→v22; Captain lean = new store). I did NOT bump the DB version or write any store.
 - **BLOCKED ON JK'S HOST/RULING (cannot be done here):** (1) reconcile the two-file split (FINDING-149); (2) host gate
   build/full-suite + commit of the canonical L9b-3a; (3) the L9b-3b store fork.
+  [NOTE (Captain, host thread): the above is a SUPERSEDED sandbox-thread entry. The canonical L9b-3a shipped as
+  `traitCandidateBuilder.ts` (54fae510 + seam-fix 4e3ad01d); the two-file split + host gate + store fork are all resolved
+  below.]
+
+## 2026-06-18 (AUTH-4 overnight, host thread, JK present "keep rolling") — L9b-3b-i Codex-built → Opus-audited VERIFIED → COMMITTED
+- JK said "keep rolling" → continued L9b-3b IN-THREAD (removed the HANDOFF_NEEDED so no duplicate fresh session races).
+  Took the store fork AUTH-4 default = NEW `franchiseTraitOverlays` store (reuse carried a silent-trait-drop landmine via
+  `ratingsOverlayMerge`). Split L9b-3b → b-i (dark store) + b-ii (flag + hook).
+- Grounded the persistence templates (franchiseRatingsOverlayStorage mirror + trackerDb store-def + syncConfig +
+  backupRestore + the franchiseSeasonLedgerStorage store-list PIN + KBL_BACKUP_VERSION). Wrote a TIGHTENED contract (L9b-3a
+  lessons baked in: forbid spec-doc edits + git-add; exact FILE LIST; the PIN trap called out explicitly) →
+  PROMPT_CONTRACTS.md + `/tmp/l9b3bi_codex_prompt.md`; dispatched Codex 5.5 | high via background `codex exec`.
+- **L9b-3b-i deliverable:** NEW `src/utils/franchiseTraitOverlayStorage.ts` (1:1 mirror of the ratings-overlay storage with
+  a categorical trait-change row: valence/traitName/displacesTraitName/realityPercentile/probability/confirmationStatus/
+  applied/createdAt) + the store mirrored at every site (trackerDb v21→v22; syncConfig 'id'; backupRestore optional:true +
+  STATIC schema v22; the PIN test toBe(21)→22 + alphabetical store-list insert + the legacy-seed helper renamed v20→v21
+  now proving the ratings-overlay row ALSO survives v22; parity + manifest + a new 8-test storage test). DARK/EMPTY;
+  KBL_BACKUP_VERSION stays 2.
+- **The tightened contract WORKED:** Codex hit EXACTLY the FILE LIST — no abandoned files, no doc edits, no git-add (vs
+  L9b-3a where it over-produced). One honest note: the PROMPT_CONTRACTS "M" was MY pre-dispatch contract block, not Codex.
+- **Independent audit (Opus):** tsc-0; `vite build` OK; full suite **7,495/430, 7,493 pass / 2 characterized fail**, ZERO
+  new reds (+8 = the new storage test); the **v21→v22 migration-survival** + **backup round-trip parity** PROVEN in the pin
+  test (seeds a v21 DB incl. a ratings-overlay row → both it AND the new trait store survive at v22 with correct
+  keyPath+indexes); ratings template + all prior stores byte-unchanged; DARK (no production consumer). VERDICT VERIFIED →
+  auto-committed. Persistence → browser-pending (#21). trackerDb **v22**.
+- **NEXT = L9b-3b-ii** (the default-OFF `isFranchisePhase2TraitsEnabled` flag + `persistDarkTraitGrantForCompletedGame`
+  hook mirroring L8b `franchiseCheckpointSweepCompute`: flag gate → 20%-checkpoint cadence → load season events →
+  enumerate MLB roster → computeSeasonTraitCandidates [L9b-3a] → computeTraitAcquisition [L9b-2] → write PENDING trait
+  rows; wired after the checkpoint gate at processCompletedGame.ts:623). Loop continues under AUTH-4.

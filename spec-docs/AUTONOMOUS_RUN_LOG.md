@@ -1348,3 +1348,28 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
     say so; (b) every pure-engine ticket whose output feeds a sibling needs a SEAM test in scope, not just within-file tests;
     (c) builder contracts must forbid editing any spec-doc / git-add (the Captain owns docs) — this run the builder edited 7
     docs + left an abandoned file.
+- **2026-06-18 (AUTH-4, JK present "keep rolling") — L9b-3b-i BUILT (Codex 5.5) → AUDITED (Opus) VERIFIED → COMMITTED.**
+  The dark `franchiseTraitOverlays` store (persistence half of the first trait writer). JK said "keep rolling" → continued
+  L9b-3b in-thread; resolved the store fork to the AUTH-4 default = NEW store (reuse silently drops trait rows via
+  `ratingsOverlayMerge`). Split L9b-3b → b-i (store) + b-ii (flag+hook).
+  - **Deliverable:** NEW `src/utils/franchiseTraitOverlayStorage.ts` (1:1 mirror of `franchiseRatingsOverlayStorage` with a
+    categorical trait-change row) + the store mirrored at every site: trackerDb `TRACKER_DB_VERSION` 21→22 + the store def
+    (keyPath 'id', by_scope/by_player); syncConfig `franchiseTraitOverlays: 'id'`; backupRestore registration `optional:true`
+    + STATIC schema version 21→22 (KBL_BACKUP_VERSION stays 2); the `franchiseSeasonLedgerStorage.test.ts` store-list PIN
+    (`toBe(21)`→22 ×2 + alphabetical store-list insert + the legacy-seed helper renamed v20→v21, now proving the
+    ratings-overlay row survives the v22 upgrade too); the parity + save-slot-manifest tests; a new 8-test storage test.
+    DARK/EMPTY (no production consumer — L9b-3b-ii writes it).
+  - **The tightened contract WORKED** (vs L9b-3a): Codex hit EXACTLY the FILE LIST — no abandoned files, no spec-doc edits,
+    no git-add. (The PROMPT_CONTRACTS "M" in git status was the Captain's own pre-dispatch contract block.)
+  - **INDEPENDENT AUDIT (Opus):** tsc-0; `vite build` OK; full suite **7,495/430, 7,493 pass / 2 characterized fail**, ZERO
+    new reds (+8 = the storage test); the v21→v22 **migration-survival** + **backup round-trip parity** PROVEN in the pin
+    test; `franchiseRatingsOverlays` template + every prior store byte-unchanged; DARK confirmed by grep. VERDICT VERIFIED →
+    auto-committed. Persistence → browser-pending (#21). trackerDb **v22**.
+  - **➡ NEXT = L9b-3b-ii** (default-OFF `isFranchisePhase2TraitsEnabled` flag + `persistDarkTraitGrantForCompletedGame`
+    hook, mirroring L8b `franchiseCheckpointSweepCompute`: flag gate → 20%-checkpoint cadence [the min-sample valve makes
+    early checkpoints dormant, so trait changes only fire late-season with a populated pool — DEFAULT-TAKEN vs a season-end
+    trigger] → load season events → enumerate MLB roster → computeSeasonTraitCandidates [L9b-3a] → computeTraitAcquisition
+    [L9b-2] per player → write PENDING `franchiseTraitOverlays` rows via `putFranchiseTraitOverlay`; deterministic
+    idempotent id; createdAt from a persisted timestamp [NO Date.now]; wired after the checkpoint gate at
+    processCompletedGame.ts:623). Then L9b-3c (§11 confirm + ATOMIC trait1/trait2 displacement via saveFranchisePlayer; do
+    NOT route trait rows through ratingsOverlayMerge).

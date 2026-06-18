@@ -40,6 +40,7 @@ const expectedTrackerStores = [
   'franchiseRatingsOverlays',
   'franchiseSeasonLedgerRows',
   'franchiseSeasonSummaries',
+  'franchiseTraitOverlays',
   'franchiseTrueValueRows',
   'franchiseTrueValueSnapshots',
   'franchiseTrustedValueArtifacts',
@@ -92,7 +93,7 @@ function transactionToPromise(tx: IDBTransaction): Promise<void> {
   });
 }
 
-async function seedLegacyV20TrackerDb(): Promise<{
+async function seedLegacyV21TrackerDb(): Promise<{
   currentGameRow: { id: string; gameId: string };
   flashpointRow: {
     franchiseId: string;
@@ -105,9 +106,25 @@ async function seedLegacyV20TrackerDb(): Promise<{
     lastGameTax: number;
     updatedAtCheckpoint: string;
   };
+  ratingsOverlayRow: {
+    id: string;
+    franchiseId: string;
+    seasonId: string;
+    statsScopeId: string;
+    playerId: string;
+    ratingKey: string;
+    delta: number;
+    kind: string;
+    expiresAtGameNumber: number | null;
+    confirmationStatus: string;
+    source: string;
+    sourceEventId: string;
+    createdAtGameNumber: number;
+    createdAt: string;
+  };
 }> {
   const db = await new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 20);
+    const request = indexedDB.open(DB_NAME, 21);
     request.onerror = () => reject(request.error);
     request.onupgradeneeded = () => {
       const legacyDb = request.result;
@@ -119,6 +136,17 @@ async function seedLegacyV20TrackerDb(): Promise<{
           keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'],
         });
         flashpointStore.createIndex('by_scope', ['franchiseId', 'seasonId', 'statsScopeId'], {
+          unique: false,
+        });
+      }
+      if (!legacyDb.objectStoreNames.contains('franchiseRatingsOverlays')) {
+        const ratingsOverlayStore = legacyDb.createObjectStore('franchiseRatingsOverlays', {
+          keyPath: 'id',
+        });
+        ratingsOverlayStore.createIndex('by_scope', ['franchiseId', 'seasonId', 'statsScopeId'], {
+          unique: false,
+        });
+        ratingsOverlayStore.createIndex('by_player', ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'], {
           unique: false,
         });
       }
@@ -138,14 +166,31 @@ async function seedLegacyV20TrackerDb(): Promise<{
     lastGameTax: -0.6,
     updatedAtCheckpoint: '2',
   };
+  const ratingsOverlayRow = {
+    id: 'legacy-franchise:legacy-season:legacy-scope:legacy-player:power:legacy-ratings',
+    franchiseId: 'legacy-franchise',
+    seasonId: 'legacy-season',
+    statsScopeId: 'legacy-scope',
+    playerId: 'legacy-player',
+    ratingKey: 'power',
+    delta: 2,
+    kind: 'permanent',
+    expiresAtGameNumber: null,
+    confirmationStatus: 'pending',
+    source: 'legacy-ratings',
+    sourceEventId: 'legacy-ratings',
+    createdAtGameNumber: 2,
+    createdAt: '2026-06-17T00:00:00.000Z',
+  };
 
-  const tx = db.transaction(['currentGame', 'franchiseFlashpointDecay'], 'readwrite');
+  const tx = db.transaction(['currentGame', 'franchiseFlashpointDecay', 'franchiseRatingsOverlays'], 'readwrite');
   tx.objectStore('currentGame').put(currentGameRow);
   tx.objectStore('franchiseFlashpointDecay').put(flashpointRow);
+  tx.objectStore('franchiseRatingsOverlays').put(ratingsOverlayRow);
   await transactionToPromise(tx);
   db.close();
 
-  return { currentGameRow, flashpointRow };
+  return { currentGameRow, flashpointRow, ratingsOverlayRow };
 }
 
 function row(overrides: Record<string, unknown> = {}) {
@@ -176,7 +221,7 @@ describe('franchise season salary ledger storage', () => {
   test('trackerDb migration creates the ledger store and preserves every prior tracker store', async () => {
     const db = await initFranchiseSeasonLedgerDatabase();
 
-    expect(TRACKER_DB_VERSION).toBe(21);
+    expect(TRACKER_DB_VERSION).toBe(22);
     expect(db.name).toBe(DB_NAME);
     expect(db.version).toBe(TRACKER_DB_VERSION);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(expectedTrackerStores);
@@ -185,17 +230,17 @@ describe('franchise season salary ledger storage', () => {
     expect(Array.from(tx.objectStore(FRANCHISE_SEASON_LEDGER_STORE_NAME).indexNames)).toEqual(['by_scope']);
   });
 
-  test('v20 to v21 migration adds ratings overlays without losing prior stores or data', async () => {
-    const { currentGameRow, flashpointRow } = await seedLegacyV20TrackerDb();
+  test('v21 to v22 migration adds trait overlays without losing prior stores or data', async () => {
+    const { currentGameRow, flashpointRow, ratingsOverlayRow } = await seedLegacyV21TrackerDb();
     resetFranchiseSeasonLedgerDatabaseForTests();
 
     const db = await initFranchiseSeasonLedgerDatabase();
 
-    expect(db.version).toBe(21);
+    expect(db.version).toBe(22);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(expectedTrackerStores);
 
     const tx = db.transaction(
-      ['currentGame', 'franchiseFlashpointDecay', 'franchiseRatingsOverlays'],
+      ['currentGame', 'franchiseFlashpointDecay', 'franchiseRatingsOverlays', 'franchiseTraitOverlays'],
       'readonly',
     );
     await expect(requestToPromise(tx.objectStore('currentGame').get('current'))).resolves.toEqual(currentGameRow);
@@ -207,9 +252,13 @@ describe('franchise season salary ledger storage', () => {
         flashpointRow.playerId,
       ])),
     ).resolves.toEqual(flashpointRow);
-    const overlayStore = tx.objectStore('franchiseRatingsOverlays');
-    expect(overlayStore.keyPath).toBe('id');
-    expect(Array.from(overlayStore.indexNames)).toEqual(['by_player', 'by_scope']);
+    const ratingsOverlayStore = tx.objectStore('franchiseRatingsOverlays');
+    expect(ratingsOverlayStore.keyPath).toBe('id');
+    expect(Array.from(ratingsOverlayStore.indexNames)).toEqual(['by_player', 'by_scope']);
+    await expect(requestToPromise(ratingsOverlayStore.get(ratingsOverlayRow.id))).resolves.toEqual(ratingsOverlayRow);
+    const traitOverlayStore = tx.objectStore('franchiseTraitOverlays');
+    expect(traitOverlayStore.keyPath).toBe('id');
+    expect(Array.from(traitOverlayStore.indexNames)).toEqual(['by_player', 'by_scope']);
     await transactionToPromise(tx);
   });
 

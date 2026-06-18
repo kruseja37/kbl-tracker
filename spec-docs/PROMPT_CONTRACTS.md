@@ -10052,3 +10052,19 @@ Use high reasoning effort. Think step-by-step. Builder ≠ auditor — Opus re-a
 **Full contract text (the dispatched prompt):** `/tmp/l9b3a_codex_prompt.md` (per-trait extractor table, reconstruction rules, API, ≥18 tests, verification greps).
 
 **Status:** VERIFIED + COMMITTED (2026-06-18, AUTH-4 overnight). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / focused 21/21 / full suite 7,486 tests, 7,484 pass / 2 characterized fail, ZERO new reds; purity + build-dark greps clean; frozen matrix/scorer/traitAcquisition/percentile/traitPricing/rosterEngineConstants BYTE-UNCHANGED; every per-trait outcome direction re-derived correct. **Builder over-produced — handled by the auditor:** Codex also left an abandoned divergent `traitContextReconstructor.*` pair (a broken EXPOSURE-COUNT model) → DELETED; and edited 5 Captain-owned spec-docs → REVERTED + re-authored. DEFAULTS-TAKEN flagged for JK (see CURRENT_STATE OPEN PENDING-JK): rate model (not count) · pressure from isClutch · Cannon/Noodle one OF-arm-per-game signal · Durable/Injury = injuries/games · basis 'none' · Clutch/Choker role-determined. trackerDb v21 (no store). NEXT = L9b-3b (dark hook + PENDING write; needs the JK store fork).
+
+---
+
+## CONTRACT — L9b-3b-i (dark `franchiseTraitOverlays` store) — 2026-06-18 (AUTH-4 overnight)
+
+**ROUTE: Codex 5.5 | high reasoning effort** (builder). Auditor = Opus 4.8 (independent; ≠ builder). PERSISTENCE / saved-data-shape → audited HARDEST. Branch codex/franchise-v1-next.
+
+**GOAL:** add a NEW dark, EMPTY IndexedDB store `franchiseTraitOverlays` by MIRRORING `franchiseRatingsOverlays` at every site (storage module + trackerDb store def + syncConfig + backupRestore + the store-list PIN test + parity test + a new storage test), bump `TRACKER_DB_VERSION` 21→22, keep `KBL_BACKUP_VERSION` at 2, NO production writer/reader (L9b-3b-ii wires it). STORE FORK resolved = NEW store (AUTH-4 default; reuse carries a silent-trait-drop landmine via `ratingsOverlayMerge`).
+
+**ROW SCHEMA:** `FranchiseTraitOverlayRow extends {franchiseId, seasonId, statsScopeId}` + `{ id, playerId, valence: 'gain'|'lose', traitName, displacesTraitName: string|null, realityPercentile, probability, confirmationStatus: 'pending'|'confirmed', applied: boolean, source, sourceEventId, createdAtGameNumber, createdAt: string }`. keyPath `'id'`; indexes `by_scope` [franchiseId,seasonId,statsScopeId] + `by_player` [...+playerId] — mirror the ratings overlay exactly.
+
+**HARD CONSTRAINTS (L9b-3a lessons baked in):** builder may NOT edit any spec-doc/`*.md`, may NOT `git add`/commit (Captain owns docs + staging); touch ONLY the contract's FILE LIST; the store stays DARK/EMPTY (no production consumer). The `franchiseSeasonLedgerStorage.test.ts` store-list PIN (`toBe(21)`→22 + alphabetical insert of `franchiseTraitOverlays` before `franchiseTrueValueRows`) is explicitly in scope (it broke a prior dispatch).
+
+**Full contract text (the dispatched prompt):** `/tmp/l9b3bi_codex_prompt.md`.
+
+**Status:** VERIFIED + COMMITTED (2026-06-18, AUTH-4 overnight). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / vite build OK / full suite 7,495 tests, 7,493 pass / 2 characterized fail, ZERO new reds. Migration v21→v22 survival PROVEN (pin test seeds a v21 DB incl. a ratings-overlay row → both it AND the new trait store survive at v22 with correct keyPath+indexes); backup parity covers the new store; KBL_BACKUP_VERSION stays 2 (STATIC schema version 21→22); DARK/EMPTY (no production consumer); `franchiseRatingsOverlays` template + all prior stores byte-unchanged. Builder hit EXACTLY the FILE LIST — no abandoned files, no doc edits (the tightened constraints held). trackerDb **v22**. NEXT = L9b-3b-ii (flag + dark trait-grant hook).

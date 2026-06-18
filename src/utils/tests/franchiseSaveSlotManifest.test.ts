@@ -1213,6 +1213,7 @@ describe('franchise save-slot manifest contract', () => {
       'playerId',
     ]);
     expect(SYNC_REGISTRY['kbl-tracker']).toHaveProperty('franchiseRatingsOverlays', 'id');
+    expect(SYNC_REGISTRY['kbl-tracker']).toHaveProperty('franchiseTraitOverlays', 'id');
     expect(SYNC_REGISTRY['kbl-tracker']).toHaveProperty('franchiseTrueValueSnapshots', [
       'franchiseId',
       'seasonId',
@@ -1250,6 +1251,10 @@ describe('franchise save-slot manifest contract', () => {
       optional: true,
     });
     expect(STATIC_DATABASE_SCHEMAS['kbl-tracker'].stores.franchiseRatingsOverlays).toMatchObject({
+      keyPath: 'id',
+      optional: true,
+    });
+    expect(STATIC_DATABASE_SCHEMAS['kbl-tracker'].stores.franchiseTraitOverlays).toMatchObject({
       keyPath: 'id',
       optional: true,
     });
