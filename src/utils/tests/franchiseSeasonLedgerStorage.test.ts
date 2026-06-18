@@ -37,6 +37,7 @@ const expectedTrackerStores = [
   'franchiseDesignationRows',
   'franchiseFameRecords',
   'franchiseFlashpointDecay',
+  'franchiseRatingsOverlays',
   'franchiseSeasonLedgerRows',
   'franchiseSeasonSummaries',
   'franchiseTrueValueRows',
@@ -76,6 +77,77 @@ function deleteDatabase(name: string): Promise<void> {
   });
 }
 
+function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function transactionToPromise(tx: IDBTransaction): Promise<void> {
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
+async function seedLegacyV20TrackerDb(): Promise<{
+  currentGameRow: { id: string; gameId: string };
+  flashpointRow: {
+    franchiseId: string;
+    seasonId: string;
+    statsScopeId: string;
+    playerId: string;
+    flashpointKind: string;
+    consecutiveGamesUnresolved: number;
+    accumulatedFanMoraleTax: number;
+    lastGameTax: number;
+    updatedAtCheckpoint: string;
+  };
+}> {
+  const db = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 20);
+    request.onerror = () => reject(request.error);
+    request.onupgradeneeded = () => {
+      const legacyDb = request.result;
+      if (!legacyDb.objectStoreNames.contains('currentGame')) {
+        legacyDb.createObjectStore('currentGame', { keyPath: 'id' });
+      }
+      if (!legacyDb.objectStoreNames.contains('franchiseFlashpointDecay')) {
+        const flashpointStore = legacyDb.createObjectStore('franchiseFlashpointDecay', {
+          keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'],
+        });
+        flashpointStore.createIndex('by_scope', ['franchiseId', 'seasonId', 'statsScopeId'], {
+          unique: false,
+        });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+  });
+
+  const currentGameRow = { id: 'current', gameId: 'legacy-v20-game' };
+  const flashpointRow = {
+    franchiseId: 'legacy-franchise',
+    seasonId: 'legacy-season',
+    statsScopeId: 'legacy-scope',
+    playerId: 'legacy-player',
+    flashpointKind: 'albatross',
+    consecutiveGamesUnresolved: 2,
+    accumulatedFanMoraleTax: -1.1,
+    lastGameTax: -0.6,
+    updatedAtCheckpoint: '2',
+  };
+
+  const tx = db.transaction(['currentGame', 'franchiseFlashpointDecay'], 'readwrite');
+  tx.objectStore('currentGame').put(currentGameRow);
+  tx.objectStore('franchiseFlashpointDecay').put(flashpointRow);
+  await transactionToPromise(tx);
+  db.close();
+
+  return { currentGameRow, flashpointRow };
+}
+
 function row(overrides: Record<string, unknown> = {}) {
   return {
     ...scope,
@@ -104,13 +176,41 @@ describe('franchise season salary ledger storage', () => {
   test('trackerDb migration creates the ledger store and preserves every prior tracker store', async () => {
     const db = await initFranchiseSeasonLedgerDatabase();
 
-    expect(TRACKER_DB_VERSION).toBe(20);
+    expect(TRACKER_DB_VERSION).toBe(21);
     expect(db.name).toBe(DB_NAME);
     expect(db.version).toBe(TRACKER_DB_VERSION);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(expectedTrackerStores);
 
     const tx = db.transaction(FRANCHISE_SEASON_LEDGER_STORE_NAME, 'readonly');
     expect(Array.from(tx.objectStore(FRANCHISE_SEASON_LEDGER_STORE_NAME).indexNames)).toEqual(['by_scope']);
+  });
+
+  test('v20 to v21 migration adds ratings overlays without losing prior stores or data', async () => {
+    const { currentGameRow, flashpointRow } = await seedLegacyV20TrackerDb();
+    resetFranchiseSeasonLedgerDatabaseForTests();
+
+    const db = await initFranchiseSeasonLedgerDatabase();
+
+    expect(db.version).toBe(21);
+    expect(Array.from(db.objectStoreNames).sort()).toEqual(expectedTrackerStores);
+
+    const tx = db.transaction(
+      ['currentGame', 'franchiseFlashpointDecay', 'franchiseRatingsOverlays'],
+      'readonly',
+    );
+    await expect(requestToPromise(tx.objectStore('currentGame').get('current'))).resolves.toEqual(currentGameRow);
+    await expect(
+      requestToPromise(tx.objectStore('franchiseFlashpointDecay').get([
+        flashpointRow.franchiseId,
+        flashpointRow.seasonId,
+        flashpointRow.statsScopeId,
+        flashpointRow.playerId,
+      ])),
+    ).resolves.toEqual(flashpointRow);
+    const overlayStore = tx.objectStore('franchiseRatingsOverlays');
+    expect(overlayStore.keyPath).toBe('id');
+    expect(Array.from(overlayStore.indexNames)).toEqual(['by_player', 'by_scope']);
+    await transactionToPromise(tx);
   });
 
   test('round-trips and replaces season-scoped ledger rows', async () => {

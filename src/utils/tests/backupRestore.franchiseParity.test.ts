@@ -142,6 +142,23 @@ const flashpointDecayRow = {
   updatedAtCheckpoint: "3",
 };
 
+const ratingsOverlayRow = {
+  id: "franchise-d2:season-d2:scope-d2:player-ratings:power:event-ratings",
+  franchiseId: "franchise-d2",
+  seasonId: "season-d2",
+  statsScopeId: "scope-d2",
+  playerId: "player-ratings",
+  ratingKey: "power",
+  delta: 4,
+  kind: "permanent" as const,
+  expiresAtGameNumber: null,
+  confirmationStatus: "pending" as const,
+  source: "development_checkpoint",
+  sourceEventId: "event-ratings",
+  createdAtGameNumber: 12,
+  createdAt: "2026-06-17T00:00:00.000Z",
+};
+
 function deleteDatabase(name: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.deleteDatabase(name);
@@ -189,6 +206,7 @@ async function seedFranchiseEconomyRows(): Promise<void> {
       "franchiseAwardsRows",
       "franchiseFameRecords",
       "franchiseFlashpointDecay",
+      "franchiseRatingsOverlays",
       "franchiseTrueValueSnapshots",
     ],
     "readwrite",
@@ -201,6 +219,7 @@ async function seedFranchiseEconomyRows(): Promise<void> {
   tx.objectStore("franchiseAwardsRows").put(awardsRow);
   tx.objectStore("franchiseFameRecords").put(fameRecordRow);
   tx.objectStore("franchiseFlashpointDecay").put(flashpointDecayRow);
+  tx.objectStore("franchiseRatingsOverlays").put(ratingsOverlayRow);
   tx.objectStore("franchiseTrueValueSnapshots").put(trueValueSnapshotRow);
 
   await transactionToPromise(tx);
@@ -261,7 +280,7 @@ describe("backup/restore kbl-tracker franchise economy parity", () => {
     expect(backupRegistryStores).toEqual(moraleDbStores);
   });
 
-  test("round-trips franchise True Value, designation, ledger, trusted-value artifact, awards, fame records, and TV snapshot rows", async () => {
+  test("round-trips franchise True Value, designation, ledger, trusted-value artifact, awards, fame records, ratings overlays, and TV snapshot rows", async () => {
     await seedFranchiseEconomyRows();
 
     const backup = await exportThenWipeAndRestore();
@@ -273,6 +292,7 @@ describe("backup/restore kbl-tracker franchise economy parity", () => {
     expect(backup.databases[TRACKER_DB_NAME].franchiseAwardsRows).toEqual([awardsRow]);
     expect(backup.databases[TRACKER_DB_NAME].franchiseFameRecords).toEqual([fameRecordRow]);
     expect(backup.databases[TRACKER_DB_NAME].franchiseFlashpointDecay).toEqual([flashpointDecayRow]);
+    expect(backup.databases[TRACKER_DB_NAME].franchiseRatingsOverlays).toEqual([ratingsOverlayRow]);
     expect(backup.databases[TRACKER_DB_NAME].franchiseTrueValueSnapshots).toEqual([trueValueSnapshotRow]);
 
     await expect(
@@ -331,6 +351,7 @@ describe("backup/restore kbl-tracker franchise economy parity", () => {
         flashpointDecayRow.playerId,
       ]),
     ).resolves.toEqual(flashpointDecayRow);
+    await expect(readRecord("franchiseRatingsOverlays", ratingsOverlayRow.id)).resolves.toEqual(ratingsOverlayRow);
     await expect(
       readRecord("franchiseTrueValueSnapshots", [
         trueValueSnapshotRow.franchiseId,
