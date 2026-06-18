@@ -12,7 +12,11 @@ NO live caller (confirm UI = deferred post-D13 D-ticket). Codex-built → Opus-a
 **7,514/433, 7,512 pass / 2 characterized fail**, ZERO new reds). trackerDb **v22**. **Whole L9b is build-DARK** —
 activate post-D13 (the L9b-3b-ii hook flag default-OFF; L9b-3c orphaned-pending its confirm UI). **➡ NEXT = L10**
 (random events) per the L-stack: L10 → L11 managers → L12 races/All-Star/awards-fame → L13 relationships → L14 rebrand →
-the L-SIM gate. L10 is a FRESH subsystem → needs a grounding recon before contracting.
+the L-SIM gate. **L10 RECON DONE** (workflow `wf_b3129cd8-9e3`) → full scope/split/forks/seams/open-questions in
+`spec-docs/L10_SCOPE_MAP.md`. SPLIT: **L10-1** pure event-selection engine (NEXT — build first, lowest risk, no I/O) ·
+L10-2 dark `franchiseL10Overlays` store (v23) · L10-3 flag + dark league-sweep hook · L10-4 stadium-change event · L10-5
+reporter tap. Build-DARK; do NOT extend `franchiseRandomEventGenerator.ts` (boundary). 6 non-blocking open questions for
+JK in the scope map §7 (AUTH-4 defaults taken meanwhile).
 *(Prior L9b-3b detail below.)* **L9b-3b DONE:** b-i = the dark
 `franchiseTraitOverlays` store (trackerDb v22) · b-ii = the default-OFF `isFranchisePhase2TraitsEnabled` flag +
 `persistDarkTraitGrantForCompletedGame` hook (flag-gate-first → 20%-checkpoint cadence → loads season events → enumerates

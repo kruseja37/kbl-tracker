@@ -1418,3 +1418,21 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   - **➡ NEXT = L10 (random events)** per the L-stack (L10 → L11 managers → L12 races/All-Star/awards-fame → L13
     relationships → L14 rebrand → L-SIM gate). L10 is a FRESH subsystem → needs a grounding recon before contracting.
     DSTACK line for L10; deps to confirm at recon.
+- **2026-06-18 (AUTH-4, "keep rolling") — L10 RECON DONE (workflow `wf_b3129cd8-9e3`, 5 readers + synthesis, ~398K
+  tokens) → SCOPE MAP captured in `spec-docs/L10_SCOPE_MAP.md`.** L10 = random events, a fresh Phase-2 engine
+  (light-chaos league sweep at the 20% checkpoint; morale/personality-weighted; Juiced/Standard/Nerfed rate dial;
+  reporter-surfaced; layers on L8/L9 earned changes). **Verified anchors:** TRACKER_DB_VERSION=22 (L10 store → v23);
+  the franchiseRandomEventGenerator BOUNDARY (do NOT extend — a different fan-morale-prompt engine); the gate at
+  processCompletedGame.ts:609-632 (L10 = 6th branch after :632); `isCheckpointBoundary` cadence; the intensity dial
+  `{juiced 1.3/standard 1.0/nerfed 0.6}` (tradeRequestGeneration.ts:46-49); the SMB stadium pool (parkLookup.ts +
+  parkFactorDeriver.ts + smb4-parks.json). **SPLIT (risk-ascending):** L10-1 pure event-selection engine → L10-2 dark
+  `franchiseL10Overlays` store (v23, the 8-site mirror incl. the franchiseSeasonLedgerStorage store-list PIN) → L10-3
+  flag + dark league-sweep hook (mirror L9b-3b-ii) → L10-4 stadium-change event (pool-pick, fan-morale-suppressed) → L10-5
+  reporter tap. **DEFAULTS-TAKEN (full table in the scope map §4):** v1 roll table = families 1–5,7,8,9 (EXCLUDE 6
+  personality-shift, arc-earned) · single 20%-checkpoint cadence · ONE new store for all L10 outputs (not L2 reuse) ·
+  reuse the intensity dial verbatim · deterministic FNV-1a seed · placeholder base rates (SIM-tuned §16) · trade-demand
+  delegates to tradeRequestGeneration.ts · name-change excluded from the auto-roll. **6 OPEN QUESTIONS FOR JK (scope map
+  §7, non-blocking — L10-1 is pure, builds without them):** (1) personality-shift exclusion mechanism; (2) trade-demand
+  ownership split; (3) single-cadence collapse vs traits-more-frequent; (4) stadium-change on the USER's team (product
+  feel); (5) cosmetic-while-dark; (6) name-change opt-in UI now vs deferred. **➡ NEXT = contract + build L10-1** (the
+  pure engine, lowest risk, independent of the store/version fork). Build-DARK, activate post-D13.
