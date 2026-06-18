@@ -13,9 +13,11 @@ processCompletedGame (after the fame compute). **SEAM-NEUTRAL** — `resolveTurn
 + L10/L13 trade-demander land, so even flag-ON writes nothing today. KBL_BACKUP_VERSION stays **2**; backup-parity +
 syncConfig lockstep; version-pin trap `franchiseSeasonLedgerStorage.test.ts` at `toBe(20)`. **L5c `8cd2cc1`** (pure §13 trade-request gen) +
 **L5d `e061e51`** (pure §13 reporter-intensity tooth, live reporter byte-unchanged) → **L5 COMPLETE** (a–d: dampener /
-flashpoint-decay / trade-requests / reporter-heat; all Codex-built → Opus-audited VERIFIED). **NOW: L7** (designation
-effects) under AUTH-4. trackerDb host-state **v20** / KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next; nothing
-pushed.)
+flashpoint-decay / trade-requests / reporter-heat; all Codex-built → Opus-audited VERIFIED). **L7 SPLIT L7a–d;
+L7a COMMITTED `0a59a24`** (filled L5b's `resolveTurnedOnPlayers` seam — the per-game flashpoint-decay now taxes a team's
+active|locked Albatross; doubly-dark, no store/version touch). **NOW: L7b** (designation→fame nudge, §20.4 Channel C —
+greenfield) under AUTH-4. trackerDb host-state **v20** / KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next;
+nothing pushed.)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.
@@ -51,8 +53,19 @@ pushed.)
   / build 0 / full suite **7,314 pass / 2 characterized fail**, ZERO new reds [+7 tests / +1 file]; live reporter + frozen
   engines byte-unchanged; pure single type-only import; math hand-verified — monotonic + band crossings + clamp).
   Auto-committed. **L5 (fan-morale teeth) COMPLETE: a dampener `428f7cb` · b flashpoint-decay `5ebb148` · c trade-requests
-  `8cd2cc1` · d reporter-heat `e061e51`.** **NOW = L7** (designation effects — wire the dormant designation fame/morale
-  effects into the Phase-2 layer, build-dark until D13) under AUTH-4.
+  `8cd2cc1` · d reporter-heat `e061e51`.** L7 (designation effects) followed — SPLIT L7a–d; L7a committed (below).
+- **✅ L7a COMMITTED `0a59a24` (2026-06-17, AUTH-4 host resume) — Albatross → L5b flashpoint seam.** L7 ("designations
+  Phase-2 completion") is a sub-stack → SPLIT into **L7a** (Albatross→flashpoint seam, DONE) · **L7b** (designation→fame
+  nudge, §20.4 Channel C — greenfield) · **L7c** (designation→fan-morale steady sentiment, Channel B/A) · **L7d** (Captain
+  router effects + Fan Hopeful cushion + Fan Favorite double-dep). L7a made `resolveTurnedOnPlayers` async + resolves each
+  completed game's home+away **active|locked ALBATROSS** holder (via the existing `getFranchiseDesignationRow`), so the
+  already-built L5b per-game flashpoint-decay taxes a team's Albatross who stays. **Doubly-dark** — gated by
+  `isFranchisePhase2FlashpointEnabled()` (OFF), and even ON it only ACCUMULATES a tax artifact (no live morale mutation).
+  NO store/flag/version/backup touch. **Codex 5.5 built → Opus 4.8 independently audited VERIFIED** (tsc 0 / build 0 /
+  full suite **7,317 pass / 2 characterized fail**, ZERO new reds [+3 tests, existing file]; flashpoint engine/store/flag +
+  trackerDb/backup byte-unchanged; firewall source-scans green; real-designation-store tests; diff hand-verified).
+  Auto-committed. **NOW = L7b** (designation→fame nudge — extend the one-time naming fame seed [FF +2 / Albatross −1,
+  greenfield in code] to Captain/Ace/MVP; behind the fame flag, dark) under AUTH-4.
 - **ATTENDED DESIGN SESSION (2026-06-17, JK present) — forks cleared + designation model reconciled; D10 build next.**
   No product code yet this session. (1) **OD-2..5 + D4 RULED** (DECISIONS_LOG 2026-06-17): OD-2 economy scale =
   new-league-construction-only / reuse pick-chart with farm anchor nerfed one grade-step via `FARM_NERF_SCALES` /
@@ -300,7 +313,10 @@ pushed.)
 
 ## SUITE BASELINE
 
-**7,316 tests / 415 files** — full suite re-run 2026-06-17 (AUTH-4 host resume) after **L5d** commit `e061e51` (**L5
+**7,319 tests / 415 files** — full suite re-run 2026-06-17 (AUTH-4 host resume) after **L7a** commit `0a59a24`: **7,317
+pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+3 tests in the
+existing `franchiseFlashpointDecayCompute.test.ts`, no new file, over the post-L5d 7,316/415; trackerDb still **v20** —
+L7a touched no store/version). Prior step: L5d commit `e061e51` (**L5
 COMPLETE**): **7,314 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds
 (+7 tests / +1 file = L5d's `reporterIntensity.test.ts`, over the post-L5c 7,309/414; trackerDb still **v20** — L5d is a
 pure engine, no store). Prior step: L5c commit `8cd2cc1` = 7,309/414 (+9 tests / +1 file =

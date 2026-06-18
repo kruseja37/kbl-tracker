@@ -9356,3 +9356,60 @@ Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff
 Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited by Opus (full-suite re-run, the monotonic + band-boundary proofs, purity + byte-unchanged frozen engines AND the untouched live reporter, the calm-at-neutral default).
 
 **Status:** COMMITTED `e061e51` (2026-06-17, AUTH-4 host resume — completes L5). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / build 0 / full suite 7,314 pass / 2 characterized fail (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+7 tests / +1 file); math hand-verified (monotonic + band crossings + clamp); the live LLM reporter (`seasonNewsGenerator.ts`) + frozen engines BYTE-UNCHANGED (build-dark held); pure single type-only import; scope = exactly the 2 allowed files. Pure engine, no user surface → auto-committed.
+
+---
+
+## L7 — Designations Phase-2 completion (SPLIT L7a–L7d; build-dark until D13)
+
+DSTACK L7 (line 82) is a sub-stack. SPLIT (Captain, 2026-06-17 AUTH-4 host resume), build in this order:
+- **L7a — Albatross → L5b flashpoint seam** (THIS CONTRACT): fill `resolveTurnedOnPlayers` with the active-Albatross source so the already-built L5b flashpoint-decay taxes a team's Albatross who stays. Cleanest/most isolated; closes the L5b loop.
+- **L7b — Designation → fame nudge (Channel C, §20.4)**: the one-time naming fame seed (Fan Favorite +2 / Albatross −1, extend to Captain/Ace/MVP) — GREENFIELD (not actually wired; the spec's "already wired" is stale). Behind the fame flag, dark.
+- **L7c — Designation → fan-morale steady sentiment (Channel B / §20.6) + Channel-A amplification tilt**: Fan Favorite ongoing warmth, Albatross ongoing irritation. Builds on the existing `processCompletedGame` designation-morale-consequence path (gated by `isFranchisePhase2MoraleEnabled`).
+- **L7d — Captain router effects (Charisma×2 to teammates + amplified swings) + Fan Hopeful call-up cushion + Fan Favorite double-dependency completion.**
+(Cornerstone already CUT — DR-1 `b48b450`. LS-9 confirmation→auto/logged morale reversal is a separate pending item, NOT in L7a.)
+
+### L7a — Albatross → L5b flashpoint seam
+
+**ROUTE:** Codex 5.5 | high reasoning effort (wiring + async signature change + persistence-adjacent designation read; touches L5b's compute) → Opus 4.8 audit (auditor ≠ builder) → standing auto-commit (no user-visible surface — doubly-dark: flag OFF by default, and even ON the flashpoint store only ACCUMULATES a tax artifact, no live morale mutation).
+
+**ROLE:** You are the L-stack builder (Codex). Fill the L5b flashpoint-decay seam: `resolveTurnedOnPlayers` currently returns `[]`; make it resolve the **active Albatross designation holder** of each team in the completed game, so the already-built per-game flashpoint-decay taxes that player (§13 tooth #2 "a turned-on player — a locked Albatross — who stays bleeds fan morale slowly every game"). DARK: still gated by the existing `isFranchisePhase2FlashpointEnabled()` (default OFF) at the call site — with the flag OFF the seam is never reached; with it ON, the flashpoint store accumulates a tax ARTIFACT only (no live fan-morale mutation — that's a later tooth).
+
+**GOAL:** In `src/utils/franchiseFlashpointDecayCompute.ts`: make `resolveTurnedOnPlayers` **async** and implement it to return the active Albatross holders of the game's home + away teams; `await` it at the single call site in `persistDarkFlashpointDecayForCompletedGame`. Update the affected tests. Trade-demander stays an empty seam (L10/L13 fill it). No new store, no new flag, no version bump.
+
+**SOURCE OF TRUTH:** `FRANCHISE_V1_LIVING_SEASON_SPEC.md` §13 tooth #2 (line 226: "a turned-on player (a locked Albatross, a trade-demander) who stays bleeds fan morale slowly every game") + DSTACK L5 (line 75: "inputs = L7 Albatross + L10/L13 trade-demander") + DSTACK L7 (line 82). MIRROR PRECEDENT: the existing L5b compute + its dark/seam discipline (`franchiseFameCompute.ts` pattern). The Albatross holder is read with the EXISTING `getFranchiseDesignationRow` (`src/utils/franchiseDesignationStorage.ts:267`).
+
+### DESIGN (build to spec; AUTH-4 DEFAULTS-TAKEN where §13 is silent)
+
+**Make the seam async + resolve Albatross.** Change `resolveTurnedOnPlayers(scope, gameState)` from sync `TurnedOnPlayer[]` to `async (scope: FlashpointScope, gameState: PersistedGameState): Promise<TurnedOnPlayer[]>`:
+- Collect the game's team ids: `[gameState.homeTeamId, gameState.awayTeamId]` (dedupe, drop falsy).
+- For each teamId, `await getFranchiseDesignationRow({ franchiseId: scope.franchiseId, seasonId: scope.seasonId, statsScopeId: scope.statsScopeId, teamId, type: 'ALBATROSS' })`.
+- If the row exists AND `(row.status === 'active' || row.status === 'locked')` AND `row.playerId` → push `{ playerId: row.playerId, kind: 'albatross' }`.
+- Leave a clear `// SEAM (still empty): L10/L13 trade-demander fills 'trade_demander'.` comment. Return the array (possibly empty — no active Albatross on either team → `[]`, which keeps the existing dark-noop path).
+- DEFAULT-TAKEN (document inline): turned-on = a team's active|locked Albatross holder (NOT 'projected'); a per-GAME tax on the home+away teams' Albatrosses (each team's Albatross bleeds when that team plays); the active designation already implies roster membership ("who stays"), so no extra lineup-presence check.
+
+**Await the seam at the call site.** In `persistDarkFlashpointDecayForCompletedGame`, change `const turnedOn = flashpointSeam.resolveTurnedOnPlayers(scope, gameState);` → `const turnedOn = await flashpointSeam.resolveTurnedOnPlayers(scope, gameState);`. Everything downstream (re-entry guard, compounding tax, store write) is UNCHANGED.
+
+**Keep the `flashpointSeam` indirection** (the mockable single point) — `resolveTurnedOnPlayers` stays exported and on `flashpointSeam`.
+
+**ALLOWED files:** EDIT `src/utils/franchiseFlashpointDecayCompute.ts` · EDIT `src/utils/tests/franchiseFlashpointDecayCompute.test.ts`. NOTHING ELSE (no store, no flag, no trackerDb/backup/sync change).
+
+**DO NOT:** add/modify a store, flag, trackerDb version, or backup parity · mutate any fan-morale / morale / fame snapshot (L5b still only ACCUMULATES the tax artifact) · change the flashpoint engine (`flashpointDecay.ts`) or the storage (`franchiseFlashpointDecayStorage.ts`) · touch `franchiseDesignations.ts` / `franchiseDesignationStorage.ts` (READ-only via `getFranchiseDesignationRow`) · `indexedDB.open` directly in the compute file (use `getFranchiseDesignationRow`) · import a reporter/LLM/narrative module (the firewall source-scan test must stay green) · fill the trade-demander seam (L10/L13) · flip any flag default.
+
+### TESTS (`src/utils/tests/franchiseFlashpointDecayCompute.test.ts`)
+
+- **Update the now-async direct-seam test** (currently "the live seam resolveTurnedOnPlayers returns [] until L7/L10/L13", line ~157): make it `await expect(resolveTurnedOnPlayers(scope, gameState())).resolves.toEqual([])` — returns [] when NO Albatross designation is seeded.
+- **Keep "flag-ON but seam empty STILL writes nothing"** green (no designation seeded → seam resolves [] → dark-noop). Update the stale comment.
+- **The injected-turned-on test** (mocks `flashpointSeam.resolveTurnedOnPlayers`): switch `.mockReturnValue([...])` → `.mockResolvedValue([...])` (the seam is async now). Behavior assertions unchanged.
+- **NEW — Albatross resolution (positive):** seed an `'active'` ALBATROSS `FranchisePlayerDesignationRecord` for `gameState.homeTeamId` (via the real designation storage put, e.g. `saveFranchiseDesignationRows`/the storage's writer) under the same scope → `await resolveTurnedOnPlayers(scope, gameState())` returns `[{ playerId: <holder>, kind: 'albatross' }]`; a `'projected'` Albatross resolves to `[]`.
+- **NEW — end-to-end dark accumulation:** flag ON + an active Albatross seeded for the home team → `persistDarkFlashpointDecayForCompletedGame` writes 1 row (`flashpointKind:'albatross'`, the holder's playerId) — proving the seam now feeds the tax. (Use the real designation store seed, NOT a mock, for this one.)
+- Keep the two source-scan tests (firewall: no reporter/llm/narrative; no raw `indexedDB.open`) — they MUST stay green (the new `getFranchiseDesignationRow` import is none of those).
+
+**VERIFICATION (prefix `NODE_ENV= `; node `~/.nvm/versions/node/v20.20.0/bin`):** tsc 0 · build 0 · FULL suite = only the 2 characterized fails (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`) + the updated/new L5b-compute tests, ZERO new reds. Greps: `franchiseFlashpointDecayCompute.ts` has NO raw `indexedDB.open`, NO reporter/llm/narrative import; `flashpointDecay.ts` / `franchiseFlashpointDecayStorage.ts` / `franchisePhase2Flags.ts` / `trackerDb.ts` BYTE-UNCHANGED (`git diff` empty); `KBL_BACKUP_VERSION` + `TRACKER_DB_VERSION` UNCHANGED (no store/version touch).
+
+**STOP IF:** making the seam async cascades a signature change beyond the single call site + the seam tests · a real Albatross read can't be seeded cleanly in the test (→ document + SET-ASIDE) · any store/version/flag must change (it must NOT) · a suite red persists past 2 fix-iterations.
+
+**FORMAT:** 1. Files changed (paths + count + passing-test count). 2. Each change w/ the §13/L7 line it satisfies. 3. Verification output (tsc/build/full-suite + the new/updated tests + the byte-unchanged + no-version-bump greps). 4. "L7a complete" OR "BLOCKED: [reason]".
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited by Opus (full-suite re-run, the async-seam + Albatross-resolution proof, the dark-noop/seam-empty preservation, byte-unchanged store/flag/version, firewall source-scans).
+
+**Status:** COMMITTED `0a59a24` (2026-06-17, AUTH-4 host resume). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / build 0 / full suite 7,317 pass / 2 characterized fail, ZERO new reds (+3 tests, existing file); async-seam + active|locked-Albatross resolution diff hand-verified; flashpoint engine/store/flag + trackerDb/backup BYTE-UNCHANGED (no store/version/flag touch); firewall source-scans green; real-designation-store integration tests (active resolves / projected ignored / locked accepted / end-to-end dark accumulation). Wiring, no user surface → auto-committed.

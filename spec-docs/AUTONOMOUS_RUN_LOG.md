@@ -740,3 +740,19 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   purity confirmed. Auto-committed. **L5 (fan-morale teeth) COMPLETE: L5a dampener `428f7cb` · L5b flashpoint-decay
   `5ebb148` · L5c trade-requests `8cd2cc1` · L5d reporter-heat `e061e51`.** **NOW = L7** (designation effects — wire the
   dormant designation fame/morale effects into the Phase-2 layer, build-dark until D13). trackerDb still v20; nothing pushed.
+
+- **2026-06-17 (AUTH-4, HOST RESUME thread) — L7a COMMITTED `0a59a24`. (L7 SPLIT L7a–d.)**
+  L7 ("designations Phase-2 completion", DSTACK L7) is a sub-stack → Captain SPLIT it: **L7a** Albatross→L5b flashpoint
+  seam (DONE) · **L7b** designation→fame nudge (§20.4 Channel C, greenfield) · **L7c** designation→fan-morale steady
+  sentiment (Channel B/A) · **L7d** Captain router effects + Fan Hopeful cushion + Fan Favorite double-dep. (Cornerstone
+  already CUT — DR-1. LS-9 confirmation→auto morale reversal is a separate pending item.) **L7a:** Captain drafted the
+  contract (PROMPT_CONTRACTS §L7a) → dispatched **Codex 5.5 | high** → Opus independently audited (auditor ≠ builder).
+  Made `resolveTurnedOnPlayers` async + resolved each completed game's home+away **active|locked ALBATROSS** holder (via
+  the existing `getFranchiseDesignationRow`); the call site now awaits the seam; downstream (re-entry guard, compounding
+  tax, store write) byte-unchanged. So the already-built L5b per-game flashpoint-decay now taxes a team's Albatross who
+  stays. **Doubly-dark:** gated by `isFranchisePhase2FlashpointEnabled()` (OFF) and even ON only ACCUMULATES a tax
+  artifact (no live morale mutation). Codex touched exactly the 2 allowed files; NO store/flag/version/backup change.
+  AUDIT VERIFIED: tsc 0 / build 0 / full suite 7,317 pass / 2 characterized fail, ZERO new reds (+3 tests, existing
+  file); flashpoint engine/store/flag + trackerDb/backup byte-unchanged; firewall source-scans green; the resolution
+  tests use the REAL designation store (active resolves / projected ignored / locked accepted / end-to-end accumulation);
+  diff hand-verified. Auto-committed. **NOW = L7b.** trackerDb still v20; nothing pushed.

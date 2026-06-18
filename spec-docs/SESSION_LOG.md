@@ -5052,3 +5052,13 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   type-only import; scope = exactly the 2 allowed files). Auto-committed. **L5 (fan-morale teeth) COMPLETE (a–d):**
   L5a `428f7cb` · L5b `5ebb148` · L5c `8cd2cc1` · L5d `e061e51`. Suite now **7,316 / 415**; trackerDb still v20.
   **NOW = L7** (designation effects) under AUTH-4. Nothing pushed.
+
+### Update (cont.) — L7 split; L7a committed
+- **L7 split L7a–d** (designations Phase-2 completion is a sub-stack): L7a Albatross→flashpoint seam (DONE) · L7b
+  designation→fame nudge (greenfield) · L7c designation→fan-morale sentiment · L7d Captain/Fan-Hopeful/Fan-Favorite.
+- **L7a COMMITTED `0a59a24`** — `resolveTurnedOnPlayers` now async + resolves each game's home+away active|locked
+  ALBATROSS holder via the existing `getFranchiseDesignationRow`, feeding the already-built L5b flashpoint-decay.
+  Doubly-dark (flag OFF + tax-artifact-only). NO store/flag/version touch. Captain-contracted → Codex 5.5 built → Opus
+  independently audited VERIFIED (tsc 0 / build 0 / suite 7,317 pass / 2 characterized fail, ZERO new reds; byte-unchanged
+  store/flag/version; firewall green; real-designation-store tests; diff hand-verified). Suite now **7,319 / 415**.
+  **NOW = L7b** (designation→fame nudge). Nothing pushed.
