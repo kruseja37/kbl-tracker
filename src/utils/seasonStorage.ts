@@ -140,6 +140,8 @@ export interface PlayerSeasonFielding {
   divingCatches?: number;
   robberies?: number;
   nutshots?: number;
+  outfieldAssists?: number;
+  baserunnersHeld?: number;
 
   // By position (games at each position)
   gamesByPosition: Record<string, number>;
@@ -265,6 +267,8 @@ export function createInitialFieldingStats(
     divingCatches: 0,
     robberies: 0,
     nutshots: 0,
+    outfieldAssists: 0,
+    baserunnersHeld: 0,
     gamesByPosition: {},
     putoutsByPosition: {},
     assistsByPosition: {},

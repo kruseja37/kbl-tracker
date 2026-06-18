@@ -9909,3 +9909,44 @@ A round-trip proving handedness persists: drive a minimal init (`handednessById`
 Use high reasoning effort. Think step-by-step. Builder ≠ auditor — re-audited by Opus (handedness threaded + VERIFIED to persist, FULL-roster keying [subs covered], no signature/deps churn, no new field/store/version, the refresh-edge limitation documented-not-expanded).
 
 **Status:** COMMITTED `32244393` (2026-06-18, AUTH-4 overnight). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / build 0 / focused 15 tests (event-log round-trip + threading + same-handed→pitcher + switch-hitter→batter + graceful-undefined); full suite 7,417 pass / 2 characterized fail (names confirmed), ZERO new reds (+4 tests). The 5-edit seam landed exactly; handedness via `handednessByIdRef` (no `buildContextSnapshot` deps/signature change), full-roster keying (subs covered), correct platoon logic. NO new `AtBatEvent` field / DB_VERSION 3 / trackerDb 21. Refresh-edge documented-graceful. Live path → browser-pending (#19). **NOW = L9a-4** (the last L9a build piece).
+
+### L9a-4 — OF extra-base-credit season tally + injury accumulator (both purely additive; NO version bump / NO new store / NO pin edit)
+
+**ROUTE:** Codex 5.5 | high reasoning effort (season-stat aggregation [part 1 on the live game-end path] + a read-path helper [part 2]; additive — audited HARDEST for the no-version/no-pin claim) → Opus 4.8 audit (auditor ≠ builder) → auto-commit verified-complete, browser-pending (part 1 accumulates on real games). Seam recon: wf_57bfcb52-19b.
+
+**ROLE:** The LAST L9a capture piece. (1) Add a per-player SEASON tally of outfield-arm extra-base-credit events (Cannon/Noodle Arm signal) aggregated from EXISTING `FieldingEvent` rows. (2) Add a derive-on-read season injury-count helper (Durable/Injury-Prone signal) from the EXISTING persisted injury events. Both are CAPTURES for L9b — do NOT build the trait engine. Both are purely additive: NO DB version bump, NO new store, NO `franchiseSeasonLedgerStorage` pin edit.
+
+**GOAL — PART 1 (OF-arm season tally):**
+1. `src/utils/seasonStorage.ts` PlayerSeasonFielding interface (~:128-152, after `robberies?`/`nutshots?` :141-142): add `outfieldAssists?: number;` (count of `outfield_assist`) + `baserunnersHeld?: number;` (count of `base_save`/`heldByOf` — the held/Noodle variant). OPTIONAL (`?`) → existing rows decode with no migration.
+2. `createInitialFieldingStats` (~:255-273): seed `outfieldAssists: 0,` + `baserunnersHeld: 0,` alongside `divingCatches: 0`.
+3. `src/utils/seasonAggregator.ts` `aggregateFieldingStats` (~:336-361): build a `Map<playerId, {assists:number; held:number}>` ONCE at the top by iterating the game's `FieldingEvent` rows — read them off `gameState.fieldingEvents` (PersistedGameState carries `fieldingEvents?: FieldingEvent[]`, gameStorage.ts:627; fall back to `getGameFieldingEvents` eventLog.ts:1747 only if needed) — counting `playType === 'outfield_assist'` → assists and `playType === 'base_save'` (and/or `runnerOutcomes.heldByOf`) → held, keyed by `fieldingEvent.playerId` (the credited throwing outfielder). Then in the `updated: PlayerSeasonFielding = {...}` literal (~:348-358) add, mirroring the `divingCatches` line: `outfieldAssists: (seasonStats.outfieldAssists ?? 0) + (ofMap.get(playerId)?.assists ?? 0),` + `baserunnersHeld: (seasonStats.baserunnersHeld ?? 0) + (ofMap.get(playerId)?.held ?? 0),`.
+   **CRITICAL (gotcha):** do NOT source from `gameStats.divingCatches`/`gameStats.robberies` — those per-game fields are DEAD (never written; the aggregator's `?? 0` hides that they're always 0). Source from the FieldingEvent rows.
+
+**GOAL — PART 2 (injury accumulator, derive-on-read):**
+4. `src/utils/eventLog.ts` (near the scope queries — `getSeasonGames` ~:2026 / `getBetweenPlayEvents` ~:1780): NEW `export async function getSeasonInjuryCountsByPlayer(seasonId: string): Promise<Map<string, number>>` — iterate `getSeasonGames(seasonId)` → `getBetweenPlayEvents(gameId)` → tally `type === 'injury'` events by the injured `playerId` (the `playerStateChange.playerId` on the injury event); exclude undone/reverted events. Optional scalar overload `getSeasonInjuryCount(seasonId, playerId)`. Pure read; NO store/field/version/live-write-path touch. (Reject Option B — wiring the dead `comebackerInjuries` field — it needs a live-path writer + captures a narrower signal.)
+
+**SOURCE OF TRUTH:** TS-11 / Cert VI.4 (`TRAIT_SIGNAL_CERTIFICATION.md:126` — net-new: OF extra-base-credit for Cannon/Noodle, injury accumulator for Durable/Injury-Prone) + OD-5(B) (`DECISIONS_LOG.md:1047` — injury = cumulative season tally riding on existing tracking). Signals: `FieldingEvent.playType 'outfield_assist'/'base_save'` (eventLog.ts:745) credited to `fieldingEvent.playerId`; injury `BetweenPlayEvent` (eventLog.ts ~:464). Seam recon: wf_57bfcb52-19b.
+
+### DESIGN (AUTH-4 DEFAULTS-TAKEN — documented)
+- **Purely additive — NO version bump, NO pin edit (VERIFIED by recon):** PlayerSeasonFielding is in the shared kbl-tracker store `playerSeasonFielding` (v21); IndexedDB stores are schemaless within a store, so an optional field changes only the value shape. The `franchiseSeasonLedgerStorage.test.ts` pin asserts only `TRACKER_DB_VERSION===21` + the store-NAME list (already includes `playerSeasonFielding`) — both UNCHANGED → the pin STAYS GREEN (must remain so). Part 2 reads the eventLog DB's existing `betweenPlayEvents` store (no index/store/version change).
+- Part 1 counts BOTH `outfield_assist` (Cannon/thrown-out) and `base_save`/held (Noodle/held) into two fields → gives L9b the full OF-arm signal. Source via path (A) (read FieldingEvent rows) to avoid the gameStorage dual-copy hazard.
+- These fields/helpers are CAPTURES consumed by L9b (Cannon/Noodle/Durable/Injury-Prone) — invisible in the UI until L9b/a display reads them (expected; not an orphan in the L9a sense).
+
+**ALLOWED files:** EDIT `src/utils/seasonStorage.ts` (2 optional fields + init) · EDIT `src/utils/seasonAggregator.ts` (the OF-arm Map + accumulation) · EDIT `src/utils/eventLog.ts` (the read-only injury helper) · NEW/EDIT tests (a seasonAggregator test for the OF-arm accumulation + an eventLog test for `getSeasonInjuryCountsByPlayer`). NOTHING ELSE — NO trackerDb/backupRestore/syncConfig/pin-test edits (no version bump, no new store).
+
+**DO NOT:** add a store / bump `TRACKER_DB_VERSION` / edit the `franchiseSeasonLedgerStorage` pin (it must stay green untouched) / add an index to `betweenPlayEvents` · source the OF tally from the dead `gameStats.divingCatches`/`robberies` pattern · wire the dead `comebackerInjuries` field (Option B rejected) · add a live game-end WRITER for the injury count (derive-on-read only) · touch the gameStorage dual copies · build the trait engine / any trait grant logic (L9b) · change any keyPath/index/store shape · break the live `aggregateGameToSeason` path.
+
+### TESTS
+- seasonAggregator: a game with 2 `outfield_assist` FieldingEvents for player X + 1 `base_save` for player Y → after `aggregateGameToSeason`, X's `outfieldAssists` += 2, Y's `baserunnersHeld` += 1; accumulates across 2 games; a game with none leaves them 0/undefined.
+- eventLog `getSeasonInjuryCountsByPlayer`: seed 2 games with injury `BetweenPlayEvent`s for a player (via `logBetweenPlayEvent`) → count = 2; non-injury types ignored; undone/reverted events excluded; a player with no injuries absent from the map.
+- The `franchiseSeasonLedgerStorage.test.ts` pin STAYS GREEN (run it; do not edit it).
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · new tests green · FULL suite — only the 2 characterized fails (+ known order-flakes → solo-confirm); the `franchiseSeasonLedgerStorage` pin GREEN; NO OTHER new reds. Greps: `TRACKER_DB_VERSION` still 21; `eventLog` DB_VERSION still 3; NO new store registered (trackerDb/backupRestore/syncConfig BYTE-UNCHANGED); the new fields are OPTIONAL.
+
+**STOP IF (→ SET-ASIDE/flag):** a version bump or a new store turns out to be required (escalate — changes the risk class) · the pin can't stay green without editing it · the OF-arm signal can't be sourced without touching the live write path / dual copies · a NEW red past 2 fix-iterations.
+
+**FORMAT:** 1. Files changed (paths + count + passing-test count). 2. Each change w/ the TS-11/OD-5(B) line. 3. Verification output (+ the pin-GREEN proof + no-version-bump/no-new-store greps + the accumulation/derive tests). 4. "L9a-4 complete" OR "BLOCKED: [reason]".
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — re-audited by Opus HARDEST on the no-version/no-pin claim (the pin stays green untouched), the OF-arm sourced from real FieldingEvent rows (not the dead gameStats pattern), the injury helper pure read-only, additive optional fields, no new store.
+
+**Status:** CONTRACTED 2026-06-18 (AUTH-4 overnight). Dispatching Codex.

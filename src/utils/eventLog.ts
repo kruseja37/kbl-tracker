@@ -1799,6 +1799,30 @@ export async function getBetweenPlayEvents(
   });
 }
 
+export async function getSeasonInjuryCountsByPlayer(seasonId: string): Promise<Map<string, number>> {
+  const games = await getSeasonGames(seasonId);
+  const injuryCounts = new Map<string, number>();
+
+  for (const game of games) {
+    const events = await getBetweenPlayEvents(game.gameId);
+    for (const event of events) {
+      if (event.type !== 'injury' || event.playerStateChange?.stateType !== 'injury') {
+        continue;
+      }
+
+      const injuredPlayerId = event.playerStateChange.playerId;
+      injuryCounts.set(injuredPlayerId, (injuryCounts.get(injuredPlayerId) ?? 0) + 1);
+    }
+  }
+
+  return injuryCounts;
+}
+
+export async function getSeasonInjuryCount(seasonId: string, playerId: string): Promise<number> {
+  const counts = await getSeasonInjuryCountsByPlayer(seasonId);
+  return counts.get(playerId) ?? 0;
+}
+
 export async function undoMostRecentGameAction(gameId: string): Promise<UndoneGameAction | null> {
   const [atBatEvents, betweenPlayEvents] = await Promise.all([
     getGameEvents(gameId),

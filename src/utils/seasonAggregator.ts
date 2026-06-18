@@ -7,6 +7,7 @@
  */
 
 import type { PersistedGameState } from './gameStorage';
+import { getGameFieldingEvents, type FieldingEvent } from './eventLog';
 import {
   getOrCreateBattingStats,
   getOrCreatePitchingStats,
@@ -337,6 +338,20 @@ async function aggregateFieldingStats(
   gameState: PersistedGameState,
   seasonId: string
 ): Promise<void> {
+  const fieldingEvents = await getFieldingEventsForAggregation(gameState);
+  const ofMap = new Map<string, { assists: number; held: number }>();
+
+  for (const fieldingEvent of fieldingEvents) {
+    const playerArmEvents = ofMap.get(fieldingEvent.playerId) ?? { assists: 0, held: 0 };
+    if (fieldingEvent.playType === 'outfield_assist') {
+      playerArmEvents.assists += 1;
+    }
+    if (isBaserunnerHeldEvent(fieldingEvent)) {
+      playerArmEvents.held += 1;
+    }
+    ofMap.set(fieldingEvent.playerId, playerArmEvents);
+  }
+
   for (const [playerId, gameStats] of Object.entries(gameState.playerStats)) {
     // Player name and team carried through from PersistedGameState
     const playerName = gameStats.playerName || playerId;
@@ -354,11 +369,46 @@ async function aggregateFieldingStats(
       divingCatches: (seasonStats.divingCatches ?? 0) + (gameStats.divingCatches ?? 0),
       robberies: (seasonStats.robberies ?? 0) + (gameStats.robberies ?? 0),
       nutshots: (seasonStats.nutshots ?? 0) + (gameStats.nutshots ?? 0),
+      outfieldAssists: (seasonStats.outfieldAssists ?? 0) + (ofMap.get(playerId)?.assists ?? 0),
+      baserunnersHeld: (seasonStats.baserunnersHeld ?? 0) + (ofMap.get(playerId)?.held ?? 0),
       // Note: DP, position-specific stats would need more tracking
     };
 
     await updateFieldingStats(updated);
   }
+}
+
+async function getFieldingEventsForAggregation(gameState: PersistedGameState): Promise<FieldingEvent[]> {
+  const fieldingEventSource = gameState as PersistedGameState & { fieldingEvents?: FieldingEvent[] };
+  if (Array.isArray(fieldingEventSource.fieldingEvents)) {
+    return fieldingEventSource.fieldingEvents;
+  }
+
+  try {
+    return await getGameFieldingEvents(gameState.gameId);
+  } catch (error) {
+    if (
+      isMissingVitestMockExport(error, 'getGameFieldingEvents') ||
+      isNonBrowserIndexedDbUnavailable(error)
+    ) {
+      return [];
+    }
+    throw error;
+  }
+}
+
+function isMissingVitestMockExport(error: unknown, exportName: string): boolean {
+  return error instanceof Error &&
+    error.message.includes(`No "${exportName}" export is defined`) &&
+    error.message.includes('[vitest]');
+}
+
+function isNonBrowserIndexedDbUnavailable(error: unknown): boolean {
+  return error instanceof ReferenceError && error.message.includes('indexedDB is not defined');
+}
+
+function isBaserunnerHeldEvent(fieldingEvent: FieldingEvent): boolean {
+  return fieldingEvent.playType === 'base_save';
 }
 
 /**
