@@ -1,8 +1,15 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-18 (**L9b-2 VERIFIED + COMMITTED `f616373a` → NOW L9b-3 (grant/write-back)** [AUTH-4
-overnight; a fresh session does the session-start reads, RESTATEs, and PROCEEDs at L9b-3 under AUTH-4 WITHOUT waiting for
-JK — AUTH-4 is the standing go]. **L9b-2** = the PURE acquisition engine `src/engines/traitAcquisition.ts` (the VI.0
+**Last Updated:** 2026-06-18 (**L9b-2 VERIFIED + COMMITTED `f616373a`; L9b-3 RECON DONE → CONTEXT-HANDOFF → NOW L9b-3a**
+[AUTH-4 overnight; a fresh session does the session-start reads, RESTATEs, and PROCEEDs at **L9b-3a** under AUTH-4 WITHOUT
+waiting for JK — AUTH-4 is the standing go]. **L9b-3** (grant/write-back — the FIRST real trait writer, PERSISTENCE class,
+audit HARDEST) is RECONNED (`wf_4275ff58-dc1`) + SPLIT into **L9b-3a** (PURE context-reconstructor + candidate-builder —
+build FIRST, independent of the store fork) · **L9b-3b** (dark hook + PENDING write, mirror L8b; the STORE FORK lands here)
+· **L9b-3c** (§11 trait-confirm + ATOMIC trait1/trait2 displacement). Full scope/split/forks/gotchas in
+`AUTONOMOUS_RUN_LOG.md` (the 2026-06-18 "L9b-3 RECON DONE" entry). **JK FORKS (non-blocking for L9b-3a):** the write
+store (reuse `franchiseRatingsOverlays` v21 = AUTH-4 default / vs a NEW `franchiseTraitOverlays` v21→v22 = recon's
+write-path reader's recommendation — `WAITING_ON_JK`), the cadence trigger, and the Two-Way role-promotion. **A fresh
+thread: contract + build L9b-3a first; build-DARK, activate post-D13.** **L9b-2** = the PURE acquisition engine `src/engines/traitAcquisition.ts` (the VI.0
 MULTIPLICATIVE combiner `P = realityPercentile × ambition/resilience/image/morale/roster factors` + gain-high/lose-low
 hysteresis dead-band + no-offsetting-pair + 2-trait-cap strength-ranked displacement; PROPOSALS only, build-dark; Codex
 5.5-built → Opus-4.8-independently-audited **VERIFIED**; 24 tests; tsc-0 / build-0 / full suite **7,465/428, 7,463 pass /

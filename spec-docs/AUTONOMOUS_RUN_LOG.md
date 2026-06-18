@@ -1239,3 +1239,55 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   fires per persisted AtBat) + PENDING trait rows + a §11 trait-confirm transform writing `trait1`/`trait2` (2-slot
   displacement, ATOMIC) onto the franchise Player via `saveFranchisePlayer`. PERSISTENCE class → audit HARDEST. **JK store
   fork (WAITING_ON_JK, default=reuse `franchiseRatingsOverlays` v21, no version bump).** The matrix stays FROZEN SMB4-asset data.
+
+- **2026-06-18 (AUTH-4, overnight, host session) — L9b-3 RECON DONE (wf_4275ff58-dc1, 5 readers) → SCOPE CAPTURED →
+  CONTEXT-HANDOFF.** L9b-2 committed; the loop kept rolling into L9b-3 (the FINAL L9b piece, the FIRST real trait writer,
+  PERSISTENCE class, audited HARDEST). Ran a 5-reader recon grounding the L8b hook template, the §11 confirm pattern, the
+  context-reconstructor seam, the write path + store fork, and the orchestration scope. **This session delivered L9b-1 +
+  L9b-2 (both VERIFIED+committed, zero new reds); L9b-3 is large + persistence-risky → it gets a FRESH thread with full
+  headroom + careful write-back audit (same precedent as the pre-L9b-1 handoff).** The fresh thread contracts L9b-3a
+  directly from this entry + CURRENT_STATE without re-reconning.
+  **L9b-3 SPLIT (converged from the recon; build in order, risk-ascending):**
+  - **L9b-3a — the PURE context-reconstructor + candidate-builder (build FIRST; INDEPENDENT of the store fork → no JK
+    blocker).** NET-NEW: there is NO existing replay-from-events `GameContext` builder (`buildGameContext`
+    [`managerWpaRecommendations.ts:390`] is private + forward-looking and leaves the event-shaped flags UNDEFINED:
+    stealAttempt / roundingBase / runningOutOfBox / buntAttempt / pitchType / pitchLocation / teamLosing /
+    consecutiveBaserunnersAllowed / comebackerToPitcher / onBasePath / fieldingChance). L9b-3a replays a player's persisted
+    AtBat/Fielding/BetweenPlay events (eventLog) → populates those flags → calls the FROZEN `activeTraitNames`
+    (`effectiveRatings.ts:367`) to COUNT real fires per trait per player per season, AND builds the role-keyed league PEER
+    POOL of per-trait season signals → emits per-trait `TraitCandidate {traitName, score}` by feeding
+    `computeTraitRealityScore` (peerValues + sampleSize + basis). PURE — no IndexedDB write, no flag, no store. Pool MUST
+    be role-bucketed (VI.2) before sorting; getPercentile is neutral-0.5 on thin pools (minPeerPool 3). v1 BUILDABLE =
+    the 12 Bucket-A + clean Bucket-B traits only (Clutch/Choker, RBI Hero/Zero, Rally Stopper/Starter/Surrounded,
+    Meltdown, Stealer/Bad Jumps, Pinch Perfect, Butter Fingers, + the L9a OF-arm Cannon/Noodle + injury Durable/Injury
+    Prone + SB/CS baserunning); the 33 Bucket-C (pitch-count/type/location etc.) stay DORMANT via the min-sample valve —
+    do NOT fabricate proxy signals. Config = `deriveAdaptiveStandardsConfig` (real season length) for `scaledThreshold`.
+  - **L9b-3b — the dark hook + PENDING write (mirror L8b `franchiseCheckpointSweepCompute` EXACTLY).** NEW default-OFF
+    `isFranchisePhase2TraitsEnabled` flag (clone the 4-part block in `franchisePhase2Flags.ts`) + a
+    `persistDarkTraitGrantForCompletedGame(gameState, scope, archiveOptions)` gated in `processCompletedGame.ts` right
+    after the checkpoint gate (~:627). Enumerate MLB players (reuse the `resolveCheckpointRoster` pattern), run 3a's
+    candidate builder → `computeTraitAcquisition` (L9b-2) → write PENDING trait-change rows. Deterministic idempotent id;
+    createdAt from a persisted timestamp (NO `new Date`); `stableHash` for any tie-break. CADENCE = season-end / late
+    (NOT truly per-game-continuous) because the percentile needs a populated full-season pool — reuse the 20%-checkpoint
+    boundary or a season-end trigger (JK to confirm trigger point). **STORE FORK lands here (see below).**
+  - **L9b-3c — the §11 trait-confirm transform + ATOMIC trait1/trait2 displacement write.** Mirror
+    `ratingsOverlayConfirmation.ts` (L2c) but for CATEGORICAL trait slots (not numeric delta). On confirm, apply the
+    2-slot displacement (gain X displacing the weakest held Y) ATOMICALLY via `saveFranchisePlayer` (flat franchise
+    `trait1`/`trait2`, NOT the nested `player.traits.*` seed shape). **Do NOT route trait rows through
+    `ratingsOverlayMerge.ts`** — it is rating-key-only and SILENTLY DROPS trait rows (the #1 orphaned-write-back risk).
+    Emit ONLY canonical `CANONICAL_TRAIT_NAMES` (name-validation guard — a misspelled trait silently never fires). The
+    live confirm UI/flow is a deferred post-D13 D-ticket (out of L9b-3 backend scope).
+  **STORE FORK (the persistence decision — recon readers SPLIT; needs JK):** REUSE `franchiseRatingsOverlays` v21 (AUTH-4
+  default — NO version bump, NO `franchiseSeasonLedgerStorage` store-list pin, NO 3-place backup parity) BUT semantically
+  wrong (the row models a numeric `delta` on a `ratingKey` + a stacking merge + no displacement lifecycle — it does NOT
+  model a string 2-slot trait displacement) vs a NEW `franchiseTraitOverlays` store (clean schema slot/oldTrait/newTrait/
+  applied, but pays v21→v22 + the store-list PIN [MEMORY: broke a prior dispatch] + 3-place backup parity + KBL_BACKUP_
+  VERSION stays 2). **The recon's write-path reader RECOMMENDS the new store (clean); the orchestration reader notes
+  AUTH-4 default = reuse (lower mechanical risk). GENUINE JK CALL — flagged in WAITING_ON_JK; the fresh thread can build
+  L9b-3a (pure) WITHOUT resolving it; it must resolve before L9b-3b.** Captain's lean: a NEW `franchiseTraitOverlays`
+  store (the reuse overloads `delta`/`ratingKey` semantics and has no applied/displacement lifecycle — and L9b-3 is
+  persistence-class where clean-shape > avoiding-a-known-mechanical-pin). DOUBLY-DARK is mandatory either way (default-OFF
+  flag + PENDING-only rows; nothing applies before D13). **OTHER JK forks (from the recon):** cadence trigger point
+  (season-end vs 20%-checkpoint); v1 buildable set = Bucket-A + clean-B only (confirm); Two-Way role-promotion (pitcher
+  earning Two Way → everyday + random IF/OF/C position) — defer or handle in L9b-3c. Full recon transcript:
+  wf_4275ff58-dc1. **NEXT THREAD: contract + build L9b-3a (the pure reconstructor) first; build-DARK, activate post-D13.**
