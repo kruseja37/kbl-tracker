@@ -417,6 +417,19 @@ agent edits the ratified rules without JK. (JK ruling 2026-06-14.)
   go) — a fresh overnight thread does the required reads, RESTATES the state, then PROCEEDS
   immediately without waiting for confirmation.
 
+- **Soul-layer measurement comes from spec verbatim, never inference (JK correction 2026-06-18):** When
+  specifying HOW a soul-layer metric is MEASURED — the reality signal/proxy AND the personality modifier for
+  a trait, the formula for a morale/fame/clutch input, etc. — always extract the exact measurement from the
+  authoritative spec verbatim, and if it is not fully/consistently specified there, SURFACE the gap for a JK
+  ruling; never infer, approximate, or back-fill the measurement from the engine's current behavior or first
+  principles. Because JK's design intent for the soul layer is more specific than the code's current behavior
+  or any plausible inference, and a plausible-but-wrong measurement silently corrupts how the asset is earned
+  (you don't find out until playtest). (Origin: in the L9b trait rebuild the Captain proposed inferred
+  outcome-proxies + a personality-primary model for the count-family traits twice; JK caught both —
+  "are we sure these are fully specced? i remember personality modifiers" / "this isn't fully reflective of
+  the revised spec; we need to be 100% certain of how we are measuring these." The per-trait measurement was
+  in fact scattered across 4 sources and underspecified — FINDING-150 follow-up.)
+
 ### Pending cleanup (not a rule — a tracked repo action)
 - **spec-assembler duplicate:** two divergent copies exist —
   `.claude/skills/spec-assembler/SKILL.md` (511 lines, CANONICAL per JK

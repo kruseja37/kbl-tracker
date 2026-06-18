@@ -7,6 +7,45 @@
 
 ## June 2026
 
+### 2026-06-18 (later): L9b trait-from-reality MEASUREMENT model — RATIFIED (JK attended)
+
+**Context**: FINDING-150 found the trait detection scope was wrong; JK demanded "100% certain
+of how we are measuring these." Captain consolidated a per-trait measurement spec (51 traits,
+workflow `wf_368f24d0-78d`); 15 needed rulings. JK ruled them + corrected the model. Full spec:
+`TRAIT_MEASUREMENT_SPEC.md §0`.
+
+**Architectural ruling — the acquisition model:**
+- **P (acquisition probability) is the single comparison currency** for displacement AND lose-low.
+- **Re-evaluate-to-drop:** every HELD trait re-emits a candidate each cycle, recomputing P from its
+  best-available signal in priority **data > ratings > personality**. Personality earns when evidence
+  is thin; contradicting evidence/ratings can REVOKE → no trait permanently sticky. (Resolves JK's
+  concern that personality-driven traits would never drop + the cross-basis comparison question.)
+- Personality is a TILT on the data/ratings signal, PRIMARY only where no data/ratings exists.
+
+**Per-trait measurement rulings:**
+- Strikeout family (K Collector/Neglector, Whiffer, Tough Out): build now on strikeout-rate-vs-peers.
+- Pitcher count-family (BB Prone/Composed/Gets Ahead/Falls Behind): **walks-allowed rate** + personality
+  (Composed/Gets Ahead = low-walks inverse → Composed reclassified buildable, no count needed).
+- **Big Hack = high HR-rate + low AVG; Little Hack = low HR-rate + high AVG** (JK's performance proxy,
+  replaces the static POW/CON ratings ratio — performance-earned + droppable).
+- **Slow Poke = GIDP (DP) rate; Sprinter = FC rate** (JK's idea; auto-persisted, no new capture).
+  beat_throw is dead because the BT button is hook-state-only (no log row) — fixable later as a
+  complementary signal, not needed for v1.
+- **Noodle Arm = ARM rating < 11 + Droopy/Timid + low Ambition → probability** (JK; ratings/personality-
+  driven, replaces the suspect bWAR proxy).
+- **Ace Exterminator = wire the opposing-pitcher-grade join** (by `atBat.pitcherId`) — JK: "we need this
+  in v1."
+- First Pitch Slayer/Prayer: personality-earned when no pitch-count data, refined by opt-in `pitchesInAtBat`.
+- IMAGE_DRIVER: K Neglector → low Charisma + Timid/Droopy (adds a CHARISMA factor — new); Big Hack→
+  Egotistical, Little Hack→Tough, First Pitch Slayer→Competitive/Egotistical, First Pitch Prayer→Timid/Droopy.
+
+**Enabling pieces (build first):** E1 thread player ratings/grades into the builder input; E2 charisma
+factor in the combiner; E3 the re-evaluate-to-drop model. Then the proxy families (R1 clean outcomes,
+R2 data-proxy+personality, R3 ratings-gated). Sequence in `TRAIT_MEASUREMENT_SPEC.md §0.4`.
+
+**Process note (ratified into SESSION_RULES pending pen):** soul-layer measurement comes from spec
+verbatim, never inference — origin: the Captain inferred trait proxies twice before going to spec.
+
 ### 2026-06-18: L10 §7 + L9/trait open-question rulings (JK attended session, Q1–Q12)
 
 **Context**: After L10 (random events) was built (5/5, build-DARK), the Captain
