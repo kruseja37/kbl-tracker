@@ -24,3 +24,11 @@ dist-ssr
 *.sw?
 spec-docs/Super Mega Baseball 4 Teams and Players/
 .vercel
+
+# Session coordination sentinels + sandbox working artifacts (never tracked)
+.git_writetest_probe
+HANDOFF_NEEDED
+HANDOFF_DONE_*
+WAITING_ON_JK.md
+Progress_Summary.md
+Temp/

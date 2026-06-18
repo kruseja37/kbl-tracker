@@ -664,3 +664,52 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   header rewritten, SESSION_LOG + CURRENT_STATE_HISTORY appended, this log) + wrote `HANDOFF_NEEDED`. **Fresh session
   resumes at L5b under AUTH-4** (the standing go). Run so far this AUTH-4 stint: L6b-1 `3b36d35`, L6b-2 `5a7685a`
   (→ L6 COMPLETE), L5a `428f7cb`. Nothing pushed.
+
+- **2026-06-17 (AUTH-4, fresh resume thread) — L5b BUILT + AUDITED (VERIFIED), UNCOMMITTED (environment wall).**
+  Fresh CONTEXT-HANDOFF resume thread: did the full session-start reads, RESTATED (Phase-2 L-stack / last=L5a `428f7cb` /
+  next=L5b), proceeded under AUTH-4. **L5b = the flashpoint-decay accumulator** (§13 tooth #2 / LS-19): a NEW dark
+  IndexedDB store `franchiseFlashpointDecay` (per-player-season running accumulator: flashpointKind / consecutiveGames
+  Unresolved / accumulatedFanMoraleTax / lastGameTax / updatedAtCheckpoint) + a default-OFF `isFranchisePhase2Flashpoint
+  Enabled()` flag + a pure `computeFlashpointGameTax` engine (compounding-but-clamped per-game bleed, ≤0, all magnitudes
+  in `FLASHPOINT_DECAY_TUNING`) + a dark per-game compute wired into `processCompletedGame` (gated, try/catch, after the
+  fame compute). **SEAM-NEUTRAL:** `resolveTurnedOnPlayers` returns [] until L7 Albatross + L10/L13 trade-demander land,
+  so even flag-ON writes nothing today. Mirrors L6b-1/L6b-2 EXACTLY. trackerDb **v19→v20**; backup parity lockstep
+  (trackerStores entry optional:true + STATIC schema v20); syncConfig entry; KBL_BACKUP_VERSION STAYS 2. The version-pin
+  trap `franchiseSeasonLedgerStorage.test.ts` updated (`toBe(20)` + store-list). Diff = the contracted 15 files (8 edited +
+  6 new + the contract): `flashpointDecay.ts`(+test), `franchiseFlashpointDecayStorage.ts`(+test), `franchiseFlashpoint
+  DecayCompute.ts`(+test); EDIT trackerDb/backupRestore/syncConfig/franchisePhase2Flags/processCompletedGame + the 3 pin/
+  parity/manifest tests. Contract in PROMPT_CONTRACTS.md §L5b.
+  - **VERIFICATION (what was observable in this sandbox):** `tsc -p tsconfig.app.json --noEmit` **exit 0** (twice);
+    `tsc -b` passed; the **6 new/affected test files = 40 tests ALL GREEN** (8 engine + 4 storage + 6 compute incl.
+    dark-noop / seam-neutral / re-entry-guard / compounding-clamped + the 4 pin-trap + 4 parity + 14 manifest). Cheap
+    invariant greps: frozen engines `git diff --stat` EMPTY (fameModel/fanMoraleDampener/masterMoraleMatrix/fanMorale
+    Engine/franchiseFameCompute/franchiseFameRecordsStorage byte-unchanged); all 3 flag defaults FALSE; KBL_BACKUP_VERSION
+    still 2; no raw `indexedDB.open` in the new files; engine pure.
+  - **INDEPENDENT AUDIT (decorrelated sub-agent, auditor ≠ builder — triangle intact):** **VERDICT VERIFIED.** All 10
+    checklist items pass with file:line evidence, zero defects, faithful L6b mirror; brute-forced the clamp over 10,000
+    games (max magnitude exactly 3.0, zero violations); independently swept every OTHER version-pin/store-enumeration test
+    and confirmed ONLY the 3 patched files are sensitive (`leagueBuilderStorageV6Migration` pins a different DB — unaffected);
+    judged the unobserved-build/full-suite REGRESSION RISK **LOW** (strictly additive: one idempotent store, one default-OFF
+    flag, one gated no-op call site).
+  - **⚠️ ENVIRONMENT WALL — UNCOMMITTED + two gates UNOBSERVED.** This resume thread ran in an isolated Linux sandbox
+    (node v22, NO codex CLI) where (1) any process >~42s is killed → full `vite build` + the full ~7,290 suite could NOT
+    be run to completion; (2) the repo mount BLOCKS git unlink (`.git/index.lock` can be created but not removed) → CANNOT
+    commit. The codex-dispatch mechanism (`~/.local/bin/codex` on the host Mac) is also unreachable from the sandbox. So
+    L5b was built + audited by this Captain thread directly (decorrelated sub-agent auditor preserved the triangle), but
+    the build-0 + full-suite gates and the commit MUST be done on the host (node v20 + git write). **WAITING_ON_JK.md
+    entry written.** The diff is on disk, uncommitted, on `codex/franchise-v1-next`.
+  - **NEXT after host-commit:** L5c (in-season trade-requests) → L5d (reporter tooth) → {L7,L8,L9b,L10} → … per the
+    DSTACK. L5b's seam (`resolveTurnedOnPlayers`) is the explicit hook L7/L10/L13 fill.
+
+- **2026-06-17 (AUTH-4, HOST RESUME thread) — L5b COMMITTED `5ebb148`. Handoff CLEARED.**
+  Fresh host session (node v20 + git write) picking up the CONTEXT-HANDOFF left at L5b-uncommitted. Did the full
+  session-start reads, RESTATED (Phase-2 L-stack / last=L5a `428f7cb` / next=COMMIT L5b); JK present + ruled
+  "commit + continue under AUTH-4." Ran the two gates the sandbox could not: `NODE_ENV= npm run build` **exit 0**
+  + full suite **7,298 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`),
+  **ZERO new reds** (the +18 tests / +3 files over the post-L5a 7,280/410 are exactly L5b's 3 new test files).
+  Re-confirmed the L5b invariants on the host (`TRACKER_DB_VERSION` 20, `franchiseFlashpointDecay` registered,
+  `KBL_BACKUP_VERSION` 2, flag default OFF, pin-trap `toBe(20)`, engine pure, compute gated after the fame compute).
+  Committed the 14 code/test files → `5ebb148`. Cleaned + gitignored the sandbox junk (Temp/, Progress_Summary.md,
+  HANDOFF_DONE_* + the tracked HANDOFF_NEEDED sentinel, .git_writetest_probe, WAITING_ON_JK.md). The stray
+  `reference-docs/Super Mega Baseball 4 Rosters.csv` left untouched (JK's documented commit-or-gitignore call).
+  **NOW = L5c** (in-season trade-requests) — drafting the contract. trackerDb **v20**; nothing pushed.

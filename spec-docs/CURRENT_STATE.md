@@ -1,23 +1,19 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-17 (SESSION ENDED — **CONTEXT-HANDOFF** at a clean boundary; a fresh session resumes at
-**L5b** under **AUTH-4 autonomous mode** [JK away ~hours — AUTH-4 is the standing "go"; see `HANDOFF_NEEDED` +
-`AUTONOMOUS_RUN_LOG.md`; do the session-start reads, RESTATE, then PROCEED without waiting]. This session began
-ATTENDED (finished L6b) then switched to AUTH-4. Every diff Codex-built → Opus-audited independently (auditor ≠
-builder), zero new reds. **L6 (Fame) COMPLETE** — `7359cbf` L6a (pure §20 Heat/Reach engine) + `3b36d35` L6b-1 (the
-`franchiseFameRecords` store + 3-place backup parity, trackerDb **v18→v19**, dark/EMPTY) + `5a7685a` L6b-2 (Phase-2
-fame flag + per-game DARK compute + processCompletedGame wiring; event-driven, WAR-gravity deferred per JK; one fix
-round — a hand-rolled kbl-schedule open → the canonical getScheduledGame). **L5 STARTED: `428f7cb` L5a** (the pure §8
-fan-morale ratings DAMPENER — a directional counter-trend brake, personality × Resilience/Ambition × Loyalty,
-sim-tuned/shape-locked; L8 will consume it). **NEXT = L5b** (the flashpoint-decay accumulator: a NEW store + dark
-per-game fan-morale tax on locked-Albatross / trade-demanders — inputs are seam-neutral until L7/L10/L13 land; same
-store+parity+flag+wiring pattern as L6b; bumps trackerDb **v19→v20**, KBL_BACKUP_VERSION stays 2; the version-pin trap
-`franchiseSeasonLedgerStorage.test.ts` is a KNOWN must-update on every store add — see the `trackerdb-version-bump-
-test-pins` memory). Then L5c (in-season trade-requests) → L5d (reporter tooth) → {L7,L8,L9b,L10} → {L11–L14} →
-L-SIM gate (then post-D13 activation + the roster-tab confirmation-gate UI removal). **Two NEW non-negotiable
-protocols are in force** (SESSION_RULES §WAITING-ON-JK + §CONTEXT-HANDOFF — read them). Full arc in
-`CURRENT_STATE_HISTORY.md` + `AUTONOMOUS_RUN_LOG.md` (2026-06-17 L6/L5a entries). trackerDb **v19** /
-KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next; nothing pushed.)
+**Last Updated:** 2026-06-17 (ACTIVE — **AUTH-4 host resume**; the L5b handoff is CLEARED. **L5b COMMITTED `5ebb148`** —
+the flashpoint-decay accumulator was host-verified (`NODE_ENV= npm run build` exit 0 + full suite **7,298 pass / 2
+characterized fail** [`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`], ZERO new reds; the +18 tests / +3 files over
+the post-L5a 7,280/410 baseline are exactly L5b's 3 new test files) and committed (14 code/test files; sandbox junk
+cleaned + gitignored). The prior AUTH-4 sandbox build + decorrelated independent audit (≠ builder, VERDICT VERIFIED,
+10/10, faithful L6b mirror) stands. **L6 (Fame) COMPLETE** — `7359cbf` L6a + `3b36d35` L6b-1 + `5a7685a` L6b-2. **L5a
+`428f7cb`** (pure §8 fan-morale DAMPENER). **L5b** = a NEW dark `franchiseFlashpointDecay` store (trackerDb **v19→v20**)
++ a default-OFF `isFranchisePhase2FlashpointEnabled()` flag + a pure compounding-but-clamped per-game fan-morale TAX
+engine (`flashpointDecay.ts`, magnitudes in `FLASHPOINT_DECAY_TUNING`) + a dark gated per-game compute in
+processCompletedGame (after the fame compute). **SEAM-NEUTRAL** — `resolveTurnedOnPlayers` returns [] until L7 Albatross
++ L10/L13 trade-demander land, so even flag-ON writes nothing today. KBL_BACKUP_VERSION stays **2**; backup-parity +
+syncConfig lockstep; version-pin trap `franchiseSeasonLedgerStorage.test.ts` at `toBe(20)`. **NOW: L5c** (in-season
+trade-requests) under AUTH-4 — contract being drafted. trackerDb host-state **v20** / KBL_BACKUP_VERSION **2**. Branch
+codex/franchise-v1-next; nothing pushed.)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.
@@ -29,6 +25,12 @@ KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next; nothing pushed.)
 
 ## RIGHT NOW
 
+- **✅ L5b COMMITTED `5ebb148` (2026-06-17, AUTH-4 host resume) — handoff CLEARED.** The flashpoint-decay accumulator
+  (§13 tooth #2 / LS-19) was host-verified (`NODE_ENV= npm run build` exit 0 + full suite **7,298 pass / 2 characterized
+  fail**, ZERO new reds — the +18 tests / +3 files = L5b's new test files) and committed (14 code/test files). The prior
+  AUTH-4 sandbox build + decorrelated independent audit (VERDICT VERIFIED, 10/10, faithful L6b mirror) stands; the host
+  run closed the 2 previously-unobserved gates (full build + full suite). Sandbox junk cleaned + gitignored (Temp/,
+  sentinels, probe). **NOW = L5c** (in-season trade-requests) under AUTH-4 — contract being drafted.
 - **ATTENDED DESIGN SESSION (2026-06-17, JK present) — forks cleared + designation model reconciled; D10 build next.**
   No product code yet this session. (1) **OD-2..5 + D4 RULED** (DECISIONS_LOG 2026-06-17): OD-2 economy scale =
   new-league-construction-only / reuse pick-chart with farm anchor nerfed one grade-step via `FARM_NERF_SCALES` /
@@ -276,8 +278,10 @@ KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next; nothing pushed.)
 
 ## SUITE BASELINE
 
-**7,282 tests / 410 files** — full suite re-run 2026-06-17 after **L5a**: **7,280 pass / 2 characterized fail**
-(`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds. Arc this session: 7,267/407 (post-L6a) →
+**7,300 tests / 413 files** — full suite re-run 2026-06-17 (AUTH-4 host resume) after **L5b** commit `5ebb148`: **7,298
+pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+18 tests / +3 files
+over the post-L5a 7,280/410 = L5b's 3 new test files; **trackerDb now v20** — L5b `franchiseFlashpointDecay`). Arc this
+session: 7,267/407 (post-L6a) →
 +4/+1 L6b-1 (7,269/408) → +4/+1 L6b-2 (7,273/409) → +7/+1 L5a (7,280/410). **trackerDb now v19** (L6b-1's
 `franchiseFameRecords`; KBL_BACKUP_VERSION stays 2). *(Prior baseline retained below for the arc trail.)* **7,267
 tests / 407 files** — full suite re-run 2026-06-17 after L6a: **7,265 pass / 2 fail**, the 2 being EXACTLY

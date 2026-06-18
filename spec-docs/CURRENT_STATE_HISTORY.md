@@ -1001,3 +1001,17 @@ Resilience/Ambition × Loyalty, sim-tuned/shape-locked; pure, no consumer until 
 SESSION_RULES protocols (WAITING-ON-JK, CONTEXT-HANDOFF). Browser-batch added: L6b-1 DB v18→v19 migration + backup
 round-trip; L6b-2 flag-OFF game-completion. ENDED via CONTEXT-HANDOFF (clean boundary, heavy context) → fresh session
 resumes at **L5b** under AUTH-4. All on `codex/franchise-v1-next`; nothing pushed.
+
+---
+## OUTGOING SNAPSHOT — 2026-06-17 (AUTH-4 resume thread, CONTEXT-HANDOFF → L5c)
+
+Resumed at L5b under AUTH-4 (fresh sandbox thread). RESTATED: Phase-2 L-stack; last=L5a `428f7cb` (§8 dampener);
+next=L5b. **L5b (flashpoint-decay accumulator) BUILT + independently AUDITED VERIFIED, but UNCOMMITTED + two gates
+UNOBSERVED** due to the sandbox: NEW dark `franchiseFlashpointDecay` store + default-OFF flag + pure compounding-clamped
+tax engine + dark per-game compute wired into processCompletedGame (seam-neutral — `resolveTurnedOnPlayers` returns []
+until L7/L10/L13). trackerDb v19→v20, KBL_BACKUP_VERSION 2, pin-trap updated. Mirrors L6b exactly. tsc 0 + 40 targeted
+tests green + frozen-byte-unchanged observed; full `vite build` + full suite could NOT run (>42s killed) and the diff
+could NOT be committed (mount blocks git unlink). Decorrelated sub-agent auditor (≠ builder) → VERDICT VERIFIED, 10/10,
+risk LOW. Host must build + run full suite + commit the 15 files on codex/franchise-v1-next. WAITING_ON_JK.md written.
+Suite baseline (last host-observed, post-L5a) 7,280 pass / 2 characterized fail; trackerDb host-state v19 (v20 after
+the L5b commit lands).
