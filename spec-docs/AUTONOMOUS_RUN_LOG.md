@@ -1063,3 +1063,23 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   snapshot is a deferred larger change (documented, not built). Live game path → browser-pending (#19). Auto-committed.
   **NOW = L9a-4** (OF extra-base-credit season tally + injury accumulator derive-on-read — the LAST L9a build piece;
   L9a-2 stays SET ASIDE for JK). trackerDb v21; nothing pushed.
+
+- **2026-06-18 (AUTH-4, overnight) — L9a-4 COMMITTED `acce899c` → L9a effectively COMPLETE.** The last L9a capture
+  piece, both parts purely additive (NO version bump / NO new store / pin GREEN untouched — recon-verified seam
+  wf_57bfcb52-19b). PART 1 (OF-arm): optional `PlayerSeasonFielding.outfieldAssists`/`baserunnersHeld` seeded to 0,
+  accumulated in `aggregateFieldingStats` from a Map over the game's real `FieldingEvent` rows (`outfield_assist`→assists,
+  `base_save`→held, credited to `fieldingEvent.playerId`, read off `gameState.fieldingEvents`) — NOT the dead `gameStats.*`
+  pattern. PART 2 (injury): derive-on-read `getSeasonInjuryCountsByPlayer`/`getSeasonInjuryCount` in eventLog (iterate
+  `getSeasonGames`→`getBetweenPlayEvents`, tally active `type==='injury'` by `playerStateChange.playerId`). 5 files. Codex
+  5.5 built → Opus 4.8 INDEPENDENTLY audited VERIFIED: tsc 0 / build 0 / focused 8 tests (OF-arm cross-game accumulation +
+  assist/held attribution; injury derivation with undone-excluded + non-injury-ignored + healthy-absent + scalar); full
+  suite **7,420 pass / 2 characterized fail** (names confirmed), ZERO new reds. `TRACKER_DB_VERSION` 21 / eventLog
+  `DB_VERSION` 3 / NO new store / `franchiseSeasonLedgerStorage` pin GREEN / trackerDb·backupRestore·syncConfig
+  byte-unchanged. LOW: the aggregator's test-env fallback error-guards (string-match vitest/indexedDB — harmless; prod
+  uses `gameState.fieldingEvents`). Live aggregation path → browser-pending (#20). Auto-committed.
+  **⇒ L9a EFFECTIVELY COMPLETE: L9a-1 `e28706e9` (pitch-location) · L9a-3 `32244393` (handedness) · L9a-4 `acce899c`
+  (OF-arm/injury); L9a-2 SET ASIDE for JK (count-UX fork).** **NOW = L9b** — the trait-from-reality ENGINE (the
+  "game-changer feature"; built on `traitInteractionMatrix.ts`; consumes ALL L9a captures: log-reconstructed context +
+  peer-relative strength/percentile scorer + P(gain/lose)=reality-percentile×personality×morale + grant/write-back with
+  2-trait cap / hysteresis / no-offsetting-pair / role-eligibility / min-sample valve). DSTACK L9b:84; Cert VI.5. Likely
+  a multi-part SPLIT — recon first. Build-DARK, activate post-D13. trackerDb v21; nothing pushed.

@@ -179,7 +179,16 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
   overlay writes → **browser-pending** (scenario #17). **OPEN DECISION logged for JK** (`AUTONOMOUS_RUN_LOG.md`): the
   L5a dampener weights a cold-team counter-trend-UP gain by AMBITION as MORE-brake vs §6:111's "upside gas pedal" framing
   — L8 consumes L5a as-built (L5 owns the §8 primitive); flagged, not relitigated.
-- **➡ NEXT (fresh session resumes here): L9a — net-new reality CAPTURE layer (§9 / OD-5 / TS-1..13).** Per the JK ruling
+- **✅ L9a — net-new reality CAPTURE layer (§9 / OD-5 / TS-1..13) — effectively COMPLETE** (L9a-1 `e28706e9` pitch-location
+  + L9a-3 `32244393` handedness join + L9a-4 `acce899c` OF-arm tally/injury derive-on-read; **L9a-2 SET ASIDE for JK** —
+  the per-pitch count UX fork). All three built additive (no version bump), each verified-to-persist, Codex-built →
+  Opus-independently-audited VERIFIED. **➡ NEXT (fresh session resumes here): L9b — the trait-from-reality ENGINE** (the
+  "game-changer feature"; built on `traitInteractionMatrix.ts`; consumes ALL the L9a captures): log-reconstructed
+  activation context + a peer-relative strength/percentile scorer (rides Adaptive Standards) + P(gain/lose) acquisition
+  = reality-percentile × personality × morale + the grant/write-back (2-trait cap, hysteresis, no-offsetting-pair,
+  role-eligibility VI.2, the min-sample valve). DSTACK L9b line 84; Cert VI.5; deps L9a ✓ / L2 ✓ / L3 ✓ / L1 ✓. LIKELY
+  a multi-part SPLIT (scorer / acquisition / grant-writeback) — recon it first. Build-DARK, activate post-D13.
+  *(Historical L9a detail below for the arc trail.)* Per the JK ruling
   (OD-5, DECISIONS_LOG 2026-06-17): **manual/opt-in, never forced, used when data present** → **REQUIRES optional
   GameTracker zone inputs for pitch/hit location** + a **cumulative season injury tally**. Net-new captures per
   `TRAIT_SIGNAL_CERTIFICATION.md` (TS-1..13): pitch-ZONE, OF-extra-base-credit (arm), the injury accumulator; everything
@@ -196,7 +205,7 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
   Captain's lean = option (b) a low-intensity post-play "final count" on the EnrichmentPanel). **✅ L9a-3 DONE `32244393`**
   (handedness join, TS-4: `batterContext`/`pitcherContext.handedness` + `matchupContext.platoonAdvantage` now persist on
   each AtBatEvent — threaded via a `handednessByIdRef` from the full rosters; no UI/field/store/version; happy-path,
-  refresh-edge documented-graceful → browser-pending #19). **➡ START with L9a-4** (the LAST L9a build piece): OF
+  refresh-edge documented-graceful → browser-pending #19). **✅ L9a-4 DONE `acce899c`** (the last L9a build piece): OF
   extra-base-credit per-player SEASON tally (per-play `heldByOf`/`baseSaved` exist on FieldingEvent/EnrichmentPanel; add
   ≤1 new field on PlayerSeasonFielding + wire in seasonAggregator — **if it touches a versioned trackerDb store, the
   `franchiseSeasonLedgerStorage.test.ts` store-list PIN is in scope** [MEMORY: broke a prior L6b dispatch]) + injury
@@ -453,7 +462,13 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## SUITE BASELINE
 
-**7,419 tests / 424 files** — full suite independently re-run 2026-06-18 (AUTH-4 overnight) after **L9a-3** commit
+**7,422 tests / 426 files** — full suite independently re-run 2026-06-18 (AUTH-4 overnight) after **L9a-4** commit
+`acce899c`: **7,420 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` — NAMES personally
+confirmed), ZERO new reds (+3 tests / +2 new files = `seasonAggregator.outfieldArm.test.ts` + `eventLog.injuryCounts.test.ts`).
+L9a-4 is purely additive: NO version bump (trackerDb **v21** / eventLog `DB_VERSION` 3), NO new store, the
+`franchiseSeasonLedgerStorage` PIN stays GREEN untouched. Live aggregation path → browser-pending (#20).
+*(Prior baseline retained below for the arc trail.)* **7,419 tests / 424 files** — full suite independently re-run
+2026-06-18 (AUTH-4 overnight) after **L9a-3** commit
 `32244393`: **7,417 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` — NAMES
 personally confirmed this run), ZERO new reds (+4 handedness tests across 2 EXISTING files; no new file → 424 unchanged).
 L9a-3 is pure wiring: `eventLog` `DB_VERSION` 3 / trackerDb **v21** / no new `AtBatEvent` field / `buildContextSnapshot`
@@ -638,6 +653,11 @@ forced the test edit, and the stale `teamMvpAcePreview` assertion was aligned to
     + `pitcherContext.handedness` + `matchupContext.platoonAdvantage` (from the rosters' bats/throws). Edge to spot-check:
     a mid-game page REFRESH — at-bats recorded AFTER the reload will have undefined handedness (known happy-path-only
     limitation; degrades gracefully). No visible UI change; this is a data-capture verification.
+20. **L9a-4** (DATA/season-aggregation — no visible UI) OF-arm + injury captures: after playing franchise games with
+    outfield-assist / runner-held plays, confirm `PlayerSeasonFielding.outfieldAssists`/`baserunnersHeld` accumulate for
+    the credited outfielders (season stats), and that `getSeasonInjuryCountsByPlayer` returns sensible per-player injury
+    counts derived from the injury events. No visible UI change (these feed L9b's Cannon/Noodle/Durable/Injury-Prone
+    traits later); a data/season-stat verification, not a visual one.
 
 ## OPEN PENDING-JK (rolling)
 
