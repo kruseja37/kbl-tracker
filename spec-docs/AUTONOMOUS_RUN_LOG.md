@@ -787,3 +787,29 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   Channel-A asymmetry + sign-preserving apply verified; pure (single type-only import); the 6 frozen engines
   byte-unchanged. Auto-committed. **NOW = L7d** (Captain router effects: Charisma×2 to teammates + amplified swings ·
   Fan Hopeful call-up cushion · Fan Favorite double-dependency). trackerDb still v20; nothing pushed.
+
+- **2026-06-17 (AUTH-4, HOST RESUME thread) — L7d SPLIT L7d-1..3; L7d-1 COMMITTED `f61dcae0`.**
+  L7d (the last L7 sub-stack) bundles three distinct mechanics → Captain SPLIT it: **L7d-1** Team Captain morale-router
+  (DONE) · **L7d-2** Fan Hopeful call-up cushion (pure: window/lift/slump-cushion/expiry, §4:87/LS-7) · **L7d-3** Fan
+  Favorite double-dependency reconciliation (FF = D6 value-half [DR-1, live] + L5/§20.6 morale-half [fame nudge L7b +
+  steady warmth/tilt L7c] — both halves already exist; thin/minimal). **L7d-1:** Captain drafted the contract
+  (PROMPT_CONTRACTS §L7d-1) → dispatched **Codex 5.5 | high** → Opus independently audited (auditor ≠ builder). NEW
+  `src/engines/captainMoraleRouter.ts` + a 9-test file: `computeCaptainCharismaRouting`/`applyCaptainCharismaRouting`
+  (Charisma ×2 teammate-morale routing — the spec-CANONICAL "double", §4:84/LS-6) + `applyCaptainPerformanceSwingAmplification`
+  (sign-preserving team-wide amp of swings tied to the Captain's OWN performance, ×1.5 sim placeholder), magnitudes in
+  `CAPTAIN_MORALE_ROUTER_TUNING`. Pure (ZERO imports). **ANTI-DOUBLE-COUNT:** routes/amplifies the clubhouse MORALE
+  channel ONLY — NOT the Captain's own ratings/development (§6:113), and NOT the §24.9 leadership-effectiveness composite
+  (Charisma+Loyalty+Resilience−Ambition for edge suppression → L13). Matrix wiring deferred post-D13. Codex touched
+  exactly the 2 allowed files; no store/flag/wiring. AUDIT VERIFIED: tsc 0 / build 0 / 9 focused tests green; canonical
+  ×2 + sign-preserving swing amp + linear charisma routing hand-verified; 6 frozen engines byte-unchanged; pure.
+  Auto-committed.
+  **⚠ NEWLY-OBSERVED ORDER-FLAKE (logged for JK; NOT a regression):** my full-suite run showed **3 fails** — the 2
+  characterized (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`) PLUS `src/src_figma/__tests__/franchiseMode/
+  AwardsWatchlist.test.tsx`. Codex's full-suite run on the IDENTICAL tree showed only the 2 characterized. AwardsWatchlist
+  PASSES SOLO (2/2) → it is a non-deterministic, order-dependent flake (same family as the documented conditional-solo
+  flakes `GameTrackerLaunchState` + `franchiseOffseasonGuards.component`), surfaced because the new L7d-1 test file shifted
+  vitest's worker pool ordering. L7d-1 is a zero-import pure engine imported by nothing → it has NO real coupling to an
+  AwardsWatchlist UI test; this is a pre-existing order-sensitivity, not an L7d-1 regression. NOT silently added to the
+  characterized set (that needs JK ratification) — flagged here + in CURRENT_STATE for JK's order-flake-root-cause batch.
+  Suite (deduped, solo-passing): **7,344 pass / 2 characterized fail** (+9 tests / +1 file = `captainMoraleRouter.test.ts`).
+  **NOW = L7d-2** (Fan Hopeful cushion). trackerDb still v20; nothing pushed.

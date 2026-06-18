@@ -9502,3 +9502,50 @@ Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff
 Use high reasoning effort. Think step-by-step. Builder ≠ auditor — your diff will be independently re-audited by Opus (full-suite re-run, the double-count guard `ALBATROSS:0`, the Channel-A asymmetry + sign-preserving apply, the 4-types coverage, purity + byte-unchanged frozen engines).
 
 **Status:** COMMITTED `886d1dce` (2026-06-17, AUTH-4 host resume). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / build 0 / full suite 7,335 pass / 2 characterized fail (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+10 tests / +1 file = `designationFanMorale.test.ts`, over post-L7b 7,325/416). Double-count guard verified (`ALBATROSS: 0`, reason → flashpoint; `summarize(['FAN_FAVORITE','ALBATROSS'])` = 0.5); Channel-A asymmetry (FF up 1.25 / Albatross down 1.25; merit neutral) + sign-preserving `applyDesignationSwingTilt` hand-verified; pure (single type-only import, no Math.random/Date.now/IO/store/React); frozen engines (`designationFameNudge`/`flashpointDecay`/`franchiseFlashpointDecayCompute`/`fanMoraleDampener`/`masterMoraleMatrix`/`franchiseDesignations`) BYTE-UNCHANGED; scope = exactly the 2 allowed files. Pure engine, no user surface → auto-committed. (Channel-B morale-store wiring + Channel-A per-play wiring = deferred post-D13 seams.) **NOW = L7d.**
+
+### L7d — Captain router + Fan Hopeful cushion + Fan Favorite double-dep (SPLIT L7d-1..3; build-dark)
+
+L7d (the last L7 sub-stack) bundles three distinct mechanics → SPLIT (Captain, 2026-06-17 AUTH-4):
+- **L7d-1 — Team Captain morale-router** (THIS, pure engine): Charisma×2 teammate-morale routing + Captain-performance team-wide swing amplification. Greenfield. (NOT the §24.9 leadership-effectiveness composite — that's L13.)
+- **L7d-2 — Fan Hopeful call-up cushion** (pure engine): fixed window + fan-morale lift + early-slump morale cushion + measurable expiry (§4 line 87 / LS-7). Greenfield.
+- **L7d-3 — Fan Favorite double-dependency reconciliation** (thin): FF = D6 value-half (DR-1, live) **+** L5/§20.6 morale-half (fame nudge L7b + steady warmth/tilt L7c) — confirm both halves present + a small pure composer if warranted (mostly already done by DR-1 + L7b + L7c; minimal new code).
+
+### L7d-1 — Team Captain morale-router (PURE engine; matrix wiring DEFERRED post-D13)
+
+**ROUTE:** Codex 5.5 | high reasoning effort (pure deterministic engine; no persistence/matrix touch) → Opus 4.8 audit (auditor ≠ builder) → standing auto-commit (pure primitive, no user surface; mirrors L5a/L7b/L7c).
+
+**ROLE:** You are the L-stack builder (Codex). Build the §4/LS-6 Team Captain morale-ROUTER as a PURE engine. Mirrors L7c `designationFanMorale.ts`: own TUNING, no store/flag/wiring/persistence/React. Build-dark.
+
+**GOAL:** NEW `src/engines/captainMoraleRouter.ts` exporting (1) `CAPTAIN_MORALE_ROUTER_TUNING`; (2) `computeCaptainCharismaRouting(captainCharisma, config?)` → `{ captainCharisma, baseRouting, captainRouting, multiplier }`; (3) `applyCaptainCharismaRouting(baseCharismaRouting, config?)` → number (×2); (4) `applyCaptainPerformanceSwingAmplification(baseTeamSwing, config?)` → number (sign-preserving). Plus its test file.
+
+**SOURCE OF TRUTH:** `FRANCHISE_V1_LIVING_SEASON_SPEC.md` §4 line 84 (Captain = non-double-counting morale router: Charisma counts DOUBLE toward teammate morale + morale swings tied to HIS performance amplified team-wide; NOT a development modifier) + §6 line 113 (Charisma lifts teammates, never own ratings) + LS-6 line 309 + §24.9 lines 623-624 (the DISTINCTION: leadership-effectiveness = Charisma+Loyalty+Resilience−Ambition composite governs relationship-edge suppression → **L13, NOT this ticket**). `HiddenModifiers.charisma` 0-100 (`src/types/game.ts:128`). MIRROR: L7c `886d1dce`.
+
+### DESIGN (build to spec; AUTH-4 DEFAULTS-TAKEN where silent — sim-tunable EXCEPT the canonical "double")
+
+- `CAPTAIN_MORALE_ROUTER_TUNING` = `{ charismaRoutingMultiplier: 2, captainPerformanceSwingMultiplier: 1.5, charismaNeutral: 50 }`. `charismaRoutingMultiplier 2` = spec-CANONICAL "double" (not a placeholder); `captainPerformanceSwingMultiplier 1.5` = §16 sim placeholder; `charismaNeutral 50` = 0-100 midpoint.
+- `computeCaptainCharismaRouting(captainCharisma)`: `baseRouting = (captainCharisma - charismaNeutral)/charismaNeutral` (linear/general — DR-2 removed the Charisma≥70 gate, so a low-charisma captain → weak/negative router); `captainRouting = baseRouting × charismaRoutingMultiplier`; return with `multiplier`.
+- `applyCaptainCharismaRouting(baseCharismaRouting)` → `× charismaRoutingMultiplier`.
+- `applyCaptainPerformanceSwingAmplification(baseTeamSwing)`: 0→0; else `× captainPerformanceSwingMultiplier`; SIGN-PRESERVING (multiplier ≥ 1; amplifies good and bad alike, never flips).
+- PURE — no Math.random/Date.now/new Date()/IO/store/reporter/React; no imports needed (plain numbers); all magnitudes in the TUNING.
+- **Header doc:** the two router jobs; ANTI-DOUBLE-COUNT (routes/amplifies the clubhouse MORALE channel ONLY — NOT own ratings/development, NOT the §24.9 leadership composite [L13]); matrix WIRING deferred post-D13.
+
+**ALLOWED files:** NEW `src/engines/captainMoraleRouter.ts` · NEW `src/engines/__tests__/captainMoraleRouter.test.ts`. NOTHING ELSE.
+
+**DO NOT:** add store/flag/wiring/persistence · wire into `processCompletedGame.ts`/morale store/`masterMoraleMatrix.ts`/designation path · implement the §24.9 leadership-effectiveness composite or ANY relationship-edge logic (L13) · apply any effect to the Captain's own ratings/development · touch `designationFanMorale.ts`/`designationFameNudge.ts`/`flashpointDecay.ts`/`fanMoraleDampener.ts`/`masterMoraleMatrix.ts`/`fanMoraleEngine.ts`/`franchiseDesignations.ts`/`franchisePhase2Flags.ts` · import store/IndexedDB/reporter/LLM/React · use Math.random/Date.now/new Date() · scatter magic numbers · let the swing-amp flip the sign.
+
+### TESTS (NEW `src/engines/__tests__/captainMoraleRouter.test.ts`, pure/deterministic)
+- Canonical double: `charismaRoutingMultiplier === 2`.
+- computeCaptainCharismaRouting: charisma 90 → positive base, captainRouting = base×2; 50 → 0/0; 30 → negative base + negative captainRouting; multiplier echoes 2.
+- applyCaptainCharismaRouting: 0.4 → 0.8; 0 → 0.
+- applyCaptainPerformanceSwingAmplification: positive amplified (>base, same sign); negative amplified in magnitude (<base, still negative); 0 → 0; sign never flips.
+- Determinism + config override.
+
+**VERIFICATION (prefix `NODE_ENV= `):** tsc 0 · build 0 · new test green · FULL suite = only the 2 characterized fails + the new L7d-1 tests, ZERO new reds. Greps: `captainMoraleRouter.ts` no store/morale/fame/reporter/React import, no Math.random/Date.now/new Date(); `designationFanMorale.ts`/`masterMoraleMatrix.ts`/`fanMoraleDampener.ts`/`franchiseDesignations.ts` BYTE-UNCHANGED.
+
+**STOP IF:** purity can't hold · honoring "double" forces touching the matrix (it must not) · a frozen engine must change · a suite red persists past 2 fix-iterations (→ SET-ASIDE).
+
+**FORMAT:** 1. Files changed (paths + count + passing-test count). 2. Each change w/ the §4/§6/LS-6 line. 3. Verification output. 4. "L7d-1 complete" OR "BLOCKED: [reason]".
+
+Use high reasoning effort. Think step-by-step. Builder ≠ auditor — re-audited by Opus (canonical ×2, sign-preserving swing amp, anti-double-count [no own-development / no §24.9 composite], purity + byte-unchanged frozen engines).
+
+**Status:** COMMITTED `f61dcae0` (2026-06-17, AUTH-4 host resume). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / build 0 / 9 focused tests green; engine is pure (ZERO imports, no Math.random/Date.now/new Date); canonical ×2 + sign-preserving swing amp + linear/general charisma routing hand-verified; anti-double-count confirmed (no own-development, no §24.9 composite); frozen engines (`designationFanMorale`/`designationFameNudge`/`masterMoraleMatrix`/`fanMoraleDampener`/`franchiseDesignations`/`processCompletedGame`) BYTE-UNCHANGED; scope = exactly the 2 allowed files. Pure engine, no user surface → auto-committed. **⚠ NEWLY-OBSERVED ORDER-FLAKE (NOT a regression):** my full-suite run showed 3 fails (added `AwardsWatchlist.test.tsx`); Codex's run on the IDENTICAL tree showed 2 (the characterized set). `AwardsWatchlist.test.tsx` PASSES SOLO (2/2) → non-deterministic order-flake (same family as the documented `GameTrackerLaunchState`/`franchiseOffseasonGuards.component` conditional-solo flakes), surfaced by the new test file shifting vitest's worker ordering. L7d-1 (zero-import pure engine, imported by nothing) has no coupling to it. Flagged for JK; NOT silently added to the characterized set. **NOW = L7d-2.**

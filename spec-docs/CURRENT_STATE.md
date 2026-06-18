@@ -1,7 +1,9 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-17 (**AUTH-4 ACTIVE RUN — L7c COMMITTED `886d1dce`; NOW L7d** [fresh session resumed at the
-L7c handoff, did the session-start reads + RESTATE, JK confirmed AUTH-4 autonomous, then built→audited→committed L7c].
+**Last Updated:** 2026-06-17 (**AUTH-4 ACTIVE RUN — L7c `886d1dce` + L7d-1 `f61dcae0` COMMITTED; NOW L7d-2** [fresh
+session resumed at the L7c handoff, did the session-start reads + RESTATE, JK confirmed AUTH-4 autonomous, then
+built→audited→committed L7c and L7d-1]. ⚠ NEWLY-OBSERVED order-flake `AwardsWatchlist.test.tsx` (passes solo; surfaced
+by L7d-1's new test file shifting vitest ordering; NOT a regression) — flagged for JK, see SUITE BASELINE.
 AUTH-4 host resume; the L5b handoff is CLEARED.
 **L5b COMMITTED `5ebb148`** —
 the flashpoint-decay accumulator was host-verified (`NODE_ENV= npm run build` exit 0 + full suite **7,298 pass / 2
@@ -21,9 +23,10 @@ L7a COMMITTED `0a59a24`** (filled L5b's `resolveTurnedOnPlayers` seam — the pe
 active|locked Albatross; doubly-dark, no store/version touch). **L7b COMMITTED `77feeda3`** (pure §20.4 Channel-C
 designation→fame nudge ENGINE — FF +2 / Albatross −1 / MVP·Ace sim; fame-store WIRING deferred). **L7c COMMITTED
 `886d1dce`** (pure §20.6 Channel B FF-warmth +0.5 + Channel A asymmetric swing-tilt ENGINE; DOUBLE-COUNT GUARD
-ALBATROSS=0 — §13 flashpoint already owns it; morale-store + per-play wiring deferred post-D13). **NOW: L7d** (Captain
-router Charisma×2 + amplified swings · Fan Hopeful call-up cushion · Fan Favorite double-dep) under AUTH-4. trackerDb
-host-state **v20** / KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next; nothing pushed.)
+ALBATROSS=0 — §13 flashpoint already owns it; morale-store + per-play wiring deferred post-D13). **L7d SPLIT L7d-1..3;
+L7d-1 COMMITTED `f61dcae0`** (pure Captain morale-router: Charisma×2 teammate routing + sign-preserving perf-swing amp;
+NOT the §24.9 leadership composite [L13]; matrix wiring deferred). **NOW: L7d-2** (Fan Hopeful call-up cushion) under
+AUTH-4. trackerDb host-state **v20** / KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next; nothing pushed.)
 **Branch:** codex/franchise-v1-next
 
 > This file is the LIVE status header — the thing every session-start reads.
@@ -95,9 +98,20 @@ host-state **v20** / KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next; n
   fame-store wiring). Mirrors L5a/L7b (pure primitive, single type-only import, no store/flag/wiring). **Codex 5.5 built
   → Opus 4.8 independently audited VERIFIED** (tsc 0 / build 0 / full suite **7,335 pass / 2 characterized fail**, ZERO
   new reds [+10 tests / +1 file]; double-count guard + Channel-A asymmetry + sign-preserving apply verified; 6 frozen
-  engines byte-unchanged; pure). Auto-committed. **NOW = L7d** (Captain router effects: Charisma×2 to teammates +
-  amplified swings on the Captain's performance · Fan Hopeful call-up cushion · Fan Favorite double-dependency
-  completion) under AUTH-4.
+  engines byte-unchanged; pure). Auto-committed. L7d followed — SPLIT L7d-1..3; L7d-1 committed (below).
+- **✅ L7d-1 COMMITTED `f61dcae0` (2026-06-17, AUTH-4 host resume) — Team Captain morale-router (pure §4/LS-6).** L7d
+  (the last L7 sub-stack) bundles three mechanics → SPLIT: **L7d-1** Captain router (DONE) · **L7d-2** Fan Hopeful
+  call-up cushion (pure: window/lift/slump-cushion/expiry, §4:87/LS-7) · **L7d-3** Fan Favorite double-dependency
+  reconciliation (FF = D6 value-half [DR-1, live] + L5/§20.6 morale-half [L7b fame nudge + L7c warmth/tilt] — both
+  halves already exist; thin). NEW pure `src/engines/captainMoraleRouter.ts`: `computeCaptainCharismaRouting` /
+  `applyCaptainCharismaRouting` (Charisma **×2** teammate-morale routing — the spec-CANONICAL "double") +
+  `applyCaptainPerformanceSwingAmplification` (sign-preserving team-wide amp of swings tied to the Captain's OWN
+  performance, ×1.5 sim placeholder), magnitudes in `CAPTAIN_MORALE_ROUTER_TUNING`. Pure (ZERO imports).
+  **ANTI-DOUBLE-COUNT:** routes/amplifies the clubhouse MORALE channel ONLY — NOT the Captain's own ratings/development,
+  and NOT the §24.9 leadership-effectiveness composite (→ L13). Matrix wiring deferred post-D13. **Codex 5.5 built →
+  Opus 4.8 independently audited VERIFIED** (tsc 0 / build 0 / 9 focused tests green; canonical ×2 + sign-preserving
+  swing amp + linear charisma routing hand-verified; 6 frozen engines byte-unchanged; pure). Auto-committed. **NOW = L7d-2**
+  (Fan Hopeful cushion) under AUTH-4.
 - **ATTENDED DESIGN SESSION (2026-06-17, JK present) — forks cleared + designation model reconciled; D10 build next.**
   No product code yet this session. (1) **OD-2..5 + D4 RULED** (DECISIONS_LOG 2026-06-17): OD-2 economy scale =
   new-league-construction-only / reuse pick-chart with farm anchor nerfed one grade-step via `FARM_NERF_SCALES` /
@@ -345,7 +359,18 @@ host-state **v20** / KBL_BACKUP_VERSION **2**. Branch codex/franchise-v1-next; n
 
 ## SUITE BASELINE
 
-**7,337 tests / 417 files** — full suite independently re-run 2026-06-17 (AUTH-4 host resume) after **L7c** commit
+**7,346 tests / 418 files** — full suite independently re-run 2026-06-17 (AUTH-4 host resume) after **L7d-1** commit
+`f61dcae0`: **7,344 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`) on the
+deduped/solo-passing basis (+9 tests / +1 file = L7d-1's `captainMoraleRouter.test.ts`, over the post-L7c 7,335/417;
+trackerDb still **v20** — L7d-1 is a pure engine, no store). **⚠ NEWLY-OBSERVED ORDER-FLAKE (2026-06-17, flagged for
+JK — NOT a regression):** my full-suite run after L7d-1 showed **3 fails**, the third being
+`src/src_figma/__tests__/franchiseMode/AwardsWatchlist.test.tsx`; Codex's full-suite run on the IDENTICAL tree showed
+only the 2 characterized. AwardsWatchlist **passes SOLO (2/2)** → it is a non-deterministic order-dependent flake (same
+family as the documented conditional-solo flakes `GameTrackerLaunchState` + `franchiseOffseasonGuards.component`),
+surfaced because L7d-1's new test file shifted vitest's worker pool ordering. L7d-1 (zero-import pure engine, imported by
+nothing) has NO coupling to it. NOT silently added to the characterized set — belongs in the order-flake root-cause batch
+(OPEN PENDING-JK). *(Prior baseline retained below for the arc trail.)* **7,337 tests / 417 files** — full suite
+independently re-run 2026-06-17 (AUTH-4 host resume) after **L7c** commit
 `886d1dce`: **7,335 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds
 (+10 tests / +1 file = L7c's `designationFanMorale.test.ts`, over the post-L7b 7,325/416; trackerDb still **v20** — L7c
 is a pure engine, no store). *(Prior baseline retained below for the arc trail.)* **7,327 tests / 416 files** — full
@@ -497,7 +522,9 @@ F-147 (stale peerPoolLimitation written live) → taxonomy/spec-cleanup batch
 SESSION_RULES. Stray reference-docs/Super Mega Baseball 4 Rosters.csv
 (commit or gitignore). ASG WPA→Fame; Signature Moment card line; fame tier
 names; F2 SOT typos (~15); F4 FA trait spellings (4); order-flake root-cause
-(3 members).
+(now 4 members: franchiseManualSmokeFixture [characterized] + GameTrackerLaunchState + franchiseOffseasonGuards.component
++ **NEWLY-OBSERVED 2026-06-17 `AwardsWatchlist.test.tsx`** — all pass solo; non-deterministic full-suite order/worker-pool
+sensitivity [shared fake-IndexedDB/global state]; surfaced when L7d-1 added a test file).
 **NEW (T10): backupRestore.ts stale-schema hardening** — the `trackerStores` registry is pinned at
 `version: 12` and omits `franchiseTrueValueRows` (v13) / `franchiseDesignationRows` (v14) /
 `franchiseSeasonLedgerRows` (v15); those silently drop on backup/restore and `getSchemaIssues` won't flag the

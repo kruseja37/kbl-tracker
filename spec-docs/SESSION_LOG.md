@@ -5085,3 +5085,20 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   double-count guard + Channel-A asymmetry + sign-preserving apply hand-verified; 6 frozen engines byte-unchanged; pure
   single type-only import). Auto-committed (pure engine, no user surface). Suite now **7,337 / 417**; trackerDb still v20.
   **NOW = L7d** (Captain router Charisma×2 + amplified swings · Fan Hopeful cushion · Fan Favorite double-dep). Nothing pushed.
+
+### Update (cont.) — L7d split L7d-1..3; L7d-1 committed
+- L7d (last L7 sub-stack) bundles 3 mechanics → SPLIT: L7d-1 Captain morale-router (DONE) · L7d-2 Fan Hopeful cushion ·
+  L7d-3 Fan Favorite double-dep reconciliation (FF value-half DR-1 + morale-half L7b/L7c already exist; thin).
+- **L7d-1 COMMITTED `f61dcae0`** — pure §4/LS-6 Team Captain morale-router (`captainMoraleRouter.ts`):
+  `computeCaptainCharismaRouting`/`applyCaptainCharismaRouting` (Charisma ×2 teammate routing — spec-canonical double) +
+  `applyCaptainPerformanceSwingAmplification` (sign-preserving team-wide perf-swing amp, ×1.5 sim), magnitudes in
+  `CAPTAIN_MORALE_ROUTER_TUNING`. Pure (ZERO imports). Anti-double-count: clubhouse MORALE channel only — NOT own
+  development, NOT the §24.9 leadership composite (→ L13). Captain-contracted → Codex 5.5 built → Opus independently
+  audited VERIFIED (tsc 0 / build 0 / 9 focused tests; canonical ×2 + sign-preserving amp hand-verified; 6 frozen
+  engines byte-unchanged; pure). Auto-committed.
+- **⚠ NEWLY-OBSERVED ORDER-FLAKE (flagged for JK, NOT a regression):** my post-L7d-1 full-suite run showed 3 fails — the
+  2 characterized + `AwardsWatchlist.test.tsx`; Codex's run on the identical tree showed only the 2. AwardsWatchlist
+  PASSES SOLO (2/2) → non-deterministic order-flake (same family as GameTrackerLaunchState/franchiseOffseasonGuards.
+  component), surfaced by the new test file shifting vitest's worker ordering. L7d-1 (zero-import pure engine) has no
+  coupling to it. Added to the order-flake root-cause batch in OPEN PENDING-JK; NOT folded into the characterized set.
+  Suite (solo-passing basis): **7,344 / 418**; trackerDb still v20. **NOW = L7d-2** (Fan Hopeful cushion). Nothing pushed.
