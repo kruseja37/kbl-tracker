@@ -1,11 +1,15 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-18 (**L9b-3b-i VERIFIED + COMMITTED (trackerDb v21→v22); L9b-3a done; NOW L9b-3b-ii** — the
-flag + dark trait-grant hook). **L9b-3b SPLIT:** b-i = the dark `franchiseTraitOverlays` store (DONE) · b-ii = the
-default-OFF `isFranchisePhase2TraitsEnabled` flag + `persistDarkTraitGrantForCompletedGame` hook (loads season events →
-L9b-3a `computeSeasonTraitCandidates` → L9b-2 `computeTraitAcquisition` → writes PENDING trait rows; wired after the
-checkpoint gate at processCompletedGame.ts:623; mirror the L8b `franchiseCheckpointSweepCompute` pattern) · b-iii/L9b-3c =
-the §11 confirm + ATOMIC trait1/trait2 displacement. **STORE FORK RESOLVED (AUTH-4 default):** NEW `franchiseTraitOverlays`
+**Last Updated:** 2026-06-18 (**L9b-3b COMPLETE (b-i `0cd75d9a` + b-ii); L9b-3a done; NOW L9b-3c** — the §11
+trait-confirm transform + ATOMIC trait1/trait2 displacement write, the LAST L9b piece). **L9b-3b DONE:** b-i = the dark
+`franchiseTraitOverlays` store (trackerDb v22) · b-ii = the default-OFF `isFranchisePhase2TraitsEnabled` flag +
+`persistDarkTraitGrantForCompletedGame` hook (flag-gate-first → 20%-checkpoint cadence → loads season events → enumerates
+MLB roster → L9b-3a `computeSeasonTraitCandidates` → L9b-2 `computeTraitAcquisition` per player → writes PENDING trait
+rows; wired after the checkpoint gate at processCompletedGame.ts:632; mirrors L8b `franchiseCheckpointSweepCompute`;
+doubly-dark = flag OFF + pending/`applied:false` rows that DON'T mutate player records until L9b-3c; Codex-built →
+Opus-audited VERIFIED, tsc-0 / full suite **7,499/431, 7,497 pass / 2 characterized fail**, ZERO new reds; live game
+path → browser-pending #22). **L9b-3c (NEXT)** = the §11 confirm + ATOMIC trait1/trait2 displacement via
+`saveFranchisePlayer` (do NOT route trait rows through `ratingsOverlayMerge` — rating-key-only, silently drops them). **STORE FORK RESOLVED (AUTH-4 default):** NEW `franchiseTraitOverlays`
 store (reuse carried a silent-trait-drop landmine via `ratingsOverlayMerge`). **L9b-3b-i** = the dark store mirroring
 `franchiseRatingsOverlays` at every site (storage module + trackerDb v22 + syncConfig + backupRestore + the store-list
 PIN + parity/manifest tests + a new storage test); DARK/EMPTY, KBL_BACKUP_VERSION stays 2; Codex-built →
@@ -93,6 +97,30 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## RIGHT NOW
 
+- **✅ L9b-3b-ii VERIFIED + COMMITTED (2026-06-18, AUTH-4 overnight) → L9b-3b COMPLETE — the flag + dark trait-grant hook
+  (the first live-path trait WRITER, doubly-dark).** NEW `src/utils/franchiseTraitGrantCompute.ts` +
+  `isFranchisePhase2TraitsEnabled` (default-OFF, 5th block in `franchisePhase2Flags.ts`) +
+  `persistDarkTraitGrantForCompletedGame(gameState, scope, archiveOptions)` wired after the checkpoint gate at
+  `processCompletedGame.ts:632` (inside `if (trueValueScope)`, matching the `[Checkpoint]` try/catch — never blocks game
+  completion). Mirrors L8b EXACTLY: **flag-gate FIRST** (normal play = zero-cost no-op, no load) → resolve league
+  gameNumber → `getSeasonMetadata().totalGames` → `isCheckpointBoundary` (20%-of-season; the min-sample valve keeps early
+  checkpoints dormant so trait changes emerge late-season with a populated pool — DEFAULT-TAKEN vs a season-end trigger) →
+  load season events (`getSeasonGames`→per-game `getGameEvents`/`getBetweenPlayEvents`/`getGameFieldingEvents`) + injury
+  counts + season fielding + games-per-player → enumerate MLB roster (league-wide) → `computeSeasonTraitCandidates`
+  (L9b-3a, config `deriveAdaptiveStandardsConfig({gamesPerSeason: totalGames})`) → per player
+  `computeTraitAcquisition` (L9b-2; heldTrait `strength` = that trait's current candidate realityPercentile ?? 0.5;
+  `rosterRole:'unknown'` v1) → writes PENDING `franchiseTraitOverlays` rows (`putFranchiseTraitOverlay`) with deterministic
+  idempotent id `…:${traitName}:trait-grant-${gameNumber}`, `applied:false`, `createdAt` from the max persisted at-bat
+  timestamp (NO Date.now). `traitGrantSeam` exposes the roster/candidate/acquisition for stubbing.
+  **Codex 5.5-built → Opus-4.8-INDEPENDENTLY-audited VERIFIED** (read line-by-line — the test stubs the seam): tsc-0 / full
+  suite **7,499/431, 7,497 pass / 2 characterized fail**, ZERO new reds (+4 = the hook test); DARK (only
+  `processCompletedGame` consumes it, flag-gated); no Date.now/random; Codex hit EXACTLY the FILE LIST (no doc edits, no
+  abandoned files). **LIMITATION:** the hook test stubs the L9b-3a→L9b-2 seam (gate/cadence/persistence/idempotency/
+  determinism covered; the engines have their own suites + the seam test) → the real end-to-end through the hook is
+  browser-pending (#22). **➡ NEXT = L9b-3c** (the LAST L9b piece: the §11 trait-confirm transform + ATOMIC trait1/trait2
+  displacement write via `saveFranchisePlayer` — mirror `ratingsOverlayConfirmation` [L2c] but CATEGORICAL; on confirm
+  apply the gain[/displace weakest]/lose to the flat franchise `trait1`/`trait2`; do NOT route trait rows through
+  `ratingsOverlayMerge`; the live confirm UI is a deferred post-D13 D-ticket). *(Prior L9b-3b-i entry below.)*
 - **✅ L9b-3b-i VERIFIED + COMMITTED (2026-06-18, AUTH-4 overnight) — the dark `franchiseTraitOverlays` store
   (persistence half of the first trait writer; trackerDb v21→v22).** NEW `src/utils/franchiseTraitOverlayStorage.ts`
   (a 1:1 mirror of `franchiseRatingsOverlayStorage` with a CATEGORICAL trait-change row: `valence` gain/lose · `traitName`
@@ -617,7 +645,11 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## SUITE BASELINE
 
-**7,495 tests / 430 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L9b-3b-i** (the dark
+**7,499 tests / 431 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L9b-3b-ii** (the flag +
+dark trait-grant hook → L9b-3b COMPLETE): **7,497 pass / 2 fail** = EXACTLY the characterized baseline
+(`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`). ZERO new reds (+4 tests / +1 file =
+`franchiseTraitGrantCompute.test.ts`; the hook is flag-gated dark + the test stubs the L9b-3a→L9b-2 seam). tsc 0. trackerDb
+**v22** (b-ii added no store). Live game path (flag-gated) → browser-pending (#22). *(Prior baseline retained below for the arc trail.)* **7,495 tests / 430 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L9b-3b-i** (the dark
 `franchiseTraitOverlays` store; trackerDb v21→v22): **7,493 pass / 2 fail** = EXACTLY the characterized baseline
 (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`, confirmed via FAIL-file grep). ZERO new reds (+8 tests / +1 file =
 L9b-3b-i's `franchiseTraitOverlayStorage.test.ts`; the modified pin/parity/manifest tests gained assertions, not test
@@ -841,6 +873,14 @@ forced the test edit, and the stale `teamMvpAcePreview` assertion was aligned to
     intact); the new store is empty (dark until L9b-3b-ii writes PENDING trait rows); backup → wipe → restore round-trips
     with the new store present (empty). Saved-data-shape change, so it leads the batch. (Engine audit already proved the
     v21→v22 migration-survival + backup parity in unit tests; this is the real-franchise confirmation.)
+22. **L9b-3b-ii** (LIVE game path — flag-gated; the first trait WRITER) the dark trait-grant hook: with the **default-OFF**
+    `isFranchisePhase2TraitsEnabled` flag (normal play), confirm playing a franchise season writes ZERO trait overlays and
+    adds no perceptible overhead (the hook flag-gates first → true no-op, no event loading). Then (dev/QA only — flip the
+    flag) play to a 20%-of-season checkpoint near season's end (so the min-sample valve's pool is populated) and confirm
+    the `franchiseTraitOverlays` store receives `pending`+`applied:false` trait-change rows for MLB players (correct
+    franchise/season/team scope, canonical trait names, `valence` gain/lose, deterministic id `…:trait-grant-N`),
+    idempotent on a replayed boundary (no dup rows), and that **nothing in the live UI changes** (pending rows don't mutate
+    `trait1`/`trait2` until the L9b-3c confirm). Writes into the v22 store; rides the persistence batch.
 
 ## OPEN PENDING-JK (rolling)
 

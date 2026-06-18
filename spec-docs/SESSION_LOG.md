@@ -5336,3 +5336,25 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   hook mirroring L8b `franchiseCheckpointSweepCompute`: flag gate → 20%-checkpoint cadence → load season events →
   enumerate MLB roster → computeSeasonTraitCandidates [L9b-3a] → computeTraitAcquisition [L9b-2] → write PENDING trait
   rows; wired after the checkpoint gate at processCompletedGame.ts:623). Loop continues under AUTH-4.
+
+## 2026-06-18 (AUTH-4 overnight, host thread, "keep rolling") — L9b-3b-ii Codex-built → Opus-audited VERIFIED → COMMITTED → L9b-3b COMPLETE
+- Pre-grounded the L8b `franchiseCheckpointSweepCompute` template + the processCompletedGame gate (confirmed the scope var
+  is `trueValueScope`, the gate sits inside `if (trueValueScope)`, `deriveAdaptiveStandardsConfig` takes `{gamesPerSeason}`)
+  while b-i built. Wrote a precise b-ii contract (forbid doc edits + git-add; exact FILE LIST; exact gate insertion) →
+  PROMPT_CONTRACTS + `/tmp/l9b3bii_codex_prompt.md`; dispatched Codex 5.5 | high.
+- **Deliverable:** `isFranchisePhase2TraitsEnabled` (default-OFF, 5th flag block) + NEW
+  `src/utils/franchiseTraitGrantCompute.ts` (`persistDarkTraitGrantForCompletedGame` — flag-gate FIRST → gameNumber →
+  totalGames → `isCheckpointBoundary` → load season events/injury/fielding/games → enumerate league MLB roster →
+  `computeSeasonTraitCandidates` → per-player `computeTraitAcquisition` [heldTrait strength = candidate realityPercentile
+  ?? 0.5; rosterRole 'unknown'] → write PENDING `franchiseTraitOverlays` rows; deterministic idempotent id; createdAt from
+  max persisted at-bat timestamp; `traitGrantSeam` for stubbing) + the gate wired after the checkpoint gate at
+  processCompletedGame.ts:632 (try/catch, never blocks completion). Doubly-dark (flag OFF + pending/applied:false).
+- **The tightened contract held again:** Codex hit EXACTLY the FILE LIST — no doc edits, no git-add, no abandoned files.
+- **Independent audit (Opus, read line-by-line since the test stubs the seam):** tsc-0; full suite **7,499/431, 7,497 pass
+  / 2 characterized fail**, ZERO new reds (+4 = the hook test); flag-gate-first no-op verified; DARK (only
+  processCompletedGame consumes it, gated); no Date.now/random; correct PENDING-row construction + idempotency +
+  determinism. VERDICT VERIFIED → auto-committed. LIMITATION: hook test stubs the L9b-3a→L9b-2 seam (engines tested in
+  their own suites + the seam test) → real end-to-end browser-pending (#22). Live game path → browser-pending (#22).
+- **⇒ L9b-3b COMPLETE (b-i `0cd75d9a` + b-ii). NEXT = L9b-3c** (the LAST L9b piece: §11 trait-confirm transform + ATOMIC
+  trait1/trait2 displacement via saveFranchisePlayer; mirror ratingsOverlayConfirmation [L2c] but categorical; do NOT route
+  trait rows through ratingsOverlayMerge). Loop continues under AUTH-4.

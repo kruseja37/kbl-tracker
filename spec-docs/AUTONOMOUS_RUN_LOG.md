@@ -1373,3 +1373,28 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
     idempotent id; createdAt from a persisted timestamp [NO Date.now]; wired after the checkpoint gate at
     processCompletedGame.ts:623). Then L9b-3c (§11 confirm + ATOMIC trait1/trait2 displacement via saveFranchisePlayer; do
     NOT route trait rows through ratingsOverlayMerge).
+- **2026-06-18 (AUTH-4, "keep rolling") — L9b-3b-ii BUILT (Codex 5.5) → AUDITED (Opus) VERIFIED → COMMITTED → L9b-3b
+  COMPLETE.** The flag + dark trait-grant hook (the first live-path trait WRITER, doubly-dark).
+  - **Deliverable:** `isFranchisePhase2TraitsEnabled` (default-OFF) + NEW `src/utils/franchiseTraitGrantCompute.ts`
+    (`persistDarkTraitGrantForCompletedGame`, mirroring L8b: flag-gate FIRST → league gameNumber → totalGames →
+    `isCheckpointBoundary` → load season events/injury/fielding/games → enumerate league MLB roster →
+    `computeSeasonTraitCandidates` [L9b-3a] → per-player `computeTraitAcquisition` [L9b-2] → write PENDING
+    `franchiseTraitOverlays` rows) + the gate wired after the checkpoint gate at processCompletedGame.ts:632 (inside
+    `if (trueValueScope)`, `[Traits]` try/catch — never blocks completion). DEFAULTS-TAKEN: heldTrait strength = candidate
+    realityPercentile ?? 0.5 · rosterRole 'unknown' v1 · createdAt from max persisted at-bat timestamp · cadence reuses the
+    20%-checkpoint boundary (the valve keeps early checkpoints dormant → trait changes emerge late-season; vs a season-end
+    trigger).
+  - **The tightened contract held (3rd dispatch running clean):** Codex hit EXACTLY the FILE LIST — no doc edits, no
+    git-add, no abandoned files. Honest workspace note (it correctly called the PROMPT_CONTRACTS "M" the Captain's
+    pre-dispatch block).
+  - **INDEPENDENT AUDIT (Opus, read line-by-line — the hook test stubs the seam):** tsc-0; full suite **7,499/431, 7,497
+    pass / 2 characterized fail**, ZERO new reds (+4 = the hook test); flag-gate-FIRST no-op (zero load on normal play)
+    verified; DARK (only processCompletedGame consumes it, flag-gated); no Date.now/random; PENDING-row construction +
+    idempotency + determinism + live-path safety confirmed. VERDICT VERIFIED → auto-committed. LIMITATION (logged): the
+    hook test stubs the L9b-3a→L9b-2 pipeline (the engines have their own suites + the seam test) → real end-to-end through
+    the hook is browser-pending (#22). Live game path → browser-pending (#22).
+  - **⇒ L9b-3b COMPLETE: b-i `0cd75d9a` (dark store) + b-ii (flag + hook). ➡ NEXT = L9b-3c** (the LAST L9b piece: the §11
+    trait-confirm transform + ATOMIC trait1/trait2 displacement write via `saveFranchisePlayer`; mirror
+    `ratingsOverlayConfirmation` [L2c] but CATEGORICAL — on confirm apply gain[/displace weakest held]/lose to the flat
+    franchise `trait1`/`trait2`; emit only `CANONICAL_TRAIT_NAMES`; do NOT route trait rows through `ratingsOverlayMerge`;
+    the live confirm UI is a deferred post-D13 D-ticket out of L9b-3c backend scope).

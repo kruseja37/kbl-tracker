@@ -45,3 +45,15 @@ export function isFranchisePhase2CheckpointEnabled(): boolean {
 export function setFranchisePhase2CheckpointEnabledForTests(enabled: boolean | null): void {
   franchisePhase2CheckpointEnabledOverride = enabled;
 }
+
+export const FRANCHISE_PHASE2_TRAITS_ENABLED_DEFAULT = false;
+
+let franchisePhase2TraitsEnabledOverride: boolean | null = null;
+
+export function isFranchisePhase2TraitsEnabled(): boolean {
+  return franchisePhase2TraitsEnabledOverride ?? FRANCHISE_PHASE2_TRAITS_ENABLED_DEFAULT;
+}
+
+export function setFranchisePhase2TraitsEnabledForTests(enabled: boolean | null): void {
+  franchisePhase2TraitsEnabledOverride = enabled;
+}
