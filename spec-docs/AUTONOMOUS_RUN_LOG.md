@@ -967,3 +967,46 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   (CURRENT_STATE scenario #17). **⇒ L8 COMPLETE: L8a `cfdd7752` + L8b `cd9e4589`. NOW = L9a** (net-new reality capture
   layer — §9/OD-5/TS-1..13: optional GameTracker pitch/hit zone inputs + injury accumulator; manual/opt-in; watched/
   browser-pending). trackerDb v21; nothing pushed.
+
+- **2026-06-18 (AUTH-4, overnight) — L9a RECON DONE → scope captured; building L9a-1 next.** Ran a 4-agent L9a recon
+  (wf_f3e99cd3-8a8; spec/cert + GameTracker inputs + capture-storage + existing-signals). Captain digested it; L9a is
+  fully scoped below. The run KEEPS ROLLING (AUTH-4; the harness preserves context via auto-summarization, so no premature
+  handoff) — proceeding with **L9a-1** (pitch-zone, the isolated/lowest-risk piece) first. L9a is the live-GameTracker +
+  event-log-persistence ticket where "typed-but-unwritten = lost" demands meticulous per-field PERSIST verification, so
+  the full scope is captured durably HERE: a mid-build compaction (or a fresh thread) resumes cleanly from this entry +
+  the CURRENT_STATE NEXT pointer.
+  **L9a SCOPE (CONTAINED capture-layer — ~90% of §9 trait signals ALREADY persist; add ONLY the genuinely net-new, each
+  verified to PERSIST). DSTACK:66 is authoritative. Recommended SPLIT:**
+  - **L9a-1 — pitch-ZONE capture (LOWEST risk, isolated; do FIRST).** Add optional `pitchZone` to `AtBatEvent.enrichment`
+    in `src/utils/eventLog.ts:~437` (kbl-event-log DB — ADDITIVE, schemaless-within-store, **NO version bump**), typed as
+    the SAME low/high/inside/outside/outOfZone enum `effectiveRatings.ts:53` already consumes (ZERO mapping). Add one
+    button-grid section to `src/src_figma/app/components/EnrichmentPanel.tsx` mirroring the existing "Pitch Type" grid at
+    `:1492-1502` (NOT the SVG spray graphic), rendered UNCONDITIONALLY for all enrichable plays (do NOT reuse the
+    `spray:false` gating). Add one branch in `handleEnrichmentUpdate` (`GameTracker.tsx:~9421`) mirroring the pitchType
+    branch. Does NOT touch `useGameState` record* hot path. **DEFAULT-TAKEN (was a JK fork): pitch-zone = the COARSE
+    strike-zone enum** (cheapest + already wired downstream) — NOT a fine x/y grid. HIT-location spray→`enrichment.fieldLocation.zone`
+    is ALREADY built/persisted (25-zone, FIELD_ZONE_INPUT_SPEC) → treat as reuse + a browser smoke, not a build.
+  - **L9a-2 — ball-strike COUNT persistence (higher leverage, touches the hook).** Wire `advanceCount('ball')` (0 callers
+    today; only `'strike'` on fouls at `useGameState.ts:9240`) AND persist the per-AB count into `AtBatEvent` (today
+    balls/strikes are transient, reset every AB). Highest-value net-new (+8 count traits). Also make the existing
+    `enrichment.pitchType` reliably WRITTEN (today only set via the HR prompt `GameTracker.tsx:7581`) — reuse-with-reliability.
+  - **L9a-3 — handedness JOIN at event-write (TS-4; wiring-only, no store).** `batterContext.handedness`/
+    `pitcherContext.handedness` are typed-optional (`eventLog.ts:322,344`) but the live writer omits them
+    (`useGameState.ts:4048-4090`, explicit "no handedness data in hook" comment). Join roster bats/throws at write-time →
+    unlocks 6 split traits + `matchupContext.platoonAdvantage`.
+  - **L9a-4 — OF extra-base-credit + injury accumulator.** OF-arm: per-play `heldByOf`/`baseSaved` already on FieldingEvent/
+    EnrichmentPanel; add the per-player SEASON tally (≤1 new field on PlayerSeasonFielding + wire in seasonAggregator) —
+    **if it touches a versioned trackerDb store, the `franchiseSeasonLedgerStorage.test.ts` store-list pin is IN SCOPE**
+    (MEMORY: this pin broke a prior L6b dispatch). Injury accumulator: `comebackerInjuries` season field EXISTS
+    (`seasonStorage.ts:99`, aggregated `seasonAggregator.ts:314`) but has ZERO live writers — **DEFAULT-TAKEN: derive the
+    cumulative tally ON READ** from the already-persisted injury `BetweenPlayEvent`s (`GameTracker.tsx:8024`) per playerId/
+    season (Option A — NO new store/version), OR wire the existing field. Avoid Option B (a new injury store) unless L9b
+    needs a frozen counter.
+  - **DO NOT build in L9a:** the strength/percentile scorer, the P(gain/lose) acquisition formula, role-eligibility
+    gating, the 2-trait-cap grant/write-back + hysteresis, the min-sample valve LOGIC — all of that is **L9b**.
+  - **MANUAL/OPT-IN (OD-5A)** is enforced BY DESIGN: every enrichment field is already optional/skippable/undefined-when-
+    skipped; thin data → the trait stays dormant (the L9b min-sample valve). No new opt-in UX to invent.
+  - **Risk:** live game path (immediate, non-debounced writes via `logAtBatEvent`/`logFieldingEvent`/`logBetweenPlayEvent`,
+    mirrored to syncEngine) → keep writes ADDITIVE; each field VERIFIED to round-trip (the "typed-but-unwritten" gate);
+    USER-VISIBLE (EnrichmentPanel) → browser-pending. Recording path is NOT duplicated for the enrichment concern
+    (inactive src/components/GameTracker has zero EnrichmentPanel refs). Full recon transcript: wf_f3e99cd3-8a8.

@@ -184,7 +184,12 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
   GameTracker zone inputs for pitch/hit location** + a **cumulative season injury tally**. Net-new captures per
   `TRAIT_SIGNAL_CERTIFICATION.md` (TS-1..13): pitch-ZONE, OF-extra-base-credit (arm), the injury accumulator; everything
   else reuses existing fields. This is the capture substrate L9b (the trait engine) consumes. **Build stays WATCHED**
-  (live GameTracker path → browser-pending). Deps: L8 ✓ / L1 ✓. After L9a → **L9b** traits → **L10** random events →
+  (live GameTracker path → browser-pending). **The full L9a scope — recommended SPLIT L9a-1..4, the DEFAULT-TAKEN forks
+  (pitch-zone = coarse strike-zone enum; injury tally = derive-on-read, no new store), and every file:line anchor — is in
+  `AUTONOMOUS_RUN_LOG.md` (the 2026-06-18 "L9a RECON DONE → CONTEXT-HANDOFF" entry). START with L9a-1 (pitch-zone capture:
+  EnrichmentPanel grid + one `eventLog` enrichment field + one `GameTracker` handler branch — isolated, lowest-risk, no
+  hook hot-path change, NO version bump).** Recon transcript: wf_f3e99cd3-8a8. Deps: L8 ✓ / L1 ✓. After L9a → **L9b**
+  traits → **L10** random events →
   **L11** managers → **L12** races/All-Star/awards-fame → **L13** relationships → **L14** rebrand → the **L-SIM gate**.
   (SET ASIDE remains: **L-ECON1** frozen draft-IV oracle + **F-144**.)
 - **ATTENDED DESIGN SESSION (2026-06-17, JK present) — forks cleared + designation model reconciled; D10 build next.**
