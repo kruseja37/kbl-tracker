@@ -130,6 +130,18 @@ const trueValueSnapshotRow = {
   computedAt: "2026-06-16T00:00:00.000Z",
 };
 
+const flashpointDecayRow = {
+  franchiseId: "franchise-d2",
+  seasonId: "season-d2",
+  statsScopeId: "scope-d2",
+  playerId: "player-flashpoint",
+  flashpointKind: "albatross" as const,
+  consecutiveGamesUnresolved: 3,
+  accumulatedFanMoraleTax: -1.65,
+  lastGameTax: -0.6,
+  updatedAtCheckpoint: "3",
+};
+
 function deleteDatabase(name: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.deleteDatabase(name);
@@ -176,6 +188,7 @@ async function seedFranchiseEconomyRows(): Promise<void> {
       "franchiseTrustedValueArtifacts",
       "franchiseAwardsRows",
       "franchiseFameRecords",
+      "franchiseFlashpointDecay",
       "franchiseTrueValueSnapshots",
     ],
     "readwrite",
@@ -187,6 +200,7 @@ async function seedFranchiseEconomyRows(): Promise<void> {
   tx.objectStore("franchiseTrustedValueArtifacts").put(trustedValueArtifact);
   tx.objectStore("franchiseAwardsRows").put(awardsRow);
   tx.objectStore("franchiseFameRecords").put(fameRecordRow);
+  tx.objectStore("franchiseFlashpointDecay").put(flashpointDecayRow);
   tx.objectStore("franchiseTrueValueSnapshots").put(trueValueSnapshotRow);
 
   await transactionToPromise(tx);
@@ -258,6 +272,7 @@ describe("backup/restore kbl-tracker franchise economy parity", () => {
     expect(backup.databases[TRACKER_DB_NAME].franchiseTrustedValueArtifacts).toEqual([trustedValueArtifact]);
     expect(backup.databases[TRACKER_DB_NAME].franchiseAwardsRows).toEqual([awardsRow]);
     expect(backup.databases[TRACKER_DB_NAME].franchiseFameRecords).toEqual([fameRecordRow]);
+    expect(backup.databases[TRACKER_DB_NAME].franchiseFlashpointDecay).toEqual([flashpointDecayRow]);
     expect(backup.databases[TRACKER_DB_NAME].franchiseTrueValueSnapshots).toEqual([trueValueSnapshotRow]);
 
     await expect(
@@ -308,6 +323,14 @@ describe("backup/restore kbl-tracker franchise economy parity", () => {
         fameRecordRow.playerId,
       ]),
     ).resolves.toEqual(fameRecordRow);
+    await expect(
+      readRecord("franchiseFlashpointDecay", [
+        flashpointDecayRow.franchiseId,
+        flashpointDecayRow.seasonId,
+        flashpointDecayRow.statsScopeId,
+        flashpointDecayRow.playerId,
+      ]),
+    ).resolves.toEqual(flashpointDecayRow);
     await expect(
       readRecord("franchiseTrueValueSnapshots", [
         trueValueSnapshotRow.franchiseId,

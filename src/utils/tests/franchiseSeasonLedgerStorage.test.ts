@@ -36,6 +36,7 @@ const expectedTrackerStores = [
   'franchiseAwardsRows',
   'franchiseDesignationRows',
   'franchiseFameRecords',
+  'franchiseFlashpointDecay',
   'franchiseSeasonLedgerRows',
   'franchiseSeasonSummaries',
   'franchiseTrueValueRows',
@@ -103,7 +104,7 @@ describe('franchise season salary ledger storage', () => {
   test('trackerDb migration creates the ledger store and preserves every prior tracker store', async () => {
     const db = await initFranchiseSeasonLedgerDatabase();
 
-    expect(TRACKER_DB_VERSION).toBe(19);
+    expect(TRACKER_DB_VERSION).toBe(20);
     expect(db.name).toBe(DB_NAME);
     expect(db.version).toBe(TRACKER_DB_VERSION);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(expectedTrackerStores);

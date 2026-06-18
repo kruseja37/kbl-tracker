@@ -1206,6 +1206,12 @@ describe('franchise save-slot manifest contract', () => {
       'statsScopeId',
       'playerId',
     ]);
+    expect(SYNC_REGISTRY['kbl-tracker']).toHaveProperty('franchiseFlashpointDecay', [
+      'franchiseId',
+      'seasonId',
+      'statsScopeId',
+      'playerId',
+    ]);
     expect(SYNC_REGISTRY['kbl-tracker']).toHaveProperty('franchiseTrueValueSnapshots', [
       'franchiseId',
       'seasonId',
@@ -1235,6 +1241,10 @@ describe('franchise save-slot manifest contract', () => {
       optional: true,
     });
     expect(STATIC_DATABASE_SCHEMAS['kbl-tracker'].stores.franchiseFameRecords).toMatchObject({
+      keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'],
+      optional: true,
+    });
+    expect(STATIC_DATABASE_SCHEMAS['kbl-tracker'].stores.franchiseFlashpointDecay).toMatchObject({
       keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'],
       optional: true,
     });

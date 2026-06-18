@@ -14,7 +14,7 @@
  */
 
 const DB_NAME = 'kbl-tracker';
-export const TRACKER_DB_VERSION = 19; // Must be the highest version any consumer ever used
+export const TRACKER_DB_VERSION = 20; // Must be the highest version any consumer ever used
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -382,6 +382,17 @@ export async function getTrackerDb(): Promise<IDBDatabase> {
           keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'],
         });
         fameStore.createIndex('by_scope', ['franchiseId', 'seasonId', 'statsScopeId'], {
+          unique: false,
+        });
+      }
+
+      // v20 / L5b: dark flashpoint-decay running-state accumulator (§13 tooth #2).
+      // Seam-neutral until L7/L10/L13; the per-game compute is gated OFF by default.
+      if (!db.objectStoreNames.contains('franchiseFlashpointDecay')) {
+        const flashpointStore = db.createObjectStore('franchiseFlashpointDecay', {
+          keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'],
+        });
+        flashpointStore.createIndex('by_scope', ['franchiseId', 'seasonId', 'statsScopeId'], {
           unique: false,
         });
       }

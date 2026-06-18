@@ -21,3 +21,15 @@ export function isFranchisePhase2FameEnabled(): boolean {
 export function setFranchisePhase2FameEnabledForTests(enabled: boolean | null): void {
   franchisePhase2FameEnabledOverride = enabled;
 }
+
+export const FRANCHISE_PHASE2_FLASHPOINT_ENABLED_DEFAULT = false;
+
+let franchisePhase2FlashpointEnabledOverride: boolean | null = null;
+
+export function isFranchisePhase2FlashpointEnabled(): boolean {
+  return franchisePhase2FlashpointEnabledOverride ?? FRANCHISE_PHASE2_FLASHPOINT_ENABLED_DEFAULT;
+}
+
+export function setFranchisePhase2FlashpointEnabledForTests(enabled: boolean | null): void {
+  franchisePhase2FlashpointEnabledOverride = enabled;
+}
