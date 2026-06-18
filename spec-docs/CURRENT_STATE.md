@@ -15,7 +15,8 @@ activate post-D13 (the L9b-3b-ii hook flag default-OFF; L9b-3c orphaned-pending 
 the L-SIM gate. **L10 RECON DONE** (workflow `wf_b3129cd8-9e3`) → full scope/split/forks/seams/open-questions in
 `spec-docs/L10_SCOPE_MAP.md`. SPLIT: **L10-1** pure event-selection engine (✅ DONE) · **L10-2** dark
 `franchiseL10Overlays` store (✅ DONE, trackerDb v23) · **L10-3** flag + dark league-sweep hook (✅ DONE) · **L10-4**
-stadium-change resolver (✅ DONE) · **L10-5** reporter tap (✅ DONE) → **L10 COMPLETE (1-5), all build-DARK.** ➡ NEXT = **L11** (managers). **L10-1 DONE** = `src/engines/franchiseL10EventEngine.ts` (`computeFranchiseL10Events`: pure deterministic
+stadium-change resolver (✅ DONE) · **L10-5** reporter tap (✅ DONE) → **L10 COMPLETE (1-5), all build-DARK.** ➡ NEXT =
+**L9b trait-reality REBUILD** (FINDING-150 — Tier 1 + Q12; see RIGHT NOW), then the L10 Q5/Q8 rework, then **L11** (managers). **L10-1 DONE** = `src/engines/franchiseL10EventEngine.ts` (`computeFranchiseL10Events`: pure deterministic
 league-sweep roll — `P = baseRate[family] × intensity dial × morale × personality`, FNV-1a-seeded fire, 8 families with
 personality-shift excluded, fan-morale-suppressed team/stadium; mirrors `tradeRequestGeneration`; build-DARK).
 Codex-built → Opus-audited VERIFIED (tsc-0 / suite **7,527/434, 7,525 pass / 2 characterized fail**, ZERO new reds).
@@ -117,6 +118,21 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## RIGHT NOW
 
+- **🔧 PIVOT (2026-06-18, attended session) — JK ruled Q1–Q12; FINDING-150 (L9b trait-detection SCOPE gap) opened; now
+  starting the L9b trait-reality REBUILD, NOT L11.** After L10 completed, the Captain surfaced all open forks; JK ruled
+  (DECISIONS_LOG 2026-06-18) with 3 OVERRIDES: **Q5** random events fire CONTINUOUSLY (not 20%-batched) · **Q8** name-change
+  IN v1 · **Q12** personality-primary trait exception IN v1. JK's Q1 challenge exposed **FINDING-150**: the trait MATRIX +
+  scorer + acquisition + the 16 built traits are SOUND, but L9b-3a built only 16 of ~50 buildable traits — it followed the
+  SUPERSEDED §D "needs the ball-strike count" triage instead of the resolved §VI model. Detection-scope audit (workflow
+  `wf_6643e635-9e3`, 7 agents, all 75 traits, code-grounded → `spec-docs/TRAIT_DETECTION_SCOPE_AUDIT.md`): **16
+  correctly-built · 34 wrongly-dormant (buildable now) · 24 correctly-dormant (need still-missing inputs) · 1 cut.** The
+  ball-strike count (Q1) only blocks 1 otherwise-uncovered trait (Composed) → count DEFERRED v1. **➡ NOW = L9b trait-reality
+  rebuild, pass 1: Tier 1 (~13 free AB-outcome/steal-error/walk proxies in `BUILDABLE_TRAITS`) + Tier 3 (the Q12
+  personality-primary engine → 6 count-family traits).** Then verify the L9a-3 handedness feed (Tier 2 platoon splits, 6),
+  Tier 4 Two Way gateway (3), Tier 5 conditional (4), and 4 micro-rulings (Noodle Arm keep/cut · Meltdown approximation ·
+  Sprinter dead-signal · Ace Exterminator join). **L10 REWORK QUEUED** (Q5 continuous cadence reshapes L10-1/L10-3 firing;
+  Q8 adds name-change to L10's dark catalog) — sequence after the L9b rebuild. trackerDb v23; nothing pushed.
+  *(Prior L10-5 / L10-COMPLETE entry below.)*
 - **✅ L10-5 VERIFIED + COMMITTED (2026-06-18, fresh attended session, AUTH-4 keep-rolling) → L10 COMPLETE (1-5) — the
   PURE reporter tap / news adapter (the final L10 piece).** NEW pure module
   `src/src_figma/app/engines/reporter/franchiseL10NewsAdapter.ts` (lives WITH the reporter — core `src/engines` must not

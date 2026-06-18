@@ -7,6 +7,62 @@
 
 ## June 2026
 
+### 2026-06-18: L10 §7 + L9/trait open-question rulings (JK attended session, Q1–Q12)
+
+**Context**: After L10 (random events) was built (5/5, build-DARK), the Captain
+surfaced all outstanding design forks — the L10 §7 questions (built on AUTH-4
+defaults) and the accumulated L9a/L9b trait DEFAULTS-TAKEN. JK ruled in plain
+language. Several rulings OVERRIDE what was already built and trigger rework.
+
+**Rulings (JK, 2026-06-18):**
+- **Q2 — Random events build-now/activate-later:** AGREED. Compute everything but
+  change nothing in the save until a post-D13 "switch on" step. (Confirms the
+  build-DARK model for L10-3/4/5.)
+- **Q3 — Personality-shift events:** AGREED — excluded from the random roll
+  (personality shifts are arc-earned, not dice).
+- **Q4 — Trade-demand ownership:** AGREED — L10 only *surfaces/triggers*; the
+  propensity math stays in `tradeRequestGeneration.ts`.
+- **Q5 — Cadence: OVERRIDE.** Random events do NOT batch at the 20%-of-season
+  checkpoint. Traits are ongoing and can fire *any time*; other random events
+  should feel similar and fire **randomly/continuously**, so changes don't all
+  land at once every 20%. → reshapes the L10 firing model (L10-1 roll cadence +
+  L10-3 hook trigger, currently gated on `isCheckpointBoundary`).
+- **Q6 — Stadium change on the user's team:** AGREED — your team IS eligible, but
+  suppressed when fans are happy.
+- **Q7 — Cosmetic changes while dark:** AGREED — write to overlay, never render
+  pre-launch.
+- **Q8 — Name change: OVERRIDE.** Name-change IS included in v1 (not deferred);
+  L10 currently excludes it. (Per Q2 it stays dark until activation; the opt-in
+  nature is honored by the confirm step, not by omitting it.)
+- **Q9 — `Workhorse` trait:** CONFIRMED pitcher-only.
+- **Q10 — `TRAIT_OPPOSITES`:** CONFIRMED — the 14 authored pairs stand (First
+  Pitch Slayer↔Prayer, Cannon↔Noodle, Clutch↔Choker, RBI Hero↔Zero, Magic
+  Hands↔Butter Fingers, Tough Out↔Whiffer, Big↔Little Hack, Sprinter↔Slow Poke,
+  Base Rounder↔Jogger, Stealer↔Bad Jumps, Consistent↔Volatile, Durable↔Injury
+  Prone, Gets Ahead↔Falls Behind, K Collector↔Neglector).
+- **Q11 — Trait reality signal:** CONFIRMED — outcome-weighted SUCCESS-RATE model
+  (not bare predicate fire-count).
+- **Q12 — Personality-primary exception: OVERRIDE.** Build it in v1 (was
+  deferred). Personality DRIVES the trait when the measured signal is thin
+  (Stimulated, Gets Ahead/Falls Behind, Big/Little Hack) — this is the §VI.3:122
+  mechanism and the key to the count-family traits.
+- **Q1 — The 8 "count" traits:** the per-pitch ball-strike count (L9a-2) is a
+  PRECISION input, NOT a hard gate (corrects the superseded §D framing; see
+  FINDING-150). First Pitch Slayer/Prayer come free from `pitchesInAtBat==1`;
+  the multi-count family is personality-primary + walks/ratings proxies. JK ruling:
+  **defer the per-pitch count for v1** (it only sharpens 4 traits). Triggered a
+  trait-detection-scope audit (FINDING-150) before any L9b-3a rebuild.
+
+**Consequences (rework queued, build was paused by JK):**
+1. **FINDING-150** — L9b-3a built ~16 of ~39+ §VI-buildable traits (inherited the
+   stale §D triage). Foundations sound; detection scope incomplete.
+2. Q5 → L10 firing cadence redesign (continuous, not 20%-batched).
+3. Q8 → add name-change to L10's v1 catalog (dark).
+4. Q12 → build the L9b-2 personality-primary exception.
+5. Q1 → L9a-2 reframed precision-only; expand L9b-3a buildable set
+   (`pitchesInAtBat` first-pitch, L9a-3 handedness platoon splits, outcome
+   proxies, personality-primary count-family).
+
 ### 2026-06-14: T8 (Mode 1 League Construction Suite) — scope rulings + split (JK)
 
 **Context**: Opening the T8 ticket (IV spec §5/§6/§7 — pool registration, snake

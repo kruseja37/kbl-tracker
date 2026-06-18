@@ -264,3 +264,26 @@ must import + emit that consumer's exact type (or a structural subtype), and the
 "pure engine" ticket whose output feeds a sibling engine needs a SEAM test in scope, not just within-file tests — tsc
 alone will not flag a producer/consumer shape drift until the wiring ticket; (3) builder contracts should forbid editing
 any spec-doc / git-add (the Captain owns docs) — this run the builder over-produced an abandoned file + edited 7 docs.
+
+---
+
+### FINDING-150
+**Date:** 2026-06-18
+**Phase:** L9 (traits-from-reality) — build-scope audit
+**Status:** CONFIRMED-OPEN (rebuild-scope; foundations sound)
+**File:** `spec-docs/TRAIT_SIGNAL_CERTIFICATION.md` §D(:52) vs §VI(:91/:103/:122/:127) · `src/engines/traitCandidateBuilder.ts` `BUILDABLE_TRAITS` (16) · `src/data/traitInteractionMatrix.ts`
+**Trigger:** JK challenged the Q1 claim that the 8 count-family traits "need the ball-strike count," pointing out First Pitch Slayer/Prayer are measurable from one-pitch ABs, Big/Little Hack from POW/CON ratios + personality, and Falls Behind/BB Prone/Composed from walks + personality — and asked whether the rest of the trait-reality logic is wrong.
+
+**Evidence:**
+1. The trait MATRIX is correct (not the problem): `traitInteractionMatrix.ts` encodes each trait's real SMB4 gameplay EFFECT, cited to the guide, and those effects genuinely key on the count — First Pitch Slayer/Prayer/Gets Ahead/Falls Behind = `count{0-0}` (:455/:445/:465/:426); Big Hack `countIn 2-0/3-0/3-1` (:201); Little Hack `0-1/0-2/1-2` (:522); BB Prone/Composed `3-ball counts` (:191/:262). This is ground-truth about what the traits DO, and is sound.
+2. The certification CONTRADICTS ITSELF on DETECTION. §D (:52) — the EARLY triage — buckets all 8 as "needs the ball-strike count input." But §VI (:91 "**SUPERSEDES §V's open framing**", JK design session 2026-06-16) resolves them WITHOUT a count: §VI.4 (:127) "reuse `pitchesInAtBat` (==1 ⇒ first-pitch)" → First Pitch Slayer/Prayer; §VI.3 (:122) "**Personality is PRIMARY where the measured signal is thin (Stimulated, Gets Ahead/Falls Behind, Big/Little Hack)**"; §VI.1 (:103) Franchise-lite "still earns … the **personality-primary ones**" — i.e. the count was NEVER meant to gate these; only zone/pitch-type/chase traits go dark without enrichment.
+3. The BUILT detection layer inherited the stale §D framing. `traitCandidateBuilder.ts` `BUILDABLE_TRAITS` = exactly 16 (Clutch/Choker, RBI Hero/Zero, Rally Stopper/Surrounded/Starter, Meltdown, Stealer/Bad Jumps, Pinch Perfect, Butter Fingers, Cannon/Noodle Arm, Durable/Injury Prone) — all outcome/state/fielding. It omits traits §VI says are buildable from already-persisted or already-joined data: First Pitch Slayer/Prayer (`pitchesInAtBat`), the platoon splits CON/POW vs L/RHP + Specialist + Reverse Splits (**handedness was joined in L9a-3**), Bunter/Tough Out/Whiffer/K Collector/K Neglector/Base Rounder/Base Jogger/Sprinter/Slow Poke (clean outcome proxies), and the personality-primary count-family (Big/Little Hack, Gets Ahead/Falls Behind, BB Prone, Composed, Stimulated). §VI's buildable set (Bucket A 12 + Bucket B 27 + the personality-primary set) is ~39+; the build delivered 16 and justified the remainder as "needs new input" by citing the superseded §D table.
+4. The personality-PRIMARY exception (the mechanism for the count-family) was DEFERRED in L9b-2 (logged as a DEFAULT-TAKEN) — JK OVERRODE this to v1 (ruling Q12, 2026-06-18). L9b-2's personality factor is only a TILT multiplier on an existing reality percentile + the min-sample valve kills thin signals, so neither L9b-3a (no candidate emitted) nor L9b-2 (tilt-only) currently implements "personality drives the trait when the signal is thin."
+
+**Impact:**
+- **Foundations are SOUND** — the matrix, the percentile scorer (`traitRealityScorer.ts`), the acquisition combiner (`traitAcquisition.ts`), and the 16 built traits are all verified-correct. This is NOT a teardown.
+- **The detection SCOPE is wrong/incomplete** — L9b-3a built ~16 of ~39+ §VI-buildable traits; spec says ~14–15 traits should be dormant-without-enrichment (zone/pitch-type/chase), the build left ~33+ dormant (≈2×).
+- **L9a-2 reframed** — the ball-strike count is a PRECISION input (lets Big/Little Hack/BB Prone/Composed measure the literal count instead of leaning on personality), NOT a hard gate. First-pitch comes free from `pitchesInAtBat`. JK ruling Q1: defer per-pitch count for v1 (precision-only, 4 traits).
+- **Root cause / lesson:** L9b-3a used the SUPERSEDED §D triage instead of the resolved §VI model, and the superseded "needs new input" justification went uncaught. Future L-stack tickets that implement a spec with both an "open triage" and a "resolved model" section MUST build to the resolved section and the contract must name it.
+
+**Next:** TRAIT_DETECTION_SCOPE_AUDIT — mechanically diff §VI's buildable set (A + B + personality-primary, with the live-persistence status of each discriminating signal) against `BUILDABLE_TRAITS`, producing the exact wrongly-dormant / correctly-dormant / cut classification with a signal source per trait, BEFORE any L9b-3a rebuild. Then re-scope L9a-2 (precision-only) + expand L9b-3a + build the L9b-2 personality-primary exception (Q12).
