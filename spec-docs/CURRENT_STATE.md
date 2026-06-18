@@ -1,10 +1,20 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-18 (**L9b-2 VERIFIED + COMMITTED `f616373a`; L9b-3 RECON DONE → CONTEXT-HANDOFF → NOW L9b-3a**
-[AUTH-4 overnight; a fresh session does the session-start reads, RESTATEs, and PROCEEDs at **L9b-3a** under AUTH-4 WITHOUT
-waiting for JK — AUTH-4 is the standing go]. **L9b-3** (grant/write-back — the FIRST real trait writer, PERSISTENCE class,
+**Last Updated:** 2026-06-18 (**L9b-3a VERIFIED + COMMITTED; L9b-2 `f616373a`; NOW L9b-3b** — the dark hook + PENDING
+write, which needs the JK STORE FORK resolved)
+[AUTH-4 overnight; a fresh session does the session-start reads, RESTATEs, and PROCEEDs at **L9b-3b** under AUTH-4 WITHOUT
+waiting for JK — AUTH-4 is the standing go]. **L9b-3a DONE** = the PURE context-reconstructor + candidate-builder
+`src/engines/traitCandidateBuilder.ts`: replays a season's already-loaded AtBat/Fielding/BetweenPlay events →
+reconstructs per-AtBat `GameContext` → probes the FROZEN `activeTraitNames` for trait opportunities → outcome-weighted
+RATE signal per the 16 v1-buildable traits → role-bucketed peer pools → feeds L9b-1 `computeTraitRealityScore` →
+`TraitCandidate[]` per player; PURE (no IndexedDB/store/flag/Date/random/async), build-DARK; Codex-built →
+Opus-independently-audited VERIFIED (21 tests; tsc-0 / full suite **7,486/429, 7,484 pass / 2 characterized fail**, ZERO
+new reds; frozen matrix/scorer byte-unchanged). **AUDIT DEVIATIONS HANDLED:** Codex left an abandoned earlier-attempt pair
+`traitContextReconstructor.*` (a broken EXPOSURE-COUNT model — opposing pairs Clutch/Choker, RBI Hero/Zero, Stealer/Bad
+Jumps, etc. came out indistinguishable) → DELETED by the auditor; Codex also edited 5 Captain-owned spec-docs → REVERTED +
+re-authored. **L9b-3** (grant/write-back — the FIRST real trait writer, PERSISTENCE class,
 audit HARDEST) is RECONNED (`wf_4275ff58-dc1`) + SPLIT into **L9b-3a** (PURE context-reconstructor + candidate-builder —
-build FIRST, independent of the store fork) · **L9b-3b** (dark hook + PENDING write, mirror L8b; the STORE FORK lands here)
+DONE) · **L9b-3b** (dark hook + PENDING write, mirror L8b; the STORE FORK lands here — NEXT)
 · **L9b-3c** (§11 trait-confirm + ATOMIC trait1/trait2 displacement). Full scope/split/forks/gotchas in
 `AUTONOMOUS_RUN_LOG.md` (the 2026-06-18 "L9b-3 RECON DONE" entry). **JK FORKS (non-blocking for L9b-3a):** the write
 store (reuse `franchiseRatingsOverlays` v21 = AUTH-4 default / vs a NEW `franchiseTraitOverlays` v21→v22 = recon's
@@ -73,6 +83,37 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## RIGHT NOW
 
+- **✅ L9b-3a VERIFIED + COMMITTED (2026-06-18, AUTH-4 overnight) — the PURE context-reconstructor + candidate-builder
+  (the read-half of the first trait writer).** NEW `src/engines/traitCandidateBuilder.ts` (+ 21-test file):
+  `computeSeasonTraitCandidates(input, config?)` takes a season's ALREADY-LOADED events + rosters + L9a-4 aggregates
+  (no IndexedDB I/O — the DB reads are L9b-3b) → for each AtBat reconstructs the matrix `GameContext`
+  (`reconstructAtBatContext`: pressure from `isClutch`, risp/runnersOn/basesEmpty from `RunnerState`, teamLosing by
+  half-inning, isSubstitutionAB from `enteredAs`, a per-(game,pitcher,inning,half) `consecutiveBaserunnersAllowed` tally
+  for Meltdown) → runs ONE synthetic all-traits probe through the FROZEN `activeTraitNames` to detect trait OPPORTUNITIES
+  → aggregates an outcome-weighted RATE `signalValue` per the 16 v1-buildable traits (Clutch/Choker WPA-favorable by role;
+  RBI Hero/Zero `rbiCount`; Rally Stopper/Surrounded pitcher-favorable/unfavorable; Rally Starter reach-rate; Meltdown
+  freq/units; Stealer/Bad Jumps SB success/`1-rate`; Pinch Perfect; Butter Fingers error-rate; Cannon/Noodle ±OF-arm-rate;
+  Durable/Injury-Prone ∓injury-rate) → role-bucketed peer pools → feeds L9b-1 `computeTraitRealityScore` (basis `'none'`)
+  → `TraitCandidate[]` per player. The 33 Bucket-C traits stay DORMANT (never in BUILDABLE_TRAITS; no proxy fabricated).
+  PURE / build-DARK (no production importer; L9b-3b wires it). **Codex 5.5-built → Opus-4.8-INDEPENDENTLY-audited
+  VERIFIED:** tsc-0 / focused 21/21 / full suite **7,486 tests / 429 files, 7,484 pass / 2 characterized fail**, ZERO new
+  reds (+21 tests / +1 file = exactly this engine's test); purity + build-dark greps clean; frozen
+  matrix/scorer/`traitAcquisition`/`percentile`/`traitPricing`/`rosterEngineConstants` BYTE-UNCHANGED; every per-trait
+  outcome direction re-derived by the auditor. **AUDIT DEVIATIONS HANDLED (the builder over-produced):** (1) Codex left an
+  ABANDONED earlier-attempt pair `traitContextReconstructor.*` implementing a broken EXPOSURE-COUNT model (bare fire-count
+  made opposing pairs indistinguishable — Clutch≡Choker, RBI Hero≡Zero, Stealer≡Bad Jumps, Butter≡Cannon≡Noodle) → the
+  auditor DELETED it (nothing imported it; the contracted `traitCandidateBuilder.ts` is the correct rate-model file); (2)
+  Codex edited 5 Captain-owned spec-docs → REVERTED to HEAD + re-authored here. trackerDb stays **v21** (pure, no store).
+  **DEFAULTS-TAKEN (AUTH-4, flagged for JK — see OPEN PENDING-JK):** outcome-weighted RATE model (not bare fire-count);
+  `pressure='high'` from the populated `isClutch` flag (finer extreme banding deferred); Cannon/Noodle share one
+  OF-arm-per-GAME signal (no per-OF-chance denominator exists in v1); Durable/Injury-Prone = injuries/games; all signals
+  `basis:'none'`; Clutch/Choker role-determined (position→batting WPA, pitcher→fielding-team WPA). **➡ NEXT = L9b-3b**
+  (the dark hook + PENDING write — clone the L8b `franchiseCheckpointSweepCompute` pattern: a default-OFF
+  `isFranchisePhase2TraitsEnabled` flag + a gated `persistDarkTraitGrantForCompletedGame` in `processCompletedGame.ts`
+  that LOADS the season events, calls `computeSeasonTraitCandidates` → `computeTraitAcquisition` (L9b-2) → writes PENDING
+  trait-change rows; PERSISTENCE class → audit HARDEST). **BLOCKS on the JK STORE FORK** (reuse `franchiseRatingsOverlays`
+  v21 = AUTH-4 default / new `franchiseTraitOverlays` v21→v22 = Captain's lean; `WAITING_ON_JK`). *(Prior L9b-2 entry
+  below.)*
 - **✅ L9b-2 VERIFIED + COMMITTED `f616373a` (2026-06-18, AUTH-4 overnight) — the PURE trait-ACQUISITION engine.** L9b
   SPLIT: L9b-1 scorer (DONE `398533d1`) · **L9b-2** acquisition (DONE, this entry) · **L9b-3** grant/write-back (NEXT —
   persistence, audit hardest). NEW `src/engines/traitAcquisition.ts` (+ 24-test file): `computeTraitAcquisition` consumes
@@ -541,7 +582,13 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## SUITE BASELINE
 
-**7,465 tests / 428 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L9b-2** commit
+**7,486 tests / 429 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L9b-3a**: **7,484 pass /
+2 fail** — the 2 = EXACTLY the characterized baseline (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`, confirmed via
+FAIL-file grep on a clean re-run). A FIRST run showed 3 fails, the 3rd being the documented order-flake
+`EliminationTeamHub.test.tsx`, which did NOT reproduce on the immediate re-run (passes solo) — same worker-pool-reorder
+family, NOT a regression. **ZERO new reds** (+21 tests / +1 file = exactly L9b-3a's `traitCandidateBuilder.test.ts`; the
+engine is pure/build-dark, imported by nothing in production → cannot regress any UI/other test). trackerDb **v21**
+(L9b-3a added no store). *(Prior baseline retained below for the arc trail.)* **7,465 tests / 428 files** — full suite run 2026-06-18 (AUTH-4 overnight, host session) after **L9b-2** commit
 `f616373a`: **7,463 pass / 2 fail** — the 2 = EXACTLY the characterized baseline (`wpaRuntimeBoundary` +
 `franchiseManualSmokeFixture`, confirmed via FAIL-line grep); the order-flakes did NOT surface this run. **ZERO new reds**
 (+24 tests / +1 file = exactly L9b-2's `traitAcquisition.test.ts`; the engine is pure/build-dark). trackerDb **v21**
@@ -794,6 +841,20 @@ solo; non-deterministic full-suite order/worker-pool sensitivity [shared fake-In
 surfaced when L9b-1 added `traitRealityScorer.test.ts`, exactly the L7d-1/AwardsWatchlist pattern).
 **`Workhorse` trait role (L9b-1 DEFAULT-TAKEN):** classified PITCHER (staminaModifier, unlisted in VI.2) → confirm or
 re-classify; affects only which players are eligible to earn it (L9b-2+), not the scorer math.
+**L9b-3a DEFAULTS-TAKEN (AUTH-4, flagged):** (1) **outcome-weighted RATE signal model** — the reality `signalValue` is a
+success-RATE within a trait's matrix-detected opportunities (e.g. Clutch = WPA-favorable rate in high-pressure PAs), NOT a
+bare predicate fire-COUNT. The L9b-3 recon line said "COUNT real fires," which Codex first built literally — but a pure
+count makes every OPPOSING pair indistinguishable (Clutch≡Choker, RBI Hero≡Zero, Stealer≡Bad Jumps, Butter≡Cannon≡Noodle
+all share one predicate), so the Captain's contract + the shipped engine use the §B-faithful outcome-weighted rate. JK:
+confirm the rate model (vs revisiting the recon's count wording). (2) `pressure='high'` derived from the populated
+`isClutch` flag (finer leverage-band → 'extreme' deferred). (3) **Cannon Arm / Noodle Arm share ONE OF-arm-per-GAME
+signal** = (outfieldAssists + baserunnersHeld) / games, inverted for Noodle — there is no per-OF-throw opportunity
+denominator in v1 (approximation). (4) Durable / Injury-Prone = injuries / games (inverted for Durable). (5) ALL signals
+use `basis:'none'` (rate floor `minSampleRate`, no season scaling). (6) Clutch/Choker are role-determined (a position
+player's signal from his batting WPA, a pitcher's from the fielding-team WPA). (7) **AUDIT NOTE (not a default — a builder
+deviation handled):** Codex over-produced — it left an abandoned `traitContextReconstructor.*` pair (the broken count
+model) which the auditor DELETED, and edited 5 Captain-owned spec-docs which the auditor REVERTED + re-authored. No JK
+action needed on the deviation; flagged for visibility.
 **L9b-2 DEFAULTS-TAKEN (AUTH-4, flagged):** (1) **`TRAIT_OPPOSITES`** — a NEW 14-pair canonical positive↔negative trait
 pairing list authored in `traitAcquisition.ts` (none existed in code/spec; derived from VI.3 +/− image groupings + the 2
 SMB4 mutual-exclusion examples). Touches the frozen trait system → JK review (add/remove pairs?). (2) **personality-PRIMARY

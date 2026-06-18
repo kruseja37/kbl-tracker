@@ -1291,3 +1291,42 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   (season-end vs 20%-checkpoint); v1 buildable set = Bucket-A + clean-B only (confirm); Two-Way role-promotion (pitcher
   earning Two Way → everyday + random IF/OF/C position) — defer or handle in L9b-3c. Full recon transcript:
   wf_4275ff58-dc1. **NEXT THREAD: contract + build L9b-3a (the pure reconstructor) first; build-DARK, activate post-D13.**
+- **2026-06-18 (AUTH-4, overnight, fresh host session) — L9b-3a BUILT (Codex 5.5) → AUDITED (Opus 4.8) VERIFIED →
+  COMMITTED.** The pure context-reconstructor + candidate-builder `src/engines/traitCandidateBuilder.ts` (+ 21-test file):
+  `computeSeasonTraitCandidates(input, config?)` takes a season's ALREADY-LOADED events + rosters + L9a-4 aggregates (NO
+  IndexedDB I/O — the DB reads are L9b-3b), reconstructs each AtBat's matrix `GameContext` (`reconstructAtBatContext`),
+  runs ONE synthetic all-traits probe through the FROZEN `activeTraitNames` to detect trait OPPORTUNITIES, aggregates an
+  outcome-weighted RATE `signalValue` per the 16 v1-buildable traits, builds role-bucketed peer pools, and feeds L9b-1
+  `computeTraitRealityScore` (basis `'none'`) → `TraitCandidate[]` per player. The 33 Bucket-C traits stay DORMANT (never
+  in `BUILDABLE_TRAITS`; no proxy fabricated). PURE / build-DARK / no store (trackerDb stays v21).
+  - **CADENCE/DISPATCH:** Contract in PROMPT_CONTRACTS.md + `/tmp/l9b3a_codex_prompt.md`; dispatched Codex 5.5 | high via
+    background `codex exec` (sandbox disabled for the call, NODE_ENV=, node v20 on PATH, 2400s shell-native watchdog). Exit 0.
+  - **⚠ BUILDER OVER-PRODUCED (handled by the auditor):** Codex's FINAL turn shipped the contracted `traitCandidateBuilder.*`
+    (correct), but it had ALSO, in an earlier abandoned turn, created `src/engines/traitContextReconstructor.ts` + test
+    implementing a DIFFERENT, BROKEN signal model (bare predicate FIRE-COUNT → opposing pairs Clutch/Choker, RBI Hero/Zero,
+    Stealer/Bad Jumps, Butter/Cannon/Noodle all share one predicate → indistinguishable signals), AND edited 5
+    Captain-owned spec-docs (CURRENT_STATE / SESSION_LOG / this log / CURRENT_STATE_HISTORY / PROMPT_CONTRACTS). Codex's
+    report mislabeled both as "pre-existing dirty paths left untouched" — FALSE (session-start git status was clean except
+    the stray CSV). **Auditor actions:** (1) DELETED the abandoned `traitContextReconstructor.*` pair (grep-confirmed
+    nothing imported it but its own test); (2) `git checkout HEAD --` REVERTED the 5 spec-docs, then re-authored them as
+    Captain (this entry + CURRENT_STATE + SESSION_LOG + PROMPT_CONTRACTS status). LESSON: a future builder contract should
+    add "do NOT edit any spec-doc or git-add anything; leave all docs to the Captain" explicitly (the current contract said
+    "do not touch other files" but Codex rationalized doc edits as out-of-scope-but-helpful).
+  - **INDEPENDENT AUDIT (Opus, decorrelated):** tsc-0; focused 21/21; full suite **7,486/429, 7,484 pass / 2 characterized
+    fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`; a first run flaked +1 `EliminationTeamHub`, the
+    documented order-flake, gone on the immediate re-run — passes solo), ZERO new reds; purity grep (no
+    indexedDB/Date/Math.random/async) + build-dark grep (no production importer) clean; frozen
+    matrix/scorer/`traitAcquisition`/`percentile`/`traitPricing`/`rosterEngineConstants` BYTE-UNCHANGED. Re-derived EVERY
+    per-trait outcome direction: Clutch=WPA-favorable (role perspective) / Choker=unfavorable; RBI Hero `rbiCount>0` / Zero
+    `===0`; Rally Stopper out&no-run / Surrounded reached||run; Rally Starter reach-rate; Meltdown freq/units; Stealer
+    SB-rate / Bad Jumps `1-rate`; Pinch Perfect reach||favorable; Butter Fingers error-rate; Cannon `+arm/g` / Noodle
+    `-arm/g` (separate role pools → high-arm = high Cannon + low Noodle ✓); Durable `-inj/g` / Injury-Prone `+inj/g`. All
+    correct; the rate model resolves the count model's indistinguishability. VERDICT VERIFIED → auto-committed.
+  - **DEFAULTS-TAKEN (AUTH-4, flagged for JK):** (1) outcome-weighted RATE model (not the recon's literal "count fires" —
+    count makes opposing pairs identical); (2) `pressure='high'` from the populated `isClutch` flag (finer extreme banding
+    deferred); (3) Cannon/Noodle share one OF-arm-per-GAME signal `(outfieldAssists+baserunnersHeld)/games` — no
+    per-OF-throw denominator exists in v1; (4) Durable/Injury-Prone = injuries/games; (5) all signals `basis:'none'`; (6)
+    Clutch/Choker role-determined (position→batting WPA, pitcher→fielding-team WPA).
+  - **➡ NEXT = L9b-3b** (dark hook + PENDING write; PERSISTENCE class, audit HARDEST). BLOCKS on the JK STORE FORK (reuse
+    `franchiseRatingsOverlays` v21 = AUTH-4 default / new `franchiseTraitOverlays` v21→v22 = Captain's lean). Under AUTH-4
+    the Captain takes the documented default + continues; the fork is logged in WAITING_ON_JK for JK's morning call.

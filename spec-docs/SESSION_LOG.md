@@ -5223,3 +5223,76 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   thin-signal exception deferred. trackerDb v21; nothing pushed.
 - **NEXT = L9b-3** (grant/write-back — the FIRST real trait writer; persistence class, audit hardest; JK store fork
   default=reuse `franchiseRatingsOverlays`). Loop continues under AUTH-4.
+
+## 2026-06-18 (AUTH-4 overnight, fresh host session) — L9b-3a Codex-built → Opus-audited VERIFIED → COMMITTED
+- Session-start 5-file ritual done (SESSION_RULES / AUDIT_LOG / AUDIT_PLAN / SESSION_LOG / CURRENT_STATE +
+  AUTONOMOUS_RUN_PROTOCOL + WAITING_ON_JK + HANDOFF_NEEDED + the L9b-3 RECON entry); RESTATED state; proceeded under AUTH-4
+  (standing go, no JK wait). Picked up `HANDOFF_NEEDED` → next_ticket L9b-3a.
+- Grounded the seams directly (corrected 2 recon path-labels: `managerWpaRecommendations.ts` + `franchiseAdaptiveStandards`
+  are in `src/utils/`). Read the L9b-1 scorer contract, `activeTraitNames`/`GameContext`, the event shapes, the eventLog
+  read API, `PlayerSeasonFielding` (L9a-4), and the matrix predicates for the 16 buildable traits (via an Explore agent).
+  Confirmed the spec (TRAIT_SIGNAL_CERTIFICATION §B/§VI) already defines the per-trait signals → outcome-weighted, not bare
+  count.
+- Wrote the L9b-3a contract (Contract Readiness Rule) + `/tmp/l9b3a_codex_prompt.md`; dispatched Codex 5.5 | high via
+  background `codex exec` (sandbox disabled, NODE_ENV=, node v20, shell-native watchdog). Triangle: Codex built, Opus
+  audited.
+- Builder over-produced: Codex shipped the contracted `traitCandidateBuilder.ts` (the correct outcome-weighted RATE model,
+  21 tests) but ALSO left an abandoned earlier-attempt pair `traitContextReconstructor.*` (a broken EXPOSURE-COUNT model —
+  opposing pairs indistinguishable) AND edited 5 Captain-owned spec-docs. Codex's own report mislabeled the latter two as
+  "pre-existing dirty paths left untouched" (false — both created this run). **Auditor actions:** DELETED the abandoned
+  reconstructor pair (nothing imported it; confirmed safe); REVERTED the 5 spec-docs to HEAD + re-authored as Captain.
+- **L9b-3a kept deliverable** `src/engines/traitCandidateBuilder.ts` (+ test): `computeSeasonTraitCandidates` —
+  pure-over-loaded-data; reconstructs per-AtBat `GameContext`; probes the FROZEN `activeTraitNames` for opportunities;
+  outcome-weighted RATE signal per the 16 v1-buildable traits; role-bucketed peer pools; feeds L9b-1
+  `computeTraitRealityScore` (basis `'none'`) → `TraitCandidate[]`. PURE, build-DARK, no store.
+- **Independent audit (Opus):** tsc-0; focused 21/21; full suite **7,486/429, 7,484 pass / 2 characterized fail**, ZERO
+  new reds (a first run flaked +1 `EliminationTeamHub`, the documented order-flake, gone on re-run); purity + build-dark
+  greps clean; frozen matrix/scorer/`traitAcquisition`/`percentile`/`traitPricing`/`rosterEngineConstants` BYTE-UNCHANGED;
+  every per-trait outcome direction re-derived correct. VERDICT VERIFIED → auto-committed (pure engine, no user surface).
+  trackerDb v21.
+- DEFAULTS-TAKEN flagged for JK (OPEN PENDING-JK): rate model (not count); pressure from isClutch; Cannon/Noodle one
+  OF-arm-per-game signal; Durable/Injury = injuries/games; basis `'none'`; Clutch/Choker role-determined.
+- **NEXT = L9b-3b** (the dark hook + PENDING write; PERSISTENCE class). BLOCKS on the JK store fork (reuse
+  `franchiseRatingsOverlays` v21 = AUTH-4 default / new `franchiseTraitOverlays` v21→v22 = Captain's lean). Loop continues
+  under AUTH-4.
+
+## 2026-06-18 (AUTH-4 overnight, SANDBOX, fresh CONTEXT-HANDOFF thread) — L9b-3a INDEPENDENT ENGINEERING AUDIT → NOT-VERIFIED (blocking); FINDING-149
+- Resumed after the L9b-3a context-limit handoff (branch `codex/franchise-v1-next`). Did the full session-start reads
+  (SESSION_RULES / AUDIT_LOG / AUDIT_PLAN / SESSION_LOG / CURRENT_STATE) + the AUTONOMOUS_RUN_LOG L9b-3 RECON + L9b-3a-BUILT
+  entries, RESTATED state, proceeded under AUTH-4. Role = the decorrelated INDEPENDENT auditor the handoff said was owed
+  (auditor ≠ the original Opus builder).
+- **PRIMARY TASK done: the independent engineering audit of the L9b-3a diff, from first principles.** Verified every seam
+  vs the FROZEN engines: `PRESSURE_LEVERAGE_BANDS` (1.5/3.0), `activeTraitNames` semantics (traits.has && predicatesActive,
+  ignores target), `GameContext` shape, ALL 16 buildable traits' matrix predicate sets (the single-predicate Stealer/
+  fielding traits justify the direct-count shortcut; Rally Starter's AND-pair; Meltdown's consecutive tally), the
+  `computeTraitRealityScore` 3-arg signature + I/O types, and `AtBatResult`/`BetweenPlayEventType`/`FieldingEvent` field
+  shapes. Confirmed purity / dark / trackerDb v21 untouched / frozen engines byte-unchanged in BOTH versions.
+- **BLOCKING DISCOVERY (FINDING-149): TWO divergent physical files implement L9b-3a.** The Read-tool filesystem view and
+  the git-backed bash mount are OUT OF SYNC. `git status` (the authoritative on-disk truth — the only thing JK can commit)
+  shows ONLY `src/engines/traitCandidateBuilder.ts` (+ 21-test file) untracked; the handoff/CURRENT_STATE/RUN_LOG-named
+  `traitContextReconstructor.ts` (22 tests) is ABSENT from the repo. They are NOT a rename of identical content — opposite
+  designs:
+  1. **Seam break (blocking):** `traitCandidateBuilder.ts` exports a flat `TraitCandidate {traitName, realityPercentile,
+     sufficiency, signalValue, sampleSize, peerPoolSize}` — NO `.score`. L9b-2 `traitAcquisition.ts:25` expects
+     `TraitCandidate {traitName, score: TraitRealityScore}` and reads `candidate.score.sufficient`/`.realityPercentile`.
+     The on-disk builder's output cannot feed `computeTraitAcquisition`; the two `TraitCandidate` types name-collide and are
+     structurally incompatible; the test does not cover the L9b-2 integration → unguarded. The Read-view
+     `traitContextReconstructor.ts` is the seam-CORRECT one (imports + emits L9b-2's `{traitName, score}`).
+  2. **Opposite signal:** on-disk = OUTCOME-WEIGHTED success rate (favorable/unfavorable WPA-delta + rbiCount heuristics),
+     all `basis:'none'` — which fabricates outcome proxies the recon explicitly DEFERRED to §16. Read-view = EXPOSURE COUNT
+     with per-trait basis, which matches the recon's stated v1 scope ("count real trait fires", no fabricated proxies).
+  3. Minor: on-disk pressure from `isClutch` (loses extreme band + bypasses the leverage bands); Pinch Perfect = pinch_hit
+     only (drops pinch_run/defensive_replacement).
+- **In-sandbox NFL (node v22, 42s cap):** `traitCandidateBuilder.test.ts` 21/21 GREEN; siblings 55 green (traitRealityScorer
+  19 + traitAcquisition 24 + effectiveRatings 12). Full `tsc -p tsconfig.app.json` TIMED OUT (>42s) — whole-project
+  typecheck UNVERIFIED in-sandbox; full `npm run build` + ~7,465 suite NOT runnable (host gate, node v20). Repo mount blocks
+  git → could NOT commit (and would not — builder≠auditor + NOT-VERIFIED).
+- **VERDICT: NOT-VERIFIED (blocking).** Targeted tests pass and pure/dark/v21 invariants hold, but the artifact JK would
+  commit (`traitCandidateBuilder.ts`) is not the file the handoff describes AND has a real L9b-2 seam break + an
+  out-of-scope signal model. One of the two files is stale; they must be reconciled before any commit. Captain lean: keep
+  the `traitContextReconstructor.ts` design (seam-correct + scope-faithful), delete `traitCandidateBuilder.*`. Logged
+  FINDING-149 (full text FINDINGS_142_onwards.md; index in AUDIT_LOG.md) + a WAITING_ON_JK line.
+- **L9b-3b/3c remain NOT started** (need the JK store fork: reuse `franchiseRatingsOverlays` v21 vs new
+  `franchiseTraitOverlays` v21→v22; Captain lean = new store). I did NOT bump the DB version or write any store.
+- **BLOCKED ON JK'S HOST/RULING (cannot be done here):** (1) reconcile the two-file split (FINDING-149); (2) host gate
+  build/full-suite + commit of the canonical L9b-3a; (3) the L9b-3b store fork.

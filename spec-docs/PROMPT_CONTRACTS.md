@@ -10036,3 +10036,19 @@ export function computeTraitAcquisition(input: TraitAcquisitionInput, tuning?: T
 Use high reasoning effort. Think step-by-step. Builder ≠ auditor — Opus re-audits independently (re-run tsc/tests, verify the combiner direction per factor, the hysteresis dead-band, the offsetting-pair + displacement reconciliation, purity/build-dark, and that the VI.3 lists + TRAIT_OPPOSITES use canonical names).
 
 **Status:** VERIFIED + COMMITTED `f616373a` (2026-06-18, AUTH-4 overnight). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / build 0 / focused 24/24 / full suite 7,465 tests, 7,463 pass / 2 characterized fail, ZERO new reds. Combiner directions + hysteresis dead-band + offsetting-pair/displacement reconciliation hand-verified vs tests; `TRAIT_OPPOSITES` + VI.3 sets canonical (module-load guard). Auditor removed one dead import (`computeTraitRealityScore`, unused) + re-verified. Pure/build-dark; trackerDb v21. DEFAULTS-TAKEN flagged for JK: TRAIT_OPPOSITES (new trait-asset data) + personality-primary thin-signal exception deferred. NEXT = L9b-3 (grant/write-back).
+
+---
+
+## CONTRACT — L9b-3a (PURE context-reconstructor + candidate-builder) — 2026-06-18 (AUTH-4 overnight)
+
+**ROUTE: Codex 5.5 | high reasoning effort** (builder). Auditor = Opus 4.8 (independent; ≠ builder). Branch codex/franchise-v1-next. Build-DARK, activate post-D13.
+
+**GOAL:** PURE, build-DARK §9 context-reconstructor + candidate-builder `src/engines/traitCandidateBuilder.ts` (+ test) that, given a season's ALREADY-LOADED events + rosters, emits per-player per-trait `TraitCandidate` by feeding the FROZEN L9b-1 scorer `computeTraitRealityScore` — for the v1 buildable set only — with NO IndexedDB I/O, NO store, NO flag, NO production caller. (DB reads + PENDING write = the NEXT ticket L9b-3b.)
+
+**SOURCE OF TRUTH:** TRAIT_SIGNAL_CERTIFICATION.md §B / §VI.2 / §VI.4 / §VI.5; L9b-1 `traitRealityScorer.ts`; FROZEN `effectiveRatings.ts` `activeTraitNames`/`GameContext`; `franchiseAdaptiveStandards.ts`; event shapes `eventLog.ts` (`AtBatEvent`/`BetweenPlayEvent.stolenBase`/`FieldingEvent`/`RunnerState`), `AtBatResult` (game.ts:12), `PlayerSeasonFielding` (seasonStorage.ts:128).
+
+**MODEL (Captain design, AUTH-4 — build-DARK + sim-tunable → bounded/reversible):** PURE core over loaded data. Opportunity detection reuses the FROZEN matrix via a synthetic all-traits probe through `activeTraitNames` on a per-AtBat reconstructed `GameContext`; between-play/fielding/season-stat traits extracted directly. Outcome-weighted RATE signal per trait (success-rate within opportunities, oriented higher=stronger; opposites inverted), `basis:'none'`, role-bucketed peer pools → `computeTraitRealityScore`. 16 BUILDABLE_TRAITS; 33 Bucket-C dormant (no proxy).
+
+**Full contract text (the dispatched prompt):** `/tmp/l9b3a_codex_prompt.md` (per-trait extractor table, reconstruction rules, API, ≥18 tests, verification greps).
+
+**Status:** VERIFIED + COMMITTED (2026-06-18, AUTH-4 overnight). Codex 5.5 built → Opus 4.8 independently audited VERIFIED: tsc 0 / focused 21/21 / full suite 7,486 tests, 7,484 pass / 2 characterized fail, ZERO new reds; purity + build-dark greps clean; frozen matrix/scorer/traitAcquisition/percentile/traitPricing/rosterEngineConstants BYTE-UNCHANGED; every per-trait outcome direction re-derived correct. **Builder over-produced — handled by the auditor:** Codex also left an abandoned divergent `traitContextReconstructor.*` pair (a broken EXPOSURE-COUNT model) → DELETED; and edited 5 Captain-owned spec-docs → REVERTED + re-authored. DEFAULTS-TAKEN flagged for JK (see CURRENT_STATE OPEN PENDING-JK): rate model (not count) · pressure from isClutch · Cannon/Noodle one OF-arm-per-game signal · Durable/Injury = injuries/games · basis 'none' · Clutch/Choker role-determined. trackerDb v21 (no store). NEXT = L9b-3b (dark hook + PENDING write; needs the JK store fork).
