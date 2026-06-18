@@ -56,11 +56,13 @@ import {
 } from './franchiseMoraleState';
 import {
   isFranchisePhase2FameEnabled,
+  isFranchisePhase2CheckpointEnabled,
   isFranchisePhase2FlashpointEnabled,
   isFranchisePhase2MoraleEnabled,
 } from './franchisePhase2Flags';
 import { persistDarkFameRecordsForCompletedGame } from './franchiseFameCompute';
 import { persistDarkFlashpointDecayForCompletedGame } from './franchiseFlashpointDecayCompute';
+import { persistDarkCheckpointSweepForCompletedGame } from './franchiseCheckpointSweepCompute';
 import type { HiddenModifiers } from '../types/game';
 
 export interface ProcessGameResult {
@@ -614,6 +616,13 @@ export async function processCompletedGame(
             await persistDarkFlashpointDecayForCompletedGame(gameState, trueValueScope, archiveOptions);
           } catch (e) {
             console.warn('[Flashpoint] dark flashpoint-decay compute skipped for completed game ' + gameState.gameId + ':', e);
+          }
+        }
+        if (isFranchisePhase2CheckpointEnabled()) {
+          try {
+            await persistDarkCheckpointSweepForCompletedGame(gameState, trueValueScope, archiveOptions);
+          } catch (e) {
+            console.warn('[Checkpoint] dark ratings-development checkpoint sweep skipped for completed game ' + gameState.gameId + ':', e);
           }
         }
         try {

@@ -33,3 +33,15 @@ export function isFranchisePhase2FlashpointEnabled(): boolean {
 export function setFranchisePhase2FlashpointEnabledForTests(enabled: boolean | null): void {
   franchisePhase2FlashpointEnabledOverride = enabled;
 }
+
+export const FRANCHISE_PHASE2_CHECKPOINT_ENABLED_DEFAULT = false;
+
+let franchisePhase2CheckpointEnabledOverride: boolean | null = null;
+
+export function isFranchisePhase2CheckpointEnabled(): boolean {
+  return franchisePhase2CheckpointEnabledOverride ?? FRANCHISE_PHASE2_CHECKPOINT_ENABLED_DEFAULT;
+}
+
+export function setFranchisePhase2CheckpointEnabledForTests(enabled: boolean | null): void {
+  franchisePhase2CheckpointEnabledOverride = enabled;
+}
