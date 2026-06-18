@@ -1,6 +1,8 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-17 (ACTIVE — **AUTH-4 host resume**; the L5b handoff is CLEARED. **L5b COMMITTED `5ebb148`** —
+**Last Updated:** 2026-06-17 (**SESSION ENDED — CONTEXT-HANDOFF → L7c** [clean boundary after 5 tickets; fresh session
+does the session-start reads, RESTATEs, PROCEEDs at L7c under AUTH-4]. AUTH-4 host resume; the L5b handoff is CLEARED.
+**L5b COMMITTED `5ebb148`** —
 the flashpoint-decay accumulator was host-verified (`NODE_ENV= npm run build` exit 0 + full suite **7,298 pass / 2
 characterized fail** [`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`], ZERO new reds; the +18 tests / +3 files over
 the post-L5a 7,280/410 baseline are exactly L5b's 3 new test files) and committed (14 code/test files; sandbox junk

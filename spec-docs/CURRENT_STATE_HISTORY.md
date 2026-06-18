@@ -1015,3 +1015,29 @@ could NOT be committed (mount blocks git unlink). Decorrelated sub-agent auditor
 risk LOW. Host must build + run full suite + commit the 15 files on codex/franchise-v1-next. WAITING_ON_JK.md written.
 Suite baseline (last host-observed, post-L5a) 7,280 pass / 2 characterized fail; trackerDb host-state v19 (v20 after
 the L5b commit lands).
+
+---
+## OUTGOING SNAPSHOT — 2026-06-17 (AUTH-4 host resume thread, CONTEXT-HANDOFF → L7c)
+
+Resumed the L5b CONTEXT-HANDOFF on the HOST (node v20 + git write + codex CLI). JK present; chose "commit + continue
+under AUTH-4." Did the session-start reads, RESTATED, proceeded. **10 commits**, every code diff Codex 5.5-built → Opus
+4.8 independently audited (auditor ≠ builder: full-suite re-run, diff hand-read, purity/byte-unchanged/invariant greps),
+ZERO new reds throughout. All on `codex/franchise-v1-next`; nothing pushed.
+
+- **L5b `5ebb148`** (+docs `7a7a8e8`) — handoff cleared: host-verified the audited sandbox diff (build 0 + full suite
+  within baseline) and committed the 14 flashpoint-decay files; cleaned + gitignored the sandbox junk (Temp/, sentinels,
+  .git_writetest_probe, WAITING_ON_JK.md, Progress_Summary.md, HANDOFF_*).
+- **L5c `8cd2cc1`** (+docs `268dd1a`) — pure §13 in-season trade-request generation engine (the loyalty inversion: angry
+  fans → loyal players bolt MORE; signed loyalty term gated on fan sentiment; intensity dial).
+- **L5d `e061e51`** (+docs `016eea1`) → **L5 COMPLETE (a–d)** — pure §13 reporter-intensity tooth (fan morale →
+  press-heat NarrativeIntensity; live LLM reporter byte-unchanged; seam deferred post-D13).
+- **L7 SPLIT L7a–d.** **L7a `0a59a24`** (+docs `17ad4a0`) — filled L5b's `resolveTurnedOnPlayers` seam (async +
+  resolves each game's home+away active|locked ALBATROSS via `getFranchiseDesignationRow`; doubly-dark, no store/version
+  touch). **L7b `77feeda3`** (+docs `2a493e0a`) — pure §20.4 Channel-C designation→fame nudge engine (FF +2 /
+  Albatross −1 / MVP·Ace +1.5 sim; Captain/Fan Hopeful → L7d; fame-store wiring deferred seam).
+
+Suite arc 7,280/410 → **7,327/416** (2 characterized fails throughout: `wpaRuntimeBoundary` + `franchiseManualSmokeFixture`;
+zero new reds). trackerDb **v20**, KBL_BACKUP_VERSION 2. Codex-build → Opus-audit via `codex exec` background dispatch
+(perl alarm watchdog) worked cleanly on the host. ENDED via CONTEXT-HANDOFF (clean boundary after 5 tickets, heavy
+context) → fresh session resumes at **L7c** under AUTH-4. NEXT after L7c: **L7d** (Captain router effects + Fan Hopeful
+cushion + Fan Favorite double-dep) → {L8, L9b, L10} → {L11–L14} → L-SIM gate.
