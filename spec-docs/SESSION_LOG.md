@@ -5564,3 +5564,25 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - **NEXT = R1-b2** (Two Way wOBA-vs-pitcher-pool one-signal + C/IF/OF position-at-grant · Utility primary-position
   plumbing into `SeasonTraitCandidateInput` · Crossed Up + Bunter opt-in) → R2 → R3. FINDING-150 rebuild in progress.
   Nothing pushed.
+
+## 2026-06-18 (attended, same session) — R1-b2 (Utility + Crossed Up + Bunter; Two Way SPLIT out)
+- **Two genuine forks surfaced to JK before building** (soul-layer discipline). JK ruled (DECISIONS_LOG): (1) **Two Way
+  SPLIT to its own ticket** (R1-b3 / R3-adjacent) — it spans the pure builder AND the L9b-3c grant-path
+  random-C/IF/OF-at-grant mechanic, so it's not a clean pure-builder trait; R1-b2 = Utility + Crossed Up + Bunter.
+  (2) **Bunter = volume/frequency** (SAC per PA), not a success rate — reads the standard SAC result, so no longer
+  enrichment-gated. Captain FINDING flagged: the rate-signal family's `getPercentile`-on-mostly-zeros inflates sparse
+  signals (Bunter/Crossed Up acute) — a §16 sim-tune/pooling-convention concern, build-DARK contains it.
+- **R1-b2 = 3 traits into `BUILDABLE_TRAITS`** + an OPTIONAL `primaryPositionByPlayer` field on
+  `SeasonTraitCandidateInput` (Utility plumbing; the hook that populates it is deferred wiring → Utility dormant until
+  then). Earnable v1 set **30 → 33**. All build-DARK. `traitAcquisition.ts` needed **no production change** (Bunter
+  already POSITIVE+TOUGH, Utility already in ROSTER_ROLE_TRAITS, Crossed Up correctly absent — independently confirmed).
+- **Derivations (§0.9 verbatim):** Bunter = SAC/PA (volume); Crossed Up = passed-ball events
+  (`wildPitchOrPassedBall.wpOrPb==='passed_ball'` + `.pitcherId`) per batters-faced (pitcher PA count); Utility =
+  fielding `success`-rate at positions ≠ the player's primary (skip players absent from the map).
+- **Builder = fresh subagent ≠ auditor = Opus Captain** (triangle). Independent line-by-line re-derivation + the
+  acquisition-state re-grep → VERDICT VERIFIED. Host gate: `NODE_ENV= npm run build` exit 0 + full suite
+  **7,629/438, 7,627 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), **ZERO new
+  reds** (+21 tests / +0 files). trackerDb stays **v23**.
+- **⇒ R1-b functionally COMPLETE except Two Way** (deferred to R1-b3/R3-adjacent). **NEXT = R2** (platoon/count-family
+  handedness; pitcher count-family on walks-allowed + first-pitch pair + the 6 handedness splits — verify the L9a-3 join
+  is fed) OR R1-b3 (Two Way) if sequenced first. FINDING-150 rebuild in progress. Nothing pushed.

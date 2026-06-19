@@ -1,7 +1,7 @@
 # CURRENT_STATE.md — LIVE HEADER
 
 **Last Updated:** 2026-06-18 — **ACTIVE (attended).** Running the **L9b trait-reality REBUILD**; landed **R-E + R1-a +
-R1-b1**. (1) **Closed the recurring spec-leak at its root + RATIFIED the measurement
+R1-b1 + R1-b2**. (1) **Closed the recurring spec-leak at its root + RATIFIED the measurement
 model** — `TRAIT_MEASUREMENT_SPEC.md` is now ONE authoritative cited source (§0.6 proxy table [47 earnable, every
 cell cited via reconciliation wf_c4bac237-5d7, spec-over-code] / §0.7 code-deltas / §0.8 gates [personality is a
 TILT never a gate; Two Way pitcher-only, NO batting gateway] / §0.9 R1 derivations); purged ALL stale framing
@@ -15,12 +15,17 @@ Jumps · K Neglector acq delta). **Earnable v1 trait set 16 → 26.** (4) **R1-b
 (Option-B HR-rate/AVG percentile-merge) · Base Rounder (forced-advance port from `atBatLogic`; JK ruled denominator
 counts thrown-out tries + scope includes batter stretches, folded into §0.9 + DECISIONS_LOG) · Distractor (owner on
 1B/2B reaches) into BUILDABLE_TRAITS + Big/Little Hack acq §0.7 image deltas. **Earnable v1 set now 30.** All
-build-DARK; builder≠auditor + full host gate each. **➡ NEXT = R1-b2** (the remaining ruled-gap traits per **§0.9**:
-Two Way wOBA-vs-pitcher-pool one-signal/position-at-grant · Utility primary-position plumbing into
-`SeasonTraitCandidateInput` · Crossed Up/Bunter opt-in) → **R2** (platoon/count-family handedness) → **R3** (Ace
-Exterminator + the deferred E1 grade thread) → L11–L14 → L-SIM gate. **FINDING-150 rebuild IN PROGRESS.** Suite
-**7,608/438, 7,606 pass / 2 characterized fail**; trackerDb **v23** (pure engines, no store); branch
-codex/franchise-v1-next; **nothing pushed**. See `HANDOFF_NEEDED` for the R1-b2 resume.
+build-DARK; builder≠auditor + full host gate each. (5) **R1-b2 COMPLETE** — Utility (fielding success-rate at
+non-primary positions; OPTIONAL `primaryPositionByPlayer` input added, hook population deferred → dormant) · Crossed Up
+(passed-ball/batters-faced, pitcher) · Bunter (SAC/PA volume per JK ruling). `traitAcquisition` needed no production
+change. **Earnable v1 set now 33.** **Two Way SPLIT out (JK ruling) → R1-b3** (spans builder + the L9b-3c grant-path
+random-C/IF/OF mechanic). **⇒ R1-b functionally COMPLETE except Two Way.** **➡ NEXT = R2** (platoon/count-family
+handedness: pitcher count-family on walks-allowed [Composed now buildable] + First-Pitch pair + the 6 handedness
+splits — verify the L9a-3 join is fed) → **R1-b3** (Two Way) + **R3** (Ace Exterminator + the deferred E1 grade thread)
+→ L11–L14 → L-SIM gate. **FINDING-150 rebuild IN PROGRESS.** Captain FINDING flagged (non-blocking): the rate-signal
+family's `getPercentile`-on-mostly-zeros inflates sparse signals (Bunter/Crossed Up) — §16 sim-tune concern, build-DARK
+contains it. Suite **7,629/438, 7,627 pass / 2 characterized fail**; trackerDb **v23** (pure engines, no store); branch
+codex/franchise-v1-next; **nothing pushed**. See `HANDOFF_NEEDED` for the R2 resume.
 *(Prior arc-narrative preserved below for context.)*
 *(Historical:* **✅ L9b COMPLETE — the trait-from-reality engine, the "game-changer feature." NOW L10**
 (random events). L9b-3c committed → L9b-3 COMPLETE → **L9b COMPLETE.** Full L9b chain: L9b-1 scorer `398533d1` ·

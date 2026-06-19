@@ -191,10 +191,19 @@ Percentile = vs the role-bucketed peer pool (the scorer, basis 'none'); the min-
   credited to the **runner** (owner), not the batter. *(R1-b.)*
 - **Two Way** = ONE earn-signal: elite hitting for a pitcher = the pitcher's **wOBA/PA** (`calculateWOBA`,
   `bwarCalculator.ts`) percentile vs the **pitcher** peer pool. The **C/IF/OF variant is a random fielding position
-  assigned AT GRANT**, NOT three separate candidates. *(R1-b.)*
+  assigned AT GRANT**, NOT three separate candidates. **(SPLIT to its own ticket — JK 2026-06-18: Two Way spans the
+  pure builder AND the grant-path, because the random C/IF/OF-at-grant mechanic needs NEW logic in the already-built
+  L9b-3c grant/confirm writer. NOT in R1-b2 [= Utility + Crossed Up + Bunter]; pairs with R3's grant/ratings work.)**
+  *(R1-b3 / R3-adjacent.)*
 - **Crossed Up** = passed-ball events (attributed to the pitcher via `wildPitchOrPassedBall.pitcherId`) per
-  **batters-faced**; **Bunter** = successful sacrifices (`result==='SAC'`) per **bunt attempt**. Both **OPT-IN**
-  (dormant until logged + min-sample). *(R1-b.)*
+  **batters-faced** (the pitcher's PA count). **OPT-IN** (dormant until PBs are logged + min-sample). *(R1-b2.)*
+- **Bunter** (JK ruling 2026-06-18 — **VOLUME/frequency, NOT a success rate**): signalValue = successful sacrifice
+  bunts (`result==='SAC'`) **per PA** (position batters), percentiled vs the position pool. Failures don't drag it
+  (numerator = SAC successes only); computable from the standard `SAC` result, so **no longer enrichment-gated**.
+  *(R1-b2. NOTE — sparse-signal caveat: when few/no SAC are logged league-wide, the rate-signal family's
+  `getPercentile`-on-mostly-zeros inflates everyone's percentile; this is a known property of ALL the rate signals
+  [Slow Poke/Sprinter/Bunter/etc.], acute for the sparsest — a §16 sim-tune / pooling-convention FINDING, not an
+  R1-b2 blocker; build-DARK contains it.)*
 - **Utility** = fielding perf at a **non-primary** position — requires threading a `primaryPositionByPlayer` map into
   `SeasonTraitCandidateInput` (mechanical input addition). *(R1-b.)*
 

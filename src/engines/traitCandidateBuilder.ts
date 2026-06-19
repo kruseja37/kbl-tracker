@@ -70,6 +70,12 @@ export const BUILDABLE_TRAITS: readonly string[] = [
   'Little Hack',
   'Base Rounder',
   'Distractor',
+  // R1-b2: Utility (fielding perf at a non-primary position), Crossed Up
+  // (passed balls per batters-faced, pitcher), Bunter (SAC volume per PA). Two
+  // Way is SPLIT to its own ticket (R1-b3 / R3-adjacent) — NOT here. Build-dark.
+  'Utility',
+  'Crossed Up',
+  'Bunter',
 ];
 
 for (const traitName of BUILDABLE_TRAITS) {
@@ -106,6 +112,14 @@ export interface SeasonTraitCandidateInput {
   seasonFieldingByPlayer: ReadonlyMap<string, { outfieldAssists?: number; baserunnersHeld?: number; games?: number }>;
   injuryCountsByPlayer: ReadonlyMap<string, number>;
   gamesByPlayer: ReadonlyMap<string, number>;
+  /**
+   * R1-b2 (Utility) — OPTIONAL. The player's primary fielding position keyed by
+   * playerId; a fielding chance at any OTHER position counts toward the Utility
+   * non-primary success rate. A player absent from the map gets NO Utility signal
+   * (the trait stays dormant until a later wiring step populates this — the hook
+   * that derives primary position is a deferred step, NOT part of this ticket).
+   */
+  primaryPositionByPlayer?: ReadonlyMap<string, string>;
 }
 
 export interface AtBatContextRunningState {
@@ -835,6 +849,104 @@ function addArmSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): voi
   }
 }
 
+/**
+ * R1-b2 — Bunter (TRAIT_MEASUREMENT_SPEC §0.9 + JK ruling 2026-06-18). VOLUME /
+ * frequency, NOT a success rate: signalValue = successful sacrifice bunts
+ * (`result === 'SAC'`) PER PA, where PA = the batter's non-undone at-bat count.
+ * Failures don't drag it — the numerator is SAC successes ONLY. Reads the
+ * standard `SAC` result (NOT enrichment-gated). Position-role downstream.
+ */
+function addBunterSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
+  interface BunterCounts { pa: number; sac: number; }
+  const counts = new Map<string, BunterCounts>();
+
+  for (const atBat of sortAtBats(input.atBatEvents).filter((event) => !undoneAt(event))) {
+    const entry = counts.get(atBat.batterId) ?? { pa: 0, sac: 0 };
+    entry.pa += 1;
+    if (atBat.result === 'SAC') entry.sac += 1;
+    counts.set(atBat.batterId, entry);
+  }
+
+  for (const [batterId, entry] of counts) {
+    if (entry.pa <= 0) continue;
+    addRawSignal(raw, batterId, 'Bunter', {
+      signalValue: entry.sac / entry.pa,
+      sampleSize: entry.pa,
+    });
+  }
+}
+
+/**
+ * R1-b2 — Crossed Up (TRAIT_MEASUREMENT_SPEC §0.9). A pitcher whose battery
+ * crosses signals: passed-ball events attributed to the pitcher per
+ * batters-faced. Numerator = non-undone `betweenPlayEvents` where
+ * `wildPitchOrPassedBall?.wpOrPb === 'passed_ball'` AND
+ * `wildPitchOrPassedBall.pitcherId === pitcherId`. Denominator = batters-faced =
+ * that pitcher's non-undone at-bat count (as `pitcherId`). signalValue = pb / bf,
+ * sampleSize = bf. OPT-IN: dormant until PBs are logged (the min-sample valve
+ * handles the dormant case). Pitcher-role downstream.
+ */
+function addCrossedUpSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
+  // Batters-faced = the pitcher's non-undone PA count (the denominator).
+  const battersFaced = new Map<string, number>();
+  for (const atBat of sortAtBats(input.atBatEvents).filter((event) => !undoneAt(event))) {
+    battersFaced.set(atBat.pitcherId, (battersFaced.get(atBat.pitcherId) ?? 0) + 1);
+  }
+
+  // Passed balls attributed to each pitcher (the numerator).
+  const passedBalls = new Map<string, number>();
+  for (const event of sortBetweenPlayEvents(input.betweenPlayEvents).filter((item) => !undoneAt(item))) {
+    const payload = event.wildPitchOrPassedBall;
+    if (payload?.wpOrPb !== 'passed_ball') continue;
+    const pitcherId = payload.pitcherId;
+    if (!pitcherId) continue;
+    passedBalls.set(pitcherId, (passedBalls.get(pitcherId) ?? 0) + 1);
+  }
+
+  for (const [pitcherId, bf] of battersFaced) {
+    if (bf <= 0) continue;
+    const pb = passedBalls.get(pitcherId) ?? 0;
+    addRawSignal(raw, pitcherId, 'Crossed Up', {
+      signalValue: pb / bf,
+      sampleSize: bf,
+    });
+  }
+}
+
+/**
+ * R1-b2 — Utility (TRAIT_MEASUREMENT_SPEC §0.9). Fielding performance at a
+ * NON-primary position. For each non-undone `fieldingEvent` whose `playerId` has
+ * a primary position in `primaryPositionByPlayer` AND whose `event.position` is
+ * NOT that primary → one non-primary chance; success = `event.success === true`.
+ * signalValue = successful-non-primary / total-non-primary chances, sampleSize =
+ * total-non-primary chances. A player ABSENT from the map gets NO Utility signal
+ * (the map is the deferred-wiring seam — when it is empty, Utility is dormant).
+ * Position-role downstream.
+ */
+function addUtilitySignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
+  const primaryByPlayer = input.primaryPositionByPlayer;
+  if (!primaryByPlayer || primaryByPlayer.size === 0) return;
+
+  const chances = new Map<string, Accumulator>();
+  for (const event of input.fieldingEvents.filter((item) => !fieldingUndoneAt(item))) {
+    const primary = primaryByPlayer.get(event.playerId);
+    if (primary == null) continue;           // absent from the map → no signal
+    if (event.position === primary) continue; // a primary-position chance is excluded
+    const acc = chances.get(event.playerId) ?? { successes: 0, sampleSize: 0 };
+    acc.sampleSize += 1;
+    if (event.success === true) acc.successes += 1;
+    chances.set(event.playerId, acc);
+  }
+
+  for (const [playerId, acc] of chances) {
+    if (acc.sampleSize <= 0) continue;
+    addRawSignal(raw, playerId, 'Utility', {
+      signalValue: acc.successes / acc.sampleSize,
+      sampleSize: acc.sampleSize,
+    });
+  }
+}
+
 function addDurabilitySignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
   const playerIds = new Set<string>([
     ...input.gamesByPlayer.keys(),
@@ -860,6 +972,11 @@ function buildRawSignals(input: SeasonTraitCandidateInput): RawSignalMap {
   addStealSignals(input, raw);
   addButterFingersSignals(input, raw);
   addArmSignals(input, raw);
+  // R1-b2 — Bunter (SAC volume per PA), Crossed Up (passed balls per batters-faced),
+  // Utility (fielding perf at a non-primary position).
+  addBunterSignals(input, raw);
+  addCrossedUpSignals(input, raw);
+  addUtilitySignals(input, raw);
   addDurabilitySignals(input, raw);
   return raw;
 }

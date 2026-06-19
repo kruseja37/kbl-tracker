@@ -78,6 +78,19 @@ function steal(runnerId: string, isSuccessful: boolean, overrides: Partial<Betwe
   } as unknown as BetweenPlayEvent;
 }
 
+function passedBall(pitcherId: string, overrides: Partial<BetweenPlayEvent> = {}): BetweenPlayEvent {
+  bpIndex += 1;
+  return {
+    eventId: `bp-${bpIndex}`,
+    gameId: 'g1',
+    timestamp: bpIndex,
+    eventIndex: bpIndex,
+    type: 'passed_ball',
+    wildPitchOrPassedBall: { wpOrPb: 'passed_ball', pitcherId },
+    ...overrides,
+  } as unknown as BetweenPlayEvent;
+}
+
 let fieldingIndex = 0;
 function fielding(overrides: Partial<FieldingEvent> = {}): FieldingEvent {
   fieldingIndex += 1;
@@ -180,6 +193,10 @@ describe('BUILDABLE_TRAITS', () => {
       'Little Hack',
       'Base Rounder',
       'Distractor',
+      // R1-b2: Utility, Crossed Up, Bunter (Two Way SPLIT out).
+      'Utility',
+      'Crossed Up',
+      'Bunter',
     ]);
   });
 
@@ -921,6 +938,286 @@ describe('R1-b1 L9b-2 seam (new traits feed computeTraitAcquisition)', () => {
       expect(skip?.reason).not.toBe('ineligible_role');
       expect(skip?.reason).not.toBe('unknown_trait');
     }
+  });
+});
+
+describe('R1-b2 Bunter (SAC volume per PA — frequency, not a success rate)', () => {
+  it('computes Bunter as SAC successes per PA (numerator = SAC only)', () => {
+    const events = [
+      ...repeat(3, () => atBat({ batterId: 'b1', result: 'SAC', outsAfter: 1 })),
+      ...repeat(7, () => atBat({ batterId: 'b1', result: 'GO', outsAfter: 1 })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      atBatEvents: events,
+    }));
+    expect(candidate(result, 'b1', 'Bunter')?.signalValue).toBeCloseTo(0.3, 10);
+    expect(candidate(result, 'b1', 'Bunter')?.sampleSize).toBe(10);
+  });
+
+  it('scores a frequent sac-bunter above a non-bunter (failures do not drag the rate)', () => {
+    // bunter: 4 SAC of 10 PA = 0.4. nonBunter: 0 SAC of 10 = 0.
+    const events = [
+      ...repeat(4, () => atBat({ batterId: 'bunter', result: 'SAC', outsAfter: 1 })),
+      ...repeat(6, () => atBat({ batterId: 'bunter', result: 'GO', outsAfter: 1 })),
+      ...repeat(10, () => atBat({ batterId: 'nonBunter', result: 'GO', outsAfter: 1 })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['bunter', 'nonBunter'], 'position'),
+      atBatEvents: events,
+    }));
+    expect(candidate(result, 'bunter', 'Bunter')?.signalValue).toBeCloseTo(0.4, 10);
+    expect(candidate(result, 'nonBunter', 'Bunter')?.signalValue).toBeCloseTo(0, 10);
+    expect(candidate(result, 'bunter', 'Bunter')?.signalValue ?? 0).toBeGreaterThan(
+      candidate(result, 'nonBunter', 'Bunter')?.signalValue ?? 1,
+    );
+  });
+
+  it('keeps Bunter out of the pitcher pool (position-only role eligibility)', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: [{ playerId: 'pitcherBat', role: 'pitcher' }],
+      atBatEvents: repeat(10, () => atBat({ batterId: 'pitcherBat', result: 'SAC', outsAfter: 1 })),
+    }));
+    expect(candidate(result, 'pitcherBat', 'Bunter')).toBeUndefined();
+  });
+
+  it('skips undone at-bats for Bunter', () => {
+    const events = [
+      atBat({ batterId: 'b1', result: 'SAC', outsAfter: 1, undoneAt: 1 }),
+      ...repeat(2, () => atBat({ batterId: 'b1', result: 'SAC', outsAfter: 1 })),
+      ...repeat(8, () => atBat({ batterId: 'b1', result: 'GO', outsAfter: 1 })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      atBatEvents: events,
+    }));
+    // Undone SAC excluded: 2 SAC of 10 live PA, not 3 of 11.
+    expect(candidate(result, 'b1', 'Bunter')?.signalValue).toBeCloseTo(0.2, 10);
+    expect(candidate(result, 'b1', 'Bunter')?.sampleSize).toBe(10);
+  });
+});
+
+describe('R1-b2 Crossed Up (passed balls per batters-faced, attributed to the pitcher)', () => {
+  it('computes Crossed Up as PB/BF via wildPitchOrPassedBall.pitcherId', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['p1'], 'pitcher'),
+      // 10 batters faced (p1 as pitcherId), 2 passed balls attributed to p1.
+      atBatEvents: repeat(10, () => atBat({ pitcherId: 'p1', batterId: 'opp', result: 'GO', outsAfter: 1 })),
+      betweenPlayEvents: [passedBall('p1'), passedBall('p1')],
+    }));
+    expect(candidate(result, 'p1', 'Crossed Up')?.signalValue).toBeCloseTo(0.2, 10);
+    expect(candidate(result, 'p1', 'Crossed Up')?.sampleSize).toBe(10);
+  });
+
+  it('scores a pitcher with more PBs/BF higher and ignores PBs attributed to another pitcher', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['p1', 'p2'], 'pitcher'),
+      atBatEvents: [
+        ...repeat(10, () => atBat({ pitcherId: 'p1', batterId: 'opp', result: 'GO', outsAfter: 1 })),
+        ...repeat(10, () => atBat({ pitcherId: 'p2', batterId: 'opp', result: 'GO', outsAfter: 1 })),
+      ],
+      // 3 PBs on p1, 1 PB on p2 — only matching-pitcherId PBs count.
+      betweenPlayEvents: [passedBall('p1'), passedBall('p1'), passedBall('p1'), passedBall('p2')],
+    }));
+    expect(candidate(result, 'p1', 'Crossed Up')?.signalValue).toBeCloseTo(0.3, 10);
+    expect(candidate(result, 'p2', 'Crossed Up')?.signalValue).toBeCloseTo(0.1, 10);
+    expect(candidate(result, 'p1', 'Crossed Up')?.signalValue ?? 0).toBeGreaterThan(
+      candidate(result, 'p2', 'Crossed Up')?.signalValue ?? 1,
+    );
+  });
+
+  it('is dormant (rate 0) when no passed balls are logged for the pitcher', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['p1'], 'pitcher'),
+      atBatEvents: repeat(10, () => atBat({ pitcherId: 'p1', batterId: 'opp', result: 'GO', outsAfter: 1 })),
+      betweenPlayEvents: [],
+    }));
+    // The signal still emits (BF > 0) at a zero rate; the valve/percentile handle dormancy.
+    expect(candidate(result, 'p1', 'Crossed Up')?.signalValue).toBeCloseTo(0, 10);
+    expect(candidate(result, 'p1', 'Crossed Up')?.sampleSize).toBe(10);
+  });
+
+  it('keeps Crossed Up out of the position pool (pitcher-only role eligibility)', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: [{ playerId: 'b1', role: 'position' }],
+      // b1 takes at-bats as a "pitcher" but is role=position → no Crossed Up.
+      atBatEvents: repeat(10, () => atBat({ pitcherId: 'b1', batterId: 'opp', result: 'GO', outsAfter: 1 })),
+      betweenPlayEvents: [passedBall('b1'), passedBall('b1')],
+    }));
+    expect(candidate(result, 'b1', 'Crossed Up')).toBeUndefined();
+  });
+
+  it('skips undone passed balls and undone batters-faced', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['p1'], 'pitcher'),
+      atBatEvents: [
+        atBat({ pitcherId: 'p1', batterId: 'opp', result: 'GO', outsAfter: 1, undoneAt: 1 }),
+        ...repeat(10, () => atBat({ pitcherId: 'p1', batterId: 'opp', result: 'GO', outsAfter: 1 })),
+      ],
+      betweenPlayEvents: [
+        passedBall('p1', { undoneAt: 1 } as Partial<BetweenPlayEvent>),
+        passedBall('p1'),
+      ],
+    }));
+    // Undone PB excluded (1 live PB) and undone PA excluded (BF = 10, not 11): 1/10.
+    expect(candidate(result, 'p1', 'Crossed Up')?.signalValue).toBeCloseTo(0.1, 10);
+    expect(candidate(result, 'p1', 'Crossed Up')?.sampleSize).toBe(10);
+  });
+});
+
+describe('R1-b2 Utility (fielding perf at a non-primary position)', () => {
+  it('computes Utility as the success rate at non-primary positions only', () => {
+    // b1 primary CF. 4 chances at non-primary positions (3 success, 1 fail) = 0.75.
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      primaryPositionByPlayer: new Map([['b1', 'CF']]),
+      fieldingEvents: [
+        fielding({ playerId: 'b1', position: 'LF', success: true }),
+        fielding({ playerId: 'b1', position: 'RF', success: true }),
+        fielding({ playerId: 'b1', position: '2B', success: true }),
+        fielding({ playerId: 'b1', position: 'SS', success: false }),
+      ],
+    }));
+    expect(candidate(result, 'b1', 'Utility')?.signalValue).toBeCloseTo(0.75, 10);
+    expect(candidate(result, 'b1', 'Utility')?.sampleSize).toBe(4);
+  });
+
+  it('excludes chances at the player primary position from the Utility sample', () => {
+    // b1 primary CF: 2 primary-CF chances (excluded) + 2 non-primary chances (1 success).
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      primaryPositionByPlayer: new Map([['b1', 'CF']]),
+      fieldingEvents: [
+        fielding({ playerId: 'b1', position: 'CF', success: true }),
+        fielding({ playerId: 'b1', position: 'CF', success: false }),
+        fielding({ playerId: 'b1', position: 'LF', success: true }),
+        fielding({ playerId: 'b1', position: 'RF', success: false }),
+      ],
+    }));
+    // Only the 2 non-primary chances count: 1 of 2 = 0.5 (CF chances excluded).
+    expect(candidate(result, 'b1', 'Utility')?.signalValue).toBeCloseTo(0.5, 10);
+    expect(candidate(result, 'b1', 'Utility')?.sampleSize).toBe(2);
+  });
+
+  it('emits NO Utility signal for a player absent from the primary-position map', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1', 'b2'], 'position'),
+      // Only b1 has a primary; b2 is absent → b2 gets no Utility signal.
+      primaryPositionByPlayer: new Map([['b1', 'CF']]),
+      fieldingEvents: [
+        fielding({ playerId: 'b1', position: 'LF', success: true }),
+        fielding({ playerId: 'b2', position: 'LF', success: true }),
+        fielding({ playerId: 'b2', position: 'RF', success: false }),
+      ],
+    }));
+    expect(candidate(result, 'b1', 'Utility')).toBeDefined();
+    expect(candidate(result, 'b2', 'Utility')).toBeUndefined();
+  });
+
+  it('emits NO Utility signal at all when the primary-position map is omitted', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      // No primaryPositionByPlayer → Utility dormant (deferred-wiring seam empty).
+      fieldingEvents: [
+        fielding({ playerId: 'b1', position: 'LF', success: true }),
+        fielding({ playerId: 'b1', position: 'RF', success: true }),
+      ],
+    }));
+    expect(candidate(result, 'b1', 'Utility')).toBeUndefined();
+  });
+
+  it('keeps Utility out of the pitcher pool (position-only role eligibility)', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: [{ playerId: 'pf1', role: 'pitcher' }],
+      primaryPositionByPlayer: new Map([['pf1', 'P']]),
+      fieldingEvents: [
+        fielding({ playerId: 'pf1', position: '1B', success: true }),
+        fielding({ playerId: 'pf1', position: '2B', success: true }),
+      ],
+    }));
+    expect(candidate(result, 'pf1', 'Utility')).toBeUndefined();
+  });
+
+  it('skips undone fielding events for Utility', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      primaryPositionByPlayer: new Map([['b1', 'CF']]),
+      fieldingEvents: [
+        fielding({ playerId: 'b1', position: 'LF', success: true, undoneAt: 1 } as Partial<FieldingEvent>),
+        fielding({ playerId: 'b1', position: 'LF', success: true }),
+        fielding({ playerId: 'b1', position: 'RF', success: false }),
+      ],
+    }));
+    // Undone non-primary success excluded: 1 of 2 = 0.5, not 2 of 3.
+    expect(candidate(result, 'b1', 'Utility')?.signalValue).toBeCloseTo(0.5, 10);
+    expect(candidate(result, 'b1', 'Utility')?.sampleSize).toBe(2);
+  });
+});
+
+describe('R1-b2 L9b-2 seam (Utility / Crossed Up / Bunter feed computeTraitAcquisition)', () => {
+  it('emits Bunter / Utility in the { traitName, score } shape the acquisition combiner consumes', () => {
+    // Enough sample + peers so the valve can clear and a real percentile forms.
+    const bunterEvents = [
+      ...repeat(40, () => atBat({ batterId: 'b1', result: 'SAC', outsAfter: 1 })),
+      ...repeat(40, () => atBat({ batterId: 'b2', result: 'GO', outsAfter: 1 })),
+      ...repeat(40, () => atBat({ batterId: 'b3', result: 'GO', outsAfter: 1 })),
+    ];
+    const fieldingEvents = [
+      ...Array.from({ length: 40 }, () => fielding({ playerId: 'b1', position: 'LF', success: true })),
+      ...Array.from({ length: 40 }, () => fielding({ playerId: 'b2', position: 'LF', success: false })),
+      ...Array.from({ length: 40 }, () => fielding({ playerId: 'b3', position: 'LF', success: true })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1', 'b2', 'b3'], 'position'),
+      atBatEvents: bunterEvents,
+      fieldingEvents,
+      primaryPositionByPlayer: new Map([['b1', 'CF'], ['b2', 'CF'], ['b3', 'CF']]),
+    }));
+    const bunter = candidate(result, 'b1', 'Bunter');
+    expect(bunter).toBeDefined();
+    expect(bunter?.score).toBeDefined();
+    expect(typeof bunter?.score.sufficient).toBe('boolean');
+
+    const acquisition = computeTraitAcquisition({
+      playerRole: 'position',
+      personality: 'TOUGH',
+      heldTraits: [],
+      candidates: result.get('b1') ?? [],
+    });
+    expect(acquisition).toHaveProperty('proposals');
+    expect(acquisition).toHaveProperty('skipped');
+    for (const traitName of ['Bunter', 'Utility']) {
+      const skip = acquisition.skipped.find((s) => s.traitName === traitName);
+      expect(skip?.reason).not.toBe('ineligible_role');
+      expect(skip?.reason).not.toBe('unknown_trait');
+    }
+  });
+
+  it('emits Crossed Up in the seam shape for a pitcher (pitcher pool)', () => {
+    const events = ['p1', 'p2', 'p3'].flatMap((pitcherId) =>
+      repeat(40, () => atBat({ pitcherId, batterId: 'opp', result: 'GO', outsAfter: 1 })),
+    );
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['p1', 'p2', 'p3'], 'pitcher'),
+      atBatEvents: events,
+      betweenPlayEvents: [
+        ...Array.from({ length: 8 }, () => passedBall('p1')),
+        ...Array.from({ length: 4 }, () => passedBall('p2')),
+      ],
+    }));
+    const crossedUp = candidate(result, 'p1', 'Crossed Up');
+    expect(crossedUp).toBeDefined();
+    expect(typeof crossedUp?.score.sufficient).toBe('boolean');
+
+    const acquisition = computeTraitAcquisition({
+      playerRole: 'pitcher',
+      personality: 'COMPETITIVE',
+      heldTraits: [],
+      candidates: result.get('p1') ?? [],
+    });
+    const skip = acquisition.skipped.find((s) => s.traitName === 'Crossed Up');
+    expect(skip?.reason).not.toBe('ineligible_role');
+    expect(skip?.reason).not.toBe('unknown_trait');
   });
 });
 

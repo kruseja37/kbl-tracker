@@ -440,6 +440,60 @@ describe('traitAcquisition R1-b1 (Big/Little Hack image deltas; Base Rounder unc
   });
 });
 
+describe('traitAcquisition R1-b2 (Bunter positive+TOUGH; Crossed Up + Utility neutral)', () => {
+  // Bunter was ALREADY positive (POSITIVE_IMAGE_TRAITS) with a TOUGH image driver
+  // (§0.6) before this ticket — verify it stays so as Bunter enters BUILDABLE.
+  test('Bunter is positive: high ambition tilts up and TOUGH drives the image axis', () => {
+    const ambitious = proposalFor('Bunter', {
+      modifiers: { ...neutralModifiers, ambition: 100 },
+    });
+    const driven = proposalFor('Bunter', { personality: 'Tough' });
+
+    expect(ambitious.imageValence).toBe('positive');
+    expect(ambitious.factors.ambitionTilt).toBeGreaterThan(1);
+    expect(driven.factors.imageAxisTilt).toBeGreaterThan(1);
+  });
+
+  // Bunter's image driver is TOUGH only — EGOTISTICAL/COMPETITIVE do NOT drive it.
+  test('Bunter image driver is TOUGH only (no cross-driver)', () => {
+    const ego = proposalFor('Bunter', { personality: 'Egotistical' });
+    const competitive = proposalFor('Bunter', { personality: 'Competitive' });
+
+    expect(ego.factors.imageAxisTilt).toBe(1);
+    expect(competitive.factors.imageAxisTilt).toBe(1);
+  });
+
+  // Crossed Up is neutral/pitcher-only — no image-set entry (§0.7).
+  test('Crossed Up is neutral: no image valence and no personality drives its image axis', () => {
+    const droopy = proposalFor('Crossed Up', {
+      playerRole: 'pitcher',
+      personality: 'Droopy',
+    });
+    const timid = proposalFor('Crossed Up', {
+      playerRole: 'pitcher',
+      personality: 'Timid',
+    });
+
+    expect(droopy.imageValence).toBe('neutral');
+    expect(droopy.factors.imageAxisTilt).toBe(1);
+    expect(timid.factors.imageAxisTilt).toBe(1);
+  });
+
+  // Utility is neutral with a BENCH roster tilt (ROSTER_ROLE_TRAITS) — no image entry.
+  test('Utility is neutral with a bench roster tilt and no image axis', () => {
+    const neutralImage = proposalFor('Utility', { personality: 'Tough' });
+    const bench = proposalFor('Utility', { rosterRole: 'bench' });
+    const starter = proposalFor('Utility', { rosterRole: 'starter' });
+
+    expect(neutralImage.imageValence).toBe('neutral');
+    expect(neutralImage.factors.imageAxisTilt).toBe(1);
+    // Bench tilts Utility's probability up vs starter (the ROSTER_ROLE factor).
+    expect(bench.factors.rosterRoleFactor).toBeGreaterThan(1);
+    expect(starter.factors.rosterRoleFactor).toBeLessThan(1);
+    expect(bench.probability).toBeGreaterThan(starter.probability);
+  });
+});
+
 describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () => {
   test('hysteresis emits a gain at or above the gain threshold', () => {
     const result = computeTraitAcquisition(input({

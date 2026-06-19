@@ -1442,3 +1442,25 @@ details §0.9's Base Rounder line left open (the soul-layer discipline: surface 
 Folded into §0.9 verbatim. (The forced-minimum baseball model itself is mechanical — port `isRunnerForced`/
 `getMinimumAdvancement` from `atBatLogic.ts` into the engine, not a JK fork.) Distractor + Big/Little Hack (Option B
 percentile-merge) were already fully pinned by §0.9 — no rulings needed.
+
+---
+
+### 2026-06-18: R1-b2 scope + Bunter measurement rulings (attended; L9b trait-reality rebuild)
+
+Grounding R1-b2 (Two Way / Utility / Crossed Up / Bunter), the Captain surfaced two genuine forks. JK ruled:
+- **Two Way → its own ticket (NOT R1-b2).** §0.9 pins the SIGNAL (a pitcher's elite hitting = wOBA percentile vs the
+  pitcher pool) cleanly, but Two Way also needs the "random C/IF/OF fielding position assigned AT GRANT" mechanic, which
+  is NEW logic in the already-built L9b-3c grant/confirm writer — beyond the pure signal-builder. So Two Way spans
+  builder + grant-path and is split out (R1-b3 / pairs with R3's grant/ratings work). **R1-b2 = Utility + Crossed Up +
+  Bunter** (3 clean pure-builder traits).
+- **Bunter = volume/frequency, not a success rate.** signalValue = successful sacrifice bunts (`result==='SAC'`) per PA
+  (position batters), percentiled vs the position pool; failures don't drag it (numerator = SAC only). Side effect: this
+  reads the standard `SAC` result, so Bunter is **no longer enrichment-gated/OPT-IN**. JK accepted "rewards frequency,
+  not execution skill."
+- **Captain FINDING flagged (non-blocking):** the rate-signal family inherits a `getPercentile`-on-mostly-zeros property
+  — when a signal is sparse league-wide (no one logs it), every player's 0-rate maps to a HIGH percentile (all peers ≤ 0),
+  mass-inflating acquisitions. Acute for the sparsest signals (Bunter, Crossed Up). A §16 sim-tune / pooling-convention
+  concern for the WHOLE family (R1-a + R1-b), not an R1-b2 fix; build-DARK + the sim gate contain it. Logged here for a
+  future tuning ticket.
+Distractor + Big/Little Hack (R1-b1) and the §0.9 derivations for Utility (fielding success-rate at non-primary
+positions) + Crossed Up (PB/batters-faced) were already pinned — built to documented defaults.

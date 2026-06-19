@@ -10372,3 +10372,78 @@ buildProposalBase untouched. Host gate: `NODE_ENV= npm run build` exit 0 (7.70s 
 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+24 tests / +0
 files). Earnable v1 set 26 → 30. Committed (hash in SESSION_LOG/CURRENT_STATE). NEXT = R1-b2 (Two Way / Utility /
 Crossed Up / Bunter).
+
+## CONTRACT — R1-b2 (Utility + Crossed Up + Bunter; Two Way SPLIT out) — 2026-06-18 (attended)
+
+**ROUTE: fresh in-session subagent | high reasoning effort** (builder; subagent not Codex CLI — backticks/`$` corrupt a
+shell-arg dispatch). Auditor = Opus 4.8 Captain (independent; ≠ builder). Branch codex/franchise-v1-next. BUILD-DARK
+(whole L9b gated OFF). Third R1 ticket (closes R1-b for the buildable set; **Two Way SPLIT to its own ticket per JK
+2026-06-18 — it spans the builder + the L9b-3c grant-path random-position mechanic; NOT in this ticket**). Source of
+truth: `TRAIT_MEASUREMENT_SPEC.md §0.9` (+ §0.6; Bunter ruling folded into §0.9 + DECISIONS_LOG 2026-06-18). **BUILD TO
+§0.9 VERBATIM — do NOT re-derive.**
+
+**GOAL:** add 3 traits — **Utility**, **Crossed Up**, **Bunter** — to `BUILDABLE_TRAITS` in
+`src/engines/traitCandidateBuilder.ts` with new signal functions, add one optional input field, + the §0.6/§0.7 image
+deltas in `src/engines/traitAcquisition.ts`. Earnable v1 set 30 → 33. **Do NOT add Two Way.**
+
+**DERIVATIONS (per §0.9 — implement EXACTLY):**
+
+1. **Bunter** (position; JK ruling 2026-06-18 — VOLUME/frequency, NOT a success rate). New fn `addBunterSignals(input,
+   raw)`: per batter (all batterIds, non-undone; role filtered downstream) count PA = at-bats as batter and SAC =
+   `result==='SAC'`; emit `Bunter` signalValue = `SAC / PA`, sampleSize = PA. Failures don't drag it (numerator = SAC
+   only). NOT enrichment-gated (reads the standard `SAC` result).
+
+2. **Crossed Up** (pitcher; OPT-IN). New fn `addCrossedUpSignals(input, raw)`: numerator per pitcher = passed-ball
+   `betweenPlayEvents` (non-undone) where `wildPitchOrPassedBall?.wpOrPb === 'passed_ball'` (or `type === 'passed_ball'`)
+   AND `wildPitchOrPassedBall.pitcherId === pitcherId`; denominator = batters-faced = that pitcher's PA count (at-bats,
+   non-undone, where they are `pitcherId`). Emit `Crossed Up` signalValue = `pb / bf`, sampleSize = bf. (Dormant until
+   PBs logged — the min-sample valve handles it.)
+
+3. **Utility** (position). Add an OPTIONAL input field `primaryPositionByPlayer?: ReadonlyMap<string, string>` to
+   `SeasonTraitCandidateInput`. New fn `addUtilitySignals(input, raw)`: for each non-undone `fieldingEvent` whose
+   `playerId` has a primary in the map AND `event.position !== primaryPositionByPlayer.get(playerId)` → one non-primary
+   chance; success = `event.success === true`. Emit `Utility` signalValue = successful-non-primary / total-non-primary,
+   sampleSize = total-non-primary chances. A player absent from the map gets NO Utility signal (skip). DOCUMENTED
+   DEFAULT: "fielding perf" = fielding success rate at non-primary positions.
+
+   Register the 3 new fns in `buildRawSignals`. Add `'Utility'`, `'Crossed Up'`, `'Bunter'` to `BUILDABLE_TRAITS`
+   (after the R1-b1 block) with an `// R1-b2:` comment.
+
+**ACQUISITION §0.6/§0.7 deltas (`traitAcquisition.ts`):** CHECK current state first and report. `'Bunter'` per §0.6 =
+↑Amb + Tough → if NOT already present, add to `POSITIVE_IMAGE_TRAITS` + `IMAGE_DRIVER_SETS['Bunter']=['TOUGH']`.
+`'Crossed Up'` = neutral → NO image entry (verify absent). `'Utility'` = neutral + bench roster tilt → NO image entry;
+verify `'Utility'` is already in `ROSTER_ROLE_TRAITS` (it is) and add nothing else.
+
+**HARD CONSTRAINTS:** edit ONLY `src/engines/traitCandidateBuilder.ts` + `src/engines/traitAcquisition.ts` + their two
+`__tests__` files. Do NOT touch the scorer / `buildPeerPools` / `computeTraitRealityScore` / `buildProposalBase` / any
+store / `processCompletedGame.ts` / `franchiseTraitGrantCompute.ts` (the hook that will later POPULATE
+`primaryPositionByPlayer` is a deferred wiring step — Utility stays dormant until then; just add the OPTIONAL field +
+consume it) / any `*.md`. Do NOT add Two Way. PURE / build-DARK — no production caller, no flag, no store, no trackerDb
+bump (stays v23). No `Date.now`/`Math.random`; sort before any percentile. No git-add/commit.
+
+**TESTS (extend the two existing `__tests__` files):** update the `BUILDABLE_TRAITS` "contains exactly" expectation
+(add the 3, R1-b2 comment). Add cases: Bunter (SAC/PA frequency; a frequent sac-bunter outscores a non-bunter; pitcher
+batter excluded by role); Crossed Up (PB/BF via `wildPitchOrPassedBall.pitcherId`; a pitcher with more PBs/BF scores
+higher; position player excluded by role; dormant when no PBs); Utility (success rate at non-primary positions;
+primary-position chances excluded; player absent from the map → no signal; pitcher excluded); undone events skipped;
+the L9b-2 seam still holds. Acq tests: Bunter positive + TOUGH driver; Crossed Up + Utility neutral.
+
+**VERIFICATION (builder runs, reports actual output):** `NODE_ENV= npx tsc --noEmit` exit 0;
+`NODE_ENV= npx vitest run src/engines/__tests__/traitCandidateBuilder.test.ts src/engines/__tests__/traitAcquisition.test.ts`
+all green. Report every changed path (all 4), the new test count, and the exact derivations + the acq finding.
+
+**FORMAT:** 1) Files changed (exact paths). 2) Per-trait derivation as built + any §0.9 deviation (should be none). 3)
+Acq finding (Bunter/Crossed Up/Utility — what was present vs added). 4) Verification output (paste actual). 5) "R1-b2
+complete" or "BLOCKED: <reason>". Do NOT commit.
+
+**Status:** ✅ VERIFIED + COMMITTED (2026-06-18, attended). Fresh in-session subagent built → Opus 4.8 Captain
+independently audited (≠ builder) from the actual diff: VERDICT VERIFIED. Re-derived each trait vs §0.9: Bunter = SAC/PA
+volume (JK ruling); Crossed Up = passed-ball/batters-faced via `wildPitchOrPassedBall.pitcherId`; Utility = fielding
+success-rate at non-primary positions (new OPTIONAL `primaryPositionByPlayer` input; dormant until the hook populates
+it — deferred wiring). `traitAcquisition.ts` needed **NO production change** — independently confirmed Bunter already
+POSITIVE+`['TOUGH']` (lines 119/171), Utility already in `ROSTER_ROLE_TRAITS` (182), Crossed Up correctly absent
+(neutral). Scorer/peer-pool/buildProposalBase/hook untouched. Host gate: `NODE_ENV= npm run build` exit 0 + full suite
+**7,629/438, 7,627 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds
+(+21 tests / +0 files). Earnable v1 set 30 → 33. Committed (hash in SESSION_LOG/CURRENT_STATE). **⇒ R1-b functionally
+COMPLETE except Two Way (split to R1-b3/R3-adjacent per JK).** NEXT = R2 (platoon/count-family handedness) — or R1-b3
+(Two Way) if sequenced first.
