@@ -57,7 +57,11 @@ import {
 } from '../franchiseTraitOverlayStorage';
 import { setFranchisePhase2TraitsEnabledForTests } from '../franchisePhase2Flags';
 import type { PersistedGameState } from '../gameStorage';
-import type { SeasonTraitCandidate } from '../../engines/traitCandidateBuilder';
+import type {
+  SeasonTraitCandidate,
+  SeasonTraitCandidateInput,
+} from '../../engines/traitCandidateBuilder';
+import { SMB4_FULL_GRADE_SCALE } from '../../engines/smb4GradeEmulator';
 
 const DB_NAME = 'kbl-tracker';
 const scope: TraitGrantScope = {
@@ -180,6 +184,9 @@ function stubTraitPipeline(): void {
       modifiers: { loyalty: 50, ambition: 50, resilience: 50, charisma: 50 },
       currentMorale: 50,
       heldTraitNames: ['Choker'],
+      bats: 'R',
+      throws: 'R',
+      primaryPosition: 'CF',
     } satisfies TraitGrantRosterEntry,
   ]);
   vi.spyOn(traitGrantSeam, 'computeSeasonTraitCandidates').mockReturnValue(new Map([
@@ -300,5 +307,79 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
     const secondRows = await getFranchiseTraitOverlaysByScope(scope);
 
     expect(secondRows).toEqual(firstRows);
+  });
+
+  test('threads roster handedness, position, and pitcher grade into computeSeasonTraitCandidates maps', async () => {
+    setFranchisePhase2TraitsEnabledForTests(true);
+    seedCheckpointReads();
+
+    const pitcherGrade = SMB4_FULL_GRADE_SCALE[3]; // 'A-' — a valid Smb4Grade
+    vi.spyOn(traitGrantSeam, 'resolveTraitGrantRoster').mockResolvedValue([
+      {
+        playerId: 'player-batter',
+        role: 'position',
+        personality: 'Competitive',
+        modifiers: { loyalty: 50, ambition: 50, resilience: 50, charisma: 50 },
+        currentMorale: 50,
+        heldTraitNames: [],
+        bats: 'L',
+        throws: 'R',
+        primaryPosition: '2B',
+        // position players carry no grade
+      },
+      {
+        playerId: 'player-pitcher',
+        role: 'pitcher',
+        personality: 'Egotistical',
+        modifiers: { loyalty: 50, ambition: 50, resilience: 50, charisma: 50 },
+        currentMorale: 50,
+        heldTraitNames: [],
+        bats: 'S',
+        throws: 'L',
+        primaryPosition: 'SP',
+        grade: pitcherGrade,
+      },
+    ] satisfies TraitGrantRosterEntry[]);
+
+    let capturedInput: SeasonTraitCandidateInput | undefined;
+    vi.spyOn(traitGrantSeam, 'computeSeasonTraitCandidates').mockImplementation((input) => {
+      capturedInput = input;
+      return new Map();
+    });
+    vi.spyOn(traitGrantSeam, 'computeTraitAcquisition').mockReturnValue({
+      proposals: [],
+      skipped: [],
+    });
+
+    const result = await persistDarkTraitGrantForCompletedGame(gameState, scope);
+
+    expect(result).toEqual({ status: 'written', written: 0 });
+    expect(capturedInput).toBeDefined();
+
+    const input = capturedInput as SeasonTraitCandidateInput;
+
+    // batterHandByPlayer carries every roster player's bats hand.
+    expect(input.batterHandByPlayer).toBeInstanceOf(Map);
+    expect(input.batterHandByPlayer?.get('player-batter')).toBe('L');
+    expect(input.batterHandByPlayer?.get('player-pitcher')).toBe('S');
+    expect(input.batterHandByPlayer?.size).toBe(2);
+
+    // pitcherHandByPlayer carries every roster player's throws hand (covers position players too).
+    expect(input.pitcherHandByPlayer).toBeInstanceOf(Map);
+    expect(input.pitcherHandByPlayer?.get('player-batter')).toBe('R');
+    expect(input.pitcherHandByPlayer?.get('player-pitcher')).toBe('L');
+    expect(input.pitcherHandByPlayer?.size).toBe(2);
+
+    // primaryPositionByPlayer carries every roster player's primary position.
+    expect(input.primaryPositionByPlayer).toBeInstanceOf(Map);
+    expect(input.primaryPositionByPlayer?.get('player-batter')).toBe('2B');
+    expect(input.primaryPositionByPlayer?.get('player-pitcher')).toBe('SP');
+    expect(input.primaryPositionByPlayer?.size).toBe(2);
+
+    // pitcherGradeByPlayer carries the Smb4Grade for pitcher-role entries and omits position players.
+    expect(input.pitcherGradeByPlayer).toBeInstanceOf(Map);
+    expect(input.pitcherGradeByPlayer?.has('player-batter')).toBe(false);
+    expect(input.pitcherGradeByPlayer?.get('player-pitcher')).toBe(pitcherGrade);
+    expect(input.pitcherGradeByPlayer?.size).toBe(1);
   });
 });

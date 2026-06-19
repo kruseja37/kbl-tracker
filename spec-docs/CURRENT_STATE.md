@@ -1,8 +1,10 @@
 # CURRENT_STATE.md — LIVE HEADER
 
 **Last Updated:** 2026-06-18 — **ACTIVE (attended).** **L9b trait-reality REBUILD — the EARNABLE SET IS COMPLETE
-(47/47).** Landed **R-E + R1-a + R1-b1 + R1-b2 + R2 + R1-b3 + R3.** FINDING-150 (the trait-detection scope gap) is
-CLOSED for the earnable set; all build-DARK (activate post-D13). *(Note 2026-06-18: a concurrent UNATTENDED resume
+(47/47) AND WIRED (W1).** Landed **R-E + R1-a + R1-b1 + R1-b2 + R2 + R1-b3 + R3 + W1.** FINDING-150 (the trait-detection
+scope gap) is CLOSED. **W1** populated the grant hook's 4 optional input maps (handedness/primary-position from roster;
+pitcher grade via the pure `scoreSmb4Player`) so the 6 handedness splits + Utility + Ace Exterminator are no longer
+dormant — all STILL flag-gated (`isFranchisePhase2TraitsEnabled` OFF) = build-DARK, activate post-D13. *(Note 2026-06-18: a concurrent UNATTENDED resume
 sandbox also reached R3 + parked a WAITING_ON_JK; the attended session built→audited→host-gated→committed R3, and
 reconciled — its stale "waiting" CURRENT_STATE/HISTORY writes were reverted; WAITING_ON_JK ticket:R3 RESOLVED.)*
 (1) **Closed the recurring spec-leak at its root + RATIFIED the measurement
@@ -36,16 +38,19 @@ defer to a later ticket — per-variant names would fragment the pool + re-rando
 v1 set now 46 of 47.** (8) **R3 COMPLETE** — Ace Exterminator (the batter's reached-base rate — hit/walk/HBP — vs
 A−-or-better opposing pitchers, via `SMB4_GRADE_TO_INDEX['A-']`; OPTIONAL `pitcherGradeByPlayer` input [E1], DORMANT
 until the grade hook; JK ruled "reached base"); no acquisition change. **⇒ THE 47/47 EARNABLE v1 TRAIT SET IS
-COMPLETE; FINDING-150 CLOSED for the earnable set.** **➡ NEXT (tracked follow-ups, NOT earnable-trait gaps): (A)** the
-**dormant-trait wiring hooks** — populate `SeasonTraitCandidateInput`'s optional maps (`pitcherHandByPlayer`/
-`batterHandByPlayer`/`primaryPositionByPlayer`/`pitcherGradeByPlayer`) from roster records so the handedness splits +
-Utility + Ace Exterminator go live (handedness also needs `opposingHand` un-hardcoded; the grade map ties to the
-app-wide grade-freshness ticket); **(B)** the **Two Way C/IF/OF** random-position + 3-variant family plumbing; **(C)**
-the §16 sim-tune FINDING (rate-signal `getPercentile`-on-mostly-zeros for sparse signals); **(D)** the broader L-stack
-(L10 Q5/Q8 rework → L11 → L12–L14 → L-SIM gate). Suite **7,677/438, 7,674 pass / 3 characterized fail**
-(`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` + `franchiseOffseasonGuards.component` — the last an order-flake
-**confirmed passing solo**); trackerDb **v23** (pure engines, no store); branch codex/franchise-v1-next; **nothing
-pushed**. Session commits: R1-b1 `474196e7` · R1-b2 `bbb839ce` · R2 `b80fa135` · R1-b3 `7e22e015` · R3 (this commit).
+COMPLETE; FINDING-150 CLOSED for the earnable set.** (9) **W1 COMPLETE** — the grant hook
+(`franchiseTraitGrantCompute.ts`) now populates `SeasonTraitCandidateInput`'s 4 optional maps from the MLB roster
+(`bats`/`throws`/`primaryPosition`; pitcher grade via the pure `scoreSmb4Player`, JK "wire all 4 now"), so the 6
+handedness splits + Utility + Ace Exterminator are no longer dormant — **still flag-gated build-DARK** (zero live effect
+until post-D13). **➡ NEXT (remaining follow-ups): (B)** the **Two Way C/IF/OF** random-position + 3-variant family
+plumbing (currently one representative `Two Way (C)`); **(C)** the §16 sim-tune FINDING (rate-signal
+`getPercentile`-on-mostly-zeros for sparse signals); **(D)** the broader L-stack (L10 Q5/Q8 rework → L11 → L12–L14 →
+L-SIM gate). *(Minor: `opposingHand` still hardcoded `'R'` in `reconstructAtBatContext` — matters only for
+matrix-handedness traits, NOT the now-wired splits which read the threaded maps.)* Suite **7,678/438, 7,676 pass / 2
+characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` — by name; `franchiseOffseasonGuards.component`
+is a 3rd order-flake, passes solo, appears intermittently); trackerDb **v23**; branch codex/franchise-v1-next; **nothing
+pushed**. Session commits: R1-b1 `474196e7` · R1-b2 `bbb839ce` · R2 `b80fa135` · R1-b3 `7e22e015` · R3 `9059f697` · W1
+(this commit).
 *(Prior arc-narrative preserved below for context.)*
 *(Historical:* **✅ L9b COMPLETE — the trait-from-reality engine, the "game-changer feature." NOW L10**
 (random events). L9b-3c committed → L9b-3 COMPLETE → **L9b COMPLETE.** Full L9b chain: L9b-1 scorer `398533d1` ·

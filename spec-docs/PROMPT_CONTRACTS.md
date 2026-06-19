@@ -10660,3 +10660,66 @@ the last a conditional-solo order-flake **confirmed passing solo 24/24** this ru
 the flake tripping this run accounts for the 2→3 fail count). Earnable v1 set 46 → **47 (COMPLETE)**. Committed (hash in
 SESSION_LOG/CURRENT_STATE). **DEFERRED follow-ups (tracked, not earnable-trait gaps):** the dormant-trait wiring hooks
 (handedness / Utility / grade maps) + the Two Way C/IF/OF family/random-position.
+
+## CONTRACT — W1 (wire the dormant-trait input maps live-dark) — 2026-06-18 (attended)
+
+**ROUTE: fresh in-session subagent | high reasoning effort** (builder; subagent not Codex CLI). Auditor = Opus 4.8
+Captain (independent; ≠ builder). Branch codex/franchise-v1-next. BUILD-DARK (flag-gated). Source of truth:
+`TRAIT_MEASUREMENT_SPEC.md §0.11` + DECISIONS_LOG 2026-06-18 "W1". JK ruled **"wire all 4 now."** First post-rebuild
+WIRING ticket: populate the 4 OPTIONAL `SeasonTraitCandidateInput` maps from the MLB roster so the handedness splits +
+Utility + Ace Exterminator stop being dormant (still flag-gated `isFranchisePhase2TraitsEnabled` OFF → build-dark, zero
+live effect until post-D13).
+
+**GOAL:** in `src/utils/franchiseTraitGrantCompute.ts`, thread each MLB player's handedness / primary-position / pitcher
+grade into the 4 optional maps at the `computeSeasonTraitCandidates` call site. PURE-DATA wiring; no behavior change
+while the flag is OFF.
+
+**CHANGES (implement EXACTLY):**
+1. Import `scoreSmb4Player` + the `Smb4Grade` type from `../engines/smb4GradeEmulator`.
+2. Extend the `TraitGrantRosterEntry` interface with: `bats: 'L' | 'R' | 'S'`, `throws: 'L' | 'R'`,
+   `primaryPosition: string`, `grade?: Smb4Grade` (set only for pitcher-role entries).
+3. In `resolveTraitGrantRoster` (the `roster.push({...})` at ~L115-122, where the full `Player` record is in scope):
+   also capture `bats: player.bats`, `throws: player.throws`, `primaryPosition: player.primaryPosition`. For pitcher-role
+   players ONLY (`getPlayerIsPitcher(player)`), compute `grade: scoreSmb4Player({ primaryPosition: player.primaryPosition,
+   bats: player.bats, throws: player.throws, velocity: player.velocity, junk: player.junk, accuracy: player.accuracy,
+   trait1: player.trait1, trait2: player.trait2 }).grade`. (`scoreSmb4Player` is PURE.)
+4. At the `computeSeasonTraitCandidates({...})` call (~L186-194), add the 4 maps built from `roster`:
+   - `batterHandByPlayer: new Map(roster.map((e) => [e.playerId, e.bats]))`
+   - `pitcherHandByPlayer: new Map(roster.map((e) => [e.playerId, e.throws]))` (every player has a throws hand → covers
+     position-players-pitching too)
+   - `primaryPositionByPlayer: new Map(roster.map((e) => [e.playerId, e.primaryPosition]))`
+   - `pitcherGradeByPlayer: new Map(roster.filter((e) => e.role === 'pitcher' && e.grade != null).map((e) => [e.playerId, e.grade as Smb4Grade]))`
+
+**HARD CONSTRAINTS:** edit ONLY `src/utils/franchiseTraitGrantCompute.ts` + its test file (find it —
+`src/utils/tests/franchiseTraitGrantCompute.test.ts` or wherever the existing `persistDarkTraitGrantForCompletedGame` /
+`resolveTraitGrantRoster` tests live). Do NOT touch `traitCandidateBuilder.ts` / the scorer / `traitAcquisition.ts` /
+any store / `processCompletedGame.ts` / `leagueBuilderStorage.ts` / `smb4GradeEmulator.ts` (import only) / any `*.md`.
+Keep the flag gate intact (`isFranchisePhase2TraitsEnabled` default OFF). NO trackerDb bump (v23). No `Date.now`/
+`Math.random` added. No git-add/commit. The maps cover the MLB roster (matching `candidatePlayers`).
+
+**TESTS (extend the existing hook test):** the existing tests stub `traitGrantSeam.computeSeasonTraitCandidates`. Add /
+extend a case that (with the flag ON via the existing test's mechanism + a stubbed roster carrying real `bats`/`throws`/
+`primaryPosition`/pitcher-ratings) asserts the stubbed `computeSeasonTraitCandidates` is called with the 4 maps
+POPULATED: `batterHandByPlayer`/`pitcherHandByPlayer`/`primaryPositionByPlayer` carry each roster player's
+hand/position, and `pitcherGradeByPlayer` carries a grade for the pitcher-role players (an `Smb4Grade`) and omits
+position players. Keep all existing hook tests green (flag-off dark-noop, checkpoint cadence, idempotency, determinism).
+If the existing test's roster stub (`resolveTraitGrantRoster` seam) needs the new fields, extend the stub minimally.
+
+**VERIFICATION (builder runs, reports actual):** `NODE_ENV= npx tsc --noEmit` exit 0;
+`NODE_ENV= npx vitest run <the hook test path>` all green; also run the builder's own tests
+`NODE_ENV= npx vitest run src/engines/__tests__/traitCandidateBuilder.test.ts` (unchanged, must stay green). Report
+every changed path, new/changed test count, and the exact map construction.
+
+**FORMAT:** 1) Files changed. 2) The roster-field capture + the 4 map constructions as built + any deviation. 3)
+Verification output (paste actual). 4) "W1 complete" or "BLOCKED: <reason>". Do NOT commit.
+
+**Status:** ✅ VERIFIED + COMMITTED (2026-06-18, attended). Fresh in-session subagent built → Opus 4.8 Captain
+independently audited (≠ builder): VERDICT VERIFIED. `resolveTraitGrantRoster` now captures `bats`/`throws`/
+`primaryPosition` per MLB player + computes pitcher-role `grade` via the pure `scoreSmb4Player`; the call site builds all
+4 maps from `roster` (handedness/position over all players; `pitcherGradeByPlayer` filtered to pitcher-role). **Flag gate
+untouched** (`isFranchisePhase2TraitsEnabled` default OFF → build-dark, zero live effect). The new hook test asserts each
+map's contents (handedness/position for both players, grade for the pitcher only, omits position players). Builder
+(`traitCandidateBuilder.ts`) unchanged. Host gate: `NODE_ENV= npm run build` exit 0 (7.59s) + full suite **7,678/438,
+7,676 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` — by name; the offseason-guards
+order-flake did not trip this run), ZERO new reds (+1 test / +0 files). **⇒ the handedness splits + Utility + Ace
+Exterminator are now WIRED (populated maps) — still flag-gated build-dark.** Committed (hash in SESSION_LOG/CURRENT_STATE).

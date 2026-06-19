@@ -49,6 +49,10 @@ import {
   type Player,
 } from './leagueBuilderStorage';
 import {
+  scoreSmb4Player,
+  type Smb4Grade,
+} from '../engines/smb4GradeEmulator';
+import {
   putFranchiseTraitOverlay,
   type FranchiseTraitOverlayRow,
   type FranchiseTraitOverlayScopeInput,
@@ -82,6 +86,10 @@ export interface TraitGrantRosterEntry {
   modifiers?: HiddenModifiers;
   currentMorale?: number;
   heldTraitNames: string[];
+  bats: 'L' | 'R' | 'S';
+  throws: 'L' | 'R';
+  primaryPosition: string;
+  grade?: Smb4Grade;
 }
 
 export type PersistDarkTraitGrantResult = {
@@ -112,13 +120,29 @@ export async function resolveTraitGrantRoster(
   for (const player of players) {
     if (getPlayerRosterStatusForLeague(player, leagueId) !== 'MLB') continue;
 
+    const isPitcher = getPlayerIsPitcher(player);
     roster.push({
       playerId: player.id,
-      role: getPlayerIsPitcher(player) ? 'pitcher' : 'position',
+      role: isPitcher ? 'pitcher' : 'position',
       personality: player.personality,
       modifiers: player.hiddenPersonalityModifiers,
       currentMorale: player.morale,
       heldTraitNames: [player.trait1, player.trait2].filter((trait): trait is string => Boolean(trait)),
+      bats: player.bats,
+      throws: player.throws,
+      primaryPosition: player.primaryPosition,
+      grade: isPitcher
+        ? scoreSmb4Player({
+            primaryPosition: player.primaryPosition,
+            bats: player.bats,
+            throws: player.throws,
+            velocity: player.velocity,
+            junk: player.junk,
+            accuracy: player.accuracy,
+            trait1: player.trait1,
+            trait2: player.trait2,
+          }).grade
+        : undefined,
     });
   }
 
@@ -191,6 +215,14 @@ export async function persistDarkTraitGrantForCompletedGame(
     seasonFieldingByPlayer: seasonData.seasonFieldingByPlayer,
     injuryCountsByPlayer: seasonData.injuryCountsByPlayer,
     gamesByPlayer: seasonData.gamesByPlayer,
+    batterHandByPlayer: new Map(roster.map((e) => [e.playerId, e.bats])),
+    pitcherHandByPlayer: new Map(roster.map((e) => [e.playerId, e.throws])),
+    primaryPositionByPlayer: new Map(roster.map((e) => [e.playerId, e.primaryPosition])),
+    pitcherGradeByPlayer: new Map(
+      roster
+        .filter((e) => e.role === 'pitcher' && e.grade != null)
+        .map((e) => [e.playerId, e.grade as Smb4Grade]),
+    ),
   }, config);
 
   const rows: FranchiseTraitOverlayRow[] = [];

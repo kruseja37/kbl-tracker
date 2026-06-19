@@ -5689,3 +5689,25 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   handedness one also needs `opposingHand` un-hardcoded); (2) the **Two Way C/IF/OF** random-position + 3-variant
   family plumbing; (3) the §16 sim-tune FINDING (rate-signal `getPercentile`-on-mostly-zeros for sparse signals); (4)
   the L10 Q5/Q8 rework + L11+ per the L-stack. Nothing pushed.
+
+## 2026-06-18 (attended, same session) — W1: wire the dormant-trait input maps live-dark
+- With 47/47 earnable traits built, the handedness splits + Utility + Ace Exterminator were DORMANT (their optional
+  `SeasonTraitCandidateInput` maps unpopulated). W1 wires them. Explore-mapped the seam: the franchise `Player` record
+  (`leagueBuilderStorage.ts`) carries `bats`/`throws`/`primaryPosition`/`velocity`/`junk`/`accuracy`; the grant hook
+  `resolveTraitGrantRoster` already loads the full roster. JK ruled **"wire all 4 now"** — incl. the grade map computed
+  on-demand via the canonical pure `scoreSmb4Player` (overrides the §0.4 grade-freshness deferral; no divergence — same
+  function; flag-gated so zero live effect). Folded into §0.11 (W1) + DECISIONS_LOG.
+- **W1** (`franchiseTraitGrantCompute.ts`): extended `TraitGrantRosterEntry` with bats/throws/primaryPosition/grade?;
+  `resolveTraitGrantRoster` captures them per MLB player (grade via `scoreSmb4Player` for pitcher-role); the
+  `computeSeasonTraitCandidates` call site builds the 4 maps (`batterHandByPlayer`/`pitcherHandByPlayer`/
+  `primaryPositionByPlayer` over all roster players; `pitcherGradeByPlayer` filtered to pitcher-role). Flag gate
+  (`isFranchisePhase2TraitsEnabled` default OFF) untouched → build-DARK, zero live effect until post-D13.
+- **Builder = fresh subagent ≠ auditor = Opus Captain** (triangle). Independent re-derivation + flag-gate-intact check
+  → VERDICT VERIFIED. Host gate: `NODE_ENV= npm run build` exit 0 (7.59s) + full suite **7,678/438, 7,676 pass / 2
+  characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` — by name), **ZERO new reds** (+1 test / +0
+  files). trackerDb stays **v23**.
+- **⇒ the 6 handedness splits + Utility + Ace Exterminator are now WIRED (populated maps), still flag-gated build-dark.**
+  **NEXT (remaining follow-ups):** (B) Two Way C/IF/OF random-position + 3-variant family plumbing; (C) the §16 sim-tune
+  FINDING (sparse-signal getPercentile); (D) the L-stack (L10 Q5/Q8 rework → L11+). Also minor: `opposingHand` is still
+  hardcoded `'R'` in `reconstructAtBatContext` (matters only for matrix-handedness traits, NOT the now-wired splits which
+  read the threaded maps). FINDING-150 rebuild COMPLETE + WIRED. Nothing pushed.

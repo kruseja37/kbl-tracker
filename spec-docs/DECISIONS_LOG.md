@@ -1515,3 +1515,19 @@ builder. JK ruled the one measurement gap:
 - **E1 plumbing:** thread an OPTIONAL `pitcherGradeByPlayer?: ReadonlyMap<string, Smb4Grade>` into the input (mirror the
   handedness maps); the grade-deriving/refreshing hook is the DEFERRED app-wide grade-freshness step → Ace Exterminator
   stays dormant until then. No acquisition or grant-path change. This is the LAST earnable v1 trait (→ 47/47).
+
+---
+
+### 2026-06-18: W1 — wire the dormant-trait input maps live-dark (attended; L9b post-rebuild)
+
+With the 47/47 earnable trait set built, the handedness splits + Utility + Ace Exterminator are DORMANT — their optional
+`SeasonTraitCandidateInput` maps (`pitcherHandByPlayer`/`batterHandByPlayer`/`primaryPositionByPlayer`/
+`pitcherGradeByPlayer`) go unpopulated by the grant hook. Grounding (Explore map) confirmed the data is all on the
+franchise `Player` record (`leagueBuilderStorage.ts`: `bats`, `throws`, `primaryPosition`, `velocity/junk/accuracy`) and
+the hook (`franchiseTraitGrantCompute.ts` `resolveTraitGrantRoster`) already loads the full roster. JK ruled **"wire all
+4 now"** — including the grade map, computed on-demand via the canonical pure `scoreSmb4Player` (the same function the
+app-wide grade-freshness ticket would use, so no divergence; on-demand from current ratings is itself fresh). This
+OVERRIDES the §0.4 grade-freshness DEFERRAL (the grade-freshness ticket may later add caching/unification). Everything
+stays flag-gated (`isFranchisePhase2TraitsEnabled` default OFF) → build-DARK, zero live effect until post-D13. W1 =
+extend `TraitGrantRosterEntry` with bats/throws/primaryPosition/grade, capture them in `resolveTraitGrantRoster`, and
+build the 4 maps at the `computeSeasonTraitCandidates` call site.

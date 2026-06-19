@@ -247,10 +247,13 @@ per the player's relevant PA bucket; percentile vs the role-bucketed peer pool; 
   `pitcherGradeByPlayer.get(atBat.pitcherId)`; the PA counts iff that grade is **A− or better**
   (`SMB4_GRADE_TO_INDEX[grade] >= SMB4_GRADE_TO_INDEX['A-']`, from `smb4GradeEmulator.ts`). Denominator = PAs vs A−+
   pitchers; numerator = those where the batter reached base. **E1 plumbing:** thread an OPTIONAL
-  `pitcherGradeByPlayer?: ReadonlyMap<string, Smb4Grade>` into `SeasonTraitCandidateInput` (mirror the handedness maps;
-  the hook that derives + refreshes grades is a DEFERRED step — the app-wide grade-freshness ticket — so the trait is
-  dormant until then, decoupled from the pure builder). No acquisition change (Ace Exterminator is already POSITIVE +
-  COMPETITIVE/EGOTISTICAL). *(R3 = the LAST earnable v1 trait → 47/47.)*
+  `pitcherGradeByPlayer?: ReadonlyMap<string, Smb4Grade>` into `SeasonTraitCandidateInput` (mirror the handedness maps).
+  **WIRED (W1, JK ruling 2026-06-18 "wire all 4 now"):** the grant hook `franchiseTraitGrantCompute.ts` populates this
+  map on-demand from each pitcher-role player's CURRENT ratings via the canonical pure `scoreSmb4Player` (the same
+  function the app-wide grade-freshness ticket uses → no divergence; on-demand from current ratings is itself "fresh");
+  the grade-freshness ticket may later add caching/unification. Still flag-gated (`isFranchisePhase2TraitsEnabled` OFF)
+  → build-dark. No acquisition change (Ace Exterminator is already POSITIVE + COMPETITIVE/EGOTISTICAL). *(R3 = the LAST
+  earnable v1 trait → 47/47; W1 wires it + the handedness/Utility maps live-dark.)*
 
 ---
 
