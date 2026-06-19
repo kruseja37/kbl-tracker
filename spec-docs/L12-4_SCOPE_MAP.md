@@ -52,8 +52,8 @@ tap, the emission, and the `allStarSelections` career-counter increment. In L12-
 - **Combo-position normalizer** — OF→{LF,CF,RF}, IF→{1B,2B,3B,SS}, 1B/OF & IF/OF→primary, SP/RP kept literal.
   Authored against the **18-member base** `Position` enum (`src/types/game.ts:9`), NOT the 15-member figma enum.
   No normalizer exists today.
-- **Configurable-fraction lock-once helper** — `crossesAllStarLockFraction(gameNumber, totalGames, fraction)`
-  (default `ALL_STAR_LOCK_FRACTION = 0.6`), **cross-from-below** against `Math.round(totalGames*fraction)`. Pure
+- **Configurable-fraction lock helper** — `isAtOrPastAllStarLockFraction(gameNumber, totalGames, fraction)`
+  (default `ALL_STAR_LOCK_FRACTION = 0.6`), **at-or-past** `Math.round(totalGames*fraction)` (lock-once via the persisted flag, NOT cross-from-below). Pure
   & deterministic. The existing 20%-grid `isCheckpointBoundary` (`franchiseCheckpointSweepCompute.ts:106-114`)
   re-fires every boundary and has no configurable threshold and no latch — do NOT reuse it.
 - **Roster-size / count constants** as named §16-tunable placeholders (reserve-bench size, SP/RP contingent
@@ -187,16 +187,20 @@ edits the same config without an engine rebuild.
 with `gameThreshold:0.6`, but it emits a calendar **event** via `getSpecialEvents` (`:97`, zero callers outside the
 engine + tests) and uses **exact-equality** `gameNumber === allStarGame` (`:110`) — replay-fragile. Not a reusable trigger.
 
-**Greenfield helper:** `crossesAllStarLockFraction(gameNumber, totalGames, fraction = ALL_STAR_LOCK_FRACTION)` —
-**cross-from-below**: `(gameNumber-1) < anchor && gameNumber >= anchor` where `anchor = Math.round(totalGames*fraction)`.
-NOT exact-equality, so a skipped/replayed/out-of-order anchor game still locks on the first game at-or-past the boundary.
-Pure & deterministic (no `Date.now`, no IndexedDB). `ALL_STAR_LOCK_FRACTION = 0.6` (override of the original 0.5; named
-§16 constant).
+**Greenfield helper (CORRECTED — at-or-past, NOT cross-from-below).**
+`isAtOrPastAllStarLockFraction(gameNumber, totalGames, fraction = ALL_STAR_LOCK_FRACTION): boolean` =
+`Number.isFinite(gameNumber) && Number.isFinite(totalGames) && totalGames > 0 && gameNumber >= Math.round(totalGames*fraction)`.
+**Do NOT use the cross-from-below form** `(gameNumber-1) < anchor && gameNumber >= anchor` — it FAILS the very skip case it
+claims to cover: if the anchor game 19 is skipped and game 20 is the first processed past it, `(20-1) < 19` is false → the lock
+would never fire. The robust design is **at-or-past + the persisted `locked` flag**: the helper answers only "are we at or past
+the lock point," and the persisted `locked` flag (checked FIRST, set once) is the single source of truth for "already locked" —
+correct under skips, replays, and out-of-order completion. Pure & deterministic (no `Date.now`, no IndexedDB).
+`ALL_STAR_LOCK_FRACTION = 0.6` (override of the original 0.5; named §16 constant).
 
 **Lock-once-and-freeze** (fields already exist, `franchiseAllStarRostersStorage.ts:29-30`):
 - Each completed game: `getFranchiseAllStarRoster(scope)`. If `row?.locked === true` → **return early** (`locked-noop`),
   skip all All-Star recompute/rebuild.
-- Else build/refresh selections; if `crossesAllStarLockFraction(...)` → set `locked=true` + `lockedAtGameNumber=<resolved gameNumber>`, persist once.
+- Else build/refresh selections; if `isAtOrPastAllStarLockFraction(...)` → set `locked=true` + `lockedAtGameNumber=<resolved gameNumber>`, persist once.
 - **Branch only on `locked`** (single source of truth); `lockedAtGameNumber` is provenance/telemetry.
 - **Pre-lock window:** every completed game rebuilds + re-puts the roster (selections churn until lock) — intended;
   preserve `createdAt` across rewrites (§3.7).
@@ -213,7 +217,7 @@ Unresolved gameNumber/totalGames → dark-noop, never throw.
 |---|---|---|---|
 | **L12-4a** | **Pure selection engine** `src/engines/franchiseAllStarSelector.ts` (mirrors `franchiseTvFamilyScorer.ts`): combo-position normalizer + per-position fame-led starter (FAN_VOTE_WEIGHTS) + merit-reserve fill + pitching contingent → `FranchiseAllStarSelection[]`. Imports only the scorer + `getPercentile`. + determinism unit tests. | **MED** | New engine file + tests. No storage/flag/I-O. |
 | **L12-4b** | **All-Star candidate exporter** — new sibling in `franchiseAwardsEngine.ts` reusing `buildFranchiseValueInputRows` + `meetsQualifier` + `qualifierFactsFromStats`, RETAINING `valuePosition`/`currentTeamId`/WAR/facts. Do NOT widen `FranchiseRaceCandidateScore`. | **MED** | `franchiseAwardsEngine.ts` (additive export) + test. |
-| **L12-4c** | **Lock helper** `crossesAllStarLockFraction` + `ALL_STAR_LOCK_FRACTION` + unit tests (lock-once, cross-from-below, freeze). | **LOW** | New pure helper + tests. |
+| **L12-4c** | **Lock helper** `isAtOrPastAllStarLockFraction` + `ALL_STAR_LOCK_FRACTION` + unit tests (at-or-past, skip-safe, guards). | **LOW** | New pure helper + tests. |
 | **L12-4d** | **Orchestrator wiring + persistence + lock** — thin `persistFranchiseAllStarRosterForCompletedGame` invoked **inside the existing `processCompletedGame.ts:657-663` L12 block** (sibling to the recompute call): load exporter rows + fame → call the pure engine → lock-once guard → `putFranchiseAllStarRoster` → set lock on crossing. Try/catch dark-noop. + integration tests. | **HIGH** | `processCompletedGame.ts` (1 site, additive), All-Star store write. |
 
 Keep the **pure engine (4a/4c) strictly separate** from the **impure orchestrator/persistence (4d)** per the dark-build
@@ -276,7 +280,7 @@ pattern. 4d is the only ticket touching the live game-completion flow.
    population are impossible from it. Mitigation: new exporter from `buildFranchiseValueInputRows`; do NOT widen the
    merit-race shape (ripples into all 8 merit races / RACE-4 ordering).
 2. **Lock-once correctness.** Re-fire / exact-equality risks a permanently-unlocked roster (skipped/replayed anchor)
-   or repeated re-locks. Mitigation: cross-from-below + branch solely on the persisted `locked` flag.
+   or repeated re-locks. Mitigation: at-or-past test + branch solely on the persisted `locked` flag (skip-safe, not cross-from-below).
 3. **Combo-position normalization.** No normalizer exists; the two `Position` enums diverge (base 18 vs figma 15). A
    wrong rule double-counts a player at multiple slots or mis-buckets two-way players. Mitigation: deterministic
    normalizer on the 18-member base enum, dedupe to one starter slot, explicit two-way ruling.

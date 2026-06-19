@@ -12407,4 +12407,82 @@ full award floor would demand 100; the trust gate excludes a 99-WAR untrusted pl
 player; null team/position → `''`, missing fame → 0/0; playerId sort. **Host gate:** `NODE_ENV= npm run build` exit 0 (7.79s)
 + full suite **7,779/449, 7,777 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), **ZERO
 new reds** (+6 = the new test). build-DARK (no caller/flag/store — L12-4d wires it); trackerDb stays **v24**. Branch-only (NOT
-pushed). **➡ NEXT = L12-4c** (the `crossesAllStarLockFraction` 60% lock-once helper — pure, cross-from-below).
+pushed). **➡ NEXT = L12-4c** (the 60% lock helper — pure, at-or-past + persisted flag).
+
+---
+
+## CONTRACT — L12-4c (All-Star 60% lock helper: isAtOrPastAllStarLockFraction) — 2026-06-19 (attended)
+
+**ROUTE:** Codex CLI (gpt-5.5, **very-high reasoning effort**) via `codex exec` stdin-from-contract. Auditor: Opus 4.8
+(builder ≠ auditor — Codex builds, Opus independently audits + runs the full host gate).
+
+**ROLE:** You are a pure-helper builder for the KBL Tracker franchise L-stack.
+
+**GOAL:** Create a tiny PURE, deterministic helper module `src/utils/franchiseAllStarLock.ts` that answers "is the completed
+game at or past the All-Star 60%-games lock checkpoint," plus its test file. Build-DARK (NO caller — L12-4d uses it).
+
+**SOURCE OF TRUTH:** `spec-docs/L12-4_SCOPE_MAP.md` §4 (the **CORRECTED at-or-past design**). The lock-once + freeze is the
+caller's (L12-4d) job via the persisted `locked` flag — this helper ONLY answers "at or past the lock point."
+
+**CRITICAL — use AT-OR-PAST, not cross-from-below.** The cross-from-below form `(gameNumber-1) < anchor && gameNumber >= anchor`
+FAILS its own skip case: if the anchor game (e.g. 19) is skipped and game 20 is the first processed past it, `(20-1) < 19` is
+false → the lock never fires. AT-OR-PAST (`gameNumber >= anchor`) + the persisted `locked` flag (4d checks it FIRST) is correct
+under skips, replays, and out-of-order completion.
+
+**CHANGES (create ONLY these 2 files):**
+
+**A. `src/utils/franchiseAllStarLock.ts`:**
+```ts
+// §16 sim placeholder: the All-Star roster locks at 60% of scheduled games (override of the original 0.5).
+export const ALL_STAR_LOCK_FRACTION = 0.6;
+
+/**
+ * True iff the completed game at `gameNumber` is AT OR PAST the All-Star lock checkpoint
+ * (`Math.round(totalGames * fraction)`). AT-OR-PAST (not cross-from-below): the caller enforces
+ * lock-once via the persisted `locked` flag, so this stays correct under skipped / replayed /
+ * out-of-order game completion. Pure: no Date.now / Math.random / I/O.
+ */
+export function isAtOrPastAllStarLockFraction(
+  gameNumber: number,
+  totalGames: number,
+  fraction: number = ALL_STAR_LOCK_FRACTION,
+): boolean {
+  if (!Number.isFinite(gameNumber) || !Number.isFinite(totalGames) || totalGames <= 0) {
+    return false;
+  }
+  const anchor = Math.round(totalGames * fraction);
+  return gameNumber >= anchor;
+}
+```
+
+**B. `src/utils/tests/franchiseAllStarLock.test.ts`** — vitest, covering:
+- **At the anchor:** `totalGames=100` (default 0.6 → anchor 60): `gameNumber=60` → true; `59` → false.
+- **Rounding:** `totalGames=32` (0.6 → `Math.round(19.2)=19`): `gameNumber=19` → true; `18` → false.
+- **Skip-safe (the key case):** anchor 19, `gameNumber=20` (the 19 game never processed) → true; and `gameNumber=25` → true.
+- **Guards:** `totalGames<=0` → false; `Number.NaN`/`Infinity` for gameNumber or totalGames → false.
+- **Custom fraction:** `isAtOrPastAllStarLockFraction(50, 100, 0.5)` → true (anchor 50); `49` → false.
+- **Default fraction is 0.6** (call with 2 args).
+
+**HARD CONSTRAINTS:** create ONLY the 2 files. PURE — no `Date.now`/`Math.random`/async/IndexedDB/imports. NO caller wiring,
+NO flag, NO store. NO git add/commit. Prefix tsc/vitest with `NODE_ENV= `.
+
+**VERIFICATION (run ALL, paste ACTUAL):** `NODE_ENV= npx tsc --noEmit` exit 0 + `NODE_ENV= npm run build` exit 0;
+`NODE_ENV= npx vitest run src/utils/tests/franchiseAllStarLock.test.ts` all green. (The auditor runs the FULL host suite.)
+
+**STOP-IF:** anything in the contract would require an import or impurity → STOP + report.
+
+**FORMAT:** 1) files changed; 2) the at-or-past helper + the guard + the skip-safe rationale; 3) verification output;
+4) "L12-4c complete" or "BLOCKED: <reason>". Do NOT commit.
+
+Use very high reasoning effort. Think step-by-step. Read `spec-docs/L12-4_SCOPE_MAP.md` §4.
+
+**Status:** ✅ VERIFIED + COMMITTED 2026-06-19 (attended). **Codex (gpt-5.5, xhigh) built → Opus audited (builder ≠ auditor)
++ full host gate.** Created `src/utils/franchiseAllStarLock.ts` (`ALL_STAR_LOCK_FRACTION 0.6` + the PURE
+`isAtOrPastAllStarLockFraction` — guards non-finite/`totalGames<=0`, then `gameNumber >= Math.round(totalGames*fraction)`;
+AT-OR-PAST, lock-once owned by 4d's persisted flag) + `src/utils/tests/franchiseAllStarLock.test.ts` (6 tests). **Captain
+correction folded in:** the scope-map's original cross-from-below form `(gameNumber-1) < anchor` was BUGGY (failed its own
+skip case — anchor 19 skipped, game 20 → `19 < 19` false → never locks); corrected to at-or-past + persisted flag (scope map
+§4 updated). Tests prove the boundary (60/59 of 100), `Math.round` (19/18 of 32), the **skip-safe** case (game 20 locks when
+anchor 19 was skipped), the guards, a custom fraction, and the 0.6 default. **Host gate:** `NODE_ENV= npm run build` exit 0
+(8.24s) + full suite **7,785/450, 7,783 pass / 2 characterized fail**, **ZERO new reds** (+6). PURE / build-DARK; trackerDb
+**v24**. Branch-only. **➡ NEXT = L12-4d** (the live-path persist wrapper + processCompletedGame wiring).
