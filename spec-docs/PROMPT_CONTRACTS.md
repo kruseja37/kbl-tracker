@@ -12486,3 +12486,210 @@ skip case — anchor 19 skipped, game 20 → `19 < 19` false → never locks); c
 anchor 19 was skipped), the guards, a custom fraction, and the 0.6 default. **Host gate:** `NODE_ENV= npm run build` exit 0
 (8.24s) + full suite **7,785/450, 7,783 pass / 2 characterized fail**, **ZERO new reds** (+6). PURE / build-DARK; trackerDb
 **v24**. Branch-only. **➡ NEXT = L12-4d** (the live-path persist wrapper + processCompletedGame wiring).
+
+---
+
+## CONTRACT — L12-4d (live-path persist wrapper + processCompletedGame wiring) — 2026-06-19 (attended)
+
+**ROUTE:** Codex CLI (gpt-5.5, **very-high reasoning effort**) via `codex exec` stdin-from-contract. Auditor: Opus 4.8
+(builder ≠ auditor — Codex builds, Opus independently audits + runs the full host gate).
+
+**ROLE:** You are a builder for the KBL Tracker franchise L-stack (the live per-game completion path).
+
+**GOAL:** Wire the All-Star roster into the live per-completed-game flow: a NEW
+`src/utils/franchiseAllStarRosterCompute.ts` (`persistFranchiseAllStarRosterForCompletedGame`) that loads the candidates
+(L12-4b) → builds the 26-man roster (L12-4a) → sets the 60% lock (L12-4c) → persists into the existing
+`franchiseAllStarRosters` store, invoked inside the EXISTING `isFranchisePhase2L12Enabled()` block in
+`processCompletedGame.ts`. **Doubly-dark** (flag default OFF). **NO trackerDb bump** (store at v24). This is the ONLY L12-4
+ticket touching the live game-completion path.
+
+**SOURCE OF TRUTH:** `spec-docs/L12-4_SCOPE_MAP.md` §3.7 / §4 (lock) / §5 (seams) / §6 (Fork 6 — recompute stays pure, a thin
+sibling persist wrapper does the write) + `spec-docs/DECISIONS_LOG.md` 2026-06-19 "L12-4 All-Star roster". Mirror the dark-gate
+pattern of the existing branches in `processCompletedGame.ts:609-663` and the seam-injection pattern of
+`franchiseRaceStandingsCompute.ts` (`raceStandingsSeam`).
+
+**VERIFIED ANCHORS (do not re-derive):** `trueValueScope` (PersistedTrueValueResult) carries `franchiseId`/`seasonId`/
+`statsScopeId`/`seasonNumber` (proven by the designationScope at `processCompletedGame.ts:665-670`). The existing L12 block is
+`processCompletedGame.ts:657-663` (`if (isFranchisePhase2L12Enabled()) { try { await recomputeFranchiseL12StandingsForCompletedGame(...) } catch ... }`).
+`gameState.savedAt: number` is the threaded timestamp (NO `Date.now`). `getSeasonMetadata` ← `'./seasonStorage'`
+(`(seasonId) => Promise<SeasonMetadata|null>`, `.totalGames`). `CompletedGameArchiveOptions` is exported from
+`franchiseCheckpointSweepCompute.ts:76`. `resolveCheckpointGameNumber` is PRIVATE there (`:286`) — you will EXPORT it.
+
+**CHANGES — edit/create ONLY these 4 files:**
+
+**A. `src/utils/franchiseCheckpointSweepCompute.ts`** — add `export` to the existing `resolveCheckpointGameNumber` function
+(`:286`). **ZERO logic change** — just expose it so the new wrapper reuses the schedule→gameNumber resolution (DRY).
+
+**B. NEW `src/utils/franchiseAllStarRosterCompute.ts`:**
+```ts
+import type { PersistedGameState } from './gameStorage';
+import { isFranchisePhase2L12Enabled } from './franchisePhase2Flags';
+import { buildFranchiseAllStarCandidates } from './franchiseAwardsEngine';
+import { computeFranchiseAllStarRoster } from '../engines/franchiseAllStarSelector';
+import { isAtOrPastAllStarLockFraction } from './franchiseAllStarLock';
+import {
+  getFranchiseAllStarRoster,
+  putFranchiseAllStarRoster,
+  franchiseAllStarRosterId,
+  type FranchiseAllStarRosterRow,
+  type FranchiseAllStarSelection,
+} from './franchiseAllStarRostersStorage';
+import { resolveCheckpointGameNumber, type CompletedGameArchiveOptions } from './franchiseCheckpointSweepCompute';
+import { getSeasonMetadata } from './seasonStorage';
+
+export type AllStarRosterScope = {
+  franchiseId: string;
+  seasonId: string;
+  statsScopeId: string;
+  seasonNumber: number;
+};
+
+// Seam for test injection (mirror raceStandingsSeam in franchiseRaceStandingsCompute.ts).
+export const allStarRosterSeam = {
+  buildCandidates: buildFranchiseAllStarCandidates,
+  getRoster: getFranchiseAllStarRoster,
+  putRoster: putFranchiseAllStarRoster,
+  getSeasonMetadata,
+  resolveGameNumber: resolveCheckpointGameNumber,
+};
+
+export type PersistAllStarResult = {
+  status: 'dark-noop' | 'locked-noop' | 'persisted' | 'persisted-locked';
+  reason?: string;
+};
+
+export async function persistFranchiseAllStarRosterForCompletedGame(
+  gameState: PersistedGameState,
+  scope: AllStarRosterScope,
+  archiveOptions?: CompletedGameArchiveOptions,
+): Promise<PersistAllStarResult> {
+  if (!isFranchisePhase2L12Enabled()) {
+    return { status: 'dark-noop', reason: 'Phase-2 L12 disabled.' };
+  }
+
+  const rosterScope = {
+    franchiseId: scope.franchiseId,
+    seasonId: scope.seasonId,
+    statsScopeId: scope.statsScopeId,
+  };
+
+  const existing = await allStarRosterSeam.getRoster(rosterScope);
+  if (existing?.locked) {
+    return { status: 'locked-noop' };
+  }
+
+  const candidates = await allStarRosterSeam.buildCandidates({
+    franchiseId: scope.franchiseId,
+    seasonId: scope.seasonId,
+    statsScopeId: scope.statsScopeId,
+    seasonNumber: scope.seasonNumber,
+  });
+  const selections: FranchiseAllStarSelection[] = computeFranchiseAllStarRoster({ candidates }).map((selection) => ({
+    playerId: selection.playerId,
+    teamId: selection.teamId,
+    position: selection.position,
+    role: selection.role,
+    selectionScore: selection.selectionScore,
+  }));
+
+  const gameNumber = await allStarRosterSeam.resolveGameNumber(gameState, archiveOptions);
+  const totalGames = (await allStarRosterSeam.getSeasonMetadata(scope.seasonId))?.totalGames;
+  const shouldLock = gameNumber != null &&
+    typeof totalGames === 'number' &&
+    isAtOrPastAllStarLockFraction(gameNumber, totalGames);
+
+  const row: FranchiseAllStarRosterRow = {
+    ...rosterScope,
+    id: franchiseAllStarRosterId(rosterScope),
+    seasonNumber: scope.seasonNumber,
+    selections,
+    locked: shouldLock,
+    lockedAtGameNumber: shouldLock ? gameNumber : (existing?.lockedAtGameNumber ?? null),
+    createdAt: existing?.createdAt ?? gameState.savedAt,
+    updatedAt: gameState.savedAt,
+  };
+  await allStarRosterSeam.putRoster(row);
+
+  return { status: shouldLock ? 'persisted-locked' : 'persisted' };
+}
+```
+(Adjust ONLY if a verified signature differs — then STOP + report. Use `gameState.savedAt` for BOTH timestamps; preserve
+`existing.createdAt` on rewrites. NO `Date.now`/`Math.random`.)
+
+**C. `src/utils/processCompletedGame.ts`** — additive ONLY:
+1. import `persistFranchiseAllStarRosterForCompletedGame` from `'./franchiseAllStarRosterCompute'`.
+2. Inside the EXISTING `if (isFranchisePhase2L12Enabled()) { ... }` block (`:657-663`), AFTER the recompute try/catch, add a
+   SECOND try/catch (mirror the surrounding pattern EXACTLY):
+   ```ts
+   try {
+     await persistFranchiseAllStarRosterForCompletedGame(gameState, trueValueScope, archiveOptions);
+   } catch (e) {
+     console.warn('[L12] dark All-Star roster persist skipped for completed game ' + gameState.gameId + ':', e);
+   }
+   ```
+   Do NOT touch the recompute call or any other branch.
+
+**D. `src/utils/tests/franchiseAllStarRosterCompute.test.ts`** — stub `allStarRosterSeam` (replace its members with
+`vi.fn()` spies) + toggle the L12 flag via the SAME test mechanism the existing L12 tests use (see
+`franchiseRaceStandingsCompute.test.ts` for how it enables `isFranchisePhase2L12Enabled` — mirror it). Assert:
+- **flag OFF** → `dark-noop`, `putRoster` NOT called.
+- **flag ON, existing.locked=true** → `locked-noop`, `buildCandidates`/`putRoster` NOT called (frozen).
+- **flag ON, not locked, below lock** (gameNumber/totalGames below the 60% anchor) → `persisted`; persisted row has
+  `locked:false`, `selections` = the engine output for the stubbed candidates, `createdAt` falls back to `gameState.savedAt`,
+  `lockedAtGameNumber:null`.
+- **flag ON, at/past lock** (gameNumber ≥ `round(totalGames*0.6)`) → `persisted-locked`; row `locked:true`,
+  `lockedAtGameNumber` = the resolved gameNumber.
+- **createdAt preservation:** when `getRoster` returns an existing (unlocked) row with an OLD `createdAt`, the persisted row
+  KEEPS that `createdAt` and sets `updatedAt = gameState.savedAt`.
+- **unresolved cadence:** `resolveGameNumber`→null OR `getSeasonMetadata`→null ⇒ still `persisted` (NOT locked), no throw.
+
+**HARD CONSTRAINTS:** edit/create ONLY the 4 files. The `processCompletedGame.ts` change is ADDITIVE (1 import + 1 try/catch
+inside the existing L12 block). The `resolveCheckpointGameNumber` change is `export`-ONLY (no logic). NO trackerDb/store/
+backup/syncConfig/ledger change (store exists at v24). NO new flag (reuse `isFranchisePhase2L12Enabled`). NO `Date.now`/
+`Math.random` (use `gameState.savedAt`). NO git add/commit. Prefix tsc/vitest with `NODE_ENV= `.
+
+**VERIFICATION (run ALL, paste ACTUAL):** `NODE_ENV= npx tsc --noEmit` exit 0 + `NODE_ENV= npm run build` exit 0;
+`NODE_ENV= npx vitest run src/utils/tests/franchiseAllStarRosterCompute.test.ts` all green; **AND run the processCompletedGame
+test family** `NODE_ENV= npx vitest run src/utils/tests/processCompletedGame*.test.ts` (the new import adds a transitive
+chain — the L12-3b precedent broke a partial mock at module-load; surface it here). (The auditor runs the FULL host suite.)
+
+**STOP-IF:** `trueValueScope` is NOT assignable to `AllStarRosterScope` (missing any of the 4 fields) → STOP + report. Any
+of `getFranchiseAllStarRoster`/`putFranchiseAllStarRoster`/`franchiseAllStarRosterId`/`FranchiseAllStarRosterRow`/
+`buildFranchiseAllStarCandidates`/`computeFranchiseAllStarRoster`/`isAtOrPastAllStarLockFraction` has a DIFFERENT signature than
+the code above → STOP + report (do not guess). Adding the import breaks a `processCompletedGame` test's partial mock in a way
+that needs MORE than a mechanical test-only mock stub → STOP + report (do NOT patch production to satisfy a mock).
+
+**FORMAT:** 1) files changed; 2) the wrapper (flag gate → lock-noop → build→engine→persist → 60% lock via the persisted flag →
+createdAt preservation) + the processCompletedGame insertion; 3) verification output (paste actual tsc/build/both vitest runs);
+4) "L12-4d complete" or "BLOCKED: <reason>". Do NOT commit.
+
+Use very high reasoning effort. Think step-by-step. Read `src/utils/franchiseRaceStandingsCompute.ts` (the seam pattern + the
+L12 block call site context), `src/utils/processCompletedGame.ts:600-665` (the dark-gate stack), `src/utils/franchiseAllStarRostersStorage.ts`
+(the row/selection shapes + id helper), `src/engines/franchiseAllStarSelector.ts` (`computeFranchiseAllStarRoster`),
+`src/utils/franchiseAwardsEngine.ts` (`buildFranchiseAllStarCandidates`), `src/utils/franchiseAllStarLock.ts`, and
+`src/utils/tests/franchiseRaceStandingsCompute.test.ts` (the flag-toggle + seam-stub test pattern to mirror).
+
+**Status:** ✅ VERIFIED + COMMITTED 2026-06-19 (attended). **Codex (gpt-5.5, xhigh) built via `codex exec`
+stdin-from-contract → Opus 4.8 independently audited (builder ≠ auditor) + ran the FULL host gate.** Created
+`src/utils/franchiseAllStarRosterCompute.ts` (`persistFranchiseAllStarRosterForCompletedGame` + the `allStarRosterSeam`
+injection object + `PersistAllStarResult`) + `src/utils/tests/franchiseAllStarRosterCompute.test.ts` (7 seam-stub tests);
+edited `franchiseCheckpointSweepCompute.ts` (`export`-only on `resolveCheckpointGameNumber`, zero logic change) +
+`processCompletedGame.ts` (1 import + 1 try/catch inside the EXISTING L12 flag block at :657-663, after the recompute, before
+the designation block). **Audit:** both live-path diffs are strictly ADDITIVE (verified via git diff); the wrapper is faithful
+to the contract (flag gate → `locked` freeze [single source of truth] → build candidates → engine → persist → 60% lock via
+`isAtOrPastAllStarLockFraction`; `createdAt` preserved on rewrite; `gameState.savedAt` timestamps, no `Date.now`). Tests
+non-vacuous: flag-off short-circuits before any seam call; locked → no rebuild; below-anchor persists unlocked with
+`row.selections` deep-equal to the REAL `computeFranchiseAllStarRoster` output; at-anchor (game 60 of 100) → `persisted-locked`
++ `lockedAtGameNumber 60`; createdAt preserved across rewrite; unresolved gameNumber/totalGames → persisted-not-locked, no
+throw. **AUDITOR-CAUGHT NEW RED (the L12-3b precedent, exactly as flagged):** the new transitive import
+(processCompletedGame → franchiseAllStarRosterCompute → `getSeasonMetadata`) broke
+`src/src_figma/__tests__/franchiseMode/FranchiseHomeLaunch.test.tsx` at MODULE-LOAD — its partial `seasonStorage` mock omitted
+`getSeasonMetadata` ("No getSeasonMetadata export is defined on the mock"); **failed deterministically (0 tests ran), NOT an
+order-flake** (Codex's scoped `processCompletedGame*.test.ts` run [18/18] missed it — that file isn't a processCompletedGame
+test). FIX (mechanical, auditor-applied, test-only): added `getSeasonMetadata: vi.fn().mockResolvedValue(null)` to that mock —
+solo re-run 23/23. **Host gate (post-fix):** `NODE_ENV= npm run build` exit 0 (7.64s) + full suite **7,792/451, 7,790 pass / 2
+characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), **ZERO new reds** (+7 wrapper tests).
+**DOUBLY-DARK** (flag default OFF + the persist only writes when the flag is on; live-path but no effect until post-D13);
+trackerDb stays **v24**. Branch-only (NOT pushed). **⇒ L12-4 COMPLETE (a/b/c/d). ➡ NEXT = L12-5** (emission / snub morale row /
+honor→Reach-floor / reporter tap). **⚠ BROWSER-VERIFY (batched, prioritized — persistence/saved-shape):** at the post-D13
+flag-flip, confirm a completed game writes a `franchiseAllStarRosters` row and that it freezes at the 60% mark.

@@ -283,7 +283,7 @@ export async function persistDarkCheckpointSweepForCompletedGame(
   return { status: 'written', written: rows.length };
 }
 
-async function resolveCheckpointGameNumber(
+export async function resolveCheckpointGameNumber(
   gameState: PersistedGameState,
   archiveOptions?: CompletedGameArchiveOptions,
 ): Promise<number | null> {

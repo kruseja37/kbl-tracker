@@ -106,6 +106,9 @@ vi.mock('../../../utils/seasonStorage', () => ({
   getActiveSeason: vi.fn().mockResolvedValue(null),
   getSeasonBattingStats: vi.fn().mockResolvedValue([]),
   getSeasonPitchingStats: vi.fn().mockResolvedValue([]),
+  // L12-4d: processCompletedGame -> franchiseAllStarRosterCompute imports getSeasonMetadata; the
+  // partial mock must define it so the transitive module-load does not throw (dark path; returns null).
+  getSeasonMetadata: vi.fn().mockResolvedValue(null),
   markSeasonComplete: vi.fn(),
   calculateStandings: vi.fn().mockResolvedValue({}),
 }));

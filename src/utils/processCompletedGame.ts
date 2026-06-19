@@ -71,6 +71,7 @@ import { persistDarkTraitGrantForCompletedGame } from './franchiseTraitGrantComp
 import { persistDarkL10ForCompletedGame } from './franchiseL10SweepCompute';
 import { persistDarkL11AutoBackstopForCompletedGame } from './franchiseManagerAutoBackstop';
 import { recomputeFranchiseL12StandingsForCompletedGame } from './franchiseRaceStandingsCompute';
+import { persistFranchiseAllStarRosterForCompletedGame } from './franchiseAllStarRosterCompute';
 import type { HiddenModifiers } from '../types/game';
 
 export interface ProcessGameResult {
@@ -659,6 +660,11 @@ export async function processCompletedGame(
             await recomputeFranchiseL12StandingsForCompletedGame(gameState, trueValueScope, archiveOptions);
           } catch (e) {
             console.warn('[L12] dark race-standing recompute skipped for completed game ' + gameState.gameId + ':', e);
+          }
+          try {
+            await persistFranchiseAllStarRosterForCompletedGame(gameState, trueValueScope, archiveOptions);
+          } catch (e) {
+            console.warn('[L12] dark All-Star roster persist skipped for completed game ' + gameState.gameId + ':', e);
           }
         }
         try {
