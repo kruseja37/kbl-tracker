@@ -1608,3 +1608,27 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   suppress→no relief; no-active-manager→no writes; determinism). Host gate: `NODE_ENV= npm run build` exit 0 (8.10s) +
   full suite **7,708/440, 7,706 pass / 2 characterized fail** (wpaRuntimeBoundary + franchiseManualSmokeFixture), ZERO new
   reds (+5). trackerDb stays **v23**. ➡ NEXT = L11-3b (per-game auto-backstop trigger reviving `managerFireProbability`).
+
+## 2026-06-19 — L11-3b: per-game auto-backstop trigger — Codex-built → fix1 (triangle caught a real defect) → VERIFIED → COMMITTED
+- **Built (3 files):** NEW `src/utils/franchiseManagerAutoBackstop.ts` `persistDarkL11AutoBackstopForCompletedGame` (mirror
+  the L10 hook: flag-gate FIRST → resolve gameNumber + max-at-bat createdAt → check ONLY the completed game's home/away
+  teams → if team-fan morale < `armingThreshold` 25, deterministic FNV-1a roll < `perGameProbability` 0.004 → `fireManager
+  ({reason:'auto-backstop'})` in try/catch) + `L11_AUTO_BACKSTOP_TUNING` (§16) + `autoBackstopSeam` + 5 tests; wired as the
+  7th gate branch in `processCompletedGame.ts` right after the L10 branch (using `trueValueScope`). Doubly-dark; no
+  Date.now/Math.random. **DEFAULT-TAKEN (AUTH-4):** v1 uses a FLAT §16 per-game probability gated by low morale; the
+  payroll-band `managerFireProbability` (salaryCalculator.ts:1259-1301) scaling is the intended refinement, DEFERRED
+  (needs team-payroll ranking). And: per-game scope = the 2 game teams (not a league sweep) — bounded/conservative.
+- **⚠ DEFECT CAUGHT BY AUDIT → fix1:** Codex guessed `instanceId = scope.franchiseId` (violating the contract STOP-IF).
+  WRONG — franchise manager assignments are keyed `instanceId = LEAGUE_BUILDER_MANAGER_INSTANCE_ID` ('league-builder',
+  managerIdentityStorage.ts:21; created so at LeagueBuilderTeams.tsx:308-309/494-495). With franchiseId, `fireManager`'s
+  `getManagerAssignment` lookup always misses → 'no-active-manager' → the auto-backstop would NEVER fire at activation.
+  fix1 = import + use `LEAGUE_BUILDER_MANAGER_INSTANCE_ID`. (Build-DARK so no live harm; the cross-model triangle caught a
+  silent-activation-failure bug — the value of Opus-audits-Codex on live-path tickets.)
+- **⚠ VERIFY-AT-ACTIVATION (logged, not blocking — build-DARK):** the team-id NAMESPACE — `gameState.homeTeamId`/`awayTeamId`
+  must match the franchise team-id namespace used by the morale snapshots (`getFranchiseMoraleSnapshot 'team-fan' teamId`)
+  AND the manager-assignment `teamId`. Not independently confirmed this run; JK's activation/browser pass must verify the
+  auto-backstop targets the right team. (Same latent namespace assumption applies to L11-3's `fireManager` snapshot.)
+- **Audit VERDICT VERIFIED** (after fix1): hook read line-by-line; gate branch mirrors L10; deterministic roll stable;
+  tests non-vacuous (flag-off no-loads; cratered+roll-hit→fire; healthy→skip; cratered+roll-miss→no fire; determinism).
+  Host gate: `NODE_ENV= npm run build` exit 0 (7.66s) + full suite **7,713/441, 7,711 pass / 2 characterized fail**, ZERO
+  new reds (+5). trackerDb v23. ➡ NEXT = L11-4 (Almanac fire/hire-date join + the L11-3 OPEN fired-tenure persistence).

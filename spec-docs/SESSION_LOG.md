@@ -5817,3 +5817,11 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   the host gate caught) → Opus-VERIFIED. Host gate: build 0 + suite 7,708/440, 7,706 pass / 2 characterized fail, zero new
   reds. **OPEN→L11-4:** successor overwrites the fired assignment key → fired tenure-end must be persisted by L11-4's
   Almanac join (detail in AUTONOMOUS_RUN_LOG). Build-DARK; trackerDb v23. NEXT = L11-3b. Nothing pushed.
+
+## 2026-06-19 (AUTH-4 overnight) — L11-3b: per-game auto-backstop trigger (build-DARK)
+- NEW `franchiseManagerAutoBackstop.ts` (flag-gated per-game hook: low-morale-gated deterministic roll → fireManager) +
+  the 7th `processCompletedGame` gate branch. Codex-built → fix1 (the audit caught instanceId=franchiseId; correct =
+  LEAGUE_BUILDER_MANAGER_INSTANCE_ID — would've been a silent activation no-op) → Opus-VERIFIED. Host gate: build 0 +
+  suite 7,713/441, 7,711 pass / 2 characterized fail, zero new reds (+5). §16 defaults (armingThreshold 25, perGame 0.004,
+  flat — payroll-band deferred). VERIFY-AT-ACTIVATION: gameState team-id namespace vs morale/assignment team-ids. trackerDb
+  v23. NEXT = L11-4. Nothing pushed.

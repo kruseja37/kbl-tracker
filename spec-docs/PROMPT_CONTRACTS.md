@@ -11143,3 +11143,53 @@ Use high reasoning effort. Think step-by-step. Read `franchiseL10SweepCompute.ts
 **OPEN→L11-4:** the successor overwrites the fired assignment key → fired tenure-end must be persisted by L11-4's Almanac
 join (logged in AUTONOMOUS_RUN_LOG). Host gate: `npm run build` exit 0 (8.10s) + suite **7,708/440, 7,706 pass / 2
 characterized fail**, ZERO new reds (+5). Committed (3 files + docs; not pushed). **➡ NEXT = L11-3b.**
+
+---
+
+## CONTRACT — L11-3b (per-game auto-backstop firing trigger) — 2026-06-19 (AUTH-4 overnight)
+
+**ROUTE: Codex CLI (`codex exec`, stdin from this contract) | very high reasoning effort** (builder; LIVE-PATH hook —
+highest-risk class). Auditor = Opus Captain (audit HARDEST — runs every completed game). Branch codex/franchise-v1-next.
+BUILD-DARK: gated by `isFranchisePhase2L11Enabled` (doubly-dark — `fireManager` + `applyFranchiseMoraleEffect` carry their
+own gates). Source: L11 rulings (trigger=BOTH incl. the auto-backstop reviving `managerFireProbability`) + the L10 hook
+pattern (`franchiseL10SweepCompute.ts`) + L11-3 `fireManager`.
+
+**GOAL:** a per-completed-game dark hook that, gated by the L11 flag, fires a team's manager via the L11-3 `fireManager`
+resolver when fan morale is cratered, on a deterministic backstop roll. Wired as the 7th gate branch in
+`processCompletedGame` after the L10 branch.
+
+**CHANGES (edit ONLY the 3 files below):**
+**A. NEW `src/utils/franchiseManagerAutoBackstop.ts`** — `persistDarkL11AutoBackstopForCompletedGame(gameState, scope, archiveOptions)`, mirroring `franchiseL10SweepCompute.persistDarkL10ForCompletedGame`:
+- **flag-gate FIRST:** `if (!isFranchisePhase2L11Enabled())` → dark-noop (no loads).
+- resolve `gameNumber` (mirror `resolveL10GameNumber`) + a `createdAt` ISO timestamp (max persisted at-bat ts; NO Date.now) — mirror the L10 hook.
+- **scope = the COMPLETED GAME's teams only** (`gameState.homeTeamId` + `gameState.awayTeamId`) — conservative, bounded per-game, NOT a league sweep. [DEFAULT — documented]
+- for each (≤2) team: `morale = (await getFranchiseMoraleSnapshot(scope,'team-fan',teamId))?.currentValue ?? 50`; if `morale >= L11_AUTO_BACKSTOP_TUNING.armingThreshold` (§16, default **25**) → skip (not cratered); else deterministic-roll a LOCAL FNV-1a off `${franchiseId}:${seasonId}:${gameNumber}:${teamId}:manager-backstop` (re-impl, do not import L10's) and if `roll < L11_AUTO_BACKSTOP_TUNING.perGameProbability` (§16, default **0.004** — a FLAT conservative per-game rate; the payroll-band `managerFireProbability` scaling is the intended refinement but is DEFERRED — it needs team-payroll ranking; document this) → `await fireManager({...scope, leagueId, teamId, mode:'franchise', instanceId, reason:'auto-backstop', endDate: createdAt})`.
+- `L11_AUTO_BACKSTOP_TUNING` const (§16 placeholders): `armingThreshold: 25`, `perGameProbability: 0.004`.
+- wrap each `fireManager` call in try/catch (never block game completion). Return `{status, fired: number, checked: number}`. Expose an `autoBackstopSeam` for stubbing.
+- GROUND `leagueId` (mirror `resolveL10Candidates`: `getAllFranchiseTeams[].leagueIds[0]`) + `instanceId` for the franchise manager assignment from `managerIdentityStorage` usage; **STOP + report if `instanceId`/`leagueId` aren't cleanly resolvable** (do not guess the assignment key).
+**B. `src/utils/processCompletedGame.ts`** — add the import + the 7th gate branch AFTER the L10 branch, mirroring it EXACTLY: `if (isFranchisePhase2L11Enabled()) { try { await persistDarkL11AutoBackstopForCompletedGame(gameState, <same scope the L10 branch uses>, archiveOptions); } catch (e) { console.warn('[L11] auto-backstop dark compute failed', e); } }` inside the `if (trueValueScope)` block.
+**C. NEW `src/utils/tests/franchiseManagerAutoBackstop.test.ts`:** flag-off dark-noop (no loads); flag-on + cratered morale + a forced roll-hit (stub the seam) → `fireManager` called for the team; flag-on + healthy morale → skipped (no fire); flag-on + cratered + roll-miss → no fire; determinism.
+
+**HARD CONSTRAINTS:** edit ONLY the NEW `franchiseManagerAutoBackstop.ts`, its NEW test, + `processCompletedGame.ts` (the
+import + ONE gate branch). Do NOT modify `franchiseManagerFiring.ts` (CALL `fireManager`), `franchisePhase2Flags.ts`
+(already has `isFranchisePhase2L11Enabled`), `franchiseMoraleState.ts`, `managerIdentityStorage.ts`, `salaryCalculator.ts`
+(do NOT add a payroll-ranking dependency — use the flat per-game default), `trackerDb.ts` (NO bump), any `*.md`.
+Doubly-dark; NO `Date.now`/`Math.random` (deterministic roll + caller timestamp). No git add/commit. Prefix tsc/vitest
+with `NODE_ENV= `.
+
+**VERIFICATION (run BOTH, paste ACTUAL):** `NODE_ENV= npx tsc --noEmit` AND `NODE_ENV= npm run build` exit 0 (the build
+is `tsc -b` + vite — NOT just `tsc --noEmit`; the L11-3 fix1 lesson); `NODE_ENV= npx vitest run src/utils/tests/franchiseManagerAutoBackstop.test.ts` all green.
+
+**STOP-IF:** `instanceId`/`leagueId` for the `fireManager` call aren't cleanly resolvable → STOP + report.
+
+**FORMAT:** 1) files; 2) the gate-branch insertion + arming/probability defaults + seam decisions; 3) verification output (actual); 4) "L11-3b complete" or "BLOCKED: <reason>". Do NOT commit.
+
+Use high reasoning effort. Think step-by-step. Read `franchiseL10SweepCompute.ts` (hook + `resolveL10GameNumber` + createdAt + scope), `processCompletedGame.ts` (the L10 gate branch to mirror), `franchiseManagerFiring.ts` (`fireManager` signature), `franchisePhase2Flags.ts`.
+
+**Status:** ✅ VERIFIED + COMMITTED (2026-06-19, AUTH-4). Codex-built → fix-iteration 1 (the audit caught
+`instanceId=scope.franchiseId` — WRONG; franchise assignments key on `LEAGUE_BUILDER_MANAGER_INSTANCE_ID`, so it would've
+been a silent activation no-op) → Opus-audited VERIFIED. Per-game hook (flag-gate → 2-team morale check → deterministic
+roll → `fireManager`), 7th `processCompletedGame` gate branch; doubly-dark, trackerDb v23. §16 defaults (armingThreshold
+25, perGameProbability 0.004, flat — payroll-band deferred). VERIFY-AT-ACTIVATION: gameState↔morale/assignment team-id
+namespace (logged). Host gate: `npm run build` exit 0 (7.66s) + suite **7,713/441, 7,711 pass / 2 characterized fail**,
+ZERO new reds (+5). Committed (3 files + docs; not pushed). **➡ NEXT = L11-4.**

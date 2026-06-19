@@ -3,7 +3,7 @@
 **Last Updated:** 2026-06-19 — **ACTIVE (AUTH-4 UNATTENDED OVERNIGHT).** **L11 manager-firings BUILD rolling under
 AUTH-4 — L11-1 engine + L11-2 legacy-write + L11-3 shared `fireManager` resolver DONE; the L11–L14 RULING PASS is
 consolidated (all 43 Qs ruled; 7 JK overrides + 2 field corrections).** Codex-built → Opus-audited, branch-only,
-build-DARK; trackerDb v23. **➡ NEXT = L11-3b (per-game auto-backstop trigger)** then L11-4 → L11-5 → fame double-ladder
+build-DARK; trackerDb v23. **➡ NEXT = L11-4 (Almanac fire/hire-date join + the L11-3 fired-tenure persistence)** then L11-5 → fame double-ladder
 collapse → L12 (split) → L13 (split) → L14 → L-SIM. Per-ticket detail in `AUTONOMOUS_RUN_LOG.md`. *(prior:)* **L10 Q5/Q8 REWORK COMPLETE → L10 (random events) FULLY
 COMPLETE.** Continuous per-game cadence (Q5 — dropped the 20%-checkpoint gate; flat per-game §16 base rates) +
 `name_change` in the dark catalog (Q8 — rare distinct cosmetic-family event). **Builder routing RESTORED to Codex**
@@ -71,7 +71,7 @@ is **~95% BUILT / production-ready** → it's a CLEANUP pass, not a build: domin
 files** (FranchiseHome 626 · TeamHubContent 506 · ScheduleContent 90 · AwardsWatchlist 30) → extract to KBL-palette
 theme tokens + minor polish (~1 week). **Timing: it's the LIVE surface, decoupled from D13/L-stack/GameTracker — do it
 ANYTIME (no gate forces a wait; mild bonus to doing tokens before the hub's future activation overlays).** Suite
-**7,708/440, 7,706 pass / 2 characterized fail (post-L11-3; +5 fireManager tests)** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` +
+**7,713/441, 7,711 pass / 2 characterized fail (post-L11-3b; +5 auto-backstop tests)** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` +
 `GameTrackerLaunchState` — the 3rd an intermittent order-flake **confirmed passing solo 9/9**; `franchiseOffseasonGuards.component`
 is another such flake); trackerDb **v23**; branch codex/franchise-v1-next; **nothing pushed**. Session commits: R1-b1
 `474196e7` · R1-b2 `bbb839ce` · R2 `b80fa135` · R1-b3 `7e22e015` · R3 `9059f697` · W1 `6a934a9e` · PRE-ACT-TRAITS gate
@@ -195,6 +195,15 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## RIGHT NOW
 
+- **✅ L11-3b VERIFIED + COMMITTED (2026-06-19, AUTH-4) — the per-game auto-backstop firing trigger (build-DARK,
+  live-path).** NEW `src/utils/franchiseManagerAutoBackstop.ts` (flag-gated per-completed-game hook: checks the game's 2
+  teams → if team-fan morale < 25 (§16), deterministic FNV-1a roll < 0.004 (§16, flat — payroll-band deferred) →
+  `fireManager({reason:'auto-backstop'})`) + the 7th `processCompletedGame` gate branch (after L10). Codex-built → **fix1
+  (the audit caught a real defect: `instanceId=franchiseId` → correct = `LEAGUE_BUILDER_MANAGER_INSTANCE_ID`; would've been
+  a silent activation no-op)** → Opus-VERIFIED. Host gate: build 0 (7.66s) + suite **7,713/441, 7,711 pass / 2
+  characterized fail**, ZERO new reds (+5). **⚠ VERIFY-AT-ACTIVATION:** the `gameState` team-id namespace vs the
+  morale/assignment team-ids (logged in `AUTONOMOUS_RUN_LOG`). Doubly-dark; trackerDb v23. **➡ NEXT = L11-4.** *(Prior
+  entries below.)*
 - **✅ L11-3 VERIFIED + COMMITTED (2026-06-19, AUTH-4) — the shared `fireManager` resolver (build-DARK).** Flag
   `isFranchisePhase2L11Enabled` + NEW `src/utils/franchiseManagerFiring.ts`: gate → reconstruct the team firing snapshot
   (MLB roster + per-player valueDelta/personality/loyalty/resilience + team-fan morale) → `computeFranchiseL11Firing`
