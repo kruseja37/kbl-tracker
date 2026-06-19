@@ -11,6 +11,7 @@ import {
 } from '../traitCandidateBuilder';
 import { CANONICAL_TRAIT_NAMES } from '../traitRealityScorer';
 import { computeTraitAcquisition } from '../traitAcquisition';
+import { calculateWOBA } from '../bwarCalculator';
 import type { EffectiveRatingsPlayer, GameContext } from '../effectiveRatings';
 import type { AtBatEvent, BetweenPlayEvent, FieldingEvent, RunnerState } from '../../utils/eventLog';
 import type { AtBatResult } from '../../types/game';
@@ -211,6 +212,9 @@ describe('BUILDABLE_TRAITS', () => {
       'POW vs RHP',
       'Specialist',
       'Reverse Splits',
+      // R1-b3: Two Way earn-signal (pitcher batting wOBA). C/IF/OF family + random
+      // position deferred — Two Way (IF)/(OF) intentionally NOT here.
+      'Two Way (C)',
     ]);
   });
 
@@ -1629,6 +1633,184 @@ describe('R2 L9b-2 seam (count-family + First-Pitch + handedness feed computeTra
       expect(skip?.reason).not.toBe('ineligible_role');
       expect(skip?.reason).not.toBe('unknown_trait');
     }
+  });
+});
+
+describe('R1-b3 Two Way (C) (pitcher batting wOBA earn-signal)', () => {
+  // A pitcher who rakes vs a pitcher who can't hit. wOBA ranks the well-hitting
+  // pitcher higher; the position-player pool never sees Two Way (C) (pitcher-only).
+  it('emits a higher Two Way (C) wOBA for a well-hitting pitcher than a poor-hitting one', () => {
+    const events = [
+      // p1 mashes: 5 HR + 5 1B over 10 PA (all AB).
+      ...repeat(5, () => atBat({ pitcherId: 'opp', batterId: 'p1', result: 'HR', outsAfter: 0 })),
+      ...repeat(5, () => atBat({ pitcherId: 'opp', batterId: 'p1', result: '1B', outsAfter: 0 })),
+      // p2 flails: 10 strikeouts over 10 PA.
+      ...repeat(10, () => atBat({ pitcherId: 'opp', batterId: 'p2', result: 'K' })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['p1', 'p2'], 'pitcher'),
+      atBatEvents: events,
+    }));
+    const good = candidate(result, 'p1', 'Two Way (C)');
+    const bad = candidate(result, 'p2', 'Two Way (C)');
+    expect(good).toBeDefined();
+    expect(bad).toBeDefined();
+    // sampleSize = batting PA.
+    expect(good?.sampleSize).toBe(10);
+    expect(bad?.sampleSize).toBe(10);
+    // The signal is the batting wOBA; the masher outranks the whiffer.
+    expect(good!.signalValue).toBeGreaterThan(bad!.signalValue);
+    // The poor hitter (no AB reaching base) has wOBA 0.
+    expect(bad?.signalValue).toBeCloseTo(0, 10);
+  });
+
+  it('computes Two Way (C) signalValue = calculateWOBA over the mapped batting line', () => {
+    // A mixed line exercising every mapping branch: 1B, GRD(→double), 3B, ITPHR(→HR),
+    // BB, IBB, HBP, SF, SAC, K, DP, plus a plain GO (an out / AB / non-hit).
+    const events = [
+      atBat({ pitcherId: 'opp', batterId: 'p1', result: '1B', outsAfter: 0 }),
+      atBat({ pitcherId: 'opp', batterId: 'p1', result: 'GRD', outsAfter: 0 }),
+      atBat({ pitcherId: 'opp', batterId: 'p1', result: '3B', outsAfter: 0 }),
+      atBat({ pitcherId: 'opp', batterId: 'p1', result: 'ITPHR', outsAfter: 0 }),
+      atBat({ pitcherId: 'opp', batterId: 'p1', result: 'BB', outsAfter: 0 }),
+      atBat({ pitcherId: 'opp', batterId: 'p1', result: 'IBB', outsAfter: 0 }),
+      atBat({ pitcherId: 'opp', batterId: 'p1', result: 'HBP', outsAfter: 0 }),
+      atBat({ pitcherId: 'opp', batterId: 'p1', result: 'SF', outsAfter: 1 }),
+      atBat({ pitcherId: 'opp', batterId: 'p1', result: 'SAC', outsAfter: 1 }),
+      atBat({ pitcherId: 'opp', batterId: 'p1', result: 'K' }),
+      atBat({ pitcherId: 'opp', batterId: 'p1', result: 'DP', outsAfter: 1 }),
+      atBat({ pitcherId: 'opp', batterId: 'p1', result: 'GO', outsAfter: 1 }),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['p1'], 'pitcher'),
+      atBatEvents: events,
+    }));
+    // PA = 12; nonAb = BB+IBB+HBP+SF+SAC = 5 → AB = 7. hits = 1B + (GRD=double) + 3B + (ITPHR=HR) = 4.
+    const expected = calculateWOBA({
+      pa: 12,
+      ab: 7,
+      hits: 4,
+      singles: 1,
+      doubles: 1,
+      triples: 1,
+      homeRuns: 1,
+      walks: 2,            // BB + IBB
+      intentionalWalks: 1, // IBB
+      hitByPitch: 1,
+      sacFlies: 1,
+      sacBunts: 1,
+      strikeouts: 1,       // K
+      gidp: 1,             // DP
+      stolenBases: 0,
+      caughtStealing: 0,
+    });
+    expect(candidate(result, 'p1', 'Two Way (C)')?.signalValue).toBeCloseTo(expected, 10);
+    expect(candidate(result, 'p1', 'Two Way (C)')?.sampleSize).toBe(12);
+  });
+
+  it('keeps Two Way (C) out of the position pool (pitcher-only role eligibility)', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      // b1 is a POSITION player who batted — must get NO Two Way (C).
+      players: players(['b1'], 'position'),
+      atBatEvents: repeat(10, () => atBat({ pitcherId: 'opp', batterId: 'b1', result: 'HR', outsAfter: 0 })),
+    }));
+    expect(candidate(result, 'b1', 'Two Way (C)')).toBeUndefined();
+  });
+
+  it('only emits Two Way (C) for a player whose role is pitcher (not by batting alone)', () => {
+    // p1 (pitcher) and b1 (position) both bat identically; only p1 earns the signal.
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: [{ playerId: 'p1', role: 'pitcher' }, { playerId: 'b1', role: 'position' }],
+      atBatEvents: [
+        ...repeat(10, () => atBat({ pitcherId: 'opp', batterId: 'p1', result: 'HR', outsAfter: 0 })),
+        ...repeat(10, () => atBat({ pitcherId: 'opp', batterId: 'b1', result: 'HR', outsAfter: 0 })),
+      ],
+    }));
+    expect(candidate(result, 'p1', 'Two Way (C)')).toBeDefined();
+    expect(candidate(result, 'b1', 'Two Way (C)')).toBeUndefined();
+  });
+
+  it('skips undone at-bats when accumulating the pitcher batting line', () => {
+    const events = [
+      atBat({ pitcherId: 'opp', batterId: 'p1', result: 'HR', outsAfter: 0, undoneAt: 1 }),
+      ...repeat(5, () => atBat({ pitcherId: 'opp', batterId: 'p1', result: '1B', outsAfter: 0 })),
+      ...repeat(5, () => atBat({ pitcherId: 'opp', batterId: 'p1', result: 'GO', outsAfter: 1 })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['p1'], 'pitcher'),
+      atBatEvents: events,
+    }));
+    // The undone HR is excluded: 10 live PA, 5 singles of 10 AB.
+    const expected = calculateWOBA({
+      pa: 10,
+      ab: 10,
+      hits: 5,
+      singles: 5,
+      doubles: 0,
+      triples: 0,
+      homeRuns: 0,
+      walks: 0,
+      intentionalWalks: 0,
+      hitByPitch: 0,
+      sacFlies: 0,
+      sacBunts: 0,
+      strikeouts: 0,
+      gidp: 0,
+      stolenBases: 0,
+      caughtStealing: 0,
+    });
+    expect(candidate(result, 'p1', 'Two Way (C)')?.signalValue).toBeCloseTo(expected, 10);
+    expect(candidate(result, 'p1', 'Two Way (C)')?.sampleSize).toBe(10);
+  });
+
+  it('goes dormant for a pitcher under the valve PA floor (< minSampleRate of 10 batting PA)', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['p1'], 'pitcher'),
+      // Only 5 batting PA → below the basis:'none' floor of 10 → not sufficient.
+      atBatEvents: repeat(5, () => atBat({ pitcherId: 'opp', batterId: 'p1', result: 'HR', outsAfter: 0 })),
+    }));
+    const twoWay = candidate(result, 'p1', 'Two Way (C)');
+    // The signal still emits (PA > 0) but the valve marks it dormant.
+    expect(twoWay).toBeDefined();
+    expect(twoWay?.sampleSize).toBe(5);
+    expect(twoWay?.score.sufficiency).not.toBe('sufficient');
+    expect(twoWay?.score.realityPercentile).toBeNull();
+  });
+
+  it('does NOT make Two Way (IF) / Two Way (OF) buildable (only the (C) representative)', () => {
+    expect(BUILDABLE_TRAITS).toContain('Two Way (C)');
+    expect(BUILDABLE_TRAITS).not.toContain('Two Way (IF)');
+    expect(BUILDABLE_TRAITS).not.toContain('Two Way (OF)');
+  });
+
+  it('feeds Two Way (C) through the L9b-2 seam to computeTraitAcquisition (pitcher pool)', () => {
+    // Three hitting pitchers → a real pitcher peer pool + enough PA to clear the valve.
+    const events = [
+      ...repeat(40, () => atBat({ pitcherId: 'opp', batterId: 'p1', result: 'HR', outsAfter: 0 })),
+      ...repeat(20, () => atBat({ pitcherId: 'opp', batterId: 'p2', result: '1B', outsAfter: 0 })),
+      ...repeat(20, () => atBat({ pitcherId: 'opp', batterId: 'p2', result: 'GO', outsAfter: 1 })),
+      ...repeat(40, () => atBat({ pitcherId: 'opp', batterId: 'p3', result: 'K' })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['p1', 'p2', 'p3'], 'pitcher'),
+      atBatEvents: events,
+    }));
+    const twoWay = candidate(result, 'p1', 'Two Way (C)');
+    expect(twoWay).toBeDefined();
+    expect(twoWay?.score).toBeDefined();
+    expect(typeof twoWay?.score.sufficient).toBe('boolean');
+
+    const acquisition = computeTraitAcquisition({
+      playerRole: 'pitcher',
+      personality: 'EGOTISTICAL',
+      heldTraits: [],
+      candidates: result.get('p1') ?? [],
+    });
+    expect(acquisition).toHaveProperty('proposals');
+    expect(acquisition).toHaveProperty('skipped');
+    const skip = acquisition.skipped.find((s) => s.traitName === 'Two Way (C)');
+    expect(skip?.reason).not.toBe('ineligible_role');
+    expect(skip?.reason).not.toBe('unknown_trait');
   });
 });
 

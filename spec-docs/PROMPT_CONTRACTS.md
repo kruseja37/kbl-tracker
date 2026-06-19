@@ -10542,3 +10542,63 @@ suite **7,658/438, 7,656 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `
 by name), ZERO new reds (+29 tests / +0 files). Earnable v1 set 33 → 45. Committed (hash in SESSION_LOG/CURRENT_STATE).
 **Handedness splits are built but DORMANT** (need the deferred handedness-map wiring). NEXT = R1-b3 (Two Way) + R3 (Ace
 Exterminator + E1).
+
+## CONTRACT — R1-b3 (Two Way earn-signal — pitcher batting wOBA) — 2026-06-18 (attended)
+
+**ROUTE: fresh in-session subagent | high reasoning effort** (builder; subagent not Codex CLI). Auditor = Opus 4.8
+Captain (independent; ≠ builder). Branch codex/franchise-v1-next. BUILD-DARK. Source of truth:
+`TRAIT_MEASUREMENT_SPEC.md §0.9` Two Way line (JK ruling 2026-06-18 "earn-signal now, defer C/IF/OF" — folded into §0.9
++ DECISIONS_LOG). **BUILD TO §0.9 VERBATIM.** Pure-builder ONLY (the C/IF/OF random-position + family plumbing are a
+DEFERRED later ticket — do NOT build them; no grant-path, no scorer/acquisition family changes).
+
+**GOAL:** add **one** trait — `Two Way (C)` (the v1 representative label for the Two Way earn-signal) — to
+`BUILDABLE_TRAITS` in `src/engines/traitCandidateBuilder.ts` with a new `addTwoWaySignals` fn. Earnable v1 set 45 → 46.
+NO acquisition change (verify `Two Way (C)` is already in `POSITIVE_IMAGE_TRAITS` + `IMAGE_DRIVER_SETS['Two Way (C)']=['EGOTISTICAL']` — it is).
+
+**DERIVATION (§0.9 — implement EXACTLY):** `addTwoWaySignals(input, raw)`: restrict to **PITCHER-role** players (build a
+pitcher-id set from `input.players` where `role==='pitcher'`; mirror `addHackSignals`' position-restriction). For each
+pitcher, accumulate their BATTING counts from non-undone at-bats where they are `batterId`, build a
+`BattingStatsForWAR` (`../types/war`), and emit `Two Way (C)` signalValue = `calculateWOBA(stats)` (import from
+`./bwarCalculator`; default SMB4 weights), sampleSize = batting **PA**.
+- Result → `BattingStatsForWAR` mapping: `singles` = `1B`; `doubles` = `2B`+`GRD`; `triples` = `3B`;
+  `homeRuns` = `HR`+`ITPHR`; `walks` = `BB`+`IBB` (TOTAL walks); `intentionalWalks` = `IBB`; `hitByPitch` = `HBP`;
+  `sacFlies` = `SF`; `ab` = PA − (`BB`+`IBB`+`HBP`+`SF`+`SAC`) (reuse `NON_AB_RESULTS`); `hits` = singles+doubles+
+  triples+homeRuns; `pa` = batting PA; `sacBunts` = `SAC`; `strikeouts` = `STRIKEOUT_RESULTS` count; `gidp` = `DP`;
+  `stolenBases` = 0; `caughtStealing` = 0 (not derivable from at-bats). (`calculateWOBA` only consumes uBB=walks−IBB,
+  HBP, singles/doubles/triples/HR, ab, sacFlies — but fill every required field of the type.)
+- Skip a pitcher with PA ≤ 0. The pitcher peer pool (role|`Two Way (C)`) is automatically all pitchers who batted →
+  "percentile vs the pitcher pool." The min-sample valve (basis `'none'`, floor 10 PA) makes it super-rare.
+- Register `addTwoWaySignals` in `buildRawSignals`. Add `'Two Way (C)'` to `BUILDABLE_TRAITS` (after the R2 block, an
+  `// R1-b3:` comment noting the C/IF/OF family + random position are deferred).
+
+**HARD CONSTRAINTS:** edit ONLY `traitCandidateBuilder.ts` + its `__tests__` file (+ the acquisition test file ONLY if
+you add a Two Way acq test; NO production change to `traitAcquisition.ts`). Do NOT add `Two Way (IF)`/`Two Way (OF)` to
+BUILDABLE_TRAITS. Do NOT touch the scorer / `buildPeerPools` / `computeTraitRealityScore` / `buildProposalBase` / any
+store / `processCompletedGame.ts` / the L9b-3c grant/confirm files / any `*.md`. PURE / build-DARK — no caller, no flag,
+no store, no trackerDb bump (v23). No `Date.now`/`Math.random`; sort before any percentile. No git-add/commit.
+
+**TESTS (extend `traitCandidateBuilder.test.ts`):** update the `BUILDABLE_TRAITS` "contains exactly" expectation (add
+`'Two Way (C)'`, `// R1-b3:` comment). Add cases: a pitcher who bats well gets a high `Two Way (C)` wOBA signal vs a
+pitcher who bats poorly (hand-compute wOBA via the SMB4 weights, OR assert the ordering + that the signal exists);
+position players get NO `Two Way (C)` (role eligibility); a pitcher with < the valve floor of batting PA goes dormant;
+only `Two Way (C)` is buildable (not IF/OF); the L9b-2 seam holds. Confirm the acq state is unchanged (`Two Way (C)`
+already POSITIVE + EGOTISTICAL).
+
+**VERIFICATION (builder runs, reports actual):** `NODE_ENV= npx tsc --noEmit` exit 0;
+`NODE_ENV= npx vitest run src/engines/__tests__/traitCandidateBuilder.test.ts src/engines/__tests__/traitAcquisition.test.ts`
+all green. Report every changed path, new test count, the exact wOBA mapping built, and the acq finding (should be
+no-change).
+
+**FORMAT:** 1) Files changed. 2) The derivation + result→stat mapping as built + any deviation. 3) Acq finding. 4)
+Verification output (paste actual). 5) "R1-b3 complete" or "BLOCKED: <reason>". Do NOT commit.
+
+**Status:** ✅ VERIFIED + COMMITTED (2026-06-18, attended). Fresh in-session subagent built → Opus 4.8 Captain
+independently audited (≠ builder): VERDICT VERIFIED. `addTwoWaySignals` restricts to PITCHER-role players, maps each
+result to `BattingStatsForWAR` exactly per §0.9 (uBB=BB via walks−IBB; doubles incl GRD; HR incl ITPHR; ab=PA−NON_AB),
+emits ONE `Two Way (C)` under the shared pitcher pool (= "percentile vs the pitcher pool"), sampleSize = batting PA,
+valve-gated super-rare. Only `Two Way (C)` added (IF/OF deferred). NO production change to `traitAcquisition.ts`
+(`Two Way (C)` already POSITIVE + EGOTISTICAL — confirmed). Scorer/grant-path untouched. Host gate:
+`NODE_ENV= npm run build` exit 0 (7.79s) + full suite **7,668/438, 7,666 pass / 2 characterized fail**
+(`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` — confirmed by name), ZERO new reds (+10 tests / +0 files).
+Earnable v1 set 45 → 46. Committed (hash in SESSION_LOG/CURRENT_STATE). **DEFERRED follow-up:** the random C/IF/OF
+position + the 3-variant family plumbing. NEXT = R3 (Ace Exterminator + E1 grade-freshness — has an external dependency).

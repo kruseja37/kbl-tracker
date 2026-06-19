@@ -613,6 +613,32 @@ describe('traitAcquisition R2 (count-family + First-Pitch image deltas; handedne
   });
 });
 
+describe('traitAcquisition R1-b3 (Two Way (C) earn-signal — acquisition state UNCHANGED)', () => {
+  // R1-b3 makes NO acquisition change. Two Way (C) was ALREADY positive
+  // (POSITIVE_IMAGE_TRAITS) with an EGOTISTICAL image driver (§0.6) — verify it
+  // stays so now that the earn-signal builds it. Pitcher-only.
+  test('Two Way (C) is positive: high ambition tilts up and EGOTISTICAL drives the image axis', () => {
+    const ambitious = proposalFor('Two Way (C)', {
+      playerRole: 'pitcher',
+      modifiers: { ...neutralModifiers, ambition: 100 },
+    });
+    const driven = proposalFor('Two Way (C)', { playerRole: 'pitcher', personality: 'Egotistical' });
+
+    expect(ambitious.imageValence).toBe('positive');
+    expect(ambitious.factors.ambitionTilt).toBeGreaterThan(1);
+    expect(driven.factors.imageAxisTilt).toBeGreaterThan(1);
+  });
+
+  // Two Way (C)'s image driver is EGOTISTICAL only — COMPETITIVE/TOUGH do NOT drive it.
+  test('Two Way (C) image driver is EGOTISTICAL only (no cross-driver)', () => {
+    const competitive = proposalFor('Two Way (C)', { playerRole: 'pitcher', personality: 'Competitive' });
+    const tough = proposalFor('Two Way (C)', { playerRole: 'pitcher', personality: 'Tough' });
+
+    expect(competitive.factors.imageAxisTilt).toBe(1);
+    expect(tough.factors.imageAxisTilt).toBe(1);
+  });
+});
+
 describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () => {
   test('hysteresis emits a gain at or above the gain threshold', () => {
     const result = computeTraitAcquisition(input({

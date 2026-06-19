@@ -1,7 +1,7 @@
 # CURRENT_STATE.md — LIVE HEADER
 
 **Last Updated:** 2026-06-18 — **ACTIVE (attended).** Running the **L9b trait-reality REBUILD**; landed **R-E + R1-a +
-R1-b1 + R1-b2 + R2**. (1) **Closed the recurring spec-leak at its root + RATIFIED the measurement
+R1-b1 + R1-b2 + R2 + R1-b3** (46 of 47 earnable traits built). (1) **Closed the recurring spec-leak at its root + RATIFIED the measurement
 model** — `TRAIT_MEASUREMENT_SPEC.md` is now ONE authoritative cited source (§0.6 proxy table [47 earnable, every
 cell cited via reconciliation wf_c4bac237-5d7, spec-over-code] / §0.7 code-deltas / §0.8 gates [personality is a
 TILT never a gate; Two Way pitcher-only, NO batting gateway] / §0.9 R1 derivations); purged ALL stale framing
@@ -25,12 +25,17 @@ PAs) + the **6 handedness splits** (CON = 1−K/PA, POW = ISO, Specialist/Revers
 over K-rate**) into BUILDABLE_TRAITS + 2 OPTIONAL handedness-map inputs + §0.7 acq deltas. **Earnable v1 set now 45**
 (of 47). The handedness splits + Utility are built but **DORMANT** — they need a deferred HOOK to populate the optional
 input maps (`pitcherHandByPlayer`/`batterHandByPlayer`/`primaryPositionByPlayer`); `opposingHand` is still hardcoded
-`'R'`. **➡ NEXT = R1-b3** (Two Way — wOBA-vs-pitcher-pool signal + the random C/IF/OF-at-grant mechanic in L9b-3c) +
-**R3** (Ace Exterminator + the deferred E1 ratings/grade thread) → then the deferred dormant-trait wiring hook → L11–L14
-→ L-SIM gate. **FINDING-150 rebuild IN PROGRESS.** Captain FINDING flagged (non-blocking): the rate-signal family's
+`'R'`. (7) **R1-b3 COMPLETE** — the Two Way earn-signal (a pitcher's batting **wOBA** via `calculateWOBA`, ONE
+representative `Two Way (C)`, percentiled vs the pitcher pool, valve-gated super-rare) into BUILDABLE_TRAITS; no
+acquisition change. **JK ruled "earn-signal now, defer C/IF/OF"** (the random position + the 3-variant family plumbing
+defer to a later ticket — per-variant names would fragment the pool + re-randomize the position each cycle). **Earnable
+v1 set now 46 of 47.** **➡ NEXT = R3** (Ace Exterminator + the deferred E1 ratings/grade thread — the LAST earnable
+trait; has an EXTERNAL dependency: §0.4 ties E1 to the app-wide grade-freshness ticket) → then the deferred
+dormant-trait wiring hooks (handedness/Utility maps + Two Way C/IF/OF family) → L11–L14 → L-SIM gate. **FINDING-150
+rebuild NEAR-COMPLETE.** Captain FINDING flagged (non-blocking): the rate-signal family's
 `getPercentile`-on-mostly-zeros inflates sparse signals (Bunter/Crossed Up) — §16 sim-tune concern, build-DARK contains
-it. Suite **7,658/438, 7,656 pass / 2 characterized fail**; trackerDb **v23** (pure engines, no store); branch
-codex/franchise-v1-next; **nothing pushed**. See `HANDOFF_NEEDED` for the R1-b3/R3 resume.
+it. Suite **7,668/438, 7,666 pass / 2 characterized fail**; trackerDb **v23** (pure engines, no store); branch
+codex/franchise-v1-next; **nothing pushed**. See `HANDOFF_NEEDED` for the R3 resume.
 *(Prior arc-narrative preserved below for context.)*
 *(Historical:* **✅ L9b COMPLETE — the trait-from-reality engine, the "game-changer feature." NOW L10**
 (random events). L9b-3c committed → L9b-3 COMPLETE → **L9b COMPLETE.** Full L9b chain: L9b-1 scorer `398533d1` ·

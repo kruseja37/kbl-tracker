@@ -1483,3 +1483,20 @@ dormant until the handedness join is wired). Measurement rulings (folded into §
 - **Structural note:** the handedness data is NOT currently persisted on AtBatEvent (`opposingHand` hardcoded `'R'`; the
   "L9a-3 join" was never wired). R2 threads optional handedness maps (deferred-wiring seam, like Utility's
   primaryPositionByPlayer) so the splits build now but stay dormant until a hook populates them.
+
+---
+
+### 2026-06-18: R1-b3 Two Way v1 scope ruling (attended; L9b trait-reality rebuild)
+
+Grounding R1-b3 (Two Way) surfaced a real architectural tension: the earn-signal (a pitcher's batting wOBA percentile
+vs the pitcher pool) requires all two-way pitchers to share ONE peer pool AND to re-evaluate stably each cycle — but
+the trait data is a triplet (Two Way C/IF/OF). Per-variant candidate names would fragment the pool into ~⅓ sizes AND
+make the just-built re-evaluate-to-drop see a held `Two Way (OF)` with no matching candidate → re-randomize/drop the
+position every checkpoint. Honoring "random C/IF/OF at grant" properly needs "treat the 3 variants as one family"
+plumbing across the scorer + acquisition — beyond the pure builder. JK ruled **"earn-signal now, defer C/IF/OF":**
+- **R1-b3 builds the earn-signal only:** per PITCHER-role player, compute batting wOBA (`calculateWOBA`), emit ONE
+  candidate under a single representative variant **`Two Way (C)`** (v1 label; all three variants share EGOTISTICAL +
+  POSITIVE so the choice is cosmetic for earning), sampleSize = batting PA, percentiled vs the pitcher pool.
+- **DEFERRED to a later ticket:** the random C/IF/OF defensive-position assignment + the family plumbing (shared pool +
+  joint re-evaluation), to land with the post-D13 grant flow / roster wiring.
+No acquisition or grant-path change in R1-b3 (Two Way (C) is already in POSITIVE_IMAGE_TRAITS + IMAGE_DRIVER_SETS).

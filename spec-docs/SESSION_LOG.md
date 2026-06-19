@@ -5613,3 +5613,24 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   **R3** (Ace Exterminator + the deferred E1 ratings/grade thread). DEFERRED WIRING owed: the handedness-map hook +
   Utility's primary-position hook (both populate `SeasonTraitCandidateInput` so those splits/Utility go live).
   FINDING-150 rebuild in progress. Nothing pushed.
+
+## 2026-06-18 (attended, same session) — R1-b3 (Two Way earn-signal — pitcher batting wOBA)
+- JK ruled the Two Way architectural fork (DECISIONS_LOG): **"earn-signal now, defer C/IF/OF."** The earn-signal needs
+  all two-way pitchers to share ONE pool + re-evaluate stably, but the data is a triplet (C/IF/OF) — per-variant names
+  would fragment the pool AND re-randomize the position each cycle (the just-built re-evaluate-to-drop). So R1-b3 builds
+  ONLY the earn-signal under one representative `Two Way (C)`; the random C/IF/OF position + the "treat-3-as-one-family"
+  plumbing defer to a later ticket (post-D13 grant flow / roster wiring).
+- **R1-b3 = `addTwoWaySignals`** (`traitCandidateBuilder.ts`): per PITCHER-role player, accumulate batting counts from
+  their `batterId` at-bats, build `BattingStatsForWAR`, emit `Two Way (C)` = `calculateWOBA(stats)`, sampleSize =
+  batting PA, percentiled vs the pitcher pool (valve-gated → super-rare). Mapping per §0.9 (uBB=BB via walks−IBB,
+  doubles incl GRD, HR incl ITPHR, ab=PA−NON_AB). Only `Two Way (C)` into BUILDABLE_TRAITS (IF/OF deferred). NO
+  acquisition change (`Two Way (C)` already POSITIVE + EGOTISTICAL). Earnable v1 set **45 → 46**.
+- **Builder = fresh subagent ≠ auditor = Opus Captain** (triangle). Independent re-derivation of the wOBA mapping +
+  pooling + role restriction → VERDICT VERIFIED. Host gate: `NODE_ENV= npm run build` exit 0 (7.79s) + full suite
+  **7,668/438, 7,666 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` — by name),
+  **ZERO new reds** (+10 tests / +0 files). trackerDb stays **v23**.
+- **NEXT = R3** (Ace Exterminator + the deferred E1 ratings/grade thread — opposing-pitcher-grade join on
+  `atBat.pitcherId`). R3 has an EXTERNAL dependency: §0.4 ties E1 to the app-wide grade-freshness ticket, so R3 may be
+  blocked pending that. **Deferred follow-ups owed:** (1) the handedness-map + Utility primary-position hook wiring
+  (dormant traits); (2) the Two Way C/IF/OF random position + family plumbing. FINDING-150 rebuild near-complete
+  (46/47 earnable built). Nothing pushed.

@@ -35,6 +35,8 @@ import type {
 import type { AtBatResult } from '../types/game';
 import { isOut } from '../types/game';
 import { getPercentile } from './percentile';
+import { calculateWOBA } from './bwarCalculator';
+import type { BattingStatsForWAR } from '../types/war';
 
 export const BUILDABLE_TRAITS: readonly string[] = [
   'Clutch',
@@ -95,6 +97,13 @@ export const BUILDABLE_TRAITS: readonly string[] = [
   'POW vs RHP',
   'Specialist',
   'Reverse Splits',
+  // R1-b3 (TRAIT_MEASUREMENT_SPEC §0.9): Two Way earn-signal = elite hitting for a
+  // pitcher = the pitcher's batting wOBA (calculateWOBA) vs the PITCHER peer pool
+  // (valve-gated → super-rare). ONE representative variant 'Two Way (C)' carries the
+  // earn-signal in v1. DEFERRED to a later ticket: the random C/IF/OF defensive
+  // position assignment + the "treat the 3 variants as ONE family" plumbing (shared
+  // pool + joint re-evaluation). Two Way (IF)/(OF) are intentionally NOT here.
+  'Two Way (C)',
 ];
 
 for (const traitName of BUILDABLE_TRAITS) {
@@ -1132,6 +1141,116 @@ function addHandednessSplitSignals(input: SeasonTraitCandidateInput, raw: RawSig
   }
 }
 
+/**
+ * R1-b3 — Two Way (TRAIT_MEASUREMENT_SPEC §0.9; JK ruling 2026-06-18 "earn-signal
+ * now, defer C/IF/OF"). The Two Way earn-signal = ELITE HITTING for a pitcher = the
+ * pitcher's batting wOBA. Restricted to PITCHER-role players (mirrors
+ * `addHackSignals`' position restriction): build a pitcher-id set from
+ * `input.players`, accumulate each such player's BATTING counts from the non-undone
+ * at-bats where they are the `batterId`, assemble a `BattingStatsForWAR`, and emit
+ * ONE candidate under the single representative variant `Two Way (C)` with
+ * signalValue = `calculateWOBA(stats)` (default SMB4 weights), sampleSize = batting
+ * PA. The pitcher peer pool (role|`Two Way (C)`) is automatically all pitchers who
+ * batted → "percentile vs the pitcher pool". The min-sample valve (basis `'none'`,
+ * floor 10 PA) keeps it super-rare. A pitcher with PA ≤ 0 is skipped.
+ *
+ * Result → BattingStatsForWAR mapping (§0.9):
+ *   singles = 1B; doubles = 2B + GRD; triples = 3B; homeRuns = HR + ITPHR;
+ *   walks = BB + IBB (TOTAL); intentionalWalks = IBB; hitByPitch = HBP; sacFlies = SF;
+ *   ab = PA − (BB + IBB + HBP + SF + SAC) (reuse NON_AB_RESULTS); hits = singles +
+ *   doubles + triples + homeRuns; pa = batting PA; sacBunts = SAC; strikeouts =
+ *   STRIKEOUT_RESULTS count; gidp = DP; stolenBases = 0; caughtStealing = 0 (not
+ *   derivable from at-bats). (`calculateWOBA` consumes only uBB = walks − IBB, HBP,
+ *   singles/doubles/triples/HR, ab, sacFlies — but every required field is filled.)
+ *
+ * DEFERRED (later ticket — NOT built here): the random C/IF/OF defensive-position
+ * assignment on grant + the "treat the 3 variants as ONE family" plumbing.
+ */
+function addTwoWaySignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
+  const pitcherIds = new Set<string>(
+    input.players.filter((player) => player.role === 'pitcher').map((player) => player.playerId),
+  );
+  if (pitcherIds.size === 0) return;
+
+  interface BattingCounts {
+    pa: number;
+    singles: number;
+    doubles: number;
+    triples: number;
+    homeRuns: number;
+    walks: number;          // BB + IBB (total)
+    intentionalWalks: number; // IBB
+    hitByPitch: number;
+    sacFlies: number;
+    sacBunts: number;
+    strikeouts: number;
+    gidp: number;
+    nonAb: number;          // BB + IBB + HBP + SF + SAC
+  }
+  const counts = new Map<string, BattingCounts>();
+
+  for (const atBat of sortAtBats(input.atBatEvents).filter((event) => !undoneAt(event))) {
+    if (!pitcherIds.has(atBat.batterId)) continue;
+    const entry = counts.get(atBat.batterId) ?? {
+      pa: 0,
+      singles: 0,
+      doubles: 0,
+      triples: 0,
+      homeRuns: 0,
+      walks: 0,
+      intentionalWalks: 0,
+      hitByPitch: 0,
+      sacFlies: 0,
+      sacBunts: 0,
+      strikeouts: 0,
+      gidp: 0,
+      nonAb: 0,
+    };
+    entry.pa += 1;
+    const result = atBat.result;
+    if (result === '1B') entry.singles += 1;
+    if (result === '2B' || result === 'GRD') entry.doubles += 1;
+    if (result === '3B') entry.triples += 1;
+    if (result === 'HR' || result === 'ITPHR') entry.homeRuns += 1;
+    if (result === 'BB' || result === 'IBB') entry.walks += 1;
+    if (result === 'IBB') entry.intentionalWalks += 1;
+    if (result === 'HBP') entry.hitByPitch += 1;
+    if (result === 'SF') entry.sacFlies += 1;
+    if (result === 'SAC') entry.sacBunts += 1;
+    if (STRIKEOUT_RESULTS.has(result)) entry.strikeouts += 1;
+    if (result === 'DP') entry.gidp += 1;
+    if (NON_AB_RESULTS.has(result)) entry.nonAb += 1;
+    counts.set(atBat.batterId, entry);
+  }
+
+  for (const [pitcherId, entry] of counts) {
+    if (entry.pa <= 0) continue;
+    const hits = entry.singles + entry.doubles + entry.triples + entry.homeRuns;
+    const stats: BattingStatsForWAR = {
+      pa: entry.pa,
+      ab: entry.pa - entry.nonAb,
+      hits,
+      singles: entry.singles,
+      doubles: entry.doubles,
+      triples: entry.triples,
+      homeRuns: entry.homeRuns,
+      walks: entry.walks,
+      intentionalWalks: entry.intentionalWalks,
+      hitByPitch: entry.hitByPitch,
+      sacFlies: entry.sacFlies,
+      sacBunts: entry.sacBunts,
+      strikeouts: entry.strikeouts,
+      gidp: entry.gidp,
+      stolenBases: 0,
+      caughtStealing: 0,
+    };
+    addRawSignal(raw, pitcherId, 'Two Way (C)', {
+      signalValue: calculateWOBA(stats),
+      sampleSize: entry.pa,
+    });
+  }
+}
+
 function addDurabilitySignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
   const playerIds = new Set<string>([
     ...input.gamesByPlayer.keys(),
@@ -1166,6 +1285,9 @@ function buildRawSignals(input: SeasonTraitCandidateInput): RawSignalMap {
   // the 6 handedness splits (DORMANT until the handedness maps are threaded in).
   addFirstPitchSignals(input, raw);
   addHandednessSplitSignals(input, raw);
+  // R1-b3 — Two Way earn-signal (PITCHER-role batting wOBA vs the pitcher pool;
+  // valve-gated → super-rare). C/IF/OF family + random position = a deferred ticket.
+  addTwoWaySignals(input, raw);
   addDurabilitySignals(input, raw);
   return raw;
 }

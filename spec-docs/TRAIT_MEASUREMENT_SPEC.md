@@ -189,12 +189,16 @@ Percentile = vs the role-bucketed peer pool (the scorer, basis 'none'); the min-
 - **Distractor** (the pitcher fails more with this runner on) = success is the batter **reaching base (hit OR walk OR
   HBP)** while the Distractor-owner is the runner on **1B or 2B**; denominator = PAs where the owner is on 1B/2B;
   credited to the **runner** (owner), not the batter. *(R1-b.)*
-- **Two Way** = ONE earn-signal: elite hitting for a pitcher = the pitcher's **wOBA/PA** (`calculateWOBA`,
-  `bwarCalculator.ts`) percentile vs the **pitcher** peer pool. The **C/IF/OF variant is a random fielding position
-  assigned AT GRANT**, NOT three separate candidates. **(SPLIT to its own ticket — JK 2026-06-18: Two Way spans the
-  pure builder AND the grant-path, because the random C/IF/OF-at-grant mechanic needs NEW logic in the already-built
-  L9b-3c grant/confirm writer. NOT in R1-b2 [= Utility + Crossed Up + Bunter]; pairs with R3's grant/ratings work.)**
-  *(R1-b3 / R3-adjacent.)*
+- **Two Way** = ONE earn-signal: elite hitting for a pitcher = the pitcher's **wOBA** (`calculateWOBA`,
+  `bwarCalculator.ts`) percentile vs the **pitcher** peer pool (valve-gated → super-rare). **R1-b3 BUILD (JK ruling
+  2026-06-18 — "earn-signal now, defer C/IF/OF"):** the builder computes each PITCHER-role player's batting wOBA from
+  their `batterId` at-bats and emits ONE candidate under a single representative canonical variant **`Two Way (C)`**
+  (the v1 label — all three variants share the EGOTISTICAL driver + POSITIVE membership, so the choice is cosmetic for
+  the earn-signal). sampleSize = batting PA; basis `'none'`. **DEFERRED to a later ticket:** the random **C/IF/OF**
+  defensive-position assignment + the "treat the 3 variants as ONE family" plumbing (shared pool + joint
+  re-evaluation), because per-variant names would fragment the pitcher pool AND make the re-evaluate-to-drop
+  re-randomize the position each cycle. Pitcher-only, NO batting-trait gateway (§0.8). No acquisition change (the
+  triplet is already POSITIVE + EGOTISTICAL). *(R1-b3 = earn-signal; the C/IF/OF family + grant-path = a later ticket.)*
 - **Crossed Up** = passed-ball events (attributed to the pitcher via `wildPitchOrPassedBall.pitcherId`) per
   **batters-faced** (the pitcher's PA count). **OPT-IN** (dormant until PBs are logged + min-sample). *(R1-b2.)*
 - **Bunter** (JK ruling 2026-06-18 — **VOLUME/frequency, NOT a success rate**): signalValue = successful sacrifice
