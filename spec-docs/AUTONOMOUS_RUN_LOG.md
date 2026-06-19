@@ -1632,3 +1632,14 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   tests non-vacuous (flag-off no-loads; cratered+roll-hit→fire; healthy→skip; cratered+roll-miss→no fire; determinism).
   Host gate: `NODE_ENV= npm run build` exit 0 (7.66s) + full suite **7,713/441, 7,711 pass / 2 characterized fail**, ZERO
   new reds (+5). trackerDb v23. ➡ NEXT = L11-4 (Almanac fire/hire-date join + the L11-3 OPEN fired-tenure persistence).
+
+## 2026-06-19 — CONTEXT HANDOFF at L11-4 (AUTH-4 overnight continues via cron/fresh session)
+- This session built the L11 firing CORE: L11-1 engine `46c3c761` · L11-2 legacy-write `1821ad21` · L11-3 fireManager
+  resolver `4c59ecbd` · L11-3b auto-backstop `7268f9f1` (+ gitignore handoff fix `ad75afa4` + ruling-pass consolidation
+  `d8bd0670`). All build-DARK, branch-only, host-gated (suite 7,713/441, 2 characterized fail), each Codex-built →
+  Opus-audited (the triangle caught 2 real defects: a tsc -b build break [L11-3] + an instanceId silent-activation bug
+  [L11-3b]).
+- **Handing off at a clean seam** (L11 firing core complete) so a FRESH-context session builds the remaining queue
+  (L11-4 design decision + L12/L13 recon-splits) with full rigor. `HANDOFF_NEEDED` written + committed (next = L11-4,
+  rich resume_note). CURRENT_STATE live header + this log are current; nothing pushed. The cron / a fresh session resumes
+  per `HANDOFF_NEEDED` + the QUEUE above.
