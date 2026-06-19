@@ -208,6 +208,7 @@ export function computeTraitAcquisition(
   const rosterRole = input.rosterRole ?? 'unknown';
   const imagePersonalities = resolveImagePersonalities(input.personality);
   const rawProposals: TraitChangeProposal[] = [];
+  const heldProbabilityByTrait = new Map<string, number>();
 
   for (const candidate of input.candidates) {
     const traitName = candidate.traitName;
@@ -243,6 +244,9 @@ export function computeTraitAcquisition(
     });
 
     const isHeld = heldNames.has(traitName);
+    if (isHeld) {
+      heldProbabilityByTrait.set(traitName, proposalBase.probability);
+    }
     if (!isHeld && proposalBase.probability >= tuning.gainThreshold) {
       rawProposals.push({ ...proposalBase, valence: 'gain' });
       continue;
@@ -262,6 +266,7 @@ export function computeTraitAcquisition(
     heldTraits: input.heldTraits,
     loseProposals,
     heldNames,
+    heldProbabilityByTrait,
     skipped,
   });
 
@@ -337,10 +342,17 @@ function reconcileGainProposals(args: {
   heldTraits: readonly HeldTrait[];
   loseProposals: TraitChangeProposal[];
   heldNames: ReadonlySet<string>;
+  heldProbabilityByTrait: ReadonlyMap<string, number>;
   skipped: SkippedTrait[];
 }): TraitChangeProposal[] {
   const gainsByName = new Map(args.gainProposals.map((proposal) => [proposal.traitName, proposal]));
   const dropped = new Set<string>();
+
+  // §0.1/§0.8: P is the single comparison currency for displacement. Rank held traits by their
+  // RECOMPUTED P this cycle; fall back to the supplied strength only when a held trait has no
+  // candidate this cycle (and therefore no recomputed P).
+  const effectiveHeldStrength = (held: HeldTrait): number =>
+    args.heldProbabilityByTrait.get(held.traitName) ?? normalizeHeldStrength(held.strength);
 
   for (const proposal of args.gainProposals) {
     const opposite = TRAIT_OPPOSITES[proposal.traitName];
@@ -364,7 +376,7 @@ function reconcileGainProposals(args: {
 
   const lossNames = new Set(args.loseProposals.map((proposal) => proposal.traitName));
   const heldAfterLosses = args.heldTraits.filter((held) => !lossNames.has(held.traitName));
-  const weakestHeld = getWeakestHeld(heldAfterLosses);
+  const weakestHeld = getWeakestHeld(heldAfterLosses, effectiveHeldStrength);
   const needsDisplacement = heldAfterLosses.length >= 2;
   const reconciled: TraitChangeProposal[] = [];
 
@@ -378,7 +390,7 @@ function reconcileGainProposals(args: {
       continue;
     }
 
-    if (weakestHeld && proposal.probability > normalizeHeldStrength(weakestHeld.strength)) {
+    if (weakestHeld && proposal.probability > effectiveHeldStrength(weakestHeld)) {
       reconciled.push({ ...proposal, displaces: weakestHeld.traitName });
       continue;
     }
@@ -389,12 +401,13 @@ function reconcileGainProposals(args: {
   return reconciled;
 }
 
-function getWeakestHeld(heldTraits: readonly HeldTrait[]): HeldTrait | undefined {
+function getWeakestHeld(
+  heldTraits: readonly HeldTrait[],
+  strengthOf: (held: HeldTrait) => number,
+): HeldTrait | undefined {
   return heldTraits.reduce<HeldTrait | undefined>((weakest, held) => {
     if (!weakest) return held;
-    return normalizeHeldStrength(held.strength) < normalizeHeldStrength(weakest.strength)
-      ? held
-      : weakest;
+    return strengthOf(held) < strengthOf(weakest) ? held : weakest;
   }, undefined);
 }
 

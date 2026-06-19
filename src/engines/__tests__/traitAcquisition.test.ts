@@ -495,6 +495,104 @@ describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () =>
     expect(result.proposals[1].displaces).toBeUndefined();
   });
 
+  // R-E-b (E3): displacement uses the RECOMPUTED P this cycle, not the supplied HeldTrait.strength.
+  test('displacement follows the recomputed P, displacing the held trait with the lower P even when its supplied strength is high', () => {
+    const result = computeTraitAcquisition(
+      input({
+        heldTraits: [
+          // High supplied strength, but its recomputed P this cycle is LOW.
+          { traitName: 'Clutch', strength: 0.9 },
+          // Low supplied strength, but its recomputed P this cycle is HIGH.
+          { traitName: 'Utility', strength: 0.1 },
+        ],
+        candidates: [
+          // Each held trait re-scores this cycle; both land in the dead band (> loseThreshold 0.35,
+          // < gainThreshold 0) so neither is lost — they only matter for displacement ranking.
+          { traitName: 'Clutch', score: score('Clutch', 0.4) },
+          { traitName: 'Utility', score: score('Utility', 0.7) },
+          { traitName: 'Stealer', score: score('Stealer', 0.5) },
+        ],
+      }),
+      NO_SWING_FORCE_GAIN_TUNING,
+    );
+
+    // Old behavior (rank by supplied strength) would have displaced 'Utility' (strength 0.1).
+    // New behavior (rank by recomputed P): Clutch P=0.4 < Utility P=0.7, so Clutch is the weakest.
+    expect(result.proposals).toMatchObject([
+      { traitName: 'Stealer', valence: 'gain', displaces: 'Clutch' },
+    ]);
+    expect(result.skipped).toEqual([
+      { traitName: 'Clutch', reason: 'dead_band' },
+      { traitName: 'Utility', reason: 'dead_band' },
+    ]);
+  });
+
+  test('a held trait with no candidate this cycle falls back to its supplied strength for displacement ranking', () => {
+    const result = computeTraitAcquisition(
+      input({
+        heldTraits: [
+          // Has a candidate this cycle → ranked by recomputed P (0.6).
+          { traitName: 'Clutch', strength: 0.9 },
+          // No candidate this cycle → ranked by supplied strength (0.2) via the ?? fallback.
+          { traitName: 'Utility', strength: 0.2 },
+        ],
+        candidates: [
+          { traitName: 'Clutch', score: score('Clutch', 0.6) },
+          { traitName: 'Stealer', score: score('Stealer', 0.5) },
+        ],
+      }),
+      NO_SWING_FORCE_GAIN_TUNING,
+    );
+
+    // Effective strengths: Clutch=0.6 (recomputed P), Utility=0.2 (supplied fallback).
+    // Weakest = Utility; gain Stealer P=0.5 > 0.2 → displaces Utility.
+    expect(result.proposals).toMatchObject([
+      { traitName: 'Stealer', valence: 'gain', displaces: 'Utility' },
+    ]);
+    expect(result.skipped).toEqual([
+      { traitName: 'Clutch', reason: 'dead_band' },
+    ]);
+  });
+
+  test('lose-low still drops a held trait whose recomputed P is at or below the lose threshold', () => {
+    const result = computeTraitAcquisition(
+      input({
+        heldTraits: [
+          { traitName: 'Clutch', strength: 0.9 },
+          { traitName: 'Utility', strength: 0.9 },
+        ],
+        candidates: [
+          // Recomputed P 0.3 ≤ loseThreshold 0.35 → lost regardless of supplied strength 0.9.
+          { traitName: 'Clutch', score: score('Clutch', 0.3) },
+        ],
+      }),
+      NO_SWING_FORCE_GAIN_TUNING,
+    );
+
+    expect(result.proposals).toMatchObject([
+      { traitName: 'Clutch', valence: 'lose', probability: 0.3 },
+    ]);
+    expect(result.skipped).toEqual([]);
+  });
+
+  test('a thin-signal held trait with no candidate is not spuriously dropped when no gain needs its slot', () => {
+    const result = computeTraitAcquisition(
+      input({
+        heldTraits: [
+          { traitName: 'Clutch', strength: 0.05 },
+          { traitName: 'Utility', strength: 0.9 },
+        ],
+        // No gain candidate and no candidate for the held traits this cycle.
+        candidates: [],
+      }),
+      NO_SWING_FORCE_GAIN_TUNING,
+    );
+
+    // Neither held trait re-scores, so neither is lost; with no gain needing a slot, nothing is displaced.
+    expect(result.proposals).toEqual([]);
+    expect(result.skipped).toEqual([]);
+  });
+
   test('TRAIT_OPPOSITES is symmetric and all names are canonical', () => {
     for (const [traitName, opposite] of Object.entries(TRAIT_OPPOSITES)) {
       expect(CANONICAL_TRAIT_NAMES.has(traitName)).toBe(true);

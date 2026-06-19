@@ -38,7 +38,7 @@
 - **E3 — Re-evaluate-to-drop (§0.1):** builder emits held-trait candidates each cycle; acquisition lose-low recomputes P. Architectural — do this with E1/E2.
 
 ### 0.4 PROPOSED BUILD SEQUENCE (each = build → independent audit → host gate → commit, build-DARK)
-1. **R-E (enabling): E1 + E2 + E3** — the input-threading + charisma factor + re-evaluate-to-drop model. Foundation for the rest.
+1. **R-E (enabling): E1 + E2 + E3** — the input-threading + charisma factor + re-evaluate-to-drop model. Foundation for the rest. **✅ R-E COMPLETE (2026-06-18):** E2 (charisma + positive-Resilience) + the 3 live-bug fixes = R-E-a `9eeb69d5`; E3 (re-evaluate-to-drop = displacement-currency unification on recomputed P) = R-E-b. **E1 (ratings/grade thread) DEFERRED to R3** — the Noodle-Arm cut removed its near-term consumer; the only remaining E1 user is Ace Exterminator's opposing-grade join (R3), to be aligned with the app-wide grade-freshness ticket.
 2. **R1 (clean outcome proxies):** strikeout family (4) + Big/Little Hack (HR/AVG) + Slow Poke/Sprinter (DP/FC) + Easy Target + Mind Gamer + the other audit "fully-specced" outcome/event proxies (Base Rounder, Pick Officer, Easy Jumps, Distractor, Utility, Two Way×3, Crossed Up, Bunter).
 3. **R2 (data-proxy + personality):** pitcher count-family (walks-allowed) + First-pitch pair (personality + opt-in) + the handedness platoon splits (6, verify the L9a-3 join is fed).
 4. **R3 (ratings-gated):** Ace Exterminator (opposing-pitcher-grade join) — depends on E1. *(Noodle Arm was here — CUT per §0.6 / JK 2026-06-18 latest: no clean reality signal.)*
