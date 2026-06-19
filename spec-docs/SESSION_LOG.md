@@ -5976,3 +5976,40 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   `franchiseManualSmokeFixture`), ZERO new reds (+8). PURE/build-DARK (no caller/flag/store; trackerDb stays v24).
 - **➡ NEXT = L12-3** (race-standing weighted composite + bands + Q3 close-race tilt + Q4 GG defensive-fame share — the
   genuinely-new design logic; reads `resolveFameTier` ONLY per Q10). Branch codex/franchise-v1-next; nothing pushed.
+
+## 2026-06-19 (attended, fresh session) — L12-3 design pass (JK ruled merit bases) + L12-3a build (pure composite engine)
+- **Session start:** fresh thread, did the full session-start reads (SESSION_RULES/AUDIT_LOG/AUDIT_PLAN/SESSION_LOG/
+  CURRENT_STATE), restated state, JK confirmed (1) sole active worker (2) proceed with L12-3.
+- **Grounding (2 workflows, code-grounded):** `wf_5c81df46-7b6` (5 readers verified all §5 anchors on the post-L12-1/L12-2
+  tree — flag now `franchisePhase2Flags.ts:85-95`, the 4 categories + exhaustive `AWARD_FULL_LABELS` present; scoreForCategory
+  :242-256, resolveFameTier fameModel.ts:191, gate seam L11 block 648-654) + `wf_9b1fd965-927` (3 readers: WPA/LI/bench).
+- **The merit-base fork (surfaced to JK per the no-inference / award-measurement rule):** the L12-1 kickoff "accepted recon
+  bases" (RELIEVER=relief-WAR/leverage, BENCH=reserve WAR, BOOGER=inverse-fWAR), but grounding showed the data reality:
+  BOOGER ✅ (fieldingWar exists), BENCH ⚠️/✅ (`isReserve` exists + totalWar — JK was right, it's specced §23.6/AWARD-5 +
+  buildable), RELIEVER ❌ (leverage NEVER persisted per-season; gmLI transient; LI partially obsolete — FINDING-099 dual-value
+  + orphaned relationship modifiers; WPA is per-GAME only, not season-rolled, not relief-isolated).
+- **JK RULINGS (DECISIONS_LOG 2026-06-19):** Bench = **best total WAR among designated reserves**; Reliever = **WPA not LI**;
+  WPA via a **NEW season field** (`pitchingWpa`/`reliefWpa` on PlayerSeasonPitching, relief = `!isStarter` games — exact, no
+  per-credit attribution surgery; a LIVE aggregator + saved-shape change). LI's 4 live uses (manager moments/decision
+  weighting/in-game PA leverage/reporter color) + the FINDING-099 defect + orphaned modifiers reported back.
+- **Captain decomposition (within "proceed"):** SPLIT L12-3 → **L12-3a** (pure composite engine + Bench/Booger selectors —
+  this entry) · **L12-3b** (the dark recompute gate branch) · **L12-3R** (the live WPA season-rollup + Reliever; isolated for
+  separate audit + browser-verify since it is the only live/saved-shape piece). Recompute-only (JK) ⇒ no race-standings store.
+- **L12-3a (Codex gpt-5.5/xhigh, 3 files):** NEW pure `src/engines/franchiseRaceStandingScorer.ts` (`computeFranchiseRaceStanding`:
+  fameRank via `FAME_TIER_RANK[resolveFameTier(heat,reachFloor)]`; percentile-normalized merit+fame; composite =
+  `wMerit·meritNorm + (fameActive ? wFame·fameNorm : 0)`; **Q3** fameActive = `fameAlwaysOn || (|marginToWinner|<tiltWindow &&
+  both merit>meritFloor)`; sort composite desc / merit desc / playerId asc; score-gap bands; `MERIT_RACE_WEIGHTS` +
+  `FAN_VOTE_WEIGHTS` §16 placeholders) + extended `franchiseAwardsEngine.ts` (`FranchiseWarAwardCategory` +BENCH_PLAYER/
+  BOOGER_GLOVE; `scoreForCategory` BENCH=totalWar, BOOGER=−fieldingWar; `WAR_AWARD_CATEGORIES` unchanged → D9 byte-neutral;
+  `scoreForCategory` exported for the test) + a 10-test file.
+- **Audit (builder=Codex ≠ auditor=Opus):** read the engine line-by-line (faithful to the spec'd 9-step algorithm; inputs not
+  mutated); tests non-vacuous (tilt fires inside window+above floor → the higher-fame close contender wins in a 10-player pool;
+  gated at the strict window boundary [margin −0.5 = NOT < 0.5]; below-floor control; RACE-4 non-close preservation; fan-vote
+  flip; band clustering; determinism; playerId tiebreak; empty→[]; selector null-guard). awards-engine diff = exactly the
+  sanctioned edits + the additive `export` (the one un-flagged extra — minor reporting nit). **FULL host gate (mine):**
+  `NODE_ENV= npm run build` exit 0 (7.72s) + full suite **7,755/445, 7,753 pass / 2 characterized fail** (`wpaRuntimeBoundary`
+  + `franchiseManualSmokeFixture`), ZERO new reds (+10 = the new engine test).
+- PURE / build-DARK (the new selectors are defined but never invoked by live code — `WAR_AWARD_CATEGORIES` is the 5; the engine
+  has no caller; trackerDb stays **v24**). Sim-tune note logged: percentile-normalization compresses the merit gap in small
+  pools (fame tilts close races more readily in large pools). **➡ NEXT = L12-3b** (the flag-gated dark recompute gate branch).
+  Branch codex/franchise-v1-next; nothing pushed.

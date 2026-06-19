@@ -19,13 +19,25 @@ under-specified mirror surface across 2 dispatches BEFORE any broken-mirror comm
 (`computeFranchiseTvFamilyRaces`): KK = `valueDelta` desc · Bust = `−valueDelta` desc · **Comeback = `currentTV − min(currentTV,
 snapshot trueValues)`** (**JK 2026-06-19 correction** — the CURRENT gap from the season trough, NOT max-rise-over-checkpoints;
 a mid-season peak given back must NOT win). PURE / build-DARK (NO caller/flag/store; a later hook feeds it the TV rows);
-Codex-built → Opus-audited → host-gate **7,745/444, ZERO new reds** (+8). **➡ NEXT = L12-3 — FRESH SESSION (JK ruled;
-design-heavy, clean context).** Race-standing weighted composite [Q2 per-race-type weights: fame-led for fan-vote /
-merit-dominant + bounded fame nudge for awards] + score-gap bands + Q3 close-race fame-tilt (`|marginToWinner| < window` AND
-both merit > floor) + Q4 GG = `fWAR + 20%·defensive-channel fame` (reads `aggregateDefensiveFame`/`row.defensiveFame`).
-Reads `resolveFameTier` ONLY (Q10), never `getFameTier`. **RECOMPUTE-ONLY (JK ruled 2026-06-19): NO new store, trackerDb
-STAYS v24, NO ledger bump** — a pure compute layer + the per-completed-game gate branch (8th, after
-processCompletedGame.ts:654); magnitudes (weights/window/floor/share) = §16 sim. Seams in `L12_SCOPE_MAP.md` §5. → L12-4
+Codex-built → Opus-audited → host-gate **7,745/444, ZERO new reds** (+8). **L12-3 SPLIT a/b/R (attended design pass —
+JK ruled the merit bases): L12-3a ✅ COMPLETE; ➡ NEXT = L12-3b.** **✅ L12-3a COMPLETE (2026-06-19, attended)** — the
+PURE race-standing composite engine `src/engines/franchiseRaceStandingScorer.ts` (`computeFranchiseRaceStanding`:
+per-race-type weighted composite `wMerit·meritPercentile + wFame·famePercentile`, fame via `resolveFameTier` rank ONLY
+[Q10]; the **Q3 close-race tilt** = fame contributes only when `|marginToWinner| < tiltWindow` AND both merit > floor —
+preserves RACE-4; **fan-vote mode** [fameAlwaysOn] built for L12-4; score-gap **bands**; `MERIT_RACE_WEIGHTS` /
+`FAN_VOTE_WEIGHTS` §16 placeholders) + extended `franchiseAwardsEngine.scoreForCategory`/`FranchiseWarAwardCategory` with
+**BENCH_PLAYER = totalWar** + **BOOGER_GLOVE = −fieldingWar** (`WAR_AWARD_CATEGORIES` unchanged → D9 finalize byte-neutral).
+Codex(gpt-5.5,xhigh)-built → Opus-audited (builder≠auditor) → host-gate **7,755/445, 7,753 pass / 2 characterized fail,
+ZERO new reds** (+10). PURE / build-DARK (no caller/flag/store; trackerDb stays **v24**). **JK DESIGN RULINGS (this pass):
+Bench Player = best total WAR among designated reserves** (`isReserve`, already built + specced §23.6/AWARD-5);
+**Reliever-of-Year = WPA, NOT leverage** (LI is not persisted per-season + carries the FINDING-099 dual-value defect +
+orphaned relationship modifiers); **WPA via a NEW season field** (`pitchingWpa`/`reliefWpa` on `PlayerSeasonPitching`,
+relief = `!isStarter` games — a LIVE aggregator + saved-shape change, isolated to L12-3R). **➡ NEXT = L12-3b** — the
+flag-gated **recompute gate branch** (8th, after `processCompletedGame.ts:654`): loads preview value-inputs + fame records
++ TV rows/snapshots, assembles per-race candidates (reserve filter for Bench, qualified-fielder filter for Booger, the Q4
+GG `fWAR + 20%·defensiveFame` blend), calls L12-3a + the L12-2 TV scorer; **RECOMPUTE-ONLY** (no store, trackerDb stays
+v24). Then **L12-3R** (the WPA season-rollup + Reliever-of-Year, live/saved-shape, browser-verify-batched). Seams in
+`L12_SCOPE_MAP.md` §5. → L12-4
 All-Star+60%-lock → L12-5
 emission/snub/reporter → L12-6 UI → L13 (split) → L14 → L-SIM. **⚠ KEEP EXACTLY ONE AUTH-4 WORKER ACTIVE — 7 Claude sessions
 were open this run (2nd collision); JK to trim.** Per-ticket detail in

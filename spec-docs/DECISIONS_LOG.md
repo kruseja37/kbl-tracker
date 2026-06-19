@@ -1814,3 +1814,32 @@ store remains the L12-1 `franchiseAllStarRosters`). **Consequence:** L12-3 is a 
 per-completed-game gate branch consumes it; no persistence).
 **Pacing:** JK ruled a FRESH session does L12-3 (the design-heavy ticket) with clean context; this session checkpointed at
 the L12-1+L12-2 clean seam (3 commits) without auto-spawning a handoff worker (JK is closing the extra sessions first).
+
+## 2026-06-19 (attended) — L12-3 new-merit-award BASES re-ruled on the grounded data reality (Bench / Reliever / WPA-vs-LI)
+**Context:** the L12-1 kickoff "accepted the recon defaults" for the 3 new merit bases (RELIEVER_OF_YEAR = relief-WAR/
+leverage; BOOGER_GLOVE = inverse-fWAR; BENCH_PLAYER = best reserve WAR), binding deferred to L12-3. At L12-3 the Captain
+grounded the data (workflows `wf_5c81df46-7b6` + `wf_9b1fd965-927`) and surfaced — per the no-inference / award-measurement
+rule — that the recon bases assumed data that partly does NOT exist: **BOOGER ✅** (`warPreviewValues.fieldingWar` present),
+**BENCH ⚠️→✅** (`trueValuePositioning.isReserve` [startsShare<0.4, franchiseEffectivePosition.ts:289-292] is a clean
+PERSISTED designation; the award IS specced — FRANCHISE_V1_LIVING_SEASON_SPEC §23.6 / AWARD-5 "positive Top-3 fame on-ramp
+for role players"), **RELIEVER ❌** (the ruled "leverage" basis is NEVER persisted per-season — gmLI is transient only,
+`PlayerSeasonPitching` has zero LI fields; LI is also partially obsolete: **FINDING-099 dual-value defect** + the orphaned
+relationship-LI modifiers; per-player WPA exists only per-GAME [`CompletedGameRecord.playerWpaTotals`], not season-rolled,
+not relief-isolated).
+**JK RULINGS:**
+- **(1) BENCH_PLAYER = best TOTAL WAR among designated reserves** (`isReserve`). Confirms the recon basis with the WAR
+  flavor pinned to `totalWar` (parity with MVP; spec said "best reserve WAR" without a flavor). The reserve award needs its
+  own LOWER qualifier (reserves never reach the ~502-PA starter floor) — §16-tunable, applied in L12-3b's candidate assembly.
+- **(2) RELIEVER_OF_YEAR = WPA, NOT leverage** (override of the recon "relief-WAR/leverage" default). LI is not viable as a
+  season-award basis (not persisted; obsolete-tinged). WPA is the basis.
+- **(3) WPA via a NEW SEASON FIELD** (override of recompute-summing the game-level totals): add `pitchingWpa` + `reliefWpa`
+  to `PlayerSeasonPitching`, accumulated by the season aggregator from each game's `playerWpaTotals`; **relief isolation is
+  EXACT and cheap** — a pitcher either starts or relieves in a given game, so `reliefWpa` = Σ that game's pitching-WPA over
+  games where he did NOT start (the per-game `isStarter` flag) — NO per-pitch attribution surgery. This is a **LIVE aggregator
+  + saved-shape change** (ungated substrate write, matching the existing TrueValue-snapshot precedent so the award has full
+  history when the flag flips). Reliever filtered by `gamesStarted` (usage, not profile).
+**Captain decomposition (within JK's "proceed"):** L12-3 SPLIT into **L12-3a** (pure composite engine + Bench/Booger
+selectors — VERIFIED + committed this session), **L12-3b** (the dark recompute gate branch), **L12-3R** (the live WPA
+season-rollup + Reliever — isolated so the live/saved-shape change gets its own audit + browser-verify; it is the ONLY
+non-dark piece of L12-3). **Note:** L12-3R touches `PlayerSeasonPitching` + the season aggregator (LIVE) — flag it for the
+per-ticket engineering audit + the browser-verify batch (saved-shape, prioritized).

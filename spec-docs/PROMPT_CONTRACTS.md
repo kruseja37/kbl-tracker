@@ -11525,5 +11525,148 @@ characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZER
 build-DARK (NO caller/flag/store/trackerDb change — a later L12 hook loads the TV rows + calls it). 8 non-vacuous tests
 (the Comeback falls-apart proof; snapshotless→0; empty→empty; single→percentile 1; determinism; playerId tiebreak).
 **➡ NEXT = L12-3** (race-standing weighted composite + bands + Q3 close-race tilt + Q4 GG defensive-fame share — the
-genuinely-new design logic; consumes `resolveFameTier` ONLY per Q10; may add the deferred 2nd ledger bump for a
-race-standings store).
+genuinely-new design logic; consumes `resolveFameTier` ONLY per Q10). **RECOMPUTE-ONLY (JK ruled 2026-06-19): NO new
+store, trackerDb stays v24, NO 2nd ledger bump.** SPLIT (Captain decomposition 2026-06-19, attended) into **L12-3a**
+(pure composite engine + Bench/Booger merit selectors — below) → **L12-3b** (the flag-gated recompute gate branch:
+loads preview value inputs + fame records + TV rows/snapshots, assembles per-race candidates incl. the reserve filter +
+GG defensive-fame blend, calls L12-3a + the L12-2 TV scorer; recompute-only) → **L12-3R** (the LIVE WPA season-rollup
+`pitchingWpa`/`reliefWpa` on `PlayerSeasonPitching` + aggregator [relief = `!isStarter` games] + bind
+RELIEVER_OF_YEAR off relief-WPA — JK ruled WPA-not-LI 2026-06-19; LI is not persisted per-season + carries the
+FINDING-099 dual-value defect + orphaned relationship modifiers).
+
+---
+
+## CONTRACT — L12-3a (race-standing composite engine + Bench/Booger merit selectors — pure) — 2026-06-19 (attended)
+
+**ROUTE: Codex CLI (`codex exec`, prompt via stdin from this contract) | very high reasoning effort** (builder; PURE
+deterministic engine + a 2-case selector extension, low-medium risk — the genuinely-new design math, but pure +
+build-DARK + trivially revisable). Auditor = Opus Captain (cross-model triangle; builder≠auditor). Branch
+codex/franchise-v1-next. BUILD-DARK: NO production caller, NO flag use, NO store, NO trackerDb/version change. Source of
+truth: `spec-docs/L12_SCOPE_MAP.md` §2 mechanic #1/#3 + §3 (L12-3) + §4 **Q2/Q3/Q4** + the L12-1 kickoff merit-basis
+ruling (DECISIONS_LOG 2026-06-19: **BENCH_PLAYER = best reserve WAR [= totalWar among designated reserves]**;
+**BOOGER_GLOVE = inverse fielding WAR**) + the L12-3 recompute-only ruling (DECISIONS_LOG 2026-06-19). **Reliever-of-Year
+is SPLIT to L12-3R — do NOT add it here.** The reserve FILTER (Bench) + qualified-fielder filter (Booger) + the GG
+defensive-fame blend live in L12-3b's candidate assembly — NOT in this pure engine.
+
+**GOAL:** the genuinely-new race-standing design logic as a PURE deterministic engine: given ONE race's candidates (each
+with a merit score + the player's fame heat/reachFloor), produce a ranked, score-gap-banded standing under a per-race-type
+weight profile (Q2: **fame-LED** for fan-vote races / **merit-DOMINANT with a bounded close-race fame tilt** for merit
+awards), including the **Q3** close-race fame tilt. PLUS extend the merit SELECTOR for the two clean new merit categories
+(Bench Player = totalWar; Booger Glove = inverse fieldingWar). Build-DARK; no caller (L12-3b loads candidates + fame
+records + calls this).
+
+**CHANGES (create/edit ONLY these 3 files):**
+
+**A. NEW `src/engines/franchiseRaceStandingScorer.ts`** — PURE (no IndexedDB / `Date.now` / `Math.random` / async / I/O).
+Import ONLY `{ getPercentile } from './percentile'` and `{ resolveFameTier, FAME_TIER_RANK } from './fameModel'` (both in
+`src/engines/`). Shape:
+```ts
+export interface RaceStandingCandidate {
+  playerId: string;
+  meritScore: number;       // the race's merit value (caller computes; for GG, caller PRE-ADDS share·defensiveFame)
+  fameHeat: number;         // player's fame-record heat (0 if no record)
+  fameReachFloor: number;   // player's fame-record reachFloor (0 if no record)
+}
+export interface RaceWeightProfile {
+  wMerit: number;
+  wFame: number;
+  fameAlwaysOn: boolean;    // true = fan-vote (fame-LED, always contributes); false = merit award (fame only via the Q3 close-race tilt)
+  tiltWindow: number;       // merit-units; Q3 enables the fame term only when |marginToWinner| < tiltWindow
+  meritFloor: number;       // BOTH the candidate AND the merit leader must have meritScore > meritFloor for the tilt
+  bandGap: number;          // composite-score gap that starts a new clustering band
+}
+export interface RaceStanding {
+  playerId: string;
+  meritScore: number;
+  fameRank: number;         // FAME_TIER_RANK[resolveFameTier(fameHeat, fameReachFloor)] ∈ [-3,5]
+  fameActive: boolean;      // whether the fame term contributed for this candidate
+  composite: number;        // the ranked score, rounded
+  marginToWinner: number;   // merit-units, rounded(meritScore − leaderMeritScore), ≤ 0
+  band: number;             // 1-based clustering band
+  rank: number;             // 1-based final rank
+}
+export function computeFranchiseRaceStanding(input: {
+  candidates: readonly RaceStandingCandidate[];
+  weights: RaceWeightProfile;
+}): RaceStanding[]
+```
+Algorithm (deterministic, pure; inputs NOT mutated — `.map()`/`.sort()` on fresh arrays):
+1. empty candidates ⇒ return `[]`.
+2. `fameRank(c) = FAME_TIER_RANK[resolveFameTier(c.fameHeat, c.fameReachFloor)]`.
+3. `meritScoresAsc` = candidates' meritScore sorted asc; `fameRanksAsc` = candidates' fameRank sorted asc.
+4. `leaderMeritScore` = max meritScore over all candidates.
+5. per candidate:
+   - `meritNorm = getPercentile(meritScore, meritScoresAsc)` ∈ [0,1]
+   - `fameNorm = getPercentile(fameRank, fameRanksAsc)` ∈ [0,1]
+   - `marginToWinner = round3(meritScore − leaderMeritScore)` (≤ 0)
+   - `fameActive = weights.fameAlwaysOn || (Math.abs(marginToWinner) < weights.tiltWindow && meritScore > weights.meritFloor && leaderMeritScore > weights.meritFloor)`
+   - `composite = round6(weights.wMerit * meritNorm + (fameActive ? weights.wFame * fameNorm : 0))`
+6. sort by `composite` DESC, tiebreak `meritScore` DESC, then `playerId.localeCompare` ASC.
+7. `rank` = 1-based index after the sort.
+8. bands: walk the sorted list; rank-1 ⇒ band 1; for each next, if `(prevComposite − thisComposite) > weights.bandGap` ⇒ band++, else same band.
+9. return `RaceStanding[]` with all fields.
+Helpers local to the file: `round3 = (x)=>Number(x.toFixed(3))`, `round6 = (x)=>Math.round(x*1e6)/1e6` (float-dust guard, deterministic).
+Export the two §16-PLACEHOLDER default profiles (comment every magnitude as a Simulation-Gate placeholder):
+```ts
+export const MERIT_RACE_WEIGHTS: RaceWeightProfile = { wMerit: 1, wFame: 0.15, fameAlwaysOn: false, tiltWindow: 0.5, meritFloor: 1, bandGap: 0.08 };
+export const FAN_VOTE_WEIGHTS:  RaceWeightProfile = { wMerit: 0.35, wFame: 0.65, fameAlwaysOn: true, tiltWindow: Number.POSITIVE_INFINITY, meritFloor: Number.NEGATIVE_INFINITY, bandGap: 0.08 };
+```
+(FAN_VOTE_WEIGHTS is for L12-4's All-Star fame-led standing; export now for reuse — L12-3b only uses MERIT_RACE_WEIGHTS.)
+
+**B. Extend `src/utils/franchiseAwardsEngine.ts`** — TWO minimal, D9-finalize-NEUTRAL edits:
+- widen `FranchiseWarAwardCategory` (lines 38-41, the 5-member Extract) to add `| 'BENCH_PLAYER' | 'BOOGER_GLOVE'` (→ 7 members). Do NOT add `RELIEVER_OF_YEAR` (that is L12-3R).
+- extend the exhaustive `scoreForCategory` switch (lines 242-256) with the 2 compiler-forced cases:
+  - `case 'BENCH_PLAYER': return (row) => row.warPreviewValues.totalWar;` (same selector as MVP; the reserve FILTER is caller-applied in L12-3b)
+  - `case 'BOOGER_GLOVE': return (row) => finiteNumber(row.warPreviewValues.fieldingWar) ? -(row.warPreviewValues.fieldingWar) : null;` (NEGATE so a DESC sort puts the WORST fielder first; `finiteNumber` is already in-file; the qualified-fielder filter is caller-applied)
+- DO NOT change `WAR_AWARD_CATEGORIES` (keep the 5 — the D9 season-end finalize loop stays byte-behavior-identical). DO NOT change `categoryCandidateRows`/`buildAwardRow`/`meetsQualifier` — their CY/GG/ROOKIE branches already handle the 2 new members via their else-paths. If the compiler forces ANY change beyond the `scoreForCategory` switch → STOP and report (see STOP-IF).
+
+**C. NEW `src/engines/__tests__/franchiseRaceStandingScorer.test.ts`** — non-vacuous:
+- merit-dominant (MERIT_RACE_WEIGHTS): a clear merit leader (high meritScore, low fame) beats a low-merit high-fame player — fame does NOT flip a non-close race (RACE-4); assert the low-merit player's `fameActive=false`.
+- Q3 tilt FIRES: two candidates within `tiltWindow` on merit, BOTH above `meritFloor`, the higher-fame one promoted above the merit leader (assert both `fameActive=true` + the rank flip). CONTROL: same two but one below `meritFloor` ⇒ no tilt (`fameActive=false`, merit order kept).
+- Q3 gated by window: two candidates with `|marginToWinner| ≥ tiltWindow` ⇒ `fameActive=false` even though both above floor (merit order kept).
+- fan-vote mode (FAN_VOTE_WEIGHTS): fame leads — a high-fame mid-merit candidate outranks a low-fame high-merit one.
+- bands: a gap > `bandGap` starts a new band; a tight cluster shares a band; assert the `band` numbers.
+- fameRank: heat 0 + reachFloor 0 ⇒ fameRank 0 (UNKNOWN); a high heat ⇒ higher fameRank (cross-check via `resolveFameTier`).
+- determinism (same input twice ⇒ `toEqual`); tie-break (equal composite + equal merit ⇒ ordered by playerId); empty ⇒ `[]`.
+- selectors: `scoreForCategory('BENCH_PLAYER')` returns totalWar; `scoreForCategory('BOOGER_GLOVE')` returns `-fieldingWar` and `null` when fieldingWar is null.
+
+**HARD CONSTRAINTS:** create/edit ONLY the 3 files above. The new engine imports ONLY `getPercentile` (`./percentile`) +
+`resolveFameTier`/`FAME_TIER_RANK` (`./fameModel`) — NO `src/utils`/storage/flag/`processCompletedGame` import. NO
+`Date.now`/`Math.random`/network/IndexedDB/async. NO store/trackerDb/flag/`*.md` change. NO git add/commit. Prefix all
+tsc/vitest with `NODE_ENV= `.
+
+**VERIFICATION (run ALL, paste ACTUAL):** `NODE_ENV= npx tsc --noEmit` exit 0 AND `NODE_ENV= npm run build` exit 0;
+`NODE_ENV= npx vitest run src/engines/__tests__/franchiseRaceStandingScorer.test.ts` all green; AND run the existing
+awards-engine test file (find it under `src/utils/` — likely `franchiseAwardsEngine*.test.ts`) green, to PROVE the
+`FranchiseWarAwardCategory` widening left the D9 finalize unaffected.
+
+**STOP-IF:**
+- `getPercentile` is NOT exported from `src/engines/percentile.ts` as `(value:number, sortedAsc:number[])=>number`, OR
+  `resolveFameTier`/`FAME_TIER_RANK` are NOT exported from `src/engines/fameModel.ts` → STOP + report.
+- widening `FranchiseWarAwardCategory` forces a compile change in ANY consumer BEYOND the `scoreForCategory` switch (i.e.
+  another exhaustive switch on it exists) → STOP + report the consumer; do NOT silently edit it.
+
+**FORMAT:** 1) files changed; 2) the composite algorithm as implemented (the 5-step + the two default profiles' magnitudes)
++ the 2 new selectors; 3) verification output (paste actual build + both test runs); 4) "L12-3a complete" or "BLOCKED:
+<reason>". Do NOT commit.
+
+Use very high reasoning effort. Think step-by-step. Read each file before editing. Read
+`src/engines/franchiseTvFamilyScorer.ts` (the pure-engine + getPercentile house style to mirror), `src/engines/fameModel.ts`
+(`resolveFameTier` :191-211 + `FAME_TIER_RANK` :66-76), `src/engines/percentile.ts` (`getPercentile`), and
+`src/utils/franchiseAwardsEngine.ts` (`FranchiseWarAwardCategory` :38-41 + `scoreForCategory` :242-256 +
+`WAR_AWARD_CATEGORIES` :95-101 + `finiteNumber` :114 + `FranchiseWarPreviewValues` field names).
+
+**Status:** ✅ VERIFIED + COMMITTED 2026-06-19 (attended). Codex (gpt-5.5, xhigh) built via `codex exec`
+stdin-from-contract (3 files: NEW `src/engines/franchiseRaceStandingScorer.ts` + its test + the 2-edit
+`franchiseAwardsEngine.ts` extension — `FranchiseWarAwardCategory` +BENCH_PLAYER/BOOGER_GLOVE + the 2 `scoreForCategory`
+cases; Bench folded into the MVP/ROOKIE `totalWar` case; Booger = negated finite `fieldingWar`; `WAR_AWARD_CATEGORIES`
+unchanged so D9 finalize is byte-behavior-identical; `scoreForCategory` additionally EXPORTED for the test — the one
+un-flagged extra, additive/safe). → Opus independently audited the diff line-by-line (builder≠auditor) + falsified
+(close-race tilt fires inside the window + above floor, gated outside both — proven both directions; RACE-4 preserved;
+fan-vote mode flips on fame; bands cluster by score-gap; determinism + playerId tiebreak; empty→[]) + ran the FULL host
+gate. Host gate: `NODE_ENV= npm run build` exit 0 (7.72s) + full suite **7,755/445, 7,753 pass / 2 characterized fail**
+(`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+10 = the new engine test). PURE / build-DARK (no
+caller/flag/store; trackerDb stays v24). Magnitudes (wMerit/wFame/tiltWindow/meritFloor/bandGap) are §16 sim placeholders.
+NOTE for sim-tune: percentile-normalization compresses the merit gap in small candidate pools, so the fame nudge tilts
+close races more readily in large pools than small ones — a magnitude nuance, not a structural defect. **➡ NEXT = L12-3b**
+(the flag-gated recompute gate branch). Committed branch-only (NOT pushed).

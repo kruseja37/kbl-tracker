@@ -37,7 +37,13 @@ import {
 
 export type FranchiseWarAwardCategory = Extract<
   FranchiseAwardCategory,
-  'MVP' | 'CY_YOUNG' | 'ROOKIE_OF_YEAR' | 'GOLD_GLOVE' | 'SILVER_SLUGGER'
+  | 'MVP'
+  | 'CY_YOUNG'
+  | 'ROOKIE_OF_YEAR'
+  | 'GOLD_GLOVE'
+  | 'SILVER_SLUGGER'
+  | 'BENCH_PLAYER'
+  | 'BOOGER_GLOVE'
 >;
 
 export type FranchiseManagerAwardCategory = Extract<
@@ -239,17 +245,22 @@ function managerRecordTermByTeam(params: {
   return records;
 }
 
-function scoreForCategory(
+export function scoreForCategory(
   category: FranchiseWarAwardCategory,
 ): ScoreSelector {
   switch (category) {
     case 'MVP':
     case 'ROOKIE_OF_YEAR':
+    case 'BENCH_PLAYER':
       return (row) => row.warPreviewValues.totalWar;
     case 'CY_YOUNG':
       return (row) => row.warPreviewValues.pitchingWar;
     case 'GOLD_GLOVE':
       return (row) => row.warPreviewValues.fieldingWar;
+    case 'BOOGER_GLOVE':
+      return (row) => finiteNumber(row.warPreviewValues.fieldingWar)
+        ? -row.warPreviewValues.fieldingWar
+        : null;
     case 'SILVER_SLUGGER':
       return (row) => row.warPreviewValues.battingWar;
   }
