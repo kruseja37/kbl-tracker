@@ -76,6 +76,8 @@ export interface ManagerProfile {
   managementStyle?: ManagerStyleSnapshot;
 }
 
+export type ManagerFiredReason = "user" | "auto-backstop" | "rebrand";
+
 export interface ManagerAssignment {
   managerId: string;
   teamId: string;
@@ -84,6 +86,7 @@ export interface ManagerAssignment {
   startDate?: string;
   endDate?: string;
   fired?: boolean;
+  firedReason?: ManagerFiredReason;
 }
 
 export type ManagerDecisionType =

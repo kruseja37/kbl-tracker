@@ -5788,3 +5788,24 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   reds (+10 / +1 file). trackerDb stays **v23**.
 - **NEXT = L11-2** (the manager-personality field [identity `ManagerProfile`, reuse the 7-enum] + the legacy/tenure write —
   a `setManagerFired` mutator setting `fired`/`endDate`/reason + the Almanac aggregate gaining hire/fire dates). Nothing pushed.
+
+## 2026-06-18 (attended, same session) — L11-2: manager-firing legacy-write primitive
+- Grounded L11-2; surfaced a scope question to JK (the manager-personality field has NO L11 consumer — the firing ripple
+  keys off PLAYER personalities, not the manager's). JK ruled **defer the manager-personality field** (L11-2 = legacy write
+  only). Captain refinement: the Almanac fire/hire-date fields move to **L11-4** (the tenure aggregate is built from
+  game/WPA data, not the assignment store — the assignment→tenure join belongs with the surfacing ticket).
+- **L11-2** (Codex gpt-5.5; 3 files): `ManagerFiredReason` (`'user'|'auto-backstop'|'rebrand'`) + optional
+  `ManagerAssignment.firedReason` (managerWpa.ts); idempotent `setManagerFired(params)` in managerIdentityStorage.ts
+  (get → null-if-missing → unchanged-if-already-fired [keeps the original endDate/reason] → else save fired:true +
+  caller-supplied endDate + firedReason). Caller-supplied timestamp (no Date.now). NO live caller (build-DARK; L11-3 wires
+  it flag-gated), NO DB-version bump (firedReason additive + unindexed). 4 new tests.
+- **Builder = Codex ≠ Auditor = Opus** (cross-model triangle). Independent diff audit + falsification (idempotency uses a
+  DIFFERENT 2nd endDate/reason; the read-gate test proves a fired manager drops from `listManagerAssignments`→[] +
+  `resolveManagerForTeam` falls back to the successor) → VERIFIED (0/0). Host gate: `NODE_ENV= npm run build` exit 0
+  (8.56s) + full suite **7,703/439, 7,701 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`),
+  ZERO new reds (+4). trackerDb stays **v23**, manager-identity DB stays **v2**.
+- **⚠ CONCURRENT-SESSION FLAG:** a SECOND Claude session (dir `fe65bf4b…`) ran workflow `wf_1f3e2c10-e94` (6-agent
+  L12/L13/L14 deep-dive) and left an untracked `spec-docs/L11_L14_OPEN_QUESTIONS.md` (510 lines) that cites this session's
+  L11 recon + rulings — a deliberate-looking parallel "get ahead of the curve" L11–L14 design worksheet. No concurrent
+  COMMITS (git history linear + all-mine in-window); my code work is disjoint. **NEXT = L11-3 HELD** pending JK's
+  coordination call (is the 2nd session intentional? adopt its worksheet? who owns the branch?). Nothing pushed.

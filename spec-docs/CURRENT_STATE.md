@@ -1,8 +1,8 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-18 — **ACTIVE (attended).** **L11 (manager firings) STARTED — recon + JK rulings + L11-1 (pure
-firing+ripple engine) DONE** (Codex-built → Opus-VERIFIED, build-DARK; ➡ NEXT = L11-2 manager-personality field +
-legacy/tenure write). *(prior:)* **L10 Q5/Q8 REWORK COMPLETE → L10 (random events) FULLY
+**Last Updated:** 2026-06-18 — **ACTIVE (attended).** **L11 (manager firings) STARTED — recon + JK rulings + L11-1 engine
++ L11-2 legacy-write DONE** (Codex-built → Opus-VERIFIED, build-DARK; ➡ NEXT = L11-3 flag + firing resolver — **HELD
+pending a concurrent-session coordination check**). *(prior:)* **L10 Q5/Q8 REWORK COMPLETE → L10 (random events) FULLY
 COMPLETE.** Continuous per-game cadence (Q5 — dropped the 20%-checkpoint gate; flat per-game §16 base rates) +
 `name_change` in the dark catalog (Q8 — rare distinct cosmetic-family event). **Builder routing RESTORED to Codex**
 (JK directive) — Codex CLI (gpt-5.5, xhigh) built via `codex exec` stdin-from-contract; Opus 4.8 audited (cross-model
@@ -69,7 +69,7 @@ is **~95% BUILT / production-ready** → it's a CLEANUP pass, not a build: domin
 files** (FranchiseHome 626 · TeamHubContent 506 · ScheduleContent 90 · AwardsWatchlist 30) → extract to KBL-palette
 theme tokens + minor polish (~1 week). **Timing: it's the LIVE surface, decoupled from D13/L-stack/GameTracker — do it
 ANYTIME (no gate forces a wait; mild bonus to doing tokens before the hub's future activation overlays).** Suite
-**7,699/439, 7,697 pass / 2 characterized fail (post-L11-1; +10 L11-1 engine tests)** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` +
+**7,703/439, 7,701 pass / 2 characterized fail (post-L11-2; +4 setManagerFired tests)** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` +
 `GameTrackerLaunchState` — the 3rd an intermittent order-flake **confirmed passing solo 9/9**; `franchiseOffseasonGuards.component`
 is another such flake); trackerDb **v23**; branch codex/franchise-v1-next; **nothing pushed**. Session commits: R1-b1
 `474196e7` · R1-b2 `bbb839ce` · R2 `b80fa135` · R1-b3 `7e22e015` · R3 `9059f697` · W1 `6a934a9e` · PRE-ACT-TRAITS gate
@@ -193,6 +193,21 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## RIGHT NOW
 
+- **✅ L11-2 VERIFIED + COMMITTED (2026-06-18, attended) — the manager-firing legacy-write primitive.** Added
+  `ManagerFiredReason` (`'user'|'auto-backstop'|'rebrand'`) + an optional `ManagerAssignment.firedReason` (managerWpa.ts)
+  + an idempotent `setManagerFired(params)` mutator (managerIdentityStorage.ts): get → null-if-missing → unchanged-if-
+  already-fired (keeps the ORIGINAL endDate/reason) → else save `fired:true` + caller-supplied `endDate` + `firedReason`.
+  Caller-supplied timestamp (NO Date.now). **NO live caller (build-DARK — L11-3 wires it flag-gated), NO DB-version bump**
+  (firedReason is additive + unindexed; manager-identity DB stays v2, trackerDb v23). **SCOPE REFINEMENTS:** the
+  manager-PERSONALITY field DEFERRED (the ripple keys off PLAYER personalities — no L11 consumer; JK ruled defer); the
+  Almanac fire/hire-date join moved to **L11-4** (the tenure aggregate is game/WPA-data-built, not assignment-built — the
+  join belongs with surfacing). **Codex(gpt-5.5)-built → Opus-audited VERIFIED** (0/0; the 4 tests are non-vacuous —
+  idempotency uses a DIFFERENT 2nd endDate/reason; the read-gate test proves a fired manager drops from
+  `listManagerAssignments`→[] + `resolveManagerForTeam` falls back to the successor). Host gate: build exit 0 (8.56s) +
+  full suite **7,703/439, 7,701 pass / 2 characterized fail**, ZERO new reds (+4). Committed on codex/franchise-v1-next
+  (3 files + docs; **not pushed**). **⚠ NEXT = L11-3 (flag + shared firing resolver) HELD** — a SECOND Claude session
+  (`fe65bf4b`, workflow `wf_1f3e2c10-e94`) is concurrently working L11–L14 design (left untracked
+  `spec-docs/L11_L14_OPEN_QUESTIONS.md`); flagged to JK for coordination before L11-3. *(Prior entries below.)*
 - **✅ L11-1 VERIFIED + COMMITTED (2026-06-18, attended) — the pure manager-firing + player-ripple engine (first L11
   ticket); preceded by the L11 recon + JK's 4 kickoff rulings (`cf097d09`).** L11 grounding recon (workflow
   `wf_107b9eb5-faf`, 5 readers → `L11_SCOPE_MAP.md`) established **L11 = the missing fire ACTION over already-built parts**

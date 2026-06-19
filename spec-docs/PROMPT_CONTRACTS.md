@@ -10981,3 +10981,93 @@ inverse-to-morale); the clamp test honestly uses override tuning (default maxes 
 disclosed). Host gate: `NODE_ENV= npm run build` exit 0 (8.67s) + full suite **7,699/439, 7,697 pass / 2 characterized
 fail**, ZERO new reds (+10 / +1 file). Committed on codex/franchise-v1-next (not pushed). **➡ NEXT = L11-2** (manager-personality
 field + legacy/tenure write).
+
+---
+
+## CONTRACT — L11-2 (manager-firing legacy write: firedReason + setManagerFired) — 2026-06-18 (attended)
+
+**ROUTE: Codex CLI (`codex exec`, prompt via stdin from this contract) | high reasoning effort** (builder; persistence
+ticket). Auditor = Opus 4.8 Captain (independent; ≠ builder; cross-model triangle). Branch codex/franchise-v1-next.
+BUILD-DARK (the mutator has NO live caller — L11-3 wires it flag-gated). Source of truth: `spec-docs/L11_SCOPE_MAP.md`
+§3 (L11-2) + DECISIONS_LOG 2026-06-18 "L11 manager-firings kickoff". **SCOPE REFINEMENT (JK 2026-06-18):** the
+manager-PERSONALITY field is DEFERRED (the firing ripple keys off PLAYER personalities, not the manager's — no L11
+consumer); and the Almanac aggregate fire/hire-date fields move to **L11-4** (the assignment→tenure join belongs with the
+surfacing ticket; the Almanac tenure aggregate is built from game/WPA data, not the assignment store). **So L11-2 = the
+assignment-side legacy-write primitive ONLY.**
+
+**GOAL:** add (1) a `firedReason` field to `ManagerAssignment` and (2) an idempotent `setManagerFired` mutator that sets
+`fired`/`endDate`/`firedReason` on a team's manager assignment in `kbl-manager-identity`. No caller, no flag, no Almanac,
+no DB-version bump.
+
+**CHANGES (implement EXACTLY) — edit ONLY these 3 files:**
+
+**A. `src/types/managerWpa.ts`:**
+1. Add `export type ManagerFiredReason = 'user' | 'auto-backstop' | 'rebrand';` (near the other manager types).
+2. In the `ManagerAssignment` interface (~L79-87), add `firedReason?: ManagerFiredReason;` immediately after
+   `fired?: boolean;`. (Optional → backward-compatible; existing stored assignments simply lack it.)
+
+**B. `src/utils/managerIdentityStorage.ts`:** add (import `ManagerFiredReason` from the types alongside the existing
+`ManagerMode`/`ManagerAssignment` imports):
+```ts
+export async function setManagerFired(params: {
+  teamId: string;
+  mode: ManagerMode;
+  instanceId: string;
+  endDate: string;            // caller-supplied firing timestamp — NO Date.now in this fn
+  reason: ManagerFiredReason;
+}): Promise<ManagerAssignment | null> {
+  const assignment = await getManagerAssignment({
+    teamId: params.teamId,
+    mode: params.mode,
+    instanceId: params.instanceId,
+  });
+  if (!assignment) return null;
+  if (assignment.fired) return assignment;   // idempotent: keep the ORIGINAL firing's endDate/reason
+  return saveManagerAssignment({
+    ...assignment,
+    fired: true,
+    endDate: params.endDate,
+    firedReason: params.reason,
+  });
+}
+```
+Reuse the EXISTING `getManagerAssignment` (~L313) + `saveManagerAssignment` (~L295) — do NOT open a new transaction or
+re-implement persistence. NO live caller (L11-3 wires it). NO `Date.now`/`Math.random`.
+
+**C. `src/utils/tests/managerIdentityStorage.test.ts` (extend the existing file):** add a `setManagerFired` describe/tests
+using the file's existing fake-indexeddb + reset harness:
+- seeds an assignment (via `saveManagerAssignment`), then `setManagerFired({...,endDate:'2026-06-18T00:00:00.000Z',reason:'user'})`
+  → returns the assignment with `fired:true`, `endDate`, `firedReason:'user'`; a fresh `getManagerAssignment` confirms it
+  persisted.
+- IDEMPOTENT: a 2nd `setManagerFired` with a DIFFERENT endDate + `reason:'rebrand'` returns the FIRST firing's values
+  (fired stays true, endDate + firedReason unchanged from the first call).
+- returns `null` when no assignment exists for the {teamId,mode,instanceId}.
+- the active-manager read-gate now EXCLUDES a fired assignment: after firing, the relevant
+  `listManagerAssignments`/`resolveManagerForTeam`-style `!fired && !endDate` filter no longer treats it as active
+  (assert via the existing helper the test file already uses, or via `getManagerAssignment` + checking the flags).
+
+**HARD CONSTRAINTS:** edit ONLY `src/types/managerWpa.ts`, `src/utils/managerIdentityStorage.ts`,
+`src/utils/tests/managerIdentityStorage.test.ts`. Do NOT touch `almanacQueries.ts` (Almanac surfacing = L11-4),
+`masterMoraleMatrix.ts`, the L11-1 engine, `trackerDb.ts` (NO version bump — `firedReason` is additive + not indexed),
+`franchisePhase2Flags.ts`, `processCompletedGame.ts`, `backupRestore.ts`, `syncConfig.ts`, any `*.md`. NO new DB/store,
+NO flag, NO live caller (build-DARK). No `Date.now`/`Math.random`. No git add/commit. Prefix tsc/vitest with `NODE_ENV= `.
+
+**VERIFICATION (builder runs, reports ACTUAL output):** `NODE_ENV= npx tsc --noEmit` exit 0; `NODE_ENV= npx vitest run
+src/utils/tests/managerIdentityStorage.test.ts` all green. Report changed paths + new test count + confirm no file beyond
+the 3 changed and no DB-version/flag/Almanac touch.
+
+**FORMAT:** 1) Files changed. 2) The `setManagerFired` + `firedReason` logic as built + any deviation. 3) Verification
+output (paste actual). 4) "L11-2 complete" or "BLOCKED: <reason>". Do NOT commit.
+
+Use high reasoning effort. Think step-by-step. Read managerIdentityStorage.ts (getManagerAssignment/saveManagerAssignment)
++ the existing managerIdentityStorage.test.ts harness before editing.
+
+**Status:** ✅ VERIFIED + COMMITTED (2026-06-18, attended). Codex (gpt-5.5) built via `codex exec` stdin-from-contract →
+Opus 4.8 Captain INDEPENDENTLY audited (≠ builder; cross-model triangle): VERDICT VERIFIED, 0 major / 0 minor. Exact to
+contract: `ManagerFiredReason` + optional `firedReason` + idempotent `setManagerFired` (get→null/idempotent/save, no
+Date.now, reuses existing get/save). Build-DARK (no caller/flag), NO DB-version bump (additive unindexed field). 4 tests
+non-vacuous (idempotency with a different 2nd endDate/reason; read-gate exclusion proven via `listManagerAssignments`→[]
++ `resolveManagerForTeam` successor fallback). Manager-personality field DEFERRED (JK); Almanac fire/hire-date join → L11-4.
+Host gate: `NODE_ENV= npm run build` exit 0 (8.56s) + full suite **7,703/439, 7,701 pass / 2 characterized fail**, ZERO
+new reds (+4). Committed (3 files + docs; not pushed). **➡ NEXT = L11-3 (flag + shared firing resolver) — HELD pending a
+concurrent-session coordination check (a second session is working L11–L14 design).**

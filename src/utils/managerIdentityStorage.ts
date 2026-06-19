@@ -2,6 +2,7 @@ import { SMB4_FIRST_NAMES, SMB4_LAST_NAMES } from "../data/smb4NameDatabase";
 import { US_CITIES } from "../data/usCities";
 import type {
   ManagerAssignment,
+  ManagerFiredReason,
   ManagerMode,
   ManagerProfile,
   ManagerStyleSnapshot,
@@ -326,6 +327,28 @@ export async function getManagerAssignment(params: {
   );
   await transactionToPromise(tx);
   return (result as ManagerAssignment | undefined) ?? null;
+}
+
+export async function setManagerFired(params: {
+  teamId: string;
+  mode: ManagerMode;
+  instanceId: string;
+  endDate: string;
+  reason: ManagerFiredReason;
+}): Promise<ManagerAssignment | null> {
+  const assignment = await getManagerAssignment({
+    teamId: params.teamId,
+    mode: params.mode,
+    instanceId: params.instanceId,
+  });
+  if (!assignment) return null;
+  if (assignment.fired) return assignment;
+  return saveManagerAssignment({
+    ...assignment,
+    fired: true,
+    endDate: params.endDate,
+    firedReason: params.reason,
+  });
 }
 
 export async function listManagerAssignments(filter: {

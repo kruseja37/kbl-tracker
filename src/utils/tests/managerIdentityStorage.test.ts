@@ -15,6 +15,7 @@ import {
   saveManagerProfile,
   saveUnassignedManagerProfile,
   seedManagerAssignmentsForTeams,
+  setManagerFired,
 } from "../managerIdentityStorage";
 import { syncEngine } from "../syncEngine";
 
@@ -221,5 +222,172 @@ describe("manager identity storage", () => {
         }),
       ]),
     );
+  });
+
+  describe("setManagerFired", () => {
+    test("marks an assignment fired and persists the firing reason", async () => {
+      await saveManagerAssignment({
+        managerId: "manager-fired",
+        teamId: "sirloins",
+        mode: "franchise",
+        instanceId: "season-2026",
+        startDate: "2026-01-01T00:00:00.000Z",
+      });
+
+      const fired = await setManagerFired({
+        teamId: "sirloins",
+        mode: "franchise",
+        instanceId: "season-2026",
+        endDate: "2026-06-18T00:00:00.000Z",
+        reason: "user",
+      });
+
+      expect(fired).toMatchObject({
+        managerId: "manager-fired",
+        teamId: "sirloins",
+        mode: "franchise",
+        instanceId: "season-2026",
+        fired: true,
+        endDate: "2026-06-18T00:00:00.000Z",
+        firedReason: "user",
+      });
+      await expect(
+        getManagerAssignment({
+          teamId: "sirloins",
+          mode: "franchise",
+          instanceId: "season-2026",
+        }),
+      ).resolves.toMatchObject({
+        fired: true,
+        endDate: "2026-06-18T00:00:00.000Z",
+        firedReason: "user",
+      });
+    });
+
+    test("keeps the original end date and reason when called again", async () => {
+      await saveManagerAssignment({
+        managerId: "manager-idempotent",
+        teamId: "moonstars",
+        mode: "franchise",
+        instanceId: "season-2026",
+        startDate: "2026-01-01T00:00:00.000Z",
+      });
+
+      const first = await setManagerFired({
+        teamId: "moonstars",
+        mode: "franchise",
+        instanceId: "season-2026",
+        endDate: "2026-06-18T00:00:00.000Z",
+        reason: "user",
+      });
+      const second = await setManagerFired({
+        teamId: "moonstars",
+        mode: "franchise",
+        instanceId: "season-2026",
+        endDate: "2026-07-04T00:00:00.000Z",
+        reason: "rebrand",
+      });
+
+      expect(first).toMatchObject({
+        fired: true,
+        endDate: "2026-06-18T00:00:00.000Z",
+        firedReason: "user",
+      });
+      expect(second).toMatchObject({
+        fired: true,
+        endDate: "2026-06-18T00:00:00.000Z",
+        firedReason: "user",
+      });
+      await expect(
+        getManagerAssignment({
+          teamId: "moonstars",
+          mode: "franchise",
+          instanceId: "season-2026",
+        }),
+      ).resolves.toMatchObject({
+        fired: true,
+        endDate: "2026-06-18T00:00:00.000Z",
+        firedReason: "user",
+      });
+    });
+
+    test("returns null when no assignment exists", async () => {
+      await expect(
+        setManagerFired({
+          teamId: "wide-loads",
+          mode: "franchise",
+          instanceId: "season-2026",
+          endDate: "2026-06-18T00:00:00.000Z",
+          reason: "auto-backstop",
+        }),
+      ).resolves.toBeNull();
+    });
+
+    test("excludes fired assignments from active manager reads", async () => {
+      await saveManagerProfile({
+        managerId: "manager-active-before-fire",
+        displayName: "Active Before Fire",
+        createdByUser: true,
+        defaultManager: false,
+      });
+      await saveManagerAssignment({
+        managerId: "manager-active-before-fire",
+        teamId: "sirloins",
+        mode: "franchise",
+        instanceId: "season-2026",
+        startDate: "2026-01-01T00:00:00.000Z",
+      });
+
+      await expect(
+        listManagerAssignments({
+          mode: "franchise",
+          instanceId: "season-2026",
+          teamId: "sirloins",
+        }),
+      ).resolves.toHaveLength(1);
+
+      await setManagerFired({
+        teamId: "sirloins",
+        mode: "franchise",
+        instanceId: "season-2026",
+        endDate: "2026-06-18T00:00:00.000Z",
+        reason: "user",
+      });
+
+      await expect(
+        listManagerAssignments({
+          mode: "franchise",
+          instanceId: "season-2026",
+          teamId: "sirloins",
+        }),
+      ).resolves.toEqual([]);
+      await expect(
+        resolveManagerForTeam({
+          team: {
+            id: "sirloins",
+            name: "Sirloins",
+            managerId: "manager-successor",
+            managerName: "Successor Voice",
+          },
+          mode: "franchise",
+          instanceId: "season-2026",
+        }),
+      ).resolves.toMatchObject({
+        managerId: "manager-successor",
+        managerName: "Successor Voice",
+        assignment: undefined,
+      });
+      await expect(
+        getManagerAssignment({
+          teamId: "sirloins",
+          mode: "franchise",
+          instanceId: "season-2026",
+        }),
+      ).resolves.toMatchObject({
+        fired: true,
+        endDate: "2026-06-18T00:00:00.000Z",
+        firedReason: "user",
+      });
+    });
   });
 });
