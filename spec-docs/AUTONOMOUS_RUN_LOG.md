@@ -1713,3 +1713,33 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   L12-Q10-defer). ⚠ One concurrent-worker collision this session (handled cleanly) — keep ONE AUTH-4 worker active.
 - ➡ NEXT = L12 recon-split (award-cat extension [L12-Q1] / All-Star roster [L12-Q5] / race-standing weighted-composite
   [L12-Q2] / TV-family KK·Bust·Comeback [AWARD-3]) per the L11–L14 ruling pass + DECISIONS_LOG; then L13 → L14 → L-SIM.
+
+## 2026-06-19 (AUTH-4 overnight) — L12 RECON DONE (read-only) + a 2nd-worker collision reconciled; next = contract L12-1
+- **L12 grounding recon produced `spec-docs/L12_SCOPE_MAP.md`** (canonical, on disk), mirroring the L10/L11 scope maps:
+  8 sections — subsystem surface, v1 mechanic (§20/§21/§23), an ordered **6-piece split**, the RULED forks, a full
+  file:line seam table, the trigger/cadence model, residual open micro-forks, and a dark-build checklist. Read-only:
+  NO build contracted, NO source edited, NO host gate, NO Codex invoked.
+- **THE 6-PIECE SPLIT (risk-ascending):** L12-1 dark landing infra (clone the L11 flag → `isFranchisePhase2L12Enabled`;
+  widen `FranchiseAwardCategory` +ALL_STAR/BENCH_PLAYER/BOOGER_GLOVE/RELIEVER_OF_YEAR [Q1, defer the 2 one-shots]; the
+  All-Star multi-selection roster store → trackerDb v23→24 + ledger PIN + C4 backup DoD) · L12-2 TV-family scorers
+  [Q7, pure, no store] · L12-3 race-standing weighted composite + bands + Q3 tilt + Q4 GG defensive-fame share ·
+  L12-4 All-Star roster builder + 60% lock [Q5/Q13] · L12-5 emission [Q6] + L3 race-snub row + honor→Reach-floor [Q9]
+  + reporter tap · L12-6 Almanac/UI surfacing.
+- **Method = workflow fan-out (7 code-grounded readers) → synthesis → adversarial critique → Captain finalize**
+  (`wf_ad44749b-459`). Every load-bearing anchor independently re-verified on-branch. Critique verdict
+  SOUND-WITH-CORRECTIONS — 5 fixes applied: ledger-PIN test path = `src/utils/tests/franchiseSeasonLedgerStorage.test.ts`;
+  the award engine/storage live in `src/utils/` NOT `src/engines/`; `AwardsWatchlist.tsx` = `src/src_figma/app/components/`;
+  `channelForFameEventType` :178-181; the SECOND `FranchiseWarAwardCategory` [eng:38-41] exhaustive-switch compile
+  coupling. Captain ALSO caught a critique off-by-one: the L11 if-block closes at **:654** and the designation `try`
+  opens at **:655**, so the new L12 gate branch inserts after **:654** (NOT :655/:656).
+- **Q10 hard requirement captured:** every L12 race/fame-tier read goes through `resolveFameTier` (`fameModel.ts:191`,
+  ZERO live importers — L12 is its first live consumer), NEVER the forbidden-label scalar `getFameTier`
+  (`fameEngine.ts:349`, labels :359/:363); the live-label purge of the 3 callers defers post-D13.
+- **⚠ CONCURRENCY EVENT (2nd of the L-run):** a 2nd AUTH-4 worker ("cron-watcher resume") ran its OWN L12 recon in
+  parallel (~08:16Z), produced a divergent **7-piece** `L12_SCOPE_MAP.md`, and appended entries here + to SESSION_LOG.
+  This session's `Write` overwrote that map on disk; **JK ruled TAKE OVER + RECONCILE** — this 6-piece, adversarially-
+  verified map is canonical; the duplicate's stale 7-piece log entries are folded into THIS one. 7 Claude sessions were
+  open on the repo (session-start `ps` filtered out `claude`, so the concurrent worker was missed); JK to trim the
+  extras / pause the cron. **Keep exactly ONE AUTH-4 worker active.**
+- **➡ NEXT = contract L12-1** in an attended/host session (Codex-built via `codex exec` stdin-from-contract → Opus-audited,
+  build-DARK behind the NEW `isFranchisePhase2L12Enabled`, default OFF; trackerDb stays v23). Branch codex/franchise-v1-next; nothing pushed.

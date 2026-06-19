@@ -5888,3 +5888,41 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   reds. ⇒ L11 (managers) FULLY COMPLETE (1-5). 2 forks ruled (TAKE OVER L11-4; L12-Q10 defer).
 - **⚠ PROCESS:** a concurrent AUTH-4 worker (cron + a manual "start new session") collided on L11-4 this session — handled
   cleanly (took over the stopped session's WIP per JK), but **keep exactly ONE AUTH-4 worker active** going forward.
+
+## 2026-06-19 (AUTH-4 overnight) — L12 RECON produced (L12_SCOPE_MAP.md, read-only) + a 2nd-worker collision reconciled
+- **L12 grounding recon → canonical `spec-docs/L12_SCOPE_MAP.md`** (on disk), mirroring the L10/L11 scope maps: 8
+  sections — subsystem surface, v1 mechanic (§20/§21/§23), an ordered **6-piece split**, the RULED forks (all 13 L12 Qs),
+  a full file:line seam table, the trigger/cadence model, the residual open micro-forks, and a dark-build checklist.
+  Read-only: NO build contracted, NO source edited, NO host gate, NO Codex invoked.
+- **Method = workflow fan-out (7 code-grounded readers) → synthesis → adversarial critique → Captain finalize**
+  (`wf_ad44749b-459`). Critique verdict SOUND-WITH-CORRECTIONS; 5 fixes applied + 1 Captain-caught off-by-one (below).
+- **6-PIECE SPLIT (risk-ascending):** L12-1 dark landing infra (clone the L11 flag → `isFranchisePhase2L12Enabled`;
+  widen `FranchiseAwardCategory` +ALL_STAR/BENCH_PLAYER/BOOGER_GLOVE/RELIEVER_OF_YEAR [Q1, defer PLATINUM_GLOVE +
+  WORLD_SERIES_MVP]; the All-Star multi-selection roster store → trackerDb v23→24 + the ledger PIN + C4 backup DoD) ·
+  L12-2 TV-family scorers [Q7, pure, no store] · L12-3 race-standing weighted composite + bands + Q3 tilt + Q4 GG
+  defensive-fame share · L12-4 All-Star roster builder + 60% lock [Q5/Q13] · L12-5 emission [Q6] + L3 race-snub row +
+  honor→Reach-floor [Q9] + reporter tap · L12-6 Almanac/UI surfacing.
+- **Key recon findings (every anchor independently re-verified on-branch):** the race-standing engine is **GREENFIELD**
+  (no race type/compute; only `SeasonEmissionConfig.raceTopN` reserved); awards compute **season-end-only**
+  (`FranchiseHome.tsx:3303-3322` `isSeasonOver` effect — NOT the per-game spine); the `status` fame channel slot
+  (`fameModel.ts:23`) is **fed by nothing** (`channelForFameEventType` returns only defensive/role_player/iconic_event,
+  `franchiseFameCompute.ts:178-181`) ⇒ confirms Q8 (status fame is L6's); the **two distinct award-category types** —
+  `scoreForCategory` switches on the 5-member `FranchiseWarAwardCategory` (`franchiseAwardsEngine.ts:38-41`, exhaustive
+  no-default :245-255), a SECOND compile coupling beyond the 9-member storage `FranchiseAwardCategory`; `resolveFameTier`
+  (`fameModel.ts:191`) has ZERO live importers (L12 is its first consumer), the forbidden-label scalar `getFameTier`
+  (`fameEngine.ts:349`, labels :359/:363) stays live, purge DEFERS post-D13 (Q10); TV snapshots ARE written per-game
+  (`processCompletedGame.ts:609`, ungated) so Comeback's running-low has data; the 60% All-Star lock needs a NEW
+  configurable-fraction helper (the existing `isCheckpointBoundary` is a fixed 20%-grid); archived `AllStarScreen.tsx`
+  gives the by-position roster shape.
+- **GATE-BRANCH INSERTION (Captain off-by-one correction over the critique):** the L11 `if`-block closes at
+  `processCompletedGame.ts:654` and the un-gated designation `try` opens at `:655`, so the new L12 dark branch inserts
+  after **:654** (NOT the critique's :655/:656). Verified by reading the lines.
+- **⚠ CONCURRENCY EVENT (2nd of the L-run):** a 2nd AUTH-4 worker ("cron-watcher resume") ran its OWN L12 recon in
+  parallel (~08:16Z) and produced a divergent **7-piece** `L12_SCOPE_MAP.md` + these log entries; this session's `Write`
+  overwrote that map on disk. **JK ruled TAKE OVER + RECONCILE** (cf. the L11-4 precedent): the 6-piece adversarially-
+  verified map is canonical, the duplicate's stale entries are folded into this one. 7 Claude sessions were open on the
+  repo (session-start `ps` filtered out `claude` and missed it); JK to trim the extras / pause the cron. **Keep exactly
+  ONE AUTH-4 worker active.**
+- **➡ NEXT ACTION = contract L12-1 build in an attended/host session** (Codex-built via `codex exec` stdin-from-contract
+  → Opus-audited, build-DARK behind a NEW `isFranchisePhase2L12Enabled` flag, default OFF). Nothing pushed; branch
+  codex/franchise-v1-next; trackerDb v23 unchanged.
