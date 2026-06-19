@@ -120,6 +120,12 @@ export const FAME_TUNING = {
     heatRetention: 0.35,
     reachFloorAfterTrade: 0,
   },
+  honorHeatBump: {
+    mvp: 12,
+    cyYoung: 10,
+    allStarStarter: 6,
+    allStarReserve: 3,
+  },
   channelWeights: {
     wpa_spine: 1,
     iconic_event: 1,
@@ -142,6 +148,14 @@ export function applyHeatUpdate(
   config: FameTuning = FAME_TUNING,
 ): number {
   return clampAndRoundHeat((currentHeat * config.heat.decayPerUpdate) + gameHeatInput, config);
+}
+
+export function applyHonorHeatBump(
+  currentHeat: number,
+  bump: number,
+  config: FameTuning = FAME_TUNING,
+): number {
+  return clampAndRoundHeat(currentHeat + bump, config);
 }
 
 export function applyWarLegitimacyGravity(

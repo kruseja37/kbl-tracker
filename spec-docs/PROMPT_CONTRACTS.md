@@ -13055,3 +13055,125 @@ RELAXED + TIMID < TOUGH deltas (personality scaling ACTIVE ⇒ proves the resolv
 change is INERT for existing behavior (no live `{kind:'race'}` constructor; matrix regression 9/9). Host gate
 `NODE_ENV= npm run build` 0 (8.14s) + suite **7,810/454, 7,808 pass / 2 characterized fail**, **ZERO new reds** (+7).
 build-DARK / ORPHANED-PENDING (no caller — L12-5e wires it); trackerDb v24. Branch-only. **➡ NEXT = L12-5d** (honor→reach-floor).
+
+---
+
+## CONTRACT — L12-5d (honor→reach-floor ratchet: non-decaying helper + role-tiered bumps + seam apply) — 2026-06-19 (attended)
+
+**ROUTE:** Codex CLI (gpt-5.5, **very-high reasoning effort**) via `codex exec` stdin-from-contract. Auditor: Opus 4.8
+(builder ≠ auditor — Codex builds, Opus independently audits + runs the full host gate).
+
+**ROLE:** You are a builder for the KBL Tracker franchise L-stack (the fame reach-floor ratchet).
+
+**GOAL:** Build the honor→reach-floor ratchet: a NON-decaying heat-bump helper + a `honorHeatBump` tuning block (in `fameModel.ts`)
++ a seam-injectable applier that, for each honoree, bumps fame heat and ratchets the permanent reach floor. Build-DARK /
+ORPHANED-PENDING (NO live caller — L12-5e wires it). Per JK F9: the WHOLE All-Star team ratchets, starters get a bigger bump than reserves.
+
+**SOURCE OF TRUTH:** `spec-docs/L12-5_SCOPE_MAP.md` §7 + `DECISIONS_LOG.md` 2026-06-19 "L12-5" (F9 whole-team starters-more).
+
+**⚠ THE DECAY TRAP (verified live):** `applyHeatUpdate` (`src/engines/fameModel.ts:139-145`) does
+`clampAndRoundHeat((currentHeat * 0.85) + input)` — it DECAYS 15% before adding. Do NOT use it for the honor bump (it would
+strip 15% of accumulated heat at the honor moment). Build a NON-decaying helper.
+
+**VERIFIED ANCHORS:** `FAME_TUNING` (`src/engines/fameModel.ts:91-137`, `as const`; tierThresholds localHero 3 / regionalStar 8
+/ nationalIcon 15); the internal `clampAndRoundHeat(value, config)` (used at `:144`); `updateReachFloor(currentReachFloor,
+heat, config)` (`:176`, heat→tier rank → `max(current, rank)`, UNKNOWN rank → unchanged); `applyHeatUpdate` (`:139`, the
+decay trap). `getFranchiseFameRecord(scope, playerId): Promise<FranchiseFameRecordRow|null>`
+(`src/utils/franchiseFameRecordsStorage.ts:160`; scope = `{franchiseId, seasonId, statsScopeId}`); `saveFranchiseFameRecordRows(rows:
+FranchiseFameRecordRow[])` (`:78`); `FranchiseFameRecordRow` = `{...scope, playerId, heat, reachFloor, wasNegative, channelTotal,
+channelByChannel, defensiveFame, rolePlayerFame, updatedAtCheckpoint}`. `isFranchisePhase2L12Enabled` + `isFranchisePhase2FameEnabled`
+(`src/utils/franchisePhase2Flags.ts:17`).
+
+**CHANGES — edit/create ONLY these 3 files:**
+
+**A. `src/engines/fameModel.ts`** (additive):
+1. Add a `honorHeatBump` block to `FAME_TUNING` (§16 placeholders; the ruled ladder `mvp ≥ cyYoung ≥ allStarStarter ≥
+   allStarReserve`): `honorHeatBump: { mvp: 12, cyYoung: 10, allStarStarter: 6, allStarReserve: 3 },` (inside the `as const` object).
+2. Add the NON-decaying helper:
+   ```ts
+   export function applyHonorHeatBump(currentHeat: number, bump: number, config: FameTuning = FAME_TUNING): number {
+     return clampAndRoundHeat(currentHeat + bump, config);
+   }
+   ```
+   (Reuse the internal `clampAndRoundHeat` — NO decay, just add+clamp+round.)
+
+**B. NEW `src/utils/franchiseHonorReachFloor.ts`:**
+```ts
+import { FAME_TUNING, applyHonorHeatBump, updateReachFloor } from '../engines/fameModel';
+import { getFranchiseFameRecord, saveFranchiseFameRecordRows } from './franchiseFameRecordsStorage';
+import { isFranchisePhase2L12Enabled, isFranchisePhase2FameEnabled } from './franchisePhase2Flags';
+
+export type FranchiseHonorTier = 'mvp' | 'cyYoung' | 'allStarStarter' | 'allStarReserve';
+
+export const franchiseHonorReachFloorSeam = {
+  getRecord: getFranchiseFameRecord,
+  saveRecords: saveFranchiseFameRecordRows,
+};
+
+export async function applyFranchiseHonorReachFloor(params: {
+  honorees: ReadonlyArray<{ playerId: string; honorTier: FranchiseHonorTier }>;
+  scope: { franchiseId: string; seasonId: string; statsScopeId: string };
+  checkpointSentinel: string;   // e.g. 'season-end-honor' or 'all-star-lock' — so the next per-game fame write does not clobber the ratchet
+}): Promise<{ status: 'dark-noop' | 'ratcheted'; ratchetedCount: number; reason?: string }> {
+  if (!isFranchisePhase2L12Enabled()) return { status: 'dark-noop', ratchetedCount: 0, reason: 'L12 disabled' };
+  // Fame is the substrate: the record only exists when the per-game dark fame writer ran. No Fame → nothing to ratchet.
+  if (!isFranchisePhase2FameEnabled()) return { status: 'dark-noop', ratchetedCount: 0, reason: 'Fame disabled (no record substrate)' };
+
+  let ratchetedCount = 0;
+  for (const honoree of params.honorees) {
+    const row = await franchiseHonorReachFloorSeam.getRecord(params.scope, honoree.playerId);
+    if (!row) continue;   // no fame record yet → skip (cannot ratchet a non-existent record)
+    const newHeat = applyHonorHeatBump(row.heat, FAME_TUNING.honorHeatBump[honoree.honorTier]);
+    const newReachFloor = updateReachFloor(row.reachFloor, newHeat);
+    await franchiseHonorReachFloorSeam.saveRecords([
+      { ...row, heat: newHeat, reachFloor: newReachFloor, updatedAtCheckpoint: params.checkpointSentinel },
+    ]);
+    ratchetedCount += 1;
+  }
+  return { status: 'ratcheted', ratchetedCount };
+}
+```
+(Adjust ONLY if a verified signature differs → STOP. NO `Date.now`/`Math.random`.)
+
+**C. `src/utils/tests/franchiseHonorReachFloor.test.ts`:**
+- **THE DECAY-TRAP test:** `applyHonorHeatBump(10, 5)` === `clampAndRoundHeat-equivalent of 15` (NOT `10*0.85+5 = 13.5`) — prove non-decaying.
+- **Ladder:** `FAME_TUNING.honorHeatBump.mvp ≥ cyYoung ≥ allStarStarter ≥ allStarReserve`.
+- **Applier (stub `franchiseHonorReachFloorSeam` + toggle both flags via the test-setters):** L12 off → dark-noop (no seam calls);
+  Fame off → dark-noop; both on + a honoree whose `getRecord`→null → skipped (not counted, no save); both on + a honoree with a
+  record → `getRecord` then `saveRecords` called with `{heat: applyHonorHeatBump(oldHeat, bump), reachFloor: updateReachFloor(oldFloor, newHeat),
+  updatedAtCheckpoint: <sentinel>}`; a STARTER bump (`allStarStarter`) is LARGER than a RESERVE bump (`allStarReserve`) for the
+  same starting heat (prove role-tiering); `ratchetedCount` counts only records found.
+
+**HARD CONSTRAINTS:** edit/create ONLY the 3 files. `fameModel.ts` change is additive (1 tuning block + 1 helper). NO live
+caller (build-DARK). NO store/trackerDb/persistence-schema change. NO `Date.now`/`Math.random`. NO git add/commit. Prefix
+tsc/vitest with `NODE_ENV= `.
+
+**VERIFICATION (run ALL, paste ACTUAL):** `NODE_ENV= npx tsc --noEmit` 0 + `NODE_ENV= npm run build` 0;
+`NODE_ENV= npx vitest run src/utils/tests/franchiseHonorReachFloor.test.ts` green; AND the fameModel regression
+`NODE_ENV= npx vitest run src/engines/__tests__/fameModel.test.ts` (prove the FAME_TUNING/helper edit broke nothing).
+(The auditor runs the FULL host suite.)
+
+**STOP-IF:** `clampAndRoundHeat` is not reachable from within `fameModel.ts` (it must be — `applyHeatUpdate` uses it) → STOP.
+`updateReachFloor`/`getFranchiseFameRecord`/`saveFranchiseFameRecordRows`/`isFranchisePhase2FameEnabled` signatures differ → STOP.
+
+**FORMAT:** 1) files changed; 2) the non-decaying helper + the honorHeatBump ladder + the L12+Fame-gated per-honoree ratchet
+(bump→updateReachFloor→save with sentinel); 3) verification output (incl. the fameModel regression); 4) "L12-5d complete" or
+"BLOCKED: <reason>". Do NOT commit.
+
+Use very high reasoning effort. Think step-by-step. Read `src/engines/fameModel.ts:91-189` (FAME_TUNING + applyHeatUpdate [the
+decay trap] + clampAndRoundHeat + updateReachFloor), `src/utils/franchiseFameRecordsStorage.ts` (get/save), and
+`src/utils/tests/franchiseAllStarRosterCompute.test.ts` (the seam-stub + flag-toggle test pattern).
+
+**Status:** ✅ VERIFIED + COMMITTED 2026-06-19 (attended). Codex (gpt-5.5, xhigh) built → Opus audited (builder ≠ auditor) +
+full host gate. Additive `fameModel.ts` (`FAME_TUNING.honorHeatBump {mvp:12, cyYoung:10, allStarStarter:6, allStarReserve:3}`
+[§16, the ruled ladder] + non-decaying `applyHonorHeatBump = clampAndRoundHeat(heat + bump)`) + NEW
+`src/utils/franchiseHonorReachFloor.ts` (`applyFranchiseHonorReachFloor`: L12-gate + Fame-gate [the fame-record substrate
+requires Fame on — else dark-noop] → per-honoree `getFranchiseFameRecord` [skip if null] → `applyHonorHeatBump(row.heat,
+honorHeatBump[tier])` → `updateReachFloor` → `saveFranchiseFameRecordRows` with a sentinel `updatedAtCheckpoint`;
+seam-injectable; `ratchetedCount`) + an 8-test file. **Audit:** faithful; **THE DECAY-TRAP test passes** —
+`applyHonorHeatBump(10,5)===15` vs `applyHeatUpdate(10,5)===13.5`, asserted unequal (the bump avoids the 15% decay);
+ladder monotonic; both dark-noop gates; null-row skip; `starter > reserve` heat ⇒ higher `updateReachFloor`. Host gate
+`NODE_ENV= npm run build` 0 (8.84s) + suite **7,818/455, 7,815 pass / 3 fail** = 2 characterized + 1 order-flake
+(`AwardsWatchlist`, **confirmed passing solo 2/2**), **ZERO new reds** (+8). build-DARK / ORPHANED-PENDING (no caller — L12-5e
+wires it); trackerDb v24. Branch-only. **⇒ all four L12-5 PAYOUT MECHANICS built (5a adapter · 5b emit-glue · 5c snub · 5d
+reach-floor). ➡ NEXT = L12-5e** (the live wiring at both trigger edges — the only impure/live-path piece).
