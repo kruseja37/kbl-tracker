@@ -1,0 +1,122 @@
+/* ============================================================================
+ * franchise-theme.css — KBL Tracker FRANCHISE HUB design layer (Fork C)
+ * ----------------------------------------------------------------------------
+ * The franchise hub keeps its green / Fenway identity, but that identity was
+ * inlined ~2,178x as hardcoded `bg-[#...]` / `text-[#...]` / `border-[#...]`
+ * arbitrary-value classes across 5 files (58 distinct hexes). This file
+ * formalizes them into named CSS variables; the in-scope files reference them
+ * as `bg-[var(--franchise-panel)]` etc.
+ *
+ * SCOPING — vars live on `:root`, NOT `.franchise-hub` (JK-approved 2026-06-19)
+ *   Originally scoped under `.franchise-hub`, but portaled content (modals /
+ *   tooltips rendered to document.body via React portals) escapes that subtree
+ *   and the vars would not resolve. Defining them on `:root` makes them resolve
+ *   EVERYWHERE, portals included. This does NOT leak into the SNES rest-of-app:
+ *   the names are `--franchise-*`-prefixed and ONLY the swept franchise classes
+ *   reference them — no non-franchise element consumes these vars, and a bare
+ *   `:root` custom-property definition paints nothing on its own.
+ *
+ * TOOLCHAIN — Tailwind v3 (NOT v4)
+ *   Installed `tailwindcss@^3.4.19`; active entry `src/main.tsx → src/index.css`
+ *   (v3 `@tailwind` directives). theme.css's `@theme inline` is v4 syntax and is
+ *   NOT in the runtime chain, so `bg-franchise-*` named utilities would not
+ *   generate. The v3-native, byte-identical mechanism is CSS vars +
+ *   `bg-[var(--franchise-*)]` arbitrary values. (See instructions/
+ *   franchise-design-system.md §0.1; v4 chase explicitly out of scope.)
+ *
+ * BYTE-SAFETY — every token is a 1:1 alias of an existing rendered hex.
+ *   Near-duplicate greens/tints are kept as SEPARATE tokens (no merging), so the
+ *   sweep changes zero pixels. Merging near-dupes is a future visual decision for
+ *   JK, not done here.
+ *
+ * NOT TOKENIZED (kept as literals — not chrome): the stadium spray-chart SVG art
+ *   palette (`fill=`/`stroke=` attrs in TeamHubContent ~5480+) and the JS
+ *   data-color maps (news-category / role / grade colors that feed `style`/SVG).
+ *   These appear ONLY as bare `#hex` (never bracketed), so the bracket-only sweep
+ *   leaves them untouched by construction.
+ * ========================================================================== */
+
+:root {
+  /* --- GREENS: structural surfaces (light → dark) ------------------------- */
+  --franchise-field: #567A50;          /* page / field background (hub root)   */
+  --franchise-field-raised: #4F7D4B;   /* lighter field panel                  */
+  --franchise-header: #6B9462;         /* header bar + tab strip               */
+  --franchise-panel: #5A8352;          /* primary card / panel surface         */
+  --franchise-border: #4A6844;         /* borders + raised/inset panel fills    */
+  --franchise-panel-dark: #3F5A3A;     /* nested / darker panel                 */
+  --franchise-panel-darker: #3F563F;   /* deeper nested panel                   */
+  --franchise-panel-deep: #3D5240;     /* deep panel                            */
+  --franchise-panel-moss: #3A5834;     /* moss-green panel                      */
+  --franchise-panel-pine: #2F4C36;     /* pine-green panel                      */
+  --franchise-shadow: #2D3D2F;         /* green shadow surface                  */
+  --franchise-shadow-soft: #2A3A2D;    /* soft green shadow                     */
+  --franchise-shadow-green: #274627;   /* darker green shadow                   */
+  --franchise-shadow-deep: #20382A;    /* deep green shadow                     */
+  --franchise-shadow-darkest: #1F2B21; /* darkest green shadow                  */
+  --franchise-field-ink: #1A3020;      /* green-black field ink                 */
+
+  /* --- TEXT: parchment / cream -------------------------------------------- */
+  --franchise-text: #E8E8D8;           /* primary text (cream)                  */
+
+  /* --- GOLD / AMBER: accent ----------------------------------------------- */
+  --franchise-gold: #C4A853;           /* primary gold accent                   */
+  --franchise-gold-bright: #FFD700;    /* bright gold (badges / stars)          */
+  --franchise-gold-light: #D4B863;     /* lighter gold fill                     */
+  --franchise-gold-soft: #FFEFB5;      /* pale gold text                        */
+  --franchise-gold-amber: #FFD27A;     /* warm amber text / fill                */
+  --franchise-gold-amber-alt: #F4D27A; /* warm amber (alt)                      */
+  --franchise-gold-pale: #F2CC8F;      /* pale amber                            */
+  --franchise-gold-hint: #FFD166;      /* light gold hint                       */
+  --franchise-gold-dark: #9A7B2C;      /* bronze border                         */
+  --franchise-gold-bronze: #8B7635;    /* darker bronze                         */
+  --franchise-gold-deep: #5A5130;      /* dark gold-tinted surface              */
+  --franchise-gold-warn: #CC9900;      /* gold warning / caution                */
+
+  /* --- WIN / POSITIVE ----------------------------------------------------- */
+  --franchise-win: #00DD00;            /* win / positive (near --snes-neon-green
+                                          #00FF00 but DISTINCT — do not remap)  */
+  --franchise-win-text: #9DFFB0;       /* soft positive text                    */
+  --franchise-win-bright: #88DD44;     /* bright positive accent                */
+  --franchise-win-soft: #A8F08A;       /* soft positive fill                    */
+  --franchise-win-pale: #BFE6A8;       /* pale positive                         */
+  --franchise-win-mint: #A7F3D0;       /* mint positive                         */
+  --franchise-win-mint-alt: #A7F3C1;   /* mint positive (alt)                   */
+
+  /* --- LOSS / NEGATIVE ----------------------------------------------------- */
+  --franchise-loss: #DD0000;           /* loss / negative (near --snes-bright-red
+                                          #FF0000 but DISTINCT — do not remap)  */
+  --franchise-loss-alt: #DC3545;       /* alt red (warnings / danger)           */
+  --franchise-loss-deep: #8B0000;      /* dark red surface                      */
+  --franchise-loss-panel: #5A3F3F;     /* red-tinted panel background           */
+  --franchise-loss-panel-alt: #6B3F3F; /* red-tinted panel background (raised)   */
+  --franchise-loss-panel-deep: #4A1F1B;/* deep red-tinted panel                 */
+  --franchise-loss-border: #A3483D;    /* red border                            */
+  --franchise-loss-text: #FFD6D6;      /* light red text                        */
+  --franchise-loss-text-soft: #FFE0E0; /* lighter red text                      */
+  --franchise-loss-text-alt: #FFD7D2;  /* light red text (alt)                  */
+  --franchise-loss-text-alt2: #FFD7D7; /* light red text (alt 2)                */
+  --franchise-loss-bright: #FF6B6B;    /* bright red text                       */
+  --franchise-loss-orange: #FF9944;    /* red-orange accent                     */
+
+  /* --- INFO / BLUE -------------------------------------------------------- */
+  --franchise-info: #3366FF;           /* info accent (bg + border)             */
+  --franchise-info-bright: #5599FF;    /* brighter info text / fill             */
+  --franchise-info-deep: #4169E1;      /* royal-blue accent                     */
+  --franchise-link: #0066FF;           /* == theme.css --snes-bright-blue; kept
+                                          local (theme.css not runtime-wired)    */
+  --franchise-info-pale: #D8E7FF;      /* pale info text                        */
+  --franchise-info-steel: #A9BCD0;     /* steel-blue border                     */
+  --franchise-info-sage: #81B29A;      /* sage-blue border                      */
+
+  /* --- NEUTRAL / INK ------------------------------------------------------ */
+  --franchise-ink: #1A1A1A;            /* dark surface / overlay                */
+  --franchise-ink-soft: #2A2A2A;       /* slightly lighter dark surface         */
+}
+
+/* NOTE — the single inline-style literal `color: '#000'` on the news-category
+ * chip (FranchiseHome ~4754) is INTENTIONALLY left as a literal, NOT tokenized.
+ * Its background comes from the EXCLUDED `getCategoryColor()` JS data-map, and a
+ * `var(--franchise-black)` here would be pruned by the CSS minifier (no CSS-side
+ * reference, since it'd be used only from an inline JS style) → the var would not
+ * resolve at runtime and the text color would change. Pure black on a data-driven
+ * chip is not part of the franchise green identity, so a literal is correct. */

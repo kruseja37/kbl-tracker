@@ -156,10 +156,10 @@ function PlayoffGameResultChip({
     score: number,
   ) => (
     <div className="flex items-center justify-between gap-2">
-      <span className={game.result!.winnerId === teamId ? 'text-[#00DD00] font-bold' : 'text-[#E8E8D8]/70'}>
+      <span className={game.result!.winnerId === teamId ? 'text-[var(--franchise-win)] font-bold' : 'text-[var(--franchise-text)]/70'}>
         {label} {team ? `(${team.seed}) ${team.teamName}` : teamId}
       </span>
-      <span className={game.result!.winnerId === teamId ? 'text-[#00DD00] font-bold' : 'text-[#E8E8D8]'}>
+      <span className={game.result!.winnerId === teamId ? 'text-[var(--franchise-win)] font-bold' : 'text-[var(--franchise-text)]'}>
         {score}
       </span>
     </div>
@@ -167,10 +167,10 @@ function PlayoffGameResultChip({
 
   return (
     <div
-      className="bg-[#5A8352] p-2 text-[8px]"
+      className="bg-[var(--franchise-panel)] p-2 text-[8px]"
       data-testid={`playoff-game-score-${series.id}-${game.gameNumber}`}
     >
-      <div className="text-[8px] text-[#E8E8D8]/60 text-center mb-1">G{game.gameNumber}</div>
+      <div className="text-[8px] text-[var(--franchise-text)]/60 text-center mb-1">G{game.gameNumber}</div>
       {renderLine("A", awayTeam, game.awayTeamId, game.result.awayScore)}
       {renderLine("H", homeTeam, game.homeTeamId, game.result.homeScore)}
     </div>
@@ -192,25 +192,25 @@ async function getVisibleFranchiseTeam(franchiseId: string | undefined, teamId: 
 
 function FranchiseV1OffseasonGate() {
   return (
-    <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-8">
+    <div className="bg-[var(--franchise-header)] border-[5px] border-[var(--franchise-border)] p-8">
       <div className="max-w-3xl mx-auto text-center">
-        <div className="text-xl text-[#E8E8D8] font-bold mb-2">FRANCHISE V1 RELEASE GATE</div>
-        <div className="text-sm text-[#E8E8D8]/75 mb-6">
+        <div className="text-xl text-[var(--franchise-text)] font-bold mb-2">FRANCHISE V1 RELEASE GATE</div>
+        <div className="text-sm text-[var(--franchise-text)]/75 mb-6">
           Offseason execution is deferred for this release. Existing-roster handoff, manual schedules,
           score-only results, GameTracker, transactions, playoffs, and read-only summaries remain available.
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-left">
-          <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-3">
-            <div className="text-[10px] text-[#C4A853] font-bold mb-1">DEFERRED</div>
-            <div className="text-[9px] text-[#E8E8D8]/70">Awards, retirements, free agency, draft, spring training, and season rollover execution.</div>
+          <div className="bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-border)] p-3">
+            <div className="text-[10px] text-[var(--franchise-gold)] font-bold mb-1">DEFERRED</div>
+            <div className="text-[9px] text-[var(--franchise-text)]/70">Awards, retirements, free agency, draft, spring training, and season rollover execution.</div>
           </div>
-          <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-3">
-            <div className="text-[10px] text-[#C4A853] font-bold mb-1">NO MUTATION</div>
-            <div className="text-[9px] text-[#E8E8D8]/70">This gate does not change League Builder templates, salaries, morale, or franchise rosters.</div>
+          <div className="bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-border)] p-3">
+            <div className="text-[10px] text-[var(--franchise-gold)] font-bold mb-1">NO MUTATION</div>
+            <div className="text-[9px] text-[var(--franchise-text)]/70">This gate does not change League Builder templates, salaries, morale, or franchise rosters.</div>
           </div>
-          <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-3">
-            <div className="text-[10px] text-[#C4A853] font-bold mb-1">AVAILABLE</div>
-            <div className="text-[9px] text-[#E8E8D8]/70">Use Museum and season summary surfaces for read-only review.</div>
+          <div className="bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-border)] p-3">
+            <div className="text-[10px] text-[var(--franchise-gold)] font-bold mb-1">AVAILABLE</div>
+            <div className="text-[9px] text-[var(--franchise-text)]/70">Use Museum and season summary surfaces for read-only review.</div>
           </div>
         </div>
       </div>
@@ -1239,58 +1239,58 @@ export function FranchiseHome() {
 
   return (
     <FranchiseDataContext.Provider value={franchiseData}>
-    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#567A50] text-white">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[var(--franchise-field)] text-white">
       {/* Header with logo */}
-      <div className="bg-[#6B9462] border-b-[6px] border-[#4A6844] px-4 py-3">
-        <div className="mx-auto flex w-full max-w-7xl min-w-0 items-center justify-between gap-4 bg-[#5A8352] px-4 py-4 sm:px-6">
+      <div className="bg-[var(--franchise-header)] border-b-[6px] border-[var(--franchise-border)] px-4 py-3">
+        <div className="mx-auto flex w-full max-w-7xl min-w-0 items-center justify-between gap-4 bg-[var(--franchise-panel)] px-4 py-4 sm:px-6">
           <button
             onClick={handleLogoClick}
             className="hover:scale-105 transition-transform active:scale-95"
           >
-            <div className="bg-white border-2 border-[#0066FF] px-2 py-1 shadow-[3px_3px_0px_0px_#DD0000]">
-              <div className="text-[8px] text-[#DD0000] leading-tight tracking-wide">SUPER</div>
-              <div className="text-[8px] text-[#DD0000] leading-tight tracking-wide">MEGA</div>
-              <div className="text-[9px] text-[#0066FF] leading-tight tracking-wide">BASEBALL</div>
+            <div className="bg-white border-2 border-[var(--franchise-link)] px-2 py-1 shadow-[3px_3px_0px_0px_#DD0000]">
+              <div className="text-[8px] text-[var(--franchise-loss)] leading-tight tracking-wide">SUPER</div>
+              <div className="text-[8px] text-[var(--franchise-loss)] leading-tight tracking-wide">MEGA</div>
+              <div className="text-[9px] text-[var(--franchise-link)] leading-tight tracking-wide">BASEBALL</div>
             </div>
           </button>
 
           {/* League name - centered */}
           <div className="min-w-0 text-center">
-            <div className="truncate text-[14px] text-[#E8E8D8] sm:text-[16px]" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>{leagueName}</div>
-            <div className="text-[8px] text-[#E8E8D8]/70">
+            <div className="truncate text-[14px] text-[var(--franchise-text)] sm:text-[16px]" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>{leagueName}</div>
+            <div className="text-[8px] text-[var(--franchise-text)]/70">
               SEASON {currentSeason} • WEEK {franchiseData.currentWeek}
-              {franchiseData.hasRealData && <span className="ml-2 text-[#C4A853]">●</span>}
+              {franchiseData.hasRealData && <span className="ml-2 text-[var(--franchise-gold)]">●</span>}
             </div>
           </div>
 
           <button
             onClick={handleLogoClick}
-            className="p-2 hover:bg-[#4A6844] border-2 border-[#4A6844] active:scale-95 transition"
+            className="p-2 hover:bg-[var(--franchise-border)] border-2 border-[var(--franchise-border)] active:scale-95 transition"
           >
-            <Home className="w-5 h-5 text-[#E8E8D8]" />
+            <Home className="w-5 h-5 text-[var(--franchise-text)]" />
           </button>
         </div>
       </div>
 
       {/* Season phase toggle */}
-      <div className="bg-[#6B9462] border-b-4 border-[#4A6844]">
+      <div className="bg-[var(--franchise-header)] border-b-4 border-[var(--franchise-border)]">
         <div className="mx-auto flex w-full max-w-7xl min-w-0">
           <button
             onClick={() => setSeasonPhase("regular")}
-            className={`min-w-0 flex-1 border-r-4 border-[#4A6844] px-1 py-2 text-[9px] transition sm:text-sm ${
+            className={`min-w-0 flex-1 border-r-4 border-[var(--franchise-border)] px-1 py-2 text-[9px] transition sm:text-sm ${
               seasonPhase === "regular"
-                ? "bg-[#4A6844] text-[#E8E8D8]"
-                : "bg-[#5A8352] text-[#E8E8D8]/60 hover:bg-[#4F7D4B]"
+                ? "bg-[var(--franchise-border)] text-[var(--franchise-text)]"
+                : "bg-[var(--franchise-panel)] text-[var(--franchise-text)]/60 hover:bg-[var(--franchise-field-raised)]"
             }`}
           >
             REGULAR SEASON
           </button>
           <button
             onClick={() => setSeasonPhase("playoffs")}
-            className={`min-w-0 flex-1 border-r-4 border-[#4A6844] px-1 py-2 text-[9px] transition sm:text-sm ${
+            className={`min-w-0 flex-1 border-r-4 border-[var(--franchise-border)] px-1 py-2 text-[9px] transition sm:text-sm ${
               seasonPhase === "playoffs"
-                ? "bg-[#4A6844] text-[#E8E8D8]"
-                : "bg-[#5A8352] text-[#E8E8D8]/60 hover:bg-[#4F7D4B]"
+                ? "bg-[var(--franchise-border)] text-[var(--franchise-text)]"
+                : "bg-[var(--franchise-panel)] text-[var(--franchise-text)]/60 hover:bg-[var(--franchise-field-raised)]"
             }`}
           >
             PLAYOFFS
@@ -1299,8 +1299,8 @@ export function FranchiseHome() {
             onClick={() => setSeasonPhase("offseason")}
             className={`min-w-0 flex-1 px-1 py-2 text-[9px] transition sm:text-sm ${
               seasonPhase === "offseason"
-                ? "bg-[#4A6844] text-[#E8E8D8]"
-                : "bg-[#5A8352] text-[#E8E8D8]/60 hover:bg-[#4F7D4B]"
+                ? "bg-[var(--franchise-border)] text-[var(--franchise-text)]"
+                : "bg-[var(--franchise-panel)] text-[var(--franchise-text)]/60 hover:bg-[var(--franchise-field-raised)]"
             }`}
           >
             OFFSEASON
@@ -1309,17 +1309,17 @@ export function FranchiseHome() {
       </div>
 
       {/* Sub-tabs */}
-      <div className="bg-[#6B9462] overflow-x-auto border-b-4 border-[#4A6844]">
+      <div className="bg-[var(--franchise-header)] overflow-x-auto border-b-4 border-[var(--franchise-border)]">
         <div className={`mx-auto flex w-max min-w-full max-w-7xl ${seasonPhase === "regular" ? "gap-0" : "gap-0"}`}>
           {currentTabs.map((tab, index) => {
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as TabType)}
-                className={`flex-1 px-2 py-2 text-[8px] whitespace-nowrap transition border-r-2 border-[#4A6844] ${
+                className={`flex-1 px-2 py-2 text-[8px] whitespace-nowrap transition border-r-2 border-[var(--franchise-border)] ${
                   activeTab === tab.id
-                    ? "bg-[#4A6844] text-[#E8E8D8]"
-                    : "text-[#E8E8D8]/60 hover:bg-[#5A8352]"
+                    ? "bg-[var(--franchise-border)] text-[var(--franchise-text)]"
+                    : "text-[var(--franchise-text)]/60 hover:bg-[var(--franchise-panel)]"
                 }`}
               >
                 {tab.label}
@@ -1330,29 +1330,29 @@ export function FranchiseHome() {
       </div>
 
       {/* Content area */}
-      <div className="mx-auto w-full max-w-7xl bg-[#567A50] p-4">
+      <div className="mx-auto w-full max-w-7xl bg-[var(--franchise-field)] p-4">
         {/* Offseason Phase Progress Banner */}
         {seasonPhase === "offseason" && offseasonState.state && (
-          <div className="mb-4 bg-[#6B9462] border-[5px] border-[#C4A853] p-4">
+          <div className="mb-4 bg-[var(--franchise-header)] border-[5px] border-[var(--franchise-gold)] p-4">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <div className="text-[14px] text-[#C4A853] font-bold" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
+                <div className="text-[14px] text-[var(--franchise-gold)] font-bold" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
                   OFFSEASON — PHASE {offseasonState.currentPhaseIndex + 1} OF {offseasonState.totalPhases}
                 </div>
-                <div className="text-[11px] text-[#E8E8D8] mt-1">
+                <div className="text-[11px] text-[var(--franchise-text)] mt-1">
                   {offseasonState.phaseName}
                 </div>
               </div>
               <div className="flex items-center gap-3">
                 {!FRANCHISE_V1_OFFSEASON_EXECUTION_ENABLED ? (
-                  <div className="bg-[#4A6844] border-[3px] border-[#5A8352] px-5 py-2 text-sm text-[#E8E8D8]/70">
+                  <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel)] px-5 py-2 text-sm text-[var(--franchise-text)]/70">
                     OFFSEASON EXECUTION DEFERRED
                   </div>
                 ) : offseasonState.isOffseasonComplete ? (
                   <button
                     onClick={handleStartNewSeason}
                     disabled={isStartingNewSeason}
-                    className="bg-[#C4A853] text-black px-6 py-3 text-sm font-bold hover:bg-[#D4B863] active:scale-95 transition-all shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="bg-[var(--franchise-gold)] text-black px-6 py-3 text-sm font-bold hover:bg-[var(--franchise-gold-light)] active:scale-95 transition-all shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     {isStartingNewSeason ? "STARTING..." : `START SEASON ${currentSeason + 1}`}
                   </button>
@@ -1360,7 +1360,7 @@ export function FranchiseHome() {
                   <button
                     onClick={handleAdvancePhase}
                     disabled={offseasonState.isLoading}
-                    className="bg-[#5A8352] border-[3px] border-[#4A6844] px-5 py-2 text-sm text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-all disabled:opacity-50"
+                    className="bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-border)] px-5 py-2 text-sm text-[var(--franchise-text)] hover:bg-[var(--franchise-field-raised)] active:scale-95 transition-all disabled:opacity-50"
                   >
                     {offseasonState.isLoading ? "ADVANCING..." : offseasonState.canAdvance ? "ADVANCE TO NEXT PHASE" : "COMPLETE PHASE & ADVANCE"}
                   </button>
@@ -1368,14 +1368,14 @@ export function FranchiseHome() {
               </div>
             </div>
             {/* Progress bar */}
-            <div className="w-full bg-[#4A6844] h-2 border border-[#3A5834]">
+            <div className="w-full bg-[var(--franchise-border)] h-2 border border-[var(--franchise-panel-moss)]">
               <div
-                className="bg-[#C4A853] h-full transition-all duration-500"
+                className="bg-[var(--franchise-gold)] h-full transition-all duration-500"
                 style={{ width: `${offseasonState.progress}%` }}
               />
             </div>
             {startSeasonError && (
-              <div role="alert" className="mt-3 bg-[#DD0000]/20 border-2 border-[#DD0000] p-3 text-xs text-[#E8E8D8]">
+              <div role="alert" className="mt-3 bg-[var(--franchise-loss)]/20 border-2 border-[var(--franchise-loss)] p-3 text-xs text-[var(--franchise-text)]">
                 {startSeasonError}
               </div>
             )}
@@ -1397,10 +1397,10 @@ export function FranchiseHome() {
                     }}
                     className={`w-5 h-5 rounded-full border-2 text-[7px] flex items-center justify-center transition-all ${
                       isComplete
-                        ? "bg-[#C4A853] border-[#C4A853] text-black"
+                        ? "bg-[var(--franchise-gold)] border-[var(--franchise-gold)] text-black"
                         : isCurrent
-                        ? "bg-[#5A8352] border-[#C4A853] text-[#E8E8D8] animate-pulse"
-                        : "bg-[#4A6844] border-[#4A6844] text-[#E8E8D8]/40"
+                        ? "bg-[var(--franchise-panel)] border-[var(--franchise-gold)] text-[var(--franchise-text)] animate-pulse"
+                        : "bg-[var(--franchise-border)] border-[var(--franchise-border)] text-[var(--franchise-text)]/40"
                     }`}
                     title={offseasonState.getPhaseDisplayName(phase)}
                   >
@@ -1482,21 +1482,21 @@ export function FranchiseHome() {
           <TradeFlow seasonId={activeSeasonId} seasonNumber={currentSeason} franchiseId={franchiseId!} />
         )}
         {activeTab === "allstar" && (
-          <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-6">
+          <div className="bg-[var(--franchise-header)] border-[5px] border-[var(--franchise-border)] p-6">
             {/* League Toggle */}
             <div className="flex gap-3 mb-6">
               <button
                 onClick={() => setAllStarLeague("Eastern")}
-                className={`flex-1 py-3 px-4 border-[4px] border-[#4A6844] transition ${
-                  allStarLeague === "Eastern" ? "bg-[#4A6844] text-[#E8E8D8]" : "bg-[#5A8352] text-[#E8E8D8]/70 hover:bg-[#4F7D4B]"
+                className={`flex-1 py-3 px-4 border-[4px] border-[var(--franchise-border)] transition ${
+                  allStarLeague === "Eastern" ? "bg-[var(--franchise-border)] text-[var(--franchise-text)]" : "bg-[var(--franchise-panel)] text-[var(--franchise-text)]/70 hover:bg-[var(--franchise-field-raised)]"
                 }`}
               >
                 <div className="text-[11px] font-bold">EASTERN LEAGUE</div>
               </button>
               <button
                 onClick={() => setAllStarLeague("Western")}
-                className={`flex-1 py-3 px-4 border-[4px] border-[#4A6844] transition ${
-                  allStarLeague === "Western" ? "bg-[#4A6844] text-[#E8E8D8]" : "bg-[#5A8352] text-[#E8E8D8]/70 hover:bg-[#4F7D4B]"
+                className={`flex-1 py-3 px-4 border-[4px] border-[var(--franchise-border)] transition ${
+                  allStarLeague === "Western" ? "bg-[var(--franchise-border)] text-[var(--franchise-text)]" : "bg-[var(--franchise-panel)] text-[var(--franchise-text)]/70 hover:bg-[var(--franchise-field-raised)]"
                 }`}
               >
                 <div className="text-[11px] font-bold">WESTERN LEAGUE</div>
@@ -1507,14 +1507,14 @@ export function FranchiseHome() {
             <div className="grid grid-cols-3 gap-4 mb-6">
               {/* Left Field */}
               <div className="col-span-1">
-                <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-3">
-                  <div className="text-[9px] text-[#E8E8D8] font-bold mb-2 text-center">LF</div>
+                <div className="bg-[var(--franchise-panel)] border-[4px] border-[var(--franchise-border)] p-3">
+                  <div className="text-[9px] text-[var(--franchise-text)] font-bold mb-2 text-center">LF</div>
                   {getTopPlayerByPosition(allStarLeague, "LF") && (
-                    <div className="bg-[#4A6844] border-[3px] border-[#C4A853] p-2">
-                      <div className="text-[9px] text-[#E8E8D8] font-bold">{getTopPlayerByPosition(allStarLeague, "LF")?.name}</div>
-                      <div className="text-[7px] text-[#E8E8D8]/70">{getTopPlayerByPosition(allStarLeague, "LF")?.team}</div>
-                      <div className="text-[8px] text-[#E8E8D8] font-bold mt-1">
-                        <Star className="w-3 h-3 inline mr-1 text-[#C4A853]" />
+                    <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-gold)] p-2">
+                      <div className="text-[9px] text-[var(--franchise-text)] font-bold">{getTopPlayerByPosition(allStarLeague, "LF")?.name}</div>
+                      <div className="text-[7px] text-[var(--franchise-text)]/70">{getTopPlayerByPosition(allStarLeague, "LF")?.team}</div>
+                      <div className="text-[8px] text-[var(--franchise-text)] font-bold mt-1">
+                        <Star className="w-3 h-3 inline mr-1 text-[var(--franchise-gold)]" />
                         {getTopPlayerByPosition(allStarLeague, "LF")?.votes.toLocaleString()} votes
                       </div>
                     </div>
@@ -1524,14 +1524,14 @@ export function FranchiseHome() {
 
               {/* Center Field */}
               <div className="col-span-1">
-                <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-3">
-                  <div className="text-[9px] text-[#E8E8D8] font-bold mb-2 text-center">CF</div>
+                <div className="bg-[var(--franchise-panel)] border-[4px] border-[var(--franchise-border)] p-3">
+                  <div className="text-[9px] text-[var(--franchise-text)] font-bold mb-2 text-center">CF</div>
                   {getTopPlayerByPosition(allStarLeague, "CF") && (
-                    <div className="bg-[#4A6844] border-[3px] border-[#C4A853] p-2">
-                      <div className="text-[9px] text-[#E8E8D8] font-bold">{getTopPlayerByPosition(allStarLeague, "CF")?.name}</div>
-                      <div className="text-[7px] text-[#E8E8D8]/70">{getTopPlayerByPosition(allStarLeague, "CF")?.team}</div>
-                      <div className="text-[8px] text-[#E8E8D8] font-bold mt-1">
-                        <Star className="w-3 h-3 inline mr-1 text-[#C4A853]" />
+                    <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-gold)] p-2">
+                      <div className="text-[9px] text-[var(--franchise-text)] font-bold">{getTopPlayerByPosition(allStarLeague, "CF")?.name}</div>
+                      <div className="text-[7px] text-[var(--franchise-text)]/70">{getTopPlayerByPosition(allStarLeague, "CF")?.team}</div>
+                      <div className="text-[8px] text-[var(--franchise-text)] font-bold mt-1">
+                        <Star className="w-3 h-3 inline mr-1 text-[var(--franchise-gold)]" />
                         {getTopPlayerByPosition(allStarLeague, "CF")?.votes.toLocaleString()} votes
                       </div>
                     </div>
@@ -1541,14 +1541,14 @@ export function FranchiseHome() {
 
               {/* Right Field */}
               <div className="col-span-1">
-                <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-3">
-                  <div className="text-[9px] text-[#E8E8D8] font-bold mb-2 text-center">RF</div>
+                <div className="bg-[var(--franchise-panel)] border-[4px] border-[var(--franchise-border)] p-3">
+                  <div className="text-[9px] text-[var(--franchise-text)] font-bold mb-2 text-center">RF</div>
                   {getTopPlayerByPosition(allStarLeague, "RF") && (
-                    <div className="bg-[#4A6844] border-[3px] border-[#C4A853] p-2">
-                      <div className="text-[9px] text-[#E8E8D8] font-bold">{getTopPlayerByPosition(allStarLeague, "RF")?.name}</div>
-                      <div className="text-[7px] text-[#E8E8D8]/70">{getTopPlayerByPosition(allStarLeague, "RF")?.team}</div>
-                      <div className="text-[8px] text-[#E8E8D8] font-bold mt-1">
-                        <Star className="w-3 h-3 inline mr-1 text-[#C4A853]" />
+                    <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-gold)] p-2">
+                      <div className="text-[9px] text-[var(--franchise-text)] font-bold">{getTopPlayerByPosition(allStarLeague, "RF")?.name}</div>
+                      <div className="text-[7px] text-[var(--franchise-text)]/70">{getTopPlayerByPosition(allStarLeague, "RF")?.team}</div>
+                      <div className="text-[8px] text-[var(--franchise-text)] font-bold mt-1">
+                        <Star className="w-3 h-3 inline mr-1 text-[var(--franchise-gold)]" />
                         {getTopPlayerByPosition(allStarLeague, "RF")?.votes.toLocaleString()} votes
                       </div>
                     </div>
@@ -1561,14 +1561,14 @@ export function FranchiseHome() {
             <div className="grid grid-cols-4 gap-4 mb-6">
               {/* Third Base */}
               <div className="col-span-1">
-                <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-3">
-                  <div className="text-[9px] text-[#E8E8D8] font-bold mb-2 text-center">3B</div>
+                <div className="bg-[var(--franchise-panel)] border-[4px] border-[var(--franchise-border)] p-3">
+                  <div className="text-[9px] text-[var(--franchise-text)] font-bold mb-2 text-center">3B</div>
                   {getTopPlayerByPosition(allStarLeague, "3B") && (
-                    <div className="bg-[#4A6844] border-[3px] border-[#C4A853] p-2">
-                      <div className="text-[9px] text-[#E8E8D8] font-bold">{getTopPlayerByPosition(allStarLeague, "3B")?.name}</div>
-                      <div className="text-[7px] text-[#E8E8D8]/70">{getTopPlayerByPosition(allStarLeague, "3B")?.team}</div>
-                      <div className="text-[8px] text-[#E8E8D8] font-bold mt-1">
-                        <Star className="w-3 h-3 inline mr-1 text-[#C4A853]" />
+                    <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-gold)] p-2">
+                      <div className="text-[9px] text-[var(--franchise-text)] font-bold">{getTopPlayerByPosition(allStarLeague, "3B")?.name}</div>
+                      <div className="text-[7px] text-[var(--franchise-text)]/70">{getTopPlayerByPosition(allStarLeague, "3B")?.team}</div>
+                      <div className="text-[8px] text-[var(--franchise-text)] font-bold mt-1">
+                        <Star className="w-3 h-3 inline mr-1 text-[var(--franchise-gold)]" />
                         {getTopPlayerByPosition(allStarLeague, "3B")?.votes.toLocaleString()} votes
                       </div>
                     </div>
@@ -1578,14 +1578,14 @@ export function FranchiseHome() {
 
               {/* Shortstop */}
               <div className="col-span-1">
-                <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-3">
-                  <div className="text-[9px] text-[#E8E8D8] font-bold mb-2 text-center">SS</div>
+                <div className="bg-[var(--franchise-panel)] border-[4px] border-[var(--franchise-border)] p-3">
+                  <div className="text-[9px] text-[var(--franchise-text)] font-bold mb-2 text-center">SS</div>
                   {getTopPlayerByPosition(allStarLeague, "SS") && (
-                    <div className="bg-[#4A6844] border-[3px] border-[#C4A853] p-2">
-                      <div className="text-[9px] text-[#E8E8D8] font-bold">{getTopPlayerByPosition(allStarLeague, "SS")?.name}</div>
-                      <div className="text-[7px] text-[#E8E8D8]/70">{getTopPlayerByPosition(allStarLeague, "SS")?.team}</div>
-                      <div className="text-[8px] text-[#E8E8D8] font-bold mt-1">
-                        <Star className="w-3 h-3 inline mr-1 text-[#C4A853]" />
+                    <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-gold)] p-2">
+                      <div className="text-[9px] text-[var(--franchise-text)] font-bold">{getTopPlayerByPosition(allStarLeague, "SS")?.name}</div>
+                      <div className="text-[7px] text-[var(--franchise-text)]/70">{getTopPlayerByPosition(allStarLeague, "SS")?.team}</div>
+                      <div className="text-[8px] text-[var(--franchise-text)] font-bold mt-1">
+                        <Star className="w-3 h-3 inline mr-1 text-[var(--franchise-gold)]" />
                         {getTopPlayerByPosition(allStarLeague, "SS")?.votes.toLocaleString()} votes
                       </div>
                     </div>
@@ -1595,14 +1595,14 @@ export function FranchiseHome() {
 
               {/* Second Base */}
               <div className="col-span-1">
-                <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-3">
-                  <div className="text-[9px] text-[#E8E8D8] font-bold mb-2 text-center">2B</div>
+                <div className="bg-[var(--franchise-panel)] border-[4px] border-[var(--franchise-border)] p-3">
+                  <div className="text-[9px] text-[var(--franchise-text)] font-bold mb-2 text-center">2B</div>
                   {getTopPlayerByPosition(allStarLeague, "2B") && (
-                    <div className="bg-[#4A6844] border-[3px] border-[#C4A853] p-2">
-                      <div className="text-[9px] text-[#E8E8D8] font-bold">{getTopPlayerByPosition(allStarLeague, "2B")?.name}</div>
-                      <div className="text-[7px] text-[#E8E8D8]/70">{getTopPlayerByPosition(allStarLeague, "2B")?.team}</div>
-                      <div className="text-[8px] text-[#E8E8D8] font-bold mt-1">
-                        <Star className="w-3 h-3 inline mr-1 text-[#C4A853]" />
+                    <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-gold)] p-2">
+                      <div className="text-[9px] text-[var(--franchise-text)] font-bold">{getTopPlayerByPosition(allStarLeague, "2B")?.name}</div>
+                      <div className="text-[7px] text-[var(--franchise-text)]/70">{getTopPlayerByPosition(allStarLeague, "2B")?.team}</div>
+                      <div className="text-[8px] text-[var(--franchise-text)] font-bold mt-1">
+                        <Star className="w-3 h-3 inline mr-1 text-[var(--franchise-gold)]" />
                         {getTopPlayerByPosition(allStarLeague, "2B")?.votes.toLocaleString()} votes
                       </div>
                     </div>
@@ -1612,14 +1612,14 @@ export function FranchiseHome() {
 
               {/* First Base */}
               <div className="col-span-1">
-                <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-3">
-                  <div className="text-[9px] text-[#E8E8D8] font-bold mb-2 text-center">1B</div>
+                <div className="bg-[var(--franchise-panel)] border-[4px] border-[var(--franchise-border)] p-3">
+                  <div className="text-[9px] text-[var(--franchise-text)] font-bold mb-2 text-center">1B</div>
                   {getTopPlayerByPosition(allStarLeague, "1B") && (
-                    <div className="bg-[#4A6844] border-[3px] border-[#C4A853] p-2">
-                      <div className="text-[9px] text-[#E8E8D8] font-bold">{getTopPlayerByPosition(allStarLeague, "1B")?.name}</div>
-                      <div className="text-[7px] text-[#E8E8D8]/70">{getTopPlayerByPosition(allStarLeague, "1B")?.team}</div>
-                      <div className="text-[8px] text-[#E8E8D8] font-bold mt-1">
-                        <Star className="w-3 h-3 inline mr-1 text-[#C4A853]" />
+                    <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-gold)] p-2">
+                      <div className="text-[9px] text-[var(--franchise-text)] font-bold">{getTopPlayerByPosition(allStarLeague, "1B")?.name}</div>
+                      <div className="text-[7px] text-[var(--franchise-text)]/70">{getTopPlayerByPosition(allStarLeague, "1B")?.team}</div>
+                      <div className="text-[8px] text-[var(--franchise-text)] font-bold mt-1">
+                        <Star className="w-3 h-3 inline mr-1 text-[var(--franchise-gold)]" />
                         {getTopPlayerByPosition(allStarLeague, "1B")?.votes.toLocaleString()} votes
                       </div>
                     </div>
@@ -1631,14 +1631,14 @@ export function FranchiseHome() {
             {/* Catcher */}
             <div className="grid grid-cols-3 gap-4 mb-6">
               <div className="col-start-2">
-                <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-3">
-                  <div className="text-[9px] text-[#E8E8D8] font-bold mb-2 text-center">C</div>
+                <div className="bg-[var(--franchise-panel)] border-[4px] border-[var(--franchise-border)] p-3">
+                  <div className="text-[9px] text-[var(--franchise-text)] font-bold mb-2 text-center">C</div>
                   {getTopPlayerByPosition(allStarLeague, "C") && (
-                    <div className="bg-[#4A6844] border-[3px] border-[#C4A853] p-2">
-                      <div className="text-[9px] text-[#E8E8D8] font-bold">{getTopPlayerByPosition(allStarLeague, "C")?.name}</div>
-                      <div className="text-[7px] text-[#E8E8D8]/70">{getTopPlayerByPosition(allStarLeague, "C")?.team}</div>
-                      <div className="text-[8px] text-[#E8E8D8] font-bold mt-1">
-                        <Star className="w-3 h-3 inline mr-1 text-[#C4A853]" />
+                    <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-gold)] p-2">
+                      <div className="text-[9px] text-[var(--franchise-text)] font-bold">{getTopPlayerByPosition(allStarLeague, "C")?.name}</div>
+                      <div className="text-[7px] text-[var(--franchise-text)]/70">{getTopPlayerByPosition(allStarLeague, "C")?.team}</div>
+                      <div className="text-[8px] text-[var(--franchise-text)] font-bold mt-1">
+                        <Star className="w-3 h-3 inline mr-1 text-[var(--franchise-gold)]" />
                         {getTopPlayerByPosition(allStarLeague, "C")?.votes.toLocaleString()} votes
                       </div>
                     </div>
@@ -1648,17 +1648,17 @@ export function FranchiseHome() {
             </div>
 
             {/* Bench Players */}
-            <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-4 mb-6">
-              <div className="text-[10px] text-[#E8E8D8] font-bold mb-3 flex items-center gap-2">
+            <div className="bg-[var(--franchise-panel)] border-[4px] border-[var(--franchise-border)] p-4 mb-6">
+              <div className="text-[10px] text-[var(--franchise-text)] font-bold mb-3 flex items-center gap-2">
                 <Users className="w-4 h-4" />
                 BENCH (POSITION PLAYERS)
               </div>
               <div className="grid grid-cols-5 gap-3">
                 {getBenchPlayers(allStarLeague).map((player, idx) => (
-                  <div key={idx} className="bg-[#4A6844] border-[3px] border-[#E8E8D8]/30 p-2">
-                    <div className="text-[8px] text-[#E8E8D8] font-bold">{player.name}</div>
-                    <div className="text-[7px] text-[#E8E8D8]/70">{player.pos} • {player.team}</div>
-                    <div className="text-[7px] text-[#E8E8D8] font-bold mt-1">
+                  <div key={idx} className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-text)]/30 p-2">
+                    <div className="text-[8px] text-[var(--franchise-text)] font-bold">{player.name}</div>
+                    <div className="text-[7px] text-[var(--franchise-text)]/70">{player.pos} • {player.team}</div>
+                    <div className="text-[7px] text-[var(--franchise-text)] font-bold mt-1">
                       {player.votes.toLocaleString()} votes
                     </div>
                   </div>
@@ -1669,23 +1669,23 @@ export function FranchiseHome() {
             {/* Pitchers Section */}
             <div className="grid grid-cols-2 gap-4">
               {/* Starting Pitchers */}
-              <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-4">
-                <div className="text-[10px] text-[#E8E8D8] font-bold mb-3 flex items-center gap-2">
+              <div className="bg-[var(--franchise-panel)] border-[4px] border-[var(--franchise-border)] p-4">
+                <div className="text-[10px] text-[var(--franchise-text)] font-bold mb-3 flex items-center gap-2">
                   <TrendingUp className="w-4 h-4" />
                   STARTING PITCHERS
                 </div>
                 <div className="space-y-2">
                   {getStartingPitchers(allStarLeague).map((player, idx) => (
-                    <div key={idx} className={`bg-[#4A6844] border-[3px] p-2 ${idx === 0 ? 'border-[#C4A853]' : 'border-[#E8E8D8]/30'}`}>
+                    <div key={idx} className={`bg-[var(--franchise-border)] border-[3px] p-2 ${idx === 0 ? 'border-[var(--franchise-gold)]' : 'border-[var(--franchise-text)]/30'}`}>
                       <div className="flex justify-between items-start">
                         <div>
-                          <div className={`text-[8px] font-bold ${idx === 0 ? 'text-[#C4A853]' : 'text-[#E8E8D8]'}`}>
+                          <div className={`text-[8px] font-bold ${idx === 0 ? 'text-[var(--franchise-gold)]' : 'text-[var(--franchise-text)]'}`}>
                             {idx === 0 && <Star className="w-3 h-3 inline mr-1" />}
                             {player.name}
                           </div>
-                          <div className="text-[7px] text-[#E8E8D8]/70">{player.team}</div>
+                          <div className="text-[7px] text-[var(--franchise-text)]/70">{player.team}</div>
                         </div>
-                        <div className="text-[7px] text-[#E8E8D8] font-bold">
+                        <div className="text-[7px] text-[var(--franchise-text)] font-bold">
                           {player.votes.toLocaleString()}
                         </div>
                       </div>
@@ -1695,23 +1695,23 @@ export function FranchiseHome() {
               </div>
 
               {/* Relief Pitchers */}
-              <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-4">
-                <div className="text-[10px] text-[#E8E8D8] font-bold mb-3 flex items-center gap-2">
+              <div className="bg-[var(--franchise-panel)] border-[4px] border-[var(--franchise-border)] p-4">
+                <div className="text-[10px] text-[var(--franchise-text)] font-bold mb-3 flex items-center gap-2">
                   <TrendingDown className="w-4 h-4" />
                   RELIEF PITCHERS
                 </div>
                 <div className="space-y-2">
                   {getReliefPitchers(allStarLeague).map((player, idx) => (
-                    <div key={idx} className={`bg-[#4A6844] border-[3px] p-2 ${idx === 0 ? 'border-[#C4A853]' : 'border-[#E8E8D8]/30'}`}>
+                    <div key={idx} className={`bg-[var(--franchise-border)] border-[3px] p-2 ${idx === 0 ? 'border-[var(--franchise-gold)]' : 'border-[var(--franchise-text)]/30'}`}>
                       <div className="flex justify-between items-start">
                         <div>
-                          <div className={`text-[8px] font-bold ${idx === 0 ? 'text-[#C4A853]' : 'text-[#E8E8D8]'}`}>
+                          <div className={`text-[8px] font-bold ${idx === 0 ? 'text-[var(--franchise-gold)]' : 'text-[var(--franchise-text)]'}`}>
                             {idx === 0 && <Star className="w-3 h-3 inline mr-1" />}
                             {player.name}
                           </div>
-                          <div className="text-[7px] text-[#E8E8D8]/70">{player.team}</div>
+                          <div className="text-[7px] text-[var(--franchise-text)]/70">{player.team}</div>
                         </div>
-                        <div className="text-[7px] text-[#E8E8D8] font-bold">
+                        <div className="text-[7px] text-[var(--franchise-text)] font-bold">
                           {player.votes.toLocaleString()}
                         </div>
                       </div>
@@ -1726,10 +1726,10 @@ export function FranchiseHome() {
           <div className="space-y-4">
             <div
               data-testid="franchise-v1-global-museum-notice"
-              className="bg-[#4A6844] border-[4px] border-[#C4A853] p-4 text-center"
+              className="bg-[var(--franchise-border)] border-[4px] border-[var(--franchise-gold)] p-4 text-center"
             >
-              <div className="text-[10px] text-[#C4A853] font-bold mb-1">GLOBAL MUSEUM NOTICE</div>
-              <div className="text-[9px] text-[#E8E8D8]/80">
+              <div className="text-[10px] text-[var(--franchise-gold)] font-bold mb-1">GLOBAL MUSEUM NOTICE</div>
+              <div className="text-[9px] text-[var(--franchise-text)]/80">
                 This read-only Museum is global and not franchise-scoped in internal v1.
               </div>
             </div>
@@ -1739,10 +1739,10 @@ export function FranchiseHome() {
         
         {/* Playoff Tabs Content */}
         {activeTab === "bracket" && (
-          <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-8">
+          <div className="bg-[var(--franchise-header)] border-[5px] border-[var(--franchise-border)] p-8">
             <div className="text-center mb-8">
-              <h2 className="text-2xl text-[#E8E8D8] font-bold mb-2">PLAYOFF BRACKET</h2>
-              <div className="text-sm text-[#E8E8D8]/70">
+              <h2 className="text-2xl text-[var(--franchise-text)] font-bold mb-2">PLAYOFF BRACKET</h2>
+              <div className="text-sm text-[var(--franchise-text)]/70">
                 {playoffData.playoff ? `Season ${playoffData.playoff.seasonNumber} Postseason` : `Season ${currentSeason} Postseason`}
               </div>
               {playoffData.playoff?.status === 'COMPLETED' && playoffData.playoff.champion && (() => {
@@ -1761,23 +1761,23 @@ export function FranchiseHome() {
                 return (
                   <div className="mt-6 space-y-4">
                     {/* Champion Banner */}
-                    <div className="bg-gradient-to-b from-[#4A6844] via-[#FFD700]/10 to-[#4A6844] border-[4px] border-[#FFD700] p-8">
-                      <div className="text-3xl text-[#FFD700] font-bold animate-pulse mb-2">
+                    <div className="bg-gradient-to-b from-[var(--franchise-border)] via-[var(--franchise-gold-bright)]/10 to-[var(--franchise-border)] border-[4px] border-[var(--franchise-gold-bright)] p-8">
+                      <div className="text-3xl text-[var(--franchise-gold-bright)] font-bold animate-pulse mb-2">
                         🏆 CHAMPION 🏆
                       </div>
-                      <div className="text-2xl text-[#FFD700] mb-1" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
+                      <div className="text-2xl text-[var(--franchise-gold-bright)] mb-1" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
                         {championTeam?.teamName.toUpperCase() ?? 'CHAMPION'}
                       </div>
-                      <div className="text-sm text-[#E8E8D8]/80 mb-1">
+                      <div className="text-sm text-[var(--franchise-text)]/80 mb-1">
                         Season {champ.seasonNumber} World Series Champions
                       </div>
                       {loserName && seriesScore && (
-                        <div className="text-xs text-[#E8E8D8]/60">
+                        <div className="text-xs text-[var(--franchise-text)]/60">
                           Won World Series {seriesScore} vs {loserName}
                         </div>
                       )}
                       {championTeam?.regularSeasonRecord && (
-                        <div className="text-[10px] text-[#E8E8D8]/40 mt-1">
+                        <div className="text-[10px] text-[var(--franchise-text)]/40 mt-1">
                           Regular Season: {championTeam.regularSeasonRecord.wins}-{championTeam.regularSeasonRecord.losses}
                         </div>
                       )}
@@ -1785,24 +1785,24 @@ export function FranchiseHome() {
 
                     {/* Playoff MVP */}
                     {champ.mvp && (
-                      <div className="bg-[#5A8352] border-[3px] border-[#FFD700] p-4">
+                      <div className="bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-gold-bright)] p-4">
                         <div className="flex items-center justify-center gap-2 mb-2">
-                          <Trophy className="w-5 h-5 text-[#FFD700]" />
-                          <div className="text-sm text-[#FFD700] font-bold">PLAYOFF MVP</div>
+                          <Trophy className="w-5 h-5 text-[var(--franchise-gold-bright)]" />
+                          <div className="text-sm text-[var(--franchise-gold-bright)] font-bold">PLAYOFF MVP</div>
                         </div>
-                        <div className="text-lg text-[#E8E8D8] font-bold">{champ.mvp.playerName}</div>
-                        <div className="text-xs text-[#E8E8D8]/70 mt-1">
+                        <div className="text-lg text-[var(--franchise-text)] font-bold">{champ.mvp.playerName}</div>
+                        <div className="text-xs text-[var(--franchise-text)]/70 mt-1">
                           {champ.teams.find(t => t.teamId === champ.mvp?.teamId)?.teamName ?? champ.mvp.teamId}
                         </div>
                         {champ.mvp.stats && (
-                          <div className="text-[10px] text-[#C4A853] mt-1">{champ.mvp.stats}</div>
+                          <div className="text-[10px] text-[var(--franchise-gold)] mt-1">{champ.mvp.stats}</div>
                         )}
                       </div>
                     )}
 
                     {/* Playoff Series Summary */}
-                    <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-4">
-                      <div className="text-xs text-[#C4A853] mb-3 uppercase">Playoff Path</div>
+                    <div className="bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-border)] p-4">
+                      <div className="text-xs text-[var(--franchise-gold)] mb-3 uppercase">Playoff Path</div>
                       <div className="space-y-2">
                         {playoffData.completedSeries
                           .filter(s => s.winner === champ.champion)
@@ -1811,10 +1811,10 @@ export function FranchiseHome() {
                             const winnerWins = s.winner === s.higherSeed.teamId ? s.higherSeedWins : s.lowerSeedWins;
                             const loserWins = s.winner === s.higherSeed.teamId ? s.lowerSeedWins : s.higherSeedWins;
                             return (
-                              <div key={s.id} className="flex justify-between items-center text-[10px] text-[#E8E8D8] bg-[#4A6844] p-2">
-                                <span className="text-[#E8E8D8]/60 w-24">{s.roundName}</span>
+                              <div key={s.id} className="flex justify-between items-center text-[10px] text-[var(--franchise-text)] bg-[var(--franchise-border)] p-2">
+                                <span className="text-[var(--franchise-text)]/60 w-24">{s.roundName}</span>
                                 <span>vs {opponent.teamName}</span>
-                                <span className="text-[#00DD00] font-bold">{winnerWins}-{loserWins}</span>
+                                <span className="text-[var(--franchise-win)] font-bold">{winnerWins}-{loserWins}</span>
                               </div>
                             );
                           })}
@@ -1824,7 +1824,7 @@ export function FranchiseHome() {
                     {/* Franchise v1 release gate */}
                     <button
                       onClick={handleBeginOffseason}
-                      className="w-full bg-[#C4A853] border-[5px] border-[#9A7B2C] py-4 px-8 text-lg text-[#1a1a1a] hover:bg-[#D4B863] active:scale-[0.98] transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] flex items-center justify-center gap-3"
+                      className="w-full bg-[var(--franchise-gold)] border-[5px] border-[var(--franchise-gold-dark)] py-4 px-8 text-lg text-[var(--franchise-ink)] hover:bg-[var(--franchise-gold-light)] active:scale-[0.98] transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] flex items-center justify-center gap-3"
                       style={{ textShadow: '1px 1px 0px rgba(255,255,255,0.3)' }}
                     >
                       <span>VIEW V1 RELEASE GATE</span>
@@ -1838,28 +1838,28 @@ export function FranchiseHome() {
             {(!playoffData.playoff || playoffNeedsSeedingConfirmation) ? (
               // No confirmed bracket exists - show season-end review / repair option
               <div className="py-8">
-                <Trophy className="w-16 h-16 text-[#E8E8D8]/30 mx-auto mb-4" />
-                <div className="text-center text-lg text-[#E8E8D8] mb-2">
+                <Trophy className="w-16 h-16 text-[var(--franchise-text)]/30 mx-auto mb-4" />
+                <div className="text-center text-lg text-[var(--franchise-text)] mb-2">
                   {playoffNeedsSeedingConfirmation ? 'Playoff Seeding Needs Confirmation' : 'No Playoffs Configured'}
                 </div>
-                <div className="text-center text-sm text-[#E8E8D8]/70 mb-6">
+                <div className="text-center text-sm text-[var(--franchise-text)]/70 mb-6">
                   {playoffNeedsSeedingConfirmation
                     ? 'This existing bracket has no confirmed seeding review. Reconfirm final standings before playoff play begins.'
                     : 'Review final standings, confirm run-differential tiebreakers, then create the bracket.'}
                 </div>
                 <div className="mx-auto max-w-4xl space-y-4">
-                  <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-4">
+                  <div className="bg-[var(--franchise-panel)] border-[4px] border-[var(--franchise-border)] p-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
-                        <div className="text-[11px] text-[#C4A853] font-bold">SEASON-END REVIEW</div>
-                        <div className="text-[10px] text-[#E8E8D8]/70">
+                        <div className="text-[11px] text-[var(--franchise-gold)] font-bold">SEASON-END REVIEW</div>
+                        <div className="text-[10px] text-[var(--franchise-text)]/70">
                           Score-only rows count for standings only; GameTracker archives keep game detail evidence.
                         </div>
                       </div>
                       <button
                         onClick={handlePreparePlayoffSeedingReview}
                         disabled={playoffReviewLoading}
-                        className="bg-[#5599FF] border-[3px] border-[#3366FF] px-4 py-2 text-[11px] text-[#E8E8D8] hover:bg-[#3366FF] disabled:opacity-50 active:scale-95 transition-transform"
+                        className="bg-[var(--franchise-info-bright)] border-[3px] border-[var(--franchise-info)] px-4 py-2 text-[11px] text-[var(--franchise-text)] hover:bg-[var(--franchise-info)] disabled:opacity-50 active:scale-95 transition-transform"
                       >
                         {playoffReviewLoading ? 'REVIEWING...' : 'REVIEW STANDINGS'}
                       </button>
@@ -1867,27 +1867,27 @@ export function FranchiseHome() {
                   </div>
 
                   {playoffReviewError && (
-                    <div className="bg-[#6B3F3F] border-[3px] border-[#DC3545] p-3 text-[10px] text-[#FFE0E0]">
+                    <div className="bg-[var(--franchise-loss-panel-alt)] border-[3px] border-[var(--franchise-loss-alt)] p-3 text-[10px] text-[var(--franchise-loss-text-soft)]">
                       {playoffReviewError}
                     </div>
                   )}
 
                   {playoffSeedingReview && (
-                    <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-4">
+                    <div className="bg-[var(--franchise-panel)] border-[4px] border-[var(--franchise-border)] p-4">
                       <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                         <div>
-                          <div className="text-[11px] text-[#C4A853] font-bold">CONFIRMED-SEEDING REVIEW</div>
-                          <div className="text-[10px] text-[#E8E8D8]/70">
+                          <div className="text-[11px] text-[var(--franchise-gold)] font-bold">CONFIRMED-SEEDING REVIEW</div>
+                          <div className="text-[10px] text-[var(--franchise-text)]/70">
                             Tiebreaker policy: record, then run differential. {playoffSeedingReview.qualifiedTeams.length} of {playoffSeedingReview.teams.length} teams qualify.
                           </div>
                         </div>
-                        <div className="text-[10px] text-[#E8E8D8]/70">
+                        <div className="text-[10px] text-[var(--franchise-text)]/70">
                           Eliminated: {playoffSeedingReview.eliminatedTeams.length}
                         </div>
                       </div>
 
                       {playoffSeedingReview.tieGroups.some((group) => group.resolvedByRunDifferential) && (
-                        <div className="mb-3 bg-[#4A6844] border border-[#C4A853]/60 p-2 text-[10px] text-[#E8E8D8]/80">
+                        <div className="mb-3 bg-[var(--franchise-border)] border border-[var(--franchise-gold)]/60 p-2 text-[10px] text-[var(--franchise-text)]/80">
                           Run differential resolved tied W-L groups:
                           {' '}
                           {playoffSeedingReview.tieGroups
@@ -1898,13 +1898,13 @@ export function FranchiseHome() {
                       )}
 
                       {playoffSeedingReview.blockers.length > 0 ? (
-                        <div className="mb-3 bg-[#6B3F3F] border border-[#DC3545] p-2 text-[10px] text-[#FFE0E0]">
+                        <div className="mb-3 bg-[var(--franchise-loss-panel-alt)] border border-[var(--franchise-loss-alt)] p-2 text-[10px] text-[var(--franchise-loss-text-soft)]">
                           {playoffSeedingReview.blockers.join(' ')}
                         </div>
                       ) : (
                         <div className="overflow-x-auto">
-                          <table className="w-full min-w-[620px] text-[10px] text-[#E8E8D8]">
-                            <thead className="border-b-2 border-[#4A6844] text-[#C4A853]">
+                          <table className="w-full min-w-[620px] text-[10px] text-[var(--franchise-text)]">
+                            <thead className="border-b-2 border-[var(--franchise-border)] text-[var(--franchise-gold)]">
                               <tr>
                                 <th className="py-2 text-left">Seed</th>
                                 <th className="py-2 text-left">Team</th>
@@ -1916,13 +1916,13 @@ export function FranchiseHome() {
                             </thead>
                             <tbody>
                               {playoffSeedingReview.teams.map((team) => (
-                                <tr key={team.teamId} className={`border-b border-[#4A6844]/70 ${team.eliminated ? 'opacity-55' : ''}`}>
+                                <tr key={team.teamId} className={`border-b border-[var(--franchise-border)]/70 ${team.eliminated ? 'opacity-55' : ''}`}>
                                   <td className="py-2">{team.seed ?? '-'}</td>
                                   <td className="py-2">{team.teamName}</td>
                                   <td className="py-2 text-center">{team.wins}-{team.losses}</td>
                                   <td className="py-2 text-center">{team.runDiff >= 0 ? '+' : ''}{team.runDiff}</td>
                                   <td className="py-2">{team.qualifying ? 'QUALIFIED' : 'ELIMINATED'}</td>
-                                  <td className="py-2 text-[#E8E8D8]/70">{team.tiebreakerNote}</td>
+                                  <td className="py-2 text-[var(--franchise-text)]/70">{team.tiebreakerNote}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -1934,14 +1934,14 @@ export function FranchiseHome() {
                         <button
                           onClick={handleConfirmPlayoffSeeding}
                           disabled={playoffSeedingReview.blockers.length > 0}
-                          className="bg-[#C4A853] border-[3px] border-[#9A7B2C] px-4 py-2 text-[11px] text-[#1a1a1a] hover:bg-[#D4B863] disabled:opacity-50 active:scale-95 transition-transform"
+                          className="bg-[var(--franchise-gold)] border-[3px] border-[var(--franchise-gold-dark)] px-4 py-2 text-[11px] text-[var(--franchise-ink)] hover:bg-[var(--franchise-gold-light)] disabled:opacity-50 active:scale-95 transition-transform"
                         >
                           {confirmedPlayoffSeedingReview === playoffSeedingReview ? 'SEEDING CONFIRMED' : 'CONFIRM SEEDING'}
                         </button>
                         <button
                           onClick={handleCreatePlayoffBracket}
                           disabled={!confirmedPlayoffSeedingReview || playoffReviewLoading}
-                          className="bg-[#5599FF] border-[3px] border-[#3366FF] px-4 py-2 text-[11px] text-[#E8E8D8] hover:bg-[#3366FF] disabled:opacity-50 active:scale-95 transition-transform"
+                          className="bg-[var(--franchise-info-bright)] border-[3px] border-[var(--franchise-info)] px-4 py-2 text-[11px] text-[var(--franchise-text)] hover:bg-[var(--franchise-info)] disabled:opacity-50 active:scale-95 transition-transform"
                         >
                           CREATE CONFIRMED BRACKET
                         </button>
@@ -1954,17 +1954,17 @@ export function FranchiseHome() {
               // Playoff exists - show bracket
               <>
                 {playoffIsStartedWithoutConfirmedSeeding && (
-                  <div className="mb-4 bg-[#6B3F3F] border-[4px] border-[#DC3545] p-4 text-center">
-                    <div className="text-[11px] text-[#FFE0E0] font-bold">LEGACY PLAYOFF BLOCKED</div>
-                    <div className="text-[10px] text-[#FFE0E0]/80">
+                  <div className="mb-4 bg-[var(--franchise-loss-panel-alt)] border-[4px] border-[var(--franchise-loss-alt)] p-4 text-center">
+                    <div className="text-[11px] text-[var(--franchise-loss-text-soft)] font-bold">LEGACY PLAYOFF BLOCKED</div>
+                    <div className="text-[10px] text-[var(--franchise-loss-text-soft)]/80">
                       This playoff already started without confirmed seeding. GameTracker launch is unavailable; repair is only available before playoff play begins.
                     </div>
                   </div>
                 )}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   {/* Eastern Conference */}
-                  <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-6">
-                    <div className="text-lg text-[#E8E8D8] font-bold mb-4 text-center border-b-2 border-[#4A6844] pb-2">
+                  <div className="bg-[var(--franchise-panel)] border-[4px] border-[var(--franchise-border)] p-6">
+                    <div className="text-lg text-[var(--franchise-text)] font-bold mb-4 text-center border-b-2 border-[var(--franchise-border)] pb-2">
                       EASTERN CONFERENCE
                     </div>
                     <div className="space-y-4">
@@ -1975,43 +1975,43 @@ export function FranchiseHome() {
                           const isExpanded = expandedSeriesId === s.id;
                           return (
                           <div key={s.id}>
-                            <div className="text-xs text-[#E8E8D8]/60 mb-2">{s.roundName.toUpperCase()}</div>
+                            <div className="text-xs text-[var(--franchise-text)]/60 mb-2">{s.roundName.toUpperCase()}</div>
                             <div
-                              className={`bg-[#4A6844] p-3 border-2 cursor-pointer transition-all ${
-                                s.status === 'COMPLETED' ? 'border-[#00DD00]' :
-                                s.status === 'IN_PROGRESS' ? 'border-[#5599FF]' :
-                                'border-[#E8E8D8]/30'
+                              className={`bg-[var(--franchise-border)] p-3 border-2 cursor-pointer transition-all ${
+                                s.status === 'COMPLETED' ? 'border-[var(--franchise-win)]' :
+                                s.status === 'IN_PROGRESS' ? 'border-[var(--franchise-info-bright)]' :
+                                'border-[var(--franchise-text)]/30'
                               }`}
                               onClick={() => setExpandedSeriesId(isExpanded ? null : s.id)}
                             >
                               {/* Clinch/Elimination badges */}
                               {higherStatus?.isClinchGame && (
-                                <div className="text-[8px] text-[#FFD700] text-center mb-1">⭐ {s.higherSeed.teamName} can clinch</div>
+                                <div className="text-[8px] text-[var(--franchise-gold-bright)] text-center mb-1">⭐ {s.higherSeed.teamName} can clinch</div>
                               )}
                               {lowerStatus?.isEliminationGame && (
-                                <div className="text-[8px] text-[#DC3545] text-center mb-1">⚠️ {s.lowerSeed.teamName} facing elimination</div>
+                                <div className="text-[8px] text-[var(--franchise-loss-alt)] text-center mb-1">⚠️ {s.lowerSeed.teamName} facing elimination</div>
                               )}
                               {lowerStatus?.isClinchGame && (
-                                <div className="text-[8px] text-[#FFD700] text-center mb-1">⭐ {s.lowerSeed.teamName} can clinch</div>
+                                <div className="text-[8px] text-[var(--franchise-gold-bright)] text-center mb-1">⭐ {s.lowerSeed.teamName} can clinch</div>
                               )}
                               {higherStatus?.isEliminationGame && (
-                                <div className="text-[8px] text-[#DC3545] text-center mb-1">⚠️ {s.higherSeed.teamName} facing elimination</div>
+                                <div className="text-[8px] text-[var(--franchise-loss-alt)] text-center mb-1">⚠️ {s.higherSeed.teamName} facing elimination</div>
                               )}
                               <div className="flex justify-between items-center mb-1">
-                                <span className={`text-xs ${s.winner === s.higherSeed.teamId ? 'text-[#00DD00] font-bold' : 'text-[#E8E8D8]'}`}>
+                                <span className={`text-xs ${s.winner === s.higherSeed.teamId ? 'text-[var(--franchise-win)] font-bold' : 'text-[var(--franchise-text)]'}`}>
                                   ({s.higherSeed.seed}) {s.higherSeed.teamName}
                                 </span>
-                                <span className="text-xs text-[#E8E8D8]">{s.higherSeedWins}</span>
+                                <span className="text-xs text-[var(--franchise-text)]">{s.higherSeedWins}</span>
                               </div>
                               <div className="flex justify-between items-center">
-                                <span className={`text-xs ${s.winner === s.lowerSeed.teamId ? 'text-[#00DD00] font-bold' : 'text-[#E8E8D8]'}`}>
+                                <span className={`text-xs ${s.winner === s.lowerSeed.teamId ? 'text-[var(--franchise-win)] font-bold' : 'text-[var(--franchise-text)]'}`}>
                                   ({s.lowerSeed.seed}) {s.lowerSeed.teamName}
                                 </span>
-                                <span className="text-xs text-[#E8E8D8]">{s.lowerSeedWins}</span>
+                                <span className="text-xs text-[var(--franchise-text)]">{s.lowerSeedWins}</span>
                               </div>
                               {/* Expanded: game-by-game results */}
                               {isExpanded && s.games.filter(g => g.status === 'COMPLETED').length > 0 && (
-                                <div className="mt-2 pt-2 border-t border-[#E8E8D8]/20">
+                                <div className="mt-2 pt-2 border-t border-[var(--franchise-text)]/20">
                                   <div className="grid grid-cols-3 gap-1">
                                     {s.games.filter(g => g.status === 'COMPLETED' && g.result).map(g => (
                                       <PlayoffGameResultChip key={g.gameNumber} series={s} game={g} />
@@ -2021,26 +2021,26 @@ export function FranchiseHome() {
                               )}
                               {s.status === 'IN_PROGRESS' && (
                                 <div className="mt-2 space-y-2">
-                                  <div className="text-[8px] text-[#5599FF] text-center">IN PROGRESS - Best of {s.bestOf}</div>
+                                  <div className="text-[8px] text-[var(--franchise-info-bright)] text-center">IN PROGRESS - Best of {s.bestOf}</div>
                                   {playoffIsConfirmedForPlay ? (
                                     <div className="flex gap-1">
                                       <button
                                         onClick={(e) => { e.stopPropagation(); handlePlayPlayoffGame(s); }}
-                                        className="flex-1 bg-[#5599FF] border-[2px] border-[#3366FF] py-1.5 text-[10px] text-white font-bold hover:bg-[#3366FF] active:scale-95 transition-transform"
+                                        className="flex-1 bg-[var(--franchise-info-bright)] border-[2px] border-[var(--franchise-info)] py-1.5 text-[10px] text-white font-bold hover:bg-[var(--franchise-info)] active:scale-95 transition-transform"
                                       >
                                         ⚾ PLAY GAME {s.games.filter(g => g.status === 'COMPLETED').length + 1}
                                       </button>
                                       {MODE_2_V1_SYNTHETIC_SIM_ENABLED && (
                                         <button
                                           onClick={(e) => { e.stopPropagation(); handleSimPlayoffGame(s); }}
-                                          className="bg-[#4A6844] border-[2px] border-[#5A8352] py-1.5 px-2 text-[10px] text-[#E8E8D8] font-bold hover:bg-[#3F5A3A] active:scale-95 transition-transform"
+                                          className="bg-[var(--franchise-border)] border-[2px] border-[var(--franchise-panel)] py-1.5 px-2 text-[10px] text-[var(--franchise-text)] font-bold hover:bg-[var(--franchise-panel-dark)] active:scale-95 transition-transform"
                                         >
                                           SIM
                                         </button>
                                       )}
                                     </div>
                                   ) : (
-                                    <div className="bg-[#6B3F3F] border border-[#DC3545] p-2 text-center text-[8px] text-[#FFE0E0]">
+                                    <div className="bg-[var(--franchise-loss-panel-alt)] border border-[var(--franchise-loss-alt)] p-2 text-center text-[8px] text-[var(--franchise-loss-text-soft)]">
                                       PLAY BLOCKED - missing confirmed seeding
                                     </div>
                                   )}
@@ -2051,7 +2051,7 @@ export function FranchiseHome() {
                           );
                         })
                       ) : (
-                        <div className="text-xs text-[#E8E8D8]/60 text-center py-4">
+                        <div className="text-xs text-[var(--franchise-text)]/60 text-center py-4">
                           {playoffData.playoff.teams.filter(t => t.league === 'Eastern').slice(0, 4).map((t, i) => (
                             <div key={t.teamId} className="py-1">({i + 1}) {t.teamName}</div>
                           ))}
@@ -2061,8 +2061,8 @@ export function FranchiseHome() {
                   </div>
 
                   {/* Western Conference */}
-                  <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-6">
-                    <div className="text-lg text-[#E8E8D8] font-bold mb-4 text-center border-b-2 border-[#4A6844] pb-2">
+                  <div className="bg-[var(--franchise-panel)] border-[4px] border-[var(--franchise-border)] p-6">
+                    <div className="text-lg text-[var(--franchise-text)] font-bold mb-4 text-center border-b-2 border-[var(--franchise-border)] pb-2">
                       WESTERN CONFERENCE
                     </div>
                     <div className="space-y-4">
@@ -2073,43 +2073,43 @@ export function FranchiseHome() {
                           const isExpanded = expandedSeriesId === s.id;
                           return (
                           <div key={s.id}>
-                            <div className="text-xs text-[#E8E8D8]/60 mb-2">{s.roundName.toUpperCase()}</div>
+                            <div className="text-xs text-[var(--franchise-text)]/60 mb-2">{s.roundName.toUpperCase()}</div>
                             <div
-                              className={`bg-[#4A6844] p-3 border-2 cursor-pointer transition-all ${
-                                s.status === 'COMPLETED' ? 'border-[#00DD00]' :
-                                s.status === 'IN_PROGRESS' ? 'border-[#5599FF]' :
-                                'border-[#E8E8D8]/30'
+                              className={`bg-[var(--franchise-border)] p-3 border-2 cursor-pointer transition-all ${
+                                s.status === 'COMPLETED' ? 'border-[var(--franchise-win)]' :
+                                s.status === 'IN_PROGRESS' ? 'border-[var(--franchise-info-bright)]' :
+                                'border-[var(--franchise-text)]/30'
                               }`}
                               onClick={() => setExpandedSeriesId(isExpanded ? null : s.id)}
                             >
                               {/* Clinch/Elimination badges */}
                               {higherStatus?.isClinchGame && (
-                                <div className="text-[8px] text-[#FFD700] text-center mb-1">⭐ {s.higherSeed.teamName} can clinch</div>
+                                <div className="text-[8px] text-[var(--franchise-gold-bright)] text-center mb-1">⭐ {s.higherSeed.teamName} can clinch</div>
                               )}
                               {lowerStatus?.isEliminationGame && (
-                                <div className="text-[8px] text-[#DC3545] text-center mb-1">⚠️ {s.lowerSeed.teamName} facing elimination</div>
+                                <div className="text-[8px] text-[var(--franchise-loss-alt)] text-center mb-1">⚠️ {s.lowerSeed.teamName} facing elimination</div>
                               )}
                               {lowerStatus?.isClinchGame && (
-                                <div className="text-[8px] text-[#FFD700] text-center mb-1">⭐ {s.lowerSeed.teamName} can clinch</div>
+                                <div className="text-[8px] text-[var(--franchise-gold-bright)] text-center mb-1">⭐ {s.lowerSeed.teamName} can clinch</div>
                               )}
                               {higherStatus?.isEliminationGame && (
-                                <div className="text-[8px] text-[#DC3545] text-center mb-1">⚠️ {s.higherSeed.teamName} facing elimination</div>
+                                <div className="text-[8px] text-[var(--franchise-loss-alt)] text-center mb-1">⚠️ {s.higherSeed.teamName} facing elimination</div>
                               )}
                               <div className="flex justify-between items-center mb-1">
-                                <span className={`text-xs ${s.winner === s.higherSeed.teamId ? 'text-[#00DD00] font-bold' : 'text-[#E8E8D8]'}`}>
+                                <span className={`text-xs ${s.winner === s.higherSeed.teamId ? 'text-[var(--franchise-win)] font-bold' : 'text-[var(--franchise-text)]'}`}>
                                   ({s.higherSeed.seed}) {s.higherSeed.teamName}
                                 </span>
-                                <span className="text-xs text-[#E8E8D8]">{s.higherSeedWins}</span>
+                                <span className="text-xs text-[var(--franchise-text)]">{s.higherSeedWins}</span>
                               </div>
                               <div className="flex justify-between items-center">
-                                <span className={`text-xs ${s.winner === s.lowerSeed.teamId ? 'text-[#00DD00] font-bold' : 'text-[#E8E8D8]'}`}>
+                                <span className={`text-xs ${s.winner === s.lowerSeed.teamId ? 'text-[var(--franchise-win)] font-bold' : 'text-[var(--franchise-text)]'}`}>
                                   ({s.lowerSeed.seed}) {s.lowerSeed.teamName}
                                 </span>
-                                <span className="text-xs text-[#E8E8D8]">{s.lowerSeedWins}</span>
+                                <span className="text-xs text-[var(--franchise-text)]">{s.lowerSeedWins}</span>
                               </div>
                               {/* Expanded: game-by-game results */}
                               {isExpanded && s.games.filter(g => g.status === 'COMPLETED').length > 0 && (
-                                <div className="mt-2 pt-2 border-t border-[#E8E8D8]/20">
+                                <div className="mt-2 pt-2 border-t border-[var(--franchise-text)]/20">
                                   <div className="grid grid-cols-3 gap-1">
                                     {s.games.filter(g => g.status === 'COMPLETED' && g.result).map(g => (
                                       <PlayoffGameResultChip key={g.gameNumber} series={s} game={g} />
@@ -2119,26 +2119,26 @@ export function FranchiseHome() {
                               )}
                               {s.status === 'IN_PROGRESS' && (
                                 <div className="mt-2 space-y-2">
-                                  <div className="text-[8px] text-[#5599FF] text-center">IN PROGRESS - Best of {s.bestOf}</div>
+                                  <div className="text-[8px] text-[var(--franchise-info-bright)] text-center">IN PROGRESS - Best of {s.bestOf}</div>
                                   {playoffIsConfirmedForPlay ? (
                                     <div className="flex gap-1">
                                       <button
                                         onClick={(e) => { e.stopPropagation(); handlePlayPlayoffGame(s); }}
-                                        className="flex-1 bg-[#5599FF] border-[2px] border-[#3366FF] py-1.5 text-[10px] text-white font-bold hover:bg-[#3366FF] active:scale-95 transition-transform"
+                                        className="flex-1 bg-[var(--franchise-info-bright)] border-[2px] border-[var(--franchise-info)] py-1.5 text-[10px] text-white font-bold hover:bg-[var(--franchise-info)] active:scale-95 transition-transform"
                                       >
                                         ⚾ PLAY GAME {s.games.filter(g => g.status === 'COMPLETED').length + 1}
                                       </button>
                                       {MODE_2_V1_SYNTHETIC_SIM_ENABLED && (
                                         <button
                                           onClick={(e) => { e.stopPropagation(); handleSimPlayoffGame(s); }}
-                                          className="bg-[#4A6844] border-[2px] border-[#5A8352] py-1.5 px-2 text-[10px] text-[#E8E8D8] font-bold hover:bg-[#3F5A3A] active:scale-95 transition-transform"
+                                          className="bg-[var(--franchise-border)] border-[2px] border-[var(--franchise-panel)] py-1.5 px-2 text-[10px] text-[var(--franchise-text)] font-bold hover:bg-[var(--franchise-panel-dark)] active:scale-95 transition-transform"
                                         >
                                           SIM
                                         </button>
                                       )}
                                     </div>
                                   ) : (
-                                    <div className="bg-[#6B3F3F] border border-[#DC3545] p-2 text-center text-[8px] text-[#FFE0E0]">
+                                    <div className="bg-[var(--franchise-loss-panel-alt)] border border-[var(--franchise-loss-alt)] p-2 text-center text-[8px] text-[var(--franchise-loss-text-soft)]">
                                       PLAY BLOCKED - missing confirmed seeding
                                     </div>
                                   )}
@@ -2149,7 +2149,7 @@ export function FranchiseHome() {
                           );
                         })
                       ) : (
-                        <div className="text-xs text-[#E8E8D8]/60 text-center py-4">
+                        <div className="text-xs text-[var(--franchise-text)]/60 text-center py-4">
                           {playoffData.playoff.teams.filter(t => t.league === 'Western').slice(0, 4).map((t, i) => (
                             <div key={t.teamId} className="py-1">({i + 1}) {t.teamName}</div>
                           ))}
@@ -2160,57 +2160,57 @@ export function FranchiseHome() {
                 </div>
 
                 {/* Championship Series */}
-                <div className="mt-8 bg-[#5A8352] border-[4px] border-[#FFD700] p-6">
-                  <div className="text-xl text-[#FFD700] font-bold mb-4 text-center">
+                <div className="mt-8 bg-[var(--franchise-panel)] border-[4px] border-[var(--franchise-gold-bright)] p-6">
+                  <div className="text-xl text-[var(--franchise-gold-bright)] font-bold mb-4 text-center">
                     <Trophy className="w-6 h-6 inline mr-2" />
                     CHAMPIONSHIP SERIES
                   </div>
                   {playoffData.bracketByLeague.Championship ? (
-                    <div className={`bg-[#4A6844] p-4 border-2 ${
-                      playoffData.bracketByLeague.Championship.status === 'COMPLETED' ? 'border-[#FFD700]' :
-                      playoffData.bracketByLeague.Championship.status === 'IN_PROGRESS' ? 'border-[#5599FF]' :
-                      'border-[#FFD700]/50'
+                    <div className={`bg-[var(--franchise-border)] p-4 border-2 ${
+                      playoffData.bracketByLeague.Championship.status === 'COMPLETED' ? 'border-[var(--franchise-gold-bright)]' :
+                      playoffData.bracketByLeague.Championship.status === 'IN_PROGRESS' ? 'border-[var(--franchise-info-bright)]' :
+                      'border-[var(--franchise-gold-bright)]/50'
                     }`}>
                       <div className="flex justify-between items-center mb-2">
-                        <span className={`text-sm ${playoffData.bracketByLeague.Championship.winner === playoffData.bracketByLeague.Championship.higherSeed.teamId ? 'text-[#FFD700] font-bold' : 'text-[#E8E8D8]'}`}>
+                        <span className={`text-sm ${playoffData.bracketByLeague.Championship.winner === playoffData.bracketByLeague.Championship.higherSeed.teamId ? 'text-[var(--franchise-gold-bright)] font-bold' : 'text-[var(--franchise-text)]'}`}>
                           {playoffData.bracketByLeague.Championship.higherSeed.teamName}
                         </span>
-                        <span className="text-lg text-[#E8E8D8]">{playoffData.bracketByLeague.Championship.higherSeedWins}</span>
+                        <span className="text-lg text-[var(--franchise-text)]">{playoffData.bracketByLeague.Championship.higherSeedWins}</span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className={`text-sm ${playoffData.bracketByLeague.Championship.winner === playoffData.bracketByLeague.Championship.lowerSeed.teamId ? 'text-[#FFD700] font-bold' : 'text-[#E8E8D8]'}`}>
+                        <span className={`text-sm ${playoffData.bracketByLeague.Championship.winner === playoffData.bracketByLeague.Championship.lowerSeed.teamId ? 'text-[var(--franchise-gold-bright)] font-bold' : 'text-[var(--franchise-text)]'}`}>
                           {playoffData.bracketByLeague.Championship.lowerSeed.teamName}
                         </span>
-                        <span className="text-lg text-[#E8E8D8]">{playoffData.bracketByLeague.Championship.lowerSeedWins}</span>
+                        <span className="text-lg text-[var(--franchise-text)]">{playoffData.bracketByLeague.Championship.lowerSeedWins}</span>
                       </div>
                       {playoffData.bracketByLeague.Championship.status === 'IN_PROGRESS' && (
                         playoffIsConfirmedForPlay ? (
                           <div className="flex gap-1 mt-3">
                             <button
                               onClick={() => handlePlayPlayoffGame(playoffData.bracketByLeague.Championship!)}
-                              className="flex-1 bg-[#FFD700] border-[2px] border-[#CC9900] py-2 text-[11px] text-[#1a1a1a] font-bold hover:bg-[#CC9900] hover:text-white active:scale-95 transition-transform"
+                              className="flex-1 bg-[var(--franchise-gold-bright)] border-[2px] border-[var(--franchise-gold-warn)] py-2 text-[11px] text-[var(--franchise-ink)] font-bold hover:bg-[var(--franchise-gold-warn)] hover:text-white active:scale-95 transition-transform"
                             >
                               🏆 PLAY GAME {playoffData.bracketByLeague.Championship.games.filter(g => g.status === 'COMPLETED').length + 1}
                             </button>
                             {MODE_2_V1_SYNTHETIC_SIM_ENABLED && (
                               <button
                                 onClick={() => handleSimPlayoffGame(playoffData.bracketByLeague.Championship!)}
-                                className="bg-[#4A6844] border-[2px] border-[#5A8352] py-2 px-3 text-[10px] text-[#E8E8D8] font-bold hover:bg-[#3F5A3A] active:scale-95 transition-transform"
+                                className="bg-[var(--franchise-border)] border-[2px] border-[var(--franchise-panel)] py-2 px-3 text-[10px] text-[var(--franchise-text)] font-bold hover:bg-[var(--franchise-panel-dark)] active:scale-95 transition-transform"
                               >
                                 SIM
                               </button>
                             )}
                           </div>
                         ) : (
-                          <div className="mt-3 bg-[#6B3F3F] border border-[#DC3545] p-2 text-center text-[9px] text-[#FFE0E0]">
+                          <div className="mt-3 bg-[var(--franchise-loss-panel-alt)] border border-[var(--franchise-loss-alt)] p-2 text-center text-[9px] text-[var(--franchise-loss-text-soft)]">
                             PLAY BLOCKED - missing confirmed seeding
                           </div>
                         )
                       )}
                     </div>
                   ) : (
-                    <div className="bg-[#4A6844] p-4 border-2 border-[#FFD700]/50">
-                      <div className="text-sm text-[#E8E8D8] text-center">Eastern Champion vs Western Champion</div>
+                    <div className="bg-[var(--franchise-border)] p-4 border-2 border-[var(--franchise-gold-bright)]/50">
+                      <div className="text-sm text-[var(--franchise-text)] text-center">Eastern Champion vs Western Champion</div>
                     </div>
                   )}
                 </div>
@@ -2219,7 +2219,7 @@ export function FranchiseHome() {
                 {playoffData.playoff.status === 'NOT_STARTED' && (
                   <div className="mt-6 text-center">
                     {!playoffData.playoff.seedingConfirmation && (
-                      <div className="mb-3 text-[10px] text-[#FFD700]">
+                      <div className="mb-3 text-[10px] text-[var(--franchise-gold-bright)]">
                         Bracket start blocked until playoff seeding is reviewed and confirmed.
                       </div>
                     )}
@@ -2233,7 +2233,7 @@ export function FranchiseHome() {
                         }
                       }}
                       disabled={!playoffData.playoff.seedingConfirmation}
-                      className="bg-[#5599FF] border-[3px] border-[#3366FF] px-6 py-3 text-sm text-[#E8E8D8] hover:bg-[#3366FF] active:scale-95 transition-transform"
+                      className="bg-[var(--franchise-info-bright)] border-[3px] border-[var(--franchise-info)] px-6 py-3 text-sm text-[var(--franchise-text)] hover:bg-[var(--franchise-info)] active:scale-95 transition-transform"
                     >
                       CONFIRM BRACKET AND START PLAYOFFS
                     </button>
@@ -2245,71 +2245,71 @@ export function FranchiseHome() {
         )}
         
         {activeTab === "series" && (
-          <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-8">
+          <div className="bg-[var(--franchise-header)] border-[5px] border-[var(--franchise-border)] p-8">
             <div className="text-center mb-8">
-              <h2 className="text-2xl text-[#E8E8D8] font-bold mb-2">SERIES RESULTS</h2>
-              <div className="text-sm text-[#E8E8D8]/70">Complete playoff series breakdowns</div>
+              <h2 className="text-2xl text-[var(--franchise-text)] font-bold mb-2">SERIES RESULTS</h2>
+              <div className="text-sm text-[var(--franchise-text)]/70">Complete playoff series breakdowns</div>
             </div>
 
             {playoffData.isLoading ? (
-              <div className="text-center text-[#E8E8D8]/60 py-8">Loading series data...</div>
+              <div className="text-center text-[var(--franchise-text)]/60 py-8">Loading series data...</div>
             ) : !playoffData.playoff ? (
-              <div className="text-center text-[#E8E8D8]/60 py-8">No playoff data available</div>
+              <div className="text-center text-[var(--franchise-text)]/60 py-8">No playoff data available</div>
             ) : playoffData.series.length === 0 ? (
-              <div className="text-center text-[#E8E8D8]/60 py-8">No series have started yet</div>
+              <div className="text-center text-[var(--franchise-text)]/60 py-8">No series have started yet</div>
             ) : (
               <div className="space-y-6">
                 {/* Group series by round */}
                 {Array.from(playoffData.bracketByRound.entries())
                   .sort(([a], [b]) => a - b)
                   .map(([round, roundSeries]) => (
-                    <div key={round} className="bg-[#5A8352] border-[4px] border-[#4A6844] p-6">
-                      <div className="text-lg text-[#E8E8D8] font-bold mb-4 border-b-2 border-[#E8E8D8]/30 pb-2">
+                    <div key={round} className="bg-[var(--franchise-panel)] border-[4px] border-[var(--franchise-border)] p-6">
+                      <div className="text-lg text-[var(--franchise-text)] font-bold mb-4 border-b-2 border-[var(--franchise-text)]/30 pb-2">
                         {playoffData.getRoundName(round)}
                       </div>
 
                       <div className="space-y-4">
                         {roundSeries.map((s) => (
-                          <div key={s.id} className={`bg-[#4A6844] p-4 border-2 ${
-                            s.status === 'COMPLETED' ? 'border-[#00DD00]' :
-                            s.status === 'IN_PROGRESS' ? 'border-[#5599FF]' :
-                            'border-[#E8E8D8]/30'
+                          <div key={s.id} className={`bg-[var(--franchise-border)] p-4 border-2 ${
+                            s.status === 'COMPLETED' ? 'border-[var(--franchise-win)]' :
+                            s.status === 'IN_PROGRESS' ? 'border-[var(--franchise-info-bright)]' :
+                            'border-[var(--franchise-text)]/30'
                           }`}>
                             {/* Series header */}
                             <div className="flex justify-between items-center mb-3">
-                              <div className="text-xs text-[#E8E8D8]/60">
+                              <div className="text-xs text-[var(--franchise-text)]/60">
                                 {s.status === 'COMPLETED' ? (
-                                  <span className="text-[#00DD00]">FINAL</span>
+                                  <span className="text-[var(--franchise-win)]">FINAL</span>
                                 ) : s.status === 'IN_PROGRESS' ? (
-                                  <span className="text-[#5599FF]">IN PROGRESS</span>
+                                  <span className="text-[var(--franchise-info-bright)]">IN PROGRESS</span>
                                 ) : (
                                   <span>PENDING</span>
                                 )}
                                 {' • Best of '}{s.bestOf}
                               </div>
-                              <div className="text-xs text-[#E8E8D8]/60">
+                              <div className="text-xs text-[var(--franchise-text)]/60">
                                 {s.higherSeedWins}-{s.lowerSeedWins}
                               </div>
                             </div>
 
                             {/* Matchup */}
                             <div className="flex justify-between items-center mb-2">
-                              <div className={`text-sm ${s.winner === s.higherSeed.teamId ? 'text-[#00DD00] font-bold' : 'text-[#E8E8D8]'}`}>
+                              <div className={`text-sm ${s.winner === s.higherSeed.teamId ? 'text-[var(--franchise-win)] font-bold' : 'text-[var(--franchise-text)]'}`}>
                                 ({s.higherSeed.seed}) {s.higherSeed.teamName}
                               </div>
-                              <div className="text-lg text-[#E8E8D8] font-bold">{s.higherSeedWins}</div>
+                              <div className="text-lg text-[var(--franchise-text)] font-bold">{s.higherSeedWins}</div>
                             </div>
                             <div className="flex justify-between items-center">
-                              <div className={`text-sm ${s.winner === s.lowerSeed.teamId ? 'text-[#00DD00] font-bold' : 'text-[#E8E8D8]'}`}>
+                              <div className={`text-sm ${s.winner === s.lowerSeed.teamId ? 'text-[var(--franchise-win)] font-bold' : 'text-[var(--franchise-text)]'}`}>
                                 ({s.lowerSeed.seed}) {s.lowerSeed.teamName}
                               </div>
-                              <div className="text-lg text-[#E8E8D8] font-bold">{s.lowerSeedWins}</div>
+                              <div className="text-lg text-[var(--franchise-text)] font-bold">{s.lowerSeedWins}</div>
                             </div>
 
                             {/* Individual games */}
                             {s.games && s.games.filter(g => g.status === 'COMPLETED').length > 0 && (
-                              <div className="mt-3 pt-3 border-t border-[#E8E8D8]/20">
-                                <div className="text-[10px] text-[#E8E8D8]/60 mb-2">GAME RESULTS</div>
+                              <div className="mt-3 pt-3 border-t border-[var(--franchise-text)]/20">
+                                <div className="text-[10px] text-[var(--franchise-text)]/60 mb-2">GAME RESULTS</div>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
                                   {s.games.filter(g => g.status === 'COMPLETED' && g.result).map((game) => (
                                     <PlayoffGameResultChip key={game.gameNumber} series={s} game={game} />
@@ -2324,7 +2324,7 @@ export function FranchiseHome() {
                   ))}
 
                 {playoffData.pendingSeries.length > 0 && (
-                  <div className="text-center text-xs text-[#E8E8D8]/60 py-4">
+                  <div className="text-center text-xs text-[var(--franchise-text)]/60 py-4">
                     {playoffData.pendingSeries.length} series pending • {playoffData.inProgressSeries.length} in progress
                   </div>
                 )}
@@ -2334,24 +2334,24 @@ export function FranchiseHome() {
         )}
         
         {activeTab === "playoff-stats" && (
-          <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-8">
+          <div className="bg-[var(--franchise-header)] border-[5px] border-[var(--franchise-border)] p-8">
             <div className="text-center mb-8">
-              <h2 className="text-2xl text-[#E8E8D8] font-bold mb-2">PLAYOFF STATISTICS</h2>
-              <div className="text-sm text-[#E8E8D8]/70">Team and player performance in the postseason</div>
+              <h2 className="text-2xl text-[var(--franchise-text)] font-bold mb-2">PLAYOFF STATISTICS</h2>
+              <div className="text-sm text-[var(--franchise-text)]/70">Team and player performance in the postseason</div>
             </div>
 
             {playoffData.isLoading ? (
-              <div className="text-center text-[#E8E8D8]/60 py-8">Loading playoff stats...</div>
+              <div className="text-center text-[var(--franchise-text)]/60 py-8">Loading playoff stats...</div>
             ) : !playoffData.playoff ? (
-              <div className="text-center text-[#E8E8D8]/60 py-8">No playoff data available</div>
+              <div className="text-center text-[var(--franchise-text)]/60 py-8">No playoff data available</div>
             ) : (
               <div className="space-y-6">
                 {/* Team Stats - derived from series data */}
-                <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-6">
-                  <div className="text-lg text-[#E8E8D8] font-bold mb-4">TEAM PLAYOFF RECORDS</div>
-                  <div className="bg-[#4A6844] p-4">
-                    <table className="w-full text-xs text-[#E8E8D8]">
-                      <thead className="border-b-2 border-[#E8E8D8]/30">
+                <div className="bg-[var(--franchise-panel)] border-[4px] border-[var(--franchise-border)] p-6">
+                  <div className="text-lg text-[var(--franchise-text)] font-bold mb-4">TEAM PLAYOFF RECORDS</div>
+                  <div className="bg-[var(--franchise-border)] p-4">
+                    <table className="w-full text-xs text-[var(--franchise-text)]">
+                      <thead className="border-b-2 border-[var(--franchise-text)]/30">
                         <tr>
                           <th className="text-left py-2">Team</th>
                           <th className="text-center py-2">Seed</th>
@@ -2381,7 +2381,7 @@ export function FranchiseHome() {
                             ).length;
 
                             return (
-                              <tr key={team.teamId} className={`border-b border-[#E8E8D8]/10 ${team.eliminated ? 'opacity-50' : ''}`}>
+                              <tr key={team.teamId} className={`border-b border-[var(--franchise-text)]/10 ${team.eliminated ? 'opacity-50' : ''}`}>
                                 <td className="py-2">{team.teamName}</td>
                                 <td className="text-center">{team.seed}</td>
                                 <td className="text-center">{team.league}</td>
@@ -2389,11 +2389,11 @@ export function FranchiseHome() {
                                 <td className="text-center">{seriesLosses}</td>
                                 <td className="text-center">
                                   {team.eliminated ? (
-                                    <span className="text-[#FF6B6B]">ELIMINATED</span>
+                                    <span className="text-[var(--franchise-loss-bright)]">ELIMINATED</span>
                                   ) : playoffData.playoff?.champion === team.teamId ? (
-                                    <span className="text-[#FFD700]">CHAMPION</span>
+                                    <span className="text-[var(--franchise-gold-bright)]">CHAMPION</span>
                                   ) : (
-                                    <span className="text-[#00DD00]">ACTIVE</span>
+                                    <span className="text-[var(--franchise-win)]">ACTIVE</span>
                                   )}
                                 </td>
                               </tr>
@@ -2404,19 +2404,19 @@ export function FranchiseHome() {
                   </div>
                 </div>
 
-                <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-6">
-                  <div className="text-lg text-[#E8E8D8] font-bold mb-4">TOP PERFORMERS</div>
+                <div className="bg-[var(--franchise-panel)] border-[4px] border-[var(--franchise-border)] p-6">
+                  <div className="text-lg text-[var(--franchise-text)] font-bold mb-4">TOP PERFORMERS</div>
                   {playoffLeadersLoading ? (
-                    <div className="bg-[#4A6844] p-4">
-                      <div className="text-xs text-[#E8E8D8]/60 text-center py-4">
+                    <div className="bg-[var(--franchise-border)] p-4">
+                      <div className="text-xs text-[var(--franchise-text)]/60 text-center py-4">
                         Loading tracked playoff performers...
                       </div>
                     </div>
                   ) : !Object.values(playoffLeaderBatting).some((items) => items.length > 0)
                     && !Object.values(playoffLeaderPitching).some((items) => items.length > 0)
                     && !Object.values(playoffLeaderFielding).some((items) => items.length > 0) ? (
-                    <div className="bg-[#4A6844] p-4">
-                      <div className="text-xs text-[#E8E8D8]/60 text-center py-4">
+                    <div className="bg-[var(--franchise-border)] p-4">
+                      <div className="text-xs text-[var(--franchise-text)]/60 text-center py-4">
                         Track playoff games via GameTracker to populate player performance
                       </div>
                     </div>
@@ -2427,11 +2427,11 @@ export function FranchiseHome() {
                         playoffLeaderPitching,
                         playoffLeaderFielding
                       ).map((card) => (
-                        <div key={card.label} className="bg-[#4A6844] p-4 border-2 border-[#E8E8D8]/30">
-                          <div className="text-[10px] text-[#E8E8D8]/60 mb-2">{card.label}</div>
-                          <div className="text-sm text-[#E8E8D8] font-bold mb-1">{card.playerName}</div>
-                          <div className="text-[10px] text-[#E8E8D8]/70 mb-2">{card.teamId}</div>
-                          <div className="text-[10px] text-[#E8E8D8]/90">{card.value}</div>
+                        <div key={card.label} className="bg-[var(--franchise-border)] p-4 border-2 border-[var(--franchise-text)]/30">
+                          <div className="text-[10px] text-[var(--franchise-text)]/60 mb-2">{card.label}</div>
+                          <div className="text-sm text-[var(--franchise-text)] font-bold mb-1">{card.playerName}</div>
+                          <div className="text-[10px] text-[var(--franchise-text)]/70 mb-2">{card.teamId}</div>
+                          <div className="text-[10px] text-[var(--franchise-text)]/90">{card.value}</div>
                         </div>
                       ))}
                     </div>
@@ -2443,24 +2443,24 @@ export function FranchiseHome() {
         )}
         
         {activeTab === "playoff-leaders" && (
-          <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-8">
+          <div className="bg-[var(--franchise-header)] border-[5px] border-[var(--franchise-border)] p-8">
             <div className="text-center mb-8">
-              <h2 className="text-2xl text-[#E8E8D8] font-bold mb-2">PLAYOFF LEADERS</h2>
-              <div className="text-sm text-[#E8E8D8]/70">Top individual performances</div>
+              <h2 className="text-2xl text-[var(--franchise-text)] font-bold mb-2">PLAYOFF LEADERS</h2>
+              <div className="text-sm text-[var(--franchise-text)]/70">Top individual performances</div>
             </div>
 
             {playoffData.isLoading ? (
-              <div className="text-center text-[#E8E8D8]/60 py-8">Loading playoff leaders...</div>
+              <div className="text-center text-[var(--franchise-text)]/60 py-8">Loading playoff leaders...</div>
             ) : !playoffData.playoff ? (
-              <div className="text-center text-[#E8E8D8]/60 py-8">No playoff data available</div>
+              <div className="text-center text-[var(--franchise-text)]/60 py-8">No playoff data available</div>
             ) : playoffData.playoff.status === 'NOT_STARTED' ? (
-              <div className="text-center text-[#E8E8D8]/60 py-8">Playoffs have not started yet</div>
+              <div className="text-center text-[var(--franchise-text)]/60 py-8">Playoffs have not started yet</div>
             ) : playoffLeadersLoading ? (
-              <div className="text-center text-[#E8E8D8]/60 py-8">Loading tracked playoff leaders...</div>
+              <div className="text-center text-[var(--franchise-text)]/60 py-8">Loading tracked playoff leaders...</div>
             ) : !Object.values(playoffLeaderBatting).some((items) => items.length > 0)
               && !Object.values(playoffLeaderPitching).some((items) => items.length > 0)
               && !Object.values(playoffLeaderFielding).some((items) => items.length > 0) ? (
-              <div className="text-center text-[#E8E8D8]/60 py-8">Track playoff games via GameTracker to populate leaders</div>
+              <div className="text-center text-[var(--franchise-text)]/60 py-8">Track playoff games via GameTracker to populate leaders</div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <FranchisePlayoffLeaderPanel title="BATTING LEADERS" entries={playoffLeaderBatting} />
@@ -2469,16 +2469,16 @@ export function FranchiseHome() {
 
                 {/* Series MVP - if champion exists */}
                 {playoffData.playoff.champion && playoffData.playoff.mvp && (
-                  <div className="lg:col-span-3 bg-[#5A8352] border-[4px] border-[#FFD700] p-6">
+                  <div className="lg:col-span-3 bg-[var(--franchise-panel)] border-[4px] border-[var(--franchise-gold-bright)] p-6">
                     <div className="flex items-center justify-center gap-2 mb-4">
-                      <Trophy className="w-6 h-6 text-[#FFD700]" />
-                      <div className="text-lg text-[#FFD700] font-bold">PLAYOFF MVP</div>
+                      <Trophy className="w-6 h-6 text-[var(--franchise-gold-bright)]" />
+                      <div className="text-lg text-[var(--franchise-gold-bright)] font-bold">PLAYOFF MVP</div>
                     </div>
-                    <div className="bg-[#4A6844] p-4 border-2 border-[#FFD700] text-center">
-                      <div className="text-xl text-[#FFD700] font-bold mb-1">
+                    <div className="bg-[var(--franchise-border)] p-4 border-2 border-[var(--franchise-gold-bright)] text-center">
+                      <div className="text-xl text-[var(--franchise-gold-bright)] font-bold mb-1">
                         {playoffData.playoff.mvp.playerName}
                       </div>
-                      <div className="text-sm text-[#E8E8D8]/70">
+                      <div className="text-sm text-[var(--franchise-text)]/70">
                         {playoffData.playoff.mvp.stats}
                       </div>
                     </div>
@@ -2490,26 +2490,26 @@ export function FranchiseHome() {
         )}
         
         {activeTab === "advance" && seasonPhase === "playoffs" && (
-          <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-8">
+          <div className="bg-[var(--franchise-header)] border-[5px] border-[var(--franchise-border)] p-8">
             <div className="text-center mb-8">
-              <h2 className="text-2xl text-[#E8E8D8] font-bold mb-2">ADVANCE TO OFFSEASON</h2>
-              <div className="text-sm text-[#E8E8D8]/70">Complete playoffs and review the season summary</div>
+              <h2 className="text-2xl text-[var(--franchise-text)] font-bold mb-2">ADVANCE TO OFFSEASON</h2>
+              <div className="text-sm text-[var(--franchise-text)]/70">Complete playoffs and review the season summary</div>
             </div>
 
             <div className="max-w-2xl mx-auto space-y-6">
               {/* Championship Summary */}
               {playoffData.playoff?.status === 'COMPLETED' && playoffData.playoff.champion ? (
-                <div className="bg-[#5A8352] p-6">
+                <div className="bg-[var(--franchise-panel)] p-6">
                   <div className="flex items-center justify-center gap-3 mb-4">
-                    <Trophy className="w-8 h-8 text-[#FFD700]" />
-                    <div className="text-xl text-[#E8E8D8] font-bold">SEASON {playoffData.playoff.seasonNumber} CHAMPION</div>
+                    <Trophy className="w-8 h-8 text-[var(--franchise-gold-bright)]" />
+                    <div className="text-xl text-[var(--franchise-text)] font-bold">SEASON {playoffData.playoff.seasonNumber} CHAMPION</div>
                   </div>
-                  <div className="bg-[#4A6844] p-4 border-2 border-[#FFD700] text-center">
-                    <div className="text-2xl text-[#FFD700] font-bold mb-2">
+                  <div className="bg-[var(--franchise-border)] p-4 border-2 border-[var(--franchise-gold-bright)] text-center">
+                    <div className="text-2xl text-[var(--franchise-gold-bright)] font-bold mb-2">
                       {playoffData.playoff.teams.find(t => t.teamId === playoffData.playoff?.champion)?.teamName || 'Champion'}
                     </div>
                     {playoffData.bracketByLeague.Championship && (
-                      <div className="text-xs text-[#E8E8D8]/70">
+                      <div className="text-xs text-[var(--franchise-text)]/70">
                         Defeated {
                           playoffData.bracketByLeague.Championship.winner === playoffData.bracketByLeague.Championship.higherSeed.teamId
                             ? playoffData.bracketByLeague.Championship.lowerSeed.teamName
@@ -2520,13 +2520,13 @@ export function FranchiseHome() {
                   </div>
                 </div>
               ) : (
-                <div className="bg-[#5A8352] p-6">
+                <div className="bg-[var(--franchise-panel)] p-6">
                   <div className="flex items-center justify-center gap-3 mb-4">
-                    <Trophy className="w-8 h-8 text-[#E8E8D8]/40" />
-                    <div className="text-xl text-[#E8E8D8]/60 font-bold">AWAITING CHAMPION</div>
+                    <Trophy className="w-8 h-8 text-[var(--franchise-text)]/40" />
+                    <div className="text-xl text-[var(--franchise-text)]/60 font-bold">AWAITING CHAMPION</div>
                   </div>
-                  <div className="bg-[#4A6844] p-4 border-2 border-[#E8E8D8]/30 text-center">
-                    <div className="text-sm text-[#E8E8D8]/60">
+                  <div className="bg-[var(--franchise-border)] p-4 border-2 border-[var(--franchise-text)]/30 text-center">
+                    <div className="text-sm text-[var(--franchise-text)]/60">
                       Complete all playoff series to crown a champion
                     </div>
                   </div>
@@ -2534,24 +2534,24 @@ export function FranchiseHome() {
               )}
 
               {/* Playoff Summary Stats */}
-              <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-6">
-                <div className="text-lg text-[#E8E8D8] font-bold mb-4">PLAYOFF SUMMARY</div>
+              <div className="bg-[var(--franchise-panel)] border-[4px] border-[var(--franchise-border)] p-6">
+                <div className="text-lg text-[var(--franchise-text)] font-bold mb-4">PLAYOFF SUMMARY</div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-[#4A6844] p-3 border-2 border-[#E8E8D8]/30">
-                    <div className="text-xs text-[#E8E8D8]/60 mb-1">Total Series</div>
-                    <div className="text-2xl text-[#E8E8D8] font-bold">{playoffData.series.length}</div>
+                  <div className="bg-[var(--franchise-border)] p-3 border-2 border-[var(--franchise-text)]/30">
+                    <div className="text-xs text-[var(--franchise-text)]/60 mb-1">Total Series</div>
+                    <div className="text-2xl text-[var(--franchise-text)] font-bold">{playoffData.series.length}</div>
                   </div>
-                  <div className="bg-[#4A6844] p-3 border-2 border-[#E8E8D8]/30">
-                    <div className="text-xs text-[#E8E8D8]/60 mb-1">Completed Series</div>
-                    <div className="text-2xl text-[#E8E8D8] font-bold">{playoffData.completedSeries.length}</div>
+                  <div className="bg-[var(--franchise-border)] p-3 border-2 border-[var(--franchise-text)]/30">
+                    <div className="text-xs text-[var(--franchise-text)]/60 mb-1">Completed Series</div>
+                    <div className="text-2xl text-[var(--franchise-text)] font-bold">{playoffData.completedSeries.length}</div>
                   </div>
-                  <div className="bg-[#4A6844] p-3 border-2 border-[#E8E8D8]/30">
-                    <div className="text-xs text-[#E8E8D8]/60 mb-1">In Progress</div>
-                    <div className="text-2xl text-[#E8E8D8] font-bold">{playoffData.inProgressSeries.length}</div>
+                  <div className="bg-[var(--franchise-border)] p-3 border-2 border-[var(--franchise-text)]/30">
+                    <div className="text-xs text-[var(--franchise-text)]/60 mb-1">In Progress</div>
+                    <div className="text-2xl text-[var(--franchise-text)] font-bold">{playoffData.inProgressSeries.length}</div>
                   </div>
-                  <div className="bg-[#4A6844] p-3 border-2 border-[#E8E8D8]/30">
-                    <div className="text-xs text-[#E8E8D8]/60 mb-1">Pending</div>
-                    <div className="text-2xl text-[#E8E8D8] font-bold">{playoffData.pendingSeries.length}</div>
+                  <div className="bg-[var(--franchise-border)] p-3 border-2 border-[var(--franchise-text)]/30">
+                    <div className="text-xs text-[var(--franchise-text)]/60 mb-1">Pending</div>
+                    <div className="text-2xl text-[var(--franchise-text)] font-bold">{playoffData.pendingSeries.length}</div>
                   </div>
                 </div>
               </div>
@@ -2562,29 +2562,29 @@ export function FranchiseHome() {
                 disabled={playoffData.playoff?.status !== 'COMPLETED'}
                 className={`w-full border-[5px] p-8 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] group ${
                   playoffData.playoff?.status === 'COMPLETED'
-                    ? 'bg-[#5A8352] border-[#C4A853] hover:bg-[#4F7D4B] active:scale-95'
-                    : 'bg-[#4A6844] border-[#E8E8D8]/30 cursor-not-allowed opacity-60'
+                    ? 'bg-[var(--franchise-panel)] border-[var(--franchise-gold)] hover:bg-[var(--franchise-field-raised)] active:scale-95'
+                    : 'bg-[var(--franchise-border)] border-[var(--franchise-text)]/30 cursor-not-allowed opacity-60'
                 }`}
               >
                 <div className="flex items-center justify-center gap-4">
                   <ArrowRight className={`w-12 h-12 ${
                     playoffData.playoff?.status === 'COMPLETED'
-                      ? 'text-[#E8E8D8] group-hover:text-[#5599FF] transition-colors'
-                      : 'text-[#E8E8D8]/40'
+                      ? 'text-[var(--franchise-text)] group-hover:text-[var(--franchise-info-bright)] transition-colors'
+                      : 'text-[var(--franchise-text)]/40'
                   }`} />
                   <div className="text-left">
                     <div className={`text-2xl font-bold mb-1 ${
-                      playoffData.playoff?.status === 'COMPLETED' ? 'text-[#E8E8D8]' : 'text-[#E8E8D8]/60'
+                      playoffData.playoff?.status === 'COMPLETED' ? 'text-[var(--franchise-text)]' : 'text-[var(--franchise-text)]/60'
                     }`}>VIEW SEASON SUMMARY</div>
                     <div className={`text-sm ${
-                      playoffData.playoff?.status === 'COMPLETED' ? 'text-[#E8E8D8]/80' : 'text-[#E8E8D8]/40'
+                      playoffData.playoff?.status === 'COMPLETED' ? 'text-[var(--franchise-text)]/80' : 'text-[var(--franchise-text)]/40'
                     }`}>Offseason execution is deferred in Franchise v1</div>
                   </div>
                 </div>
               </button>
 
               {playoffData.playoff?.status !== 'COMPLETED' && (
-                <div className="text-center text-xs text-[#FF9944] mt-4">
+                <div className="text-center text-xs text-[var(--franchise-loss-orange)] mt-4">
                   ⚠️ Complete all playoff series before advancing to offseason
                 </div>
               )}
@@ -2610,7 +2610,7 @@ export function FranchiseHome() {
             <div className="text-center py-12">
               <button
                 onClick={() => setShowFreeAgency(true)}
-                className="bg-[#5A8352] border-[5px] border-[#C4A853] px-12 py-6 text-xl text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+                className="bg-[var(--franchise-panel)] border-[5px] border-[var(--franchise-gold)] px-12 py-6 text-xl text-[var(--franchise-text)] hover:bg-[var(--franchise-field-raised)] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
               >
                 START FREE AGENCY
               </button>
@@ -2686,35 +2686,35 @@ export function FranchiseHome() {
         {canUseOffseasonExecution && activeTab === "draft" && (
           <button
             onClick={() => setShowDraft(true)}
-            className="w-full bg-[#6B9462] border-[5px] border-[#C4A853] p-8 hover:bg-[#5A8352] transition-colors group"
+            className="w-full bg-[var(--franchise-header)] border-[5px] border-[var(--franchise-gold)] p-8 hover:bg-[var(--franchise-panel)] transition-colors group"
           >
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-4">
-                <Trophy className="w-12 h-12 text-[#C4A853] group-hover:text-[#5599FF] transition-colors" />
+                <Trophy className="w-12 h-12 text-[var(--franchise-gold)] group-hover:text-[var(--franchise-info-bright)] transition-colors" />
                 <div className="text-left">
-                  <div className="text-3xl text-[#E8E8D8] font-bold">SEASON {currentSeason} DRAFT</div>
-                  <div className="text-base text-[#E8E8D8]/70 mt-1">Draft 10 prospects to your farm system</div>
+                  <div className="text-3xl text-[var(--franchise-text)] font-bold">SEASON {currentSeason} DRAFT</div>
+                  <div className="text-base text-[var(--franchise-text)]/70 mt-1">Draft 10 prospects to your farm system</div>
                 </div>
               </div>
-              <div className="bg-[#C4A853] text-black px-6 py-3 text-xl font-bold group-hover:bg-[#5599FF] transition-colors">
+              <div className="bg-[var(--franchise-gold)] text-black px-6 py-3 text-xl font-bold group-hover:bg-[var(--franchise-info-bright)] transition-colors">
                 START →
               </div>
             </div>
-            <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-4 max-w-3xl mx-auto">
+            <div className="bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-border)] p-4 max-w-3xl mx-auto">
               <div className="flex items-center justify-around text-center">
                 <div className="flex-1">
-                  <div className="text-sm text-[#E8E8D8]/60 mb-1">STEP 1</div>
-                  <div className="text-base text-[#E8E8D8]">Choose Inactive Players</div>
+                  <div className="text-sm text-[var(--franchise-text)]/60 mb-1">STEP 1</div>
+                  <div className="text-base text-[var(--franchise-text)]">Choose Inactive Players</div>
                 </div>
-                <ArrowRight className="w-5 h-5 text-[#E8E8D8]/40" />
+                <ArrowRight className="w-5 h-5 text-[var(--franchise-text)]/40" />
                 <div className="flex-1">
-                  <div className="text-sm text-[#E8E8D8]/60 mb-1">STEP 2</div>
-                  <div className="text-base text-[#E8E8D8]">Draft Farm Prospects</div>
+                  <div className="text-sm text-[var(--franchise-text)]/60 mb-1">STEP 2</div>
+                  <div className="text-base text-[var(--franchise-text)]">Draft Farm Prospects</div>
                 </div>
-                <ArrowRight className="w-5 h-5 text-[#E8E8D8]/40" />
+                <ArrowRight className="w-5 h-5 text-[var(--franchise-text)]/40" />
                 <div className="flex-1">
-                  <div className="text-sm text-[#E8E8D8]/60 mb-1">STEP 3</div>
-                  <div className="text-base text-[#E8E8D8]">Review & Confirm</div>
+                  <div className="text-sm text-[var(--franchise-text)]/60 mb-1">STEP 3</div>
+                  <div className="text-base text-[var(--franchise-text)]">Review & Confirm</div>
                 </div>
               </div>
             </div>
@@ -2722,41 +2722,41 @@ export function FranchiseHome() {
         )}
         {canUseOffseasonExecution && activeTab === "farm-reconciliation" && (
           <div className="p-8 space-y-6">
-            <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-6">
+            <div className="bg-[var(--franchise-panel)] border-[5px] border-[var(--franchise-gold)] p-6">
               <div className="flex items-center gap-4 mb-4">
-                <div className="w-16 h-16 bg-[#1A1A1A] rounded-full flex items-center justify-center text-3xl">
+                <div className="w-16 h-16 bg-[var(--franchise-ink)] rounded-full flex items-center justify-center text-3xl">
                   🌾
                 </div>
                 <div>
-                  <div className="text-2xl text-[#E8E8D8]">FARM SYSTEM RECONCILIATION</div>
-                  <div className="text-sm text-[#E8E8D8]/80">Offseason Phase 8</div>
+                  <div className="text-2xl text-[var(--franchise-text)]">FARM SYSTEM RECONCILIATION</div>
+                  <div className="text-sm text-[var(--franchise-text)]/80">Offseason Phase 8</div>
                 </div>
               </div>
-              <div className="text-sm text-[#E8E8D8]/80 mb-4">
+              <div className="text-sm text-[var(--franchise-text)]/80 mb-4">
                 Review and balance farm system rosters across all teams. Ensure each team has the correct number of farm players after draft picks, retirements, and free agency moves.
               </div>
               <div className="grid grid-cols-3 gap-4 mt-4">
-                <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
-                  <div className="text-2xl text-[#E8E8D8]">🌱</div>
-                  <div className="text-xs text-[#E8E8D8]/60">Prospects</div>
+                <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel)] p-3 text-center">
+                  <div className="text-2xl text-[var(--franchise-text)]">🌱</div>
+                  <div className="text-xs text-[var(--franchise-text)]/60">Prospects</div>
                 </div>
-                <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
-                  <div className="text-2xl text-[#E8E8D8]">📋</div>
-                  <div className="text-xs text-[#E8E8D8]/60">Roster Slots</div>
+                <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel)] p-3 text-center">
+                  <div className="text-2xl text-[var(--franchise-text)]">📋</div>
+                  <div className="text-xs text-[var(--franchise-text)]/60">Roster Slots</div>
                 </div>
-                <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
-                  <div className="text-2xl text-[#E8E8D8]">⚖️</div>
-                  <div className="text-xs text-[#E8E8D8]/60">Balance</div>
+                <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel)] p-3 text-center">
+                  <div className="text-2xl text-[var(--franchise-text)]">⚖️</div>
+                  <div className="text-xs text-[var(--franchise-text)]/60">Balance</div>
                 </div>
               </div>
             </div>
 
-            <div className="bg-[#4169E1]/20 border-l-4 border-[#4169E1] p-4">
-              <div className="text-xs text-[#E8E8D8]/90 mb-2 flex items-center gap-2">
+            <div className="bg-[var(--franchise-info-deep)]/20 border-l-4 border-[var(--franchise-info-deep)] p-4">
+              <div className="text-xs text-[var(--franchise-text)]/90 mb-2 flex items-center gap-2">
                 <span>💡</span>
                 <span className="font-bold">Phase 8 — Coming Soon</span>
               </div>
-              <div className="text-xs text-[#E8E8D8]/70">
+              <div className="text-xs text-[var(--franchise-text)]/70">
                 Farm system reconciliation will automatically balance rosters after the draft and free agency phases. For now, use the "Complete Phase & Advance" button to skip to the next phase.
               </div>
             </div>
@@ -2764,41 +2764,41 @@ export function FranchiseHome() {
         )}
         {canUseOffseasonExecution && activeTab === "chemistry" && (
           <div className="p-8 space-y-6">
-            <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-6">
+            <div className="bg-[var(--franchise-panel)] border-[5px] border-[var(--franchise-gold)] p-6">
               <div className="flex items-center gap-4 mb-4">
-                <div className="w-16 h-16 bg-[#1A1A1A] rounded-full flex items-center justify-center text-3xl">
+                <div className="w-16 h-16 bg-[var(--franchise-ink)] rounded-full flex items-center justify-center text-3xl">
                   ⚗️
                 </div>
                 <div>
-                  <div className="text-2xl text-[#E8E8D8]">CHEMISTRY REBALANCING</div>
-                  <div className="text-sm text-[#E8E8D8]/80">Offseason Phase 9</div>
+                  <div className="text-2xl text-[var(--franchise-text)]">CHEMISTRY REBALANCING</div>
+                  <div className="text-sm text-[var(--franchise-text)]/80">Offseason Phase 9</div>
                 </div>
               </div>
-              <div className="text-sm text-[#E8E8D8]/80 mb-4">
+              <div className="text-sm text-[var(--franchise-text)]/80 mb-4">
                 Team chemistry shifts based on roster changes during the offseason. New acquisitions, departures, and trades all affect how well your team gels heading into the new season.
               </div>
               <div className="grid grid-cols-3 gap-4 mt-4">
-                <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
-                  <div className="text-2xl text-[#E8E8D8]">📈</div>
-                  <div className="text-xs text-[#E8E8D8]/60">Improved</div>
+                <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel)] p-3 text-center">
+                  <div className="text-2xl text-[var(--franchise-text)]">📈</div>
+                  <div className="text-xs text-[var(--franchise-text)]/60">Improved</div>
                 </div>
-                <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
-                  <div className="text-2xl text-[#E8E8D8]">📉</div>
-                  <div className="text-xs text-[#E8E8D8]/60">Declined</div>
+                <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel)] p-3 text-center">
+                  <div className="text-2xl text-[var(--franchise-text)]">📉</div>
+                  <div className="text-xs text-[var(--franchise-text)]/60">Declined</div>
                 </div>
-                <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
-                  <div className="text-2xl text-[#E8E8D8]">➖</div>
-                  <div className="text-xs text-[#E8E8D8]/60">Unchanged</div>
+                <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel)] p-3 text-center">
+                  <div className="text-2xl text-[var(--franchise-text)]">➖</div>
+                  <div className="text-xs text-[var(--franchise-text)]/60">Unchanged</div>
                 </div>
               </div>
             </div>
 
-            <div className="bg-[#4169E1]/20 border-l-4 border-[#4169E1] p-4">
-              <div className="text-xs text-[#E8E8D8]/90 mb-2 flex items-center gap-2">
+            <div className="bg-[var(--franchise-info-deep)]/20 border-l-4 border-[var(--franchise-info-deep)] p-4">
+              <div className="text-xs text-[var(--franchise-text)]/90 mb-2 flex items-center gap-2">
                 <span>💡</span>
                 <span className="font-bold">Phase 9 — Coming Soon</span>
               </div>
-              <div className="text-xs text-[#E8E8D8]/70">
+              <div className="text-xs text-[var(--franchise-text)]/70">
                 Chemistry rebalancing will calculate team chemistry changes based on roster moves. For now, use the "Complete Phase & Advance" button to skip to the next phase.
               </div>
             </div>
@@ -2814,7 +2814,7 @@ export function FranchiseHome() {
             <div className="text-center py-12">
               <button
                 onClick={() => setShowFinalize(true)}
-                className="bg-[#5A8352] border-[5px] border-[#C4A853] px-12 py-6 text-xl text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+                className="bg-[var(--franchise-panel)] border-[5px] border-[var(--franchise-gold)] px-12 py-6 text-xl text-[var(--franchise-text)] hover:bg-[var(--franchise-field-raised)] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
               >
                 START FINALIZE & ADVANCE
               </button>
@@ -2846,30 +2846,30 @@ export function FranchiseHome() {
         {canUseOffseasonExecution && activeTab === "ratings-adj" && (
           <button
             onClick={() => setShowRatingsAdjustment(true)}
-            className="w-full bg-[#6B9462] border-[5px] border-[#C4A853] p-8 hover:bg-[#5A8352] transition-colors group"
+            className="w-full bg-[var(--franchise-header)] border-[5px] border-[var(--franchise-gold)] p-8 hover:bg-[var(--franchise-panel)] transition-colors group"
           >
             <div className="flex items-center justify-center gap-4 mb-4">
-              <BarChart3 className="w-16 h-16 text-[#E8E8D8] group-hover:text-[#DD0000] transition-colors" />
+              <BarChart3 className="w-16 h-16 text-[var(--franchise-text)] group-hover:text-[var(--franchise-loss)] transition-colors" />
               <div className="text-left">
-                <div className="text-2xl text-[#E8E8D8] font-bold mb-1">END-OF-SEASON RATINGS ADJUSTMENTS</div>
-                <div className="text-sm text-[#E8E8D8]/80">Review player performance and adjust ratings for Season 4</div>
+                <div className="text-2xl text-[var(--franchise-text)] font-bold mb-1">END-OF-SEASON RATINGS ADJUSTMENTS</div>
+                <div className="text-sm text-[var(--franchise-text)]/80">Review player performance and adjust ratings for Season 4</div>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-4 max-w-2xl mx-auto">
-              <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-4">
-                <div className="text-3xl text-[#E8E8D8] mb-1">📊</div>
-                <div className="text-xs text-[#E8E8D8]/60">WAR-Based Adjustments</div>
+              <div className="bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-border)] p-4">
+                <div className="text-3xl text-[var(--franchise-text)] mb-1">📊</div>
+                <div className="text-xs text-[var(--franchise-text)]/60">WAR-Based Adjustments</div>
               </div>
-              <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-4">
-                <div className="text-3xl text-[#E8E8D8] mb-1">💰</div>
-                <div className="text-xs text-[#E8E8D8]/60">Salary Updates</div>
+              <div className="bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-border)] p-4">
+                <div className="text-3xl text-[var(--franchise-text)] mb-1">💰</div>
+                <div className="text-xs text-[var(--franchise-text)]/60">Salary Updates</div>
               </div>
-              <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-4">
-                <div className="text-3xl text-[#E8E8D8] mb-1">🏆</div>
-                <div className="text-xs text-[#E8E8D8]/60">Manager Bonuses</div>
+              <div className="bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-border)] p-4">
+                <div className="text-3xl text-[var(--franchise-text)] mb-1">🏆</div>
+                <div className="text-xs text-[var(--franchise-text)]/60">Manager Bonuses</div>
               </div>
             </div>
-            <div className="mt-6 text-sm text-[#E8E8D8] flex items-center justify-center gap-2">
+            <div className="mt-6 text-sm text-[var(--franchise-text)] flex items-center justify-center gap-2">
               <span>Click to begin</span>
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </div>
@@ -2877,52 +2877,52 @@ export function FranchiseHome() {
         )}
         {canUseOffseasonExecution && activeTab === "awards" && (
           <div className="p-8 space-y-6">
-            <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-6">
+            <div className="bg-[var(--franchise-panel)] border-[5px] border-[var(--franchise-gold)] p-6">
               <div className="flex items-center gap-4 mb-4">
-                <div className="w-16 h-16 bg-[#1A1A1A] rounded-full flex items-center justify-center text-3xl">
+                <div className="w-16 h-16 bg-[var(--franchise-ink)] rounded-full flex items-center justify-center text-3xl">
                   🏆
                 </div>
                 <div>
-                  <div className="text-2xl text-[#E8E8D8]">AWARDS CEREMONY</div>
-                  <div className="text-sm text-[#E8E8D8]/80">Offseason Phase 2</div>
+                  <div className="text-2xl text-[var(--franchise-text)]">AWARDS CEREMONY</div>
+                  <div className="text-sm text-[var(--franchise-text)]/80">Offseason Phase 2</div>
                 </div>
               </div>
-              <div className="text-sm text-[#E8E8D8]/80 mb-4">
+              <div className="text-sm text-[var(--franchise-text)]/80 mb-4">
                 Celebrate the season's best performers across 13 award categories. League leaders receive automatic rewards, while major awards use hybrid voting with user override capability.
               </div>
               <div className="grid grid-cols-4 gap-4 mt-4">
-                <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
-                  <div className="text-2xl text-[#E8E8D8]">13</div>
-                  <div className="text-xs text-[#E8E8D8]/60">Award Screens</div>
+                <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel)] p-3 text-center">
+                  <div className="text-2xl text-[var(--franchise-text)]">13</div>
+                  <div className="text-xs text-[var(--franchise-text)]/60">Award Screens</div>
                 </div>
-                <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
-                  <div className="text-2xl text-[#E8E8D8]">42+</div>
-                  <div className="text-xs text-[#E8E8D8]/60">Total Awards</div>
+                <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel)] p-3 text-center">
+                  <div className="text-2xl text-[var(--franchise-text)]">42+</div>
+                  <div className="text-xs text-[var(--franchise-text)]/60">Total Awards</div>
                 </div>
-                <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
-                  <div className="text-2xl text-[#E8E8D8]">🥇</div>
-                  <div className="text-xs text-[#E8E8D8]/60">Gold Gloves</div>
+                <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel)] p-3 text-center">
+                  <div className="text-2xl text-[var(--franchise-text)]">🥇</div>
+                  <div className="text-xs text-[var(--franchise-text)]/60">Gold Gloves</div>
                 </div>
-                <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
-                  <div className="text-2xl text-[#E8E8D8]">👑</div>
-                  <div className="text-xs text-[#E8E8D8]/60">MVP Awards</div>
+                <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel)] p-3 text-center">
+                  <div className="text-2xl text-[var(--franchise-text)]">👑</div>
+                  <div className="text-xs text-[var(--franchise-text)]/60">MVP Awards</div>
                 </div>
               </div>
             </div>
 
             <button
               onClick={() => setShowAwards(true)}
-              className="w-full bg-[#5A8352] border-[5px] border-[#4A6844] py-6 text-xl text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+              className="w-full bg-[var(--franchise-panel)] border-[5px] border-[var(--franchise-border)] py-6 text-xl text-[var(--franchise-text)] hover:bg-[var(--franchise-field-raised)] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
             >
               🏆 BEGIN AWARDS CEREMONY 🏆
             </button>
 
-            <div className="bg-[#4169E1]/20 border-l-4 border-[#4169E1] p-4">
-              <div className="flex items-start gap-2 text-sm text-[#E8E8D8]">
+            <div className="bg-[var(--franchise-info-deep)]/20 border-l-4 border-[var(--franchise-info-deep)] p-4">
+              <div className="flex items-start gap-2 text-sm text-[var(--franchise-text)]">
                 <span className="text-lg">ℹ️</span>
                 <div>
                   <div className="font-bold mb-1">Award Categories:</div>
-                  <ul className="text-[#E8E8D8]/80 space-y-1 ml-4 list-disc">
+                  <ul className="text-[var(--franchise-text)]/80 space-y-1 ml-4 list-disc">
                     <li>League Leaders (auto-calculated rewards)</li>
                     <li>Gold Glove (9 positions) + Platinum Glove</li>
                     <li>Silver Slugger (9 positions) + Booger Glove</li>
@@ -2937,48 +2937,48 @@ export function FranchiseHome() {
         )}
         {canUseOffseasonExecution && activeTab === "contraction" && (
           <div className="p-8 space-y-6">
-            <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-6">
+            <div className="bg-[var(--franchise-panel)] border-[5px] border-[var(--franchise-gold)] p-6">
               <div className="flex items-center gap-4 mb-4">
-                <div className="w-16 h-16 bg-[#1A1A1A] rounded-full flex items-center justify-center text-3xl">
+                <div className="w-16 h-16 bg-[var(--franchise-ink)] rounded-full flex items-center justify-center text-3xl">
                   ⚠️
                 </div>
                 <div>
-                  <div className="text-2xl text-[#E8E8D8]">EXPANSION BOUNDARY</div>
-                  <div className="text-sm text-[#E8E8D8]/80">Offseason Phase 4</div>
+                  <div className="text-2xl text-[var(--franchise-text)]">EXPANSION BOUNDARY</div>
+                  <div className="text-sm text-[var(--franchise-text)]/80">Offseason Phase 4</div>
                 </div>
               </div>
-              <div className="text-sm text-[#E8E8D8]/80 mb-4">
+              <div className="text-sm text-[var(--franchise-text)]/80 mb-4">
                 League contraction and expansion workflows are deferred in Mode 2 v1. This phase is skip-only until franchise-owned offseason adapters are implemented.
               </div>
               <div className="grid grid-cols-3 gap-4 mt-4">
-                <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
-                  <div className="text-2xl text-[#E8E8D8]">⏸</div>
-                  <div className="text-xs text-[#E8E8D8]/60">Deferred</div>
+                <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel)] p-3 text-center">
+                  <div className="text-2xl text-[var(--franchise-text)]">⏸</div>
+                  <div className="text-xs text-[var(--franchise-text)]/60">Deferred</div>
                 </div>
-                <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
-                  <div className="text-2xl text-[#E8E8D8]">V1</div>
-                  <div className="text-xs text-[#E8E8D8]/60">Skip Only</div>
+                <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel)] p-3 text-center">
+                  <div className="text-2xl text-[var(--franchise-text)]">V1</div>
+                  <div className="text-xs text-[var(--franchise-text)]/60">Skip Only</div>
                 </div>
-                <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
-                  <div className="text-2xl text-[#E8E8D8]">🏛️</div>
-                  <div className="text-xs text-[#E8E8D8]/60">No Mutation</div>
+                <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel)] p-3 text-center">
+                  <div className="text-2xl text-[var(--franchise-text)]">🏛️</div>
+                  <div className="text-xs text-[var(--franchise-text)]/60">No Mutation</div>
                 </div>
               </div>
             </div>
 
             <button
               onClick={handleAdvancePhase}
-              className="w-full bg-[#5A8352] border-[5px] border-[#4A6844] py-6 text-xl text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+              className="w-full bg-[var(--franchise-panel)] border-[5px] border-[var(--franchise-border)] py-6 text-xl text-[var(--franchise-text)] hover:bg-[var(--franchise-field-raised)] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
             >
               SKIP DEFERRED EXPANSION PHASE →
             </button>
 
-            <div className="bg-[#4169E1]/20 border-l-4 border-[#4169E1] p-4">
-              <div className="text-xs text-[#E8E8D8]/90 mb-2 flex items-center gap-2">
+            <div className="bg-[var(--franchise-info-deep)]/20 border-l-4 border-[var(--franchise-info-deep)] p-4">
+              <div className="text-xs text-[var(--franchise-text)]/90 mb-2 flex items-center gap-2">
                 <span>💡</span>
                 <span className="font-bold">Phase 4 Boundary</span>
               </div>
-              <div className="text-xs text-[#E8E8D8]/70 space-y-1">
+              <div className="text-xs text-[var(--franchise-text)]/70 space-y-1">
                 Expansion and contraction are not active franchise workflows in Mode 2 v1. Use the skip button to continue the offseason without mutating franchise or League Builder data.
               </div>
             </div>
@@ -2986,48 +2986,48 @@ export function FranchiseHome() {
         )}
         {canUseOffseasonExecution && activeTab === "retirements" && (
           <div className="p-8 space-y-6">
-            <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-6">
+            <div className="bg-[var(--franchise-panel)] border-[5px] border-[var(--franchise-gold)] p-6">
               <div className="flex items-center gap-4 mb-4">
-                <div className="w-16 h-16 bg-[#1A1A1A] rounded-full flex items-center justify-center text-3xl">
+                <div className="w-16 h-16 bg-[var(--franchise-ink)] rounded-full flex items-center justify-center text-3xl">
                   🎩
                 </div>
                 <div>
-                  <div className="text-2xl text-[#E8E8D8]">RETIREMENTS</div>
-                  <div className="text-sm text-[#E8E8D8]/80">Offseason Phase 5</div>
+                  <div className="text-2xl text-[var(--franchise-text)]">RETIREMENTS</div>
+                  <div className="text-sm text-[var(--franchise-text)]/80">Offseason Phase 5</div>
                 </div>
               </div>
-              <div className="text-sm text-[#E8E8D8]/80 mb-4">
+              <div className="text-sm text-[var(--franchise-text)]/80 mb-4">
                 Players retire based on age-weighted dice rolls. The goal is 1-2 retirements per team per season. Celebrate retiring players and optionally retire their jersey numbers.
               </div>
               <div className="grid grid-cols-3 gap-4 mt-4">
-                <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
-                  <div className="text-2xl text-[#E8E8D8]">8</div>
-                  <div className="text-xs text-[#E8E8D8]/60">Teams</div>
+                <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel)] p-3 text-center">
+                  <div className="text-2xl text-[var(--franchise-text)]">8</div>
+                  <div className="text-xs text-[var(--franchise-text)]/60">Teams</div>
                 </div>
-                <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
-                  <div className="text-2xl text-[#E8E8D8]">1-2</div>
-                  <div className="text-xs text-[#E8E8D8]/60">Per Team</div>
+                <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel)] p-3 text-center">
+                  <div className="text-2xl text-[var(--franchise-text)]">1-2</div>
+                  <div className="text-xs text-[var(--franchise-text)]/60">Per Team</div>
                 </div>
-                <div className="bg-[#4A6844] border-[3px] border-[#5A8352] p-3 text-center">
-                  <div className="text-2xl text-[#E8E8D8]">🎲</div>
-                  <div className="text-xs text-[#E8E8D8]/60">Dice Roll</div>
+                <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel)] p-3 text-center">
+                  <div className="text-2xl text-[var(--franchise-text)]">🎲</div>
+                  <div className="text-xs text-[var(--franchise-text)]/60">Dice Roll</div>
                 </div>
               </div>
             </div>
 
             <button
               onClick={() => setShowRetirements(true)}
-              className="w-full bg-[#5A8352] border-[5px] border-[#4A6844] py-6 text-xl text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+              className="w-full bg-[var(--franchise-panel)] border-[5px] border-[var(--franchise-border)] py-6 text-xl text-[var(--franchise-text)] hover:bg-[var(--franchise-field-raised)] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
             >
               🎩 BEGIN RETIREMENT PHASE 🎩
             </button>
 
-            <div className="bg-[#4169E1]/20 border-l-4 border-[#4169E1] p-4">
-              <div className="flex items-start gap-2 text-sm text-[#E8E8D8]">
+            <div className="bg-[var(--franchise-info-deep)]/20 border-l-4 border-[var(--franchise-info-deep)] p-4">
+              <div className="flex items-start gap-2 text-sm text-[var(--franchise-text)]">
                 <span className="text-lg">ℹ️</span>
                 <div>
                   <div className="font-bold mb-1">How it works:</div>
-                  <ul className="text-[#E8E8D8]/80 space-y-1 ml-4 list-disc">
+                  <ul className="text-[var(--franchise-text)]/80 space-y-1 ml-4 list-disc">
                     <li>Review retirement probabilities for each team (based on player age)</li>
                     <li>Roll dice to see if anyone retires</li>
                     <li>Celebrate retiring players with career highlights</li>
@@ -3040,7 +3040,7 @@ export function FranchiseHome() {
           </div>
         )}
         {activeTab === "advance" && (
-          <div className="text-center py-12 text-[#E8E8D8]/60 text-xs">ADVANCE COMING SOON</div>
+          <div className="text-center py-12 text-[var(--franchise-text)]/60 text-xs">ADVANCE COMING SOON</div>
         )}
       </div>
 
@@ -3060,15 +3060,15 @@ export function FranchiseHome() {
 
       {scoreOnlyGame && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-          <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-6 max-w-md w-full mx-4">
-            <div className="text-lg text-[#E8E8D8] mb-2 text-center">ENTER FINAL SCORE</div>
-            <div className="text-[10px] text-[#E8E8D8]/70 mb-5 text-center">
+          <div className="bg-[var(--franchise-header)] border-[6px] border-[var(--franchise-border)] p-6 max-w-md w-full mx-4">
+            <div className="text-lg text-[var(--franchise-text)] mb-2 text-center">ENTER FINAL SCORE</div>
+            <div className="text-[10px] text-[var(--franchise-text)]/70 mb-5 text-center">
               Score-only updates schedule + standings. It may queue team-fan morale prompt context, but morale changes only after Random Event Log confirmation. No Game Detail archive, player stats, WPA, fame, milestones, awards, designations, relationships, or Almanac player evidence.
             </div>
 
             <div className="grid grid-cols-2 gap-3 mb-4">
               <label className="block">
-                <span className="block text-[9px] text-[#E8E8D8]/80 mb-1">
+                <span className="block text-[9px] text-[var(--franchise-text)]/80 mb-1">
                   {franchiseData.teamNameMap[scoreOnlyGame.awayTeamId] ?? scoreOnlyGame.awayTeamId}
                 </span>
                 <input
@@ -3077,11 +3077,11 @@ export function FranchiseHome() {
                   step="1"
                   value={scoreOnlyAwayScore}
                   onChange={(event) => setScoreOnlyAwayScore(event.target.value)}
-                  className="w-full bg-[#4A6844] border-[3px] border-[#3F5A3A] p-2 text-sm text-[#E8E8D8]"
+                  className="w-full bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel-dark)] p-2 text-sm text-[var(--franchise-text)]"
                 />
               </label>
               <label className="block">
-                <span className="block text-[9px] text-[#E8E8D8]/80 mb-1">
+                <span className="block text-[9px] text-[var(--franchise-text)]/80 mb-1">
                   {franchiseData.teamNameMap[scoreOnlyGame.homeTeamId] ?? scoreOnlyGame.homeTeamId}
                 </span>
                 <input
@@ -3090,13 +3090,13 @@ export function FranchiseHome() {
                   step="1"
                   value={scoreOnlyHomeScore}
                   onChange={(event) => setScoreOnlyHomeScore(event.target.value)}
-                  className="w-full bg-[#4A6844] border-[3px] border-[#3F5A3A] p-2 text-sm text-[#E8E8D8]"
+                  className="w-full bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel-dark)] p-2 text-sm text-[var(--franchise-text)]"
                 />
               </label>
             </div>
 
             {scoreOnlyError && (
-              <div className="bg-[#8B0000] border-[3px] border-[#DC3545] p-2 text-[9px] text-white mb-4">
+              <div className="bg-[var(--franchise-loss-deep)] border-[3px] border-[var(--franchise-loss-alt)] p-2 text-[9px] text-white mb-4">
                 {scoreOnlyError}
               </div>
             )}
@@ -3105,14 +3105,14 @@ export function FranchiseHome() {
               <button
                 onClick={closeScoreOnlyModal}
                 disabled={scoreOnlySaving}
-                className="flex-1 bg-[#4A6844] border-[5px] border-[#5A8352] py-3 text-sm text-[#E8E8D8] hover:bg-[#3F5A3A] disabled:opacity-50"
+                className="flex-1 bg-[var(--franchise-border)] border-[5px] border-[var(--franchise-panel)] py-3 text-sm text-[var(--franchise-text)] hover:bg-[var(--franchise-panel-dark)] disabled:opacity-50"
               >
                 CANCEL
               </button>
               <button
                 onClick={() => void handleScoreOnlySubmit()}
                 disabled={scoreOnlySaving}
-                className="flex-1 bg-[#5A8352] border-[5px] border-[#4A6844] py-3 text-sm text-[#E8E8D8] hover:bg-[#4F7D4B] disabled:opacity-50"
+                className="flex-1 bg-[var(--franchise-panel)] border-[5px] border-[var(--franchise-border)] py-3 text-sm text-[var(--franchise-text)] hover:bg-[var(--franchise-field-raised)] disabled:opacity-50"
               >
                 {scoreOnlySaving ? 'SAVING' : 'SAVE SCORE ONLY'}
               </button>
@@ -3138,14 +3138,14 @@ function StandingsContent() {
   return (
     <div className="space-y-4">
       {/* League Toggle */}
-      <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-4">
+      <div className="bg-[var(--franchise-header)] border-[5px] border-[var(--franchise-border)] p-4">
         <div className="flex gap-2">
           <button
             onClick={() => setSelectedLeague("Eastern")}
             className={`flex-1 py-2 px-4 text-[10px] transition ${
               selectedLeague === "Eastern"
-                ? "bg-[#4A6844] text-[#E8E8D8]"
-                : "bg-[#5A8352] text-[#E8E8D8]/60 hover:bg-[#4F7D4B]"
+                ? "bg-[var(--franchise-border)] text-[var(--franchise-text)]"
+                : "bg-[var(--franchise-panel)] text-[var(--franchise-text)]/60 hover:bg-[var(--franchise-field-raised)]"
             }`}
           >
             EASTERN LEAGUE
@@ -3154,8 +3154,8 @@ function StandingsContent() {
             onClick={() => setSelectedLeague("Western")}
             className={`flex-1 py-2 px-4 text-[10px] transition ${
               selectedLeague === "Western"
-                ? "bg-[#4A6844] text-[#E8E8D8]"
-                : "bg-[#5A8352] text-[#E8E8D8]/60 hover:bg-[#4F7D4B]"
+                ? "bg-[var(--franchise-border)] text-[var(--franchise-text)]"
+                : "bg-[var(--franchise-panel)] text-[var(--franchise-text)]/60 hover:bg-[var(--franchise-field-raised)]"
             }`}
           >
             WESTERN LEAGUE
@@ -3165,21 +3165,21 @@ function StandingsContent() {
 
       {/* Divisions */}
       {Object.entries(currentLeagueStandings).map(([division, teams]) => (
-        <div key={division} className="bg-[#6B9462] border-[5px] border-[#4A6844] p-4">
+        <div key={division} className="bg-[var(--franchise-header)] border-[5px] border-[var(--franchise-border)] p-4">
           <div 
-            className="text-[12px] text-[#E8E8D8] mb-3 pb-2 border-b-2 border-[#4A6844]"
+            className="text-[12px] text-[var(--franchise-text)] mb-3 pb-2 border-b-2 border-[var(--franchise-border)]"
             style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}
           >
             {division.toUpperCase()}
           </div>
           
           {/* Table Header */}
-          <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-2 mb-2 px-2 pb-1 border-b border-[#4A6844]">
-            <div className="text-[8px] text-[#E8E8D8]/70">TEAM</div>
-            <div className="text-[8px] text-[#E8E8D8]/70 text-center">W</div>
-            <div className="text-[8px] text-[#E8E8D8]/70 text-center">L</div>
-            <div className="text-[8px] text-[#E8E8D8]/70 text-center">GB</div>
-            <div className="text-[8px] text-[#E8E8D8]/70 text-center">RD</div>
+          <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-2 mb-2 px-2 pb-1 border-b border-[var(--franchise-border)]">
+            <div className="text-[8px] text-[var(--franchise-text)]/70">TEAM</div>
+            <div className="text-[8px] text-[var(--franchise-text)]/70 text-center">W</div>
+            <div className="text-[8px] text-[var(--franchise-text)]/70 text-center">L</div>
+            <div className="text-[8px] text-[var(--franchise-text)]/70 text-center">GB</div>
+            <div className="text-[8px] text-[var(--franchise-text)]/70 text-center">RD</div>
           </div>
 
           {/* Team Rows */}
@@ -3187,15 +3187,15 @@ function StandingsContent() {
             <div 
               key={teamData.team}
               className={`grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-2 px-2 py-1.5 ${
-                index % 2 === 0 ? 'bg-[#5A8352]/30' : ''
+                index % 2 === 0 ? 'bg-[var(--franchise-panel)]/30' : ''
               }`}
             >
-              <div className="text-[10px] text-[#E8E8D8]">{teamData.team}</div>
-              <div className="text-[10px] text-[#E8E8D8] text-center">{teamData.wins}</div>
-              <div className="text-[10px] text-[#E8E8D8] text-center">{teamData.losses}</div>
-              <div className="text-[10px] text-[#E8E8D8] text-center">{teamData.gamesBack}</div>
+              <div className="text-[10px] text-[var(--franchise-text)]">{teamData.team}</div>
+              <div className="text-[10px] text-[var(--franchise-text)] text-center">{teamData.wins}</div>
+              <div className="text-[10px] text-[var(--franchise-text)] text-center">{teamData.losses}</div>
+              <div className="text-[10px] text-[var(--franchise-text)] text-center">{teamData.gamesBack}</div>
               <div className={`text-[10px] text-center ${
-                teamData.runDiff.startsWith('+') ? 'text-[#E8E8D8]' : 'text-[#E8E8D8]/80'
+                teamData.runDiff.startsWith('+') ? 'text-[var(--franchise-text)]' : 'text-[var(--franchise-text)]/80'
               }`}>
                 {teamData.runDiff}
               </div>
@@ -3995,20 +3995,20 @@ function GameDayContent({
     <div className="space-y-4">
       {/* Season complete banner */}
       {seasonComplete && (
-        <div className="bg-[#C4A853] border-[6px] border-[#9A7B2C] p-6 text-center">
-          <div className="text-2xl text-[#1a1a1a] mb-2" style={{ textShadow: '1px 1px 0px rgba(255,255,255,0.3)' }}>
+        <div className="bg-[var(--franchise-gold)] border-[6px] border-[var(--franchise-gold-dark)] p-6 text-center">
+          <div className="text-2xl text-[var(--franchise-ink)] mb-2" style={{ textShadow: '1px 1px 0px rgba(255,255,255,0.3)' }}>
             REGULAR SEASON COMPLETE
           </div>
-          <div className="text-sm text-[#1a1a1a]/80 mb-1">
+          <div className="text-sm text-[var(--franchise-ink)]/80 mb-1">
             {completedCount} game{completedCount !== 1 ? 's' : ''} played
             {skippedCount > 0 && ` / ${skippedCount} skipped`}
           </div>
-          <div className="text-[10px] text-[#1a1a1a]/60 mb-3">
+          <div className="text-[10px] text-[var(--franchise-ink)]/60 mb-3">
             Season {currentSeason} ({gamesPerTeam} games per team)
           </div>
           <button
             onClick={() => navigate(`/franchise/${franchiseId}/season-summary`)}
-            className="bg-[#1a1a1a] border-[4px] border-[#9A7B2C] py-3 px-8 text-sm text-[#C4A853] hover:bg-[#2a2a2a] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)]"
+            className="bg-[var(--franchise-ink)] border-[4px] border-[var(--franchise-gold-dark)] py-3 px-8 text-sm text-[var(--franchise-gold)] hover:bg-[var(--franchise-ink-soft)] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)]"
             style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
           >
             VIEW SEASON SUMMARY
@@ -4018,14 +4018,14 @@ function GameDayContent({
 
       {/* Next game card */}
       {!seasonComplete && !scheduleData.isLoading && !hasNextGame && (
-        <div className="bg-[#5A8352] border-[5px] border-[#4A6844] p-8 text-center">
-          <div className="text-lg text-[#E8E8D8] mb-2">NO GAMES SCHEDULED</div>
-          <div className="text-sm text-[#E8E8D8]/80 mb-6">
+        <div className="bg-[var(--franchise-panel)] border-[5px] border-[var(--franchise-border)] p-8 text-center">
+          <div className="text-lg text-[var(--franchise-text)] mb-2">NO GAMES SCHEDULED</div>
+          <div className="text-sm text-[var(--franchise-text)]/80 mb-6">
             Season {currentSeason} starts empty. Add SMB4 games manually as you play them.
           </div>
           <button
             onClick={onAddGame}
-            className="bg-[#5599FF] border-[3px] border-[#3366FF] px-6 py-3 text-sm text-[#E8E8D8] hover:bg-[#3366FF] active:scale-95 transition-transform inline-flex items-center gap-2"
+            className="bg-[var(--franchise-info-bright)] border-[3px] border-[var(--franchise-info)] px-6 py-3 text-sm text-[var(--franchise-text)] hover:bg-[var(--franchise-info)] active:scale-95 transition-transform inline-flex items-center gap-2"
           >
             <Plus className="w-4 h-4" /> Add Game
           </button>
@@ -4033,22 +4033,22 @@ function GameDayContent({
       )}
 
       {!seasonComplete && scheduleData.nextGame && (
-      <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-4 relative">
-        <div className="text-[8px] text-[#E8E8D8] mb-3">▶ NEXT GAME{scheduleData.nextGame.date ? ` • ${scheduleData.nextGame.date}` : ''}</div>
+      <div className="bg-[var(--franchise-panel)] border-[5px] border-[var(--franchise-gold)] p-4 relative">
+        <div className="text-[8px] text-[var(--franchise-text)] mb-3">▶ NEXT GAME{scheduleData.nextGame.date ? ` • ${scheduleData.nextGame.date}` : ''}</div>
         <div className="grid grid-cols-3 gap-4 items-center mb-4">
           <div className="text-center">
-            <div className="text-lg text-[#E8E8D8]" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>{awayTeamId.toUpperCase()}</div>
-            <div className="text-[8px] text-[#E8E8D8]">{franchiseData.nextGame?.awayRecord ?? ''}</div>
+            <div className="text-lg text-[var(--franchise-text)]" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>{awayTeamId.toUpperCase()}</div>
+            <div className="text-[8px] text-[var(--franchise-text)]">{franchiseData.nextGame?.awayRecord ?? ''}</div>
           </div>
 
           <div className="text-center">
-            <div className="text-2xl text-[#E8E8D8]">vs</div>
-            <div className="text-[7px] text-[#E8E8D8]/70 italic mt-1">{franchiseData.stadiumMap[homeTeamId] || homeTeamId.toUpperCase()}</div>
+            <div className="text-2xl text-[var(--franchise-text)]">vs</div>
+            <div className="text-[7px] text-[var(--franchise-text)]/70 italic mt-1">{franchiseData.stadiumMap[homeTeamId] || homeTeamId.toUpperCase()}</div>
           </div>
 
           <div className="text-center">
-            <div className="text-lg text-[#E8E8D8]" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>{homeTeamId.toUpperCase()}</div>
-            <div className="text-[8px] text-[#E8E8D8]">{franchiseData.nextGame?.homeRecord ?? ''}</div>
+            <div className="text-lg text-[var(--franchise-text)]" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>{homeTeamId.toUpperCase()}</div>
+            <div className="text-[8px] text-[var(--franchise-text)]">{franchiseData.nextGame?.homeRecord ?? ''}</div>
           </div>
         </div>
 
@@ -4057,21 +4057,21 @@ function GameDayContent({
           <div className="flex gap-2 justify-center">
             <button
               onClick={() => setConfirmAction("score")}
-              className="bg-[#5A8352] border-[5px] border-[#4A6844] py-3 px-8 text-sm text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+              className="bg-[var(--franchise-panel)] border-[5px] border-[var(--franchise-border)] py-3 px-8 text-sm text-[var(--franchise-text)] hover:bg-[var(--franchise-field-raised)] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
             >
               SCORE GAME
             </button>
             {MODE_2_V1_SYNTHETIC_SIM_ENABLED && (
               <button
                 onClick={() => setConfirmAction("simulate")}
-                className="bg-[#4A6844] border-[5px] border-[#5A8352] py-3 px-4 text-[10px] text-[#E8E8D8] hover:bg-[#3F5A3A] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] whitespace-nowrap"
+                className="bg-[var(--franchise-border)] border-[5px] border-[var(--franchise-panel)] py-3 px-4 text-[10px] text-[var(--franchise-text)] hover:bg-[var(--franchise-panel-dark)] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] whitespace-nowrap"
               >
                 SIM 1 GAME
               </button>
             )}
             <button
               onClick={() => setConfirmAction("skip")}
-              className="bg-[#4A6844] border-[5px] border-[#5A8352] py-3 px-4 text-[10px] text-[#E8E8D8] hover:bg-[#3F5A3A] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] whitespace-nowrap"
+              className="bg-[var(--franchise-border)] border-[5px] border-[var(--franchise-panel)] py-3 px-4 text-[10px] text-[var(--franchise-text)] hover:bg-[var(--franchise-panel-dark)] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] whitespace-nowrap"
             >
               SKIP GAME
             </button>
@@ -4082,19 +4082,19 @@ function GameDayContent({
             <div className="flex gap-1 justify-center flex-wrap">
               <button
                 onClick={() => setConfirmAction("sim-today")}
-                className="bg-[#3F5A3A] border-[3px] border-[#5A8352] py-1 px-3 text-[8px] text-[#E8E8D8] hover:bg-[#4A6844] active:scale-95 transition-transform"
+                className="bg-[var(--franchise-panel-dark)] border-[3px] border-[var(--franchise-panel)] py-1 px-3 text-[8px] text-[var(--franchise-text)] hover:bg-[var(--franchise-border)] active:scale-95 transition-transform"
               >
                 SIM TODAY ({getGamesByScope('today').length})
               </button>
               <button
                 onClick={() => setConfirmAction("sim-week")}
-                className="bg-[#3F5A3A] border-[3px] border-[#5A8352] py-1 px-3 text-[8px] text-[#E8E8D8] hover:bg-[#4A6844] active:scale-95 transition-transform"
+                className="bg-[var(--franchise-panel-dark)] border-[3px] border-[var(--franchise-panel)] py-1 px-3 text-[8px] text-[var(--franchise-text)] hover:bg-[var(--franchise-border)] active:scale-95 transition-transform"
               >
                 SIM WEEK ({getGamesByScope('week').length})
               </button>
               <button
                 onClick={() => setConfirmAction("sim-season")}
-                className="bg-[#3F5A3A] border-[3px] border-[#5A8352] py-1 px-3 text-[8px] text-[#E8E8D8] hover:bg-[#4A6844] active:scale-95 transition-transform"
+                className="bg-[var(--franchise-panel-dark)] border-[3px] border-[var(--franchise-panel)] py-1 px-3 text-[8px] text-[var(--franchise-text)] hover:bg-[var(--franchise-border)] active:scale-95 transition-transform"
               >
                 SIM SEASON ({getGamesByScope('season').length})
               </button>
@@ -4103,7 +4103,7 @@ function GameDayContent({
 
         </div>
 
-        <div className="absolute bottom-2 right-2 text-[8px] text-[#E8E8D8]">
+        <div className="absolute bottom-2 right-2 text-[8px] text-[var(--franchise-text)]">
           GAME {resolvedCount + 1}/{totalScheduled}
         </div>
       </div>
@@ -4113,7 +4113,7 @@ function GameDayContent({
         <>
           <div
             data-testid="franchise-v1-next-game-preview-gate"
-            className="bg-[#6B9462] border-[5px] border-[#4A6844] p-4 text-[9px] text-[#E8E8D8]/70"
+            className="bg-[var(--franchise-header)] border-[5px] border-[var(--franchise-border)] p-4 text-[9px] text-[var(--franchise-text)]/70"
           >
             Next-game story and head-to-head preview modules are deferred in internal v1. Use Schedule, Team Hub, and Game Detail for canonical game records.
           </div>
@@ -4124,20 +4124,20 @@ function GameDayContent({
             <div>
               <button
                 onClick={() => setShowAwayTeamStats(!showAwayTeamStats)}
-                className="w-full bg-[#6B9462] border-[5px] border-[#4A6844] py-3 px-6 text-[10px] text-[#E8E8D8] hover:bg-[#5A8352] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] flex items-center justify-between"
+                className="w-full bg-[var(--franchise-header)] border-[5px] border-[var(--franchise-border)] py-3 px-6 text-[10px] text-[var(--franchise-text)] hover:bg-[var(--franchise-panel)] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] flex items-center justify-between"
               >
                 <div className="flex-1 text-center">
                   <div className="text-[10px] tracking-wide uppercase" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.4)' }}>
                     {awayTeamId}
                   </div>
-                  <div className="text-[7px] text-[#E8E8D8]/80 mt-1">{getTeamRecord(awayTeamId)}</div>
+                  <div className="text-[7px] text-[var(--franchise-text)]/80 mt-1">{getTeamRecord(awayTeamId)}</div>
                 </div>
                 {showAwayTeamStats ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
               </button>
 
               {showAwayTeamStats && (
-                <div className="bg-[#6B9462] border-4 border-[#4A6844] border-t-0 p-4 overflow-y-auto max-h-[600px]">
-                  <div className="text-center text-[9px] text-[#E8E8D8]/50 py-4">
+                <div className="bg-[var(--franchise-header)] border-4 border-[var(--franchise-border)] border-t-0 p-4 overflow-y-auto max-h-[600px]">
+                  <div className="text-center text-[9px] text-[var(--franchise-text)]/50 py-4">
                     No stats yet — play games to see team leaders.
                   </div>
                 </div>
@@ -4148,20 +4148,20 @@ function GameDayContent({
             <div>
               <button
                 onClick={() => setShowHomeTeamStats(!showHomeTeamStats)}
-                className="w-full bg-[#6B9462] border-[5px] border-[#4A6844] py-3 px-6 text-[10px] text-[#E8E8D8] hover:bg-[#5A8352] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] flex items-center justify-between"
+                className="w-full bg-[var(--franchise-header)] border-[5px] border-[var(--franchise-border)] py-3 px-6 text-[10px] text-[var(--franchise-text)] hover:bg-[var(--franchise-panel)] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] flex items-center justify-between"
               >
                 <div className="flex-1 text-center">
                   <div className="text-[10px] tracking-wide uppercase" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.4)' }}>
                     {homeTeamId}
                   </div>
-                  <div className="text-[7px] text-[#E8E8D8]/80 mt-1">{getTeamRecord(homeTeamId)}</div>
+                  <div className="text-[7px] text-[var(--franchise-text)]/80 mt-1">{getTeamRecord(homeTeamId)}</div>
                 </div>
                 {showHomeTeamStats ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
               </button>
 
               {showHomeTeamStats && (
-                <div className="bg-[#6B9462] border-4 border-[#4A6844] border-t-0 p-4 overflow-y-auto max-h-[600px]">
-                  <div className="text-center text-[9px] text-[#E8E8D8]/50 py-4">
+                <div className="bg-[var(--franchise-header)] border-4 border-[var(--franchise-border)] border-t-0 p-4 overflow-y-auto max-h-[600px]">
+                  <div className="text-center text-[9px] text-[var(--franchise-text)]/50 py-4">
                     No stats yet — play games to see team leaders.
                   </div>
                 </div>
@@ -4174,9 +4174,9 @@ function GameDayContent({
       {/* Confirmation dialog */}
       {confirmAction && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-          <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-6 max-w-md">
-            <div className="text-lg text-[#E8E8D8] mb-4 text-center">ARE YOU SURE?</div>
-            <div className="text-sm text-[#E8E8D8] mb-6 text-center">
+          <div className="bg-[var(--franchise-header)] border-[6px] border-[var(--franchise-border)] p-6 max-w-md">
+            <div className="text-lg text-[var(--franchise-text)] mb-4 text-center">ARE YOU SURE?</div>
+            <div className="text-sm text-[var(--franchise-text)] mb-6 text-center">
               {confirmAction === "score" && "Score this game in GameTracker?"}
               {MODE_2_V1_SYNTHETIC_SIM_ENABLED && confirmAction === "simulate" && "Simulate this game? Full player stats will be generated."}
               {confirmAction === "skip" && "Skip this game? It will be marked SKIPPED and cannot be scored later."}
@@ -4190,7 +4190,7 @@ function GameDayContent({
             <div className="flex gap-2">
               <button
                 onClick={() => setConfirmAction(null)}
-                className="flex-1 bg-[#4A6844] border-[5px] border-[#5A8352] py-3 text-sm text-[#E8E8D8] hover:bg-[#3F5A3A] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+                className="flex-1 bg-[var(--franchise-border)] border-[5px] border-[var(--franchise-panel)] py-3 text-sm text-[var(--franchise-text)] hover:bg-[var(--franchise-panel-dark)] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
               >
                 CANCEL
               </button>
@@ -4207,7 +4207,7 @@ function GameDayContent({
                   else if (confirmAction === "skip-season") handleBatchSkip('season');
                 }}
                 disabled={isPreparingGameLaunch}
-                className="flex-1 bg-[#5A8352] border-[5px] border-[#4A6844] py-3 text-sm text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+                className="flex-1 bg-[var(--franchise-panel)] border-[5px] border-[var(--franchise-border)] py-3 text-sm text-[var(--franchise-text)] hover:bg-[var(--franchise-field-raised)] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
               >
                 {isPreparingGameLaunch ? "PREPARING..." : "CONFIRM"}
               </button>
@@ -4219,8 +4219,8 @@ function GameDayContent({
       {/* Toast notification */}
       {toastMessage && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4">
-          <div className="bg-[#4A6844] border-[4px] border-[#C4A853] px-6 py-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]">
-            <div className="text-[11px] text-[#E8E8D8] whitespace-nowrap">
+          <div className="bg-[var(--franchise-border)] border-[4px] border-[var(--franchise-gold)] px-6 py-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]">
+            <div className="text-[11px] text-[var(--franchise-text)] whitespace-nowrap">
               {toastMessage}
             </div>
           </div>
@@ -4252,24 +4252,24 @@ function GameDayContent({
       {/* T3-01: Pre-game lineup review overlay */}
       {preGameData && (
         <div className="fixed inset-0 bg-black/85 flex items-center justify-center z-50 overflow-y-auto p-4">
-          <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-6 max-w-3xl w-full my-4">
+          <div className="bg-[var(--franchise-header)] border-[6px] border-[var(--franchise-border)] p-6 max-w-3xl w-full my-4">
             {/* Header */}
             <div className="text-center mb-4">
-              <div className="text-lg text-[#E8E8D8] font-bold mb-1" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.5)' }}>
+              <div className="text-lg text-[var(--franchise-text)] font-bold mb-1" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.5)' }}>
                 PRE-GAME LINEUP
               </div>
-              <div className="text-xs text-[#E8E8D8]/70">
+              <div className="text-xs text-[var(--franchise-text)]/70">
                 Game {preGameData.gameNumber} &bull; {preGameData.awayTeamName} @ {preGameData.homeTeamName}
               </div>
               {pregameReadinessIssues.length > 0 && (
                 <div
-                  className="mt-4 border-2 border-[#C4A853] bg-[#1f2b21] p-3 text-left text-[10px] text-[#E8E8D8]"
+                  className="mt-4 border-2 border-[var(--franchise-gold)] bg-[var(--franchise-shadow-darkest)] p-3 text-left text-[10px] text-[var(--franchise-text)]"
                   data-testid="franchise-pregame-readiness"
                 >
-                  <div className="mb-2 font-bold tracking-[0.16em] text-[#C4A853]">
+                  <div className="mb-2 font-bold tracking-[0.16em] text-[var(--franchise-gold)]">
                     LINEUP READINESS REQUIRED
                   </div>
-                  <div className="text-[#E8E8D8]/75">
+                  <div className="text-[var(--franchise-text)]/75">
                     {pregameReadinessIssues.join(" • ")}
                   </div>
                 </div>
@@ -4284,12 +4284,12 @@ function GameDayContent({
             <div className="grid grid-cols-2 gap-4 mb-4">
               {/* Away Starter */}
               <div>
-                <div className="text-[9px] text-[#E8E8D8]/60 mb-1 uppercase tracking-wider">Away starter override</div>
+                <div className="text-[9px] text-[var(--franchise-text)]/60 mb-1 uppercase tracking-wider">Away starter override</div>
                 <select
                   aria-label="Away starter override"
                   value={preGameData.selectedAwayStarterIdx}
                   onChange={(e) => setPreGameData({ ...preGameData, selectedAwayStarterIdx: Number(e.target.value) })}
-                  className="w-full bg-[#3d5240] border-[3px] border-[#2a3a2d] text-[#E8E8D8] text-xs px-2 py-2"
+                  className="w-full bg-[var(--franchise-panel-deep)] border-[3px] border-[var(--franchise-shadow-soft)] text-[var(--franchise-text)] text-xs px-2 py-2"
                 >
                   {preGameData.awayPitchers.map((p, i) => (
                     <option key={i} value={i}>{p.name} ({p.throwingHand})</option>
@@ -4298,12 +4298,12 @@ function GameDayContent({
               </div>
               {/* Home Starter */}
               <div>
-                <div className="text-[9px] text-[#E8E8D8]/60 mb-1 uppercase tracking-wider">Home starter override</div>
+                <div className="text-[9px] text-[var(--franchise-text)]/60 mb-1 uppercase tracking-wider">Home starter override</div>
                 <select
                   aria-label="Home starter override"
                   value={preGameData.selectedHomeStarterIdx}
                   onChange={(e) => setPreGameData({ ...preGameData, selectedHomeStarterIdx: Number(e.target.value) })}
-                  className="w-full bg-[#3d5240] border-[3px] border-[#2a3a2d] text-[#E8E8D8] text-xs px-2 py-2"
+                  className="w-full bg-[var(--franchise-panel-deep)] border-[3px] border-[var(--franchise-shadow-soft)] text-[var(--franchise-text)] text-xs px-2 py-2"
                 >
                   {preGameData.homePitchers.map((p, i) => (
                     <option key={i} value={i}>{p.name} ({p.throwingHand})</option>
@@ -4311,7 +4311,7 @@ function GameDayContent({
                 </select>
               </div>
             </div>
-            <div className="mb-4 text-center text-[10px] text-[#E8E8D8]/60">
+            <div className="mb-4 text-center text-[10px] text-[var(--franchise-text)]/60">
               Lineup order and rotation source from Team Hub. Starter override is game-only.
             </div>
 
@@ -4347,7 +4347,7 @@ function GameDayContent({
             <div className="flex gap-3">
               <button
                 onClick={() => setPreGameData(null)}
-                className="flex-1 bg-[#4A6844] border-[5px] border-[#5A8352] py-3 text-sm text-[#E8E8D8] hover:bg-[#3F5A3A] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+                className="flex-1 bg-[var(--franchise-border)] border-[5px] border-[var(--franchise-panel)] py-3 text-sm text-[var(--franchise-text)] hover:bg-[var(--franchise-panel-dark)] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
               >
                 BACK
               </button>
@@ -4356,8 +4356,8 @@ function GameDayContent({
                 disabled={!canLaunchPregame}
                 className={`flex-[2] border-[5px] py-3 text-sm font-bold transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] ${
                   !canLaunchPregame
-                    ? "border-[#4A6844] bg-[#3F5A3A] text-[#E8E8D8]/50 cursor-not-allowed"
-                    : "border-[#8B7635] bg-[#C4A853] text-[#1a3020] hover:bg-[#D4B863] active:scale-95"
+                    ? "border-[var(--franchise-border)] bg-[var(--franchise-panel-dark)] text-[var(--franchise-text)]/50 cursor-not-allowed"
+                    : "border-[var(--franchise-gold-bronze)] bg-[var(--franchise-gold)] text-[var(--franchise-field-ink)] hover:bg-[var(--franchise-gold-light)] active:scale-95"
                 }`}
               >
                 START GAME
@@ -4406,39 +4406,39 @@ function LeagueLeadersContent() {
   return (
     <div className="space-y-4 max-h-[calc(100vh-300px)] overflow-y-auto">
       {/* Season 1 Leaders Header */}
-      <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4 text-center">
-        <div className="text-2xl text-[#E8E8D8] mb-1" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.2)' }}>
+      <div className="bg-[var(--franchise-header)] border-[6px] border-[var(--franchise-border)] p-4 text-center">
+        <div className="text-2xl text-[var(--franchise-text)] mb-1" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.2)' }}>
           SEASON 1 LEAGUE LEADERS
         </div>
-        <div className="text-[8px] text-[#E8E8D8]/70">REAL BATTING AND PITCHING LEADERBOARDS</div>
+        <div className="text-[8px] text-[var(--franchise-text)]/70">REAL BATTING AND PITCHING LEADERBOARDS</div>
       </div>
 
       {/* League Leaders Section */}
       <div>
         <button
           onClick={() => toggleSection("leaders")}
-          className="w-full bg-[#6B9462] border-[5px] border-[#4A6844] py-3 px-4 text-[10px] text-[#E8E8D8] hover:bg-[#5A8352] active:scale-[0.99] transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] flex items-center justify-between"
+          className="w-full bg-[var(--franchise-header)] border-[5px] border-[var(--franchise-border)] py-3 px-4 text-[10px] text-[var(--franchise-text)] hover:bg-[var(--franchise-panel)] active:scale-[0.99] transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] flex items-center justify-between"
         >
           <span>▶ LEAGUE LEADERS</span>
           {expandedSection === "leaders" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </button>
         
         {expandedSection === "leaders" && (
-          <div className="bg-[#6B9462] border-[5px] border-[#4A6844] border-t-0 p-4">
+          <div className="bg-[var(--franchise-header)] border-[5px] border-[var(--franchise-border)] border-t-0 p-4">
             {/* League toggles */}
             <div className="flex gap-2 mb-4">
               <button
                 onClick={() => setExpandedLeague("al")}
-                className={`flex-1 py-2 px-4 border-[4px] border-[#4A6844] transition ${
-                  expandedLeague === "al" ? "bg-[#4A6844] text-[#E8E8D8]" : "bg-[#5A8352] text-[#E8E8D8]/70 hover:bg-[#4F7D4B]"
+                className={`flex-1 py-2 px-4 border-[4px] border-[var(--franchise-border)] transition ${
+                  expandedLeague === "al" ? "bg-[var(--franchise-border)] text-[var(--franchise-text)]" : "bg-[var(--franchise-panel)] text-[var(--franchise-text)]/70 hover:bg-[var(--franchise-field-raised)]"
                 }`}
               >
                 <div className="text-[10px] font-bold">EASTERN LEAGUE</div>
               </button>
               <button
                 onClick={() => setExpandedLeague("nl")}
-                className={`flex-1 py-2 px-4 border-[4px] border-[#4A6844] transition ${
-                  expandedLeague === "nl" ? "bg-[#4A6844] text-[#E8E8D8]" : "bg-[#5A8352] text-[#E8E8D8]/70 hover:bg-[#4F7D4B]"
+                className={`flex-1 py-2 px-4 border-[4px] border-[var(--franchise-border)] transition ${
+                  expandedLeague === "nl" ? "bg-[var(--franchise-border)] text-[var(--franchise-text)]" : "bg-[var(--franchise-panel)] text-[var(--franchise-text)]/70 hover:bg-[var(--franchise-field-raised)]"
                 }`}
               >
                 <div className="text-[10px] font-bold">WESTERN LEAGUE</div>
@@ -4448,8 +4448,8 @@ function LeagueLeadersContent() {
         <div className="grid grid-cols-2 gap-4">
           {/* Batting Leaders */}
           <div>
-            <div className="bg-[#4A6844] border-[4px] border-[#5A8352] p-2 mb-2">
-              <div className="text-[8px] text-[#E8E8D8] text-center">BATTING LEADERS</div>
+            <div className="bg-[var(--franchise-border)] border-[4px] border-[var(--franchise-panel)] p-2 mb-2">
+              <div className="text-[8px] text-[var(--franchise-text)] text-center">BATTING LEADERS</div>
             </div>
             <div className="space-y-1">
               {(expandedLeague === "al" ? battingLeadersAL : battingLeadersNL).map((leader, index) => {
@@ -4458,37 +4458,37 @@ function LeagueLeadersContent() {
                   <div key={index}>
                     <button
                       onClick={() => setExpandedBattingStat(expandedBattingStat === leader.stat ? null : leader.stat)}
-                      className="w-full bg-[#5A8352] border-[3px] border-[#4A6844] p-2 hover:bg-[#4F7D4B] transition"
+                      className="w-full bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-border)] p-2 hover:bg-[var(--franchise-field-raised)] transition"
                     >
                       <div className="flex justify-between items-center">
                         <div className="flex items-center gap-2">
-                          <div className="text-[8px] text-[#E8E8D8] font-bold">{leader.stat}</div>
+                          <div className="text-[8px] text-[var(--franchise-text)] font-bold">{leader.stat}</div>
                           {expandedBattingStat === leader.stat ? (
-                            <ChevronUp className="w-3 h-3 text-[#E8E8D8]" />
+                            <ChevronUp className="w-3 h-3 text-[var(--franchise-text)]" />
                           ) : (
-                            <ChevronDown className="w-3 h-3 text-[#E8E8D8]" />
+                            <ChevronDown className="w-3 h-3 text-[var(--franchise-text)]" />
                           )}
                         </div>
-                        <div className="text-[10px] text-[#E8E8D8] font-bold">{leader.value}</div>
+                        <div className="text-[10px] text-[var(--franchise-text)] font-bold">{leader.value}</div>
                       </div>
-                      <div className="text-[8px] text-[#E8E8D8]/70 text-left">
+                      <div className="text-[8px] text-[var(--franchise-text)]/70 text-left">
                         {battingData[leader.stat as keyof typeof battingData]?.[0]?.player ?? 'N/A'} (
                         {battingData[leader.stat as keyof typeof battingData]?.[0]?.team ?? 'N/A'})
                       </div>
                     </button>
                     
                     {expandedBattingStat === leader.stat && (
-                      <div className="bg-[#4A6844] border-[3px] border-[#5A8352] border-t-0 p-2">
-                        <div className="text-[7px] text-[#E8E8D8] font-bold mb-1">TOP 5</div>
+                      <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel)] border-t-0 p-2">
+                        <div className="text-[7px] text-[var(--franchise-text)] font-bold mb-1">TOP 5</div>
                         {(battingData[leader.stat as keyof typeof battingData] ?? []).map((player, pIndex) => (
                           <div 
                             key={pIndex} 
-                            className="flex justify-between items-center py-1 border-b border-[#5A8352] last:border-b-0"
+                            className="flex justify-between items-center py-1 border-b border-[var(--franchise-panel)] last:border-b-0"
                           >
-                            <div className="text-[8px] text-[#E8E8D8]">
+                            <div className="text-[8px] text-[var(--franchise-text)]">
                               {pIndex + 1}. {player.player} ({player.team})
                             </div>
-                            <div className="text-[8px] text-[#E8E8D8] font-bold">{player.value}</div>
+                            <div className="text-[8px] text-[var(--franchise-text)] font-bold">{player.value}</div>
                           </div>
                         ))}
                       </div>
@@ -4501,8 +4501,8 @@ function LeagueLeadersContent() {
 
           {/* Pitching Leaders */}
           <div>
-            <div className="bg-[#4A6844] border-[4px] border-[#5A8352] p-2 mb-2">
-              <div className="text-[8px] text-[#E8E8D8] text-center">PITCHING LEADERS</div>
+            <div className="bg-[var(--franchise-border)] border-[4px] border-[var(--franchise-panel)] p-2 mb-2">
+              <div className="text-[8px] text-[var(--franchise-text)] text-center">PITCHING LEADERS</div>
             </div>
             <div className="space-y-1">
               {(expandedLeague === "al" ? pitchingLeadersAL : pitchingLeadersNL).map((leader, index) => {
@@ -4511,37 +4511,37 @@ function LeagueLeadersContent() {
                   <div key={index}>
                     <button
                       onClick={() => setExpandedPitchingStat(expandedPitchingStat === leader.stat ? null : leader.stat)}
-                      className="w-full bg-[#5A8352] border-[3px] border-[#4A6844] p-2 hover:bg-[#4F7D4B] transition"
+                      className="w-full bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-border)] p-2 hover:bg-[var(--franchise-field-raised)] transition"
                     >
                       <div className="flex justify-between items-center">
                         <div className="flex items-center gap-2">
-                          <div className="text-[8px] text-[#E8E8D8] font-bold">{leader.stat}</div>
+                          <div className="text-[8px] text-[var(--franchise-text)] font-bold">{leader.stat}</div>
                           {expandedPitchingStat === leader.stat ? (
-                            <ChevronUp className="w-3 h-3 text-[#E8E8D8]" />
+                            <ChevronUp className="w-3 h-3 text-[var(--franchise-text)]" />
                           ) : (
-                            <ChevronDown className="w-3 h-3 text-[#E8E8D8]" />
+                            <ChevronDown className="w-3 h-3 text-[var(--franchise-text)]" />
                           )}
                         </div>
-                        <div className="text-[10px] text-[#E8E8D8] font-bold">{leader.value}</div>
+                        <div className="text-[10px] text-[var(--franchise-text)] font-bold">{leader.value}</div>
                       </div>
-                      <div className="text-[8px] text-[#E8E8D8]/70 text-left">
+                      <div className="text-[8px] text-[var(--franchise-text)]/70 text-left">
                         {pitchingData[leader.stat as keyof typeof pitchingData]?.[0]?.player ?? 'N/A'} (
                         {pitchingData[leader.stat as keyof typeof pitchingData]?.[0]?.team ?? 'N/A'})
                       </div>
                     </button>
 
                     {expandedPitchingStat === leader.stat && (
-                      <div className="bg-[#4A6844] border-[3px] border-[#5A8352] border-t-0 p-2">
-                        <div className="text-[7px] text-[#E8E8D8] font-bold mb-1">TOP 5</div>
+                      <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel)] border-t-0 p-2">
+                        <div className="text-[7px] text-[var(--franchise-text)] font-bold mb-1">TOP 5</div>
                         {(pitchingData[leader.stat as keyof typeof pitchingData] ?? []).map((player, pIndex) => (
                           <div 
                             key={pIndex} 
-                            className="flex justify-between items-center py-1 border-b border-[#5A8352] last:border-b-0"
+                            className="flex justify-between items-center py-1 border-b border-[var(--franchise-panel)] last:border-b-0"
                           >
-                            <div className="text-[8px] text-[#E8E8D8]">
+                            <div className="text-[8px] text-[var(--franchise-text)]">
                               {pIndex + 1}. {player.player} ({player.team})
                             </div>
-                            <div className="text-[8px] text-[#E8E8D8] font-bold">{player.value}</div>
+                            <div className="text-[8px] text-[var(--franchise-text)] font-bold">{player.value}</div>
                           </div>
                         ))}
                       </div>
@@ -4558,10 +4558,10 @@ function LeagueLeadersContent() {
 
       <div
         data-testid="franchise-v1-awards-live"
-        className="bg-[#4A6844] border-[4px] border-[#5A8352] p-4 text-center"
+        className="bg-[var(--franchise-border)] border-[4px] border-[var(--franchise-panel)] p-4 text-center"
       >
-        <div className="text-[10px] text-[#C4A853] font-bold mb-1">AWARDS AND WATCHLISTS LIVE</div>
-        <div className="text-[9px] text-[#E8E8D8]/80">
+        <div className="text-[10px] text-[var(--franchise-gold)] font-bold mb-1">AWARDS AND WATCHLISTS LIVE</div>
+        <div className="text-[9px] text-[var(--franchise-text)]/80">
           Season award watchlists and finalized award rows are active when eligible; offseason ceremony effects remain separate and dormant.
         </div>
       </div>
@@ -4654,11 +4654,11 @@ function BeatReporterNews({
   return (
     <div className="space-y-4 max-h-[calc(100vh-300px)] overflow-y-auto">
       {/* Header */}
-      <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4 text-center">
-        <div className="text-2xl text-[#E8E8D8] mb-1" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.2)' }}>
+      <div className="bg-[var(--franchise-header)] border-[6px] border-[var(--franchise-border)] p-4 text-center">
+        <div className="text-2xl text-[var(--franchise-text)] mb-1" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.2)' }}>
           YOUR DAILY SQUINCH
         </div>
-        <div className="text-[8px] text-[#E8E8D8]/70">LATEST STORIES FROM AROUND THE LEAGUE</div>
+        <div className="text-[8px] text-[var(--franchise-text)]/70">LATEST STORIES FROM AROUND THE LEAGUE</div>
       </div>
 
       {/* Filters */}
@@ -4671,8 +4671,8 @@ function BeatReporterNews({
             }}
             className={`flex-1 py-3 px-4 border-[5px] transition shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] ${
               newsFilter === "all" 
-                ? "bg-[#5A8352] border-[#4A6844] text-[#E8E8D8]" 
-                : "bg-[#4A6844] border-[#5A8352] text-[#E8E8D8]/70 hover:bg-[#3F5A3A]"
+                ? "bg-[var(--franchise-panel)] border-[var(--franchise-border)] text-[var(--franchise-text)]" 
+                : "bg-[var(--franchise-border)] border-[var(--franchise-panel)] text-[var(--franchise-text)]/70 hover:bg-[var(--franchise-panel-dark)]"
             }`}
           >
             <div className="text-[10px] font-bold">ALL NEWS</div>
@@ -4684,8 +4684,8 @@ function BeatReporterNews({
             }}
             className={`flex-1 py-3 px-4 border-[5px] transition shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] ${
               newsFilter === "league" 
-                ? "bg-[#5A8352] border-[#4A6844] text-[#E8E8D8]" 
-                : "bg-[#4A6844] border-[#5A8352] text-[#E8E8D8]/70 hover:bg-[#3F5A3A]"
+                ? "bg-[var(--franchise-panel)] border-[var(--franchise-border)] text-[var(--franchise-text)]" 
+                : "bg-[var(--franchise-border)] border-[var(--franchise-panel)] text-[var(--franchise-text)]/70 hover:bg-[var(--franchise-panel-dark)]"
             }`}
           >
             <div className="text-[10px] font-bold">LEAGUE-WIDE</div>
@@ -4694,8 +4694,8 @@ function BeatReporterNews({
             onClick={() => setNewsFilter("team")}
             className={`flex-1 py-3 px-4 border-[5px] transition shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] ${
               newsFilter === "team" 
-                ? "bg-[#5A8352] border-[#4A6844] text-[#E8E8D8]" 
-                : "bg-[#4A6844] border-[#5A8352] text-[#E8E8D8]/70 hover:bg-[#3F5A3A]"
+                ? "bg-[var(--franchise-panel)] border-[var(--franchise-border)] text-[var(--franchise-text)]" 
+                : "bg-[var(--franchise-border)] border-[var(--franchise-panel)] text-[var(--franchise-text)]/70 hover:bg-[var(--franchise-panel-dark)]"
             }`}
           >
             <div className="text-[10px] font-bold">TEAM REPORTS</div>
@@ -4704,15 +4704,15 @@ function BeatReporterNews({
 
         {/* Team Filter */}
         {newsFilter === "team" && (
-          <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-3">
-            <div className="text-[8px] text-[#E8E8D8] mb-2">FILTER BY TEAM</div>
+          <div className="bg-[var(--franchise-header)] border-[5px] border-[var(--franchise-border)] p-3">
+            <div className="text-[8px] text-[var(--franchise-text)] mb-2">FILTER BY TEAM</div>
             <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={() => setSelectedTeam(null)}
                 className={`py-2 px-3 border-[4px] transition text-[8px] ${
                   selectedTeam === null
-                    ? "bg-[#5A8352] border-[#4A6844] text-[#E8E8D8]"
-                    : "bg-[#4A6844] border-[#5A8352] text-[#E8E8D8]/70 hover:bg-[#3F5A3A]"
+                    ? "bg-[var(--franchise-panel)] border-[var(--franchise-border)] text-[var(--franchise-text)]"
+                    : "bg-[var(--franchise-border)] border-[var(--franchise-panel)] text-[var(--franchise-text)]/70 hover:bg-[var(--franchise-panel-dark)]"
                 }`}
               >
                 ALL TEAMS
@@ -4723,8 +4723,8 @@ function BeatReporterNews({
                   onClick={() => setSelectedTeam(team)}
                   className={`py-2 px-3 border-[4px] transition text-[8px] ${
                     selectedTeam === team
-                      ? "bg-[#5A8352] border-[#4A6844] text-[#E8E8D8]"
-                      : "bg-[#4A6844] border-[#5A8352] text-[#E8E8D8]/70 hover:bg-[#3F5A3A]"
+                      ? "bg-[var(--franchise-panel)] border-[var(--franchise-border)] text-[var(--franchise-text)]"
+                      : "bg-[var(--franchise-border)] border-[var(--franchise-panel)] text-[var(--franchise-text)]/70 hover:bg-[var(--franchise-panel-dark)]"
                   }`}
                 >
                   {team.toUpperCase()}
@@ -4743,7 +4743,7 @@ function BeatReporterNews({
             <div
               key={article.id}
               onClick={() => setExpandedArticle(isExpanded ? null : article.id)}
-              className="bg-[#6B9462] border-[5px] border-[#4A6844] p-4 hover:bg-[#5A8352] transition cursor-pointer shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+              className="bg-[var(--franchise-header)] border-[5px] border-[var(--franchise-border)] p-4 hover:bg-[var(--franchise-panel)] transition cursor-pointer shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
             >
               {/* Article Header */}
               <div className="flex items-start justify-between mb-2">
@@ -4756,41 +4756,41 @@ function BeatReporterNews({
                       {article.category}
                     </div>
                     {article.team && (
-                      <div className="px-2 py-1 bg-[#4A6844] border-[3px] border-[#5A8352] text-[7px] text-[#E8E8D8]">
+                      <div className="px-2 py-1 bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel)] text-[7px] text-[var(--franchise-text)]">
                         {article.team.toUpperCase()}
                       </div>
                     )}
                   </div>
-                  <h3 className="text-sm text-[#E8E8D8] font-bold leading-tight mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
+                  <h3 className="text-sm text-[var(--franchise-text)] font-bold leading-tight mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
                     {article.headline}
                   </h3>
                 </div>
                 {isExpanded ? (
-                  <ChevronUp className="w-4 h-4 text-[#E8E8D8] ml-2 flex-shrink-0" />
+                  <ChevronUp className="w-4 h-4 text-[var(--franchise-text)] ml-2 flex-shrink-0" />
                 ) : (
-                  <ChevronDown className="w-4 h-4 text-[#E8E8D8] ml-2 flex-shrink-0" />
+                  <ChevronDown className="w-4 h-4 text-[var(--franchise-text)] ml-2 flex-shrink-0" />
                 )}
               </div>
 
               {/* Article Body */}
-              <p className="text-[10px] text-[#E8E8D8]/90 leading-relaxed mb-3">
+              <p className="text-[10px] text-[var(--franchise-text)]/90 leading-relaxed mb-3">
                 {isExpanded ? article.fullText : article.excerpt}
               </p>
 
               {/* Read More Indicator */}
               {!isExpanded && (
-                <div className="text-[8px] text-[#E8E8D8]/70 mb-2 italic">
+                <div className="text-[8px] text-[var(--franchise-text)]/70 mb-2 italic">
                   Click to read more...
                 </div>
               )}
 
               {/* Article Footer */}
-              <div className="flex items-center justify-between pt-2 border-t-2 border-[#4A6844]">
+              <div className="flex items-center justify-between pt-2 border-t-2 border-[var(--franchise-border)]">
                 <div className="flex items-center gap-2">
-                  <Newspaper className="w-3 h-3 text-[#E8E8D8]/60" />
-                  <span className="text-[8px] text-[#E8E8D8]/80">{article.reporter}</span>
+                  <Newspaper className="w-3 h-3 text-[var(--franchise-text)]/60" />
+                  <span className="text-[8px] text-[var(--franchise-text)]/80">{article.reporter}</span>
                 </div>
-                <span className="text-[8px] text-[#E8E8D8]/60">{article.timestamp}</span>
+                <span className="text-[8px] text-[var(--franchise-text)]/60">{article.timestamp}</span>
               </div>
             </div>
           );
@@ -4798,8 +4798,8 @@ function BeatReporterNews({
       </div>
 
       {filteredArticles.length === 0 && (
-        <div className="bg-[#6B9462] border-[5px] border-[#4A6844] p-8 text-center">
-          <div className="text-[10px] text-[#E8E8D8]/60">NO POST-GAME COLUMNS YET</div>
+        <div className="bg-[var(--franchise-header)] border-[5px] border-[var(--franchise-border)] p-8 text-center">
+          <div className="text-[10px] text-[var(--franchise-text)]/60">NO POST-GAME COLUMNS YET</div>
         </div>
       )}
     </div>
@@ -4814,18 +4814,18 @@ function FranchisePlayoffLeaderPanel({
   entries: Record<string, PlayoffPlayerStats[]>;
 }) {
   return (
-    <div className="bg-[#5A8352] border-[4px] border-[#4A6844] p-6">
-      <div className="text-lg text-[#E8E8D8] font-bold mb-4">{title}</div>
+    <div className="bg-[var(--franchise-panel)] border-[4px] border-[var(--franchise-border)] p-6">
+      <div className="text-lg text-[var(--franchise-text)] font-bold mb-4">{title}</div>
       <div className="space-y-3">
         {Object.entries(entries).map(([label, stats]) => (
-          <div key={label} className="bg-[#4A6844] p-3 border-2 border-[#E8E8D8]/30">
-            <div className="text-xs text-[#E8E8D8]/60 mb-2">{label}</div>
+          <div key={label} className="bg-[var(--franchise-border)] p-3 border-2 border-[var(--franchise-text)]/30">
+            <div className="text-xs text-[var(--franchise-text)]/60 mb-2">{label}</div>
             {stats.length === 0 ? (
-              <div className="text-sm text-[#E8E8D8]/60">No data</div>
+              <div className="text-sm text-[var(--franchise-text)]/60">No data</div>
             ) : (
               <div className="space-y-1">
                 {stats.map((stat, index) => (
-                  <div key={`${label}-${stat.playerId}-${index}`} className="flex items-center justify-between text-[10px] text-[#E8E8D8]">
+                  <div key={`${label}-${stat.playerId}-${index}`} className="flex items-center justify-between text-[10px] text-[var(--franchise-text)]">
                     <span>{index + 1}. {stat.playerName}</span>
                     <span>{formatFranchisePlayoffLeaderValue(label, stat)}</span>
                   </div>

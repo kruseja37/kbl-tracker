@@ -61,13 +61,13 @@ export function ScheduleContent({
         <div className="flex items-center gap-1">
           <button
             onClick={(e) => { e.stopPropagation(); onDeleteGame(gameId); setConfirmDeleteId(null); }}
-            className="bg-[#DC3545] border-[2px] border-[#8B0000] px-2 py-0.5 text-[8px] text-white font-bold hover:bg-[#8B0000] transition-colors"
+            className="bg-[var(--franchise-loss-alt)] border-[2px] border-[var(--franchise-loss-deep)] px-2 py-0.5 text-[8px] text-white font-bold hover:bg-[var(--franchise-loss-deep)] transition-colors"
           >
             DELETE
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null); }}
-            className="bg-[#4A6844] border-[2px] border-[#3F5A3A] px-2 py-0.5 text-[8px] text-[#E8E8D8] font-bold hover:bg-[#3F5A3A] transition-colors"
+            className="bg-[var(--franchise-border)] border-[2px] border-[var(--franchise-panel-dark)] px-2 py-0.5 text-[8px] text-[var(--franchise-text)] font-bold hover:bg-[var(--franchise-panel-dark)] transition-colors"
           >
             CANCEL
           </button>
@@ -77,7 +77,7 @@ export function ScheduleContent({
     return (
       <button
         onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(gameId); }}
-        className="text-[#E8E8D8]/40 hover:text-[#DC3545] transition-colors p-1"
+        className="text-[var(--franchise-text)]/40 hover:text-[var(--franchise-loss-alt)] transition-colors p-1"
         title="Remove game"
       >
         <Trash2 className="w-3.5 h-3.5" />
@@ -90,7 +90,7 @@ export function ScheduleContent({
     return (
       <button
         onClick={(e) => { e.stopPropagation(); onEnterFinalScore(game); }}
-        className="bg-[#4A6844] border-[2px] border-[#3F5A3A] px-2 py-1 text-[8px] text-[#E8E8D8] hover:bg-[#3F5A3A] transition-colors"
+        className="bg-[var(--franchise-border)] border-[2px] border-[var(--franchise-panel-dark)] px-2 py-1 text-[8px] text-[var(--franchise-text)] hover:bg-[var(--franchise-panel-dark)] transition-colors"
         title="Enter score-only final score"
         aria-label={`Enter score-only final score for game ${game.gameNumber}`}
       >
@@ -108,14 +108,14 @@ export function ScheduleContent({
   const renderScoreOnlyBadge = (game: ScheduledGame) => {
     if (!isScoreOnlyResult(game)) return null;
     return (
-      <div className="text-[8px] font-bold text-[#1a1a1a] bg-[#FFD27A] border-[2px] border-[#C4A853] px-2 py-1">SCORE ONLY</div>
+      <div className="text-[8px] font-bold text-[var(--franchise-ink)] bg-[var(--franchise-gold-amber)] border-[2px] border-[var(--franchise-gold)] px-2 py-1">SCORE ONLY</div>
     );
   };
 
   const renderArchiveBadge = (game: ScheduledGame) => {
     if (!hasGameDetailLink(game)) return null;
     return (
-      <div className="text-[8px] font-bold text-[#E8E8D8] bg-[#3F5A3A] border-[2px] border-[#C4A853] px-2 py-1">ARCHIVE</div>
+      <div className="text-[8px] font-bold text-[var(--franchise-text)] bg-[var(--franchise-panel-dark)] border-[2px] border-[var(--franchise-gold)] px-2 py-1">ARCHIVE</div>
     );
   };
 
@@ -124,7 +124,7 @@ export function ScheduleContent({
     return (
       <a
         href={`/almanac/games/${game.gameLogId}`}
-        className="text-[8px] text-[#1a1a1a] bg-[#C4A853] border-[2px] border-[#9A7B2C] px-2 py-1 font-bold hover:bg-[#D4B863] transition-colors"
+        className="text-[8px] text-[var(--franchise-ink)] bg-[var(--franchise-gold)] border-[2px] border-[var(--franchise-gold-dark)] px-2 py-1 font-bold hover:bg-[var(--franchise-gold-light)] transition-colors"
         onClick={(e) => e.stopPropagation()}
       >
         Game Detail
@@ -135,7 +135,7 @@ export function ScheduleContent({
   const renderScoreOnlyCopy = (game: ScheduledGame) => {
     if (!isScoreOnlyResult(game)) return null;
     return (
-      <div className="mt-2 text-[8px] text-[#E8E8D8]/65">
+      <div className="mt-2 text-[8px] text-[var(--franchise-text)]/65">
         Schedule + standings only. May queue team-fan morale prompt; confirm in Random Event Log. No Game Detail archive, player stats, WPA, fame, milestones, awards, designations, relationships, or Almanac player evidence.
       </div>
     );
@@ -203,44 +203,44 @@ export function ScheduleContent({
   return (
     <div className="space-y-4">
       {/* Header with Add Game button */}
-      <div className="bg-[#5A8352] p-4">
+      <div className="bg-[var(--franchise-panel)] p-4">
         <div className="flex items-center justify-between mb-2">
-          <div className="text-sm text-[#E8E8D8]">📅 SEASON {seasonNumber} SCHEDULE</div>
+          <div className="text-sm text-[var(--franchise-text)]">📅 SEASON {seasonNumber} SCHEDULE</div>
           <button
             onClick={onAddGame}
-            className="bg-[#5599FF] border-[3px] border-[#3366FF] px-3 py-1 text-xs text-[#E8E8D8] hover:bg-[#3366FF] active:scale-95 transition-transform flex items-center gap-1"
+            className="bg-[var(--franchise-info-bright)] border-[3px] border-[var(--franchise-info)] px-3 py-1 text-xs text-[var(--franchise-text)] hover:bg-[var(--franchise-info)] active:scale-95 transition-transform flex items-center gap-1"
           >
             <Plus className="w-3 h-3" /> Add Game
           </button>
         </div>
         
         {teamStats ? (
-          <div className="text-xs text-[#E8E8D8]/80">
+          <div className="text-xs text-[var(--franchise-text)]/80">
             ⭐ {selectedTeam} │ {teamStats.wins}-{teamStats.losses} ({teamStats.winPct}) │ {teamStats.gamesRemaining} games remaining
           </div>
         ) : (
-          <div className="text-xs text-[#E8E8D8]/80">
+          <div className="text-xs text-[var(--franchise-text)]/80">
             Full League │ {games.length} games scheduled
           </div>
         )}
-        <div className="mt-2 text-[9px] text-[#E8E8D8]/65">
+        <div className="mt-2 text-[9px] text-[var(--franchise-text)]/65">
           V1 schedule is user-supplied only: add/edit/delete pending rows or review CSV. Generated schedules are off.
         </div>
       </div>
 
       {onImportCsvRows && (
-        <div className="bg-[#5A8352] border-[5px] border-[#4A6844] p-4 space-y-3">
+        <div className="bg-[var(--franchise-panel)] border-[5px] border-[var(--franchise-border)] p-4 space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="text-[10px] text-[#E8E8D8]">CSV SCHEDULE IMPORT</div>
-              <div className="text-[9px] text-[#E8E8D8]/70">
+              <div className="text-[10px] text-[var(--franchise-text)]">CSV SCHEDULE IMPORT</div>
+              <div className="text-[9px] text-[var(--franchise-text)]/70">
                 Header: gameNumber, awayTeam, homeTeam, optional dayNumber, date, time, notes
               </div>
-              <div className="text-[8px] text-[#E8E8D8]/60">
+              <div className="text-[8px] text-[var(--franchise-text)]/60">
                 User-provided rows only; import does not generate missing matchups.
               </div>
             </div>
-            <label className="bg-[#4A6844] border-[3px] border-[#3F5A3A] px-3 py-2 text-[10px] text-[#E8E8D8] hover:bg-[#3F5A3A] active:scale-95 transition-transform inline-flex items-center gap-2 cursor-pointer">
+            <label className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel-dark)] px-3 py-2 text-[10px] text-[var(--franchise-text)] hover:bg-[var(--franchise-panel-dark)] active:scale-95 transition-transform inline-flex items-center gap-2 cursor-pointer">
               <FileUp className="w-3.5 h-3.5" /> Review CSV
               <input
                 type="file"
@@ -255,33 +255,33 @@ export function ScheduleContent({
           </div>
 
           {csvFileName && (
-            <div className="text-[9px] text-[#E8E8D8]/70">Selected: {csvFileName}</div>
+            <div className="text-[9px] text-[var(--franchise-text)]/70">Selected: {csvFileName}</div>
           )}
 
           {csvImportError && (
-            <div className="bg-[#8B0000] border-[3px] border-[#DC3545] p-2 text-[9px] text-white">
+            <div className="bg-[var(--franchise-loss-deep)] border-[3px] border-[var(--franchise-loss-alt)] p-2 text-[9px] text-white">
               {csvImportError}
             </div>
           )}
 
           {csvReview && (
-            <div className="bg-[#4A6844] border-[3px] border-[#3F5A3A] p-3 space-y-3">
+            <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel-dark)] p-3 space-y-3">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-[10px] text-[#E8E8D8]">
+                <div className="text-[10px] text-[var(--franchise-text)]">
                   {csvReview.acceptedRows.length} valid rows
                   {csvReview.issues.length > 0 ? ` | ${csvReview.issues.length} issue${csvReview.issues.length === 1 ? "" : "s"}` : ""}
                 </div>
                 <div className="flex gap-2">
                   <button
                     onClick={() => { setCsvReview(null); setCsvFileName(""); setCsvImportError(null); }}
-                    className="bg-[#5A8352] border-[2px] border-[#3F5A3A] px-3 py-1 text-[9px] text-[#E8E8D8] hover:bg-[#3F5A3A]"
+                    className="bg-[var(--franchise-panel)] border-[2px] border-[var(--franchise-panel-dark)] px-3 py-1 text-[9px] text-[var(--franchise-text)] hover:bg-[var(--franchise-panel-dark)]"
                   >
                     Clear
                   </button>
                   <button
                     onClick={() => void handleAcceptCsvImport()}
                     disabled={csvReview.hasErrors || csvReview.acceptedRows.length === 0 || csvImporting}
-                    className="bg-[#5599FF] border-[2px] border-[#3366FF] px-3 py-1 text-[9px] text-[#E8E8D8] hover:bg-[#3366FF] disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="bg-[var(--franchise-info-bright)] border-[2px] border-[var(--franchise-info)] px-3 py-1 text-[9px] text-[var(--franchise-text)] hover:bg-[var(--franchise-info)] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {csvImporting ? "Importing" : "Accept Import"}
                   </button>
@@ -291,7 +291,7 @@ export function ScheduleContent({
               {csvReview.issues.length > 0 && (
                 <div className="space-y-1">
                   {csvReview.issues.slice(0, 6).map((issue, index) => (
-                    <div key={`${issue.rowNumber}-${issue.code}-${index}`} className="text-[9px] text-[#FFD7D7]">
+                    <div key={`${issue.rowNumber}-${issue.code}-${index}`} className="text-[9px] text-[var(--franchise-loss-text-alt2)]">
                       Row {issue.rowNumber}: {issue.message}
                     </div>
                   ))}
@@ -301,7 +301,7 @@ export function ScheduleContent({
               {csvReview.acceptedRows.length > 0 && (
                 <div className="space-y-1">
                   {csvReview.acceptedRows.slice(0, 5).map((row) => (
-                    <div key={row.gameNumber} className="text-[9px] text-[#E8E8D8]/75">
+                    <div key={row.gameNumber} className="text-[9px] text-[var(--franchise-text)]/75">
                       Game {row.gameNumber}: {teamName(row.awayTeamId)} @ {teamName(row.homeTeamId)}{row.date ? ` | ${row.date}` : ""}
                     </div>
                   ))}
@@ -313,28 +313,28 @@ export function ScheduleContent({
       )}
 
       {/* Filter Dropdown */}
-      <div className="bg-[#5A8352] border-[5px] border-[#4A6844] p-4">
-        <div className="text-[8px] text-[#E8E8D8] mb-3">▶ SEASON {seasonNumber} SCHEDULE</div>
+      <div className="bg-[var(--franchise-panel)] border-[5px] border-[var(--franchise-border)] p-4">
+        <div className="text-[8px] text-[var(--franchise-text)] mb-3">▶ SEASON {seasonNumber} SCHEDULE</div>
         <div className="relative">
           <button 
             onClick={() => setDropdownOpen(!dropdownOpen)}
-            className="w-full bg-[#4A6844] py-2 px-3 text-[10px] text-[#E8E8D8] hover:bg-[#3F5A3A] active:scale-95 transition-transform flex items-center justify-between"
+            className="w-full bg-[var(--franchise-border)] py-2 px-3 text-[10px] text-[var(--franchise-text)] hover:bg-[var(--franchise-panel-dark)] active:scale-95 transition-transform flex items-center justify-between"
           >
             <span>Filter: {selectedTeam}</span>
             {dropdownOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
           </button>
           
           {dropdownOpen && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-[#4A6844] border-[3px] border-[#E8E8D8] z-10 max-h-64 overflow-y-auto">
+            <div className="absolute top-full left-0 right-0 mt-1 bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-text)] z-10 max-h-64 overflow-y-auto">
               <button
                 onClick={() => {
                   onTeamChange("FULL LEAGUE");
                   setDropdownOpen(false);
                 }}
-                className="w-full py-2 px-3 text-[10px] text-[#E8E8D8] hover:bg-[#3F5A3A] flex items-center justify-between border-b border-[#3F5A3A]"
+                className="w-full py-2 px-3 text-[10px] text-[var(--franchise-text)] hover:bg-[var(--franchise-panel-dark)] flex items-center justify-between border-b border-[var(--franchise-panel-dark)]"
               >
                 <span>FULL LEAGUE</span>
-                {selectedTeam === "FULL LEAGUE" && <CheckCircle className="w-3 h-3 text-[#E8E8D8]" />}
+                {selectedTeam === "FULL LEAGUE" && <CheckCircle className="w-3 h-3 text-[var(--franchise-text)]" />}
               </button>
               {availableTeams.map(team => (
                 <button
@@ -343,10 +343,10 @@ export function ScheduleContent({
                     onTeamChange(team);
                     setDropdownOpen(false);
                   }}
-                  className="w-full py-2 px-3 text-[10px] text-[#E8E8D8] hover:bg-[#3F5A3A] flex items-center justify-between border-b border-[#3F5A3A]"
+                  className="w-full py-2 px-3 text-[10px] text-[var(--franchise-text)] hover:bg-[var(--franchise-panel-dark)] flex items-center justify-between border-b border-[var(--franchise-panel-dark)]"
                 >
                   <span>{team}</span>
-                  {selectedTeam === team && <CheckCircle className="w-3 h-3 text-[#E8E8D8]" />}
+                  {selectedTeam === team && <CheckCircle className="w-3 h-3 text-[var(--franchise-text)]" />}
                 </button>
               ))}
             </div>
@@ -354,7 +354,7 @@ export function ScheduleContent({
         </div>
         
         {selectedTeam !== "FULL LEAGUE" && filteredGames.length > 0 && (
-          <div className="text-xs text-[#E8E8D8]/60 mt-2 text-center">
+          <div className="text-xs text-[var(--franchise-text)]/60 mt-2 text-center">
             Showing: {filteredGames.length} games
           </div>
         )}
@@ -362,24 +362,24 @@ export function ScheduleContent({
 
       {/* Empty State */}
       {games.length === 0 && (
-        <div className="bg-[#5A8352] border-[5px] border-[#4A6844] p-12 text-center">
+        <div className="bg-[var(--franchise-panel)] border-[5px] border-[var(--franchise-border)] p-12 text-center">
           <div className="text-4xl mb-4">📭</div>
-          <div className="text-lg text-[#E8E8D8] mb-2">NO GAMES SCHEDULED</div>
-          <div className="text-sm text-[#E8E8D8]/80 mb-6">
+          <div className="text-lg text-[var(--franchise-text)] mb-2">NO GAMES SCHEDULED</div>
+          <div className="text-sm text-[var(--franchise-text)]/80 mb-6">
             Your Season {seasonNumber} schedule is empty.<br />
             Add games as you play them in SMB4.
           </div>
           <div className="space-y-3">
             <button
               onClick={onAddGame}
-              className="bg-[#5599FF] border-[3px] border-[#3366FF] px-6 py-3 text-sm text-[#E8E8D8] hover:bg-[#3366FF] active:scale-95 transition-transform inline-flex items-center gap-2"
+              className="bg-[var(--franchise-info-bright)] border-[3px] border-[var(--franchise-info)] px-6 py-3 text-sm text-[var(--franchise-text)] hover:bg-[var(--franchise-info)] active:scale-95 transition-transform inline-flex items-center gap-2"
             >
               <Plus className="w-4 h-4" /> Add Game
             </button>
-            <div className="text-xs text-[#E8E8D8]/60">or</div>
+            <div className="text-xs text-[var(--franchise-text)]/60">or</div>
             <button
               onClick={onAddGame}
-              className="bg-[#5599FF] border-[3px] border-[#3366FF] px-6 py-3 text-sm text-[#E8E8D8] hover:bg-[#3366FF] active:scale-95 transition-transform inline-flex items-center gap-2"
+              className="bg-[var(--franchise-info-bright)] border-[3px] border-[var(--franchise-info)] px-6 py-3 text-sm text-[var(--franchise-text)] hover:bg-[var(--franchise-info)] active:scale-95 transition-transform inline-flex items-center gap-2"
             >
               <Plus className="w-4 h-4" /> Add Series (3 games)
             </button>
@@ -392,17 +392,17 @@ export function ScheduleContent({
         <div className="space-y-3">
           {/* Next Game - Highlighted */}
           {nextGame && selectedTeam === "FULL LEAGUE" && (
-            <div className="bg-[#5A8352] border-[5px] border-[#C4A853] p-4">
+            <div className="bg-[var(--franchise-panel)] border-[5px] border-[var(--franchise-gold)] p-4">
               <div className="flex items-center justify-between mb-2">
-                <div className="text-[10px] text-[#E8E8D8]">
+                <div className="text-[10px] text-[var(--franchise-text)]">
                   {nextGame.date || `DAY ${nextGame.dayNumber}`} {nextGame.date && "• TODAY"}
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="text-[8px] text-[#E8E8D8] bg-[#4A6844] px-2 py-1">NEXT GAME</div>
+                  <div className="text-[8px] text-[var(--franchise-text)] bg-[var(--franchise-border)] px-2 py-1">NEXT GAME</div>
                   {onEditGame && (
                     <button
                       onClick={(e) => { e.stopPropagation(); onEditGame(nextGame); }}
-                      className="text-[#E8E8D8]/40 hover:text-[#FFD700] transition-colors p-1"
+                      className="text-[var(--franchise-text)]/40 hover:text-[var(--franchise-gold-bright)] transition-colors p-1"
                       title="Edit game"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
@@ -414,41 +414,41 @@ export function ScheduleContent({
               </div>
               <div className="flex items-center justify-center gap-4">
                 <div className="text-right">
-                  <div className="text-base text-[#E8E8D8]">{teamName(nextGame.awayTeamId)}</div>
-                  <div className="text-[8px] text-[#E8E8D8]/60">(AWAY)</div>
+                  <div className="text-base text-[var(--franchise-text)]">{teamName(nextGame.awayTeamId)}</div>
+                  <div className="text-[8px] text-[var(--franchise-text)]/60">(AWAY)</div>
                 </div>
                 <div className="text-center px-2">
-                  <div className="text-xl text-[#E8E8D8]">@</div>
-                  <div className="text-[7px] text-[#E8E8D8]/70 italic mt-1">{stadiumMap[nextGame.homeTeamId] || teamName(nextGame.homeTeamId)}</div>
+                  <div className="text-xl text-[var(--franchise-text)]">@</div>
+                  <div className="text-[7px] text-[var(--franchise-text)]/70 italic mt-1">{stadiumMap[nextGame.homeTeamId] || teamName(nextGame.homeTeamId)}</div>
                 </div>
                 <div className="text-left">
-                  <div className="text-base text-[#E8E8D8]">{teamName(nextGame.homeTeamId)}</div>
-                  <div className="text-[8px] text-[#E8E8D8]/60">(HOME)</div>
+                  <div className="text-base text-[var(--franchise-text)]">{teamName(nextGame.homeTeamId)}</div>
+                  <div className="text-[8px] text-[var(--franchise-text)]/60">(HOME)</div>
                 </div>
               </div>
               {nextGame.time && (
-                <div className="text-[8px] text-[#E8E8D8]/60 text-center mt-2">{nextGame.time}</div>
+                <div className="text-[8px] text-[var(--franchise-text)]/60 text-center mt-2">{nextGame.time}</div>
               )}
-              <div className="text-[8px] text-[#E8E8D8]/60 text-right mt-2">Game {nextGame.gameNumber}</div>
+              <div className="text-[8px] text-[var(--franchise-text)]/60 text-right mt-2">Game {nextGame.gameNumber}</div>
             </div>
           )}
 
           {/* Upcoming Games */}
           {selectedTeam !== "FULL LEAGUE" && upcomingGames.length > 0 && (
             <>
-              <div className="text-xs text-[#E8E8D8] bg-[#4A6844] px-3 py-2">
+              <div className="text-xs text-[var(--franchise-text)] bg-[var(--franchise-border)] px-3 py-2">
                 UPCOMING ({upcomingGames.length} games scheduled)
               </div>
               {upcomingGames.slice(0, 5).map((game, index) => (
-                <div key={game.id} className="bg-[#5A8352] border-[5px] border-[#4A6844] p-3">
-                  <div className="flex items-center justify-between text-[10px] text-[#E8E8D8]/80 mb-2">
+                <div key={game.id} className="bg-[var(--franchise-panel)] border-[5px] border-[var(--franchise-border)] p-3">
+                  <div className="flex items-center justify-between text-[10px] text-[var(--franchise-text)]/80 mb-2">
                     <span>Game {game.gameNumber} │ Day {game.dayNumber}</span>
                     <div className="flex items-center gap-2">
-                  {index === 0 && <span className="text-[#FFD700]">← NEXT GAME</span>}
+                  {index === 0 && <span className="text-[var(--franchise-gold-bright)]">← NEXT GAME</span>}
                       {onEditGame && (
                         <button
                           onClick={(e) => { e.stopPropagation(); onEditGame(game); }}
-                          className="text-[#E8E8D8]/40 hover:text-[#FFD700] transition-colors p-1"
+                          className="text-[var(--franchise-text)]/40 hover:text-[var(--franchise-gold-bright)] transition-colors p-1"
                           title="Edit game"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
@@ -458,7 +458,7 @@ export function ScheduleContent({
                       {renderDeleteButton(game.id)}
                     </div>
                   </div>
-                  <div className="flex items-center justify-between text-xs text-[#E8E8D8]">
+                  <div className="flex items-center justify-between text-xs text-[var(--franchise-text)]">
                     <span>{game.awayTeamId === selectedTeam ? "vs" : "@"} {teamName(game.awayTeamId === selectedTeam ? game.homeTeamId : game.awayTeamId)}</span>
                     <span>{game.awayTeamId === selectedTeam ? "Home" : "Away"}</span>
                   </div>
@@ -469,19 +469,19 @@ export function ScheduleContent({
 
           {/* Other Scheduled Games (Full League view) */}
           {selectedTeam === "FULL LEAGUE" && upcomingGames.slice(1, 6).map(game => (
-            <div key={game.id} className="bg-[#5A8352] border-[5px] border-[#4A6844] p-4">
+            <div key={game.id} className="bg-[var(--franchise-panel)] border-[5px] border-[var(--franchise-border)] p-4">
               <div className="flex items-center justify-between mb-2">
-                <div className="text-[10px] text-[#E8E8D8]">
+                <div className="text-[10px] text-[var(--franchise-text)]">
                   {game.date || `DAY ${game.dayNumber}`}
                 </div>
                 <div className="flex items-center gap-2">
                   {game.time && (
-                    <div className="text-[8px] text-[#E8E8D8] bg-[#4A6844] px-2 py-1">{game.time}</div>
+                    <div className="text-[8px] text-[var(--franchise-text)] bg-[var(--franchise-border)] px-2 py-1">{game.time}</div>
                   )}
                   {onEditGame && (
                     <button
                       onClick={(e) => { e.stopPropagation(); onEditGame(game); }}
-                      className="text-[#E8E8D8]/40 hover:text-[#FFD700] transition-colors p-1"
+                      className="text-[var(--franchise-text)]/40 hover:text-[var(--franchise-gold-bright)] transition-colors p-1"
                       title="Edit game"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
@@ -493,34 +493,34 @@ export function ScheduleContent({
               </div>
               <div className="flex items-center justify-center gap-4">
                 <div className="text-right">
-                  <div className="text-base text-[#E8E8D8]">{teamName(game.awayTeamId)}</div>
-                  <div className="text-[8px] text-[#E8E8D8]/60">(AWAY)</div>
+                  <div className="text-base text-[var(--franchise-text)]">{teamName(game.awayTeamId)}</div>
+                  <div className="text-[8px] text-[var(--franchise-text)]/60">(AWAY)</div>
                 </div>
                 <div className="text-center px-2">
-                  <div className="text-xl text-[#E8E8D8]">@</div>
-                  <div className="text-[7px] text-[#E8E8D8]/70 italic mt-1">{stadiumMap[game.homeTeamId] || teamName(game.homeTeamId)}</div>
+                  <div className="text-xl text-[var(--franchise-text)]">@</div>
+                  <div className="text-[7px] text-[var(--franchise-text)]/70 italic mt-1">{stadiumMap[game.homeTeamId] || teamName(game.homeTeamId)}</div>
                 </div>
                 <div className="text-left">
-                  <div className="text-base text-[#E8E8D8]">{teamName(game.homeTeamId)}</div>
-                  <div className="text-[8px] text-[#E8E8D8]/60">(HOME)</div>
+                  <div className="text-base text-[var(--franchise-text)]">{teamName(game.homeTeamId)}</div>
+                  <div className="text-[8px] text-[var(--franchise-text)]/60">(HOME)</div>
                 </div>
               </div>
-              <div className="text-[8px] text-[#E8E8D8]/60 text-right mt-2">Game {game.gameNumber}</div>
+              <div className="text-[8px] text-[var(--franchise-text)]/60 text-right mt-2">Game {game.gameNumber}</div>
             </div>
           ))}
 
           {/* Divider */}
           {completedGames.length > 0 && (
             <>
-              <div className="border-t-[3px] border-[#4A6844] my-2"></div>
-              <div className="text-center text-[8px] text-[#E8E8D8]/60 py-2">▼ COMPLETED GAMES ({completedGames.length})</div>
+              <div className="border-t-[3px] border-[var(--franchise-border)] my-2"></div>
+              <div className="text-center text-[8px] text-[var(--franchise-text)]/60 py-2">▼ COMPLETED GAMES ({completedGames.length})</div>
             </>
           )}
 
           {/* Completed Games */}
           {selectedTeam !== "FULL LEAGUE" && completedGames.length > 0 && (
             <>
-              <div className="text-xs text-[#E8E8D8] bg-[#4A6844] px-3 py-2">
+              <div className="text-xs text-[var(--franchise-text)] bg-[var(--franchise-border)] px-3 py-2">
                 COMPLETED ({completedGames.length} games)
               </div>
               {completedGames.slice(0, 10).map(game => {
@@ -534,14 +534,14 @@ export function ScheduleContent({
                   : "--";
 
                 return (
-                  <div key={game.id} className="bg-[#5A8352] border-[5px] border-[#4A6844] p-3">
-                  <div className="flex items-center justify-between text-[10px] text-[#E8E8D8]/80">
+                  <div key={game.id} className="bg-[var(--franchise-panel)] border-[5px] border-[var(--franchise-border)] p-3">
+                  <div className="flex items-center justify-between text-[10px] text-[var(--franchise-text)]/80">
                     <span>Game {game.gameNumber} │ Day {game.dayNumber} │ {game.awayTeamId === selectedTeam ? "@" : "vs"} {teamName(opponent)} │ {location}</span>
                     <div className="flex items-center gap-2">
                       {renderScoreOnlyBadge(game)}
                       {renderArchiveBadge(game)}
                       {renderGameDetailLink(game)}
-                      <span className={isWin ? "text-[#00DD00]" : "text-[#DD0000]"}>
+                      <span className={isWin ? "text-[var(--franchise-win)]" : "text-[var(--franchise-loss)]"}>
                         {isWin ? "W" : "L"} {score}
                       </span>
                     </div>
@@ -555,51 +555,51 @@ export function ScheduleContent({
 
           {/* Completed Games - Full League view */}
           {selectedTeam === "FULL LEAGUE" && completedGames.slice(0, 5).map(game => (
-            <div key={game.id} className="bg-[#5A8352] border-[5px] border-[#4A6844] p-4">
+            <div key={game.id} className="bg-[var(--franchise-panel)] border-[5px] border-[var(--franchise-border)] p-4">
               <div className="flex items-center justify-between mb-2">
-                <div className="text-[10px] text-[#E8E8D8]">
+                <div className="text-[10px] text-[var(--franchise-text)]">
                   {game.date || `DAY ${game.dayNumber}`}
                 </div>
-                <div className="text-[8px] text-[#E8E8D8] bg-[#4A6844] px-2 py-1">FINAL</div>
+                <div className="text-[8px] text-[var(--franchise-text)] bg-[var(--franchise-border)] px-2 py-1">FINAL</div>
                 {renderScoreOnlyBadge(game)}
                 {renderArchiveBadge(game)}
                 {renderGameDetailLink(game)}
               </div>
               <div className="flex items-center justify-center gap-4">
                 <div className="text-right">
-                  <div className="text-base text-[#E8E8D8]">{teamName(game.awayTeamId)}</div>
-                  <div className="text-[8px] text-[#E8E8D8]/60">(AWAY)</div>
+                  <div className="text-base text-[var(--franchise-text)]">{teamName(game.awayTeamId)}</div>
+                  <div className="text-[8px] text-[var(--franchise-text)]/60">(AWAY)</div>
                 </div>
                 <div className="text-center px-2">
                   {game.result ? (
-                    <div className="text-2xl text-[#E8E8D8] font-bold">
+                    <div className="text-2xl text-[var(--franchise-text)] font-bold">
                       {game.result.awayScore}-{game.result.homeScore}
                     </div>
                   ) : (
-                    <div className="text-xl text-[#E8E8D8]">@</div>
+                    <div className="text-xl text-[var(--franchise-text)]">@</div>
                   )}
                 </div>
                 <div className="text-left">
-                  <div className="text-base text-[#E8E8D8]">{teamName(game.homeTeamId)}</div>
-                  <div className="text-[8px] text-[#E8E8D8]/60">(HOME)</div>
+                  <div className="text-base text-[var(--franchise-text)]">{teamName(game.homeTeamId)}</div>
+                  <div className="text-[8px] text-[var(--franchise-text)]/60">(HOME)</div>
                 </div>
               </div>
               {renderScoreOnlyCopy(game)}
-              <div className="text-[8px] text-[#E8E8D8]/60 text-right mt-2">Game {game.gameNumber}</div>
+              <div className="text-[8px] text-[var(--franchise-text)]/60 text-right mt-2">Game {game.gameNumber}</div>
             </div>
           ))}
 
           {/* Unscheduled notice for team view */}
           {selectedTeam !== "FULL LEAGUE" && (
-            <div className="bg-[#5A8352] border-[5px] border-[#4A6844] p-3 flex items-center justify-between">
-              <div className="text-xs text-[#E8E8D8]/80">
+            <div className="bg-[var(--franchise-panel)] border-[5px] border-[var(--franchise-border)] p-3 flex items-center justify-between">
+              <div className="text-xs text-[var(--franchise-text)]/80">
                 {teamStats && teamStats.gamesRemaining === 0 
                   ? "All games scheduled for this season" 
                   : `Unscheduled: games remaining`}
               </div>
               <button
                 onClick={onAddGame}
-                className="bg-[#5599FF] border-[2px] border-[#3366FF] px-3 py-1 text-xs text-[#E8E8D8] hover:bg-[#3366FF] active:scale-95 transition-transform flex items-center gap-1"
+                className="bg-[var(--franchise-info-bright)] border-[2px] border-[var(--franchise-info)] px-3 py-1 text-xs text-[var(--franchise-text)] hover:bg-[var(--franchise-info)] active:scale-95 transition-transform flex items-center gap-1"
               >
                 <Plus className="w-3 h-3" /> Add Game
               </button>

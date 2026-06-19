@@ -160,11 +160,11 @@ export function AwardsWatchlist({
   };
 
   return (
-    <section className="bg-[#6B9462] border-[5px] border-[#4A6844] p-4" data-testid="awards-watchlist">
+    <section className="bg-[var(--franchise-header)] border-[5px] border-[var(--franchise-border)] p-4" data-testid="awards-watchlist">
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="text-[14px] font-bold text-[#E8E8D8]">AWARDS WATCHLIST</div>
-          <div className="text-[9px] text-[#E8E8D8]/70">
+          <div className="text-[14px] font-bold text-[var(--franchise-text)]">AWARDS WATCHLIST</div>
+          <div className="text-[9px] text-[var(--franchise-text)]/70">
             {mode === "finalized"
               ? "Final awards from the season-end D9 awards store."
               : "Projected — finalizes at season end."}
@@ -172,23 +172,23 @@ export function AwardsWatchlist({
         </div>
         <div className={`border-[3px] px-3 py-2 text-[9px] font-bold ${
           mode === "finalized"
-            ? "border-[#C4A853] bg-[#C4A853] text-black"
-            : "border-[#4A6844] bg-[#5A8352] text-[#E8E8D8]"
+            ? "border-[var(--franchise-gold)] bg-[var(--franchise-gold)] text-black"
+            : "border-[var(--franchise-border)] bg-[var(--franchise-panel)] text-[var(--franchise-text)]"
         }`}>
           {mode === "finalized" ? "FINALIZED" : "PROJECTED"}
         </div>
       </div>
 
       {isLoading ? (
-        <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-4 text-sm text-[#E8E8D8]/75">
+        <div className="bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-border)] p-4 text-sm text-[var(--franchise-text)]/75">
           Loading awards...
         </div>
       ) : error ? (
-        <div role="alert" className="bg-[#DD0000]/20 border-[3px] border-[#DD0000] p-4 text-sm text-[#E8E8D8]">
+        <div role="alert" className="bg-[var(--franchise-loss)]/20 border-[3px] border-[var(--franchise-loss)] p-4 text-sm text-[var(--franchise-text)]">
           {error}
         </div>
       ) : rows.length === 0 ? (
-        <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-4 text-sm text-[#E8E8D8]/75">
+        <div className="bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-border)] p-4 text-sm text-[var(--franchise-text)]/75">
           Projected awards are pending WAR-like season evidence.
         </div>
       ) : (
@@ -201,19 +201,19 @@ export function AwardsWatchlist({
             return (
               <article
                 key={category}
-                className="bg-[#5A8352] border-[4px] border-[#4A6844] p-4"
+                className="bg-[var(--franchise-panel)] border-[4px] border-[var(--franchise-border)] p-4"
                 data-testid={`award-card-${category}`}
               >
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-[10px] font-bold text-[#C4A853]">
+                    <div className="text-[10px] font-bold text-[var(--franchise-gold)]">
                       {AWARD_EMBLEMS[category]} {AWARD_SHORT_LABELS[category]}
                     </div>
-                    <div className="text-sm font-bold text-[#E8E8D8]">{AWARD_FULL_LABELS[category]}</div>
+                    <div className="text-sm font-bold text-[var(--franchise-text)]">{AWARD_FULL_LABELS[category]}</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-[8px] uppercase text-[#E8E8D8]/55">Winner</div>
-                    <div className="text-[12px] font-bold text-[#E8E8D8]" data-testid={`award-winner-${category}`}>
+                    <div className="text-[8px] uppercase text-[var(--franchise-text)]/55">Winner</div>
+                    <div className="text-[12px] font-bold text-[var(--franchise-text)]" data-testid={`award-winner-${category}`}>
                       {winnerName}
                     </div>
                   </div>
@@ -221,26 +221,26 @@ export function AwardsWatchlist({
 
                 {category === "MANAGER_OF_YEAR" && (
                   <div className="mb-3 grid grid-cols-2 gap-2 text-[9px]">
-                    <div className="bg-[#4A6844] p-2">
-                      <div className="text-[#E8E8D8]/55">Actual Wins</div>
-                      <div className="text-[#E8E8D8]">{formatOptionalNumber(row.managerActualWins)}</div>
+                    <div className="bg-[var(--franchise-border)] p-2">
+                      <div className="text-[var(--franchise-text)]/55">Actual Wins</div>
+                      <div className="text-[var(--franchise-text)]">{formatOptionalNumber(row.managerActualWins)}</div>
                     </div>
-                    <div className="bg-[#4A6844] p-2">
-                      <div className="text-[#E8E8D8]/55">Expected Wins</div>
-                      <div className="text-[#E8E8D8]">{formatOptionalNumber(row.managerExpectedWins)}</div>
+                    <div className="bg-[var(--franchise-border)] p-2">
+                      <div className="text-[var(--franchise-text)]/55">Expected Wins</div>
+                      <div className="text-[var(--franchise-text)]">{formatOptionalNumber(row.managerExpectedWins)}</div>
                     </div>
                   </div>
                 )}
 
                 {category === "GOLD_GLOVE" && row.goldGloveSplit && (
                   <div className="mb-3 grid grid-cols-2 gap-2 text-[9px]">
-                    <div className="bg-[#4A6844] p-2">
-                      <div className="text-[#E8E8D8]/55">fWAR Split</div>
-                      <div className="text-[#E8E8D8]">{formatOptionalNumber(row.goldGloveSplit.fWar)}</div>
+                    <div className="bg-[var(--franchise-border)] p-2">
+                      <div className="text-[var(--franchise-text)]/55">fWAR Split</div>
+                      <div className="text-[var(--franchise-text)]">{formatOptionalNumber(row.goldGloveSplit.fWar)}</div>
                     </div>
-                    <div className="bg-[#4A6844] p-2">
-                      <div className="text-[#E8E8D8]/55">Total WAR</div>
-                      <div className="text-[#E8E8D8]">{formatOptionalNumber(row.goldGloveSplit.totalWar)}</div>
+                    <div className="bg-[var(--franchise-border)] p-2">
+                      <div className="text-[var(--franchise-text)]/55">Total WAR</div>
+                      <div className="text-[var(--franchise-text)]">{formatOptionalNumber(row.goldGloveSplit.totalWar)}</div>
                     </div>
                   </div>
                 )}
@@ -249,12 +249,12 @@ export function AwardsWatchlist({
                   {row.candidates.map((candidate, index) => (
                     <div
                       key={`${category}-${candidate.playerId}`}
-                      className="grid grid-cols-[28px_1fr_auto_auto] items-center gap-2 bg-[#4A6844] px-3 py-2 text-[9px]"
+                      className="grid grid-cols-[28px_1fr_auto_auto] items-center gap-2 bg-[var(--franchise-border)] px-3 py-2 text-[9px]"
                     >
-                      <div className="text-[#C4A853]">#{index + 1}</div>
-                      <div className="min-w-0 truncate text-[#E8E8D8]">{resolveName(row, candidate.playerId)}</div>
-                      <div className="text-[#E8E8D8]/70">{formatScore(candidate.score)}</div>
-                      <div className={candidate.marginToWinner === 0 ? "text-[#C4A853]" : "text-[#E8E8D8]/60"}>
+                      <div className="text-[var(--franchise-gold)]">#{index + 1}</div>
+                      <div className="min-w-0 truncate text-[var(--franchise-text)]">{resolveName(row, candidate.playerId)}</div>
+                      <div className="text-[var(--franchise-text)]/70">{formatScore(candidate.score)}</div>
+                      <div className={candidate.marginToWinner === 0 ? "text-[var(--franchise-gold)]" : "text-[var(--franchise-text)]/60"}>
                         {formatMargin(candidate.marginToWinner)}
                       </div>
                     </div>

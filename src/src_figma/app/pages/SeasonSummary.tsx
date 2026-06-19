@@ -508,8 +508,8 @@ export function SeasonSummary() {
 
   if (franchiseData.isLoading || isSummaryLoading || (!persistedSummary && seasonStats.isLoading) || scheduleData.isLoading || playoffData.isLoading) {
     return (
-      <div className="min-h-screen bg-[#567A50] flex items-center justify-center">
-        <div className="text-[#E8E8D8] text-lg">Loading season summary...</div>
+      <div className="min-h-screen bg-[var(--franchise-field)] flex items-center justify-center">
+        <div className="text-[var(--franchise-text)] text-lg">Loading season summary...</div>
       </div>
     );
   }
@@ -535,21 +535,21 @@ export function SeasonSummary() {
     return (
       <button
         onClick={() => toggleSection(section)}
-        className="w-full bg-[#4A6844] border-[5px] border-[#5A8352] py-3 px-4 text-left flex items-center justify-between hover:bg-[#3F5A3A] active:scale-[0.99] transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+        className="w-full bg-[var(--franchise-border)] border-[5px] border-[var(--franchise-panel)] py-3 px-4 text-left flex items-center justify-between hover:bg-[var(--franchise-panel-dark)] active:scale-[0.99] transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
       >
-        <span className="text-sm text-[#E8E8D8] uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+        <span className="text-sm text-[var(--franchise-text)] uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
           {title}
         </span>
-        {isExpanded ? <ChevronUp className="w-4 h-4 text-[#E8E8D8]" /> : <ChevronDown className="w-4 h-4 text-[#E8E8D8]" />}
+        {isExpanded ? <ChevronUp className="w-4 h-4 text-[var(--franchise-text)]" /> : <ChevronDown className="w-4 h-4 text-[var(--franchise-text)]" />}
       </button>
     );
   }
 
   function manifestStatusClass(status: string): string {
-    if (status === 'trusted' || status === 'included') return 'text-[#BFE6A8]';
-    if (status === 'blocked') return 'text-[#FFD7D2]';
-    if (status === 'incomplete') return 'text-[#F4D27A]';
-    return 'text-[#E8E8D8]/70';
+    if (status === 'trusted' || status === 'included') return 'text-[var(--franchise-win-pale)]';
+    if (status === 'blocked') return 'text-[var(--franchise-loss-text-alt)]';
+    if (status === 'incomplete') return 'text-[var(--franchise-gold-amber-alt)]';
+    return 'text-[var(--franchise-text)]/70';
   }
 
   // ============================================
@@ -562,20 +562,20 @@ export function SeasonSummary() {
   const skippedGames = persistedSummary?.schedule.skippedGameIds.length ?? (scheduleData.games ?? []).filter(g => g.status === 'SKIPPED').length;
 
   return (
-    <div className="min-h-screen bg-[#567A50]">
+    <div className="min-h-screen bg-[var(--franchise-field)]">
       {/* Header */}
-      <div className="bg-[#C4A853] border-b-[6px] border-[#9A7B2C] p-6 text-center">
+      <div className="bg-[var(--franchise-gold)] border-b-[6px] border-[var(--franchise-gold-dark)] p-6 text-center">
         <div className="flex items-center justify-center gap-3 mb-2">
-          <Trophy className="w-8 h-8 text-[#1a1a1a]" />
-          <div className="text-3xl text-[#1a1a1a]" style={{ textShadow: '1px 1px 0px rgba(255,255,255,0.3)' }}>
+          <Trophy className="w-8 h-8 text-[var(--franchise-ink)]" />
+          <div className="text-3xl text-[var(--franchise-ink)]" style={{ textShadow: '1px 1px 0px rgba(255,255,255,0.3)' }}>
             SEASON {currentSeason} SUMMARY
           </div>
-          <Trophy className="w-8 h-8 text-[#1a1a1a]" />
+          <Trophy className="w-8 h-8 text-[var(--franchise-ink)]" />
         </div>
-        <div className="text-sm text-[#1a1a1a]/70">
+        <div className="text-sm text-[var(--franchise-ink)]/70">
           {franchiseData.leagueName || 'KRUSE BASEBALL'} — {gamesPerTeam} games per team
         </div>
-        <div className="text-[10px] text-[#1a1a1a]/50 mt-1">
+        <div className="text-[10px] text-[var(--franchise-ink)]/50 mt-1">
           {completedGames} played{skippedGames > 0 ? ` / ${skippedGames} skipped` : ''}
         </div>
       </div>
@@ -586,11 +586,11 @@ export function SeasonSummary() {
         {/* ============================================ */}
         <SectionHeader title="Final Standings" section="standings" />
         {expandedSection === "standings" && (
-          <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4 space-y-4">
+          <div className="bg-[var(--franchise-header)] border-[6px] border-[var(--franchise-border)] p-4 space-y-4">
             {summaryStandings.length > 0 ? (
-              <table className="w-full text-[10px] text-[#E8E8D8]">
+              <table className="w-full text-[10px] text-[var(--franchise-text)]">
                 <thead>
-                  <tr className="text-[#E8E8D8]/60">
+                  <tr className="text-[var(--franchise-text)]/60">
                     <th className="text-left py-0.5 w-1/3">Team</th>
                     <th className="text-center py-0.5">W</th>
                     <th className="text-center py-0.5">L</th>
@@ -600,7 +600,7 @@ export function SeasonSummary() {
                 </thead>
                 <tbody>
                   {summaryStandings.map((team, idx) => (
-                    <tr key={team.teamId} className={idx === 0 ? 'text-[#C4A853]' : ''}>
+                    <tr key={team.teamId} className={idx === 0 ? 'text-[var(--franchise-gold)]' : ''}>
                       <td className="py-0.5">{team.teamName}</td>
                       <td className="text-center py-0.5">{team.wins}</td>
                       <td className="text-center py-0.5">{team.losses}</td>
@@ -612,15 +612,15 @@ export function SeasonSummary() {
               </table>
             ) : Object.entries(franchiseData.standings).map(([conference, divisions]) => (
               <div key={conference}>
-                <div className="text-xs text-[#C4A853] mb-2 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+                <div className="text-xs text-[var(--franchise-gold)] mb-2 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
                   {conference} Conference
                 </div>
                 {Object.entries(divisions as Record<string, StandingEntry[]>).map(([division, teams]) => (
                   <div key={division} className="mb-3">
-                    <div className="text-[9px] text-[#E8E8D8]/70 mb-1 uppercase">{division}</div>
-                    <table className="w-full text-[10px] text-[#E8E8D8]">
+                    <div className="text-[9px] text-[var(--franchise-text)]/70 mb-1 uppercase">{division}</div>
+                    <table className="w-full text-[10px] text-[var(--franchise-text)]">
                       <thead>
-                        <tr className="text-[#E8E8D8]/60">
+                        <tr className="text-[var(--franchise-text)]/60">
                           <th className="text-left py-0.5 w-1/3">Team</th>
                           <th className="text-center py-0.5">W</th>
                           <th className="text-center py-0.5">L</th>
@@ -630,7 +630,7 @@ export function SeasonSummary() {
                       </thead>
                       <tbody>
                         {(teams as StandingEntry[]).map((team, idx) => (
-                          <tr key={team.team} className={idx === 0 ? 'text-[#C4A853]' : ''}>
+                          <tr key={team.team} className={idx === 0 ? 'text-[var(--franchise-gold)]' : ''}>
                             <td className="py-0.5">{team.team}</td>
                             <td className="text-center py-0.5">{team.wins}</td>
                             <td className="text-center py-0.5">{team.losses}</td>
@@ -652,23 +652,23 @@ export function SeasonSummary() {
         {/* ============================================ */}
         <SectionHeader title="League Leaders" section="leaders" />
         {expandedSection === "leaders" && (
-          <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4 space-y-4">
+          <div className="bg-[var(--franchise-header)] border-[6px] border-[var(--franchise-border)] p-4 space-y-4">
             {/* Batting Leaders */}
             <div>
-              <div className="text-xs text-[#C4A853] mb-2 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+              <div className="text-xs text-[var(--franchise-gold)] mb-2 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
                 Batting
               </div>
               {battingLeaders && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {(Object.entries(battingLeaders) as [string, BattingLeaderEntry[]][]).map(([stat, leaders]) => (
-                    <div key={stat} className="bg-[#5A8352] border-[3px] border-[#4A6844] p-2">
-                      <div className="text-[9px] text-[#C4A853] mb-1">{stat}</div>
+                    <div key={stat} className="bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-border)] p-2">
+                      <div className="text-[9px] text-[var(--franchise-gold)] mb-1">{stat}</div>
                       {leaders.map((player, idx) => (
-                        <div key={player.playerId} className="flex justify-between text-[9px] text-[#E8E8D8]">
-                          <span className={idx === 0 ? 'text-[#C4A853]' : ''}>
+                        <div key={player.playerId} className="flex justify-between text-[9px] text-[var(--franchise-text)]">
+                          <span className={idx === 0 ? 'text-[var(--franchise-gold)]' : ''}>
                             {idx + 1}. {player.playerName}
                           </span>
-                          <span className={idx === 0 ? 'text-[#C4A853]' : ''}>
+                          <span className={idx === 0 ? 'text-[var(--franchise-gold)]' : ''}>
                             {stat === 'AVG' ? formatAvg(player.avg) :
                              stat === 'OBP' ? formatAvg(player.obp) :
                              stat === 'SLG' ? formatAvg(player.slg) :
@@ -685,20 +685,20 @@ export function SeasonSummary() {
 
             {/* Pitching Leaders */}
             <div>
-              <div className="text-xs text-[#C4A853] mb-2 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+              <div className="text-xs text-[var(--franchise-gold)] mb-2 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
                 Pitching
               </div>
               {pitchingLeaders && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {(Object.entries(pitchingLeaders) as [string, PitchingLeaderEntry[]][]).map(([stat, leaders]) => (
-                    <div key={stat} className="bg-[#5A8352] border-[3px] border-[#4A6844] p-2">
-                      <div className="text-[9px] text-[#C4A853] mb-1">{stat}</div>
+                    <div key={stat} className="bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-border)] p-2">
+                      <div className="text-[9px] text-[var(--franchise-gold)] mb-1">{stat}</div>
                       {leaders.map((player, idx) => (
-                        <div key={player.playerId} className="flex justify-between text-[9px] text-[#E8E8D8]">
-                          <span className={idx === 0 ? 'text-[#C4A853]' : ''}>
+                        <div key={player.playerId} className="flex justify-between text-[9px] text-[var(--franchise-text)]">
+                          <span className={idx === 0 ? 'text-[var(--franchise-gold)]' : ''}>
                             {idx + 1}. {player.playerName}
                           </span>
-                          <span className={idx === 0 ? 'text-[#C4A853]' : ''}>
+                          <span className={idx === 0 ? 'text-[var(--franchise-gold)]' : ''}>
                             {stat === 'ERA' ? formatERA(player.era) :
                              stat === 'WHIP' ? formatWHIP(player.whip) :
                              stat === 'W' ? player.wins :
@@ -715,20 +715,20 @@ export function SeasonSummary() {
 
             {/* WAR Leaders */}
             <div>
-              <div className="text-xs text-[#C4A853] mb-2 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+              <div className="text-xs text-[var(--franchise-gold)] mb-2 uppercase" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
                 WAR (Overall)
               </div>
-              <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-2">
+              <div className="bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-border)] p-2">
                 {warLeaders.length === 0 && (
-                  <div className="text-[9px] text-[#E8E8D8]/50 italic">No data available</div>
+                  <div className="text-[9px] text-[var(--franchise-text)]/50 italic">No data available</div>
                 )}
                 {warLeaders.map((entry, idx) => (
-                  <div key={`${entry.playerName}-${idx}`} className="flex justify-between text-[9px] text-[#E8E8D8]">
-                    <span className={idx === 0 ? 'text-[#C4A853]' : ''}>
+                  <div key={`${entry.playerName}-${idx}`} className="flex justify-between text-[9px] text-[var(--franchise-text)]">
+                    <span className={idx === 0 ? 'text-[var(--franchise-gold)]' : ''}>
                       {idx + 1}. {entry.playerName} ({entry.teamId.toUpperCase()})
-                      <span className="text-[#E8E8D8]/50 ml-1">{entry.type === 'pitcher' ? 'P' : 'POS'}</span>
+                      <span className="text-[var(--franchise-text)]/50 ml-1">{entry.type === 'pitcher' ? 'P' : 'POS'}</span>
                     </span>
-                    <span className={idx === 0 ? 'text-[#C4A853]' : ''}>
+                    <span className={idx === 0 ? 'text-[var(--franchise-gold)]' : ''}>
                       {entry.war.toFixed(1)}
                     </span>
                   </div>
@@ -743,8 +743,8 @@ export function SeasonSummary() {
         {/* ============================================ */}
         <SectionHeader title="Awards Status" section="awards" />
         {expandedSection === "awards" && (
-          <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4 space-y-3">
-            <div className="text-[10px] text-[#E8E8D8]/70 leading-relaxed">
+          <div className="bg-[var(--franchise-header)] border-[6px] border-[var(--franchise-border)] p-4 space-y-3">
+            <div className="text-[10px] text-[var(--franchise-text)]/70 leading-relaxed">
               League awards finalize from the season-end awards store when rows exist for this scope. Leader previews appear only when finalized award rows are not available.
             </div>
 
@@ -757,12 +757,12 @@ export function SeasonSummary() {
 
             {/* Position player preview fallback */}
             {!persistedSummary && awards?.mvp && (
-              <div className="bg-[#5A8352] border-[3px] border-[#C4A853] p-3">
-                <div className="text-[9px] text-[#C4A853] mb-1">TOP POSITION PLAYER PREVIEW</div>
-                <div className="text-sm text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+              <div className="bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-gold)] p-3">
+                <div className="text-[9px] text-[var(--franchise-gold)] mb-1">TOP POSITION PLAYER PREVIEW</div>
+                <div className="text-sm text-[var(--franchise-text)]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
                   {awards.mvp.playerName}
                 </div>
-                <div className="text-[9px] text-[#E8E8D8]/70">
+                <div className="text-[9px] text-[var(--franchise-text)]/70">
                   {awards.mvp.teamId.toUpperCase()} — {awards.mvp.value} {awards.mvp.statLabel}
                 </div>
               </div>
@@ -770,12 +770,12 @@ export function SeasonSummary() {
 
             {/* Pitcher preview fallback */}
             {!persistedSummary && awards?.cyYoung && (
-              <div className="bg-[#5A8352] border-[3px] border-[#C4A853] p-3">
-                <div className="text-[9px] text-[#C4A853] mb-1">TOP PITCHER PREVIEW</div>
-                <div className="text-sm text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+              <div className="bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-gold)] p-3">
+                <div className="text-[9px] text-[var(--franchise-gold)] mb-1">TOP PITCHER PREVIEW</div>
+                <div className="text-sm text-[var(--franchise-text)]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
                   {awards.cyYoung.playerName}
                 </div>
-                <div className="text-[9px] text-[#E8E8D8]/70">
+                <div className="text-[9px] text-[var(--franchise-text)]/70">
                   {awards.cyYoung.teamId.toUpperCase()} — {awards.cyYoung.value} {awards.cyYoung.statLabel}
                 </div>
               </div>
@@ -783,15 +783,15 @@ export function SeasonSummary() {
 
             {/* Fielding preview fallback */}
             {!persistedSummary && awards?.goldGloves && awards.goldGloves.length > 0 && (
-              <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-3">
-                <div className="text-[9px] text-[#C4A853] mb-2">FIELDING LEADER PREVIEW</div>
+              <div className="bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-border)] p-3">
+                <div className="text-[9px] text-[var(--franchise-gold)] mb-2">FIELDING LEADER PREVIEW</div>
                 <div className="grid grid-cols-2 gap-1">
                   {awards.goldGloves.map(gg => (
-                    <div key={gg.position} className="flex justify-between text-[9px] text-[#E8E8D8]">
+                    <div key={gg.position} className="flex justify-between text-[9px] text-[var(--franchise-text)]">
                       <span>
-                        <span className="text-[#C4A853]">{gg.position}</span> — {gg.playerName}
+                        <span className="text-[var(--franchise-gold)]">{gg.position}</span> — {gg.playerName}
                       </span>
-                      <span className="text-[#E8E8D8]/60">{gg.fWAR.toFixed(1)} fWAR</span>
+                      <span className="text-[var(--franchise-text)]/60">{gg.fWAR.toFixed(1)} fWAR</span>
                     </div>
                   ))}
                 </div>
@@ -800,7 +800,7 @@ export function SeasonSummary() {
 
             {/* No awards message */}
             {!persistedSummary && !awards?.mvp && !awards?.cyYoung && (
-              <div className="text-[10px] text-[#E8E8D8]/50 italic text-center py-4">
+              <div className="text-[10px] text-[var(--franchise-text)]/50 italic text-center py-4">
                 No stat leader preview data available — play or score games to generate stats
               </div>
             )}
@@ -812,25 +812,25 @@ export function SeasonSummary() {
         {/* ============================================ */}
         <SectionHeader title="Your Team" section="team" />
         {expandedSection === "team" && (
-          <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4">
+          <div className="bg-[var(--franchise-header)] border-[6px] border-[var(--franchise-border)] p-4">
             {userTeamSummary ? (
               <div className="space-y-3">
                 {/* Record */}
                 <div className="text-center">
-                  <div className="text-lg text-[#E8E8D8]" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
+                  <div className="text-lg text-[var(--franchise-text)]" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
                     {userTeamSummary.teamName.toUpperCase()}
                   </div>
-                  <div className="text-2xl text-[#C4A853]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
+                  <div className="text-2xl text-[var(--franchise-gold)]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
                     {userTeamSummary.wins}-{userTeamSummary.losses}
                   </div>
-                  <div className="text-[10px] text-[#E8E8D8]/70">
+                  <div className="text-[10px] text-[var(--franchise-text)]/70">
                     {userTeamSummary.divisionRank === 1 ? '1st' :
                      userTeamSummary.divisionRank === 2 ? '2nd' :
                      userTeamSummary.divisionRank === 3 ? '3rd' :
                      `${userTeamSummary.divisionRank}th`} in {userTeamSummary.divisionName}{userTeamSummary.conferenceName ? ` (${userTeamSummary.conferenceName})` : ''}
                     {userTeamSummary.gamesBack !== '-' && ` — ${userTeamSummary.gamesBack} GB`}
                   </div>
-                  <div className="text-[9px] text-[#E8E8D8]/50 mt-1">
+                  <div className="text-[9px] text-[var(--franchise-text)]/50 mt-1">
                     Run Differential: {userTeamSummary.runDiff}
                   </div>
                 </div>
@@ -838,10 +838,10 @@ export function SeasonSummary() {
                 {/* Key Performers */}
                 {(userTeamSummary.topBatters.length > 0 || userTeamSummary.topPitchers.length > 0) && (
                   <div>
-                    <div className="text-[9px] text-[#C4A853] mb-1 uppercase">Key Performers</div>
+                    <div className="text-[9px] text-[var(--franchise-gold)] mb-1 uppercase">Key Performers</div>
                     <div className="space-y-1">
                       {userTeamSummary.topBatters.map(b => (
-                        <div key={b.playerId} className="flex justify-between text-[9px] text-[#E8E8D8]">
+                        <div key={b.playerId} className="flex justify-between text-[9px] text-[var(--franchise-text)]">
                           <span>{b.playerName}</span>
                           <span>
                             {formatAvg(b.avg)} / {b.homeRuns} HR / {b.rbi} RBI / {b.totalWAR.toFixed(1)} WAR
@@ -849,7 +849,7 @@ export function SeasonSummary() {
                         </div>
                       ))}
                       {userTeamSummary.topPitchers.map(p => (
-                        <div key={p.playerId} className="flex justify-between text-[9px] text-[#E8E8D8]">
+                        <div key={p.playerId} className="flex justify-between text-[9px] text-[var(--franchise-text)]">
                           <span>{p.playerName}</span>
                           <span>
                             {p.wins}-{p.losses} / {formatERA(p.era)} ERA / {p.strikeouts} K / {p.pWAR.toFixed(1)} pWAR
@@ -861,7 +861,7 @@ export function SeasonSummary() {
                 )}
               </div>
             ) : (
-              <div className="text-[10px] text-[#E8E8D8]/50 italic text-center py-4">
+              <div className="text-[10px] text-[var(--franchise-text)]/50 italic text-center py-4">
                 No team data available
               </div>
             )}
@@ -873,53 +873,53 @@ export function SeasonSummary() {
         {/* ============================================ */}
         <SectionHeader title="Season Complete Manifest" section="manifest" />
         {expandedSection === "manifest" && (
-          <div className="bg-[#6B9462] border-[6px] border-[#4A6844] p-4 space-y-3">
+          <div className="bg-[var(--franchise-header)] border-[6px] border-[var(--franchise-border)] p-4 space-y-3">
             {persistedSummary?.manifest ? (
               <>
-                <div className="bg-[#5A8352] border-[3px] border-[#4A6844] p-3">
+                <div className="bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-border)] p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-[9px] text-[#C4A853] uppercase">Read-only awards-aware handoff package</div>
+                    <div className="text-[9px] text-[var(--franchise-gold)] uppercase">Read-only awards-aware handoff package</div>
                     <div className={`text-[9px] uppercase ${manifestStatusClass(persistedSummary.manifest.status)}`}>
                       {persistedSummary.manifest.status.replace(/-/g, ' ')}
                     </div>
                   </div>
-                  <div className="mt-2 text-[10px] text-[#E8E8D8]/70 leading-relaxed">
+                  <div className="mt-2 text-[10px] text-[var(--franchise-text)]/70 leading-relaxed">
                     This summary records Mode 2 season evidence for review only. Final True Value handoff authority,
                     salary movement, morale automation, relationship mutation, season rollover, and Mode 3/offseason execution remain blocked.
                   </div>
                 </div>
 
                 {persistedSummary.manifest.blockers.length > 0 && (
-                  <div className="bg-[#4A1F1B]/70 border-[3px] border-[#A3483D] p-3">
-                    <div className="text-[9px] text-[#FFD7D2] uppercase mb-1">Completion blockers</div>
+                  <div className="bg-[var(--franchise-loss-panel-deep)]/70 border-[3px] border-[var(--franchise-loss-border)] p-3">
+                    <div className="text-[9px] text-[var(--franchise-loss-text-alt)] uppercase mb-1">Completion blockers</div>
                     {persistedSummary.manifest.blockers.map((blocker) => (
-                      <div key={blocker} className="text-[9px] text-[#FFD7D2]/90">- {blocker}</div>
+                      <div key={blocker} className="text-[9px] text-[var(--franchise-loss-text-alt)]/90">- {blocker}</div>
                     ))}
                   </div>
                 )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {persistedSummary.manifest.categories.map((category) => (
-                    <div key={category.key} className="bg-[#5A8352] border-[3px] border-[#4A6844] p-2">
+                    <div key={category.key} className="bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-border)] p-2">
                       <div className="flex items-start justify-between gap-2">
-                        <div className="text-[9px] text-[#E8E8D8] uppercase">{category.label}</div>
+                        <div className="text-[9px] text-[var(--franchise-text)] uppercase">{category.label}</div>
                         <div className={`text-[8px] uppercase whitespace-nowrap ${manifestStatusClass(category.status)}`}>
                           {category.status.replace(/-/g, ' ')}
                         </div>
                       </div>
-                      <div className="mt-1 text-[9px] text-[#E8E8D8]/65 leading-relaxed">{category.detail}</div>
+                      <div className="mt-1 text-[9px] text-[var(--franchise-text)]/65 leading-relaxed">{category.detail}</div>
                       {category.blockers.slice(0, 1).map((blocker) => (
-                        <div key={blocker} className="mt-1 text-[8px] text-[#FFD7D2]/90">{blocker}</div>
+                        <div key={blocker} className="mt-1 text-[8px] text-[var(--franchise-loss-text-alt)]/90">{blocker}</div>
                       ))}
                       {category.warnings.slice(0, 1).map((warning) => (
-                        <div key={warning} className="mt-1 text-[8px] text-[#F4D27A]/90">{warning}</div>
+                        <div key={warning} className="mt-1 text-[8px] text-[var(--franchise-gold-amber-alt)]/90">{warning}</div>
                       ))}
                     </div>
                   ))}
                 </div>
               </>
             ) : (
-              <div className="text-[10px] text-[#E8E8D8]/50 italic text-center py-4">
+              <div className="text-[10px] text-[var(--franchise-text)]/50 italic text-center py-4">
                 No persisted awards-aware handoff manifest is available yet.
               </div>
             )}
@@ -932,21 +932,21 @@ export function SeasonSummary() {
         <div className="pt-4 pb-8">
           <button
             onClick={handleStartPlayoffs}
-            className="w-full bg-[#C4A853] border-[6px] border-[#9A7B2C] py-4 px-8 text-lg text-[#1a1a1a] hover:bg-[#D4B863] active:scale-[0.98] transition-transform shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)] flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-[var(--franchise-gold)] border-[6px] border-[var(--franchise-gold-dark)] py-4 px-8 text-lg text-[var(--franchise-ink)] hover:bg-[var(--franchise-gold-light)] active:scale-[0.98] transition-transform shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)] flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ textShadow: '1px 1px 0px rgba(255,255,255,0.3)' }}
           >
             <span>{playoffData.hasActivePlayoff ? 'VIEW PLAYOFFS' : 'REVIEW PLAYOFF SEEDING'}</span>
             <ArrowRight className="w-5 h-5" />
           </button>
           {playoffData.error && (
-            <div className="mt-3 border-[3px] border-[#A3483D] bg-[#4A1F1B]/80 px-3 py-2 text-[10px] text-[#FFD7D2]">
+            <div className="mt-3 border-[3px] border-[var(--franchise-loss-border)] bg-[var(--franchise-loss-panel-deep)]/80 px-3 py-2 text-[10px] text-[var(--franchise-loss-text-alt)]">
               {playoffData.error}
             </div>
           )}
 
           <button
             onClick={() => navigate(`/franchise/${franchiseId}`)}
-            className="w-full mt-2 bg-[#4A6844] border-[4px] border-[#5A8352] py-2 px-4 text-[10px] text-[#E8E8D8]/70 hover:bg-[#3F5A3A] active:scale-[0.99] transition-transform"
+            className="w-full mt-2 bg-[var(--franchise-border)] border-[4px] border-[var(--franchise-panel)] py-2 px-4 text-[10px] text-[var(--franchise-text)]/70 hover:bg-[var(--franchise-panel-dark)] active:scale-[0.99] transition-transform"
           >
             BACK TO FRANCHISE
           </button>
