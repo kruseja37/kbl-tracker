@@ -27,8 +27,10 @@ spec-docs/Super Mega Baseball 4 Teams and Players/
 
 # Session coordination sentinels + sandbox working artifacts (never tracked)
 .git_writetest_probe
-HANDOFF_NEEDED
-HANDOFF_DONE_*
 WAITING_ON_JK.md
 Progress_Summary.md
 Temp/
+
+# Handoff protocol — intentionally TRACKED (NOT ignored): the overnight cron
+# schedule resumes the run by picking up the handoff from committed state, so
+# HANDOFF_NEEDED / HANDOFF_DONE_* must be committable. (Un-ignored 2026-06-19 per JK.)
