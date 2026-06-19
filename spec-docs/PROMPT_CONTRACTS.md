@@ -13177,3 +13177,108 @@ ladder monotonic; both dark-noop gates; null-row skip; `starter > reserve` heat 
 (`AwardsWatchlist`, **confirmed passing solo 2/2**), **ZERO new reds** (+8). build-DARK / ORPHANED-PENDING (no caller — L12-5e
 wires it); trackerDb v24. Branch-only. **⇒ all four L12-5 PAYOUT MECHANICS built (5a adapter · 5b emit-glue · 5c snub · 5d
 reach-floor). ➡ NEXT = L12-5e** (the live wiring at both trigger edges — the only impure/live-path piece).
+
+---
+
+## CONTRACT — L12-5e-1 (the All-Star lock edge: wire emit+reach-floor+snub on the 60% lock) — 2026-06-19 (attended)
+
+**ROUTE:** Codex CLI (gpt-5.5, **very-high reasoning effort**) via `codex exec` stdin-from-contract. Auditor: Opus 4.8
+(builder ≠ auditor — Codex builds, Opus independently audits + runs the full host gate).
+
+**ROLE:** You are a builder for the KBL Tracker franchise L-stack (the All-Star payout wiring).
+
+**GOAL:** Fire the three L12-5 payout mechanics at the **60% All-Star lock**: a NEW seam-injectable orchestrator
+`runFranchiseAllStarLockPayouts(...)` (emit + reach-floor + snub) + a one-call wiring into the existing L12-4d persist wrapper
+on the lock transition. Build-DARK (doubly-gated — the wrapper is L12-gated and each payout re-gates). Per-game spine. Per F9:
+the WHOLE team ratchets the reach-floor, starters (`role:'starter'`, incl. the wildcard + the core pitchers) get the
+`allStarStarter` bump, reserves get `allStarReserve`. Per F2: the snub hits the CLOSE non-selected losers.
+
+**SCOPE NOTE (deferred, NOT dropped):** the `allStarSelections` career counter (F9 "increments at the lock") has a GREENFIELD
+careerStorage write-path — DEFER it to a 5e follow-up / L12-6. 5e-1 fires emit + reach-floor + snub only.
+
+**SOURCE OF TRUTH:** `spec-docs/L12-5_SCOPE_MAP.md` §2/§5/§6/§7 + `DECISIONS_LOG.md` 2026-06-19 "L12-5" (F2/F7/F9).
+
+**VERIFIED ANCHORS:** the wrapper `persistFranchiseAllStarRosterForCompletedGame` (`src/utils/franchiseAllStarRosterCompute.ts`)
+has `candidates` (`:57`, `AllStarCandidate[]`) + `selections` (`:63`, `FranchiseAllStarSelection[]`) + `shouldLock` (`:73`) in
+scope, and persists with `status: shouldLock ? 'persisted-locked' : 'persisted'` (`:89`); it already returned early on
+`existing?.locked` (`:53`) so `shouldLock===true` here IS the lock transition (fire-once). `gameState.savedAt:number` is the
+threaded timestamp. `AllStarCandidate` = `{playerId, teamId, rawPosition, hittingMerit:number|null, battingWar, startingMerit:number|null,
+reliefMerit:number|null, gamesStarted, qualifiedAsHitter, qualifiedAsPitcher, fameHeat, fameReachFloor}`
+(`src/engines/franchiseAllStarSelector.ts`). `FranchiseAllStarSelection` = `{playerId, teamId, position, role:'starter'|'reserve',
+selectionScore?}`. The three payout entry points (all seam-injectable, all L12-gated internally):
+`emitFranchiseHonorNews({honorInput, teamId, leagueId?})` (`src/src_figma/app/engines/reporter/franchiseHonorEmission.ts`;
+`FranchiseHonorNewsInput` from `./franchiseL12AwardNewsAdapter`); `applyFranchiseHonorReachFloor({honorees:{playerId,honorTier}[],
+scope, checkpointSentinel})` (`src/utils/franchiseHonorReachFloor.ts`); `applyFranchiseRaceSnubMorale({victims:{playerId,teamId}[],
+honorKind, scope, timestamp})` (`src/utils/franchiseRaceSnubMorale.ts`). **`src/utils` MAY import from `src_figma`** (processCompletedGame
+already does — the WAR orchestrator).
+
+**CHANGES — edit/create ONLY these 3 files:**
+
+**A. NEW `src/utils/franchiseAllStarLockPayouts.ts`:**
+- `const ALL_STAR_SNUB_TOP_N = 3;` (§16 placeholder — how many close-losers get snubbed).
+- a seam `franchiseAllStarLockPayoutSeam = { emit: emitFranchiseHonorNews, applyReachFloor: applyFranchiseHonorReachFloor, applySnub: applyFranchiseRaceSnubMorale }`.
+- PURE helpers (export for testing):
+  - `honoreesFromSelections(selections): {playerId; honorTier:'allStarStarter'|'allStarReserve'}[]` — `role==='starter' → 'allStarStarter'`, else `'allStarReserve'`.
+  - `pickAllStarSnubVictims(candidates, selectedIds: ReadonlySet<string>, topN): {playerId; teamId}[]` — the non-selected (not in `selectedIds`), sorted by their merit DESC (`merit = hittingMerit ?? startingMerit ?? reliefMerit ?? 0`) then `playerId` asc, take `topN`. (F2 close-losers = the best players who just missed.)
+  - `emitTeamId(selections): string | null` — the `teamId` with the MOST selections (count by teamId; tiebreak `teamId` asc); null if no selections.
+- `export async function runFranchiseAllStarLockPayouts(params: { selections: FranchiseAllStarSelection[]; candidates: readonly AllStarCandidate[]; scope: {franchiseId; seasonId; statsScopeId; seasonNumber}; timestamp: number }): Promise<{ emit: string; reachFloor: string; snub: string }>`
+  — fire all three, EACH in its OWN try/catch (a payout failure must NOT block the others or the caller); return each sub-status string (or `'error'`):
+  - **reach-floor:** `applyReachFloor({ honorees: honoreesFromSelections(selections), scope: {franchiseId,seasonId,statsScopeId}, checkpointSentinel: 'all-star-lock' })`.
+  - **snub:** `applySnub({ victims: pickAllStarSnubVictims(candidates, new Set(selections.map(s=>s.playerId)), ALL_STAR_SNUB_TOP_N), honorKind: 'ALL_STAR', scope: {franchiseId,seasonId,statsScopeId,seasonNumber}, timestamp })`.
+  - **emit:** `const teamId = emitTeamId(selections)`; if `teamId` → `emit({ honorInput: { franchiseId, seasonId, seasonNumber, honorKind:'ALL_STAR', triggerPhase:'all-star-lock', subjectIds: selections.map(s=>s.playerId), facts: { selectedCount: selections.length } }, teamId })`; else skip (`'no-team'`).
+
+**B. `src/utils/franchiseAllStarRosterCompute.ts`** — additive: after `await allStarRosterSeam.putRoster(row)` (`:87`), when
+`shouldLock` is true, fire the payouts in a try/catch (dark-safe — never throw):
+```ts
+if (shouldLock) {
+  try {
+    await runFranchiseAllStarLockPayouts({ selections, candidates, scope: { franchiseId: scope.franchiseId, seasonId: scope.seasonId, statsScopeId: scope.statsScopeId, seasonNumber: scope.seasonNumber }, timestamp: gameState.savedAt });
+  } catch (e) {
+    console.warn('[L12] All-Star lock payouts skipped for completed game ' + gameState.gameId + ':', e);
+  }
+}
+```
+Import `runFranchiseAllStarLockPayouts` from `'./franchiseAllStarLockPayouts'`. Do NOT change the wrapper's return shape, the
+lock/persist logic, or the `candidates`/`selections` computation. (The wrapper is already L12-gated at its top.)
+
+**C. `src/utils/tests/franchiseAllStarLockPayouts.test.ts`** — stub `franchiseAllStarLockPayoutSeam` (vi.fn each) + unit-test the
+pure helpers + the orchestrator: `honoreesFromSelections` (starter/wildcard[role:'starter']→allStarStarter, reserve→allStarReserve);
+`pickAllStarSnubVictims` (excludes selected, top-N by merit desc, playerId tiebreak); `emitTeamId` (most-selections team, tiebreak);
+`runFranchiseAllStarLockPayouts` (all three seam fns called with the right args — honorees, victims, the ALL_STAR honorInput +
+emit team; each payout isolated by try/catch so one throwing does NOT block the others [make `applySnub` throw → emit + reachFloor
+still called]).
+
+**HARD CONSTRAINTS:** edit/create ONLY the 3 files. The wrapper edit is additive (1 import + 1 `if(shouldLock)` try/catch). NO
+new flag/store/trackerDb/persistence-schema change. NO `Date.now`/`Math.random` (timestamp = `gameState.savedAt`). NO
+`processCompletedGame.ts` edit (the existing wrapper call already triggers this). NO git add/commit. Prefix tsc/vitest with `NODE_ENV= `.
+
+**VERIFICATION (run ALL, paste ACTUAL):** `NODE_ENV= npx tsc --noEmit` 0 + `NODE_ENV= npm run build` 0;
+`NODE_ENV= npx vitest run src/utils/tests/franchiseAllStarLockPayouts.test.ts` green; AND the wrapper regression
+`NODE_ENV= npx vitest run src/utils/tests/franchiseAllStarRosterCompute.test.ts` (prove the wiring broke nothing); AND
+`NODE_ENV= npx vitest run src/utils/tests/processCompletedGame*.test.ts` (the new transitive import — surface any partial-mock break).
+(The auditor runs the FULL host suite.)
+
+**STOP-IF:** any verified signature differs → STOP. Wiring this needs a `processCompletedGame.ts` edit (it should NOT — the
+wrapper call suffices) → STOP + report. Adding the import breaks a partial mock beyond a mechanical test-only stub → STOP + report.
+
+**FORMAT:** 1) files changed; 2) the orchestrator (honorees/victims/emit-team + the 3 isolated payouts) + the wrapper hook;
+3) verification output (incl. the wrapper + processCompletedGame regressions); 4) "L12-5e-1 complete" or "BLOCKED: <reason>". Do NOT commit.
+
+Use very high reasoning effort. Think step-by-step. Read `src/utils/franchiseAllStarRosterCompute.ts` (the wrapper — where
+`selections`/`candidates`/`shouldLock` live), `src/src_figma/app/engines/reporter/franchiseHonorEmission.ts` (emit) +
+`./franchiseL12AwardNewsAdapter` (the input), `src/utils/franchiseHonorReachFloor.ts` (reach-floor), `src/utils/franchiseRaceSnubMorale.ts`
+(snub), and `src/utils/tests/franchiseAllStarRosterCompute.test.ts` (the seam-stub test pattern).
+
+**Status:** ✅ VERIFIED + COMMITTED 2026-06-19 (attended). Codex (gpt-5.5, xhigh) built → Opus audited (builder ≠ auditor) +
+full host gate. NEW `src/utils/franchiseAllStarLockPayouts.ts` (`runFranchiseAllStarLockPayouts` + seam: `honoreesFromSelections`
+[role:'starter'→allStarStarter incl. wildcard+pitching starters, reserve→allStarReserve], `pickAllStarSnubVictims` [non-selected
+top-3 by `hittingMerit ?? startingMerit ?? reliefMerit`], `emitTeamId` [most-selections team]; the 3 payouts EACH isolated in
+their own try/catch) + the additive wrapper hook (`if (shouldLock)` after `putRoster`, dark-safe, `gameState.savedAt`). Audit:
+faithful; wrapper edit additive (1 import + 1 try/catch, return shape unchanged); payouts doubly-dark (the wrapper L12-gates +
+each payout re-gates). **AUDITOR-CAUGHT NEW RED (the L12-3b/L12-4d transitive-import-mock pattern, 3rd occurrence):** the new
+snub chain pulled `getFranchisePlayer` into `FranchiseHomeLaunch.test.tsx`'s import graph; its `franchisePlayerStorage` partial
+mock omitted it → module-load throw ("No getFranchisePlayer export… on the mock"); deterministic, NOT a flake (Codex's scoped
+`franchiseAllStarRosterCompute`+`processCompletedGame*` runs missed it — FranchiseHomeLaunch isn't in either). FIX (mechanical,
+test-only): added `getFranchisePlayer: vi.fn().mockResolvedValue(null)` — solo re-run 23/23. Host gate (post-fix):
+`NODE_ENV= npm run build` 0 (8.02s) + suite **7,823/456, 7,821 pass / 2 characterized fail**, **ZERO new reds** (+5). build-DARK
+(per-game spine, fires on the lock); trackerDb v24. Branch-only. **➡ NEXT = L12-5e-2** (the season-end MVP/CY edge — the final piece).

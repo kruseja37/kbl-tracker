@@ -75,6 +75,9 @@ vi.mock('../../../utils/leagueBuilderStorage', () => ({
 vi.mock('../../../utils/franchisePlayerStorage', () => ({
   getFranchiseTeam: mocks.mockGetFranchiseTeam,
   saveFranchiseTeam: mocks.mockSaveFranchiseTeam,
+  // L12-5e-1: processCompletedGame -> franchiseAllStarLockPayouts -> franchiseRaceSnubMorale imports
+  // getFranchisePlayer; the partial mock must define it so the transitive module-load does not throw.
+  getFranchisePlayer: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock('../../../utils/managerIdentityStorage', () => ({

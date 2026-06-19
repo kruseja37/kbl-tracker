@@ -3,6 +3,7 @@ import { isFranchisePhase2L12Enabled } from './franchisePhase2Flags';
 import { buildFranchiseAllStarCandidates } from './franchiseAwardsEngine';
 import { computeFranchiseAllStarRoster } from '../engines/franchiseAllStarSelector';
 import { isAtOrPastAllStarLockFraction } from './franchiseAllStarLock';
+import { runFranchiseAllStarLockPayouts } from './franchiseAllStarLockPayouts';
 import {
   getFranchiseAllStarRoster,
   putFranchiseAllStarRoster,
@@ -85,6 +86,23 @@ export async function persistFranchiseAllStarRosterForCompletedGame(
     updatedAt: gameState.savedAt,
   };
   await allStarRosterSeam.putRoster(row);
+  if (shouldLock) {
+    try {
+      await runFranchiseAllStarLockPayouts({
+        selections,
+        candidates,
+        scope: {
+          franchiseId: scope.franchiseId,
+          seasonId: scope.seasonId,
+          statsScopeId: scope.statsScopeId,
+          seasonNumber: scope.seasonNumber,
+        },
+        timestamp: gameState.savedAt,
+      });
+    } catch (e) {
+      console.warn('[L12] All-Star lock payouts skipped for completed game ' + gameState.gameId + ':', e);
+    }
+  }
 
   return { status: shouldLock ? 'persisted-locked' : 'persisted' };
 }
