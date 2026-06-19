@@ -5540,3 +5540,27 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - **NEXT = R1-b** (6 ruled-gap traits per §0.9; SPLIT R1-b1 [Big/Little Hack, Base Rounder, Distractor] + R1-b2
   [Two Way, Utility, Crossed Up, Bunter]) → R2 → R3 → L11–L14 → L-SIM gate. **CHECKPOINTED by JK** (clean milestone
   after R-E + R1-a). FINDING-150 rebuild in progress. Nothing pushed.
+
+## 2026-06-18 (attended, fresh session) — L9b trait-reality REBUILD: R1-b1 (Big/Little Hack + Base Rounder + Distractor)
+- Session-start reads + RESTATE; JK confirmed ("yes, correct"). Picked up the L9b rebuild at R1-b per `HANDOFF_NEEDED`.
+- **R1-b1 = 4 traits into `BUILDABLE_TRAITS`** (`src/engines/traitCandidateBuilder.ts`) + §0.7 image deltas
+  (`src/engines/traitAcquisition.ts`). Earnable v1 set **26 → 30**. All position-role, build-DARK.
+- **Soul-layer discipline:** the Captain surfaced the two measurement details §0.9's Base Rounder line left open
+  (rather than infer — the exact spec-leak this arc exists to fix). JK ruled (DECISIONS_LOG): (1) DENOMINATOR counts
+  thrown-out extra-base tries as chances; (2) SCOPE includes the batter-runner's own stretches. Folded into §0.9
+  verbatim. Distractor + Big/Little Hack were already fully pinned by §0.9 — no rulings needed.
+- **Derivations built (§0.9 verbatim):** Big Hack = `(hrPct + (1−avgPct))/2`, Little Hack mirror — Option-B
+  within-builder percentile pre-pass over HR-rate (HR∈{HR,ITPHR}/PA) + AVG (hits/AB, AB=PA−BB/IBB/HBP/SF/SAC), cohort
+  = position players w/ PA≥1∧AB≥1, local hit/HR sets (NOT game.ts `isHit`, which omits ITPHR). Distractor = batter
+  reaches via hit/walk/HBP while owner on 1B/2B, credited to the owner. Base Rounder = advance beyond the forced
+  minimum from `runnerOutcomes`; `isRunnerForced`/`getMinimumAdvancement` ported self-contained from `atBatLogic.ts`
+  (no UI-layer import). Acq: Big Hack→POSITIVE+EGOTISTICAL, Little Hack→POSITIVE+TOUGH; Base Rounder already
+  positive+COMPETITIVE/TOUGH (untouched); Distractor neutral.
+- **Builder = fresh in-session subagent ≠ auditor = Opus Captain** (triangle). Independent line-by-line re-derivation
+  from the diff (each trait + the forced-advance port + the merge math) → VERDICT VERIFIED. Host gate:
+  `NODE_ENV= npm run build` exit 0 (7.70s + PWA) + full suite **7,608/438, 7,606 pass / 2 characterized fail**
+  (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), **ZERO new reds** (+24 tests / +0 files = 19 builder + 5
+  acquisition, all in the 2 existing test files). trackerDb stays **v23** (pure engines, no store).
+- **NEXT = R1-b2** (Two Way wOBA-vs-pitcher-pool one-signal + C/IF/OF position-at-grant · Utility primary-position
+  plumbing into `SeasonTraitCandidateInput` · Crossed Up + Bunter opt-in) → R2 → R3. FINDING-150 rebuild in progress.
+  Nothing pushed.

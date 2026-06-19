@@ -33,6 +33,7 @@ import type {
   RunnerState,
 } from '../utils/eventLog';
 import type { AtBatResult } from '../types/game';
+import { getPercentile } from './percentile';
 
 export const BUILDABLE_TRAITS: readonly string[] = [
   'Clutch',
@@ -62,6 +63,13 @@ export const BUILDABLE_TRAITS: readonly string[] = [
   'Mind Gamer',
   'Pick Officer',
   'Easy Jumps',
+  // R1-b1: Big/Little Hack (HR-rate × AVG percentile-merge), Base Rounder
+  // (extra-base advancement over the forced minimum), Distractor (batter reaches
+  // with this owner-runner on 1B/2B). All position-role. Build-dark.
+  'Big Hack',
+  'Little Hack',
+  'Base Rounder',
+  'Distractor',
 ];
 
 for (const traitName of BUILDABLE_TRAITS) {
@@ -176,6 +184,44 @@ const STRIKEOUT_RESULTS: ReadonlySet<AtBatResult> = new Set([
   'D3K',
   'WP_K',
   'PB_K',
+]);
+
+// R1-b1: a home run for HR-rate is the over-fence HR plus the inside-the-park HR
+// (ITPHR). NOTE: the game.ts `isHit`/`reachesBase` OMIT ITPHR, so these LOCAL
+// sets are intentionally NOT derived from them — ITPHR counts as both a HR and a
+// hit here (§0.9). GRD (ground-rule double) is a hit but not a HR.
+const HOME_RUN_RESULTS: ReadonlySet<AtBatResult> = new Set(['HR', 'ITPHR']);
+
+const HIT_RESULTS: ReadonlySet<AtBatResult> = new Set([
+  '1B',
+  '2B',
+  '3B',
+  'HR',
+  'ITPHR',
+  'GRD',
+]);
+
+// R1-b1: AB = PA − (BB + IBB + HBP + SF + SAC) — the non-AB plate appearances.
+const NON_AB_RESULTS: ReadonlySet<AtBatResult> = new Set([
+  'BB',
+  'IBB',
+  'HBP',
+  'SF',
+  'SAC',
+]);
+
+// R1-b1 (Distractor): the batter "reached base" via a HIT, WALK, or HBP while the
+// owner-runner is on 1B/2B. Excludes E/FC/D3K/WP_K/PB_K reaches (§0.9).
+const DISTRACTOR_REACH_RESULTS: ReadonlySet<AtBatResult> = new Set([
+  '1B',
+  '2B',
+  '3B',
+  'HR',
+  'ITPHR',
+  'GRD',
+  'BB',
+  'IBB',
+  'HBP',
 ]);
 
 const PROBE_PLAYER: EffectiveRatingsPlayer = {
@@ -475,6 +521,247 @@ function addOutcomeRateSignals(input: SeasonTraitCandidateInput, raw: RawSignalM
   }
 }
 
+/**
+ * R1-b1 — Big Hack / Little Hack (TRAIT_MEASUREMENT_SPEC §0.9, Option B
+ * percentile-merge). A position-role pull-power proxy: a Big Hacker swings for
+ * the fences (high HR-rate, low AVG); a Little Hacker slaps for contact (low
+ * HR-rate, high AVG).
+ *
+ * Cohort = position players with PA ≥ 1 AND AB ≥ 1 (a player with only walks —
+ * AB = 0 — gets no Hack signal). PA = at-bats where they are the batter
+ * (non-undone). HR-rate = HR/PA where HR ∈ {HR, ITPHR}. AVG = hits/AB where hits
+ * ∈ {1B, 2B, 3B, HR, ITPHR, GRD} and AB = PA − (BB + IBB + HBP + SF + SAC).
+ *
+ * A within-builder percentile PRE-PASS ranks each player's HR-rate and AVG vs the
+ * cohort pools (sorted ascending). The merged signalValue is then:
+ *   Big Hack    = (hrPct + (1 − avgPct)) / 2
+ *   Little Hack = ((1 − hrPct) + avgPct) / 2
+ * sampleSize = PA for both. (This merged score then flows through the normal
+ * scorer, which re-percentiles it vs the position pool — the intended double
+ * percentile per §0.9: "the merged score is the signalValue".)
+ */
+function addHackSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
+  const positionIds = new Set<string>(
+    input.players.filter((player) => player.role === 'position').map((player) => player.playerId),
+  );
+
+  interface HackCounts { pa: number; hr: number; hits: number; nonAb: number; }
+  const counts = new Map<string, HackCounts>();
+
+  for (const atBat of sortAtBats(input.atBatEvents).filter((event) => !undoneAt(event))) {
+    if (!positionIds.has(atBat.batterId)) continue;
+    const entry = counts.get(atBat.batterId) ?? { pa: 0, hr: 0, hits: 0, nonAb: 0 };
+    entry.pa += 1;
+    if (HOME_RUN_RESULTS.has(atBat.result)) entry.hr += 1;
+    if (HIT_RESULTS.has(atBat.result)) entry.hits += 1;
+    if (NON_AB_RESULTS.has(atBat.result)) entry.nonAb += 1;
+    counts.set(atBat.batterId, entry);
+  }
+
+  // Cohort = PA ≥ 1 AND AB ≥ 1, iterated in id order for deterministic pools.
+  interface CohortRow { playerId: string; pa: number; hrRate: number; avg: number; }
+  const cohort: CohortRow[] = [];
+  for (const playerId of [...counts.keys()].sort((a, b) => a.localeCompare(b))) {
+    const entry = counts.get(playerId);
+    if (!entry) continue;
+    const ab = entry.pa - entry.nonAb;
+    if (entry.pa < 1 || ab < 1) continue;
+    cohort.push({
+      playerId,
+      pa: entry.pa,
+      hrRate: entry.hr / entry.pa,
+      avg: entry.hits / ab,
+    });
+  }
+  if (cohort.length === 0) return;
+
+  const hrPool = cohort.map((row) => row.hrRate).sort((a, b) => a - b);
+  const avgPool = cohort.map((row) => row.avg).sort((a, b) => a - b);
+
+  for (const row of cohort) {
+    const hrPct = getPercentile(row.hrRate, hrPool);
+    const avgPct = getPercentile(row.avg, avgPool);
+    addRawSignal(raw, row.playerId, 'Big Hack', {
+      signalValue: (hrPct + (1 - avgPct)) / 2,
+      sampleSize: row.pa,
+    });
+    addRawSignal(raw, row.playerId, 'Little Hack', {
+      signalValue: ((1 - hrPct) + avgPct) / 2,
+      sampleSize: row.pa,
+    });
+  }
+}
+
+/**
+ * R1-b1 — Distractor (TRAIT_MEASUREMENT_SPEC §0.9). "The pitcher fails more with
+ * this runner on": a success is the BATTER reaching base (hit OR walk OR HBP)
+ * while the Distractor-OWNER is the runner on 1B or 2B (3B is NOT counted).
+ *
+ * For each non-undone at-bat, each present owner on 1B/2B adds one opportunity
+ * keyed to that owner's id (both 1B and 2B owners credited when both occupied).
+ * Denominator = PAs where the owner is on 1B/2B; numerator = those where the
+ * batter reached via DISTRACTOR_REACH_RESULTS. Credited to the OWNER, not the
+ * batter.
+ */
+function addDistractorSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
+  const accumulators = new Map<string, Map<string, Accumulator>>();
+
+  for (const atBat of sortAtBats(input.atBatEvents).filter((event) => !undoneAt(event))) {
+    const reached = DISTRACTOR_REACH_RESULTS.has(atBat.result);
+    const owners = [atBat.runners.first?.runnerId, atBat.runners.second?.runnerId];
+    for (const ownerId of owners) {
+      if (!ownerId) continue;
+      addOpportunity(accumulators, ownerId, 'Distractor', reached);
+    }
+  }
+
+  addAccumulatorSignals(raw, accumulators);
+}
+
+// R1-b1 (Base Rounder): self-contained port of the canonical forced-advance
+// model from `src/components/GameTracker/atBatLogic.ts` (do NOT import the
+// UI-layer file). Operates on base-occupancy booleans + outs + result.
+type BaseKey = 'first' | 'second' | 'third';
+interface BaseBooleans { first: boolean; second: boolean; third: boolean; }
+
+const WALK_FORCE_RESULTS: ReadonlySet<AtBatResult> = new Set(['BB', 'IBB', 'HBP']);
+
+function isRunnerForced(
+  base: BaseKey,
+  result: AtBatResult,
+  bases: BaseBooleans,
+  outs: number,
+): boolean {
+  const walkOrSpecialForce =
+    WALK_FORCE_RESULTS.has(result) || (result === 'D3K' && (outs === 2 || !bases.first));
+
+  if (walkOrSpecialForce) {
+    if (base === 'first') return true;
+    if (base === 'second') return bases.first;
+    return bases.first && bases.second;
+  }
+
+  if (result === '1B') return base === 'first';
+  if (result === '2B') return base === 'first' || base === 'second';
+  if (result === '3B') return true;
+  if (result === 'FC') return base === 'first';
+  if (result === 'DP') {
+    if (base === 'first') return true;
+    if (base === 'second') return bases.first;
+    return bases.first && bases.second;
+  }
+
+  return false;
+}
+
+function getMinimumAdvancement(
+  base: BaseKey,
+  result: AtBatResult,
+  bases: BaseBooleans,
+  outs: number,
+): 'second' | 'third' | 'home' | null {
+  if (!isRunnerForced(base, result, bases, outs)) return null;
+
+  if (result === '2B') {
+    if (base === 'first' || base === 'second') return 'third';
+  }
+  if (result === '3B') return 'home';
+
+  if (base === 'first') return 'second';
+  if (base === 'second') return 'third';
+  return 'home';
+}
+
+// Ordinal of a base label (the runner's reflexive position is its own ordinal).
+const BASE_ORDINAL: Readonly<Record<'first' | 'second' | 'third' | 'home', number>> = {
+  first: 1,
+  second: 2,
+  third: 3,
+  home: 4,
+};
+
+/**
+ * The base ordinal a batter is ENTITLED to by the result (the batter's forced
+ * minimum). Hits → the bag the hit reaches; HR/ITPHR → home; every other reach
+ * (walk/HBP/error/FC/dropped-3rd) → first.
+ */
+function batterEntitledOrdinal(result: AtBatResult): number {
+  switch (result) {
+    case '1B':
+      return 1;
+    case '2B':
+    case 'GRD':
+      return 2;
+    case '3B':
+      return 3;
+    case 'HR':
+    case 'ITPHR':
+      return 4;
+    default:
+      // BB/IBB/HBP/E/FC/D3K/WP_K/PB_K → first.
+      return 1;
+  }
+}
+
+/**
+ * R1-b1 — Base Rounder (TRAIT_MEASUREMENT_SPEC §0.9 + JK rulings 2026-06-18). A
+ * success is a runner advancing BEYOND the forced minimum (1st→3rd on a single,
+ * scoring from 2nd on a single, the batter stretching a single into a double),
+ * over the runner's advancement opportunities, read from `atBat.runnerOutcomes`.
+ *
+ * JK ruling 1: every RECORDED advancement is a chance, INCLUDING being thrown out
+ * trying for the extra base (`toBase:'out'` is a non-success opportunity); a held
+ * runner (`toBase:'end'`) is NOT a chance.
+ * JK ruling 2: SCOPE includes the batter-runner's own stretches
+ * (`fromBase:'batter'`); the batter's forced minimum = the base the result
+ * entitles them to. Credited to `entry.runnerId`.
+ */
+function addBaseRounderSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
+  const accumulators = new Map<string, Map<string, Accumulator>>();
+
+  for (const atBat of sortAtBats(input.atBatEvents).filter((event) => !undoneAt(event))) {
+    if (!Array.isArray(atBat.runnerOutcomes)) continue;
+    const bases: BaseBooleans = {
+      first: !!atBat.runners.first,
+      second: !!atBat.runners.second,
+      third: !!atBat.runners.third,
+    };
+
+    for (const entry of atBat.runnerOutcomes) {
+      const { runnerId, fromBase, toBase } = entry;
+
+      // Opportunity iff a recorded advancement OR a throw-out (ruling 1); a held
+      // 'end' is not a chance.
+      const isChance = toBase !== 'end';
+      if (!isChance) continue;
+
+      let forcedMinOrdinal: number;
+      if (fromBase === 'batter') {
+        forcedMinOrdinal = batterEntitledOrdinal(atBat.result);
+      } else {
+        const currentOrdinal = BASE_ORDINAL[fromBase];
+        if (isRunnerForced(fromBase, atBat.result, bases, atBat.outs)) {
+          const forcedTo = getMinimumAdvancement(fromBase, atBat.result, bases, atBat.outs);
+          forcedMinOrdinal = forcedTo ? BASE_ORDINAL[forcedTo] : currentOrdinal;
+        } else {
+          // Not forced ⇒ the minimum is to stay put.
+          forcedMinOrdinal = currentOrdinal;
+        }
+      }
+
+      // Success iff the runner reached a REAL base (not out/end) beyond the
+      // forced minimum.
+      const reachedRealBase = toBase !== 'out';
+      const toBaseOrdinal = reachedRealBase ? BASE_ORDINAL[toBase] : 0;
+      const success = reachedRealBase && toBaseOrdinal > forcedMinOrdinal;
+
+      addOpportunity(accumulators, runnerId, 'Base Rounder', success);
+    }
+  }
+
+  addAccumulatorSignals(raw, accumulators);
+}
+
 type StolenBasePayload = NonNullable<BetweenPlayEvent['stolenBase']> & {
   runnerId?: string;
   isSuccessful?: boolean;
@@ -566,6 +853,10 @@ function buildRawSignals(input: SeasonTraitCandidateInput): RawSignalMap {
   const raw: RawSignalMap = new Map();
   addAtBatSignals(input, raw);
   addOutcomeRateSignals(input, raw);
+  // R1-b1 — Big/Little Hack, Distractor, Base Rounder (after the R1-a outcome rates).
+  addHackSignals(input, raw);
+  addDistractorSignals(input, raw);
+  addBaseRounderSignals(input, raw);
   addStealSignals(input, raw);
   addButterFingersSignals(input, raw);
   addArmSignals(input, raw);

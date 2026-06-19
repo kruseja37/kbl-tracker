@@ -1425,3 +1425,20 @@ patterns), so proceeding under the soul-layer greenlight with documented conserv
   `salaryCalculator` `player.fame` read, the GameTracker/`useFameTracking` display) is NOT disturbed — reconcile/retire
   post-D13. **The L3 `fame` morale tap stays DARK** (the §20.5/§20.6 fame→morale plug is a deferred post-D13
   integration; note the seam, don't fill).
+
+---
+
+### 2026-06-18: R1-b Base Rounder measurement rulings (attended; L9b trait-reality rebuild)
+
+Building R1-b (the 6 ruled-gap traits per `TRAIT_MEASUREMENT_SPEC.md §0.9`), the Captain surfaced the two measurement
+details §0.9's Base Rounder line left open (the soul-layer discipline: surface gaps, never infer). JK ruled:
+- **Denominator — count thrown-out tries.** Every recorded advancement (safe OR out) is a "chance"; safely taking the
+  extra base is the success. Most literal to §0.9 ("over the runner's advancement opportunities, from `runnerOutcomes`").
+  A runner gunned down trying for extra counts as a non-success opportunity (lightly drags the rate); a held runner
+  (`toBase:'end'`) is not a chance.
+- **Scope — include batter stretches.** Base Rounder also credits the batter-runner for taking extra bases on their own
+  batted ball (single→double, etc.), not only true baserunners already on base. The batter's forced minimum = the base
+  the result entitles them to (1B→1st, 2B/GRD→2nd, 3B→3rd, HR/ITPHR→home, BB/IBB/HBP/E/FC/D3K/WP_K/PB_K→1st).
+Folded into §0.9 verbatim. (The forced-minimum baseball model itself is mechanical — port `isRunnerForced`/
+`getMinimumAdvancement` from `atBatLogic.ts` into the engine, not a JK fork.) Distractor + Big/Little Hack (Option B
+percentile-merge) were already fully pinned by §0.9 — no rulings needed.

@@ -1,7 +1,7 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-18 — **SESSION END / CHECKPOINT (attended).** This session ran the **L9b trait-reality
-REBUILD** and landed **R-E + R1-a**. (1) **Closed the recurring spec-leak at its root + RATIFIED the measurement
+**Last Updated:** 2026-06-18 — **ACTIVE (attended).** Running the **L9b trait-reality REBUILD**; landed **R-E + R1-a +
+R1-b1**. (1) **Closed the recurring spec-leak at its root + RATIFIED the measurement
 model** — `TRAIT_MEASUREMENT_SPEC.md` is now ONE authoritative cited source (§0.6 proxy table [47 earnable, every
 cell cited via reconciliation wf_c4bac237-5d7, spec-over-code] / §0.7 code-deltas / §0.8 gates [personality is a
 TILT never a gate; Two Way pitcher-only, NO batting gateway] / §0.9 R1 derivations); purged ALL stale framing
@@ -11,13 +11,16 @@ positive-Resilience tilts + 3 LIVE latent-bug fixes — Cannon Arm/Durable/Injur
 **`fc3d9dab`** (R-E-b: E3 re-evaluate-to-drop = displacement ranks by recomputed **P**); **E1 deferred to R3** (the
 Noodle-Arm cut removed its near-term consumer). (3) **R1-a COMPLETE** — **`a5126afb`** (10 clean outcome-proxy
 traits into BUILDABLE_TRAITS: strikeout family [full K-family] · Slow Poke/Sprinter/Mind Gamer · Pick Officer/Easy
-Jumps · K Neglector acq delta). **Earnable v1 trait set 16 → 26.** All build-DARK; builder≠auditor + full host gate
-each. **➡ NEXT = R1-b** (the 6 ruled-gap traits per **§0.9**, SPLIT **R1-b1** [Big/Little Hack percentile-merge ·
-Base Rounder · Distractor] + **R1-b2** [Two Way wOBA-vs-pitcher-pool one-signal/position-at-grant · Utility
-primary-position plumbing · Crossed Up/Bunter opt-in]) → **R2** (platoon/count-family handedness) → **R3** (Ace
+Jumps · K Neglector acq delta). **Earnable v1 trait set 16 → 26.** (4) **R1-b1 COMPLETE** — Big/Little Hack
+(Option-B HR-rate/AVG percentile-merge) · Base Rounder (forced-advance port from `atBatLogic`; JK ruled denominator
+counts thrown-out tries + scope includes batter stretches, folded into §0.9 + DECISIONS_LOG) · Distractor (owner on
+1B/2B reaches) into BUILDABLE_TRAITS + Big/Little Hack acq §0.7 image deltas. **Earnable v1 set now 30.** All
+build-DARK; builder≠auditor + full host gate each. **➡ NEXT = R1-b2** (the remaining ruled-gap traits per **§0.9**:
+Two Way wOBA-vs-pitcher-pool one-signal/position-at-grant · Utility primary-position plumbing into
+`SeasonTraitCandidateInput` · Crossed Up/Bunter opt-in) → **R2** (platoon/count-family handedness) → **R3** (Ace
 Exterminator + the deferred E1 grade thread) → L11–L14 → L-SIM gate. **FINDING-150 rebuild IN PROGRESS.** Suite
-**7,584/438, 7,582 pass / 2 characterized fail**; trackerDb **v23** (pure engines, no store); branch
-codex/franchise-v1-next; **nothing pushed**. See `HANDOFF_NEEDED` for the R1-b resume.
+**7,608/438, 7,606 pass / 2 characterized fail**; trackerDb **v23** (pure engines, no store); branch
+codex/franchise-v1-next; **nothing pushed**. See `HANDOFF_NEEDED` for the R1-b2 resume.
 *(Prior arc-narrative preserved below for context.)*
 *(Historical:* **✅ L9b COMPLETE — the trait-from-reality engine, the "game-changer feature." NOW L10**
 (random events). L9b-3c committed → L9b-3 COMPLETE → **L9b COMPLETE.** Full L9b chain: L9b-1 scorer `398533d1` ·

@@ -178,7 +178,14 @@ Percentile = vs the role-bucketed peer pool (the scorer, basis 'none'); the min-
   unit mismatch). The merged score is the signalValue (needs a within-builder percentile pre-pass over HR-rate + AVG).
   *(R1-b.)*
 - **Base Rounder** = a success is a runner advancing **beyond the forced minimum** (1st→3rd on a single, scoring from
-  2nd on a single, etc.) over the runner's advancement opportunities, from `atBat.runnerOutcomes` (from→to). *(R1-b.)*
+  2nd on a single, etc.) over the runner's advancement opportunities, from `atBat.runnerOutcomes` (from→to). The forced
+  minimum is the standard baseball forced-advance model (port `isRunnerForced`/`getMinimumAdvancement` from
+  `atBatLogic.ts` into the engine — do NOT import the UI-layer file; a non-forced runner's minimum is to stay put).
+  **JK rulings 2026-06-18 (R1-b):** (1) DENOMINATOR = every recorded advancement is a chance, **including being thrown
+  out trying for the extra base** (`toBase:'out'` counts as a non-success opportunity; a held runner `toBase:'end'`
+  is NOT a chance). (2) SCOPE = **include the batter-runner's own stretches** (`fromBase:'batter'` — single→double
+  etc.; the batter's forced minimum = the base the result entitles them to), not only true baserunners. Credited to
+  `runnerOutcomes[].runnerId`. *(R1-b.)*
 - **Distractor** (the pitcher fails more with this runner on) = success is the batter **reaching base (hit OR walk OR
   HBP)** while the Distractor-owner is the runner on **1B or 2B**; denominator = PAs where the owner is on 1B/2B;
   credited to the **runner** (owner), not the batter. *(R1-b.)*

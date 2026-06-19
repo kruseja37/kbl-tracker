@@ -10272,3 +10272,103 @@ Use high reasoning effort. Think step-by-step. Builder ≠ auditor — Opus re-a
 **Full contract text (dispatched prompt):** `/tmp/r1_a_codex_prompt.md`.
 
 **Status:** ✅ VERIFIED + COMMITTED (2026-06-18, attended). Fresh in-session subagent built → Opus 4.8 Captain independently audited (≠ builder) from the actual diff: VERDICT VERIFIED. Diff = EXACTLY the 4 FILE LIST files; 10 traits added to BUILDABLE_TRAITS with correct derivations (full K-family `{K,Kc,Ꝁ,D3K,WP_K,PB_K}`; inverse `1−rate` for K Neglector/Tough Out/Pick Officer; per-PA; new `addOutcomeRateSignals` + pitcher-steal extension of `addStealSignals` via `runnerAttribution.pitcherId`; role eligibility keeps pitcher-K out of the position pool); K Neglector → NEGATIVE_IMAGE_TRAITS + IMAGE_DRIVER_SETS ['TIMID','DROOPY'] (charisma factor already from R-E-a); scorer/peer-pool/buildProposalBase untouched. Host gate: `NODE_ENV= npm run build` exit 0 + full suite **7,584/438, 7,582 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+12 tests / +0 files); adding 10 BUILDABLE_TRAITS broke no downstream test. NEXT = R1-b (the 6 ruled-gap traits, per §0.9).
+
+## CONTRACT — R1-b1 (Big/Little Hack + Base Rounder + Distractor) — 2026-06-18 (attended)
+
+**ROUTE: fresh in-session subagent | high reasoning effort** (builder; subagent not Codex CLI — the prompt's
+backticks/`$` corrupt a shell-arg dispatch; the L10-4/L10-5/R-E/R1-a precedent). Auditor = Opus 4.8 Captain
+(independent; ≠ builder). Branch codex/franchise-v1-next. BUILD-DARK (whole L9b gated OFF behind
+`isFranchisePhase2TraitsEnabled`). Second R1 ticket (R1-b1 of the R1-b split; R1-b2 = Two Way/Utility/Crossed Up/Bunter
+next). Source of truth: ratified `TRAIT_MEASUREMENT_SPEC.md §0.9` (+ §0.6 table; Base Rounder JK rulings folded into §0.9
++ DECISIONS_LOG 2026-06-18). **BUILD TO §0.9 VERBATIM — do NOT re-derive (the spec-leak this arc fixed).**
+
+**GOAL:** add 4 traits — **Big Hack**, **Little Hack**, **Base Rounder**, **Distractor** — to `BUILDABLE_TRAITS` in
+`src/engines/traitCandidateBuilder.ts` with new signal functions, + the §0.7 image-set deltas for Big/Little Hack in
+`src/engines/traitAcquisition.ts`. All 4 are `position`-role (already in `POSITION_ONLY_TRAITS` in the scorer —
+do NOT touch the scorer). Earnable v1 set 26 → 30.
+
+**DERIVATIONS (per §0.9 — implement EXACTLY):**
+
+1. **Big Hack / Little Hack — Option B percentile-merge (needs a within-builder percentile pre-pass).** New fn
+   `addHackSignals(input, raw)`:
+   - Cohort = `input.players` filtered to `role === 'position'` that have **PA ≥ 1 AND AB ≥ 1** (a player with no AB —
+     e.g. all walks — gets no Hack signal). PA = count of `input.atBatEvents` where they are `batterId` (non-undone).
+   - Per cohort player: `HR-rate = HR/PA` where HR ∈ {`HR`,`ITPHR`}; `AVG = hits/AB` where hits ∈
+     {`1B`,`2B`,`3B`,`HR`,`ITPHR`,`GRD`}, `AB = PA − (BB + IBB + HBP + SF + SAC)`. (Include `ITPHR` as a HR and a hit —
+     it is an inside-the-park home run; note the existing `isHit` in game.ts omits it, so do NOT reuse `isHit`/`reachesBase`
+     — define local sets in the builder.)
+   - Percentile pre-pass: build the cohort pools of HR-rate and AVG, sort ascending, and use `getPercentile` (imported
+     from `./percentile`) to get each player's `hrPct` and `avgPct` in [0,1].
+   - `Big Hack` signalValue = `(hrPct + (1 − avgPct)) / 2`; `Little Hack` signalValue = `((1 − hrPct) + avgPct) / 2`.
+     `sampleSize = PA` for both. Emit via `addRawSignal`. (These merged scores then flow through the normal
+     `computeTraitRealityScore` which re-percentiles them vs the position pool — that double-percentile is intended:
+     §0.9 says "the merged score is the signalValue.")
+
+2. **Distractor** (position; credited to the OWNER-runner, not the batter). New fn `addDistractorSignals(input, raw)`:
+   - For each non-undone atBat: owners = `atBat.runners.first?.runnerId` (on 1B) and `atBat.runners.second?.runnerId`
+     (on 2B) — 3B is NOT counted. For each present owner, add ONE opportunity keyed to that owner's id:
+     success = the batter **reached base via HIT or WALK or HBP** — result ∈ {`1B`,`2B`,`3B`,`HR`,`ITPHR`,`GRD`,`BB`,
+     `IBB`,`HBP`} (NOT `E`/`FC`/`D3K`/`WP_K`/`PB_K`). Denominator = PAs where the owner is on 1B/2B. Emit rate =
+     successes/opportunities, sampleSize = opportunities.
+
+3. **Base Rounder** (position; §0.9 + JK rulings). New fn `addBaseRounderSignals(input, raw)`:
+   - Port the forced-advance model from `src/components/GameTracker/atBatLogic.ts` as SELF-CONTAINED local helpers
+     (`isRunnerForced` + `getMinimumAdvancement`) — do NOT import the UI-layer file. Operate on base booleans derived
+     from `atBat.runners` ({first,second,third} occupancy) + `atBat.outs` + `atBat.result`.
+   - For each non-undone atBat with a `runnerOutcomes` array, for each entry: runner = `entry.runnerId`,
+     `fromBase ∈ {batter,first,second,third}`, `toBase ∈ {first,second,third,home,out,end}`.
+     - forcedMinOrdinal: if `fromBase==='batter'` → the result's entitled base ordinal (1B→1, 2B/GRD→2, 3B→3,
+       HR/ITPHR→4, BB/IBB/HBP/E/FC/D3K/WP_K/PB_K→1; if result is an out and the batter still has an entry, skip — no
+       opportunity). If `fromBase ∈ {first,second,third}` → if `isRunnerForced` ⇒ `getMinimumAdvancement` ordinal,
+       else the runner's current-base ordinal (not forced = min is to stay).
+     - toBaseOrdinal: first=1,second=2,third=3,home=4. **Opportunity (denominator +1)** iff `toBase ∈
+       {first,second,third,home,out}` (a recorded advancement OR a throw-out — JK ruling 1); `toBase==='end'` (held) is
+       NOT a chance. **Success (numerator +1)** iff `toBase` is a real base (not `out`/`end`) AND `toBaseOrdinal >
+       forcedMinOrdinal`. Credit to `entry.runnerId`.
+   - Emit rate = successes/opportunities, sampleSize = opportunities.
+
+   Register all three new fns in `buildRawSignals` (after `addOutcomeRateSignals`). Add the 4 names to `BUILDABLE_TRAITS`
+   (after the R1-a block) with an `// R1-b1:` comment.
+
+**ACQUISITION §0.7 deltas (`traitAcquisition.ts` ONLY these):** `'Big Hack'` → add to `POSITIVE_IMAGE_TRAITS` +
+`IMAGE_DRIVER_SETS['Big Hack'] = ['EGOTISTICAL']`; `'Little Hack'` → add to `POSITIVE_IMAGE_TRAITS` +
+`IMAGE_DRIVER_SETS['Little Hack'] = ['TOUGH']`. (Base Rounder = ↑Amb + Competitive/Tough per §0.6 — but verify whether
+Base Rounder is already in `POSITIVE_IMAGE_TRAITS`/`IMAGE_DRIVER_SETS`; if NOT present, add `'Base Rounder'` to
+`POSITIVE_IMAGE_TRAITS` + `IMAGE_DRIVER_SETS['Base Rounder']=['COMPETITIVE','TOUGH']`. Distractor = neutral/universal
+tilt — NO image-set entry.) Report exactly what you found and changed.
+
+**HARD CONSTRAINTS:** edit ONLY `src/engines/traitCandidateBuilder.ts` + `src/engines/traitAcquisition.ts` + their two
+`__tests__` files. Do NOT touch `traitRealityScorer.ts` / the scorer / `buildPeerPools` / `computeTraitRealityScore` /
+`buildProposalBase` / any store / `processCompletedGame.ts` / any `*.md` / `atBatLogic.ts` (port, don't import). Do NOT
+add the R1-b2 traits (Two Way/Utility/Crossed Up/Bunter). PURE / build-DARK — no production caller, no flag flip, no
+store, no trackerDb bump (stays v23). No git-add/commit. Determinism: no `Date.now`/`Math.random`; sort before
+percentile.
+
+**TESTS (extend the two existing `__tests__` files):** update the `BUILDABLE_TRAITS` "contains exactly" expectation
+(add the 4 with an R1-b1 comment). Add cases: Big/Little Hack percentile-merge (a high-HR/low-AVG player scores high
+Big / low Little and the mirror; ITPHR counts as HR+hit; AB excludes BB/IBB/HBP/SF/SAC; AB=0 player gets no signal);
+Distractor (owner on 1B/2B credited, 3B not, batter-reach success set, both-owners-credited when 1B+2B occupied);
+Base Rounder (1st→3rd on a single = success; runner only reaching forced min = opportunity-not-success; thrown-out
+try = opportunity-not-success per ruling 1; batter single→double stretch = success per ruling 2; held `end` = not a
+chance); undone events skipped; role eligibility keeps these out of the pitcher pool; the L9b-2 seam still holds
+(output feeds `computeTraitAcquisition`).
+
+**VERIFICATION (builder runs, reports actual output):** `NODE_ENV= npx tsc --noEmit` exit 0;
+`NODE_ENV= npx vitest run src/engines/__tests__/traitCandidateBuilder.test.ts src/engines/__tests__/traitAcquisition.test.ts`
+all green. Report: every changed path (all 4), the new test count, and the exact derivations implemented per trait.
+
+**FORMAT:** 1) Files changed (exact paths). 2) Per-trait: the derivation as built + any §0.9 deviation (should be none).
+3) Verification output (paste actual). 4) "R1-b1 complete" or "BLOCKED: <reason>".
+
+**Status:** ✅ VERIFIED + COMMITTED (2026-06-18, attended). Fresh in-session subagent built → Opus 4.8 Captain
+independently audited (≠ builder) from the actual diff: VERDICT VERIFIED. Diff = EXACTLY the 4 FILE LIST files (the 3
+spec-docs in the commit are Captain-authored, not builder). Re-derived each trait vs §0.9: Big/Little Hack Option-B
+percentile-merge exact (local HR/hit/non-AB sets incl. ITPHR, NOT game.ts `isHit`; cohort PA≥1∧AB≥1; deterministic
+sorted pre-pass via `getPercentile`); Distractor owners on 1B/2B only, credited to owner, both-credited; Base Rounder
+`isRunnerForced`/`getMinimumAdvancement` an EXACT port of atBatLogic (no import), JK ruling 1 (thrown-out counts) +
+ruling 2 (batter stretch) correct, `end` not a chance. Acq §0.7: Big Hack→POSITIVE+EGOTISTICAL, Little Hack→POSITIVE+
+TOUGH; Base Rounder already positive+COMPETITIVE/TOUGH (untouched); Distractor neutral (no entry). Scorer/peer-pool/
+buildProposalBase untouched. Host gate: `NODE_ENV= npm run build` exit 0 (7.70s + PWA) + full suite **7,608/438, 7,606
+pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+24 tests / +0
+files). Earnable v1 set 26 → 30. Committed (hash in SESSION_LOG/CURRENT_STATE). NEXT = R1-b2 (Two Way / Utility /
+Crossed Up / Bunter).

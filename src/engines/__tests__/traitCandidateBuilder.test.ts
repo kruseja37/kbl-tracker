@@ -175,6 +175,11 @@ describe('BUILDABLE_TRAITS', () => {
       'Mind Gamer',
       'Pick Officer',
       'Easy Jumps',
+      // R1-b1: Big/Little Hack, Base Rounder, Distractor.
+      'Big Hack',
+      'Little Hack',
+      'Base Rounder',
+      'Distractor',
     ]);
   });
 
@@ -551,6 +556,371 @@ describe('R1-a outcome-rate signals (per-PA proxies)', () => {
     // The undone K is excluded: 4 K of 10 live PA, not 5 of 11.
     expect(candidate(result, 'b1', 'Whiffer')?.signalValue).toBeCloseTo(0.4, 10);
     expect(candidate(result, 'b1', 'Whiffer')?.sampleSize).toBe(10);
+  });
+});
+
+describe('R1-b1 Big Hack / Little Hack (percentile-merge of HR-rate × AVG)', () => {
+  // 3-player cohort with clean within-builder percentiles:
+  //   A: HR-rate 0.30, AVG 0.30 (big hacker)
+  //   B: HR-rate 0.10, AVG 0.50 (middle)
+  //   C: HR-rate 0.00, AVG 0.70 (little hacker)
+  // hrPool asc [0, .1, .3] → hrPct A=1, B=2/3, C=1/3
+  // avgPool asc [.3, .5, .7] → avgPct A=1/3, B=2/3, C=1
+  function hackCohort(): AtBatEvent[] {
+    return [
+      // A: 3 HR + 7 outs of 10 PA → HR/PA=.3, hits=3, AB=10, AVG=.3
+      ...repeat(3, () => atBat({ batterId: 'A', result: 'HR', outsAfter: 0 })),
+      ...repeat(7, () => atBat({ batterId: 'A', result: 'GO', outsAfter: 1 })),
+      // B: 1 HR + 4 1B + 5 outs of 10 → HR/PA=.1, hits=5, AB=10, AVG=.5
+      ...repeat(1, () => atBat({ batterId: 'B', result: 'HR', outsAfter: 0 })),
+      ...repeat(4, () => atBat({ batterId: 'B', result: '1B', outsAfter: 0 })),
+      ...repeat(5, () => atBat({ batterId: 'B', result: 'GO', outsAfter: 1 })),
+      // C: 0 HR + 7 1B + 3 outs of 10 → HR/PA=0, hits=7, AB=10, AVG=.7
+      ...repeat(7, () => atBat({ batterId: 'C', result: '1B', outsAfter: 0 })),
+      ...repeat(3, () => atBat({ batterId: 'C', result: 'GO', outsAfter: 1 })),
+    ];
+  }
+
+  it('scores a high-HR/low-AVG player high Big Hack and low Little Hack, and mirrors for the contact hitter', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['A', 'B', 'C'], 'position'),
+      atBatEvents: hackCohort(),
+    }));
+    // A (big hacker): Big = (1 + (1 - 1/3))/2 = 0.8333..., Little = ((1-1) + 1/3)/2 = 0.16667
+    expect(candidate(result, 'A', 'Big Hack')?.signalValue).toBeCloseTo((1 + (1 - 1 / 3)) / 2, 10);
+    expect(candidate(result, 'A', 'Little Hack')?.signalValue).toBeCloseTo(((1 - 1) + 1 / 3) / 2, 10);
+    expect(candidate(result, 'A', 'Big Hack')?.sampleSize).toBe(10);
+    // C (little hacker): the exact mirror of A.
+    expect(candidate(result, 'C', 'Big Hack')?.signalValue).toBeCloseTo((1 / 3 + (1 - 1)) / 2, 10);
+    expect(candidate(result, 'C', 'Little Hack')?.signalValue).toBeCloseTo(((1 - 1 / 3) + 1) / 2, 10);
+    // Big Hack and Little Hack are complementary per player (sum to 1).
+    const aBig = candidate(result, 'A', 'Big Hack')?.signalValue ?? 0;
+    const aLittle = candidate(result, 'A', 'Little Hack')?.signalValue ?? 0;
+    expect(aBig + aLittle).toBeCloseTo(1, 10);
+    expect(aBig).toBeGreaterThan(candidate(result, 'C', 'Big Hack')?.signalValue ?? 1);
+  });
+
+  it('counts ITPHR as both a home run and a hit', () => {
+    // X hits 4 ITPHR + 6 outs of 10 → HR/PA=.4, hits=4, AB=10, AVG=.4
+    // Y all outs → HR/PA=0, hits=0, AVG=0. ITPHR must register as HR + hit for X.
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['X', 'Y'], 'position'),
+      atBatEvents: [
+        ...repeat(4, () => atBat({ batterId: 'X', result: 'ITPHR', outsAfter: 0 })),
+        ...repeat(6, () => atBat({ batterId: 'X', result: 'GO', outsAfter: 1 })),
+        ...repeat(10, () => atBat({ batterId: 'Y', result: 'GO', outsAfter: 1 })),
+      ],
+    }));
+    // X HR-rate 0.4 > Y 0 → X hrPct = 1.0; X AVG 0.4 > Y 0 → X avgPct = 1.0.
+    // Big Hack X = (1 + (1 - 1))/2 = 0.5 (ITPHR pulled into BOTH pools).
+    expect(candidate(result, 'X', 'Big Hack')?.signalValue).toBeCloseTo((1 + (1 - 1)) / 2, 10);
+    expect(candidate(result, 'X', 'Little Hack')?.signalValue).toBeCloseTo(((1 - 1) + 1) / 2, 10);
+  });
+
+  it('excludes BB/IBB/HBP/SF/SAC from AB so AVG denominator is hits-eligible PAs only', () => {
+    // P: 10 PA = 2 1B + 4 BB + 4 outs. AB = 10 - 4(BB) = 6. AVG = 2/6 = 0.3333.
+    // Q: a contrast player so the cohort/percentiles are well-defined.
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['P', 'Q'], 'position'),
+      atBatEvents: [
+        ...repeat(2, () => atBat({ batterId: 'P', result: '1B', outsAfter: 0 })),
+        ...repeat(4, () => atBat({ batterId: 'P', result: 'BB', outsAfter: 0 })),
+        ...repeat(4, () => atBat({ batterId: 'P', result: 'GO', outsAfter: 1 })),
+        // Q: 1 1B + 9 outs, no walks → AVG = 1/10 = 0.1 (< P's 0.3333).
+        ...repeat(1, () => atBat({ batterId: 'Q', result: '1B', outsAfter: 0 })),
+        ...repeat(9, () => atBat({ batterId: 'Q', result: 'GO', outsAfter: 1 })),
+      ],
+    }));
+    // P AVG = 2/6 > Q AVG = 1/10 → P avgPct = 1.0, both HR-rate 0 → both hrPct = 1.0.
+    // Little Hack P = ((1 - 1) + 1)/2 = 0.5 (confirms AB excludes the 4 walks; if
+    // walks were in AB, P AVG would be 2/10 = 0.2 < Q and avgPct would flip to 0.5).
+    expect(candidate(result, 'P', 'Little Hack')?.signalValue).toBeCloseTo(((1 - 1) + 1) / 2, 10);
+    expect(candidate(result, 'P', 'Big Hack')?.signalValue).toBeCloseTo((1 + (1 - 1)) / 2, 10);
+    // sampleSize = PA (not AB) = 10.
+    expect(candidate(result, 'P', 'Big Hack')?.sampleSize).toBe(10);
+  });
+
+  it('emits no Hack signal for a player with PA but AB = 0 (all walks)', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['W', 'N'], 'position'),
+      atBatEvents: [
+        // W: 5 walks, 0 AB → no Hack signal.
+        ...repeat(5, () => atBat({ batterId: 'W', result: 'BB', outsAfter: 0 })),
+        // N: a normal hitter so the cohort is non-empty.
+        ...repeat(3, () => atBat({ batterId: 'N', result: '1B', outsAfter: 0 })),
+        ...repeat(7, () => atBat({ batterId: 'N', result: 'GO', outsAfter: 1 })),
+      ],
+    }));
+    expect(candidate(result, 'W', 'Big Hack')).toBeUndefined();
+    expect(candidate(result, 'W', 'Little Hack')).toBeUndefined();
+    expect(candidate(result, 'N', 'Big Hack')).toBeDefined();
+  });
+
+  it('skips undone at-bats when computing Hack rates', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['A', 'B'], 'position'),
+      atBatEvents: [
+        // An undone HR for A must not inflate A's HR-rate.
+        atBat({ batterId: 'A', result: 'HR', outsAfter: 0, undoneAt: 1 }),
+        ...repeat(10, () => atBat({ batterId: 'A', result: '1B', outsAfter: 0 })),
+        ...repeat(2, () => atBat({ batterId: 'B', result: 'HR', outsAfter: 0 })),
+        ...repeat(8, () => atBat({ batterId: 'B', result: 'GO', outsAfter: 1 })),
+      ],
+    }));
+    // A live HR-rate = 0 (the only HR is undone). B HR-rate = 0.2 > A.
+    // A hrPct = 1/2 = 0.5; sampleSize = 10 (the undone PA excluded).
+    expect(candidate(result, 'A', 'Big Hack')?.sampleSize).toBe(10);
+    expect(candidate(result, 'A', 'Big Hack')?.signalValue).toBeLessThan(
+      candidate(result, 'B', 'Big Hack')?.signalValue ?? 0,
+    );
+  });
+
+  it('keeps Big/Little Hack out of the pitcher pool (position-only role eligibility)', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: [{ playerId: 'pitcherBat', role: 'pitcher' }],
+      atBatEvents: repeat(10, () => atBat({ batterId: 'pitcherBat', result: 'HR', outsAfter: 0 })),
+    }));
+    expect(candidate(result, 'pitcherBat', 'Big Hack')).toBeUndefined();
+    expect(candidate(result, 'pitcherBat', 'Little Hack')).toBeUndefined();
+  });
+});
+
+describe('R1-b1 Distractor (batter reaches with the owner-runner on 1B/2B)', () => {
+  it('credits the owner on 1B and the owner on 2B, not the batter, and not a 3B runner', () => {
+    // owner o1 on 1B: 4 batter-reaches of 8 PA → rate 0.5.
+    // owner o2 on 2B: a separate set crediting o2.
+    // owner o3 on 3B only: never credited.
+    const on1B: RunnerState = { first: { runnerId: 'o1', runnerName: 'O1', responsiblePitcherId: 'p1' }, second: null, third: null };
+    const on2B: RunnerState = { first: null, second: { runnerId: 'o2', runnerName: 'O2', responsiblePitcherId: 'p1' }, third: null };
+    const on3B: RunnerState = { first: null, second: null, third: { runnerId: 'o3', runnerName: 'O3', responsiblePitcherId: 'p1' } };
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['o1', 'o2', 'o3', 'b1'], 'position'),
+      atBatEvents: [
+        ...repeat(4, () => atBat({ batterId: 'b1', runners: on1B, result: '1B', outsAfter: 0 })),
+        ...repeat(4, () => atBat({ batterId: 'b1', runners: on1B, result: 'GO', outsAfter: 1 })),
+        ...repeat(6, () => atBat({ batterId: 'b1', runners: on2B, result: 'BB', outsAfter: 0 })),
+        ...repeat(4, () => atBat({ batterId: 'b1', runners: on2B, result: 'K' })),
+        ...repeat(5, () => atBat({ batterId: 'b1', runners: on3B, result: '1B', outsAfter: 0 })),
+      ],
+    }));
+    // o1 (1B owner): 4 reaches / 8 PA = 0.5.
+    expect(candidate(result, 'o1', 'Distractor')?.signalValue).toBeCloseTo(0.5, 10);
+    expect(candidate(result, 'o1', 'Distractor')?.sampleSize).toBe(8);
+    // o2 (2B owner): 6 reaches / 10 PA = 0.6.
+    expect(candidate(result, 'o2', 'Distractor')?.signalValue).toBeCloseTo(0.6, 10);
+    expect(candidate(result, 'o2', 'Distractor')?.sampleSize).toBe(10);
+    // o3 was only ever on 3B → never an owner.
+    expect(candidate(result, 'o3', 'Distractor')).toBeUndefined();
+    // The batter (b1) is NOT credited the runner's Distractor.
+    expect(candidate(result, 'b1', 'Distractor')).toBeUndefined();
+  });
+
+  it('credits BOTH owners one opportunity each when 1B and 2B are occupied', () => {
+    const firstAndSecond: RunnerState = {
+      first: { runnerId: 'o1', runnerName: 'O1', responsiblePitcherId: 'p1' },
+      second: { runnerId: 'o2', runnerName: 'O2', responsiblePitcherId: 'p1' },
+      third: null,
+    };
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['o1', 'o2'], 'position'),
+      atBatEvents: [
+        ...repeat(7, () => atBat({ batterId: 'b1', runners: firstAndSecond, result: '1B', outsAfter: 0 })),
+        ...repeat(3, () => atBat({ batterId: 'b1', runners: firstAndSecond, result: 'GO', outsAfter: 1 })),
+      ],
+    }));
+    // Both owners get 10 opportunities, 7 successes each.
+    expect(candidate(result, 'o1', 'Distractor')?.signalValue).toBeCloseTo(0.7, 10);
+    expect(candidate(result, 'o1', 'Distractor')?.sampleSize).toBe(10);
+    expect(candidate(result, 'o2', 'Distractor')?.signalValue).toBeCloseTo(0.7, 10);
+    expect(candidate(result, 'o2', 'Distractor')?.sampleSize).toBe(10);
+  });
+
+  it('counts hit/walk/HBP as reaches but NOT E/FC/D3K reaches', () => {
+    const on1B: RunnerState = { first: { runnerId: 'o1', runnerName: 'O1', responsiblePitcherId: 'p1' }, second: null, third: null };
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['o1'], 'position'),
+      atBatEvents: [
+        atBat({ batterId: 'b1', runners: on1B, result: '1B', outsAfter: 0 }),  // success
+        atBat({ batterId: 'b1', runners: on1B, result: 'HR', outsAfter: 0 }),  // success
+        atBat({ batterId: 'b1', runners: on1B, result: 'BB', outsAfter: 0 }),  // success
+        atBat({ batterId: 'b1', runners: on1B, result: 'HBP', outsAfter: 0 }), // success
+        atBat({ batterId: 'b1', runners: on1B, result: 'E', outsAfter: 0 }),   // NOT a reach
+        atBat({ batterId: 'b1', runners: on1B, result: 'FC', outsAfter: 1 }),  // NOT a reach
+        atBat({ batterId: 'b1', runners: on1B, result: 'D3K', outsAfter: 0 }), // NOT a reach
+        atBat({ batterId: 'b1', runners: on1B, result: 'GO', outsAfter: 1 }),  // out
+      ],
+    }));
+    // 4 reaches of 8 opportunities = 0.5 (E/FC/D3K excluded).
+    expect(candidate(result, 'o1', 'Distractor')?.signalValue).toBeCloseTo(0.5, 10);
+    expect(candidate(result, 'o1', 'Distractor')?.sampleSize).toBe(8);
+  });
+
+  it('skips undone at-bats for Distractor', () => {
+    const on1B: RunnerState = { first: { runnerId: 'o1', runnerName: 'O1', responsiblePitcherId: 'p1' }, second: null, third: null };
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['o1'], 'position'),
+      atBatEvents: [
+        atBat({ batterId: 'b1', runners: on1B, result: '1B', outsAfter: 0, undoneAt: 1 }),
+        ...repeat(2, () => atBat({ batterId: 'b1', runners: on1B, result: '1B', outsAfter: 0 })),
+        ...repeat(2, () => atBat({ batterId: 'b1', runners: on1B, result: 'GO', outsAfter: 1 })),
+      ],
+    }));
+    // The undone reach is excluded: 2 reaches of 4, not 3 of 5.
+    expect(candidate(result, 'o1', 'Distractor')?.signalValue).toBeCloseTo(0.5, 10);
+    expect(candidate(result, 'o1', 'Distractor')?.sampleSize).toBe(4);
+  });
+});
+
+describe('R1-b1 Base Rounder (advancing beyond the forced minimum)', () => {
+  function ro(runnerId: string, fromBase: 'batter' | 'first' | 'second' | 'third', toBase: 'first' | 'second' | 'third' | 'home' | 'out' | 'end') {
+    return { runnerId, runnerName: runnerId.toUpperCase(), fromBase, toBase };
+  }
+
+  it('counts a runner taking 1st→3rd on a single as a success (forced min is 2nd)', () => {
+    const on1B: RunnerState = { first: { runnerId: 'r1', runnerName: 'R1', responsiblePitcherId: 'p1' }, second: null, third: null };
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['r1'], 'position'),
+      atBatEvents: [
+        // On a 1B, r1 is forced to 2nd; reaching 3rd (ordinal 3 > 2) is a success.
+        ...repeat(3, () => atBat({ batterId: 'b1', result: '1B', outsAfter: 0, runners: on1B, runnerOutcomes: [ro('r1', 'first', 'third')] })),
+        // r1 only making the forced 2nd = opportunity, not success.
+        ...repeat(1, () => atBat({ batterId: 'b1', result: '1B', outsAfter: 0, runners: on1B, runnerOutcomes: [ro('r1', 'first', 'second')] })),
+      ],
+    }));
+    expect(candidate(result, 'r1', 'Base Rounder')?.signalValue).toBeCloseTo(0.75, 10);
+    expect(candidate(result, 'r1', 'Base Rounder')?.sampleSize).toBe(4);
+  });
+
+  it('counts a runner only reaching the forced minimum as opportunity-not-success', () => {
+    const on1B: RunnerState = { first: { runnerId: 'r1', runnerName: 'R1', responsiblePitcherId: 'p1' }, second: null, third: null };
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['r1'], 'position'),
+      atBatEvents: repeat(4, () => atBat({ batterId: 'b1', result: '1B', outsAfter: 0, runners: on1B, runnerOutcomes: [ro('r1', 'first', 'second')] })),
+    }));
+    expect(candidate(result, 'r1', 'Base Rounder')?.signalValue).toBeCloseTo(0, 10);
+    expect(candidate(result, 'r1', 'Base Rounder')?.sampleSize).toBe(4);
+  });
+
+  it('counts a thrown-out extra-base try as opportunity-not-success (JK ruling 1)', () => {
+    const on1B: RunnerState = { first: { runnerId: 'r1', runnerName: 'R1', responsiblePitcherId: 'p1' }, second: null, third: null };
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['r1'], 'position'),
+      atBatEvents: [
+        // Two safe extra-base takes (success) + two thrown out (opportunity, not success).
+        ...repeat(2, () => atBat({ batterId: 'b1', result: '1B', outsAfter: 0, runners: on1B, runnerOutcomes: [ro('r1', 'first', 'third')] })),
+        ...repeat(2, () => atBat({ batterId: 'b1', result: '1B', outsAfter: 1, runners: on1B, runnerOutcomes: [ro('r1', 'first', 'out')] })),
+      ],
+    }));
+    // 2 successes of 4 chances (the throw-outs ARE chances).
+    expect(candidate(result, 'r1', 'Base Rounder')?.signalValue).toBeCloseTo(0.5, 10);
+    expect(candidate(result, 'r1', 'Base Rounder')?.sampleSize).toBe(4);
+  });
+
+  it('counts the batter-runner stretching a single into a double as a success (JK ruling 2)', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      atBatEvents: [
+        // A 1B entitles the batter to 1st; reaching 2nd (ordinal 2 > 1) is a success.
+        ...repeat(3, () => atBat({ batterId: 'b1', result: '1B', outsAfter: 0, runnerOutcomes: [ro('b1', 'batter', 'second')] })),
+        // The batter only taking the entitled 1st = opportunity, not success.
+        ...repeat(1, () => atBat({ batterId: 'b1', result: '1B', outsAfter: 0, runnerOutcomes: [ro('b1', 'batter', 'first')] })),
+      ],
+    }));
+    expect(candidate(result, 'b1', 'Base Rounder')?.signalValue).toBeCloseTo(0.75, 10);
+    expect(candidate(result, 'b1', 'Base Rounder')?.sampleSize).toBe(4);
+  });
+
+  it('does NOT count a held runner (toBase "end") as a chance', () => {
+    const on2B: RunnerState = { first: null, second: { runnerId: 'r2', runnerName: 'R2', responsiblePitcherId: 'p1' }, third: null };
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['r2'], 'position'),
+      atBatEvents: [
+        // r2 on 2B with a walk is NOT forced; scoring (home, ordinal 4 > 2) = success.
+        ...repeat(2, () => atBat({ batterId: 'b1', result: 'BB', outsAfter: 0, runners: on2B, runnerOutcomes: [ro('r2', 'second', 'home')] })),
+        // r2 held at 2nd (toBase 'end') is NOT a chance at all.
+        ...repeat(5, () => atBat({ batterId: 'b1', result: 'BB', outsAfter: 0, runners: on2B, runnerOutcomes: [ro('r2', 'second', 'end')] })),
+      ],
+    }));
+    // 2 successes of 2 chances (the 5 holds are not chances) = 1.0.
+    expect(candidate(result, 'r2', 'Base Rounder')?.signalValue).toBeCloseTo(1, 10);
+    expect(candidate(result, 'r2', 'Base Rounder')?.sampleSize).toBe(2);
+  });
+
+  it('uses the forced minimum on a double — 1st→home is a success, 1st→3rd is the forced min', () => {
+    const on1B: RunnerState = { first: { runnerId: 'r1', runnerName: 'R1', responsiblePitcherId: 'p1' }, second: null, third: null };
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['r1'], 'position'),
+      atBatEvents: [
+        // On a 2B, r1 from 1st is forced to 3rd; scoring (home > 3rd) is a success.
+        ...repeat(2, () => atBat({ batterId: 'b1', result: '2B', outsAfter: 0, runners: on1B, runnerOutcomes: [ro('r1', 'first', 'home')] })),
+        // Only reaching the forced 3rd = opportunity, not success.
+        ...repeat(2, () => atBat({ batterId: 'b1', result: '2B', outsAfter: 0, runners: on1B, runnerOutcomes: [ro('r1', 'first', 'third')] })),
+      ],
+    }));
+    expect(candidate(result, 'r1', 'Base Rounder')?.signalValue).toBeCloseTo(0.5, 10);
+    expect(candidate(result, 'r1', 'Base Rounder')?.sampleSize).toBe(4);
+  });
+
+  it('skips undone at-bats for Base Rounder', () => {
+    const on1B: RunnerState = { first: { runnerId: 'r1', runnerName: 'R1', responsiblePitcherId: 'p1' }, second: null, third: null };
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['r1'], 'position'),
+      atBatEvents: [
+        atBat({ batterId: 'b1', result: '1B', outsAfter: 0, runners: on1B, runnerOutcomes: [ro('r1', 'first', 'third')], undoneAt: 1 }),
+        ...repeat(1, () => atBat({ batterId: 'b1', result: '1B', outsAfter: 0, runners: on1B, runnerOutcomes: [ro('r1', 'first', 'third')] })),
+        ...repeat(1, () => atBat({ batterId: 'b1', result: '1B', outsAfter: 0, runners: on1B, runnerOutcomes: [ro('r1', 'first', 'second')] })),
+      ],
+    }));
+    // Undone success excluded: 1 success of 2 chances = 0.5.
+    expect(candidate(result, 'r1', 'Base Rounder')?.signalValue).toBeCloseTo(0.5, 10);
+    expect(candidate(result, 'r1', 'Base Rounder')?.sampleSize).toBe(2);
+  });
+
+  it('keeps Base Rounder out of the pitcher pool (position-only)', () => {
+    const on1B: RunnerState = { first: { runnerId: 'pr1', runnerName: 'PR1', responsiblePitcherId: 'p1' }, second: null, third: null };
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: [{ playerId: 'pr1', role: 'pitcher' }],
+      atBatEvents: repeat(5, () => atBat({ batterId: 'b1', result: '1B', outsAfter: 0, runners: on1B, runnerOutcomes: [ro('pr1', 'first', 'third')] })),
+    }));
+    expect(candidate(result, 'pr1', 'Base Rounder')).toBeUndefined();
+  });
+});
+
+describe('R1-b1 L9b-2 seam (new traits feed computeTraitAcquisition)', () => {
+  it('emits Big Hack / Base Rounder / Distractor in the { traitName, score } shape the acquisition combiner consumes', () => {
+    const on1B: RunnerState = { first: { runnerId: 'b1', runnerName: 'B1', responsiblePitcherId: 'p1' }, second: null, third: null };
+    // Build enough sample + peers so the valve can clear and a real percentile forms.
+    const events = [
+      // Big Hack inputs: b1 a big hacker, peers b2/b3 contact hitters.
+      ...repeat(40, () => atBat({ batterId: 'b1', result: 'HR', outsAfter: 0 })),
+      ...repeat(40, () => atBat({ batterId: 'b2', result: '1B', outsAfter: 0 })),
+      ...repeat(40, () => atBat({ batterId: 'b3', result: '1B', outsAfter: 0 })),
+      // Base Rounder + Distractor inputs crediting b1 as owner/runner.
+      ...repeat(40, () => atBat({ batterId: 'opp', result: '1B', outsAfter: 0, runners: on1B, runnerOutcomes: [{ runnerId: 'b1', runnerName: 'B1', fromBase: 'first', toBase: 'third' }] })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1', 'b2', 'b3'], 'position'),
+      atBatEvents: events,
+    }));
+    const bigHack = candidate(result, 'b1', 'Big Hack');
+    expect(bigHack).toBeDefined();
+    expect(bigHack?.score).toBeDefined();
+    expect(typeof bigHack?.score.sufficient).toBe('boolean');
+
+    const acquisition = computeTraitAcquisition({
+      playerRole: 'position',
+      personality: 'EGOTISTICAL',
+      heldTraits: [],
+      candidates: result.get('b1') ?? [],
+    });
+    expect(acquisition).toHaveProperty('proposals');
+    expect(acquisition).toHaveProperty('skipped');
+    // None of the new traits should be dropped for ineligible/unknown reasons.
+    for (const traitName of ['Big Hack', 'Little Hack', 'Base Rounder', 'Distractor']) {
+      const skip = acquisition.skipped.find((s) => s.traitName === traitName);
+      expect(skip?.reason).not.toBe('ineligible_role');
+      expect(skip?.reason).not.toBe('unknown_trait');
+    }
   });
 });
 

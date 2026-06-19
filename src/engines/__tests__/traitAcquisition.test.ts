@@ -381,6 +381,65 @@ describe('traitAcquisition R1-a (K Neglector enters BUILDABLE)', () => {
   });
 });
 
+describe('traitAcquisition R1-b1 (Big/Little Hack image deltas; Base Rounder unchanged; Distractor neutral)', () => {
+  // Big Hack is now POSITIVE with an EGOTISTICAL image driver (§0.7).
+  test('Big Hack is positive: high ambition tilts up and EGOTISTICAL drives the image axis', () => {
+    const ambitious = proposalFor('Big Hack', {
+      modifiers: { ...neutralModifiers, ambition: 100 },
+    });
+    const driven = proposalFor('Big Hack', {
+      personality: 'Egotistical',
+    });
+
+    expect(ambitious.imageValence).toBe('positive');
+    expect(ambitious.factors.ambitionTilt).toBeGreaterThan(1);
+    expect(driven.factors.imageAxisTilt).toBeGreaterThan(1);
+  });
+
+  // Little Hack is now POSITIVE with a TOUGH image driver (§0.7).
+  test('Little Hack is positive: high ambition tilts up and TOUGH drives the image axis', () => {
+    const ambitious = proposalFor('Little Hack', {
+      modifiers: { ...neutralModifiers, ambition: 100 },
+    });
+    const driven = proposalFor('Little Hack', {
+      personality: 'Tough',
+    });
+
+    expect(ambitious.imageValence).toBe('positive');
+    expect(ambitious.factors.ambitionTilt).toBeGreaterThan(1);
+    expect(driven.factors.imageAxisTilt).toBeGreaterThan(1);
+  });
+
+  // Big Hack's driver is EGOTISTICAL, not TOUGH; Little Hack's is TOUGH, not EGOTISTICAL.
+  test('the Hack image drivers do not cross over', () => {
+    const bigWithTough = proposalFor('Big Hack', { personality: 'Tough' });
+    const littleWithEgo = proposalFor('Little Hack', { personality: 'Egotistical' });
+
+    expect(bigWithTough.factors.imageAxisTilt).toBe(1);
+    expect(littleWithEgo.factors.imageAxisTilt).toBe(1);
+  });
+
+  // Base Rounder was ALREADY positive with a COMPETITIVE/TOUGH driver (pre-R1-b1) — unchanged.
+  test('Base Rounder stays positive with a COMPETITIVE/TOUGH image driver', () => {
+    const competitive = proposalFor('Base Rounder', { personality: 'Competitive' });
+    const tough = proposalFor('Base Rounder', { personality: 'Tough' });
+
+    expect(competitive.imageValence).toBe('positive');
+    expect(competitive.factors.imageAxisTilt).toBeGreaterThan(1);
+    expect(tough.factors.imageAxisTilt).toBeGreaterThan(1);
+  });
+
+  // Distractor is neutral/universal tilt — no image-set entry (§0.7).
+  test('Distractor is neutral: no image valence and no personality drives its image axis', () => {
+    const egotistical = proposalFor('Distractor', { personality: 'Egotistical' });
+    const tough = proposalFor('Distractor', { personality: 'Tough' });
+
+    expect(egotistical.imageValence).toBe('neutral');
+    expect(egotistical.factors.imageAxisTilt).toBe(1);
+    expect(tough.factors.imageAxisTilt).toBe(1);
+  });
+});
+
 describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () => {
   test('hysteresis emits a gain at or above the gain threshold', () => {
     const result = computeTraitAcquisition(input({

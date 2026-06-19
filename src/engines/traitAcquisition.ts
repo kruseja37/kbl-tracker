@@ -120,6 +120,9 @@ const POSITIVE_IMAGE_TRAITS = new Set([
   'Consistent',
   'Cannon Arm',
   'Durable',
+  // R1-b1 (§0.7): Big/Little Hack enter BUILDABLE_TRAITS — both positive valence.
+  'Big Hack',
+  'Little Hack',
 ]);
 
 const NEGATIVE_IMAGE_TRAITS = new Set([
@@ -170,6 +173,10 @@ const IMAGE_DRIVER_SETS: Readonly<Record<string, readonly CanonicalPersonality[]
   'Cannon Arm': ['COMPETITIVE'],
   // R1-a (§0.7): K Neglector image driver — same TIMID/DROOPY axis as Choker et al.
   'K Neglector': ['TIMID', 'DROOPY'],
+  // R1-b1 (§0.7): Big Hack ← EGOTISTICAL (swing-for-the-fences), Little Hack ←
+  // TOUGH (grind-it-out contact). Distractor = neutral/universal — no entry.
+  'Big Hack': ['EGOTISTICAL'],
+  'Little Hack': ['TOUGH'],
 };
 
 const ROSTER_ROLE_TRAITS = new Set(['Pinch Perfect', 'Utility']);
