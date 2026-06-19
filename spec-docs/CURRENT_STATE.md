@@ -1,15 +1,27 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-19 — **ATTENDED session (JK present), checkpointed for a fresh session.** **✅ L12-3 COMPLETE
+**Last Updated:** 2026-06-19 — **ATTENDED session (JK present), checkpointed for a fresh session.** **✅ L12-4 COMPLETE
+(a/b/c/d) — the All-Star roster selection engine + 60% lock is FULLY BUILT.** v1 = **ONE league-wide 26-man team, any league
+size** (8 fame-led position starters + 5 family-grouped merit backups + 12 pitchers [4 SP/1 backup SP/5 RP/2 backup RP,
+usage-classified via `gamesStarted`] + 1 fame-led WILDCARD); **no DH; two-way = stronger side only.** User-selectable
+1-vs-2-teams + dual-conference + the per-position min/max League-Builder customization (JK sketched) are **DEFERRED to v2**
+(modeled as a config preset so they drop onto the same engine without a rebuild). Build-DARK + doubly-dark behind
+`isFranchisePhase2L12Enabled` (the persist writes only when the flag is on, post-D13). **NO DB/schema work** — the
+`franchiseAllStarRosters` store + the `FAN_VOTE_WEIGHTS` fan-vote scorer already existed (L12-1/L12-3); trackerDb stays
+**v24**. **L12-4 commits:** 4a `d23cbd66` (pure selection engine) · 4b `fc92e421` (candidate exporter, relaxed mid-season
+floor) · 4c `f457ad18` (lock helper, at-or-past skip-safe) · 4d `e1773624` (live-path persist + `processCompletedGame`
+wiring). **➡ NEXT = L12-5** (emission [MVP/CY/All-Star emit, rest visibility-only] + the L3 race-snub morale row
+[`MORALE_TAP_REGISTRY.race`] + honor→Reach-floor map + the reporter→`SeasonNewsEvent` adapter) → L12-6 (Almanac/UI) → L13 →
+L14 → L-SIM. Codex-built → Opus-audited (builder≠auditor; the full host gate caught + the auditor mechanically fixed the
+L12-3b-precedent regression in 4d — `FranchiseHomeLaunch.test.tsx`'s partial `seasonStorage` mock lacked `getSeasonMetadata`,
+broke at module-load, NOT a flake; test-only stub). **BROWSER-VERIFY (batched, prioritized — persistence/saved-shape):** at the
+post-D13 flag-flip, confirm a completed game writes a `franchiseAllStarRosters` row + freezes at the 60% mark. Branch-only
+(**NOTHING pushed**), build-DARK; trackerDb **v24**; suite **7,792/451, 7,790 pass / 2 characterized fail, ZERO new reds**.
+Full L12-4 recon/seams/rulings → `spec-docs/L12-4_SCOPE_MAP.md`. *(prior:)* **✅ L12-3 COMPLETE
 (a/b/c/R-1/R-2) — the race-standing system is FULLY BUILT.** The per-game race-standing recompute now covers ALL 8 merit
 categories (MVP/CY/SS/GG/RoY/Bench/Booger/Reliever) + the TV-family (KK/Bust/Comeback), reads `resolveFameTier` ONLY,
 recompute-only + doubly-dark behind `isFranchisePhase2L12Enabled` (the LONE live exception = the L12-3R-1 `pitchingWpa`
-season substrate write — browser-verify batched #24). **➡ NEXT = L12-4 (All-Star roster builder + 60% lock) — a FRESH
-HIGH-RISK subsystem; START WITH A GROUNDING RECON** (mirror the L10/L11/L12 recon pattern; the `franchiseAllStarRosters`
-store + the by-position scaffold already exist from L12-1). Then L12-5 (emission/snub/honor→Reach-floor/reporter tap) →
-L12-6 (Almanac/UI) → L13 → L14 → L-SIM. Codex-built → Opus-audited (builder≠auditor; the full host gate caught + the
-auditor fixed 2 real reds Codex's scoped runs missed — the L12-3b mock + the L12-3R-2 `pitchingWpa` shape assertions),
-branch-only (**NOTHING pushed**), build-DARK; trackerDb **v24**; suite **7,765/447, ZERO new reds**. L11 (managers) FULLY
+season substrate write — browser-verify batched #24). L11 (managers) FULLY
 COMPLETE (1–5); the L11–L14 RULING PASS is consolidated (all 43 Qs ruled). **L12-Q10
 RULED (JK 2026-06-19): DEFER the live `getFameTier` label-purge to the post-D13 fame activation; the only hard
 requirement folds into L12 (the build-DARK race code reads `resolveFameTier`, NEVER the scalar `getFameTier`) — so

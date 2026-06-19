@@ -6123,3 +6123,38 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   (MVP/CY/SS/GG/RoY/Bench/Booger/Reliever) + the TV-family, recompute-only + doubly-dark behind `isFranchisePhase2L12Enabled`
   (only the L12-3R-1 `pitchingWpa` substrate write is live/ungated). **➡ NEXT = L12-4** (All-Star roster builder + 60% lock).
   Branch codex/franchise-v1-next; nothing pushed.
+
+## 2026-06-19 (attended) — L12-4 COMPLETE (a/b/c/d): the All-Star roster selection engine + 60% lock
+- **Recon** (workflow `wf_74ab63b0-55a`, 6 readers + synthesis + adversarial critique → `spec-docs/L12-4_SCOPE_MAP.md`). The
+  critique caught the Captain about to re-open the already-RULED by-position-starters question (Q5); corrected before surfacing.
+  Confirmed L12-4 = a clean selection-engine + lock build with **NO DB/schema work** (the `franchiseAllStarRosters` store +
+  the `FAN_VOTE_WEIGHTS` fan-vote scorer already exist from L12-1/L12-3; trackerDb stays v24).
+- **JK rulings** (AskUserQuestion + a v1-simplify refinement; DECISIONS_LOG 2026-06-19): **v1 = ONE league-wide 26-man team,
+  any league size** (user-selectable 1-vs-2 + dual-conference + the per-position min/max League-Builder customization JK
+  sketched all DEFERRED to v2, modeled as a config preset so they drop in without an engine rebuild). Roster = 8 fame-led
+  position starters + 5 family-grouped merit backups (1 C / 1 corner-IF / 1 middle-IF / 2 OF) + 12 pitchers (4 SP + 1 backup SP
+  + 5 RP + 2 backup RP) + **1 fame-led WILDCARD** (100% fame, §16-tunable to the 65% starter floor). **No DH. Two-way =
+  stronger side only.**
+- **Build SPLIT, each Codex(gpt-5.5,xhigh)-built via `codex exec` stdin-from-contract → Opus-audited (builder ≠ auditor) →
+  full host gate:**
+  - **L12-4a `d23cbd66`** — PURE `src/engines/franchiseAllStarSelector.ts` (`computeFranchiseAllStarRoster`: combo-position
+    normalizer + two-way stronger-side + 8 fame-led starters + 5 family backups + SP/RP usage-classified contingent + fame
+    wildcard; config-preset `V1_ALL_STAR_ROSTER_CONFIG`). 8 tests. Suite 7,773/448, ZERO new reds.
+  - **L12-4b `fc92e421`** — the candidate exporter in `franchiseAwardsEngine.ts` (additive): a PURE
+    `mapValueRowsToAllStarCandidates` (trust gate → **RELAXED 60%-lock PA/IP floors** `ALL_STAR_PA/IP_QUALIFIER_FRACTION`
+    0.25/0.15 — the full award floor would qualify nobody mid-season → fame join → playerId sort) + a THIN async
+    `buildFranchiseAllStarCandidates`. D9 finalize byte-unchanged. 6 tests. Suite 7,779/449, ZERO new reds.
+  - **L12-4c `f457ad18`** — `src/utils/franchiseAllStarLock.ts` (`isAtOrPastAllStarLockFraction`, `ALL_STAR_LOCK_FRACTION 0.6`).
+    **Captain caught + corrected the scope-map's own cross-from-below form** (`(gameNumber-1) < anchor` FAILS its skip case) →
+    at-or-past + persisted-flag lock-once. 6 tests. Suite 7,785/450, ZERO new reds.
+  - **L12-4d `e1773624`** — the LIVE-PATH wiring: `franchiseAllStarRosterCompute.ts`
+    (`persistFranchiseAllStarRosterForCompletedGame`: flag → locked-freeze → build → engine → persist → 60% lock; seam-injectable;
+    createdAt-preserving; `gameState.savedAt` timestamps) + the additive `processCompletedGame.ts` insertion (1 import + 1
+    try/catch in the existing L12 block) + `export`-only on `resolveCheckpointGameNumber`. 7 tests. **AUDITOR-CAUGHT NEW RED
+    (the L12-3b precedent, as flagged):** the new transitive import broke `FranchiseHomeLaunch.test.tsx`'s partial
+    `seasonStorage` mock at module-load (missing `getSeasonMetadata`) — deterministic, NOT a flake; fixed with a mechanical
+    test-only mock stub (solo 23/23). Host gate 7,792/451, **ZERO new reds**.
+- **⇒ L12-4 COMPLETE.** Doubly-dark (flag default OFF; the persist writes only when the flag is on, post-D13). **BROWSER-VERIFY
+  (batched, prioritized — persistence/saved-shape):** at the post-D13 flag-flip, confirm a completed game writes a
+  `franchiseAllStarRosters` row + freezes at the 60% mark. **➡ NEXT = L12-5** (emission / L3 race-snub morale row /
+  honor→Reach-floor / reporter tap). Branch codex/franchise-v1-next; nothing pushed.
