@@ -12693,3 +12693,123 @@ characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), **Z
 trackerDb stays **v24**. Branch-only (NOT pushed). **⇒ L12-4 COMPLETE (a/b/c/d). ➡ NEXT = L12-5** (emission / snub morale row /
 honor→Reach-floor / reporter tap). **⚠ BROWSER-VERIFY (batched, prioritized — persistence/saved-shape):** at the post-D13
 flag-flip, confirm a completed game writes a `franchiseAllStarRosters` row and that it freezes at the 60% mark.
+
+---
+
+## CONTRACT — L12-5a (pure award/All-Star reporter adapter + AWARD_RESULT NarrativeEventType) — 2026-06-19 (attended)
+
+**ROUTE:** Codex CLI (gpt-5.5, **very-high reasoning effort**) via `codex exec` stdin-from-contract. Auditor: Opus 4.8
+(builder ≠ auditor — Codex builds, Opus independently audits + runs the full host gate).
+
+**ROLE:** You are a pure-adapter builder for the KBL Tracker franchise L-stack (the reporter layer).
+
+**GOAL:** Add a NEW `NarrativeEventType` member **`AWARD_RESULT`** (+ its mandatory `hedgingModifier` Record entry) and a PURE,
+deterministic reporter adapter `buildFranchiseAwardSeasonNewsEvent(input) → SeasonNewsEvent` that maps a resolved marquee-honor
+outcome (MVP / Cy Young / All-Star) into the `SeasonNewsEvent` the beat reporter narrates. Build-DARK / ORPHANED-PENDING (NO
+production caller yet — L12-5b wires it). PURE: no LLM/network/I/O/Date.now/Math.random; fully synchronous.
+
+**SOURCE OF TRUTH:** `spec-docs/L12-5_SCOPE_MAP.md` §4f/§5 + `DECISIONS_LOG.md` 2026-06-19 "L12-5". Mirror the EXACT structure of
+`src/src_figma/app/engines/reporter/franchiseL11ManagerChangeNewsAdapter.ts` (the L11 template). `SeasonNewsEvent` is owned by
+`seasonNewsGenerator.ts:11-19`.
+
+**CHANGES — edit/create ONLY these 3 files:**
+
+**A. `src/engines/narrativeEngine.ts`** (additive, ONE commit — the compile break IS the guardrail):
+1. Add `| 'AWARD_RESULT'` to the `NarrativeEventType` union (`:77-89`, after `'MANAGER_CHANGE'`).
+2. Add `AWARD_RESULT: 1.0,` to the exhaustive `hedgingModifier: Record<NarrativeEventType, number>` (`:590-603`) — value **1.0**
+   (awards are factual, matching `MILESTONE`/`STREAK`/`SEASON_SUMMARY`). Do NOT touch `highStakesEvents[]` (non-exhaustive; awards
+   are factual, no retraction class). Confirm `hedgingModifier` is the ONLY exhaustive `Record<NarrativeEventType,…>` (it is) —
+   if any OTHER exhaustive Record/switch on the union exists, STOP + report.
+
+**B. NEW `src/src_figma/app/engines/reporter/franchiseL12AwardNewsAdapter.ts`** — mirror the L11 adapter:
+```ts
+import type { SeasonNewsEvent } from './seasonNewsGenerator';
+import type { NarrativeEventType } from '../../../../engines/narrativeEngine';
+
+// SIM-tuned placeholder dramatic-weight tuning for L12 marquee honors (§16; conservative).
+export const L12_NEWS_DRAMATIC_WEIGHT = {
+  base: { MVP: 0.8, CY_YOUNG: 0.7, ALL_STAR: 0.6 },
+  magnitudeScale: 0.3,
+} as const;
+
+export type FranchiseHonorKind = 'MVP' | 'CY_YOUNG' | 'ALL_STAR';
+export type FranchiseHonorTriggerPhase = 'season-end' | 'all-star-lock';
+
+export interface FranchiseHonorNewsInput {
+  franchiseId: string;
+  seasonId: string;
+  seasonNumber: number;
+  honorKind: FranchiseHonorKind;
+  triggerPhase: FranchiseHonorTriggerPhase;
+  subjectIds: string[];          // the honored player ids (MVP/CY = [winnerId]; All-Star = the selected/notable ids)
+  facts: Record<string, unknown>;// deterministic ground truth lifted verbatim by the caller — never fabricated here
+  magnitude?: number;            // optional 0..1 drama input (award margin / roster notability); clamped
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+export function buildFranchiseAwardSeasonNewsEvent(input: FranchiseHonorNewsInput): SeasonNewsEvent {
+  const magnitude = clamp(input.magnitude ?? 0.4, 0, 1);
+  const dramaticWeight = clamp(
+    L12_NEWS_DRAMATIC_WEIGHT.base[input.honorKind] + L12_NEWS_DRAMATIC_WEIGHT.magnitudeScale * magnitude,
+    0, 1,
+  );
+  const eventType: NarrativeEventType = 'AWARD_RESULT';
+  return {
+    franchiseId: input.franchiseId,
+    seasonId: input.seasonId,
+    seasonNumber: input.seasonNumber,
+    eventType,
+    subjectIds: [...input.subjectIds],
+    facts: {
+      ...input.facts,
+      honorKind: input.honorKind,
+      triggerPhase: input.triggerPhase,
+    },
+    dramaticWeight,
+  };
+}
+```
+PURE/sync; NO `id`/`createdAt` (minted downstream). `honorKind` + `triggerPhase` ride `facts` (the dual timing is NOT new union
+members). Caller-supplied `facts` is spread first so the two reserved keys always win.
+
+**C. NEW `src/src_figma/__tests__/reporter/franchiseL12AwardNewsAdapter.test.ts`** — mirror
+`franchiseL11ManagerChangeNewsAdapter.test.ts`. Assert: for an MVP input (season-end), a CY_YOUNG input, and an ALL_STAR input
+(all-star-lock) → eventType `'AWARD_RESULT'`; `subjectIds` copied (and a NEW array, not the input ref); `facts` contains the
+caller facts PLUS `honorKind` + `triggerPhase`; `dramaticWeight` = `clamp(base[honorKind] + 0.3*magnitude, 0, 1)` (check a
+known value + the magnitude default 0.4 + a magnitude>1 clamp); NO `id`/`createdAt` keys; deterministic (same input → deeply-equal output).
+
+**HARD CONSTRAINTS:** edit/create ONLY the 3 files. The `narrativeEngine.ts` change is additive (1 union member + 1 Record
+entry). NO emission wiring, NO caller, NO flag/store/persistence (build-DARK). NO `Date.now`/`Math.random`/async/I-O. NO git
+add/commit. Prefix tsc/vitest with `NODE_ENV= `.
+
+**VERIFICATION (run ALL, paste ACTUAL):** `NODE_ENV= npx tsc --noEmit` exit 0 (proves the exhaustive Record is satisfied) +
+`NODE_ENV= npm run build` exit 0; `NODE_ENV= npx vitest run src/src_figma/__tests__/reporter/franchiseL12AwardNewsAdapter.test.ts`
+all green. Also `NODE_ENV= npx vitest run src/src_figma/__tests__/reporter/franchiseL11ManagerChangeNewsAdapter.test.ts`
+(sibling regression — prove the Record edit broke no existing reporter logic). (The auditor runs the FULL host suite.)
+
+**STOP-IF:** there is ANY exhaustive `Record<NarrativeEventType,…>` or exhaustive `switch (eventType)` BEYOND `hedgingModifier`
+that the union edit would break → STOP + report (add to the contract, don't guess). `SeasonNewsEvent` has a different shape than
+assumed → STOP + report.
+
+**FORMAT:** 1) files changed; 2) the AWARD_RESULT union/Record entry + the pure adapter (honorKind/triggerPhase in facts,
+dramaticWeight); 3) verification output (paste actual tsc/build/both vitest runs); 4) "L12-5a complete" or "BLOCKED: <reason>".
+Do NOT commit.
+
+Use very high reasoning effort. Think step-by-step. Read `src/src_figma/app/engines/reporter/franchiseL11ManagerChangeNewsAdapter.ts`
+(+ its test) as the template, `src/src_figma/app/engines/reporter/seasonNewsGenerator.ts:11-19` (`SeasonNewsEvent`), and
+`src/engines/narrativeEngine.ts:77-89` + `:590-603` (the union + the exhaustive Record).
+
+**Status:** ✅ VERIFIED + COMMITTED 2026-06-19 (attended). Codex (gpt-5.5, xhigh) built → Opus audited (builder ≠ auditor) +
+full host gate. Additive `narrativeEngine.ts` (`| 'AWARD_RESULT'` union member + `AWARD_RESULT: 1.0` in the exhaustive
+`hedgingModifier` Record — tsc-0 proves exhaustiveness; confirmed it's the ONLY exhaustive `Record<NarrativeEventType,…>`,
+`highStakesEvents` untouched) + NEW pure `franchiseL12AwardNewsAdapter.ts` (`buildFranchiseAwardSeasonNewsEvent` — mirrors the
+L11 adapter; honorKind/triggerPhase ride `facts` with caller facts spread FIRST so the reserved keys win; subjectIds copied;
+no id/createdAt; `L12_NEWS_DRAMATIC_WEIGHT` §16 base MVP 0.8/CY 0.7/AllStar 0.6 + 0.3·magnitude clamp) + a 4-test file.
+Audit: diffs additive + faithful; tests non-vacuous (the `'caller-value-must-not-win'` trick proves the reserved-key
+override; all 3 honor kinds; magnitude default 0.4 + >1 clamp; determinism); sibling L11 adapter test 9/9. Host gate
+`NODE_ENV= npm run build` 0 (7.57s) + suite **7,796/452, 7,794 pass / 2 characterized fail**, **ZERO new reds** (+4).
+build-DARK / ORPHANED-PENDING (no caller — L12-5b wires it); trackerDb v24. Branch-only. **➡ NEXT = L12-5b** (emission
+config ON-switch + the seam-injectable emit-glue).

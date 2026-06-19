@@ -1896,3 +1896,36 @@ validation cost is not worth it yet. **v1 = ONE league-wide 26-man team, any lea
 **Build SPLIT (build-DARK, builder≠auditor):** L12-4a pure selection engine (single 26-man) · L12-4b All-Star candidate
 exporter (retains position/team) · L12-4c lock-once helper (60%) · L12-4d orchestrator wiring + persistence (NO conference
 resolution in v1). No trackerDb bump (store at v24). Full scope/seams/anchors in `spec-docs/L12-4_SCOPE_MAP.md`.
+
+---
+
+## 2026-06-19 (attended) — L12-5 award/All-Star EMISSION + snub morale + reach-floor: 3 forks RULED
+**Context:** L12-5 grounding recon (`wf_23cc345d-df4`, 6 readers + synthesis + adversarial critique →
+`spec-docs/L12-5_SCOPE_MAP.md`). L12-5 = the PAYOUT layer: it reads the already-built award rows / locked All-Star roster /
+standings and fires emission + snub-morale + reach-floor for the marquee honors (MVP/CY/All-Star — Q6). The critique caught +
+the Captain verified two live correctness traps: (1) the L3 race morale tap fires ONLY when the event carries `kind:'race'`
+(the designation template builds `{type}` with no kind → hits the event table, bypassing the tap) AND the resolver must return
+a NEW non-neutral object (the `base === NEUTRAL_BASE_CONSEQUENCE` ref-check skips personality scaling); (2) the honor→reach-floor
+ratchet needs a THIRD flag — `isFranchisePhase2FameEnabled` — because the `FranchiseFameRecordRow` it ratchets is only produced
+by the per-game dark fame writer (so the effect no-ops cleanly if Fame is off). Two trigger edges: All-Star pays at the 60%
+LOCK (per-game spine); MVP/CY at SEASON-END finalize (extract a PURE `emitFranchiseHonors(scope)`, NOT inline in the React effect).
+
+**JK RULINGS (AskUserQuestion):**
+- **F2 — snub = the CLOSE LOSERS only** (NOT everyone). The caller derives the set: MVP/CY = top runner(s)-up by smallest
+  `marginToWinner`; All-Star = the highest-scoring non-selected qualified player at the contested slot. Closeness threshold/top-N
+  = §16 sim.
+- **F7 — the new race tap = SNUB ONLY.** Leave the legacy positive `ALL_STAR_SELECTION` nod row (masterMoraleMatrix.ts:324)
+  untouched; `MORALE_TAP_REGISTRY.race` carries ONLY the negative snub. No double-count (routing the nod through the tap is rejected).
+- **F9 — reach-floor: WHOLE TEAM, starters get MORE.** Everyone selected (starters + reserves + wildcard) gets a permanent
+  reach-floor bump; starters + wildcard get a BIGGER bump than reserves. `honorHeatBump` ladder = `mvp ≥ cyYoung ≥ allStarStarter
+  ≥ allStarReserve` (§16 magnitudes); the ratchet iterates ALL selections by role; the `allStarSelections` career counter
+  increments at the lock (any selection).
+- **Captain engineering defaults (taken):** ONE new `NarrativeEventType` `AWARD_RESULT` (discriminate honor via `facts`, 1
+  forced `hedgingModifier` entry); `perEventRate=1` (boolean gate); MVP/CY overcounting valve = `listSeasonNewsItemsByEvent`
+  read-guard + fire-once across the two FranchiseHome paths; MVP/CY payout in a PURE module not the React effect; flat snub
+  resolver keyed off `type` (graded-snub = v2); the non-decaying `applyHonorHeatBump` helper lands in `fameModel.ts`
+  (additive math, no fame-behavior change); per-checkpoint race narration DEFERRED to v2.
+**Build SPLIT (build-DARK, builder≠auditor):** L12-5a pure reporter adapter + `AWARD_RESULT` union/Record · L12-5b emission
+config ON-switch + emitter wiring at both edges · L12-5c L3 snub row (`kind:'race'` event + close-losers set + apply loop, L12+Morale
+double-gate) · L12-5d honor→reach-floor (non-decaying helper + `honorHeatBump` tiers + write-back at both edges, L12+Fame gate).
+No trackerDb bump. Full scope/seams/anchors/risks in `spec-docs/L12-5_SCOPE_MAP.md`.

@@ -86,7 +86,8 @@ export type NarrativeEventType =
   | 'SEASON_SUMMARY'
   | 'OFFSEASON_NEWS'
   | 'RANDOM_EVENT'
-  | 'MANAGER_CHANGE';
+  | 'MANAGER_CHANGE'
+  | 'AWARD_RESULT';
 
 export interface NarrativeContext {
   eventType: NarrativeEventType;
@@ -600,6 +601,7 @@ export function determineConfidenceLevel(
     OFFSEASON_NEWS: 0.75,   // Lots of rumors in offseason
     RANDOM_EVENT: 0.85,     // Varies widely
     MANAGER_CHANGE: 0.90,   // Front-office fact known, motives uncertain
+    AWARD_RESULT: 1.0,      // Awards are factual results
   };
 
   const effectiveConfidence = baseAccuracy * hedgingModifier[eventType];
