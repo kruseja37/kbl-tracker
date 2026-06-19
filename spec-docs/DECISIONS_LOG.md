@@ -7,6 +7,42 @@
 
 ## June 2026
 
+### 2026-06-18 (L11 manager-firings kickoff): trigger + ripple + relief rulings (JK attended)
+
+**Context**: L11 (manager firings) grounding recon (workflow `wf_107b9eb5-faf`, 5 readers) → `spec-docs/L11_SCOPE_MAP.md`.
+Captain-verified: the `MANAGER_FIRED` morale-matrix row (self −2 / fan bump / clubhouse −1, masterMoraleMatrix.ts:24/148/375)
++ the `ManagerAssignment.fired`/`endDate` fields (managerWpa.ts:86) + the Manager Almanac page ALREADY EXIST — but the row
+has ZERO emitters and nothing ever writes `fired:true`. ⇒ **L11 is the missing PRODUCER + the two consequence-writes, not
+a new subsystem.** MOY stays OUT (Phase-1 D9 award). Captain surfaced 4 forks; JK ruled (richer/scaled across the board):
+
+**Rulings (JK, 2026-06-18):**
+- **Trigger = BOTH + L14.** A firing fires via (a) a manual GM action (the §12 "valve the GM spends"), (b) an AUTO
+  backstop roll on sustained low fan morale (revives the orphaned `managerFireProbability` 0.05–0.15-by-payroll,
+  salaryCalculator.ts:1278-1294, as the backstop probability), AND (c) the L14 rebrand auto-cascade — all routed through
+  ONE shared firing resolver. The "sustained low fan morale" arming threshold/duration is §16 SIM-TUNE (no such
+  measurement exists today; conservative placeholder + the payroll-band probs).
+- **Personality ripple = BUILD FULL NOW, dark vs the types.** Build the COMPLETE mechanic incl. the personality half
+  against the type defs; it stays inert until L1 wires player loyalty/resilience + a new manager-personality field. ⇒ L11
+  ADDS a manager-personality field (default home: the IDENTITY `ManagerProfile`, managerWpa.ts:68, `kbl-manager-identity`;
+  reuse the canonical 7-personality enum — NOT the career-stats `mwarCalculator` type, which D9 retires). The ripple
+  DIRECTIONS come VERBATIM from §12 ("a loyal player takes a morale hit, a resilient one shrugs it off, a producing
+  egotist barely notices"); magnitudes are §16 SIM-TUNE.
+- **Performance gate = SCALED by how underwater.** A net-positive True-Value player is untouchable (zero ripple); a
+  net-negative player's morale hit SCALES with how negative their True Value is (gradient, not a cliff). Source = the LIVE
+  season-to-date True Value (`FranchiseTrueValueRow.valueDelta`), NOT the D6 frozen artifact.
+- **Fan-relief bump = SCALED by how bad it is.** The relief pop is NOT flat (both +4 and +15 rejected) — it scales with
+  team struggle (lower fan morale / worse record → bigger relief). §16 SIM-TUNE scale; emitted ONCE per firing, not
+  per-player.
+
+**Defaults TAKEN (Captain, not asked — low-stakes; flagged for any later JK override):** MOY OUT (no manager
+fame/award/ceremony — do not touch `mwarCalculator`/`AwardsCeremonyFlow`/`AwardsWatchlist`); ONE fan-write per firing;
+successor = auto-generate a default identity (`buildDefaultManagerProfile`, "new voice"); the Almanac tenure aggregate
+gains hire/fire dates + an end-reason ("fired"/"resigned"/"relocated"); RIDE the existing morale/identity stores (NO new
+L11 overlay store, NO trackerDb bump) — all writes gated by a new default-OFF `isFranchisePhase2L11Enabled` flag
+(doubly-dark with the morale flag). Clubhouse touch stays flat −1 in v1. **Build order:** L11-1 pure firing+ripple engine
+→ L11-2 manager-personality field + legacy/tenure write → L11-3 flag + the shared resolver/hook (manual + auto-backstop +
+L14 entry) → L11-4 Almanac surfacing → L11-5 reporter tap. All build-DARK, activate post-D13.
+
 ### 2026-06-18 (R1 proxy derivations): the gap rulings for the R1 build (JK attended)
 
 **Context**: R1 grounding surfaced 6 implementation gaps where §0.6's proxy needed a computation ruling (the
