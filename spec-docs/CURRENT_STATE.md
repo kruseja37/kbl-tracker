@@ -1,23 +1,27 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-19 — **ATTENDED session (JK present), checkpointed for a fresh session.** **🔄 L12-5 IN PROGRESS
-(4 of 5) — all four PAYOUT MECHANICS built + committed; only the live wiring (5e) remains.** L12-5 = the award/All-Star
-**payout layer** (emission + L3 race-snub morale + honor→reach-floor ratchet) for the marquee honors (MVP/CY/All-Star — Q6).
-Recon + 3 JK rulings done (snub = **close losers only**; the new race tap = **snub-only**, keep the legacy nod; reach-floor =
-**whole team, starters get more**) → `spec-docs/L12-5_SCOPE_MAP.md`. **Built (each Codex-built → Opus-audited → full host gate,
-build-DARK / ORPHANED-PENDING):** 5a `f1ba864a` (`AWARD_RESULT` NarrativeEventType + pure `buildFranchiseAwardSeasonNewsEvent`
-reporter adapter) · 5b `85c4cb72` (seam-injectable `emitFranchiseHonorNews` emit-glue: flag→effectiveConfig→gate→honorKind
-dedup→reporter→take→persist) · 5c `2e1552e4` (the L3 snub: `MORALE_TAP_REGISTRY.race` fresh non-neutral resolver +
-`{kind:'race'}` event [the make-or-break] + `pickRaceSnubVictims` close-losers + seam apply, L12+Morale gated) · 5d `644a4e29`
-(honor→reach-floor: non-decaying `applyHonorHeatBump` + `honorHeatBump` ladder mvp≥cy≥allStarStarter≥allStarReserve + the
-L12+Fame-gated ratchet). **⚠ TWO LIVE CORRECTNESS TRAPS verified + handled:** the snub tap fires ONLY on `kind:'race'` (the
-designation template uses `{type}` → bypasses it) + the resolver must return a fresh non-neutral object; the reach-floor needs
-a THIRD flag (Fame) for its record substrate. suite **7,818/455, ZERO new reds**; trackerDb v24; branch-only.
-**➡ NEXT = L12-5e** (the ONLY impure/live-path piece — wire emit+snub+reach-floor at the TWO trigger edges: All-Star at the
-60% lock in `processCompletedGame` [fire on `'persisted-locked'`], MVP/CY at season-end via a PURE `emitFranchiseHonors(scope)`
-module called from the `FranchiseHome` `isSeasonOver` effect [the emit `seasonNewsItems` dedup is the fire-once guard for all
-three effects]). Likely SPLIT 5e-1 (All-Star edge) + 5e-2 (season-end FranchiseHome edge — highest risk). *(prior:)* **✅ L12-4
-COMPLETE
+**Last Updated:** 2026-06-19 — **ATTENDED session (JK present), checkpointed for a fresh session.** **✅ L12-5 COMPLETE
+(a/b/c/d/e-1/e-2) — the award/All-Star PAYOUT layer is FULLY BUILT.** L12-5 = emission + L3 race-snub morale + honor→reach-floor
+ratchet for the marquee honors (MVP/CY/All-Star — Q6), fired at TWO trigger edges. Recon + 3 JK rulings (snub = **close losers
+only**; the new race tap = **snub-only**, keep the legacy nod; reach-floor = **whole team, starters get more**) →
+`spec-docs/L12-5_SCOPE_MAP.md`. **Built (each Codex-built → Opus-audited → full host gate, build-DARK):** 5a `f1ba864a`
+(`AWARD_RESULT` event + pure reporter adapter) · 5b `85c4cb72` (seam `emitFranchiseHonorNews` emit-glue, honorKind dedup) ·
+5c `2e1552e4` (L3 snub: `MORALE_TAP_REGISTRY.race` fresh non-neutral resolver + `{kind:'race'}` event [make-or-break] +
+`pickRaceSnubVictims` close-losers, L12+Morale gated) · 5d `644a4e29` (honor→reach-floor: non-decaying `applyHonorHeatBump` +
+`honorHeatBump` ladder, L12+Fame gated) · **5e-1 `5180cc42`** (the All-Star LOCK edge: `runFranchiseAllStarLockPayouts`
+[reach-floor whole-team role-tiered + snub top-3 + emit via the most-represented team] hooked into the L12-4d persist wrapper
+on `'persisted-locked'`) · **5e-2 `1540e8be`** (the SEASON-END edge: `emitFranchiseSeasonEndHonors` reads finalized MVP/CY rows
++ `playerId→teamId` map → emit→[fire-once on `'emitted'`]→reach-floor+snub; ADDITIVE FranchiseHome chaining after the two
+finalize calls). **⚠ TRAPS handled (all verified live):** snub tap fires ONLY on `kind:'race'` + a fresh non-neutral resolver;
+reach-floor needs a 3rd flag (Fame) substrate; the emit `seasonNewsItems` dedup is the single FIRE-ONCE guard for all three
+season-end effects (prevents the React-effect double-ratchet); 3 transitive-import-mock breaks (L12-3b/4d/5e-1 pattern) each
+auditor-fixed (test-only stubs). **DEFERRED (noted, not dropped):** the `allStarSelections` career-counter write (greenfield
+write-path → a 5e follow-up / L12-6). suite **7,829/457, ZERO new reds**; trackerDb v24; branch-only; **nothing pushed**.
+**BROWSER-VERIFY (batched, post-D13):** at the flag-flip, confirm the reporter narrates MVP/CY at season-end + the All-Star
+announcement at the 60% lock, the snub morale lands on the close losers, and the reach-floor ratchets (needs the Fame flag on too).
+**➡ NEXT = L12-6** (Almanac/UI surfacing — the LAST L12 piece: feed the flag-off All-Star UI from the real builder, surface the
+race standings/award races + the new categories in `AwardsWatchlist`, + the deferred `allStarSelections` counter). Then L13 →
+L14 → the L-SIM gate. *(prior:)* **✅ L12-4 COMPLETE
 (a/b/c/d) — the All-Star roster selection engine + 60% lock is FULLY BUILT.** v1 = **ONE league-wide 26-man team, any league
 size** (8 fame-led position starters + 5 family-grouped merit backups + 12 pitchers [4 SP/1 backup SP/5 RP/2 backup RP,
 usage-classified via `gamesStarted`] + 1 fame-led WILDCARD); **no DH; two-way = stronger side only.** User-selectable

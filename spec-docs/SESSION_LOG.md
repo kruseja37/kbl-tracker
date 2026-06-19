@@ -6158,3 +6158,39 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   (batched, prioritized — persistence/saved-shape):** at the post-D13 flag-flip, confirm a completed game writes a
   `franchiseAllStarRosters` row + freezes at the 60% mark. **➡ NEXT = L12-5** (emission / L3 race-snub morale row /
   honor→Reach-floor / reporter tap). Branch codex/franchise-v1-next; nothing pushed.
+
+## 2026-06-19 (attended) — L12-5 COMPLETE (a/b/c/d/e-1/e-2): the award/All-Star PAYOUT layer
+- **Recon** (`wf_23cc345d-df4`, 6 readers + synthesis + adversarial critique → `spec-docs/L12-5_SCOPE_MAP.md`). The critique +
+  Captain verification caught TWO live correctness traps: (1) the L3 race morale tap fires ONLY when the event carries
+  `kind:'race'` (the designation template builds `{type}` → hits the event table, bypassing the tap) AND the resolver must
+  return a NEW non-neutral object (the `base === NEUTRAL_BASE_CONSEQUENCE` ref-check skips personality scaling); (2) the
+  honor→reach-floor ratchet needs a THIRD flag (`isFranchisePhase2FameEnabled`) because the `FranchiseFameRecordRow` it ratchets
+  is only produced by the per-game dark fame writer. Verified emission infra exists but had ZERO live emitters (orphaned-pending).
+- **3 JK rulings (AskUserQuestion):** snub = **CLOSE LOSERS only** (top runners-up by margin / closest non-selected); the new
+  race tap = **SNUB-ONLY** (keep the legacy positive `ALL_STAR_SELECTION` nod row — no double-count); reach-floor = **WHOLE TEAM,
+  starters get MORE** (`mvp ≥ cyYoung ≥ allStarStarter ≥ allStarReserve`).
+- **Build SPLIT (each Codex(gpt-5.5,xhigh)-built via `codex exec` stdin-from-contract → Opus-audited → full host gate, build-DARK):**
+  - **5a `f1ba864a`** — `AWARD_RESULT` NarrativeEventType (+ forced `hedgingModifier` entry) + pure `buildFranchiseAwardSeasonNewsEvent`
+    reporter adapter (honorKind/triggerPhase in `facts`, no id/createdAt). Suite 7,796/452.
+  - **5b `85c4cb72`** — seam `emitFranchiseHonorNews` emit-glue: flag → effectiveConfig (marquee `AWARD_RESULT` default-on,
+    honors explicit 0) → `shouldEmitSeasonNews` → `(franchise,season,honorKind)` dedup read-guard → reporter → take → persist.
+    *(First dispatch hung — watchdog-killed; retry succeeded.)* Suite 7,803/453.
+  - **5c `2e1552e4`** — the L3 snub: `MORALE_TAP_REGISTRY.race` fresh non-neutral resolver (`raceSnubSelf -4`) + the `{kind:'race'}`
+    event constructor + `pickRaceSnubVictims` (close-losers) + seam-injectable apply loop (L12+Morale double-gate). The
+    make-or-break test proves the tap fires + EGOTISTICAL/TIMID amplify. Suite 7,810/454.
+  - **5d `644a4e29`** — honor→reach-floor: non-decaying `applyHonorHeatBump` (avoids `applyHeatUpdate`'s 15% decay) + the
+    `honorHeatBump` ladder + the L12+Fame-gated per-honoree ratchet. Decay-trap test: `applyHonorHeatBump(10,5)=15 ≠ 13.5`. Suite 7,818/455.
+  - **5e-1 `5180cc42`** — the All-Star LOCK edge: `runFranchiseAllStarLockPayouts` (reach-floor whole-team role-tiered + snub
+    top-3 close-losers + emit via the most-represented team) hooked ADDITIVELY into the L12-4d persist wrapper on the
+    `'persisted-locked'` transition; each payout isolated. **Auditor caught + fixed the 3rd transitive-import-mock break**
+    (`FranchiseHomeLaunch.test.tsx` `franchisePlayerStorage` mock missing `getFranchisePlayer`). Suite 7,823/456.
+  - **5e-2 `1540e8be`** — the SEASON-END edge: `emitFranchiseSeasonEndHonors` reads finalized MVP/CY rows + a `playerId→teamId`
+    map → emit (winner's team) → **fire-once on `'emitted'`** → reach-floor + snub; STRICTLY ADDITIVE FranchiseHome wiring
+    (1 import + chaining the emit after the two `computeAndPersistFranchiseWarAwards` finalize paths). The emit `seasonNewsItems`
+    dedup is the single fire-once guard (prevents the React-effect double-ratchet). Suite 7,829/457, FranchiseHome regression 35/35.
+- **⇒ L12-5 COMPLETE.** Everything build-DARK (doubly/triply-gated; the season-end module L12-gates → dark-noop so the live
+  FranchiseHome chain is inert until post-D13). **DEFERRED (noted):** the `allStarSelections` career-counter write (greenfield
+  write-path) → a 5e follow-up / L12-6. trackerDb v24; ZERO new reds throughout; branch-only; nothing pushed.
+  **BROWSER-VERIFY batched (post-D13):** reporter narrates MVP/CY at season-end + All-Star at the 60% lock; snub morale on the
+  close losers; reach-floor ratchets (needs Fame flag on). **➡ NEXT = L12-6** (Almanac/UI surfacing — the last L12 piece).
+  *(Note: a concurrent UI-cleanup session appended a `DECISIONS_LOG` theme.css/Tailwind-v3 entry this run; left uncommitted for that session.)*
