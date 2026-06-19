@@ -12068,4 +12068,24 @@ pattern — `scoreForCategory`/`categoryCandidateRows` reserve filter/`meetsQual
 to mirror), `src/utils/franchiseValueInputs.ts` (`FranchiseWarPreviewValues` + `buildWarPreviewValues`),
 `src/utils/franchiseRaceStandingsCompute.ts` (`L12_MERIT_RACE_CATEGORIES`), and the two test files.
 
-**Status:** ⏳ CONTRACTED 2026-06-19 (attended). Awaiting dispatch (after L12-3R-1).
+**Status:** ✅ VERIFIED + COMMITTED 2026-06-19 (attended). Codex (gpt-5.5, xhigh) built via `codex exec`
+stdin-from-contract (5 files: `franchiseValueInputs.ts` [+`pitchingWpa: number|null` on FranchiseWarPreviewValues, threaded
+in `buildWarPreviewValues` from `pitching?.pitchingWpa` in BOTH return paths] + `franchiseAwardsEngine.ts`
+[`FranchiseWarAwardCategory` +RELIEVER_OF_YEAR; `scoreForCategory` → pitchingWpa; `categoryCandidateRows` pure-reliever
+filter `gamesStarted>0 → null`; `meetsQualifier` relief-IP floor `minIP × RELIEVER_QUALIFIER_IP_FRACTION` 0.15 §16;
+`FranchiseWarAwardQualifierFacts` +`gamesStarted`; `qualifierFactsFromStats` populates it; `WAR_AWARD_CATEGORIES` UNCHANGED]
++ `franchiseRaceStandingsCompute.ts` [RELIEVER_OF_YEAR = the 8th `L12_MERIT_RACE_CATEGORIES`] + the 2 test files). → Opus
+independently audited (builder≠auditor): the binding mirrors L12-3c; position players self-filter via null pitchingWpa; the
+reliever test proves the starter (highest WPA, gamesStarted 5) is EXCLUDED, pure relievers rank by pitchingWpa, and a
+3-IP reliever is EXCLUDED by the ~3.75-IP floor; the D9-finalize-stability assertion is extended to exclude all 3 new
+categories. **AUDITOR-CAUGHT NEW REDS (Codex's scoped 2-file run missed them):** adding `pitchingWpa` to
+FranchiseWarPreviewValues broke 4 `franchiseValueInputs.test.ts` `toEqual` shape assertions (Received had `pitchingWpa: null`,
+Expected lacked it) — all 4 failed because the test expectations weren't propagated; a 5th file `AwardsWatchlist.test.tsx`
+also flagged but **passes SOLO (2/2) = the documented order-flake, NOT a regression**. **FIX (mechanical, auditor-applied,
+test-only):** added `pitchingWpa: null` to the 4 expected `warPreviewValues` objects. Host gate (post-fix): `NODE_ENV= npm
+run build` exit 0 + full suite **7,765/447, 7,763 pass / 2 characterized fail** (`wpaRuntimeBoundary` +
+`franchiseManualSmokeFixture`), ZERO new reds (+1 = the RELIEVER test). BUILD-DARK (the RELIEVER race rides the flag-gated
+recompute); `WAR_AWARD_CATEGORIES` unchanged ⇒ D9 finalize byte-neutral; trackerDb v24. **6 files committed** (3 prod + 3
+test [1 of which is the mechanical shape-fix]). Branch-only (NOT pushed). **⇒ L12-3 COMPLETE (a/b/c/R-1/R-2): the race-standing
+recompute now covers all 8 merit categories (MVP/CY/SS/GG/RoY/Bench/Booger/Reliever) + the TV-family. ➡ NEXT = L12-4
+(All-Star roster + 60% lock).**

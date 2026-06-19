@@ -44,6 +44,7 @@ export type FranchiseWarAwardCategory = Extract<
   | 'SILVER_SLUGGER'
   | 'BENCH_PLAYER'
   | 'BOOGER_GLOVE'
+  | 'RELIEVER_OF_YEAR'
 >;
 
 export type FranchiseManagerAwardCategory = Extract<
@@ -55,6 +56,7 @@ export interface FranchiseWarAwardQualifierFacts {
   playerId: string;
   plateAppearances?: number | null;
   inningsPitched?: number | null;
+  gamesStarted?: number | null;
 }
 
 export interface ComputeFranchiseWarAwardsInput extends FranchiseAwardsScopeInput {
@@ -115,6 +117,7 @@ const WAR_AWARD_CATEGORIES: readonly FranchiseWarAwardCategory[] = [
 const MANAGER_OF_YEAR_CATEGORY: FranchiseManagerAwardCategory = 'MANAGER_OF_YEAR';
 const MANAGER_OF_YEAR_GAME_LIMIT = 1000;
 const BENCH_PLAYER_QUALIFIER_FRACTION = 0.25;
+const RELIEVER_QUALIFIER_IP_FRACTION = 0.15;
 
 // MOY-7: Simulation-Gate placeholder. Equal weights are intentionally temporary.
 const MANAGER_OF_YEAR_SIM_GATE_PLACEHOLDER_WEIGHTS = {
@@ -262,6 +265,8 @@ export function scoreForCategory(
       return (row) => row.warPreviewValues.totalWar;
     case 'CY_YOUNG':
       return (row) => row.warPreviewValues.pitchingWar;
+    case 'RELIEVER_OF_YEAR':
+      return (row) => row.warPreviewValues.pitchingWpa;
     case 'GOLD_GLOVE':
       return (row) => row.warPreviewValues.fieldingWar;
     case 'BOOGER_GLOVE':
@@ -283,6 +288,10 @@ function meetsQualifier(params: {
   if (params.category === 'CY_YOUNG') {
     return finiteNumber(params.facts.inningsPitched) &&
       params.facts.inningsPitched >= params.minInningsPitched;
+  }
+  if (params.category === 'RELIEVER_OF_YEAR') {
+    return finiteNumber(params.facts.inningsPitched) &&
+      params.facts.inningsPitched >= params.minInningsPitched * RELIEVER_QUALIFIER_IP_FRACTION;
   }
   if (params.category === 'BENCH_PLAYER') {
     return finiteNumber(params.facts.plateAppearances) &&
@@ -335,6 +344,12 @@ function categoryCandidateRows(params: {
       if (
         params.category === 'BENCH_PLAYER' &&
         !row.trueValuePositioning?.isReserve
+      ) {
+        return null;
+      }
+      if (
+        params.category === 'RELIEVER_OF_YEAR' &&
+        (params.qualifierByPlayerId.get(row.playerId)?.gamesStarted ?? 0) > 0
       ) {
         return null;
       }
@@ -546,6 +561,7 @@ function qualifierFactsFromStats(
     facts.set(row.playerId, {
       ...(facts.get(row.playerId) ?? { playerId: row.playerId }),
       inningsPitched: row.outsRecorded / 3,
+      gamesStarted: row.gamesStarted,
     });
   }
   return Array.from(facts.values()).sort((left, right) => left.playerId.localeCompare(right.playerId));

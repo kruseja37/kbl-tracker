@@ -155,6 +155,10 @@ describe('recomputeFranchiseL12StandingsForCompletedGame', () => {
         { playerId: 'booger-worst-fielder', score: 1.5 },
         { playerId: 'booger-next-worst', score: 0.4 },
       ]),
+      RELIEVER_OF_YEAR: candidateRows([
+        { playerId: 'reliever-top', score: 2.2 },
+        { playerId: 'reliever-next', score: 1.4 },
+      ]),
     }));
     vi.spyOn(raceStandingsSeam, 'getFameRows').mockResolvedValue([
       fameRow('mvp-leader', { heat: 8, reachFloor: 1 }),
@@ -185,6 +189,10 @@ describe('recomputeFranchiseL12StandingsForCompletedGame', () => {
     expect(standings?.meritRaces.BOOGER_GLOVE?.map((row) => [row.rank, row.playerId])).toEqual([
       [1, 'booger-worst-fielder'],
       [2, 'booger-next-worst'],
+    ]);
+    expect(standings?.meritRaces.RELIEVER_OF_YEAR?.map((row) => [row.rank, row.playerId])).toEqual([
+      [1, 'reliever-top'],
+      [2, 'reliever-next'],
     ]);
   });
 

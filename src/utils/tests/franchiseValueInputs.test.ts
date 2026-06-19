@@ -318,6 +318,7 @@ describe('franchise value input contract', () => {
     expect(row.warPreviewValues).toEqual({
       battingWar: 0.2,
       pitchingWar: null,
+      pitchingWpa: null,
       fieldingWar: 0.1,
       baserunningWar: 0.1,
       totalWar: 0.4,
@@ -534,6 +535,7 @@ describe('franchise value input contract', () => {
     expect(report.rows[0].warPreviewValues).toEqual({
       battingWar: 0.2,
       pitchingWar: 0.7,
+      pitchingWpa: null,
       fieldingWar: 0.1,
       baserunningWar: 0.1,
       totalWar: 1.1,
@@ -617,6 +619,7 @@ describe('franchise value input contract', () => {
     expect(report.rows[0].warPreviewValues).toEqual({
       battingWar: 0.2,
       pitchingWar: 0.7,
+      pitchingWpa: null,
       fieldingWar: 0.1,
       baserunningWar: 0.1,
       totalWar: 1.1,
@@ -701,6 +704,7 @@ describe('franchise value input contract', () => {
     expect(report.rows[0].warPreviewValues).toEqual({
       battingWar: null,
       pitchingWar: null,
+      pitchingWpa: null,
       fieldingWar: null,
       baserunningWar: null,
       totalWar: null,

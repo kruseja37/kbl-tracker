@@ -34,6 +34,7 @@ export type FranchiseValueParkFactorStatus = 'seed-only' | 'custom-unavailable' 
 export interface FranchiseWarPreviewValues {
   battingWar: number | null;
   pitchingWar: number | null;
+  pitchingWpa: number | null;
   fieldingWar: number | null;
   baserunningWar: number | null;
   totalWar: number | null;
@@ -241,6 +242,7 @@ function buildWarPreviewValues(
 ): FranchiseWarPreviewValues {
   const battingWar = finiteOrNull(batting?.bwar);
   const pitchingWar = finiteOrNull(pitching?.pwar);
+  const pitchingWpa = finiteOrNull(pitching?.pitchingWpa);
   const fieldingWar = finiteOrNull(batting?.fwar);
   const baserunningWar = finiteOrNull(batting?.rwar);
   const statRowTotalWar = finiteOrNull(batting?.totalWar);
@@ -255,6 +257,7 @@ function buildWarPreviewValues(
     return {
       battingWar,
       pitchingWar,
+      pitchingWpa,
       fieldingWar,
       baserunningWar,
       totalWar,
@@ -269,6 +272,7 @@ function buildWarPreviewValues(
   return {
     battingWar,
     pitchingWar,
+    pitchingWpa,
     fieldingWar,
     baserunningWar,
     totalWar: components.length > 0

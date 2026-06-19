@@ -6097,3 +6097,29 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   snapshots, so history exists at the post-D13 flag-flip). **Browser-verify BATCHED + PRIORITIZED** (CURRENT_STATE BROWSER-VERIFY
   OUTSTANDING #24). trackerDb v24. **➡ NEXT = L12-3R-2** (the dark Reliever binding — depends on this `pitchingWpa` field).
   Branch codex/franchise-v1-next; nothing pushed.
+
+## 2026-06-19 (attended) — L12-3R-2: dark Reliever-of-Year binding ⇒ L12-3 COMPLETE
+- **L12-3R-2 (Codex gpt-5.5/xhigh, 5 files):** `franchiseValueInputs.ts` (+`pitchingWpa: number|null` on
+  FranchiseWarPreviewValues, threaded from `pitching?.pitchingWpa` in both `buildWarPreviewValues` return paths) +
+  `franchiseAwardsEngine.ts` (`FranchiseWarAwardCategory` +RELIEVER_OF_YEAR [8th]; `scoreForCategory`→pitchingWpa;
+  `categoryCandidateRows` pure-reliever filter `gamesStarted>0→null`; `meetsQualifier` relief-IP floor
+  `minIP×RELIEVER_QUALIFIER_IP_FRACTION` 0.15 §16; `FranchiseWarAwardQualifierFacts` +`gamesStarted` populated in
+  `qualifierFactsFromStats`; `WAR_AWARD_CATEGORIES` UNCHANGED → D9 byte-neutral) + `franchiseRaceStandingsCompute.ts`
+  (RELIEVER_OF_YEAR = the 8th `L12_MERIT_RACE_CATEGORIES`) + 2 test files.
+- **Audit (builder=Codex ≠ auditor=Opus):** diffs read line-by-line (binding mirrors L12-3c; position players self-filter
+  via null pitchingWpa). Tests non-vacuous: the RELIEVER test proves the starter (highest WPA 9.5, gamesStarted 5) is
+  EXCLUDED, pure relievers rank by pitchingWpa (2.2→1.4), a 3-IP reliever is EXCLUDED by the ~3.75-IP floor (=25×0.15);
+  the D9-finalize-stability assertion extended to exclude all 3 new categories; the orchestrator asserts the RELIEVER
+  standing ranked.
+- **AUDITOR-CAUGHT NEW REDS (Codex's scoped 2-file run missed them; the full host gate caught them):** adding `pitchingWpa`
+  to FranchiseWarPreviewValues broke **4** `franchiseValueInputs.test.ts` `toEqual` shape assertions (Received had
+  `pitchingWpa: null`, Expected lacked the key — confirmed real, not flakes); a 5th file `AwardsWatchlist.test.tsx` also
+  flagged but **passes SOLO (2/2) = the documented order-flake**, NOT a regression (verified, not assumed). FIX (mechanical,
+  auditor-applied, test-only): added `pitchingWpa: null` to the 4 expected `warPreviewValues` objects.
+- **FULL host gate (post-fix):** `NODE_ENV= npm run build` exit 0 + full suite **7,765/447, 7,763 pass / 2 characterized
+  fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+1 = the RELIEVER test). BUILD-DARK; trackerDb
+  v24. **6 files committed** (3 prod + 3 test [1 = the mechanical shape-fix]).
+- **⇒ L12-3 COMPLETE (a/b/c/R-1/R-2).** The per-game race-standing recompute covers all 8 merit categories
+  (MVP/CY/SS/GG/RoY/Bench/Booger/Reliever) + the TV-family, recompute-only + doubly-dark behind `isFranchisePhase2L12Enabled`
+  (only the L12-3R-1 `pitchingWpa` substrate write is live/ungated). **➡ NEXT = L12-4** (All-Star roster builder + 60% lock).
+  Branch codex/franchise-v1-next; nothing pushed.

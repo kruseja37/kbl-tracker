@@ -83,6 +83,14 @@ const scope = {
   statsScopeId: 'season-d9b',
 };
 
+type ValueRowOverrides = Omit<
+  Partial<FranchiseValueInputRow>,
+  'warInputAvailability' | 'warPreviewValues'
+> & {
+  warInputAvailability?: Partial<FranchiseValueInputRow['warInputAvailability']>;
+  warPreviewValues?: Partial<FranchiseValueInputRow['warPreviewValues']>;
+};
+
 function deleteDatabase(name: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.deleteDatabase(name);
@@ -94,16 +102,17 @@ function deleteDatabase(name: string): Promise<void> {
 
 function valueRow(
   playerId: string,
-  overrides: Partial<FranchiseValueInputRow> = {},
+  overrides: ValueRowOverrides = {},
 ): FranchiseValueInputRow {
   const {
     warPreviewValues: _ignoredWarPreviewValues,
     warInputAvailability: _ignoredWarInputAvailability,
     ...rowOverrides
   } = overrides;
-  const warPreviewValues = {
+  const warPreviewValues: FranchiseValueInputRow['warPreviewValues'] = {
     battingWar: 0,
     pitchingWar: null,
+    pitchingWpa: null,
     fieldingWar: 0,
     baserunningWar: 0,
     totalWar: 0,
@@ -394,7 +403,11 @@ function battingStats(playerId: string, pa = 120): PlayerSeasonBatting {
   };
 }
 
-function pitchingStats(playerId: string, innings = 25): PlayerSeasonPitching {
+function pitchingStats(
+  playerId: string,
+  innings = 25,
+  overrides: Partial<PlayerSeasonPitching> = {},
+): PlayerSeasonPitching {
   return {
     seasonId: scope.statsScopeId,
     playerId,
@@ -422,10 +435,12 @@ function pitchingStats(playerId: string, innings = 25): PlayerSeasonPitching {
     noHitters: 0,
     perfectGames: 0,
     pwar: 0,
+    pitchingWpa: 0,
     fameBonuses: 0,
     fameBoners: 0,
     fameNet: 0,
     lastUpdated: 1781654300000,
+    ...overrides,
   };
 }
 
@@ -869,6 +884,11 @@ describe('franchise WAR awards engine', () => {
       'ROOKIE_OF_YEAR',
       'SILVER_SLUGGER',
     ]);
+    expect(stored.map((row) => row.category)).not.toEqual(expect.arrayContaining([
+      'BENCH_PLAYER',
+      'BOOGER_GLOVE',
+      'RELIEVER_OF_YEAR',
+    ]));
   });
 
   test('computeFranchiseAwardsPreview ranks current rows under the looser preview gate without persisting', async () => {
@@ -1017,6 +1037,63 @@ describe('franchise WAR awards engine', () => {
       { playerId: 'booger-worst', score: 2.4, marginToWinner: 0 },
       { playerId: 'booger-next', score: 0.6, marginToWinner: -1.8 },
     ]);
+    expect(mocks.getRecentGames).not.toHaveBeenCalled();
+    expect(mocks.calculateStandings).not.toHaveBeenCalled();
+  });
+
+  test('computeFranchiseRaceCandidateRows ranks Reliever of the Year by pitchingWpa for pure relievers above the relief-IP floor', async () => {
+    const rows = [
+      valueRow('starter-high-wpa', {
+        warPreviewValues: { pitchingWar: 1, pitchingWpa: 9.5, totalWar: 1 },
+      }),
+      valueRow('reliever-top', {
+        warPreviewValues: { pitchingWar: 0.2, pitchingWpa: 2.2, totalWar: 0.2 },
+      }),
+      valueRow('reliever-next', {
+        warPreviewValues: { pitchingWar: 0.1, pitchingWpa: 1.4, totalWar: 0.1 },
+      }),
+      valueRow('reliever-too-few-ip', {
+        warPreviewValues: { pitchingWar: 0.1, pitchingWpa: 6.4, totalWar: 0.1 },
+      }),
+    ];
+    mocks.buildFranchiseValueInputRows.mockResolvedValue({
+      ...report(rows),
+      trustedValueArtifactFrozen: false,
+    });
+    mocks.getAllBattingStats.mockResolvedValue([]);
+    mocks.getAllPitchingStats.mockResolvedValue([
+      pitchingStats('starter-high-wpa', 30, { gamesStarted: 5, pitchingWpa: 9.5 }),
+      pitchingStats('reliever-top', 4, { gamesStarted: 0, pitchingWpa: 2.2 }),
+      pitchingStats('reliever-next', 5, { gamesStarted: 0, pitchingWpa: 1.4 }),
+      pitchingStats('reliever-too-few-ip', 3, { gamesStarted: 0, pitchingWpa: 6.4 }),
+    ]);
+    mocks.getCareerStats.mockResolvedValue({
+      batting: { seasonsPlayed: 1 },
+      pitching: { seasonsPlayed: 1 },
+      fielding: { seasonsPlayed: 1 },
+    });
+    await persistTrustedValueArtifact({
+      ...artifact(rows.map((row) => row.playerId)),
+      frozen: false,
+      frozenAt: null,
+    });
+    await saveFranchiseTrueValueRows(rows.map((row, index) => trueValueRow(row.playerId, 100 - index)));
+
+    const candidates = await computeFranchiseRaceCandidateRows({
+      ...scope,
+      seasonNumber: 1,
+      computedAt,
+    }, ['RELIEVER_OF_YEAR']);
+
+    expect(Object.keys(candidates)).toEqual(['RELIEVER_OF_YEAR']);
+    expect(candidates.RELIEVER_OF_YEAR).toEqual([
+      { playerId: 'reliever-top', score: 2.2, marginToWinner: 0 },
+      { playerId: 'reliever-next', score: 1.4, marginToWinner: -0.8 },
+    ]);
+    expect(candidates.RELIEVER_OF_YEAR?.map((candidate) => candidate.playerId)).not.toEqual(expect.arrayContaining([
+      'starter-high-wpa',
+      'reliever-too-few-ip',
+    ]));
     expect(mocks.getRecentGames).not.toHaveBeenCalled();
     expect(mocks.calculateStandings).not.toHaveBeenCalled();
   });

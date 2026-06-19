@@ -44,6 +44,7 @@ const L12_MERIT_RACE_CATEGORIES = [
   'SILVER_SLUGGER',
   'BENCH_PLAYER',
   'BOOGER_GLOVE',
+  'RELIEVER_OF_YEAR',
 ] as const;
 
 type AwardsPreviewScope = FranchiseAwardsScopeInput & {
