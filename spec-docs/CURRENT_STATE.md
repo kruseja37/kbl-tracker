@@ -1099,6 +1099,17 @@ forced the test edit, and the stale `teamMvpAcePreview` assertion was aligned to
 
 ## OPEN PENDING-JK (rolling)
 
+**✅ RESOLVED/SUPERSEDED SWEEP (2026-06-18, attended) — closed by the Q1–Q12 rulings + the L9b rebuild; do NOT re-raise:**
+- **Workhorse trait role** → RESOLVED (Q9: confirmed pitcher-only).
+- **`TRAIT_OPPOSITES` (14 pairs)** → RESOLVED (Q10: confirmed).
+- **Trait reality signal model** → RESOLVED (Q11: outcome-weighted SUCCESS-RATE, not exposure-count).
+- **personality-PRIMARY thin-signal exception (the deferral default)** → SUPERSEDED by the no-personality-only rule
+  (`d71767aa`): every earnable trait has a data proxy; personality is a tilt, never the sole input.
+- **Cannon/Noodle OF-arm signal default** → MOOT (Noodle Arm CUT this session).
+*(Still genuinely open/deferred below: §16 sim-tuned magnitudes [placeholders]; FINDING-148; F-144/145/147 taxonomy
+cleanup; T10 `backupRestore` hardening; order-flake root-cause batch; the grade-freshness app-wide ticket [ruled,
+needs scoping at R3/E1]; the SOUL-LAYER build-to-spec greenlight for L11–L14.)*
+
 **✅ OD-2..5 + D4 ALL RULED 2026-06-17 (attended session) — full text in `DECISIONS_LOG.md` (2026-06-17 entry):**
 - **OD-2 (L-ECON1) — RULED:** new-league-construction-only (no retroactive — no in-progress leagues); reuse the
   pick-value chart, **farm anchor nerfed one grade-step via `FARM_NERF_SCALES`** (resolves the farm≈22-man concern);
