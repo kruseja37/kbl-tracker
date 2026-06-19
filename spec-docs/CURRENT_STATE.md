@@ -1,9 +1,16 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-19 — **ACTIVE (AUTH-4 UNATTENDED OVERNIGHT).** **L12 (races/All-Star/awards) BUILD rolling under
-AUTH-4 — L12-1 dark landing infra DONE (see below); recon-split complete. L11 (managers) FULLY COMPLETE (1–5); the L11–L14
-RULING PASS is consolidated (all 43 Qs ruled; 7 JK overrides + 2 field corrections).** Codex-built → Opus-audited,
-branch-only, build-DARK; trackerDb **v24**. **L12-Q10
+**Last Updated:** 2026-06-19 — **ATTENDED session (JK present), checkpointed for a fresh session.** **✅ L12-3 COMPLETE
+(a/b/c/R-1/R-2) — the race-standing system is FULLY BUILT.** The per-game race-standing recompute now covers ALL 8 merit
+categories (MVP/CY/SS/GG/RoY/Bench/Booger/Reliever) + the TV-family (KK/Bust/Comeback), reads `resolveFameTier` ONLY,
+recompute-only + doubly-dark behind `isFranchisePhase2L12Enabled` (the LONE live exception = the L12-3R-1 `pitchingWpa`
+season substrate write — browser-verify batched #24). **➡ NEXT = L12-4 (All-Star roster builder + 60% lock) — a FRESH
+HIGH-RISK subsystem; START WITH A GROUNDING RECON** (mirror the L10/L11/L12 recon pattern; the `franchiseAllStarRosters`
+store + the by-position scaffold already exist from L12-1). Then L12-5 (emission/snub/honor→Reach-floor/reporter tap) →
+L12-6 (Almanac/UI) → L13 → L14 → L-SIM. Codex-built → Opus-audited (builder≠auditor; the full host gate caught + the
+auditor fixed 2 real reds Codex's scoped runs missed — the L12-3b mock + the L12-3R-2 `pitchingWpa` shape assertions),
+branch-only (**NOTHING pushed**), build-DARK; trackerDb **v24**; suite **7,765/447, ZERO new reds**. L11 (managers) FULLY
+COMPLETE (1–5); the L11–L14 RULING PASS is consolidated (all 43 Qs ruled). **L12-Q10
 RULED (JK 2026-06-19): DEFER the live `getFameTier` label-purge to the post-D13 fame activation; the only hard
 requirement folds into L12 (the build-DARK race code reads `resolveFameTier`, NEVER the scalar `getFameTier`) — so
 L12-Q10 needs NO standalone work now.** **L12 RECON DONE → `spec-docs/L12_SCOPE_MAP.md`** (6-piece split, adversarially
@@ -1076,6 +1083,15 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## SUITE BASELINE
 
+**7,765 tests / 447 files** — full suite run 2026-06-19 (attended, real node v20, `NODE_ENV=`) after **L12-3R-2**
+(`cd7a4eae`, → L12-3 COMPLETE): **7,763 pass / 2 fail** = EXACTLY the characterized baseline (`wpaRuntimeBoundary`
+"allowlisted" + `franchiseManualSmokeFixture` 5000ms timeout). ZERO new reds across the whole L12-3 arc this session
+(L12-3a +10 / L12-3b +5 / L12-3c +1 / L12-3R-1 +3 / L12-3R-2 +1 over the post-L12-2 7,745/444 baseline). The documented
+order-flake `AwardsWatchlist.test.tsx` surfaced once (during the pre-fix L12-3R-2 run) and **passed solo 2/2** — NOT added
+to the characterized set. trackerDb **v24** (only L12-1 bumped it v23→24; L12-3 added NO store — recompute-only). Build
+exit 0. **2 auditor-caught/fixed mechanical reds this session** (the full host gate vs Codex's scoped runs): L12-3b's
+`processCompletedGame.trueValue` mock gap + L12-3R-2's 4 `franchiseValueInputs` `pitchingWpa` shape assertions — both
+test-only, no production defect. *(Prior baselines retained below for the arc trail.)*
 **7,584 tests / 438 files** — full suite run 2026-06-18 (attended, real node v20, `NODE_ENV=`) after **R1-a**
 (`a5126afb`, 10 clean outcome-proxy traits): **7,582 pass / 2 fail** = EXACTLY the characterized baseline
 (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`). ZERO new reds across the whole L9b-rebuild arc this session

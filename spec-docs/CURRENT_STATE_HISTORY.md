@@ -1102,3 +1102,26 @@ throughout; trackerDb v23; nothing pushed. NAMED PRE-ACTIVATION GATE: PRE-ACT-TR
 unattended resume sandbox briefly parked WAITING_ON_JK ticket:R3 (RESOLVED; its stale CURRENT_STATE/HISTORY writes
 reverted). NEXT PHASE: the L-stack (L10 Q5/Q8 rework → L11 → L12–L14 → L-SIM gate) + the §16 sim-tune FINDING at the
 L-SIM gate. JK asked at checkpoint for a UI-remaining assessment (UI cleanup planning).
+
+---
+
+**2026-06-19 (ATTENDED session) — L12-3 COMPLETE (the race-standing system).** Picked up at L12-1+L12-2 done; built the
+entire L12-3 stack over one long attended session (Codex-built → Opus-audited per ticket, branch-only, nothing pushed):
+**L12-3a `5ce0d940`** (pure composite engine — per-race-type weighted composite + Q3 close-race fame-tilt + score-gap bands
++ Q4 GG `fWAR+20%·defensiveFame` blend; + Bench/Booger merit selectors) · **L12-3b `da554ed7`** (the dark per-game recompute
+gate branch — orchestrator wiring the composite + the L12-2 TV scorer; recompute-only) · **L12-3c `7f78618e`** (Bench/Booger
+standings — the D9-adjacent reserve filter + relaxed qualifier + a reusable `computeFranchiseRaceCandidateRows` exporter) ·
+**L12-3R-1 `036d842e`** (the LIVE/saved-shape `pitchingWpa` season rollup — additive-optional field + ungated aggregator
+accumulation, no DB churn; browser-verify batched #24) · **L12-3R-2 `cd7a4eae`** (the dark Reliever-of-Year binding —
+pitchingWpa basis, pure-reliever `gamesStarted===0` filter + relief-IP floor). **DESIGN RULINGS (JK, this session,
+DECISIONS_LOG):** the new-merit-award BASES re-grounded on the data reality (Bench = total WAR among designated reserves
+[specced §23.6]; Reliever = WPA-not-LI [LI unpersisted + FINDING-099 defect + orphaned modifiers]; WPA via a new season
+field); the reliever pool = PURE RELIEVERS ONLY (⇒ dropped reliefWpa/`!isStarter` — for a 0-start pitcher relief-WPA ==
+total pitching-WPA). `WAR_AWARD_CATEGORIES` stays the 5 throughout ⇒ the D9 season-end finalize is byte-neutral (the new
+categories ride the flag-gated recompute only). The per-game recompute now covers all 8 merit categories
+(MVP/CY/SS/GG/RoY/Bench/Booger/Reliever) + the TV-family. **The full host gate earned its keep twice** — it caught 2 real
+new reds Codex's scoped runs missed (L12-3b's processCompletedGame mock gap; L12-3R-2's 4 franchiseValueInputs pitchingWpa
+shape assertions), both auditor-fixed mechanically (test-only). Survived a platform server-error mid-L12-3c (resumed from
+the intact tree, nothing lost). Suite 7,745/444 → **7,765/447, ZERO new reds**; trackerDb v24 (only L12-1 bumped it).
+**NEXT: L12-4** (All-Star roster builder + 60% lock — a fresh high-risk subsystem; start with a grounding recon) → L12-5
+(emission/snub/honor/reporter) → L12-6 (Almanac/UI) → L13 → L14 → L-SIM.
