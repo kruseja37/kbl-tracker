@@ -239,6 +239,19 @@ per the player's relevant PA bucket; percentile vs the role-bucketed peer pool; 
     isn't conflated with K Collector.** Low BAA = good → invert (`1 − BAA`) so a tough pitcher ranks HIGH. **Switch
     hitters (`batterHand==='S'`) are EXCLUDED from the same/opposite cohorts** (no fixed hand). *(R2.)*
 
+### 0.11 R3 PROXY DERIVATION — ruled (JK 2026-06-18); build R3 to this
+
+- **Ace Exterminator** (position; OPT-IN; **DORMANT until the E1 grade join is fed**) = the batter's **reached-base
+  rate vs A−-or-better opposing pitchers**. **JK ruling 2026-06-18 = REACHED BASE** (hit OR walk OR HBP — the same set
+  as Distractor: `{1B,2B,3B,HR,ITPHR,GRD,BB,IBB,HBP}`). For each PA, the opposing pitcher's grade =
+  `pitcherGradeByPlayer.get(atBat.pitcherId)`; the PA counts iff that grade is **A− or better**
+  (`SMB4_GRADE_TO_INDEX[grade] >= SMB4_GRADE_TO_INDEX['A-']`, from `smb4GradeEmulator.ts`). Denominator = PAs vs A−+
+  pitchers; numerator = those where the batter reached base. **E1 plumbing:** thread an OPTIONAL
+  `pitcherGradeByPlayer?: ReadonlyMap<string, Smb4Grade>` into `SeasonTraitCandidateInput` (mirror the handedness maps;
+  the hook that derives + refreshes grades is a DEFERRED step — the app-wide grade-freshness ticket — so the trait is
+  dormant until then, decoupled from the pure builder). No acquisition change (Ace Exterminator is already POSITIVE +
+  COMPETITIVE/EGOTISTICAL). *(R3 = the LAST earnable v1 trait → 47/47.)*
+
 ---
 
 ---

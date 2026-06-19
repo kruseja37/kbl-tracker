@@ -10602,3 +10602,61 @@ valve-gated super-rare. Only `Two Way (C)` added (IF/OF deferred). NO production
 (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` — confirmed by name), ZERO new reds (+10 tests / +0 files).
 Earnable v1 set 45 → 46. Committed (hash in SESSION_LOG/CURRENT_STATE). **DEFERRED follow-up:** the random C/IF/OF
 position + the 3-variant family plumbing. NEXT = R3 (Ace Exterminator + E1 grade-freshness — has an external dependency).
+
+## CONTRACT — R3 (Ace Exterminator earn-signal + E1 grade-map thread) — 2026-06-18 (attended)
+
+**ROUTE: fresh in-session subagent | high reasoning effort** (builder; subagent not Codex CLI). Auditor = Opus 4.8
+Captain (independent; ≠ builder). Branch codex/franchise-v1-next. BUILD-DARK. Source of truth:
+`TRAIT_MEASUREMENT_SPEC.md §0.11` (JK ruling 2026-06-18 — folded into §0.11 + DECISIONS_LOG). **BUILD TO §0.11 VERBATIM.**
+The LAST earnable v1 trait (→ 47/47). Pure-builder via the deferred-map pattern (E1 grade map is DORMANT until a later
+hook populates it; the grade-freshness ticket is the deferred step — NOT this ticket).
+
+**GOAL:** add **one** trait — `Ace Exterminator` — to `BUILDABLE_TRAITS` in `src/engines/traitCandidateBuilder.ts` with
+a new `addAceExterminatorSignals` fn + one OPTIONAL input field (E1). Earnable v1 set 46 → 47. NO acquisition change
+(verify `Ace Exterminator` already in `POSITIVE_IMAGE_TRAITS` + `IMAGE_DRIVER_SETS['Ace Exterminator']=['COMPETITIVE','EGOTISTICAL']` — it is).
+
+**DERIVATION (§0.11 — implement EXACTLY):** add OPTIONAL `pitcherGradeByPlayer?: ReadonlyMap<string, Smb4Grade>` to
+`SeasonTraitCandidateInput` (import `Smb4Grade` + `SMB4_GRADE_TO_INDEX` from `./smb4GradeEmulator`). New fn
+`addAceExterminatorSignals(input, raw)`: if `pitcherGradeByPlayer` is absent/empty → return early (dormant). For each
+non-undone at-bat, look up the opposing pitcher's grade `g = pitcherGradeByPlayer.get(atBat.pitcherId)`; the PA counts
+ONLY if `g` is defined AND **A− or better** (`SMB4_GRADE_TO_INDEX[g] >= SMB4_GRADE_TO_INDEX['A-']`). For a qualifying PA,
+add one opportunity keyed to the BATTER: success = the batter **reached base via hit/walk/HBP** — REUSE the existing
+`DISTRACTOR_REACH_RESULTS` set (`{1B,2B,3B,HR,ITPHR,GRD,BB,IBB,HBP}` — exactly hit/walk/HBP; excludes E/FC/D3K). Emit via
+`addAccumulatorSignals` ⇒ `Ace Exterminator` = reached/(PAs vs A−+ pitchers), sampleSize = PAs vs A−+ pitchers.
+Register `addAceExterminatorSignals` in `buildRawSignals`. Add `'Ace Exterminator'` to `BUILDABLE_TRAITS` (after the
+R1-b3 block, `// R3:` comment). Position-role (downstream eligibility filters pitchers).
+
+**HARD CONSTRAINTS:** edit ONLY `src/engines/traitCandidateBuilder.ts` + its `__tests__` file (+ the acquisition test
+ONLY if you add an Ace Exterminator acq assertion). NO production change to `traitAcquisition.ts`. Do NOT touch the
+scorer / `buildPeerPools` / `computeTraitRealityScore` / `buildProposalBase` / any store / `processCompletedGame.ts` /
+the hooks (the grade-map population is the DEFERRED grade-freshness step — just add the OPTIONAL field + consume it;
+Ace Exterminator stays dormant until then) / `smb4GradeEmulator.ts` (import only) / any `*.md`. PURE / build-DARK — no
+caller, no flag, no store, no trackerDb bump (v23). No `Date.now`/`Math.random`. No git-add/commit.
+
+**TESTS (extend `traitCandidateBuilder.test.ts`):** update the `BUILDABLE_TRAITS` "contains exactly" expectation (add
+`'Ace Exterminator'`, `// R3:` comment). Add cases: reach rate vs A−+ pitchers (a batter who reaches often vs aces
+scores high; reach = hit/walk/HBP, E/FC NOT a reach); PAs vs sub-A− pitchers are EXCLUDED from the denominator; the
+grade threshold is inclusive of exactly `A-` and better (test an `A-` PA counts, a `B+` PA does not); DORMANT when
+`pitcherGradeByPlayer` is omitted; position-role only (a pitcher batter excluded); undone at-bats skipped; the L9b-2
+seam holds. Confirm acq state unchanged.
+
+**VERIFICATION (builder runs, reports actual):** `NODE_ENV= npx tsc --noEmit` exit 0;
+`NODE_ENV= npx vitest run src/engines/__tests__/traitCandidateBuilder.test.ts src/engines/__tests__/traitAcquisition.test.ts`
+all green. Report every changed path, new test count, the exact derivation + grade-threshold logic, and the acq finding
+(no-change).
+
+**FORMAT:** 1) Files changed. 2) The derivation + the A−-threshold comparison as built + any deviation. 3) Acq finding.
+4) Verification output (paste actual). 5) "R3 complete" or "BLOCKED: <reason>". Do NOT commit.
+
+**Status:** ✅ VERIFIED + COMMITTED (2026-06-18, attended) → **completes the 47/47 earnable v1 trait set.** Fresh
+in-session subagent built → Opus 4.8 Captain independently audited (≠ builder): VERDICT VERIFIED. `addAceExterminatorSignals`
+gates on `pitcherGradeByPlayer` (dormant when absent), counts only PAs vs A−-or-better pitchers
+(`SMB4_GRADE_TO_INDEX[grade] >= SMB4_GRADE_TO_INDEX['A-']` — verified the scale `["S","A+","A","A-",...]` so A−=13, B+=12
+→ S/A+/A/A− qualify, B+ excluded), success = `DISTRACTOR_REACH_RESULTS` (hit/walk/HBP), credited to the batter,
+position-role. NO acquisition change (`Ace Exterminator` already POSITIVE + COMPETITIVE/EGOTISTICAL). Host gate:
+`NODE_ENV= npm run build` exit 0 (7.88s) + full suite **7,677/438, 7,674 pass / 3 characterized fail** — the 3 are all
+in the documented characterized set (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` + `franchiseOffseasonGuards.component`,
+the last a conditional-solo order-flake **confirmed passing solo 24/24** this run), **ZERO new reds** (+9 tests / +0 files;
+the flake tripping this run accounts for the 2→3 fail count). Earnable v1 set 46 → **47 (COMPLETE)**. Committed (hash in
+SESSION_LOG/CURRENT_STATE). **DEFERRED follow-ups (tracked, not earnable-trait gaps):** the dormant-trait wiring hooks
+(handedness / Utility / grade maps) + the Two Way C/IF/OF family/random-position.

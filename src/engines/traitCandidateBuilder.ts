@@ -37,6 +37,7 @@ import { isOut } from '../types/game';
 import { getPercentile } from './percentile';
 import { calculateWOBA } from './bwarCalculator';
 import type { BattingStatsForWAR } from '../types/war';
+import { SMB4_GRADE_TO_INDEX, type Smb4Grade } from './smb4GradeEmulator';
 
 export const BUILDABLE_TRAITS: readonly string[] = [
   'Clutch',
@@ -104,6 +105,11 @@ export const BUILDABLE_TRAITS: readonly string[] = [
   // position assignment + the "treat the 3 variants as ONE family" plumbing (shared
   // pool + joint re-evaluation). Two Way (IF)/(OF) are intentionally NOT here.
   'Two Way (C)',
+  // R3 (TRAIT_MEASUREMENT_SPEC §0.11): Ace Exterminator earn-signal = the batter's
+  // reached-base rate (hit/walk/HBP) vs A−-or-better opposing pitchers. DORMANT
+  // until the E1 grade join (`pitcherGradeByPlayer`) is fed — the grade-freshness
+  // hook is a deferred step, NOT this ticket. Position-role. Build-dark.
+  'Ace Exterminator',
 ];
 
 for (const traitName of BUILDABLE_TRAITS) {
@@ -166,6 +172,17 @@ export interface SeasonTraitCandidateInput {
    * this map is skipped for the Specialist/Reverse cohort accounting.
    */
   batterHandByPlayer?: ReadonlyMap<string, 'L' | 'R' | 'S'>;
+  /**
+   * R3 (Ace Exterminator) — OPTIONAL. The opposing pitcher's SMB4 roster grade
+   * keyed by pitcherId, joined on `atBat.pitcherId`. Only PAs vs an A−-or-better
+   * pitcher (`SMB4_GRADE_TO_INDEX[grade] >= SMB4_GRADE_TO_INDEX['A-']`) count toward
+   * the batter's Ace Exterminator reached-base rate. When this map is absent or
+   * empty, Ace Exterminator stays DORMANT (the `addAceExterminatorSignals`
+   * early-return). This is the deferred-wiring seam — the app-wide grade-freshness
+   * hook that derives + refreshes grades is NOT part of this ticket (mirrors
+   * Utility's `primaryPositionByPlayer` and the handedness maps).
+   */
+  pitcherGradeByPlayer?: ReadonlyMap<string, Smb4Grade>;
 }
 
 export interface AtBatContextRunningState {
@@ -685,6 +702,39 @@ function addDistractorSignals(input: SeasonTraitCandidateInput, raw: RawSignalMa
       if (!ownerId) continue;
       addOpportunity(accumulators, ownerId, 'Distractor', reached);
     }
+  }
+
+  addAccumulatorSignals(raw, accumulators);
+}
+
+/**
+ * R3 — Ace Exterminator (TRAIT_MEASUREMENT_SPEC §0.11; JK ruling 2026-06-18). The
+ * BATTER's reached-base rate vs A−-or-better opposing pitchers. DORMANT until the
+ * E1 grade join is fed: if `pitcherGradeByPlayer` is absent or empty, return early
+ * so the trait stays dormant (mirrors Utility / handedness deferred-wiring seams).
+ *
+ * For each non-undone at-bat, the opposing pitcher's grade =
+ * `pitcherGradeByPlayer.get(atBat.pitcherId)`. The PA counts ONLY if that grade is
+ * defined AND A− or better (`SMB4_GRADE_TO_INDEX[grade] >= SMB4_GRADE_TO_INDEX['A-']`,
+ * higher index = better grade). A qualifying PA adds one opportunity keyed to the
+ * BATTER; success = the batter reached base via hit/walk/HBP — REUSE the existing
+ * `DISTRACTOR_REACH_RESULTS` set (excludes E/FC/D3K reaches). signalValue =
+ * reached/(PAs vs A−+ pitchers), sampleSize = PAs vs A−+ pitchers. Position-role
+ * downstream (the eligibility filter excludes pitcher batters).
+ */
+function addAceExterminatorSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
+  const gradeByPlayer = input.pitcherGradeByPlayer;
+  if (!gradeByPlayer || gradeByPlayer.size === 0) return; // deferred-wiring seam empty → dormant
+
+  const aceThreshold = SMB4_GRADE_TO_INDEX['A-'];
+  const accumulators = new Map<string, Map<string, Accumulator>>();
+
+  for (const atBat of sortAtBats(input.atBatEvents).filter((event) => !undoneAt(event))) {
+    const grade = gradeByPlayer.get(atBat.pitcherId);
+    if (grade == null) continue;                                  // pitcher grade absent → skip PA
+    if (SMB4_GRADE_TO_INDEX[grade] < aceThreshold) continue;      // sub-A− pitcher → excluded
+    const reached = DISTRACTOR_REACH_RESULTS.has(atBat.result);
+    addOpportunity(accumulators, atBat.batterId, 'Ace Exterminator', reached);
   }
 
   addAccumulatorSignals(raw, accumulators);
@@ -1272,6 +1322,9 @@ function buildRawSignals(input: SeasonTraitCandidateInput): RawSignalMap {
   // R1-b1 — Big/Little Hack, Distractor, Base Rounder (after the R1-a outcome rates).
   addHackSignals(input, raw);
   addDistractorSignals(input, raw);
+  // R3 — Ace Exterminator (reached-base rate vs A−+ opposing pitchers; DORMANT
+  // until the E1 grade map is threaded in).
+  addAceExterminatorSignals(input, raw);
   addBaseRounderSignals(input, raw);
   addStealSignals(input, raw);
   addButterFingersSignals(input, raw);

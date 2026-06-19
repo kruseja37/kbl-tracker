@@ -1500,3 +1500,18 @@ plumbing across the scorer + acquisition — beyond the pure builder. JK ruled *
 - **DEFERRED to a later ticket:** the random C/IF/OF defensive-position assignment + the family plumbing (shared pool +
   joint re-evaluation), to land with the post-D13 grant flow / roster wiring.
 No acquisition or grant-path change in R1-b3 (Two Way (C) is already in POSITIVE_IMAGE_TRAITS + IMAGE_DRIVER_SETS).
+
+---
+
+### 2026-06-18: R3 Ace Exterminator ruling (attended; L9b trait-reality rebuild — the last earnable trait)
+
+Grounding R3 showed it is NOT blocked: `smb4GradeEmulator.ts` already provides `SMB4_FULL_GRADE_SCALE` (incl. "A-") +
+`SMB4_GRADE_TO_INDEX` for the "A− or better" threshold, and Ace Exterminator is already POSITION + POSITIVE +
+COMPETITIVE/EGOTISTICAL in acquisition (no change). The builder half is cleanly buildable now via the established
+deferred-map pattern; the grade-freshness external dependency bites only at the deferred hook, decoupled from the pure
+builder. JK ruled the one measurement gap:
+- **Ace Exterminator success = REACHED BASE (hit/walk/HBP) vs A−-or-better opposing pitchers.** Denominator = PAs vs
+  A−+ pitchers; numerator = reached-base PAs. Same reach set as Distractor.
+- **E1 plumbing:** thread an OPTIONAL `pitcherGradeByPlayer?: ReadonlyMap<string, Smb4Grade>` into the input (mirror the
+  handedness maps); the grade-deriving/refreshing hook is the DEFERRED app-wide grade-freshness step → Ace Exterminator
+  stays dormant until then. No acquisition or grant-path change. This is the LAST earnable v1 trait (→ 47/47).

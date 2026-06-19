@@ -12,6 +12,7 @@ import {
 import { CANONICAL_TRAIT_NAMES } from '../traitRealityScorer';
 import { computeTraitAcquisition } from '../traitAcquisition';
 import { calculateWOBA } from '../bwarCalculator';
+import type { Smb4Grade } from '../smb4GradeEmulator';
 import type { EffectiveRatingsPlayer, GameContext } from '../effectiveRatings';
 import type { AtBatEvent, BetweenPlayEvent, FieldingEvent, RunnerState } from '../../utils/eventLog';
 import type { AtBatResult } from '../../types/game';
@@ -215,6 +216,8 @@ describe('BUILDABLE_TRAITS', () => {
       // R1-b3: Two Way earn-signal (pitcher batting wOBA). C/IF/OF family + random
       // position deferred — Two Way (IF)/(OF) intentionally NOT here.
       'Two Way (C)',
+      // R3: Ace Exterminator (reached-base rate vs A−+ opposing pitchers).
+      'Ace Exterminator',
     ]);
   });
 
@@ -803,6 +806,174 @@ describe('R1-b1 Distractor (batter reaches with the owner-runner on 1B/2B)', () 
     // The undone reach is excluded: 2 reaches of 4, not 3 of 5.
     expect(candidate(result, 'o1', 'Distractor')?.signalValue).toBeCloseTo(0.5, 10);
     expect(candidate(result, 'o1', 'Distractor')?.sampleSize).toBe(4);
+  });
+});
+
+describe('R3 Ace Exterminator (reached-base rate vs A−+ opposing pitchers)', () => {
+  it('computes the batter reached-base rate over PAs vs A−-or-better pitchers only', () => {
+    // ace1 is grade A (qualifies), ace2 is grade S (qualifies), scrub is grade C (excluded).
+    const gradeByPlayer = new Map<string, Smb4Grade>([
+      ['ace1', 'A'],
+      ['ace2', 'S'],
+      ['scrub', 'C'],
+    ]);
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      pitcherGradeByPlayer: gradeByPlayer,
+      atBatEvents: [
+        // vs ace1 (A): 3 reaches of 5 PA.
+        ...repeat(3, () => atBat({ batterId: 'b1', pitcherId: 'ace1', result: '1B', outsAfter: 0 })),
+        ...repeat(2, () => atBat({ batterId: 'b1', pitcherId: 'ace1', result: 'GO', outsAfter: 1 })),
+        // vs ace2 (S): 1 reach of 5 PA.
+        ...repeat(1, () => atBat({ batterId: 'b1', pitcherId: 'ace2', result: 'BB', outsAfter: 0 })),
+        ...repeat(4, () => atBat({ batterId: 'b1', pitcherId: 'ace2', result: 'K' })),
+        // vs scrub (C): all reaches, but EXCLUDED from the denominator.
+        ...repeat(6, () => atBat({ batterId: 'b1', pitcherId: 'scrub', result: 'HR', outsAfter: 0 })),
+      ],
+    }));
+    // 4 reaches of 10 PA vs A−+ pitchers = 0.4 (the 6 scrub PAs are excluded).
+    expect(candidate(result, 'b1', 'Ace Exterminator')?.signalValue).toBeCloseTo(0.4, 10);
+    expect(candidate(result, 'b1', 'Ace Exterminator')?.sampleSize).toBe(10);
+  });
+
+  it('counts hit/walk/HBP as reaches but NOT E/FC/D3K reaches', () => {
+    const gradeByPlayer = new Map<string, Smb4Grade>([['ace1', 'A']]);
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      pitcherGradeByPlayer: gradeByPlayer,
+      atBatEvents: [
+        atBat({ batterId: 'b1', pitcherId: 'ace1', result: '1B', outsAfter: 0 }),  // success
+        atBat({ batterId: 'b1', pitcherId: 'ace1', result: 'HR', outsAfter: 0 }),  // success
+        atBat({ batterId: 'b1', pitcherId: 'ace1', result: 'BB', outsAfter: 0 }),  // success
+        atBat({ batterId: 'b1', pitcherId: 'ace1', result: 'HBP', outsAfter: 0 }), // success
+        atBat({ batterId: 'b1', pitcherId: 'ace1', result: 'E', outsAfter: 0 }),   // NOT a reach
+        atBat({ batterId: 'b1', pitcherId: 'ace1', result: 'FC', outsAfter: 1 }),  // NOT a reach
+        atBat({ batterId: 'b1', pitcherId: 'ace1', result: 'D3K', outsAfter: 0 }), // NOT a reach
+        atBat({ batterId: 'b1', pitcherId: 'ace1', result: 'GO', outsAfter: 1 }),  // out
+      ],
+    }));
+    // 4 reaches of 8 PA = 0.5 (E/FC/D3K excluded from the numerator, still in the denominator).
+    expect(candidate(result, 'b1', 'Ace Exterminator')?.signalValue).toBeCloseTo(0.5, 10);
+    expect(candidate(result, 'b1', 'Ace Exterminator')?.sampleSize).toBe(8);
+  });
+
+  it('treats the A− threshold as inclusive: an A− PA counts, a B+ PA does not', () => {
+    // aMinus is exactly the threshold grade (counts); bPlus is one notch below (excluded).
+    const gradeByPlayer = new Map<string, Smb4Grade>([
+      ['aMinus', 'A-'],
+      ['bPlus', 'B+'],
+    ]);
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      pitcherGradeByPlayer: gradeByPlayer,
+      atBatEvents: [
+        // vs A- pitcher: 2 reaches of 4 PA → counts.
+        ...repeat(2, () => atBat({ batterId: 'b1', pitcherId: 'aMinus', result: '1B', outsAfter: 0 })),
+        ...repeat(2, () => atBat({ batterId: 'b1', pitcherId: 'aMinus', result: 'GO', outsAfter: 1 })),
+        // vs B+ pitcher: all reaches, but EXCLUDED (below the threshold).
+        ...repeat(5, () => atBat({ batterId: 'b1', pitcherId: 'bPlus', result: 'HR', outsAfter: 0 })),
+      ],
+    }));
+    // Only the 4 A− PAs count: 2 of 4 = 0.5. The 5 B+ PAs are excluded.
+    expect(candidate(result, 'b1', 'Ace Exterminator')?.signalValue).toBeCloseTo(0.5, 10);
+    expect(candidate(result, 'b1', 'Ace Exterminator')?.sampleSize).toBe(4);
+  });
+
+  it('emits NO Ace Exterminator signal when the pitcher-grade map is omitted (dormant)', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      // No pitcherGradeByPlayer → Ace Exterminator dormant (deferred-wiring seam empty).
+      atBatEvents: repeat(10, () => atBat({ batterId: 'b1', pitcherId: 'ace1', result: '1B', outsAfter: 0 })),
+    }));
+    expect(candidate(result, 'b1', 'Ace Exterminator')).toBeUndefined();
+  });
+
+  it('emits NO Ace Exterminator signal when the pitcher-grade map is empty (dormant)', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      pitcherGradeByPlayer: new Map<string, Smb4Grade>(),
+      atBatEvents: repeat(10, () => atBat({ batterId: 'b1', pitcherId: 'ace1', result: '1B', outsAfter: 0 })),
+    }));
+    expect(candidate(result, 'b1', 'Ace Exterminator')).toBeUndefined();
+  });
+
+  it('skips a PA whose pitcher is absent from the grade map', () => {
+    // ace1 graded; ungraded pitcher has no entry → those PAs are skipped entirely.
+    const gradeByPlayer = new Map<string, Smb4Grade>([['ace1', 'A']]);
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      pitcherGradeByPlayer: gradeByPlayer,
+      atBatEvents: [
+        ...repeat(2, () => atBat({ batterId: 'b1', pitcherId: 'ace1', result: '1B', outsAfter: 0 })),
+        ...repeat(2, () => atBat({ batterId: 'b1', pitcherId: 'ace1', result: 'GO', outsAfter: 1 })),
+        // Ungraded pitcher → no grade entry → skipped (not in the denominator).
+        ...repeat(5, () => atBat({ batterId: 'b1', pitcherId: 'ungraded', result: 'HR', outsAfter: 0 })),
+      ],
+    }));
+    expect(candidate(result, 'b1', 'Ace Exterminator')?.signalValue).toBeCloseTo(0.5, 10);
+    expect(candidate(result, 'b1', 'Ace Exterminator')?.sampleSize).toBe(4);
+  });
+
+  it('keeps Ace Exterminator out of the pitcher pool (position-only role eligibility)', () => {
+    const gradeByPlayer = new Map<string, Smb4Grade>([['ace1', 'A']]);
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: [{ playerId: 'pf1', role: 'pitcher' }],
+      pitcherGradeByPlayer: gradeByPlayer,
+      // pf1 bats vs an A pitcher — but as a pitcher-role player, Ace Exterminator
+      // (position-only) is filtered out downstream.
+      atBatEvents: repeat(8, () => atBat({ batterId: 'pf1', pitcherId: 'ace1', result: '1B', outsAfter: 0 })),
+    }));
+    expect(candidate(result, 'pf1', 'Ace Exterminator')).toBeUndefined();
+  });
+
+  it('skips undone at-bats for Ace Exterminator', () => {
+    const gradeByPlayer = new Map<string, Smb4Grade>([['ace1', 'A']]);
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      pitcherGradeByPlayer: gradeByPlayer,
+      atBatEvents: [
+        atBat({ batterId: 'b1', pitcherId: 'ace1', result: '1B', outsAfter: 0, undoneAt: 1 }),
+        ...repeat(2, () => atBat({ batterId: 'b1', pitcherId: 'ace1', result: '1B', outsAfter: 0 })),
+        ...repeat(2, () => atBat({ batterId: 'b1', pitcherId: 'ace1', result: 'GO', outsAfter: 1 })),
+      ],
+    }));
+    // The undone reach is excluded: 2 reaches of 4, not 3 of 5.
+    expect(candidate(result, 'b1', 'Ace Exterminator')?.signalValue).toBeCloseTo(0.5, 10);
+    expect(candidate(result, 'b1', 'Ace Exterminator')?.sampleSize).toBe(4);
+  });
+});
+
+describe('R3 Ace Exterminator L9b-2 seam (feeds computeTraitAcquisition)', () => {
+  it('emits Ace Exterminator in the { traitName, score } shape the acquisition combiner consumes', () => {
+    const gradeByPlayer = new Map<string, Smb4Grade>([['ace1', 'A']]);
+    // b1 mashes aces; peers b2/b3 flail vs the same ace so a real percentile forms.
+    const events = [
+      ...repeat(40, () => atBat({ batterId: 'b1', pitcherId: 'ace1', result: 'HR', outsAfter: 0 })),
+      ...repeat(40, () => atBat({ batterId: 'b2', pitcherId: 'ace1', result: 'GO', outsAfter: 1 })),
+      ...repeat(40, () => atBat({ batterId: 'b3', pitcherId: 'ace1', result: 'K' })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1', 'b2', 'b3'], 'position'),
+      pitcherGradeByPlayer: gradeByPlayer,
+      atBatEvents: events,
+    }));
+    const ace = candidate(result, 'b1', 'Ace Exterminator');
+    expect(ace).toBeDefined();
+    expect(ace?.score).toBeDefined();
+    expect(typeof ace?.score.sufficient).toBe('boolean');
+
+    const acquisition = computeTraitAcquisition({
+      playerRole: 'position',
+      personality: 'EGOTISTICAL',
+      heldTraits: [],
+      candidates: result.get('b1') ?? [],
+    });
+    expect(acquisition).toHaveProperty('proposals');
+    expect(acquisition).toHaveProperty('skipped');
+    // Ace Exterminator must not be dropped for ineligible/unknown reasons.
+    const skip = acquisition.skipped.find((s) => s.traitName === 'Ace Exterminator');
+    expect(skip?.reason).not.toBe('ineligible_role');
+    expect(skip?.reason).not.toBe('unknown_trait');
   });
 });
 

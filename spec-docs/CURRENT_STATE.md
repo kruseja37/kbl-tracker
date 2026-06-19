@@ -1,7 +1,11 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-18 — **ACTIVE (attended).** Running the **L9b trait-reality REBUILD**; landed **R-E + R1-a +
-R1-b1 + R1-b2 + R2 + R1-b3** (46 of 47 earnable traits built). (1) **Closed the recurring spec-leak at its root + RATIFIED the measurement
+**Last Updated:** 2026-06-18 — **ACTIVE (attended).** **L9b trait-reality REBUILD — the EARNABLE SET IS COMPLETE
+(47/47).** Landed **R-E + R1-a + R1-b1 + R1-b2 + R2 + R1-b3 + R3.** FINDING-150 (the trait-detection scope gap) is
+CLOSED for the earnable set; all build-DARK (activate post-D13). *(Note 2026-06-18: a concurrent UNATTENDED resume
+sandbox also reached R3 + parked a WAITING_ON_JK; the attended session built→audited→host-gated→committed R3, and
+reconciled — its stale "waiting" CURRENT_STATE/HISTORY writes were reverted; WAITING_ON_JK ticket:R3 RESOLVED.)*
+(1) **Closed the recurring spec-leak at its root + RATIFIED the measurement
 model** — `TRAIT_MEASUREMENT_SPEC.md` is now ONE authoritative cited source (§0.6 proxy table [47 earnable, every
 cell cited via reconciliation wf_c4bac237-5d7, spec-over-code] / §0.7 code-deltas / §0.8 gates [personality is a
 TILT never a gate; Two Way pitcher-only, NO batting gateway] / §0.9 R1 derivations); purged ALL stale framing
@@ -29,13 +33,19 @@ input maps (`pitcherHandByPlayer`/`batterHandByPlayer`/`primaryPositionByPlayer`
 representative `Two Way (C)`, percentiled vs the pitcher pool, valve-gated super-rare) into BUILDABLE_TRAITS; no
 acquisition change. **JK ruled "earn-signal now, defer C/IF/OF"** (the random position + the 3-variant family plumbing
 defer to a later ticket — per-variant names would fragment the pool + re-randomize the position each cycle). **Earnable
-v1 set now 46 of 47.** **➡ NEXT = R3** (Ace Exterminator + the deferred E1 ratings/grade thread — the LAST earnable
-trait; has an EXTERNAL dependency: §0.4 ties E1 to the app-wide grade-freshness ticket) → then the deferred
-dormant-trait wiring hooks (handedness/Utility maps + Two Way C/IF/OF family) → L11–L14 → L-SIM gate. **FINDING-150
-rebuild NEAR-COMPLETE.** Captain FINDING flagged (non-blocking): the rate-signal family's
-`getPercentile`-on-mostly-zeros inflates sparse signals (Bunter/Crossed Up) — §16 sim-tune concern, build-DARK contains
-it. Suite **7,668/438, 7,666 pass / 2 characterized fail**; trackerDb **v23** (pure engines, no store); branch
-codex/franchise-v1-next; **nothing pushed**. See `HANDOFF_NEEDED` for the R3 resume.
+v1 set now 46 of 47.** (8) **R3 COMPLETE** — Ace Exterminator (the batter's reached-base rate — hit/walk/HBP — vs
+A−-or-better opposing pitchers, via `SMB4_GRADE_TO_INDEX['A-']`; OPTIONAL `pitcherGradeByPlayer` input [E1], DORMANT
+until the grade hook; JK ruled "reached base"); no acquisition change. **⇒ THE 47/47 EARNABLE v1 TRAIT SET IS
+COMPLETE; FINDING-150 CLOSED for the earnable set.** **➡ NEXT (tracked follow-ups, NOT earnable-trait gaps): (A)** the
+**dormant-trait wiring hooks** — populate `SeasonTraitCandidateInput`'s optional maps (`pitcherHandByPlayer`/
+`batterHandByPlayer`/`primaryPositionByPlayer`/`pitcherGradeByPlayer`) from roster records so the handedness splits +
+Utility + Ace Exterminator go live (handedness also needs `opposingHand` un-hardcoded; the grade map ties to the
+app-wide grade-freshness ticket); **(B)** the **Two Way C/IF/OF** random-position + 3-variant family plumbing; **(C)**
+the §16 sim-tune FINDING (rate-signal `getPercentile`-on-mostly-zeros for sparse signals); **(D)** the broader L-stack
+(L10 Q5/Q8 rework → L11 → L12–L14 → L-SIM gate). Suite **7,677/438, 7,674 pass / 3 characterized fail**
+(`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` + `franchiseOffseasonGuards.component` — the last an order-flake
+**confirmed passing solo**); trackerDb **v23** (pure engines, no store); branch codex/franchise-v1-next; **nothing
+pushed**. Session commits: R1-b1 `474196e7` · R1-b2 `bbb839ce` · R2 `b80fa135` · R1-b3 `7e22e015` · R3 (this commit).
 *(Prior arc-narrative preserved below for context.)*
 *(Historical:* **✅ L9b COMPLETE — the trait-from-reality engine, the "game-changer feature." NOW L10**
 (random events). L9b-3c committed → L9b-3 COMPLETE → **L9b COMPLETE.** Full L9b chain: L9b-1 scorer `398533d1` ·
