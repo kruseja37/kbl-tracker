@@ -146,6 +146,22 @@ function repeat(count: number, fn: (index: number) => AtBatEvent): AtBatEvent[] 
   return Array.from({ length: count }, (_, index) => fn(index));
 }
 
+// PRE-ACT-TRAITS-1: a test-local re-derivation of the builder's deterministic Two Way
+// variant seed (FNV-1a 32-bit of playerId mod 3 → C/IF/OF). Re-computed here rather
+// than imported so the test independently PINS the expected variant for a fixed id.
+const TWO_WAY_VARIANTS_TEST = ['Two Way (C)', 'Two Way (IF)', 'Two Way (OF)'] as const;
+function fnv1a(value: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < value.length; i++) {
+    h ^= value.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+function expectedTwoWayVariant(playerId: string): (typeof TWO_WAY_VARIANTS_TEST)[number] {
+  return TWO_WAY_VARIANTS_TEST[fnv1a(playerId) % 3];
+}
+
 const probe: EffectiveRatingsPlayer = {
   id: 'probe',
   traits: [
@@ -213,9 +229,12 @@ describe('BUILDABLE_TRAITS', () => {
       'POW vs RHP',
       'Specialist',
       'Reverse Splits',
-      // R1-b3: Two Way earn-signal (pitcher batting wOBA). C/IF/OF family + random
-      // position deferred — Two Way (IF)/(OF) intentionally NOT here.
+      // R1-b3 / PRE-ACT-TRAITS-1: Two Way earn-signal (pitcher batting wOBA). Full
+      // C/IF/OF family — each pitcher's variant seeded by FNV-1a(playerId) mod 3; all
+      // three pool together as ONE 'Two Way' family.
       'Two Way (C)',
+      'Two Way (IF)',
+      'Two Way (OF)',
       // R3: Ace Exterminator (reached-base rate vs A−+ opposing pitchers).
       'Ace Exterminator',
     ]);
@@ -1807,10 +1826,32 @@ describe('R2 L9b-2 seam (count-family + First-Pitch + handedness feed computeTra
   });
 });
 
-describe('R1-b3 Two Way (C) (pitcher batting wOBA earn-signal)', () => {
-  // A pitcher who rakes vs a pitcher who can't hit. wOBA ranks the well-hitting
-  // pitcher higher; the position-player pool never sees Two Way (C) (pitcher-only).
-  it('emits a higher Two Way (C) wOBA for a well-hitting pitcher than a poor-hitting one', () => {
+describe('R1-b3 / PRE-ACT-TRAITS-1 Two Way C/IF/OF family (pitcher batting wOBA earn-signal)', () => {
+  // Fixed-id seed pins (verified vs the builder's FNV-1a(playerId) mod 3):
+  //   p1 → 'Two Way (IF)'   p2 → 'Two Way (OF)'   p3 → 'Two Way (C)'
+  // These three ids cover all three variants, which the family-pooling test relies on.
+
+  it('seeds a deterministic, stable Two Way variant per pitcher (FNV-1a of playerId)', () => {
+    // PIN the expected variant for each fixed id (recomputed independently in-test).
+    expect(expectedTwoWayVariant('p1')).toBe('Two Way (IF)');
+    expect(expectedTwoWayVariant('p2')).toBe('Two Way (OF)');
+    expect(expectedTwoWayVariant('p3')).toBe('Two Way (C)');
+
+    const events = repeat(10, () => atBat({ pitcherId: 'opp', batterId: 'p1', result: '1B', outsAfter: 0 }));
+    const build = () => computeSeasonTraitCandidates(baseInput({
+      players: players(['p1'], 'pitcher'),
+      atBatEvents: events,
+    }));
+    const first = build();
+    const second = build();
+    // Exactly ONE Two Way variant emitted — the seeded one — and stable across builds.
+    const variantsOf = (result: ReturnType<typeof build>) =>
+      (result.get('p1') ?? []).filter((c) => c.traitName.startsWith('Two Way')).map((c) => c.traitName);
+    expect(variantsOf(first)).toEqual([expectedTwoWayVariant('p1')]);
+    expect(variantsOf(second)).toEqual([expectedTwoWayVariant('p1')]);
+  });
+
+  it('emits a higher Two Way wOBA for a well-hitting pitcher than a poor-hitting one', () => {
     const events = [
       // p1 mashes: 5 HR + 5 1B over 10 PA (all AB).
       ...repeat(5, () => atBat({ pitcherId: 'opp', batterId: 'p1', result: 'HR', outsAfter: 0 })),
@@ -1822,8 +1863,9 @@ describe('R1-b3 Two Way (C) (pitcher batting wOBA earn-signal)', () => {
       players: players(['p1', 'p2'], 'pitcher'),
       atBatEvents: events,
     }));
-    const good = candidate(result, 'p1', 'Two Way (C)');
-    const bad = candidate(result, 'p2', 'Two Way (C)');
+    // Each pitcher's candidate carries their OWN seeded variant (p1→IF, p2→OF).
+    const good = candidate(result, 'p1', expectedTwoWayVariant('p1'));
+    const bad = candidate(result, 'p2', expectedTwoWayVariant('p2'));
     expect(good).toBeDefined();
     expect(bad).toBeDefined();
     // sampleSize = batting PA.
@@ -1835,7 +1877,43 @@ describe('R1-b3 Two Way (C) (pitcher batting wOBA earn-signal)', () => {
     expect(bad?.signalValue).toBeCloseTo(0, 10);
   });
 
-  it('computes Two Way (C) signalValue = calculateWOBA over the mapped batting line', () => {
+  it('family pooling: 3 pitchers on DIFFERENT variants are percentiled against each other', () => {
+    // p1/p2/p3 seed to IF/OF/C respectively — all three variant names differ, yet they
+    // must share ONE 'Two Way' family pool so wOBA percentiles rank across them.
+    expect(new Set([
+      expectedTwoWayVariant('p1'),
+      expectedTwoWayVariant('p2'),
+      expectedTwoWayVariant('p3'),
+    ]).size).toBe(3);
+    const events = [
+      // p1 best (all HR), p2 middling (half on base), p3 worst (all K) — enough PA to clear the valve.
+      ...repeat(40, () => atBat({ pitcherId: 'opp', batterId: 'p1', result: 'HR', outsAfter: 0 })),
+      ...repeat(20, () => atBat({ pitcherId: 'opp', batterId: 'p2', result: '1B', outsAfter: 0 })),
+      ...repeat(20, () => atBat({ pitcherId: 'opp', batterId: 'p2', result: 'GO', outsAfter: 1 })),
+      ...repeat(40, () => atBat({ pitcherId: 'opp', batterId: 'p3', result: 'K' })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['p1', 'p2', 'p3'], 'pitcher'),
+      atBatEvents: events,
+    }));
+    const best = candidate(result, 'p1', expectedTwoWayVariant('p1')); // Two Way (IF)
+    const mid = candidate(result, 'p2', expectedTwoWayVariant('p2'));  // Two Way (OF)
+    const worst = candidate(result, 'p3', expectedTwoWayVariant('p3')); // Two Way (C)
+    expect(best?.score.realityPercentile).not.toBeNull();
+    expect(mid?.score.realityPercentile).not.toBeNull();
+    expect(worst?.score.realityPercentile).not.toBeNull();
+    // Despite carrying three DIFFERENT variant names, they are ranked against each
+    // other (shared 'Two Way' pool): best > mid > worst by realityPercentile.
+    expect(best!.score.realityPercentile!).toBeGreaterThan(mid!.score.realityPercentile!);
+    expect(mid!.score.realityPercentile!).toBeGreaterThan(worst!.score.realityPercentile!);
+    // The top-wOBA pitcher gets the top percentile (1.0 = fraction <= value) of the
+    // shared 3-pitcher pool. Without family pooling each variant's pool would be size 1
+    // (< minPeerPool 3) → all three would be null; reaching a real percentile here is
+    // itself the proof the three variants share ONE 'Two Way' pool.
+    expect(best!.score.realityPercentile!).toBe(1);
+  });
+
+  it('computes the Two Way signalValue = calculateWOBA over the mapped batting line', () => {
     // A mixed line exercising every mapping branch: 1B, GRD(→double), 3B, ITPHR(→HR),
     // BB, IBB, HBP, SF, SAC, K, DP, plus a plain GO (an out / AB / non-hit).
     const events = [
@@ -1875,20 +1953,23 @@ describe('R1-b3 Two Way (C) (pitcher batting wOBA earn-signal)', () => {
       stolenBases: 0,
       caughtStealing: 0,
     });
-    expect(candidate(result, 'p1', 'Two Way (C)')?.signalValue).toBeCloseTo(expected, 10);
-    expect(candidate(result, 'p1', 'Two Way (C)')?.sampleSize).toBe(12);
+    const variant = expectedTwoWayVariant('p1'); // Two Way (IF)
+    expect(candidate(result, 'p1', variant)?.signalValue).toBeCloseTo(expected, 10);
+    expect(candidate(result, 'p1', variant)?.sampleSize).toBe(12);
   });
 
-  it('keeps Two Way (C) out of the position pool (pitcher-only role eligibility)', () => {
+  it('keeps Two Way out of the position pool (pitcher-only role eligibility)', () => {
     const result = computeSeasonTraitCandidates(baseInput({
-      // b1 is a POSITION player who batted — must get NO Two Way (C).
+      // b1 is a POSITION player who batted — must get NO Two Way variant at all.
       players: players(['b1'], 'position'),
       atBatEvents: repeat(10, () => atBat({ pitcherId: 'opp', batterId: 'b1', result: 'HR', outsAfter: 0 })),
     }));
     expect(candidate(result, 'b1', 'Two Way (C)')).toBeUndefined();
+    expect(candidate(result, 'b1', 'Two Way (IF)')).toBeUndefined();
+    expect(candidate(result, 'b1', 'Two Way (OF)')).toBeUndefined();
   });
 
-  it('only emits Two Way (C) for a player whose role is pitcher (not by batting alone)', () => {
+  it('only emits Two Way for a player whose role is pitcher (not by batting alone)', () => {
     // p1 (pitcher) and b1 (position) both bat identically; only p1 earns the signal.
     const result = computeSeasonTraitCandidates(baseInput({
       players: [{ playerId: 'p1', role: 'pitcher' }, { playerId: 'b1', role: 'position' }],
@@ -1897,8 +1978,10 @@ describe('R1-b3 Two Way (C) (pitcher batting wOBA earn-signal)', () => {
         ...repeat(10, () => atBat({ pitcherId: 'opp', batterId: 'b1', result: 'HR', outsAfter: 0 })),
       ],
     }));
-    expect(candidate(result, 'p1', 'Two Way (C)')).toBeDefined();
+    expect(candidate(result, 'p1', expectedTwoWayVariant('p1'))).toBeDefined();
     expect(candidate(result, 'b1', 'Two Way (C)')).toBeUndefined();
+    expect(candidate(result, 'b1', 'Two Way (IF)')).toBeUndefined();
+    expect(candidate(result, 'b1', 'Two Way (OF)')).toBeUndefined();
   });
 
   it('skips undone at-bats when accumulating the pitcher batting line', () => {
@@ -1930,8 +2013,9 @@ describe('R1-b3 Two Way (C) (pitcher batting wOBA earn-signal)', () => {
       stolenBases: 0,
       caughtStealing: 0,
     });
-    expect(candidate(result, 'p1', 'Two Way (C)')?.signalValue).toBeCloseTo(expected, 10);
-    expect(candidate(result, 'p1', 'Two Way (C)')?.sampleSize).toBe(10);
+    const variant = expectedTwoWayVariant('p1');
+    expect(candidate(result, 'p1', variant)?.signalValue).toBeCloseTo(expected, 10);
+    expect(candidate(result, 'p1', variant)?.sampleSize).toBe(10);
   });
 
   it('goes dormant for a pitcher under the valve PA floor (< minSampleRate of 10 batting PA)', () => {
@@ -1940,7 +2024,7 @@ describe('R1-b3 Two Way (C) (pitcher batting wOBA earn-signal)', () => {
       // Only 5 batting PA → below the basis:'none' floor of 10 → not sufficient.
       atBatEvents: repeat(5, () => atBat({ pitcherId: 'opp', batterId: 'p1', result: 'HR', outsAfter: 0 })),
     }));
-    const twoWay = candidate(result, 'p1', 'Two Way (C)');
+    const twoWay = candidate(result, 'p1', expectedTwoWayVariant('p1'));
     // The signal still emits (PA > 0) but the valve marks it dormant.
     expect(twoWay).toBeDefined();
     expect(twoWay?.sampleSize).toBe(5);
@@ -1948,13 +2032,13 @@ describe('R1-b3 Two Way (C) (pitcher batting wOBA earn-signal)', () => {
     expect(twoWay?.score.realityPercentile).toBeNull();
   });
 
-  it('does NOT make Two Way (IF) / Two Way (OF) buildable (only the (C) representative)', () => {
+  it('makes all three Two Way variants buildable (C/IF/OF family)', () => {
     expect(BUILDABLE_TRAITS).toContain('Two Way (C)');
-    expect(BUILDABLE_TRAITS).not.toContain('Two Way (IF)');
-    expect(BUILDABLE_TRAITS).not.toContain('Two Way (OF)');
+    expect(BUILDABLE_TRAITS).toContain('Two Way (IF)');
+    expect(BUILDABLE_TRAITS).toContain('Two Way (OF)');
   });
 
-  it('feeds Two Way (C) through the L9b-2 seam to computeTraitAcquisition (pitcher pool)', () => {
+  it('feeds the seeded Two Way variant through the L9b-2 seam to computeTraitAcquisition', () => {
     // Three hitting pitchers → a real pitcher peer pool + enough PA to clear the valve.
     const events = [
       ...repeat(40, () => atBat({ pitcherId: 'opp', batterId: 'p1', result: 'HR', outsAfter: 0 })),
@@ -1966,7 +2050,8 @@ describe('R1-b3 Two Way (C) (pitcher batting wOBA earn-signal)', () => {
       players: players(['p1', 'p2', 'p3'], 'pitcher'),
       atBatEvents: events,
     }));
-    const twoWay = candidate(result, 'p1', 'Two Way (C)');
+    const variant = expectedTwoWayVariant('p1'); // Two Way (IF)
+    const twoWay = candidate(result, 'p1', variant);
     expect(twoWay).toBeDefined();
     expect(twoWay?.score).toBeDefined();
     expect(typeof twoWay?.score.sufficient).toBe('boolean');
@@ -1979,7 +2064,8 @@ describe('R1-b3 Two Way (C) (pitcher batting wOBA earn-signal)', () => {
     });
     expect(acquisition).toHaveProperty('proposals');
     expect(acquisition).toHaveProperty('skipped');
-    const skip = acquisition.skipped.find((s) => s.traitName === 'Two Way (C)');
+    // The specific seeded variant is neither role-rejected nor unknown to acquisition.
+    const skip = acquisition.skipped.find((s) => s.traitName === variant);
     expect(skip?.reason).not.toBe('ineligible_role');
     expect(skip?.reason).not.toBe('unknown_trait');
   });

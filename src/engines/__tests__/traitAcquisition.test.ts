@@ -613,10 +613,37 @@ describe('traitAcquisition R2 (count-family + First-Pitch image deltas; handedne
   });
 });
 
-describe('traitAcquisition R1-b3 (Two Way (C) earn-signal — acquisition state UNCHANGED)', () => {
-  // R1-b3 makes NO acquisition change. Two Way (C) was ALREADY positive
-  // (POSITIVE_IMAGE_TRAITS) with an EGOTISTICAL image driver (§0.6) — verify it
-  // stays so now that the earn-signal builds it. Pitcher-only.
+describe('traitAcquisition R1-b3 / PRE-ACT-TRAITS-1 (Two Way C/IF/OF family — acquisition UNCHANGED)', () => {
+  // R1-b3 / PRE-ACT-TRAITS-1 make NO acquisition change. All THREE Two Way variants
+  // were ALREADY positive (POSITIVE_IMAGE_TRAITS) with an EGOTISTICAL image driver
+  // (§0.6) — verify each stays so now that the builder seeds variants per pitcher.
+  // Pitcher-only.
+  test.each(['Two Way (C)', 'Two Way (IF)', 'Two Way (OF)'])(
+    '%s is positive: high ambition tilts up and EGOTISTICAL drives the image axis',
+    (traitName) => {
+      const ambitious = proposalFor(traitName, {
+        playerRole: 'pitcher',
+        modifiers: { ...neutralModifiers, ambition: 100 },
+      });
+      const driven = proposalFor(traitName, { playerRole: 'pitcher', personality: 'Egotistical' });
+
+      expect(ambitious.imageValence).toBe('positive');
+      expect(ambitious.factors.ambitionTilt).toBeGreaterThan(1);
+      expect(driven.factors.imageAxisTilt).toBeGreaterThan(1);
+    },
+  );
+
+  test.each(['Two Way (C)', 'Two Way (IF)', 'Two Way (OF)'])(
+    '%s image driver is EGOTISTICAL only (no cross-driver)',
+    (traitName) => {
+      const competitive = proposalFor(traitName, { playerRole: 'pitcher', personality: 'Competitive' });
+      const tough = proposalFor(traitName, { playerRole: 'pitcher', personality: 'Tough' });
+
+      expect(competitive.factors.imageAxisTilt).toBe(1);
+      expect(tough.factors.imageAxisTilt).toBe(1);
+    },
+  );
+
   test('Two Way (C) is positive: high ambition tilts up and EGOTISTICAL drives the image axis', () => {
     const ambitious = proposalFor('Two Way (C)', {
       playerRole: 'pitcher',

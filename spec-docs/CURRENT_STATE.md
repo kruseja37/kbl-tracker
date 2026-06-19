@@ -1,15 +1,17 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-18 — **ACTIVE (attended).** **L9b trait-reality REBUILD — the EARNABLE SET IS COMPLETE
-(47/47) AND WIRED (W1).** Landed **R-E + R1-a + R1-b1 + R1-b2 + R2 + R1-b3 + R3 + W1.** FINDING-150 (the trait-detection
-scope gap) is CLOSED. **W1** populated the grant hook's 4 optional input maps (handedness/primary-position from roster;
-pitcher grade via the pure `scoreSmb4Player`) so the 6 handedness splits + Utility + Ace Exterminator are no longer
-dormant — all STILL flag-gated (`isFranchisePhase2TraitsEnabled` OFF) = build-DARK, activate post-D13.
+**Last Updated:** 2026-06-18 — **ACTIVE (attended).** **L9b trait-reality REBUILD — the TRAIT ENGINE IS FULLY BUILT +
+WIRED + the Two Way C/IF/OF FAMILY COMPLETE.** Landed **R-E + R1-a + R1-b1 + R1-b2 + R2 + R1-b3 + R3 + W1 +
+PRE-ACT-TRAITS-1.** 47/47 earnable traits; FINDING-150 CLOSED. **W1** populated the grant hook's 4 optional input maps
+(handedness/primary-position from roster; pitcher grade via the pure `scoreSmb4Player`) — the 6 handedness splits +
+Utility + Ace Exterminator are wired. **PRE-ACT-TRAITS-1** realized the full Two Way C/IF/OF family in the builder
+(FNV-1a(playerId) seed per variant + `poolTraitKey` family pool; no grant-path/scorer/acquisition surgery). All STILL
+flag-gated (`isFranchisePhase2TraitsEnabled` OFF) = build-DARK, activate post-D13.
 **⚠️ NAMED PRE-ACTIVATION GATE — `PRE-ACT-TRAITS` (clears BEFORE the L9b flag-flip / D13; DECISIONS_LOG 2026-06-18):**
-W1 wired the DATA seams (8 of 9 verified — sole production path), but before activation: **(1)** Two Way (IF)/(OF)
-random-position-at-grant + 3-variant family plumbing (the one still-deferred seam = item B); **(2)** END-TO-END
-activation verification on REAL franchise data (W1 is unit-verified only — hook test stubs the seam; browser-pending,
-pairs with F-141); **(3)** standing note: un-hardcode `opposingHand` only if a matrix-handedness trait is ever added.
+**(1) ✅ DONE** (Two Way family — PRE-ACT-TRAITS-1); **(2) OPEN (JK/browser)** — END-TO-END activation verification on
+REAL franchise data with the flag flipped (everything is unit-verified only; pairs with F-141); **(3) standing note** —
+un-hardcode `opposingHand` only if a matrix-handedness trait is ever added. **⇒ ALL AGENT-BUILDABLE trait-rebuild work
+is COMPLETE; only the human browser end-to-end (-2) + the standing note (-3) remain in the gate.**
 *(Note 2026-06-18: a concurrent UNATTENDED resume
 sandbox also reached R3 + parked a WAITING_ON_JK; the attended session built→audited→host-gated→committed R3, and
 reconciled — its stale "waiting" CURRENT_STATE/HISTORY writes were reverted; WAITING_ON_JK ticket:R3 RESOLVED.)*
@@ -48,15 +50,17 @@ COMPLETE; FINDING-150 CLOSED for the earnable set.** (9) **W1 COMPLETE** — the
 (`franchiseTraitGrantCompute.ts`) now populates `SeasonTraitCandidateInput`'s 4 optional maps from the MLB roster
 (`bats`/`throws`/`primaryPosition`; pitcher grade via the pure `scoreSmb4Player`, JK "wire all 4 now"), so the 6
 handedness splits + Utility + Ace Exterminator are no longer dormant — **still flag-gated build-DARK** (zero live effect
-until post-D13). **➡ NEXT (remaining follow-ups): (B)** the **Two Way C/IF/OF** random-position + 3-variant family
-plumbing (currently one representative `Two Way (C)`); **(C)** the §16 sim-tune FINDING (rate-signal
-`getPercentile`-on-mostly-zeros for sparse signals); **(D)** the broader L-stack (L10 Q5/Q8 rework → L11 → L12–L14 →
-L-SIM gate). *(Minor: `opposingHand` still hardcoded `'R'` in `reconstructAtBatContext` — matters only for
-matrix-handedness traits, NOT the now-wired splits which read the threaded maps.)* Suite **7,678/438, 7,676 pass / 2
-characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` — by name; `franchiseOffseasonGuards.component`
-is a 3rd order-flake, passes solo, appears intermittently); trackerDb **v23**; branch codex/franchise-v1-next; **nothing
-pushed**. Session commits: R1-b1 `474196e7` · R1-b2 `bbb839ce` · R2 `b80fa135` · R1-b3 `7e22e015` · R3 `9059f697` · W1
-(this commit).
+until post-D13). (10) **PRE-ACT-TRAITS-1 COMPLETE** — the full Two Way C/IF/OF family in the builder (FNV-1a(playerId)
+seed per variant + `poolTraitKey` shared family pool; no grant-path/scorer/acquisition surgery). **⇒ ALL
+AGENT-BUILDABLE trait-rebuild work is COMPLETE.** **➡ NEXT: (PRE-ACT-TRAITS-2)** JK/browser END-TO-END activation
+verification (the gate's only remaining buildable-by-human item); then the broader **(D)** L-stack (L10 Q5/Q8 rework →
+L11 → L12–L14 → L-SIM gate) and **(C)** the §16 sim-tune FINDING (sparse-signal `getPercentile`) at the L-SIM gate.
+*(Minor/standing: `opposingHand` still hardcoded `'R'` — matrix-handedness traits only, NOT the wired splits.)* Suite
+**7,686/438, 7,683 pass / 3 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` +
+`GameTrackerLaunchState` — the 3rd an intermittent order-flake **confirmed passing solo 9/9**; `franchiseOffseasonGuards.component`
+is another such flake); trackerDb **v23**; branch codex/franchise-v1-next; **nothing pushed**. Session commits: R1-b1
+`474196e7` · R1-b2 `bbb839ce` · R2 `b80fa135` · R1-b3 `7e22e015` · R3 `9059f697` · W1 `6a934a9e` · PRE-ACT-TRAITS gate
+`d4ebc357` · PRE-ACT-TRAITS-1 (this commit).
 *(Prior arc-narrative preserved below for context.)*
 *(Historical:* **✅ L9b COMPLETE — the trait-from-reality engine, the "game-changer feature." NOW L10**
 (random events). L9b-3c committed → L9b-3 COMPLETE → **L9b COMPLETE.** Full L9b chain: L9b-1 scorer `398533d1` ·

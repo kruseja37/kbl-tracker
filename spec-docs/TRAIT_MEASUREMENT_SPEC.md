@@ -194,11 +194,17 @@ Percentile = vs the role-bucketed peer pool (the scorer, basis 'none'); the min-
   2026-06-18 — "earn-signal now, defer C/IF/OF"):** the builder computes each PITCHER-role player's batting wOBA from
   their `batterId` at-bats and emits ONE candidate under a single representative canonical variant **`Two Way (C)`**
   (the v1 label — all three variants share the EGOTISTICAL driver + POSITIVE membership, so the choice is cosmetic for
-  the earn-signal). sampleSize = batting PA; basis `'none'`. **DEFERRED to a later ticket:** the random **C/IF/OF**
-  defensive-position assignment + the "treat the 3 variants as ONE family" plumbing (shared pool + joint
-  re-evaluation), because per-variant names would fragment the pitcher pool AND make the re-evaluate-to-drop
-  re-randomize the position each cycle. Pitcher-only, NO batting-trait gateway (§0.8). No acquisition change (the
-  triplet is already POSITIVE + EGOTISTICAL). *(R1-b3 = earn-signal; the C/IF/OF family + grant-path = a later ticket.)*
+  the earn-signal). sampleSize = batting PA; basis `'none'`. Pitcher-only, NO batting-trait gateway (§0.8). No
+  acquisition change (the triplet is already POSITIVE + EGOTISTICAL).
+  **PRE-ACT-TRAITS-1 BUILD (2026-06-18 — the C/IF/OF family, realized in the BUILDER, no grant-path/scorer/acquisition
+  surgery):** the builder assigns each two-way pitcher's variant by a **deterministic FNV-1a hash of `playerId` mod 3 →
+  `Two Way (C)/(IF)/(OF)`** (stable forever; pseudo-random across pitchers; no `Math.random`), and emits ONE candidate
+  under that variant. The peer pool **canonicalizes all 3 variants to a single `Two Way` family key**
+  (`poolTraitKey`), so a pitcher's wOBA is percentiled vs ALL two-way pitchers (shared pool), and the per-pitcher seed
+  keeps re-evaluate-to-drop stable (same variant each cycle → a held variant always matches its own candidate). Position
+  assigned at BUILD via the seed (outcome-identical to "at grant": a stable pseudo-random C/IF/OF per pitcher) —
+  sidesteps the anticipated L9b-3c grant-path change. All 3 variants enter `BUILDABLE_TRAITS`; no scorer/acquisition/
+  grant change. *(R1-b3 = earn-signal under `Two Way (C)`; PRE-ACT-TRAITS-1 = the full C/IF/OF family.)*
 - **Crossed Up** = passed-ball events (attributed to the pitcher via `wildPitchOrPassedBall.pitcherId`) per
   **batters-faced** (the pitcher's PA count). **OPT-IN** (dormant until PBs are logged + min-sample). *(R1-b2.)*
 - **Bunter** (JK ruling 2026-06-18 — **VOLUME/frequency, NOT a success rate**): signalValue = successful sacrifice

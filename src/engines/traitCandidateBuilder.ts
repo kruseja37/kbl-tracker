@@ -98,13 +98,16 @@ export const BUILDABLE_TRAITS: readonly string[] = [
   'POW vs RHP',
   'Specialist',
   'Reverse Splits',
-  // R1-b3 (TRAIT_MEASUREMENT_SPEC §0.9): Two Way earn-signal = elite hitting for a
-  // pitcher = the pitcher's batting wOBA (calculateWOBA) vs the PITCHER peer pool
-  // (valve-gated → super-rare). ONE representative variant 'Two Way (C)' carries the
-  // earn-signal in v1. DEFERRED to a later ticket: the random C/IF/OF defensive
-  // position assignment + the "treat the 3 variants as ONE family" plumbing (shared
-  // pool + joint re-evaluation). Two Way (IF)/(OF) are intentionally NOT here.
+  // R1-b3 / PRE-ACT-TRAITS-1 (TRAIT_MEASUREMENT_SPEC §0.9): Two Way earn-signal =
+  // elite hitting for a pitcher = the pitcher's batting wOBA (calculateWOBA) vs the
+  // PITCHER peer pool (valve-gated → super-rare). Each two-way pitcher's variant is
+  // assigned by a deterministic FNV-1a hash of playerId mod 3 → C/IF/OF (stable
+  // forever, pseudo-random across pitchers, no Math.random). All 3 variants are
+  // canonical + pitcher-only and pool together as ONE 'Two Way' family (poolTraitKey)
+  // so wOBA is percentiled vs ALL two-way pitchers regardless of assigned variant.
   'Two Way (C)',
+  'Two Way (IF)',
+  'Two Way (OF)',
   // R3 (TRAIT_MEASUREMENT_SPEC §0.11): Ace Exterminator earn-signal = the batter's
   // reached-base rate (hit/walk/HBP) vs A−-or-better opposing pitchers. DORMANT
   // until the E1 grade join (`pitcherGradeByPlayer`) is fed — the grade-freshness
@@ -1198,11 +1201,13 @@ function addHandednessSplitSignals(input: SeasonTraitCandidateInput, raw: RawSig
  * `addHackSignals`' position restriction): build a pitcher-id set from
  * `input.players`, accumulate each such player's BATTING counts from the non-undone
  * at-bats where they are the `batterId`, assemble a `BattingStatsForWAR`, and emit
- * ONE candidate under the single representative variant `Two Way (C)` with
- * signalValue = `calculateWOBA(stats)` (default SMB4 weights), sampleSize = batting
- * PA. The pitcher peer pool (role|`Two Way (C)`) is automatically all pitchers who
- * batted → "percentile vs the pitcher pool". The min-sample valve (basis `'none'`,
- * floor 10 PA) keeps it super-rare. A pitcher with PA ≤ 0 is skipped.
+ * ONE candidate under that pitcher's seeded variant `twoWayVariantForPitcher(id)`
+ * (C/IF/OF) with signalValue = `calculateWOBA(stats)` (default SMB4 weights),
+ * sampleSize = batting PA. The pitcher peer pool is the shared family key
+ * (role|`Two Way` via `poolTraitKey`), automatically all pitchers who batted →
+ * "percentile vs the pitcher pool" regardless of each pitcher's assigned variant. The
+ * min-sample valve (basis `'none'`, floor 10 PA) keeps it super-rare. A pitcher with
+ * PA ≤ 0 is skipped.
  *
  * Result → BattingStatsForWAR mapping (§0.9):
  *   singles = 1B; doubles = 2B + GRD; triples = 3B; homeRuns = HR + ITPHR;
@@ -1213,9 +1218,48 @@ function addHandednessSplitSignals(input: SeasonTraitCandidateInput, raw: RawSig
  *   derivable from at-bats). (`calculateWOBA` consumes only uBB = walks − IBB, HBP,
  *   singles/doubles/triples/HR, ab, sacFlies — but every required field is filled.)
  *
- * DEFERRED (later ticket — NOT built here): the random C/IF/OF defensive-position
- * assignment on grant + the "treat the 3 variants as ONE family" plumbing.
+ * PRE-ACT-TRAITS-1: the C/IF/OF position is now seeded deterministically at BUILD
+ * (FNV-1a of playerId mod 3 — outcome-identical to a stable per-pitcher "at grant"
+ * assignment) and all 3 variants pool as ONE `Two Way` family (`poolTraitKey`). The
+ * scorer / acquisition / grant path are unchanged.
  */
+/**
+ * PRE-ACT-TRAITS-1: local deterministic FNV-1a 32-bit hash of a string. Used only to
+ * assign each two-way pitcher a stable pseudo-random C/IF/OF variant from their
+ * playerId. Intentionally local (NOT the L10 engine import) to keep this builder pure
+ * and self-contained — no Math.random, no Date.now.
+ */
+function hashString(value: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < value.length; i++) {
+    h ^= value.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
+const TWO_WAY_VARIANTS = ['Two Way (C)', 'Two Way (IF)', 'Two Way (OF)'] as const;
+type TwoWayVariant = (typeof TWO_WAY_VARIANTS)[number];
+
+/**
+ * PRE-ACT-TRAITS-1: deterministic per-pitcher Two Way variant. Stable forever
+ * (FNV-1a of playerId mod 3), pseudo-random across pitchers. The position assigned
+ * at BUILD is outcome-identical to "at grant" — a stable C/IF/OF per pitcher — so the
+ * grant path stays untouched.
+ */
+function twoWayVariantForPitcher(playerId: string): TwoWayVariant {
+  return TWO_WAY_VARIANTS[hashString(playerId) % 3];
+}
+
+/**
+ * PRE-ACT-TRAITS-1: canonicalize any of the 3 Two Way variants to a single 'Two Way'
+ * family key so all two-way pitchers share ONE peer pool (wOBA percentiled vs ALL
+ * two-way pitchers regardless of assigned variant). Every other trait keys on itself.
+ */
+function poolTraitKey(traitName: string): string {
+  return (TWO_WAY_VARIANTS as readonly string[]).includes(traitName) ? 'Two Way' : traitName;
+}
+
 function addTwoWaySignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
   const pitcherIds = new Set<string>(
     input.players.filter((player) => player.role === 'pitcher').map((player) => player.playerId),
@@ -1294,7 +1338,7 @@ function addTwoWaySignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): 
       stolenBases: 0,
       caughtStealing: 0,
     };
-    addRawSignal(raw, pitcherId, 'Two Way (C)', {
+    addRawSignal(raw, pitcherId, twoWayVariantForPitcher(pitcherId), {
       signalValue: calculateWOBA(stats),
       sampleSize: entry.pa,
     });
@@ -1338,8 +1382,9 @@ function buildRawSignals(input: SeasonTraitCandidateInput): RawSignalMap {
   // the 6 handedness splits (DORMANT until the handedness maps are threaded in).
   addFirstPitchSignals(input, raw);
   addHandednessSplitSignals(input, raw);
-  // R1-b3 — Two Way earn-signal (PITCHER-role batting wOBA vs the pitcher pool;
-  // valve-gated → super-rare). C/IF/OF family + random position = a deferred ticket.
+  // R1-b3 / PRE-ACT-TRAITS-1 — Two Way earn-signal (PITCHER-role batting wOBA vs the
+  // shared pitcher pool; valve-gated → super-rare). Each pitcher's C/IF/OF variant is
+  // seeded deterministically (twoWayVariantForPitcher); all 3 pool as ONE family.
   addTwoWaySignals(input, raw);
   addDurabilitySignals(input, raw);
   return raw;
@@ -1358,7 +1403,7 @@ function buildPeerPools(players: readonly SeasonTraitPlayer[], raw: RawSignalMap
       if (!isTraitEligibleForRole(traitName, player.role)) continue;
       const signal = byTrait.get(traitName);
       if (!signal || signal.sampleSize <= 0) continue;
-      const key = roleKey(player.role, traitName);
+      const key = roleKey(player.role, poolTraitKey(traitName));
       pools.set(key, pools.get(key) ?? []);
       pools.get(key)?.push(signal.signalValue);
     }
@@ -1393,7 +1438,7 @@ export function computeSeasonTraitCandidates(
           playerRole: player.role,
           signalValue: signal.signalValue,
           sampleSize: signal.sampleSize,
-          peerValues: peerPools.get(roleKey(player.role, traitName)) ?? [],
+          peerValues: peerPools.get(roleKey(player.role, poolTraitKey(traitName))) ?? [],
           basis: 'none',
         }, config);
         // Emit the L9b-2 seam shape ({ traitName, score }) + raw debug fields.

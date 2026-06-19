@@ -5711,3 +5711,25 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   FINDING (sparse-signal getPercentile); (D) the L-stack (L10 Q5/Q8 rework → L11+). Also minor: `opposingHand` is still
   hardcoded `'R'` in `reconstructAtBatContext` (matters only for matrix-handedness traits, NOT the now-wired splits which
   read the threaded maps). FINDING-150 rebuild COMPLETE + WIRED. Nothing pushed.
+
+## 2026-06-18 (attended, same session) — PRE-ACT-TRAITS-1: the Two Way C/IF/OF family (gate item -1 done)
+- "Finish it off" → took PRE-ACT-TRAITS-1 (the one still-buildable pre-activation seam). Design realized ENTIRELY in the
+  builder, NO grant-path/scorer/acquisition surgery (simpler than anticipated when Two Way was split out): each two-way
+  pitcher's variant is assigned by a deterministic **FNV-1a(playerId) mod 3 → C/IF/OF** (stable, pure, no Math.random),
+  and `poolTraitKey` canonicalizes all 3 variants to ONE `Two Way` family pool so wOBA is percentiled vs ALL two-way
+  pitchers. Position assigned at BUILD via the seed = outcome-identical to a stable per-pitcher "at grant" pick; the
+  deterministic seed keeps re-evaluate-to-drop stable. Folded into §0.9.
+- **PRE-ACT-TRAITS-1** (`traitCandidateBuilder.ts` ONLY): all 3 variants → `BUILDABLE_TRAITS`; local `hashString`
+  (FNV-1a) + `twoWayVariantForPitcher`; `addTwoWaySignals` emits the seeded variant; `poolTraitKey` at both pooling
+  sites (`buildPeerPools` + the `computeSeasonTraitCandidates` lookup). No `traitAcquisition.ts` production change (the
+  IF/OF variants were already POSITIVE + EGOTISTICAL). Load-bearing: without family-pooling each variant pool = size 1
+  < `minPeerPool` 3 → null scores; the family-pooling test proves it.
+- **Builder = fresh subagent ≠ auditor = Opus Captain** (triangle). Independent re-derivation (seed determinism +
+  family-pool end-to-end + only-the-pure-engine-changed) → VERDICT VERIFIED. Host gate: `NODE_ENV= npm run build` exit 0
+  (7.85s) + full suite **7,686/438, 7,683 pass / 3 characterized fail** (`wpaRuntimeBoundary` +
+  `franchiseManualSmokeFixture` + `GameTrackerLaunchState` — the last an order-flake **confirmed passing solo 9/9**),
+  **ZERO new reds** (+8 tests / +0 files). trackerDb stays **v23**.
+- **⇒ THE TRAIT ENGINE IS FULLY BUILT + WIRED + the Two Way family COMPLETE.** PRE-ACT-TRAITS gate item -1 DONE; only
+  **-2** (JK browser end-to-end activation verification — pairs with F-141) + **-3** (standing `opposingHand` note) left.
+  All buildable trait-rebuild work is done. NEXT (a different phase): (C) the §16 sim-tune FINDING at the L-SIM gate;
+  (D) the L-stack (L10 Q5/Q8 rework → L11+). Nothing pushed.

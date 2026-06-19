@@ -10723,3 +10723,75 @@ map's contents (handedness/position for both players, grade for the pitcher only
 7,676 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` — by name; the offseason-guards
 order-flake did not trip this run), ZERO new reds (+1 test / +0 files). **⇒ the handedness splits + Utility + Ace
 Exterminator are now WIRED (populated maps) — still flag-gated build-dark.** Committed (hash in SESSION_LOG/CURRENT_STATE).
+
+## CONTRACT — PRE-ACT-TRAITS-1 (Two Way C/IF/OF family in the builder) — 2026-06-18 (attended)
+
+**ROUTE: fresh in-session subagent | high reasoning effort** (builder; subagent not Codex CLI). Auditor = Opus 4.8
+Captain (independent; ≠ builder). Branch codex/franchise-v1-next. BUILD-DARK. Source of truth:
+`TRAIT_MEASUREMENT_SPEC.md §0.9` Two Way line (PRE-ACT-TRAITS-1 design, folded in 2026-06-18) + DECISIONS_LOG
+PRE-ACT-TRAITS. Evolves R1-b3's single-`Two Way (C)` representative into the full C/IF/OF family — **realized entirely in
+the builder; NO scorer / acquisition / grant-path change.**
+
+**GOAL:** in `src/engines/traitCandidateBuilder.ts`, (a) emit each two-way pitcher's variant by a deterministic seed, and
+(b) pool all 3 Two Way variants together. All 3 variants enter `BUILDABLE_TRAITS`.
+
+**CHANGES (implement EXACTLY):**
+1. **`BUILDABLE_TRAITS`:** replace the single `'Two Way (C)'` entry with all three — `'Two Way (C)'`, `'Two Way (IF)'`,
+   `'Two Way (OF)'` (keep an `// R1-b3 / PRE-ACT-TRAITS-1:` comment). All three are canonical + pitcher-only.
+2. **Deterministic seed helper (local, do NOT import the L10 engine):** add an FNV-1a 32-bit `hashString(value: string):
+   number` (`let h = 0x811c9dc5; for each char: h ^= charCodeAt; h = Math.imul(h, 0x01000193); return h >>> 0;`) + a
+   `function twoWayVariantForPitcher(playerId: string): 'Two Way (C)' | 'Two Way (IF)' | 'Two Way (OF)'` =
+   `(['Two Way (C)','Two Way (IF)','Two Way (OF)'] as const)[hashString(playerId) % 3]`. No `Math.random`/`Date.now`.
+3. **`addTwoWaySignals`:** emit the signal under `twoWayVariantForPitcher(pitcherId)` instead of the fixed
+   `'Two Way (C)'`. (Everything else in the fn — the BattingStatsForWAR mapping, `calculateWOBA`, sampleSize = PA,
+   pitcher-role restriction — UNCHANGED.) So each two-way pitcher emits exactly ONE variant signal (their seeded one).
+4. **Family pooling:** add `function poolTraitKey(traitName: string): string` returning `'Two Way'` for any of the 3
+   Two Way variants, else `traitName`. In `buildPeerPools` (the `roleKey(player.role, traitName)` at ~L1361) AND in
+   `computeSeasonTraitCandidates`'s `peerPools.get(roleKey(player.role, traitName))` lookup (~L1396), use
+   `roleKey(player.role, poolTraitKey(traitName))`. This pools all 3 variants into ONE `role|Two Way` family pool, so a
+   pitcher's wOBA is percentiled vs ALL two-way pitchers regardless of their assigned variant. (Each pitcher still emits
+   only one variant, so no double-count.) The emitted candidate keeps its specific variant `traitName`; only the POOL
+   key is canonicalized.
+
+**WHY no other change:** role eligibility (`isTraitEligibleForRole`) is unchanged (all 3 are pitcher-only → identical).
+The stable per-pitcher seed makes re-evaluate-to-drop stable (a held `Two Way (X)` always matches its own re-emitted
+candidate). Acquisition: all 3 already in `POSITIVE_IMAGE_TRAITS` + `IMAGE_DRIVER_SETS['Two Way (*)']=['EGOTISTICAL']`.
+Grant path writes whatever variant the candidate carries.
+
+**HARD CONSTRAINTS:** edit ONLY `src/engines/traitCandidateBuilder.ts` + `src/engines/__tests__/traitCandidateBuilder.test.ts`
+(+ `traitAcquisition.test.ts` only if adding a Two Way acq assertion — but NO `traitAcquisition.ts` production change).
+Do NOT touch `traitRealityScorer.ts` / the scorer / `computeTraitRealityScore` / `buildProposalBase` / any store /
+`processCompletedGame.ts` / the L9b-3c grant files / `franchiseTraitGrantCompute.ts` / any `*.md`. PURE / build-DARK —
+no caller, no flag, no store, no trackerDb bump. No `Date.now`/`Math.random`; sort before any percentile. No
+git-add/commit.
+
+**TESTS (`traitCandidateBuilder.test.ts`):** update the `BUILDABLE_TRAITS` "contains exactly" expectation (the 3 Two
+Way variants in place of the single one). UPDATE the existing R1-b3 Two Way tests to the family design + add: a two-way
+pitcher emits exactly ONE variant = `twoWayVariantForPitcher(id)` (assert the deterministic variant for a fixed id; pin
+the expected variant by computing the FNV-1a in the test or asserting it's one of the 3 and stable across two calls);
+**family pooling** — 3+ pitchers seeded to DIFFERENT variants are still percentiled against each other (e.g. the best
+wOBA pitcher gets the top percentile even though peers carry different variant names), proving the shared `Two Way`
+pool; position players get no Two Way (role); the valve still gates a thin-PA pitcher; the L9b-2 seam holds (the variant
+candidate feeds `computeTraitAcquisition`).
+
+**VERIFICATION (builder runs, reports actual):** `NODE_ENV= npx tsc --noEmit` exit 0;
+`NODE_ENV= npx vitest run src/engines/__tests__/traitCandidateBuilder.test.ts src/engines/__tests__/traitAcquisition.test.ts`
+all green. Report every changed path, new/changed test count, the seed + poolTraitKey logic as built, and that no
+production file beyond `traitCandidateBuilder.ts` changed.
+
+**FORMAT:** 1) Files changed. 2) The seed/variant + family-pool logic as built + any deviation. 3) Verification output
+(paste actual). 4) "PRE-ACT-TRAITS-1 complete" or "BLOCKED: <reason>". Do NOT commit.
+
+**Status:** ✅ VERIFIED + COMMITTED (2026-06-18, attended) → **PRE-ACT-TRAITS-1 (the Two Way family) DONE.** Fresh
+in-session subagent built → Opus 4.8 Captain independently audited (≠ builder): VERDICT VERIFIED. All 3 Two Way variants
+in `BUILDABLE_TRAITS`; `twoWayVariantForPitcher` = local FNV-1a(playerId) mod 3 (stable, pure, no Math.random);
+`addTwoWaySignals` emits the seeded variant; `poolTraitKey` canonicalizes the 3 variants to ONE `Two Way` family pool at
+BOTH pooling sites (`buildPeerPools` + the `computeSeasonTraitCandidates` peer-pool lookup) so wOBA is percentiled vs ALL
+two-way pitchers (load-bearing — without it each variant pool = size 1 < minPeerPool 3 → null). **ONLY
+`traitCandidateBuilder.ts` production change** — no scorer/acquisition/grant touch (the IF/OF variants were already
+POSITIVE + EGOTISTICAL). Re-evaluation stays stable (deterministic per-pitcher seed). Host gate: `NODE_ENV= npm run
+build` exit 0 (7.85s) + full suite **7,686/438, 7,683 pass / 3 characterized fail** (`wpaRuntimeBoundary` +
+`franchiseManualSmokeFixture` + `GameTrackerLaunchState` — the last an order-flake **confirmed passing solo 9/9**), ZERO
+new reds (+8 tests / +0 files). Committed (hash in SESSION_LOG/CURRENT_STATE). **⇒ the trait engine is fully built +
+wired + the Two Way family complete; PRE-ACT-TRAITS gate now has only -2 (JK browser end-to-end) + -3 (standing
+opposingHand note) left.**
