@@ -32,6 +32,7 @@ import { processCompletedGame } from "../../../utils/processCompletedGame";
 import { markSeasonComplete } from "../../../utils/seasonStorage";
 import { freezeTrustedValueArtifactForSeason } from "../../../utils/franchiseTrustedValueStorage";
 import { computeAndPersistFranchiseWarAwards } from "../../../utils/franchiseAwardsEngine";
+import { emitFranchiseSeasonEndHonors } from "../engines/reporter/franchiseSeasonEndHonors";
 import { getAllGames, getAllGamesByFranchise } from "../../../utils/scheduleStorage";
 import { getSeasonIdForScope } from "../../../utils/franchisePersistenceContract";
 import { startOffseason, OFFSEASON_PHASES, type OffseasonPhase } from "../../../utils/offseasonStorage";
@@ -3315,6 +3316,11 @@ function GameDayContent({
         statsScopeId: activeSeasonId,
         seasonNumber: currentSeason,
         computedAt: awardComputedAtFromFreeze(frozen),
+      })).then(() => emitFranchiseSeasonEndHonors({
+        franchiseId,
+        seasonId: activeSeasonId,
+        statsScopeId: activeSeasonId,
+        seasonNumber: currentSeason,
       })).catch((err) => {
         console.warn('Failed to freeze trusted value artifact or finalize awards after season completion:', err);
       });
@@ -3349,6 +3355,12 @@ function GameDayContent({
             statsScopeId: activeSeasonId,
             seasonNumber: currentSeason,
             computedAt: awardComputedAtFromFreeze(frozen),
+          });
+          await emitFranchiseSeasonEndHonors({
+            franchiseId,
+            seasonId: activeSeasonId,
+            statsScopeId: activeSeasonId,
+            seasonNumber: currentSeason,
           });
         }
         setSeasonComplete(true);

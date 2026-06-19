@@ -13282,3 +13282,103 @@ mock omitted it → module-load throw ("No getFranchisePlayer export… on the m
 test-only): added `getFranchisePlayer: vi.fn().mockResolvedValue(null)` — solo re-run 23/23. Host gate (post-fix):
 `NODE_ENV= npm run build` 0 (8.02s) + suite **7,823/456, 7,821 pass / 2 characterized fail**, **ZERO new reds** (+5). build-DARK
 (per-game spine, fires on the lock); trackerDb v24. Branch-only. **➡ NEXT = L12-5e-2** (the season-end MVP/CY edge — the final piece).
+
+---
+
+## CONTRACT — L12-5e-2 (the season-end MVP/CY edge: emit+reach-floor+snub at finalize) — 2026-06-19 (attended)
+
+**ROUTE:** Codex CLI (gpt-5.5, **very-high reasoning effort**) via `codex exec` stdin-from-contract. Auditor: Opus 4.8
+(builder ≠ auditor — Codex builds, Opus independently audits + runs the full host gate).
+
+**ROLE:** You are a builder for the KBL Tracker franchise L-stack (the season-end honor payout wiring). **This is the FINAL L12-5 ticket.**
+
+**GOAL:** Fire the three payout mechanics for MVP + Cy Young at SEASON-END: a NEW pure-ish, seam-injectable
+`emitFranchiseSeasonEndHonors(scope)` module + a MINIMAL additive wiring into the existing `FranchiseHome` finalize (chain it
+after the two `computeAndPersistFranchiseWarAwards` calls). Build-DARK (the module L12-gates at its top → dark-noop when off,
+so the FranchiseHome chain is inert until post-D13). **FIRE-ONCE:** the emit's `seasonNewsItems` dedup is the single fire-once
+guard — run reach-floor + snub ONLY when the emit returns `'emitted'` (the React effect re-fires + has a twin path; this
+prevents double-ratchet).
+
+**SOURCE OF TRUTH:** `spec-docs/L12-5_SCOPE_MAP.md` §2 (the season-end edge) / §5 / Fork F5/F6 + `DECISIONS_LOG.md` 2026-06-19 "L12-5".
+
+**VERIFIED ANCHORS:** `getFranchiseAwardRowsByScope(scope: {franchiseId, seasonId, statsScopeId}): Promise<FranchiseAwardRow[]>`
+(`src/utils/franchiseAwardsStorage.ts:158`); `FranchiseAwardRow = {category: FranchiseAwardCategory, winnerPlayerId: string|null,
+candidates: {playerId, score, marginToWinner}[], finalized: boolean, computedAt: string, ...}`; `FranchiseAwardCandidate` has NO
+teamId. `buildFranchiseValueInputRows({franchiseId, seasonId, statsScopeId, seasonNumber}): Promise<{rows: FranchiseValueInputRow[]}>`;
+`FranchiseValueInputRow` has `playerId` + `currentTeamId: string|null` (`src/utils/franchiseValueInputs.ts`). The 3 payout entry
+points (all L12-gated internally): `emitFranchiseHonorNews({honorInput, teamId})` returns `{status:'emitted'|'deduped'|'gated'|
+'no-reporter'|'take-failed'|'dark-noop'}` (`src/src_figma/app/engines/reporter/franchiseHonorEmission.ts`);
+`applyFranchiseHonorReachFloor({honorees:{playerId,honorTier}[], scope, checkpointSentinel})` (`src/utils/franchiseHonorReachFloor.ts`,
+honorTier `'mvp'|'cyYoung'`); `applyFranchiseRaceSnubMorale({victims:{playerId,teamId}[], honorKind, scope, timestamp:number})` +
+the PURE `pickRaceSnubVictims(candidates:{playerId,teamId,marginToWinner}[], winnerIds:Set, topN)` (`src/utils/franchiseRaceSnubMorale.ts`).
+`isFranchisePhase2L12Enabled` (`src/utils/franchisePhase2Flags.ts`). The TWO FranchiseHome finalize calls:
+`FranchiseHome.tsx:3312` (the `isSeasonOver` useEffect, `freeze(...).then((frozen) => computeAndPersistFranchiseWarAwards({...})).catch(...)`)
+AND `:3346` (`checkSeasonComplete`, `await computeAndPersistFranchiseWarAwards({...});` then `setSeasonComplete(true)`).
+
+**CHANGES — edit/create ONLY these 3 files:**
+
+**A. NEW `src/src_figma/app/engines/reporter/franchiseSeasonEndHonors.ts`:**
+- `const SEASON_END_SNUB_TOP_N = 3;` (§16).
+- a const list: `[{category:'MVP', honorKind:'MVP', honorTier:'mvp'}, {category:'CY_YOUNG', honorKind:'CY_YOUNG', honorTier:'cyYoung'}]`.
+- a seam `franchiseSeasonEndHonorsSeam = { getAwards: getFranchiseAwardRowsByScope, getValueRows: buildFranchiseValueInputRows, emit: emitFranchiseHonorNews, applyReachFloor: applyFranchiseHonorReachFloor, applySnub: applyFranchiseRaceSnubMorale }`.
+- `export async function emitFranchiseSeasonEndHonors(scope: {franchiseId; seasonId; statsScopeId; seasonNumber}): Promise<{ status:'dark-noop'|'processed'; emitted: string[] }>`:
+  - `if (!isFranchisePhase2L12Enabled()) return {status:'dark-noop', emitted:[]}` (gate FIRST — avoid the loads when off).
+  - load `awards = await seam.getAwards({franchiseId,seasonId,statsScopeId})` and `valueReport = await seam.getValueRows(scope)`, each in its own try/catch (degrade to `[]`/`{rows:[]}`).
+  - `teamByPlayer = new Map(valueReport.rows.map(r => [r.playerId, r.currentTeamId]))` (playerId → teamId|null).
+  - `const emitted: string[] = []`.
+  - for each honor in the list:
+    - `const row = awards.find(a => a.category === honor.category && a.finalized && a.winnerPlayerId)`. if none → continue.
+    - `const winnerTeamId = teamByPlayer.get(row.winnerPlayerId!) ?? null`. if null → continue (no team ⇒ can't emit ⇒ skip the honor).
+    - **emit (try/catch):** `const emitResult = await seam.emit({ honorInput: { ...scope, honorKind: honor.honorKind, triggerPhase:'season-end', subjectIds:[row.winnerPlayerId!], facts: { winnerId: row.winnerPlayerId } }, teamId: winnerTeamId })`. (Drop `seasonNumber`? NO — honorInput needs `franchiseId, seasonId, seasonNumber` from scope.) If `emitResult.status !== 'emitted'` → continue (the fire-once gate: payouts only on the FIRST successful emit; a later finalize re-runs and gets `'deduped'` → skips).
+    - `emitted.push(honor.honorKind)`.
+    - **reach-floor (try/catch):** `await seam.applyReachFloor({ honorees:[{playerId: row.winnerPlayerId!, honorTier: honor.honorTier}], scope:{franchiseId,seasonId,statsScopeId}, checkpointSentinel:'season-end-honor' })`.
+    - **snub (try/catch):** `const victims = pickRaceSnubVictims(row.candidates.map(c => ({playerId: c.playerId, teamId: teamByPlayer.get(c.playerId) ?? '', marginToWinner: c.marginToWinner})).filter(v => v.teamId !== ''), new Set([row.winnerPlayerId!]), SEASON_END_SNUB_TOP_N)`; `await seam.applySnub({ victims, honorKind: honor.honorKind, scope, timestamp: Date.parse(row.computedAt) || 0 })`.
+  - return `{status:'processed', emitted}`.
+  (Each of the 3 payouts in its OWN try/catch so one failing does not block the others or the next honor. NO `Date.now`/`Math.random` — timestamp from `row.computedAt`.)
+
+**B. `src/src_figma/app/pages/FranchiseHome.tsx`** — additive ONLY (chain the emit after each existing finalize):
+1. import `emitFranchiseSeasonEndHonors` from `../engines/reporter/franchiseSeasonEndHonors`.
+2. The `isSeasonOver` useEffect (`:3312`): add `.then(() => emitFranchiseSeasonEndHonors({ franchiseId, seasonId: activeSeasonId, statsScopeId: activeSeasonId, seasonNumber: currentSeason }))` AFTER the `computeAndPersistFranchiseWarAwards({...})` `.then(...)` and BEFORE the `.catch(...)`.
+3. `checkSeasonComplete` (`:3346`): add `await emitFranchiseSeasonEndHonors({ franchiseId, seasonId: activeSeasonId, statsScopeId: activeSeasonId, seasonNumber: currentSeason });` immediately AFTER the `await computeAndPersistFranchiseWarAwards({...});` (still inside the `if (franchiseId)` block).
+   Do NOT change any other FranchiseHome logic, state, or effect deps.
+
+**C. `src/src_figma/__tests__/reporter/franchiseSeasonEndHonors.test.ts`** — stub `franchiseSeasonEndHonorsSeam` + toggle the L12 flag.
+Assert: flag OFF → dark-noop (no seam calls); flag ON with a finalized MVP row + a value-row team → emit called with the MVP
+honorInput (winner's team), and BECAUSE emit returns `'emitted'` → reach-floor (honorTier `'mvp'`) + snub (runners-up by margin,
+winner excluded, teams joined) both called; emit returns `'deduped'` → reach-floor + snub NOT called (the fire-once gate); a
+non-finalized / no-winner / no-team row is skipped; MVP + CY both processed independently; each payout isolated (snub throwing
+does not block the next honor).
+
+**HARD CONSTRAINTS:** edit/create ONLY the 3 files. The FranchiseHome edit is ADDITIVE (1 import + 2 chained calls); do NOT
+restructure the effect or `checkSeasonComplete`. NO new flag/store/trackerDb/persistence-schema. NO `Date.now`/`Math.random`. NO
+git add/commit. Prefix tsc/vitest with `NODE_ENV= `.
+
+**VERIFICATION (run ALL, paste ACTUAL):** `NODE_ENV= npx tsc --noEmit` 0 + `NODE_ENV= npm run build` 0;
+`NODE_ENV= npx vitest run src/src_figma/__tests__/reporter/franchiseSeasonEndHonors.test.ts` green; AND the FranchiseHome
+regression `NODE_ENV= npx vitest run src/src_figma/__tests__/franchiseMode/FranchiseHome.test.tsx src/src_figma/__tests__/franchiseMode/FranchiseHomeLaunch.test.tsx`
+(the new import chain — surface any partial-mock break). (The auditor runs the FULL host suite + will fix any test-only mock gap.)
+
+**STOP-IF:** any verified signature differs → STOP. The FranchiseHome finalize structure is not as described (the two
+`computeAndPersistFranchiseWarAwards` calls) → STOP + report. Wiring needs a non-additive FranchiseHome change → STOP + report.
+
+**FORMAT:** 1) files changed; 2) the season-end module (award-row read → team join → per-honor emit→[fire-once]→reach-floor+snub)
++ the 2 FranchiseHome chains; 3) verification output (incl. the FranchiseHome regressions); 4) "L12-5e-2 complete" or "BLOCKED: <reason>". Do NOT commit.
+
+Use very high reasoning effort. Think step-by-step. Read `src/utils/franchiseAwardsStorage.ts` (the award row + getFranchiseAwardRowsByScope),
+`src/utils/franchiseValueInputs.ts` (buildFranchiseValueInputRows + currentTeamId), `src/src_figma/app/engines/reporter/franchiseHonorEmission.ts`
++ `./franchiseL12AwardNewsAdapter`, `src/utils/franchiseHonorReachFloor.ts`, `src/utils/franchiseRaceSnubMorale.ts` (pickRaceSnubVictims),
+`src/src_figma/app/pages/FranchiseHome.tsx:3299-3360` (the two finalize calls), and `src/src_figma/__tests__/reporter/franchiseHonorEmission.test.ts` (the seam-stub + flag-toggle pattern).
+
+**Status:** ✅ VERIFIED + COMMITTED 2026-06-19 (attended). **⇒ L12-5 COMPLETE.** Codex (gpt-5.5, xhigh) built → Opus audited
+(builder ≠ auditor) + full host gate. NEW `src/src_figma/app/engines/reporter/franchiseSeasonEndHonors.ts`
+(`emitFranchiseSeasonEndHonors`: L12-gate → load finalized award rows + value rows → `playerId→currentTeamId` map → per MVP/CY:
+emit via the winner's team → **fire-once gate: payouts only on `emitResult.status==='emitted'`** → reach-floor (winner, tier
+mvp/cyYoung) + snub (runners-up via `pickRaceSnubVictims`, teamId-joined, `Date.parse(computedAt)` timestamp); each payout
+isolated in try/catch) + the **strictly ADDITIVE** FranchiseHome wiring (1 import + `.then(emit)` after the `isSeasonOver`
+finalize + `await emit` after the `checkSeasonComplete` finalize — no effect/state/deps restructure) + a 6-test file. Audit:
+FranchiseHome diff verified additive; the module is faithful; the fire-once (emit-dedup gates reach-floor+snub) prevents the
+React-effect double-ratchet (Risk 3/4). Host gate `NODE_ENV= npm run build` 0 (7.61s) + suite **7,829/457, 7,827 pass / 2
+characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), **ZERO new reds** (+6; FranchiseHome regression
+35/35, NO new mock break). build-DARK (the module L12-gates → dark-noop, so the live FranchiseHome chain is inert until
+post-D13); trackerDb v24. Branch-only. **⇒ L12-5 COMPLETE (a/b/c/d/e-1/e-2) — the award/All-Star PAYOUT layer is fully built.
+➡ NEXT = L12-6** (Almanac/UI surfacing — the last L12 piece).
