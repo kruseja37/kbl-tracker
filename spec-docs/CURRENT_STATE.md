@@ -19,8 +19,9 @@ under-specified mirror surface across 2 dispatches BEFORE any broken-mirror comm
 (`computeFranchiseTvFamilyRaces`): KK = `valueDelta` desc · Bust = `−valueDelta` desc · **Comeback = `currentTV − min(currentTV,
 snapshot trueValues)`** (**JK 2026-06-19 correction** — the CURRENT gap from the season trough, NOT max-rise-over-checkpoints;
 a mid-season peak given back must NOT win). PURE / build-DARK (NO caller/flag/store; a later hook feeds it the TV rows);
-Codex-built → Opus-audited → host-gate **7,745/444, ZERO new reds** (+8). **L12-3 SPLIT a/b/R (attended design pass —
-JK ruled the merit bases): L12-3a + L12-3b ✅ COMPLETE; ➡ NEXT = L12-3R (+ Bench/Booger standings follow-up).** **✅ L12-3a COMPLETE (2026-06-19, attended)** — the
+Codex-built → Opus-audited → host-gate **7,745/444, ZERO new reds** (+8). **L12-3 SPLIT a/b/c/R (attended design pass —
+JK ruled the merit bases): L12-3a + L12-3b + L12-3c ✅ COMPLETE; ➡ NEXT = L12-3R (the live WPA rollup + Reliever — the only
+non-dark piece left).** **✅ L12-3a COMPLETE (2026-06-19, attended)** — the
 PURE race-standing composite engine `src/engines/franchiseRaceStandingScorer.ts` (`computeFranchiseRaceStanding`:
 per-race-type weighted composite `wMerit·meritPercentile + wFame·famePercentile`, fame via `resolveFameTier` rank ONLY
 [Q10]; the **Q3 close-race tilt** = fame contributes only when `|marginToWinner| < tiltWindow` AND both merit > floor —
@@ -41,11 +42,16 @@ TV rows/snapshots, builds per-race candidates for MVP/CY/SS/GG/RoY (GG `score + 
 DOUBLY-DARK (flag default OFF). Codex-built → Opus-audited (builder≠auditor) → **the full host gate caught a real new red
 Codex's scoped run missed** (the new transitive import broke `processCompletedGame.trueValue.test.ts`'s partial mock at
 module-load — failed SOLO; auditor-fixed mechanically: a 1-line snapshot-reader mock stub, no cascade) → host gate
-**7,760/446, 7,758 pass / 2 characterized fail, ZERO new reds** (+5). **Bench/Booger/Reliever STANDINGS deferred** (the
-recompute covers the 5 existing merit categories + TV-family; Bench/Booger need the D9-adjacent reserve filter + qualifier,
-Reliever needs L12-3R's WPA). **➡ NEXT = L12-3R** — the LIVE WPA season-rollup (`pitchingWpa`/`reliefWpa` on
-`PlayerSeasonPitching` + the season aggregator, relief = `!isStarter` games) + bind Reliever-of-Year; **saved-shape +
-live-aggregator change → its own engineering audit + browser-verify batch.** Then the Bench/Booger standings follow-up.
+**7,760/446, 7,758 pass / 2 characterized fail, ZERO new reds** (+5). **✅ L12-3c COMPLETE (2026-06-19,
+attended)** — wired **Bench/Booger** standings into the recompute (D9-finalize-neutral): a `categoryCandidateRows`
+reserve filter + a relaxed-PA `meetsQualifier` branch (`BENCH_PLAYER_QUALIFIER_FRACTION` 0.25 §16) + a new exported
+`computeFranchiseRaceCandidateRows(scope, categories)` (mirrors the preview assembly, no MOY/persistence); orchestrator
+switched to all 7 merit categories. `WAR_AWARD_CATEGORIES` UNCHANGED (D9 byte-neutral, proven by a finalize-stability test).
+Codex-built → Opus-audited → host gate **7,761/446, 7,759 pass / 2 characterized fail, ZERO new reds** (+1). ⇒ the L12
+merit recompute now covers **all 7 merit categories + the TV-family**; only **Reliever-of-Year** remains.
+**➡ NEXT = L12-3R** — the LIVE WPA season-rollup (`pitchingWpa`/`reliefWpa` on `PlayerSeasonPitching` + the season
+aggregator, relief = `!isStarter` games) + bind Reliever-of-Year; **the only non-dark piece — saved-shape +
+live-aggregator change → its own engineering audit + JK browser-verify batch.**
 Seams in `L12_SCOPE_MAP.md` §5. → L12-4
 All-Star+60%-lock → L12-5
 emission/snub/reporter → L12-6 UI → L13 (split) → L14 → L-SIM. **⚠ KEEP EXACTLY ONE AUTH-4 WORKER ACTIVE — 7 Claude sessions

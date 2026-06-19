@@ -6044,3 +6044,31 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   processCompletedGame + 2 tests [1 new + 1 mock-fixed]). **➡ NEXT = L12-3R** (the LIVE WPA season-rollup
   `pitchingWpa`/`reliefWpa` + the season aggregator + bind Reliever — saved-shape + live, own audit + browser-verify batch)
   + the Bench/Booger standings follow-up. Branch codex/franchise-v1-next; nothing pushed.
+
+## 2026-06-19 (attended) — L12-3c: Bench/Booger standings (reserve filter + relaxed qualifier + race-candidate exporter)
+- **JK chose** the dark Bench/Booger follow-up next (over L12-3R or a checkpoint). Contracted directly from the prior
+  groundings (no new recon needed — I'd already read `categoryCandidateRows`/`meetsQualifier`/`scoreForCategory`/the preview
+  assembly).
+- **L12-3c (Codex gpt-5.5/xhigh, 4 files):** `franchiseAwardsEngine.ts` — `BENCH_PLAYER_QUALIFIER_FRACTION` 0.25 (§16); a
+  relaxed-bench-PA branch in `meetsQualifier` (`PA ≥ minPA·0.25`); a `BENCH_PLAYER` reserve filter in `categoryCandidateRows`
+  (mirrors the RoY rookie filter, `!isReserve → null`); a new exported `computeFranchiseRaceCandidateRows(scope, categories)`
+  that runs the SAME D9 input-assembly + `categoryCandidateRows` machinery for an arbitrary category list, mapping to
+  `{playerId, score, marginToWinner}` (no `buildAwardRow`/goldGloveSplit/MOY/persistence; skips the managerGames+standings
+  loads). `WAR_AWARD_CATEGORIES` UNCHANGED (the 5) → the D9 season-end finalize is byte-behavior-identical (the new
+  bench/booger branches are only reached when this new fn is called with those categories — the finalize never passes them).
+  `franchiseRaceStandingsCompute.ts` — seam `computeAwardsPreview`→`computeRaceCandidateRows`; `L12_MERIT_RACE_CATEGORIES`
+  expanded to the 7; new `loadOrEmptyRecord` degradation helper; the GG `+0.2·defensiveFame` blend + fame defaults preserved.
+- **Audit (builder=Codex ≠ auditor=Opus):** both production diffs read line-by-line (faithful; D9-neutral; the exporter is a
+  faithful preview-assembly mirror; the orchestrator switch is behavior-equivalent for the 5 + adds bench/booger). Tests
+  non-vacuous: **D9-finalize-stability proof** (persisted finalize categories stay exactly CY/GG/MOY/MVP/RoY/SS), the exporter
+  test (bench reserve filter excludes a non-reserve + a sub-relaxed-floor PA; bench-reserve at 98 PA admitted by the relaxed
+  floor but excluded from MVP's standard floor — proves the qualifier distinction; Booger orders worst-fielder-first via
+  −fieldingWar; getRecentGames/calculateStandings NOT called), + the orchestrator now asserts Bench/Booger standings ranked.
+- **NOTE (server-error resume):** a platform server error interrupted the session right AFTER the full host gate returned
+  clean and BEFORE the commit; resumed from the intact working tree (L12-3a/3b committed, L12-3c's 5 files uncommitted, nothing
+  lost) per JK "pick up where you left off."
+- **FULL host gate (mine):** `NODE_ENV= npm run build` exit 0 + full suite **7,761/446, 7,759 pass / 2 characterized fail**
+  (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), only 2 failed files, ZERO new reds (+1 = the exporter test). BUILD-DARK
+  + recompute-only; trackerDb stays **v24**. ⇒ the L12 merit recompute now covers ALL 7 merit categories (MVP/CY/SS/GG/RoY +
+  Bench/Booger) + the TV-family; only **Reliever-of-Year** remains. **➡ NEXT = L12-3R** (the LIVE WPA season-rollup + Reliever
+  — the only non-dark L12-3 piece; needs its own engineering audit + JK browser-verify). Branch codex/franchise-v1-next; nothing pushed.

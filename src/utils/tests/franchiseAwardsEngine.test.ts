@@ -44,6 +44,7 @@ import {
   computeAndPersistFranchiseWarAwards,
   computeFranchiseAwardsPreview,
   computeFranchiseManagerOfYear,
+  computeFranchiseRaceCandidateRows,
   computeFranchiseWarAwards,
   type FranchiseManagerAwardAggregate,
   type FranchiseWarAwardQualifierFacts,
@@ -181,6 +182,29 @@ function valueRow(
     ...rowOverrides,
     warPreviewValues,
     warInputAvailability,
+  };
+}
+
+function trueValuePositioning(
+  isReserve: boolean,
+): NonNullable<FranchiseValueInputRow['trueValuePositioning']> {
+  return {
+    valuationMode: isReserve ? 'reserve' : 'single-position',
+    valuePosition: 'SS',
+    effectivePosition: 'SS',
+    poolPosition: isReserve ? 'RESERVE' : 'SS',
+    profilePosition: 'SS',
+    profilePitcherRole: null,
+    starts: isReserve ? 1 : 5,
+    currentTeamStarts: isReserve ? 1 : 5,
+    teamCompletedGames: 8,
+    startsShare: isReserve ? 0.125 : 0.625,
+    isReserve,
+    twoWayTrait: null,
+    twoWayBatPosition: null,
+    twoWayArmPosition: null,
+    startsSource: 'game-header-starting-lineups',
+    reasons: [],
   };
 }
 
@@ -837,6 +861,14 @@ describe('franchise WAR awards engine', () => {
       statsScopeId: scope.statsScopeId,
     });
     expect(mocks.calculateStandings).toHaveBeenCalledWith(scope.seasonId);
+    expect(stored.map((row) => row.category).sort()).toEqual([
+      'CY_YOUNG',
+      'GOLD_GLOVE',
+      'MANAGER_OF_YEAR',
+      'MVP',
+      'ROOKIE_OF_YEAR',
+      'SILVER_SLUGGER',
+    ]);
   });
 
   test('computeFranchiseAwardsPreview ranks current rows under the looser preview gate without persisting', async () => {
@@ -911,5 +943,81 @@ describe('franchise WAR awards engine', () => {
     expect(preview.find((row) => row.category === 'MVP')?.winnerPlayerId).toBe('mvp');
     expect(preview.find((row) => row.category === 'MANAGER_OF_YEAR')?.winnerPlayerId).toBe('preview-manager');
     expect(stored).toEqual([]);
+  });
+
+  test('computeFranchiseRaceCandidateRows exports requested rows and applies Bench and Booger eligibility', async () => {
+    const rows = [
+      valueRow('bench-reserve', {
+        trueValuePositioning: trueValuePositioning(true),
+        warPreviewValues: { totalWar: 2.4, battingWar: 1.8, fieldingWar: 0.2, pitchingWar: null, baserunningWar: 0.4, totalWarSource: 'stat-row', trustedForFinalValue: true },
+      }),
+      valueRow('bench-starter', {
+        trueValuePositioning: trueValuePositioning(false),
+        warPreviewValues: { totalWar: 8.5, battingWar: 6, fieldingWar: 0.1, pitchingWar: null, baserunningWar: 2.4, totalWarSource: 'stat-row', trustedForFinalValue: true },
+      }),
+      valueRow('bench-too-few-pa', {
+        trueValuePositioning: trueValuePositioning(true),
+        warPreviewValues: { totalWar: 9, battingWar: 7, fieldingWar: -3, pitchingWar: null, baserunningWar: 2, totalWarSource: 'stat-row', trustedForFinalValue: true },
+      }),
+      valueRow('booger-worst', {
+        warPreviewValues: { totalWar: 1, battingWar: 3, fieldingWar: -2.4, pitchingWar: null, baserunningWar: 0.4, totalWarSource: 'stat-row', trustedForFinalValue: true },
+      }),
+      valueRow('booger-next', {
+        warPreviewValues: { totalWar: 1.5, battingWar: 2, fieldingWar: -0.6, pitchingWar: null, baserunningWar: 0.1, totalWarSource: 'stat-row', trustedForFinalValue: true },
+      }),
+      valueRow('booger-best', {
+        warPreviewValues: { totalWar: 3.2, battingWar: 1.5, fieldingWar: 1.2, pitchingWar: null, baserunningWar: 0.5, totalWarSource: 'stat-row', trustedForFinalValue: true },
+      }),
+    ];
+    const paByPlayerId: Record<string, number> = {
+      'bench-reserve': 98,
+      'bench-too-few-pa': 20,
+    };
+    mocks.buildFranchiseValueInputRows.mockResolvedValue({
+      ...report(rows),
+      trustedValueArtifactFrozen: false,
+    });
+    mocks.getAllBattingStats.mockResolvedValue(rows.map((row) =>
+      battingStats(row.playerId, paByPlayerId[row.playerId] ?? 120),
+    ));
+    mocks.getAllPitchingStats.mockResolvedValue([]);
+    mocks.getCareerStats.mockResolvedValue({
+      batting: { seasonsPlayed: 1 },
+      pitching: { seasonsPlayed: 1 },
+      fielding: { seasonsPlayed: 1 },
+    });
+    await persistTrustedValueArtifact({
+      ...artifact(rows.map((row) => row.playerId)),
+      frozen: false,
+      frozenAt: null,
+    });
+    await saveFranchiseTrueValueRows(rows.map((row, index) => trueValueRow(row.playerId, 100 - index)));
+
+    const candidates = await computeFranchiseRaceCandidateRows({
+      ...scope,
+      seasonNumber: 1,
+      computedAt,
+    }, ['MVP', 'BENCH_PLAYER', 'BOOGER_GLOVE']);
+
+    expect(Object.keys(candidates).sort()).toEqual([
+      'BENCH_PLAYER',
+      'BOOGER_GLOVE',
+      'MVP',
+    ]);
+    expect(candidates.CY_YOUNG).toBeUndefined();
+    expect(candidates.MVP?.map((candidate) => candidate.playerId)).not.toContain('bench-reserve');
+    expect(candidates.BENCH_PLAYER).toEqual([
+      { playerId: 'bench-reserve', score: 2.4, marginToWinner: 0 },
+    ]);
+    expect(candidates.BENCH_PLAYER?.map((candidate) => candidate.playerId)).not.toEqual(expect.arrayContaining([
+      'bench-starter',
+      'bench-too-few-pa',
+    ]));
+    expect(candidates.BOOGER_GLOVE?.slice(0, 2)).toEqual([
+      { playerId: 'booger-worst', score: 2.4, marginToWinner: 0 },
+      { playerId: 'booger-next', score: 0.6, marginToWinner: -1.8 },
+    ]);
+    expect(mocks.getRecentGames).not.toHaveBeenCalled();
+    expect(mocks.calculateStandings).not.toHaveBeenCalled();
   });
 });

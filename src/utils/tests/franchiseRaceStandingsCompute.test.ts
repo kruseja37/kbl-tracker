@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-import type { FranchiseAwardRow } from '../franchiseAwardsStorage';
+import type {
+  FranchiseRaceCandidateScore,
+  FranchiseWarAwardCategory,
+} from '../franchiseAwardsEngine';
 import {
   L12_GG_DEFENSIVE_FAME_SHARE,
   raceStandingsSeam,
@@ -44,24 +47,20 @@ function trueValueScope(rows: Array<Pick<FranchiseTrueValueRow, 'playerId' | 'va
   };
 }
 
-function awardRow(
-  category: FranchiseAwardRow['category'],
+function candidateRows(
   candidates: Array<{ playerId: string; score: number }>,
-): FranchiseAwardRow {
-  return {
-    franchiseId: 'franchise-l12',
-    seasonId: 'season-l12',
-    statsScopeId: 'stats-l12',
-    category,
-    winnerPlayerId: candidates[0]?.playerId ?? null,
-    candidates: candidates.map((candidate) => ({
-      ...candidate,
-      marginToWinner: candidate.score - (candidates[0]?.score ?? 0),
-    })),
-    voteWeight: null,
-    finalized: false,
-    computedAt: 'static-preview-time',
-  };
+): FranchiseRaceCandidateScore[] {
+  const winnerScore = candidates[0]?.score ?? 0;
+  return candidates.map((candidate) => ({
+    ...candidate,
+    marginToWinner: candidate.score - winnerScore,
+  }));
+}
+
+function candidateRowsByCategory(
+  rows: Partial<Record<FranchiseWarAwardCategory, FranchiseRaceCandidateScore[]>>,
+): Partial<Record<FranchiseWarAwardCategory, FranchiseRaceCandidateScore[]>> {
+  return rows;
 }
 
 function fameRow(playerId: string, overrides: Partial<FranchiseFameRecordRow> = {}): FranchiseFameRecordRow {
@@ -119,7 +118,7 @@ describe('recomputeFranchiseL12StandingsForCompletedGame', () => {
 
   test('flag off returns dark-noop before any seam loader runs', async () => {
     setFranchisePhase2L12EnabledForTests(false);
-    const previewSpy = vi.spyOn(raceStandingsSeam, 'computeAwardsPreview');
+    const previewSpy = vi.spyOn(raceStandingsSeam, 'computeRaceCandidateRows');
     const fameSpy = vi.spyOn(raceStandingsSeam, 'getFameRows');
     const snapshotSpy = vi.spyOn(raceStandingsSeam, 'getSnapshotRows');
 
@@ -139,16 +138,24 @@ describe('recomputeFranchiseL12StandingsForCompletedGame', () => {
 
   test('flag on ranks merit preview rows, applies GG defensive-fame blend, and defaults missing fame to rank zero', async () => {
     setFranchisePhase2L12EnabledForTests(true);
-    vi.spyOn(raceStandingsSeam, 'computeAwardsPreview').mockResolvedValue([
-      awardRow('MVP', [
+    vi.spyOn(raceStandingsSeam, 'computeRaceCandidateRows').mockResolvedValue(candidateRowsByCategory({
+      MVP: candidateRows([
         { playerId: 'mvp-leader', score: 9 },
         { playerId: 'mvp-no-fame', score: 6 },
         { playerId: 'mvp-third', score: 3 },
       ]),
-      awardRow('GOLD_GLOVE', [
+      GOLD_GLOVE: candidateRows([
         { playerId: 'gg-defender', score: 2 },
       ]),
-    ]);
+      BENCH_PLAYER: candidateRows([
+        { playerId: 'bench-reserve-top', score: 1.8 },
+        { playerId: 'bench-reserve-next', score: 1.2 },
+      ]),
+      BOOGER_GLOVE: candidateRows([
+        { playerId: 'booger-worst-fielder', score: 1.5 },
+        { playerId: 'booger-next-worst', score: 0.4 },
+      ]),
+    }));
     vi.spyOn(raceStandingsSeam, 'getFameRows').mockResolvedValue([
       fameRow('mvp-leader', { heat: 8, reachFloor: 1 }),
       fameRow('mvp-third', { heat: 4, reachFloor: 0 }),
@@ -171,11 +178,19 @@ describe('recomputeFranchiseL12StandingsForCompletedGame', () => {
       playerId: 'gg-defender',
       meritScore: 2 + (L12_GG_DEFENSIVE_FAME_SHARE * 5),
     });
+    expect(standings?.meritRaces.BENCH_PLAYER?.map((row) => [row.rank, row.playerId])).toEqual([
+      [1, 'bench-reserve-top'],
+      [2, 'bench-reserve-next'],
+    ]);
+    expect(standings?.meritRaces.BOOGER_GLOVE?.map((row) => [row.rank, row.playerId])).toEqual([
+      [1, 'booger-worst-fielder'],
+      [2, 'booger-next-worst'],
+    ]);
   });
 
   test('flag on computes TV-family KK, Bust, and Comeback from true-value rows and snapshots', async () => {
     setFranchisePhase2L12EnabledForTests(true);
-    vi.spyOn(raceStandingsSeam, 'computeAwardsPreview').mockResolvedValue([]);
+    vi.spyOn(raceStandingsSeam, 'computeRaceCandidateRows').mockResolvedValue({});
     vi.spyOn(raceStandingsSeam, 'getFameRows').mockResolvedValue([]);
     vi.spyOn(raceStandingsSeam, 'getSnapshotRows').mockResolvedValue([
       snapshotRow('comeback-leader', 'early', 40),
@@ -213,7 +228,7 @@ describe('recomputeFranchiseL12StandingsForCompletedGame', () => {
 
   test('flag on with empty preview returns computed empty merit races without throwing', async () => {
     setFranchisePhase2L12EnabledForTests(true);
-    vi.spyOn(raceStandingsSeam, 'computeAwardsPreview').mockResolvedValue([]);
+    vi.spyOn(raceStandingsSeam, 'computeRaceCandidateRows').mockResolvedValue({});
     vi.spyOn(raceStandingsSeam, 'getFameRows').mockResolvedValue([]);
     vi.spyOn(raceStandingsSeam, 'getSnapshotRows').mockResolvedValue([]);
 
@@ -237,7 +252,7 @@ describe('recomputeFranchiseL12StandingsForCompletedGame', () => {
 
   test('flag on degrades loader failures to empty computed standings', async () => {
     setFranchisePhase2L12EnabledForTests(true);
-    vi.spyOn(raceStandingsSeam, 'computeAwardsPreview').mockRejectedValue(new Error('preview unavailable'));
+    vi.spyOn(raceStandingsSeam, 'computeRaceCandidateRows').mockRejectedValue(new Error('preview unavailable'));
     vi.spyOn(raceStandingsSeam, 'getFameRows').mockRejectedValue(new Error('fame unavailable'));
     vi.spyOn(raceStandingsSeam, 'getSnapshotRows').mockRejectedValue(new Error('snapshots unavailable'));
 

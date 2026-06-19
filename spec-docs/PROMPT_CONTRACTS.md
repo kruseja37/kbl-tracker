@@ -11801,3 +11801,134 @@ mock-compatible there). Host gate (post-fix): `NODE_ENV= npm run build` exit 0 +
 trackerDb stays v24. **4 files committed** (orchestrator + processCompletedGame + 2 tests [1 new + 1 mock-fixed]).
 Branch-only (NOT pushed). **➡ NEXT = L12-3R** (the live WPA season-rollup + Reliever-of-Year) + the Bench/Booger
 standings follow-up (the D9-adjacent reserve filter + qualifier).
+
+---
+
+## CONTRACT — L12-3c (Bench/Booger standings: reserve filter + qualifier + race-candidate exporter) — 2026-06-19 (attended)
+
+**ROUTE: Codex CLI (`codex exec`, prompt via stdin from this contract) | very high reasoning effort** (builder; touches the
+LIVE D9 awards engine `franchiseAwardsEngine.ts` but the change is **D9-FINALIZE-NEUTRAL** — `WAR_AWARD_CATEGORIES` stays
+the 5, so the new BENCH_PLAYER/BOOGER_GLOVE branches are only ever reached by the dark L12 recompute). Auditor = Opus
+Captain (cross-model triangle; builder≠auditor). Branch codex/franchise-v1-next. BUILD-DARK + RECOMPUTE-ONLY: no store, no
+trackerDb/version change, no persistence. Source of truth: `spec-docs/L12_SCOPE_MAP.md` §2 #3 + §4 Q1/Q5 + the L12-1
+kickoff merit-basis ruling (DECISIONS_LOG 2026-06-19: BENCH_PLAYER = best total WAR among designated reserves; BOOGER_GLOVE
+= inverse fielding WAR among qualified fielders) + the L12-3a/L12-3b commits (`5ce0d940`, `da554ed7`).
+
+**GOAL:** complete the L12 merit-race coverage by wiring BENCH_PLAYER + BOOGER_GLOVE standings into the dark per-game
+recompute. The L12-3a selectors already exist (`scoreForCategory` BENCH=totalWar, BOOGER=−fieldingWar); L12-3c adds the
+candidate FILTERING (reserve filter for Bench; relaxed Bench PA qualifier) + a reusable race-candidate exporter, then feeds
+Bench/Booger through the L12-3b orchestrator's existing composite path. Reliever-of-Year is STILL deferred (L12-3R, needs
+WPA).
+
+**CHANGES (edit/create ONLY these files):**
+
+**A. `src/utils/franchiseAwardsEngine.ts`** — three additive, D9-finalize-NEUTRAL edits:
+1. Add a §16 placeholder constant near the other tuning consts: `const BENCH_PLAYER_QUALIFIER_FRACTION = 0.25;`
+   (Simulation-Gate placeholder — a bench/role player never reaches the full ~502-PA starter floor, so the Bench race uses
+   a relaxed fraction of it).
+2. `meetsQualifier` (currently :258-272): add a BENCH_PLAYER branch BEFORE the final return — a reserve plays part-time, so
+   it qualifies on a RELAXED PA floor:
+   ```ts
+   if (params.category === 'BENCH_PLAYER') {
+     return finiteNumber(params.facts.plateAppearances) &&
+       params.facts.plateAppearances >= params.minPlateAppearances * BENCH_PLAYER_QUALIFIER_FRACTION;
+   }
+   ```
+   (BOOGER_GLOVE falls through to the standard PA floor — "worst among REGULAR fielders" is intended.)
+3. `categoryCandidateRows` (currently :274-326): add a BENCH_PLAYER reserve filter, mirroring the existing ROOKIE_OF_YEAR
+   filter (the `if (params.category === 'ROOKIE_OF_YEAR' && !rookie) return null;` block at ~:307-312). Add right beside it:
+   ```ts
+   if (
+     params.category === 'BENCH_PLAYER' &&
+     !row.trueValuePositioning?.isReserve
+   ) {
+     return null;
+   }
+   ```
+4. EXPORT a new reusable race-candidate function (place it just after `computeFranchiseAwardsPreview`):
+   ```ts
+   export interface FranchiseRaceCandidateScore { playerId: string; score: number; marginToWinner: number; }
+   export async function computeFranchiseRaceCandidateRows(
+     scope: ComputeFranchiseAwardsPreviewScope,
+     categories: readonly FranchiseWarAwardCategory[],
+   ): Promise<Partial<Record<FranchiseWarAwardCategory, FranchiseRaceCandidateScore[]>>>
+   ```
+   Body MIRRORS `computeFranchiseAwardsPreview`'s input assembly (:629-686) — `buildFranchiseValueInputRows` + the
+   `buildFranchiseAnalyticsTrustReport` gate (`if (!trustReport.war.warLikePreviewAvailable) return {};`) + the
+   `Promise.all` loads (trustedValueArtifact, trueValueRows, battingRows, pitchingRows, rookiePlayerIds — SKIP managerGames
+   + standings, not needed) + `if (!trustedValueArtifact) return {};` + `adaptiveStandardsConfig` +
+   `thresholds = awardQualifierThresholds(adaptiveStandardsConfig)` + `qualifierFacts = qualifierFactsFromStats(...)`. Then
+   for each requested `category`, run `categoryCandidateRows({...})` (the SAME machinery the D9 finalize uses — passing
+   `thresholds.minPlateAppearances`/`minInningsPitched`) and map each result to `{ playerId: c.row.playerId, score:
+   rounded(c.score), marginToWinner: rounded(c.score - rounded(candidates[0].score)) }` (mirror `buildAwardRow`'s
+   marginToWinner). Return the `Partial<Record<...>>`. NO persistence, NO `buildAwardRow`/`goldGloveSplit`, no MOY.
+   **DO NOT add BENCH_PLAYER/BOOGER_GLOVE to `WAR_AWARD_CATEGORIES`** — the D9 season-end finalize loop MUST stay the 5
+   (byte-behavior-identical). The new branches in meetsQualifier/categoryCandidateRows are reached ONLY when this new fn is
+   called with bench/booger — the D9 finalize never passes them.
+
+**B. `src/utils/franchiseRaceStandingsCompute.ts`** (the L12-3b orchestrator) — switch the merit source to the new exporter:
+- Change `L12_MERIT_RACE_CATEGORIES` to the 7: `['MVP','CY_YOUNG','ROOKIE_OF_YEAR','GOLD_GLOVE','SILVER_SLUGGER','BENCH_PLAYER','BOOGER_GLOVE']`.
+- Replace the `raceStandingsSeam.computeAwardsPreview` member with `computeRaceCandidateRows` (wrapping
+  `computeFranchiseRaceCandidateRows`). In the orchestrator, call
+  `const candidateRowsByCategory = await loadOrEmptyRecord(() => raceStandingsSeam.computeRaceCandidateRows({franchiseId,seasonId,statsScopeId,seasonNumber}, L12_MERIT_RACE_CATEGORIES));`
+  (add a `loadOrEmptyRecord` sibling to `loadOrEmpty` that defaults to `{}` on throw). Then for each category, read
+  `candidateRowsByCategory[category] ?? []`; map each `{playerId, score}` → `RaceStandingCandidate` exactly as before (the
+  GG `score + L12_GG_DEFENSIVE_FAME_SHARE * defensiveFame` blend stays; fame default 0/0; skip a category with no rows).
+- Keep everything else (fame load, TV-family, return shape, flag-gate-first, no persistence) unchanged.
+
+**C. Tests:**
+- Update `src/utils/tests/franchiseRaceStandingsCompute.test.ts`: rename the seam stub `computeAwardsPreview` →
+  `computeRaceCandidateRows`, returning a `Partial<Record<category, {playerId,score,marginToWinner}[]>>` instead of
+  `FranchiseAwardRow[]`. Add a BENCH_PLAYER + a BOOGER_GLOVE category to the stub and assert their standings appear in
+  `meritRaces.BENCH_PLAYER` / `meritRaces.BOOGER_GLOVE` (ranked). Keep the GG-blend assertion (now sourced from the new
+  stub shape). Keep the flag-off no-op (the seam method renamed), empty, and loader-failure tests.
+- Extend the awards-engine test file (`src/utils/tests/franchiseAwardsEngine.test.ts`): (a) `computeFranchiseRaceCandidateRows`
+  returns candidate rows for a requested category list (with a seeded/eligible input — reuse the file's existing fixtures);
+  (b) the BENCH_PLAYER reserve filter excludes a non-reserve player + includes a reserve; (c) the BENCH_PLAYER relaxed
+  qualifier admits a part-time PA below the full floor but above `floor*0.25`; (d) BOOGER_GLOVE orders the WORST fielder
+  first (lowest fieldingWar → highest −fieldingWar). If the existing fixtures make a full integration test heavy, a focused
+  unit test of `meetsQualifier`/the filter via `computeFranchiseRaceCandidateRows` is acceptable.
+
+**HARD CONSTRAINTS:** edit/create ONLY the 3 files (franchiseAwardsEngine.ts, franchiseRaceStandingsCompute.ts, the 2 test
+files). **DO NOT change `WAR_AWARD_CATEGORIES`** (D9 finalize stays the 5). NO store/trackerDb/backup/syncConfig/ledger
+change. NO persistence. NO new flag. NO `Date.now`/`Math.random`. NO git add/commit. Prefix all tsc/vitest with `NODE_ENV= `.
+
+**VERIFICATION (run ALL, paste ACTUAL):** `NODE_ENV= npx tsc --noEmit` exit 0 + `NODE_ENV= npm run build` exit 0;
+`NODE_ENV= npx vitest run src/utils/tests/franchiseRaceStandingsCompute.test.ts src/utils/tests/franchiseAwardsEngine.test.ts`
+all green; **AND the awards-engine test must prove the D9 FINALIZE is unchanged** (the existing MVP/CY/RoY/GG/SS finalize
+tests still pass identically).
+
+**STOP-IF:**
+- adding the BENCH_PLAYER branch to `categoryCandidateRows`/`meetsQualifier` forces ANY change to the D9 finalize behavior
+  for the 5 WAR categories (an existing awards-engine test goes red) → STOP + report.
+- `awardQualifierThresholds` / `qualifierFactsFromStats` / `categoryCandidateRows` are not callable as the contract assumes
+  (e.g. private + un-reusable from the new exported fn within the same module) → they ARE in the same module so callable;
+  if not, STOP + report.
+
+**FORMAT:** 1) files changed; 2) the reserve filter + relaxed qualifier + the new exporter shape + the orchestrator switch;
+3) verification output (paste actual build + both test runs, incl. the D9-finalize-unchanged proof); 4) "L12-3c complete"
+or "BLOCKED: <reason>". Do NOT commit.
+
+Use very high reasoning effort. Think step-by-step. Read each file before editing:
+`src/utils/franchiseAwardsEngine.ts` (`meetsQualifier` :258-272, `categoryCandidateRows` :274-326 incl. the ROOKIE filter,
+`computeFranchiseWarAwardsFromEligibleInput` :364+ for the threshold derivation + the categoryCandidateRows call shape,
+`computeFranchiseAwardsPreview` :626-707 for the input assembly to mirror, `awardQualifierThresholds`/`qualifierFactsFromStats`),
+`src/utils/franchiseRaceStandingsCompute.ts` (the L12-3b orchestrator + its `loadOrEmpty` + `raceStandingsSeam`), and the
+two test files.
+
+**Status:** ✅ VERIFIED + COMMITTED 2026-06-19 (attended). Codex (gpt-5.5, xhigh) built via `codex exec`
+stdin-from-contract (4 files: `franchiseAwardsEngine.ts` [+`BENCH_PLAYER_QUALIFIER_FRACTION`=0.25 §16; the meetsQualifier
+relaxed-bench-PA branch; the categoryCandidateRows reserve filter; the new exported `computeFranchiseRaceCandidateRows`
+mirroring the preview assembly minus MOY/standings] + `franchiseRaceStandingsCompute.ts` [seam→`computeRaceCandidateRows`,
+7 merit categories, `loadOrEmptyRecord`, GG blend preserved] + the 2 test files). `WAR_AWARD_CATEGORIES` UNCHANGED (D9
+finalize byte-neutral). → Opus independently audited the diffs line-by-line (builder≠auditor): the new branches are reached
+ONLY by the dark recompute (D9 finalize never passes bench/booger); the new exporter has no persistence/buildAwardRow/MOY;
+the orchestrator switch is behavior-equivalent for the 5 + adds bench/booger. Tests non-vacuous: **D9-finalize-stability
+proof** (persisted categories stay exactly CY/GG/MOY/MVP/RoY/SS), the exporter test (bench reserve filter + relaxed-PA
+distinct from the MVP standard floor; Booger worst-fielder-first via −fieldingWar; MOY/standings NOT called), + the
+orchestrator now asserts Bench/Booger standings ranked. **FULL host gate (mine, not Codex's 2-file scoped run):**
+`NODE_ENV= npm run build` exit 0 + full suite **7,761/446, 7,759 pass / 2 characterized fail** (`wpaRuntimeBoundary` +
+`franchiseManualSmokeFixture`), only 2 failed files, ZERO new reds (+1 = the exporter test). BUILD-DARK + recompute-only;
+trackerDb stays v24. ⇒ the L12 merit-race recompute now covers all 7 merit categories (MVP/CY/SS/GG/RoY + Bench/Booger) +
+the TV-family; only **Reliever-of-Year** remains (L12-3R, needs the live WPA rollup). Branch-only (NOT pushed). **➡ NEXT =
+L12-3R** (the live WPA season-rollup + Reliever).

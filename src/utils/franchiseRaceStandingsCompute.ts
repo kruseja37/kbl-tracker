@@ -17,7 +17,7 @@ import {
 } from '../engines/franchiseTvFamilyScorer';
 import type { PersistedGameState } from './gameStorage';
 import {
-  computeFranchiseAwardsPreview,
+  computeFranchiseRaceCandidateRows,
   type FranchiseWarAwardCategory,
 } from './franchiseAwardsEngine';
 import {
@@ -32,7 +32,7 @@ import type { FranchiseTrueValueRow } from './franchiseTrueValueStorage';
 import {
   getFranchiseTrueValueSnapshotRowsByScope,
 } from './franchiseTrueValueSnapshotsStorage';
-import type { FranchiseAwardRow, FranchiseAwardsScopeInput } from './franchiseAwardsStorage';
+import type { FranchiseAwardsScopeInput } from './franchiseAwardsStorage';
 
 export const L12_GG_DEFENSIVE_FAME_SHARE = 0.2;
 
@@ -42,6 +42,8 @@ const L12_MERIT_RACE_CATEGORIES = [
   'ROOKIE_OF_YEAR',
   'GOLD_GLOVE',
   'SILVER_SLUGGER',
+  'BENCH_PLAYER',
+  'BOOGER_GLOVE',
 ] as const;
 
 type AwardsPreviewScope = FranchiseAwardsScopeInput & {
@@ -70,12 +72,15 @@ type FameSignals = {
   defensiveFame: number;
 };
 
-async function computeAwardsPreview(scope: AwardsPreviewScope): Promise<FranchiseAwardRow[]> {
-  return computeFranchiseAwardsPreview(scope);
+async function computeRaceCandidateRows(
+  scope: AwardsPreviewScope,
+  categories: readonly FranchiseWarAwardCategory[],
+) {
+  return computeFranchiseRaceCandidateRows(scope, categories);
 }
 
 export const raceStandingsSeam = {
-  computeAwardsPreview,
+  computeRaceCandidateRows,
   getFameRows: getFranchiseFameRecordRowsByScope,
   getSnapshotRows: getFranchiseTrueValueSnapshotRowsByScope,
 };
@@ -89,12 +94,12 @@ export async function recomputeFranchiseL12StandingsForCompletedGame(
     return { status: 'dark-noop', reason: 'Phase-2 L12 disabled.' };
   }
 
-  const previewRows = await loadOrEmpty(() => raceStandingsSeam.computeAwardsPreview({
+  const candidateRowsByCategory = await loadOrEmptyRecord(() => raceStandingsSeam.computeRaceCandidateRows({
     franchiseId: scope.franchiseId,
     seasonId: scope.seasonId,
     statsScopeId: scope.statsScopeId,
     seasonNumber: scope.seasonNumber,
-  }));
+  }, L12_MERIT_RACE_CATEGORIES));
   const fameRows = await loadOrEmpty(() => raceStandingsSeam.getFameRows({
     franchiseId: scope.franchiseId,
     seasonId: scope.seasonId,
@@ -104,10 +109,10 @@ export async function recomputeFranchiseL12StandingsForCompletedGame(
 
   const meritRaces: FranchiseL12RaceStandings['meritRaces'] = {};
   for (const category of L12_MERIT_RACE_CATEGORIES) {
-    const awardRow = previewRows.find((row) => row.category === category);
-    if (!awardRow) continue;
+    const candidateRows = candidateRowsByCategory[category] ?? [];
+    if (candidateRows.length === 0) continue;
 
-    const candidates = awardRow.candidates.map((candidate): RaceStandingCandidate => {
+    const candidates = candidateRows.map((candidate): RaceStandingCandidate => {
       const fame = fameByPlayerId.get(candidate.playerId) ?? noFameSignals();
       return {
         playerId: candidate.playerId,
@@ -159,6 +164,24 @@ async function loadOrEmpty<T>(
     return Array.isArray(rows) ? [...rows] : [];
   } catch {
     return [];
+  }
+}
+
+async function loadOrEmptyRecord<T extends string, U>(
+  loader: () => Promise<Partial<Record<T, readonly U[]>>>,
+): Promise<Partial<Record<T, U[]>>> {
+  try {
+    const rowsByKey = await loader();
+    if (!rowsByKey || typeof rowsByKey !== 'object') {
+      return {};
+    }
+    const cloned: Partial<Record<T, U[]>> = {};
+    for (const [key, rows] of Object.entries(rowsByKey) as Array<[T, readonly U[] | undefined]>) {
+      cloned[key] = Array.isArray(rows) ? [...rows] : [];
+    }
+    return cloned;
+  } catch {
+    return {};
   }
 }
 

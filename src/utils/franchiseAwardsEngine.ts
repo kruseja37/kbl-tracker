@@ -96,6 +96,12 @@ export interface ComputeFranchiseAwardsPreviewScope extends FranchiseAwardsScope
   computedAt?: string;
 }
 
+export interface FranchiseRaceCandidateScore {
+  playerId: string;
+  score: number;
+  marginToWinner: number;
+}
+
 type ScoreSelector = (row: FranchiseValueInputRow) => number | null;
 
 const WAR_AWARD_CATEGORIES: readonly FranchiseWarAwardCategory[] = [
@@ -108,6 +114,7 @@ const WAR_AWARD_CATEGORIES: readonly FranchiseWarAwardCategory[] = [
 
 const MANAGER_OF_YEAR_CATEGORY: FranchiseManagerAwardCategory = 'MANAGER_OF_YEAR';
 const MANAGER_OF_YEAR_GAME_LIMIT = 1000;
+const BENCH_PLAYER_QUALIFIER_FRACTION = 0.25;
 
 // MOY-7: Simulation-Gate placeholder. Equal weights are intentionally temporary.
 const MANAGER_OF_YEAR_SIM_GATE_PLACEHOLDER_WEIGHTS = {
@@ -277,6 +284,10 @@ function meetsQualifier(params: {
     return finiteNumber(params.facts.inningsPitched) &&
       params.facts.inningsPitched >= params.minInningsPitched;
   }
+  if (params.category === 'BENCH_PLAYER') {
+    return finiteNumber(params.facts.plateAppearances) &&
+      params.facts.plateAppearances >= params.minPlateAppearances * BENCH_PLAYER_QUALIFIER_FRACTION;
+  }
 
   return finiteNumber(params.facts.plateAppearances) &&
     params.facts.plateAppearances >= params.minPlateAppearances;
@@ -318,6 +329,12 @@ function categoryCandidateRows(params: {
       if (
         params.category === 'ROOKIE_OF_YEAR' &&
         !params.rookiePlayerIds.has(row.playerId)
+      ) {
+        return null;
+      }
+      if (
+        params.category === 'BENCH_PLAYER' &&
+        !row.trueValuePositioning?.isReserve
       ) {
         return null;
       }
@@ -704,4 +721,74 @@ export async function computeFranchiseAwardsPreview(
     ...row,
     finalized: false,
   }));
+}
+
+export async function computeFranchiseRaceCandidateRows(
+  scope: ComputeFranchiseAwardsPreviewScope,
+  categories: readonly FranchiseWarAwardCategory[],
+): Promise<Partial<Record<FranchiseWarAwardCategory, FranchiseRaceCandidateScore[]>>> {
+  const valueInputReport = await buildFranchiseValueInputRows({
+    franchiseId: scope.franchiseId,
+    seasonId: scope.seasonId,
+    statsScopeId: scope.statsScopeId,
+    seasonNumber: scope.seasonNumber,
+  });
+  const trustReport = buildFranchiseAnalyticsTrustReport({
+    valueInputReport,
+  });
+
+  if (!trustReport.war.warLikePreviewAvailable) {
+    return {};
+  }
+
+  const [
+    trustedValueArtifact,
+    trueValueRows,
+    battingRows,
+    pitchingRows,
+    rookiePlayerIds,
+  ] = await Promise.all([
+    getTrustedValueArtifact(scope.franchiseId, scope.seasonId, scope.statsScopeId),
+    getFranchiseTrueValueRows(scope),
+    getAllBattingStats(scope.statsScopeId),
+    getAllPitchingStats(scope.statsScopeId),
+    loadRookiePlayerIds(valueInputReport.rows.map((row) => row.playerId)),
+  ]);
+
+  if (!trustedValueArtifact) {
+    return {};
+  }
+
+  const adaptiveStandardsConfig = deriveAdaptiveStandardsConfig({
+    gamesPerTeam: valueInputReport.seasonContext.gamesPerTeam,
+    inningsPerGame: valueInputReport.seasonContext.inningsPerGame,
+  });
+  const thresholds = awardQualifierThresholds(adaptiveStandardsConfig);
+  const qualifierByPlayerId = factsByPlayerId(qualifierFactsFromStats(battingRows, pitchingRows));
+  const trueValueByPlayerId = trueValueRowsByPlayerId(trueValueRows);
+  const rowsByCategory: Partial<Record<FranchiseWarAwardCategory, FranchiseRaceCandidateScore[]>> = {};
+
+  for (const category of categories) {
+    const candidates = categoryCandidateRows({
+      category,
+      valueRows: valueInputReport.rows,
+      trueValueByPlayerId,
+      trustedValueArtifact,
+      qualifierByPlayerId,
+      minPlateAppearances: thresholds.minPlateAppearances,
+      minInningsPitched: thresholds.minInningsPitched,
+      rookiePlayerIds,
+    });
+    const winnerScore = rounded(candidates[0]?.score ?? 0);
+    rowsByCategory[category] = candidates.map((candidate) => {
+      const score = rounded(candidate.score);
+      return {
+        playerId: candidate.row.playerId,
+        score,
+        marginToWinner: rounded(score - winnerScore),
+      };
+    });
+  }
+
+  return rowsByCategory;
 }
