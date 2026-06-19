@@ -1843,3 +1843,19 @@ selectors — VERIFIED + committed this session), **L12-3b** (the dark recompute
 season-rollup + Reliever — isolated so the live/saved-shape change gets its own audit + browser-verify; it is the ONLY
 non-dark piece of L12-3). **Note:** L12-3R touches `PlayerSeasonPitching` + the season aggregator (LIVE) — flag it for the
 per-ticket engineering audit + the browser-verify batch (saved-shape, prioritized).
+
+## 2026-06-19 (attended) — L12-3R Reliever-of-Year eligibility = PURE RELIEVERS ONLY (gamesStarted === 0)
+**Context:** L12-3R binds RELIEVER_OF_YEAR off a WPA basis (JK earlier ruled WPA-not-LI). Grounding (`wf_509658cd-6fe`)
+confirmed `reliefWpa = Σ(pitchingWpa over !isStarter games)` is exactly computable, which would let a swingman (mostly-
+relief but some starts) compete on his relief-only WPA. The Captain SURFACED the eligibility fork (per the surface-don't-
+infer rule, since it's an award-measurement choice): (A) relievers by usage+volume [swingmen compete on relief WPA], (B)
+PURE relievers only [gamesStarted===0], (C) anyone with relief work.
+**JK RULING: (B) PURE RELIEVERS ONLY** — eligible iff `gamesStarted === 0`, ranked by pitching-WPA, above a relief-innings
+floor. **Consequence (Captain-flagged):** for a 0-start pitcher, relief-WPA == total pitching-WPA, so the relief-isolation
+(`reliefWpa` + the per-game `!isStarter` split) is REDUNDANT and is **DROPPED** — L12-3R persists only ONE new field,
+`pitchingWpa` (total pitching WPA), and filters to 0-start pitchers at scoring time. Simpler + lower-risk live change.
+**Build:** SPLIT **L12-3R-1** (LIVE — `pitchingWpa?` on PlayerSeasonPitching + ungated aggregator accumulation; additive-
+optional, no DB churn; browser-verify batched) + **L12-3R-2** (dark Reliever binding — scoreForCategory pitchingWpa, a
+`gamesStarted > 0 → null` filter, a relief-IP-floor qualifier `minIP × RELIEVER_QUALIFIER_IP_FRACTION` 0.15 §16; the
+orchestrator's 8th category; `WAR_AWARD_CATEGORIES` stays the 5 → D9 finalize byte-neutral). The relief-IP-floor + the
+0-start cutoff are §16 sim placeholders.

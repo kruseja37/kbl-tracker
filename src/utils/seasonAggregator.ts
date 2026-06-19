@@ -275,6 +275,13 @@ async function aggregatePitchingStats(
   gameState: PersistedGameState,
   seasonId: string
 ): Promise<void> {
+  const pitchingWpaByPlayerId = new Map<string, number>();
+  for (const playerWpa of gameState.playerWpaTotals ?? []) {
+    if (Number.isFinite(playerWpa.pitchingWpa)) {
+      pitchingWpaByPlayerId.set(playerWpa.playerId, playerWpa.pitchingWpa);
+    }
+  }
+
   for (const pitcherStats of gameState.pitcherGameStats) {
     const seasonStats = await getOrCreatePitchingStats(
       seasonId,
@@ -325,6 +332,7 @@ async function aggregatePitchingStats(
       saves: seasonStats.saves + (pitcherStats.save ? 1 : 0),
       holds: seasonStats.holds + (pitcherStats.hold ? 1 : 0),
       blownSaves: seasonStats.blownSaves + (pitcherStats.blownSave ? 1 : 0),
+      pitchingWpa: (seasonStats.pitchingWpa ?? 0) + (pitchingWpaByPlayerId.get(pitcherStats.pitcherId) ?? 0),
     };
 
     await updatePitchingStats(updated);

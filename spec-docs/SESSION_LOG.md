@@ -6072,3 +6072,28 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   + recompute-only; trackerDb stays **v24**. ⇒ the L12 merit recompute now covers ALL 7 merit categories (MVP/CY/SS/GG/RoY +
   Bench/Booger) + the TV-family; only **Reliever-of-Year** remains. **➡ NEXT = L12-3R** (the LIVE WPA season-rollup + Reliever
   — the only non-dark L12-3 piece; needs its own engineering audit + JK browser-verify). Branch codex/franchise-v1-next; nothing pushed.
+
+## 2026-06-19 (attended) — L12-3R grounding + JK ruled "pure relievers only" + L12-3R-1 (live pitchingWpa rollup)
+- **JK "keep rolling, ground L12-3R".** Grounding (`wf_509658cd-6fe`, 4 readers): (R1) the aggregator hook = `aggregatePitchingStats`
+  (seasonAggregator.ts:274), UNGATED/live, already loops `pitcherGameStats` (isStarter) + can read `playerWpaTotals` by pitcherId;
+  (R2) adding optional `pitchingWpa?`/`reliefWpa?` to PlayerSeasonPitching is PURE additive (no DB-version/migration/backup/ledger
+  churn — like `pwar?`); (R3) `reliefWpa = Σ(pitchingWpa over !isStarter games)` is EXACTLY computable (a pitcher starts OR relieves
+  per game; join by playerId); (R4) the reliever binding path (thread onto FranchiseWarPreviewValues → scoreForCategory + a usage
+  filter; gamesStarted needed in qualifier facts).
+- **JK RULING — reliever pool = PURE RELIEVERS ONLY (`gamesStarted===0`).** KEY consequence I surfaced: for a 0-start pitcher,
+  relief-WPA == total pitching-WPA, so **`reliefWpa` + the `!isStarter` isolation are DROPPED** — L12-3R needs only ONE field
+  `pitchingWpa` (total pitching WPA), filtered to 0-start pitchers at scoring time. (DECISIONS_LOG to follow.) SPLIT into **L12-3R-1**
+  (LIVE rollup) + **L12-3R-2** (dark Reliever binding); both contracts written to PROMPT_CONTRACTS.md for the review-before-build gate.
+- **L12-3R-1 (Codex gpt-5.5/xhigh, 3 files):** `seasonStorage.ts` (+`pitchingWpa?: number` on PlayerSeasonPitching, after `pwar?`,
+  NOT in `createInitialPitchingStats`) + `seasonAggregator.ts` (`aggregatePitchingStats` builds a finite-guarded
+  `pitchingWpaByPlayerId` from `gameState.playerWpaTotals ?? []` + sums `pitchingWpa` unconditionally per pitcher, matching the
+  sibling saves/holds accumulation — missing WPA → +0) + a new fake-indexeddb test.
+- **Audit (builder=Codex ≠ auditor=Opus):** both diffs read line-by-line — additive-optional field (no DB churn; trackerDb stays v24);
+  accumulation mirrors the existing summed-field idempotency model (no NEW risk); the test is real end-to-end (2-game sum
+  0.42+(−0.12)=0.30; missing→0; undefined-totals→0, no NaN). **FULL host gate (mine):** `NODE_ENV= npm run build` exit 0 + full
+  suite **7,764/447, 7,762 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+3
+  = the new test) — **the LIVE aggregator change perturbed no other test.**
+- **LIVE + saved-shape (NOT build-dark)** — `pitchingWpa` accumulates ungated every regular-season game (substrate write like TV
+  snapshots, so history exists at the post-D13 flag-flip). **Browser-verify BATCHED + PRIORITIZED** (CURRENT_STATE BROWSER-VERIFY
+  OUTSTANDING #24). trackerDb v24. **➡ NEXT = L12-3R-2** (the dark Reliever binding — depends on this `pitchingWpa` field).
+  Branch codex/franchise-v1-next; nothing pushed.

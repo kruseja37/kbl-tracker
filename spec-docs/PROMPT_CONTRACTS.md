@@ -11932,3 +11932,140 @@ orchestrator now asserts Bench/Booger standings ranked. **FULL host gate (mine, 
 trackerDb stays v24. ⇒ the L12 merit-race recompute now covers all 7 merit categories (MVP/CY/SS/GG/RoY + Bench/Booger) +
 the TV-family; only **Reliever-of-Year** remains (L12-3R, needs the live WPA rollup). Branch-only (NOT pushed). **➡ NEXT =
 L12-3R** (the live WPA season-rollup + Reliever).
+
+> **L12-3R DESIGN (grounded `wf_509658cd-6fe`; JK ruled the reliever pool = PURE RELIEVERS ONLY 2026-06-19).**
+> Consequence of "pure relievers only" (`gamesStarted===0`): a 0-start pitcher's relief-WPA == their total pitching-WPA,
+> so **`reliefWpa` + the `!isStarter` per-game isolation are DROPPED** — L12-3R needs only ONE new field `pitchingWpa`
+> (total pitching WPA), filtered to 0-start pitchers at scoring time. SPLIT: **L12-3R-1** (LIVE rollup — schema field +
+> ungated aggregator accumulation) → **L12-3R-2** (dark Reliever binding).
+
+---
+
+## CONTRACT — L12-3R-1 (LIVE WPA season rollup: pitchingWpa on PlayerSeasonPitching) — 2026-06-19 (attended)
+
+**ROUTE: Codex CLI (`codex exec`, prompt via stdin from this contract) | very high reasoning effort** (builder; **LIVE +
+SAVED-SHAPE** — the season aggregator runs ungated every regular-season game, and this adds a persisted optional field;
+NOT build-dark). Auditor = Opus Captain (cross-model triangle; builder≠auditor). Branch codex/franchise-v1-next. Source of
+truth: the L12-3R grounding (`wf_509658cd-6fe` R1/R2) + JK's "pure relievers only" ruling (DECISIONS_LOG 2026-06-19) + the
+ungated TrueValue-snapshot substrate-write precedent (`processCompletedGame.ts:609`). **Per the batched-browser-verify pen:
+the per-ticket ENGINEERING gate (build/suite/falsify) runs now + PASSES; JK's browser sign-off is BATCHED + PRIORITIZED
+(saved-shape).**
+
+**GOAL:** persist a per-player season `pitchingWpa` (total pitching Win Probability Added) so the L12-3R-2 dark Reliever
+race can rank pure relievers by it. Accumulated UNGATED in the live season aggregator (so the history exists when the L12
+flag flips), mirroring the TrueValue-snapshot substrate write. NO reliefWpa, NO `!isStarter` split (JK ruled pure relievers
+only ⇒ relief-WPA == total pitching-WPA for the eligible set).
+
+**CHANGES (edit/create ONLY these files):**
+**A. `src/utils/seasonStorage.ts`** — add ONE optional field to `PlayerSeasonPitching` (after `pwar?: number`, before
+`lastUpdated`): `pitchingWpa?: number;`. **Do NOT add it to `createInitialPitchingStats`** (match the `pwar` pattern —
+optional, written only during aggregation). Additive-optional ⇒ NO DB-version bump, NO migration, NO backup/ledger change
+(verified R2: trackerDb stays v24, KBL_BACKUP_VERSION stays 2, the ledger PIN is untouched — the store list is unchanged).
+**B. `src/utils/seasonAggregator.ts`** — in `aggregatePitchingStats` (~:274-332), accumulate `pitchingWpa` UNCONDITIONALLY
+for every pitcher, summed per game (mirror the existing counting-field accumulation, e.g. `gamesStarted` at ~:305):
+- Build a per-pitcher game-WPA lookup from `gameState.playerWpaTotals` (a `KblWpaPlayerTotal[]`, may be `undefined`):
+  `const pitchingWpaByPlayerId = new Map(...)` keyed by `playerId` → `pitchingWpa` (guard undefined/non-finite → skip).
+- In the per-pitcher update, set the new season value = `(existing.pitchingWpa ?? 0) + (pitchingWpaByPlayerId.get(pitcherId) ?? 0)`,
+  following the EXACT idempotency/accumulation shape the sibling summed fields use (so a pitcher missing from
+  `playerWpaTotals` contributes 0, never NaN). Do NOT alter any other field's accumulation.
+**C. Tests** (`src/utils/tests/seasonAggregator*.test.ts` — match the repo convention): a pitcher's `pitchingWpa` SUMS
+across two aggregated games; a pitcher present in `pitcherGameStats` but ABSENT from `playerWpaTotals` accumulates +0 (no
+NaN); `playerWpaTotals` undefined ⇒ all pitchers +0 (no throw).
+
+**HARD CONSTRAINTS:** edit/create ONLY the 3 files. NO `reliefWpa`, NO `!isStarter` logic (pure relievers only). NO DB
+version / trackerDb / backup / syncConfig / ledger change (additive optional field). NO career-WPA field (out of scope). NO
+new flag (this is an ungated substrate write by design). NO `Date.now`/`Math.random`. NO git add/commit. Prefix tsc/vitest
+with `NODE_ENV= `.
+
+**VERIFICATION (run ALL, paste ACTUAL):** `NODE_ENV= npx tsc --noEmit` exit 0 + `NODE_ENV= npm run build` exit 0; the
+seasonAggregator test green. (The auditor runs the FULL host suite.)
+
+**STOP-IF:** `PlayerSeasonPitching` / `aggregatePitchingStats` / `gameState.playerWpaTotals` (`KblWpaPlayerTotal.pitchingWpa`)
+shapes differ from the grounding → STOP + report. Accumulating `pitchingWpa` forces ANY existing aggregator test red →
+STOP + report (it must be purely additive).
+
+**FORMAT:** 1) files changed; 2) the accumulation shape + the undefined/missing-WPA guard; 3) verification output; 4)
+"L12-3R-1 complete" or "BLOCKED: <reason>". Do NOT commit.
+
+Use very high reasoning effort. Think step-by-step. Read `src/utils/seasonAggregator.ts` (`aggregatePitchingStats` + the
+sibling field accumulation + idempotency), `src/utils/seasonStorage.ts` (`PlayerSeasonPitching` + `createInitialPitchingStats`),
+`src/utils/kblWpaAttribution.ts` (`KblWpaPlayerTotal.pitchingWpa`), `src/utils/gameStorage.ts` (`playerWpaTotals` on the game state).
+
+**Status:** ✅ VERIFIED + COMMITTED 2026-06-19 (attended). Codex (gpt-5.5, xhigh) built via `codex exec`
+stdin-from-contract (3 files: `seasonStorage.ts` [+`pitchingWpa?: number` on PlayerSeasonPitching, after `pwar?`, NOT in
+`createInitialPitchingStats`] + `seasonAggregator.ts` [`aggregatePitchingStats` builds a finite-guarded
+`pitchingWpaByPlayerId` from `gameState.playerWpaTotals ?? []` + sums `pitchingWpa` unconditionally per pitcher, matching
+the sibling summed-field shape — missing WPA → +0] + a new fake-indexeddb test). NO reliefWpa / NO `!isStarter` (pure
+relievers only). → Opus independently audited (builder≠auditor): the field is additive-optional (no DB-version/migration/
+backup/ledger churn — trackerDb stays v24, KBL_BACKUP_VERSION 2); the accumulation mirrors the existing saves/holds pattern
+(same idempotency model — sums per game, no NEW idempotency risk); the test is real end-to-end (aggregates 2 games →
+0.42+(−0.12)=0.30; missing-from-totals→0; undefined-totals→0, no NaN). **FULL host gate (mine):** `NODE_ENV= npm run build`
+exit 0 + full suite **7,764/447, 7,762 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`),
+ZERO new reds (+3 = the new test) — **the LIVE aggregator change perturbed no other test.** **LIVE + saved-shape (NOT
+build-dark)** — `pitchingWpa` accumulates ungated every regular-season game (substrate write, like TV snapshots, so history
+exists at the post-D13 flag-flip). **Browser-verify BATCHED + PRIORITIZED** (saved-shape — logged in CURRENT_STATE
+BROWSER-VERIFY OUTSTANDING). Branch-only (NOT pushed). **➡ NEXT = L12-3R-2** (the dark Reliever binding — depends on this field).
+
+---
+
+## CONTRACT — L12-3R-2 (dark Reliever-of-Year binding: pitchingWpa basis, pure-reliever filter) — 2026-06-19 (attended)
+
+**ROUTE: Codex CLI (`codex exec`, prompt via stdin from this contract) | very high reasoning effort** (builder; BUILD-DARK —
+the binding only affects the flag-gated L12 recompute + the dark RELIEVER_OF_YEAR category; `WAR_AWARD_CATEGORIES` stays the
+5 ⇒ D9 finalize byte-neutral). Auditor = Opus Captain (builder≠auditor). Branch codex/franchise-v1-next. **DEPENDS ON
+L12-3R-1** (the `pitchingWpa` season field must exist first). Source of truth: the L12-3R grounding (`wf_509658cd-6fe` R4) +
+JK's "pure relievers only" ruling + the L12-3c bench/booger binding pattern (`7f78618e`).
+
+**GOAL:** bind RELIEVER_OF_YEAR into the dark L12 recompute — ranked by season `pitchingWpa`, eligibility = PURE RELIEVERS
+(`gamesStarted === 0`) above a relief-innings floor. Mirrors how Bench/Booger were bound (L12-3c). Build-dark; rides the
+existing `franchiseRaceStandingsCompute` recompute.
+
+**CHANGES (edit/create ONLY these files):**
+**A. `src/utils/franchiseValueInputs.ts`** — thread the new season field onto the value-input row so the scorer can read it:
+add `pitchingWpa: number | null;` to `FranchiseWarPreviewValues` (~:34-42); in `buildWarPreviewValues` (~:238-280) set it
+from `pitching?.pitchingWpa ?? null` (alongside how `pwar`/pitching fields flow). It then flows into the row via
+`buildFranchiseValueInputRows` automatically.
+**B. `src/utils/franchiseAwardsEngine.ts`** — five additive, D9-finalize-NEUTRAL edits:
+1. `const RELIEVER_QUALIFIER_IP_FRACTION = 0.15;` (§16 placeholder — relievers throw far fewer innings than the starter IP floor).
+2. `FranchiseWarAwardCategory` Extract (~:38-47): add `| 'RELIEVER_OF_YEAR'` (→ 8 members).
+3. `FranchiseWarAwardQualifierFacts` (~:48-58): add `gamesStarted?: number | null;`; populate it in `qualifierFactsFromStats`
+   (~:506-552) from the pitching row's `gamesStarted` (merge alongside `inningsPitched`).
+4. `scoreForCategory` switch: `case 'RELIEVER_OF_YEAR': return (row) => row.warPreviewValues.pitchingWpa;`
+5. `categoryCandidateRows` (~:274-354): add a pure-reliever filter (mirror the BENCH reserve filter) — a candidate is
+   excluded unless they are a pure reliever: `if (params.category === 'RELIEVER_OF_YEAR' && (params.qualifierByPlayerId.get(row.playerId)?.gamesStarted ?? 0) > 0) return null;`
+   AND `meetsQualifier` (~:258-272): add a RELIEVER branch — relief IP floor:
+   `if (params.category === 'RELIEVER_OF_YEAR') return finiteNumber(params.facts.inningsPitched) && params.facts.inningsPitched >= params.minInningsPitched * RELIEVER_QUALIFIER_IP_FRACTION;`
+   **DO NOT change `WAR_AWARD_CATEGORIES`** (stays the 5 — D9 finalize byte-neutral; the RELIEVER branch is reached ONLY when
+   the new fn / recompute passes RELIEVER_OF_YEAR).
+**C. `src/utils/franchiseRaceStandingsCompute.ts`** — add `'RELIEVER_OF_YEAR'` to `L12_MERIT_RACE_CATEGORIES` (→ the 8th).
+The orchestrator's existing per-category loop + the GG blend are unchanged (RELIEVER has no fame blend; its candidate maps
+`meritScore = candidate.score` = pitchingWpa).
+**D. Tests:**
+- `src/utils/tests/franchiseAwardsEngine.test.ts`: `computeFranchiseRaceCandidateRows(scope, ['RELIEVER_OF_YEAR'])` — a
+  starter (gamesStarted>0) is EXCLUDED even with high pitchingWpa; a 0-start reliever above the relief-IP floor is INCLUDED +
+  ranked by pitchingWpa (desc); a 0-start reliever below the relief-IP floor is excluded; the D9 finalize categories stay
+  exactly the 5 WAR + MOY (extend the existing finalize-stability assertion).
+- `src/utils/tests/franchiseRaceStandingsCompute.test.ts`: the seam stub returns a RELIEVER_OF_YEAR candidate list ⇒
+  `meritRaces.RELIEVER_OF_YEAR` appears ranked.
+
+**HARD CONSTRAINTS:** edit/create ONLY the 4 files. **DO NOT change `WAR_AWARD_CATEGORIES`** (D9 finalize stays the 5). NO
+store/trackerDb/backup/syncConfig/ledger change. NO persistence. NO new flag. NO `Date.now`/`Math.random`. NO git
+add/commit. Prefix tsc/vitest with `NODE_ENV= `.
+
+**VERIFICATION (run ALL, paste ACTUAL):** `NODE_ENV= npx tsc --noEmit` exit 0 + `NODE_ENV= npm run build` exit 0;
+`NODE_ENV= npx vitest run src/utils/tests/franchiseAwardsEngine.test.ts src/utils/tests/franchiseRaceStandingsCompute.test.ts`
+all green, INCLUDING the D9-finalize-unchanged proof. (The auditor runs the FULL host suite.)
+
+**STOP-IF:** `FranchiseWarPreviewValues` lacks `pitchingWpa` after L12-3R-1's field threads through (i.e. L12-3R-1 not yet
+landed) → STOP + report (R-2 depends on R-1). Adding RELIEVER_OF_YEAR forces a compile change BEYOND the listed sites
+(another exhaustive switch on `FranchiseWarAwardCategory`) → STOP + report.
+
+**FORMAT:** 1) files changed; 2) the reliever filter (gamesStarted===0) + the relief-IP floor + the pitchingWpa basis + the
+orchestrator 8th category; 3) verification output (incl. D9-finalize-unchanged); 4) "L12-3R-2 complete" or "BLOCKED". Do NOT commit.
+
+Use very high reasoning effort. Think step-by-step. Read `src/utils/franchiseAwardsEngine.ts` (the L12-3c BENCH/BOOGER
+pattern — `scoreForCategory`/`categoryCandidateRows` reserve filter/`meetsQualifier` bench branch/`qualifierFactsFromStats` —
+to mirror), `src/utils/franchiseValueInputs.ts` (`FranchiseWarPreviewValues` + `buildWarPreviewValues`),
+`src/utils/franchiseRaceStandingsCompute.ts` (`L12_MERIT_RACE_CATEGORIES`), and the two test files.
+
+**Status:** ⏳ CONTRACTED 2026-06-19 (attended). Awaiting dispatch (after L12-3R-1).

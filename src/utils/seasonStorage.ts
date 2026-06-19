@@ -120,6 +120,7 @@ export interface PlayerSeasonPitching {
 
   // WAR (populated by WAR orchestrator after calculation)
   pwar?: number;       // Pitching WAR
+  pitchingWpa?: number;
 
   // Timestamps
   lastUpdated: number;

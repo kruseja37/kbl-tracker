@@ -20,8 +20,12 @@ under-specified mirror surface across 2 dispatches BEFORE any broken-mirror comm
 snapshot trueValues)`** (**JK 2026-06-19 correction** — the CURRENT gap from the season trough, NOT max-rise-over-checkpoints;
 a mid-season peak given back must NOT win). PURE / build-DARK (NO caller/flag/store; a later hook feeds it the TV rows);
 Codex-built → Opus-audited → host-gate **7,745/444, ZERO new reds** (+8). **L12-3 SPLIT a/b/c/R (attended design pass —
-JK ruled the merit bases): L12-3a + L12-3b + L12-3c ✅ COMPLETE; ➡ NEXT = L12-3R (the live WPA rollup + Reliever — the only
-non-dark piece left).** **✅ L12-3a COMPLETE (2026-06-19, attended)** — the
+JK ruled the merit bases): L12-3a + L12-3b + L12-3c + L12-3R-1 ✅ COMPLETE; ➡ NEXT = L12-3R-2 (the dark Reliever binding —
+last L12-3 piece).** **L12-3R split R-1 (live `pitchingWpa` rollup) + R-2 (dark Reliever binding) after JK ruled the
+reliever pool = PURE RELIEVERS ONLY (so reliefWpa==pitchingWpa for the eligible set → dropped reliefWpa/`!isStarter`).
+✅ L12-3R-1 COMPLETE (LIVE/saved-shape): `pitchingWpa?` on PlayerSeasonPitching + ungated accumulation in
+`aggregatePitchingStats` (additive-optional, no DB churn; trackerDb v24); host gate 7,764/447, ZERO new reds; **browser-verify
+BATCHED** (saved-shape #B-L12-3R-1).** **✅ L12-3a COMPLETE (2026-06-19, attended)** — the
 PURE race-standing composite engine `src/engines/franchiseRaceStandingScorer.ts` (`computeFranchiseRaceStanding`:
 per-race-type weighted composite `wMerit·meritPercentile + wFame·famePercentile`, fame via `resolveFameTier` rank ONLY
 [Q10]; the **Q3 close-race tilt** = fame contributes only when `|marginToWinner| < tiltWindow` AND both merit > floor —
@@ -1340,6 +1344,12 @@ forced the test edit, and the stale `teamMvpAcePreview` assertion was aligned to
     trait-overlays intact); the new store is empty (dark until L10-3 writes L10 event rows); backup → wipe → restore
     round-trips with the new store present (empty). Saved-data-shape change, so it leads the batch. (Engine audit already
     proved the v22→v23 migration-survival + backup parity in unit tests; this is the real-franchise confirmation.)
+24. **L12-3R-1** (DATA/season-aggregation — no visible UI; saved-shape, prioritized) per-player season `pitchingWpa` now
+    accumulates in the live season aggregator (ungated, like the TrueValue snapshots): play franchise games to completion
+    and confirm that pitchers' `PlayerSeasonPitching.pitchingWpa` accumulates (sum of each game's per-pitcher pitching-WPA
+    from `playerWpaTotals`) and survives reload + backup/restore; a pitcher with no WPA entry that game stays at +0 (never
+    NaN); no perceptible overhead. Additive optional field (no DB-version bump). No visible UI change — it feeds the dark
+    L12-3R-2 Reliever-of-Year race (flag-gated, pure relievers ranked by pitchingWpa). A data/season-stat verification.
 
 ## OPEN PENDING-JK (rolling)
 
