@@ -1,6 +1,8 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-18 — **ACTIVE (attended).** **L10 Q5/Q8 REWORK COMPLETE → L10 (random events) FULLY
+**Last Updated:** 2026-06-18 — **ACTIVE (attended).** **L11 (manager firings) STARTED — recon + JK rulings + L11-1 (pure
+firing+ripple engine) DONE** (Codex-built → Opus-VERIFIED, build-DARK; ➡ NEXT = L11-2 manager-personality field +
+legacy/tenure write). *(prior:)* **L10 Q5/Q8 REWORK COMPLETE → L10 (random events) FULLY
 COMPLETE.** Continuous per-game cadence (Q5 — dropped the 20%-checkpoint gate; flat per-game §16 base rates) +
 `name_change` in the dark catalog (Q8 — rare distinct cosmetic-family event). **Builder routing RESTORED to Codex**
 (JK directive) — Codex CLI (gpt-5.5, xhigh) built via `codex exec` stdin-from-contract; Opus 4.8 audited (cross-model
@@ -67,7 +69,7 @@ is **~95% BUILT / production-ready** → it's a CLEANUP pass, not a build: domin
 files** (FranchiseHome 626 · TeamHubContent 506 · ScheduleContent 90 · AwardsWatchlist 30) → extract to KBL-palette
 theme tokens + minor polish (~1 week). **Timing: it's the LIVE surface, decoupled from D13/L-stack/GameTracker — do it
 ANYTIME (no gate forces a wait; mild bonus to doing tokens before the hub's future activation overlays).** Suite
-**7,689/438, 7,687 pass / 2 characterized fail (post-L10-Q5Q8; +3 Q8 engine tests)** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` +
+**7,699/439, 7,697 pass / 2 characterized fail (post-L11-1; +10 L11-1 engine tests)** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` +
 `GameTrackerLaunchState` — the 3rd an intermittent order-flake **confirmed passing solo 9/9**; `franchiseOffseasonGuards.component`
 is another such flake); trackerDb **v23**; branch codex/franchise-v1-next; **nothing pushed**. Session commits: R1-b1
 `474196e7` · R1-b2 `bbb839ce` · R2 `b80fa135` · R1-b3 `7e22e015` · R3 `9059f697` · W1 `6a934a9e` · PRE-ACT-TRAITS gate
@@ -191,6 +193,29 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## RIGHT NOW
 
+- **✅ L11-1 VERIFIED + COMMITTED (2026-06-18, attended) — the pure manager-firing + player-ripple engine (first L11
+  ticket); preceded by the L11 recon + JK's 4 kickoff rulings (`cf097d09`).** L11 grounding recon (workflow
+  `wf_107b9eb5-faf`, 5 readers → `L11_SCOPE_MAP.md`) established **L11 = the missing fire ACTION over already-built parts**
+  (the `MANAGER_FIRED` matrix row + `ManagerAssignment.fired`/`endDate` + the Manager Almanac all exist; the row has zero
+  emitters, nothing writes `fired:true`), NOT a new subsystem. MOY stays OUT (Phase-1 D9). **JK rulings (DECISIONS_LOG):**
+  trigger = manual GM action + auto-backstop (revive the orphaned `managerFireProbability`) + L14 cascade (one shared
+  resolver); personality ripple = build full now, dark vs the types (inert until L1 + a new manager-personality field);
+  performance gate = SCALED by how underwater (live `valueDelta`, net-positive untouchable); fan-relief = SCALED by team
+  struggle, once per firing. **L11-1** = NEW pure `src/engines/franchiseL11FiringEngine.ts` (+10-test file):
+  `computeFranchiseL11Firing(input, tuning?)` → `{reliefBumpDelta, playerRipples[], managerSelfDelta}` — relief scaled by
+  struggle (4 at neutral fan-morale → capped 12 cratered); per-player ripple 0 for net-positive (untouchable), else a
+  `|valueDelta|`-severity gradient × personality tilt (§12-verbatim: loyal bigger, resilient smaller, EGOTISTICAL lowest
+  0.5); magnitudes §16 sim-tune. PURE (no Date.now/Math.random/I/O), build-DARK — NO caller/flag/store, trackerDb stays
+  **v23**, imports only the `CanonicalPersonality` type. **Builder = Codex (gpt-5.5) ≠ Auditor = Opus Captain**
+  (cross-model triangle). Independent line-by-line audit + directional falsification (loyal>disloyal, resilient<non-resilient,
+  egotist<timid/droopy, monotonic severity, relief inverse-to-morale — all 10 tests are real comparisons, non-vacuous; the
+  clamp test honestly uses override tuning since default maxes at −5.4 < the −6 floor) → VERIFIED (0 major / 0 minor).
+  Host gate: `NODE_ENV= npm run build` exit 0 (8.67s) + full suite **7,699/439, 7,697 pass / 2 characterized fail**
+  (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+10 / +1 file). Committed on
+  codex/franchise-v1-next (2 engine files + docs; **not pushed**). **➡ NEXT = L11-2** (the manager-personality field
+  [home: identity `ManagerProfile` managerWpa.ts:68, reuse the canonical 7-personality enum] + the legacy/tenure write —
+  a `setManagerFired` mutator setting `fired`/`endDate`/reason + the Almanac tenure aggregate gaining hire/fire dates).
+  *(Prior L10/L9b entries below.)*
 - **✅ L10-Q5Q8 VERIFIED + COMMITTED (2026-06-18, attended) — the Q5/Q8 rework of the L10 random-event subsystem; ⇒ L10
   (random events) FULLY COMPLETE.** **Q5 (continuous cadence):** dropped the 20%-checkpoint gate in
   `franchiseL10SweepCompute.ts` (removed the `getSeasonMetadata` + `isCheckpointBoundary` fetch/gate + the

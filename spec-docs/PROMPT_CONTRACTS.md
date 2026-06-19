@@ -10906,3 +10906,78 @@ event (seam team-path preserved). NO store/DB/flag touch (trackerDb stays **v23*
 `NODE_ENV= npm run build` exit 0 (7.59s) + full suite **7,689/438, 7,687 pass / 2 characterized fail** (`wpaRuntimeBoundary`
 + `franchiseManualSmokeFixture`), ZERO new reds (+3 Q8 engine tests). Committed on codex/franchise-v1-next (4 code/test +
 docs; not pushed). **➡ NEXT = L11 (managers)** — fresh subsystem, grounding recon first.
+
+---
+
+## CONTRACT — L11-1 (pure manager-firing + player-ripple engine) — 2026-06-18 (attended)
+
+**ROUTE: Codex CLI (`codex exec`, prompt via stdin from this contract) | high reasoning effort** (builder). Auditor =
+Opus 4.8 Captain (independent; ≠ builder; cross-model triangle). Branch codex/franchise-v1-next. BUILD-DARK (pure
+engine; no caller, no flag, no store, no trackerDb touch). Source of truth: `spec-docs/L11_SCOPE_MAP.md` (§2 mechanic,
+§3 split L11-1) + DECISIONS_LOG 2026-06-18 "L11 manager-firings kickoff" rulings (FRANCHISE_V1_LIVING_SEASON_SPEC §12).
+First L11 ticket — the PURE compute half; persistence/flag/hook/manager-personality-field land in L11-2/3.
+
+**GOAL:** a NEW pure deterministic engine that, given a firing snapshot (team fan morale + per-player {True-Value
+`valueDelta`, personality, loyalty, resilience}), returns the scaled fan-relief bump + the per-player morale ripple
+(zero for net-positive players; a severity×personality gradient for net-negative), per JK's 2026-06-18 rulings.
+
+**CHANGES (implement EXACTLY) — create ONLY these two files:**
+
+**A. NEW `src/engines/franchiseL11FiringEngine.ts`** (pure; import ONLY `import type { CanonicalPersonality } from
+'./masterMoraleMatrix';` — do NOT import EVENT_DELTA/composeMoraleConsequence or anything runtime):
+1. Types:
+   - `FranchiseL11FiringPlayer { id: string; valueDelta: number; personality: CanonicalPersonality; loyalty?: number; resilience?: number }` (loyalty/resilience are 0–100; absent → treated as the neutral 50).
+   - `FranchiseL11FiringInput { teamFanMorale: number; players: readonly FranchiseL11FiringPlayer[]; reason?: 'user' | 'auto-backstop' | 'rebrand' }`.
+   - `FranchiseL11PlayerRipple { playerId: string; moraleDelta: number; untouchable: boolean }`.
+   - `FranchiseL11FiringReport { reliefBumpDelta: number; playerRipples: FranchiseL11PlayerRipple[]; managerSelfDelta: number }`.
+   - `FranchiseL11FiringTuning` interface + `export const FRANCHISE_L11_FIRING_TUNING: FranchiseL11FiringTuning`.
+2. `FRANCHISE_L11_FIRING_TUNING` — §16 SIM-TUNE placeholders (directions per §12; seeded off the MANAGER_FIRED matrix
+   values, but owned locally): `neutralMorale: 50`, `reliefBase: 4`, `reliefStruggleScale: 2`, `reliefMax: 12`,
+   `managerSelfBase: -2`, `rippleBase: -2`, `valueDeltaScale: 200000`, `rippleFloor: -6`, `loyaltyWeight: 0.5`,
+   `resilienceWeight: 0.5`, and `personalitySensitivity: Record<CanonicalPersonality, number>` =
+   `{ COMPETITIVE: 1.0, RELAXED: 0.9, DROOPY: 1.15, JOLLY: 0.9, TOUGH: 0.7, TIMID: 1.2, EGOTISTICAL: 0.5 }` (EGOTISTICAL
+   LOWEST — §12 "a producing egotist barely notices"; all §16 placeholders).
+3. `export function computeFranchiseL11Firing(input: FranchiseL11FiringInput, tuning: FranchiseL11FiringTuning = FRANCHISE_L11_FIRING_TUNING): FranchiseL11FiringReport`:
+   - **Relief bump (scaled by struggle — JK):** `const fan = clamp(input.teamFanMorale, 0, 100); const struggle = Math.max(0, (tuning.neutralMorale - fan) / tuning.neutralMorale); reliefBumpDelta = clamp(tuning.reliefBase * (1 + tuning.reliefStruggleScale * struggle), 0, tuning.reliefMax);` (one value per firing — NOT per player). So fan 50→4, fan 0→12 (capped), fan 25→8.
+   - **Per-player ripple (performance gate SCALED — JK):** for each player, if `valueDelta >= 0` → `{ playerId, moraleDelta: 0, untouchable: true }` (net-positive = untouchable, §12). Else:
+     `severity = clamp(Math.abs(valueDelta) / tuning.valueDeltaScale, 0, 1);`
+     `loyalty = player.loyalty ?? tuning.neutralMorale; resilience = player.resilience ?? tuning.neutralMorale;`
+     `loyaltyFactor = 1 + tuning.loyaltyWeight * (loyalty - tuning.neutralMorale) / tuning.neutralMorale;` (loyal→bigger hit; §12 "a loyal player takes a morale hit")
+     `resilienceFactor = 1 - tuning.resilienceWeight * (resilience - tuning.neutralMorale) / tuning.neutralMorale;` (resilient→smaller; §12 "a resilient one shrugs it off")
+     `tilt = Math.max(0, tuning.personalitySensitivity[player.personality] * loyaltyFactor * resilienceFactor);` (clamp ≥0 so the hit never flips to positive)
+     `moraleDelta = clamp(tuning.rippleBase * severity * tilt, tuning.rippleFloor, 0);` → `{ playerId, moraleDelta, untouchable: false }`.
+   - `managerSelfDelta = tuning.managerSelfBase;` (the manager's own −2, a passthrough for the resolver).
+   - Sort `playerRipples` by `playerId` (stable/deterministic). Local `clamp(v,min,max)` helper.
+   - **PURE:** no `Date.now`/`Math.random`/IndexedDB/async; deterministic (same input → deeply-equal output).
+
+**B. NEW `src/engines/__tests__/franchiseL11FiringEngine.test.ts`** — assert: (1) net-positive player → moraleDelta 0 +
+untouchable true; (2) net-negative → moraleDelta < 0 + untouchable false; (3) MONOTONIC severity — a more-underwater
+valueDelta yields a larger-magnitude hit (same personality/modifiers); (4) loyal (loyalty 100) → bigger hit than
+disloyal (loyalty 0); (5) resilient (resilience 100) → smaller hit than non-resilient (0); (6) EGOTISTICAL → smaller hit
+than TIMID/DROOPY (same inputs); (7) relief scales — lower teamFanMorale → larger reliefBumpDelta, fan 50 → reliefBase 4,
+clamped at reliefMax; (8) clamps — extreme valueDelta respects rippleFloor; (9) determinism — same input deeply-equal on
+two calls; (10) absent loyalty/resilience treated as neutral 50.
+
+**HARD CONSTRAINTS:** create ONLY the two files above. Do NOT modify `masterMoraleMatrix.ts` (import the TYPE only), any
+store/`trackerDb.ts`/`franchisePhase2Flags.ts`/`processCompletedGame.ts`/manager-identity/`salaryCalculator.ts`/Almanac,
+or any `*.md`. NO flag, NO store, NO DB bump, NO caller (pure build-DARK). No `Date.now`/`Math.random`. No git
+add/commit. Prefix all tsc/vitest with `NODE_ENV= `.
+
+**VERIFICATION (builder runs, reports ACTUAL output):** `NODE_ENV= npx tsc --noEmit` exit 0; `NODE_ENV= npx vitest run
+src/engines/__tests__/franchiseL11FiringEngine.test.ts` all green. Report every changed/created path + count, the relief
++ ripple formulas as built, and confirm no file beyond the two new ones changed.
+
+**FORMAT:** 1) Files created. 2) The relief-bump + per-player-ripple logic as built + any deviation. 3) Verification
+output (paste actual). 4) "L11-1 complete" or "BLOCKED: <reason>". Do NOT commit.
+
+Use high reasoning effort. Think step-by-step. Read masterMoraleMatrix.ts for the CanonicalPersonality type before importing.
+
+**Status:** ✅ VERIFIED + COMMITTED (2026-06-18, attended). Codex (gpt-5.5) built via `codex exec` stdin-from-contract →
+Opus 4.8 Captain INDEPENDENTLY audited (≠ builder; cross-model triangle): VERDICT VERIFIED, 0 major / 0 minor. Engine
+exact to contract (relief scaled by struggle 4→12; performance gate scaled gradient, net-positive untouchable;
+personality tilt §12-verbatim, EGOTISTICAL lowest); PURE/build-DARK (no caller/flag/store, trackerDb v23). 10/10 tests
+non-vacuous + directional (loyal>disloyal, resilient<non-resilient, egotist<timid/droopy, monotonic severity, relief
+inverse-to-morale); the clamp test honestly uses override tuning (default maxes at −5.4 < the −6 floor — builder
+disclosed). Host gate: `NODE_ENV= npm run build` exit 0 (8.67s) + full suite **7,699/439, 7,697 pass / 2 characterized
+fail**, ZERO new reds (+10 / +1 file). Committed on codex/franchise-v1-next (not pushed). **➡ NEXT = L11-2** (manager-personality
+field + legacy/tenure write).

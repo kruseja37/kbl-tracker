@@ -5764,3 +5764,27 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   order-flakes both passed this run), **ZERO new reds** (+3 tests / +0 files).
 - **⇒ L10 (random events) FULLY COMPLETE** incl. the Q5/Q8 rework. **NEXT = L11 (managers)** — a FRESH L-stack subsystem
   needing a grounding recon before contracting (mirror the L10 recon). Nothing pushed.
+
+## 2026-06-18 (attended, same session) — L11 (manager firings) kickoff: recon + JK rulings + L11-1 (pure firing+ripple engine)
+- **Routing now Codex** (restored). L11 grounding recon via workflow `wf_107b9eb5-faf` (5 readers → `L11_SCOPE_MAP.md`).
+  Captain-verified the 3 load-bearing anchors: the `MANAGER_FIRED` matrix row (self −2/fan/clubhouse,
+  masterMoraleMatrix.ts:24/148/375) exists with ZERO emitters; `ManagerAssignment.fired`/`endDate` exist (managerWpa.ts:86)
+  with NO writer; the auto-roll `managerFireProbability` (salaryCalculator.ts:1259-1301) is orphaned. ⇒ **L11 = the missing
+  PRODUCER + 2 consequence-writes, NOT a new subsystem.** MOY stays OUT (Phase-1 D9).
+- **JK ruled 4 forks** (DECISIONS_LOG 'L11 kickoff', recon+rulings committed `cf097d09`): trigger = manual GM action + auto
+  backstop (revive `managerFireProbability`) + L14 cascade (one shared resolver); personality ripple = build full now dark
+  vs the types (inert until L1 + a new manager-personality field, home = identity `ManagerProfile`, reuse the 7-enum);
+  performance gate = SCALED by how underwater (live `valueDelta`, net-positive untouchable); fan-relief = SCALED by team
+  struggle, once per firing.
+- **L11-1** (Codex gpt-5.5; 2 new files): pure `src/engines/franchiseL11FiringEngine.ts` — `computeFranchiseL11Firing` →
+  relief bump (scaled by struggle, clamped 4→12) + per-player ripple (0 for net-positive; severity-gradient × personality
+  tilt for net-negative; §12-verbatim directions: loyal bigger, resilient smaller, EGOTISTICAL lowest 0.5) +
+  `managerSelfDelta` passthrough. PURE/build-DARK, no caller/flag/store; imports only `CanonicalPersonality`. §16
+  placeholder magnitudes.
+- **Builder = Codex ≠ Auditor = Opus** (cross-model triangle). Independent line-by-line audit + directional falsification
+  (all 10 tests are real comparisons, non-vacuous; the clamp test honestly uses override tuning since default maxes at
+  −5.4 < the −6 floor — builder disclosed) → VERIFIED (0/0). Host gate: `NODE_ENV= npm run build` exit 0 (8.67s) + full
+  suite **7,699/439, 7,697 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new
+  reds (+10 / +1 file). trackerDb stays **v23**.
+- **NEXT = L11-2** (the manager-personality field [identity `ManagerProfile`, reuse the 7-enum] + the legacy/tenure write —
+  a `setManagerFired` mutator setting `fired`/`endDate`/reason + the Almanac aggregate gaining hire/fire dates). Nothing pushed.
