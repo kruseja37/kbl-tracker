@@ -4,7 +4,13 @@
 (47/47) AND WIRED (W1).** Landed **R-E + R1-a + R1-b1 + R1-b2 + R2 + R1-b3 + R3 + W1.** FINDING-150 (the trait-detection
 scope gap) is CLOSED. **W1** populated the grant hook's 4 optional input maps (handedness/primary-position from roster;
 pitcher grade via the pure `scoreSmb4Player`) so the 6 handedness splits + Utility + Ace Exterminator are no longer
-dormant — all STILL flag-gated (`isFranchisePhase2TraitsEnabled` OFF) = build-DARK, activate post-D13. *(Note 2026-06-18: a concurrent UNATTENDED resume
+dormant — all STILL flag-gated (`isFranchisePhase2TraitsEnabled` OFF) = build-DARK, activate post-D13.
+**⚠️ NAMED PRE-ACTIVATION GATE — `PRE-ACT-TRAITS` (clears BEFORE the L9b flag-flip / D13; DECISIONS_LOG 2026-06-18):**
+W1 wired the DATA seams (8 of 9 verified — sole production path), but before activation: **(1)** Two Way (IF)/(OF)
+random-position-at-grant + 3-variant family plumbing (the one still-deferred seam = item B); **(2)** END-TO-END
+activation verification on REAL franchise data (W1 is unit-verified only — hook test stubs the seam; browser-pending,
+pairs with F-141); **(3)** standing note: un-hardcode `opposingHand` only if a matrix-handedness trait is ever added.
+*(Note 2026-06-18: a concurrent UNATTENDED resume
 sandbox also reached R3 + parked a WAITING_ON_JK; the attended session built→audited→host-gated→committed R3, and
 reconciled — its stale "waiting" CURRENT_STATE/HISTORY writes were reverted; WAITING_ON_JK ticket:R3 RESOLVED.)*
 (1) **Closed the recurring spec-leak at its root + RATIFIED the measurement

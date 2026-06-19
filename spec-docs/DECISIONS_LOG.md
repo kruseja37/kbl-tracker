@@ -1531,3 +1531,24 @@ OVERRIDES the §0.4 grade-freshness DEFERRAL (the grade-freshness ticket may lat
 stays flag-gated (`isFranchisePhase2TraitsEnabled` default OFF) → build-DARK, zero live effect until post-D13. W1 =
 extend `TraitGrantRosterEntry` with bats/throws/primaryPosition/grade, capture them in `resolveTraitGrantRoster`, and
 build the 4 maps at the `computeSeasonTraitCandidates` call site.
+
+---
+
+### 2026-06-18: PRE-ACT-TRAITS — named pre-activation trait-seam gate (JK directive; attended)
+
+JK elevated (post-FINDING-150 close) the risk that the ~9 newly-built traits behind dormant data seams could "ship dead
+at activation." STATUS (verified, not asserted): **W1 (`6a934a9e`) already wired the DATA seams** — it populates all 4
+optional `SeasonTraitCandidateInput` maps on the SOLE production path (`processCompletedGame` →
+`persistDarkTraitGrantForCompletedGame` → `computeSeasonTraitCandidates`; grep-confirmed no second caller). So Utility
+(`primaryPositionByPlayer`) + the 6 handedness splits (`pitcherHandByPlayer`/`batterHandByPlayer`) + Ace Exterminator
+(`pitcherGradeByPlayer`) are wired (8 of 9). The `opposingHand='R'` hardcode does NOT block the handedness splits —
+they read the THREADED maps, not `ctx.opposingHand` (which feeds only the matrix probe, whose traits are not
+handedness-conditional). **Remaining pre-activation work (the named gate, so it doesn't slip):**
+- **PRE-ACT-TRAITS-1:** Two Way (IF)/(OF) random-position-at-grant + the 3-variant "family" plumbing (builder currently
+  emits one representative `Two Way (C)`). The one genuinely-still-deferred seam (= item B).
+- **PRE-ACT-TRAITS-2:** END-TO-END activation verification — W1 is UNIT-verified only (its hook test stubs the seam; the
+  builder tests use synthetic maps). Before the flag flips, verify on REAL franchise data that all 47 traits — especially
+  the 9 newly-wired/sparse ones — produce sane candidates (browser/integration; pairs with the F-141 D0/flag-flip gate).
+- **PRE-ACT-TRAITS-3 (standing note):** un-hardcode `opposingHand` in `reconstructAtBatContext` ONLY IF a
+  matrix-handedness trait is ever added to the v1 set (not needed for the current 47).
+This gate clears BEFORE the L9b flag-flip / D13 activation. JK directive: name it explicitly so it is not lost.
