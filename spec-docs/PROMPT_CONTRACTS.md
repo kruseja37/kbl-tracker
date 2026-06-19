@@ -11670,3 +11670,134 @@ caller/flag/store; trackerDb stays v24). Magnitudes (wMerit/wFame/tiltWindow/mer
 NOTE for sim-tune: percentile-normalization compresses the merit gap in small candidate pools, so the fame nudge tilts
 close races more readily in large pools than small ones — a magnitude nuance, not a structural defect. **➡ NEXT = L12-3b**
 (the flag-gated recompute gate branch). Committed branch-only (NOT pushed).
+
+---
+
+## CONTRACT — L12-3b (dark recompute gate branch: per-game race-standing recompute) — 2026-06-19 (attended)
+
+**ROUTE: Codex CLI (`codex exec`, prompt via stdin from this contract) | very high reasoning effort** (builder; LIVE-PATH
+insertion into `processCompletedGame.ts`, but DOUBLY-DARK: a NEW flag default OFF + NO persistence → a true no-op until
+post-D13). Auditor = Opus Captain (cross-model triangle; builder≠auditor). Branch codex/franchise-v1-next. BUILD-DARK +
+**RECOMPUTE-ONLY**: NO store, NO trackerDb/version/backup/ledger change, NO persistence (emission/UI consume the standings
+in L12-5/L12-6). Source of truth: `spec-docs/L12_SCOPE_MAP.md` §3 (L12-3) + §6 cadence + the L12-3 recompute-only ruling
+(DECISIONS_LOG 2026-06-19) + the L12-3b grounding (workflow `wf_28fe3f96-d6d`: mid-season WAR preview IS available per
+completed game via `computeFranchiseAwardsPreview`; the trustedValueArtifact is created per-game `frozen=false`; the
+finalize-only path requires `frozen=true`, NOT the preview).
+
+**GOAL:** wire the per-completed-game race-standing recompute SEAM (Q13: standings recompute every completed game off the
+live spine). The recompute loads the live mid-season award candidates + fame records + TV rows/snapshots, runs the L12-3a
+composite engine + the L12-2 TV scorer, and RETURNS a unified standings result (consumed by nobody yet — emission/UI are
+L12-5/L12-6). **SCOPE (Captain decomposition, attended):** this ticket covers the races whose candidates flow from
+`computeFranchiseAwardsPreview` — **MVP / CY_YOUNG / ROOKIE_OF_YEAR / GOLD_GLOVE / SILVER_SLUGGER** — plus the **TV-family**
+(KK/Bust/Comeback via L12-2). **BENCH_PLAYER / BOOGER_GLOVE / RELIEVER_OF_YEAR standings are DEFERRED to a follow-up**
+(bench/booger need a reserve/qualifier filter through the D9 candidate machinery; reliever needs L12-3R's WPA). **Do NOT
+touch `franchiseAwardsEngine.ts`** — the L12-3a bench/booger selectors stay dark until the follow-up wires them.
+
+**CHANGES (create/edit ONLY these 3 files):**
+
+**A. NEW `src/utils/franchiseRaceStandingsCompute.ts`** — the impure orchestrator. MIRROR the dark-hook shape of
+`src/utils/franchiseManagerAutoBackstop.ts` (flag-gate FIRST → load → compute → return a structured result; expose a
+`raceStandingsSeam` object holding the injectable loaders so the test can stub them). Imports: the engines from
+`../engines/franchiseRaceStandingScorer` (`computeFranchiseRaceStanding`, `MERIT_RACE_WEIGHTS`, type `RaceStanding`,
+`RaceStandingCandidate`) + `../engines/franchiseTvFamilyScorer` (`computeFranchiseTvFamilyRaces`, `FranchiseTvFamilyResult`,
+types); `computeFranchiseAwardsPreview` + type `FranchiseWarAwardCategory` from `./franchiseAwardsEngine`;
+`getFranchiseFameRecordRowsByScope` from `./franchiseFameRecordsStorage`; `getFranchiseTrueValueSnapshotRowsByScope` from
+`./franchiseTrueValueSnapshotsStorage`; `isFranchisePhase2L12Enabled` from `./franchisePhase2Flags`; types
+`PersistedGameState` from `./gameStorage`, `PersistedTrueValueResult`/`PersistedTrueValueScope` from `./processCompletedGame`
+(or re-declare a minimal `{franchiseId,seasonId,statsScopeId,seasonNumber, rows}` shape if importing from processCompletedGame
+creates a cycle — VERIFY no import cycle; if cyclic, type the param structurally), `CompletedGameArchiveOptions` from
+`./franchiseCheckpointSweepCompute`.
+```ts
+export const L12_GG_DEFENSIVE_FAME_SHARE = 0.2; // §16 Simulation-Gate placeholder (Q4): GG = fWAR + share·defensiveFame
+const L12_MERIT_RACE_CATEGORIES = ['MVP','CY_YOUNG','ROOKIE_OF_YEAR','GOLD_GLOVE','SILVER_SLUGGER'] as const;
+export interface FranchiseL12RaceStandings {
+  meritRaces: Partial<Record<FranchiseWarAwardCategory, RaceStanding[]>>;
+  tvFamily: FranchiseTvFamilyResult;
+}
+export type RecomputeL12Result = { status: 'dark-noop' | 'computed'; reason?: string; standings?: FranchiseL12RaceStandings };
+export async function recomputeFranchiseL12StandingsForCompletedGame(
+  gameState: PersistedGameState,
+  scope: { franchiseId: string; seasonId: string; statsScopeId: string; seasonNumber: number; rows: readonly FranchiseTrueValueRow[] },
+  archiveOptions?: CompletedGameArchiveOptions,
+): Promise<RecomputeL12Result>
+```
+Flow:
+1. `if (!isFranchisePhase2L12Enabled()) return { status: 'dark-noop', reason: 'Phase-2 L12 disabled.' };` (FIRST — true no-op, no loads).
+2. `const previewRows = await raceStandingsSeam.computeAwardsPreview({ franchiseId, seasonId, statsScopeId, seasonNumber });` (computeFranchiseAwardsPreview → FranchiseAwardRow[]; may be [] mid-season if no WAR preview / no artifact — handle gracefully).
+3. `const fameRows = await raceStandingsSeam.getFameRows({ franchiseId, seasonId, statsScopeId });` → build `Map<playerId, {heat,reachFloor,defensiveFame}>`; missing player ⇒ default `{heat:0,reachFloor:0,defensiveFame:0}`.
+4. meritRaces: for each category in `L12_MERIT_RACE_CATEGORIES`, find `previewRows.find(r => r.category === category)`; if absent, skip. Map its `.candidates` → `RaceStandingCandidate { playerId, meritScore: category==='GOLD_GLOVE' ? candidate.score + L12_GG_DEFENSIVE_FAME_SHARE * (fame.get(playerId)?.defensiveFame ?? 0) : candidate.score, fameHeat: fame.get(playerId)?.heat ?? 0, fameReachFloor: fame.get(playerId)?.reachFloor ?? 0 }`; `meritRaces[category] = computeFranchiseRaceStanding({ candidates, weights: MERIT_RACE_WEIGHTS });`
+5. TV-family: `values = scope.rows.map(r => ({ playerId: r.playerId, valueDelta: r.valueDelta, trueValue: r.trueValue }))`; `snapshots = (await raceStandingsSeam.getSnapshotRows({franchiseId,seasonId,statsScopeId})).map(s => ({ playerId: s.playerId, checkpoint: s.checkpoint, trueValue: s.trueValue }))`; `tvFamily = computeFranchiseTvFamilyRaces({ values, snapshots });`
+6. `return { status: 'computed', standings: { meritRaces, tvFamily } };`
+- NO persistence anywhere. Each load wrapped so an empty/missing result degrades to empty (never throws out of the orchestrator). Do NOT pass `computedAt` to the preview (let it default). The `raceStandingsSeam` object wraps `computeAwardsPreview`/`getFameRows`/`getSnapshotRows` for test injection (mirror `autoBackstopSeam`).
+
+**B. `src/utils/processCompletedGame.ts`** — insert the 8th dark branch AFTER line 654 (the L11 `if`-block's closing brace),
+BEFORE the designation `try` at :655, mirroring the L11 block EXACTLY:
+```ts
+if (isFranchisePhase2L12Enabled()) {
+  try {
+    await recomputeFranchiseL12StandingsForCompletedGame(gameState, trueValueScope, archiveOptions);
+  } catch (e) {
+    console.warn('[L12] dark race-standing recompute skipped for completed game ' + gameState.gameId + ':', e);
+  }
+}
+```
++ add the `isFranchisePhase2L12Enabled` import (the flag-import block) + the `recomputeFranchiseL12StandingsForCompletedGame`
+import. `trueValueScope` (PersistedTrueValueResult) is in scope at :654 with `.rows` — pass it directly.
+
+**C. NEW `src/utils/__tests__/franchiseRaceStandingsCompute.test.ts`** (match the repo test-dir convention — check whether
+sibling hook tests live in `src/utils/__tests__/` or `src/utils/tests/`) — non-vacuous, stub the `raceStandingsSeam`:
+- flag OFF ⇒ `status:'dark-noop'`, and the seam loaders are NOT called (assert with spy stubs).
+- flag ON + stubbed preview (an MVP row with 3 candidates + a GOLD_GLOVE row with 1 candidate) + stubbed fame ⇒
+  `meritRaces.MVP` has 3 ranked standings; **GG blend** — give the GG candidate `score=2` + a fame record `defensiveFame=5`
+  ⇒ assert its effective `meritScore` reflects `2 + 0.2*5 = 3` (read it back from the GG standing's `meritScore`).
+- flag ON + stubbed TV rows + snapshots ⇒ `tvFamily.kk/bust/comeback` populated (a clear KK leader by `valueDelta`).
+- a candidate with NO fame record ⇒ `fameRank` resolves to 0 (heat 0/reachFloor 0), no throw.
+- flag ON + empty preview ([]) ⇒ `meritRaces` empty, `status:'computed'`, no throw.
+
+**HARD CONSTRAINTS:** create/edit ONLY the 3 files. NO `franchiseAwardsEngine.ts` edit (bench/booger standings are the
+follow-up). NO store/trackerDb/backup/syncConfig/ledger change. NO persistence (recompute-only). The new flag
+`isFranchisePhase2L12Enabled` already exists (L12-1) default OFF — do NOT change its default. NO `Date.now`/`Math.random`
+in the orchestrator (pass no `computedAt`). NO git add/commit. Prefix all tsc/vitest with `NODE_ENV= `.
+
+**VERIFICATION (run ALL, paste ACTUAL):** `NODE_ENV= npx tsc --noEmit` exit 0 AND `NODE_ENV= npm run build` exit 0; the
+new test file green; confirm the flag-OFF gate branch is a TRUE no-op.
+
+**STOP-IF:**
+- `computeFranchiseAwardsPreview` / `getFranchiseFameRecordRowsByScope` / `getFranchiseTrueValueSnapshotRowsByScope`
+  signatures differ from the contract → STOP + report.
+- the L11 `if`-block does NOT close at `processCompletedGame.ts:654` (re-verify; L12-3a did not touch this file) → STOP +
+  report the actual insertion line.
+- importing `PersistedTrueValueResult` from `processCompletedGame.ts` into the new module creates an import CYCLE → type
+  the `scope` param structurally instead + report the choice.
+
+**FORMAT:** 1) files changed; 2) the orchestrator flow + the GG `+0.2·defensiveFame` blend + the seam shape; 3) verification
+output (paste actual); 4) "L12-3b complete" or "BLOCKED: <reason>". Do NOT commit.
+
+Use very high reasoning effort. Think step-by-step. Read each file before editing:
+`src/utils/franchiseManagerAutoBackstop.ts` (the dark-hook + `seam` pattern to mirror), `src/utils/processCompletedGame.ts`
+:600-666 (the gate region + the L11 block + the `trueValueScope` shape), `src/utils/franchiseAwardsEngine.ts` :626-707
+(`computeFranchiseAwardsPreview` + `FranchiseAwardRow`/`FranchiseAwardCandidate` shape), `src/engines/franchiseRaceStandingScorer.ts`
++ `src/engines/franchiseTvFamilyScorer.ts` (the engines + input types), `src/utils/franchiseFameRecordsStorage.ts`
+(`getFranchiseFameRecordRowsByScope` + `FranchiseFameRecordRow.defensiveFame/heat/reachFloor`), `src/utils/franchiseTrueValueStorage.ts`
+(`FranchiseTrueValueRow.valueDelta/trueValue`) + `src/utils/franchiseTrueValueSnapshotsStorage.ts`
+(`getFranchiseTrueValueSnapshotRowsByScope` + the snapshot `checkpoint/trueValue`).
+
+**Status:** ✅ VERIFIED + COMMITTED 2026-06-19 (attended). Codex (gpt-5.5, xhigh) built via `codex exec`
+stdin-from-contract (3 files: NEW `src/utils/franchiseRaceStandingsCompute.ts` orchestrator + the 8th gate branch in
+`processCompletedGame.ts` [after :654, mirrors L11] + its test). Used STRUCTURAL scope typing to avoid the
+processCompletedGame import cycle (the STOP-IF, handled). → Opus independently audited (builder≠auditor): orchestrator
+faithful (flag-gate first; `loadOrEmpty` degrades gracefully; GG `score + 0.2·defensiveFame` blend; missing-fame →
+heat 0/reachFloor 0; no persistence; no Date.now/Math.random); gate branch correctly placed + flag-gated; test
+non-vacuous (flag-off no-op via seam spies, GG blend = `2 + 0.2·5`, full TV-family math, empty-preview, loader-failure
+degradation). **AUDITOR-CAUGHT REAL REGRESSION (Codex's scoped run missed it; the full host gate caught it):** the new
+static transitive import (`processCompletedGame` → `franchiseRaceStandingsCompute` → `getFranchiseTrueValueSnapshotRowsByScope`)
+broke `processCompletedGame.trueValue.test.ts` at module-load (its partial `franchiseTrueValueSnapshotsStorage` mock
+lacked that export → "No export defined on the mock"; failed SOLO = a real new red, NOT an order-flake). **FIX
+(mechanical, auditor-applied, test-only):** added a `getFranchiseTrueValueSnapshotRowsByScope: vi.fn(async () => [])`
+stub to that test's mock factory — NO cascade (the 1 export sufficed; the awards-engine graph is otherwise
+mock-compatible there). Host gate (post-fix): `NODE_ENV= npm run build` exit 0 + full suite **7,760/446, 7,758 pass /
+2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+5 orchestrator test; the
+3 processCompletedGame.trueValue tests run again). DOUBLY-DARK (flag default OFF + recompute-only, no persistence);
+trackerDb stays v24. **4 files committed** (orchestrator + processCompletedGame + 2 tests [1 new + 1 mock-fixed]).
+Branch-only (NOT pushed). **➡ NEXT = L12-3R** (the live WPA season-rollup + Reliever-of-Year) + the Bench/Booger
+standings follow-up (the D9-adjacent reserve filter + qualifier).

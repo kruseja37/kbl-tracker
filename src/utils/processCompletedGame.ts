@@ -62,6 +62,7 @@ import {
   isFranchisePhase2TraitsEnabled,
   isFranchisePhase2L10Enabled,
   isFranchisePhase2L11Enabled,
+  isFranchisePhase2L12Enabled,
 } from './franchisePhase2Flags';
 import { persistDarkFameRecordsForCompletedGame } from './franchiseFameCompute';
 import { persistDarkFlashpointDecayForCompletedGame } from './franchiseFlashpointDecayCompute';
@@ -69,6 +70,7 @@ import { persistDarkCheckpointSweepForCompletedGame } from './franchiseCheckpoin
 import { persistDarkTraitGrantForCompletedGame } from './franchiseTraitGrantCompute';
 import { persistDarkL10ForCompletedGame } from './franchiseL10SweepCompute';
 import { persistDarkL11AutoBackstopForCompletedGame } from './franchiseManagerAutoBackstop';
+import { recomputeFranchiseL12StandingsForCompletedGame } from './franchiseRaceStandingsCompute';
 import type { HiddenModifiers } from '../types/game';
 
 export interface ProcessGameResult {
@@ -650,6 +652,13 @@ export async function processCompletedGame(
             await persistDarkL11AutoBackstopForCompletedGame(gameState, trueValueScope, archiveOptions);
           } catch (e) {
             console.warn('[L11] auto-backstop dark compute failed', e);
+          }
+        }
+        if (isFranchisePhase2L12Enabled()) {
+          try {
+            await recomputeFranchiseL12StandingsForCompletedGame(gameState, trueValueScope, archiveOptions);
+          } catch (e) {
+            console.warn('[L12] dark race-standing recompute skipped for completed game ' + gameState.gameId + ':', e);
           }
         }
         try {

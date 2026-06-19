@@ -20,7 +20,7 @@ under-specified mirror surface across 2 dispatches BEFORE any broken-mirror comm
 snapshot trueValues)`** (**JK 2026-06-19 correction** — the CURRENT gap from the season trough, NOT max-rise-over-checkpoints;
 a mid-season peak given back must NOT win). PURE / build-DARK (NO caller/flag/store; a later hook feeds it the TV rows);
 Codex-built → Opus-audited → host-gate **7,745/444, ZERO new reds** (+8). **L12-3 SPLIT a/b/R (attended design pass —
-JK ruled the merit bases): L12-3a ✅ COMPLETE; ➡ NEXT = L12-3b.** **✅ L12-3a COMPLETE (2026-06-19, attended)** — the
+JK ruled the merit bases): L12-3a + L12-3b ✅ COMPLETE; ➡ NEXT = L12-3R (+ Bench/Booger standings follow-up).** **✅ L12-3a COMPLETE (2026-06-19, attended)** — the
 PURE race-standing composite engine `src/engines/franchiseRaceStandingScorer.ts` (`computeFranchiseRaceStanding`:
 per-race-type weighted composite `wMerit·meritPercentile + wFame·famePercentile`, fame via `resolveFameTier` rank ONLY
 [Q10]; the **Q3 close-race tilt** = fame contributes only when `|marginToWinner| < tiltWindow` AND both merit > floor —
@@ -32,12 +32,21 @@ ZERO new reds** (+10). PURE / build-DARK (no caller/flag/store; trackerDb stays 
 Bench Player = best total WAR among designated reserves** (`isReserve`, already built + specced §23.6/AWARD-5);
 **Reliever-of-Year = WPA, NOT leverage** (LI is not persisted per-season + carries the FINDING-099 dual-value defect +
 orphaned relationship modifiers); **WPA via a NEW season field** (`pitchingWpa`/`reliefWpa` on `PlayerSeasonPitching`,
-relief = `!isStarter` games — a LIVE aggregator + saved-shape change, isolated to L12-3R). **➡ NEXT = L12-3b** — the
-flag-gated **recompute gate branch** (8th, after `processCompletedGame.ts:654`): loads preview value-inputs + fame records
-+ TV rows/snapshots, assembles per-race candidates (reserve filter for Bench, qualified-fielder filter for Booger, the Q4
-GG `fWAR + 20%·defensiveFame` blend), calls L12-3a + the L12-2 TV scorer; **RECOMPUTE-ONLY** (no store, trackerDb stays
-v24). Then **L12-3R** (the WPA season-rollup + Reliever-of-Year, live/saved-shape, browser-verify-batched). Seams in
-`L12_SCOPE_MAP.md` §5. → L12-4
+relief = `!isStarter` games — a LIVE aggregator + saved-shape change, isolated to L12-3R). **✅ L12-3b COMPLETE (2026-06-19, attended)** — the
+flag-gated **recompute gate branch** (8th, after `processCompletedGame.ts:654`): NEW
+`src/utils/franchiseRaceStandingsCompute.ts` orchestrator (`recomputeFranchiseL12StandingsForCompletedGame`) loads the
+mid-season award preview (`computeFranchiseAwardsPreview` — verified available per-game, `frozen=false`) + fame records +
+TV rows/snapshots, builds per-race candidates for MVP/CY/SS/GG/RoY (GG `score + 0.2·defensiveFame` blend; missing-fame →
+0/0) + runs the L12-3a composite + the L12-2 TV scorer; **RECOMPUTE-ONLY** (no store/persistence; trackerDb stays v24),
+DOUBLY-DARK (flag default OFF). Codex-built → Opus-audited (builder≠auditor) → **the full host gate caught a real new red
+Codex's scoped run missed** (the new transitive import broke `processCompletedGame.trueValue.test.ts`'s partial mock at
+module-load — failed SOLO; auditor-fixed mechanically: a 1-line snapshot-reader mock stub, no cascade) → host gate
+**7,760/446, 7,758 pass / 2 characterized fail, ZERO new reds** (+5). **Bench/Booger/Reliever STANDINGS deferred** (the
+recompute covers the 5 existing merit categories + TV-family; Bench/Booger need the D9-adjacent reserve filter + qualifier,
+Reliever needs L12-3R's WPA). **➡ NEXT = L12-3R** — the LIVE WPA season-rollup (`pitchingWpa`/`reliefWpa` on
+`PlayerSeasonPitching` + the season aggregator, relief = `!isStarter` games) + bind Reliever-of-Year; **saved-shape +
+live-aggregator change → its own engineering audit + browser-verify batch.** Then the Bench/Booger standings follow-up.
+Seams in `L12_SCOPE_MAP.md` §5. → L12-4
 All-Star+60%-lock → L12-5
 emission/snub/reporter → L12-6 UI → L13 (split) → L14 → L-SIM. **⚠ KEEP EXACTLY ONE AUTH-4 WORKER ACTIVE — 7 Claude sessions
 were open this run (2nd collision); JK to trim.** Per-ticket detail in

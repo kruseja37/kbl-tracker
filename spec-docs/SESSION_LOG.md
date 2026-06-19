@@ -6013,3 +6013,34 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   has no caller; trackerDb stays **v24**). Sim-tune note logged: percentile-normalization compresses the merit gap in small
   pools (fame tilts close races more readily in large pools). **➡ NEXT = L12-3b** (the flag-gated dark recompute gate branch).
   Branch codex/franchise-v1-next; nothing pushed.
+
+## 2026-06-19 (attended) — L12-3b: the dark per-game race-standing recompute gate branch
+- **Grounding (`wf_28fe3f96-d6d`, 2 readers):** resolved the crux — mid-season WAR PREVIEW is available per completed game
+  (`computeFranchiseAwardsPreview`/`buildFranchiseValueInputRows` build `warPreviewValues` from live stats every call; the
+  `trustedValueArtifact` is created per-game `frozen=false` at processCompletedGame.ts:271; only the FINALIZE path needs
+  `frozen=true`). Confirmed the gate seam unchanged (L11 block 648-654; insert after :654), the loaders + the TV-row→input
+  mapping, and `defensiveFame` on the fame row for the GG blend.
+- **Scope decision (communicated to JK):** L12-3b covers the 5 races flowing from the preview (MVP/CY/SS/GG/RoY) + the
+  TV-family (L12-2), zero D9-engine touch. Bench/Booger standings (need the D9-adjacent reserve filter + qualifier) +
+  Reliever (needs L12-3R's WPA) DEFERRED to the follow-up.
+- **L12-3b (Codex gpt-5.5/xhigh, 3 files):** NEW `src/utils/franchiseRaceStandingsCompute.ts`
+  (`recomputeFranchiseL12StandingsForCompletedGame`: flag-gate FIRST → `loadOrEmpty` the preview + fame + snapshots →
+  build per-race `RaceStandingCandidate` [GG meritScore = `score + 0.2·defensiveFame`; missing-fame → heat 0/reachFloor 0]
+  → `computeFranchiseRaceStanding` per merit race + `computeFranchiseTvFamilyRaces` for TV → return unified standings; NO
+  persistence; `raceStandingsSeam` for test injection; STRUCTURAL scope type to dodge the processCompletedGame import
+  cycle) + the 8th gate branch in `processCompletedGame.ts` (after :654, flag-gated try/catch, mirrors L11) + a 5-test file.
+- **Audit (builder=Codex ≠ auditor=Opus):** orchestrator + gate branch read line-by-line (faithful; doubly-dark;
+  recompute-only); the new test non-vacuous (flag-off no-op via seam spies; GG blend `2 + 0.2·5`; TV-family KK/Bust/Comeback
+  math incl. comeback `80−min(80,40,70)=40`; empty-preview; loader-failure degradation). **THE FULL HOST GATE CAUGHT A REAL
+  NEW RED that Codex's scoped run missed:** the new static transitive import (processCompletedGame →
+  franchiseRaceStandingsCompute → `getFranchiseTrueValueSnapshotRowsByScope`) broke `processCompletedGame.trueValue.test.ts`
+  at module-load — its partial `franchiseTrueValueSnapshotsStorage` mock lacked that export ("No export defined on the
+  mock"); **failed SOLO ⇒ a real regression, NOT an order-flake** (verified per the suite-baseline rule, not assumed). FIX
+  (mechanical, auditor-applied, test-only): added a `getFranchiseTrueValueSnapshotRowsByScope: vi.fn(async () => [])` stub to
+  that test's mock factory — re-ran solo: passes (3 tests), NO cascade (1 export sufficed). **Host gate (post-fix):**
+  `NODE_ENV= npm run build` exit 0 + full suite **7,760/446, 7,758 pass / 2 characterized fail** (`wpaRuntimeBoundary` +
+  `franchiseManualSmokeFixture`), ZERO new reds (+5 orchestrator test; the 3 processCompletedGame.trueValue tests run again).
+- DOUBLY-DARK (flag default OFF + recompute-only); trackerDb stays **v24**. 4 files committed (orchestrator +
+  processCompletedGame + 2 tests [1 new + 1 mock-fixed]). **➡ NEXT = L12-3R** (the LIVE WPA season-rollup
+  `pitchingWpa`/`reliefWpa` + the season aggregator + bind Reliever — saved-shape + live, own audit + browser-verify batch)
+  + the Bench/Booger standings follow-up. Branch codex/franchise-v1-next; nothing pushed.

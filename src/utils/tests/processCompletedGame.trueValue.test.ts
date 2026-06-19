@@ -59,6 +59,10 @@ vi.mock('../franchiseTrueValueStorage', () => ({
 
 vi.mock('../franchiseTrueValueSnapshotsStorage', () => ({
   saveFranchiseTrueValueSnapshotRows: mocks.saveFranchiseTrueValueSnapshotRows,
+  // L12-3b: processCompletedGame now statically imports franchiseRaceStandingsCompute,
+  // which imports this reader for its seam (flag default OFF → never called here). Stub so
+  // the module graph resolves under this partial mock.
+  getFranchiseTrueValueSnapshotRowsByScope: vi.fn(async () => []),
 }));
 
 vi.mock('../franchiseDesignationStorage', () => ({
