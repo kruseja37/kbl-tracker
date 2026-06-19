@@ -494,6 +494,125 @@ describe('traitAcquisition R1-b2 (Bunter positive+TOUGH; Crossed Up + Utility ne
   });
 });
 
+describe('traitAcquisition R2 (count-family + First-Pitch image deltas; handedness splits neutral)', () => {
+  // BB Prone is now NEGATIVE with NO image driver (mechanical) — low resilience raises it.
+  test('BB Prone is negative: low resilience raises it and NO personality drives its image axis', () => {
+    const fragile = proposalFor('BB Prone', {
+      playerRole: 'pitcher',
+      modifiers: { ...neutralModifiers, resilience: 0 },
+    });
+    const timid = proposalFor('BB Prone', { playerRole: 'pitcher', personality: 'Timid' });
+    const droopy = proposalFor('BB Prone', { playerRole: 'pitcher', personality: 'Droopy' });
+
+    expect(fragile.imageValence).toBe('negative');
+    expect(fragile.factors.resilienceTilt).toBeGreaterThan(1);
+    // BB Prone has NO IMAGE_DRIVER_SETS entry — no personality drives its image axis.
+    expect(timid.factors.imageAxisTilt).toBe(1);
+    expect(droopy.factors.imageAxisTilt).toBe(1);
+  });
+
+  // Falls Behind is now NEGATIVE with a TIMID image driver (§0.7).
+  test('Falls Behind is negative: low resilience raises it and TIMID drives the image axis', () => {
+    const fragile = proposalFor('Falls Behind', {
+      playerRole: 'pitcher',
+      personality: 'Timid',
+      modifiers: { ...neutralModifiers, resilience: 0 },
+    });
+
+    expect(fragile.imageValence).toBe('negative');
+    expect(fragile.factors.resilienceTilt).toBeGreaterThan(1);
+    expect(fragile.factors.imageAxisTilt).toBeGreaterThan(1);
+  });
+
+  // Composed is now POSITIVE with NO image driver; its lean is the high-Resilience positive path.
+  test('Composed is positive: high resilience tilts it up via resiliencePositiveTilt and there is no image driver', () => {
+    const resilient = proposalFor('Composed', {
+      playerRole: 'pitcher',
+      modifiers: { ...neutralModifiers, resilience: 100 },
+    });
+    const tough = proposalFor('Composed', { playerRole: 'pitcher', personality: 'Tough' });
+
+    expect(resilient.imageValence).toBe('positive');
+    // The R-E-a high-Resilience positive path fires (RESILIENCE_POSITIVE_TRAITS membership).
+    expect(resilient.factors.resiliencePositiveTilt).toBeGreaterThan(1);
+    // Composed has NO IMAGE_DRIVER_SETS entry — no personality drives its image axis.
+    expect(tough.factors.imageAxisTilt).toBe(1);
+  });
+
+  // Gets Ahead is now POSITIVE with a COMPETITIVE image driver (§0.7).
+  test('Gets Ahead is positive: COMPETITIVE drives the image axis and high resilience tilts it up', () => {
+    const competitive = proposalFor('Gets Ahead', {
+      playerRole: 'pitcher',
+      personality: 'Competitive',
+    });
+    const resilient = proposalFor('Gets Ahead', {
+      playerRole: 'pitcher',
+      modifiers: { ...neutralModifiers, resilience: 100 },
+    });
+
+    expect(competitive.imageValence).toBe('positive');
+    expect(competitive.factors.imageAxisTilt).toBeGreaterThan(1);
+    expect(resilient.factors.resiliencePositiveTilt).toBeGreaterThan(1);
+  });
+
+  // First Pitch Slayer is now POSITIVE with a COMPETITIVE/EGOTISTICAL image driver (§0.7).
+  test('First Pitch Slayer is positive: COMPETITIVE and EGOTISTICAL both drive the image axis', () => {
+    const competitive = proposalFor('First Pitch Slayer', { personality: 'Competitive' });
+    const egotistical = proposalFor('First Pitch Slayer', { personality: 'Egotistical' });
+
+    expect(competitive.imageValence).toBe('positive');
+    expect(competitive.factors.imageAxisTilt).toBeGreaterThan(1);
+    expect(egotistical.factors.imageAxisTilt).toBeGreaterThan(1);
+  });
+
+  // First Pitch Prayer is now NEGATIVE with a TIMID/DROOPY image driver (§0.7).
+  test('First Pitch Prayer is negative: TIMID and DROOPY drive the image axis and low resilience raises it', () => {
+    const timid = proposalFor('First Pitch Prayer', { personality: 'Timid' });
+    const droopy = proposalFor('First Pitch Prayer', { personality: 'Droopy' });
+    const fragile = proposalFor('First Pitch Prayer', {
+      modifiers: { ...neutralModifiers, resilience: 0 },
+    });
+
+    expect(timid.imageValence).toBe('negative');
+    expect(timid.factors.imageAxisTilt).toBeGreaterThan(1);
+    expect(droopy.factors.imageAxisTilt).toBeGreaterThan(1);
+    expect(fragile.factors.resilienceTilt).toBeGreaterThan(1);
+  });
+
+  // The First-Pitch pair drivers do not cross over.
+  test('First Pitch Slayer is not driven by TIMID/DROOPY; Prayer is not driven by COMPETITIVE/EGOTISTICAL', () => {
+    const slayerTimid = proposalFor('First Pitch Slayer', { personality: 'Timid' });
+    const slayerDroopy = proposalFor('First Pitch Slayer', { personality: 'Droopy' });
+    const prayerCompetitive = proposalFor('First Pitch Prayer', { personality: 'Competitive' });
+    const prayerEgo = proposalFor('First Pitch Prayer', { personality: 'Egotistical' });
+
+    expect(slayerTimid.factors.imageAxisTilt).toBe(1);
+    expect(slayerDroopy.factors.imageAxisTilt).toBe(1);
+    expect(prayerCompetitive.factors.imageAxisTilt).toBe(1);
+    expect(prayerEgo.factors.imageAxisTilt).toBe(1);
+  });
+
+  // The 6 handedness splits are NEUTRAL (§0.6) — no image valence, no image driver.
+  test('the 6 handedness splits are neutral: no image valence and no personality drives the image axis', () => {
+    const positionSplits = ['CON vs LHP', 'CON vs RHP', 'POW vs LHP', 'POW vs RHP'];
+    for (const traitName of positionSplits) {
+      const ego = proposalFor(traitName, { personality: 'Egotistical' });
+      const timid = proposalFor(traitName, { personality: 'Timid' });
+      expect(ego.imageValence).toBe('neutral');
+      expect(ego.factors.imageAxisTilt).toBe(1);
+      expect(timid.factors.imageAxisTilt).toBe(1);
+    }
+    const pitcherSplits = ['Specialist', 'Reverse Splits'];
+    for (const traitName of pitcherSplits) {
+      const ego = proposalFor(traitName, { playerRole: 'pitcher', personality: 'Egotistical' });
+      const timid = proposalFor(traitName, { playerRole: 'pitcher', personality: 'Timid' });
+      expect(ego.imageValence).toBe('neutral');
+      expect(ego.factors.imageAxisTilt).toBe(1);
+      expect(timid.factors.imageAxisTilt).toBe(1);
+    }
+  });
+});
+
 describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () => {
   test('hysteresis emits a gain at or above the gain threshold', () => {
     const result = computeTraitAcquisition(input({

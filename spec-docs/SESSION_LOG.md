@@ -5586,3 +5586,30 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - **⇒ R1-b functionally COMPLETE except Two Way** (deferred to R1-b3/R3-adjacent). **NEXT = R2** (platoon/count-family
   handedness; pitcher count-family on walks-allowed + first-pitch pair + the 6 handedness splits — verify the L9a-3 join
   is fed) OR R1-b3 (Two Way) if sequenced first. FINDING-150 rebuild in progress. Nothing pushed.
+
+## 2026-06-18 (attended, same session) — R2 (count-family + First-Pitch pair + 6 handedness splits)
+- JK ruled "do ALL of R2 now" + the measurement forks (DECISIONS_LOG): First-Pitch = HIT vs OUT; CON = 1−K/PA, POW =
+  ISO, **Specialist/Reverse = 1−BAA same/opposite (JK chose BAA over K-rate so Specialist isn't conflated with K
+  Collector)**; handedness splits build DARK + DORMANT (threaded handedness maps, hook wiring deferred like Utility).
+  All folded into §0.10 verbatim.
+- **R2 = 12 traits into `BUILDABLE_TRAITS`** + 2 OPTIONAL handedness-map inputs (`pitcherHandByPlayer`,
+  `batterHandByPlayer`). Earnable v1 set **33 → 45**. All build-DARK.
+  - **Count-family (4):** walks-allowed `(BB+IBB)/BF` — BB Prone/Falls Behind = rate, Composed/Gets Ahead = 1−rate
+    (pair-mates share the signal; personality tilt differentiates). Folded into `addOutcomeRateSignals`.
+  - **First-Pitch pair (2):** hit/(hits+outs) on logged first-pitch PAs (`pitchesInAtBat===1`); Slayer = hit, Prayer =
+    out (= 1−Slayer). OPT-IN.
+  - **Handedness splits (6):** CON vs LHP/RHP = 1−K/PA bucketed by opposing-pitcher hand; POW = ISO; Specialist/Reverse
+    = 1−BAA vs same/opposite-handed batters (switch hitters excluded). **DORMANT** until the handedness join is wired
+    (`opposingHand` is still hardcoded `'R'` in the reconstructor; the splits read the threaded maps, not that field).
+- **Acq §0.7:** Composed/Gets Ahead/First Pitch Slayer → POSITIVE; BB Prone/Falls Behind/First Pitch Prayer → NEGATIVE;
+  drivers for Gets Ahead/Falls Behind/Slayer/Prayer; BB Prone + Composed no-driver (Composed uses the R-E-a high-Res
+  positive path, gated on `RESILIENCE_POSITIVE_TRAITS` — verified fires); the 6 splits NEUTRAL.
+- **Builder = fresh subagent ≠ auditor = Opus Captain** (triangle). Independent line-by-line re-derivation of all 3
+  groups + the acq deltas + grep-confirmed the splits are neutral → VERDICT VERIFIED. Host gate:
+  `NODE_ENV= npm run build` exit 0 (7.97s) + full suite **7,658/438, 7,656 pass / 2 characterized fail**
+  (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` — confirmed by name), **ZERO new reds** (+29 tests / +0 files).
+  trackerDb stays **v23**.
+- **NEXT = R1-b3** (Two Way — ONE wOBA-vs-pitcher-pool signal + the random C/IF/OF-at-grant mechanic in L9b-3c) +
+  **R3** (Ace Exterminator + the deferred E1 ratings/grade thread). DEFERRED WIRING owed: the handedness-map hook +
+  Utility's primary-position hook (both populate `SeasonTraitCandidateInput` so those splits/Utility go live).
+  FINDING-150 rebuild in progress. Nothing pushed.

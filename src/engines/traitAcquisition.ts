@@ -123,6 +123,13 @@ const POSITIVE_IMAGE_TRAITS = new Set([
   // R1-b1 (§0.7): Big/Little Hack enter BUILDABLE_TRAITS — both positive valence.
   'Big Hack',
   'Little Hack',
+  // R2 (§0.7): the count-family POSITIVE pair (Composed / Gets Ahead — low walks,
+  // high-Resilience lean via RESILIENCE_POSITIVE_TRAITS) + First Pitch Slayer
+  // (first-pitch hit, big-game axis). Composed has NO image driver (its lean is
+  // the universal high-Resilience positive path); Gets Ahead / Slayer get drivers.
+  'Composed',
+  'Gets Ahead',
+  'First Pitch Slayer',
 ]);
 
 const NEGATIVE_IMAGE_TRAITS = new Set([
@@ -140,6 +147,12 @@ const NEGATIVE_IMAGE_TRAITS = new Set([
   'Injury Prone',
   // R1-a (§0.7): K Neglector enters BUILDABLE_TRAITS — negative valence + low-charisma lean.
   'K Neglector',
+  // R2 (§0.7): the count-family NEGATIVE pair (BB Prone / Falls Behind — high
+  // walks) + First Pitch Prayer (first-pitch out). BB Prone is mechanical (NO
+  // image driver); Falls Behind / Prayer get TIMID-axis drivers (§0.7).
+  'BB Prone',
+  'Falls Behind',
+  'First Pitch Prayer',
 ]);
 
 const IMAGE_DRIVER_SETS: Readonly<Record<string, readonly CanonicalPersonality[]>> = {
@@ -177,6 +190,17 @@ const IMAGE_DRIVER_SETS: Readonly<Record<string, readonly CanonicalPersonality[]
   // TOUGH (grind-it-out contact). Distractor = neutral/universal — no entry.
   'Big Hack': ['EGOTISTICAL'],
   'Little Hack': ['TOUGH'],
+  // R2 (§0.7): count-family pair-mates share a data signal; the personality TILT
+  // differentiates them. Gets Ahead ← COMPETITIVE (positive), Falls Behind ←
+  // TIMID (negative). First Pitch Slayer ← COMPETITIVE/EGOTISTICAL (big-game
+  // spotlight, positive), First Pitch Prayer ← TIMID/DROOPY (Composure-negative).
+  // BB Prone = mechanical (NO driver — universal tilt only); Composed = the
+  // high-Resilience positive path (RESILIENCE_POSITIVE_TRAITS), no driver. The 6
+  // handedness splits are NEUTRAL (§0.6) — intentionally NO entry here.
+  'Gets Ahead': ['COMPETITIVE'],
+  'Falls Behind': ['TIMID'],
+  'First Pitch Slayer': ['COMPETITIVE', 'EGOTISTICAL'],
+  'First Pitch Prayer': ['TIMID', 'DROOPY'],
 };
 
 const ROSTER_ROLE_TRAITS = new Set(['Pinch Perfect', 'Utility']);
@@ -185,7 +209,7 @@ const ROSTER_ROLE_TRAITS = new Set(['Pinch Perfect', 'Utility']);
 const CHARISMA_SENSITIVE_TRAITS = new Set(['K Neglector']);
 
 // §0.6/§0.7: high-Resilience POSITIVE lean. Today resilienceTilt only down-tilts NEGATIVE traits; this adds
-// the symmetric positive path. Scoped to these two per §0.7; they enter BUILDABLE_TRAITS in R2 — dormant until then.
+// the symmetric positive path. Scoped to these two per §0.7; both entered BUILDABLE_TRAITS in R2 (now live).
 const RESILIENCE_POSITIVE_TRAITS = new Set(['Composed', 'Gets Ahead']);
 
 const OPPOSITE_PAIRS: readonly (readonly [string, string])[] = [

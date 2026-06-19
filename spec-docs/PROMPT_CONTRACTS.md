@@ -10447,3 +10447,98 @@ POSITIVE+`['TOUGH']` (lines 119/171), Utility already in `ROSTER_ROLE_TRAITS` (1
 (+21 tests / +0 files). Earnable v1 set 30 → 33. Committed (hash in SESSION_LOG/CURRENT_STATE). **⇒ R1-b functionally
 COMPLETE except Two Way (split to R1-b3/R3-adjacent per JK).** NEXT = R2 (platoon/count-family handedness) — or R1-b3
 (Two Way) if sequenced first.
+
+## CONTRACT — R2 (count-family + First-Pitch pair + 6 handedness splits) — 2026-06-18 (attended)
+
+**ROUTE: fresh in-session subagent | high reasoning effort** (builder; subagent not Codex CLI). Auditor = Opus 4.8
+Captain (independent; ≠ builder). Branch codex/franchise-v1-next. BUILD-DARK. Source of truth:
+`TRAIT_MEASUREMENT_SPEC.md §0.10` (+ §0.6/§0.7; JK rulings folded into §0.10 + DECISIONS_LOG 2026-06-18). **BUILD TO
+§0.10 VERBATIM — do NOT re-derive.** JK ruled "do ALL of R2 now"; the 6 handedness splits build DARK + DORMANT (their
+handedness-map inputs are unpopulated until a deferred hook wiring — like Utility's `primaryPositionByPlayer`).
+
+**GOAL:** add 12 traits to `BUILDABLE_TRAITS` in `src/engines/traitCandidateBuilder.ts` with new signals, add two
+OPTIONAL handedness-map inputs, + the §0.7 image deltas in `src/engines/traitAcquisition.ts`. Earnable v1 set 33 → 45.
+
+**DERIVATIONS (per §0.10 — implement EXACTLY):**
+
+GROUP A — **pitcher count-family** (BB Prone / Composed / Gets Ahead / Falls Behind; all PITCHER-role; buildable now):
+extend the pitcher side of `addOutcomeRateSignals` (the existing `pitcherCounts` already has `{pa,k}`; add a `walk`
+count incremented on `result==='BB'||'IBB'`). `walkRate = walk / pa` (pa = batters-faced). Emit: **BB Prone** =
+`walkRate`, **Falls Behind** = `walkRate` (same signal); **Composed** = `1 − walkRate`, **Gets Ahead** = `1 − walkRate`
+(same). sampleSize = pa. (The pair-mates share a signal; personality TILT differentiates — §0.7.)
+
+GROUP B — **First Pitch Slayer / Prayer** (POSITION-role; OPT-IN). New fn `addFirstPitchSignals`: for each non-undone
+atBat with `enrichment?.pitchesInAtBat === 1`, classify the result: a **hit** (`HIT_RESULTS` from R1-b1:
+{1B,2B,3B,HR,ITPHR,GRD}) or an **out** (`isOut(result)` imported from `../types/game`). Only hit-or-out first-pitch PAs
+are opportunities (a first-pitch HBP/E/FC is neither → excluded). Per such PA add one opportunity to BOTH:
+**First Pitch Slayer** success = it was a hit; **First Pitch Prayer** success = it was an out. Emit both via
+`addAccumulatorSignals` (Slayer = hits/(hits+outs), Prayer = outs/(hits+outs) = 1−Slayer), sampleSize = hit-or-out
+first-pitch PAs.
+
+GROUP C — **6 handedness splits** (DORMANT until wired). Add to `SeasonTraitCandidateInput` two OPTIONAL fields:
+`pitcherHandByPlayer?: ReadonlyMap<string, 'L' | 'R'>` and `batterHandByPlayer?: ReadonlyMap<string, 'L' | 'R' | 'S'>`.
+New fn `addHandednessSplitSignals`: if `pitcherHandByPlayer` is absent/empty, return early (all 6 dormant). For each
+non-undone atBat, `oppHand = pitcherHandByPlayer.get(atBat.pitcherId)` (skip the at-bat for the batter splits if absent):
+  - **CON vs LHP / CON vs RHP** (position, by oppHand): bucket the batter's PA; `K = STRIKEOUT_RESULTS.has(result)`.
+    Per oppHand bucket emit `CON vs LHP` (oppHand='L') / `CON vs RHP` (oppHand='R') = `1 − K/PA_bucket`, sampleSize =
+    PA in that bucket.
+  - **POW vs LHP / POW vs RHP** (position, by oppHand): ISO = `(TB − H)/AB` in that bucket. TB: 1B=1, 2B/GRD=2, 3B=3,
+    HR/ITPHR=4 (else 0); H = `HIT_RESULTS`; AB = bucket-PA − (BB+IBB+HBP+SF+SAC) (reuse `NON_AB_RESULTS`). Emit
+    `POW vs LHP`/`POW vs RHP` = ISO, sampleSize = AB in that bucket (skip if AB≤0).
+  - **Specialist / Reverse Splits** (PITCHER, by batter-vs-pitcher hand): need BOTH maps. `pHand =
+    pitcherHandByPlayer.get(pitcherId)`, `bHand = batterHandByPlayer.get(batterId)`; skip the at-bat if either absent
+    or `bHand==='S'` (switch hitters EXCLUDED). `same = (bHand===pHand)`. BAA = hits-allowed/AB by that cohort: track,
+    per pitcher, a SAME-cohort and an OPPOSITE-cohort {hits, ab} where ab counts non-`NON_AB_RESULTS` PAs and hits =
+    `HIT_RESULTS`. Emit **Specialist** = `1 − (sameHits/sameAB)` (sampleSize = sameAB), **Reverse Splits** =
+    `1 − (oppHits/oppAB)` (sampleSize = oppAB); skip a cohort with AB≤0. (Low BAA ⇒ high signal ⇒ tough pitcher ranks
+    high — the inversion is intentional, §0.10.)
+
+  Register the new fns in `buildRawSignals`. Add all 12 names to `BUILDABLE_TRAITS` (after the R1-b2 block, `// R2:`
+  comment): BB Prone, Composed, Gets Ahead, Falls Behind, First Pitch Slayer, First Pitch Prayer, CON vs LHP, CON vs
+  RHP, POW vs LHP, POW vs RHP, Specialist, Reverse Splits.
+
+**ACQUISITION §0.7 deltas (`traitAcquisition.ts`) — CHECK current state + report what you change:**
+- BB Prone → `NEGATIVE_IMAGE_TRAITS` (no driver). Falls Behind → `NEGATIVE_IMAGE_TRAITS` + `IMAGE_DRIVER_SETS['Falls Behind']=['TIMID']`.
+- Composed → `POSITIVE_IMAGE_TRAITS` (the high-Resilience positive path from R-E-a fires on POSITIVE membership — verify it does).
+- Gets Ahead → `POSITIVE_IMAGE_TRAITS` + `IMAGE_DRIVER_SETS['Gets Ahead']=['COMPETITIVE']`.
+- First Pitch Slayer → `POSITIVE_IMAGE_TRAITS` + `IMAGE_DRIVER_SETS['First Pitch Slayer']=['COMPETITIVE','EGOTISTICAL']`.
+- First Pitch Prayer → `NEGATIVE_IMAGE_TRAITS` + `IMAGE_DRIVER_SETS['First Pitch Prayer']=['TIMID','DROOPY']`.
+- CON vs LHP/RHP, POW vs LHP/RHP, Specialist, Reverse Splits = **neutral** (§0.6) → NO image entry (verify absent).
+
+**HARD CONSTRAINTS:** edit ONLY `traitCandidateBuilder.ts` + `traitAcquisition.ts` + their two `__tests__` files. Do
+NOT touch the scorer / `buildPeerPools` / `computeTraitRealityScore` / `buildProposalBase` / any store /
+`processCompletedGame.ts` / the hooks (the wiring that POPULATES the handedness maps + Utility's primary map is a
+deferred step — just add the OPTIONAL fields + consume them; the handedness splits stay dormant) / any `*.md`. PURE /
+build-DARK — no production caller, no flag, no store, no trackerDb bump (v23). No `Date.now`/`Math.random`; sort before
+any percentile. `reconstructAtBatContext`'s hardcoded `opposingHand:'R'` stays — the splits read the threaded maps, NOT
+that field. No git-add/commit.
+
+**TESTS:** update the `BUILDABLE_TRAITS` "contains exactly" expectation (add the 12, `// R2:` comment). Add cases:
+count-family (walkRate high → BB Prone/Falls Behind, 1−rate → Composed/Gets Ahead; pair-mates equal; position batter
+excluded by role); First-Pitch (hit→Slayer, out→Prayer, Slayer+Prayer=1 over the hit-or-out denom, non-first-pitch PAs
+ignored, HBP first-pitch excluded); handedness (CON 1−K/PA bucketed by pitcher hand; POW ISO bucketed; Specialist
+1−BAA same-hand + Reverse 1−BAA opposite; switch-hitter excluded; ALL 6 dormant when the maps are omitted); undone
+skipped; role eligibility; the L9b-2 seam. Acq tests: BB Prone/Falls Behind negative, Composed/Gets Ahead positive
+(+ Composed high-Res tilt), First Pitch Slayer positive / Prayer negative with the right drivers, the 6 splits neutral.
+
+**VERIFICATION (builder runs, reports actual):** `NODE_ENV= npx tsc --noEmit` exit 0;
+`NODE_ENV= npx vitest run src/engines/__tests__/traitCandidateBuilder.test.ts src/engines/__tests__/traitAcquisition.test.ts`
+all green. Report every changed path, new test count, exact derivations + the acq finding.
+
+**FORMAT:** 1) Files changed. 2) Per-group derivations as built + any §0.10 deviation (should be none). 3) Acq finding.
+4) Verification output (paste actual). 5) "R2 complete" or "BLOCKED: <reason>". Do NOT commit.
+
+**Status:** ✅ VERIFIED + COMMITTED (2026-06-18, attended). Fresh in-session subagent built → Opus 4.8 Captain
+independently audited (≠ builder) line-by-line: VERDICT VERIFIED. Re-derived each group vs §0.10: count-family
+walkRate/(1−walkRate) pair-mates share the signal (folded into `addOutcomeRateSignals` pitcher loop); First-Pitch
+hit/out mutually-exclusive over the hit-or-out denom (Slayer+Prayer=1, isOut imported); the 6 handedness splits — CON
+1−K/PA bucketed by `pitcherHandByPlayer`, POW ISO=(TB−H)/AB, Specialist/Reverse 1−BAA same/opposite via both maps,
+switch-hitters excluded, ALL 6 DORMANT when the maps are absent (early-return). Acq §0.7: Composed/Gets Ahead/First
+Pitch Slayer→POSITIVE, BB Prone/Falls Behind/First Pitch Prayer→NEGATIVE, drivers added; BB Prone+Composed no-driver
+(Composed uses the R-E-a `RESILIENCE_POSITIVE_TRAITS` high-Res path, gated at :344 — verified fires); the 6 splits
+NEUTRAL (grep-confirmed absent from every image set). Scorer/peer-pool/buildProposalBase untouched;
+`reconstructAtBatContext` `opposingHand:'R'` untouched. Host gate: `NODE_ENV= npm run build` exit 0 (7.97s) + full
+suite **7,658/438, 7,656 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` — confirmed
+by name), ZERO new reds (+29 tests / +0 files). Earnable v1 set 33 → 45. Committed (hash in SESSION_LOG/CURRENT_STATE).
+**Handedness splits are built but DORMANT** (need the deferred handedness-map wiring). NEXT = R1-b3 (Two Way) + R3 (Ace
+Exterminator + E1).

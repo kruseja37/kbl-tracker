@@ -33,6 +33,7 @@ import type {
   RunnerState,
 } from '../utils/eventLog';
 import type { AtBatResult } from '../types/game';
+import { isOut } from '../types/game';
 import { getPercentile } from './percentile';
 
 export const BUILDABLE_TRAITS: readonly string[] = [
@@ -76,6 +77,24 @@ export const BUILDABLE_TRAITS: readonly string[] = [
   'Utility',
   'Crossed Up',
   'Bunter',
+  // R2 (TRAIT_MEASUREMENT_SPEC §0.10): pitcher count-family (walks-allowed rate
+  // proxy — BB Prone/Falls Behind = walkRate, Composed/Gets Ahead = 1−walkRate,
+  // pair-mates share the signal, personality TILT differentiates §0.7); the
+  // position First-Pitch pair (hits/(hits+outs) on logged first-pitch PAs); and
+  // the 6 handedness splits (DORMANT until the handedness-map join is wired — the
+  // maps mirror Utility's primaryPositionByPlayer deferred seam). Build-dark.
+  'BB Prone',
+  'Composed',
+  'Gets Ahead',
+  'Falls Behind',
+  'First Pitch Slayer',
+  'First Pitch Prayer',
+  'CON vs LHP',
+  'CON vs RHP',
+  'POW vs LHP',
+  'POW vs RHP',
+  'Specialist',
+  'Reverse Splits',
 ];
 
 for (const traitName of BUILDABLE_TRAITS) {
@@ -120,6 +139,24 @@ export interface SeasonTraitCandidateInput {
    * that derives primary position is a deferred step, NOT part of this ticket).
    */
   primaryPositionByPlayer?: ReadonlyMap<string, string>;
+  /**
+   * R2 (handedness splits) — OPTIONAL. The throwing hand ('L'|'R') of each pitcher
+   * keyed by pitcherId, used to bucket the position batter's CON/POW splits and to
+   * classify same/opposite for the pitcher's Specialist/Reverse Splits. When this
+   * map is absent or empty, ALL 6 handedness splits stay DORMANT (the
+   * `addHandednessSplitSignals` early-return). This is the deferred-wiring seam —
+   * the hook that joins roster handedness is NOT part of this ticket (mirrors
+   * Utility's `primaryPositionByPlayer`).
+   */
+  pitcherHandByPlayer?: ReadonlyMap<string, 'L' | 'R'>;
+  /**
+   * R2 (handedness splits) — OPTIONAL. The batting hand ('L'|'R'|'S') of each
+   * batter keyed by batterId. Only consumed by the pitcher's Specialist/Reverse
+   * Splits (the same/opposite cohort split); a switch hitter ('S') has no fixed
+   * hand and is EXCLUDED from both cohorts. An at-bat whose batter is absent from
+   * this map is skipped for the Specialist/Reverse cohort accounting.
+   */
+  batterHandByPlayer?: ReadonlyMap<string, 'L' | 'R' | 'S'>;
 }
 
 export interface AtBatContextRunningState {
@@ -497,7 +534,9 @@ function addAtBatSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): v
  */
 function addOutcomeRateSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
   interface BatterCounts { pa: number; k: number; dp: number; fc: number; walk: number; }
-  interface PitcherCounts { pa: number; k: number; }
+  // R2: the pitcher side gains a `walk` count (the count-family walks-allowed
+  // proxy: BB/IBB allowed to opposing batters). walkRate = walk / pa (pa = BF).
+  interface PitcherCounts { pa: number; k: number; walk: number; }
   const batterCounts = new Map<string, BatterCounts>();
   const pitcherCounts = new Map<string, PitcherCounts>();
 
@@ -510,9 +549,10 @@ function addOutcomeRateSignals(input: SeasonTraitCandidateInput, raw: RawSignalM
     if (atBat.result === 'BB' || atBat.result === 'IBB') batter.walk += 1;
     batterCounts.set(atBat.batterId, batter);
 
-    const pitcher = pitcherCounts.get(atBat.pitcherId) ?? { pa: 0, k: 0 };
+    const pitcher = pitcherCounts.get(atBat.pitcherId) ?? { pa: 0, k: 0, walk: 0 };
     pitcher.pa += 1;
     if (STRIKEOUT_RESULTS.has(atBat.result)) pitcher.k += 1;
+    if (atBat.result === 'BB' || atBat.result === 'IBB') pitcher.walk += 1;
     pitcherCounts.set(atBat.pitcherId, pitcher);
   }
 
@@ -532,6 +572,15 @@ function addOutcomeRateSignals(input: SeasonTraitCandidateInput, raw: RawSignalM
     const kRate = counts.k / counts.pa;
     addRawSignal(raw, pitcherId, 'K Collector', { signalValue: kRate, sampleSize: counts.pa });
     addRawSignal(raw, pitcherId, 'K Neglector', { signalValue: 1 - kRate, sampleSize: counts.pa });
+
+    // R2 count-family (§0.10): walks-allowed rate. BB Prone / Falls Behind = the
+    // rate (high walks); Composed / Gets Ahead = 1 − rate (low walks). Each pair
+    // shares the SAME signal — personality TILT differentiates them (§0.7).
+    const walkRate = counts.walk / counts.pa;
+    addRawSignal(raw, pitcherId, 'BB Prone', { signalValue: walkRate, sampleSize: counts.pa });
+    addRawSignal(raw, pitcherId, 'Falls Behind', { signalValue: walkRate, sampleSize: counts.pa });
+    addRawSignal(raw, pitcherId, 'Composed', { signalValue: 1 - walkRate, sampleSize: counts.pa });
+    addRawSignal(raw, pitcherId, 'Gets Ahead', { signalValue: 1 - walkRate, sampleSize: counts.pa });
   }
 }
 
@@ -947,6 +996,142 @@ function addUtilitySignals(input: SeasonTraitCandidateInput, raw: RawSignalMap):
   }
 }
 
+/**
+ * R2 — First Pitch Slayer / Prayer (TRAIT_MEASUREMENT_SPEC §0.10; JK ruling
+ * 2026-06-18 = HIT vs OUT). OPT-IN on `enrichment.pitchesInAtBat === 1`. For each
+ * non-undone first-pitch PA that ended in a HIT (`HIT_RESULTS`) OR an OUT
+ * (`isOut(result)`), add one opportunity to BOTH traits over the SAME hit-or-out
+ * denominator: Slayer success = it was a hit; Prayer success = it was an out. A
+ * first-pitch HBP / reached-on-error is NEITHER → excluded (not an opportunity).
+ * Slayer = hits/(hits+outs), Prayer = outs/(hits+outs) = 1 − Slayer; sampleSize =
+ * hit-or-out first-pitch PAs. Credited to the BATTER (position-role downstream).
+ * (A first-pitch K is impossible — K needs ≥3 pitches — so K's presence in isOut
+ * is harmless here.)
+ */
+function addFirstPitchSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
+  const accumulators = new Map<string, Map<string, Accumulator>>();
+
+  for (const atBat of sortAtBats(input.atBatEvents).filter((event) => !undoneAt(event))) {
+    if (atBat.enrichment?.pitchesInAtBat !== 1) continue;
+    const isHit = HIT_RESULTS.has(atBat.result);
+    const isOutPa = isOut(atBat.result);
+    // Only hit-or-out first-pitch PAs are opportunities (HBP/E/FC are neither).
+    if (!isHit && !isOutPa) continue;
+    addOpportunity(accumulators, atBat.batterId, 'First Pitch Slayer', isHit);
+    addOpportunity(accumulators, atBat.batterId, 'First Pitch Prayer', isOutPa);
+  }
+
+  addAccumulatorSignals(raw, accumulators);
+}
+
+// R2 (handedness POW splits): total-bases of a single AB-result (TB component of ISO).
+function totalBasesOf(result: AtBatResult): number {
+  if (result === '1B') return 1;
+  if (result === '2B' || result === 'GRD') return 2;
+  if (result === '3B') return 3;
+  if (result === 'HR' || result === 'ITPHR') return 4;
+  return 0;
+}
+
+/**
+ * R2 — the 6 handedness platoon splits (TRAIT_MEASUREMENT_SPEC §0.10; JK rulings
+ * 2026-06-18). DORMANT until the handedness join is fed: if `pitcherHandByPlayer`
+ * is absent or empty, return early so all 6 traits stay dormant. `opposingHand`
+ * is hardcoded 'R' in the reconstructor — these splits read the THREADED maps, NOT
+ * that field.
+ *
+ *  - CON vs LHP / CON vs RHP (position, by opposing-pitcher hand) = avoid-strikeout
+ *    rate `1 − K/PA` in PAs vs L / R pitchers. Bucketed by
+ *    `pitcherHandByPlayer.get(pitcherId)`; an at-bat whose pitcher hand is absent
+ *    is skipped for the batter splits. sampleSize = PA in that bucket.
+ *  - POW vs LHP / POW vs RHP (position, by opposing-pitcher hand) = ISO
+ *    `(TB − H)/AB` in that bucket. TB: 1B=1, 2B/GRD=2, 3B=3, HR/ITPHR=4; H =
+ *    `HIT_RESULTS`; AB = bucket-PA − (BB+IBB+HBP+SF+SAC) (the `NON_AB_RESULTS`).
+ *    sampleSize = AB in that bucket; skipped when AB ≤ 0.
+ *  - Specialist / Reverse Splits (PITCHER, by batter-vs-pitcher hand) = `1 − BAA`
+ *    vs SAME / OPPOSITE handed batters. Needs BOTH maps; an at-bat is skipped if
+ *    the pitcher hand, the batter hand is absent, or `batterHand === 'S'` (switch
+ *    hitters EXCLUDED — no fixed hand). BAA = hits-allowed/AB by that cohort; AB
+ *    counts non-`NON_AB_RESULTS` PAs, hits = `HIT_RESULTS`. Low BAA ⇒ high signal
+ *    (inverted so a tough pitcher ranks HIGH). sampleSize = cohort AB; skipped
+ *    when AB ≤ 0.
+ */
+function addHandednessSplitSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
+  const pitcherHand = input.pitcherHandByPlayer;
+  if (!pitcherHand || pitcherHand.size === 0) return;
+  const batterHand = input.batterHandByPlayer;
+
+  interface BatterSplit { pa: number; k: number; ab: number; tb: number; hits: number; }
+  // Per batter, two oppHand buckets keyed 'L'/'R'.
+  const batterSplits = new Map<string, { L: BatterSplit; R: BatterSplit }>();
+  const newBatterSplit = (): BatterSplit => ({ pa: 0, k: 0, ab: 0, tb: 0, hits: 0 });
+
+  interface PitcherCohort { ab: number; hits: number; }
+  // Per pitcher, a SAME-handed cohort and an OPPOSITE-handed cohort.
+  const pitcherCohorts = new Map<string, { same: PitcherCohort; opposite: PitcherCohort }>();
+  const newPitcherCohort = (): PitcherCohort => ({ ab: 0, hits: 0 });
+
+  for (const atBat of sortAtBats(input.atBatEvents).filter((event) => !undoneAt(event))) {
+    const pHand = pitcherHand.get(atBat.pitcherId);
+
+    // --- Position batter CON/POW splits (bucketed by the opposing pitcher's hand) ---
+    if (pHand === 'L' || pHand === 'R') {
+      let splits = batterSplits.get(atBat.batterId);
+      if (!splits) {
+        splits = { L: newBatterSplit(), R: newBatterSplit() };
+        batterSplits.set(atBat.batterId, splits);
+      }
+      const bucket = splits[pHand];
+      bucket.pa += 1;
+      if (STRIKEOUT_RESULTS.has(atBat.result)) bucket.k += 1;
+      if (!NON_AB_RESULTS.has(atBat.result)) bucket.ab += 1;
+      bucket.tb += totalBasesOf(atBat.result);
+      if (HIT_RESULTS.has(atBat.result)) bucket.hits += 1;
+    }
+
+    // --- Pitcher Specialist / Reverse Splits (by batter-vs-pitcher hand) ---
+    const bHand = batterHand?.get(atBat.batterId);
+    if ((pHand === 'L' || pHand === 'R') && (bHand === 'L' || bHand === 'R')) {
+      let cohorts = pitcherCohorts.get(atBat.pitcherId);
+      if (!cohorts) {
+        cohorts = { same: newPitcherCohort(), opposite: newPitcherCohort() };
+        pitcherCohorts.set(atBat.pitcherId, cohorts);
+      }
+      const cohort = bHand === pHand ? cohorts.same : cohorts.opposite;
+      if (!NON_AB_RESULTS.has(atBat.result)) cohort.ab += 1;
+      if (HIT_RESULTS.has(atBat.result)) cohort.hits += 1;
+    }
+  }
+
+  for (const [batterId, splits] of batterSplits) {
+    // CON: avoid-strikeout rate 1 − K/PA, per oppHand bucket (sampleSize = PA).
+    if (splits.L.pa > 0) {
+      addRawSignal(raw, batterId, 'CON vs LHP', { signalValue: 1 - splits.L.k / splits.L.pa, sampleSize: splits.L.pa });
+    }
+    if (splits.R.pa > 0) {
+      addRawSignal(raw, batterId, 'CON vs RHP', { signalValue: 1 - splits.R.k / splits.R.pa, sampleSize: splits.R.pa });
+    }
+    // POW: ISO = (TB − H)/AB, per oppHand bucket (sampleSize = AB; skip AB ≤ 0).
+    if (splits.L.ab > 0) {
+      addRawSignal(raw, batterId, 'POW vs LHP', { signalValue: (splits.L.tb - splits.L.hits) / splits.L.ab, sampleSize: splits.L.ab });
+    }
+    if (splits.R.ab > 0) {
+      addRawSignal(raw, batterId, 'POW vs RHP', { signalValue: (splits.R.tb - splits.R.hits) / splits.R.ab, sampleSize: splits.R.ab });
+    }
+  }
+
+  for (const [pitcherId, cohorts] of pitcherCohorts) {
+    // Specialist = 1 − BAA vs SAME-handed batters; Reverse Splits = 1 − BAA vs
+    // OPPOSITE-handed. Low BAA ⇒ high signal (inverted). sampleSize = cohort AB.
+    if (cohorts.same.ab > 0) {
+      addRawSignal(raw, pitcherId, 'Specialist', { signalValue: 1 - cohorts.same.hits / cohorts.same.ab, sampleSize: cohorts.same.ab });
+    }
+    if (cohorts.opposite.ab > 0) {
+      addRawSignal(raw, pitcherId, 'Reverse Splits', { signalValue: 1 - cohorts.opposite.hits / cohorts.opposite.ab, sampleSize: cohorts.opposite.ab });
+    }
+  }
+}
+
 function addDurabilitySignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
   const playerIds = new Set<string>([
     ...input.gamesByPlayer.keys(),
@@ -977,6 +1162,10 @@ function buildRawSignals(input: SeasonTraitCandidateInput): RawSignalMap {
   addBunterSignals(input, raw);
   addCrossedUpSignals(input, raw);
   addUtilitySignals(input, raw);
+  // R2 — First-Pitch pair (count-family is folded into addOutcomeRateSignals) +
+  // the 6 handedness splits (DORMANT until the handedness maps are threaded in).
+  addFirstPitchSignals(input, raw);
+  addHandednessSplitSignals(input, raw);
   addDurabilitySignals(input, raw);
   return raw;
 }

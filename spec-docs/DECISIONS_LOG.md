@@ -1464,3 +1464,22 @@ Grounding R1-b2 (Two Way / Utility / Crossed Up / Bunter), the Captain surfaced 
   future tuning ticket.
 Distractor + Big/Little Hack (R1-b1) and the §0.9 derivations for Utility (fielding success-rate at non-primary
 positions) + Crossed Up (PB/batters-faced) were already pinned — built to documented defaults.
+
+---
+
+### 2026-06-18: R2 scope + measurement rulings (attended; L9b trait-reality rebuild)
+
+JK ruled "do ALL of R2 now" (count-family + First-Pitch pair + the 6 handedness splits; the handedness half builds DARK +
+dormant until the handedness join is wired). Measurement rulings (folded into §0.10 verbatim):
+- **Count-family** (BB Prone / Composed / Gets Ahead / Falls Behind): walks-allowed rate = (BB+IBB)/batters-faced;
+  BB Prone/Falls Behind = rate (high), Composed/Gets Ahead = 1−rate (low). Personality tilt differentiates the pairs.
+- **First Pitch Slayer / Prayer**: **HIT vs OUT** on logged first-pitch PAs (`pitchesInAtBat===1`). Slayer = hits/(hits+outs),
+  Prayer = 1−Slayer. First-pitch HBP / reached-on-error excluded (neither hit nor out).
+- **Handedness splits** (DORMANT until the handedness join is fed — thread `pitcherHandByPlayer` + `batterHandByPlayer`
+  maps into the input, mirror Utility): **CON vs LHP/RHP** = 1−K/PA vs that-handed pitchers; **POW vs LHP/RHP** = ISO vs
+  that-handed pitchers; **Specialist** = 1−BAA vs SAME-handed batters; **Reverse Splits** = 1−BAA vs OPPOSITE-handed.
+  **JK CHOSE BAA over K-rate for the pitcher splits** ("better measure and doesn't get conflated with K Collector").
+  Switch hitters excluded from same/opposite cohorts.
+- **Structural note:** the handedness data is NOT currently persisted on AtBatEvent (`opposingHand` hardcoded `'R'`; the
+  "L9a-3 join" was never wired). R2 threads optional handedness maps (deferred-wiring seam, like Utility's
+  primaryPositionByPlayer) so the splits build now but stay dormant until a hook populates them.

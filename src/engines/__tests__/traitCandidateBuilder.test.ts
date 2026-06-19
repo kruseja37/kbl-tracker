@@ -13,6 +13,7 @@ import { CANONICAL_TRAIT_NAMES } from '../traitRealityScorer';
 import { computeTraitAcquisition } from '../traitAcquisition';
 import type { EffectiveRatingsPlayer, GameContext } from '../effectiveRatings';
 import type { AtBatEvent, BetweenPlayEvent, FieldingEvent, RunnerState } from '../../utils/eventLog';
+import type { AtBatResult } from '../../types/game';
 
 const noRunners: RunnerState = { first: null, second: null, third: null };
 
@@ -197,6 +198,19 @@ describe('BUILDABLE_TRAITS', () => {
       'Utility',
       'Crossed Up',
       'Bunter',
+      // R2: pitcher count-family, First-Pitch pair, 6 handedness splits.
+      'BB Prone',
+      'Composed',
+      'Gets Ahead',
+      'Falls Behind',
+      'First Pitch Slayer',
+      'First Pitch Prayer',
+      'CON vs LHP',
+      'CON vs RHP',
+      'POW vs LHP',
+      'POW vs RHP',
+      'Specialist',
+      'Reverse Splits',
     ]);
   });
 
@@ -1218,6 +1232,403 @@ describe('R1-b2 L9b-2 seam (Utility / Crossed Up / Bunter feed computeTraitAcqui
     const skip = acquisition.skipped.find((s) => s.traitName === 'Crossed Up');
     expect(skip?.reason).not.toBe('ineligible_role');
     expect(skip?.reason).not.toBe('unknown_trait');
+  });
+});
+
+describe('R2 pitcher count-family (walks-allowed rate proxy)', () => {
+  it('computes BB Prone / Falls Behind = walkRate and Composed / Gets Ahead = 1 − walkRate per BF', () => {
+    const events = [
+      ...repeat(2, () => atBat({ pitcherId: 'p1', batterId: 'opp', result: 'BB', outsAfter: 0 })),
+      ...repeat(1, () => atBat({ pitcherId: 'p1', batterId: 'opp', result: 'IBB', outsAfter: 0 })),
+      ...repeat(7, () => atBat({ pitcherId: 'p1', batterId: 'opp', result: 'GO', outsAfter: 1 })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['p1'], 'pitcher'),
+      atBatEvents: events,
+    }));
+    // walkRate = (2 BB + 1 IBB) / 10 BF = 0.3.
+    expect(candidate(result, 'p1', 'BB Prone')?.signalValue).toBeCloseTo(0.3, 10);
+    expect(candidate(result, 'p1', 'Falls Behind')?.signalValue).toBeCloseTo(0.3, 10);
+    expect(candidate(result, 'p1', 'Composed')?.signalValue).toBeCloseTo(0.7, 10);
+    expect(candidate(result, 'p1', 'Gets Ahead')?.signalValue).toBeCloseTo(0.7, 10);
+    expect(candidate(result, 'p1', 'BB Prone')?.sampleSize).toBe(10);
+    expect(candidate(result, 'p1', 'Gets Ahead')?.sampleSize).toBe(10);
+  });
+
+  it('keeps the high pair (BB Prone = Falls Behind) and the low pair (Composed = Gets Ahead) equal — shared signal', () => {
+    const events = [
+      ...repeat(4, () => atBat({ pitcherId: 'p1', batterId: 'opp', result: 'BB', outsAfter: 0 })),
+      ...repeat(6, () => atBat({ pitcherId: 'p1', batterId: 'opp', result: 'GO', outsAfter: 1 })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['p1'], 'pitcher'),
+      atBatEvents: events,
+    }));
+    const bbProne = candidate(result, 'p1', 'BB Prone')?.signalValue;
+    const fallsBehind = candidate(result, 'p1', 'Falls Behind')?.signalValue;
+    const composed = candidate(result, 'p1', 'Composed')?.signalValue;
+    const getsAhead = candidate(result, 'p1', 'Gets Ahead')?.signalValue;
+    expect(bbProne).toBeCloseTo(0.4, 10);
+    expect(fallsBehind).toBe(bbProne);
+    expect(composed).toBeCloseTo(0.6, 10);
+    expect(getsAhead).toBe(composed);
+  });
+
+  it('keeps the count-family pitcher-only (a position batter gets no count-family signal via role eligibility)', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: [{ playerId: 'b1', role: 'position' }],
+      // b1 takes at-bats as a "pitcher" but is role=position → no count-family trait.
+      atBatEvents: repeat(10, () => atBat({ pitcherId: 'b1', batterId: 'opp', result: 'BB', outsAfter: 0 })),
+    }));
+    expect(candidate(result, 'b1', 'BB Prone')).toBeUndefined();
+    expect(candidate(result, 'b1', 'Composed')).toBeUndefined();
+    expect(candidate(result, 'b1', 'Gets Ahead')).toBeUndefined();
+    expect(candidate(result, 'b1', 'Falls Behind')).toBeUndefined();
+  });
+
+  it('skips undone at-bats when accumulating the walks-allowed rate', () => {
+    const events = [
+      atBat({ pitcherId: 'p1', batterId: 'opp', result: 'BB', outsAfter: 0, undoneAt: 1 }),
+      ...repeat(3, () => atBat({ pitcherId: 'p1', batterId: 'opp', result: 'BB', outsAfter: 0 })),
+      ...repeat(7, () => atBat({ pitcherId: 'p1', batterId: 'opp', result: 'GO', outsAfter: 1 })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['p1'], 'pitcher'),
+      atBatEvents: events,
+    }));
+    // The undone BB is excluded: 3 BB of 10 live BF, not 4 of 11.
+    expect(candidate(result, 'p1', 'BB Prone')?.signalValue).toBeCloseTo(0.3, 10);
+    expect(candidate(result, 'p1', 'BB Prone')?.sampleSize).toBe(10);
+  });
+});
+
+function firstPitch(result: AtBatResult, overrides: Partial<AtBatEvent> = {}): AtBatEvent {
+  return atBat({
+    batterId: 'b1',
+    result,
+    outsAfter: isOutResult(result) ? 1 : 0,
+    enrichment: { pitchesInAtBat: 1 },
+    ...overrides,
+  });
+}
+
+function isOutResult(result: AtBatResult): boolean {
+  return ['GO', 'FO', 'FLO', 'LO', 'PO', 'DP', 'SF', 'SAC'].includes(result);
+}
+
+describe('R2 First Pitch Slayer / Prayer (hit vs out on logged first-pitch PAs)', () => {
+  it('computes Slayer = hits/(hits+outs) and Prayer = outs/(hits+outs) over first-pitch PAs', () => {
+    const events = [
+      ...repeat(3, () => firstPitch('1B')),
+      ...repeat(7, () => firstPitch('GO')),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      atBatEvents: events,
+    }));
+    expect(candidate(result, 'b1', 'First Pitch Slayer')?.signalValue).toBeCloseTo(0.3, 10);
+    expect(candidate(result, 'b1', 'First Pitch Prayer')?.signalValue).toBeCloseTo(0.7, 10);
+    expect(candidate(result, 'b1', 'First Pitch Slayer')?.sampleSize).toBe(10);
+    expect(candidate(result, 'b1', 'First Pitch Prayer')?.sampleSize).toBe(10);
+  });
+
+  it('makes Slayer + Prayer = 1 over the same hit-or-out denominator', () => {
+    const events = [
+      ...repeat(4, () => firstPitch('HR')),
+      ...repeat(1, () => firstPitch('ITPHR')),
+      ...repeat(5, () => firstPitch('FO')),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      atBatEvents: events,
+    }));
+    const slayer = candidate(result, 'b1', 'First Pitch Slayer')?.signalValue ?? 0;
+    const prayer = candidate(result, 'b1', 'First Pitch Prayer')?.signalValue ?? 0;
+    expect(slayer).toBeCloseTo(0.5, 10);
+    expect(slayer + prayer).toBeCloseTo(1, 10);
+  });
+
+  it('ignores at-bats that were not first-pitch PAs (pitchesInAtBat !== 1 or absent)', () => {
+    const events = [
+      ...repeat(2, () => firstPitch('1B')),
+      // Not first-pitch: enrichment with 4 pitches — excluded.
+      ...repeat(5, () => atBat({ batterId: 'b1', result: '1B', outsAfter: 0, enrichment: { pitchesInAtBat: 4 } })),
+      // No enrichment at all — excluded.
+      ...repeat(5, () => atBat({ batterId: 'b1', result: 'GO', outsAfter: 1 })),
+      ...repeat(2, () => firstPitch('GO')),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      atBatEvents: events,
+    }));
+    // Only the 4 first-pitch PAs count: 2 hits, 2 outs → 0.5 each.
+    expect(candidate(result, 'b1', 'First Pitch Slayer')?.signalValue).toBeCloseTo(0.5, 10);
+    expect(candidate(result, 'b1', 'First Pitch Slayer')?.sampleSize).toBe(4);
+  });
+
+  it('excludes a first-pitch HBP / reached-on-error (neither a hit nor an out)', () => {
+    const events = [
+      ...repeat(3, () => firstPitch('1B')),
+      ...repeat(1, () => firstPitch('GO')),
+      // First-pitch HBP and E — neither hit nor out → excluded from the denominator.
+      firstPitch('HBP', { outsAfter: 0 }),
+      firstPitch('E', { outsAfter: 0 }),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      atBatEvents: events,
+    }));
+    // 3 hits + 1 out = 4 hit-or-out PAs (HBP and E excluded): Slayer = 0.75.
+    expect(candidate(result, 'b1', 'First Pitch Slayer')?.signalValue).toBeCloseTo(0.75, 10);
+    expect(candidate(result, 'b1', 'First Pitch Slayer')?.sampleSize).toBe(4);
+  });
+
+  it('keeps the First-Pitch pair position-only (a pitcher batter gets no signal via role eligibility)', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: [{ playerId: 'p1', role: 'pitcher' }],
+      atBatEvents: [
+        ...repeat(5, () => firstPitch('1B', { batterId: 'p1' })),
+        ...repeat(5, () => firstPitch('GO', { batterId: 'p1' })),
+      ],
+    }));
+    expect(candidate(result, 'p1', 'First Pitch Slayer')).toBeUndefined();
+    expect(candidate(result, 'p1', 'First Pitch Prayer')).toBeUndefined();
+  });
+
+  it('skips undone first-pitch PAs', () => {
+    const events = [
+      firstPitch('1B', { undoneAt: 1 }),
+      ...repeat(2, () => firstPitch('1B')),
+      ...repeat(2, () => firstPitch('GO')),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      atBatEvents: events,
+    }));
+    // The undone hit is excluded: 2 hits, 2 outs = 0.5 (not 3/5).
+    expect(candidate(result, 'b1', 'First Pitch Slayer')?.signalValue).toBeCloseTo(0.5, 10);
+    expect(candidate(result, 'b1', 'First Pitch Slayer')?.sampleSize).toBe(4);
+  });
+});
+
+describe('R2 handedness platoon splits (DORMANT until the handedness maps are threaded)', () => {
+  it('emits NO handedness split signal when the pitcherHand map is omitted (all 6 dormant)', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: [...players(['b1'], 'position'), ...players(['p1'], 'pitcher')],
+      atBatEvents: [
+        ...repeat(5, () => atBat({ batterId: 'b1', pitcherId: 'p1', result: 'K' })),
+        ...repeat(5, () => atBat({ batterId: 'b1', pitcherId: 'p1', result: '1B', outsAfter: 0 })),
+      ],
+      // No pitcherHandByPlayer / batterHandByPlayer → handedness splits dormant.
+    }));
+    expect(candidate(result, 'b1', 'CON vs LHP')).toBeUndefined();
+    expect(candidate(result, 'b1', 'CON vs RHP')).toBeUndefined();
+    expect(candidate(result, 'b1', 'POW vs LHP')).toBeUndefined();
+    expect(candidate(result, 'b1', 'POW vs RHP')).toBeUndefined();
+    expect(candidate(result, 'p1', 'Specialist')).toBeUndefined();
+    expect(candidate(result, 'p1', 'Reverse Splits')).toBeUndefined();
+  });
+
+  it('emits NO handedness split signal when the pitcherHand map is present but empty', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      atBatEvents: repeat(10, () => atBat({ batterId: 'b1', pitcherId: 'p1', result: 'K' })),
+      pitcherHandByPlayer: new Map(),
+    }));
+    expect(candidate(result, 'b1', 'CON vs LHP')).toBeUndefined();
+    expect(candidate(result, 'b1', 'CON vs RHP')).toBeUndefined();
+  });
+
+  it('computes CON vs LHP / CON vs RHP = 1 − K/PA bucketed by the opposing pitcher hand', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      atBatEvents: [
+        // vs LHP (pL): 2 K of 10 PA → CON vs LHP = 0.8.
+        ...repeat(2, () => atBat({ batterId: 'b1', pitcherId: 'pL', result: 'K' })),
+        ...repeat(8, () => atBat({ batterId: 'b1', pitcherId: 'pL', result: 'GO', outsAfter: 1 })),
+        // vs RHP (pR): 6 K of 10 PA → CON vs RHP = 0.4.
+        ...repeat(6, () => atBat({ batterId: 'b1', pitcherId: 'pR', result: 'K' })),
+        ...repeat(4, () => atBat({ batterId: 'b1', pitcherId: 'pR', result: 'GO', outsAfter: 1 })),
+      ],
+      pitcherHandByPlayer: new Map([['pL', 'L'], ['pR', 'R']]),
+    }));
+    expect(candidate(result, 'b1', 'CON vs LHP')?.signalValue).toBeCloseTo(0.8, 10);
+    expect(candidate(result, 'b1', 'CON vs LHP')?.sampleSize).toBe(10);
+    expect(candidate(result, 'b1', 'CON vs RHP')?.signalValue).toBeCloseTo(0.4, 10);
+    expect(candidate(result, 'b1', 'CON vs RHP')?.sampleSize).toBe(10);
+  });
+
+  it('computes POW vs LHP / POW vs RHP = ISO (TB − H)/AB bucketed by the opposing pitcher hand', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      atBatEvents: [
+        // vs LHP: 2 HR + 8 GO. AB = 10, TB = 8, H = 2 → ISO = (8−2)/10 = 0.6.
+        ...repeat(2, () => atBat({ batterId: 'b1', pitcherId: 'pL', result: 'HR', outsAfter: 0 })),
+        ...repeat(8, () => atBat({ batterId: 'b1', pitcherId: 'pL', result: 'GO', outsAfter: 1 })),
+        // vs RHP: 2 walks (non-AB) + 1 single + 7 GO. AB = 8, TB = 1, H = 1 → ISO = 0.
+        ...repeat(2, () => atBat({ batterId: 'b1', pitcherId: 'pR', result: 'BB', outsAfter: 0 })),
+        ...repeat(1, () => atBat({ batterId: 'b1', pitcherId: 'pR', result: '1B', outsAfter: 0 })),
+        ...repeat(7, () => atBat({ batterId: 'b1', pitcherId: 'pR', result: 'GO', outsAfter: 1 })),
+      ],
+      pitcherHandByPlayer: new Map([['pL', 'L'], ['pR', 'R']]),
+    }));
+    expect(candidate(result, 'b1', 'POW vs LHP')?.signalValue).toBeCloseTo(0.6, 10);
+    expect(candidate(result, 'b1', 'POW vs LHP')?.sampleSize).toBe(10);
+    expect(candidate(result, 'b1', 'POW vs RHP')?.signalValue).toBeCloseTo(0, 10);
+    // AB excludes the 2 walks → 8.
+    expect(candidate(result, 'b1', 'POW vs RHP')?.sampleSize).toBe(8);
+  });
+
+  it('computes Specialist = 1 − BAA same-hand and Reverse Splits = 1 − BAA opposite-hand for a pitcher', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['pR'], 'pitcher'),
+      atBatEvents: [
+        // pR is R-handed. Same-hand cohort = R batters (bR): 2 hits of 10 AB → BAA 0.2 → Specialist 0.8.
+        ...repeat(2, () => atBat({ pitcherId: 'pR', batterId: 'bR', result: '1B', outsAfter: 0 })),
+        ...repeat(8, () => atBat({ pitcherId: 'pR', batterId: 'bR', result: 'GO', outsAfter: 1 })),
+        // Opposite-hand cohort = L batters (bL): 5 hits of 10 AB → BAA 0.5 → Reverse Splits 0.5.
+        ...repeat(5, () => atBat({ pitcherId: 'pR', batterId: 'bL', result: '1B', outsAfter: 0 })),
+        ...repeat(5, () => atBat({ pitcherId: 'pR', batterId: 'bL', result: 'GO', outsAfter: 1 })),
+      ],
+      pitcherHandByPlayer: new Map([['pR', 'R']]),
+      batterHandByPlayer: new Map([['bR', 'R'], ['bL', 'L']]),
+    }));
+    expect(candidate(result, 'pR', 'Specialist')?.signalValue).toBeCloseTo(0.8, 10);
+    expect(candidate(result, 'pR', 'Specialist')?.sampleSize).toBe(10);
+    expect(candidate(result, 'pR', 'Reverse Splits')?.signalValue).toBeCloseTo(0.5, 10);
+    expect(candidate(result, 'pR', 'Reverse Splits')?.sampleSize).toBe(10);
+  });
+
+  it('excludes switch hitters (batterHand === "S") from the Specialist / Reverse cohorts', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['pR'], 'pitcher'),
+      atBatEvents: [
+        // Same-hand R cohort: 1 hit of 5 AB → BAA 0.2 → Specialist 0.8.
+        ...repeat(1, () => atBat({ pitcherId: 'pR', batterId: 'bR', result: '1B', outsAfter: 0 })),
+        ...repeat(4, () => atBat({ pitcherId: 'pR', batterId: 'bR', result: 'GO', outsAfter: 1 })),
+        // Switch hitter bS — ALL hits, but must NOT distort either cohort.
+        ...repeat(10, () => atBat({ pitcherId: 'pR', batterId: 'bS', result: 'HR', outsAfter: 0 })),
+      ],
+      pitcherHandByPlayer: new Map([['pR', 'R']]),
+      batterHandByPlayer: new Map([['bR', 'R'], ['bS', 'S']]),
+    }));
+    // Specialist sees only the 5 bR AB (switch hitter excluded): BAA 0.2 → 0.8.
+    expect(candidate(result, 'pR', 'Specialist')?.signalValue).toBeCloseTo(0.8, 10);
+    expect(candidate(result, 'pR', 'Specialist')?.sampleSize).toBe(5);
+    // No opposite-hand AB at all → Reverse Splits dormant.
+    expect(candidate(result, 'pR', 'Reverse Splits')).toBeUndefined();
+  });
+
+  it('skips at-bats whose pitcher hand is absent from the map (batter splits)', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      atBatEvents: [
+        // pL mapped L: 1 K of 5 → CON vs LHP = 0.8.
+        ...repeat(1, () => atBat({ batterId: 'b1', pitcherId: 'pL', result: 'K' })),
+        ...repeat(4, () => atBat({ batterId: 'b1', pitcherId: 'pL', result: 'GO', outsAfter: 1 })),
+        // pUnknown absent from the map → these are skipped entirely.
+        ...repeat(10, () => atBat({ batterId: 'b1', pitcherId: 'pUnknown', result: 'K' })),
+      ],
+      pitcherHandByPlayer: new Map([['pL', 'L']]),
+    }));
+    expect(candidate(result, 'b1', 'CON vs LHP')?.signalValue).toBeCloseTo(0.8, 10);
+    expect(candidate(result, 'b1', 'CON vs LHP')?.sampleSize).toBe(5);
+    // No R-handed pitcher in the map → CON vs RHP dormant.
+    expect(candidate(result, 'b1', 'CON vs RHP')).toBeUndefined();
+  });
+
+  it('skips undone at-bats in the handedness buckets', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      atBatEvents: [
+        atBat({ batterId: 'b1', pitcherId: 'pL', result: 'K', undoneAt: 1 }),
+        ...repeat(2, () => atBat({ batterId: 'b1', pitcherId: 'pL', result: 'K' })),
+        ...repeat(8, () => atBat({ batterId: 'b1', pitcherId: 'pL', result: 'GO', outsAfter: 1 })),
+      ],
+      pitcherHandByPlayer: new Map([['pL', 'L']]),
+    }));
+    // The undone K is excluded: 2 K of 10 → CON vs LHP = 0.8 (not 3/11).
+    expect(candidate(result, 'b1', 'CON vs LHP')?.signalValue).toBeCloseTo(0.8, 10);
+    expect(candidate(result, 'b1', 'CON vs LHP')?.sampleSize).toBe(10);
+  });
+
+  it('keeps the splits role-bucketed (CON/POW position-only, Specialist/Reverse pitcher-only)', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: [{ playerId: 'b1', role: 'position' }, { playerId: 'pR', role: 'pitcher' }],
+      atBatEvents: [
+        // b1 is L-handed vs R-handed pR → the OPPOSITE cohort (Reverse Splits) for pR.
+        ...repeat(10, () => atBat({ batterId: 'b1', pitcherId: 'pR', result: 'GO', outsAfter: 1 })),
+      ],
+      pitcherHandByPlayer: new Map([['pR', 'R']]),
+      batterHandByPlayer: new Map([['b1', 'L']]),
+    }));
+    // Position batter is eligible for CON/POW, NOT for the pitcher Specialist/Reverse.
+    expect(candidate(result, 'b1', 'CON vs RHP')).toBeDefined();
+    expect(candidate(result, 'b1', 'Reverse Splits')).toBeUndefined();
+    // Pitcher is eligible for Specialist/Reverse (here the opposite-hand cohort →
+    // Reverse Splits), NOT for the position CON/POW splits.
+    expect(candidate(result, 'pR', 'Reverse Splits')).toBeDefined();
+    expect(candidate(result, 'pR', 'CON vs RHP')).toBeUndefined();
+  });
+});
+
+describe('R2 L9b-2 seam (count-family + First-Pitch + handedness feed computeTraitAcquisition)', () => {
+  it('emits the count-family in the { traitName, score } shape the acquisition combiner consumes', () => {
+    // Three pitchers with different walk rates → a real pitcher peer pool.
+    const events = [
+      ...repeat(20, () => atBat({ pitcherId: 'p1', batterId: 'opp', result: 'BB', outsAfter: 0 })),
+      ...repeat(20, () => atBat({ pitcherId: 'p1', batterId: 'opp', result: 'GO', outsAfter: 1 })),
+      ...repeat(5, () => atBat({ pitcherId: 'p2', batterId: 'opp', result: 'BB', outsAfter: 0 })),
+      ...repeat(35, () => atBat({ pitcherId: 'p2', batterId: 'opp', result: 'GO', outsAfter: 1 })),
+      ...repeat(40, () => atBat({ pitcherId: 'p3', batterId: 'opp', result: 'GO', outsAfter: 1 })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['p1', 'p2', 'p3'], 'pitcher'),
+      atBatEvents: events,
+    }));
+    const bbProne = candidate(result, 'p1', 'BB Prone');
+    expect(bbProne).toBeDefined();
+    expect(typeof bbProne?.score.sufficient).toBe('boolean');
+
+    const acquisition = computeTraitAcquisition({
+      playerRole: 'pitcher',
+      personality: 'TIMID',
+      heldTraits: [],
+      candidates: result.get('p1') ?? [],
+    });
+    expect(acquisition).toHaveProperty('proposals');
+    expect(acquisition).toHaveProperty('skipped');
+    for (const traitName of ['BB Prone', 'Composed', 'Gets Ahead', 'Falls Behind']) {
+      const skip = acquisition.skipped.find((s) => s.traitName === traitName);
+      expect(skip?.reason).not.toBe('ineligible_role');
+      expect(skip?.reason).not.toBe('unknown_trait');
+    }
+  });
+
+  it('emits the First-Pitch pair in the seam shape for a position player', () => {
+    const events = ['b1', 'b2', 'b3'].flatMap((batterId, index) => [
+      ...repeat(index + 1, () => firstPitch('1B', { batterId })),
+      ...repeat(40 - (index + 1), () => firstPitch('GO', { batterId })),
+    ]);
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1', 'b2', 'b3'], 'position'),
+      atBatEvents: events,
+    }));
+    const slayer = candidate(result, 'b1', 'First Pitch Slayer');
+    expect(slayer).toBeDefined();
+    expect(typeof slayer?.score.sufficient).toBe('boolean');
+
+    const acquisition = computeTraitAcquisition({
+      playerRole: 'position',
+      personality: 'COMPETITIVE',
+      heldTraits: [],
+      candidates: result.get('b1') ?? [],
+    });
+    for (const traitName of ['First Pitch Slayer', 'First Pitch Prayer']) {
+      const skip = acquisition.skipped.find((s) => s.traitName === traitName);
+      expect(skip?.reason).not.toBe('ineligible_role');
+      expect(skip?.reason).not.toBe('unknown_trait');
+    }
   });
 });
 

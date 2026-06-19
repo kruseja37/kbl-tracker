@@ -207,6 +207,34 @@ Percentile = vs the role-bucketed peer pool (the scorer, basis 'none'); the min-
 - **Utility** = fielding perf at a **non-primary** position — requires threading a `primaryPositionByPlayer` map into
   `SeasonTraitCandidateInput` (mechanical input addition). *(R1-b.)*
 
+### 0.10 R2 PROXY DERIVATIONS — ruled (JK 2026-06-18); build R2 to these
+
+JK ruled "do all of R2 now" (the handedness splits build DARK + dormant until the handedness join is wired). All rates
+per the player's relevant PA bucket; percentile vs the role-bucketed peer pool; min-sample valve always applies.
+
+- **Pitcher count-family** (BB Prone / Composed / Gets Ahead / Falls Behind): data proxy = **walks-allowed rate** =
+  `(BB+IBB) / batters-faced` (the pitcher's PA count). **BB Prone / Falls Behind = the rate (high walks)**;
+  **Composed / Gets Ahead = `1 − rate` (low walks — inverse)**. All four share the SAME walks-allowed signal in their
+  high/low pair; personality TILT differentiates them (§0.7). Buildable now (standard results, no count needed). *(R2.)*
+- **First Pitch Slayer / Prayer** (position; OPT-IN on `enrichment.pitchesInAtBat===1`): on logged first-pitch PAs,
+  **JK ruling 2026-06-18 = HIT vs OUT.** Denominator = first-pitch PAs that ended in a **hit OR an out** (a first-pitch
+  HBP / reached-on-error is excluded — neither a hit nor an out). **Slayer = hits / (hits+outs)** (favorable);
+  **Prayer = outs / (hits+outs) = 1 − Slayer** (unfavorable). Hits = `{1B,2B,3B,HR,ITPHR,GRD}`; outs = `isOut(result)`
+  (a first-pitch K is impossible — K needs ≥3 pitches). NOT personality-earned; personality is the tilt (§0.7). *(R2.)*
+- **Handedness platoon splits** (6; OPT-IN; **DORMANT until the handedness join is fed** — thread
+  `pitcherHandByPlayer` + `batterHandByPlayer` maps into `SeasonTraitCandidateInput`, mirror Utility's
+  `primaryPositionByPlayer`; the hook that populates them is a deferred wiring step. `opposingHand` is currently
+  hardcoded `'R'` in the reconstructor — the splits read the threaded maps, NOT that field). **JK rulings 2026-06-18:**
+  - **CON vs LHP / CON vs RHP** (position) = **avoid-strikeout rate `1 − K/PA`** in PAs where the OPPOSING PITCHER is
+    L / R (`pitcherHandByPlayer.get(pitcherId)`). Higher = better contact vs that hand.
+  - **POW vs LHP / POW vs RHP** (position) = **ISO** = `(TB − H) / AB` in PAs vs that-handed pitchers (TB: 1B=1,2B/GRD=2,
+    3B=3,HR/ITPHR=4; H = hits; AB = PA − BB/IBB/HBP/SF/SAC). Higher = more power vs that hand.
+  - **Specialist** (pitcher) = **`1 − BAA` vs SAME-handed batters**; **Reverse Splits** (pitcher) = **`1 − BAA` vs
+    OPPOSITE-handed batters**. BAA (batting-average-against) = `hits-allowed / AB` by that cohort of batters; same/opposite
+    = `batterHandByPlayer.get(batterId)` vs `pitcherHandByPlayer.get(pitcherId)`. **JK chose BAA over K-rate so Specialist
+    isn't conflated with K Collector.** Low BAA = good → invert (`1 − BAA`) so a tough pitcher ranks HIGH. **Switch
+    hitters (`batterHand==='S'`) are EXCLUDED from the same/opposite cohorts** (no fixed hand). *(R2.)*
+
 ---
 
 ---
