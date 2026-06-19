@@ -12813,3 +12813,132 @@ override; all 3 honor kinds; magnitude default 0.4 + >1 clamp; determinism); sib
 `NODE_ENV= npm run build` 0 (7.57s) + suite **7,796/452, 7,794 pass / 2 characterized fail**, **ZERO new reds** (+4).
 build-DARK / ORPHANED-PENDING (no caller — L12-5b wires it); trackerDb v24. Branch-only. **➡ NEXT = L12-5b** (emission
 config ON-switch + the seam-injectable emit-glue).
+
+---
+
+## CONTRACT — L12-5b (the seam-injectable award-emission glue) — 2026-06-19 (attended)
+
+**ROUTE:** Codex CLI (gpt-5.5, **very-high reasoning effort**) via `codex exec` stdin-from-contract. Auditor: Opus 4.8
+(builder ≠ auditor — Codex builds, Opus independently audits + runs the full host gate).
+
+**ROLE:** You are a builder for the KBL Tracker franchise L-stack (the reporter emission layer).
+
+**GOAL:** Create the **emit-glue** `src/src_figma/app/engines/reporter/franchiseHonorEmission.ts` —
+`emitFranchiseHonorNews(...)` that turns a resolved marquee honor (the L12-5a `FranchiseHonorNewsInput`) into a persisted
+`seasonNewsItems` record, with the flag gate + the emission gate + an idempotent dedup read-guard. Build-DARK /
+ORPHANED-PENDING (NO production caller yet — L12-5e wires it at the two trigger edges). Seam-injectable for testing the async
+LLM path.
+
+**SOURCE OF TRUTH:** `spec-docs/L12-5_SCOPE_MAP.md` §5 (the emission pipeline) + Fork F3/F5 defaults. Reuse the existing
+emission bus; do NOT modify `seasonNewsGenerator.ts`, the config storage, or the news store.
+
+**VERIFIED ANCHORS (signatures — do not re-derive):**
+- `isFranchisePhase2L12Enabled()` (`src/utils/franchisePhase2Flags.ts`).
+- `loadSeasonEmissionConfig(): Promise<SeasonEmissionConfig>` (`src/utils/seasonEmissionConfigStorage.ts`); default
+  `{marqueeOnly:true, perEventRate:{}, raceTopN:3,...}`.
+- `shouldEmitSeasonNews(eventType, config): boolean` (`seasonNewsGenerator.ts:135`); `generateSeasonNewsTake(event, reporter,
+  config): Promise<SeasonNewsItem|null>` (`:147`, async LLM, re-checks the gate, returns null on failure).
+- `listSeasonNewsItemsByEvent(franchiseId, seasonId, eventType): Promise<SeasonNewsItem[]>` (`src/utils/seasonNewsStorage.ts:92`);
+  `persistSeasonNewsItem(record: SeasonNewsItem): Promise<void>` (`:39`). `SeasonNewsItem` carries `facts` (so `facts.honorKind` survives).
+- `getReporterForTeam(teamId, leagueId?, franchiseId?): Promise<BeatReporter|null>` (`src/utils/reporterStorage.ts:75`).
+- `buildFranchiseAwardSeasonNewsEvent(input): SeasonNewsEvent` + `type FranchiseHonorNewsInput` (`./franchiseL12AwardNewsAdapter`, L12-5a).
+- **`processCompletedGame.ts` already imports from `src_figma` (the WAR orchestrator, `:37`)** — so an emit-glue in
+  `src_figma/app/engines/reporter/` is importable from BOTH the per-game util path (5e All-Star edge) and FranchiseHome (5e season-end edge).
+
+**CHANGES (create ONLY these 2 files):**
+
+**A. `src/src_figma/app/engines/reporter/franchiseHonorEmission.ts`:**
+```ts
+import { isFranchisePhase2L12Enabled } from '../../../../utils/franchisePhase2Flags';
+import { loadSeasonEmissionConfig } from '../../../../utils/seasonEmissionConfigStorage';
+import { listSeasonNewsItemsByEvent, persistSeasonNewsItem } from '../../../../utils/seasonNewsStorage';
+import { getReporterForTeam } from '../../../../utils/reporterStorage';
+import { generateSeasonNewsTake, shouldEmitSeasonNews } from './seasonNewsGenerator';
+import { buildFranchiseAwardSeasonNewsEvent, type FranchiseHonorNewsInput } from './franchiseL12AwardNewsAdapter';
+
+// Seam for test injection (mirror raceStandingsSeam / allStarRosterSeam).
+export const franchiseHonorEmissionSeam = {
+  loadConfig: loadSeasonEmissionConfig,
+  listByEvent: listSeasonNewsItemsByEvent,
+  getReporter: getReporterForTeam,
+  generateTake: generateSeasonNewsTake,
+  persist: persistSeasonNewsItem,
+};
+
+export type EmitHonorStatus = 'dark-noop' | 'gated' | 'deduped' | 'no-reporter' | 'take-failed' | 'emitted';
+export type EmitHonorResult = { status: EmitHonorStatus; reason?: string };
+
+export async function emitFranchiseHonorNews(params: {
+  honorInput: FranchiseHonorNewsInput;
+  teamId: string;
+  leagueId?: string;
+}): Promise<EmitHonorResult> {
+  if (!isFranchisePhase2L12Enabled()) return { status: 'dark-noop', reason: 'Phase-2 L12 disabled.' };
+
+  const config = await franchiseHonorEmissionSeam.loadConfig();
+  // Marquee awards emit by default (Fork F3) — force AWARD_RESULT on UNLESS the config explicitly set it (0 = opt-out),
+  // WITHOUT writing the stored config (no saved-shape change).
+  const effectiveConfig = {
+    ...config,
+    perEventRate: { ...config.perEventRate, AWARD_RESULT: config.perEventRate.AWARD_RESULT ?? 1 },
+  };
+  if (!shouldEmitSeasonNews('AWARD_RESULT', effectiveConfig)) return { status: 'gated' };
+
+  // Overcounting valve (Fork F5): one AWARD_RESULT per (franchise, season, honorKind).
+  const existing = await franchiseHonorEmissionSeam.listByEvent(
+    params.honorInput.franchiseId, params.honorInput.seasonId, 'AWARD_RESULT',
+  );
+  if (existing.some((item) => item.facts?.honorKind === params.honorInput.honorKind)) {
+    return { status: 'deduped' };
+  }
+
+  const reporter = await franchiseHonorEmissionSeam.getReporter(params.teamId, params.leagueId, params.honorInput.franchiseId);
+  if (!reporter) return { status: 'no-reporter' };
+
+  const event = buildFranchiseAwardSeasonNewsEvent(params.honorInput);
+  const item = await franchiseHonorEmissionSeam.generateTake(event, reporter, effectiveConfig);
+  if (!item) return { status: 'take-failed' };
+
+  await franchiseHonorEmissionSeam.persist(item);
+  return { status: 'emitted' };
+}
+```
+(Adjust ONLY if a verified signature differs → STOP + report. NO `Date.now`/`Math.random` of your own [the take mints its own]; NO config write.)
+
+**B. `src/src_figma/__tests__/reporter/franchiseHonorEmission.test.ts`** — stub `franchiseHonorEmissionSeam` (replace members
+with `vi.fn()`) + toggle the L12 flag via `setFranchisePhase2L12EnabledForTests` (mirror `franchiseAllStarRosterCompute.test.ts`).
+Assert each branch: flag OFF → `dark-noop` (no seam calls); config `perEventRate.AWARD_RESULT:0` → `gated` (no getReporter/
+generateTake/persist); `listByEvent` already has an item with matching `facts.honorKind` → `deduped` (no generateTake/persist);
+`getReporter`→null → `no-reporter`; `generateTake`→null → `take-failed` (no persist); happy path → `emitted` + `persist` called
+with the take's item; and that a DIFFERENT honorKind in `listByEvent` does NOT dedup (MVP existing must not block CY).
+
+**HARD CONSTRAINTS:** create ONLY the 2 files. NO edit to `seasonNewsGenerator.ts` / config storage / news storage / the flag
+module. NO store/trackerDb/persistence-schema change. NO new flag. NO caller wiring (build-DARK). NO `Date.now`/`Math.random`.
+NO git add/commit. Prefix tsc/vitest with `NODE_ENV= `.
+
+**VERIFICATION (run ALL, paste ACTUAL):** `NODE_ENV= npx tsc --noEmit` exit 0 + `NODE_ENV= npm run build` exit 0;
+`NODE_ENV= npx vitest run src/src_figma/__tests__/reporter/franchiseHonorEmission.test.ts` all green. (The auditor runs the FULL host suite.)
+
+**STOP-IF:** any verified signature above differs from the code above → STOP + report. `shouldEmitSeasonNews`/`SeasonEmissionConfig.perEventRate`
+shape differs → STOP. The emit-glue would need to edit any reporter/storage module → STOP.
+
+**FORMAT:** 1) files changed; 2) the emit-glue (flag → effectiveConfig marquee-default → gate → honorKind dedup → reporter →
+build → take → persist) + the seam; 3) verification output; 4) "L12-5b complete" or "BLOCKED: <reason>". Do NOT commit.
+
+Use very high reasoning effort. Think step-by-step. Read `src/src_figma/app/engines/reporter/seasonNewsGenerator.ts`
+(shouldEmitSeasonNews/generateSeasonNewsTake), `src/utils/seasonNewsStorage.ts` (list/persist), `src/utils/seasonEmissionConfigStorage.ts`,
+`src/utils/reporterStorage.ts` (getReporterForTeam), `./franchiseL12AwardNewsAdapter` (L12-5a), and
+`src/utils/tests/franchiseAllStarRosterCompute.test.ts` (the seam-stub + flag-toggle test pattern to mirror).
+
+**Status:** ✅ VERIFIED + COMMITTED 2026-06-19 (attended). Codex (gpt-5.5, xhigh) built → Opus audited (builder ≠ auditor) +
+full host gate. *(First dispatch hung — watchdog-killed at 1500s, no files, a transient API stall; RETRY succeeded cleanly,
+same contract.)* Created `franchiseHonorEmission.ts` (`emitFranchiseHonorNews` + the `franchiseHonorEmissionSeam` injection
+object + `EmitHonorResult`: flag gate → effectiveConfig [force `AWARD_RESULT:1` via `?? 1`, honoring an explicit 0, NO config
+write] → `shouldEmitSeasonNews` gate → `(franchise,season,honorKind)` dedup read-guard → `getReporterForTeam` → 5a adapter →
+`generateSeasonNewsTake` → `persistSeasonNewsItem`) + a 7-test file. Audit: faithful to contract; pure-of-Date.now;
+seam-routed. Tests non-vacuous (flag-off short-circuit; explicit-0 → gated; honorKind dedup is SPECIFIC — an existing MVP item
+does NOT block CY; no-reporter; take-failed; happy path asserts the built event facts + the effectiveConfig `AWARD_RESULT:1`).
+Host gate `NODE_ENV= npm run build` 0 (8.92s) + suite **7,803/453, 7,800 pass / 3 fail** = 2 characterized
+(`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`) + 1 order-flake (`GameTrackerLaunchState`, **confirmed passing solo
+9/9**), **ZERO new reds** (+7). build-DARK / ORPHANED-PENDING (no caller — L12-5e wires it); trackerDb v24. Branch-only.
+**➡ NEXT = L12-5c** (the L3 snub row).
