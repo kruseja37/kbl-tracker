@@ -1,5 +1,6 @@
 import type { AdaptiveStandardsConfig } from './franchiseAdaptiveStandards';
 import { deriveAdaptiveStandardsConfig } from './franchiseAdaptiveStandards';
+import type { AllStarCandidate } from '../engines/franchiseAllStarSelector';
 import { awardQualifierThresholds } from './franchiseAwardTrust';
 import {
   replaceFranchiseAwardRowsForScope,
@@ -20,6 +21,10 @@ import {
   getFranchiseTrueValueRows,
   type FranchiseTrueValueRow,
 } from './franchiseTrueValueStorage';
+import {
+  getFranchiseFameRecordRowsByScope,
+  type FranchiseFameRecordRow,
+} from './franchiseFameRecordsStorage';
 import { buildFranchiseAnalyticsTrustReport } from './franchiseAnalyticsTrust';
 import { getCareerStats } from './careerStorage';
 import {
@@ -118,6 +123,10 @@ const MANAGER_OF_YEAR_CATEGORY: FranchiseManagerAwardCategory = 'MANAGER_OF_YEAR
 const MANAGER_OF_YEAR_GAME_LIMIT = 1000;
 const BENCH_PLAYER_QUALIFIER_FRACTION = 0.25;
 const RELIEVER_QUALIFIER_IP_FRACTION = 0.15;
+// §16 sim placeholder, sized for the 60%-games All-Star lock; not the season-end award floor.
+const ALL_STAR_PA_QUALIFIER_FRACTION = 0.25;
+// §16 sim placeholder, sized for the 60%-games All-Star lock; not the season-end award floor.
+const ALL_STAR_IP_QUALIFIER_FRACTION = 0.15;
 
 // MOY-7: Simulation-Gate placeholder. Equal weights are intentionally temporary.
 const MANAGER_OF_YEAR_SIM_GATE_PLACEHOLDER_WEIGHTS = {
@@ -807,4 +816,100 @@ export async function computeFranchiseRaceCandidateRows(
   }
 
   return rowsByCategory;
+}
+
+export function mapValueRowsToAllStarCandidates(params: {
+  valueRows: FranchiseValueInputRow[];
+  trustedValueArtifact: FranchiseTrustedValueArtifact;
+  qualifierByPlayerId: Map<string, FranchiseWarAwardQualifierFacts>;
+  fameByPlayerId: Map<string, FranchiseFameRecordRow>;
+  minPlateAppearances: number;
+  minInningsPitched: number;
+}): AllStarCandidate[] {
+  return params.valueRows
+    .map((row): AllStarCandidate | null => {
+      if (!isPlayerTrustedForValue(params.trustedValueArtifact, row.playerId)) {
+        return null;
+      }
+
+      const facts = params.qualifierByPlayerId.get(row.playerId);
+      const plateAppearances = facts?.plateAppearances;
+      const inningsPitched = facts?.inningsPitched;
+      const qualifiedAsHitter = finiteNumber(plateAppearances) &&
+        plateAppearances >= params.minPlateAppearances * ALL_STAR_PA_QUALIFIER_FRACTION;
+      const qualifiedAsPitcher = finiteNumber(inningsPitched) &&
+        inningsPitched >= params.minInningsPitched * ALL_STAR_IP_QUALIFIER_FRACTION;
+
+      if (!qualifiedAsHitter && !qualifiedAsPitcher) {
+        return null;
+      }
+
+      const fame = params.fameByPlayerId.get(row.playerId);
+      return {
+        playerId: row.playerId,
+        teamId: row.currentTeamId ?? '',
+        rawPosition: row.valuePosition ?? '',
+        hittingMerit: row.warPreviewValues.totalWar,
+        battingWar: row.warPreviewValues.battingWar,
+        startingMerit: row.warPreviewValues.pitchingWar,
+        reliefMerit: row.warPreviewValues.pitchingWpa,
+        gamesStarted: facts?.gamesStarted ?? 0,
+        qualifiedAsHitter,
+        qualifiedAsPitcher,
+        fameHeat: fame?.heat ?? 0,
+        fameReachFloor: fame?.reachFloor ?? 0,
+      };
+    })
+    .filter((candidate): candidate is AllStarCandidate => candidate !== null)
+    .sort((left, right) => left.playerId.localeCompare(right.playerId));
+}
+
+export async function buildFranchiseAllStarCandidates(
+  scope: ComputeFranchiseAwardsPreviewScope,
+): Promise<AllStarCandidate[]> {
+  const valueInputReport = await buildFranchiseValueInputRows({
+    franchiseId: scope.franchiseId,
+    seasonId: scope.seasonId,
+    statsScopeId: scope.statsScopeId,
+    seasonNumber: scope.seasonNumber,
+  });
+  const trustReport = buildFranchiseAnalyticsTrustReport({
+    valueInputReport,
+  });
+
+  if (!trustReport.war.warLikePreviewAvailable) {
+    return [];
+  }
+
+  const [
+    trustedValueArtifact,
+    battingRows,
+    pitchingRows,
+    fameRows,
+  ] = await Promise.all([
+    getTrustedValueArtifact(scope.franchiseId, scope.seasonId, scope.statsScopeId),
+    getAllBattingStats(scope.statsScopeId),
+    getAllPitchingStats(scope.statsScopeId),
+    getFranchiseFameRecordRowsByScope(scope),
+  ]);
+
+  if (!trustedValueArtifact) {
+    return [];
+  }
+
+  const thresholds = awardQualifierThresholds(deriveAdaptiveStandardsConfig({
+    gamesPerTeam: valueInputReport.seasonContext.gamesPerTeam,
+    inningsPerGame: valueInputReport.seasonContext.inningsPerGame,
+  }));
+  const qualifierByPlayerId = factsByPlayerId(qualifierFactsFromStats(battingRows, pitchingRows));
+  const fameByPlayerId = new Map(fameRows.map((row) => [row.playerId, row]));
+
+  return mapValueRowsToAllStarCandidates({
+    valueRows: valueInputReport.rows,
+    trustedValueArtifact,
+    qualifierByPlayerId,
+    fameByPlayerId,
+    minPlateAppearances: thresholds.minPlateAppearances,
+    minInningsPitched: thresholds.minInningsPitched,
+  });
 }

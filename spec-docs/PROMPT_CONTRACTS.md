@@ -12274,3 +12274,137 @@ saturation, DH-ineligibility, under-supply (roster < 26, no throw), determinism.
 (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), **ZERO new reds** (+8 = the new test file). PURE / build-DARK (no
 caller/flag/store — L12-4b/4d wire it); trackerDb stays **v24**. Branch-only (NOT pushed). **➡ NEXT = L12-4b** (the All-Star
 candidate exporter — reuses `buildFranchiseValueInputRows` + `meetsQualifier`, retains position/team, populates `AllStarCandidate`).
+
+---
+
+## CONTRACT — L12-4b (All-Star candidate exporter: assemble AllStarCandidate[] from franchise data) — 2026-06-19 (attended)
+
+**ROUTE:** Codex CLI (gpt-5.5, **very-high reasoning effort**) via `codex exec` stdin-from-contract. Auditor: Opus 4.8
+(builder ≠ auditor — Codex builds, Opus independently audits + runs the full host gate).
+
+**ROLE:** You are a builder for the KBL Tracker franchise L-stack (the D9 award engine module).
+
+**GOAL:** Add the **All-Star candidate exporter** to `src/utils/franchiseAwardsEngine.ts` — assembling the
+`AllStarCandidate[]` that feeds the L12-4a engine (`computeFranchiseAllStarRoster`), from the live franchise WAR/qualifier/
+fame data. Split into a **PURE mapper** (all the logic, fully unit-tested) + a **THIN async loader** (mirrors
+`computeFranchiseRaceCandidateRows`, just loads + delegates). Build-DARK (NO caller / NO flag / NO store change — L12-4d wires
+it). NO persistence write, NO `Date.now`/`Math.random`.
+
+**SOURCE OF TRUTH:** `spec-docs/L12-4_SCOPE_MAP.md` §2/§3 + `spec-docs/DECISIONS_LOG.md` 2026-06-19 "L12-4 All-Star roster".
+Mirror the existing async exporter `computeFranchiseRaceCandidateRows` (`franchiseAwardsEngine.ts:742-810`) for the loading
+pattern. The `AllStarCandidate` shape is OWNED by `src/engines/franchiseAllStarSelector.ts` (import the type).
+
+**CRITICAL DESIGN POINT — the qualifier floor MUST be RELAXED.** The All-Star roster locks at the **60%-games checkpoint**
+(mid-season). The award `awardQualifierThresholds` PA/IP floors are calibrated for a FULL season (PA≈502/IP≈162 season-scaled),
+so at the 60% lock NO player has accumulated full-season PA → the standard floor would qualify **nobody**. Use NEW relaxed
+All-Star fractions (§16 sim placeholders, sized for mid-season): `ALL_STAR_PA_QUALIFIER_FRACTION = 0.25`,
+`ALL_STAR_IP_QUALIFIER_FRACTION = 0.15`.
+
+**CHANGES — edit ONLY `src/utils/franchiseAwardsEngine.ts` + create ONE test file:**
+
+**A. `src/utils/franchiseAwardsEngine.ts`** (additive only — touch NOTHING in the existing D9 award/finalize paths):
+1. Imports: add `import type { AllStarCandidate } from '../engines/franchiseAllStarSelector';` and
+   `getFranchiseFameRecordRowsByScope` + `type FranchiseFameRecordRow` from `'./franchiseFameRecordsStorage'`.
+2. Two new §16 constants near the existing fractions (`:119-120`):
+   `const ALL_STAR_PA_QUALIFIER_FRACTION = 0.25;` and `const ALL_STAR_IP_QUALIFIER_FRACTION = 0.15;`
+   (comment both: §16 sim placeholder, sized for the 60%-games All-Star lock — NOT the season-end award floor).
+3. **PURE exported `mapValueRowsToAllStarCandidates`** — the testable core:
+   ```ts
+   export function mapValueRowsToAllStarCandidates(params: {
+     valueRows: FranchiseValueInputRow[];
+     trustedValueArtifact: FranchiseTrustedValueArtifact;
+     qualifierByPlayerId: Map<string, FranchiseWarAwardQualifierFacts>;
+     fameByPlayerId: Map<string, FranchiseFameRecordRow>;
+     minPlateAppearances: number;
+     minInningsPitched: number;
+   }): AllStarCandidate[]
+   ```
+   For each `row` in `valueRows`:
+   - **Trust gate:** skip unless `isPlayerTrustedForValue(params.trustedValueArtifact, row.playerId)`.
+   - `facts = params.qualifierByPlayerId.get(row.playerId)`.
+   - `qualifiedAsHitter = finiteNumber(facts?.plateAppearances) && facts.plateAppearances >= params.minPlateAppearances * ALL_STAR_PA_QUALIFIER_FRACTION`.
+   - `qualifiedAsPitcher = finiteNumber(facts?.inningsPitched) && facts.inningsPitched >= params.minInningsPitched * ALL_STAR_IP_QUALIFIER_FRACTION`.
+   - **Emit ONLY if `qualifiedAsHitter || qualifiedAsPitcher`** (lean — drop players clearing no floor).
+   - `fame = params.fameByPlayerId.get(row.playerId)`.
+   - Build `AllStarCandidate`: `playerId: row.playerId`; `teamId: row.currentTeamId ?? ''`; `rawPosition: row.valuePosition ?? ''`;
+     `hittingMerit: row.warPreviewValues.totalWar`; `battingWar: row.warPreviewValues.battingWar`;
+     `startingMerit: row.warPreviewValues.pitchingWar`; `reliefMerit: row.warPreviewValues.pitchingWpa`;
+     `gamesStarted: facts?.gamesStarted ?? 0`; `qualifiedAsHitter`; `qualifiedAsPitcher`;
+     `fameHeat: fame?.heat ?? 0`; `fameReachFloor: fame?.reachFloor ?? 0`.
+   Sort the result by `playerId` ascending (determinism).
+4. **THIN async exported `buildFranchiseAllStarCandidates`** — load + delegate (NO logic beyond loading; mirror
+   `computeFranchiseRaceCandidateRows:742-797`):
+   ```ts
+   export async function buildFranchiseAllStarCandidates(
+     scope: ComputeFranchiseAwardsPreviewScope,
+   ): Promise<AllStarCandidate[]>
+   ```
+   - `const valueInputReport = await buildFranchiseValueInputRows({franchiseId, seasonId, statsScopeId, seasonNumber})`.
+   - trust short-circuit: if `!buildFranchiseAnalyticsTrustReport({valueInputReport}).war.warLikePreviewAvailable` → return `[]`.
+   - `Promise.all`: `getTrustedValueArtifact(...)`, `getAllBattingStats(scope.statsScopeId)`,
+     `getAllPitchingStats(scope.statsScopeId)`, `getFranchiseFameRecordRowsByScope(scope)`.
+   - if `!trustedValueArtifact` → return `[]`.
+   - `thresholds = awardQualifierThresholds(deriveAdaptiveStandardsConfig({gamesPerTeam, inningsPerGame}))` (same as the
+     sibling exporter at `:778-782`).
+   - `qualifierByPlayerId = factsByPlayerId(qualifierFactsFromStats(battingRows, pitchingRows))`.
+   - `fameByPlayerId = new Map(fameRows.map((r) => [r.playerId, r]))`.
+   - `return mapValueRowsToAllStarCandidates({ valueRows: valueInputReport.rows, trustedValueArtifact, qualifierByPlayerId,
+     fameByPlayerId, minPlateAppearances: thresholds.minPlateAppearances, minInningsPitched: thresholds.minInningsPitched })`.
+   - Do NOT load true-value rows or rookie ids (All-Star uses WAR + fame, not trueValue/rookie). Do NOT change `computeFranchiseRaceCandidateRows`.
+
+**B. `src/utils/tests/franchiseAllStarCandidates.test.ts`** — PURE-mapper unit tests (NO IndexedDB; call
+`mapValueRowsToAllStarCandidates` directly with synthetic `FranchiseValueInputRow`s / facts maps / fame maps / a stub
+`trustedValueArtifact`). Cover:
+- **Field mapping:** position←valuePosition, team←currentTeamId, hittingMerit←totalWar, battingWar, startingMerit←pitchingWar,
+  reliefMerit←pitchingWpa, gamesStarted from facts, fameHeat/fameReachFloor from the fame map.
+- **Relaxed qualifier:** a player at `minPA * 0.25` clears `qualifiedAsHitter`; just below does not; `minIP * 0.15` clears
+  `qualifiedAsPitcher`. (Prove the relaxed fraction, NOT the full floor.)
+- **Trust gate:** an untrusted player (per the stub artifact) is excluded entirely.
+- **Lean filter:** a player clearing NEITHER floor is NOT emitted.
+- **Fame defaults:** a player missing from the fame map gets `fameHeat:0`/`fameReachFloor:0`.
+- **Null handling:** `currentTeamId:null`→`''`, `valuePosition:null`→`''` (still emitted if a floor clears).
+- **Determinism:** output sorted by `playerId`.
+(The thin async `buildFranchiseAllStarCandidates` is intentionally logic-free load+delegate — it is exercised end-to-end by
+L12-4d's integration test; do NOT build a heavy fake-indexeddb fixture here.)
+
+**HARD CONSTRAINTS:** edit ONLY `franchiseAwardsEngine.ts` (additively) + create the ONE test file. **DO NOT** change
+`scoreForCategory`, `meetsQualifier`, `categoryCandidateRows`, `computeFranchiseRaceCandidateRows`, `WAR_AWARD_CATEGORIES`, or
+ANY D9 award/finalize path (the season-end finalize MUST stay byte-behavior-identical). NO store/trackerDb/backup/syncConfig/
+ledger change. NO persistence. NO new flag. NO caller wiring (build-DARK). NO `Date.now`/`Math.random`. NO git add/commit.
+Prefix tsc/vitest with `NODE_ENV= `.
+
+**VERIFICATION (run ALL, paste ACTUAL):** `NODE_ENV= npx tsc --noEmit` exit 0 + `NODE_ENV= npm run build` exit 0;
+`NODE_ENV= npx vitest run src/utils/tests/franchiseAllStarCandidates.test.ts` all green. Also run the sibling regression
+`NODE_ENV= npx vitest run src/utils/tests/franchiseAwardsEngine.test.ts` (prove the additive change broke nothing in the D9
+exporter). (The auditor runs the FULL host suite.)
+
+**STOP-IF:** `AllStarCandidate` is not exported from `src/engines/franchiseAllStarSelector.ts` with the fields the mapper sets
+→ STOP + report. `FranchiseFameRecordRow` lacks `heat`/`reachFloor` → STOP + report. Building this requires editing any D9
+finalize/award path beyond the additive exporter → STOP + report.
+
+**FORMAT:** 1) files changed; 2) the pure mapper (relaxed qualifier + trust gate + field map + fame join) and the thin loader;
+3) verification output (paste actual tsc/build/vitest, incl. the sibling regression); 4) "L12-4b complete" or "BLOCKED:
+<reason>". Do NOT commit.
+
+Use very high reasoning effort. Think step-by-step. Read `src/utils/franchiseAwardsEngine.ts`
+(`computeFranchiseRaceCandidateRows` + `qualifierFactsFromStats` + `factsByPlayerId` + `finiteNumber` +
+`isPlayerTrustedForValue` usage), `src/engines/franchiseAllStarSelector.ts` (the `AllStarCandidate` type you populate),
+`src/utils/franchiseFameRecordsStorage.ts` (`FranchiseFameRecordRow` + `getFranchiseFameRecordRowsByScope`), and
+`spec-docs/L12-4_SCOPE_MAP.md` §3.
+
+**Status:** ✅ VERIFIED + COMMITTED 2026-06-19 (attended). **Codex (gpt-5.5, xhigh) built via `codex exec`
+stdin-from-contract → Opus 4.8 independently audited (builder ≠ auditor) + ran the FULL host gate.** Additive edits to
+`src/utils/franchiseAwardsEngine.ts` ONLY (the AllStarCandidate-type + fame-storage imports; the 2 §16 relaxed-floor
+constants `ALL_STAR_PA_QUALIFIER_FRACTION 0.25`/`ALL_STAR_IP_QUALIFIER_FRACTION 0.15`; the PURE exported
+`mapValueRowsToAllStarCandidates` [trust gate → relaxed PA/IP floors → lean `qualifiedAsHitter||qualifiedAsPitcher` filter →
+exact WAR/team/position field map → fame join (heat/reachFloor, defaults 0/0) → playerId sort]; the THIN async exported
+`buildFranchiseAllStarCandidates` mirroring `computeFranchiseRaceCandidateRows`'s load pattern, NO true-value/rookie loads, NO
+persistence) + a new `src/utils/tests/franchiseAllStarCandidates.test.ts` (6 pure tests). **Audit:** the git diff is
+ADDITIVE-ONLY — `scoreForCategory`/`meetsQualifier`/`categoryCandidateRows`/`computeFranchiseRaceCandidateRows`/
+`WAR_AWARD_CATEGORIES`/the D9 finalize path are ALL byte-unchanged (the sibling `franchiseAwardsEngine.test.ts` 13/13 still
+green). Tests non-vacuous: the relaxed-floor test proves 24 PA is excluded but 25 PA (=`minPA·0.25`) is admitted where the
+full award floor would demand 100; the trust gate excludes a 99-WAR untrusted player; the lean filter drops a no-floor
+player; null team/position → `''`, missing fame → 0/0; playerId sort. **Host gate:** `NODE_ENV= npm run build` exit 0 (7.79s)
++ full suite **7,779/449, 7,777 pass / 2 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), **ZERO
+new reds** (+6 = the new test). build-DARK (no caller/flag/store — L12-4d wires it); trackerDb stays **v24**. Branch-only (NOT
+pushed). **➡ NEXT = L12-4c** (the `crossesAllStarLockFraction` 60% lock-once helper — pure, cross-from-below).
