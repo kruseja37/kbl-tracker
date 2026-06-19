@@ -5733,3 +5733,34 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   **-2** (JK browser end-to-end activation verification — pairs with F-141) + **-3** (standing `opposingHand` note) left.
   All buildable trait-rebuild work is done. NEXT (a different phase): (C) the §16 sim-tune FINDING at the L-SIM gate;
   (D) the L-stack (L10 Q5/Q8 rework → L11+). Nothing pushed.
+
+## 2026-06-18 (attended, fresh session) — L10-Q5Q8: continuous cadence (Q5) + name_change dark catalog (Q8); routing restored to Codex
+- Session-start reads + RESTATE; JK confirmed state + directed "start with L10 Q5/Q8 rework." Surfaced 3 design
+  sub-forks before building (event volume / name_change rarity / trait cadence). JK ruled: **Q5 = FLAT per-game** (no
+  season-length scaling); **Q8 = name_change its OWN rare rate** (rarer than cosmetic). JK's peer-comparison challenge
+  established the key distinction: the 20%-checkpoint is doing **sample-synchronization** work for the percentile-vs-peers
+  systems (trait adaptation L9b + ratings dev L8) — so those STAY periodic; only the **independent-per-player L10 dice
+  rolls** go continuous (L10 firing has NO peer ranking at fire time → continuous is statistically clean; the whole-league
+  sweep gives every rostered player equal rolls).
+- **ROUTING CORRECTION (JK):** the Captain auto-defaulted the build to an in-session subagent, then to a /tmp
+  prompt-duplicate; JK pointed at `AI_TEAM_OPERATING_MODEL.md` — **Codex is the default builder**, handed off via the
+  contract in `PROMPT_CONTRACTS.md` fed to `codex exec` on **STDIN** (the backtick/`$` shell-arg corruption that drove the
+  L10-4 → PRE-ACT-TRAITS-1 subagent stretch — 12 tickets, all 2026-06-18 — is fixable via stdin, not a Codex limitation).
+  Captured in SESSION_RULES pending pen + memory. Triangle: SEPARATION held through those 12, but the cross-MODEL
+  diversity was lost; now RESTORED (Codex builds, Opus audits). Likely a context-pressure contributor too (subagent
+  dispatch routed every builder prompt + report through the main window; Codex offloads both to a file/its own process).
+- **L10-Q5Q8** (Codex gpt-5.5 xhigh; 4 files): `franchiseL10EventEngine.ts` — per-game base rates (≈÷10) +
+  `nameChangeBaseRate 0.0004` + optional `baseRateOverride` on the roll spec + name_change player-only cosmetic-family
+  spec (distinct `seedSuffix`; neutral); `franchiseL10SweepCompute.ts` — removed the `getSeasonMetadata` +
+  `isCheckpointBoundary` fetch/gate + the `not-checkpoint` status (continuous firing). +3 Q8 engine tests; the hook test's
+  `not-checkpoint` test → a continuous test (non-boundary game 19 writes rows); `SEEDED_CANDIDATES` re-seeded to still
+  fire under the lowered per-game rates. Store/reporter unchanged (`family`/`eventType` are plain strings; the adapter is
+  generic). trackerDb stays **v23**.
+- **Builder = Codex ≠ Auditor = Opus Captain** (cross-model triangle restored). Independent line-by-line diff audit +
+  real-engine falsification (cosmetic-rate-0 + nameChangeBaseRate-1 → ONLY name_change fires; game 19 fires 1 event /
+  game 20 fires a team event → seam team-path coverage preserved through the re-seed) → VERDICT VERIFIED (0 major / 0
+  minor). Host gate: `NODE_ENV= npm run build` exit 0 (7.59s) + full suite **7,689/438, 7,687 pass / 2 characterized
+  fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`; `GameTrackerLaunchState` + `franchiseOffseasonGuards.component`
+  order-flakes both passed this run), **ZERO new reds** (+3 tests / +0 files).
+- **⇒ L10 (random events) FULLY COMPLETE** incl. the Q5/Q8 rework. **NEXT = L11 (managers)** — a FRESH L-stack subsystem
+  needing a grounding recon before contracting (mirror the L10 recon). Nothing pushed.

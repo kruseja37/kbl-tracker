@@ -10795,3 +10795,114 @@ build` exit 0 (7.85s) + full suite **7,686/438, 7,683 pass / 3 characterized fai
 new reds (+8 tests / +0 files). Committed (hash in SESSION_LOG/CURRENT_STATE). **⇒ the trait engine is fully built +
 wired + the Two Way family complete; PRE-ACT-TRAITS gate now has only -2 (JK browser end-to-end) + -3 (standing
 opposingHand note) left.**
+
+---
+
+## CONTRACT — L10-Q5Q8 (continuous cadence + name_change dark catalog) — 2026-06-18 (attended)
+
+**ROUTE: Codex CLI (`codex exec`, prompt via stdin/file) | high reasoning effort** (builder; the prompt is fed on
+stdin from a file so the shell never interpolates the backticks/`$` that previously corrupted a shell-ARG dispatch —
+this restores Codex as the canonical default builder per `AI_TEAM_OPERATING_MODEL.md`; JK directive 2026-06-18).
+Auditor = Opus 4.8 Captain (independent; ≠ builder — stronger cross-model decorrelation than a Claude subagent).
+Branch codex/franchise-v1-next. BUILD-DARK (whole L10 gated OFF behind
+`isFranchisePhase2L10Enabled`). Source of truth: DECISIONS_LOG 2026-06-18 **Q5** (cadence OVERRIDE — random events fire
+continuously, NOT 20%-batched) + **Q8** (name-change OVERRIDE — IN v1, dark, opt-in honored at the confirm step) +
+JK attended rulings 2026-06-18: Q5 = **flat per-game** (no season-length scaling); Q8 = name_change gets its **own
+dedicated rare rate** (rarer than cosmetic). Reworks what L10-1/L10-3 already shipped. **Trait-adaptation + ratings-dev
+cadence STAY periodic (JK ruling — the peer-percentile needs sample synchronization); do NOT touch their hooks.**
+
+**GOAL:** (Q5) make the L10 league-sweep fire on EVERY completed game (remove the 20%-checkpoint gate) with base rates
+re-tuned to per-game placeholders; (Q8) add `name_change` to the dark catalog as a distinct, rarer cosmetic-family
+event. Engine stays pure; hook stays dark/flag-gated; NO store/DB/flag change.
+
+**CHANGES (implement EXACTLY):**
+
+**A. `src/engines/franchiseL10EventEngine.ts` (Q5 rates + Q8 name_change):**
+1. (Q5) Lower the 8 `FRANCHISE_L10_EVENT_TUNING.baseRate` values to PER-GAME placeholders (≈ ÷10 from the old
+   per-sweep values; §16 SIM-TUNE): `performance: 0.006, pitching: 0.0035, trait: 0.0025, role: 0.002, cosmetic:
+   0.0018, team: 0.0018, roster: 0.0025, wildcard: 0.001`.
+2. (Q8) Add `nameChangeBaseRate: number` to the `FranchiseL10EventTuning` interface; set `nameChangeBaseRate: 0.0004`
+   in `FRANCHISE_L10_EVENT_TUNING` (rare — rarer than cosmetic 0.0018; §16 placeholder).
+3. (Q8) Add optional `baseRateOverride?: number` to the `FranchiseL10RollSpec` type.
+4. (Q8) Change `getEligibleRollSpecs(candidate)` → `getEligibleRollSpecs(candidate, config)` and pass `config` at the
+   call site (~L175). In the **player** branch ONLY, after the per-family specs, append the name_change spec:
+   `{ family: 'cosmetic', eventType: 'name_change', seedSuffix: 'name_change', baseRateOverride: config.nameChangeBaseRate }`.
+   The team branch is UNCHANGED (no name_change).
+5. (Q8) In `computeProbability`, change `const baseRate = config.baseRate[spec.family];` →
+   `const baseRate = spec.baseRateOverride ?? config.baseRate[spec.family];`.
+6. Update the module header `DEFAULTS-TAKEN` block: #2 now states name-change IS in the catalog as a rare,
+   distinct cosmetic-family event (dark; opt-in honored at the post-D13 confirm step, NOT by omission); #3 (cadence)
+   now states cadence is CONTINUOUS per-game (owned by L10-3) and base rates are PER-GAME §16 placeholders.
+   **DO NOT change** `getEventType` (it already returns `spec.eventType` early so name_change resolves), `getValence`
+   (cosmetic → 'neutral' already), magnitude (`FRANCHISE_L10_EVENT_MAGNITUDE['cosmetic'] = 1`), or `compareEvents`.
+   name_change's distinct `seedSuffix` keeps its roll independent of `cosmetic_change`.
+
+**B. `src/engines/__tests__/franchiseL10EventEngine.test.ts` (Q8 — ADD, keep all existing tests):**
+   - name_change fires as a distinct cosmetic-family neutral event for a PLAYER (config with high `nameChangeBaseRate`):
+     assert an event with `family:'cosmetic'`, `eventType:'name_change'`, `valence:'neutral'`, `targetKind:'player'`.
+   - the override is INDEPENDENT of the cosmetic rate: with `baseRate.cosmetic = 0` and `nameChangeBaseRate = 1`,
+     name_change STILL fires while `cosmetic_change` does NOT (proves `baseRateOverride` is used, not the family rate).
+   - name_change is rarer than cosmetic under representative tuning OR never fires for team candidates (pick the
+     cleaner assertion — at minimum assert NO team-target `name_change` is ever emitted).
+   (Existing tests use high-rate config overrides, so the Q5 default-rate drop does not affect them; the only
+   default-tuning tests are determinism + empty — both unaffected. Confirm the suite stays green either way.)
+
+**C. `src/utils/franchiseL10SweepCompute.ts` (Q5 — continuous):**
+1. REMOVE the cadence gate: delete the `totalGames` fetch + the `isCheckpointBoundary(...)` check (current ~L193-204).
+   The sweep now runs on EVERY completed game (after the flag + gameNumber + candidate + createdAt resolves).
+2. REMOVE the now-unused imports: `getSeasonMetadata` (from `./seasonStorage`) and `isCheckpointBoundary` (from
+   `./franchiseCheckpointSweepCompute` — KEEP `type CompletedGameArchiveOptions` from that module).
+3. REMOVE `'not-checkpoint'` from the `PersistDarkL10Result['status']` union (no longer returned).
+4. Update the module-header `DEFAULTS-TAKEN`: replace the "single-cadence collapse / 20% checkpoint" line with
+   "continuous cadence (JK Q5 2026-06-18): the sweep fires on EVERY completed game; base rates are per-game placeholders.
+   Per-game determinism + idempotency preserved by the gameNumber-keyed `seedBase` + `sourceEventId` (`l10-${gameNumber}`)."
+   Everything else (gameNumber resolve, `resolveL10Candidates`, createdAt resolve, seedBase, row mapping, `putFranchiseL10Overlay`)
+   is UNCHANGED.
+
+**D. `src/utils/tests/franchiseL10SweepCompute.test.ts` (Q5):**
+   - REPLACE the test `'flag on but not a checkpoint boundary returns not-checkpoint and writes zero rows'` (~L194-204)
+     with a CONTINUOUS-cadence test: flag on at a NON-20%-boundary game (e.g. `seedSweepReads(19)`) now WRITES pending
+     rows (`status:'written'`, `written > 0`, `sourceEventId:'l10-19'`). Proves firing is no longer checkpoint-gated.
+   - The other tests (gameNumber 20) stay valid (20 fires under continuous too); keep their `l10-20` assertions.
+   - `getSeasonMetadata` is no longer consumed by the hook — the `vi.mock('../seasonStorage')` + its seeding become
+     harmless no-ops; leave them OR remove for cleanliness (builder's call), but ensure no test asserts it WAS called
+     (the flag-off test's "not called" assertion stays TRUE).
+
+**E. (optional, coverage) `src/src_figma/__tests__/reporter/franchiseL10NewsAdapter.test.ts`:** add a case asserting a
+   `name_change` event (family `cosmetic`, eventType `name_change`, neutral) maps to a `RANDOM_EVENT` SeasonNewsEvent
+   with `facts.eventType === 'name_change'` and the neutral `dramaticWeight` base. The adapter PRODUCTION file is GENERIC
+   and must NOT change.
+
+**HARD CONSTRAINTS:** edit ONLY `src/engines/franchiseL10EventEngine.ts`, `src/engines/__tests__/franchiseL10EventEngine.test.ts`,
+`src/utils/franchiseL10SweepCompute.ts`, `src/utils/tests/franchiseL10SweepCompute.test.ts` (+ optionally the reporter
+TEST file in E). Do NOT touch: `franchiseL10OverlayStorage.ts` (L10-2 store), `franchiseL10NewsAdapter.ts` (reporter
+PRODUCTION), `trackerDb.ts` (NO version bump — stays **v23**), `franchisePhase2Flags.ts`, `processCompletedGame.ts`,
+`franchiseTraitGrantCompute.ts` (trait cadence STAYS periodic — JK ruling), `franchiseCheckpointSweepCompute.ts` (only
+drop the named import from the hook), any other engine/util, any `*.md` / spec-docs / CURRENT_STATE / SESSION_LOG.
+Engine stays PURE (no `Date.now`/`Math.random`/IndexedDB); hook stays flag-gated build-DARK; no store/DB/flag change.
+No `git add`/commit.
+
+**VERIFICATION (builder runs, reports ACTUAL output):**
+- `NODE_ENV= npx tsc --noEmit` exit 0;
+- `NODE_ENV= npx vitest run src/engines/__tests__/franchiseL10EventEngine.test.ts src/utils/tests/franchiseL10SweepCompute.test.ts src/src_figma/__tests__/reporter/franchiseL10NewsAdapter.test.ts` all green.
+Report every changed path, new/changed test count, the EXACT base-rate values set + name_change wiring + the gate
+removal, and confirm no production file beyond the 2 named changed and no trackerDb/flag/store touch. (Host full
+build+suite gate = auditor.)
+
+**FORMAT:** 1) Files changed (exact paths). 2) The Q5 (per-game rates + gate removal) and Q8 (name_change) logic as
+built + any deviation. 3) Verification output (paste actual). 4) "L10-Q5Q8 complete" or "BLOCKED: <reason>". Do NOT commit.
+
+Use high reasoning effort. Think step-by-step. Read each file before editing it.
+
+**Status:** ✅ VERIFIED + COMMITTED (2026-06-18, attended) → **L10 (random events) FULLY COMPLETE.** Codex (gpt-5.5,
+xhigh) built via `codex exec` stdin-from-contract (routing restored to Codex per JK; the backtick/`$` shell-arg
+corruption is sidestepped by stdin) → Opus 4.8 Captain INDEPENDENTLY audited (≠ builder; cross-model triangle): VERDICT
+VERIFIED, 0 major / 0 minor. **Q5:** dropped the 20%-checkpoint gate in the hook (removed `getSeasonMetadata` +
+`isCheckpointBoundary` + the `not-checkpoint` status) → fires every completed game; engine base rates re-tuned to
+per-game §16 placeholders (≈÷10). **Q8:** `name_change` is a distinct rare cosmetic-family event (`nameChangeBaseRate
+0.0004` via a new `baseRateOverride`; player-only; distinct `seedSuffix`; neutral). Falsified: cosmetic-rate-0 →
+ONLY name_change fires; real-engine probe — game 19 fires 1 event (continuous test non-vacuous) + game 20 fires a team
+event (seam team-path preserved). NO store/DB/flag touch (trackerDb stays **v23**); whole L10 build-DARK. Host gate:
+`NODE_ENV= npm run build` exit 0 (7.59s) + full suite **7,689/438, 7,687 pass / 2 characterized fail** (`wpaRuntimeBoundary`
++ `franchiseManualSmokeFixture`), ZERO new reds (+3 Q8 engine tests). Committed on codex/franchise-v1-next (4 code/test +
+docs; not pushed). **➡ NEXT = L11 (managers)** — fresh subsystem, grounding recon first.

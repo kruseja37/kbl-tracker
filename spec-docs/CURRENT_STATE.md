@@ -1,6 +1,11 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-18 — **ACTIVE (attended).** **L9b trait-reality REBUILD — the TRAIT ENGINE IS FULLY BUILT +
+**Last Updated:** 2026-06-18 — **ACTIVE (attended).** **L10 Q5/Q8 REWORK COMPLETE → L10 (random events) FULLY
+COMPLETE.** Continuous per-game cadence (Q5 — dropped the 20%-checkpoint gate; flat per-game §16 base rates) +
+`name_change` in the dark catalog (Q8 — rare distinct cosmetic-family event). **Builder routing RESTORED to Codex**
+(JK directive) — Codex CLI (gpt-5.5, xhigh) built via `codex exec` stdin-from-contract; Opus 4.8 audited (cross-model
+triangle); VERIFIED, build-DARK behind `isFranchisePhase2L10Enabled` (OFF), trackerDb stays v23. **➡ NEXT = L11
+(managers)** — fresh subsystem, needs a grounding recon. *(Prior:)* **L9b trait-reality REBUILD — the TRAIT ENGINE IS FULLY BUILT +
 WIRED + the Two Way C/IF/OF FAMILY COMPLETE.** Landed **R-E + R1-a + R1-b1 + R1-b2 + R2 + R1-b3 + R3 + W1 +
 PRE-ACT-TRAITS-1.** 47/47 earnable traits; FINDING-150 CLOSED. **W1** populated the grant hook's 4 optional input maps
 (handedness/primary-position from roster; pitcher grade via the pure `scoreSmb4Player`) — the 6 handedness splits +
@@ -62,7 +67,7 @@ is **~95% BUILT / production-ready** → it's a CLEANUP pass, not a build: domin
 files** (FranchiseHome 626 · TeamHubContent 506 · ScheduleContent 90 · AwardsWatchlist 30) → extract to KBL-palette
 theme tokens + minor polish (~1 week). **Timing: it's the LIVE surface, decoupled from D13/L-stack/GameTracker — do it
 ANYTIME (no gate forces a wait; mild bonus to doing tokens before the hub's future activation overlays).** Suite
-**7,686/438, 7,683 pass / 3 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` +
+**7,689/438, 7,687 pass / 2 characterized fail (post-L10-Q5Q8; +3 Q8 engine tests)** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` +
 `GameTrackerLaunchState` — the 3rd an intermittent order-flake **confirmed passing solo 9/9**; `franchiseOffseasonGuards.component`
 is another such flake); trackerDb **v23**; branch codex/franchise-v1-next; **nothing pushed**. Session commits: R1-b1
 `474196e7` · R1-b2 `bbb839ce` · R2 `b80fa135` · R1-b3 `7e22e015` · R3 `9059f697` · W1 `6a934a9e` · PRE-ACT-TRAITS gate
@@ -186,6 +191,29 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## RIGHT NOW
 
+- **✅ L10-Q5Q8 VERIFIED + COMMITTED (2026-06-18, attended) — the Q5/Q8 rework of the L10 random-event subsystem; ⇒ L10
+  (random events) FULLY COMPLETE.** **Q5 (continuous cadence):** dropped the 20%-checkpoint gate in
+  `franchiseL10SweepCompute.ts` (removed the `getSeasonMetadata` + `isCheckpointBoundary` fetch/gate + the
+  `not-checkpoint` status) → the league sweep now fires on EVERY completed game; base rates in
+  `franchiseL10EventEngine.ts` re-tuned to PER-GAME §16 placeholders (≈÷10: performance 0.006 … wildcard 0.001) — flat
+  per-game (JK ruled flat, NO season-length scaling). **Q8 (`name_change`):** added as a DISTINCT rare cosmetic-family
+  event (`nameChangeBaseRate 0.0004` via a new optional `baseRateOverride` on the roll spec; player-only; distinct
+  `seedSuffix` → independent roll + store id; neutral valence), DARK — opt-in honored at the post-D13 confirm step, NOT
+  by omission. Store/reporter unchanged (the `family`/`eventType` fields are plain strings; the reporter adapter is
+  generic). **Trait-adaptation + ratings-dev cadence STAY periodic (JK ruling — the percentile-vs-peers model needs the
+  20%-checkpoint sample synchronization; only the independent-per-player L10 dice rolls go continuous).** **Builder
+  routing RESTORED to Codex (JK directive):** builder = Codex CLI (`codex exec`, prompt fed via stdin from the contract
+  in PROMPT_CONTRACTS.md — sidesteps the backtick/`$` shell-arg corruption that drove the L10-4 → PRE-ACT-TRAITS-1
+  subagent detour, 12 tickets); auditor = Opus 4.8 (cross-model triangle restored). NO store/DB/flag change (trackerDb
+  stays **v23**). **Codex(gpt-5.5,xhigh)-built → Opus-INDEPENDENTLY-audited VERIFIED** (0 major / 0 minor; falsified:
+  cosmetic-rate-0 + nameChangeBaseRate-1 → ONLY name_change fires [proves the override]; real-engine probe — game 19
+  fires 1 event [continuous test non-vacuous] + game 20 fires a team event [seam team-path coverage preserved through
+  the re-seed]). Host gate: `NODE_ENV= npm run build` exit 0 (7.59s) + full suite **7,689/438, 7,687 pass / 2
+  characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`; `GameTrackerLaunchState` +
+  `franchiseOffseasonGuards.component` order-flakes both passed this run), ZERO new reds (+3 / +0 files = the 3 Q8 engine
+  tests). Committed on codex/franchise-v1-next (4 code/test + docs; **not pushed**). **➡ NEXT = L11 (managers)** per the
+  L-stack (L11 → L12 races/All-Star/awards-fame → L13 relationships → L14 rebrand → the L-SIM gate); L11 is a FRESH
+  subsystem needing a grounding recon before contracting (mirror the L10 recon). *(Prior L10/L9b entries below.)*
 - **🔧 PIVOT (2026-06-18, attended session) — JK ruled Q1–Q12; FINDING-150 (L9b trait-detection SCOPE gap) opened; now
   starting the L9b trait-reality REBUILD, NOT L11.** After L10 completed, the Captain surfaced all open forks; JK ruled
   (DECISIONS_LOG 2026-06-18) with 3 OVERRIDES: **Q5** random events fire CONTINUOUSLY (not 20%-batched) · **Q8** name-change

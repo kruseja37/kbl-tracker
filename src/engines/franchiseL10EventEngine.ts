@@ -6,8 +6,12 @@ import type { CanonicalPersonality } from './masterMoraleMatrix';
  *
  * DEFAULTS-TAKEN from spec-docs/L10_SCOPE_MAP.md:
  * 1. Family 6 personality shift is arc-earned and excluded from this roll.
- * 2. Name-change is excluded from cosmetic auto-roll.
- * 3. This module performs one deterministic league sweep; cadence is owned by L10-3.
+ * 2. Name-change IS in the catalog as a rare DISTINCT cosmetic-family event
+ *    (dark). It is NOT excluded by omission; the opt-in is honored at the
+ *    post-D13 confirm/apply step. Its own dedicated rate is rarer than the
+ *    ordinary cosmetic_change rate.
+ * 3. Cadence is CONTINUOUS per-game (owned by L10-3): the sweep fires on every
+ *    completed game, so these base rates are PER-GAME §16 SIM-TUNE placeholders.
  * 4. Within-family concrete resolution is downstream; this emits representative candidates.
  * 5. Base rates and magnitudes are Section 16 SIM-TUNE placeholders.
  * 6. roster/trade_demand is proposed only; propensity math stays in tradeRequestGeneration.ts.
@@ -32,6 +36,7 @@ export type FranchiseL10EventFamily =
 
 export interface FranchiseL10EventTuning {
   baseRate: Record<FranchiseL10EventFamily, number>;
+  nameChangeBaseRate: number;
   intensityMultiplier: Record<TierKey, number>;
   personalitySensitivity: Record<CanonicalPersonality, number>;
   neutralMorale: number;
@@ -43,15 +48,16 @@ export interface FranchiseL10EventTuning {
 // Section 16 SIM-TUNE placeholders: conservative, low-damage rates and magnitudes.
 export const FRANCHISE_L10_EVENT_TUNING: FranchiseL10EventTuning = {
   baseRate: {
-    performance: 0.06,
-    pitching: 0.035,
-    trait: 0.025,
-    role: 0.02,
-    cosmetic: 0.018,
-    team: 0.018,
-    roster: 0.025,
-    wildcard: 0.01,
+    performance: 0.006,
+    pitching: 0.0035,
+    trait: 0.0025,
+    role: 0.002,
+    cosmetic: 0.0018,
+    team: 0.0018,
+    roster: 0.0025,
+    wildcard: 0.001,
   },
+  nameChangeBaseRate: 0.0004,
   intensityMultiplier: {
     juiced: 1.3,
     standard: 1.0,
@@ -108,6 +114,7 @@ type FranchiseL10RollSpec = {
   eventType?: string;
   seedSuffix?: string;
   teamSuppressed?: boolean;
+  baseRateOverride?: number;
 };
 
 type FranchiseL10ProbabilityResult = {
@@ -172,7 +179,7 @@ export function computeFranchiseL10Events(
   const events: FranchiseL10EventCandidate[] = [];
 
   for (const candidate of input.candidates) {
-    for (const spec of getEligibleRollSpecs(candidate)) {
+    for (const spec of getEligibleRollSpecs(candidate, config)) {
       const rollSeed = getRollSeed(input.seedBase, candidate.id, spec);
       const roll = franchiseL10DeterministicRoll(rollSeed);
       const probabilityResult = computeProbability(candidate, spec, input.intensity, config);
@@ -192,14 +199,29 @@ export function franchiseL10DeterministicRoll(seed: string): number {
   return Number((hashString(seed) / 0xffffffff).toFixed(6));
 }
 
-function getEligibleRollSpecs(candidate: FranchiseL10Candidate): FranchiseL10RollSpec[] {
+function getEligibleRollSpecs(
+  candidate: FranchiseL10Candidate,
+  config: FranchiseL10EventTuning,
+): FranchiseL10RollSpec[] {
   if (candidate.kind === 'team') {
     return [...TEAM_ROLL_SPECS];
   }
 
-  return PLAYER_FAMILIES
+  const specs: FranchiseL10RollSpec[] = PLAYER_FAMILIES
     .filter((family) => family !== 'pitching' || candidate.role === 'pitcher')
     .map((family) => ({ family }));
+
+  // Q8: name_change is a DISTINCT rare cosmetic-family event with its own
+  // dedicated rate, independent of the ordinary cosmetic_change roll (distinct
+  // seedSuffix). Players only — teams never roll name_change.
+  specs.push({
+    family: 'cosmetic',
+    eventType: 'name_change',
+    seedSuffix: 'name_change',
+    baseRateOverride: config.nameChangeBaseRate,
+  });
+
+  return specs;
 }
 
 function computeProbability(
@@ -208,7 +230,7 @@ function computeProbability(
   intensity: TierKey,
   config: FranchiseL10EventTuning,
 ): FranchiseL10ProbabilityResult {
-  const baseRate = config.baseRate[spec.family];
+  const baseRate = spec.baseRateOverride ?? config.baseRate[spec.family];
   const intensityScale = config.intensityMultiplier[intensity];
   const moraleFactor = getMoraleFactor(candidate, spec, config);
   const personalityFactor = candidate.personality

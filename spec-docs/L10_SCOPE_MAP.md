@@ -56,7 +56,7 @@ reuse its trigger enums, or write its DB. **Naming guard:** avoid `franchiseRand
 
 ## 4. FORKS — AUTH-4 DEFAULTS TAKEN (proceed unless JK overrides)
 - **v1 roll table:** families 1–5, 7, 8, 9; **exclude 6** (arc-earned). Trade-demand (8) delegates to `tradeRequestGeneration.ts`.
-- **Cadence:** single timer — all L10 fire at the existing **20% checkpoint boundary** (`isCheckpointBoundary`), reusing L8/L9 cadence (collapses the spec's two-timer "traits live / ratings 20%" → one for v1).
+- **Cadence:** ~~single timer at the 20% checkpoint boundary~~ **SUPERSEDED — JK Q5 (2026-06-18) → CONTINUOUS per-game.** L10 fires on EVERY completed game (the `isCheckpointBoundary` gate was removed in L10-Q5Q8); flat per-game §16 base rates (≈÷10 from the old per-sweep values), NO season-length scaling. The percentile-vs-peers systems (trait adaptation L9b, ratings dev L8) KEEP the 20% checkpoint for sample synchronization; only L10's independent-per-player dice rolls go continuous.
 - **Base rates:** conservative placeholders in a `L10_EVENT_TUNING` const (mirror `TRADE_REQUEST_TUNING`), SIM-tuned later.
 - **Intensity dial:** reuse `{ juiced: 1.3, standard: 1.0, nerfed: 0.6 }` verbatim (tradeRequestGeneration.ts:46-49).
 - **Stadium-change rate:** low base × `(1 − fanMoraleSuppression)` (suppression rises with fan morale > 50); pool-pick fixed (LSD-5).
@@ -74,7 +74,7 @@ reuse its trigger enums, or write its DB. **Naming guard:** avoid `franchiseRand
 - **Morale/personality weighting (L10-1):** `masterMoraleMatrix.ts` (events :14-31, EVENT_DELTA :91-161, CanonicalPersonality :4-11/:244-252, personality tuning :184-234, `composeMoraleConsequence` :413-487, normalize :489-496); hidden modifiers :416,:546-569; dampener `fanMoraleDampener.ts:43-84`; production example `processCompletedGame.ts:371-400`. **Design note:** L10 consumes RESOLVED `ResolvedMoraleConsequence` deltas as a weight input, not raw params; fan morale is a brake (dampener), never a direct dev weight.
 
 ## 6. CADENCE / RATE MODEL
-Fires as a league sweep at each 20% checkpoint (reuse `isCheckpointBoundary`); sweeps every MLB-rostered player league-wide; probability decides who.
+**(UPDATED — JK Q5 2026-06-18: CONTINUOUS.)** Fires as a league sweep on EVERY completed game (the 20%-checkpoint gate was removed in L10-Q5Q8); sweeps every MLB-rostered player league-wide; probability decides who. Base rates are now PER-GAME (flat, no season-length scaling).
 ```
 P(event for candidate) = baseRate[family] × intensityMultiplier[intensity]   // 1.3/1.0/0.6
                          × moraleWeight(player) × personalityWeight(player.personality)
@@ -84,7 +84,7 @@ Apply the multiplier where `tradeRequestGeneration.ts:96` does. Stadium-change =
 ## 7. OPEN QUESTIONS FOR JK (genuine rulings; AUTH-4 defaults taken meanwhile)
 1. **Personality-shift (#6) exclusion** — v1 simply never emits it (Captain lean) vs L10 owns an arc-detection stub? (default: never emit)
 2. **Trade-demand ownership** — L10 surfaces/triggers only, propensity math stays in `tradeRequestGeneration.ts` (default) vs L10 owns the whole event?
-3. **Single-cadence collapse** — all L10 at the 20% checkpoint (default) vs trait-family L10 on a more frequent cadence?
+3. **Single-cadence collapse** — ~~all L10 at the 20% checkpoint (default)~~ **RESOLVED — JK Q5: L10 is CONTINUOUS per-game** (built in L10-Q5Q8); the percentile-ranked systems (trait adaptation, ratings dev) stay periodic for sample sync.
 4. **Stadium-change on the USER's team** — allowed (suppressed by morale) (default) vs AI-teams only? (product-feel: forces a mid-season park recompute on JK's team)
 5. **Cosmetic changes while dark** — write to overlay, never render pre-D13 (default) — confirm no special-casing.
-6. **Name-change opt-in (#5)** — exclude from the auto-roll in v1 (default; opt-in UI deferred) vs build a minimal confirm flow now?
+6. **Name-change opt-in (#5)** — ~~exclude from the auto-roll in v1 (default)~~ **RESOLVED — JK Q8: INCLUDED in the dark catalog** (built in L10-Q5Q8) as a rare DISTINCT cosmetic-family event with its own low rate; opt-in honored at the post-D13 confirm step, NOT by omission.

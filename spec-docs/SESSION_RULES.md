@@ -451,6 +451,19 @@ agent edits the ratified rules without JK. (JK ruling 2026-06-14.)
   personality-influenced ones — so it can never be ranked or displaced fairly. (Origin: JK at R-E kickoff,
   correcting a personality-primary-only framing the Captain proposed for the count-family/Big-Little-Hack.)
 
+- **Codex is the default builder; hand off via the contract on stdin, never a subagent-by-default or a duplicate prompt
+  file (JK correction 2026-06-18):** When a meaningful KBL build is ready to hand off, always route it to **Codex** (the
+  `AI_TEAM_OPERATING_MODEL.md` Default-Routing builder) — dispatched by pointing `codex exec` at the contract section in
+  `spec-docs/PROMPT_CONTRACTS.md` via **stdin** (heredoc/pipe, NEVER a shell-arg) — and never duplicate the contract into
+  a temp prompt file. Because (a) Codex-built + Opus-audited preserves cross-MODEL decorrelation — a Claude subagent
+  builder shares the Opus auditor's blind spots, so the triangle's SEPARATION still holds but its DIVERSITY (the whole
+  point of the second pair of eyes) is lost; (b) stdin sidesteps the backtick/`$` shell-arg corruption that was the ONLY
+  real reason the L10-4 → PRE-ACT-TRAITS-1 stretch (12 consecutive tickets, all 2026-06-18) retreated to in-session
+  subagents — a fixable plumbing bug, not a Codex limitation; (c) a duplicate full-prompt file is a second source of
+  truth, forbidden by the operating model's "What To Avoid." The in-session subagent is the fallback ONLY when Codex is
+  genuinely unavailable. (Origin: the Captain auto-defaulted this L10-Q5Q8 build to a subagent, then to a /tmp prompt
+  duplicate; JK caught both and pointed at `AI_TEAM_OPERATING_MODEL.md`.)
+
 ### Pending cleanup (not a rule — a tracked repo action)
 - **spec-assembler duplicate:** two divergent copies exist —
   `.claude/skills/spec-assembler/SKILL.md` (511 lines, CANONICAL per JK

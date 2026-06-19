@@ -3,10 +3,10 @@
  *
  * Wires the L10-1 pure event-selection engine (`computeFranchiseL10Events`) to
  * the L10-2 dark store (`franchiseL10Overlays`). Mirrors the L9b-3b-ii
- * trait-grant hook shape EXACTLY: flag-gate first, resolve the league game
- * number, gate on the 20%-of-season checkpoint boundary, enumerate the league
- * MLB roster + per-team fan morale, build L10 candidates (players + teams),
- * roll the deterministic sweep, then write pending overlay rows.
+ * trait-grant hook shape: flag-gate first, resolve the league game number,
+ * then (continuous cadence — JK Q5) on EVERY completed game enumerate the
+ * league MLB roster + per-team fan morale, build L10 candidates (players +
+ * teams), roll the deterministic sweep, then write pending overlay rows.
  *
  * Doubly-dark by default: the default-OFF Phase-2 L10 flag guards the whole
  * compute (normal play is a zero-cost no-op — no loads), and every written
@@ -14,8 +14,10 @@
  * confirm/apply step promotes it.
  *
  * DEFAULTS-TAKEN (spec-docs/L10_SCOPE_MAP.md §4/§7):
- * - single-cadence collapse: L10 fires at the existing 20% checkpoint boundary,
- *   reusing the L8/L9 cadence gate (`isCheckpointBoundary`).
+ * - continuous cadence (JK Q5 2026-06-18): the sweep fires on EVERY completed
+ *   game; base rates are per-game placeholders. Per-game determinism +
+ *   idempotency preserved by the gameNumber-keyed seedBase + sourceEventId
+ *   (l10-${gameNumber}).
  * - intensity dial = 'standard' (no franchise intensity setting is wired yet).
  * - seedBase = `${franchiseId}:${seasonId}:${gameNumber}` (reproducible sweep).
  * - candidates = the league MLB roster (player candidates) + each distinct team
@@ -61,7 +63,6 @@ import {
 import { getFranchiseTrueValueRows } from './franchiseTrueValueStorage';
 import { getFranchiseMoraleSnapshot } from './franchiseMoraleState';
 import {
-  isCheckpointBoundary,
   type CompletedGameArchiveOptions,
 } from './franchiseCheckpointSweepCompute';
 import {
@@ -70,7 +71,6 @@ import {
   type FranchiseL10OverlayScopeInput,
 } from './franchiseL10OverlayStorage';
 import { isFranchisePhase2L10Enabled } from './franchisePhase2Flags';
-import { getSeasonMetadata } from './seasonStorage';
 import { getGame as getScheduledGame } from './scheduleStorage';
 
 // §16 placeholder: mirror the L8b checkpoint tuning so the performance signal
@@ -91,7 +91,7 @@ export type L10SweepScope = FranchiseL10OverlayScopeInput & {
 };
 
 export type PersistDarkL10Result = {
-  status: 'dark-noop' | 'not-checkpoint' | 'written';
+  status: 'dark-noop' | 'written';
   written: number;
   reason?: string;
 };
@@ -188,19 +188,6 @@ export async function persistDarkL10ForCompletedGame(
       written: 0,
       reason: 'Unresolved league game number; cannot place an L10 sweep.',
     };
-  }
-
-  const totalGames = (await getSeasonMetadata(scope.seasonId))?.totalGames;
-  if (!totalGames || totalGames <= 0) {
-    return {
-      status: 'dark-noop',
-      written: 0,
-      reason: 'No season totalGames; cannot place an L10 sweep.',
-    };
-  }
-
-  if (!isCheckpointBoundary(gameNumber, totalGames)) {
-    return { status: 'not-checkpoint', written: 0 };
   }
 
   const candidates = await l10SweepSeam.resolveL10Candidates(scope);

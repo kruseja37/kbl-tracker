@@ -79,17 +79,17 @@ const gameState = {
 const headerTimestamp = Date.UTC(2026, 5, 18, 12, 0, 0);
 const atBatTimestamp = Date.UTC(2026, 5, 18, 12, 30, 0);
 
-// A candidate set engineered to produce at least one fired event under the
-// default 'standard' intensity + the seed `${franchiseId}:${seasonId}:20`.
+// A candidate set engineered to produce fired events under the lowered Q5
+// per-game rates for both game 19 and game 20.
 const SEEDED_CANDIDATES: FranchiseL10Candidate[] = [
   {
-    id: 'player-alpha',
+    id: 'l10-seed-82',
     kind: 'player',
     role: 'position',
     personality: 'EGOTISTICAL',
-    playerMorale: 95,
+    playerMorale: 100,
     fanMorale: 20,
-    performanceSignal: 0.9,
+    performanceSignal: 1,
   },
   {
     id: 'player-bravo',
@@ -103,7 +103,7 @@ const SEEDED_CANDIDATES: FranchiseL10Candidate[] = [
   {
     // Engineered (with this seedBase) to fire a team-target event so the seam
     // test exercises the targetKind:'team' row-mapping path end-to-end.
-    id: 'team-dd',
+    id: 'team-seed-7',
     kind: 'team',
     fanMorale: 0,
   },
@@ -191,16 +191,21 @@ describe('persistDarkL10ForCompletedGame', () => {
     expect(await getFranchiseL10OverlaysByScope(scope)).toEqual([]);
   });
 
-  test('flag on but not a checkpoint boundary returns not-checkpoint and writes zero rows', async () => {
+  test('Q5: continuous cadence — flag on, a non-20%-boundary game still fires and writes rows', async () => {
     setFranchisePhase2L10EnabledForTests(true);
     seedCheckpointReads(19);
     stubCandidates();
 
     const result = await persistDarkL10ForCompletedGame(gameState, scope);
 
-    expect(result).toEqual({ status: 'not-checkpoint', written: 0 });
-    expect(mocks.getSeasonGames).not.toHaveBeenCalled();
-    expect(await getFranchiseL10OverlaysByScope(scope)).toEqual([]);
+    expect(result.status).toBe('written');
+    expect(result.written).toBeGreaterThan(0);
+    const rows = await getFranchiseL10OverlaysByScope(scope);
+    expect(rows.length).toBe(result.written);
+    for (const row of rows) {
+      expect(row.sourceEventId).toBe('l10-19');
+      expect(row.createdAtGameNumber).toBe(19);
+    }
   });
 
   test('checkpoint boundary writes pending L10 overlay rows and replays idempotently', async () => {

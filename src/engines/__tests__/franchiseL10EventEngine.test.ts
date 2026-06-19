@@ -243,6 +243,63 @@ describe('franchiseL10EventEngine L10-1 pure selection engine', () => {
     )));
   });
 
+  test('Q8: player name_change fires as a distinct neutral cosmetic-family event', () => {
+    const config: FranchiseL10EventTuning = {
+      ...FRANCHISE_L10_EVENT_TUNING,
+      nameChangeBaseRate: 1,
+    };
+    const report = computeFranchiseL10Events(
+      { candidates: playerSet(20, { role: 'position' }), intensity: 'standard', seedBase: 'name-change' },
+      config,
+    );
+    const nameChangeEvents = report.events.filter((event) => event.eventType === 'name_change');
+
+    expect(nameChangeEvents.length).toBeGreaterThan(0);
+    for (const event of nameChangeEvents) {
+      expect(event.family).toBe('cosmetic');
+      expect(event.eventType).toBe('name_change');
+      expect(event.valence).toBe('neutral');
+      expect(event.targetKind).toBe('player');
+    }
+  });
+
+  test('Q8: name_change uses its own rate independent of the cosmetic family rate', () => {
+    const config: FranchiseL10EventTuning = {
+      ...FRANCHISE_L10_EVENT_TUNING,
+      baseRate: { ...FRANCHISE_L10_EVENT_TUNING.baseRate, cosmetic: 0 },
+      nameChangeBaseRate: 1,
+    };
+    const report = computeFranchiseL10Events(
+      { candidates: playerSet(20, { role: 'position' }), intensity: 'standard', seedBase: 'independence' },
+      config,
+    );
+    const cosmeticChange = report.events.filter((event) => event.eventType === 'cosmetic_change');
+    const nameChange = report.events.filter((event) => event.eventType === 'name_change');
+
+    expect(nameChange.length).toBeGreaterThan(0);
+    expect(cosmeticChange).toHaveLength(0);
+  });
+
+  test('Q8: name_change is team-exempt', () => {
+    const teamCandidates = Array.from({ length: 20 }, (_, index) => ({
+      id: `team-${index.toString().padStart(3, '0')}`,
+      kind: 'team' as const,
+      fanMorale: 0,
+    }));
+    const config: FranchiseL10EventTuning = {
+      ...highRateTuning,
+      nameChangeBaseRate: 1,
+    };
+    const report = computeFranchiseL10Events(
+      { candidates: teamCandidates, intensity: 'juiced', seedBase: 'team-name-change' },
+      config,
+    );
+
+    expect(
+      report.events.some((event) => event.eventType === 'name_change' && event.targetKind === 'team'),
+    ).toBe(false);
+  });
+
   test('roster fire chooses one representative downstream candidate type', () => {
     const config: FranchiseL10EventTuning = {
       ...FRANCHISE_L10_EVENT_TUNING,
