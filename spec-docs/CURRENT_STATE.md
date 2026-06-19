@@ -19,9 +19,14 @@ under-specified mirror surface across 2 dispatches BEFORE any broken-mirror comm
 (`computeFranchiseTvFamilyRaces`): KK = `valueDelta` desc · Bust = `−valueDelta` desc · **Comeback = `currentTV − min(currentTV,
 snapshot trueValues)`** (**JK 2026-06-19 correction** — the CURRENT gap from the season trough, NOT max-rise-over-checkpoints;
 a mid-season peak given back must NOT win). PURE / build-DARK (NO caller/flag/store; a later hook feeds it the TV rows);
-Codex-built → Opus-audited → host-gate **7,745/444, ZERO new reds** (+8). **➡ NEXT = L12-3** (race-standing weighted composite
-+ bands + Q3 close-race tilt + Q4 GG defensive-fame share — the genuinely-new design logic; reads `resolveFameTier` ONLY per
-Q10; may add the deferred 2nd ledger bump for a race-standings store) → L12-4 All-Star+60%-lock → L12-5
+Codex-built → Opus-audited → host-gate **7,745/444, ZERO new reds** (+8). **➡ NEXT = L12-3 — FRESH SESSION (JK ruled;
+design-heavy, clean context).** Race-standing weighted composite [Q2 per-race-type weights: fame-led for fan-vote /
+merit-dominant + bounded fame nudge for awards] + score-gap bands + Q3 close-race fame-tilt (`|marginToWinner| < window` AND
+both merit > floor) + Q4 GG = `fWAR + 20%·defensive-channel fame` (reads `aggregateDefensiveFame`/`row.defensiveFame`).
+Reads `resolveFameTier` ONLY (Q10), never `getFameTier`. **RECOMPUTE-ONLY (JK ruled 2026-06-19): NO new store, trackerDb
+STAYS v24, NO ledger bump** — a pure compute layer + the per-completed-game gate branch (8th, after
+processCompletedGame.ts:654); magnitudes (weights/window/floor/share) = §16 sim. Seams in `L12_SCOPE_MAP.md` §5. → L12-4
+All-Star+60%-lock → L12-5
 emission/snub/reporter → L12-6 UI → L13 (split) → L14 → L-SIM. **⚠ KEEP EXACTLY ONE AUTH-4 WORKER ACTIVE — 7 Claude sessions
 were open this run (2nd collision); JK to trim.** Per-ticket detail in
 `AUTONOMOUS_RUN_LOG.md`. *(prior:)* **L10 Q5/Q8 REWORK COMPLETE → L10 (random events) FULLY

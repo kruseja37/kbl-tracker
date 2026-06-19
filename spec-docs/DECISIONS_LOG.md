@@ -1802,3 +1802,15 @@ contract (CHANGES A + the test, BEFORE dispatch) + `L12_SCOPE_MAP.md` (§1/§2/�
 **Lesson (Captain):** when a spec measurement is phrased ambiguously (here "max(... running ...)"), SURFACE the fork for a
 JK ruling rather than pick a reading and bake it into a build — even for award/value metrics (not just the soul-layer
 traits). The ambiguity was caught only because JK happened to be watching the dispatch.
+
+## 2026-06-19 (AUTH-4) — L12-3 race-standing persistence: RECOMPUTE-ONLY (no new store)
+**Context:** the L12-1 kickoff deferred the race-standings persistence decision to L12-3 (the "deferred 2nd ledger bump"):
+persist the per-game standings in a new `franchiseRaceStandings` store (trackerDb v24→v25 + the C4 backup DoD + the
+store-list PIN) so the Almanac could replay how a race evolved, OR recompute standings live each game with no store.
+**JK RULING:** **RECOMPUTE-ONLY** — no new store. The per-game race standings are recomputed from the live TV/WAR/fame
+spine each completed game; the Almanac shows final race results, not the standing-by-standing history. ⇒ **L12-3 adds NO
+store, NO trackerDb bump (stays v24), NO ledger-PIN churn** — the "deferred 2nd ledger bump" is NOT spent (the only L12
+store remains the L12-1 `franchiseAllStarRosters`). **Consequence:** L12-3 is a pure compute layer (engine + the
+per-completed-game gate branch consumes it; no persistence).
+**Pacing:** JK ruled a FRESH session does L12-3 (the design-heavy ticket) with clean context; this session checkpointed at
+the L12-1+L12-2 clean seam (3 commits) without auto-spawning a handoff worker (JK is closing the extra sessions first).
