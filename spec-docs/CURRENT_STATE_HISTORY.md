@@ -1084,3 +1084,21 @@ latent-bug fixes) + `fc3d9dab` (E3 displacement-on-recomputed-P); E1 deferred to
 (10 clean outcome-proxy traits). Earnable v1 set 16 → 26; all build-DARK; builder≠auditor + full host gate each.
 Suite 7,584/438, 7,582 pass / 2 characterized fail; trackerDb v23. NEXT: R1-b (6 ruled-gap traits per §0.9, SPLIT
 b1 AtBat-proxies / b2 Two Way+Utility+opt-in) → R2 → R3 → L11–L14 → L-SIM gate. FINDING-150 rebuild in progress.
+
+---
+2026-06-18 (attended session, outgoing — SESSION-END CHECKPOINT) — L9b TRAIT-REALITY REBUILD COMPLETE. The
+FINDING-150 trait-from-reality engine ("game-changer feature") is fully BUILT + WIRED + the Two Way C/IF/OF family
+done — all build-DARK (isFranchisePhase2TraitsEnabled OFF), activates post-D13. 8 commits this session, each
+builder≠auditor → independent diff audit → full host gate → commit: R1-b1 474196e7 (Big/Little Hack, Base Rounder,
+Distractor) · R1-b2 bbb839ce (Utility, Crossed Up, Bunter) · R2 b80fa135 (count-family, First-Pitch, 6 handedness
+splits) · R1-b3 7e22e015 (Two Way earn-signal) · R3 9059f697 (Ace Exterminator → 47/47 earnable) · W1 6a934a9e (wire
+the 4 dormant input maps from roster: handedness/primary-position + pitcher grade via scoreSmb4Player) · d4ebc357
+(name the PRE-ACT-TRAITS gate) · PRE-ACT-TRAITS-1 bf10dcfa (Two Way C/IF/OF family: FNV-1a(playerId) seed +
+poolTraitKey family pool, no grant-path/scorer/acquisition surgery). Every measurement/wiring/design ruling is in
+TRAIT_MEASUREMENT_SPEC.md §0.6–§0.11 + DECISIONS_LOG (the single source). Suite 7,686/438, 7,683 pass / 3 characterized
+fail (wpaRuntimeBoundary + franchiseManualSmokeFixture + 1 intermittent solo-passing order-flake), ZERO new reds
+throughout; trackerDb v23; nothing pushed. NAMED PRE-ACTIVATION GATE: PRE-ACT-TRAITS-1 (Two Way family) DONE; remaining
+-2 = JK/browser end-to-end activation verification (pairs with F-141), -3 = standing opposingHand note. A concurrent
+unattended resume sandbox briefly parked WAITING_ON_JK ticket:R3 (RESOLVED; its stale CURRENT_STATE/HISTORY writes
+reverted). NEXT PHASE: the L-stack (L10 Q5/Q8 rework → L11 → L12–L14 → L-SIM gate) + the §16 sim-tune FINDING at the
+L-SIM gate. JK asked at checkpoint for a UI-remaining assessment (UI cleanup planning).
