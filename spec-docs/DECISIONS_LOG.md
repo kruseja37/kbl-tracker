@@ -1743,3 +1743,24 @@ handedness-conditional). **Remaining pre-activation work (the named gate, so it 
 - **PRE-ACT-TRAITS-3 (standing note):** un-hardcode `opposingHand` in `reconstructAtBatContext` ONLY IF a
   matrix-handedness trait is ever added to the v1 set (not needed for the current 47).
 This gate clears BEFORE the L9b flag-flip / D13 activation. JK directive: name it explicitly so it is not lost.
+
+## 2026-06-19 (AUTH-4) — L12-Q10 fame double-ladder collapse: SCOPE ruling (defer live purge, constrain races)
+**Context:** §20.8 (FRANCHISE_V1_LIVING_SEASON_SPEC.md:423-439) says all 3 fame classification schemes (6-tier geographic
+`FameLevel`, 9-tier scalar `getFameTier()` in fameEngine.ts, 5-tier reporter `FameTier`) collapse to the single §20.7
+canonical Heat/Reach ladder (`resolveFameTier`/`heatToFameTier`: IMMORTAL_LEGEND..DESPISED); thresholds are TBD/sim-tuned
+("do NOT import existing code's thresholds"). The legacy scalar `getFameTier(totalFame)` (forbidden labels "Fan
+Favorite":359 / "Villain":363) is still LIVE in the UI (`fameIntegration.ts:556` PlayerFameSummary.tier +
+`useFameTracking` re-export). The canonical Heat/Reach model is build-DARK (only flashpoint/processCompletedGame
+flag-gated paths) — its live per-player heat/reachFloor data does NOT exist until the post-D13 fame activation.
+**The fork the Captain surfaced (rather than auto-build a protected SMB4 asset on the live path — the
+no-inference/soul-layer-verbatim rule holds under AUTH-4):** §20.8 describes the post-activation TARGET but does not
+resolve the pre-activation scope — (a) defer the live label-purge to post-D13 activation + only constrain the build-DARK
+L12 race code to read `resolveFameTier`; (b) narrow-relabel the live scalar ladder now (user-visible, browser-verify,
+semantic mismatch); (c) other.
+**JK RULING (a):** DEFER the live `getFameTier` label-purge to the post-D13 fame-activation ticket (when the live UI
+migrates to the Heat/Reach model anyway). L12-Q10 has NO standalone build now. Its only HARD requirement folds into the
+L12 build: **every L12 race / fame-tier read MUST go through `resolveFameTier`, NEVER the scalar `getFameTier`.** Add the
+live-`getFameTier` label-purge to the post-D13 activation checklist (alongside the L9b/L10/L11 flag-flips).
+**Rationale:** lowest risk; no risky live-display change on a protected asset before the data model is live; satisfies the
+"races read the canonical ladder before any race goes live" requirement directly in the L12 build; no browser-verify
+needed now.

@@ -3,8 +3,12 @@
 **Last Updated:** 2026-06-19 — **ACTIVE (AUTH-4 UNATTENDED OVERNIGHT).** **L11 manager-firings BUILD rolling under
 AUTH-4 — L11-1 engine + L11-2 legacy-write + L11-3 resolver + L11-3b auto-backstop + L11-4 Almanac tenure-join + L11-5
 reporter tap DONE ⇒ **L11 (managers) FULLY COMPLETE (1–5)**; the L11–L14 RULING PASS is consolidated (all 43 Qs ruled; 7
-JK overrides + 2 field corrections).** Codex-built → Opus-audited, branch-only, build-DARK; trackerDb v23. **➡ NEXT =
-fame double-ladder collapse (L12-Q10 pre-L12 cleanup)** → L12 (split) → L13 (split) → L14 → L-SIM. Per-ticket detail in `AUTONOMOUS_RUN_LOG.md`. *(prior:)* **L10 Q5/Q8 REWORK COMPLETE → L10 (random events) FULLY
+JK overrides + 2 field corrections).** Codex-built → Opus-audited, branch-only, build-DARK; trackerDb v23. **L12-Q10
+RULED (JK 2026-06-19): DEFER the live `getFameTier` label-purge to the post-D13 fame activation; the only hard
+requirement folds into L12 (the build-DARK race code reads `resolveFameTier`, NEVER the scalar `getFameTier`) — so
+L12-Q10 needs NO standalone work now.** **➡ NEXT = L12 (recon-split FIRST, mirror L10/L11): award-cat extension
+[L12-Q1] / All-Star roster / race-standing weighted-composite [L12-Q2] / TV-family KK·Bust·Comeback** → L13 (split) →
+L14 → L-SIM. Per-ticket detail in `AUTONOMOUS_RUN_LOG.md`. *(prior:)* **L10 Q5/Q8 REWORK COMPLETE → L10 (random events) FULLY
 COMPLETE.** Continuous per-game cadence (Q5 — dropped the 20%-checkpoint gate; flat per-game §16 base rates) +
 `name_change` in the dark catalog (Q8 — rare distinct cosmetic-family event). **Builder routing RESTORED to Codex**
 (JK directive) — Codex CLI (gpt-5.5, xhigh) built via `codex exec` stdin-from-contract; Opus 4.8 audited (cross-model

@@ -5868,3 +5868,23 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Committed branch-only (NEVER pushed). **⇒ L11 (managers) FULLY COMPLETE (1–5).**
 - **➡ NEXT = the fame double-ladder collapse** (L12-Q10 pre-L12 cleanup — a hard prerequisite before any L12 race goes
   live: retire `fameEngine.ts getFameTier` forbidden labels; races must read `resolveFameTier`) → L12 recon-split.
+
+## 2026-06-19 (AUTH-4 overnight, solo) — L12-Q10 fame double-ladder collapse RULED (defer) → context handoff at L12
+- After L11-5 (L11 fully complete), grounded the next queue item — the fame double-ladder collapse (L12-Q10). Found it's a
+  protected-SMB4-asset, LIVE-path change with a genuine scope fork §20.8 doesn't resolve for the pre-activation state
+  (legacy scalar `getFameTier` live in the UI; canonical Heat/Reach `resolveFameTier` build-DARK with no live per-player
+  data until post-D13). Per the no-inference/soul-layer-verbatim rule (holds under AUTH-4), SURFACED the fork instead of
+  auto-building.
+- **JK RULING (a):** defer the live label-purge to post-D13 activation; L12-Q10's only hard requirement folds into L12
+  (race code reads `resolveFameTier`, never the scalar `getFameTier`). No standalone fame-ladder work now. (DECISIONS_LOG
+  2026-06-19.)
+- **⇒ Next buildable = L12 itself** — a large multi-part subsystem (award-cat extension [L12-Q1] / All-Star roster /
+  race-standing weighted-composite [L12-Q2] / TV-family KK·Bust·Comeback) needing its own grounding recon-split (mirror
+  L10/L11). Given L11-complete + L12-Q10-ruled is a clean seam and this session's context is heavy (session-start reads +
+  a concurrency-collision takeover of L11-4 + the full L11-5 cycle + 2 design forks), CHECKPOINTING here per the
+  CONTEXT-HANDOFF PROTOCOL so a fresh-context session does the L12 recon + build with full rigor.
+- **Session tally (all committed branch-only, codex/franchise-v1-next, nothing pushed):** L11-4 `3e718e4f` (concurrent-WIP
+  takeover, independently audited + host-gated) + L11-5 `f77b3c75` (Codex-built → Opus-audited). Suite 7,729/442, ZERO new
+  reds. ⇒ L11 (managers) FULLY COMPLETE (1-5). 2 forks ruled (TAKE OVER L11-4; L12-Q10 defer).
+- **⚠ PROCESS:** a concurrent AUTH-4 worker (cron + a manual "start new session") collided on L11-4 this session — handled
+  cleanly (took over the stopped session's WIP per JK), but **keep exactly ONE AUTH-4 worker active** going forward.

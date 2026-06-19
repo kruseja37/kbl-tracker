@@ -1700,3 +1700,16 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   race goes live: retire the `fameEngine.ts getFameTier` forbidden labels; every race/fame-tier read must go through
   `resolveFameTier`. Then L12 recon-split (award-cat extension / All-Star roster / race standing weighted-composite /
   TV-family). Needs grounding (grep the two fame-tier ladders + their consumers) before contracting.
+
+## 2026-06-19 — L12-Q10 fame double-ladder collapse RULED (defer) → CONTEXT HANDOFF at L12
+- Grounded the fame double-ladder collapse (L12-Q10): legacy scalar `getFameTier(totalFame)` [fameEngine.ts:349,
+  forbidden labels Fan Favorite/Villain] is LIVE (fameIntegration.ts:556 + useFameTracking); canonical `resolveFameTier`
+  [fameModel.ts:191, §20.7 Heat/Reach ladder] is build-DARK with NO live per-player data until post-D13. §20.8 describes
+  the post-activation target but NOT the pre-activation scope → surfaced the fork (protected asset; no-inference rule).
+- **JK RULING (a) — defer:** the live label-purge moves to the post-D13 fame activation; L12-Q10's hard requirement folds
+  into L12 (race code reads `resolveFameTier`, never `getFameTier`). No standalone work now. (DECISIONS_LOG 2026-06-19.)
+- **HANDOFF written at a clean seam** (L11 fully complete + L12-Q10 ruled). NEXT = L12 (recon-split first, mirror L10/L11).
+  This session: L11-4 takeover `3e718e4f` + L11-5 `f77b3c75`, suite 7,729/442 ZERO new reds, 2 forks ruled (take-over,
+  L12-Q10-defer). ⚠ One concurrent-worker collision this session (handled cleanly) — keep ONE AUTH-4 worker active.
+- ➡ NEXT = L12 recon-split (award-cat extension [L12-Q1] / All-Star roster [L12-Q5] / race-standing weighted-composite
+  [L12-Q2] / TV-family KK·Bust·Comeback [AWARD-3]) per the L11–L14 ruling pass + DECISIONS_LOG; then L13 → L14 → L-SIM.
