@@ -9,6 +9,8 @@ import {
   getManagerAssignment,
   getManagerProfile,
   listManagerAssignments,
+  managerFiredReasonToTenureEndReason,
+  recordManagerTenureEnd,
   resetManagerIdentityDatabaseForTests,
   resolveManagerForTeam,
   saveManagerAssignment,
@@ -388,6 +390,121 @@ describe("manager identity storage", () => {
         endDate: "2026-06-18T00:00:00.000Z",
         firedReason: "user",
       });
+    });
+  });
+
+  describe("recordManagerTenureEnd (L11-4)", () => {
+    test("maps firing reasons to Almanac end-reasons", () => {
+      expect(managerFiredReasonToTenureEndReason("user")).toBe("fired");
+      expect(managerFiredReasonToTenureEndReason("auto-backstop")).toBe("fired");
+      expect(managerFiredReasonToTenureEndReason("rebrand")).toBe("relocated");
+    });
+
+    test("durably appends a tenure record to the fired manager's profile", async () => {
+      await saveManagerProfile({
+        managerId: "manager-fired",
+        displayName: "Fired Voice",
+        createdByUser: true,
+        defaultManager: false,
+      });
+
+      const updated = await recordManagerTenureEnd({
+        managerId: "manager-fired",
+        teamId: "sirloins",
+        mode: "franchise",
+        instanceId: "season-2026",
+        hireDate: "2026-01-01T00:00:00.000Z",
+        endDate: "2026-06-18T00:00:00.000Z",
+        reason: "user",
+      });
+
+      expect(updated?.tenureRecords).toEqual([
+        {
+          teamId: "sirloins",
+          mode: "franchise",
+          instanceId: "season-2026",
+          hireDate: "2026-01-01T00:00:00.000Z",
+          endDate: "2026-06-18T00:00:00.000Z",
+          endReason: "fired",
+        },
+      ]);
+
+      const reloaded = await getManagerProfile("manager-fired");
+      expect(reloaded?.tenureRecords).toHaveLength(1);
+    });
+
+    test("is idempotent on (teamId, mode, instanceId, endDate)", async () => {
+      await saveManagerProfile({
+        managerId: "manager-fired",
+        displayName: "Fired Voice",
+        createdByUser: true,
+        defaultManager: false,
+      });
+      const params = {
+        managerId: "manager-fired",
+        teamId: "sirloins",
+        mode: "franchise" as const,
+        instanceId: "season-2026",
+        hireDate: "2026-01-01T00:00:00.000Z",
+        endDate: "2026-06-18T00:00:00.000Z",
+        reason: "user" as const,
+      };
+
+      await recordManagerTenureEnd(params);
+      const replayed = await recordManagerTenureEnd(params);
+
+      expect(replayed?.tenureRecords).toHaveLength(1);
+    });
+
+    test("preserves the successor profile's tenure records on an unrelated save", async () => {
+      await saveManagerProfile({
+        managerId: "manager-fired",
+        displayName: "Fired Voice",
+        createdByUser: true,
+        defaultManager: false,
+      });
+      await recordManagerTenureEnd({
+        managerId: "manager-fired",
+        teamId: "sirloins",
+        mode: "franchise",
+        instanceId: "season-2026",
+        endDate: "2026-06-18T00:00:00.000Z",
+        reason: "rebrand",
+      });
+
+      // An unrelated re-save of the same profile must not drop the records.
+      await saveManagerProfile({
+        managerId: "manager-fired",
+        displayName: "Fired Voice (renamed)",
+        createdByUser: true,
+        defaultManager: false,
+      });
+
+      const reloaded = await getManagerProfile("manager-fired");
+      expect(reloaded?.displayName).toBe("Fired Voice (renamed)");
+      expect(reloaded?.tenureRecords).toEqual([
+        {
+          teamId: "sirloins",
+          mode: "franchise",
+          instanceId: "season-2026",
+          hireDate: undefined,
+          endDate: "2026-06-18T00:00:00.000Z",
+          endReason: "relocated",
+        },
+      ]);
+    });
+
+    test("returns null when the manager profile does not exist", async () => {
+      await expect(
+        recordManagerTenureEnd({
+          managerId: "manager-missing",
+          teamId: "sirloins",
+          mode: "franchise",
+          instanceId: "season-2026",
+          endDate: "2026-06-18T00:00:00.000Z",
+          reason: "user",
+        }),
+      ).resolves.toBeNull();
     });
   });
 });

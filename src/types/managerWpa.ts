@@ -65,6 +65,30 @@ export interface ManagerStyleSnapshot {
   label?: string;
 }
 
+/**
+ * How a manager's tenure with a team ended (L11). 'fired' covers both the
+ * manual GM action and the auto-backstop; 'relocated' is the L14 rebrand
+ * cascade; 'resigned' is reserved (no L11 emitter yet).
+ */
+export type ManagerTenureEndReason = "fired" | "resigned" | "relocated";
+
+/**
+ * A durable record of one manager's stint with a single (teamId, mode,
+ * instanceId) — written when the manager is fired/replaced so the legacy is
+ * not lost when the successor overwrites the team-keyed assignment row. Lives
+ * on the fired manager's identity ManagerProfile (keyed by the unique
+ * managerId, never overwritten by a successor), per the L11-Q9 ruling: ride
+ * the existing identity store, no new store, no DB-version bump.
+ */
+export interface ManagerTenureRecord {
+  teamId: string;
+  mode: ManagerMode;
+  instanceId: string;
+  hireDate?: string;
+  endDate: string;
+  endReason: ManagerTenureEndReason;
+}
+
 export interface ManagerProfile {
   managerId: string;
   displayName: string;
@@ -74,6 +98,7 @@ export interface ManagerProfile {
   createdByUser: boolean;
   defaultManager: boolean;
   managementStyle?: ManagerStyleSnapshot;
+  tenureRecords?: ManagerTenureRecord[];
 }
 
 export type ManagerFiredReason = "user" | "auto-backstop" | "rebrand";

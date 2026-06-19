@@ -35,6 +35,7 @@ import { isFranchisePhase2L11Enabled } from './franchisePhase2Flags';
 import {
   buildDefaultManagerProfile,
   getManagerAssignment,
+  recordManagerTenureEnd,
   saveManagerAssignment,
   saveManagerProfile,
   setManagerFired,
@@ -200,6 +201,22 @@ export async function fireManager(params: FireManagerParams): Promise<FireManage
     teamId: params.teamId,
     mode,
     instanceId: params.instanceId,
+    endDate: params.endDate,
+    reason: params.reason,
+  });
+
+  // Durably persist the fired tenure-end on the fired manager's profile BEFORE
+  // the successor overwrites the team-keyed assignment row (resolves the L11-3
+  // OPEN: the setManagerFired tombstone on the assignment key is transient).
+  // The profile is keyed by the unique managerId, so it survives the swap.
+  // hireDate comes from the fired assignment's startDate (also about to be
+  // overwritten). Per L11-Q9: ride the identity store, no new store.
+  await recordManagerTenureEnd({
+    managerId: assignment.managerId,
+    teamId: params.teamId,
+    mode,
+    instanceId: params.instanceId,
+    hireDate: assignment.startDate,
     endDate: params.endDate,
     reason: params.reason,
   });

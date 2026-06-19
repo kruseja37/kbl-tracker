@@ -19,6 +19,7 @@ import {
 } from '../franchiseTrueValueStorage';
 import {
   getManagerAssignment,
+  getManagerProfile,
   listManagerAssignments,
   resetManagerIdentityDatabaseForTests,
   saveManagerAssignment,
@@ -264,6 +265,20 @@ describe('fireManager', () => {
     });
     expect(assignments).toHaveLength(1);
     expect(assignments[0].managerId).toBe('team-alpha-manager');
+
+    // L11-4: the fired tenure-end is durably persisted on the fired manager's
+    // profile (survives the successor overwriting the team-keyed assignment).
+    const firedProfile = await getManagerProfile('manager-incumbent');
+    expect(firedProfile?.tenureRecords).toEqual([
+      {
+        teamId: baseParams.teamId,
+        mode: 'franchise',
+        instanceId: baseParams.instanceId,
+        hireDate: '2026-01-01T00:00:00.000Z',
+        endDate: baseParams.endDate,
+        endReason: 'fired',
+      },
+    ]);
 
     const fanSnapshot = await getFranchiseMoraleSnapshot(scope, 'team-fan', baseParams.teamId);
     const negativeSnapshot = await getFranchiseMoraleSnapshot(scope, 'player', 'player-negative');

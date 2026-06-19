@@ -10,6 +10,8 @@ import type {
   ManagerDecisionType,
   ManagerLineupDeltaRecord,
   ManagerProfile,
+  ManagerTenureEndReason,
+  ManagerTenureRecord,
 } from '../types/managerWpa';
 import {
   getEliminationAllTimePlayerStats,
@@ -215,6 +217,13 @@ export interface ManagerTeamTenureAggregate {
   worstDecision?: ManagerAlmanacDecisionSummary;
   lineupDeltaDetails: ManagerAlmanacLineupDeltaSummary[];
   tendencies: ManagerDecisionTendencies;
+  /**
+   * L11-4 — legacy surfacing. Joined from the fired manager's durable
+   * ManagerProfile.tenureRecords (L11-Q9). Absent on a still-active tenure.
+   */
+  hireDate?: string;
+  endDate?: string;
+  endReason?: ManagerTenureEndReason;
 }
 
 export interface ManagerAlmanacAggregate {
@@ -357,6 +366,9 @@ interface ManagerWorkingTenure {
   worstDecision?: ManagerAlmanacDecisionSummary;
   lineupDeltaDetails: ManagerAlmanacLineupDeltaSummary[];
   decisionTypeCounts: Partial<Record<ManagerDecisionType, number>>;
+  hireDate?: string;
+  endDate?: string;
+  endReason?: ManagerTenureEndReason;
 }
 
 interface ManagerWorkingAggregate {
@@ -1063,6 +1075,33 @@ function getOrCreateManagerAggregate(
   return aggregate;
 }
 
+/**
+ * L11-4 — find the durable tenure-end record for a manager's stint with a
+ * specific (teamId, mode, instanceId) on the manager's profile. If a stint was
+ * ended more than once (re-hired then re-fired), the LATEST endDate wins so the
+ * surfaced legacy reflects the most recent close of that exact stint key.
+ */
+function findTenureRecord(
+  profile: ManagerProfile | undefined,
+  teamId: string,
+  mode: AlmanacInstanceMode,
+  instanceId: string,
+): ManagerTenureRecord | undefined {
+  if (!profile?.tenureRecords?.length) return undefined;
+  let match: ManagerTenureRecord | undefined;
+  for (const record of profile.tenureRecords) {
+    if (
+      record.teamId === teamId &&
+      record.mode === mode &&
+      record.instanceId === instanceId &&
+      (!match || record.endDate > match.endDate)
+    ) {
+      match = record;
+    }
+  }
+  return match;
+}
+
 function getOrCreateManagerTenure(
   aggregate: ManagerWorkingAggregate,
   params: {
@@ -1074,6 +1113,7 @@ function getOrCreateManagerTenure(
     instanceId: string;
     instanceName: string;
   },
+  tenureRecord?: ManagerTenureRecord,
 ): ManagerWorkingTenure {
   const key = `${params.teamId}::${params.mode}::${params.instanceId}`;
   const existing = aggregate.tenures.get(key);
@@ -1096,6 +1136,9 @@ function getOrCreateManagerTenure(
     pendingDecisionCount: 0,
     decisionTypeCounts: {},
     lineupDeltaDetails: [],
+    hireDate: tenureRecord?.hireDate,
+    endDate: tenureRecord?.endDate,
+    endReason: tenureRecord?.endReason,
   };
   aggregate.tenures.set(key, tenure);
   return tenure;
@@ -1242,6 +1285,9 @@ function finalizeManagerTenure(
       tenure.tacticalDecisionCount,
       tenure.lineupDecisionCount,
     ),
+    hireDate: tenure.hireDate,
+    endDate: tenure.endDate,
+    endReason: tenure.endReason,
   };
 }
 
@@ -1510,26 +1556,31 @@ export function aggregateCommittedManagerAlmanac(
       }
 
       const teamName = getTeamNameForGame(game, decision.teamId);
+      const profile = profileByManagerId.get(decision.managerId);
       const managerName = getDefaultManagerLabel(
         decision.managerId,
         decision.teamId,
         teamName,
-        profileByManagerId.get(decision.managerId),
+        profile,
       );
       const aggregate = getOrCreateManagerAggregate(
         aggregates,
         decision.managerId,
         managerName,
       );
-      const tenure = getOrCreateManagerTenure(aggregate, {
-        managerId: decision.managerId,
-        managerName,
-        teamId: decision.teamId,
-        teamName,
-        mode: descriptor.mode,
-        instanceId: descriptor.instanceId,
-        instanceName,
-      });
+      const tenure = getOrCreateManagerTenure(
+        aggregate,
+        {
+          managerId: decision.managerId,
+          managerName,
+          teamId: decision.teamId,
+          teamName,
+          mode: descriptor.mode,
+          instanceId: descriptor.instanceId,
+          instanceName,
+        },
+        findTenureRecord(profile, decision.teamId, descriptor.mode, descriptor.instanceId),
+      );
       const instanceKey = `${descriptor.mode}::${descriptor.instanceId}`;
 
       aggregate.teamNamesById.set(decision.teamId, teamName);
@@ -1556,26 +1607,31 @@ export function aggregateCommittedManagerAlmanac(
       }
 
       const teamName = getTeamNameForGame(game, stint.teamId);
+      const profile = profileByManagerId.get(stint.managerId);
       const managerName = getDefaultManagerLabel(
         stint.managerId,
         stint.teamId,
         teamName,
-        profileByManagerId.get(stint.managerId),
+        profile,
       );
       const aggregate = getOrCreateManagerAggregate(
         aggregates,
         stint.managerId,
         managerName,
       );
-      const tenure = getOrCreateManagerTenure(aggregate, {
-        managerId: stint.managerId,
-        managerName,
-        teamId: stint.teamId,
-        teamName,
-        mode: descriptor.mode,
-        instanceId: descriptor.instanceId,
-        instanceName,
-      });
+      const tenure = getOrCreateManagerTenure(
+        aggregate,
+        {
+          managerId: stint.managerId,
+          managerName,
+          teamId: stint.teamId,
+          teamName,
+          mode: descriptor.mode,
+          instanceId: descriptor.instanceId,
+          instanceName,
+        },
+        findTenureRecord(profile, stint.teamId, descriptor.mode, descriptor.instanceId),
+      );
       const instanceKey = `${descriptor.mode}::${descriptor.instanceId}`;
 
       aggregate.teamNamesById.set(stint.teamId, teamName);
@@ -1594,26 +1650,31 @@ export function aggregateCommittedManagerAlmanac(
       }
 
       const teamName = getTeamNameForGame(game, delta.teamId);
+      const profile = profileByManagerId.get(delta.managerId);
       const managerName = getDefaultManagerLabel(
         delta.managerId,
         delta.teamId,
         teamName,
-        profileByManagerId.get(delta.managerId),
+        profile,
       );
       const aggregate = getOrCreateManagerAggregate(
         aggregates,
         delta.managerId,
         managerName,
       );
-      const tenure = getOrCreateManagerTenure(aggregate, {
-        managerId: delta.managerId,
-        managerName,
-        teamId: delta.teamId,
-        teamName,
-        mode: descriptor.mode,
-        instanceId: descriptor.instanceId,
-        instanceName,
-      });
+      const tenure = getOrCreateManagerTenure(
+        aggregate,
+        {
+          managerId: delta.managerId,
+          managerName,
+          teamId: delta.teamId,
+          teamName,
+          mode: descriptor.mode,
+          instanceId: descriptor.instanceId,
+          instanceName,
+        },
+        findTenureRecord(profile, delta.teamId, descriptor.mode, descriptor.instanceId),
+      );
       const instanceKey = `${descriptor.mode}::${descriptor.instanceId}`;
 
       aggregate.teamNamesById.set(delta.teamId, teamName);

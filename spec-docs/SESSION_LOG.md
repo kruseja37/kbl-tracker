@@ -5825,3 +5825,24 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   suite 7,713/441, 7,711 pass / 2 characterized fail, zero new reds (+5). §16 defaults (armingThreshold 25, perGame 0.004,
   flat — payroll-band deferred). VERIFY-AT-ACTIVATION: gameState team-id namespace vs morale/assignment team-ids. trackerDb
   v23. NEXT = L11-4. Nothing pushed.
+
+## 2026-06-19 (AUTH-4 overnight, TAKEOVER) — L11-4: Almanac tenure join + durable fired-tenure persistence ⇒ L11 firing core COMPLETE
+- **CONCURRENCY EVENT:** a fresh session ("start new session") did the session-start reads and found L11-4 ALREADY being
+  built by a SECOND concurrent AUTH-4 cron session — uncommitted WIP whose diff GREW 111→388 insertions across 8 files
+  DURING the reads (source 12:10-12:12Z, tests 12:13-12:15Z), then went STABLE ~230s with no live build proc and
+  list_sessions showing no other running session. Stood down, logged WAITING_ON_JK [ticket:L11-4]. **JK ruled TAKE OVER.**
+- Independently audited the full WIP diff line-by-line (builder≠auditor — this session did NOT write it). VERDICT: correct + on-spec.
+- **WHAT L11-4 DOES (7 files):** types `ManagerTenureRecord` + `ManagerTenureEndReason` + `ManagerProfile.tenureRecords?`
+  (managerWpa.ts); `recordManagerTenureEnd` + `managerFiredReasonToTenureEndReason` (managerIdentityStorage.ts —
+  idempotent on (teamId,mode,instanceId,endDate), rides the identity store, NO DB-version bump, merge-safe);
+  `fireManager` wires `recordManagerTenureEnd` on the FIRED `assignment.managerId`/`startDate` BEFORE the successor
+  `saveManagerAssignment` overwrites the team-keyed row (resolves the L11-3 OPEN: the `setManagerFired` tombstone was
+  transient); `almanacQueries.ts` `ManagerTeamTenureAggregate` gains `hireDate`/`endDate`/`endReason` joined via
+  `findTenureRecord` (re-fire latest-endDate-wins + cross-stint-bleed guard) at all 3 aggregation sites. +7 tests.
+- **Host gate:** `NODE_ENV= npm run build` exit 0 (7.65s) + full suite **7,720/441, 7,718 pass / 2 characterized fail**
+  (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds. build-DARK behind `isFranchisePhase2L11Enabled`;
+  trackerDb v23. Committed branch-only (NEVER pushed); HANDOFF_NEEDED deletion folded in.
+- **⚠ PROCESS NOTE for JK:** two AUTH-4 workers ran concurrently on codex/franchise-v1-next (the overnight cron + a manual
+  "start new session"). No corruption (the other session stopped before committing; this one took over cleanly per JK).
+  Recommend keeping exactly ONE AUTH-4 worker active to avoid future collision/reconciliation (cf. the fe65bf4b precedent).
+- **➡ NEXT = L11-5** (reporter tap → SeasonNewsEvent), then the fame double-ladder collapse (L12-Q10 pre-L12 cleanup) → L12 recon-split.

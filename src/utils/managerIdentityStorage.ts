@@ -6,6 +6,8 @@ import type {
   ManagerMode,
   ManagerProfile,
   ManagerStyleSnapshot,
+  ManagerTenureEndReason,
+  ManagerTenureRecord,
 } from "../types/managerWpa";
 import { getDefaultManagerIdForTeam } from "./managerWpaDerivation";
 import { syncEngine } from "./syncEngine";
@@ -348,6 +350,66 @@ export async function setManagerFired(params: {
     fired: true,
     endDate: params.endDate,
     firedReason: params.reason,
+  });
+}
+
+/**
+ * Map an L11 firing reason to the Almanac tenure end-reason (L11-Q9).
+ * Manual + auto-backstop both read as 'fired'; the L14 rebrand cascade reads
+ * as 'relocated'. ('resigned' has no L11 emitter yet.)
+ */
+export function managerFiredReasonToTenureEndReason(
+  reason: ManagerFiredReason,
+): ManagerTenureEndReason {
+  return reason === "rebrand" ? "relocated" : "fired";
+}
+
+/**
+ * Durably append a tenure-end record to the fired manager's profile so the
+ * Manager Almanac can surface hire/fire dates + an end-reason even after the
+ * successor overwrites the team-keyed assignment row (the L11-3 OPEN). Lives
+ * on the profile (unique managerId, never overwritten), per the L11-Q9 ruling:
+ * ride the existing identity store, no new store, no DB-version bump.
+ *
+ * Idempotent on (teamId, mode, instanceId, endDate): replaying the same firing
+ * does not duplicate the record (matching `setManagerFired` idempotency).
+ * Returns null if the manager profile does not exist.
+ */
+export async function recordManagerTenureEnd(params: {
+  managerId: string;
+  teamId: string;
+  mode: ManagerMode;
+  instanceId: string;
+  hireDate?: string;
+  endDate: string;
+  reason: ManagerFiredReason;
+}): Promise<ManagerProfile | null> {
+  const existing = await getManagerProfile(params.managerId);
+  if (!existing) return null;
+
+  const endReason = managerFiredReasonToTenureEndReason(params.reason);
+  const record: ManagerTenureRecord = {
+    teamId: params.teamId,
+    mode: params.mode,
+    instanceId: params.instanceId,
+    hireDate: params.hireDate,
+    endDate: params.endDate,
+    endReason,
+  };
+
+  const priorRecords = existing.tenureRecords ?? [];
+  const alreadyRecorded = priorRecords.some(
+    (entry) =>
+      entry.teamId === record.teamId &&
+      entry.mode === record.mode &&
+      entry.instanceId === record.instanceId &&
+      entry.endDate === record.endDate,
+  );
+  if (alreadyRecorded) return existing;
+
+  return saveManagerProfile({
+    ...existing,
+    tenureRecords: [...priorRecords, record],
   });
 }
 

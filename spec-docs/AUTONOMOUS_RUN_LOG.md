@@ -1643,3 +1643,30 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   (L11-4 design decision + L12/L13 recon-splits) with full rigor. `HANDOFF_NEEDED` written + committed (next = L11-4,
   rich resume_note). CURRENT_STATE live header + this log are current; nothing pushed. The cron / a fresh session resumes
   per `HANDOFF_NEEDED` + the QUEUE above.
+
+## 2026-06-19 — L11-4: Almanac tenure join + durable fired-tenure persistence — CONCURRENT-WIP TAKEOVER → Opus-audited → host-gated → COMMITTED ⇒ L11 firing core COMPLETE
+- **CONCURRENCY EVENT:** the cron resume launched a fresh session that, mid session-start grounding of L11-4, found the
+  ticket ALREADY built in the working tree by a SECOND concurrent AUTH-4 session that then stopped (uncommitted; HEAD still
+  the handoff commit 1543f941; the diff GREW 111→388 insertions across 8 files DURING the reads, then went stable ~230s; no
+  live build/codex proc; list_sessions: no other running session). Stood down + logged WAITING_ON_JK [ticket:L11-4]. JK
+  ruled TAKE OVER.
+- **AUDIT (independent, builder≠auditor — this session did NOT build the diff):** read all 8 files line-by-line. CORRECT +
+  on-spec to L11-Q9 + the L11-3 OPEN resolution. Key checks: (1) `recordManagerTenureEnd` rides the managerId-keyed identity
+  profile → NO DB-version bump (additive optional `tenureRecords`; manager-identity DB stays v2, trackerDb v23); (2)
+  idempotent on (teamId,mode,instanceId,endDate); (3) `saveManagerProfile` merges `{...existing,...input}` so an unrelated
+  re-save never drops `tenureRecords`; (4) `fireManager` captures the FIRED `assignment.managerId` + `startDate`(=hireDate)
+  BEFORE the successor `saveManagerProfile`/`saveManagerAssignment` overwrites the team-keyed `[mode,instanceId,teamId]` row
+  — so the legacy survives (the `setManagerFired` tombstone was transient, the L11-3 OPEN); (5) `findTenureRecord` =
+  latest-endDate-wins on re-fire + cross-stint-bleed guard, seeded at working-tenure create, copied out in
+  `finalizeManagerTenure`, joined at all 3 sites (decisions/stints/deltas) with a clean `profile` refactor (no label-path
+  behavior change). Tests non-vacuous: idempotency replay (len 1), reload-from-store (persistence not just in-mem),
+  merge-preservation, cross-stint bleed guard, active-tenure-no-dates, null-profile→null, end-to-end fireManager assertion.
+- **HOST GATE:** `NODE_ENV= npm run build` exit 0 (✓ 7.65s + PWA) + `NODE_ENV= npx vitest run` → **7,720/441, 7,718 pass / 2
+  characterized fail** (`wpaRuntimeBoundary` allowlist on franchiseAnalyticsTrust.ts [untouched by L11-4] +
+  `franchiseManualSmokeFixture` 5s-timeout flake), ZERO new reds, +7 tests. Committed branch-only on codex/franchise-v1-next
+  (NEVER pushed); HANDOFF_NEEDED deletion folded in.
+- **⚠ PROCESS for JK:** TWO AUTH-4 workers ran concurrently on the same branch (overnight cron + a manual "start new
+  session"). Took over cleanly with no corruption, but concurrent AUTH-4 sessions are a collision/lost-work hazard (cf. the
+  fe65bf4b precedent). Recommend: keep exactly ONE AUTH-4 worker active.
+- **➡ NEXT = L11-5** (reporter tap: fired/relocated manager event → SeasonNewsEvent, mirror L10-5's pure adapter; build-DARK)
+  → fame double-ladder collapse (L12-Q10 pre-L12 cleanup) → L12 recon-split.

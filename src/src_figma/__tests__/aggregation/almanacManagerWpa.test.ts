@@ -620,4 +620,65 @@ describe("Almanac Manager WPA aggregation", () => {
       teamIds: ["elim-team"],
     });
   });
+
+  test("L11-4: joins durable tenure hire/fire dates + end-reason from the manager profile", () => {
+    const firedProfile: ManagerProfile = {
+      managerId: "away-manager",
+      displayName: "Casey Strategy",
+      createdByUser: true,
+      defaultManager: false,
+      tenureRecords: [
+        {
+          teamId: "away",
+          mode: "exhibition",
+          instanceId: "league-a",
+          hireDate: "2026-01-01T00:00:00.000Z",
+          endDate: "2026-06-18T00:00:00.000Z",
+          endReason: "fired",
+        },
+        // A different stint key — must NOT bleed onto the league-a tenure.
+        {
+          teamId: "away",
+          mode: "franchise",
+          instanceId: "other-instance",
+          endDate: "2025-06-18T00:00:00.000Z",
+          endReason: "relocated",
+        },
+      ],
+    };
+
+    const [aggregate] = aggregateCommittedManagerAlmanac(
+      [
+        createGame({
+          competitionType: "exhibition",
+          competitionId: "league-a",
+          leagueId: "league-a",
+          managerDecisions: [createDecision({ managerWpa: 0.1 })],
+        }),
+      ],
+      {},
+      [firedProfile],
+    );
+
+    expect(aggregate.tenures).toHaveLength(1);
+    expect(aggregate.tenures[0]).toMatchObject({
+      teamId: "away",
+      instanceId: "league-a",
+      hireDate: "2026-01-01T00:00:00.000Z",
+      endDate: "2026-06-18T00:00:00.000Z",
+      endReason: "fired",
+    });
+  });
+
+  test("L11-4: leaves an active tenure without hire/fire dates when no firing record exists", () => {
+    const [aggregate] = aggregateCommittedManagerAlmanac(
+      [createGame({ managerDecisions: [createDecision({ managerWpa: 0.1 })] })],
+      {},
+      [profile],
+    );
+
+    expect(aggregate.tenures[0].hireDate).toBeUndefined();
+    expect(aggregate.tenures[0].endDate).toBeUndefined();
+    expect(aggregate.tenures[0].endReason).toBeUndefined();
+  });
 });
