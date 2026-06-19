@@ -55,7 +55,11 @@ seed per variant + `poolTraitKey` shared family pool; no grant-path/scorer/acqui
 AGENT-BUILDABLE trait-rebuild work is COMPLETE.** **➡ NEXT: (PRE-ACT-TRAITS-2)** JK/browser END-TO-END activation
 verification (the gate's only remaining buildable-by-human item); then the broader **(D)** L-stack (L10 Q5/Q8 rework →
 L11 → L12–L14 → L-SIM gate) and **(C)** the §16 sim-tune FINDING (sparse-signal `getPercentile`) at the L-SIM gate.
-*(Minor/standing: `opposingHand` still hardcoded `'R'` — matrix-handedness traits only, NOT the wired splits.)* Suite
+*(Minor/standing: `opposingHand` still hardcoded `'R'` — matrix-handedness traits only, NOT the wired splits.)*
+**📋 UI cleanup/build plan READY → `spec-docs/UI_CLEANUP_PLAN.md`** (2026-06-18, grounded + verified): happy-path UI is
+built; the big BUILD = post-D13 activation UI (~12 surfaces) + offseason + GT 4-column; the CLEANUP JK wants = a ~1-week
+polish dominated by design-tokens/shared-Button (101 hex-drift files). **Timing: do the design-token cleanup at the
+L-stack→D13 bridge, BEFORE the activation-UI build (never after).** Suite
 **7,686/438, 7,683 pass / 3 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` +
 `GameTrackerLaunchState` — the 3rd an intermittent order-flake **confirmed passing solo 9/9**; `franchiseOffseasonGuards.component`
 is another such flake); trackerDb **v23**; branch codex/franchise-v1-next; **nothing pushed**. Session commits: R1-b1
