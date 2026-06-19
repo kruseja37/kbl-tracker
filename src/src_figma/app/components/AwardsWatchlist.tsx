@@ -33,6 +33,10 @@ const AWARD_FULL_LABELS: Record<FranchiseAwardCategory, string> = {
   KARA_KAWAGUCHI: "Kara Kawaguchi",
   COMEBACK_PLAYER: "Comeback Player",
   BUST_OF_YEAR: "Bust of the Year",
+  ALL_STAR: "All-Star",
+  BENCH_PLAYER: "Bench Player",
+  BOOGER_GLOVE: "Booger Glove",
+  RELIEVER_OF_YEAR: "Reliever of the Year",
 };
 
 interface AwardsWatchlistProps {

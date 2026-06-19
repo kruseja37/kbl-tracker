@@ -1,20 +1,24 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-19 — **ACTIVE (AUTH-4 UNATTENDED OVERNIGHT).** **L11 manager-firings BUILD rolling under
-AUTH-4 — L11-1 engine + L11-2 legacy-write + L11-3 resolver + L11-3b auto-backstop + L11-4 Almanac tenure-join + L11-5
-reporter tap DONE ⇒ **L11 (managers) FULLY COMPLETE (1–5)**; the L11–L14 RULING PASS is consolidated (all 43 Qs ruled; 7
-JK overrides + 2 field corrections).** Codex-built → Opus-audited, branch-only, build-DARK; trackerDb v23. **L12-Q10
+**Last Updated:** 2026-06-19 — **ACTIVE (AUTH-4 UNATTENDED OVERNIGHT).** **L12 (races/All-Star/awards) BUILD rolling under
+AUTH-4 — L12-1 dark landing infra DONE (see below); recon-split complete. L11 (managers) FULLY COMPLETE (1–5); the L11–L14
+RULING PASS is consolidated (all 43 Qs ruled; 7 JK overrides + 2 field corrections).** Codex-built → Opus-audited,
+branch-only, build-DARK; trackerDb **v24**. **L12-Q10
 RULED (JK 2026-06-19): DEFER the live `getFameTier` label-purge to the post-D13 fame activation; the only hard
 requirement folds into L12 (the build-DARK race code reads `resolveFameTier`, NEVER the scalar `getFameTier`) — so
-L12-Q10 needs NO standalone work now.** **L12 RECON DONE (2026-06-19, read-only) → `spec-docs/L12_SCOPE_MAP.md`**
-(6-piece split, adversarially verified, every anchor re-checked on-branch; a CONCURRENT-WORKER dup [a 2nd AUTH-4
-"cron-watcher" produced a divergent 7-piece map] was RECONCILED per JK's TAKE-OVER ruling — the 6-piece map is
-canonical, the dup's stale log entries folded in). **➡ NEXT = contract L12-1** (dark landing infra: new
-`isFranchisePhase2L12Enabled` flag + `FranchiseAwardCategory` +4 slots [Q1, defer the 2 one-shots] + the All-Star
-multi-selection roster store → trackerDb v23→24 + the ledger-PIN + C4 backup DoD) → L12-2 TV-family scorers → L12-3
-race-standing composite → L12-4 All-Star+60%-lock → L12-5 emission/snub/reporter → L12-6 UI → L13 (split) → L14 →
-L-SIM. **⚠ KEEP EXACTLY ONE AUTH-4 WORKER ACTIVE — 7 Claude sessions were open this run (2nd collision); JK to trim.**
-Per-ticket detail in `AUTONOMOUS_RUN_LOG.md`. *(prior:)* **L10 Q5/Q8 REWORK COMPLETE → L10 (random events) FULLY
+L12-Q10 needs NO standalone work now.** **L12 RECON DONE → `spec-docs/L12_SCOPE_MAP.md`** (6-piece split, adversarially
+verified; a CONCURRENT-WORKER 7-piece dup was RECONCILED per JK's TAKE-OVER ruling). **✅ L12-1 COMPLETE (2026-06-19,
+AUTH-4) — dark landing infra:** new default-OFF `isFranchisePhase2L12Enabled` flag + `FranchiseAwardCategory` +4 season-race
+slots [Q1: ALL_STAR/BENCH_PLAYER/BOOGER_GLOVE/RELIEVER_OF_YEAR; defer the 2 one-shots] + the NEW dark id-keyed
+`franchiseAllStarRosters` store with the FULL 7-site mirror (**trackerDb v23→24**, syncConfig, backupRestore schema+version,
++ the ledger-PIN/manifest/parity tests) + a new storage test. **Codex(gpt-5.5)-built → Opus-audited (builder≠auditor) →
+host-gated:** `npm run build` 0 + full suite **7,737/443, 7,735 pass / 2 characterized fail**, ZERO new reds (+8); store
+count **43**; build-DARK (store EMPTY, no writer/hook); KBL_BACKUP_VERSION stays 2. *(Codex's STOP-IF correctly caught an
+under-specified mirror surface across 2 dispatches BEFORE any broken-mirror commit — the L6b-1 failure mode, prevented.)*
+**➡ NEXT = L12-2** (TV-family scorers KK/Bust/Comeback — pure, no store, rides the L12-1 flag) → L12-3 race-standing
+composite → L12-4 All-Star+60%-lock → L12-5 emission/snub/reporter → L12-6 UI → L13 (split) → L14 → L-SIM. **⚠ KEEP
+EXACTLY ONE AUTH-4 WORKER ACTIVE — 7 Claude sessions were open this run (2nd collision); JK to trim.** Per-ticket detail in
+`AUTONOMOUS_RUN_LOG.md`. *(prior:)* **L10 Q5/Q8 REWORK COMPLETE → L10 (random events) FULLY
 COMPLETE.** Continuous per-game cadence (Q5 — dropped the 20%-checkpoint gate; flat per-game §16 base rates) +
 `name_change` in the dark catalog (Q8 — rare distinct cosmetic-family event). **Builder routing RESTORED to Codex**
 (JK directive) — Codex CLI (gpt-5.5, xhigh) built via `codex exec` stdin-from-contract; Opus 4.8 audited (cross-model

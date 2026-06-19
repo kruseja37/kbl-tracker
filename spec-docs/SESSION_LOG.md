@@ -5926,3 +5926,30 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - **➡ NEXT ACTION = contract L12-1 build in an attended/host session** (Codex-built via `codex exec` stdin-from-contract
   → Opus-audited, build-DARK behind a NEW `isFranchisePhase2L12Enabled` flag, default OFF). Nothing pushed; branch
   codex/franchise-v1-next; trackerDb v23 unchanged.
+
+## 2026-06-19 (AUTH-4 overnight) — L12-1: dark landing infra (flag + award-cat +4 + All-Star roster store, trackerDb v24)
+- **JK ruled 3 L12-1 kickoff micro-forks** (DECISIONS_LOG 2026-06-19): contract L12-1 NOW; All-Star = a DEDICATED store
+  (1st of Q1's two ledger bumps; the race-standings store is the deferred 2nd, decided at L12-3); accept the recon merit
+  bases (RELIEVER=relief-WAR/leverage, BOOGER_GLOVE=inverse-fWAR, BENCH_PLAYER=best reserve-WAR — bind at L12-3, NOT here).
+- **Routing = Codex** (ratified): contract written to PROMPT_CONTRACTS.md → `codex exec` (gpt-5.5, xhigh) fed the contract
+  pointer on stdin (NOT duplicated), background + watchdog, node v20, `NODE_ENV=`. **Two dispatches correctly STOPPED on
+  the contract's STOP-IF** (my contract-wording bugs, NOT build issues): v1 surfaced 2 unlisted store-mirror TEST sites
+  (`franchiseSaveSlotManifest.test.ts` + `backupRestore.franchiseParity.test.ts` — the latter's schema-equality check is
+  the HARD guard); v2 tripped on the L10 CONSUMER `franchiseL10SweepCompute.ts` appearing in the grep + a wrong
+  `awardEmblems.ts` path. Each time I verified the gap, fixed the contract (full 7-site mirror enumerated; consumer
+  excluded; path pinned to `src/engines/awardEmblems.ts`; store fixed to id-keyed), re-dispatched. **The STOP-IF prevented
+  an under-mirrored store from ever being committed — the L6b-1 failure mode, caught BEFORE the break.**
+- **L12-1 (Codex, 11 files):** default-OFF `isFranchisePhase2L12Enabled` (clone of the L11 block); `FranchiseAwardCategory`
+  +ALL_STAR/BENCH_PLAYER/BOOGER_GLOVE/RELIEVER_OF_YEAR (already in `AwardType`) + the 4 exhaustive `AWARD_FULL_LABELS` keys;
+  NEW dark id-keyed `franchiseAllStarRosters` store (deterministic `…:allstar` id, `by_scope` index, caller timestamps, no
+  writer) mirroring `franchiseL10Overlays` at all 7 sites (trackerDb v23→24 + onupgradeneeded, syncConfig, backupRestore
+  `trackerStores` + `STATIC_DATABASE_SCHEMAS.version` 24, ledger-PIN alpha-insert + `toBe(24)`×2, manifest `toMatchObject`,
+  parity fixture+seed+backup+restore) + a non-vacuous storage test. Did NOT touch `franchiseAwardsEngine.ts` /
+  `processCompletedGame.ts` (no scorer, no per-game hook — those are L12-3+). KBL_BACKUP_VERSION stays 2; store count 43.
+- **Audit (builder=Codex ≠ auditor=Opus):** diff read line-by-line + store module compared vs the L10 precedent (faithful;
+  correctly omits `by_target`/`delete`; delegates to the shared `getTrackerDb` → no separate connection, avoids the
+  v-conflict-hang class) + the new storage test confirmed non-vacuous (scope isolation, timestamp preservation, sync key,
+  shared-trackerDb/purity source invariant). **FULL host gate (mine, not Codex's 4-file run):** `NODE_ENV= npm run build`
+  exit 0 (7.89s) + full suite **7,737/443, 7,735 pass / 2 characterized fail** (`wpaRuntimeBoundary` +
+  `franchiseManualSmokeFixture`; `EliminationTeamHub` order-flake passed), ZERO new reds (+8 = the new store test).
+  build-DARK; trackerDb v24. **➡ NEXT = L12-2** (TV-family scorers — pure, no store). Branch codex/franchise-v1-next; nothing pushed.

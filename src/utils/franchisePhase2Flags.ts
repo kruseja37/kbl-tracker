@@ -81,3 +81,15 @@ export function isFranchisePhase2L11Enabled(): boolean {
 export function setFranchisePhase2L11EnabledForTests(enabled: boolean | null): void {
   franchisePhase2L11EnabledOverride = enabled;
 }
+
+export const FRANCHISE_PHASE2_L12_ENABLED_DEFAULT = false;
+
+let franchisePhase2L12EnabledOverride: boolean | null = null;
+
+export function isFranchisePhase2L12Enabled(): boolean {
+  return franchisePhase2L12EnabledOverride ?? FRANCHISE_PHASE2_L12_ENABLED_DEFAULT;
+}
+
+export function setFranchisePhase2L12EnabledForTests(enabled: boolean | null): void {
+  franchisePhase2L12EnabledOverride = enabled;
+}

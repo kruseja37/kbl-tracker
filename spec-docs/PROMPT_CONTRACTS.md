@@ -11270,3 +11270,162 @@ clamped `dramaticWeight`; constant-key facts; inline `endReason` map (no Indexed
 build` exit 0 (7.5s) + full suite **7,729/442, 7,726 pass / 3 fail** = 2 characterized + 1 order-flake (`EliminationTeamHub`,
 confirmed passing solo 16/16), ZERO new reds (+9). build-DARK; no flag/store/trackerDb change (v23). ⇒ L11 (managers)
 FULLY COMPLETE (1–5). **➡ NEXT = fame double-ladder collapse (L12-Q10) → L12.**
+
+---
+
+## CONTRACT — L12-1 (dark landing infra: flag + award-category widening + All-Star roster store) — 2026-06-19 (AUTH-4 overnight)
+
+**ROUTE: Codex CLI (`codex exec`, prompt via stdin from this contract) | very high reasoning effort** (builder; PERSISTENCE
+ticket — a NEW IndexedDB store + a trackerDb v-bump + the store-list PIN; the L6b-1 dispatch-breaker lives here, so the
+FULL mirror MUST be in THIS ticket). Auditor = Opus Captain (cross-model triangle; builder≠auditor). Branch
+codex/franchise-v1-next. BUILD-DARK: the new flag defaults OFF, the store is created EMPTY with NO production writer; zero
+runtime behavior change. Source of truth: `spec-docs/L12_SCOPE_MAP.md` §3 (L12-1) + §5 (anchors) + §8 (dark-build
+checklist) + the L11–L14 ruling pass (DECISIONS_LOG 2026-06-18/19: **L12-Q1** = the 4 season-race slots NOW, defer the 2
+one-shots; **L12-Q5** = by-position roster) + JK's 2026-06-19 L12-1 kickoff rulings (dedicated store; accept the recon
+merit-base defaults) + the `franchiseL10Overlays` store as the EXACT mirror precedent.
+
+**GOAL:** land the L12 schema foundation — frozen and dark — so the L12 compute tickets (L12-2..L12-6) write into existing
+structures with no further ledger churn: (1) a new default-OFF `isFranchisePhase2L12Enabled` flag; (2) widen the
+persistable `FranchiseAwardCategory` with the 4 season-race slots; (3) a NEW dark/EMPTY `franchiseAllStarRosters`
+IndexedDB store (the All-Star roster cannot fit the single-winner award row) with the COMPLETE mirror (trackerDb v23→24 +
+onupgradeneeded + syncConfig + backup + the ledger-PIN test + a storage test). NO per-game hook, NO award-scoring change,
+NO engine change — those are later L12 tickets.
+
+**CHANGES (edit ONLY the files listed; mirror `franchiseL10Overlays` at EVERY site it touches):**
+
+**A. NEW FLAG — `src/utils/franchisePhase2Flags.ts`:** clone the L11 flag block (the `isFranchisePhase2L11Enabled` block,
+~:73-83) verbatim → `isFranchisePhase2L12Enabled` (module-level default-OFF override var + a `setFranchisePhase2L12Enabled`
+test-setter + the getter), placed immediately after the L11 block. Default MUST be false.
+
+**B. WIDEN THE STORAGE CATEGORY — `src/utils/franchiseAwardsStorage.ts`:** add `'ALL_STAR' | 'BENCH_PLAYER' |
+'BOOGER_GLOVE' | 'RELIEVER_OF_YEAR'` to the `FranchiseAwardCategory` `Extract<>` (~:16-27). These 4 ALREADY exist in the
+source `AwardType` union (`src/engines/awardEmblems.ts:13-17`) so the Extract widening is valid. Do NOT add `PLATINUM_GLOVE` /
+`WORLD_SERIES_MVP` (deferred per Q1). Do NOT touch `FranchiseWarAwardCategory` or `scoreForCategory` in
+`franchiseAwardsEngine.ts` — the merit SCORING for these 4 is a LATER ticket (L12-3); L12-1 only makes them PERSISTABLE.
+
+**C. FIX EVERY EXHAUSTIVE Record — `src/src_figma/app/components/AwardsWatchlist.tsx` (+ any other site):**
+`git grep -n "Record<FranchiseAwardCategory"` across src/ and add the 4 new keys to EVERY exhaustive
+`Record<FranchiseAwardCategory, …>` (at minimum `AWARD_FULL_LABELS` ~:26): `ALL_STAR: 'All-Star'`,
+`BENCH_PLAYER: 'Bench Player'`, `BOOGER_GLOVE: 'Booger Glove'`, `RELIEVER_OF_YEAR: 'Reliever of the Year'`. (tsc -b FORCES
+this — the Record is exhaustive; a miss breaks the build.) Do NOT add them to the `AWARD_ORDER` display array (surfacing is L12-6).
+
+**D. NEW STORE MODULE — `src/utils/franchiseAllStarRostersStorage.ts`:** clone `src/utils/franchiseL10OverlayStorage.ts`
+EXACTLY in structure/style (its `getTrackerDb`-based put/get/list pattern, the `by_scope` index helper, the scope typing).
+Store-name constant `franchiseAllStarRosters`. Row type:
+```ts
+export type FranchiseAllStarSelectionRole = 'starter' | 'reserve';
+export interface FranchiseAllStarSelection {
+  playerId: string;
+  teamId: string;
+  position: string;            // a Position literal (C/1B/2B/3B/SS/LF/CF/RF/DH/SP/RP)
+  role: FranchiseAllStarSelectionRole;
+  selectionScore?: number;     // denormalized fame-led (starter) / merit (reserve) score snapshot
+}
+export interface FranchiseAllStarRosterRow {
+  id: string;                  // deterministic, ONE per scope: `${franchiseId}:${seasonId}:${statsScopeId}:allstar`
+  franchiseId: string;
+  seasonId: string;
+  statsScopeId: string;
+  seasonNumber: number;
+  selections: FranchiseAllStarSelection[];
+  lockedAtGameNumber: number | null;
+  locked: boolean;
+  createdAt: number;
+  updatedAt?: number;
+}
+```
+keyPath **`'id'`** (id-keyed, EXACTLY like the L10 overlay store — the row carries a deterministic one-per-scope `id`); ONE
+`by_scope` index on `['franchiseId','seasonId','statsScopeId']` (mirror L10's index style). Provide a small
+`franchiseAllStarRosterId(scope)` helper that builds the deterministic id, plus put/get/list mirroring the L10 module's
+function names/signatures (e.g. `putFranchiseAllStarRoster`, `getFranchiseAllStarRoster(scope)` reading by the synthesized
+id, `getFranchiseAllStarRostersByScope`). NO `Date.now` inside (caller supplies `createdAt`). NO production caller
+(dark/EMPTY). *(Shape is refinable pre-activation — the store holds no live data until post-D13.)*
+
+**E. trackerDb — `src/utils/trackerDb.ts`:** bump `TRACKER_DB_VERSION` 23 → **24**; add a guarded `onupgradeneeded` block
+`if (!db.objectStoreNames.contains('franchiseAllStarRosters')) { const s = db.createObjectStore('franchiseAllStarRosters',
+{ keyPath: 'id' }); s.createIndex('by_scope', ['franchiseId','seasonId','statsScopeId']); }`, mirroring the
+`franchiseL10Overlays` block at ~:430 EXACTLY.
+
+**F. syncConfig — `src/utils/syncConfig.ts`:** add `franchiseAllStarRosters: 'id',` to `SYNC_REGISTRY['kbl-tracker']`
+immediately after the `franchiseTraitOverlays` entry (~:19), mirroring `franchiseL10Overlays: 'id'`.
+
+**G. backup schema — `src/utils/backupRestore.ts`:** (1) add a `franchiseAllStarRosters: { keyPath: 'id', indexes: [{ name:
+'by_scope', keyPath: ['franchiseId','seasonId','statsScopeId'] }], optional: true }` entry to the `trackerStores` object
+(mirror the `franchiseL10Overlays` block at ~:168). (2) bump `STATIC_DATABASE_SCHEMAS['kbl-tracker'].version` 23 → **24**
+(~:353). `KBL_BACKUP_VERSION` STAYS **2** (additive store — mirror L10, which did NOT bump it). NOTE:
+`STATIC_DATABASE_SCHEMAS['kbl-tracker'].stores === trackerStores`, so the (1) entry ALSO satisfies the schema-equality
+guard exercised by test **K** below.
+
+**H. ledger-PIN test — `src/utils/tests/franchiseSeasonLedgerStorage.test.ts` (the L6b-1 dispatch-breaker — MUST be in this
+ticket):** alphabetically insert `'franchiseAllStarRosters'` into the `expectedTrackerStores` array (~:28); change BOTH
+`expect(TRACKER_DB_VERSION).toBe(23)` (~:276) and `expect(db.version).toBe(23)` (~:296) to `toBe(24)`; if a v23→v24 (or
+"current version") migration-survival test exists, extend it so the new store opens.
+
+**I. NEW storage test — `src/utils/tests/franchiseAllStarRostersStorage.test.ts`:** mirror the L10 store test — a put→get
+round-trip, by_scope listing, the empty-default read, and a shape/key assertion on the row.
+
+**J. manifest test — `src/utils/tests/franchiseSaveSlotManifest.test.ts` (1st site Codex's STOP-IF surfaced; additive
+coverage):** mirror the `franchiseL10Overlays` assertions (~:1216 + ~:1258): add
+`expect(SYNC_REGISTRY['kbl-tracker']).toHaveProperty('franchiseAllStarRosters', 'id');` and
+`expect(STATIC_DATABASE_SCHEMAS['kbl-tracker'].stores).toHaveProperty('franchiseAllStarRosters');` +
+`.toMatchObject({ keyPath: 'id' });` alongside the existing per-store checks.
+
+**K. backup-parity test — `src/utils/tests/backupRestore.franchiseParity.test.ts` (2nd site; the HARD guard — the
+schema-equality check at ~:311-313 asserts `Object.keys(STATIC_DATABASE_SCHEMAS['kbl-tracker'].stores).sort()` EQUALS the
+real `db.objectStoreNames.sort()`, so it BREAKS unless E + G both add the store):** mirror the `franchiseL10Overlays`
+treatment — (1) add an `allStarRosterRow` fixture (id-keyed, e.g. `id: "franchise-d2:season-d2:scope-d2:allstar"`, with the
+row fields incl. `selections: []`, `locked: false`, `lockedAtGameNumber: null`, `createdAt`); (2) add
+`"franchiseAllStarRosters"` to the `readwrite` tx store-name array (~:240-251); (3) add
+`tx.objectStore("franchiseAllStarRosters").put(allStarRosterRow);` (~:264); (4) add
+`expect(backup.databases[TRACKER_DB_NAME].franchiseAllStarRosters).toEqual([allStarRosterRow]);` (~:339) and a restore
+readback `await expect(readRecord("franchiseAllStarRosters", allStarRosterRow.id)).resolves.toEqual(allStarRosterRow);` (~:400).
+
+**HARD CONSTRAINTS:** edit ONLY A–K above. Do NOT touch `franchiseAwardsEngine.ts` (NO scoring), `processCompletedGame.ts`
+(NO per-game hook in L12-1 — the gate branch is a LATER ticket; it inserts AFTER the L11 branch closes at :654, before the
+designation `try` at :655), any reporter/morale/fame engine, any other `*.md`. NO `Math.random`/`Date.now` in the store
+module. Build-DARK: flag default OFF, store EMPTY, no writer. No git add/commit. Prefix all tsc/vitest with `NODE_ENV= `.
+
+**VERIFICATION (run ALL, paste ACTUAL):** `NODE_ENV= npm run build` exit 0 (this is `tsc -b` + vite — it FORCES the
+exhaustive `Record<FranchiseAwardCategory>` entries AND the store-list PIN; do NOT rely on `tsc --noEmit` alone — the
+L11-3 fix1 lesson); `NODE_ENV= npx vitest run src/utils/tests/franchiseAllStarRostersStorage.test.ts
+src/utils/tests/franchiseSeasonLedgerStorage.test.ts src/utils/tests/franchiseSaveSlotManifest.test.ts
+src/utils/tests/backupRestore.franchiseParity.test.ts` all green; report the new total tracker-store count.
+
+**STOP-IF:** any of the 4 new categories is NOT already in `AwardType` (`src/engines/awardEmblems.ts:13-17`) → STOP (don't
+invent emblems); a fresh `git grep -l "franchiseL10Overlays" -- 'src/*'` returns a file BEYOND the expected EIGHT — the 7
+store-mirror sites (`trackerDb.ts`, `syncConfig.ts`, `backupRestore.ts`, `franchiseL10OverlayStorage.ts`,
+`franchiseSeasonLedgerStorage.test.ts`, `franchiseSaveSlotManifest.test.ts`, `backupRestore.franchiseParity.test.ts`) PLUS
+`franchiseL10SweepCompute.ts` (the L10 per-game CONSUMER / business-logic — NOT a store-mirror site; L12's equivalent
+consumer is the DEFERRED L12-3 hook, so do NOT replicate it) → STOP + report ONLY the file(s) beyond those 8 (do NOT
+silently skip a real new mirror site — the L6b-1 failure mode); the `getTrackerDb`/store-open pattern differs from what the
+L10 module uses → STOP + report.
+
+**FORMAT:** 1) every changed file (incl. the mechanically-forced test/Record edits — enumerate ALL, with the total
+changed-path count); 2) the flag + the 4 category additions + the store row shape + every mirror site touched; 3)
+verification output (paste actual build + test + the store count); 4) "L12-1 complete" or "BLOCKED: <reason>". Do NOT commit.
+
+Use very high reasoning effort. Think step-by-step. Read `franchiseL10OverlayStorage.ts` + `trackerDb.ts` + `syncConfig.ts`
++ `backupRestore.ts` + `franchiseSeasonLedgerStorage.test.ts` (the mirror precedent at every site), `franchisePhase2Flags.ts`
+(the L11 flag block to clone), `franchiseAwardsStorage.ts` + `src/engines/awardEmblems.ts` (the category union), and grep
+every `Record<FranchiseAwardCategory`.
+
+**Status:** v1 DISPATCHED 2026-06-19 (AUTH-4) → Codex CORRECTLY STOPPED per the STOP-IF (found 2 unlisted mirror-test
+sites — `franchiseSaveSlotManifest.test.ts` [additive coverage] + `backupRestore.franchiseParity.test.ts` [its
+schema-equality check is the HARD guard]; no files changed). Contract REVISED to enumerate all 7 precedent sites + fix the
+store to id-keyed (J + K added). RE-DISPATCHED 2026-06-19 (AUTH-4). → v2 ALSO correctly stopped (two contract-wording bugs,
+not build issues: the STOP-IF's "git grep" list omitted the L10 CONSUMER `franchiseL10SweepCompute.ts` that legitimately
+appears in the grep's 8 results, and the `awardEmblems.ts` path was unstated so Codex guessed it wrong). Fixed: the
+consumer is now explicitly expected-and-excluded in the STOP-IF, and the path is pinned to `src/engines/awardEmblems.ts`.
+RE-DISPATCHED v3 2026-06-19 (AUTH-4). → **✅ VERIFIED + COMMITTED.** Codex(gpt-5.5, xhigh)-built (11 files: flag,
+category-widen, AWARD_FULL_LABELS, NEW id-keyed `franchiseAllStarRosters` store + its test, trackerDb v23→24, syncConfig,
+backupRestore schema+version, + the 3 pinning tests [ledger/manifest/parity]) → Opus independently audited the diff
+line-by-line (builder≠auditor) + the store module vs the `franchiseL10Overlays` precedent (faithful clone; correctly omits
+`by_target`/`delete`; delegates to the shared `getTrackerDb` — no separate connection, avoids the v-conflict-hang class) +
+the new storage test (non-vacuous: scope isolation, caller-timestamp preservation, `syncEngine.upsert` key, + a source-level
+shared-trackerDb/purity invariant) + ran the FULL host gate (Codex ran only the build + 4 targeted files). Host gate:
+`NODE_ENV= npm run build` exit 0 (7.89s) + full suite **7,737/443, 7,735 pass / 2 characterized fail** (`wpaRuntimeBoundary`
++ `franchiseManualSmokeFixture`), ZERO new reds (+8 = the new store test; the `EliminationTeamHub` order-flake passed this
+run). build-DARK (flag default OFF, store EMPTY, no writer/hook); trackerDb **v23→24**; KBL_BACKUP_VERSION stays **2**;
+tracker store count **43**. Two earlier dispatches correctly STOPPED on contract-wording bugs (not build issues) — the
+STOP-IF caught an under-specified mirror surface BEFORE any broken-mirror commit (the L6b-1 failure mode, prevented).
+**➡ NEXT = L12-2 (TV-family scorers: KK / Bust / Comeback — pure, no store).**

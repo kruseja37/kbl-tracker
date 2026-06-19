@@ -24,6 +24,10 @@ export type FranchiseAwardCategory = Extract<
   | 'KARA_KAWAGUCHI'
   | 'COMEBACK_PLAYER'
   | 'BUST_OF_YEAR'
+  | 'ALL_STAR'
+  | 'BENCH_PLAYER'
+  | 'BOOGER_GLOVE'
+  | 'RELIEVER_OF_YEAR'
 >;
 
 export interface FranchiseAwardCandidate {

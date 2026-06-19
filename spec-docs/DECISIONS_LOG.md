@@ -1764,3 +1764,26 @@ live-`getFameTier` label-purge to the post-D13 activation checklist (alongside t
 **Rationale:** lowest risk; no risky live-display change on a protected asset before the data model is live; satisfies the
 "races read the canonical ladder before any race goes live" requirement directly in the L12 build; no browser-verify
 needed now.
+
+## 2026-06-19 (AUTH-4 overnight) — L12-1 kickoff rulings (3 micro-forks the recon surfaced) + the L12 recon
+**Context:** the L12 grounding recon (`spec-docs/L12_SCOPE_MAP.md`, committed `58129601`) decomposed L12 into a 6-piece
+split and surfaced 3 micro-forks that gate L12-1 (the dark landing-infra ticket) but were NOT in the already-ruled 13 L12
+questions. JK present (a manual session); the Captain surfaced them rather than take AUTH-4 defaults on a costly-to-change
+persistence decision.
+**JK RULINGS:**
+- **(1) Proceed = contract L12-1 NOW** (the dark landing infra: the `isFranchisePhase2L12Enabled` flag + the
+  `FranchiseAwardCategory` +4-slot widening + the new All-Star roster store), mirroring the L11 recon→build cadence.
+- **(2) All-Star / standings persistence = DEDICATED STORE(S)** (override of "no new store / extend the award row"). The
+  All-Star roster persists as its own `franchiseAllStarRosters` IndexedDB store (it cannot fit the single-winner award
+  row); this is the FIRST of the "TWO ledger bumps" Q1 budgeted (trackerDb v23→24 + the C4 backup DoD + the
+  `franchiseSeasonLedgerStorage.test.ts` store-list PIN, in-ticket). The SECOND bump (a race-standings store, v24→25) is
+  DEFERRED to L12-3 — decide persist-vs-recompute-only when the composite shape is designed (default: recompute-only
+  unless the Almanac needs standings history).
+- **(3) The 3 new merit-award BASES = ACCEPT THE RECON DEFAULTS** (these were undefined in the live `scoreForCategory`
+  switch and not in the already-ruled basis list): **RELIEVER_OF_YEAR = relief-WAR / leverage; BOOGER_GLOVE = inverse-fWAR
+  (worst qualified fielder); BENCH_PLAYER = best reserve / role-player WAR.** Pure scoring, §16-tunable, easily revised.
+  These bind at **L12-3** (the scoring extension), NOT L12-1 — L12-1 only makes the 4 categories PERSISTABLE (the storage
+  union), it does NOT extend `FranchiseWarAwardCategory`/`scoreForCategory` (the second compile coupling; that is L12-3).
+**Process note:** a 2nd concurrent AUTH-4 worker produced a divergent 7-piece L12 recon in parallel (~08:16Z); JK ruled
+TAKE OVER + RECONCILE — the 6-piece adversarially-verified map is canonical (see SESSION_LOG / AUTONOMOUS_RUN_LOG
+2026-06-19). Keep exactly ONE AUTH-4 worker active.

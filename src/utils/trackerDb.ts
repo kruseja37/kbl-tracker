@@ -14,7 +14,7 @@
  */
 
 const DB_NAME = 'kbl-tracker';
-export const TRACKER_DB_VERSION = 23; // Must be the highest version any consumer ever used
+export const TRACKER_DB_VERSION = 24; // Must be the highest version any consumer ever used
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -435,6 +435,17 @@ export async function getTrackerDb(): Promise<IDBDatabase> {
           unique: false,
         });
         l10OverlayStore.createIndex('by_target', ['franchiseId', 'seasonId', 'statsScopeId', 'targetId'], {
+          unique: false,
+        });
+      }
+
+      // v24 / L12-1: dark franchise-instance All-Star roster store (§21 / L12).
+      // No production writer/reader yet; L12-4/L12-5 wire the dark roster flow later.
+      if (!db.objectStoreNames.contains('franchiseAllStarRosters')) {
+        const allStarRosterStore = db.createObjectStore('franchiseAllStarRosters', {
+          keyPath: 'id',
+        });
+        allStarRosterStore.createIndex('by_scope', ['franchiseId', 'seasonId', 'statsScopeId'], {
           unique: false,
         });
       }

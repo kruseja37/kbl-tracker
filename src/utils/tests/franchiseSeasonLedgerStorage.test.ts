@@ -33,6 +33,7 @@ const expectedTrackerStores = [
   'currentGame',
   'eliminationAllTimePlayerStats',
   'eliminationRunFameAggregates',
+  'franchiseAllStarRosters',
   'franchiseAwardsRows',
   'franchiseDesignationRows',
   'franchiseFameRecords',
@@ -273,7 +274,7 @@ describe('franchise season salary ledger storage', () => {
   test('trackerDb migration creates the ledger store and preserves every prior tracker store', async () => {
     const db = await initFranchiseSeasonLedgerDatabase();
 
-    expect(TRACKER_DB_VERSION).toBe(23);
+    expect(TRACKER_DB_VERSION).toBe(24);
     expect(db.name).toBe(DB_NAME);
     expect(db.version).toBe(TRACKER_DB_VERSION);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(expectedTrackerStores);
@@ -282,7 +283,7 @@ describe('franchise season salary ledger storage', () => {
     expect(Array.from(tx.objectStore(FRANCHISE_SEASON_LEDGER_STORE_NAME).indexNames)).toEqual(['by_scope']);
   });
 
-  test('v22 to v23 migration adds L10 overlays without losing prior stores or data', async () => {
+  test('v22 to v24 migration adds L10 overlays and All-Star rosters without losing prior stores or data', async () => {
     const {
       currentGameRow,
       flashpointRow,
@@ -293,7 +294,7 @@ describe('franchise season salary ledger storage', () => {
 
     const db = await initFranchiseSeasonLedgerDatabase();
 
-    expect(db.version).toBe(23);
+    expect(db.version).toBe(24);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(expectedTrackerStores);
 
     const tx = db.transaction(
@@ -303,6 +304,7 @@ describe('franchise season salary ledger storage', () => {
         'franchiseRatingsOverlays',
         'franchiseTraitOverlays',
         'franchiseL10Overlays',
+        'franchiseAllStarRosters',
       ],
       'readonly',
     );
@@ -326,6 +328,9 @@ describe('franchise season salary ledger storage', () => {
     const l10OverlayStore = tx.objectStore('franchiseL10Overlays');
     expect(l10OverlayStore.keyPath).toBe('id');
     expect(Array.from(l10OverlayStore.indexNames)).toEqual(['by_scope', 'by_target']);
+    const allStarRosterStore = tx.objectStore('franchiseAllStarRosters');
+    expect(allStarRosterStore.keyPath).toBe('id');
+    expect(Array.from(allStarRosterStore.indexNames)).toEqual(['by_scope']);
     await transactionToPromise(tx);
   });
 

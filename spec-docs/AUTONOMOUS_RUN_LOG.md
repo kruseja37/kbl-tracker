@@ -1743,3 +1743,20 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   extras / pause the cron. **Keep exactly ONE AUTH-4 worker active.**
 - **➡ NEXT = contract L12-1** in an attended/host session (Codex-built via `codex exec` stdin-from-contract → Opus-audited,
   build-DARK behind the NEW `isFranchisePhase2L12Enabled`, default OFF; trackerDb stays v23). Branch codex/franchise-v1-next; nothing pushed.
+
+## 2026-06-19 (AUTH-4 overnight) — L12-1 VERIFIED + COMMITTED: dark landing infra (flag + award-cat +4 + All-Star store, v24)
+- **JK ruled 3 L12-1 kickoff micro-forks** (DECISIONS_LOG): contract NOW · All-Star = a DEDICATED `franchiseAllStarRosters`
+  store (1st of Q1's two ledger bumps; race-standings store = deferred 2nd, at L12-3) · accept the recon merit bases
+  (RELIEVER/BOOGER_GLOVE/BENCH_PLAYER — bind at L12-3, not L12-1).
+- **Routing = Codex** (ratified): contract in PROMPT_CONTRACTS.md → `codex exec` (gpt-5.5, xhigh) stdin-pointer, background
+  + watchdog. **Codex's STOP-IF correctly fired on 2 dispatches (my contract-wording bugs, NOT build issues)** → I fixed
+  the contract each time (full 7-site mirror enumerated incl. the manifest + parity tests; the L10 CONSUMER
+  `franchiseL10SweepCompute.ts` excluded; `src/engines/awardEmblems.ts` path pinned; store fixed to id-keyed) → v3 built.
+  **An under-mirrored store was NEVER committed — the L6b-1 failure mode, prevented BEFORE the break.**
+- **L12-1 (11 files):** flag `isFranchisePhase2L12Enabled` (default OFF) · `FranchiseAwardCategory` +4 + the 4 exhaustive
+  `AWARD_FULL_LABELS` keys · NEW dark id-keyed `franchiseAllStarRosters` store mirroring `franchiseL10Overlays` at all 7
+  sites (trackerDb v23→**24**, syncConfig, backupRestore schema + `.version` 24, ledger-PIN/manifest/parity tests) + a
+  storage test. No engine/`processCompletedGame` touch (no scorer, no hook). KBL_BACKUP_VERSION stays 2; store count **43**.
+- **Audit (builder=Codex ≠ auditor=Opus):** line-by-line diff + L10-precedent compare (faithful; shared `getTrackerDb`, no
+  separate connection) + non-vacuous storage test. **FULL host gate:** build exit 0 (7.89s) + suite **7,737/443, 7,735 pass
+  / 2 characterized fail**, ZERO new reds (+8). build-DARK; trackerDb v24. **➡ NEXT = L12-2** (TV-family scorers — pure). Nothing pushed.
