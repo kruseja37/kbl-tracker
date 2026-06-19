@@ -11071,3 +11071,75 @@ non-vacuous (idempotency with a different 2nd endDate/reason; read-gate exclusio
 Host gate: `NODE_ENV= npm run build` exit 0 (8.56s) + full suite **7,703/439, 7,701 pass / 2 characterized fail**, ZERO
 new reds (+4). Committed (3 files + docs; not pushed). **➡ NEXT = L11-3 (flag + shared firing resolver) — HELD pending a
 concurrent-session coordination check (a second session is working L11–L14 design).**
+
+---
+
+## CONTRACT — L11-3 (flag + the shared `fireManager` resolver) — 2026-06-19 (AUTH-4 overnight)
+
+**ROUTE: Codex CLI (`codex exec`, prompt via stdin from this contract) | very high reasoning effort** (builder;
+live-path persistence integration). Auditor = Opus 4.8 Captain (independent; ≠ builder; cross-model triangle). Branch
+codex/franchise-v1-next. BUILD-DARK (gated by a NEW default-OFF `isFranchisePhase2L11Enabled`; the resolver has NO live
+caller — the manual UI [L11-Q13], the L11-3b auto-backstop, and L14 wire it later). Source of truth: `L11_SCOPE_MAP.md`
+§3 (L11-3) + DECISIONS_LOG L11 rulings (Q7/Q8/Q9/Q10/Q11) + L11-1 `computeFranchiseL11Firing` + L11-2 `setManagerFired`.
+
+**GOAL:** ONE shared resolver `fireManager(...)` that — gated by the L11 flag — reconstructs a team's firing snapshot
+from storage, computes the firing via L11-1, persists the fan-relief + per-player morale deltas, closes the fired
+manager's legacy (`setManagerFired`), and auto-generates a successor. ONE callable unit (manual valve + L11-3b
+auto-backstop + L14 all call it).
+
+**CHANGES (implement EXACTLY) — edit ONLY the 3 files below:**
+
+**A. `src/utils/franchisePhase2Flags.ts`** — add the 7th flag block, cloning the L10 block (lines 61-69) EXACTLY:
+`FRANCHISE_PHASE2_L11_ENABLED_DEFAULT = false`; `isFranchisePhase2L11Enabled(): boolean`;
+`setFranchisePhase2L11EnabledForTests(enabled: boolean | null): void`.
+
+**B. NEW `src/utils/franchiseManagerFiring.ts`** — `export async function fireManager(params)`:
+- params: `{ franchiseId; seasonId; statsScopeId; leagueId; teamId; mode?: ManagerMode (default 'franchise'); instanceId; reason: ManagerFiredReason; endDate: string; skipUserConfirm?: boolean; suppressFanReliefBump?: boolean }`.
+- result: `{ status: 'dark-noop' | 'fired' | 'no-active-manager'; firingReport?: FranchiseL11FiringReport; reliefApplied: boolean; ripplesApplied: number; firedManagerId?: string; successorManagerId?: string; reason?: string }`.
+- Logic IN ORDER:
+  1. **Flag gate FIRST:** `if (!isFranchisePhase2L11Enabled()) return { status:'dark-noop', reliefApplied:false, ripplesApplied:0, reason:'Phase-2 L11 disabled.' }` (normal play = zero-cost no-op, no loads).
+  2. **Resolve the fired manager:** `getManagerAssignment({teamId, mode, instanceId})`; if null OR `assignment.fired` OR `assignment.endDate` set → `return { status:'no-active-manager', reliefApplied:false, ripplesApplied:0 }`.
+  3. **Reconstruct the firing snapshot for `teamId`** — MIRROR `resolveL10Candidates` (`franchiseL10SweepCompute.ts`) but SCOPED to ONE team: enumerate the team's MLB players (`getAllFranchisePlayers` + `getPlayerRosterStatusForLeague(player,leagueId)==='MLB'` + `getPlayerTeamIdForLeague(player,leagueId)===teamId`); per player → `{ id, valueDelta (from `getFranchiseTrueValueRows` by playerId; absent → 0), personality (`normalizePersonality(player.personality)`), loyalty/resilience (from the player's `HiddenModifiers` if present; absent → leave undefined so L11-1 treats as neutral 50) }`. `teamFanMorale = (await getFranchiseMoraleSnapshot(scope,'team-fan',teamId))?.currentValue ?? 50`.
+  4. **Compute:** `report = computeFranchiseL11Firing({ teamFanMorale, players, reason })` (L11-1).
+  5. **Persist morale via `applyFranchiseMoraleEffect`** (`sourceEventId = `manager-fired:${teamId}:${seasonId}:${instanceId}``; `timestamp = params.endDate` — NO Date.now):
+     - relief: `if (!suppressFanReliefBump && report.reliefBumpDelta > 0)` → `applyFranchiseMoraleEffect({...scope, targetType:'team-fan', teamId, delta: report.reliefBumpDelta, reason:'manager.fired.relief', sourceEventId, timestamp})`; set `reliefApplied`.
+     - ripples: for each `report.playerRipples` with `moraleDelta !== 0` → `applyFranchiseMoraleEffect({...scope, targetType:'player', playerId, delta: moraleDelta, reason:'manager.fired.ripple', sourceEventId: `${sourceEventId}:${playerId}`, timestamp})`; count `ripplesApplied`.
+  6. **Close legacy:** `setManagerFired({teamId, mode, instanceId, endDate: params.endDate, reason})` (L11-2). `firedManagerId = assignment.managerId`.
+  7. **Successor (auto-gen, JK Q8):** `buildDefaultManagerProfile(<team identity>)` → `saveManagerProfile(...)` → `saveManagerAssignment({managerId: successor, teamId, mode, instanceId, startDate: params.endDate})`; `successorManagerId = successor`. **GROUND `buildDefaultManagerProfile`'s signature + the `ManagerTeamIdentity` shape from `managerIdentityStorage.ts` first**; if the team identity isn't cleanly resolvable from params/storage, STOP + report (do NOT guess the manager-assignment key).
+  8. `return { status:'fired', firingReport: report, reliefApplied, ripplesApplied, firedManagerId, successorManagerId }`.
+- NO `Date.now`/`Math.random` (timestamp caller-supplied; `buildDefaultManagerProfile` is seed-deterministic). NO live caller (build-DARK). Expose a `managerFiringSeam` (roster/compute/write fns) for test stubbing, mirroring `l10SweepSeam`.
+
+**C. NEW `src/utils/tests/franchiseManagerFiring.test.ts`** (fake-indexeddb; mirror `franchiseL10SweepCompute.test.ts`):
+- flag-off → dark-noop, zero loads/writes.
+- flag-on + active manager + a seeded roster (some net-negative `valueDelta` players) → `status:'fired'`; relief applied (team-fan snapshot rose); net-negative players' morale dropped, net-positive untouched; old assignment now `fired`; a NEW active successor assignment exists.
+- `suppressFanReliefBump:true` → `reliefApplied:false` but ripples still applied.
+- no active manager → `status:'no-active-manager'`, no writes.
+- determinism: same inputs (fixed `endDate`) → same result/writes.
+
+**HARD CONSTRAINTS:** edit ONLY `franchisePhase2Flags.ts`, the NEW `franchiseManagerFiring.ts`, its NEW test. Do NOT
+modify: the L11-1 engine, `managerWpa.ts`, `managerIdentityStorage.ts` (CALL its existing exports), `franchiseMoraleState.ts`
+(CALL `applyFranchiseMoraleEffect`/`getFranchiseMoraleSnapshot`), `masterMoraleMatrix.ts`, `trackerDb.ts` (NO version
+bump), `processCompletedGame.ts` (auto-backstop = L11-3b), the Almanac (L11-4), any `*.md`. NO live caller, NO new
+store/DB, NO `Date.now`/`Math.random`. No git add/commit. Prefix tsc/vitest with `NODE_ENV= `.
+
+**VERIFICATION (builder runs, reports ACTUAL):** `NODE_ENV= npx tsc --noEmit` exit 0; `NODE_ENV= npx vitest run
+src/utils/tests/franchiseManagerFiring.test.ts` all green. Report changed paths + the resolver logic as built + the
+seam-grounding decisions (instanceId / `buildDefaultManagerProfile`) + confirm no forbidden file changed + no
+trackerDb/store bump.
+
+**STOP-IF:** the team-identity for `buildDefaultManagerProfile` isn't cleanly resolvable from params/storage, OR the
+manager-assignment key (`instanceId`) contract is ambiguous → STOP + report (do not guess).
+
+**FORMAT:** 1) Files. 2) Resolver + seam decisions + any deviation. 3) Verification output (paste actual). 4) "L11-3
+complete" or "BLOCKED: <reason>". Do NOT commit.
+
+Use high reasoning effort. Think step-by-step. Read `franchiseL10SweepCompute.ts` (the `resolveL10Candidates` pattern),
+`managerIdentityStorage.ts` (assignment + `buildDefaultManagerProfile` API), `franchiseMoraleState.ts`
+(`applyFranchiseMoraleEffect`), and the L11-1 engine before building.
+
+**Status:** ✅ VERIFIED + COMMITTED (2026-06-19, AUTH-4). Codex-built → fix-iteration 1 (readonly→mutable
+`FranchiseL11FiringPlayer[]` accumulator — a `tsc -b` build break the host gate caught; Codex's `tsc --noEmit` missed it)
+→ Opus-audited VERIFIED (0 major / 1 documented open-decision-for-L11-4). Build-DARK, no live caller, trackerDb v23.
+**OPEN→L11-4:** the successor overwrites the fired assignment key → fired tenure-end must be persisted by L11-4's Almanac
+join (logged in AUTONOMOUS_RUN_LOG). Host gate: `npm run build` exit 0 (8.10s) + suite **7,708/440, 7,706 pass / 2
+characterized fail**, ZERO new reds (+5). Committed (3 files + docs; not pushed). **➡ NEXT = L11-3b.**

@@ -5809,3 +5809,11 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   L11 recon + rulings — a deliberate-looking parallel "get ahead of the curve" L11–L14 design worksheet. No concurrent
   COMMITS (git history linear + all-mine in-window); my code work is disjoint. **NEXT = L11-3 HELD** pending JK's
   coordination call (is the 2nd session intentional? adopt its worksheet? who owns the branch?). Nothing pushed.
+
+## 2026-06-19 (AUTH-4 overnight) — L11-3: shared fireManager resolver (build-DARK)
+- AUTH-4 engaged (caffeinate running; handoff gitignore fixed `ad75afa4`). L11-3 = flag `isFranchisePhase2L11Enabled` +
+  `src/utils/franchiseManagerFiring.ts` `fireManager()` (snapshot reconstruction + L11-1 compute + morale writes +
+  setManagerFired + auto-gen successor) + 5 tests. Codex-built → 1 fix-iteration (readonly→mutable accumulator, build break
+  the host gate caught) → Opus-VERIFIED. Host gate: build 0 + suite 7,708/440, 7,706 pass / 2 characterized fail, zero new
+  reds. **OPEN→L11-4:** successor overwrites the fired assignment key → fired tenure-end must be persisted by L11-4's
+  Almanac join (detail in AUTONOMOUS_RUN_LOG). Build-DARK; trackerDb v23. NEXT = L11-3b. Nothing pushed.

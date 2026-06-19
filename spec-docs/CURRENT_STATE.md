@@ -1,9 +1,10 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-19 — **ACTIVE (attended).** **L11 (manager firings) STARTED — recon + rulings + L11-1 engine
-+ L11-2 legacy-write DONE; the L11–L14 RULING PASS landed** (all 43 open Qs ruled via the parallel design session — 7 JK
-overrides + 2 field corrections; consolidated + committed here). **➡ NEXT = L11-3 (flag + shared firing resolver), now
-fully ruled.** *(prior:)* **L10 Q5/Q8 REWORK COMPLETE → L10 (random events) FULLY
+**Last Updated:** 2026-06-19 — **ACTIVE (AUTH-4 UNATTENDED OVERNIGHT).** **L11 manager-firings BUILD rolling under
+AUTH-4 — L11-1 engine + L11-2 legacy-write + L11-3 shared `fireManager` resolver DONE; the L11–L14 RULING PASS is
+consolidated (all 43 Qs ruled; 7 JK overrides + 2 field corrections).** Codex-built → Opus-audited, branch-only,
+build-DARK; trackerDb v23. **➡ NEXT = L11-3b (per-game auto-backstop trigger)** then L11-4 → L11-5 → fame double-ladder
+collapse → L12 (split) → L13 (split) → L14 → L-SIM. Per-ticket detail in `AUTONOMOUS_RUN_LOG.md`. *(prior:)* **L10 Q5/Q8 REWORK COMPLETE → L10 (random events) FULLY
 COMPLETE.** Continuous per-game cadence (Q5 — dropped the 20%-checkpoint gate; flat per-game §16 base rates) +
 `name_change` in the dark catalog (Q8 — rare distinct cosmetic-family event). **Builder routing RESTORED to Codex**
 (JK directive) — Codex CLI (gpt-5.5, xhigh) built via `codex exec` stdin-from-contract; Opus 4.8 audited (cross-model
@@ -70,7 +71,7 @@ is **~95% BUILT / production-ready** → it's a CLEANUP pass, not a build: domin
 files** (FranchiseHome 626 · TeamHubContent 506 · ScheduleContent 90 · AwardsWatchlist 30) → extract to KBL-palette
 theme tokens + minor polish (~1 week). **Timing: it's the LIVE surface, decoupled from D13/L-stack/GameTracker — do it
 ANYTIME (no gate forces a wait; mild bonus to doing tokens before the hub's future activation overlays).** Suite
-**7,703/439, 7,701 pass / 2 characterized fail (post-L11-2; +4 setManagerFired tests)** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` +
+**7,708/440, 7,706 pass / 2 characterized fail (post-L11-3; +5 fireManager tests)** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` +
 `GameTrackerLaunchState` — the 3rd an intermittent order-flake **confirmed passing solo 9/9**; `franchiseOffseasonGuards.component`
 is another such flake); trackerDb **v23**; branch codex/franchise-v1-next; **nothing pushed**. Session commits: R1-b1
 `474196e7` · R1-b2 `bbb839ce` · R2 `b80fa135` · R1-b3 `7e22e015` · R3 `9059f697` · W1 `6a934a9e` · PRE-ACT-TRAITS gate
@@ -194,6 +195,16 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## RIGHT NOW
 
+- **✅ L11-3 VERIFIED + COMMITTED (2026-06-19, AUTH-4) — the shared `fireManager` resolver (build-DARK).** Flag
+  `isFranchisePhase2L11Enabled` + NEW `src/utils/franchiseManagerFiring.ts`: gate → reconstruct the team firing snapshot
+  (MLB roster + per-player valueDelta/personality/loyalty/resilience + team-fan morale) → `computeFranchiseL11Firing`
+  (L11-1) → write relief + per-player ripples (`applyFranchiseMoraleEffect`) → `setManagerFired` (L11-2) → auto-gen
+  successor (`buildDefaultManagerProfile`). Codex-built → 1 fix-iter (readonly→mutable accumulator — a `tsc -b` build break
+  the host gate caught that Codex's `tsc --noEmit` missed) → Opus-VERIFIED. Host gate: build 0 (8.10s) + suite
+  **7,708/440, 7,706 pass / 2 characterized fail**, ZERO new reds (+5). **⚠ OPEN→L11-4:** the successor overwrites the
+  fired `[mode,instanceId,teamId]` assignment key, so the fired tenure-end (date/reason) must be persisted by L11-4's
+  Almanac join, NOT the transient assignment (detail in `AUTONOMOUS_RUN_LOG.md`). trackerDb v23; build-DARK. **➡ NEXT =
+  L11-3b** (per-game auto-backstop trigger). *(Prior entries below.)*
 - **✅ L11–L14 RULING PASS consolidated + COMMITTED (2026-06-19, attended) — the design-session handoff.** A parallel
   design session (`fe65bf4b`, workflow `wf_1f3e2c10-e94`, 6 agents w/ adversarial auditors) brought L12/L13/L14 to the
   L11 §7 decision-ready standard; JK ruled all 43 open questions in one pass (`L11_L14_OPEN_QUESTIONS.md`). The build

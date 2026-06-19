@@ -1565,3 +1565,46 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
 - **⇒ L10 (random events) COMPLETE: L10-1 `607fa015` · L10-2 `a830a61f` · L10-3 `8a33d9d3` · L10-4 `057340ed` · L10-5 —
   all build-DARK, activate post-D13.** **➡ NEXT = L11 (managers)** per the L-stack (L11 → L12 races/All-Star/awards-fame →
   L13 relationships → L14 rebrand → the L-SIM gate); a fresh subsystem needing a grounding recon before contracting.
+
+## 2026-06-19 — AUTH-4 OVERNIGHT RUN RE-ENGAGED (JK switched it on; rulings all locked)
+- **Mode:** AUTH-4 unattended. JK ruled all 43 L11–L14 questions (committed `d8bd0670`), so the soul-layer DESIGN is
+  pre-decided — tonight is pure build to the ratified spec + rulings. `caffeinate -i -s` running (Mac stays awake).
+  Builder routing = **Codex** (`codex exec`, stdin-from-contract, harness sandbox disabled per call); auditor = Opus
+  Captain (cross-model triangle). Branch codex/franchise-v1-next; commit, NEVER push; co-author trailer; NODE_ENV= on all
+  tsc/vitest; each ticket gates tsc 0 + build 0 + the characterized suite baseline (now **7,703/439, 2 characterized
+  fail**: wpaRuntimeBoundary + franchiseManualSmokeFixture; trackerDb v23).
+- **Handoff safety:** `.gitignore` un-ignored `HANDOFF_NEEDED`/`HANDOFF_DONE_*` (`ad75afa4`) so the cron resume picks up
+  a handoff from committed state. On context-limit: Session-End + write+COMMIT `HANDOFF_NEEDED` (next_ticket/branch/
+  resume_note), then stop; the cron launches a fresh session.
+- **Tonight's QUEUE (build to spec, document, keep rolling):** L11-3 (flag + shared `fireManager` resolver) → L11-3b
+  (auto-backstop trigger reviving `managerFireProbability`) → L11-4 (Almanac fire/hire-date join + fired marker) → L11-5
+  (reporter tap) → the fame double-ladder collapse (L12-Q10 pre-L12 cleanup) → L12 (recon-split: award-cat ext / All-Star
+  roster / race standing / TV-family) → L13 (recon-split: §24 taxonomy / formation gate / matrix edge rows / reporter
+  inaccuracy) → L14 (rebrand cascade) → L-SIM gate. All build-DARK; magnitudes = §16 placeholders.
+- **DONE pre-run (this session, committed):** L10-Q5Q8 `f1d3fe53` · L11 recon `cf097d09` · L11-1 `46c3c761` · L11-2
+  `1821ad21` · worksheet `41bc91c6` · ruling-pass consolidation `d8bd0670` · gitignore `ad75afa4`.
+
+## 2026-06-19 — L11-3: shared `fireManager` resolver — Codex-built → fix1 → Opus-VERIFIED → COMMITTED
+- **Built (3 files):** flag `isFranchisePhase2L11Enabled` (default-OFF, 7th block) + NEW `src/utils/franchiseManagerFiring.ts`
+  (`fireManager(params)`: flag-gate → resolve active assignment → reconstruct the team's firing snapshot [MLB roster +
+  per-player valueDelta/personality/loyalty/resilience + team-fan morale, mirror `resolveL10Candidates` scoped to teamId]
+  → `computeFranchiseL11Firing` [L11-1] → write relief [unless suppressFanReliefBump] + per-player ripples via
+  `applyFranchiseMoraleEffect` → `setManagerFired` [L11-2] → auto-gen successor [`buildDefaultManagerProfile`]) + a 5-test
+  suite + a `managerFiringSeam`. Caller-supplied `endDate` (no Date.now); build-DARK (no live caller).
+- **Seam decisions:** `instanceId` passed through (no key guessed); `buildDefaultManagerProfile` takes `ManagerTeamIdentity`
+  resolved from `getAllFranchiseTeams`; added `seasonNumber` to params (required by `applyFranchiseMoraleEffect` scope).
+- **fix1 (build break the host gate caught):** `firingPlayers` was typed `readonly FranchiseL11FiringPlayer[]` → `.push`/`.sort`
+  illegal under `tsc -b` (Codex's `tsc --noEmit` missed it). Fixed = mutable `FranchiseL11FiringPlayer[]` accumulator.
+  PROCESS: future contracts verify with `NODE_ENV= npm run build` (not just tsc --noEmit).
+- **⚠ OPEN DECISION → L11-4:** the successor `saveManagerAssignment` reuses the `[mode,instanceId,teamId]` key → it
+  OVERWRITES the `setManagerFired` tombstone, so the fired manager's `fired`/`endDate`/`reason` in the assignment store is
+  TRANSIENT. The firing IS recorded in morale history (sourceEventId `manager-fired:…`) + `firedManagerId` is returned, but
+  the fired tenure-end (date/reason) must be persisted DURABLY by **L11-4** (the Almanac `ManagerTeamTenureAggregate`
+  fire/hire-date fields, per JK-Q9) — captured from the firing event/`firedManagerId`, NOT by reading the overwritten
+  assignment. L11-4 may restructure the resolver order (capture legacy before the successor swap) or drop the now-transient
+  `setManagerFired` from the replace path. NOT a safety wall (build-DARK, no live caller).
+- **Audit VERDICT VERIFIED** (0 major / 1 documented open-decision-for-L11-4): resolver read line-by-line; tests
+  non-vacuous (flag-off no-loads; fired→relief+ripple+successor+morale snapshots rose/dropped, net-positive untouched;
+  suppress→no relief; no-active-manager→no writes; determinism). Host gate: `NODE_ENV= npm run build` exit 0 (8.10s) +
+  full suite **7,708/440, 7,706 pass / 2 characterized fail** (wpaRuntimeBoundary + franchiseManualSmokeFixture), ZERO new
+  reds (+5). trackerDb stays **v23**. ➡ NEXT = L11-3b (per-game auto-backstop trigger reviving `managerFireProbability`).
