@@ -1,10 +1,23 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-18 — **SESSION END / HANDOFF.** This session: **L10 COMPLETE** (random events, build-DARK) →
-JK ruled Q1–Q12 → **FINDING-150** (L9b built 16 of ~50 buildable traits) → **trait measurement model RATIFIED**
-(`TRAIT_MEASUREMENT_SPEC.md §0`, `703d78b9`) → **`ROADMAP_TO_V1.md` created** (`dc0ad199`, 22 done / 20 outstanding).
-**➡ NEXT SESSION STARTS THE L9b REBUILD at R-E** (enabling pieces) per `TRAIT_MEASUREMENT_SPEC.md §0.4` — see RIGHT NOW +
-`HANDOFF_NEEDED`. Suite 7,559/438; trackerDb v23; branch codex/franchise-v1-next; nothing pushed.
+**Last Updated:** 2026-06-18 — **SESSION END / CHECKPOINT (attended).** This session ran the **L9b trait-reality
+REBUILD** and landed **R-E + R1-a**. (1) **Closed the recurring spec-leak at its root + RATIFIED the measurement
+model** — `TRAIT_MEASUREMENT_SPEC.md` is now ONE authoritative cited source (§0.6 proxy table [47 earnable, every
+cell cited via reconciliation wf_c4bac237-5d7, spec-over-code] / §0.7 code-deltas / §0.8 gates [personality is a
+TILT never a gate; Two Way pitcher-only, NO batting gateway] / §0.9 R1 derivations); purged ALL stale framing
+(personality-primary-no-proxy, the Two-Way gateway, the fielding/hitting conflation, Noodle Arm) across 4 spec docs;
+JK rulings durable in DECISIONS_LOG (**`d71767aa`**). (2) **R-E COMPLETE** — **`9eeb69d5`** (R-E-a: E2 charisma +
+positive-Resilience tilts + 3 LIVE latent-bug fixes — Cannon Arm/Durable/Injury Prone tilts were silently dead) ·
+**`fc3d9dab`** (R-E-b: E3 re-evaluate-to-drop = displacement ranks by recomputed **P**); **E1 deferred to R3** (the
+Noodle-Arm cut removed its near-term consumer). (3) **R1-a COMPLETE** — **`a5126afb`** (10 clean outcome-proxy
+traits into BUILDABLE_TRAITS: strikeout family [full K-family] · Slow Poke/Sprinter/Mind Gamer · Pick Officer/Easy
+Jumps · K Neglector acq delta). **Earnable v1 trait set 16 → 26.** All build-DARK; builder≠auditor + full host gate
+each. **➡ NEXT = R1-b** (the 6 ruled-gap traits per **§0.9**, SPLIT **R1-b1** [Big/Little Hack percentile-merge ·
+Base Rounder · Distractor] + **R1-b2** [Two Way wOBA-vs-pitcher-pool one-signal/position-at-grant · Utility
+primary-position plumbing · Crossed Up/Bunter opt-in]) → **R2** (platoon/count-family handedness) → **R3** (Ace
+Exterminator + the deferred E1 grade thread) → L11–L14 → L-SIM gate. **FINDING-150 rebuild IN PROGRESS.** Suite
+**7,584/438, 7,582 pass / 2 characterized fail**; trackerDb **v23** (pure engines, no store); branch
+codex/franchise-v1-next; **nothing pushed**. See `HANDOFF_NEEDED` for the R1-b resume.
 *(Prior arc-narrative preserved below for context.)*
 *(Historical:* **✅ L9b COMPLETE — the trait-from-reality engine, the "game-changer feature." NOW L10**
 (random events). L9b-3c committed → L9b-3 COMPLETE → **L9b COMPLETE.** Full L9b chain: L9b-1 scorer `398533d1` ·
@@ -811,6 +824,12 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## SUITE BASELINE
 
+**7,584 tests / 438 files** — full suite run 2026-06-18 (attended, real node v20, `NODE_ENV=`) after **R1-a**
+(`a5126afb`, 10 clean outcome-proxy traits): **7,582 pass / 2 fail** = EXACTLY the characterized baseline
+(`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`). ZERO new reds across the whole L9b-rebuild arc this session
+(R-E-a +9 / R-E-b +4 / R1-a +12 over the post-L10-5 7,559 baseline; all additive tests in existing files, +0 new
+files — pure build-dark engines imported by no production path cannot regress other tests). Build exit 0. trackerDb
+**v23** unchanged (R-E + R1-a are pure engine work — no store). *(Prior baselines retained below for the arc trail.)*
 **7,559 tests / 438 files** — full suite run 2026-06-18 (fresh attended session, real node v20, `NODE_ENV=`) after
 **L10-5** (the pure reporter news adapter → **L10 COMPLETE**): **7,557 pass / 2 fail** = EXACTLY the characterized
 baseline (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` 5000ms timeout). ZERO new reds (+9 tests / +1 file =

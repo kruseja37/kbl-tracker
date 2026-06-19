@@ -5505,3 +5505,38 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - **NEXT = L10-3** (default-OFF `isFranchisePhase2L10Enabled` flag + `persistDarkL10ForCompletedGame` league-sweep hook
   gated by flag AND `isCheckpointBoundary`, wiring L10-1 → L10-2; mirror L9b-3b-ii; 6th gate branch after
   processCompletedGame.ts:632). Loop continues under AUTH-4.
+
+## 2026-06-18 (attended, fresh session) — L9b trait-reality REBUILD: spec ratified + R-E + R1-a (CHECKPOINT)
+- Session-start reads + RESTATE; JK confirmed (attended). Picked up the L9b rebuild at R-E per `HANDOFF_NEEDED`.
+- **Spec-leak root-caused + fixed (the heart of the session).** At R-E kickoff the Captain twice re-surfaced the
+  superseded "personality-primary (no data proxy)" framing for Big/Little Hack + the count-family, LOSING JK's §0.2
+  data-proxy rulings — the 3rd recurrence of the soul-layer inference pattern. Root cause: `TRAIT_MEASUREMENT_SPEC.md`
+  was internally CONTRADICTORY (ratified §0 sitting over un-updated §B/§C/§D tables), AND the personality column had
+  been sourced from the CODE's `IMAGE_DRIVER_SETS` (narrower than §VI.3 — it omits the universal Layer-1 Ambition/
+  Resilience tilt). FIX: rewrote the spec to ONE authoritative source — **§0.6** proxy table (47 earnable, every cell
+  cited via reconciliation workflow `wf_c4bac237-5d7`, precedence §0.2>§VI.3>code), **§0.7** code-deltas, **§0.8**
+  gates, **§0.9** R1 derivations; purged stale phrasings across TRAIT_MEASUREMENT_SPEC + TRAIT_SIGNAL_CERTIFICATION +
+  TRAIT_DETECTION_SCOPE_AUDIT + a traitRealityScorer comment. Two process lessons → SESSION_RULES pen.
+- **JK rulings (DECISIONS_LOG):** NO personality-only traits; Stimulated → out; First Pitch = first-pitch hits/outs
+  (opt-in); Two Way = elite hitting (wOBA/PA vs the PITCHER peer pool), pitcher-only, NO batting gateway, C/IF/OF
+  position assigned at grant; Noodle Arm CUT (no clean signal); charisma mirrors resilience (K Neglector = low
+  Charisma + Timid/Droopy); two-layer personality (Layer-1 universal Ambition/Resilience + Layer-2 image axis;
+  personality is a TILT never a gate); Big/Little Hack = percentile-merge (Option B); Distractor = batter-reaches-base
+  (hit/walk/HBP) while owner on 1B/2B; Base Rounder = beyond-forced-minimum; Crossed Up/Bunter opt-in denominators;
+  Utility primary-position plumbing; grade-freshness app-wide (separate ticket). Spec committed `d71767aa`.
+- **R-E COMPLETE** (build-DARK; builder = fresh in-session subagent ≠ auditor = Opus Captain; full host gate each):
+  **R-E-a `9eeb69d5`** (E2 charisma factor + positive-Resilience path + 3 LIVE latent-bug fixes — Cannon Arm/Durable/
+  Injury Prone tilts were silently dead) · **R-E-b `fc3d9dab`** (E3 re-evaluate-to-drop = displacement ranks by the
+  recomputed P, not stale `HeldTrait.strength`). E1 deferred to R3.
+- **R1-a COMPLETE `a5126afb`:** 10 clean outcome-proxy traits into BUILDABLE_TRAITS — K Collector/K Neglector/Whiffer/
+  Tough Out/Easy Target (full K-family `{K,Kc,Ꝁ,D3K,WP_K,PB_K}`) · Slow Poke (DP) · Sprinter (FC) · Mind Gamer (walk)
+  · Pick Officer/Easy Jumps (opposing steal-success via `runnerAttribution.pitcherId`) — new `addOutcomeRateSignals`
+  + a pitcher-keyed extension of `addStealSignals`; + K Neglector acq image-set delta; + the §0.9 derivations spec.
+  **Earnable v1 set 16 → 26.**
+- **Suite:** 7,584/438, 7,582 pass / 2 characterized fail (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`),
+  **ZERO new reds** across all 4 commits. trackerDb **v23** (pure engines, no store). Routing note: switched the
+  builder from the Codex CLI to in-session subagents (the contract prompts' backticks/`$` corrupt a shell-arg
+  dispatch) — the L10-4/L10-5 precedent; triangle preserved.
+- **NEXT = R1-b** (6 ruled-gap traits per §0.9; SPLIT R1-b1 [Big/Little Hack, Base Rounder, Distractor] + R1-b2
+  [Two Way, Utility, Crossed Up, Bunter]) → R2 → R3 → L11–L14 → L-SIM gate. **CHECKPOINTED by JK** (clean milestone
+  after R-E + R1-a). FINDING-150 rebuild in progress. Nothing pushed.

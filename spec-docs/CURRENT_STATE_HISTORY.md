@@ -1068,3 +1068,19 @@ background + a shell-native watchdog (macOS has no `timeout` — see the `codex-
 CONTEXT-HANDOFF (clean boundary after 7 feature commits + heavy context) → fresh session resumes at **L8** under AUTH-4.
 NEXT: **L8** ratings development (first real writer through L2; every-20% checkpoint × §8 dampener × personality ×
 Ambition/Resilience → overlays via L2 confirm; ratings only; likely SPLIT L8a/L8b) → L9a → L9b → L10 → L11–L14 → L-SIM gate.
+
+---
+
+**2026-06-18 (outgoing snapshot — superseded by the L9b-rebuild checkpoint):** L10 COMPLETE (random events,
+build-DARK; L10-1..5) → JK ruled Q1–Q12 → FINDING-150 (L9b had built only 16 of ~50 buildable traits) → trait
+measurement model RATIFIED (`TRAIT_MEASUREMENT_SPEC.md §0`, `703d78b9`) → `ROADMAP_TO_V1.md` created (`dc0ad199`).
+Handoff to the L9b rebuild at R-E. Suite 7,559/438; trackerDb v23; branch codex/franchise-v1-next; nothing pushed.
+
+**2026-06-18 (L9b-rebuild checkpoint — this session):** the L9b trait-reality REBUILD started; R-E + R1-a landed.
+(1) Spec-leak root-caused + fixed → ONE authoritative measurement source (`TRAIT_MEASUREMENT_SPEC.md` §0.6 cited
+proxy table / §0.7 code-deltas / §0.8 gates / §0.9 R1 derivations), stale framing purged across 4 spec docs; rulings
+durable in DECISIONS_LOG (`d71767aa`). (2) R-E COMPLETE — `9eeb69d5` (E2 charisma + positive-Resilience + 3 live
+latent-bug fixes) + `fc3d9dab` (E3 displacement-on-recomputed-P); E1 deferred to R3. (3) R1-a COMPLETE — `a5126afb`
+(10 clean outcome-proxy traits). Earnable v1 set 16 → 26; all build-DARK; builder≠auditor + full host gate each.
+Suite 7,584/438, 7,582 pass / 2 characterized fail; trackerDb v23. NEXT: R1-b (6 ruled-gap traits per §0.9, SPLIT
+b1 AtBat-proxies / b2 Two Way+Utility+opt-in) → R2 → R3 → L11–L14 → L-SIM gate. FINDING-150 rebuild in progress.
