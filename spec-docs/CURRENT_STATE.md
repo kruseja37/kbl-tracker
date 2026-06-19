@@ -1,6 +1,23 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-19 — **ATTENDED session (JK present), checkpointed for a fresh session.** **✅ L12-4 COMPLETE
+**Last Updated:** 2026-06-19 — **ATTENDED session (JK present), checkpointed for a fresh session.** **🔄 L12-5 IN PROGRESS
+(4 of 5) — all four PAYOUT MECHANICS built + committed; only the live wiring (5e) remains.** L12-5 = the award/All-Star
+**payout layer** (emission + L3 race-snub morale + honor→reach-floor ratchet) for the marquee honors (MVP/CY/All-Star — Q6).
+Recon + 3 JK rulings done (snub = **close losers only**; the new race tap = **snub-only**, keep the legacy nod; reach-floor =
+**whole team, starters get more**) → `spec-docs/L12-5_SCOPE_MAP.md`. **Built (each Codex-built → Opus-audited → full host gate,
+build-DARK / ORPHANED-PENDING):** 5a `f1ba864a` (`AWARD_RESULT` NarrativeEventType + pure `buildFranchiseAwardSeasonNewsEvent`
+reporter adapter) · 5b `85c4cb72` (seam-injectable `emitFranchiseHonorNews` emit-glue: flag→effectiveConfig→gate→honorKind
+dedup→reporter→take→persist) · 5c `2e1552e4` (the L3 snub: `MORALE_TAP_REGISTRY.race` fresh non-neutral resolver +
+`{kind:'race'}` event [the make-or-break] + `pickRaceSnubVictims` close-losers + seam apply, L12+Morale gated) · 5d `644a4e29`
+(honor→reach-floor: non-decaying `applyHonorHeatBump` + `honorHeatBump` ladder mvp≥cy≥allStarStarter≥allStarReserve + the
+L12+Fame-gated ratchet). **⚠ TWO LIVE CORRECTNESS TRAPS verified + handled:** the snub tap fires ONLY on `kind:'race'` (the
+designation template uses `{type}` → bypasses it) + the resolver must return a fresh non-neutral object; the reach-floor needs
+a THIRD flag (Fame) for its record substrate. suite **7,818/455, ZERO new reds**; trackerDb v24; branch-only.
+**➡ NEXT = L12-5e** (the ONLY impure/live-path piece — wire emit+snub+reach-floor at the TWO trigger edges: All-Star at the
+60% lock in `processCompletedGame` [fire on `'persisted-locked'`], MVP/CY at season-end via a PURE `emitFranchiseHonors(scope)`
+module called from the `FranchiseHome` `isSeasonOver` effect [the emit `seasonNewsItems` dedup is the fire-once guard for all
+three effects]). Likely SPLIT 5e-1 (All-Star edge) + 5e-2 (season-end FranchiseHome edge — highest risk). *(prior:)* **✅ L12-4
+COMPLETE
 (a/b/c/d) — the All-Star roster selection engine + 60% lock is FULLY BUILT.** v1 = **ONE league-wide 26-man team, any league
 size** (8 fame-led position starters + 5 family-grouped merit backups + 12 pitchers [4 SP/1 backup SP/5 RP/2 backup RP,
 usage-classified via `gamesStarted`] + 1 fame-led WILDCARD); **no DH; two-way = stronger side only.** User-selectable
