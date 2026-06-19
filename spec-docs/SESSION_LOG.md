@@ -5953,3 +5953,26 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   exit 0 (7.89s) + full suite **7,737/443, 7,735 pass / 2 characterized fail** (`wpaRuntimeBoundary` +
   `franchiseManualSmokeFixture`; `EliminationTeamHub` order-flake passed), ZERO new reds (+8 = the new store test).
   build-DARK; trackerDb v24. **➡ NEXT = L12-2** (TV-family scorers — pure, no store). Branch codex/franchise-v1-next; nothing pushed.
+
+## 2026-06-19 (AUTH-4 overnight) — L12-2: pure TV-family scorers (KK / Bust / Comeback) + a JK measurement correction
+- **JK CORRECTION (pre-dispatch) — L12-Q7 Comeback measurement:** the Captain drafted the Comeback score as
+  `max(currentTV − own running season-low)` over checkpoints (the worksheet's literal phrasing) = the max rise above the
+  running min at ANY checkpoint. JK caught it BEFORE dispatch: the award must measure **the CURRENT gap between season-low
+  and current TV** (`currentTV − seasonLow`), so a player who peaks mid-season then FALLS APART by season-end does NOT win.
+  Corrected the L12-2 contract + `L12_SCOPE_MAP.md` (§1/§2/§3/§4 Q7) + logged it (DECISIONS_LOG 2026-06-19) + a pending
+  lesson (SESSION_RULES: surface ambiguous measurement phrasings for a ruling, award/value metrics too, not just soul-layer).
+  Side benefit: simpler engine — `min` is order-independent, NO checkpoint ordering needed.
+- **L12-2 (Codex gpt-5.5; 2 new files):** PURE `src/engines/franchiseTvFamilyScorer.ts` `computeFranchiseTvFamilyRaces({values,
+  snapshots})` → `{kk, bust, comeback}`, each a `{playerId, score, percentile, rank}[]`. KK score = `valueDelta`; Bust =
+  `−valueDelta`; Comeback = `currentTV − min(currentTV, that player's snapshot trueValues)` (currentTV from the cumulative
+  `values` row). percentile via the lifted `getPercentile` (scores sorted asc); rank 1-based after a DESC sort; ties broken
+  by `playerId.localeCompare`. Imports ONLY `getPercentile` (no storage/utils import — fully decoupled; a later hook maps
+  rows → inputs). PURE: no I/O/Date/random/async; inputs not mutated.
+- **Audit (builder=Codex ≠ auditor=Opus):** engine read line-by-line + the 8-test file confirmed non-vacuous — the key
+  Comeback test (snapshots 50→20→45→**30**, currentTV 30 ⇒ score 10) proves the falls-apart player LOSES to a currently-
+  recovered player (now 48 ⇒ score 28); snapshotless ⇒ score 0 but still ranked; empty values ⇒ empty categories; single
+  candidate ⇒ `getPercentile` = 1 (asserted); determinism; playerId tiebreak. **FULL host gate:** `NODE_ENV= npm run build`
+  exit 0 (7.57s) + full suite **7,745/444, 7,743 pass / 2 characterized fail** (`wpaRuntimeBoundary` +
+  `franchiseManualSmokeFixture`), ZERO new reds (+8). PURE/build-DARK (no caller/flag/store; trackerDb stays v24).
+- **➡ NEXT = L12-3** (race-standing weighted composite + bands + Q3 close-race tilt + Q4 GG defensive-fame share — the
+  genuinely-new design logic; reads `resolveFameTier` ONLY per Q10). Branch codex/franchise-v1-next; nothing pushed.

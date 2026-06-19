@@ -464,6 +464,16 @@ agent edits the ratified rules without JK. (JK ruling 2026-06-14.)
   genuinely unavailable. (Origin: the Captain auto-defaulted this L10-Q5Q8 build to a subagent, then to a /tmp prompt
   duplicate; JK caught both and pointed at `AI_TEAM_OPERATING_MODEL.md`.)
 
+- **Surface ambiguous measurement phrasings, don't pick a reading (JK correction 2026-06-19, extends the soul-layer
+  no-inference rule to award/value metrics):** When a spec measurement/formula is phrased ambiguously — e.g.
+  `max(currentTV − own running season-low)` can mean EITHER "the current gap from the season trough" OR "the max rise above
+  the running minimum at any checkpoint" — always SURFACE the interpretation fork for a JK ruling BEFORE baking it into a
+  build contract, for ANY earnable/award/value metric (not only the soul-layer traits). Because the spec phrasing can be
+  misread and a plausible-but-wrong measurement silently corrupts how the asset/award is earned, and it is only caught if
+  JK happens to be watching the dispatch. (Origin: the Captain read the Comeback-Player score as max-rise-over-checkpoints
+  and was about to dispatch the L12-2 build; JK caught it pre-dispatch — the award must measure the CURRENT gap so a player
+  who peaks mid-season then falls apart does NOT win. DECISIONS_LOG 2026-06-19 "L12-Q7 Comeback measurement CLARIFIED".)
+
 ### Pending cleanup (not a rule — a tracked repo action)
 - **spec-assembler duplicate:** two divergent copies exist —
   `.claude/skills/spec-assembler/SKILL.md` (511 lines, CANONICAL per JK

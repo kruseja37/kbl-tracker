@@ -11429,3 +11429,101 @@ run). build-DARK (flag default OFF, store EMPTY, no writer/hook); trackerDb **v2
 tracker store count **43**. Two earlier dispatches correctly STOPPED on contract-wording bugs (not build issues) — the
 STOP-IF caught an under-specified mirror surface BEFORE any broken-mirror commit (the L6b-1 failure mode, prevented).
 **➡ NEXT = L12-2 (TV-family scorers: KK / Bust / Comeback — pure, no store).**
+
+---
+
+## CONTRACT — L12-2 (TV-family scorers: KK / Bust / Comeback — pure engine) — 2026-06-19 (AUTH-4 overnight)
+
+**ROUTE: Codex CLI (`codex exec`, prompt via stdin from this contract) | very high reasoning effort** (builder; PURE
+deterministic engine, low risk — mirrors the L11-1 shape). Auditor = Opus Captain (cross-model triangle; builder≠auditor).
+Branch codex/franchise-v1-next. BUILD-DARK: NO production caller, NO flag, NO store, NO trackerDb/version change — a pure
+function that has zero effect until a later L12 hook loads the TV rows and calls it. Source of truth:
+`spec-docs/L12_SCOPE_MAP.md` §2 mechanic #4 + §3 (L12-2) + the L12-Q7 ruling (DECISIONS_LOG 2026-06-18 + the
+2026-06-19 L12-1 kickoff entry: "accept the recon merit/TV bases").
+
+**GOAL:** a PURE, deterministic engine that, given a season's per-player TrueValue rows + per-checkpoint TrueValue
+snapshots, ranks the three TV-family races. TV is OUT of the merit-WAR awards (that is L12-3); it powers ONLY these three.
+Build-DARK; no caller (a later ticket loads `getFranchiseTrueValueRows`/`getFranchiseTrueValueSnapshotRowsByScope` and feeds
+this engine).
+
+**CHANGES (create ONLY these 2 files):**
+
+**A. NEW `src/engines/franchiseTvFamilyScorer.ts`** — PURE (no IndexedDB / `Date.now` / `Math.random` / async / I/O).
+Define minimal input interfaces (decoupled from the storage types — import NOTHING from `src/utils/`):
+```ts
+export interface TvFamilyValueInput { playerId: string; valueDelta: number; trueValue: number; } // per player; trueValue = the CURRENT cumulative value (Comeback uses it)
+export interface TvFamilySnapshotInput { playerId: string; checkpoint: string | number; trueValue: number; } // per-checkpoint
+export interface TvFamilyCandidate { playerId: string; score: number; percentile: number; rank: number; }
+export interface FranchiseTvFamilyResult { kk: TvFamilyCandidate[]; bust: TvFamilyCandidate[]; comeback: TvFamilyCandidate[]; }
+export function computeFranchiseTvFamilyRaces(
+  input: { values: readonly TvFamilyValueInput[]; snapshots: readonly TvFamilySnapshotInput[] },
+): FranchiseTvFamilyResult
+```
+Scoring (all three: "higher score = better candidate = rank 1", ties broken by `playerId.localeCompare` ascending for
+determinism; `percentile` via `getPercentile(score, scoresSortedAscending)` from `../engines/percentile`? — it lives at
+`src/engines/percentile.ts`, so import `{ getPercentile } from './percentile'`):
+- **KK** (the "league-wide Fan Favorite" — most undervalued): per player, `score = valueDelta` (signed; higher = more
+  undervalued). Rank by score DESC.
+- **Bust** (same metric INVERTED — most overvalued): per player, `score = -valueDelta` (so the most-negative valueDelta
+  becomes the highest bust score). Rank by score DESC.
+- **Comeback** (the CURRENT gap between the player's season-low and their CURRENT TrueValue — **JK ruling 2026-06-19:** a
+  player who peaks mid-season then FALLS APART by season end must NOT win; the award measures who, RIGHT NOW, is furthest
+  above their season trough): iterate the players in `values`. For each, `currentTV = thatPlayer.trueValue` (the cumulative
+  current value); `seasonLow = min(currentTV, …all of that player's snapshots' trueValue)`; `score = currentTV − seasonLow`
+  (always ≥ 0 because currentTV is included in the min). A player with NO snapshots ⇒ `seasonLow = currentTV` ⇒ score 0 (no
+  trough history → cannot win, but stays a rank-able candidate). Rank by score DESC. **This is `currentTV − seasonLow`, NOT
+  the max-rise-over-checkpoints** — a big mid-season recovery the player later gave back scores LOW because currentTV is
+  back down. NOTE: `min` is order-independent → you do NOT need to sort snapshots by checkpoint for Comeback.
+- `percentile` for each category = `getPercentile(thatCandidate.score, [all scores in that category sorted ascending])`,
+  rounded the same way percentile is used elsewhere (do NOT re-round if `getPercentile` already returns a [0,1] float —
+  store it verbatim). `rank` = 1-based position after the DESC sort (ties keep distinct ranks by the playerId tiebreak).
+- EDGE CASES: empty `values` ⇒ `kk: [], bust: []`; empty/snapshotless ⇒ `comeback: []`; a category with ONE candidate ⇒
+  rank 1 + whatever `getPercentile` returns for a single-element array (assert it in the test, don't hardcode an assumption).
+- Determinism: NO floating-point nondeterminism beyond the inputs; pure sort + arithmetic.
+
+**B. NEW `src/engines/__tests__/franchiseTvFamilyScorer.test.ts`** — non-vacuous:
+- KK orders by `valueDelta` desc; the highest-valueDelta player is `kk[0]` (rank 1).
+- Bust is KK inverted: the most-NEGATIVE-valueDelta player is `bust[0]`; assert `bust` order is the REVERSE of the
+  `valueDelta`-asc order and that the same player is NOT simultaneously `kk[0]` and `bust[0]` (unless 1 player).
+- Comeback "current gap from season-low" (JK ruling — the FALLS-APART case must NOT win): player A snapshots 50 → 20 → 45 →
+  30 with `values` currentTV = 30 ⇒ seasonLow = 20 ⇒ score = 10 (the mid-season peak of 45 was given back — must NOT inflate
+  the score). Player B snapshots 50 → 20 with currentTV = 48 ⇒ score = 28. Assert B (currently recovered) OUTRANKS A (gave it
+  back): 28 > 10. This is the test that proves `currentTV − seasonLow`, NOT max-running-rise.
+- A player with zero snapshots ⇒ seasonLow = currentTV ⇒ comeback score 0 (present in the list, ranked last-ish, score 0).
+- determinism: same input twice ⇒ `toEqual`. tie-break: two equal scores ⇒ ordered by `playerId`.
+- percentile: monotonic with score within a category; within [0,1].
+
+**HARD CONSTRAINTS:** create ONLY the 2 files above. Import ONLY `getPercentile` from `./percentile` (no other `src/utils`
+or storage import — the engine is decoupled; the caller will map storage rows → the minimal inputs). Do NOT touch any
+store / `trackerDb.ts` / `franchisePhase2Flags.ts` / `franchiseAwardsEngine.ts` / `franchiseAwardsStorage.ts` /
+`processCompletedGame.ts` / any `*.md`. NO flag (the engine is pure; the flag gates the future hook, not this). NO
+`Date.now`/`Math.random`/network/IndexedDB/async. No git add/commit. Prefix all tsc/vitest with `NODE_ENV= `.
+
+**VERIFICATION (run ALL, paste ACTUAL):** `NODE_ENV= npx tsc --noEmit` exit 0 AND `NODE_ENV= npm run build` exit 0;
+`NODE_ENV= npx vitest run src/engines/__tests__/franchiseTvFamilyScorer.test.ts` all green.
+
+**STOP-IF:** `getPercentile` is NOT exported from `src/engines/percentile.ts` with signature `(value: number, sortedArray:
+number[]) => number` → STOP + report. (Comeback needs NO checkpoint ordering — `min` is order-independent — so there is no
+ordering ambiguity to resolve.)
+
+**FORMAT:** 1) files changed; 2) the 3 scoring formulas as implemented (esp. the Comeback `currentTV − seasonLow` gap) + the
+percentile/rank/tiebreak choices; 3) verification output (paste actual); 4) "L12-2 complete" or "BLOCKED: <reason>". Do NOT commit.
+
+Use very high reasoning effort. Think step-by-step. Read `src/engines/percentile.ts` (the helper),
+`src/utils/franchiseTrueValueStorage.ts` (the `FranchiseTrueValueRow` field names — `valueDelta`) and
+`src/utils/franchiseTrueValueSnapshotsStorage.ts` (the snapshot `checkpoint`/`trueValue` fields + checkpoint ordering) for
+field-name fidelity (Comeback uses the snapshot `trueValue` for the trough + the `values` row `trueValue` for current — NO
+checkpoint ordering needed), and the L11-1 engine (`src/engines/franchiseL11FiringEngine.ts`) for the pure-engine house style.
+
+**Status:** **✅ VERIFIED + COMMITTED 2026-06-19 (AUTH-4).** Comeback formula corrected to `currentTV − seasonLow` per JK
+ruling BEFORE dispatch (DECISIONS_LOG). Codex(gpt-5.5, xhigh)-built (2 files: pure `src/engines/franchiseTvFamilyScorer.ts`
++ its test) → Opus independently audited the engine line-by-line (builder≠auditor) — KK=valueDelta desc, Bust=−valueDelta
+desc, **Comeback=`currentTV − min(currentTV, snapshot trueValues)`** (the falls-apart case scores 10 not 25 — proven by the
+test); pure (imports only `getPercentile`; no I/O/Date/random/async); inputs not mutated (`.map().sort()` on fresh arrays) +
+ran the FULL host gate. Host gate: `NODE_ENV= npm run build` exit 0 (7.57s) + full suite **7,745/444, 7,743 pass / 2
+characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), ZERO new reds (+8 = the engine test). PURE /
+build-DARK (NO caller/flag/store/trackerDb change — a later L12 hook loads the TV rows + calls it). 8 non-vacuous tests
+(the Comeback falls-apart proof; snapshotless→0; empty→empty; single→percentile 1; determinism; playerId tiebreak).
+**➡ NEXT = L12-3** (race-standing weighted composite + bands + Q3 close-race tilt + Q4 GG defensive-fame share — the
+genuinely-new design logic; consumes `resolveFameTier` ONLY per Q10; may add the deferred 2nd ledger bump for a
+race-standings store).

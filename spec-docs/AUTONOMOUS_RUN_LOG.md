@@ -1760,3 +1760,17 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
 - **Audit (builder=Codex ≠ auditor=Opus):** line-by-line diff + L10-precedent compare (faithful; shared `getTrackerDb`, no
   separate connection) + non-vacuous storage test. **FULL host gate:** build exit 0 (7.89s) + suite **7,737/443, 7,735 pass
   / 2 characterized fail**, ZERO new reds (+8). build-DARK; trackerDb v24. **➡ NEXT = L12-2** (TV-family scorers — pure). Nothing pushed.
+
+## 2026-06-19 (AUTH-4 overnight) — L12-2 VERIFIED + COMMITTED: pure TV-family scorers + a JK Comeback-measurement correction
+- **JK CORRECTION pre-dispatch (L12-Q7):** Comeback = **`currentTV − seasonLow`** (the CURRENT gap from the trough), NOT the
+  Captain's drafted `max(currentTV − running season-low)` over checkpoints. A mid-season peak later given back must NOT win.
+  Fixed the contract + scope map + DECISIONS_LOG + a pending SESSION_RULES lesson before dispatch. (Side effect: `min` is
+  order-independent → no checkpoint ordering.)
+- **L12-2 (2 new files):** PURE `src/engines/franchiseTvFamilyScorer.ts` — KK=`valueDelta` desc · Bust=`−valueDelta` desc ·
+  Comeback=`currentTV − min(currentTV, snapshot trueValues)`; `{playerId,score,percentile,rank}[]` per race; percentile via
+  the lifted `getPercentile`; rank desc, playerId tiebreak. Imports ONLY `getPercentile`; pure (no I/O/Date/random/async);
+  inputs not mutated. NO caller/flag/store/trackerDb change.
+- **Audit (builder=Codex ≠ auditor=Opus):** engine line-by-line + 8-test file non-vacuous (the Comeback falls-apart proof:
+  50→20→45→30 ⇒ score 10 < a currently-recovered 48 ⇒ 28). **FULL host gate:** build exit 0 (7.57s) + suite **7,745/444,
+  7,743 pass / 2 characterized fail**, ZERO new reds (+8). PURE/build-DARK; trackerDb stays v24.
+- **➡ NEXT = L12-3** (race-standing weighted composite + bands + Q3 tilt + Q4 GG defensive-fame share; reads `resolveFameTier` only). Nothing pushed.

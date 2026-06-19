@@ -32,7 +32,7 @@ on top of the **LIVE D9 merit-award engine** and the **DARK-built L6 fame substr
 - the **race-standing composite scorer** (w_merit·WAR + w_fame·fame, weights *per race type*) + **score-gap clustering bands** + the **Q3 close-race fame-tilt** (`|margin| < window` AND both merit > floor) — none of this exists; the live sort is pure WAR (franchiseAwardsEngine.ts:321-325).
 - the **All-Star multi-selection roster record** (1 fan-voted starter/position + pitching contingent + merit-reserve block) — the single-winner `FranchiseAwardRow` (franchiseAwardsStorage.ts:40-50) cannot hold it; this is the highest-coupling greenfield store decision.
 - the **GoldGlove Q4 defensive-channel-fame share** (fWAR + 20%·defensive-channel-fame) — today GG is pure fieldingWar (eng:252).
-- the **TV-family scorers** — KK (league-wide valueDelta rank), Bust (inverted), Comeback (max(currentTV − own running season-low)); the substrate is 100% live, the scoring math is 100% missing (grep of all three names in the engine = 0).
+- the **TV-family scorers** — KK (league-wide valueDelta rank), Bust (inverted), Comeback (currentTV − season-low gap, JK 2026-06-19); the substrate is 100% live, the scoring math is 100% missing (grep of all three names in the engine = 0).
 - the **RELIEVER_OF_YEAR / BENCH_PLAYER / BOOGER_GLOVE** merit bases (no `scoreForCategory` branch exists for them, eng:242-256).
 - **award fame/morale EMISSION** (MVP+CY+All-Star emit; rest visibility-only) — zero emission exists; franchiseDesignationEligibility.ts:460 confirms "awards, fame mutation, morale mutation… remain blocked."
 - the **L3 race-snub morale row** — the matrix `race` tap is a live no-op (`race: () => NEUTRAL_BASE_CONSEQUENCE`, masterMoraleMatrix.ts:401).
@@ -88,9 +88,10 @@ honors computation is the D9 award sort fired **once at season-end** from a `Fra
 4. **The TV-family (KK / Bust / Comeback) [Q7].** TV is OUT of merit awards — it powers ONLY these three.
    **KK** = league-wide `valueDelta` rank (cumulative `franchiseTrueValueRows.valueDelta`, signed,
    `valueDelta = trueValue − salary` at salaryCalculator.ts:1018; positive = undervalued). **Bust** = same
-   basis **inverted**. **Comeback** = `max(currentTV − own running season-low)` over the per-checkpoint TV
-   snapshots — the running season-low / trough derivation **exists nowhere** and is the new build the
-   spec §23 calls for. Basis stable.
+   basis **inverted**. **Comeback** = `currentTV − seasonLow` where currentTV = the player's CURRENT cumulative
+   `trueValue` and seasonLow = `min(currentTV, that player's snapshot trueValues)` (**JK ruling 2026-06-19**: the gap AS OF
+   NOW, NOT a max-rise-over-checkpoints — a mid-season peak the player later gives back must NOT win). The season-low /
+   trough derivation **exists nowhere** and is the new build §23 calls for. Basis stable.
 
 5. **Emission [Q6].** **MVP + Cy Young + All-Star EMIT fame/morale**; all other races are **visibility-only**
    at launch. Top-N depth = sim (the `raceTopN` config field already exists). The emission gate
@@ -119,8 +120,9 @@ honors computation is the D9 award sort fired **once at season-end** from a `Fra
 
 - **L12-2 — TV-family scorers (KK + Bust + Comeback).** Pure engines over **already-live** substrate.
   KK/Bust = rank over `getFranchiseTrueValueRows(scope).valueDelta` (no new store, no DB/ledger bump,
-  visibility-only per Q6). Comeback = walk `getFranchiseTrueValueSnapshotRowsByScope`, `min(trueValue)` =
-  trough, `swing = latestTV − minTV`, rank desc. The three TV-family categories are **already** persistable
+  visibility-only per Q6). Comeback = `currentTV − seasonLow` (currentTV from the cumulative `values` row; seasonLow =
+  `min(currentTV, the player's snapshot trueValues)`; **JK 2026-06-19 — the CURRENT gap, NOT max-rise**), rank desc. The
+  three TV-family categories are **already** persistable
   (storage.ts:24-26) and emblem-mapped — **zero ledger cost**. **Risk: low.**
   **Mirror obligations:** none new (rides the L12-1 flag + gate).
 
@@ -183,8 +185,10 @@ honors computation is the D9 award sort fired **once at season-end** from a `Fra
 - **Q6 — RULED.** MVP + Cy Young + All-Star EMIT fame/morale; all other races visibility-only at launch.
   Top-N depth = sim (`raceTopN` field exists).
 
-- **Q7 — RULED.** TV-family: KK = league-wide `valueDelta` rank; Bust = same inverted; Comeback =
-  `max(currentTV − own running season-low)` over the TV snapshots. Basis stable.
+- **Q7 — RULED** (Comeback formula CLARIFIED by JK 2026-06-19). TV-family: KK = league-wide `valueDelta` rank; Bust = same
+  inverted; **Comeback = `currentTV − seasonLow`** (currentTV = current cumulative `trueValue`; seasonLow = min over the
+  player's snapshots incl. current) — the CURRENT gap from the season trough, NOT the max-rise-at-any-checkpoint (a
+  mid-season peak later given back must NOT win). Basis stable.
 
 - **Q8 — RULED.** §20.4 status-fame layer is **L6's** (draft seed/call-up/send-down/bench 0.5x/league-leader).
   L12 ONLY consumes the resolved tier. **Code already matches** (status channel fed-by-nothing). NOT L12 scope.

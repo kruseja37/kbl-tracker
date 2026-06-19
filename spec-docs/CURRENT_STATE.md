@@ -15,9 +15,15 @@ slots [Q1: ALL_STAR/BENCH_PLAYER/BOOGER_GLOVE/RELIEVER_OF_YEAR; defer the 2 one-
 host-gated:** `npm run build` 0 + full suite **7,737/443, 7,735 pass / 2 characterized fail**, ZERO new reds (+8); store
 count **43**; build-DARK (store EMPTY, no writer/hook); KBL_BACKUP_VERSION stays 2. *(Codex's STOP-IF correctly caught an
 under-specified mirror surface across 2 dispatches BEFORE any broken-mirror commit — the L6b-1 failure mode, prevented.)*
-**➡ NEXT = L12-2** (TV-family scorers KK/Bust/Comeback — pure, no store, rides the L12-1 flag) → L12-3 race-standing
-composite → L12-4 All-Star+60%-lock → L12-5 emission/snub/reporter → L12-6 UI → L13 (split) → L14 → L-SIM. **⚠ KEEP
-EXACTLY ONE AUTH-4 WORKER ACTIVE — 7 Claude sessions were open this run (2nd collision); JK to trim.** Per-ticket detail in
+**✅ L12-2 COMPLETE (2026-06-19, AUTH-4)** — pure TV-family scorer `src/engines/franchiseTvFamilyScorer.ts`
+(`computeFranchiseTvFamilyRaces`): KK = `valueDelta` desc · Bust = `−valueDelta` desc · **Comeback = `currentTV − min(currentTV,
+snapshot trueValues)`** (**JK 2026-06-19 correction** — the CURRENT gap from the season trough, NOT max-rise-over-checkpoints;
+a mid-season peak given back must NOT win). PURE / build-DARK (NO caller/flag/store; a later hook feeds it the TV rows);
+Codex-built → Opus-audited → host-gate **7,745/444, ZERO new reds** (+8). **➡ NEXT = L12-3** (race-standing weighted composite
++ bands + Q3 close-race tilt + Q4 GG defensive-fame share — the genuinely-new design logic; reads `resolveFameTier` ONLY per
+Q10; may add the deferred 2nd ledger bump for a race-standings store) → L12-4 All-Star+60%-lock → L12-5
+emission/snub/reporter → L12-6 UI → L13 (split) → L14 → L-SIM. **⚠ KEEP EXACTLY ONE AUTH-4 WORKER ACTIVE — 7 Claude sessions
+were open this run (2nd collision); JK to trim.** Per-ticket detail in
 `AUTONOMOUS_RUN_LOG.md`. *(prior:)* **L10 Q5/Q8 REWORK COMPLETE → L10 (random events) FULLY
 COMPLETE.** Continuous per-game cadence (Q5 — dropped the 20%-checkpoint gate; flat per-game §16 base rates) +
 `name_change` in the dark catalog (Q8 — rare distinct cosmetic-family event). **Builder routing RESTORED to Codex**

@@ -1787,3 +1787,18 @@ persistence decision.
 **Process note:** a 2nd concurrent AUTH-4 worker produced a divergent 7-piece L12 recon in parallel (~08:16Z); JK ruled
 TAKE OVER + RECONCILE — the 6-piece adversarially-verified map is canonical (see SESSION_LOG / AUTONOMOUS_RUN_LOG
 2026-06-19). Keep exactly ONE AUTH-4 worker active.
+
+## 2026-06-19 (AUTH-4) — L12-Q7 Comeback Player measurement CLARIFIED (current gap, not max-rise)
+**Context:** the L11–L14 ruling-pass text + the L12 scope map both phrased the Comeback Player of the Year score as
+`max(currentTV − own running season-low)`. Drafting the L12-2 contract, the Captain read that as the **max rise above the
+running minimum at any checkpoint** (interpretation B) and was about to dispatch it. JK CAUGHT it before dispatch.
+**JK RULING:** the Comeback award measures **the player with the CURRENT biggest gap between their season-low and their
+current TrueValue** — i.e. `score = currentTV − seasonLow`, where currentTV = the player's current cumulative `trueValue`
+and seasonLow = `min(currentTV, that player's per-checkpoint snapshot trueValues)`. **A player who has a great middle of
+the season but FALLS APART by season-end must NOT win** (their current TV is back near their low → small gap). This is
+NOT the max-rise-over-checkpoints reading (which would still reward a mid-season recovery the player later gave back).
+**Consequences:** simpler engine (a `min` is order-independent → no checkpoint ordering needed). Applied to the L12-2
+contract (CHANGES A + the test, BEFORE dispatch) + `L12_SCOPE_MAP.md` (§1/§2/§3/§4 Q7) corrected.
+**Lesson (Captain):** when a spec measurement is phrased ambiguously (here "max(... running ...)"), SURFACE the fork for a
+JK ruling rather than pick a reading and bake it into a build — even for award/value metrics (not just the soul-layer
+traits). The ambiguity was caught only because JK happened to be watching the dispatch.
