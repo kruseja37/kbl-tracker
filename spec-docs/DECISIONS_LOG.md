@@ -1859,3 +1859,40 @@ optional, no DB churn; browser-verify batched) + **L12-3R-2** (dark Reliever bin
 `gamesStarted > 0 → null` filter, a relief-IP-floor qualifier `minIP × RELIEVER_QUALIFIER_IP_FRACTION` 0.15 §16; the
 orchestrator's 8th category; `WAR_AWARD_CATEGORIES` stays the 5 → D9 finalize byte-neutral). The relief-IP-floor + the
 0-start cutoff are §16 sim placeholders.
+
+---
+
+## 2026-06-19 (attended) — L12-4 All-Star roster: format + exact rosters + DH + two-way RULED
+**Context:** L12-4 grounding recon (`wf_74ab63b0-55a`, 6 readers + synthesis + adversarial critique →
+`spec-docs/L12-4_SCOPE_MAP.md`). L12-4 = the greenfield by-position All-Star **selection engine + 60% lock**, writing into
+the already-built `franchiseAllStarRosters` store (L12-1, trackerDb v24 — **no DB/schema work**) and reading the already-
+built fan-vote scorer (L12-3, `FAN_VOTE_WEIGHTS`). The recon's adversarial critique caught the Captain about to re-open the
+already-RULED by-position-starters question (Q5) and re-confirm Q2/Q13 — corrected before surfacing. The genuinely spec-
+silent forks went to JK via an AskUserQuestion pass. **Boundary:** L12-4 PRODUCES the roster + sets the lock ONLY; all
+payouts (reach-floor ratchet, badge, morale, snub, career All-Star counter) are L12-5.
+
+**JK RULINGS (AskUserQuestion pass, THEN the v1-simplify refinement below):**
+- **Q3 — DH = NEVER included.** The 8 position slots are C/1B/2B/3B/SS/LF/CF/RF; no DH slot, no `config.useDH` gate.
+- **Q4 — Two-way players compete on the STRONGER SIDE ONLY** (bat vs mound, whichever scores higher) — one slot, never both.
+- **Captain defaults (confirmed):** the `allStarSelections` career counter is NOT written by L12-4 (it's a payout → L12-5/
+  season-end; zero live writer today); the per-game recompute stays pure (a thin sibling `persistFranchiseAllStarRoster…`
+  wrapper does the write inside the existing `processCompletedGame.ts:657-663` L12 flag block).
+
+**v1-SIMPLIFY REFINEMENT (JK, same session — supersedes the AskUserQuestion Q1/Q2 dual-format answers):** JK weighed a
+flexible user-configurable roster builder (per-position min/max reserve eligibility in League Builder) vs fixed rosters and
+ruled **SIMPLIFY for v1**, because v1 All-Star plays no game and is build-dark — the config-UI + constraint-solver +
+validation cost is not worth it yet. **v1 = ONE league-wide 26-man team, any league size:**
+- **25 base** = 8 fame-led position starters (`FAN_VOTE_WEIGHTS`) + 5 family-grouped MERIT backups (1 C · 1 corner-IF [1B/3B]
+  · 1 middle-IF [2B/SS] · 2 OF) = 13 position players; + 4 SP + 1 backup SP + 5 RP + 2 backup RP = 12 pitchers (SP by
+  `pitchingWar`, RP by `pitchingWpa`; reliever = `gamesStarted===0`).
+- **+ 1 FAN WILDCARD** (the 26th) = **fame-led**, any position, the highest-fame **qualified** player not already selected
+  (`position:'WILDCARD'`, `role:'starter'`). Fame split (JK: "at least the starters' weighting, could be 100% fame"): dark
+  default **100% fame** (`WILDCARD_WEIGHTS` wMerit 0/wFame 1, qualifier floor still applies so never a scrub), §16-tunable
+  down to the 65% starter floor.
+- Encode the slot in `position`, the headliner-vs-depth tier in the binary `role` — **no selection-shape widening**.
+- **DEFERRED to v2** (NOT built in L12-4): user-selectable 1-vs-2 teams; the dual-conference 22-man format + conference
+  resolution; the per-position min/max reserve-eligibility customization in League Builder. v1 models the roster as a config
+  **preset** so v2's customization edits the same config WITHOUT an engine rebuild.
+**Build SPLIT (build-DARK, builder≠auditor):** L12-4a pure selection engine (single 26-man) · L12-4b All-Star candidate
+exporter (retains position/team) · L12-4c lock-once helper (60%) · L12-4d orchestrator wiring + persistence (NO conference
+resolution in v1). No trackerDb bump (store at v24). Full scope/seams/anchors in `spec-docs/L12-4_SCOPE_MAP.md`.

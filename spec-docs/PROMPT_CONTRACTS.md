@@ -12089,3 +12089,188 @@ recompute); `WAR_AWARD_CATEGORIES` unchanged ⇒ D9 finalize byte-neutral; track
 test [1 of which is the mechanical shape-fix]). Branch-only (NOT pushed). **⇒ L12-3 COMPLETE (a/b/c/R-1/R-2): the race-standing
 recompute now covers all 8 merit categories (MVP/CY/SS/GG/RoY/Bench/Booger/Reliever) + the TV-family. ➡ NEXT = L12-4
 (All-Star roster + 60% lock).**
+
+---
+
+## CONTRACT — L12-4a (pure All-Star roster selection engine — v1 26-man) — 2026-06-19 (attended)
+
+**ROUTE:** Codex CLI (gpt-5.5, **very-high reasoning effort**) via `codex exec` stdin-from-contract. Auditor: Opus 4.8
+(builder ≠ auditor — Codex builds, Opus independently audits + runs the full host gate).
+
+**ROLE:** You are a pure-engine builder for the KBL Tracker franchise L-stack.
+
+**GOAL:** Create a PURE, deterministic, side-effect-free engine `src/engines/franchiseAllStarSelector.ts` that builds the v1
+**26-man, single league-wide** All-Star roster from a PRE-ASSEMBLED candidate list, plus its test file. Build-DARK (NO
+caller / NO flag / NO store — L12-4b/4d wire it later). NO persistence, NO IndexedDB, NO Date.now/Math.random/async.
+
+**SOURCE OF TRUTH:** `spec-docs/L12-4_SCOPE_MAP.md` §3.5 (the v1 26-man roster) + `spec-docs/DECISIONS_LOG.md` 2026-06-19
+"L12-4 All-Star roster". Mirror the pure-engine pattern of `src/engines/franchiseTvFamilyScorer.ts`. Reuse
+`computeFranchiseRaceStanding` + `RaceWeightProfile` + `RaceStandingCandidate` + `FAN_VOTE_WEIGHTS` from
+`src/engines/franchiseRaceStandingScorer.ts` (all verified exported at :4/:11/:45/:59).
+
+**CHANGES (create ONLY these 2 files; edit NOTHING else):**
+
+**A. `src/engines/franchiseAllStarSelector.ts`** — exports + types EXACTLY:
+```ts
+import {
+  computeFranchiseRaceStanding,
+  FAN_VOTE_WEIGHTS,
+  type RaceWeightProfile,
+  type RaceStandingCandidate,
+} from './franchiseRaceStandingScorer';
+
+export type AllStarFieldPosition = 'C' | '1B' | '2B' | '3B' | 'SS' | 'LF' | 'CF' | 'RF';
+
+// 100%-fame fan wildcard weights (JK: "could be 100% fame"; §16-tunable to the 65% starter floor).
+export const WILDCARD_WEIGHTS: RaceWeightProfile = {
+  wMerit: 0, wFame: 1, fameAlwaysOn: true,
+  tiltWindow: Number.POSITIVE_INFINITY, meritFloor: Number.NEGATIVE_INFINITY, bandGap: 0.08,
+};
+
+// One eligible candidate, pre-assembled by L12-4b. RAW position string + component merits; the ENGINE does ALL
+// normalization (combo-position + two-way stronger-side) internally so it is fully unit-testable in isolation.
+export interface AllStarCandidate {
+  playerId: string;
+  teamId: string;
+  rawPosition: string;          // valuePosition (may be combo 'OF'/'IF'/'IF/OF'/'1B/OF', concrete 'C'..'RF'/'DH', or a pitcher label)
+  hittingMerit: number | null;  // totalWar (full hitter value — backup ranking + the bat side of two-way)
+  battingWar: number | null;    // batting component (two-way side comparison)
+  startingMerit: number | null; // pitchingWar (SP ranking + the arm side of two-way)
+  reliefMerit: number | null;   // pitchingWpa (RP ranking)
+  gamesStarted: number;         // SP (>=1) vs RP (===0) classification
+  qualifiedAsHitter: boolean;   // PA floor (meetsQualifier, computed by 4b)
+  qualifiedAsPitcher: boolean;  // relaxed IP floor (meetsQualifier, computed by 4b)
+  fameHeat: number;
+  fameReachFloor: number;
+}
+
+export type AllStarSelectionRole = 'starter' | 'reserve';
+
+export interface AllStarSelection {
+  playerId: string;
+  teamId: string;
+  position: string;             // 'C'..'RF' | 'SP' | 'RP' | 'WILDCARD'
+  role: AllStarSelectionRole;
+  selectionScore: number;       // fame-led composite (starters/wildcard) OR raw merit (backups/pitchers)
+}
+
+export interface AllStarRosterConfig {
+  positionStarters: readonly AllStarFieldPosition[];
+  positionBackups: readonly { readonly slot: string; readonly eligible: readonly AllStarFieldPosition[]; readonly count: number }[];
+  startingPitchers: number;
+  backupStartingPitchers: number;
+  relievers: number;
+  backupRelievers: number;
+  wildcards: number;
+  starterWeights: RaceWeightProfile;
+  wildcardWeights: RaceWeightProfile;
+}
+
+export const V1_ALL_STAR_ROSTER_CONFIG: AllStarRosterConfig = {
+  positionStarters: ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'],
+  positionBackups: [
+    { slot: 'C', eligible: ['C'], count: 1 },
+    { slot: 'corner-IF', eligible: ['1B', '3B'], count: 1 },
+    { slot: 'middle-IF', eligible: ['2B', 'SS'], count: 1 },
+    { slot: 'OF', eligible: ['LF', 'CF', 'RF'], count: 2 },
+  ],
+  startingPitchers: 4,
+  backupStartingPitchers: 1,
+  relievers: 5,
+  backupRelievers: 2,
+  wildcards: 1,
+  starterWeights: FAN_VOTE_WEIGHTS,
+  wildcardWeights: WILDCARD_WEIGHTS,
+};
+
+export function computeFranchiseAllStarRoster(input: {
+  candidates: readonly AllStarCandidate[];
+  config?: AllStarRosterConfig;   // defaults to V1_ALL_STAR_ROSTER_CONFIG
+}): AllStarSelection[]
+```
+
+**ALGORITHM** (deterministic; EVERY tiebreak ends on `playerId` ascending; a slot with no eligible candidate is left
+UNFILLED — the roster may be < 26, never throw):
+
+1. **Normalize each candidate to a single eligible facet:**
+   - `hitterEligible` = `qualifiedAsHitter` AND `rawPosition` normalizes to one of the 8 field positions.
+   - `pitcherEligible` = `qualifiedAsPitcher` AND `rawPosition` ∈ {`'P'`,`'SP'`,`'RP'`,`'CP'`,`'SP/RP'`}.
+   - **TWO-WAY (both eligible): keep ONLY the stronger side** — if `(battingWar ?? -Infinity) >= (startingMerit ?? -Infinity)`
+     treat as hitter-only (drop the pitcher facet) else pitcher-only (drop the hitter facet). [JK: stronger side, one slot.]
+   - **Combo field-position normalizer** (only when hitterEligible): concrete `C/1B/2B/3B/SS/LF/CF/RF` pass through;
+     `'OF'→'CF'`, `'IF'→'SS'`, `'IF/OF'→'CF'`, `'1B/OF'→'1B'`; **`'DH'` is NOT a field position** ⇒ a DH-only player is
+     hitter-INELIGIBLE in v1 (no DH slot). Call the result `fieldPosition`.
+   - **Pitcher kind:** `gamesStarted >= 1 ⇒ 'SP'`; `gamesStarted === 0 ⇒ 'RP'`.
+2. **Position starters (8):** for each `config.positionStarters` position P → gather hitter-eligible candidates with
+   `fieldPosition === P` → `computeFranchiseRaceStanding({ candidates: [{playerId, meritScore: hittingMerit ?? 0, fameHeat,
+   fameReachFloor}], weights: config.starterWeights })` → the `rank === 1` entry is the starter → emit
+   `{position: P, role:'starter', selectionScore: standing.composite}`. (Fame-led: the highest-FAME qualified player wins
+   the start even over a higher-WAR teammate — the popularity snub.)
+3. **Position backups (5):** from hitter-eligible NOT already a starter, fill each `config.positionBackups` family slot in
+   array order: gather not-yet-selected candidates with `fieldPosition ∈ slot.eligible`, sort by `hittingMerit` desc then
+   `playerId` asc, take `slot.count` → emit `{position: fieldPosition, role:'reserve', selectionScore: hittingMerit ?? 0}`.
+   A player taken by an earlier slot is excluded from later slots.
+4. **Starting pitchers (4 + 1 backup):** pitcher-eligible with kind `'SP'`, sort by `startingMerit` desc (null last) then
+   `playerId` asc → first `startingPitchers` are `role:'starter'`, next `backupStartingPitchers` are `role:'reserve'`;
+   `position:'SP'`, `selectionScore: startingMerit ?? 0`.
+5. **Relievers (5 + 2 backup):** pitcher-eligible with kind `'RP'`, sort by `reliefMerit` desc (**null reliefMerit excluded**
+   — null-guard) then `playerId` asc → first `relievers` `role:'starter'`, next `backupRelievers` `role:'reserve'`;
+   `position:'RP'`, `selectionScore: reliefMerit ?? 0`.
+6. **Wildcard (1):** from ALL candidates (hitter- OR pitcher-eligible) NOT already selected in steps 2-5 →
+   `computeFranchiseRaceStanding({ candidates: [{playerId, meritScore: hittingMerit ?? startingMerit ?? reliefMerit ?? 0,
+   fameHeat, fameReachFloor}], weights: config.wildcardWeights })` → `rank === 1` = the wildcard → emit
+   `{position:'WILDCARD', role:'starter', selectionScore: standing.composite}`.
+7. **Return** the selections in a STABLE deterministic order: position starters (config order), then backups (slot order),
+   then SP (starters then backups), then RP (starters then backups), then the wildcard.
+
+**PURITY:** import ONLY from `'./franchiseRaceStandingScorer'`; NO Date/Math.random/async/IndexedDB; do not mutate inputs.
+Mirror the shape/structure of `franchiseTvFamilyScorer.ts` (interfaces → compute fn → small pure helpers).
+
+**B. `src/engines/__tests__/franchiseAllStarSelector.test.ts`** — non-vacuous, deterministic vitest tests:
+- **Fame-led starter (the snub):** at a position, a high-FAME low-WAR player beats a low-fame high-WAR teammate for the start.
+- **Backups family grouping:** the corner-IF backup is the best of {1B,3B} not already a starter; 2 OF backups; an already-
+  selected starter is never double-picked.
+- **Pitchers:** SP ranked by `startingMerit` (4 + 1), RP by `reliefMerit` (5 + 2); a `gamesStarted>0` pitcher NEVER appears in
+  the RP pool and a `gamesStarted===0` pitcher NEVER in the SP pool; a null-`reliefMerit` pitcher is excluded from RP.
+- **Two-way stronger side:** a both-eligible player with `battingWar > pitchingWar` appears ONLY as a hitter (never a pitcher),
+  and vice-versa — exactly one pool, never both.
+- **Wildcard:** the highest-FAME qualified player NOT already selected becomes the wildcard regardless of WAR; never duplicates
+  an already-selected player; `position:'WILDCARD'`.
+- **DH-only player is hitter-ineligible** (no DH slot).
+- **Under-supply:** a position with no eligible candidate leaves the slot empty (roster < 26), no throw.
+- **Determinism:** identical input → identical output; ties resolve on `playerId`.
+
+**HARD CONSTRAINTS:** create ONLY the 2 files. Edit NOTHING else. NO store/flag/trackerDb/backup/syncConfig/ledger change.
+NO persistence/IndexedDB. NO `Date.now`/`Math.random`/async. Import ONLY from `'./franchiseRaceStandingScorer'`. NO git
+add/commit. Prefix tsc/vitest with `NODE_ENV= `.
+
+**VERIFICATION (run ALL, paste ACTUAL):** `NODE_ENV= npx tsc --noEmit` exit 0 + `NODE_ENV= npm run build` exit 0;
+`NODE_ENV= npx vitest run src/engines/__tests__/franchiseAllStarSelector.test.ts` all green. (The auditor runs the FULL host suite.)
+
+**STOP-IF:** `computeFranchiseRaceStanding` / `FAN_VOTE_WEIGHTS` / `RaceWeightProfile` / `RaceStandingCandidate` are NOT
+exported from `franchiseRaceStandingScorer.ts` as assumed → STOP + report. The engine would need to import from ANY
+storage/util module to satisfy the algorithm → STOP + report (it MUST stay pure, scorer-only).
+
+**FORMAT:** 1) files changed (exact paths); 2) the algorithm (the 6 tiers + two-way stronger-side + combo normalizer +
+wildcard + deterministic order); 3) verification output (paste actual tsc/build/vitest); 4) "L12-4a complete" or
+"BLOCKED: <reason>". Do NOT commit.
+
+Use very high reasoning effort. Think step-by-step. Read `src/engines/franchiseTvFamilyScorer.ts` (the pure template),
+`src/engines/franchiseRaceStandingScorer.ts` (the scorer + weights you reuse), and `spec-docs/L12-4_SCOPE_MAP.md` §3.5.
+
+**Status:** ✅ VERIFIED + COMMITTED 2026-06-19 (attended). **Codex (gpt-5.5, xhigh) built via `codex exec`
+stdin-from-contract → Opus 4.8 independently audited (builder ≠ auditor) + ran the FULL host gate** (Codex ran only tsc +
+build + the single test file). Created exactly the 2 contracted files: `src/engines/franchiseAllStarSelector.ts`
+(`computeFranchiseAllStarRoster` — the 6-tier pipeline: combo-position normalizer [`OF→CF`/`IF→SS`/`IF-OF→CF`/`1B-OF→1B`,
+`DH`→null/ineligible] → two-way stronger-side resolution [`battingWar` vs `startingMerit`] → 8 fame-led position starters
+[`FAN_VOTE_WEIGHTS`] → 5 family-grouped merit backups → SP block [`pitchingWar`, 4+1] → RP block [`pitchingWpa`, null-excluded,
+5+2] → 1 fame-led `WILDCARD` [`WILDCARD_WEIGHTS` 100% fame]; PURE — imports only `franchiseRaceStandingScorer`; config-preset
+`V1_ALL_STAR_ROSTER_CONFIG` for v2 forward-compat) + `src/engines/__tests__/franchiseAllStarSelector.test.ts` (8 non-vacuous
+tests). **Audit:** engine read line-by-line — faithful + pure + correct (one facet per candidate ⇒ no double-pick; usage-based
+SP/RP via `gamesStarted`; deterministic playerId tiebreaks); tests prove the fame snub, the usage-based pitcher classification
+(label-'RP' with starts → SP pool), the two-way comparison keying on `battingWar` (not `hittingMerit`), small-N composite
+saturation, DH-ineligibility, under-supply (roster < 26, no throw), determinism. Codex stayed in scope (only the 2 files).
+**Host gate:** `NODE_ENV= npm run build` exit 0 (7.57s) + full suite **7,773/448, 7,771 pass / 2 characterized fail**
+(`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), **ZERO new reds** (+8 = the new test file). PURE / build-DARK (no
+caller/flag/store — L12-4b/4d wire it); trackerDb stays **v24**. Branch-only (NOT pushed). **➡ NEXT = L12-4b** (the All-Star
+candidate exporter — reuses `buildFranchiseValueInputRows` + `meetsQualifier`, retains position/team, populates `AllStarCandidate`).
