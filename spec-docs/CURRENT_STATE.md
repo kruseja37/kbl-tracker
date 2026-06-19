@@ -56,10 +56,12 @@ AGENT-BUILDABLE trait-rebuild work is COMPLETE.** **➡ NEXT: (PRE-ACT-TRAITS-2)
 verification (the gate's only remaining buildable-by-human item); then the broader **(D)** L-stack (L10 Q5/Q8 rework →
 L11 → L12–L14 → L-SIM gate) and **(C)** the §16 sim-tune FINDING (sparse-signal `getPercentile`) at the L-SIM gate.
 *(Minor/standing: `opposingHand` still hardcoded `'R'` — matrix-handedness traits only, NOT the wired splits.)*
-**📋 UI cleanup/build plan READY → `spec-docs/UI_CLEANUP_PLAN.md`** (2026-06-18, grounded + verified): happy-path UI is
-built; the big BUILD = post-D13 activation UI (~12 surfaces) + offseason + GT 4-column; the CLEANUP JK wants = a ~1-week
-polish dominated by design-tokens/shared-Button (101 hex-drift files). **Timing: do the design-token cleanup at the
-L-stack→D13 bridge, BEFORE the activation-UI build (never after).** Suite
+**📋 UI cleanup plan READY → `spec-docs/UI_CLEANUP_PLAN.md`** (2026-06-18, grounded + verified). **SCOPE (JK ruling):
+the FRANCHISE HUB regular-season + playoff tabs ONLY — NOT GameTracker (done), NOT offseason (deferred).** That surface
+is **~95% BUILT / production-ready** → it's a CLEANUP pass, not a build: dominated by **~1,250 hardcoded hex across 4
+files** (FranchiseHome 626 · TeamHubContent 506 · ScheduleContent 90 · AwardsWatchlist 30) → extract to KBL-palette
+theme tokens + minor polish (~1 week). **Timing: it's the LIVE surface, decoupled from D13/L-stack/GameTracker — do it
+ANYTIME (no gate forces a wait; mild bonus to doing tokens before the hub's future activation overlays).** Suite
 **7,686/438, 7,683 pass / 3 characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` +
 `GameTrackerLaunchState` — the 3rd an intermittent order-flake **confirmed passing solo 9/9**; `franchiseOffseasonGuards.component`
 is another such flake); trackerDb **v23**; branch codex/franchise-v1-next; **nothing pushed**. Session commits: R1-b1
