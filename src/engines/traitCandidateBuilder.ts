@@ -51,6 +51,17 @@ export const BUILDABLE_TRAITS: readonly string[] = [
   'Noodle Arm',
   'Durable',
   'Injury Prone',
+  // R1-a: clean outcome-proxy traits (TRAIT_MEASUREMENT_SPEC §0.6). Build-dark.
+  'K Collector',
+  'K Neglector',
+  'Whiffer',
+  'Tough Out',
+  'Easy Target',
+  'Slow Poke',
+  'Sprinter',
+  'Mind Gamer',
+  'Pick Officer',
+  'Easy Jumps',
 ];
 
 for (const traitName of BUILDABLE_TRAITS) {
@@ -151,6 +162,17 @@ const REACHED_BASE_RESULTS: ReadonlySet<AtBatResult> = new Set([
   'HBP',
   'E',
   'FC',
+  'D3K',
+  'WP_K',
+  'PB_K',
+]);
+
+// R1-a: a strikeout is the FULL K-family, not just K/Kc — a dropped-third-strike
+// reach (D3K/WP_K/PB_K) and the regional 'Ꝁ' all still count toward K-rate.
+const STRIKEOUT_RESULTS: ReadonlySet<AtBatResult> = new Set([
+  'K',
+  'Kc',
+  'Ꝁ',
   'D3K',
   'WP_K',
   'PB_K',
@@ -403,6 +425,56 @@ function addAtBatSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): v
   }
 }
 
+/**
+ * R1-a — clean per-PA outcome-rate proxies (TRAIT_MEASUREMENT_SPEC §0.6).
+ *
+ * One pass over the sorted, non-undone at-bats accumulates per-BATTER PA/K/DP/FC/
+ * walk and per-PITCHER PA/K, then emits the rate signals. A player's PA = the
+ * count of at-bats where they are the batter (batter traits) or the pitcher
+ * (pitcher traits) — the documented R1-a denominator. Strikeouts use the FULL
+ * K-family (STRIKEOUT_RESULTS), not just K/Kc. Role eligibility (VI.2) keeps a
+ * pitcher's batter-K signals out of the position pool and vice-versa downstream.
+ */
+function addOutcomeRateSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
+  interface BatterCounts { pa: number; k: number; dp: number; fc: number; walk: number; }
+  interface PitcherCounts { pa: number; k: number; }
+  const batterCounts = new Map<string, BatterCounts>();
+  const pitcherCounts = new Map<string, PitcherCounts>();
+
+  for (const atBat of sortAtBats(input.atBatEvents).filter((event) => !undoneAt(event))) {
+    const batter = batterCounts.get(atBat.batterId) ?? { pa: 0, k: 0, dp: 0, fc: 0, walk: 0 };
+    batter.pa += 1;
+    if (STRIKEOUT_RESULTS.has(atBat.result)) batter.k += 1;
+    if (atBat.result === 'DP') batter.dp += 1;
+    if (atBat.result === 'FC') batter.fc += 1;
+    if (atBat.result === 'BB' || atBat.result === 'IBB') batter.walk += 1;
+    batterCounts.set(atBat.batterId, batter);
+
+    const pitcher = pitcherCounts.get(atBat.pitcherId) ?? { pa: 0, k: 0 };
+    pitcher.pa += 1;
+    if (STRIKEOUT_RESULTS.has(atBat.result)) pitcher.k += 1;
+    pitcherCounts.set(atBat.pitcherId, pitcher);
+  }
+
+  for (const [batterId, counts] of batterCounts) {
+    if (counts.pa <= 0) continue;
+    const kRate = counts.k / counts.pa;
+    addRawSignal(raw, batterId, 'Whiffer', { signalValue: kRate, sampleSize: counts.pa });
+    addRawSignal(raw, batterId, 'Tough Out', { signalValue: 1 - kRate, sampleSize: counts.pa });
+    addRawSignal(raw, batterId, 'Easy Target', { signalValue: kRate, sampleSize: counts.pa });
+    addRawSignal(raw, batterId, 'Slow Poke', { signalValue: counts.dp / counts.pa, sampleSize: counts.pa });
+    addRawSignal(raw, batterId, 'Sprinter', { signalValue: counts.fc / counts.pa, sampleSize: counts.pa });
+    addRawSignal(raw, batterId, 'Mind Gamer', { signalValue: counts.walk / counts.pa, sampleSize: counts.pa });
+  }
+
+  for (const [pitcherId, counts] of pitcherCounts) {
+    if (counts.pa <= 0) continue;
+    const kRate = counts.k / counts.pa;
+    addRawSignal(raw, pitcherId, 'K Collector', { signalValue: kRate, sampleSize: counts.pa });
+    addRawSignal(raw, pitcherId, 'K Neglector', { signalValue: 1 - kRate, sampleSize: counts.pa });
+  }
+}
+
 type StolenBasePayload = NonNullable<BetweenPlayEvent['stolenBase']> & {
   runnerId?: string;
   isSuccessful?: boolean;
@@ -410,6 +482,7 @@ type StolenBasePayload = NonNullable<BetweenPlayEvent['stolenBase']> & {
 
 function addStealSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
   const attempts = new Map<string, Accumulator>();
+  const pitcherAttempts = new Map<string, Accumulator>();
   for (const event of sortBetweenPlayEvents(input.betweenPlayEvents).filter((item) => !undoneAt(item))) {
     const payload = event.stolenBase as StolenBasePayload | undefined;
     if (!payload?.runnerId || typeof payload.isSuccessful !== 'boolean') continue;
@@ -417,12 +490,28 @@ function addStealSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): v
     acc.sampleSize += 1;
     if (payload.isSuccessful) acc.successes += 1;
     attempts.set(payload.runnerId, acc);
+
+    // R1-a: opposing-steal outcomes joined to the pitcher who allowed/suppressed
+    // them via runnerAttribution.pitcherId. SB ⇒ success, CS ⇒ failure.
+    const pitcherId = event.runnerAttribution?.pitcherId;
+    if (pitcherId) {
+      const pAcc = pitcherAttempts.get(pitcherId) ?? { successes: 0, sampleSize: 0 };
+      pAcc.sampleSize += 1;
+      if (payload.isSuccessful) pAcc.successes += 1;
+      pitcherAttempts.set(pitcherId, pAcc);
+    }
   }
   for (const [runnerId, acc] of attempts) {
     if (acc.sampleSize <= 0) continue;
     const successRate = acc.successes / acc.sampleSize;
     addRawSignal(raw, runnerId, 'Stealer', { signalValue: successRate, sampleSize: acc.sampleSize });
     addRawSignal(raw, runnerId, 'Bad Jumps', { signalValue: 1 - successRate, sampleSize: acc.sampleSize });
+  }
+  for (const [pitcherId, acc] of pitcherAttempts) {
+    if (acc.sampleSize <= 0) continue;
+    const pitcherSuccessRate = acc.successes / acc.sampleSize;
+    addRawSignal(raw, pitcherId, 'Easy Jumps', { signalValue: pitcherSuccessRate, sampleSize: acc.sampleSize });
+    addRawSignal(raw, pitcherId, 'Pick Officer', { signalValue: 1 - pitcherSuccessRate, sampleSize: acc.sampleSize });
   }
 }
 
@@ -476,6 +565,7 @@ function addDurabilitySignals(input: SeasonTraitCandidateInput, raw: RawSignalMa
 function buildRawSignals(input: SeasonTraitCandidateInput): RawSignalMap {
   const raw: RawSignalMap = new Map();
   addAtBatSignals(input, raw);
+  addOutcomeRateSignals(input, raw);
   addStealSignals(input, raw);
   addButterFingersSignals(input, raw);
   addArmSignals(input, raw);

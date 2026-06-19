@@ -341,6 +341,46 @@ describe('traitAcquisition R-E-a latent-bug fixes + dormant tilts (§0.6/§0.7/�
   });
 });
 
+describe('traitAcquisition R1-a (K Neglector enters BUILDABLE)', () => {
+  // K Neglector is now negative-valence with a TIMID/DROOPY image driver.
+  test('K Neglector is negative: a DROOPY image driver fires and low resilience raises it', () => {
+    const droopyFragile = proposalFor('K Neglector', {
+      playerRole: 'pitcher',
+      personality: 'Droopy',
+      modifiers: { ...neutralModifiers, resilience: 0 },
+    });
+
+    expect(droopyFragile.imageValence).toBe('negative');
+    expect(droopyFragile.factors.imageAxisTilt).toBeGreaterThan(1);
+    expect(droopyFragile.factors.resilienceTilt).toBeGreaterThan(1);
+  });
+
+  test('K Neglector TIMID personality also drives the image axis', () => {
+    const timid = proposalFor('K Neglector', {
+      playerRole: 'pitcher',
+      personality: 'Timid',
+    });
+
+    expect(timid.factors.imageAxisTilt).toBeGreaterThan(1);
+  });
+
+  // (still) low charisma raises K Neglector P via the R-E-a charisma factor.
+  test('low charisma raises K Neglector probability above high charisma', () => {
+    const lowCharisma = proposalFor('K Neglector', {
+      playerRole: 'pitcher',
+      modifiers: { ...neutralModifiers, charisma: 0 },
+    });
+    const highCharisma = proposalFor('K Neglector', {
+      playerRole: 'pitcher',
+      modifiers: { ...neutralModifiers, charisma: 100 },
+    });
+
+    expect(lowCharisma.factors.charismaTilt).toBeGreaterThan(1);
+    expect(highCharisma.factors.charismaTilt).toBeLessThan(1);
+    expect(lowCharisma.probability).toBeGreaterThan(highCharisma.probability);
+  });
+});
+
 describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () => {
   test('hysteresis emits a gain at or above the gain threshold', () => {
     const result = computeTraitAcquisition(input({

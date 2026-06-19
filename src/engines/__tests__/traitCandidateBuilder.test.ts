@@ -164,6 +164,17 @@ describe('BUILDABLE_TRAITS', () => {
       'Noodle Arm',
       'Durable',
       'Injury Prone',
+      // R1-a: clean outcome-proxy traits.
+      'K Collector',
+      'K Neglector',
+      'Whiffer',
+      'Tough Out',
+      'Easy Target',
+      'Slow Poke',
+      'Sprinter',
+      'Mind Gamer',
+      'Pick Officer',
+      'Easy Jumps',
     ]);
   });
 
@@ -401,6 +412,145 @@ describe('direct-source signals', () => {
     expect(candidate(result, 'b1', 'Durable')?.signalValue).toBeCloseTo(-0.1, 10);
     expect(candidate(result, 'b2', 'Injury Prone')?.score.realityPercentile).toBeNull();
     expect(candidate(result, 'b2', 'Injury Prone')?.score.sufficiency).toBe('thin_sample');
+  });
+});
+
+describe('R1-a outcome-rate signals (per-PA proxies)', () => {
+  it('computes pitcher K Collector and K Neglector as K-rate / 1 - K-rate per PA', () => {
+    const events = [
+      ...repeat(3, () => atBat({ pitcherId: 'p1', batterId: 'opp', result: 'K' })),
+      ...repeat(7, () => atBat({ pitcherId: 'p1', batterId: 'opp', result: 'GO', outsAfter: 1 })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['p1'], 'pitcher'),
+      atBatEvents: events,
+    }));
+    expect(candidate(result, 'p1', 'K Collector')?.signalValue).toBeCloseTo(0.3, 10);
+    expect(candidate(result, 'p1', 'K Collector')?.sampleSize).toBe(10);
+    expect(candidate(result, 'p1', 'K Neglector')?.signalValue).toBeCloseTo(0.7, 10);
+    expect(candidate(result, 'p1', 'K Neglector')?.sampleSize).toBe(10);
+  });
+
+  it('computes batter Whiffer, Tough Out, and Easy Target from K-rate per PA', () => {
+    const events = [
+      ...repeat(4, () => atBat({ batterId: 'b1', result: 'Kc' })),
+      ...repeat(6, () => atBat({ batterId: 'b1', result: 'GO', outsAfter: 1 })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      atBatEvents: events,
+    }));
+    expect(candidate(result, 'b1', 'Whiffer')?.signalValue).toBeCloseTo(0.4, 10);
+    expect(candidate(result, 'b1', 'Tough Out')?.signalValue).toBeCloseTo(0.6, 10);
+    expect(candidate(result, 'b1', 'Easy Target')?.signalValue).toBeCloseTo(0.4, 10);
+    expect(candidate(result, 'b1', 'Whiffer')?.sampleSize).toBe(10);
+  });
+
+  it('counts a non-K/Kc strikeout (D3K) toward K-rate', () => {
+    const events = [
+      atBat({ batterId: 'b1', result: 'D3K', outsAfter: 0 }),
+      ...repeat(9, () => atBat({ batterId: 'b1', result: 'GO', outsAfter: 1 })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      atBatEvents: events,
+    }));
+    // D3K is a reach, but it is still a strikeout for K-rate purposes.
+    expect(candidate(result, 'b1', 'Whiffer')?.signalValue).toBeCloseTo(0.1, 10);
+    expect(candidate(result, 'b1', 'Easy Target')?.signalValue).toBeCloseTo(0.1, 10);
+    expect(candidate(result, 'b1', 'Tough Out')?.signalValue).toBeCloseTo(0.9, 10);
+  });
+
+  it('computes Slow Poke from DP-rate per PA', () => {
+    const events = [
+      ...repeat(2, () => atBat({ batterId: 'b1', result: 'DP', outsAfter: 2 })),
+      ...repeat(6, () => atBat({ batterId: 'b1', result: 'GO', outsAfter: 1 })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      atBatEvents: events,
+    }));
+    expect(candidate(result, 'b1', 'Slow Poke')?.signalValue).toBeCloseTo(0.25, 10);
+    expect(candidate(result, 'b1', 'Slow Poke')?.sampleSize).toBe(8);
+  });
+
+  it('computes Sprinter from FC-rate per PA', () => {
+    const events = [
+      ...repeat(3, () => atBat({ batterId: 'b1', result: 'FC', outsAfter: 1 })),
+      ...repeat(7, () => atBat({ batterId: 'b1', result: 'GO', outsAfter: 1 })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      atBatEvents: events,
+    }));
+    expect(candidate(result, 'b1', 'Sprinter')?.signalValue).toBeCloseTo(0.3, 10);
+  });
+
+  it('computes Mind Gamer from walk-rate (BB or IBB) per PA', () => {
+    const events = [
+      ...repeat(2, () => atBat({ batterId: 'b1', result: 'BB', outsAfter: 0 })),
+      ...repeat(3, () => atBat({ batterId: 'b1', result: 'IBB', outsAfter: 0 })),
+      ...repeat(5, () => atBat({ batterId: 'b1', result: 'GO', outsAfter: 1 })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      atBatEvents: events,
+    }));
+    expect(candidate(result, 'b1', 'Mind Gamer')?.signalValue).toBeCloseTo(0.5, 10);
+  });
+
+  it('computes pitcher Easy Jumps and Pick Officer from opposing steal success via runnerAttribution', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['p1'], 'pitcher'),
+      betweenPlayEvents: [
+        steal('r1', true, { runnerAttribution: { pitcherId: 'p1' } } as Partial<BetweenPlayEvent>),
+        steal('r2', false, { runnerAttribution: { pitcherId: 'p1' } } as Partial<BetweenPlayEvent>),
+        steal('r3', false, { runnerAttribution: { pitcherId: 'p1' } } as Partial<BetweenPlayEvent>),
+        steal('r4', false, { runnerAttribution: { pitcherId: 'p1' } } as Partial<BetweenPlayEvent>),
+      ],
+    }));
+    expect(candidate(result, 'p1', 'Easy Jumps')?.signalValue).toBeCloseTo(0.25, 10);
+    expect(candidate(result, 'p1', 'Pick Officer')?.signalValue).toBeCloseTo(0.75, 10);
+    expect(candidate(result, 'p1', 'Easy Jumps')?.sampleSize).toBe(4);
+  });
+
+  it('keeps pitcher-K and batter-K in separate role pools via role eligibility', () => {
+    // p1 is a pitcher; b1 is a position player. Each appears as BOTH batter and
+    // pitcher in some at-bat, but only the role-eligible trait is emitted.
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: [{ playerId: 'p1', role: 'pitcher' }, { playerId: 'b1', role: 'position' }],
+      atBatEvents: [
+        // p1 pitches and strikes batters out (pitcher K Collector eligible).
+        ...repeat(10, () => atBat({ pitcherId: 'p1', batterId: 'opp', result: 'K' })),
+        // p1 also takes an at-bat as batter and whiffs — but Whiffer is position-only.
+        ...repeat(10, () => atBat({ pitcherId: 'opp-p', batterId: 'p1', result: 'K' })),
+        // b1 bats and whiffs (position Whiffer eligible).
+        ...repeat(10, () => atBat({ pitcherId: 'opp-p', batterId: 'b1', result: 'K' })),
+        // b1 also "pitches" — but K Collector is pitcher-only.
+        ...repeat(10, () => atBat({ pitcherId: 'b1', batterId: 'opp', result: 'K' })),
+      ],
+    }));
+    // Pitcher gets the pitcher-K trait, NOT the batter-K trait.
+    expect(candidate(result, 'p1', 'K Collector')?.signalValue).toBeCloseTo(1, 10);
+    expect(candidate(result, 'p1', 'Whiffer')).toBeUndefined();
+    // Position player gets the batter-K trait, NOT the pitcher-K trait.
+    expect(candidate(result, 'b1', 'Whiffer')?.signalValue).toBeCloseTo(1, 10);
+    expect(candidate(result, 'b1', 'K Collector')).toBeUndefined();
+  });
+
+  it('skips undone at-bats when accumulating outcome rates', () => {
+    const events = [
+      atBat({ batterId: 'b1', result: 'K', undoneAt: 1 }),
+      ...repeat(4, () => atBat({ batterId: 'b1', result: 'K' })),
+      ...repeat(6, () => atBat({ batterId: 'b1', result: 'GO', outsAfter: 1 })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['b1'], 'position'),
+      atBatEvents: events,
+    }));
+    // The undone K is excluded: 4 K of 10 live PA, not 5 of 11.
+    expect(candidate(result, 'b1', 'Whiffer')?.signalValue).toBeCloseTo(0.4, 10);
+    expect(candidate(result, 'b1', 'Whiffer')?.sampleSize).toBe(10);
   });
 });
 

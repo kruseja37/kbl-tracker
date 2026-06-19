@@ -161,6 +161,36 @@ driver). Stale code entries (Stimulated, Magic Hands, Base Jogger, Consistent, V
   **PITCHER** traits — earning Two Way does NOT open the position-player (batting) trait pool. The on-grant random
   IF/OF/C fielding position is defensive-roster only. **There are now NO trait→trait eligibility dependencies in the model.**
 
+### 0.9 R1 PROXY DERIVATIONS — ruled (JK 2026-06-18); build R1 to these
+
+All rates are **per plate appearance (PA)** = the player's `atBatEvents` count (as batter or pitcher) unless noted.
+Percentile = vs the role-bucketed peer pool (the scorer, basis 'none'); the min-sample valve always applies.
+
+- **Strikeout family** (K Collector / K Neglector / Whiffer / Tough Out / Easy Target): strikeout = the FULL K-family
+  `{K, Kc, Ꝁ, D3K, WP_K, PB_K}` (NOT just K/Kc); rate = K/PA; the "low" traits (K Neglector, Tough Out) use `1 − K/PA`.
+  *(R1-a.)*
+- **Slow Poke** = `DP`/PA · **Sprinter** = `FC`/PA · **Mind Gamer** = `(BB+IBB)`/PA. *(R1-a.)*
+- **Pick Officer / Easy Jumps** = opposing steal-success rate vs the pitcher (`stolenBase.isSuccessful` joined via
+  `runnerAttribution.pitcherId`); Pick Officer = `1 − rate`. *(R1-a.)*
+- **Big Hack / Little Hack — OPTION B (percentile-merge), JK-ruled:** percentile each player's HR-rate (HR/PA) AND
+  AVG (hits/AB) vs the peer pool, then **Big Hack score = (HR-rate %ile + (1 − AVG %ile)) / 2**;
+  **Little Hack = ((1 − HR-rate %ile) + AVG %ile) / 2**. Both inputs on the 0–1 percentile scale → fair blend (no
+  unit mismatch). The merged score is the signalValue (needs a within-builder percentile pre-pass over HR-rate + AVG).
+  *(R1-b.)*
+- **Base Rounder** = a success is a runner advancing **beyond the forced minimum** (1st→3rd on a single, scoring from
+  2nd on a single, etc.) over the runner's advancement opportunities, from `atBat.runnerOutcomes` (from→to). *(R1-b.)*
+- **Distractor** (the pitcher fails more with this runner on) = success is the batter **reaching base (hit OR walk OR
+  HBP)** while the Distractor-owner is the runner on **1B or 2B**; denominator = PAs where the owner is on 1B/2B;
+  credited to the **runner** (owner), not the batter. *(R1-b.)*
+- **Two Way** = ONE earn-signal: elite hitting for a pitcher = the pitcher's **wOBA/PA** (`calculateWOBA`,
+  `bwarCalculator.ts`) percentile vs the **pitcher** peer pool. The **C/IF/OF variant is a random fielding position
+  assigned AT GRANT**, NOT three separate candidates. *(R1-b.)*
+- **Crossed Up** = passed-ball events (attributed to the pitcher via `wildPitchOrPassedBall.pitcherId`) per
+  **batters-faced**; **Bunter** = successful sacrifices (`result==='SAC'`) per **bunt attempt**. Both **OPT-IN**
+  (dormant until logged + min-sample). *(R1-b.)*
+- **Utility** = fielding perf at a **non-primary** position — requires threading a `primaryPositionByPlayer` map into
+  `SeasonTraitCandidateInput` (mechanical input addition). *(R1-b.)*
+
 ---
 
 ---

@@ -135,6 +135,8 @@ const NEGATIVE_IMAGE_TRAITS = new Set([
   'Whiffer',
   'Volatile',
   'Injury Prone',
+  // R1-a (§0.7): K Neglector enters BUILDABLE_TRAITS — negative valence + low-charisma lean.
+  'K Neglector',
 ]);
 
 const IMAGE_DRIVER_SETS: Readonly<Record<string, readonly CanonicalPersonality[]>> = {
@@ -166,6 +168,8 @@ const IMAGE_DRIVER_SETS: Readonly<Record<string, readonly CanonicalPersonality[]
   Bunter: ['TOUGH'],
   Whiffer: ['EGOTISTICAL'],
   'Cannon Arm': ['COMPETITIVE'],
+  // R1-a (§0.7): K Neglector image driver — same TIMID/DROOPY axis as Choker et al.
+  'K Neglector': ['TIMID', 'DROOPY'],
 };
 
 const ROSTER_ROLE_TRAITS = new Set(['Pinch Perfect', 'Utility']);

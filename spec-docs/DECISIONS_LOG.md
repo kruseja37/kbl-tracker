@@ -7,6 +7,31 @@
 
 ## June 2026
 
+### 2026-06-18 (R1 proxy derivations): the gap rulings for the R1 build (JK attended)
+
+**Context**: R1 grounding surfaced 6 implementation gaps where §0.6's proxy needed a computation ruling (the
+scorer takes ONE signalValue + one peer pool). JK ruled. Full buildable derivations now in
+`TRAIT_MEASUREMENT_SPEC.md §0.9`.
+
+- **Documented default:** all R1 rates are **per plate appearance (PA)** (the conventional reading of "rate").
+- **Big Hack / Little Hack = OPTION B (percentile-merge):** percentile HR-rate and AVG separately vs peers, then
+  **Big Hack = (HR-rate %ile + (1 − AVG %ile)) / 2** (Little Hack = mirror). Both inputs on the 0–1 percentile
+  scale → fair blend (no unit mismatch). JK: "yes, gap 1 = option B."
+- **Two Way = ONE earn-signal** (elite hitting = pitcher wOBA/PA vs the pitcher pool); C/IF/OF = random fielding
+  position assigned AT GRANT, not three candidates. JK: "yep."
+- **Base Rounder = advances beyond the forced minimum** (1st→3rd on a single, scoring from 2nd on a single, etc.)
+  over advancement opportunities (from `runnerOutcomes`). JK: "yes."
+- **Distractor — REFINED by JK:** success = the batter **reaches base (hit OR walk OR HBP)** while the
+  Distractor-owner is the runner on 1B/2B; denominator = PAs with the owner on 1B/2B; credited to the runner.
+  JK: "i like it but should we also add hits while on first or second? the key here is that the pitcher is failing
+  at a higher rate because of the runner on base" → broadened from walks-only to all reach-base.
+- **Crossed Up = passed balls per batters-faced; Bunter = successful sacs per bunt attempt** (both opt-in). JK: "yes."
+- **Utility** = fielding perf at a non-primary position → thread a `primaryPositionByPlayer` map into the builder
+  input (mechanical). JK: "yep."
+
+**Build split:** R1-a (clean, no-gap: strikeout family + Slow Poke/Sprinter/Mind Gamer + Pick Officer/Easy Jumps +
+K Neglector acq delta) DISPATCHED; R1-b (the 6 ruled-gap traits above) next, after R1-a commits (same files).
+
 ### 2026-06-18 (latest): No personality-only traits + spec-integrity fix (JK attended, R-E kickoff)
 
 **Context**: At the R-E (trait rebuild enabling pieces) kickoff, the Captain re-surfaced
