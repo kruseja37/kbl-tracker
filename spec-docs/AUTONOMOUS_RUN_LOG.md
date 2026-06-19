@@ -1670,3 +1670,33 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   fe65bf4b precedent). Recommend: keep exactly ONE AUTH-4 worker active.
 - **➡ NEXT = L11-5** (reporter tap: fired/relocated manager event → SeasonNewsEvent, mirror L10-5's pure adapter; build-DARK)
   → fame double-ladder collapse (L12-Q10 pre-L12 cleanup) → L12 recon-split.
+
+## 2026-06-19 — L11-5: reporter tap (manager firing/relocation → SeasonNewsEvent) — Codex-built → Opus-audited → host-gated → COMMITTED ⇒ L11 (managers) FULLY COMPLETE
+- **Routing restored to spec (Codex builder):** Opus (Captain) wrote the contract to PROMPT_CONTRACTS.md → Codex (gpt-5.5,
+  very-high) built via `codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -` fed a stdin heredoc
+  that POINTED at the contract section (NOT duplicated; NOT a subagent) → Opus independently audited the diff (builder≠auditor,
+  cross-model triangle) + ran the full host gate. Codex stayed within the 3 contracted code files (no scope creep).
+- **Deliverable (3 files):** (A) `src/engines/narrativeEngine.ts` — `MANAGER_CHANGE` added to `NarrativeEventType` + the
+  exhaustive `hedgingModifier` (0.90, "front-office fact known, motives uncertain" — matches TRADE_REACTION) + `highStakesEvents`;
+  additive + DORMANT (no `MANAGER_CHANGE` emitter exists → live behavior byte-unchanged for every existing event type).
+  (B) NEW pure `src/src_figma/app/engines/reporter/franchiseL11ManagerChangeNewsAdapter.ts`
+  (`buildFranchiseManagerChangeSeasonNewsEvent`: endReason = rebrand→relocated else fired [inline map, NO managerIdentityStorage
+  import → stays IndexedDB-free]; valence relocated→neutral else negative; magnitude = clamp((50−fanMorale)/50,0,1) default 0.4;
+  dramaticWeight = clamp(base[valence] + 0.3·magnitude, 0,1) via `L11_NEWS_DRAMATIC_WEIGHT {neutral 0.4, negative 0.6}`;
+  eventType `MANAGER_CHANGE`; subjectIds [fired, successor?]; constant-key facts; PURE; no id/createdAt). (C) NEW 9-test file.
+  Lives in `src/src_figma/app/engines/reporter/` (correct dependency direction — depends on the UI-layer SeasonNewsEvent type,
+  like L10-5). build-DARK: NO production caller, `seasonNewsGenerator.ts` untouched, NO flag/store/trackerDb change (v23).
+- **Audit VERDICT VERIFIED** (0 major / 0 minor): adapter is a faithful L10-5 mirror; narrativeEngine change additive+dormant;
+  tests non-vacuous (user==auto-backstop weight; rebrand<firing at same morale; morale monotonic; clamp [0,1] at morale 0;
+  no-successor subjectIds; determinism; fabrication/`id`/`createdAt` guard).
+- **HOST GATE (full, mine — Codex ran only the single test file):** `NODE_ENV= npm run build` exit 0 (✓ 7.5s + PWA) +
+  `NODE_ENV= npx vitest run` → **7,729/442, 7,726 pass / 3 fail** = 2 characterized (`wpaRuntimeBoundary` +
+  `franchiseManualSmokeFixture`) + 1 order-flake (`EliminationTeamHub` "legacy POG" — CONFIRMED passing solo 16/16 with
+  TeamPage; L11-5's surface has zero causal path to it), ZERO new reds, +9 / +1 file. Committed branch-only on
+  codex/franchise-v1-next (3 code files + docs; NEVER pushed).
+- **⇒ L11 (managers) FULLY COMPLETE:** L11-1 `46c3c761` · L11-2 `1821ad21` · L11-3 `4c59ecbd` · L11-3b `7268f9f1` · L11-4
+  `3e718e4f` · L11-5 (this commit) — all build-DARK behind `isFranchisePhase2L11Enabled`, activate post-D13.
+- **➡ NEXT = the fame double-ladder collapse (L12-Q10)** — a pre-L12 CODE-CLEANUP ticket + HARD PREREQUISITE before any L12
+  race goes live: retire the `fameEngine.ts getFameTier` forbidden labels; every race/fame-tier read must go through
+  `resolveFameTier`. Then L12 recon-split (award-cat extension / All-Star roster / race standing weighted-composite /
+  TV-family). Needs grounding (grep the two fame-tier ladders + their consumers) before contracting.

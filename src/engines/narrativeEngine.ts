@@ -85,7 +85,8 @@ export type NarrativeEventType =
   | 'PLAYOFF_RACE'
   | 'SEASON_SUMMARY'
   | 'OFFSEASON_NEWS'
-  | 'RANDOM_EVENT';
+  | 'RANDOM_EVENT'
+  | 'MANAGER_CHANGE';
 
 export interface NarrativeContext {
   eventType: NarrativeEventType;
@@ -598,6 +599,7 @@ export function determineConfidenceLevel(
     SEASON_SUMMARY: 1.0,    // Historical record
     OFFSEASON_NEWS: 0.75,   // Lots of rumors in offseason
     RANDOM_EVENT: 0.85,     // Varies widely
+    MANAGER_CHANGE: 0.90,   // Front-office fact known, motives uncertain
   };
 
   const effectiveConfidence = baseAccuracy * hedgingModifier[eventType];
@@ -632,7 +634,7 @@ export function requiresRetraction(
 ): boolean {
   // High-stakes inaccuracies need retractions
   const highStakesEvents: NarrativeEventType[] = [
-    'TRADE_REACTION', 'INJURY_REPORT', 'CALL_UP', 'OFFSEASON_NEWS'
+    'TRADE_REACTION', 'INJURY_REPORT', 'CALL_UP', 'OFFSEASON_NEWS', 'MANAGER_CHANGE'
   ];
 
   const severeInaccuracies: InaccuracyType[] = [

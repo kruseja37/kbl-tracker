@@ -5846,3 +5846,25 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   "start new session"). No corruption (the other session stopped before committing; this one took over cleanly per JK).
   Recommend keeping exactly ONE AUTH-4 worker active to avoid future collision/reconciliation (cf. the fe65bf4b precedent).
 - **➡ NEXT = L11-5** (reporter tap → SeasonNewsEvent), then the fame double-ladder collapse (L12-Q10 pre-L12 cleanup) → L12 recon-split.
+
+## 2026-06-19 (AUTH-4 overnight, solo) — L11-5: reporter tap (manager firing/relocation → SeasonNewsEvent) ⇒ L11 (managers) FULLY COMPLETE
+- Routing RESTORED to spec: Codex (gpt-5.5, very-high) built via `codex exec` stdin-from-contract (contract in
+  PROMPT_CONTRACTS.md, NOT duplicated); Opus independently audited (builder≠auditor — cross-model triangle) + ran the FULL
+  host gate (Codex ran only the single new test file).
+- **WHAT L11-5 DOES (3 files):** NEW pure build-DARK `src/src_figma/app/engines/reporter/franchiseL11ManagerChangeNewsAdapter.ts`
+  (`buildFranchiseManagerChangeSeasonNewsEvent`: firing ground-truth → `SeasonNewsEvent`, eventType `MANAGER_CHANGE`,
+  subjectIds [fired, successor?], constant-key facts, bounded dramaticWeight — negative for firings / neutral for
+  rebrand-relocations, magnitude from fan-morale-at-firing; inline endReason map keeps it IndexedDB-free; PURE, no
+  id/createdAt minted) + NEW test (9 tests, non-vacuous) + `MANAGER_CHANGE` added to `NarrativeEventType` + `hedgingModifier`
+  (0.90, matches TRADE_REACTION) + `highStakesEvents` (narrativeEngine.ts) — additive + DORMANT (no emitter, live reporter
+  byte-unchanged; seasonNewsGenerator.ts untouched). Mirrors L10-5.
+- **Audit:** diff read line-by-line; matches the contract exactly (no scope creep — Codex stayed within the 3 code files);
+  pure; constant-key facts; correct valence/magnitude/dramaticWeight; tests non-vacuous (user vs auto-backstop equal,
+  rebrand < firing at same morale, morale monotonicity, clamp boundary, no-successor subjectIds, determinism, fabrication
+  guard).
+- **Host gate (mine, full suite):** `NODE_ENV= npm run build` exit 0 (7.5s) + full suite **7,729/442, 7,726 pass / 3 fail**
+  = 2 characterized (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`) + 1 order-flake (`EliminationTeamHub`, CONFIRMED
+  passing solo 16/16 — L11-5's surface has zero causal path to it), ZERO new reds (+9). build-DARK; trackerDb v23.
+- Committed branch-only (NEVER pushed). **⇒ L11 (managers) FULLY COMPLETE (1–5).**
+- **➡ NEXT = the fame double-ladder collapse** (L12-Q10 pre-L12 cleanup — a hard prerequisite before any L12 race goes
+  live: retire `fameEngine.ts getFameTier` forbidden labels; races must read `resolveFameTier`) → L12 recon-split.

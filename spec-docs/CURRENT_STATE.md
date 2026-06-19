@@ -1,10 +1,10 @@
 # CURRENT_STATE.md — LIVE HEADER
 
 **Last Updated:** 2026-06-19 — **ACTIVE (AUTH-4 UNATTENDED OVERNIGHT).** **L11 manager-firings BUILD rolling under
-AUTH-4 — L11-1 engine + L11-2 legacy-write + L11-3 resolver + L11-3b auto-backstop + L11-4 Almanac tenure-join DONE ⇒ L11
-FIRING CORE COMPLETE; the L11–L14 RULING PASS is consolidated (all 43 Qs ruled; 7 JK overrides + 2 field corrections).**
-Build → Opus-audited, branch-only, build-DARK; trackerDb v23. **➡ NEXT = L11-5 (reporter tap)** then fame double-ladder
-collapse → L12 (split) → L13 (split) → L14 → L-SIM. Per-ticket detail in `AUTONOMOUS_RUN_LOG.md`. *(prior:)* **L10 Q5/Q8 REWORK COMPLETE → L10 (random events) FULLY
+AUTH-4 — L11-1 engine + L11-2 legacy-write + L11-3 resolver + L11-3b auto-backstop + L11-4 Almanac tenure-join + L11-5
+reporter tap DONE ⇒ **L11 (managers) FULLY COMPLETE (1–5)**; the L11–L14 RULING PASS is consolidated (all 43 Qs ruled; 7
+JK overrides + 2 field corrections).** Codex-built → Opus-audited, branch-only, build-DARK; trackerDb v23. **➡ NEXT =
+fame double-ladder collapse (L12-Q10 pre-L12 cleanup)** → L12 (split) → L13 (split) → L14 → L-SIM. Per-ticket detail in `AUTONOMOUS_RUN_LOG.md`. *(prior:)* **L10 Q5/Q8 REWORK COMPLETE → L10 (random events) FULLY
 COMPLETE.** Continuous per-game cadence (Q5 — dropped the 20%-checkpoint gate; flat per-game §16 base rates) +
 `name_change` in the dark catalog (Q8 — rare distinct cosmetic-family event). **Builder routing RESTORED to Codex**
 (JK directive) — Codex CLI (gpt-5.5, xhigh) built via `codex exec` stdin-from-contract; Opus 4.8 audited (cross-model
@@ -71,7 +71,7 @@ is **~95% BUILT / production-ready** → it's a CLEANUP pass, not a build: domin
 files** (FranchiseHome 626 · TeamHubContent 506 · ScheduleContent 90 · AwardsWatchlist 30) → extract to KBL-palette
 theme tokens + minor polish (~1 week). **Timing: it's the LIVE surface, decoupled from D13/L-stack/GameTracker — do it
 ANYTIME (no gate forces a wait; mild bonus to doing tokens before the hub's future activation overlays).** Suite
-**7,720/441, 7,718 pass / 2 characterized fail (post-L11-4; +7 tenure tests)** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` +
+**7,729/442, 7,726 pass / 3 fail (post-L11-5; +9 reporter-tap tests) = 2 characterized + 1 order-flake (`EliminationTeamHub`, passes solo 16/16)** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture` +
 `GameTrackerLaunchState` — the 3rd an intermittent order-flake **confirmed passing solo 9/9**; `franchiseOffseasonGuards.component`
 is another such flake); trackerDb **v23**; branch codex/franchise-v1-next; **nothing pushed**. Session commits: R1-b1
 `474196e7` · R1-b2 `bbb839ce` · R2 `b80fa135` · R1-b3 `7e22e015` · R3 `9059f697` · W1 `6a934a9e` · PRE-ACT-TRAITS gate
@@ -195,6 +195,22 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## RIGHT NOW
 
+- **✅ L11-5 VERIFIED + COMMITTED (2026-06-19, AUTH-4 — Codex-built → Opus-audited) — the reporter tap (manager
+  firing/relocation → SeasonNewsEvent). ⇒ L11 (managers) FULLY COMPLETE (1–5).** NEW pure build-DARK adapter
+  `src/src_figma/app/engines/reporter/franchiseL11ManagerChangeNewsAdapter.ts` (`buildFranchiseManagerChangeSeasonNewsEvent`):
+  maps a firing's deterministic ground truth → `SeasonNewsEvent` (eventType `MANAGER_CHANGE`, subjectIds [fired,
+  successor?], constant-key `facts`, bounded `dramaticWeight` — negative for firings, neutral for rebrand-relocations,
+  magnitude from fan-morale-at-firing); inline `endReason` map (rebrand→relocated, else fired) keeps it free of IndexedDB
+  deps; PURE (no Date/Math.random/I/O/LLM), no id/createdAt minted. + `MANAGER_CHANGE` added to `NarrativeEventType` +
+  `hedgingModifier` (0.90, matches TRADE_REACTION) + `highStakesEvents` (narrativeEngine.ts) — **additive + DORMANT** (no
+  emitter, so live reporter behavior is byte-unchanged for all existing event types; `seasonNewsGenerator.ts` untouched).
+  Mirrors L10-5 exactly. **Routing RESTORED to spec:** Codex (gpt-5.5, very-high) built via `codex exec` stdin-from-contract
+  → Opus independently audited the diff line-by-line (builder≠auditor) + ran the FULL host gate (Codex only ran the single
+  test file). Host gate: `NODE_ENV= npm run build` exit 0 (7.5s) + full suite **7,729/442, 7,726 pass / 3 fail** = 2
+  characterized (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`) + 1 order-flake (`EliminationTeamHub`, **confirmed
+  passing solo 16/16**), ZERO new reds (+9). build-DARK; no flag/store/trackerDb change (v23). **➡ NEXT = the fame
+  double-ladder collapse** (L12-Q10 pre-L12 cleanup: retire `fameEngine.ts getFameTier` forbidden labels; races must read
+  `resolveFameTier`) → L12 recon-split. *(Prior entries below.)*
 - **✅ L11-4 VERIFIED + COMMITTED (2026-06-19, AUTH-4 TAKEOVER) — the Almanac fire/hire-date tenure join + DURABLE
   fired-tenure persistence (resolves the L11-3 OPEN). ⇒ L11 FIRING CORE COMPLETE.** NEW `ManagerTenureRecord` +
   `ManagerTenureEndReason` ('fired'/'resigned'/'relocated') types + `ManagerProfile.tenureRecords?` (managerWpa.ts);

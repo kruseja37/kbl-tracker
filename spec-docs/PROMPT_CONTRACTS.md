@@ -11193,3 +11193,80 @@ roll → `fireManager`), 7th `processCompletedGame` gate branch; doubly-dark, tr
 25, perGameProbability 0.004, flat — payroll-band deferred). VERIFY-AT-ACTIVATION: gameState↔morale/assignment team-id
 namespace (logged). Host gate: `npm run build` exit 0 (7.66s) + suite **7,713/441, 7,711 pass / 2 characterized fail**,
 ZERO new reds (+5). Committed (3 files + docs; not pushed). **➡ NEXT = L11-4.**
+
+## CONTRACT — L11-5 (reporter tap: manager firing/relocation → SeasonNewsEvent) — 2026-06-19 (AUTH-4 overnight)
+
+**ROUTE: Codex CLI (`codex exec`, prompt via stdin from this contract) | very high reasoning effort** (builder; PURE
+adapter, low risk — mirror of L10-5). Auditor = Opus Captain (cross-model triangle; builder≠auditor). Branch
+codex/franchise-v1-next. BUILD-DARK: NO production caller; the live reporter (`seasonNewsGenerator.ts`) stays
+byte-unchanged. Source of truth: `spec-docs/L11_SCOPE_MAP.md` §L11-5 + the L10-5 adapter pattern
+(`src/src_figma/app/engines/reporter/franchiseL10NewsAdapter.ts`) + the §24/REP reporter cadence (a manager FIRING is a
+named per-event take). This is the FINAL L11 piece.
+
+**GOAL:** a PURE, deterministic, build-DARK adapter that maps a manager firing/relocation (the deterministic ground truth
+of an L11-3 `fireManager` result) into a `SeasonNewsEvent` — the same reporter input shape L10-5 produces. Plus the one
+prerequisite: a `MANAGER_CHANGE` `NarrativeEventType` so the firing is framed correctly (a firing is neither RANDOM_EVENT
+nor OFFSEASON_NEWS). NO live caller, NO emission path — the live emission is the deferred post-D13 seam (mirrors L10-5).
+
+**CHANGES (edit ONLY the 3 files below):**
+**A. MODIFY `src/engines/narrativeEngine.ts`** — additive + DORMANT (no `MANAGER_CHANGE` emitter exists, so live behavior
+for all existing event types is unchanged):
+- Add `| 'MANAGER_CHANGE'` as the last member of the `NarrativeEventType` union (after `'RANDOM_EVENT'`).
+- Add `MANAGER_CHANGE: 0.90,` to the exhaustive `hedgingModifier: Record<NarrativeEventType, number>` (≈line 589) — the
+  FACT of a firing is a confirmed front-office transaction (match `TRADE_REACTION: 0.90`); comment `// Front-office fact known, motives uncertain`. (tsc -b FORCES this entry — the Record is exhaustive.)
+- Add `'MANAGER_CHANGE'` to the `highStakesEvents` array (≈line 634) — a firing is high-stakes.
+**B. NEW `src/src_figma/app/engines/reporter/franchiseL11ManagerChangeNewsAdapter.ts`** — mirror `franchiseL10NewsAdapter.ts`
+EXACTLY in shape/purity/doc-comment style:
+- `export const L11_NEWS_DRAMATIC_WEIGHT = { base: { neutral: 0.4, negative: 0.6 }, magnitudeScale: 0.3 } as const;` (`neutral` = the rebrand/relocation case, `negative` = a firing). §16 placeholder, conservative; a firing out-drama-weights a random event (L10 base 0.5) slightly.
+- `export interface FranchiseManagerChangeNewsInput { franchiseId: string; seasonId: string; seasonNumber: number; teamId: string; teamName: string; firedManagerId: string; firedManagerName?: string; successorManagerId?: string; successorManagerName?: string; reason: ManagerFiredReason; endDate: string; teamFanMoraleAtFiring?: number; }` (import `ManagerFiredReason` + `ManagerTenureEndReason` as TYPES from `../../../../types/managerWpa` — that file is pure types, NO IndexedDB).
+- `export function buildFranchiseManagerChangeSeasonNewsEvent(input: FranchiseManagerChangeNewsInput): SeasonNewsEvent`:
+  - `const endReason: ManagerTenureEndReason = input.reason === 'rebrand' ? 'relocated' : 'fired';` (inline — do NOT import `managerFiredReasonToTenureEndReason` from `managerIdentityStorage.ts`; that would pull IndexedDB into a pure adapter. The two-line map is the local, pure equivalent; keep them logically in sync.)
+  - `const valence: 'neutral' | 'negative' = endReason === 'relocated' ? 'neutral' : 'negative';`
+  - `const magnitude = input.teamFanMoraleAtFiring != null ? clamp((50 - input.teamFanMoraleAtFiring) / 50, 0, 1) : 0.4;` (lower fan morale at firing → more dramatic; default 0.4 when unknown).
+  - `const dramaticWeight = clamp(L11_NEWS_DRAMATIC_WEIGHT.base[valence] + L11_NEWS_DRAMATIC_WEIGHT.magnitudeScale * magnitude, 0, 1);`
+  - `const eventType: NarrativeEventType = 'MANAGER_CHANGE';` (import the TYPE from `../../../../engines/narrativeEngine`).
+  - `subjectIds: [input.firedManagerId, ...(input.successorManagerId ? [input.successorManagerId] : [])]`.
+  - `facts` = a CONSTANT key set (mirror L10-5's constant-key facts; undefined optionals pass through): `{ teamId, teamName, firedManagerId, firedManagerName, successorManagerId, successorManagerName, reason, endReason, endDate, teamFanMoraleAtFiring }` — deterministic ground truth lifted from input, NEVER fabricated.
+  - returns `{ franchiseId, seasonId, seasonNumber, eventType, subjectIds, facts, dramaticWeight }`.
+  - local `clamp(value,min,max)` helper (copy L10-5's). PURE: no LLM/network/IndexedDB/`Date`/`Math.random`/async. NO `id`/`createdAt` minted here (the live reporter mints those downstream — mirror L10-5).
+**C. NEW `src/src_figma/__tests__/reporter/franchiseL11ManagerChangeNewsAdapter.test.ts`** (mirror the location/style of
+`src/src_figma/__tests__/reporter/franchiseL10NewsAdapter.test.ts`):
+- exact-key-set lock on the returned `SeasonNewsEvent` AND on `facts` (locks the shape).
+- `reason:'user'` → `eventType 'MANAGER_CHANGE'`, `facts.endReason 'fired'`, negative framing, `subjectIds [fired, successor]`.
+- `reason:'auto-backstop'` → `facts.endReason 'fired'` (same negative framing).
+- `reason:'rebrand'` → `facts.endReason 'relocated'`, neutral framing; its `dramaticWeight` < a `'user'` firing with the SAME `teamFanMoraleAtFiring` (relocation is lower-drama).
+- magnitude monotonicity: lower `teamFanMoraleAtFiring` → strictly higher `dramaticWeight` (two inputs differing only in morale).
+- absent `successorManagerId` → `subjectIds === [firedManagerId]`.
+- determinism: same input twice → `toEqual` (deeply equal).
+- `dramaticWeight` always within [0,1] (clamp boundary: e.g. morale 0 → still ≤ 1).
+
+**HARD CONSTRAINTS:** edit ONLY the 3 files above. Do NOT touch `seasonNewsGenerator.ts` (reporter byte-unchanged), the
+live reporter/emission path, `reporterIntensity.ts`, any store/`trackerDb.ts` (NO version bump), `franchisePhase2Flags.ts`,
+`franchiseManagerFiring.ts`, any other `*.md`. NO new flag, NO store. The adapter has NO production caller (build-DARK,
+orphaned-pending the post-D13 emission seam). NO `Date.now`/`Math.random`/network/IndexedDB in the adapter. No git
+add/commit. Prefix all tsc/vitest with `NODE_ENV= `.
+
+**VERIFICATION (run ALL, paste ACTUAL):** `NODE_ENV= npx tsc --noEmit` exit 0 AND `NODE_ENV= npm run build` exit 0 (the
+build is `tsc -b` + vite — NOT just `tsc --noEmit`; it FORCES the new `hedgingModifier` entry — the L11-3 fix1 lesson);
+`NODE_ENV= npx vitest run src/src_figma/__tests__/reporter/franchiseL11ManagerChangeNewsAdapter.test.ts` all green.
+
+**STOP-IF:** the `SeasonNewsEvent` interface differs from what L10-5 produces (re-read `seasonNewsGenerator.ts`), OR
+`ManagerFiredReason`/`ManagerTenureEndReason` are not exported from `types/managerWpa.ts` → STOP + report (do not guess).
+
+**FORMAT:** 1) files changed; 2) the adapter API + the `MANAGER_CHANGE` additions + the valence/magnitude/dramaticWeight
+decisions; 3) verification output (paste actual); 4) "L11-5 complete" or "BLOCKED: <reason>". Do NOT commit.
+
+Use very high reasoning effort. Think step-by-step. Read `franchiseL10NewsAdapter.ts` (the pattern to mirror),
+`franchiseL10NewsAdapter.test.ts` (test style), `seasonNewsGenerator.ts` (the `SeasonNewsEvent` interface),
+`narrativeEngine.ts` (`NarrativeEventType` + `hedgingModifier` + `highStakesEvents`), `types/managerWpa.ts`
+(`ManagerFiredReason` + `ManagerTenureEndReason`).
+
+**Status:** ✅ VERIFIED + COMMITTED 2026-06-19 (AUTH-4). Codex (gpt-5.5, very-high) built via `codex exec`
+stdin-from-contract (stayed within the 3 contracted code files — no scope creep) → Opus independently audited the diff
+line-by-line (builder≠auditor) + ran the FULL host gate (Codex ran only the single test file). `MANAGER_CHANGE` added to
+`NarrativeEventType`/`hedgingModifier` (0.90)/`highStakesEvents` — additive + DORMANT (no emitter; live reporter
+byte-unchanged). Pure adapter mirrors L10-5: valence (firing negative / rebrand-relocation neutral) + morale-magnitude →
+clamped `dramaticWeight`; constant-key facts; inline `endReason` map (no IndexedDB pull-in). Host gate: `NODE_ENV= npm run
+build` exit 0 (7.5s) + full suite **7,729/442, 7,726 pass / 3 fail** = 2 characterized + 1 order-flake (`EliminationTeamHub`,
+confirmed passing solo 16/16), ZERO new reds (+9). build-DARK; no flag/store/trackerDb change (v23). ⇒ L11 (managers)
+FULLY COMPLETE (1–5). **➡ NEXT = fame double-ladder collapse (L12-Q10) → L12.**
