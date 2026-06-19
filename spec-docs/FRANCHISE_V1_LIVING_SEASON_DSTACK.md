@@ -11,6 +11,14 @@ below). Remaining ratification gates: JK explicit sign-off on the structure + D0
 from the Phase-1 D-stack (D1–D13 in `FRANCHISE_PLAYABLE_V1_DEFINITION.md`) and the LS-N decision-log ids.
 Final naming is JK's call.
 
+> **⚠️ TREE-RECONCILE (ruling pass 2026-06-19) — this DSTACK predates the L1–L10 build.** Tickets **L1–L10 are
+> BUILT** (build-dark, committed on `codex/franchise-v1-next`); in particular **fame (L6 / `fameModel.ts` +
+> `franchiseFameCompute.ts`)** and **awards (D9 / `franchiseAwardsEngine.ts`, live)** EXIST — treat any "build X"
+> wording below for them as **reconcile-to-tree, do NOT rebuild** (readiness-audit cross-cutting #1). **L11–L14 are
+> RULED** (ruling pass, JK 2026-06-19 — see `DECISIONS_LOG.md` + `L11_L14_OPEN_QUESTIONS.md`) and pending build; only
+> sim magnitudes remain deferred. The separate `kbl-relationships` DB named below is **RETIRED** (L13 reuses
+> `rivalryScores` in the shared `kbl-tracker` DB per SEA-3 / L13-Q12).
+
 > **Relationship to Phase-1.** Phase-1 = the D-stack (D1–D13), the value-spine-LIVE + real-awards cut line,
 > ships FIRST. Phase-2 = this L-stack, the in-season "soul" layer, layers on top. Per F-141 the D-stack still
 > ships first; the rule (§E) is **BUILD Phase-2 foundations dark in parallel with the late D-stack, ACTIVATE
@@ -117,7 +125,7 @@ Routing per ticket: Codex 5.5 | very-high (state/persistence/matrix) or high (pu
 4. **C4 — Backup parity GROWS, and is already in deficit.** `backupRestore.ts:275` pins v12 while
    `trackerDb.ts:17` is v15 → 3 franchise-economy stores already silently drop. The D2 parity-guard covers
    only the shared `kbl-tracker` DB; Phase-2 stores in separate DBs (`kbl-franchise-morale`,
-   `kbl-relationships`, fame Heat/Reach, race standings) are guarded by nothing. **Action:** (a) re-scope the
+   `kbl-relationships` [RETIRED — L13 reuses the `rivalryScores` store in the shared `kbl-tracker` DB per SEA-3 / L13-Q12, ruling pass 2026-06-19; no separate relationships DB], fame Heat/Reach, race standings) are guarded by nothing. **Action:** (a) re-scope the
    guard to ALL ~22 backed-up DBs (registry store-set + keyPaths + indexes === live opener) as a failing CI
    assertion; (b) reconcile `syncConfig.ts` + `franchiseSaveSlotManifest.ts` to one canonical DB list;
    (c) a **prerequisite hardening ticket**: wire export/restore to a real tested UI trigger + fail-closed on

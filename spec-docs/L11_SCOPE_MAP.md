@@ -250,6 +250,14 @@ The "fan morale craters / sustained low" measurement does NOT exist in code (onl
 `trendStreak` in fanMoraleEngine.ts; threshold/duration is Sim-Gate-owned and unbuilt).
 
 ## 7. OPEN QUESTIONS FOR JK (genuine rulings; AUTH-4 defaults taken meanwhile)
+
+> **✅ ALL RULED (ruling pass, JK 2026-06-19).** Every question below is now ruled — see `DECISIONS_LOG.md`
+> "L11–L14 ruling pass" + `L11_L14_OPEN_QUESTIONS.md`. Q1–Q6 + the §4 forks were settled at the L11 kickoff
+> (DECISIONS_LOG 2026-06-18: trigger=both+L14, scaled gate/relief, flat-clubhouse, one-fan-write, MOY-out). Q7–Q13
+> ruled in the pass: Q7 personality on the identity profile (7-enum) · Q8 auto-generate successor · Q9 ride existing
+> stores + tenure end-reason · Q10 build-dark/L1-gates-activation · Q11 the L14 firing-call contract
+> (`suppressFanReliefBump`) · Q12 MOY-out confirmed · Q13 minimal "Fire Manager" surface (framing later). Retained
+> below as the rationale/citation map.
 1. **Firing trigger model + threshold.** §12 = GM-discretionary "valve"; the orphaned
    `calculateFanExpectations` (salaryCalculator.ts:1278-1294) encodes an auto-probability roll
    (0.05–0.15 by payroll band) + the salary spec adds a 25%-games gate. **Button vs auto-roll

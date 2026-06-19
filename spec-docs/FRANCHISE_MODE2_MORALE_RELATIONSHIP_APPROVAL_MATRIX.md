@@ -1,5 +1,12 @@
 # Franchise Mode 2 Morale / Relationship Approval Matrix
 
+> ## ⚠️ SUPERSEDED-BY-§24 (L13-Q11, ruling pass 2026-06-19)
+> The relationship rows in this 2026-06-02 matrix (marked "Awaiting user approval"/"blocked") are **SUPERSEDED** by
+> `FRANCHISE_V1_LIVING_SEASON_SPEC.md §24` + the REL-1..9 decision log + the L13 rulings in `DECISIONS_LOG.md`
+> ("L11–L14 ruling pass"). Relationships are **ratified and IN v1** (LSD-6 — the living season is v1). Do NOT read
+> "blocked"/"awaiting approval" from this doc as current status; §24 + the L13 rulings are the sole authority. This
+> file is retained for historical context only.
+
 **Date:** 2026-06-02
 **Branch:** `codex/franchise-v1-next`
 **Source docs:**

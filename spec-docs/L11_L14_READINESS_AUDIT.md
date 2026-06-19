@@ -5,6 +5,12 @@
 (*is each soul-layer measurement pinned enough to build without inference, internally consistent, and
 non-contradictory with the other specs + the code* — NOT just "is there a LOCKED design paragraph").
 
+> **✅ RESOLVED (ruling pass, JK 2026-06-19).** This audit's ~34 gaps were compiled into decision-ready questions
+> (`L11_L14_OPEN_QUESTIONS.md`, 6-agent workflow `wf_1f3e2c10-e94`) and **all ruled by JK** — see `DECISIONS_LOG.md`
+> "L11–L14 ruling pass." Only sim magnitudes remain deferred (§16 placeholders). Two of this audit's "missing field"
+> gaps were WRONG: player `gender` AND `age` both already exist as persisted player fields (L13-Q3/Q9). This audit
+> is retained as the map of what each per-ticket build ratification still folds in.
+
 ## HEADLINE
 
 **All four L11–L14 = `GAPS-NEED-JK-RULINGS`. None is build-ready-to-spec.** The §12/§20–24 sections are

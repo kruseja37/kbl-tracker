@@ -1,5 +1,12 @@
 # Franchise Mode 2 Morale / Relationship Decision Worksheet
 
+> ## ⚠️ SUPERSEDED-BY-§24 (L13-Q11, ruling pass 2026-06-19)
+> This 2026-06-02 worksheet's relationship decisions (empty checkboxes / "awaiting approval") are **SUPERSEDED** by
+> `FRANCHISE_V1_LIVING_SEASON_SPEC.md §24` + REL-1..9 + the L13 rulings in `DECISIONS_LOG.md` ("L11–L14 ruling
+> pass"). The relationship taxonomy (the §24 six affect-edges), formation gates, reporter accuracy, charged
+> matchups, and morale coupling are all RULED there. Its **7 ENTITY-edges are a different axis (who-to-whom)** and
+> fold into edge endpoints, NOT edge types (L13-Q1). Retained for historical context only; §24 + L13 are authority.
+
 **Date:** 2026-06-02
 **Branch:** `codex/franchise-v1-next`
 **Current HEAD:** `45bec28 Document and surface Mode 2 foundation status`

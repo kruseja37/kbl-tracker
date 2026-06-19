@@ -12,6 +12,30 @@ settled decisions.
 
 ---
 
+> ## ✅ STATUS: RULED (JK ruling pass, 2026-06-19)
+> **All 43 open questions across L11–L14 are now ruled** — see the authoritative record in
+> `DECISIONS_LOG.md` → **"2026-06-18/19 (L11–L14 ruling pass)"** (per-ticket rulings, with JK's overrides and the
+> two field corrections below). This worksheet is retained as the rationale/citation map; the DECISIONS_LOG entry
+> is the source of truth for what was decided.
+>
+> **JK overrides of the Captain default** (don't assume the default below was taken): L12-Q1 (season-race slots
+> now, defer the 2 one-shots) · L12-Q2 (single weighted composite, reconciled to per-race-type weights) · L12-Q8
+> (L6 owns the whole status layer) · L12-Q13 (lock at 60%, not 50%) · L13-Q7 (keep flat base constants + matrix
+> multiplier) · L14-Q2 (clear non-Captain badges + re-seed a new Fan Hopeful) · L14-Q3 (rebrand DOES reset the
+> whole roster's fame — a 2nd reset valve, amend FAME-7).
+>
+> **Field corrections (workflow gaps that were WRONG):** player **`gender`** AND **`age`** both already exist as
+> persisted player fields (`playerDatabase`/`unifiedPlayerStorage`/`leagueBuilderStorage` + Builder UI) — so L13-Q3
+> ('young' reads real age) and L13-Q9 (romance reads real gender) need **no new field and no L1 dependency**; the
+> agents missed them by checking `HiddenModifiers`/`ManagerProfile` instead of the player record.
+>
+> **Spec-doc reconciliation follow-ups (doc-hygiene, apply before/at each build):** amend FAME-7 (L14-Q3) · stamp
+> the two `FRANCHISE_MODE2_MORALE_RELATIONSHIP_*` docs SUPERSEDED-BY-§24 (L13-Q11) · retire the DSTACK
+> `kbl-relationships` DB wording (L13-Q12) · reconcile the stale DSTACK · schedule the fame double-ladder collapse
+> as a pre-L12 cleanup (L12-Q10).
+
+---
+
 ## THE FRAMING DECISION (read first)
 
 There is a real tension to settle before ruling anything:

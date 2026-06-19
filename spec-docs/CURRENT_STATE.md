@@ -1,8 +1,9 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-18 — **ACTIVE (attended).** **L11 (manager firings) STARTED — recon + JK rulings + L11-1 engine
-+ L11-2 legacy-write DONE** (Codex-built → Opus-VERIFIED, build-DARK; ➡ NEXT = L11-3 flag + firing resolver — **HELD
-pending a concurrent-session coordination check**). *(prior:)* **L10 Q5/Q8 REWORK COMPLETE → L10 (random events) FULLY
+**Last Updated:** 2026-06-19 — **ACTIVE (attended).** **L11 (manager firings) STARTED — recon + rulings + L11-1 engine
++ L11-2 legacy-write DONE; the L11–L14 RULING PASS landed** (all 43 open Qs ruled via the parallel design session — 7 JK
+overrides + 2 field corrections; consolidated + committed here). **➡ NEXT = L11-3 (flag + shared firing resolver), now
+fully ruled.** *(prior:)* **L10 Q5/Q8 REWORK COMPLETE → L10 (random events) FULLY
 COMPLETE.** Continuous per-game cadence (Q5 — dropped the 20%-checkpoint gate; flat per-game §16 base rates) +
 `name_change` in the dark catalog (Q8 — rare distinct cosmetic-family event). **Builder routing RESTORED to Codex**
 (JK directive) — Codex CLI (gpt-5.5, xhigh) built via `codex exec` stdin-from-contract; Opus 4.8 audited (cross-model
@@ -193,6 +194,27 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## RIGHT NOW
 
+- **✅ L11–L14 RULING PASS consolidated + COMMITTED (2026-06-19, attended) — the design-session handoff.** A parallel
+  design session (`fe65bf4b`, workflow `wf_1f3e2c10-e94`, 6 agents w/ adversarial auditors) brought L12/L13/L14 to the
+  L11 §7 decision-ready standard; JK ruled all 43 open questions in one pass (`L11_L14_OPEN_QUESTIONS.md`). The build
+  session (Captain) REVIEWED the uncommitted output (read the full `DECISIONS_LOG` ruling entry + spot-checked the
+  §14/FAME-7/§20.4/DSTACK/MODE2 edits — all sound + traceable to ruling ids), then committed + consolidated.
+  **7 JK OVERRIDES:** L12-Q1 (award-cat = season-race slots NOW [`ALL_STAR`/`BENCH_PLAYER`/`BOOGER_GLOVE`/
+  `RELIEVER_OF_YEAR`], defer the 2 one-shots); L12-Q2 (race standing = single weighted composite w/ per-race-type
+  weights — fame-led fan-vote, merit-dominant awards); L12-Q8 (the WHOLE §20.4 status-fame layer = L6 owns it; L12 only
+  consumes the tier); L12-Q13 (All-Star lock at 60%, not 50%); L14-Q2 (badge reset re-seeds a NEW Fan Hopeful); L14-Q3
+  (rebrand RESETS roster fame team-wide → FAME-7 amended to "trade OR rebrand"); L11-Q11/L14-Q8 (`fireManager({reason:
+  'rebrand', skipUserConfirm:true, suppressFanReliefBump:true})` — ripple applies, relief bump suppressed). **2 FIELD
+  CORRECTIONS** (worksheet was WRONG): player `age` AND `gender` ARE real persisted fields → L13 needs NO new field + NO
+  L1 age/gender dependency. **Doc-hygiene done:** DSTACK tree-reconcile banner (L1-L10 built — don't rebuild fame/awards;
+  `kbl-relationships` DB RETIRED → reuse `rivalryScores`); MODE2 approval-matrix + worksheet stamped SUPERSEDED-BY-§24
+  (closes the FINDING-150 "awaiting approval" trap). **2 follow-ups flagged, deferred to build:** the row-by-row stale-
+  DSTACK rewrite (banner instead — a careless sweep risks errors); the fame double-ladder collapse (L12-Q10 = a code-
+  cleanup ticket, hard prerequisite BEFORE any L12 race goes live). **⇒ L11 fully ruled (Q5–Q13).** **➡ NEXT = L11-3** —
+  the flag + shared firing resolver: a default-OFF `isFranchisePhase2L11Enabled` + a `fireManager(...)` that wires L11-1's
+  engine + `setManagerFired` (L11-2) + the L3 matrix consequence sink; manual valve + auto-backstop (revive the orphaned
+  `managerFireProbability`) + the L14 `reason:'rebrand'` entry; auto-gen successor (`buildDefaultManagerProfile`); minimal
+  "Fire Manager" GM action in v1. Build-DARK. *(Prior entries below.)*
 - **✅ L11-2 VERIFIED + COMMITTED (2026-06-18, attended) — the manager-firing legacy-write primitive.** Added
   `ManagerFiredReason` (`'user'|'auto-backstop'|'rebrand'`) + an optional `ManagerAssignment.firedReason` (managerWpa.ts)
   + an idempotent `setManagerFired(params)` mutator (managerIdentityStorage.ts): get → null-if-missing → unchanged-if-

@@ -7,6 +7,161 @@
 
 ## June 2026
 
+### 2026-06-18 (L11–L14 ruling pass): L11 forks RATIFIED + L14↔L11 contract & hot-seat surface RULED (JK attended)
+
+**Context**: JK ran a ruling pass over the consolidated open-questions worksheet
+`spec-docs/L11_L14_OPEN_QUESTIONS.md` (built from `L11_SCOPE_MAP.md §7` + workflow `wf_1f3e2c10-e94`, which brought
+L12/L13/L14 to the L11 §7 decision-ready standard with an adversarial auditor per ticket). Starting with L11 (the
+next ticket). JK confirmed the Captain defaults and ruled the two genuinely-new items.
+
+**RATIFIED** (promoted from "Defaults TAKEN" in the kickoff entry below to JK-ruled):
+- **L11-Q7 — manager-personality field** = the canonical **7-personality enum on the IDENTITY `ManagerProfile`**
+  (`kbl-manager-identity`), NOT the D9-retired `mwarCalculator` career-stats type.
+- **L11-Q8 — successor on firing** = **auto-generate a default identity** (`buildDefaultManagerProfile`, "new voice").
+- **L11-Q9 — legacy persistence** = **ride the existing morale/identity stores** (NO new L11 store, NO trackerDb
+  bump); `ManagerTeamTenureAggregate` gains hire/fire dates + an end-reason (fired/resigned/relocated).
+- **L11-Q10 — L1 sequencing** = **build DARK against the `HiddenModifiers` type now**; L1 persisting
+  loyalty/resilience is an ACTIVATION prerequisite (post-D13), not a build blocker.
+- *(Confirmed already-ruled in the kickoff entry: clubhouse touch flat −1 [Q5]; ONE fan-write per firing [Q6]; MOY
+  OUT of L11 [Q12].)*
+
+**NEW RULINGS:**
+- **L11-Q11 / L14-Q8 — the L14↔L11 firing call contract.** L14's rebrand invokes the ONE shared resolver as
+  `fireManager({teamId, reason:'rebrand', skipUserConfirm:true, suppressFanReliefBump:true})`: the **per-player
+  ripple STILL applies** (players react to the regime change) but the **team-fan RELIEF bump is SUPPRESSED**, because
+  the rebrand's ~70 hard-set is the authoritative fan-morale outcome. ⇒ **This also settles the L14 cascade order**
+  (L14-Q4): the relief bump is NOT emitted-then-overwritten — it is skipped. Pin this signature in BOTH the L11 and
+  L14 contracts so the triangle audit checks both sides.
+- **L11-Q13 — GM hot-seat surface in v1 = MINIMAL.** A minimal "Fire Manager" GM action ships in v1 (required by the
+  trigger=BOTH ruling anyway); the full hot-seat pressure/mandate framing is DEFERRED past v1. Keeps L11 build-focused.
+
+⇒ **L11 is fully ruled** (kickoff 4 forks + this pass). Remaining L11 work is pure build (L11-1..5, build-DARK,
+activate post-D13). The L11–L14 worksheet status column is updated to match.
+
+**— L12 (Race system + All-Star + player Awards) — RULED (JK, same pass):**
+- **L12-Q1 — award-category extension = SEASON-RACE SLOTS NOW, DEFER THE 2 ONE-SHOTS** (override of "all 6"). Extend
+  the persistable `FranchiseAwardCategory` with `ALL_STAR` / `BENCH_PLAYER` / `BOOGER_GLOVE` / `RELIEVER_OF_YEAR`
+  now (All-Star modeled as a **multi-selection roster record**, not a single-winner row); **defer `PLATINUM_GLOVE` +
+  `WORLD_SERIES_MVP`** (season-end one-shots; WS MVP depends on playoffs) to a later slot. ⇒ accepts TWO ledger
+  bumps (the C4 backup DoD + the `franchiseSeasonLedgerStorage.test.ts` store-list pin must be in-ticket each time).
+- **L12-Q2 — race standing = SINGLE WEIGHTED COMPOSITE with PER-RACE-TYPE WEIGHTS** (override of "merit spine + tilt",
+  then reconciled). Standing = `w_merit·WAR + w_fame·fame`, bands by score-gap clustering — BUT the weights vary by
+  race type: **fame-LED for fan-vote races (All-Star starters); merit-DOMINANT with fame bounded to a small
+  close-race nudge for merit awards.** The per-race-type split is what preserves the ratified **RACE-4**
+  (fame is a tilt-not-driver on merit awards) inside the weighted-composite form. Weights = §16 SIM-TUNE.
+- **L12-Q5 — All-Star roster = BY-POSITION TEMPLATE mirroring the archived screen.** 1 fan-voted starter per position
+  + a pitching contingent + a merit-reserve block; performance floor reuses the existing `minPlateAppearances` /
+  `minInningsPitched` qualifier. Counts/floor sim-nudgeable.
+- **L12-Q7 — TV-family = valueDelta-RANK / INVERTED / SWING.** KK = league-wide `valueDelta` (value-vs-expectation,
+  the "league-wide Fan Favorite"); Bust = same metric inverted (bottom-3 inverted race); Comeback =
+  `max(currentTV − own running season-low)` over the TV snapshots. Basis stable; only any normalization constant is sim.
+- **L12-Q8 — status-fame layer = L6 OWNS THE WHOLE LAYER** (override of "league-leader→L12"). The entire §20.4 status
+  layer (draft seed / call-up / send-down / bench 0.5× / league-leader) is **fame-internal, owned by the fame layer
+  (an L6 follow-up — L6 is already built dark)**; **L12 only CONSUMES the resulting tier.** Status fame is NOT L12 scope.
+- **L12-Q10 — fame double-ladder collapse = SEPARATE PRE-L12 CLEANUP ticket.** A dedicated ticket retires the legacy
+  `getFameTier` (forbidden "Fan Favorite"/"Villain" labels). HARD prerequisite: races read the new `resolveFameTier`
+  and the forbidden-label ladder is gone **before any race goes live**.
+- **L12-Q13 — All-Star lock = at the 60% scheduled-games mark** (override of 50%), configurable; race standings
+  recompute per completed game off the existing spine; All-Star roster locks at the 60% checkpoint; award races
+  finalize at season end.
+- **L12-Q3/Q4/Q6/Q9 — structural FORMS confirmed, magnitudes = §16 placeholders:** Q3 fame tilts only when
+  `|margin| < window` AND both players' merit > floor; Q4 GoldGlove = `fWAR + share·defensive-channel-fame` (seed
+  **20%**, never total fame); Q6 **MVP + Cy Young + All-Star EMIT** fame/morale, all other races visible-only at
+  launch; Q9 honor→Reach-floor map (bigger honor → higher permanent floor, via the built `updateReachFloor`) + the
+  snub morale hit personality-scaled through a new L3 race-snub row.
+- **L12-Q11 — channel A stays OUT of L12** (confirmed): L12 READS fame for standings only; the §20.5/20.6
+  fame→fan-morale plug stays the L6-ruled dark seam.
+- **L12-Q12 — NO L12 ruling** (DEFER): Heat `decayPerUpdate` + WAR-floor gravity strength are §16 sim placeholders
+  already in `FAME_TUNING`; L12 consumes the live config.
+
+**— L13 (Relationships-lite + reporter accuracy) — RULED (JK, same pass):**
+- **L13-Q1 — taxonomy = §24 SIX AFFECT-EDGES canonical** (Rivalry / Feud / Mentorship / Friendship / Romance /
+  History). Map the code's 9 literal types into them (Romance←DATING/MARRIED/DIVORCED/CRUSH; Feud←BULLY_VICTIM;
+  Rivalry←RIVALS/JEALOUS; Friendship←BEST_FRIENDS; Mentorship←MENTOR_PROTEGE) + add History; retire the surplus. The
+  worksheet's 7 ENTITY-edges are a different axis (who-to-whom) → fold into edge endpoints, NOT edge types.
+- **L13-Q2 — formation gate = PER-TYPE bar.** Each of the 6 types declares its own input-modifier set (per §24.2
+  recipes) AND its own threshold constant. Thresholds = §16 SIM-TUNE (target ~1-3 live edges/team).
+- **L13-Q3 — triggers = the EXISTING player `age` field for 'young' + a NEW co-rostered-games counter for 'extended
+  time'.** ⚠ FIELD CORRECTION: `age` IS a real persisted player field (`age:number` 18-49, `playerDatabase.ts:47` /
+  `unifiedPlayerStorage.ts:41` / `leagueBuilderStorage.ts:229` + the Builder UI) — the workflow's "no age field" gap
+  was WRONG (it checked `HiddenModifiers`/`ManagerProfile`). So 'young' reads real age (sim-tuned cutoff); only the
+  games-together counter is new. No new age field, no L1 age dependency.
+- **L13-Q4 — edges have a STRENGTH that grows + fades** (not on/off). Scalar intensity [0..1] + lapse-decay (mirror
+  the L5 flashpoint-decay primitive) + a hysteresis band (anti-flicker). Magnitudes = §16. (Needed for the
+  "troublemaker traded → victim recovers" loop to have a quantity to recover.)
+- **L13-Q5 — reporter inaccuracy = FLAT ~10%, HEDGE/FLAG only.** Relationship intel is inaccurate at a flat ~10%
+  (the §24.5 number); "inaccurate" = mark the take "unconfirmed", NEVER distort the underlying edge; seeded FNV-1a
+  off franchise+season+moveId. RECONCILE BY SCOPE: the live per-personality `REPORTER_ACCURACY_RATES` (0.65-0.95)
+  stays as in-game-take VOICE flavor; it is NOT the relationship-intel rate. Content-distortion → v1.1.
+- **L13-Q6 — charged matchup amplifies MORALE** (REL-6), built fresh, personality-scaled, keyed off the §24 History
+  edge + former-team flag. The existing code's LEVERAGE-INDEX revenge/romance multipliers
+  (`relationshipIntegration.ts` / `leverageCalculator.ts`) stay as an INDEPENDENT pre-existing in-game feature — do
+  NOT delete, do NOT extend; Q1's taxonomy retirement eventually orphans them.
+- **L13-Q7 — per-edge morale: KEEP the flat base constants + apply personality scaling via the MATRIX.**
+  relationshipEngine's `MORALE_EFFECTS` is retained as the per-edge BASE magnitude (relationship domain data), but
+  the morale **WRITE** routes through the L3 master matrix (`composeMoraleConsequence`), which applies the
+  personality/modifier cross. ⇒ BOUNDARY (so this is NOT the FINDING-150 scatter): ONE morale-application path (the
+  matrix); relationshipEngine no longer writes morale directly — it only supplies the base delta the matrix scales.
+- **L13-Q8 — Captain effectiveness = `w1·Charisma + w2·Loyalty + w3·Resilience − w4·Ambition`, normalized [0..1]**;
+  suppression = a multiplier on negative-edge deltas, catalysis = a boost to positive-edge formation odds. Weights +
+  magnitudes = §16. (Distinct from the Charisma×2 morale-routing — no double-count, per REL-8.)
+- **L13-Q9 — romance reads the EXISTING player `gender` field** (`'M'|'F'`, the `Gender` type in
+  `playerDatabase`/`unifiedPlayerStorage`/`leagueBuilderStorage` + the League Builder UI). ⚠ FIELD CORRECTION: the
+  workflow's "no gender field" gap was WRONG (same cause as Q3). Base-rate structure = friendship-rate ≫ romance-rate
+  + a same-gender multiplier keyed on the pair's genders; magnitudes = §16. No new field, no L1 gender dependency.
+- **L13-Q10 — relationship→fan-morale: ONLY REPORTED drama nudges fans directly.** The indirect path
+  (drama → player morale → performance → fan morale) is always on; a small DIRECT fan-morale nudge fires only for
+  edges that clear the SEA-2 emission gate (reporter-amplified = the §24.10 "visible drama"). Coefficient = §16.
+- **L13-Q11 — SUPERSEDE the stale cross-ref docs.** §24/REL-1..9 are the sole L13 authority; stamp the two
+  `FRANCHISE_MODE2_MORALE_RELATIONSHIP_*` docs (approval-matrix + decision-worksheet) **SUPERSEDED-BY-§24**. Closes
+  the exact FINDING-150 mechanism (a builder reading "awaiting approval"/"blocked" and stalling L13).
+- **L13-Q12 — storage = REUSE the reserved `rivalryScores` store in the shared `kbl-tracker` DB** IF its schema can
+  carry `{player1, player2, type, intensity, formed/dissolved, accuracy}`; if it can't, a new `kbl-tracker` store
+  forces the full C4 backup DoD + the `franchiseSeasonLedgerStorage.test.ts` store-list pin in THIS ticket.
+  **REJECT** the separate `kbl-relationships` DB (reopens the DSTACK-item-8 backup-parity hole) and **retire that
+  DSTACK wording** as superseded by SEA-3. (Decide schema-fit before build so the store-mirror scope is known.)
+- **L13-Q13 — build DARK against the `HiddenModifiers` type now; L1 persisting charisma/loyalty/resilience is the
+  ACTIVATION prerequisite** (post-D13), not a build blocker. Gender + age already exist (Q3/Q9) → NOT L1 additions;
+  L1's only L13 prerequisite is the four hidden modifiers.
+
+**— L14 (Rebrand circuit-breaker) — RULED (JK, same pass):**
+- **L14-Q1 — trigger = a NEW dwell counter + GM-GATED.** Build a "consecutive games at rock-bottom fan morale"
+  counter (the existing `trendStreak` is "same-direction changes", the WRONG primitive — a real new counter is
+  needed). Once it trips, the rebrand is **OFFERED to the GM as an action** (not auto-forced). The morale band +
+  window length = §16 SIM-TUNE.
+- **L14-Q2 — badge reset = clear the 4 team/fanbase badges + clear the OLD Fan Hopeful, then RE-SEED a NEW Fan
+  Hopeful chosen by the new fanbase** (the existing random-top-3-prospects mechanic). **Exempt Captain only** — it
+  travels with the player's leadership. Because stats persist, the value-based badges re-assign to the same players
+  at the next designation checkpoint, so "clear" = drop the current badge + let the engine re-derive.
+- **L14-Q3 — rebrand RESETS the whole roster's fame** (override of "fame persists") **via the EXISTING trade-style
+  fame reset applied team-wide** (Heat cools + Reach floor drops toward Unknown). ⇒ **rebrand becomes a SECOND
+  fame-reset valve alongside trade — AMEND FAME-7** ("trade is the only reset valve" → "trade OR rebrand"). No new
+  fame math; reuse the per-player trade reset across the roster. *(Spec-doc edit required: §14 + §20.3 + FAME-7.)*
+- **L14-Q4 — cascade ORDER (deterministic, single fan-morale write):** (1) fire manager + apply the player morale
+  ripple [fan-relief bump SUPPRESSED per L11-Q11]; (2) clear all NON-CAPTAIN badges (KEEP Captain) + re-seed the new
+  Fan Hopeful; (3) relocate the stadium; (4) reset the roster fame (trade-style, team-wide); (5) wipe dead money
+  (stub, Q6); (6) HARD-SET fan morale to `REBRAND_RESET_MORALE` (~70) **LAST** so nothing overwrites it.
+- **L14-Q5 — new identity = USER enters the new name/city; persist a relocation history record.** Append
+  `{formerTeamName, formerStadiumName, relocatedAtSeason, relocatedAtGame}` to a NEW `teamHistory` array on the
+  franchise-team metadata (no such field today) so the Almanac renders "formerly known as X." Wrap the already-ruled
+  LSD-5 pool-pick in a user-facing stadium picker (excluding the current park). Colors optional/deferred.
+- **L14-Q6 — dead-money wipe = STUB in L14, real wipe in the ECONOMY TRACK.** L14 ships a clearly-labeled
+  `clearCarriedDeadMoney(teamId)` hook; the persisted carried-balance ledger + the real wipe are built by the economy
+  track (which IS in v1 per LSD-6). Until that lands, the wipe is a documented no-op. (LSD-4 cut next-season budget
+  PRESSURE but not the in-season carry ledger — that's economy-track scope.)
+- **L14-Q7 — reset value = named constant `REBRAND_RESET_MORALE = 70`** (sim-nudgeable). Structure fixed (a fresh
+  fanbase lands upper-CONTENT, ~70); the exact integer is §16-tunable. (70 is inside CONTENT 55-74; EXCITED starts at 75.)
+- **L14-Q8 — ALREADY RULED = L11-Q11.** L14 invokes the shared resolver as
+  `fireManager({teamId, reason:'rebrand', skipUserConfirm:true, suppressFanReliefBump:true})`; pinned in both contracts.
+
+⇒ **The L11–L14 ruling pass is COMPLETE.** Every SAFE-NOW + MIXED-structural question is ruled; only sim magnitudes
+(the §16 placeholders) remain deferred. **Spec-doc reconciliation follow-ups generated by this pass** (doc-hygiene,
+to apply before/at each ticket's build): (a) **amend FAME-7** for the rebrand fame-reset valve (L14-Q3); (b) stamp
+the two `FRANCHISE_MODE2_MORALE_RELATIONSHIP_*` docs **SUPERSEDED-BY-§24** (L13-Q11); (c) **retire the DSTACK
+`kbl-relationships` DB wording** as superseded by SEA-3 (L13-Q12); (d) reconcile the **stale DSTACK** so no builder
+rebuilds the now-built fame/awards engines; (e) the **fame double-ladder collapse** as a pre-L12 cleanup ticket
+(L12-Q10). The L11–L14 worksheet status is updated to RULED.
+
 ### 2026-06-18 (L11 manager-firings kickoff): trigger + ripple + relief rulings (JK attended)
 
 **Context**: L11 (manager firings) grounding recon (workflow `wf_107b9eb5-faf`, 5 readers) → `spec-docs/L11_SCOPE_MAP.md`.
