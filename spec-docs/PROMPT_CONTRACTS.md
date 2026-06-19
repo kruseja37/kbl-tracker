@@ -12942,3 +12942,116 @@ Host gate `NODE_ENV= npm run build` 0 (8.92s) + suite **7,803/453, 7,800 pass / 
 (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`) + 1 order-flake (`GameTrackerLaunchState`, **confirmed passing solo
 9/9**), **ZERO new reds** (+7). build-DARK / ORPHANED-PENDING (no caller — L12-5e wires it); trackerDb v24. Branch-only.
 **➡ NEXT = L12-5c** (the L3 snub row).
+
+---
+
+## CONTRACT — L12-5c (the L3 race-snub morale row: resolver + close-losers + seam-injectable apply) — 2026-06-19 (attended)
+
+**ROUTE:** Codex CLI (gpt-5.5, **very-high reasoning effort**) via `codex exec` stdin-from-contract. Auditor: Opus 4.8
+(builder ≠ auditor — Codex builds, Opus independently audits + runs the full host gate).
+
+**ROLE:** You are a builder for the KBL Tracker franchise L-stack (the L3 morale matrix + the snub payout).
+
+**GOAL:** Make the dark `MORALE_TAP_REGISTRY.race` tap fire a personality-scaled **snub** morale hit, and build the pure
+helpers + a seam-injectable apply loop that delivers it to the CLOSE LOSERS of a marquee honor. Build-DARK / ORPHANED-PENDING
+(NO live caller — L12-5e wires it at both trigger edges).
+
+**SOURCE OF TRUTH:** `spec-docs/L12-5_SCOPE_MAP.md` §6 + `DECISIONS_LOG.md` 2026-06-19 "L12-5" (F2 close-losers, F7 snub-only,
+F8 flat resolver). Mirror the designation apply loop `persistDesignationMoraleConsequencesAfterTrueValue`
+(`processCompletedGame.ts:378-426`) for the per-player apply — **BUT change the event constructor (see THE MAKE-OR-BREAK below).**
+
+**⚠ THE MAKE-OR-BREAK (verified live — get this right or the whole tap is inert):** `getBaseMoraleConsequence`
+(`masterMoraleMatrix.ts:405-411`) routes to `MORALE_TAP_REGISTRY[kind]` ONLY when the event has `kind` set
+(`if (event.kind && event.kind !== 'event')`). The designation template builds `{ type }` with NO `kind` → it hits the EVENT
+table, NEVER the tap. The snub event MUST be `{ kind: 'race', type: <key> }`. ALSO: `composeMoraleConsequence` skips
+personality scaling when `base === NEUTRAL_BASE_CONSEQUENCE` by **reference equality** (`:424`) — the `race` resolver MUST
+return a **freshly-constructed** object, NEVER the `NEUTRAL_BASE_CONSEQUENCE` reference.
+
+**VERIFIED ANCHORS:** `BaseMoraleConsequence = {selfPlayerMoraleDelta, teamFanMoraleDelta, otherTouched:[], reason}`
+(`masterMoraleMatrix.ts:45-50`); `MoraleMatrixEvent` tap variant `{kind: MoraleMatrixTapKind, type:string}` (`:73-81`);
+`EVENT_DELTA` (`:91`, e.g. `playerSlumpSelf:-4`/`clutchOutSelf:-4`); `composeMoraleConsequence(event, personality, modifiers,
+curPlayerMorale, curFanMorale)` (`:413`); `applyFranchiseMoraleMatrixConsequence(input)` self-gates on
+`isFranchisePhase2MoraleEnabled` (`franchiseMoraleState.ts:388-391`) — input keys
+`{franchiseId, seasonId, statsScopeId, seasonNumber, playerId, teamId, consequence, sourceEventId, timestamp}`
+(designation call site `processCompletedGame.ts:400-421`); `getFranchisePlayer(franchiseId, playerId)`
+(`franchisePlayerStorage.ts`); `getFranchiseMoraleSnapshot(scope, targetType, targetId)` (`franchiseMoraleState.ts:207`);
+`resolveHiddenModifiers` (the small default-fill at `processCompletedGame.ts:359` — REPLICATE it locally, it's private).
+
+**CHANGES — edit/create ONLY these 3 files:**
+
+**A. `src/engines/masterMoraleMatrix.ts`** (additive):
+1. Add to `EVENT_DELTA` (near the negatives `:139-141`): `raceSnubSelf: -4,` (§16 placeholder — flat per F8).
+2. Replace `MORALE_TAP_REGISTRY.race` (`:401`, currently `() => NEUTRAL_BASE_CONSEQUENCE`) with a resolver returning a
+   **FRESH** non-neutral object:
+   ```ts
+   race: (event) => ({
+     selfPlayerMoraleDelta: EVENT_DELTA.raceSnubSelf,
+     teamFanMoraleDelta: 0,
+     otherTouched: [],
+     reason: event.type,
+   }),
+   ```
+   (Flat magnitude per F8; `event.type` carries the honor key for telemetry; the fresh object enables personality scaling.)
+
+**B. NEW `src/utils/franchiseRaceSnubMorale.ts`:**
+- `export type FranchiseHonorKind = 'MVP' | 'CY_YOUNG' | 'ALL_STAR';`
+- `buildRaceSnubMoraleEvent(honorKind): MoraleMatrixEvent` → `{ kind: 'race', type: 'race.snub.' + honorKind.toLowerCase() }`
+  (the make-or-break `kind:'race'`).
+- `pickRaceSnubVictims(candidates: ReadonlyArray<{playerId:string; teamId:string; marginToWinner:number}>, winnerIds: ReadonlySet<string>, topN: number): {playerId:string; teamId:string}[]`
+  — PURE (F2 close-losers): drop any `winnerIds` member, sort by `Math.abs(marginToWinner)` asc then `playerId` asc, take `topN`.
+- a seam `franchiseRaceSnubSeam = { getPlayer: getFranchisePlayer, getSnapshot: getFranchiseMoraleSnapshot, applyConsequence: applyFranchiseMoraleMatrixConsequence }`.
+- `export async function applyFranchiseRaceSnubMorale(params: { victims: {playerId:string; teamId:string}[]; honorKind: FranchiseHonorKind; scope: {franchiseId:string; seasonId:string; statsScopeId:string; seasonNumber:number}; timestamp: number }): Promise<{status:'dark-noop'|'applied'; appliedCount:number; reason?:string}>`
+  — `if (!isFranchisePhase2L12Enabled()) return {status:'dark-noop', appliedCount:0, reason:'L12 disabled'}`; build the event once
+  via `buildRaceSnubMoraleEvent(honorKind)`; for each victim: `const player = await seam.getPlayer(scope.franchiseId, victim.playerId)`;
+  `const curPlayer = (await seam.getSnapshot(scope,'player',victim.playerId))?.currentValue ?? player?.morale ?? 50`;
+  `const curFan = (await seam.getSnapshot(scope,'team-fan',victim.teamId))?.currentValue ?? 50`;
+  `const consequence = composeMoraleConsequence(event, player?.personality, resolveHiddenModifiers(player?.hiddenPersonalityModifiers), curPlayer, curFan)`;
+  `await seam.applyConsequence({...scope, playerId: victim.playerId, teamId: victim.teamId, consequence, sourceEventId: ['race-snub', scope.franchiseId, scope.seasonId, scope.statsScopeId, honorKind, victim.playerId].join(':'), timestamp})`.
+  Count successes (status not failed). **NOTE the double-gate:** L12 gates HERE; the Morale flag self-gates inside
+  `applyFranchiseMoraleMatrixConsequence` (→ `'dark-noop'` per victim if Morale off) — that is expected, do NOT add a second explicit Morale check.
+  `resolveHiddenModifiers` = replicate the small default-fill from `processCompletedGame.ts:359` locally (read it).
+
+**C. `src/utils/tests/franchiseRaceSnubMorale.test.ts`:**
+- **THE MAKE-OR-BREAK test:** `composeMoraleConsequence(buildRaceSnubMoraleEvent('MVP'), <personality>, <mods>, 50, 50)` →
+  `selfPlayerMoraleDelta < 0` (the tap fired — NOT neutral); and an EGOTISTICAL/TIMID personality AMPLIFIES the negative vs
+  TOUGH/RELAXED (prove personality scaling is active — i.e. the resolver did NOT return the NEUTRAL ref).
+- `pickRaceSnubVictims`: winner (margin 0 / in winnerIds) excluded; the 2 smallest-|margin| losers chosen for topN=2; playerId tiebreak.
+- `buildRaceSnubMoraleEvent`: `kind==='race'`, `type==='race.snub.mvp'` etc.
+- `applyFranchiseRaceSnubMorale` (stub `franchiseRaceSnubSeam`): flag OFF → dark-noop, no seam calls; flag ON → `applyConsequence`
+  called once PER victim with the `{kind:'race'}`-derived consequence + the deterministic sourceEventId; `appliedCount` correct.
+
+**HARD CONSTRAINTS:** edit/create ONLY the 3 files. The `masterMoraleMatrix.ts` change is additive (1 EVENT_DELTA key + the
+race resolver body). NO live caller (build-DARK). NO store/trackerDb/flag change. NO `Date.now`/`Math.random` (timestamp is a
+param). NO git add/commit. Prefix tsc/vitest with `NODE_ENV= `.
+
+**VERIFICATION (run ALL, paste ACTUAL):** `NODE_ENV= npx tsc --noEmit` 0 + `NODE_ENV= npm run build` 0;
+`NODE_ENV= npx vitest run src/utils/tests/franchiseRaceSnubMorale.test.ts` green; AND the morale-matrix regression
+`NODE_ENV= npx vitest run src/engines/__tests__/masterMoraleMatrix.test.ts` (prove the resolver/EVENT_DELTA edit broke nothing).
+(The auditor runs the FULL host suite.)
+
+**STOP-IF:** `composeMoraleConsequence`/`applyFranchiseMoraleMatrixConsequence`/`getFranchiseMoraleSnapshot`/`getFranchisePlayer`
+signatures differ from above → STOP + report. Filling the race resolver requires touching the EVENT table or any other tap → STOP.
+
+**FORMAT:** 1) files changed; 2) the resolver (kind:'race' fires the tap, fresh non-neutral object) + the close-losers picker +
+the snub-event constructor + the apply loop (per-victim compose+apply, double-gate); 3) verification output (incl. the
+masterMoraleMatrix regression); 4) "L12-5c complete" or "BLOCKED: <reason>". Do NOT commit.
+
+Use very high reasoning effort. Think step-by-step. Read `src/engines/masterMoraleMatrix.ts` (the tap registry/dispatch/composer/EVENT_DELTA/row),
+`src/utils/processCompletedGame.ts:359-426` (resolveHiddenModifiers + the designation apply loop to mirror — note it uses `{type}` NOT `{kind:'race'}`),
+`src/utils/franchiseMoraleState.ts` (applyFranchiseMoraleMatrixConsequence + getFranchiseMoraleSnapshot), and
+`src/utils/tests/franchiseAllStarRosterCompute.test.ts` (the seam-stub + flag-toggle test pattern).
+
+**Status:** ✅ VERIFIED + COMMITTED 2026-06-19 (attended). Codex (gpt-5.5, xhigh) built → Opus audited (builder ≠ auditor) +
+full host gate. Additive `masterMoraleMatrix.ts` (`raceSnubSelf:-4` EVENT_DELTA + `MORALE_TAP_REGISTRY.race` → a FRESH
+non-neutral `{selfPlayerMoraleDelta: raceSnubSelf, teamFanMoraleDelta:0, otherTouched:[], reason: event.type}`) + NEW
+`src/utils/franchiseRaceSnubMorale.ts` (`buildRaceSnubMoraleEvent` → `{kind:'race', type:'race.snub.<honor>'}`;
+`pickRaceSnubVictims` close-losers [exclude winners, sort by |marginToWinner| then playerId, topN]; the seam-injectable
+`applyFranchiseRaceSnubMorale` — L12-gate → per-victim getPlayer/snapshot → `composeMoraleConsequence(event, personality,
+resolveHiddenModifiers, curPlayer, curFan)` → `applyFranchiseMoraleMatrixConsequence` with a deterministic `race-snub:…`
+sourceEventId; Morale flag self-gates in the apply fn) + a 7-test file. **Audit:** the resolver is fresh+non-neutral; the
+`timestamp?: string` field confirms Codex's `toISOString()` is correct; **THE MAKE-OR-BREAK test passes** —
+`composeMoraleConsequence(buildRaceSnubMoraleEvent('MVP'),…).base.reason === 'race.snub.mvp'` (tap fired) AND EGOTISTICAL <
+RELAXED + TIMID < TOUGH deltas (personality scaling ACTIVE ⇒ proves the resolver did NOT return the NEUTRAL ref). Resolver
+change is INERT for existing behavior (no live `{kind:'race'}` constructor; matrix regression 9/9). Host gate
+`NODE_ENV= npm run build` 0 (8.14s) + suite **7,810/454, 7,808 pass / 2 characterized fail**, **ZERO new reds** (+7).
+build-DARK / ORPHANED-PENDING (no caller — L12-5e wires it); trackerDb v24. Branch-only. **➡ NEXT = L12-5d** (honor→reach-floor).

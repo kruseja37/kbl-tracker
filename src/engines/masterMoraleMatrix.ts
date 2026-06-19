@@ -147,6 +147,7 @@ const EVENT_DELTA = {
   teammateInjurySelf: -2,
   managerFiredSelf: -2,
   tradeDemandSelf: -3,
+  raceSnubSelf: -4,
   fanFavoriteLockedSelf: 4,
   albatrossLockedSelf: -5,
   captainBigGameSelf: 3,
@@ -398,7 +399,12 @@ export type MoraleTapResolver = (event: MoraleMatrixEvent) => BaseMoraleConseque
 export const MORALE_TAP_REGISTRY: Readonly<Record<MoraleMatrixTapKind, MoraleTapResolver>> = {
   fame: () => NEUTRAL_BASE_CONSEQUENCE,
   designation: () => NEUTRAL_BASE_CONSEQUENCE,
-  race: () => NEUTRAL_BASE_CONSEQUENCE,
+  race: (event) => ({
+    selfPlayerMoraleDelta: EVENT_DELTA.raceSnubSelf,
+    teamFanMoraleDelta: 0,
+    otherTouched: [],
+    reason: event.type,
+  }),
   relationship: () => NEUTRAL_BASE_CONSEQUENCE,
 };
 
