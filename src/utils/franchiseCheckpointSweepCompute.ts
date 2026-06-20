@@ -27,6 +27,7 @@ import {
   RATINGS_DEVELOPMENT_TUNING,
   type RatingsDevelopmentTuning,
 } from '../engines/ratingsDevelopment';
+import { checkpointCountForCadence } from '../data/rosterEngineConstants';
 import {
   normalizePersonality,
   type CanonicalPersonality,
@@ -103,13 +104,15 @@ export type PersistDarkCheckpointSweepResult = {
   reason?: string;
 };
 
-export function isCheckpointBoundary(gameNumber: number, totalGames: number): boolean {
+export function isCheckpointBoundary(gameNumber: number, totalGames: number, checkpointCount = 5): boolean {
   return (
     Number.isInteger(gameNumber) &&
     gameNumber > 0 &&
     totalGames > 0 &&
-    Math.floor(((gameNumber - 1) * 5) / totalGames) !==
-      Math.floor((gameNumber * 5) / totalGames)
+    Number.isInteger(checkpointCount) &&
+    checkpointCount > 0 &&
+    Math.floor(((gameNumber - 1) * checkpointCount) / totalGames) !==
+      Math.floor((gameNumber * checkpointCount) / totalGames)
   );
 }
 
@@ -217,7 +220,8 @@ export async function persistDarkCheckpointSweepForCompletedGame(
     };
   }
 
-  const totalGames = (await getSeasonMetadata(scope.seasonId))?.totalGames;
+  const seasonMetadata = await getSeasonMetadata(scope.seasonId);
+  const totalGames = seasonMetadata?.totalGames;
   if (!totalGames || totalGames <= 0) {
     return {
       status: 'dark-noop',
@@ -226,7 +230,8 @@ export async function persistDarkCheckpointSweepForCompletedGame(
     };
   }
 
-  if (!isCheckpointBoundary(gameNumber, totalGames)) {
+  const checkpointCount = checkpointCountForCadence(seasonMetadata?.checkpointCadence);
+  if (!isCheckpointBoundary(gameNumber, totalGames, checkpointCount)) {
     return { status: 'not-checkpoint', written: 0 };
   }
 

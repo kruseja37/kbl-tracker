@@ -26,6 +26,8 @@ function base(): LsimStateSnapshot {
     gamesSimulated: 1,
     totalScheduledGames: 10,
     gamesPerTeam: 10,
+    checkpointCadence: 'standard',
+    checkpointCount: 5,
     checkpointGameNumbers: [2, 4, 6, 8, 10],
     teamIds: ['t1'],
     teams: [],
@@ -130,7 +132,7 @@ const CASES: Array<{ name: string; mutate: (s: LsimStateSnapshot) => void }> = [
     } },
   { name: 'soul.per-write-idempotency',
     mutate: (s) => { s.lastGameDelta = { battingIncreasedPlayerIds: [], pitchingIncreasedPlayerIds: [], afterFirstProcessDigest: 'a', afterReplayDigest: 'b' }; } },
-  { name: 'soul.checkpoint-cadence-exactly-five',
+  { name: 'soul.checkpoint-cadence-matches-setting',
     mutate: (s) => { s.gamesSimulated = s.totalScheduledGames; s.gameNumber = s.totalScheduledGames; s.ratingsOverlays = [{ sourceEventId: 'checkpoint-2' } as never]; /* only 1 of 5 boundaries */ } },
   { name: 'soul.ratings-overlay-validity', // NAMED property now includes the deterministic id
     mutate: (s) => {
@@ -265,6 +267,20 @@ describe('L-SIM invariant falsification audit', () => {
       expect(result.pass, `${name} stayed GREEN on injected bad state — cannot be falsified; detail=${result.detail}`).toBe(false);
     });
   }
+
+  test('soul.checkpoint-cadence-matches-setting TRIPS RED for frequent cadence with only standard-count overlays', () => {
+    const snap = base();
+    snap.gamesSimulated = snap.totalScheduledGames;
+    snap.gameNumber = snap.totalScheduledGames;
+    snap.checkpointCadence = 'frequent';
+    snap.checkpointCount = 10;
+    snap.checkpointGameNumbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    snap.ratingsOverlays = [2, 4, 6, 8, 10].map((gameNumber) =>
+      ({ sourceEventId: `checkpoint-${gameNumber}` }) as never);
+
+    const result = resultFor('soul.checkpoint-cadence-matches-setting', snap);
+    expect(result.pass, `frequent cadence mismatch stayed GREEN; detail=${result.detail}`).toBe(false);
+  });
 
   // §5.3 inverse-test backstop: prove the three finalize invariants are not just red-trippable but also genuinely
   // GREEN on a VALID season-end snapshot satisfying the named property (else "trips red" could be vacuous-always-red).

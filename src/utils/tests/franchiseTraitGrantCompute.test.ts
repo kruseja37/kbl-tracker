@@ -122,7 +122,7 @@ function candidate(
   };
 }
 
-function seedCheckpointReads(gameNumber = 20): void {
+function seedCheckpointReads(gameNumber = 20, metadataOverrides: Record<string, unknown> = {}): void {
   mocks.getGame.mockResolvedValue({
     id: 'schedule-20',
     gameNumber,
@@ -136,6 +136,7 @@ function seedCheckpointReads(gameNumber = 20): void {
     gamesPlayed: gameNumber,
     totalGames: 100,
     gamesPerTeam: null,
+    ...metadataOverrides,
   });
   mocks.getSeasonGames.mockResolvedValue([
     {
@@ -287,6 +288,23 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
       sourceEventId: 'trait-grant-20',
       createdAtGameNumber: 20,
       createdAt: new Date(atBatTimestamp).toISOString(),
+    });
+  });
+
+  test('frequent cadence from season metadata makes game 10 of 100 a trait checkpoint', async () => {
+    setFranchisePhase2TraitsEnabledForTests(true);
+    seedCheckpointReads(10, { checkpointCadence: 'frequent' });
+    stubTraitPipeline();
+
+    const result = await persistDarkTraitGrantForCompletedGame(gameState, scope);
+    const rows = await getFranchiseTraitOverlaysByScope(scope);
+
+    expect(result).toEqual({ status: 'written', written: 1 });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      playerId: 'player-alpha',
+      sourceEventId: 'trait-grant-10',
+      createdAtGameNumber: 10,
     });
   });
 

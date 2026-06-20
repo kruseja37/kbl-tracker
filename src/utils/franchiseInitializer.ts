@@ -24,6 +24,11 @@ import type {
   StoredFranchiseConfig,
 } from '../types/franchise';
 import {
+  CHECKPOINT_CADENCE_DEFAULT,
+  normalizeCheckpointCadence,
+  type CheckpointCadence,
+} from '../data/rosterEngineConstants';
+import {
   createFranchise,
   deleteFranchise,
   saveFranchiseConfig,
@@ -415,6 +420,7 @@ async function ensureFranchiseSeasonMetadata(
   totalGames: number,
   // X1/X2: config-sourced per-team season length; never derived from schedule row count.
   gamesPerTeam: number | null,
+  checkpointCadence: CheckpointCadence = CHECKPOINT_CADENCE_DEFAULT,
 ): Promise<{ metadata: SeasonMetadata; created: boolean; updated: boolean }> {
   const seasonId = getFranchiseSeasonId(franchiseId, seasonNumber);
   const seasonName = getFranchiseSeasonName(seasonNumber);
@@ -427,6 +433,7 @@ async function ensureFranchiseSeasonMetadata(
       seasonName,
       totalGames,
       gamesPerTeam,
+      checkpointCadence,
     );
     return { metadata, created: true, updated: false };
   }
@@ -457,8 +464,9 @@ async function createFranchiseSeasonMetadata(
   seasonNumber: number,
   totalGames: number,
   gamesPerTeam: number | null,
+  checkpointCadence: CheckpointCadence = CHECKPOINT_CADENCE_DEFAULT,
 ): Promise<void> {
-  await ensureFranchiseSeasonMetadata(franchiseId, seasonNumber, totalGames, gamesPerTeam);
+  await ensureFranchiseSeasonMetadata(franchiseId, seasonNumber, totalGames, gamesPerTeam, checkpointCadence);
 }
 
 async function deriveSeasonTotalGames(
@@ -517,15 +525,17 @@ export async function repairFranchisePersistence(
   const rosterBackfilled =
     franchisePlayers.length === 0 ||
     franchiseTeams.length === 0;
+  let checkpointCadence: CheckpointCadence = CHECKPOINT_CADENCE_DEFAULT;
 
   if (rosterBackfilled) {
     if (!config.league) {
       throw new Error(`No league ID in franchise config for ${franchiseId}`);
     }
-    await loadScheduleTeamsForLeague(
+    const { leagueTemplate } = await loadScheduleTeamsForLeague(
       config.league,
       'Need at least 2 teams to repair franchise persistence',
     );
+    checkpointCadence = normalizeCheckpointCadence(leagueTemplate.checkpointCadence);
     await deepCopyLeagueToFranchise(franchiseId, config.league, {
       seasonId: getFranchiseSeasonId(franchiseId, seasonNumber),
       seasonNumber,
@@ -539,6 +549,7 @@ export async function repairFranchisePersistence(
     seasonNumber,
     totalGames,
     config.season?.gamesPerTeam ?? null,
+    checkpointCadence,
   );
 
   return {
@@ -650,7 +661,13 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
     await assignTeamFanHopefuls(franchiseId, initialSeasonId, undefined, hiddenModifierBackfill.players);
 
     // 9. Create the season metadata record franchise mode reads later.
-    await createFranchiseSeasonMetadata(franchiseId, 1, 0, config.season.gamesPerTeam);
+    await createFranchiseSeasonMetadata(
+      franchiseId,
+      1,
+      0,
+      config.season.gamesPerTeam,
+      normalizeCheckpointCadence(leagueTemplate.checkpointCadence),
+    );
 
     // 10. Set as active franchise
     await setActiveFranchise(franchiseId);

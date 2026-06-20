@@ -4,6 +4,7 @@ import { FLASHPOINT_DECAY_TUNING, computeFlashpointGameTax } from '../../../src/
 import { L11_AUTO_BACKSTOP_TUNING } from '../../../src/utils/franchiseManagerAutoBackstop';
 import { TRAIT_ACQUISITION_TUNING, TRAIT_OPPOSITES } from '../../../src/engines/traitAcquisition';
 import { pickRaceSnubVictims } from '../../../src/utils/franchiseRaceSnubMorale';
+import { checkpointCountForCadence } from '../../../src/data/rosterEngineConstants';
 import type { FranchiseDesignationType } from '../../../src/utils/franchiseDesignations';
 import type { Player } from '../../../src/utils/leagueBuilderStorage';
 import type {
@@ -426,6 +427,7 @@ function replayIdempotency(snapshot: LsimStateSnapshot): LsimInvariantResult {
 
 function checkpointCadence(snapshot: LsimStateSnapshot): LsimInvariantResult {
   const reached = reachedCheckpoints(snapshot);
+  const expectedCount = checkpointCountForCadence(snapshot.checkpointCadence);
   const sourceGameNumbers = Array.from(new Set(
     snapshot.ratingsOverlays
       .map((row) => gameNumberFromSourceEventId('checkpoint-', row.sourceEventId))
@@ -433,13 +435,14 @@ function checkpointCadence(snapshot: LsimStateSnapshot): LsimInvariantResult {
   )).sort((left, right) => left - right);
   const missing = reached.filter((gameNumber) => !sourceGameNumbers.includes(gameNumber));
   const unexpected = sourceGameNumbers.filter((gameNumber) => !snapshot.checkpointGameNumbers.includes(gameNumber));
-  const finalExactFive = snapshot.gamesSimulated < snapshot.totalScheduledGames || sourceGameNumbers.length === 5;
-  const pass = missing.length === 0 && unexpected.length === 0 && finalExactFive;
+  const finalMatchesSetting = snapshot.gamesSimulated < snapshot.totalScheduledGames ||
+    sourceGameNumbers.length === expectedCount;
+  const pass = missing.length === 0 && unexpected.length === 0 && finalMatchesSetting;
   return invariantResult(
-    'soul.checkpoint-cadence-exactly-five',
+    'soul.checkpoint-cadence-matches-setting',
     CRITICAL,
     pass,
-    `reached=${reached.join(',') || 'none'}; overlayCheckpoints=${sourceGameNumbers.join(',') || 'none'}; missing=${missing.join(',') || 'none'}; unexpected=${unexpected.join(',') || 'none'}`,
+    `cadence=${snapshot.checkpointCadence}; expectedCount=${expectedCount}; reached=${reached.join(',') || 'none'}; overlayCheckpoints=${sourceGameNumbers.join(',') || 'none'}; missing=${missing.join(',') || 'none'}; unexpected=${unexpected.join(',') || 'none'}`,
   );
 }
 

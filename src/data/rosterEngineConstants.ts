@@ -272,6 +272,24 @@ export const SOLVENCY_SEVERE_TAX_FRAC = 0.20;
 /** §12/§5.4 balanceMode default for Mode 1 league construction. */
 export const BALANCE_MODE_DEFAULT = 'taxed' as const;
 
+/** Shared ratings/traits/L-SIM checkpoint cadence. Standard preserves the original 20% grid. */
+export const CHECKPOINT_CADENCE_DEFAULT = 'standard' as const;
+
+export const CHECKPOINT_CADENCE_COUNTS = {
+  standard: 5,
+  frequent: 10,
+} as const;
+
+export type CheckpointCadence = keyof typeof CHECKPOINT_CADENCE_COUNTS;
+
+export function normalizeCheckpointCadence(value: unknown): CheckpointCadence {
+  return value === 'frequent' ? 'frequent' : CHECKPOINT_CADENCE_DEFAULT;
+}
+
+export function checkpointCountForCadence(cadence: CheckpointCadence | null | undefined): number {
+  return CHECKPOINT_CADENCE_COUNTS[normalizeCheckpointCadence(cadence)];
+}
+
 /** §12/§7.2 poolSurplusMax: warn when registered pool exceeds roster slots by more than 20%. */
 export const POOL_SURPLUS_MAX = 1.2;
 

@@ -17,6 +17,7 @@ import type { FranchiseL10OverlayRow } from '../../../src/utils/franchiseL10Over
 import type { FranchiseFlashpointDecayRow } from '../../../src/utils/franchiseFlashpointDecayStorage';
 import type { FranchiseAllStarRosterRow } from '../../../src/utils/franchiseAllStarRostersStorage';
 import type { FranchiseAwardRow } from '../../../src/utils/franchiseAwardsStorage';
+import type { CheckpointCadence } from '../../../src/data/rosterEngineConstants';
 import type { FranchiseMoraleSnapshot } from '../../../src/utils/franchiseMoraleState';
 import type { FranchiseTrustedValueArtifact } from '../../../src/utils/franchiseTrustedValueStorage';
 import type { SeasonNewsItem } from '../../../src/types/reporter';
@@ -113,6 +114,8 @@ export interface LsimStateSnapshot {
   gamesSimulated: number;
   totalScheduledGames: number;
   gamesPerTeam: number;
+  checkpointCadence: CheckpointCadence;
+  checkpointCount: number;
   checkpointGameNumbers: number[];
   teamIds: string[];
   teams: Team[];

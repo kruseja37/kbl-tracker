@@ -12,7 +12,12 @@
  */
 
 import { generateHometown } from '../data/usCities';
-import { BALANCE_MODE_DEFAULT } from '../data/rosterEngineConstants';
+import {
+  BALANCE_MODE_DEFAULT,
+  CHECKPOINT_CADENCE_DEFAULT,
+  normalizeCheckpointCadence,
+  type CheckpointCadence,
+} from '../data/rosterEngineConstants';
 import type { BalanceMode, RegisteredPool, TeamCapIdentity } from '../engines/leagueConstruction';
 import type { TierKey } from '../data/tierParams';
 import type { OptimalLineupSnapshot } from '../types/managerWpa';
@@ -95,6 +100,7 @@ export interface LeagueTemplate {
   defaultRulesPreset: string;
   tier?: TierKey;
   balanceMode?: BalanceMode;
+  checkpointCadence?: CheckpointCadence;
   logoUrl?: string;
   color?: string;
 }
@@ -561,6 +567,10 @@ function normalizeLeagueTemplateRecord(template: LegacyLeagueTemplateRecord): Le
     ...template,
     tier: template.tier ?? 'juiced',
     balanceMode: template.balanceMode ?? BALANCE_MODE_DEFAULT,
+    checkpointCadence: normalizeCheckpointCadence(
+      (template as LegacyLeagueTemplateRecord & { checkpointCadence?: unknown }).checkpointCadence ??
+        CHECKPOINT_CADENCE_DEFAULT,
+    ),
   };
 }
 

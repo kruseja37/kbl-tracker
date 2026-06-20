@@ -81,6 +81,8 @@ export function renderLsimH2Report(summary: LsimH2SuiteSummary): string {
     '',
     `Exact baseline games simulated: **${baseline.gamesSimulated}**`,
     '',
+    `Checkpoint cadence: **${baseline.checkpointCadence}** (${baseline.checkpointGameNumbers.length} boundaries)`,
+    '',
     `Checkpoint files: ${baseline.checkpointFiles.length === 0 ? 'none' : baseline.checkpointFiles.join(', ')}`,
     '',
     '## Soul-Layer Invariants',
@@ -102,7 +104,7 @@ export function renderLsimH2Report(summary: LsimH2SuiteSummary): string {
     '## Notes',
     '',
     '- The runner drives real `processCompletedGame` with all Phase-2 flags forced on.',
-    '- The baseline sandbox is direct, deterministic, 6 teams, 20 games per team, 60 scheduled games.',
+    `- The baseline sandbox is direct, deterministic, 6 teams, ${baseline.gamesPerTeam} games per team, ${baseline.totalScheduledGames} scheduled games.`,
     '- The full edge-league and multi-season matrix remains assigned to the Opus step-4 audit.',
     '',
   ].join('\n');

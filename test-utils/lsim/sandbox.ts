@@ -45,6 +45,11 @@ import { resetTrackerDbForTests } from '../../src/utils/trackerDb';
 import { syncEngine } from '../../src/utils/syncEngine';
 import type { StoredFranchiseConfig } from '../../src/types/franchise';
 import type { processCompletedGame } from '../../src/utils/processCompletedGame';
+import {
+  CHECKPOINT_CADENCE_DEFAULT,
+  normalizeCheckpointCadence,
+  type CheckpointCadence,
+} from '../../src/data/rosterEngineConstants';
 
 export const L_SIM_IDS = {
   franchiseId: 'lsim-franchise-h1',
@@ -70,6 +75,7 @@ export interface LsimTeamSeed {
 
 export interface LsimSandboxContext {
   ids: typeof L_SIM_IDS;
+  checkpointCadence: CheckpointCadence;
   teams: Team[];
   teamSeeds: LsimTeamSeed[];
   scheduleByGameNumber: Map<number, ScheduledGame>;
@@ -90,6 +96,7 @@ export interface LsimSandboxSetupOptions {
   initialGamesPlayed?: number;
   preseedPriorStats?: boolean;
   deterministicScheduleIds?: boolean;
+  checkpointCadence?: CheckpointCadence;
 }
 
 const FIXED_ISO = '2026-06-19T12:00:00.000Z';
@@ -343,7 +350,9 @@ function rosterLineup(players: Player[]): TeamRoster['lineupWithDH'] {
   }));
 }
 
-async function seedLeagueAndFranchisePlayers(): Promise<Omit<LsimSandboxContext, 'scheduleByGameNumber' | 'processOptions' | 'scope' | 'setupPath' | 'salaryBaseline' | 'trueValueCandidatePlayerId'>> {
+async function seedLeagueAndFranchisePlayers(
+  checkpointCadence: CheckpointCadence,
+): Promise<Omit<LsimSandboxContext, 'checkpointCadence' | 'scheduleByGameNumber' | 'processOptions' | 'scope' | 'setupPath' | 'salaryBaseline' | 'trueValueCandidatePlayerId'>> {
   const teams: Team[] = [];
   const teamSeeds: LsimTeamSeed[] = [];
 
@@ -363,6 +372,7 @@ async function seedLeagueAndFranchisePlayers(): Promise<Omit<LsimSandboxContext,
     defaultRulesPreset: 'lsim-rules',
     tier: 'standard',
     balanceMode: 'advisory',
+    checkpointCadence,
     color: '#2451A6',
   });
 
@@ -604,7 +614,11 @@ function buildFranchiseConfig(teamSeeds: LsimTeamSeed[], salaryBaseline: StoredF
   };
 }
 
-async function seedSeasonMetadata(totalScheduledGames: number, initialGamesPlayed: number): Promise<void> {
+async function seedSeasonMetadata(
+  totalScheduledGames: number,
+  initialGamesPlayed: number,
+  checkpointCadence: CheckpointCadence,
+): Promise<void> {
   await saveSeasonMetadata({
     seasonId: L_SIM_IDS.seasonId,
     seasonNumber: L_SIM_IDS.seasonNumber,
@@ -614,6 +628,7 @@ async function seedSeasonMetadata(totalScheduledGames: number, initialGamesPlaye
     gamesPlayed: initialGamesPlayed,
     totalGames: totalScheduledGames,
     gamesPerTeam: L_SIM_IDS.gamesPerTeam,
+    checkpointCadence,
   });
 }
 
@@ -849,13 +864,14 @@ export async function setupLsimSandbox(options: LsimSandboxSetupOptions = {}): P
   );
   const preseedPriorStats = options.preseedPriorStats ?? true;
   const deterministicScheduleIds = options.deterministicScheduleIds ?? false;
+  const checkpointCadence = normalizeCheckpointCadence(options.checkpointCadence ?? CHECKPOINT_CADENCE_DEFAULT);
 
   await resetSandboxDatabases();
-  const seeded = await seedLeagueAndFranchisePlayers();
+  const seeded = await seedLeagueAndFranchisePlayers(checkpointCadence);
   await seedManagerAssignments(seeded.teams);
   const salaryBaseline = buildSalaryBaseline(seeded.teamSeeds);
   await saveFranchiseConfig(buildFranchiseConfig(seeded.teamSeeds, salaryBaseline));
-  await seedSeasonMetadata(totalScheduledGames, initialGamesPlayed);
+  await seedSeasonMetadata(totalScheduledGames, initialGamesPlayed, checkpointCadence);
   await seedStrugglingFanMoraleTrajectory();
   const scheduleByGameNumber = await seedScheduleRows(seeded.teams, totalScheduledGames, deterministicScheduleIds);
   if (preseedPriorStats) {
@@ -864,6 +880,7 @@ export async function setupLsimSandbox(options: LsimSandboxSetupOptions = {}): P
 
   return {
     ...seeded,
+    checkpointCadence,
     scheduleByGameNumber,
     totalScheduledGames,
     processOptions: {

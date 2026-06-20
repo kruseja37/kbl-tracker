@@ -3,6 +3,10 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { writeLsimH2Report } from './report';
 import { runLsimH2Suite, summarizeH2SuiteForConsole } from './seasonRunner';
+import {
+  CHECKPOINT_CADENCE_DEFAULT,
+  normalizeCheckpointCadence,
+} from '../../src/data/rosterEngineConstants';
 
 describe('L-SIM H2 season runner and invariant suite', () => {
   const originalConsoleLog = console.log;
@@ -55,9 +59,13 @@ describe('L-SIM H2 season runner and invariant suite', () => {
 
   test('runs the baseline season leg and same-seed determinism leg', async () => {
     const gamesPerTeam = Number(process.env.LSIM_H2_GAMES_PER_TEAM ?? 20);
+    const checkpointCadence = normalizeCheckpointCadence(
+      process.env.LSIM_H2_CHECKPOINT_CADENCE ?? CHECKPOINT_CADENCE_DEFAULT,
+    );
     const summary = await runLsimH2Suite({
       seed: 'lsim-h2-baseline',
       gamesPerTeam,
+      checkpointCadence,
       teamCount: 6,
       checkpointEvery: 10,
       writeCheckpoints: true,

@@ -29,6 +29,11 @@ import {
 } from '../leagueBuilderStorage';
 import { getFranchiseTrueValueRows } from '../franchiseTrueValueStorage';
 import { getFranchiseMoraleSnapshot } from '../franchiseMoraleState';
+import {
+  CHECKPOINT_CADENCE_COUNTS,
+  CHECKPOINT_CADENCE_DEFAULT,
+  checkpointCountForCadence,
+} from '../../data/rosterEngineConstants';
 
 vi.mock('../seasonStorage', () => ({
   getSeasonMetadata: vi.fn(),
@@ -214,6 +219,31 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
     expect(isCheckpointBoundary(2, 0)).toBe(false);
   });
 
+  test('checkpoint cadence constants default to the original five-boundary standard cadence', () => {
+    expect(CHECKPOINT_CADENCE_DEFAULT).toBe('standard');
+    expect(CHECKPOINT_CADENCE_COUNTS).toEqual({ standard: 5, frequent: 10 });
+    expect(checkpointCountForCadence(undefined)).toBe(5);
+    expect(checkpointCountForCadence('standard')).toBe(5);
+    expect(checkpointCountForCadence('frequent')).toBe(10);
+  });
+
+  test('isCheckpointBoundary supports frequent ten-boundary cadence via the third parameter', () => {
+    const trueFor10 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    for (let gameNumber = 1; gameNumber <= 10; gameNumber += 1) {
+      expect(isCheckpointBoundary(gameNumber, 10, 10)).toBe(trueFor10.includes(gameNumber));
+    }
+
+    const trueFor32 = [4, 7, 10, 13, 16, 20, 23, 26, 29, 32];
+    for (let gameNumber = 1; gameNumber <= 32; gameNumber += 1) {
+      expect(isCheckpointBoundary(gameNumber, 32, 10)).toBe(trueFor32.includes(gameNumber));
+    }
+
+    const trueFor60 = [6, 12, 18, 24, 30, 36, 42, 48, 54, 60];
+    for (let gameNumber = 1; gameNumber <= 60; gameNumber += 1) {
+      expect(isCheckpointBoundary(gameNumber, 60, 10)).toBe(trueFor60.includes(gameNumber));
+    }
+  });
+
   test('selectDevelopmentRatingKey is deterministic and selects a valid pitcher or hitter key', () => {
     const pitcherKey = selectDevelopmentRatingKey(entry({ playerId: 'same-pitcher', isPitcher: true }));
     const hitterKey = selectDevelopmentRatingKey(entry({ playerId: 'same-hitter', isPitcher: false }));
@@ -306,6 +336,25 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
         createdAt: shifter.createdAt,
       },
     ]);
+  });
+
+  test('frequent cadence from season metadata makes game 3 of 10 a checkpoint boundary', async () => {
+    setFranchisePhase2CheckpointEnabledForTests(true);
+    vi.mocked(getScheduledGame).mockResolvedValue({ id: 'scheduled-checkpoint-3', gameNumber: 3 } as never);
+    vi.mocked(getSeasonMetadata).mockResolvedValue({ totalGames: 10, checkpointCadence: 'frequent' } as never);
+    const shifter = entry({ playerId: 'player-frequent', performanceSignal: 1 });
+    vi.spyOn(checkpointSweepSeam, 'resolveCheckpointRoster').mockResolvedValue([shifter]);
+
+    const result = await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
+    const rows = await overlayStorage.getFranchiseRatingsOverlaysByScope(scope);
+
+    expect(result).toEqual({ status: 'written', written: 1 });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      playerId: 'player-frequent',
+      sourceEventId: 'checkpoint-3',
+      createdAtGameNumber: 3,
+    });
   });
 
   test('replaying the same boundary checkpoint overwrites the same overlay id without duplicates', async () => {

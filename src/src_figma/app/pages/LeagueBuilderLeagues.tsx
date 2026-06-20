@@ -22,9 +22,14 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { useLeagueBuilderData, type LeagueTemplate } from "../../hooks/useLeagueBuilderData";
-import { BALANCE_MODE_DEFAULT } from "../../../data/rosterEngineConstants";
+import {
+  BALANCE_MODE_DEFAULT,
+  CHECKPOINT_CADENCE_DEFAULT,
+  type CheckpointCadence,
+} from "../../../data/rosterEngineConstants";
 import type { BalanceMode, RegisteredPool } from "../../../engines/leagueConstruction";
 import type { TierKey } from "../../../data/tierParams";
+import { isFranchisePhase2L13Enabled } from "../../../utils/franchisePhase2Flags";
 
 // ============================================
 // TYPES
@@ -37,6 +42,7 @@ interface LeagueFormData {
   defaultRulesPreset: string;
   tier: TierKey;
   balanceMode: BalanceMode;
+  checkpointCadence: CheckpointCadence;
   color: string;
 }
 
@@ -47,6 +53,7 @@ const DEFAULT_FORM_DATA: LeagueFormData = {
   defaultRulesPreset: "",
   tier: "juiced",
   balanceMode: BALANCE_MODE_DEFAULT,
+  checkpointCadence: CHECKPOINT_CADENCE_DEFAULT,
   color: "#5A8352",
 };
 
@@ -62,12 +69,21 @@ const BALANCE_MODE_OPTIONS: Array<{ value: BalanceMode; label: string }> = [
   { value: "off", label: "Off" },
 ];
 
+const CHECKPOINT_CADENCE_OPTIONS: Array<{ value: CheckpointCadence; label: string }> = [
+  { value: "standard", label: "Standard" },
+  { value: "frequent", label: "Frequent" },
+];
+
 function formatTier(value: TierKey | undefined): string {
   return TIER_OPTIONS.find((option) => option.value === (value ?? "juiced"))?.label ?? "Juiced";
 }
 
 function formatBalanceMode(value: BalanceMode | undefined): string {
   return BALANCE_MODE_OPTIONS.find((option) => option.value === (value ?? BALANCE_MODE_DEFAULT))?.label ?? "Taxed";
+}
+
+function formatCheckpointCadence(value: CheckpointCadence | undefined): string {
+  return CHECKPOINT_CADENCE_OPTIONS.find((option) => option.value === (value ?? CHECKPOINT_CADENCE_DEFAULT))?.label ?? "Standard";
 }
 
 // ============================================
@@ -97,6 +113,7 @@ export function LeagueBuilderLeagues() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [registeringPoolId, setRegisteringPoolId] = useState<string | null>(null);
   const [registeredPoolResult, setRegisteredPoolResult] = useState<RegisteredPool | null>(null);
+  const showCheckpointCadenceControl = isFranchisePhase2L13Enabled();
 
   // Set default rules preset when data loads
   useEffect(() => {
@@ -128,6 +145,7 @@ export function LeagueBuilderLeagues() {
       defaultRulesPreset: league.defaultRulesPreset,
       tier: league.tier ?? "juiced",
       balanceMode: league.balanceMode ?? BALANCE_MODE_DEFAULT,
+      checkpointCadence: league.checkpointCadence ?? CHECKPOINT_CADENCE_DEFAULT,
       color: league.color || "#5A8352",
     });
     setIsModalOpen(true);
@@ -153,6 +171,7 @@ export function LeagueBuilderLeagues() {
           defaultRulesPreset: formData.defaultRulesPreset,
           tier: formData.tier,
           balanceMode: formData.balanceMode,
+          checkpointCadence: formData.checkpointCadence,
           color: formData.color,
         });
       } else {
@@ -165,6 +184,7 @@ export function LeagueBuilderLeagues() {
           defaultRulesPreset: formData.defaultRulesPreset,
           tier: formData.tier,
           balanceMode: formData.balanceMode,
+          checkpointCadence: formData.checkpointCadence,
           color: formData.color,
         });
       }
@@ -321,6 +341,9 @@ export function LeagueBuilderLeagues() {
                         </span>
                         <span>{formatTier(league.tier)}</span>
                         <span>{formatBalanceMode(league.balanceMode)}</span>
+                        {showCheckpointCadenceControl && (
+                          <span>{formatCheckpointCadence(league.checkpointCadence)} checkpoints</span>
+                        )}
                         <span>
                           Created:{" "}
                           {new Date(league.createdDate).toLocaleDateString()}
@@ -519,6 +542,33 @@ export function LeagueBuilderLeagues() {
                   ))}
                 </select>
               </div>
+
+              {showCheckpointCadenceControl && (
+                <div>
+                  <label className="block text-sm font-bold mb-2">Checkpoint Cadence</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {CHECKPOINT_CADENCE_OPTIONS.map((option) => {
+                      const active = formData.checkpointCadence === option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() =>
+                            setFormData((prev) => ({ ...prev, checkpointCadence: option.value }))
+                          }
+                          className={`border-[4px] p-3 text-left font-bold transition ${
+                            active
+                              ? "bg-[#E8E8D8] border-[#E8E8D8] text-[#2F4A2A]"
+                              : "bg-[#4A6844] border-[#3F5A3A] text-[#E8E8D8] hover:border-[#E8E8D8]/70"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Team Selection */}
               <div>

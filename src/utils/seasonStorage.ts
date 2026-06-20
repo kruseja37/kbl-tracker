@@ -11,6 +11,10 @@ import { syncEngine } from './syncEngine';
 import { getScoreOnlyCompletedGamesBySeason } from './scheduleStorage';
 import { getRecentGames, type CompletedGameRecord } from './gameStorage';
 import { captureOptimizerConstantsSnapshot } from '../engines/optimizerConstantsSnapshot';
+import {
+  normalizeCheckpointCadence,
+  type CheckpointCadence,
+} from '../data/rosterEngineConstants';
 
 // Store names
 const STORES = {
@@ -164,6 +168,7 @@ export interface SeasonMetadata {
   gamesPlayed: number;
   totalGames: number;  // Scheduled games
   gamesPerTeam: number | null; // W1-B: per-team season length snapshot for WAR scaling
+  checkpointCadence?: CheckpointCadence;
   optimizerConstantsVersion?: string;
   optimizerConstantsHash?: string;
 }
@@ -499,6 +504,9 @@ function normalizeSeasonMetadata(metadata: SeasonMetadata): SeasonMetadata {
   return {
     ...metadata,
     gamesPerTeam: normalizeGamesPerTeam((metadata as SeasonMetadata & { gamesPerTeam?: unknown }).gamesPerTeam),
+    checkpointCadence: normalizeCheckpointCadence(
+      (metadata as SeasonMetadata & { checkpointCadence?: unknown }).checkpointCadence,
+    ),
   };
 }
 
@@ -542,10 +550,12 @@ export async function getOrCreateSeason(
   seasonNumber: number,
   seasonName: string,
   totalGames: number,
-  gamesPerTeam: number | null = null
+  gamesPerTeam: number | null = null,
+  checkpointCadence?: CheckpointCadence,
 ): Promise<SeasonMetadata> {
   const db = await initSeasonDatabase();
   const normalizedGamesPerTeam = normalizeGamesPerTeam(gamesPerTeam);
+  const normalizedCheckpointCadence = normalizeCheckpointCadence(checkpointCadence);
 
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORES.SEASON_METADATA, 'readwrite');
@@ -585,6 +595,7 @@ export async function getOrCreateSeason(
           gamesPlayed: 0,
           totalGames,
           gamesPerTeam: normalizedGamesPerTeam,
+          checkpointCadence: normalizedCheckpointCadence,
         };
         const stamped = stampOptimizerConstantsSnapshot(newSeason);
         const putRequest = store.put(stamped.metadata);

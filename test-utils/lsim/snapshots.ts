@@ -21,6 +21,10 @@ import { getTrustedValueArtifact } from '../../src/utils/franchiseTrustedValueSt
 import { getFranchiseTrueValueRows } from '../../src/utils/franchiseTrueValueStorage';
 import { getFranchiseTrueValueSnapshotRowsByScope } from '../../src/utils/franchiseTrueValueSnapshotsStorage';
 import { listSeasonNewsItemsForFranchiseSeason } from '../../src/utils/seasonNewsStorage';
+import {
+  CHECKPOINT_CADENCE_DEFAULT,
+  checkpointCountForCadence,
+} from '../../src/data/rosterEngineConstants';
 import type {
   LsimFinalizeProof,
   LsimL12Proof,
@@ -41,9 +45,9 @@ export interface ReadLsimSnapshotOptions {
   finalizeProof?: LsimFinalizeProof | null;
 }
 
-export function checkpointGameNumbers(totalGames: number): number[] {
+export function checkpointGameNumbers(totalGames: number, checkpointCount = 5): number[] {
   return Array.from({ length: totalGames }, (_, index) => index + 1)
-    .filter((gameNumber) => isCheckpointBoundary(gameNumber, totalGames));
+    .filter((gameNumber) => isCheckpointBoundary(gameNumber, totalGames, checkpointCount));
 }
 
 export async function readLsimStateSnapshot(
@@ -110,12 +114,17 @@ export async function readLsimStateSnapshot(
     dumpLsimStores(),
   ]);
 
+  const checkpointCadence = seasonMetadata?.checkpointCadence ?? CHECKPOINT_CADENCE_DEFAULT;
+  const checkpointCount = checkpointCountForCadence(checkpointCadence);
+
   return {
     gameNumber: options.gameNumber,
     gamesSimulated: options.gamesSimulated,
     totalScheduledGames: context.totalScheduledGames,
     gamesPerTeam: context.ids.gamesPerTeam,
-    checkpointGameNumbers: checkpointGameNumbers(context.totalScheduledGames),
+    checkpointCadence,
+    checkpointCount,
+    checkpointGameNumbers: checkpointGameNumbers(context.totalScheduledGames, checkpointCount),
     teamIds: context.teams.map((team) => team.id).sort(),
     teams,
     players,

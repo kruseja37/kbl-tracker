@@ -6,6 +6,7 @@ import { captureOptimizerConstantsSnapshot } from "../../engines/optimizerConsta
 import {
   getOrCreateSeason,
   getSeasonMetadata,
+  initSeasonDatabase,
   saveSeasonMetadata,
 } from "../seasonStorage";
 import { resetTrackerDbForTests } from "../trackerDb";
@@ -51,6 +52,30 @@ describe("seasonStorage optimizer constants snapshot", () => {
     await expect(getSeasonMetadata("optimizer-season-1")).resolves.toMatchObject({
       optimizerConstantsVersion: snapshot.version,
       optimizerConstantsHash: snapshot.hash,
+    });
+  });
+
+  test("defaults absent checkpointCadence to standard when reading legacy season metadata", async () => {
+    const db = await initSeasonDatabase();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction("seasonMetadata", "readwrite");
+      tx.objectStore("seasonMetadata").put({
+        seasonId: "legacy-no-checkpoint-cadence",
+        seasonNumber: 1,
+        seasonName: "Legacy Season",
+        status: "active",
+        startDate: 1,
+        gamesPlayed: 0,
+        totalGames: 32,
+        gamesPerTeam: 16,
+      });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+
+    await expect(getSeasonMetadata("legacy-no-checkpoint-cadence")).resolves.toMatchObject({
+      checkpointCadence: "standard",
     });
   });
 

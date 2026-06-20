@@ -6,13 +6,15 @@ Generated: 2026-06-19
 
 | Leg | Seed | Games Simulated | Total Scheduled Games | Stopped Early | Final Digest |
 | --- | --- | ---: | ---: | --- | --- |
-| Baseline | lsim-h2-baseline | 60 | 60 | false | 8571151:5403bbde |
-| Determinism A | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8565624:7c694372 |
-| Determinism B | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8565624:7c694372 |
+| Baseline | lsim-h2-baseline | 60 | 60 | false | 8571213:ea1cc332 |
+| Determinism A | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8565686:ac988f54 |
+| Determinism B | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8565686:ac988f54 |
 
 Determinism same-seed byte-identical end-state: **PASS**
 
 Exact baseline games simulated: **60**
+
+Checkpoint cadence: **standard** (5 boundaries)
 
 Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/lsim-h2-baseline-checkpoint-010.json, /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/lsim-h2-baseline-checkpoint-020.json, /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/lsim-h2-baseline-checkpoint-030.json, /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/lsim-h2-baseline-checkpoint-040.json, /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/lsim-h2-baseline-checkpoint-050.json, /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/lsim-h2-baseline-checkpoint-060.json
 
@@ -24,7 +26,7 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
 | soul.all-star-sixty-percent-lock | CRITICAL | 60 | 0 |
 | soul.awards-off-frozen-artifact | CRITICAL | 60 | 0 |
 | soul.channel-separation-double-count-guards | CRITICAL | 60 | 0 |
-| soul.checkpoint-cadence-exactly-five | CRITICAL | 60 | 0 |
+| soul.checkpoint-cadence-matches-setting | CRITICAL | 60 | 0 |
 | soul.designation-six-slots-single-holder | CRITICAL | 60 | 0 |
 | soul.emission-snub-signal | INVESTIGATE | 60 | 0 |
 | soul.fame-components-finite | CRITICAL | 60 | 0 |

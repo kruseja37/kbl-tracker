@@ -60,6 +60,7 @@ import {
 import {
   deriveAdaptiveStandardsConfig,
 } from './franchiseAdaptiveStandards';
+import { checkpointCountForCadence } from '../data/rosterEngineConstants';
 import {
   isCheckpointBoundary,
   type CompletedGameArchiveOptions,
@@ -173,7 +174,8 @@ export async function persistDarkTraitGrantForCompletedGame(
     };
   }
 
-  const totalGames = (await getSeasonMetadata(scope.seasonId))?.totalGames;
+  const seasonMetadata = await getSeasonMetadata(scope.seasonId);
+  const totalGames = seasonMetadata?.totalGames;
   if (!totalGames || totalGames <= 0) {
     return {
       status: 'dark-noop',
@@ -182,7 +184,8 @@ export async function persistDarkTraitGrantForCompletedGame(
     };
   }
 
-  if (!isCheckpointBoundary(gameNumber, totalGames)) {
+  const checkpointCount = checkpointCountForCadence(seasonMetadata?.checkpointCadence);
+  if (!isCheckpointBoundary(gameNumber, totalGames, checkpointCount)) {
     return { status: 'not-checkpoint', written: 0 };
   }
 

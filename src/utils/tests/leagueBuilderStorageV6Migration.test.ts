@@ -222,6 +222,7 @@ describe('leagueBuilderStorage v7 MLB draft session migration', () => {
       teamIds: ['team-a', 'team-b'],
       tier: 'juiced',
       balanceMode: 'taxed',
+      checkpointCadence: 'standard',
     }));
 
     __resetLeagueBuilderDatabaseForTests();
@@ -237,6 +238,7 @@ describe('leagueBuilderStorage v7 MLB draft session migration', () => {
     expect(rawTemplate.name).toBe('Legacy V5 League');
     expect(rawTemplate.tier).toBeUndefined();
     expect(rawTemplate.balanceMode).toBeUndefined();
+    expect(rawTemplate.checkpointCadence).toBeUndefined();
     rawDb.close();
   });
 

@@ -165,6 +165,7 @@ describe('W1-FIX franchise season metadata gamesPerTeam fuel line', () => {
       'Season 1',
       0,
       40,
+      'standard',
     );
     expect(mocks.saveFranchiseTeam).toHaveBeenCalledWith(
       'franchise-1',

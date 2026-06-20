@@ -40,11 +40,18 @@ import { L_SIM_IDS, setupLsimSandbox, type LsimSandboxContext } from './sandbox'
 import { checkpointGameNumbers, readLsimStateSnapshot } from './snapshots';
 import { describeFirstStoreDumpDifference, stableStringify, dumpLsimStores } from './storeDump';
 import { generateLsimSyntheticCompletedGame, type LsimSyntheticCompletedGame } from './syntheticGame';
+import {
+  CHECKPOINT_CADENCE_DEFAULT,
+  checkpointCountForCadence,
+  normalizeCheckpointCadence,
+  type CheckpointCadence,
+} from '../../src/data/rosterEngineConstants';
 
 export interface LsimSeasonRunnerConfig {
   seed: string;
   teamCount?: 6;
   gamesPerTeam?: number;
+  checkpointCadence?: CheckpointCadence;
   checkpointEvery?: number;
   writeCheckpoints?: boolean;
   outputDir?: string;
@@ -58,6 +65,7 @@ export interface LsimSeasonRunSummary {
   seed: string;
   teamCount: number;
   gamesPerTeam: number;
+  checkpointCadence: CheckpointCadence;
   totalScheduledGames: number;
   gamesSimulated: number;
   stoppedEarly: boolean;
@@ -664,6 +672,8 @@ export async function runLsimSeason(config: LsimSeasonRunnerConfig): Promise<Lsi
     throw new Error(`[L-SIM-H2] H2 direct sandbox currently supports the seeded 6-team league; received teamCount=${teamCount}`);
   }
   const gamesPerTeam = config.gamesPerTeam ?? DEFAULT_GAMES_PER_TEAM;
+  const checkpointCadence = normalizeCheckpointCadence(config.checkpointCadence ?? CHECKPOINT_CADENCE_DEFAULT);
+  const checkpointCount = checkpointCountForCadence(checkpointCadence);
   const totalScheduledGames = Math.floor((teamCount * gamesPerTeam) / 2);
   const checkpointEvery = config.checkpointEvery ?? DEFAULT_CHECKPOINT_EVERY;
   const writeCheckpoints = config.writeCheckpoints ?? true;
@@ -687,6 +697,7 @@ export async function runLsimSeason(config: LsimSeasonRunnerConfig): Promise<Lsi
       initialGamesPlayed: 0,
       preseedPriorStats: false,
       deterministicScheduleIds: true,
+      checkpointCadence,
     });
     let previous = await readLsimStateSnapshot(context, {
       gameNumber: 0,
@@ -835,11 +846,12 @@ export async function runLsimSeason(config: LsimSeasonRunnerConfig): Promise<Lsi
       seed: config.seed,
       teamCount,
       gamesPerTeam,
+      checkpointCadence,
       totalScheduledGames,
       gamesSimulated: finalSnapshot.gamesSimulated,
       stoppedEarly,
       finalDigest: finalSnapshot.storeDump.digest,
-      checkpointGameNumbers: checkpointGameNumbers(totalScheduledGames),
+      checkpointGameNumbers: checkpointGameNumbers(totalScheduledGames, checkpointCount),
       invariantResults,
       findings,
       distributions: computeLsimDistributions(finalSnapshot),
@@ -857,6 +869,7 @@ export async function runLsimH2Suite(config: Partial<LsimSeasonRunnerConfig> = {
     seed: config.seed ?? 'lsim-h2-baseline',
     teamCount: config.teamCount ?? DEFAULT_TEAM_COUNT,
     gamesPerTeam: config.gamesPerTeam ?? DEFAULT_GAMES_PER_TEAM,
+    checkpointCadence: normalizeCheckpointCadence(config.checkpointCadence ?? CHECKPOINT_CADENCE_DEFAULT),
     checkpointEvery: config.checkpointEvery ?? DEFAULT_CHECKPOINT_EVERY,
     outputDir: config.outputDir ?? DEFAULT_OUTPUT_DIR,
   } satisfies LsimSeasonRunnerConfig;
@@ -920,6 +933,7 @@ export function summarizeH2SuiteForConsole(summary: LsimH2SuiteSummary): string 
     baseline: {
       gamesSimulated: summary.baseline.gamesSimulated,
       totalScheduledGames: summary.baseline.totalScheduledGames,
+      checkpointCadence: summary.baseline.checkpointCadence,
       stoppedEarly: summary.baseline.stoppedEarly,
       finalDigest: summary.baseline.finalDigest,
       findings: summary.baseline.findings.length,
