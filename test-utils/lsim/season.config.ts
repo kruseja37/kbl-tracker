@@ -20,6 +20,6 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: [path.resolve(ROOT, 'src/test-setup.ts')],
     include: ['test-utils/lsim/seasonRunner.scenario.ts'],
-    testTimeout: 900_000,
+    testTimeout: 2_700_000,
   },
 });

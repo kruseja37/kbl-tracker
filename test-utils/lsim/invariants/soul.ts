@@ -1,5 +1,7 @@
-import { FAME_TIER_RANK, resolveFameTier } from '../../../src/engines/fameModel';
+import { FAME_TIER_RANK, FAME_TUNING, resolveFameTier } from '../../../src/engines/fameModel';
 import { ALL_STAR_LOCK_FRACTION } from '../../../src/utils/franchiseAllStarLock';
+import { FLASHPOINT_DECAY_TUNING, computeFlashpointGameTax } from '../../../src/engines/flashpointDecay';
+import { L11_AUTO_BACKSTOP_TUNING } from '../../../src/utils/franchiseManagerAutoBackstop';
 import { TRAIT_ACQUISITION_TUNING, TRAIT_OPPOSITES } from '../../../src/engines/traitAcquisition';
 import type { FranchiseDesignationType } from '../../../src/utils/franchiseDesignations';
 import type { Player } from '../../../src/utils/leagueBuilderStorage';
@@ -18,7 +20,7 @@ const DESIGNATION_ROW_TYPES: readonly FranchiseDesignationType[] = [
   'FAN_FAVORITE',
   'ALBATROSS',
 ];
-const REQUIRED_L12_MERIT_CATEGORIES = [
+export const REQUIRED_L12_MERIT_CATEGORIES = [
   'MVP',
   'CY_YOUNG',
   'ROOKIE_OF_YEAR',
@@ -140,22 +142,31 @@ function fameHeatFickle(snapshot: LsimStateSnapshot): LsimInvariantResult {
 }
 
 function fameTierLegitimacy(snapshot: LsimStateSnapshot): LsimInvariantResult {
+  // §20.1/§20.2 (H3 disambiguation): the legitimacy floor is UPWARD soft gravity, and a high-fame/low-WAR
+  // "darling/overrated" is a BLESSED archetype — NOT a violation. The old hard downward cap
+  // (tier>=NATIONAL_ICON AND warPct<0.25) was the INVERSE of the design. Flag only APEX DEGENERACY: a
+  // replacement/near-replacement (bottom-decile WAR) player reaching the very TOP tier (IMMORTAL_LEGEND) —
+  // the noise the prestige labels should resist. Darlings are a §9 distribution signal, not a failure.
+  const APEX = FAME_TIER_RANK.IMMORTAL_LEGEND;
+  const APEX_DEGENERACY_WAR_PERCENTILE = 0.1;
   const trueValueByPlayer = new Map(snapshot.trueValueRows.map((row) => [row.playerId, row]));
   const offenders = snapshot.fameRows
     .filter((row) => {
       const fameRank = FAME_TIER_RANK[resolveFameTier(row.heat, row.reachFloor)];
       const valueRow = trueValueByPlayer.get(row.playerId);
-      return fameRank >= FAME_TIER_RANK.NATIONAL_ICON &&
+      return fameRank >= APEX &&
         valueRow &&
         isFiniteNumber(valueRow.warPercentile) &&
-        valueRow.warPercentile < 0.25;
+        valueRow.warPercentile < APEX_DEGENERACY_WAR_PERCENTILE;
     })
     .map((row) => row.playerId);
   return invariantResult(
     'soul.fame-war-legitimacy-floor',
     INVESTIGATE,
     offenders.length === 0,
-    offenders.length === 0 ? 'no low-war-percentile player holds NATIONAL_ICON or above' : `offenders=${offenders.slice(0, 8).join(',')}`,
+    offenders.length === 0
+      ? 'no replacement/neg-WAR player holds the apex IMMORTAL_LEGEND tier (high-fame/low-WAR darlings are blessed §20.2 — a §9 signal, not a fail)'
+      : `apexDegenerate=${offenders.slice(0, 8).join(',')}`,
   );
 }
 
@@ -164,16 +175,18 @@ function l12RaceNoNanAndResolve(snapshot: LsimStateSnapshot): LsimInvariantResul
   if (!proof) {
     return invariantResult('soul.l12-race-no-nan-resolve-tier', CRITICAL, false, 'missing L12 proof');
   }
-  const missingCategories = REQUIRED_L12_MERIT_CATEGORIES.filter((category) => !proof.categories.includes(category));
-  const requiresFullCategorySet = snapshot.gamesSimulated >= snapshot.totalScheduledGames;
+  // §5.1: no NaN in composites/percentiles; ranking == the weighted composite (rank order == composite desc);
+  // an empty merit category is VALID SPARSITY when its eligibility POOL is also empty, but CORRUPTION (FAIL) when
+  // eligible candidates existed and were dropped. (Eligibility-pool refinement, JK ruling 2026-06-19.)
   const pass = proof.status === 'computed' &&
     !proof.hasNonFiniteScore &&
-    (!requiresFullCategorySet || missingCategories.length === 0);
+    proof.rankingMatchesComposite === true &&
+    (proof.missingCategoriesWithNonEmptyPool?.length ?? 0) === 0;
   return invariantResult(
     'soul.l12-race-no-nan-resolve-tier',
     CRITICAL,
     pass,
-    `status=${proof.status}; candidateCount=${proof.candidateCount}; missingMeritCategories=${missingCategories.join(',') || 'none'}; nonFinite=${proof.hasNonFiniteScore}; ${proof.detail}`,
+    `status=${proof.status}; nonFinite=${proof.hasNonFiniteScore}; rankingMatchesComposite=${proof.rankingMatchesComposite}; droppedDespiteEligiblePool=${(proof.missingCategoriesWithNonEmptyPool ?? []).join(',') || 'none'}; ${proof.detail}`,
   );
 }
 
@@ -182,9 +195,9 @@ function moraleBounds(snapshot: LsimStateSnapshot): LsimInvariantResult {
     !isFiniteNumber(row.currentValue) ||
     !isFiniteNumber(row.baselineValue) ||
     row.currentValue < 0 ||
-    row.currentValue > 100 ||
+    row.currentValue > 99 ||
     row.baselineValue < 0 ||
-    row.baselineValue > 100,
+    row.baselineValue > 99,
   );
   return invariantResult(
     'soul.morale-bounds',
@@ -195,44 +208,72 @@ function moraleBounds(snapshot: LsimStateSnapshot): LsimInvariantResult {
 }
 
 function flashpointClamp(snapshot: LsimStateSnapshot): LsimInvariantResult {
-  const bad = snapshot.flashpointRows.filter((row) =>
-    !isFiniteNumber(row.consecutiveGamesUnresolved) ||
-    !isFiniteNumber(row.accumulatedFanMoraleTax) ||
-    !isFiniteNumber(row.lastGameTax) ||
-    row.consecutiveGamesUnresolved < 0 ||
-    row.accumulatedFanMoraleTax > 0 ||
-    row.lastGameTax > 0 ||
-    row.lastGameTax < -3,
-  );
+  const bad: string[] = [];
+  for (const row of snapshot.flashpointRows) {
+    if (
+      !isFiniteNumber(row.consecutiveGamesUnresolved) ||
+      !isFiniteNumber(row.accumulatedFanMoraleTax) ||
+      !isFiniteNumber(row.lastGameTax) ||
+      row.consecutiveGamesUnresolved < 0 ||
+      row.accumulatedFanMoraleTax > 0 ||
+      row.lastGameTax > 0 ||
+      row.lastGameTax < FLASHPOINT_DECAY_TUNING.maxGameTax
+    ) {
+      bad.push(`${row.playerId}:bounds(${row.lastGameTax})`);
+      continue;
+    }
+    // Compounding-but-CLAMPED: the persisted per-game tax must equal the production formula for THIS row's
+    // kind + consecutive-unresolved count. computeFlashpointGameTax encodes BOTH the ramp (consecutive↑ → |tax|↑)
+    // AND the clamp (maxGameTax), and returns 0 for a null/non-Albatross kind (happy / non-turned-on teams).
+    const expected = computeFlashpointGameTax({
+      kind: row.flashpointKind,
+      consecutiveGamesUnresolved: row.consecutiveGamesUnresolved,
+    }).gameTax;
+    if (Math.abs(row.lastGameTax - expected) > 1e-6) {
+      bad.push(`${row.playerId}:tax=${row.lastGameTax}!=expected${expected}`);
+    }
+  }
   return invariantResult(
     'soul.flashpoint-compounding-clamped',
     CRITICAL,
     bad.length === 0,
-    bad.length === 0 ? `flashpointRows=${snapshot.flashpointRows.length}` : `badRows=${bad.slice(0, 8).map((row) => row.playerId).join(',')}`,
+    bad.length === 0
+      ? `flashpointRows=${snapshot.flashpointRows.length}; lastGameTax matches computeFlashpointGameTax ramp+clamp (maxGameTax=${FLASHPOINT_DECAY_TUNING.maxGameTax})`
+      : `badRows=${bad.slice(0, 8).join(',')}`,
   );
 }
 
 function designationSlots(snapshot: LsimStateSnapshot): LsimInvariantResult {
-  const duplicateRows: string[] = [];
+  // §5.1 six slots/team, each <=1 holder. FOUR are designation rows (TEAM_MVP/ACE/FAN_FAVORITE/ALBATROSS):
+  // enforce <=1 ACTIVE holder per (teamId,type) — projected/lost rows don't count. Captain + Fan Hopeful are
+  // SINGLE team fields (team.captainPlayerId / team.fanHopefulPlayerId): a scalar is structurally <=1, and both
+  // are currently DEFERRED (null). Fail only if a scalar slot is somehow multi-valued.
+  const ACTIVE = new Set(['active', 'locked']);
+  const violations: string[] = [];
   for (const teamId of snapshot.teamIds) {
     for (const type of DESIGNATION_ROW_TYPES) {
-      const rows = snapshot.designationRows.filter((row) => row.teamId === teamId && row.type === type);
-      if (rows.length > 1) duplicateRows.push(`${teamId}:${type}:${rows.length}`);
+      const holders = new Set(
+        snapshot.designationRows
+          .filter((row) => row.teamId === teamId && row.type === type && ACTIVE.has(row.status))
+          .map((row) => row.playerId),
+      );
+      if (holders.size > 1) violations.push(`${teamId}:${type}:${holders.size}`);
     }
   }
-  const badTeamSlots = snapshot.teams.filter((team) => {
+  for (const team of snapshot.teams) {
     const captain = (team as Player & { captainPlayerId?: string | null }).captainPlayerId;
     const fanHopeful = (team as Player & { fanHopefulPlayerId?: string | null }).fanHopefulPlayerId;
-    return captain === undefined || fanHopeful === undefined;
-  });
-  const pass = duplicateRows.length === 0 && badTeamSlots.length === 0;
+    if (Array.isArray(captain)) violations.push(`${team.id}:captain-multi`);
+    if (Array.isArray(fanHopeful)) violations.push(`${team.id}:fanHopeful-multi`);
+  }
+  const pass = violations.length === 0;
   return invariantResult(
     'soul.designation-six-slots-single-holder',
     CRITICAL,
     pass,
     pass
-      ? `teams=${snapshot.teamIds.length}; rowSlots=${DESIGNATION_ROW_TYPES.length}; captain/fanHopeful team fields present`
-      : `duplicateRows=${duplicateRows.join(',') || 'none'}; missingTeamFields=${badTeamSlots.map((team) => team.id).join(',') || 'none'}`,
+      ? `teams=${snapshot.teamIds.length}; <=1 active holder per ${DESIGNATION_ROW_TYPES.length} row-types + Captain/Fan-Hopeful single-field (structurally <=1; DEFERRED)`
+      : `violations=${violations.slice(0, 8).join(',')}`,
   );
 }
 
@@ -279,21 +320,47 @@ function l10PerGameCadence(snapshot: LsimStateSnapshot): LsimInvariantResult {
 }
 
 function l11BackstopGate(snapshot: LsimStateSnapshot): LsimInvariantResult {
-  const managerAssignments = snapshot.storeDump.databases['kbl-manager-identity']?.managerAssignments ?? [];
-  const fired = managerAssignments.filter((assignment) => {
-    const record = assignment as Record<string, unknown>;
-    return record.tenureStatus === 'fired' ||
-      record.tenureEndReason === 'fan_morale_backstop' ||
-      record.firedReason === 'fan_morale_backstop';
-  });
-  const sawLowMorale = snapshot.moraleSnapshots.some((row) =>
-    row.targetType === 'team-fan' && row.currentValue < 25,
-  );
+  // §5.1 auto-backstop fires ONLY when the FIRED team's fan morale < armingThreshold and the deterministic roll <
+  // perGameProbability; a successor is auto-generated; the fired tenure (date/reason) persists across the successor
+  // write. (The roll<threshold gate is production-internal — the firing only exists if it held; the harness asserts
+  // the observable persistence + ties <25 to the FIRED team.)
+  const managerDb = snapshot.storeDump.databases['kbl-manager-identity'] ?? {};
+  const assignments = (managerDb.managerAssignments ?? []) as Array<Record<string, unknown>>;
+  const profiles = (managerDb.managerProfiles ?? []) as Array<Record<string, unknown>>;
+  const tenureRecords = profiles.flatMap((p) => (p.tenureRecords as Array<Record<string, unknown>> | undefined) ?? []);
+  const fired = assignments.filter((a) => a.fired === true && a.firedReason === 'auto-backstop');
+  if (fired.length === 0) {
+    return invariantResult(
+      'soul.l11-backstop-under-25-plus-roll',
+      CRITICAL,
+      true,
+      'PENDING-STEP-3: no auto-backstop firings this run (the always-up generator never drives team-fan morale < 25); strengthened logic is synthetic-falsified',
+    );
+  }
+  const armingThreshold = L11_AUTO_BACKSTOP_TUNING.armingThreshold;
+  const violations: string[] = [];
+  for (const f of fired) {
+    const teamId = String(f.teamId);
+    // Step-3 note: the firing's relief bump raises the fired team's currentValue post-firing, so this should be
+    // refined to read the firing-time value from morale history once firings are live.
+    const teamMorale = snapshot.moraleSnapshots.find((m) => m.targetType === 'team-fan' && m.teamId === teamId);
+    if (!teamMorale || !(isFiniteNumber(teamMorale.currentValue) && teamMorale.currentValue < armingThreshold)) {
+      violations.push(`${teamId}:firedTeamMoraleNotUnder${armingThreshold}`);
+    }
+    if (!assignments.some((a) => a.teamId === teamId && a.fired !== true && !a.endDate)) {
+      violations.push(`${teamId}:noSuccessor`);
+    }
+    if (!tenureRecords.some((t) => t.teamId === teamId && t.endReason === 'fired')) {
+      violations.push(`${teamId}:noFiredTenure`);
+    }
+  }
   return invariantResult(
     'soul.l11-backstop-under-25-plus-roll',
     CRITICAL,
-    fired.length === 0 || sawLowMorale,
-    `backstopFirings=${fired.length}; sawTeamFanMoraleUnder25=${sawLowMorale}`,
+    violations.length === 0,
+    violations.length === 0
+      ? `backstopFirings=${fired.length}; each fired team <${armingThreshold} + successor + fired-tenure persists`
+      : `violations=${violations.slice(0, 8).join(',')}`,
   );
 }
 
@@ -332,11 +399,21 @@ function checkpointCadence(snapshot: LsimStateSnapshot): LsimInvariantResult {
 
 function ratingsOverlayValidity(snapshot: LsimStateSnapshot): LsimInvariantResult {
   const players = playerById(snapshot);
+  // CHEAP TIGHTENING: also assert single consistent scope + the deterministic id
+  // (`${franchiseId}:${seasonId}:${statsScopeId}:${playerId}:${ratingKey}:${sourceEventId}`).
+  const scopes = new Set(
+    snapshot.ratingsOverlays.map((row) => {
+      const r = row as unknown as { franchiseId: string; seasonId: string; statsScopeId: string };
+      return `${r.franchiseId}|${r.seasonId}|${r.statsScopeId}`;
+    }),
+  );
   const bad = snapshot.ratingsOverlays.filter((row) => {
     const player = players.get(row.playerId);
     const validKey = isPitcher(player)
       ? PITCHER_RATING_KEYS.has(row.ratingKey)
       : HITTER_RATING_KEYS.has(row.ratingKey);
+    const r = row as unknown as { franchiseId: string; seasonId: string; statsScopeId: string };
+    const expectedId = [r.franchiseId, r.seasonId, r.statsScopeId, row.playerId, row.ratingKey, row.sourceEventId].join(':');
     return !player ||
       row.source !== 'ratings-development' ||
       row.confirmationStatus !== 'pending' ||
@@ -346,13 +423,17 @@ function ratingsOverlayValidity(snapshot: LsimStateSnapshot): LsimInvariantResul
       row.createdAtGameNumber < 1 ||
       !isFiniteNumber(row.delta) ||
       row.delta === 0 ||
-      !validKey;
+      !validKey ||
+      row.id !== expectedId;
   });
+  const pass = bad.length === 0 && scopes.size <= 1;
   return invariantResult(
     'soul.ratings-overlay-validity',
     CRITICAL,
-    bad.length === 0,
-    bad.length === 0 ? `ratingsOverlays=${snapshot.ratingsOverlays.length}` : `badOverlayIds=${bad.slice(0, 8).map((row) => row.id).join(',')}`,
+    pass,
+    pass
+      ? `ratingsOverlays=${snapshot.ratingsOverlays.length}; single scope + deterministic ids`
+      : `badOverlayIds=${bad.slice(0, 6).map((row) => row.id).join(',') || 'none'}; distinctScopes=${scopes.size}`,
   );
 }
 
@@ -372,14 +453,25 @@ function traitTwoSlotNoOffsetHysteresis(snapshot: LsimStateSnapshot): LsimInvari
     (row.valence === 'lose' && row.probability > TRAIT_ACQUISITION_TUNING.loseThreshold) ||
     (row.valence === 'gain' && TRAIT_OPPOSITES[row.traitName] === row.displacesTraitName),
   );
-  const pass = badPlayers.length === 0 && badOverlays.length === 0;
+  // CHEAP TIGHTENING: displacement is ATOMIC — at most one displacing resolution (a gain that displaces a held
+  // trait) per player per cycle (sourceEventId). (re-evaluate-to-drop is cross-cycle + needs trait LOSSES, which
+  // require the generator-adversity decline path → it is a [post-Step-3] COVERAGE_GAPS item.)
+  const displacementsPerCycle = new Map<string, number>();
+  for (const row of snapshot.traitOverlays) {
+    if (row.valence === 'gain' && row.displacesTraitName) {
+      const key = `${row.playerId}::${row.sourceEventId}`;
+      displacementsPerCycle.set(key, (displacementsPerCycle.get(key) ?? 0) + 1);
+    }
+  }
+  const nonAtomic = [...displacementsPerCycle.entries()].filter(([, n]) => n > 1).map(([k]) => k);
+  const pass = badPlayers.length === 0 && badOverlays.length === 0 && nonAtomic.length === 0;
   return invariantResult(
     'soul.trait-two-slot-no-offset-hysteresis',
     CRITICAL,
     pass,
     pass
-      ? `players=${snapshot.players.length}; traitOverlays=${snapshot.traitOverlays.length}`
-      : `badPlayers=${badPlayers.slice(0, 8).map((player) => player.id).join(',')}; badOverlayIds=${badOverlays.slice(0, 8).map((row) => row.id).join(',')}`,
+      ? `players=${snapshot.players.length}; traitOverlays=${snapshot.traitOverlays.length}; displacements atomic`
+      : `badPlayers=${badPlayers.slice(0, 6).map((player) => player.id).join(',') || 'none'}; badOverlayIds=${badOverlays.slice(0, 6).map((row) => row.id).join(',') || 'none'}; nonAtomic=${nonAtomic.slice(0, 4).join(',') || 'none'}`,
   );
 }
 
@@ -395,7 +487,8 @@ function backupMigrationProof(snapshot: LsimStateSnapshot): LsimInvariantResult 
     );
   }
   const pass = snapshot.persistenceProof.backupRoundTripByteIdentical === true &&
-    snapshot.persistenceProof.migrationSurvivalChecked;
+    snapshot.persistenceProof.migrationSurvivalChecked &&
+    snapshot.persistenceProof.migrationSurvivalAcrossVersionBump === true;
   return invariantResult(
     'soul.persistence-backup-migration-proof',
     CRITICAL,
@@ -460,30 +553,96 @@ function allStarSixtyPercentLock(snapshot: LsimStateSnapshot): LsimInvariantResu
 }
 
 function reachFloorRatchetFromHonors(snapshot: LsimStateSnapshot): LsimInvariantResult {
-  const regressions = snapshot.fameRows.filter((row) => row.reachFloor < 0);
+  // §5.3 honor → reach-floor ratchet. At the All-Star lock, the honor payout (applyFranchiseHonorReachFloor, gated
+  // on L12+Fame) bumps each SELECTED player's fame HEAT by the role-tiered honorHeatBump (starter/wildcard 6 >
+  // reserve 3), ratchets reachFloor, and stamps the fame record updatedAtCheckpoint='all-star-lock'.
+  // NOTE: the `allStarSelections` career counter is part of §5.3 but is greenfield/UNWIRED (no production path
+  // increments it) — so per the "no invariant before the data exists" rule it is NOT asserted; see COVERAGE_GAPS.
+  const negative = snapshot.fameRows.filter((row) => row.reachFloor < 0).map((row) => row.playerId);
+  const lockGame = Math.round(snapshot.totalScheduledGames * ALL_STAR_LOCK_FRACTION);
+  if (snapshot.gameNumber !== lockGame) {
+    return invariantResult(
+      'soul.reach-floor-ratchet',
+      CRITICAL,
+      negative.length === 0,
+      negative.length === 0
+        ? `reachFloor>=0 (honor ratchet tested at lockGame=${lockGame}; permanence covered by reach-monotonic)`
+        : `negativeReach=${negative.slice(0, 8).join(',')}`,
+    );
+  }
+  const roster = snapshot.allStarRosters[0];
+  if (!roster || roster.locked !== true) {
+    return invariantResult('soul.reach-floor-ratchet', CRITICAL, false, `no locked All-Star roster at lockGame=${lockGame}`);
+  }
+  const fameById = new Map(snapshot.fameRows.map((row) => [row.playerId, row]));
+  const SENTINEL = 'all-star-lock';
+  // A selected player with NO fame record is correctly skipped by the payout (no substrate) — not a failure.
+  const selectedWithRecord = roster.selections.filter((sel) => fameById.has(sel.playerId));
+  const notStamped = selectedWithRecord.filter(
+    (sel) => (fameById.get(sel.playerId) as { updatedAtCheckpoint?: string }).updatedAtCheckpoint !== SENTINEL,
+  );
+  const starterBump = FAME_TUNING.honorHeatBump.allStarStarter;
+  const reserveBump = FAME_TUNING.honorHeatBump.allStarReserve;
+  const tieredCorrectly = starterBump > reserveBump;
+  const pass = negative.length === 0 && notStamped.length === 0 && tieredCorrectly;
   return invariantResult(
     'soul.reach-floor-ratchet',
     CRITICAL,
-    regressions.length === 0,
-    regressions.length === 0 ? 'all reachFloor values are nonnegative or neutral-ratchet safe' : `negativeReachRows=${regressions.map((row) => row.playerId).join(',')}`,
+    pass,
+    pass
+      ? `lockGame=${lockGame}; selected=${roster.selections.length}; withFameRecord=${selectedWithRecord.length} all stamped '${SENTINEL}'; starterBump ${starterBump}>${reserveBump}`
+      : `negativeReach=${negative.slice(0, 4).join(',') || 'none'}; notStamped=${notStamped.slice(0, 6).map((s) => s.playerId).join(',') || 'none'}; tiered=${tieredCorrectly}; withFameRecord=${selectedWithRecord.length}/${roster.selections.length}`,
   );
 }
 
 function emissionSnubSignal(snapshot: LsimStateSnapshot): LsimInvariantResult {
+  // §5.3 emission: the snub fires for the CLOSE LOSERS only (never a winner) and the legacy positive nod
+  // (AWARD_RESULT, deduped one-per-honorKind) is not double-counted. The nod is a SeasonNewsItem; the snub is a
+  // morale consequence (history sourceEventId 'race-snub:...') — they are separate systems.
   if (snapshot.gamesSimulated < snapshot.totalScheduledGames) {
     return invariantResult(
       'soul.emission-snub-signal',
       INVESTIGATE,
       true,
-      `pending season-end signal at ${snapshot.gamesSimulated}/${snapshot.totalScheduledGames}`,
+      `pending season-end at ${snapshot.gamesSimulated}/${snapshot.totalScheduledGames}`,
     );
   }
-  const hasSnub = snapshot.seasonNewsItems.some((item) => JSON.stringify(item).toLowerCase().includes('snub'));
+  const awardNews = snapshot.seasonNewsItems.filter((item) => item.eventType === 'AWARD_RESULT');
+  if (awardNews.length === 0) {
+    return invariantResult(
+      'soul.emission-snub-signal',
+      INVESTIGATE,
+      true,
+      'PENDING-STEP-4: the runner does not yet call a production season-finalize, so no AWARD_RESULT nod / snub fires; strengthened logic is synthetic-falsified',
+    );
+  }
+  const honorCounts = new Map<string, number>();
+  for (const item of awardNews) {
+    const honorKind = String((item.facts as { honorKind?: unknown }).honorKind ?? 'unknown');
+    honorCounts.set(honorKind, (honorCounts.get(honorKind) ?? 0) + 1);
+  }
+  const doubleCounted = [...honorCounts.entries()].filter(([, n]) => n > 1).map(([k, n]) => `${k}:${n}`);
+  const winnerIds = new Set(
+    awardNews.map((item) => String((item.facts as { winnerId?: unknown }).winnerId ?? '')).filter(Boolean),
+  );
+  const snubbedWinners = snapshot.moraleSnapshots
+    .filter((m) =>
+      m.playerId !== undefined &&
+      winnerIds.has(m.playerId) &&
+      (m.history ?? []).some(
+        (h) => typeof (h as { sourceEventId?: unknown }).sourceEventId === 'string' &&
+          (h as { sourceEventId: string }).sourceEventId.startsWith('race-snub:'),
+      ),
+    )
+    .map((m) => m.playerId);
+  const pass = doubleCounted.length === 0 && snubbedWinners.length === 0;
   return invariantResult(
     'soul.emission-snub-signal',
     INVESTIGATE,
-    hasSnub || snapshot.seasonNewsItems.length > 0,
-    `seasonNewsItems=${snapshot.seasonNewsItems.length}; hasSnubText=${hasSnub}`,
+    pass,
+    pass
+      ? `AWARD_RESULT nods=${awardNews.length} (one per honorKind); no winner snubbed`
+      : `doubleCountedHonors=${doubleCounted.join(',') || 'none'}; snubbedWinners=${snubbedWinners.join(',') || 'none'}`,
   );
 }
 

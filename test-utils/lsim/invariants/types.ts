@@ -63,6 +63,8 @@ export interface LsimDeferredInvariant {
 export interface LsimPersistenceProof {
   backupRoundTripByteIdentical: boolean | null;
   migrationSurvivalChecked: boolean;
+  /** A REAL version-bump leg: a franchise written at an early trackerDb version survives the upgrade to current. */
+  migrationSurvivalAcrossVersionBump: boolean;
   detail: string;
 }
 
@@ -71,6 +73,10 @@ export interface LsimL12Proof {
   candidateCount: number;
   categories: string[];
   hasNonFiniteScore: boolean;
+  /** rank order == weighted-composite desc, rank = index + 1, across every category. */
+  rankingMatchesComposite: boolean;
+  /** Categories ABSENT from standings whose eligibility POOL is non-empty (eligible candidates dropped = corruption). */
+  missingCategoriesWithNonEmptyPool: string[];
   detail: string;
 }
 

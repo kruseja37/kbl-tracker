@@ -12,10 +12,12 @@ import {
 } from '../../src/utils/eventLog';
 import { processCompletedGame } from '../../src/utils/processCompletedGame';
 import { recomputeFranchiseL12StandingsForCompletedGame } from '../../src/utils/franchiseRaceStandingsCompute';
+import { computeFranchiseRaceCandidateRows } from '../../src/utils/franchiseAwardsEngine';
+import { getTrackerDb, resetTrackerDbForTests, TRACKER_DB_VERSION } from '../../src/utils/trackerDb';
 import type { AtBatResult } from '../../src/types/game';
 import { computeLsimDistributions, type LsimDistributions } from './distributions';
 import { forceAllPhase2FlagsOn, type ForcedPhase2Flags } from './flags';
-import { getSoulInvariantChecks } from './invariants/soul';
+import { getSoulInvariantChecks, REQUIRED_L12_MERIT_CATEGORIES } from './invariants/soul';
 import { getStatsInvariantChecks } from './invariants/stats';
 import type {
   LsimDeferredInvariant,
@@ -405,15 +407,15 @@ async function buildL12Proof(
   synthetic: LsimSyntheticCompletedGame,
   snapshot: LsimStateSnapshot,
 ): Promise<LsimL12Proof> {
+  const scope = {
+    franchiseId: context.scope.franchiseId,
+    seasonId: context.scope.seasonId,
+    statsScopeId: context.scope.statsScopeId,
+    seasonNumber: context.ids.seasonNumber,
+  };
   const result = await recomputeFranchiseL12StandingsForCompletedGame(
     synthetic.gameState,
-    {
-      franchiseId: context.scope.franchiseId,
-      seasonId: context.scope.seasonId,
-      statsScopeId: context.scope.statsScopeId,
-      seasonNumber: context.ids.seasonNumber,
-      rows: snapshot.trueValueRows,
-    },
+    { ...scope, rows: snapshot.trueValueRows },
     synthetic.archiveOptions,
   );
   if (result.status !== 'computed' || !result.standings) {
@@ -422,6 +424,8 @@ async function buildL12Proof(
       candidateCount: 0,
       categories: [],
       hasNonFiniteScore: false,
+      rankingMatchesComposite: true,
+      missingCategoriesWithNonEmptyPool: [],
       detail: result.reason ?? 'no standings payload',
     };
   }
@@ -432,25 +436,111 @@ async function buildL12Proof(
     .map(([category]) => category)
     .sort();
   const candidateCount = meritEntries.reduce((sum, [, rows]) => sum + (rows?.length ?? 0), 0);
+
+  // ranking == weighted composite: each category array is sorted DESC by composite with rank = index + 1.
+  let rankingMatchesComposite = true;
+  for (const [, rows] of meritEntries) {
+    if (!Array.isArray(rows)) continue;
+    for (let index = 0; index < rows.length; index += 1) {
+      if (rows[index].rank !== index + 1) rankingMatchesComposite = false;
+      if (index > 0 && rows[index].composite > rows[index - 1].composite + 1e-9) rankingMatchesComposite = false;
+    }
+  }
+
+  // eligibility-pool refinement: a REQUIRED merit category ABSENT from standings is valid sparsity IFF its
+  // eligibility pool (the production candidate-builder) is also empty; a non-empty pool means candidates were dropped.
+  const presentSet = new Set(categories);
+  const missing = REQUIRED_L12_MERIT_CATEGORIES.filter((category) => !presentSet.has(category));
+  let missingCategoriesWithNonEmptyPool: string[] = [];
+  if (missing.length > 0) {
+    const pool = await computeFranchiseRaceCandidateRows(
+      scope as Parameters<typeof computeFranchiseRaceCandidateRows>[0],
+      missing as unknown as Parameters<typeof computeFranchiseRaceCandidateRows>[1],
+    );
+    const poolByCategory = pool as Record<string, unknown[] | undefined>;
+    missingCategoriesWithNonEmptyPool = missing.filter((category) => (poolByCategory[category]?.length ?? 0) > 0);
+  }
+
   return {
     status: result.status,
     candidateCount,
     categories,
     hasNonFiniteScore: finitePath(result.standings) !== null,
-    detail: `tvFamilyKeys=${Object.keys(result.standings.tvFamily).sort().join(',') || 'none'}`,
+    rankingMatchesComposite,
+    missingCategoriesWithNonEmptyPool,
+    detail: `tvFamilyKeys=${Object.keys(result.standings.tvFamily).sort().join(',') || 'none'}; missingCategories=${missing.join(',') || 'none'}`,
   };
+}
+
+function deleteIdbDatabase(name: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(name);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error ?? new Error(`Failed to delete ${name}`));
+    request.onblocked = () => resolve();
+  });
+}
+
+// A REAL version-bump migration leg (§5.4): write a row into kbl-tracker at an EARLY version, then open via the
+// PRODUCTION getTrackerDb (which runs onupgradeneeded up to TRACKER_DB_VERSION) and confirm the early row survived,
+// a late (v24) store now exists, and the DB sits at the current version. Destructive — the caller restores the
+// franchise from a backup taken beforehand.
+async function runMigrationSurvivalAcrossVersionBump(): Promise<boolean> {
+  resetTrackerDbForTests();
+  await deleteIdbDatabase('kbl-tracker');
+  await new Promise<void>((resolve, reject) => {
+    const open = indexedDB.open('kbl-tracker', 1);
+    open.onupgradeneeded = () => {
+      const db = open.result;
+      if (!db.objectStoreNames.contains('completedGames')) {
+        db.createObjectStore('completedGames', { keyPath: 'gameId' });
+      }
+    };
+    open.onsuccess = () => {
+      const db = open.result;
+      const tx = db.transaction('completedGames', 'readwrite');
+      tx.objectStore('completedGames').put({ gameId: 'lsim-migration-sentinel', sentinel: true });
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => { db.close(); reject(tx.error); };
+    };
+    open.onerror = () => reject(open.error);
+  });
+  resetTrackerDbForTests();
+  const db = await getTrackerDb();
+  const survived = await new Promise<boolean>((resolve) => {
+    try {
+      const tx = db.transaction('completedGames', 'readonly');
+      const get = tx.objectStore('completedGames').get('lsim-migration-sentinel');
+      get.onsuccess = () => resolve(Boolean((get.result as { sentinel?: boolean } | undefined)?.sentinel));
+      get.onerror = () => resolve(false);
+    } catch {
+      resolve(false);
+    }
+  });
+  return survived && db.objectStoreNames.contains('franchiseAllStarRosters') && db.version === TRACKER_DB_VERSION;
 }
 
 async function runPersistenceProof(): Promise<LsimPersistenceProof> {
   const before = await dumpLsimStores();
   const backup = await exportAllData();
+  let migrationSurvivalAcrossVersionBump = false;
+  try {
+    migrationSurvivalAcrossVersionBump = await runMigrationSurvivalAcrossVersionBump();
+  } catch {
+    migrationSurvivalAcrossVersionBump = false;
+  }
+  // The migration leg rebuilt kbl-tracker holding only the sentinel; wipe again so the restore + round-trip parity
+  // start from a clean DB rather than inheriting that sentinel row.
+  resetTrackerDbForTests();
+  await deleteIdbDatabase('kbl-tracker');
   const restoreResult = await restoreAllData(backup);
   const after = await dumpLsimStores();
   const byteIdentical = restoreResult.success === true && before.digest === after.digest;
   return {
     backupRoundTripByteIdentical: byteIdentical,
     migrationSurvivalChecked: restoreResult.success === true,
-    detail: `restoreSuccess=${restoreResult.success}; beforeDigest=${before.digest}; afterDigest=${after.digest}; restoredDatabases=${restoreResult.restoredDatabases?.length ?? 0}; error=${restoreResult.error ?? 'none'}`,
+    migrationSurvivalAcrossVersionBump,
+    detail: `restoreSuccess=${restoreResult.success}; beforeDigest=${before.digest}; afterDigest=${after.digest}; migrationVersionBump=${migrationSurvivalAcrossVersionBump}; restoredDatabases=${restoreResult.restoredDatabases?.length ?? 0}; error=${restoreResult.error ?? 'none'}`,
   };
 }
 
@@ -538,6 +628,8 @@ export async function runLsimSeason(config: LsimSeasonRunnerConfig): Promise<Lsi
         candidateCount: 0,
         categories: [],
         hasNonFiniteScore: false,
+        rankingMatchesComposite: true,
+        missingCategoriesWithNonEmptyPool: [],
         detail: 'initial snapshot',
       },
       persistenceProof: null,
