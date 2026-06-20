@@ -13753,26 +13753,88 @@ contract exists so the deferred set is logged, NOT dropped.
 
 ---
 
-## CONTRACT — L13-4 (intensity lifecycle: scalar + lapse-decay + hysteresis, per-game, folded into the edge record) — 2026-06-19 (attended)
+## CONTRACT — L13-4 (intensity lifecycle: per-game decay + charged-matchup + hysteresis/dissolution — first PER-GAME writer) — 2026-06-20 (attended, updated)
 
-**ROUTE:** Codex CLI (gpt-5.5, very-high). Auditor: Opus 4.8 (builder ≠ auditor).
-**ROLE:** Pure-engine + dark-compute builder. **DEPENDS ON L13-1 (edge record carries `intensity`) + L13-3 (formation).**
+> **L13-4 UPDATE (JK rulings 2026-06-20).** Two rulings extend the 2026-06-19 contract: (1) the **charged-matchup INTENSITY
+> bump** is IN L13-4 (the brief title; the MORALE facet stays L13-6); (2) **dissolution** — the hysteresis dissolve-below
+> sets `dissolvedAtGameNumber` (§24.8 resolve quantity). And ruling B stands: **NO new field** → intensity is RECOMPUTED, not
+> accumulated.
 
-**GOAL:** Give edges a scalar **intensity [0..1]** that grows while the trigger holds and **lapse-decays** when it
-lapses, with a **hysteresis band** (anti-flicker), mirroring the L5 flashpoint-decay primitive. **Cadence = PER-GAME**
-(Fork B). **Fold intensity into the existing L13-1 edge record — NO second store, NO second PIN** (Fork B). Build-DARK.
+**ROUTE:** Codex CLI (gpt-5.5, **very-high / xhigh reasoning effort**) via `codex exec` stdin. Auditor: Opus 4.8
+(builder ≠ auditor). Build-DARK. NO browser verify (folds into the one v1 smoke pass).
+**ROLE:** Pure-engine + dark per-game compute builder. The FIRST **per-game** writer to the L13-1 edge store. **DEPENDS ON
+L13-1 (record carries `intensity` + `dissolvedAtGameNumber`, `7b9c92fc`) + L13-3a (formation, `f737c67e`).**
 
-**SOURCE OF TRUTH:** `DECISIONS_LOG.md:89-91` (L13-Q4) + §24.8 (the "troublemaker traded → victim recovers" loop needs a
-quantity to recover). **Template:** `flashpointDecay.ts:74-100` (compounding ramp + clamp) + `franchiseFlashpointDecayCompute.ts:104-160`
-(per-game accumulate + re-entry guard) + `franchiseFlashpointDecayStorage.ts:16-28` (`consecutiveGamesUnresolved` +
-`updatedAtCheckpoint` re-entry guard) — but write to the **edge record**, not a new store.
+**GOAL:** Give edges a scalar **intensity [0..1]** with a PER-GAME lifecycle on the EXISTING edge record (ruling B — **NO new
+field**, NO second store/PIN, NO trackerDb bump): (1) **lapse-decay** toward 0 between formations (mirror the flashpoint
+ramp/clamp shape); (2) **charged-matchup bump** (JK 2026-06-20) — when BOTH of an edge's players appear in THIS game on
+**OPPOSING teams**, a one-game intensity bump; (3) **hysteresis** (form-above / dissolve-below, anti-flicker); (4)
+**dissolution** (JK 2026-06-20) — when intensity lapse-decays below the dissolve threshold, set the edge's
+`dissolvedAtGameNumber` (§24.8 "troublemaker traded → resolves"). **Cadence = PER-GAME** (every completed game, NOT just
+checkpoints). Build-DARK behind `isFranchisePhase2L13Enabled`. The charged-matchup **MORALE** facet stays in L13-6; L13-4 is
+the **INTENSITY** facet only.
 
-**⚠ MAKE-OR-BREAK:** per-game re-entry guard (no double-decay if the per-game compute runs twice for one game — mirror
-`updatedAt*`). Hysteresis = two thresholds (form-above / dissolve-below) so an edge near the line doesn't flicker
-active/inactive each game. Decay is monotone toward 0 on lapse. **STOP-IF** folding intensity in requires a trackerDb
-version bump (it must NOT — the field is already on the L13-1 record; if L13-1 omitted it, surface).
-**VERIFICATION:** tsc/build 0; decay unit tests (ramp, clamp, hysteresis no-flicker, re-entry idempotence). **FORMAT**
-house. **Status:** ⏸ AUTHORED — build HELD.
+**SOURCE OF TRUTH:** `DECISIONS_LOG.md:89-91` (L13-Q4) + §24.8 + JK rulings 2026-06-20 (charged-matchup intensity in L13-4;
+dissolution-at-dissolve-threshold in L13-4; no new field). **Template:** `flashpointDecay.ts:74-100` (compounding ramp +
+clamp) + `franchiseFlashpointDecayCompute.ts:104-160` (per-game compute + re-entry guard) — but write to the **edge record**,
+**no accumulator field**.
+
+**VERIFIED ANCHORS (re-verified 2026-06-20):**
+- L13-1 record `src/utils/franchiseRelationshipEdgesStorage.ts`: `intensity:30`, `dissolvedAtGameNumber:36`,
+  `formedAtGameNumber`, `potential`; read `getFranchiseRelationshipEdgesByScope:135`; write `putFranchiseRelationshipEdge:109`
+  (put-on-id overwrites). Row fields are invisible to the PIN/backup — but ruling B forbids a new field → **RECOMPUTE**.
+- Per-game hook: `processCompletedGame.ts:625-629` (flashpoint decay fires EVERY game, `isFranchisePhase2FlashpointEnabled`);
+  the L13 sibling is at `:646` (L13-3a formation). L13-4's intensity compute fires EVERY game — add it in the L13 block.
+- L13-3a `src/utils/franchiseRelationshipFormationCompute.ts` (edge-resolution + scope pattern) + `src/engines/relationshipFormation.ts`
+  (seeded FNV-1a). gameState participants for charged-matchup: the completed game's home/away teams + their playerIds (re-verify
+  the exact `PersistedGameState` field at build).
+
+**⚠ MAKE-OR-BREAK:**
+1. **NO NEW FIELD (ruling B).** Intensity is RECOMPUTED per-game as a DETERMINISTIC function of the edge's existing fields
+   (esp. `formedAtGameNumber`) + the current gameNumber + whether this game is a charged matchup (from gameState) — NOT an
+   accumulator. So re-running a game → identical write (PER-GAME idempotency) WITHOUT a re-entry-guard field. **STOP-IF** a
+   correct decay genuinely needs persisted accumulator state → surface (do NOT add a field).
+2. **DETERMINISTIC.** No `Date.now`/`Math.random`; decay/matchup derive from gameState (gameNumber, participants), not
+   wall-clock; seeded (FNV-1a, mirror L13-3a) if a tie-break is needed.
+3. **PER-GAME IDEMPOTENT.** Re-running one game does NOT double-decay / double-bump (guaranteed by recomputation, not
+   accumulation). Prove it.
+4. **SINGLE intensity writer.** Only this compute writes `intensity`/`dissolvedAtGameNumber`. L13-3a writes intensity at
+   FORMATION — **document + handle the checkpoint-game order** so formation and decay don't conflict.
+5. **HYSTERESIS** = two thresholds (form-above / dissolve-below). **DISSOLUTION:** below dissolve → set
+   `dissolvedAtGameNumber = gameNumber` (idempotent: re-set to the same value). Decay monotone toward 0 absent a matchup.
+6. **CHARGED-MATCHUP:** both edge players in THIS game on OPPOSING teams → a one-game §16-placeholder intensity bump. Keys off
+   ANY existing edge's pair (**NOT** History-specific — that's L13-6). Recomputed each game (transient → idempotent).
+7. **DARK.** Flag OFF → no decay, no matchup, no dissolution; zero production change. NO morale/matrix tap (L13-5), NO reporter
+   (L13-7), NO Captain/romance/co-rostered (L13-3b). Intensity changes on the record; nothing downstream reads it.
+
+**CHANGES (additive; exact files set at build):**
+**A. NEW pure intensity engine** (e.g. `src/engines/relationshipIntensity.ts`): `computeRelationshipIntensity(edge,
+   {gameNumber, isChargedMatchup})` → recomputed intensity [0..1] (decay shape + matchup bump + clamp) + the active/dissolved
+   hysteresis state. **§16 SIM-TUNE PLACEHOLDER** constants (decay rate, form/dissolve thresholds, matchup bump) — do NOT invent.
+**B. NEW dark per-game compute** (e.g. `src/utils/franchiseRelationshipIntensityCompute.ts`):
+   `persistDarkRelationshipIntensityForCompletedGame` — reads existing edges (`getFranchiseRelationshipEdgesByScope`), detects
+   charged matchups from gameState participants, recomputes each edge's intensity + dissolution, writes back via
+   `putFranchiseRelationshipEdge` (same id → overwrite). Fires EVERY game; dark-noop when flag-off.
+**C. `processCompletedGame.ts`:** call the intensity compute in the L13 block (every game).
+**D. L-SIM:** extend the edge snapshot + a NEW/extended intensity invariant (`soul.ts`): intensity in-bounds [0..1]; decays
+   monotonically absent a matchup; no double-apply on re-run; dissolution sets `dissolvedAtGameNumber` below threshold;
+   charged-matchup fires only on actual opposing-team matchups. Falsification: trips on a double-applied decay (out-of-trajectory
+   intensity) + out-of-bounds intensity.
+**E. Unit tests:** decay ramp/clamp; hysteresis no-flicker; charged-matchup bump on opposing teams / none for same-team;
+   dissolution at threshold; PER-GAME idempotence (recompute → identical).
+
+**HARD CONSTRAINTS:** edit/create ONLY the listed files (+ tests). DARK. **NO new field on the edge record (ruling B).** NO
+`Date.now`/`Math.random`. NO trackerDb bump. NO morale/reporter/Captain/romance/co-rostered. NO git add/commit.
+
+**VERIFICATION (run ALL, paste ACTUAL):** `NODE_ENV= npx tsc -b` 0 + `npm run build` 0; unit + L-SIM intensity tests green;
+full suite **ZERO new reds** (prove any non-pass pre-existing by solo); L-SIM 24g + 60g flags-ON BOTH cadences (**standard LAST**
+— the baseline-regeneration trap; delete any stray non-60g checkpoint file): intensity changes per-game, decays deterministically,
+charged-matchup fires only on matchups, PER-GAME idempotent (re-run → no double-decay), same-seed byte-identical; findings=0.
+
+**STOP-IF:** a correct per-game decay needs persisted accumulator state (a new field) → STOP + surface (ruling B). Charged-matchup
+needs the History edge (it must NOT — keys off any pair). Morale/reporter creep in → STOP.
+
+**FORMAT** house. Use very high reasoning effort. **Status:** ⏸ AUTHORED — ready for dispatch (JK attended, sole-mutator, 2026-06-20).
 
 ---
 
