@@ -1445,6 +1445,14 @@ forced the test edit, and the stale `teamMvpAcePreview` assertion was aligned to
     from `playerWpaTotals`) and survives reload + backup/restore; a pitcher with no WPA entry that game stays at +0 (never
     NaN); no perceptible overhead. Additive optional field (no DB-version bump). No visible UI change — it feeds the dark
     L12-3R-2 Reliever-of-Year race (flag-gated, pure relievers ranked by pitchingWpa). A data/season-stat verification.
+25. **L13-1** (PERSISTENCE — prioritized; trackerDb v24→v25) the new dark/EMPTY `franchiseRelationshipEdges` store
+    (relationship-edge persistence foundation for the L13 stack): open an EXISTING franchise created before this change →
+    confirm the v25 migration runs cleanly with NO data loss — prior season/standings/True-Value/All-Star/awards data all
+    intact and the hub loads normally; the new store appears EMPTY (no writer yet — it ships behind the default-OFF L13
+    flag `isFranchisePhase2L13Enabled`). Then Settings → Backup → save, then Restore that backup → it round-trips with the
+    new (empty) store present (no schema error; `KBL_BACKUP_VERSION` still 2). Nothing in the franchise UI changes
+    (build-DARK). Engineering audit passed (build 0; full suite ZERO new reds; the v24→v25 + v22→v25 migration-survival
+    + backup round-trip tests are green); this verifies the migration on REAL franchise data. (commit `7b9c92fc`.)
 
 ## OPEN PENDING-JK (rolling)
 
