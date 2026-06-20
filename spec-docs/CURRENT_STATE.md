@@ -309,8 +309,12 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
   **L-SIM re-verify:** 24g all-CRITICAL green / 0 findings; 60g determinism same-seed byte-identical (A==B
   `8565624:7c694372`, finalDigest `8571151:5403bbde` — legitimately changed from pre-fix `8566994:8cfc87a3` since the
   durable effects now mutate the season-end state); the snub morale + reach-floor now fire IN-SIM (player morale snapshot
-  count 33→34, fame tier shifts). **⚠ BROWSER-VERIFY OUTSTANDING (JK, soul-layer, post-D13 flag-flip):** confirm a
-  season-end MVP/CY winner's fame ratchets + the close losers' morale moves even when the news take is absent. WAITING_ON_JK
+  count 33→34, fame tier shifts). **⚠ BROWSER-VERIFY OUTSTANDING (JK, soul-layer, post-D13 flag-flip — NOT checkable until the flip; this layer is
+  build-dark):** does NOT require any team at low/<25 fan morale — that's the separate l11-backstop manager-firing
+  condition, a different finding; the honor payouts fire for the league's NORMAL award winners every season-end.
+  Reproduce at a completed season-end (award winners present) with the news layer UNAVAILABLE (no reporter assigned, or
+  LLM/crypto offline — a condition you can set deliberately): confirm the MVP/CY winner's fame still ratchets + the close
+  losers' morale still moves while the news prose is absent. WAITING_ON_JK
   Item 1 RESOLVED; Item 2 (graduate emission-snub to live-real-green by keying on the now-firing snub morale) still open.
   **➡ H3 NEXT = Step 5/6 (matrix); the production finding is now closed pending browser sign-off.** *(prior:)*
 - **✅ H3 STEP 4 COMPLETE (2026-06-20, AUTH-4 overnight — L-SIM sim-hardening track, parallel to the L-stack) — season-finalize
