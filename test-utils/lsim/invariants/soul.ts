@@ -319,39 +319,80 @@ function l10PerGameCadence(snapshot: LsimStateSnapshot): LsimInvariantResult {
   );
 }
 
+const MANAGER_FIRED_RELIEF_REASON = 'manager.fired.relief';
+
+// FNV-1a 32-bit, matching the production hashStringToUint32 (seed 2166136261, prime 16777619) used by the
+// auto-backstop roll. The roll = hash(seed)/0x100000000; the firing arms only when roll < perGameProbability.
+function fnv1a32(input: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+function managerBackstopRoll(franchiseId: string, seasonId: string, gameNumber: number, teamId: string): number {
+  return fnv1a32(`${franchiseId}:${seasonId}:${gameNumber}:${teamId}:manager-backstop`) / 0x100000000;
+}
+
 function l11BackstopGate(snapshot: LsimStateSnapshot): LsimInvariantResult {
-  // §5.1 auto-backstop fires ONLY when the FIRED team's fan morale < armingThreshold and the deterministic roll <
-  // perGameProbability; a successor is auto-generated; the fired tenure (date/reason) persists across the successor
-  // write. (The roll<threshold gate is production-internal — the firing only exists if it held; the harness asserts
-  // the observable persistence + ties <25 to the FIRED team.)
+  // §5.1 auto-backstop. CORRECTED (H3 Step-3 follow-up): a firing OVERWRITES the fired managerAssignment with the
+  // successor (same [mode,instanceId,teamId] key), so `fired===true` assignments are ALWAYS empty at the snapshot —
+  // the prior detection was vacuous. Detect firings via the OBSERVABLE downstream relief on the fired team's fan
+  // morale (`manager.fired.relief`, always applied for an auto-backstop firing) and cross-check the durable record.
   const managerDb = snapshot.storeDump.databases['kbl-manager-identity'] ?? {};
   const assignments = (managerDb.managerAssignments ?? []) as Array<Record<string, unknown>>;
   const profiles = (managerDb.managerProfiles ?? []) as Array<Record<string, unknown>>;
   const tenureRecords = profiles.flatMap((p) => (p.tenureRecords as Array<Record<string, unknown>> | undefined) ?? []);
-  const fired = assignments.filter((a) => a.fired === true && a.firedReason === 'auto-backstop');
-  if (fired.length === 0) {
+
+  const firings: Array<{ teamId: string; firingTimeMorale: number }> = [];
+  for (const m of snapshot.moraleSnapshots) {
+    if (m.targetType !== 'team-fan' || !m.teamId) continue;
+    const reliefEntry = (m.history ?? []).find((h) => (h as { reason?: unknown }).reason === MANAGER_FIRED_RELIEF_REASON);
+    if (reliefEntry) {
+      // the relief entry's previousValue is the morale AT THE FIRING (current is already recovered by the bump).
+      firings.push({ teamId: m.teamId, firingTimeMorale: Number((reliefEntry as { previousValue?: number }).previousValue) });
+    }
+  }
+  if (firings.length === 0) {
     return invariantResult(
       'soul.l11-backstop-under-25-plus-roll',
       CRITICAL,
       true,
-      'PENDING-STEP-3: no auto-backstop firings this run (the always-up generator never drives team-fan morale < 25); strengthened logic is synthetic-falsified',
+      'PENDING: no auto-backstop firings this run (the generator does not yet drive team-fan morale < 25 often enough); the strengthened logic is synthetic-falsified',
     );
   }
+
   const armingThreshold = L11_AUTO_BACKSTOP_TUNING.armingThreshold;
+  const perGameProbability = L11_AUTO_BACKSTOP_TUNING.perGameProbability;
+  // scope for the deterministic roll, lifted from an existing scope-stamped row (no scope on the snapshot itself).
+  const scoped = (snapshot.trueValueRows[0] ?? snapshot.fameRows[0] ?? snapshot.designationRows[0]) as unknown as
+    | { franchiseId?: string; seasonId?: string }
+    | undefined;
   const violations: string[] = [];
-  for (const f of fired) {
-    const teamId = String(f.teamId);
-    // Step-3 note: the firing's relief bump raises the fired team's currentValue post-firing, so this should be
-    // refined to read the firing-time value from morale history once firings are live.
-    const teamMorale = snapshot.moraleSnapshots.find((m) => m.targetType === 'team-fan' && m.teamId === teamId);
-    if (!teamMorale || !(isFiniteNumber(teamMorale.currentValue) && teamMorale.currentValue < armingThreshold)) {
-      violations.push(`${teamId}:firedTeamMoraleNotUnder${armingThreshold}`);
+  for (const f of firings) {
+    // (a) the fired team's fan morale was < armingThreshold AT THE FIRING (read from history, not the recovered current)
+    if (!(isFiniteNumber(f.firingTimeMorale) && f.firingTimeMorale < armingThreshold)) {
+      violations.push(`${f.teamId}:firingTimeMorale=${f.firingTimeMorale}>=${armingThreshold}`);
     }
-    if (!assignments.some((a) => a.teamId === teamId && a.fired !== true && !a.endDate)) {
-      violations.push(`${teamId}:noSuccessor`);
+    // (b) the deterministic roll < threshold was satisfiable for the fired team (the firing game is one such game)
+    if (scoped?.franchiseId && scoped?.seasonId) {
+      let rollSatisfiable = false;
+      for (let g = 1; g <= snapshot.totalScheduledGames; g += 1) {
+        if (managerBackstopRoll(scoped.franchiseId, scoped.seasonId, g, f.teamId) < perGameProbability) {
+          rollSatisfiable = true;
+          break;
+        }
+      }
+      if (!rollSatisfiable) violations.push(`${f.teamId}:noGameWithRollUnder${perGameProbability}`);
     }
-    if (!tenureRecords.some((t) => t.teamId === teamId && t.endReason === 'fired')) {
-      violations.push(`${teamId}:noFiredTenure`);
+    // (c) a successor was generated and is active for the team
+    if (!assignments.some((a) => a.teamId === f.teamId && a.fired !== true && !a.endDate)) {
+      violations.push(`${f.teamId}:noActiveSuccessor`);
+    }
+    // (d) the fired tenure persists (date + 'fired' reason)
+    if (!tenureRecords.some((t) => t.teamId === f.teamId && t.endReason === 'fired' && Boolean(t.endDate))) {
+      violations.push(`${f.teamId}:noFiredTenureRecord`);
     }
   }
   return invariantResult(
@@ -359,7 +400,7 @@ function l11BackstopGate(snapshot: LsimStateSnapshot): LsimInvariantResult {
     CRITICAL,
     violations.length === 0,
     violations.length === 0
-      ? `backstopFirings=${fired.length}; each fired team <${armingThreshold} + successor + fired-tenure persists`
+      ? `firings=${firings.length} via fan-morale relief [${firings.map((f) => `${f.teamId}@firingMorale${f.firingTimeMorale}`).join(',')}]; each: firing-time morale <${armingThreshold} + roll-satisfiable + successor + fired-tenure persists`
       : `violations=${violations.slice(0, 8).join(',')}`,
   );
 }

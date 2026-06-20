@@ -110,8 +110,23 @@ const CASES: Array<{ name: string; mutate: (s: LsimStateSnapshot) => void }> = [
     mutate: (s) => { s.designationRows = [{ teamId: 't1', playerId: 'p', type: 'ALBATROSS', sourceInputs: { salary: 100, albatrossSalaryFloor: 50, valueDeltaOverContract: 0, gamesPlayed: 10, gamesFloor: 1 } } as never]; } },
   { name: 'soul.l10-per-game-cadence',
     mutate: (s) => { s.gameNumber = 1; s.l10Overlays = [{ sourceEventId: 'l10-5' } as never]; /* game 5 > current 1 */ } },
-  { name: 'soul.l11-backstop-under-25-plus-roll', // synthetic-falsify (live PENDING-STEP-3): fired auto-backstop lacking the required persistence
-    mutate: (s) => { s.storeDump = { databases: { 'kbl-manager-identity': { managerAssignments: [{ fired: true, firedReason: 'auto-backstop', teamId: 't1' }] } }, digest: '', rowCounts: {} }; } },
+  // l11-backstop now detects firings via the fan-morale relief entry (the assignment is overwritten by the successor).
+  // Three inverse cases, each tripping a DIFFERENT named property it can NOW see (scoped rows left empty -> roll-check skipped, isolating a/c/d):
+  { name: 'soul.l11-backstop-under-25-plus-roll', // (a) firing-time morale >= 25 (relief entry previousValue)
+    mutate: (s) => {
+      s.moraleSnapshots = [{ targetType: 'team-fan', teamId: 't1', history: [{ reason: 'manager.fired.relief', previousValue: 30, currentValue: 38 }] } as never];
+      s.storeDump = { databases: { 'kbl-manager-identity': { managerAssignments: [{ teamId: 't1', managerId: 'succ', fired: false }], managerProfiles: [{ managerId: 'm', tenureRecords: [{ teamId: 't1', endReason: 'fired', endDate: '2026-01-01' }] }] } }, digest: '', rowCounts: {} };
+    } },
+  { name: 'soul.l11-backstop-under-25-plus-roll', // (c) no active successor generated for the fired team
+    mutate: (s) => {
+      s.moraleSnapshots = [{ targetType: 'team-fan', teamId: 't1', history: [{ reason: 'manager.fired.relief', previousValue: 20, currentValue: 28 }] } as never];
+      s.storeDump = { databases: { 'kbl-manager-identity': { managerAssignments: [], managerProfiles: [{ managerId: 'm', tenureRecords: [{ teamId: 't1', endReason: 'fired', endDate: '2026-01-01' }] }] } }, digest: '', rowCounts: {} };
+    } },
+  { name: 'soul.l11-backstop-under-25-plus-roll', // (d) firing left a relief but NO durable fired-tenure record
+    mutate: (s) => {
+      s.moraleSnapshots = [{ targetType: 'team-fan', teamId: 't1', history: [{ reason: 'manager.fired.relief', previousValue: 20, currentValue: 28 }] } as never];
+      s.storeDump = { databases: { 'kbl-manager-identity': { managerAssignments: [{ teamId: 't1', managerId: 'succ', fired: false }], managerProfiles: [] } }, digest: '', rowCounts: {} };
+    } },
   { name: 'soul.per-write-idempotency',
     mutate: (s) => { s.lastGameDelta = { battingIncreasedPlayerIds: [], pitchingIncreasedPlayerIds: [], afterFirstProcessDigest: 'a', afterReplayDigest: 'b' }; } },
   { name: 'soul.checkpoint-cadence-exactly-five',
