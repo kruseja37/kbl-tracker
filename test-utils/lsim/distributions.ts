@@ -3,6 +3,10 @@ import type { LsimStateSnapshot } from './invariants/types';
 
 export interface LsimDistributions {
   fameTierDistribution: Record<FameTier, number>;
+  fameHeatTransitions: {
+    up: number;
+    down: number;
+  };
   traitGrantLossCounts: {
     gain: number;
     lose: number;
@@ -41,13 +45,53 @@ function range(values: number[]): { min: number | null; max: number | null; coun
 }
 
 function managerBackstopFirings(snapshot: LsimStateSnapshot): number {
-  const rows = snapshot.storeDump.databases['kbl-manager-identity']?.managerAssignments ?? [];
-  return rows.filter((row) => {
+  const managerDb = snapshot.storeDump.databases['kbl-manager-identity'] ?? {};
+  const assignmentRows = managerDb.managerAssignments ?? [];
+  const profileRows = managerDb.managerProfiles ?? [];
+  const firedKeys = new Set<string>();
+
+  for (const row of assignmentRows) {
     const record = row as Record<string, unknown>;
-    return record.tenureStatus === 'fired' ||
+    if (
+      record.tenureStatus === 'fired' ||
       record.tenureEndReason === 'fan_morale_backstop' ||
-      record.firedReason === 'fan_morale_backstop';
-  }).length;
+      record.firedReason === 'fan_morale_backstop' ||
+      record.firedReason === 'auto-backstop'
+    ) {
+      firedKeys.add(`${String(record.teamId)}:${String(record.endDate ?? record.managerId ?? 'assignment')}`);
+    }
+  }
+
+  for (const row of profileRows) {
+    const record = row as Record<string, unknown>;
+    const tenureRecords = Array.isArray(record.tenureRecords)
+      ? record.tenureRecords as Array<Record<string, unknown>>
+      : [];
+    for (const tenure of tenureRecords) {
+      if (tenure.endReason === 'fired') {
+        firedKeys.add(`${String(tenure.teamId)}:${String(tenure.endDate ?? record.managerId ?? 'tenure')}`);
+      }
+    }
+  }
+
+  return firedKeys.size;
+}
+
+function fameHeatTransitions(snapshot: LsimStateSnapshot): { up: number; down: number } {
+  let up = 0;
+  let down = 0;
+  let current: LsimStateSnapshot | undefined = snapshot;
+  while (current?.previous) {
+    const prior = new Map(current.previous.fameRows.map((row) => [row.playerId, row.heat]));
+    for (const row of current.fameRows) {
+      const previousHeat = prior.get(row.playerId);
+      if (typeof previousHeat !== 'number' || !Number.isFinite(previousHeat)) continue;
+      if (row.heat > previousHeat) up += 1;
+      if (row.heat < previousHeat) down += 1;
+    }
+    current = current.previous;
+  }
+  return { up, down };
 }
 
 export function computeLsimDistributions(snapshot: LsimStateSnapshot): LsimDistributions {
@@ -88,6 +132,7 @@ export function computeLsimDistributions(snapshot: LsimStateSnapshot): LsimDistr
 
   return {
     fameTierDistribution,
+    fameHeatTransitions: fameHeatTransitions(snapshot),
     traitGrantLossCounts: {
       gain: snapshot.traitOverlays.filter((row) => row.valence === 'gain').length,
       lose: snapshot.traitOverlays.filter((row) => row.valence === 'lose').length,

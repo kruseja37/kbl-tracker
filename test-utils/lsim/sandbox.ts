@@ -19,6 +19,12 @@ import {
   saveFranchiseTeam,
 } from '../../src/utils/franchisePlayerStorage';
 import { saveFranchiseConfig } from '../../src/utils/franchiseManager';
+import { applyFranchiseMoraleEffect } from '../../src/utils/franchiseMoraleState';
+import {
+  ensureDefaultManagerProfiles,
+  LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+  saveManagerAssignment,
+} from '../../src/utils/managerIdentityStorage';
 import {
   getOrCreateBattingStats,
   getOrCreateFieldingStats,
@@ -43,8 +49,8 @@ import type { processCompletedGame } from '../../src/utils/processCompletedGame'
 export const L_SIM_IDS = {
   franchiseId: 'lsim-franchise-h1',
   leagueId: 'lsim-league-h1',
-  seasonId: 'lsim-franchise-h1-season-1',
-  statsScopeId: 'lsim-franchise-h1-season-1',
+  seasonId: 'lsim-franchise-h1-season-step3-3',
+  statsScopeId: 'lsim-franchise-h1-season-step3-3',
   seasonNumber: 1,
   gamesPerTeam: 20,
   inningsPerGame: 9,
@@ -87,6 +93,7 @@ export interface LsimSandboxSetupOptions {
 }
 
 const FIXED_ISO = '2026-06-19T12:00:00.000Z';
+const FIXED_PLUS_ONE_MINUTE_ISO = '2026-06-19T12:01:00.000Z';
 const FIXED_START = Date.UTC(2026, 5, 19, 12, 0, 0);
 const MLB_POSITIONS: Position[] = [
   'C',
@@ -115,11 +122,15 @@ const MLB_POSITIONS: Position[] = [
 const FARM_POSITIONS: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'SP', 'RP'];
 const CHEMISTRIES: Chemistry[] = ['Competitive', 'Spirited', 'Crafty', 'Scholarly', 'Disciplined'];
 const STADIUMS = ['Swagger Center', 'Bingata Bowl', 'Tiger Den', 'Sakura Hills', 'Motor Yard', 'Apple Field'];
+const STRUGGLING_TEAM_INDEXES = new Set([1, 4]);
+const STRUGGLING_TEAM_MORALE_TARGETS: Record<string, number> = {
+  'lsim-team-02': 21,
+  'lsim-team-05': 22,
+};
 const DB_NAMES_TO_DELETE = [
   'kbl-tracker',
   'kbl-franchise-morale',
   'kbl-league-builder',
-  'kbl-manager-identity',
 ];
 
 function isPitcherPosition(position: Position): boolean {
@@ -128,6 +139,35 @@ function isPitcherPosition(position: Position): boolean {
 
 function playerName(player: Player): string {
   return `${player.firstName} ${player.lastName}`;
+}
+
+function heldTraitsFor(
+  teamIndex: number,
+  rosterIndex: number,
+  position: Position,
+  rosterStatus: 'MLB' | 'FARM',
+): Pick<Player, 'trait1' | 'trait2'> {
+  if (rosterStatus !== 'MLB' || !STRUGGLING_TEAM_INDEXES.has(teamIndex)) return {};
+
+  if (!isPitcherPosition(position)) {
+    if (rosterIndex === 0) return { trait1: 'Tough Out' };
+    if (rosterIndex === 1) return { trait1: 'Rally Starter' };
+    if (rosterIndex === 4) return { trait1: 'Clutch' };
+    if (rosterIndex === 7) return { trait1: 'Durable' };
+  }
+
+  if (position === 'SP' && rosterIndex === 13) return { trait1: 'K Collector' };
+  if (position === 'RP' && rosterIndex === 16) return { trait1: 'Composed' };
+
+  return {};
+}
+
+function seededPlayerMorale(teamIndex: number, rosterIndex: number, isStar: boolean): number {
+  if (isStar) return 92;
+  if (STRUGGLING_TEAM_INDEXES.has(teamIndex) && rosterIndex < 18) {
+    return 28 + ((teamIndex * 3 + rosterIndex * 5) % 13);
+  }
+  return 42 + ((teamIndex * 7 + rosterIndex * 5) % 46);
 }
 
 function deleteDatabaseIfPresent(name: string): Promise<void> {
@@ -181,6 +221,7 @@ async function resetSandboxDatabases(): Promise<void> {
       'fieldingEvents',
       'betweenPlayEvents',
     ]).catch(() => undefined),
+    clearStoresIfPresent('kbl-manager-identity', ['managerProfiles', 'managerAssignments']).catch(() => undefined),
   ]);
   await Promise.all(DB_NAMES_TO_DELETE.map(deleteDatabaseIfPresent));
 }
@@ -219,6 +260,7 @@ function makePlayer(team: Team, teamIndex: number, rosterIndex: number, position
   const personality = (['Competitive', 'Spirited', 'Crafty', 'Scholarly', 'Disciplined', 'Tough', 'Relaxed', 'Egotistical', 'Timid', 'Droopy'] as const)[
     (teamIndex + rosterIndex) % 10
   ];
+  const heldTraits = heldTraitsFor(teamIndex, rosterIndex, position, rosterStatus);
 
   return {
     id: `${team.id}-${rosterStatus.toLowerCase()}-${String(rosterIndex + 1).padStart(2, '0')}-${position.replace('/', '-')}`,
@@ -249,7 +291,8 @@ function makePlayer(team: Team, teamIndex: number, rosterIndex: number, position
       resilience: isStar ? 82 : 30 + ((teamIndex * 13 + rosterIndex * 3) % 58),
       charisma: isStar ? 88 : 28 + ((teamIndex * 5 + rosterIndex * 11) % 62),
     },
-    morale: isStar ? 92 : 42 + ((teamIndex * 7 + rosterIndex * 5) % 46),
+    ...heldTraits,
+    morale: seededPlayerMorale(teamIndex, rosterIndex, isStar),
     mojo: isStar ? 'Hot' : 'Normal',
     fame: isStar ? 24 : 4 + ((teamIndex + rosterIndex) % 9),
     salary,
@@ -367,6 +410,58 @@ async function seedLeagueAndFranchisePlayers(): Promise<Omit<LsimSandboxContext,
   }
 
   return { ids: L_SIM_IDS, teams, teamSeeds };
+}
+
+async function seedManagerAssignments(teams: Team[]): Promise<void> {
+  const profiles = await ensureDefaultManagerProfiles(teams);
+  const profileByTeamId = new Map(profiles.map((profile, index) => [teams[index].id, profile]));
+
+  for (const team of teams) {
+    const profile = profileByTeamId.get(team.id);
+    if (!profile) continue;
+    await saveManagerAssignment({
+      managerId: profile.managerId,
+      teamId: team.id,
+      mode: 'franchise',
+      instanceId: LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+      startDate: FIXED_ISO,
+    });
+  }
+}
+
+async function seedStrugglingFanMoraleTrajectory(): Promise<void> {
+  for (const [teamId, target] of Object.entries(STRUGGLING_TEAM_MORALE_TARGETS)) {
+    const firstDrop = Math.ceil((50 - target) * 0.55);
+    const secondDrop = 50 - target - firstDrop;
+    await applyFranchiseMoraleEffect({
+      franchiseId: L_SIM_IDS.franchiseId,
+      seasonId: L_SIM_IDS.seasonId,
+      statsScopeId: L_SIM_IDS.statsScopeId,
+      seasonNumber: L_SIM_IDS.seasonNumber,
+      targetType: 'team-fan',
+      teamId,
+      delta: -firstDrop,
+      reason: 'L-SIM seeded early fan concern for a struggling club',
+      sourceEventId: `lsim-step3-fan-drop:${teamId}:opening`,
+      sourceKind: 'manual-override',
+      actorDisplayName: 'L-SIM Step 3 seeder',
+      timestamp: FIXED_ISO,
+    });
+    await applyFranchiseMoraleEffect({
+      franchiseId: L_SIM_IDS.franchiseId,
+      seasonId: L_SIM_IDS.seasonId,
+      statsScopeId: L_SIM_IDS.statsScopeId,
+      seasonNumber: L_SIM_IDS.seasonNumber,
+      targetType: 'team-fan',
+      teamId,
+      delta: -secondDrop,
+      reason: 'L-SIM seeded sustained fan decline for a struggling club',
+      sourceEventId: `lsim-step3-fan-drop:${teamId}:sustained`,
+      sourceKind: 'manual-override',
+      actorDisplayName: 'L-SIM Step 3 seeder',
+      timestamp: FIXED_PLUS_ONE_MINUTE_ISO,
+    });
+  }
 }
 
 function buildSalaryBaseline(teamSeeds: LsimTeamSeed[]): StoredFranchiseConfig['salaryBaseline'] {
@@ -757,9 +852,11 @@ export async function setupLsimSandbox(options: LsimSandboxSetupOptions = {}): P
 
   await resetSandboxDatabases();
   const seeded = await seedLeagueAndFranchisePlayers();
+  await seedManagerAssignments(seeded.teams);
   const salaryBaseline = buildSalaryBaseline(seeded.teamSeeds);
   await saveFranchiseConfig(buildFranchiseConfig(seeded.teamSeeds, salaryBaseline));
   await seedSeasonMetadata(totalScheduledGames, initialGamesPlayed);
+  await seedStrugglingFanMoraleTrajectory();
   const scheduleByGameNumber = await seedScheduleRows(seeded.teams, totalScheduledGames, deterministicScheduleIds);
   if (preseedPriorStats) {
     await seedPriorRegularSeasonStats(seeded.teamSeeds);
