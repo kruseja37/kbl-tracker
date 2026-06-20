@@ -13641,35 +13641,115 @@ invariants/soul.ts,falsification.ts}`.
 
 ---
 
-## CONTRACT — L13-3 (formation engine: per-type threshold gate + triggers + romance/gender + Captain composite) — 2026-06-19 (attended)
+> **L13-3 SPLIT (JK ruling 2026-06-20).** The dense single formation contract was split into **L13-3a** (the leaner FIRST-WRITER
+> cut — dispatched now) + **L13-3b** (the deferred refinements — LOGGED, not dropped). Rationale: land edges forming in-sim
+> deterministically/idempotently first; isolate the net-new co-rostered infra + the Captain composite + romance/gender into a
+> follow-up. "Defer is fine, dropped is not" (JK). Co-rostered "extended time" source ruled = pure `completedGames` read (no schema).
 
-**ROUTE:** Codex CLI (gpt-5.5, very-high). Auditor: Opus 4.8 (builder ≠ auditor).
-**ROLE:** Pure-engine builder. **DEPENDS ON L13-1 (store + types) + L13-2 (taxonomy map).**
+## CONTRACT — L13-3a (relationship edge FORMATION: threshold-gate + checkpoint WRITE — the FIRST store writer) — 2026-06-20 (attended)
 
-**GOAL:** Build the DARK edge-formation engine: per-type personality/modifier **threshold gate** (each of the 6 declares
-its own input set + threshold constant, §16 placeholders, target ~1-3 live edges/team); trigger predicates ("young" reads
-the real `age` field; "extended time" reads a NEW co-rostered-games counter); **potential-vs-active** (§24.4 — potential
-computable for any pair incl. farm); romance **base-rates + same-gender weight** reading the real `gender` field; the
-**Captain effectiveness composite** `w1·Charisma + w2·Loyalty + w3·Resilience − w4·Ambition` normalized [0..1] that
-**suppresses** negative-edge deltas + **catalyzes** positive-edge formation odds. **Cadence = the 20% CHECKPOINT** (Fork B
-— mirror the checkpoint-sweep entry, NOT per-game). Build-DARK behind the L13 flag.
+**ROUTE:** Codex CLI (gpt-5.5, **very-high / xhigh reasoning effort**) via `codex exec` stdin-from-contract. Auditor: Opus 4.8
+(builder ≠ auditor). **Build-DARK behind the L13 flag. NO browser verify (folds into the one v1 smoke pass).**
+**ROLE:** Builder for the franchise relationship-edge FORMATION engine + the dark checkpoint-write hook (the first writer to the
+L13-1 store). **DEPENDS ON L13-1 (store + types, `7b9c92fc`) + L13-2 (taxonomy map, `b18031b7`) + the cadence-aware checkpoint (`39f65a17`).**
 
-**SOURCE OF TRUTH:** §24.2/24.3/24.4/24.6/24.9 + `DECISIONS_LOG.md:82-111` (L13-Q2/Q3/Q8/Q9). `captainMoraleRouter.ts:10-22`
-explicitly defers the §24.9 composite to L13 — build it HERE, keeping it OFF the Charisma×2 routing path (standing
-constraint 1, the double-count guard).
+**GOAL:** The **FIRST writer** to the L13-1 relationship-edge store. At the cadence-aware 20%-grid checkpoint boundary, evaluate
+per-type personality/modifier **threshold-gated** edge FORMATION and **WRITE** the resulting edges via the L13-1 store API —
+**deterministically + idempotently**. Build-DARK behind `isFranchisePhase2L13Enabled`. **SCOPE = the affect edges fully
+specifiable now: RIVALRY, FEUD, MENTORSHIP, FRIENDSHIP** (+ `potential`-vs-active, §24.4). **ROMANCE + HISTORY formation, the
+co-rostered "extended time" trigger, and the Captain effectiveness composite are L13-3b — DO NOT build them here.**
 
-**VERIFIED ANCHORS:** `age`/`gender` `playerDatabase.ts:47-48` (+`unifiedPlayerStorage.ts:41-42`,
-`leagueBuilderStorage.ts:227,229`; `Gender='M'|'F'`); `HiddenModifiers` `game.ts:123-129`; checkpoint cadence
-`franchiseCheckpointSweepCompute.ts:106-114`; the co-rostered counter is NET-NEW (grep confirmed none exists).
-**⚠ MAKE-OR-BREAK:** the Captain composite must NOT reuse the Charisma×2 routing multiplier (double-count). `age`/`gender`
-are real fields — do NOT invent them or add an L1 dependency (field-correction, `DECISIONS_LOG:84-88,108-111`). Hidden
-modifiers are persisted only on `leagueBuilderStorage` Player → default-fill missing (mirror `resolveHiddenModifiers`
-`processCompletedGame.ts:359`); L1 persisting them is the ACTIVATION prereq, not a build blocker.
+**SOURCE OF TRUTH:** §24.2/24.3/24.4 + `DECISIONS_LOG.md` L13-Q2/Q3 + `L13_SCOPE_MAP.md` §3. JK ruling 2026-06-20: leaner
+first-writer cut; the write/hook folded into L13-3a (was §3's L13-8 wiring); co-rostered source = pure `completedGames` read (L13-3b).
 
-**VERIFICATION:** tsc/build 0; formation unit tests (gate fires/withholds per personality; potential computable for a
-non-co-rostered pair; same-gender weight applied; Captain composite suppresses a negative edge); no double-count test.
-**STOP-IF** the co-rostered counter requires mutating a store outside L13-1's edge record (surface — may need a small
-counter field on the edge or a roster-tenure read). **FORMAT** as house. **Status:** ⏸ AUTHORED — build HELD.
+**VERIFIED ANCHORS (re-verified at build, 2026-06-20):**
+- **L13-1 store** `src/utils/franchiseRelationshipEdgesStorage.ts`: `RelationshipEdgeType` (`:15`), `RelationshipEdgeRow`
+  (`:23`; fields id/franchiseId/seasonId/statsScopeId/seasonNumber/player1Id/player2Id/type/intensity/potential/accuracy/
+  formedAtGameNumber/dissolvedAtGameNumber/createdAt/updatedAt?), `franchiseRelationshipEdgeId(scope,p1,p2,type)` (`:92`,
+  **canonicalizes the unordered pair** → deterministic id), `putFranchiseRelationshipEdge` (`async`, `:109`, put-on-id =
+  overwrite-not-duplicate).
+- **L13-2 taxonomy** `src/engines/relationshipEngine.ts`: `map9To6`/`RELATIONSHIP_9_TO_6_MAP`/`RELATIONSHIP_6_TO_9_COVERAGE`
+  (`:39,51,65`). L13-3a writes the canonical 6-type edges directly; use the map only where a legacy literal is the input.
+- **Cadence-aware checkpoint** `franchiseCheckpointSweepCompute.ts:106-114`: `isCheckpointBoundary(gameNumber, totalGames,
+  checkpointCount = 5)`; the consumer reads `seasonMetadata.checkpointCadence` → `checkpointCountForCadence`
+  (`src/data/rosterEngineConstants.ts`). Form at the SAME boundary (5 Standard / 10 Frequent).
+- **Hook precedent** `processCompletedGame.ts:630-639`: `if (isFranchisePhase2CheckpointEnabled()) await
+  persistDarkCheckpointSweepForCompletedGame(gameState, trueValueScope, archiveOptions);` (+ trait sibling `:637-639`). The
+  formation writer is a NEW sibling gated by `isFranchisePhase2L13Enabled()` (`franchisePhase2Flags.ts`).
+- **Inputs:** `HiddenModifiers` (loyalty/ambition/resilience/charisma, 0-100) `game.ts:123-129`; default-fill missing via the
+  `resolveHiddenModifiers` NEUTRAL pattern (`processCompletedGame.ts:~359`). `age` real field (MENTORSHIP "young"):
+  `playerDatabase.ts:47-48` (+ `unifiedPlayerStorage.ts:41-42`, `leagueBuilderStorage.ts:227`). NO L1 dependency (default-fill).
+- Density target ~1-3 live edges/team (§1).
+
+**⚠ MAKE-OR-BREAK:**
+1. **DETERMINISTIC + IDEMPOTENT.** Formation uses a **seeded** decision (seed = franchise+season+checkpoint+canonical-pair+type,
+   FNV-1a style — **NO `Date.now`/`Math.random`**) → same seed → identical edges. The edge id is deterministic (canonicalized
+   pair) → re-running a checkpoint MUST NOT double-write (`put` on the same id overwrites). PROVE the per-write-idempotency
+   property (re-run a checkpoint → identical store state, no dup edges).
+2. **SINGLE WRITER.** This formation compute is the ONLY thing writing the edge store. No other writer.
+3. **DARK.** Flag OFF → the formation sibling is never invoked → zero production behavior change, zero edges written.
+4. **CADENCE.** Form at the configurable boundary (read `seasonMetadata.checkpointCadence`) — correct for BOTH Standard(5) and
+   Frequent(10).
+5. **NO downstream consume.** Edges are written; nothing reads them (no morale tap [L13-5], no charged-matchup [L13-6], no
+   reporter [L13-7], no reader).
+
+**CHANGES (additive; exact files set at build):**
+**A. NEW pure formation engine** (e.g. `src/engines/relationshipFormation.ts`): per-type threshold gate for
+   RIVALRY/FEUD/MENTORSHIP/FRIENDSHIP — each declares its input set (the pair's `HiddenModifiers`; MENTORSHIP also reads the
+   real `age` for "young") + a **§16 PLACEHOLDER threshold constant** (clearly-marked SIM-TUNE placeholders, shape locked — do
+   NOT invent magnitudes). `potential`-vs-active (§24.4). Seeded, deterministic, pure (no I/O). Returns the edge(s) to write.
+**B. NEW dark compute+write** (e.g. `src/utils/franchiseRelationshipFormationCompute.ts`, mirror `franchiseTraitGrantCompute.ts`):
+   `persistDarkRelationshipFormationForCompletedGame` — reads `seasonMetadata` (totalGames + checkpointCadence), checks
+   `isCheckpointBoundary` at the configurable count, resolves the same-team roster pairs, runs the engine, writes via
+   `putFranchiseRelationshipEdge` (idempotent on the deterministic id). Returns `{status, written}`; dark-noop when flag-off/not-boundary.
+**C. `src/utils/processCompletedGame.ts`:** add the sibling gate `if (isFranchisePhase2L13Enabled()) { try { await
+   persistDarkRelationshipFormationForCompletedGame(...); } catch {…} }` mirroring `:630-639`.
+**D. L-SIM:** snapshot the `franchiseRelationshipEdges` store (`test-utils/lsim/snapshots.ts`) + a NEW `soul` invariant
+   (`test-utils/lsim/invariants/soul.ts` + `types.ts`): formation fires at the correct checkpoint boundaries for the snapshot's
+   cadence; idempotent (re-run → no dup edges); deterministic (same seed → same edges); edge-count bound (~1-3/team).
+   Falsification (`falsification.ts`): trips on a double-write AND on formation at a non-boundary.
+**E. Unit tests:** gate fires/withholds per personality threshold; `potential` computable for a non-co-rostered pair;
+   deterministic id (re-form → same id, no dup); idempotent write; seeded determinism.
+
+**HARD CONSTRAINTS:** edit/create ONLY the listed files (+ tests). DARK (flag-off = no formation). NO `Date.now`/`Math.random`
+(seeded). NO morale/matrix tap, NO charged-matchup, NO reporter, NO reader. **NO ROMANCE/HISTORY formation, NO Captain composite,
+NO co-rostered "extended time" trigger (all L13-3b).** NO trackerDb bump. NO git add/commit.
+
+**VERIFICATION (run ALL, paste ACTUAL):** `NODE_ENV= npx tsc -b` 0 + `npm run build` 0; the unit + L-SIM formation tests green;
+full suite **ZERO new reds** (prove any non-pass pre-existing by solo); L-SIM 24g + 60g flags-ON for BOTH cadences — edges form
+at the right boundaries, idempotent (re-run a checkpoint → no dup), deterministic (same-seed byte-identical), findings=0.
+
+**STOP-IF:** forming needs a store outside {`franchiseRelationshipEdges` (write), `seasonMetadata`, the roster/players (read)} →
+surface. ROMANCE/HISTORY/Captain/co-rostered creep in → STOP (L13-3b).
+
+**FORMAT:** 1) files; 2) the engine gate + the seeded determinism + the id/idempotency + the processCompletedGame sibling + the
+L-SIM invariant; 3) verification (incl. both-cadence sim legs + idempotency + determinism); 4) "L13-3a complete"/"BLOCKED". No commit.
+Use very high reasoning effort. **Status:** ⏸ AUTHORED — ready for dispatch (JK attended, sole-mutator, 2026-06-20).
+
+---
+
+## CONTRACT — L13-3b (DEFERRED formation refinements: Captain composite + romance/gender + co-rostered "extended time") — 2026-06-20 (LOGGED, deferred)
+
+**ROUTE:** Codex CLI (gpt-5.5, very-high). Auditor: Opus 4.8 (builder ≠ auditor). **DEPENDS ON L13-3a.** Build-DARK.
+**ROLE:** Builder — the formation refinements DEFERRED from L13-3a (JK ruling 2026-06-20: "defer is fine, dropped is not"). This
+contract exists so the deferred set is logged, NOT dropped.
+
+**GOAL (the deferred set — extend the L13-3a engine):**
+1. **Captain effectiveness composite** `w1·Charisma + w2·Loyalty + w3·Resilience − w4·Ambition` normalized [0..1] →
+   **SUPPRESS** negative-edge deltas + **CATALYZE** positive-edge formation odds. Built IN the formation engine, kept **OFF**
+   the Charisma×2 routing path — the double-count guard (`src/engines/captainMoraleRouter.ts:8-22` confirms §24.9 is L13's job;
+   selection=Cha+Loy, routing=Cha×2, effectiveness=4-modifiers — three distinct uses). §24.9 / REL-8.
+2. **ROMANCE formation:** base-rates + **same-gender weight** reading the real `gender` field (`playerDatabase.ts` `Gender='M'|'F'`).
+   §24.6 / L13-Q9.
+3. **Co-rostered "extended time" trigger:** sourced via a **PURE READ of `completedGames`** (JK ruling 2026-06-20) — count games
+   where both players appear with the same `teamId` up to the checkpoint game (`gameStorage.ts` `CompletedGameRecord.playerStats
+   [playerId].teamId` + `pitcherGameStats[].teamId`); **NO new store/field**. Limitation: counts co-APPEARANCES (box-score), an
+   accepted proxy for co-rostered; document it.
+4. **HISTORY** lifecycle edge (former-team flag) if specified by §24.
+
+**§16 placeholder magnitudes only.** DARK behind the L13 flag. Per-type threshold gate extended to ROMANCE/HISTORY.
+
+**Status:** ⏸ DEFERRED — LOGGED, not dispatched. Build after L13-3a lands + JK go-ahead (the next L13-3 ticket).
 
 ---
 
