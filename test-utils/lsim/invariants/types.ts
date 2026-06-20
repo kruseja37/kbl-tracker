@@ -12,6 +12,7 @@ import type { FranchiseTrueValueRow } from '../../../src/utils/franchiseTrueValu
 import type { FranchiseTrueValueSnapshotRow } from '../../../src/utils/franchiseTrueValueSnapshotsStorage';
 import type { FranchisePlayerDesignationRecord } from '../../../src/utils/franchiseDesignations';
 import type { FranchiseRatingsOverlayRow } from '../../../src/utils/franchiseRatingsOverlayStorage';
+import type { RelationshipEdgeRow } from '../../../src/utils/franchiseRelationshipEdgesStorage';
 import type { FranchiseTraitOverlayRow } from '../../../src/utils/franchiseTraitOverlayStorage';
 import type { FranchiseL10OverlayRow } from '../../../src/utils/franchiseL10OverlayStorage';
 import type { FranchiseFlashpointDecayRow } from '../../../src/utils/franchiseFlashpointDecayStorage';
@@ -131,6 +132,7 @@ export interface LsimStateSnapshot {
   trueValueSnapshots: FranchiseTrueValueSnapshotRow[];
   designationRows: FranchisePlayerDesignationRecord[];
   ratingsOverlays: FranchiseRatingsOverlayRow[];
+  relationshipEdges: RelationshipEdgeRow[];
   traitOverlays: FranchiseTraitOverlayRow[];
   l10Overlays: FranchiseL10OverlayRow[];
   flashpointRows: FranchiseFlashpointDecayRow[];

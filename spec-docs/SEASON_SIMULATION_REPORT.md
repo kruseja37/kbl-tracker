@@ -6,9 +6,9 @@ Generated: 2026-06-19
 
 | Leg | Seed | Games Simulated | Total Scheduled Games | Stopped Early | Final Digest |
 | --- | --- | ---: | ---: | --- | --- |
-| Baseline | lsim-h2-baseline | 60 | 60 | false | 8571213:ea1cc332 |
-| Determinism A | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8565686:ac988f54 |
-| Determinism B | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8565686:ac988f54 |
+| Baseline | lsim-h2-baseline | 60 | 60 | false | 8575073:a6645486 |
+| Determinism A | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8569546:44b24aba |
+| Determinism B | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8569546:44b24aba |
 
 Determinism same-seed byte-identical end-state: **PASS**
 
@@ -37,6 +37,7 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
 | soul.l10-per-game-cadence | INVESTIGATE | 60 | 0 |
 | soul.l11-backstop-under-25-plus-roll | CRITICAL | 60 | 0 |
 | soul.l12-race-no-nan-resolve-tier | CRITICAL | 60 | 0 |
+| soul.l13-relationship-formation-checkpoint-write | CRITICAL | 60 | 0 |
 | soul.morale-bounds | CRITICAL | 60 | 0 |
 | soul.per-write-idempotency | CRITICAL | 60 | 0 |
 | soul.persistence-backup-migration-proof | CRITICAL | 60 | 0 |
@@ -61,7 +62,6 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
 
 - §5.4 soul.real-export-migration-survival: H2 validates sandbox backup/restore round-trip through the real API; no real user export is touched under the sandbox-only contract.
 - §5.6 soul.tv-fixed-baseline-non-drift-across-seasons: H2 baseline is one season; multi-season legs are delegated to Opus step 4.
-- §5 / §H soul.l13-relationship-invariants: L13 relationship layer is explicitly not built; skipped and flagged per grounding §H.
 
 ## Section 9 Distributions
 

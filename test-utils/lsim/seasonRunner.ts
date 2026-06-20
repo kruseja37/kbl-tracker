@@ -637,11 +637,6 @@ function deferredInvariants(): LsimDeferredInvariant[] {
       section: '§5.6',
       reason: 'H2 baseline is one season; multi-season legs are delegated to Opus step 4.',
     },
-    {
-      name: 'soul.l13-relationship-invariants',
-      section: '§5 / §H',
-      reason: 'L13 relationship layer is explicitly not built; skipped and flagged per grounding §H.',
-    },
   ];
 }
 

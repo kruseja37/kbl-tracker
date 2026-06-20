@@ -43,6 +43,7 @@ function base(): LsimStateSnapshot {
     trueValueSnapshots: [],
     designationRows: [],
     ratingsOverlays: [],
+    relationshipEdges: [],
     traitOverlays: [],
     l10Overlays: [],
     flashpointRows: [],
@@ -134,6 +135,59 @@ const CASES: Array<{ name: string; mutate: (s: LsimStateSnapshot) => void }> = [
     mutate: (s) => { s.lastGameDelta = { battingIncreasedPlayerIds: [], pitchingIncreasedPlayerIds: [], afterFirstProcessDigest: 'a', afterReplayDigest: 'b' }; } },
   { name: 'soul.checkpoint-cadence-matches-setting',
     mutate: (s) => { s.gamesSimulated = s.totalScheduledGames; s.gameNumber = s.totalScheduledGames; s.ratingsOverlays = [{ sourceEventId: 'checkpoint-2' } as never]; /* only 1 of 5 boundaries */ } },
+  { name: 'soul.l13-relationship-formation-checkpoint-write',
+    mutate: (s) => {
+      s.gameNumber = 2;
+      s.gamesSimulated = 2;
+      s.players = [
+        { id: 'p1', leagueAssignments: [{ teamId: 't1' }] } as never,
+        { id: 'p2', leagueAssignments: [{ teamId: 't1' }] } as never,
+      ];
+      const row = {
+        id: 'f:s:ss:p1:p2:RIVALRY',
+        franchiseId: 'f',
+        seasonId: 's',
+        statsScopeId: 'ss',
+        seasonNumber: 1,
+        player1Id: 'p1',
+        player2Id: 'p2',
+        type: 'RIVALRY',
+        intensity: 0.9,
+        potential: false,
+        accuracy: 0.8,
+        formedAtGameNumber: 2,
+        dissolvedAtGameNumber: null,
+        createdAt: 2,
+        updatedAt: 2,
+      };
+      s.relationshipEdges = [row, row] as never;
+    } },
+  { name: 'soul.l13-relationship-formation-checkpoint-write',
+    mutate: (s) => {
+      s.gameNumber = 3;
+      s.gamesSimulated = 3;
+      s.players = [
+        { id: 'p1', leagueAssignments: [{ teamId: 't1' }] } as never,
+        { id: 'p2', leagueAssignments: [{ teamId: 't1' }] } as never,
+      ];
+      s.relationshipEdges = [{
+        id: 'f:s:ss:p1:p2:FRIENDSHIP',
+        franchiseId: 'f',
+        seasonId: 's',
+        statsScopeId: 'ss',
+        seasonNumber: 1,
+        player1Id: 'p1',
+        player2Id: 'p2',
+        type: 'FRIENDSHIP',
+        intensity: 0.9,
+        potential: false,
+        accuracy: 0.8,
+        formedAtGameNumber: 3,
+        dissolvedAtGameNumber: null,
+        createdAt: 3,
+        updatedAt: 3,
+      }] as never;
+    } },
   { name: 'soul.ratings-overlay-validity', // NAMED property now includes the deterministic id
     mutate: (s) => {
       s.players = [{ id: 'p', primaryPosition: 'SS' } as never];
@@ -249,7 +303,7 @@ describe('L-SIM invariant falsification audit', () => {
     const results = CHECKS.map((check) => check(base()));
     const failing = results.filter((r) => !r.pass).map((r) => `${r.name}: ${r.detail}`);
     expect(failing).toEqual([]);
-    expect(results.length).toBe(22);
+    expect(results.length).toBe(23);
   });
 
   test('falsification cases cover every soul invariant exactly once', () => {

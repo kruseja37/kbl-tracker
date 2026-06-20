@@ -16,6 +16,7 @@ import { getFranchiseFlashpointDecayRowsByScope } from '../../src/utils/franchis
 import { getFranchiseL10OverlaysByScope } from '../../src/utils/franchiseL10OverlayStorage';
 import { listFranchiseMoraleSnapshots } from '../../src/utils/franchiseMoraleState';
 import { getFranchiseRatingsOverlaysByScope } from '../../src/utils/franchiseRatingsOverlayStorage';
+import { getFranchiseRelationshipEdgesByScope } from '../../src/utils/franchiseRelationshipEdgesStorage';
 import { getFranchiseTraitOverlaysByScope } from '../../src/utils/franchiseTraitOverlayStorage';
 import { getTrustedValueArtifact } from '../../src/utils/franchiseTrustedValueStorage';
 import { getFranchiseTrueValueRows } from '../../src/utils/franchiseTrueValueStorage';
@@ -67,6 +68,7 @@ export async function readLsimStateSnapshot(
     trueValueSnapshots,
     designationRows,
     ratingsOverlays,
+    relationshipEdges,
     traitOverlays,
     l10Overlays,
     flashpointRows,
@@ -96,6 +98,7 @@ export async function readLsimStateSnapshot(
     getFranchiseTrueValueSnapshotRowsByScope(scope),
     getFranchiseDesignationRows(scope),
     getFranchiseRatingsOverlaysByScope(scope),
+    getFranchiseRelationshipEdgesByScope(scope),
     getFranchiseTraitOverlaysByScope(scope),
     getFranchiseL10OverlaysByScope(scope),
     getFranchiseFlashpointDecayRowsByScope(scope),
@@ -139,6 +142,7 @@ export async function readLsimStateSnapshot(
     trueValueSnapshots,
     designationRows,
     ratingsOverlays,
+    relationshipEdges,
     traitOverlays,
     l10Overlays,
     flashpointRows,

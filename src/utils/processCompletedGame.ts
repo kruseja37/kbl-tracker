@@ -63,11 +63,13 @@ import {
   isFranchisePhase2L10Enabled,
   isFranchisePhase2L11Enabled,
   isFranchisePhase2L12Enabled,
+  isFranchisePhase2L13Enabled,
 } from './franchisePhase2Flags';
 import { persistDarkFameRecordsForCompletedGame } from './franchiseFameCompute';
 import { persistDarkFlashpointDecayForCompletedGame } from './franchiseFlashpointDecayCompute';
 import { persistDarkCheckpointSweepForCompletedGame } from './franchiseCheckpointSweepCompute';
 import { persistDarkTraitGrantForCompletedGame } from './franchiseTraitGrantCompute';
+import { persistDarkRelationshipFormationForCompletedGame } from './franchiseRelationshipFormationCompute';
 import { persistDarkL10ForCompletedGame } from './franchiseL10SweepCompute';
 import { persistDarkL11AutoBackstopForCompletedGame } from './franchiseManagerAutoBackstop';
 import { recomputeFranchiseL12StandingsForCompletedGame } from './franchiseRaceStandingsCompute';
@@ -639,6 +641,13 @@ export async function processCompletedGame(
             await persistDarkTraitGrantForCompletedGame(gameState, trueValueScope, archiveOptions);
           } catch (e) {
             console.warn('[Traits] dark trait-grant compute skipped for completed game ' + gameState.gameId + ':', e);
+          }
+        }
+        if (isFranchisePhase2L13Enabled()) {
+          try {
+            await persistDarkRelationshipFormationForCompletedGame(gameState, trueValueScope, archiveOptions);
+          } catch (e) {
+            console.warn('[L13] dark relationship formation skipped for completed game ' + gameState.gameId + ':', e);
           }
         }
         if (isFranchisePhase2L10Enabled()) {

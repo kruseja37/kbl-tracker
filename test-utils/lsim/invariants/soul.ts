@@ -4,6 +4,10 @@ import { FLASHPOINT_DECAY_TUNING, computeFlashpointGameTax } from '../../../src/
 import { L11_AUTO_BACKSTOP_TUNING } from '../../../src/utils/franchiseManagerAutoBackstop';
 import { TRAIT_ACQUISITION_TUNING, TRAIT_OPPOSITES } from '../../../src/engines/traitAcquisition';
 import { pickRaceSnubVictims } from '../../../src/utils/franchiseRaceSnubMorale';
+import {
+  franchiseRelationshipEdgeId,
+  type RelationshipEdgeType,
+} from '../../../src/utils/franchiseRelationshipEdgesStorage';
 import { checkpointCountForCadence } from '../../../src/data/rosterEngineConstants';
 import type { FranchiseDesignationType } from '../../../src/utils/franchiseDesignations';
 import type { Player } from '../../../src/utils/leagueBuilderStorage';
@@ -35,6 +39,12 @@ export const REQUIRED_L12_MERIT_CATEGORIES = [
 const PITCHER_POSITIONS = new Set(['SP', 'SP/RP', 'RP', 'CP', 'P']);
 const HITTER_RATING_KEYS = new Set(['power', 'contact', 'speed', 'fielding', 'arm']);
 const PITCHER_RATING_KEYS = new Set(['velocity', 'junk', 'accuracy']);
+const L13_3A_RELATIONSHIP_TYPES = new Set<RelationshipEdgeType>([
+  'RIVALRY',
+  'FEUD',
+  'MENTORSHIP',
+  'FRIENDSHIP',
+]);
 // §5.3 season-end honor edge: MVP/CY emit an AWARD_RESULT nod + a close-loser snub.
 // Mirrors franchiseSeasonEndHonors.ts:19 (SEASON_END_SNUB_TOP_N) + :29-32 (SEASON_END_HONORS, honorKind === award category).
 const SEASON_END_SNUB_TOP_N = 3;
@@ -446,6 +456,65 @@ function checkpointCadence(snapshot: LsimStateSnapshot): LsimInvariantResult {
   );
 }
 
+function relationshipFormationCheckpointWrite(snapshot: LsimStateSnapshot): LsimInvariantResult {
+  const reached = reachedCheckpoints(snapshot);
+  const edgeIds = snapshot.relationshipEdges.map((row) => row.id);
+  const duplicateIds = edgeIds.filter((id, index) => edgeIds.indexOf(id) !== index);
+  const allowedCheckpoints = new Set(snapshot.checkpointGameNumbers);
+  const currentIsCheckpoint = allowedCheckpoints.has(snapshot.gameNumber);
+  const formedAtNumbers = Array.from(new Set(
+    snapshot.relationshipEdges
+      .map((row) => row.formedAtGameNumber)
+      .filter((gameNumber): gameNumber is number => Number.isInteger(gameNumber)),
+  )).sort((left, right) => left - right);
+  const nonBoundaryFormation = formedAtNumbers.filter((gameNumber) =>
+    !allowedCheckpoints.has(gameNumber) || gameNumber > snapshot.gameNumber,
+  );
+  const badIds = snapshot.relationshipEdges.filter((row) =>
+    row.id !== franchiseRelationshipEdgeId(row, row.player1Id, row.player2Id, row.type),
+  );
+  const forbiddenTypes = snapshot.relationshipEdges.filter((row) => !L13_3A_RELATIONSHIP_TYPES.has(row.type));
+  const badPotentialState = snapshot.relationshipEdges.filter((row) =>
+    row.potential !== false ||
+    !Number.isInteger(row.formedAtGameNumber) ||
+    row.dissolvedAtGameNumber !== null,
+  );
+  const teamOf = teamOfPlayer(snapshot);
+  const crossTeamActive = snapshot.relationshipEdges.filter((row) =>
+    teamOf(row.player1Id) !== '?' &&
+    teamOf(row.player2Id) !== '?' &&
+    teamOf(row.player1Id) !== teamOf(row.player2Id),
+  );
+  const finalDensityLimit = Math.max(1, snapshot.teamIds.length * 3);
+  const densityExceeded = snapshot.relationshipEdges.length > finalDensityLimit;
+  const missingEdgesAfterCheckpoint = reached.length > 0 && snapshot.relationshipEdges.length === 0;
+  const missingCurrentCheckpointWrite = currentIsCheckpoint &&
+    snapshot.gameNumber > 0 &&
+    snapshot.relationshipEdges.length > 0 &&
+    !formedAtNumbers.includes(snapshot.gameNumber);
+  const shouldBeEmptyPreCheckpoint = reached.length === 0 && snapshot.relationshipEdges.length > 0;
+  const pass =
+    duplicateIds.length === 0 &&
+    nonBoundaryFormation.length === 0 &&
+    badIds.length === 0 &&
+    forbiddenTypes.length === 0 &&
+    badPotentialState.length === 0 &&
+    crossTeamActive.length === 0 &&
+    !densityExceeded &&
+    !missingEdgesAfterCheckpoint &&
+    !missingCurrentCheckpointWrite &&
+    !shouldBeEmptyPreCheckpoint;
+
+  return invariantResult(
+    'soul.l13-relationship-formation-checkpoint-write',
+    CRITICAL,
+    pass,
+    pass
+      ? `edges=${snapshot.relationshipEdges.length}; formedAt=${formedAtNumbers.join(',') || 'none'}; current=${snapshot.gameNumber}; cadence=${snapshot.checkpointCadence}; densityLimit=${finalDensityLimit}; no duplicate ids`
+      : `edges=${snapshot.relationshipEdges.length}; dup=${duplicateIds.slice(0, 4).join(',') || 'none'}; nonBoundary=${nonBoundaryFormation.join(',') || 'none'}; badIds=${badIds.slice(0, 4).map((row) => row.id).join(',') || 'none'}; forbidden=${forbiddenTypes.map((row) => row.type).join(',') || 'none'}; badPotential=${badPotentialState.slice(0, 4).map((row) => row.id).join(',') || 'none'}; crossTeam=${crossTeamActive.slice(0, 4).map((row) => row.id).join(',') || 'none'}; densityExceeded=${densityExceeded}; missingAfterCheckpoint=${missingEdgesAfterCheckpoint}; missingCurrentBoundary=${missingCurrentCheckpointWrite}; preCheckpointNonEmpty=${shouldBeEmptyPreCheckpoint}`,
+  );
+}
+
 function ratingsOverlayValidity(snapshot: LsimStateSnapshot): LsimInvariantResult {
   const players = playerById(snapshot);
   // CHEAP TIGHTENING: also assert single consistent scope + the deterministic id
@@ -832,6 +901,7 @@ export function getSoulInvariantChecks(): LsimInvariantCheck[] {
     l11BackstopGate,
     replayIdempotency,
     checkpointCadence,
+    relationshipFormationCheckpointWrite,
     ratingsOverlayValidity,
     traitTwoSlotNoOffsetHysteresis,
     backupMigrationProof,
