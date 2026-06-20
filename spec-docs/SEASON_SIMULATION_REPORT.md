@@ -6,9 +6,9 @@ Generated: 2026-06-19
 
 | Leg | Seed | Games Simulated | Total Scheduled Games | Stopped Early | Final Digest |
 | --- | --- | ---: | ---: | --- | --- |
-| Baseline | lsim-h2-baseline | 60 | 60 | false | 8575073:a6645486 |
-| Determinism A | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8569546:44b24aba |
-| Determinism B | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8569546:44b24aba |
+| Baseline | lsim-h2-baseline | 60 | 60 | false | 8575072:71b1abef |
+| Determinism A | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8569545:d55d29fe |
+| Determinism B | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8569545:d55d29fe |
 
 Determinism same-seed byte-identical end-state: **PASS**
 
@@ -38,6 +38,7 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
 | soul.l11-backstop-under-25-plus-roll | CRITICAL | 60 | 0 |
 | soul.l12-race-no-nan-resolve-tier | CRITICAL | 60 | 0 |
 | soul.l13-relationship-formation-checkpoint-write | CRITICAL | 60 | 0 |
+| soul.l13-relationship-intensity-lifecycle | CRITICAL | 60 | 0 |
 | soul.morale-bounds | CRITICAL | 60 | 0 |
 | soul.per-write-idempotency | CRITICAL | 60 | 0 |
 | soul.persistence-backup-migration-proof | CRITICAL | 60 | 0 |

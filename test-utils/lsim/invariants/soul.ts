@@ -1,6 +1,10 @@
 import { FAME_TIER_RANK, FAME_TUNING, resolveFameTier } from '../../../src/engines/fameModel';
 import { ALL_STAR_LOCK_FRACTION } from '../../../src/utils/franchiseAllStarLock';
 import { FLASHPOINT_DECAY_TUNING, computeFlashpointGameTax } from '../../../src/engines/flashpointDecay';
+import {
+  RELATIONSHIP_INTENSITY_TUNING,
+  computeRelationshipIntensity,
+} from '../../../src/engines/relationshipIntensity';
 import { L11_AUTO_BACKSTOP_TUNING } from '../../../src/utils/franchiseManagerAutoBackstop';
 import { TRAIT_ACQUISITION_TUNING, TRAIT_OPPOSITES } from '../../../src/engines/traitAcquisition';
 import { pickRaceSnubVictims } from '../../../src/utils/franchiseRaceSnubMorale';
@@ -474,10 +478,12 @@ function relationshipFormationCheckpointWrite(snapshot: LsimStateSnapshot): Lsim
     row.id !== franchiseRelationshipEdgeId(row, row.player1Id, row.player2Id, row.type),
   );
   const forbiddenTypes = snapshot.relationshipEdges.filter((row) => !L13_3A_RELATIONSHIP_TYPES.has(row.type));
+  // L13-4 update: a dissolved edge (dissolvedAtGameNumber set) is a VALID state once
+  // intensity lapse-decays below the dissolve threshold; dissolution correctness is the
+  // intensity-lifecycle invariant's job, so the formation invariant no longer flags it.
   const badPotentialState = snapshot.relationshipEdges.filter((row) =>
     row.potential !== false ||
-    !Number.isInteger(row.formedAtGameNumber) ||
-    row.dissolvedAtGameNumber !== null,
+    !Number.isInteger(row.formedAtGameNumber),
   );
   const teamOf = teamOfPlayer(snapshot);
   const crossTeamActive = snapshot.relationshipEdges.filter((row) =>
@@ -512,6 +518,101 @@ function relationshipFormationCheckpointWrite(snapshot: LsimStateSnapshot): Lsim
     pass
       ? `edges=${snapshot.relationshipEdges.length}; formedAt=${formedAtNumbers.join(',') || 'none'}; current=${snapshot.gameNumber}; cadence=${snapshot.checkpointCadence}; densityLimit=${finalDensityLimit}; no duplicate ids`
       : `edges=${snapshot.relationshipEdges.length}; dup=${duplicateIds.slice(0, 4).join(',') || 'none'}; nonBoundary=${nonBoundaryFormation.join(',') || 'none'}; badIds=${badIds.slice(0, 4).map((row) => row.id).join(',') || 'none'}; forbidden=${forbiddenTypes.map((row) => row.type).join(',') || 'none'}; badPotential=${badPotentialState.slice(0, 4).map((row) => row.id).join(',') || 'none'}; crossTeam=${crossTeamActive.slice(0, 4).map((row) => row.id).join(',') || 'none'}; densityExceeded=${densityExceeded}; missingAfterCheckpoint=${missingEdgesAfterCheckpoint}; missingCurrentBoundary=${missingCurrentCheckpointWrite}; preCheckpointNonEmpty=${shouldBeEmptyPreCheckpoint}`,
+  );
+}
+
+function currentCompletedGame(snapshot: LsimStateSnapshot): LsimStateSnapshot['completedGames'][number] | null {
+  return snapshot.completedGames[snapshot.completedGames.length - 1] ?? null;
+}
+
+function currentGameTeamByPlayer(snapshot: LsimStateSnapshot): Map<string, string> {
+  const game = currentCompletedGame(snapshot);
+  const teamByPlayer = new Map<string, string>();
+  if (!game) return teamByPlayer;
+
+  for (const [playerId, stats] of Object.entries(game.playerStats ?? {})) {
+    if (stats.teamId) teamByPlayer.set(playerId, stats.teamId);
+  }
+  for (const stats of game.pitcherGameStats ?? []) {
+    if (stats.pitcherId && stats.teamId) teamByPlayer.set(stats.pitcherId, stats.teamId);
+  }
+
+  return teamByPlayer;
+}
+
+function isChargedRelationshipEdgeThisGame(
+  row: { player1Id: string; player2Id: string },
+  teamByPlayer: Map<string, string>,
+): boolean {
+  const player1TeamId = teamByPlayer.get(row.player1Id);
+  const player2TeamId = teamByPlayer.get(row.player2Id);
+  return Boolean(player1TeamId && player2TeamId && player1TeamId !== player2TeamId);
+}
+
+function relationshipIntensityLifecycle(snapshot: LsimStateSnapshot): LsimInvariantResult {
+  const currentGame = currentCompletedGame(snapshot);
+  if (!currentGame || snapshot.relationshipEdges.length === 0) {
+    return invariantResult(
+      'soul.l13-relationship-intensity-lifecycle',
+      CRITICAL,
+      true,
+      `edges=${snapshot.relationshipEdges.length}; currentGame=${currentGame?.gameId ?? 'none'}`,
+    );
+  }
+
+  const teamByPlayer = currentGameTeamByPlayer(snapshot);
+  const previousEdges = new Map((snapshot.previous?.relationshipEdges ?? []).map((row) => [row.id, row]));
+  const tolerance = 1 / RELATIONSHIP_INTENSITY_TUNING.precision;
+  const outOfBounds = snapshot.relationshipEdges.filter((row) =>
+    !isFiniteNumber(row.intensity) || row.intensity < 0 || row.intensity > 1,
+  );
+  const trajectoryMismatches: string[] = [];
+  const dissolutionMismatches: string[] = [];
+  const monotonicityViolations: string[] = [];
+  let chargedCount = 0;
+
+  for (const row of snapshot.relationshipEdges) {
+    const isChargedMatchup = isChargedRelationshipEdgeThisGame(row, teamByPlayer);
+    if (isChargedMatchup) chargedCount += 1;
+    const expected = computeRelationshipIntensity(row, {
+      gameNumber: snapshot.gameNumber,
+      isChargedMatchup,
+    });
+
+    if (Math.abs(row.intensity - expected.intensity) > tolerance) {
+      trajectoryMismatches.push(`${row.id}:${row.intensity}->expected:${expected.intensity}`);
+    }
+    if (row.dissolvedAtGameNumber !== expected.dissolvedAtGameNumber) {
+      dissolutionMismatches.push(`${row.id}:${row.dissolvedAtGameNumber ?? 'null'}->expected:${expected.dissolvedAtGameNumber ?? 'null'}`);
+    }
+
+    const previous = previousEdges.get(row.id);
+    const currentFormationReset = row.formedAtGameNumber === snapshot.gameNumber;
+    if (
+      previous &&
+      !isChargedMatchup &&
+      !currentFormationReset &&
+      row.dissolvedAtGameNumber === null &&
+      previous.dissolvedAtGameNumber === null &&
+      row.intensity > previous.intensity + tolerance
+    ) {
+      monotonicityViolations.push(`${row.id}:${previous.intensity}->${row.intensity}`);
+    }
+  }
+
+  const pass =
+    outOfBounds.length === 0 &&
+    trajectoryMismatches.length === 0 &&
+    dissolutionMismatches.length === 0 &&
+    monotonicityViolations.length === 0;
+
+  return invariantResult(
+    'soul.l13-relationship-intensity-lifecycle',
+    CRITICAL,
+    pass,
+    pass
+      ? `edges=${snapshot.relationshipEdges.length}; charged=${chargedCount}; intensity in-bounds; deterministic trajectory matched; currentGame=${currentGame.gameId}`
+      : `outOfBounds=${outOfBounds.slice(0, 4).map((row) => `${row.id}:${row.intensity}`).join(',') || 'none'}; trajectory=${trajectoryMismatches.slice(0, 4).join(',') || 'none'}; dissolution=${dissolutionMismatches.slice(0, 4).join(',') || 'none'}; monotonicity=${monotonicityViolations.slice(0, 4).join(',') || 'none'}; charged=${chargedCount}; currentGame=${currentGame.gameId}`,
   );
 }
 
@@ -902,6 +1003,7 @@ export function getSoulInvariantChecks(): LsimInvariantCheck[] {
     replayIdempotency,
     checkpointCadence,
     relationshipFormationCheckpointWrite,
+    relationshipIntensityLifecycle,
     ratingsOverlayValidity,
     traitTwoSlotNoOffsetHysteresis,
     backupMigrationProof,
