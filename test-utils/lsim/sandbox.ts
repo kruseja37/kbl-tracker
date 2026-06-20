@@ -28,7 +28,11 @@ import {
   updateFieldingStats,
   updatePitchingStats,
 } from '../../src/utils/seasonStorage';
-import { importFranchiseScheduleRows, type ScheduledGame } from '../../src/utils/scheduleStorage';
+import {
+  importFranchiseScheduleRows,
+  initScheduleDatabase,
+  type ScheduledGame,
+} from '../../src/utils/scheduleStorage';
 import { resetFranchiseMoraleDatabaseForTests } from '../../src/utils/franchiseMoraleState';
 import { resetManagerIdentityDatabaseForTests } from '../../src/utils/managerIdentityStorage';
 import { resetTrackerDbForTests } from '../../src/utils/trackerDb';
@@ -63,6 +67,7 @@ export interface LsimSandboxContext {
   teams: Team[];
   teamSeeds: LsimTeamSeed[];
   scheduleByGameNumber: Map<number, ScheduledGame>;
+  totalScheduledGames: number;
   processOptions: LsimProcessOptions;
   scope: {
     franchiseId: string;
@@ -72,6 +77,13 @@ export interface LsimSandboxContext {
   setupPath: 'direct';
   salaryBaseline: StoredFranchiseConfig['salaryBaseline'];
   trueValueCandidatePlayerId: string;
+}
+
+export interface LsimSandboxSetupOptions {
+  totalScheduledGames?: number;
+  initialGamesPlayed?: number;
+  preseedPriorStats?: boolean;
+  deterministicScheduleIds?: boolean;
 }
 
 const FIXED_ISO = '2026-06-19T12:00:00.000Z';
@@ -107,8 +119,6 @@ const DB_NAMES_TO_DELETE = [
   'kbl-tracker',
   'kbl-franchise-morale',
   'kbl-league-builder',
-  'kbl-schedule',
-  'kbl-app-meta',
   'kbl-manager-identity',
 ];
 
@@ -125,8 +135,33 @@ function deleteDatabaseIfPresent(name: string): Promise<void> {
     const request = indexedDB.deleteDatabase(name);
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error ?? new Error(`Failed to delete IndexedDB database ${name}`));
-    request.onblocked = () => reject(new Error(`IndexedDB database ${name} deletion was blocked`));
+    request.onblocked = () => resolve();
   });
+}
+
+async function clearStoresIfPresent(dbName: string, storeNames: string[]): Promise<void> {
+  const db = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open(dbName);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error ?? new Error(`Failed to open IndexedDB database ${dbName}`));
+    request.onblocked = () => reject(new Error(`IndexedDB database ${dbName} open was blocked`));
+  });
+
+  try {
+    const existingStores = storeNames.filter((storeName) => db.objectStoreNames.contains(storeName));
+    if (existingStores.length === 0) return;
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(existingStores, 'readwrite');
+      for (const storeName of existingStores) {
+        tx.objectStore(storeName).clear();
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error ?? new Error(`Failed to clear IndexedDB database ${dbName}`));
+      tx.onabort = () => reject(tx.error ?? new Error(`Clearing IndexedDB database ${dbName} aborted`));
+    });
+  } finally {
+    db.close();
+  }
 }
 
 async function resetSandboxDatabases(): Promise<void> {
@@ -136,6 +171,17 @@ async function resetSandboxDatabases(): Promise<void> {
   resetManagerIdentityDatabaseForTests();
   __resetLeagueBuilderDatabaseForTests();
   await deleteFranchiseDatabase(L_SIM_IDS.franchiseId);
+  await Promise.all([
+    clearStoresIfPresent('kbl-app-meta', ['franchiseList', 'appSettings', 'franchiseConfigs', 'eliminationList']).catch(() => undefined),
+    clearStoresIfPresent('kbl-schedule', ['scheduledGames', 'scheduleMetadata']).catch(() => undefined),
+    clearStoresIfPresent('kbl-event-log', [
+      'gameHeaders',
+      'atBatEvents',
+      'pitchingAppearances',
+      'fieldingEvents',
+      'betweenPlayEvents',
+    ]).catch(() => undefined),
+  ]);
   await Promise.all(DB_NAMES_TO_DELETE.map(deleteDatabaseIfPresent));
 }
 
@@ -278,10 +324,16 @@ async function seedLeagueAndFranchisePlayers(): Promise<Omit<LsimSandboxContext,
   });
 
   for (let teamIndex = 0; teamIndex < 6; teamIndex += 1) {
-    const team = await saveTeam(makeTeam(teamIndex));
-    await saveFranchiseTeam(L_SIM_IDS.franchiseId, team);
+    let team = await saveTeam(makeTeam(teamIndex));
     const mlbPlayers = MLB_POSITIONS.map((position, rosterIndex) => makePlayer(team, teamIndex, rosterIndex, position, 'MLB'));
     const farmPlayers = FARM_POSITIONS.map((position, rosterIndex) => makePlayer(team, teamIndex, rosterIndex, position, 'FARM'));
+    team = {
+      ...team,
+      captainPlayerId: mlbPlayers[0]?.id ?? null,
+      fanHopefulPlayerId: farmPlayers[0]?.id ?? null,
+    };
+    await saveTeam(team);
+    await saveFranchiseTeam(L_SIM_IDS.franchiseId, team);
 
     for (const player of [...mlbPlayers, ...farmPlayers]) {
       await savePlayer(player);
@@ -457,21 +509,102 @@ function buildFranchiseConfig(teamSeeds: LsimTeamSeed[], salaryBaseline: StoredF
   };
 }
 
-async function seedSeasonMetadata(): Promise<void> {
+async function seedSeasonMetadata(totalScheduledGames: number, initialGamesPlayed: number): Promise<void> {
   await saveSeasonMetadata({
     seasonId: L_SIM_IDS.seasonId,
     seasonNumber: L_SIM_IDS.seasonNumber,
     seasonName: 'L-SIM H1 Season 1',
     status: 'active',
     startDate: FIXED_START,
-    gamesPlayed: L_SIM_IDS.checkpointGameNumber - 1,
-    totalGames: L_SIM_IDS.gamesPerTeam,
+    gamesPlayed: initialGamesPlayed,
+    totalGames: totalScheduledGames,
     gamesPerTeam: L_SIM_IDS.gamesPerTeam,
   });
 }
 
-async function seedScheduleRows(teams: Team[]): Promise<Map<number, ScheduledGame>> {
-  const rows = Array.from({ length: L_SIM_IDS.gamesPerTeam }, (_, index) => {
+function buildRoundRobinScheduleRows(teams: Team[], totalScheduledGames: number): Array<{
+  gameNumber: number;
+  dayNumber: number;
+  date: string;
+  time: string;
+  notes: string;
+  awayTeamId: string;
+  homeTeamId: string;
+}> {
+  const pairings: Array<[Team, Team]> = [];
+  for (let left = 0; left < teams.length; left += 1) {
+    for (let right = left + 1; right < teams.length; right += 1) {
+      pairings.push([teams[left], teams[right]]);
+    }
+  }
+
+  return Array.from({ length: totalScheduledGames }, (_, index) => {
+    const gameNumber = index + 1;
+    const pairing = pairings[index % pairings.length];
+    const cycle = Math.floor(index / pairings.length);
+    const home = cycle % 2 === 0 ? pairing[0] : pairing[1];
+    const away = cycle % 2 === 0 ? pairing[1] : pairing[0];
+
+    return {
+      gameNumber,
+      dayNumber: gameNumber,
+      date: `LSIM Day ${gameNumber}`,
+      time: '7:05 PM',
+      notes: 'L-SIM H2 seeded schedule row',
+      awayTeamId: away.id,
+      homeTeamId: home.id,
+    };
+  });
+}
+
+async function seedDeterministicScheduleRows(teams: Team[], totalScheduledGames: number): Promise<Map<number, ScheduledGame>> {
+  const rows = buildRoundRobinScheduleRows(teams, totalScheduledGames);
+  const games: ScheduledGame[] = rows.map((row) => ({
+    id: `lsim-schedule-g${String(row.gameNumber).padStart(3, '0')}`,
+    franchiseId: L_SIM_IDS.franchiseId,
+    seasonId: L_SIM_IDS.seasonId,
+    statsScopeId: L_SIM_IDS.statsScopeId,
+    seasonNumber: L_SIM_IDS.seasonNumber,
+    gameNumber: row.gameNumber,
+    dayNumber: row.dayNumber,
+    date: row.date,
+    time: row.time,
+    notes: row.notes,
+    awayTeamId: row.awayTeamId,
+    homeTeamId: row.homeTeamId,
+    status: 'SCHEDULED',
+    createdAt: FIXED_START + (row.gameNumber * 60_000),
+    importedAt: FIXED_START,
+    source: 'csv-import',
+  }));
+
+  const db = await initScheduleDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(['scheduledGames', 'scheduleMetadata'], 'readwrite');
+    const gameStore = tx.objectStore('scheduledGames');
+    for (const game of games) {
+      gameStore.put(game);
+    }
+    tx.objectStore('scheduleMetadata').put({
+      seasonNumber: L_SIM_IDS.seasonNumber,
+      totalGamesScheduled: games.length,
+      totalGamesCompleted: 0,
+      lastUpdated: FIXED_START,
+    });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error('Failed to seed deterministic L-SIM schedule'));
+    tx.onabort = () => reject(tx.error ?? new Error('Deterministic L-SIM schedule seed aborted'));
+  });
+
+  return new Map(games.map((game) => [game.gameNumber, game]));
+}
+
+async function seedScheduleRows(teams: Team[], totalScheduledGames: number, deterministicIds: boolean): Promise<Map<number, ScheduledGame>> {
+  if (deterministicIds) {
+    return seedDeterministicScheduleRows(teams, totalScheduledGames);
+  }
+
+  const rows = Array.from({ length: totalScheduledGames }, (_, index) => {
     const gameNumber = index + 1;
     const homeTeamId = gameNumber === L_SIM_IDS.checkpointGameNumber
       ? teams[0].id
@@ -614,23 +747,33 @@ export function lsimArchiveOptionsFor(scheduleGame: ScheduledGame, finalScore: {
   };
 }
 
-export async function setupLsimSandbox(): Promise<LsimSandboxContext> {
+export async function setupLsimSandbox(options: LsimSandboxSetupOptions = {}): Promise<LsimSandboxContext> {
+  const totalScheduledGames = options.totalScheduledGames ?? L_SIM_IDS.gamesPerTeam;
+  const initialGamesPlayed = options.initialGamesPlayed ?? (
+    options.preseedPriorStats === false ? 0 : L_SIM_IDS.checkpointGameNumber - 1
+  );
+  const preseedPriorStats = options.preseedPriorStats ?? true;
+  const deterministicScheduleIds = options.deterministicScheduleIds ?? false;
+
   await resetSandboxDatabases();
   const seeded = await seedLeagueAndFranchisePlayers();
   const salaryBaseline = buildSalaryBaseline(seeded.teamSeeds);
   await saveFranchiseConfig(buildFranchiseConfig(seeded.teamSeeds, salaryBaseline));
-  await seedSeasonMetadata();
-  const scheduleByGameNumber = await seedScheduleRows(seeded.teams);
-  await seedPriorRegularSeasonStats(seeded.teamSeeds);
+  await seedSeasonMetadata(totalScheduledGames, initialGamesPlayed);
+  const scheduleByGameNumber = await seedScheduleRows(seeded.teams, totalScheduledGames, deterministicScheduleIds);
+  if (preseedPriorStats) {
+    await seedPriorRegularSeasonStats(seeded.teamSeeds);
+  }
 
   return {
     ...seeded,
     scheduleByGameNumber,
+    totalScheduledGames,
     processOptions: {
       seasonId: L_SIM_IDS.seasonId,
       seasonNumber: L_SIM_IDS.seasonNumber,
       seasonName: 'L-SIM H1 Season 1',
-      seasonTotalGames: L_SIM_IDS.gamesPerTeam,
+      seasonTotalGames: totalScheduledGames,
       gamesPerTeam: L_SIM_IDS.gamesPerTeam,
       gamesPerSeason: L_SIM_IDS.gamesPerTeam,
       inningsPerGame: L_SIM_IDS.inningsPerGame,
@@ -640,7 +783,7 @@ export async function setupLsimSandbox(): Promise<LsimSandboxContext> {
         inningsPerGame: L_SIM_IDS.inningsPerGame,
       },
       franchiseId: L_SIM_IDS.franchiseId,
-      currentGame: L_SIM_IDS.checkpointGameNumber,
+      currentGame: initialGamesPlayed + 1,
       currentSeason: L_SIM_IDS.seasonNumber,
     },
     scope: {
