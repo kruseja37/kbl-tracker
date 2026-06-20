@@ -13637,7 +13637,7 @@ Use very high reasoning effort. Read `src/utils/franchiseCheckpointSweepCompute.
 `src/src_figma/app/pages/LeagueBuilderLeagues.tsx` (balanceMode form), and `test-utils/lsim/{snapshots.ts,sandbox.ts,
 invariants/soul.ts,falsification.ts}`.
 
-**Status:** ⏸ AUTHORED — ready for dispatch (JK attended, sole-mutator).
+**Status:** ✅ BUILT + Opus-audited (builder≠auditor) — VERIFIED-COMPLETE (2026-06-20, attended). Codex(gpt-5.5/xhigh)-built; commit `39f65a17`. 2-field design (LeagueTemplate + SeasonMetadata, both optional → NO trackerDb bump/migration); `isCheckpointBoundary(…, checkpointCount = 5)` default-preserving; all 3 consumers read the one setting; toggle gated by `isFranchisePhase2L13Enabled`; invariant generalized → `soul.checkpoint-cadence-matches-setting` + falsification trips on mismatch for BOTH cadences. Host gate: build 0; full suite 7,846 pass / 2 fail = characterized set only (proven pre-existing by solo), ZERO new reds. L-SIM 60g BOTH legs green + deterministic (standard `8571213:ea1cc332`, frequent `9594676:19401021`), findings=0; the standard baseline JSONs changed by EXACTLY +62 bytes each (the recorded cadence field) with ZERO overlay-count change → standard behavior byte-identical. **Audit catch:** Codex left the baseline JSONs holding the FREQUENT leg's output (ran it last) + a stray `checkpoint-024.json`; the auditor re-ran the STANDARD leg last to restore the canonical baseline + removed the stray. NO browser verify (build-dark; folds into the one v1 smoke pass).
 
 ---
 
