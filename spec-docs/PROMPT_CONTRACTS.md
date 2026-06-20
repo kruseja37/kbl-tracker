@@ -13536,7 +13536,7 @@ sub-discriminator if any downstream needs DATING-vs-MARRIED (check `detectRomant
 **VERIFICATION:** tsc 0 + build 0; a unit test asserting totality of the map + the 5 collapse groups; the
 `relationshipEngine`/`leverageCalculator` regression suites green (prove no consumer broke).
 **FORMAT:** files; the map + retention notes; verification; "L13-2 complete"/"BLOCKED". No commit.
-**Status:** ⏸ AUTHORED — build HELD. *(Anchors into not-yet-built L13-1 types — re-verify the import at build.)*
+**Status:** ✅ BUILT + Opus-audited (builder≠auditor) — VERIFIED-COMPLETE (2026-06-20, attended). Codex(gpt-5.5/xhigh)-built; commit `b18031b7`. `map9To6` + `RELATIONSHIP_9_TO_6_MAP` (compile-time-total via `satisfies`) + `RELATIONSHIP_6_TO_9_COVERAGE` inverse table; 9-literal `RelationshipType` union RETAINED + `@deprecated`; `leverageCalculator.ts` untouched (empty diff); store-dark (zero external caller). Host gate: build 0; full suite 7,841 pass / 2 fail (457/2 files) = characterized set only (wpaRuntimeBoundary hard-fail + franchiseManualSmokeFixture order-flake, both proven pre-existing by solo run), ZERO new reds. NO browser verify (build-dark src logic — audit + green suite is the close). Pending JK review of the audit. ➡ NEXT = L13-3 (formation engine).
 
 ---
 
