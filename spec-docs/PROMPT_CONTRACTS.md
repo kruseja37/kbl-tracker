@@ -13540,6 +13540,107 @@ sub-discriminator if any downstream needs DATING-vs-MARRIED (check `detectRomant
 
 ---
 
+## CONTRACT — CHECKPOINT-CADENCE-CONFIG (binary shared checkpoint cadence as a league setting) — 2026-06-20 (attended)
+
+**ROUTE:** Codex CLI (gpt-5.5, **very-high / xhigh reasoning effort**) via `codex exec` stdin-from-contract. Auditor: Opus 4.8
+(builder ≠ auditor — Codex builds, Opus independently audits + runs the full host gate). **ADDITIVE — NO trackerDb bump, NO
+migration. Build-dark. Folds into the single end-of-v1 smoke pass (no per-ticket browser verify).**
+
+**ROLE:** Builder for the franchise season/league config layer + the shared checkpoint-boundary primitive + the L-SIM invariant.
+
+**GOAL:** Make the shared checkpoint cadence — currently FIXED at 20% (5 checkpoints/season) — a **binary, additive, league-level
+setting**: **Standard = 20% (5/season, DEFAULT)** | **Frequent = 10% (10/season)**. ADDITIVE only — **NO `TRACKER_DB_VERSION`
+bump, NO migration**. The DEFAULT (Standard) preserves current behavior EXACTLY for every existing/new league & season. Build-DARK:
+the League Builder toggle is L-stack-visibility-gated; with default Standard, production behavior is unchanged.
+
+**SOURCE OF TRUTH:** this contract + the verified anchors below (re-verify at build). The cadence is the SHARED checkpoint
+boundary read by ratings-development, traits, and the L-SIM sweep — one source, three consumers.
+
+**⚠ MAKE-OR-BREAK:**
+1. **ONE source.** `isCheckpointBoundary` is the single boundary computation; all 3 consumers must derive the count from the
+   ONE setting and pass it in. Do NOT introduce a second hardcoded cadence anywhere.
+2. **Default preserves behavior.** The 3rd `isCheckpointBoundary` param defaults to 5; every existing 2-arg call + every
+   league/season without the field behaves EXACTLY as today (Standard/20%/5). Prove the existing pin test stays green.
+3. **No DB bump.** The fields are OPTIONAL on existing stores (`SeasonMetadata`, `LeagueTemplate`) — additive, no migration.
+   If a version bump seems required → STOP + surface.
+
+**VERIFIED ANCHORS (re-verify at build):**
+- Boundary computation (the ONE source): `isCheckpointBoundary(gameNumber, totalGames)` `franchiseCheckpointSweepCompute.ts:106-114`
+  — the literal **`5`** in `Math.floor(((g-1)*5)/totalGames) !== Math.floor((g*5)/totalGames)` IS the checkpoint count.
+- 3 consumers: ratings-dev sweep `franchiseCheckpointSweepCompute.ts:229`; traits `franchiseTraitGrantCompute.ts:185`; sim
+  sweep `test-utils/lsim/snapshots.ts:44-46` (`checkpointGameNumbers(totalGames)`). All source season length via
+  `getSeasonMetadata(seasonId).totalGames` (sweep `:220`; trait analogous).
+- `SeasonMetadata` `seasonStorage.ts:157-169` (`totalGames:165`, **`gamesPerTeam:166` = the additive-snapshot precedent**);
+  `getOrCreateSeason` `:540` (optional `gamesPerTeam` param `:545`, set on new metadata `:587`); `normalizeSeasonMetadata`
+  `:498` (read-default site).
+- `LeagueTemplate` `leagueBuilderStorage.ts:86-100` (**`balanceMode?:97` = the additive-binary precedent**); `BalanceMode`
+  `'taxed'|'advisory'|'off'` `leagueConstruction.ts:16`; `BALANCE_MODE_DEFAULT='taxed'` `rosterEngineConstants.ts:273`;
+  default-apply `leagueBuilderStorage.ts:563` + `useLeagueBuilderData.ts:410`.
+- Propagation (league→season): `franchiseInitializer.ts` loads `getLeagueTemplate` (`:391`) and ALREADY threads `gamesPerTeam`
+  → `ensureFranchiseSeasonMetadata` (`:415-446`) → `getOrCreateSeason` (`:424`). `checkpointCadence` rides this SAME path.
+- League Builder toggle UI: `LeagueBuilderLeagues.tsx` (the `balanceMode` form field `:39,49,130,155,167` = the toggle precedent).
+- Sim invariant: `test-utils/lsim/invariants/soul.ts:427-444` `checkpointCadence` → `'soul.checkpoint-cadence-exactly-five'`
+  (CRITICAL); the **`sourceGameNumbers.length === 5`** literal `:436`. Falsification `test-utils/lsim/falsification.ts:133-134`.
+  Sim season-metadata seed: `sandbox.ts:607` `seedSeasonMetadata`.
+- Existing pin test: `franchiseCheckpointSweepCompute.test.ts:195-215` (20% behavior; 2-arg calls stay valid with default 5).
+
+**CHANGES (additive; exact files set at build — this is the expected set):**
+**A. Cadence type + constants** (one home — recommend `src/data/rosterEngineConstants.ts` beside `BALANCE_MODE_DEFAULT`, or a
+  small new module): `type CheckpointCadence = 'standard' | 'frequent'`; `CHECKPOINT_CADENCE_DEFAULT = 'standard'`;
+  `CHECKPOINT_CADENCE_COUNTS = { standard: 5, frequent: 10 } as const` + `checkpointCountForCadence(cadence): number`.
+**B. `isCheckpointBoundary(gameNumber, totalGames, checkpointCount = 5)`** — replace BOTH `5` literals with `checkpointCount`;
+  default 5. (`franchiseCheckpointSweepCompute.ts:106-114`)
+**C. `SeasonMetadata.checkpointCadence?: CheckpointCadence`** (additive optional, `seasonStorage.ts:157`) — `gamesPerTeam`
+  pattern. `getOrCreateSeason` gains an optional `checkpointCadence` param (set on the NEW metadata only; existing-branch
+  untouched). `normalizeSeasonMetadata` defaults it to `'standard'` on read. **NO trackerDb bump.**
+**D. The 3 consumers** read `seasonMetadata.checkpointCadence` (default standard) → `checkpointCountForCadence` → pass to
+  `isCheckpointBoundary`: `franchiseCheckpointSweepCompute.ts:229`; `franchiseTraitGrantCompute.ts:185`;
+  `test-utils/lsim/snapshots.ts` (`checkpointGameNumbers(totalGames, checkpointCount=5)` + the `:46` call — thread the cadence
+  from the snapshot's `seasonMetadata`).
+**E. `LeagueTemplate.checkpointCadence?: CheckpointCadence`** (additive optional, `leagueBuilderStorage.ts:97` area) +
+  default-apply (`:563` + `useLeagueBuilderData.ts:410`, balanceMode pattern). Propagation: `franchiseInitializer` threads
+  `leagueTemplate.checkpointCadence ?? CHECKPOINT_CADENCE_DEFAULT` → `ensureFranchiseSeasonMetadata` → `getOrCreateSeason`
+  (mirroring `gamesPerTeam`).
+**F. League Builder toggle** (`LeagueBuilderLeagues.tsx`): a binary two-option control (Standard / Frequent) in the league
+  create/edit form, mirroring `balanceMode` (form state `:39,130,155,167`). **Gate its VISIBILITY** with the same L-stack flag
+  the surrounding L-stack UI uses (appears when live; the setting is STORED either way; default Standard). *(Confirm the exact
+  visibility gate at build — match the surrounding pattern; if none exists, store the field + render behind the L13 flag.)*
+**G. Sim:** `sandbox.ts seedSeasonMetadata` (`:607`) sets `checkpointCadence` — parameterize so the sim runs BOTH `'standard'`
+  and `'frequent'`. `soul.ts checkpointCadence` invariant (`:427-444`): replace the `=== 5` literal with the cadence-derived
+  expected count (`checkpointCountForCadence` from the snapshot's cadence) — assert exactly-N matching the setting; rename the
+  id `'soul.checkpoint-cadence-exactly-five'` → `'soul.checkpoint-cadence-matches-setting'` (or generalize in place — set at
+  build, but the assertion MUST be cadence-driven). `falsification.ts` (`:133`): extend to trip on a count MISMATCH for BOTH
+  cadences (keep the existing 1-of-5 case; add a frequent(10)-but-only-5 case).
+**H. Tests:** `franchiseCheckpointSweepCompute.test.ts` — ADD `checkpointCount=10` (Frequent) cases beside the existing default-5
+  cases (which MUST stay green via the 2-arg/default call); a unit test for `checkpointCountForCadence` / `CHECKPOINT_CADENCE_COUNTS`;
+  a `SeasonMetadata` read-default test (absent field → `'standard'`); the L-SIM cadence invariant runs green for BOTH 5 and 10.
+
+**HARD CONSTRAINTS:** additive only; **NO `TRACKER_DB_VERSION` bump, NO migration**; DEFAULT = Standard everywhere (existing
+leagues/seasons + 2-arg `isCheckpointBoundary` calls behave EXACTLY as today); build-DARK (toggle visibility-gated; default
+preserves production behavior); NO `Date.now`/`Math.random` added; NO git add/commit.
+
+**VERIFICATION (run ALL, paste ACTUAL):** `NODE_ENV= npx tsc -b` 0 + `NODE_ENV= npm run build` 0; the new + extended unit tests
+green; the **L-SIM 24g + 60g legs green for BOTH cadences** (run/test both 5 and 10); **determinism byte-identical** (same-seed
+A==B); full suite **ZERO new reds** (prove any non-pass pre-existing by solo run).
+
+**STOP-IF:** a `TRACKER_DB_VERSION` bump seems required (it must NOT — optional field on an existing store) → STOP + surface.
+A SECOND cadence source appears (any other hardcoded `5`/`0.2` checkpoint math beyond `isCheckpointBoundary`) → STOP + surface.
+The L-stack visibility gate for the toggle is ambiguous → default to the surrounding pattern + note it (do NOT block).
+
+**FORMAT:** 1) files changed; 2) the cadence type/constants + `isCheckpointBoundary` signature diff + the `SeasonMetadata`/
+`LeagueTemplate` field + the consumer reads + the sim-invariant change; 3) verification (incl. BOTH-cadence sim legs +
+determinism); 4) "CHECKPOINT-CADENCE-CONFIG complete" / "BLOCKED: <reason>". Do NOT commit.
+
+Use very high reasoning effort. Read `src/utils/franchiseCheckpointSweepCompute.ts`, `src/utils/franchiseTraitGrantCompute.ts`,
+`src/utils/seasonStorage.ts` (SeasonMetadata + getOrCreateSeason + normalizeSeasonMetadata), `src/utils/leagueBuilderStorage.ts`
+(LeagueTemplate + balanceMode default), `src/utils/franchiseInitializer.ts` (the gamesPerTeam threading),
+`src/src_figma/app/pages/LeagueBuilderLeagues.tsx` (balanceMode form), and `test-utils/lsim/{snapshots.ts,sandbox.ts,
+invariants/soul.ts,falsification.ts}`.
+
+**Status:** ⏸ AUTHORED — ready for dispatch (JK attended, sole-mutator).
+
+---
+
 ## CONTRACT — L13-3 (formation engine: per-type threshold gate + triggers + romance/gender + Captain composite) — 2026-06-19 (attended)
 
 **ROUTE:** Codex CLI (gpt-5.5, very-high). Auditor: Opus 4.8 (builder ≠ auditor).
