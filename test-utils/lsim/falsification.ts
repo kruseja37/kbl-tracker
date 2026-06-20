@@ -49,6 +49,7 @@ function base(): LsimStateSnapshot {
     moraleSnapshots: [],
     seasonNewsItems: [],
     trustedValueArtifact: null,
+    finalizeProof: null,
     storeDump: { databases: {}, digest: 'base', rowCounts: {} },
     l12Proof: { status: 'computed', candidateCount: 0, categories: [], hasNonFiniteScore: false, rankingMatchesComposite: true, missingCategoriesWithNonEmptyPool: [], detail: 'base' },
     persistenceProof: null,
@@ -150,13 +151,94 @@ const CASES: Array<{ name: string; mutate: (s: LsimStateSnapshot) => void }> = [
       s.allStarRosters = [{ locked: true, lockedAtGameNumber: s.gameNumber, selections: [{ playerId: 'p', teamId: 't1', position: 'C', role: 'starter' }] } as never];
       s.fameRows = [{ playerId: 'p', heat: 10, reachFloor: 1, updatedAtCheckpoint: 'game-5', channelByChannel: { ...FINITE_CHANNELS } } as never];
     } },
-  { name: 'soul.emission-snub-signal', // synthetic-falsify (live PENDING-STEP-4): the legacy nod double-counted per honorKind
+  // §5.3 TV-freeze — inverse 1: a post-freeze recompute that should be a no-op but ISN'T (anti-thaw guard failed).
+  { name: 'soul.tv-freeze',
+    mutate: (s) => {
+      s.gamesSimulated = s.totalScheduledGames;
+      s.trustedValueArtifact = { frozen: true, frozenAt: 123, trustedPlayerIds: [] } as never;
+      s.finalizeProof = { ran: true, invoked: [], artifactPresent: true, reFreezeIdempotent: true, antiThawHeld: false, emissionStatus: 'processed', emittedHonors: [], awardsFinalizedCount: 1, awardsWithWinnerCount: 1, detail: 'anti-thaw failed' } as never;
+    } },
+  // §5.3 TV-freeze — inverse 2: the artifact never froze at season-end.
+  { name: 'soul.tv-freeze',
+    mutate: (s) => {
+      s.gamesSimulated = s.totalScheduledGames;
+      s.trustedValueArtifact = { frozen: false, frozenAt: null, trustedPlayerIds: [] } as never;
+      s.finalizeProof = { ran: true, invoked: [], artifactPresent: false, reFreezeIdempotent: false, antiThawHeld: false, emissionStatus: 'processed', emittedHonors: [], awardsFinalizedCount: 0, awardsWithWinnerCount: 0, detail: 'no freeze' } as never;
+    } },
+  // §5.3 awards-off-frozen — inverse 1: a finalized winner computed off an UNFROZEN artifact.
+  { name: 'soul.awards-off-frozen-artifact',
+    mutate: (s) => {
+      s.gamesSimulated = s.totalScheduledGames;
+      s.trustedValueArtifact = { frozen: false, frozenAt: null, trustedPlayerIds: ['w'] } as never;
+      s.awardRows = [{ category: 'MVP', finalized: true, winnerPlayerId: 'w', candidates: [] } as never];
+      s.finalizeProof = { ran: true, invoked: [], artifactPresent: true, reFreezeIdempotent: true, antiThawHeld: true, emissionStatus: 'processed', emittedHonors: [], awardsFinalizedCount: 1, awardsWithWinnerCount: 1, detail: 'unfrozen winner' } as never;
+    } },
+  // §5.3 awards-off-frozen — inverse 2: an UNTRUSTED row won (winner not in the frozen artifact's trustedPlayerIds).
+  { name: 'soul.awards-off-frozen-artifact',
+    mutate: (s) => {
+      s.gamesSimulated = s.totalScheduledGames;
+      s.trustedValueArtifact = { frozen: true, frozenAt: 1, trustedPlayerIds: ['other'] } as never;
+      s.awardRows = [{ category: 'MVP', finalized: true, winnerPlayerId: 'w', candidates: [] } as never];
+      s.finalizeProof = { ran: true, invoked: [], artifactPresent: true, reFreezeIdempotent: true, antiThawHeld: true, emissionStatus: 'processed', emittedHonors: [], awardsFinalizedCount: 1, awardsWithWinnerCount: 1, detail: 'untrusted winner' } as never;
+    } },
+  // §5.3 emission-snub — inverse 1: the legacy nod double-counted per honorKind.
+  { name: 'soul.emission-snub-signal',
     mutate: (s) => {
       s.gamesSimulated = s.totalScheduledGames;
       s.seasonNewsItems = [
         { eventType: 'AWARD_RESULT', facts: { honorKind: 'MVP', winnerId: 'w' } } as never,
         { eventType: 'AWARD_RESULT', facts: { honorKind: 'MVP', winnerId: 'w' } } as never,
       ];
+    } },
+  // §5.3 emission-snub — inverse 2: a snub fired for a NON-close loser (margin 4, outside the top-3 closest).
+  { name: 'soul.emission-snub-signal',
+    mutate: (s) => {
+      s.gamesSimulated = s.totalScheduledGames;
+      s.seasonNewsItems = [{ eventType: 'AWARD_RESULT', facts: { honorKind: 'MVP', winnerId: 'w' } } as never];
+      s.awardRows = [{ category: 'MVP', finalized: true, winnerPlayerId: 'w', candidates: [
+        { playerId: 'w', score: 9, marginToWinner: 0 }, { playerId: 'L1', score: 8, marginToWinner: 1 },
+        { playerId: 'L2', score: 7, marginToWinner: 2 }, { playerId: 'L3', score: 6, marginToWinner: 3 },
+        { playerId: 'L4', score: 5, marginToWinner: 4 },
+      ] } as never];
+      s.moraleSnapshots = ['L1', 'L2', 'L3', 'L4'].map((playerId) =>
+        ({ playerId, history: [{ sourceEventId: `race-snub:f:s:ss:MVP:${playerId}` }] }) as never);
+    } },
+  // §5.3 emission-snub — inverse 3: a missing snub for an actual close loser (top-3 expected, only 2 snubbed).
+  { name: 'soul.emission-snub-signal',
+    mutate: (s) => {
+      s.gamesSimulated = s.totalScheduledGames;
+      s.seasonNewsItems = [{ eventType: 'AWARD_RESULT', facts: { honorKind: 'MVP', winnerId: 'w' } } as never];
+      s.awardRows = [{ category: 'MVP', finalized: true, winnerPlayerId: 'w', candidates: [
+        { playerId: 'w', score: 9, marginToWinner: 0 }, { playerId: 'L1', score: 8, marginToWinner: 1 },
+        { playerId: 'L2', score: 7, marginToWinner: 2 }, { playerId: 'L3', score: 6, marginToWinner: 3 },
+      ] } as never];
+      s.moraleSnapshots = ['L1', 'L2'].map((playerId) =>
+        ({ playerId, history: [{ sourceEventId: `race-snub:f:s:ss:MVP:${playerId}` }] }) as never);
+    } },
+  // §5.3 emission-snub — inverse 4: the WINNER was snubbed (snub must never target a winner).
+  { name: 'soul.emission-snub-signal',
+    mutate: (s) => {
+      s.gamesSimulated = s.totalScheduledGames;
+      s.seasonNewsItems = [{ eventType: 'AWARD_RESULT', facts: { honorKind: 'MVP', winnerId: 'w' } } as never];
+      s.awardRows = [{ category: 'MVP', finalized: true, winnerPlayerId: 'w', candidates: [
+        { playerId: 'w', score: 9, marginToWinner: 0 }, { playerId: 'L1', score: 8, marginToWinner: 1 },
+      ] } as never];
+      s.moraleSnapshots = ['w', 'L1'].map((playerId) =>
+        ({ playerId, history: [{ sourceEventId: `race-snub:f:s:ss:MVP:${playerId}` }] }) as never);
+    } },
+  // §5.3 emission-snub — inverse 5: a snub fired for an honorKind that emitted NO nod (snub gated behind nod emission).
+  { name: 'soul.emission-snub-signal',
+    mutate: (s) => {
+      s.gamesSimulated = s.totalScheduledGames;
+      s.seasonNewsItems = [{ eventType: 'AWARD_RESULT', facts: { honorKind: 'MVP', winnerId: 'w' } } as never];
+      s.awardRows = [
+        { category: 'MVP', finalized: true, winnerPlayerId: 'w', candidates: [{ playerId: 'w', score: 9, marginToWinner: 0 }] } as never,
+        { category: 'CY_YOUNG', finalized: true, winnerPlayerId: 'cy', candidates: [
+          { playerId: 'cy', score: 9, marginToWinner: 0 }, { playerId: 'C1', score: 8, marginToWinner: 1 },
+        ] } as never,
+      ];
+      // CY_YOUNG emitted NO nod, yet a CY snub was recorded -> snubWithoutNod violation.
+      s.moraleSnapshots = [{ playerId: 'C1', history: [{ sourceEventId: 'race-snub:f:s:ss:CY_YOUNG:C1' }] } as never];
     } },
 ];
 
@@ -165,7 +247,7 @@ describe('L-SIM invariant falsification audit', () => {
     const results = CHECKS.map((check) => check(base()));
     const failing = results.filter((r) => !r.pass).map((r) => `${r.name}: ${r.detail}`);
     expect(failing).toEqual([]);
-    expect(results.length).toBe(20);
+    expect(results.length).toBe(22);
   });
 
   test('falsification cases cover every soul invariant exactly once', () => {
@@ -183,4 +265,49 @@ describe('L-SIM invariant falsification audit', () => {
       expect(result.pass, `${name} stayed GREEN on injected bad state — cannot be falsified; detail=${result.detail}`).toBe(false);
     });
   }
+
+  // §5.3 inverse-test backstop: prove the three finalize invariants are not just red-trippable but also genuinely
+  // GREEN on a VALID season-end snapshot satisfying the named property (else "trips red" could be vacuous-always-red).
+  test('soul.tv-freeze PASSES a valid frozen-artifact season-end snapshot', () => {
+    const snap = base();
+    snap.gamesSimulated = snap.totalScheduledGames;
+    snap.trustedValueArtifact = { frozen: true, frozenAt: 1718800000000, trustedPlayerIds: ['w'] } as never;
+    snap.finalizeProof = { ran: true, invoked: ['freeze', 'awards', 'emit'], artifactPresent: true, reFreezeIdempotent: true, antiThawHeld: true, emissionStatus: 'processed', emittedHonors: [], awardsFinalizedCount: 5, awardsWithWinnerCount: 5, detail: 'valid' } as never;
+    expect(resultFor('soul.tv-freeze', snap).pass).toBe(true);
+  });
+
+  test('soul.awards-off-frozen-artifact PASSES finalized winners drawn from the frozen trusted set', () => {
+    const snap = base();
+    snap.gamesSimulated = snap.totalScheduledGames;
+    snap.trustedValueArtifact = { frozen: true, frozenAt: 1, trustedPlayerIds: ['w', 'x'] } as never;
+    snap.awardRows = [
+      { category: 'MVP', finalized: true, winnerPlayerId: 'w', candidates: [] } as never,
+      { category: 'CY_YOUNG', finalized: true, winnerPlayerId: 'x', candidates: [] } as never,
+    ];
+    expect(resultFor('soul.awards-off-frozen-artifact', snap).pass).toBe(true);
+  });
+
+  test('soul.emission-snub-signal PASSES when only the top-3 close losers are snubbed, one nod per honorKind', () => {
+    const snap = base();
+    snap.gamesSimulated = snap.totalScheduledGames;
+    snap.seasonNewsItems = [{ eventType: 'AWARD_RESULT', facts: { honorKind: 'MVP', winnerId: 'w' } } as never];
+    snap.awardRows = [{ category: 'MVP', finalized: true, winnerPlayerId: 'w', candidates: [
+      { playerId: 'w', score: 9, marginToWinner: 0 }, { playerId: 'L1', score: 8, marginToWinner: 1 },
+      { playerId: 'L2', score: 7, marginToWinner: 2 }, { playerId: 'L3', score: 6, marginToWinner: 3 },
+      { playerId: 'L4', score: 5, marginToWinner: 4 },
+    ] } as never];
+    snap.moraleSnapshots = ['L1', 'L2', 'L3'].map((playerId) =>
+      ({ playerId, history: [{ sourceEventId: `race-snub:f:s:ss:MVP:${playerId}` }] }) as never);
+    expect(resultFor('soul.emission-snub-signal', snap).pass).toBe(true);
+  });
+
+  test('soul.emission-snub-signal stays GREEN-LIVE-PENDING when no nod fired (offline reporter+LLM gate)', () => {
+    const snap = base();
+    snap.gamesSimulated = snap.totalScheduledGames;
+    snap.seasonNewsItems = [];
+    snap.finalizeProof = { ran: true, invoked: [], artifactPresent: true, reFreezeIdempotent: true, antiThawHeld: true, emissionStatus: 'processed', emittedHonors: [], awardsFinalizedCount: 5, awardsWithWinnerCount: 5, detail: 'no nod' } as never;
+    const result = resultFor('soul.emission-snub-signal', snap);
+    expect(result.pass).toBe(true);
+    expect(result.detail).toContain('LIVE-PENDING');
+  });
 });

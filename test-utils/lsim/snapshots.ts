@@ -22,6 +22,7 @@ import { getFranchiseTrueValueRows } from '../../src/utils/franchiseTrueValueSto
 import { getFranchiseTrueValueSnapshotRowsByScope } from '../../src/utils/franchiseTrueValueSnapshotsStorage';
 import { listSeasonNewsItemsForFranchiseSeason } from '../../src/utils/seasonNewsStorage';
 import type {
+  LsimFinalizeProof,
   LsimL12Proof,
   LsimLastGameDelta,
   LsimPersistenceProof,
@@ -37,6 +38,7 @@ export interface ReadLsimSnapshotOptions {
   lastGameDelta?: LsimLastGameDelta;
   l12Proof?: LsimL12Proof | null;
   persistenceProof?: LsimPersistenceProof | null;
+  finalizeProof?: LsimFinalizeProof | null;
 }
 
 export function checkpointGameNumbers(totalGames: number): number[] {
@@ -139,6 +141,7 @@ export async function readLsimStateSnapshot(
     storeDump,
     l12Proof: options.l12Proof ?? null,
     persistenceProof: options.persistenceProof ?? null,
+    finalizeProof: options.finalizeProof ?? null,
     previous: options.previous,
     lastGameDelta: options.lastGameDelta,
   };

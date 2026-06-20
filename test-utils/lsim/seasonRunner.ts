@@ -12,7 +12,13 @@ import {
 } from '../../src/utils/eventLog';
 import { processCompletedGame } from '../../src/utils/processCompletedGame';
 import { recomputeFranchiseL12StandingsForCompletedGame } from '../../src/utils/franchiseRaceStandingsCompute';
-import { computeFranchiseRaceCandidateRows } from '../../src/utils/franchiseAwardsEngine';
+import { computeFranchiseRaceCandidateRows, computeAndPersistFranchiseWarAwards } from '../../src/utils/franchiseAwardsEngine';
+import {
+  freezeTrustedValueArtifactForSeason,
+  getTrustedValueArtifact,
+  persistTrustedValueArtifact,
+} from '../../src/utils/franchiseTrustedValueStorage';
+import { emitFranchiseSeasonEndHonors } from '../../src/src_figma/app/engines/reporter/franchiseSeasonEndHonors';
 import { getTrackerDb, resetTrackerDbForTests, TRACKER_DB_VERSION } from '../../src/utils/trackerDb';
 import type { AtBatResult } from '../../src/types/game';
 import { computeLsimDistributions, type LsimDistributions } from './distributions';
@@ -21,6 +27,7 @@ import { getSoulInvariantChecks, REQUIRED_L12_MERIT_CATEGORIES } from './invaria
 import { getStatsInvariantChecks } from './invariants/stats';
 import type {
   LsimDeferredInvariant,
+  LsimFinalizeProof,
   LsimFindingClassification,
   LsimInvariantResult,
   LsimL12Proof,
@@ -472,6 +479,72 @@ async function buildL12Proof(
   };
 }
 
+// Mirrors FranchiseHome.tsx:3219 awardComputedAtFromFreeze — a 1-LINE param derivation used at the genuine call site,
+// NOT a finalize reimplementation. Ties the awards `computedAt` to the freeze's frozenAt (the determinism anchor).
+function awardComputedAtFromFreeze(frozen: { frozenAt: number | null } | null): string | undefined {
+  return frozen?.frozenAt ? new Date(frozen.frozenAt).toISOString() : undefined;
+}
+
+/**
+ * §5.3 SEASON-FINALIZE — invokes the GENUINE production finalize chain exactly as FranchiseHome.tsx does at season-end
+ * (the "two finalize calls" + the L12-5e-2 additive emission), in the same order. This is invoking production READ/write
+ * code, NOT a harness reimplementation — a reimplemented finalize would be a hallucinated-green testing a fake.
+ *
+ *   1. freezeTrustedValueArtifactForSeason   src/utils/franchiseTrustedValueStorage.ts:97   (FranchiseHome.tsx:3309/3347)
+ *   2. computeAndPersistFranchiseWarAwards    src/utils/franchiseAwardsEngine.ts:594         (FranchiseHome.tsx:3313/3352)
+ *   3. emitFranchiseSeasonEndHonors           franchiseSeasonEndHonors.ts:69                 (FranchiseHome.tsx:3319/3359)
+ *
+ * It then actively re-tests the §5.3 TV-freeze idempotency + anti-thaw (a 2nd freeze is a no-op; a frozen->unfrozen
+ * overwrite is refused by the storage guard) — both REFUSE to write, so the probe is store-neutral / deterministic.
+ */
+async function runSeasonFinalize(context: LsimSandboxContext): Promise<LsimFinalizeProof> {
+  const scope = context.scope;
+  const seasonNumber = context.ids.seasonNumber;
+  const invoked: string[] = [];
+
+  const frozen = await freezeTrustedValueArtifactForSeason(scope);
+  invoked.push('freezeTrustedValueArtifactForSeason@src/utils/franchiseTrustedValueStorage.ts:97');
+
+  const awards = await computeAndPersistFranchiseWarAwards({
+    ...scope,
+    seasonNumber,
+    computedAt: awardComputedAtFromFreeze(frozen),
+  });
+  invoked.push('computeAndPersistFranchiseWarAwards@src/utils/franchiseAwardsEngine.ts:594');
+
+  const emission = await emitFranchiseSeasonEndHonors({ ...scope, seasonNumber });
+  invoked.push('emitFranchiseSeasonEndHonors@src/src_figma/app/engines/reporter/franchiseSeasonEndHonors.ts:69');
+
+  // §5.3 TV-freeze idempotency + anti-thaw (the named property: a post-freeze recompute is a no-op).
+  let reFreezeIdempotent = false;
+  let antiThawHeld = false;
+  const afterFreeze = await getTrustedValueArtifact(scope.franchiseId, scope.seasonId, scope.statsScopeId);
+  if (afterFreeze?.frozen === true && afterFreeze.frozenAt !== null) {
+    const reFrozen = await freezeTrustedValueArtifactForSeason(scope);
+    reFreezeIdempotent = reFrozen?.frozen === true && reFrozen.frozenAt === afterFreeze.frozenAt;
+    // Anti-thaw: attempt a frozen->unfrozen overwrite. persistTrustedValueArtifact's guard MUST refuse it (no write),
+    // leaving the artifact frozen at the original frozenAt. (Refused write => store-neutral => determinism preserved.)
+    await persistTrustedValueArtifact({ ...afterFreeze, frozen: false, frozenAt: null });
+    const afterThawAttempt = await getTrustedValueArtifact(scope.franchiseId, scope.seasonId, scope.statsScopeId);
+    antiThawHeld = afterThawAttempt?.frozen === true && afterThawAttempt.frozenAt === afterFreeze.frozenAt;
+  }
+
+  const finalized = awards.filter((row) => row.finalized);
+  const withWinner = finalized.filter((row) => row.winnerPlayerId);
+  return {
+    ran: true,
+    invoked,
+    artifactPresent: frozen !== null,
+    reFreezeIdempotent,
+    antiThawHeld,
+    emissionStatus: emission.status,
+    emittedHonors: emission.emitted,
+    awardsFinalizedCount: finalized.length,
+    awardsWithWinnerCount: withWinner.length,
+    detail: `frozenAt=${afterFreeze?.frozenAt ?? 'none'}; reFreezeIdempotent=${reFreezeIdempotent}; antiThawHeld=${antiThawHeld}; awardsFinalized=${finalized.length}; awardsWithWinner=${withWinner.length}; emission=${emission.status}; emitted=[${emission.emitted.join(',')}]`,
+  };
+}
+
 function deleteIdbDatabase(name: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.deleteDatabase(name);
@@ -546,11 +619,6 @@ async function runPersistenceProof(): Promise<LsimPersistenceProof> {
 
 function deferredInvariants(): LsimDeferredInvariant[] {
   return [
-    {
-      name: 'soul.season-end-tv-freeze-awards-off-frozen-artifact',
-      section: '§5.3',
-      reason: 'Runner does not call a production season-finalize path in H2; finalization/awards artifact checks are deferred to the step-4 matrix.',
-    },
     {
       name: 'soul.real-export-migration-survival',
       section: '§5.4',
@@ -665,6 +733,9 @@ export async function runLsimSeason(config: LsimSeasonRunnerConfig): Promise<Lsi
 
       if (!runInvariantChecks && !runReplayIdempotency) {
         if (gameNumber === totalScheduledGames) {
+          // §5.3: drive the genuine production season-finalize so the determinism legs reproduce the finalized
+          // end-state (frozen artifact + awards) byte-identically. Deterministic via the scenario's FrozenDate.
+          await runSeasonFinalize(context);
           finalSnapshot = await readLsimStateSnapshot(context, {
             gameNumber,
             gamesSimulated: gameNumber,
@@ -707,6 +778,11 @@ export async function runLsimSeason(config: LsimSeasonRunnerConfig): Promise<Lsi
         afterReplayDigest = (await dumpLsimStores()).digest;
       }
       const lastGameDelta = deriveLastGameDelta(previous, afterFirst, afterReplayDigest);
+      // §5.3 season-finalize runs AFTER the idempotency replay (so afterFirst/afterReplay digests stay pre-finalize)
+      // and BEFORE the persistence proof (so the backup captures the frozen artifact + awards).
+      const finalizeProof = gameNumber === totalScheduledGames
+        ? await runSeasonFinalize(context)
+        : null;
       const persistenceProof = runPersistence && gameNumber === totalScheduledGames
         ? await runPersistenceProof()
         : null;
@@ -717,6 +793,7 @@ export async function runLsimSeason(config: LsimSeasonRunnerConfig): Promise<Lsi
         lastGameDelta,
         l12Proof,
         persistenceProof,
+        finalizeProof,
       });
 
       const gameResults = checks.map((check) => check(finalSnapshot));

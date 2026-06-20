@@ -3,6 +3,7 @@ import { ALL_STAR_LOCK_FRACTION } from '../../../src/utils/franchiseAllStarLock'
 import { FLASHPOINT_DECAY_TUNING, computeFlashpointGameTax } from '../../../src/engines/flashpointDecay';
 import { L11_AUTO_BACKSTOP_TUNING } from '../../../src/utils/franchiseManagerAutoBackstop';
 import { TRAIT_ACQUISITION_TUNING, TRAIT_OPPOSITES } from '../../../src/engines/traitAcquisition';
+import { pickRaceSnubVictims } from '../../../src/utils/franchiseRaceSnubMorale';
 import type { FranchiseDesignationType } from '../../../src/utils/franchiseDesignations';
 import type { Player } from '../../../src/utils/leagueBuilderStorage';
 import type {
@@ -33,6 +34,10 @@ export const REQUIRED_L12_MERIT_CATEGORIES = [
 const PITCHER_POSITIONS = new Set(['SP', 'SP/RP', 'RP', 'CP', 'P']);
 const HITTER_RATING_KEYS = new Set(['power', 'contact', 'speed', 'fielding', 'arm']);
 const PITCHER_RATING_KEYS = new Set(['velocity', 'junk', 'accuracy']);
+// §5.3 season-end honor edge: MVP/CY emit an AWARD_RESULT nod + a close-loser snub.
+// Mirrors franchiseSeasonEndHonors.ts:19 (SEASON_END_SNUB_TOP_N) + :29-32 (SEASON_END_HONORS, honorKind === award category).
+const SEASON_END_SNUB_TOP_N = 3;
+const RACE_SNUB_SOURCE_PREFIX = 'race-snub:';
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
@@ -636,10 +641,99 @@ function reachFloorRatchetFromHonors(snapshot: LsimStateSnapshot): LsimInvariant
   );
 }
 
+function tvFreeze(snapshot: LsimStateSnapshot): LsimInvariantResult {
+  // §5.3 TV-freeze: at season-end the True Value (trusted-value) artifact FREEZES — frozen flag sets, frozenAt is
+  // stamped, the anti-thaw guard holds, and a post-freeze recompute is a no-op. The idempotency + anti-thaw require an
+  // active runtime re-test, recorded by the runner in finalizeProof (it re-freezes + attempts a refused unfreeze).
+  if (snapshot.gamesSimulated < snapshot.totalScheduledGames) {
+    return invariantResult(
+      'soul.tv-freeze',
+      CRITICAL,
+      true,
+      `pending season-end freeze at ${snapshot.gamesSimulated}/${snapshot.totalScheduledGames}`,
+    );
+  }
+  const proof = snapshot.finalizeProof;
+  const artifact = snapshot.trustedValueArtifact;
+  if (!proof?.ran) {
+    return invariantResult('soul.tv-freeze', CRITICAL, false, 'missing finalize proof at season-end');
+  }
+  const frozenInStore = artifact !== null &&
+    (artifact as { frozen?: boolean }).frozen === true &&
+    (artifact as { frozenAt?: number | null }).frozenAt != null;
+  const pass = proof.artifactPresent && frozenInStore && proof.reFreezeIdempotent && proof.antiThawHeld;
+  return invariantResult(
+    'soul.tv-freeze',
+    CRITICAL,
+    pass,
+    pass
+      ? `frozen=true frozenAt=${(artifact as { frozenAt?: number | null }).frozenAt}; reFreeze no-op + anti-thaw guard held; invoked=[${proof.invoked.join(' -> ')}]`
+      : `artifactPresent=${proof.artifactPresent}; frozenInStore=${frozenInStore}; reFreezeIdempotent=${proof.reFreezeIdempotent}; antiThawHeld=${proof.antiThawHeld}; ${proof.detail}`,
+  );
+}
+
+function awardsOffFrozenArtifact(snapshot: LsimStateSnapshot): LsimInvariantResult {
+  // §5.3 awards-off-frozen (AWARD_TRUST_CONTRACT.md:9-10,35): awards finalize OFF the FROZEN artifact — the D8 trust
+  // gate requires `artifact.frozen === true`, finalized rows are persisted, and every winner belongs to the frozen
+  // artifact's trustedPlayerIds. An untrusted / unfrozen-value row can NEVER win.
+  if (snapshot.gamesSimulated < snapshot.totalScheduledGames) {
+    return invariantResult(
+      'soul.awards-off-frozen-artifact',
+      CRITICAL,
+      true,
+      `pending season-end finalize at ${snapshot.gamesSimulated}/${snapshot.totalScheduledGames}`,
+    );
+  }
+  const artifact = snapshot.trustedValueArtifact;
+  const frozen = artifact !== null && (artifact as { frozen?: boolean }).frozen === true;
+  const trustedIds = new Set((artifact as { trustedPlayerIds?: string[] } | null)?.trustedPlayerIds ?? []);
+  const finalized = snapshot.awardRows.filter((row) => row.finalized);
+  const winners = finalized.map((row) => row.winnerPlayerId).filter((id): id is string => Boolean(id));
+  const untrustedWinners = winners.filter((id) => !trustedIds.has(id));
+  // The artifact MUST be frozen (the gate that authorized the finalize), finalized rows MUST exist (the finalize ran),
+  // and NO winner may sit outside the frozen trusted set.
+  const pass = frozen && finalized.length > 0 && untrustedWinners.length === 0;
+  return invariantResult(
+    'soul.awards-off-frozen-artifact',
+    CRITICAL,
+    pass,
+    pass
+      ? `artifact.frozen=true; finalizedRows=${finalized.length}; winners=[${winners.join(',') || 'none'}] all in trustedPlayerIds(${trustedIds.size})`
+      : `frozen=${frozen}; finalizedRows=${finalized.length}; untrustedWinners=[${untrustedWinners.join(',') || 'none'}]; trustedCount=${trustedIds.size}`,
+  );
+}
+
+function snubVictimsByHonor(snapshot: LsimStateSnapshot): Map<string, Set<string>> {
+  // Observe the ACTUAL snub targets from player-morale history: sourceEventId = 'race-snub:fid:sid:ssid:HONOR:playerId'.
+  const byHonor = new Map<string, Set<string>>();
+  for (const morale of snapshot.moraleSnapshots) {
+    if (morale.playerId === undefined) continue;
+    for (const entry of morale.history ?? []) {
+      const sourceEventId = (entry as { sourceEventId?: unknown }).sourceEventId;
+      if (typeof sourceEventId !== 'string' || !sourceEventId.startsWith(RACE_SNUB_SOURCE_PREFIX)) continue;
+      const segments = sourceEventId.split(':');
+      const honorKind = segments[4]; // 'race-snub' : fid : sid : ssid : HONOR : playerId
+      if (!honorKind) continue;
+      if (!byHonor.has(honorKind)) byHonor.set(honorKind, new Set());
+      byHonor.get(honorKind)!.add(morale.playerId);
+    }
+  }
+  return byHonor;
+}
+
+function teamOfPlayer(snapshot: LsimStateSnapshot): (playerId: string) => string {
+  const byId = playerById(snapshot);
+  return (playerId: string): string => {
+    const player = byId.get(playerId) as (Player & { leagueAssignments?: Array<{ teamId?: string }> }) | undefined;
+    return player?.leagueAssignments?.[0]?.teamId ?? '?';
+  };
+}
+
 function emissionSnubSignal(snapshot: LsimStateSnapshot): LsimInvariantResult {
-  // §5.3 emission: the snub fires for the CLOSE LOSERS only (never a winner) and the legacy positive nod
-  // (AWARD_RESULT, deduped one-per-honorKind) is not double-counted. The nod is a SeasonNewsItem; the snub is a
-  // morale consequence (history sourceEventId 'race-snub:...') — they are separate systems.
+  // §5.3 emission-snub: the snub fires for the CLOSE LOSERS ONLY (smallest |marginToWinner|, top-3, winner excluded) and
+  // the legacy positive nod (AWARD_RESULT) is deduped one-per-honorKind (not double-counted). The nod is a SeasonNewsItem;
+  // the snub is a morale consequence (history sourceEventId 'race-snub:...'). Close-loser selection reuses the PRODUCTION
+  // pickRaceSnubVictims (not a reimplementation).
   if (snapshot.gamesSimulated < snapshot.totalScheduledGames) {
     return invariantResult(
       'soul.emission-snub-signal',
@@ -650,40 +744,73 @@ function emissionSnubSignal(snapshot: LsimStateSnapshot): LsimInvariantResult {
   }
   const awardNews = snapshot.seasonNewsItems.filter((item) => item.eventType === 'AWARD_RESULT');
   if (awardNews.length === 0) {
+    // LIVE-PENDING (not vacuous): the named property is fully encoded below + SYNTHETIC-FALSIFIED in falsification.ts.
+    // The season-end AWARD_RESULT nod cannot be exercised in the OFFLINE deterministic harness — it is reporter-gated
+    // (getReporterForTeam) AND narrative-LLM-gated (generateSeasonNewsTake -> callClaudeMessages) AND minted with a
+    // crypto.randomUUID id; the snub is gated behind nod emission. See WAITING_ON_JK / the L-SIM report finding.
     return invariantResult(
       'soul.emission-snub-signal',
       INVESTIGATE,
       true,
-      'PENDING-STEP-4: the runner does not yet call a production season-finalize, so no AWARD_RESULT nod / snub fires; strengthened logic is synthetic-falsified',
+      `LIVE-PENDING: no AWARD_RESULT nod fired offline (reporter+LLM+crypto-gated nod; snub gated behind it); emittedHonors=[${snapshot.finalizeProof?.emittedHonors.join(',') ?? ''}]; close-losers-only + no-double-count are synthetic-falsified`,
     );
   }
+  // (1) no double-counted honorKind (the legacy nod dedup)
   const honorCounts = new Map<string, number>();
   for (const item of awardNews) {
     const honorKind = String((item.facts as { honorKind?: unknown }).honorKind ?? 'unknown');
     honorCounts.set(honorKind, (honorCounts.get(honorKind) ?? 0) + 1);
   }
   const doubleCounted = [...honorCounts.entries()].filter(([, n]) => n > 1).map(([k, n]) => `${k}:${n}`);
-  const winnerIds = new Set(
-    awardNews.map((item) => String((item.facts as { winnerId?: unknown }).winnerId ?? '')).filter(Boolean),
-  );
-  const snubbedWinners = snapshot.moraleSnapshots
-    .filter((m) =>
-      m.playerId !== undefined &&
-      winnerIds.has(m.playerId) &&
-      (m.history ?? []).some(
-        (h) => typeof (h as { sourceEventId?: unknown }).sourceEventId === 'string' &&
-          (h as { sourceEventId: string }).sourceEventId.startsWith('race-snub:'),
-      ),
-    )
-    .map((m) => m.playerId);
-  const pass = doubleCounted.length === 0 && snubbedWinners.length === 0;
+
+  // (2)/(3) close-losers-only: for each nod's honorKind, the ACTUAL snubbed set must equal the top-3 closest losers
+  // (by |marginToWinner|, winner excluded) from that award's candidates — no far loser snubbed, no close loser missed.
+  const actualByHonor = snubVictimsByHonor(snapshot);
+  const teamOf = teamOfPlayer(snapshot);
+  const closeLoserViolations: string[] = [];
+  const snubbedWinners: string[] = [];
+  const honorKinds = new Set(awardNews.map((item) => String((item.facts as { honorKind?: unknown }).honorKind ?? '')));
+  for (const honorKind of honorKinds) {
+    if (!honorKind) continue;
+    const row = snapshot.awardRows.find((award) => award.category === honorKind);
+    const winnerId = row?.winnerPlayerId ?? null;
+    const actual = actualByHonor.get(honorKind) ?? new Set<string>();
+    if (winnerId && actual.has(winnerId)) snubbedWinners.push(`${honorKind}:${winnerId}`);
+    if (!row) {
+      if (actual.size > 0) closeLoserViolations.push(`${honorKind}:snubWithoutAwardRow`);
+      continue;
+    }
+    const expected = new Set(
+      pickRaceSnubVictims(
+        row.candidates.map((candidate) => ({
+          playerId: candidate.playerId,
+          teamId: teamOf(candidate.playerId),
+          marginToWinner: candidate.marginToWinner,
+        })),
+        new Set(winnerId ? [winnerId] : []),
+        SEASON_END_SNUB_TOP_N,
+      ).map((victim) => victim.playerId),
+    );
+    for (const playerId of actual) {
+      if (!expected.has(playerId)) closeLoserViolations.push(`${honorKind}:nonCloseLoserSnubbed(${playerId})`);
+    }
+    for (const playerId of expected) {
+      if (!actual.has(playerId)) closeLoserViolations.push(`${honorKind}:closeLoserMissed(${playerId})`);
+    }
+  }
+  // Reverse direction: the snub is gated behind nod emission (franchiseSeasonEndHonors.ts:104) — a race-snub recorded
+  // for an honorKind that emitted NO AWARD_RESULT nod is a violation (snub without its gating nod).
+  for (const snubbedHonor of actualByHonor.keys()) {
+    if (!honorKinds.has(snubbedHonor)) closeLoserViolations.push(`${snubbedHonor}:snubWithoutNod`);
+  }
+  const pass = doubleCounted.length === 0 && snubbedWinners.length === 0 && closeLoserViolations.length === 0;
   return invariantResult(
     'soul.emission-snub-signal',
     INVESTIGATE,
     pass,
     pass
-      ? `AWARD_RESULT nods=${awardNews.length} (one per honorKind); no winner snubbed`
-      : `doubleCountedHonors=${doubleCounted.join(',') || 'none'}; snubbedWinners=${snubbedWinners.join(',') || 'none'}`,
+      ? `AWARD_RESULT nods=${awardNews.length} (one per honorKind); snubs = top-${SEASON_END_SNUB_TOP_N} close losers only; no winner snubbed`
+      : `doubleCountedHonors=${doubleCounted.join(',') || 'none'}; snubbedWinners=${snubbedWinners.join(',') || 'none'}; closeLoserViolations=${closeLoserViolations.slice(0, 8).join(',') || 'none'}`,
   );
 }
 
@@ -708,6 +835,8 @@ export function getSoulInvariantChecks(): LsimInvariantCheck[] {
     channelSeparation,
     allStarSixtyPercentLock,
     reachFloorRatchetFromHonors,
+    tvFreeze,
+    awardsOffFrozenArtifact,
     emissionSnubSignal,
   ];
 }

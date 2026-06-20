@@ -80,6 +80,34 @@ export interface LsimL12Proof {
   detail: string;
 }
 
+/**
+ * §5.3 season-finalize proof — recorded by the runner after it invokes the GENUINE production finalize chain
+ * (freezeTrustedValueArtifactForSeason -> computeAndPersistFranchiseWarAwards -> emitFranchiseSeasonEndHonors).
+ * The TV-freeze idempotency + anti-thaw assertions REQUIRE an active runtime re-test (re-freeze / refused unfreeze),
+ * so they cannot be read from a static snapshot — they live here (mirrors the persistenceProof / l12Proof pattern).
+ */
+export interface LsimFinalizeProof {
+  /** the production finalize chain actually ran this leg (season-end only) */
+  ran: boolean;
+  /** the genuine production functions invoked, with file:line — guards against a hallucinated finalize reimplementation */
+  invoked: string[];
+  /** a D6a trusted-value artifact existed to freeze (else freeze returns null and the whole chain is inert) */
+  artifactPresent: boolean;
+  /** a SECOND freeze returned the identical frozenAt — the post-freeze recompute is a no-op (§5.3 idempotency) */
+  reFreezeIdempotent: boolean;
+  /** a frozen->unfrozen overwrite was REFUSED by persistTrustedValueArtifact's guard; the artifact stayed frozen (§5.3 anti-thaw) */
+  antiThawHeld: boolean;
+  /** emitFranchiseSeasonEndHonors().status ('processed' | 'dark-noop') */
+  emissionStatus: string;
+  /** the honorKinds that emitted an AWARD_RESULT nod (empty offline — the nod is reporter+LLM-gated) */
+  emittedHonors: string[];
+  /** finalized award rows the awards engine persisted */
+  awardsFinalizedCount: number;
+  /** finalized award rows that named a winner */
+  awardsWithWinnerCount: number;
+  detail: string;
+}
+
 export interface LsimStateSnapshot {
   gameNumber: number;
   gamesSimulated: number;
@@ -111,6 +139,7 @@ export interface LsimStateSnapshot {
   storeDump: LsimStoreDump;
   l12Proof: LsimL12Proof | null;
   persistenceProof: LsimPersistenceProof | null;
+  finalizeProof: LsimFinalizeProof | null;
   previous?: LsimStateSnapshot;
   lastGameDelta?: LsimLastGameDelta;
 }
