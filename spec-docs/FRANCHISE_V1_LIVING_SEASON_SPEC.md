@@ -635,7 +635,8 @@ High-Charisma players — **especially the Captain** — **suppress negative edg
 ### 24.10 Sources & fan-morale coupling
 
 - Edges are sourced from two places: **personality compatibility** (structural — who's on the roster) and **race competition** (the envy hook from All-Star/awards, §21-22).
-- **Relationships -> fan morale is LIGHT and reporter-mediated.** The primary path is the one already built: relationship -> player morale -> performance -> fan morale. On top, fans react to **visible** dramas the reporter amplifies (a feud visibly tanking the team frustrates them; a beloved mentorship or romance lifts them a little). The *direct* relationship->fan-morale effect is small and gated through the reporter, to avoid over-coupling.
+- **Relationships -> fan morale is LIGHT and reporter-mediated.** The primary path is the one already built and wired: relationship -> player morale -> **development** (the morale-aligned ratings-move multiplier at the 20% checkpoint sweep) -> True Value -> standings/fame -> fan morale. On top, fans react to **visible** dramas the reporter amplifies (a feud visibly tanking the team frustrates them; a beloved mentorship or romance lifts them a little). The *direct* relationship->fan-morale effect is small and gated through the reporter, to avoid over-coupling.
+  > **§24.10 value-channel correction (L13 ruling C, 2026-06-19 — spec matched to code).** The built loop is morale → **development** (`ratingsDevelopment.ts` morale-alignment multiplier, consumed by `franchiseCheckpointSweepCompute.ts`), NOT morale → in-game performance (mojo/fitness/WAR carry **no** morale input today). The morale→in-game-performance leg is **intentionally deferred — not v1**. The L-SIM relationship invariants assert morale→development; they must **never** assert morale→WAR.
 
 ---
 
@@ -667,7 +668,7 @@ High-Charisma players — **especially the Captain** — **suppress negative edg
 | REL-6 | Charged matchups: facing a former team or a History-edge player amplifies that game's morale swing (personality-scaled); reporter pre-narrates |
 | REL-7 | Edge lifecycle: form/intensify/dissolve; a trade or send-down ends an edge; enables trade-troublemaker -> victim recovers -> performance recovers |
 | REL-8 | Captain & Charisma govern relationships (suppress negative, catalyze positive); Captain effectiveness = Charisma + Loyalty + Resilience − Ambition-weight (selection uses 2 modifiers, effectiveness uses 4; distinct from morale-routing); absolute for v1, league-relative as sim-gated extension |
-| REL-9 | Relationships -> fan morale is light + reporter-mediated (primary path is via player morale -> performance); fans react to visible dramas only |
+| REL-9 | Relationships -> fan morale is light + reporter-mediated (primary path is via player morale -> **development** -> True Value, the built+wired loop, NOT morale -> in-game performance/WAR which is deferred — see §24.10 correction 2026-06-19); fans react to visible dramas only |
 
 ---
 

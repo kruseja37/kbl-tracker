@@ -13382,3 +13382,463 @@ characterized fail** (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`), **Z
 35/35, NO new mock break). build-DARK (the module L12-gates → dark-noop, so the live FranchiseHome chain is inert until
 post-D13); trackerDb v24. Branch-only. **⇒ L12-5 COMPLETE (a/b/c/d/e-1/e-2) — the award/All-Star PAYOUT layer is fully built.
 ➡ NEXT = L12-6** (Almanac/UI surfacing — the last L12 piece).
+
+---
+---
+
+# L13 — RELATIONSHIPS-LITE + REPORTER ACCURACY (build contracts) — authored 2026-06-19 (attended)
+
+**Provenance.** Design RULED (`DECISIONS_LOG.md` 2026-06-18 L11–L14 pass + 2026-06-19 A/B/C forks). Scope/seams
+grounded in `spec-docs/L13_SCOPE_MAP.md` (read-only recon, Opus 4.8). All 8 build-DARK, builder ≠ auditor, activate
+post-D13. **Builds HELD until JK is sole mutator on the repo** (JK 2026-06-19) — these contracts are the dispatch plan,
+not a go signal.
+
+**STANDING CONSTRAINTS (every L13 contract inherits these):**
+1. **Double-count guard** — Captain Charisma ×2 morale routing (`captainMoraleRouter.ts:24-64`) must NOT also flow
+   through the §24.9 leadership composite (L13-3). Charisma scales morale-routing OR edge-suppression, never both on
+   the same delta.
+2. **Leave the LI multipliers alone** — `leverageCalculator.ts:606-654` + `calculateLIWithRelationships:774-825` are an
+   independent pre-existing feature on the dying 9-type taxonomy. Do NOT delete, do NOT extend. (L13-2's retirement
+   eventually orphans them — that's expected, not L13's cleanup.)
+3. **One morale-WRITE path = the matrix** — relationshipEngine supplies the BASE delta only; the write routes through
+   `composeMoraleConsequence` → `applyFranchiseMoraleMatrixConsequence` (L13-Q7). No edge code writes `moraleSnapshots`
+   directly.
+4. **Value-channel scope (Fork C)** — L13 feeds morale → **development** (the built loop); it does NOT touch
+   mojo/fitness/WAR. No morale→in-game-performance wiring in any L13 ticket.
+5. **Cadence (Fork B)** — formation at the **20% checkpoint**; decay + charged-matchup **per-game**; intensity folded
+   into the edge record (no 2nd store/PIN).
+6. NO `Date.now`/`Math.random` (timestamps/game-numbers are params). Prefix tsc/vitest with `NODE_ENV= `. NO git
+   add/commit. Each ticket edits/creates ONLY its listed files.
+
+---
+
+## CONTRACT — L13-1 (NEW relationship-edge store + record type + 6-edge enum + v24→v25 migration + L13 flag) — 2026-06-19 (attended)
+
+**ROUTE:** Codex CLI (gpt-5.5, **very-high reasoning effort**) via `codex exec` stdin-from-contract. Auditor: Opus 4.8
+(builder ≠ auditor — Codex builds, Opus independently audits + runs the full host gate). **PERSISTENCE-CLASS — JK
+browser-verify item (migration + round-trip), prioritized.**
+
+**ROLE:** You are a persistence builder for the KBL Tracker franchise L-stack (the IndexedDB / trackerDb layer).
+
+**GOAL:** Create a NEW dark/empty `kbl-tracker` store for relationship edges, with the persisted edge record type + the
+canonical 6-edge enum, a v24→v25 migration, and the L13 feature flag. NO writers, NO live caller (the store ships
+EMPTY; L13-3/4 fill it behind the flag). This is the isolated persistence sub-ticket — its own audit + migration test.
+
+**SOURCE OF TRUTH:** `L13_SCOPE_MAP.md` §4 (rivalryScores does NOT fit — team↔team) + `DECISIONS_LOG.md` 2026-06-19
+Fork A. **MEMORY (broke L6b-1):** the store-list PIN + version bump must land IN THIS TICKET, not lag.
+
+**⚠ THE MAKE-OR-BREAK (get these or the full host gate goes RED):**
+1. **The store-list PIN.** `src/utils/tests/franchiseSeasonLedgerStorage.test.ts` hard-pins BOTH the version
+   (`expect(TRACKER_DB_VERSION).toBe(24)` at `:277` AND `:297`) and the full sorted store list (`expectedTrackerStores`
+   array `:28-72`, asserted `:280`). You MUST: change both `toBe(24)`→`toBe(25)` and insert the new store name into the
+   array **in sorted position**. Miss this → the pin test fails the host gate.
+2. **Version bump in two minds.** `TRACKER_DB_VERSION` (`trackerDb.ts:17`) 24→25, and the new store created in the
+   `onupgradeneeded` chain (mirror the `rivalryScores` block `trackerDb.ts:297-304` and the All-Star block).
+3. **Backup parity.** Add the store to the `trackerStores` manifest in `backupRestore.ts` (mirror the `rivalryScores`
+   entry `:308-317`). `KBL_BACKUP_VERSION` (`:64`, currently `2`) stays **2** — adding a store is additive/backward-
+   compatible; do NOT bump it. PROVE via the backup round-trip in the test (the store exports/imports clean).
+4. **Storage module shape.** Mirror `src/utils/franchiseAllStarRostersStorage.ts` EXACTLY: `getTrackerDb`,
+   `const DB_NAME = 'kbl-tracker'`, deterministic id builder, `by_scope` index `[franchiseId, seasonId, statsScopeId]`,
+   `syncEngine.upsert(DB_NAME, STORE, id, row)` on put, caller-supplied timestamps, NO `indexedDB.open`/`onupgradeneeded`
+   in the module, NO `Date.now`/`Math.random`.
+
+**VERIFIED ANCHORS:** `TRACKER_DB_VERSION` `trackerDb.ts:17`; store-create precedent `trackerDb.ts:297-304`; storage-
+module template `franchiseAllStarRostersStorage.ts` (whole file) + its test `franchiseAllStarRostersStorage.test.ts`;
+PIN `franchiseSeasonLedgerStorage.test.ts:28-72,277,280,297`; backup manifest `backupRestore.ts:308-317` +
+`KBL_BACKUP_VERSION:64`; sync map `syncConfig.ts:44`; reset list `resetDerivedCompetitionData.ts:29`; flag pattern
+`franchisePhase2Flags.ts` (L12 block `:85-95`).
+
+**CHANGES — edit/create ONLY these files:**
+
+**A. NEW `src/utils/franchiseRelationshipEdgesStorage.ts`** (mirror the All-Star storage module). Export:
+- `export type RelationshipEdgeType = 'RIVALRY' | 'FEUD' | 'MENTORSHIP' | 'FRIENDSHIP' | 'ROMANCE' | 'HISTORY';` (the
+  canonical §24.2 six — the persisted vocabulary; the 9→6 MAPPING is L13-2, not here).
+- `export interface RelationshipEdgeRow` = `{ id; franchiseId; seasonId; statsScopeId; seasonNumber; player1Id;
+  player2Id; type: RelationshipEdgeType; intensity: number /*[0..1], folded-in per Fork B*/; potential: boolean
+  /*potential-vs-active §24.4*/; accuracy: number /*reporter intel confidence, REP-4*/; formedAtGameNumber: number |
+  null; dissolvedAtGameNumber: number | null; createdAt: number; updatedAt?: number; }`.
+- `franchiseRelationshipEdgeId(scope, player1Id, player2Id, type)` — deterministic, **canonicalize the unordered pair**
+  (sort the two playerIds so `(A,B)` and `(B,A)` collide) joined with scope + type.
+- `STORE_NAME`, `initFranchiseRelationshipEdgeDatabase`, `putFranchiseRelationshipEdge`, `getFranchiseRelationshipEdge`,
+  `getFranchiseRelationshipEdgesByScope`, `clearFranchiseRelationshipEdgesForTests`,
+  `resetFranchiseRelationshipEdgesForTests`.
+
+**B. `src/utils/trackerDb.ts`** (additive): `TRACKER_DB_VERSION` 24→25; add the store block in `onupgradeneeded`
+(keyPath `'id'`; indexes `by_scope`=`['franchiseId','seasonId','statsScopeId']` + `by_pair`=`['player1Id','player2Id']`
+for edge lookups + `changed_at` if the sync pattern needs it — match what the module queries).
+
+**C. `src/utils/backupRestore.ts`** — add the store to `trackerStores` (keyPath `id` + the same indexes). `KBL_BACKUP_VERSION` UNCHANGED.
+
+**D. `src/utils/syncConfig.ts`** — add `<storeName>: 'id'`.
+
+**E. `src/utils/resetDerivedCompetitionData.ts`** — add the store to the cleared list (relationship edges are derived
+from rosters/personalities → reset with competition data). *(If the auditor judges edges are NOT derived-competition
+data, flag — but default IN, mirroring rivalryScores `:29`.)*
+
+**F. `src/utils/franchisePhase2Flags.ts`** — add `FRANCHISE_PHASE2_L13_ENABLED_DEFAULT = false`, the override var,
+`isFranchisePhase2L13Enabled()`, `setFranchisePhase2L13EnabledForTests()` — mirror the L12 block `:85-95`.
+
+**G. `src/utils/tests/franchiseSeasonLedgerStorage.test.ts`** (THE PIN) — `toBe(24)`→`toBe(25)` at `:277` AND `:297`;
+insert the new store name into `expectedTrackerStores` `:28-72` in sorted position.
+
+**H. NEW `src/utils/tests/franchiseRelationshipEdgesStorage.test.ts`** (mirror `franchiseAllStarRostersStorage.test.ts`):
+migration creates the store (keyPath `id`, the indexes); id determinism + **pair canonicalization** (A,B == B,A);
+round-trip by id + by scope; scope isolation; `syncEngine.upsert` called with id key; no production-only imports
+(`getTrackerDb`, no `indexedDB.open`, no `Date.now`/`Math.random`); **v24→v25 migration-survival** (the prior stores
+all still exist after the bump — mirror the legacy-store checks `franchiseSeasonLedgerStorage.test.ts:151-173`).
+
+**HARD CONSTRAINTS:** edit/create ONLY the 8 files above. Store ships **EMPTY** — NO writer, NO processCompletedGame
+wiring, NO engine. `KBL_BACKUP_VERSION` unchanged. NO git add/commit.
+
+**VERIFICATION (run ALL, paste ACTUAL):** `NODE_ENV= npx tsc --noEmit` 0 + `NODE_ENV= npm run build` 0;
+`NODE_ENV= npx vitest run src/utils/tests/franchiseRelationshipEdgesStorage.test.ts` green; **AND the PIN**
+`NODE_ENV= npx vitest run src/utils/tests/franchiseSeasonLedgerStorage.test.ts` green (proves the version + store-list
+update is consistent); AND `NODE_ENV= npx vitest run src/utils/tests/backupRestore*.test.ts` if present (backup parity).
+
+**STOP-IF:** the All-Star storage module template differs structurally from the assumptions above → STOP + report.
+Any store other than the new one would change → STOP. The PIN test references a version other than 24 at audit time
+(someone bumped in between) → STOP + reconcile.
+
+**FORMAT:** 1) files changed; 2) the Row type + id canonicalization + the migration block + the PIN diff (version + store
+list); 3) verification output (incl. the PIN + backup tests); 4) "L13-1 complete" or "BLOCKED: <reason>". Do NOT commit.
+
+Use very high reasoning effort. Read `src/utils/franchiseAllStarRostersStorage.ts` + its test (the template),
+`src/utils/trackerDb.ts:1-40,290-310`, `src/utils/tests/franchiseSeasonLedgerStorage.test.ts` (the PIN +
+migration-survival pattern), `src/utils/backupRestore.ts:300-320`, `src/utils/franchisePhase2Flags.ts`.
+
+**Status:** ⏸ AUTHORED — build HELD (JK sole-mutator gate, 2026-06-19).
+
+---
+
+## CONTRACT — L13-2 (taxonomy reconciliation: map the legacy 9 literals → the canonical 6, retire surplus) — 2026-06-19 (attended)
+
+**ROUTE:** Codex CLI (gpt-5.5, very-high). Auditor: Opus 4.8 (builder ≠ auditor).
+**ROLE:** Builder for the relationship domain layer. **DEPENDS ON L13-1** (consumes `RelationshipEdgeType`).
+
+**GOAL:** Author the pure mapping from the live 9 literal types (`relationshipEngine.ts:12-22`
+DATING/MARRIED/DIVORCED/BEST_FRIENDS/MENTOR_PROTEGE/RIVALS/BULLY_VICTIM/JEALOUS/CRUSH) onto the canonical 6 AFFECT-edges
+(Romance←DATING/MARRIED/DIVORCED/CRUSH; Feud←BULLY_VICTIM; Rivalry←RIVALS/JEALOUS; Friendship←BEST_FRIENDS;
+Mentorship←MENTOR_PROTEGE; History added as a lifecycle state). Build-DARK. Per L13-Q1.
+
+**SOURCE OF TRUTH:** `DECISIONS_LOG.md:78-81` (L13-Q1 mapping verbatim) + `L13_SCOPE_MAP.md` §3 L13-1/2.
+**SEAM:** the canonical edge vocabulary every later L13 ticket consumes; the 9-literal `MORALE_EFFECTS` base values
+(`relationshipEngine.ts:38-48`) are RETAINED (L13-5 reuses them as base deltas) — this ticket maps TYPES, not magnitudes.
+
+**CHANGES (pure, additive — exact files set at build):** a `map9To6(literal): RelationshipEdgeType` function + its
+inverse-coverage table; do NOT delete the 9-literal union yet (RelationshipPanel/useRelationshipData still import it —
+verify routing first; likely orphan per `L13_SCOPE_MAP.md` §4) — mark surplus types deprecated, retire only once L13-3
+is the sole writer. **Leave the LI multipliers (`leverageCalculator.ts:606-654`) untouched** (standing constraint 2).
+
+**⚠ MAKE-OR-BREAK:** the 9→6 map must be total (every literal maps) and the 4 Romance-collapsing literals must carry a
+sub-discriminator if any downstream needs DATING-vs-MARRIED (check `detectRomanticMatchups` consumers before flattening).
+**STOP-IF** retiring a literal breaks a live LI detector import.
+
+**VERIFICATION:** tsc 0 + build 0; a unit test asserting totality of the map + the 5 collapse groups; the
+`relationshipEngine`/`leverageCalculator` regression suites green (prove no consumer broke).
+**FORMAT:** files; the map + retention notes; verification; "L13-2 complete"/"BLOCKED". No commit.
+**Status:** ⏸ AUTHORED — build HELD. *(Anchors into not-yet-built L13-1 types — re-verify the import at build.)*
+
+---
+
+## CONTRACT — L13-3 (formation engine: per-type threshold gate + triggers + romance/gender + Captain composite) — 2026-06-19 (attended)
+
+**ROUTE:** Codex CLI (gpt-5.5, very-high). Auditor: Opus 4.8 (builder ≠ auditor).
+**ROLE:** Pure-engine builder. **DEPENDS ON L13-1 (store + types) + L13-2 (taxonomy map).**
+
+**GOAL:** Build the DARK edge-formation engine: per-type personality/modifier **threshold gate** (each of the 6 declares
+its own input set + threshold constant, §16 placeholders, target ~1-3 live edges/team); trigger predicates ("young" reads
+the real `age` field; "extended time" reads a NEW co-rostered-games counter); **potential-vs-active** (§24.4 — potential
+computable for any pair incl. farm); romance **base-rates + same-gender weight** reading the real `gender` field; the
+**Captain effectiveness composite** `w1·Charisma + w2·Loyalty + w3·Resilience − w4·Ambition` normalized [0..1] that
+**suppresses** negative-edge deltas + **catalyzes** positive-edge formation odds. **Cadence = the 20% CHECKPOINT** (Fork B
+— mirror the checkpoint-sweep entry, NOT per-game). Build-DARK behind the L13 flag.
+
+**SOURCE OF TRUTH:** §24.2/24.3/24.4/24.6/24.9 + `DECISIONS_LOG.md:82-111` (L13-Q2/Q3/Q8/Q9). `captainMoraleRouter.ts:10-22`
+explicitly defers the §24.9 composite to L13 — build it HERE, keeping it OFF the Charisma×2 routing path (standing
+constraint 1, the double-count guard).
+
+**VERIFIED ANCHORS:** `age`/`gender` `playerDatabase.ts:47-48` (+`unifiedPlayerStorage.ts:41-42`,
+`leagueBuilderStorage.ts:227,229`; `Gender='M'|'F'`); `HiddenModifiers` `game.ts:123-129`; checkpoint cadence
+`franchiseCheckpointSweepCompute.ts:106-114`; the co-rostered counter is NET-NEW (grep confirmed none exists).
+**⚠ MAKE-OR-BREAK:** the Captain composite must NOT reuse the Charisma×2 routing multiplier (double-count). `age`/`gender`
+are real fields — do NOT invent them or add an L1 dependency (field-correction, `DECISIONS_LOG:84-88,108-111`). Hidden
+modifiers are persisted only on `leagueBuilderStorage` Player → default-fill missing (mirror `resolveHiddenModifiers`
+`processCompletedGame.ts:359`); L1 persisting them is the ACTIVATION prereq, not a build blocker.
+
+**VERIFICATION:** tsc/build 0; formation unit tests (gate fires/withholds per personality; potential computable for a
+non-co-rostered pair; same-gender weight applied; Captain composite suppresses a negative edge); no double-count test.
+**STOP-IF** the co-rostered counter requires mutating a store outside L13-1's edge record (surface — may need a small
+counter field on the edge or a roster-tenure read). **FORMAT** as house. **Status:** ⏸ AUTHORED — build HELD.
+
+---
+
+## CONTRACT — L13-4 (intensity lifecycle: scalar + lapse-decay + hysteresis, per-game, folded into the edge record) — 2026-06-19 (attended)
+
+**ROUTE:** Codex CLI (gpt-5.5, very-high). Auditor: Opus 4.8 (builder ≠ auditor).
+**ROLE:** Pure-engine + dark-compute builder. **DEPENDS ON L13-1 (edge record carries `intensity`) + L13-3 (formation).**
+
+**GOAL:** Give edges a scalar **intensity [0..1]** that grows while the trigger holds and **lapse-decays** when it
+lapses, with a **hysteresis band** (anti-flicker), mirroring the L5 flashpoint-decay primitive. **Cadence = PER-GAME**
+(Fork B). **Fold intensity into the existing L13-1 edge record — NO second store, NO second PIN** (Fork B). Build-DARK.
+
+**SOURCE OF TRUTH:** `DECISIONS_LOG.md:89-91` (L13-Q4) + §24.8 (the "troublemaker traded → victim recovers" loop needs a
+quantity to recover). **Template:** `flashpointDecay.ts:74-100` (compounding ramp + clamp) + `franchiseFlashpointDecayCompute.ts:104-160`
+(per-game accumulate + re-entry guard) + `franchiseFlashpointDecayStorage.ts:16-28` (`consecutiveGamesUnresolved` +
+`updatedAtCheckpoint` re-entry guard) — but write to the **edge record**, not a new store.
+
+**⚠ MAKE-OR-BREAK:** per-game re-entry guard (no double-decay if the per-game compute runs twice for one game — mirror
+`updatedAt*`). Hysteresis = two thresholds (form-above / dissolve-below) so an edge near the line doesn't flicker
+active/inactive each game. Decay is monotone toward 0 on lapse. **STOP-IF** folding intensity in requires a trackerDb
+version bump (it must NOT — the field is already on the L13-1 record; if L13-1 omitted it, surface).
+**VERIFICATION:** tsc/build 0; decay unit tests (ramp, clamp, hysteresis no-flicker, re-entry idempotence). **FORMAT**
+house. **Status:** ⏸ AUTHORED — build HELD.
+
+---
+
+## CONTRACT — L13-5 (matrix relationship-tap authoring: the SIM-CRITICAL feedback write) — 2026-06-19 (attended)
+
+**ROUTE:** Codex CLI (gpt-5.5, very-high). Auditor: Opus 4.8 (builder ≠ auditor).
+**ROLE:** Builder for the L3 morale matrix + the relationship morale payout. **DEPENDS ON L13-1/2/3.**
+
+**GOAL:** Make the dark `MORALE_TAP_REGISTRY.relationship` tap fire **personality-scaled per-edge morale**, with
+relationshipEngine's `MORALE_EFFECTS` (`relationshipEngine.ts:38-48`) supplying the BASE delta and the matrix applying
+the personality/modifier cross (L13-Q7). **This is the feedback write that makes L13 sim-critical** (relationship →
+morale → development). Feud target eats the hit / aggressor largely unaffected (§24.2). Build-DARK / ORPHANED-PENDING
+(L13-8 wires the live caller).
+
+**SOURCE OF TRUTH:** `DECISIONS_LOG.md:100-104` (L13-Q7 — KEEP flat base + scale via matrix; ONE write path).
+**⚠ THE MAKE-OR-BREAK (verbatim from the L12-5c precedent — same trap):** `getBaseMoraleConsequence`
+(`masterMoraleMatrix.ts:411-417`) routes to a tap ONLY when `event.kind` is set (`event.kind && event.kind !== 'event'`).
+A `{type}`-only event hits the EVENT table, never the tap → build `{ kind: 'relationship', type: <edgeKey> }`. AND
+`composeMoraleConsequence` skips personality scaling when `base === NEUTRAL_BASE_CONSEQUENCE` by **reference equality** —
+the `relationship` resolver (currently `masterMoraleMatrix.ts:408` `() => NEUTRAL_BASE_CONSEQUENCE`) MUST return a
+**freshly-constructed** non-neutral object carrying the per-edge base delta. (Mirror exactly what L12-5c did for the
+`race` tap at `:402-407`.)
+
+**VERIFIED ANCHORS:** tap registry `masterMoraleMatrix.ts:399-409`; the `race` tap precedent (now non-neutral) `:402-407`;
+`composeMoraleConsequence` `:419`; apply `applyFranchiseMoraleMatrixConsequence` `franchiseMoraleState.ts:388`; base values
+`relationshipEngine.ts:38-48`; the snub apply-loop template `franchiseRaceSnubMorale.ts` (L12-5c — the per-target compose+apply).
+**STANDING CONSTRAINTS 1+3 apply** (no Charisma double-count; matrix is the only morale writer).
+**VERIFICATION:** tsc/build 0; **the make-or-break test** (`composeMoraleConsequence({kind:'relationship',type:'feud'},…)`
+→ non-neutral, and an EGOTISTICAL/TIMID target amplifies vs TOUGH/RELAXED — proves the fresh-object scaling fired); the
+`masterMoraleMatrix.test.ts` regression green. **STOP-IF** filling the relationship tap requires touching the EVENT table
+or another tap. **FORMAT** house. **Status:** ⏸ AUTHORED — build HELD.
+
+---
+
+## CONTRACT — L13-6 (charged-matchup morale amplification — per-game, fresh, History-keyed) — 2026-06-19 (attended)
+
+**ROUTE:** Codex CLI (gpt-5.5, very-high). Auditor: Opus 4.8 (builder ≠ auditor).
+**ROLE:** Builder for the per-game morale layer. **DEPENDS ON L13-1/2/5.**
+
+**GOAL:** When a player faces his former team or a player he has a **History** edge with, amplify **that game's MORALE
+swing** (REL-6/§24.7), personality-scaled (egotist vs the team that dumped him = extra-charged). Build a FRESH morale-swing
+amplification keyed off the §24 History edge + a former-team flag. **Cadence = PER-GAME** (Fork B). **Independent of the LI
+multipliers — leave `leverageCalculator.ts:606-654` untouched** (standing constraint 2; they amplify the LEVERAGE INDEX, a
+different quantity). Build-DARK.
+
+**SOURCE OF TRUTH:** `DECISIONS_LOG.md:96-99` (L13-Q6 — MORALE not LI, built fresh) + §24.7.
+**⚠ MAKE-OR-BREAK:** the amplified quantity is the player's morale swing routed through the L13-5 matrix path (constraint
+3), NOT a leverage multiplier. The former-team flag needs a "former team" signal — confirm the source at build (roster
+history / the History edge's endpoints); **STOP-IF** no former-team signal exists without a new store.
+**VERIFICATION:** tsc/build 0; unit test (History edge + former-team → amplified morale swing; no History → baseline; LI
+multipliers unchanged). **FORMAT** house. **Status:** ⏸ AUTHORED — build HELD.
+
+---
+
+## CONTRACT — L13-7 (reporter integration: REP-4 inaccuracy + pre-move intel + news adapter + SEA-2 fan-morale nudge) — 2026-06-19 (attended)
+
+**ROUTE:** Codex CLI (gpt-5.5, very-high). Auditor: Opus 4.8 (builder ≠ auditor).
+**ROLE:** Pure-adapter + reporter-layer builder. **DEPENDS ON L13-1/3/4.**
+
+**GOAL:** (a) **REP-4 inaccuracy primitive** — relationship intel is inaccurate at a **flat ~10%**, meaning HEDGE/FLAG only
+(mark a take "unconfirmed", NEVER distort the underlying edge), seeded FNV-1a off franchise+season+moveId; (b) **pre-move
+advisory heads-up** on a roster move when a notable edge (active OR potential) is involved — NEVER a hard gate (§24.5);
+(c) the **relationship-flare news adapter** (pure `SeasonNewsEvent` builder, additive + dormant, mirroring the L11/L12
+adapters); (d) the small **DIRECT fan-morale nudge** for reporter-amplified ("visible") drama, gated on the **SEA-2
+emission gate** (L13-Q10). Build-DARK.
+
+**SOURCE OF TRUTH:** `DECISIONS_LOG.md:92-95` (L13-Q5 flat-10%-hedge + scope split) + `:112-114` (L13-Q10 fan nudge) + §24.5/24.10.
+**SCOPE SPLIT (do not unify):** the live per-personality `REPORTER_ACCURACY_RATES` (0.65-0.95, `narrativeEngine.ts:351-361`)
+stays as in-game-take VOICE flavor; the relationship-intel rate is the separate flat ~10% HEDGE/FLAG.
+**TEMPLATES:** news adapters `franchiseL11ManagerChangeNewsAdapter.ts:69` / `franchiseL12AwardNewsAdapter.ts:28`; emission
+seam `franchiseHonorEmission.ts:20-51`; news store `seasonNewsStorage.ts:39-62`.
+**⚠ MAKE-OR-BREAK:** "inaccurate" NEVER mutates the stored edge (constraint: the edge is ground truth; only the reported
+TAKE is hedged) — content-distortion is v1.1. The fan-morale nudge fires ONLY for edges clearing the SEA-2 gate (no
+gate → no direct fan effect; the indirect morale→development path is always on).
+**VERIFICATION:** tsc/build 0; deterministic adapter test (same input → same SeasonNewsEvent); FNV-1a seed determinism;
+pre-move heads-up is advisory (returns intel, does not block). **FORMAT** house. **Status:** ⏸ AUTHORED — build HELD.
+
+---
+
+## CONTRACT — L13-8 (flag-gated processCompletedGame wiring: checkpoint formation branch + per-game decay/charged-matchup) — 2026-06-19 (attended)
+
+**ROUTE:** Codex CLI (gpt-5.5, very-high). Auditor: Opus 4.8 (builder ≠ auditor). **The live-wire ticket — the final L13 piece.**
+**ROLE:** Builder for the live per-game completion path. **DEPENDS ON L13-1..7.**
+
+**GOAL:** Wire the L13 dark computes into `processCompletedGame.ts` behind `isFranchisePhase2L13Enabled()`, on the ruled
+cadence (Fork B): **formation/re-evaluation only at the 20% checkpoint boundary** (`isCheckpointBoundary`), **intensity
+decay + charged-matchup per game**. Mirror the existing gated dark-compute branches. Build-DARK (flag default false →
+the whole chain is a dark-noop until post-D13).
+
+**SOURCE OF TRUTH:** `DECISIONS_LOG.md` 2026-06-19 Fork B + `L13_SCOPE_MAP.md` §3 L13-8.
+**VERIFIED ANCHORS:** the dark-compute gate cascade `processCompletedGame.ts:616-680` (mirror the L10/L11/L12 `if
+(isFranchisePhase2LxEnabled()) { try { … } catch }` blocks); the L13 flag from L13-1; checkpoint test
+`isCheckpointBoundary` `franchiseCheckpointSweepCompute.ts:106-114`; the morale apply self-gates on the Morale flag
+(expect per-target dark-noop when Morale off — do NOT add a second check, per the L12-5c note).
+**⚠ MAKE-OR-BREAK (MEMORY — L12-3b/L12-4d):** wiring a new module into `processCompletedGame` breaks partial-mock test
+files at module-load (`No "X" export on the mock`) — deterministic, the full host gate catches it, a scoped run misses
+it. The auditor must run the FULL host suite; fix is a test-only mock stub. Formation must gate on BOTH the L13 flag AND
+the checkpoint boundary (don't run the pairwise scan every game).
+**VERIFICATION:** tsc/build 0; the FULL host suite (the auditor) — surface any partial-mock break; a wiring test (flag off
+→ no L13 writes; flag on + checkpoint → formation runs; flag on + non-checkpoint → only decay/charged-matchup).
+**FORMAT** house. **Status:** ⏸ AUTHORED — build HELD. **⇒ completing L13-8 = L13 fully built (dark), pending post-D13 activation.**
+
+---
+
+# L-SIM — FLAGS-ON SANDBOX HARNESS (build contracts) — authored 2026-06-19 (attended)
+
+> Enacts `L_SIM_ARCHITECTURE_AND_INVARIANTS_SPEC.md` §7 Phase 1 + §11. Source-of-truth grounding (gate-chain, setup
+> contract, per-game contract, dark-branch map, †-corrections, gotchas): `spec-docs/L_SIM_PHASE1_GROUNDING.md`.
+> Split: **H1** = harness + franchise sandbox setup + soul-layer synthetic generator + preflight proof (this contract).
+> **H2** (separate, AFTER H1 preflight is green + audited) = the §5 invariant suite + §9 distribution emitters.
+
+## CONTRACT — L-SIM-H1 (flags-ON sandbox harness + franchise setup + soul-layer generator + preflight proof) — 2026-06-19 (attended)
+
+**ROUTE: Codex (gpt-5.5) | very high reasoning effort.** Builder = Codex; Auditor = Opus 4.8 (builder ≠ auditor).
+
+You are the L-SIM harness builder.
+
+**GOAL:** Build a flags-FORCED-ON season-simulator harness that drives the **REAL** `src/utils/processCompletedGame.ts`
+(NOT the stripped `test-utils/processCompletedGame.ts`) against a sandbox `fake-indexeddb` franchise, plus a **PREFLIGHT
+PROOF** that ONE synthetic game with all 8 Phase-2 flags ON measurably changes soul-layer state. This is §11 **step 2**
+only — do NOT build the §5 invariant suite here (that is H2).
+
+**SOURCE OF TRUTH (read in full first):**
+- `spec-docs/L_SIM_PHASE1_GROUNDING.md` — gate-chain (§A), pre-loop setup contract (§B), per-game synthetic contract
+  (§C), dark-branch map (§D), †-corrections (§E), build-biting gotchas (§F), recipe sources (§G).
+- `L_SIM_ARCHITECTURE_AND_INVARIANTS_SPEC.md` §0 (autonomy + the HALT line), §3 (architecture + preflight proof), §4
+  (soul-layer synthetic inputs).
+
+**CONSTRAINTS:**
+- Only CREATE files under `test-utils/lsim/` (+ a dedicated vitest config, mirroring `franchise-proof-of-life.config.ts`).
+  Do NOT edit production `src/` — this is test-infra only. If a production change seems required to make the pipeline
+  fire, STOP and report it as a HALT/finding (it is NOT a build step).
+- **† RULE (JK directive — verbatim):** *Any †-marked signature in `spec-docs/FRANCHISE_API_MAP.md` is UNVERIFIED —
+  read it from code before use; never trust the map's version.* Grounding §E lists the corrected signatures, but
+  re-confirm each from source at the point of use.
+- Drive the **REAL** `src/utils/processCompletedGame.ts`. Force ALL flags ON by enumerating the
+  `setFranchisePhase2*EnabledForTests` setters from `src/utils/franchisePhase2Flags.ts` **at runtime** (read the file —
+  do not hardcode the list; if the file gains a flag, the harness picks it up).
+- Sandbox ONLY: `import 'fake-indexeddb/auto'`; reset BOTH DBs each run (`resetTrackerDbForTests` +
+  `resetFranchiseMoraleDatabaseForTests`); `syncEngine.setEnabled(false)`. NEVER touch a real save.
+- Deterministic + seeded; no `Date.now`/`Math.random` in the generator (seed-derive timestamps).
+- The franchise setup MUST satisfy the gate-chain (grounding §A) so that **True Value PERSISTS** — `rosterStatus==='MLB'`
+  + a salary-baseline config (`calculationVersion` + `teamPayrolls[teamId]`, see `franchiseValueInputs.ts:507`) + finite
+  WAR + position peer-pool ≥ 4. **Prefer the real creation path** (`deepCopyLeagueToFranchise` + the salary baseline the
+  initializer sets) over hand-seeding; verify TV persists. Seed `seasonMetadata.gamesPerTeam` BEFORE game 1 and seed
+  `scheduleStorage` game rows (`gameNumber` 1..N) so the checkpoint-cadence branches (checkpoint/traits/L10/L11) fire.
+- The generator MUST inject `playerWpaTotals` (`KblWpaPlayerTotal`, `kblWpaAttribution.ts:57` — `totalWpa` feeds fame,
+  `pitchingWpa` feeds Reliever) + `fameEvents` + lineups (grounding §C); vary `personality` + `hiddenPersonalityModifiers`
+  across players (else neutral 50/50/50/50 → zero soul signal). Match team-ids across game/franchise/league (grounding §F).
+- Work on branch `codex/franchise-v1-next`. Report EVERY changed path (Builder Reporting Completeness rule).
+
+**EXPECTED OUTPUT:** a `test-utils/lsim/` harness (franchise sandbox seeder · soul-layer synthetic generator · flags-ON
+driver · preflight test + its vitest config). The **PREFLIGHT** asserts that after ONE flags-ON game at a 20%-checkpoint
+`gameNumber`, soul-layer state measurably changed across ≥4 dark branches — concretely: a `franchiseTrueValueRows` row
+persisted; a `franchiseFameRecords` row with `reachFloor≥0` and a `wpa_spine` channel > 0; a `franchiseDesignationRows`
+row; AND a `franchiseRatingsOverlays` pending overlay (checkpoint). If any dark branch does NOT fire, the preflight FAILS
+LOUD naming the gate it hit (no silent pass). If the gate-chain cannot be satisfied with realistic data, that is itself a
+FINDING — document it precisely (which gate, why) and STOP; do NOT fake state to force green.
+
+**VERIFICATION:**
+- `NODE_ENV= npx vitest run -c <new config>` → preflight GREEN, with console proof: per-store row counts before/after
+  the game (showing each dark branch wrote).
+- `NODE_ENV= npm run build` → exit 0.
+- Do NOT run or perturb the main characterized suite (the harness lives OUT of the default suite, like
+  `franchise-proof-of-life`).
+
+**FORMAT:** 1. Files changed (every path). 2. Setup path chosen (deepCopy vs direct) + why + the TV-persist evidence.
+3. Preflight output pasted (before/after store counts proving each branch fired). 4. Any gate that could NOT be satisfied
+(finding). 5. "L-SIM-H1 complete" OR "BLOCKED: <gate + reason>".
+
+**FAILURE PROTOCOL:** ambiguity → quote the grounding §/line and ask. A † signature mismatch → re-read source + note it.
+A needed production change → STOP, report as HALT (do not edit `src/`). Never fake soul-state to pass.
+
+Use very high reasoning effort. Think step-by-step.
+
+**Status:** ✅ AUTHORED — ready to dispatch to Codex. (H2 = §5 invariant suite + §9 emitters, authored after H1 preflight
+is green + audited; **H2's audit MUST falsify each invariant** — inject a known-bad input, confirm it trips RED — per JK
+directive 2026-06-19, not just confirm build+run.)
+
+---
+
+## CONTRACT — L-SIM-H2 (season runner + §5 soul-layer invariant suite + §9 distribution emitters) — 2026-06-19 (attended)
+
+**ROUTE: Codex (gpt-5.5) | very high reasoning effort.** Builder = Codex; Auditor = Opus 4.8 (builder ≠ auditor — the
+audit will **FALSIFY each invariant** per JK directive, not just confirm build+run).
+
+**PRECONDITION:** L-SIM-H1 is committed + VERIFIED (`8fbf08c3`) — the harness (`test-utils/lsim/`) drives the REAL
+`src/utils/processCompletedGame` flags-ON; the preflight is green. BUILD ON IT; reuse `flags.ts`/`sandbox.ts`/
+`syntheticGame.ts`/`proof.ts`; do not duplicate them.
+
+**GOAL:** Add (1) a deterministic multi-game **SEASON RUNNER** that drives a full season through the real
+`processCompletedGame` flags-ON on the H1 sandbox — accumulation **REAL** (drive games 1..N; do NOT pre-seed prior-season
+stats for the full run); (2) the **§5 SOUL-LAYER INVARIANT SUITE** + the base skill's 12 stats checks; (3) the **§9
+DISTRIBUTION EMITTERS**; (4) a report writer → `spec-docs/SEASON_SIMULATION_REPORT.md`. This is §11 **step 3**.
+
+**SOURCE OF TRUTH:** `L_SIM_ARCHITECTURE_AND_INVARIANTS_SPEC.md` §5 (every CRITICAL/INVESTIGATE invariant), §6 (run
+matrix), §9 (distributions), §10 (artifacts + findings routing), §0 (autonomy + HALT line); `L_SIM_PHASE1_GROUNDING.md`
+§D (dark-branch soul-state proofs) + §H (the Phase-1 invariant subset — what applies now vs deferred).
+
+**CONSTRAINTS:**
+- Only create/extend files under `test-utils/lsim/` (+ the report under `spec-docs/`). Do NOT edit production `src/`. A
+  needed production change = a HALT finding (report, don't fix) per §0.
+- **† RULE (JK — verbatim):** *Any †-marked signature in `spec-docs/FRANCHISE_API_MAP.md` is UNVERIFIED — read it from
+  code before use; never trust the map's version.*
+- **EACH invariant MUST be an independently-callable pure check over an injected state snapshot**, returning
+  `{name, tag:'CRITICAL'|'INVESTIGATE', pass, detail}`. MANDATORY: the Opus audit injects a KNOWN-BAD state per invariant
+  and confirms it trips RED — an invariant that cannot be falsified is rejected. Do NOT bury checks only inside the runner
+  loop; expose them as standalone functions over a state snapshot.
+- The runner drives the REAL pipeline flags-ON (reuse H1's flag-forcing + sandbox + generator). **Broaden
+  `playerWpaTotals` across the roster** (H1 fed only ~4 players → thin fame signal). Deterministic + seeded; checkpoint
+  every 10 games + resumable (§0.1). Sandbox only; reset both DBs; `syncEngine.setEnabled(false)`.
+- Implement the **Phase-1 invariant subset** (grounding §H): the 12 stats checks + §5.1 (fame finite / reach-monotonic /
+  heat-fickle / race-no-NaN / `resolveFameTier`-only; morale bounds; flashpoint compounding-but-clamped; designation 6-slot
+  + Albatross ≥2×-min-salary-overpaid gate; L10 per-game cadence; L11 backstop <25 + roll; per-write idempotency) + §5.2
+  (checkpoint cadence EXACTLY 5× + ratings-overlay validity + trait 2-slot/no-offset/hysteresis) + §5.4 (migration-survival
+  + backup round-trip parity) + §5.5 (determinism: same seed → byte-identical end-state across ALL stores) + §5.6 (channel
+  separation: WPA→fame vs WAR→TrueValue never cross-contaminate; TV fixed-baseline non-drift across seasons; the
+  double-count guards). §5.3 season-end (TV freeze / awards-off-frozen-artifact / All-Star 60% lock / reach-floor ratchet /
+  emission-snub) — implement IF the runner finalizes a season; else stub + mark DEFERRED. L13 relationship checks — SKIP +
+  flag (L13 not built). **Report any invariant NOT implemented as a GAP — never assume green (§12).**
+- **§9 emitters:** fame-tier distribution (9 tiers), trait grant/loss counts per season, award margins, random-event
+  frequency per family, morale ranges + auto-backstop firing rate, flashpoint tax magnitudes. **REPORT only — never tune
+  §16** (HALT line).
+- Work on branch `codex/franchise-v1-next`. Report EVERY changed path.
+
+**EXPECTED OUTPUT:** `test-utils/lsim/` extended with a `seasonRunner` + an `invariants/` module set (each independently
+callable) + the §9 emitters + a report writer; `spec-docs/SEASON_SIMULATION_REPORT.md` (skill format + a Soul-Layer
+Invariants section + the §9 distributions + the EXACT games-simulated count). **VALIDATE** by running a BASELINE full
+season (the 6-team sandbox, `gamesPerTeam` ≥ 20) + the DETERMINISM leg (same seed twice → byte-identical end-state). The
+full §6 edge-league + multi-season matrix is run by the Opus step (step 4) — make the runner accept a league/season config
+so those legs are constructible, but you need only run **baseline + determinism** here.
+- **Findings routing (§10):** a CRITICAL invariant failure stops that run-leg + logs the finding; INVESTIGATE logs +
+  continues. Tag each finding **mechanical/wiring (auto-fixable)** vs **HALT — JK FIX DECISION** (soul-behavior /
+  persistence / §16 / SMB4-asset). Do NOT fix a HALT-class finding; report it.
+
+**VERIFICATION:**
+- `NODE_ENV= npx vitest run -c <the lsim config>` → the baseline season + determinism leg run; the invariants execute;
+  paste the pass/fail summary + the games-simulated count + the §9 distributions. Honest: RED findings logged, not hidden.
+- `NODE_ENV= npm run build` → exit 0. Do NOT perturb the characterized suite.
+
+**FORMAT:** 1. Files changed (every path). 2. Invariants implemented (list) + any NOT implemented (gap). 3.
+Baseline-season + determinism run output (pasted summary + games count + distributions). 4. Findings (each tagged
+mechanical vs HALT). 5. "L-SIM-H2 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL:** ambiguity → quote the spec §/grounding line + ask. † mismatch → re-read source + note. Production
+change needed → STOP + report HALT. **Never fake an invariant pass or hide a RED.**
+
+Use very high reasoning effort. Think step-by-step.
+
+**Status:** ✅ AUTHORED — dispatching to Codex.

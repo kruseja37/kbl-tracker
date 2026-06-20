@@ -7,6 +7,82 @@
 
 ## June 2026
 
+### 2026-06-19 (L-SIM Phase 1 audit): L12-race "missing merit category" = VALID SPARSITY, with a teeth-keeping refinement — RULED (attended)
+
+**Context:** The Opus step-4 audit of the L-SIM-H2 invariant suite ran an INDEPENDENT scaled reproduction (24-game
+flags-ON season) that tripped `soul.l12-race-no-nan-resolve-tier` CRITICAL at season-end — a merit category had ZERO
+eligible candidates while the race math was sound (status `computed`, no NaN). Codex's single 60-game leg did not expose
+it. Surfaced to JK.
+
+**DECISION (JK 2026-06-19):** An empty merit category at season-end is NOT a failure by itself — a category legitimately
+has zero qualifiers in tiny/edge leagues and short seasons. Keep the invariant **CRITICAL** (the severity is right); what
+changes is the DEFINITION of failure:
+1. **KEEP** enforcing (the real corruption guards, unchanged): no NaN anywhere in race composites/percentiles; every
+   category resolves to a valid `computed` status; fame contributes via `resolveFameTier` rank only.
+2. **CHANGE** — when a category's candidate list is empty, check that category's **ELIGIBILITY POOL** (count of roster
+   players satisfying its eligibility predicate — Reliever = pure relievers `gamesStarted===0` above the relief-IP floor;
+   Bench = reserves by totalWar; Booger = position players by −fieldingWar; etc.): pool empty → **PASS** (valid sparsity,
+   nobody qualified); pool NON-empty but category empty → **FAIL** (corruption: eligible candidates existed but were
+   dropped).
+3. This **SUBSUMES** the season-length concern (short seasons → fewer players clear IP/PA floors → pool legitimately
+   empty → emptiness passes); no separate season-length rule needed.
+
+**FALLBACK** (only if reaching the eligibility predicate from the harness is disproportionate): assert every standard
+category is non-empty in a full-size/full-length (standard config) league, accept emptiness in sub-threshold/edge legs.
+Coarser (keys off league size, not actual eligibility) — prefer the eligibility-pool check; use the heuristic only if
+wiring the predicate is genuinely costly.
+
+**Routing:** H3 **harness** work (correcting an INVARIANT, NOT a production change), builder ≠ auditor. Distinct from the
+two fixes the H2 audit already applied inline (mechanical auditor corrections): the All-Star-lock invariant
+`Math.ceil`→`Math.round` to match `franchiseAllStarLock.ts` (masked at 60 games where 60×0.6=36 is exact, exposed at 24
+where 24×0.6=14.4), and renaming `seasonRunner.test.ts`→`.scenario.ts` out of the default suite. This eligibility-pool
+refinement is build-scale → queued for H3 with the reach-floor-ratchet strengthening + the deferred §5.3 season-finalize
+checks. Pipeline behavior unchanged throughout.
+
+### 2026-06-19 (L13 grounding recon + A/B/C rulings + build-contract authoring): JK ruled the 3 code-grounded forks (attended)
+
+**Context:** the read-only L13 grounding recon (`spec-docs/L13_SCOPE_MAP.md`, Opus 4.8, AUTH-4) resolved the pivotal
+sequencing question and surfaced 3 genuinely-new code-grounded forks the L11–L14 ruling pass did not close. JK ruled
+all three and authorized authoring the L13-1..8 build contracts (builds HELD until JK is sole mutator on the repo).
+
+**PIVOTAL (recon finding, ratified):** L13 is **SIM-CRITICAL, not narrative-only.** Relationships write the morale
+channel (the L3 matrix `relationship` tap, `masterMoraleMatrix.ts:408`, currently a neutral stub) and through it the
+**value** channel: the live wired loop is **relationship → player morale → ratings-development → True Value →
+standings/fame** (`ratingsDevelopment.ts:15-16,106` consumed by `franchiseCheckpointSweepCompute.ts:179,251` at 20%
+checkpoints). ⇒ L13 must land **before** the comprehensive L-SIM Phase-4 run; the L-SIM needs §5 relationship
+invariants. The morale→in-game-performance (mojo/fitness/WAR) leg is **unwired and intentionally deferred** (Fork C).
+
+- **Fork A — storage = NEW `kbl-tracker` store. APPROVED.** `rivalryScores` is team↔team + dormant
+  (`reporter.ts:175-186`) and **cannot** carry a player-edge record, so L13-Q12's fallback fires. Build to the FULL
+  persistence discipline: **`TRACKER_DB_VERSION` 24→25**, the `franchiseSeasonLedgerStorage.test.ts` store-list PIN
+  updated **in the same ticket** (the L6b-1 failure mode — must not lag), backup-parity + migration-survival proven by
+  test, `KBL_BACKUP_VERSION` handled, store ships **dark/empty behind the L13 flag**. **Isolate the store as its own
+  first sub-ticket (L13-1)** with its own audit + a v24→v25 migration test, exactly like the L9b/L10/All-Star store
+  tickets. **Batched browser-verify item (migration + round-trip), prioritized.**
+- **Fork B — cadence = MIXED. CONFIRMED.** **Edge formation fires at the 20% checkpoint** (needs the
+  accumulated-interaction sample, same as traits + ratings-dev); **edge decay + charged-matchup effects fire
+  per-game.** Fold the **intensity into the edge record** (not a second indexed store/field) → **no second PIN**.
+- **Fork C — morale→in-game-performance stays OUT of L13. CONFIRMED + spec fixed.** L13's value-channel effect is
+  morale → **ratings-development** (built+wired), NOT morale → in-game WAR/mojo (intentionally dormant). §24.10 + REL-9
+  corrected this pass to match the code; the L-SIM relationship invariants assert morale→development, **never**
+  morale→WAR. The morale→in-game-performance leg is **explicitly deferred — not v1.**
+
+**Standing build constraints (carried into every L13 contract):** (1) preserve the **double-count guard** — Captain
+Charisma ×2 morale routing (`captainMoraleRouter.ts:24-64`) must **not** also flow through the §24.9 leadership
+composite (Q8); (2) **leave the LI revenge/romance multipliers alone** (`leverageCalculator.ts:606-654` — an
+independent pre-existing feature; do not delete, do not extend); (3) one morale-WRITE path = the matrix
+(relationshipEngine supplies the base delta only, per L13-Q7).
+
+**Build split RULED (contracts authored in `PROMPT_CONTRACTS.md`, build-DARK, builder ≠ auditor, persistence first):**
+**L13-1** new edge store + record type + 6-edge enum + v24→v25 migration/PIN/backup + L13 flag · **L13-2** 9→6 taxonomy
+map + retire surplus literals · **L13-3** formation engine (per-type threshold gate + triggers + romance/gender +
+Captain composite; **checkpoint** cadence) · **L13-4** intensity lifecycle (scalar + lapse-decay + hysteresis;
+**per-game**; folded into the edge record) · **L13-5** matrix relationship-tap authoring (the feedback write) ·
+**L13-6** charged-matchup morale amplification (**per-game**) · **L13-7** reporter integration (REP-4 inaccuracy +
+pre-move intel + news adapter + SEA-2-gated fan-morale nudge) · **L13-8** flag + processCompletedGame gate wiring
+(checkpoint branch for formation, per-game branch for decay/charged-matchup). Doc-hygiene applied this pass: §24.10/REL-9
+correction (Fork C); the two `FRANCHISE_MODE2_MORALE_RELATIONSHIP_*` docs stamped **SUPERSEDED-BY-§24** (L13-Q11).
+
 ### 2026-06-18 (L11–L14 ruling pass): L11 forks RATIFIED + L14↔L11 contract & hot-seat surface RULED (JK attended)
 
 **Context**: JK ran a ruling pass over the consolidated open-questions worksheet
@@ -1929,3 +2005,53 @@ LOCK (per-game spine); MVP/CY at SEASON-END finalize (extract a PURE `emitFranch
 config ON-switch + emitter wiring at both edges · L12-5c L3 snub row (`kind:'race'` event + close-losers set + apply loop, L12+Morale
 double-gate) · L12-5d honor→reach-floor (non-decaying helper + `honorHeatBump` tiers + write-back at both edges, L12+Fame gate).
 No trackerDb bump. Full scope/seams/anchors/risks in `spec-docs/L12-5_SCOPE_MAP.md`.
+
+
+---
+
+## 2026-06-19 (attended) — UI cleanup: theme.css/tailwind.css are DEAD v4 orphans; franchise tokenization uses v3 CSS-vars (Fork C); v4 migration DEFERRED
+**Context:** Phase 1 of the franchise-hub UI cleanup (Fork C = keep the franchise green, tokenize it, then de-jargon +
+de-densify) surfaced a discrepancy vs the `UI_CLEANUP_PLAN.md` premise. The Phase-1 builder (Claude Code, opus) flagged it;
+the Captain independently verified via the live import chain. **Tailwind is v3.4.19 (JIT/PostCSS).**
+`src/src_figma/styles/theme.css` + `styles/tailwind.css` use **v4-only syntax** (`@theme inline`, `@import 'tailwindcss'`,
+`@custom-variant`) and are **NOT in the runtime import chain.** The live global stylesheet is **`src/index.css`** (v3
+`@tailwind base/components/utilities` + Vite-default base + a `:root` `Press Start 2P` font + 4 typewriter/scoreboard
+font-faces); it does NOT import theme.css, and theme.css's v4 directives would not function under v3 regardless.
+**Origin (Captain error corrected):** the Captain had earlier asserted theme.css was "the live design system, unambiguously
+live app-wide" — inferred from the file's contents (global font + CRT block) WITHOUT checking the import chain. The builder's
+import-chain check disproved it; the Captain confirmed by reading `src/index.css`. The one piece that IS live: the global
+pixel font comes from `src/index.css`'s `:root`, so the retro typographic baseline is real — it is the SNES color tokens +
+CRT overlay in theme.css that are dead.
+
+**FINDING (supersedes the UI_CLEANUP_PLAN premise):**
+1. **There is NO live design-token system.** theme.css's SNES color tokens + CRT overlay are inert/dead orphaned
+   Figma-export artifacts. App colors are all hardcoded arbitrary Tailwind values (`bg-[#…]`) per component; the franchise
+   hub is the heaviest concentration. (`theme.css` + `tailwind.css` = deletion / "orphaned-artifact" candidates so no future
+   session re-mistakes them for the live system.)
+2. **Scope correction:** the franchise green = **~70 distinct hexes / ~2,178 occurrences across 5 files**
+   (FranchiseHome 982 · TeamHubContent 888 · ScheduleContent 154 · SeasonSummary 112 · AwardsWatchlist 42) — NOT the
+   "~9 colors / ~1,250 across 4 files" the UI_CLEANUP_PLAN estimated. `SeasonSummary.tsx` IS in scope (hub-reachable);
+   `FranchiseV1VisualSmokeSeed.tsx` EXCLUDED (dev-only route behind `enableFranchiseVisualSmokePreviewRoute`).
+
+**DECISION (JK 2026-06-19):**
+- **Fork C tokenization uses the v3-correct mechanism:** the franchise green as ~30 semantic CSS vars scoped under a
+  `.franchise-hub` wrapper, consumed as `bg-[var(--franchise-*)]` arbitrary values — byte-identical render, never leaks.
+  NOT the `@theme inline`/v4 path. (Built in Phase 1: `src/src_figma/styles/franchise-theme.css`.)
+- **Do NOT migrate the app to Tailwind v4.** A v4 migration is a separate, large, app-wide build-system project (CSS-first
+  config + breaking utility changes across every screen) — out of scope for the cosmetic franchise cleanup, and a separate
+  post-v1 decision if ever taken. theme.css's commented-out `@theme inline` block stays as a future-v4 breadcrumb only.
+- **Excluded from the byte-safe sweep** (data/illustration, not chrome): the stadium spray-chart SVG art
+  (`TeamHubContent.tsx ~5480+`), the JS data-color maps (news-category/role/grade colors feeding `style`/SVG, e.g.
+  `FranchiseHome.tsx:4630`), and sub-3-use one-off tints. ~30 tokens cover ~95% of uses; the ~5% tail stays literal/flagged,
+  never invented around.
+
+**Implications / future:**
+- There is **no app-wide design system to "match franchise mode to"** — the whole app is hardcoded. App-wide visual
+  consistency, if ever wanted, is a future (post-v1) project; `franchise-theme.css` is the natural seed to extend the same
+  v3 CSS-var pattern outward.
+- **Phase 1 deliverables:** `src/src_figma/styles/franchise-theme.css` (~30 scoped vars, byte-exact) +
+  `instructions/franchise-design-system.md` (hex→token map, density scale, copy-voice + banned-words, punch list, Phase-2
+  wiring). Only those 2 new files created (empty diff verified on all 5 UI files + theme.css).
+- **Phase 2 (the sweep) is GATED** on a clean L12 commit + sole-mutator; MUST do the density + copy passes (not just
+  hex→token), handle portaled content rendered outside `.franchise-hub` (scoped vars won't resolve there), and keep
+  genuinely-inactive families' honest "not yet" wording per D11 #14/#15 (only promote families that are actually live).
