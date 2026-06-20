@@ -6,9 +6,9 @@ Generated: 2026-06-19
 
 | Leg | Seed | Games Simulated | Total Scheduled Games | Stopped Early | Final Digest |
 | --- | --- | ---: | ---: | --- | --- |
-| Baseline | lsim-h2-baseline | 60 | 60 | false | 8566994:8cfc87a3 |
-| Determinism A | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8560489:56091768 |
-| Determinism B | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8560489:56091768 |
+| Baseline | lsim-h2-baseline | 60 | 60 | false | 8571151:5403bbde |
+| Determinism A | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8565624:7c694372 |
+| Determinism B | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8565624:7c694372 |
 
 Determinism same-seed byte-identical end-state: **PASS**
 
@@ -68,16 +68,16 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
   "fameTierDistribution": {
     "IMMORTAL_LEGEND": 4,
     "GLOBAL_SUPERSTAR": 0,
-    "NATIONAL_ICON": 3,
+    "NATIONAL_ICON": 4,
     "REGIONAL_STAR": 3,
-    "LOCAL_HERO": 18,
+    "LOCAL_HERO": 17,
     "UNKNOWN": 0,
     "POLARIZING": 17,
     "NOTORIOUS": 10,
     "DESPISED": 11
   },
   "fameHeatTransitions": {
-    "up": 497,
+    "up": 499,
     "down": 739
   },
   "traitGrantLossCounts": {
@@ -249,7 +249,7 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
     "player": {
       "min": 34,
       "max": 70,
-      "count": 33
+      "count": 34
     },
     "teamFan": {
       "min": 4,

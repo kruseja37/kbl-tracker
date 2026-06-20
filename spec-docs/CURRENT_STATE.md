@@ -295,6 +295,24 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## RIGHT NOW
 
+- **✅ H3 HONOR-DECOUPLE FIX COMMITTED — browser-pending (2026-06-20, AUTH-4 — the Step-4 production finding, JK ruled DECOUPLE).**
+  `fix(franchise): decouple season-end honor payouts (fame ratchet + morale snub) from the cosmetic LLM nod` (commit
+  **`95b4533d`**) + docs. Fixes the franchiseSeasonEndHonors.ts:104 coupling where a transient reporter/LLM/crypto nod
+  failure silently+permanently skipped the durable FAME reach-floor ratchet + MORALE close-loser snub. Now the nod is
+  BEST-EFFORT (gates only the prose); the durable payouts fire whenever an award finalizes — with NO double-application
+  (reach-floor emission-level idempotency guard on the `'season-end-honor'` sentinel; snub already idempotent via its
+  deterministic `race-snub:...` sourceEventId). Control-flow only; §16 magnitudes untouched; applyFranchiseHonorReachFloor
+  + snub primitive + all-star edge UNTOUCHED (zero scope creep). **Builder = Codex (gpt-5.5) via codex exec
+  stdin-from-contract; Auditor = Opus (builder≠auditor, cross-model) → VERIFIED on all 4 criteria.** tsc 0 / build 0 /
+  full suite 7828 pass / 3 fail = 2 hard-characterized + AwardsWatchlist (order-flake, passes solo 2/2), ZERO new reds;
+  +2 decoupling tests (no-reporter + throwing nod still apply payouts) + the 'deduped' test rewritten to the new contract.
+  **L-SIM re-verify:** 24g all-CRITICAL green / 0 findings; 60g determinism same-seed byte-identical (A==B
+  `8565624:7c694372`, finalDigest `8571151:5403bbde` — legitimately changed from pre-fix `8566994:8cfc87a3` since the
+  durable effects now mutate the season-end state); the snub morale + reach-floor now fire IN-SIM (player morale snapshot
+  count 33→34, fame tier shifts). **⚠ BROWSER-VERIFY OUTSTANDING (JK, soul-layer, post-D13 flag-flip):** confirm a
+  season-end MVP/CY winner's fame ratchets + the close losers' morale moves even when the news take is absent. WAITING_ON_JK
+  Item 1 RESOLVED; Item 2 (graduate emission-snub to live-real-green by keying on the now-firing snub morale) still open.
+  **➡ H3 NEXT = Step 5/6 (matrix); the production finding is now closed pending browser sign-off.** *(prior:)*
 - **✅ H3 STEP 4 COMPLETE (2026-06-20, AUTH-4 overnight — L-SIM sim-hardening track, parallel to the L-stack) — season-finalize
   coverage: the §5.3 invariants now EXECUTE for the first time.** The L-SIM runner now invokes the GENUINE production
   season-finalize chain at season-end — `freezeTrustedValueArtifactForSeason` (franchiseTrustedValueStorage.ts:97) →

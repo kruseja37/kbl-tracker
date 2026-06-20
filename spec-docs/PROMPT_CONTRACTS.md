@@ -13842,3 +13842,168 @@ change needed → STOP + report HALT. **Never fake an invariant pass or hide a R
 Use very high reasoning effort. Think step-by-step.
 
 **Status:** ✅ AUTHORED — dispatching to Codex.
+
+---
+
+## CONTRACT — L-SIM-H3-STEP3 (generator adversity: exercise the decline paths) — 2026-06-19 (attended)
+
+**ROUTE: Codex (gpt-5.5) | high reasoning effort.** Builder = Codex; Auditor = Opus 4.8 (builder ≠ auditor). On the
+VERIFIED Step-2 baseline (commit `820becfc`).
+
+You are the L-SIM generator-adversity builder.
+
+**GOAL:** Make the synthetic generator produce realistic performance **DECLINE** — slumps, cold streaks, downswings — so
+the currently-dormant engine paths actually fire. Today the generator is **always-up** (hash-derived, talent-decoupled
+WPA, `test-utils/lsim/syntheticGame.ts`): traits **1677 gains / 0 losses**, fame top-heavy with a hollow middle and zero
+negative tiers, morale inert (~42–58), **0 manager firings**. That dormancy is why `l11-backstop` and several §5
+properties cannot be live-tested.
+
+**SOURCE OF TRUTH:** `spec-docs/H3_KICKOFF.md` Step 3. **BUILD SURFACE:** `test-utils/lsim/syntheticGame.ts` (the
+per-game generator) + `test-utils/lsim/sandbox.ts` (the franchise seeder — held traits + initial morale).
+
+**CONSTRAINTS:**
+- Only edit files under `test-utils/lsim/`. Do NOT edit production `src/`. A needed production change = STOP + report as a
+  HALT finding (it is signal, not a build step).
+- **† RULE (verbatim):** *Any †-marked signature in `spec-docs/FRANCHISE_API_MAP.md` is UNVERIFIED — read it from code
+  before use; never trust the map's version.*
+- **Deterministic + seeded — non-negotiable.** Same seed → byte-identical season. Keep the FNV-1a discipline; no
+  `Date.now`/`Math.random` in the generator. (The determinism meta-check WILL catch a leak.)
+- **Realistic, NOT pathological.** Normal slump depth/duration — believable cold stretches that exercise the low end, not
+  everyone-craters / manufactured chaos.
+- **DO NOT touch the invariants** (`test-utils/lsim/invariants/*` logic). Step 2 is done — do NOT retune a correct
+  invariant to absorb the new data. If a correct invariant reds on realistic decline, that is a FINDING to surface.
+- **DO NOT** add the backlogged missing invariants (`L_SIM_COVERAGE_GAPS.md`) — that is the step after this. **DO NOT**
+  wire the orphaned fame gravity (parked for JK).
+
+**WHAT TO BUILD (the mechanisms each dormant path needs):**
+- **fame FALLS** ← inject NEGATIVE `playerWpaTotals.totalWpa` for slumping players (negative heat input → Heat decays
+  downward), and broaden WPA across the roster (today only ~4 players get it). The down-transitions loosen the
+  top-heavy/hollow-middle fame distribution.
+- **trait LOSSES** (`traitAcquisition.ts:290`, `loseThreshold = 0.35`) ← TWO things: (a) the SEEDER must give some players
+  **held traits** (`trait1`/`trait2`) — today they have none, so there is nothing to lose; (b) the generator's decline
+  must drop those holders' trait-relevant reality (their at-bat/fielding/pitching outcomes on the held trait's signal)
+  **below 0.35** so a `lose` proposal is produced.
+- **manager FIRINGS** ← the auto-backstop fires only when a team's **team-fan morale < 25** (`L11_AUTO_BACKSTOP_TUNING.
+  armingThreshold`) AND the seeded roll < `perGameProbability` (0.004). **GROUNDING (verified):** in the harness pipeline,
+  team-fan morale is moved ONLY by designation-morale consequences + manager-relief — it is **NOT** wired to game results
+  (the fan-morale-from-game-result formulas feed the DARK random-event overlay path, not applied). So decline alone will
+  NOT reach <25. To make `l11-backstop` live-testable, **SEED a declining / low team-fan morale trajectory for a couple of
+  struggling teams** (a legitimate "struggling franchise" setup, consistent with their generator decline), so morale
+  reaches <25 for enough team-games that the 0.004 roll can fire. **If you cannot reach <25 through any wired path,
+  SURFACE it** (the l11-backstop live-test is blocked by an unwired fan-morale-from-performance path) — do not force it.
+- **flashpoint under real stress** ← an Albatross holder who persists through the decline accumulates the compounding tax;
+  the decline supplies genuine stress.
+
+**THE SUCCESS CONDITION IS BEHAVIORAL, not "build green"** (this is the audit's focus). After the change, the re-run §9
+distributions MUST show the dormant paths firing: **trait losses > 0, fame falls > 0 (Heat down-transitions), auto-backstop
+firings > 0, flashpoint exercised.** A generator that builds clean but still produces 0 losses / 0 firings is a **FAILED
+step** — it means the decline did not reach the thresholds. **Report the §9 distributions BEFORE and AFTER.**
+
+**SURFACE — do not fix:** now that decline exists, `l11-backstop` runs live for the first time. If a firing fires but the
+successor isn't generated, or the <25-tie / roll / fired-tenure-persistence doesn't hold → a genuine production finding
+(HALT — JK FIX DECISION). Same for any correct invariant that reds on realistic decline.
+
+**VERIFICATION:** `NODE_ENV= npm run build` exit 0; re-run the 24g (`smoke.config.ts`) + the 60g
+(`season.config.ts`); paste the BEFORE/AFTER §9 distributions and the dormant-paths-firing counts; the determinism leg
+must stay byte-identical.
+
+**FORMAT:** 1. Files changed (every path). 2. The decline mechanism (how cold streaks + held traits + seeded morale work,
+deterministically). 3. BEFORE/AFTER §9 distributions. 4. Dormant-paths-firing confirmation (trait losses / firings /
+fame-falls counts). 5. Any new reds + classification (production-finding vs harness). 6. Determinism result. 7. "L-SIM-H3-
+STEP3 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL:** ambiguity → quote the spec/grounding line + ask. † mismatch → re-read source + note. Production change
+needed → STOP + report HALT. **Never soften an invariant to absorb the new data; never fake the distributions or hide a RED.**
+
+Use high reasoning effort. Think step-by-step.
+
+**Status:** ✅ AUTHORED — dispatching to Codex.
+
+<!-- ===== BEGIN CONTRACT: H3-HONOR-DECOUPLE (2026-06-20, AUTH-4) ===== -->
+## CONTRACT — H3-HONOR-DECOUPLE — decouple season-end honor payouts from the cosmetic LLM nod
+
+**ROUTE: Codex 5.5 | high reasoning effort.** Builder = Codex; Auditor = Opus (≠ builder); then JK browser sign-off.
+
+You are Codex, the BUILDER on KBL Tracker (repo root /Users/johnkruse/Projects/kbl-tracker, branch
+codex/franchise-v1-next). Branch only; NO worktrees; NO push; NO commit (Opus audits then commits).
+
+GOAL:
+Fix a PRODUCTION coupling bug (JK ruled DECOUPLE — WAITING_ON_JK 2026-06-20 Item 1; surfaced by H3 Step-4 + a 3-lens
+audit). At season-end, the durable FAME reach-floor ratchet AND the durable MORALE close-loser snub are gated BEHIND the
+cosmetic AWARD_RESULT news nod emitting. Make the durable payouts fire whenever an award FINALIZES, INDEPENDENT of
+whether the (reporter + LLM + crypto)-dependent news nod succeeds — WITHOUT introducing any double-application.
+
+SOURCE OF TRUTH:
+WAITING_ON_JK.md 2026-06-20 Item 1 (JK: decouple). The bug: src/src_figma/app/engines/reporter/franchiseSeasonEndHonors.ts
+line ~104 `if (emitResult.status !== 'emitted') continue;` sits BEFORE applyReachFloor (~:112) and the snub (~:137), so a
+nod failure (no-reporter / take-failed / LLM down / crypto) silently+permanently skips real game-state effects.
+
+CONSTRAINTS:
+- Only edit these files:
+  * src/src_figma/app/engines/reporter/franchiseSeasonEndHonors.ts  (the control-flow decouple + reach-floor idempotency guard + add getFameRecord to the seam)
+  * src/src_figma/__tests__/reporter/franchiseSeasonEndHonors.test.ts  (update the now-stale 'deduped' test + add the decoupling + idempotency tests)
+- Do NOT touch: src/utils/franchiseHonorReachFloor.ts (applyFranchiseHonorReachFloor stays untouched — keep the
+  idempotency in the EMISSION, not the shared primitive, so the all-star-lock edge is unaffected), franchiseRaceSnubMorale.ts,
+  franchiseMoraleState.ts, fameModel.ts, the §16 magnitudes (honorHeatBump values, snub deltas), franchiseAllStarLockPayouts.ts,
+  any store/trackerDb/backup. NO new IndexedDB store, NO version bump.
+- This is a CONTROL-FLOW decoupling + the idempotency it requires — NOT a tuning change.
+
+EXACT CHANGE (franchiseSeasonEndHonors.ts):
+1. Add `getFameRecord: getFranchiseFameRecord` to `franchiseSeasonEndHonorsSeam` (import getFranchiseFameRecord from
+   '../../../../utils/franchiseFameRecordsStorage'). Add a `const SEASON_END_HONOR_SENTINEL = 'season-end-honor';` and use it
+   where the literal 'season-end-honor' is passed as checkpointSentinel (PRESERVE the value — do not change the string).
+2. Restructure the per-honor loop body (currently lines ~80-145). KEEP: `if (!row?.winnerPlayerId) continue;` and
+   `if (winnerTeamId === null) continue;` (the winnerTeamId gate is a TEAM-RESOLUTION precondition, separate from the nod's
+   emit-result — leave it). Then:
+   (A) COSMETIC NOD — best-effort. Wrap the `seam.emit({honorInput, teamId: winnerTeamId})` in try/catch; set a local
+       `nodEmitted = emitResult.status === 'emitted'` (false on throw); `if (nodEmitted) emitted.push(honor.honorKind);`.
+       The emit failure path MUST NOT `continue` / skip anything below. (This is the bug fix — remove the
+       `if (emitResult.status !== 'emitted') continue;`.)
+   (B) DURABLE reach-floor — fires whenever the award finalized, independent of the nod. IDEMPOTENT GUARD (required —
+       applyFranchiseHonorReachFloor is NOT self-idempotent; it re-bumps heat each call, and BOTH FranchiseHome call sites
+       [3308-3328 passive useEffect + 3344-3365 active] re-fire on reload, so an unguarded decouple would double-ratchet):
+       fetch the winner's fame record via `seam.getFameRecord({franchiseId, seasonId, statsScopeId}, winnerPlayerId)`;
+       call `seam.applyReachFloor({honorees:[{playerId:winnerPlayerId, honorTier:honor.honorTier}], scope:{franchiseId,
+       seasonId, statsScopeId}, checkpointSentinel: SEASON_END_HONOR_SENTINEL})` ONLY when
+       `fameRecord?.updatedAtCheckpoint !== SEASON_END_HONOR_SENTINEL`. Keep this in its own try/catch (failure must not
+       block the snub or the next honor).
+   (C) DURABLE snub — fires whenever the award finalized, independent of the nod. Keep the EXISTING pickRaceSnubVictims
+       selection + applySnub call EXACTLY as-is (close-loser selection unchanged). It is already idempotent via its
+       deterministic 'race-snub:...' sourceEventId (applyFranchiseMoraleEffect dedups → status 'skipped' on re-run), so
+       call it unconditionally (re-runs no-op). Keep its own try/catch.
+3. The function still returns `{status:'processed', emitted}` (emitted now lists only honors whose nod actually emitted).
+
+DUAL-WINNER EDGE (document in a code comment, do not special-case): a single player winning BOTH MVP and CY at season-end
+(both sentinel 'season-end-honor') collapses to ONE reach-floor bump under the guard (the 2nd honor sees the sentinel and
+skips). This is an essentially-impossible edge (MVP=position WAR, CY=pitcher WAR) and the bump VALUES are unchanged; the
+single updatedAtCheckpoint field cannot track per-honor. Acceptable.
+
+TESTS (franchiseSeasonEndHonors.test.ts):
+- Update `installSeamMocks` to also mock `getFameRecord` (default `vi.fn(async () => null)` so first-run reach-floor applies).
+- REWRITE the now-stale `deduped emit skips reach-floor and snub` test: under the new contract, the nod's 'deduped' status no
+  longer gates the durable effects. Replace with reach-floor IDEMPOTENCY: emitStatus 'deduped' (or 'emitted') + getFameRecord
+  returning a record whose `updatedAtCheckpoint === 'season-end-honor'` → assert applyReachFloor NOT called; applySnub IS
+  called (the emission fires it; the real primitive would no-op via sourceEventId — that dedup is covered by
+  franchiseMoraleState.test.ts:82,142). 
+- ADD the DECOUPLING / inverse-of-the-bug test: emitStatus 'no-reporter' (nod fails) + getFameRecord returns null (first run)
+  → assert result.emitted === [] (no prose) AND applyReachFloor IS called with the winner AND applySnub IS called with the
+  close losers. (Prove the durable effects STILL apply when the nod fails.)
+- ADD a second decoupling case: emit throws → durable effects still apply (same asserts).
+- Keep the other existing tests green (flag-off; emitted MVP fires both; skips non-finalized/no-winner/no-team; MVP+CY
+  independent; snub-failure-does-not-block) — adjust ONLY where the new getFameRecord seam mock is needed (they should pass
+  with getFameRecord default null).
+
+VERIFICATION (prefix `NODE_ENV= `; node at ~/.nvm/versions/node/v20.20.0/bin):
+- `NODE_ENV= npx tsc --noEmit` → 0.
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run src/src_figma/__tests__/reporter/franchiseSeasonEndHonors.test.ts` → all pass.
+- `NODE_ENV= npm test` (FULL suite) → zero new reds vs the characterized baseline (the documented characterized fails only).
+
+STOP IF: a needed change falls outside the 2 allowed files; making the durable effects idempotent would require touching
+applyFranchiseHonorReachFloor or a store; any characterized test beyond the 'deduped' rewrite would change. → "BLOCKED: <reason>".
+
+REPORT: 1) every changed git path + total; 2) the control-flow change described; 3) ACTUAL tsc/build/test output;
+4) "H3-HONOR-DECOUPLE complete" OR "BLOCKED: <reason>".
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: H3-HONOR-DECOUPLE ===== -->
