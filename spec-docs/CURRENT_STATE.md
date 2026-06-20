@@ -295,6 +295,26 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## RIGHT NOW
 
+- **✅ H3 STEP 4 COMPLETE (2026-06-20, AUTH-4 overnight — L-SIM sim-hardening track, parallel to the L-stack) — season-finalize
+  coverage: the §5.3 invariants now EXECUTE for the first time.** The L-SIM runner now invokes the GENUINE production
+  season-finalize chain at season-end — `freezeTrustedValueArtifactForSeason` (franchiseTrustedValueStorage.ts:97) →
+  `computeAndPersistFranchiseWarAwards` (franchiseAwardsEngine.ts:594) → `emitFranchiseSeasonEndHonors`
+  (franchiseSeasonEndHonors.ts:69), same order as FranchiseHome.tsx:3309-3319 (NOT a reimplementation — audit-confirmed).
+  THREE §5.3 invariants are now live (soul count 20→22): **`soul.tv-freeze` (CRITICAL) REAL-GREEN** — real frozen artifact
+  (frozen=true, 96 trusted players), re-freeze no-op + anti-thaw guard fires for real; **`soul.awards-off-frozen-artifact`
+  (CRITICAL) REAL-GREEN** — 5 real finalized awards (MVP/CY/GG/RoY/SS) off the frozen artifact, every winner ∈
+  trustedPlayerIds; **`soul.emission-snub-signal` (INVESTIGATE) upgraded to the real property** (close-losers-only via the
+  production `pickRaceSnubVictims` + no-double-count + no-winner-snubbed + snub-without-nod) + SYNTHETIC-FALSIFIED, reports
+  LIVE-PENDING offline (the season-end nod is reporter+LLM(`callClaudeMessages`)+crypto.randomUUID-gated; the snub is gated
+  behind it). Re-falsification: falsification.config.ts **36/36** (baseline + every inverse trips red + 4 happy-path PASS).
+  Re-runs: 24g smoke all CRITICAL green / 0 findings; 60g determinism **same-seed byte-identical (A==B `8560489:56091768`)**
+  WITH finalize wired into both legs (digest legitimately differs from pre-Step-4 — finalize mutates end-state). tsc over
+  test-utils/lsim: 0 NEW errors (18 pre-existing harness loose-typing baseline). `npm run build` exit 0 (zero src/ touched).
+  Builder=Opus → independent adversarial audit (builder≠auditor, 3-lens workflow): **SOUND_WITH_MINORS → COMMIT.**
+  **⚠ PRODUCTION FINDING (HALT-JK, WAITING_ON_JK):** season-end fame-ratchet + close-loser morale-snub are gated behind the
+  LLM/reporter nod emitting (franchiseSeasonEndHonors.ts:104) → a transient LLM outage silently+permanently skips durable
+  game-state effects, not just news prose. **➡ H3 NEXT = Step 5 (re-run baseline+repro green-for-the-right-reasons — largely
+  done by this step's re-runs) → Step 6 the full §6 edge-league + multi-season matrix.** *(L-stack track entries below.)*
 - **✅ L11-5 VERIFIED + COMMITTED (2026-06-19, AUTH-4 — Codex-built → Opus-audited) — the reporter tap (manager
   firing/relocation → SeasonNewsEvent). ⇒ L11 (managers) FULLY COMPLETE (1–5).** NEW pure build-DARK adapter
   `src/src_figma/app/engines/reporter/franchiseL11ManagerChangeNewsAdapter.ts` (`buildFranchiseManagerChangeSeasonNewsEvent`):

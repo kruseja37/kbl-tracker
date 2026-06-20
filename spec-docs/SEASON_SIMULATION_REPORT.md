@@ -6,9 +6,9 @@ Generated: 2026-06-19
 
 | Leg | Seed | Games Simulated | Total Scheduled Games | Stopped Early | Final Digest |
 | --- | --- | ---: | ---: | --- | --- |
-| Baseline | lsim-h2-baseline | 60 | 60 | false | 8538802:e1c7527a |
-| Determinism A | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8532312:e035d7d1 |
-| Determinism B | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8532312:e035d7d1 |
+| Baseline | lsim-h2-baseline | 60 | 60 | false | 8566994:8cfc87a3 |
+| Determinism A | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8560489:56091768 |
+| Determinism B | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8560489:56091768 |
 
 Determinism same-seed byte-identical end-state: **PASS**
 
@@ -22,6 +22,7 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
 | --- | --- | ---: | ---: |
 | soul.albatross-2x-min-salary-overpaid-gate | CRITICAL | 60 | 0 |
 | soul.all-star-sixty-percent-lock | CRITICAL | 60 | 0 |
+| soul.awards-off-frozen-artifact | CRITICAL | 60 | 0 |
 | soul.channel-separation-double-count-guards | CRITICAL | 60 | 0 |
 | soul.checkpoint-cadence-exactly-five | CRITICAL | 60 | 0 |
 | soul.designation-six-slots-single-holder | CRITICAL | 60 | 0 |
@@ -40,6 +41,7 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
 | soul.ratings-overlay-validity | CRITICAL | 60 | 0 |
 | soul.reach-floor-ratchet | CRITICAL | 60 | 0 |
 | soul.trait-two-slot-no-offset-hysteresis | CRITICAL | 60 | 0 |
+| soul.tv-freeze | CRITICAL | 60 | 0 |
 | stats.batting-row-arithmetic | CRITICAL | 60 | 0 |
 | stats.completed-games-count | CRITICAL | 60 | 0 |
 | stats.derived-rate-ranges | CRITICAL | 60 | 0 |
@@ -55,7 +57,6 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
 
 ## Gaps / Deferred
 
-- §5.3 soul.season-end-tv-freeze-awards-off-frozen-artifact: Runner does not call a production season-finalize path in H2; finalization/awards artifact checks are deferred to the step-4 matrix.
 - §5.4 soul.real-export-migration-survival: H2 validates sandbox backup/restore round-trip through the real API; no real user export is touched under the sandbox-only contract.
 - §5.6 soul.tv-fixed-baseline-non-drift-across-seasons: H2 baseline is one season; multi-season legs are delegated to Opus step 4.
 - §5 / §H soul.l13-relationship-invariants: L13 relationship layer is explicitly not built; skipped and flagged per grounding §H.
@@ -197,7 +198,43 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
       }
     }
   },
-  "awardMargins": [],
+  "awardMargins": [
+    {
+      "category": "CY_YOUNG",
+      "winnerPlayerId": "lsim-team-01-mlb-17-RP",
+      "topMarginToWinner": 0,
+      "candidateCount": 12,
+      "finalized": true
+    },
+    {
+      "category": "GOLD_GLOVE",
+      "winnerPlayerId": "lsim-team-05-mlb-22-CF",
+      "topMarginToWinner": 0,
+      "candidateCount": 84,
+      "finalized": true
+    },
+    {
+      "category": "MVP",
+      "winnerPlayerId": "lsim-team-01-mlb-01-C",
+      "topMarginToWinner": 0,
+      "candidateCount": 84,
+      "finalized": true
+    },
+    {
+      "category": "ROOKIE_OF_YEAR",
+      "winnerPlayerId": "lsim-team-01-mlb-01-C",
+      "topMarginToWinner": 0,
+      "candidateCount": 84,
+      "finalized": true
+    },
+    {
+      "category": "SILVER_SLUGGER",
+      "winnerPlayerId": "lsim-team-01-mlb-01-C",
+      "topMarginToWinner": 0,
+      "candidateCount": 84,
+      "finalized": true
+    }
+  ],
   "randomEventFrequencyByFamily": {
     "performance": 47,
     "roster": 20,
