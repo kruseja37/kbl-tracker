@@ -13838,34 +13838,93 @@ needs the History edge (it must NOT — keys off any pair). Morale/reporter cree
 
 ---
 
-## CONTRACT — L13-5 (matrix relationship-tap authoring: the SIM-CRITICAL feedback write) — 2026-06-19 (attended)
+## CONTRACT — L13-5 (THE KEYSTONE: relationship → morale tap — producer + resolver, hit + §24.8 recovery, → development) — 2026-06-20 (attended, updated)
 
-**ROUTE:** Codex CLI (gpt-5.5, very-high). Auditor: Opus 4.8 (builder ≠ auditor).
-**ROLE:** Builder for the L3 morale matrix + the relationship morale payout. **DEPENDS ON L13-1/2/3.**
+> **L13-5 UPDATE (JK rulings 2026-06-20).** (1) Build the FULL LOOP, not just the resolver: PRODUCER + RESOLVER, **wired +
+> connected** (dark-flag-gated) so the tap FIRES in-sim — the original contract's "orphaned-pending, L13-8 wires it" is
+> superseded. (2) Include the **§24.8 RECOVERY** now — "the whole point": when the GM removes the troublemaker from the
+> victim's roster (trade / send-down / call-up that breaks co-rostering), the victim's lost morale RECOVERS. (3) Cadence =
+> **per-game, idempotent**.
 
-**GOAL:** Make the dark `MORALE_TAP_REGISTRY.relationship` tap fire **personality-scaled per-edge morale**, with
-relationshipEngine's `MORALE_EFFECTS` (`relationshipEngine.ts:38-48`) supplying the BASE delta and the matrix applying
-the personality/modifier cross (L13-Q7). **This is the feedback write that makes L13 sim-critical** (relationship →
-morale → development). Feud target eats the hit / aggressor largely unaffected (§24.2). Build-DARK / ORPHANED-PENDING
-(L13-8 wires the live caller).
+**ROUTE:** Codex CLI (gpt-5.5, **very-high / xhigh reasoning effort**) via `codex exec` stdin. Auditor: Opus 4.8
+(builder ≠ auditor). Build-DARK. NO browser verify (folds into the one v1 smoke pass). **FIRST cross-boundary write — touches
+the live morale system; the morale→WAR boundary (§24.10) is load-bearing.**
+**ROLE:** Builder for the L3 morale matrix relationship resolver + the per-game relationship-morale producer + the dark wiring.
+**DEPENDS ON L13-1 (edge store) + L13-2 (taxonomy) + L13-3a (edges form) + L13-4 (intensity, `915dbf6d`).**
 
-**SOURCE OF TRUTH:** `DECISIONS_LOG.md:100-104` (L13-Q7 — KEEP flat base + scale via matrix; ONE write path).
-**⚠ THE MAKE-OR-BREAK (verbatim from the L12-5c precedent — same trap):** `getBaseMoraleConsequence`
-(`masterMoraleMatrix.ts:411-417`) routes to a tap ONLY when `event.kind` is set (`event.kind && event.kind !== 'event'`).
-A `{type}`-only event hits the EVENT table, never the tap → build `{ kind: 'relationship', type: <edgeKey> }`. AND
-`composeMoraleConsequence` skips personality scaling when `base === NEUTRAL_BASE_CONSEQUENCE` by **reference equality** —
-the `relationship` resolver (currently `masterMoraleMatrix.ts:408` `() => NEUTRAL_BASE_CONSEQUENCE`) MUST return a
-**freshly-constructed** non-neutral object carrying the per-edge base delta. (Mirror exactly what L12-5c did for the
-`race` tap at `:402-407`.)
+**GOAL — the keystone feedback write (relationship → morale → DEVELOPMENT):**
+**(A) RESOLVER** — replace the no-op `MORALE_TAP_REGISTRY.relationship` (`masterMoraleMatrix.ts:408` `() => NEUTRAL_BASE_CONSEQUENCE`)
+with a real resolver returning a **freshly-constructed** non-neutral `BaseMoraleConsequence` per edge type; BASE delta from
+`relationshipEngine` `MORALE_EFFECTS` (`:38-48`) mapped via the L13-2 type→legacy representative (FEUD←BULLY_VICTIM = target
+eats the hit/aggressor +3 §24.2; RIVALRY←RIVALS −5/−5; FRIENDSHIP←BEST_FRIENDS +6; MENTORSHIP←MENTOR_PROTEGE +4/+7); the
+matrix applies the personality/modifier cross in `composeMoraleConsequence` (L13-Q7 — flat base, scale via matrix). Mirror the
+`race` tap `:402-407`.
+**(B) PRODUCER (per-game dark)** — `persistDarkRelationshipMoraleForCompletedGame` (mirror `franchiseRaceSnubMorale.ts` +
+`persistDesignationMoraleConsequencesAfterTrueValue` `processCompletedGame.ts:381-429`). Per completed game, read edges
+(`getFranchiseRelationshipEdgesByScope`) + the current roster (player→team). For each edge above the **§16 intensity threshold**
+(read the L13-4 `intensity`) with both players **CO-ROSTERED** → `composeMoraleConsequence({kind:'relationship', type:<edgeType>}, …)`
+→ `applyFranchiseMoraleMatrixConsequence(…, sourceEventId='relationship-hit:…:edgeId')` (the HIT, idempotent). **§24.8 RECOVERY:**
+for each edge whose HIT is in the morale history but the two players are **NO LONGER co-rostered** (troublemaker removed) →
+apply the **equal-and-opposite** recovery (reverse the EXACT recorded hit delta read from the morale history;
+`sourceEventId='relationship-recovery:…:edgeId'`, idempotent). Net-zero after resolution → the victim recovers.
+**(C) WIRING** — call the producer in `processCompletedGame` (the L13/morale block), behind `isFranchisePhase2L13Enabled`
+(+ the Phase-2 morale flag the apply path already checks). Dark.
 
-**VERIFIED ANCHORS:** tap registry `masterMoraleMatrix.ts:399-409`; the `race` tap precedent (now non-neutral) `:402-407`;
-`composeMoraleConsequence` `:419`; apply `applyFranchiseMoraleMatrixConsequence` `franchiseMoraleState.ts:388`; base values
-`relationshipEngine.ts:38-48`; the snub apply-loop template `franchiseRaceSnubMorale.ts` (L12-5c — the per-target compose+apply).
-**STANDING CONSTRAINTS 1+3 apply** (no Charisma double-count; matrix is the only morale writer).
-**VERIFICATION:** tsc/build 0; **the make-or-break test** (`composeMoraleConsequence({kind:'relationship',type:'feud'},…)`
-→ non-neutral, and an EGOTISTICAL/TIMID target amplifies vs TOUGH/RELAXED — proves the fresh-object scaling fired); the
-`masterMoraleMatrix.test.ts` regression green. **STOP-IF** filling the relationship tap requires touching the EVENT table
-or another tap. **FORMAT** house. **Status:** ⏸ AUTHORED — build HELD.
+**ROUTING CONSTRAINT (§24.10 — LOAD-BEARING):** the applied morale → `moraleSnapshots` → read at the 20% checkpoint by
+`franchiseCheckpointSweepCompute.ts:182` → `ratingsDevelopment.ts:86-104` (DEVELOPMENT only). **VERIFIED:** zero `morale`
+references in `bwarCalculator`/`pwarCalculator`/`mojoEngine`/`fitnessEngine` (grep). **Do NOT create ANY relationship→WAR or
+morale→WAR path.**
+
+**SOURCE OF TRUTH:** `DECISIONS_LOG.md:100-104` (L13-Q7) + §24.2/24.8/24.10 + JK rulings 2026-06-20 (full loop; §24.8 roster-move
+recovery; per-game idempotent).
+
+**⚠ MAKE-OR-BREAK:**
+1. **kind-routing (L12-5c trap):** `getBaseMoraleConsequence` (`:411-417`) routes to a tap ONLY when `event.kind` is set. Emit
+   `{ kind:'relationship', type:<edgeType> }` — a `{type}`-only event hits the EVENT table, never the tap.
+2. **reference-equality (L12-5c trap):** `composeMoraleConsequence` skips personality scaling when `base === NEUTRAL_BASE_CONSEQUENCE`
+   by reference — the resolver MUST return a **freshly-constructed** non-neutral object.
+3. **ONE write path (standing constraint 3):** the matrix (`composeMoraleConsequence` → `applyFranchiseMoraleMatrixConsequence`)
+   is the ONLY morale writer; the producer routes through it, NEVER writes `moraleSnapshots` directly.
+4. **No Charisma double-count (standing constraint 1).**
+5. **§24.8 net-zero recovery:** the recovery reverses the EXACT applied hit delta (from the morale history `sourceEventId`→delta),
+   idempotent → net-zero after the troublemaker leaves the victim's roster. Trigger = loss of CO-ROSTERING (roster move), per JK.
+6. **§24.10:** morale → DEVELOPMENT only, NEVER WAR.
+7. **Idempotent (per-game):** HIT once + RECOVERY once via deterministic `sourceEventId`s + the history dedup
+   (`franchiseMoraleState.ts:299-310`). Re-running a game → no double-apply.
+8. **NO new field:** the edge record + the morale history carry the state (the recovery reads the hit from history). STOP-IF a
+   new field is needed.
+9. **DARK:** flag OFF → producer emits nothing → the resolver never receives a `kind:'relationship'` event → zero production change.
+
+**VERIFIED ANCHORS:** tap registry `masterMoraleMatrix.ts:399-409`; `race` tap precedent `:402-407`; `getBaseMoraleConsequence`
+`:411-417`; `composeMoraleConsequence` `:419`; apply `applyFranchiseMoraleMatrixConsequence` `franchiseMoraleState.ts:388` +
+dedup `:299-310`; base values `relationshipEngine.ts:38-48` + L13-2 `RELATIONSHIP_6_TO_9_COVERAGE` (`relationshipEngine.ts:51`);
+producer templates `franchiseRaceSnubMorale.ts` + `persistDesignationMoraleConsequencesAfterTrueValue` (`processCompletedGame.ts:381-429`);
+edge read `franchiseRelationshipEdgesStorage.ts:135`; roster resolution (mirror L13-3a `franchiseRelationshipFormationCompute.ts`
+`getPlayerTeamIdForLeague`); morale→development `franchiseCheckpointSweepCompute.ts:182` + `ratingsDevelopment.ts:86-104`.
+
+**CHANGES (additive; exact files set at build):** A. `src/engines/masterMoraleMatrix.ts` (the resolver + a relationship
+base-delta lookup). B. NEW `src/utils/franchiseRelationshipMoraleCompute.ts` (the producer: hit + recovery). C.
+`src/utils/processCompletedGame.ts` (the dark per-game wiring). D. L-SIM: snapshot the relationship-morale deltas + a NEW
+invariant (the tap fires; routes to development; morale→WAR stays zero; hit+recovery net-zero after a roster move; idempotent)
++ falsification (trips if the tap routes to WAR, double-applies, or recovery doesn't net-zero). E. unit tests incl. the
+make-or-break + `masterMoraleMatrix.test.ts` regression.
+
+**HARD CONSTRAINTS:** edit/create ONLY the listed files (+ tests). DARK. NO `Date.now`/`Math.random` (seed/derive from
+gameState). NO new field. NO trackerDb bump. NO reporter (L13-7), NO L13-6 charged-matchup, NO L13-3b logic; **do NOT touch the
+formation invariant's `crossTeamActive` (L13-6's known item).** NO git add/commit.
+
+**VERIFICATION (run ALL, paste ACTUAL):** `NODE_ENV= npx tsc -b` 0 + `npm run build` 0; **the make-or-break test**
+(`composeMoraleConsequence({kind:'relationship',type:'feud'},…)` → non-neutral; EGOTISTICAL/TIMID target amplifies vs
+TOUGH/RELAXED) + `masterMoraleMatrix.test.ts` green; full suite **ZERO new reds** (prove any non-pass pre-existing by solo);
+L-SIM 24g + 60g BOTH cadences (**standard LAST** — the baseline-regen trap; delete stray non-60g files): the tap FIRES
+(relationship morale deltas appear where before NONE), routes to DEVELOPMENT, morale→WAR ABSENT, hit+recovery **net-zero** after
+a roster move breaks co-rostering, idempotent (re-run → no double-apply), same-seed byte-identical, findings=0.
+
+**STOP-IF:** filling the tap needs the EVENT table or another tap → STOP. The recovery needs a new field (it must NOT — read the
+hit from morale history) → STOP. ANY morale→WAR / relationship→WAR path appears → STOP. The producer would write `moraleSnapshots`
+directly (bypassing the matrix) → STOP.
+
+**FORMAT** house. Use very high reasoning effort. **Status:** ⏸ AUTHORED — ready for dispatch (JK attended, sole-mutator, 2026-06-20).
 
 ---
 
