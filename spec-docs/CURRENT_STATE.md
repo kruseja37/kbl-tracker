@@ -1,6 +1,12 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-**Last Updated:** 2026-06-19 — **ATTENDED session (JK present), checkpointed for a fresh session.** **✅ L12-5 COMPLETE
+**Last Updated:** 2026-06-20 — **ATTENDED session (JK present).** **HEAD STATE: L13 stack in progress (build-dark) — L13-1
+CLOSED** (relationship edge store + trackerDb v25 migration, browser-verified on a real franchise, no data loss) **· L13-2
+verified-complete** (edge-type taxonomy, 9→6 map). **NEXT = L13-3 (edge formation @ checkpoint) — BUT the checkpoint cadence
+is under JK review** (currently fixed 20% = 5/season; JK wants it configurable by season length — note this is the SHARED
+checkpoint cadence used by ratings-dev + traits too, not L13-only). **Parallel track: H3 L-SIM sim-hardening COMPLETE through
+Step 4 + the season-end honor-decouple PRODUCTION fix** (the sim caught it; verified, browser-pending at the post-D13 flag-flip).
+*(prior head:)* **✅ L12-5 COMPLETE
 (a/b/c/d/e-1/e-2) — the award/All-Star PAYOUT layer is FULLY BUILT.** L12-5 = emission + L3 race-snub morale + honor→reach-floor
 ratchet for the marquee honors (MVP/CY/All-Star — Q6), fired at TWO trigger edges. Recon + 3 JK rulings (snub = **close losers
 only**; the new race tap = **snub-only**, keep the legacy nod; reach-floor = **whole team, starters get more**) →
@@ -1313,6 +1319,14 @@ forced the test edit, and the stale `teamMvpAcePreview` assertion was aligned to
 **CLI:** prefix `NODE_ENV= `; node at `~/.nvm/versions/node/v20.20.0/bin`.
 
 ## BROWSER-VERIFY OUTSTANDING (JK)
+
+> **▶ COLLAPSED INTO ONE v1 SMOKE PASS (JK 2026-06-20).** There is NO current franchise data to protect — the goal is a clean
+> v1 BEFORE any meaningful (un-corruptable) franchise exists. So these are NO LONGER per-ticket gates. They collapse into a
+> SINGLE end-of-v1 smoke pass on a DISPOSABLE/throwaway franchise: near v1, flip the Phase-2 flags ON and run ONE pass
+> confirming the dark features behave + migrations load clean. The numbered/lettered items below are now just the CHECKLIST
+> of what that one pass covers — NOT separate sign-offs. Persistence/migration items are already proven by unit tests, so the
+> v1 pass is a final smoke-check, not a data-safety gate. **Correctness discipline (builder≠auditor, falsification/inverse
+> tests) is UNCHANGED — only the per-ticket browser ceremony is collapsed.**
 
 > BATCHED per the SESSION_RULES pen (JK 2026-06-14) — cleared in one pass before
 > the D0 / flag-flip / playtest gate; persistence/data-shape items prioritized.
