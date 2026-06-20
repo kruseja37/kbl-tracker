@@ -6,6 +6,7 @@ import {
 } from '../../app/engines/reporter/franchiseSeasonEndHonors';
 import { setFranchisePhase2L12EnabledForTests } from '../../../utils/franchisePhase2Flags';
 import type { FranchiseAwardRow } from '../../../utils/franchiseAwardsStorage';
+import type { FranchiseFameRecordRow } from '../../../utils/franchiseFameRecordsStorage';
 import type { FranchiseValueInputReport } from '../../../utils/franchiseValueInputs';
 
 const originalSeam = { ...franchiseSeasonEndHonorsSeam };
@@ -41,23 +42,51 @@ function valueReportRows(rows: Array<{ playerId: string; currentTeamId: string |
   return rows as FranchiseValueInputReport['rows'];
 }
 
+function fameRecord(overrides: Partial<FranchiseFameRecordRow> = {}): FranchiseFameRecordRow {
+  return {
+    franchiseId: scope.franchiseId,
+    seasonId: scope.seasonId,
+    statsScopeId: scope.statsScopeId,
+    playerId: 'player-mvp',
+    heat: 10,
+    reachFloor: 8,
+    wasNegative: false,
+    channelTotal: 10,
+    channelByChannel: {
+      wpa_spine: 0,
+      iconic_event: 0,
+      status: 10,
+      defensive: 0,
+      role_player: 0,
+    },
+    defensiveFame: 0,
+    rolePlayerFame: 0,
+    updatedAtCheckpoint: 'pre-honor',
+    ...overrides,
+  };
+}
+
 function installSeamMocks(params: {
   awards?: FranchiseAwardRow[];
   valueRows?: Array<{ playerId: string; currentTeamId: string | null }>;
   emitStatus?: 'emitted' | 'deduped' | 'gated' | 'no-reporter' | 'take-failed' | 'dark-noop';
+  emit?: ReturnType<typeof vi.fn>;
+  getFameRecord?: ReturnType<typeof vi.fn>;
   applySnub?: ReturnType<typeof vi.fn>;
 } = {}) {
   const getAwards = vi.fn(async () => params.awards ?? []);
   const getValueRows = vi.fn(async () => ({
     rows: valueReportRows(params.valueRows ?? []),
   }) as FranchiseValueInputReport);
-  const emit = vi.fn(async () => ({ status: params.emitStatus ?? 'emitted' }));
+  const emit = params.emit ?? vi.fn(async () => ({ status: params.emitStatus ?? 'emitted' }));
+  const getFameRecord = params.getFameRecord ?? vi.fn(async () => null);
   const applyReachFloor = vi.fn(async () => ({ status: 'ratcheted', ratchetedCount: 1 }));
   const applySnub = params.applySnub ?? vi.fn(async () => ({ status: 'applied', appliedCount: 1 }));
 
   franchiseSeasonEndHonorsSeam.getAwards = getAwards;
   franchiseSeasonEndHonorsSeam.getValueRows = getValueRows;
   franchiseSeasonEndHonorsSeam.emit = emit;
+  franchiseSeasonEndHonorsSeam.getFameRecord = getFameRecord;
   franchiseSeasonEndHonorsSeam.applyReachFloor = applyReachFloor;
   franchiseSeasonEndHonorsSeam.applySnub = applySnub;
 
@@ -65,6 +94,7 @@ function installSeamMocks(params: {
     getAwards,
     getValueRows,
     emit,
+    getFameRecord,
     applyReachFloor,
     applySnub,
   };
@@ -161,20 +191,116 @@ describe('emitFranchiseSeasonEndHonors', () => {
     });
   });
 
-  test('deduped emit skips reach-floor and snub fire-once payouts', async () => {
+  test('season-end honor checkpoint skips reach-floor while deduped nod still fires snub payout', async () => {
     setFranchisePhase2L12EnabledForTests(true);
     const seam = installSeamMocks({
       awards: [awardRow()],
-      valueRows: [{ playerId: 'player-mvp', currentTeamId: 'team-winner' }],
+      valueRows: [
+        { playerId: 'player-mvp', currentTeamId: 'team-winner' },
+        { playerId: 'runner-1', currentTeamId: 'team-runner-1' },
+        { playerId: 'runner-2', currentTeamId: 'team-runner-2' },
+        { playerId: 'runner-3', currentTeamId: 'team-runner-3' },
+      ],
       emitStatus: 'deduped',
+      getFameRecord: vi.fn(async () => fameRecord({ updatedAtCheckpoint: 'season-end-honor' })),
     });
 
     const result = await emitFranchiseSeasonEndHonors(scope);
 
     expect(result).toEqual({ status: 'processed', emitted: [] });
     expect(seam.emit).toHaveBeenCalledTimes(1);
+    expect(seam.getFameRecord).toHaveBeenCalledWith({
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+    }, 'player-mvp');
     expect(seam.applyReachFloor).not.toHaveBeenCalled();
-    expect(seam.applySnub).not.toHaveBeenCalled();
+    expect(seam.applySnub).toHaveBeenCalledWith({
+      victims: [
+        { playerId: 'runner-2', teamId: 'team-runner-2' },
+        { playerId: 'runner-1', teamId: 'team-runner-1' },
+        { playerId: 'runner-3', teamId: 'team-runner-3' },
+      ],
+      honorKind: 'MVP',
+      scope,
+      timestamp: Date.parse('2026-10-01T12:00:00.000Z'),
+    });
+  });
+
+  test('no-reporter nod still applies reach-floor and close-loser snub payouts', async () => {
+    setFranchisePhase2L12EnabledForTests(true);
+    const seam = installSeamMocks({
+      awards: [awardRow()],
+      valueRows: [
+        { playerId: 'player-mvp', currentTeamId: 'team-winner' },
+        { playerId: 'runner-1', currentTeamId: 'team-runner-1' },
+        { playerId: 'runner-2', currentTeamId: 'team-runner-2' },
+        { playerId: 'runner-3', currentTeamId: 'team-runner-3' },
+      ],
+      emitStatus: 'no-reporter',
+    });
+
+    const result = await emitFranchiseSeasonEndHonors(scope);
+
+    expect(result).toEqual({ status: 'processed', emitted: [] });
+    expect(seam.applyReachFloor).toHaveBeenCalledWith({
+      honorees: [{ playerId: 'player-mvp', honorTier: 'mvp' }],
+      scope: {
+        franchiseId: 'franchise-1',
+        seasonId: 'season-1',
+        statsScopeId: 'season-1',
+      },
+      checkpointSentinel: 'season-end-honor',
+    });
+    expect(seam.applySnub).toHaveBeenCalledWith({
+      victims: [
+        { playerId: 'runner-2', teamId: 'team-runner-2' },
+        { playerId: 'runner-1', teamId: 'team-runner-1' },
+        { playerId: 'runner-3', teamId: 'team-runner-3' },
+      ],
+      honorKind: 'MVP',
+      scope,
+      timestamp: Date.parse('2026-10-01T12:00:00.000Z'),
+    });
+  });
+
+  test('throwing nod still applies reach-floor and close-loser snub payouts', async () => {
+    setFranchisePhase2L12EnabledForTests(true);
+    const seam = installSeamMocks({
+      awards: [awardRow()],
+      valueRows: [
+        { playerId: 'player-mvp', currentTeamId: 'team-winner' },
+        { playerId: 'runner-1', currentTeamId: 'team-runner-1' },
+        { playerId: 'runner-2', currentTeamId: 'team-runner-2' },
+        { playerId: 'runner-3', currentTeamId: 'team-runner-3' },
+      ],
+      emit: vi.fn(async () => {
+        throw new Error('LLM down');
+      }),
+    });
+
+    const result = await emitFranchiseSeasonEndHonors(scope);
+
+    expect(result).toEqual({ status: 'processed', emitted: [] });
+    expect(seam.applyReachFloor).toHaveBeenCalledWith({
+      honorees: [{ playerId: 'player-mvp', honorTier: 'mvp' }],
+      scope: {
+        franchiseId: 'franchise-1',
+        seasonId: 'season-1',
+        statsScopeId: 'season-1',
+      },
+      checkpointSentinel: 'season-end-honor',
+    });
+    expect(seam.applySnub).toHaveBeenCalledWith({
+      victims: [
+        { playerId: 'runner-2', teamId: 'team-runner-2' },
+        { playerId: 'runner-1', teamId: 'team-runner-1' },
+        { playerId: 'runner-3', teamId: 'team-runner-3' },
+      ],
+      honorKind: 'MVP',
+      scope,
+      timestamp: Date.parse('2026-10-01T12:00:00.000Z'),
+    });
   });
 
   test('skips non-finalized, no-winner, and no-team rows', async () => {
