@@ -27,6 +27,7 @@ const TRACKER_STORES_TO_CLEAR = [
   "reporterAlmanacEntries",
   "reporterLegacySummaryJobs",
   "rivalryScores",
+  "franchiseRelationshipEdges",
 ] as const;
 
 function transactionToPromise(tx: IDBTransaction): Promise<void> {

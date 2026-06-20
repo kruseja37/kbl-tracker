@@ -165,6 +165,14 @@ const trackerStores: Record<string, StoreSchema> = {
     ],
     optional: true,
   },
+  franchiseRelationshipEdges: {
+    keyPath: 'id',
+    indexes: [
+      { name: 'by_scope', keyPath: ['franchiseId', 'seasonId', 'statsScopeId'] },
+      { name: 'by_pair', keyPath: ['player1Id', 'player2Id'] },
+    ],
+    optional: true,
+  },
   franchiseL10Overlays: {
     keyPath: 'id',
     indexes: [
@@ -355,7 +363,7 @@ const trackerStores: Record<string, StoreSchema> = {
 
 export const STATIC_DATABASE_SCHEMAS: Record<string, DatabaseSchema> = {
   'kbl-tracker': {
-    version: 24,
+    version: 25,
     stores: trackerStores,
   },
   'kbl-playoffs': {

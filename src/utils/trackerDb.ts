@@ -14,7 +14,7 @@
  */
 
 const DB_NAME = 'kbl-tracker';
-export const TRACKER_DB_VERSION = 24; // Must be the highest version any consumer ever used
+export const TRACKER_DB_VERSION = 25; // Must be the highest version any consumer ever used
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -446,6 +446,20 @@ export async function getTrackerDb(): Promise<IDBDatabase> {
           keyPath: 'id',
         });
         allStarRosterStore.createIndex('by_scope', ['franchiseId', 'seasonId', 'statsScopeId'], {
+          unique: false,
+        });
+      }
+
+      // v25 / L13-1: dark franchise relationship edge store (§24 / L13).
+      // No production writer/reader yet; later L13 tickets fill it behind the L13 flag.
+      if (!db.objectStoreNames.contains('franchiseRelationshipEdges')) {
+        const relationshipEdgeStore = db.createObjectStore('franchiseRelationshipEdges', {
+          keyPath: 'id',
+        });
+        relationshipEdgeStore.createIndex('by_scope', ['franchiseId', 'seasonId', 'statsScopeId'], {
+          unique: false,
+        });
+        relationshipEdgeStore.createIndex('by_pair', ['player1Id', 'player2Id'], {
           unique: false,
         });
       }

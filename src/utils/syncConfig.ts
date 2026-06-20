@@ -15,6 +15,7 @@ export const SYNC_REGISTRY: Record<string, Record<string, string | string[]>> = 
     franchiseFameRecords: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'],
     franchiseFlashpointDecay: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'],
     franchiseRatingsOverlays: 'id',
+    franchiseRelationshipEdges: 'id',
     franchiseL10Overlays: 'id',
     franchiseTraitOverlays: 'id',
     franchiseAllStarRosters: 'id',
