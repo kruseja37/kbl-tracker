@@ -13724,7 +13724,7 @@ surface. ROMANCE/HISTORY/Captain/co-rostered creep in → STOP (L13-3b).
 
 **FORMAT:** 1) files; 2) the engine gate + the seeded determinism + the id/idempotency + the processCompletedGame sibling + the
 L-SIM invariant; 3) verification (incl. both-cadence sim legs + idempotency + determinism); 4) "L13-3a complete"/"BLOCKED". No commit.
-Use very high reasoning effort. **Status:** ⏸ AUTHORED — ready for dispatch (JK attended, sole-mutator, 2026-06-20).
+Use very high reasoning effort. **Status:** ✅ BUILT + Opus-audited (builder≠auditor) — VERIFIED-COMPLETE (2026-06-20, attended). Codex(gpt-5.5/xhigh)-built; commit `f737c67e`. Forms RIVALRY/FEUD/MENTORSHIP/FRIENDSHIP via §16-placeholder threshold gates; seeded FNV-1a (no Date.now/Math.random); dark sibling in `processCompletedGame` behind `isFranchisePhase2L13Enabled`; idempotent (deterministic id + put-overwrite); single writer; cadence-aware. Host gate: build 0; full suite 7,858 pass / 2 fail = characterized set only (proven pre-existing by solo), ZERO new reds. L-SIM flags-ON both cadences: edges form at the right boundaries, findings=0, same-seed byte-identical (idempotent), auditor-reproduced standard 60g digest `8575073:a6645486` (deterministic); baseline regenerated at standard (010 empty<game-12; 020=5→060=7 edges, ~1.2/team); no stray 024. A new soul invariant (`relationshipFormationCheckpointWrite`) + falsification (double-write) added. NO scope creep (no Captain/romance/co-rostered/morale/charged/reporter/reader). NO browser verify (dark; folds into the one v1 smoke pass). ➡ NEXT = L13-4 (intensity lifecycle) — or L13-3b (the logged deferred set) per JK.
 
 ---
 
