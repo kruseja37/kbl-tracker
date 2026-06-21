@@ -2460,3 +2460,15 @@ player at whole-draft completion via the FRANCHISE freeze store (`franchiseTrueV
 careful class; `settledSalary?` is the only additive field per the L-ECON1 gotcha). GROUND AT SOURCE FIRST. Then scout-privacy UI (§6.1) →
 POSITION_POOL SP/RP fix; Mode-2 = LSIM-P3.
 
+**WAVE 48 — AUC-5.2 RECONNED → HANDOFF at the AUC-5.1-COMPLETE milestone (careful franchise-bridge ticket deserves fresh context).**
+- **AUC-5.2 recon (grounded at source, for the next session):** the §4 two-number freeze adds the SECOND number (`settledSalary`) to the EXISTING
+  checkpoint-0 franchise freeze. **`FranchiseTrueValueSnapshotRow`** (`franchiseTrueValueSnapshotsStorage.ts:17`) = {franchiseId, seasonId, statsScopeId,
+  playerId, checkpoint, trueValue, valueDelta, warPercentile, computedAt} — **`settledSalary?: number` is ADDITIVE** (a row field, NOT a store) ⇒
+  **NO trackerDb bump** (store `franchiseTrueValueSnapshots` exists trackerDb:370; TRACKER_DB_VERSION stays 25; the version-pin pins the STORE SET, not
+  row fields — VERIFY). Writer = `saveFranchiseTrueValueSnapshotRows` (:83). **The freeze fires at FRANCHISE-INIT checkpoint-0 (the G1 home), NOT in
+  the auction** — so AUC-5.2 lives in the Mode-1→Mode-2 BRIDGE (`franchiseInitializer`), reading the drafted winning-bid salaries (AuctionResult.salary /
+  the leagueBuilder roster assignments `{playerId, salary}`) → stamp `settledSalary` alongside `trueValue` at checkpoint-0. **CROSS-CUTTING / saved-shape /
+  Mode-2-test-exercised = the highest-risk class → fresh-context, careful grounding of the franchiseInitializer freeze path required.**
+- **CHECKPOINT rationale:** AUC-5.1 COMPLETE = the entire Mode-1 auction (16 tickets this run, all zero-new-reds). AUC-5.2 is a delicate franchise-DB
+  bridge; building it at the tail of a marathon session risks a subtle saved-shape/bridge error. Handing off at the complete-subsystem seam.
+
