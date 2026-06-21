@@ -2376,3 +2376,7 @@ NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its 
 - **Contract committed `8edb8daf`.** Dispatched to Codex (gpt-5.5, xhigh) bg task `b1mgyb6jw` → `/tmp/codex-auc51d1.out`. On landing: read-the-diff audit +
   full Mode-1 suite + confirm no existing file modified + commit. **➡ after 5.1d-1 = AUC-5.1d-2** (the farm hook).
 
+**WAVE 39 — ✅ AUC-5.1d-1 COMMITTED `b5523bd3` (AUC-5.1d at 1/3).** Codex-built → Opus-audited: VERIFIED. Pure `buildFarmAuctionSession`
+assembles the SAME §2 machine on the 5.1a pool + 5.1c wallet (10 slots, §5.2 cap), true IV, reuse-only, 2 new files, nothing existing modified.
+tsc 0 + full suite **7966 pass / 1 fail = wpaRuntimeBoundary (characterized), zero new reds** (+5). **➡ NEXT = AUC-5.1d-2 (the farm hook).**
+
