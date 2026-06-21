@@ -160,6 +160,22 @@ HIDDEN. The only value signal is the scout's range + 20–80 grade.
   band salaries, so the farm archetype instead **tilts the scout's hole-prioritization + valuation**
   (§3.5) — it raises the priority/recommended-pay for prospects matching your farm identity. The farm
   wallet itself stays archetype-neutral.
+- **⚠ SOURCE OF TRUTH for the archetype machinery (RB-3 grounds HERE — the design is RATIFIED, not new):**
+  - **Algorithm** = `composeIdentity` — `IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md §6.3` (band-priority →
+    greedy mod-stack pick) + the **ratified ruling DECISIONS_LOG §520 (JK 2026-06-14):** decreases are
+    OPTIONAL, point-allocation input, user freely edits the ≤2-increase/≤2-decrease stack. The A6/ID-9
+    open flag is CLOSED. Code: `leagueConstruction.ts` `composeIdentity`/`identityCapShift`/`shiftLuxuryCaps`.
+  - **The "leeway not a wall" tax IS the already-ratified D13 design** (`IV_ENGINE §5.3` / D13): the luxury
+    tax is a **soft convex BUDGET-DRAIN, never a hard wall** — verbatim "20 over ≈ pocket change, 200 over
+    ≈ a bullpen … no single optimal archetype." RB-3 does NOT redesign the tax — it **wires the ratified
+    tax into the auction** (the auction stubbed `projectedTax:0`; compute the per-bid marginal tax like
+    the snake's `pickMarginalTax`). **Acceptance gate already exists:** §5.3 **EV-flatness** — no composed
+    identity's best roster may deviate >10% from the cross-identity mean (T3 verified it PASSES at tierCap).
+  - **Cap + modification DATA** = `T3_POOL_ANALYSIS.md §R4` (XBL-workbook-derived) → `tierParams.ts`
+    (`LUXURY_CAP_TABLES`, `CAP_MODIFICATION_FRACTIONS` [42 deltas], `DISABLED_LUXURY_ROWS` now empty).
+  - **NET-NEW in V2 = the DUAL identity only.** All the above is SINGLE-identity-per-team; RB-3's new work
+    is splitting it into independent **MLB archetype** (→ the wired luxury tax) + **farm archetype** (→ the
+    §3.5 scout-priority tilt). The machinery is reused twice, not reinvented.
 
 ### 4.3 Solvency cap (roster-fill guarantee) — unchanged
 `auctionMaxBid = remainingBudget − (slotsRemaining − 1) × minSalary − projectedTax` ceiling guarantees

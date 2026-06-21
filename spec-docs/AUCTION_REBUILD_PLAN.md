@@ -25,7 +25,7 @@ session per the loop (split further as the grounding warrants).
 
 | # | Ticket | V2 § | Class | What |
 |---|---|---|---|---|
-| **RB-3** | Dual archetypes + MLB luxury tax | §4.2 | engine + wiring | two archetypes per team (MLB + farm); wire the **gentle convex** marginal luxury tax into `auctionMaxBid` (un-stub `projectedTax:0`) for MLB; farm archetype → scout-priority tilt. ⚠ leeway-not-a-wall calibration |
+| **RB-3** | Dual archetypes + MLB luxury tax | §4.2 | engine + wiring | **The archetype algorithm + soft tax are RATIFIED (V2 §4.2 sources: composeIdentity = IV_ENGINE §6.3 + DECISIONS_LOG §520; the leeway tax = the ratified D13 soft convex budget-drain; caps/42-mod-fractions = T3 §R4/tierParams.ts).** RB-3 = (a) **WIRE** the ratified tax into the auction (un-stub `projectedTax:0`; per-bid marginal tax like the snake's `pickMarginalTax`) — do NOT redesign it; (b) **ADD the NET-NEW dual identity** (separate MLB archetype → tax, farm archetype → §3.5 scout-priority tilt). **Acceptance gate = §5.3 EV-flatness (no identity >10% advantaged).** |
 | **RB-4** | MLB→farm carryover | §4.5 | data/logic (small) | one-way valve: unspent MLB × 50% → farm wallet; timing-enforced |
 
 ## Phase 3 — MORALE / IDENTITY / THE MODE-2 BRIDGE
