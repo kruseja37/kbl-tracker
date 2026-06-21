@@ -2254,3 +2254,21 @@ NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its 
   (§3.2, reuse §7.4 scout-range), positions-visible/ratings-hidden card (§3.3), walled-off farm wallet (§3.4, NEW separate budget), scout-hiring
   dependency (§3.5/§6 Q8 — every team must hire a scout, no scout-less path). Then AUC-5.2 (L-ECON1 freeze) → scout-privacy UI (§6.1) → POSITION_POOL
   SP/RP fix; Mode-2 = LSIM-P3. Grounding §3 at source next.
+
+**WAVE 31 — AUC-5.1 (farm auction §3) RECON DONE → `spec-docs/AUC-5.1_SCOPE_MAP.md`.**
+- **Grounded §3 + an Explore infra map of the EXISTING farm/scout system** (file:line in the map). The farm auction REUSES the §2 machine
+  (AUC-4.2-complete) + §7.5 bidding wholesale with §3's 4 overrides. **It is a MAJOR multi-ticket subsystem** (comparable to the whole MLB
+  auction chain), split 5.1a–e: (a) farm prospect-pool registration + IV pricing · (b) §3.2 scout VALUE-range obscuring · (c) walled-off farm
+  wallet §3.4 · (d) farm-auction wrapper + MLB→farm sequencing §3.1 · (e) farm UI card §3.3.
+- **KEY DE-RISK — the foundational value fork is RESOLVED by reuse:** prospects have NO numerical IV today (the existing scout-obscuring is
+  GRADE-step noise, not the §3.2 value range), but **prospect trueIV = `computeIV`(prospect ratings)** — the SAME engine that prices the MLB
+  pool (`registerPool`→`computeIV` ivEngine.ts:638), confirmed by §3.4 (the wallet self-calibrates "§5.2 over the prospect pool" ⇒ prospects
+  ARE IV-priced). The B1–B9 generator already yields poolable ratings. **⇒ NOT a new value-design decision.**
+- **ALREADY BUILT (consume, don't rebuild):** scout HIRING (`draftLeagueBuilderScout`, 2 scouts/team, durable) ⇒ §3.5/§6 Q8 satisfied;
+  `scoutAccuracy(position,scout)` [45–92]; farm roster store (`TeamRoster.farmRoster`); the §2 machine.
+- **MISSING (build):** prospect IV pricing+pool registration · §3.2 value-range (`[trueIV(1±w)]`, w=0.6·(1−acc), scoutNoiseBase=0.6 §12) ·
+  walled-off NERFED farm wallet (§3.4/Q7, self-calibrating §5.2) · MLB→farm sequencing + per-tier format config.
+- **🟡 SURFACED FOR JK (foundational value-economy — flagged in the map §3, AUTH-4 default taken, NOT blocking):** JK-1 confirm prospect IV =
+  `computeIV(ratings)`; JK-2 farm-wallet NERF magnitude (Q7 rules "nerfed", magnitude is a dial); JK-3 auction-format farm REPLACES the snake
+  prospect draft for auction leagues (R1 ⇒ yes, default). **➡ NEXT = AUC-5.1a** (fork-free foundational pool registration + IV pricing) →
+  5.1b (scout range) → 5.1c (wallet) → 5.1d (wrapper+sequencing) → 5.1e (UI). 5.1a/5.1b are independent + fork-free → build first.
