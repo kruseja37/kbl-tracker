@@ -2331,3 +2331,22 @@ NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its 
   §5.2 self-calibration entry (how TIER_CAPS/the MLB cap is derived → mirror NERFED for farm); where the farm wallet persists (TeamRoster vs new field/
   store — saved-shape ⇒ version-bump/4-mirror discipline + full-suite gate); the nerf magnitude (**JK-2 flagged**, default ~0.25–0.4). Then 5.1d
   (wrapper + MLB→farm sequencing §3.1) → 5.1e (UI §3.3). Handing off per STEP 6 so 5.1c gets a fresh full-context session.
+  *(SUPERSEDED: JK said "yes" → reclaimed the baton, continued AUC-5.1c in THIS session — WAVE 36.)*
+
+**WAVE 36 — AUC-5.1c (walled-off farm wallet §3.4) CONTRACTED + DISPATCHED. (Baton reclaimed — JK "yes" = continue here.)**
+- **Source-grounding REVISED two earlier assumptions (STEP 3.A pays off again):**
+  - **(i) 5.1c is NOT a persistence/saved-shape ticket** — the MLB wallet is DERIVED on the fly (`buildAuctionTeams` useAuctionDraft.ts:148:
+    `budgetRemaining = tierCap − committedSalaries`; `TeamRoster` has NO budget field) → the farm wallet follows suit ⇒ **NO DB/store/version
+    change** (the handoff/scope-map's "saved-shape ⇒ version-bump/4-mirror" was wrong). 5.1c is a PURE engine/data ticket.
+  - **(ii) JK-2 (farm-wallet nerf magnitude) is RESOLVED — the nerf is EMERGENT, not a free dial; my "~0.25-0.4" was an uninformed invention.**
+    §3.4/Q7: the cap self-calibrates §5.2 OVER THE PROSPECT POOL; since prospects have intrinsically lower IVs than MLB stock, the §5.2 cap over
+    that weaker pool is automatically smaller = the nerf. NO separate multiplier. (The `FARM_NERF_SCALES`/"one grade step left §7.4" in tierParams is
+    the GENERATION nerf — prospect quality — explicitly OUT of §3.4's wallet scope.) Flagged for JK to confirm the emergent reading.
+- **§5.2 formula grounded exact:** `tierCap = max(maxPoolIV/starBudgetShare, rosterSlots×medianPoolIV×rosterHeadroom)` (tierParams.ts:16/57-63);
+  constants `T3_DERIVATION_INPUTS.starBudgetShare=0.33` + `.rosterHeadroom=1.15` (tierParams.ts:203-212) — IMPORTED, not hardcoded. TIER_CAPS are
+  precomputed offline (no live fn) → 5.1c implements the formula over the AUC-5.1a pool with FARM slots=10. Farm minSalary = `LEAGUE_MINIMUM_SALARY`.
+- **5.1c scope:** NEW pure `src/utils/farmAuctionWallet.ts` — `computeFarmTierCap(poolIVs, farmSlots=10)` (§5.2, emergent nerf) + `buildFarmAuctionTeamInputs`
+  (farm `AuctionTeamInput[]` mirror: budget=cap−committed, slots=10−rostered, minSalary=LEAGUE_MINIMUM_SALARY, tax=0) + tests. PURE / build-DARK, **no DB change**.
+- **Contract committed `7c14325f`.** Dispatched to Codex (gpt-5.5, xhigh) bg task `bc5ftzjos` → `/tmp/codex-auc51c.out`. On landing: read-the-diff audit +
+  full Mode-1 suite + confirm NO DB/store change + oracle byte-unchanged + commit. **➡ after 5.1c ⇒ AUC-5.1 at 3/5 → 5.1d** (wrapper + MLB→farm
+  sequencing §3.1 + per-league auction-vs-snake format config) → 5.1e (UI §3.3).
