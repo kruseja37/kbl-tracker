@@ -188,6 +188,62 @@ const CASES: Array<{ name: string; mutate: (s: LsimStateSnapshot) => void }> = [
         updatedAt: 3,
       }] as never;
     } },
+  { name: 'soul.l13-relationship-intensity-lifecycle',
+    mutate: (s) => {
+      s.gameNumber = 3;
+      s.gamesSimulated = 3;
+      s.completedGames = [{ gameId: 'game-3', playerStats: {}, pitcherGameStats: [] }] as never;
+      s.relationshipEdges = [{
+        id: 'f:s:ss:p1:p2:RIVALRY',
+        franchiseId: 'f',
+        seasonId: 's',
+        statsScopeId: 'ss',
+        seasonNumber: 1,
+        player1Id: 'p1',
+        player2Id: 'p2',
+        type: 'RIVALRY',
+        intensity: 0.99,
+        potential: false,
+        accuracy: 0.8,
+        formedAtGameNumber: 1,
+        dissolvedAtGameNumber: null,
+        createdAt: 1,
+        updatedAt: 3,
+      }] as never;
+    } },
+  { name: 'soul.l13-relationship-morale-development-boundary',
+    mutate: (s) => {
+      s.gameNumber = s.totalScheduledGames;
+      s.gamesSimulated = s.totalScheduledGames;
+      s.relationshipEdges = [{
+        id: 'f:s:ss:p1:p2:FEUD',
+        franchiseId: 'f',
+        seasonId: 's',
+        statsScopeId: 'ss',
+        seasonNumber: 1,
+        player1Id: 'p1',
+        player2Id: 'p2',
+        type: 'FEUD',
+        intensity: 0.9,
+        potential: false,
+        accuracy: 0.8,
+        formedAtGameNumber: 2,
+        dissolvedAtGameNumber: null,
+        createdAt: 2,
+        updatedAt: 3,
+      }] as never;
+      s.moraleSnapshots = [{
+        targetType: 'player',
+        playerId: 'p2',
+        currentValue: 40,
+        baselineValue: 50,
+        history: [{
+          sourceEventId: 'relationship-hit:f:s:ss:f:s:ss:p1:p2:FEUD:game-2',
+          delta: -10,
+        }],
+      }] as never;
+      s.ratingsOverlays = [];
+    } },
   { name: 'soul.ratings-overlay-validity', // NAMED property now includes the deterministic id
     mutate: (s) => {
       s.players = [{ id: 'p', primaryPosition: 'SS' } as never];
@@ -303,7 +359,7 @@ describe('L-SIM invariant falsification audit', () => {
     const results = CHECKS.map((check) => check(base()));
     const failing = results.filter((r) => !r.pass).map((r) => `${r.name}: ${r.detail}`);
     expect(failing).toEqual([]);
-    expect(results.length).toBe(23);
+    expect(results.length).toBe(25);
   });
 
   test('falsification cases cover every soul invariant exactly once', () => {

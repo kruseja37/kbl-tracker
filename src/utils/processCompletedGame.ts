@@ -71,6 +71,7 @@ import { persistDarkCheckpointSweepForCompletedGame } from './franchiseCheckpoin
 import { persistDarkTraitGrantForCompletedGame } from './franchiseTraitGrantCompute';
 import { persistDarkRelationshipFormationForCompletedGame } from './franchiseRelationshipFormationCompute';
 import { persistDarkRelationshipIntensityForCompletedGame } from './franchiseRelationshipIntensityCompute';
+import { persistDarkRelationshipMoraleForCompletedGame } from './franchiseRelationshipMoraleCompute';
 import { persistDarkL10ForCompletedGame } from './franchiseL10SweepCompute';
 import { persistDarkL11AutoBackstopForCompletedGame } from './franchiseManagerAutoBackstop';
 import { recomputeFranchiseL12StandingsForCompletedGame } from './franchiseRaceStandingsCompute';
@@ -654,6 +655,11 @@ export async function processCompletedGame(
             await persistDarkRelationshipIntensityForCompletedGame(gameState, trueValueScope, archiveOptions);
           } catch (e) {
             console.warn('[L13] dark relationship intensity skipped for completed game ' + gameState.gameId + ':', e);
+          }
+          try {
+            await persistDarkRelationshipMoraleForCompletedGame(gameState, trueValueScope, archiveOptions);
+          } catch (e) {
+            console.warn('[L13] dark relationship morale skipped for completed game ' + gameState.gameId + ':', e);
           }
         }
         if (isFranchisePhase2L10Enabled()) {

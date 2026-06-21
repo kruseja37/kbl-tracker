@@ -1,5 +1,6 @@
 import type { MoraleEventType as FanMoraleEventType } from './fanMoraleEngine';
 import type { HiddenModifiers } from '../types/game';
+import type { RelationshipEdgeType } from '../utils/franchiseRelationshipEdgesStorage';
 
 export type CanonicalPersonality =
   | 'COMPETITIVE'
@@ -78,6 +79,8 @@ export type MoraleMatrixEvent =
   | {
       kind: MoraleMatrixTapKind;
       type: string;
+      relationshipRole?: 'player1' | 'player2';
+      exactSelfPlayerMoraleDelta?: number;
     };
 
 type PersonalityTuning = {
@@ -270,6 +273,15 @@ const NEUTRAL_BASE_CONSEQUENCE: BaseMoraleConsequence = {
   reason: 'neutral',
 };
 
+export const RELATIONSHIP_MORALE_BASE_DELTAS: Readonly<
+  Partial<Record<RelationshipEdgeType, { player1: number; player2: number }>>
+> = {
+  RIVALRY: { player1: -5, player2: -5 },
+  FEUD: { player1: 3, player2: -10 },
+  FRIENDSHIP: { player1: 6, player2: 6 },
+  MENTORSHIP: { player1: 4, player2: 7 },
+};
+
 const PLAYER_EVENT_BASE_TABLE = {
   WIN: row(EVENT_DELTA.winSelf, EVENT_DELTA.winFan, [], 'game.win'),
   LOSS: row(EVENT_DELTA.lossSelf, EVENT_DELTA.lossFan, [], 'game.loss'),
@@ -405,7 +417,7 @@ export const MORALE_TAP_REGISTRY: Readonly<Record<MoraleMatrixTapKind, MoraleTap
     otherTouched: [],
     reason: event.type,
   }),
-  relationship: () => NEUTRAL_BASE_CONSEQUENCE,
+  relationship: resolveRelationshipTap,
 };
 
 export function getBaseMoraleConsequence(event: MoraleMatrixEvent): BaseMoraleConsequence {
@@ -428,6 +440,7 @@ export function composeMoraleConsequence(
   const personalityTuning = MORALE_TUNING.personality[canonicalPersonality];
   const eventType = event.type;
   const isNeutral = base === NEUTRAL_BASE_CONSEQUENCE;
+  const exactRecoveryDelta = getExactRelationshipRecoveryDelta(event);
 
   if (isNeutral) {
     return {
@@ -443,6 +456,23 @@ export function composeMoraleConsequence(
       otherTouched: [],
       reason: base.reason,
       isNeutral,
+    };
+  }
+
+  if (exactRecoveryDelta !== null) {
+    return {
+      eventType,
+      personality: canonicalPersonality,
+      base,
+      selfPlayerMoraleDelta: exactRecoveryDelta,
+      teamFanMoraleDelta: MORALE_TUNING.eventDelta.neutral,
+      fanMoraleToPlayerMoraleDelta: MORALE_TUNING.eventDelta.neutral,
+      totalPlayerMoraleDelta: exactRecoveryDelta,
+      projectedPlayerMorale: clampMorale(currentPlayerMorale + exactRecoveryDelta),
+      projectedFanMorale: clampMorale(currentFanMorale),
+      otherTouched: [],
+      reason: base.reason,
+      isNeutral: false,
     };
   }
 
@@ -517,6 +547,76 @@ function row(
 
 function touch(relation: MoraleRelation, delta: number): OtherTouchedBase {
   return { relation, delta };
+}
+
+function resolveRelationshipTap(event: MoraleMatrixEvent): BaseMoraleConsequence {
+  const exactRecoveryDelta = getExactRelationshipRecoveryDelta(event);
+  if (exactRecoveryDelta !== null) {
+    return {
+      selfPlayerMoraleDelta: exactRecoveryDelta,
+      teamFanMoraleDelta: 0,
+      otherTouched: [],
+      reason: 'relationship.recovery',
+    };
+  }
+
+  const edgeType = normalizeRelationshipEdgeType(event.type);
+  if (!edgeType) return NEUTRAL_BASE_CONSEQUENCE;
+
+  const deltas = RELATIONSHIP_MORALE_BASE_DELTAS[edgeType];
+  if (!deltas) return NEUTRAL_BASE_CONSEQUENCE;
+
+  const relationshipRole = getRelationshipEventRole(event, edgeType);
+  return {
+    selfPlayerMoraleDelta: deltas[relationshipRole],
+    teamFanMoraleDelta: 0,
+    otherTouched: [],
+    reason: `relationship.${edgeType.toLowerCase()}.${relationshipRole}`,
+  };
+}
+
+function normalizeRelationshipEdgeType(value: string): RelationshipEdgeType | null {
+  const normalized = String(value ?? '').trim().toUpperCase();
+  if (
+    normalized === 'RIVALRY' ||
+    normalized === 'FEUD' ||
+    normalized === 'MENTORSHIP' ||
+    normalized === 'FRIENDSHIP' ||
+    normalized === 'ROMANCE' ||
+    normalized === 'HISTORY'
+  ) {
+    return normalized;
+  }
+  return null;
+}
+
+function getRelationshipEventRole(
+  event: MoraleMatrixEvent,
+  edgeType: RelationshipEdgeType,
+): 'player1' | 'player2' {
+  if ('relationshipRole' in event && event.relationshipRole === 'player2') {
+    return 'player2';
+  }
+  if ('relationshipRole' in event && event.relationshipRole === 'player1') {
+    return 'player1';
+  }
+
+  return edgeType === 'FEUD' ? 'player2' : 'player1';
+}
+
+function getExactRelationshipRecoveryDelta(event: MoraleMatrixEvent): number | null {
+  if (
+    event.kind === 'relationship' &&
+    event.type === 'relationship.recovery' &&
+    'exactSelfPlayerMoraleDelta' in event &&
+    typeof event.exactSelfPlayerMoraleDelta === 'number' &&
+    Number.isFinite(event.exactSelfPlayerMoraleDelta) &&
+    event.exactSelfPlayerMoraleDelta !== 0
+  ) {
+    return event.exactSelfPlayerMoraleDelta;
+  }
+
+  return null;
 }
 
 function lookupBaseRow(eventType: MasterMoraleEventType | string): BaseMoraleConsequence {

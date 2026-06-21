@@ -11,6 +11,7 @@ import {
   type RunnerState,
 } from '../../src/utils/eventLog';
 import { processCompletedGame } from '../../src/utils/processCompletedGame';
+import { getFranchisePlayer, saveFranchisePlayer } from '../../src/utils/franchisePlayerStorage';
 import { recomputeFranchiseL12StandingsForCompletedGame } from '../../src/utils/franchiseRaceStandingsCompute';
 import { computeFranchiseRaceCandidateRows, computeAndPersistFranchiseWarAwards } from '../../src/utils/franchiseAwardsEngine';
 import {
@@ -23,7 +24,11 @@ import { getTrackerDb, resetTrackerDbForTests, TRACKER_DB_VERSION } from '../../
 import type { AtBatResult } from '../../src/types/game';
 import { computeLsimDistributions, type LsimDistributions } from './distributions';
 import { forceAllPhase2FlagsOn, type ForcedPhase2Flags } from './flags';
-import { getSoulInvariantChecks, REQUIRED_L12_MERIT_CATEGORIES } from './invariants/soul';
+import {
+  getSoulInvariantChecks,
+  REQUIRED_L12_MERIT_CATEGORIES,
+  summarizeRelationshipMoraleDeltas,
+} from './invariants/soul';
 import { getStatsInvariantChecks } from './invariants/stats';
 import type {
   LsimDeferredInvariant,
@@ -417,6 +422,46 @@ function deriveLastGameDelta(
   };
 }
 
+async function breakRelationshipCoRosteringForRecovery(
+  context: LsimSandboxContext,
+  snapshot: LsimStateSnapshot,
+): Promise<string | null> {
+  const teamByPlayer = new Map<string, string | null>();
+  const rosterStatusByPlayer = new Map<string, string | null>();
+  for (const player of snapshot.players) {
+    const assignment = player.leagueAssignments?.find((entry) => entry.leagueId === context.ids.leagueId);
+    teamByPlayer.set(player.id, assignment?.teamId ?? null);
+    rosterStatusByPlayer.set(player.id, assignment?.rosterStatus ?? null);
+  }
+
+  const candidate = snapshot.relationshipEdges.find((edge) =>
+    edge.dissolvedAtGameNumber === null &&
+    edge.potential === false &&
+    teamByPlayer.get(edge.player1Id) &&
+    teamByPlayer.get(edge.player1Id) === teamByPlayer.get(edge.player2Id) &&
+    rosterStatusByPlayer.get(edge.player1Id) === 'MLB' &&
+    rosterStatusByPlayer.get(edge.player2Id) === 'MLB' &&
+    snapshot.moraleSnapshots.some((morale) =>
+      morale.targetType === 'player' &&
+      (morale.playerId === edge.player1Id || morale.playerId === edge.player2Id) &&
+      morale.history.some((entry) => entry.sourceEventId.startsWith('relationship-hit:')),
+    ),
+  );
+  if (!candidate) return null;
+
+  const player = await getFranchisePlayer(context.ids.franchiseId, candidate.player2Id);
+  if (!player) return null;
+  await saveFranchisePlayer(context.ids.franchiseId, {
+    ...player,
+    leagueAssignments: (player.leagueAssignments ?? []).map((assignment) =>
+      assignment.leagueId === context.ids.leagueId
+        ? { ...assignment, rosterStatus: 'FARM' as const }
+        : assignment,
+    ),
+  });
+  return candidate.id;
+}
+
 async function buildL12Proof(
   context: LsimSandboxContext,
   synthetic: LsimSyntheticCompletedGame,
@@ -656,6 +701,7 @@ async function writeCheckpointFile(
     gamesSimulated: snapshot.gamesSimulated,
     digest: snapshot.storeDump.digest,
     rowCounts: snapshot.storeDump.rowCounts,
+    relationshipMoraleDeltas: summarizeRelationshipMoraleDeltas(snapshot),
     findings,
   }), 'utf8');
   return filePath;
@@ -710,12 +756,16 @@ export async function runLsimSeason(config: LsimSeasonRunnerConfig): Promise<Lsi
     });
     let finalSnapshot = previous;
     let stoppedEarly = false;
+    let relationshipRecoveryBreakEdgeId: string | null = null;
 
     for (let gameNumber = 1; gameNumber <= totalScheduledGames; gameNumber += 1) {
       const synthetic = generateLsimSyntheticCompletedGame(context, {
         gameNumber,
         seed: `${config.seed}:game-${gameNumber}`,
       });
+      if (runInvariantChecks && relationshipRecoveryBreakEdgeId === null && previous.relationshipEdges.length > 0) {
+        relationshipRecoveryBreakEdgeId = await breakRelationshipCoRosteringForRecovery(context, previous);
+      }
       await seedSyntheticEventLog(context, synthetic, gameNumber);
       const processOptions = {
         ...context.processOptions,

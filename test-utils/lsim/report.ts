@@ -1,5 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { summarizeRelationshipMoraleDeltas } from './invariants/soul';
 import type { LsimH2SuiteSummary } from './seasonRunner';
 
 const DEFAULT_REPORT_PATH = path.resolve(process.cwd(), 'spec-docs/SEASON_SIMULATION_REPORT.md');
@@ -43,6 +44,7 @@ function deferredSection(summary: LsimH2SuiteSummary): string {
 
 export function renderLsimH2Report(summary: LsimH2SuiteSummary): string {
   const baseline = summary.baseline;
+  const relationshipMoraleDeltas = summarizeRelationshipMoraleDeltas(baseline.finalSnapshot);
   return [
     '# Season Simulation Report',
     '',
@@ -84,6 +86,10 @@ export function renderLsimH2Report(summary: LsimH2SuiteSummary): string {
     `Checkpoint cadence: **${baseline.checkpointCadence}** (${baseline.checkpointGameNumbers.length} boundaries)`,
     '',
     `Checkpoint files: ${baseline.checkpointFiles.length === 0 ? 'none' : baseline.checkpointFiles.join(', ')}`,
+    '',
+    '## L13 Relationship Morale Deltas',
+    '',
+    jsonBlock(relationshipMoraleDeltas),
     '',
     '## Soul-Layer Invariants',
     '',

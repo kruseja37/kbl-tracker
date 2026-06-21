@@ -6,9 +6,9 @@ Generated: 2026-06-19
 
 | Leg | Seed | Games Simulated | Total Scheduled Games | Stopped Early | Final Digest |
 | --- | --- | ---: | ---: | --- | --- |
-| Baseline | lsim-h2-baseline | 60 | 60 | false | 8575072:71b1abef |
-| Determinism A | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8569545:d55d29fe |
-| Determinism B | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8569545:d55d29fe |
+| Baseline | lsim-h2-baseline | 60 | 60 | false | 8886145:67ed1d5b |
+| Determinism A | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8986467:13311171 |
+| Determinism B | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8986467:13311171 |
 
 Determinism same-seed byte-identical end-state: **PASS**
 
@@ -17,6 +17,33 @@ Exact baseline games simulated: **60**
 Checkpoint cadence: **standard** (5 boundaries)
 
 Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/lsim-h2-baseline-checkpoint-010.json, /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/lsim-h2-baseline-checkpoint-020.json, /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/lsim-h2-baseline-checkpoint-030.json, /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/lsim-h2-baseline-checkpoint-040.json, /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/lsim-h2-baseline-checkpoint-050.json, /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/lsim-h2-baseline-checkpoint-060.json
+
+## L13 Relationship Morale Deltas
+
+```json
+{
+  "relationshipHits": 390,
+  "relationshipRecoveries": 2,
+  "relationshipPlayerGroups": 14,
+  "duplicateSourceIds": 0,
+  "recoveredGroups": 2,
+  "recoveredGroupsNetZero": 2,
+  "nonZeroRecoveredGroups": 0,
+  "hitDeltaTotal": 167,
+  "recoveryDeltaTotal": -11,
+  "recoveredGroupsNetDelta": 0,
+  "ratingsDevelopmentRows": 281,
+  "moraleToWarLeaks": 0,
+  "sampleSourceEventIds": [
+    "relationship-hit:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-03-mlb-01-C:lsim-team-03-mlb-11-1B:MENTORSHIP:game-12",
+    "relationship-hit:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-03-mlb-01-C:lsim-team-03-mlb-11-1B:MENTORSHIP:game-12",
+    "relationship-hit:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-03-mlb-02-1B:lsim-team-03-mlb-11-1B:MENTORSHIP:game-12",
+    "relationship-hit:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-03-mlb-02-1B:lsim-team-03-mlb-11-1B:MENTORSHIP:game-12",
+    "relationship-hit:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-03-mlb-02-1B:lsim-team-03-mlb-11-1B:MENTORSHIP:game-13",
+    "relationship-hit:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-03-mlb-02-1B:lsim-team-03-mlb-11-1B:MENTORSHIP:game-13"
+  ]
+}
+```
 
 ## Soul-Layer Invariants
 
@@ -39,6 +66,7 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
 | soul.l12-race-no-nan-resolve-tier | CRITICAL | 60 | 0 |
 | soul.l13-relationship-formation-checkpoint-write | CRITICAL | 60 | 0 |
 | soul.l13-relationship-intensity-lifecycle | CRITICAL | 60 | 0 |
+| soul.l13-relationship-morale-development-boundary | CRITICAL | 60 | 0 |
 | soul.morale-bounds | CRITICAL | 60 | 0 |
 | soul.per-write-idempotency | CRITICAL | 60 | 0 |
 | soul.persistence-backup-migration-proof | CRITICAL | 60 | 0 |
@@ -81,34 +109,34 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
   },
   "fameHeatTransitions": {
     "up": 499,
-    "down": 739
+    "down": 740
   },
   "traitGrantLossCounts": {
-    "gain": 1645,
+    "gain": 1629,
     "lose": 10,
     "byTrait": {
       "Big Hack": {
-        "gain": 52,
+        "gain": 51,
         "lose": 0
       },
       "Bunter": {
-        "gain": 180,
+        "gain": 177,
         "lose": 0
       },
       "Cannon Arm": {
-        "gain": 114,
+        "gain": 113,
         "lose": 0
       },
       "Durable": {
-        "gain": 209,
+        "gain": 206,
         "lose": 4
       },
       "Easy Target": {
-        "gain": 74,
+        "gain": 73,
         "lose": 0
       },
       "Little Hack": {
-        "gain": 61,
+        "gain": 63,
         "lose": 0
       },
       "Mind Gamer": {
@@ -116,7 +144,7 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
         "lose": 0
       },
       "POW vs LHP": {
-        "gain": 39,
+        "gain": 37,
         "lose": 0
       },
       "Rally Starter": {
@@ -124,11 +152,11 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
         "lose": 0
       },
       "Sprinter": {
-        "gain": 136,
+        "gain": 133,
         "lose": 0
       },
       "Tough Out": {
-        "gain": 73,
+        "gain": 72,
         "lose": 1
       },
       "Injury Prone": {
@@ -136,7 +164,7 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
         "lose": 0
       },
       "Noodle Arm": {
-        "gain": 184,
+        "gain": 182,
         "lose": 0
       },
       "Slow Poke": {
@@ -144,7 +172,7 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
         "lose": 0
       },
       "Whiffer": {
-        "gain": 50,
+        "gain": 49,
         "lose": 0
       },
       "Choker": {
@@ -213,28 +241,28 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
       "category": "GOLD_GLOVE",
       "winnerPlayerId": "lsim-team-05-mlb-22-CF",
       "topMarginToWinner": 0,
-      "candidateCount": 84,
+      "candidateCount": 83,
       "finalized": true
     },
     {
       "category": "MVP",
       "winnerPlayerId": "lsim-team-01-mlb-01-C",
       "topMarginToWinner": 0,
-      "candidateCount": 84,
+      "candidateCount": 83,
       "finalized": true
     },
     {
       "category": "ROOKIE_OF_YEAR",
       "winnerPlayerId": "lsim-team-01-mlb-01-C",
       "topMarginToWinner": 0,
-      "candidateCount": 84,
+      "candidateCount": 83,
       "finalized": true
     },
     {
       "category": "SILVER_SLUGGER",
       "winnerPlayerId": "lsim-team-01-mlb-01-C",
       "topMarginToWinner": 0,
-      "candidateCount": 84,
+      "candidateCount": 83,
       "finalized": true
     }
   ],
@@ -250,12 +278,12 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
   },
   "moraleRanges": {
     "player": {
-      "min": 34,
-      "max": 70,
-      "count": 34
+      "min": 0,
+      "max": 99,
+      "count": 40
     },
     "teamFan": {
-      "min": 4,
+      "min": 14,
       "max": 61,
       "count": 6
     },

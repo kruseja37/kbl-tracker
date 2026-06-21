@@ -103,6 +103,52 @@ describe('masterMoraleMatrix L3a pure engine', () => {
     expect(resolved.projectedFanMorale).toBe(90);
   });
 
+  test('relationship tap requires kind routing and returns a fresh non-neutral consequence', () => {
+    const typeOnly = composeMoraleConsequence(
+      { type: 'feud' },
+      'EGOTISTICAL',
+      neutralModifiers,
+      50,
+      50,
+    );
+    const relationship = composeMoraleConsequence(
+      { kind: 'relationship', type: 'feud' },
+      'EGOTISTICAL',
+      neutralModifiers,
+      50,
+      50,
+    );
+
+    expect(typeOnly.isNeutral).toBe(true);
+    expect(relationship.isNeutral).toBe(false);
+    expect(relationship.base.reason).toBe('relationship.feud.player2');
+    expect(relationship.selfPlayerMoraleDelta).toBeLessThan(0);
+  });
+
+  test('relationship feud target hit amplifies for egotistical and timid players', () => {
+    const event: MoraleMatrixEvent = { kind: 'relationship', type: 'feud' };
+    const egotistical = compose(event, {}, 'EGOTISTICAL');
+    const relaxed = compose(event, {}, 'RELAXED');
+    const timid = compose(event, {}, 'TIMID');
+    const tough = compose(event, {}, 'TOUGH');
+
+    expect(egotistical.isNeutral).toBe(false);
+    expect(egotistical.selfPlayerMoraleDelta).toBeLessThan(relaxed.selfPlayerMoraleDelta);
+    expect(timid.selfPlayerMoraleDelta).toBeLessThan(tough.selfPlayerMoraleDelta);
+  });
+
+  test('relationship participant roles preserve asymmetric legacy deltas', () => {
+    const feudAggressor = compose({ kind: 'relationship', type: 'FEUD', relationshipRole: 'player1' });
+    const feudTarget = compose({ kind: 'relationship', type: 'FEUD', relationshipRole: 'player2' });
+    const mentor = compose({ kind: 'relationship', type: 'MENTORSHIP', relationshipRole: 'player1' });
+    const protege = compose({ kind: 'relationship', type: 'MENTORSHIP', relationshipRole: 'player2' });
+
+    expect(feudAggressor.base.selfPlayerMoraleDelta).toBe(3);
+    expect(feudTarget.base.selfPlayerMoraleDelta).toBe(-10);
+    expect(mentor.base.selfPlayerMoraleDelta).toBe(4);
+    expect(protege.base.selfPlayerMoraleDelta).toBe(7);
+  });
+
   test('unknown events resolve neutral and never throw', () => {
     const resolved = composeMoraleConsequence(
       { type: 'UNMATCHED_EVENT_FROM_FUTURE' },
