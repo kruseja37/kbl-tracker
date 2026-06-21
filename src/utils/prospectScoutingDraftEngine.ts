@@ -10,6 +10,12 @@ import {
   type Smb4Grade,
   type Smb4PlayerInput,
 } from '../engines/smb4GradeEmulator';
+import {
+  CHEMISTRY_CODES,
+  CHEMISTRY_CODE_TO_WORD,
+  CHEMISTRY_TARGET_DISTRIBUTION,
+  type ChemistryCode,
+} from '../data/chemistryCanonical';
 import { FIRST_NAMES as SMB4_FIRST_NAMES, LAST_NAMES as SMB4_LAST_NAMES } from '../data/nameDatabase';
 import type { Position } from '../types/game';
 import { prospectSalaryForDraftRound } from './prospectSalary';
@@ -438,6 +444,61 @@ function normal(seed: string): number {
 
 function pick<T>(seed: string, values: readonly T[]): T {
   return values[Math.floor(randomUnit(seed) * values.length)] ?? values[0];
+}
+
+export function rebalanceProspectChemistryToTarget(
+  prospects: readonly GeneratedProspectCandidate[],
+  batchSeed: string,
+): GeneratedProspectCandidate[] {
+  const batchSize = prospects.length;
+  if (batchSize === 0) {
+    return [];
+  }
+
+  const quotaRows = CHEMISTRY_CODES.map((code, orderIndex) => {
+    const exactCount = batchSize * CHEMISTRY_TARGET_DISTRIBUTION[code];
+    const floorCount = Math.floor(exactCount);
+    return {
+      code,
+      orderIndex,
+      count: floorCount,
+      remainder: exactCount - floorCount,
+    };
+  });
+
+  let assignedCount = quotaRows.reduce((sum, row) => sum + row.count, 0);
+  const remainders = [...quotaRows].sort((left, right) => {
+    const remainderDiff = right.remainder - left.remainder;
+    if (remainderDiff !== 0) return remainderDiff;
+    return left.orderIndex - right.orderIndex;
+  });
+
+  for (let index = 0; assignedCount < batchSize; index += 1) {
+    const row = remainders[index % remainders.length];
+    row.count += 1;
+    assignedCount += 1;
+  }
+
+  const chemistryCodes: ChemistryCode[] = [];
+  for (const code of CHEMISTRY_CODES) {
+    const count = quotaRows.find((row) => row.code === code)?.count ?? 0;
+    for (let index = 0; index < count; index += 1) {
+      chemistryCodes.push(code);
+    }
+  }
+
+  for (let index = chemistryCodes.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.min(
+      index,
+      Math.floor(randomUnit(`${batchSeed}:shuffle:${index}`) * (index + 1)),
+    );
+    [chemistryCodes[index], chemistryCodes[swapIndex]] = [chemistryCodes[swapIndex], chemistryCodes[index]];
+  }
+
+  return prospects.map((prospect, index) => ({
+    ...prospect,
+    chemistry: CHEMISTRY_CODE_TO_WORD[chemistryCodes[index] ?? CHEMISTRY_CODES[0]],
+  }));
 }
 
 export function prospectTraitsConflict(left: string, right: string): boolean {
@@ -1144,8 +1205,12 @@ export function generateProspectPool(
   };
   const usedIds = new Set(input.existingPlayerIds ?? []);
 
-  return Array.from({ length: count }, (_, index) => {
-    const candidate = buildCandidate(engineInput, index);
+  const candidates = rebalanceProspectChemistryToTarget(
+    Array.from({ length: count }, (_, index) => buildCandidate(engineInput, index)),
+    `${input.seed}:chemistry-rebalance`,
+  );
+
+  return candidates.map((candidate, index) => {
     const report = scoutProspect(candidate, undefined, input.seed);
     const pickNumber = index + 1;
     const playerId = deterministicPlayerId(
@@ -1222,7 +1287,10 @@ export function generateProspectScoutingDraft(
   const pickOrder = buildPickOrder(input);
   const totalPicks = pickOrder.length;
   const poolSize = Math.max(totalPicks, totalPicks * (input.candidatePoolMultiplier ?? 3));
-  const draftClass = Array.from({ length: poolSize }, (_, index) => buildCandidate(input, index));
+  const draftClass = rebalanceProspectChemistryToTarget(
+    Array.from({ length: poolSize }, (_, index) => buildCandidate(input, index)),
+    `${input.seed}:chemistry-rebalance`,
+  );
   const available = [...draftClass];
   const usedIds = new Set(input.existingPlayerIds ?? []);
   const selectedPicks: ProspectDraftPick[] = [];
