@@ -211,3 +211,34 @@ Raw additions captured verbatim, each tagged: COVERED (already specced/built) ·
 7. **Scouting specialties visible** [NEW-SPEC] — let users hire a scout matching their needs by rating category and/or position (and/or both). Still never 100% accurate, but a more strategic selection. (Builds on R8's one-scout model + §7.4 scout-obscured ranges.)
 8. **Stadium analytics depth in Team Hub** [VERIFY — v1 critical] — ensure MAXIMAL park-factor/stadium-stat depth, especially for player WAR. Should already be in (WAR consumes park factors); CONFIRM it's actually wired + surfaced in v1, not shortchanged.
 9. **Farm prospect generation up to spec?** [VERIFY — important] — the full farm draft is built, but the player-quality DISTRIBUTION + ratings spread + generation-rule compliance may never have been audited. Audit the generation logic against the rules. (Directly tied to R7's tier-driven farm distribution.)
+
+
+---
+
+## §9 — RATIFIED RULINGS — VERIFICATION-PASS FOLLOW-UP (2026-06-20, JK on MODE1_V1_VERIFICATION)
+
+Resolves WAITING_ON_JK A / D / E from the Mode-1 verification pass. Authoritative.
+
+### A — DRAFT FORMAT: AUCTION-ONLY for v1; snake toggle → v1.1
+- v1 ships **auction ONLY**. The format-selector + re-exposed snake (R2) is DEFERRED to **v1.1**.
+- Rationale: auction is greenfield and gates the whole economy lane; the format-toggle is the unbuilt half (V4 PARTIAL); carrying a second draft path through the freeze writer adds risk for no v1 benefit.
+- CONSEQUENCE: the G1 freeze writer + the economy lane build against AUCTION only. The existing snake code STAYS in-tree (not deleted) for v1.1 re-exposure, but is NOT a v1 path.
+
+### D — STADIUM ANALYTICS: seed park factors → WAR for v1; adaptive deferred; DATA RETAINED + DISPLAYED
+- **v1 WAR consumes SEED/STATIC park factors** (STADIUM_ANALYTICS_SPEC §1.0 point 1 — allowed). **Archive-derived ADAPTIVE park factors stay deferred** (§1.0 point 5 — preview-only until a later audit).
+- **DATA-RETENTION REQUIREMENT (v1, load-bearing — NEW):** the raw per-game batted-ball + handedness data that the adaptive layer AND the RH/LH split displays will need MUST be captured and durably STORED in v1, even though adaptive consumption is deferred. If GameTracker discards it per-game, the adaptive factors + handedness splits become impossible to build later. This is a CAPTURE+STORE requirement, not a compute requirement. → NEW VERIFICATION ITEM owed: confirm batted-ball/handedness data is persisted, not ephemeral.
+- **DISPLAY (v1):** surface stadium analytics in the Team-Hub **stadium-analytics tab** (and/or Almanac). STADIUM_ANALYTICS_SPEC already enumerates the full tracked data set — INCLUDING **PARK RECORDS**, never called out before → ADD park-records tracking + display to v1 scope.
+- Splits to design-for (later-safe): RH vs LH hitters by statistical category, by park.
+
+### E — FARM-PROSPECT GENERATION: spec it; TWO oracles; standard-only for v1
+Direction for the farm-prospect-generation spec (authoring task owed). Rulings:
+- **GRADE ORACLE = the League-Builder "player analyzer."** The analyzer (input ratings/trait/handedness/position → grade) is the EXISTING source of truth for grade COMPUTATION. The generator must be CONSISTENT with it — generate ratings such that feeding them back through the analyzer yields the target grade (the generator is effectively the analyzer's INVERSE). This RESOLVES V9: do NOT arbitrarily bless the code or realign to the old A–D table; anchor BOTH to the analyzer's grade function (locate it in league-builder code).
+- **DISTRIBUTION ORACLE = Fable's pool analysis of the real 440** (T3_POOL_ANALYSIS). Derive the empirical distributions (secondary-position transitions, handedness split, chemistry frequencies) from the REAL pool, not uniform assumptions.
+- **NO age / development curve in v1.** Development is driven by morale, performance, relationships, personality, and luck — NOT age. Drop age from the generator entirely.
+- **STANDARD distribution ONLY for v1.** Ship ONE validated standard grade distribution (the §3.2 table is the anchor). DEFER the juiced/nerfed SHIFT of the *generation* distribution to L-ECON3 (farmGradeMode), added once standard is proven correct against the grade oracle. NOTE — keep two levers SEPARATE: the farm BUDGET tier (walled-off wallet, R3) MAY still be tiered in v1; only the prospect-GENERATION distribution is fixed at standard for v1.
+- **SECONDARY POSITIONS (net-new — missing from the pasted §3.x):** prospects need a secondary position, assigned via a POOL-DERIVED transition distribution P(secondary | primary) learned from the real 440 (distribution oracle) — NOT uniform random (a CF must not get a 2B secondary).
+- **POSITIONS VISIBLE during the farm draft (ratings hidden) — R3 REFINEMENT:** primary + secondary positions are ALWAYS shown to GMs during the farm prospect draft, even though ratings/value are scout-obscured. GMs must draft for positional need — hiding position kills draft strategy. So scouts obscure RATINGS/VALUE, NEVER POSITION.
+- **HANDEDNESS (net-new — missing from §3.x):** generate bats/throws handedness, pool-anchored to SMB4's real L/R/S split (the analyzer takes handedness as input, so it must be assigned).
+- **PITCHER ARSENAL (verify):** confirm pitch-type/arsenal generation for SP/RP/CP is handled (generator or farm-system spec); if not, add it.
+- **CHEMISTRY (validate the assumption):** the pasted §3.5 assumes ~20% even across 5 types — VALIDATE against SMB4's actual chemistry frequencies (distribution oracle); if not uniform, anchor to the real split.
+- **KEEP from the pasted spec (good as-is):** §3.2 grade distribution (= the standard anchor), §3.3 position weights, §3.4 trait distribution (30/50/20). §3.5 chemistry pending the validation above.
