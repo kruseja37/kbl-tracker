@@ -1,5 +1,12 @@
 # AUCTION_DRAFT_SPEC.md — Mode 1 Auction Draft (v1 primary + only format)
 
+> **⚠ PARTIALLY SUPERSEDED (2026-06-21) — read `AUCTION_DRAFT_SPEC_V2.md` FIRST.** After JK's
+> attended review, the **value model** (per-prospect-IV pricing → scout price-range + 20–80 grade),
+> the **nomination/resolution model** (GM-nomination/re-nomination → engine random-weighted nomination
+> + one-chance-only), and several budget/morale/identity mechanics were REVISED. V2 §0 lists every
+> reversal. This V1 doc remains authoritative ONLY for the device/hot-seat handoff UX where V2 does not
+> override it. **Do not build the value or nomination layer from this V1 doc.**
+
 **Status:** Authoring spec for the NET-NEW layer on top of already-ratified auction logic.
 **Authored:** 2026-06-20 (Captain, from JK rulings).
 **Type:** Design spec — UX + flow + wiring. Authoring task only; NO production code in this pass.
