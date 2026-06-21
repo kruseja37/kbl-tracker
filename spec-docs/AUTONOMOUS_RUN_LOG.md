@@ -2350,3 +2350,15 @@ NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its 
 - **Contract committed `7c14325f`.** Dispatched to Codex (gpt-5.5, xhigh) bg task `bc5ftzjos` → `/tmp/codex-auc51c.out`. On landing: read-the-diff audit +
   full Mode-1 suite + confirm NO DB/store change + oracle byte-unchanged + commit. **➡ after 5.1c ⇒ AUC-5.1 at 3/5 → 5.1d** (wrapper + MLB→farm
   sequencing §3.1 + per-league auction-vs-snake format config) → 5.1e (UI §3.3).
+
+**WAVE 37 — ✅ AUC-5.1c COMMITTED `456e0f46` ⇒ the FARM ENGINE LAYER is COMPLETE (AUC-5.1 at 3/5).**
+- Codex(gpt-5.5,xhigh)-built → Opus-audited (builder≠auditor): VERIFIED. 2 NEW files (`farmAuctionWallet.ts` + test), NOTHING existing modified.
+  `computeFarmTierCap(poolIVs, farmSlots=10)` = the EXACT §5.2 `max(maxPoolIV/starBudgetShare, farmSlots×medianPoolIV×rosterHeadroom)` with
+  constants IMPORTED from `T3_DERIVATION_INPUTS` (0.33/1.15) — emergent nerf (no dial). `buildFarmAuctionTeamInputs` mirrors the MLB adapter
+  (budget=cap−committed clamped, slots=10−rostered clamped, LEAGUE_MINIMUM_SALARY, tax=0). PURE/build-DARK, NO DB change. HOST GATE: tsc 0 +
+  full Mode-1 suite **7961 pass / 1 fail = wpaRuntimeBoundary (characterized), ZERO new reds** (+7 non-circular wallet tests). oracle/DB untouched.
+- ⇒ **FARM ENGINE LAYER DONE: 5.1a (priced pool) + 5.1b (scout §3.2 value-range) + 5.1c (§3.4 wallet)** — all the farm-economy primitives the
+  §2 machine needs. **➜ NEXT = AUC-5.1d** (the INTEGRATIVE wrapper — heaviest farm ticket): drive the §2 hot-seat machine for the farm round
+  off the 5.1a pool + 5.1c wallet with the 5.1b scout-range as the display anchor; MLB→farm sequencing (§3.1); per-league auction-vs-snake format
+  config. Likely needs its own recon/split (a farm hook + sequencing, then 5.1e UI). Grounding the integration surface next.
+
