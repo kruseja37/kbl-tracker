@@ -14036,7 +14036,7 @@ seam `franchiseHonorEmission.ts:20-51`; news store `seasonNewsStorage.ts:39-62`.
 TAKE is hedged) — content-distortion is v1.1. The fan-morale nudge fires ONLY for edges clearing the SEA-2 gate (no
 gate → no direct fan effect; the indirect morale→development path is always on).
 **VERIFICATION:** tsc/build 0; deterministic adapter test (same input → same SeasonNewsEvent); FNV-1a seed determinism;
-pre-move heads-up is advisory (returns intel, does not block). **FORMAT** house. **Status:** ⏸ AUTHORED — build HELD.
+pre-move heads-up is advisory (returns intel, does not block); **L-SIM both legs (24g+60g), STANDARD LAST (baseline-regen trap): moraleToWarLeaks=0 (§24.10 — the SEA-2 fan-nudge writes the FAN-morale channel, NEVER WAR), same-seed byte-identical, findings=0; the fan-nudge fires ONLY on the SEA-2 gate + is per-game idempotent; add an invariant for the fan-channel nudge + REP-4 determinism and FALSIFY it.** **FORMAT** house. **Status:** ⏸ AUTHORED (amended 2026-06-20: +L-SIM fan-channel gate — Opus) — build HELD.
 
 ---
 
