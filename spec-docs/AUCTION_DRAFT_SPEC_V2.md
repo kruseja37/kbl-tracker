@@ -207,8 +207,9 @@ codes SPI/DIS/CMP/SCH/CRA — NOT the `undefined`-personality situation), so the
 **440 distribution: SPI 21.1% · DIS 20.0% · CMP 20.0% · SCH 20.0% · CRA 18.9%** — i.e. essentially **UNIFORM**
 (≈20% each; spirited slightly high, crafty slightly low). ⇒ matching the 440 = roughly-EVEN availability =
 exactly the "all chemistry strategies buildable" balance the requirement wanted. The "some types more valuable"
-value comes from the **POTENCY** mechanic, NOT scarcity (the counts are ~equal). **JK micro-decision (default =
-honor the 440 shares as a ±tolerance band):** honor the slight tilt, or snap to flat 20% each? (cosmetic).
+value comes from the **POTENCY** mechanic, NOT scarcity (the counts are ~equal). **JK RESOLVED 2026-06-21:
+honor the near-uniform 440 shape EXACTLY — target = SPI 21 / DIS 20 / CMP 20 / SCH 20 / CRA 19 (do NOT snap
+to flat 20). Enforce as a ±tolerance band around those exact shares.**
 **Build caveats for RB-0:** (a) compute the target from the **3-letter `PLAYERS` record**, NOT the separate
 Title-Case `ALL_MLB_PLAYERS` in `src/data/players/mlb/`; (b) tighten `PlayerData.chemistry` from loose `string`
 (`:66`) to the 5-literal union; (c) centralize ONE canonical form (player 3-letter ↔ team full-word ↔ V2
