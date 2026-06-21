@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { FIRST_NAMES as SMB4_FIRST_NAMES, LAST_NAMES as SMB4_LAST_NAMES } from '../../data/nameDatabase';
 import { TRAIT_PRICING } from '../../data/traitPricing';
-import { countTraitPolarity, normalizeTrait } from '../../engines/smb4GradeEmulator';
+import { countTraitPolarity, normalizeTrait, scoreSmb4Player } from '../../engines/smb4GradeEmulator';
 import {
   buildProspectPlayerForPick,
   generateProspectScoutingDraft,
@@ -423,6 +423,62 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     expect(pitchers.some((candidate) =>
       !(candidate.arsenal.includes('4F') && candidate.arsenal.includes('2F')),
     )).toBe(true);
+  });
+
+  test('generated prospects round-trip to their assigned §3.2 analyzer grade', () => {
+    const output = generateProspectScoutingDraft({
+      ...BASE_INPUT,
+      rounds: 80,
+      candidatePoolMultiplier: 5,
+      seed: 'section-5-2-analyzer-round-trip-seed',
+    });
+    const targetGrades = new Set(['A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D']);
+    const seenGrades = new Set<string>();
+
+    for (const candidate of output.draftClass) {
+      expect(candidate.bats).toBeDefined();
+      expect(candidate.throws).toBeDefined();
+      seenGrades.add(candidate.trueGrade);
+      expect(scoreSmb4Player({
+        primaryPosition: candidate.position,
+        secondaryPosition: candidate.secondaryPosition,
+        bats: candidate.bats,
+        throws: candidate.throws,
+        power: candidate.ratings.power,
+        contact: candidate.ratings.contact,
+        speed: candidate.ratings.speed,
+        fielding: candidate.ratings.fielding,
+        arm: candidate.ratings.arm,
+        velocity: candidate.ratings.velocity,
+        junk: candidate.ratings.junk,
+        accuracy: candidate.ratings.accuracy,
+        arsenal: candidate.arsenal,
+        trait1: candidate.trait1,
+        trait2: candidate.trait2,
+      }).grade).toBe(candidate.trueGrade);
+    }
+
+    for (const player of output.generatedPlayers) {
+      expect(scoreSmb4Player({
+        primaryPosition: player.primaryPosition,
+        secondaryPosition: player.secondaryPosition,
+        bats: player.bats,
+        throws: player.throws,
+        power: player.power,
+        contact: player.contact,
+        speed: player.speed,
+        fielding: player.fielding,
+        arm: player.arm,
+        velocity: player.velocity,
+        junk: player.junk,
+        accuracy: player.accuracy,
+        arsenal: player.arsenal,
+        trait1: player.trait1,
+        trait2: player.trait2,
+      }).grade).toBe(player.overallGrade);
+    }
+
+    expect(seenGrades).toEqual(targetGrades);
   });
 
   test('generated prospect names come from the SMB4 database with deterministic variety', () => {

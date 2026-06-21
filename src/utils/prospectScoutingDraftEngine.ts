@@ -4,6 +4,12 @@ import {
   type PitcherRatings,
   type PositionPlayerRatings,
 } from '../engines/gradeEngine';
+import {
+  SMB4_CALIBRATED_GRADE_THRESHOLDS,
+  scoreSmb4Player,
+  type Smb4Grade,
+  type Smb4PlayerInput,
+} from '../engines/smb4GradeEmulator';
 import { FIRST_NAMES as SMB4_FIRST_NAMES, LAST_NAMES as SMB4_LAST_NAMES } from '../data/nameDatabase';
 import type { Position } from '../types/game';
 import { prospectSalaryForDraftRound } from './prospectSalary';
@@ -103,6 +109,8 @@ export interface GeneratedProspectCandidate {
   lastName: string;
   position: DraftPosition;
   secondaryPosition?: Position;
+  bats?: 'L' | 'R' | 'S';
+  throws?: 'L' | 'R';
   trueGrade: Grade;
   potentialGrade: Grade;
   ratings: PositionPlayerRatings & PitcherRatings;
@@ -263,6 +271,14 @@ const POSITION_POOL: DraftPosition[] = [
 ];
 const CHEMISTRY_POOL = ['Competitive', 'Crafty', 'Disciplined', 'Spirited', 'Scholarly'];
 const PERSONALITY_POOL = ['Competitive', 'Relaxed', 'Droopy', 'Jolly', 'Tough', 'Timid', 'Egotistical'];
+const PROSPECT_MIN_RATING = 20;
+const PROSPECT_MAX_RATING = 99;
+const PROSPECT_BASE_RATING_CENTER = 60;
+const PROSPECT_TOOL_SIGMA = 7;
+const PROSPECT_SOLVE_MIN_SHIFT = -80;
+const PROSPECT_SOLVE_MAX_SHIFT = 80;
+const PROSPECT_SOLVE_ITERATIONS = 28;
+const PROSPECT_CORRECTION_STEP = 0.25;
 export const PROSPECT_HITTER_TRAIT_POOL = [
   'Ace Exterminator',
   'Bad Ball Hitter',
@@ -356,6 +372,27 @@ const SECONDARY_POSITION_WEIGHTS: Record<FieldingDraftPosition, Array<[Position 
   LF: [['OF', 16], ['RF', 8], ['C', 5], ['1B/OF', 3], ['1B', 2], [undefined, 3]],
   CF: [['OF', 23], ['1B/OF', 6], [undefined, 1]],
   RF: [['OF', 10], ['C', 10], ['LF', 7], ['1B/OF', 2], [undefined, 2]],
+};
+function calibratedThreshold(higherGrade: Smb4Grade, lowerGrade: Smb4Grade): number {
+  const threshold = SMB4_CALIBRATED_GRADE_THRESHOLDS.find((entry) =>
+    entry.higherGrade === higherGrade && entry.lowerGrade === lowerGrade,
+  );
+  if (!threshold) {
+    throw new Error(`Missing SMB4 calibrated threshold ${higherGrade}/${lowerGrade}.`);
+  }
+  return threshold.threshold;
+}
+
+const PROSPECT_ANALYZER_TARGET_SCORES: Partial<Record<Grade, number>> = {
+  A: (calibratedThreshold('A+', 'A') + calibratedThreshold('A', 'A-')) / 2,
+  'A-': (calibratedThreshold('A', 'A-') + calibratedThreshold('A-', 'B+')) / 2,
+  'B+': (calibratedThreshold('A-', 'B+') + calibratedThreshold('B+', 'B')) / 2,
+  B: (calibratedThreshold('B+', 'B') + calibratedThreshold('B', 'B-')) / 2,
+  'B-': (calibratedThreshold('B', 'B-') + calibratedThreshold('B-', 'C+')) / 2,
+  'C+': (calibratedThreshold('B-', 'C+') + calibratedThreshold('C+', 'C')) / 2,
+  C: (calibratedThreshold('C+', 'C') + calibratedThreshold('C', 'C-')) / 2,
+  'C-': (calibratedThreshold('C', 'C-') + calibratedThreshold('C-', 'D+')) / 2,
+  D: 46,
 };
 // fixed draft age — no age-based dev/variability at generation (PROSPECT §10; Captain 2026-06-21)
 const PROSPECT_DRAFT_AGE = 18;
@@ -473,22 +510,12 @@ function adjustGrade(grade: Grade, stepsTowardBetter: number): Grade {
   return GRADES[Math.max(0, Math.min(GRADES.length - 1, index - stepsTowardBetter))];
 }
 
-function gradeCenter(grade: Grade): number {
-  const centers: Partial<Record<Grade, number>> = {
-    S: 95,
-    'A+': 92,
-    A: 87,
-    'A-': 83,
-    'B+': 78,
-    B: 73,
-    'B-': 68,
-    'C+': 63,
-    C: 58,
-    'C-': 53,
-    'D+': 49,
-    D: 45,
-  };
-  return centers[grade] ?? 58;
+function targetAnalyzerScore(grade: Grade): number {
+  const target = PROSPECT_ANALYZER_TARGET_SCORES[grade];
+  if (target === undefined) {
+    throw new Error(`Prospect grade ${grade} is not a §3.2 generation target.`);
+  }
+  return target;
 }
 
 function potentialGrade(seed: string, trueGrade: Grade): Grade {
@@ -496,12 +523,15 @@ function potentialGrade(seed: string, trueGrade: Grade): Grade {
   return adjustGrade(trueGrade, boost);
 }
 
-function rating(seed: string, center: number, bias = 0): number {
-  return clamp(center + bias + normal(seed) * 7, 20, 99);
+function baseRating(seed: string, center = PROSPECT_BASE_RATING_CENTER, bias = 0): number {
+  return center + bias + normal(seed) * PROSPECT_TOOL_SIGMA;
 }
 
-function buildRatings(seed: string, grade: Grade, position: DraftPosition): PositionPlayerRatings & PitcherRatings {
-  const center = gradeCenter(grade);
+function clampRating(value: number): number {
+  return clamp(value, PROSPECT_MIN_RATING, PROSPECT_MAX_RATING);
+}
+
+function buildBaseRatings(seed: string, position: DraftPosition): PositionPlayerRatings & PitcherRatings {
   if (isPitcher(position)) {
     const roleBias =
       position === 'SP' || position === 'SP/RP'
@@ -510,27 +540,239 @@ function buildRatings(seed: string, grade: Grade, position: DraftPosition): Posi
           ? { velocity: 8, junk: 5, accuracy: -8 }
           : { velocity: 3, junk: 2, accuracy: -2 };
     return {
-      power: rating(`${seed}:power`, 35),
-      contact: rating(`${seed}:contact`, 35),
-      speed: rating(`${seed}:speed`, 45),
-      fielding: rating(`${seed}:fielding`, center, -8),
-      arm: rating(`${seed}:arm`, center, -5),
-      velocity: rating(`${seed}:velocity`, center, roleBias.velocity),
-      junk: rating(`${seed}:junk`, center, roleBias.junk),
-      accuracy: rating(`${seed}:accuracy`, center, roleBias.accuracy),
+      power: baseRating(`${seed}:power`, 35),
+      contact: baseRating(`${seed}:contact`, 35),
+      speed: baseRating(`${seed}:speed`, 45),
+      fielding: baseRating(`${seed}:fielding`, PROSPECT_BASE_RATING_CENTER, -8),
+      arm: baseRating(`${seed}:arm`, PROSPECT_BASE_RATING_CENTER, -5),
+      velocity: baseRating(`${seed}:velocity`, PROSPECT_BASE_RATING_CENTER, roleBias.velocity),
+      junk: baseRating(`${seed}:junk`, PROSPECT_BASE_RATING_CENTER, roleBias.junk),
+      accuracy: baseRating(`${seed}:accuracy`, PROSPECT_BASE_RATING_CENTER, roleBias.accuracy),
     };
   }
 
   const bias = POSITION_STAT_BIAS[position] ?? {};
   return {
-    power: rating(`${seed}:power`, center, bias.power ?? 0),
-    contact: rating(`${seed}:contact`, center, bias.contact ?? 0),
-    speed: rating(`${seed}:speed`, center, bias.speed ?? 0),
-    fielding: rating(`${seed}:fielding`, center, bias.fielding ?? 0),
-    arm: rating(`${seed}:arm`, center, bias.arm ?? 0),
+    power: baseRating(`${seed}:power`, PROSPECT_BASE_RATING_CENTER, bias.power ?? 0),
+    contact: baseRating(`${seed}:contact`, PROSPECT_BASE_RATING_CENTER, bias.contact ?? 0),
+    speed: baseRating(`${seed}:speed`, PROSPECT_BASE_RATING_CENTER, bias.speed ?? 0),
+    fielding: baseRating(`${seed}:fielding`, PROSPECT_BASE_RATING_CENTER, bias.fielding ?? 0),
+    arm: baseRating(`${seed}:arm`, PROSPECT_BASE_RATING_CENTER, bias.arm ?? 0),
     velocity: 0,
     junk: 0,
     accuracy: 0,
+  };
+}
+
+function applyRatingShift(
+  baseRatings: PositionPlayerRatings & PitcherRatings,
+  position: DraftPosition,
+  shift: number,
+): PositionPlayerRatings & PitcherRatings {
+  if (isPitcher(position)) {
+    return {
+      power: clampRating(baseRatings.power + shift),
+      contact: clampRating(baseRatings.contact + shift),
+      speed: clampRating(baseRatings.speed + shift),
+      fielding: clampRating(baseRatings.fielding + shift),
+      arm: clampRating(baseRatings.arm + shift),
+      velocity: clampRating(baseRatings.velocity + shift),
+      junk: clampRating(baseRatings.junk + shift),
+      accuracy: clampRating(baseRatings.accuracy + shift),
+    };
+  }
+
+  return {
+    power: clampRating(baseRatings.power + shift),
+    contact: clampRating(baseRatings.contact + shift),
+    speed: clampRating(baseRatings.speed + shift),
+    fielding: clampRating(baseRatings.fielding + shift),
+    arm: clampRating(baseRatings.arm + shift),
+    velocity: 0,
+    junk: 0,
+    accuracy: 0,
+  };
+}
+
+function zeroRatings(): PositionPlayerRatings & PitcherRatings {
+  return {
+    power: 0,
+    contact: 0,
+    speed: 0,
+    fielding: 0,
+    arm: 0,
+    velocity: 0,
+    junk: 0,
+    accuracy: 0,
+  };
+}
+
+function buildAnalyzerInput(input: {
+  position: DraftPosition;
+  secondaryPosition?: Position;
+  bats: ProspectBatHand;
+  throws: ProspectThrowHand;
+  ratings: PositionPlayerRatings & PitcherRatings;
+  arsenal: readonly string[];
+  trait1?: string;
+  trait2?: string;
+}): Smb4PlayerInput {
+  return {
+    primaryPosition: input.position,
+    secondaryPosition: input.secondaryPosition,
+    bats: input.bats,
+    throws: input.throws,
+    power: input.ratings.power,
+    contact: input.ratings.contact,
+    speed: input.ratings.speed,
+    fielding: input.ratings.fielding,
+    arm: input.ratings.arm,
+    velocity: input.ratings.velocity,
+    junk: input.ratings.junk,
+    accuracy: input.ratings.accuracy,
+    arsenal: [...input.arsenal],
+    trait1: input.trait1,
+    trait2: input.trait2,
+  };
+}
+
+interface AnalyzerRatingSolveInput {
+  targetGrade: Grade;
+  position: DraftPosition;
+  secondaryPosition?: Position;
+  bats: ProspectBatHand;
+  throws: ProspectThrowHand;
+  baseRatings: PositionPlayerRatings & PitcherRatings;
+  arsenal: readonly string[];
+  trait1?: string;
+  trait2?: string;
+}
+
+interface AnalyzerRatingSolveCandidate {
+  shift: number;
+  ratings: PositionPlayerRatings & PitcherRatings;
+  result: ReturnType<typeof scoreSmb4Player>;
+}
+
+function scoreShiftedRatings(input: AnalyzerRatingSolveInput, shift: number): AnalyzerRatingSolveCandidate {
+  const ratings = applyRatingShift(input.baseRatings, input.position, shift);
+  const result = scoreSmb4Player(buildAnalyzerInput({
+    position: input.position,
+    secondaryPosition: input.secondaryPosition,
+    bats: input.bats,
+    throws: input.throws,
+    ratings,
+    arsenal: input.arsenal,
+    trait1: input.trait1,
+    trait2: input.trait2,
+  }));
+  return { shift, ratings, result };
+}
+
+function closerToTarget(
+  candidate: AnalyzerRatingSolveCandidate,
+  incumbent: AnalyzerRatingSolveCandidate,
+  targetScore: number,
+  targetGrade: Grade,
+): boolean {
+  const candidateGradeMatches = candidate.result.grade === targetGrade;
+  const incumbentGradeMatches = incumbent.result.grade === targetGrade;
+  if (candidateGradeMatches !== incumbentGradeMatches) return candidateGradeMatches;
+  const candidateError = Math.abs(candidate.result.numericScore - targetScore);
+  const incumbentError = Math.abs(incumbent.result.numericScore - targetScore);
+  if (Math.abs(candidateError - incumbentError) > 1e-9) return candidateError < incumbentError;
+  return candidate.shift < incumbent.shift;
+}
+
+function scanForTargetGrade(
+  input: AnalyzerRatingSolveInput,
+  targetScore: number,
+  startShift: number,
+  endShift: number,
+): AnalyzerRatingSolveCandidate | undefined {
+  const startTick = Math.ceil(startShift / PROSPECT_CORRECTION_STEP);
+  const endTick = Math.floor(endShift / PROSPECT_CORRECTION_STEP);
+  let best: AnalyzerRatingSolveCandidate | undefined;
+
+  for (let tick = startTick; tick <= endTick; tick += 1) {
+    const candidate = scoreShiftedRatings(input, tick * PROSPECT_CORRECTION_STEP);
+    if (candidate.result.grade !== input.targetGrade) continue;
+    if (!best || closerToTarget(candidate, best, targetScore, input.targetGrade)) {
+      best = candidate;
+    }
+  }
+
+  return best;
+}
+
+function buildRatings(input: AnalyzerRatingSolveInput): {
+  ratings: PositionPlayerRatings & PitcherRatings;
+  realizedGrade: Grade;
+  numericScore: number;
+  featureOnlyScore: number;
+} {
+  const targetScore = targetAnalyzerScore(input.targetGrade);
+  const featureOnlyScore = scoreSmb4Player(buildAnalyzerInput({
+    position: input.position,
+    secondaryPosition: input.secondaryPosition,
+    bats: input.bats,
+    throws: input.throws,
+    ratings: zeroRatings(),
+    arsenal: input.arsenal,
+    trait1: input.trait1,
+    trait2: input.trait2,
+  })).numericScore;
+  const lowScore = scoreShiftedRatings(input, PROSPECT_SOLVE_MIN_SHIFT);
+  const highScore = scoreShiftedRatings(input, PROSPECT_SOLVE_MAX_SHIFT);
+  let best = closerToTarget(lowScore, highScore, targetScore, input.targetGrade) ? lowScore : highScore;
+  let low = PROSPECT_SOLVE_MIN_SHIFT;
+  let high = PROSPECT_SOLVE_MAX_SHIFT;
+
+  for (let iteration = 0; iteration < PROSPECT_SOLVE_ITERATIONS; iteration += 1) {
+    const mid = (low + high) / 2;
+    const candidate = scoreShiftedRatings(input, mid);
+    if (closerToTarget(candidate, best, targetScore, input.targetGrade)) {
+      best = candidate;
+    }
+    if (candidate.result.numericScore < targetScore) {
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+
+  if (best.result.grade !== input.targetGrade) {
+    const localCorrection = scanForTargetGrade(
+      input,
+      targetScore,
+      Math.max(PROSPECT_SOLVE_MIN_SHIFT, best.shift - 8),
+      Math.min(PROSPECT_SOLVE_MAX_SHIFT, best.shift + 8),
+    );
+    const fullCorrection = localCorrection ?? scanForTargetGrade(
+      input,
+      targetScore,
+      PROSPECT_SOLVE_MIN_SHIFT,
+      PROSPECT_SOLVE_MAX_SHIFT,
+    );
+    if (fullCorrection) {
+      best = fullCorrection;
+    }
+  }
+
+  if (best.result.grade !== input.targetGrade) {
+    throw new Error(
+      `Unable to solve prospect analyzer grade ${input.targetGrade} within [${PROSPECT_MIN_RATING},${PROSPECT_MAX_RATING}] ratings. ` +
+        `featureOnly=${featureOnlyScore.toFixed(3)} low=${lowScore.result.grade}/${lowScore.result.numericScore.toFixed(3)} ` +
+        `high=${highScore.result.grade}/${highScore.result.numericScore.toFixed(3)} ` +
+        `best=${best.result.grade}/${best.result.numericScore.toFixed(3)}.`,
+    );
+  }
+
+  return {
+    ratings: best.ratings,
+    realizedGrade: input.targetGrade,
+    numericScore: best.result.numericScore,
+    featureOnlyScore,
   };
 }
 
@@ -688,29 +930,46 @@ function buildCandidate(input: ProspectScoutingDraftInput, index: number): Gener
   const seed = `${input.seed}:candidate:${index}`;
   const position = pick(`${seed}:position`, POSITION_POOL);
   const secondaryPosition = chooseSecondary(position, seed);
-  const trueGrade = pickWeighted(`${seed}:grade`, STANDARD_GRADE_WEIGHTS);
-  const ratings = buildRatings(seed, trueGrade, position);
+  const targetGrade = pickWeighted(`${seed}:grade`, STANDARD_GRADE_WEIGHTS);
+  const bats = drawProspectBats(seed);
+  const throws = drawProspectThrows(seed, bats);
   const traitPool = isPitcher(position) ? PROSPECT_PITCHER_TRAIT_POOL : PROSPECT_HITTER_TRAIT_POOL;
   const traitCount = drawProspectTraitCount(seed);
   const trait1 = traitCount >= 1 ? pick(`${seed}:trait1`, traitPool) : undefined;
   const trait2 = traitCount >= 2 && trait1
     ? pickSecondProspectTrait(seed, traitPool, trait1)
     : undefined;
+  const baseRatings = buildBaseRatings(seed, position);
+  const arsenal = buildArsenal(
+    seed,
+    position,
+    baseRatings.junk,
+    [trait1, trait2].filter((trait): trait is string => Boolean(trait)),
+  );
+  const solved = buildRatings({
+    targetGrade,
+    position,
+    secondaryPosition,
+    bats,
+    throws,
+    baseRatings,
+    arsenal,
+    trait1,
+    trait2,
+  });
+  const trueGrade = solved.realizedGrade;
   return {
     candidateId: `candidate-${input.leagueId}-${input.seasonNumber}-${index + 1}`,
     firstName: pick(`${seed}:first`, SMB4_FIRST_NAMES),
     lastName: pick(`${seed}:last`, SMB4_LAST_NAMES),
     position,
     secondaryPosition,
+    bats,
+    throws,
     trueGrade,
     potentialGrade: potentialGrade(`${seed}:potential`, trueGrade),
-    ratings,
-    arsenal: buildArsenal(
-      seed,
-      position,
-      ratings.junk,
-      [trait1, trait2].filter((trait): trait is string => Boolean(trait)),
-    ),
+    ratings: solved.ratings,
+    arsenal,
     trait1,
     trait2,
     personality: pick(`${seed}:personality`, PERSONALITY_POOL),
@@ -775,8 +1034,8 @@ function buildPlayerDto(input: {
   const seed = `${engineInput.seed}:player:${playerId}`;
   const hometown = pick(`${seed}:hometown`, CITIES);
   const salary = prospectSalaryForDraftRound(draftPick.round);
-  const bats = drawProspectBats(seed);
-  const throws = drawProspectThrows(seed, bats);
+  const bats = candidate.bats ?? drawProspectBats(seed);
+  const throws = candidate.throws ?? drawProspectThrows(seed, bats);
   return {
     id: playerId,
     firstName: candidate.firstName,
