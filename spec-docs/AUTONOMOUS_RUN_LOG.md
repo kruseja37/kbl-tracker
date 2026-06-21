@@ -2427,3 +2427,12 @@ tsc 0 + full suite **7971 pass / 1 fail = wpaRuntimeBoundary (characterized), ze
   Mode-1 suite + commit. **JK BROWSER-VERIFY BATCHED** (the whole auction surface). **➡ after 5.1e-2 = AUC-5.1d-3** (MLB→farm sequencing + per-league
   format config) = the LAST farm-auction wiring; then AUC-5.2 (L-ECON1 freeze) → scout-privacy UI → POSITION_POOL fix.
 
+**WAVE 45 — ✅ AUC-5.1e-2 COMMITTED `070a2aa2` ⇒ 🎉 THE FARM AUCTION IS PLAYABLE END-TO-END.** Codex-built → Opus-audited: VERIFIED.
+NEW `LeagueBuilderFarmAuctionDraft.tsx` + `/league-builder/farm-auction-draft` route, §3.3-OBSCURED (true IV read ONLY for the internal
+`perceivedValueRange`; rendered value = the scout 'estimate [low-high]'; grade = `scoutedGrade` fuzzed; positions shown; NO ratings/true-IV/true-grade
+leak — audit-verified the only `.iv` use is the range computation). §2.5 pool sorts by the scout-range estimate. tsc 0 + full suite **7972 pass / 1
+fail = wpaRuntimeBoundary (characterized), zero new reds**. **⇒ FARM AUCTION COMPLETE except AUC-5.1d-3**: engine (5.1a pool / 5.1b scout-range /
+5.1c wallet) + hook (5.1d-1 session builder / 5.1d-2 hook / 5.1e-1 pool-expose) + UI (5.1e-2 page) ALL built, all build-DARK, all zero-new-reds.
+**➡ NEXT = AUC-5.1d-3** (MLB→farm sequencing §3.1 + per-league auction-vs-snake format config) = the LAST AUC-5.1 piece. JK BROWSER-VERIFY BATCHED:
+the whole MLB + farm auction surface.
+
