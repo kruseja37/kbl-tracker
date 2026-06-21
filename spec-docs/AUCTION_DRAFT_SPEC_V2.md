@@ -49,15 +49,22 @@ scout-privacy = **default covered, long-press REVEALS** your own report.
 ### 2.1 Engine nomination (replaces GM nomination)
 - The **engine** surfaces players one at a time from the available pool — there is no nominator on the
   clock. This applies to **both tiers** (MLB and farm).
-- **Weighted reveal — the mechanism:** at each step the engine draws the next player from the
-  **remaining** available pool with probability **∝ (the player's hidden value-percentile)^k**.
-  - `k` = the **front-load exponent** (sim-tunable §11; default **~2–3**). `k=0` → pure uniform random;
-    higher `k` → stronger players surface earlier more reliably. The mid default gives "stars *usually*
-    early, but real upsets" — a sleeper sometimes jumps the line (forcing a hard "lock him now or lose
-    him" call), a target sometimes slips late (so you may have spent more than planned by then).
-  - **Percentile is the player's FIXED value-rank in the full class** (so weights don't need
-    recomputing as the pool drains — just renormalize over what remains). The hidden true-talent rank is
-    used ONLY to set these surface probabilities — it is never shown.
+- **Weighted reveal — the mechanism (SAME formula both tiers, different input):** at each step the
+  engine draws the next player from the **remaining** pool with probability **∝ (value-percentile)^k**.
+  - **The percentile input differs by tier:** **MLB** uses the **KNOWN/public IV percentile** (the same
+    IV the advisory shows — there is NO hidden layer for MLB; rank by the real IV). **FARM** uses the
+    **HIDDEN true-value percentile** (engine-only; GMs get only their scout's read; it doubles as a soft
+    quality signal in the fog). Percentile is the player's FIXED value-rank in the full class (weights
+    just renormalize over what remains as the pool drains).
+  - `k` = the **front-load exponent** (sim-tunable §11, **per-tier**; default **~2–3**). `k=0` → pure
+    uniform random; higher `k` → stronger players surface earlier more reliably. The mid default gives
+    "stars *usually* early, but real upsets." (Plausible per-tier split: MLB slightly LOWER k — the
+    public values already say who's good, so more order-randomness sharpens the gamble; farm HIGHER k —
+    the weighting also serves as a hidden-quality hint. Sweep in RB-16.)
+  - **Why weight MLB even though values are public:** the draw is **probabilistic, NOT a strict best→worst
+    sort**, so even knowing every IV you don't know *when* your specific target lands (fight-now vs
+    save-and-risk = the A4 gamble); AND it makes "drafted early" a real **commitment** signal for the §6
+    morale-by-slot system (under k=0 "early" would be pure luck and the slot-morale would be meaningless).
   - **Seeded** (reproducible for save/resume + sim).
 - **Determinism:** the surface order is seeded (reproducible for save/resume + sim).
 
@@ -340,7 +347,7 @@ Each drafted player gets a one-time morale adjustment off the neutral 50, from t
 |---|---|---|
 | MLB→farm carryover % | 50% | §4.5 — sweep 30/50/70 |
 | Reserve floor | low (0.5–0.7×) | §4.4 — sweep up to 0.8–0.9; pick the anti-juicing sweet spot |
-| Nomination talent-weighting | TBD | §2.1 — how strongly better players surface early |
+| Nomination talent-weighting `k` (PER-TIER) | ~2–3 each | §2.1 — `∝ percentile^k`; MLB input = public IV pctile, farm = hidden true-value pctile; consider MLB lower-k / farm higher-k |
 | Archetype luxury-tax curve | gentle/convex | §4.2 — must stay "cost not wall" |
 | Shill interest curve + personality profiles | conservative (V1) | §5 |
 | Player-morale magnitudes | slot ±15 / pay ±10 | §6 |
