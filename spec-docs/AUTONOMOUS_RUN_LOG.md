@@ -2411,3 +2411,7 @@ deliverable: mirror `LeagueBuilderAuctionDraft` but §3.3-obscured (name+positio
   persist-the-DTOs (robust) — took regenerate, flagged. Contract committed; dispatched to Codex (gpt-5.5, xhigh) bg `b9bf1btep`. On landing: read-the-diff
   audit + full Mode-1 suite + commit. **➡ after 5.1e-1 = AUC-5.1e-2** (the farm UI page §3.3) → AUC-5.1d-3 (sequencing+format) = the final farm wiring.
 
+**WAVE 43 — ✅ AUC-5.1e-1 COMMITTED `e76f84b5`.** Farm hook now exposes pool+scoutsByTeamId+farmTierCap, regenerates the pool deterministically
+on resume (keeps row.session live; warns-not-throws on mismatch); 5/5 incl. resume-determinism (regenerated pool === persisted session.players).
+tsc 0 + full suite **7971 pass / 1 fail = wpaRuntimeBoundary (characterized), zero new reds**. **➡ NEXT = AUC-5.1e-2 (the farm UI page §3.3).**
+
