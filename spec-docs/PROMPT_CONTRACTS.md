@@ -13928,23 +13928,90 @@ directly (bypassing the matrix) → STOP.
 
 ---
 
-## CONTRACT — L13-6 (charged-matchup morale amplification — per-game, fresh, History-keyed) — 2026-06-19 (attended)
+## CONTRACT — L13-6 (charged-matchup MORALE: result-aligned swing amplification — pair case, per-game, dark) — 2026-06-20 (attended, updated)
 
-**ROUTE:** Codex CLI (gpt-5.5, very-high). Auditor: Opus 4.8 (builder ≠ auditor).
-**ROLE:** Builder for the per-game morale layer. **DEPENDS ON L13-1/2/5.**
+> **L13-6 UPDATE (JK rulings 2026-06-20).** (1) SCOPE = the PAIR case: two EDGE-PAIRED players facing off ON OPPOSING TEAMS
+> (reuse L13-4's matchup detector) — decoupled from the deferred History type + the former-team-vs-team case (the original
+> contract's STOP-IF). (2) EFFECT = RESULT-ALIGNED ("amplify the swing"): an extra morale delta in the DIRECTION of the
+> matched-up player's team result (win → +, loss → −), personality-scaled. (3) Two REQUIRED riders: REMOVE the crossTeamActive
+> formation-invariant check; DE-DUPLICATE the MORALE_EFFECTS base deltas (import, not the L13-5 duplicate).
 
-**GOAL:** When a player faces his former team or a player he has a **History** edge with, amplify **that game's MORALE
-swing** (REL-6/§24.7), personality-scaled (egotist vs the team that dumped him = extra-charged). Build a FRESH morale-swing
-amplification keyed off the §24 History edge + a former-team flag. **Cadence = PER-GAME** (Fork B). **Independent of the LI
-multipliers — leave `leverageCalculator.ts:606-654` untouched** (standing constraint 2; they amplify the LEVERAGE INDEX, a
-different quantity). Build-DARK.
+**ROUTE:** Codex CLI (gpt-5.5, **very-high / xhigh reasoning effort**) via `codex exec` stdin. Auditor: Opus 4.8
+(builder ≠ auditor). Build-DARK. NO browser verify (folds into the one v1 smoke pass). **Routes to morale→DEVELOPMENT only
+(§24.10) — same load-bearing boundary as L13-5, watched as hard.**
+**ROLE:** Builder for the per-game charged-matchup morale layer + the crossTeamActive invariant fix + the MORALE_EFFECTS de-dup.
+**DEPENDS ON L13-1 + L13-4 (matchup detector, `915dbf6d`) + L13-5 (producer/resolver/one-write-path, `c724fc7f`).**
 
-**SOURCE OF TRUTH:** `DECISIONS_LOG.md:96-99` (L13-Q6 — MORALE not LI, built fresh) + §24.7.
-**⚠ MAKE-OR-BREAK:** the amplified quantity is the player's morale swing routed through the L13-5 matrix path (constraint
-3), NOT a leverage multiplier. The former-team flag needs a "former team" signal — confirm the source at build (roster
-history / the History edge's endpoints); **STOP-IF** no former-team signal exists without a new store.
-**VERIFICATION:** tsc/build 0; unit test (History edge + former-team → amplified morale swing; no History → baseline; LI
-multipliers unchanged). **FORMAT** house. **Status:** ⏸ AUTHORED — build HELD.
+**GOAL (§24.7 — the "revenge game"):** PER-GAME, when two EDGE-PAIRED players face each other on OPPOSING teams (the cross-team
+case), apply a RESULT-ALIGNED charged-matchup morale amplification via the L13-5 producer/matrix path. "Amplify the swing": the
+extra delta is in the DIRECTION of the matched-up player's team result this game (win → extra +morale, loss → extra −morale; an
+egotist facing the team that dumped him is extra-charged), personality-scaled in the matrix. **§16 PLACEHOLDER** magnitude — do
+NOT invent. Build-DARK behind `isFranchisePhase2L13Enabled` + the morale flag. **Leave the LI multipliers
+(`leverageCalculator.ts:606-654`) untouched** (constraint 2 — they amplify the LEVERAGE INDEX, a different quantity).
+
+**REUSE — do NOT build a second detector:** L13-4 already detects opposing-team matchups: `getRelationshipParticipantTeams(gameState)`
++ `isChargedRelationshipMatchup(edge, participants)` (`franchiseRelationshipIntensityCompute.ts:65,102`). L13-6 IMPORTS + reuses
+these. The game RESULT comes from `gameState` (home/away final score → the matched-up player's team win/loss).
+
+**ROUTING (§24.10 — LOAD-BEARING):** morale → `moraleSnapshots` → checkpoint → `ratingsDevelopment.ts:86-104` (DEVELOPMENT only).
+VERIFIED clean (zero morale in WAR/mojo/fitness). NO relationship→WAR / morale→WAR path. ONE write path
+(`composeMoraleConsequence` → `applyFranchiseMoraleMatrixConsequence`, the L13-5 pattern); NEVER `moraleSnapshots` directly.
+
+**RIDER 1 (REQUIRED — crossTeamActive invariant fix):** the formation invariant `relationshipFormationCheckpointWrite`
+(`soul.ts:507-511`) flags any cross-team edge (`teamOf(p1) !== teamOf(p2)`) — a STALE assumption that L13-6 makes invalid (a
+formed edge becoming cross-team via a trade is the LEGITIMATE charged-matchup basis). **REMOVE the crossTeamActive check** (the
+filter + its clause in the `pass` condition + the `crossTeam=` detail string). The formation invariant KEEPS its other checks
+(dup ids / boundary / id-determinism / types / density / pre+post-checkpoint). **CONFIRM the formation falsification cases STILL
+FIRE** (they trip via the other checks, not crossTeam).
+
+**RIDER 2 (REQUIRED — MORALE_EFFECTS de-dup):** the L13-5 resolver duplicated the base deltas into `RELATIONSHIP_MORALE_BASE_DELTAS`
+(`masterMoraleMatrix.ts:276-283`). REPLACE it with a derivation from the SINGLE source `MORALE_EFFECTS` (`relationshipEngine.ts:81` —
+export it) mapped 6-type→representative legacy literal (RIVALRY←RIVALS, FEUD←BULLY_VICTIM, FRIENDSHIP←BEST_FRIENDS,
+MENTORSHIP←MENTOR_PROTEGE; via `RELATIONSHIP_6_TO_9_COVERAGE` `:51` or a representative). PURE de-dup — VERIFY the resolved values
+are byte-identical (RIVALRY -5/-5, FEUD 3/-10, FRIENDSHIP 6/6, MENTORSHIP 4/7) → NO behavior change.
+
+**⚠ MAKE-OR-BREAK:**
+1. **RESULT-ALIGNED:** the charged delta sign = the matched-up player's team result this game (win → +, loss → −). The §16 base
+   delta is signed by result; **personality scales it in the matrix** (do NOT use the exact-delta bypass — personality MUST scale).
+   The event conveys the result direction.
+2. **§24.10:** morale → DEVELOPMENT only, NEVER WAR.
+3. **REUSE** L13-4's detector — NO second matchup detector.
+4. **ONE write path; NO new edge field.**
+5. **PER-GAME IDEMPOTENT:** deterministic `sourceEventId` (edge + game + 'charged'); re-running a game → no double-apply. NO
+   `Date.now`/`Math.random`.
+6. **crossTeamActive REMOVED** + the formation falsification still fires.
+7. **MORALE_EFFECTS de-dup byte-identical.**
+8. **DARK:** flag off → no charged-matchup morale.
+
+**VERIFIED ANCHORS:** L13-4 detector `franchiseRelationshipIntensityCompute.ts:65,102`; L13-5 producer
+`franchiseRelationshipMoraleCompute.ts` (extend it — `processCompletedGame` already wires it) + resolver/dup `masterMoraleMatrix.ts`
+(composeMoraleConsequence `:419`, tap registry `:417`, duplicate `:276-283`); `MORALE_EFFECTS` `relationshipEngine.ts:81` +
+`RELATIONSHIP_6_TO_9_COVERAGE` `:51`; crossTeamActive `soul.ts:507-511`; apply `franchiseMoraleState.ts:388`; game result from
+`gameState`; §24.10 morale→dev `ratingsDevelopment.ts:86-104` (zero morale in WAR/mojo/fitness — re-confirm).
+
+**CHANGES (additive; exact files at build):** A. `src/engines/relationshipEngine.ts` (export `MORALE_EFFECTS`). B.
+`src/engines/masterMoraleMatrix.ts` (the charged-matchup resolver path [result-aligned base delta] + replace the duplicate with
+the MORALE_EFFECTS-derived lookup). C. `src/utils/franchiseRelationshipMoraleCompute.ts` (EXTEND the producer: per-game charged
+matchup — reuse the L13-4 detector + the game result, apply via the existing producer pattern; no new wiring). D.
+`test-utils/lsim/invariants/soul.ts` (REMOVE crossTeamActive; extend/add the charged-matchup invariant) + `falsification.ts`. E.
+unit tests (charged win→+/loss→−, personality scaling, cross-team-only not co-rostered, idempotent; de-dup byte-identical;
+crossTeamActive removal + falsification still fires) + `masterMoraleMatrix.test.ts` regression.
+
+**HARD CONSTRAINTS:** edit/create ONLY the listed files (+ tests). DARK. NO `Date.now`/`Math.random`. NO new edge field. NO
+reporter (L13-7), NO L13-3b. **NO session-doc edits (CURRENT_STATE / SESSION_LOG / CURRENT_STATE_HISTORY — the L13-5 trap).** Leave
+`leverageCalculator.ts:606-654` untouched. NO trackerDb bump. NO git add/commit.
+
+**VERIFICATION (run ALL, paste ACTUAL):** `NODE_ENV= npx tsc -b` 0 + `npm run build` 0; the charged-matchup + de-dup +
+crossTeamActive-removal unit tests + `masterMoraleMatrix.test.ts` green; full suite **ZERO new reds** (prove non-pass pre-existing
+by solo); L-SIM 24g + 60g BOTH cadences (**standard LAST** — baseline-regen trap; delete stray non-60g files): the charged-matchup
+morale FIRES on cross-team matchups → DEVELOPMENT, `moraleToWarLeaks=0` (§24.10), per-game idempotent (re-run → no double-apply),
+same-seed byte-identical, the **crossTeamActive invariant now passes WITH cross-team pairs present** (the fix works in-sim),
+findings=0.
+
+**STOP-IF:** the charged matchup needs a former-team-vs-team signal / new store (it must NOT — pair case, reuse L13-4's detector).
+ANY morale→WAR path. The de-dup changes a value (it must be byte-identical). A second matchup detector. A session-doc edit.
+
+**FORMAT** house. Use very high reasoning effort. **Status:** ⏸ AUTHORED — ready for dispatch (JK attended, sole-mutator, 2026-06-20).
 
 ---
 
