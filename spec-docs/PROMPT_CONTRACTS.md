@@ -15152,3 +15152,40 @@ Use xhigh reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: AUC-5.1c ===== -->
+
+<!-- ===== CONTRACT: AUC-5.1d-1 (pure farm-auction session builder) ===== -->
+## CONTRACT — AUC-5.1d-1 (pure farm-auction session builder — assemble the §2 machine on the farm pool+wallet) — 2026-06-21 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5, xhigh). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** Mode-1 FARM AUCTION — the FIRST, fork-free piece of AUC-5.1d (the integrative wrapper). The PURE, headless foundation: assemble a farm-tier hot-seat auction SESSION from the now-complete farm engine layer (5.1a pool + 5.1c wallet) wired into the SAME §2 machine the MLB auction uses. **DEPENDS ON AUC-5.1a (`ecd36347`), AUC-5.1c (`456e0f46`), the §2 machine (AUC-2.1/2.2).** PURE, **build-DARK** (no live caller until the farm hook 5.1d-2). The scout-range DISPLAY (5.1b) is NOT here — it's a per-bidder UI concern; the §2 machine runs on TRUE IV.
+
+**GOAL:** A pure `buildFarmAuctionSession(input) → { session, pool }` that: builds the priced farm prospect pool (5.1a), derives the §5.2 farm tier cap over that pool (5.1c), builds the farm `AuctionTeamInput[]` on the farm wallet + 10 slots (5.1c), and inits a `CpuShillAuctionSession` via the SAME `initAuctionSession` the MLB hook uses — returning the session PLUS the pool (the prospect DTOs, retained for the 5.1e §3.3 card + the 5.1b scout-range display). Deterministic by seed.
+
+**MAKE-OR-BREAK:** the farm session must be the IDENTICAL §2 machine the MLB auction runs (`initAuctionSession` / `auctionStateMachine.ts`), seeded with the FARM pool's `auctionPlayers` (true IVs) + the FARM-wallet `AuctionTeamInput[]` — only the POOL (prospects) and the WALLET (farm tier cap, 10 slots) differ. Do NOT fork the state machine; do NOT recompute IV/cap any way other than the 5.1a/5.1c functions; do NOT feed the scout-range/perceived value into the session (true IV only).
+
+**SOURCE OF TRUTH:** `AUCTION_DRAFT_SPEC.md` §3 ("the farm auction reuses the §2 hot-seat machine and §7.5 bidding wholesale") + `spec-docs/AUC-5.1_SCOPE_MAP.md`. **Reuse (re-read at source):** `buildFarmAuctionPool` (`src/utils/farmAuctionPool.ts` — input `{leagueId, seasonNumber, seed, teamDraftOrder?, scoutsByTeamId?, poolMultiplier?}`, output `{prospects: LeagueBuilderProspectPlayerDto[], auctionPlayers: AuctionPlayer[]}`); `computeFarmTierCap` + `buildFarmAuctionTeamInputs` (`src/utils/farmAuctionWallet.ts`); `initAuctionSession` (`src/engines/auctionStateMachine.ts:136` — input `{teams: AuctionTeamInput[], players: AuctionPlayer[], config?: Partial<AuctionSetupConfig>, nominationOrder?}`); `CpuShillAuctionSession` (`src/engines/cpuShillBidding.ts:32`); `DEFAULT_AUCTION_SETUP_CONFIG` (`src/data/auctionEngineConstants.ts`). **Mirror the MLB pattern** = `useAuctionDraft.ts` `initAuction` (the pool→AuctionPlayer / teams→AuctionTeamInput / `initAuctionSession(...) as CpuShillAuctionSession` assembly, ~lines 332-368) — but on the farm functions + 10 slots.
+
+**DESIGN CALLS (Captain, AUTH-4 — documented for JK):**
+1. **PURE builder — scouts + rosters are INPUTS, not loaded here.** `buildFarmAuctionSession` takes `teams` + `scoutsByTeamId` as args (the async load via `getScoutProfilesForLeague`/`toScoutDescriptor` happens in the 5.1d-2 hook). Keeps this headlessly testable like 5.1a/b/c.
+2. **Farm tier cap = `computeFarmTierCap(pool.auctionPlayers.map(p => p.iv))`** (the whole farm pool's true IVs; default 10 slots). One cap for the league (every team's farm wallet uses it), matching how the MLB pool has one `tierCap`.
+3. **Config** = `{...DEFAULT_AUCTION_SETUP_CONFIG, ...input.config, nominationOrderSeed: input.seed}` mirroring the MLB initAuction; `cpuShillCount` passes through from `input.config` (the farm room can have CPU shills too).
+
+**CONSTRAINTS — exactly these files:**
+1. **NEW `src/utils/farmAuctionSession.ts`** — export:
+   - `export interface BuildFarmAuctionSessionInput { leagueId: string; seasonNumber?: number; teams: readonly { teamId: string; teamName?: string; farmRosterPlayerIds?: readonly string[]; committedFarmSalaries?: number }[]; scoutsByTeamId?: Record<string, ProspectScoutDescriptor | undefined>; seed: string; config?: Partial<AuctionSetupConfig>; poolMultiplier?: number; }`
+   - `export interface FarmAuctionSessionResult { session: CpuShillAuctionSession; pool: FarmAuctionPool; farmTierCap: number; }`
+   - `export function buildFarmAuctionSession(input): FarmAuctionSessionResult` — (a) `pool = buildFarmAuctionPool({leagueId, seasonNumber: input.seasonNumber ?? 1, seed: input.seed, teamDraftOrder: input.teams.map(t => ({teamId: t.teamId, teamName: t.teamName ?? t.teamId})), scoutsByTeamId: input.scoutsByTeamId, poolMultiplier: input.poolMultiplier})`; (b) `farmTierCap = computeFarmTierCap(pool.auctionPlayers.map(p => p.iv))`; (c) `teamInputs = buildFarmAuctionTeamInputs({teams: input.teams.map(t => ({teamId: t.teamId, farmRosterPlayerIds: t.farmRosterPlayerIds ?? [], committedFarmSalaries: t.committedFarmSalaries})), farmTierCap})`; (d) `session = initAuctionSession({teams: teamInputs, players: pool.auctionPlayers, config: {...DEFAULT_AUCTION_SETUP_CONFIG, ...input.config, nominationOrderSeed: input.seed}}) as CpuShillAuctionSession`; (e) return `{session, pool, farmTierCap}`. PURE (no IndexedDB/Date/Math.random/async). Import types from the engines/utils above.
+2. **NEW `src/utils/tests/farmAuctionSession.test.ts`** — (a) the session is `NOMINATION` (or `AUCTION_COMPLETE` only if a team has 0 farm slots) with `players` === the pool's auctionPlayers (same ids/ivs); (b) each team's `AuctionTeamState.budgetRemaining` === `farmTierCap` when farm rosters are empty, and the farm tier cap === `computeFarmTierCap(pool IVs)`; (c) `rosterSlotsRemaining` === 10 for empty farm rosters; (d) determinism: same seed → identical pool ids + session nominationOrder; (e) the pool's prospects are carried through unchanged.
+
+**DO NOT:** modify the §2 machine / cpuShillBidding / 5.1a / 5.1c / 5.1b / storage / tierParams / frozen economics; load scouts or rosters from IndexedDB (inputs only — that's the 5.1d-2 hook); feed the scout-range/perceived value into the session; add a live caller / route / persistence (build-dark — 5.1d-2 wires + persists). Branch `codex/mode1-v1` only; do NOT commit (Opus commits after audit); do NOT push.
+
+**EXPECTED OUTPUT:** a pure `buildFarmAuctionSession` that assembles the §2 machine on the farm pool + farm wallet (10 slots, §5.2 cap), returning the session + pool, deterministic by seed. Build-dark.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` exit 0; `NODE_ENV= npx vitest run src/utils/tests/farmAuctionSession.test.ts` → green. Report ACTUAL output. (Opus runs the full Mode-1 suite + confirms no existing file modified.)
+
+**FORMAT:** 1) EVERY changed/new path + total; 2) the assembly (pool→cap→teamInputs→initAuctionSession) + how it mirrors the MLB initAuction; 3) ACTUAL tsc + the test output; 4) "AUC-5.1d-1 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL (STOP-IF):** if `initAuctionSession`'s input shape is NOT `{teams, players, config?, nominationOrder?}` (re-read auctionStateMachine.ts:136) → STOP and quote it. If `buildFarmAuctionPool`/`buildFarmAuctionTeamInputs` signatures differ from this contract → STOP and quote them. If assembling the farm session appears to REQUIRE modifying the §2 machine (not just feeding it farm inputs) → STOP and report (it must be reuse-only).
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: AUC-5.1d-1 ===== -->
