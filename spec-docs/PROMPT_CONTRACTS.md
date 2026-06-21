@@ -14011,7 +14011,7 @@ findings=0.
 **STOP-IF:** the charged matchup needs a former-team-vs-team signal / new store (it must NOT — pair case, reuse L13-4's detector).
 ANY morale→WAR path. The de-dup changes a value (it must be byte-identical). A second matchup detector. A session-doc edit.
 
-**FORMAT** house. Use very high reasoning effort. **Status:** ⏸ AUTHORED — ready for dispatch (JK attended, sole-mutator, 2026-06-20).
+**FORMAT** house. Use very high reasoning effort. **Status:** ✅ BUILT + Opus-audited (builder≠auditor; Codex stopped mid-verification → auditor took over) — VERIFIED-COMPLETE (2026-06-20, attended). Commit `6dd00141`. Charged-matchup morale, PAIR case, RESULT-ALIGNED (win→+winSelf/loss→+lossSelf, personality-scaled); reuses L13-4's detector (no second); one write path; per-game idempotent; dark. RIDER 1: crossTeamActive REMOVED (cross-team edges valid post-trade) — falsification 42/42 incl. a new cross-team POSITIVE test, the negative cases still fire (not a silent deletion). RIDER 2: MORALE_EFFECTS de-dup — RELATIONSHIP_MORALE_BASE_DELTAS now DERIVED from the single MORALE_EFFECTS source (byte-identical RIVALRY -5/-5, FEUD 3/-10, FRIENDSHIP 6/6, MENTORSHIP 4/7). §24.10 HOLDS (`moraleToWarLeaks=0`). Host gate: build 0; suite 7,882 pass / 3 fail = characterized only (incl. the AwardsWatchlist order-flake, solo-proven), ZERO new reds. L-SIM BOTH cadences full 60g findings=0, same-seed byte-identical, standard `8931876:4b218874`; @060: relationshipChargedMatchups=6, chargedPos=3/chargedNeg=3 (result-aligned), ratingsDevelopmentRows=286 (→development), duplicateSourceIds=0; crossTeamActive removal validated in-sim. No session-doc edits. NO browser verify (dark). ➡ NEXT = L13-7 (reporter) / L13-8 (flag/gate) / L13-3b per JK.
 
 ---
 
