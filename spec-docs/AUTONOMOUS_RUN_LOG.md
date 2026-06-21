@@ -1968,3 +1968,19 @@ NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its 
 - **✅ L14-2b VERIFIED + COMMITTING.** Build 0; **FULL suite 7902 pass / 2 fail = wpaRuntimeBoundary + franchiseManualSmokeFixture
   (characterized), ZERO new reds.** ⇒ **L14-2 COMPLETE (a+b).** ➡ NEXT Mode-2 = **L14-3** (flag-gated GM-offer + processCompletedGame
   wiring + reuse the L11 news adapter rebrand→relocated mapping) → then LSIM-P1/P3.
+
+**WAVE 12:**
+- **✅ L14-2b COMMITTED `ed1cf4ef`** ⇒ **L14-2 COMPLETE.** **✅ B6 COMMITTED `6a123460`** (trait pools + 30/50/20; build 0;
+  prospect test 19/19; oracle/traitPricing untouched). Mode-1 at 6/9.
+- **➡ B7 dispatched (`btkp3hcem`)** — canonicalize arsenal §8 (≥1 FB/≥1 off-speed, role tapers, adopt smb4PlayerGenerator.buildArsenal).
+- **➡ L14-3 dispatched (`codex-l14-3`)** — the rebrand GM-offer reader + accept wrapper. **DESIGN CALLS (flagged for JK):**
+  (1) L14 is GM-INITIATED → **NO processCompletedGame block** (offer computed LIVE); (2) dwell read from the team-fan morale
+  snapshot **history** (per-effect ≈ per-game proxy, mirrors the L11 backstop); (3) rebrand news is AUTOMATIC via the cascade's
+  `fireManager(reason:'rebrand')` → L11 'relocated' adapter (no new adapter). Build-dark. ⇒ completing L14-3 = **L14 fully
+  built (dark)**; then the L-SIM gate (LSIM-P1 partial now → LSIM-P3 full matrix = the pre-flip passport).
+
+**WAVE 13:**
+- **✅ L14-3 VERIFIED + COMMITTING** — `franchiseRebrandOffer.ts` (`getRebrandOffer` flag-gated live dwell-from-history;
+  `acceptRebrandOffer` re-checks armed → `executeRebrandCascade`). New file only, NO processCompletedGame block (as designed),
+  no importers (build-dark), build 0, 5 tests. ⇒ **L14 FULLY BUILT (dark): L14-1 (flag+dwell) + L14-2 (cascade) + L14-3 (offer).**
+  **➡ Mode-2 NEXT = the L-SIM gate** (LSIM-P1 partial run now → LSIM-P3 full matrix = the post-D13 flip passport). L13-3b deferred.

@@ -14644,3 +14644,58 @@ Use very high reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: B6 ===== -->
+
+<!-- ===== CONTRACT: B7 (prospect-gen — canonicalize arsenal §8) ===== -->
+## CONTRACT — B7 (prospect-gen: canonicalize pitcher arsenal, §8) — 2026-06-20 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5, high). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** Mode-1 prospect-gen. **DEPENDS ON B5+B8+B2+B3+B4+B6 (same file, committed).**
+
+**GOAL:** Replace the prospect generator's ad-hoc arsenal with the §8 canonical rule, mirroring `smb4PlayerGenerator.buildArsenal`.
+
+**SOURCE OF TRUTH:** `spec-docs/PROSPECT_GENERATION_SPEC.md §8` (RULED 2026-06-20, ruling D): every pitcher gets **≥1 fastball** from `{4F, 2F, CF}` **+ ≥1 off-speed** from `{SL, CB, CH, FK, SB}`, **NO forced 4F+2F**; arsenal size = **role tapers SP & SP/RP 3–5 · RP 2–4 · CP 2–3, scaled by junk** within the role range. Reference impl: `src/engines/smb4PlayerGenerator.ts` `buildArsenal` (:567) + `FASTBALL_PITCH_TYPES`/`OFFSPEED_PITCH_TYPES` (:409-411).
+
+**CONSTRAINTS:**
+- In `src/utils/prospectScoutingDraftEngine.ts`: replace the current arsenal generation (~lines 420-428) with the §8 rule — adopt the `smb4PlayerGenerator.buildArsenal` PATTERN (≥1 fastball from the 3-member set, ≥1 off-speed, role-tapered size scaled by junk). Use the existing SEEDED helpers, NOT `Math.random`. Pitchers only (fielders get no arsenal).
+- Role tapers: SP & `SP/RP` → 3–5; RP → 2–4; CP → 2–3 (higher junk → upper end). `SP/RP` taper = SP-like (3–5) — derive from the real pool if trivially available, else default 3–5 (note it).
+- **Retire the orphaned `src/engines/gradeEngine.generateArsenal`** ONLY if it has no live importers (grep first; if imported, leave it + note).
+- **FROZEN ORACLE — do NOT modify** `smb4GradeEmulator.ts` or `smb4PlayerGenerator.ts` (read-only reference). The arsenal feeds the grade (`arsenal_count`) so it must be set in the candidate before the (later B1) rating solve.
+- Branch `codex/mode1-v1` only; do NOT commit; do NOT push.
+
+**EXPECTED OUTPUT:** §8-canonical arsenal generation (≥1 FB / ≥1 off-speed, role-tapered + junk-scaled, no forced 4F+2F).
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` 0; `NODE_ENV= npx vitest run src/utils/tests/prospectScoutingDraftEngine.test.ts` → green (add a test: every pitcher arsenal has ≥1 fastball + ≥1 off-speed, size within the role taper, no forced 4F+2F pairing; fielders get none). Do NOT run the full suite.
+
+**FORMAT:** 1) files changed + total; 2) the arsenal rule implemented + role tapers + the gradeEngine.generateArsenal disposition (+ importer grep); 3) ACTUAL tsc + prospect test output; 4) "B7 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL:** if `gradeEngine.generateArsenal` has live importers → leave it + report. If the arsenal field type can't hold the pitch codes → STOP and quote it. Never modify the oracle.
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: B7 ===== -->
+
+<!-- ===== CONTRACT: L14-3 (rebrand offer reader + accept wrapper, build-dark) ===== -->
+## CONTRACT — L14-3 (rebrand circuit-breaker: GM-offer reader + accept wrapper, build-dark) — 2026-06-21 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5, high). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-tracker` [branch `codex/franchise-v1-next`].**
+**ROLE:** Mode-2 L14 — the GM-offer glue between the dwell counter (L14-1) and the cascade (L14-2b). Build-DARK.
+
+**GOAL:** A flag-gated, live-computed "is a rebrand offered for this team?" reader + a thin accept wrapper that runs the cascade. **DESIGN CALLS (Captain, AUTH-4 — documented for JK):** (1) L14 is **GM-INITIATED**, NOT a per-game auto-trigger → **NO `processCompletedGame` block** (unlike L10–L13); the offer is computed LIVE when the franchise UI asks. (2) The dwell series is read from the **team-fan morale snapshot history** (mirrors the L11 auto-backstop's history-read) — the history is per-EFFECT, used as a per-GAME proxy (fan morale changes ~once/game); flag this granularity approximation for JK/L-SIM. (3) The **rebrand news is AUTOMATIC** — `executeRebrandCascade`'s step-1 `fireManager({reason:'rebrand'})` already emits the L11 `'relocated'` news (`franchiseL11ManagerChangeNewsAdapter.ts:73`); no new adapter.
+
+**SOURCE OF TRUTH:** `DECISIONS_LOG.md` L14-Q1 (dwell + GM-gated) + `spec-docs/FRANCHISE_V1_LIVING_SEASON_SPEC.md §248`. Dwell fn: `franchiseRebrandDwell.ts` `computeRebrandDwell` (L14-1). Cascade: `franchiseRebrandApply.ts` `executeRebrandCascade` (L14-2b). Flag: `isFranchisePhase2L14Enabled` (`franchisePhase2Flags.ts`).
+
+**CONSTRAINTS — NEW file `src/utils/franchiseRebrandOffer.ts`:**
+- `async getRebrandOffer(scope: FranchiseMoraleScope, teamId: string): Promise<{ offered: boolean; consecutiveRockBottomGames: number }>`: if `!isFranchisePhase2L14Enabled()` → `{offered:false, consecutiveRockBottomGames:0}` (dark-noop). Else read the team-fan snapshot (`getFranchiseMoraleSnapshot(scope, 'team-fan', teamId)`), map its `history` to a most-recent-last `number[]` of `currentValue`s, run `computeRebrandDwell` → `offered = result.armed`.
+- `async acceptRebrandOffer(input: ExecuteRebrandCascadeInput): Promise<ExecuteRebrandCascadeResult>`: re-check `getRebrandOffer` is `offered` for the team; if not armed (or flag off) → return a `{status:'failed', reason:'rebrand not offered'}`-shaped result WITHOUT running the cascade; else delegate to `executeRebrandCascade(input)`. (Guards against accepting an un-armed offer.)
+- Do NOT add a `processCompletedGame` block. Do NOT touch the cascade/dwell/flag internals. Build-DARK (no live caller — the franchise UI wires it post-flag).
+- Branch `codex/franchise-v1-next` only; do NOT commit (Opus commits after audit); do NOT push.
+
+**EXPECTED OUTPUT:** `getRebrandOffer` + `acceptRebrandOffer`. Build-dark.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` 0; a NEW test `src/utils/tests/franchiseRebrandOffer.test.ts` (fake-indexeddb): flag-off → not offered; history with ≥trigger consecutive rock-bottom → offered; history recovering → not offered; `acceptRebrandOffer` on an un-armed team → failed-without-cascade; on an armed team → delegates (mock/spy executeRebrandCascade or assert the cascade ran). Run ONLY that test. Do NOT run the full suite (Opus runs it — but this adds NO processCompletedGame import, so transitive-mock risk is low).
+
+**FORMAT:** 1) every changed path + total; 2) the offer/accept logic + the history→series mapping; 3) ACTUAL tsc + new-test output; 4) "L14-3 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL:** if the morale snapshot history can't yield a usable currentValue series → STOP and quote its shape. If a `processCompletedGame` block seems genuinely required (e.g. dwell MUST be persisted per-game) → STOP and report (do not add one without flagging).
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: L14-3 ===== -->
