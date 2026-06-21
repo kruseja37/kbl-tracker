@@ -2380,3 +2380,15 @@ NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its 
 assembles the SAME §2 machine on the 5.1a pool + 5.1c wallet (10 slots, §5.2 cap), true IV, reuse-only, 2 new files, nothing existing modified.
 tsc 0 + full suite **7966 pass / 1 fail = wpaRuntimeBoundary (characterized), zero new reds** (+5). **➡ NEXT = AUC-5.1d-2 (the farm hook).**
 
+**WAVE 40 — AUC-5.1d-2 (farm-auction hook) CONTRACTED + DISPATCHED.**
+- The farm hook makes a farm auction PLAYABLE (analog of the MLB 4.1a hook). **DESIGN DECISIONS (flagged):** (1) STANDALONE `useFarmAuctionDraft`
+  mirroring `useAuctionDraft` — do NOT modify the committed MLB hook; the tier-agnostic autoAdvance/transition loop is DUPLICATED (cited) → future
+  shared-core dedup is an OPEN-DECISION. (2) farm persistence = new `createFarmAuctionSessionId` = `${leagueId}::startup-farm-auction-draft::N`
+  REUSING the AUC-3.1 `auctionSessions` store (NO new store/DB bump — namespaced id only; distinct from the MLB session). (3) scouts OPTIONAL (the
+  §2 machine runs on TRUE IV — scout-range display is 5.1e; don't block on scout-per-team assignment). (4) farm rosters via `getRoster().farmRoster`.
+- **MAKE-OR-BREAK:** reuse the §2 machine + cpuShillBidding (incl. AUC-4.2 turn-fidelity + cpuDecideLoneSurvivor) UNCHANGED — only init (`buildFarmAuctionSession`)
+  + the persistence namespace are farm-specific. Contract committed; dispatched to Codex (gpt-5.5, xhigh) bg task `b0b2w211p` → `/tmp/codex-auc51d2.out`.
+  On landing: read-the-diff audit + full Mode-1 suite (storage touch → ripple risk) + confirm NO DB/store change + farm id ≠ MLB id + commit.
+  **➡ after 5.1d-2 = AUC-5.1d-3** (MLB→farm sequencing + per-league format config) → 5.1e (UI §3.3, incl. the scout-range display). **JK browser-verify
+  BATCHED** (the farm hook is user-facing once 5.1e lands).
+
