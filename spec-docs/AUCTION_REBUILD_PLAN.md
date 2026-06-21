@@ -18,7 +18,7 @@ session per the loop (split further as the grounding warrants).
 
 | # | Ticket | V2 § | Class | What | Survives/Rewrites |
 |---|---|---|---|---|---|
-| **RB-0** | 3-axis personality model + pre-draft assignment | §3.7 | engine/data | Pin the **3 independent axes** (1: primary personality, 7 types, VISIBLE; 2: hidden modifiers, 4×0–100, HIDDEN forever; 3: chemistry, 5 types, VISIBLE). **Assign FRESH before the draft** — re-roll stock players' axes 1+2 (seeded), prospects already done; MOVE hidden-mod creation from the franchise-init backfill to pre-draft. Fix `PERSONALITY_BASELINES` non-canonical names → canonical 7. **OPEN-Q: chemistry reset-or-keep (lean keep).** Feeds RB-1 (scout chemistry-fit), RB-5 (morale tilt), RB-7 (freeze persists all 3). | clarifies the conflated personality/chemistry/modifier code |
+| **RB-0** | 3-axis personality model + pre-draft assignment | §3.7 | engine/data | Pin the **3 independent axes** (1: primary personality, 7 types, VISIBLE; 2: hidden modifiers, 4×0–100, HIDDEN forever; 3: chemistry, 5 types, VISIBLE). **Assign FRESH before the draft** — re-roll stock players' axes **1+2** (seeded; **KEEP axis-3 chemistry from SMB4** — JK confirmed), prospects already done; MOVE hidden-mod creation from the franchise-init backfill to pre-draft. **Balance the GENERATED-prospect chemistry distribution across all 5 types** (gen constraint + validation; JK — so all chemistry strategies stay buildable). **Rebuild the conflated `PERSONALITY_BASELINES` on the canonical 7** (figures = JK dial). Feeds RB-1 (scout chemistry-fit), RB-5 (morale), RB-7 (freeze persists all 3). | clarifies the conflated personality/chemistry/modifier code |
 
 ## Phase 1 — THE SPINE (value + nomination)
 
@@ -38,7 +38,7 @@ session per the loop (split further as the grounding warrants).
 
 | # | Ticket | V2 § | Class | What |
 |---|---|---|---|---|
-| **RB-5** | Player morale from draft | §6 | new engine | slot (when surfaced/won) + over/underpay (vs scout range) matrix; early=commitment dominates; personality-tilted; feeds TV |
+| **RB-5** | Player morale from draft | §6/§3.7 | new engine | slot (when surfaced/won) + over/underpay (vs scout range) matrix; early=commitment dominates; feeds TV. **Personality = the KIND of reaction (visible), hidden modifiers = the MAGNITUDE (unseen).** 3 morale layers (§3.7): baseline (RB-0 canonical rebuild) · **event-reactiveness per personality = NET-NEW** (no reactivity multiplier today; resilience modulates) · **relationship dynamics = REUSE the L13 engine** (`relationshipEngine`/`masterMoraleMatrix`, build-dark), define the personality bully/mentor/clash rules (charisma/loyalty modulate) |
 | **RB-6** | Fan morale from payroll | §7 | new engine | payroll-rank vs median; exponential both ends (high 2× = win-now; low = anti-tank); one-time at draft-end |
 | **RB-7** | **Freeze → Mode 2 (4-number bridge)** = AUC-5.2 expanded | §10 | **careful saved-shape / franchise-bridge** | checkpoint-0 stamps trueValue + **settledSalary** + **starting player morale (RB-5)** + **starting fan morale (RB-6)**; franchise-init **seeds Mode-2 morale from the freeze, overriding defaults**. trackerDb + `franchiseInitializer` (additive `settledSalary?` + morale fields; verify NO trackerDb bump + version-pin) |
 | **RB-8** | GM identity entity | §8 | new entity | parallel to the manager profile, **above** it, **fire-manager authority**, named (user=GM); reporter names GM on roster/draft, manager on in-game |
