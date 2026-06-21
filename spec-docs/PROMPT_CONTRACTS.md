@@ -15332,3 +15332,55 @@ Use xhigh reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: AUC-5.1d-3 ===== -->
+
+<!-- ===== CONTRACT: RB-0a (chemistry canonical module + target distribution) ===== -->
+## CONTRACT — RB-0a (chemistry canonical form + `CHEMISTRY_TARGET_DISTRIBUTION`) — 2026-06-21 (AUTH-4, Mode-1 auction REBUILD)
+
+**ROUTE:** Codex CLI (gpt-5.5, **xhigh**). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** Mode-1 auction rebuild FOUNDATION (RB-0, split part a). Establish the ONE canonical player-chemistry form + freeze the 440-pool target distribution that the pre-draft 3-axis regen (RB-0b) and scout chemistry-fit (RB-1) will consume. **Purely ADDITIVE + behavior-preserving — NO data regeneration, NO type-tightening of `PlayerData.chemistry` (deferred — see DO NOT).** Build-safe; the freeze persists nothing new.
+
+**GOAL:** (1) Add a new canonical chemistry module exporting the 5-code `ChemistryCode` union, the canonical bidirectional code↔Title-Case-word maps, a `normalizeToChemistryCode()` normalizer, and the frozen `CHEMISTRY_TARGET_DISTRIBUTION` (the JK-ratified 440 shares). (2) Make the existing PLAYER-path converter (`leagueBuilderStorage.ts` `CHEMISTRY_MAP` / `convertPlayer`) derive from the canonical module — byte-identical output (single source for the player path). (3) A validation test that pins the constant + guards 440-source drift + proves the normalizer round-trips.
+
+**SOURCE OF TRUTH:** `AUCTION_DRAFT_SPEC_V2.md` **§3.7** (the 3-axis model; chemistry = axis 3, VISIBLE, 5 types) + the **"Chemistry BALANCE" block** (440 target = the canonical balanced shape) + the **"Build caveats for RB-0"** (compute the target from the **3-letter `PLAYERS` record** NOT the Title-Case `ALL_MLB_PLAYERS`; centralize ONE canonical form). **JK RULING 2026-06-21:** target = **SPI 21 / DIS 20 / CMP 20 / SCH 20 / CRA 19** (honor the exact near-uniform 440 shape, do NOT snap to flat-20; enforce as a ±tolerance band). `AUCTION_REBUILD_PLAN.md` RB-0.
+
+**GROUNDED ANCHORS (re-verified from source 2026-06-21 in this worktree — trust these):**
+- `src/data/playerDatabase.ts:66` — `chemistry: string;  // SPI, DIS, CMP, SCH, CRA` (the **PlayerData** field; loose `string`; ALL 506 entries use 3-letter codes).
+- `src/data/playerDatabase.ts:513` — `export const PLAYERS: Record<string, PlayerData> = {` (506 entries = 440 rostered + 66 free agents).
+- Free agents marked `teamId: 'free-agent'` (e.g. `:8815`). **440-rostered distribution re-counted from source: SPI 93 (21.14%) · DIS 88 (20.0%) · CMP 88 (20.0%) · SCH 88 (20.0%) · CRA 83 (18.86%).** (FAs ALSO use 3-letter codes — the spec's "FAs carry full-word chemistry" note is WRONG; FAs are still EXCLUDED from the target.)
+- `src/data/playerDatabase.ts:17` `export type Chemistry = 'SPIRITED'|'CRAFTY'|'DISCIPLINED'|'FIERY'|'GRITTY'|'SCHOLARLY'|'COMPETITIVE';` + `:78 chemistry: Chemistry;` — this is the **TEAM** chemistry type/field (UPPERCASE, 7 values incl. FIERY/GRITTY). **DO NOT TOUCH — it is a different axis (team chemistry), not player chemistry.**
+- `src/utils/leagueBuilderStorage.ts:72` `export type Chemistry = 'Competitive'|'Spirited'|'Crafty'|'Scholarly'|'Disciplined';` (the league-builder PLAYER chemistry union, Title-Case, 5 values) — used by `Player.chemistry` (`:273`).
+- `src/utils/leagueBuilderStorage.ts:1919-1932` `const CHEMISTRY_MAP: Record<string, Chemistry>` (3-letter + UPPERCASE + `FIERY`/`GRITTY`→`Competitive`) used by `convertPlayer` at `:1976-1977` (`CHEMISTRY_MAP[player.chemistry] || CHEMISTRY_MAP[player.chemistry.toUpperCase()] || 'Competitive'`). **This is the PLAYER-path converter to migrate.**
+- `src/engines/ovrCalculator.ts:314-354` `CHEMISTRY_ABBREV_MAP` + `normalizeChemistry()` — feeds `HITTER/PITCHER_CHEMISTRY_ADJ` OVR coefficients (`:181`/`:234`). **DO NOT TOUCH — frozen-OVR/grade-oracle-adjacent; behavior-sensitive; deferred.**
+- `src/data/players/mlb/index.ts:70` `export const ALL_MLB_PLAYERS: PlayerData[]` — a SEPARATE data set typed `PlayerData[]` that carries **mixed** chemistry forms (~440 Title-Case + ~220 3-letter). **This is why `PlayerData.chemistry` CANNOT be tightened to a 3-letter union in this ticket — DO NOT compute the target from it, DO NOT tighten the type.**
+
+**DESIGN CALLS (Captain, AUTH-4 — documented for JK):**
+1. **`ChemistryCode` = the 3-letter union `'SPI'|'DIS'|'CMP'|'SCH'|'CRA'`** (matches the `PLAYERS` data form; the canonical PLAYER-chemistry code).
+2. **`CHEMISTRY_TARGET_DISTRIBUTION` = the JK-ratified shares as FRACTIONS summing to 1.0:** `{ SPI: 0.21, DIS: 0.20, CMP: 0.20, SCH: 0.20, CRA: 0.19 }` (fractions chosen over percents for downstream rebalancing math). Also export `CHEMISTRY_TARGET_SOURCE_TOLERANCE = 0.015` (±1.5pp band the 440 source satisfies and RB-0b/RB-16 reuse).
+3. **`normalizeToChemistryCode(value: string): ChemistryCode`** reproduces the existing `CHEMISTRY_MAP` semantics: accepts 3-letter codes, Title-Case words, UPPERCASE words; `FIERY`/`GRITTY` → `CMP`; unknown/empty → `CMP` (matches the existing `'Competitive'` default). It is the single normalizer; `CHEMISTRY_CODE_TO_WORD[normalizeToChemistryCode(x)]` reproduces `CHEMISTRY_MAP[x] || ... || 'Competitive'` byte-for-byte.
+4. **DEFERRALS (documented, NOT done here):** (a) tightening `PlayerData.chemistry: string` → `ChemistryCode` is BLOCKED by the 440 Title-Case entries in `ALL_MLB_PLAYERS` (same `PlayerData` type) — needs a separate data-normalization pass (RB-0a-2); (b) migrating `ovrCalculator.normalizeChemistry`/`CHEMISTRY_ABBREV_MAP` to the canonical module is deferred (frozen-OVR-oracle-adjacent — only with a byte-identical OVR-output proof). Both flagged in the report. **FA treatment:** the 66 free agents (3-letter, `teamId:'free-agent'`) are EXCLUDED from the target computation and from any future regen (they are not draft-pool players).
+
+**CONSTRAINTS — edit/create exactly these files:**
+1. **NEW `src/data/chemistryCanonical.ts`** — export:
+   - `export type ChemistryCode = 'SPI' | 'DIS' | 'CMP' | 'SCH' | 'CRA';`
+   - `export const CHEMISTRY_CODES: readonly ChemistryCode[] = ['SPI','DIS','CMP','SCH','CRA'] as const;`
+   - `export const CHEMISTRY_CODE_TO_WORD: Record<ChemistryCode, 'Spirited'|'Disciplined'|'Competitive'|'Scholarly'|'Crafty'>` = SPI→Spirited, DIS→Disciplined, CMP→Competitive, SCH→Scholarly, CRA→Crafty.
+   - `export const CHEMISTRY_WORD_TO_CODE` = the exact inverse (Title-Case word → code).
+   - `export function normalizeToChemistryCode(value: string): ChemistryCode` per DESIGN CALL 3 (3-letter passthrough; Title-Case + UPPERCASE via WORD_TO_CODE / a case-insensitive lookup; `FIERY`/`GRITTY`→`'CMP'`; default `'CMP'`).
+   - `export const CHEMISTRY_TARGET_DISTRIBUTION: Record<ChemistryCode, number>` = `{ SPI: 0.21, DIS: 0.20, CMP: 0.20, SCH: 0.20, CRA: 0.19 }`.
+   - `export const CHEMISTRY_TARGET_SOURCE_TOLERANCE = 0.015;`
+   - A file header comment citing AUCTION_DRAFT_SPEC_V2 §3.7 + the JK 2026-06-21 ruling + the 440 source counts.
+2. **`src/utils/leagueBuilderStorage.ts`** — make the PLAYER-path chemistry conversion derive from the canonical module: import `normalizeToChemistryCode` + `CHEMISTRY_CODE_TO_WORD`, and replace the body of the `convertPlayer` chemistry line (`:1976-1977`) so the resulting Title-Case `Chemistry` value is produced via `CHEMISTRY_CODE_TO_WORD[normalizeToChemistryCode(player.chemistry)]`. You MAY keep `CHEMISTRY_MAP` if other call sites use it, but it must then be DERIVED from the canonical maps (no second hand-written table). **The output `Chemistry` value for every input must be IDENTICAL to today** (incl. FIERY/GRITTY→Competitive, unknown→Competitive). Do NOT change the `Chemistry` type at `:72`, `Player`, the store, or DB version. **STOP-IF you cannot prove byte-identical output → leave `leagueBuilderStorage.ts` UNCHANGED and ship only file 1 + file 3 (additive floor); report it.**
+3. **NEW `src/data/tests/chemistryCanonical.test.ts`** (vitest) — assert: (a) `CHEMISTRY_TARGET_DISTRIBUTION` values sum to 1.0 (±1e-9) and cover exactly the 5 codes; (b) importing `PLAYERS` from `../playerDatabase`, filtering `teamId !== 'free-agent'`, yields exactly **440** players and each code's share is within `CHEMISTRY_TARGET_SOURCE_TOLERANCE` of `CHEMISTRY_TARGET_DISTRIBUTION` (the drift guard); (c) `normalizeToChemistryCode` maps each 3-letter code to itself, each Title-Case + UPPERCASE word to the right code, `FIERY`/`GRITTY`→`'CMP'`, and `''`/garbage→`'CMP'`; (d) `CHEMISTRY_CODE_TO_WORD` and `CHEMISTRY_WORD_TO_CODE` are exact inverses over the 5.
+
+**DO NOT:** tighten/alter `PlayerData.chemistry` (`playerDatabase.ts:66`); touch the TEAM `Chemistry` type/field (`playerDatabase.ts:17`/`:78`); modify `ALL_MLB_PLAYERS` / any `src/data/players/mlb/*` data; touch `ovrCalculator.ts` / `normalizeChemistry` / the OVR chemistry-adj coefficients; touch `masterMoraleMatrix.ts` / `PERSONALITY_BASELINES` / `playerMorale.ts`; regenerate any player axes (that is RB-0b); bump `DB_VERSION` / change any store; touch the frozen IV oracle (`spec-docs/reference/iv_oracle.json`) or any `analyze-pool` artifact. Branch `codex/mode1-v1` only; do NOT commit, do NOT push (Opus commits after audit).
+
+**EXPECTED OUTPUT:** a new additive canonical chemistry module + the frozen target distribution + a derived (behavior-identical) player-path converter + a passing validation/drift test. Zero behavior change anywhere; `PlayerData.chemistry` stays `string`; no DB/store/oracle change.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` exit 0; `NODE_ENV= npx vitest run src/data/tests/chemistryCanonical.test.ts` → green; if you touched `leagueBuilderStorage.ts`, also run the league-builder/convertPlayer test file(s) it has → green. Paste ACTUAL output. (Opus re-runs the FULL Mode-1 suite + confirms zero-new-reds vs the wpaRuntimeBoundary baseline + the convertPlayer chemistry output is byte-identical.)
+
+**FORMAT:** 1) EVERY changed/new path + the total count; 2) the canonical exports + that the player-path map now derives from them (or the STOP-IF note); 3) ACTUAL tsc + test output; 4) "RB-0a complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL (STOP-IF):** if deriving `convertPlayer`/`CHEMISTRY_MAP` from the canonical module would change ANY chemistry output → STOP, leave `leagueBuilderStorage.ts` untouched, ship the additive module + test only, report it. If the 440-source drift test does NOT pass within ±1.5pp (the data isn't what was grounded) → STOP and report the actual counts (do NOT loosen the tolerance to force green). If anything would require touching `ALL_MLB_PLAYERS`, the team `Chemistry` type, `ovrCalculator`, or a DB version → STOP and report (out of scope).
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-0a ===== -->
