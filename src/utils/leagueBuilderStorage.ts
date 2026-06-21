@@ -22,7 +22,9 @@ import type { BalanceMode, RegisteredPool, TeamCapIdentity } from '../engines/le
 import type { TierKey } from '../data/tierParams';
 import type { OptimalLineupSnapshot } from '../types/managerWpa';
 import type { ParkFactors } from '../types/war';
+import type { ParkDimensions } from '../data/parkLookup';
 import type { EraFlavor, FameTier, PlayerArchetype } from '../types/reporter';
+import type { RebrandRelocationMarker } from '../engines/franchiseRebrandCascade';
 import { trackFieldChanges, type EditHistoryEntry } from './editHistoryTracker';
 import type { HiddenPersonalityModifiers } from './prospectScoutingDraftEngine';
 import {
@@ -120,6 +122,7 @@ export interface Team {
   logoUrl?: string;
   stadium: string;
   stadiumId?: string;
+  stadiumDimensions?: ParkDimensions;
   parkFactors?: ParkFactors;
   controlledBy?: 'human' | 'ai';
   stadiumCapacity?: number;
@@ -138,6 +141,7 @@ export interface Team {
   capIdentity?: TeamCapIdentity;
   captainPlayerId?: string | null;
   fanHopefulPlayerId?: string | null;
+  teamHistory?: RebrandRelocationMarker[];
   lineupWithDH?: LineupSlot[];
   lineupWithoutDH?: LineupSlot[];
   startingRotation?: string[];

@@ -14551,3 +14551,96 @@ Use high reasoning effort. Think step-by-step.
 
 Use very high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: L14-2a ===== -->
+
+<!-- ===== CONTRACT: B4 (prospect-gen — handedness via §7) ===== -->
+## CONTRACT — B4 (prospect-gen: handedness via §7 pool-anchored conditional split) — 2026-06-20 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5, high). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** Mode-1 prospect-gen. **DEPENDS ON B5+B8+B2+B3 (same file, committed).**
+
+**GOAL:** Generate `bats`/`throws` from the §7 pool-anchored CONDITIONAL distribution (replacing the current uniform picks).
+
+**SOURCE OF TRUTH:** `spec-docs/PROSPECT_GENERATION_SPEC.md §7` — **read verbatim.** Bats R 51.6% / L 41.4% / S 7.0%. Throws CONDITIONAL on bats: bats-L → throws-L ~40%; bats-R → throws-L ~10%; switch → throws-L ~19% (else throws-R). Position-conditioning is DEFERRED (ruling C — league-wide for v1).
+
+**CONSTRAINTS:**
+- In `src/utils/prospectScoutingDraftEngine.ts` `buildPlayerDto` (~lines 618-619): replace uniform `bats: pick(seed, ['L','R','S'])` + `throws: pick(seed, ['L','R'])` with: `bats` via a §7-weighted seeded draw (R 51.6 / L 41.4 / S 7.0), then `throws` via a seeded draw CONDITIONAL on the drawn bats (bats `L`→ L40/R60, `R`→ L10/R90, `S`→ L19/R81). Use the existing seeded helpers (`randomUnit`/`pickWeighted`/`pickWeightedValue`), NOT `Math.random`.
+- Do NOT add position-conditioning (deferred, ruling C). FROZEN ORACLE — do NOT modify `smb4GradeEmulator.ts`. Do NOT touch other gen logic.
+- Branch `codex/mode1-v1` only; do NOT commit; do NOT push.
+
+**EXPECTED OUTPUT:** `bats`/`throws` drawn per §7 (conditional).
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` 0; `NODE_ENV= npx vitest run src/utils/tests/prospectScoutingDraftEngine.test.ts` → green (add a test asserting valid values + the conditional skew over many seeds). Do NOT run the full suite.
+
+**FORMAT:** 1) files changed + total; 2) the bats/throws draw logic; 3) ACTUAL tsc + prospect test output; 4) "B4 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL:** if the `bats`/`throws` field types aren't `'L'|'R'|'S'` / `'L'|'R'` → STOP and quote them. Never modify the grade oracle.
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: B4 ===== -->
+
+<!-- ===== CONTRACT: L14-2b (rebrand cascade — impure atomic orchestrator) ===== -->
+## CONTRACT — L14-2b (rebrand cascade: impure atomic orchestrator, build-dark) — 2026-06-21 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5, very high). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-tracker` [branch `codex/franchise-v1-next`].**
+**ROLE:** Mode-2 L14 — the IMPURE half: the atomic+idempotent orchestrator composing L14-2a's pure transforms with the store I/O. Build-DARK (NO caller — L14-3 wires it post-flag).
+
+**GOAL:** `executeRebrandCascade(input)` runs the §248 6-step cascade for ONE team, in order, idempotently. Composes the reused primitives + L14-2a's pure transforms + persistence.
+
+**SOURCE OF TRUTH:** `spec-docs/FRANCHISE_V1_LIVING_SEASON_SPEC.md §248` (the ordered cascade) + `DECISIONS_LOG.md` L14-Q2..Q8. Pure transforms: `src/engines/franchiseRebrandCascade.ts` (L14-2a). Constant: `REBRAND_RESET_MORALE` (=70).
+
+**CONSTRAINTS — NEW file `src/utils/franchiseRebrandApply.ts` (impure):**
+`async executeRebrandCascade(input: { scope: {franchiseId, seasonId, statsScopeId, seasonNumber}; teamId; newTeamName; newCity; seasonNumber; gameNumber; seed }): Promise<{status:'applied'|'already-applied'|'failed'; ...}>`. Steps IN THIS ORDER (mirror `franchiseManagerFiring.ts:139` `fireManager`'s sequential-await structure):
+- **IDEMPOTENCY FIRST:** load the leagueBuilder team; if `team.teamHistory` already has a marker with `relocatedAtSeason===seasonNumber && relocatedAtGame===gameNumber`, return `'already-applied'` (no-op).
+- **1.** `fireManager({ teamId, reason:'rebrand', skipUserConfirm:true, suppressFanReliefBump:true })` (reuse — `franchiseManagerFiring.ts`).
+- **2a. Badge clear (TEAM-SCOPED — critical):** `getFranchiseDesignationRows(scope)` → compute `toClear = selectRebrandDesignationRowsToClear(rows.filter(r => r.teamId === teamId))` (L14-2a) → `kept = rows minus toClear` → `replaceFranchiseDesignationRowsForScope(scope, kept)`. (Do NOT use `deleteFranchiseDesignationRowsForScope` alone — it is FRANCHISE-WIDE and would clear every team's badges.) Captain = `captainPlayerId`, never touched.
+- **2b. Fan Hopeful reseed:** reseed `team.fanHopefulPlayerId` via the existing top-3-farm-prospect mechanic (`computeTeamFanHopefuls` `franchiseInitializer.ts` — read it; if it operates on all teams, derive the single-team reseed). Clear the old before reseeding.
+- **3. Stadium relocate:** `pickStadiumFromPool`/`resolveFranchiseStadiumChange` (`franchiseStadiumChangeResolver.ts:42/77`); pull the FULL stadium record (name/dimensions/park factors, LSD-5) onto the team.
+- **4. Team-wide fame reset:** `getFranchiseFameRecordRowsByScope(scope)` filtered to the team's roster players → `applyRebrandFameReset(row)` (L14-2a) each → `saveFranchiseFameRecordRows(updated)`.
+- **5. Dead money:** call a NEW `clearCarriedDeadMoney(teamId)` STUB (a no-op with a `// STUB: economy track owns the real wipe (L14-Q6)` comment) — declare it in this file or a clearly-labeled spot.
+- **6. Fan morale hard-set LAST:** read the team-fan morale snapshot (`getFranchiseMoraleSnapshot` for `{scope, targetType:'team-fan', teamId}`) → `applyFranchiseMoraleEffect({ ...scope, targetType:'team-fan', teamId, delta: REBRAND_RESET_MORALE - currentValue, reason:'rebrand reset', sourceEventId:<deterministic e.g. `rebrand:${teamId}:${seasonNumber}:${gameNumber}`>, sourceKind:'rebrand-reset' })`. (Net effect = currentValue → 70.)
+- **+ teamHistory marker:** `buildRelocationMarker({formerTeamName, formerStadiumName, relocatedAtSeason:seasonNumber, relocatedAtGame:gameNumber})` (L14-2a) → append to `team.teamHistory`; set the new name/city; persist the team (leagueBuilder save).
+- **Field add:** add `teamHistory?: RebrandRelocationMarker[]` (OPTIONAL, additive) to the leagueBuilder team type. **If this implicates a leagueBuilder DB version bump or a version-pin test → STOP and report** (optional fields should be additive with NO bump).
+- **Enum add:** add `'rebrand-reset'` to `FranchiseMoraleSourceKind` (`franchiseMoraleState.ts:8`).
+- **ATOMICITY NOTE (document in code):** these stores are SEPARATE IndexedDB databases — true cross-DB ACID isn't possible; "atomic" here = strict ordering + idempotency (the teamHistory marker is the idempotency key; a re-run no-ops). Order matters: morale hard-set is step 6 (LAST) so nothing overwrites it.
+- Build-DARK: NO caller, behind nothing yet (L14-3 adds the flag-gated caller). Do NOT touch `processCompletedGame`, the grade oracle, or fameModel tuning.
+- Branch `codex/franchise-v1-next` only; do NOT commit (Opus commits after audit); do NOT push.
+
+**EXPECTED OUTPUT:** `executeRebrandCascade` + the `teamHistory` field + the `'rebrand-reset'` sourceKind + the `clearCarriedDeadMoney` stub. Build-dark.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` 0; a NEW test `src/utils/tests/franchiseRebrandApply.test.ts` (fake-indexeddb): idempotency (2nd run → 'already-applied', no double-apply); badge clear affects ONLY the rebrand team (a second team's badges survive); fame reset applied to the roster; morale ends at 70; teamHistory appended; fan hopeful reseeded. Run ONLY that test file. Do NOT run the full suite (Opus runs the host gate — this is a multi-store change, so the auditor runs the FULL suite for transitive-mock breaks).
+
+**FORMAT:** 1) every changed path + total; 2) each step's exact API + the idempotency key + the teamHistory field add (and whether it needed a DB bump); 3) ACTUAL tsc + new-test output; 4) "L14-2b complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL:** STOP + quote if: the teamHistory field needs a DB version bump/pin; `computeTeamFanHopefuls` can't do a single-team reseed; a store API signature differs from the above; morale has no readable currentValue. Never fake atomicity or modify the oracle/fameModel tuning.
+
+Use very high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: L14-2b ===== -->
+
+<!-- ===== CONTRACT: B6 (prospect-gen — position-appropriate trait pools + 30/50/20) ===== -->
+## CONTRACT — B6 (prospect-gen: position-appropriate positive trait pools, 30/50/20 count) — 2026-06-20 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5, xhigh). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** Mode-1 prospect-gen. **DEPENDS ON B5+B8+B2+B3+B4 (same file, committed).**
+
+**GOAL:** Replace the two hardcoded trait pools (`BATTER_TRAITS`/`PITCHER_TRAITS`) with POSITION-APPROPRIATE, POSITIVE-ONLY, analyzer-RECOGNIZED trait pools, and set the trait COUNT to 30/50/20.
+
+**SOURCE OF TRUTH (read all):** `spec-docs/TRAIT_INTEGRATION_SPEC.md §5.2` (position→eligible categories) + `PROSPECT_GENERATION_SPEC.md §5.5` (positive/neutral ONLY — no negative traits at generation) + `§3.4` (trait-count 30%/0, 50%/1, 20%/2). **Analyzer recognition (READ, do not modify):** `src/engines/smb4GradeEmulator.ts` `HITTER_TRAIT_FLAGS` (:388) + `PITCHER_TRAIT_FLAGS` (:373) + `countTraitPolarity` (:456) + `TRAIT_NORMALIZATION` (:184); `src/data/traitPricing.ts` (`polarity: 'positive'|'negative'`).
+
+**CONSTRAINTS:**
+- In `src/utils/prospectScoutingDraftEngine.ts`: build a **hitter pool** (for fielders) and a **pitcher pool** (for SP/SP-RP/RP/CP) of trait DISPLAY names that are (a) recognized by the analyzer (appear in the relevant `*_TRAIT_FLAGS` or normalize to a `traitPricing` entry), (b) **`polarity:'positive'`** (NO negatives — §5.5), (c) position-appropriate per §5.2 (hitter pool = Hitting/Baserunning/Fielding categories; pitcher pool = Pitching). Use the EXACT strings the analyzer recognizes (post-`normalizeTrait`).
+- **Remove `'Workhorse'`** from the pitcher pool unless it is a recognized positive trait (it maps oddly to registry `'n'`) — verify against the flags/registry; if unrecognized, drop it.
+- Set the trait-count draw to **30%/0, 50%/1, 20%/2** (§3.4); when 2 traits, no duplicate + no offsetting/contradictory pair.
+- **Retire the orphaned `src/data/traitPools.ts`** if it is genuinely unused (grep importers first; if anything imports it, leave it + note). Do NOT introduce negative traits anywhere.
+- **FROZEN ORACLE — do NOT modify** `smb4GradeEmulator.ts` or `traitPricing.ts` (read-only). Do NOT touch other gen logic.
+- Branch `codex/mode1-v1` only; do NOT commit; do NOT push.
+
+**EXPECTED OUTPUT:** position-appropriate positive-only analyzer-recognized trait pools + the 30/50/20 count.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` 0; `NODE_ENV= npx vitest run src/utils/tests/prospectScoutingDraftEngine.test.ts` → green (add a test: every pool trait is positive + analyzer-recognized; count distribution ≈ 30/50/20 over many seeds; pitchers get pitcher-pool traits, fielders hitter-pool). Do NOT run the full suite.
+
+**FORMAT:** 1) files changed + total; 2) the two pools (with the recognition source for each trait) + the count logic + the Workhorse/traitPools.ts disposition; 3) ACTUAL tsc + prospect test output; 4) "B6 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL:** if a desired trait isn't analyzer-recognized or its polarity is ambiguous → drop it + note (do NOT include unrecognized traits). If `traitPools.ts` has live importers → leave it + report. Never modify the oracle/traitPricing.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: B6 ===== -->

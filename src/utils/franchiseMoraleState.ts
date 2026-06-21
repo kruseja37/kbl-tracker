@@ -9,7 +9,8 @@ export type FranchiseMoraleSourceKind =
   | 'random-event-confirmation'
   | 'manual-override'
   | 'matrix-auto'
-  | 'relationship-reporter';
+  | 'relationship-reporter'
+  | 'rebrand-reset';
 
 export interface FranchiseMoraleScope {
   franchiseId: string;

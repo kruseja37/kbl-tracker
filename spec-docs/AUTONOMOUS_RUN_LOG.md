@@ -1917,4 +1917,54 @@ NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its 
 - **B3 first attempt → correctly BLOCKED** (§6 composite secondary labels IF/OF/IF-OF/1B-OF vs the narrow `DraftPosition | 'P'`
   DTO type). AMENDED: widen the DTO `secondaryPosition` to the global `Position` type (**VERIFIED** it already has the
   composites + matches `Player.secondaryPosition: Position` `leagueBuilderStorage.ts:240` + the analyzer `VERSATILITY_MAP`
-  `smb4GradeEmulator.ts:174-181`); pitchers → undefined (no secondary). **Re-dispatched (`bm8yln8uv`).**
+  `smb4GradeEmulator.ts:174-181`); pitchers → undefined (no secondary). **Re-dispatched (`bm8yln8uv`).
+
+**WAVE 8:**
+- **✅ L14-2a COMMITTED `79cb7a7c`** (pure rebrand transforms; build 0; 5 tests; build-dark).
+- **L14-2b grounding COMPLETE** (the impure atomic orchestrator — both open questions resolved):
+  - **Morale hard-set (step 6):** morale snapshot stores absolute `currentValue`; only `applyFranchiseMoraleEffect` (delta)
+    mutates it → hard-set 70 = read team-fan `currentValue`, apply `delta = 70 − currentValue` (clamp via `clampFranchiseMorale`;
+    a `rebrand-reset` sourceKind). LAST, so nothing overwrites it.
+  - **Team-scoped badge clear (step 2):** `deleteFranchiseDesignationRowsForScope` is FRANCHISE-WIDE (would nuke ALL teams) →
+    use `getFranchiseDesignationRows(scope)` → drop only `{teamId===rebrandTeam && type∈REBRAND_BADGE_TYPES}` (via L14-2a's
+    `selectRebrandDesignationRowsToClear` + teamId filter) → `replaceFranchiseDesignationRowsForScope(scope, kept)`.
+  - Other steps reuse: `fireManager` (1), `pickStadiumFromPool`/`resolveFranchiseStadiumChange` (3), `getFranchiseFameRecordRowsByScope`
+    + L14-2a `applyRebrandFameReset` + `saveFranchiseFameRecordRows` (4), `clearCarriedDeadMoney` stub (5), `computeTeamFanHopefuls`
+    reseed (2). teamHistory marker = additive optional field on the leagueBuilder team (`leagueBuilderStorage.ts` ~:240 area, NOT
+    trackerDb). **Idempotency:** skip if a teamHistory marker for {season,game} exists. **Atomicity:** mirror `fireManager`'s
+    sequential awaits. **➡ L14-2b = next Mode-2 dispatch (dedicated careful contract; audit HARDEST — multi-store atomic soul-layer).**
+
+**WAVE 9:**
+- **✅ B3 COMMITTED `bbbde5fe`** (secondary positions via §6, type-widened to `Position`; build 0; prospect test 15/15;
+  oracle untouched). Mode-1 at 4/9: B5→B8→B2→B3.
+- **➡ B4 dispatched (`b11s0295g`)** — handedness via §7 conditional split (bats R51.6/L41.4/S7.0; throws conditional;
+  position-conditioning deferred per ruling C).
+- **➡ L14-2b dispatched (`b5lo7ajz8`, very-high effort)** — the impure atomic orchestrator `executeRebrandCascade`
+  (idempotent via teamHistory marker; team-scoped badge clear; team-wide fame reset; morale hard-set delta-to-70 LAST;
+  teamHistory field add; `rebrand-reset` sourceKind; dead-money stub). **AUDITOR RUNS THE FULL SUITE** (multi-store change →
+  transitive-mock-break risk). build-DARK (no caller; L14-3 wires it).
+  - **⚠ DISPATCH BUG (caught + fixed):** first L14-2b dispatch FAILED with a 400 — `model_reasoning_effort=very-high` is INVALID
+    (Codex CLI accepts `none|minimal|low|medium|high|xhigh`). No files changed (never ran). Re-dispatched with `xhigh`
+    (`bqz4uom12`). LESSON: the "very high effort" routing note maps to the CLI value **`xhigh`**, not `very-high`.**
+
+**WAVE 10:**
+- **✅ B4 COMMITTED `d406ec5a`** (handedness §7 conditional; build 0; prospect test 16/16; oracle untouched). Mode-1 at 5/9.
+- **➡ B6 dispatched (`bi4yhhi5y`, xhigh)** — position-appropriate POSITIVE-only analyzer-recognized trait pools (§5.2 + §5.5)
+  + 30/50/20 count (§3.4); remove Workhorse if unrecognized; retire orphaned traitPools.ts. Grounded: traits are display-name
+  strings (analyzer normalizes + HITTER/PITCHER_TRAIT_FLAGS + countTraitPolarity; traitPricing carries polarity) → no
+  code↔name conversion. Frozen oracle read-only.
+- **L14-2b (`bqz4uom12`, xhigh) still building** — hard audit + FULL suite on landing (multi-store atomic soul-layer).
+
+**WAVE 11:**
+- **L14-2b AUDIT (SOUND) — full suite running (`brbkhf7ar`), then commit.** Read `franchiseRebrandApply.ts` line-by-line:
+  all 6 steps in order; idempotency via `rebrand:team:season:game` marker (re-run → 'already-applied'); **team-scoped** badge
+  clear (filter to teamId, keep other teams) + **team-roster-scoped** fame reset; morale delta-to-70 LAST; teamHistory +
+  stadiumDimensions additive (NO DB bump); `rebrand-reset` sourceKind added; all imported APIs exist (tsc 0). The "1 test" is a
+  COMPREHENSIVE e2e (4 badges cleared team-only + a beta team's rows + fame survive, Captain `captainPlayerId` untouched,
+  morale=70, teamHistory len 1, idempotent 2nd run). Protected files (trackerDb/processCompletedGame/oracle/fameModel) untouched.
+  **🟡 FLAGGED LIMITATION (build-dark, for L-SIM/JK):** non-ACID cross-store — a crash BETWEEN the fame-reset and the (last)
+  marker write would, on retry, DOUBLE-apply the fame reset (`applyRebrandFameReset` isn't self-idempotent); marker-LAST is the
+  safer choice (a marker-first would skip-and-leave-incomplete). Rare; recoverable; L-SIM will exercise. NOT a commit-blocker.
+- **✅ L14-2b VERIFIED + COMMITTING.** Build 0; **FULL suite 7902 pass / 2 fail = wpaRuntimeBoundary + franchiseManualSmokeFixture
+  (characterized), ZERO new reds.** ⇒ **L14-2 COMPLETE (a+b).** ➡ NEXT Mode-2 = **L14-3** (flag-gated GM-offer + processCompletedGame
+  wiring + reuse the L11 news adapter rebrand→relocated mapping) → then LSIM-P1/P3.
