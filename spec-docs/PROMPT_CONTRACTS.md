@@ -15298,3 +15298,37 @@ Use xhigh reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: AUC-5.1e-2 ===== -->
+
+<!-- ===== CONTRACT: AUC-5.1d-3 (MLB→farm sequencing + draftFormat field) ===== -->
+## CONTRACT — AUC-5.1d-3 (MLB→farm sequencing §3.1 + per-league draftFormat field) — 2026-06-21 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5, xhigh). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** Mode-1 FARM AUCTION — the LAST AUC-5.1 piece: wire the §3.1 MLB→farm sequencing + a per-league draft-format flag. **DEPENDS ON the MLB auction page (`LeagueBuilderAuctionDraft`) + the farm page (`/league-builder/farm-auction-draft`, AUC-5.1e-2).** Small + additive. UI build-DARK behind the existing routes; JK browser-verify BATCHED.
+
+**GOAL:** (1) §3.1 sequencing — when the MLB auction reaches `AUCTION_COMPLETE`, give a clear "Proceed to Farm Auction →" path (the farm fills after the MLB roster, §3.1). (2) A persisted per-league `draftFormat` flag (`'auction' | 'snake'`, applied league-wide per R1) so the league config records which draft format it uses, with a default-safe reader.
+
+**SOURCE OF TRUTH:** `AUCTION_DRAFT_SPEC.md` **§3.1** ("the MLB auction fills the 22-man roster first, then the farm auction fills the 10-man farm; both run the §2 machine back-to-back; the two-number freeze (§4) fires once, after the farm auction completes") + **R1** (one league-wide format applied to BOTH tiers). `LeagueTemplate` (`src/utils/leagueBuilderStorage.ts:93`; note its existing `format` at :425 is ELIMINATION bracket, NOT draft format — do NOT touch it). The MLB page AUCTION_COMPLETE block (`LeagueBuilderAuctionDraft.tsx:310` / :694) + the farm route (`/league-builder/farm-auction-draft`).
+
+**DESIGN CALLS (Captain, AUTH-4 — documented for JK):**
+1. **Sequencing = a user-driven LINK, not auto-advance** — on MLB `AUCTION_COMPLETE`, render a "Proceed to Farm Auction →" button that `navigate("/league-builder/farm-auction-draft")`. (The §4 freeze fires after FARM completes = AUC-5.2; the farm page's AUCTION_COMPLETE gets a "Draft complete — finalize (freeze)" placeholder note, NO freeze logic here.)
+2. **`draftFormat` default = `'snake'`** for back-compat (existing templates lack the field) via a `getLeagueDraftFormat(template)` reader. **[Flagged: VISION §9.A makes AUCTION the v1 PRIMARY format — JK may want the default flipped to `'auction'` for NEW leagues; the league-setup FORMAT-PICKER UI that sets this is a DEFERRED follow-up (this ticket adds the field + reader + the sequencing link, not the setup UI).]**
+3. **`draftFormat` is an ADDITIVE OPTIONAL field on `LeagueTemplate`** — NO DB-version bump, NO store change (an optional field on the opaque template object; old rows default via the reader). Confirm the version-pin tests pin the STORE SET + version, NOT the template's field list (so this is safe).
+
+**CONSTRAINTS — edit exactly these files:**
+1. **`src/utils/leagueBuilderStorage.ts`** — ADD `draftFormat?: 'auction' | 'snake'` to the `LeagueTemplate` interface (`:93`) + `export function getLeagueDraftFormat(template: Pick<LeagueTemplate, 'draftFormat'> | null | undefined): 'auction' | 'snake'` returning `template?.draftFormat ?? 'snake'`. ADDITIVE ONLY — do NOT bump `DB_VERSION`, do NOT touch the store schema / `saveLeagueTemplate` logic / the elimination `format` field.
+2. **`src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx`** (the committed MLB page) — in the `AUCTION_COMPLETE` render block, ADD a "PROCEED TO FARM AUCTION →" button (mirror the page's existing button styling) that calls `navigate("/league-builder/farm-auction-draft")`. ADDITIVE — do NOT change any auction logic / the rest of the page.
+3. **`src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx`** (the farm page) — in its `AUCTION_COMPLETE` block, ADD a short "Draft complete — the two-number freeze runs next (AUC-5.2)" note (no freeze logic). ADDITIVE.
+4. **NEW `src/utils/tests/leagueDraftFormat.test.ts`** — `getLeagueDraftFormat`: `undefined`/no-field → `'snake'`; `{draftFormat:'auction'}` → `'auction'`; `{draftFormat:'snake'}` → `'snake'`. (Plus, if a page smoke test is trivial, assert the MLB AUCTION_COMPLETE renders the farm-proceed link — optional.)
+
+**DO NOT:** bump `DB_VERSION` / change the store set / migrate; build the league-setup draft-format PICKER UI (deferred follow-up — flag it); implement the §4 two-number freeze (AUC-5.2); auto-advance MLB→farm (user-driven link only); modify the §2 machine / hooks / engines. Branch `codex/mode1-v1` only; do NOT commit (Opus commits after audit); do NOT push.
+
+**EXPECTED OUTPUT:** an additive `draftFormat` field + `getLeagueDraftFormat` reader (default snake) + a user-driven "Proceed to Farm Auction" link at MLB `AUCTION_COMPLETE` + a farm-complete freeze-placeholder note. No DB change.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` exit 0; `NODE_ENV= npx vitest run src/utils/tests/leagueDraftFormat.test.ts` → green. Report ACTUAL output. (Opus runs the full Mode-1 suite + confirms NO DB-version/store change + the version-pin tests still pass.)
+
+**FORMAT:** 1) EVERY changed/new path + total; 2) the field/reader + the sequencing link + that it's additive (no DB bump); 3) ACTUAL tsc + the test output; 4) "AUC-5.1d-3 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL (STOP-IF):** if adding `draftFormat` to `LeagueTemplate` would require a DB-version bump or trips a version-pin test → STOP and report (it must be additive-optional). If the MLB page's AUCTION_COMPLETE block can't take an additive button without restructuring → STOP and quote it. If `navigate` isn't already available in the MLB page → use its existing router hook (re-read the imports).
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: AUC-5.1d-3 ===== -->
