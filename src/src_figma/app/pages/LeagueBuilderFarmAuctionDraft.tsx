@@ -771,6 +771,9 @@ export function LeagueBuilderFarmAuctionDraft() {
             {session?.state === "AUCTION_COMPLETE" && (
               <div className="bg-[#2F7D46] border-4 border-[#E8E8D8]/40 p-4 font-bold">
                 FARM AUCTION COMPLETE. Farm rosters are filled in the auction session.
+                <div className="mt-2 text-sm text-[#E8E8D8]/85">
+                  Draft complete — the two-number freeze runs next (AUC-5.2).
+                </div>
               </div>
             )}
           </section>

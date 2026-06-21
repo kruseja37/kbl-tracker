@@ -692,8 +692,14 @@ export function LeagueBuilderAuctionDraft() {
             )}
 
               {session?.state === "AUCTION_COMPLETE" && (
-                <div className="bg-[#2F7D46] border-4 border-[#E8E8D8]/40 p-4 font-bold">
-                  AUCTION COMPLETE. MLB rosters are filled in the auction session.
+                <div className="bg-[#2F7D46] border-4 border-[#E8E8D8]/40 p-4 font-bold flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <span>AUCTION COMPLETE. MLB rosters are filled in the auction session.</span>
+                  <button
+                    onClick={() => navigate("/league-builder/farm-auction-draft")}
+                    className="px-4 py-2 bg-[#3B7DD8] hover:bg-[#4B8DE8] border-4 border-[#E8E8D8] font-bold whitespace-nowrap"
+                  >
+                    PROCEED TO FARM AUCTION →
+                  </button>
                 </div>
               )}
             </section>

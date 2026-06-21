@@ -100,11 +100,16 @@ export interface LeagueTemplate {
   conferences: Conference[];
   divisions: Division[];
   defaultRulesPreset: string;
+  draftFormat?: 'auction' | 'snake';
   tier?: TierKey;
   balanceMode?: BalanceMode;
   checkpointCadence?: CheckpointCadence;
   logoUrl?: string;
   color?: string;
+}
+
+export function getLeagueDraftFormat(template: Pick<LeagueTemplate, 'draftFormat'> | null | undefined): 'auction' | 'snake' {
+  return template?.draftFormat ?? 'snake';
 }
 
 // Team
