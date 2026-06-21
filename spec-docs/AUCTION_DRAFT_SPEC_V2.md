@@ -197,9 +197,28 @@ chemistry types are more valuable than others). BOTH (a) the regenerated MLB-poo
 (b) the generated FARM prospects must be **rebalanced to MATCH that 440-target distribution** (a generation/
 regen constraint + validation pass, like the §3.2-grade + §3.3-position distributions). Rationale: chemistry
 drives trait potency, so a lopsided pool would let every team cheaply stack one type to Level 3 while being
-unable to reach Level 2 in others — killing the "pick this player *for his chemistry*" decision, AND it
-preserves the relative value of the scarcer/stronger types. **One pass computes the 440-target distribution,
-then regenerates MLB-pool + farm chemistry to match it, alongside the personality regen.**
+unable to reach Level 2 in others — killing the "pick this player *for his chemistry*" decision. **One pass
+computes the 440-target distribution, then regenerates MLB-pool + farm chemistry to match it, alongside the
+personality regen.**
+
+**MEASURED — grounded at source 2026-06-21 (`src/data/playerDatabase.ts` PLAYERS record; 440 = 506 entries
+minus 66 free agents; adversarially re-verified):** chemistry IS fully populated on every stock player (3-letter
+codes SPI/DIS/CMP/SCH/CRA — NOT the `undefined`-personality situation), so the target is real measurable data.
+**440 distribution: SPI 21.1% · DIS 20.0% · CMP 20.0% · SCH 20.0% · CRA 18.9%** — i.e. essentially **UNIFORM**
+(≈20% each; spirited slightly high, crafty slightly low). ⇒ matching the 440 = roughly-EVEN availability =
+exactly the "all chemistry strategies buildable" balance the requirement wanted. The "some types more valuable"
+value comes from the **POTENCY** mechanic, NOT scarcity (the counts are ~equal). **JK micro-decision (default =
+honor the 440 shares as a ±tolerance band):** honor the slight tilt, or snap to flat 20% each? (cosmetic).
+**Build caveats for RB-0:** (a) compute the target from the **3-letter `PLAYERS` record**, NOT the separate
+Title-Case `ALL_MLB_PLAYERS` in `src/data/players/mlb/`; (b) tighten `PlayerData.chemistry` from loose `string`
+(`:66`) to the 5-literal union; (c) centralize ONE canonical form (player 3-letter ↔ team full-word ↔ V2
+lowercase words) — don't re-derive per call site; (d) decide FA treatment (the 66 free agents carry full-word
+chemistry, excluded from the 440 target).
+
+**COMPETITIVE morale row — confirmed-correct (grounded 2026-06-21):** already `positiveSelfMultiplier 1.15` /
+`negativeSelfMultiplier 1.05` in `MORALE_TUNING.personality` — boosted by success, hurt by failure, exactly as
+intended; a milder EGOTISTICAL (1.25/1.15, fanSens 1.5). NO change needed; optional flavor nudge = negativeSelf
+1.05→1.10 and/or fanSens 1.15→1.25 (erodes the deliberate COMPETITIVE-vs-EGOTISTICAL spacing).
 
 **Primary personality + hidden modifiers in morale — ALREADY BUILT in the core engine (CORRECTED at source
 2026-06-21 — `masterMoraleMatrix.composeMoraleConsequence`, `src/engines/masterMoraleMatrix.ts`; L3-era,
