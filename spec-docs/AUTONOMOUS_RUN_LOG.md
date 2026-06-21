@@ -2272,3 +2272,21 @@ NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its 
   `computeIV(ratings)`; JK-2 farm-wallet NERF magnitude (Q7 rules "nerfed", magnitude is a dial); JK-3 auction-format farm REPLACES the snake
   prospect draft for auction leagues (R1 ⇒ yes, default). **➡ NEXT = AUC-5.1a** (fork-free foundational pool registration + IV pricing) →
   5.1b (scout range) → 5.1c (wallet) → 5.1d (wrapper+sequencing) → 5.1e (UI). 5.1a/5.1b are independent + fork-free → build first.
+
+**WAVE 32 — AUC-5.1a (priced farm prospect pool) CONTRACTED + DISPATCHED. (`/kbl-captain` resume — JK re-invoked THIS session "and roll"; reclaimed own baton.)**
+- **Source-grounding CORRECTED the scope-map anchor (STEP 3.A — never trust a recon blindly):** the scope map said prospect IV =
+  `computeIV`, but the MLB auction pool actually prices each player as **`iv = calculateIvBaseSalary(toSalaryPlayer(player)).ivBase`**
+  (`registerLeaguePool` useLeagueBuilderData.ts:414; `ivBase = kblIV`, salaryCalculator.ts:741-744). So 5.1a's MAKE-OR-BREAK = price
+  prospects through that SAME `calculateIvBaseSalary(...).ivBase` (NOT `computeIV` directly) → an MLB player and a prospect with identical
+  `PlayerForSalary` inputs get identical IV (one currency across both auction economies). `PlayerForSalary` (:87) needs ratings/age/fame/
+  position — all present on the prospect DTO (`LeagueBuilderProspectPlayerDto`:157). Generator reused: `buildProspectPlayerForPick` (exported
+  :1101) / `buildCandidate` (local :929 → additive export). ivPercentile mirrors `computeIvPercentiles` (useAuctionDraft.ts:93).
+- **5.1a scope:** NEW pure `src/utils/farmAuctionPool.ts` `buildFarmAuctionPool` → generate the prospect pool (unassigned, no snake draft) →
+  price via the MLB path → `{prospects: DTO[], auctionPlayers: AuctionPlayer[]}`; + an additive generator export if needed; + a pricing-PARITY
+  test (the make-or-break). PURE / build-DARK (no live caller until 5.1d), no store/DB. **DESIGN CALLS (flagged):** pool size = 10×teams×3;
+  prospect→PlayerForSalary mapping REPLICATED (cite toSalaryPlayer — a `src/utils` module must not import a `src_figma` hook) → future
+  shared-mapper refactor is an OPEN-DECISION; salary set by the winning bid (not the pool).
+- **Contract committed `9e7e1144`** (`PROMPT_CONTRACTS.md`, marker `CONTRACT: AUC-5.1a`). **Dispatched to Codex** (gpt-5.5, **xhigh** — NOT
+  very-high, the 400 trap) via `codex exec -C …/kbl-mode1` stdin-from-contract, background task `bhw99f3z2` → `/tmp/codex-auc51a.out`.
+  On landing: read-the-diff audit (builder≠auditor) + FULL Mode-1 suite host gate (additive export to the widely-imported prospect engine →
+  transitive-mock-break risk) + commit. **➡ after 5.1a = AUC-5.1b** (scout §3.2 value-range, also fork-free).
