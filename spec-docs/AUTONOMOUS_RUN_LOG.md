@@ -2151,3 +2151,25 @@ NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its 
 - **Contract committed** (PROMPT_CONTRACTS.md `CONTRACT: AUC-4.1a`). **Dispatched to Codex** (gpt-5.5, xhigh) background task `b6b9ql8j9`
   → `/tmp/codex-auc41a.out`. On landing: audit (builder≠auditor) + full Mode-1 suite + commit. **➡ after 4.1a = AUC-4.1b (visual screens).**
   **⚠ Note:** 4.1a is UI build-DARK behind a new route; the whole auction surface needs JK browser sign-off (batched) once 4.1b lands.
+
+**WAVE 27 — ✅ AUC-4.1a COMMITTED `b2a0d610` (auction at 6/~8).**
+- Codex(gpt-5.5, xhigh)-built → **Opus-audited (builder≠auditor): VERIFIED.** 5 files: `App.tsx` (+route, mirrors snake-draft) +
+  NEW `useAuctionDraft.ts` hook + `LeagueBuilderAuctionDraft.tsx` page (466 lines, all states + "Now: TEAM — action" banner +
+  setup + lot log) + 2 tests. Hook consumes the pure engines only (no duplication), persists via `saveAuctionSession` after every
+  transition, `autoAdvanceCpu` loops CPU turns with a state-progress key + 400-step guard (terminates safely, no CPU handoff).
+  Launch maps `RegisteredPool.players`→`AuctionPlayer` (rank-derived **0–100** ivPercentile — VERIFIED correct: `reservePriceCurve`
+  clamps to `RESERVE_PRICE_CURVE_MAX_PERCENTILE=90` and the canonical AUC-2.1 test uses 90/50/0; the AUC-2.2 cpuShill test's 0–1
+  data was the inconsistent-but-harmless outlier) + league teams→`AuctionTeamInput` (budgetRemaining = tierCap−committed, 22 slots,
+  LEAGUE_MINIMUM_SALARY). §6 rulings applied incl. **tap-to-claim lone survivor** (`claimLoneSurvivor`/`passLoneSurvivor` exist).
+  6 genuine tests (init→NOMINATION+persist, full nominate→bid→SOLD w/ CPU auto-acting, autosave, seed determinism, lone-survivor
+  claim, page smoke). **Gate:** `NODE_ENV= tsc -b` 0 + full Mode-1 suite **7934 pass / 1 fail = `wpaRuntimeBoundary` (documented
+  characterized; `franchiseAnalyticsTrust.ts` not in diff), ZERO new reds** (+6 = the new tests).
+- **🟡 TWO LIMITATIONS FLAGGED → AUC-4.1b (committed in the message; for JK):** (A) `getCurrentBidderTeamId` = "first still-in ≠
+  highBidder" is a CHALLENGER model, not a strict §2.1 round-robin ROTATION (lower-index teams challenge first; higher-index enter
+  as others drop — auction still terminates + fills rosters + tends to the high-valuation winner, but turn fidelity needs the proper
+  rotation pointer in 4.1b); (B) a CPU lone-survivor PASSES (never claims uncontested-at-reserve) — verify CPU rosters still fill
+  legally; possible 4.1b tuning (CPUs claim valuable free players).
+- **DEFAULTS taken (logged WAVE 26):** instant CPU auto-turns, banner handoff, autosave-every-transition, engine-seeded shills.
+- **➡ NEXT = AUC-4.1b** (the rich §2.3 7-element OPEN_BIDDING turn view + §2.5 nomination pool filter/sort + SOLD/PASSED notices +
+  §2.4 handoff polish + the (A)/(B) fixes) → then AUC-5.1 (farm) → AUC-5.2 (L-ECON1 freeze) → scout-privacy UI → POSITION_POOL fix;
+  Mode-2 = LSIM-P3. **BROWSER-VERIFY (batched): the whole auction surface, once 4.1b lands.** Clean handoff at this seam (see below).
