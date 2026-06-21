@@ -392,6 +392,37 @@ describe('L-SIM invariant falsification audit', () => {
     expect(result.pass, `frequent cadence mismatch stayed GREEN; detail=${result.detail}`).toBe(false);
   });
 
+  test('soul.l13-relationship-formation-checkpoint-write PASSES valid active cross-team edges', () => {
+    const snap = base();
+    snap.teamIds = ['t1', 't2'];
+    snap.gameNumber = 2;
+    snap.gamesSimulated = 2;
+    snap.players = [
+      { id: 'p1', leagueAssignments: [{ teamId: 't1' }] } as never,
+      { id: 'p2', leagueAssignments: [{ teamId: 't2' }] } as never,
+    ];
+    snap.relationshipEdges = [{
+      id: 'f:s:ss:p1:p2:RIVALRY',
+      franchiseId: 'f',
+      seasonId: 's',
+      statsScopeId: 'ss',
+      seasonNumber: 1,
+      player1Id: 'p1',
+      player2Id: 'p2',
+      type: 'RIVALRY',
+      intensity: 0.9,
+      potential: false,
+      accuracy: 0.8,
+      formedAtGameNumber: 2,
+      dissolvedAtGameNumber: null,
+      createdAt: 2,
+      updatedAt: 2,
+    }] as never;
+
+    const result = resultFor('soul.l13-relationship-formation-checkpoint-write', snap);
+    expect(result.pass, `valid cross-team relationship edge was rejected; detail=${result.detail}`).toBe(true);
+  });
+
   // §5.3 inverse-test backstop: prove the three finalize invariants are not just red-trippable but also genuinely
   // GREEN on a VALID season-end snapshot satisfying the named property (else "trips red" could be vacuous-always-red).
   test('soul.tv-freeze PASSES a valid frozen-artifact season-end snapshot', () => {

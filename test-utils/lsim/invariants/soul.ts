@@ -55,10 +55,12 @@ const SEASON_END_SNUB_TOP_N = 3;
 const RACE_SNUB_SOURCE_PREFIX = 'race-snub:';
 const RELATIONSHIP_HIT_SOURCE_PREFIX = 'relationship-hit:';
 const RELATIONSHIP_RECOVERY_SOURCE_PREFIX = 'relationship-recovery:';
+const RELATIONSHIP_CHARGED_SOURCE_PREFIX = 'relationship-charged:';
 
 export interface LsimRelationshipMoraleDeltaSummary {
   relationshipHits: number;
   relationshipRecoveries: number;
+  relationshipChargedMatchups: number;
   relationshipPlayerGroups: number;
   duplicateSourceIds: number;
   recoveredGroups: number;
@@ -66,6 +68,9 @@ export interface LsimRelationshipMoraleDeltaSummary {
   nonZeroRecoveredGroups: number;
   hitDeltaTotal: number;
   recoveryDeltaTotal: number;
+  chargedDeltaTotal: number;
+  chargedPositiveDeltas: number;
+  chargedNegativeDeltas: number;
   recoveredGroupsNetDelta: number;
   ratingsDevelopmentRows: number;
   moraleToWarLeaks: number;
@@ -503,12 +508,6 @@ function relationshipFormationCheckpointWrite(snapshot: LsimStateSnapshot): Lsim
     row.potential !== false ||
     !Number.isInteger(row.formedAtGameNumber),
   );
-  const teamOf = teamOfPlayer(snapshot);
-  const crossTeamActive = snapshot.relationshipEdges.filter((row) =>
-    teamOf(row.player1Id) !== '?' &&
-    teamOf(row.player2Id) !== '?' &&
-    teamOf(row.player1Id) !== teamOf(row.player2Id),
-  );
   const finalDensityLimit = Math.max(1, snapshot.teamIds.length * 3);
   const densityExceeded = snapshot.relationshipEdges.length > finalDensityLimit;
   const missingEdgesAfterCheckpoint = reached.length > 0 && snapshot.relationshipEdges.length === 0;
@@ -523,7 +522,6 @@ function relationshipFormationCheckpointWrite(snapshot: LsimStateSnapshot): Lsim
     badIds.length === 0 &&
     forbiddenTypes.length === 0 &&
     badPotentialState.length === 0 &&
-    crossTeamActive.length === 0 &&
     !densityExceeded &&
     !missingEdgesAfterCheckpoint &&
     !missingCurrentCheckpointWrite &&
@@ -535,7 +533,7 @@ function relationshipFormationCheckpointWrite(snapshot: LsimStateSnapshot): Lsim
     pass,
     pass
       ? `edges=${snapshot.relationshipEdges.length}; formedAt=${formedAtNumbers.join(',') || 'none'}; current=${snapshot.gameNumber}; cadence=${snapshot.checkpointCadence}; densityLimit=${finalDensityLimit}; no duplicate ids`
-      : `edges=${snapshot.relationshipEdges.length}; dup=${duplicateIds.slice(0, 4).join(',') || 'none'}; nonBoundary=${nonBoundaryFormation.join(',') || 'none'}; badIds=${badIds.slice(0, 4).map((row) => row.id).join(',') || 'none'}; forbidden=${forbiddenTypes.map((row) => row.type).join(',') || 'none'}; badPotential=${badPotentialState.slice(0, 4).map((row) => row.id).join(',') || 'none'}; crossTeam=${crossTeamActive.slice(0, 4).map((row) => row.id).join(',') || 'none'}; densityExceeded=${densityExceeded}; missingAfterCheckpoint=${missingEdgesAfterCheckpoint}; missingCurrentBoundary=${missingCurrentCheckpointWrite}; preCheckpointNonEmpty=${shouldBeEmptyPreCheckpoint}`,
+      : `edges=${snapshot.relationshipEdges.length}; dup=${duplicateIds.slice(0, 4).join(',') || 'none'}; nonBoundary=${nonBoundaryFormation.join(',') || 'none'}; badIds=${badIds.slice(0, 4).map((row) => row.id).join(',') || 'none'}; forbidden=${forbiddenTypes.map((row) => row.type).join(',') || 'none'}; badPotential=${badPotentialState.slice(0, 4).map((row) => row.id).join(',') || 'none'}; densityExceeded=${densityExceeded}; missingAfterCheckpoint=${missingEdgesAfterCheckpoint}; missingCurrentBoundary=${missingCurrentCheckpointWrite}; preCheckpointNonEmpty=${shouldBeEmptyPreCheckpoint}`,
   );
 }
 
@@ -639,7 +637,8 @@ function relationshipMoraleTapDevelopmentBoundary(snapshot: LsimStateSnapshot): 
   const seasonComplete = snapshot.gamesSimulated >= snapshot.totalScheduledGames;
   const relationshipSystemActive = snapshot.relationshipEdges.length > 0 ||
     summary.relationshipHits > 0 ||
-    summary.relationshipRecoveries > 0;
+    summary.relationshipRecoveries > 0 ||
+    summary.relationshipChargedMatchups > 0;
 
   const pass =
     summary.duplicateSourceIds === 0 &&
@@ -647,6 +646,9 @@ function relationshipMoraleTapDevelopmentBoundary(snapshot: LsimStateSnapshot): 
     summary.moraleToWarLeaks === 0 &&
     (!seasonComplete || !relationshipSystemActive || summary.relationshipHits > 0) &&
     (!seasonComplete || !relationshipSystemActive || summary.relationshipRecoveries > 0) &&
+    (!seasonComplete || !relationshipSystemActive || summary.relationshipChargedMatchups > 0) &&
+    (summary.relationshipChargedMatchups === 0 ||
+      (summary.chargedPositiveDeltas > 0 && summary.chargedNegativeDeltas > 0)) &&
     (!seasonComplete || summary.relationshipHits === 0 || summary.ratingsDevelopmentRows > 0);
 
   return invariantResult(
@@ -654,8 +656,8 @@ function relationshipMoraleTapDevelopmentBoundary(snapshot: LsimStateSnapshot): 
     CRITICAL,
     pass,
     pass
-      ? `relationshipHits=${summary.relationshipHits}; recoveries=${summary.relationshipRecoveries}; recoveredGroupsNetZero=${summary.recoveredGroupsNetZero}; ratingsDevelopmentRows=${summary.ratingsDevelopmentRows}; moraleToWarLeaks=0`
-      : `relationshipHits=${summary.relationshipHits}; recoveries=${summary.relationshipRecoveries}; duplicateSourceIds=${summary.duplicateSourceIds}; nonZeroRecovered=${summary.nonZeroRecoveredGroups}; ratingsDevelopmentRows=${summary.ratingsDevelopmentRows}; moraleToWarLeaks=${summary.moraleToWarLeaks}; seasonComplete=${seasonComplete}`,
+      ? `relationshipHits=${summary.relationshipHits}; recoveries=${summary.relationshipRecoveries}; chargedMatchups=${summary.relationshipChargedMatchups}; chargedPositive=${summary.chargedPositiveDeltas}; chargedNegative=${summary.chargedNegativeDeltas}; recoveredGroupsNetZero=${summary.recoveredGroupsNetZero}; ratingsDevelopmentRows=${summary.ratingsDevelopmentRows}; moraleToWarLeaks=0`
+      : `relationshipHits=${summary.relationshipHits}; recoveries=${summary.relationshipRecoveries}; chargedMatchups=${summary.relationshipChargedMatchups}; chargedPositive=${summary.chargedPositiveDeltas}; chargedNegative=${summary.chargedNegativeDeltas}; duplicateSourceIds=${summary.duplicateSourceIds}; nonZeroRecovered=${summary.nonZeroRecoveredGroups}; ratingsDevelopmentRows=${summary.ratingsDevelopmentRows}; moraleToWarLeaks=${summary.moraleToWarLeaks}; seasonComplete=${seasonComplete}`,
   );
 }
 
@@ -678,7 +680,8 @@ export function summarizeRelationshipMoraleDeltas(snapshot: LsimStateSnapshot): 
     for (const entry of morale.history ?? []) {
       const isHit = entry.sourceEventId.startsWith(RELATIONSHIP_HIT_SOURCE_PREFIX);
       const isRecovery = entry.sourceEventId.startsWith(RELATIONSHIP_RECOVERY_SOURCE_PREFIX);
-      if (!isHit && !isRecovery) continue;
+      const isCharged = entry.sourceEventId.startsWith(RELATIONSHIP_CHARGED_SOURCE_PREFIX);
+      if (!isHit && !isRecovery && !isCharged) continue;
       relationshipEntries.push({
         playerId: morale.playerId,
         sourceEventId: entry.sourceEventId,
@@ -692,8 +695,10 @@ export function summarizeRelationshipMoraleDeltas(snapshot: LsimStateSnapshot): 
       const group = relationshipSourceGroup(entry.sourceEventId);
       const playerGroup = `${morale.playerId}::${group}`;
       relationshipGroups.add(playerGroup);
-      netByPlayerAndEdge.set(playerGroup, roundLsimDelta((netByPlayerAndEdge.get(playerGroup) ?? 0) + entry.delta));
-      if (isRecovery) recoveredGroups.add(playerGroup);
+      if (!isCharged) {
+        netByPlayerAndEdge.set(playerGroup, roundLsimDelta((netByPlayerAndEdge.get(playerGroup) ?? 0) + entry.delta));
+        if (isRecovery) recoveredGroups.add(playerGroup);
+      }
     }
   }
 
@@ -703,6 +708,9 @@ export function summarizeRelationshipMoraleDeltas(snapshot: LsimStateSnapshot): 
   const recoveryCount = relationshipEntries.filter((entry) =>
     entry.sourceEventId.startsWith(RELATIONSHIP_RECOVERY_SOURCE_PREFIX),
   ).length;
+  const chargedEntries = relationshipEntries.filter((entry) =>
+    entry.sourceEventId.startsWith(RELATIONSHIP_CHARGED_SOURCE_PREFIX),
+  );
   const nonZeroRecovered = [...recoveredGroups].filter((group) =>
     Math.abs(netByPlayerAndEdge.get(group) ?? 0) > 0.001,
   );
@@ -717,6 +725,7 @@ export function summarizeRelationshipMoraleDeltas(snapshot: LsimStateSnapshot): 
   return {
     relationshipHits: hitCount,
     relationshipRecoveries: recoveryCount,
+    relationshipChargedMatchups: chargedEntries.length,
     relationshipPlayerGroups: relationshipGroups.size,
     duplicateSourceIds: duplicateSourceIds.length,
     recoveredGroups: recoveredGroups.size,
@@ -732,6 +741,9 @@ export function summarizeRelationshipMoraleDeltas(snapshot: LsimStateSnapshot): 
         .filter((entry) => entry.sourceEventId.startsWith(RELATIONSHIP_RECOVERY_SOURCE_PREFIX))
         .reduce((total, entry) => total + entry.delta, 0),
     ),
+    chargedDeltaTotal: roundLsimDelta(chargedEntries.reduce((total, entry) => total + entry.delta, 0)),
+    chargedPositiveDeltas: chargedEntries.filter((entry) => entry.delta > 0).length,
+    chargedNegativeDeltas: chargedEntries.filter((entry) => entry.delta < 0).length,
     recoveredGroupsNetDelta,
     ratingsDevelopmentRows: snapshot.ratingsOverlays.filter((row) => row.source === 'ratings-development').length,
     moraleToWarLeaks: warFieldLeaks.length,
@@ -742,7 +754,8 @@ export function summarizeRelationshipMoraleDeltas(snapshot: LsimStateSnapshot): 
 function relationshipSourceGroup(sourceEventId: string): string {
   const withoutKind = sourceEventId
     .replace(RELATIONSHIP_HIT_SOURCE_PREFIX, '')
-    .replace(RELATIONSHIP_RECOVERY_SOURCE_PREFIX, '');
+    .replace(RELATIONSHIP_RECOVERY_SOURCE_PREFIX, '')
+    .replace(RELATIONSHIP_CHARGED_SOURCE_PREFIX, '');
   const gameMarker = withoutKind.lastIndexOf(':game-');
   return gameMarker >= 0 ? withoutKind.slice(0, gameMarker) : withoutKind;
 }

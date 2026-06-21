@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 
 import {
   MORALE_TUNING,
+  RELATIONSHIP_MORALE_BASE_DELTAS,
   composeMoraleConsequence,
   getBaseMoraleConsequence,
   normalizePersonality,
@@ -147,6 +148,53 @@ describe('masterMoraleMatrix L3a pure engine', () => {
     expect(feudTarget.base.selfPlayerMoraleDelta).toBe(-10);
     expect(mentor.base.selfPlayerMoraleDelta).toBe(4);
     expect(protege.base.selfPlayerMoraleDelta).toBe(7);
+  });
+
+  test('relationship base deltas stay byte-identical after MORALE_EFFECTS de-duplication', () => {
+    expect(RELATIONSHIP_MORALE_BASE_DELTAS).toEqual({
+      RIVALRY: { player1: -5, player2: -5 },
+      FEUD: { player1: 3, player2: -10 },
+      FRIENDSHIP: { player1: 6, player2: 6 },
+      MENTORSHIP: { player1: 4, player2: 7 },
+    });
+  });
+
+  test('charged relationship matchup result direction is personality-scaled', () => {
+    const winEvent: MoraleMatrixEvent = {
+      kind: 'relationship',
+      type: 'RIVALRY',
+      chargedMatchupResult: 'win',
+    };
+    const lossEvent: MoraleMatrixEvent = {
+      kind: 'relationship',
+      type: 'RIVALRY',
+      chargedMatchupResult: 'loss',
+    };
+
+    const egotisticalWin = compose(winEvent, {}, 'EGOTISTICAL');
+    const relaxedWin = compose(winEvent, {}, 'RELAXED');
+    const timidLoss = compose(lossEvent, {}, 'TIMID');
+    const toughLoss = compose(lossEvent, {}, 'TOUGH');
+    const lowFanWin = composeMoraleConsequence(winEvent, 'RELAXED', neutralModifiers, 50, 0);
+    const highFanLoss = composeMoraleConsequence(lossEvent, 'TOUGH', neutralModifiers, 50, 99);
+
+    expect(egotisticalWin.base).toMatchObject({
+      selfPlayerMoraleDelta: MORALE_TUNING.eventDelta.winSelf,
+      reason: 'relationship.charged_matchup.win',
+    });
+    expect(egotisticalWin.selfPlayerMoraleDelta).toBeGreaterThan(relaxedWin.selfPlayerMoraleDelta);
+    expect(egotisticalWin.selfPlayerMoraleDelta).toBeGreaterThan(0);
+    expect(lowFanWin.fanMoraleToPlayerMoraleDelta).toBe(0);
+    expect(lowFanWin.totalPlayerMoraleDelta).toBeGreaterThan(0);
+
+    expect(timidLoss.base).toMatchObject({
+      selfPlayerMoraleDelta: MORALE_TUNING.eventDelta.lossSelf,
+      reason: 'relationship.charged_matchup.loss',
+    });
+    expect(timidLoss.selfPlayerMoraleDelta).toBeLessThan(toughLoss.selfPlayerMoraleDelta);
+    expect(timidLoss.selfPlayerMoraleDelta).toBeLessThan(0);
+    expect(highFanLoss.fanMoraleToPlayerMoraleDelta).toBe(0);
+    expect(highFanLoss.totalPlayerMoraleDelta).toBeLessThan(0);
   });
 
   test('unknown events resolve neutral and never throw', () => {

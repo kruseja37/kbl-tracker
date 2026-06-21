@@ -9,10 +9,12 @@ vi.mock('../scheduleStorage', () => ({
 }));
 
 import {
+  buildRelationshipChargedMatchupEvent,
   buildRelationshipMoraleEvent,
   buildRelationshipRecoveryEvent,
   franchiseRelationshipMoraleSeam,
   persistDarkRelationshipMoraleForCompletedGame,
+  relationshipChargedSourceEventId,
   relationshipHitSourceEventId,
   relationshipRecoverySourceEventId,
   type RelationshipMoraleRoster,
@@ -173,6 +175,11 @@ describe('franchise relationship morale compute', () => {
       type: 'relationship.recovery',
       exactSelfPlayerMoraleDelta: 12.5,
     });
+    expect(buildRelationshipChargedMatchupEvent(edge({ type: 'RIVALRY' }), 'win')).toEqual({
+      kind: 'relationship',
+      type: 'RIVALRY',
+      chargedMatchupResult: 'win',
+    });
   });
 
   test('flag off returns dark-noop before edge or roster reads', async () => {
@@ -188,6 +195,7 @@ describe('franchise relationship morale compute', () => {
       status: 'dark-noop',
       hitCount: 0,
       recoveryCount: 0,
+      chargedCount: 0,
       reason: 'Phase-2 L13 disabled.',
     });
     expect(getEdges).not.toHaveBeenCalled();
@@ -218,7 +226,7 @@ describe('franchise relationship morale compute', () => {
     const result = await persistDarkRelationshipMoraleForCompletedGame(gameState(), scope);
     const hitSourceId = relationshipHitSourceEventId(scope, row, 'game-7');
 
-    expect(result).toEqual({ status: 'applied', hitCount: 2, recoveryCount: 0 });
+    expect(result).toEqual({ status: 'applied', hitCount: 2, recoveryCount: 0, chargedCount: 0 });
     expect(applyConsequence).toHaveBeenCalledTimes(2);
     expect(applyConsequence.mock.calls[0][0]).toMatchObject({
       ...scope,
@@ -294,7 +302,7 @@ describe('franchise relationship morale compute', () => {
 
     const result = await persistDarkRelationshipMoraleForCompletedGame(gameState(), scope);
 
-    expect(result).toEqual({ status: 'applied', hitCount: 0, recoveryCount: 1 });
+    expect(result).toEqual({ status: 'applied', hitCount: 0, recoveryCount: 1, chargedCount: 0 });
     expect(applyConsequence).toHaveBeenCalledTimes(1);
     expect(applyConsequence.mock.calls[0][0]).toMatchObject({
       ...scope,
@@ -357,7 +365,136 @@ describe('franchise relationship morale compute', () => {
 
     const result = await persistDarkRelationshipMoraleForCompletedGame(gameState(), scope);
 
-    expect(result).toEqual({ status: 'applied', hitCount: 0, recoveryCount: 0 });
+    expect(result).toEqual({ status: 'applied', hitCount: 0, recoveryCount: 0, chargedCount: 0 });
     expect(applyConsequence).not.toHaveBeenCalled();
+  });
+
+  test('cross-team charged matchup applies result-aligned personality-scaled morale to both participants', async () => {
+    setFranchisePhase2L13EnabledForTests(true);
+    setFranchisePhase2MoraleEnabledForTests(true);
+    const row = edge({
+      type: 'RIVALRY',
+      player1Id: 'away-rival',
+      player2Id: 'home-rival',
+    });
+    vi.spyOn(franchiseRelationshipMoraleSeam, 'getEdges').mockResolvedValue([row]);
+    vi.spyOn(franchiseRelationshipMoraleSeam, 'resolveRoster').mockResolvedValue(roster([
+      { playerId: 'away-rival', teamId: 'team-away', personality: 'EGOTISTICAL' },
+      { playerId: 'home-rival', teamId: 'team-home', personality: 'RELAXED' },
+    ]));
+    vi.spyOn(franchiseRelationshipMoraleSeam, 'getSnapshot').mockResolvedValue(null);
+    const applyConsequence = vi.spyOn(franchiseRelationshipMoraleSeam, 'applyConsequence')
+      .mockResolvedValue({
+        status: 'applied',
+        applied: [],
+        skipped: [],
+        failed: [],
+        reason: 'stubbed matrix write',
+        blockers: [],
+      });
+
+    const result = await persistDarkRelationshipMoraleForCompletedGame(gameState({
+      homeScore: 6,
+      awayScore: 3,
+      playerStats: {
+        'away-rival': {
+          playerName: 'Away Rival',
+          teamId: 'team-away',
+          pa: 4,
+          ab: 4,
+          h: 1,
+          singles: 1,
+          doubles: 0,
+          triples: 0,
+          hr: 0,
+          rbi: 0,
+          r: 0,
+          bb: 0,
+          hbp: 0,
+          k: 1,
+          sb: 0,
+          cs: 0,
+          sf: 0,
+          sh: 0,
+          gidp: 0,
+          putouts: 1,
+          assists: 0,
+          fieldingErrors: 0,
+          grandSlams: 0,
+          d3kOutcomes: 0,
+          divingCatches: 0,
+          robberies: 0,
+          nutshots: 0,
+        },
+        'home-rival': {
+          playerName: 'Home Rival',
+          teamId: 'team-home',
+          pa: 4,
+          ab: 4,
+          h: 2,
+          singles: 1,
+          doubles: 1,
+          triples: 0,
+          hr: 0,
+          rbi: 1,
+          r: 1,
+          bb: 0,
+          hbp: 0,
+          k: 0,
+          sb: 0,
+          cs: 0,
+          sf: 0,
+          sh: 0,
+          gidp: 0,
+          putouts: 1,
+          assists: 0,
+          fieldingErrors: 0,
+          grandSlams: 0,
+          d3kOutcomes: 0,
+          divingCatches: 0,
+          robberies: 0,
+          nutshots: 0,
+        },
+      },
+    }), scope);
+    const chargedSourceId = relationshipChargedSourceEventId(scope, row, 'game-7');
+
+    expect(result).toEqual({ status: 'applied', hitCount: 0, recoveryCount: 0, chargedCount: 2 });
+    expect(applyConsequence).toHaveBeenCalledTimes(2);
+    expect(applyConsequence.mock.calls[0][0]).toMatchObject({
+      ...scope,
+      playerId: 'away-rival',
+      teamId: 'team-away',
+      sourceEventId: chargedSourceId,
+    });
+    expect(applyConsequence.mock.calls[0][0].consequence).toMatchObject({
+      eventType: 'RIVALRY',
+      isNeutral: false,
+      base: {
+        selfPlayerMoraleDelta: -1,
+        teamFanMoraleDelta: 0,
+        otherTouched: [],
+        reason: 'relationship.charged_matchup.loss',
+      },
+    });
+    expect(applyConsequence.mock.calls[0][0].consequence.selfPlayerMoraleDelta).toBeLessThan(-1);
+    expect(applyConsequence.mock.calls[1][0]).toMatchObject({
+      ...scope,
+      playerId: 'home-rival',
+      teamId: 'team-home',
+      sourceEventId: chargedSourceId,
+    });
+    expect(applyConsequence.mock.calls[1][0].consequence).toMatchObject({
+      eventType: 'RIVALRY',
+      isNeutral: false,
+      base: {
+        selfPlayerMoraleDelta: 1,
+        teamFanMoraleDelta: 0,
+        otherTouched: [],
+        reason: 'relationship.charged_matchup.win',
+      },
+    });
+    expect(applyConsequence.mock.calls[1][0].consequence.selfPlayerMoraleDelta).toBeLessThan(1);
+    expect(relationshipChargedSourceEventId(scope, row, 'game-7')).toBe(chargedSourceId);
   });
 });

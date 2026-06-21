@@ -42,6 +42,11 @@ import {
   resolveCheckpointGameNumber,
   type CompletedGameArchiveOptions,
 } from './franchiseCheckpointSweepCompute';
+import {
+  getRelationshipParticipantTeams,
+  isChargedRelationshipMatchup,
+  type RelationshipParticipantTeams,
+} from './franchiseRelationshipIntensityCompute';
 import type { PersistedGameState } from './gameStorage';
 
 export type RelationshipMoraleScope = FranchiseRelationshipEdgeScopeInput & {
@@ -66,8 +71,11 @@ export type PersistDarkRelationshipMoraleResult = {
   status: 'dark-noop' | 'applied';
   hitCount: number;
   recoveryCount: number;
+  chargedCount: number;
   reason?: string;
 };
+
+type ChargedMatchupResult = 'win' | 'loss';
 
 const NEUTRAL_HIDDEN_MODIFIERS: HiddenModifiers = {
   loyalty: 50,
@@ -99,6 +107,17 @@ export function buildRelationshipRecoveryEvent(exactSelfPlayerMoraleDelta: numbe
     kind: 'relationship',
     type: 'relationship.recovery',
     exactSelfPlayerMoraleDelta,
+  };
+}
+
+export function buildRelationshipChargedMatchupEvent(
+  edge: Pick<RelationshipEdgeRow, 'type'>,
+  chargedMatchupResult: ChargedMatchupResult,
+): MoraleMatrixEvent {
+  return {
+    kind: 'relationship',
+    type: edge.type,
+    chargedMatchupResult,
   };
 }
 
@@ -148,6 +167,14 @@ export function relationshipRecoverySourceEventId(
   return `${relationshipSourcePrefix('relationship-recovery', scope, edge)}:${gameKey}`;
 }
 
+export function relationshipChargedSourceEventId(
+  scope: RelationshipMoraleScope,
+  edge: Pick<RelationshipEdgeRow, 'id'>,
+  gameKey: string,
+): string {
+  return `${relationshipSourcePrefix('relationship-charged', scope, edge)}:${gameKey}`;
+}
+
 export async function persistDarkRelationshipMoraleForCompletedGame(
   gameState: PersistedGameState,
   scope: RelationshipMoraleScope,
@@ -158,6 +185,7 @@ export async function persistDarkRelationshipMoraleForCompletedGame(
       status: 'dark-noop',
       hitCount: 0,
       recoveryCount: 0,
+      chargedCount: 0,
       reason: 'Phase-2 L13 disabled.',
     };
   }
@@ -166,6 +194,7 @@ export async function persistDarkRelationshipMoraleForCompletedGame(
       status: 'dark-noop',
       hitCount: 0,
       recoveryCount: 0,
+      chargedCount: 0,
       reason: 'Phase-2 morale disabled.',
     };
   }
@@ -176,6 +205,7 @@ export async function persistDarkRelationshipMoraleForCompletedGame(
       status: 'dark-noop',
       hitCount: 0,
       recoveryCount: 0,
+      chargedCount: 0,
       reason: 'No relationship edges in scope.',
     };
   }
@@ -183,12 +213,26 @@ export async function persistDarkRelationshipMoraleForCompletedGame(
   const gameNumber = await resolveCheckpointGameNumber(gameState, archiveOptions);
   const gameKey = relationshipGameKey(gameState, gameNumber);
   const timestamp = relationshipTimestamp(gameState, gameNumber);
+  const participants = getRelationshipParticipantTeams(gameState);
   const roster = await franchiseRelationshipMoraleSeam.resolveRoster(scope);
   let hitCount = 0;
   let recoveryCount = 0;
+  let chargedCount = 0;
 
   for (const edge of edges) {
     try {
+      if (isChargedRelationshipMatchup(edge, participants)) {
+        chargedCount += await applyRelationshipChargedMatchup(
+          edge,
+          scope,
+          roster,
+          participants,
+          gameState,
+          gameKey,
+          timestamp,
+        );
+      }
+
       const coRostered = areRelationshipPlayersCoRostered(edge, roster);
       if (shouldApplyRelationshipHit(edge, coRostered)) {
         hitCount += await applyRelationshipHit(edge, scope, roster, gameKey, timestamp);
@@ -207,6 +251,7 @@ export async function persistDarkRelationshipMoraleForCompletedGame(
     status: 'applied',
     hitCount,
     recoveryCount,
+    chargedCount,
   };
 }
 
@@ -280,6 +325,70 @@ async function applyRelationshipRecovery(
   return applied;
 }
 
+async function applyRelationshipChargedMatchup(
+  edge: RelationshipEdgeRow,
+  scope: RelationshipMoraleScope,
+  roster: RelationshipMoraleRoster,
+  participants: RelationshipParticipantTeams,
+  gameState: PersistedGameState,
+  gameKey: string,
+  timestamp: string,
+): Promise<number> {
+  const sourceEventId = relationshipChargedSourceEventId(scope, edge, gameKey);
+  let applied = 0;
+
+  applied += await applyRelationshipParticipantChargedMatchup({
+    edge,
+    scope,
+    roster,
+    participants,
+    gameState,
+    playerId: edge.player1Id,
+    sourceEventId,
+    timestamp,
+  });
+  applied += await applyRelationshipParticipantChargedMatchup({
+    edge,
+    scope,
+    roster,
+    participants,
+    gameState,
+    playerId: edge.player2Id,
+    sourceEventId,
+    timestamp,
+  });
+
+  return applied;
+}
+
+async function applyRelationshipParticipantChargedMatchup(params: {
+  edge: RelationshipEdgeRow;
+  scope: RelationshipMoraleScope;
+  roster: RelationshipMoraleRoster;
+  participants: RelationshipParticipantTeams;
+  gameState: PersistedGameState;
+  playerId: string;
+  sourceEventId: string;
+  timestamp: string;
+}): Promise<number> {
+  const teamId = params.participants.byPlayerId.get(params.playerId);
+  if (!teamId) return 0;
+
+  const chargedMatchupResult = relationshipTeamResult(params.gameState, teamId);
+  if (!chargedMatchupResult) return 0;
+
+  return applyRelationshipParticipantConsequence({
+    edge: params.edge,
+    scope: params.scope,
+    roster: params.roster,
+    playerId: params.playerId,
+    teamId,
+    event: buildRelationshipChargedMatchupEvent(params.edge, chargedMatchupResult),
+    sourceEventId: params.sourceEventId,
+    timestamp: params.timestamp,
+  });
+}
+
 async function applyRelationshipParticipantRecovery(
   edge: RelationshipEdgeRow,
   scope: RelationshipMoraleScope,
@@ -311,19 +420,21 @@ async function applyRelationshipParticipantConsequence(params: {
   scope: RelationshipMoraleScope;
   roster: RelationshipMoraleRoster;
   playerId: string;
+  teamId?: string;
   event: MoraleMatrixEvent;
   sourceEventId: string;
   timestamp: string;
 }): Promise<number> {
   const rosterEntry = params.roster.byPlayerId.get(params.playerId);
-  if (!rosterEntry?.teamId) return 0;
+  const teamId = params.teamId ?? rosterEntry?.teamId ?? null;
+  if (!rosterEntry || !teamId) return 0;
 
   const currentPlayerMorale =
     (await franchiseRelationshipMoraleSeam.getSnapshot(params.scope, 'player', params.playerId))?.currentValue ??
     rosterEntry.morale ??
     50;
   const currentFanMorale =
-    (await franchiseRelationshipMoraleSeam.getSnapshot(params.scope, 'team-fan', rosterEntry.teamId))?.currentValue ??
+    (await franchiseRelationshipMoraleSeam.getSnapshot(params.scope, 'team-fan', teamId))?.currentValue ??
     50;
   const consequence = composeMoraleConsequence(
     params.event,
@@ -338,7 +449,7 @@ async function applyRelationshipParticipantConsequence(params: {
   const result = await franchiseRelationshipMoraleSeam.applyConsequence({
     ...params.scope,
     playerId: params.playerId,
-    teamId: rosterEntry.teamId,
+    teamId,
     consequence,
     sourceEventId: params.sourceEventId,
     timestamp: params.timestamp,
@@ -367,7 +478,7 @@ function relationshipUnrecoveredDelta(
 }
 
 function relationshipSourcePrefix(
-  kind: 'relationship-hit' | 'relationship-recovery',
+  kind: 'relationship-hit' | 'relationship-recovery' | 'relationship-charged',
   scope: RelationshipMoraleScope,
   edge: Pick<RelationshipEdgeRow, 'id'>,
 ): string {
@@ -378,6 +489,20 @@ function relationshipSourcePrefix(
     scope.statsScopeId,
     edge.id,
   ].join(':');
+}
+
+function relationshipTeamResult(
+  gameState: PersistedGameState,
+  teamId: string,
+): ChargedMatchupResult | null {
+  const homeScore = Number(gameState.homeScore);
+  const awayScore = Number(gameState.awayScore);
+  if (!Number.isFinite(homeScore) || !Number.isFinite(awayScore) || homeScore === awayScore) {
+    return null;
+  }
+  if (teamId === gameState.homeTeamId) return homeScore > awayScore ? 'win' : 'loss';
+  if (teamId === gameState.awayTeamId) return awayScore > homeScore ? 'win' : 'loss';
+  return null;
 }
 
 function relationshipGameKey(

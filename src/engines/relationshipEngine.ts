@@ -78,7 +78,7 @@ export interface Relationship {
 }
 
 // Morale effects by relationship type
-const MORALE_EFFECTS: Record<RelationshipType, { player1: number; player2: number }> = {
+export const MORALE_EFFECTS: Record<RelationshipType, { player1: number; player2: number }> = {
   [RelationshipType.DATING]: { player1: 8, player2: 8 },
   [RelationshipType.MARRIED]: { player1: 12, player2: 12 },
   [RelationshipType.DIVORCED]: { player1: -8, player2: -8 },

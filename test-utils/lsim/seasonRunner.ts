@@ -22,6 +22,7 @@ import {
 import { emitFranchiseSeasonEndHonors } from '../../src/src_figma/app/engines/reporter/franchiseSeasonEndHonors';
 import { getTrackerDb, resetTrackerDbForTests, TRACKER_DB_VERSION } from '../../src/utils/trackerDb';
 import type { AtBatResult } from '../../src/types/game';
+import type { Player } from '../../src/utils/leagueBuilderStorage';
 import { computeLsimDistributions, type LsimDistributions } from './distributions';
 import { forceAllPhase2FlagsOn, type ForcedPhase2Flags } from './flags';
 import {
@@ -425,6 +426,7 @@ function deriveLastGameDelta(
 async function breakRelationshipCoRosteringForRecovery(
   context: LsimSandboxContext,
   snapshot: LsimStateSnapshot,
+  synthetic: LsimSyntheticCompletedGame,
 ): Promise<string | null> {
   const teamByPlayer = new Map<string, string | null>();
   const rosterStatusByPlayer = new Map<string, string | null>();
@@ -434,20 +436,32 @@ async function breakRelationshipCoRosteringForRecovery(
     rosterStatusByPlayer.set(player.id, assignment?.rosterStatus ?? null);
   }
 
-  const candidate = snapshot.relationshipEdges.find((edge) =>
-    edge.dissolvedAtGameNumber === null &&
-    edge.potential === false &&
-    teamByPlayer.get(edge.player1Id) &&
-    teamByPlayer.get(edge.player1Id) === teamByPlayer.get(edge.player2Id) &&
-    rosterStatusByPlayer.get(edge.player1Id) === 'MLB' &&
-    rosterStatusByPlayer.get(edge.player2Id) === 'MLB' &&
-    snapshot.moraleSnapshots.some((morale) =>
-      morale.targetType === 'player' &&
-      (morale.playerId === edge.player1Id || morale.playerId === edge.player2Id) &&
-      morale.history.some((entry) => entry.sourceEventId.startsWith('relationship-hit:')),
-    ),
-  );
+  const gameTeamIds = new Set([synthetic.gameState.awayTeamId, synthetic.gameState.homeTeamId]);
+  const candidate = snapshot.relationshipEdges.find((edge) => {
+    const player1TeamId = teamByPlayer.get(edge.player1Id);
+    const player2TeamId = teamByPlayer.get(edge.player2Id);
+    return Boolean(
+      edge.dissolvedAtGameNumber === null &&
+        edge.potential === false &&
+        player1TeamId &&
+        player1TeamId === player2TeamId &&
+        gameTeamIds.has(player1TeamId) &&
+        rosterStatusByPlayer.get(edge.player1Id) === 'MLB' &&
+        rosterStatusByPlayer.get(edge.player2Id) === 'MLB' &&
+        snapshot.moraleSnapshots.some((morale) =>
+          morale.targetType === 'player' &&
+          (morale.playerId === edge.player1Id || morale.playerId === edge.player2Id) &&
+          morale.history.some((entry) => entry.sourceEventId.startsWith('relationship-hit:')),
+        ),
+    );
+  });
   if (!candidate) return null;
+
+  const player1TeamId = teamByPlayer.get(candidate.player1Id);
+  if (!player1TeamId) return null;
+  const targetTeamId = player1TeamId === synthetic.gameState.homeTeamId
+    ? synthetic.gameState.awayTeamId
+    : synthetic.gameState.homeTeamId;
 
   const player = await getFranchisePlayer(context.ids.franchiseId, candidate.player2Id);
   if (!player) return null;
@@ -455,11 +469,87 @@ async function breakRelationshipCoRosteringForRecovery(
     ...player,
     leagueAssignments: (player.leagueAssignments ?? []).map((assignment) =>
       assignment.leagueId === context.ids.leagueId
-        ? { ...assignment, rosterStatus: 'FARM' as const }
+        ? { ...assignment, teamId: targetTeamId, rosterStatus: 'MLB' as const }
         : assignment,
     ),
   });
+  patchSyntheticChargedMatchupParticipant(synthetic, player, targetTeamId);
   return candidate.id;
+}
+
+function patchSyntheticChargedMatchupParticipant(
+  synthetic: LsimSyntheticCompletedGame,
+  player: Player,
+  targetTeamId: string,
+): void {
+  const game = synthetic.gameState;
+  const isAwayTarget = targetTeamId === game.awayTeamId;
+  const entry = {
+    playerId: player.id,
+    playerName: playerName(player),
+    position: player.primaryPosition,
+  };
+
+  game.awayLineup = (game.awayLineup ?? []).filter((row) => row.playerId !== player.id);
+  game.homeLineup = (game.homeLineup ?? []).filter((row) => row.playerId !== player.id);
+  if (game.awayLineupState) {
+    game.awayLineupState.lineup = (game.awayLineupState.lineup ?? []).filter((row) => row.playerId !== player.id);
+  }
+  if (game.homeLineupState) {
+    game.homeLineupState.lineup = (game.homeLineupState.lineup ?? []).filter((row) => row.playerId !== player.id);
+  }
+
+  const lineup = isAwayTarget ? game.awayLineup : game.homeLineup;
+  const lineupState = isAwayTarget ? game.awayLineupState : game.homeLineupState;
+  if (!lineup?.some((row) => row.playerId === player.id)) {
+    lineup?.push(entry);
+  }
+  if (lineupState && !lineupState.lineup.some((row) => row.playerId === player.id)) {
+    lineupState.lineup.push({
+      ...entry,
+      battingOrder: lineupState.lineup.length + 1,
+      enteredInning: 1,
+      isStarter: false,
+    });
+  }
+
+  if (game.playerStats[player.id]) {
+    game.playerStats[player.id] = {
+      ...game.playerStats[player.id],
+      teamId: targetTeamId,
+      playerName: playerName(player),
+    };
+  } else {
+    game.playerStats[player.id] = {
+      playerName: playerName(player),
+      teamId: targetTeamId,
+      pa: 1,
+      ab: 1,
+      h: 0,
+      singles: 0,
+      doubles: 0,
+      triples: 0,
+      hr: 0,
+      rbi: 0,
+      r: 0,
+      bb: 0,
+      hbp: 0,
+      k: 1,
+      sb: 0,
+      cs: 0,
+      sf: 0,
+      sh: 0,
+      gidp: 0,
+      putouts: 0,
+      assists: 0,
+      fieldingErrors: 0,
+      grandSlams: 0,
+      d3kOutcomes: 0,
+      divingCatches: 0,
+      robberies: 0,
+      nutshots: 0,
+    };
+  }
 }
 
 async function buildL12Proof(
@@ -764,7 +854,7 @@ export async function runLsimSeason(config: LsimSeasonRunnerConfig): Promise<Lsi
         seed: `${config.seed}:game-${gameNumber}`,
       });
       if (runInvariantChecks && relationshipRecoveryBreakEdgeId === null && previous.relationshipEdges.length > 0) {
-        relationshipRecoveryBreakEdgeId = await breakRelationshipCoRosteringForRecovery(context, previous);
+        relationshipRecoveryBreakEdgeId = await breakRelationshipCoRosteringForRecovery(context, previous, synthetic);
       }
       await seedSyntheticEventLog(context, synthetic, gameNumber);
       const processOptions = {
