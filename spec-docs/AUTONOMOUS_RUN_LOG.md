@@ -2415,3 +2415,15 @@ deliverable: mirror `LeagueBuilderAuctionDraft` but §3.3-obscured (name+positio
 on resume (keeps row.session live; warns-not-throws on mismatch); 5/5 incl. resume-determinism (regenerated pool === persisted session.players).
 tsc 0 + full suite **7971 pass / 1 fail = wpaRuntimeBoundary (characterized), zero new reds**. **➡ NEXT = AUC-5.1e-2 (the farm UI page §3.3).**
 
+**WAVE 44 — AUC-5.1e-2 (farm UI page §3.3) CONTRACTED + DISPATCHED — the VISIBLE farm-auction deliverable.**
+- Grounded: route mirrors `/league-builder/auction-draft` (App.tsx:108/299) → `/league-builder/farm-auction-draft`; the prospect DTO carries
+  `prospectProfile.scoutedGrade` (fuzzed, SHOW) vs `overallGrade` (true, HIDE). `scoutAccuracy` exported (:873) for the per-bidder range.
+- **5.1e-2 scope:** NEW `LeagueBuilderFarmAuctionDraft.tsx` + route + smoke test — mirror the MLB page but §3.3-OBSCURED. **MAKE-OR-BREAK (§3.3/§9.E):**
+  NEVER render true IV / any individual rating / true grade. Value = ONLY the §3.2 scout RANGE (`perceivedValueRange(trueIV, scoutAccuracy(pos,
+  bidder's scout), seed-per-(team,prospect))`, computed for the CURRENT BIDDER); grade = ONLY `scoutedGrade`; positions ALWAYS shown. §2.5 pool sorts
+  by scout-range midpoint (not IV). Consumes the 5.1e-1 hook (pool/scouts/farmTierCap). Smoke test asserts NO IV/rating leak. Scout-privacy long-press
+  (§6.1) = SEPARATE.
+- Contract committed; dispatched to Codex (gpt-5.5, xhigh) bg `blgdabtoe`. On landing: read-the-diff audit (esp. NO IV/rating/true-grade leak) + full
+  Mode-1 suite + commit. **JK BROWSER-VERIFY BATCHED** (the whole auction surface). **➡ after 5.1e-2 = AUC-5.1d-3** (MLB→farm sequencing + per-league
+  format config) = the LAST farm-auction wiring; then AUC-5.2 (L-ECON1 freeze) → scout-privacy UI → POSITION_POOL fix.
+
