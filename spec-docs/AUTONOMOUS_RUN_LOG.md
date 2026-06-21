@@ -1774,3 +1774,34 @@ continue.** **SET ASIDE (the one safety wall): L-ECON1** (frozen-draft-IV re-pri
   50→20→45→30 ⇒ score 10 < a currently-recovered 48 ⇒ 28). **FULL host gate:** build exit 0 (7.57s) + suite **7,745/444,
   7,743 pass / 2 characterized fail**, ZERO new reds (+8). PURE/build-DARK; trackerDb stays v24.
 - **➡ NEXT = L12-3** (race-standing weighted composite + bands + Q3 tilt + Q4 GG defensive-fame share; reads `resolveFameTier` only). Nothing pushed.
+
+---
+
+## 2026-06-20 (AUTH-4 overnight — RUN START) — JK enacted AUTH-4 for an unattended overnight max-production run
+
+**Mode switched to AUTH-4 by JK directive ("enact auth-4 protocol to run this through the night").** Captain = Opus 4.8,
+single-Captain (**Shape A**): Opus owns the integration line `codex/franchise-v1-next` (docs + Mode-2 dispatch/audit) and
+dispatches Codex for Mode-1 in the worktree `/Users/johnkruse/Projects/kbl-mode1` [`codex/mode1-v1`, forked from `549f9832`].
+Codex builds; Opus audits (builder≠auditor); branch-only, **never push**. The prior L13-7 thread retires.
+
+**Kickoff setup done:**
+- Mode-1 worktree created (`549f9832` base — has the ruled draft/farm specs) + `npm install` exit 0 → build-ready.
+- 13 Mode-1 design-fork rulings + scout-privacy persisted at `549f9832` (commit is the Mode-1 build source).
+
+**Corrected state (the CURRENT_STATE header was STALE — said NEXT=L13-3):** L13-1..L13-7 are DONE + committed (L13-7
+`34bdd76e`). The L13 dark stack is ALSO largely WIRED into `processCompletedGame.ts:648-664` (formation + intensity +
+morale, all behind `isFranchisePhase2L13Enabled()`). ⇒ L13-8 is substantially present; the one open question is whether
+formation is CHECKPOINT-gated per Fork B (recon confirms).
+
+**QUEUE (live — supersedes the stale protocol Queue at AUTONOMOUS_RUN_PROTOCOL.md:70-99):**
+- **Mode-2 (here):** confirm L13-8 cadence → L13-3b (deferred captain/romance/co-rostered) → L14 (rebrand) → L-SIM gate.
+- **Mode-1 (worktree):** build the auction/prospect/scout v1 from the ruled specs (PROSPECT §14 B1–B11 + AUCTION §5),
+  anchored to `scoreSmb4Player`/`smb4PlayerGenerator`; scout-report privacy UI.
+
+**Engine:** launched a grounding recon (Mode-2 remaining-work audit + Mode-1 build scope-map/split). On completion: write
+contracts → dispatch Codex (bg, build + FAST gate only per the Codex L-SIM-stall lesson) → audit + run the heavy L-SIM legs
+myself → host gate (tsc 0 / build 0 / characterized suite) → commit → next. Self-sustains via background-completion
+re-invocation + a ScheduleWakeup fallback. SET-ASIDE-AND-CONTINUE on the 4 safety walls.
+
+### Ticket log (newest at bottom)
+_(none committed yet this run — recon in flight)_
