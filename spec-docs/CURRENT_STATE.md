@@ -10,9 +10,11 @@
 > (3.1 `2ef82fa3` = leagueBuilder v7→v8 auctionSessions store + resume; 4.1a `b2a0d610` = hot-seat UI foundation; **4.2 `ce69036d`
 > = engine turn-fidelity: faithful §2.1 bid-rotation pointer + §7.6 CPU lone-survivor claim [closes the 2 flagged 4.1a limits];
 > 4.1b `fb07ad6d` = rich §2.3 turn view + §2.5 filter/sort pool + SOLD/PASSED notices + §2.4 handoff + names-not-IDs**).
-> **QUEUE (fresh session resumes here):** **AUC-5.1 (farm auction, §3)** — MLB-then-farm sequencing + scout-obscured value (§3.2) +
-> positions-visible/ratings-hidden card (§3.3) + walled-off farm wallet (§3.4) + scout-hiring dep (§3.5/§6 Q8) → 5.2 (L-ECON1
-> settledSalary freeze) → scout-privacy UI (§6.1) → POSITION_POOL SP/RP fix; Mode-2 = LSIM-P3 (full-matrix passport).
+> **QUEUE (fresh session resumes here):** **AUC-5.1a** (farm prospect-pool registration + IV pricing) — the first of the 5-ticket
+> AUC-5.1 farm-auction split; RECON DONE → read **`spec-docs/AUC-5.1_SCOPE_MAP.md`** FIRST (it has the EXISTS/MISSING map, the split
+> 5.1a–e, the resolved prospect-IV=`computeIV` fork, AUTH-4 defaults, + 3 forks flagged for JK). 5.1a/5.1b are fork-free → build first.
+> Then 5.1c (wallet) → 5.1d (wrapper+sequencing) → 5.1e (UI) → AUC-5.2 (L-ECON1 settledSalary freeze) → scout-privacy UI (§6.1) →
+> POSITION_POOL SP/RP fix; Mode-2 = LSIM-P3 (full-matrix passport).
 > **OPEN DECISIONS / FLAGS for JK** (in the ledger): AUC-2.2 sim-tune defaults (bargainInterestCurve + shill profiles); AUC-4.2
 > nominator-first bid-rotation sub-fork (vs team-after-nominator — both terminate, shifts CPU bid seq); AUC-4.1b raise presets start at
 > minBid+1×increment (no bare-minimum one-tap preset); AUC-3.1 whole-blob-persist default; +earlier B8 fixed-age, L14-2b non-ACID
