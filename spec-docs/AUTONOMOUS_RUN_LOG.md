@@ -2095,3 +2095,23 @@ NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its 
   profiles sniper/spender/zealot — bias 0.98/1.08/1.02 · aggression 0.82/1.15/0.96 · maxInterestProb 0.74/0.88/0.82 (all globally
   capped at `NO_FLOOR_MAX_INTEREST_PROBABILITY=0.92`) · archetypeFitSpread 0.18/0.22/0.30 · nomination value/bargain/drain weights.
 - **➡ NEXT = AUC-3.1 (auction session persistence)** — persistence-class; grounding the save/resume seam at source before contracting.
+
+**WAVE 24 — AUC-3.1 GROUNDED + CONTRACTED + DISPATCHED.**
+- **Grounding (at source, no-inference — caught + corrected an Explore-agent mislabel that conflated AUC-3.1 with AUC-5.2):**
+  `AUCTION_DRAFT_SPEC.md §5.2 #6` (lines 447-449) = persist the in-progress `CpuShillAuctionSession` (current lot/bids/rotation
+  pointer/per-team committed-remaining/results), **mirror `LeagueBuilderMlbDraftSession`**, in the **`kbl-league-builder` DB (NOT
+  trackerDb)** → trackerDb v25 pin UNTOUCHED. The settledSalary/freeze write is the SEPARATE **AUC-5.2** (#9), NOT this ticket.
+- **Anchors verified at source:** `leagueBuilderStorage.ts` DB_VERSION 7→8 (:39) + new `auctionSessions` store mirroring
+  `mlbDraftSessions` (:753-756) + API mirroring `createMlbDraftSessionId`/`get/save/deleteMlbDraftSession` (:1445/1575/1592/1621,
+  incl. their `syncEngine.upsert/remove('kbl-league-builder', …)` calls). **4 MIRROR SITES** (the L6b-1 broken-mirror trap):
+  storage module · `syncConfig.ts:52-61` · `backupRestore.ts:764` (also pins `version:7`→8) · the version-pin test
+  `leagueBuilderStorageV6Migration.test.ts` (`expectedStores` + 3× `db.version).toBe(7)`→8 + a new v7→v8 additive-migration test).
+- **DESIGN CALLS (AUTH-4 defaults, flagged for JK):** (1) persist the WHOLE serialized session blob (lossless resume, no field
+  drift) in an envelope, NOT a hand-picked subset; (2) key by `[leagueId, seasonNumber]` (one active auction/league-season);
+  (3) determinism rides inside the blob (nominationOrderSeed + cpuShills persisted → no shill regen on load). Build-DARK API
+  (UI autosave wires in AUC-4.1) but the v7→v8 migration is LIVE + must prove additive.
+- **Contract committed `959e1cc0`** (PROMPT_CONTRACTS.md, marker `CONTRACT: AUC-3.1`). **Dispatched to Codex** (gpt-5.5, xhigh)
+  via `codex exec -C …/kbl-mode1` stdin-from-contract, background task `bkrqkfb22` → `/tmp/codex-auc31.out`. On landing: independent
+  audit (builder≠auditor) + **FULL Mode-1 suite host gate** (DB-version bump → syncEngine/backup-parity ripple risk) + commit.
+  **BROWSER-VERIFY OUTSTANDING (batched, persistence-PRIORITIZED):** a real kbl-league-builder DB migrates v7→v8 with no data loss +
+  an auction session round-trips/resumes. **➡ after AUC-3.1 = AUC-4.1 (hot-seat UI).**
