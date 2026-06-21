@@ -295,3 +295,65 @@ export const POOL_SURPLUS_MAX = 1.2;
 
 /** §12/§5.3 T3 acceptance criterion: flag identity EV drift above 10%. */
 export const EV_FLATNESS_TOLERANCE = 0.10;
+
+/**
+ * Shared league-minimum salary in canonical kblIV dollars.
+ * Source: existing T5 salary bridge floor, moved here so auction minSalaryByPosition
+ * and salaryCalculator share one numeric source.
+ */
+export const LEAGUE_MINIMUM_SALARY = 1666.49;
+
+/**
+ * IV_ENGINE §7.5 / D14: auction opening asks use a reserve multiplier that
+ * scales from 0.5 at the pool bottom to 0.7 by the top decile.
+ */
+export const RESERVE_PRICE_CURVE_MIN = 0.5;
+export const RESERVE_PRICE_CURVE_MAX = 0.7;
+export const RESERVE_PRICE_CURVE_MAX_PERCENTILE = 90;
+
+export function reservePriceCurve(ivPercentile: number): number {
+  const percentile = Number.isFinite(ivPercentile)
+    ? Math.min(Math.max(ivPercentile, 0), RESERVE_PRICE_CURVE_MAX_PERCENTILE)
+    : 0;
+  const progress = percentile / RESERVE_PRICE_CURVE_MAX_PERCENTILE;
+  return RESERVE_PRICE_CURVE_MIN + (RESERVE_PRICE_CURVE_MAX - RESERVE_PRICE_CURVE_MIN) * progress;
+}
+
+export const AUCTION_MIN_SALARY_POSITIONS = [
+  'C',
+  '1B',
+  '2B',
+  '3B',
+  'SS',
+  'LF',
+  'CF',
+  'RF',
+  'DH',
+  'SP',
+  'SP/RP',
+  'RP',
+  'CP',
+] as const;
+
+export type AuctionMinSalaryPosition = typeof AUCTION_MIN_SALARY_POSITIONS[number];
+
+/** IV_ENGINE §7.5 minSalaryByPosition, sourced from the existing league minimum salary floor. */
+export const MIN_SALARY_BY_POSITION: Record<AuctionMinSalaryPosition, number> =
+  Object.fromEntries(AUCTION_MIN_SALARY_POSITIONS.map((position) => [position, LEAGUE_MINIMUM_SALARY])) as Record<
+    AuctionMinSalaryPosition,
+    number
+  >;
+
+/**
+ * AUCTION_DRAFT_SPEC.md §2.3 / IV_ENGINE §7.5 solvency cap.
+ * Compute projectedTax at the call site with leagueConstruction.luxuryTax, then
+ * pass it here to keep the per-bid ceiling pure.
+ */
+export function auctionMaxBid(
+  remainingBudget: number,
+  slotsRemaining: number,
+  minSalary: number,
+  projectedTax: number,
+): number {
+  return Math.max(0, remainingBudget - Math.max(0, slotsRemaining - 1) * minSalary - projectedTax);
+}
