@@ -90,6 +90,43 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     expect(output.visibleReports.every((report) => report.position !== 'DH')).toBe(true);
   });
 
+  test('generated secondary positions follow §6 map and pitchers carry none', () => {
+    const output = generateProspectScoutingDraft({
+      ...BASE_INPUT,
+      rounds: 12,
+      candidatePoolMultiplier: 5,
+      seed: 'section-6-secondary-position-policy-seed',
+    });
+    const pitcherPositions = new Set(['SP', 'RP', 'CP']);
+    const validSecondaryByPrimary: Record<string, Set<string>> = {
+      C: new Set(['1B', 'RF', 'LF', '3B', 'IF/OF']),
+      '1B': new Set(['3B', 'C', 'LF', 'RF', '2B']),
+      '2B': new Set(['SS', '3B', 'IF', 'IF/OF']),
+      '3B': new Set(['SS', '1B', 'IF', '2B']),
+      SS: new Set(['2B', '3B', 'IF', 'IF/OF', 'OF']),
+      LF: new Set(['OF', 'RF', 'C', '1B/OF', '1B']),
+      CF: new Set(['OF', '1B/OF']),
+      RF: new Set(['OF', 'C', 'LF', '1B/OF']),
+    };
+
+    const pitcherPlayers = output.generatedPlayers.filter((player) =>
+      pitcherPositions.has(player.primaryPosition),
+    );
+    const fielderPlayers = output.generatedPlayers.filter((player) =>
+      !pitcherPositions.has(player.primaryPosition),
+    );
+    const fielderWithSecondary = fielderPlayers.find((player) => player.secondaryPosition);
+
+    expect(pitcherPlayers.length).toBeGreaterThan(0);
+    expect(pitcherPlayers.every((player) => player.secondaryPosition === undefined)).toBe(true);
+    expect(fielderPlayers.length).toBeGreaterThan(0);
+    expect(fielderWithSecondary).toBeDefined();
+    expect(fielderPlayers.every((player) =>
+      player.secondaryPosition === undefined ||
+      validSecondaryByPrimary[player.primaryPosition]?.has(player.secondaryPosition) === true,
+    )).toBe(true);
+  });
+
   test('generated non-pitcher prospects do not carry visible pitching ratings or arsenal', () => {
     const output = generateProspectScoutingDraft({
       ...BASE_INPUT,

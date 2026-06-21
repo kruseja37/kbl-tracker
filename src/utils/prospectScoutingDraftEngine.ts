@@ -5,6 +5,7 @@ import {
   type PositionPlayerRatings,
 } from '../engines/gradeEngine';
 import { FIRST_NAMES as SMB4_FIRST_NAMES, LAST_NAMES as SMB4_LAST_NAMES } from '../data/nameDatabase';
+import type { Position } from '../types/game';
 import { prospectSalaryForDraftRound } from './prospectSalary';
 
 export { prospectSalaryForDraftRound } from './prospectSalary';
@@ -25,6 +26,9 @@ export type DraftPosition =
   | 'SP'
   | 'RP'
   | 'CP';
+
+type PitcherDraftPosition = Extract<DraftPosition, 'SP' | 'RP' | 'CP'>;
+type FieldingDraftPosition = Exclude<DraftPosition, 'DH' | PitcherDraftPosition>;
 
 export type ScoutSpecialty =
   | DraftPosition
@@ -97,6 +101,7 @@ export interface GeneratedProspectCandidate {
   firstName: string;
   lastName: string;
   position: DraftPosition;
+  secondaryPosition?: Position;
   trueGrade: Grade;
   potentialGrade: Grade;
   ratings: PositionPlayerRatings & PitcherRatings;
@@ -151,7 +156,7 @@ export interface LeagueBuilderProspectPlayerDto {
   throws: 'L' | 'R';
   armSlot: null;
   primaryPosition: DraftPosition;
-  secondaryPosition?: DraftPosition | 'P';
+  secondaryPosition?: Position;
   power: number;
   contact: number;
   speed: number;
@@ -259,6 +264,17 @@ const CHEMISTRY_POOL = ['Competitive', 'Crafty', 'Disciplined', 'Spirited', 'Sch
 const PERSONALITY_POOL = ['Competitive', 'Relaxed', 'Droopy', 'Jolly', 'Tough', 'Timid', 'Egotistical'];
 const BATTER_TRAITS = ['Clutch', 'Tough Out', 'Rally Starter', 'Sprinter', 'Magic Hands', 'Utility'];
 const PITCHER_TRAITS = ['K Collector', 'Workhorse', 'Elite 4F', 'Elite SL', 'Specialist', 'Rally Stopper'];
+const SECONDARY_POSITION_WEIGHTS: Record<FieldingDraftPosition, Array<[Position | undefined, number]>> = {
+  // PROSPECT_GENERATION_SPEC.md §6 raw counts from the real 440-player pool.
+  C: [['1B', 17], ['RF', 4], ['LF', 3], ['3B', 2], ['IF/OF', 1], [undefined, 13]],
+  '1B': [['3B', 7], ['C', 5], ['LF', 4], ['RF', 2], ['2B', 1], [undefined, 12]],
+  '2B': [['SS', 15], ['3B', 9], ['IF', 4], ['IF/OF', 2], [undefined, 4]],
+  '3B': [['SS', 11], ['1B', 8], ['IF', 3], ['2B', 2], [undefined, 4]],
+  SS: [['2B', 14], ['3B', 4], ['IF', 4], ['IF/OF', 4], ['OF', 1], [undefined, 3]],
+  LF: [['OF', 16], ['RF', 8], ['C', 5], ['1B/OF', 3], ['1B', 2], [undefined, 3]],
+  CF: [['OF', 23], ['1B/OF', 6], [undefined, 1]],
+  RF: [['OF', 10], ['C', 10], ['LF', 7], ['1B/OF', 2], [undefined, 2]],
+};
 // fixed draft age — no age-based dev/variability at generation (PROSPECT §10; Captain 2026-06-21)
 const PROSPECT_DRAFT_AGE = 18;
 const CITIES = [
@@ -305,12 +321,28 @@ function pickWeighted<T extends string>(seed: string, weights: Array<[T, number]
   return weights[weights.length - 1][0];
 }
 
+function pickWeightedValue<T>(seed: string, weights: Array<[T, number]>): T {
+  const total = weights.reduce((sum, [, weight]) => sum + weight, 0);
+  let roll = randomUnit(seed) * total;
+  for (const [value, weight] of weights) {
+    roll -= weight;
+    if (roll <= 0) return value;
+  }
+  return weights[weights.length - 1][0];
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Math.round(value)));
 }
 
-function isPitcher(position: DraftPosition): boolean {
+function isPitcher(position: DraftPosition): position is PitcherDraftPosition {
   return position === 'SP' || position === 'RP' || position === 'CP';
+}
+
+function chooseSecondary(primary: DraftPosition, seed: string): Position | undefined {
+  if (isPitcher(primary)) return undefined;
+  if (primary === 'DH') return undefined;
+  return pickWeightedValue(`${seed}:secondary`, SECONDARY_POSITION_WEIGHTS[primary]);
 }
 
 function gradeIndex(grade: Grade): number {
@@ -498,6 +530,7 @@ export function generateHiddenPersonalityModifiers(seed: string): HiddenPersonal
 function buildCandidate(input: ProspectScoutingDraftInput, index: number): GeneratedProspectCandidate {
   const seed = `${input.seed}:candidate:${index}`;
   const position = pick(`${seed}:position`, POSITION_POOL);
+  const secondaryPosition = chooseSecondary(position, seed);
   const trueGrade = pickWeighted(`${seed}:grade`, STANDARD_GRADE_WEIGHTS);
   const ratings = buildRatings(seed, trueGrade, position);
   const traitPool = isPitcher(position) ? PITCHER_TRAITS : BATTER_TRAITS;
@@ -510,6 +543,7 @@ function buildCandidate(input: ProspectScoutingDraftInput, index: number): Gener
     firstName: pick(`${seed}:first`, SMB4_FIRST_NAMES),
     lastName: pick(`${seed}:last`, SMB4_LAST_NAMES),
     position,
+    secondaryPosition,
     trueGrade,
     potentialGrade: potentialGrade(`${seed}:potential`, trueGrade),
     ratings,
@@ -589,7 +623,7 @@ function buildPlayerDto(input: {
     throws: pick(`${seed}:throws`, ['L', 'R'] as const),
     armSlot: null,
     primaryPosition: candidate.position,
-    secondaryPosition: isPitcher(candidate.position) ? 'P' : undefined,
+    secondaryPosition: candidate.secondaryPosition,
     power: candidate.ratings.power,
     contact: candidate.ratings.contact,
     speed: candidate.ratings.speed,
