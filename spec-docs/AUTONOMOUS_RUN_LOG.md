@@ -2069,3 +2069,11 @@ NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its 
   noise±12%` (reuse composeIdentity) + probabilistic bargainInterestCurve (sim-tune, flagged) + depletable budgets +
   personalities; **HARD make-or-break = NO deterministic price floor** (tested across seeds). Next: AUC-3.1 (persist) → 4.1
   (hot-seat UI) → 5.1 (farm) → 5.2 (L-ECON1 freeze) + scout-privacy UI.
+
+**WAVE 22 — HANDOFF (context near limit; JK prompted).**
+- **✅ AUC-2.2 COMMITTED `ed846e5d`** — its in-flight build landed during the handoff; finished it cleanly (audit: NO
+  deterministic floor structurally guaranteed — interest prob capped <1.0, bid only if minBid<valuation & under budget &
+  seeded-interest passes; composeIdentity/economics untouched; build 0; 8 tests). Auction now at 4/~8.
+- **CONTEXT HANDOFF written** (`HANDOFF_NEEDED` re-pointed to the CLEAN seam AUC-3.1; CURRENT_STATE live header refreshed;
+  this ledger committed). Tree clean, no in-flight Codex. Fresh session resumes at **AUC-3.1** (persistence) → 4.1 → 5.1 →
+  5.2 → scout-privacy UI → POSITION_POOL fix; Mode-2 = LSIM-P3. STOPPING per the context-handoff protocol.

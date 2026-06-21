@@ -6,9 +6,9 @@
 > **LIVE LEDGER = `AUTONOMOUS_RUN_LOG.md` (WAVE 1–21) — read it top-to-bottom on return; it supersedes everything below.**
 > **DONE this run:** Mode-2 **L14 fully built** (L14-1/2a/2b/3) ⇒ L1–L14 all build-dark; **L-SIM LSIM-P1 GREEN** (60g
 > findings=0, determinism byte-identical, L14 proven dormant). Mode-1 **prospect-gen COMPLETE (B1–B9, validated ±0.3pp to §3.2)**;
-> auction track at 3/~8 (AUC-1.1/1.2/2.1 committed; **AUC-2.2 IN FLIGHT at handoff** — Codex task `b36rn6zh8`, `/tmp/codex-auc22.out`).
-> **QUEUE:** auction AUC-2.2 → 3.1 (persist) → 4.1 (hot-seat UI) → 5.1 (farm) → 5.2 (L-ECON1 freeze) + scout-privacy UI + the
-> POSITION_POOL SP/RP fix; Mode-2 = LSIM-P3 (full-matrix passport). **OPEN DECISIONS for JK** (logged in the ledger): B8 fixed-age,
+> auction track at 4/~8 (AUC-1.1/1.2/2.1/2.2 committed). **QUEUE (fresh session resumes here):** auction AUC-3.1 (persist) →
+> 4.1 (hot-seat UI) → 5.1 (farm) → 5.2 (L-ECON1 freeze) + scout-privacy UI + the POSITION_POOL SP/RP fix; Mode-2 = LSIM-P3
+> (full-matrix passport). **OPEN DECISIONS for JK** (logged in the ledger): B8 fixed-age,
 > L14-2b non-ACID partial-crash edge, L14-3 GM-initiated/no-pCG-block, POSITION_POOL SP/RP gap, smoke fame-war-legitimacy (resolved @60g).
 > **⚠ Everything below this block is STALE (L13-era) — trust the ledger.** `caffeinate` PID 84474 keeps the Mac awake.
 
