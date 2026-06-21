@@ -15115,3 +15115,40 @@ Use xhigh reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: AUC-5.1b ===== -->
+
+<!-- ===== CONTRACT: AUC-5.1c (walled-off farm wallet — §3.4) ===== -->
+## CONTRACT — AUC-5.1c (walled-off farm wallet: §5.2 self-cal cap + farm AuctionTeamInput, §3.4) — 2026-06-21 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5, xhigh). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** Mode-1 FARM AUCTION — the 3rd sub-ticket of the AUC-5.1 split (see `spec-docs/AUC-5.1_SCOPE_MAP.md`). The §3.4 walled-off farm wallet. **DEPENDS ON AUC-5.1a (`ecd36347`, supplies the priced prospect pool).** PURE engine/data, **build-DARK** (no live caller until AUC-5.1d). **NO DB / saved-shape change** — the wallet is DERIVED (like the MLB one), not persisted.
+
+**GOAL:** Give each team a farm budget SEPARATE from the MLB tier cap (§3.4 — farm spending draws ONLY on the farm wallet). Two pure pieces: (1) a §5.2 self-calibrating farm tier cap computed OVER the AUC-5.1a prospect-pool IVs with the FARM roster size; (2) a farm `AuctionTeamInput[]` builder mirroring the MLB `buildAuctionTeams`, on the farm wallet + 10 farm slots.
+
+**MAKE-OR-BREAK:** the farm tier cap MUST be derived by the EXACT §5.2 formula + the SAME registry constants the MLB cap uses — only the POOL (prospect, lower-IV) and the ROSTER SIZE (10, not 22) change. **§5.2: `tierCap = max(maxPoolIV / starBudgetShare, rosterSlots × medianPoolIV × rosterHeadroom)`** (`src/data/tierParams.ts:16` comment + `:57-63` the `TierCapParams` field docs: `starBranch = maxPoolIV/starBudgetShare`, `rosterBranch = rosterSlots × medianPoolIV × rosterHeadroom`). Use `starBudgetShare = T3_DERIVATION_INPUTS.starBudgetShare` (0.33) + `rosterHeadroom = T3_DERIVATION_INPUTS.rosterHeadroom` (1.15) from `tierParams.ts:203-212` — **IMPORT them, do NOT hardcode.** Do NOT invent a separate nerf multiplier (see Design Call 1).
+
+**SOURCE OF TRUTH:** `AUCTION_DRAFT_SPEC.md` **§3.4** (lines 315-329) + **§6 Q7** (line 493). Quote §3.4: *"Tier cap for the farm wallet derives the same self-calibrating way (IV_ENGINE §5.2) over the prospect pool."* + *"Solvency (§7.5 maxBid) applies within the farm wallet using the farm roster's slots and a farm minSalaryByPosition."* §3.4 ALSO (lines 322-325): the farm-BUDGET wallet is SEPARATE from the farm-GENERATION distribution shift (out of scope here). MLB cap usage: `registerPool` → `tierCap: TIER_CAPS[tier].tierCap` (leagueConstruction.ts:276). MLB adapter to MIRROR: `buildAuctionTeams` (useAuctionDraft.ts:127-153 — `budgetRemaining = max(0, tierCap − committedSalaries)`, `rosterSlotsRemaining = max(0, SLOTS − rosterIds.length)`, `minSalary = LEAGUE_MINIMUM_SALARY`, `projectedTax = 0`). Farm slots = `FARM_AUCTION_ROSTER_SLOTS_PER_TEAM` (10, already in `farmAuctionPool.ts`) / `STARTUP_FARM_TARGET_SIZE`. `AuctionTeamInput` type = `auctionStateMachine.ts:35`.
+
+**DESIGN CALLS (Captain, AUTH-4 — documented for JK):**
+1. **The "nerf" (§3.4/Q7 "walled-off NERFED budget") is EMERGENT, not a free dial — supersedes the prior JK-2 flag's "~0.25-0.4" guess.** Because the cap self-calibrates §5.2 OVER THE PROSPECT POOL, and prospects have intrinsically lower IVs than MLB stock players, the resulting farm cap is AUTOMATICALLY smaller than the MLB cap — that IS the nerf. NO separate nerf multiplier. (The `FARM_NERF_SCALES` / "one grade step left §7.4" in tierParams is the GENERATION nerf — prospect quality — explicitly OUT of §3.4's wallet scope.) **This corrects the handoff/scope-map's mis-flag; surfaced for JK to confirm the emergent-nerf reading.**
+2. **Farm `minSalary` = `LEAGUE_MINIMUM_SALARY`** (the flat floor the MLB `MIN_SALARY_BY_POSITION` already uses for every position) — no new farm-specific minimum.
+3. **`projectedTax = 0`** at farm-wallet build (mirror buildAuctionTeams; the farm wallet has no luxury-tax layer in v1).
+4. **Median** = the standard sample median (sort ascending; odd → middle; even → mean of the two middle values).
+
+**CONSTRAINTS — exactly these files (PURE; no DB/store/version change; no live caller):**
+1. **NEW `src/utils/farmAuctionWallet.ts`** — export:
+   - `export function computeFarmTierCap(poolIVs: readonly number[], farmSlots?: number): number` — `const starBranch = max(poolIVs) / T3_DERIVATION_INPUTS.starBudgetShare`; `const rosterBranch = (farmSlots ?? FARM_AUCTION_ROSTER_SLOTS_PER_TEAM) * median(poolIVs) * T3_DERIVATION_INPUTS.rosterHeadroom`; `return Math.max(starBranch, rosterBranch)`. Guard empty/non-finite poolIVs → throw.
+   - `export function buildFarmAuctionTeamInputs(input: { teams: readonly { teamId: string; farmRosterPlayerIds: readonly string[]; committedFarmSalaries?: number }[]; farmTierCap: number; farmSlots?: number; minSalary?: number }): AuctionTeamInput[]` — per team mirror buildAuctionTeams: `budgetRemaining = Math.max(0, farmTierCap − (committedFarmSalaries ?? 0))`, `rosterSlotsRemaining = Math.max(0, (farmSlots ?? 10) − farmRosterPlayerIds.length)`, `minSalary = input.minSalary ?? LEAGUE_MINIMUM_SALARY`, `projectedTax = 0`, `roster = []` (or the committed farm assignments if salaries are supplied — keep minimal). Import `AuctionTeamInput` from `../engines/auctionStateMachine`, `LEAGUE_MINIMUM_SALARY` from `../data/rosterEngineConstants`, `T3_DERIVATION_INPUTS` from `../data/tierParams`, `FARM_AUCTION_ROSTER_SLOTS_PER_TEAM` from `./farmAuctionPool`. PURE (no I/O/Date/random).
+2. **NEW `src/utils/tests/farmAuctionWallet.test.ts`** — (a) §5.2 cap math: a hand-computed pool (known max+median) reproduces `max(max/0.33, 10×median×1.15)` to the dollar; (b) EMERGENT NERF: a weaker pool (lower IVs) yields a strictly SMALLER cap than a stronger pool; (c) which branch wins flips correctly (a top-heavy pool → starBranch; a flat pool → rosterBranch); (d) median even/odd correctness; (e) `buildFarmAuctionTeamInputs`: budget = cap − committed (clamped ≥0), slots = 10 − rostered (clamped ≥0), minSalary floor; (f) guards (empty poolIVs throws).
+
+**DO NOT:** add a farm BUDGET field to `TeamRoster` or any store / bump a DB version (the wallet is DERIVED — confirmed: MLB `buildAuctionTeams` derives budget on the fly, no persisted budget); modify `tierParams.ts` / `TIER_CAPS` / frozen IV economics / the oracle; apply the farm-GENERATION nerf here (out of scope); add a live caller (build-dark — AUC-5.1d wires it). Branch `codex/mode1-v1` only; do NOT commit (Opus commits after audit); do NOT push.
+
+**EXPECTED OUTPUT:** a pure §5.2 farm tier-cap (emergent-nerfed via the prospect pool) + a farm `AuctionTeamInput[]` builder mirroring the MLB adapter on the farm wallet + 10 slots. Build-dark, no DB change.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` exit 0; `NODE_ENV= npx vitest run src/utils/tests/farmAuctionWallet.test.ts` → green. Report ACTUAL output. (Opus runs the full Mode-1 suite + confirms NO DB-version/store change + IV oracle byte-unchanged.)
+
+**FORMAT:** 1) EVERY changed/new path + total; 2) the §5.2 cap formula + the imported constants + the emergent-nerf reasoning + the adapter mirror; 3) ACTUAL tsc + the test output; 4) "AUC-5.1c complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL (STOP-IF):** if `T3_DERIVATION_INPUTS` does NOT export `starBudgetShare`/`rosterHeadroom` → STOP and quote where they live. If the §5.2 rosterBranch is NOT `rosterSlots × medianPoolIV × rosterHeadroom` (re-read tierParams.ts:16/60) → STOP and quote the real formula. If §3.4 actually requires a PERSISTED farm budget (re-read §3.4 + confirm the MLB wallet is derived) → STOP and report. If a separate nerf multiplier seems required beyond the over-the-prospect-pool self-cal → STOP and report (Design Call 1 says it must be emergent).
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: AUC-5.1c ===== -->
