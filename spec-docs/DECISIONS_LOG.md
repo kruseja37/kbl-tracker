@@ -7,6 +7,51 @@
 
 ## June 2026
 
+### 2026-06-20 (attended): Mode-1 draft/farm v1 design forks — 13 rulings + a new scout-report privacy requirement — RULED
+
+**Context:** Two read-only concurrent sessions authored `PROSPECT_GENERATION_SPEC.md` (v2, farm-prospect generation) and
+`AUCTION_DRAFT_SPEC.md` (the hot-seat auction), each closing with batched WAITING_ON_JK forks (prospect A–E, auction
+Q1–Q8). JK ruled all 13 in one attended pass; a code-grounded check of two ("A" grade-model, "E" positions) was run first.
+
+**Prospect rulings (→ `PROSPECT_GENERATION_SPEC.md` §15 + body §3.3/§8/§5.1):**
+- **A — grade oracle = `scoreSmb4Player`** (`smb4GradeEmulator.ts`, the Player-Analyzer fitted model: ratings + handedness
+  + traits + secondary + arsenal), NOT the simple 3:3:2:1:1 `gradeEngine`. Code fact verified: **nothing reverse-engineers
+  a profile from salary/IV** (grep-confirmed zero) — both graders are forward ratings→grade; `gradeEngine` only feeds
+  `franchiseRatingsSalaryAdapter` (version `…grade-salary-only`), which computes grade + salary from ratings as siblings and
+  DEFERS True Value/IV. Retire the `gradeEngine` prospect-generator path; build on the `scoreSmb4Player`/`smb4PlayerGenerator`
+  family. *Rationale:* the draft must show the grade reflecting the whole player (matching what the Builder Analyzer shows).
+- **B — keep trait counts 30/50/20** (vs the real pool's 16/63/21). *Rationale:* prospects = undeveloped upside that grows
+  into traits via development.
+- **C — defer position-conditioned handedness** (league-wide bats/throws split for v1). *Rationale:* small realism gain
+  (`thr_L` scores only −0.66); not worth the complexity now.
+- **D — pitcher arsenal:** every pitcher ≥1 fastball `{4F,2F,CF}` + ≥1 off-speed `{SL,CB,CH,FK,SB}`, **no forced 4F+2F**;
+  arsenal size = real-pool **role tapers (SP & SP/RP 3–5, RP 2–4, CP 2–3) scaled by junk**. Adopt `smb4PlayerGenerator.buildArsenal`
+  (already encodes this rule + vocab at `:409-411`); retire `gradeEngine.generateArsenal` (`:382`, force-pairs 4F+2F = the bug).
+- **E — NO DH/UTIL in the farm class** (neither is a valid SMB4 primary or secondary position — `DH` is a lineup slot only;
+  `UTIL` is in no `Position` type). Fielders: primary + **optional** secondary, both from the 8 fielding positions
+  {C,1B,2B,3B,SS,LF,CF,RF}. Pitchers: **one of {SP, SP/RP, RP, CP}, no secondary** — `SP/RP` is a single combined swingman
+  role (NOT SP-primary + RP-secondary; `PITCHER_POSITIONS=["SP","RP","CP","SP/RP"]`, `smb4PlayerGenerator.ts:134`). A 1B with
+  no secondary is functionally DH-like but rostered at 1B.
+
+**Auction rulings (→ `AUCTION_DRAFT_SPEC.md` §6):**
+- **Q1** fixed cyclic nomination rotation, seeded at setup · **Q2** nomination = put-up-only (no obligation) + tap-to-claim
+  for the lone solvent survivor · **Q3** flat increment scaled to cap, per-turn timer OFF by default · **Q4** pass = out for
+  this lot · **Q5** §2.2.2 progress-guard re-nomination (re-nominatable only after another player SELLS; → FA tail after 2
+  passes w/o intervening sale; no immediate re-nominate of one you just caused to pass) · **Q6** farm card shows a grade
+  RANGE + scout-driven confidence · **Q7** nerfed walled-off farm wallet, auto-sizing cap · **Q8** REQUIRE every team to hire
+  a scout before the draft can start (removes the no-scout widest-range fallback).
+
+**NEW requirement — scout-report privacy on the shared device (→ `AUCTION_DRAFT_SPEC.md` §6.1):** JK caught that passing one
+iPad around the draft room exposes each GM's private scouting report (Q6 range + confidence, per-team via their own scout).
+**Default COVERED; reveal via long-press (re-covers on release). Scope = scout reports ONLY** (budgets/target lists/max-bid
+stay visible). Farm auction + scouting/prep phase; MLB-auction grades are public (no cover). *Rationale:* asymmetric paid-for
+info must not be free-ridden.
+
+**Routing note:** these specs are the source for the upcoming Mode-1 v1 build branch; committed on `codex/franchise-v1-next`
+so the Mode-1 branch inherits the ruled specs.
+
+---
+
 ### 2026-06-19 (L-SIM Phase 1 audit): L12-race "missing merit category" = VALID SPARSITY, with a teeth-keeping refinement — RULED (attended)
 
 **Context:** The Opus step-4 audit of the L-SIM-H2 invariant suite ran an INDEPENDENT scaled reproduction (24-game
