@@ -1844,3 +1844,15 @@ module correct (counts most-recent consecutive ≤ band-max from the end; armed 
 NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its own 6 tests green. ➡ NEXT Mode-2 = **L14-2**
 (6-step cascade). **Anchor correction:** the stadium-change resolver IS real at `src/engines/franchiseStadiumChangeResolver.ts`
 (recon's `src/utils/` path was wrong) — L14-2 reuses it.
+
+**WAVE 2:**
+- **B8** (Mode-1, `codex/mode1-v1`): drop random age generation from the prospect generator (§10). — dispatched (`blp1co606`).
+- **L14-2 grounding (Mode-2) — PARTIAL, contract HELD (no-inference):** located the reuse anchors `pickStadiumFromPool`
+  (`franchiseStadiumChangeResolver.ts:42`) + `resolveFranchiseStadiumChange` (:77) for step 3, and `fanHopefulPlayerId`
+  (`franchiseInitializer.ts:189`) + `computeTeamFanHopefuls` (top-3-by-scouted-grade reseed) for step 2. **STILL UNLOCATED
+  (must ground before contracting — soul-layer, no inference):** (a) the "4 team/fanbase badges" taxonomy (only
+  `FAN_FAVORITE_NAMED` surfaced — need the full set + how to clear); (b) the "existing trade-style fame reset" valve
+  (FAME-7 — Heat-cool + Reach-floor-drop on trade; grep for the trade fame-reset fn came back empty). `teamHistory` is a
+  NEW field (Q5; `tradeEngine.formerTeamName` is unrelated). **➡ NEXT Mode-2 = finish L14-2 grounding (locate the fame-reset
+  valve + badge set), then contract + dispatch.** Mode-2 idle ~1 cycle by design (rigor > keeping the pipe full on the
+  riskiest ticket).

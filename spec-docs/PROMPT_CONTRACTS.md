@@ -14438,3 +14438,30 @@ Use high reasoning effort. Think step-by-step.
 
 Use high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: L14-1 ===== -->
+
+<!-- ===== CONTRACT: B8 (prospect-gen — drop age generation) ===== -->
+## CONTRACT — B8 (prospect-gen: drop age generation, §10) — 2026-06-20 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5, high). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** Mode-1 prospect-gen cleanup. **DEPENDS ON B5 (same file, already committed `0136598c`).**
+
+**GOAL:** Remove age generation from the prospect generator — prospects carry no age-based development curve (§10; development is morale/performance/personality-driven).
+
+**SOURCE OF TRUTH:** `spec-docs/PROSPECT_GENERATION_SPEC.md §10` (drop-age) + `§15` (RULED 2026-06-20).
+
+**CONSTRAINTS:**
+- In `src/utils/prospectScoutingDraftEngine.ts`, remove the random age generation (the `age: 18 + Math.random()*6`-style expression in the prospect/player DTO builder). PREFER removing it entirely. If the player/prospect type REQUIRES an `age` field, STOP and report the exact type + where age is consumed (do NOT invent a default silently).
+- If `src/engines/gradeEngine.ts` has a now-unused age path (recon noted ~line 370), add a 1-line `// unused: prospects carry no age (PROSPECT §10)` comment — do NOT delete cross-module code.
+- Do NOT touch ratings/grade/personality/chemistry/arsenal logic.
+- Branch `codex/mode1-v1` only; do NOT commit (Opus commits after audit); do NOT push.
+
+**EXPECTED OUTPUT:** no random age generation in the prospect generator.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` 0; `NODE_ENV= npx vitest run src/utils/tests/prospectScoutingDraftEngine.test.ts` → green. Do NOT run the full suite (Opus runs the gate).
+
+**FORMAT:** 1) files changed + total; 2) what was removed + any type constraint hit; 3) ACTUAL tsc + the prospect test output; 4) "B8 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL:** if a required `age` field blocks removal → STOP and report the type + its consumers (do NOT guess a default).
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: B8 ===== -->
