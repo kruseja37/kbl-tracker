@@ -2115,3 +2115,21 @@ NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its 
   audit (builder≠auditor) + **FULL Mode-1 suite host gate** (DB-version bump → syncEngine/backup-parity ripple risk) + commit.
   **BROWSER-VERIFY OUTSTANDING (batched, persistence-PRIORITIZED):** a real kbl-league-builder DB migrates v7→v8 with no data loss +
   an auction session round-trips/resumes. **➡ after AUC-3.1 = AUC-4.1 (hot-seat UI).**
+
+**WAVE 25 — ✅ AUC-3.1 COMMITTED `2ef82fa3` (auction at 5/~8).**
+- Codex(gpt-5.5, xhigh)-built → **Opus-audited (builder≠auditor): VERIFIED.** 6 files (Codex self-caught a 6th — a 2nd version-pin test
+  `leagueBuilderStorage.editorialSchema.test.ts` — and reported it; reporting-completeness held). Diff is PURELY ADDITIVE: new
+  `auctionSessions` store (kbl-league-builder **v7→v8**, keyPath id + leagueId index) mirroring `mlbDraftSessions` EXACTLY +
+  `LeagueBuilderAuctionSession` envelope (whole serialized `CpuShillAuctionSession` blob, no lossy subset) + create/get/save/delete
+  (sync-mirrored, `::startup-auction-draft::` key namespace) + `clearAllLeagueBuilderData` extended. **All 4 mirror sites correct**
+  (storage · syncConfig · backupRestore v8+schema+includedStores · the pin test). **Pin tests STRENGTHENED not weakened**: new
+  `seedV7` fixture + a real v7→v8 additive-migration test proving all 10 prior stores' data survives + the new store empty; the 6th
+  file adds store/index coverage. Round-trip test = genuine deep-equality of a mid-`OPEN_BIDDING` session (currentLot/passedTracker/
+  results/cpuShills) + createdDate-preserve/lastModified-advance/null-after-delete.
+- **HOST GATE (full Mode-1 suite — store add = saved-shape ripple class):** `NODE_ENV= tsc -b` exit 0 + **7928 pass / 1 fail = 472
+  files; the 1 fail = `wpaRuntimeBoundary` (the documented hard-characterized fail, flagging `franchiseAnalyticsTrust.ts` — a file
+  NOT in this diff), ZERO new reds** (franchiseManualSmokeFixture passed this run). DB-version migration is additive + LIVE; the
+  save/load API is build-DARK (UI autosave wires in AUC-4.1).
+- **BROWSER-VERIFY OUTSTANDING (batched, persistence-PRIORITIZED):** confirm a real kbl-league-builder DB migrates v7→v8 with no
+  data loss + an auction session saves/resumes losslessly. **➡ NEXT = AUC-4.1 (hot-seat UI — the §2.3/§2.5 MLB-auction screens) —
+  grounding the existing src_figma page/route patterns before contracting (largest greenfield lift; user-facing → JK browser sign-off batched).**
