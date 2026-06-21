@@ -231,6 +231,18 @@ export interface ProspectScoutingDraftOutput {
 }
 
 const GRADES: Grade[] = ['A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D'];
+const STANDARD_GRADE_WEIGHTS: Array<[Grade, number]> = [
+  ['A', 2],
+  ['A-', 5],
+  ['B+', 10],
+  ['B', 15],
+  ['B-', 15],
+  ['C+', 15],
+  ['C', 18],
+  ['C-', 12],
+  ['D', 8],
+  ['A+', 0],
+];
 const POSITION_POOL: DraftPosition[] = [
   'SP', 'SP', 'SP', 'SP',
   'RP', 'RP', 'CP',
@@ -313,49 +325,6 @@ function adjustGrade(grade: Grade, stepsTowardBetter: number): Grade {
   const index = gradeIndex(grade);
   if (index < 0) return grade;
   return GRADES[Math.max(0, Math.min(GRADES.length - 1, index - stepsTowardBetter))];
-}
-
-function roundGradeWeights(round: number): Array<[Grade, number]> {
-  if (round === 1) {
-    return [
-      ['A', 4],
-      ['A-', 8],
-      ['B+', 15],
-      ['B', 20],
-      ['B-', 22],
-      ['C+', 18],
-      ['C', 8],
-      ['C-', 3],
-      ['D+', 1],
-      ['D', 1],
-    ];
-  }
-  if (round <= 3) {
-    return [
-      ['A', 2],
-      ['A-', 5],
-      ['B+', 10],
-      ['B', 15],
-      ['B-', 20],
-      ['C+', 25],
-      ['C', 15],
-      ['C-', 5],
-      ['D+', 2],
-      ['D', 1],
-    ];
-  }
-  return [
-    ['A', 1],
-    ['A-', 2],
-    ['B+', 5],
-    ['B', 10],
-    ['B-', 15],
-    ['C+', 25],
-    ['C', 25],
-    ['C-', 12],
-    ['D+', 4],
-    ['D', 1],
-  ];
 }
 
 function gradeCenter(grade: Grade): number {
@@ -526,11 +495,10 @@ export function generateHiddenPersonalityModifiers(seed: string): HiddenPersonal
   };
 }
 
-function buildCandidate(input: ProspectScoutingDraftInput, index: number, totalPicks: number): GeneratedProspectCandidate {
+function buildCandidate(input: ProspectScoutingDraftInput, index: number): GeneratedProspectCandidate {
   const seed = `${input.seed}:candidate:${index}`;
   const position = pick(`${seed}:position`, POSITION_POOL);
-  const roundHint = Math.min(input.rounds, Math.floor(index / Math.max(1, totalPicks)) + 1);
-  const trueGrade = pickWeighted(`${seed}:grade`, roundGradeWeights(roundHint));
+  const trueGrade = pickWeighted(`${seed}:grade`, STANDARD_GRADE_WEIGHTS);
   const ratings = buildRatings(seed, trueGrade, position);
   const traitPool = isPitcher(position) ? PITCHER_TRAITS : BATTER_TRAITS;
   const traitRoll = randomUnit(`${seed}:trait-count`);
@@ -726,7 +694,7 @@ export function generateProspectScoutingDraft(
   const pickOrder = buildPickOrder(input);
   const totalPicks = pickOrder.length;
   const poolSize = Math.max(totalPicks, totalPicks * (input.candidatePoolMultiplier ?? 3));
-  const draftClass = Array.from({ length: poolSize }, (_, index) => buildCandidate(input, index, totalPicks));
+  const draftClass = Array.from({ length: poolSize }, (_, index) => buildCandidate(input, index));
   const available = [...draftClass];
   const usedIds = new Set(input.existingPlayerIds ?? []);
   const selectedPicks: ProspectDraftPick[] = [];
