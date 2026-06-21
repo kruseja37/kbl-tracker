@@ -2231,3 +2231,26 @@ NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its 
   On landing: audit (builder≠auditor) + full Mode-1 suite + commit. **BROWSER-VERIFY (batched, JK):** the WHOLE auction surface (incl. the AUC-3.1
   v7→v8 migration + resume) once 4.1b lands — the user-facing visual gate. **➡ after AUC-4.1b ⇒ auction PLAYABLE 7/~8** → AUC-5.1 (farm)
   → 5.2 (L-ECON1 freeze) → scout-privacy UI → POSITION_POOL SP/RP fix; Mode-2 = LSIM-P3.
+
+**WAVE 30 — ✅ AUC-4.1b COMMITTED `fb07ad6d` ⇒ THE MLB AUCTION IS PLAYABLE END-TO-END WITH THE RICH UI (auction 7/~8).**
+- Codex(gpt-5.5,xhigh)-built → **Opus-audited (builder≠auditor): VERIFIED.** 2 files (page + smoke test), PAGE-ONLY (no engine/hook/storage
+  touched). The §2.3 7-element OPEN_BIDDING turn view (lot card w/ primary+secondary position badges + IV/reserve advisory · high bid+bidder
+  by NAME · YOUR budget · YOUR `getTeamAuctionMaxBid` cap · slots-remaining + roster position tally · raise presets[+1×/+2×/+5×]+custom both
+  CLAMPED to maxBid · Pass · §2.4 handoff prompt "Pass device to [team]"/"Hold — CPUs resolving"), §2.5 nomination pool (position filter + IV
+  sort toggle, default desc; the old 24-row cap dropped), distinct SOLD/PASSED/SET_ASIDE color notices, NAMES-not-IDs throughout (resultText/
+  high-bidder/still-in/lot-log all resolve via the maps), debug `<pre>` dump REMOVED. Consumes the AUC-4.2 hook/engine AS-IS — the UI helpers
+  (`findNextHumanNominatorTeamId`, `clampBidAmount`) are presentation/input-validation only, NO auction logic duplicated. **HOST GATE:**
+  `NODE_ENV= tsc -b` exit 0 + full Mode-1 suite **7942 pass / 2 fail (474 files): both CHARACTERIZED (wpaRuntimeBoundary hard +
+  franchiseManualSmokeFixture solo-confirmed 4/4), ZERO new reds** (page test 2/2 green). positions-needed = the flagged slots+roster-tally
+  fallback (no auction position-requirement model exists — as the contract permitted).
+- **🟡 MINOR UX NIT (for the JK browser batch, non-blocking, contract-faithful):** the cheapest raise preset = `minBid + 1×increment`, so there is
+  no one-tap "bid the EXACT minimum" button — the custom field covers it. This is exactly what the AUC-4.1b contract specified ("+1×/+2×/+5× the
+  increment ABOVE the current min bid"); flagging in case JK wants a bare-minimum preset added later.
+- **⇒ THE 2 AUC-4.1a LIMITATIONS ARE CLOSED:** (A) the challenger heuristic → faithful §2.1 round-robin (AUC-4.2 engine pointer); (B) CPU
+  lone-survivor PASS → §7.6 claim-at-reserve (AUC-4.2). **BROWSER-VERIFY (batched, JK — the user-facing visual gate):** the WHOLE auction surface
+  end-to-end on a real locked league — launch → nominate (filter/sort) → bid (presets/custom, maxBid clamp, auto-pass) → SOLD/PASSED notices →
+  device-handoff prompts → CPU shills resolving in place → lone-survivor claim → AUCTION_COMPLETE; PLUS the AUC-3.1 v7→v8 migration + mid-draft
+  resume (persistence-prioritized). **➡ NEXT = AUC-5.1 (farm auction, §3)** — the larger §3 build: MLB-then-farm sequencing, scout-obscured value
+  (§3.2, reuse §7.4 scout-range), positions-visible/ratings-hidden card (§3.3), walled-off farm wallet (§3.4, NEW separate budget), scout-hiring
+  dependency (§3.5/§6 Q8 — every team must hire a scout, no scout-less path). Then AUC-5.2 (L-ECON1 freeze) → scout-privacy UI (§6.1) → POSITION_POOL
+  SP/RP fix; Mode-2 = LSIM-P3. Grounding §3 at source next.

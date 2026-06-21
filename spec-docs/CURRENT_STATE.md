@@ -3,17 +3,21 @@
 > **⚙️ AUTH-4 OVERNIGHT RUN IN PROGRESS (2026-06-20 → 2026-06-21).** JK enacted unattended AUTH-4. **Single-Captain (Shape A):**
 > Opus owns this integration line `codex/franchise-v1-next` (docs + Mode-2 dispatch/audit) + dispatches Codex for Mode-1 in
 > worktree `/Users/johnkruse/Projects/kbl-mode1` [`codex/mode1-v1`]. Codex builds, Opus audits, branch-only, never push.
-> **LIVE LEDGER = `AUTONOMOUS_RUN_LOG.md` (WAVE 1–27) — read it top-to-bottom on return; it supersedes everything below.**
+> **LIVE LEDGER = `AUTONOMOUS_RUN_LOG.md` (WAVE 1–30) — read it top-to-bottom on return; it supersedes everything below.**
 > **DONE this run:** Mode-2 **L14 fully built** (L14-1/2a/2b/3) ⇒ L1–L14 all build-dark; **L-SIM LSIM-P1 GREEN** (60g
 > findings=0, determinism byte-identical, L14 proven dormant). Mode-1 **prospect-gen COMPLETE (B1–B9, ±0.3pp to §3.2)**;
-> **auction track at 6/~8 — AUC-1.1/1.2/2.1/2.2/3.1/4.1a committed** (2.2 `ed846e5d`, 3.1 `2ef82fa3` = leagueBuilder v7→v8
-> auctionSessions store + resume, 4.1a `b2a0d610` = hot-seat UI foundation: page+route+`useAuctionDraft` hook+autosave).
-> **QUEUE (fresh session resumes here):** **AUC-4.1b** (rich §2.3/§2.5 visual screens + the 2 flagged limits) → 5.1 (farm) →
-> 5.2 (L-ECON1 freeze) + scout-privacy UI + the POSITION_POOL SP/RP fix; Mode-2 = LSIM-P3 (full-matrix passport).
-> **OPEN DECISIONS / FLAGS for JK** (in the ledger): AUC-2.2 sim-tune defaults (bargainInterestCurve + shill profiles); AUC-4.1a
-> limits (A) challenger-vs-round-robin turn order, (B) CPU lone-survivor passes; AUC-3.1 whole-blob-persist default; +earlier
-> B8 fixed-age, L14-2b non-ACID edge, POSITION_POOL SP/RP gap. **BROWSER-VERIFY batched:** leagueBuilder v7→v8 migration +
-> auction resume (AUC-3.1, persistence-prioritized); the whole auction surface once 4.1b lands.
+> **auction track at 7/~8 — THE MLB AUCTION IS PLAYABLE END-TO-END (rich UI).** AUC-1.1/1.2/2.1/2.2/3.1/4.1a/4.2/4.1b committed
+> (3.1 `2ef82fa3` = leagueBuilder v7→v8 auctionSessions store + resume; 4.1a `b2a0d610` = hot-seat UI foundation; **4.2 `ce69036d`
+> = engine turn-fidelity: faithful §2.1 bid-rotation pointer + §7.6 CPU lone-survivor claim [closes the 2 flagged 4.1a limits];
+> 4.1b `fb07ad6d` = rich §2.3 turn view + §2.5 filter/sort pool + SOLD/PASSED notices + §2.4 handoff + names-not-IDs**).
+> **QUEUE (fresh session resumes here):** **AUC-5.1 (farm auction, §3)** — MLB-then-farm sequencing + scout-obscured value (§3.2) +
+> positions-visible/ratings-hidden card (§3.3) + walled-off farm wallet (§3.4) + scout-hiring dep (§3.5/§6 Q8) → 5.2 (L-ECON1
+> settledSalary freeze) → scout-privacy UI (§6.1) → POSITION_POOL SP/RP fix; Mode-2 = LSIM-P3 (full-matrix passport).
+> **OPEN DECISIONS / FLAGS for JK** (in the ledger): AUC-2.2 sim-tune defaults (bargainInterestCurve + shill profiles); AUC-4.2
+> nominator-first bid-rotation sub-fork (vs team-after-nominator — both terminate, shifts CPU bid seq); AUC-4.1b raise presets start at
+> minBid+1×increment (no bare-minimum one-tap preset); AUC-3.1 whole-blob-persist default; +earlier B8 fixed-age, L14-2b non-ACID
+> edge, POSITION_POOL SP/RP gap. **BROWSER-VERIFY batched:** the WHOLE auction surface end-to-end (4.1b landed) + the leagueBuilder
+> v7→v8 migration + mid-draft resume (AUC-3.1, persistence-prioritized) — the user-facing visual gate.
 > **⚠ Everything below this block is STALE (L13-era) — trust the ledger.** `caffeinate` PID 84474 keeps the Mac awake.
 > **⚠ SOLO-WORKER:** a JK-invoked session is the SOLE owner (collision reconciled WAVE 23). On handoff, let the SINGLE
 > auto-spawn continue — do NOT also manually start a session (that double-invoke = the WAVE 22/23 collision).
