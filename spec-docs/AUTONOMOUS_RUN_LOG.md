@@ -2401,3 +2401,13 @@ reds** (+4); **AUC-3.1 round-trip 1/1 + version-pin 7/7 green** (storage refacto
 deliverable: mirror `LeagueBuilderAuctionDraft` but §3.3-obscured (name+positions SHOWN; ratings HIDDEN; value = the 5.1b scout RANGE, never true IV)
 + the per-bidder scout-range. Then AUC-5.1d-3 (MLB→farm sequencing + per-league format config) = the final farm wiring.
 
+**WAVE 42 — AUC-5.1e-1 (farm hook: expose pool+scouts, regenerate-on-resume) CONTRACTED + DISPATCHED.**
+- Grounding gap found: the farm UI page needs the GENERATED prospect DTOs (name+positions — NOT in leagueData.players) + per-team scouts, but the
+  5.1d-2 hook DISCARDED the pool (`buildFarmAuctionSession(...).session`) + didn't expose scouts. So 5.1e splits: **5.1e-1** (hook plumbing — expose
+  `pool`+`scoutsByTeamId`+`farmTierCap`, REGENERATE the pool deterministically on resume) → **5.1e-2** (the §3.3 obscured page). `scoutAccuracy` is
+  exported (prospectScoutingDraftEngine.ts:873) for the per-bidder range.
+- **MAKE-OR-BREAK:** regenerated `pool.auctionPlayers` MUST === persisted `session.players` (deterministic in leagueId/seed/teamDraftOrder/scouts; the
+  pool depends only on those, NOT roster contents → stable mid-auction). Proven by a determinism test. DESIGN CALL: regenerate-on-resume (lean) vs
+  persist-the-DTOs (robust) — took regenerate, flagged. Contract committed; dispatched to Codex (gpt-5.5, xhigh) bg `b9bf1btep`. On landing: read-the-diff
+  audit + full Mode-1 suite + commit. **➡ after 5.1e-1 = AUC-5.1e-2** (the farm UI page §3.3) → AUC-5.1d-3 (sequencing+format) = the final farm wiring.
+
