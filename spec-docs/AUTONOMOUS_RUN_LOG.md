@@ -2290,3 +2290,16 @@ NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its 
   very-high, the 400 trap) via `codex exec -C …/kbl-mode1` stdin-from-contract, background task `bhw99f3z2` → `/tmp/codex-auc51a.out`.
   On landing: read-the-diff audit (builder≠auditor) + FULL Mode-1 suite host gate (additive export to the widely-imported prospect engine →
   transitive-mock-break risk) + commit. **➡ after 5.1a = AUC-5.1b** (scout §3.2 value-range, also fork-free).
+- **✅ AUC-5.1a COMMITTED `ecd36347` — Codex(gpt-5.5,xhigh)-built → Opus-audited (builder≠auditor): VERIFIED.** 3 files (NEW
+  `src/utils/farmAuctionPool.ts` + NEW test + additive `generateProspectPool` export on prospectScoutingDraftEngine). `buildFarmAuctionPool` →
+  `{prospects: DTO[], auctionPlayers: AuctionPlayer[]}`: generates an UNassigned prospect pool (reuses `buildCandidate`+`buildPlayerDto`, NO snake
+  draft, `leagueAssignments=[]`) + prices each via **`calculateIvBaseSalary(toFarmAuctionSalaryPlayer(prospect)).ivBase`** — the IDENTICAL MLB-pool
+  path. **MAKE-OR-BREAK VERIFIED AT SOURCE:** `toFarmAuctionSalaryPlayer` mirrors `toSalaryPlayer` (useLeagueBuilderData.ts:177-215) FIELD-FOR-FIELD
+  (same id/name/isPitcher/positions/pitcherRole/ratings/battingRatings/age/bats/fame/traits/arsenal/armSlot — both omit personality+isTwoWay) ⇒ a
+  prospect and an MLB player with identical ratings get identical IV (one currency across both auction economies). `computeIvPercentiles` faithfully
+  replicated. **HOST GATE:** `tsc -b` 0 + full Mode-1 suite **7948 pass / 1 fail (475 files) = wpaRuntimeBoundary (hard-characterized, not in diff),
+  ZERO new reds** (+5 = farmAuctionPool.test, incl. salary-independence + determinism + pool-size + percentile-monotonic). PURE / build-DARK, no store/DB.
+  **NOTE:** the parity test's `expectedSalaryPlayer` is the test's own copy (mildly circular) — the true MLB-parity is closed by the at-source field
+  comparison above, not the test. POSITION_POOL's skew is orthogonal (its own flagged ticket; pricing is correct regardless of position mix).
+  **➡ NEXT = AUC-5.1b** (scout §3.2 value-range: pure `[trueIV(1±w)]`, w=0.6·(1−scoutAccuracy), midpoint seeded-jitter — consumes the existing
+  `scoutAccuracy` 45–92 → /100; fork-free, build-DARK).
