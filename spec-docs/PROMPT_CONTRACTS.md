@@ -15040,3 +15040,43 @@ Use xhigh reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: AUC-4.1b ===== -->
+
+<!-- ===== CONTRACT: AUC-5.1a (farm prospect-pool registration + IV pricing) ===== -->
+## CONTRACT — AUC-5.1a (priced farm prospect pool — generate + price via the MLB path, §3) — 2026-06-21 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5, xhigh). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** Mode-1 FARM AUCTION — the FIRST, fork-free sub-ticket of the 5-ticket AUC-5.1 split (see `spec-docs/AUC-5.1_SCOPE_MAP.md` §2). Build a PRICED farm prospect pool the §2 hot-seat machine can nominate. PURE/data, **build-DARK** (no live caller until AUC-5.1d wraps it). DEPENDS ON the committed MLB auction chain (AUC-1.1…4.1b) + the existing prospect/scout engine.
+
+**GOAL:** Produce a deterministic, IV-priced pool of farm prospects exposed as `AuctionPlayer[]` (`{playerId, iv, ivPercentile}` — the exact shape `auctionStateMachine.initAuctionSession` nominates), plus the parallel prospect records (for AUC-5.1c/d/e to use for the §3.3 card + farm-roster assignment). The prospects are GENERATED (reuse the existing generator); each is priced by the **IDENTICAL path the MLB auction pool uses**.
+
+**MAKE-OR-BREAK (the economy-consistency invariant):** a prospect and an MLB player with **identical `PlayerForSalary` inputs MUST get the identical `iv`.** The MLB auction pool prices each player as `iv = calculateIvBaseSalary(toSalaryPlayer(player)).ivBase` (`useLeagueBuilderData.ts:397-415`, esp. :414; `ivBase = kblIV`, `salaryCalculator.ts:741-744`). The farm pool MUST price prospects through the SAME `calculateIvBaseSalary(...).ivBase`. Do **NOT** invent a new IV formula, do **NOT** call `computeIV`/`ivEngine` directly, do **NOT** use the round-based prospect `salary` as the IV. The two auction economies must be one currency.
+
+**SOURCE OF TRUTH (RE-READ EACH AT SOURCE before building — do not trust this contract's line numbers blindly):**
+- `AUCTION_DRAFT_SPEC.md` §3 (farm reuses the §2 machine + §7.5 bidding wholesale) + §3.4 (the farm wallet self-calibrates "§5.2 over the prospect pool" ⇒ prospects ARE IV-priced) + `spec-docs/AUC-5.1_SCOPE_MAP.md` §1-2.
+- **MLB pricing path to MIRROR:** `src/src_figma/hooks/useLeagueBuilderData.ts` `registerLeaguePool` (:397-415) → `iv: calculateIvBaseSalary(toSalaryPlayer(player)).ivBase` (:414); the prospect→`PlayerForSalary` mapping must MIRROR `toSalaryPlayer` (:177-2xx) EXACTLY (position via `toSalaryPosition` :152, pitcher detect, ratings/battingRatings, age, fame, bats, traits, arsenal).
+- **Pricer:** `calculateIvBaseSalary(player: PlayerForSalary): { ivBase, ivBreakdown }` (`src/engines/salaryCalculator.ts:741`); `PlayerForSalary` shape (:87 — needs `ratings, age, fame, isPitcher, primaryPosition, …`).
+- **ivPercentile:** MIRROR `computeIvPercentiles` (`src/src_figma/app/hooks/useAuctionDraft.ts:93` — rank-of-iv across the pool, 0–100, ties→first index, `denominator=max(1,n-1)`).
+- **Generator (reuse — do NOT change generation logic):** `src/utils/prospectScoutingDraftEngine.ts` — `buildCandidate` (:929, LOCAL → export it OR add a pure pool-gen wrapper), `buildProspectPlayerForPick` (exported :1101) builds the full `LeagueBuilderProspectPlayerDto` (:157, has ratings/age/fame/positions/traits/arsenal — everything the pricer needs). `generateProspectScoutingDraft` (:1119) shows the pool-assembly pattern (`draftClass = Array.from({length: poolSize}, (_,i) => buildCandidate(input,i))` :1155) — **but do NOT run its snake draft; we only want the generated, UNassigned pool.**
+
+**DESIGN CALLS (Captain, AUTH-4 — documented for JK; flagged as OPEN-DECISIONS):**
+1. **Pool size** = `farmRosterSlots(=10) × teamCount × poolMultiplier` (default `poolMultiplier = 3`, mirroring the snake `candidatePoolMultiplier`) → enough nomination surplus for a 10-man farm auction. (Flagged — exact multiplier is a sim-tune dial.)
+2. **Prospect→`PlayerForSalary` mapping is REPLICATED** in the new farm module (mirroring `toSalaryPlayer`, with a `// mirrors toSalaryPlayer (useLeagueBuilderData.ts:177)` citation) rather than imported — a `src/utils/` module must NOT depend on a `src_figma` hook. **OPEN-DECISION for JK:** a future refactor could extract a shared player→PlayerForSalary mapper to kill the drift risk; for now the citation + a parity test guard it.
+3. The pool `AuctionPlayer` carries only `{playerId, iv, ivPercentile}`; **salary is set by the winning bid** (§7.5), so no salary field is needed in the pool (the prospect's round-based `salary` is irrelevant to the auction).
+
+**CONSTRAINTS — exactly these files:**
+1. **NEW `src/utils/farmAuctionPool.ts`** — export `buildFarmAuctionPool(input): FarmAuctionPool` where `input = { leagueId, seasonNumber, teamCount (or teamDraftOrder), seed, scoutsByTeamId?, poolMultiplier? }` and `FarmAuctionPool = { prospects: LeagueBuilderProspectPlayerDto[]; auctionPlayers: AuctionPlayer[] }` (import `AuctionPlayer` type from `../engines/auctionStateMachine`). Logic: (a) generate `poolSize` prospects via the reused generator (full DTOs, UNassigned — no snake draft); (b) price each: build a `PlayerForSalary` from the prospect mirroring `toSalaryPlayer`, then `iv = calculateIvBaseSalary(that).ivBase`; (c) compute `ivPercentile` per prospect mirroring `computeIvPercentiles`; (d) return both arrays, ordered deterministically by the seed. PURE (no IndexedDB/store/Date/Math.random — seed-driven via the generator's existing seeded RNG).
+2. **`src/utils/prospectScoutingDraftEngine.ts`** — ADDITIVE export only IF needed to reuse the generation without the draft: either `export` `buildCandidate`, or add a thin `export function generateProspectPool(input, count): LeagueBuilderProspectPlayerDto[]` that reuses `buildCandidate` + the candidate→DTO path (mirror `buildProspectPlayerForPick`). Do NOT alter generation/scoring/POSITION_POOL logic (that's a separate flagged ticket).
+3. **NEW `src/utils/tests/farmAuctionPool.test.ts`** — (a) **PRICING PARITY (the make-or-break):** construct a prospect with known ratings/age/fame/position and assert its pool `iv` === `calculateIvBaseSalary(<the equivalent PlayerForSalary built the same way>).ivBase` (and that a hitter and a pitcher prospect both price sanely > 0); (b) `ivPercentile` is in [0,100], monotonic with iv, top iv → ~100; (c) determinism: same seed → identical pool (ids, ivs, order); (d) pool size === `10 × teamCount × poolMultiplier`.
+
+**DO NOT:** run or modify the snake prospect draft; modify `salaryCalculator.ts` / `ivEngine.ts` / frozen IV economics / the IV oracle; add a store / DB-version bump; add the scout VALUE-range (that's AUC-5.1b) or the farm wallet (AUC-5.1c) or any live caller (build-dark — AUC-5.1d wires it); import from any `src_figma` hook into this `src/utils` module. Branch `codex/mode1-v1` only; do NOT commit (Opus commits after audit); do NOT push.
+
+**EXPECTED OUTPUT:** a pure `buildFarmAuctionPool` producing a deterministic, MLB-consistent IV-priced prospect pool as `AuctionPlayer[]` + the prospect DTOs, with a pricing-parity test proving farm IV == the MLB pricing path. Build-dark.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` exit 0; `NODE_ENV= npx vitest run src/utils/tests/farmAuctionPool.test.ts` → green. Report ACTUAL output. (Opus runs the FULL Mode-1 suite as the host gate — the additive export touches the widely-imported prospect engine, so transitive-mock-break risk is in scope.)
+
+**FORMAT:** 1) EVERY changed/new path + total; 2) the prospect→PlayerForSalary mapping (and how it mirrors `toSalaryPlayer`) + how you reused the generator without the draft + the pricing-parity proof; 3) ACTUAL tsc + the test output; 4) "AUC-5.1a complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL (STOP-IF):** if `registerLeaguePool` does NOT price via `calculateIvBaseSalary(toSalaryPlayer(...)).ivBase` → STOP and quote what it actually does. If a prospect CANNOT be mapped to `PlayerForSalary` (a field `calculateIvBaseSalary` needs that the prospect DTO lacks) → STOP and quote the missing field. If the generator cannot be reused to produce an UNassigned pool without running the snake draft → STOP and report. If pricing a prospect yields `iv ≤ 0` or `NaN` → STOP and report the input.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: AUC-5.1a ===== -->
