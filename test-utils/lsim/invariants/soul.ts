@@ -12,6 +12,11 @@ import {
   franchiseRelationshipEdgeId,
   type RelationshipEdgeType,
 } from '../../../src/utils/franchiseRelationshipEdgesStorage';
+import {
+  RELATIONSHIP_INTEL_INACCURACY_RATE,
+  relationshipIntelRoll,
+  relationshipIntelSeed,
+} from '../../../src/utils/franchiseRelationshipIntel';
 import { checkpointCountForCadence } from '../../../src/data/rosterEngineConstants';
 import type { FranchiseDesignationType } from '../../../src/utils/franchiseDesignations';
 import type { Player } from '../../../src/utils/leagueBuilderStorage';
@@ -56,6 +61,7 @@ const RACE_SNUB_SOURCE_PREFIX = 'race-snub:';
 const RELATIONSHIP_HIT_SOURCE_PREFIX = 'relationship-hit:';
 const RELATIONSHIP_RECOVERY_SOURCE_PREFIX = 'relationship-recovery:';
 const RELATIONSHIP_CHARGED_SOURCE_PREFIX = 'relationship-charged:';
+const RELATIONSHIP_FAN_NUDGE_SOURCE_PREFIX = 'relationship-visible-fan-nudge:';
 
 export interface LsimRelationshipMoraleDeltaSummary {
   relationshipHits: number;
@@ -661,6 +667,96 @@ function relationshipMoraleTapDevelopmentBoundary(snapshot: LsimStateSnapshot): 
   );
 }
 
+function relationshipRep4FanNudgeBoundary(snapshot: LsimStateSnapshot): LsimInvariantResult {
+  const relationshipNews = snapshot.seasonNewsItems.filter((item) => item.eventType === 'RELATIONSHIP_FLARE');
+  const edgeById = new Map(snapshot.relationshipEdges.map((row) => [row.id, row]));
+  const newsSourceIds = new Set<string>();
+  const newsIssues: string[] = [];
+
+  for (const item of relationshipNews) {
+    const facts = item.facts as Record<string, unknown>;
+    const edgeId = typeof facts.edgeId === 'string' ? facts.edgeId : null;
+    const moveId = typeof facts.relationshipIntelMoveId === 'string' ? facts.relationshipIntelMoveId : null;
+    const sourceEventId = typeof facts.fanNudgeSourceEventId === 'string'
+      ? facts.fanNudgeSourceEventId
+      : typeof facts.relationshipFlareSourceEventId === 'string'
+        ? facts.relationshipFlareSourceEventId
+        : null;
+
+    if (sourceEventId) newsSourceIds.add(sourceEventId);
+    if (!edgeId) newsIssues.push(`${item.id}:missingEdgeId`);
+    if (!moveId) newsIssues.push(`${item.id}:missingMoveId`);
+    if (!sourceEventId) newsIssues.push(`${item.id}:missingFanSource`);
+
+    const edge = edgeId ? edgeById.get(edgeId) : null;
+    if (!edge) {
+      if (edgeId) newsIssues.push(`${item.id}:unknownEdge:${edgeId}`);
+      continue;
+    }
+
+    if (facts.relationshipType !== edge.type) newsIssues.push(`${item.id}:typeDistorted`);
+    if (Number(facts.intensity) !== edge.intensity) newsIssues.push(`${item.id}:intensityDistorted`);
+    if (facts.potential !== edge.potential) newsIssues.push(`${item.id}:potentialDistorted`);
+
+    if (moveId) {
+      const expectedSeed = relationshipIntelSeed({
+        franchiseId: item.franchiseId,
+        seasonId: item.seasonId,
+        moveId,
+      });
+      const expectedRoll = relationshipIntelRoll({
+        franchiseId: item.franchiseId,
+        seasonId: item.seasonId,
+        moveId,
+      });
+      const expectedUnconfirmed = expectedRoll < RELATIONSHIP_INTEL_INACCURACY_RATE;
+
+      if (facts.relationshipIntelSeed !== expectedSeed) newsIssues.push(`${item.id}:seedMismatch`);
+      if (Math.abs(Number(facts.relationshipIntelRoll) - expectedRoll) > 1e-12) newsIssues.push(`${item.id}:rollMismatch`);
+      if (facts.relationshipIntelUnconfirmed !== expectedUnconfirmed) newsIssues.push(`${item.id}:hedgeMismatch`);
+    }
+  }
+
+  const fanNudgeSourceIds = new Set<string>();
+  const duplicateFanSources: string[] = [];
+  const playerChannelNudges: string[] = [];
+  for (const morale of snapshot.moraleSnapshots) {
+    const seenInSnapshot = new Set<string>();
+    for (const entry of morale.history ?? []) {
+      if (!entry.sourceEventId.startsWith(RELATIONSHIP_FAN_NUDGE_SOURCE_PREFIX)) continue;
+      if (morale.targetType !== 'team-fan') {
+        playerChannelNudges.push(`${morale.playerId ?? morale.id}:${entry.sourceEventId}`);
+        continue;
+      }
+      if (seenInSnapshot.has(entry.sourceEventId)) {
+        duplicateFanSources.push(`${morale.teamId ?? morale.id}:${entry.sourceEventId}`);
+      }
+      seenInSnapshot.add(entry.sourceEventId);
+      fanNudgeSourceIds.add(entry.sourceEventId);
+    }
+  }
+
+  const nudgeWithoutNews = [...fanNudgeSourceIds].filter((sourceEventId) => !newsSourceIds.has(sourceEventId));
+  const emittedWithoutNudge = [...newsSourceIds].filter((sourceEventId) => !fanNudgeSourceIds.has(sourceEventId));
+  const warFieldLeaks = warRowsWithForbiddenRelationshipMoraleFields(snapshot);
+  const pass =
+    newsIssues.length === 0 &&
+    duplicateFanSources.length === 0 &&
+    playerChannelNudges.length === 0 &&
+    nudgeWithoutNews.length === 0 &&
+    emittedWithoutNudge.length === 0 &&
+    warFieldLeaks.length === 0;
+
+  return invariantResult(
+    'soul.l13-rep4-fan-nudge-boundary',
+    CRITICAL,
+    pass,
+    pass
+      ? `relationshipFlares=${relationshipNews.length}; fanNudges=${fanNudgeSourceIds.size}; REP-4 seed deterministic; fan nudges are team-fan only and emission-gated`
+      : `newsIssues=${newsIssues.slice(0, 8).join(',') || 'none'}; duplicateFanSources=${duplicateFanSources.slice(0, 4).join(',') || 'none'}; playerChannelNudges=${playerChannelNudges.slice(0, 4).join(',') || 'none'}; nudgeWithoutNews=${nudgeWithoutNews.slice(0, 4).join(',') || 'none'}; emittedWithoutNudge=${emittedWithoutNudge.slice(0, 4).join(',') || 'none'}; warLeaks=${warFieldLeaks.slice(0, 4).join(',') || 'none'}`,
+  );
+}
+
 export function summarizeRelationshipMoraleDeltas(snapshot: LsimStateSnapshot): LsimRelationshipMoraleDeltaSummary {
   type RelationshipHistory = {
     playerId: string;
@@ -1171,6 +1267,7 @@ export function getSoulInvariantChecks(): LsimInvariantCheck[] {
     relationshipFormationCheckpointWrite,
     relationshipIntensityLifecycle,
     relationshipMoraleTapDevelopmentBoundary,
+    relationshipRep4FanNudgeBoundary,
     ratingsOverlayValidity,
     traitTwoSlotNoOffsetHysteresis,
     backupMigrationProof,

@@ -5,7 +5,11 @@ import { isFranchisePhase2MoraleEnabled } from './franchisePhase2Flags';
 export const FRANCHISE_MORALE_STATE_CONTRACT_VERSION = 'franchise-morale-state-v1';
 
 export type FranchiseMoraleTargetType = 'team-fan' | 'player';
-export type FranchiseMoraleSourceKind = 'random-event-confirmation' | 'manual-override' | 'matrix-auto';
+export type FranchiseMoraleSourceKind =
+  | 'random-event-confirmation'
+  | 'manual-override'
+  | 'matrix-auto'
+  | 'relationship-reporter';
 
 export interface FranchiseMoraleScope {
   franchiseId: string;

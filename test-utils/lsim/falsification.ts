@@ -244,6 +244,53 @@ const CASES: Array<{ name: string; mutate: (s: LsimStateSnapshot) => void }> = [
       }] as never;
       s.ratingsOverlays = [];
     } },
+  { name: 'soul.l13-rep4-fan-nudge-boundary',
+    mutate: (s) => {
+      const fanNudgeSourceEventId = 'relationship-visible-fan-nudge:f:s:ss:f:s:ss:p1:p2:FEUD:game-7';
+      s.relationshipEdges = [{
+        id: 'f:s:ss:p1:p2:FEUD',
+        franchiseId: 'f',
+        seasonId: 's',
+        statsScopeId: 'ss',
+        seasonNumber: 1,
+        player1Id: 'p1',
+        player2Id: 'p2',
+        type: 'FEUD',
+        intensity: 0.9,
+        potential: false,
+        accuracy: 0.8,
+        formedAtGameNumber: 2,
+        dissolvedAtGameNumber: null,
+        createdAt: 2,
+        updatedAt: 3,
+      }] as never;
+      s.seasonNewsItems = [{
+        id: 'relationship-news-bad',
+        franchiseId: 'f',
+        seasonId: 's',
+        seasonNumber: 1,
+        eventType: 'RELATIONSHIP_FLARE',
+        subjectIds: ['p1', 'p2'],
+        facts: {
+          edgeId: 'f:s:ss:p1:p2:FEUD',
+          relationshipType: 'FRIENDSHIP',
+          intensity: 0.1,
+          potential: false,
+          relationshipIntelMoveId: 'move-1',
+          relationshipIntelSeed: 'wrong-seed',
+          relationshipIntelRoll: 0.99,
+          relationshipIntelUnconfirmed: true,
+          fanNudgeSourceEventId,
+        },
+      }] as never;
+      s.moraleSnapshots = [{
+        targetType: 'player',
+        playerId: 'p1',
+        currentValue: 47,
+        baselineValue: 50,
+        history: [{ sourceEventId: fanNudgeSourceEventId, delta: -3 }],
+      }] as never;
+    } },
   { name: 'soul.ratings-overlay-validity', // NAMED property now includes the deterministic id
     mutate: (s) => {
       s.players = [{ id: 'p', primaryPosition: 'SS' } as never];
@@ -359,7 +406,7 @@ describe('L-SIM invariant falsification audit', () => {
     const results = CHECKS.map((check) => check(base()));
     const failing = results.filter((r) => !r.pass).map((r) => `${r.name}: ${r.detail}`);
     expect(failing).toEqual([]);
-    expect(results.length).toBe(25);
+    expect(results.length).toBe(26);
   });
 
   test('falsification cases cover every soul invariant exactly once', () => {

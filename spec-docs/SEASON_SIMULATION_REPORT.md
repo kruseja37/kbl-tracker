@@ -71,6 +71,7 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
 | soul.l13-relationship-formation-checkpoint-write | CRITICAL | 60 | 0 |
 | soul.l13-relationship-intensity-lifecycle | CRITICAL | 60 | 0 |
 | soul.l13-relationship-morale-development-boundary | CRITICAL | 60 | 0 |
+| soul.l13-rep4-fan-nudge-boundary | CRITICAL | 60 | 0 |
 | soul.morale-bounds | CRITICAL | 60 | 0 |
 | soul.per-write-idempotency | CRITICAL | 60 | 0 |
 | soul.persistence-backup-migration-proof | CRITICAL | 60 | 0 |
