@@ -2100,3 +2100,50 @@ CRT overlay in theme.css that are dead.
 - **Phase 2 (the sweep) is GATED** on a clean L12 commit + sole-mutator; MUST do the density + copy passes (not just
   hex→token), handle portaled content rendered outside `.franchise-hub` (scoped vars won't resolve there), and keep
   genuinely-inactive families' honest "not yet" wording per D11 #14/#15 (only promote families that are actually live).
+
+---
+
+## 2026-06-21 — RB-1 (Mode-1 scout value model) SPLIT + RB-1b chemistry-fit model RULED (JK attended)
+
+**Context:** RB-1 (`AUCTION_REBUILD_PLAN.md` Phase-1) rewrites the scout value layer (AUC-5.1a/5.1b). Source-grounded this
+session (workflow `wf_c1a73726-c46`, 5 readers + Captain source-verify in the `kbl-mode1` worktree). Finding: RB-1 has a
+clean MECHANICAL half + an under-specified, internally-CONFLICTING soul-layer half (the chemistry-MIX → potency-TIER rule).
+That rule is doubly-defined + conflicting across specs AND fenced by a hard guardrail (IV stays potency-neutral at L2
+forever; the frozen IV oracle is untouchable).
+
+**DECISION 1 — RB-1 is SPLIT (JK):**
+- **RB-1a (build NOW):** the mechanical scout value re-anchor — the displayed band centered on the scout's *biased price
+  opinion* (NOT exact true IV) + a 20–80 numeric overall grade; true IV stays hidden. Captain's documented defaults below.
+- **RB-1b (build after; model ruled now):** the chemistry-fit → potency-tier scout price bump.
+
+**DECISION 2 — RB-1b chemistry-fit model = PER-TRAIT COUNT · 3-TIER · PERCEPTION-LAYER (JK):**
+- **Model = the EOS_RATINGS_ADJUSTMENT_SPEC + IV_ENGINE §7.3 draft-board "marginal synergy" model**, NOT the per-player-
+  chemistry-axis reading of V2 §3.7: each of a prospect's traits is potency-scaled by the COUNT of the GM's already-rostered
+  players sharing **THAT TRAIT's** chemistry type (`EOS_RATINGS_ADJUSTMENT_SPEC.md:478-489`: `getChemistryTier(teamChemistryCount)`).
+  Rationale: it matches how `computeIV` trait pricing + `effectiveRatings` already work (per-trait `ChemistryType`), and the
+  existing §7.3 overlay concept ("this Spirited pick takes you 2→3, upgrading N traits a tier").
+- **3 tiers L1/L2/L3 — resolves the logged CAR-003 conflict.** EOS `getChemistryTier` returns 1–4, but
+  `PotencyTier`/`POTENCY_SCALE`/`effectiveRatings` are all hard-wired to 3 tiers; the 4-tier is the stale outlier. Canon = L1/L2/L3.
+- **Perception-layer ONLY — reconciles the guardrail.** The chemistry-fit bump lives in the SCOUT'S PRICE OPINION (RB-1b),
+  NEVER in canonical IV/salary. Satisfies V2 §3.7 ("scout prices chemistry-fit") AND IV_ENGINE §3.5/D15 ("IV stays L2-reference
+  forever; salary NEVER reprices for chemistry potency"). Implementation = run trait pricing at the chemistry-derived fit tier,
+  take the delta vs the L2 baseline, surface as a price nudge on the scout's opinion. The frozen IV oracle + `computeIV`'s L2
+  default stay byte-untouched.
+- **OPEN for the RB-1b build:** the exact same-chemistry-COUNT → L1/L2/L3 thresholds are unpinned in spec ("SMB4 count→tier
+  thresholds" flagged needed). Captain takes a documented conservative default at RB-1b build + flags for sim-tune (RB-16),
+  unless JK pins them first.
+- CONFLICT-001 (chemistry TYPE list, 4-vs-5) is already resolved by RB-0a (5 canonical codes SPI/DIS/CMP/SCH/CRA).
+
+**RB-1a Captain defaults (per JK "build RB-1a with your defaults"):**
+1. **Band anchor = the scout's biased price opinion** = `trueIV × (1 + bias)`, where `bias` is a per-(scout, prospect)
+   seeded offset scaled by `(1 − accuracy/100)` and floored so it is NEVER exactly 0 → the displayed `[low,high]` midpoint no
+   longer reveals exact true IV (the V1 leak: `perceivedValueRange(auctionPlayer.iv,…)` made midpoint = true IV exactly).
+   On-scale (trueIV-relative). **NOT `FARM_SCOUTED_GRADE_PROJECTED_VALUE`** — verified a DIFFERENT/smaller scale (the
+   analyzer's rookie-scaled "scout-visible salary" at `rosterAnalyzer.ts:356`, not the auction kblIV scale).
+2. **20–80 grade** = linear map of the 12-letter `Grade` ladder (S=80 … D=20) off the SCOUTED letter grade (never the true
+   `scoreSmb4Player` numericScore — that would leak truth).
+3. Width unchanged (reuse `perceivedValueRange` keyed on `scoutAccuracy`).
+4. MLB tier untouched (public IV by design).
+- **Deferred from RB-1a (flagged in `MODE1_REBUILD_JK_BACKLOG.md`):** (a) the farm Opening/reserve still derives from true IV
+  (`reservePriceCurve(ivPct)×iv`) — a secondary back-solvable leak → folded into **RB-2** (nomination/reserve rework, which
+  already touches the state machine); (b) per-bidder scouted GRADE (§3.6 rival-disagreement) → folded into **RB-11** (scout privacy).

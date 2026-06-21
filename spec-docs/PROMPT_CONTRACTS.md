@@ -15468,3 +15468,99 @@ Use xhigh reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-0b-1 ===== -->
+
+<!-- ===== CONTRACT: RB-1a (scout value re-anchor — band off true-IV + 20–80 grade) ===== -->
+## CONTRACT — RB-1a (Mode-1 auction REBUILD: scout value re-anchor) — 2026-06-21 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5) | xhigh reasoning effort. **WORKTREE:** `/Users/johnkruse/Projects/kbl-mode1` [branch
+`codex/mode1-v1`] ONLY (NOT the docs checkout). **Builder = Codex; Auditor = Opus 4.8 (builder≠auditor). Do NOT commit; do
+NOT push — Opus commits after the audit + full-suite gate.**
+
+**ROLE:** You are a precise TypeScript builder implementing one contained, oracle-neutral change to the FARM auction's scout
+value DISPLAY layer.
+
+**GOAL (one sentence):** On the §3.3-obscured FARM auction, center the displayed scout value band on the scout's *biased
+price opinion* instead of the prospect's EXACT true IV, and surface a 20–80 numeric overall grade — so a GM can no longer
+read the exact true IV off the band midpoint — while leaving canonical IV/salary, the frozen oracle, the MLB tier, and the
+auction reserve/bidding mechanics completely unchanged.
+
+**SOURCE OF TRUTH:** `AUCTION_DRAFT_SPEC_V2.md` §3.1 (scout = price range + 20–80 grade, "reused but anchored on the scout's
+price opinion, not true IV"), §3.2 (true IV hidden — "a GM can't infer truth from the midpoint"), §3.4 (positions visible,
+ratings hidden). DECISIONS_LOG 2026-06-21 "RB-1 SPLIT + RB-1a Captain defaults" is binding.
+
+**GROUNDED ANCHORS (re-read each at source before coding — do not trust these line refs blindly):**
+- `src/engines/scoutValueRange.ts:12` — `perceivedValueRange(anchor, scoutAccuracy/*0-100*/, seed): {w, low, high, displayedEstimate}`:
+  `w = SCOUT_NOISE_BASE*(1-acc/100)`, `low/high = anchor*(1∓w)`, displayed = seeded-jittered, forced inside the open band.
+  It is GENERIC (symmetric around its FIRST ARG). **Leave this engine + its test UNCHANGED** — only change what arg 1 is.
+  THROWS if arg 1 ≤ 0 / non-finite.
+- `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx:73-84` — `scoutRangeForProspect` is the V1 leak: it passes
+  `auctionPlayer.iv` (the EXACT true IV; `auctionStateMachine.ts:22`) as arg 1, so `(low+high)/2 === trueIV` exactly.
+  Also: `scoutAccuracy(prospect.primaryPosition, scoutsByTeamId[teamId])` (45–92) and `scoutedGrade()` at :69-71
+  (reads `prospect.prospectProfile.scoutedGrade`, a stored LETTER `Grade`), and `formatScoutRange` at :86-89.
+- `src/utils/prospectScoutingDraftEngine.ts` — `scoutAccuracy` (:934, 45–92); `ProspectProfile` (:103) carries `trueGrade`
+  + `scoutedGrade` + `potentialGrade` (all `Grade`); `gradeDistance(left,right)` exported (:574); `normal`/`adjustGrade` are
+  INTERNAL (do not need them).
+- `src/engines/gradeEngine.ts:19` — `export type Grade = 'S'|'A+'|'A'|'A-'|'B+'|'B'|'B-'|'C+'|'C'|'C-'|'D+'|'D'` (12 letters).
+- `src/data/rosterEngineConstants.ts:57` — `SCOUT_NOISE_BASE = 0.6` (display-only). **Do NOT** anchor on
+  `FARM_SCOUTED_GRADE_PROJECTED_VALUE` (:240) — verified a DIFFERENT, smaller "scout-visible salary" scale (consumed at
+  `rosterAnalyzer.ts:353-356` against a rookie-scaled salary), NOT the auction kblIV scale; using it would make the displayed
+  estimate diverge from the real opening/reserve.
+
+**DESIGN CALLS (ratified Captain defaults — implement exactly, do not redesign):**
+1. **NEW pure module `src/engines/scoutPriceOpinion.ts`** exporting:
+   - `gradeToTwentyEighty(grade: Grade): number` — linear map of the 12-letter ladder to the 20–80 scouting scale
+     (`S`→80 … `D`→20; index 0..11 → `80 - index*(60/11)`), rounded to an integer, clamped [20,80]. Unknown grade → 50.
+   - `scoutPriceOpinion(input: { trueIV: number; scoutAccuracy: number; scoutId?: string; candidateId: string; seed: string }): number`
+     — returns the scout's biased price anchor = `trueIV * (1 + bias)`, where:
+       - `u = seededUnit(\`${seed}:price-bias:${scoutId ?? 'default'}:${candidateId}\`)` ∈ [0,1) via the SAME FNV-1a
+         `hashString`/`seededUnit` pattern as `scoutValueRange.ts:51-62` (copy the helper locally — pure, no Math.random).
+       - `signed = u*2 - 1` ∈ [-1,1); `magnitude = SCOUT_PRICE_BIAS_MAX * (1 - clamp(scoutAccuracy/100,0,1))` with a NEW
+         module const `SCOUT_PRICE_BIAS_MAX = 0.30` (the worst scout, acc 45, biases up to ±0.165; the best, acc 92, ±0.024).
+       - `bias = signed * magnitude`, then FLOOR its absolute value to a tiny `BIAS_FLOOR = 0.01` keeping `signed`'s sign
+         (so the anchor is NEVER exactly `trueIV` even when `signed≈0` → the midpoint never equals truth).
+       - Guard: if `trueIV` ≤ 0 / non-finite, return `trueIV` unchanged (let the caller's existing null/throw path handle it).
+   - Pure/deterministic: no IndexedDB, no `Date`, no `Math.random`, no async. May import the `Grade` type only.
+2. **EDIT `LeagueBuilderFarmAuctionDraft.tsx`** — in `scoutRangeForProspect` replace the arg-1 `auctionPlayer.iv` with
+   `scoutPriceOpinion({ trueIV: auctionPlayer.iv, scoutAccuracy: accuracy, scoutId: scoutsByTeamId?.[teamId]?.scoutId,
+   candidateId: auctionPlayer.playerId, seed: \`${seed}:${teamId}\` })`, then call `perceivedValueRange(thatOpinion, accuracy,
+   \`${seed}:${teamId}:${auctionPlayer.playerId}\`)` (seed UNCHANGED). The band now centers on the biased opinion.
+   Add the 20–80 readout wherever the scouted letter grade is rendered (the nomination row + the open-bidding lot panel):
+   show e.g. `Scout grade {scoutedGrade(prospect)} ({gradeToTwentyEighty(prospect.prospectProfile.scoutedGrade)})` — keep the
+   existing letter, ADD the parenthetical 20–80. Reuse `scoutedGrade()` for the letter; map the SAME stored `scoutedGrade`
+   to 20–80 (the obscured grade, never `trueGrade`).
+3. **NEW `src/engines/__tests__/scoutPriceOpinion.test.ts`** — (a) determinism (same inputs → identical output); (b) the
+   anchor is NEVER exactly `trueIV` (floor holds even at the seed that yields `signed≈0`); (c) a lower `scoutAccuracy` yields a
+   strictly wider possible `|bias|` than a higher one (monotonic in inaccuracy); (d) `gradeToTwentyEighty`: `S`→80, `D`→20,
+   monotonic non-increasing across the ladder, integer in [20,80]; (e) non-positive `trueIV` returns unchanged.
+4. **UPDATE the page's own test** `src/src_figma/__tests__/pages/LeagueBuilderFarmAuctionDraft.test.tsx` (it currently
+   recomputes the expected range via `perceivedValueRange(prospect IV, …)` at ~:248): change the expected anchor to
+   `scoutPriceOpinion(...)` so it asserts the NEW contract, AND add/keep an assertion that the rendered band midpoint is
+   NOT equal to the exact true IV. Do NOT weaken any no-IV/no-rating-leak assertion.
+
+**CONSTRAINTS — do NOT touch:** `src/engines/scoutValueRange.ts` + its test (reuse unchanged); `computeIV`/`ivEngine.ts`/
+`salaryCalculator.ts`/`smb4GradeEmulator.ts`/the frozen IV oracle `spec-docs/reference/iv_oracle.json` (oracle/IV/salary
+neutral); the auction reserve/opening derivation (`auctionStateMachine.ts` `nominatePlayer`/`openingAsk`/`reservePriceCurve`)
+— the farm Opening/reserve IV-leak is DEFERRED to RB-2, not this ticket; the MLB page `LeagueBuilderAuctionDraft.tsx` (public
+IV by design); anything chemistry/potency (that is RB-1b); `FARM_SCOUTED_GRADE_PROJECTED_VALUE`; `rosterAnalyzer*`. No
+trackerDb/store/DB_VERSION change. Branch `codex/mode1-v1` only; do NOT commit, do NOT push.
+
+**EXPECTED OUTPUT:** the farm auction band's `[low,high]` midpoint is the scout's biased opinion (≠ exact true IV), varying
+per bidding team's scout; each prospect shows its letter grade PLUS a 20–80; MLB page, reserves, bidding, IV/salary, and the
+oracle are byte-unchanged.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` exit 0; `NODE_ENV= npx vitest run src/engines/__tests__/scoutPriceOpinion.test.ts
+src/src_figma/__tests__/pages/LeagueBuilderFarmAuctionDraft.test.tsx` green. Paste ACTUAL output. (Opus re-runs the FULL
+Mode-1 suite + confirms zero-new-reds vs `wpaRuntimeBoundary` + no oracle/IV/store change.)
+
+**FORMAT:** 1) every changed/new path + total count; 2) the new module + the page edit + the two test files, and confirm
+`scoutValueRange.ts`/`computeIV`/oracle/reserve all untouched; 3) ACTUAL tsc + test output; 4) "RB-1a complete" OR
+"BLOCKED: <reason>".
+
+**FAILURE PROTOCOL (STOP-IF):** if `perceivedValueRange` rejects the biased anchor (e.g. it can go ≤ 0) → STOP and quote
+(it must stay strictly positive: `trueIV>0` × `(1+bias)` with `|bias|<1`). If `ProspectScoutDescriptor` has no `scoutId`
+field to pass → use a stable fallback (e.g. `teamId`) and report it. If centering the band off true IV forces ANY change to
+the reserve/opening/bidding path or the MLB page → STOP (out of scope; that is RB-2). If a full-suite test elsewhere pins the
+farm band midpoint to exact `auctionPlayer.iv` → report it (do not edit tests outside the two named files without flagging).
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-1a ===== -->

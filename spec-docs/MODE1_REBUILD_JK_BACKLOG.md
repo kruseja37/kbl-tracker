@@ -6,7 +6,7 @@ design decisions. Batched per the SESSION_RULES "Batched browser verification" r
 none of these block the build loop; the **browser-verify batch CLEARS before the
 D0 / flag-flip / iPad-playtest gate (F-141)**. Updated as new RB tickets land.
 
-**Last updated:** 2026-06-21 (after RB-0 complete: RB-0a `edb94d31` · RB-0b-2 `16ca8d61` · RB-0b-1 `fde093ed`).
+**Last updated:** 2026-06-21 (RB-1 SPLIT + RB-1b chemistry-fit model RULED [DECISIONS_LOG 2026-06-21]; RB-1a dispatched. After RB-0 complete: RB-0a `edb94d31` · RB-0b-2 `16ca8d61` · RB-0b-1 `fde093ed`).
 **Scope:** Mode-1 auction rebuild ONLY. The Mode-2 L-stack (L1–L14) has its OWN separate
 post-D13 flag-flip browser batch — tracked in the L-stack section of CURRENT_STATE/the ledger, NOT here.
 
@@ -35,6 +35,8 @@ post-D13 flag-flip browser batch — tracked in the L-stack section of CURRENT_S
 | **D-3** | A `regeneratedAt` guard so `initAuction` skips re-regen on resume | Idempotent-by-seed today (re-run re-writes identical values) → correctness is fine; this is a resume-perf optimization only. | optional, anytime |
 | **D-4** | The league-setup **FORMAT-PICKER UI** (auction-default vs snake) | AUC-5.1d-3 landed the `draftFormat` field + reader; the picker UI is the deferred follow-up. | RB-13 |
 | **D-5** | `POSITION_POOL` SP/RP gap | The prospect generator's `POSITION_POOL` (`prospectScoutingDraftEngine.ts` ~:252) needs SP/RP added + corrected weights. | RB-14 |
+| **D-6** | Farm Opening/reserve still derives from true IV (`reservePriceCurve(ivPct)×iv`, `auctionStateMachine.nominatePlayer`) — a secondary back-solvable IV leak the RB-1a band re-anchor does NOT close. | RB-1a is the DISPLAY re-anchor only; obscuring the reserve/opening touches the shared state machine. | **RB-2** (nomination/reserve rework already touches it). |
+| **D-7** | Per-bidder scouted GRADE (§3.6: rival scouts genuinely disagree on the letter, not just band width). RB-1a re-anchors the band CENTER per-bidder but still displays the single stored `scoutedGrade` + its 20–80. | Per-bidder grade plumbing belongs with the scout-privacy reveal surface. | **RB-11** (scout-privacy UI). |
 
 ---
 
@@ -50,6 +52,7 @@ post-D13 flag-flip browser batch — tracked in the L-stack section of CURRENT_S
 | **O-6** | Prospect age generation (B8) | (current) | §10 "drop the age" — the generator age handling. |
 | **O-7** | `CHEMISTRY_TARGET_DISTRIBUTION` shares (RB-0a) | JK's rounded `.21/.20/.20/.20/.19` (sums to 1.0) | within tolerance of the measured 21.14/18.86 source — honors JK's exact 2026-06-21 ruling. Informational. |
 | **O-8** | FA chemistry form (RB-0a) | FAs excluded from the target/regen | The spec note "FAs carry full-word chemistry" was WRONG — FAs use 3-letter codes too. Informational correction. |
+| **O-9** | RB-1b same-chemistry-COUNT → potency-TIER thresholds (how many same-chem teammates → L1/L2/L3) | Captain conservative default at RB-1b build + sim-tune (RB-16) | Model already RULED per-trait-count / 3-tier / perception-layer (DECISIONS_LOG 2026-06-21); only the numeric count→tier cut-points stay open. JK may pin them; else the documented default stands. |
 
 ---
 
