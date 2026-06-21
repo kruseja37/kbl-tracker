@@ -2446,3 +2446,17 @@ the whole MLB + farm auction surface.
   version-pin intact + commit. **➡ after 5.1d-3 ⇒ AUC-5.1 (MLB + FARM auction) COMPLETE** → AUC-5.2 (L-ECON1 two-number freeze §4, trackerDb franchise
   bridge — the economy-correctness gate) → scout-privacy UI (§6.1) → POSITION_POOL SP/RP fix; Mode-2 = LSIM-P3.
 
+**WAVE 47 — ✅ AUC-5.1d-3 COMMITTED `f0e7c7a9` ⇒ 🎉 AUC-5.1 COMPLETE: THE ENTIRE MODE-1 AUCTION DRAFT (MLB + FARM) IS BUILT + PLAYABLE.**
+Codex-built → Opus-audited: VERIFIED. Additive `LeagueTemplate.draftFormat?` + `getLeagueDraftFormat` (default snake, NO DB bump) + MLB
+AUCTION_COMPLETE → "PROCEED TO FARM AUCTION →" link (§3.1) + farm freeze-placeholder note. tsc 0 + full suite **7975 pass / 1 fail =
+wpaRuntimeBoundary (characterized), zero new reds**; version-pin 7/7 (no DB change). **⇒ AUC-5.1 DONE (16 tickets this run):** MLB AUC-1.1..4.1b +
+FARM 5.1a/b/c (engine) + 5.1d-1/d-2 (session+hook) + 5.1e-1/e-2 (pool-expose+UI) + 5.1d-3 (sequencing+format). Routes live (build-DARK):
+`/league-builder/auction-draft` + `/league-builder/farm-auction-draft`. **DESIGN FLAGS for JK (all in-ledger):** draftFormat default snake (vs
+§9.A auction-primary); user-link sequencing (not auto); farm-wallet emergent-nerf; AUC-4.2 nominator-first rotation; 4.1b raise-preset min; 5.1b
+midpoint-jitter; 5.1e-1 regenerate-on-resume; the league-setup format-picker UI deferred. **JK BROWSER-VERIFY BATCHED:** the whole MLB+farm auction
+surface (v7→v8 migration + resume + §3.3 obscuring).
+**➡ NEXT = AUC-5.2 (L-ECON1 two-number freeze, §4)** — the economy-correctness gate: stamp `{trueValue, settledSalary, checkpoint:0}` per rostered
+player at whole-draft completion via the FRANCHISE freeze store (`franchiseTrueValueSnapshots`, **trackerDb** — a saved-shape/franchise-bridge ticket,
+careful class; `settledSalary?` is the only additive field per the L-ECON1 gotcha). GROUND AT SOURCE FIRST. Then scout-privacy UI (§6.1) →
+POSITION_POOL SP/RP fix; Mode-2 = LSIM-P3.
+

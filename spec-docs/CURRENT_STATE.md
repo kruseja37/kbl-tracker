@@ -3,22 +3,21 @@
 > **⚙️ AUTH-4 OVERNIGHT RUN IN PROGRESS (2026-06-20 → 2026-06-21).** JK enacted unattended AUTH-4. **Single-Captain (Shape A):**
 > Opus owns this integration line `codex/franchise-v1-next` (docs + Mode-2 dispatch/audit) + dispatches Codex for Mode-1 in
 > worktree `/Users/johnkruse/Projects/kbl-mode1` [`codex/mode1-v1`]. Codex builds, Opus audits, branch-only, never push.
-> **LIVE LEDGER = `AUTONOMOUS_RUN_LOG.md` (WAVE 1–37) — read it top-to-bottom on return; it supersedes everything below.**
+> **LIVE LEDGER = `AUTONOMOUS_RUN_LOG.md` (WAVE 1–47) — read it top-to-bottom on return; it supersedes everything below.**
 > **DONE this run:** Mode-2 **L14 fully built** (L14-1/2a/2b/3) ⇒ L1–L14 all build-dark; **L-SIM LSIM-P1 GREEN** (60g
 > findings=0, determinism byte-identical, L14 proven dormant). Mode-1 **prospect-gen COMPLETE (B1–B9, ±0.3pp to §3.2)**;
-> **auction track at 7/~8 — THE MLB AUCTION IS PLAYABLE END-TO-END (rich UI).** AUC-1.1/1.2/2.1/2.2/3.1/4.1a/4.2/4.1b committed
-> (3.1 `2ef82fa3` = leagueBuilder v7→v8 auctionSessions store + resume; 4.1a `b2a0d610` = hot-seat UI foundation; **4.2 `ce69036d`
-> = engine turn-fidelity: faithful §2.1 bid-rotation pointer + §7.6 CPU lone-survivor claim [closes the 2 flagged 4.1a limits];
-> 4.1b `fb07ad6d` = rich §2.3 turn view + §2.5 filter/sort pool + SOLD/PASSED notices + §2.4 handoff + names-not-IDs**). **FARM auction
-> (AUC-5.1, §3) ENGINE LAYER COMPLETE — 3/5:** 5.1a `ecd36347` = priced prospect pool (MLB-IV parity at source); 5.1b `d0a5fae5` = §3.2 scout
-> value-range; 5.1c `456e0f46` = §3.4 walled-off wallet (§5.2 self-cal cap, emergent nerf). All pure/build-DARK/zero-new-reds.
-> **QUEUE (fresh session resumes here):** **AUC-5.1d (farm-auction WRAPPER + MLB→farm sequencing, §3.1)** — the INTEGRATIVE ticket (heaviest
-> farm piece): drive the §2 hot-seat machine for the farm round off the 5.1a pool (`buildFarmAuctionPool`) + 5.1c wallet (`buildFarmAuctionTeamInputs`/
-> `computeFarmTierCap`) with the 5.1b scout-range (`perceivedValueRange`) as the DISPLAY anchor (true IV internal); MLB→farm sequencing (§3.1, the
-> existing "MLB=22 first" prereq is the seam); per-league auction-vs-snake format config. **RECON THE INTEGRATION SURFACE FIRST** (the useAuctionDraft
-> hook reuse-vs-farm-variant, DraftFlow/FinalizeAdvanceFlow sequencing, the league format config) — likely a SPLIT (farm hook/wrapper, then 5.1e UI
-> §3.3). Read **`spec-docs/AUC-5.1_SCOPE_MAP.md`**. Then 5.1e (UI §3.3) → AUC-5.2 (L-ECON1 settledSalary freeze) → scout-privacy UI (§6.1) →
-> POSITION_POOL SP/RP fix; Mode-2 = LSIM-P3.
+> **🎉 AUC-5.1 COMPLETE — THE ENTIRE MODE-1 AUCTION DRAFT (MLB + FARM) IS BUILT + PLAYABLE.** **MLB:** AUC-1.1/1.2/2.1/2.2/3.1/4.1a/4.2/4.1b
+> (config/reserve/state-machine/CPU-shill/persistence/hot-seat-UI; 4.2 `ce69036d` engine turn-fidelity + 4.1b `fb07ad6d` rich §2.3/§2.5 UI).
+> **FARM (§3):** 5.1a `ecd36347` priced pool · 5.1b `d0a5fae5` §3.2 scout value-range · 5.1c `456e0f46` §3.4 wallet (§5.2 self-cal, emergent nerf) ·
+> 5.1d-1 `b5523bd3` session builder · 5.1d-2 `55fd759c` `useFarmAuctionDraft` (farm-namespaced persist) · 5.1e-1 `e76f84b5` pool/scout exposure +
+> regenerate-on-resume · 5.1e-2 `070a2aa2` §3.3-obscured page (`/league-builder/farm-auction-draft`) · 5.1d-3 `f0e7c7a9` MLB→farm sequencing +
+> `draftFormat` field. **ALL build-DARK / branch-only / zero-new-reds.** Routes: `/league-builder/auction-draft` (MLB) + `/league-builder/farm-auction-draft` (farm).
+> **QUEUE (fresh session resumes here):** **AUC-5.2 (L-ECON1 two-number freeze, §4)** — the economy-correctness gate: at the END of the whole draft
+> (after farm), stamp `{trueValue, settledSalary, checkpoint:0}` per rostered player via the franchise freeze store (`franchiseTrueValueSnapshots`,
+> trackerDb; `FranchiseTrueValueSnapshotRow` `franchiseTrueValueSnapshotsStorage.ts:17` — `settledSalary?` is the only ADDITIVE field per the L-ECON1
+> gotcha; MEMORY notes). **trackerDb/franchise-bridge ticket — saved-shape, careful class — GROUND AT SOURCE FIRST.** Then scout-privacy UI (§6.1, farm
+> long-press) → POSITION_POOL SP/RP fix (`prospectScoutingDraftEngine.ts:260`); Mode-2 = LSIM-P3 (full §6 matrix passport).
+> **NOTE: the whole auction surface (MLB+farm) is JK-BROWSER-VERIFY BATCHED** (incl. the leagueBuilder v7→v8 migration + resume + the §3.3 obscuring).
 > **OPEN DECISIONS / FLAGS for JK** (in the ledger): AUC-2.2 sim-tune defaults (bargainInterestCurve + shill profiles); AUC-4.2
 > nominator-first bid-rotation sub-fork (vs team-after-nominator — both terminate, shifts CPU bid seq); AUC-4.1b raise presets start at
 > minBid+1×increment (no bare-minimum one-tap preset); AUC-3.1 whole-blob-persist default; +earlier B8 fixed-age, L14-2b non-ACID
