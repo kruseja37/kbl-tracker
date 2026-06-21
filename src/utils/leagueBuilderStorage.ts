@@ -18,6 +18,7 @@ import {
   normalizeCheckpointCadence,
   type CheckpointCadence,
 } from '../data/rosterEngineConstants';
+import { CHEMISTRY_CODE_TO_WORD, normalizeToChemistryCode } from '../data/chemistryCanonical';
 import type { BalanceMode, RegisteredPool, TeamCapIdentity } from '../engines/leagueConstruction';
 import type { CpuShillAuctionSession } from '../engines/cpuShillBidding';
 import type { TierKey } from '../data/tierParams';
@@ -1914,24 +1915,6 @@ import { ALL_MLB_PLAYERS } from '../data/players/mlb';
 import { calculateSalary, type PlayerForSalary, type PlayerPosition as SalaryPosition } from '../engines/salaryCalculator';
 
 /**
- * Chemistry code to full chemistry name mapping
- */
-const CHEMISTRY_MAP: Record<string, Chemistry> = {
-  'SPI': 'Spirited',
-  'DIS': 'Disciplined',
-  'CMP': 'Competitive',
-  'SCH': 'Scholarly',
-  'CRA': 'Crafty',
-  'SPIRITED': 'Spirited',
-  'DISCIPLINED': 'Disciplined',
-  'COMPETITIVE': 'Competitive',
-  'SCHOLARLY': 'Scholarly',
-  'CRAFTY': 'Crafty',
-  'FIERY': 'Competitive',  // Map FIERY to Competitive
-  'GRITTY': 'Competitive', // Map GRITTY to Competitive
-};
-
-/**
  * Compute salary from SMB4 player ratings using the salary engine
  */
 function computeInitialSalary(player: PlayerData, primaryPosition: Position): number {
@@ -1973,8 +1956,8 @@ function convertPlayer(player: PlayerData, leagueId = 'sml'): Omit<Player, 'crea
   const firstName = nameParts[0] || 'Unknown';
   const lastName = nameParts.slice(1).join(' ') || player.id;
 
-  // Map chemistry code to full name
-  const chemistry = CHEMISTRY_MAP[player.chemistry] || CHEMISTRY_MAP[player.chemistry.toUpperCase()] || 'Competitive';
+  // Map player chemistry code to the League Builder title-case name.
+  const chemistry: Chemistry = CHEMISTRY_CODE_TO_WORD[normalizeToChemistryCode(player.chemistry)];
 
   // Determine position for League Builder format
   let primaryPosition: Position = player.primaryPosition as Position;
