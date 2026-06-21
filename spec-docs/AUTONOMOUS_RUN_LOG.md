@@ -2392,3 +2392,12 @@ tsc 0 + full suite **7966 pass / 1 fail = wpaRuntimeBoundary (characterized), ze
   **➡ after 5.1d-2 = AUC-5.1d-3** (MLB→farm sequencing + per-league format config) → 5.1e (UI §3.3, incl. the scout-range display). **JK browser-verify
   BATCHED** (the farm hook is user-facing once 5.1e lands).
 
+**WAVE 41 — ✅ AUC-5.1d-2 COMMITTED `55fd759c` (AUC-5.1d at 2/3 — the farm auction is FUNCTIONALLY BUILT: engine + hook).** Codex-built →
+Opus-audited: VERIFIED. `useFarmAuctionDraft` mirrors `useAuctionDraft` but reuses the §2 machine + cpuShillBidding (incl. AUC-4.2 turn-fidelity)
+UNCHANGED; farm-specific = `buildFarmAuctionSession` init + farmRoster slots + farm-namespaced persist. Storage: ADDITIVE `createFarmAuctionSessionId`
++ by-id get/save accessors (existing fns delegate, behavior-preserving for MLB, sync keyed by session.id), REUSE the auctionSessions store — NO new
+store / NO DB bump; committed MLB hook UNTOUCHED. HOST GATE: tsc 0 + full suite **7970 pass / 1 fail = wpaRuntimeBoundary (characterized), zero new
+reds** (+4); **AUC-3.1 round-trip 1/1 + version-pin 7/7 green** (storage refactor safe). **➡ NEXT = AUC-5.1e (the farm UI page §3.3)** — the visible
+deliverable: mirror `LeagueBuilderAuctionDraft` but §3.3-obscured (name+positions SHOWN; ratings HIDDEN; value = the 5.1b scout RANGE, never true IV)
++ the per-bidder scout-range. Then AUC-5.1d-3 (MLB→farm sequencing + per-league format config) = the final farm wiring.
+
