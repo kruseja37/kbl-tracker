@@ -1,23 +1,20 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-> **⚙️ AUTH-4 OVERNIGHT RUN IN PROGRESS (2026-06-20 → 2026-06-21).** JK enacted unattended AUTH-4. **Single-Captain (Shape A):**
-> Opus owns this integration line `codex/franchise-v1-next` (docs + Mode-2 dispatch/audit) + dispatches Codex for Mode-1 in
-> worktree `/Users/johnkruse/Projects/kbl-mode1` [`codex/mode1-v1`]. Codex builds, Opus audits, branch-only, never push.
-> **LIVE LEDGER = `AUTONOMOUS_RUN_LOG.md` (WAVE 1–47) — read it top-to-bottom on return; it supersedes everything below.**
-> **DONE this run:** Mode-2 **L14 fully built** (L14-1/2a/2b/3) ⇒ L1–L14 all build-dark; **L-SIM LSIM-P1 GREEN** (60g
-> findings=0, determinism byte-identical, L14 proven dormant). Mode-1 **prospect-gen COMPLETE (B1–B9, ±0.3pp to §3.2)**;
-> **🎉 AUC-5.1 COMPLETE — THE ENTIRE MODE-1 AUCTION DRAFT (MLB + FARM) IS BUILT + PLAYABLE.** **MLB:** AUC-1.1/1.2/2.1/2.2/3.1/4.1a/4.2/4.1b
-> (config/reserve/state-machine/CPU-shill/persistence/hot-seat-UI; 4.2 `ce69036d` engine turn-fidelity + 4.1b `fb07ad6d` rich §2.3/§2.5 UI).
-> **FARM (§3):** 5.1a `ecd36347` priced pool · 5.1b `d0a5fae5` §3.2 scout value-range · 5.1c `456e0f46` §3.4 wallet (§5.2 self-cal, emergent nerf) ·
-> 5.1d-1 `b5523bd3` session builder · 5.1d-2 `55fd759c` `useFarmAuctionDraft` (farm-namespaced persist) · 5.1e-1 `e76f84b5` pool/scout exposure +
-> regenerate-on-resume · 5.1e-2 `070a2aa2` §3.3-obscured page (`/league-builder/farm-auction-draft`) · 5.1d-3 `f0e7c7a9` MLB→farm sequencing +
-> `draftFormat` field. **ALL build-DARK / branch-only / zero-new-reds.** Routes: `/league-builder/auction-draft` (MLB) + `/league-builder/farm-auction-draft` (farm).
-> **QUEUE (fresh session resumes here):** **AUC-5.2 (L-ECON1 two-number freeze, §4)** — the economy-correctness gate: at the END of the whole draft
-> (after farm), stamp `{trueValue, settledSalary, checkpoint:0}` per rostered player via the franchise freeze store (`franchiseTrueValueSnapshots`,
-> trackerDb; `FranchiseTrueValueSnapshotRow` `franchiseTrueValueSnapshotsStorage.ts:17` — `settledSalary?` is the only ADDITIVE field per the L-ECON1
-> gotcha; MEMORY notes). **trackerDb/franchise-bridge ticket — saved-shape, careful class — GROUND AT SOURCE FIRST.** Then scout-privacy UI (§6.1, farm
-> long-press) → POSITION_POOL SP/RP fix (`prospectScoutingDraftEngine.ts:260`); Mode-2 = LSIM-P3 (full §6 matrix passport).
-> **NOTE: the whole auction surface (MLB+farm) is JK-BROWSER-VERIFY BATCHED** (incl. the leagueBuilder v7→v8 migration + resume + the §3.3 obscuring).
+> **⚙️ MODE-1 AUCTION REDESIGN RATIFIED (2026-06-21, JK attended) → AUTH-4 REBUILD QUEUED for a FRESH THREAD.** The overnight AUTH-4 run
+> built the entire Mode-1 auction V1 (AUC-5.1, 16 tickets, build-dark, branch `codex/mode1-v1`). JK's attended review then **REVISED the
+> design** → **`AUCTION_DRAFT_SPEC_V2.md`** (authoritative; V1 spec bannered superseded) + the execution sequence **`AUCTION_REBUILD_PLAN.md`**.
+> **Single-Captain (Shape A):** Opus owns `codex/franchise-v1-next` (docs) + dispatches Codex for Mode-1 in `/Users/johnkruse/Projects/kbl-mode1`
+> [`codex/mode1-v1`]. Codex builds, Opus audits, branch-only, never push.
+> **LIVE LEDGER = `AUTONOMOUS_RUN_LOG.md` (WAVE 1–48) — read top-to-bottom on return; supersedes everything below.**
+> **V1 BUILT (build-dark, branch-only, zero-new-reds — SHELLS SURVIVE the rebuild):** MLB AUC-1.1..4.1b + FARM 5.1a..e/d-1/d-2/d-3. The
+> §2 bidding/CPU/wallet/persistence/hot-seat-UI + page shells are REUSED; the **value layer** (per-prospect-IV → scout price-range+20–80 grade)
+> and **nomination/resolve** (GM-nomination → engine weighted-random + one-chance) are REWRITTEN, + new systems (dual archetype tax, MLB→farm
+> carryover, draft→player-morale + payroll→fan-morale carried into Mode-2 via the 4-number freeze, separate GM entity, scout-as-bridge, roster
+> board, guided UX, shill/CPU-team split). Mode-2 L1–L14 build-dark; L-SIM LSIM-P1 GREEN. Prospect-gen B1–B9 done.
+> **➡ NEXT (fresh thread, AUTH-4 re-authorized): run `/kbl-captain` on `AUCTION_REBUILD_PLAN.md` starting RB-1 (scout value model) → RB-2
+> (engine nomination + one-chance) → RB-3.. per the plan's ordering.** Read `AUCTION_DRAFT_SPEC_V2.md` + `AUCTION_REBUILD_PLAN.md` FIRST.
+> All §13/§11 dials are default-set + sim-tunable (RB-16) — none block the build. **JK-BROWSER-VERIFY BATCHED:** the whole auction surface,
+> after the rebuild (not the V1 build).
 > **OPEN DECISIONS / FLAGS for JK** (in the ledger): AUC-2.2 sim-tune defaults (bargainInterestCurve + shill profiles); AUC-4.2
 > nominator-first bid-rotation sub-fork (vs team-after-nominator — both terminate, shifts CPU bid seq); AUC-4.1b raise presets start at
 > minBid+1×increment (no bare-minimum one-tap preset); AUC-3.1 whole-blob-persist default; +earlier B8 fixed-age, L14-2b non-ACID

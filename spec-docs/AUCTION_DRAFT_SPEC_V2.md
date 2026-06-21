@@ -49,11 +49,16 @@ scout-privacy = **default covered, long-press REVEALS** your own report.
 ### 2.1 Engine nomination (replaces GM nomination)
 - The **engine** surfaces players one at a time from the available pool — there is no nominator on the
   clock. This applies to **both tiers** (MLB and farm).
-- **Weighted reveal:** the surface order is **random but weighted by hidden true talent** — stronger
-  players are *more likely* to appear earlier, **not guaranteed**. A sleeper sometimes surfaces early
-  (forcing a hard "lock him now or lose him" call); a target sometimes surfaces late (you may have
-  spent more than planned by then). The weighting curve is a **sim-tunable** (§11). The engine uses the
-  hidden true-talent ranking only to set surface probabilities — it is never shown.
+- **Weighted reveal — the mechanism:** at each step the engine draws the next player from the
+  **remaining** available pool with probability **∝ (the player's hidden value-percentile)^k**.
+  - `k` = the **front-load exponent** (sim-tunable §11; default **~2–3**). `k=0` → pure uniform random;
+    higher `k` → stronger players surface earlier more reliably. The mid default gives "stars *usually*
+    early, but real upsets" — a sleeper sometimes jumps the line (forcing a hard "lock him now or lose
+    him" call), a target sometimes slips late (so you may have spent more than planned by then).
+  - **Percentile is the player's FIXED value-rank in the full class** (so weights don't need
+    recomputing as the pool drains — just renormalize over what remains). The hidden true-talent rank is
+    used ONLY to set these surface probabilities — it is never shown.
+  - **Seeded** (reproducible for save/resume + sim).
 - **Determinism:** the surface order is seeded (reproducible for save/resume + sim).
 
 ### 2.2 One-chance resolution (replaces re-nomination)
@@ -168,10 +173,16 @@ the ceiling that protects roster-fill. (Now `projectedTax` carries the §4.2 arc
 - **Min-bid button:** a surfaced player → a "**Bid Minimum**" control is active → a GM hits it (open at
   reserve), raises, or passes. The minimum is claimable when you are the standing bidder; once outbid,
   you raise (within solvency) or you're out.
-- **Reserve level = OPEN (§13, sim-tunable).** JK floated 90% of value (MLB) / 80% of slot value (farm)
-  as a high floor; the Captain flagged that a high floor kills the bargain/strategy upside. **Decision
-  deferred to sim-tune:** sweep the reserve from low (current 0.5–0.7×) to high (0.8–0.9×) and pick the
-  value that keeps the TV economy honest (steals possible but not systemic) without juicing.
+- **Reserve level = START LOW (JK ruling 2026-06-21).** Low floors give the back-and-forth bidding we
+  want; sim can raise them if order suffers. Mechanism (the "50/70" are NOT a tier split — they're the
+  endpoints of a percentile curve):
+  - **MLB:** keep the **percentile curve** `reservePriceCurve` (**0.5 at the pool bottom → 0.7 at the
+    top**, × the player's **public IV**) — a scrub opens at ~50% of his IV (bargain room), a star at
+    ~70% (less room to steal the best).
+  - **FARM:** a **FLAT low floor**, the SAME opening for every prospect (e.g. a small fraction of the
+    class-average value, or the farm minimum salary) — because a per-prospect % would **leak the hidden
+    rank**. All differentiation comes from bidding + each GM's scout range.
+  - Both are **sim-tunable** (§11); sweep upward only if the TV economy juices (systemic steals).
 
 ### 4.5 MLB → farm budget carryover (one-way valve, NEW)
 - **Unspent MLB budget → farm budget**, × a **carryover %** (default **50%**, sim-tunable §11).
@@ -273,13 +284,22 @@ Each drafted player gets a one-time morale adjustment off the neutral 50, from t
 
 ---
 
-## §10. THE TWO-NUMBER FREEZE (AUC-5.2) + SEQUENCING (carried from V1 §4/§3.1)
+## §10. THE FREEZE → MODE 2 (now a FOUR-number bridge — JK 2026-06-21)
 
-- MLB auction fills 22 → farm auction fills 10 → at the **end of the whole draft**, the **two-number
-  freeze** stamps `{trueValue, settledSalary, checkpoint:0}` per rostered player into the franchise
-  freeze store (`franchiseTrueValueSnapshots`). `settledSalary` (the auction winning bid) is the only
-  ADDITIVE field; the freeze fires at **franchise-init checkpoint-0** (the Mode-1→Mode-2 bridge). This
-  is the next build (AUC-5.2) — a careful saved-shape/franchise-bridge ticket.
+- MLB auction fills 22 → farm auction fills 10 → at the **end of the whole draft**, the freeze fires at
+  **franchise-init checkpoint-0** (the Mode-1→Mode-2 bridge) and stamps, per rostered player + per team:
+  1. **trueValue** (the frozen IV — exists in V1).
+  2. **settledSalary** (the auction winning bid — additive field, AUC-5.2).
+  3. **starting PLAYER morale** (the §6 draft-derived value — slot + over/underpay, personality-tilted).
+  4. **starting FAN morale** (the §7 payroll-rank value).
+- **⚠ THE PAYOFF (JK):** Mode 2 (the franchise season) must **seed its starting morale from #3/#4 — NOT
+  from the default starter-morale settings.** Player morale starts at the draft-derived value (e.g. the
+  underpaid-late kid opens *below* 50, then the TV loop evolves it); team fan morale starts at the
+  payroll-rank value. Without this carry, the entire draft "fingerprint" evaporates on day 1 of the
+  season. The franchise-init morale seed reads the freeze and overrides the defaults.
+- **Build:** AUC-5.2 stamps trueValue+settledSalary; the morale-capture (#3/#4 → freeze) + the
+  franchise-init morale-seed (freeze → Mode-2 starting morale) ride with the §6/§7 morale tickets (see
+  the rebuild plan). All are careful saved-shape / franchise-bridge work (trackerDb + franchiseInitializer).
 
 ---
 
@@ -318,12 +338,15 @@ Each drafted player gets a one-time morale adjustment off the neutral 50, from t
 
 ## §13. OPEN ITEMS (to resolve before/within the build)
 
-1. **Reserve floor level** — sim-tune (§4.4); is the bargain-upside worth a low floor, or do you want
-   the 80/90% high floor for order?
-2. **Exact player-morale deltas** + the late/underpaid basement depth (§6).
-3. **Fan-morale payroll thresholds + curve steepness** (§7).
-4. **Archetype luxury-tax curve** — the exact convex shape that keeps straying a *cost not a wall* (§4.2).
-5. **Nomination talent-weighting** strength (§2.1) — how front-loaded toward better players.
-6. **Roster-fill tail** — confirm the surplus + guaranteed-fillable late-draft behavior (§2.3).
-7. **GM entity** — confirm the data model parallels the manager profile + the fire-manager authority
-   path (§8).
+1. ✅ **Reserve floor level — RESOLVED (JK):** start LOW — MLB percentile curve 0.5–0.7×IV, farm flat
+   low floor; sim raises only if it juices (§4.4). (Sim-tunable thereafter.)
+2. **Exact player-morale deltas** + the late/underpaid basement depth (§6) — start ±15/±10, sim-tune.
+3. **Fan-morale payroll thresholds + curve steepness** (§7) — Captain's defaults, sim-tune.
+4. **Archetype luxury-tax curve** — the exact convex shape that keeps straying a *cost not a wall*
+   (§4.2) — Captain's default, sim-tune.
+5. ✅ **Nomination talent-weighting — MECHANISM SET:** weight ∝ percentile^k, `k≈2–3` default
+   (§2.1); the `k` magnitude is the sim-tune dial.
+6. **Roster-fill tail** — confirm the surplus + guaranteed-fillable late-draft behavior (§2.3) —
+   Captain to verify at build.
+7. ✅ **GM entity — CONFIRMED (JK):** separate entity, data model parallels the manager profile, sits
+   above the manager with fire-manager authority (§8).

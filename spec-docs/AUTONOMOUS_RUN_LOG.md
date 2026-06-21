@@ -2472,3 +2472,18 @@ POSITION_POOL SP/RP fix; Mode-2 = LSIM-P3.
 - **CHECKPOINT rationale:** AUC-5.1 COMPLETE = the entire Mode-1 auction (16 tickets this run, all zero-new-reds). AUC-5.2 is a delicate franchise-DB
   bridge; building it at the tail of a marathon session risks a subtle saved-shape/bridge error. Handing off at the complete-subsystem seam.
 
+**WAVE 49 — ATTENDED DESIGN REVIEW (JK off AUTH-4) → MODE-1 AUCTION REDESIGN RATIFIED → AUTH-4 REBUILD QUEUED.**
+- JK returned, reviewed the AUC-5.1 flags, and RULED a substantial design revision (the V1 per-prospect-IV pricing leaked the scout truth; GM-nomination
+  allowed passive juicing). **Ratified design → `spec-docs/AUCTION_DRAFT_SPEC_V2.md`** (V1 bannered partially-superseded) + execution sequence
+  **`AUCTION_REBUILD_PLAN.md`** (RB-1..16). KEY DECISIONS: scout = **price range + 20–80 grade** (true IV hidden → call-up reveal); **engine
+  weighted-random nomination** (∝ percentile^k, k≈2–3) + **ONE-CHANCE-ONLY** (no bid = gone forever); **dual MLB/farm archetypes** + a **gentle convex**
+  MLB luxury tax (leeway-not-a-wall; un-stub the inert `projectedTax:0`); **MLB→farm one-way budget carryover (50%)**; **draft→player-morale (slot +
+  over/underpay) + payroll→fan-morale (rank, exp both ends, anti-tank)** both **captured in a 4-number checkpoint-0 freeze and seeded into Mode-2
+  starting morale** (overriding defaults — the payoff that makes the draft matter); **separate GM entity** (parallel to + above the manager, fire
+  authority); scout-as-bridge + roster board; scout-privacy = long-press-REVEALS; CPU-shill (dissolve, pure-pressure) vs opt-in CPU-team split;
+  reserve START LOW (MLB 0.5–0.7 curve / farm flat floor); no auction draft-trades (in-season only). All §11/§13 dials default-set + sim-tunable (RB-16).
+- **SHELLS SURVIVE:** the §2 bidding/CPU/wallet/persistence/hot-seat-UI + page shells are reused; the value + nomination layers are rewritten + the new
+  systems built. Spec-first — NO CODE written this session. Docs committed.
+- **➡ PLAN:** JK starts a FRESH THREAD (reset context) to run the AUTH-4 `/kbl-captain` loop on `AUCTION_REBUILD_PLAN.md` (Opus writes plan/contracts +
+  audits; Codex builds). CURRENT_STATE live header repointed. (This attended session wrote the docs, not code.)
+
