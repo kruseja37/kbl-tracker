@@ -173,10 +173,13 @@ Pin them as **three independent axes** per player:
 **Assignment / timing (THE FIX):** all KBL-flavor axes are assigned **FRESH, before the draft** — NOT
 inherited from the SMB4 console default, so GMs can't pre-know a player from the game:
 - **Prospects:** at prospect generation (already done — personality + modifiers + chemistry, seeded).
-- **Stock MLB players:** **RESET before the MLB draft** — re-roll the **primary personality (1)** + the
-  **hidden modifiers (2)**, seeded deterministically. **[OPEN Q — JK: does the reset also re-roll
-  CHEMISTRY (3), or KEEP each stock player's real SMB4 chemistry? Captain lean = KEEP (chemistry is a
-  real visible attribute GMs strategize around + it drives potency); only re-roll axes 1+2.]**
+- **ALL MLB-pool players — RESOLVED (JK 2026-06-21):** the MLB pool is **HETEROGENEOUS** (the 440 stock
+  set is only ONE construction option; real drafts mix stock + user-created players, analyzed *as a whole*
+  for IVs/salary-tiers). So **regenerate ALL THREE axes for every MLB-pool player before the draft** —
+  personality (1) + hidden modifiers (2) + **chemistry (3)** — seeded deterministically. **Chemistry is
+  REGENERATED and REBALANCED to match the 440-base-pool's chemistry distribution** (the base pool gets the
+  balance right; some chemistry types are more valuable than others), computed in the **same pass** as the
+  personality regen. [Supersedes the earlier "keep SMB4 chemistry" — that assumed a pure-stock pool.]
 - This MOVES hidden-modifier creation from the **franchise-init backfill**
   (`generateFranchiseHiddenModifierBackfill`) to **PRE-DRAFT**, so all three axes exist + are correct
   during the draft AND persist unchanged into Mode 2 (the franchise-init backfill becomes a no-op safety net).
@@ -188,29 +191,39 @@ potency tier (`ivEngine` `PotencyTier` L1/L2/L3). **[VERIFY/BUILD: the chemistry
 — the tier is consumed by `computeIV`, but the fit→tier computation is a "downstream league-context
 concern" that may be net-new; ground its spec at build.]**
 
-**Chemistry BALANCE across generated prospects (JK 2026-06-21):** the farm prospect generator MUST produce
-a **balanced chemistry distribution across the 5 types** (a generation constraint + validation pass, like
-the §3.2-grade + §3.3-position distributions). Rationale: chemistry drives trait potency, so a lopsided
-pool would let every team cheaply stack one type to Level 3 while being unable to reach Level 2 in others
-— killing the "pick this player *for his chemistry*" decision. [The STOCK MLB pool keeps SMB4's chemistry
-distribution; OPEN-Q for JK: also balance-check the 440-pool, or accept SMB4's spread? Default = accept.]
+**Chemistry BALANCE across the WHOLE draft pool — TARGET = the 440-base-pool's distribution (JK 2026-06-21):**
+the 440-base-pool's chemistry mix is the canonical balanced TARGET (the base pool "gets it right"; some
+chemistry types are more valuable than others). BOTH (a) the regenerated MLB-pool chemistry (above) and
+(b) the generated FARM prospects must be **rebalanced to MATCH that 440-target distribution** (a generation/
+regen constraint + validation pass, like the §3.2-grade + §3.3-position distributions). Rationale: chemistry
+drives trait potency, so a lopsided pool would let every team cheaply stack one type to Level 3 while being
+unable to reach Level 2 in others — killing the "pick this player *for his chemistry*" decision, AND it
+preserves the relative value of the scarcer/stronger types. **One pass computes the 440-target distribution,
+then regenerates MLB-pool + farm chemistry to match it, alongside the personality regen.**
 
-**Primary personality's role in morale — THREE layers (JK clarification 2026-06-21; personality = the KIND
-of reaction, hidden modifiers = the unseen MAGNITUDE/flavor):**
-1. **Baseline** — per-personality starting morale. EXISTS but the current `PERSONALITY_BASELINES`
-   (`playerMorale.ts:83`) is CONFLATED (mixes the 7 personalities + chemistry names like DISCIPLINED/
-   SPIRITED/CRAFTY + invented names ECCENTRIC/GRUMPY/FIERY/GRITTY; only JOLLY+TOUGH are canonical). RB-0
-   rebuilds it on the canonical 7; **the figures are JK's design dial.**
-2. **Event-reactiveness** — same event, DIFFERENT swing magnitude by personality (a losing streak hits
-   egotistical harder than jolly; benching, being unwanted, etc.). **NET-NEW** — today only the baseline
-   exists, no per-personality reactivity multiplier. Modulated by hidden **resilience** (the magnitude).
-3. **Relationship dynamics** — inter-player morale (droopy/timid bullied by tough/egotistical; mentoring;
-   clashes). The **relationship engine EXISTS** (L13: `relationshipEngine`/`masterMoraleMatrix`/
-   `relationshipFormation`/`captainMoraleRouter`, build-dark) — REUSE it; what's net-new is the
-   **personality-specific rules** inside it (who bullies/mentors/clashes). Modulated by hidden
-   **charisma/loyalty**.
-The draft-morale tilt (§6) uses the VISIBLE personality (GM can ANTICIPATE the *kind* of reaction) +
-the HIDDEN modifiers (GM canNOT see the *magnitude*).
+**Primary personality + hidden modifiers in morale — ALREADY BUILT in the core engine (CORRECTED at source
+2026-06-21 — `masterMoraleMatrix.composeMoraleConsequence`, `src/engines/masterMoraleMatrix.ts`; L3-era,
+build-dark behind D13). NOT net-new.** Per morale EVENT, the engine resolves the consequence from the
+player's personality + hidden modifiers + current morales:
+- **Personality (canonical 7) = the reactivity archetype** — `MORALE_TUNING.personality[p]` gives each a
+  `positiveSelfMultiplier`/`negativeSelfMultiplier` (how hard YOUR morale swings on good vs bad events),
+  `positive`/`negativeFanMultiplier`, and `fanMoraleSensitivity`. Real values = JK's intuition exactly:
+  **EGOTISTICAL** 1.25/1.15 + fanSens **1.5** (reacts huge); **RELAXED** 0.85/0.75 + 0.5 (shrugs);
+  **DROOPY** 0.8/**1.25**, **TIMID** 0.9/**1.2** (crushed by bad — vulnerable); **TOUGH** 1.0/**0.8**
+  (resists adversity); **JOLLY** 1.1/0.9; **COMPETITIVE** 1.15/1.05.
+- **Hidden modifiers = the unseen magnitude + spread** — `MORALE_TUNING.modifierMultipliers`: **ambition**
+  amplifies UP-swings, **resilience** dampens DOWN-swings, **charisma** scales how much this player's event
+  SPREADS to OTHER players (contagion/`otherTouched`), **loyalty** scales the fan→player link.
+- **Relationship contagion is built** — an event ripples to teammates via `otherTouched × relation
+  (teammate 1 / captain 2 / young 1.5 / clubhouse 1.25) × charisma`. That IS "droopy bullied by a tough teammate."
+- **Legacy names already reconciled** — `LEGACY_PERSONALITY_RECONCILIATION` maps GRUMPY→DROOPY, FIERY→
+  COMPETITIVE, SPIRITED→JOLLY, DISCIPLINED/CRAFTY/GRITTY→TOUGH, etc. **The old `playerMorale.ts
+  PERSONALITY_BASELINES` is DEAD LEGACY — do NOT "fix" it; the matrix is canonical.**
+⇒ **The morale machinery is BUILT** (personality reactivity + modifier roles + contagion). The figures JK
+can tune = `MORALE_TUNING`. **RB-5's job is NOT to build reactivity** — it is to define the DRAFT as morale
+EVENTS (e.g. a "drafted-early/high" event, an "overpaid/underpaid" event) fed through
+`composeMoraleConsequence` with the player's personality+modifiers, then seed the result as the starting
+morale at the freeze (§10).
 
 ## §4. BUDGETS & ARCHETYPE
 
@@ -447,13 +460,15 @@ Each drafted player gets a one-time morale adjustment off the neutral 50, from t
    Captain to verify at build.
 7. ✅ **GM entity — CONFIRMED (JK):** separate entity, data model parallels the manager profile, sits
    above the manager with fire-manager authority (§8).
-8. ✅ **Personality model (§3.7) — RESOLVED (JK):** re-roll axes 1+2 pre-draft, **KEEP axis-3 chemistry**
-   from SMB4; **balance the generated-prospect chemistry distribution.** Remaining JK micro-Q: also
-   balance-check the 440 STOCK MLB pool's chemistry, or accept SMB4's spread? (default: accept). The
-   **canonical-7 baseline FIGURES are JK's design dial** (RB-0 rebuilds the table; JK sets the numbers).
-   VERIFY-AT-BUILD: (a) the chemistry-MIX → potency-TIER rule (makes the scout's chemistry-fit value real
-   — may be net-new); (b) per-personality **event-reactiveness** = NET-NEW; (c) relationship bully/mentor
-   rules go INTO the existing L13 relationship engine (reuse).
+8. ✅ **Personality model (§3.7) — RESOLVED (JK):** regenerate ALL THREE axes pre-draft for every
+   MLB-pool player (the pool is heterogeneous — stock + user-created); **rebalance chemistry (MLB regen +
+   farm gen) to MATCH the 440-base-pool distribution** (the canonical balanced target). **The morale
+   ENGINE is ALREADY BUILT** (`masterMoraleMatrix.composeMoraleConsequence`: canonical 7 + per-personality
+   reactivity multipliers + ambition/resilience/charisma/loyalty roles + relationship contagion + legacy-
+   name reconciliation; the old `playerMorale.ts PERSONALITY_BASELINES` is DEAD LEGACY). Tunable figures =
+   `MORALE_TUNING`. **Corrected 2026-06-21: the morale reactivity/relationship machinery is REUSE, NOT
+   net-new** — RB-5 only defines the DRAFT events + seeds at the freeze. The ONE genuine VERIFY/BUILD = the
+   chemistry-MIX → potency-TIER rule (makes the scout's chemistry-fit value real).
 9. **Draft-morale timing (§3.7/§10):** since stock players' personality/modifiers are assigned at RB-0
    (pre-draft) and morale freezes at franchise-init (§10), confirm the morale is COMPUTED at the freeze
    (using draft-recorded slot/price + the now-present personality) rather than live mid-draft — unless a
