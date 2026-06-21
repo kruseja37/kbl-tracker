@@ -1984,3 +1984,88 @@ NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its 
   `acceptRebrandOffer` re-checks armed → `executeRebrandCascade`). New file only, NO processCompletedGame block (as designed),
   no importers (build-dark), build 0, 5 tests. ⇒ **L14 FULLY BUILT (dark): L14-1 (flag+dwell) + L14-2 (cascade) + L14-3 (offer).**
   **➡ Mode-2 NEXT = the L-SIM gate** (LSIM-P1 partial run now → LSIM-P3 full matrix = the post-D13 flip passport). L13-3b deferred.
+
+**WAVE 14:**
+- **✅ B7 COMMITTED `656705e9`** (arsenal §8: ≥1 FB/≥1 off-speed, role tapers junk-scaled; build 0; prospect test 20/20).
+  Mode-1 at 7/9.
+- **🟡 GAP FLAGGED FOR JK (POSITION_POOL):** the generator's `POSITION_POOL` (`prospectScoutingDraftEngine.ts:252`) produces
+  SP×4/RP×2/CP + fielders but **NO `SP/RP`** and is NOT the §3.3 weighted distribution (ruling E says pitchers include SP/RP).
+  No B-ticket covered the PRIMARY-position distribution (B3 = secondary). **Follow-up needed:** update POSITION_POOL to §3.3
+  (add SP/RP + the real-pool weights). NOT a B7 issue (B7's SP/RP arsenal branch is correct-but-currently-unreached).
+- **➡ B1 dispatched (`codex-b1`, xhigh) — THE KEYSTONE:** the generate-score-correct solve (§5.2) — features-first, binary-search
+  δ against `scoreSmb4Player` to the §3.2 band center, re-score+correct, clamp [20,99] → realized grade == assigned grade
+  (the spec's central 1.72pp claim). Frozen oracle read-only. After B1 = **B9** (the 40k ±1.5pp validation test) ⇒ Mode-1 done.
+- **Mode-2: L14 fully built (dark) → NEXT = the L-SIM gate** (LSIM-P1 partial run, then LSIM-P3 full matrix).
+
+**WAVE 15:**
+- **✅ B1 COMMITTED `80ccb085` — THE KEYSTONE.** generate-score-correct solve; round-trip grade==assigned across all §3.2
+  grades; oracle untouched; build 0; full suite **7898 pass / 1 fail = wpaRuntimeBoundary only (characterized), ZERO new
+  reds** (franchiseManualSmokeFixture passed this run). Mode-1 at 8/9.
+- **➡ B9 dispatched (`codex-b9`) — Mode-1 FINAL** — the §13 distribution-validation test (40k prospects → realized analyzer
+  grades within ±1.5pp of §3.2; trait 30/50/20; position sanity). On green ⇒ **Mode-1 prospect-gen DONE** (modulo the
+  POSITION_POOL SP/RP follow-up + the auction AUC-* chain, which is the separate Mode-1 auction track not yet started).
+- **Mode-2 dedicated next = the L-SIM gate** (my verify runs: LSIM-P1 partial, then LSIM-P3 full matrix).
+
+**WAVE 16:**
+- **✅ B9 COMMITTED `fd772933` ⇒ MODE-1 PROSPECT-GENERATION COMPLETE (B1–B9).** §13 validation: 40k prospects reproduce
+  §3.2 within **±0.3pp** (max |dev| B+ 0.308pp). The analyzer-anchored pipeline is proven end-to-end.
+- **➡ AUCTION track STARTED — AUC-1.1 dispatched (`bs6gjehqt`)** — auction config/enums (disjoint new file, §5/§6 defaults).
+  Remaining auction chain: AUC-1.2 (reserve-price) → 2.1 (state machine) → 2.2 (CPU shill) → 3.1 (persistence) → 4.1 (hot-seat UI)
+  → 5.1 (farm auction) → 5.2 (L-ECON1 freeze) + scout-privacy UI. (Mode-1 worktree.)
+- **➡ L-SIM GATE STARTED — smoke (24g) leg launched (`b917m7osm`).** Grounded: determinism check already in the harness
+  (`seasonRunner.ts:1035`); the season leg WRITES `results/lsim-h2-baseline-checkpoint-{003..060}.json` → after the 60g leg
+  I `git diff` those (byte-identical = L14 dormant = the proof; any change = a finding). Run smoke first, STANDARD 60g LAST
+  (baseline-regen trap). Read the summary JSON, not the vitest RC.
+
+**WAVE 17:**
+- **✅ AUC-1.1 COMMITTED `446abc46`** (auction config/enums + defaults; build 0; 2 tests). ➡ AUC-1.2 dispatched (`b8cdaa5de`,
+  reserve-price curve §7.5 + minSalaryByPosition + solvency-capped auctionMaxBid).
+- **✅ L-SIM SMOKE (24g) PASS — CRITICAL all green** (every CRITICAL invariant 24/0, incl. all L12/L13/L14 soul checks:
+  tv-freeze, reach-floor-ratchet, all-star-60%-lock, l13-relationship-formation/intensity/morale, l13-rep4-fan-nudge,
+  awards-off-frozen-artifact, per-write-idempotency, channel-separation). digest@24 `4002051:7efd59ac`.
+  **🟡 2 INVESTIGATE findings (non-blocking, logged for JK):** `soul.fame-war-legitimacy-floor` failed @games 23+24 (22/2) —
+  a fame-vs-WAR legitimacy SOFT floor (INVESTIGATE-tag, not CRITICAL); likely a player carrying fame above the WAR-legitimacy
+  floor late-season. (`soul.emission-snub-signal`/`fame-heat-fickle`/`l10-per-game-cadence` are INVESTIGATE but PASSED.)
+- **➡ L-SIM SEASON (60g) leg launched (`b6q77pqdf`)** — determinism (same-seed byte-identical) + regenerates
+  `results/lsim-h2-baseline-checkpoint-{003..060}.json`; on completion I `git diff` those (byte-identical = L14 dormant proof;
+  change = finding) + read findings/determinism from the summary.
+
+**WAVE 18:**
+- **AUC-1.2 AUDITED SOUND — gate+commit HELD until the 60g season frees the CPU** (concurrent vitest risks timeout-flakes).
+  `reservePriceCurve` 0.5→0.7-by-IV-percentile (top decile) is **§7.5-VERBATIM** (IV_ENGINE §7.5:502 + D14 table:611), NOT
+  invented; `auctionMaxBid` = §2.3/§7.5 solvency cap; `minSalaryByPosition` single-sourced from the existing `MIN_SALARY` floor.
+  The `salaryCalculator.ts` touch is behavior-neutral (`MIN_SALARY` = same 1666.49, now `= LEAGUE_MINIMUM_SALARY` in
+  rosterEngineConstants — reuse-don't-duplicate; consumers franchiseDesignationStorage/Eligibility unaffected, same value).
+  Frozen IV economics untouched. tsc 0; 5 tests. **➡ on 60g completion: run AUC-1.2 full suite (core-engine change) → commit →
+  dispatch AUC-2.1 (state machine).**
+
+**WAVE 19 — ✅ L-SIM GATE LSIM-P1: GREEN (major milestone).**
+- **60g season leg: findings 0** (0 CRITICAL / 0 INVESTIGATE). **Determinism: same-seed byte-identical** (`8986467:13311171`).
+  **finalDigest `8931876:4b218874` == L13-6/L13-7's committed digest, and the regenerated `results/lsim-h2-baseline-*.json`
+  show ZERO git change ⇒ L14 is FULLY DORMANT** (zero sim-state change, the same proof L13-7 had). The 24g smoke's
+  `soul.fame-war-legitimacy-floor` INVESTIGATE @23/@24 **did NOT recur at 60g** → a short-season edge, NOT a defect.
+- ⇒ **The entire built-dark L-stack (L1–L14) is validated: deterministic, zero accumulated-state findings at 60g, §24.10
+  morale↛WAR holds, L14 inert.** LSIM-P1 (the partial gate) is DONE.
+- **➡ Remaining L-SIM = LSIM-P3** (the full §6 matrix: multi-seed · edge leagues [tiny/reliever-heavy/blowout/parity] ·
+  multi-season continuity · real-save migration round-trip · + L14 dwell/cascade invariants) = **the post-D13 flip passport.**
+  Distributions (this run): fame tiers spread (4 Immortal / 17 Local Hero / 11 Despised); trait grants 1640 gain/10 lose;
+  awards finalized; auto-backstop firing 1.7%; flashpoint tax −22.15 (albatross). Season leg ~7min.
+
+**WAVE 20:**
+- **✅ AUC-1.2 COMMITTED `866cf56e`** (reserve-price/minSalary/maxBid; full suite 7906 pass / 1 characterized, ZERO new reds;
+  salaryCalculator re-sourcing confirmed safe across consumers).
+- **➡ AUC-2.1 dispatched (`codex-auc21`, xhigh) — the AUCTION CORE:** pure hot-seat state machine reducer (SETUP→NOMINATION→
+  OPEN_BIDDING→RESOLVE→SOLD/PASSED→COMPLETE) per §2.2/§2.2.1 (RESOLVE: SOLD/PASSED/lone-survivor-tap-to-claim) /§2.2.2
+  (progress invariant + legal-fill termination) + the Q1/Q2/Q4/Q5 rulings; reuses AUC-1.1 config + AUC-1.2 reservePriceCurve/
+  auctionMaxBid. Pure, heavily tested. Next auction: AUC-2.2 (CPU shill) → 3.1 (persist) → 4.1 (hot-seat UI) → 5.1 (farm) →
+  5.2 (L-ECON1 freeze) + scout-privacy UI.
+- **Mode-2: LSIM-P1 done; LSIM-P3 (full §6 matrix passport) = a later dedicated build+run** (harness extensions for edge
+  leagues / multi-season / real-save migration / L14 cascade invariants).
+
+**WAVE 21:**
+- **✅ AUC-2.1 COMMITTED `33b0cbff`** (auction state-machine core — RESOLVE/progress-invariant/termination verified by reading
+  `evaluateResolve`; build 0; 12 tests). Auction at 3/~8.
+- **➡ AUC-2.2 dispatched (`codex-auc22`, xhigh)** — CPU shill market (§7.6): pure valuation `IV×archetypeFit×personalityBias×
+  noise±12%` (reuse composeIdentity) + probabilistic bargainInterestCurve (sim-tune, flagged) + depletable budgets +
+  personalities; **HARD make-or-break = NO deterministic price floor** (tested across seeds). Next: AUC-3.1 (persist) → 4.1
+  (hot-seat UI) → 5.1 (farm) → 5.2 (L-ECON1 freeze) + scout-privacy UI.

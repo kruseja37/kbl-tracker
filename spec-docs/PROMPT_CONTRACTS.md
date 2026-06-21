@@ -14673,6 +14673,177 @@ Use xhigh reasoning effort. Think step-by-step.
 Use high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: B7 ===== -->
 
+<!-- ===== CONTRACT: B1 (prospect-gen — analyzer-anchored generate-score-correct solve) ===== -->
+## CONTRACT — B1 (prospect-gen: anchor ratings to scoreSmb4Player, generate-score-correct) — 2026-06-20 (AUTH-4) — KEYSTONE
+
+**ROUTE:** Codex CLI (gpt-5.5, xhigh). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** Mode-1 prospect-gen CORE. **DEPENDS ON B2+B3+B4+B6+B7 (the grade table + all grade-affecting features — committed).**
+
+**GOAL:** Replace the naive `buildRatings` (grade-center fill) with the §5.2 **generate-score-correct** solve so each prospect's analyzer grade EQUALS its assigned grade (the spec's central claim; validated to 1.72pp in §13).
+
+**SOURCE OF TRUTH (read all):** `PROSPECT_GENERATION_SPEC.md §5.1` (the oracle) + **§5.2** (the algorithm) + **§5.3** (σ per-tool spread = a TOOL-DIVERSITY knob, NOT a grade knob — keep the existing per-tool bias/noise) + **§5.4** (clamp range, [20,99]) + **§3.2** (the band → `scoreSmb4Player` calibrated-threshold targets). The oracle: `scoreSmb4Player(input: Smb4PlayerInput, options?)` `src/engines/smb4GradeEmulator.ts:671`; calibrated thresholds `:150-163`. Reference assembly: how `src/engines/smb4PlayerGenerator.ts` builds the `Smb4PlayerInput` (mirror it).
+
+**CONSTRAINTS (in `src/utils/prospectScoutingDraftEngine.ts`):**
+- **Reorder `buildCandidate`** so ALL grade-affecting features (primary/secondary position, bats/throws, traits, arsenal) are generated BEFORE the rating solve (§5.2 step 2).
+- **Implement the solve** (replace/augment `buildRatings`): build a position-biased, per-tool-noised BASE rating profile (keep the §5.3 σ tool-diversity); assemble the candidate into `Smb4PlayerInput` (ratings + the frozen features); **binary-search a uniform shift δ** added to the base profile until `scoreSmb4Player(candidate)` lands at the **§3.2 band CENTER** for the assigned grade `G` (target the center, not the edge — §5.2 / rec #4). Then **re-score with the full analyzer and apply a final correction** so the realized grade == `G`. **Clamp ratings to §5.4 [20,99].**
+- The realized grade must equal `G` by construction. Set `overallGrade`/`trueGrade` consistently (the realized analyzer grade).
+- **FROZEN ORACLE — do NOT modify** `smb4GradeEmulator.ts` (read/call only). Do NOT modify the §3.2 weights (B2) or any feature generator (B3/B4/B6/B7).
+- Keep determinism (seeded; no `Math.random`). Performance: the binary search runs per prospect over a pool — keep it bounded (e.g. ~20-30 iterations).
+- Branch `codex/mode1-v1` only; do NOT commit; do NOT push.
+
+**EXPECTED OUTPUT:** ratings solved so `scoreSmb4Player(prospect).grade === assignedGrade` for every prospect; the naive grade-center fill is gone.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` 0; `NODE_ENV= npx vitest run src/utils/tests/prospectScoutingDraftEngine.test.ts` → green, **adding a test that for a sample across ALL §3.2 grades, `scoreSmb4Player(generated).grade === assignedGrade`** (the round-trip exactness). Do NOT run the full suite (Opus runs it). (B9 will add the 40k ±1.5pp distribution test separately.)
+
+**FORMAT:** 1) files changed + total; 2) the solve (base profile, binary-search target = §3.2 band center, correction, clamp) + the buildCandidate reorder; 3) ACTUAL tsc + prospect test output (incl. the round-trip test); 4) "B1 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL:** if `scoreSmb4Player`'s `Smb4PlayerInput` shape can't be assembled from the candidate, or the §3.2 band center target is ambiguous vs the calibrated thresholds → STOP and quote both. If the binary search can't hit a band for some grade within [20,99] → STOP and report which grade. NEVER modify the oracle to make the solve converge.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: B1 ===== -->
+
+<!-- ===== CONTRACT: B9 (prospect-gen — §13 distribution-validation test) ===== -->
+## CONTRACT — B9 (prospect-gen: §13 distribution-validation test) — 2026-06-20 (AUTH-4) — Mode-1 FINAL
+
+**ROUTE:** Codex CLI (gpt-5.5, high). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** Mode-1 prospect-gen validation. **DEPENDS ON B1..B7 (all committed).**
+
+**GOAL:** A §13 validation test proving the generated draft class reproduces §3.2 (within tolerance) + trait/position sanity — the end-to-end proof of the B1–B7 pipeline.
+
+**SOURCE OF TRUTH:** `PROSPECT_GENERATION_SPEC.md §13` (validation) + `§3.2` (the target distribution) + `§3.4` (30/50/20).
+
+**CONSTRAINTS:**
+- Add a test (in `src/utils/tests/prospectScoutingDraftEngine.test.ts` or a new sibling test file): generate a LARGE pool (target 40k; if too slow, ≥20k — note the N) via `generateProspectScoutingDraft`, score each with `scoreSmb4Player`, histogram realized analyzer grades, and **assert each §3.2 grade's realized share is within ±1.5pp** of §3.2 (B1 makes grade==assigned exact, so only sampling noise should remain → comfortable pass). Also assert: trait-count ≈ 30/50/20 (±~3pp), position spread sane (NO DH/UTIL; pitchers get pitcher-pool traits/arsenals, fielders hitter-pool).
+- Export `generateProspectScoutingDraft` (+ any helpers the test needs) if not already exported.
+- Test-only + minimal export changes; NO engine-logic change. **FROZEN ORACLE untouched.**
+- Branch `codex/mode1-v1` only; do NOT commit; do NOT push.
+
+**EXPECTED OUTPUT:** a passing §13 distribution-validation test.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` 0; `NODE_ENV= npx vitest run <the test file>` → green (note the N used + the runtime).
+
+**FORMAT:** 1) files changed + total; 2) the test design (N, the per-grade tolerance, the trait/position checks) + the realized per-grade deviations observed; 3) ACTUAL tsc + test output; 4) "B9 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL:** if the realized distribution misses §3.2 BEYOND ±1.5pp → that is a REAL finding (a B1/B2 defect), **STOP and report the per-grade deviations** — do NOT loosen the tolerance to force a pass.
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: B9 ===== -->
+
+<!-- ===== CONTRACT: AUC-1.1 (auction config + setup enums) ===== -->
+## CONTRACT — AUC-1.1 (auction config enum + league-setup fields) — 2026-06-21 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5, high). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** Mode-1 AUCTION track — the foundation config (disjoint NEW file, no deps).
+
+**GOAL:** A typed auction config module: the format enum + the setup config carrying the JK-ruled defaults, so all downstream auction tickets (state machine, CPU shill, persistence, UI) build on it.
+
+**SOURCE OF TRUTH:** `spec-docs/AUCTION_DRAFT_SPEC.md §5` (build surface — AUC-1.1) + `§6` (the RULED defaults: Q1 fixed-cyclic nomination seeded at setup; Q3 flat increment scaled to cap + per-turn timer OFF by default; Q2 put-up-only; auction = v1 PRIMARY+ONLY, snake = not-v1).
+
+**CONSTRAINTS — NEW file `src/data/auctionEngineConstants.ts`:**
+- `export type AuctionFormat = 'auction' | 'snake';` (v1 default `'auction'`; `'snake'` is a typed-but-not-v1 placeholder per §9.A).
+- `export interface AuctionSetupConfig { format: AuctionFormat; bidIncrement: number; turnTimerSeconds: number | null; nominationOrderSeed: string; cpuShillCount: number; excludeFromLeague?: boolean; }` (+ a `DEFAULT_AUCTION_SETUP_CONFIG` with the §6 ruled defaults: format 'auction', a flat bidIncrement constant [comment as cap-scaled/§16 sim-tune], turnTimerSeconds null [Q3 timer OFF], nominationOrderSeed fixed at setup [Q1], a default cpuShillCount).
+- Pure DATA/types only — no engine logic, no IndexedDB, no imports beyond types. Mirror the existing `rosterEngineConstants.ts`/`tierParams.ts` data-module style.
+- A small test `src/data/tests/auctionEngineConstants.test.ts` (defaults present + sane: format 'auction', timer null, increment > 0).
+- Branch `codex/mode1-v1` only; do NOT commit; do NOT push.
+
+**EXPECTED OUTPUT:** the auction config module + defaults + a small test. No behavior wired anywhere (foundation).
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` 0; `NODE_ENV= npx vitest run src/data/tests/auctionEngineConstants.test.ts` → green. Do NOT run the full suite.
+
+**FORMAT:** 1) files changed + total; 2) the config shape + the §6-sourced defaults; 3) ACTUAL tsc + test output; 4) "AUC-1.1 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL:** if §6 leaves a default genuinely unspecified → pick a conservative value, COMMENT it as a §16 sim-tune default, and note it (do NOT block on a tunable).
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: AUC-1.1 ===== -->
+
+<!-- ===== CONTRACT: AUC-1.2 (reserve-price curve + minSalaryByPosition + auctionMaxBid) ===== -->
+## CONTRACT — AUC-1.2 (auction registry: reservePriceCurve + minSalaryByPosition + auctionMaxBid) — 2026-06-21 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5, high). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** Mode-1 AUCTION track — the pure pricing primitives the state machine + CPU shill consume. **DEPENDS ON AUC-1.1 (committed).**
+
+**GOAL:** Add the auction reserve-price curve + min-salary-by-position + the solvency-capped max-bid as PURE functions, **citing IV_ENGINE §7.5 (do NOT re-derive/alter the economics)**.
+
+**SOURCE OF TRUTH:** `spec-docs/AUCTION_DRAFT_SPEC.md §5` (AUC-1.2; the economics are CITED from `IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md §7.5/§7.6` — read §7.5 for the reserve-price + min-salary model) + `§2.3` (maxBid = solvency-capped). REUSE `luxuryTax` (`src/engines/leagueConstruction.ts:233`) for projected tax; do NOT reimplement it.
+
+**CONSTRAINTS — add to `src/data/rosterEngineConstants.ts` (or a clearly-named auction section):**
+- `RESERVE_PRICE_CURVE_MIN`/`MAX` + a PURE `reservePriceCurve(ivPercentile: number): number` per IV_ENGINE §7.5 (map an IV percentile → reserve price; cite the §7.5 form, do NOT invent a different curve). `MIN_SALARY_BY_POSITION` per §7.5 (or the existing salary-floor source if one exists — grep first; reuse, don't duplicate).
+- A PURE `auctionMaxBid(remainingBudget, slotsRemaining, minSalary, projectedTax)` = the §2.3 solvency cap (`remainingBudget − (slotsRemaining − 1) × minSalary − projectedTax`, clamped ≥ 0). Reuse `luxuryTax` to compute projectedTax at the call site (or accept it as a param — keep this fn pure).
+- Pure functions + constants only; no IndexedDB, no state. Mirror the `rosterEngineConstants.ts`/`tierParams.ts` style.
+- A test `src/data/tests/rosterEngineConstants.auction.test.ts` (or extend the existing): reservePriceCurve at percentile 0/50/100 monotonic; minSalaryByPosition present for all positions; auctionMaxBid edges (solo slot, budget exhaustion → 0, normal).
+- **FROZEN:** do NOT alter IV_ENGINE §7.5 economics or any existing pricing in `ivEngine.ts`/`tierParams.ts`/`leagueConstruction.ts` (read/cite only).
+- Branch `codex/mode1-v1` only; do NOT commit; do NOT push.
+
+**EXPECTED OUTPUT:** the reserve-price curve + min-salary + solvency-capped max-bid, pure + tested, citing §7.5.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` 0; `NODE_ENV= npx vitest run <the test>` → green. Do NOT run the full suite.
+
+**FORMAT:** 1) files changed + total; 2) the §7.5-cited reserve-price form + minSalary source (reused or new) + the maxBid formula; 3) ACTUAL tsc + test output; 4) "AUC-1.2 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL:** if IV_ENGINE §7.5 doesn't clearly specify the reserve-price curve or a min-salary source already exists → STOP and quote §7.5 + the existing source (do NOT invent economics or duplicate an existing salary floor).
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: AUC-1.2 ===== -->
+
+<!-- ===== CONTRACT: AUC-2.1 (auction state machine — pure reducer) ===== -->
+## CONTRACT — AUC-2.1 (auction hot-seat state machine, pure reducer) — 2026-06-21 (AUTH-4) — AUCTION CORE
+
+**ROUTE:** Codex CLI (gpt-5.5, xhigh). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** Mode-1 AUCTION core — the PURE hot-seat state machine. **DEPENDS ON AUC-1.1 (config) + AUC-1.2 (reservePriceCurve/auctionMaxBid) — committed.**
+
+**GOAL:** A PURE, deterministic, heavily-tested auction state-machine reducer implementing §2.2 (the hot-seat flow), §2.2.1 (RESOLVE), §2.2.2 (progress invariant + legal-fill termination), per the §6 rulings.
+
+**SOURCE OF TRUTH (read all):** `AUCTION_DRAFT_SPEC.md §2.2` (state flow) + **§2.2.1** (RESOLVE — exact rule) + **§2.2.2** (progress invariant / no-stall + legal-fill termination) + `§2.5` (nomination) + `§6` RULINGS: Q1 fixed-cyclic nomination seeded at setup · Q2 put-up-only (no forced opening bid) + lone-survivor TAP-TO-CLAIM · Q4 pass = out-for-this-lot (no re-entry) · Q5 the §2.2.2 progress-guard disposition. Reuse `reservePriceCurve`/`auctionMaxBid` (AUC-1.2 `rosterEngineConstants.ts`) + `AuctionSetupConfig` (AUC-1.1).
+
+**CONSTRAINTS — NEW PURE file `src/engines/auctionStateMachine.ts`:**
+- States: `'SETUP' | 'NOMINATION' | 'OPEN_BIDDING' | 'RESOLVE' | 'SOLD' | 'PASSED' | 'AUCTION_COMPLETE'`. Types: `Lot` (playerId, openingAsk, highBid: number|null, highBidder: teamId|null, stillIn: Set/array of teamIds), `AuctionSession` (teams+budgets+roster-slots, fixed-cyclic nominationOrder, available pool, the passed-tracker for §2.2.2, current lot, results).
+- Pure transition fns (NO IndexedDB/Date/Math.random — deterministic from inputs; any randomness seeded from config): `initAuctionSession`, `nominatePlayer` (opens a lot; `openingAsk = reservePriceCurve(ivPercentile) × IV`), `recordBid` (valid iff `> highBid` by ≥ increment AND `≤ auctionMaxBid(...)` solvency — reject otherwise), `passBid` (team leaves stillIn — pass=out, Q4), `evaluateResolve` (fires when stillIn ≤ 1: **SOLD** if highBid≠null [winner=highBidder, winning bid→salary]; **lone-survivor-never-bid** → a claim-or-pass decision state [Q2 tap-to-claim]; **PASSED** if stillIn empties with highBid==null), `rotateNomination` (fixed-cyclic Q1; skip full-roster teams), and the **§2.2.2 progress invariant** (a PASSED player not re-nominatable until another SOLD; set aside after 2 passes w/ no intervening sale; nominator can't re-nominate a player they just caused to PASS) + **legal-fill termination** (AUCTION_COMPLETE when no team has an open slot).
+- Do NOT do persistence (AUC-3.1) or UI (AUC-4.1) or CPU shills (AUC-2.2) — pure state only. Do NOT touch frozen economics.
+- HEAVY tests `src/engines/__tests__/auctionStateMachine.test.ts`: SOLD (incl. lone-survivor-who-bid), PASSED, lone-survivor-never-bid claim→SOLD / pass→PASSED, bid rejection (below increment / above solvency cap), pass=out monotonic shrink, §2.2.2 (re-nominatable only after a sale; set-aside after 2 passes; no immediate self-re-nominate), legal-fill termination, fixed-cyclic rotation skipping full teams.
+- Branch `codex/mode1-v1` only; do NOT commit; do NOT push.
+
+**EXPECTED OUTPUT:** the pure auction reducer + heavy tests. No persistence/UI/shills.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` 0; `NODE_ENV= npx vitest run src/engines/__tests__/auctionStateMachine.test.ts` → green. Do NOT run the full suite.
+
+**FORMAT:** 1) files changed + total; 2) the state/transition design + how §2.2.1 RESOLVE + §2.2.2 progress invariant + the Q1/Q2/Q4/Q5 rulings are encoded; 3) ACTUAL tsc + test output; 4) "AUC-2.1 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL:** if a §2.2.1/§2.2.2 rule is ambiguous or needs an IV/percentile input the session can't supply → STOP and quote the spec + the missing input. Keep it PURE (no I/O).
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: AUC-2.1 ===== -->
+
+<!-- ===== CONTRACT: AUC-2.2 (CPU shill bidding — pure) ===== -->
+## CONTRACT — AUC-2.2 (CPU shill bid-resolution loop, §7.6) — 2026-06-21 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5, xhigh). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** Mode-1 AUCTION — the CPU shill market (pure). **DEPENDS ON AUC-1.1/1.2/2.1 (committed).**
+
+**GOAL:** Pure CPU-shill bid/nomination policy per IV_ENGINE §7.6 — private hidden valuation + probabilistic interest + depletable budgets + personalities, with the **HARD rule: NO deterministic price floor** (the reserve curve is the law; shills are the market).
+
+**SOURCE OF TRUTH:** `IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md §7.6` (read it) + `AUCTION_DRAFT_SPEC.md §2.6` (interleave) + `§34`/§5 (AUC-2.2). Valuation = `IV × archetypeFit × personalityBias × noise(±12%)`. REUSE `composeIdentity` (`src/engines/leagueConstruction.ts:156`) for archetypeFit; do NOT reimplement it. shillNoise = **±12%** (D14). `bargainInterestCurve` is **TBD/playtest sim-tune** (D14 table) → pick a conservative default, COMMENT it sim-tune, flag for JK.
+
+**CONSTRAINTS — NEW PURE file `src/engines/cpuShillBidding.ts`:**
+- `evaluateCpuValuation(player, shill, seed): number` = `IV × archetypeFit(composeIdentity) × personalityBias × noise(±12%)` (seeded noise, NOT Math.random).
+- `evaluateCpuInterest(lot, shill, seed): boolean` via a `bargainInterestCurve` (the cheaper vs the shill's valuation, the likelier to bid — sim-tune default, flag). Seeded.
+- `cpuBidOnLot(session, shillTeamId, seed): bid | pass` — bids the minimum legal raise IF interested AND within the shill's DEPLETABLE budget AND below its private valuation; otherwise passes. **MAKE-OR-BREAK: NO deterministic price floor** — a shill must NEVER guarantee a minimum price; interest is probabilistic + valuation-bounded. NO branch that says "always bid up to X."
+- `resolveCpuNomination(session, shillTeamId, seed)` — a CPU nominator auto-selects a player (per §7.6) when on the nomination clock.
+- Shill personalities (sniper/spender/zealot) as `personalityBias` profiles (sim-tune, flag). Pure (no I/O/Date/Math.random — all seeded). Consume the AUC-2.1 session shape.
+- HEAVY tests `src/engines/__tests__/cpuShillBidding.test.ts`: valuation = IV×fit×bias×noise within ±12%; interest is probabilistic (varies by seed, not constant); a shill never bids above its valuation or below... NO — never bids ABOVE valuation, never bids when over-budget; **the no-deterministic-floor assertion** (across many seeds, a cheap lot does NOT always draw a shill bid — there exist seeds where shills pass); depletable budget enforced.
+- Do NOT touch the state machine (AUC-2.1) internals, frozen economics, or `composeIdentity`. Branch `codex/mode1-v1` only; do NOT commit; do NOT push.
+
+**EXPECTED OUTPUT:** the pure shill policy fns + heavy tests, no deterministic floor.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` 0; `NODE_ENV= npx vitest run src/engines/__tests__/cpuShillBidding.test.ts` → green. Do NOT run the full suite.
+
+**FORMAT:** 1) files changed + total; 2) the valuation/interest/bid policy + how the no-deterministic-floor rule is structurally guaranteed + the sim-tune defaults (flag bargainInterestCurve + personalities); 3) ACTUAL tsc + test output; 4) "AUC-2.2 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL:** if §7.6 needs a curve/bias value it doesn't specify → conservative default + COMMENT sim-tune + flag (do NOT block). If a deterministic floor seems needed to make tests pass → STOP (that violates the HARD rule).
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: AUC-2.2 ===== -->
+
 <!-- ===== CONTRACT: L14-3 (rebrand offer reader + accept wrapper, build-dark) ===== -->
 ## CONTRACT — L14-3 (rebrand circuit-breaker: GM-offer reader + accept wrapper, build-dark) — 2026-06-21 (AUTH-4)
 
