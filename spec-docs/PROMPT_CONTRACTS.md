@@ -15384,3 +15384,87 @@ Use xhigh reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-0a ===== -->
+
+<!-- ===== CONTRACT: RB-0b-2 (farm-prospect chemistry rebalance to target) ===== -->
+## CONTRACT — RB-0b-2 (farm-prospect chemistry rebalanced to `CHEMISTRY_TARGET_DISTRIBUTION`) — 2026-06-21 (AUTH-4, Mode-1 auction REBUILD)
+
+**ROUTE:** Codex CLI (gpt-5.5, **xhigh**). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** RB-0b split part 2 — make GENERATED FARM PROSPECT chemistry match the frozen `CHEMISTRY_TARGET_DISTRIBUTION` (RB-0a) instead of an unweighted uniform pick. Pure engine change inside `prospectScoutingDraftEngine.ts`; NO persistence/seam/UI change. Isolated + low-risk.
+
+**GOAL:** Replace the uniform per-candidate chemistry pick with a deterministic, batch-level **quota** assignment so a generated prospect BATCH's chemistry distribution matches `CHEMISTRY_TARGET_DISTRIBUTION` (SPI .21/DIS .20/CMP .20/SCH .20/CRA .19) within `CHEMISTRY_TARGET_SOURCE_TOLERANCE` (0.015) — WITHOUT perturbing ANY other prospect draw (personality, hidden modifiers, ratings, grade, position). Prospects keep storing chemistry as the Title-Case word.
+
+**SOURCE OF TRUTH:** `AUCTION_DRAFT_SPEC_V2.md` §3.7 "Chemistry BALANCE across the WHOLE draft pool" ("(b) the generated FARM prospects must be rebalanced to MATCH that 440-target distribution … like the §3.2-grade + §3.3-position distributions"). `src/data/chemistryCanonical.ts` (RB-0a, committed `edb94d31`): `CHEMISTRY_TARGET_DISTRIBUTION`, `CHEMISTRY_CODES`, `CHEMISTRY_CODE_TO_WORD`, `CHEMISTRY_TARGET_SOURCE_TOLERANCE`.
+
+**GROUNDED ANCHORS (re-verified from source 2026-06-21 — trust, but re-read at point of edit):**
+- `src/utils/prospectScoutingDraftEngine.ts:986` — `chemistry: pick(\`${seed}:chemistry\`, CHEMISTRY_POOL),` (the uniform pick to replace). `:282` `const CHEMISTRY_POOL = ['Competitive', 'Crafty', 'Disciplined', 'Spirited', 'Scholarly'];`.
+- `:939-989` `buildCandidate(input, index)` with `const seed = \`${input.seed}:candidate:${index}\`;` — **each axis draws from its OWN seed string (FNV-1a per-string, NOT a stateful stream), so changing/removing the chemistry draw does NOT shift personality/modifier/grade draws.**
+- Batch-assembly sites: `:1147` `Array.from({ length: count }, (_, index) => buildCandidate(engineInput, index))` and `:1225` `const draftClass = Array.from({ length: poolSize }, (_, index) => buildCandidate(input, index));` — **re-read both from source; apply the rebalance to the final generated array at the shared chokepoint(s).**
+- RNG helpers (`:420-441`): `hashString` (FNV-1a), `randomUnit(seed)=hashString(seed)/0xffffffff`, `pick<T>(seed, values)`, `normal`. `GeneratedProspectCandidate.chemistry: string` (`:131`, Title-Case word).
+- `leagueBuilderStartupFarmDraft.test.ts:218-230` pins prospect COUNT (20 drafted / 10 farm) + salary/round + `engineMethodVersion === PROSPECT_SCOUTING_DRAFT_ENGINE_VERSION` (a self-referential read) — does NOT pin chemistry values/distribution.
+
+**DESIGN CALLS (Captain, AUTH-4 — documented for JK):**
+1. **Quota method = largest-remainder (Hamilton):** for a batch of N, per-code target count = `floor(N × frac)`, then distribute the leftover (`N − Σfloor`) to the codes with the largest fractional parts, deterministic tiebreak by `CHEMISTRY_CODES` order. Guarantees Σ = N and the per-code share is within ≤1/N of target (well inside ±1.5pp for any N≥67).
+2. **Deterministic assignment:** build the chemistry multiset from the quota, then assign codes to prospect indices via a **seeded Fisher-Yates shuffle** keyed on a SEPARATE namespace `\`${input.seed}:chemistry-rebalance\`` (NOT `\`${seed}:chemistry\``) so it consumes no RNG that any other draw uses → personality/modifiers/grade/ratings stay byte-identical. Store the result as the Title-Case word via `CHEMISTRY_CODE_TO_WORD`.
+3. **Keep `buildCandidate` otherwise byte-identical.** You MAY drop the now-dead `:986` `pick(\`${seed}:chemistry\`, ...)` (its result is overwritten) OR leave it and overwrite in the post-pass — EITHER is fine as long as no OTHER candidate field changes. The rebalance is a post-generation pass over the assembled array (a new array; do not mutate in place if the engine treats candidates as shared).
+4. **Do NOT bump `PROSPECT_SCOUTING_DRAFT_ENGINE_VERSION`** unless a test fails without it (the rebalance is deterministic + applied uniformly; resume regenerates identically). If a test pins a literal version string and breaks → STOP and report (don't silently bump).
+
+**CONSTRAINTS — edit/create exactly these files:**
+1. **`src/utils/prospectScoutingDraftEngine.ts`** — ADD an exported pure function `rebalanceProspectChemistryToTarget(prospects, batchSeed)` (largest-remainder quota over `CHEMISTRY_TARGET_DISTRIBUTION` + seeded Fisher-Yates assignment, importing from `../data/chemistryCanonical`), and APPLY it to the final generated prospect array at the batch-assembly chokepoint(s) (`~:1147` and `~:1225` — re-read; if they share a helper, apply there once). Use the `\`${input.seed}:chemistry-rebalance\`` namespace. Do NOT change ratings/grade/position/personality/modifier logic.
+2. **NEW `src/utils/tests/prospectChemistryRebalance.test.ts`** — assert: (a) a large batch (e.g. 1000) with a fixed seed has each chemistry share within `CHEMISTRY_TARGET_SOURCE_TOLERANCE` of `CHEMISTRY_TARGET_DISTRIBUTION`; (b) determinism (same seed → identical chemistry assignment); (c) **no-perturbation** — with the same seed, every prospect's personality + hiddenPersonalityModifiers + grade/rating + position are IDENTICAL to a generation run captured before the chemistry overwrite (prove the other axes did not move — e.g. compare a pre-rebalance vs post-rebalance candidate on all non-chemistry fields); (d) a small batch (e.g. 23) still sums correctly (quota integrity, no crash).
+
+**DO NOT:** touch persistence / `convertPlayer` / `registerLeaguePool` / `initAuction` / any store / DB version (that is RB-0b-1); modify the static `PLAYERS` data or `playerDatabase.ts`; change personality/hidden-modifier generation; alter ratings/grade/position draws or their seeds; touch the frozen IV oracle. Branch `codex/mode1-v1` only; do NOT commit, do NOT push.
+
+**EXPECTED OUTPUT:** generated farm-prospect batches whose chemistry matches the target distribution deterministically, with every other prospect attribute byte-unchanged.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` exit 0; `NODE_ENV= npx vitest run src/utils/tests/prospectChemistryRebalance.test.ts` green; `NODE_ENV= npx vitest run src/utils/tests/leagueBuilderStartupFarmDraft.test.ts` green (counts/salary unaffected). Paste ACTUAL output. (Opus re-runs the FULL Mode-1 suite + confirms zero-new-reds + that personality/grade draws are unperturbed.)
+
+**FORMAT:** 1) every changed/new path + total; 2) the rebalance fn + where applied + the separate-seed-namespace proof of no perturbation; 3) ACTUAL tsc + test output; 4) "RB-0b-2 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL (STOP-IF):** if the rebalance cannot be applied without perturbing another draw (e.g. the only chokepoint forces a shared RNG stream) → STOP and quote it. If a test pins a literal prospect chemistry value or the engine version and breaks → STOP and report. If the batch-assembly structure differs materially from the grounded `:1147`/`:1225` → STOP and report what you found.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-0b-2 ===== -->
+
+<!-- ===== CONTRACT: RB-0b-1 (MLB-pool pre-draft 3-axis regen + persist) ===== -->
+## CONTRACT — RB-0b-1 (pre-draft regen of all 3 personality axes for every MLB-pool player) — 2026-06-21 (AUTH-4, Mode-1 auction REBUILD)
+
+**ROUTE:** Codex CLI (gpt-5.5, **xhigh**). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** RB-0b split part 1 — the spec-PRIMARY foundation: regenerate ALL THREE personality axes FRESH, PRE-DRAFT, for every MLB-pool (league) player, persist them onto the player records so they flow into Mode-2, and demote the franchise-init hidden-modifier backfill to a no-op safety net. **PERSISTENCE / saved-shape + a live-path hook → audit-HARDEST; JK browser-verify BATCHED (persistence-prioritized).**
+
+**GOAL:** At MLB-auction start (pre-draft), for every player assigned to the league, deterministically (re)generate: (1) **primary personality** = a seeded pick from the canonical 7-type pool (replacing the `convertPlayer` hardcoded `'Competitive'` for league players); (2) **hidden modifiers** (loyalty/ambition/resilience/charisma) via the existing seeded generator (MOVED here from franchise-init); (3) **chemistry** = target-rebalanced over the league pool to `CHEMISTRY_TARGET_DISTRIBUTION` (anti-console-leak reshuffle). Persist via `savePlayer`. Idempotent (purely seeded). The franchise-init backfill stays as an untouched no-op safety net.
+
+**SOURCE OF TRUTH:** `AUCTION_DRAFT_SPEC_V2.md` §3.7 ("Assignment/timing (THE FIX)": "regenerate ALL THREE axes for every MLB-pool player before the draft … seeded deterministically … MOVES hidden-modifier creation from the franchise-init backfill to PRE-DRAFT, so all three axes exist + are correct during the draft AND persist unchanged into Mode 2"; "Chemistry is REGENERATED and REBALANCED to match the 440-base-pool's chemistry distribution"). `AUCTION_REBUILD_PLAN.md` RB-0. `src/data/chemistryCanonical.ts` (RB-0a `edb94d31`).
+
+**GROUNDED ANCHORS (re-verified from source 2026-06-21 — trust, but re-read at point of edit):**
+- `src/utils/leagueBuilderStorage.ts:2010` — `convertPlayer` sets `personality: 'Competitive'` (hardcoded) + `chemistry` (canonical) + NO `hiddenPersonalityModifiers`. **DO NOT MODIFY convertPlayer** — the regen overrides league players pre-draft; non-league globalPlayers keep the seed default until they join a league.
+- `src/utils/leagueBuilderStorage.ts` exports `getAllPlayers()` + `savePlayer(player)` (globalPlayers store, keyed by `id`, `store.put` at ~:1071) + the `Player` interface (`:273-275` personality/chemistry/`hiddenPersonalityModifiers?`) + `Personality`/`Chemistry` types (`:68-72`).
+- `src/src_figma/app/hooks/useAuctionDraft.ts:334-370` — `initAuction(leagueId, ...)`: `:346` `const pool = existingPool ?? await leagueData.registerLeaguePool(leagueId);` then `:354` `const players = buildAuctionPlayers(pool);`. **HOOK the regen here, BEFORE `:346`** (so the regen persists before the pool + franchise read the players).
+- `src/src_figma/hooks/useLeagueBuilderData.ts:397-426` `registerLeaguePool` — `getAllPlayers().filter(p => p.leagueAssignments?.some(a => a.leagueId === league.id))` is the exact league-membership filter to mirror.
+- `src/utils/prospectScoutingDraftEngine.ts:282-283` — `PERSONALITY_POOL = ['Competitive','Relaxed','Droopy','Jolly','Tough','Timid','Egotistical']` (the canonical 7, Title-Case) + `:930-937` `generateHiddenPersonalityModifiers(seed)` + `:439-441` `pick<T>(seed, values)` + `:429-437` `randomUnit`/`normal`/`hashString` (FNV-1a per-seed). **Reuse these (export if needed) — do NOT reimplement the RNG.**
+- `src/utils/franchiseInitializer.ts:208-210` backfill skips players that already have `hiddenPersonalityModifiers` → becomes a no-op once stamped. **DO NOT MODIFY the backfill** (it stays a safety net; its test `franchiseInitializer.test.ts:95-127` uses mock players → stays green).
+- `src/utils/franchisePlayerStorage.ts:561` `deepCopyLeagueToFranchise` spreads `...effectivePlayer` (carries the 3 axes into the franchise) → Mode-2 reads them from `getAllFranchisePlayers` (`franchiseGameTrackerRoster.ts:258`). Confirmed: pre-draft axes persist to Mode-2. The freeze handoff contract (`types/franchise.ts:113-124`) does NOT carry player axes (they ride the franchise player store) — so NO handoff-contract / trackerDb change is needed.
+
+**DESIGN CALLS (Captain, AUTH-4 — documented for JK):**
+1. **Seed = `\`${leagueId}:${player.id}\`` (order-independent, stable).** Personality = `pick(\`${leagueId}:${player.id}:personality\`, PERSONALITY_POOL)`. Modifiers = `generateHiddenPersonalityModifiers(\`${leagueId}:${player.id}\`)`. Chemistry quota shuffle seed = `\`${leagueId}:chemistry-rebalance\``. ⇒ re-running is IDEMPOTENT (same values), so resume is safe with NO guard flag.
+2. **Personality = independent seeded pick from the canonical 7** (no target distribution specified for personality — only chemistry is rebalanced). This also FIXES the 100%-'Competitive' conflation for league players.
+3. **Chemistry = largest-remainder quota over the league pool** (same method as RB-0b-2) to `CHEMISTRY_TARGET_DISTRIBUTION`, seeded Fisher-Yates assignment, stored as the Title-Case `Chemistry` word via `CHEMISTRY_CODE_TO_WORD`. This OVERWRITES the imported chemistry (deliberate anti-console-leak reshuffle; the pool distribution is preserved/targeted, per-player value changes). For pools smaller than ~67 the share may exceed ±1.5pp by up to 1/N — acceptable (quota integrity guaranteed; the band is a target).
+4. **Seam = a new pure engine + a thin persistence wrapper invoked once in `initAuction` before `registerLeaguePool`.** Idempotent by construction.
+
+**CONSTRAINTS — edit/create exactly these files:**
+1. **NEW `src/engines/leaguePoolAxisRegen.ts`** — PURE `export function regenerateLeaguePoolPlayerAxes(players: Player[], leagueId: string): Player[]` (no I/O): returns NEW player objects with personality (seeded 7-pick), `hiddenPersonalityModifiers` (seeded), and chemistry (largest-remainder quota + seeded shuffle, Title-Case word) set per the DESIGN CALLS; all other fields untouched. Import the RNG/`pick`/`generateHiddenPersonalityModifiers`/`PERSONALITY_POOL` from `prospectScoutingDraftEngine` (export them there if not already exported — ADD `export` only, no logic change) and the chemistry maps/target from `../data/chemistryCanonical`. Pure/deterministic (no Date/Math.random/IndexedDB).
+2. **NEW `src/utils/leaguePoolAxisRegenPersist.ts`** — `export async function regenerateAndPersistLeaguePoolAxes(leagueId: string): Promise<{ regeneratedCount: number }>`: `getAllPlayers()` → filter to `leagueAssignments?.some(a => a.leagueId === leagueId)` (mirror `registerLeaguePool`) → `regenerateLeaguePoolPlayerAxes(leaguePlayers, leagueId)` → `savePlayer` each updated player → return the count. Import `getAllPlayers`/`savePlayer`/`Player` from `./leagueBuilderStorage`.
+3. **`src/src_figma/app/hooks/useAuctionDraft.ts`** — in `initAuction`, BEFORE `:346` (the `registerLeaguePool`/`getRegisteredPool` line), `await regenerateAndPersistLeaguePoolAxes(leagueId);` (one line + import). Additive; do NOT restructure the rest of initAuction.
+4. **NEW `src/engines/__tests__/leaguePoolAxisRegen.test.ts`** — on the PURE function: (a) determinism (same players+leagueId → identical output); (b) all 3 axes set on every player (personality ∈ the 7; modifiers all numbers ∈ [0,100]; chemistry ∈ the 5 Title-Case words); (c) over a ≥200-player synthetic pool the chemistry distribution is within `CHEMISTRY_TARGET_SOURCE_TOLERANCE` of target; (d) quota integrity for a small pool (e.g. 23 — counts sum to N, no crash); (e) non-axis fields (id, ratings, position) unchanged.
+
+**DO NOT:** modify `convertPlayer` / its `'Competitive'` default; modify `generateFranchiseHiddenModifierBackfill` or its test; bump trackerDb / `DB_VERSION` / change any store schema (this updates EXISTING records' fields via `savePlayer` — no shape change; CONFIRM `savePlayer` needs no new field); touch the freeze handoff contract; modify the static `PLAYERS` data / `playerDatabase.ts`; reimplement the RNG; touch the frozen IV oracle; alter ratings/salary/IV. Branch `codex/mode1-v1` only; do NOT commit, do NOT push.
+
+**EXPECTED OUTPUT:** every league player carries a fresh seeded 7-type personality + 4 hidden modifiers + a target-rebalanced chemistry after `initAuction`, persisted to `globalPlayers`, flowing into the franchise; the backfill is now a no-op for those players. No DB/schema/oracle change.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` exit 0; `NODE_ENV= npx vitest run src/engines/__tests__/leaguePoolAxisRegen.test.ts` green. Paste ACTUAL output. (Opus re-runs the FULL Mode-1 suite + confirms zero-new-reds + no trackerDb/store change + that the backfill test still passes.)
+
+**FORMAT:** 1) every changed/new path + total; 2) the pure regen + the persist wrapper + the one-line initAuction hook + that it's idempotent/no-DB-change; 3) ACTUAL tsc + test output; 4) "RB-0b-1 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL (STOP-IF):** if persisting the regenerated players needs ANY new store field / DB-version bump → STOP and report (it must be an in-place field update on the existing `Player` shape). If `getAllPlayers`/`savePlayer` are not exported or `initAuction` cannot take an additive pre-`registerLeaguePool` await without restructuring → STOP and quote it. If exporting `PERSONALITY_POOL`/`pick`/`generateHiddenPersonalityModifiers` from `prospectScoutingDraftEngine` requires more than adding `export` → STOP. If a full-suite test asserts a specific league-player personality/chemistry value through the auction path → STOP and report (do not edit the test).
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-0b-1 ===== -->
