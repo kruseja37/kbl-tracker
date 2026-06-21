@@ -244,7 +244,7 @@ const POSITION_POOL: DraftPosition[] = [
   'RF',
 ];
 const CHEMISTRY_POOL = ['Competitive', 'Crafty', 'Disciplined', 'Spirited', 'Scholarly'];
-const PERSONALITY_POOL = ['Competitive', 'Spirited', 'Crafty', 'Scholarly', 'Disciplined', 'Tough', 'Relaxed'];
+const PERSONALITY_POOL = ['Competitive', 'Relaxed', 'Droopy', 'Jolly', 'Tough', 'Timid', 'Egotistical'];
 const BATTER_TRAITS = ['Clutch', 'Tough Out', 'Rally Starter', 'Sprinter', 'Magic Hands', 'Utility'];
 const PITCHER_TRAITS = ['K Collector', 'Workhorse', 'Elite 4F', 'Elite SL', 'Specialist', 'Rally Stopper'];
 const CITIES = [
