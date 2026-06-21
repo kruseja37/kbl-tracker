@@ -1,11 +1,16 @@
 # CURRENT_STATE.md — LIVE HEADER
 
-> **⚙️ AUTH-4 OVERNIGHT RUN ACTIVE (2026-06-20 → overnight).** JK enacted unattended AUTH-4. **Single-Captain (Shape A):**
+> **⚙️ AUTH-4 OVERNIGHT RUN IN PROGRESS (2026-06-20 → 2026-06-21).** JK enacted unattended AUTH-4. **Single-Captain (Shape A):**
 > Opus owns this integration line `codex/franchise-v1-next` (docs + Mode-2 dispatch/audit) + dispatches Codex for Mode-1 in
-> worktree `/Users/johnkruse/Projects/kbl-mode1` [`codex/mode1-v1`, base `549f9832`]. Codex builds, Opus audits, branch-only,
-> never push. **Live ledger = `AUTONOMOUS_RUN_LOG.md`** (read top-to-bottom on return). **Queue:** Mode-2 = L13-8
-> cadence-confirm → L13-3b → L14 → L-SIM; Mode-1 = auction/prospect/scout v1 from the ruled specs. **⚠ The "NEXT=L13-3"
-> line below is STALE:** L13-1..7 are DONE (`34bdd76e`) and the L13 dark stack is wired at `processCompletedGame.ts:648-664`.
+> worktree `/Users/johnkruse/Projects/kbl-mode1` [`codex/mode1-v1`]. Codex builds, Opus audits, branch-only, never push.
+> **LIVE LEDGER = `AUTONOMOUS_RUN_LOG.md` (WAVE 1–21) — read it top-to-bottom on return; it supersedes everything below.**
+> **DONE this run:** Mode-2 **L14 fully built** (L14-1/2a/2b/3) ⇒ L1–L14 all build-dark; **L-SIM LSIM-P1 GREEN** (60g
+> findings=0, determinism byte-identical, L14 proven dormant). Mode-1 **prospect-gen COMPLETE (B1–B9, validated ±0.3pp to §3.2)**;
+> auction track at 3/~8 (AUC-1.1/1.2/2.1 committed; **AUC-2.2 IN FLIGHT at handoff** — Codex task `b36rn6zh8`, `/tmp/codex-auc22.out`).
+> **QUEUE:** auction AUC-2.2 → 3.1 (persist) → 4.1 (hot-seat UI) → 5.1 (farm) → 5.2 (L-ECON1 freeze) + scout-privacy UI + the
+> POSITION_POOL SP/RP fix; Mode-2 = LSIM-P3 (full-matrix passport). **OPEN DECISIONS for JK** (logged in the ledger): B8 fixed-age,
+> L14-2b non-ACID partial-crash edge, L14-3 GM-initiated/no-pCG-block, POSITION_POOL SP/RP gap, smoke fame-war-legitimacy (resolved @60g).
+> **⚠ Everything below this block is STALE (L13-era) — trust the ledger.** `caffeinate` PID 84474 keeps the Mac awake.
 
 **Last Updated:** 2026-06-20 — **ATTENDED session (JK present).** **HEAD STATE: L13 stack in progress (build-dark) — L13-1
 CLOSED** (relationship edge store + trackerDb v25 migration, browser-verified on a real franchise, no data loss) **· L13-2
