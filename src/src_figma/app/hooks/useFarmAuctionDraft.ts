@@ -20,6 +20,7 @@ import {
 } from "../../../engines/cpuShillBidding";
 import { DEFAULT_AUCTION_SETUP_CONFIG, type AuctionSetupConfig } from "../../../data/auctionEngineConstants";
 import { buildFarmAuctionSession } from "../../../utils/farmAuctionSession";
+import type { FarmAuctionPool } from "../../../utils/farmAuctionPool";
 import {
   createFarmAuctionSessionId,
   getAuctionSessionById,
@@ -53,6 +54,9 @@ export interface UseFarmAuctionDraftOptions {
 
 export interface UseFarmAuctionDraftReturn {
   session: CpuShillAuctionSession | null;
+  pool: FarmAuctionPool | null;
+  scoutsByTeamId: Record<string, ProspectScoutDescriptor | undefined> | null;
+  farmTierCap: number | null;
   seed: string;
   isWorking: boolean;
   error: FarmAuctionDraftError;
@@ -195,6 +199,9 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
   const fallbackLeagueData = useLeagueBuilderData();
   const leagueData = options.leagueData ?? fallbackLeagueData;
   const [session, setSession] = useState<CpuShillAuctionSession | null>(null);
+  const [pool, setPool] = useState<FarmAuctionPool | null>(null);
+  const [scoutsByTeamId, setScoutsByTeamId] = useState<Record<string, ProspectScoutDescriptor | undefined> | null>(null);
+  const [farmTierCap, setFarmTierCap] = useState<number | null>(null);
   const [context, setContext] = useState<FarmAuctionDraftContext | null>(null);
   const [isWorking, setIsWorking] = useState(false);
   const [error, setError] = useState<FarmAuctionDraftError>(null);
@@ -318,10 +325,43 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
       .map((teamId) => leagueData.teams.find((team) => team.id === teamId))
       .filter((team): team is Team => Boolean(team)) ?? [];
     setContext(nextContext);
-    if (!row) return null;
+    if (!row) {
+      setPool(null);
+      setScoutsByTeamId(null);
+      setFarmTierCap(null);
+      return null;
+    }
+    const teams = await buildFarmAuctionTeams({
+      leagueTeams: nextLeagueTeams,
+      getRoster: leagueData.getRoster,
+    });
+    const nextScoutsByTeamId = await loadOptionalFarmScouts(leagueId);
+    const regen = buildFarmAuctionSession({
+      leagueId,
+      seasonNumber,
+      teams,
+      scoutsByTeamId: nextScoutsByTeamId,
+      seed: row.session.config.nominationOrderSeed,
+      config: row.session.config,
+    });
+    const regeneratedOrder = regen.pool.auctionPlayers.map((player) => player.playerId);
+    const persistedOrder = row.session.playerOrder;
+    const matchesPersistedOrder = regeneratedOrder.length === persistedOrder.length
+      && regeneratedOrder.every((playerId, index) => playerId === persistedOrder[index]);
+    if (!matchesPersistedOrder) {
+      console.warn("Farm auction pool regeneration mismatch; resuming persisted session with best-effort display pool.", {
+        leagueId,
+        seasonNumber,
+        persistedOrder,
+        regeneratedOrder,
+      });
+    }
     const resumed = await autoAdvanceCpu(row.session, nextContext, nextLeagueTeams);
+    setPool(regen.pool);
+    setScoutsByTeamId(nextScoutsByTeamId ?? null);
+    setFarmTierCap(regen.farmTierCap);
     return resumed;
-  }), [autoAdvanceCpu, leagueData.leagues, leagueData.teams, runAction]);
+  }), [autoAdvanceCpu, leagueData.getRoster, leagueData.leagues, leagueData.teams, runAction]);
 
   const initFarmAuction = useCallback(async (
     leagueId: string,
@@ -349,19 +389,23 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
       excludeFromLeague: partialConfig.excludeFromLeague ?? true,
     };
     const nextContext = { leagueId, seasonNumber: FARM_AUCTION_SEASON };
-    const scoutsByTeamId = await loadOptionalFarmScouts(leagueId);
-    const initialized = buildFarmAuctionSession({
+    const nextScoutsByTeamId = await loadOptionalFarmScouts(leagueId);
+    const result = buildFarmAuctionSession({
       leagueId,
       seasonNumber: FARM_AUCTION_SEASON,
       teams,
-      scoutsByTeamId,
+      scoutsByTeamId: nextScoutsByTeamId,
       seed,
       config,
-    }).session;
+    });
 
     setContext(nextContext);
-    await persist(initialized, nextContext);
-    return autoAdvanceCpu(initialized, nextContext, nextLeagueTeams);
+    await persist(result.session, nextContext);
+    const initialized = await autoAdvanceCpu(result.session, nextContext, nextLeagueTeams);
+    setPool(result.pool);
+    setScoutsByTeamId(nextScoutsByTeamId ?? null);
+    setFarmTierCap(result.farmTierCap);
+    return initialized;
   }), [autoAdvanceCpu, leagueData, persist, runAction]);
 
   const runSessionTransition = useCallback(async (
@@ -387,6 +431,9 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
 
   return {
     session,
+    pool,
+    scoutsByTeamId,
+    farmTierCap,
     seed: session?.config.nominationOrderSeed ?? DEFAULT_AUCTION_SETUP_CONFIG.nominationOrderSeed,
     isWorking,
     error,

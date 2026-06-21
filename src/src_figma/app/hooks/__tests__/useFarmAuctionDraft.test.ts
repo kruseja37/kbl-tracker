@@ -12,6 +12,7 @@ import {
   createFarmAuctionSessionId,
   getAuctionSession,
   getAuctionSessionById,
+  saveScoutProfile,
   saveAuctionSession,
 } from "../../../../utils/leagueBuilderStorage";
 import {
@@ -158,6 +159,25 @@ function buildMlbSession(seed: string): CpuShillAuctionSession {
       excludeFromLeague: true,
     },
   }) as CpuShillAuctionSession;
+}
+
+function sessionAuctionPlayers(session: CpuShillAuctionSession) {
+  return session.playerOrder.map((playerId) => session.players[playerId]);
+}
+
+async function seedScoutProfile(leagueId: string, teamId: string): Promise<void> {
+  await saveScoutProfile({
+    id: `${leagueId}-${teamId}-scout`,
+    leagueId,
+    teamId,
+    name: `${teamId.toUpperCase()} Scout`,
+    specialties: teamId === "human" ? ["outfield"] : ["pitching"],
+    weaknesses: teamId === "human" ? ["CP"] : ["1B"],
+    accuracyByPosition: { CF: 84, SP: 80, CP: 55, "1B": 64 },
+    seed: `${leagueId}:${teamId}:scout`,
+    createdDate: "2026-01-01",
+    lastModified: "2026-01-01",
+  });
 }
 
 describe("useFarmAuctionDraft", () => {
@@ -344,5 +364,73 @@ describe("useFarmAuctionDraft", () => {
     expect(result.current.session?.nominationOrder).toEqual(firstOrder);
     expect(result.current.session?.playerOrder).toEqual(firstPlayerOrder);
     expect(result.current.session?.players).toEqual(firstPlayers);
+  });
+
+  test("exposes the generated farm pool and deterministically regenerates it on resume", async () => {
+    const teamIds = ["human", "other"];
+    const leagueId = "farm-resume-pool";
+    const seed = seedWithOrder(teamIds, ["human", "other"]);
+    mockLeagueData({
+      leagues: [makeLeague(leagueId, teamIds)],
+      teams: [makeTeam("human"), makeTeam("other")],
+    });
+    await Promise.all(teamIds.map((teamId) => seedScoutProfile(leagueId, teamId)));
+
+    const { result } = renderHook(() => useFarmAuctionDraft());
+
+    await act(async () => {
+      await result.current.initFarmAuction(leagueId, {
+        nominationOrderSeed: seed,
+        cpuShillCount: 0,
+        bidIncrement: 1_000,
+      });
+    });
+
+    const initializedPool = result.current.pool;
+    const initializedSession = result.current.session;
+    expect(initializedPool).not.toBeNull();
+    expect(initializedSession).not.toBeNull();
+    expect(result.current.scoutsByTeamId).toEqual({
+      human: expect.objectContaining({ scoutId: `${leagueId}-human-scout`, scoutName: "HUMAN Scout" }),
+      other: expect.objectContaining({ scoutId: `${leagueId}-other-scout`, scoutName: "OTHER Scout" }),
+    });
+    expect(result.current.farmTierCap).toEqual(expect.any(Number));
+    expect(result.current.farmTierCap).toBeGreaterThan(0);
+    expect(initializedPool?.auctionPlayers).toEqual(sessionAuctionPlayers(initializedSession!));
+
+    const originalAuctionPlayers = initializedPool!.auctionPlayers.map((player) => ({ ...player }));
+    expect(initializedPool!.prospects).toHaveLength(originalAuctionPlayers.length);
+    expect(new Set(initializedPool!.prospects.map((prospect) => prospect.id))).toEqual(
+      new Set(originalAuctionPlayers.map((player) => player.playerId)),
+    );
+    expect(initializedPool!.prospects.slice(0, 5)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: originalAuctionPlayers[0].playerId,
+          firstName: expect.any(String),
+          lastName: expect.any(String),
+          primaryPosition: expect.any(String),
+        }),
+      ]),
+    );
+
+    await act(async () => {
+      await result.current.nominate(originalAuctionPlayers[0].playerId);
+    });
+
+    const persisted = await getAuctionSessionById(createFarmAuctionSessionId(leagueId));
+    expect(persisted?.session.playerOrder).toEqual(originalAuctionPlayers.map((player) => player.playerId));
+    expect(sessionAuctionPlayers(persisted!.session)).toEqual(originalAuctionPlayers);
+
+    const { result: resumed } = renderHook(() => useFarmAuctionDraft());
+    await act(async () => {
+      await resumed.current.loadFarmAuction(leagueId);
+    });
+
+    expect(resumed.current.pool?.auctionPlayers).toEqual(originalAuctionPlayers);
+    expect(resumed.current.pool?.auctionPlayers).toEqual(sessionAuctionPlayers(resumed.current.session!));
+    expect(resumed.current.session?.playerOrder).toEqual(originalAuctionPlayers.map((player) => player.playerId));
+    expect(resumed.current.scoutsByTeamId).toEqual(result.current.scoutsByTeamId);
+    expect(resumed.current.farmTierCap).toBe(result.current.farmTierCap);
   });
 });
