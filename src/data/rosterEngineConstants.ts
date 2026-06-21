@@ -53,6 +53,9 @@ export const POTENCY_SCALE: {
  */
 export const PITCHER_ASSUMED_ARM = 99;
 
+// §3.2 / §12 scout-obscured value range; display-only, NOT an IV input
+export const SCOUT_NOISE_BASE = 0.6;
+
 export const PITCHER_ROLES: readonly PitcherRoleKey[] = ['SP', 'SP/RP', 'RP', 'CP'] as const;
 export const PITCH_ATTRS = ['VEL', 'JNK', 'ACC'] as const;
 export const BAT_USAGE_ATTRS = ['POW', 'CON', 'SPD', 'FLD'] as const;
