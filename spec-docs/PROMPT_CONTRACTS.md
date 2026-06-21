@@ -14870,3 +14870,43 @@ Use xhigh reasoning effort. Think step-by-step.
 
 Use high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: L14-3 ===== -->
+
+<!-- ===== CONTRACT: AUC-3.1 (auction session persistence — leagueBuilder DB store + resume) ===== -->
+## CONTRACT — AUC-3.1 (auction session persistence, §5.2 #6) — 2026-06-21 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5, xhigh). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** Mode-1 AUCTION — save/resume the in-progress hot-seat auction session. **DEPENDS ON AUC-1.1/1.2/2.1/2.2 (committed).** This is a PERSISTENCE / saved-shape ticket (DB-version bump) — audit is HARDEST class.
+
+**GOAL:** Persist the full in-progress `CpuShillAuctionSession` so a long pass-the-iPad hot-seat draft (§2) can be saved and resumed at the exact same state. Mirror the existing `LeagueBuilderMlbDraftSession` store/API. **HOME = the `kbl-league-builder` IndexedDB (NOT trackerDb).** No live caller yet (the UI autosave wires in AUC-4.1) — so the STORE/API are build-dark, but the DB-version migration is LIVE + must be proven additive.
+
+**SOURCE OF TRUTH:** `spec-docs/AUCTION_DRAFT_SPEC.md` §5.2 item **6** (lines 447-449, quote: *"Auction persistence (NEW) — auction session state (current lot, bids, rotation pointer, per-team committed/remaining, results); mirror the existing `LeagueBuilderMlbDraftSession` shape … League-builder DB likely needs a store/version bump (NOT the tracker DB)."*). The session shape = `CpuShillAuctionSession` (`src/engines/cpuShillBidding.ts:32`, extends `AuctionSession` `src/engines/auctionStateMachine.ts:84`).
+
+**DESIGN CALLS (Captain, AUTH-4 — documented for JK):**
+1. **Persist the WHOLE serialized session blob** (the full `CpuShillAuctionSession`: state/config/teams/nominationOrder/nominationIndex/nominationRound/players/playerOrder/availablePlayerIds/setAsidePlayerIds/passedTracker/currentLot/pendingClaim/results/saleCount/cpuShills) inside an envelope row — NOT a hand-picked field subset. Rationale: guarantees byte-exact resume with zero field-drift risk; the spec's field list is illustrative ("current lot, bids, rotation pointer, …"). The session is plain JSON data (no functions/class instances), so it round-trips losslessly.
+2. **Key by `[leagueId, seasonNumber]`** via a `createAuctionSessionId(leagueId, seasonNumber)` (mirror `createMlbDraftSessionId` :1445) — one active auction per league-season (matches the single hot-seat draft model).
+3. **Determinism:** `nominationOrderSeed` (in `config`) + `cpuShills` ride inside the persisted blob → resume is deterministic; do NOT regenerate shills on load.
+
+**CONSTRAINTS — edit `src/utils/leagueBuilderStorage.ts` (+ the 3 mirror sites + 1 pin test + 1 new test):**
+1. `src/utils/leagueBuilderStorage.ts`:
+   - `DB_VERSION = 7` → `8` (line 39).
+   - Add `AUCTION_SESSIONS: 'auctionSessions'` to the `STORES` const (line 41 block).
+   - In `onupgradeneeded` (line 683 block): add `if (!db.objectStoreNames.contains(STORES.AUCTION_SESSIONS)) { const store = db.createObjectStore(STORES.AUCTION_SESSIONS, { keyPath: 'id' }); store.createIndex('leagueId', 'leagueId', { unique: false }); }` — MIRROR `MLB_DRAFT_SESSIONS` exactly (lines 753-756). Additive only; do NOT alter any existing store or migration branch.
+   - NEW `export interface LeagueBuilderAuctionSession` mirroring `LeagueBuilderMlbDraftSession` (line 205): `{ id: string; leagueId: string; seasonNumber: number; seed: string; session: CpuShillAuctionSession; createdDate: string; lastModified: string }` (`seed` = `session.config.nominationOrderSeed`, duplicated to the envelope for parity; import the `CpuShillAuctionSession` type from `../engines/cpuShillBidding`).
+   - NEW `createAuctionSessionId`, `getAuctionSession`, `saveAuctionSession`, `deleteAuctionSession` — MIRROR the MLB fns (`createMlbDraftSessionId` :1445, `getMlbDraftSession` :1575, `saveMlbDraftSession` :1592 [Omit createdDate/lastModified, stamp via `nowISO()`, existing-createdDate-preserve], `deleteMlbDraftSession` :1621) VERBATIM in structure, INCLUDING the `syncEngine.upsert('kbl-league-builder', 'auctionSessions', id, row)` on save (`tx.oncomplete`) and `syncEngine.remove('kbl-league-builder', 'auctionSessions', id)` on delete, both behind `!syncEngine.isSuppressed()`.
+2. `src/utils/syncConfig.ts`: add `auctionSessions: 'id',` to the `'kbl-league-builder'` block (lines 52-61, after `mlbDraftSessions: 'id',`).
+3. `src/utils/backupRestore.ts`: in the `'kbl-league-builder'` block (line 764): bump `version: 7` → `8` (line 765) AND add `auctionSessions: { keyPath: 'id', indexes: [{ name: 'leagueId', keyPath: 'leagueId' }] }` to its `stores:` map (mirror the existing entries).
+4. `src/utils/tests/leagueBuilderStorageV6Migration.test.ts` (the VERSION PIN — MUST update or it goes RED): add `'auctionSessions'` to the `expectedStores` array (find its definition near the top); change all three `expect(db.version).toBe(7)` → `.toBe(8)` (lines ~207/215/249); ADD a new test `raw v7 database upgrades additively to v8 and preserves all prior stores + creates auctionSessions` mirroring the v6→v7 test (line 245) — seed a v7 DB, open, assert v8 + the full store list + a prior store's data survives.
+5. NEW `src/utils/tests/auctionSessionStorage.test.ts` (fake-indexeddb): round-trip — build a realistic mid-`OPEN_BIDDING` `CpuShillAuctionSession` (a currentLot with highBid/highBidder/stillIn, non-trivial team budgets, ≥1 result, a populated passedTracker, cpuShills), `saveAuctionSession` → `getAuctionSession` → assert DEEP EQUALITY of the returned `session` to the original (proves lossless resume incl. cpuShills + currentLot + rotation pointers + budgets + results); assert `createdDate` preserved + `lastModified` advances on re-save; `deleteAuctionSession` → `getAuctionSession` returns null.
+
+**DO NOT:** touch `auctionStateMachine.ts` / `cpuShillBidding.ts` internals (pure engines — import their TYPES only); touch trackerDb / `franchiseTrueValueSnapshots` / the freeze writer (that is **AUC-5.2**, a SEPARATE ticket — AUC-3.1 is session-state persistence ONLY, NOT the L-ECON1 settledSalary freeze); touch frozen economics. Branch `codex/mode1-v1` only; do NOT commit (Opus commits after audit); do NOT push.
+
+**EXPECTED OUTPUT:** the `auctionSessions` store (kbl-league-builder v7→v8) + the `LeagueBuilderAuctionSession` envelope + create/get/save/delete API (sync-mirrored) + all 4 mirror sites updated + the round-trip test. Lossless resume.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` exit 0; `NODE_ENV= npx vitest run src/utils/tests/leagueBuilderStorageV6Migration.test.ts src/utils/tests/auctionSessionStorage.test.ts` → green (the pin test still passes at v8 + the new round-trip passes). Report ACTUAL output. (Opus runs the FULL Mode-1 suite as the host gate — a DB-version bump can ripple into syncEngine/backup-parity tests.)
+
+**FORMAT:** 1) EVERY changed path + total count; 2) the persisted shape + which 4 mirror sites you touched + how resume stays lossless + the v7→v8 migration proof; 3) ACTUAL tsc + the 2 test files' output; 4) "AUC-3.1 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL:** if `expectedStores` is built dynamically (not a literal array) or the pin test asserts the store set a different way → STOP and quote how it enumerates stores. If the `CpuShillAuctionSession` is NOT cleanly JSON-serializable (any function/Map/class field) → STOP and quote the offending field (do NOT hand-map a lossy subset without flagging). If a v7→v8 bump seems to require touching an existing store's migration branch → STOP and report (it must be purely additive).
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: AUC-3.1 ===== -->
