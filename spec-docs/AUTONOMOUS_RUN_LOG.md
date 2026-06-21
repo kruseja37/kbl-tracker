@@ -2173,3 +2173,33 @@ NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its 
 - **➡ NEXT = AUC-4.1b** (the rich §2.3 7-element OPEN_BIDDING turn view + §2.5 nomination pool filter/sort + SOLD/PASSED notices +
   §2.4 handoff polish + the (A)/(B) fixes) → then AUC-5.1 (farm) → AUC-5.2 (L-ECON1 freeze) → scout-privacy UI → POSITION_POOL fix;
   Mode-2 = LSIM-P3. **BROWSER-VERIFY (batched): the whole auction surface, once 4.1b lands.** Clean handoff at this seam (see below).
+
+**WAVE 28 — AUTH-4 RESUME (sole-owner auto-spawn continuation; baton claimed) → AUC-4.1b SPLIT → AUC-4.2 CONTRACTED + DISPATCHED.**
+- **Resume:** fresh session at 07:11 MDT 2026-06-21; `HANDOFF_NEEDED` (written 06:56, ~14min prior = the standard handoff auto-spawn)
+  CLAIMED → `HANDOFF_DONE_2026-06-21T131218Z`; verified NO live build worker (the running `Codex.app` procs are the desktop GUI, not
+  a `codex exec` CLI); `caffeinate` PID 84474 alive. Sole-owner; did NOT manually start a 2nd session (WAVE 22/23 collision avoided).
+- **GROUNDED AUC-4.1b at source** (no-inference; this track twice caught Explore-agent mislabels). Two decisive spec facts reshaped the
+  two flagged fixes from "hook tweaks" into ENGINE-surface correctness changes:
+  - **Fix (A) round-robin rotation:** the engine `auctionStateMachine.ts` has NO bidding turn-order at all — `recordBid`/`passBid` accept
+    any still-in team; RESOLVE fires purely on `stillIn≤1`. So turn order is 100% caller-side, and because `autoAdvanceCpu` drives CPU bids,
+    rotation order AFFECTS the CPU bid sequence → final salary/winner (not just visuals). **§5.2 #6 EXPLICITLY lists "rotation pointer" as
+    persisted auction-session state** → the faithful fix lives in the engine session (AUC-3.1 persists it for free), NOT hook React-state
+    (which AUC-3.1 doesn't persist → lost on mid-lot resume). The AUC-4.1a "first still-in ≠ highBidder" challenger heuristic was a stand-in.
+  - **Fix (B) CPU lone-survivor:** §2.7 + §2.2.1 make the lone-survivor claim load-bearing for §2.2.2 legal-fill; §6 Q2 rules HUMAN
+    lone-survivor = tap-to-claim, but a CPU has no human to tap → its §7.6 policy must decide. AUC-4.1a always PASSes (`passLoneSurvivor`)
+    → can underfill CPU rosters / leave valuable free players unclaimed. Clean fix reuses `evaluateCpuValuation`: **claim iff valuation > reserve**
+    (mirrors the existing `minimumBid ≥ valuation → over-valuation pass`); ratios (val≈iv×[0.74,1.39] vs reserve=iv×[0.5,0.7]) ⇒ claims
+    in ~all cases → legal-fill preserved. No new tunable, no deterministic floor.
+- **SPLIT DECISION (Captain, AUTH-4 — documented for JK):** the handoff envisioned 4.1b = UI + both fixes in ONE ticket. Re-scoped into
+  TWO, mirroring the 4.1a logic-vs-4.1b-visual rationale: **AUC-4.2** = the engine TURN-FIDELITY LOGIC (rotation pointer in `auctionStateMachine.ts`
+  + engine `getCurrentBidderTeamId`; `cpuDecideLoneSurvivor` in `cpuShillBidding.ts`; `useAuctionDraft.ts` rewire) — headlessly testable,
+  touches the committed AUC-2.1+2.2 core engines (full-suite host gate). **AUC-4.1b** = the rich VISUAL page ONLY (§2.3 7-element turn view,
+  §2.5 filter/sort, SOLD/PASSED notices, §2.4 polish, names-not-IDs, remove debug dump) — the JK-browser target. Rationale: a determinism/
+  outcome-bearing core-engine change and a 466-line visual rewrite are different audit classes; splitting keeps each audit clean + decorrelated.
+- **Contract committed `e176cdb7`** (`PROMPT_CONTRACTS.md`, marker `CONTRACT: AUC-4.2`). **Dispatched to Codex** (gpt-5.5, xhigh) via
+  `codex exec -C …/kbl-mode1` stdin-from-contract, background task `bfa1gu9nz` → `/tmp/codex-auc42.out`. On landing: independent audit
+  (builder≠auditor) + FULL Mode-1 suite host gate (two committed core engines changed) + commit.
+- **🟡 SPEC-SILENT SUB-FORK flagged in-contract for JK:** first bid action of a lot = the NOMINATOR (start-at-nominator, §2.4 H1 device-stays)
+  vs the team AFTER the nominator — both terminate identically (RESOLVE is `stillIn≤1`-driven) but shift the CPU bid sequence → some final
+  salaries. Conservative default taken = nominator-first. **➡ after AUC-4.2 (audit+commit) = AUC-4.1b (visual).** Then AUC-5.1 → 5.2 →
+  scout-privacy → POSITION_POOL fix; Mode-2 = LSIM-P3.
