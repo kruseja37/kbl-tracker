@@ -2203,3 +2203,31 @@ NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its 
   vs the team AFTER the nominator — both terminate identically (RESOLVE is `stillIn≤1`-driven) but shift the CPU bid sequence → some final
   salaries. Conservative default taken = nominator-first. **➡ after AUC-4.2 (audit+commit) = AUC-4.1b (visual).** Then AUC-5.1 → 5.2 →
   scout-privacy → POSITION_POOL fix; Mode-2 = LSIM-P3.
+- **✅ AUC-4.2 COMMITTED `ce69036d` — Codex(gpt-5.5,xhigh)-built → Opus-audited (builder≠auditor): VERIFIED.** 6 files (3 src + 3 test).
+  Engine `auctionStateMachine.ts`: `bidTurnTeamId` (req. on `Lot`) set nominator-first, advanced by a pure `nextBidTurn` (cyclic scan
+  after the actor, skips the highBidder) on recordBid/passBid, nulled at `stillIn≤1`; new exported `getCurrentBidderTeamId` selector
+  (defensive recompute fallback for legacy blobs). `cpuShillBidding.ts`: `cpuDecideLoneSurvivor` — claim iff `price≤maxBid ∧ valuation>price`
+  (mirrors the `minimumBid≥valuation → over-valuation` bid rule), reuses `evaluateCpuValuation`; no new tunable/floor. Hook `useAuctionDraft.ts`:
+  re-exports the engine selector (page import preserved), RESOLVE branch uses the CPU claim decision, `bidTurnTeamId` added to `stateProgressKey`.
+  **Audit (line-by-line at source):** rotation sound — at every call site `afterTeamId` is the highBidder (excluded) or a just-passed team
+  (∉ stillIn), so it's never wrongly returned; A→B→C re-raise cycles terminate to the high bidder; CPU claim preserves §2.2.2 legal-fill
+  (val≈iv×[0.74,1.39] > reserve=iv×[0.5,0.7] ⇒ claims in ~all cases). **HOST GATE (full Mode-1 suite — two committed core engines changed):**
+  `NODE_ENV= tsc -b` exit 0 (independent) + **7941 pass / 2 fail (474 files): both CHARACTERIZED — `wpaRuntimeBoundary` (hard, flags
+  franchiseAnalyticsTrust.ts, NOT in diff) + `franchiseManualSmokeFixture` (conditional-solo flake — CONFIRMED solo-pass 4/4 this session),
+  ZERO new reds** (+7: engine 12→16, cpu 8→11, hook re-derived). The 3 scoped auction test files green in the full run. trackerDb/leagueBuilder
+  DB UNTOUCHED (the pointer rides inside the existing AUC-3.1 blob — no store/version change). **🟡 MINOR (non-blocking, logged):** the AUC-3.1
+  round-trip fixture (`auctionSessionStorage.test.ts:37 buildMidAuctionSession`) hand-builds a `currentLot` WITHOUT `bidTurnTeamId` — passes
+  because `tsc -b` excludes test files (esbuild strips types) + structured-clone round-trips `undefined`; real sessions always carry the field,
+  so production resume is lossless. A future tidy could add the field to that fixture.
+
+**WAVE 29 — AUC-4.1b CONTRACTED + DISPATCHED (auction at 6.5/~8 — engine-logic done, visual pending).**
+- **Contract committed `adceeae3`** (`PROMPT_CONTRACTS.md`, marker `CONTRACT: AUC-4.1b`; pre-drafted during the 4.2 build, finalized with the
+  `ce69036d` dependency hash). PAGE-ONLY: rebuild `LeagueBuilderAuctionDraft.tsx`'s render blocks to the §2.3 7-element OPEN_BIDDING turn view
+  (lot card w/ primary+secondary positions + IV advisory · current high bid+bidder by NAME · YOUR budget · YOUR `getTeamAuctionMaxBid` cap w/
+  clamped raise presets+custom · slots-remaining + positions-needed [best-effort, flagged] · Raise/Pass · handoff prompt), §2.5 nomination pool
+  (position filter + IV sort), distinct SOLD/PASSED/SET_ASIDE notices, §2.4 handoff polish, NAMES-not-IDs throughout, remove the debug `<pre>` dump.
+  Consumes the AUC-4.2 hook/engine AS-IS (NO logic change); mirrors the page's existing inline-hex palette (theme tokens inert under v3).
+- **Dispatched to Codex** (gpt-5.5, xhigh) via `codex exec -C …/kbl-mode1` stdin-from-contract, background task `btubpftwl` → `/tmp/codex-auc41b.out`.
+  On landing: audit (builder≠auditor) + full Mode-1 suite + commit. **BROWSER-VERIFY (batched, JK):** the WHOLE auction surface (incl. the AUC-3.1
+  v7→v8 migration + resume) once 4.1b lands — the user-facing visual gate. **➡ after AUC-4.1b ⇒ auction PLAYABLE 7/~8** → AUC-5.1 (farm)
+  → 5.2 (L-ECON1 freeze) → scout-privacy UI → POSITION_POOL SP/RP fix; Mode-2 = LSIM-P3.
