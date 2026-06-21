@@ -11,8 +11,17 @@
 > and **nomination/resolve** (GM-nomination → engine weighted-random + one-chance) are REWRITTEN, + new systems (dual archetype tax, MLB→farm
 > carryover, draft→player-morale + payroll→fan-morale carried into Mode-2 via the 4-number freeze, separate GM entity, scout-as-bridge, roster
 > board, guided UX, shill/CPU-team split). Mode-2 L1–L14 build-dark; L-SIM LSIM-P1 GREEN. Prospect-gen B1–B9 done.
-> **➡ NEXT (fresh thread, AUTH-4 re-authorized): run `/kbl-captain` on `AUCTION_REBUILD_PLAN.md` starting RB-1 (scout value model) → RB-2
-> (engine nomination + one-chance) → RB-3.. per the plan's ordering.** Read `AUCTION_DRAFT_SPEC_V2.md` + `AUCTION_REBUILD_PLAN.md` FIRST.
+> **➡ NEXT (fresh thread, AUTH-4 re-authorized): run `/kbl-captain` on `AUCTION_REBUILD_PLAN.md` starting RB-0 (3-axis personality model +
+> pre-draft assignment + chemistry rebalance — the FOUNDATION the spine depends on) → RB-1 (scout value) → RB-2 (nomination/one-chance) →
+> … RB-18 per the plan's ordering.** Read `AUCTION_DRAFT_SPEC_V2.md` + `AUCTION_REBUILD_PLAN.md` FIRST.
+> **2026-06-21 ATTENDED GROUNDING (WAVE 50, this session — all committed, NO code):** added §3.7 **3-axis personality model** (primary
+> personality 7 / hidden modifiers 4 / chemistry 5) + **RB-0**; CORRECTED the morale model at source — the engine
+> (`masterMoraleMatrix.composeMoraleConsequence`) is ALREADY BUILT (per-personality reactivity + ambition/resilience/charisma/loyalty roles +
+> relationship contagion + legacy reconciliation), so **RB-5 is REUSE, not net-new**; the old `playerMorale.ts` baselines are DEAD LEGACY →
+> **RB-17** (split-deprecate) + **RB-18** (live lineup morale indicator). JK RULINGS: regenerate ALL 3 axes for every MLB-pool player
+> (heterogeneous pool — stock + user-created); **chemistry target = the EXACT near-uniform 440 shape SPI 21/DIS 20/CMP 20/SCH 20/CRA 19**
+> (grounded + adversarially-verified — fully populated 3-letter codes on the `PLAYERS` record, NOT `src/data/players/mlb/`); COMPETITIVE
+> morale row confirmed-correct (1.15/1.05); morale shown live under the player name near the line-score (fixed-height, zero-reflow).
 > All §13/§11 dials are default-set + sim-tunable (RB-16) — none block the build. **JK-BROWSER-VERIFY BATCHED:** the whole auction surface,
 > after the rebuild (not the V1 build).
 > **OPEN DECISIONS / FLAGS for JK** (in the ledger): AUC-2.2 sim-tune defaults (bargainInterestCurve + shill profiles); AUC-4.2

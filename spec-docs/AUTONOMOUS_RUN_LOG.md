@@ -2487,3 +2487,27 @@ POSITION_POOL SP/RP fix; Mode-2 = LSIM-P3.
 - **➡ PLAN:** JK starts a FRESH THREAD (reset context) to run the AUTH-4 `/kbl-captain` loop on `AUCTION_REBUILD_PLAN.md` (Opus writes plan/contracts +
   audits; Codex builds). CURRENT_STATE live header repointed. (This attended session wrote the docs, not code.)
 
+**WAVE 50 — ATTENDED DESIGN GROUNDING (JK present; personality model + morale-engine correction + 3-question grounding) → NO CODE, docs only.**
+- **Personality model pinned (§3.7 + RB-0):** 3 INDEPENDENT axes — (1) primary personality, 7 types VISIBLE (egotistical/competitive/tough/droopy/
+  timid/jolly/relaxed); (2) hidden modifiers, 4×0–100 HIDDEN-FOREVER (ambition/loyalty/charisma/resilience; only signal = the CAPTAIN reveal =
+  highest loyalty+charisma); (3) chemistry, 5 types VISIBLE (competitive/crafty/scholarly/spirited/disciplined → trait potency). "competitive" is in
+  BOTH axis 1 and 3 — independent. **Assignment fix:** regenerate ALL 3 axes pre-draft for every MLB-pool player (the pool is HETEROGENEOUS — the
+  stock 440 is one option; real drafts mix stock + user-created, analyzed as a whole).
+- **MORALE MODEL CORRECTED AT SOURCE (JK caught a recall error):** the core engine `masterMoraleMatrix.composeMoraleConsequence`
+  (`src/engines/masterMoraleMatrix.ts`, build-dark behind D13) is ALREADY BUILT — per-personality reactivity multipliers (`MORALE_TUNING.personality`:
+  EGOTISTICAL 1.25/1.15 fanSens 1.5 reacts huge, RELAXED/TOUGH shrug, DROOPY/TIMID crushed by bad), hidden-modifier roles (ambition up-amplify /
+  resilience down-dampen / charisma contagion-spread / loyalty fan-link), relationship contagion (relation × charisma), AND
+  `LEGACY_PERSONALITY_RECONCILIATION`. ⇒ **RB-5 is REUSE** (define draft events + seed at freeze), NOT a net-new reactivity build. The old
+  `playerMorale.ts PERSONALITY_BASELINES` is DEAD LEGACY.
+- **3-question grounding workflow (5 agents, both consequential answers adversarially verified — NOT refuted):**
+  (1) **440 chemistry data is FULLY POPULATED** (3-letter codes SPI/DIS/CMP/SCH/CRA on the `PLAYERS` record at `playerDatabase.ts:66`; NOT the
+  `undefined`-personality void) — dist **SPI 21.1 / DIS 20.0 / CMP 20.0 / SCH 20.0 / CRA 18.9% (near-uniform)**; the rebalance ruling is buildable as
+  written → RB-0 frozen `CHEMISTRY_TARGET_DISTRIBUTION`. (2) **COMPETITIVE morale row confirmed-correct** (1.15 up / 1.05 down — boosted/hurt, milder
+  EGOTISTICAL); no change. (3) **`playerMorale.ts` is DEAD in live franchise UX** (sole importer = the UNROUTED `src/components/GameTracker` tree;
+  no `src_figma/app` path) → split-deprecate: retire the dead baseline table, PRESERVE the 4 display helpers (no matrix equivalent).
+- **JK RULINGS (2026-06-21):** chemistry target = honor the EXACT near-uniform 440 shape (SPI 21/DIS 20/CMP 20/SCH 20/CRA 19), do NOT snap to flat-20;
+  morale shown live UNDER the player-name line near the per-player line-score, standout color, **fixed-height / zero-reflow across the nine-man
+  lineup** (placeholder until the live morale path / D13). → **RB-17** (deprecate playerMorale, split) + **RB-18** (live lineup morale indicator) added.
+- **Plan now RB-0 → RB-18.** Commits: 1d9b5755, 586424d0, 67587da9 (morale correction), 1a0807f9 (3-question grounding), bac383e3 (rulings) + this WAVE.
+- **➡ NEXT:** RB-0 is the first build ticket. Fresh AUTH-4 `/kbl-captain` session re-grounds from this ledger + CURRENT_STATE, then dispatches Codex.
+
