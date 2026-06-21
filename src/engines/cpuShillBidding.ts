@@ -76,6 +76,32 @@ export type CpuBidOnLotDecision =
       personality: CpuShillPersonality | null;
     };
 
+export type CpuLoneSurvivorDecision =
+  | {
+      kind: 'claim';
+      teamId: string;
+      playerId: string;
+      price: number;
+      valuation: number;
+      maxBid: number;
+    }
+  | {
+      kind: 'pass';
+      teamId: string;
+      playerId: string | null;
+      reason:
+        | 'not-resolve'
+        | 'no-pending-claim'
+        | 'not-this-team'
+        | 'team-full'
+        | 'over-budget'
+        | 'over-valuation'
+        | 'unknown-player';
+      valuation: number | null;
+      maxBid: number | null;
+    };
+type CpuLoneSurvivorPassReason = Extract<CpuLoneSurvivorDecision, { kind: 'pass' }>['reason'];
+
 export type CpuNominationPassReason =
   | 'expected-nomination'
   | 'no-current-nominator'
@@ -293,6 +319,60 @@ export function cpuBidOnLot(
   };
 }
 
+export function cpuDecideLoneSurvivor(
+  session: CpuShillAuctionSession,
+  teamId: string,
+  seed: string,
+): CpuLoneSurvivorDecision {
+  if (session.state !== 'RESOLVE') {
+    return loneSurvivorPassDecision(teamId, null, 'not-resolve', null, null);
+  }
+
+  const claim = session.pendingClaim;
+  if (claim === null) {
+    return loneSurvivorPassDecision(teamId, null, 'no-pending-claim', null, null);
+  }
+  if (claim.teamId !== teamId) {
+    return loneSurvivorPassDecision(teamId, claim.playerId, 'not-this-team', null, null);
+  }
+
+  const shill = resolveSessionShill(session, teamId, seed);
+  const team = findTeam(session, teamId);
+  if (team === null || team.rosterSlotsRemaining <= 0) {
+    return loneSurvivorPassDecision(teamId, claim.playerId, 'team-full', null, null);
+  }
+
+  const player = session.players[claim.playerId] as CpuShillAuctionPlayer | undefined;
+  if (player === undefined) {
+    return loneSurvivorPassDecision(teamId, claim.playerId, 'unknown-player', null, null);
+  }
+
+  const price = claim.price;
+  const maxBid = auctionMaxBid(
+    team.budgetRemaining,
+    team.rosterSlotsRemaining,
+    team.minSalary,
+    team.projectedTax,
+  );
+  const valuation = evaluateCpuValuation(player, shill, seed);
+
+  if (price > maxBid) {
+    return loneSurvivorPassDecision(teamId, claim.playerId, 'over-budget', valuation, maxBid);
+  }
+  if (valuation <= price) {
+    return loneSurvivorPassDecision(teamId, claim.playerId, 'over-valuation', valuation, maxBid);
+  }
+
+  return {
+    kind: 'claim',
+    teamId,
+    playerId: claim.playerId,
+    price,
+    valuation,
+    maxBid,
+  };
+}
+
 export function resolveCpuNomination(
   session: CpuShillAuctionSession,
   shillTeamId: string,
@@ -451,6 +531,16 @@ function passDecision(
   personality: CpuShillPersonality | null,
 ): CpuBidOnLotDecision {
   return { kind: 'pass', teamId, playerId, reason, minimumBid, maxBid, valuation, personality };
+}
+
+function loneSurvivorPassDecision(
+  teamId: string,
+  playerId: string | null,
+  reason: CpuLoneSurvivorPassReason,
+  valuation: number | null,
+  maxBid: number | null,
+): CpuLoneSurvivorDecision {
+  return { kind: 'pass', teamId, playerId, reason, valuation, maxBid };
 }
 
 function seededUnit(seed: string): number {

@@ -263,28 +263,25 @@ describe("useAuctionDraft", () => {
     await act(async () => {
       await result.current.bid("human", openingAsk!);
     });
-    const afterCpuAutoLot = result.current.session?.currentLot;
-    expect(afterCpuAutoLot?.highBidder === "cpu" || !afterCpuAutoLot?.stillIn.includes("cpu")).toBe(true);
+    expect(result.current.session?.nominationOrder).toEqual(["human", "other", "cpu"]);
+    expect(result.current.currentBidderTeamId).toBe("other");
+    expect(result.current.session?.currentLot).toMatchObject({
+      highBidder: "human",
+      bidTurnTeamId: "other",
+      stillIn: ["human", "cpu", "other"],
+    });
 
-    let guard = 0;
-    while (result.current.session?.state === "OPEN_BIDDING" && guard < 6) {
-      guard += 1;
-      const lot = result.current.session.currentLot;
-      const highBidder = lot?.highBidder;
-      const humanStillIn = lot?.stillIn.find((teamId) => teamId !== highBidder && !result.current.isCpuTeam(teamId));
-      if (!humanStillIn) {
-        await act(async () => {
-          await result.current.resolve();
-        });
-      } else {
-        await act(async () => {
-          await result.current.pass(humanStillIn);
-        });
-      }
-    }
+    await act(async () => {
+      await result.current.pass("other");
+    });
 
     expect(result.current.session?.state).toBe("SOLD");
-    expect(result.current.session?.results.at(-1)?.disposition).toBe("SOLD");
+    expect(result.current.session?.results.at(-1)).toMatchObject({
+      playerId: "p1",
+      disposition: "SOLD",
+      winnerTeamId: "human",
+      salary: openingAsk,
+    });
   });
 
   test("autosaves committed transitions after user actions", async () => {
@@ -386,6 +383,47 @@ describe("useAuctionDraft", () => {
       disposition: "SOLD",
       winnerTeamId: "human",
       salary: reserve,
+    });
+  });
+
+  test("CPU lone survivor auto-claims at reserve and fills a roster slot", async () => {
+    const teamIds = ["human", "cpu"];
+    const seed = seedWithFirst(teamIds, "human");
+    mockLeagueData({
+      leagues: [makeLeague("league-cpu-claim", teamIds)],
+      teams: [makeTeam("human"), makeTeam("cpu", "ai")],
+      pools: { "league-cpu-claim": makePool("league-cpu-claim", ["p1"]) },
+    });
+
+    const { result } = renderHook(() => useAuctionDraft());
+
+    await act(async () => {
+      await result.current.initAuction("league-cpu-claim", {
+        nominationOrderSeed: seed,
+        cpuShillCount: 0,
+        bidIncrement: 1_000,
+      });
+    });
+    await act(async () => {
+      await result.current.nominate("p1");
+    });
+
+    const reserve = result.current.session?.currentLot?.openingAsk;
+
+    await act(async () => {
+      await result.current.pass("human");
+    });
+
+    expect(result.current.session?.state).toBe("SOLD");
+    expect(result.current.session?.results.at(-1)).toMatchObject({
+      playerId: "p1",
+      disposition: "SOLD",
+      winnerTeamId: "cpu",
+      salary: reserve,
+    });
+    expect(result.current.session?.teams.find((team) => team.teamId === "cpu")).toMatchObject({
+      rosterSlotsRemaining: 21,
+      roster: [{ playerId: "p1", salary: reserve }],
     });
   });
 });

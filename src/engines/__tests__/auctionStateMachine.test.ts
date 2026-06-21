@@ -3,8 +3,10 @@ import { describe, expect, test } from 'vitest';
 import {
   claimLoneSurvivor,
   evaluateResolve,
+  getCurrentBidderTeamId,
   getCurrentNominator,
   initAuctionSession,
+  nextBidTurn,
   nominatePlayer,
   passBid,
   passLoneSurvivor,
@@ -81,6 +83,7 @@ describe('auctionStateMachine AUC-2.1 pure reducer', () => {
       openingAsk: 700,
       highBid: null,
       stillIn: ['A', 'B', 'C'],
+      bidTurnTeamId: 'A',
     });
 
     session = ok(recordBid(session, 'B', 700));
@@ -105,6 +108,79 @@ describe('auctionStateMachine AUC-2.1 pure reducer', () => {
       rosterSlotsRemaining: 1,
       roster: [{ playerId: 'star', salary: 700 }],
     });
+  });
+
+  test('opens a lot with the nominator on the bidding clock', () => {
+    let session = makeSession({ nominationOrder: ['B', 'C', 'A'] });
+
+    expect(getCurrentNominator(session)).toBe('B');
+
+    session = ok(nominatePlayer(session, 'star'));
+
+    expect(session.currentLot?.bidTurnTeamId).toBe('B');
+    expect(getCurrentBidderTeamId(session)).toBe('B');
+  });
+
+  test('after a bid, the bidding clock advances to the next still-in team and skips the high bidder', () => {
+    let session = makeSession();
+
+    session = ok(nominatePlayer(session, 'star'));
+    session = ok(recordBid(session, 'A', 700));
+
+    expect(session.currentLot?.highBidder).toBe('A');
+    expect(session.currentLot?.bidTurnTeamId).toBe('B');
+    expect(getCurrentBidderTeamId(session)).toBe('B');
+
+    session = ok(recordBid(session, 'B', 800));
+
+    expect(session.currentLot?.highBidder).toBe('B');
+    expect(session.currentLot?.bidTurnTeamId).toBe('C');
+    expect(getCurrentBidderTeamId(session)).toBe('C');
+  });
+
+  test('round-robin bidding never lands on the current high bidder while challengers remain', () => {
+    let session = makeSession();
+
+    session = ok(nominatePlayer(session, 'star'));
+    expect(getCurrentBidderTeamId(session)).toBe('A');
+
+    session = ok(recordBid(session, 'A', 700));
+    expect(getCurrentBidderTeamId(session)).toBe('B');
+    expect(getCurrentBidderTeamId(session)).not.toBe(session.currentLot?.highBidder);
+
+    session = ok(recordBid(session, 'B', 800));
+    expect(getCurrentBidderTeamId(session)).toBe('C');
+    expect(getCurrentBidderTeamId(session)).not.toBe(session.currentLot?.highBidder);
+
+    session = ok(passBid(session, 'C'));
+    expect(session.currentLot?.stillIn).toEqual(['A', 'B']);
+    expect(getCurrentBidderTeamId(session)).toBe('A');
+    expect(getCurrentBidderTeamId(session)).not.toBe(session.currentLot?.highBidder);
+
+    session = ok(recordBid(session, 'A', 900));
+    expect(getCurrentBidderTeamId(session)).toBe('B');
+    expect(getCurrentBidderTeamId(session)).not.toBe(session.currentLot?.highBidder);
+
+    session = ok(passBid(session, 'B'));
+    expect(session.state).toBe('RESOLVE');
+    expect(session.currentLot?.bidTurnTeamId).toBeNull();
+
+    session = ok(evaluateResolve(session));
+
+    expect(session.state).toBe('SOLD');
+    expect(session.results.at(-1)).toMatchObject({
+      playerId: 'star',
+      disposition: 'SOLD',
+      winnerTeamId: 'A',
+      salary: 900,
+    });
+  });
+
+  test('nextBidTurn wraps cyclically through nomination order', () => {
+    expect(nextBidTurn(['A', 'B', 'C'], ['A', 'C'], 'C', 'C')).toBe('A');
+    expect(nextBidTurn(['A', 'B', 'C'], ['A', 'C'], 'A', 'A')).toBe('C');
+    expect(nextBidTurn(['A', 'B', 'C'], ['C'], 'A', 'C')).toBeNull();
+    expect(nextBidTurn(['A', 'B', 'C'], ['B', 'C'], 'missing', null)).toBe('B');
   });
 
   test('PASSED path records no winner when every bidder passes before a bid', () => {

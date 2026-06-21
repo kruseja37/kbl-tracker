@@ -48,6 +48,7 @@ export interface Lot {
   highBid: number | null;
   highBidder: string | null;
   stillIn: readonly string[];
+  bidTurnTeamId: string | null;
 }
 
 export interface PendingClaim {
@@ -172,6 +173,38 @@ export function getCurrentNominator(session: AuctionSession): string | null {
   return session.nominationOrder[session.nominationIndex] ?? null;
 }
 
+export function getCurrentBidderTeamId(session: AuctionSession | null): string | null {
+  if (session === null || session.state !== 'OPEN_BIDDING' || session.currentLot === null) return null;
+  const lot = session.currentLot;
+  if (lot.stillIn.length <= 1) return null;
+  return lot.bidTurnTeamId ?? nextBidTurn(
+    session.nominationOrder,
+    lot.stillIn,
+    lot.highBidder ?? '__auction-legacy-start__',
+    lot.highBidder,
+  );
+}
+
+export function nextBidTurn(
+  nominationOrder: readonly string[],
+  stillIn: readonly string[],
+  afterTeamId: string | null,
+  highBidder: string | null,
+): string | null {
+  if (nominationOrder.length === 0 || stillIn.length === 0) return null;
+
+  const stillInSet = new Set(stillIn);
+  const afterIndex = afterTeamId === null ? -1 : nominationOrder.indexOf(afterTeamId);
+  const startIndex = afterIndex === -1 ? 0 : (afterIndex + 1) % nominationOrder.length;
+
+  for (let offset = 0; offset < nominationOrder.length; offset += 1) {
+    const teamId = nominationOrder[(startIndex + offset) % nominationOrder.length];
+    if (teamId !== highBidder && stillInSet.has(teamId)) return teamId;
+  }
+
+  return null;
+}
+
 export function getTeamAuctionMaxBid(session: AuctionSession, teamId: string): number | null {
   const team = findTeam(session, teamId);
   if (team === null) return null;
@@ -203,6 +236,9 @@ export function nominatePlayer(session: AuctionSession, playerId: string): Aucti
   const stillIn = session.teams
     .filter((team) => team.rosterSlotsRemaining > 0)
     .map((team) => team.teamId);
+  const bidTurnTeamId = stillIn.includes(nominatorTeamId)
+    ? nominatorTeamId
+    : nextBidTurn(session.nominationOrder, stillIn, nominatorTeamId, null);
 
   return accepted({
     ...session,
@@ -214,6 +250,7 @@ export function nominatePlayer(session: AuctionSession, playerId: string): Aucti
       highBid: null,
       highBidder: null,
       stillIn,
+      bidTurnTeamId,
     },
     pendingClaim: null,
     availablePlayerIds: session.availablePlayerIds.filter((id) => id !== playerId),
@@ -242,6 +279,7 @@ export function recordBid(session: AuctionSession, teamId: string, bid: number):
       ...lot,
       highBid: bid,
       highBidder: teamId,
+      bidTurnTeamId: nextBidTurn(session.nominationOrder, lot.stillIn, teamId, teamId),
     },
   });
 }
@@ -260,6 +298,9 @@ export function passBid(session: AuctionSession, teamId: string): AuctionTransit
     currentLot: {
       ...lot,
       stillIn,
+      bidTurnTeamId: stillIn.length <= 1
+        ? null
+        : nextBidTurn(session.nominationOrder, stillIn, teamId, lot.highBidder),
     },
   });
 }

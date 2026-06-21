@@ -14,6 +14,7 @@ import {
 import {
   bargainInterestProbability,
   cpuBidOnLot,
+  cpuDecideLoneSurvivor,
   evaluateCpuArchetypeFit,
   evaluateCpuInterest,
   evaluateCpuValuation,
@@ -223,6 +224,123 @@ describe('cpuShillBidding AUC-2.2 pure policy', () => {
       expect(decision.minimumBid).toBe(600);
       expect(decision.maxBid).toBe(500);
     }
+  });
+
+  test('CPU lone survivor claims at reserve when valuation exceeds price', () => {
+    let session: CpuShillAuctionSession = makeSession({
+      teams: [
+        { teamId: 'human', budgetRemaining: 20_000, rosterSlotsRemaining: 1, minSalary: 0 },
+        { teamId: 'cpu', budgetRemaining: 20_000, rosterSlotsRemaining: 1, minSalary: 0 },
+      ],
+      nominationOrder: ['human', 'cpu'],
+    });
+
+    session = ok(nominatePlayer(session, 'star')) as CpuShillAuctionSession;
+    session = ok(passBid(session, 'human')) as CpuShillAuctionSession;
+    session = ok(evaluateResolve(session)) as CpuShillAuctionSession;
+
+    expect(session.pendingClaim).toEqual({ playerId: 'star', teamId: 'cpu', price: 700 });
+
+    const decision = cpuDecideLoneSurvivor(session, 'cpu', 'lone-survivor-claim');
+
+    expect(decision.kind).toBe('claim');
+    if (decision.kind === 'claim') {
+      expect(decision.price).toBe(700);
+      expect(decision.valuation).toBeGreaterThan(decision.price);
+      expect(decision.maxBid).toBeGreaterThanOrEqual(decision.price);
+    }
+  });
+
+  test('CPU lone survivor passes over-valuation when valuation is not above reserve', () => {
+    const lowValueShill: CpuShillProfile = {
+      ...POWER_SHILL,
+      personalityBias: 0.2,
+      interestAggression: 2,
+      maxInterestProbability: 1,
+    };
+    let session: CpuShillAuctionSession = makeSession({
+      teams: [
+        { teamId: 'human', budgetRemaining: 20_000, rosterSlotsRemaining: 1, minSalary: 0 },
+        { teamId: 'cpu', budgetRemaining: 20_000, rosterSlotsRemaining: 1, minSalary: 0 },
+      ],
+      nominationOrder: ['human', 'cpu'],
+      shill: lowValueShill,
+    });
+
+    session = ok(nominatePlayer(session, 'star')) as CpuShillAuctionSession;
+    session = ok(passBid(session, 'human')) as CpuShillAuctionSession;
+    session = ok(evaluateResolve(session)) as CpuShillAuctionSession;
+
+    const decision = cpuDecideLoneSurvivor(session, 'cpu', 'lone-survivor-over-valuation');
+
+    expect(decision.kind).toBe('pass');
+    if (decision.kind === 'pass') {
+      expect(decision.reason).toBe('over-valuation');
+      expect(decision.valuation).not.toBeNull();
+      expect(decision.valuation!).toBeLessThanOrEqual(700);
+      expect(decision.maxBid).toBe(20_000);
+    }
+  });
+
+  test('CPU lone-survivor decision reports guard branches without claiming', () => {
+    const base = makeSession();
+
+    expect(cpuDecideLoneSurvivor(base, 'cpu', 'wrong-state')).toMatchObject({
+      kind: 'pass',
+      reason: 'not-resolve',
+      playerId: null,
+      valuation: null,
+      maxBid: null,
+    });
+
+    expect(cpuDecideLoneSurvivor({ ...base, state: 'RESOLVE', pendingClaim: null }, 'cpu', 'no-claim')).toMatchObject({
+      kind: 'pass',
+      reason: 'no-pending-claim',
+      playerId: null,
+    });
+
+    expect(
+      cpuDecideLoneSurvivor(
+        { ...base, state: 'RESOLVE', pendingClaim: { playerId: 'star', teamId: 'human', price: 700 } },
+        'cpu',
+        'wrong-team',
+      ),
+    ).toMatchObject({
+      kind: 'pass',
+      reason: 'not-this-team',
+      playerId: 'star',
+    });
+
+    const fullCpu = makeSession({
+      teams: [
+        { teamId: 'human', budgetRemaining: 20_000, rosterSlotsRemaining: 1, minSalary: 0 },
+        { teamId: 'cpu', budgetRemaining: 20_000, rosterSlotsRemaining: 0, minSalary: 0 },
+      ],
+      nominationOrder: ['human', 'cpu'],
+    });
+    expect(
+      cpuDecideLoneSurvivor(
+        { ...fullCpu, state: 'RESOLVE', pendingClaim: { playerId: 'star', teamId: 'cpu', price: 700 } },
+        'cpu',
+        'full-team',
+      ),
+    ).toMatchObject({
+      kind: 'pass',
+      reason: 'team-full',
+      playerId: 'star',
+    });
+
+    expect(
+      cpuDecideLoneSurvivor(
+        { ...base, state: 'RESOLVE', pendingClaim: { playerId: 'missing', teamId: 'cpu', price: 700 } },
+        'cpu',
+        'unknown-player',
+      ),
+    ).toMatchObject({
+      kind: 'pass',
+      reason: 'unknown-player',
+      playerId: 'missing',
+    });
   });
 
   test('CPU nomination returns a deterministic legal player without mutating the session', () => {

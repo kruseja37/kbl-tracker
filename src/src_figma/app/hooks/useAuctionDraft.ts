@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import {
   claimLoneSurvivor,
   evaluateResolve,
+  getCurrentBidderTeamId,
   getCurrentNominator,
   initAuctionSession,
   nominatePlayer,
@@ -11,12 +12,12 @@ import {
   recordBid,
   rotateNomination,
   type AuctionPlayer,
-  type AuctionSession,
   type AuctionTeamInput,
   type AuctionTransitionResult,
 } from "../../../engines/auctionStateMachine";
 import {
   cpuBidOnLot,
+  cpuDecideLoneSurvivor,
   resolveCpuNomination,
   type CpuShillAuctionSession,
 } from "../../../engines/cpuShillBidding";
@@ -35,6 +36,8 @@ import {
   type TeamRoster,
   type UseLeagueBuilderDataReturn,
 } from "../../hooks/useLeagueBuilderData";
+
+export { getCurrentBidderTeamId } from "../../../engines/auctionStateMachine";
 
 const MLB_AUCTION_ROSTER_SLOTS = 22;
 const MLB_AUCTION_SEASON = 1;
@@ -152,13 +155,6 @@ export async function buildAuctionTeams(input: {
   );
 }
 
-export function getCurrentBidderTeamId(session: AuctionSession | null): string | null {
-  if (!session || session.state !== "OPEN_BIDDING" || !session.currentLot) return null;
-  const lot = session.currentLot;
-  if (lot.stillIn.length <= 1) return null;
-  return lot.stillIn.find((teamId) => teamId !== lot.highBidder) ?? null;
-}
-
 export function deriveCpuTeamIds(session: CpuShillAuctionSession | null, leagueTeams: readonly Team[]): string[] {
   if (!session) return [];
   const ids = new Set<string>();
@@ -198,6 +194,7 @@ function stateProgressKey(session: CpuShillAuctionSession): string {
           highBid: lot.highBid,
           highBidder: lot.highBidder,
           stillIn: lot.stillIn,
+          bidTurnTeamId: lot.bidTurnTeamId,
         }
       : null,
   });
@@ -280,7 +277,12 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
       } else if (next.state === "RESOLVE") {
         if (next.pendingClaim) {
           if (!nextCpuTeamIds.has(next.pendingClaim.teamId)) return next;
-          next = transitionOrThrow(passLoneSurvivor(next));
+          const decision = cpuDecideLoneSurvivor(
+            next,
+            next.pendingClaim.teamId,
+            `${next.config.nominationOrderSeed}:claim:${step}`,
+          );
+          next = transitionOrThrow(decision.kind === "claim" ? claimLoneSurvivor(next) : passLoneSurvivor(next));
           await persist(next, nextContext);
         } else {
           next = transitionOrThrow(evaluateResolve(next));
