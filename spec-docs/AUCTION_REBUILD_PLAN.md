@@ -41,7 +41,7 @@ session per the loop (split further as the grounding warrants).
 
 | # | Ticket | V2 § | Class | What |
 |---|---|---|---|---|
-| **RB-9** | Scout-as-bridge + roster board | §3.5/§9 | UI + logic | scout reads MLB holes weighted by farm archetype → "fill these"; persistent glanceable MLB+farm roster board w/ gaps |
+| **RB-9** | Scout-as-bridge + roster board | §3.5/§9 | **mostly REUSE** | **Hole-detection = the already-built+wired Roster Analyzer Engine** (`src/engines/rosterAnalyzerEngine.ts`, live in TeamHub + LeagueBuilderRosters; already scout-aware) — add a `draft_prep` surface + a thin draft adapter feeding the GM's in-progress MLB+farm roster; weight holes by the farm-archetype team profile (`smb4TeamProfileEngine`). The scout layer (§3) values the fillers (the JOIN). Roster board renders the analyzer findings. Spec: `ROSTER_ANALYZER_RECOMMENDATION_ENGINE_SPEC.md`. Do NOT build a parallel hole-detector. |
 | **RB-10** | CPU shill ↔ CPU-team split + dissolve | §5 | rework | separate pure-pressure shills (dissolve-to-pool, exclude-from-league actually built) from opt-in CPU-controlled franchise teams |
 | **RB-11** | Scout-privacy UI | §3.6/§6.1 | new UI | default COVERED, **long-press REVEALS** own report, re-covers on release; farm + prep only |
 | **RB-12** | Guided first-person UX | §9 | new UI (light) | reporter "coach" line at each phase transition; deepen later |

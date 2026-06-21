@@ -125,6 +125,19 @@ HIDDEN. The only value signal is the scout's range + 20–80 grade.
   slot "screams louder" — and surfaces **"fill these in the farm"** guidance as players come up.
 - This is *why* scout specialties + the farm archetype matter: a GM aligns their **scout hiring** to
   the **farm archetype** to get sharper reads on the prospect types they're targeting.
+- **⚠ HOLE-DETECTION = REUSE the (already-built, already-wired) Roster Analyzer Engine — do NOT build a
+  parallel one (RB-9).** `src/engines/rosterAnalyzerEngine.ts` (+ `rosterAnalyzer.ts` + the Builder/
+  Franchise adapters) is LIVE in `TeamHubContent.tsx` + `LeagueBuilderRosters.tsx`. It already produces
+  position-coverage/depth/lineup-rotation-bullpen-gap findings + team-profile (via `smb4TeamProfileEngine`)
+  strengths/weaknesses, evidence-backed + trust-scored + read-only, and is **already scout-aware**
+  (`scoutConfidence` on farm players, farm/call-up `MoveRecommendation`). Spec:
+  `ROSTER_ANALYZER_RECOMMENDATION_ENGINE_SPEC.md` (`RosterAnalyzerSurface` is extensible — add a
+  `draft_prep` surface + a thin draft adapter that feeds the GM's **in-progress** MLB+farm roster).
+- **Division of labor:** the Roster Analyzer answers "what does MY roster NEED" (KNOWN — own roster);
+  the SCOUT layer (§3.1–3.3) answers "what is THIS PROSPECT worth" (OBSCURED). The scout-as-bridge is
+  the JOIN — analyzer finds the holes (weighted by the farm-archetype team profile), the scout values
+  the fillers. Keeping the draft on the SAME engine keeps its advice consistent with the season-long
+  team-hub advice.
 
 ### 3.6 Scout-privacy on the shared device (§6.1, corrected)
 - **Default COVERED.** A GM **long-presses to REVEAL** their own scout report; it **re-covers on
@@ -290,7 +303,9 @@ Each drafted player gets a one-time morale adjustment off the neutral 50, from t
 - **Roster visibility board (hard requirement, A4):** a persistent, glanceable view of the GM's **MLB +
   farm rosters with gaps highlighted** during the draft — no paper-tracking. With random/one-chance
   nomination a GM can't pre-plan perfectly, so the board + the scout's hole-guidance (§3.5) are what
-  make reacting to gaps fair instead of frustrating.
+  make reacting to gaps fair instead of frustrating. **The gap-highlighting is the Roster Analyzer
+  Engine's output** (§3.5 — reuse, don't rebuild), so the draft board matches the season-long team-hub
+  roster view.
 - **Guided first-person experience (N4):** the reporter/"machine" walks the GM through setup → scouting
   → MLB auction → farm auction → freeze. **Start LIGHT** — a contextual "coach" that drops a line at
   each phase transition — and **deepen** toward a fuller tutorial only if it earns its keep.
