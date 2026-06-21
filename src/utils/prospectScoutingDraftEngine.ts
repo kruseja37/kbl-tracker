@@ -264,6 +264,18 @@ const CHEMISTRY_POOL = ['Competitive', 'Crafty', 'Disciplined', 'Spirited', 'Sch
 const PERSONALITY_POOL = ['Competitive', 'Relaxed', 'Droopy', 'Jolly', 'Tough', 'Timid', 'Egotistical'];
 const BATTER_TRAITS = ['Clutch', 'Tough Out', 'Rally Starter', 'Sprinter', 'Magic Hands', 'Utility'];
 const PITCHER_TRAITS = ['K Collector', 'Workhorse', 'Elite 4F', 'Elite SL', 'Specialist', 'Rally Stopper'];
+type ProspectBatHand = LeagueBuilderProspectPlayerDto['bats'];
+type ProspectThrowHand = LeagueBuilderProspectPlayerDto['throws'];
+const PROSPECT_BATS_WEIGHTS: Array<[ProspectBatHand, number]> = [
+  ['R', 51.6],
+  ['L', 41.4],
+  ['S', 7.0],
+];
+const PROSPECT_THROWS_BY_BATS: Record<ProspectBatHand, Array<[ProspectThrowHand, number]>> = {
+  L: [['L', 40], ['R', 60]],
+  R: [['L', 10], ['R', 90]],
+  S: [['L', 19], ['R', 81]],
+};
 const SECONDARY_POSITION_WEIGHTS: Record<FieldingDraftPosition, Array<[Position | undefined, number]>> = {
   // PROSPECT_GENERATION_SPEC.md §6 raw counts from the real 440-player pool.
   C: [['1B', 17], ['RF', 4], ['LF', 3], ['3B', 2], ['IF/OF', 1], [undefined, 13]],
@@ -329,6 +341,14 @@ function pickWeightedValue<T>(seed: string, weights: Array<[T, number]>): T {
     if (roll <= 0) return value;
   }
   return weights[weights.length - 1][0];
+}
+
+function drawProspectBats(seed: string): ProspectBatHand {
+  return pickWeighted(`${seed}:bats`, PROSPECT_BATS_WEIGHTS);
+}
+
+function drawProspectThrows(seed: string, bats: ProspectBatHand): ProspectThrowHand {
+  return pickWeighted(`${seed}:throws`, PROSPECT_THROWS_BY_BATS[bats]);
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -612,6 +632,8 @@ function buildPlayerDto(input: {
   const seed = `${engineInput.seed}:player:${playerId}`;
   const hometown = pick(`${seed}:hometown`, CITIES);
   const salary = prospectSalaryForDraftRound(draftPick.round);
+  const bats = drawProspectBats(seed);
+  const throws = drawProspectThrows(seed, bats);
   return {
     id: playerId,
     firstName: candidate.firstName,
@@ -619,8 +641,8 @@ function buildPlayerDto(input: {
     gender: randomUnit(`${seed}:gender`) < 0.18 ? 'F' : 'M',
     jerseyNumber: 60 + ((draftPick.pickNumber - 1) % 40),
     age: PROSPECT_DRAFT_AGE,
-    bats: pick(`${seed}:bats`, ['L', 'R', 'S'] as const),
-    throws: pick(`${seed}:throws`, ['L', 'R'] as const),
+    bats,
+    throws,
     armSlot: null,
     primaryPosition: candidate.position,
     secondaryPosition: candidate.secondaryPosition,

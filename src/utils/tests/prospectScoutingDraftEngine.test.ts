@@ -2,12 +2,14 @@ import { describe, expect, test } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { FIRST_NAMES as SMB4_FIRST_NAMES, LAST_NAMES as SMB4_LAST_NAMES } from '../../data/nameDatabase';
 import {
+  buildProspectPlayerForPick,
   generateProspectScoutingDraft,
   gradeDistance,
   prospectSalaryForDraftRound,
   scoutProspect,
   type GeneratedProspectCandidate,
   type ProspectScoutingDraftInput,
+  type ProspectScoutingReport,
 } from '../prospectScoutingDraftEngine';
 
 const BASE_INPUT: ProspectScoutingDraftInput = {
@@ -125,6 +127,97 @@ describe('shared deterministic prospect/scouting draft engine', () => {
       player.secondaryPosition === undefined ||
       validSecondaryByPrimary[player.primaryPosition]?.has(player.secondaryPosition) === true,
     )).toBe(true);
+  });
+
+  test('generated bats and throws follow §7 conditional handedness split', () => {
+    const candidate: GeneratedProspectCandidate = {
+      candidateId: 'candidate-handedness',
+      firstName: 'Test',
+      lastName: 'Handedness',
+      position: 'CF',
+      trueGrade: 'B',
+      potentialGrade: 'B+',
+      ratings: {
+        power: 60,
+        contact: 60,
+        speed: 70,
+        fielding: 70,
+        arm: 60,
+        velocity: 0,
+        junk: 0,
+        accuracy: 0,
+      },
+      arsenal: [],
+      personality: 'Competitive',
+      chemistry: 'Competitive',
+      hiddenPersonalityModifiers: {
+        loyalty: 50,
+        ambition: 50,
+        resilience: 50,
+        charisma: 50,
+      },
+    };
+    const report: ProspectScoutingReport = {
+      candidateId: candidate.candidateId,
+      scoutedGrade: 'B',
+      scoutAccuracy: 0,
+      scoutConfidence: 'medium',
+      gradeError: 0,
+      scout: {
+        specialties: [],
+        weaknesses: [],
+      },
+    };
+    const stats = {
+      L: { total: 0, throwsL: 0 },
+      R: { total: 0, throwsL: 0 },
+      S: { total: 0, throwsL: 0 },
+    };
+    const validBats = new Set(['L', 'R', 'S']);
+    const validThrows = new Set(['L', 'R']);
+    const sampleSize = 6000;
+
+    for (let index = 0; index < sampleSize; index += 1) {
+      const player = buildProspectPlayerForPick({
+        engineInput: {
+          ...BASE_INPUT,
+          seed: `section-7-handedness-seed-${index}`,
+        },
+        candidate,
+        report,
+        pick: { round: 1, pickNumber: index + 1, teamId: 'team-a' },
+        playerId: `section-7-player-${index}`,
+      });
+
+      expect(validBats.has(player.bats)).toBe(true);
+      expect(validThrows.has(player.throws)).toBe(true);
+      stats[player.bats].total += 1;
+      if (player.throws === 'L') {
+        stats[player.bats].throwsL += 1;
+      }
+    }
+
+    const batsR = stats.R.total / sampleSize;
+    const batsL = stats.L.total / sampleSize;
+    const batsS = stats.S.total / sampleSize;
+    const throwsLeftGivenBatsL = stats.L.throwsL / stats.L.total;
+    const throwsLeftGivenBatsR = stats.R.throwsL / stats.R.total;
+    const throwsLeftGivenBatsS = stats.S.throwsL / stats.S.total;
+
+    expect(batsR).toBeGreaterThan(0.48);
+    expect(batsR).toBeLessThan(0.55);
+    expect(batsL).toBeGreaterThan(0.38);
+    expect(batsL).toBeLessThan(0.45);
+    expect(batsS).toBeGreaterThan(0.05);
+    expect(batsS).toBeLessThan(0.09);
+    expect(throwsLeftGivenBatsL).toBeGreaterThan(0.36);
+    expect(throwsLeftGivenBatsL).toBeLessThan(0.44);
+    expect(throwsLeftGivenBatsR).toBeGreaterThan(0.07);
+    expect(throwsLeftGivenBatsR).toBeLessThan(0.13);
+    expect(throwsLeftGivenBatsS).toBeGreaterThan(0.13);
+    expect(throwsLeftGivenBatsS).toBeLessThan(0.25);
+    expect(throwsLeftGivenBatsL).toBeGreaterThan(throwsLeftGivenBatsS);
+    expect(throwsLeftGivenBatsS).toBeGreaterThan(throwsLeftGivenBatsR);
   });
 
   test('generated non-pitcher prospects do not carry visible pitching ratings or arsenal', () => {
