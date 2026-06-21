@@ -156,6 +156,42 @@ HIDDEN. The only value signal is the scout's range + 20–80 grade.
 
 ---
 
+### 3.7 Player personality model — THREE DISTINCT axes (NEW, JK 2026-06-21)
+The specs/code have **conflated** these (verified: `PERSONALITY_BASELINES` uses non-canonical names;
+stock players' `personality` is `undefined`; hidden modifiers are backfilled only at franchise init).
+Pin them as **three independent axes** per player:
+
+| Axis | Values | Visibility | Role |
+|---|---|---|---|
+| **1. Primary personality** | exactly ONE of 7: **egotistical, competitive, tough, droopy, timid, jolly, relaxed** | **VISIBLE** (draft + franchise) | morale **VOLATILITY / reactiveness** — how swingy a player's morale will be + relationship dynamics; GMs read it to gauge risk |
+| **2. Hidden modifiers** | ALL 4, at random levels: **ambition, loyalty, charisma, resilience** (0–100) | **HIDDEN FOREVER** (entire draft + franchise) | unpredictable morale-fluctuation flavor over time. The ONLY GM signal is the **CAPTAIN reveal** = the player with the highest **loyalty+charisma** composite on the team — and even then NO specifics + NO teammate comparisons (you just know your composite is below the captain's) |
+| **3. Chemistry** | exactly ONE of 5: **competitive, crafty, scholarly, spirited, disciplined** | **VISIBLE** (draft + franchise) | drives **TRAIT POTENCY** (chemistry-fit → potency tier L1/L2/L3 → trait-value multiplier); GMs + the scout/roster-analyzer use the team's chemistry **mix** to value chemistry-fit |
+
+> ⚠ "competitive" is a value in BOTH axis 1 AND axis 3 — they are INDEPENDENT (a player can be
+> personality=competitive AND chemistry=crafty). This is the exact conflation the model fixes.
+
+**Assignment / timing (THE FIX):** all KBL-flavor axes are assigned **FRESH, before the draft** — NOT
+inherited from the SMB4 console default, so GMs can't pre-know a player from the game:
+- **Prospects:** at prospect generation (already done — personality + modifiers + chemistry, seeded).
+- **Stock MLB players:** **RESET before the MLB draft** — re-roll the **primary personality (1)** + the
+  **hidden modifiers (2)**, seeded deterministically. **[OPEN Q — JK: does the reset also re-roll
+  CHEMISTRY (3), or KEEP each stock player's real SMB4 chemistry? Captain lean = KEEP (chemistry is a
+  real visible attribute GMs strategize around + it drives potency); only re-roll axes 1+2.]**
+- This MOVES hidden-modifier creation from the **franchise-init backfill**
+  (`generateFranchiseHiddenModifierBackfill`) to **PRE-DRAFT**, so all three axes exist + are correct
+  during the draft AND persist unchanged into Mode 2 (the franchise-init backfill becomes a no-op safety net).
+
+**Scout / roster-analyzer use of chemistry (feeds §3.5):** because chemistry is VISIBLE + drives trait
+potency, the scout's price recommendation factors **chemistry-FIT** — a prospect whose chemistry + traits
+RAISE the team's overall potency is worth paying MORE for; a poor fit, LESS. Leverages the existing
+potency tier (`ivEngine` `PotencyTier` L1/L2/L3). **[VERIFY/BUILD: the chemistry-MIX → potency-TIER rule
+— the tier is consumed by `computeIV`, but the fit→tier computation is a "downstream league-context
+concern" that may be net-new; ground its spec at build.]**
+
+**Morale tilt (refines §6):** the morale tilt uses BOTH the VISIBLE axis 1 (GM can ANTICIPATE the
+volatility) AND the HIDDEN axis 2 (GM canNOT — pure flavor). Fix the non-canonical `PERSONALITY_BASELINES`
+names to the canonical 7.
+
 ## §4. BUDGETS & ARCHETYPE
 
 ### 4.1 Self-scaling budgets
@@ -268,8 +304,11 @@ Each drafted player gets a one-time morale adjustment off the neutral 50, from t
 - **Interaction (JK's framing):** **early dominates** — a cheap-but-early pick still gets the commitment
   boost; a **late** pick only claws back the slot penalty if **overpaid**; **late + underpaid = the
   morale basement**.
-- **Personality-tilted:** egotistical/ambitious players weight "was I wanted" heavily; humble/relaxed
-  shrug. (Use the existing personality modifiers.)
+- **Personality-tilted — using BOTH axes (§3.7):** the **VISIBLE primary personality** (axis 1) sets the
+  morale's reactiveness/volatility the GM can ANTICIPATE (egotistical reacts hard to being unwanted;
+  relaxed shrugs); the **HIDDEN modifiers** (axis 2 — ambition/resilience) add the swing the GM CANNOT
+  see (pure flavor). Both are assigned **before the draft** (RB-0), so they exist when the morale is
+  computed at the freeze (§10).
 - **Feeds the TV loop:** the underpaid-late kid starts **below 50** ("they didn't want me") but has an
   easy path to overperform his cheap salary → high TV → in-season morale rebound. A genuine arc.
 - **Starting magnitudes (tune in playtest):** slot ≈ **±15**, pay ≈ **±10**; basement (late+underpaid)
@@ -388,3 +427,12 @@ Each drafted player gets a one-time morale adjustment off the neutral 50, from t
    Captain to verify at build.
 7. ✅ **GM entity — CONFIRMED (JK):** separate entity, data model parallels the manager profile, sits
    above the manager with fire-manager authority (§8).
+8. **Personality model (§3.7) — ONE open JK question:** does the pre-draft RESET re-roll **chemistry**
+   too, or keep each stock player's real SMB4 chemistry? (Captain lean: KEEP chemistry; re-roll only the
+   primary personality + hidden modifiers.) Plus VERIFY-AT-BUILD: (a) the chemistry-MIX → potency-TIER
+   rule (the engine that makes the scout's chemistry-fit value real — may be net-new); (b) personality →
+   morale VOLATILITY (current code has personality→baseline only; the swing dimension may be net-new).
+9. **Draft-morale timing (§3.7/§10):** since stock players' personality/modifiers are assigned at RB-0
+   (pre-draft) and morale freezes at franchise-init (§10), confirm the morale is COMPUTED at the freeze
+   (using draft-recorded slot/price + the now-present personality) rather than live mid-draft — unless a
+   live in-draft morale preview is wanted (would need the assignment confirmed pre-draft, which RB-0 does).

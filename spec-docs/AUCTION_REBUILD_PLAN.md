@@ -14,11 +14,17 @@ session per the loop (split further as the grounding warrants).
 
 ---
 
+## Phase 0 — FOUNDATION (personality model)
+
+| # | Ticket | V2 § | Class | What | Survives/Rewrites |
+|---|---|---|---|---|---|
+| **RB-0** | 3-axis personality model + pre-draft assignment | §3.7 | engine/data | Pin the **3 independent axes** (1: primary personality, 7 types, VISIBLE; 2: hidden modifiers, 4×0–100, HIDDEN forever; 3: chemistry, 5 types, VISIBLE). **Assign FRESH before the draft** — re-roll stock players' axes 1+2 (seeded), prospects already done; MOVE hidden-mod creation from the franchise-init backfill to pre-draft. Fix `PERSONALITY_BASELINES` non-canonical names → canonical 7. **OPEN-Q: chemistry reset-or-keep (lean keep).** Feeds RB-1 (scout chemistry-fit), RB-5 (morale tilt), RB-7 (freeze persists all 3). | clarifies the conflated personality/chemistry/modifier code |
+
 ## Phase 1 — THE SPINE (value + nomination)
 
 | # | Ticket | V2 § | Class | What | Survives/Rewrites |
 |---|---|---|---|---|---|
-| **RB-1** | Scout value model | §3 | engine/data | scout output = **price range + 20–80 grade** (true IV hidden, used only for budget scale + call-up); reuse `perceivedValueRange` anchored on the scout price, not IV; class-strength budget scale | **REWRITES** AUC-5.1a (pool pricing) + 5.1b (anchor) |
+| **RB-1** | Scout value model | §3 | engine/data | scout output = **price range + 20–80 grade** (true IV hidden, used only for budget scale + call-up); reuse `perceivedValueRange` anchored on the scout price, not IV; class-strength budget scale; the scout's price factors **chemistry-fit → trait potency** (§3.7; VERIFY/BUILD the chemistry-mix→potency-tier rule) | **REWRITES** AUC-5.1a (pool pricing) + 5.1b (anchor) |
 | **RB-2** | Engine nomination + one-chance | §2.1/§2.2 | core engine (careful) | NOMINATION → engine **weighted-random** (∝ percentile^k, k≈2–3 seeded); RESOLVE no-bid → **out forever**; no re-nomination; roster-fill guarantee + tail | **REWRITES** AUC-2.1 nomination/resolve; keeps OPEN_BIDDING/CPU/wallet |
 
 ## Phase 2 — BUDGETS (archetype + carryover)
