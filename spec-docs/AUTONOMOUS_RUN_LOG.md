@@ -2314,3 +2314,20 @@ NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its 
   "the displayed POINT-estimate is the jittered ≠-truth value, the bounds stay literal `trueIV(1±w)`"; jitter shape is a sim-tune dial.
 - **Contract committed `ba732f05`.** Dispatched to Codex (gpt-5.5, xhigh) bg task `bqgc3i1e9` → `/tmp/codex-auc51b.out`. On landing: read-the-diff audit +
   full Mode-1 suite + **`git diff` the IV oracle (must be byte-unchanged — safety wall a)** + commit. **➡ after 5.1b = AUC-5.1c** (walled-off farm wallet §3.4).
+- **✅ AUC-5.1b COMMITTED `d0a5fae5` — Codex(gpt-5.5,xhigh)-built → Opus-audited (builder≠auditor): VERIFIED.** 3 files (additive `SCOUT_NOISE_BASE=0.6`
+  in rosterEngineConstants §12 + NEW `src/engines/scoutValueRange.ts` + test). `perceivedValueRange(trueIV, scoutAccuracy[0-100], seed)` →
+  `{w, low=trueIV(1−w), high=trueIV(1+w), displayedEstimate}`, `w = 0.6·(1−acc/100)` (§3.2-exact; acc92→w0.048, acc45→w0.33), seeded FNV-1a jitter
+  ∈[−w,+w] for the displayed point forced into the open band + ≠ truth (true IV internal for all engine math). **Audit:** math faithful to §3.2;
+  pure (numbers in, struct out, no prospect-engine import); 6 thorough tests (w-vs-acc, symmetric bracket, estimate∈(low,high)∧≠truth, determinism w/
+  seed-INDEPENDENT bounds, clamp, guards). **HOST GATE:** `tsc -b` 0 + **IV oracle + ivEngine/salaryCalculator/ivCurves BYTE-UNCHANGED (safety wall a ✓)**
+  + full Mode-1 suite **7954 pass / 1 fail (476 files) = wpaRuntimeBoundary (characterized), ZERO new reds** (+6). PURE / build-DARK, no store/DB.
+  **DESIGN CALL (flagged):** the §3.2 "midpoint seeded-jittered" line read as "displayed POINT-estimate jittered ≠ truth; bounds stay literal" (jitter
+  shape is a sim-tune dial). **⇒ AUC-5.1 at 2/5 (5.1a pool + 5.1b scout-range done, both fork-free + build-DARK).**
+
+**WAVE 35 — HANDOFF at the clean 5.1b seam (STEP 6; context heavily used after the AUC-4.2/4.1b + 5.1a/5.1b arc).**
+- Clean fork-free seam: 5.1a + 5.1b committed, worktrees clean, no Codex build in flight. **➡ NEXT = AUC-5.1c (walled-off farm wallet, §3.4)** — the
+  HEAVIEST farm class (persistence/state): a per-team farm budget SEPARATE from the MLB tier cap, self-calibrating NERFED tier cap (§5.2 over the
+  prospect pool — feed it the AUC-5.1a `auctionPlayers` IVs), farm `minSalaryByPosition`, + a farm `AuctionTeamInput` adapter. **Grounding TODO:** the
+  §5.2 self-calibration entry (how TIER_CAPS/the MLB cap is derived → mirror NERFED for farm); where the farm wallet persists (TeamRoster vs new field/
+  store — saved-shape ⇒ version-bump/4-mirror discipline + full-suite gate); the nerf magnitude (**JK-2 flagged**, default ~0.25–0.4). Then 5.1d
+  (wrapper + MLB→farm sequencing §3.1) → 5.1e (UI §3.3). Handing off per STEP 6 so 5.1c gets a fresh full-context session.
