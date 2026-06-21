@@ -77,6 +77,16 @@ export interface ProspectScoutingDraftInput {
   candidatePoolMultiplier?: number;
 }
 
+export interface ProspectPoolInput {
+  leagueId: string;
+  seasonNumber: number;
+  seed: string;
+  teamDraftOrder?: ProspectDraftTeam[];
+  scoutsByTeamId?: Record<string, ProspectScoutDescriptor | undefined>;
+  existingPlayerIds?: string[];
+  existingTeamIds?: string[];
+}
+
 export interface HiddenPersonalityModifiers {
   loyalty: number;
   ambition: number;
@@ -1106,6 +1116,66 @@ export function buildProspectPlayerForPick(input: {
   playerId: string;
 }): LeagueBuilderProspectPlayerDto {
   return buildPlayerDto(input);
+}
+
+const FARM_AUCTION_POOL_TEAM_ID = '__farm_auction_pool_unassigned__';
+
+export function generateProspectPool(
+  input: ProspectPoolInput,
+  count: number,
+): LeagueBuilderProspectPlayerDto[] {
+  if (!Number.isInteger(count) || count < 0) {
+    throw new Error('Prospect pool count must be a non-negative integer.');
+  }
+
+  const teamDraftOrder = input.teamDraftOrder && input.teamDraftOrder.length > 0
+    ? [...input.teamDraftOrder]
+    : [{ teamId: FARM_AUCTION_POOL_TEAM_ID, teamName: 'Farm Auction Pool' }];
+  const engineInput: ProspectScoutingDraftInput = {
+    leagueId: input.leagueId,
+    seasonNumber: input.seasonNumber,
+    seed: input.seed,
+    teamDraftOrder,
+    rounds: 1,
+    scoutsByTeamId: input.scoutsByTeamId,
+    existingPlayerIds: input.existingPlayerIds,
+    existingTeamIds: input.existingTeamIds,
+    candidatePoolMultiplier: 1,
+  };
+  const usedIds = new Set(input.existingPlayerIds ?? []);
+
+  return Array.from({ length: count }, (_, index) => {
+    const candidate = buildCandidate(engineInput, index);
+    const report = scoutProspect(candidate, undefined, input.seed);
+    const pickNumber = index + 1;
+    const playerId = deterministicPlayerId(
+      engineInput,
+      FARM_AUCTION_POOL_TEAM_ID,
+      Math.floor(index / teamDraftOrder.length) + 1,
+      pickNumber,
+      usedIds,
+    );
+    const player = buildPlayerDto({
+      engineInput,
+      candidate,
+      report,
+      pick: {
+        round: Math.floor(index / teamDraftOrder.length) + 1,
+        pickNumber,
+        teamId: FARM_AUCTION_POOL_TEAM_ID,
+      },
+      playerId,
+    });
+
+    return {
+      ...player,
+      leagueAssignments: [],
+      prospectProfile: {
+        ...player.prospectProfile,
+        teamId: FARM_AUCTION_POOL_TEAM_ID,
+      },
+    };
+  });
 }
 
 export function visibleReportForProspectPlayer(input: {
