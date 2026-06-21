@@ -44,7 +44,7 @@ const BASE_INPUT: ProspectScoutingDraftInput = {
   },
 };
 
-const PITCHER_POSITIONS = new Set(['SP', 'RP', 'CP']);
+const PITCHER_POSITIONS = new Set(['SP', 'SP/RP', 'RP', 'CP']);
 
 function compact(output: ReturnType<typeof generateProspectScoutingDraft>) {
   return {
@@ -106,7 +106,7 @@ describe('shared deterministic prospect/scouting draft engine', () => {
       candidatePoolMultiplier: 5,
       seed: 'section-6-secondary-position-policy-seed',
     });
-    const pitcherPositions = new Set(['SP', 'RP', 'CP']);
+    const pitcherPositions = PITCHER_POSITIONS;
     const validSecondaryByPrimary: Record<string, Set<string>> = {
       C: new Set(['1B', 'RF', 'LF', '3B', 'IF/OF']),
       '1B': new Set(['3B', 'C', 'LF', 'RF', '2B']),
@@ -336,7 +336,7 @@ describe('shared deterministic prospect/scouting draft engine', () => {
       candidatePoolMultiplier: 5,
       seed: 'non-pitcher-pitching-model-policy-seed',
     });
-    const pitcherPositions = new Set(['SP', 'RP', 'CP']);
+    const pitcherPositions = PITCHER_POSITIONS;
     const nonPitcherCandidates = output.draftClass.filter((candidate) => !pitcherPositions.has(candidate.position));
     const nonPitcherPlayers = output.generatedPlayers.filter((player) => !pitcherPositions.has(player.primaryPosition));
 
@@ -362,7 +362,7 @@ describe('shared deterministic prospect/scouting draft engine', () => {
       candidatePoolMultiplier: 5,
       seed: 'pitcher-pitching-model-policy-seed',
     });
-    const pitcherPositions = new Set(['SP', 'RP', 'CP']);
+    const pitcherPositions = PITCHER_POSITIONS;
     const pitcherPlayers = output.generatedPlayers.filter((player) => pitcherPositions.has(player.primaryPosition));
 
     expect(pitcherPlayers.length).toBeGreaterThan(0);
@@ -371,6 +371,57 @@ describe('shared deterministic prospect/scouting draft engine', () => {
       player.junk > 0 &&
       player.accuracy > 0 &&
       player.arsenal.length > 0,
+    )).toBe(true);
+  });
+
+  test('generated pitcher arsenals follow the §8 canonical family and role taper', () => {
+    const output = generateProspectScoutingDraft({
+      ...BASE_INPUT,
+      rounds: 80,
+      candidatePoolMultiplier: 5,
+      seed: 'section-8-canonical-arsenal-policy-seed',
+    });
+    const fastballs = new Set(['4F', '2F', 'CF']);
+    const offspeed = new Set(['SL', 'CB', 'CH', 'FK', 'SB']);
+    const roleRanges: Record<string, [number, number]> = {
+      SP: [3, 5],
+      'SP/RP': [3, 5],
+      RP: [2, 4],
+      CP: [2, 3],
+    };
+    const pitchers = output.draftClass.filter((candidate) => PITCHER_POSITIONS.has(candidate.position));
+    const fielders = output.draftClass.filter((candidate) => !PITCHER_POSITIONS.has(candidate.position));
+
+    expect(pitchers.length).toBeGreaterThan(0);
+    expect(fielders.length).toBeGreaterThan(0);
+    expect(fielders.every((candidate) => candidate.arsenal.length === 0)).toBe(true);
+
+    for (const candidate of pitchers) {
+      const [min, max] = roleRanges[candidate.position];
+
+      expect(candidate.arsenal.length).toBeGreaterThanOrEqual(min);
+      expect(candidate.arsenal.length).toBeLessThanOrEqual(max);
+      expect(candidate.arsenal.some((pitch) => fastballs.has(pitch))).toBe(true);
+      expect(candidate.arsenal.some((pitch) => offspeed.has(pitch))).toBe(true);
+      expect(new Set(candidate.arsenal).size).toBe(candidate.arsenal.length);
+    }
+
+    for (const player of output.generatedPlayers) {
+      if (!PITCHER_POSITIONS.has(player.primaryPosition)) {
+        expect(player.arsenal).toEqual([]);
+        continue;
+      }
+
+      const [min, max] = roleRanges[player.primaryPosition];
+      expect(player.arsenal.length).toBeGreaterThanOrEqual(min);
+      expect(player.arsenal.length).toBeLessThanOrEqual(max);
+      expect(player.arsenal.some((pitch) => fastballs.has(pitch))).toBe(true);
+      expect(player.arsenal.some((pitch) => offspeed.has(pitch))).toBe(true);
+      expect(new Set(player.arsenal).size).toBe(player.arsenal.length);
+    }
+
+    expect(pitchers.some((candidate) =>
+      !(candidate.arsenal.includes('4F') && candidate.arsenal.includes('2F')),
     )).toBe(true);
   });
 

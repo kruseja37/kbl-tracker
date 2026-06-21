@@ -24,10 +24,11 @@ export type DraftPosition =
   | 'RF'
   | 'DH'
   | 'SP'
+  | 'SP/RP'
   | 'RP'
   | 'CP';
 
-type PitcherDraftPosition = Extract<DraftPosition, 'SP' | 'RP' | 'CP'>;
+type PitcherDraftPosition = Extract<DraftPosition, 'SP' | 'SP/RP' | 'RP' | 'CP'>;
 type FieldingDraftPosition = Exclude<DraftPosition, 'DH' | PitcherDraftPosition>;
 
 export type ScoutSpecialty =
@@ -330,6 +331,21 @@ const PROSPECT_THROWS_BY_BATS: Record<ProspectBatHand, Array<[ProspectThrowHand,
   R: [['L', 10], ['R', 90]],
   S: [['L', 19], ['R', 81]],
 };
+const FASTBALL_PITCH_TYPES = ['4F', '2F', 'CF'] as const;
+const OFFSPEED_PITCH_TYPES = ['SL', 'CB', 'CH', 'FK', 'SB'] as const;
+const ALL_PITCH_TYPES = [...FASTBALL_PITCH_TYPES, ...OFFSPEED_PITCH_TYPES] as const;
+const FASTBALL_PITCH_SET = new Set<string>(FASTBALL_PITCH_TYPES);
+const OFFSPEED_PITCH_SET = new Set<string>(OFFSPEED_PITCH_TYPES);
+const ELITE_TRAIT_TO_PITCH: Record<string, string> = {
+  'Elite 2F': '2F',
+  'Elite 4F': '4F',
+  'Elite CB': 'CB',
+  'Elite CF': 'CF',
+  'Elite CH': 'CH',
+  'Elite FK': 'FK',
+  'Elite SB': 'SB',
+  'Elite SL': 'SL',
+};
 const SECONDARY_POSITION_WEIGHTS: Record<FieldingDraftPosition, Array<[Position | undefined, number]>> = {
   // PROSPECT_GENERATION_SPEC.md §6 raw counts from the real 440-player pool.
   C: [['1B', 17], ['RF', 4], ['LF', 3], ['3B', 2], ['IF/OF', 1], [undefined, 13]],
@@ -434,7 +450,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function isPitcher(position: DraftPosition): position is PitcherDraftPosition {
-  return position === 'SP' || position === 'RP' || position === 'CP';
+  return position === 'SP' || position === 'SP/RP' || position === 'RP' || position === 'CP';
 }
 
 function chooseSecondary(primary: DraftPosition, seed: string): Position | undefined {
@@ -488,7 +504,7 @@ function buildRatings(seed: string, grade: Grade, position: DraftPosition): Posi
   const center = gradeCenter(grade);
   if (isPitcher(position)) {
     const roleBias =
-      position === 'SP'
+      position === 'SP' || position === 'SP/RP'
         ? { velocity: -2, junk: -2, accuracy: 5 }
         : position === 'CP'
           ? { velocity: 8, junk: 5, accuracy: -8 }
@@ -518,14 +534,56 @@ function buildRatings(seed: string, grade: Grade, position: DraftPosition): Posi
   };
 }
 
-function buildArsenal(seed: string, position: DraftPosition, junk: number): string[] {
+function prospectArsenalRange(position: PitcherDraftPosition): [number, number] {
+  if (position === 'SP' || position === 'SP/RP') return [3, 5];
+  if (position === 'CP') return [2, 3];
+  return [2, 4];
+}
+
+function targetArsenalCount(position: PitcherDraftPosition, junk: number): number {
+  const [min, max] = prospectArsenalRange(position);
+  const junkRatio = (Math.max(20, Math.min(99, junk)) - 20) / 79;
+  return clamp(min + junkRatio * (max - min), min, max);
+}
+
+function buildArsenal(seed: string, position: DraftPosition, junk: number, traits: readonly string[]): string[] {
   if (!isPitcher(position)) return [];
-  const offspeed = ['CB', 'SL', 'CH', 'FK', 'CF', 'SB'];
-  const shuffled = [...offspeed].sort((a, b) =>
-    randomUnit(`${seed}:pitch:${a}`) - randomUnit(`${seed}:pitch:${b}`),
+  const forced = traits
+    .map((trait) => ELITE_TRAIT_TO_PITCH[trait])
+    .filter((pitch): pitch is string => Boolean(pitch));
+  const pitches = Array.from(new Set(forced));
+  const pool = junk >= 75
+    ? ['CF', 'CB', 'SL', 'CH', 'FK', 'SB', '4F', '2F']
+    : junk <= 40
+      ? ['4F', '2F', 'CF', 'SL', 'CH', 'CB', 'FK', 'SB']
+      : ['4F', 'CF', 'SL', 'CB', 'CH', '2F', 'FK', 'SB'];
+  const rankedPool = [...pool].sort((left, right) =>
+    randomUnit(`${seed}:pitch:${left}`) - randomUnit(`${seed}:pitch:${right}`),
   );
-  const count = junk >= 70 ? 4 : junk >= 55 ? 3 : junk >= 40 ? 2 : 1;
-  return ['4F', ...shuffled.slice(0, count)];
+  const needsFastball = !pitches.some((pitch) => FASTBALL_PITCH_SET.has(pitch));
+  const needsOffspeed = !pitches.some((pitch) => OFFSPEED_PITCH_SET.has(pitch));
+  const requiredFamilySlots = Number(needsFastball) + Number(needsOffspeed);
+  const baseTargetCount = targetArsenalCount(position, junk);
+  const targetCount = Math.min(5, Math.max(baseTargetCount, pitches.length + requiredFamilySlots));
+
+  if (needsFastball) {
+    pitches.push(pick(`${seed}:fastball`, FASTBALL_PITCH_TYPES));
+  }
+  if (needsOffspeed) {
+    pitches.push(pick(`${seed}:offspeed`, OFFSPEED_PITCH_TYPES));
+  }
+
+  for (const pitch of rankedPool) {
+    if (pitches.length >= targetCount) break;
+    if (!pitches.includes(pitch)) pitches.push(pitch);
+  }
+
+  for (const pitch of ALL_PITCH_TYPES) {
+    if (pitches.length >= targetCount) break;
+    if (!pitches.includes(pitch)) pitches.push(pitch);
+  }
+
+  return pitches;
 }
 
 function specialtyMatches(position: DraftPosition, specialty: ScoutSpecialty): boolean {
@@ -555,6 +613,7 @@ function baseAccuracy(position: DraftPosition): number {
     CF: 65,
     RP: 65,
     CP: 60,
+    'SP/RP': 70,
   };
   return byPosition[position] ?? 70;
 }
@@ -646,7 +705,12 @@ function buildCandidate(input: ProspectScoutingDraftInput, index: number): Gener
     trueGrade,
     potentialGrade: potentialGrade(`${seed}:potential`, trueGrade),
     ratings,
-    arsenal: buildArsenal(seed, position, ratings.junk),
+    arsenal: buildArsenal(
+      seed,
+      position,
+      ratings.junk,
+      [trait1, trait2].filter((trait): trait is string => Boolean(trait)),
+    ),
     trait1,
     trait2,
     personality: pick(`${seed}:personality`, PERSONALITY_POOL),
