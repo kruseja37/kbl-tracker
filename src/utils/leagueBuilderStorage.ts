@@ -1467,6 +1467,10 @@ export function createAuctionSessionId(leagueId: string, seasonNumber = 1): stri
   return `${leagueId}::startup-auction-draft::${seasonNumber}`;
 }
 
+export function createFarmAuctionSessionId(leagueId: string, seasonNumber = 1): string {
+  return `${leagueId}::startup-farm-auction-draft::${seasonNumber}`;
+}
+
 export async function getAllScoutProfiles(): Promise<LeagueBuilderScoutProfile[]> {
   const db = await initLeagueBuilderDatabase();
 
@@ -1660,9 +1664,11 @@ export async function getAuctionSession(
   leagueId: string,
   seasonNumber = 1,
 ): Promise<LeagueBuilderAuctionSession | null> {
-  const db = await initLeagueBuilderDatabase();
-  const id = createAuctionSessionId(leagueId, seasonNumber);
+  return getAuctionSessionById(createAuctionSessionId(leagueId, seasonNumber));
+}
 
+export async function getAuctionSessionById(id: string): Promise<LeagueBuilderAuctionSession | null> {
+  const db = await initLeagueBuilderDatabase();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORES.AUCTION_SESSIONS, 'readonly');
     const store = tx.objectStore(STORES.AUCTION_SESSIONS);
@@ -1679,9 +1685,18 @@ export async function saveAuctionSession(
     lastModified?: string;
   },
 ): Promise<LeagueBuilderAuctionSession> {
+  return saveAuctionSessionById(session);
+}
+
+export async function saveAuctionSessionById(
+  session: Omit<LeagueBuilderAuctionSession, 'createdDate' | 'lastModified'> & {
+    createdDate?: string;
+    lastModified?: string;
+  },
+): Promise<LeagueBuilderAuctionSession> {
   const db = await initLeagueBuilderDatabase();
   const now = nowISO();
-  const existing = await getAuctionSession(session.leagueId, session.seasonNumber);
+  const existing = await getAuctionSessionById(session.id);
   const fullSession: LeagueBuilderAuctionSession = {
     ...session,
     seed: session.session.config.nominationOrderSeed,

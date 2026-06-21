@@ -1,0 +1,409 @@
+import { useCallback, useMemo, useState } from "react";
+
+import {
+  claimLoneSurvivor,
+  evaluateResolve,
+  getCurrentBidderTeamId,
+  getCurrentNominator,
+  nominatePlayer,
+  passBid,
+  passLoneSurvivor,
+  recordBid,
+  rotateNomination,
+  type AuctionTransitionResult,
+} from "../../../engines/auctionStateMachine";
+import {
+  cpuBidOnLot,
+  cpuDecideLoneSurvivor,
+  resolveCpuNomination,
+  type CpuShillAuctionSession,
+} from "../../../engines/cpuShillBidding";
+import { DEFAULT_AUCTION_SETUP_CONFIG, type AuctionSetupConfig } from "../../../data/auctionEngineConstants";
+import { buildFarmAuctionSession } from "../../../utils/farmAuctionSession";
+import {
+  createFarmAuctionSessionId,
+  getAuctionSessionById,
+  getScoutProfilesForLeague,
+  saveAuctionSessionById,
+  type LeagueBuilderScoutProfile,
+} from "../../../utils/leagueBuilderStorage";
+import type { ProspectScoutDescriptor } from "../../../utils/prospectScoutingDraftEngine";
+import {
+  useLeagueBuilderData,
+  type Team,
+  type TeamRoster,
+  type UseLeagueBuilderDataReturn,
+} from "../../hooks/useLeagueBuilderData";
+
+export { getCurrentBidderTeamId } from "../../../engines/auctionStateMachine";
+
+const FARM_AUCTION_SEASON = 1;
+const MAX_CPU_AUTO_ADVANCE_STEPS = 400;
+
+type FarmAuctionDraftContext = {
+  leagueId: string;
+  seasonNumber: number;
+};
+
+export type FarmAuctionDraftError = string | null;
+
+export interface UseFarmAuctionDraftOptions {
+  leagueData?: UseLeagueBuilderDataReturn;
+}
+
+export interface UseFarmAuctionDraftReturn {
+  session: CpuShillAuctionSession | null;
+  seed: string;
+  isWorking: boolean;
+  error: FarmAuctionDraftError;
+  leagueData: UseLeagueBuilderDataReturn;
+  activeLeagueId: string | null;
+  seasonNumber: number;
+  cpuTeamIds: string[];
+  currentNominatorTeamId: string | null;
+  currentBidderTeamId: string | null;
+  initFarmAuction: (leagueId: string, partialConfig?: Partial<AuctionSetupConfig>) => Promise<CpuShillAuctionSession | null>;
+  loadFarmAuction: (leagueId: string, seasonNumber?: number) => Promise<CpuShillAuctionSession | null>;
+  nominate: (playerId: string) => Promise<CpuShillAuctionSession | null>;
+  bid: (teamId: string, amount: number) => Promise<CpuShillAuctionSession | null>;
+  pass: (teamId: string) => Promise<CpuShillAuctionSession | null>;
+  claimAtReserve: () => Promise<CpuShillAuctionSession | null>;
+  resolve: () => Promise<CpuShillAuctionSession | null>;
+  rotate: () => Promise<CpuShillAuctionSession | null>;
+  isCpuTeam: (teamId: string | null | undefined) => boolean;
+}
+
+function transitionOrThrow(result: AuctionTransitionResult): CpuShillAuctionSession {
+  if (!result.ok) {
+    throw new Error(`Farm auction transition rejected: ${result.reason}`);
+  }
+  return result.session as CpuShillAuctionSession;
+}
+
+function teamDisplayName(team: Team | null | undefined): string {
+  if (!team) return "Unknown Team";
+  return team.location ? `${team.location} ${team.name}` : team.name;
+}
+
+export function deriveFarmCpuTeamIds(session: CpuShillAuctionSession | null, leagueTeams: readonly Team[]): string[] {
+  if (!session) return [];
+  const ids = new Set<string>();
+
+  for (const team of leagueTeams) {
+    if (team.controlledBy === "ai") ids.add(team.id);
+  }
+
+  for (const teamId of Object.keys(session.cpuShills ?? {})) {
+    ids.add(teamId);
+  }
+
+  const count = Math.max(0, Math.min(session.config.cpuShillCount ?? 0, session.nominationOrder.length));
+  if (count > 0) {
+    for (const teamId of session.nominationOrder.slice(-count)) {
+      ids.add(teamId);
+    }
+  }
+
+  return session.nominationOrder.filter((teamId) => ids.has(teamId));
+}
+
+function scoutProfileToDescriptor(scout: LeagueBuilderScoutProfile): ProspectScoutDescriptor {
+  return {
+    scoutId: scout.id,
+    scoutName: scout.name,
+    specialties: scout.specialties as ProspectScoutDescriptor["specialties"],
+    weaknesses: scout.weaknesses as ProspectScoutDescriptor["weaknesses"],
+  };
+}
+
+function resolveScoutsByTeamId(
+  scouts: readonly LeagueBuilderScoutProfile[],
+): Record<string, ProspectScoutDescriptor | undefined> | undefined {
+  const byTeamId = new Map<string, LeagueBuilderScoutProfile[]>();
+
+  for (const scout of scouts) {
+    if (!scout.teamId) continue;
+    byTeamId.set(scout.teamId, [...(byTeamId.get(scout.teamId) ?? []), scout]);
+  }
+
+  if (byTeamId.size === 0) return undefined;
+  if ([...byTeamId.values()].some((teamScouts) => teamScouts.length > 1)) return undefined;
+
+  return Object.fromEntries(
+    [...byTeamId.entries()].map(([teamId, [scout]]) => [teamId, scoutProfileToDescriptor(scout)]),
+  );
+}
+
+async function loadOptionalFarmScouts(
+  leagueId: string,
+): Promise<Record<string, ProspectScoutDescriptor | undefined> | undefined> {
+  try {
+    return resolveScoutsByTeamId(await getScoutProfilesForLeague(leagueId));
+  } catch {
+    return undefined;
+  }
+}
+
+async function buildFarmAuctionTeams(input: {
+  leagueTeams: readonly Team[];
+  getRoster: UseLeagueBuilderDataReturn["getRoster"];
+}): Promise<Array<{
+  teamId: string;
+  teamName: string;
+  farmRosterPlayerIds: readonly string[];
+  committedFarmSalaries: number;
+}>> {
+  return Promise.all(
+    input.leagueTeams.map(async (team) => {
+      const roster: TeamRoster | null = await input.getRoster(team.id);
+
+      return {
+        teamId: team.id,
+        teamName: teamDisplayName(team),
+        farmRosterPlayerIds: roster?.farmRoster ?? [],
+        committedFarmSalaries: 0,
+      };
+    }),
+  );
+}
+
+// Mirrors useAuctionDraft; duplicated intentionally until a shared hot-seat core is extracted.
+function stateProgressKey(session: CpuShillAuctionSession): string {
+  const lot = session.currentLot;
+  return JSON.stringify({
+    state: session.state,
+    nominationIndex: session.nominationIndex,
+    nominationRound: session.nominationRound,
+    available: session.availablePlayerIds.length,
+    setAside: session.setAsidePlayerIds.length,
+    results: session.results.length,
+    saleCount: session.saleCount,
+    pendingClaim: session.pendingClaim,
+    lot: lot
+      ? {
+          playerId: lot.playerId,
+          highBid: lot.highBid,
+          highBidder: lot.highBidder,
+          stillIn: lot.stillIn,
+          bidTurnTeamId: lot.bidTurnTeamId,
+        }
+      : null,
+  });
+}
+
+export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): UseFarmAuctionDraftReturn {
+  const fallbackLeagueData = useLeagueBuilderData();
+  const leagueData = options.leagueData ?? fallbackLeagueData;
+  const [session, setSession] = useState<CpuShillAuctionSession | null>(null);
+  const [context, setContext] = useState<FarmAuctionDraftContext | null>(null);
+  const [isWorking, setIsWorking] = useState(false);
+  const [error, setError] = useState<FarmAuctionDraftError>(null);
+
+  const activeLeague = useMemo(
+    () => leagueData.leagues.find((league) => league.id === context?.leagueId) ?? null,
+    [context?.leagueId, leagueData.leagues],
+  );
+
+  const leagueTeams = useMemo(() => {
+    if (!activeLeague?.teamIds?.length) return [];
+    return activeLeague.teamIds
+      .map((teamId) => leagueData.teams.find((team) => team.id === teamId))
+      .filter((team): team is Team => Boolean(team));
+  }, [activeLeague, leagueData.teams]);
+
+  const cpuTeamIds = useMemo(() => deriveFarmCpuTeamIds(session, leagueTeams), [leagueTeams, session]);
+  const cpuTeamIdSet = useMemo(() => new Set(cpuTeamIds), [cpuTeamIds]);
+  const currentNominatorTeamId = session ? getCurrentNominator(session) : null;
+  const currentBidderTeamId = getCurrentBidderTeamId(session);
+
+  const persist = useCallback(async (nextSession: CpuShillAuctionSession, nextContext: FarmAuctionDraftContext) => {
+    await saveAuctionSessionById({
+      id: createFarmAuctionSessionId(nextContext.leagueId, nextContext.seasonNumber),
+      leagueId: nextContext.leagueId,
+      seasonNumber: nextContext.seasonNumber,
+      seed: nextSession.config.nominationOrderSeed,
+      session: nextSession,
+    });
+    return nextSession;
+  }, []);
+
+  // Mirrors useAuctionDraft; the §2 state machine + CPU shill transitions are reused unchanged.
+  const autoAdvanceCpu = useCallback(async (
+    startSession: CpuShillAuctionSession,
+    nextContext: FarmAuctionDraftContext,
+    nextLeagueTeams: readonly Team[],
+  ) => {
+    let next = startSession;
+    let previousProgress = stateProgressKey(next);
+    const nextCpuTeamIds = new Set(deriveFarmCpuTeamIds(next, nextLeagueTeams));
+
+    for (let step = 0; step < MAX_CPU_AUTO_ADVANCE_STEPS; step += 1) {
+      if (next.state === "AUCTION_COMPLETE") return next;
+
+      if (next.state === "NOMINATION") {
+        const nominator = getCurrentNominator(next);
+        if (!nextCpuTeamIds.has(nominator ?? "")) return next;
+
+        const decision = resolveCpuNomination(next, nominator!, `${next.config.nominationOrderSeed}:nominate:${step}`);
+        if (decision.kind !== "nominate") return next;
+
+        next = transitionOrThrow(nominatePlayer(next, decision.playerId));
+        await persist(next, nextContext);
+      } else if (next.state === "OPEN_BIDDING") {
+        if (!next.currentLot) return next;
+        if (next.currentLot.stillIn.length <= 1) {
+          next = transitionOrThrow(evaluateResolve(next));
+          await persist(next, nextContext);
+        } else {
+          const bidder = getCurrentBidderTeamId(next);
+          if (!nextCpuTeamIds.has(bidder ?? "")) return next;
+
+          const decision = cpuBidOnLot(next, bidder!, `${next.config.nominationOrderSeed}:bid:${step}:${next.currentLot.highBid ?? "open"}`);
+          next = transitionOrThrow(
+            decision.kind === "bid"
+              ? recordBid(next, bidder!, decision.bid)
+              : passBid(next, bidder!),
+          );
+          await persist(next, nextContext);
+        }
+      } else if (next.state === "RESOLVE") {
+        if (next.pendingClaim) {
+          if (!nextCpuTeamIds.has(next.pendingClaim.teamId)) return next;
+          const decision = cpuDecideLoneSurvivor(
+            next,
+            next.pendingClaim.teamId,
+            `${next.config.nominationOrderSeed}:claim:${step}`,
+          );
+          next = transitionOrThrow(decision.kind === "claim" ? claimLoneSurvivor(next) : passLoneSurvivor(next));
+          await persist(next, nextContext);
+        } else {
+          next = transitionOrThrow(evaluateResolve(next));
+          await persist(next, nextContext);
+        }
+      } else {
+        return next;
+      }
+
+      const progress = stateProgressKey(next);
+      if (progress === previousProgress) {
+        throw new Error(`Farm CPU auto-advance made no progress from ${progress}`);
+      }
+      previousProgress = progress;
+    }
+
+    throw new Error(`Farm CPU auto-advance exceeded ${MAX_CPU_AUTO_ADVANCE_STEPS} steps from ${startSession.state}`);
+  }, [persist]);
+
+  const runAction = useCallback(async (action: () => Promise<CpuShillAuctionSession | null>) => {
+    setIsWorking(true);
+    setError(null);
+    try {
+      const next = await action();
+      setSession(next);
+      return next;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+      return null;
+    } finally {
+      setIsWorking(false);
+    }
+  }, []);
+
+  const loadFarmAuction = useCallback(async (leagueId: string, seasonNumber = FARM_AUCTION_SEASON) => runAction(async () => {
+    const row = await getAuctionSessionById(createFarmAuctionSessionId(leagueId, seasonNumber));
+    const nextContext = { leagueId, seasonNumber };
+    const nextLeague = leagueData.leagues.find((candidate) => candidate.id === leagueId);
+    const nextLeagueTeams = nextLeague?.teamIds
+      .map((teamId) => leagueData.teams.find((team) => team.id === teamId))
+      .filter((team): team is Team => Boolean(team)) ?? [];
+    setContext(nextContext);
+    if (!row) return null;
+    const resumed = await autoAdvanceCpu(row.session, nextContext, nextLeagueTeams);
+    return resumed;
+  }), [autoAdvanceCpu, leagueData.leagues, leagueData.teams, runAction]);
+
+  const initFarmAuction = useCallback(async (
+    leagueId: string,
+    partialConfig: Partial<AuctionSetupConfig> = {},
+  ) => runAction(async () => {
+    const league = leagueData.leagues.find((candidate) => candidate.id === leagueId);
+    if (!league) throw new Error("League not found.");
+    const nextLeagueTeams = league.teamIds
+      .map((teamId) => leagueData.teams.find((team) => team.id === teamId))
+      .filter((team): team is Team => Boolean(team));
+    if (nextLeagueTeams.length === 0) throw new Error("Selected league has no teams.");
+
+    const teams = await buildFarmAuctionTeams({
+      leagueTeams: nextLeagueTeams,
+      getRoster: leagueData.getRoster,
+    });
+    const seed = partialConfig.nominationOrderSeed || DEFAULT_AUCTION_SETUP_CONFIG.nominationOrderSeed;
+    const config: AuctionSetupConfig = {
+      ...DEFAULT_AUCTION_SETUP_CONFIG,
+      ...partialConfig,
+      nominationOrderSeed: seed,
+      bidIncrement: partialConfig.bidIncrement ?? DEFAULT_AUCTION_SETUP_CONFIG.bidIncrement,
+      cpuShillCount: Math.max(0, Math.min(partialConfig.cpuShillCount ?? DEFAULT_AUCTION_SETUP_CONFIG.cpuShillCount, teams.length)),
+      turnTimerSeconds: partialConfig.turnTimerSeconds ?? null,
+      excludeFromLeague: partialConfig.excludeFromLeague ?? true,
+    };
+    const nextContext = { leagueId, seasonNumber: FARM_AUCTION_SEASON };
+    const scoutsByTeamId = await loadOptionalFarmScouts(leagueId);
+    const initialized = buildFarmAuctionSession({
+      leagueId,
+      seasonNumber: FARM_AUCTION_SEASON,
+      teams,
+      scoutsByTeamId,
+      seed,
+      config,
+    }).session;
+
+    setContext(nextContext);
+    await persist(initialized, nextContext);
+    return autoAdvanceCpu(initialized, nextContext, nextLeagueTeams);
+  }), [autoAdvanceCpu, leagueData, persist, runAction]);
+
+  const runSessionTransition = useCallback(async (
+    transition: (current: CpuShillAuctionSession) => AuctionTransitionResult,
+  ) => runAction(async () => {
+    if (!session || !context) throw new Error("Farm auction session is not ready.");
+    const transitioned = transitionOrThrow(transition(session));
+    await persist(transitioned, context);
+    return autoAdvanceCpu(transitioned, context, leagueTeams);
+  }), [autoAdvanceCpu, context, leagueTeams, persist, runAction, session]);
+
+  const nominate = useCallback((playerId: string) => runSessionTransition((current) => nominatePlayer(current, playerId)), [runSessionTransition]);
+  const bid = useCallback((teamId: string, amount: number) => runSessionTransition((current) => recordBid(current, teamId, amount)), [runSessionTransition]);
+  const pass = useCallback((teamId: string) => runSessionTransition((current) => {
+    if (current.state === "RESOLVE" && current.pendingClaim?.teamId === teamId) {
+      return passLoneSurvivor(current);
+    }
+    return passBid(current, teamId);
+  }), [runSessionTransition]);
+  const claimAtReserve = useCallback(() => runSessionTransition((current) => claimLoneSurvivor(current)), [runSessionTransition]);
+  const resolve = useCallback(() => runSessionTransition((current) => evaluateResolve(current)), [runSessionTransition]);
+  const rotate = useCallback(() => runSessionTransition((current) => rotateNomination(current)), [runSessionTransition]);
+
+  return {
+    session,
+    seed: session?.config.nominationOrderSeed ?? DEFAULT_AUCTION_SETUP_CONFIG.nominationOrderSeed,
+    isWorking,
+    error,
+    leagueData,
+    activeLeagueId: context?.leagueId ?? null,
+    seasonNumber: context?.seasonNumber ?? FARM_AUCTION_SEASON,
+    cpuTeamIds,
+    currentNominatorTeamId,
+    currentBidderTeamId,
+    initFarmAuction,
+    loadFarmAuction,
+    nominate,
+    bid,
+    pass,
+    claimAtReserve,
+    resolve,
+    rotate,
+    isCpuTeam: (teamId) => cpuTeamIdSet.has(teamId ?? ""),
+  };
+}
