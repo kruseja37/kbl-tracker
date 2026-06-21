@@ -33,13 +33,11 @@
 > (heterogeneous pool — stock + user-created); **chemistry target = the EXACT near-uniform 440 shape SPI 21/DIS 20/CMP 20/SCH 20/CRA 19**
 > (grounded + adversarially-verified — fully populated 3-letter codes on the `PLAYERS` record, NOT `src/data/players/mlb/`); COMPETITIVE
 > morale row confirmed-correct (1.15/1.05); morale shown live under the player name near the line-score (fixed-height, zero-reflow).
-> All §13/§11 dials are default-set + sim-tunable (RB-16) — none block the build. **JK-BROWSER-VERIFY BATCHED:** the whole auction surface,
-> after the rebuild (not the V1 build).
-> **OPEN DECISIONS / FLAGS for JK** (in the ledger): AUC-2.2 sim-tune defaults (bargainInterestCurve + shill profiles); AUC-4.2
-> nominator-first bid-rotation sub-fork (vs team-after-nominator — both terminate, shifts CPU bid seq); AUC-4.1b raise presets start at
-> minBid+1×increment (no bare-minimum one-tap preset); AUC-3.1 whole-blob-persist default; +earlier B8 fixed-age, L14-2b non-ACID
-> edge, POSITION_POOL SP/RP gap. **BROWSER-VERIFY batched:** the WHOLE auction surface end-to-end (4.1b landed) + the leagueBuilder
-> v7→v8 migration + mid-draft resume (AUC-3.1, persistence-prioritized) — the user-facing visual gate.
+> All §13/§11 dials are default-set + sim-tunable (RB-16) — none block the build.
+> **📋 ALL browser-verify tasks + code deferrals + open JK decisions are CONSOLIDATED + BATCHED → `spec-docs/MODE1_REBUILD_JK_BACKLOG.md`**
+> (JK directive 2026-06-21 — one workable list; persistence browser-verify PRIORITIZED [BV-1 leagueBuilder v7→v8 + mid-draft resume,
+> BV-2 RB-0b-1 3-axis persistence]; BV-3 = the whole auction surface after the rebuild). The batch CLEARS before the D0 / flag-flip /
+> iPad-playtest gate (F-141); none of it blocks the RB build loop. (Mode-2 L-stack has its OWN separate post-D13 browser batch.)
 > **⚠ Everything below this block is STALE (L13-era) — trust the ledger.** `caffeinate` PID 84474 keeps the Mac awake.
 > **⚠ SOLO-WORKER:** a JK-invoked session is the SOLE owner (collision reconciled WAVE 23). On handoff, let the SINGLE
 > auto-spawn continue — do NOT also manually start a session (that double-invoke = the WAVE 22/23 collision).
