@@ -2077,3 +2077,21 @@ NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its 
 - **CONTEXT HANDOFF written** (`HANDOFF_NEEDED` re-pointed to the CLEAN seam AUC-3.1; CURRENT_STATE live header refreshed;
   this ledger committed). Tree clean, no in-flight Codex. Fresh session resumes at **AUC-3.1** (persistence) → 4.1 → 5.1 →
   5.2 → scout-privacy UI → POSITION_POOL fix; Mode-2 = LSIM-P3. STOPPING per the context-handoff protocol.
+
+**WAVE 23 — AUTH-4 RESUME (sole-owner continuation, JK-invoked 2026-06-21).**
+- **CONCURRENT-SESSION COLLISION reconciled:** TWO sessions briefly ran — the WAVE-22 handoff session (auto-spawned by
+  `HANDOFF_NEEDED`) AND this one (JK hand-invoked "start new session"). Both did the same first action (audit+commit AUC-2.2);
+  the handoff session won the commit race (`ed846e5d`, 08:39:34Z) then STOPPED cleanly. **JK ruled THIS session = SOLE OWNER**
+  (~3h later — nothing touched the tree in between; the other session is dead). Re-neutralized the handoff session's re-created
+  `HANDOFF_NEEDED` → `HANDOFF_DONE_2026-06-21T115613Z` so no THIRD session auto-spawns. Documented root cause: handoff-auto-spawn
+  + manual-invoke = two workers — the failure mode of the "KEEP EXACTLY ONE AUTH-4 WORKER" rule.
+- **AUC-2.2 (`ed846e5d`) INDEPENDENTLY RE-AUDITED → VERIFIED** (corroborates WAVE-22; builder=Codex ≠ auditor=this Opus session).
+  Re-ran the scoped gate myself: `NODE_ENV= tsc -b` exit 0 (whole project) + `cpuShillBidding` 8/8 + `auctionStateMachine` 12/12,
+  ZERO new reds. `nominatePlayer` purity re-verified AT SOURCE (pure reducer → the `resolveCpuNomination` loop legality-check is
+  safe; the test asserts non-mutation). No-floor tested across 220 seeds (both 'bid' and 'pass' present).
+- **🟡 SIM-TUNE FLAGS FOR JK (AUC-2.2 — surfaced here; WAVE-22 omitted them):** conservative defaults, commented sim-tune, revisit
+  at the §16 sim-tune / playtest pass: `bargainInterestProbability` 5-band discount curve {<.05→.05 · <.15→.14 · <.30→.32 ·
+  <.45→.56 · else→.76} × `interestAggression` × budgetFactor (0.55 + budgetRoom·0.45), clamped to the profile cap; personality
+  profiles sniper/spender/zealot — bias 0.98/1.08/1.02 · aggression 0.82/1.15/0.96 · maxInterestProb 0.74/0.88/0.82 (all globally
+  capped at `NO_FLOOR_MAX_INTEREST_PROBABILITY=0.92`) · archetypeFitSpread 0.18/0.22/0.30 · nomination value/bargain/drain weights.
+- **➡ NEXT = AUC-3.1 (auction session persistence)** — persistence-class; grounding the save/resume seam at source before contracting.
