@@ -15259,3 +15259,42 @@ Use xhigh reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: AUC-5.1e-1 ===== -->
+
+<!-- ===== CONTRACT: AUC-5.1e-2 (farm UI page — §3.3 obscured) ===== -->
+## CONTRACT — AUC-5.1e-2 (farm-auction UI page: §3.3 positions-visible/ratings-hidden + scout-range) — 2026-06-21 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5, xhigh). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** Mode-1 FARM AUCTION — the VISIBLE deliverable: the farm-auction page (the §3.3-obscured analog of the MLB `LeagueBuilderAuctionDraft`). **DEPENDS ON AUC-5.1e-1 (`e76f84b5` — the hook exposes `pool`/`scoutsByTeamId`/`farmTierCap`), AUC-5.1b (`perceivedValueRange`), AUC-4.1b (the MLB page template).** UI build-DARK behind a new route; JK browser-verify BATCHED.
+
+**GOAL:** A routable `/league-builder/farm-auction-draft` page that drives a full farm auction via `useFarmAuctionDraft`, mirroring the MLB `LeagueBuilderAuctionDraft` UI **but §3.3-OBSCURED**: player name + primary/secondary positions SHOWN; individual ratings HIDDEN; true IV/value HIDDEN → shown ONLY as the §3.2 scout RANGE; grade shown ONLY as the scout-fuzzed band.
+
+**MAKE-OR-BREAK (§3.3/§9.E — the whole point of the farm card):** the page MUST NEVER render a prospect's true IV, any individual rating (POW/CON/SPD/FLD/ARM/VEL/JNK/ACC), or the true grade. The lot/pool value is ONLY the §3.2 scout RANGE (`perceivedValueRange`); the grade is ONLY `prospect.prospectProfile.scoutedGrade` (the fuzzed band, §6 Q6). True IV is read internally (to compute the range + the engine math) but NEVER displayed. Positions are ALWAYS visible (§9.E).
+
+**SOURCE OF TRUTH:** `AUCTION_DRAFT_SPEC.md` **§3.3** (lines 295-313, the exact show/hide card table) + **§3.2** (the scout range) + **§6 Q6** (grade = scout-fuzzed band) + §2.3/§2.5 (the turn view + pool — same interaction as MLB, only the value/grade display is obscured). **MIRROR `src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx`** (the MLB page — same layout/palette/state-switch/lot-log/handoff banner; re-read it). Consume: `useFarmAuctionDraft` (`pool`, `scoutsByTeamId`, `farmTierCap`, `session`, `currentBidderTeamId`, `nominate/bid/pass/claimAtReserve/resolve/rotate`, `isCpuTeam`); `perceivedValueRange` (`src/engines/scoutValueRange.ts`); `scoutAccuracy(position, scout?)` (`src/utils/prospectScoutingDraftEngine.ts:873`); `getTeamAuctionMaxBid` (`auctionStateMachine.ts`). Route pattern = App.tsx:108/299.
+
+**DESIGN CALLS (Captain, AUTH-4 — documented for JK):**
+1. **The scout RANGE is computed for the CURRENT BIDDER** (each GM bids against THEIR scout's perceived range, §3.2): `trueIV = session.players[playerId].iv`; `acc = scoutAccuracy(prospect.primaryPosition, scoutsByTeamId?.[currentBidderTeamId])`; `range = perceivedValueRange(trueIV, acc, \`${seed}:${currentBidderTeamId}:${playerId}\`)`. Display `range.displayedEstimate` (the scout's point guess) + `[range.low, range.high]`. (A missing scout → `scoutAccuracy` returns its base/default → widest range; §6 Q8 requires a scout but build-dark tolerates absence.)
+2. **§2.5 nomination pool, farm variant:** filter by position; SORT by the scout-range midpoint/`displayedEstimate` (NOT by true IV — §2.5 farm). Each row: name + position badges + `scoutedGrade` + the scout range. No true IV.
+3. **Scout-privacy long-press (§6.1) is NOT here** — a SEPARATE ticket; the farm card shows the current holder's range plainly for now.
+
+**CONSTRAINTS — edit exactly these 3 files:**
+1. **`src/App.tsx`** — ADD a lazy import + `<Route path="/league-builder/farm-auction-draft" element={<LeagueBuilderFarmAuctionDraft />} />` MIRRORING the MLB auction route (lines 108-111 / 299-300). Additive.
+2. **NEW `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx`** (export `LeagueBuilderFarmAuctionDraft`) — mirror `LeagueBuilderAuctionDraft` structure (SETUP panel + "Now: [TEAM] — [action]" banner + the NOMINATION/OPEN_BIDDING/RESOLVE/SOLD-PASSED/COMPLETE state-switch + lot log), driven by `useFarmAuctionDraft`. Build a `prospectById` map from `auction.pool?.prospects` (keyed by `id`) for name/positions/`scoutedGrade`. **§3.3 OBSCURING applied everywhere a value/grade/rating would show:**
+   - Lot card: name + primary/secondary position badges (mirror `positionBadges`) + the scout RANGE (Design Call 1) + the scout grade (`scoutedGrade`). NO IV, NO ratings, NO true grade.
+   - The §2.3 turn view (high bid + bidder by name, YOUR budget, YOUR `getTeamAuctionMaxBid` cap, slots remaining, raise presets+custom clamped, Pass, handoff) — IDENTICAL to MLB EXCEPT the lot's value is the scout range (no IV advisory).
+   - The §2.5 nomination pool (Design Call 2). SOLD/PASSED/SET_ASIDE notices + lot log: names (the prospect names via `prospectById`), and for SOLD show the winning bid as the salary (that IS public — it's the paid price, not the hidden IV).
+   - Styling: mirror the MLB page's EXISTING inline-hex palette EXACTLY (`bg-[#2d3d2f]`, etc.); a clear "FARM AUCTION — scouted values" header so it's distinct from MLB.
+3. **NEW `src/src_figma/__tests__/pages/LeagueBuilderFarmAuctionDraft.test.tsx`** — smoke test (RTL + fake-indexeddb): renders SETUP; BEGIN → NOMINATION shows prospect NAMES + POSITION badges + a scout-range/estimate string; **assert NO true-IV/rating leak** (e.g. the lot card does NOT render `session.players[id].iv` as text, and renders a range with low≠high for a sub-max scout); a SOLD row shows the winning salary + winner name.
+
+**DO NOT:** modify `useFarmAuctionDraft` / the §2 machine / `scoutValueRange` / engines / storage (consume only); RENDER any true IV, individual rating, or true grade (the §3.3 make-or-break); add the MLB→farm sequencing or league format config (AUC-5.1d-3); add the §6.1 scout-privacy long-press (separate). Branch `codex/mode1-v1` only; do NOT commit (Opus commits after audit); do NOT push.
+
+**EXPECTED OUTPUT:** a routable, §3.3-obscured farm-auction page (positions visible, ratings/IV hidden, value = scout range, grade = scout-fuzzed) driving a full farm auction via the hook, on the existing inline-hex palette. JK-browser target.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` exit 0; `NODE_ENV= npx vitest run src/src_figma/__tests__/pages/LeagueBuilderFarmAuctionDraft.test.tsx` → green. Report ACTUAL output. (Opus runs the full Mode-1 suite + reviews the diff for any IV/rating leak; JK browser sign-off BATCHED with the whole auction surface.)
+
+**FORMAT:** 1) EVERY changed/new path + total; 2) how the §3.3 obscuring is enforced (value=range, grade=scoutedGrade, no ratings/IV) + the scout-range-per-bidder computation; 3) ACTUAL tsc + the page test output; 4) "AUC-5.1e-2 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL (STOP-IF):** if `auction.pool?.prospects` does NOT carry name/primaryPosition/secondaryPosition/`prospectProfile.scoutedGrade` (re-read the DTO) → STOP and quote it. If the scout range cannot be computed without exposing true IV in the DOM → STOP and report (true IV must stay internal). If `perceivedValueRange`/`scoutAccuracy` signatures differ → STOP and quote them.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: AUC-5.1e-2 ===== -->
