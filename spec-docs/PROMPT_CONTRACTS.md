@@ -14995,3 +14995,48 @@ Use xhigh reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: AUC-4.2 ===== -->
+
+<!-- ===== CONTRACT: AUC-4.1b (rich hot-seat auction VISUAL screens — page only) ===== -->
+## CONTRACT — AUC-4.1b (rich hot-seat auction UI: §2.3 turn view + §2.5 pool + §2.4 handoff, PAGE-ONLY) — 2026-06-21 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5, xhigh). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** Mode-1 AUCTION — the VISUAL half of the AUC-4.1b split. **DEPENDS ON AUC-1.1/1.2/2.1/2.2/3.1/4.1a + AUC-4.2 (committed `ce69036d`).** PAGE-ONLY: upgrade the AUC-4.1a placeholder render blocks in `LeagueBuilderAuctionDraft.tsx` to the rich §2.3/§2.5 spec. The turn-fidelity LOGIC (bid rotation + CPU lone-survivor claim) already landed in AUC-4.2 — **consume the hook/engine AS-IS; do NOT change any logic.** This is the JK-browser-verify visual target (batched).
+
+**GOAL:** Replace the placeholder OPEN_BIDDING / NOMINATION / SOLD / PASSED views + the debug JSON dump with the §2.3 seven-element per-bidder turn view, the §2.5 nomination pool (filter-by-position + sort-by-IV), distinct SOLD/PASSED/SET_ASIDE notices, §2.4 device-handoff prompt polish, and TEAM/PLAYER NAMES everywhere (no raw IDs).
+
+**SOURCE OF TRUTH:** `spec-docs/AUCTION_DRAFT_SPEC.md`:
+- **§2.3** (lines 177-199) — the 7 elements the device holder sees in OPEN_BIDDING (enumerated below).
+- **§2.4** (lines 201-218) — device-handoff: a CPU turn NEVER hands off; the banner names the holder; the step-7 prompt reads "Pass device to [next human]" only when a next human exists, else "Hold — CPUs resolving."
+- **§2.5** (lines 220-230) — nominator sees the live pool filterable by position / sortable by IV; selects one; opens at the §7.5 reserve.
+- **§2.2 SOLD/PASSED** (lines 131-132) — SOLD = winner + winning-bid-as-salary; PASSED = `highBid==null`; SET_ASIDE = passed twice (engine `AuctionResultDisposition`).
+- MLB-auction grades are PUBLIC (no scout cover here — the §6.1 scout-privacy long-press is FARM-only, a SEPARATE ticket).
+
+**CONSTRAINTS — edit ONLY the page + its smoke test (2 files):**
+1. **`src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx`** — keep the SETUP panel + the "Now: [TEAM] — [action]" banner; rebuild the per-state render blocks. Position/IV data comes from the existing `playerById` (leagueData `Player.primaryPosition` + optional `Player.secondaryPosition`); team names via the existing `teamById` + `teamDisplayName`; budgets/slots from `session.teams.find(t=>t.teamId===…)`; per-bidder maxBid via **`getTeamAuctionMaxBid(session, teamId)`** (import from `../../../engines/auctionStateMachine`). The current bidder is `auction.currentBidderTeamId` (now engine-driven via AUC-4.2 — a faithful round-robin).
+   - **§2.3 OPEN_BIDDING per-bidder turn view (all 7 elements):**
+     1. **Lot card** — player NAME (`playerDisplayName`) + **primary + secondary position(s)** (badge style, mirror the snake page `LeagueBuilderSnakeDraft.tsx:696` `primaryPosition` badge; show secondary only if present) + the **IV / recommended value** as advisory (`formatMoney(lot's AuctionPlayer.iv)` + the reserve `reservePriceCurve(ivPct)×iv`).
+     2. **Current high bid + high bidder** — `formatMoney(lot.highBid)` + the high-bidder TEAM NAME (`teamDisplayName(teamById.get(lot.highBidder))`); "No bid yet" when `highBid===null`.
+     3. **YOUR remaining budget** — the current bidder team's `budgetRemaining`.
+     4. **YOUR solvency-capped maxBid** — `getTeamAuctionMaxBid(session, currentBidderTeamId)`; the Raise controls are DISABLED above it (you can never bid yourself unable to fill a legal roster). Show the auto-pass note ("teams below the current ask are auto-passed").
+     5. **Roster slots remaining + positions still NEEDED** — `team.rosterSlotsRemaining` ALWAYS; for "positions needed," derive from the team's current `roster` composition if a position-requirement model is readily available; **if not, show slots-remaining + the current roster's position tally only** (do NOT invent a requirement model — flag in the report).
+     6. **Controls: Raise** — preset increment buttons (`+1×/+2×/+5×` the `config.bidIncrement` above the current min bid, each DISABLED if it exceeds maxBid) + a custom amount input clamped to `[minBid, maxBid]` — and **Pass**. Disable all when the current bidder is a CPU (`auction.isCpuTeam`).
+     7. **Handoff prompt** after the action resolves — "Pass device to **[next team]**" when the next holder is human; "**Hold — CPUs resolving**" when only CPUs remain still-in (§2.4). Reuse/extend the banner.
+   - **§2.5 NOMINATION** — the available pool with a **position FILTER** (a select built from the distinct positions present in the pool) + an **IV SORT** toggle (asc/desc; default desc); each row shows name + position badge + IV + reserve; clicking nominates. Disable when the nominator is a CPU.
+   - **SOLD / PASSED / AUCTION_COMPLETE** — distinct notices: SOLD = green, "[Player] SOLD to [Team] for $X"; PASSED = amber "[Player] PASSED"; SET_ASIDE = red "[Player] set aside"; resolve names via the maps (the current `resultText` uses raw IDs — FIX it to resolve `playerId`→name and `winnerTeamId`→team name).
+   - **Lot log** — names not IDs (same `resultText` fix).
+   - **REMOVE the debug `<pre>` JSON dump** (current lines ~431-442).
+   - **Styling:** match the page's EXISTING inline-hex palette EXACTLY (`bg-[#2d3d2f]`, panels `#556B55`, cards `#4A6844`, text `#E8E8D8`, blue `#3B7DD8`, green `#2F7D46`, red `#6B3A3A`, gold `#FFD27A`, retro `shadow-[Npx_Npx_0px_0px_rgba(0,0,0,0.8)]`, thick borders) — do NOT introduce `@theme` tokens (inert under the v3 runtime).
+2. **`src/src_figma/__tests__/pages/LeagueBuilderAuctionDraft.test.tsx`** — extend the smoke test: assert the §2.3 turn view renders team/player NAMES (not raw IDs) in OPEN_BIDDING, the nomination pool exposes a position filter + IV sort control, and a SOLD result row shows the winner team name + salary. Keep it a light render/interaction test (RTL + fake-indexeddb), not a full engine re-test (4.2 owns logic tests).
+
+**DO NOT:** modify `auctionStateMachine.ts` / `cpuShillBidding.ts` / `useAuctionDraft.ts` / storage (consume only — `auction.currentBidderTeamId`, `auction.nominate/bid/pass/claimAtReserve/resolve/rotate`, `auction.isCpuTeam`, the re-exported `getCurrentBidderTeamId`); add the farm auction (§3 = AUC-5.1) or scout-privacy long-press (§6.1, farm-only = separate); change any economics. Branch `codex/mode1-v1` only; do NOT commit (Opus commits after audit); do NOT push.
+
+**EXPECTED OUTPUT:** the auction page renders the full §2.3 seven-element turn view, the §2.5 filter/sort nomination pool, distinct SOLD/PASSED/SET_ASIDE notices, §2.4 handoff prompts, names-not-IDs throughout, debug dump removed — all on the existing inline-hex palette. Logic unchanged.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` exit 0; `NODE_ENV= npx vitest run src/src_figma/__tests__/pages/LeagueBuilderAuctionDraft.test.tsx` → green. Report ACTUAL output. (Opus runs the full Mode-1 suite + reviews the diff; this is the user-facing surface → JK browser sign-off is BATCHED for the whole auction once this lands.)
+
+**FORMAT:** 1) EVERY changed path + total; 2) which of the 7 §2.3 elements you rendered + how positions-needed was handled (model found, or slots+tally fallback) + the filter/sort approach + the names-not-IDs fix; 3) ACTUAL tsc + the page test output; 4) "AUC-4.1b complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL:** if the `Player` record lacks `secondaryPosition` → render primary only + note it. If no position-requirement model exists for "positions still needed" → render slots-remaining + the current roster position tally and FLAG it (do NOT fabricate per-position quotas). If any §2.3 datum (budget / maxBid / positions) is NOT reachable from `session`/`leagueData` → STOP and quote what's available (do NOT fabricate).
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: AUC-4.1b ===== -->
