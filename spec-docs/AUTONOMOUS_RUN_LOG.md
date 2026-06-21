@@ -2362,3 +2362,17 @@ NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its 
   off the 5.1a pool + 5.1c wallet with the 5.1b scout-range as the display anchor; MLB→farm sequencing (§3.1); per-league auction-vs-snake format
   config. Likely needs its own recon/split (a farm hook + sequencing, then 5.1e UI). Grounding the integration surface next.
 
+**WAVE 38 — AUC-5.1d-1 (pure farm-auction session builder) CONTRACTED + DISPATCHED. (Baton reclaimed — JK "keep rollin".)**
+- 5.1d (the integrative wrapper) RECONNED + SPLIT. Grounded the integration surface: scouts load via `getScoutProfilesForLeague`→`toScoutDescriptor`→
+  `scoutsByTeamId` (leagueBuilderStartupFarmDraft.ts:780/281); `buildFarmAuctionPool` (5.1a) takes teamDraftOrder+scoutsByTeamId; the §2 machine +
+  cpuShillBidding are TIER-AGNOSTIC (take AuctionPlayer[]/AuctionTeamInput[]); AUC-3.1 session key = `${leagueId}::startup-auction-draft::N` (the farm
+  needs a DISTINCT namespace in 5.1d-2). **SPLIT:** 5.1d-1 (PURE session builder — THIS) → 5.1d-2 (farm hook: load scouts/rosters + drive autoAdvance/
+  persist [farm-namespaced] + per-bidder scout-range display + the hook-reuse-vs-variant decision) → 5.1d-3 (MLB→farm sequencing + per-league format
+  config) → 5.1e (farm UI card §3.3).
+- **5.1d-1 scope:** NEW pure `src/utils/farmAuctionSession.ts` `buildFarmAuctionSession({leagueId, teams, scoutsByTeamId, seed, config?, poolMultiplier?})`
+  → `{session: CpuShillAuctionSession, pool: FarmAuctionPool, farmTierCap}`: build pool (5.1a) → `computeFarmTierCap(pool IVs)` (5.1c) → farm
+  `AuctionTeamInput[]` (5.1c, 10 slots) → `initAuctionSession(...)` (the SAME §2 machine the MLB hook uses) — scout-range NOT here (true IV drives the
+  machine; the range is a 5.1d-2/5.1e display concern). PURE / build-DARK, scouts+rosters are INPUTS (no I/O). Mirrors the MLB `initAuction` assembly.
+- **Contract committed `8edb8daf`.** Dispatched to Codex (gpt-5.5, xhigh) bg task `b1mgyb6jw` → `/tmp/codex-auc51d1.out`. On landing: read-the-diff audit +
+  full Mode-1 suite + confirm no existing file modified + commit. **➡ after 5.1d-1 = AUC-5.1d-2** (the farm hook).
+
