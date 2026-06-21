@@ -15226,3 +15226,36 @@ Use xhigh reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: AUC-5.1d-2 ===== -->
+
+<!-- ===== CONTRACT: AUC-5.1e-1 (farm hook — expose pool + scouts, regenerate on resume) ===== -->
+## CONTRACT — AUC-5.1e-1 (farm hook plumbing: expose pool + scoutsByTeamId, regenerate pool on resume) — 2026-06-21 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5, xhigh). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** Mode-1 FARM AUCTION — the small plumbing bridge before the farm UI page (AUC-5.1e-2). **DEPENDS ON AUC-5.1d-2 (`55fd759c` — `useFarmAuctionDraft`), AUC-5.1a (`buildFarmAuctionPool`/`buildFarmAuctionSession`).** Build-DARK. Additive-only to the just-committed farm hook + its test.
+
+**GOAL:** The farm UI page needs the GENERATED prospect DTOs (name + primary/secondary position — generated prospects are NOT in `leagueData.players`) and the per-team scout descriptors (for the §3.2 scout-range). `useFarmAuctionDraft` currently DISCARDS the pool (`buildFarmAuctionSession(...).session`, hook line 360) and doesn't expose scouts. Fix: retain + expose `pool` (the `FarmAuctionPool`) + `scoutsByTeamId` + `farmTierCap`, and REGENERATE the pool deterministically on resume (`loadFarmAuction`) so the prospect DTOs survive a save/reload.
+
+**MAKE-OR-BREAK (resume consistency):** the pool regenerated on resume MUST be IDENTICAL to the original — the regenerated `pool.auctionPlayers` (ids + ivs + ivPercentiles) MUST equal the persisted `session.players` / `session.playerOrder`. This holds because `buildFarmAuctionPool` is deterministic in `(leagueId, seasonNumber, seed, teamDraftOrder, scoutsByTeamId, poolMultiplier)` and the POOL depends only on those (NOT on roster contents — rosters only affect the wallet). The resume MUST rebuild with the SAME inputs: `seed = row.session.config.nominationOrderSeed`, the same league teams (teamDraftOrder), the same scouts. PROVE it with a test.
+
+**SOURCE OF TRUTH:** the hook `src/src_figma/app/hooks/useFarmAuctionDraft.ts` (re-read `initFarmAuction` :326-365, `loadFarmAuction` :313-324, the `return` :388-408, the `buildFarmAuctionTeams`/`loadOptionalFarmScouts` helpers); `buildFarmAuctionSession` (`src/utils/farmAuctionSession.ts` — returns `{session, pool, farmTierCap}`); `FarmAuctionPool` (`src/utils/farmAuctionPool.ts`).
+
+**DESIGN CALLS (Captain, AUTH-4 — documented for JK):**
+1. **Regenerate-on-resume (NOT persist-the-prospects).** Leaner (no envelope/saved-shape change); deterministic. The risk = if scout profiles changed between save and resume the regenerated pool could differ — acceptable for v1 (scouts are durable post-draft); the determinism test + the consistency assertion guard it. **[Flagged: persist-the-prospect-DTOs is the more robust alternative if JK wants it.]**
+2. **Consistency assertion:** on resume, after regenerating the pool, if `pool.auctionPlayers` ids do NOT match `row.session.playerOrder`, still resume (use `row.session` as the live session) but `console.warn` once (the prospect DTOs are best-effort display data; the auction logic always uses the persisted session). Do NOT throw.
+
+**CONSTRAINTS — edit exactly these 2 files (additive):**
+1. **`src/src_figma/app/hooks/useFarmAuctionDraft.ts`** — add React state `pool: FarmAuctionPool | null` + `scoutsByTeamId: Record<string, ProspectScoutDescriptor | undefined> | null` + `farmTierCap: number | null`. In `initFarmAuction`: keep the FULL `buildFarmAuctionSession(...)` result — `setPool(result.pool)`, `setScoutsByTeamId(scoutsByTeamId)`, `setFarmTierCap(result.farmTierCap)` (use `result.session` as before). In `loadFarmAuction`: after `getAuctionSessionById` returns a `row`, REGENERATE — rebuild `teams` (`buildFarmAuctionTeams`) + scouts (`loadOptionalFarmScouts`) + `const regen = buildFarmAuctionSession({leagueId, seasonNumber, teams, scoutsByTeamId, seed: row.session.config.nominationOrderSeed, config: row.session.config})`; `setPool(regen.pool)`, `setScoutsByTeamId(scoutsByTeamId)`, `setFarmTierCap(regen.farmTierCap)`; do the Design-Call-2 consistency check; KEEP `row.session` as the live session (do NOT use `regen.session`). Add `pool`, `scoutsByTeamId`, `farmTierCap` to the `return {...}`. Do NOT change any auction/transition/persist logic.
+2. **`src/src_figma/app/hooks/__tests__/useFarmAuctionDraft.test.ts`** — ADD a test: init a farm auction → capture `pool.auctionPlayers` + the prospect ids/positions are exposed; save (autosave) → `loadFarmAuction` the same league → the REGENERATED `pool.auctionPlayers` equals the original (ids + ivs) AND equals the resumed `session.playerOrder`; `scoutsByTeamId` + `farmTierCap` are exposed on both init and resume.
+
+**DO NOT:** change the §2 machine / persistence / `buildFarmAuctionSession` / 5.1a-d / `useAuctionDraft`; persist the prospect DTOs (regenerate instead); add the page/UI (AUC-5.1e-2); change auction logic. Branch `codex/mode1-v1` only; do NOT commit (Opus commits after audit); do NOT push.
+
+**EXPECTED OUTPUT:** `useFarmAuctionDraft` exposes `pool` + `scoutsByTeamId` + `farmTierCap`, regenerating the pool deterministically on resume (proven consistent with the persisted session). Build-dark.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` exit 0; `NODE_ENV= npx vitest run src/src_figma/app/hooks/__tests__/useFarmAuctionDraft.test.ts` → green. Report ACTUAL output. (Opus runs the full Mode-1 suite.)
+
+**FORMAT:** 1) EVERY changed path + total; 2) the pool-retain (init) + regenerate (resume) approach + the determinism/consistency proof; 3) ACTUAL tsc + the test output; 4) "AUC-5.1e-1 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL (STOP-IF):** if the regenerated `pool.auctionPlayers` does NOT deterministically match the persisted `session.players` (re-check the inputs) → STOP and report the mismatch (do NOT silently ship inconsistent display data). If exposing the pool seems to require persisting it (a saved-shape change) → STOP and report (it must regenerate). If `buildFarmAuctionSession`'s result shape differs from `{session, pool, farmTierCap}` → STOP and quote it.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: AUC-5.1e-1 ===== -->
