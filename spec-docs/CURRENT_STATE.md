@@ -5,15 +5,26 @@
 > design** → **`AUCTION_DRAFT_SPEC_V2.md`** (authoritative; V1 spec bannered superseded) + the execution sequence **`AUCTION_REBUILD_PLAN.md`**.
 > **Single-Captain (Shape A):** Opus owns `codex/franchise-v1-next` (docs) + dispatches Codex for Mode-1 in `/Users/johnkruse/Projects/kbl-mode1`
 > [`codex/mode1-v1`]. Codex builds, Opus audits, branch-only, never push.
-> **LIVE LEDGER = `AUTONOMOUS_RUN_LOG.md` (WAVE 1–48) — read top-to-bottom on return; supersedes everything below.**
+> **LIVE LEDGER = `AUTONOMOUS_RUN_LOG.md` (WAVE 1–53) — read top-to-bottom on return; supersedes everything below.**
 > **V1 BUILT (build-dark, branch-only, zero-new-reds — SHELLS SURVIVE the rebuild):** MLB AUC-1.1..4.1b + FARM 5.1a..e/d-1/d-2/d-3. The
 > §2 bidding/CPU/wallet/persistence/hot-seat-UI + page shells are REUSED; the **value layer** (per-prospect-IV → scout price-range+20–80 grade)
 > and **nomination/resolve** (GM-nomination → engine weighted-random + one-chance) are REWRITTEN, + new systems (dual archetype tax, MLB→farm
 > carryover, draft→player-morale + payroll→fan-morale carried into Mode-2 via the 4-number freeze, separate GM entity, scout-as-bridge, roster
 > board, guided UX, shill/CPU-team split). Mode-2 L1–L14 build-dark; L-SIM LSIM-P1 GREEN. Prospect-gen B1–B9 done.
-> **➡ NEXT (fresh thread, AUTH-4 re-authorized): run `/kbl-captain` on `AUCTION_REBUILD_PLAN.md` starting RB-0 (3-axis personality model +
-> pre-draft assignment + chemistry rebalance — the FOUNDATION the spine depends on) → RB-1 (scout value) → RB-2 (nomination/one-chance) →
-> … RB-18 per the plan's ordering.** Read `AUCTION_DRAFT_SPEC_V2.md` + `AUCTION_REBUILD_PLAN.md` FIRST.
+> **✅ RB-0 COMPLETE (personality-model FOUNDATION, 3 commits on `codex/mode1-v1`, branch-only, zero-new-reds):** RB-0a `edb94d31`
+> (canonical chemistry module `src/data/chemistryCanonical.ts` — `ChemistryCode` 5-code union + code↔word maps + `normalizeToChemistryCode`
+> + frozen `CHEMISTRY_TARGET_DISTRIBUTION` {SPI .21/DIS .20/CMP .20/SCH .20/CRA .19} + 440-source drift test; `convertPlayer` player-path
+> derives from it, byte-identical) · RB-0b-2 `16ca8d61` (farm-prospect chemistry rebalanced to target — largest-remainder quota + seeded
+> shuffle, separate seed namespace, no other draw perturbed) · RB-0b-1 `fde093ed` (every MLB-pool player gets a fresh seeded 7-type
+> personality + 4 hidden modifiers + target-balanced chemistry at `initAuction`, persisted via `savePlayer`, flowing into Mode-2; franchise-init
+> backfill demoted to a no-op safety net; NO trackerDb/store change). **Pre-RB-0 suite baseline pinned = 481 files / 1 fail `wpaRuntimeBoundary`;
+> after RB-0 = 484 files / 1 fail (same), 7991 tests.**
+> **➡ NEXT (fresh thread, AUTH-4): `/kbl-captain` on `AUCTION_REBUILD_PLAN.md` → RB-1 (scout value, §3, REWRITES AUC-5.1a/5.1b: scout = price
+> range + 20–80 grade, true IV hidden; reuse `perceivedValueRange` anchored on the scout price; class-strength budget scale; scout price factors
+> chemistry-fit → trait potency — VERIFY/BUILD the chemistry-MIX→potency-TIER rule, the genuine net-new piece). Needs fresh grounding (AUC-5.1a/5.1b
+> pool-pricing + anchor + `ivEngine` PotencyTier + `perceivedValueRange`).** → RB-2 (nomination/one-chance) → … RB-18. Read
+> `AUCTION_DRAFT_SPEC_V2.md` + `AUCTION_REBUILD_PLAN.md` FIRST. **JK-BROWSER-VERIFY BATCHED (persistence-prioritized):** RB-0b-1 — a real draft
+> stamps all 3 axes onto league players + they carry into the franchise (a 7-type personality spread, no longer 100% 'Competitive').
 > **2026-06-21 ATTENDED GROUNDING (WAVE 50, this session — all committed, NO code):** added §3.7 **3-axis personality model** (primary
 > personality 7 / hidden modifiers 4 / chemistry 5) + **RB-0**; CORRECTED the morale model at source — the engine
 > (`masterMoraleMatrix.composeMoraleConsequence`) is ALREADY BUILT (per-personality reactivity + ambition/resilience/charisma/loyalty roles +
