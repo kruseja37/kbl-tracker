@@ -14030,8 +14030,14 @@ emission gate** (L13-Q10). Build-DARK.
 **SOURCE OF TRUTH:** `DECISIONS_LOG.md:92-95` (L13-Q5 flat-10%-hedge + scope split) + `:112-114` (L13-Q10 fan nudge) + §24.5/24.10.
 **SCOPE SPLIT (do not unify):** the live per-personality `REPORTER_ACCURACY_RATES` (0.65-0.95, `narrativeEngine.ts:351-361`)
 stays as in-game-take VOICE flavor; the relationship-intel rate is the separate flat ~10% HEDGE/FLAG.
-**TEMPLATES:** news adapters `franchiseL11ManagerChangeNewsAdapter.ts:69` / `franchiseL12AwardNewsAdapter.ts:28`; emission
-seam `franchiseHonorEmission.ts:20-51`; news store `seasonNewsStorage.ts:39-62`.
+**TEMPLATES (anchor paths corrected 2026-06-20 — the reporter layer is `src/src_figma/app/engines/reporter/`, NOT `src/utils/`):**
+news adapters `src/src_figma/app/engines/reporter/franchiseL11ManagerChangeNewsAdapter.ts:69` (`buildFranchiseManagerChangeSeasonNewsEvent`,
+the pure `SeasonNewsEvent` builder to mirror) / `src/src_figma/app/engines/reporter/franchiseL12AwardNewsAdapter.ts`; `SeasonNewsEvent`
+type from `src/src_figma/app/engines/reporter/seasonNewsGenerator.ts`; emission seam
+`src/src_figma/app/engines/reporter/franchiseHonorEmission.ts:17-52` (`emitFranchiseHonorNews`; `EmitHonorStatus =
+'dark-noop'|'gated'|'deduped'|'no-reporter'|'take-failed'|'emitted'` — **the SEA-2 gate = status `'emitted'`**, the fan-nudge fires
+ONLY then); news store `src/utils/seasonNewsStorage.ts` (store `'seasonNewsItems'`); fan-channel apply
+`applyFranchiseMoraleEffect(targetType:'team-fan')` `src/utils/franchiseMoraleState.ts:250` (NEVER player/WAR).
 **⚠ MAKE-OR-BREAK:** "inaccurate" NEVER mutates the stored edge (constraint: the edge is ground truth; only the reported
 TAKE is hedged) — content-distortion is v1.1. The fan-morale nudge fires ONLY for edges clearing the SEA-2 gate (no
 gate → no direct fan effect; the indirect morale→development path is always on).
