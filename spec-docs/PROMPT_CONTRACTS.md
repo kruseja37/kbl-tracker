@@ -15080,3 +15080,38 @@ Use xhigh reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: AUC-5.1a ===== -->
+
+<!-- ===== CONTRACT: AUC-5.1b (scout-obscured value range — §3.2) ===== -->
+## CONTRACT — AUC-5.1b (scout-obscured value range, §3.2 — pure) — 2026-06-21 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5, xhigh). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** Mode-1 FARM AUCTION — the SECOND, fork-free sub-ticket of the AUC-5.1 split (see `spec-docs/AUC-5.1_SCOPE_MAP.md` §2). The §3.2 "bid on PERCEIVED value" range mechanic. PURE math, **build-DARK** (no live caller until AUC-5.1d/5.1e). DEPENDS ON AUC-5.1a (committed `ecd36347`, supplies the prospect trueIV).
+
+**GOAL:** Given a prospect's true IV + the OBSERVING team's scout accuracy + a seed, produce the scout-obscured VALUE RANGE the GM sees in the farm auction — `[trueIV·(1−w), trueIV·(1+w)]`, `w = scoutNoiseBase·(1−scoutAccuracy)` — plus a seeded "displayed estimate" (the jittered point ≠ truth). True IV stays internal for ALL engine math; only the displayed anchor changes.
+
+**SOURCE OF TRUTH:** `AUCTION_DRAFT_SPEC.md` **§3.2** (lines 286-293) — quote: *"the displayed value is a range `[trueIV × (1 − w), trueIV × (1 + w)]`, `w = scoutNoiseBase × (1 − scoutAccuracy)` (default `scoutNoiseBase = 0.6`, registry §12), midpoint seeded-jittered so midpoint ≠ truth. … True IV is held internally for all engine math and snaps to truth at call-up (§7.4), never before."* Scout accuracy comes from the existing **`scoutAccuracy(position, scout)`** (`src/utils/prospectScoutingDraftEngine.ts:863`, returns a **0–100 scale**, clamp [45,92]) — RE-READ it at source to confirm the scale.
+
+**DESIGN CALLS (Captain, AUTH-4 — documented for JK):**
+1. **`scoutAccuracy` input is the raw 0–100 engine scale** (45–92) — the function NORMALIZES `/100` internally so `(1−scoutAccuracy01)` ∈ [0.08, 0.55] ⇒ `w` ∈ [0.048, 0.33] at scoutNoiseBase 0.6. Param documented as 0–100.
+2. **The §3.2 "midpoint seeded-jittered" is read as:** the RANGE bounds are the LITERAL `[trueIV(1−w), trueIV(1+w)]` (centered on truth); the separately-returned **`displayedEstimate`** is the GM-facing point guess = `trueIV · (1 + jitter)`, `jitter` seeded-deterministic ∈ `[−w, +w]`, clamped into the OPEN interval `(low, high)`, and FORCED ≠ trueIV (nudge if jitter rounds to 0). Rationale: the spec's range formula is exact (so its center is truth); "midpoint ≠ truth" must mean the displayed point-estimate the GM reads is offset, preventing a "truth = range center" inference. **[Flagged — the displayed-estimate jitter shape is the AUTH-4 reading of a slightly-ambiguous spec line; magnitude/shape is a sim-tune dial.]**
+3. **`SCOUT_NOISE_BASE = 0.6`** added to `rosterEngineConstants.ts` (§12 registry, per the spec) — it is a SCOUT-DISPLAY constant, NEVER consumed by `computeIV`/IV pricing/the oracle (purely additive, oracle-neutral).
+
+**CONSTRAINTS — exactly these files:**
+1. **`src/data/rosterEngineConstants.ts`** — ADD `export const SCOUT_NOISE_BASE = 0.6;` with a `// §3.2 / §12 scout-obscured value range; display-only, NOT an IV input` comment. ADDITIVE ONLY — do NOT touch any existing constant, curve, or IV-economics value.
+2. **NEW `src/engines/scoutValueRange.ts`** — PURE, no IndexedDB/Date/Math.random/IO. Export:
+   - `export interface ScoutValueRange { w: number; low: number; high: number; displayedEstimate: number; }`
+   - `export function perceivedValueRange(trueIV: number, scoutAccuracy: number /*0–100*/, seed: string): ScoutValueRange` — `acc01 = clamp(scoutAccuracy/100, 0, 1)`; `w = SCOUT_NOISE_BASE * (1 - acc01)`; `low = trueIV*(1-w)`, `high = trueIV*(1+w)`; `displayedEstimate` = `trueIV*(1+jitter)` with `jitter` from a deterministic seeded unit-hash (FNV-1a style, mirror the `seededUnit`/`hashString` pattern already in `cpuShillBidding.ts`/`auctionStateMachine.ts`) mapped to `[-w, +w]`, clamped into `(low, high)`, forced ≠ `trueIV`. Guard `trueIV<=0`/non-finite → throw. Do NOT import the prospect engine (numbers in, struct out).
+3. **NEW `src/engines/__tests__/scoutValueRange.test.ts`** — (a) `w` shrinks as accuracy rises (acc=92 → w≈0.048 narrow; acc=45 → w≈0.33 wide); (b) `low < trueIV < high` and the bracket is symmetric about trueIV; (c) `displayedEstimate ∈ (low, high)` AND `!== trueIV`; (d) determinism: same (trueIV, acc, seed) → identical struct; different seed → (generally) different `displayedEstimate`; (e) clamp: acc outside [0,100] is clamped.
+
+**DO NOT:** modify `computeIV`/`ivEngine`/`salaryCalculator`/the IV oracle/any existing constant; consume the range in any live path (build-dark — AUC-5.1d/5.1e wire it); change the grade-noise obscuring (that already exists, separate). The FROZEN IV oracle must be byte-unchanged. Branch `codex/mode1-v1` only; do NOT commit (Opus commits after audit); do NOT push.
+
+**EXPECTED OUTPUT:** a pure `perceivedValueRange` producing the §3.2 `[trueIV(1±w)]` band + a seeded displayed estimate ≠ truth, with `SCOUT_NOISE_BASE` in the §12 registry. Build-dark.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` exit 0; `NODE_ENV= npx vitest run src/engines/__tests__/scoutValueRange.test.ts` → green. Report ACTUAL output. (Opus runs the full Mode-1 suite + `git diff` the IV oracle to confirm byte-unchanged.)
+
+**FORMAT:** 1) EVERY changed/new path + total; 2) the `w`/range/displayedEstimate math + the seeded-jitter shape; 3) ACTUAL tsc + the test output; 4) "AUC-5.1b complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL (STOP-IF):** if `scoutAccuracy()` is NOT a 0–100 scale (e.g. already 0–1) → STOP and quote it. If adding `SCOUT_NOISE_BASE` to `rosterEngineConstants.ts` would change the IV oracle or any IV-pricing output → STOP and report (it must be oracle-neutral; if the file is the wrong home, propose `auctionEngineConstants.ts`). If `trueIV<=0` is a real possible input from the pool → STOP and report (AUC-5.1a should guarantee >0).
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: AUC-5.1b ===== -->
