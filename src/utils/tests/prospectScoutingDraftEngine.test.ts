@@ -45,6 +45,31 @@ const BASE_INPUT: ProspectScoutingDraftInput = {
 };
 
 const PITCHER_POSITIONS = new Set(['SP', 'SP/RP', 'RP', 'CP']);
+const SECTION_3_2_GRADE_TARGETS = {
+  A: 0.02,
+  'A-': 0.05,
+  'B+': 0.10,
+  B: 0.15,
+  'B-': 0.15,
+  'C+': 0.15,
+  C: 0.18,
+  'C-': 0.12,
+  D: 0.08,
+} as const;
+const SECTION_3_4_TRAIT_COUNT_TARGETS = [0.30, 0.50, 0.20] as const;
+const SECTION_13_SAMPLE_SIZE = 40_000;
+const SECTION_13_GRADE_TOLERANCE = 0.015;
+const SECTION_13_TRAIT_TOLERANCE = 0.03;
+const SECTION_13_POSITION_PLAYER_MIN_SHARE = 0.50;
+const SECTION_13_POSITION_PLAYER_MAX_SHARE = 0.70;
+
+type Section32Grade = keyof typeof SECTION_3_2_GRADE_TARGETS;
+
+function bucketSection32AnalyzerGrade(grade: string): Section32Grade | undefined {
+  if (grade in SECTION_3_2_GRADE_TARGETS) return grade as Section32Grade;
+  if (grade !== 'S' && grade !== 'A+') return 'D';
+  return undefined;
+}
 
 function compact(output: ReturnType<typeof generateProspectScoutingDraft>) {
   return {
@@ -480,6 +505,118 @@ describe('shared deterministic prospect/scouting draft engine', () => {
 
     expect(seenGrades).toEqual(targetGrades);
   });
+
+  test('§13 generated draft class reproduces §3.2 analyzer-grade distribution and §3.4 trait sanity', () => {
+    const output = generateProspectScoutingDraft({
+      ...BASE_INPUT,
+      rounds: 200,
+      candidatePoolMultiplier: 100,
+      seed: 'section-13-distribution-validation-seed',
+    });
+    const gradeCounts = Object.fromEntries(
+      Object.keys(SECTION_3_2_GRADE_TARGETS).map((grade) => [grade, 0]),
+    ) as Record<Section32Grade, number>;
+    const traitCounts = [0, 0, 0];
+    const positionCounts = new Map<string, number>();
+    const hitterPool = new Set(PROSPECT_HITTER_TRAIT_POOL);
+    const pitcherPool = new Set(PROSPECT_PITCHER_TRAIT_POOL);
+    let pitcherCount = 0;
+    let fielderCount = 0;
+
+    expect(output.draftClass).toHaveLength(SECTION_13_SAMPLE_SIZE);
+
+    for (const candidate of output.draftClass) {
+      const scored = scoreSmb4Player({
+        primaryPosition: candidate.position,
+        secondaryPosition: candidate.secondaryPosition,
+        bats: candidate.bats,
+        throws: candidate.throws,
+        power: candidate.ratings.power,
+        contact: candidate.ratings.contact,
+        speed: candidate.ratings.speed,
+        fielding: candidate.ratings.fielding,
+        arm: candidate.ratings.arm,
+        velocity: candidate.ratings.velocity,
+        junk: candidate.ratings.junk,
+        accuracy: candidate.ratings.accuracy,
+        arsenal: candidate.arsenal,
+        trait1: candidate.trait1,
+        trait2: candidate.trait2,
+      });
+      const analyzerGrade = bucketSection32AnalyzerGrade(scored.grade);
+      const traits = [candidate.trait1, candidate.trait2].filter((trait): trait is string => Boolean(trait));
+      const isPitcher = PITCHER_POSITIONS.has(candidate.position);
+
+      expect(analyzerGrade).toBeDefined();
+      expect(candidate.position).not.toBe('DH');
+      expect(candidate.position).not.toBe('UTIL');
+      expect(candidate.secondaryPosition).not.toBe('DH');
+      expect(candidate.secondaryPosition).not.toBe('UTIL');
+      expect(new Set(traits).size).toBe(traits.length);
+      if (traits.length === 2) {
+        expect(prospectTraitsConflict(traits[0], traits[1])).toBe(false);
+      }
+
+      gradeCounts[analyzerGrade!] += 1;
+      traitCounts[traits.length] += 1;
+      positionCounts.set(candidate.position, (positionCounts.get(candidate.position) ?? 0) + 1);
+
+      if (isPitcher) {
+        pitcherCount += 1;
+        expect(candidate.secondaryPosition).toBeUndefined();
+        expect(candidate.arsenal.length).toBeGreaterThan(0);
+        expect(candidate.ratings.velocity).toBeGreaterThan(0);
+        expect(candidate.ratings.junk).toBeGreaterThan(0);
+        expect(candidate.ratings.accuracy).toBeGreaterThan(0);
+        expect(traits.every((trait) => pitcherPool.has(trait))).toBe(true);
+        expect(traits.every((trait) => !hitterPool.has(trait))).toBe(true);
+      } else {
+        fielderCount += 1;
+        expect(candidate.arsenal).toEqual([]);
+        expect(candidate.ratings.velocity).toBe(0);
+        expect(candidate.ratings.junk).toBe(0);
+        expect(candidate.ratings.accuracy).toBe(0);
+        expect(traits.every((trait) => hitterPool.has(trait))).toBe(true);
+        expect(traits.every((trait) => !pitcherPool.has(trait))).toBe(true);
+      }
+    }
+
+    const realizedGradeDeviations = Object.fromEntries(
+      Object.entries(SECTION_3_2_GRADE_TARGETS).map(([grade, target]) => {
+        const realized = gradeCounts[grade as Section32Grade] / SECTION_13_SAMPLE_SIZE;
+        return [grade, Number(((realized - target) * 100).toFixed(3))];
+      }),
+    ) as Record<Section32Grade, number>;
+    const realizedTraitDeviations = SECTION_3_4_TRAIT_COUNT_TARGETS.map((target, index) =>
+      Number((((traitCounts[index] / SECTION_13_SAMPLE_SIZE) - target) * 100).toFixed(3)),
+    );
+    const fielderShare = fielderCount / SECTION_13_SAMPLE_SIZE;
+
+    console.info('§13 N', SECTION_13_SAMPLE_SIZE);
+    console.info('§13 grade deviations pp', realizedGradeDeviations);
+    console.info('§13 trait-count deviations pp', {
+      zero: realizedTraitDeviations[0],
+      one: realizedTraitDeviations[1],
+      two: realizedTraitDeviations[2],
+    });
+    console.info('§13 position counts', Object.fromEntries([...positionCounts.entries()].sort()));
+
+    for (const [grade, target] of Object.entries(SECTION_3_2_GRADE_TARGETS)) {
+      const realized = gradeCounts[grade as Section32Grade] / SECTION_13_SAMPLE_SIZE;
+      expect(Math.abs(realized - target)).toBeLessThanOrEqual(SECTION_13_GRADE_TOLERANCE);
+    }
+    for (const [index, target] of SECTION_3_4_TRAIT_COUNT_TARGETS.entries()) {
+      const realized = traitCounts[index] / SECTION_13_SAMPLE_SIZE;
+      expect(Math.abs(realized - target)).toBeLessThanOrEqual(SECTION_13_TRAIT_TOLERANCE);
+    }
+    expect(pitcherCount).toBeGreaterThan(0);
+    expect(fielderCount).toBeGreaterThan(0);
+    expect(fielderShare).toBeGreaterThanOrEqual(SECTION_13_POSITION_PLAYER_MIN_SHARE);
+    expect(fielderShare).toBeLessThanOrEqual(SECTION_13_POSITION_PLAYER_MAX_SHARE);
+    for (const position of ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'SP', 'RP', 'CP']) {
+      expect(positionCounts.get(position)).toBeGreaterThan(0);
+    }
+  }, 120_000);
 
   test('generated prospect names come from the SMB4 database with deterministic variety', () => {
     const output = generateProspectScoutingDraft({
