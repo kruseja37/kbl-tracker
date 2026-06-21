@@ -2436,3 +2436,13 @@ fail = wpaRuntimeBoundary (characterized), zero new reds**. **⇒ FARM AUCTION C
 **➡ NEXT = AUC-5.1d-3** (MLB→farm sequencing §3.1 + per-league auction-vs-snake format config) = the LAST AUC-5.1 piece. JK BROWSER-VERIFY BATCHED:
 the whole MLB + farm auction surface.
 
+**WAVE 46 — AUC-5.1d-3 (MLB→farm sequencing + draftFormat field) CONTRACTED + DISPATCHED — the LAST AUC-5.1 piece.**
+- Grounded: LeagueTemplate has NO draft-format field (its `format` :425 is elimination-bracket); DB_VERSION 8; MLB page AUCTION_COMPLETE has no
+  next-phase link. **5.1d-3 scope (minimal, additive):** add `draftFormat?: 'auction'|'snake'` to LeagueTemplate + `getLeagueDraftFormat` reader
+  (default 'snake', NO DB bump) + a user-driven "Proceed to Farm Auction →" link at MLB AUCTION_COMPLETE (§3.1 sequencing) + a farm-complete
+  freeze-placeholder note. **DESIGN CALLS (flagged):** sequencing = user link not auto-advance; draftFormat default 'snake' back-compat (VISION §9.A
+  makes auction the v1 PRIMARY → JK may flip the default; the league-setup FORMAT-PICKER UI is a DEFERRED follow-up — this ticket adds the field+reader
+  +link only). Contract committed; dispatched to Codex (gpt-5.5, xhigh) bg `ba7arnso8`. On landing: audit + full Mode-1 suite + confirm NO DB bump +
+  version-pin intact + commit. **➡ after 5.1d-3 ⇒ AUC-5.1 (MLB + FARM auction) COMPLETE** → AUC-5.2 (L-ECON1 two-number freeze §4, trackerDb franchise
+  bridge — the economy-correctness gate) → scout-privacy UI (§6.1) → POSITION_POOL SP/RP fix; Mode-2 = LSIM-P3.
+
