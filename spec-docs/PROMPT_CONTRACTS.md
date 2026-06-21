@@ -14382,3 +14382,59 @@ REPORT: 1) every changed git path + total; 2) the control-flow change described;
 
 Use high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: H3-HONOR-DECOUPLE ===== -->
+
+<!-- ===== CONTRACT: B5 (Mode-1 prospect-gen — pin personality to canonical 7) ===== -->
+## CONTRACT — B5 (prospect-gen: pin PERSONALITY_POOL to the canonical 7) — 2026-06-20 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5, high). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** Mode-1 prospect-generation fix.
+
+**GOAL:** Replace the non-canonical `PERSONALITY_POOL` in the prospect generator with the canonical 7 SMB4 personalities.
+
+**SOURCE OF TRUTH:** `spec-docs/PERSONALITY_SYSTEM_SPEC.md §2` (canonical 7 = COMPETITIVE, RELAXED, DROOPY, JOLLY, TOUGH, TIMID, EGOTISTICAL) + `spec-docs/PROSPECT_GENERATION_SPEC.md §15-B5` (RULED 2026-06-20).
+
+**CONSTRAINTS:**
+- Only edit `src/utils/prospectScoutingDraftEngine.ts` — the `PERSONALITY_POOL` constant (near line 247; currently the non-canonical `['Competitive','Spirited','Crafty','Scholarly','Disciplined','Tough','Relaxed']`).
+- Match the EXACT string format the `Player.personality` field uses elsewhere — READ the `Player` type + `PERSONALITY_SYSTEM_SPEC §2` and `src/engines/playerMorale.ts` `PERSONALITY_BASELINES` to confirm casing. Do NOT guess.
+- Do NOT touch `CHEMISTRY_POOL` (~line 246; already the correct 5 SMB4 chemistry types).
+- Do NOT touch any rating/grade logic — personality is morale-read only; it does NOT feed `scoreSmb4Player`.
+- Branch `codex/mode1-v1` only; do NOT commit (Opus commits after audit); do NOT push.
+
+**EXPECTED OUTPUT:** `PERSONALITY_POOL` = the canonical 7 in the Player.personality format. No other behavior change.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` 0 errors; confirm the constant matches the canonical 7. Do NOT run the full suite (Opus runs the host gate).
+
+**FORMAT:** 1) files changed + total; 2) before/after `PERSONALITY_POOL` + the format-source you matched; 3) ACTUAL tsc output; 4) "B5 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL:** if the canonical casing is ambiguous (Title vs UPPER) → quote both sources, use the `Player.personality` type's format, note it. If a change would touch any file other than `prospectScoutingDraftEngine.ts` → STOP and report.
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: B5 ===== -->
+
+<!-- ===== CONTRACT: L14-1 (rebrand circuit-breaker — L14 flag + PURE dwell counter) ===== -->
+## CONTRACT — L14-1 (L14 flag + PURE rebrand-dwell counter, build-DARK) — 2026-06-20 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5, high). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-tracker` [branch `codex/franchise-v1-next`].**
+**ROLE:** Mode-2 L14 dark-landing infra. Build-DARK behind a default-OFF flag.
+
+**GOAL:** Add the L14 feature flag + a PURE rebrand-dwell-counter module (NO store, NO DB bump). Dark-landing infra for the rebrand circuit-breaker; the GM-offer + 6-step cascade are later tickets (L14-2/L14-3).
+
+**SOURCE OF TRUTH:** `spec-docs/DECISIONS_LOG.md` L14-Q1 (dwell = consecutive games at the rock-bottom fan band, GM-gated) + L14-Q7 (`REBRAND_RESET_MORALE = 70`, named, sim-nudgeable). **DEFAULT-TAKEN (AUTH-4 — report it):** dwell is DERIVED from fan-morale history (a PURE function), NOT a persisted field → avoids a new store / trackerDb bump / version-pin trap.
+
+**CONSTRAINTS:**
+- Add `isFranchisePhase2L14Enabled(): boolean` to `src/utils/franchisePhase2Flags.ts`, mirroring `isFranchisePhase2L13Enabled` EXACTLY (same default-OFF mechanism + the matching `setFranchisePhase2L14EnabledForTests` setter IF the L13 flag has one — read the file, match the pattern incl. any flag registry/list).
+- NEW PURE file `src/utils/franchiseRebrandDwell.ts` exporting: `REBRAND_RESET_MORALE = 70`; `REBRAND_DWELL_BAND_MAX` (rock-bottom fan-morale ceiling — §16 sim-tune, default 20, comment as sim-tune); `REBRAND_DWELL_TRIGGER_GAMES` (consecutive count to arm — §16 sim-tune, default 20, comment); and `computeRebrandDwell(fanMoraleHistory: number[]): { consecutiveRockBottomGames: number; armed: boolean }` — counts the MOST-RECENT consecutive entries ≤ `REBRAND_DWELL_BAND_MAX`; `armed = count >= REBRAND_DWELL_TRIGGER_GAMES`. PURE: no IndexedDB, no Date, no Math.random, no async.
+- NEW test `src/utils/tests/franchiseRebrandDwell.test.ts`: increment (consecutive rock-bottom), reset (a recovery game breaks the streak), band-edge (== max counts; max+1 does not), arm threshold (trigger−1 not armed; trigger armed), empty history.
+- Do NOT add a store; do NOT bump trackerDb; do NOT touch `processCompletedGame`; do NOT touch the cascade/stadium/fame-reset (L14-2/L14-3).
+- Branch `codex/franchise-v1-next` only; do NOT commit (Opus commits after audit); do NOT push.
+
+**EXPECTED OUTPUT:** the L14 flag (mirrors L13) + the pure dwell module + its test. Build-DARK (flag OFF; nothing calls `computeRebrandDwell` yet).
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` 0; run ONLY the new test (`NODE_ENV= npx vitest run src/utils/tests/franchiseRebrandDwell.test.ts`) → green. Do NOT run the full suite (Opus runs the host gate).
+
+**FORMAT:** 1) every changed git path + total; 2) the L13 flag pattern you mirrored + the dwell semantics + the §16 default constants (flag for JK sim-tune); 3) ACTUAL tsc + new-test output; 4) "L14-1 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL:** if the L13 flag pattern has nuances (a registry, a setter list) → mirror exactly + report. If a pure `number[]` history is insufficient for the dwell semantics → STOP and report what's missing (do NOT invent a persisted store).
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: L14-1 ===== -->

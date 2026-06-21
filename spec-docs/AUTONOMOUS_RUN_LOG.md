@@ -1804,4 +1804,43 @@ myself → host gate (tsc 0 / build 0 / characterized suite) → commit → next
 re-invocation + a ScheduleWakeup fallback. SET-ASIDE-AND-CONTINUE on the 4 safety walls.
 
 ### Ticket log (newest at bottom)
-_(none committed yet this run — recon in flight)_
+
+**RECON COMPLETE (`wf_1012939c-048`, 6 agents).** Dependency-ordered split produced. Headlines:
+- **L13-8 = VERIFIED DONE** (formation checkpoint-gated `franchiseRelationshipFormationCompute.ts:123`, intensity per-game,
+  L13-6 charged-matchup wired, all 3 gate on the L13 flag + wired at `processCompletedGame.ts:648`, tests present). ⇒ **L13
+  stack COMPLETE.** Not dispatched.
+- **Mode-2 queue:** L14 (rebrand circuit-breaker — REQUIRED for v1, the 4th fan-morale tooth; zero code + zero contract) →
+  L14-0 author contract (me) → L14-1 flag+dwell → L14-2 6-step cascade → L14-3 GM-offer + processCompletedGame wiring.
+  Then LSIM-P1 (partial run now) → LSIM-P3 (full §6 matrix = the pre-flip passport, after L14-3). **L13-3b DEFERRED** (not v1).
+- **Mode-1 queue (worktree):** prospect B-chain B5→B8→B2→B3→B4→B6→B7→B1→B9 — **ALL one file
+  `src/utils/prospectScoutingDraftEngine.ts` → SERIALIZED**; auction AUC-1.1→1.2→2.1→(2.2,3.1)→4.1→5.1→5.2 (mostly disjoint
+  new files). **B10 DEFERRED** (L-ECON3).
+- **SAFETY WALLS (SET-ASIDE triggers):** `scoreSmb4Player` (`smb4GradeEmulator.ts:671`) + the §3.2 band thresholds are the
+  FROZEN grade oracle — B1/B3/B4/B6/B7 generate AGAINST it (fine) but must NEVER modify it (a diff touching the oracle file =
+  SET-ASIDE). AUC-5.2 (L-ECON1 freeze writer): `settledSalary` is a pure additive field (0 hits, no DB bump, stays v25) — SAFE
+  iff the writer never re-prices trueValue / calls luxuryTax. L14 trackerDb writes (if any) must include the version-pin scope.
+- **Recon path corrections folded in:** prospect engine is `src/utils/` (not `src/engines/`); L14 flag → `franchisePhase2Flags.ts`
+  (not `src/config/flags.ts`); stadium-change resolver UNVERIFIED (L14-2 must locate/build it).
+
+**WAVE 1 dispatched (2 disjoint Codex builds, parallel):**
+- **B5** (Mode-1, worktree `codex/mode1-v1`): pin `PERSONALITY_POOL` (`prospectScoutingDraftEngine.ts:247`) to the canonical 7
+  (PERSONALITY_SYSTEM_SPEC §2). Trivial, no oracle. — dispatched.
+- **L14-1** (Mode-2, here): `isFranchisePhase2L14Enabled` flag + a PURE `franchiseRebrandDwell.ts` (dwell computed from
+  fan-morale history — DEFAULT-TAKEN: derived, not persisted → no store/DB bump) + `REBRAND_RESET_MORALE=70` + band/trigger
+  §16 constants. — dispatched.
+
+**GATE STRATEGY (AUTH-4 engineering call, documented):** build (tsc+vite) ALWAYS; **FULL suite** for tickets that wire into
+`processCompletedGame` / add a store / have broad imports (the transitive-import-mock risk per MEMORY); **build + affected
+tests** for pure/isolated/build-dark tickets. Periodic full-suite checkpoint per stream. Read the vitest summary, not the RC
+(characterized fails make RC nonzero).
+
+**✅ B5 COMMITTED `0136598c` (codex/mode1-v1).** Audit: diff = exactly the `PERSONALITY_POOL` line → canonical 7 (Title-case
+per `Player.personality`); CHEMISTRY_POOL untouched; no oracle/rating touch. **FULL host gate (Mode-1 baseline):** build 0;
+suite **7890 pass / 2 fail = wpaRuntimeBoundary + franchiseManualSmokeFixture (characterized), ZERO new reds.** Codex caught a
+contract path slip (playerMorale is `src/utils/`, not `src/engines/`) — harmless. ➡ NEXT Mode-1 = **B8** (drop age gen).
+
+**✅ L14-1 VERIFIED — committing.** Audit: flag mirrors L13 EXACTLY (default-OFF + test setter, no registry); pure dwell
+module correct (counts most-recent consecutive ≤ band-max from the end; armed ≥ trigger); NO importers (build-dark confirmed);
+NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its own 6 tests green. ➡ NEXT Mode-2 = **L14-2**
+(6-step cascade). **Anchor correction:** the stadium-change resolver IS real at `src/engines/franchiseStadiumChangeResolver.ts`
+(recon's `src/utils/` path was wrong) — L14-2 reuses it.
