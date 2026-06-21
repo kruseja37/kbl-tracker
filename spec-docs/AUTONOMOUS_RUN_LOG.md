@@ -1856,3 +1856,65 @@ NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its 
   NEW field (Q5; `tradeEngine.formerTeamName` is unrelated). **➡ NEXT Mode-2 = finish L14-2 grounding (locate the fame-reset
   valve + badge set), then contract + dispatch.** Mode-2 idle ~1 cycle by design (rigor > keeping the pipe full on the
   riskiest ticket).
+
+**WAVE 3:**
+- **B8 first attempt → correctly BLOCKED (STOP-IF fired):** `age` is a REQUIRED field on the global `Player` type
+  (`leagueBuilderStorage.ts:235`) + the prospect DTO (`prospectScoutingDraftEngine.ts:149`), consumed by salary
+  (`ageFactor` `salaryCalculator.ts:791`), season-transition aging (`seasonTransitionEngine.ts:129`), fitness, relationships,
+  and the draft UI. Dropping it is cross-cutting. **🟡 DEFAULT-TAKEN / OPEN DECISION FOR JK (B8 age):** §10 says "drop the
+  age field," but it's a required global contract → AMENDED B8 to set a fixed `PROSPECT_DRAFT_AGE = 18` (kills the random
+  `18+rand*6` gen per §10's intent — no age variability at generation — while keeping the required field). Development stays
+  L8 morale/performance-driven (not age). **JK: confirm fixed-age-18 vs a full age-field-removal refactor (v1.1?).**
+  B8 re-dispatched (`b45n596ey`).
+- **L14-2 grounding COMPLETE** (all 6 cascade primitives located, contract-ready):
+  1. `fireManager({reason:'rebrand', skipUserConfirm:true, suppressFanReliefBump:true})` (`franchiseManagerFiring.ts:52-53`);
+  2. clear the **4 badges = Team MVP / Ace / Albatross / Fan Favorite** (KEEP Captain — `FRANCHISE_V1_LIVING_SEASON_SPEC.md:248`)
+     + clear old Fan Hopeful + reseed via `computeTeamFanHopefuls` (`franchiseInitializer.ts`);
+  3. relocate stadium → `pickStadiumFromPool`/`resolveFranchiseStadiumChange` (`franchiseStadiumChangeResolver.ts:42/77`);
+  4. team-wide trade-style fame reset → `fameModel.ts:119` `tradeReset` (heat×`heatRetention`, reachFloor=`reachFloorAfterTrade`);
+  5. wipe dead money → STUB (Q6); 6. HARD-SET fan morale to `REBRAND_RESET_MORALE=70` LAST.
+  + `teamHistory` = NEW field (Q5) — **DATA-SHAPE: confirm the team-record store (leagueBuilder vs trackerDb) before
+  contracting; if trackerDb → version-pin scope.** **➡ L14-2 = next Mode-2 dispatch** (careful contract — atomic soul-layer; audit HARDEST).
+
+**WAVE 4:**
+- **✅ B8 COMMITTED `87331ae0`** (fixed `PROSPECT_DRAFT_AGE=18`; build 0; prospect test 14/14). ➡ NEXT Mode-1 = **B2** — dispatched (`bma9pnac3`, single §3.2 grade table).
+- **L14-2 grounding (cont.):** `teamHistory` → the **leagueBuilder team record** (`leagueBuilderStorage.ts:139`, alongside
+  captainPlayerId/fanHopefulPlayerId) — **NOT trackerDb → no version-pin trap; additive optional field** (like settledSalary).
+  REMAINING GAP: the badge-clear is non-trivial — the 4 badges are COMPUTED designation records (`calculateFranchiseDesignations`
+  `franchiseDesignations.ts:373`), not a static field; need the active-designation store + clear API (keep captainPlayerId),
+  the team-wide player-fame-reset application path (apply `fameModel` tradeReset to every roster fame record), and the
+  atomic+idempotent write pattern. **➡ Launched a focused L14-2 grounding agent** (badge-clear API · team-wide fame-reset
+  application · teamHistory field · atomic/idempotency pattern · dead-money stub) → contract-ready spec, THEN dispatch L14-2.
+  Rigor over speed on the riskiest ticket (AUTH-4).
+
+**WAVE 5:**
+- **✅ B2 COMMITTED `77bedc88`** (single §3.2 `STANDARD_GRADE_WEIGHTS`, round tables removed; build 0; prospect test 14/14).
+- **➡ B3 dispatched (`codex-b3`)** — secondary-position generation via the §6 `P(secondary|primary)` map (pitchers none;
+  composite labels IF/OF/IF-OF/1B-OF kept per the analyzer's versatility scoring; frozen-oracle untouched). Mode-1 chain now
+  B5→B8→B2→**B3** (→B4→B6→B7→B1→B9).
+- **L14-2 grounding agent in flight** (badge-clear API / team-wide fame-reset / teamHistory / atomic-idempotency) → on return,
+  contract + dispatch L14-2.
+
+**WAVE 6:**
+- **L14-2 grounding agent STALLED** (stream watchdog, 600s no-progress; no clean result, transcript unreadable). Recovered by
+  grounding the rest MYSELF: badge-clear = `franchiseDesignationStorage.ts` `deleteFranchiseDesignationRowsForScope`/`replace…`
+  (:221/:237; Captain = `captainPlayerId`, separate); team-wide fame reset = `franchiseFameRecordsStorage` get/save + the
+  existing trade-reset transform `fameModel.ts:225-240`; atomic pattern = mirror `fireManager` (:139) sequential awaits;
+  morale via `applyFranchiseMoraleEffect` + `FranchiseMoraleScope`/`SourceKind`.
+- **L14-2 SPLIT (proven pure/impure pattern, de-risks the riskiest ticket):**
+  - **L14-2a (PURE transforms)** — `franchiseRebrandCascade.ts`: `applyRebrandFameReset` (reuse fameModel trade-reset),
+    `selectRebrandDesignationRowsToClear` (the 4 badge types, keep Captain), `buildRelocationMarker`. Build-dark, testable.
+    **➡ dispatched (`codex-l14-2a`, main).**
+  - **L14-2b (impure orchestrator)** — NEXT: reads state, calls pickStadiumFromPool + computeTeamFanHopefuls + fireManager +
+    the 2a transforms, persists atomically/idempotently (teamHistory marker = idempotency key), hard-sets morale 70 LAST.
+    OPEN before 2b: confirm the morale **absolute hard-SET** path (vs delta) + the team-scoped badge clear (not all teams).
+
+**WAVE 7:**
+- **✅ L14-2a VERIFIED — committing.** Pure transforms `franchiseRebrandCascade.ts`: `applyRebrandFameReset` REUSES the
+  existing `applyTradeReset` (`fameModel.ts:227` — no duplicate math), `selectRebrandDesignationRowsToClear` (the 4 badge
+  types), `buildRelocationMarker`. Pure (no I/O/Date/random), no importers (build-dark), oracle/fame-tuning untouched.
+  Build 0; 5 new tests green.
+- **B3 first attempt → correctly BLOCKED** (§6 composite secondary labels IF/OF/IF-OF/1B-OF vs the narrow `DraftPosition | 'P'`
+  DTO type). AMENDED: widen the DTO `secondaryPosition` to the global `Position` type (**VERIFIED** it already has the
+  composites + matches `Player.secondaryPosition: Position` `leagueBuilderStorage.ts:240` + the analyzer `VERSATILITY_MAP`
+  `smb4GradeEmulator.ts:174-181`); pitchers → undefined (no secondary). **Re-dispatched (`bm8yln8uv`).**

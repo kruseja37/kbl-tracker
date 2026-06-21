@@ -14445,23 +14445,109 @@ Use high reasoning effort. Think step-by-step.
 **ROUTE:** Codex CLI (gpt-5.5, high). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
 **ROLE:** Mode-1 prospect-gen cleanup. **DEPENDS ON B5 (same file, already committed `0136598c`).**
 
-**GOAL:** Remove age generation from the prospect generator — prospects carry no age-based development curve (§10; development is morale/performance/personality-driven).
+**GOAL:** Kill the RANDOM age generation in the prospect generator (§10). **AMENDED 2026-06-21 (Captain ruling, AUTH-4):** the first attempt correctly STOPPED — `age` is a REQUIRED field on the global `Player` type (`leagueBuilderStorage.ts:235`) + `LeagueBuilderProspectPlayerDto` (`prospectScoutingDraftEngine.ts:149`), consumed by salary (`ageFactor`), season-transition aging, fitness, relationships, and the draft UI. Dropping the field is a cross-cutting refactor (NOT v1). So honor §10's intent — no age-based variability at generation — by replacing the random age with a FIXED constant.
 
-**SOURCE OF TRUTH:** `spec-docs/PROSPECT_GENERATION_SPEC.md §10` (drop-age) + `§15` (RULED 2026-06-20).
+**SOURCE OF TRUTH:** `spec-docs/PROSPECT_GENERATION_SPEC.md §10` ("drop the v1.0 `age: 18 + …` gen") + the Captain amendment above.
 
 **CONSTRAINTS:**
-- In `src/utils/prospectScoutingDraftEngine.ts`, remove the random age generation (the `age: 18 + Math.random()*6`-style expression in the prospect/player DTO builder). PREFER removing it entirely. If the player/prospect type REQUIRES an `age` field, STOP and report the exact type + where age is consumed (do NOT invent a default silently).
-- If `src/engines/gradeEngine.ts` has a now-unused age path (recon noted ~line 370), add a 1-line `// unused: prospects carry no age (PROSPECT §10)` comment — do NOT delete cross-module code.
-- Do NOT touch ratings/grade/personality/chemistry/arsenal logic.
+- In `src/utils/prospectScoutingDraftEngine.ts`, replace the random age expression (`age: 18 + Math.random()*6` or similar in the prospect/player DTO builder) with a FIXED named constant `PROSPECT_DRAFT_AGE = 18` (declare it near the other generator constants, comment: `// fixed draft age — no age-based dev/variability at generation (PROSPECT §10; Captain 2026-06-21)`). KEEP the `age` field populated (required by the global `Player` contract).
+- Do NOT remove the `age` field; do NOT touch salary/aging/relationship code; do NOT touch ratings/grade/personality/chemistry/arsenal logic.
+- `gradeEngine.ts` has no age path (the first attempt confirmed) — do NOT touch it.
 - Branch `codex/mode1-v1` only; do NOT commit (Opus commits after audit); do NOT push.
 
-**EXPECTED OUTPUT:** no random age generation in the prospect generator.
+**EXPECTED OUTPUT:** the prospect generator assigns `age: PROSPECT_DRAFT_AGE` (fixed 18) — no `Math.random()` in the age path.
 
 **VERIFICATION:** `NODE_ENV= npx tsc -b` 0; `NODE_ENV= npx vitest run src/utils/tests/prospectScoutingDraftEngine.test.ts` → green. Do NOT run the full suite (Opus runs the gate).
 
-**FORMAT:** 1) files changed + total; 2) what was removed + any type constraint hit; 3) ACTUAL tsc + the prospect test output; 4) "B8 complete" OR "BLOCKED: <reason>".
+**FORMAT:** 1) files changed + total; 2) before/after the age expression + the constant added; 3) ACTUAL tsc + the prospect test output; 4) "B8 complete" OR "BLOCKED: <reason>".
 
-**FAILURE PROTOCOL:** if a required `age` field blocks removal → STOP and report the type + its consumers (do NOT guess a default).
+**FAILURE PROTOCOL:** if a prospect test pins the random age range → report it (the fixed age may need the test updated; do that, noting it). If anything else blocks → STOP and report.
 
 Use high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: B8 ===== -->
+
+<!-- ===== CONTRACT: B2 (prospect-gen — single §3.2 STANDARD grade table, no rounds) ===== -->
+## CONTRACT — B2 (prospect-gen: single §3.2 STANDARD grade distribution, drop round tables) — 2026-06-20 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5, high). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** Mode-1 prospect-gen. **DEPENDS ON B5+B8 (same file, committed).**
+
+**GOAL:** Replace the round-keyed grade-weight tables with a SINGLE `STANDARD_GRADE_WEIGHTS` table per §3.2 — the v1 draft is an AUCTION (no rounds).
+
+**SOURCE OF TRUTH:** `spec-docs/PROSPECT_GENERATION_SPEC.md §3.2` — **read the §3.2 grade-distribution table VERBATIM and use those exact percentages** (do NOT paraphrase from memory). §6.3/§63 notes the round-keyed tables were a snake-draft artifact, removed for auction.
+
+**CONSTRAINTS:**
+- In `src/utils/prospectScoutingDraftEngine.ts`: replace `roundGradeWeights(round)` (near line 316) and its call site (near line 531) with a single module-level `STANDARD_GRADE_WEIGHTS` table whose grade→weight entries are EXACTLY §3.2's. Remove the now-dead round-keyed table(s)/param threading for grade weights (do NOT remove `round`/`pickNumber` if used elsewhere — only the grade-weight round-keying).
+- The weights must be consumed by the existing grade-sampling path unchanged otherwise (B1 later re-anchors the rating solve; B2 only swaps the distribution source).
+- Do NOT touch ratings/personality/chemistry/arsenal/age logic.
+- Branch `codex/mode1-v1` only; do NOT commit; do NOT push.
+
+**EXPECTED OUTPUT:** one `STANDARD_GRADE_WEIGHTS` (per §3.2) feeding grade sampling; no round-keyed grade tables.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` 0; `NODE_ENV= npx vitest run src/utils/tests/prospectScoutingDraftEngine.test.ts` → green (update any test that pinned a round-keyed weight, noting it). Do NOT run the full suite.
+
+**FORMAT:** 1) files changed + total; 2) the §3.2 weights you used (verbatim) + what round-keying you removed; 3) ACTUAL tsc + prospect test output; 4) "B2 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL:** if §3.2's weights don't sum to 100 or a grade label is ambiguous vs the sampler's expected keys → STOP and quote §3.2 + the sampler's key type.
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: B2 ===== -->
+
+<!-- ===== CONTRACT: B3 (prospect-gen — secondary positions via §6 map) ===== -->
+## CONTRACT — B3 (prospect-gen: secondary-position generation, §6 P(secondary|primary)) — 2026-06-20 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5, high). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-mode1` [branch `codex/mode1-v1`].**
+**ROLE:** Mode-1 prospect-gen. **DEPENDS ON B5+B8+B2 (same file, committed).**
+
+**GOAL:** Generate each prospect's secondary position from the §6 pool-derived `P(secondary | primary)` transition map (replacing the current hardcoded secondary).
+
+**SOURCE OF TRUTH:** `spec-docs/PROSPECT_GENERATION_SPEC.md §6` — **read the §6 table VERBATIM** (the per-primary distributions + the ~15% global "no secondary" + raw counts). Pitchers get NO secondary (ruling E + §6: 100% of real pitchers have none). The §6 map uses COMPOSITE labels (`IF`, `OF`, `IF/OF`, `1B/OF`) alongside discrete positions — these are VALID (the analyzer's `secondaryVersatility` scores them, `smb4GradeEmulator.ts:175-182`); use them as written, do NOT collapse to the 8 discrete.
+
+**CONSTRAINTS:**
+- **TYPE FIX (resolves the 2026-06-21 BLOCK):** widen the prospect DTO `secondaryPosition` from `DraftPosition | 'P'` (~line 154) to the global `Position` type (import it). **VERIFIED:** `Position` (game.ts:9) already includes §6's composites (`IF`/`OF`/`IF/OF`/`1B/OF`) AND matches `Player.secondaryPosition: Position` (`leagueBuilderStorage.ts:240`) + the analyzer's `VERSATILITY_MAP` keys (`smb4GradeEmulator.ts:174-181`). Drop the `'P'` option (pitchers get NO secondary). Do NOT widen the PRIMARY `DraftPosition` type (primary stays discrete per ruling E).
+- In `src/utils/prospectScoutingDraftEngine.ts`: add a deterministic `chooseSecondary(primary, seed): Position | undefined` implementing §6's per-primary distribution (seeded via the existing `randomUnit`/`pick` helpers, NOT Math.random); call it in `buildCandidate`; replace the hardcoded `secondaryPosition` (currently pitchers `'P'` ~line 592, fielders hardcoded) — **pitchers → undefined** (no secondary), **fielders → the §6 draw** (incl. the ~15% → undefined).
+- Use the EXACT probabilities + labels from §6 (per primary). If a primary's row doesn't sum to ~100% → STOP and quote it.
+- **FROZEN ORACLE — do NOT modify** `src/engines/smb4GradeEmulator.ts` or any grade/scoring logic. B3 only assigns the `secondaryPosition` feature. (If editing the oracle seems required → STOP and report — that is a safety wall.)
+- Do NOT touch ratings/grade/personality/chemistry/arsenal/age logic.
+- Branch `codex/mode1-v1` only; do NOT commit; do NOT push.
+
+**EXPECTED OUTPUT:** position-player prospects get a §6-distributed `secondaryPosition` (incl. ~15% none + composite labels); pitchers get none.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` 0; `NODE_ENV= npx vitest run src/utils/tests/prospectScoutingDraftEngine.test.ts` → green (add/adjust a test asserting pitchers get none + a fielder draws a §6-valid secondary, noting it). Do NOT run the full suite.
+
+**FORMAT:** 1) files changed + total; 2) the `chooseSecondary` map you implemented (per primary) + how pitchers are handled; 3) ACTUAL tsc + prospect test output; 4) "B3 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL:** if §6's secondary type conflicts with the prospect DTO's `secondaryPosition` type (e.g. it can't hold composite labels) → STOP and quote both. Never modify the grade oracle.
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: B3 ===== -->
+
+<!-- ===== CONTRACT: L14-2a (rebrand cascade — PURE transforms) ===== -->
+## CONTRACT — L14-2a (rebrand cascade: PURE transforms, build-dark) — 2026-06-21 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5, very high). Auditor: Opus 4.8 (builder ≠ auditor). **WORKTREE: `/Users/johnkruse/Projects/kbl-tracker` [branch `codex/franchise-v1-next`].**
+**ROLE:** Mode-2 L14 rebrand — the PURE half of the cascade (the impure atomic orchestrator is L14-2b). Build-DARK (no caller).
+
+**GOAL:** A PURE, testable module of the rebrand cascade's deterministic transforms — fame reset, badge-selection, relocation marker — with NO IndexedDB / I/O / Date / Math.random. L14-2b composes these with the impure picks + persistence.
+
+**SOURCE OF TRUTH:** `spec-docs/FRANCHISE_V1_LIVING_SEASON_SPEC.md §248` (the 6-step cascade) + `DECISIONS_LOG.md` L14-Q2/Q3/Q5. Reuse `REBRAND_RESET_MORALE` from `src/utils/franchiseRebrandDwell.ts` (L14-1).
+
+**CONSTRAINTS — NEW PURE file `src/engines/franchiseRebrandCascade.ts`:**
+- `REBRAND_BADGE_TYPES = ['TEAM_MVP','ACE','ALBATROSS','FAN_FAVORITE']` (the 4 badges cleared; Captain is NOT a designation — it's `captainPlayerId`, never in this list).
+- `applyRebrandFameReset(fameRow, tuning?) → fameRow'` — the team-wide trade-style fame reset PER record: mirror the EXISTING trade-reset transform at `src/engines/fameModel.ts:225-240` (heat = `clampAndRoundHeat(heat * tradeReset.heatRetention)`, `reachFloor = tradeReset.reachFloorAfterTrade`). **If fameModel already exports a single-record trade-reset fn, REUSE it** (read fameModel.ts; do NOT duplicate the math — import it). Default tuning = `FAME_TUNING`. Pure; returns a new row (input not mutated).
+- `selectRebrandDesignationRowsToClear(teamDesignationRows) → rows[]` — given a team's designation rows, return the subset whose type ∈ `REBRAND_BADGE_TYPES` (the rows to clear); KEEP all others. Pure filter.
+- `buildRelocationMarker({formerTeamName, formerStadiumName, relocatedAtSeason, relocatedAtGame}) → marker` — the exact L14-Q5 shape for the `teamHistory[]` append. Pure.
+- **Do NOT** import IndexedDB/storage modules, do NOT call pickStadiumFromPool / computeTeamFanHopefuls / fireManager (those are L14-2b's impure orchestration). Do NOT touch the grade oracle.
+- NEW test `src/engines/__tests__/franchiseRebrandCascade.test.ts`: fame-reset math (heat scaled by heatRetention, reachFloor set; input not mutated), badge selection (exactly the 4 types selected, others kept, Captain n/a), marker shape.
+- Branch `codex/franchise-v1-next` only; do NOT commit (Opus commits after audit); do NOT push.
+
+**EXPECTED OUTPUT:** the pure transforms + their test. Build-dark (no importer yet).
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` 0; `NODE_ENV= npx vitest run src/engines/__tests__/franchiseRebrandCascade.test.ts` → green. Do NOT run the full suite.
+
+**FORMAT:** 1) every changed path + total; 2) the 3 transforms' signatures + whether you REUSED an existing fameModel trade-reset fn (cite it) or applied the math inline (justify); 3) ACTUAL tsc + new-test output; 4) "L14-2a complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL:** if fameModel's trade-reset shape doesn't fit a single-record transform, or the designation-row `type` field differs from the 4 names → STOP and quote the actual shapes. Never modify the grade oracle / fameModel tuning constants.
+
+Use very high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: L14-2a ===== -->
