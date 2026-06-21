@@ -247,6 +247,8 @@ const CHEMISTRY_POOL = ['Competitive', 'Crafty', 'Disciplined', 'Spirited', 'Sch
 const PERSONALITY_POOL = ['Competitive', 'Relaxed', 'Droopy', 'Jolly', 'Tough', 'Timid', 'Egotistical'];
 const BATTER_TRAITS = ['Clutch', 'Tough Out', 'Rally Starter', 'Sprinter', 'Magic Hands', 'Utility'];
 const PITCHER_TRAITS = ['K Collector', 'Workhorse', 'Elite 4F', 'Elite SL', 'Specialist', 'Rally Stopper'];
+// fixed draft age — no age-based dev/variability at generation (PROSPECT §10; Captain 2026-06-21)
+const PROSPECT_DRAFT_AGE = 18;
 const CITIES = [
   { city: 'Denver', state: 'CO' },
   { city: 'Portland', state: 'OR' },
@@ -614,7 +616,7 @@ function buildPlayerDto(input: {
     lastName: candidate.lastName,
     gender: randomUnit(`${seed}:gender`) < 0.18 ? 'F' : 'M',
     jerseyNumber: 60 + ((draftPick.pickNumber - 1) % 40),
-    age: 18 + Math.floor(randomUnit(`${seed}:age`) * 6),
+    age: PROSPECT_DRAFT_AGE,
     bats: pick(`${seed}:bats`, ['L', 'R', 'S'] as const),
     throws: pick(`${seed}:throws`, ['L', 'R'] as const),
     armSlot: null,
