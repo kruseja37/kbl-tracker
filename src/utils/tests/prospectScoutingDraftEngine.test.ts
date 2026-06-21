@@ -1,10 +1,15 @@
 import { describe, expect, test } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { FIRST_NAMES as SMB4_FIRST_NAMES, LAST_NAMES as SMB4_LAST_NAMES } from '../../data/nameDatabase';
+import { TRAIT_PRICING } from '../../data/traitPricing';
+import { countTraitPolarity, normalizeTrait } from '../../engines/smb4GradeEmulator';
 import {
   buildProspectPlayerForPick,
   generateProspectScoutingDraft,
   gradeDistance,
+  PROSPECT_HITTER_TRAIT_POOL,
+  PROSPECT_PITCHER_TRAIT_POOL,
+  prospectTraitsConflict,
   prospectSalaryForDraftRound,
   scoutProspect,
   type GeneratedProspectCandidate,
@@ -38,6 +43,8 @@ const BASE_INPUT: ProspectScoutingDraftInput = {
     },
   },
 };
+
+const PITCHER_POSITIONS = new Set(['SP', 'RP', 'CP']);
 
 function compact(output: ReturnType<typeof generateProspectScoutingDraft>) {
   return {
@@ -127,6 +134,108 @@ describe('shared deterministic prospect/scouting draft engine', () => {
       player.secondaryPosition === undefined ||
       validSecondaryByPrimary[player.primaryPosition]?.has(player.secondaryPosition) === true,
     )).toBe(true);
+  });
+
+  test('prospect trait pools are positive analyzer-recognized display names', () => {
+    const pricingByName = new Map(TRAIT_PRICING.map((entry) => [entry.name, entry]));
+    const hitterFlagTraits = new Set([
+      'First Pitch Slayer',
+      'Little Hack',
+      'Mind Gamer',
+      'Rally Starter',
+      'Magic Hands',
+      'Utility',
+      'Big Hack',
+      'Sprinter',
+      'Cannon Arm',
+      'Fastball Hitter',
+      'Bad Ball Hitter',
+    ]);
+    const pitcherFlagTraits = new Set([
+      'K Collector',
+      'Gets Ahead',
+      'Elite 2F',
+      'Elite 4F',
+      'Elite CF',
+      'Rally Stopper',
+      'Elite FK',
+      'Specialist',
+      'Elite CB',
+    ]);
+
+    for (const [pool, flagTraits] of [
+      [PROSPECT_HITTER_TRAIT_POOL, hitterFlagTraits],
+      [PROSPECT_PITCHER_TRAIT_POOL, pitcherFlagTraits],
+    ] as const) {
+      expect(new Set(pool).size).toBe(pool.length);
+      for (const trait of pool) {
+        const normalized = normalizeTrait(trait);
+        const pricing = pricingByName.get(normalized);
+        const polarity = countTraitPolarity([normalized]);
+
+        expect(pricing?.polarity).toBe('positive');
+        expect(polarity).toEqual({
+          positiveTraits: 1,
+          negativeTraits: 0,
+          unknownTraits: [],
+        });
+        expect(flagTraits.has(normalized) || pricing?.name === normalized).toBe(true);
+      }
+    }
+  });
+
+  test('generated prospect traits follow 30/50/20 count split with no duplicate or conflict pairs', () => {
+    const output = generateProspectScoutingDraft({
+      ...BASE_INPUT,
+      rounds: 120,
+      candidatePoolMultiplier: 5,
+      seed: 'section-3-4-trait-count-distribution-seed',
+    });
+    const counts = [0, 0, 0];
+
+    for (const candidate of output.draftClass) {
+      const traits = [candidate.trait1, candidate.trait2].filter((trait): trait is string => Boolean(trait));
+      counts[traits.length] += 1;
+
+      expect(new Set(traits).size).toBe(traits.length);
+      if (traits.length === 2) {
+        expect(prospectTraitsConflict(traits[0], traits[1])).toBe(false);
+      }
+    }
+
+    const total = output.draftClass.length;
+    expect(counts[0] / total).toBeGreaterThan(0.25);
+    expect(counts[0] / total).toBeLessThan(0.35);
+    expect(counts[1] / total).toBeGreaterThan(0.45);
+    expect(counts[1] / total).toBeLessThan(0.55);
+    expect(counts[2] / total).toBeGreaterThan(0.15);
+    expect(counts[2] / total).toBeLessThan(0.25);
+  });
+
+  test('generated pitchers get pitcher-pool traits and fielders get hitter-pool traits', () => {
+    const output = generateProspectScoutingDraft({
+      ...BASE_INPUT,
+      rounds: 80,
+      candidatePoolMultiplier: 5,
+      seed: 'section-5-5-position-appropriate-traits-seed',
+    });
+    const hitterPool = new Set(PROSPECT_HITTER_TRAIT_POOL);
+    const pitcherPool = new Set(PROSPECT_PITCHER_TRAIT_POOL);
+    const pitchers = output.draftClass.filter((candidate) => PITCHER_POSITIONS.has(candidate.position));
+    const fielders = output.draftClass.filter((candidate) => !PITCHER_POSITIONS.has(candidate.position));
+
+    expect(pitchers.length).toBeGreaterThan(0);
+    expect(fielders.length).toBeGreaterThan(0);
+    for (const candidate of pitchers) {
+      const traits = [candidate.trait1, candidate.trait2].filter((trait): trait is string => Boolean(trait));
+      expect(traits.every((trait) => pitcherPool.has(trait))).toBe(true);
+      expect(traits.every((trait) => !hitterPool.has(trait))).toBe(true);
+    }
+    for (const candidate of fielders) {
+      const traits = [candidate.trait1, candidate.trait2].filter((trait): trait is string => Boolean(trait));
+      expect(traits.every((trait) => hitterPool.has(trait))).toBe(true);
+      expect(traits.every((trait) => !pitcherPool.has(trait))).toBe(true);
+    }
   });
 
   test('generated bats and throws follow §7 conditional handedness split', () => {

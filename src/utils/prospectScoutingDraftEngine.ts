@@ -262,8 +262,62 @@ const POSITION_POOL: DraftPosition[] = [
 ];
 const CHEMISTRY_POOL = ['Competitive', 'Crafty', 'Disciplined', 'Spirited', 'Scholarly'];
 const PERSONALITY_POOL = ['Competitive', 'Relaxed', 'Droopy', 'Jolly', 'Tough', 'Timid', 'Egotistical'];
-const BATTER_TRAITS = ['Clutch', 'Tough Out', 'Rally Starter', 'Sprinter', 'Magic Hands', 'Utility'];
-const PITCHER_TRAITS = ['K Collector', 'Workhorse', 'Elite 4F', 'Elite SL', 'Specialist', 'Rally Stopper'];
+export const PROSPECT_HITTER_TRAIT_POOL = [
+  'Ace Exterminator',
+  'Bad Ball Hitter',
+  'Base Rounder',
+  'Big Hack',
+  'Bunter',
+  'Cannon Arm',
+  'CON vs LHP',
+  'CON vs RHP',
+  'Distractor',
+  'Dive Wizard',
+  'Fastball Hitter',
+  'First Pitch Slayer',
+  'High Pitch',
+  'Inside Pitch',
+  'Little Hack',
+  'Low Pitch',
+  'Magic Hands',
+  'Mind Gamer',
+  'Off-Speed Hitter',
+  'Outside Pitch',
+  'Pinch Perfect',
+  'POW vs LHP',
+  'POW vs RHP',
+  'Rally Starter',
+  'RBI Hero',
+  'Sprinter',
+  'Stealer',
+  'Tough Out',
+  'Utility',
+] as const;
+export const PROSPECT_PITCHER_TRAIT_POOL = [
+  'Composed',
+  'Elite 2F',
+  'Elite 4F',
+  'Elite CB',
+  'Elite CF',
+  'Elite CH',
+  'Elite FK',
+  'Elite SB',
+  'Elite SL',
+  'Gets Ahead',
+  'K Collector',
+  'Metal Head',
+  'Pick Officer',
+  'Rally Stopper',
+  'Reverse Splits',
+  'Specialist',
+  'Workhorse',
+] as const;
+export const PROSPECT_TRAIT_CONFLICT_PAIRS = [
+  ['Big Hack', 'Little Hack'],
+  ['High Pitch', 'Low Pitch'],
+  ['Inside Pitch', 'Outside Pitch'],
+  ['Specialist', 'Reverse Splits'],
+] as const;
 type ProspectBatHand = LeagueBuilderProspectPlayerDto['bats'];
 type ProspectThrowHand = LeagueBuilderProspectPlayerDto['throws'];
 const PROSPECT_BATS_WEIGHTS: Array<[ProspectBatHand, number]> = [
@@ -321,6 +375,30 @@ function normal(seed: string): number {
 
 function pick<T>(seed: string, values: readonly T[]): T {
   return values[Math.floor(randomUnit(seed) * values.length)] ?? values[0];
+}
+
+export function prospectTraitsConflict(left: string, right: string): boolean {
+  return PROSPECT_TRAIT_CONFLICT_PAIRS.some(([first, second]) =>
+    (left === first && right === second) || (left === second && right === first),
+  );
+}
+
+function drawProspectTraitCount(seed: string): 0 | 1 | 2 {
+  const traitRoll = randomUnit(`${seed}:trait-count`);
+  if (traitRoll < 0.3) return 0;
+  if (traitRoll < 0.8) return 1;
+  return 2;
+}
+
+function pickSecondProspectTrait(
+  seed: string,
+  traitPool: readonly string[],
+  firstTrait: string,
+): string | undefined {
+  const eligible = traitPool.filter((trait) =>
+    trait !== firstTrait && !prospectTraitsConflict(firstTrait, trait),
+  );
+  return eligible.length > 0 ? pick(`${seed}:trait2`, eligible) : undefined;
 }
 
 function pickWeighted<T extends string>(seed: string, weights: Array<[T, number]>): T {
@@ -553,11 +631,12 @@ function buildCandidate(input: ProspectScoutingDraftInput, index: number): Gener
   const secondaryPosition = chooseSecondary(position, seed);
   const trueGrade = pickWeighted(`${seed}:grade`, STANDARD_GRADE_WEIGHTS);
   const ratings = buildRatings(seed, trueGrade, position);
-  const traitPool = isPitcher(position) ? PITCHER_TRAITS : BATTER_TRAITS;
-  const traitRoll = randomUnit(`${seed}:trait-count`);
-  const traitCount = traitRoll < 0.3 ? 0 : traitRoll < 0.8 ? 1 : 2;
+  const traitPool = isPitcher(position) ? PROSPECT_PITCHER_TRAIT_POOL : PROSPECT_HITTER_TRAIT_POOL;
+  const traitCount = drawProspectTraitCount(seed);
   const trait1 = traitCount >= 1 ? pick(`${seed}:trait1`, traitPool) : undefined;
-  const trait2Raw = traitCount >= 2 ? pick(`${seed}:trait2`, traitPool) : undefined;
+  const trait2 = traitCount >= 2 && trait1
+    ? pickSecondProspectTrait(seed, traitPool, trait1)
+    : undefined;
   return {
     candidateId: `candidate-${input.leagueId}-${input.seasonNumber}-${index + 1}`,
     firstName: pick(`${seed}:first`, SMB4_FIRST_NAMES),
@@ -569,7 +648,7 @@ function buildCandidate(input: ProspectScoutingDraftInput, index: number): Gener
     ratings,
     arsenal: buildArsenal(seed, position, ratings.junk),
     trait1,
-    trait2: trait2Raw === trait1 ? undefined : trait2Raw,
+    trait2,
     personality: pick(`${seed}:personality`, PERSONALITY_POOL),
     chemistry: pick(`${seed}:chemistry`, CHEMISTRY_POOL),
     hiddenPersonalityModifiers: generateHiddenPersonalityModifiers(seed),
