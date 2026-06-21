@@ -2303,3 +2303,14 @@ NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its 
   comparison above, not the test. POSITION_POOL's skew is orthogonal (its own flagged ticket; pricing is correct regardless of position mix).
   **➡ NEXT = AUC-5.1b** (scout §3.2 value-range: pure `[trueIV(1±w)]`, w=0.6·(1−scoutAccuracy), midpoint seeded-jitter — consumes the existing
   `scoutAccuracy` 45–92 → /100; fork-free, build-DARK).
+
+**WAVE 34 — AUC-5.1b (scout-obscured value range §3.2) CONTRACTED + DISPATCHED.**
+- Grounded: `scoutAccuracy()` (prospectScoutingDraftEngine.ts:863) returns a **0–100 scale** (clamp [45,92]) → normalize /100; `rosterEngineConstants.ts`
+  IS the §12 registry (header cites IV_ENGINE §12) → `SCOUT_NOISE_BASE=0.6` home (additive, display-only, oracle-neutral); NO existing value-range
+  (confirmed) → net-new pure math.
+- **5.1b scope:** ADD `SCOUT_NOISE_BASE=0.6` (§12) + NEW pure `src/engines/scoutValueRange.ts` `perceivedValueRange(trueIV, scoutAccuracy0-100, seed)`
+  → `{w, low=trueIV(1−w), high=trueIV(1+w), displayedEstimate}`, `w=0.6·(1−acc/100)`, seeded jitter for the displayed point ≠ truth. PURE / build-DARK.
+  **DESIGN CALL (flagged):** the §3.2 "midpoint seeded-jittered" line is slightly ambiguous (the range formula is exact ⇒ its center IS truth) — read as
+  "the displayed POINT-estimate is the jittered ≠-truth value, the bounds stay literal `trueIV(1±w)`"; jitter shape is a sim-tune dial.
+- **Contract committed `ba732f05`.** Dispatched to Codex (gpt-5.5, xhigh) bg task `bqgc3i1e9` → `/tmp/codex-auc51b.out`. On landing: read-the-diff audit +
+  full Mode-1 suite + **`git diff` the IV oracle (must be byte-unchanged — safety wall a)** + commit. **➡ after 5.1b = AUC-5.1c** (walled-off farm wallet §3.4).
