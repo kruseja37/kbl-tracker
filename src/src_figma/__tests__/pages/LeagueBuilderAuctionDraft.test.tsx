@@ -81,16 +81,26 @@ function makeTeam(id: string): Team {
   };
 }
 
-function makePlayer(id: string): Player {
-  return {
+function makePlayer(
+  id: string,
+  primaryPosition: Player["primaryPosition"] = "CF",
+  secondaryPosition?: Player["secondaryPosition"],
+): Player {
+  const nameById: Record<string, { firstName: string; lastName: string }> = {
+    "player-a": { firstName: "Avery", lastName: "Anchor" },
+    "player-b": { firstName: "Blake", lastName: "Bolt" },
+  };
+  const name = nameById[id] ?? { firstName: "Free", lastName: "Agent" };
+
+  const player: Player = {
     id,
-    firstName: id,
-    lastName: "Player",
+    firstName: name.firstName,
+    lastName: name.lastName,
     gender: "M",
     age: 25,
     bats: "R",
     throws: "R",
-    primaryPosition: "CF",
+    primaryPosition,
     power: 70,
     contact: 70,
     speed: 70,
@@ -112,6 +122,8 @@ function makePlayer(id: string): Player {
     lastModified: "2026-01-01",
     isCustom: true,
   };
+  if (secondaryPosition) player.secondaryPosition = secondaryPosition;
+  return player;
 }
 
 function emptyRoster(teamId: string): TeamRoster {
@@ -164,7 +176,7 @@ function mockLeagueData() {
   const leagueData = {
     leagues: [makeLeague()],
     teams: [makeTeam("team-a"), makeTeam("team-b")],
-    players: [makePlayer("player-a"), makePlayer("player-b")],
+    players: [makePlayer("player-a", "CF", "LF"), makePlayer("player-b", "SP")],
     rulesPresets: [],
     isLoading: false,
     error: null,
@@ -190,7 +202,7 @@ describe("LeagueBuilderAuctionDraft", () => {
     await deleteDatabase(DB_NAME).catch(() => undefined);
   });
 
-  test("renders setup and begins into the NOMINATION placeholder", async () => {
+  test("renders setup and begins into the filterable nomination pool", async () => {
     render(<LeagueBuilderAuctionDraft />);
 
     expect(screen.getByText("MLB AUCTION DRAFT")).toBeInTheDocument();
@@ -203,5 +215,61 @@ describe("LeagueBuilderAuctionDraft", () => {
       expect(screen.getByText("STATE: NOMINATION")).toBeInTheDocument();
     });
     expect(screen.getAllByText(/NOMINATOR/i).length).toBeGreaterThan(0);
+
+    const positionFilter = screen.getByLabelText("Position filter");
+    expect(positionFilter).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /IV SORT: DESC/i })).toBeInTheDocument();
+    expect(screen.getByText("Avery Anchor")).toBeInTheDocument();
+
+    fireEvent.change(positionFilter, { target: { value: "SP" } });
+    expect(screen.getByText("Blake Bolt")).toBeInTheDocument();
+    expect(screen.queryByText("Avery Anchor")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /IV SORT: DESC/i }));
+    expect(screen.getByRole("button", { name: /IV SORT: ASC/i })).toBeInTheDocument();
+  });
+
+  test("renders open bidding with names and records a SOLD result row with winner salary", async () => {
+    render(<LeagueBuilderAuctionDraft />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /BEGIN AUCTION DRAFT/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("STATE: NOMINATION")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Avery Anchor/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("STATE: OPEN_BIDDING")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Avery Anchor")).toBeInTheDocument();
+    expect(screen.getByText("No bid yet")).toBeInTheDocument();
+    expect(screen.getByText("YOUR REMAINING BUDGET")).toBeInTheDocument();
+    expect(screen.getByText("YOUR MAX BID")).toBeInTheDocument();
+    expect(screen.getByText("ROSTER SLOTS REMAINING")).toBeInTheDocument();
+    expect(screen.getByText("CURRENT ROSTER POSITION TALLY")).toBeInTheDocument();
+    expect(screen.getByText(/Still in: Page (Caps|Keys), Page (Caps|Keys)/)).toBeInTheDocument();
+    expect(screen.queryByText("player-a")).not.toBeInTheDocument();
+    expect(screen.queryByText("team-a")).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Custom bid amount")).toHaveValue(70000);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /RAISE CUSTOM/i }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Custom bid amount")).toHaveValue(75000);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "PASS" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("STATE: SOLD")).toBeInTheDocument();
+    });
+
+    expect(screen.getAllByText(/Avery Anchor SOLD to Page (Caps|Keys) for \$70,000/).length).toBeGreaterThan(0);
   });
 });
