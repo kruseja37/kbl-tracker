@@ -2133,3 +2133,21 @@ NO store/DB bump. Gate (adaptive — pure/build-dark): build 0 (tsc+vite) + its 
 - **BROWSER-VERIFY OUTSTANDING (batched, persistence-PRIORITIZED):** confirm a real kbl-league-builder DB migrates v7→v8 with no
   data loss + an auction session saves/resumes losslessly. **➡ NEXT = AUC-4.1 (hot-seat UI — the §2.3/§2.5 MLB-auction screens) —
   grounding the existing src_figma page/route patterns before contracting (largest greenfield lift; user-facing → JK browser sign-off batched).**
+
+**WAVE 26 — AUC-4.1 GROUNDED + SPLIT + 4.1a DISPATCHED.**
+- **Grounding (Explore agent + my source verification):** the launch analog = `LeagueBuilderSnakeDraft.tsx` (page/launch/styling/persist
+  pattern); the IV pool comes from `useLeagueBuilderData().registerLeaguePool(leagueId)`/`getRegisteredPool` (`RegisteredPool.players[].iv`);
+  `initAuctionSession({teams, players, config})` seeds the nomination order from `config.nominationOrderSeed` (verified at
+  auctionStateMachine.ts:105-170). **Two agent claims I CORRECTED before contracting:** (1) lone-survivor is NOT a fork — §6 Q2 RULES
+  it tap-to-claim (one tap, not auto-award); (2) styling — per MEMORY the `@theme` tokens are inert under the v3 runtime, so the contract
+  pins "mirror the snake page's inline-hex/`bg-[var(--…)]` classes," sidestepping it.
+- **SPLIT (large user-facing greenfield → 2 builds):** **AUC-4.1a** = page shell + route + the `useAuctionDraft` hook (engine wiring,
+  CPU auto-advance, autosave, launch-from-league) + placeholder state-switch + handoff banner + lot log → makes a full MLB auction
+  PLAYABLE-ROUGH end-to-end + hook-tested (the high-value/high-risk LOGIC, headlessly verifiable). **AUC-4.1b** = the rich §2.3 7-element
+  OPEN_BIDDING turn view + §2.5 nomination pool filter/sort + SOLD/PASSED notices + handoff-modal polish (the JK-browser-verify visual target).
+- **DEFAULTS taken for 4.1a (AUTH-4, spec-silent — logged in the contract for JK):** D1 CPU auto-turns resolve instantly in hook logic
+  (the ~500ms visual beat = 4.1b); D2 handoff = persistent banner (no blocking modal) in 4.1a; D3 autosave after EVERY committed transition;
+  D4 CPU shills pass-through/engine-seeded (no new generation logic).
+- **Contract committed** (PROMPT_CONTRACTS.md `CONTRACT: AUC-4.1a`). **Dispatched to Codex** (gpt-5.5, xhigh) background task `b6b9ql8j9`
+  → `/tmp/codex-auc41a.out`. On landing: audit (builder≠auditor) + full Mode-1 suite + commit. **➡ after 4.1a = AUC-4.1b (visual screens).**
+  **⚠ Note:** 4.1a is UI build-DARK behind a new route; the whole auction surface needs JK browser sign-off (batched) once 4.1b lands.
