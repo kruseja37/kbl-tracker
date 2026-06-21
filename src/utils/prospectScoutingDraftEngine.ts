@@ -286,7 +286,7 @@ const POSITION_POOL: DraftPosition[] = [
   'RF',
 ];
 const CHEMISTRY_POOL = ['Competitive', 'Crafty', 'Disciplined', 'Spirited', 'Scholarly'];
-const PERSONALITY_POOL = ['Competitive', 'Relaxed', 'Droopy', 'Jolly', 'Tough', 'Timid', 'Egotistical'];
+export const PERSONALITY_POOL = ['Competitive', 'Relaxed', 'Droopy', 'Jolly', 'Tough', 'Timid', 'Egotistical'];
 const PROSPECT_MIN_RATING = 20;
 const PROSPECT_MAX_RATING = 99;
 const PROSPECT_BASE_RATING_CENTER = 60;
@@ -432,7 +432,7 @@ function hashString(input: string): number {
   return hash >>> 0;
 }
 
-function randomUnit(seed: string): number {
+export function randomUnit(seed: string): number {
   return hashString(seed) / 0xffffffff;
 }
 
@@ -442,7 +442,7 @@ function normal(seed: string): number {
   return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
 }
 
-function pick<T>(seed: string, values: readonly T[]): T {
+export function pick<T>(seed: string, values: readonly T[]): T {
   return values[Math.floor(randomUnit(seed) * values.length)] ?? values[0];
 }
 

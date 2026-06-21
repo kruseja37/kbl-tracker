@@ -28,6 +28,7 @@ import {
   getAuctionSession,
   saveAuctionSession,
 } from "../../../utils/leagueBuilderStorage";
+import { regenerateAndPersistLeaguePoolAxes } from "../../../utils/leaguePoolAxisRegenPersist";
 import {
   useLeagueBuilderData,
   type Player,
@@ -342,6 +343,7 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
       .filter((team): team is Team => Boolean(team));
     if (nextLeagueTeams.length === 0) throw new Error("Selected league has no teams.");
 
+    await regenerateAndPersistLeaguePoolAxes(leagueId);
     const existingPool = await leagueData.getRegisteredPool(leagueId);
     const pool = existingPool ?? await leagueData.registerLeaguePool(leagueId);
     if (pool.players.length === 0) throw new Error("RegisteredPool has no players for this league.");
