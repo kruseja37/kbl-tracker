@@ -7,6 +7,16 @@
 
 ## June 2026
 
+### 2026-06-22 (attended): Trait RESOLUTION / selection layer — value-weighted, probabilistic, incumbency — RULED
+
+**Context:** JK flagged that the threshold model only answers "does each trait qualify" — missing the SELECTION layer (which traits land when several qualify + the 2-cap; how incumbents defend slots). Dig `wlfqzli7h` confirmed the layer is BUILT (`reconcileGainProposals`, `traitAcquisition.ts:375-437`) + was SPECCED (Fable-era `FRANCHISE_V1_LIVING_SEASON_SPEC §9` → `TRAIT_SIGNAL_CERTIFICATION §VI.0` → `TRAIT_MEASUREMENT_SPEC §0.1`), but is **purely performance-P with NO value term and NO incumbency**, plus a real cap-collision bug. → design folded into `TRAIT_GAIN_LOSS_THRESHOLD_SPEC.md §8B`.
+
+**RULINGS:**
+- **Probabilistic gain/loss (not deterministic):** clearing a threshold = ELIGIBLE; firing is a **seeded** probability scaling with the margin past the bar (+ tier). Borderline qualifiers may wait a checkpoint; standouts almost always fire. (Today the code is a deterministic `P≥0.75` switch — adds the roll; stays seed-reproducible.)
+- **Value + incumbency scoring:** `gainScore = P × traitWeight`; `keepScore = P × traitWeight × β`, **β = 1.25 (moderate incumbency)**. ⇒ value defends the slot (keep Rare > gain Common) AND tenure defends it (deserves-to-keep > qualifies-to-gain).
+- **Resolution:** rank firing gains by gainScore, admit best-first into open slots; at cap duel gainScore vs weakest keepScore (recompute weakest after each displacement → FIXES the double-displacement bug). `maxTraits=2` becomes a tunable constant. Opposite-pair + role + no-2-negatives caps honored.
+- **Build:** additive to the built+tested P pipeline (~4 line edits + 1 ranking block + the seeded roll + 2 tuning constants + the `traitWeight` fn from the threshold spec); also closes the displacement-currency seam (`PROMPT_CONTRACTS.md:10246`).
+
 ### 2026-06-22 (attended): Trait gain/loss threshold system — value/scarcity sliding scale — RULED
 
 **Context:** JK's design question — what thresholds gate trait gain/loss over a season; group/scale them by trait value/scarcity; leverage the XBL workbook. Research run `wt1ks3cku`. Full design → `spec-docs/TRAIT_GAIN_LOSS_THRESHOLD_SPEC.md`.

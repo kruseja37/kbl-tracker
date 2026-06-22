@@ -87,5 +87,28 @@ Tier assignment is derived at load (compute `traitWeight`, bucket by `weightMin`
 - **(default) recompute the scale per-league** (the $ ranking is XBL-L2-derived; don't freeze cross-league).
 - All threshold/genWeight numbers are Sim-Gate PLACEHOLDERS (shapes locked, values tunable at RB-16-style sweep).
 
+## 8B. Resolution / selection layer — when multiple qualify (RULED 2026-06-22)
+The threshold (§4) answers "does each trait individually qualify." This layer answers "given several qualifiers + the 2-slot cap, which land + how incumbents defend their slots." It **EXTENDS the already-built `reconcileGainProposals`** (`traitAcquisition.ts:375-437`) — which today handles the 2-cap, displacement, hysteresis, opposite-pairs, and re-evaluate-to-drop, but is **purely performance-P with NO value term and NO incumbency** — by threading the §2 value tiers + an incumbency bonus.
+
+**Likelihood — RULED: probabilistic, not deterministic.** Clearing a threshold makes a trait *eligible*; whether it actually fires is a **seeded** probability that scales with the **margin past the threshold** (and tier — higher tiers slightly harder), so a borderline qualifier may wait a checkpoint while a standout almost always fires. Loss is symmetric (probability scales with how far below the loss bar). Seeded-deterministic (same seed → same outcome; reproducible for L-SIM/tests). Exact curve = sim-tune placeholder; shape = monotonic in margin. (Today the code is a deterministic `P ≥ 0.75` switch — this adds the roll.)
+
+**Scoring — value + incumbency:**
+- `gainScore(new)  = P × traitWeight`
+- `keepScore(held) = P_held × traitWeight × β`  — **β = 1.25 (RULED, moderate incumbency)**
+where `traitWeight` = the §2 value/scarcity weight (Common→Elite).
+
+**Algorithm (additive to the built reconciler):**
+1. Compute P per candidate (built); eligible gains (P≥gain) + losses (P≤lose) with hysteresis (built).
+2. Roll the seeded likelihood per eligible gain/loss → the **firing set** (NEW).
+3. Losses fire first → free cap slots (built; same-pass via `heldAfterLosses`).
+4. **Rank firing gains by `gainScore` desc** (NEW — replaces arrival-order admission).
+5. Admit best-first into open slots; `maxTraits = 2` becomes a **tunable constant** (today a hard literal `>= 2`).
+6. At cap: duel `gainScore(new) > keepScore(weakestHeld)` → admit-with-displacement, else block `cap_no_displacement`; **recompute weakest after each displacement** (FIXES the double-displacement collision bug where two gains both target the same held slot).
+7. Honor opposite-pair + role-eligibility + LeagueSettings caps (no 2 negatives, no bench negatives) (built).
+
+**Satisfies JK's requirements:** value-weighted selection among multiple qualifiers (R2/R4a); "deserves to keep a Rare over gaining a Common" (via `traitWeight`); **"deserves to keep more than qualifies to gain"** (via β incumbency, R4b); probabilistic likelihood of gain AND loss (R1); fixes the cap-collision bug.
+
+**Build cost:** additive to the tested P pipeline — ~4 line edits at the comparison points (`:407` compare score, `:415` `maxTraits`, `:428` score duel, `:439-447` `keepScore` comparator) + 1 ranking block (replaces `:418-434`, also fixes the bug) + the seeded likelihood roll + 2 new `TRAIT_ACQUISITION_TUNING` constants (`maxTraits=2`, `incumbencyBeta=1.25`) + the `traitWeight(trait)` fn (from §2/§6). Also closes the displacement-currency seam (`PROMPT_CONTRACTS.md:10246` — put both sides on recomputed `P × weight`). Write-back (`franchiseTraitGrantCompute.ts`) unchanged. **Prior spec lineage:** `FRANCHISE_V1_LIVING_SEASON_SPEC §9` (original cap+displacement+hysteresis), `TRAIT_SIGNAL_CERTIFICATION §VI.0`, `TRAIT_MEASUREMENT_SPEC §0.1` (P-currency) — this layer adds the value + incumbency the prior model lacked.
+
 ## 9. Provenance
 Workbook scarcity (`TEAM MAX USES`) + value (IV $ ranking) extracted read-only from `reference-docs/IV_ENGINE_SOURCE_OF_TRUTH__XBL_Test_Texas_Rangers.xlsx`. Engine seams cited from kbl-mode1. Design research run `wt1ks3cku`; rulings JK-attended 2026-06-22.
