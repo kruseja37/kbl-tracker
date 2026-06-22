@@ -262,7 +262,9 @@ export function surfaceNextPlayer(session: AuctionSession): AuctionTransitionRes
   }
 
   const player = session.players[playerId];
-  const openingAsk = reservePriceCurve(player.ivPercentile) * player.iv;
+  const openingAsk = session.config.flatReserveFloor != null
+    ? session.config.flatReserveFloor
+    : reservePriceCurve(player.ivPercentile) * player.iv;
   const stillIn = session.teams
     .filter((team) => team.rosterSlotsRemaining > 0)
     .map((team) => team.teamId);
@@ -445,7 +447,7 @@ export function resolveLot(session: AuctionSession): AuctionTransitionResult {
     });
   }
 
-  return accepted(finalizePassedLotPermanent(session));
+  return accepted(resolveNoBidLot(session));
 }
 
 export function claimLoneSurvivor(session: AuctionSession): AuctionTransitionResult {
@@ -473,7 +475,7 @@ export function passLoneSurvivorOut(session: AuctionSession): AuctionTransitionR
   if (session.state !== 'RESOLVE') return rejected(session, 'expected-resolve');
   if (session.pendingClaim === null) return rejected(session, 'no-pending-claim');
 
-  return accepted(finalizePassedLotPermanent(session));
+  return accepted(resolveNoBidLot(session));
 }
 
 export function rotateNomination(session: AuctionSession): AuctionTransitionResult {
@@ -609,6 +611,53 @@ function finalizePassedLotPermanent(session: AuctionSession): AuctionSession {
       },
     ],
   };
+}
+
+function resolveNoBidLot(session: AuctionSession): AuctionSession {
+  const lot = requireLot(session);
+  const totalOpenSlots = session.teams.reduce(
+    (sum, team) => sum + Math.max(0, team.rosterSlotsRemaining),
+    0,
+  );
+  const remainingPool = session.availablePlayerIds.length;
+
+  // One-chance no-bid invariant: when upstream supplies players >= open slots,
+  // keep available + current lot >= open slots by forcing a cheap filler before
+  // a PASSED result could strand a roster slot.
+  if (remainingPool >= totalOpenSlots) return finalizePassedLotPermanent(session);
+
+  const forcedTeam = selectForcedFillerTeam(session, lot.openingAsk);
+  if (forcedTeam === null) return finalizePassedLotPermanent(session);
+
+  return finalizeSoldLot(session, forcedTeam.teamId, lot.openingAsk);
+}
+
+function selectForcedFillerTeam(session: AuctionSession, openingAsk: number): AuctionTeamState | null {
+  const nominationOrderIndex = new Map<string, number>();
+  session.nominationOrder.forEach((teamId, index) => {
+    nominationOrderIndex.set(teamId, index);
+  });
+
+  const eligible = session.teams.filter((team) => {
+    if (team.rosterSlotsRemaining <= 0) return false;
+    return auctionMaxBid(
+      team.budgetRemaining,
+      team.rosterSlotsRemaining,
+      team.minSalary,
+      team.projectedTax,
+    ) >= openingAsk;
+  });
+
+  return eligible.sort((left, right) => {
+    const slotDiff = right.rosterSlotsRemaining - left.rosterSlotsRemaining;
+    if (slotDiff !== 0) return slotDiff;
+
+    const leftOrder = nominationOrderIndex.get(left.teamId) ?? Number.POSITIVE_INFINITY;
+    const rightOrder = nominationOrderIndex.get(right.teamId) ?? Number.POSITIVE_INFINITY;
+    if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+
+    return left.teamId.localeCompare(right.teamId);
+  })[0] ?? null;
 }
 
 function finalizePassedLot(session: AuctionSession): AuctionSession {

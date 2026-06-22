@@ -18,6 +18,7 @@ export interface AuctionSetupConfig {
   turnTimerSeconds: number | null;
   nominationOrderSeed: string;
   nominationWeightExponent?: number;
+  flatReserveFloor?: number;
   cpuShillCount: number;
   excludeFromLeague?: boolean;
 }

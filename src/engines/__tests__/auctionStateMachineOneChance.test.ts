@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { reservePriceCurve } from '../../data/rosterEngineConstants';
+import { LEAGUE_MINIMUM_SALARY, reservePriceCurve } from '../../data/rosterEngineConstants';
 import {
   advanceLot,
   initAuctionSession,
@@ -34,6 +34,7 @@ const PLAYERS = [
 
 function makeSession(overrides: {
   seed?: string;
+  flatReserveFloor?: number;
   nominationWeightExponent?: number;
   teams?: readonly AuctionTeamInput[];
   players?: readonly AuctionPlayer[];
@@ -44,6 +45,7 @@ function makeSession(overrides: {
       ...BASE_CONFIG,
       nominationOrderSeed: overrides.seed ?? BASE_CONFIG.nominationOrderSeed,
       nominationWeightExponent: overrides.nominationWeightExponent,
+      flatReserveFloor: overrides.flatReserveFloor,
     },
     teams: overrides.teams ?? [
       { teamId: 'A', budgetRemaining: 10_000, rosterSlotsRemaining: 3, minSalary: 0 },
@@ -70,6 +72,40 @@ function permanentNoBidPass(session: AuctionSession): AuctionSession {
   if (bidder === null || bidder === undefined) throw new Error('Expected a bidder to pass');
   let next = ok(passBid(session, bidder));
   next = ok(resolveLot(next));
+  return next;
+}
+
+function passAllNoBidActors(session: AuctionSession): AuctionSession {
+  let next = session;
+
+  while (next.state === 'OPEN_BIDDING') {
+    const bidder = next.currentLot?.bidTurnTeamId;
+    if (bidder === null || bidder === undefined) throw new Error('Expected a bidder to pass');
+    next = ok(passBid(next, bidder));
+  }
+
+  if (next.state === 'RESOLVE') {
+    next = ok(resolveLot(next));
+  }
+  if (next.state === 'RESOLVE' && next.pendingClaim !== null) {
+    next = ok(passLoneSurvivorOut(next));
+  }
+
+  return next;
+}
+
+function drainAllPassAuction(session: AuctionSession): AuctionSession {
+  let next = session;
+
+  while (next.state !== 'AUCTION_COMPLETE') {
+    next = ok(surfaceNextPlayer(next));
+    if (next.state === 'AUCTION_COMPLETE') break;
+    next = passAllNoBidActors(next);
+    if (next.state !== 'AUCTION_COMPLETE') {
+      next = ok(advanceLot(next));
+    }
+  }
+
   return next;
 }
 
@@ -144,7 +180,7 @@ describe('auctionStateMachine one-chance engine path', () => {
 
   test('a no-bid player is permanently out and never re-surfaces', () => {
     let session = makeSession({
-      teams: [{ teamId: 'A', budgetRemaining: 10_000, rosterSlotsRemaining: 10, minSalary: 0 }],
+      teams: [{ teamId: 'A', budgetRemaining: 10_000, rosterSlotsRemaining: 1, minSalary: 0 }],
       nominationOrder: ['A'],
     });
 
@@ -223,8 +259,8 @@ describe('auctionStateMachine one-chance engine path', () => {
   test('passLoneSurvivorOut permanently passes a pending one-chance claim', () => {
     let session = makeSession({
       teams: [
-        { teamId: 'A', budgetRemaining: 10_000, rosterSlotsRemaining: 3, minSalary: 0 },
-        { teamId: 'B', budgetRemaining: 10_000, rosterSlotsRemaining: 3, minSalary: 0 },
+        { teamId: 'A', budgetRemaining: 10_000, rosterSlotsRemaining: 1, minSalary: 0 },
+        { teamId: 'B', budgetRemaining: 10_000, rosterSlotsRemaining: 1, minSalary: 0 },
       ],
       nominationOrder: ['A', 'B'],
     });
@@ -243,5 +279,129 @@ describe('auctionStateMachine one-chance engine path', () => {
     expect(session.state).toBe('PASSED');
     expect(session.passedTracker[playerId]).toBeUndefined();
     expect(session.availablePlayerIds).not.toContain(playerId);
+  });
+
+  test('flatReserveFloor opens every surfaced farm player at the same floor', () => {
+    const players = [
+      { playerId: 'low-prospect', iv: 250, ivPercentile: 3 },
+      { playerId: 'elite-prospect', iv: 4_000, ivPercentile: 99 },
+    ];
+    let session = makeSession({
+      flatReserveFloor: LEAGUE_MINIMUM_SALARY,
+      teams: [{ teamId: 'A', budgetRemaining: 20_000, rosterSlotsRemaining: 2 }],
+      players,
+      nominationOrder: ['A'],
+    });
+    const openingAsks: number[] = [];
+
+    for (let i = 0; i < players.length; i += 1) {
+      session = ok(surfaceNextPlayer(session));
+      if (session.currentLot === null) throw new Error('Expected a surfaced farm player');
+      openingAsks.push(session.currentLot.openingAsk);
+      session = passAllNoBidActors(session);
+      if (session.state !== 'AUCTION_COMPLETE') {
+        session = ok(advanceLot(session));
+      }
+    }
+
+    expect(openingAsks).toEqual([LEAGUE_MINIMUM_SALARY, LEAGUE_MINIMUM_SALARY]);
+
+    const curveSession = makeSession({ players, nominationOrder: ['A'] });
+    const selectedPlayerId = selectNextNominee(curveSession);
+    if (selectedPlayerId === null) throw new Error('Expected a curve-priced nominee');
+    const opened = ok(surfaceNextPlayer(curveSession));
+    const selectedPlayer = curveSession.players[selectedPlayerId];
+
+    expect(opened.currentLot?.openingAsk).toBe(
+      reservePriceCurve(selectedPlayer.ivPercentile) * selectedPlayer.iv,
+    );
+  });
+
+  test('tight all-pass one-chance auction force-claims every player and fills every roster', () => {
+    const session = drainAllPassAuction(makeSession({
+      flatReserveFloor: LEAGUE_MINIMUM_SALARY,
+      teams: [
+        { teamId: 'A', budgetRemaining: 10_000, rosterSlotsRemaining: 1 },
+        { teamId: 'B', budgetRemaining: 10_000, rosterSlotsRemaining: 1 },
+      ],
+      players: [
+        { playerId: 'filler-1', iv: 1_000, ivPercentile: 10 },
+        { playerId: 'filler-2', iv: 2_000, ivPercentile: 90 },
+      ],
+      nominationOrder: ['A', 'B'],
+    }));
+
+    expect(session.state).toBe('AUCTION_COMPLETE');
+    expect(session.teams.map((team) => team.rosterSlotsRemaining)).toEqual([0, 0]);
+    expect(session.results).toHaveLength(2);
+    expect(session.results.every((result) => result.disposition === 'SOLD')).toBe(true);
+    expect(session.results.filter((result) => result.disposition === 'PASSED')).toHaveLength(0);
+  });
+
+  test('non-tight all-pass lot remains a permanent one-chance pass', () => {
+    let session = makeSession({
+      flatReserveFloor: LEAGUE_MINIMUM_SALARY,
+      teams: [
+        { teamId: 'A', budgetRemaining: 10_000, rosterSlotsRemaining: 1 },
+        { teamId: 'B', budgetRemaining: 10_000, rosterSlotsRemaining: 1 },
+      ],
+      players: [
+        { playerId: 'extra-1', iv: 1_000, ivPercentile: 10 },
+        { playerId: 'extra-2', iv: 2_000, ivPercentile: 50 },
+        { playerId: 'extra-3', iv: 3_000, ivPercentile: 90 },
+      ],
+      nominationOrder: ['A', 'B'],
+    });
+
+    session = ok(surfaceNextPlayer(session));
+    const passedPlayerId = session.currentLot?.playerId;
+    session = passAllNoBidActors(session);
+
+    expect(session.state).toBe('PASSED');
+    expect(session.results).toHaveLength(1);
+    expect(session.results[0]).toMatchObject({
+      playerId: passedPlayerId,
+      disposition: 'PASSED',
+      winnerTeamId: null,
+      salary: null,
+    });
+  });
+
+  test('tight lone-survivor pass force-claims to the neediest eligible team', () => {
+    let session = makeSession({
+      flatReserveFloor: LEAGUE_MINIMUM_SALARY,
+      teams: [
+        { teamId: 'A', budgetRemaining: 20_000, rosterSlotsRemaining: 2 },
+        { teamId: 'B', budgetRemaining: 20_000, rosterSlotsRemaining: 1 },
+      ],
+      players: [
+        { playerId: 'needed-1', iv: 1_000, ivPercentile: 10 },
+        { playerId: 'needed-2', iv: 2_000, ivPercentile: 50 },
+        { playerId: 'needed-3', iv: 3_000, ivPercentile: 90 },
+      ],
+      nominationOrder: ['A', 'B'],
+    });
+
+    session = ok(surfaceNextPlayer(session));
+    const playerId = session.currentLot?.playerId;
+    if (playerId === undefined) throw new Error('Expected a surfaced player');
+    session = ok(passBid(session, 'A'));
+    session = ok(resolveLot(session));
+
+    expect(session.state).toBe('RESOLVE');
+    expect(session.pendingClaim).toMatchObject({ playerId, teamId: 'B' });
+
+    session = ok(passLoneSurvivorOut(session));
+
+    expect(session.state).toBe('SOLD');
+    expect(session.results).toHaveLength(1);
+    expect(session.results[0]).toMatchObject({
+      playerId,
+      disposition: 'SOLD',
+      winnerTeamId: 'A',
+      salary: LEAGUE_MINIMUM_SALARY,
+    });
+    expect(session.teams.find((team) => team.teamId === 'A')?.rosterSlotsRemaining).toBe(1);
+    expect(session.teams.find((team) => team.teamId === 'B')?.rosterSlotsRemaining).toBe(1);
   });
 });
