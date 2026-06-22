@@ -5,6 +5,7 @@ import { ArrowLeft, CheckCircle2, Gavel, RefreshCw, ShieldAlert, UserCheck } fro
 import {
   DraftRosterBoard,
   FARM_BOARD_TARGET,
+  type BoardPriorityGap,
   type DraftBoardEntry,
 } from "../components/DraftRosterBoard";
 import { useFarmAuctionDraft } from "../hooks/useFarmAuctionDraft";
@@ -19,14 +20,30 @@ import { chemistryFitPriceMultiplier } from "../../../engines/chemistryFitValue"
 import { gradeToTwentyEighty, scoutPriceOpinion } from "../../../engines/scoutPriceOpinion";
 import { perceivedValueRange, type ScoutValueRange } from "../../../engines/scoutValueRange";
 import {
+  sortByTiltedPriority,
+  tiltAnalyzerFindings,
+} from "../../../engines/farmArchetypeTilt";
+import {
+  analyzeDraftRoster,
+  type DraftAnalyzerFarmEntry,
+  type DraftAnalyzerMlbEntry,
+} from "../../../utils/rosterAnalyzerDraftAdapter";
+import {
   scoutAccuracy,
   type DraftPosition,
   type LeagueBuilderProspectPlayerDto,
   type ProspectScoutDescriptor,
 } from "../../../utils/prospectScoutingDraftEngine";
-import type { Team } from "../../hooks/useLeagueBuilderData";
+import type { Player, Team } from "../../hooks/useLeagueBuilderData";
 
 const DEFAULT_FARM_AUCTION_SEED = "farm-auction-v1";
+const DRAFT_BOARD_GAP_KINDS = new Set([
+  "position_coverage",
+  "lineup",
+  "rotation",
+  "bullpen",
+  "depth_chart",
+]);
 
 function formatMoney(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "N/A";
@@ -47,6 +64,11 @@ function teamDisplayName(team: Team | null | undefined): string {
 function prospectDisplayName(prospect: LeagueBuilderProspectPlayerDto | null | undefined): string {
   if (!prospect) return "Unknown Prospect";
   return `${prospect.firstName} ${prospect.lastName}`.trim() || "Unknown Prospect";
+}
+
+function playerDisplayName(player: Player | null | undefined): string {
+  if (!player) return "Unknown Player";
+  return `${player.firstName} ${player.lastName}`.trim() || "Unknown Player";
 }
 
 function prospectPositions(prospect: LeagueBuilderProspectPlayerDto | null | undefined): string[] {
@@ -214,6 +236,7 @@ export function LeagueBuilderFarmAuctionDraft() {
   }, [activeLeague, leagueData.teams]);
 
   const teamById = useMemo(() => new Map(leagueData.teams.map((team) => [team.id, team])), [leagueData.teams]);
+  const playerById = useMemo(() => new Map(leagueData.players.map((player) => [player.id, player])), [leagueData.players]);
   const prospectById = useMemo(
     () => new Map((auction.pool?.prospects ?? []).map((prospect) => [prospect.id, prospect])),
     [auction.pool],
@@ -275,6 +298,78 @@ export function LeagueBuilderFarmAuctionDraft() {
     () => rosterBoardEntries.reduce((sum, entry) => sum + entry.salary, 0),
     [rosterBoardEntries],
   );
+  const rosterBoardWalletCap = useMemo(
+    () => rosterBoardTeamState ? rosterBoardTeamState.budgetRemaining + rosterBoardPayroll : null,
+    [rosterBoardPayroll, rosterBoardTeamState],
+  );
+  const rosterBoardReport = useMemo(() => {
+    if (!session || !rosterBoardTeamState) return null;
+
+    const boardTeam = teamById.get(rosterBoardTeamState.teamId);
+    const mlbWonPlayers: DraftAnalyzerMlbEntry[] = (auction.mlbRosterPlayerIdsByTeamId[rosterBoardTeamState.teamId] ?? [])
+      .map((playerId) => playerById.get(playerId))
+      .filter((player): player is Player => Boolean(player))
+      .map((player) => ({
+        id: player.id,
+        name: playerDisplayName(player),
+        primaryPosition: player.primaryPosition,
+        secondaryPosition: player.secondaryPosition,
+        salary: 0,
+      }));
+    if (mlbWonPlayers.length === 0) return null;
+
+    const farmWonPlayers: DraftAnalyzerFarmEntry[] = rosterBoardEntries.map((entry) => ({
+      id: entry.id,
+      name: entry.name,
+      primaryPosition: entry.primaryPosition,
+      secondaryPosition: entry.secondaryPosition,
+      salary: entry.salary,
+    }));
+
+    return analyzeDraftRoster({
+      leagueId: activeLeague?.id,
+      team: {
+        id: rosterBoardTeamState.teamId,
+        name: teamDisplayName(boardTeam),
+      },
+      mlbWonPlayers,
+      farmWonPlayers,
+      walletCap: rosterBoardWalletCap ?? undefined,
+    });
+  }, [
+    activeLeague?.id,
+    auction.mlbRosterPlayerIdsByTeamId,
+    playerById,
+    rosterBoardEntries,
+    rosterBoardTeamState,
+    rosterBoardWalletCap,
+    session,
+    teamById,
+  ]);
+  const rosterBoardPriorityGaps = useMemo<BoardPriorityGap[]>(() => {
+    if (!rosterBoardReport || !rosterBoardTeamState) return [];
+
+    const boardTeam = teamById.get(rosterBoardTeamState.teamId);
+    if (!boardTeam?.farmCapIdentity) return [];
+
+    const gapFindings = rosterBoardReport.findings.filter((finding) => (
+      DRAFT_BOARD_GAP_KINDS.has(finding.kind) && finding.severity !== "info"
+    ));
+
+    return sortByTiltedPriority(tiltAnalyzerFindings(gapFindings, boardTeam.farmCapIdentity))
+      .slice(0, 5)
+      .map((tilted) => ({
+        id: tilted.finding.id,
+        severity: tilted.finding.severity,
+        label: tilted.finding.title,
+      }));
+  }, [rosterBoardReport, rosterBoardTeamState, teamById]);
+  const rosterBoardBudgetWarning = useMemo(() => {
+    if (!rosterBoardTeamState) return null;
+    return rosterBoardTeamState.budgetRemaining < rosterBoardTeamState.rosterSlotsRemaining * rosterBoardTeamState.minSalary
+      ? "Filling your remaining slots would exceed your budget"
+      : null;
+  }, [rosterBoardTeamState]);
   const latestResult = session?.results.at(-1) ?? null;
 
   useEffect(() => {
@@ -763,6 +858,8 @@ export function LeagueBuilderFarmAuctionDraft() {
             target={FARM_BOARD_TARGET}
             payroll={rosterBoardPayroll}
             walletRemaining={rosterBoardTeamState?.budgetRemaining ?? null}
+            priorityGaps={rosterBoardPriorityGaps}
+            budgetWarning={rosterBoardBudgetWarning}
           />
         )}
       </div>

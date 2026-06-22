@@ -60,6 +60,7 @@ export interface UseFarmAuctionDraftReturn {
   pool: FarmAuctionPool | null;
   scoutsByTeamId: Record<string, ProspectScoutDescriptor | undefined> | null;
   mlbRosterChemistryByTeamId: Record<string, Partial<Record<ChemistryCode, number>>>;
+  mlbRosterPlayerIdsByTeamId: Record<string, readonly string[]>;
   farmTierCap: number | null;
   seed: string;
   isWorking: boolean;
@@ -164,11 +165,13 @@ async function buildFarmAuctionTeams(input: {
     mlbBudgetCarryover: number;
   }>;
   mlbRosterChemistryByTeamId: Record<string, Partial<Record<ChemistryCode, number>>>;
+  mlbRosterPlayerIdsByTeamId: Record<string, readonly string[]>;
 }> {
   const chemistryByPlayerId = new Map(
     input.leaguePlayers.map((player) => [player.id, normalizeToChemistryCode(player.chemistry)]),
   );
   const mlbRosterChemistryByTeamId: Record<string, Partial<Record<ChemistryCode, number>>> = {};
+  const mlbRosterPlayerIdsByTeamId: Record<string, readonly string[]> = {};
   const mlbSession = await getAuctionSession(input.leagueId);
   const mlbUnspentByTeamId = new Map(
     (mlbSession?.session.state === "AUCTION_COMPLETE" ? mlbSession.session.teams : [])
@@ -178,12 +181,14 @@ async function buildFarmAuctionTeams(input: {
     input.leagueTeams.map(async (team) => {
       const roster: TeamRoster | null = await input.getRoster(team.id);
       const chemistryCounts: Partial<Record<ChemistryCode, number>> = {};
-      for (const playerId of roster?.mlbRoster ?? []) {
+      const mlbRosterPlayerIds = roster?.mlbRoster ?? [];
+      for (const playerId of mlbRosterPlayerIds) {
         const chemistry = chemistryByPlayerId.get(playerId);
         if (!chemistry) continue;
         chemistryCounts[chemistry] = (chemistryCounts[chemistry] ?? 0) + 1;
       }
       mlbRosterChemistryByTeamId[team.id] = chemistryCounts;
+      mlbRosterPlayerIdsByTeamId[team.id] = [...mlbRosterPlayerIds];
 
       return {
         teamId: team.id,
@@ -195,7 +200,7 @@ async function buildFarmAuctionTeams(input: {
     }),
   );
 
-  return { teams, mlbRosterChemistryByTeamId };
+  return { teams, mlbRosterChemistryByTeamId, mlbRosterPlayerIdsByTeamId };
 }
 
 // Mirrors useAuctionDraft; duplicated intentionally until a shared hot-seat core is extracted.
@@ -230,6 +235,7 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
   const [mlbRosterChemistryByTeamId, setMlbRosterChemistryByTeamId] = useState<
     Record<string, Partial<Record<ChemistryCode, number>>>
   >({});
+  const [mlbRosterPlayerIdsByTeamId, setMlbRosterPlayerIdsByTeamId] = useState<Record<string, readonly string[]>>({});
   const [farmTierCap, setFarmTierCap] = useState<number | null>(null);
   const [context, setContext] = useState<FarmAuctionDraftContext | null>(null);
   const [isWorking, setIsWorking] = useState(false);
@@ -354,10 +360,15 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
       setPool(null);
       setScoutsByTeamId(null);
       setMlbRosterChemistryByTeamId({});
+      setMlbRosterPlayerIdsByTeamId({});
       setFarmTierCap(null);
       return null;
     }
-    const { teams, mlbRosterChemistryByTeamId: nextMlbRosterChemistryByTeamId } = await buildFarmAuctionTeams({
+    const {
+      teams,
+      mlbRosterChemistryByTeamId: nextMlbRosterChemistryByTeamId,
+      mlbRosterPlayerIdsByTeamId: nextMlbRosterPlayerIdsByTeamId,
+    } = await buildFarmAuctionTeams({
       leagueId,
       leagueTeams: nextLeagueTeams,
       getRoster: leagueData.getRoster,
@@ -382,6 +393,7 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
       setPool(row.pool);
       setScoutsByTeamId(nextScoutsByTeamId ?? null);
       setMlbRosterChemistryByTeamId(nextMlbRosterChemistryByTeamId);
+      setMlbRosterPlayerIdsByTeamId(nextMlbRosterPlayerIdsByTeamId);
       setFarmTierCap(computeFarmTierCap(row.pool.auctionPlayers.map((player) => player.iv)));
       return resumed;
     }
@@ -411,6 +423,7 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
     setPool(regen.pool);
     setScoutsByTeamId(nextScoutsByTeamId ?? null);
     setMlbRosterChemistryByTeamId(nextMlbRosterChemistryByTeamId);
+    setMlbRosterPlayerIdsByTeamId(nextMlbRosterPlayerIdsByTeamId);
     setFarmTierCap(regen.farmTierCap);
     return resumed;
   }), [autoAdvanceCpu, leagueData.getRoster, leagueData.leagues, leagueData.players, leagueData.teams, runAction]);
@@ -426,7 +439,11 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
       .filter((team): team is Team => Boolean(team));
     if (nextLeagueTeams.length === 0) throw new Error("Selected league has no teams.");
 
-    const { teams, mlbRosterChemistryByTeamId: nextMlbRosterChemistryByTeamId } = await buildFarmAuctionTeams({
+    const {
+      teams,
+      mlbRosterChemistryByTeamId: nextMlbRosterChemistryByTeamId,
+      mlbRosterPlayerIdsByTeamId: nextMlbRosterPlayerIdsByTeamId,
+    } = await buildFarmAuctionTeams({
       leagueId,
       leagueTeams: nextLeagueTeams,
       getRoster: leagueData.getRoster,
@@ -462,6 +479,7 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
     setPool(result.pool);
     setScoutsByTeamId(nextScoutsByTeamId ?? null);
     setMlbRosterChemistryByTeamId(nextMlbRosterChemistryByTeamId);
+    setMlbRosterPlayerIdsByTeamId(nextMlbRosterPlayerIdsByTeamId);
     setFarmTierCap(result.farmTierCap);
     return initialized;
   }), [autoAdvanceCpu, leagueData, persist, runAction]);
@@ -491,6 +509,7 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
     pool,
     scoutsByTeamId,
     mlbRosterChemistryByTeamId,
+    mlbRosterPlayerIdsByTeamId,
     farmTierCap,
     seed: session?.config.nominationOrderSeed ?? DEFAULT_AUCTION_SETUP_CONFIG.nominationOrderSeed,
     isWorking,

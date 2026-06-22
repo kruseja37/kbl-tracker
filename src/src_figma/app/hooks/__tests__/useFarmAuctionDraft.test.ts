@@ -415,13 +415,23 @@ describe("useFarmAuctionDraft", () => {
       human: { SPI: 2, DIS: 1 },
       cpu: { CMP: 1 },
     });
+    expect(result.current.mlbRosterPlayerIdsByTeamId).toEqual({
+      human: ["mlb-spi-1", "mlb-spi-2", "mlb-dis", "missing-player"],
+      cpu: ["mlb-legacy-fiery"],
+    });
 
     const persisted = await getAuctionSessionById(createFarmAuctionSessionId("farm-chemistry"));
     expect(persisted?.session.teams.find((team) => team.teamId === "human")).not.toHaveProperty(
       "mlbRosterChemistry",
     );
+    expect(persisted?.session.teams.find((team) => team.teamId === "human")).not.toHaveProperty(
+      "mlbRosterPlayerIds",
+    );
     expect(persisted?.session.teams.find((team) => team.teamId === "cpu")).not.toHaveProperty(
       "mlbRosterChemistry",
+    );
+    expect(persisted?.session.teams.find((team) => team.teamId === "cpu")).not.toHaveProperty(
+      "mlbRosterPlayerIds",
     );
   });
 

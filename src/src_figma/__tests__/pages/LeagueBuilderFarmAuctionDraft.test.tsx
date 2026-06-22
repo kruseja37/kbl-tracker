@@ -229,6 +229,10 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
 
   test("renders the obscured farm auction flow with positions and scout ranges only", async () => {
     const { leagueData, teams } = mockLeagueData();
+    teams[0].farmCapIdentity = {
+      increase: ["Defense First"],
+      decrease: [],
+    };
     const seed = seedWithFirst(TEAM_IDS, "team-a");
     const expected = buildFarmAuctionSession({
       leagueId: LEAGUE_ID,
@@ -267,10 +271,17 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
         return { candidate, prospect, accuracy, priceOpinion };
       });
     const boostedChemistry = normalizeToChemistryCode(baseCandidates[0].prospect.chemistry);
-    const rosterChemistryCounts = { [boostedChemistry]: 3 };
-    const mlbRosterPlayerIds = ["mlb-chem-1", "mlb-chem-2", "mlb-chem-3"];
-    leagueData.players = mlbRosterPlayerIds.map((id) => ({
-      id,
+    const mlbPlayers = [
+      { id: "mlb-c", firstName: "Mlb", lastName: "Catcher", primaryPosition: "C" },
+      { id: "mlb-1b", firstName: "Mlb", lastName: "First", primaryPosition: "1B" },
+      { id: "mlb-2b", firstName: "Mlb", lastName: "Second", primaryPosition: "2B" },
+      { id: "mlb-3b", firstName: "Mlb", lastName: "Third", primaryPosition: "3B" },
+      { id: "mlb-lf", firstName: "Mlb", lastName: "Left", primaryPosition: "LF" },
+    ];
+    const rosterChemistryCounts = { [boostedChemistry]: mlbPlayers.length };
+    const mlbRosterPlayerIds = mlbPlayers.map((player) => player.id);
+    leagueData.players = mlbPlayers.map((player) => ({
+      ...player,
       chemistry: baseCandidates[0].prospect.chemistry,
     })) as unknown as UseLeagueBuilderDataReturn["players"];
     leagueData.getRoster = vi.fn(async (teamId: string) => ({
@@ -324,6 +335,8 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     expect(screen.getByText("YOUR REMAINING BUDGET")).toBeInTheDocument();
     expect(screen.getByText("YOUR MAX BID")).toBeInTheDocument();
     expect(screen.getByText("ROSTER SLOTS REMAINING")).toBeInTheDocument();
+    expect(screen.getByText("PRIORITY GAPS")).toBeInTheDocument();
+    expect(screen.getByText(/SS coverage below target/)).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getByLabelText("Custom bid amount")).toHaveValue(expectedBidAmount);
