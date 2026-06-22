@@ -40,6 +40,7 @@ interface LeagueFormData {
   description: string;
   teamIds: string[];
   defaultRulesPreset: string;
+  draftFormat: 'auction' | 'snake';
   tier: TierKey;
   balanceMode: BalanceMode;
   checkpointCadence: CheckpointCadence;
@@ -51,6 +52,7 @@ const DEFAULT_FORM_DATA: LeagueFormData = {
   description: "",
   teamIds: [],
   defaultRulesPreset: "",
+  draftFormat: "auction",
   tier: "juiced",
   balanceMode: BALANCE_MODE_DEFAULT,
   checkpointCadence: CHECKPOINT_CADENCE_DEFAULT,
@@ -67,6 +69,11 @@ const BALANCE_MODE_OPTIONS: Array<{ value: BalanceMode; label: string }> = [
   { value: "taxed", label: "Taxed" },
   { value: "advisory", label: "Advisory" },
   { value: "off", label: "Off" },
+];
+
+const DRAFT_FORMAT_OPTIONS: Array<{ value: 'auction' | 'snake'; label: string }> = [
+  { value: "auction", label: "Auction (default)" },
+  { value: "snake", label: "Snake" },
 ];
 
 const CHECKPOINT_CADENCE_OPTIONS: Array<{ value: CheckpointCadence; label: string }> = [
@@ -143,6 +150,7 @@ export function LeagueBuilderLeagues() {
       description: league.description || "",
       teamIds: league.teamIds,
       defaultRulesPreset: league.defaultRulesPreset,
+      draftFormat: league.draftFormat ?? "auction",
       tier: league.tier ?? "juiced",
       balanceMode: league.balanceMode ?? BALANCE_MODE_DEFAULT,
       checkpointCadence: league.checkpointCadence ?? CHECKPOINT_CADENCE_DEFAULT,
@@ -169,6 +177,7 @@ export function LeagueBuilderLeagues() {
           description: formData.description.trim() || undefined,
           teamIds: formData.teamIds,
           defaultRulesPreset: formData.defaultRulesPreset,
+          draftFormat: formData.draftFormat,
           tier: formData.tier,
           balanceMode: formData.balanceMode,
           checkpointCadence: formData.checkpointCadence,
@@ -182,6 +191,7 @@ export function LeagueBuilderLeagues() {
           conferences: [],
           divisions: [],
           defaultRulesPreset: formData.defaultRulesPreset,
+          draftFormat: formData.draftFormat,
           tier: formData.tier,
           balanceMode: formData.balanceMode,
           checkpointCadence: formData.checkpointCadence,
@@ -518,6 +528,31 @@ export function LeagueBuilderLeagues() {
                   className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
                 >
                   {TIER_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Draft Format */}
+              <div>
+                <label htmlFor="league-draft-format" className="block text-sm font-bold mb-2">
+                  DRAFT FORMAT
+                </label>
+                <select
+                  id="league-draft-format"
+                  aria-label="Draft format"
+                  value={formData.draftFormat}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      draftFormat: e.target.value as 'auction' | 'snake',
+                    }))
+                  }
+                  className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                >
+                  {DRAFT_FORMAT_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>

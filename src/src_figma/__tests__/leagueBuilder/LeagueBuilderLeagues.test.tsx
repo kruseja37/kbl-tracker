@@ -63,6 +63,21 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
   })),
 }));
 
+const openCreateLeagueModal = async () => {
+  fireEvent.click(screen.getByText('CREATE NEW LEAGUE'));
+  expect(await screen.findByText('Create New League')).toBeInTheDocument();
+};
+
+const createLeagueFromModal = async (name: string) => {
+  fireEvent.change(screen.getByPlaceholderText('e.g., Kruse Baseball League'), {
+    target: { value: name },
+  });
+  fireEvent.click(screen.getByRole('button', { name: /^create league$/i }));
+  await waitFor(() => {
+    expect(screen.queryByText('Create New League')).not.toBeInTheDocument();
+  });
+};
+
 // ============================================
 // TESTS
 // ============================================
@@ -343,6 +358,36 @@ describe('LeagueBuilderLeagues Component', () => {
         btn.textContent?.toLowerCase().includes('create league')
       );
       expect(saveButton).toBeInTheDocument();
+    });
+  });
+
+  describe('Draft Format', () => {
+    test('creating a league persists selected snake draft format', async () => {
+      render(<LeagueBuilderLeagues />);
+      await openCreateLeagueModal();
+
+      fireEvent.change(screen.getByLabelText('Draft format'), {
+        target: { value: 'snake' },
+      });
+      await createLeagueFromModal('Snake Draft League');
+
+      await waitFor(() => {
+        expect(mockCreateLeague).toHaveBeenCalledWith(
+          expect.objectContaining({ draftFormat: 'snake' })
+        );
+      });
+    });
+
+    test('creating a league persists default auction draft format', async () => {
+      render(<LeagueBuilderLeagues />);
+      await openCreateLeagueModal();
+      await createLeagueFromModal('Auction Draft League');
+
+      await waitFor(() => {
+        expect(mockCreateLeague).toHaveBeenCalledWith(
+          expect.objectContaining({ draftFormat: 'auction' })
+        );
+      });
     });
   });
 
