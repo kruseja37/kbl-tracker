@@ -207,7 +207,7 @@ describe("useAuctionDraft", () => {
     await deleteDatabase(DB_NAME).catch(() => undefined);
   });
 
-  test("initializes a locked league into NOMINATION and persists the session", async () => {
+  test("initializes a locked league into an engine-surfaced open lot and persists the session", async () => {
     const teamIds = ["human", "other"];
     const seed = seedWithFirst(teamIds, "human");
     mockLeagueData({
@@ -226,16 +226,19 @@ describe("useAuctionDraft", () => {
       });
     });
 
-    expect(result.current.session?.state).toBe("NOMINATION");
-    expect(result.current.session?.availablePlayerIds).toHaveLength(4);
+    expect(result.current.session?.state).toBe("OPEN_BIDDING");
+    expect(result.current.session?.availablePlayerIds).toHaveLength(3);
+    expect(result.current.session?.currentLot?.playerId).toEqual(expect.any(String));
+    expect(result.current.session?.config.nominationWeightExponent).toBe(2);
     expect(result.current.session?.players.p1.ivPercentile).toBe(100);
 
     const persisted = await getAuctionSession("league-init");
-    expect(persisted?.session.state).toBe("NOMINATION");
+    expect(persisted?.session.state).toBe("OPEN_BIDDING");
+    expect(persisted?.session.currentLot?.playerId).toBe(result.current.session?.currentLot?.playerId);
     expect(persisted?.session.config.nominationOrderSeed).toBe(seed);
   });
 
-  test("drives nominate to bids to SOLD while a CPU team auto-acts", async () => {
+  test("drives engine-surfaced lot to bids to SOLD while a CPU team auto-acts", async () => {
     const teamIds = ["human", "cpu", "other"];
     const seed = seedWithFirst(teamIds, "human");
     mockLeagueData({
@@ -253,12 +256,10 @@ describe("useAuctionDraft", () => {
         bidIncrement: 1_000,
       });
     });
-    await act(async () => {
-      await result.current.nominate("p1");
-    });
-
     const openingAsk = result.current.session?.currentLot?.openingAsk;
+    const playerId = result.current.session?.currentLot?.playerId;
     expect(openingAsk).toBeGreaterThan(0);
+    expect(playerId).toEqual(expect.any(String));
 
     await act(async () => {
       await result.current.bid("human", openingAsk!);
@@ -277,11 +278,19 @@ describe("useAuctionDraft", () => {
 
     expect(result.current.session?.state).toBe("SOLD");
     expect(result.current.session?.results.at(-1)).toMatchObject({
-      playerId: "p1",
+      playerId,
       disposition: "SOLD",
       winnerTeamId: "human",
       salary: openingAsk,
     });
+
+    await act(async () => {
+      await result.current.advance();
+    });
+
+    expect(result.current.session?.state).toBe("OPEN_BIDDING");
+    expect(result.current.session?.currentLot?.playerId).not.toBe(playerId);
+    expect(result.current.session?.results).toHaveLength(1);
   });
 
   test("autosaves committed transitions after user actions", async () => {
@@ -302,13 +311,9 @@ describe("useAuctionDraft", () => {
         bidIncrement: 1_000,
       });
     });
-    await act(async () => {
-      await result.current.nominate("p1");
-    });
-
     const persisted = await getAuctionSession("league-save");
     expect(persisted?.session.state).toBe("OPEN_BIDDING");
-    expect(persisted?.session.currentLot?.playerId).toBe("p1");
+    expect(persisted?.session.currentLot?.playerId).toBe(result.current.session?.currentLot?.playerId);
   });
 
   test("uses the same seed to produce the same nomination order", async () => {
@@ -361,11 +366,8 @@ describe("useAuctionDraft", () => {
         bidIncrement: 1_000,
       });
     });
-    await act(async () => {
-      await result.current.nominate("p1");
-    });
-
     const reserve = result.current.session?.currentLot?.openingAsk;
+    const playerId = result.current.session?.currentLot?.playerId;
     await act(async () => {
       await result.current.pass("other");
     });
@@ -379,7 +381,7 @@ describe("useAuctionDraft", () => {
 
     expect(result.current.session?.state).toBe("SOLD");
     expect(result.current.session?.results.at(-1)).toMatchObject({
-      playerId: "p1",
+      playerId,
       disposition: "SOLD",
       winnerTeamId: "human",
       salary: reserve,
@@ -404,11 +406,8 @@ describe("useAuctionDraft", () => {
         bidIncrement: 1_000,
       });
     });
-    await act(async () => {
-      await result.current.nominate("p1");
-    });
-
     const reserve = result.current.session?.currentLot?.openingAsk;
+    const playerId = result.current.session?.currentLot?.playerId;
 
     await act(async () => {
       await result.current.pass("human");
@@ -416,14 +415,14 @@ describe("useAuctionDraft", () => {
 
     expect(result.current.session?.state).toBe("SOLD");
     expect(result.current.session?.results.at(-1)).toMatchObject({
-      playerId: "p1",
+      playerId,
       disposition: "SOLD",
       winnerTeamId: "cpu",
       salary: reserve,
     });
     expect(result.current.session?.teams.find((team) => team.teamId === "cpu")).toMatchObject({
       rosterSlotsRemaining: 21,
-      roster: [{ playerId: "p1", salary: reserve }],
+      roster: [{ playerId, salary: reserve }],
     });
   });
 });

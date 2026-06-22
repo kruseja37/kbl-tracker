@@ -17,9 +17,6 @@ import {
 import type { Player, Team } from "../../hooks/useLeagueBuilderData";
 
 const DEFAULT_AUCTION_SEED = "startup-auction-v1";
-const ALL_POSITIONS_FILTER = "ALL";
-
-type IvSortDirection = "asc" | "desc";
 
 function formatMoney(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "N/A";
@@ -80,20 +77,6 @@ function rosterPositionTally(
   return [...tally.entries()].sort((left, right) => left[0].localeCompare(right[0]));
 }
 
-function findNextHumanNominatorTeamId(
-  session: AuctionSession | null,
-  isCpuTeam: (teamId: string | null | undefined) => boolean,
-): string | null {
-  if (!session || session.nominationOrder.length === 0) return null;
-  for (let offset = 1; offset <= session.nominationOrder.length; offset += 1) {
-    const index = (session.nominationIndex + offset) % session.nominationOrder.length;
-    const teamId = session.nominationOrder[index];
-    const teamState = session.teams.find((team) => team.teamId === teamId);
-    if (teamState && teamState.rosterSlotsRemaining > 0 && !isCpuTeam(teamId)) return teamId;
-  }
-  return null;
-}
-
 export function LeagueBuilderAuctionDraft() {
   const navigate = useNavigate();
   const auction = useAuctionDraft();
@@ -103,8 +86,6 @@ export function LeagueBuilderAuctionDraft() {
   const [cpuCount, setCpuCount] = useState(0);
   const [bidIncrement, setBidIncrement] = useState(5000);
   const [bidAmount, setBidAmount] = useState("");
-  const [positionFilter, setPositionFilter] = useState(ALL_POSITIONS_FILTER);
-  const [ivSortDirection, setIvSortDirection] = useState<IvSortDirection>("desc");
   const loadedKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -137,7 +118,6 @@ export function LeagueBuilderAuctionDraft() {
   const playerById = useMemo(() => new Map(leagueData.players.map((player) => [player.id, player])), [leagueData.players]);
   const teamStateById = useMemo(() => new Map(session?.teams.map((team) => [team.teamId, team]) ?? []), [session]);
 
-  const currentNominator = auction.currentNominatorTeamId ? teamById.get(auction.currentNominatorTeamId) : null;
   const currentBidder = auction.currentBidderTeamId ? teamById.get(auction.currentBidderTeamId) : null;
   const currentLotPlayer = session?.currentLot ? playerById.get(session.currentLot.playerId) : null;
   const minBid = session ? minimumBid(session) : null;
@@ -148,14 +128,11 @@ export function LeagueBuilderAuctionDraft() {
   const currentBidderMaxBid = session && auction.currentBidderTeamId
     ? getTeamAuctionMaxBid(session, auction.currentBidderTeamId)
     : null;
-  const currentNominatorIsCpu = auction.isCpuTeam(auction.currentNominatorTeamId);
   const currentBidderIsCpu = auction.isCpuTeam(auction.currentBidderTeamId);
   const currentRosterTally = useMemo(
     () => rosterPositionTally(currentBidderTeamState, playerById),
     [currentBidderTeamState, playerById],
   );
-  const nextHumanNominatorTeamId = findNextHumanNominatorTeamId(session, auction.isCpuTeam);
-  const nextHumanNominator = nextHumanNominatorTeamId ? teamById.get(nextHumanNominatorTeamId) : null;
   const latestResult = session?.results.at(-1) ?? null;
 
   useEffect(() => {
@@ -171,13 +148,11 @@ export function LeagueBuilderAuctionDraft() {
   };
 
   const nowTeam =
-    session?.state === "NOMINATION" ? currentNominator :
     session?.state === "OPEN_BIDDING" ? currentBidder :
     session?.state === "RESOLVE" && session.pendingClaim ? pendingClaimTeam :
-    (session?.state === "SOLD" || session?.state === "PASSED") ? nextHumanNominator :
     null;
   const nowAction =
-    session?.state === "NOMINATION" ? "nominate" :
+    session?.state === "NOMINATION" ? "surface next lot" :
     session?.state === "OPEN_BIDDING" ? "raise or pass" :
     session?.state === "RESOLVE" && session.pendingClaim ? "claim at reserve or pass" :
     (session?.state === "SOLD" || session?.state === "PASSED") ? "confirm next lot" :
@@ -187,10 +162,7 @@ export function LeagueBuilderAuctionDraft() {
   const handoffPrompt = useMemo(() => {
     if (!session) return "Host setup";
     if (session.state === "NOMINATION") {
-      if (auction.isCpuTeam(auction.currentNominatorTeamId)) {
-        return `Hold — ${teamDisplayName(currentNominator)} nominating.`;
-      }
-      return `Pass device to ${teamDisplayName(currentNominator)}`;
+      return "Hold — engine surfacing the next player.";
     }
     if (session.state === "OPEN_BIDDING") {
       if (auction.currentBidderTeamId && !auction.isCpuTeam(auction.currentBidderTeamId)) {
@@ -203,15 +175,13 @@ export function LeagueBuilderAuctionDraft() {
       return "Hold — CPUs resolving";
     }
     if (session.state === "SOLD" || session.state === "PASSED") {
-      return nextHumanNominator ? `Pass device to ${teamDisplayName(nextHumanNominator)}` : "Hold — CPUs resolving";
+      return "Confirm next lot.";
     }
     if (session.state === "AUCTION_COMPLETE") return "Auction complete.";
     return "Hold — CPUs resolving";
   }, [
     auction,
     currentBidder,
-    currentNominator,
-    nextHumanNominator,
     pendingClaimTeam,
     session,
   ]);
@@ -222,34 +192,6 @@ export function LeagueBuilderAuctionDraft() {
       .map((playerId) => session.players[playerId])
       .filter(Boolean);
   }, [session]);
-
-  const availablePositionFilters = useMemo(() => {
-    const positions = new Set<string>();
-    for (const candidate of availablePoolCandidates) {
-      const player = playerById.get(candidate.playerId);
-      for (const position of playerPositions(player)) positions.add(position);
-    }
-    return [...positions].sort((left, right) => left.localeCompare(right));
-  }, [availablePoolCandidates, playerById]);
-
-  useEffect(() => {
-    if (positionFilter !== ALL_POSITIONS_FILTER && !availablePositionFilters.includes(positionFilter)) {
-      setPositionFilter(ALL_POSITIONS_FILTER);
-    }
-  }, [availablePositionFilters, positionFilter]);
-
-  const visibleCandidates = useMemo(() => {
-    return availablePoolCandidates
-      .filter((candidate) => {
-        if (positionFilter === ALL_POSITIONS_FILTER) return true;
-        return playerPositions(playerById.get(candidate.playerId)).includes(positionFilter);
-      })
-      .sort((left, right) => {
-        const ivDelta = ivSortDirection === "desc" ? right.iv - left.iv : left.iv - right.iv;
-        if (ivDelta !== 0) return ivDelta;
-        return playerDisplayName(playerById.get(left.playerId)).localeCompare(playerDisplayName(playerById.get(right.playerId)));
-      });
-  }, [availablePoolCandidates, ivSortDirection, playerById, positionFilter]);
 
   const blockers = useMemo(() => {
     const messages: string[] = [];
@@ -435,63 +377,11 @@ export function LeagueBuilderAuctionDraft() {
             )}
 
             {session?.state === "NOMINATION" && (
-              <div>
-                <div className="mb-4 bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                  <div className="text-xs text-[#E8E8D8]/60">NOMINATOR</div>
-                  <div className="text-xl font-bold">{teamDisplayName(currentNominator)}</div>
-                </div>
-                <div className="mb-4 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
-                  <label htmlFor="auction-position-filter" className="block text-xs text-[#E8E8D8]/70 font-bold">
-                    POSITION FILTER
-                    <select
-                      id="auction-position-filter"
-                      aria-label="Position filter"
-                      value={positionFilter}
-                      onChange={(event) => setPositionFilter(event.target.value)}
-                      disabled={auction.isWorking || currentNominatorIsCpu}
-                      className="mt-1 w-full bg-[#4A6844] border-4 border-[#E8E8D8]/30 px-3 py-2 text-[#E8E8D8] font-bold focus:border-[#E8E8D8]/60 outline-none"
-                    >
-                      <option value={ALL_POSITIONS_FILTER}>All positions</option>
-                      {availablePositionFilters.map((position) => (
-                        <option key={position} value={position}>{position}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <button
-                    type="button"
-                    aria-pressed={ivSortDirection === "asc"}
-                    onClick={() => setIvSortDirection((direction) => direction === "desc" ? "asc" : "desc")}
-                    disabled={auction.isWorking || currentNominatorIsCpu}
-                    className="self-end px-4 py-2 bg-[#3B7DD8] hover:bg-[#4B8DE8] disabled:opacity-50 disabled:hover:bg-[#3B7DD8] border-4 border-[#E8E8D8] transition font-bold"
-                  >
-                    IV SORT: {ivSortDirection.toUpperCase()}
-                  </button>
-                </div>
-                <div className="space-y-2 max-h-[540px] overflow-y-auto pr-1">
-                  {visibleCandidates.map((candidate) => {
-                    const player = playerById.get(candidate.playerId);
-                    return (
-                      <button
-                        key={candidate.playerId}
-                        onClick={() => void auction.nominate(candidate.playerId)}
-                        disabled={auction.isWorking || currentNominatorIsCpu}
-                        className="w-full bg-[#4A6844] hover:bg-[#5A8352] disabled:opacity-50 border-4 border-[#E8E8D8]/30 p-3 text-left transition"
-                      >
-                        <div className="flex flex-wrap items-center gap-2 mb-1">
-                          <div className="font-bold">{playerDisplayName(player)}</div>
-                          {positionBadges(player)}
-                        </div>
-                        <div className="text-xs text-[#E8E8D8]/65">
-                          IV {formatMoney(candidate.iv)} · reserve {formatMoney(reservePriceCurve(candidate.ivPercentile) * candidate.iv)}
-                        </div>
-                      </button>
-                    );
-                  })}
-                  {visibleCandidates.length === 0 && (
-                    <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4 text-sm text-[#E8E8D8]/70">
-                      No players match this position filter.
-                    </div>
-                  )}
+              <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
+                <div className="text-xs text-[#E8E8D8]/60">ENGINE NOMINATION</div>
+                <div className="text-xl font-bold">Surfacing the next player...</div>
+                <div className="mt-1 text-sm text-[#E8E8D8]/70">
+                  Available pool: {availablePoolCandidates.length} players
                 </div>
               </div>
             )}
@@ -500,7 +390,7 @@ export function LeagueBuilderAuctionDraft() {
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                      <div className="text-xs text-[#E8E8D8]/60">LOT</div>
+                      <div className="text-xs text-[#E8E8D8]/60">ENGINE NOMINATED</div>
                       <div className="flex flex-wrap items-center gap-2 mb-2">
                         <div className="text-xl font-bold">{playerDisplayName(currentLotPlayer)}</div>
                         {positionBadges(currentLotPlayer)}
@@ -682,7 +572,7 @@ export function LeagueBuilderAuctionDraft() {
                     <div className="text-xl font-bold">{latestResult ? resultText(latestResult, playerById, teamById) : session.state}</div>
                   </div>
                   <button
-                    onClick={() => void auction.rotate()}
+                    onClick={() => void auction.advance()}
                   disabled={auction.isWorking}
                   className="px-4 py-2 bg-[#3B7DD8] hover:bg-[#4B8DE8] border-4 border-[#E8E8D8] font-bold"
                 >

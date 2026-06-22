@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  advanceLot,
   evaluateResolve,
   initAuctionSession,
-  nominatePlayer,
   passBid,
   recordBid,
-  rotateNomination,
+  surfaceNextPlayer,
   type AuctionSession,
   type AuctionTeamInput,
   type AuctionTransitionResult,
@@ -18,7 +18,6 @@ import {
   evaluateCpuArchetypeFit,
   evaluateCpuInterest,
   evaluateCpuValuation,
-  resolveCpuNomination,
   shillNoiseMultiplier,
   type CpuShillAuctionPlayer,
   type CpuShillAuctionSession,
@@ -86,6 +85,10 @@ function ok(result: AuctionTransitionResult): AuctionSession {
   return result.session;
 }
 
+function openEngineLot(session: CpuShillAuctionSession): CpuShillAuctionSession {
+  return ok(surfaceNextPlayer(session)) as CpuShillAuctionSession;
+}
+
 describe('cpuShillBidding AUC-2.2 pure policy', () => {
   test('valuation is IV x archetypeFit(composeIdentity) x personalityBias x seeded noise within +/-12%', () => {
     const player = PLAYERS[0];
@@ -119,8 +122,8 @@ describe('cpuShillBidding AUC-2.2 pure policy', () => {
   });
 
   test('cpuBidOnLot bids the minimum legal raise only when interested and legal', () => {
-    let session: CpuShillAuctionSession = makeSession();
-    session = ok(nominatePlayer(session, 'star')) as CpuShillAuctionSession;
+    let session: CpuShillAuctionSession = makeSession({ players: [PLAYERS[0]] });
+    session = openEngineLot(session);
 
     const biddingSeed = Array.from({ length: 300 }, (_, index) => `bid-hit-${index}`).find(
       (seed) => cpuBidOnLot(session, 'cpu', seed).kind === 'bid',
@@ -146,8 +149,8 @@ describe('cpuShillBidding AUC-2.2 pure policy', () => {
       interestAggression: 2,
       maxInterestProbability: 1,
     };
-    let session: CpuShillAuctionSession = makeSession({ shill: cautious });
-    session = ok(nominatePlayer(session, 'star')) as CpuShillAuctionSession;
+    let session: CpuShillAuctionSession = makeSession({ players: [PLAYERS[0]], shill: cautious });
+    session = openEngineLot(session);
     session = ok(recordBid(session, 'human', 1_300)) as CpuShillAuctionSession;
 
     const decision = cpuBidOnLot(session, 'cpu', 'valuation-cap');
@@ -168,7 +171,7 @@ describe('cpuShillBidding AUC-2.2 pure policy', () => {
         { teamId: 'other', budgetRemaining: 20_000, rosterSlotsRemaining: 2, minSalary: 0 },
       ],
     });
-    session = ok(nominatePlayer(session, 'star')) as CpuShillAuctionSession;
+    session = openEngineLot({ ...session, playerOrder: ['star'], availablePlayerIds: ['star'] });
 
     const decision = cpuBidOnLot(session, 'cpu', 'budget-cap');
 
@@ -181,8 +184,8 @@ describe('cpuShillBidding AUC-2.2 pure policy', () => {
   });
 
   test('cheap lots do not create a deterministic floor across many seeds', () => {
-    let session: CpuShillAuctionSession = makeSession();
-    session = ok(nominatePlayer(session, 'cheap')) as CpuShillAuctionSession;
+    let session: CpuShillAuctionSession = makeSession({ players: [PLAYERS[1]] });
+    session = openEngineLot(session);
 
     const decisions = Array.from({ length: 220 }, (_, index) =>
       cpuBidOnLot(session, 'cpu', `cheap-lot-${index}`).kind,
@@ -205,24 +208,25 @@ describe('cpuShillBidding AUC-2.2 pure policy', () => {
       ],
     });
 
-    session = ok(nominatePlayer(session, 'first')) as CpuShillAuctionSession;
-    session = ok(recordBid(session, 'cpu', 500)) as CpuShillAuctionSession;
+    session = openEngineLot(session);
+    const firstAsk = session.currentLot?.openingAsk;
+    expect(firstAsk).toEqual(expect.any(Number));
+    session = ok(recordBid(session, 'cpu', firstAsk!)) as CpuShillAuctionSession;
     session = ok(passBid(session, 'human')) as CpuShillAuctionSession;
     session = ok(passBid(session, 'other')) as CpuShillAuctionSession;
     session = ok(evaluateResolve(session)) as CpuShillAuctionSession;
 
     expect(session.teams.find((team) => team.teamId === 'cpu')?.budgetRemaining).toBe(500);
 
-    session = ok(rotateNomination(session)) as CpuShillAuctionSession;
-    session = ok(nominatePlayer(session, 'second')) as CpuShillAuctionSession;
+    session = ok(advanceLot(session)) as CpuShillAuctionSession;
+    session = openEngineLot(session);
 
     const decision = cpuBidOnLot(session, 'cpu', 'after-budget-depletion');
 
     expect(decision.kind).toBe('pass');
     if (decision.kind === 'pass') {
       expect(decision.reason).toBe('over-budget');
-      expect(decision.minimumBid).toBe(600);
-      expect(decision.maxBid).toBe(500);
+      expect(decision.minimumBid).toBeGreaterThan(decision.maxBid!);
     }
   });
 
@@ -235,7 +239,7 @@ describe('cpuShillBidding AUC-2.2 pure policy', () => {
       nominationOrder: ['human', 'cpu'],
     });
 
-    session = ok(nominatePlayer(session, 'star')) as CpuShillAuctionSession;
+    session = openEngineLot({ ...session, playerOrder: ['star'], availablePlayerIds: ['star'] });
     session = ok(passBid(session, 'human')) as CpuShillAuctionSession;
     session = ok(evaluateResolve(session)) as CpuShillAuctionSession;
 
@@ -267,7 +271,7 @@ describe('cpuShillBidding AUC-2.2 pure policy', () => {
       shill: lowValueShill,
     });
 
-    session = ok(nominatePlayer(session, 'star')) as CpuShillAuctionSession;
+    session = openEngineLot({ ...session, playerOrder: ['star'], availablePlayerIds: ['star'] });
     session = ok(passBid(session, 'human')) as CpuShillAuctionSession;
     session = ok(evaluateResolve(session)) as CpuShillAuctionSession;
 
@@ -343,19 +347,4 @@ describe('cpuShillBidding AUC-2.2 pure policy', () => {
     });
   });
 
-  test('CPU nomination returns a deterministic legal player without mutating the session', () => {
-    const session = makeSession({ nominationOrder: ['cpu', 'human', 'other'] });
-    const beforeAvailable = [...session.availablePlayerIds];
-
-    const first = resolveCpuNomination(session, 'cpu', 'nomination-seed');
-    const second = resolveCpuNomination(session, 'cpu', 'nomination-seed');
-
-    expect(first).toEqual(second);
-    expect(first.kind).toBe('nominate');
-    if (first.kind === 'nominate') {
-      expect(session.availablePlayerIds).toContain(first.playerId);
-      expect(nominatePlayer(session, first.playerId).ok).toBe(true);
-    }
-    expect(session.availablePlayerIds).toEqual(beforeAvailable);
-  });
 });

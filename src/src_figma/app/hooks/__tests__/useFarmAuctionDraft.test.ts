@@ -4,6 +4,7 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { initAuctionSession, seededNominationOrder } from "../../../../engines/auctionStateMachine";
+import { LEAGUE_MINIMUM_SALARY } from "../../../../data/rosterEngineConstants";
 import type { CpuShillAuctionSession } from "../../../../engines/cpuShillBidding";
 import { FARM_AUCTION_ROSTER_SLOTS_PER_TEAM } from "../../../../utils/farmAuctionPool";
 import {
@@ -200,7 +201,7 @@ describe("useFarmAuctionDraft", () => {
     await deleteDatabase(DB_NAME).catch(() => undefined);
   });
 
-  test("initializes a locked league into NOMINATION using the farm pool, 10-slot rosters, and farm cap budgets", async () => {
+  test("initializes a locked league into an engine-surfaced farm lot with flat-floor reserve", async () => {
     const teamIds = ["human", "cpu"];
     const seed = seedWithOrder(teamIds, ["human", "cpu"]);
     mockLeagueData({
@@ -222,10 +223,14 @@ describe("useFarmAuctionDraft", () => {
       });
     });
 
-    expect(result.current.session?.state).toBe("NOMINATION");
+    expect(result.current.session?.state).toBe("OPEN_BIDDING");
     expect(result.current.session?.availablePlayerIds).toHaveLength(
-      teamIds.length * FARM_AUCTION_ROSTER_SLOTS_PER_TEAM * 3,
+      teamIds.length * FARM_AUCTION_ROSTER_SLOTS_PER_TEAM * 3 - 1,
     );
+    expect(result.current.session?.currentLot?.playerId).toEqual(expect.any(String));
+    expect(result.current.session?.currentLot?.openingAsk).toBe(LEAGUE_MINIMUM_SALARY);
+    expect(result.current.session?.config.nominationWeightExponent).toBe(3);
+    expect(result.current.session?.config.flatReserveFloor).toBe(LEAGUE_MINIMUM_SALARY);
     expect(result.current.session?.teams.find((team) => team.teamId === "human")).toMatchObject({
       rosterSlotsRemaining: FARM_AUCTION_ROSTER_SLOTS_PER_TEAM - 2,
       roster: [],
@@ -239,7 +244,8 @@ describe("useFarmAuctionDraft", () => {
     expect(budgets[1]).toBe(budgets[0]);
 
     const persisted = await getAuctionSessionById(createFarmAuctionSessionId("farm-init"));
-    expect(persisted?.session.state).toBe("NOMINATION");
+    expect(persisted?.session.state).toBe("OPEN_BIDDING");
+    expect(persisted?.session.currentLot?.openingAsk).toBe(LEAGUE_MINIMUM_SALARY);
     await expect(getAuctionSession("farm-init")).resolves.toBeNull();
   });
 
@@ -286,7 +292,7 @@ describe("useFarmAuctionDraft", () => {
     );
   });
 
-  test("drives nominate to bids to SOLD while a CPU farm team auto-acts", async () => {
+  test("drives engine-surfaced farm lot to bids to SOLD while a CPU farm team auto-acts", async () => {
     const teamIds = ["human", "other", "cpu"];
     const seed = seedWithOrder(teamIds, ["human", "other", "cpu"]);
     mockLeagueData({
@@ -304,11 +310,9 @@ describe("useFarmAuctionDraft", () => {
       });
     });
 
-    const playerId = result.current.session?.availablePlayerIds[0];
-    await act(async () => {
-      await result.current.nominate(playerId!);
-    });
+    const playerId = result.current.session?.currentLot?.playerId;
     const openingAsk = result.current.session?.currentLot?.openingAsk;
+    expect(openingAsk).toBe(LEAGUE_MINIMUM_SALARY);
 
     await act(async () => {
       await result.current.bid("human", openingAsk!);
@@ -334,6 +338,14 @@ describe("useFarmAuctionDraft", () => {
     const soldResult = result.current.session?.results.at(-1);
     const winner = result.current.session?.teams.find((team) => team.teamId === soldResult?.winnerTeamId);
     expect(winner?.roster).toContainEqual({ playerId, salary: soldResult?.salary });
+
+    await act(async () => {
+      await result.current.advance();
+    });
+
+    expect(result.current.session?.state).toBe("OPEN_BIDDING");
+    expect(result.current.session?.currentLot?.playerId).not.toBe(playerId);
+    expect(result.current.session?.currentLot?.openingAsk).toBe(LEAGUE_MINIMUM_SALARY);
   });
 
   test("autosaves under the farm namespace, resumes by farm id, and does not clobber the MLB auction row", async () => {
@@ -361,10 +373,7 @@ describe("useFarmAuctionDraft", () => {
         bidIncrement: 1_000,
       });
     });
-    const playerId = result.current.session?.availablePlayerIds[0];
-    await act(async () => {
-      await result.current.nominate(playerId!);
-    });
+    const playerId = result.current.session?.currentLot?.playerId;
 
     const farmRow = await getAuctionSessionById(createFarmAuctionSessionId(leagueId));
     expect(farmRow?.id).toBe(createFarmAuctionSessionId(leagueId));
@@ -464,10 +473,6 @@ describe("useFarmAuctionDraft", () => {
         }),
       ]),
     );
-
-    await act(async () => {
-      await result.current.nominate(originalAuctionPlayers[0].playerId);
-    });
 
     const persisted = await getAuctionSessionById(createFarmAuctionSessionId(leagueId));
     expect(persisted?.session.playerOrder).toEqual(originalAuctionPlayers.map((player) => player.playerId));

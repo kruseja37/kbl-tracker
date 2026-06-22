@@ -202,7 +202,7 @@ describe("LeagueBuilderAuctionDraft", () => {
     await deleteDatabase(DB_NAME).catch(() => undefined);
   });
 
-  test("renders setup and begins into the filterable nomination pool", async () => {
+  test("renders setup and begins into an engine-nominated open lot", async () => {
     render(<LeagueBuilderAuctionDraft />);
 
     expect(screen.getByText("MLB AUCTION DRAFT")).toBeInTheDocument();
@@ -212,21 +212,13 @@ describe("LeagueBuilderAuctionDraft", () => {
     fireEvent.click(begin);
 
     await waitFor(() => {
-      expect(screen.getByText("STATE: NOMINATION")).toBeInTheDocument();
+      expect(screen.getByText("STATE: OPEN_BIDDING")).toBeInTheDocument();
     });
-    expect(screen.getAllByText(/NOMINATOR/i).length).toBeGreaterThan(0);
-
-    const positionFilter = screen.getByLabelText("Position filter");
-    expect(positionFilter).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /IV SORT: DESC/i })).toBeInTheDocument();
-    expect(screen.getByText("Avery Anchor")).toBeInTheDocument();
-
-    fireEvent.change(positionFilter, { target: { value: "SP" } });
-    expect(screen.getByText("Blake Bolt")).toBeInTheDocument();
-    expect(screen.queryByText("Avery Anchor")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /IV SORT: DESC/i }));
-    expect(screen.getByRole("button", { name: /IV SORT: ASC/i })).toBeInTheDocument();
+    expect(screen.getByText("ENGINE NOMINATED")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Position filter")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /IV SORT/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Avery Anchor|Blake Bolt/)).toBeInTheDocument();
+    expect(screen.getByText("YOUR MAX BID")).toBeInTheDocument();
   });
 
   test("renders open bidding with names and records a SOLD result row with winner salary", async () => {
@@ -235,16 +227,11 @@ describe("LeagueBuilderAuctionDraft", () => {
     fireEvent.click(await screen.findByRole("button", { name: /BEGIN AUCTION DRAFT/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("STATE: NOMINATION")).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /Avery Anchor/i }));
-
-    await waitFor(() => {
       expect(screen.getByText("STATE: OPEN_BIDDING")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("Avery Anchor")).toBeInTheDocument();
+    expect(screen.getByText("ENGINE NOMINATED")).toBeInTheDocument();
+    expect(screen.getByText(/Avery Anchor|Blake Bolt/)).toBeInTheDocument();
     expect(screen.getByText("No bid yet")).toBeInTheDocument();
     expect(screen.getByText("YOUR REMAINING BUDGET")).toBeInTheDocument();
     expect(screen.getByText("YOUR MAX BID")).toBeInTheDocument();
@@ -270,6 +257,6 @@ describe("LeagueBuilderAuctionDraft", () => {
       expect(screen.getByText("STATE: SOLD")).toBeInTheDocument();
     });
 
-    expect(screen.getAllByText(/Avery Anchor SOLD to Page (Caps|Keys) for \$70,000/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/(Avery Anchor|Blake Bolt) SOLD to Page (Caps|Keys) for \$/).length).toBeGreaterThan(0);
   });
 });

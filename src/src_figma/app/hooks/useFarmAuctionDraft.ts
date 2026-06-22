@@ -3,23 +3,22 @@ import { useCallback, useMemo, useState } from "react";
 import {
   claimLoneSurvivor,
   evaluateResolve,
+  advanceLot,
   getCurrentBidderTeamId,
-  getCurrentNominator,
-  nominatePlayer,
   passBid,
   passLoneSurvivor,
   recordBid,
-  rotateNomination,
+  surfaceNextPlayer,
   type AuctionTransitionResult,
 } from "../../../engines/auctionStateMachine";
 import {
   cpuBidOnLot,
   cpuDecideLoneSurvivor,
-  resolveCpuNomination,
   type CpuShillAuctionSession,
 } from "../../../engines/cpuShillBidding";
 import { DEFAULT_AUCTION_SETUP_CONFIG, type AuctionSetupConfig } from "../../../data/auctionEngineConstants";
 import { normalizeToChemistryCode, type ChemistryCode } from "../../../data/chemistryCanonical";
+import { LEAGUE_MINIMUM_SALARY } from "../../../data/rosterEngineConstants";
 import { buildFarmAuctionSession } from "../../../utils/farmAuctionSession";
 import type { FarmAuctionPool } from "../../../utils/farmAuctionPool";
 import {
@@ -67,16 +66,14 @@ export interface UseFarmAuctionDraftReturn {
   activeLeagueId: string | null;
   seasonNumber: number;
   cpuTeamIds: string[];
-  currentNominatorTeamId: string | null;
   currentBidderTeamId: string | null;
   initFarmAuction: (leagueId: string, partialConfig?: Partial<AuctionSetupConfig>) => Promise<CpuShillAuctionSession | null>;
   loadFarmAuction: (leagueId: string, seasonNumber?: number) => Promise<CpuShillAuctionSession | null>;
-  nominate: (playerId: string) => Promise<CpuShillAuctionSession | null>;
   bid: (teamId: string, amount: number) => Promise<CpuShillAuctionSession | null>;
   pass: (teamId: string) => Promise<CpuShillAuctionSession | null>;
   claimAtReserve: () => Promise<CpuShillAuctionSession | null>;
   resolve: () => Promise<CpuShillAuctionSession | null>;
-  rotate: () => Promise<CpuShillAuctionSession | null>;
+  advance: () => Promise<CpuShillAuctionSession | null>;
   isCpuTeam: (teamId: string | null | undefined) => boolean;
 }
 
@@ -199,7 +196,6 @@ function stateProgressKey(session: CpuShillAuctionSession): string {
     nominationIndex: session.nominationIndex,
     nominationRound: session.nominationRound,
     available: session.availablePlayerIds.length,
-    setAside: session.setAsidePlayerIds.length,
     results: session.results.length,
     saleCount: session.saleCount,
     pendingClaim: session.pendingClaim,
@@ -243,7 +239,6 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
 
   const cpuTeamIds = useMemo(() => deriveFarmCpuTeamIds(session, leagueTeams), [leagueTeams, session]);
   const cpuTeamIdSet = useMemo(() => new Set(cpuTeamIds), [cpuTeamIds]);
-  const currentNominatorTeamId = session ? getCurrentNominator(session) : null;
   const currentBidderTeamId = getCurrentBidderTeamId(session);
 
   const persist = useCallback(async (nextSession: CpuShillAuctionSession, nextContext: FarmAuctionDraftContext) => {
@@ -271,13 +266,7 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
       if (next.state === "AUCTION_COMPLETE") return next;
 
       if (next.state === "NOMINATION") {
-        const nominator = getCurrentNominator(next);
-        if (!nextCpuTeamIds.has(nominator ?? "")) return next;
-
-        const decision = resolveCpuNomination(next, nominator!, `${next.config.nominationOrderSeed}:nominate:${step}`);
-        if (decision.kind !== "nominate") return next;
-
-        next = transitionOrThrow(nominatePlayer(next, decision.playerId));
+        next = transitionOrThrow(surfaceNextPlayer(next));
         await persist(next, nextContext);
       } else if (next.state === "OPEN_BIDDING") {
         if (!next.currentLot) return next;
@@ -414,6 +403,8 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
       cpuShillCount: Math.max(0, Math.min(partialConfig.cpuShillCount ?? DEFAULT_AUCTION_SETUP_CONFIG.cpuShillCount, teams.length)),
       turnTimerSeconds: partialConfig.turnTimerSeconds ?? null,
       excludeFromLeague: partialConfig.excludeFromLeague ?? true,
+      nominationWeightExponent: 3,
+      flatReserveFloor: LEAGUE_MINIMUM_SALARY,
     };
     const nextContext = { leagueId, seasonNumber: FARM_AUCTION_SEASON };
     const nextScoutsByTeamId = await loadOptionalFarmScouts(leagueId);
@@ -445,7 +436,6 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
     return autoAdvanceCpu(transitioned, context, leagueTeams);
   }), [autoAdvanceCpu, context, leagueTeams, persist, runAction, session]);
 
-  const nominate = useCallback((playerId: string) => runSessionTransition((current) => nominatePlayer(current, playerId)), [runSessionTransition]);
   const bid = useCallback((teamId: string, amount: number) => runSessionTransition((current) => recordBid(current, teamId, amount)), [runSessionTransition]);
   const pass = useCallback((teamId: string) => runSessionTransition((current) => {
     if (current.state === "RESOLVE" && current.pendingClaim?.teamId === teamId) {
@@ -455,7 +445,7 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
   }), [runSessionTransition]);
   const claimAtReserve = useCallback(() => runSessionTransition((current) => claimLoneSurvivor(current)), [runSessionTransition]);
   const resolve = useCallback(() => runSessionTransition((current) => evaluateResolve(current)), [runSessionTransition]);
-  const rotate = useCallback(() => runSessionTransition((current) => rotateNomination(current)), [runSessionTransition]);
+  const advance = useCallback(() => runSessionTransition((current) => advanceLot(current)), [runSessionTransition]);
 
   return {
     session,
@@ -470,16 +460,14 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
     activeLeagueId: context?.leagueId ?? null,
     seasonNumber: context?.seasonNumber ?? FARM_AUCTION_SEASON,
     cpuTeamIds,
-    currentNominatorTeamId,
     currentBidderTeamId,
     initFarmAuction,
     loadFarmAuction,
-    nominate,
     bid,
     pass,
     claimAtReserve,
     resolve,
-    rotate,
+    advance,
     isCpuTeam: (teamId) => cpuTeamIdSet.has(teamId ?? ""),
   };
 }

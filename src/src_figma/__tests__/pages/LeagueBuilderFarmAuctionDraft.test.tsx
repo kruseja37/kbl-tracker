@@ -1,14 +1,14 @@
 import "fake-indexeddb/auto";
 
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { reservePriceCurve } from "../../../data/rosterEngineConstants";
+import { LEAGUE_MINIMUM_SALARY } from "../../../data/rosterEngineConstants";
 import { normalizeToChemistryCode } from "../../../data/chemistryCanonical";
 import { chemistryFitPriceMultiplier } from "../../../engines/chemistryFitValue";
 import { gradeToTwentyEighty, scoutPriceOpinion } from "../../../engines/scoutPriceOpinion";
 import { perceivedValueRange } from "../../../engines/scoutValueRange";
-import { seededNominationOrder } from "../../../engines/auctionStateMachine";
+import { seededNominationOrder, surfaceNextPlayer } from "../../../engines/auctionStateMachine";
 import { buildFarmAuctionSession } from "../../../utils/farmAuctionSession";
 import {
   __resetLeagueBuilderDatabaseForTests,
@@ -206,8 +206,12 @@ function formatScoutRange(range: { displayedEstimate: number; low: number; high:
   return `${formatMoney(range.displayedEstimate)} estimate [${formatMoney(range.low)}-${formatMoney(range.high)}]`;
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function openEngineLot(session: ReturnType<typeof buildFarmAuctionSession>["session"]) {
+  const result = surfaceNextPlayer(session);
+  if (!result.ok || !result.session.currentLot) {
+    throw new Error("Expected farm auction engine to surface an open lot.");
+  }
+  return result.session;
 }
 
 describe("LeagueBuilderFarmAuctionDraft", () => {
@@ -241,8 +245,12 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
         bidIncrement: 1000,
         turnTimerSeconds: null,
         excludeFromLeague: true,
+        nominationWeightExponent: 3,
+        flatReserveFloor: LEAGUE_MINIMUM_SALARY,
       },
     });
+    const surfaced = openEngineLot(expected.session);
+    const surfacedLot = surfaced.currentLot!;
     const prospectById = new Map(expected.pool.prospects.map((prospect) => [prospect.id, prospect]));
     const baseCandidates = expected.session.availablePlayerIds
       .map((playerId) => expected.session.players[playerId])
@@ -269,30 +277,21 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
       ...emptyRoster(teamId),
       mlbRoster: teamId === "team-a" ? mlbRosterPlayerIds : [],
     }));
-    const sortedCandidates = baseCandidates
-      .map((candidate) => {
-        const chemFit = chemistryFitPriceMultiplier(candidate.prospect.chemistry, rosterChemistryCounts);
-        const range = perceivedValueRange(
-          candidate.priceOpinion * chemFit,
-          candidate.accuracy,
-          `${seed}:team-a:${candidate.candidate.playerId}`,
-        );
-        return { ...candidate, range, chemFit };
-      })
-      .sort((left, right) =>
-        right.range.displayedEstimate - left.range.displayedEstimate ||
-        prospectDisplayName(left.prospect).localeCompare(prospectDisplayName(right.prospect)),
-      );
-    const target = sortedCandidates.find((candidate) => candidate.chemFit > 1);
-    if (!target) throw new Error("Expected at least one chemistry-fit farm auction target.");
-    const neutralTarget = sortedCandidates.find((candidate) => candidate.chemFit === 1);
-    if (!neutralTarget) throw new Error("Expected at least one neutral chemistry-fit farm auction target.");
+    const target = baseCandidates.find((candidate) => candidate.candidate.playerId === surfacedLot.playerId);
+    if (!target) throw new Error("Expected the engine-surfaced farm lot in the candidate list.");
+    const targetChemFit = chemistryFitPriceMultiplier(target.prospect.chemistry, rosterChemistryCounts);
+    const targetRange = perceivedValueRange(
+      target.priceOpinion * targetChemFit,
+      target.accuracy,
+      `${seed}:team-a:${target.candidate.playerId}`,
+    );
     const targetName = prospectDisplayName(target.prospect);
-    const targetRangeText = formatScoutRange(target.range);
+    const targetRangeText = formatScoutRange(targetRange);
     const targetGradeText = `Scout grade ${target.prospect.prospectProfile.scoutedGrade} (${gradeToTwentyEighty(target.prospect.prospectProfile.scoutedGrade)})`;
-    const targetRangeMidpoint = (target.range.low + target.range.high) / 2;
-    const expectedSalePrice = formatMoney(Math.ceil(reservePriceCurve(target.candidate.ivPercentile) * target.candidate.iv));
-    const neutralRangeMidpoint = (neutralTarget.range.low + neutralTarget.range.high) / 2;
+    const targetRangeMidpoint = (targetRange.low + targetRange.high) / 2;
+    const expectedOpeningPrice = formatMoney(LEAGUE_MINIMUM_SALARY);
+    const expectedBidAmount = Math.ceil(LEAGUE_MINIMUM_SALARY);
+    const expectedSalePrice = formatMoney(expectedBidAmount);
 
     render(<LeagueBuilderFarmAuctionDraft />);
 
@@ -303,50 +302,38 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     fireEvent.click(await screen.findByRole("button", { name: /BEGIN FARM AUCTION/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("STATE: NOMINATION")).toBeInTheDocument();
-    });
-
-    const targetButton = screen.getByRole("button", { name: new RegExp(escapeRegExp(targetName)) });
-    expect(targetButton).toHaveTextContent(targetName);
-    for (const position of prospectPositions(target.prospect)) {
-      expect(within(targetButton).getByText(position)).toBeInTheDocument();
-    }
-    expect(targetButton).toHaveTextContent(targetGradeText);
-    expect(targetButton).toHaveTextContent(`Scout value ${targetRangeText}`);
-    expect(target.range.low).not.toBe(target.range.high);
-    expect(target.chemFit).toBeCloseTo(1.08, 10);
-    expect(targetRangeMidpoint).toBeCloseTo(target.priceOpinion * target.chemFit, 10);
-    expect(targetRangeMidpoint).not.toBe(target.candidate.iv);
-    expect(targetButton).not.toHaveTextContent(formatMoney(target.candidate.iv));
-    expect(targetButton).not.toHaveTextContent(/\b(POW|CON|SPD|FLD|ARM|VEL|JNK|ACC)\b/);
-    expect(targetButton).not.toHaveTextContent(/Overall|True grade|Ratings/i);
-    const neutralButton = screen.getByRole("button", { name: new RegExp(escapeRegExp(prospectDisplayName(neutralTarget.prospect))) });
-    expect(neutralButton).toHaveTextContent(`Scout value ${formatScoutRange(neutralTarget.range)}`);
-    expect(neutralRangeMidpoint).toBeCloseTo(neutralTarget.priceOpinion, 10);
-
-    fireEvent.click(targetButton);
-
-    await waitFor(() => {
       expect(screen.getByText("STATE: OPEN_BIDDING")).toBeInTheDocument();
     });
 
+    expect(screen.getByText("ENGINE NOMINATED")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Position filter")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /SCOUT SORT/i })).not.toBeInTheDocument();
     expect(screen.getByText(targetName)).toBeInTheDocument();
+    for (const position of prospectPositions(target.prospect)) {
+      expect(screen.getAllByText(position).length).toBeGreaterThan(0);
+    }
     expect(screen.getByText(`Scout value ${targetRangeText}`)).toBeInTheDocument();
     expect(screen.getByText(targetGradeText)).toBeInTheDocument();
+    expect(screen.getByText(`Opening ${expectedOpeningPrice}`)).toBeInTheDocument();
+    expect(targetRange.low).not.toBe(targetRange.high);
+    expect(targetRangeMidpoint).toBeCloseTo(target.priceOpinion * targetChemFit, 10);
+    expect(targetRangeMidpoint).not.toBe(target.candidate.iv);
     expect(screen.queryByText(formatMoney(target.candidate.iv))).not.toBeInTheDocument();
+    expect(screen.queryByText(/\b(POW|CON|SPD|FLD|ARM|VEL|JNK|ACC)\b/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Overall|True grade|Ratings/i)).not.toBeInTheDocument();
     expect(screen.getByText("YOUR REMAINING BUDGET")).toBeInTheDocument();
     expect(screen.getByText("YOUR MAX BID")).toBeInTheDocument();
     expect(screen.getByText("ROSTER SLOTS REMAINING")).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getByLabelText("Custom bid amount")).toHaveValue(Number(expectedSalePrice.replace(/[$,]/g, "")));
+      expect(screen.getByLabelText("Custom bid amount")).toHaveValue(expectedBidAmount);
     });
 
     fireEvent.click(screen.getByRole("button", { name: /RAISE CUSTOM/i }));
 
     await waitFor(() => {
       expect(screen.getByLabelText("Custom bid amount")).toHaveValue(
-        Number(expectedSalePrice.replace(/[$,]/g, "")) + 1000,
+        expectedBidAmount + 1000,
       );
     });
 

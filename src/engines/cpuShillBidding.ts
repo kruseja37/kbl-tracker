@@ -1,4 +1,4 @@
-import { auctionMaxBid, reservePriceCurve } from '../data/rosterEngineConstants';
+import { auctionMaxBid } from '../data/rosterEngineConstants';
 import {
   BANDS,
   BAND_STATS,
@@ -8,8 +8,6 @@ import {
   type BandPriorities,
 } from './leagueConstruction';
 import {
-  getCurrentNominator,
-  nominatePlayer,
   type AuctionPlayer,
   type AuctionSession,
 } from './auctionStateMachine';
@@ -101,28 +99,6 @@ export type CpuLoneSurvivorDecision =
       maxBid: number | null;
     };
 type CpuLoneSurvivorPassReason = Extract<CpuLoneSurvivorDecision, { kind: 'pass' }>['reason'];
-
-export type CpuNominationPassReason =
-  | 'expected-nomination'
-  | 'no-current-nominator'
-  | 'no-legal-player'
-  | 'team-not-on-clock';
-
-export type CpuNominationDecision =
-  | {
-      kind: 'nominate';
-      teamId: string;
-      playerId: string;
-      openingAsk: number;
-      valuation: number;
-      score: number;
-      personality: CpuShillPersonality;
-    }
-  | {
-      kind: 'pass';
-      teamId: string;
-      reason: CpuNominationPassReason;
-    };
 
 interface ResolvedCpuShillProfile extends CpuShillProfile {
   personalityBias: number;
@@ -370,81 +346,6 @@ export function cpuDecideLoneSurvivor(
     price,
     valuation,
     maxBid,
-  };
-}
-
-export function resolveCpuNomination(
-  session: CpuShillAuctionSession,
-  shillTeamId: string,
-  seed: string,
-): CpuNominationDecision {
-  if (session.state !== 'NOMINATION') {
-    return { kind: 'pass', teamId: shillTeamId, reason: 'expected-nomination' };
-  }
-  const nominator = getCurrentNominator(session);
-  if (nominator === null) {
-    return { kind: 'pass', teamId: shillTeamId, reason: 'no-current-nominator' };
-  }
-  if (nominator !== shillTeamId) {
-    return { kind: 'pass', teamId: shillTeamId, reason: 'team-not-on-clock' };
-  }
-
-  const shill = resolveSessionShill(session, shillTeamId, seed);
-  const personality = CPU_SHILL_PERSONALITY_PROFILES[shill.personality];
-  let best:
-    | {
-        playerId: string;
-        openingAsk: number;
-        valuation: number;
-        score: number;
-      }
-    | null = null;
-
-  const maxOpeningAsk = Math.max(
-    1,
-    ...session.availablePlayerIds.map((playerId) => {
-      const player = session.players[playerId];
-      return player === undefined ? 0 : reservePriceCurve(player.ivPercentile) * player.iv;
-    }),
-  );
-
-  for (const playerId of session.availablePlayerIds) {
-    const legal = nominatePlayer(session, playerId);
-    if (!legal.ok) continue;
-    const player = session.players[playerId] as CpuShillAuctionPlayer | undefined;
-    if (player === undefined) continue;
-
-    const openingAsk = reservePriceCurve(player.ivPercentile) * player.iv;
-    const valuation = evaluateCpuValuation(player, shill, `${seed}:nomination`);
-    const bargain = Math.max(0, valuation - openingAsk);
-    const randomJitter = seededUnit(`${seed}:${shillTeamId}:${playerId}:nomination`) * player.iv * 0.03;
-    const score =
-      valuation * personality.nominationValueWeight +
-      bargain * personality.nominationBargainWeight +
-      (openingAsk / maxOpeningAsk) * player.iv * personality.nominationDrainWeight +
-      randomJitter;
-
-    if (
-      best === null ||
-      score > best.score ||
-      (score === best.score && playerId.localeCompare(best.playerId) < 0)
-    ) {
-      best = { playerId, openingAsk, valuation, score };
-    }
-  }
-
-  if (best === null) {
-    return { kind: 'pass', teamId: shillTeamId, reason: 'no-legal-player' };
-  }
-
-  return {
-    kind: 'nominate',
-    teamId: shillTeamId,
-    playerId: best.playerId,
-    openingAsk: best.openingAsk,
-    valuation: best.valuation,
-    score: best.score,
-    personality: shill.personality,
   };
 }
 

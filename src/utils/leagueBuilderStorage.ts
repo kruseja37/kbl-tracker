@@ -110,7 +110,7 @@ export interface LeagueTemplate {
 }
 
 export function getLeagueDraftFormat(template: Pick<LeagueTemplate, 'draftFormat'> | null | undefined): 'auction' | 'snake' {
-  return template?.draftFormat ?? 'snake';
+  return template?.draftFormat ?? 'auction';
 }
 
 // Team
