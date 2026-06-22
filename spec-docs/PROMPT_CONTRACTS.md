@@ -15707,3 +15707,123 @@ the hook → STOP and quote. If wiring the multiplier forces a change to `scoutP
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-1b-2 ===== -->
+
+<!-- ===== CONTRACT: RB-2a (pure build-dark one-chance auction engine: weighted-reveal selector + surface/resolve/advance) ===== -->
+**ROUTE:** Codex (gpt-5.5) CLI | xhigh reasoning effort
+**ROLE:** You are the Mode-1 auction core-engine builder. This is a DELICATE core-engine ticket: build the NEW engine-driven
+one-chance nomination/resolve API as **PURE, ADDITIVE, BUILD-DARK** functions ALONGSIDE the existing GM-nomination API. Do NOT
+modify, rename, or delete any existing function, type field, or test. Nothing wires to your new functions in this ticket (that is
+RB-2b) — they are exercised only by a NEW test file you add.
+
+**GOAL:** Add an engine-driven, seeded, weighted-reveal nomination + one-chance resolution sub-API to the auction state machine
+(AUCTION_DRAFT_SPEC_V2 §2.1/§2.2/§2.3) so RB-2b can wire the hooks/pages to it and delete the old GM-nomination + re-nomination
+machinery.
+
+**SOURCE OF TRUTH:** `spec-docs/AUCTION_DRAFT_SPEC_V2.md` §2.1 (engine weighted reveal ∝ percentile^k, seeded; both tiers; the
+percentile INPUT differs by tier but the engine just consumes `player.ivPercentile`), §2.2 (one-chance: ≥1 bid → highest wins; NO
+bid → PERMANENTLY OUT, never re-surfaced; no re-nomination, no set-aside-then-return), §2.3 (roster-fill: when the pool empties the
+auction ends — the surplus guarantee is upstream in the pool builder, NOT this engine). `spec-docs/AUCTION_REBUILD_PLAN.md` RB-2.
+
+**GROUNDED ANCHORS (re-read at source in /Users/johnkruse/Projects/kbl-mode1 before editing — do not trust these line refs blindly):**
+- `src/engines/auctionStateMachine.ts` — the file to extend. Existing (DO NOT TOUCH): `AuctionSession` shape (:85), `AuctionPlayer`
+  {playerId, iv, ivPercentile} (:20), `Lot` (:44), `AuctionResult` (:67), `nominatePlayer` (:219, the OLD GM entry — leave intact),
+  `rotateNomination` (:356), `evaluateResolve` (:308), `finalizePassedLot` (:440, the OLD tracker-writing passed-finalize — leave
+  intact), `finalizeSoldLot` (:397, REUSABLE — it calls `releaseEligiblePassedPlayers` which is a NO-OP when `passedTracker` is `{}`,
+  so your one-chance path may safely reuse it), `getNominationBlockReason` (:500), `nextBidTurn` (:188), `reservePriceCurve`
+  import + `auctionMaxBid`, `findNextOpenNominationIndex` (:557), `hashString` (:607, FNV-1a → uint32), `accepted`/`rejected`
+  helpers. `recordBid` (:260) and `passBid` (:287) are SHARED and unchanged — your one-chance path reuses them.
+- `src/data/auctionEngineConstants.ts` — `AuctionSetupConfig` (:15), `DEFAULT_AUCTION_SETUP_CONFIG` (:36).
+- `src/data/rosterEngineConstants.ts` — `reservePriceCurve(ivPercentile)` (:317) expects ivPercentile on a **0–100** scale (clamps to
+  90); `computeIvPercentiles` (useAuctionDraft.ts:97) produces ivPercentile in **0–100**.
+- Resume-safe step counter: under one-chance each surfaced player yields EXACTLY ONE `results` entry (SOLD or PASSED), so
+  `session.results.length` at surface time is a deterministic, persisted, resume-safe surface-step index.
+
+**MAKE-OR-BREAK (the one property the audit will try hardest to break):** A no-bid player is **PERMANENTLY OUT** — never
+re-surfaced, NO `passedTracker` entry written, NOT re-added to `availablePlayerIds`; AND the next nominee is chosen BY THE ENGINE
+(weighted ∝ (percentile/100)^k, seeded, fully reproducible from `(seed, results.length, playerId, weight)`), never by a caller-passed
+playerId. The new test must prove a passed player is gone forever across subsequent surfaces.
+
+**WHAT TO BUILD (all PURE, all EXPORTED, ADDITIVE — no behavior change to any existing export):**
+
+1. `src/data/auctionEngineConstants.ts`:
+   - Add OPTIONAL field `nominationWeightExponent?: number;` to `AuctionSetupConfig` (optional → back-compat; do NOT make it required).
+   - Add `export const DEFAULT_NOMINATION_WEIGHT_EXPONENT = 2.5;` (mid of the §2.1 ~2–3 band; per-tier overrides come from the hooks in RB-2b).
+   - Leave `DEFAULT_AUCTION_SETUP_CONFIG` **byte-unchanged** (do NOT add the field to it — the selector falls back via `??`).
+
+2. `src/engines/auctionStateMachine.ts` (add these; touch NOTHING existing except a new `import { DEFAULT_NOMINATION_WEIGHT_EXPONENT } from '../data/auctionEngineConstants'`):
+   - `export function selectNextNominee(session: AuctionSession): string | null` — Efraimidis–Spirakis seeded weighted sampling
+     without replacement over `session.availablePlayerIds`:
+       • if `availablePlayerIds` is empty → return `null`.
+       • `const step = session.results.length;` `const seed = session.config.nominationOrderSeed;`
+         `const k = session.config.nominationWeightExponent ?? DEFAULT_NOMINATION_WEIGHT_EXPONENT;`
+       • for each candidate id present in `session.players`:
+           `const pctile01 = Math.min(Math.max((session.players[id].ivPercentile) / 100, 0), 1);`
+           `const weight = Math.pow(Math.max(pctile01, 0.02), k);`  // 0.02 floor → every player has nonzero draw weight (pool fully drains)
+           `const u = (hashString(`${seed}:surface:${step}:${id}`) + 0.5) / 0x100000000;`  // u in (0,1)
+           `const key = Math.pow(u, 1 / weight);`
+       • return the candidate with the **largest key**; tie-break by `id.localeCompare`. (Skip any availableId missing from `session.players`.)
+       • This is reproducible: depends only on (seed, step, id, weight) — not on draw order — so save/resume reproduces the surface order.
+   - `export function surfaceNextPlayer(session: AuctionSession): AuctionTransitionResult` — the engine surface (replaces `nominatePlayer`):
+       • reject `'auction-complete'` if state AUCTION_COMPLETE; `'expected-nomination'` if state !== NOMINATION; `'current-lot-open'` if currentLot !== null.
+       • `const playerId = selectNextNominee(session);` if `null` → `accepted({ ...session, state: 'AUCTION_COMPLETE', currentLot: null, pendingClaim: null })`.
+       • `openingAsk = reservePriceCurve(player.ivPercentile) * player.iv` (same as the old path).
+       • `stillIn` = teams with `rosterSlotsRemaining > 0` (teamId list).
+       • opening bidder rotation: the first team in `nominationOrder` at-or-after `session.nominationIndex` that is in `stillIn`
+         (reuse/adapt `findNextOpenNominationIndex` + `nominationOrder` indexing; fall back to the first stillIn team). Set
+         `bidTurnTeamId` to it. (No nominator exists under engine nomination; set `Lot.nominatorTeamId` to this opening-bidder teamId —
+         it is VESTIGIAL under one-chance; RB-2b owns the final Lot/Result shape decision. Document this in a code comment.)
+       • → state OPEN_BIDDING; currentLot {playerId, nominatorTeamId: openingBidder, openingAsk, highBid:null, highBidder:null, stillIn, bidTurnTeamId};
+         `availablePlayerIds` minus playerId; pendingClaim null.
+   - `function finalizePassedLotPermanent(session: AuctionSession): AuctionSession` (internal) — like `finalizePassedLot` but the
+     one-chance terminal: append a `{ disposition:'PASSED', winnerTeamId:null, salary:null, ... }` result, set state 'PASSED', currentLot
+     kept; write **NO** `passedTracker` entry and **NO** `setAsidePlayerIds` change (the player was already removed at surface and never returns).
+   - `export function resolveLot(session: AuctionSession): AuctionTransitionResult` — the one-chance resolve (mirrors `evaluateResolve`
+     EXACTLY for the stillIn>1 / sold / lone-survivor-pending branches — reuse `finalizeSoldLot`) but the final no-bid branch calls
+     `finalizePassedLotPermanent` instead of `finalizePassedLot`.
+   - `export function passLoneSurvivorOut(session: AuctionSession): AuctionTransitionResult` — the one-chance lone-survivor pass:
+     RESOLVE + pendingClaim required → `finalizePassedLotPermanent` (permanent out). (`claimLoneSurvivor` is REUSED unchanged for the claim path.)
+   - `export function advanceLot(session: AuctionSession): AuctionTransitionResult` — the one-chance "next lot" (replaces `rotateNomination`):
+       • AUCTION_COMPLETE → accepted(session); reject `'expected-passed-or-sold'` if state not SOLD/PASSED.
+       • if `isAuctionComplete(session)` (all teams full) OR `availablePlayerIds.length === 0` (pool exhausted — the §2.3 tail terminal) →
+         AUCTION_COMPLETE (currentLot/pendingClaim null).
+       • else → state NOMINATION, currentLot/pendingClaim null, and bump the opening-bidder rotation:
+         `nominationIndex = findNextOpenNominationIndex(teams, nominationOrder, nominationIndex + 1)` (clamp -1 → keep prior), bump
+         `nominationRound` on wrap (mirror `rotateNomination`'s `+ (next <= nominationIndex ? 1 : 0)`).
+
+3. `src/engines/__tests__/auctionStateMachineOneChance.test.ts` (NEW FILE — do NOT modify the existing `auctionStateMachine.test.ts`):
+   non-vacuous tests proving:
+   - selectNextNominee is DETERMINISTIC (same session+seed → same id) and weighting works (with a high k and distinct percentiles, the
+     high-percentile player is selected for a known seed; assert the actual selected id, not just "is a string").
+   - the pool fully DRAINS via repeated surface→resolve→advance: every player surfaced EXACTLY once, no repeats, no omissions.
+   - surfaceNextPlayer: NOMINATION→OPEN_BIDDING, lot opened at reserve, player removed from `availablePlayerIds`, bidTurn set; rejects from wrong states.
+   - **MAKE-OR-BREAK:** a no-bid player → resolveLot → state PASSED, `passedTracker` has NO entry for it, it is NOT in `availablePlayerIds`,
+     and after advanceLot the next surfaceNextPlayer NEVER returns it again (permanent out). Contrast: do NOT assert any re-nomination.
+   - resume-safety: selectNextNominee returns the same id for the same (seed, results.length) across two independent sessions.
+   - advanceLot terminal: AUCTION_COMPLETE when pool empty AND when all teams full.
+
+**CONSTRAINTS:**
+- Edit ONLY: `src/data/auctionEngineConstants.ts`, `src/engines/auctionStateMachine.ts`, and NEW `src/engines/__tests__/auctionStateMachineOneChance.test.ts`.
+- Do NOT modify/rename/delete ANY existing export, type, or field (nominatePlayer, rotateNomination, evaluateResolve, finalizePassedLot,
+  getNominationBlockReason, getCurrentNominator, passedTracker, setAsidePlayerIds — all stay). Do NOT modify the existing test file.
+- Do NOT touch hooks, pages, cpuShillBidding, persistence (leagueBuilderStorage/farmAuctionSession), or the frozen IV oracle
+  (`spec-docs/reference/iv_oracle.json`). Branch-only on `codex/mode1-v1`; do NOT commit or push.
+- Pure functions only (no IndexedDB, no Date.now/Math.random, no async). Determinism via `hashString` only.
+
+**EXPECTED OUTPUT:** the new exported functions compile; the new test file passes; the EXISTING auctionStateMachine.test.ts and
+auctionEngineConstants.test.ts remain green unchanged (old GM-nomination + re-nomination behavior byte-identical).
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` exit 0; `NODE_ENV= npx vitest run src/engines/__tests__/auctionStateMachineOneChance.test.ts
+src/engines/__tests__/auctionStateMachine.test.ts src/data/tests/auctionEngineConstants.test.ts` all green. Paste ACTUAL output.
+(Opus re-runs the FULL Mode-1 suite + confirms zero-new-reds vs `wpaRuntimeBoundary`.)
+
+**FORMAT:** 1) every changed/new path + total count; 2) describe each new function + confirm NO existing export/field/test changed and
+NO hook/page/persistence/oracle touch; 3) ACTUAL tsc + vitest output; 4) "RB-2a complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL (STOP-IF):** if adding `nominationWeightExponent` to `AuctionSetupConfig` breaks `auctionEngineConstants.test.ts`
+→ STOP and quote the failing assertion. If reusing `finalizeSoldLot` in the one-chance path is NOT safe (i.e. it mutates
+`passedTracker`/`setAsidePlayerIds` in a way that affects a clean one-chance session) → STOP and report. If the weighted-sampling
+math cannot guarantee the pool fully drains (some player never selectable) → STOP and report. If any existing export must change to
+make the new path compile → STOP and report.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-2a ===== -->
