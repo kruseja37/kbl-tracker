@@ -7,6 +7,20 @@
 
 ## June 2026
 
+### 2026-06-22 (attended): Trait gain/loss threshold system — value/scarcity sliding scale — RULED
+
+**Context:** JK's design question — what thresholds gate trait gain/loss over a season; group/scale them by trait value/scarcity; leverage the XBL workbook. Research run `wt1ks3cku`. Full design → `spec-docs/TRAIT_GAIN_LOSS_THRESHOLD_SPEC.md`.
+
+**RULINGS:**
+- **One trait `traitWeight` = 80% $ value (IV ranking) + 20% scarcity (workbook `TEAM MAX USES`)**, rank-normalized. Drives BOTH in-season gain/loss thresholds AND prospect generation rarity (the unifying scale).
+- **4 positive tiers (Common/Uncommon/Rare/Elite) + 3 negative tiers (Minor/Moderate/Severe)**, grouped + tunable, with per-trait overrides. Valuable → higher gain threshold + lower loss threshold (harder to earn, stickier). Example positives: Elite gain 0.92/loss 0.12; Common 0.55/0.30.
+- **Negatives inverted:** gain a flaw by performing badly, lose by performing well. **Severe negatives = HARD to acquire + sticky** (only the persistently terrible; easy-to-acquire = Minor). 
+- **NO age effect in v1** — performance-only (age-gating = documented v2).
+- **Generation rarity:** `genWeight = 1 − traitWeight`; weighted draw (not uniform) at ~27% negative; Two-Way = Elite floor `genWeight≈0.05` (RARE, never excluded); Sign Stealer + Stimulated excluded from the adaptive engine entirely (still priced).
+- **Build:** the in-season threshold seam is BUILT (`traitAcquisition.ts` gain/loss already a tuning arg — widen scalar→tier-lookup); the scale/tier config + negative inversion + generation weighting are bounded greenfield; the visible in-game gain/loss needs the deferred confirmation UI + Phase-2 flag (post-D13).
+
+**OPEN FORK (JK):** TWO competing season trait-change systems — the in-season checkpoint **threshold engine** (this spec) vs the **EOS "Trait Wheel Spin"** (`EOS_RATINGS_ADJUSTMENT_SPEC.md` §449: probabilistic award-ceremony, winners 60%/top 30%/regular 5%, 15% negative, eye-test). DECIDE: threshold engine SUPERSEDES the wheel-spin, they LAYER, or one is deprecated. (Also: EOS 15%-negative vs generation 27% inconsistency.)
+
 ### 2026-06-22 (attended, cont.): Prospect-generator audit + trait/CPU-scout rulings — RULED
 
 **Context:** A logic audit of the Mode-1 prospect generator (`prospectScoutingDraftEngine.ts` + `smb4PlayerGenerator.ts`) surfaced real bugs + a spec conflict. JK ruled the open forks. Fixes execute on `codex/mode1-v1` (attended thread's chemistry/trait/prospect/draft cluster).
