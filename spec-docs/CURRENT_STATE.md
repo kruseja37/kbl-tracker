@@ -98,11 +98,16 @@
 > (`buildDraftAnalyzerInput`/`analyzeDraftRoster`) mapping the GM's in-progress won MLB+farm roster → the EXISTING `analyzeRoster` (REUSE, not a parallel hole-detector).
 > MLB ratings VISIBLE (public §3.6), farm ratings OBSCURED + scout signal on `optionState` (§3.2). Make-or-break proven: incomplete MLB roster → `position_coverage`
 > holes; farm prospects → `farm_options`/`call_up_advice` (read_only) — all from the existing engine. NO UI consumer yet (RB-9c). FULL suite **495 files / 8054 tests,
-> 1 fail (wpaRuntimeBoundary).** **RB-9 SPLIT:** 9a (done) / **RB-9b (NEXT) = farm-archetype DUAL identity** (additive `farmCapIdentity?` on the leagueBuilder `Team`
-> — NOT the franchise config, because the draft runs pre-franchise-init — + BandPriorities→Smb4TeamProfileLevels mapping [resolve the Defense band] + the §3.5
-> hole-weighting tilt; likely sub-splits) / **RB-9c = the §9 roster board UI** (both auction pages, gaps highlighted, reuse the analyzer report + panel pattern + scout-JOIN).
-> **RB-9a OPEN-DECISIONS (defaults taken):** D-9a-1 (draft analyzer salary disabled — holes-focused) · D-9a-2 (minimal self-contained adapter DTOs) · D-9b-PREVIEW (farm-archetype
-> home = leagueBuilder Team, no trackerDb bump — grounded correction of the recon's franchise-config rec). Then RB-10 … RB-18.
+> 1 fail (wpaRuntimeBoundary).**
+> **✅ RB-9b COMPLETE (WAVE 74, `475fed15`, `codex/mode1-v1`, branch-only, ZERO-NEW-REDS) — the farm-archetype field (saved-shape) + the archetype→profile-target BRIDGE (build-DARK).**
+> Additive `farmCapIdentity?: TeamCapIdentity` on the leagueBuilder `Team` (DUAL identity, peer to MLB `capIdentity`; `kbl-league-builder` v8 record field, NO version bump, V6-migration
+> round-trip test green) + NEW pure `src/engines/farmArchetypeProfile.ts` `bandPrioritiesToTargetProfile` (the bridge `composeIdentity` lacks: band priorities → `Smb4TeamProfileLevels`
+> target; Power/Contact/Speed/Rotation/Bullpen mapped, Defense dropped; priority→level curve sim-tunable). FULL suite **496 files / 8059 tests, 1 fail (wpaRuntimeBoundary).**
+> **RB-9 SPLIT:** 9a ✅ / 9b ✅ / **RB-9c (NEXT) = the §9 roster visibility board + the §3.5 hole-weighting tilt + the farm-archetype setup picker** (consumer/UI payoff; SUBSTANTIAL → likely sub-splits).
+> Reuse `analyzeDraftRoster` (9a) + `bandPrioritiesToTargetProfile`/`compareTeamProfiles`/`calculateTeamProfile` (9b) for archetype-weighted gaps; the existing analyzer panels are a STYLE
+> reference (text chips), the glanceable MLB+farm gaps-highlighted board is NEW UI; mount on both auction pages; GM team via `controlledBy==='human'`; scout-JOIN reuses `scoutRangeForProspect`.
+> **RB-9a/9b OPEN-DECISIONS (defaults taken):** D-9a-1 (draft salary disabled) · D-9a-2 (self-contained adapter DTOs) · D-9b-1 (farm-archetype home = leagueBuilder Team, no DB bump) ·
+> D-9b-2 (Defense band dropped from profile-gap) · D-9b-3 (priority→level curve, normalized by max mapped, sim-tunable). Then RB-10 … RB-18.
 > **OPEN (verify at RB-16):** the §2.3 surplus pool-sizing (pool ≥ total slots) lives upstream in the pool builder; the RB-2b-1 forced-filler
 > guarantee assumes it. **JK-BROWSER-VERIFY BATCHED
 > (persistence-prioritized):** RB-0b-1 — a real draft stamps all 3 axes onto league players + they carry into the franchise (7-type personality
