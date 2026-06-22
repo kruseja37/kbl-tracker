@@ -277,6 +277,8 @@ export interface Player {
   mojo: MojoState;
   fame: number;
   salary: number;
+  // §10 freeze: the auction winning bid (RB-7c); additive, no consumer in v1
+  settledSalary?: number;
   salaryCalculationVersion?: string;
   salarySeasonId?: string;
   salaryStatsScopeId?: string;
