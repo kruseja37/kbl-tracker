@@ -101,27 +101,6 @@ function buildMidAuctionSession(): CpuShillAuctionSession {
     },
     playerOrder: ['lot-player', 'available-player', 'passed-player', 'set-aside-player'],
     availablePlayerIds: ['available-player', 'passed-player'],
-    setAsidePlayerIds: ['set-aside-player'],
-    passedTracker: {
-      'passed-player': {
-        totalPasses: 2,
-        passCountSinceLastSale: 1,
-        lastPassSaleCount: 1,
-        blockedUntilSaleCount: 2,
-        lastPassNominatorTeamId: 'team-a',
-        lastPassNominationRound: 1,
-        setAside: false,
-      },
-      'set-aside-player': {
-        totalPasses: 3,
-        passCountSinceLastSale: 3,
-        lastPassSaleCount: 1,
-        blockedUntilSaleCount: 3,
-        lastPassNominatorTeamId: 'team-c',
-        lastPassNominationRound: 1,
-        setAside: true,
-      },
-    },
     currentLot: {
       playerId: 'lot-player',
       nominatorTeamId: 'team-c',

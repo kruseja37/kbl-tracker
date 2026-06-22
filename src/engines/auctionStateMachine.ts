@@ -73,16 +73,6 @@ export interface AuctionResult {
   salary: number | null;
 }
 
-export interface PassedPlayerTracker {
-  totalPasses: number;
-  passCountSinceLastSale: number;
-  lastPassSaleCount: number;
-  blockedUntilSaleCount: number;
-  lastPassNominatorTeamId: string;
-  lastPassNominationRound: number;
-  setAside: boolean;
-}
-
 export interface AuctionSession {
   state: AuctionState;
   config: AuctionSetupConfig;
@@ -93,8 +83,6 @@ export interface AuctionSession {
   players: Readonly<Record<string, AuctionPlayer>>;
   playerOrder: readonly string[];
   availablePlayerIds: readonly string[];
-  setAsidePlayerIds: readonly string[];
-  passedTracker: Readonly<Record<string, PassedPlayerTracker>>;
   currentLot: Lot | null;
   pendingClaim: PendingClaim | null;
   results: readonly AuctionResult[];
@@ -123,9 +111,6 @@ export type AuctionRejectionReason =
   | 'no-open-nominator'
   | 'no-pending-claim'
   | 'player-already-sold-or-unavailable'
-  | 'player-blocked-by-nominator-cycle'
-  | 'player-blocked-until-sale'
-  | 'player-set-aside'
   | 'team-full'
   | 'team-not-found'
   | 'team-not-in-lot'
@@ -160,18 +145,11 @@ export function initAuctionSession(input: InitAuctionSessionInput): AuctionSessi
     players,
     playerOrder,
     availablePlayerIds: [...playerOrder],
-    setAsidePlayerIds: [],
-    passedTracker: {},
     currentLot: null,
     pendingClaim: null,
     results: [],
     saleCount: 0,
   };
-}
-
-export function getCurrentNominator(session: AuctionSession): string | null {
-  if (session.state === 'AUCTION_COMPLETE' || session.nominationOrder.length === 0) return null;
-  return session.nominationOrder[session.nominationIndex] ?? null;
 }
 
 export function getCurrentBidderTeamId(session: AuctionSession | null): string | null {
@@ -307,47 +285,6 @@ export function surfaceNextPlayer(session: AuctionSession): AuctionTransitionRes
   });
 }
 
-export function nominatePlayer(session: AuctionSession, playerId: string): AuctionTransitionResult {
-  if (session.state === 'AUCTION_COMPLETE') return rejected(session, 'auction-complete');
-  if (session.state !== 'NOMINATION') return rejected(session, 'expected-nomination');
-  if (session.currentLot !== null) return rejected(session, 'current-lot-open');
-
-  const nominatorTeamId = getCurrentNominator(session);
-  if (nominatorTeamId === null) return rejected(session, 'no-open-nominator');
-
-  const nominator = findTeam(session, nominatorTeamId);
-  if (nominator === null) return rejected(session, 'team-not-found');
-  if (nominator.rosterSlotsRemaining <= 0) return rejected(session, 'nominator-full');
-
-  const availability = getNominationBlockReason(session, playerId, nominatorTeamId);
-  if (availability !== null) return rejected(session, availability);
-
-  const player = session.players[playerId];
-  const openingAsk = reservePriceCurve(player.ivPercentile) * player.iv;
-  const stillIn = session.teams
-    .filter((team) => team.rosterSlotsRemaining > 0)
-    .map((team) => team.teamId);
-  const bidTurnTeamId = stillIn.includes(nominatorTeamId)
-    ? nominatorTeamId
-    : nextBidTurn(session.nominationOrder, stillIn, nominatorTeamId, null);
-
-  return accepted({
-    ...session,
-    state: 'OPEN_BIDDING',
-    currentLot: {
-      playerId,
-      nominatorTeamId,
-      openingAsk,
-      highBid: null,
-      highBidder: null,
-      stillIn,
-      bidTurnTeamId,
-    },
-    pendingClaim: null,
-    availablePlayerIds: session.availablePlayerIds.filter((id) => id !== playerId),
-  });
-}
-
 export function recordBid(session: AuctionSession, teamId: string, bid: number): AuctionTransitionResult {
   if (session.state !== 'OPEN_BIDDING') return rejected(session, 'expected-open-bidding');
   const lot = session.currentLot;
@@ -396,33 +333,6 @@ export function passBid(session: AuctionSession, teamId: string): AuctionTransit
   });
 }
 
-export function evaluateResolve(session: AuctionSession): AuctionTransitionResult {
-  if (session.state !== 'OPEN_BIDDING' && session.state !== 'RESOLVE') {
-    return rejected(session, 'expected-resolve');
-  }
-  const lot = session.currentLot;
-  if (lot === null) return rejected(session, 'no-current-lot');
-  if (lot.stillIn.length > 1) {
-    return accepted({ ...session, state: 'OPEN_BIDDING', pendingClaim: null });
-  }
-  if (lot.highBid !== null && lot.highBidder !== null) {
-    return accepted(finalizeSoldLot(session, lot.highBidder, lot.highBid));
-  }
-  if (lot.stillIn.length === 1) {
-    return accepted({
-      ...session,
-      state: 'RESOLVE',
-      pendingClaim: {
-        playerId: lot.playerId,
-        teamId: lot.stillIn[0],
-        price: lot.openingAsk,
-      },
-    });
-  }
-
-  return accepted(finalizePassedLot(session));
-}
-
 export function resolveLot(session: AuctionSession): AuctionTransitionResult {
   if (session.state !== 'OPEN_BIDDING' && session.state !== 'RESOLVE') {
     return rejected(session, 'expected-resolve');
@@ -464,52 +374,11 @@ export function claimLoneSurvivor(session: AuctionSession): AuctionTransitionRes
   return accepted(finalizeSoldLot(session, claim.teamId, claim.price));
 }
 
-export function passLoneSurvivor(session: AuctionSession): AuctionTransitionResult {
-  if (session.state !== 'RESOLVE') return rejected(session, 'expected-resolve');
-  if (session.pendingClaim === null) return rejected(session, 'no-pending-claim');
-
-  return accepted(finalizePassedLot(session));
-}
-
 export function passLoneSurvivorOut(session: AuctionSession): AuctionTransitionResult {
   if (session.state !== 'RESOLVE') return rejected(session, 'expected-resolve');
   if (session.pendingClaim === null) return rejected(session, 'no-pending-claim');
 
   return accepted(resolveNoBidLot(session));
-}
-
-export function rotateNomination(session: AuctionSession): AuctionTransitionResult {
-  if (session.state === 'AUCTION_COMPLETE') return accepted(session);
-  if (session.state !== 'SOLD' && session.state !== 'PASSED') {
-    return rejected(session, 'expected-passed-or-sold');
-  }
-  if (isAuctionComplete(session)) {
-    return accepted({
-      ...session,
-      state: 'AUCTION_COMPLETE',
-      currentLot: null,
-      pendingClaim: null,
-    });
-  }
-
-  const next = findNextOpenNominationIndex(session.teams, session.nominationOrder, session.nominationIndex + 1);
-  if (next === -1) {
-    return accepted({
-      ...session,
-      state: 'AUCTION_COMPLETE',
-      currentLot: null,
-      pendingClaim: null,
-    });
-  }
-
-  return accepted({
-    ...session,
-    state: 'NOMINATION',
-    currentLot: null,
-    pendingClaim: null,
-    nominationIndex: next,
-    nominationRound: session.nominationRound + (next <= session.nominationIndex ? 1 : 0),
-  });
 }
 
 export function advanceLot(session: AuctionSession): AuctionTransitionResult {
@@ -561,7 +430,7 @@ function finalizeSoldLot(session: AuctionSession, winnerTeamId: string, salary: 
       roster: [...team.roster, { playerId: lot.playerId, salary }],
     };
   });
-  const releasedSession = releaseEligiblePassedPlayers({
+  const soldSession: AuctionSession = {
     ...session,
     teams,
     state: 'SOLD',
@@ -578,18 +447,18 @@ function finalizeSoldLot(session: AuctionSession, winnerTeamId: string, salary: 
         salary,
       },
     ],
-  });
+  };
 
-  if (isAuctionComplete(releasedSession)) {
+  if (isAuctionComplete(soldSession)) {
     return {
-      ...releasedSession,
+      ...soldSession,
       state: 'AUCTION_COMPLETE',
       currentLot: null,
       pendingClaim: null,
     };
   }
 
-  return releasedSession;
+  return soldSession;
 }
 
 function finalizePassedLotPermanent(session: AuctionSession): AuctionSession {
@@ -660,93 +529,6 @@ function selectForcedFillerTeam(session: AuctionSession, openingAsk: number): Au
   })[0] ?? null;
 }
 
-function finalizePassedLot(session: AuctionSession): AuctionSession {
-  const lot = requireLot(session);
-  const previous = session.passedTracker[lot.playerId];
-  const sameSaleWindow = previous?.lastPassSaleCount === session.saleCount;
-  const passCountSinceLastSale = sameSaleWindow ? previous.passCountSinceLastSale + 1 : 1;
-  const setAside = passCountSinceLastSale >= 2;
-  const tracker: PassedPlayerTracker = {
-    totalPasses: (previous?.totalPasses ?? 0) + 1,
-    passCountSinceLastSale,
-    lastPassSaleCount: session.saleCount,
-    blockedUntilSaleCount: session.saleCount + 1,
-    lastPassNominatorTeamId: lot.nominatorTeamId,
-    lastPassNominationRound: session.nominationRound,
-    setAside,
-  };
-  const setAsidePlayerIds = setAside
-    ? sortPlayerIds(session, unique([...session.setAsidePlayerIds, lot.playerId]))
-    : session.setAsidePlayerIds;
-
-  return {
-    ...session,
-    state: 'PASSED',
-    currentLot: lot,
-    pendingClaim: null,
-    passedTracker: {
-      ...session.passedTracker,
-      [lot.playerId]: tracker,
-    },
-    setAsidePlayerIds,
-    results: [
-      ...session.results,
-      {
-        playerId: lot.playerId,
-        disposition: setAside ? 'SET_ASIDE' : 'PASSED',
-        nominatorTeamId: lot.nominatorTeamId,
-        winnerTeamId: null,
-        salary: null,
-      },
-    ],
-  };
-}
-
-function releaseEligiblePassedPlayers(session: AuctionSession): AuctionSession {
-  const releasable = Object.entries(session.passedTracker)
-    .filter(([, tracker]) => !tracker.setAside && tracker.blockedUntilSaleCount <= session.saleCount)
-    .map(([playerId]) => playerId);
-  if (releasable.length === 0) return session;
-
-  return {
-    ...session,
-    availablePlayerIds: sortPlayerIds(
-      session,
-      unique([
-        ...session.availablePlayerIds,
-        ...releasable.filter((playerId) => session.players[playerId] !== undefined),
-      ]),
-    ),
-  };
-}
-
-function getNominationBlockReason(
-  session: AuctionSession,
-  playerId: string,
-  nominatorTeamId: string,
-): AuctionRejectionReason | null {
-  if (session.players[playerId] === undefined) return 'unknown-player';
-  if (session.setAsidePlayerIds.includes(playerId)) return 'player-set-aside';
-
-  const tracker = session.passedTracker[playerId];
-  if (!session.availablePlayerIds.includes(playerId)) {
-    if (tracker !== undefined && tracker.blockedUntilSaleCount > session.saleCount) {
-      return 'player-blocked-until-sale';
-    }
-    return 'player-already-sold-or-unavailable';
-  }
-  if (
-    tracker !== undefined &&
-    !tracker.setAside &&
-    tracker.lastPassNominatorTeamId === nominatorTeamId &&
-    tracker.lastPassNominationRound >= session.nominationRound
-  ) {
-    return 'player-blocked-by-nominator-cycle';
-  }
-
-  return null;
-}
-
 function minimumLegalBid(lot: Lot, bidIncrement: number): number {
   return lot.highBid === null ? lot.openingAsk : lot.highBid + bidIncrement;
 }
@@ -813,18 +595,6 @@ function accepted(session: AuctionSession): AuctionTransitionResult {
 
 function rejected(session: AuctionSession, reason: AuctionRejectionReason): AuctionTransitionResult {
   return { ok: false, session, reason };
-}
-
-function unique(values: readonly string[]): string[] {
-  return [...new Set(values)];
-}
-
-function sortPlayerIds(session: AuctionSession, playerIds: readonly string[]): string[] {
-  const order = new Map(session.playerOrder.map((playerId, index) => [playerId, index]));
-  return [...playerIds].sort((left, right) =>
-    (order.get(left) ?? Number.MAX_SAFE_INTEGER) - (order.get(right) ?? Number.MAX_SAFE_INTEGER) ||
-    left.localeCompare(right),
-  );
 }
 
 function hashString(value: string): number {

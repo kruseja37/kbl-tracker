@@ -198,9 +198,7 @@ describe('auctionStateMachine one-chance engine path', () => {
       winnerTeamId: null,
       salary: null,
     });
-    expect(session.passedTracker[passedPlayerId]).toBeUndefined();
     expect(session.availablePlayerIds).not.toContain(passedPlayerId);
-    expect(session.setAsidePlayerIds).not.toContain(passedPlayerId);
 
     session = ok(advanceLot(session));
     session = ok(surfaceNextPlayer(session));
@@ -251,8 +249,6 @@ describe('auctionStateMachine one-chance engine path', () => {
     session = ok(resolveLot(session));
 
     expect(session.state).toBe('AUCTION_COMPLETE');
-    expect(session.passedTracker).toEqual({});
-    expect(session.setAsidePlayerIds).toEqual([]);
     expect(ok(advanceLot(session)).state).toBe('AUCTION_COMPLETE');
   });
 
@@ -277,8 +273,29 @@ describe('auctionStateMachine one-chance engine path', () => {
     session = ok(passLoneSurvivorOut(session));
 
     expect(session.state).toBe('PASSED');
-    expect(session.passedTracker[playerId]).toBeUndefined();
     expect(session.availablePlayerIds).not.toContain(playerId);
+  });
+
+  test('rejects bids below the increment and above the solvency cap without changing the lot', () => {
+    let session = makeSession({
+      teams: [
+        { teamId: 'A', budgetRemaining: 10_000, rosterSlotsRemaining: 2, minSalary: 0 },
+        { teamId: 'B', budgetRemaining: 10_000, rosterSlotsRemaining: 2, minSalary: 0 },
+        { teamId: 'C', budgetRemaining: 750, rosterSlotsRemaining: 1, minSalary: 0 },
+      ],
+      players: [{ playerId: 'star', iv: 1_000, ivPercentile: 90 }],
+    });
+
+    session = ok(surfaceNextPlayer(session));
+    session = ok(recordBid(session, 'A', 700));
+
+    const belowIncrement = reject(recordBid(session, 'B', 799));
+    expect(belowIncrement.reason).toBe('bid-below-minimum');
+    expect(belowIncrement.session.currentLot?.highBid).toBe(700);
+
+    const aboveCap = reject(recordBid(session, 'C', 800));
+    expect(aboveCap.reason).toBe('bid-above-solvency-cap');
+    expect(aboveCap.session.currentLot?.highBidder).toBe('A');
   });
 
   test('flatReserveFloor opens every surfaced farm player at the same floor', () => {

@@ -2,10 +2,10 @@ import { describe, expect, test } from 'vitest';
 
 import {
   advanceLot,
-  evaluateResolve,
   initAuctionSession,
   passBid,
   recordBid,
+  resolveLot,
   surfaceNextPlayer,
   type AuctionSession,
   type AuctionTeamInput,
@@ -214,7 +214,7 @@ describe('cpuShillBidding AUC-2.2 pure policy', () => {
     session = ok(recordBid(session, 'cpu', firstAsk!)) as CpuShillAuctionSession;
     session = ok(passBid(session, 'human')) as CpuShillAuctionSession;
     session = ok(passBid(session, 'other')) as CpuShillAuctionSession;
-    session = ok(evaluateResolve(session)) as CpuShillAuctionSession;
+    session = ok(resolveLot(session)) as CpuShillAuctionSession;
 
     expect(session.teams.find((team) => team.teamId === 'cpu')?.budgetRemaining).toBe(500);
 
@@ -241,7 +241,7 @@ describe('cpuShillBidding AUC-2.2 pure policy', () => {
 
     session = openEngineLot({ ...session, playerOrder: ['star'], availablePlayerIds: ['star'] });
     session = ok(passBid(session, 'human')) as CpuShillAuctionSession;
-    session = ok(evaluateResolve(session)) as CpuShillAuctionSession;
+    session = ok(resolveLot(session)) as CpuShillAuctionSession;
 
     expect(session.pendingClaim).toEqual({ playerId: 'star', teamId: 'cpu', price: 700 });
 
@@ -273,7 +273,7 @@ describe('cpuShillBidding AUC-2.2 pure policy', () => {
 
     session = openEngineLot({ ...session, playerOrder: ['star'], availablePlayerIds: ['star'] });
     session = ok(passBid(session, 'human')) as CpuShillAuctionSession;
-    session = ok(evaluateResolve(session)) as CpuShillAuctionSession;
+    session = ok(resolveLot(session)) as CpuShillAuctionSession;
 
     const decision = cpuDecideLoneSurvivor(session, 'cpu', 'lone-survivor-over-valuation');
 
