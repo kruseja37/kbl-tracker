@@ -2,12 +2,12 @@ import { useCallback, useMemo, useState } from "react";
 
 import {
   claimLoneSurvivor,
-  evaluateResolve,
+  resolveLot,
   advanceLot,
   getCurrentBidderTeamId,
   initAuctionSession,
   passBid,
-  passLoneSurvivor,
+  passLoneSurvivorOut,
   recordBid,
   surfaceNextPlayer,
   type AuctionPlayer,
@@ -249,7 +249,7 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
       } else if (next.state === "OPEN_BIDDING") {
         if (!next.currentLot) return next;
         if (next.currentLot.stillIn.length <= 1) {
-          next = transitionOrThrow(evaluateResolve(next));
+          next = transitionOrThrow(resolveLot(next));
           await persist(next, nextContext);
         } else {
           const bidder = getCurrentBidderTeamId(next);
@@ -271,10 +271,10 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
             next.pendingClaim.teamId,
             `${next.config.nominationOrderSeed}:claim:${step}`,
           );
-          next = transitionOrThrow(decision.kind === "claim" ? claimLoneSurvivor(next) : passLoneSurvivor(next));
+          next = transitionOrThrow(decision.kind === "claim" ? claimLoneSurvivor(next) : passLoneSurvivorOut(next));
           await persist(next, nextContext);
         } else {
-          next = transitionOrThrow(evaluateResolve(next));
+          next = transitionOrThrow(resolveLot(next));
           await persist(next, nextContext);
         }
       } else {
@@ -372,12 +372,12 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
   const bid = useCallback((teamId: string, amount: number) => runSessionTransition((current) => recordBid(current, teamId, amount)), [runSessionTransition]);
   const pass = useCallback((teamId: string) => runSessionTransition((current) => {
     if (current.state === "RESOLVE" && current.pendingClaim?.teamId === teamId) {
-      return passLoneSurvivor(current);
+      return passLoneSurvivorOut(current);
     }
     return passBid(current, teamId);
   }), [runSessionTransition]);
   const claimAtReserve = useCallback(() => runSessionTransition((current) => claimLoneSurvivor(current)), [runSessionTransition]);
-  const resolve = useCallback(() => runSessionTransition((current) => evaluateResolve(current)), [runSessionTransition]);
+  const resolve = useCallback(() => runSessionTransition((current) => resolveLot(current)), [runSessionTransition]);
   const advance = useCallback(() => runSessionTransition((current) => advanceLot(current)), [runSessionTransition]);
 
   return {
