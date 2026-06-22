@@ -1,0 +1,109 @@
+HANDOFF_NEEDED — AUTH-4 Mode-1 auction REBUILD (fresh thread)
+
+next_ticket: RB-8 (GM identity entity, AUCTION_DRAFT_SPEC_V2.md §8). Then RB-9 … RB-18 per AUCTION_REBUILD_PLAN.md.
+WHY HAND OFF HERE: a productive session closed the ENTIRE §10 freeze bridge — RB-7a/RB-7b/RB-7c, all branch-only
+zero-new-reds — at a CLEAN seam (🎉 RB-7 COMPLETE, no Codex build in flight). RB-8 is the next substantial ticket: a
+NEW entity (GM) with a likely SAVED-SHAPE decision (new store vs ride franchise config). The asymmetry rule (give the
+careful saved-shape/new-entity ticket a FULL-budget thread) + the context-handoff protocol both say: hand RB-8 to a
+fresh thread, don't start it on a depleted context. (This is exactly how RB-7 was handed to THIS session.)
+
+branch / worktrees (Shape A — single Captain):
+- Docs / contracts / ledger: /Users/johnkruse/Projects/kbl-tracker  [codex/franchise-v1-next]
+- Mode-1 BUILD worktree:     /Users/johnkruse/Projects/kbl-mode1     [codex/mode1-v1] (own node_modules)
+
+ORIENT FIRST (read, do NOT trust summaries): AUTONOMOUS_RUN_LOG.md WAVE 66–69 (the full RB-7 arc — grounding +
+the 7a/7b/7c split + every OPEN-DECISION); CURRENT_STATE live header (NEXT = RB-8 + the RB-7 OPEN-DECISIONS for JK);
+AUTONOMOUS_RUN_PROTOCOL.md (AUTH-4 + the 4 safety walls); SESSION_RULES.md (soul-layer no-inference + surface-ambiguity);
+AUCTION_DRAFT_SPEC_V2.md §8 (GM identity) + AUCTION_REBUILD_PLAN.md RB-8. Restate phase/last/next, then PROCEED (AUTH-4 = standing go).
+
+DONE this session (all branch-only on codex/mode1-v1, zero-new-reds each; docs on codex/franchise-v1-next):
+- 🎉 RB-7 COMPLETE — the §10 four-number freeze → Mode-2 bridge, SPLIT into three:
+  - RB-7a `103ac42a` — NEW pure `src/engines/draftFreeze.ts` (`computeDraftFreeze`): SOLD-in-won-order MLB+farm →
+    per-player starting morale (REUSES RB-5 `computeDraftMoraleFromRaw`) + per-team fan morale (REUSES RB-6
+    `computeDraftFanMorale`) + settledSalary passthrough. Build-dark, zero existing-file edits. + `__tests__/draftFreeze.test.ts`.
+  - RB-7b `bba6e1a8` — THE PAYOFF (LIVE): `franchiseMoraleState.seedFranchiseMoraleBaseline` (baseline=current=draftValue,
+    new 'draft-seed' sourceKind, idempotent, NOT flag-gated) + NEW pure `src/utils/draftFreezeInputs.ts`
+    (`buildDraftFreezeInputs`) + `franchiseInitializer` step 8.5 (between :661 and :663, inside `if (mlbSession?.session)`):
+    load MLB `getAuctionSession(config.league,1)` + farm `getAuctionSessionById(createFarmAuctionSessionId(config.league,1))`,
+    build meta from `hiddenModifierBackfill.players`, `computeDraftFreeze`, SEED player + team-fan baselines OVERRIDING
+    the default 50. Graceful no-op when no MLB session. + 2 test-only mock stubs (the franchiseInitializer partial-mock fix).
+  - RB-7c `1bd042e5` — additive optional `Player.settledSalary?` + stamp the winning bid at step 8.5 (MLB-tier best-effort).
+  - SAVED-SHAPE: **NO trackerDb bump anywhere** — morale rides the existing `kbl-franchise-morale` v1 DB; settledSalary
+    is additive-optional on the per-franchise PLAYERS store (v1) + the Player type. TRACKER_DB_VERSION stays 25; the
+    version-pin test (`franchiseSeasonLedgerStorage.test.ts`, `expect(TRACKER_DB_VERSION).toBe(25)` + 42-store list) stays green.
+
+RB-7 OPEN-DECISIONS to put in front of JK (documented defaults TAKEN; rework cheap):
+- D-7a-1: draft slot order = GLOBAL-WITHIN-TIER won order (not per-team). Alt = per-team.
+- D-7a-2: fan-morale payroll = MLB winning bids only. Alt = MLB+farm (engine has `fanMoralePayrollScope`).
+- D-7b-2: the freeze pay-signal scout range = iv-centered `perceivedValueRange(iv, DEFAULT_FREEZE_SCOUT_ACCURACY=70, seed)`.
+  The displayed in-draft range used `scoutPriceOpinion × chemistryFit`, and chemFit depends on draft-time roster chemistry
+  → NOT reconstructable post-hoc. Fidelity upgrades flagged: (a) per-team scout accuracy
+  (`getScoutProfilesForLeague` → `scoutsByTeamId[teamId]?.accuracyByPosition?.[primaryPosition]`); (b) the bulletproof =
+  persist the displayed range at draft-resolve (a larger auction-path change; RB-16/defer).
+- D-7b-3: graceful no-op when no MLB auction session (snake/incomplete).
+- D-7c-1: farm-prospect settledSalary deferred (farm prospects live in the farm roster store, not STORES.PLAYERS; no v1 consumer).
+- D-7c-2 (REAL economy question — SURFACE PROMINENTLY): the auction WINNING BID does NOT carry into Mode-2 cap/payroll
+  today — `withInitialFranchiseSalary` recalculates `player.salary` from attributes. §10 made settledSalary an "additive
+  field," so RB-7c recorded the bid WITHOUT touching salary. JK DECISION: should Mode-2 franchise salary = settledSalary
+  (so the auction economy/luxury-tax carries forward)? If yes → a focused follow-up overriding withInitialFranchiseSalary
+  for auction-drafted players.
+
+RB-8 specifics (ground at SOURCE in kbl-mode1 first — never trust this note's refs):
+- §8 = a GM entity structured PARALLEL to the manager profile (name, tenure, history) but sitting ABOVE it: the GM owns
+  roster/draft decisions + can FIRE the manager; the manager owns in-game decisions. Do NOT merge the roles. The USER IS
+  the GM (first-person, named — own or chosen). One GM per team. Reporter refers to the GM by name on roster/draft/
+  team-building moves and the manager by name on in-game decisions (two distinct voices).
+- GROUND: (a) the existing manager-profile structure — `managerProfiles` store + `tenureRecords` (memory: a firing
+  overwrites the fired managerAssignment with the successor; tenureRecords endReason='fired' is how firings are detected).
+  Find the manager profile type + store + how it's created at franchise-init + how the reporter currently names the manager.
+  (b) Where the GM entity should LIVE — a NEW store (saved-shape: full 7-site mirror + version-pin + parity if a trackerDb
+  store; OR a separate small DB like kbl-franchise-morale; OR ride the franchise config/metadata). PREFER additive/no-bump;
+  if a trackerDb store is genuinely needed, that is a SAVED-SHAPE WALL — audit HARDEST (version-pin + migration-survival +
+  backup parity), and note the trackerDb version-pin test pins BOTH TRACKER_DB_VERSION (25) AND the full store list.
+  (c) the reporter integration points (where roster/draft vs in-game narration is generated) — where to inject the GM name.
+  (d) the "user IS the GM" naming flow (FranchiseSetup wizard — where the user names themselves/the franchise).
+- LIKELY a saved-shape ticket (new entity persistence). Split if the grounding warrants (e.g. RB-8a entity+store / RB-8b
+  reporter wiring), mirroring the RB-7 split.
+
+SUITE BASELINE (kbl-mode1, codex/mode1-v1 @ 1bd042e5): FULL suite = 493 files (492 pass / 1 fail), 8044 tests
+(8043 pass / 1 fail). The ONLY characterized hard fail = `wpaRuntimeBoundary.test.ts`. `GameTrackerLaunchState.test.tsx`
++ `AwardsWatchlist.test.tsx` are documented INTERMITTENT ORDER-FLAKES (pass SOLO) — if either appears in a full run,
+verify it solo, don't count it as a regression. ZERO-NEW-REDS = after your ticket the only hard failed file is wpaRuntimeBoundary.
+
+PER-TICKET LOOP: GROUND ANCHORS AT SOURCE first (re-read every file:line; the workflow/Explore agents LOCATE, you
+personally re-read the safety-critical ones — the recon had 2 conflicts this session that only direct reads resolved).
+CONTRACT → PROMPT_CONTRACTS.md wrapped in `<!-- ===== CONTRACT: RB-8 ===== -->` … markers (ROUTE/ROLE/GOAL/SOURCE-OF-TRUTH
+[spec § + file:line]/grounded anchors/MAKE-OR-BREAK/CONSTRAINTS [exact files; frozen oracle read-only; branch-only]/
+EXPECTED/VERIFICATION/FORMAT/STOP-IF + "Use xhigh reasoning effort"). Commit the contract on codex/franchise-v1-next
+BEFORE dispatch (Contract Readiness Rule). DISPATCH Codex (run_in_background + dangerouslyDisableSandbox), worktree
+= /Users/johnkruse/Projects/kbl-mode1:
+  export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH"
+  { sed -n '/<!-- ===== CONTRACT: RB-8 /,/<!-- ===== END CONTRACT: RB-8 /p' \
+      /Users/johnkruse/Projects/kbl-tracker/spec-docs/PROMPT_CONTRACTS.md \
+    | NODE_ENV= ~/.local/bin/codex exec -C /Users/johnkruse/Projects/kbl-mode1 --skip-git-repo-check \
+      -s workspace-write -c model_reasoning_effort=xhigh -o /tmp/codex-rb8.out - ; echo "CODEX_EXIT=$?" ; } \
+    > /tmp/codex-rb8.log 2>&1
+  (xhigh — NOT very-high [invalid 400 → zero file changes]. macOS has no `timeout`; rely on run_in_background. Redirect to
+   /tmp/codex-rb8.log — the bg task's own -o output file may come back empty. Ignore the benign "failed to load skill
+   .../mode2-pilot" startup line. The contract text echoes in the log — scan for ACTUAL ERROR/400, not the echoed "STOP-IF".)
+AUDIT the real diff (git -C /Users/johnkruse/Projects/kbl-mode1 --no-pager diff + cat new files; builder≠auditor — never
+trust the Codex paste); only contracted files; frozen IV oracle (spec-docs/reference/iv_oracle.json) untouched. GATE —
+new-store/franchise-init ticket ⇒ run the FULL Mode-1 suite (NOT a scoped run — transitive-import-mock-break risk when
+wiring into franchise-init; fix = test-only mock stubs added to the offending partial-mock test files):
+  cd /Users/johnkruse/Projects/kbl-mode1 && export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" \
+    && NODE_ENV= npx tsc -b ; echo "TSC=$?" ; NODE_ENV= npx vitest run > /tmp/rb8-suite.log 2>&1
+  then read /tmp/rb8-suite.log (grep "Test Files"/"Tests "/"FAIL "); READ THE FAILED-FILE LIST not the RC (the
+  characterized wpaRuntimeBoundary fail makes the RC nonzero). If a trackerDb store/bump happens, ALSO verify the
+  version-pin + migration-survival + backup-parity tests. COMMIT branch-only (NEVER push), co-author trailer
+  "Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>". LOG a WAVE bullet (WAVE 70…) in AUTONOMOUS_RUN_LOG.md +
+  repoint CURRENT_STATE + commit docs on codex/franchise-v1-next (stage BY PATH — leave pre-existing HANDOFF_DONE_* /
+  FRANCHISE_MODE1_MODE2_PLAYABLE_V1_GAP_ANALYSIS.md / stray spec-docs untouched).
+
+caffeinate: PID 84474 (caffeinate -s -i) + a second from this session keep the Mac awake (both hold; harmless).
+node at ~/.nvm/versions/node/v20.20.0/bin (prefix NODE_ENV=). codex at ~/.local/bin/codex (xhigh).
+
+SOLO-WORKER: claim THIS baton FIRST —
+  mv HANDOFF_NEEDED HANDOFF_DONE_$(date -u +%Y%m%dT%H%M%SZ)
+then confirm sole worker (pgrep -lf "codex exec"; check other claude procs). One worker per branch. A second worker that
+finds no HANDOFF_NEEDED stands down. (Several stray claude procs existed this run — the atomic baton mv is the
+deconfliction; first to mv owns RB-8.)
