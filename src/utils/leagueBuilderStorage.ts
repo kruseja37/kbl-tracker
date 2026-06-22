@@ -144,6 +144,7 @@ export interface Team {
   heritageFacts?: string[];
   rivalries?: TeamRivalry[];
   capIdentity?: TeamCapIdentity;
+  farmCapIdentity?: TeamCapIdentity;
   captainPlayerId?: string | null;
   fanHopefulPlayerId?: string | null;
   lineupWithDH?: LineupSlot[];

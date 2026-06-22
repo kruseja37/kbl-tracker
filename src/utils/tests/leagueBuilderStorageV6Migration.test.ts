@@ -473,4 +473,48 @@ describe('leagueBuilderStorage v8 auction session migration', () => {
       expect.objectContaining({ capIdentity }),
     );
   });
+
+  test('farmCapIdentity is an additive Team field that round-trips when present and stays undefined when absent', async () => {
+    const savedWithoutIdentity = await saveTeam({
+      name: 'No Farm Identity Club',
+      abbreviation: 'NFC',
+      location: 'Nowhere',
+      nickname: 'Blank',
+      colors: { primary: '#111111', secondary: '#eeeeee' },
+      stadium: 'Plain Park',
+      leagueIds: ['league-a'],
+    });
+
+    await expect(getTeam(savedWithoutIdentity.id)).resolves.toEqual(
+      expect.not.objectContaining({ farmCapIdentity: expect.anything() }),
+    );
+
+    const farmCapIdentity = {
+      bandPriorities: {
+        Power: 6,
+        Contact: 0,
+        Speed: 1,
+        Defense: 4,
+        Rotation: 2,
+        Bullpen: 3,
+      },
+      increase: ['Big Swings', 'Bullpen Aces'],
+      decrease: ['Glove First'],
+    };
+
+    const savedWithIdentity = await saveTeam({
+      name: 'Farm Identity Club',
+      abbreviation: 'FIC',
+      location: 'Texture',
+      nickname: 'Seedlings',
+      colors: { primary: '#224466', secondary: '#ffee99' },
+      stadium: 'Farm Yard',
+      leagueIds: ['league-a'],
+      farmCapIdentity,
+    });
+
+    await expect(getTeam(savedWithIdentity.id)).resolves.toEqual(
+      expect.objectContaining({ farmCapIdentity }),
+    );
+  });
 });
