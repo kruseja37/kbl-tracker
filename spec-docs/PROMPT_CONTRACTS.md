@@ -16013,3 +16013,81 @@ to `auctionStateMachine.ts` or persistence → STOP and report.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-2b-2 ===== -->
+
+<!-- ===== CONTRACT: RB-2b-3 (STRIP the orphaned GM-nomination + re-nomination machinery) ===== -->
+**ROUTE:** Codex (gpt-5.5) CLI | xhigh reasoning effort
+**ROLE:** Mode-1 auction core-engine cleanup. DELETE the now-orphaned (zero-production-consumer) old GM-nomination +
+re-nomination machinery from the engine and update the 4 test files that still reference it. This is the LAST RB-2
+piece ⇒ after it, RB-2 (engine nomination + one-chance) is COMPLETE.
+
+**GOAL:** remove the dead old path so the engine has exactly ONE nomination/resolve system (engine-driven one-chance).
+
+**SOURCE OF TRUTH:** AUCTION_DRAFT_SPEC_V2 §2 (one-chance is the only model). The old path has NO production consumer
+(RB-2b-2 + WAVE 59-FIX rewired every hook/page/cpuShill to the new API) — verified by grep.
+
+**GROUNDED — FULL retired-API surface (grep-confirmed; re-verify at source):**
+- `src/engines/auctionStateMachine.ts` — DELETE these (all orphaned except their own tests):
+  • functions: `nominatePlayer`, `rotateNomination`, `getCurrentNominator`, `getNominationBlockReason`,
+    `evaluateResolve`, `passLoneSurvivor`, `finalizePassedLot`, `releaseEligiblePassedPlayers`.
+  • type: `PassedPlayerTracker`.
+  • `AuctionSession` fields: `setAsidePlayerIds`, `passedTracker` (+ remove their init in `initAuctionSession`).
+  • `AuctionRejectionReason` members (now unused): `'player-set-aside'`, `'player-blocked-until-sale'`,
+    `'player-blocked-by-nominator-cycle'`.
+  • COUPLING: `finalizeSoldLot` (SHARED — KEEP) currently calls `releaseEligiblePassedPlayers`; REMOVE that call
+    (under one-chance there is no re-release; `finalizeSoldLot` just records the sale). Verify `finalizeSoldLot`
+    otherwise unchanged.
+  • KEEP (do NOT delete): everything one-chance — `selectNextNominee`, `surfaceNextPlayer`, `resolveLot`,
+    `passLoneSurvivorOut`, `advanceLot`, `resolveNoBidLot`, `selectForcedFillerTeam`, `finalizePassedLotPermanent`,
+    plus the shared `recordBid`/`passBid`/`claimLoneSurvivor`/`finalizeSoldLot`/`nextBidTurn`/`getCurrentBidderTeamId`/
+    `seededNominationOrder`/`findNextOpenNominationIndex`/helpers. KEEP `SET_ASIDE` in `AuctionResultDisposition`
+    (the 2 pages reference it in display branches — out of THIS ticket's engine+test scope; harmless, never produced).
+- TEST FILES to update (the only remaining references):
+  • `src/engines/__tests__/auctionStateMachine.test.ts` (426 lines) — REMOVE every test that exercises a deleted
+    symbol (the SOLD/PASSED/lone-survivor/bid-rotation tests that SET UP via `nominatePlayer`, the nominator-clock
+    test, the 3 re-nomination tests, the set-aside test, the rotation-via-`rotateNomination` tests, the
+    `auction-completes`-via-`rotateNomination` test, anything reading `passedTracker`/`setAsidePlayerIds`). KEEP the
+    PURE-helper tests that touch no deleted symbol (`nextBidTurn`, `seededNominationOrder`). The bid-rotation/solvency/
+    SOLD/lone-survivor coverage already lives in `auctionStateMachineOneChance.test.ts` (surface→bid→resolve) — do NOT
+    duplicate; if a UNIQUE still-valid assertion (e.g. the solvency-cap `bid-above-solvency-cap` rejection) is NOT
+    covered there, PORT it into the one-chance file via `surfaceNextPlayer`/`recordBid`. No net loss of meaningful coverage.
+  • `src/engines/__tests__/auctionStateMachineOneChance.test.ts` — REMOVE the now-impossible field assertions
+    (lines ~201,203,254,255,280: `session.passedTracker[...]` / `session.setAsidePlayerIds` — the fields no longer
+    exist; their "no tracker written" intent is now structurally guaranteed). Keep every other assertion.
+  • `src/engines/__tests__/cpuShillBidding.test.ts` — swap `evaluateResolve` → `resolveLot` (import + 3 call sites
+    ~217,244,276). Behavior identical for the SOLD/lone paths these tests drive.
+  • `src/utils/tests/auctionSessionStorage.test.ts` — REMOVE `setAsidePlayerIds:` (~104) + `passedTracker:` (~105)
+    from the test's session fixture (those fields no longer exist on `AuctionSession`). The `SET_ASIDE` result
+    (~144) may stay (disposition value kept). Confirm the persistence round-trip test still passes with the new shape.
+
+**MAKE-OR-BREAK:** after the strip, `tsc -b` is clean AND a grep of `nominatePlayer|rotateNomination|getCurrentNominator|
+getNominationBlockReason|evaluateResolve|\bpassLoneSurvivor\b|finalizePassedLot\b|releaseEligiblePassedPlayers|
+PassedPlayerTracker|setAsidePlayerIds|passedTracker|player-set-aside|player-blocked-until-sale|
+player-blocked-by-nominator-cycle` over `src` returns ZERO hits (i.e. the old machinery is GONE, not just unreferenced).
+Note `\bpassLoneSurvivor\b` must NOT match the kept `passLoneSurvivorOut`. The one-chance behavior is unchanged
+(engine tests still prove surface/resolve/forced-filler/flat-floor).
+
+**CONSTRAINTS:**
+- Edit ONLY: `src/engines/auctionStateMachine.ts` + the 4 test files listed. Do NOT touch hooks, pages, cpuShill
+  source, persistence source, or the frozen oracle. Do NOT delete/alter any one-chance or shared function. Branch-only
+  on `codex/mode1-v1`; do NOT commit/push.
+
+**EXPECTED OUTPUT:** the engine exposes exactly one nomination/resolve system (one-chance); the old machinery is gone;
+all 4 test files compile + pass; saved-shape round-trip intact for the kept fields.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` exit 0; `NODE_ENV= npx vitest run src/engines/__tests__/auctionStateMachine.test.ts
+src/engines/__tests__/auctionStateMachineOneChance.test.ts src/engines/__tests__/cpuShillBidding.test.ts
+src/utils/tests/auctionSessionStorage.test.ts` green; paste the make-or-break grep output (must be empty). (Opus
+re-runs the FULL Mode-1 suite + confirms zero-new-reds vs wpaRuntimeBoundary.)
+
+**FORMAT:** 1) every changed path + total; 2) the deleted symbols list + confirm `finalizeSoldLot` keeps only the
+sale-record (no re-release) + confirm KEEP of all one-chance/shared fns + SET_ASIDE disposition; 3) ACTUAL tsc + the
+empty make-or-break grep + vitest output; 4) "RB-2b-3 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL (STOP-IF):** if any deleted symbol turns out to have a PRODUCTION (non-test) consumer → STOP and
+quote it (the strip is unsafe — something wasn't rewired). If removing the `setAsidePlayerIds`/`passedTracker` fields
+breaks the `auctionSessionStorage` round-trip in a way that implies a real saved-shape pin (not just a fixture edit)
+→ STOP and report. If gutting `auctionStateMachine.test.ts` would lose UNIQUE coverage not present in the one-chance
+file and porting is non-trivial → STOP and list what would be lost.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-2b-3 ===== -->
