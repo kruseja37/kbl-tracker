@@ -55,6 +55,8 @@ describe('buildFranchiseManagerChangeSeasonNewsEvent', () => {
       [
         'teamId',
         'teamName',
+        'gmId',
+        'gmName',
         'firedManagerId',
         'firedManagerName',
         'successorManagerId',
@@ -94,6 +96,15 @@ describe('buildFranchiseManagerChangeSeasonNewsEvent', () => {
 
     expect(relocation.facts.endReason).toBe('relocated');
     expect(relocation.dramaticWeight).toBeLessThan(firing.dramaticWeight);
+  });
+
+  it('passes through optional GM identity facts verbatim without defaulting them', () => {
+    const withGm = build({ gmId: 'fr-1-gm', gmName: 'Casey Ledger' });
+    const withoutGm = build();
+
+    expect(withGm.facts.gmId).toBe('fr-1-gm');
+    expect(withGm.facts.gmName).toBe('Casey Ledger');
+    expect(withoutGm.facts.gmName).toBeUndefined();
   });
 
   it('increases dramaticWeight as team fan morale at firing drops', () => {
@@ -145,6 +156,8 @@ describe('buildFranchiseManagerChangeSeasonNewsEvent', () => {
     expect(result.facts).toEqual({
       teamId: 'team-7',
       teamName: 'Moonstars',
+      gmId: undefined,
+      gmName: undefined,
       firedManagerId: 'manager-old',
       firedManagerName: 'Pat Pine',
       successorManagerId: 'manager-new',
