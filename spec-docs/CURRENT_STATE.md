@@ -5,7 +5,7 @@
 > design** → **`AUCTION_DRAFT_SPEC_V2.md`** (authoritative; V1 spec bannered superseded) + the execution sequence **`AUCTION_REBUILD_PLAN.md`**.
 > **Single-Captain (Shape A):** Opus owns `codex/franchise-v1-next` (docs) + dispatches Codex for Mode-1 in `/Users/johnkruse/Projects/kbl-mode1`
 > [`codex/mode1-v1`]. Codex builds, Opus audits, branch-only, never push.
-> **LIVE LEDGER = `AUTONOMOUS_RUN_LOG.md` (WAVE 1–53) — read top-to-bottom on return; supersedes everything below.**
+> **LIVE LEDGER = `AUTONOMOUS_RUN_LOG.md` (WAVE 1–57) — read top-to-bottom on return; supersedes everything below.**
 > **V1 BUILT (build-dark, branch-only, zero-new-reds — SHELLS SURVIVE the rebuild):** MLB AUC-1.1..4.1b + FARM 5.1a..e/d-1/d-2/d-3. The
 > §2 bidding/CPU/wallet/persistence/hot-seat-UI + page shells are REUSED; the **value layer** (per-prospect-IV → scout price-range+20–80 grade)
 > and **nomination/resolve** (GM-nomination → engine weighted-random + one-chance) are REWRITTEN, + new systems (dual archetype tax, MLB→farm
@@ -24,15 +24,27 @@
 > engine — level-up/buffer/neutral, BIDIRECTIONAL for RB-9 per JK) + `883e3188` (MLB+farm chemistry feed [derived, NOT persisted] + scout-price
 > wire: `perceivedValueRange(priceOpinion × chemFit, …)`, ≤+8% when a prospect's chemistry would level-up/buffer the GM's roster). Canonical
 > IV/salary/oracle/`computeIV`/reserve/MLB-tier byte-untouched throughout. Suite **486 files / 8002 tests, sole fail `wpaRuntimeBoundary`.**
+> **✅ RB-2a COMPLETE (WAVE 57, `2b7e894d`, `codex/mode1-v1`, branch-only, ZERO-NEW-REDS) — the PURE build-dark one-chance auction engine.**
+> RB-2 SPLIT (2a engine / 2b wiring) because an in-place rewrite breaks all §2 consumers at once. ADDITIVE (old GM-nomination path byte-untouched):
+> `selectNextNominee` (seeded weighted reveal ∝ (ivPct/100)^k, Efraimidis–Spirakis WRS; step=`results.length` → resume-safe; 0.02 weight floor → pool
+> drains) + `surfaceNextPlayer` (engine surfaces next, no nominator) + `resolveLot`/`passLoneSurvivorOut`/`advanceLot` — **no-bid → PERMANENTLY OUT**
+> (`finalizePassedLotPermanent`: no `passedTracker`/`setAsidePlayerIds`/re-add). `nominationWeightExponent?` config (default 2.5; per-tier MLB 2 / farm 3
+> at RB-2b); `DEFAULT_AUCTION_SETUP_CONFIG` byte-unchanged. Suite **487 files / 8010 tests, sole fail `wpaRuntimeBoundary`.**
 > **RB-1b model + refinement RULED (DECISIONS_LOG 2026-06-21):** per-trait COUNT · 3-tier L1≤3/L2 4-7/L3≥8 (grounded `TRAIT_INTEGRATION_SPEC`) ·
 > PERCEPTION-LAYER · boundary-aware (level-up full / buffer 0.4× at floors / neutral) · BIDIRECTIONAL (RB-9 owes the `'remove'` send-down cost = D-8).
-> **➡ NEXT (AUTH-4): `/kbl-captain` → RB-2 (engine nomination + one-chance, §2.1/§2.2)** — REWRITE `nominatePlayer` (auctionStateMachine.ts:219) →
-> ENGINE weighted-random reveal ∝ (value-percentile)^k (seeded; MLB=public IV pctile, farm=hidden true-value pctile; per-tier k≈2–3); RESOLVE
-> no-bid → **out forever** (strip `setAsidePlayerIds`/`passedTracker` re-nomination). CAREFUL core-engine ticket — ground the full §2 state machine +
-> the CPU/round-robin/wallet seams (these SURVIVE) at source first. Then RB-3 (dual archetypes + MLB luxury tax) → … RB-18. Read
-> `AUCTION_DRAFT_SPEC_V2.md` + `AUCTION_REBUILD_PLAN.md` FIRST. **JK-BROWSER-VERIFY BATCHED (persistence-prioritized):** RB-0b-1 — a real draft
-> stamps all 3 axes onto league players + they carry into the franchise (7-type personality spread); BV-3 now also covers the RB-1a scout
-> price-range + 20–80 grade display + the RB-1b chemistry-fit bump (true IV no longer reverse-engineerable from the band midpoint).
+> **➡ NEXT (AUTH-4): `/kbl-captain` → RB-2b (wire the one-chance engine + strip the old nomination/re-nomination machinery)** — wire
+> `surfaceNextPlayer`/`resolveLot`/`passLoneSurvivorOut`/`advanceLot` into `useAuctionDraft` + `useFarmAuctionDraft` (NOMINATION → unconditional
+> auto-surface; set `nominationWeightExponent` per tier MLB 2 / farm 3; fix `stateProgressKey`'s `setAsidePlayerIds` read; `rotate`→`advance`; drop
+> `nominate(playerId)`/`currentNominatorTeamId`) + the 2 pages (GM nomination picker → "engine surfaced [player]"; bidding UI survives) +
+> `cpuShillBidding` (drop `resolveCpuNomination`) + persistence; THEN DELETE old `nominatePlayer`/`rotateNomination`/`getNominationBlockReason`/
+> `finalizePassedLot`/`releaseEligiblePassedPlayers`/`getCurrentNominator` + `setAsidePlayerIds`/`passedTracker` (SAFE: session persists as a
+> structured-clone blob in `leagueBuilderStorage`, NO field-by-field shape pin — verified) + rewrite `auctionStateMachine.test.ts` (remove the
+> re-nomination/set-aside tests). Ground the §2 CPU/round-robin/wallet seams (these SURVIVE) at source first. Then RB-3 (dual archetypes + MLB
+> luxury tax) → … RB-18. Read `AUCTION_DRAFT_SPEC_V2.md` + `AUCTION_REBUILD_PLAN.md` FIRST. **OPEN (verify at RB-2b/RB-16):** the §2.3 roster-fill
+> surplus GUARANTEE lives upstream in the pool builder (engine handles only the pool-empty → COMPLETE tail). **JK-BROWSER-VERIFY BATCHED
+> (persistence-prioritized):** RB-0b-1 — a real draft stamps all 3 axes onto league players + they carry into the franchise (7-type personality
+> spread); BV-3 now also covers the RB-1a scout price-range + 20–80 grade display + the RB-1b chemistry-fit bump + the RB-2 engine-surfaced
+> one-chance flow (true IV no longer reverse-engineerable from the band midpoint).
 > **2026-06-21 ATTENDED GROUNDING (WAVE 50, this session — all committed, NO code):** added §3.7 **3-axis personality model** (primary
 > personality 7 / hidden modifiers 4 / chemistry 5) + **RB-0**; CORRECTED the morale model at source — the engine
 > (`masterMoraleMatrix.composeMoraleConsequence`) is ALREADY BUILT (per-personality reactivity + ambition/resilience/charisma/loyalty roles +
