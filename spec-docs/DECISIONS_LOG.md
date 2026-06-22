@@ -7,6 +7,26 @@
 
 ## June 2026
 
+### 2026-06-22 (attended, cont.): Prospect-generator audit + trait/CPU-scout rulings — RULED
+
+**Context:** A logic audit of the Mode-1 prospect generator (`prospectScoutingDraftEngine.ts` + `smb4PlayerGenerator.ts`) surfaced real bugs + a spec conflict. JK ruled the open forks. Fixes execute on `codex/mode1-v1` (attended thread's chemistry/trait/prospect/draft cluster).
+
+**RULINGS:**
+- **Prospect traits — negatives ARE IN (overrides the 2026-06-20 "positive-only at generation" ruling).** JK: "we need all possible positive AND negative traits in the prospect generator; this shouldn't have happened — a gap in our spec." So prospects roll from ALL 75 traits EXCEPT an explicit exclusion list: **Sign Stealer, Stimulated** (both cut from the in-season adaptive engine — TS-7/TS-9 + 2026-06-18) **+ Two Way (C/IF/OF)** (earned Mode-2 trait, never generated — 2026-06-18). Safe: the grade inverse-solver (`buildRatings`) re-solves to the target grade AFTER traits, so negatives don't distort the §3.2 grade distribution (the old "neg_count lowers grade unpredictably" rationale is obsolete given the solve loop). **SPEC RECONCILIATION REQUIRED:** update `PROSPECT_GENERATION_SPEC.md` §3.4/§5.5/§15.B (currently mandate positive-only) before/with the pool change.
+- **Pos:neg trait MIX = match the real SMB4 pool (~27% negative)** (55 positive : 20 negative trait types ≈ 73/27). Realistic; busts feel earned.
+- **CPU bidders bid on a SCOUT-ESTIMATED value, NOT raw true IV (H2 fix).** Today `cpuShillBidding.ts:166` bids on raw `player.iv` → CPUs have perfect info + never misjudge busts/steals. Fix so CPUs use their own scout's noisy read (same uncertainty the human faces). ⇒ `cpuShillBidding.ts` is now attended-owned; **RB-10 reclaimed from the parallel lane** (coupled to this scout-value work).
+- **Snake-draft chemistry drift (M3) = DEFERRED** with the snake-draft feature (RB-13). The v1 auction path preserves chemistry correctly; fix snake when the snake picker ships.
+- **K Neglecter spelling = canonical "K Neglector"** (with an *o*) — verified against the XBL workbook (`Traits`/`ImportedTraits` = "K Neglector (-)") + the frozen oracle + `traitPricing.ts`. Fix the *typo* instances ("K Neglecter") in `smb4_traits_reference.md`, the generation NEG pool, and 4 FA entries in `playerDatabase.ts` → "K Neglector". No oracle risk.
+
+**AUDIT PUNCH LIST (fix on `codex/mode1-v1`):**
+- **H1 (HIGH) — `normal()` is a broken Gaussian.** `prospectScoutingDraftEngine.ts:439` Box-Muller fed by two stateless FNV hashes of suffix-differing strings (`seed:u1`/`seed:u2`) → correlated → right-skewed, low tail truncated at ~−1.2σ (200k-draw repro). Corrupts EVERY rating + hidden modifier (low-end tools + low loyalty/ambition/etc. unreachable). Fix: seed a proper advancing PRNG (mulberry32 from `hashString(seed)`, draw 2 independent uniforms) — deterministic, as `smb4PlayerGenerator` already does.
+- **H2 (HIGH) — CPU true-value leak** (see CPU ruling above).
+- **H3 + M2 (HIGH/MED) — POSITION_POOL broken:** missing `SP/RP` entirely (the RB-14 gap → 0% swingmen) + off-oracle weights (coarse 16-slot array: SP 25% vs §3.3 18%, CF 12.5% vs 7%…). Fix: drive position selection from the §3.3 weight table via `pickWeighted`.
+- **M1 (MED) — latent crash + missing grade:** dead `['A+',0]` in the `pickWeighted` float-safety fallback (`A+` ∉ GRADES → `targetAnalyzerScore` throws if ever hit); `D+` never generated. Fix: remove the `['A+',0]` row, make the fallback a real grade.
+- **L2 (LOW) — delete orphaned `gradeEngine.generateArsenal`** (the retired forced-4F+2F path; zero non-test callers).
+- **DEFERRED:** M3 (snake chemistry, above); L1 (two parallel generators — tech-debt, consolidate later); L3 (RNG fragility — subsumed by the H1 fix).
+- **VERIFIED CORRECT (do not touch):** grade/ratings inverse-solver hits §3.2; auction-path chemistry balance; handedness; trait-count 30/50/20; no cross-position/duplicate traits; Two Way correctly excluded; no DH/UTIL; arsenal rules; determinism; canonical-7 personality pool.
+
 ### 2026-06-22 (attended): RB-7/8/9 open-decision review — rulings (auction economy, fan morale, GM scope, defense identity, scout trait-potency) — RULED
 
 **Context:** After the AUTH-4 run closed RB-9a + RB-9b, JK reviewed the accumulated open decisions (RB-7/8/9 defaults + the backlog) in an attended pass. Several rulings change already-shipped tickets → tracked as follow-ups. Magnitudes marked sim-tune/pending where noted.
