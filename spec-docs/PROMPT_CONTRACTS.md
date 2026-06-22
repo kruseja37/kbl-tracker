@@ -17268,3 +17268,78 @@ Use xhigh reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-15 ===== -->
+
+<!-- ===== CONTRACT: RB-9b-2 ===== -->
+## CONTRACT: RB-9b-2 — Defense-inclusive 6-band farm-archetype hole-weighting TILT (pure, build-DARK; retires the rejected 5-category bridge)
+
+**ROUTE:** Codex build in the Mode-1 worktree `/Users/johnkruse/Projects/kbl-mode1` on branch `codex/mode1-v1`. Branch-only; do NOT commit, do NOT push (the Captain commits after audit).
+
+**ROLE:** You are the builder (Codex). Opus is the auditor (builder ≠ auditor). Build EXACTLY this contract — no extra scope.
+
+**GOAL:** Build the §3.5 "farm archetype → scout hole-prioritization tilt" PURE FOUNDATION, the way JK ruled it (DECISIONS_LOG 2026-06-22, D-9b-2 REVERSED): the tilt must run on the **6-band archetype (Power/Contact/Speed/Defense/Rotation/Bullpen)**, with **Defense a first-class identity category**, derived from the archetype's actual cap-modification ELEMENTS (the `CAP_MODIFICATION_FRACTIONS` set) decomposed across the 6 bands via `BAND_STATS`. This SUPERSEDES the RB-9b file `src/engines/farmArchetypeProfile.ts` (`bandPrioritiesToTargetProfile`), which JK declared "the WRONG target" because the 5-category `Smb4TeamProfileLevels` it produced has NO defense category. **DELETE that build-dark file + its test and REPLACE it with a new band-based tilt engine.** **Build-DARK: NO UI, NO consumer wiring, do NOT edit the analyzer or any page/hook** — RB-9c consumes this. Deliverable = the new pure engine + tests + the deletion of the retired bridge.
+
+**SOURCE OF TRUTH:** ⚠ The ratified `AUCTION_DRAFT_SPEC_V2.md`, `AUCTION_REBUILD_PLAN.md`, and `DECISIONS_LOG.md` live on the **docs branch** and are **NOT present in your `codex/mode1-v1` worktree** — do NOT open them or treat their absence as a stop condition; the operative requirements are EMBEDDED below (the Captain grounded them at source). The anchors you VERIFY are the CODE anchors below — all in `src/`, present in your worktree.
+
+**EMBEDDED SPEC (the operative rulings, verbatim intent):**
+- **AUCTION_DRAFT_SPEC_V2 §3.5:** "After the MLB auction, the scout reads the GM's filled MLB roster, identifies positional/role holes, weights them by the GM's farm archetype (§4.2) — a power-identity team's unfilled power slot 'screams louder' — and surfaces 'fill these in the farm' guidance. HOLE-DETECTION = REUSE the (already-built) Roster Analyzer Engine — do NOT build a parallel one." Division of labor: the analyzer answers "what does MY roster NEED" (the holes); the farm archetype WEIGHTS those holes.
+- **JK RULING D-9b-2 (REVERSED, 2026-06-22):** "Defense IS a 6th identity category. The farm-archetype hole-weighting tilt must run on the 6-band archetype (Power/Contact/Speed/Defense/Rotation/Bullpen) broken into the archetype elements, NOT the 5-category smb4 profile that lacks defense. The tilt consumes the 6-band archetype directly; the `bandPrioritiesToTargetProfile` 5-category bridge was the wrong target — rebuild the tilt on the bands/elements." This MUST land before RB-9c consumes it.
+- **§11 sim-tunable:** the tilt magnitude is a placeholder dial swept before lock.
+
+**GROUNDED ANCHORS (re-read each at source before editing; CODE anchors only — verify these; STOP if any `src/…` anchor mismatches):**
+- `src/engines/leagueConstruction.ts:17` — `export type Band = 'Power' | 'Contact' | 'Speed' | 'Defense' | 'Rotation' | 'Bullpen';` · `:18` `export type BandPriorities = Record<Band, number>;` · `:20` `export type TeamCapIdentity = { bandPriorities?: BandPriorities; increase: string[]; decrease: string[] };` · `:63` `export const BANDS: readonly Band[] = [...6 bands...]` · `:65-72` `export const BAND_STATS: Record<Band, readonly ModStat[]>` = `{ Power:['POW'], Contact:['CON'], Speed:['SPD'], Defense:['FLD','ARM'], Rotation:['RVEL','RJNK','RACC'], Bullpen:['PVEL','PJNK','PACC'] }`. (The private `bandScores()` at `:111-123` shows the canonical decomposition: per band, sum of `Math.max(deltas[stat], 0)` over `BAND_STATS[band]` — REPLICATE this positive-sum pattern; do NOT import the private fn.)
+- `src/data/tierParams.ts:156` — `export type ModStat = 'POW'|'CON'|'SPD'|'FLD'|'ARM'|'RVEL'|'RJNK'|'RACC'|'PVEL'|'PJNK'|'PACC';` · `:158` `export const CAP_MODIFICATION_FRACTIONS: Record<string, Record<ModStat, number>>` — the named archetype elements (e.g. `'Defense First'` = FLD 0.576/ARM 0.265 + SPD 0.2; `'Big D'`; `'Catch the Ball!'`; `'Fence Swingers'` = POW; `'Rotation Boost'`; `'Bullpen Boost'`; `'--'` = all-zero neutral). These are what `composeIdentity` stacks into `TeamCapIdentity.increase`.
+- `src/engines/rosterAnalyzerEngine.ts:129-144` — `export type AnalyzerConstraintKind = 'data_integrity'|'roster_count'|'position_coverage'|'lineup'|'rotation'|'bullpen'|'depth_chart'|'pitch_arsenal'|'team_profile'|'salary_value'|'luxury_cap'|'trait_usage'|'chemistry_balance'|'farm_options'|'phase_lock';` · `:14` `export type AnalyzerSeverity = 'blocker'|'critical'|'warning'|'info';` · `:224-234` `export interface AnalyzerFinding { id: string; kind: AnalyzerConstraintKind; severity: AnalyzerSeverity; trust; title; detail; affectedPlayerIds?; evidence; recommendedActionIds?; }`. **TYPE-ONLY import these — do NOT edit rosterAnalyzerEngine.ts.** Note: `AnalyzerFinding` carries NO structured position/band/weight field → the tilt MUST classify by `kind`, not by parsing `detail`/`title` text.
+- RETIRE TARGET: `src/engines/farmArchetypeProfile.ts` (`bandPrioritiesToTargetProfile`, `BAND_TO_PROFILE_CATEGORY`, `FARM_ARCHETYPE_TARGET_TUNING`) + `src/engines/__tests__/farmArchetypeProfile.test.ts`. **Grounded: imported by NOTHING except its own test** (build-dark) — deleting it must leave `tsc -b` at exit 0.
+
+**MAKE-OR-BREAK:**
+1. `archetypeBandWeights(identity)` returns a record over ALL SIX `BANDS` **including `Defense`**, normalized so the strongest band = 1. For a Defense-leaning archetype (`increase: ['Defense First']`, OR `bandPriorities` with Defense strictly highest) **`Defense` is the strict-max weight** — the EXACT capability the retired 5-category bridge structurally could not express.
+2. `tiltAnalyzerFindings` gives a `position_coverage` finding under a Defense-max archetype a `tiltMultiplier === 1 + tuning.tiltStrength` (> 1) — defensive holes "scream louder" for a defense-first farm. A finding whose kind maps to a zero-weight band (e.g. a `rotation` hole under a pure-Defense archetype) gets `tiltMultiplier === 1` (no tilt). The tilt is ONE-SIDED (∈ [1, 1+tiltStrength]; never < 1).
+3. The retired `farmArchetypeProfile.ts` + its test are DELETED and `NODE_ENV= npx tsc -b` is exit 0 (proves it was build-dark — no live importer anywhere).
+
+**CONSTRAINTS — exact files (touch ONLY these four):**
+1. NEW FILE `src/engines/farmArchetypeTilt.ts` — the pure tilt engine (design below).
+2. NEW FILE `src/engines/__tests__/farmArchetypeTilt.test.ts` — the unit test (design below).
+3. DELETE `src/engines/farmArchetypeProfile.ts`.
+4. DELETE `src/engines/__tests__/farmArchetypeProfile.test.ts`.
+- FROZEN oracle `spec-docs/reference/iv_oracle.json` is READ-ONLY — never touch.
+- Do NOT edit `rosterAnalyzerEngine.ts`, `leagueConstruction.ts`, `tierParams.ts`, `smb4TeamProfileEngine.ts`, the draft adapter (RB-9a), `leagueBuilderStorage.ts`, or ANY UI/page/hook/store/franchise file (type/value IMPORTS only). Do NOT wire the tilt into any consumer (build-DARK — RB-9c does the wiring + the board).
+
+**ENGINE DESIGN (`src/engines/farmArchetypeTilt.ts`) — pure, deterministic, no React/storage/Date/Math.random:**
+- Imports: `import { type Band, type BandPriorities, type TeamCapIdentity, BANDS, BAND_STATS } from './leagueConstruction';` · `import { CAP_MODIFICATION_FRACTIONS, type ModStat } from '../data/tierParams';` · `import type { AnalyzerFinding, AnalyzerConstraintKind, AnalyzerSeverity } from './rosterAnalyzerEngine';`
+- `export const FARM_ARCHETYPE_TILT_TUNING = { tiltStrength: 0.6 } as const;` — sim-tunable §11 (doc-comment: how loudly an archetype-aligned hole "screams"; top-band hole → ×1.6).
+- `export function archetypeBandWeights(identity: TeamCapIdentity | undefined): Record<Band, number>`:
+  - Build `raw` = a `Record<Band, number>` initialized to 0 for all 6 BANDS.
+  - **Element-first (the 44-element breakdown):** if `identity?.increase?.length`, for each element name present in `CAP_MODIFICATION_FRACTIONS`, decompose its deltas across the bands — for each band, add `BAND_STATS[band].reduce((s, stat) => s + Math.max(deltas[stat], 0), 0)` to `raw[band]` (positive-sum, replicating the canonical `bandScores().pos`). Unknown element names are skipped.
+  - **Fallback:** else if `identity?.bandPriorities`, set `raw[band] = max(0, finite(bandPriorities[band]))` for each band (non-finite/negative → 0).
+  - **Neutral:** else (undefined / empty increase + no priorities) leave all-zero.
+  - Normalize: `maxRaw = Math.max(0, ...BANDS.map(b => raw[b]))`; return `{ [band]: maxRaw > 0 ? raw[band] / maxRaw : 0 }` for all 6 bands. (All-equal input → all 1; neutral → all 0.)
+- `export const FINDING_KIND_TO_BANDS: Partial<Record<AnalyzerConstraintKind, readonly Band[]>> = { position_coverage: ['Defense'], depth_chart: ['Defense'], lineup: ['Power','Contact','Speed'], rotation: ['Rotation'], bullpen: ['Bullpen'] };` — doc-comment: only positional/role HOLE kinds are archetype-tilted; Defense is first-class via `position_coverage`/`depth_chart` (the JOIN is by `kind`, NOT by parsing finding text — `AnalyzerFinding` has no structured position field). All other kinds (data_integrity/roster_count/team_profile/pitch_arsenal/salary_value/luxury_cap/trait_usage/chemistry_balance/farm_options/phase_lock) are intentionally untilted (multiplier 1).
+- `export interface TiltedFinding { finding: AnalyzerFinding; bands: readonly Band[]; bandWeight: number; tiltMultiplier: number; }`
+- `export function tiltAnalyzerFindings(findings: readonly AnalyzerFinding[], identity: TeamCapIdentity | undefined, tuning: { tiltStrength: number } = FARM_ARCHETYPE_TILT_TUNING): TiltedFinding[]`:
+  - `const weights = archetypeBandWeights(identity);`
+  - map each finding → `{ finding, bands, bandWeight, tiltMultiplier }` where `bands = FINDING_KIND_TO_BANDS[finding.kind] ?? []`, `bandWeight = bands.length ? Math.max(...bands.map(b => weights[b])) : 0`, `tiltMultiplier = 1 + bandWeight * tuning.tiltStrength`.
+  - Return in INPUT ORDER (pure annotation; do NOT reorder here).
+- `export const TILT_SEVERITY_RANK: Record<AnalyzerSeverity, number> = { blocker: 3, critical: 2, warning: 1, info: 0 };` and `export function sortByTiltedPriority(tilted: readonly TiltedFinding[]): TiltedFinding[]` — a STABLE sort (return a new array; use a decorate-sort-by-index tiebreak to keep it stable) by `TILT_SEVERITY_RANK[finding.severity]` desc, then `tiltMultiplier` desc, then original index asc. (RB-9c's convenience ranker; pure.)
+- Top-of-file comment: build-DARK (RB-9c consumes it); SUPERSEDES the retired `farmArchetypeProfile.ts` 5-category bridge per JK D-9b-2 (Defense is now first-class); the band weights derive from the cap-modification ELEMENTS (the 44-element breakdown) so Defense-boosting elements like `'Defense First'`/`'Big D'` raise the Defense band; `tiltStrength` is sim-tunable §11.
+
+**TEST (`src/engines/__tests__/farmArchetypeTilt.test.ts`) — non-vacuous:**
+1. **Defense first-class (the make-or-break):** `archetypeBandWeights({ increase: ['Defense First'], decrease: [] })` → result has all 6 band keys incl. `Defense`, and `Defense` is the strict max (=== 1) (proves the element decomposition routes FLD/ARM → Defense — the thing the 5-cat bridge could NOT do). Repeat via `bandPriorities` with Defense:6, rest 0 → Defense === 1, others < 1.
+2. **Tilt screams louder:** with a Defense-max archetype, `tiltAnalyzerFindings([positionCoverageFinding], identity)[0].tiltMultiplier === 1 + FARM_ARCHETYPE_TILT_TUNING.tiltStrength`; and a `rotation` finding under the SAME archetype → `tiltMultiplier === 1` (Rotation weight 0). Use minimal hand-built `AnalyzerFinding` literals (id/kind/severity/trust/title/detail/evidence:[]).
+3. **Kind map:** `FINDING_KIND_TO_BANDS` covers the 5 hole kinds; a finding of an UNMAPPED kind (e.g. `chemistry_balance`) → `bands` empty, `tiltMultiplier === 1`.
+4. **Neutral / balanced:** `archetypeBandWeights(undefined)` → every band 0; a Power archetype (`increase:['Fence Swingers']`) → Power strict-max and a `lineup` finding (Power∈bands) gets the full tilt while a `bullpen` finding gets 1. All weights ∈ [0,1].
+5. **Sort:** `sortByTiltedPriority` orders a blocker above a warning regardless of tilt, and within equal severity orders higher `tiltMultiplier` first, stable on ties.
+
+**VERIFICATION (you run, report the real output):**
+- `cd /Users/johnkruse/Projects/kbl-mode1 && export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" && NODE_ENV= npx tsc -b` → exit 0 (paste the tail — this is the proof the retired file had no live importer).
+- `NODE_ENV= npx vitest run src/engines/__tests__/farmArchetypeTilt.test.ts` → all pass (paste the summary). (The Captain runs the FULL suite gate.)
+- Report `git status --short` (exactly: 2 new files, 2 deleted files).
+
+**FORMAT (report back):** the diff summary (files + line counts), the verbatim signatures of `archetypeBandWeights` + `tiltAnalyzerFindings` + the `FINDING_KIND_TO_BANDS` map, the tsc result tail, the focused test results, and `git status --short`.
+
+**FAILURE PROTOCOL / STOP-IF:**
+- If deleting `src/engines/farmArchetypeProfile.ts` breaks `tsc -b` (a LIVE importer exists) → STOP and quote the importer (the build-dark assumption is wrong).
+- If a contracted **CODE anchor (a `src/…` file:line)** does not match the actual source — e.g. `AnalyzerFinding.kind` is not `AnalyzerConstraintKind`, the hole kinds differ, or `BAND_STATS`/`BANDS`/`CAP_MODIFICATION_FRACTIONS` aren't exported as documented → STOP and quote the discrepancy. (The V2/DECISIONS spec files are intentionally NOT in this worktree — their absence is EXPECTED, NOT a stop condition; the requirements are embedded above. Only `src/…` anchor mismatches stop you.)
+- Never touch the frozen oracle or any file outside the four listed. Never commit/push. Branch-only.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-9b-2 ===== -->
