@@ -7,12 +7,32 @@
 
 ## June 2026
 
+### 2026-06-22 (attended): PROSPECT AGE — generate real age (skew-young, full-range, revealed) — RULED (REVERSES prior removal) → `PROSPECT_GENERATION_SPEC.md §10`
+
+**Context:** JK: farm rosters span low-A→AAA, so prospects can be **any age** — they must NOT all be young vs the 440 MLB pool, but should **skew young**. Age should be a draft factor revealed to GMs ("do I want a 40yo who may regress on arrival, or a younger player all else equal?") for more dynamic farm teams + a more interesting limited-info draft. Verified (`wmehpv790`): the canonical generator hard-codes `age: 18` for EVERY prospect (`prospectScoutingDraftEngine.ts:1116`, const `:414`); `PROSPECT_GENERATION_SPEC §10` (+ C5/B8) explicitly REMOVED age (a Captain default 2026-06-21); the canonical farm-auction UI doesn't even render age. MLB pool ages: 19–42, mean 28.9, median 29 (veteran-skewed).
+
+**RULING (JK — reverses the prior removal):**
+- **Generate a real age, skew-young + full-range:** young-centered draw (placeholder `clamp(round(N(μ≈21,σ≈4)),18,42)`, sim-tunable) — center below the MLB median ~29, span ~18–42. Deterministic/seeded.
+- **Reveal age to GMs** in the canonical farm-auction draft (`LeagueBuilderFarmAuctionDraft.tsx`, currently not rendered); age is VISIBLE (not scout-obscured like ratings/IV).
+- **Older prospects regress on arrival** via the ratings **§5 age curve** (no separate arrival mechanism — carry the real age into the ratings engine). CPU-scout age-discounting = separate scout-logic question, default GMs judge it themselves.
+- Build: replace the fixed const + delete the `§10` gate comment; fix `DraftFlow.tsx` dummy ages; `yearsInMinors` stays dropped. (Spec §10/C5/B8 updated.)
+
+### 2026-06-22 (attended): ROOKIE vs FAN HOPEFUL — distinct; don't reuse the salary marker — RULED → `RATINGS_ADJUSTMENT_SPEC.md §13B`
+
+**Context:** JK corrected a conflation. **Fan Hopeful** = per-TEAM, team-singular farm designation (the headline prospect fans are excited about; drives fan morale) — already built/live (`computeTeamFanHopefuls` → `team.fanHopefulPlayerId`, top-3-by-visible-grade seeded pick), **leave as-is**. **Rookie** = per-PLAYER: **every player drafted in the farm prospect draft, upon FIRST call-up** — but **NOT** an MLB veteran sent down (to make room) then recalled. Orthogonal concepts (a Fan Hopeful on the farm is never a rookie).
+
+**RULING (JK):** my earlier §13B reuse of `rookieScaleActiveBySeason` is WRONG — verified (`wmehpv790`) it fires on EVERY call-up incl. recall (`franchiseRosterMovement.ts:347-350`) and is never cleared → a recalled veteran wrongly gets it. Correct model:
+- New first-class **`draftedAsFarmProspect`** flag stamped at prospect creation (not the brittle `sourceDatabase` string).
+- New **`rookieStatus`** set true ONLY when `firstCallUp===true` AND `draftedAsFarmProspect===true` AND no prior activation (firstCallUp already excludes recalled vets + stock-MLB players). Add a **rookie-window clear** (none exists today).
+- Visible ROOKIE **badge** via the existing badge `<span>`; do NOT add `ROOKIE` to `FranchiseDesignationType` or the team-singular designation store.
+- Risk LOW: per-franchise Player DB is schema-free → no DB bump; update `franchiseRosterMovement.test.ts` (+ a new recalled-vet-isn't-rookie test).
+
 ### 2026-06-22 (attended): Trait POSITION-MISMATCH — protect + flag, don't prevent — RULED
 
 **Context:** JK flagged that a player could lose a trait at a position whose stats can't defend it (catcher with Cannon Arm). Analysis `wfzg5s1tu` CONFIRMED it (build-dark, latent): the arm signal is OF-assists-only (catcher CS isn't tracked → credited to pitcher; IF throws log as assist/DP), so a regular catcher/IF reads "artificial weak arm" → unfair loss + can't re-earn. Blast radius is NARROW — only the arm family (Cannon Arm/Noodle Arm); all batting/pitching/baserunning signals are universal-by-role. → `TRAIT_GAIN_LOSS_THRESHOLD_SPEC.md §8C`.
 
 **RULING (JK):** protect strongly + make it transparent; do NOT build the schema-level cure.
-- Canonical `POSITION_MISMATCH_UNREGAINABLE` (trait × position) map (v1: arm family at C/1B/2B/3B/SS/DH).
+- Canonical `POSITION_MISMATCH_UNREGAINABLE` (trait × position) map (v1: arm family at C/1B/2B/3B/SS). (DH dropped — position removed.)
 - Held mismatch traits = **much harder to lose, NOT impossible**: suppress the artificial-zero-signal self-loss (treat as no-signal), + a strong keepScore boost / much-higher displacement bar (a far-stronger trait can still rarely bump it).
 - Accept un-regainable (no valid signal at that position) — do NOT build the catcher-CS-event / per-position-cohort cure (avoids a trackerDb bump).
 - **Scout draft flag:** "this player has a unique trait that could be lost and not regained — heads up." **Roster Analyzer:** must NOT undervalue un-regainable-trait players; surface the flag.

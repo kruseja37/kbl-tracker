@@ -16,7 +16,7 @@ This revision is the resolution of **V9** (`MODE1_V1_VERIFICATION.md`: "farm gen
 | **C2** | **GRADE ORACLE located and named** = `scoreSmb4Player` (`src/engines/smb4GradeEmulator.ts:671`), the V2 fitted SMB4-emulation model surfaced by the Player Analyzer (`Builder.tsx:1302`). The simple 3:3:2:1:1 `gradeEngine` grader is **not** the analyzer oracle. | §9.E: "locate it in league-builder code." The analyzer scores ratings **+ handedness + traits + secondary position + arsenal** → a calibrated grade. |
 | **C3** | **DISTRIBUTION ORACLE numbers added** (§6/§7/§3.5), derived empirically from the real stock pool. | §9.E: derive secondary-position transitions, handedness split, chemistry frequencies from the **real 440**, not uniform assumptions. |
 | **C4** | **§3.2 grade table KEPT as the v1 STANDARD anchor.** Juiced/nerfed shift of the *generation* distribution **DEFERRED to L-ECON3 (`farmGradeMode`)**. | §9.E: "STANDARD distribution ONLY for v1." |
-| **C5** | **NEW**: secondary positions (§6), handedness (§7), pitcher arsenal spec (§8), positions-visible/ratings-hidden (§9). **REMOVED**: age / development curve (§10). | §9.E net-new + drop-age rulings. |
+| **C5** | **NEW**: secondary positions (§6), handedness (§7), pitcher arsenal spec (§8), positions-visible/ratings-hidden (§9). ~~REMOVED: age / development curve~~ → **REVERSED 2026-06-22 (JK): age IS generated — skew-young, full-range, revealed to GMs (§10).** | §9.E net-new; age-drop reversed per §10. |
 | **C6** | **§3.5 chemistry ~20%-even VALIDATED** against the real pool (and clarified: chemistry ≠ personality — the canonical-7 personality is a separate axis). | §9.E: "validate the assumption." |
 
 **Authoritative inputs:** `MODE1_LEAGUE_BUILD_TO_DRAFT_VISION.md §9.E` (rulings), `src/engines/smb4GradeEmulator.ts` (grade oracle), `src/data/playerDatabase.ts` (the real stock pool — distribution oracle), `GRADE_ALGORITHM_SPEC.md`, `SMB4_GRADE_V3_OBJECTIVE_AUDIT.md`, `TRAIT_INTEGRATION_SPEC.md §5.2`.
@@ -225,9 +225,18 @@ During the farm prospect draft (auction), **primary + secondary positions are AL
 
 ---
 
-## 10. No Age / Development Curve — **REMOVED (§9.E)**
+## 10. Age — skew-young, full-range, revealed to GMs — **RULED (JK 2026-06-22; REVERSES the prior removal)**
 
-Generated prospects carry **no age and no age-based development curve** in v1. Development is driven by **morale, performance, relationships, personality, and luck** — not age. Drop the `age`/`yearsInMinors`/age-based-growth fields and any age factor from the prospect generator (the v1.0 spec's `age: 18 + …` and the analyzer's optional `age` input are not used for generation or development).
+> ⚠ **Supersedes** the earlier "No Age / Development Curve — REMOVED" ruling (a Captain default 2026-06-21) and the change-log C5 / build-task B8 "drop age" lines. JK reversed it: prospects **do** carry a real, varied age.
+
+**Why:** farm rosters span low-A through AAA, so prospects can be **any age** — they must NOT all be young relative to the 440-player MLB pool. A real age makes the draft more dynamic and gives GMs a genuine trade-off on limited info: *"do I take the 40-year-old who may regress on arrival, or the younger player when all else is equal?"*
+
+**Rules:**
+1. **Generate a real age — skew young, full range.** Draw from a young-centered distribution that still reaches the veteran tail: center clearly **below the MLB median (~29)** but span the same **~18–42** envelope the pool uses (`playerDatabase` ages are 19–42, mean 28.9, median 29, veteran-skewed). Placeholder draw (sim-tunable): `age = clamp(round(N(μ≈21, σ≈4)), 18, 42)` — i.e. most prospects 18–24, a thinning tail into the late-20s/30s, rare 40-somethings. **Deterministic/seeded** (reuse the generator's existing seeded helpers).
+2. **Reveal age to GMs.** Age is shown on the scout-facing prospect card / draft board in the **canonical farm-auction draft** (`LeagueBuilderFarmAuctionDraft.tsx` — currently does not render it) so it factors into bidding. Age is a **visible** fact, not scout-obscured (unlike ratings/IV — §9). `VisibleSafeProspectReport.age` already carries it.
+3. **Older prospects regress on arrival** via the ratings **§5 age curve** (`RATINGS_ADJUSTMENT_SPEC.md` — one 5-band age structure: 32–35 mild decline, 36+ steep). A drafted 35-year-old lands in a declining band and trends down over the season; an 18-year-old develops. This is what makes the "younger, all else equal" instinct correct — no separate arrival-regression mechanism needed beyond carrying the real age into the ratings engine. (Whether CPU scouts/bidders age-discount perceived value is a separate scout-logic question — default: GMs judge the revealed age themselves; the curve does the rest.)
+
+**Build notes (greenfield/reversal):** the canonical generator currently hard-codes `age: PROSPECT_DRAFT_AGE = 18` (`prospectScoutingDraftEngine.ts:1116`, const `:414`) — replace with the seeded draw and delete the `PROSPECT_DRAFT_AGE` constant + its §10 gate comment (`:413`). The `age` field already exists on `LeagueBuilderProspectPlayerDto` (`:179`) and `VisibleSafeProspectReport` (`:160`). Also fix the non-canonical `DraftFlow.tsx` dummy ages (`:490` `randBetween(19,22)`, `:517`) to match. `yearsInMinors` stays dropped (not part of this reversal).
 
 ---
 
@@ -285,7 +294,7 @@ Concrete deltas between the current live generator (`src/utils/prospectScoutingD
 | **B5** | **Pin personality to the canonical 7** (the §2.B/G2 fix); keep chemistry on the 5 SMB4 types (§3.5). | `prospectScoutingDraftEngine.ts:247` (`PERSONALITY_POOL`), `:246` (`CHEMISTRY_POOL` ok) | **WIRING** |
 | **B6** | **Position-appropriate trait pools** per §5.5 / `TRAIT_INTEGRATION_SPEC §5.2` (DH/closer/two-way carve-outs); fix `Workhorse` (not in the trait registry) and the orphaned `traitPools.ts`. | `prospectScoutingDraftEngine.ts:248-249, 533-535`; `traitPools.ts` | **BUILD** (small) |
 | **B7** | **Canonicalize arsenal** (§8): single role/junk rule, resolve the `4F` vs `{4F,2F}` fastball-seed discrepancy, enforce role-plausible counts; retire the orphaned `gradeEngine.generateArsenal`. | `prospectScoutingDraftEngine.ts:420-428`; `gradeEngine.ts:381-401` (orphan) | **WIRING** |
-| **B8** | **Drop age / `yearsInMinors` / age-development** from the generator (§10). | `prospectScoutingDraftEngine.ts` rating/age path; `gradeEngine.ts:370` | **WIRING** |
+| **B8** | **Generate a real age** (§10, REVERSED): replace fixed `age: PROSPECT_DRAFT_AGE = 18` (`:1116`, const `:414`) with a seeded skew-young/full-range draw (~18–42, μ≈21, σ≈4); delete the `PROSPECT_DRAFT_AGE` const + `:413` gate comment; fix `DraftFlow.tsx:490/:517` dummy ages. Keep `yearsInMinors` dropped. **+ reveal age** in the canonical farm-auction draft UI (`LeagueBuilderFarmAuctionDraft.tsx` / `useFarmAuctionDraft.ts` — add an Age column/line; `VisibleSafeProspectReport.age` already carries it). | `prospectScoutingDraftEngine.ts:413-414, 1116`; `DraftFlow.tsx:490,517`; `LeagueBuilderFarmAuctionDraft.tsx` | **BUILD** (small) |
 | **B9** | **Add a distribution-validation test** asserting the generated class's analyzer-grade histogram matches §3.2 within tolerance (≈±1.5pp), plus trait-split + position-spread checks (none exists today). | new test | **BUILD** (test) |
 | **B10** | **(Deferred, L-ECON3)** add `farmGradeMode` as a multiplicative skew over §3.2 weights for juiced/nerfed; wire the orphaned `FARM_NERF_SCALES`. **Not v1.** | new; `tierParams.ts:51-55` | **BUILD** (post-v1) |
 | **B11** | Retire/leave the orphaned `gradeEngine.generateFullProspect/generateProspectRatings` (test-only) — not part of the live path. | `gradeEngine.ts:303, 417` | none (note) |
