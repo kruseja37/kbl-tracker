@@ -17444,3 +17444,51 @@ Use xhigh reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-9c-2 ===== -->
+
+<!-- ===== CONTRACT: RB-9c-3a ===== -->
+## CONTRACT: RB-9c-3a — MLB draft board intelligence (analyzer gap-priority + wallet-cap solvency warning) + shared board props
+
+**ROUTE:** Codex build in the Mode-1 worktree `/Users/johnkruse/Projects/kbl-mode1-b` on branch `codex/mode1-v1-b` (the single active Mode-1 code lane). Branch-only; do NOT commit, do NOT push (the Captain commits after audit).
+
+**ROLE:** You are the builder (Codex). Opus is the auditor (builder ≠ auditor). Build EXACTLY this contract — no extra scope.
+
+**GOAL:** Make the RB-9c-2 draft roster board COST-AWARE + gap-prioritized on the **MLB auction page** (`LeagueBuilderAuctionDraft.tsx`), and build the SHARED board props the farm page (RB-9c-3b) will reuse. Two things: (1) feed the Roster Analyzer (`analyzeDraftRoster`, RB-9a) over the GM's in-progress MLB roster → rank the gap findings by `tiltAnalyzerFindings`+`sortByTiltedPriority` (RB-9b-2) → render a top-N "PRIORITY GAPS" list on the board; (2) per JK's **D-9a-1 reversal (#4/#7)**, wire the analyzer's salary check to the team's actual wallet cap AND surface a forward-looking **solvency warning** ("filling your remaining slots would exceed your budget"). **MLB uses NO farm tilt** (the §3.5 archetype tilt is farm-specific; the MLB archetype's mechanism is the luxury tax) — so the MLB board passes `undefined` identity to the tilt (→ pure severity ranking, same code path the farm board will reuse with `farmCapIdentity`).
+
+**SOURCE OF TRUTH:** ⚠ `AUCTION_DRAFT_SPEC_V2.md` + the DECISIONS_LOG live on the **docs branch**, NOT in your worktree — do NOT open them or treat their absence as a stop. The operative rulings (§3.5 scout-as-bridge; D-9a-1 reversal "show roster + salary + running payroll + remaining wallet on the board, analyzer salary-check wired to the actual wallet cap so it can flag 'filling this hole pushes you over'") are embedded above. Verify only the `src/…` CODE anchors below.
+
+**GROUNDED ANCHORS (re-read each at source; CODE anchors only — STOP if any `src/…` mismatches):**
+- **Draft adapter** `src/utils/rosterAnalyzerDraftAdapter.ts`: `buildDraftAnalyzerInput` (`:142-169`) builds `config: createDefaultRosterAnalyzerConfig({ presetId: 'draft_prep_read_only_v1', salary: { enabled: false, unit: 'raw' }, ...(input.config ?? {}) })`; `DraftAnalyzerAdapterInput` (`:51-61`, has `mlbWonPlayers: DraftAnalyzerMlbEntry[]`, `farmWonPlayers`, optional `config?`); `analyzeDraftRoster(input)` (`:171-173`).
+- **Analyzer salary finding** `src/engines/rosterAnalyzerEngine.ts`: `RosterAnalyzerConfig.salary?: { enabled: boolean; unit: 'raw'|'millions'|'unknown'; cap?: number; luxuryCap?: number }` (`:167-194`); the salary block (`:936-965`) emits a `luxury_cap` finding when `config.salary.enabled` && `profile.salaryTotal > config.salary.luxuryCap`. `AnalyzerFinding` (`:224-234`: id/kind/severity/trust/title/detail/…). `AnalyzerConstraintKind` gap kinds = `position_coverage|lineup|rotation|bullpen|depth_chart`.
+- **RB-9b-2 tilt** `src/engines/farmArchetypeTilt.ts`: `tiltAnalyzerFindings(findings, identity, tuning?) → TiltedFinding[]` (`:86-104`); `sortByTiltedPriority(tilted) → TiltedFinding[]` (`:113-122`); `TiltedFinding = { finding: AnalyzerFinding; bands; bandWeight; tiltMultiplier }` (`:79-84`). Passing `identity: undefined` → every `tiltMultiplier === 1` → `sortByTiltedPriority` becomes a pure severity sort.
+- **Board** `src/src_figma/app/components/DraftRosterBoard.tsx`: `DraftRosterBoardProps = { tier; entries; target; payroll; walletRemaining }` (`:11-17`); the component imports ONLY `ReactNode` (keep it engine-decoupled — new props must be MINIMAL DTOs, NOT `AnalyzerFinding`/`TiltedFinding`). The existing styling: section/card/badge classes + the `GapCard` dashed `#FFD27A`.
+- **MLB page** `src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx`: `teamById` (`:~122`), `playerById`, `rosterBoardTeamState` (`:~141`, an `AuctionTeamState` with `roster`/`budgetRemaining`/`rosterSlotsRemaining`/`minSalary`/`teamId`), `rosterBoardEntries: DraftBoardEntry[]` (`:~146`), `rosterBoardPayroll` (`:~160`). The board is mounted at `:~641`. `playerDisplayName` helper exists.
+- **Existing adapter test** `src/utils/tests/rosterAnalyzerDraftAdapter.test.ts` asserts NO salary findings with the default (salary-disabled) input — must STAY GREEN (the new `walletCap` is OPT-IN; absent → unchanged behavior).
+
+**MAKE-OR-BREAK:**
+1. `buildDraftAnalyzerInput` accepts an additive optional `walletCap?: number`; when provided it sets `config.salary = { enabled: true, unit: 'raw', luxuryCap: walletCap }` (merged so an explicit `input.config.salary` still wins); when ABSENT, behavior is byte-unchanged (salary disabled) and the existing adapter test stays green.
+2. The MLB board shows a top-N "PRIORITY GAPS" list (the analyzer's gap-kind findings, severity-ranked via `sortByTiltedPriority` with `identity: undefined`), rendered as severity·title chips matching the existing analyzer-panel style; and a **solvency/over-budget warning** when `rosterBoardTeamState.budgetRemaining < rosterBoardTeamState.rosterSlotsRemaining * rosterBoardTeamState.minSalary` (you can't afford to fill the remaining slots at the reserve floor).
+3. `DraftRosterBoard` gains additive optional props `priorityGaps?: BoardPriorityGap[]` (`BoardPriorityGap = { id: string; severity: string; label: string }`) + `budgetWarning?: string | null`, rendered additively (when absent → the board renders EXACTLY as today; the existing component tests stay green). The component stays engine-decoupled (no analyzer/tilt imports).
+
+**CONSTRAINTS — exact files (touch ONLY these; tests as needed):**
+1. `src/utils/rosterAnalyzerDraftAdapter.ts` — additive `walletCap?: number` on `DraftAnalyzerAdapterInput`; wire it into the `config.salary` as above. No other behavior change.
+2. `src/src_figma/app/components/DraftRosterBoard.tsx` — additive optional `priorityGaps?: BoardPriorityGap[]` + `budgetWarning?: string | null` props; render a "PRIORITY GAPS" sub-section (chips: `{severity.toUpperCase()} · {label}`, top of or beside the grid) + a highlighted budget-warning banner when `budgetWarning` is set. Export `BoardPriorityGap`. ADDITIVE — when the props are undefined the render is unchanged.
+3. `src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx` — compute (memoized): `walletCap = (rosterBoardTeamState ? rosterBoardTeamState.budgetRemaining + rosterBoardPayroll : null)`; `report = session ? analyzeDraftRoster({ team: { id, name }, mlbWonPlayers: <the board roster mapped to DraftAnalyzerMlbEntry: id/name/primaryPosition/secondaryPosition/salary>, farmWonPlayers: [], walletCap }) : null`; `priorityGaps = sortByTiltedPriority(tiltAnalyzerFindings(report.findings.filter(gap-kinds & severity!=='info'), undefined)).slice(0,5).map(t => ({ id: t.finding.id, severity: t.finding.severity, label: t.finding.title }))`; `budgetWarning = (state && state.budgetRemaining < state.rosterSlotsRemaining * state.minSalary) ? 'Filling your remaining slots would exceed your budget' : null`. Pass `priorityGaps` + `budgetWarning` to the existing `<DraftRosterBoard tier="mlb" … />`. Reuse the existing `rosterBoardEntries`/`rosterBoardTeamState`/`rosterBoardPayroll` (do not re-derive). Do NOT change the farm page (RB-9c-3b).
+4. Tests: extend `rosterAnalyzerDraftAdapter.test.ts` (a `walletCap`-provided case → a `luxury_cap`/salary finding appears when payroll exceeds it; absent → none, existing test green); extend `DraftRosterBoard.test.tsx` (priorityGaps render as chips; budgetWarning banner shows; both absent → unchanged). Keep `LeagueBuilderAuctionDraft.test.tsx` green (add a light assertion only if needed).
+- Do NOT touch the farm page/hook, `farmArchetypeTilt.ts`, `rosterAnalyzerEngine.ts`, storage, the frozen oracle, or any other file. Do NOT tilt the MLB board by any identity (pass `undefined`).
+
+**VERIFICATION (you run, report real output):**
+- `cd /Users/johnkruse/Projects/kbl-mode1-b && export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" && NODE_ENV= npx tsc -b` → exit 0 (paste tail).
+- `NODE_ENV= npx vitest run src/utils/tests/rosterAnalyzerDraftAdapter.test.ts src/src_figma/__tests__/components/DraftRosterBoard.test.tsx src/src_figma/__tests__/pages/LeagueBuilderAuctionDraft.test.tsx` → all pass (paste summary). (Captain runs the FULL suite.)
+- Report `git status --short`.
+
+**FORMAT:** diff summary (files + line counts), the new `walletCap` wiring snippet, the new `DraftRosterBoard` props + `BoardPriorityGap`, the MLB-page priorityGaps/budgetWarning derivation, tsc result, focused test results, `git status --short`.
+
+**FAILURE PROTOCOL / STOP-IF:**
+- If enabling salary via `config.salary` does not flow through `createDefaultRosterAnalyzerConfig`/the engine as documented (the `luxury_cap` finding doesn't fire on `salaryTotal > luxuryCap`) → STOP and quote.
+- If `analyzeDraftRoster`/the tilt/sort APIs don't match → STOP and quote.
+- If a contracted **CODE anchor (`src/…` file:line)** mismatches → STOP and quote. (V2/DECISIONS specs absent from the worktree is EXPECTED, NOT a stop.)
+- If the board props cannot be added additively (would change existing render/tests) → STOP and explain.
+- Never touch the frozen oracle or files outside those listed. Never commit/push. Branch-only.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-9c-3a ===== -->
