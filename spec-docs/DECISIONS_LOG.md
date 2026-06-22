@@ -7,6 +7,12 @@
 
 ## June 2026
 
+### 2026-06-22 (attended): Snake draft STAYS user-selectable in v1 — the §9.A-vs-§9:411 tension RESOLVED (RB-13 / RB-13b)
+
+**Context:** During the AUTH-4 RB-wrapper run, the Captain flagged a spec contradiction (D-13a-2): `auctionEngineConstants.ts`'s header comment says "auction is the v1 primary and ONLY format; snake = v1.1 fallback," while `AUCTION_DRAFT_SPEC_V2.md` §9:411 says "the league setup lets the GM choose auction (default) vs snake." RB-13a shipped the picker offering BOTH (default auction), leaving the question of whether snake should be selectable in v1.
+
+**RULING (JK):** **Snake IS user-selectable in v1.** §9:411 wins — the format picker keeps both Auction (default) and Snake options. The §9.A "auction is the v1 only format" comment is superseded; a follow-up should soften/correct that `auctionEngineConstants.ts` comment so it stops implying auction-only. **Consequence:** RB-13a's picker (offers both, persists `draftFormat`) is CONFIRMED correct. **RB-13b is therefore a real ticket** (not moot): it must wire the hub/draft flow to route auction-vs-snake by the selected league's `draftFormat`. The remaining RB-13b ENGINEERING fork (no global active-league anchor — both draft pages self-pick `leagues[0]`, and the draft routes are static no-param paths) is left to the RB-13b builder to resolve with a documented default (e.g. per-league "Draft" actions in the CURRENT LEAGUES list that route by that league's `draftFormat`, threading the leagueId to the draft page).
+
 ### 2026-06-22 (attended): RATINGS RANGE — aggressive-when-warranted convex curve, both-end edge compression, soft seasonal damping — RULED → `RATINGS_ADJUSTMENT_SPEC.md §6/§6A`
 
 **Context:** JK on the volatility tension — want one season to FEEL like multiple (meaningful growth/decline) without erratic checkpoint-to-checkpoint ping-pong. Current engine (`ratingsDevelopment.ts`): `maxAbsDelta:6`/checkpoint, SYMMETRIC dead-band `0.75`, morale mult 0.5–1.5, but **no seasonal bound + no anti-reversal** → both too-erratic and too-much-cumulative (10 cps × ±6 = ±60/season possible).
