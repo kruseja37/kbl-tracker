@@ -62,11 +62,15 @@
 > `AUCTION_COMPLETE`; per-team join by teamId (never pooled); missing/snake/incomplete MLB → 0; NO new persisted field / NO trackerDb / NO schema change;
 > MLB hook + auction state machine + frozen oracle untouched. Suite **488 files / 8012 tests, sole hard fail `wpaRuntimeBoundary`** (+ the
 > `GameTrackerLaunchState` order-flake, verified passes SOLO 9/9).
-> **➡ NEXT (AUTH-4): `/kbl-captain` → RB-5 (player morale from draft, V2 §6/§3.7) — MOSTLY REUSE.** The morale engine
-> `masterMoraleMatrix.composeMoraleConsequence` (`src/engines/masterMoraleMatrix.ts:445`; `MORALE_TUNING:175`) is ALREADY BUILT. RB-5 = (a) define the
-> draft as morale EVENTS (drafted-early/high; overpaid/underpaid vs scout range — early=commitment dominates), (b) feed them through
-> `composeMoraleConsequence` with each player's personality+modifiers, (c) seed the result as starting morale for the freeze (§10 — wired later by RB-7).
-> Careful SOUL-LAYER ticket: extract the §6 measurement VERBATIM + surface any ambiguity (no inference). Needs fresh grounding. Then RB-6 … RB-18.
+> **🎉 RB-5 (player morale from the draft) COMPUTATION COMPLETE (WAVE 64, `2374e5d1`, `codex/mode1-v1`, branch-only, ZERO-NEW-REDS).** Pure
+> build-DARK `src/engines/draftMorale.ts`: §6 starting morale off neutral 50 from slot(±15, won-order terciles) + pay(±10, vs scout range), SUM-then-tilt
+> via a behavior-preserving extract (`applyPersonalityToSelfMoraleDelta`) from the already-built `masterMoraleMatrix` → "early dominates" holds for ALL 7
+> personalities (a correct Codex BLOCK on DROOPY under the rejected tilt-each model drove the sum-then-tilt fix; logged as a JK OPEN-DECISION). Part (c) —
+> seeding this into Mode-2 starting morale at the §10 freeze — is RB-7. Suite **489 files / 8021 tests, sole hard fail `wpaRuntimeBoundary`.**
+> **➡ NEXT (AUTH-4): `/kbl-captain` → RB-6 (fan morale from payroll, V2 §7) — NEW engine.** One-time at draft-end; payroll RANK vs the median; median =
+> neutral 50; deviation HURTS, EXPONENTIAL past the 75th/25th payroll percentile, HIGH side 2× (anti-all-in relocation-risk + anti-tank). Reuse
+> `percentile.ts getPercentile` + the `fanMoraleEngine` 50-neutral scale; PURE engine taking per-team payrolls (the payroll-sum data path = RB-7). Careful
+> SOUL-LAYER measurement (exp-curve params = §11/§13 sim-tune; surface ambiguity). Then RB-7 (freeze bridge) … RB-18.
 > **OPEN (verify at RB-16):** the §2.3 surplus pool-sizing (pool ≥ total slots) lives upstream in the pool builder; the RB-2b-1 forced-filler
 > guarantee assumes it. **JK-BROWSER-VERIFY BATCHED
 > (persistence-prioritized):** RB-0b-1 — a real draft stamps all 3 axes onto league players + they carry into the franchise (7-type personality
