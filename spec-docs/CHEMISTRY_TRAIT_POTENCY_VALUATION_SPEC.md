@@ -63,21 +63,31 @@ The single most important mechanic, stated verbatim `[GUIDE]` line 326:
 
 > **THRESHOLD CONFLICT — flag, do not assert code as truth.** The live code uses **off-by-one** boundaries: `[CODE]` `chemistryFitValue.ts:4-5` sets `CHEMISTRY_FIT_L2_MIN=4`, `CHEMISTRY_FIT_L3_MIN=8` → L1=0–3, L2=4–7, L3=8+ (tagged "RB-16 sim-tune"). Separately, `[CODE]` TRAIT_INTEGRATION_SPEC §4 defines a **non-game 4-tier model** (0–3/4–7/8–11/12+, multipliers 1.00/1.25/1.50/1.75) — the game has only 3 levels. **JK ruled the 4/8 code be corrected to 3/7.** That correction is pending (read-only here).
 
-### 2.5 The per-level value scale — CONFIRMED, with reconciliation
+### 2.5 The per-level value scale — ⚠ CODE-vs-SOURCE DISCREPANCY at the strong tier (VALIDATED 2026-06-22)
 
-The game scales positive-trait effects roughly **x1 / x2 / x4** for L1/L2/L3 `[GUIDE]` lines 339/348/363 (multiplicative traits like Cannon Arm, Durable, Sprinter) and similar ~4x ramps for flat-additive traits (Tough Out +12→+25→+50 CON; First Pitch Slayer +5→+10→+20 POW).
+**The canonical valuation source — `XBL Test Texas Rangers.xlsx` `ImportedTraits` (byte-identical to the repo template; see Provenance) — encodes the per-level ramp as `0.5 / 1.0 / 3.0` relative to L2.** VALIDATED cell-for-cell across many traits (raw Block1/Block2/Block3, relative to Block2):
 
-KBL **normalizes this so L2 = 1.0** (divide x1/x2/x4 by 2):
+| Trait | Pol | L1 (×L2) | L2 | L3 (×L2) | Raw |
+|---|---|---|---|---|---|
+| Cannon Arm | + | 0.51 | 1.0 | **3.0** | 23 / 45 / 135 |
+| Tough Out | + | 0.50 | 1.0 | **3.0** | 5 / 10 / 30 |
+| Big Hack | + | 0.55 | 1.0 | **3.0** | 6 / 11 / 33 |
+| Sprinter | + | 0.60 | 1.0 | **3.0** | 3 / 5 / 15 |
+| Whiffer / Noodle / Choker / Wild Thrower (neg, columns reversed) | − | **3.0** (harshest @ L1) | 1.0 | 0.5 (mildest @ L3) | e.g. Whiffer 8/15/45 |
 
-| Tier | Positives (`POTENCY_SCALE.positives`) | Negatives (`standardInverted`) | Game equivalent |
-|---|---|---|---|
-| L1 | **0.5** | **2.0** | x1 / worst |
-| L2 | **1.0** | **1.0** | x2 = baseline |
-| L3 | **2.0** | **0.5** | x4 / least-harmful |
+So the workbook ramp is **positive: L1 0.5× / L2 1.0× / L3 3.0×; negative (inverted by chemistry level): L1 3.0× / L2 1.0× / L3 0.5×.** Confirmed direction matches the game (negatives get milder as chemistry rises).
 
-`[CODE]` `rosterEngineConstants.ts:41-48`. `IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md:144` states this explicitly ("0.5x/1.0x/2.0x ... consistent with game's x1/x2/x4").
+**The CODE disagrees at the strong tier.** `[CODE]` `rosterEngineConstants.ts:41-48` `POTENCY_SCALE` = positives `{L1:0.5, L2:1.0, L3:2.0}`, negatives/standardInverted `{L1:2.0, L2:1.0, L3:0.5}`:
 
-**Negative-trait inversion is REAL in the game** (not just a KBL ruling): K Neglecter VEL −30→−15→−8 `[GUIDE]` line 382; Whiffer CON −50→−25→−12 `[CODE]` `smb4_traits_reference.md:30`. Negatives genuinely get *less* harmful as the matching chemistry count rises, so the code's `standardInverted` (L1 2.0 worst → L3 0.5 mildest) is faithful to the game.
+| Tier | Code positives | **Workbook positives** | Code negatives | **Workbook negatives** |
+|---|---|---|---|---|
+| L1 | 0.5 | 0.5 ✓ | 2.0 | **3.0** ✗ |
+| L2 | 1.0 | 1.0 ✓ | 1.0 | 1.0 ✓ |
+| L3 | **2.0** | **3.0** ✗ | 0.5 | 0.5 ✓ |
+
+The code's extreme tier is **2.0×**; the canonical workbook's is **3.0×** — the code **undershoots strong-tier potency (positive L3 and negative L1) by ~33%.** The `2.0` was set to match the BillyYank guide's loose "×1/×2/×4" wording (`[GUIDE]` 339/348/363), which normalizes to L3=2.0×L2; but the **guide's prose and the workbook's actual per-trait columns disagree** (guide L3 ≈ 2× L2, workbook L3 = 3× L2). `IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md:144` repeats the 0.5/1.0/2.0 "game-faithful" claim — it is faithful to the *guide wording*, NOT to the canonical valuation workbook. **This is a real fix candidate (§9.7), now validated against the source JK identified.** (Currently DORMANT: all live IV callers run at L2, so L3/L1 potency is not yet computed in production — but any potency-true valuation or scout L1/L3 adjustment must use the canonical 3.0×, not 2.0×.)
+
+**Negative-trait inversion direction is REAL in the game** (not just a KBL ruling): K Neglecter VEL −30→−15→−8 `[GUIDE]` line 382; Whiffer CON −50→−25→−12 `[CODE]` `smb4_traits_reference.md:30`. Negatives get *less* harmful as the matching chemistry count rises, so the code's `standardInverted` direction is correct; only its strong-tier magnitude (2.0 vs the workbook's 3.0) is off.
 
 > **Empirical IV behavior (prior run wqv2dgtiz):** a positive trait ~halves at L1 and ~doubles at L3 (L2→L3 ≈ +112–115%; L2→L1 ≈ −48–52%); the L1↔L3 *input* spread is ~4x; the *dollar* output is super-linear (convex marginal curve). The scale applies to the rating-equivalent **deltas only** — never to the `flatFee`/`multiplier` columns.
 
@@ -391,8 +401,8 @@ The down-tier ripple on call-up is unmodeled; the `'remove'` primitive exists bu
 ### 9.6 Un-pin the hitter raw layer, or keep the oracle frozen?
 Today hitters are L2-only (raw clone, `ivEngine.ts:648`); only pitcher kblIV can express potency, and even that is inert (all callers default L2). Making hitter kblIV potency-sensitive **breaks G1/G2/G3 and requires an oracle re-bless** (§5.4). **Decision:** (a) keep the oracle frozen and express all potency at the scout/perception layer only (no re-bless), or (b) give hitters a real kbl layer and re-bless the oracle. Note: pitcher kblIV at L1/L3 is *already* free (not oracle-pinned); only L2 and hitters are locked.
 
-### 9.7 Workbook ramp vs IV scale discrepancy
-The workbook `ImportedTraits` L3 ≈ **3× L2**, but the IV engine's scale uses **2× L2** for L3 (§3.3). **Decision:** which per-level ramp is canonical for KBL — the workbook's x1/x3-ish, the IV engine's 0.5/1.0/2.0 (game-normalized x1/x2/x4), or the raw game x1/x2/x4 un-normalized? These three disagree.
+### 9.7 Workbook ramp vs IV scale discrepancy — VALIDATED against the canonical source (the likely-correct fix)
+The canonical valuation workbook (`XBL Test Texas Rangers.xlsx` `ImportedTraits`, byte-identical to the repo template — see Provenance) encodes the strong tier as **3.0× L2** (positive L3 and negative L1), validated cell-for-cell (§2.5). The CODE's `POTENCY_SCALE` uses **2.0×** there — undershooting by ~33%. The `2.0` matches the BillyYank guide's loose "×1/×2/×4" prose, NOT the workbook columns the IV logic was actually built from. **Decision:** correct `POTENCY_SCALE.positives.L3` 2.0→3.0 and `standardInverted.L1` 2.0→3.0 to match the canonical source? (Worked impact: at L3 the IV engine would price Cannon Arm ARM as +135 not +90.) This is DORMANT today — all live callers run L2 — so the fix is safe to make now and only takes effect once potency goes live, but it must be settled before any potency-true valuation or scout L1/L3 adjustment (whose magnitude should anchor to 3.0×, not 2.0×). NOTE: the frozen oracle pins only L2, so changing the L3/L1 multipliers does NOT require an oracle re-bless (§5.4).
 
 ### 9.8 Off-pattern trait values
 Consistent (L2=0.4), Metal Head (L2=0.03), Volatile (L2=1.2), Injury Prone (L2 VEL=−0.9) break monotonicity (§3.3). **Decision:** authoritative, or spreadsheet typos to normalize?
@@ -408,4 +418,9 @@ The workbook is an xlsx snapshot of a live Google Sheet (`[WB]` `Link` sheet, gi
 
 ---
 
-**Provenance note:** trait-value extraction was read-only via openpyxl (no file modified). File-location correction: the Team Builder workbook is at `spec-docs/reference/`, NOT `reference-docs/` (which holds only the Jester stats book and the SOT rosters xlsx). Code citations are from `kbl-mode1`; the IV/grade engine and chemistry-fit engine live there.
+**Provenance note (updated 2026-06-22 after JK identified the canonical source):**
+- **The canonical valuation source is `XBL Test Texas Rangers.xlsx`** (a populated XBL league workbook; JK-supplied, currently at `~/Downloads/`). Its **valuation tabs are BYTE-IDENTICAL to the repo's `spec-docs/reference/Team_Builder_Archetype_Logic_Template.xlsx`** — verified 0 differing rows on `ImportedTraits`, `Traits`, `Cap Modifiers Reference`, `Lists`, `DynamicDropdown`. The only meaningful difference is the **`Roster` sheet** (the XBL file carries the real Texas Rangers — Eovaldi, deGrom, Leiter, Corbin… — the 21 dollar-anchors `T3_POOL_ANALYSIS.md` reproduces to ±$0). So the trait/rating/position/handedness/archetype tables this spec cites are the canonical ones; the template is a same-lineage copy.
+- **The codified `traitPricing.ts` L2 values = the workbook `Traits` (= `ImportedTraits` L2) sheet** (T3-authoritative; reproduces the Rangers anchors ±$0). So the L2 trait table in §3.2 is canonical.
+- **⚠ Open hygiene item (§9.11):** the canonical source lives only in `~/Downloads/`, not the repo. The repo holds the byte-identical template + the codified `traitPricing.ts`. RECOMMEND committing `XBL Test Texas Rangers.xlsx` (or a sanitized copy) into `reference-docs/` as the durable canonical source-of-truth, since it is "the source for how we value traits/ratings/positions/handedness/profile pieces."
+- Extraction was read-only via openpyxl (no file modified). Code citations are from `kbl-mode1`.
+- The Jester reference (`reference-docs/Jester's…xlsx`) is a stats/awards tracker only — NO trait/chemistry math; not a valuation source.
