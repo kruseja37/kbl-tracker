@@ -2186,3 +2186,37 @@ literal DECISION-2 per-trait effect — second-order; v1 uses the prospect's che
 the dominant "upgrades N existing traits" effect); (ii) weighting the level-up by N = existing roster traits of that category;
 (iii) RB-9's actual bidirectional consumption (its own ticket — requirement flagged now). RB-1b SPLIT: **RB-1b-1** pure engine
 (the boundary-aware primitive + the fit multiplier + tests) → **RB-1b-2** the MLB+farm roster-chemistry feed (hook) + page wire.
+
+---
+
+## 2026-06-21 (attended) — RB-2 (engine nomination + one-chance) JK rulings + RB-2a built
+
+**Context:** RB-2a (the PURE build-dark one-chance auction engine) shipped (`2b7e894d`, WAVE 57) — `selectNextNominee`
+(seeded weighted reveal ∝ (ivPercentile/100)^k, Efraimidis–Spirakis) + `surfaceNextPlayer` + `resolveLot`/
+`passLoneSurvivorOut`/`advanceLot` (no-bid → permanently out), additive/build-dark alongside the old GM-nomination
+path. RB-2 SPLIT into RB-2a (engine) + RB-2b (wire the hooks/pages/persistence + strip the old machinery). On
+resume JK ruled the four RB-2b forks:
+
+- **RB-2-Q1 — Farm auction opening/reserve floor (§4.4; closes the D-6 rank-leak): FLAT = the farm/league MINIMUM
+  SALARY.** RB-2a's `surfaceNextPlayer` currently uses the MLB percentile-reserve curve `reservePriceCurve(ivPct)×iv`
+  for BOTH tiers — correct for MLB (§4.4 percentile curve), but for FARM a per-prospect % LEAKS the hidden true-value
+  rank via the opening price. RB-2b switches the FARM opening to a FLAT floor = `LEAGUE_MINIMUM_SALARY` (same opening
+  for every prospect → zero rank leak; lowest floor → most bid back-and-forth, consistent with the 2026-06-21 "start
+  low" reserve ruling). MLB keeps the percentile curve. Sim-tunable (RB-16). *(Rejected: a fraction of class-average
+  value — also leak-free but JK chose the simpler fixed minimum.)*
+- **RB-2-Q2 — Roster-fill guarantee at the tail (§2.3): HARD GUARANTEE via forced fillers.** Under one-chance a
+  no-bid player is gone forever, so the pool drains and a GM could theoretically be stranded. RB-2b makes a softlock
+  IMPOSSIBLE BY CONSTRUCTION: once a GM's open roster slots == affordable players remaining, the engine force-surfaces
+  cheap fillers that CANNOT go no-bid-out (the player must be claimable). *(Rejected: trust pool-surplus sizing alone
+  — leaves a small residual stranding risk; JK chose the runtime guarantee since a softlocked draft is a hard
+  player-facing failure.)*
+- **RB-2-Q3 — Nomination weight exponent k per tier: MLB = 2, FARM = 3.** Public-IV MLB → lower k adds order-randomness
+  → sharpens the fight-now-vs-save gamble + makes "drafted early" a real §6 slot-morale commitment signal; hidden-value
+  FARM → higher k doubles as a soft quality hint in the fog. RB-2b sets `config.nominationWeightExponent` per tier (the
+  RB-2a default 2.5 applies only if a tier doesn't set it). Sim-tunable (RB-16). *(Rejected: equal 2.5 both tiers.)*
+- **RB-2-Q4 — New-league draft format default (backlog O-1 RESOLVED): AUCTION.** VISION §9.A makes auction the v1
+  primary; new leagues default to `draftFormat: 'auction'` (snake stays available via the RB-13 format picker). RB-2b
+  (or RB-13) flips the `DEFAULT` from `snake` → `auction`. *(Rejected: keep snake back-compat default.)*
+
+All four are durable RB-2b build inputs; baked into HANDOFF_NEEDED. k + reserve + filler magnitudes are RB-16
+sim-tune dials, none block the build.

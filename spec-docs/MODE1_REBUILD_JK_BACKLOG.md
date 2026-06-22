@@ -35,7 +35,7 @@ post-D13 flag-flip browser batch — tracked in the L-stack section of CURRENT_S
 | **D-3** | A `regeneratedAt` guard so `initAuction` skips re-regen on resume | Idempotent-by-seed today (re-run re-writes identical values) → correctness is fine; this is a resume-perf optimization only. | optional, anytime |
 | **D-4** | The league-setup **FORMAT-PICKER UI** (auction-default vs snake) | AUC-5.1d-3 landed the `draftFormat` field + reader; the picker UI is the deferred follow-up. | RB-13 |
 | **D-5** | `POSITION_POOL` SP/RP gap | The prospect generator's `POSITION_POOL` (`prospectScoutingDraftEngine.ts` ~:252) needs SP/RP added + corrected weights. | RB-14 |
-| **D-6** | Farm Opening/reserve still derives from true IV (`reservePriceCurve(ivPct)×iv`, `auctionStateMachine.nominatePlayer`) — a secondary back-solvable IV leak the RB-1a band re-anchor does NOT close. | RB-1a is the DISPLAY re-anchor only; obscuring the reserve/opening touches the shared state machine. | **RB-2** (nomination/reserve rework already touches it). |
+| **D-6** | ✅ RULED 2026-06-21 — Farm opening = a **FLAT floor = `LEAGUE_MINIMUM_SALARY`** (same for every prospect → no rank leak); MLB keeps the percentile curve. RB-2a still uses the MLB curve for both; **RB-2b switches the farm tier.** | RB-1a was DISPLAY-only; the reserve/opening lives in the state machine (`surfaceNextPlayer`). | **RB-2b** (DECISIONS_LOG 2026-06-21 RB-2-Q1). |
 | **D-7** | Per-bidder scouted GRADE (§3.6: rival scouts genuinely disagree on the letter, not just band width). RB-1a re-anchors the band CENTER per-bidder but still displays the single stored `scoutedGrade` + its 20–80. | Per-bidder grade plumbing belongs with the scout-privacy reveal surface. | **RB-11** (scout-privacy UI). |
 | **D-8** | **RB-9 MUST consume the chemistry value BIDIRECTIONALLY** (JK 2026-06-21). The in-season recommendation engine must value both a call-up's chemistry ADD (level-up/buffer) AND a send-down's chemistry REMOVE (a category dropping below a tier floor = a COST) — not one-directionally. RB-1b ships the bidirectional pure primitive `marginalChemistryValue(count, 'add'\|'remove')`; RB-9 must use the `'remove'` direction for send-down move costs. | RB-1b only needs the `'add'` direction for the draft scout price; the `'remove'` consumer is the season recommender. | **RB-9** (scout-as-bridge + roster board) — reuse the RB-1b primitive, do NOT re-derive. |
 | **D-9** | RB-1b second-order refinements: (i) per-trait amplification of the prospect's OWN traits by the roster (literal DECISION-2 per-trait); (ii) weight the level-up by N = existing roster traits of the category (§7.3 "upgrades N existing traits"). | v1 uses the prospect's chemistry-category marginal value (the dominant §7.3 effect); these refine the magnitude. | RB-16 sim-tune / a fast-follow. |
@@ -46,7 +46,7 @@ post-D13 flag-flip browser batch — tracked in the L-stack section of CURRENT_S
 
 | # | Decision | AUTH-4 default taken | Notes |
 |---|---|---|---|
-| **O-1** | `draftFormat` default for NEW leagues | `snake` (back-compat) | VISION §9.A makes AUCTION the v1 PRIMARY → JK may want NEW leagues to default `auction`. |
+| **O-1** | ✅ RESOLVED 2026-06-21 — `draftFormat` default for NEW leagues = **`auction`** (VISION §9.A; snake via RB-13 picker). | (was `snake`) → flip to `auction` in RB-2b/RB-13 | DECISIONS_LOG 2026-06-21 RB-2-Q4. |
 | **O-2** | Shill sim-tune (AUC-2.2) | conservative defaults, commented sim-tune | `bargainInterestCurve` + the sniper/spender/zealot shill profiles. |
 | **O-3** | Bid-rotation order (AUC-4.2) | (current) | nominator-first vs team-after-nominator sub-fork — both terminate; shifts the CPU bid sequence. |
 | **O-4** | Raise presets (AUC-4.1b) | start at `minBid + 1×increment` (no bare-minimum one-tap) | confirm, or add a min-tap preset. |
@@ -55,6 +55,8 @@ post-D13 flag-flip browser batch — tracked in the L-stack section of CURRENT_S
 | **O-7** | `CHEMISTRY_TARGET_DISTRIBUTION` shares (RB-0a) | JK's rounded `.21/.20/.20/.20/.19` (sums to 1.0) | within tolerance of the measured 21.14/18.86 source — honors JK's exact 2026-06-21 ruling. Informational. |
 | **O-8** | FA chemistry form (RB-0a) | FAs excluded from the target/regen | The spec note "FAs carry full-word chemistry" was WRONG — FAs use 3-letter codes too. Informational correction. |
 | **O-9** | RB-1b same-chemistry-COUNT → potency-TIER thresholds (how many same-chem teammates → L1/L2/L3) | Captain conservative default at RB-1b build + sim-tune (RB-16) | Model already RULED per-trait-count / 3-tier / perception-layer (DECISIONS_LOG 2026-06-21); only the numeric count→tier cut-points stay open. JK may pin them; else the documented default stands. |
+| **O-10** | ✅ RESOLVED 2026-06-21 — Roster-fill guarantee at the draft tail (§2.3) = **HARD guarantee / forced fillers** (slots==affordable-left → force-surface cheap fillers that can't go no-bid-out; softlock impossible). | RB-2b build input | DECISIONS_LOG 2026-06-21 RB-2-Q2. |
+| **O-11** | ✅ RESOLVED 2026-06-21 — Nomination weight exponent **k = MLB 2 / farm 3** (sim-tune RB-16). | RB-2b sets `config.nominationWeightExponent` per tier | DECISIONS_LOG 2026-06-21 RB-2-Q3. |
 
 ---
 
