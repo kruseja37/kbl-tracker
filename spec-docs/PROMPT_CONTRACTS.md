@@ -17538,3 +17538,154 @@ Use xhigh reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-9c-3b ===== -->
+
+<!-- ===== CONTRACT: RB-10a ===== -->
+# CONTRACT RB-10a — CPU shill ↔ CPU-controlled-team CONCEPT SPLIT (NEW pure engine module, build-dark)
+
+**ROUTE:** Codex 5.5 (gpt-5.5) | xhigh reasoning effort
+**ROLE:** Builder (Codex). Opus 4.8 audits the real diff (builder≠auditor). Worktree
+`/Users/johnkruse/Projects/kbl-mode1-b`, branch `codex/mode1-v1-b`. Branch-only — NEVER commit/push.
+
+**GOAL (one sentence):** Add ONE new PURE engine module that classifies an auction session's CPU teams
+into pure-pressure **SHILLS** (excluded from the league / dissolve-to-pool) vs opt-in **CPU-CONTROLLED
+franchise teams** (real AI teams whose players enter the franchise) — the §5 "separate the two concepts
+in config + the engine" half — WITHOUT changing any existing behavior. This is **build-dark**: nothing
+consumes it yet (RB-10b will wire the dissolve at the franchise bridge).
+
+**SOURCE OF TRUTH — V2 §5 (embedded verbatim; the V2 spec lives on the docs branch and is ABSENT from
+this worktree — do NOT look for it here):**
+> ## §5. CPU SHILLS vs CPU-CONTROLLED TEAMS (separate the two)
+> - CPU shills = pure bid pressure, NOT franchise teams. They participate in bidding to push prices
+>   toward fair value (preventing systemic steals) but are EXCLUDED from the league: their won players
+>   dissolve back to the pool ("exclude from league" — specced in V1, never built; `excludeFromLeague`
+>   is currently a no-op flag). They make the room competitive + unpredictable without becoming playable
+>   teams. **Default mode.**
+> - CPU-controlled teams = real franchise teams the CPU drafts for — an explicit opt-in for a GM who
+>   wants AI opponents in the season. Their won players DO fill a real roster + enter the franchise.
+> - Today these are conflated (a "shill" is currently the last N league teams, CPU-controlled, and their
+>   players would enter the franchise). The rebuild must (a) separate the two concepts in config + the
+>   engine, and (b) implement the dissolve-to-pool for true shills.
+> - Tuning: the shill valuation/interest curve + sniper/spender/zealot personalities are real tunable
+>   constants (hardcoded defaults today), sim-tunable (§11); personalities are seeded-random at setup.
+>   CPU teams (opt-in) use the same valuation engine.
+
+RB-10a builds part (a) ONLY as a pure classification module. Part (b) (the dissolve enforcement) is RB-10b.
+
+**GROUNDED ANCHORS (Captain already read these at source; RE-READ them in the worktree before you build —
+mirror the existing union logic EXACTLY):**
+- The existing BLENDED derivation to mirror — `src/src_figma/app/hooks/useAuctionDraft.ts:229-249`:
+  ```ts
+  export function deriveCpuTeamIds(session: CpuShillAuctionSession | null, leagueTeams: readonly Team[]): string[] {
+    if (!session) return [];
+    const ids = new Set<string>();
+    for (const team of leagueTeams) {
+      if (team.controlledBy === "ai") ids.add(team.id);
+    }
+    for (const teamId of Object.keys(session.cpuShills ?? {})) {
+      ids.add(teamId);
+    }
+    const count = Math.max(0, Math.min(session.config.cpuShillCount ?? 0, session.nominationOrder.length));
+    if (count > 0) {
+      for (const teamId of session.nominationOrder.slice(-count)) {
+        ids.add(teamId);
+      }
+    }
+    return session.nominationOrder.filter((teamId) => ids.has(teamId));
+  }
+  ```
+  This is the AUTO-BID set (shills + AI teams that auto-play). RB-10a does NOT touch this function; it
+  replicates the union for the parity anchor and ALSO produces the new SPLIT.
+- Types you import (DO NOT modify them):
+  - `CpuShillAuctionSession` — `src/engines/cpuShillBidding.ts:30-32` — `extends AuctionSession` and adds
+    `cpuShills?: Readonly<Record<string, CpuShillProfile>>`.
+  - `AuctionSession` — `src/engines/auctionStateMachine.ts` — has `nominationOrder` and `config: AuctionSetupConfig`
+    (RE-READ the exact field types and import the TYPE).
+  - `AuctionSetupConfig` — `src/data/auctionEngineConstants.ts:15-24` — has `cpuShillCount: number` and
+    `excludeFromLeague?: boolean`.
+  - Team control: `src/utils/leagueBuilderStorage.ts:133` declares `controlledBy?: 'human' | 'ai'`.
+- DO NOT import from `leagueBuilderStorage` (avoid an engine→storage coupling). Define a minimal
+  STRUCTURAL team type in the new module instead.
+
+**CONSTRAINTS:**
+- CREATE exactly TWO files:
+  - `src/engines/cpuTeamRoles.ts` (the pure module)
+  - `src/engines/__tests__/cpuTeamRoles.test.ts` (the tests)
+- Do NOT touch ANY other file. In particular do NOT touch: `src/engines/cpuShillBidding.ts` (sensitive
+  CPU bid/value file), `src/src_figma/app/hooks/useAuctionDraft.ts`, `src/src_figma/app/hooks/useFarmAuctionDraft.ts`,
+  the auction pages, `src/utils/draftFreezeInputs.ts`, `src/utils/franchiseInitializer.ts`,
+  `src/data/auctionEngineConstants.ts`, any storage/`trackerDb`, the frozen oracle
+  `spec-docs/reference/iv_oracle.json`.
+- PURE module: no React, no storage, no IndexedDB, no `Date`/`Math.random`/`crypto`/`fetch`. Imports limited
+  to TYPES from `cpuShillBidding`/`auctionStateMachine`/`auctionEngineConstants`.
+- Additive only. Zero behavior change to anything that exists (nothing consumes the new module).
+
+**EXPECTED OUTPUT — `src/engines/cpuTeamRoles.ts` exports:**
+1. `export interface CpuTeamControlInfo { id: string; controlledBy?: 'human' | 'ai'; }` — the minimal
+   structural team shape the classifier needs.
+2. `export function deriveControlledCpuTeamIds(leagueTeams: readonly CpuTeamControlInfo[]): string[]` —
+   the ids of teams with `controlledBy === 'ai'`, in INPUT order. These are the REAL opt-in AI franchise
+   teams (their players enter the franchise).
+3. `export function deriveShillTeamIds(session: CpuShillAuctionSession | null, leagueTeams: readonly CpuTeamControlInfo[]): string[]`
+   — the pure-pressure DISSOLVING set:
+   - `null` session → `[]`.
+   - If `session.config.excludeFromLeague === false` → `[]` (nothing dissolves; the flag is the explicit
+     dissolve switch — documented default D-10a-3).
+   - base set = `Object.keys(session.cpuShills ?? {})` ∪ the last `Math.max(0, Math.min(session.config.cpuShillCount ?? 0, session.nominationOrder.length))`
+     of `session.nominationOrder`.
+   - MINUS every team whose `controlledBy === 'ai'` (disjointness: a CPU-CONTROLLED team is NEVER a shill,
+     even if it falls in the last-N slice — documented default D-10a-2).
+   - return filtered to `session.nominationOrder` order (mirror the existing `.filter` so ordering matches).
+4. `export function classifyCpuTeams(session: CpuShillAuctionSession | null, leagueTeams: readonly CpuTeamControlInfo[]): { shillTeamIds: string[]; controlledCpuTeamIds: string[]; allCpuTeamIds: string[]; }`
+   where:
+   - `shillTeamIds` = `deriveShillTeamIds(...)`.
+   - `controlledCpuTeamIds` = `deriveControlledCpuTeamIds(...)` **filtered to teams that appear in
+     `session.nominationOrder`** (so it lists real AI bidders in the session; `null` session → `[]`).
+   - `allCpuTeamIds` = the AUTO-BID set = an EXACT replica of the existing `deriveCpuTeamIds` union above
+     (controlledBy==='ai' ∪ cpuShills keys ∪ last-N, filtered to `nominationOrder`). This IGNORES
+     `excludeFromLeague` (it is the auto-play set, which must stay byte-identical to today). `null`→`[]`.
+   - **MAKE-OR-BREAK invariant:** `allCpuTeamIds` MUST equal what the current `deriveCpuTeamIds` returns for
+     the same inputs (the auto-bid set is preserved). And when `excludeFromLeague` is true (default) with NO
+     `controlledBy==='ai'` teams, `shillTeamIds ∪ controlledCpuTeamIds === allCpuTeamIds` (every CPU bidder
+     is classified). When `excludeFromLeague === false`, `shillTeamIds === []` so the split union may be a
+     strict subset of `allCpuTeamIds` (the non-AI last-N bidders are legacy "regular" CPU bidders that do
+     NOT dissolve) — that is the intended v1 behavior; assert it.
+
+Add a concise top-of-file doc comment citing V2 §5 and noting build-dark (consumed by RB-10b).
+
+**EXPECTED OUTPUT — `src/engines/__tests__/cpuTeamRoles.test.ts` (non-vacuous):**
+Build small fixture sessions (you may cast minimal literals `as CpuShillAuctionSession` — only
+`nominationOrder`, `config`, `cpuShills` matter). Cover at minimum:
+- **Parity:** for a session with `cpuShillCount: 2` (no cpuShills map, no AI teams), `allCpuTeamIds` equals
+  the last 2 of `nominationOrder` in nominationOrder order — and equals a local inline re-computation of the
+  existing `deriveCpuTeamIds` logic.
+- **Coverage (default):** `excludeFromLeague: true`, no AI teams → `shillTeamIds ∪ controlledCpuTeamIds`
+  deep-equals `allCpuTeamIds`.
+- **Disjointness:** a team that is BOTH `controlledBy: 'ai'` AND in the last-N slice appears in
+  `controlledCpuTeamIds` and is ABSENT from `shillTeamIds`.
+- **Dissolve switch:** `excludeFromLeague: false` → `shillTeamIds === []` (deep-equal `[]`), while
+  `allCpuTeamIds` is unchanged (still the union).
+- **Explicit cpuShills map:** keys in `session.cpuShills` are included in `shillTeamIds` (when not AI).
+- **null session** → all three arrays empty.
+
+**VERIFICATION (run these in the worktree; paste output):**
+- `cd /Users/johnkruse/Projects/kbl-mode1-b && export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" && NODE_ENV= npx tsc -b` → exit 0 (paste tail).
+- `NODE_ENV= npx vitest run src/engines/__tests__/cpuTeamRoles.test.ts` → all pass (paste summary).
+  (The Captain runs the FULL Mode-1 suite at the gate.)
+- Report `git status --short` (expect EXACTLY the 2 new files).
+
+**FORMAT:** 1) files changed (paths + line counts); 2) the full `cpuTeamRoles.ts` source; 3) the test list;
+4) tsc result; 5) focused test result; 6) `git status --short`.
+
+**FAILURE PROTOCOL / STOP-IF:**
+- If `AuctionSession` does NOT expose `nominationOrder` + `config` as the anchor shows → STOP and quote the
+  real shape.
+- If mirroring the existing `deriveCpuTeamIds` union would require importing a runtime value (not just types)
+  from a storage/UI file → STOP and quote (we keep the module pure).
+- If a contracted **CODE anchor (`src/…` file:line)** mismatches what you read → STOP and quote it. (The
+  V2/DECISIONS spec docs being ABSENT from this worktree is EXPECTED, NOT a stop.)
+- If the parity invariant (`allCpuTeamIds` == existing `deriveCpuTeamIds`) cannot be satisfied → STOP and
+  quote why.
+- Never touch any file outside the 2 listed. Never touch the frozen oracle. Never commit/push. Branch-only.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-10a ===== -->
