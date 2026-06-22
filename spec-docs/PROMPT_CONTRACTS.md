@@ -16371,3 +16371,109 @@ describe. If the frozen oracle or the auction state machine would change → STO
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-4 ===== -->
+
+<!-- ===== CONTRACT: RB-5 (player morale from the draft — pure engine, build-dark) ===== -->
+**ROUTE:** Codex (gpt-5.5) CLI | xhigh reasoning effort
+**ROLE:** Mode-1 SOUL-LAYER builder. Build the §6 "player morale from the draft" COMPUTATION as a NEW pure engine that
+REUSES the already-built `masterMoraleMatrix` personality/hidden-modifier tilt machinery. PURE / build-DARK — NO live
+caller, NO store, NO DB, NO persistence, NO oracle. (The freeze-seed that STAMPS this onto Mode-2 starting morale is
+RB-7, NOT this ticket.)
+
+**GOAL:** given a drafted player's slot signal (when won) + pay signal (price vs the scout's range) + personality +
+hidden modifiers, compute a one-time STARTING MORALE off neutral 50, personality-tilted, such that **"early dominates"**:
+early+underpaid is still a net boost, late+overpaid only partially claws back (still net negative), late+underpaid is the
+basement, early+overpaid is the ceiling.
+
+**SOURCE OF TRUTH (extract VERBATIM — soul-layer no-inference):** AUCTION_DRAFT_SPEC_V2 §6 (lines 349-368):
+- Two interacting signals: **Slot** (early=boost "they committed budget to me" / late=penalty "I almost went
+  undrafted" / middle=neutral) and **Pay** (above the scout range=boost "they wanted me" / below=penalty "afterthought"
+  / within=neutral).
+- **Interaction = "early dominates":** cheap-but-early still gets the commitment boost; a LATE pick claws back the slot
+  penalty ONLY if overpaid; **late+underpaid = the morale basement**.
+- **Personality-tilted using BOTH axes (§3.7):** the VISIBLE primary personality sets reactiveness/volatility; the
+  HIDDEN modifiers (ambition/resilience) add unseeable swing. (Both already exist on the player pre-draft — RB-0.)
+- **Magnitudes (tune in playtest — §13/§11):** slot ≈ **±15**, pay ≈ **±10**; basement well below 50, ceiling well
+  above. Off neutral **50**.
+- **KEY INSIGHT (not inference — it's what the magnitudes imply):** the ADDITIVE model `slot(±15) + pay(±10)` exactly
+  reproduces "early dominates" because |slot| (15) > |pay| (10): early+underpaid = +15−10 = +5 (boost survives);
+  late+overpaid = −15+10 = −5 (partial clawback, still negative); late+underpaid = −25 (basement); early+overpaid =
+  +25 (ceiling). Use additive.
+
+**GROUNDED ANCHORS (re-read at source in /Users/johnkruse/Projects/kbl-mode1):**
+- The morale engine `src/engines/masterMoraleMatrix.ts` is ALREADY BUILT. The self-delta personality tilt lives INSIDE
+  `composeMoraleConsequence` (lines 493-497): `roundDelta(applyPersonalityMultiplier(applyAmbitionOrResilience(
+  base.selfPlayerMoraleDelta, modifiers), tuning.positiveSelfMultiplier, tuning.negativeSelfMultiplier))`.
+  `applyAmbitionOrResilience` (:683) applies the hidden modifiers (ambition up-swing on +deltas, resilience
+  down-swing on −deltas); `applyPersonalityMultiplier` (:693) applies the personality's pos/neg self multiplier
+  (per-personality table at `MORALE_TUNING.personality`, :195-245). `normalizePersonality` (:541), `roundDelta`,
+  `clampMorale` ([0,99]) are present.
+- `HiddenModifiers` = `{ loyalty, ambition, resilience, charisma }` 0-100 (`src/types/game.ts:124-129`).
+- Personality = the canonical 7 (`CanonicalPersonality`, :11-18); RB-0 stamped each player's primary personality +
+  modifiers pre-draft.
+- The raw draft inputs (RB-7's job to supply, NOT this ticket): the won order from `session.results` (`AuctionResult`,
+  `auctionStateMachine.ts:68` — `playerId/disposition/winnerTeamId/salary`); the scout range from `perceivedValueRange`
+  (`scoutValueRange.ts:12`, `ScoutValueRange {low,high}`). This engine takes the CLASSIFIED inputs (or raw + helpers),
+  so it does NOT import the auction/scout modules.
+
+**MAKE-OR-BREAK:**
+1. The `masterMoraleMatrix.ts` change is a **BEHAVIOR-PRESERVING extract-method**: extract the lines 493-497 self-delta
+   tilt into a new EXPORTED `applyPersonalityToSelfMoraleDelta(baseSelfDelta: number, personality: string | undefined,
+   modifiers: HiddenModifiers): number` (= `roundDelta(applyPersonalityMultiplier(applyAmbitionOrResilience(baseSelfDelta,
+   modifiers), tuning.positiveSelfMultiplier, tuning.negativeSelfMultiplier))`, `tuning = MORALE_TUNING.personality[
+   normalizePersonality(personality)]`), and have `composeMoraleConsequence` CALL it. `composeMoraleConsequence` MUST
+   produce byte-identical output for every existing event — the existing `masterMoraleMatrix.test.ts` (+ every morale
+   consumer test) passes UNCHANGED. Do NOT add any new event types to the catalog. Export `clampMorale` if not already.
+2. **"early dominates" holds** for the additive tilt-each-then-sum model: with any personality, `computeDraftMorale`
+   gives early+underpaid → net POSITIVE delta; late+overpaid → net NEGATIVE; late+underpaid → the most-negative
+   (basement); early+overpaid → the most-positive (ceiling). (Tilt EACH signal separately then sum — so "egotistical
+   reacts hard to being unwanted" applies the negative multiplier to the pay-penalty signal specifically.)
+3. **PURE / build-DARK:** the new engine has NO IndexedDB/store/flag/`Date`/`Math.random`/async, NO live caller, NO
+   DB/persistence/oracle change. trackerDb untouched.
+
+**WHAT TO BUILD:**
+1. `src/engines/masterMoraleMatrix.ts`: add the exported `applyPersonalityToSelfMoraleDelta` primitive (extract-method,
+   behavior-preserving) + `composeMoraleConsequence` calls it; export `clampMorale` if needed. NOTHING else changes.
+2. `src/engines/draftMorale.ts` (NEW, pure):
+   - `DRAFT_MORALE_TUNING` = `{ slotBoost: 15, slotPenalty: -15, payBoost: 10, payPenalty: -10, neutralMorale: 50 }`
+     (each marked `// RB-16 sim-tune §11/§13`).
+   - `classifyDraftSlot(orderIndex: number, totalWon: number): 'early' | 'middle' | 'late'` — TERCILES over the won
+     order (first third early / last third late / else middle); handle small/edge `totalWon` sanely (e.g. ≤1 → middle).
+   - `classifyDraftPay(winningBid: number, range: { low: number; high: number }): 'above' | 'within' | 'below'` —
+     `bid > high` → above, `bid < low` → below, else within.
+   - `computeDraftMorale(input: { slotClass, payClass, personality: string | undefined, modifiers: HiddenModifiers }):
+     { startingMorale: number; slotDelta: number; payDelta: number; totalDelta: number }` — slotBase = +15/−15/0,
+     payBase = +10/−10/0; `slotDelta = applyPersonalityToSelfMoraleDelta(slotBase, personality, modifiers)`, `payDelta =
+     applyPersonalityToSelfMoraleDelta(payBase, …)`, `totalDelta = roundDelta(slotDelta + payDelta)`, `startingMorale =
+     clampMorale(50 + totalDelta)`. (fan morale is NOT involved here — that's §7/RB-6.)
+   - A convenience `computeDraftMoraleFromRaw(orderIndex, totalWon, winningBid, range, personality, modifiers)` that
+     classifies then calls `computeDraftMorale` (for RB-7's later use).
+3. `src/engines/__tests__/draftMorale.test.ts` (NEW): the 4 corner cases (early+underpaid net+ / late+overpaid net− /
+   late+underpaid basement / early+overpaid ceiling), middle+within = neutral (50), personality contrast (EGOTISTICAL
+   amplifies vs RELAXED dampens, same classes), modifier contrast (high ambition amplifies the boost; high resilience
+   dampens the penalty), the classify helpers (terciles + pay buckets + edges), and clamp safety ([0,99]).
+
+**CONSTRAINTS:**
+- Edit ONLY: `src/engines/masterMoraleMatrix.ts`, `src/engines/draftMorale.ts` (new),
+  `src/engines/__tests__/draftMorale.test.ts` (new). Do NOT add event types to the morale catalog, do NOT touch any
+  auction/scout/farm file, persistence, trackerDb, or the frozen oracle. Branch-only; no commit/push.
+- The matrix change is ONLY the extract-method + (maybe) a `clampMorale` export — provably behavior-preserving.
+
+**EXPECTED OUTPUT:** a pure `draftMorale` engine computing personality-tilted starting morale off 50 with "early
+dominates"; `masterMoraleMatrix` gains one reusable tilt primitive with ZERO behavior change to existing morale.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` exit 0; `NODE_ENV= npx vitest run src/engines/__tests__/draftMorale.test.ts
+src/engines/__tests__/masterMoraleMatrix.test.ts` green (the matrix test UNCHANGED proves behavior-preservation). Paste
+ACTUAL output. (Opus re-runs the FULL Mode-1 suite + confirms zero-new-reds.)
+
+**FORMAT:** 1) changed paths + total; 2) confirm the matrix extract is behavior-preserving (existing matrix test unchanged
++ green) + no new event types + "early dominates" holds + pure/build-dark + oracle untouched; 3) ACTUAL tsc + vitest
+output; 4) "RB-5 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL (STOP-IF):** if the extract-method changes ANY existing `composeMoraleConsequence` output (a matrix
+test expectation would need editing) → STOP and quote the diff (it must be byte-identical). If §6's "early dominates"
+cannot hold under the additive tilt-each-then-sum model for some personality → STOP and show the failing case. If
+building this requires importing the auction/scout/farm modules or any store → STOP (it must be a pure engine taking
+classified/raw inputs). If the frozen oracle would change → STOP.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-5 ===== -->
