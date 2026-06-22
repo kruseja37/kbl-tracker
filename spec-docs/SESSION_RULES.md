@@ -388,6 +388,18 @@ agent edits the ratified rules without JK. (JK ruling 2026-06-14.)
   engineering gate (non-deferrable) from the human experience gate (batchable) so
   JK's time is spent efficiently without weakening either.
 
+- **Two-worktree contract grounding (self-caught WAVE 73, RB-9a fix1):** When
+  contracting a Codex build for the **`codex/mode1-v1` worktree** (`/Users/johnkruse/Projects/kbl-mode1`),
+  always EMBED the operative spec text INLINE in the contract and scope any
+  "STOP-IF anchor mismatch" rule to **`src/…` CODE anchors only**, because the
+  ratified docs (`AUCTION_DRAFT_SPEC_V2.md`, `AUCTION_REBUILD_PLAN.md`, the
+  ledger) live on the **docs branch `codex/franchise-v1-next`** and are ABSENT
+  from the mode1 worktree — a contract that tells Codex to verify a docs-branch
+  spec file:line will (correctly) trip Codex's anchor-mismatch STOP-IF and burn a
+  dispatch with zero file changes. The Captain grounds the spec; Codex verifies
+  only the code it edits. (RB-9a dispatch #1 BLOCKED on exactly this; fix1 embedded
+  §3.5 inline + scoped the STOP-IF → re-dispatch.)
+
 - **Full-cadence scoping for narrative systems (JK correction 2026-06-16):** When asked to
   "settle the cadence" of the reporter / any narrative system, always certify and settle the
   FULL cadence surface — per-game recap, per-EVENT takes (trade / call-up / send-down /
