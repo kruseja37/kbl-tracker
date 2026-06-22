@@ -36,11 +36,12 @@
 > 8014 tests, sole fail `wpaRuntimeBoundary`.** **RB-2b SPLIT → 2b-1 (engine, done) / 2b-2 (WIRE) / 2b-3 (STRIP old machinery + rewrite engine test).**
 > **JK RULINGS 2026-06-21 (RB-2-Q1..Q4, DECISIONS_LOG):** farm flat reserve = min salary · roster-fill = hard guarantee · k = MLB 2 / farm 3 ·
 > new-league `draftFormat` default → `auction` (O-1 resolved).
-> **✅ RB-2b-2 COMPLETE (WAVE 59, `456bd195`, `codex/mode1-v1`, branch-only, ZERO-NEW-REDS) — WIRE the one-chance engine into all consumers.** Both
-> tiers are engine-nominated + one-chance end-to-end: hooks' NOMINATION → unconditional `surfaceNextPlayer`, `rotate`→`advance`, k 2/3 + farm flat
-> floor + auction default wired; pages swap the GM picker → engine-surfaced display (bidding UI preserved); `cpuShillBidding.resolveCpuNomination`
-> deleted (bid/claim shills survive). Independent grep: zero old-API references in any consumer. Suite **487 files / 8013 tests; fails = `wpaRuntimeBoundary`
-> (hard) + `AwardsWatchlist` (order-flake, verified passes solo 2/2) ⇒ ZERO NEW REDS.**
+> **✅ RB-2b-2 COMPLETE (WAVE 59 `456bd195` + WAVE 59-FIX `bacff8f2`, `codex/mode1-v1`, branch-only, ZERO-NEW-REDS) — WIRE the one-chance engine into
+> all consumers.** Both tiers are engine-nominated + one-chance end-to-end: hooks' NOMINATION → unconditional `surfaceNextPlayer`, RESOLVE →
+> `resolveLot`/`passLoneSurvivorOut` (the **59-FIX**: 456bd195 left resolve on the OLD `evaluateResolve`/`passLoneSurvivor`, so one-chance + the
+> RB-2b-1 forced-filler were DEAD — auditor-caught on a disprove re-check, now LIVE), `rotate`→`advance`, k 2/3 + farm flat floor + auction default
+> wired; pages swap the GM picker → engine-surfaced display (bidding UI preserved); `cpuShillBidding.resolveCpuNomination` deleted (bid/claim shills
+> survive). Independent grep: zero old-API references in any consumer. Suite **487 files / 8013 tests, sole hard fail `wpaRuntimeBoundary` ⇒ ZERO NEW REDS.**
 > **RB-1b model + refinement RULED (DECISIONS_LOG 2026-06-21):** per-trait COUNT · 3-tier L1≤3/L2 4-7/L3≥8 (grounded `TRAIT_INTEGRATION_SPEC`) ·
 > PERCEPTION-LAYER · boundary-aware (level-up full / buffer 0.4× at floors / neutral) · BIDIRECTIONAL (RB-9 owes the `'remove'` send-down cost = D-8).
 > **➡ NEXT (AUTH-4): `/kbl-captain` → RB-2b-3 (STRIP the orphaned old machinery — the last RB-2 piece)** — delete from

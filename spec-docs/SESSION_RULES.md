@@ -474,6 +474,19 @@ agent edits the ratified rules without JK. (JK ruling 2026-06-14.)
   and was about to dispatch the L12-2 build; JK caught it pre-dispatch — the award must measure the CURRENT gap so a player
   who peaks mid-season then falls apart does NOT win. DECISIONS_LOG 2026-06-19 "L12-Q7 Comeback measurement CLARIFIED".)
 
+- **Wiring-refactor audits must grep the FULL retired-API surface, not just the headline renames (Captain self-NFL
+  2026-06-22, RB-2b-2):** When auditing a refactor that RETIRES an old API in favor of a new one (and especially a
+  build-then-wire split where the new functions exist alongside the old), the "no consumer still calls the old API"
+  verification grep must enumerate EVERY function on the retired path — including same-shape siblings that are easy to
+  overlook because they were not renamed in the obvious way. Because a consumer left on one un-grepped old function
+  silently keeps the OLD behavior live while build+tests stay green (the old code is valid), so the new behavior is
+  DEAD and the gate passes anyway. (Origin: RB-2b-2 wired the auction NOMINATION path to `surfaceNextPlayer` but left
+  both hooks' RESOLVE path on `evaluateResolve`/`passLoneSurvivor`; the audit grep covered only
+  `nominatePlayer|rotateNomination|getCurrentNominator|resolveCpuNomination` and missed the resolve pair, so the
+  one-chance permanent-out + the forced-filler were dead behind a green gate — caught on a disprove-the-claim re-check
+  before the next ticket. Build the grep from the full delete-list, and prefer enumerating retired functions in the
+  contract's STOP-IF.)
+
 ### Pending cleanup (not a rule — a tracked repo action)
 - **spec-assembler duplicate:** two divergent copies exist —
   `.claude/skills/spec-assembler/SKILL.md` (511 lines, CANONICAL per JK
