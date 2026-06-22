@@ -17,6 +17,7 @@ export interface AuctionSetupConfig {
   bidIncrement: number;
   turnTimerSeconds: number | null;
   nominationOrderSeed: string;
+  nominationWeightExponent?: number;
   cpuShillCount: number;
   excludeFromLeague?: boolean;
 }
@@ -32,6 +33,8 @@ export const DEFAULT_AUCTION_NOMINATION_ORDER_SEED = 'auction-setup-seed';
 
 /** §5.2 #1 / IV_ENGINE §7.6, §16 sim-tune: shills are opt-in by host count. */
 export const DEFAULT_CPU_SHILL_COUNT = 0;
+
+export const DEFAULT_NOMINATION_WEIGHT_EXPONENT = 2.5;
 
 export const DEFAULT_AUCTION_SETUP_CONFIG: AuctionSetupConfig = {
   format: 'auction',

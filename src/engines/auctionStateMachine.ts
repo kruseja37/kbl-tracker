@@ -1,5 +1,6 @@
 import {
   DEFAULT_AUCTION_SETUP_CONFIG,
+  DEFAULT_NOMINATION_WEIGHT_EXPONENT,
   type AuctionSetupConfig,
 } from '../data/auctionEngineConstants';
 import {
@@ -205,6 +206,35 @@ export function nextBidTurn(
   return null;
 }
 
+export function selectNextNominee(session: AuctionSession): string | null {
+  const step = session.results.length;
+  const seed = session.config.nominationOrderSeed;
+  const exponent = session.config.nominationWeightExponent ?? DEFAULT_NOMINATION_WEIGHT_EXPONENT;
+  let selectedId: string | null = null;
+  let selectedKey = Number.NEGATIVE_INFINITY;
+
+  for (const playerId of session.availablePlayerIds) {
+    const player = session.players[playerId];
+    if (player === undefined) continue;
+
+    const pctile01 = Math.min(Math.max(player.ivPercentile / 100, 0), 1);
+    const weight = Math.pow(Math.max(pctile01, 0.02), exponent);
+    const u = (hashString(`${seed}:surface:${step}:${playerId}`) + 0.5) / 0x100000000;
+    const key = Math.pow(u, 1 / weight);
+
+    if (
+      selectedId === null ||
+      key > selectedKey ||
+      (key === selectedKey && playerId.localeCompare(selectedId) < 0)
+    ) {
+      selectedId = playerId;
+      selectedKey = key;
+    }
+  }
+
+  return selectedId;
+}
+
 export function getTeamAuctionMaxBid(session: AuctionSession, teamId: string): number | null {
   const team = findTeam(session, teamId);
   if (team === null) return null;
@@ -214,6 +244,65 @@ export function getTeamAuctionMaxBid(session: AuctionSession, teamId: string): n
     team.minSalary,
     team.projectedTax,
   );
+}
+
+export function surfaceNextPlayer(session: AuctionSession): AuctionTransitionResult {
+  if (session.state === 'AUCTION_COMPLETE') return rejected(session, 'auction-complete');
+  if (session.state !== 'NOMINATION') return rejected(session, 'expected-nomination');
+  if (session.currentLot !== null) return rejected(session, 'current-lot-open');
+
+  const playerId = selectNextNominee(session);
+  if (playerId === null) {
+    return accepted({
+      ...session,
+      state: 'AUCTION_COMPLETE',
+      currentLot: null,
+      pendingClaim: null,
+    });
+  }
+
+  const player = session.players[playerId];
+  const openingAsk = reservePriceCurve(player.ivPercentile) * player.iv;
+  const stillIn = session.teams
+    .filter((team) => team.rosterSlotsRemaining > 0)
+    .map((team) => team.teamId);
+  if (stillIn.length === 0) {
+    return accepted({
+      ...session,
+      state: 'AUCTION_COMPLETE',
+      currentLot: null,
+      pendingClaim: null,
+    });
+  }
+
+  const openingBidderIndex = findNextOpenNominationIndex(
+    session.teams,
+    session.nominationOrder,
+    session.nominationIndex,
+  );
+  const openingBidderFromOrder = openingBidderIndex === -1
+    ? null
+    : session.nominationOrder[openingBidderIndex] ?? null;
+  const openingBidder = openingBidderFromOrder !== null && stillIn.includes(openingBidderFromOrder)
+    ? openingBidderFromOrder
+    : stillIn[0];
+
+  return accepted({
+    ...session,
+    state: 'OPEN_BIDDING',
+    currentLot: {
+      playerId,
+      // One-chance nomination is engine-driven; this vestigial field records the opening bidder.
+      nominatorTeamId: openingBidder,
+      openingAsk,
+      highBid: null,
+      highBidder: null,
+      stillIn,
+      bidTurnTeamId: openingBidder,
+    },
+    pendingClaim: null,
+    availablePlayerIds: session.availablePlayerIds.filter((id) => id !== playerId),
+  });
 }
 
 export function nominatePlayer(session: AuctionSession, playerId: string): AuctionTransitionResult {
@@ -332,6 +421,33 @@ export function evaluateResolve(session: AuctionSession): AuctionTransitionResul
   return accepted(finalizePassedLot(session));
 }
 
+export function resolveLot(session: AuctionSession): AuctionTransitionResult {
+  if (session.state !== 'OPEN_BIDDING' && session.state !== 'RESOLVE') {
+    return rejected(session, 'expected-resolve');
+  }
+  const lot = session.currentLot;
+  if (lot === null) return rejected(session, 'no-current-lot');
+  if (lot.stillIn.length > 1) {
+    return accepted({ ...session, state: 'OPEN_BIDDING', pendingClaim: null });
+  }
+  if (lot.highBid !== null && lot.highBidder !== null) {
+    return accepted(finalizeSoldLot(session, lot.highBidder, lot.highBid));
+  }
+  if (lot.stillIn.length === 1) {
+    return accepted({
+      ...session,
+      state: 'RESOLVE',
+      pendingClaim: {
+        playerId: lot.playerId,
+        teamId: lot.stillIn[0],
+        price: lot.openingAsk,
+      },
+    });
+  }
+
+  return accepted(finalizePassedLotPermanent(session));
+}
+
 export function claimLoneSurvivor(session: AuctionSession): AuctionTransitionResult {
   if (session.state !== 'RESOLVE') return rejected(session, 'expected-resolve');
   const claim = session.pendingClaim;
@@ -351,6 +467,13 @@ export function passLoneSurvivor(session: AuctionSession): AuctionTransitionResu
   if (session.pendingClaim === null) return rejected(session, 'no-pending-claim');
 
   return accepted(finalizePassedLot(session));
+}
+
+export function passLoneSurvivorOut(session: AuctionSession): AuctionTransitionResult {
+  if (session.state !== 'RESOLVE') return rejected(session, 'expected-resolve');
+  if (session.pendingClaim === null) return rejected(session, 'no-pending-claim');
+
+  return accepted(finalizePassedLotPermanent(session));
 }
 
 export function rotateNomination(session: AuctionSession): AuctionTransitionResult {
@@ -384,6 +507,36 @@ export function rotateNomination(session: AuctionSession): AuctionTransitionResu
     pendingClaim: null,
     nominationIndex: next,
     nominationRound: session.nominationRound + (next <= session.nominationIndex ? 1 : 0),
+  });
+}
+
+export function advanceLot(session: AuctionSession): AuctionTransitionResult {
+  if (session.state === 'AUCTION_COMPLETE') return accepted(session);
+  if (session.state !== 'SOLD' && session.state !== 'PASSED') {
+    return rejected(session, 'expected-passed-or-sold');
+  }
+  if (isAuctionComplete(session) || session.availablePlayerIds.length === 0) {
+    return accepted({
+      ...session,
+      state: 'AUCTION_COMPLETE',
+      currentLot: null,
+      pendingClaim: null,
+    });
+  }
+
+  const next = findNextOpenNominationIndex(session.teams, session.nominationOrder, session.nominationIndex + 1);
+  const nominationIndex = next === -1 ? session.nominationIndex : next;
+  const nominationRound = next === -1
+    ? session.nominationRound
+    : session.nominationRound + (next <= session.nominationIndex ? 1 : 0);
+
+  return accepted({
+    ...session,
+    state: 'NOMINATION',
+    currentLot: null,
+    pendingClaim: null,
+    nominationIndex,
+    nominationRound,
   });
 }
 
@@ -435,6 +588,27 @@ function finalizeSoldLot(session: AuctionSession, winnerTeamId: string, salary: 
   }
 
   return releasedSession;
+}
+
+function finalizePassedLotPermanent(session: AuctionSession): AuctionSession {
+  const lot = requireLot(session);
+
+  return {
+    ...session,
+    state: 'PASSED',
+    currentLot: lot,
+    pendingClaim: null,
+    results: [
+      ...session.results,
+      {
+        playerId: lot.playerId,
+        disposition: 'PASSED',
+        nominatorTeamId: lot.nominatorTeamId,
+        winnerTeamId: null,
+        salary: null,
+      },
+    ],
+  };
 }
 
 function finalizePassedLot(session: AuctionSession): AuctionSession {
