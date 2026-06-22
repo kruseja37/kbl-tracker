@@ -16394,10 +16394,14 @@ basement, early+overpaid is the ceiling.
   HIDDEN modifiers (ambition/resilience) add unseeable swing. (Both already exist on the player pre-draft — RB-0.)
 - **Magnitudes (tune in playtest — §13/§11):** slot ≈ **±15**, pay ≈ **±10**; basement well below 50, ceiling well
   above. Off neutral **50**.
-- **KEY INSIGHT (not inference — it's what the magnitudes imply):** the ADDITIVE model `slot(±15) + pay(±10)` exactly
-  reproduces "early dominates" because |slot| (15) > |pay| (10): early+underpaid = +15−10 = +5 (boost survives);
-  late+overpaid = −15+10 = −5 (partial clawback, still negative); late+underpaid = −25 (basement); early+overpaid =
-  +25 (ceiling). Use additive.
+- **KEY INSIGHT (not inference — it's what the magnitudes imply):** the ADDITIVE base `slot(±15) + pay(±10)` exactly
+  reproduces "early dominates" because |slot| (15) > |pay| (10): early+underpaid base = +5 (boost survives);
+  late+overpaid = −5 (partial clawback, still negative); late+underpaid = −25 (basement); early+overpaid = +25
+  (ceiling). **Apply the personality+modifier tilt to the NET base delta (SUM-then-tilt), NOT per-signal** — the matrix
+  self-multipliers are always POSITIVE, so sum-then-tilt PRESERVES the base sign ⇒ "early dominates" holds for ALL 7
+  personalities (Captain-verified: DROOPY early+underpaid = +5×0.8 = +4 > 0; under the REJECTED tilt-EACH model DROOPY
+  netted −0.5, violating §6 — that is precisely why sum-then-tilt is the chosen model). Personality still SCALES the
+  magnitude (EGOTISTICAL widest, RELAXED narrowest).
 
 **GROUNDED ANCHORS (re-read at source in /Users/johnkruse/Projects/kbl-mode1):**
 - The morale engine `src/engines/masterMoraleMatrix.ts` is ALREADY BUILT. The self-delta personality tilt lives INSIDE
@@ -16423,10 +16427,10 @@ basement, early+overpaid is the ceiling.
    normalizePersonality(personality)]`), and have `composeMoraleConsequence` CALL it. `composeMoraleConsequence` MUST
    produce byte-identical output for every existing event — the existing `masterMoraleMatrix.test.ts` (+ every morale
    consumer test) passes UNCHANGED. Do NOT add any new event types to the catalog. Export `clampMorale` if not already.
-2. **"early dominates" holds** for the additive tilt-each-then-sum model: with any personality, `computeDraftMorale`
-   gives early+underpaid → net POSITIVE delta; late+overpaid → net NEGATIVE; late+underpaid → the most-negative
-   (basement); early+overpaid → the most-positive (ceiling). (Tilt EACH signal separately then sum — so "egotistical
-   reacts hard to being unwanted" applies the negative multiplier to the pay-penalty signal specifically.)
+2. **"early dominates" holds for ALL 7 personalities** under SUM-then-tilt: `computeDraftMorale` gives early+underpaid →
+   net POSITIVE; late+overpaid → net NEGATIVE; late+underpaid → the most-negative (basement); early+overpaid → the
+   most-positive (ceiling) — for EVERY canonical personality (the positive self-multipliers preserve the base sign).
+   Personality SCALES the magnitude (EGOTISTICAL > RELAXED for the same class).
 3. **PURE / build-DARK:** the new engine has NO IndexedDB/store/flag/`Date`/`Math.random`/async, NO live caller, NO
    DB/persistence/oracle change. trackerDb untouched.
 
@@ -16441,16 +16445,17 @@ basement, early+overpaid is the ceiling.
    - `classifyDraftPay(winningBid: number, range: { low: number; high: number }): 'above' | 'within' | 'below'` —
      `bid > high` → above, `bid < low` → below, else within.
    - `computeDraftMorale(input: { slotClass, payClass, personality: string | undefined, modifiers: HiddenModifiers }):
-     { startingMorale: number; slotDelta: number; payDelta: number; totalDelta: number }` — slotBase = +15/−15/0,
-     payBase = +10/−10/0; `slotDelta = applyPersonalityToSelfMoraleDelta(slotBase, personality, modifiers)`, `payDelta =
-     applyPersonalityToSelfMoraleDelta(payBase, …)`, `totalDelta = roundDelta(slotDelta + payDelta)`, `startingMorale =
+     { startingMorale: number; slotBase: number; payBase: number; totalDelta: number }` — slotBase = +15/−15/0,
+     payBase = +10/−10/0; **`baseDelta = slotBase + payBase`** (sum FIRST); `totalDelta =
+     applyPersonalityToSelfMoraleDelta(baseDelta, personality, modifiers)` (tilt the NET once); `startingMorale =
      clampMorale(50 + totalDelta)`. (fan morale is NOT involved here — that's §7/RB-6.)
    - A convenience `computeDraftMoraleFromRaw(orderIndex, totalWon, winningBid, range, personality, modifiers)` that
      classifies then calls `computeDraftMorale` (for RB-7's later use).
-3. `src/engines/__tests__/draftMorale.test.ts` (NEW): the 4 corner cases (early+underpaid net+ / late+overpaid net− /
-   late+underpaid basement / early+overpaid ceiling), middle+within = neutral (50), personality contrast (EGOTISTICAL
-   amplifies vs RELAXED dampens, same classes), modifier contrast (high ambition amplifies the boost; high resilience
-   dampens the penalty), the classify helpers (terciles + pay buckets + edges), and clamp safety ([0,99]).
+3. `src/engines/__tests__/draftMorale.test.ts` (NEW): the 4 corner cases asserted **for ALL 7 personalities**
+   (early+underpaid net+ / late+overpaid net− / late+underpaid basement / early+overpaid ceiling — early-dominates
+   holds for every personality), middle+within = neutral (exactly 50), personality contrast (EGOTISTICAL magnitude >
+   RELAXED for the same class), modifier contrast (high ambition amplifies a net-positive; high resilience dampens a
+   net-negative), the classify helpers (terciles + pay buckets + edges), and clamp safety ([0,99]).
 
 **CONSTRAINTS:**
 - Edit ONLY: `src/engines/masterMoraleMatrix.ts`, `src/engines/draftMorale.ts` (new),
@@ -16471,9 +16476,18 @@ output; 4) "RB-5 complete" OR "BLOCKED: <reason>".
 
 **FAILURE PROTOCOL (STOP-IF):** if the extract-method changes ANY existing `composeMoraleConsequence` output (a matrix
 test expectation would need editing) → STOP and quote the diff (it must be byte-identical). If §6's "early dominates"
-cannot hold under the additive tilt-each-then-sum model for some personality → STOP and show the failing case. If
-building this requires importing the auction/scout/farm modules or any store → STOP (it must be a pure engine taking
-classified/raw inputs). If the frozen oracle would change → STOP.
+cannot hold under the SUM-then-tilt model for some personality → STOP and show the failing case (it SHOULD hold for all
+7 — the positive multipliers preserve the base sign; do NOT silently switch models). If building this requires importing
+the auction/scout/farm modules or any store → STOP (it must be a pure engine taking classified/raw inputs). If the
+frozen oracle would change → STOP.
+
+**CAPTAIN OPEN-DECISION (logged for JK morning review — sum-then-tilt vs tilt-each):** §6 has a mild internal tension —
+"early dominates (cheap-but-early still gets the commitment boost)" reads as a SIGN guarantee, while "personality reacts
+hard to being unwanted" has a per-SIGNAL flavor. SUM-then-tilt (chosen) tilts the NET so the sign is preserved for all 7
+personalities (satisfies "early dominates" universally). The alternative TILT-each (personality reacts to each signal's
+valence) lets pessimist personalities (DROOPY) flip a mild-positive net to negative — Codex's first pass correctly
+BLOCKED on exactly this. Sum-then-tilt is the conservative default; per-signal reactivity is a §11/§13 refinement if JK
+wants DROOPY to be crushable even on early+underpaid.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-5 ===== -->
