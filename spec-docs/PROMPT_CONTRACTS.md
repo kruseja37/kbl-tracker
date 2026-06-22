@@ -16091,3 +16091,80 @@ file and porting is non-trivial → STOP and list what would be lost.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-2b-3 ===== -->
+
+<!-- ===== CONTRACT: RB-3a (pure auction luxury-tax helper, reuse the ratified machinery, build-dark) ===== -->
+**ROUTE:** Codex (gpt-5.5) CLI | xhigh reasoning effort
+**ROLE:** Mode-1 auction engine builder. Add a PURE, build-dark helper that computes a team's auction luxury tax by
+REUSING the already-ratified snake-draft machinery (do NOT reimplement or redesign the tax). Nothing wires to it in
+this ticket (RB-3b wires the MLB hook) — it's exercised only by a new test.
+
+**GOAL:** give the auction a single pure function to compute a team's projected luxury tax for a (committed roster
+[+ optional candidate]) under that team's archetype identity — so RB-3b can replace the auction's `projectedTax: 0`
+stub with a real per-lot value.
+
+**SOURCE OF TRUTH:** AUCTION_DRAFT_SPEC_V2 §4.2 (MLB archetype shifts the luxury caps → affordability; "leeway not a
+wall"; the design is RATIFIED — RB-3 WIRES, does not redesign). The tax + identity machinery is the snake's, in
+`leagueConstruction.ts`; the data is `tierParams.ts`.
+
+**GROUNDED ANCHORS (re-read at source in /Users/johnkruse/Projects/kbl-mode1):**
+- `src/engines/leagueConstruction.ts` (REUSE, do not modify): `shiftLuxuryCaps(caps: LuxuryCapRow[], identity:
+  IdentityComposition): LuxuryCapRow[]` (:217), `luxuryTax(roster: ConstructionRoster, caps: LuxuryCapRow[], mode:
+  BalanceMode): { charged, wouldBeTax, binding }` (:233; `mode:'taxed'` → charged is the real tax), `pickMarginalTax`
+  (:355), `toConstructionPlayer(player: Player): ConstructionPlayer` (the playerId/Player→ratings mapper the snake
+  uses — LeagueBuilderSnakeDraft.tsx:111), `ConstructionRoster`/`ConstructionPlayer` types (:50/:57), `TeamCapIdentity
+  = { bandPriorities?, increase: string[], decrease: string[] }` (:20), `IdentityComposition = { increase, decrease }`.
+- `src/data/tierParams.ts` (REUSE): `LUXURY_CAP_TABLES: Record<TierKey, LuxuryCapRow[]>` (:81), `TierKey`
+  (juiced|standard|nerfed), `LuxuryCapRow` (:71).
+- `src/data/rosterEngineConstants.ts`: `EV_FLATNESS_TOLERANCE = 0.10` (:300).
+
+**MAKE-OR-BREAK:** the helper REUSES `shiftLuxuryCaps`+`luxuryTax` (no reimplemented tax math) and is correct on the
+edges: a team with NO `capIdentity` → base caps (`LUXURY_CAP_TABLES[tier]`, no shift); an on-archetype-heavy roster is
+taxed STRICTLY LESS than the same-size off-archetype-heavy roster under a given identity (the tax actually
+discriminates by archetype fit); the candidate variant returns the would-be tax of `[...roster, candidate]`.
+
+**WHAT TO BUILD (PURE / ADDITIVE / build-dark):**
+1. NEW `src/engines/auctionLuxuryTax.ts`:
+   - `export function auctionShiftedCaps(capIdentity: TeamCapIdentity | undefined, tier: TierKey): LuxuryCapRow[]` —
+     `capIdentity ? shiftLuxuryCaps(LUXURY_CAP_TABLES[tier], { increase: capIdentity.increase, decrease:
+     capIdentity.decrease }) : LUXURY_CAP_TABLES[tier]`.
+   - `export function computeAuctionTeamProjectedTax(committedRoster: ConstructionRoster, candidate: ConstructionPlayer
+     | null, capIdentity: TeamCapIdentity | undefined, tier: TierKey): number` — `const caps = auctionShiftedCaps(...)`;
+     `const roster = candidate ? [...committedRoster, candidate] : committedRoster`; `return luxuryTax(roster, caps,
+     'taxed').charged`. (This "would-be total tax after winning the candidate" reading is the auction's analog of the
+     snake's per-pick recompute — chosen because the auction's single `projectedTax` field + salary-only
+     `budgetRemaining` make the snake's committed/marginal split not map cleanly; documented in a header comment.)
+   - (Optional, if trivial) `export function auctionMarginalTax(committedRoster, candidate, capIdentity, tier): number`
+     = `computeAuctionTeamProjectedTax(committedRoster, candidate, ...) − computeAuctionTeamProjectedTax(committedRoster,
+     null, ...)` for callers that want the pure marginal.
+   - Import only from `leagueConstruction` + `tierParams`. No IndexedDB/Date/Math.random/async.
+2. NEW `src/engines/__tests__/auctionLuxuryTax.test.ts` — non-vacuous:
+   - no-identity → base caps (tax == `luxuryTax(roster, LUXURY_CAP_TABLES[tier], 'taxed').charged`).
+   - an identity that prioritizes a band shifts that band's cap (assert the shifted cap differs from base for the
+     prioritized stat; reuse a real `CAP_MODIFICATION_FRACTIONS` identity).
+   - **archetype-fit discrimination:** under a given identity, an on-archetype-heavy roster has STRICTLY LOWER
+     `computeAuctionTeamProjectedTax` than an off-archetype-heavy roster of the same size (the tax bites
+     off-archetype loading).
+   - the candidate variant = the tax of `[...roster, candidate]`.
+
+**CONSTRAINTS:**
+- Edit ONLY: NEW `src/engines/auctionLuxuryTax.ts` + NEW `src/engines/__tests__/auctionLuxuryTax.test.ts`.
+- Do NOT modify `leagueConstruction.ts`/`tierParams.ts`/the auction hooks/pages/state machine, or the frozen IV
+  oracle. Branch-only on `codex/mode1-v1`; no commit/push.
+- Pure functions only. REUSE the ratified tax/identity functions — do NOT reimplement the tax formula.
+
+**EXPECTED OUTPUT:** a pure helper that the MLB hook (RB-3b) will call per lot; archetype-fit discrimination proven.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` exit 0; `NODE_ENV= npx vitest run src/engines/__tests__/auctionLuxuryTax.test.ts`
+green. Paste ACTUAL output. (Opus re-runs the FULL Mode-1 suite + confirms zero-new-reds vs wpaRuntimeBoundary.)
+
+**FORMAT:** 1) changed/new paths + total; 2) confirm the helper REUSES shiftLuxuryCaps+luxuryTax (no reimplemented
+math) + the no-identity/candidate edges + NO touch to leagueConstruction/tierParams/consumers/oracle; 3) ACTUAL tsc +
+vitest output; 4) "RB-3a complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL (STOP-IF):** if `toConstructionPlayer`/`luxuryTax`/`shiftLuxuryCaps` are NOT importable/usable
+without modifying leagueConstruction → STOP and report. If `mode:'taxed'` is NOT the value that makes `luxuryTax`
+charge a non-zero tax → STOP and quote the BalanceMode handling. If building the archetype-fit discrimination test
+requires data/ratings not available from `toConstructionPlayer` → STOP and report.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-3a ===== -->
