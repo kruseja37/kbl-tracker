@@ -7,6 +7,20 @@
 
 ## June 2026
 
+### 2026-06-22 (attended): RATINGS RANGE — aggressive-when-warranted convex curve, both-end edge compression, soft seasonal damping — RULED → `RATINGS_ADJUSTMENT_SPEC.md §6/§6A`
+
+**Context:** JK on the volatility tension — want one season to FEEL like multiple (meaningful growth/decline) without erratic checkpoint-to-checkpoint ping-pong. Current engine (`ratingsDevelopment.ts`): `maxAbsDelta:6`/checkpoint, SYMMETRIC dead-band `0.75`, morale mult 0.5–1.5, but **no seasonal bound + no anti-reversal** → both too-erratic and too-much-cumulative (10 cps × ±6 = ±60/season possible).
+
+**RULING (JK):**
+- **Aggressive WHEN WARRANTED, not small.** ±1–2 "may as well be zero" (traits + mojo already swing the profile that much). A truly-elite-vs-peers, SUSTAINED season can move a key attribute **~a full grade level**; a marginally-above-peers player barely moves. Symmetric for collapse (→ demotion/trade-bait). The leap must be EARNED but is possible.
+- **Convex reward curve on the relative signal** (`Δ = sign(r)·baseScale·((|r|−startBar)/(1−startBar))^γ`, γ>1): marginal performers get tiny moves, only the deep tail (elite/collapsing) approaches the per-checkpoint cap. The grade-level leap requires staying in the tail across MANY checkpoints (per-checkpoint capped → must accumulate). *Worked feel:* average SS playing elite-vs-SS → special climb; power RF marginally > RF peers → little power movement.
+- **Edge compression at BOTH ends:** harder to gain near 99 AND harder to lose near 0 (extends the earlier near-99-only rule). Elite tiers need genuinely elite sustained play; floor players resist cratering. Great arcs from undeveloped bases; hard for already-great players to go elite→elite+ in one year.
+- **Soft seasonal damping (not a hard cap):** cumulative same-direction movement adds progressive resistance + a hard backstop ≈ one grade level. Organic deceleration; **cadence-independent** (season total binds → more checkpoints = smoother, not bigger).
+- **Anti-ping-pong:** directional hysteresis (reversal needs a higher bar than continuation) + slow aggregate-base signal + asymmetric dead-band.
+- All numbers = §16 sim-tune placeholders; calibrate the grade-level backstop against the `smb4GradeEmulator` band width.
+
+**OPEN (PROPOSED, §6B) — trade / "change of scenery":** JK mused whether a trade resets ratings. Reject full rating reset (unearned advantage). Recommend: reset ONLY the seasonal cumulative-movement accumulator on trade (keeps current ratings, regains room-to-move → faster recovery IF earned), optional small temp recovery boost as a dial. Win-win deadline-trade incentive; performance-gated so not a free win. **JK to confirm whether to build it + how strong.**
+
 ### 2026-06-22 (attended): PROSPECT AGE — generate real age (skew-young, full-range, revealed) — RULED (REVERSES prior removal) → `PROSPECT_GENERATION_SPEC.md §10`
 
 **Context:** JK: farm rosters span low-A→AAA, so prospects can be **any age** — they must NOT all be young vs the 440 MLB pool, but should **skew young**. Age should be a draft factor revealed to GMs ("do I want a 40yo who may regress on arrival, or a younger player all else equal?") for more dynamic farm teams + a more interesting limited-info draft. Verified (`wmehpv790`): the canonical generator hard-codes `age: 18` for EVERY prospect (`prospectScoutingDraftEngine.ts:1116`, const `:414`); `PROSPECT_GENERATION_SPEC §10` (+ C5/B8) explicitly REMOVED age (a Captain default 2026-06-21); the canonical farm-auction UI doesn't even render age. MLB pool ages: 19–42, mean 28.9, median 29 (veteran-skewed).
