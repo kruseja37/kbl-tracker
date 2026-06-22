@@ -38,6 +38,8 @@ describe("DraftRosterBoard", () => {
     expect(screen.getByText("2/22 slots")).toBeInTheDocument();
     expect(screen.getByText("$120,000")).toBeInTheDocument();
     expect(screen.getByText("$880,000")).toBeInTheDocument();
+    expect(screen.queryByText("PRIORITY GAPS")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("draft-roster-budget-warning")).not.toBeInTheDocument();
 
     const catcherSlot = screen.getByTestId("draft-roster-slot-C");
     expect(within(catcherSlot).getByText("Casey Catcher")).toBeInTheDocument();
@@ -88,5 +90,33 @@ describe("DraftRosterBoard", () => {
     expect(within(firstOpenSlot).getByText("FARM 1 GAP")).toBeInTheDocument();
     expect(screen.getAllByText("OPEN")).toHaveLength(8);
     expect(screen.queryByText(/\b(POW|CON|SPD|FLD|ARM|VEL|JNK|ACC)\b/)).not.toBeInTheDocument();
+  });
+
+  test("renders priority gap chips and budget warning when provided", () => {
+    render(
+      <DraftRosterBoard
+        tier="mlb"
+        entries={[]}
+        target={MLB_BOARD_TARGET}
+        payroll={0}
+        walletRemaining={20_000}
+        priorityGaps={[
+          { id: "rotation-gap", severity: "critical", label: "Rotation needs starters" },
+          { id: "lineup-gap", severity: "warning", label: "Lineup lacks contact" },
+        ]}
+        budgetWarning="Filling your remaining slots would exceed your budget"
+      />,
+    );
+
+    expect(screen.getByText("PRIORITY GAPS")).toBeInTheDocument();
+    expect(screen.getByTestId("draft-roster-priority-gap-rotation-gap")).toHaveTextContent(
+      "CRITICAL · Rotation needs starters",
+    );
+    expect(screen.getByTestId("draft-roster-priority-gap-lineup-gap")).toHaveTextContent(
+      "WARNING · Lineup lacks contact",
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Filling your remaining slots would exceed your budget",
+    );
   });
 });

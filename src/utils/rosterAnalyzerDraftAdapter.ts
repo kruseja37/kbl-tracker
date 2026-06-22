@@ -56,6 +56,7 @@ export interface DraftAnalyzerAdapterInput {
   };
   mlbWonPlayers: DraftAnalyzerMlbEntry[];
   farmWonPlayers: DraftAnalyzerFarmEntry[];
+  walletCap?: number;
   generatedAt?: string;
   config?: Partial<RosterAnalyzerConfig>;
 }
@@ -160,8 +161,9 @@ export function buildDraftAnalyzerInput(input: DraftAnalyzerAdapterInput): Roste
     config: createDefaultRosterAnalyzerConfig({
       presetId: 'draft_prep_read_only_v1',
       salary: {
-        enabled: false,
+        enabled: typeof input.walletCap === 'number',
         unit: 'raw',
+        ...(typeof input.walletCap === 'number' ? { luxuryCap: input.walletCap } : {}),
       },
       ...(input.config ?? {}),
     }),

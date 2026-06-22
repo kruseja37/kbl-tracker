@@ -200,6 +200,55 @@ describe('rosterAnalyzerDraftAdapter', () => {
     )).toBe(true);
   });
 
+  test('salary findings stay disabled when walletCap is absent', () => {
+    const report = analyzeDraftRoster(makeInput({
+      mlbWonPlayers: [
+        makeMlbPlayer({ id: 'c-1', primaryPosition: 'C', salary: 800_000 }),
+        makeMlbPlayer({ id: 'sp-1', primaryPosition: 'SP', salary: 700_000 }),
+      ],
+    }));
+
+    expect(report.findings.some((finding) => finding.kind === 'luxury_cap')).toBe(false);
+    expect(report.findings.some((finding) => finding.kind === 'salary_value')).toBe(false);
+  });
+
+  test('walletCap opts draft salary analysis into the analyzer luxury-cap finding', () => {
+    const report = analyzeDraftRoster(makeInput({
+      walletCap: 1_000_000,
+      mlbWonPlayers: [
+        makeMlbPlayer({ id: 'c-1', primaryPosition: 'C', salary: 800_000 }),
+        makeMlbPlayer({ id: 'sp-1', primaryPosition: 'SP', salary: 700_000 }),
+      ],
+    }));
+
+    expect(report.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'luxury_cap',
+          title: 'Luxury-style advisory threshold exceeded',
+        }),
+      ]),
+    );
+  });
+
+  test('explicit salary config still wins over walletCap opt-in', () => {
+    const input = buildDraftAnalyzerInput(makeInput({
+      walletCap: 1_000_000,
+      config: {
+        salary: {
+          enabled: false,
+          unit: 'raw',
+        },
+      },
+    }));
+
+    expect(input.config?.salary).toMatchObject({
+      enabled: false,
+      unit: 'raw',
+    });
+    expect(input.config?.salary?.luxuryCap).toBeUndefined();
+  });
+
   test('empty draft input does not throw and yields under-target findings', () => {
     const report = analyzeDraftRoster(makeInput());
 

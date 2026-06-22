@@ -8,12 +8,20 @@ export type DraftBoardEntry = {
   salary: number;
 };
 
+export type BoardPriorityGap = {
+  id: string;
+  severity: string;
+  label: string;
+};
+
 export type DraftRosterBoardProps = {
   tier: "mlb" | "farm";
   entries: DraftBoardEntry[];
   target: number;
   payroll: number;
   walletRemaining: number | null;
+  priorityGaps?: BoardPriorityGap[];
+  budgetWarning?: string | null;
 };
 
 type MlbSlotGroup = "FIELD" | "ROTATION" | "BULLPEN" | "DEPTH / BENCH";
@@ -223,6 +231,48 @@ function BoardGroup({ title, children }: { title: string; children: ReactNode })
   );
 }
 
+function BoardAlerts({
+  priorityGaps,
+  budgetWarning,
+}: {
+  priorityGaps?: BoardPriorityGap[];
+  budgetWarning?: string | null;
+}) {
+  const hasPriorityGaps = Boolean(priorityGaps?.length);
+  if (!hasPriorityGaps && !budgetWarning) return null;
+
+  return (
+    <div className="mt-6 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,auto)]">
+      {hasPriorityGaps && (
+        <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
+          <div className="text-xs text-[#E8E8D8]/60 font-bold tracking-[0.12em]">PRIORITY GAPS</div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {priorityGaps!.map((gap) => (
+              <span
+                key={gap.id}
+                data-testid={`draft-roster-priority-gap-${gap.id}`}
+                className="bg-[#3B7DD8] border-2 border-[#E8E8D8]/30 px-2 py-1 text-xs font-bold"
+              >
+                {gap.severity.toUpperCase()} · {gap.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {budgetWarning && (
+        <div
+          role="alert"
+          data-testid="draft-roster-budget-warning"
+          className="bg-[#6B3A3A] border-4 border-[#FFD27A] p-4 text-sm font-bold text-[#FFE8B0]"
+        >
+          {budgetWarning}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MlbBoardGrid({ entries }: { entries: DraftBoardEntry[] }) {
   const { slots, depthEntries } = fillMlbSlots(entries);
   const depthSlot = MLB_BOARD_SLOTS.find((slot) => slot.kind === "depth")!;
@@ -306,7 +356,15 @@ function FarmBoardGrid({ entries, target }: { entries: DraftBoardEntry[]; target
   );
 }
 
-export function DraftRosterBoard({ tier, entries, target, payroll, walletRemaining }: DraftRosterBoardProps) {
+export function DraftRosterBoard({
+  tier,
+  entries,
+  target,
+  payroll,
+  walletRemaining,
+  priorityGaps,
+  budgetWarning,
+}: DraftRosterBoardProps) {
   const title = tier === "mlb" ? "MLB ROSTER VISIBILITY BOARD" : "FARM ROSTER VISIBILITY BOARD";
 
   return (
@@ -331,6 +389,8 @@ export function DraftRosterBoard({ tier, entries, target, payroll, walletRemaini
           </div>
         </div>
       </div>
+
+      <BoardAlerts priorityGaps={priorityGaps} budgetWarning={budgetWarning} />
 
       {tier === "mlb" ? (
         <MlbBoardGrid entries={entries} />

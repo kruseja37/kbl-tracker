@@ -10,8 +10,17 @@ import {
 import {
   DraftRosterBoard,
   MLB_BOARD_TARGET,
+  type BoardPriorityGap,
   type DraftBoardEntry,
 } from "../components/DraftRosterBoard";
+import {
+  analyzeDraftRoster,
+  type DraftAnalyzerMlbEntry,
+} from "../../../utils/rosterAnalyzerDraftAdapter";
+import {
+  sortByTiltedPriority,
+  tiltAnalyzerFindings,
+} from "../../../engines/farmArchetypeTilt";
 import { reservePriceCurve } from "../../../data/rosterEngineConstants";
 import {
   getTeamAuctionMaxBid,
@@ -22,6 +31,13 @@ import {
 import type { Player, Team } from "../../hooks/useLeagueBuilderData";
 
 const DEFAULT_AUCTION_SEED = "startup-auction-v1";
+const DRAFT_BOARD_GAP_KINDS = new Set([
+  "position_coverage",
+  "lineup",
+  "rotation",
+  "bullpen",
+  "depth_chart",
+]);
 
 function formatMoney(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "N/A";
@@ -159,6 +175,54 @@ export function LeagueBuilderAuctionDraft() {
     () => rosterBoardEntries.reduce((sum, entry) => sum + entry.salary, 0),
     [rosterBoardEntries],
   );
+  const rosterBoardWalletCap = useMemo(
+    () => rosterBoardTeamState ? rosterBoardTeamState.budgetRemaining + rosterBoardPayroll : null,
+    [rosterBoardPayroll, rosterBoardTeamState],
+  );
+  const rosterBoardReport = useMemo(() => {
+    if (!session || !rosterBoardTeamState) return null;
+
+    const team = teamById.get(rosterBoardTeamState.teamId);
+    const mlbWonPlayers: DraftAnalyzerMlbEntry[] = rosterBoardEntries.map((entry) => ({
+      id: entry.id,
+      name: entry.name,
+      primaryPosition: entry.primaryPosition,
+      secondaryPosition: entry.secondaryPosition,
+      salary: entry.salary,
+    }));
+
+    return analyzeDraftRoster({
+      leagueId: activeLeague?.id,
+      team: {
+        id: rosterBoardTeamState.teamId,
+        name: teamDisplayName(team),
+      },
+      mlbWonPlayers,
+      farmWonPlayers: [],
+      walletCap: rosterBoardWalletCap ?? undefined,
+    });
+  }, [activeLeague?.id, rosterBoardEntries, rosterBoardTeamState, rosterBoardWalletCap, session, teamById]);
+  const rosterBoardPriorityGaps = useMemo<BoardPriorityGap[]>(() => {
+    if (!rosterBoardReport) return [];
+
+    const gapFindings = rosterBoardReport.findings.filter((finding) => (
+      DRAFT_BOARD_GAP_KINDS.has(finding.kind) && finding.severity !== "info"
+    ));
+
+    return sortByTiltedPriority(tiltAnalyzerFindings(gapFindings, undefined))
+      .slice(0, 5)
+      .map((tilted) => ({
+        id: tilted.finding.id,
+        severity: tilted.finding.severity,
+        label: tilted.finding.title,
+      }));
+  }, [rosterBoardReport]);
+  const rosterBoardBudgetWarning = useMemo(() => {
+    if (!rosterBoardTeamState) return null;
+    return rosterBoardTeamState.budgetRemaining < rosterBoardTeamState.rosterSlotsRemaining * rosterBoardTeamState.minSalary
+      ? "Filling your remaining slots would exceed your budget"
+      : null;
+  }, [rosterBoardTeamState]);
   const latestResult = session?.results.at(-1) ?? null;
 
   useEffect(() => {
@@ -646,6 +710,8 @@ export function LeagueBuilderAuctionDraft() {
             target={MLB_BOARD_TARGET}
             payroll={rosterBoardPayroll}
             walletRemaining={rosterBoardTeamState?.budgetRemaining ?? null}
+            priorityGaps={rosterBoardPriorityGaps}
+            budgetWarning={rosterBoardBudgetWarning}
           />
         )}
       </div>
