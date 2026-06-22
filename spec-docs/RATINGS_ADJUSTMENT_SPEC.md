@@ -127,4 +127,19 @@ Season-AGGREGATE relative standing as the base + a **moderate trend tilt** (rece
 **Risk:** LOW — franchise Players live in a per-franchise IndexedDB (`franchisePlayerStorage`, store holds the whole object as value), so new optional Player fields need **no DB version bump** and don't touch the `TRACKER_DB_VERSION` store-list pins. Test to update: `franchiseRosterMovement.test.ts` (rookie assertions + a NEW test that a recalled veteran does NOT get rookie status). Apply in both worktrees (byte-identical engine).
 
 ## 14. Provenance
-Research runs `wy351xzbq` (four-model audit + aging) + `wenf4w3ee` (DH inventory, compaction lost-context audit, rookie-designation feasibility). Engine seams: `ratingsDevelopment.ts`, `agingEngine.ts`, `franchiseCheckpointSweepCompute.ts`, `RatingsAdjustmentFlow.tsx`, `ratingsOverlayMerge.ts` (kbl-mode1). Rulings JK-attended 2026-06-22.
+Research runs `wy351xzbq` (four-model audit + aging) + `wenf4w3ee` (DH inventory, compaction lost-context audit, rookie-designation feasibility) + `wmehpv790` (prospect age + rookie/Fan-Hopeful semantics). Engine seams: `ratingsDevelopment.ts`, `agingEngine.ts`, `franchiseCheckpointSweepCompute.ts`, `RatingsAdjustmentFlow.tsx`, `ratingsOverlayMerge.ts` (kbl-mode1). Rulings JK-attended 2026-06-22.
+
+## Appendix A — worked season examples (ILLUSTRATIVE; placeholder tunables)
+Five full-season arcs run through ONE placeholder parameter set, to validate the *feel* before build. **All numbers are §16 sim-tune placeholders**, shown only to demonstrate the mechanism shapes.
+
+**Param set used:** 10 checkpoints · per-checkpoint cap ±4 · dead-band start `0.30`/continue `0.20`/reversal `0.50` · convex `γ=2`, baseScale `4` · both-end edge compression (gain ×(99−R)/99, loss ×R/99) · age slope/cp {18–21 +0.30, 22–24 +0.15, 25–31 0, 32–35 −0.15, 36+ −0.45; speed/field/arm steeper} · rookie ×1.3 up / ×0.5 down · soft seasonal damping toward a ~12-pt (one-grade) backstop · morale ×0.85–1.2. `r` = signed standing vs position-group cohort.
+
+| # | Archetype | Setup | Season arc (headline tool) | Net | Mechanism shown |
+|---|-----------|-------|----------------------------|-----|-----------------|
+| 1 | **Rookie phenom** | SS, 20, drafted; Contact 58 (grade C); plays elite vs SS peers (`r≈+0.85`) | Contact 58→71 (decelerating) | C → solid B | convex reward + rookie modifier + develop band + soft damping |
+| 2 | **Ace at ceiling** | SP, 28, prime; Velocity 92 (A); only marginal vs ace peers (`r≈+0.4`) | Velocity 92→92 (flat) | A → A | edge compression near 99 + dead-band = anti-inflation anchor |
+| 3 | **Collapsing star, traded** | RF, 30; Power 86 (B+/A−); slumps (`r≈−0.7`), dealt @50% | 86→80 (collapse) → reset → 80→81 (stabilize) | A− → B | convex collapse + accumulator-reset change-of-scenery (recovery still earned) |
+| 4 | **Hot start, cools** | 2B, 26, avg; Contact 72; torrid Q1 (`r≈+0.75`), then average (`r≈0`) | 72→75 (Q1), holds 75 | B → better-B | directional hysteresis + dead-band = no ping-pong |
+| 5 | **Aging gamble** | 1B, 38, drafted at star ratings (Power 90, age-independent); hits fine (`r≈+0.45`) | Power 90→86; Speed 45→37, Field 55→47, Arm 50→42 | A → B | age-independent generation + age-curve gravity + per-attribute realism |
+
+**Realism anchor:** the *median* player sits inside the dead-band most checkpoints → drifts ±0–2 over a season (≈ archetype 4 after it cools). Only genuinely separated performers get arcs — so the league stays stable while a handful of stories carry the season (beat-reporter fodder).
