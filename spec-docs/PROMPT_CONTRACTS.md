@@ -17345,3 +17345,49 @@ Use xhigh reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-9b-2 ===== -->
+
+<!-- ===== CONTRACT: RB-9c-1 ===== -->
+## CONTRACT: RB-9c-1 — Farm-archetype setup picker (mirror the MLB capIdentity picker for `farmCapIdentity`)
+
+**ROUTE:** Codex build in the Mode-1 worktree `/Users/johnkruse/Projects/kbl-mode1-b` on branch `codex/mode1-v1-b` (the single active Mode-1 code lane). Branch-only; do NOT commit, do NOT push (the Captain commits after audit).
+
+**ROLE:** You are the builder (Codex). Opus is the auditor (builder ≠ auditor). Build EXACTLY this contract — no extra scope.
+
+**GOAL:** Let a GM choose a **farm archetype** at team setup, INDEPENDENTLY of the MLB archetype (V2 §4.2: "A GM chooses an MLB archetype and a farm archetype at setup — independently, e.g. power+speed MLB, defense+pitching farm"). The storage field `farmCapIdentity?: TeamCapIdentity` ALREADY EXISTS on the `Team` record (RB-9b, `leagueBuilderStorage.ts:148`); this ticket adds the UI that COLLECTS it, by MIRRORING the existing MLB "Team Identity (Cap)" picker in `LeagueBuilderTeams.tsx` for a second, independent `farmCapIdentity`. It is consumed later by RB-9c-3 (the §3.5 hole-weighting tilt via `archetypeBandWeights`/`tiltAnalyzerFindings`, which prefer the composed `increase` elements) — so the farm picker must build the SAME `{ bandPriorities, increase, decrease }` shape the MLB picker builds. NO auction-page / analyzer / tilt wiring here (that is RB-9c-2/3).
+
+**SOURCE OF TRUTH:** ⚠ `AUCTION_DRAFT_SPEC_V2.md` + the DECISIONS_LOG live on the **docs branch**, NOT in your worktree — do NOT open them or treat their absence as a stop. The operative requirement (independent MLB + farm archetypes, §4.2) is embedded above. Verify only the `src/…` CODE anchors below.
+
+**GROUNDED ANCHORS (re-read each at source before editing; CODE anchors only — STOP if any `src/…` anchor mismatches; everything in `src/src_figma/app/pages/LeagueBuilderTeams.tsx` unless noted):**
+- `:147-148` (`src/utils/leagueBuilderStorage.ts`) — `capIdentity?: TeamCapIdentity;` then `farmCapIdentity?: TeamCapIdentity;` on the `Team` interface. The farm field EXISTS; do NOT modify storage.
+- `:257` — `isCapIdentityOpen` collapse-state (mirror with an `isFarmCapIdentityOpen`).
+- `:1520-1540` — the collapsible "Team Identity (Cap)" SECTION HEADER ("Band priority, cap-mod stack, and shifted luxury-cap preview").
+- `:1542-1582` — the band-priority input grid (numeric 0–5 + range slider per `Band`), driven by `updateCapIdentityPriority(band, value)` (`:676`).
+- `:1598-1641` — the Increase/Decrease cap-mod slot selects (`CAP_IDENTITY_MOD_OPTIONS`), driven by `updateCapIdentityMod(kind, index, value)` (`:694`).
+- `:523-538` — `handleSave` builds the `TeamCapIdentity` (`{ bandPriorities: { ...createEmptyBandPriorities(), ...formData.capIdentity.bandPriorities }, increase: capIdentityValidation.identity.increase, decrease: capIdentityValidation.identity.decrease }`) and includes it in the `teamData` payload (`:569`) passed to `updateTeam` (`:576`).
+- The `formData.capIdentity` state shape + its initialization from the team on EDIT, and `capIdentityValidation` (the `composeIdentity`/`applyIdentitySelection`-backed validation) — find these and mirror them for farm.
+- TEST: `src/src_figma/__tests__/leagueBuilder/LeagueBuilderTeams.test.tsx` — has a "round-trip editorial fields" Edit-Team test and NO `capIdentity`-specific assertions (adding a parallel farm picker is test-safe). Mirror the round-trip test for `farmCapIdentity`.
+
+**MAKE-OR-BREAK:**
+1. A GM can set the **farm archetype independently** of the MLB archetype (separate band-priority inputs + separate increase/decrease slots; setting one does NOT change the other), and on save `team.farmCapIdentity` is the SAME `{ bandPriorities, increase, decrease }` shape `capIdentity` uses, persisted via the existing `updateTeam` path and re-loaded into the form on edit (round-trips).
+2. The existing MLB `capIdentity` picker + its handlers + `handleSave`'s `capIdentity` build are BEHAVIORALLY UNCHANGED (the farm picker is purely additive — new state, new handlers, new JSX section, new `handleSave` field). All existing `LeagueBuilderTeams.test.tsx` assertions stay green.
+
+**CONSTRAINTS — exact files (touch ONLY these two):**
+1. `src/src_figma/app/pages/LeagueBuilderTeams.tsx` — ADD: an `isFarmCapIdentityOpen` collapse state; a `formData.farmCapIdentity` state slice (initialized from `team.farmCapIdentity` on edit, mirroring the capIdentity init); `updateFarmCapIdentityPriority`/`updateFarmCapIdentityMod` handlers (mirror `:676`/`:694`); a `farmCapIdentityValidation` (mirror the capIdentity one); a NEW collapsible "Farm Identity (Cap)" picker SECTION (mirror `:1520-1641`, clearly LABELED as the FARM archetype, distinct from the MLB "Team Identity (Cap)" section); and the `farmCapIdentity` build + inclusion in the `teamData` payload in `handleSave` (mirror `:523-538`/`:569`). Reuse the SAME `Band`/`createEmptyBandPriorities`/`CAP_IDENTITY_MOD_OPTIONS`/`composeIdentity`/`applyIdentitySelection` machinery the MLB picker uses — do NOT duplicate the constants.
+2. `src/src_figma/__tests__/leagueBuilder/LeagueBuilderTeams.test.tsx` — ADD ONE test: open Edit on a team, set a farm band priority (or assert the farm picker renders distinct from the MLB picker), save, and assert `updateTeam`/the save mock was called with `farmCapIdentity` carrying the chosen shape (mirror the existing capIdentity-adjacent / editorial round-trip test). Do NOT modify existing tests.
+- Do NOT touch `leagueBuilderStorage.ts` (the field exists), the auction pages, the analyzer, `farmArchetypeTilt.ts`, the frozen oracle, or any other file. Do NOT wire the farm archetype into the tilt/board (RB-9c-2/3).
+
+**VERIFICATION (you run, report the real output):**
+- `cd /Users/johnkruse/Projects/kbl-mode1-b && export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" && NODE_ENV= npx tsc -b` → exit 0 (paste tail).
+- `NODE_ENV= npx vitest run src/src_figma/__tests__/leagueBuilder/LeagueBuilderTeams.test.tsx` → all pass incl. the new farm round-trip (paste summary). (The Captain runs the FULL suite gate.)
+- Report `git status --short` (exactly: 2 modified files).
+
+**FORMAT (report back):** the diff summary (files + line counts), the verbatim new handler signatures + the `handleSave` farmCapIdentity build snippet, the tsc result, the focused test results, and `git status --short`.
+
+**FAILURE PROTOCOL / STOP-IF:**
+- If `farmCapIdentity` is NOT already on the `Team` type, or collecting it requires a storage/`updateTeam` change → STOP and quote (the field should already exist per RB-9b).
+- If a contracted **CODE anchor (`src/…` file:line)** does not match the actual source → STOP and quote the discrepancy. (The V2/DECISIONS spec files are intentionally NOT in this worktree — their absence is EXPECTED, NOT a stop. Only `src/…` mismatches stop you.)
+- If mirroring the MLB picker would force a behavioral change to the EXISTING `capIdentity` picker → STOP (the farm picker must be purely additive/independent).
+- Never touch the frozen oracle or any file outside the two listed. Never commit/push. Branch-only.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-9c-1 ===== -->
