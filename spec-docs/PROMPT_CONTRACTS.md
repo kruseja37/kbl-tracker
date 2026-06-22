@@ -17805,3 +17805,114 @@ NOT add any compensating re-indexing.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-10b ===== -->
+
+<!-- ===== CONTRACT: RB-11 ===== -->
+# CONTRACT RB-11 — Scout-privacy UI: default-COVERED scout report, long-press REVEALS (§3.6/§6.1)
+
+**ROUTE:** Codex 5.5 (gpt-5.5) | xhigh reasoning effort
+**ROLE:** Builder (Codex). Opus 4.8 audits the real diff (builder≠auditor). Worktree
+`/Users/johnkruse/Projects/kbl-mode1-b`, branch `codex/mode1-v1-b`. Branch-only — NEVER commit/push.
+
+**GOAL (one sentence):** On the shared-device farm auction, the GM's private scout report (price range +
+grade) is COVERED by default and REVEALS only while long-pressed (re-covers on release) — so a rival
+holding the passed iPad can't free-ride your scout's paid-for opinion. Everything else (name, positions,
+opening ask, budgets, max-bid, roster board) stays visible.
+
+**SOURCE OF TRUTH (embedded verbatim; the V2 spec + DECISIONS_LOG live on the docs branch, ABSENT here):**
+> V2 §3.6 Scout-privacy on the shared device (§6.1, corrected):
+> - Default COVERED. A GM long-presses to REVEAL their own scout report; it re-covers on release.
+>   Rationale: the iPad passes around the room; if reports were shown by default, a rival sees your
+>   high-confidence A-grade … → free scouting that defeats per-team scouts.
+> - Scope = scout reports ONLY (the price range + grade + confidence). Budgets, your max-bid, roster
+>   board stay visible. Applies to the farm + the scouting/prep phase. MLB players are public — no cover.
+>
+> DECISIONS_LOG 2026-06-20 (attended): "Default COVERED; reveal via long-press (re-covers on release).
+> Scope = scout reports ONLY (budgets/target lists/max-bid stay visible). Farm auction + scouting/prep
+> phase; MLB-auction grades are public (no cover)."
+
+NOTE: there is NO separate scouting/prep page in the codebase — the farm auction page is the only scout-
+report surface, so RB-11 = the farm auction page. (MLB auction page = no change; MLB is public.)
+
+**GROUNDED ANCHORS (Captain read these at source; RE-READ before building):**
+- `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx`, the OPEN_BIDDING "ENGINE NOMINATED" card,
+  lines 639-643 — a 3-col grid whose first two cells ARE the scout report, third is the public opening:
+  ```tsx
+  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-[#E8E8D8]/75">
+    <div>Scout value {formatScoutRange(currentLotRange)}</div>     {/* line 640 — COVER */}
+    <div>Scout grade {scoutGradeDisplay(currentLotProspect)}</div> {/* line 641 — COVER */}
+    <div>Opening {formatMoney(lot.openingAsk)}</div>               {/* line 642 — STAYS PUBLIC */}
+  </div>
+  ```
+  `formatScoutRange` (124-126) → "<estimate> estimate [<low>-<high>]"; `scoutGradeDisplay` (94-98) →
+  "<letter> (<20-80>)". These two divs are the ONLY scout-report render in the page (grep-confirmed).
+- The CHARACTERIZED page test that currently asserts these are visible by DEFAULT — MUST be updated:
+  `src/src_figma/__tests__/pages/LeagueBuilderFarmAuctionDraft.test.tsx:326-327`:
+  ```tsx
+  expect(screen.getByText(`Scout value ${targetRangeText}`)).toBeInTheDocument();   // 326
+  expect(screen.getByText(targetGradeText)).toBeInTheDocument();                    // 327
+  ```
+  Surrounding asserts (322 name, 323-324 positions, 328 `Opening …`, 333-334 no-ratings, 335-339 budget/
+  max-bid/roster/PRIORITY GAPS) must STAY GREEN unchanged (those are public, not scout reports).
+
+**CONSTRAINTS:**
+- CREATE: `src/src_figma/app/components/LongPressReveal.tsx` + `src/src_figma/__tests__/app/LongPressReveal.test.tsx`.
+- EDIT: `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx` (wrap the scout report only) +
+  `src/src_figma/__tests__/pages/LeagueBuilderFarmAuctionDraft.test.tsx` (update 326-327 to the new
+  default-covered + long-press-reveal behavior).
+- Do NOT touch: the MLB auction page, any engine/storage, the scout-value computation
+  (`formatScoutRange`/`scoutGradeDisplay`/`currentLotRange` stay as-is — you only change WHERE/WHEN they
+  render), the frozen oracle.
+- Pure UI; no new deps. Works for mouse AND touch (iPad) → use POINTER events.
+
+**EXPECTED OUTPUT:**
+1. `LongPressReveal.tsx` — a small reusable control:
+   - Props: `{ label: string; children: ReactNode; className?: string }` (`label` = the covered
+     affordance text / accessible name, e.g. "Hold to reveal scout report").
+   - Renders a `<button type="button">` with `aria-label={label}`. State `revealed` (useState, default
+     false). `onPointerDown` → reveal; `onPointerUp` + `onPointerLeave` + `onPointerCancel` → re-cover.
+     `onContextMenu={(e) => e.preventDefault()}` + a `select-none` class (kill the iOS long-press callout /
+     text selection). Covered → render `label` (with a 🔒 affordance); revealed → render `children`.
+   - Imports only React. No timers needed (press = hold; reveal is tied to pointer-down..up).
+2. `LeagueBuilderFarmAuctionDraft.tsx` — wrap the TWO scout-report cells (640 + 641) TOGETHER in ONE
+   `<LongPressReveal label="Hold to reveal scout report">` so one hold reveals the whole report; KEEP the
+   `Opening` cell (642) OUTSIDE/visible. Preserve the surrounding card + grid layout reasonably (the
+   reveal cell may span the value+grade columns; the visual arrangement is a v1 default — see OPEN-DECISION).
+   Import `LongPressReveal` with the page's existing component-import path style.
+3. `LongPressReveal.test.tsx` — covered by default shows `label` and NOT the children text; `pointerDown`
+   reveals the children; `pointerUp` (and separately `pointerLeave`) re-covers.
+4. Update `LeagueBuilderFarmAuctionDraft.test.tsx`: after reaching OPEN_BIDDING, assert (a) the scout
+   value/grade text is NOT in the document by default + the "Hold to reveal scout report" control IS
+   present; (b) `fireEvent.pointerDown` on that control → the `Scout value …` + grade text ARE present;
+   (c) `fireEvent.pointerUp` → re-covered (text gone). Leave every other assertion in that test unchanged.
+
+**MEASUREMENT/SCOPE NOTE:** cover ONLY the scout report (price range + grade). The "confidence" the spec
+mentions is already embedded in the grade/range display — do NOT invent a new confidence field. Opening
+ask, name, positions, budgets, max-bid, roster board, PRIORITY GAPS all stay public.
+
+**VERIFICATION (run in the worktree; paste output):**
+- `cd /Users/johnkruse/Projects/kbl-mode1-b && export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" && NODE_ENV= npx tsc -b` → exit 0 (paste tail).
+- `NODE_ENV= npx vitest run src/src_figma/__tests__/app/LongPressReveal.test.tsx src/src_figma/__tests__/pages/LeagueBuilderFarmAuctionDraft.test.tsx` → all pass (paste summary). (The Captain runs the FULL Mode-1 suite at the gate.)
+- `git status --short` (expect the 2 new files + the 2 edited files).
+
+**FORMAT:** 1) files changed (paths + line counts); 2) the full `LongPressReveal.tsx`; 3) the farm-page
+wrap diff; 4) the page-test diff; 5) tsc result; 6) focused test results; 7) `git status --short`.
+
+**FAILURE PROTOCOL / STOP-IF:**
+- If lines 639-643 / the `formatScoutRange`+`scoutGradeDisplay` render do NOT match the anchor → STOP and
+  quote the real code.
+- If wrapping the two cells cannot preserve the card/grid layout without restructuring beyond the scout
+  cells → STOP and quote (we'll decide the layout).
+- If pointer events aren't usable in the test env (jsdom) so the reveal can't be exercised → STOP and quote
+  (we'll fall back to a click-toggle for the test while keeping pointer for runtime).
+- If updating the characterized test would require weakening any NON-scout assertion (name/positions/
+  opening/budget/no-ratings/PRIORITY GAPS) → STOP and quote.
+- If a contracted **CODE anchor (`src/…` file:line)** mismatches → STOP and quote it. (V2/DECISIONS docs
+  ABSENT is EXPECTED, NOT a stop.)
+- Never touch the MLB page, engines/storage, or the frozen oracle. Never commit/push. Branch-only.
+
+**OPEN-DECISION (documented default; flag for JK):** value+grade revealed TOGETHER by one long-press (one
+"report"), covered cell occupies the value+grade columns with `Opening` still public. Alt = cover each
+field separately, or cover the whole ENGINE-NOMINATED card except name/positions.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-11 ===== -->
