@@ -5,7 +5,7 @@
 > design** → **`AUCTION_DRAFT_SPEC_V2.md`** (authoritative; V1 spec bannered superseded) + the execution sequence **`AUCTION_REBUILD_PLAN.md`**.
 > **Single-Captain (Shape A):** Opus owns `codex/franchise-v1-next` (docs) + dispatches Codex for Mode-1 in `/Users/johnkruse/Projects/kbl-mode1`
 > [`codex/mode1-v1`]. Codex builds, Opus audits, branch-only, never push.
-> **LIVE LEDGER = `AUTONOMOUS_RUN_LOG.md` (WAVE 1–58) — read top-to-bottom on return; supersedes everything below.**
+> **LIVE LEDGER = `AUTONOMOUS_RUN_LOG.md` (WAVE 1–59) — read top-to-bottom on return; supersedes everything below.**
 > **V1 BUILT (build-dark, branch-only, zero-new-reds — SHELLS SURVIVE the rebuild):** MLB AUC-1.1..4.1b + FARM 5.1a..e/d-1/d-2/d-3. The
 > §2 bidding/CPU/wallet/persistence/hot-seat-UI + page shells are REUSED; the **value layer** (per-prospect-IV → scout price-range+20–80 grade)
 > and **nomination/resolve** (GM-nomination → engine weighted-random + one-chance) are REWRITTEN, + new systems (dual archetype tax, MLB→farm
@@ -36,18 +36,22 @@
 > 8014 tests, sole fail `wpaRuntimeBoundary`.** **RB-2b SPLIT → 2b-1 (engine, done) / 2b-2 (WIRE) / 2b-3 (STRIP old machinery + rewrite engine test).**
 > **JK RULINGS 2026-06-21 (RB-2-Q1..Q4, DECISIONS_LOG):** farm flat reserve = min salary · roster-fill = hard guarantee · k = MLB 2 / farm 3 ·
 > new-league `draftFormat` default → `auction` (O-1 resolved).
+> **✅ RB-2b-2 COMPLETE (WAVE 59, `456bd195`, `codex/mode1-v1`, branch-only, ZERO-NEW-REDS) — WIRE the one-chance engine into all consumers.** Both
+> tiers are engine-nominated + one-chance end-to-end: hooks' NOMINATION → unconditional `surfaceNextPlayer`, `rotate`→`advance`, k 2/3 + farm flat
+> floor + auction default wired; pages swap the GM picker → engine-surfaced display (bidding UI preserved); `cpuShillBidding.resolveCpuNomination`
+> deleted (bid/claim shills survive). Independent grep: zero old-API references in any consumer. Suite **487 files / 8013 tests; fails = `wpaRuntimeBoundary`
+> (hard) + `AwardsWatchlist` (order-flake, verified passes solo 2/2) ⇒ ZERO NEW REDS.**
 > **RB-1b model + refinement RULED (DECISIONS_LOG 2026-06-21):** per-trait COUNT · 3-tier L1≤3/L2 4-7/L3≥8 (grounded `TRAIT_INTEGRATION_SPEC`) ·
 > PERCEPTION-LAYER · boundary-aware (level-up full / buffer 0.4× at floors / neutral) · BIDIRECTIONAL (RB-9 owes the `'remove'` send-down cost = D-8).
-> **➡ NEXT (AUTH-4): `/kbl-captain` → RB-2b-2 (WIRE the one-chance engine into the consumers)** — switch both hooks (`useAuctionDraft`/
-> `useFarmAuctionDraft`) + both pages + `cpuShillBidding` to the new API: NOMINATION branch → unconditional `surfaceNextPlayer`; `rotate`→`advanceLot`;
-> drop `nominate(playerId)`/`currentNominatorTeamId`; fix `stateProgressKey`'s `setAsidePlayerIds` read; pages: GM nomination picker → "engine surfaced
-> [player]" (bidding UI survives); set `nominationWeightExponent` MLB 2 / farm 3 (Q3) + the farm hook's `config.flatReserveFloor = LEAGUE_MINIMUM_SALARY`
-> (Q1); flip new-league `draftFormat` default → `auction` (Q4/O-1); `cpuShillBidding`: delete `resolveCpuNomination` + its 2 call sites (cpuBidOnLot/
-> cpuDecideLoneSurvivor survive). The OLD engine fns stay (orphaned) — deleted in **RB-2b-3 (STRIP)** (delete `nominatePlayer`/`rotateNomination`/
-> `getCurrentNominator`/`getNominationBlockReason`/`finalizePassedLot`/`releaseEligiblePassedPlayers`/`setAsidePlayerIds`/`passedTracker` + rewrite
-> `auctionStateMachine.test.ts`; SAFE — session persists as a structured-clone blob, NO field-by-field shape pin, verified; tsc proves no references
-> remain). Then RB-3 (dual archetypes + MLB luxury tax) → … RB-18. **OPEN (verify at RB-2b-2/RB-16):** the §2.3 surplus pool-sizing (pool ≥ total
-> slots) lives upstream in the pool builder; the engine guarantee assumes it. **JK-BROWSER-VERIFY BATCHED
+> **➡ NEXT (AUTH-4): `/kbl-captain` → RB-2b-3 (STRIP the orphaned old machinery — the last RB-2 piece)** — delete from
+> `auctionStateMachine.ts` the now-orphaned (zero-consumer) `nominatePlayer`/`rotateNomination`/`getCurrentNominator`/`getNominationBlockReason`/
+> `finalizePassedLot`/`releaseEligiblePassedPlayers` + the `PassedPlayerTracker` type + the `setAsidePlayerIds`/`passedTracker` fields on `AuctionSession`
+> (+ their `initAuctionSession` init) + the 3 dead rejection reasons; decide whether to also drop the `SET_ASIDE` disposition + the dead page display
+> branches or leave them harmless. Rewrite `auctionStateMachine.test.ts` (drop the re-nomination/set-aside/nominator-clock tests; port the bid-rotation/
+> solvency/SOLD coverage onto `surfaceNextPlayer`/`resolveLot`/`advanceLot`). SAFE — tsc proves no references remain; session persists as a
+> structured-clone blob (NO field-by-field shape pin, verified). ⇒ then **RB-2 COMPLETE** → RB-3 (dual archetypes + MLB luxury tax) → … RB-18.
+> **OPEN (verify at RB-16):** the §2.3 surplus pool-sizing (pool ≥ total slots) lives upstream in the pool builder; the RB-2b-1 forced-filler
+> guarantee assumes it. **JK-BROWSER-VERIFY BATCHED
 > (persistence-prioritized):** RB-0b-1 — a real draft stamps all 3 axes onto league players + they carry into the franchise (7-type personality
 > spread); BV-3 now also covers the RB-1a scout price-range + 20–80 grade display + the RB-1b chemistry-fit bump + the RB-2 engine-surfaced
 > one-chance flow (true IV no longer reverse-engineerable from the band midpoint).
