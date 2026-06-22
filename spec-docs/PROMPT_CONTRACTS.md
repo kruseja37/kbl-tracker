@@ -16801,3 +16801,53 @@ do NOT touch it.**
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-7b ===== -->
+
+<!-- ===== CONTRACT: RB-7c ===== -->
+## CONTRACT: RB-7c — stamp settledSalary (the §10 #2 additive field; completes the freeze)
+
+**ROUTE:** Codex (builder) — worktree `/Users/johnkruse/Projects/kbl-mode1` [`codex/mode1-v1`]. Opus audits (builder≠auditor).
+**ROLE:** Builder. Implement EXACTLY this; a CORRECT STOP-IF is GOOD.
+
+**GOAL:** Record the §10 **#2 settledSalary** (the auction WINNING BID) as an ADDITIVE optional field on each rostered
+franchise player, stamped at franchise-init. This is the last of the §10 four numbers (trueValue rides the player
+record; player+fan morale = RB-7b). **settledSalary is a DISTINCT additive field — do NOT change `salary` or the salary
+calc.** It has NO v1 consumer (bookkeeping/audit for future display + valuation); just persist it faithfully.
+
+**SOURCE OF TRUTH:** `AUCTION_DRAFT_SPEC_V2.md` §10 ("settledSalary (the auction winning bid — **additive field**, AUC-5.2)").
+
+**GROUNDED ANCHORS (re-read; STOP-IF differ):**
+- `src/utils/leagueBuilderStorage.ts:241-314` `Player` — has `salary: number` (~:279) + optional salary-meta fields; ADD `settledSalary?: number` here (additive optional).
+- `src/engines/draftFreeze.ts` `DraftFreezePlayerResult` carries `playerId` + `settledSalary` (the winning bid); `computeDraftFreeze(...).players` is the per-player list (already produced in RB-7b's step 8.5).
+- `src/utils/franchisePlayerStorage.ts` — franchise players live in a PER-FRANCHISE DB (`getFranchiseDatabaseName`, DB_VERSION=1, `STORES.PLAYERS` keyPath 'id') — NOT trackerDb. `getFranchisePlayer(franchiseId, playerId): Promise<Player|null>` (:196); `saveFranchisePlayer(franchiseId, player)` (:212) = clean spread-and-put (preserves all fields, sets lastModified, marks team snapshots stale — harmless at init; does NOT recompute salary).
+- `src/utils/franchiseInitializer.ts` — RB-7b's step 8.5 (after `:661`, inside `if (mlbSession?.session) { … }`) already builds `freeze = computeDraftFreeze(inputs)` and loops `freeze.players`. ADD the settledSalary stamp in/after that same loop.
+- **Farm note:** farm prospects are NOT in `STORES.PLAYERS` (they live in the farm roster store via `getFranchiseFarmRoster`). So the stamp is MLB-tier best-effort: a `getFranchisePlayer` miss → skip silently. (D-7c-1: farm-prospect settledSalary deferred — separate store, no v1 consumer.)
+
+**WHAT TO BUILD:**
+1. **EDIT `src/utils/leagueBuilderStorage.ts`** — add `settledSalary?: number;` to the `Player` interface near the salary fields, with a comment: `// §10 freeze: the auction winning bid (RB-7c); additive, no consumer in v1`.
+2. **EDIT `src/utils/franchiseInitializer.ts`** — inside the existing `if (mlbSession?.session) { … }` block (RB-7b step 8.5), AFTER `const freeze = computeDraftFreeze(inputs);` (and alongside/after the morale-seed loops), stamp settledSalary:
+   ```ts
+   for (const player of freeze.players) {
+     const existing = await getFranchisePlayer(franchiseId, player.playerId);
+     if (!existing) continue; // farm prospects live in the farm store (D-7c-1) — skip
+     if (existing.settledSalary === player.settledSalary) continue; // idempotent / re-init safe
+     await saveFranchisePlayer(franchiseId, { ...existing, settledSalary: player.settledSalary });
+   }
+   ```
+   Import `getFranchisePlayer` + `saveFranchisePlayer` from `./franchisePlayerStorage` (add to the existing import or a new import line). Do NOT change `withInitialFranchiseSalary`, `salary`, or any other field.
+3. **TEST:** add a focused saved-shape round-trip in the appropriate franchisePlayerStorage test file (or a new `src/utils/tests/franchisePlayerStorageSettledSalary.test.ts`): `saveFranchisePlayer(fid, {...player, settledSalary: 1234})` then `getFranchisePlayer` → `settledSalary === 1234`; AND a player saved WITHOUT settledSalary reads back with `settledSalary === undefined` (additive-optional, no default). (The stamp WIRING is covered by the no-regression FULL suite + RB-7a/RB-7b tests of `freeze.players`.)
+
+**SAVED-SHAPE DISCIPLINE:** additive optional field on the per-franchise PLAYERS store (schemaless IndexedDB) ⇒ **NO DB version bump** (per-franchise DB stays v1; trackerDb UNTOUCHED, `TRACKER_DB_VERSION` stays 25, its version-pin test stays green). Do NOT add/alter any store. Do NOT change `salary`/the salary calc/`withInitialFranchiseSalary`.
+
+**CONSTRAINTS:** edit ONLY `leagueBuilderStorage.ts` (the Player field) + `franchiseInitializer.ts` (the stamp) + ONE test file. FROZEN oracle READ-ONLY. Branch-only — do NOT commit/push.
+
+**VERIFICATION (report ACTUAL output):**
+- `cd /Users/johnkruse/Projects/kbl-mode1 && export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" && NODE_ENV= npx tsc -b` → 0.
+- FULL Mode-1 suite `NODE_ENV= npx vitest run` — report "Test Files"/"Tests" + the FAILED-FILE LIST (read the list, NOT the RC). Baseline sole hard fail = `wpaRuntimeBoundary` (order-flakes pass solo). ZERO NEW REDS.
+- `git -C /Users/johnkruse/Projects/kbl-mode1 status --short` → only the 3 contracted paths (+ test-mock stubs ONLY if a partial-mock test breaks at module-load on the new franchisePlayerStorage imports — test-only fix, allowed).
+
+**FORMAT:** report changed paths, tsc, the full-suite summary + failed-file list.
+
+**STOP-IF:** a trackerDb or per-franchise-DB version bump is needed → STOP. `saveFranchisePlayer` mutates/recomputes fields other than the ones passed → STOP. The Player type or storage signatures differ from above → STOP. The frozen oracle would change → STOP.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-7c ===== -->
