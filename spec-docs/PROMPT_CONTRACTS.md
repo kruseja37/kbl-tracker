@@ -18016,3 +18016,84 @@ insertion diffs; 4) the test list; 5) tsc result; 6) focused test results; 7) `g
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-12 ===== -->
+
+<!-- ===== CONTRACT: RB-13a ===== -->
+# CONTRACT RB-13a — Draft-format PICKER at league create/edit (write `draftFormat`; §9 format-picker, input side)
+
+**ROUTE:** Codex 5.5 (gpt-5.5) | xhigh reasoning effort
+**ROLE:** Builder (Codex). Opus 4.8 audits the real diff (builder≠auditor). Worktree
+`/Users/johnkruse/Projects/kbl-mode1-b`, branch `codex/mode1-v1-b`. Branch-only — NEVER commit/push.
+
+**GOAL (one sentence):** Add a draft-format picker (Auction [default] / Snake) to the league create/edit
+modal so the GM's choice persists on `LeagueTemplate.draftFormat` — the §9 format-picker INPUT side.
+(Routing the draft flow by `draftFormat` is RB-13b, deferred — see OPEN-DECISIONS.)
+
+**SOURCE OF TRUTH — V2 §9 (embedded; spec on docs branch, ABSENT here):**
+> §9 Format picker (setup): the league setup lets the GM choose auction (default) vs snake, applied
+> league-wide to both tiers (R1). (`draftFormat` field built; the picker UI is this item.)
+
+**GROUNDED ANCHORS (Captain read these at source; RE-READ before building):**
+- `LeagueTemplate.draftFormat?: 'auction' | 'snake'` already EXISTS — `src/utils/leagueBuilderStorage.ts:105`;
+  helper `getLeagueDraftFormat(template)` defaults to `'auction'` (113-114). DO NOT change the storage type.
+- The league create/edit form — `src/src_figma/app/pages/LeagueBuilderLeagues.tsx`:
+  - `interface LeagueFormData` (lines 38-46): `name/description/teamIds/defaultRulesPreset/tier/balanceMode/checkpointCadence/color`.
+  - `DEFAULT_FORM_DATA` (49-57): mirror to add the new field.
+  - the edit-init `setFormData({...})` (~141-148) reads `league.tier ?? …`, `league.balanceMode ?? …` — add the format read there.
+  - `handleSave` (160-197): the `updateLeague({...})` (166-176) and `createLeague({...})` (178-189) payloads — add the new field to BOTH.
+  - the modal renders `<select>` pickers; the `tier` select (≈513-521) maps `TIER_OPTIONS`-style arrays to `<option>`s and does `setFormData((prev) => ({ ...prev, tier: e.target.value as TierKey }))`. There is a `BALANCE_MODE_OPTIONS` array (66) as the options pattern. MIRROR this for the format select.
+- The leagues page test `src/src_figma/__tests__/leagueBuilder/LeagueBuilderLeagues.test.tsx` mocks
+  `createLeague`/`updateLeague` but does NOT assert their call args ⇒ adding `draftFormat` won't break it.
+
+**CONSTRAINTS:**
+- EDIT ONLY: `src/src_figma/app/pages/LeagueBuilderLeagues.tsx` + `src/src_figma/__tests__/leagueBuilder/LeagueBuilderLeagues.test.tsx`.
+- Do NOT touch: storage (`draftFormat` already exists), the draft pages, the hub `LeagueBuilder.tsx`,
+  routing (`App.tsx`), any engine, the frozen oracle.
+- Additive UI; no new deps; mirror the EXISTING tier/balanceMode select pattern (same styling).
+
+**EXPECTED OUTPUT — `LeagueBuilderLeagues.tsx`:**
+1. Add `draftFormat: 'auction' | 'snake';` to `LeagueFormData`; `draftFormat: 'auction'` to `DEFAULT_FORM_DATA`.
+2. Add a `DRAFT_FORMAT_OPTIONS: Array<{ value: 'auction' | 'snake'; label: string }>` = `[{value:'auction', label:'Auction (default)'}, {value:'snake', label:'Snake'}]`.
+3. Edit-init: in the edit `setFormData({...})`, add `draftFormat: league.draftFormat ?? 'auction'`.
+4. `handleSave`: add `draftFormat: formData.draftFormat` to BOTH the `updateLeague` and `createLeague` payloads.
+5. In the modal, add a labeled `<select>` ("DRAFT FORMAT") next to the tier/balance pickers, value=`formData.draftFormat`,
+   `onChange` → `setFormData((prev) => ({ ...prev, draftFormat: e.target.value as 'auction' | 'snake' }))`,
+   rendering `DRAFT_FORMAT_OPTIONS`. Give the `<select>` an accessible name (a `<label htmlFor>`/`aria-label`
+   "Draft format") so the test can target it.
+
+**EXPECTED OUTPUT — test (extend `LeagueBuilderLeagues.test.tsx`):**
+- Open the "new league" modal, type a name, select the format = "Snake", save → `createLeague` was called
+  with `expect.objectContaining({ draftFormat: 'snake' })`.
+- A second assertion that the DEFAULT (no change) create persists `draftFormat: 'auction'` (objectContaining).
+  Reuse the file's existing modal-open + save helpers/mocks.
+
+**VERIFICATION (run in the worktree; paste output):**
+- `cd /Users/johnkruse/Projects/kbl-mode1-b && export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" && NODE_ENV= npx tsc -b` → exit 0 (paste tail).
+- `NODE_ENV= npx vitest run src/src_figma/__tests__/leagueBuilder/LeagueBuilderLeagues.test.tsx` → all pass (paste summary). (Captain runs the FULL suite.)
+- `git status --short` (expect the 2 edited files).
+
+**FORMAT:** 1) files changed (paths + line counts); 2) the `LeagueBuilderLeagues.tsx` diff; 3) the test diff;
+4) tsc result; 5) focused test result; 6) `git status --short`.
+
+**FAILURE PROTOCOL / STOP-IF:**
+- If `LeagueFormData` / `DEFAULT_FORM_DATA` / `handleSave` / the tier-select pattern do NOT match the anchors →
+  STOP and quote the real code.
+- If `LeagueTemplate.draftFormat` is NOT already on the storage type → STOP and quote (do not add it here).
+- If adding the field to the `createLeague`/`updateLeague` payload is a type error (the `Omit<LeagueTemplate,…>`
+  shape) → STOP and quote.
+- If a contracted **CODE anchor (`src/…` file:line)** mismatches → STOP and quote it. (V2/DECISIONS docs ABSENT
+  is EXPECTED, NOT a stop.)
+- Never touch storage/draft pages/hub/routing/engines/oracle. Never commit/push. Branch-only.
+
+**OPEN-DECISIONS (documented defaults; flag for JK):**
+- **(D-13a-1) RB-13 SPLIT — 13a = picker (this); 13b = route the draft flow by `draftFormat`.** Routing is
+  deferred because BOTH draft pages self-resolve their league via `activeLeagueId = leagues[0]` (no global
+  active-league anchor) and the hub `LeagueBuilder.tsx:220` hard-routes "MLB DRAFT" → `/snake-draft`; wiring
+  format→route needs a JK call on the active-league model. UNTIL 13b, `draftFormat` is persisted but does
+  NOT yet change which draft page opens.
+- **(D-13a-2) SPEC TENSION for JK:** §9.A (`auctionEngineConstants.ts` header comment) says "auction is the v1
+  primary and ONLY format; snake = v1.1 fallback" vs §9:411 "the picker lets the GM choose auction/snake." The
+  picker offers BOTH (per the explicit §9:411 picker spec), default auction. If JK wants v1 auction-only, drop
+  the snake `<option>` (trivial).
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-13a ===== -->
