@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import {
   claimLoneSurvivor,
@@ -14,12 +14,15 @@ import {
   type AuctionTeamInput,
   type AuctionTransitionResult,
 } from "../../../engines/auctionStateMachine";
+import { computeAuctionTeamProjectedTaxWithCaps } from "../../../engines/auctionLuxuryTax";
+import type { ConstructionPlayer, TeamCapIdentity } from "../../../engines/leagueConstruction";
 import {
   cpuBidOnLot,
   cpuDecideLoneSurvivor,
   type CpuShillAuctionSession,
 } from "../../../engines/cpuShillBidding";
 import { DEFAULT_AUCTION_SETUP_CONFIG, type AuctionSetupConfig } from "../../../data/auctionEngineConstants";
+import type { LuxuryCapRow } from "../../../data/tierParams";
 import { LEAGUE_MINIMUM_SALARY } from "../../../data/rosterEngineConstants";
 import {
   createAuctionSessionId,
@@ -28,6 +31,7 @@ import {
 } from "../../../utils/leagueBuilderStorage";
 import { regenerateAndPersistLeaguePoolAxes } from "../../../utils/leaguePoolAxisRegenPersist";
 import {
+  toConstructionPlayer,
   useLeagueBuilderData,
   type Player,
   type RegisteredPool,
@@ -45,6 +49,13 @@ const MAX_CPU_AUTO_ADVANCE_STEPS = 400;
 type AuctionDraftContext = {
   leagueId: string;
   seasonNumber: number;
+};
+
+type AuctionLuxuryTaxContext = {
+  poolById: Map<string, RegisteredPool["players"][number]>;
+  playerById: Map<string, Player>;
+  identityByTeamId: Map<string, TeamCapIdentity | undefined>;
+  baseCaps: LuxuryCapRow[];
 };
 
 export type AuctionDraftError = string | null;
@@ -119,6 +130,69 @@ export function buildAuctionPlayers(pool: RegisteredPool): AuctionPlayer[] {
       ivPercentile: percentiles.get(player.id) ?? 0,
     };
   });
+}
+
+function buildAuctionLuxuryTaxContext(input: {
+  pool: RegisteredPool;
+  leagueTeams: readonly Team[];
+  players: readonly Player[];
+}): AuctionLuxuryTaxContext {
+  return {
+    poolById: new Map(input.pool.players.map((player) => [player.id, player])),
+    playerById: new Map(input.players.map((player) => [player.id, player])),
+    identityByTeamId: new Map(input.leagueTeams.map((team) => [team.id, team.capIdentity])),
+    baseCaps: input.pool.luxuryCaps,
+  };
+}
+
+function zeroProjectedTax(session: CpuShillAuctionSession): CpuShillAuctionSession {
+  return {
+    ...session,
+    teams: session.teams.map((team) => ({ ...team, projectedTax: 0 })),
+  };
+}
+
+function resolveConstructionPlayer(
+  playerId: string,
+  ctx: AuctionLuxuryTaxContext,
+): ConstructionPlayer | null {
+  if (!ctx.poolById.has(playerId)) return null;
+  const player = ctx.playerById.get(playerId);
+  return player ? toConstructionPlayer(player) : null;
+}
+
+export function applyAuctionLuxuryTaxForLot(
+  session: CpuShillAuctionSession,
+  ctx: AuctionLuxuryTaxContext | null | undefined,
+): CpuShillAuctionSession {
+  if (!session.currentLot) return session;
+  if (!ctx) return zeroProjectedTax(session);
+
+  const candidate = resolveConstructionPlayer(session.currentLot.playerId, ctx);
+  if (!candidate) return zeroProjectedTax(session);
+
+  return {
+    ...session,
+    teams: session.teams.map((team) => {
+      const committedRoster: ConstructionPlayer[] = [];
+
+      for (const assignment of team.roster) {
+        const player = resolveConstructionPlayer(assignment.playerId, ctx);
+        if (!player) return { ...team, projectedTax: 0 };
+        committedRoster.push(player);
+      }
+
+      return {
+        ...team,
+        projectedTax: computeAuctionTeamProjectedTaxWithCaps(
+          committedRoster,
+          candidate,
+          ctx.identityByTeamId.get(team.teamId),
+          ctx.baseCaps,
+        ),
+      };
+    }),
+  };
 }
 
 export async function buildAuctionTeams(input: {
@@ -201,6 +275,7 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
   const leagueData = options.leagueData ?? fallbackLeagueData;
   const [session, setSession] = useState<CpuShillAuctionSession | null>(null);
   const [context, setContext] = useState<AuctionDraftContext | null>(null);
+  const taxContextRef = useRef<AuctionLuxuryTaxContext | null>(null);
   const [isWorking, setIsWorking] = useState(false);
   const [error, setError] = useState<AuctionDraftError>(null);
 
@@ -245,6 +320,7 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
 
       if (next.state === "NOMINATION") {
         next = transitionOrThrow(surfaceNextPlayer(next));
+        next = applyAuctionLuxuryTaxForLot(next, taxContextRef.current);
         await persist(next, nextContext);
       } else if (next.state === "OPEN_BIDDING") {
         if (!next.currentLot) return next;
@@ -315,10 +391,26 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
       .map((teamId) => leagueData.teams.find((team) => team.id === teamId))
       .filter((team): team is Team => Boolean(team)) ?? [];
     setContext(nextContext);
-    if (!row) return null;
-    const resumed = await autoAdvanceCpu(row.session, nextContext, nextLeagueTeams);
+    if (!row) {
+      taxContextRef.current = null;
+      return null;
+    }
+
+    const existingPool = await leagueData.getRegisteredPool(leagueId);
+    const pool = existingPool ?? await leagueData.registerLeaguePool(leagueId);
+    taxContextRef.current = buildAuctionLuxuryTaxContext({
+      pool,
+      leagueTeams: nextLeagueTeams,
+      players: leagueData.players,
+    });
+
+    const resumed = await autoAdvanceCpu(
+      applyAuctionLuxuryTaxForLot(row.session, taxContextRef.current),
+      nextContext,
+      nextLeagueTeams,
+    );
     return resumed;
-  }), [autoAdvanceCpu, leagueData.leagues, leagueData.teams, runAction]);
+  }), [autoAdvanceCpu, leagueData, runAction]);
 
   const initAuction = useCallback(async (
     leagueId: string,
@@ -356,6 +448,11 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
     const initialized = initAuctionSession({ teams, players, config }) as CpuShillAuctionSession;
 
     setContext(nextContext);
+    taxContextRef.current = buildAuctionLuxuryTaxContext({
+      pool,
+      leagueTeams: nextLeagueTeams,
+      players: leagueData.players,
+    });
     await persist(initialized, nextContext);
     return autoAdvanceCpu(initialized, nextContext, nextLeagueTeams);
   }), [autoAdvanceCpu, leagueData, persist, runAction]);

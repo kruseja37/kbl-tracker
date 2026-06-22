@@ -3,7 +3,8 @@ import "fake-indexeddb/auto";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { seededNominationOrder } from "../../../../engines/auctionStateMachine";
+import { getTeamAuctionMaxBid, seededNominationOrder } from "../../../../engines/auctionStateMachine";
+import type { LuxuryCapRow } from "../../../../data/tierParams";
 import {
   __resetLeagueBuilderDatabaseForTests,
   getAuctionSession,
@@ -79,7 +80,7 @@ function makeTeam(id: string, controlledBy: Team["controlledBy"] = "human"): Tea
   };
 }
 
-function makePlayer(id: string): Player {
+function makePlayer(id: string, overrides: Partial<Player> = {}): Player {
   return {
     id,
     firstName: id,
@@ -109,6 +110,7 @@ function makePlayer(id: string): Player {
     createdDate: "2026-01-01",
     lastModified: "2026-01-01",
     isCustom: true,
+    ...overrides,
   };
 }
 
@@ -174,8 +176,9 @@ function mockLeagueData(input: {
   leagues: LeagueTemplate[];
   teams: Team[];
   pools: Record<string, RegisteredPool>;
+  players?: Player[];
 }) {
-  const players = Object.values(input.pools)
+  const players = input.players ?? Object.values(input.pools)
     .flatMap((pool) => pool.players)
     .map((poolPlayer) => makePlayer(poolPlayer.id));
   const leagueData = {
@@ -231,6 +234,7 @@ describe("useAuctionDraft", () => {
     expect(result.current.session?.currentLot?.playerId).toEqual(expect.any(String));
     expect(result.current.session?.config.nominationWeightExponent).toBe(2);
     expect(result.current.session?.players.p1.ivPercentile).toBe(100);
+    expect(result.current.session?.teams.map((team) => team.projectedTax)).toEqual([0, 0]);
 
     const persisted = await getAuctionSession("league-init");
     expect(persisted?.session.state).toBe("OPEN_BIDDING");
@@ -424,5 +428,81 @@ describe("useAuctionDraft", () => {
       rosterSlotsRemaining: 21,
       roster: [{ playerId, salary: reserve }],
     });
+  });
+
+  test("applies pool luxury caps per surfaced lot so off-archetype max bid is reduced", async () => {
+    const teamIds = ["human", "other"];
+    const seed = seedWithFirst(teamIds, "human");
+    const caps: LuxuryCapRow[] = [
+      {
+        group: "hitters",
+        stat: "CON",
+        topN: 1,
+        cap: 95,
+        penaltyCurve: 1,
+        penaltyPer100: 1_000_000,
+        minAdder: 0,
+      },
+    ];
+    const humanTeam: Team = {
+      ...makeTeam("human"),
+      capIdentity: {
+        increase: ["POW"],
+        decrease: ["CON"],
+      },
+    };
+    const onPool: RegisteredPool = {
+      ...makePool("league-on", ["on-fit"]),
+      luxuryCaps: caps,
+    };
+    const offPool: RegisteredPool = {
+      ...makePool("league-off", ["off-fit"]),
+      luxuryCaps: caps,
+    };
+
+    mockLeagueData({
+      leagues: [makeLeague("league-on", teamIds), makeLeague("league-off", teamIds)],
+      teams: [humanTeam, makeTeam("other")],
+      pools: {
+        "league-on": onPool,
+        "league-off": offPool,
+      },
+      players: [
+        makePlayer("on-fit", { power: 100, contact: 10 }),
+        makePlayer("off-fit", { power: 10, contact: 100 }),
+      ],
+    });
+
+    const { result } = renderHook(() => useAuctionDraft());
+
+    await act(async () => {
+      await result.current.initAuction("league-on", {
+        nominationOrderSeed: seed,
+        cpuShillCount: 0,
+        bidIncrement: 1_000,
+      });
+    });
+
+    const onTax = result.current.session?.teams.find((team) => team.teamId === "human")?.projectedTax;
+    const onMaxBid = result.current.session ? getTeamAuctionMaxBid(result.current.session, "human") : null;
+
+    await act(async () => {
+      await result.current.initAuction("league-off", {
+        nominationOrderSeed: seed,
+        cpuShillCount: 0,
+        bidIncrement: 1_000,
+      });
+    });
+
+    const offTax = result.current.session?.teams.find((team) => team.teamId === "human")?.projectedTax;
+    const offMaxBid = result.current.session ? getTeamAuctionMaxBid(result.current.session, "human") : null;
+
+    expect(result.current.session?.currentLot?.playerId).toBe("off-fit");
+    expect(onTax).toBe(0);
+    expect(offTax).toEqual(expect.any(Number));
+    expect(offTax!).toBeGreaterThan(0);
+    expect(onMaxBid).not.toBeNull();
+    expect(offMaxBid).not.toBeNull();
+    expect(offMaxBid!).toBeLessThan(onMaxBid!);
   });
 });

@@ -16,12 +16,30 @@ export function auctionShiftedCaps(
   capIdentity: TeamCapIdentity | undefined,
   tier: TierKey,
 ): LuxuryCapRow[] {
+  return auctionShiftedCapsWithBaseCaps(capIdentity, LUXURY_CAP_TABLES[tier]);
+}
+
+function auctionShiftedCapsWithBaseCaps(
+  capIdentity: TeamCapIdentity | undefined,
+  baseCaps: LuxuryCapRow[],
+): LuxuryCapRow[] {
   return capIdentity
-    ? shiftLuxuryCaps(LUXURY_CAP_TABLES[tier], {
+    ? shiftLuxuryCaps(baseCaps, {
         increase: capIdentity.increase,
         decrease: capIdentity.decrease,
       })
-    : LUXURY_CAP_TABLES[tier];
+    : baseCaps;
+}
+
+export function computeAuctionTeamProjectedTaxWithCaps(
+  committedRoster: ConstructionRoster,
+  candidate: ConstructionPlayer | null,
+  capIdentity: TeamCapIdentity | undefined,
+  baseCaps: LuxuryCapRow[],
+): number {
+  const caps = auctionShiftedCapsWithBaseCaps(capIdentity, baseCaps);
+  const roster = candidate ? [...committedRoster, candidate] : committedRoster;
+  return luxuryTax(roster, caps, 'taxed').charged;
 }
 
 export function computeAuctionTeamProjectedTax(
@@ -30,9 +48,12 @@ export function computeAuctionTeamProjectedTax(
   capIdentity: TeamCapIdentity | undefined,
   tier: TierKey,
 ): number {
-  const caps = auctionShiftedCaps(capIdentity, tier);
-  const roster = candidate ? [...committedRoster, candidate] : committedRoster;
-  return luxuryTax(roster, caps, 'taxed').charged;
+  return computeAuctionTeamProjectedTaxWithCaps(
+    committedRoster,
+    candidate,
+    capIdentity,
+    LUXURY_CAP_TABLES[tier],
+  );
 }
 
 export function auctionMarginalTax(
