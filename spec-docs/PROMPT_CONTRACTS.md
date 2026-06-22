@@ -16706,3 +16706,98 @@ export function computeDraftFreeze(
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-7a ===== -->
+
+<!-- ===== CONTRACT: RB-7b ===== -->
+## CONTRACT: RB-7b — wire the §10 freeze PAYOFF (seed Mode-2 morale from the draft, overriding defaults)
+
+**ROUTE:** Codex (builder) — worktree `/Users/johnkruse/Projects/kbl-mode1` [`codex/mode1-v1`]. Opus audits (builder≠auditor).
+**ROLE:** Builder. Implement EXACTLY this contract; a CORRECT STOP-IF is GOOD — report it, do not improvise.
+
+**GOAL (the §10 PAYOFF):** At franchise-init, SEED Mode-2 starting morale from the finished draft, OVERRIDING the
+default neutral-50: each rostered player's starting PLAYER morale = the §6 draft-derived value; each team's starting
+FAN morale = the §7 payroll-rank value. Uses the RB-7a engine `computeDraftFreeze` (already built). **Scope of THIS
+ticket = the MORALE SEED ONLY** (player + team-fan). The `settledSalary` stamp (§10 #2) is a SEPARATE ticket (RB-7c) —
+do NOT add a `settledSalary` field or stamp it here. **trueValue (#1) already rides the franchise player record —
+do NOT touch it.**
+
+**SOURCE OF TRUTH (spec, VERBATIM):** `AUCTION_DRAFT_SPEC_V2.md` §10 ("Mode 2 must seed its starting morale from #3/#4
+— NOT from the default starter-morale settings … without this carry, the entire draft fingerprint evaporates on day 1");
+§6 (player morale) + §7 (fan morale) — both already encoded in the RB-5/RB-6/RB-7a engines (do NOT re-tune).
+
+**GROUNDED ANCHORS (re-read at source; do not trust line refs blindly — STOP-IF any differ):**
+- `src/engines/draftFreeze.ts` — `computeDraftFreeze(wonPlayersInOrder: DraftFreezePlayerInput[], options?): DraftFreezeResult`; `DraftFreezePlayerInput = {playerId, teamId, tier:'MLB'|'FARM', settledSalary, scoutRange:{low,high}, personality:string|undefined, modifiers:HiddenModifiers}`; result `players:[{playerId, startingMorale, ...}]` + `teams:[{teamId, startingFanMorale, ...}]`. (RB-7a, already committed.)
+- `src/utils/franchiseMoraleState.ts` — `FranchiseMoraleScope = {franchiseId, seasonId, statsScopeId, seasonNumber}` (:14-19); `FranchiseMoraleSourceKind` union (:8-12); private `createSnapshot` (:185-209, defaults `baselineValue:50/currentValue:50`) + private `saveSnapshot` (:241-252); `clampFranchiseMorale` (:110-113, → [0,99]); `getFranchiseMoraleSnapshot(scope,targetType,targetId)` (:211); `getFranchiseMoraleSnapshotId` (:115-121). The Phase-2 flag gates ONLY `applyFranchiseMoraleMatrixConsequence` (:395) — the snapshot WRITE layer is NOT flag-gated (seed unconditionally; it is inert data until the morale system reads it).
+- `src/utils/franchiseInitializer.ts:570-680 initializeFranchise(config)` — INJECT a new step between `:661` (`assignTeamFanHopefuls(...)`, AFTER `generateFranchiseHiddenModifierBackfill` :658 which guarantees hidden modifiers present + returns `.players`) and `:663` (`createFranchiseSeasonMetadata`). `config.league` = the leagueId; `initialSeasonId = getFranchiseSeasonId(franchiseId,1)` already computed at :659.
+- `src/utils/leagueBuilderStorage.ts` — `getAuctionSession(leagueId, seasonNumber=1): Promise<LeagueBuilderAuctionSession|null>` (:1669); `getAuctionSessionById` (:1676); `createFarmAuctionSessionId(leagueId, seasonNumber=1)` (:1476). `LeagueBuilderAuctionSession = {id, leagueId, seasonNumber, seed, session: CpuShillAuctionSession, ...}` (:230); the session has `results: AuctionResult[]` (won order) + `players: Record<string, AuctionPlayer>`.
+- `src/engines/auctionStateMachine.ts` — `AuctionResult = {playerId, disposition:'SOLD'|'PASSED'|'SET_ASIDE', nominatorTeamId, winnerTeamId:string|null, salary:number|null}` (:68-74); `AuctionPlayer = {playerId, iv:number, ivPercentile:number}` (:21-25).
+- `src/engines/scoutValueRange.ts:12-34 perceivedValueRange(trueIV, scoutAccuracy, seed): {w, low, high, displayedEstimate}` — NOTE `low/high = trueIV×(1∓w)`, `w = SCOUT_NOISE_BASE×(1-accuracy/100)`; the SEED affects ONLY `displayedEstimate`, NOT low/high (so low/high are deterministic from iv+accuracy).
+- franchise `Player` (`leagueBuilderStorage.ts:241-314`) — `personality: Personality`, `hiddenPersonalityModifiers?: HiddenPersonalityModifiers {loyalty,ambition,resilience,charisma}`, `primaryPosition: Position`; NO iv field (iv comes from the SESSION's AuctionPlayer). `hiddenModifierBackfill.players` (the franchiseInitializer :658 result) is the authoritative post-backfill list (modifiers present).
+
+**MEASUREMENT DEFAULTS (Captain's documented conservative readings — encode as named constants + a comment; flagged for JK):**
+- **(D-7b-2) freeze pay-signal scout range = `perceivedValueRange(iv, DEFAULT_FREEZE_SCOUT_ACCURACY, seed).{low,high}`**, iv = the persisted `session.players[playerId].iv`, `DEFAULT_FREEZE_SCOUT_ACCURACY` = a NEW named constant (use **70**; §11/§13 sim-tune). RATIONALE: the displayed in-draft range used `scoutPriceOpinion × chemistryFit`, and chemistryFit depends on the team's roster-chemistry AT THE MOMENT OF NOMINATION — NOT reconstructable post-hoc without replaying the whole draft. So the freeze reconstructs an iv-centered range with a default accuracy (deterministic, robust). [JK OPEN-DECISIONs: (a) use per-team scout accuracy `getScoutProfilesForLeague(leagueId)` → `scoutsByTeamId[winnerTeamId]?.accuracyByPosition?.[primaryPosition]` ?? default; (b) the bulletproof fix = persist the displayed range at draft-resolve — a larger auction-path change, deferred/RB-16.]
+- **(D-7b-3) graceful no-op:** if there is no MLB auction session (snake draft / incomplete / not found) → SKIP seeding entirely (leave the default-50 behavior untouched), no throw. (Mirrors RB-4's auction-gated pattern.)
+- fan-morale payroll scope = MLB-only (RB-7a default D-7a-2) — do not override.
+
+**WHAT TO BUILD:**
+1. **EDIT `src/utils/franchiseMoraleState.ts`** — add `'draft-seed'` to the `FranchiseMoraleSourceKind` union, and add an EXPORTED:
+   ```ts
+   export interface SeedFranchiseMoraleBaselineInput extends FranchiseMoraleScope {
+     targetType: FranchiseMoraleTargetType;
+     teamId?: string;        // required for 'team-fan'
+     playerId?: string;      // required for 'player'
+     value: number;          // the draft-derived starting morale (becomes baseline AND current)
+     reason?: string;
+     actorDisplayName?: string;
+     timestamp?: string;
+   }
+   export async function seedFranchiseMoraleBaseline(input: SeedFranchiseMoraleBaselineInput): Promise<ApplyFranchiseMoraleEffectResult>;
+   ```
+   Behavior: resolve the target id (teamId for team-fan, playerId for player); build the snapshot id; IDEMPOTENT — if a snapshot already EXISTS for this target AND its history contains a `sourceKind:'draft-seed'` entry, return `{status:'skipped',...}` WITHOUT overwriting (re-init safe). Otherwise write a snapshot via the EXISTING private `createSnapshot` then set `baselineValue = currentValue = clampFranchiseMorale(value)`, with ONE history entry `{sourceEventId: \`draft-seed:${targetType}:${idTarget}\`, sourceKind:'draft-seed', previousValue: 50, currentValue: clamped, delta: clamped-50, reason: input.reason ?? 'Draft-derived starting morale (§10 freeze)', actorDisplayName: input.actorDisplayName ?? 'System', timestamp}`, then `saveSnapshot`. Validate scope/target like `applyFranchiseMoraleEffect` (return `{status:'failed',blockers}` on missing identity). REUSE the private helpers — do NOT duplicate snapshot/persistence logic. This write is NOT flag-gated.
+2. **NEW pure `src/utils/draftFreezeInputs.ts`** — a pure adapter (no IO):
+   ```ts
+   export interface DraftFreezePlayerMeta { personality: string | undefined; modifiers: HiddenModifiers; }
+   export const DEFAULT_FREEZE_SCOUT_ACCURACY = 70; // §11/§13 sim-tune (D-7b-2)
+   export function buildDraftFreezeInputs(args: {
+     mlbSession: AuctionSession | null;
+     farmSession: AuctionSession | null;
+     metaByPlayerId: ReadonlyMap<string, DraftFreezePlayerMeta>;
+     defaultScoutAccuracy?: number;
+   }): DraftFreezePlayerInput[];
+   ```
+   For each session (mlb→tier 'MLB', farm→tier 'FARM'), iterate `session.results` IN ORDER; keep only `disposition==='SOLD'` with non-null `winnerTeamId` + `salary`; get `iv = session.players[playerId]?.iv` (skip the player if absent/≤0 — cannot price a range); `scoutRange = perceivedValueRange(iv, defaultScoutAccuracy ?? DEFAULT_FREEZE_SCOUT_ACCURACY, \`freeze:${playerId}\`)` → `{low, high}`; `meta = metaByPlayerId.get(playerId)` (if absent → personality undefined + neutral-50 modifiers `{loyalty:50,ambition:50,resilience:50,charisma:50}`); push `{playerId, teamId: winnerTeamId, tier, settledSalary: salary, scoutRange:{low,high}, personality, modifiers}`. Output MLB results then farm results (preserves per-tier won order for `computeDraftFreeze`). Imports allowed: `../engines/draftFreeze` (types), `../engines/auctionStateMachine` (AuctionSession type), `../engines/scoutValueRange` (perceivedValueRange), `../types/game` (HiddenModifiers). NO store/IO/Date/random.
+3. **EDIT `src/utils/franchiseInitializer.ts`** — inject the seed step between :661 and :663:
+   - `const mlbSession = await getAuctionSession(config.league, 1);` — if `!mlbSession?.session` → SKIP the whole step (D-7b-3).
+   - `const farmSession = await getAuctionSessionById(createFarmAuctionSessionId(config.league, 1));`
+   - `const metaByPlayerId = new Map(hiddenModifierBackfill.players.map(p => [p.id, { personality: p.personality, modifiers: p.hiddenPersonalityModifiers ?? {loyalty:50,ambition:50,resilience:50,charisma:50} }]));`
+   - `const inputs = buildDraftFreezeInputs({ mlbSession: mlbSession.session, farmSession: farmSession?.session ?? null, metaByPlayerId });`
+   - `const freeze = computeDraftFreeze(inputs);`
+   - `const scope = { franchiseId, seasonId: initialSeasonId, statsScopeId: initialSeasonId, seasonNumber: 1 };`
+   - `for (const pl of freeze.players) await seedFranchiseMoraleBaseline({ ...scope, targetType:'player', playerId: pl.playerId, value: pl.startingMorale });`
+   - `for (const tm of freeze.teams) await seedFranchiseMoraleBaseline({ ...scope, targetType:'team-fan', teamId: tm.teamId, value: tm.startingFanMorale });`
+   - Wrap the whole step so a non-fatal failure does NOT abort franchise creation IF that matches the existing init resilience pattern — but a genuine seed write error SHOULD surface; ground the surrounding try/catch (the outer try at :582 cleans up on throw). Prefer: let it run inside the existing try; it is gated on a valid session so the happy path is safe. Do NOT swallow errors silently.
+4. **TESTS:** (a) `src/utils/tests/draftFreezeInputs.test.ts` (or the repo's util-test location) — SOLD filtering + won order preserved, MLB-before-farm tier tagging, iv→range via perceivedValueRange, missing-iv skip, missing-meta neutral fallback. (b) extend/add a `franchiseMoraleState` seed test — `seedFranchiseMoraleBaseline` writes baseline=current=value (clamped), idempotent (second call → 'skipped', value unchanged), validates missing target. (c) if a franchise-init integration/smoke test exists that exercises `initializeFranchise`, ensure it still passes (update any partial mocks to expose the new imports — see FAILURE PROTOCOL).
+
+**SAVED-SHAPE DISCIPLINE (this is the safety-wall ticket — the make-or-break):**
+- **NO trackerDb change.** This ticket writes ONLY the existing `kbl-franchise-morale` DB (v1) via additive snapshot writes. It creates NO new store and bumps NO version. `TRACKER_DB_VERSION` stays **25**; the version-pin test `src/utils/tests/franchiseSeasonLedgerStorage.test.ts` (`expect(TRACKER_DB_VERSION).toBe(25)` + the 42-store list) MUST stay green UNTOUCHED.
+- Do NOT add a `settledSalary` field anywhere (that is RB-7c). Do NOT change any persisted record SHAPE in trackerDb. The morale snapshot shape is unchanged (only a new sourceKind enum value + a new write path).
+- Idempotent + re-init safe (the seed skips if already seeded).
+
+**CONSTRAINTS:** edit ONLY `franchiseMoraleState.ts` + `franchiseInitializer.ts`; create ONLY `draftFreezeInputs.ts` + the test file(s). Do NOT edit `draftFreeze.ts`/`draftMorale.ts`/`draftFanMorale.ts`/`scoutValueRange.ts`/`trackerDb.ts`/any store schema. FROZEN oracle `spec-docs/reference/iv_oracle.json` READ-ONLY. Branch-only — do NOT commit, do NOT push.
+
+**VERIFICATION (report ACTUAL output):**
+- `cd /Users/johnkruse/Projects/kbl-mode1 && export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" && NODE_ENV= npx tsc -b` → exit 0.
+- **FULL Mode-1 suite** `NODE_ENV= npx vitest run` (NOT a scoped run — franchiseInitializer is widely imported ⇒ transitive-import-mock-break risk). Report the "Test Files"/"Tests" summary + the FAILED-FILE LIST (read the failed files, NOT the exit code). Baseline = the ONLY hard fail is `wpaRuntimeBoundary` (`GameTrackerLaunchState`/`AwardsWatchlist` are documented intermittent order-flakes that pass solo). Must be ZERO NEW REDS.
+- `git -C /Users/johnkruse/Projects/kbl-mode1 status --short` → only the 4 contracted paths.
+
+**FORMAT:** report every changed path, the tsc result, the FULL-suite summary + failed-file list, and the measurement defaults encoded.
+
+**FAILURE PROTOCOL / STOP-IF:**
+- If a partial-mock test file breaks at module-load with "No <X> export" because franchiseInitializer now imports `getAuctionSession`/`createFarmAuctionSessionId`/`computeDraftFreeze`/`buildDraftFreezeInputs`/`seedFranchiseMoraleBaseline` — that is the known transitive-import-mock-break; FIX it by adding the missing export(s) as test-only mock stubs in the offending test file's `vi.mock(...)` (do NOT change production code to satisfy a mock). This is allowed beyond the 4 contracted paths (test files only).
+- If implementing requires a trackerDb version bump or any new store → STOP (this is a safety wall; a bump means the design is wrong for this ticket).
+- If implementing requires changing a persisted record SHAPE in trackerDb → STOP.
+- If `computeDraftFreeze` / `perceivedValueRange` / the morale-state private helpers differ from the signatures above → STOP and report the real signature.
+- If `AuctionPlayer` has no `iv`, or the session shape differs → STOP and report.
+- If the frozen oracle would change → STOP.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-7b ===== -->
