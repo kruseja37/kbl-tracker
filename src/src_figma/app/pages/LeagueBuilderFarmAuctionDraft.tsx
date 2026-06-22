@@ -8,6 +8,7 @@ import {
   type BoardPriorityGap,
   type DraftBoardEntry,
 } from "../components/DraftRosterBoard";
+import { AuctionCoachBanner } from "../components/AuctionCoachBanner";
 import { LongPressReveal } from "../components/LongPressReveal";
 import { useFarmAuctionDraft } from "../hooks/useFarmAuctionDraft";
 import { normalizeToChemistryCode, type ChemistryCode } from "../../../data/chemistryCanonical";
@@ -611,6 +612,8 @@ export function LeagueBuilderFarmAuctionDraft() {
               <h2 className="font-bold text-lg">STATE: {session?.state ?? "SETUP"}</h2>
               {session && <div className="text-sm text-[#E8E8D8]/60">Seed {session.config.nominationOrderSeed}</div>}
             </div>
+
+            <AuctionCoachBanner tier="farm" state={session?.state ?? "SETUP"} />
 
             {!session && (
               <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4 text-[#E8E8D8]/80">
