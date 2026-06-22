@@ -243,8 +243,8 @@ describe('effectiveRatings T6 pure engine', () => {
     expect(TWO_WAY_ARM_BY_TIER).toEqual({ L1: 60, L2: 80, L3: 99 });
     expect(TWO_WAY_USAGE).toBe(1);
     expect(POTENCY_SCALE).toEqual({
-      positives: { L1: 0.5, L2: 1.0, L3: 2.0 },
-      standardInverted: { L1: 2.0, L2: 1.0, L3: 0.5 },
+      positives: { L1: 0.5, L2: 1.0, L3: 3.0 },
+      standardInverted: { L1: 3.0, L2: 1.0, L3: 0.5 },
     });
     expect(PITCHER_ASSUMED_ARM).toBe(99);
     expect(TWO_WAY_TRAIT_POSITION).toEqual({ 'Two Way (C)': 'C', 'Two Way (IF)': 'IF', 'Two Way (OF)': 'OF' });

@@ -38,13 +38,22 @@ export const TWO_WAY_ARM_BY_TIER: Record<PotencyTier, number> = { L1: 60, L2: 80
 /** §12/D15 JK ruling: Two Way holders unlock 1.00 usage on all hitter attributes. */
 export const TWO_WAY_USAGE = 1.00;
 
-/** §12 JK ruling 2026-06-10: IV potency scales trait deltas around L2 neutrality. */
+/**
+ * §12 JK ruling 2026-06-10: IV potency scales trait deltas around L2 neutrality.
+ * Strong tier corrected 2.0→3.0 (JK 2026-06-22): the canonical valuation source
+ * (XBL Test Texas Rangers workbook `ImportedTraits`) ramps positives 0.5/1.0/3.0
+ * and negatives 3.0/1.0/0.5 — verified cell-for-cell (Cannon Arm 23/45/135, Tough
+ * Out 5/10/30, Whiffer 8/15/45). The prior 2.0 matched the BillyYank guide's loose
+ * "x1/x2/x4" wording, not the workbook the IV logic was built from. DORMANT today
+ * (all ivEngine/effectiveRatings callers run at L2; oracle pins only L2 → no re-bless).
+ * See spec-docs/CHEMISTRY_TRAIT_POTENCY_VALUATION_SPEC.md §2.5/§9.7.
+ */
 export const POTENCY_SCALE: {
   positives: Record<PotencyTier, number>;
   standardInverted: Record<PotencyTier, number>;
 } = {
-  positives: { L1: 0.5, L2: 1.0, L3: 2.0 },
-  standardInverted: { L1: 2.0, L2: 1.0, L3: 0.5 },
+  positives: { L1: 0.5, L2: 1.0, L3: 3.0 },
+  standardInverted: { L1: 3.0, L2: 1.0, L3: 0.5 },
 };
 
 /**
