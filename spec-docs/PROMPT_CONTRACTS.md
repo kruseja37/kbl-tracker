@@ -16256,3 +16256,118 @@ state machine → STOP.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-3b ===== -->
+
+<!-- ===== CONTRACT: RB-4 (MLB→farm budget carryover — the §4.5 one-way valve) ===== -->
+**ROUTE:** Codex (gpt-5.5) CLI | xhigh reasoning effort
+**ROLE:** Mode-1 auction data/logic builder. Implement the §4.5 MLB→farm budget carryover (one-way valve): each GM
+carries a fraction (default 50%) of their UNSPENT MLB auction budget into their OWN farm-auction wallet. ADDITIVE
+only — no DB/schema/oracle/state-machine change.
+
+**GOAL:** when the farm auction initializes, each team's farm `budgetRemaining` = its self-calibrating farm tier cap
+(unchanged) PLUS `max(0, that team's unspent MLB budget) × MLB_TO_FARM_CARRYOVER_PCT (0.5)`. Per-team (team A's MLB
+leftovers fund ONLY team A's farm). One-directional + timing-enforced (the farm runs AFTER MLB; there is structurally
+no farm→MLB path). Strategic intent (§4.5): blow your MLB budget → enter the farm poor → draft scouted-scrubs.
+
+**SOURCE OF TRUTH:** AUCTION_DRAFT_SPEC_V2 §4.5 (verbatim: "Unspent MLB budget → farm budget, × a carryover %
+(default 50%, sim-tunable §11)"; "One-directional, timing-enforced: the farm runs after MLB") + §11 (carryover %
+default 50, sweep 30/50/70).
+
+**GROUNDED ANCHORS (re-read at source in /Users/johnkruse/Projects/kbl-mode1):**
+- MLB unspent is authoritative from the PERSISTED MLB auction session, per team:
+  `getAuctionSession(leagueId)` (`src/utils/leagueBuilderStorage.ts:1669`, default `seasonNumber=1` = MLB_AUCTION_SEASON)
+  → `row.session.teams[].budgetRemaining` (`AuctionTeamState`, `auctionStateMachine.ts:27-29`). The engine decrements
+  `budgetRemaining` by the WINNING SALARY (bid) on each sale (`auctionStateMachine.ts:428`) ⇒ at completion
+  `budgetRemaining` = unspent CASH. **The RB-3 luxury tax does NOT reduce it** (the tax only caps `auctionMaxBid` via
+  `projectedTax`; `budgetRemaining` drops ONLY on actual wins). ⇒ **READ the session's `budgetRemaining`; do NOT
+  re-derive unspent from rosters/pool salaries** (settled salary = winning bid, not pool salary — only the session
+  reflects it).
+- Read unspent ONLY when MLB is COMPLETE: gate on `row.session.state === 'AUCTION_COMPLETE'` (`AuctionSession.state`,
+  `auctionStateMachine.ts:76-77`; literal at `:19`). If the MLB session is MISSING (snake-draft MLB, or none yet) →
+  `null` → carryover 0 (graceful; snake has no budget concept — do NOT throw).
+- Farm wallet seam: `src/utils/farmAuctionWallet.ts` `buildFarmAuctionTeamInputs` (:49-65) sets
+  `budgetRemaining = max(0, farmTierCap − committedFarmSalaries)` per team (same `farmTierCap` for all). This is where
+  the carryover gets ADDED.
+- Farm session builder: `src/utils/farmAuctionSession.ts` `buildFarmAuctionSession` maps `BuildFarmAuctionSessionInput.teams[]`
+  (:17-30) → `buildFarmAuctionTeamInputs` by EXPLICITLY picking `{teamId, farmRosterPlayerIds, committedFarmSalaries}`
+  at :53-60 ⇒ you MUST add `mlbBudgetCarryover` to that mapping or it is dropped.
+- The hook seam: `src/src_figma/app/hooks/useFarmAuctionDraft.ts` `buildFarmAuctionTeams` (:151-189) builds the per-team
+  `{teamId, teamName, farmRosterPlayerIds, committedFarmSalaries}` list. `team.id`/`teamId` = the league team id, the
+  SAME id space as the MLB session's `teams[].teamId` (the per-team join). It is already `async` and runs at
+  `initFarmAuction` (call site ~:392, `leagueId` in scope) AND the resume path (call site ~:347, `leagueId` in scope).
+  Both call sites forward the returned `teams` array WHOLE into `buildFarmAuctionSession({... teams ...})` (~:356, ~:414)
+  ⇒ adding `mlbBudgetCarryover` onto the returned team objects propagates to both. The hook already imports from
+  `leagueBuilderStorage` (:23-30) — add `getAuctionSession`.
+- **Resume safety (do NOT break):** the resume path consumes `row.session` budgets DIRECTLY
+  (`autoAdvanceCpu(row.session,…)`, ~:373); `buildFarmAuctionTeams`'s output on resume feeds ONLY the display-pool
+  `regen` (~:353), whose team budgets are discarded. So applying carryover in `buildFarmAuctionTeams` is correct at
+  init and INERT on resume (no double-count). Carryover is deterministic (the MLB session is frozen post-completion).
+  Do NOT change how the resume path uses `row.session` budgets.
+
+**MAKE-OR-BREAK:**
+1. **PER-TEAM:** each team's farm `budgetRemaining = max(0, farmTierCap − committedFarmSalaries) + max(0,
+   mlbUnspent[thatTeam]) × 0.5`. Team A's MLB leftovers fund ONLY team A's farm — never league-pooled, never another
+   team's wallet.
+2. **ONE-WAY + TIMING:** carryover reads the persisted MLB session ONLY when `state === 'AUCTION_COMPLETE'`;
+   missing/incomplete/snake MLB → 0 carryover (graceful, no throw). No farm→MLB path is created.
+3. **ADDITIVE / NO SAVED-SHAPE BREAK:** `budgetRemaining` already exists on the team input/state AND the persisted
+   session blob — only the numeric VALUE changes. NO new persisted field, NO trackerDb version bump, NO store/schema
+   change; the farm session still round-trips. `MLB_TO_FARM_CARRYOVER_PCT = 0.5` is a NAMED exported constant marked
+   `// RB-16 sim-tune §11 (sweep 30/50/70)`.
+4. Frozen IV oracle (`spec-docs/reference/iv_oracle.json`) + canonical IV/salary/reserve/bidding + the MLB hook + the
+   auction state machine all UNTOUCHED.
+
+**WHAT TO BUILD:**
+1. `src/utils/farmAuctionWallet.ts`:
+   - Export `MLB_TO_FARM_CARRYOVER_PCT = 0.5` (comment: RB-16 sim-tune §11, sweep 30/50/70).
+   - Export a PURE helper `computeMlbToFarmCarryover(unspent: number, pct = MLB_TO_FARM_CARRYOVER_PCT): number`
+     = `Number.isFinite(unspent) ? Math.max(0, unspent) * pct : 0` (negative/NaN unspent → 0).
+   - Extend `BuildFarmAuctionTeamInputsInput.teams[]` with optional `mlbBudgetCarryover?: number`.
+   - In `buildFarmAuctionTeamInputs`: `budgetRemaining = Math.max(0, input.farmTierCap − committedFarmSalaries) +
+     Math.max(0, team.mlbBudgetCarryover ?? 0)`.
+2. `src/utils/farmAuctionSession.ts`: add optional `mlbBudgetCarryover?: number` to `BuildFarmAuctionSessionInput.teams[]`;
+   forward it in the `buildFarmAuctionTeamInputs` mapping (:53-60).
+3. `src/src_figma/app/hooks/useFarmAuctionDraft.ts`:
+   - Import `getAuctionSession` from `leagueBuilderStorage`.
+   - Thread `leagueId` into `buildFarmAuctionTeams`'s input (add the param; pass it from BOTH call sites — `leagueId` is
+     already in scope at each).
+   - In `buildFarmAuctionTeams`: load the MLB session ONCE (`const mlbSession = await getAuctionSession(leagueId)`),
+     build `mlbUnspentByTeamId` from `mlbSession?.session.state === 'AUCTION_COMPLETE' ? mlbSession.session.teams : []`
+     (`Map(teamId → budgetRemaining)`), and set each returned team's
+     `mlbBudgetCarryover: computeMlbToFarmCarryover(mlbUnspentByTeamId.get(team.id) ?? 0)`. Update the return type to
+     include `mlbBudgetCarryover: number`.
+4. Tests:
+   - `src/utils/tests/farmAuctionWallet.test.ts`: `computeMlbToFarmCarryover` (0.5×unspent; negative/0/NaN → 0; custom
+     pct) + `buildFarmAuctionTeamInputs` ADDS the carryover to `budgetRemaining` per team (and is unchanged when
+     `mlbBudgetCarryover` absent).
+   - `src/utils/tests/farmAuctionSession.test.ts`: `mlbBudgetCarryover` threads through into the session team budgets.
+   - `src/src_figma/app/hooks/__tests__/useFarmAuctionDraft.test.ts`: with a persisted COMPLETE MLB auction session in
+     storage carrying per-team unspent budgets, a fresh `initFarmAuction` yields each team's farm budget =
+     farmTierCap + that team's unspent×0.5 (correct per-team join); with NO MLB session (or a non-COMPLETE one) → no
+     carryover. Reuse the existing test's storage-mock pattern.
+
+**CONSTRAINTS:**
+- Edit ONLY: `src/utils/farmAuctionWallet.ts`, `src/utils/farmAuctionSession.ts`,
+  `src/src_figma/app/hooks/useFarmAuctionDraft.ts`, and the 3 test files above. Do NOT touch the MLB hook, the pages,
+  the auction state machine, `leagueBuilderStorage` (read-only via the existing `getAuctionSession`), persistence
+  schema/trackerDb, or the frozen oracle. Branch-only; no commit/push.
+- Read the MLB session's `budgetRemaining` (do NOT re-derive). Gate on `AUCTION_COMPLETE`.
+
+**EXPECTED OUTPUT:** per-team farm budgets seeded with 50% of each GM's unspent MLB budget; missing/snake/incomplete
+MLB → no carryover; additive (no DB/shape change); frozen oracle untouched.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` exit 0; `NODE_ENV= npx vitest run src/utils/tests/farmAuctionWallet.test.ts
+src/utils/tests/farmAuctionSession.test.ts src/src_figma/app/hooks/__tests__/useFarmAuctionDraft.test.ts` green. Paste
+ACTUAL output. (Opus re-runs the FULL Mode-1 suite + confirms zero-new-reds.)
+
+**FORMAT:** 1) changed paths + total; 2) confirm per-team carryover (not pooled) + the `AUCTION_COMPLETE` gate + reads
+the session `budgetRemaining` (not re-derived) + additive (no DB/shape/version change) + farm-only + oracle untouched;
+3) ACTUAL tsc + vitest output; 4) "RB-4 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL (STOP-IF):** if adding the carryover requires a trackerDb version bump, a NEW persisted field on the
+auction-session row, or any session storage-schema change → STOP and report (saved-shape wall). If the persisted MLB
+session does NOT expose per-team `budgetRemaining` (or it isn't the unspent cash at completion) → STOP and quote what
+it exposes. If threading `leagueId` into `buildFarmAuctionTeams` requires touching files beyond the 3 listed → STOP and
+describe. If the frozen oracle or the auction state machine would change → STOP.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-4 ===== -->
