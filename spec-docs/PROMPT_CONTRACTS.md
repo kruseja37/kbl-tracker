@@ -16851,3 +16851,61 @@ calc.** It has NO v1 consumer (bookkeeping/audit for future display + valuation)
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-7c ===== -->
+
+<!-- ===== CONTRACT: RB-8a ===== -->
+# CONTRACT RB-8a — GM identity ENTITY + additive persistence (the saved-shape core; NO UI, NO reporter)
+
+**ROUTE:** Codex 5.5 | xhigh reasoning effort. Worktree `/Users/johnkruse/Projects/kbl-mode1` [`codex/mode1-v1`]. Branch-only — do NOT commit/push.
+
+**ROLE:** You are the Mode-1 builder. Add a **GM identity entity** that is structurally **parallel to the manager profile** and persist it **additively** on the franchise config/metadata. This is the first of three RB-8 sub-tickets (8a = entity+persistence, this; 8b = the FranchiseSetup naming UI; 8c = fire-authority + reporter voicing — NOT in scope here).
+
+**GOAL (one sentence):** Define a `GmProfile` type (parallel to `ManagerProfile`), give every franchise a named GM at franchise-init (user-chosen name if provided, else a deterministic generated SMB4-style default), and persist it additively on the franchise config + metadata — with **ZERO** trackerDb or kbl-app-meta DB-version bump.
+
+**SOURCE OF TRUTH:** `AUCTION_DRAFT_SPEC_V2.md` §8 (GM identity): "A GM is a distinct entity, structured **parallel to the manager profile** (name, tenure, history), but sits **ABOVE** the manager … the **user IS the GM** (first-person) — exists in the ecosystem with a **name** (their own or chosen). One GM per team. Do NOT merge the roles." Also §13 item 7 (JK CONFIRMED: "separate entity, data model parallels the manager profile, sits above the manager with fire-manager authority").
+
+**GROUNDED ANCHORS (re-verified at source by the Captain — trust these; re-read before editing):**
+- `ManagerProfile` shape to PARALLEL — `src/types/managerWpa.ts:92`: `{ managerId, displayName, gender?, age?, hometown?, createdByUser, defaultManager, managementStyle?, tenureRecords? }`. `ManagerTenureRecord` `:83` `{ teamId, mode, instanceId, hireDate?, endDate, endReason }`.
+- The deterministic-default-name pattern to MIRROR — `src/utils/managerIdentityStorage.ts:173 buildDefaultManagerProfile`: `pickBySeed(SMB4_FIRST_NAMES, seed)` + `pickBySeed(SMB4_LAST_NAMES, seed)`; `pickBySeed`(:62)/`hashStringToUint32`(:53) are **PRIVATE (NOT exported)** — you must INLINE an equivalent tiny deterministic FNV-1a hash + modulo pick (do NOT export the manager's private helpers; do NOT use `Math.random`/`Date` — the default name must be deterministic from the seed). `SMB4_FIRST_NAMES`/`SMB4_LAST_NAMES` ARE exported from `src/data/smb4NameDatabase.ts` (`generateRandomName` there uses `Math.random` — do NOT use it).
+- `FranchiseConfig` (in-memory setup) — `src/types/franchise.ts:133`; `franchiseName` at `:177`. `StoredFranchiseConfig extends FranchiseConfig` — `:185` (persisted to kbl-app-meta `franchiseConfigs`).
+- `FranchiseMetadata` — `src/utils/franchiseManager.ts:33` (persisted to kbl-app-meta `franchiseList`); `updateFranchiseMetadata` Pick at `:356-358` currently allows only `leagueName|leagueId|controlledTeamId|controlledTeamName|currentSeason`.
+- kbl-app-meta DB — `franchiseManager.ts:76-77` `META_DB_NAME='kbl-app-meta'`, `META_DB_VERSION=3`. Stores created in `initMetaDatabase` onupgradeneeded (`:118-138`). **Adding a FIELD to a record is schemaless in IndexedDB → NO version bump.**
+- Init injection point — `src/utils/franchiseInitializer.ts:581 initializeFranchise`: step 4 `:610-613` sets `controlledTeamId`/`controlledTeamName`; step 5 `:616 updateFranchiseMetadata(...)`; step 6 `:646-662` builds `storedConfig: StoredFranchiseConfig = { ...config, …, franchiseId, createdAt }` then `saveFranchiseConfig(storedConfig)` `:662`.
+- Version-pin SAFETY — `src/utils/tests/franchiseSeasonLedgerStorage.test.ts:278` `expect(TRACKER_DB_VERSION).toBe(25)` + `:281` the 43-store list (`:28-73`). kbl-app-meta is a SEPARATE DB and is NOT in that list ⇒ your additive kbl-app-meta record fields do NOT touch this test.
+
+**MAKE-OR-BREAK (the audit will check exactly these):**
+1. **NO DB version bump anywhere.** `TRACKER_DB_VERSION` stays **25**; `META_DB_VERSION` stays **3**; no new store in any DB; the version-pin test stays green. GM data rides EXISTING kbl-app-meta records as additive optional fields.
+2. The GM is a real **entity parallel to `ManagerProfile`** (a `GmProfile` interface), NOT a bare string.
+3. Every franchise gets a GM with a non-empty `displayName` after init: user-chosen `config.gmName` if present/non-blank (then `createdByUser:true`), else a **deterministic** generated SMB4 name seeded on `franchiseId` (then `createdByUser:false`). Same `franchiseId` ⇒ same default name across reloads.
+4. Reads back: `getGmProfile(franchiseId)` returns the persisted GM after init.
+
+**EXPECTED OUTPUT (exact edits):**
+1. **`src/types/franchise.ts`** — ADD (additive only):
+   - `export interface GmTenureRecord { teamId: string; startDate?: string; endDate?: string; endReason?: 'replaced' | 'relocated'; }` (forward-compat; parallels `ManagerTenureRecord` — NOT populated in v1).
+   - `export interface GmProfile { gmId: string; displayName: string; createdByUser: boolean; teamId?: string; tenureRecords?: GmTenureRecord[]; }` (parallels `ManagerProfile`; `gmId`↔`managerId`, `createdByUser` mirrors the manager flag; no `defaultManager` analog needed for a single user-GM).
+   - Add optional `gmName?: string;` to `FranchiseConfig` (the user's chosen name, set by RB-8b's UI later; undefined for now).
+   - Add optional `gm?: GmProfile;` to `StoredFranchiseConfig`.
+2. **`src/utils/gmIdentity.ts`** (NEW, pure-ish module):
+   - `export function buildGmProfile(input: { franchiseId: string; controlledTeamId?: string; gmName?: string }): GmProfile` — `gmId = ` + "`${input.franchiseId}-gm`" + ` (mirrors ` + "`${teamId}-manager`" + `); if `input.gmName?.trim()` → `displayName = input.gmName.trim()`, `createdByUser:true`; else INLINE a deterministic FNV-1a `hashStringToUint32` + `pickBySeed(SMB4_FIRST_NAMES, ` + "`${franchiseId}:gm:first`" + `)` / `…:gm:last` → `displayName = ` + "`${first} ${last}`" + `, `createdByUser:false`; `teamId: input.controlledTeamId`. No async, no `Math.random`/`Date`.
+   - `export async function getGmProfile(franchiseId: string): Promise<GmProfile | null>` — `const cfg = await getFranchiseConfig(franchiseId)` (import from `./franchiseManager`); return `cfg?.gm ?? null`.
+3. **`src/utils/franchiseManager.ts`** — additive: add `gmName?: string;` to `FranchiseMetadata` (`:33`); add `'gmName'` to the `updateFranchiseMetadata` `Pick<FranchiseMetadata, …>` union (`:358`). Nothing else.
+4. **`src/utils/franchiseInitializer.ts`** — wire (mirror the RB-7b additive pattern): after step 4 (controlledTeamId known, ~`:614`), `const gmProfile = buildGmProfile({ franchiseId, controlledTeamId, gmName: config.gmName })` (import from `./gmIdentity`); add `gmName: gmProfile.displayName` to the step-5 `updateFranchiseMetadata({...})` object (`:616-622`); add `gm: gmProfile,` to the step-6 `storedConfig` object literal (`:646-661`, before `saveFranchiseConfig`). Do NOT touch the RB-7b step-8.5 morale block or any other step.
+5. **`src/utils/__tests__/gmIdentity.test.ts`** (NEW) — non-vacuous: (a) `buildGmProfile` with a `gmName` → `displayName===gmName.trim()`, `createdByUser:true`, `gmId===` + "`${fid}-gm`" + `; (b) without `gmName` → non-empty `displayName`, `createdByUser:false`, and DETERMINISM (two calls with the same `franchiseId` give the SAME `displayName`; a different `franchiseId` may differ); (c) blank/whitespace `gmName` falls through to the generated default (`createdByUser:false`). (Persistence round-trip via `getGmProfile`/init is covered by the FULL suite; if you can unit-test `getGmProfile` against a fake-indexeddb config save, add it, else the suite covers the wiring.)
+
+**CONSTRAINTS:** edit ONLY the 5 paths above (4 edits + `gmIdentity.ts` new + the new test) (+ test-only mock stubs ONLY if a partial-mock test breaks at module-load on the new `gmIdentity`/`franchiseInitializer` imports — see FAILURE PROTOCOL). Do NOT add/alter any IndexedDB store or bump any DB version. Do NOT create a new DB (no `kbl-gm-identity` — v1 GM rides the franchise config; this is a Captain ruling). Do NOT touch the reporter, FranchiseSetup UI, manager firing, the RB-7b morale block, `salary`/value calc, or the frozen IV oracle (`spec-docs/reference/iv_oracle.json` — READ-ONLY).
+
+**VERIFICATION (report ACTUAL output):**
+- `cd /Users/johnkruse/Projects/kbl-mode1 && export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" && NODE_ENV= npx tsc -b` → exit 0.
+- FULL Mode-1 suite `NODE_ENV= npx vitest run` — report "Test Files"/"Tests" lines + the FAILED-FILE LIST (read the LIST, not the RC; the characterized `wpaRuntimeBoundary` makes the RC nonzero). Baseline sole hard fail = `wpaRuntimeBoundary`; `GameTrackerLaunchState`/`AwardsWatchlist` are intermittent order-flakes that pass SOLO — if either appears, re-run it solo and say so. ZERO NEW REDS required.
+- `git -C /Users/johnkruse/Projects/kbl-mode1 status --short` → only the contracted paths.
+
+**FORMAT:** (1) every changed path + total count; (2) each change w/ the §8 / anchor ref; (3) tsc result; (4) the full-suite "Test Files"/"Tests" summary + the failed-file LIST; (5) "RB-8a complete" OR "BLOCKED: <exact reason>".
+
+**FAILURE PROTOCOL / STOP-IF:**
+- If implementing this would require a trackerDb or kbl-app-meta DB-version bump or a new store/DB → **STOP** and report (this is a saved-shape wall — do NOT bump).
+- If a partial-`vi.mock` test of `franchiseInitializer` breaks at module-load because of the new `./gmIdentity` import (the transitive-import-mock-break pattern) → add the minimal **test-only** mock stub (export the new symbol on the existing mock) — report it as a changed path; do NOT alter production code to satisfy a mock.
+- If an existing test does an exact `toEqual` on the whole `FranchiseMetadata`/`StoredFranchiseConfig` and the additive field breaks it → report it (do NOT delete the assertion; the field is additive-optional so update the fixture minimally if clearly correct, else STOP and report).
+- If any anchor above does not match the actual source → STOP and quote the discrepancy; do NOT guess.
+- Never touch the frozen oracle. Never commit/push.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-8a ===== -->
