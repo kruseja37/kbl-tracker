@@ -18097,3 +18097,101 @@ modal so the GM's choice persists on `LeagueTemplate.draftFormat` — the §9 fo
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-13a ===== -->
+
+<!-- ===== CONTRACT: RB-14 ===== -->
+# CONTRACT RB-14 — Prospect POSITION_POOL fix: drive primary position from the §3.3 weight table (add SP/RP, correct weights)
+
+**ROUTE:** Codex 5.5 (gpt-5.5) | xhigh reasoning effort
+**ROLE:** Builder (Codex). Opus 4.8 audits the real diff (builder≠auditor). Worktree
+`/Users/johnkruse/Projects/kbl-mode1-b`, branch `codex/mode1-v1-b`. Branch-only — NEVER commit/push.
+
+**GOAL (one sentence):** Replace the coarse 16-slot uniform `POSITION_POOL` in the prospect generator with
+a WEIGHTED draw from the ruled §3.3 position-distribution table — which (a) ADDS the missing `SP/RP`
+swingman role (currently 0% generated) and (b) corrects the off-oracle weights (today SP≈25%, CF≈12.5%).
+
+**SOURCE OF TRUTH — PROSPECT_GENERATION_SPEC §3.3 (RULED 2026-06-20 E; embedded verbatim; spec on docs
+branch, ABSENT here):**
+> §3.3 Position Distribution — NO DH/UTIL; pitchers = {SP, SP/RP, RP, CP}.
+> ```
+> const POSITION_WEIGHTS = {
+>   'SP': 18, 'SP/RP': 6, 'RP': 13, 'CP': 4,         // pitcher roles — SP/RP is a single combined swingman role
+>   'C': 9, '1B': 7, '2B': 8, 'SS': 7, '3B': 6,
+>   'LF': 8, 'CF': 7, 'RF': 7,                         // the 8 SMB4 fielding positions
+> };
+> ```
+> Weights track the real-pool primary spread; ≈41% pitchers / 59% position players. DH/UTIL removed
+> (neither is a valid SMB4 primary or secondary). `SP/RP` is the combined swingman role (NOT SP-primary +
+> RP-secondary), pitchers carry NO secondary.
+(Cross-ref DECISIONS_LOG: "POSITION_POOL broken: missing SP/RP entirely (the RB-14 gap → 0% swingmen) +
+off-oracle weights. Fix: drive position selection from the §3.3 weight table via pickWeighted.")
+
+**GROUNDED ANCHORS (Captain read these at source; RE-READ before building):**
+- `src/utils/prospectScoutingDraftEngine.ts:276-289` — the CURRENT coarse pool (NO `SP/RP`):
+  ```ts
+  const POSITION_POOL: DraftPosition[] = [
+    'SP','SP','SP','SP','RP','RP','CP','C','1B','2B','SS','3B','LF','CF','CF','RF',
+  ];
+  ```
+- The CONSUMER — `src/utils/prospectScoutingDraftEngine.ts:1002`:
+  `const position = pick(\`${seed}:position\`, POSITION_POOL);` (uniform `pick`).
+- The weighted helper ALREADY exists — `src/utils/prospectScoutingDraftEngine.ts:538`:
+  `function pickWeightedValue<T>(seed: string, weights: Array<[T, number]>): T` (used at line 567 for
+  secondary positions). Reuse it.
+- `DraftPosition` includes `'SP/RP'` (line 39) and `'DH'` (line 37). The §3.3 table EXCLUDES DH (keep DH out —
+  "no DH" is VERIFIED-CORRECT per DECISIONS_LOG, do NOT add it).
+
+**CONSTRAINTS:**
+- EDIT ONLY: `src/utils/prospectScoutingDraftEngine.ts` + `src/utils/tests/prospectScoutingDraftEngine.test.ts`.
+- Do NOT touch: the grade model / inverse-solver (§3.2 VERIFIED-CORRECT), chemistry, traits, handedness,
+  secondary-position logic, determinism plumbing, the frozen oracle, any other file.
+- Behavior-preserving EXCEPT the intended position-distribution change. Determinism preserved (same seeded
+  `pickWeightedValue` machinery already used elsewhere).
+
+**EXPECTED OUTPUT — `prospectScoutingDraftEngine.ts`:**
+1. Replace the `POSITION_POOL` array with a weighted table:
+   ```ts
+   const POSITION_PRIMARY_WEIGHTS: Array<[DraftPosition, number]> = [
+     ['SP', 18], ['SP/RP', 6], ['RP', 13], ['CP', 4],
+     ['C', 9], ['1B', 7], ['2B', 8], ['SS', 7], ['3B', 6],
+     ['LF', 8], ['CF', 7], ['RF', 7],
+   ];
+   ```
+   (Exactly the §3.3 table. NO `DH`. Sums to 100.)
+2. Line 1002: `const position = pickWeightedValue(\`${seed}:position\`, POSITION_PRIMARY_WEIGHTS);` (keep the
+   SAME seed string `\`${seed}:position\`` so only the SELECTION METHOD changes).
+3. Remove the now-unused `POSITION_POOL` (and, if `pick` becomes unused anywhere, leave it — do not chase
+   unrelated cleanup; only remove `POSITION_POOL` if nothing else references it — grep first).
+
+**EXPECTED OUTPUT — test (`prospectScoutingDraftEngine.test.ts`):**
+- A distribution test: using the engine's EXISTING public generation path (reuse whatever helper the test
+  file already uses to generate a pool), generate a LARGE deterministic sample (e.g. a pool / repeated
+  generation across enough seeds to get ≥300 prospects), tally `primaryPosition`, and assert:
+  - `SP/RP` count > 0 (the RB-14 gap is closed — was 0).
+  - `DH` count === 0 (no DH ever generated).
+  - the empirical distribution roughly tracks §3.3 — at minimum: SP is the most common pitcher role, and the
+    pitcher share (SP+SP/RP+RP+CP) is in a sane band (≈0.30–0.52) around the ruled ≈0.41. Use tolerant bands
+    (this is a sampled distribution) — do NOT pin exact counts.
+- Keep it deterministic (fixed seeds) so it isn't flaky.
+
+**VERIFICATION (run in the worktree; paste output):**
+- `cd /Users/johnkruse/Projects/kbl-mode1-b && export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" && NODE_ENV= npx tsc -b` → exit 0 (paste tail).
+- `NODE_ENV= npx vitest run src/utils/tests/prospectScoutingDraftEngine.test.ts src/utils/tests/prospectChemistryRebalance.test.ts` → all pass (paste summary). (Captain runs the FULL suite.)
+- `git status --short` (expect the 2 edited files).
+
+**FORMAT:** 1) files changed (paths + line counts); 2) the engine diff; 3) the test additions; 4) tsc result;
+5) focused test results; 6) `git status --short`.
+
+**FAILURE PROTOCOL / STOP-IF:**
+- If line 1002 / the `POSITION_POOL` def / `pickWeightedValue` signature do NOT match the anchors → STOP and
+  quote the real code.
+- If an EXISTING test pins the OLD position distribution (a specific seed → a specific primaryPosition, or
+  "no SP/RP") such that the weighted change breaks it → STOP and quote it (we'll decide whether to update that
+  characterized assertion).
+- If changing `pick`→`pickWeightedValue` at 1002 requires touching the secondary-position or any other
+  generation step → STOP and quote (scope is ONLY the primary-position draw).
+- If a contracted **CODE anchor (`src/…` file:line)** mismatches → STOP and quote it. (PROSPECT_GENERATION_SPEC
+  being ABSENT from this worktree is EXPECTED, NOT a stop.)
+- Never touch the grade model / oracle / other files. Never commit/push. Branch-only.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-14 ===== -->
