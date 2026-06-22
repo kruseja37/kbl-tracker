@@ -2,6 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { ArrowLeft, CheckCircle2, Gavel, RefreshCw, ShieldAlert, UserCheck } from "lucide-react";
 
+import {
+  DraftRosterBoard,
+  FARM_BOARD_TARGET,
+  type DraftBoardEntry,
+} from "../components/DraftRosterBoard";
 import { useFarmAuctionDraft } from "../hooks/useFarmAuctionDraft";
 import { normalizeToChemistryCode, type ChemistryCode } from "../../../data/chemistryCanonical";
 import {
@@ -248,6 +253,27 @@ export function LeagueBuilderFarmAuctionDraft() {
   const currentRosterTally = useMemo(
     () => rosterPositionTally(currentBidderTeamState, prospectById),
     [currentBidderTeamState, prospectById],
+  );
+  const rosterBoardTeamState = useMemo(() => {
+    if (currentBidderTeamState) return currentBidderTeamState;
+    const humanTeam = leagueData.teams.find((team) => team.controlledBy === "human");
+    return humanTeam ? teamStateById.get(humanTeam.id) ?? null : null;
+  }, [currentBidderTeamState, leagueData.teams, teamStateById]);
+  const rosterBoardEntries = useMemo<DraftBoardEntry[]>(() => (
+    (rosterBoardTeamState?.roster ?? []).map((assignment) => {
+      const prospect = prospectById.get(assignment.playerId);
+      return {
+        id: assignment.playerId,
+        name: prospectDisplayName(prospect),
+        primaryPosition: prospect?.primaryPosition ?? "Unknown",
+        secondaryPosition: prospect?.secondaryPosition,
+        salary: assignment.salary,
+      };
+    })
+  ), [prospectById, rosterBoardTeamState]);
+  const rosterBoardPayroll = useMemo(
+    () => rosterBoardEntries.reduce((sum, entry) => sum + entry.salary, 0),
+    [rosterBoardEntries],
   );
   const latestResult = session?.results.at(-1) ?? null;
 
@@ -728,6 +754,16 @@ export function LeagueBuilderFarmAuctionDraft() {
               )}
             </div>
           </section>
+        )}
+
+        {session && (
+          <DraftRosterBoard
+            tier="farm"
+            entries={rosterBoardEntries}
+            target={FARM_BOARD_TARGET}
+            payroll={rosterBoardPayroll}
+            walletRemaining={rosterBoardTeamState?.budgetRemaining ?? null}
+          />
         )}
       </div>
     </div>

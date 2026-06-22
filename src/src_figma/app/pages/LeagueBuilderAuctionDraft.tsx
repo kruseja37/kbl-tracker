@@ -7,6 +7,11 @@ import {
   teamDisplayName,
   useAuctionDraft,
 } from "../hooks/useAuctionDraft";
+import {
+  DraftRosterBoard,
+  MLB_BOARD_TARGET,
+  type DraftBoardEntry,
+} from "../components/DraftRosterBoard";
 import { reservePriceCurve } from "../../../data/rosterEngineConstants";
 import {
   getTeamAuctionMaxBid,
@@ -132,6 +137,27 @@ export function LeagueBuilderAuctionDraft() {
   const currentRosterTally = useMemo(
     () => rosterPositionTally(currentBidderTeamState, playerById),
     [currentBidderTeamState, playerById],
+  );
+  const rosterBoardTeamState = useMemo(() => {
+    if (currentBidderTeamState) return currentBidderTeamState;
+    const humanTeam = leagueData.teams.find((team) => team.controlledBy === "human");
+    return humanTeam ? teamStateById.get(humanTeam.id) ?? null : null;
+  }, [currentBidderTeamState, leagueData.teams, teamStateById]);
+  const rosterBoardEntries = useMemo<DraftBoardEntry[]>(() => (
+    (rosterBoardTeamState?.roster ?? []).map((assignment) => {
+      const player = playerById.get(assignment.playerId);
+      return {
+        id: assignment.playerId,
+        name: playerDisplayName(player),
+        primaryPosition: player?.primaryPosition ?? "Unknown",
+        secondaryPosition: player?.secondaryPosition,
+        salary: assignment.salary,
+      };
+    })
+  ), [playerById, rosterBoardTeamState]);
+  const rosterBoardPayroll = useMemo(
+    () => rosterBoardEntries.reduce((sum, entry) => sum + entry.salary, 0),
+    [rosterBoardEntries],
   );
   const latestResult = session?.results.at(-1) ?? null;
 
@@ -611,6 +637,16 @@ export function LeagueBuilderAuctionDraft() {
               )}
             </div>
           </section>
+        )}
+
+        {session && (
+          <DraftRosterBoard
+            tier="mlb"
+            entries={rosterBoardEntries}
+            target={MLB_BOARD_TARGET}
+            payroll={rosterBoardPayroll}
+            walletRemaining={rosterBoardTeamState?.budgetRemaining ?? null}
+          />
         )}
       </div>
     </div>
