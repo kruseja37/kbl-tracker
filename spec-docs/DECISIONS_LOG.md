@@ -7,6 +7,13 @@
 
 ## June 2026
 
+### 2026-06-22 (attended): Trait MEASUREMENT — window, trend factor, peer cohorts — RULED
+
+**Context:** JK validated the stickiness/early-loss balance + asked about the measurement basis. → `TRAIT_GAIN_LOSS_THRESHOLD_SPEC.md §4A`.
+- **Window = season-to-date AGGREGATE base** + a **MODERATE trend tilt** (recent-since-last-checkpoint vs aggregate): trending up → easier gain/harder loss; down → vice versa. Neutral at CP1 (no prior) so it can't worsen early loss. (Anchor = aggregate; responsiveness = trend.)
+- **Peer cohorts:** hitters-vs-hitters / pitchers-vs-pitchers ALREADY built (never mixed); **Two-Way already ranks the pitcher's bat vs the PITCHER pool** (the Shohei case — `traitCandidateBuilder.ts:101-107`), no artificial inflation. **NEW: separate SP-vs-SP / RP-vs-RP** (RP = SP/RP-no-starts + RP + CP) for pitching-trait percentiles, with **all-pitcher fallback** when a cohort is below the min-peer-pool valve.
+- **Early-loss validated SAFE:** min-sample valve keeps held traits dormant at CP1 (no early loss); valuable tiers need a near-total collapse (Rare bottom-22% / Elite bottom-12%); loss probabilistic; trend neutral at CP1. Drafted valuable traits protected early, not impossibly sticky over a real decline.
+
 ### 2026-06-22 (attended): Trait RESOLUTION / selection layer — value-weighted, probabilistic, incumbency — RULED
 
 **Context:** JK flagged that the threshold model only answers "does each trait qualify" — missing the SELECTION layer (which traits land when several qualify + the 2-cap; how incumbents defend slots). Dig `wlfqzli7h` confirmed the layer is BUILT (`reconcileGainProposals`, `traitAcquisition.ts:375-437`) + was SPECCED (Fable-era `FRANCHISE_V1_LIVING_SEASON_SPEC §9` → `TRAIT_SIGNAL_CERTIFICATION §VI.0` → `TRAIT_MEASUREMENT_SPEC §0.1`), but is **purely performance-P with NO value term and NO incumbency**, plus a real cap-collision bug. → design folded into `TRAIT_GAIN_LOSS_THRESHOLD_SPEC.md §8B`.

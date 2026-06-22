@@ -47,6 +47,20 @@ As value rises: gainThreshold ↑ (harder to earn), lossThreshold ↓ (stickier)
 - **RULED: NO age effect in v1** — gain/loss is performance-only. (SMB4 natively drifts skills by age; age-gating is a documented v2 enhancement.)
 - **League-config caps honored** (workbook LeagueSettings): max 2 traits/player, ≤3 positives per negative, no 2 negatives on one player, no bench negatives — the existing reconciler skips cap-violating proposals.
 
+## 4A. Measurement — window, trend factor, peer cohorts (RULED 2026-06-22)
+**Window — base = season-to-date AGGREGATE.** The base signal `P` is the player's aggregate percentile (stable — what he's done all year). This is the anchor; it's what kept stickiness safe but slow.
+
+**Trend factor — RULED: moderate.** A multiplicative tilt from **recent form (since the last checkpoint) vs the aggregate**: trending UP (recent > aggregate) → eases gain + resists loss; trending DOWN → eases loss + resists gain. Moderate, bounded multiplier (sim-tunable). **Neutral at checkpoint 1** (no prior checkpoint to compare) ⇒ cannot worsen early loss. This is the responsiveness layer over the stable aggregate: a genuinely *declining* star can eventually shed a trait (so it's not impossibly sticky) and a *surging* youngster earns one faster — without cheap single-streak flips.
+
+**Peer cohorts — the percentile basis.** `P` ranks the player within a ROLE-APPROPRIATE pool (the scorer is cohort-agnostic; the caller supplies the pool):
+- **Hitters vs hitters, pitchers vs pitchers — never mixed** (role-eligibility + role-specific signal pools). CONFIRMED already built.
+- **Cross-role signals use the player's OWN role cohort:** Two-Way = the pitcher's batting wOBA vs the **PITCHER** pool (already built, `traitCandidateBuilder.ts:101-107`) — an elite-hitting pitcher stands out *among pitchers* (the Shohei case), not drowned by every hitter. No artificial inflation, bar not impossibly high.
+- **RULED — separate SP vs RP cohorts:** pitching-trait percentiles rank starters vs starters and relievers (SP/RP-with-no-starts + RP + CP) vs relievers, so short-burst reliever rate stats aren't compared to starter workloads. **Fall back to the full pitcher pool when a league's SP or RP cohort is below the min-peer-pool valve** (avoids noisy small-cohort percentiles). (Today pitchers are ONE cohort — this is the refinement.)
+
+**Early-loss protection (validates "don't lose drafted traits cheaply"):** the **min-sample valve** keeps a held trait DORMANT until enough PA/IP — at CP1 (20%) most players haven't cleared it → no early loss; valuable tiers have a low loss bar (Rare bottom-22%, Elite bottom-12% — needs a near-total collapse); loss is probabilistic; the trend factor is neutral at CP1. Net: drafted valuable traits are safe through the early season but not impossibly sticky over a real decline.
+
+**Build:** trend factor = a new multiplicative term in `buildProposalBase` (alongside the existing personality/morale tilts), sourced from a NEW since-last-checkpoint vs season-aggregate signal (the engine must track the recent window). SP/RP split = filter the peer-pool construction in the candidate builder/caller by pitcher sub-role (gamesStarted) with the min-peer-pool fallback. Both additive; the aggregate base + role cohorts already exist.
+
 ## 5. Generation rarity — the same scale weights prospect trait selection
 Replaces the current **uniform** pick. `genWeight = (1 − traitWeight)` (per-tier values in §3). Two-Way `traitWeight ≈ 1.0` → `genWeight ≈ 0.05` (Elite floor) ⇒ **rare top-end, NOT excluded** (JK 2026-06-22). Selection = weighted random over the eligible pool (respect the workbook hitter/pitcher/both eligibility gate), two passes: (1) polarity per slot at `NEGATIVE_TRAIT_FRACTION = 0.27`; (2) weighted draw within polarity. Excluded entirely (priced for salary, no gain/loss, never generated): **Sign Stealer, Stimulated**.
 
