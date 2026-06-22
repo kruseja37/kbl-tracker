@@ -56,10 +56,17 @@
 > MLB archetype; the auction had been ignoring it). (2) Farm-archetype **DUAL identity → DEFERRED to RB-9** (its §3.5 scout-tilt consumer; farm wallet
 > tax-neutral). (3) Full **§5.3 EV-flatness cross-identity harness → DEFERRED to RB-16** (sim-validation; T3 verified the property at tierCap) — RB-3a
 > shipped a fit-discrimination sanity test instead of a heavy best-roster optimizer.
-> **➡ NEXT (AUTH-4): `/kbl-captain` → RB-4 (MLB→farm budget carryover, V2 §4.5)** — one-way valve: unspent MLB budget × carryover% (default 50%,
-> sim-tunable §11) → the farm wallet; timing-enforced (farm runs AFTER MLB). Small data/logic ticket. Ground at source: the MLB auction's final
-> unspent-budget read at completion + how the farm wallet (`farmAuctionWallet.ts`/`buildFarmAuctionSession`) is seeded + the MLB→farm sequencing
-> (AUC-5.1d-3). Then … RB-18.
+> **🎉 RB-4 (MLB→farm budget carryover) COMPLETE (WAVE 63, `217ed234`, `codex/mode1-v1`, branch-only, ZERO-NEW-REDS).** The §4.5 one-way valve is
+> LIVE: each GM carries **50%** (`MLB_TO_FARM_CARRYOVER_PCT`, RB-16 sim-tune §11) of their OWN unspent MLB budget into their OWN farm wallet. ADDITIVE —
+> reads the persisted MLB session's per-team `budgetRemaining` (authoritative unspent cash; the luxury tax never reduces it) gated on MLB
+> `AUCTION_COMPLETE`; per-team join by teamId (never pooled); missing/snake/incomplete MLB → 0; NO new persisted field / NO trackerDb / NO schema change;
+> MLB hook + auction state machine + frozen oracle untouched. Suite **488 files / 8012 tests, sole hard fail `wpaRuntimeBoundary`** (+ the
+> `GameTrackerLaunchState` order-flake, verified passes SOLO 9/9).
+> **➡ NEXT (AUTH-4): `/kbl-captain` → RB-5 (player morale from draft, V2 §6/§3.7) — MOSTLY REUSE.** The morale engine
+> `masterMoraleMatrix.composeMoraleConsequence` (`src/engines/masterMoraleMatrix.ts:445`; `MORALE_TUNING:175`) is ALREADY BUILT. RB-5 = (a) define the
+> draft as morale EVENTS (drafted-early/high; overpaid/underpaid vs scout range — early=commitment dominates), (b) feed them through
+> `composeMoraleConsequence` with each player's personality+modifiers, (c) seed the result as starting morale for the freeze (§10 — wired later by RB-7).
+> Careful SOUL-LAYER ticket: extract the §6 measurement VERBATIM + surface any ambiguity (no inference). Needs fresh grounding. Then RB-6 … RB-18.
 > **OPEN (verify at RB-16):** the §2.3 surplus pool-sizing (pool ≥ total slots) lives upstream in the pool builder; the RB-2b-1 forced-filler
 > guarantee assumes it. **JK-BROWSER-VERIFY BATCHED
 > (persistence-prioritized):** RB-0b-1 — a real draft stamps all 3 axes onto league players + they carry into the franchise (7-type personality
