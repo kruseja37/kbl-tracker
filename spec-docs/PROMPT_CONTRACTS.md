@@ -16168,3 +16168,91 @@ requires data/ratings not available from `toConstructionPlayer` → STOP and rep
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-3a ===== -->
+
+<!-- ===== CONTRACT: RB-3b (wire the MLB luxury tax into the auction hook, per-lot) ===== -->
+**ROUTE:** Codex (gpt-5.5) CLI | xhigh reasoning effort
+**ROLE:** Mode-1 auction integration builder. Wire the RB-3a luxury-tax helper into the MLB auction hook so a team's
+`projectedTax` reflects its archetype identity + the surfaced candidate, per lot — replacing the `projectedTax: 0`
+stub. Farm stays tax-NEUTRAL (untouched). Do NOT modify the auction state machine or the snake.
+
+**GOAL:** make off-archetype bidding cost more in the MLB auction: on each surfaced lot, every eligible team's
+`projectedTax` = the would-be total luxury tax if it wins the candidate (under the team's `capIdentity`), so the
+existing `auctionMaxBid` (which already subtracts `projectedTax`) reduces off-archetype max bids. Leeway-not-a-wall.
+
+**SOURCE OF TRUTH:** AUCTION_DRAFT_SPEC_V2 §4.2 (MLB archetype → affordability via shifted luxury caps; the design is
+RATIFIED). Mirror the SNAKE's exact tax usage (it is the reference implementation).
+
+**GROUNDED ANCHORS (re-read at source in /Users/johnkruse/Projects/kbl-mode1):**
+- RB-3a helper `src/engines/auctionLuxuryTax.ts`: `computeAuctionTeamProjectedTax(committedRoster, candidate,
+  capIdentity, tier)` (tier-based; uses `LUXURY_CAP_TABLES[tier]`). **⚠ RB-3b must compute against the POOL's actual
+  `pool.luxuryCaps`, NOT a tier re-lookup** — the snake uses `shiftLuxuryCaps(pool.luxuryCaps, team.capIdentity)`
+  (LeagueBuilderSnakeDraft.tsx:113-114/317-318) and the existing hook test sets `pool.luxuryCaps: []` expecting NO
+  tax. `pool.luxuryCaps === LUXURY_CAP_TABLES[pool.tier]` in production, but honoring `pool.luxuryCaps` keeps the
+  empty-caps test green + matches the snake + survives any pool customization. ⇒ **ADD a caps-based variant** to
+  `auctionLuxuryTax.ts`: `computeAuctionTeamProjectedTaxWithCaps(committedRoster, candidate, capIdentity, baseCaps:
+  LuxuryCapRow[])` (= `luxuryTax([...roster, candidate?], capIdentity ? shiftLuxuryCaps(baseCaps, {increase,decrease})
+  : baseCaps, 'taxed').charged`); refactor the existing tier-based fn to delegate to it (`...WithCaps(..., LUXURY_CAP_TABLES[tier])`)
+  so RB-3a's tests stay green. RB-3b uses the `...WithCaps` variant with `pool.luxuryCaps`.
+- `src/engines/leagueConstruction.ts`: `toConstructionPlayer(player as Player): ConstructionPlayer` (the snake's
+  playerId→ratings mapper), `shiftLuxuryCaps`, `RegisteredPool` carries `tier: TierKey`, `luxuryCaps: LuxuryCapRow[]`,
+  `tierCap`, `players: PoolPlayerPriced[]`.
+- `src/src_figma/app/hooks/useAuctionDraft.ts`: `buildAuctionTeams` (~:124-153, the `projectedTax: 0` stub at ~:148);
+  `autoAdvanceCpu` (~:240-304) — the NOMINATION branch `next = transitionOrThrow(surfaceNextPlayer(next))` is where a
+  lot opens; the per-lot tax recompute goes RIGHT AFTER it. `runSessionTransition` (~:374), `initAuction`/`loadAuction`
+  (have the `pool`). The pool is fetched in init/load but is NOT currently stored for `autoAdvanceCpu`'s use across
+  bid/pass/advance transitions → RB-3b must STORE a tax context (poolById + identityByTeamId + `pool.luxuryCaps`) in a
+  ref/state at init/load so `autoAdvanceCpu` can recompute per lot on every path.
+- The snake's poolById pattern: `new Map((pool?.players ?? []).map(p => [p.id, p]))`; team identity = `team.capIdentity`.
+- `auctionMaxBid` (rosterEngineConstants) + the state machine already consume `team.projectedTax` (RB-2 verified) — RB-3b
+  only needs to keep `session.teams[].projectedTax` correct per lot.
+
+**MAKE-OR-BREAK:** with a non-empty `pool.luxuryCaps` and a team that has a `capIdentity`, when an OFF-archetype player
+is the surfaced lot, that team's `projectedTax` is > 0 and its `auctionMaxBid` is reduced vs the same team on an
+ON-archetype lot (the tax discriminates per candidate per lot). The recompute uses the team's LIVE session roster
+(grows as it wins) + the current candidate. With `pool.luxuryCaps: []` (the existing test fixture), `projectedTax`
+stays 0 (no behavior change → that test stays green).
+
+**WHAT TO BUILD:**
+1. `src/engines/auctionLuxuryTax.ts`: add `computeAuctionTeamProjectedTaxWithCaps(committedRoster, candidate,
+   capIdentity, baseCaps)` (caps-based) + delegate the tier-based fn to it. (Keep RB-3a's 4 tests green.)
+2. `src/src_figma/app/hooks/useAuctionDraft.ts` (MLB ONLY):
+   - Store a tax context at init/load: `{ poolById: Map<id, poolPlayer>, identityByTeamId: Map<teamId, TeamCapIdentity|undefined>,
+     baseCaps: pool.luxuryCaps }` (a ref or state, available to `autoAdvanceCpu`).
+   - Add a pure helper `applyAuctionLuxuryTaxForLot(session, ctx): session` — if `session.currentLot` is null, return
+     session unchanged; else for the candidate (`poolById.get(currentLot.playerId)` → `toConstructionPlayer`), set each
+     team's `projectedTax = computeAuctionTeamProjectedTaxWithCaps(team.roster.map(r => toConstructionPlayer(poolById.get(r.playerId) as Player)),
+     candidateConstructionPlayer, identityByTeamId.get(team.teamId), baseCaps)`. Skip/0 for teams whose roster players
+     aren't all resolvable (defensive). Return the session with updated `teams[].projectedTax`.
+   - Call it in `autoAdvanceCpu` immediately AFTER each `surfaceNextPlayer` transition (so every surfaced lot — init,
+     advance, CPU — gets taxed before any bid/maxBid). Keep `buildAuctionTeams`'s initial `projectedTax: 0` (it's
+     pre-lot; the per-lot recompute supersedes it once a lot opens) OR set it to the committed-roster tax — either is
+     fine; the per-lot value is what matters.
+   - Do NOT change the farm hook (`useFarmAuctionDraft` stays `projectedTax: 0` — farm is tax-neutral).
+3. Tests: add to `src/src_figma/app/hooks/__tests__/useAuctionDraft.test.ts` (or a focused new test) a case with a
+   non-empty `luxuryCaps` pool + a team `capIdentity` proving an off-archetype surfaced lot yields `projectedTax > 0` /
+   reduced `auctionMaxBid` for that team, while the empty-caps existing test stays green. If wiring the tax requires
+   asserting through the state machine, use `getTeamAuctionMaxBid`.
+
+**CONSTRAINTS:**
+- Edit ONLY: `src/engines/auctionLuxuryTax.ts`, `src/src_figma/app/hooks/useAuctionDraft.ts`, the MLB hook test (+ the
+  RB-3a helper test only if the delegation refactor needs it). Do NOT touch the farm hook, the pages, the auction state
+  machine, `leagueConstruction.ts`/`tierParams.ts`, persistence, or the frozen oracle. Branch-only; no commit/push.
+- Use `pool.luxuryCaps` (NOT `LUXURY_CAP_TABLES[pool.tier]`). Mirror the snake's `toConstructionPlayer(... as Player)` mapping.
+
+**EXPECTED OUTPUT:** MLB auction `projectedTax` reflects archetype + candidate per lot; off-archetype bids cost more;
+farm unchanged; empty-caps existing test green.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` exit 0; `NODE_ENV= npx vitest run src/src_figma/app/hooks/__tests__/useAuctionDraft.test.ts
+src/engines/__tests__/auctionLuxuryTax.test.ts` green. Paste ACTUAL output. (Opus re-runs the FULL Mode-1 suite + confirms zero-new-reds.)
+
+**FORMAT:** 1) changed paths + total; 2) confirm pool.luxuryCaps used (not tier re-lookup) + the per-lot recompute point +
+the tax-context storage + farm untouched + the empty-caps test stays green; 3) ACTUAL tsc + vitest output; 4) "RB-3b complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL (STOP-IF):** if `autoAdvanceCpu` can't reach the pool/identities without a larger refactor than a
+stored tax-context → STOP and describe. If using `pool.luxuryCaps` vs `LUXURY_CAP_TABLES[tier]` changes existing-test
+behavior in a way that implies a real semantic conflict → STOP and quote. If `toConstructionPlayer` can't map the
+auction pool players (shape mismatch) → STOP and report. If the per-lot recompute would need to mutate the auction
+state machine → STOP.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-3b ===== -->
