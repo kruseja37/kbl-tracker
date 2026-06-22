@@ -9,6 +9,7 @@ import {
   type AuctionResult,
   type AuctionSession,
 } from "../../../engines/auctionStateMachine";
+import { gradeToTwentyEighty, scoutPriceOpinion } from "../../../engines/scoutPriceOpinion";
 import { perceivedValueRange, type ScoutValueRange } from "../../../engines/scoutValueRange";
 import {
   scoutAccuracy,
@@ -70,6 +71,13 @@ function scoutedGrade(prospect: LeagueBuilderProspectPlayerDto | null | undefine
   return prospect?.prospectProfile.scoutedGrade ?? "N/A";
 }
 
+function scoutGradeDisplay(prospect: LeagueBuilderProspectPlayerDto | null | undefined): string {
+  const grade = scoutedGrade(prospect);
+  const storedGrade = prospect?.prospectProfile.scoutedGrade;
+  if (!storedGrade) return grade;
+  return `${grade} (${gradeToTwentyEighty(storedGrade)})`;
+}
+
 function scoutRangeForProspect(input: {
   prospect: LeagueBuilderProspectPlayerDto | null | undefined;
   auctionPlayer: AuctionPlayer | null | undefined;
@@ -79,8 +87,16 @@ function scoutRangeForProspect(input: {
 }): ScoutValueRange | null {
   const { prospect, auctionPlayer, teamId, scoutsByTeamId, seed } = input;
   if (!prospect || !auctionPlayer || !teamId) return null;
-  const accuracy = scoutAccuracy(prospect.primaryPosition as DraftPosition, scoutsByTeamId?.[teamId]);
-  return perceivedValueRange(auctionPlayer.iv, accuracy, `${seed}:${teamId}:${auctionPlayer.playerId}`);
+  const scout = scoutsByTeamId?.[teamId];
+  const accuracy = scoutAccuracy(prospect.primaryPosition as DraftPosition, scout);
+  const priceOpinion = scoutPriceOpinion({
+    trueIV: auctionPlayer.iv,
+    scoutAccuracy: accuracy,
+    scoutId: scout?.scoutId,
+    candidateId: auctionPlayer.playerId,
+    seed: `${seed}:${teamId}`,
+  });
+  return perceivedValueRange(priceOpinion, accuracy, `${seed}:${teamId}:${auctionPlayer.playerId}`);
 }
 
 function formatScoutRange(range: ScoutValueRange | null): string {
@@ -560,7 +576,7 @@ export function LeagueBuilderFarmAuctionDraft() {
                         {positionBadges(prospect)}
                       </div>
                       <div className="text-xs text-[#E8E8D8]/65">
-                        Scout grade {scoutedGrade(prospect)} · Scout value {formatScoutRange(range)}
+                        Scout grade {scoutGradeDisplay(prospect)} · Scout value {formatScoutRange(range)}
                       </div>
                     </button>
                   ))}
@@ -584,7 +600,7 @@ export function LeagueBuilderFarmAuctionDraft() {
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-[#E8E8D8]/75">
                       <div>Scout value {formatScoutRange(currentLotRange)}</div>
-                      <div>Scout grade {scoutedGrade(currentLotProspect)}</div>
+                      <div>Scout grade {scoutGradeDisplay(currentLotProspect)}</div>
                       <div>Opening {formatMoney(lot.openingAsk)}</div>
                     </div>
                   </div>

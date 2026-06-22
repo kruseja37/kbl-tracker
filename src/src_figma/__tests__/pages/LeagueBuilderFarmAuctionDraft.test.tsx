@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { reservePriceCurve } from "../../../data/rosterEngineConstants";
+import { gradeToTwentyEighty, scoutPriceOpinion } from "../../../engines/scoutPriceOpinion";
 import { perceivedValueRange } from "../../../engines/scoutValueRange";
 import { seededNominationOrder } from "../../../engines/auctionStateMachine";
 import { buildFarmAuctionSession } from "../../../utils/farmAuctionSession";
@@ -245,12 +246,16 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
       .map((playerId) => expected.session.players[playerId])
       .map((candidate) => {
         const prospect = prospectById.get(candidate.playerId)!;
-        const range = perceivedValueRange(
-          candidate.iv,
-          scoutAccuracy(prospect.primaryPosition, SCOUTS_BY_TEAM_ID["team-a"]),
-          `${seed}:team-a:${candidate.playerId}`,
-        );
-        return { candidate, prospect, range };
+        const accuracy = scoutAccuracy(prospect.primaryPosition, SCOUTS_BY_TEAM_ID["team-a"]);
+        const priceOpinion = scoutPriceOpinion({
+          trueIV: candidate.iv,
+          scoutAccuracy: accuracy,
+          scoutId: SCOUTS_BY_TEAM_ID["team-a"].scoutId,
+          candidateId: candidate.playerId,
+          seed: `${seed}:team-a`,
+        });
+        const range = perceivedValueRange(priceOpinion, accuracy, `${seed}:team-a:${candidate.playerId}`);
+        return { candidate, prospect, range, priceOpinion };
       })
       .sort((left, right) =>
         right.range.displayedEstimate - left.range.displayedEstimate ||
@@ -259,6 +264,8 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     const target = sortedCandidates[0];
     const targetName = prospectDisplayName(target.prospect);
     const targetRangeText = formatScoutRange(target.range);
+    const targetGradeText = `Scout grade ${target.prospect.prospectProfile.scoutedGrade} (${gradeToTwentyEighty(target.prospect.prospectProfile.scoutedGrade)})`;
+    const targetRangeMidpoint = (target.range.low + target.range.high) / 2;
     const expectedSalePrice = formatMoney(Math.ceil(reservePriceCurve(target.candidate.ivPercentile) * target.candidate.iv));
 
     render(<LeagueBuilderFarmAuctionDraft />);
@@ -278,9 +285,11 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     for (const position of prospectPositions(target.prospect)) {
       expect(within(targetButton).getByText(position)).toBeInTheDocument();
     }
-    expect(targetButton).toHaveTextContent(`Scout grade ${target.prospect.prospectProfile.scoutedGrade}`);
+    expect(targetButton).toHaveTextContent(targetGradeText);
     expect(targetButton).toHaveTextContent(`Scout value ${targetRangeText}`);
     expect(target.range.low).not.toBe(target.range.high);
+    expect(targetRangeMidpoint).toBeCloseTo(target.priceOpinion, 10);
+    expect(targetRangeMidpoint).not.toBe(target.candidate.iv);
     expect(targetButton).not.toHaveTextContent(formatMoney(target.candidate.iv));
     expect(targetButton).not.toHaveTextContent(/\b(POW|CON|SPD|FLD|ARM|VEL|JNK|ACC)\b/);
     expect(targetButton).not.toHaveTextContent(/Overall|True grade|Ratings/i);
@@ -293,6 +302,7 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
 
     expect(screen.getByText(targetName)).toBeInTheDocument();
     expect(screen.getByText(`Scout value ${targetRangeText}`)).toBeInTheDocument();
+    expect(screen.getByText(targetGradeText)).toBeInTheDocument();
     expect(screen.queryByText(formatMoney(target.candidate.iv))).not.toBeInTheDocument();
     expect(screen.getByText("YOUR REMAINING BUDGET")).toBeInTheDocument();
     expect(screen.getByText("YOUR MAX BID")).toBeInTheDocument();
