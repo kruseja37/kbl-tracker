@@ -17689,3 +17689,119 @@ Build small fixture sessions (you may cast minimal literals `as CpuShillAuctionS
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-10a ===== -->
+
+<!-- ===== CONTRACT: RB-10b ===== -->
+# CONTRACT RB-10b — DISSOLVE-TO-POOL enforcement: exclude CPU-shill wins from the franchise freeze (§5b)
+
+**ROUTE:** Codex 5.5 (gpt-5.5) | xhigh reasoning effort
+**ROLE:** Builder (Codex). Opus 4.8 audits the real diff (builder≠auditor). Worktree
+`/Users/johnkruse/Projects/kbl-mode1-b`, branch `codex/mode1-v1-b`. Branch-only — NEVER commit/push.
+**DEPENDS ON RB-10a (`36ac4fa0`, already committed on this branch):** consume the pure module
+`src/engines/cpuTeamRoles.ts` (`deriveShillTeamIds`).
+
+**GOAL (one sentence):** Make CPU SHILLS truly "dissolve back to the pool / excluded from the league"
+(V2 §5b) by EXCLUDING shill-team-won lots from the draft-freeze that seeds Mode-2 — so a shill team's
+wins NEVER seed franchise player-morale, fan-morale, or `settledSalary`. Today they DO (the live
+conflation bug). This is the only behavior change.
+
+**SOURCE OF TRUTH — V2 §5 (embedded verbatim; the V2 spec lives on the docs branch and is ABSENT from
+this worktree — do NOT look for it here):**
+> - CPU shills = pure bid pressure, NOT franchise teams … they are EXCLUDED from the league: their won
+>   players dissolve back to the pool ("exclude from league" — specced in V1, never built;
+>   `excludeFromLeague` is currently a no-op flag).
+> - CPU-controlled teams = real franchise teams the CPU drafts for … Their won players DO fill a real
+>   roster + enter the franchise.
+> - The rebuild must (a) separate the two concepts in config + the engine [DONE in RB-10a], and (b)
+>   implement the dissolve-to-pool for true shills [THIS TICKET].
+
+**GROUNDED ANCHORS (Captain read these at source; RE-READ them before building):**
+- The auction does NOT populate rosters; the live consumption point is the FREEZE. `franchiseInitializer.ts`
+  step 8.5 (`if (mlbSession?.session)`, around lines 682-735) reads the persisted MLB + farm auction
+  sessions (`getAuctionSession(config.league, 1)` @683, `getAuctionSessionById(createFarmAuctionSessionId(config.league, 1))`
+  @685), calls `buildDraftFreezeInputs({ mlbSession, farmSession, metaByPlayerId })` @699, then
+  `computeDraftFreeze(inputs)` @704, then seeds: `settledSalary` per existing franchise player (712-717),
+  `seedFranchiseMoraleBaseline` per `freeze.players` (player morale, 719-726) and per `freeze.teams`
+  (team-fan morale, 727-734).
+- `buildDraftFreezeInputs` — `src/utils/draftFreezeInputs.ts`. `buildSessionInputs(session, tier, …)`
+  (lines 36-79) iterates `session.results`, keeps only `disposition === 'SOLD'` with a `winnerTeamId` +
+  finite salary + finite iv, and pushes one input per kept result (`teamId: result.winnerTeamId`).
+- `computeDraftFreeze` — `src/engines/draftFreeze.ts` — derives EVERYTHING from the inputs:
+  `players`, the team set (`teamIdsInFirstSeenOrder`), per-team payroll, and the fan-morale RANKING.
+  So removing shill-team inputs removes shills from players AND from teams/fan-morale automatically.
+- `deriveShillTeamIds(session, leagueTeams)` (RB-10a, `src/engines/cpuTeamRoles.ts`) returns the
+  dissolving set = (`session.cpuShills` keys ∪ last-`cpuShillCount` of `nominationOrder`) − teams with
+  `controlledBy === 'ai'`, gated by `excludeFromLeague !== false`, filtered to `nominationOrder`. It takes
+  `CpuShillAuctionSession | null` + `readonly CpuTeamControlInfo[]` (`{ id; controlledBy? }`).
+- League-team `controlledBy`: `franchiseInitializer` ALREADY imports `getLeagueTemplate` and uses
+  `getTeam(teamId)` (see `loadScheduleTeamsForLeague` @404-427) — `getTeam` returns the full `Team` with
+  `controlledBy?: 'human' | 'ai'`. So build `leagueTeams` with NO new import from an already-mocked module.
+- The persisted `mlbSession.session` / `farmSession.session` runtime blob carries `cpuShills?`, `config`
+  (incl. `cpuShillCount`, `excludeFromLeague`), and `nominationOrder`. If TS won't accept it as
+  `CpuShillAuctionSession`, cast minimally (`as CpuShillAuctionSession`) at the call — do NOT change the
+  persisted type.
+
+**CONSTRAINTS:**
+- Edit ONLY: `src/utils/draftFreezeInputs.ts`, `src/utils/franchiseInitializer.ts`, and the tests
+  `src/utils/tests/draftFreezeInputs.test.ts` (extend) + (only if a new import into a partially-mocked
+  module forces it) `src/utils/tests/franchiseInitializer.w1fix.test.ts`.
+- Do NOT touch: `src/engines/cpuTeamRoles.ts` (RB-10a, consume only), `src/engines/draftFreeze.ts`,
+  `src/engines/cpuShillBidding.ts`, the auction hooks/pages, any storage schema / `trackerDb`, the frozen
+  oracle `spec-docs/reference/iv_oracle.json`.
+- ADDITIVE + backward-compatible: when no shills exist (empty excluded set), behavior is byte-identical to
+  today. NO new persisted field, NO DB bump, NO migration, NO saved-shape change (this only changes WHICH
+  morale baselines get seeded, not any record shape).
+
+**EXPECTED OUTPUT:**
+1. `src/utils/draftFreezeInputs.ts`:
+   - Add to the `buildDraftFreezeInputs` args two optionals: `mlbExcludedTeamIds?: ReadonlySet<string>`
+     and `farmExcludedTeamIds?: ReadonlySet<string>`.
+   - Thread each per-tier set into `buildSessionInputs(session, tier, …, excludedTeamIds)`; inside the
+     loop, `continue` (skip) when `result.winnerTeamId` is in `excludedTeamIds`. Default (undefined set)
+     → exclude nothing (byte-identical to today).
+2. `src/utils/franchiseInitializer.ts` step 8.5 (inside the existing `if (mlbSession?.session)` block):
+   - Build `leagueTeams: { id: string; controlledBy?: 'human' | 'ai' }[]` from
+     `getLeagueTemplate(config.league)` → `teamIds` → `getTeam(id)` (await; filter nulls) → `{ id, controlledBy }`.
+   - `const mlbShillIds = new Set(deriveShillTeamIds(mlbSession.session as CpuShillAuctionSession, leagueTeams));`
+   - `const farmShillIds = new Set(deriveShillTeamIds((farmSession?.session ?? null) as CpuShillAuctionSession | null, leagueTeams));`
+   - Pass `mlbExcludedTeamIds: mlbShillIds, farmExcludedTeamIds: farmShillIds` into the existing
+     `buildDraftFreezeInputs({ … })` call. Everything downstream is unchanged.
+   - Import `deriveShillTeamIds` (+ the `CpuShillAuctionSession` type if needed) from the engines layer
+     using the SAME relative-path style the file already uses for engine imports.
+3. Tests:
+   - Extend `src/utils/tests/draftFreezeInputs.test.ts`: a session where a SHILL team and a REAL team each
+     win a SOLD lot; with `mlbExcludedTeamIds = new Set([shillTeamId])` → the shill-won input is ABSENT and
+     the real-won input is PRESENT; with no excluded set → BOTH present (backward-compat). (Pure-function
+     test; no IndexedDB.)
+   - If (and only if) you add a new import to `franchiseInitializer` from a module that
+     `franchiseInitializer.w1fix.test.ts` mocks with an explicit factory, add the new export to that mock
+     so module-load doesn't break (the documented transitive-import-mock trap). `cpuTeamRoles` is pure and
+     NOT mocked → importing it needs no mock change. (`getTeam`/`getLeagueTemplate` are already imported.)
+
+**MEASUREMENT NOTE (do NOT change behavior beyond the exclusion — this is logged for JK, not for you to
+resolve):** excluding shill-won lots from the inputs compresses the within-tier won-order indices for the
+remaining real players (slot-morale is measured among real wins only). That is the chosen v1 default. Do
+NOT add any compensating re-indexing.
+
+**VERIFICATION (run these in the worktree; paste output):**
+- `cd /Users/johnkruse/Projects/kbl-mode1-b && export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" && NODE_ENV= npx tsc -b` → exit 0 (paste tail).
+- `NODE_ENV= npx vitest run src/utils/tests/draftFreezeInputs.test.ts` (+ `franchiseInitializer.w1fix.test.ts` if touched) → all pass (paste summary). (The Captain runs the FULL Mode-1 suite at the gate.)
+- Report `git status --short` (expect 2-3 changed files: the two src files + the freeze test, optionally the w1fix test).
+
+**FORMAT:** 1) files changed (paths + line counts); 2) the `draftFreezeInputs.ts` diff; 3) the
+`franchiseInitializer.ts` step-8.5 diff; 4) the test additions; 5) tsc result; 6) focused test result;
+7) `git status --short`.
+
+**FAILURE PROTOCOL / STOP-IF:**
+- If step 8.5 / `buildDraftFreezeInputs` / `buildSessionInputs` do NOT match the anchors above → STOP and
+  quote the real code.
+- If `getTeam` or `getLeagueTemplate` is NOT already imported in `franchiseInitializer` (so you'd need a new
+  import from an already-mocked module) → STOP and quote (we'll decide the import vs the leagueTeams=[] fallback).
+- If `mlbSession.session` cannot be passed to `deriveShillTeamIds` even with a cast → STOP and quote the
+  persisted session type.
+- If the exclusion would require editing `draftFreeze.ts` or any file outside the listed set → STOP and quote.
+- If a contracted **CODE anchor (`src/…` file:line)** mismatches → STOP and quote it. (The V2/DECISIONS spec
+  docs being ABSENT from this worktree is EXPECTED, NOT a stop.)
+- Never touch the frozen oracle. Never commit/push. Branch-only.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-10b ===== -->
