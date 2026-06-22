@@ -71,14 +71,15 @@
 > `src/engines/draftFanMorale.ts` (zero imports): §7 starting fan morale off neutral 50 from payroll RANK vs the median (rank-normalized `i/(N−1)`),
 > exponential penalty past the 75th/25th percentile, HIGH side 2× (30 vs 15), in-band=exactly 50, clamp [0,100], degenerate→neutral. Provably-isolated
 > new-file ticket → gated `tsc -b` 0 + the new test 8/8 (the payroll-sum data path = RB-7).
-> **➡ NEXT (AUTH-4): `/kbl-captain` → RB-7c — the tiny §10 #2 (stamp settledSalary).** RB-7 progress (WAVE 66–68): ✅ **RB-7a** (`103ac42a`)
-> = pure `draftFreeze.ts` compute engine; ✅ **RB-7b** (`bba6e1a8`) = the §10 PAYOFF LIVE — `franchiseInitializer` step 8.5 seeds Mode-2 player +
-> team-fan starting morale from the finished draft (via `seedFranchiseMoraleBaseline` + `buildDraftFreezeInputs` + `computeDraftFreeze`), OVERRIDING
-> the neutral-50 default; graceful no-op when no auction session; **NO trackerDb bump** (writes only the existing `kbl-franchise-morale` v1 DB);
-> FULL suite 491/1 (wpaRuntimeBoundary only) = zero new reds; version-pin 25 green. **RB-7c** = add an additive optional `settledSalary?: number` to the
-> franchise `Player` (no DB bump) + stamp each rostered player's auction WINNING BID at franchise-init (the freeze inputs already carry it; no v1 consumer
-> → pure bookkeeping). OPEN-DECISIONs D-7b-2 (iv-centered range w/ default accuracy 70 — chemFit range non-reconstructable; per-scout/persist-at-draft
-> flagged) + D-7b-3 (no-op when no auction) logged. Then RB-8 (GM identity) … RB-18.
+> **➡ NEXT (AUTH-4): `/kbl-captain` → RB-8 — GM identity entity (V2 §8).** 🎉 **RB-7 COMPLETE** (the whole §10 four-number freeze → Mode-2 bridge):
+> ✅ RB-7a `103ac42a` (pure `draftFreeze.ts` engine) · ✅ RB-7b `bba6e1a8` (the PAYOFF LIVE — `franchiseInitializer` step 8.5 seeds Mode-2 player + team-fan
+> starting morale from the draft, overriding the neutral-50 default) · ✅ RB-7c `1bd042e5` (additive `Player.settledSalary` stamp). All four §10 numbers
+> stamped at franchise-init checkpoint-0; **NO trackerDb bump anywhere** (TRACKER_DB_VERSION stays 25); FULL suite 493 files / 1 fail (wpaRuntimeBoundary)
+> = zero new reds. **JK OPEN-DECISIONS to review:** D-7a-1 (slot order global-within-tier) · D-7a-2 (fan payroll MLB-only) · D-7b-2 (iv-centered freeze
+> range @ default accuracy 70) · D-7c-1 (farm settledSalary deferred) · **D-7c-2 (winning bid does NOT carry into Mode-2 cap/payroll — should it?).**
+> **RB-8** = a NEW GM entity parallel to the manager profile but ABOVE it (owns roster/draft, can fire the manager); user IS the GM (named, first-person);
+> reporter names GM on roster/draft + manager on in-game. Needs grounding: the managerProfiles structure (+ tenureRecords), GM-entity home (new store vs
+> rides franchise config — saved-shape), reporter integration. Then RB-9 … RB-18.
 > **OPEN (verify at RB-16):** the §2.3 surplus pool-sizing (pool ≥ total slots) lives upstream in the pool builder; the RB-2b-1 forced-filler
 > guarantee assumes it. **JK-BROWSER-VERIFY BATCHED
 > (persistence-prioritized):** RB-0b-1 — a real draft stamps all 3 axes onto league players + they carry into the franchise (7-type personality
