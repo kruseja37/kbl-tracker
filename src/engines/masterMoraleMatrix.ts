@@ -490,11 +490,11 @@ export function composeMoraleConsequence(
     };
   }
 
-  const selfPlayerMoraleDelta = roundDelta(applyPersonalityMultiplier(
-    applyAmbitionOrResilience(base.selfPlayerMoraleDelta, modifiers),
-    personalityTuning.positiveSelfMultiplier,
-    personalityTuning.negativeSelfMultiplier,
-  ));
+  const selfPlayerMoraleDelta = applyPersonalityToSelfMoraleDelta(
+    base.selfPlayerMoraleDelta,
+    personality,
+    modifiers,
+  );
   const teamFanMoraleDelta = roundDelta(applyPersonalityMultiplier(
     base.teamFanMoraleDelta,
     personalityTuning.positiveFanMultiplier,
@@ -545,6 +545,19 @@ export function normalizePersonality(personality: string | undefined): Canonical
   }
 
   return LEGACY_PERSONALITY_RECONCILIATION[normalized] ?? 'RELAXED';
+}
+
+export function applyPersonalityToSelfMoraleDelta(
+  baseSelfDelta: number,
+  personality: string | undefined,
+  modifiers: HiddenModifiers,
+): number {
+  const tuning = MORALE_TUNING.personality[normalizePersonality(personality)];
+  return roundDelta(applyPersonalityMultiplier(
+    applyAmbitionOrResilience(baseSelfDelta, modifiers),
+    tuning.positiveSelfMultiplier,
+    tuning.negativeSelfMultiplier,
+  ));
 }
 
 function row(
@@ -730,7 +743,7 @@ function centeredModifier(value: number): number {
   return (clamped - MORALE_TUNING.scale.modifierNeutral) / MORALE_TUNING.scale.modifierRangeHalf;
 }
 
-function clampMorale(value: number): number {
+export function clampMorale(value: number): number {
   return clamp(value, MORALE_TUNING.scale.moraleMin, MORALE_TUNING.scale.moraleMax);
 }
 
