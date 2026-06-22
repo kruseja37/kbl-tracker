@@ -243,6 +243,57 @@ describe('LeagueBuilderTeams Component', () => {
       });
     });
 
+    test('round-trips farm cap identity independently through updateTeam', async () => {
+      render(<LeagueBuilderTeams />);
+      fireEvent.click(screen.getAllByTitle('Edit team')[0]);
+
+      expect(await screen.findByText('Farm Identity (Cap)')).toBeInTheDocument();
+
+      fireEvent.change(screen.getByLabelText('Farm Power priority'), {
+        target: { value: '4' },
+      });
+      fireEvent.change(screen.getByLabelText('Farm increase cap modification 1'), {
+        target: { value: 'POW' },
+      });
+      fireEvent.change(screen.getByLabelText('Farm decrease cap modification 1'), {
+        target: { value: 'ARM' },
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+      await waitFor(() => {
+        expect(mockUpdateTeam).toHaveBeenCalledWith(
+          expect.objectContaining({
+            id: 'team-1',
+            capIdentity: {
+              bandPriorities: {
+                Power: 0,
+                Contact: 0,
+                Speed: 0,
+                Defense: 0,
+                Rotation: 0,
+                Bullpen: 0,
+              },
+              increase: [],
+              decrease: [],
+            },
+            farmCapIdentity: {
+              bandPriorities: {
+                Power: 4,
+                Contact: 0,
+                Speed: 0,
+                Defense: 0,
+                Rotation: 0,
+                Bullpen: 0,
+              },
+              increase: ['POW'],
+              decrease: ['ARM'],
+            },
+          }),
+        );
+      });
+    });
+
     test('allows team abbreviations longer than four characters in edit mode', async () => {
       render(<LeagueBuilderTeams />);
       fireEvent.click(screen.getAllByTitle('Edit team')[0]);
