@@ -1,55 +1,78 @@
-HANDOFF_NEEDED — AUTH-4 Mode-1 auction REBUILD (fresh thread)
+HANDOFF_NEEDED — AUTH-4 Mode-1 PARALLEL build lane (independent of the chemistry/trait/prospect/draft rework)
 
-next_ticket: RB-9c (the §9 roster visibility board + the §3.5 farm-archetype hole-weighting TILT + the farm-archetype SETUP PICKER — the consumer/UI payoff of RB-9). SUBSTANTIAL UI sub-epic → LIKELY sub-splits (e.g. 9c-1 setup picker / 9c-2 the board component + tilt / 9c-3 the two-page mounts). Then RB-10 … RB-18 per AUCTION_REBUILD_PLAN.md.
+⚠ THIS IS THE PARALLEL LANE BATON. An ATTENDED thread (JK live) is concurrently reworking the
+chemistry / trait / prospect-generator / draft-guide cluster on branch `codex/mode1-v1` in the
+`/Users/johnkruse/Projects/kbl-mode1` worktree. To avoid the #1 failure (two workers on one branch),
+THIS lane runs on a SEPARATE branch + worktree and must NEVER touch `codex/mode1-v1` or the owned files below.
 
-WHY HAND OFF HERE: a productive session closed RB-9a + RB-9b (the scout-as-bridge ENGINE foundation) at a CLEAN seam (both branch-only zero-new-reds, no Codex build in flight). RB-9c is the heaviest RB-9 piece — new roster-board UI + the design-laden tilt presentation + a setup picker + two auction-page integrations + a JK browser-verify batch. The asymmetry rule (give the substantial fresh-grounding UI ticket a FULL-budget thread) + the context-handoff protocol both say: hand RB-9c to a fresh thread. (This is exactly how RB-8 → RB-9 was handed to the prior thread.)
+next_ticket: RB-17 (deprecate playerMorale.ts — isolated cleanup, ZERO overlap), then RB-15 (resume = persist
+farm DTOs/storylines), then RB-10 (CPU shill ↔ CPU-team split + dissolve). Pick the first that grounds cleanly;
+SKIP any ticket whose grounding shows it must touch an OWNED file (below) and move to the next.
 
-branch / worktrees (Shape A — single Captain):
-- Docs / contracts / ledger: /Users/johnkruse/Projects/kbl-tracker  [codex/franchise-v1-next]
-- Mode-1 BUILD worktree:     /Users/johnkruse/Projects/kbl-mode1     [codex/mode1-v1] (own node_modules)
+YOUR BRANCH / WORKTREE (do NOT use the attended thread's kbl-mode1 / codex/mode1-v1):
+- BUILD here: /Users/johnkruse/Projects/kbl-mode1-b  [branch codex/mode1-v1-b]  (forked off codex/mode1-v1 @ 956fd15d)
+  - Its node_modules is being `npm install`ed now (log /tmp/mode1b-npm-install.log); confirm it finished before gating.
+- Docs/contracts/ledger: /Users/johnkruse/Projects/kbl-tracker [codex/franchise-v1-next] — BUT the attended thread
+  is ALSO committing docs there. To avoid a docs-branch race: write your contract for each ticket to PROMPT_CONTRACTS.md
+  and commit it, but KEEP YOUR LEDGER NOTES in a clearly-separate WAVE block and `git pull --rebase`-free (single repo,
+  same branch) — COORDINATE: stage ONLY your contract/ledger lines BY PATH, and if a docs commit races, retry the commit
+  (do not force). If docs-branch contention is painful, write your per-ticket notes into a NEW file
+  `spec-docs/PARALLEL_LANE_LOG.md` (yours alone) instead of AUTONOMOUS_RUN_LOG.md to fully decouple.
 
-ORIENT FIRST (read, do NOT trust summaries): AUTONOMOUS_RUN_LOG.md WAVE 73–74 (the full RB-9 arc — the 6-agent recon, the 9a/9b/9c split, every OPEN-DECISION + the saved-shape grounding correction); CURRENT_STATE live header (NEXT = RB-9c + the RB-9a/9b OPEN-DECISIONS for JK); AUTONOMOUS_RUN_PROTOCOL.md (AUTH-4 + the 4 safety walls); SESSION_RULES.md (soul-layer no-inference + surface-ambiguity + the NEW pending-pen lesson on two-worktree contract grounding). Restate phase/last/next, then PROCEED (AUTH-4 = standing go).
+⛔ OWNED BY THE ATTENDED THREAD — DO NOT EDIT (these are the chemistry/trait/prospect/draft cluster in flux):
+  src/data/rosterEngineConstants.ts (POTENCY_SCALE) · src/data/traitPricing.ts · src/data/chemistryCanonical.ts ·
+  src/engines/ivEngine.ts · src/engines/effectiveRatings.ts · src/engines/chemistryFitValue.ts ·
+  src/engines/farmArchetypeProfile.ts · src/engines/scoutValueRange.ts · src/engines/scoutPriceOpinion.ts ·
+  src/engines/smb4PlayerGenerator.ts · src/engines/smb4TeamProfileEngine.ts · src/utils/prospectScoutingDraftEngine.ts ·
+  src/utils/rosterAnalyzerDraftAdapter.ts · src/engines/rosterAnalyzerEngine.ts ·
+  src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx · LeagueBuilderAuctionDraft.tsx · LeagueBuilderTeams.tsx
+  ⚠ src/utils/leagueBuilderStorage.ts is SHARED (both lanes may touch it) — if your ticket needs it, touch ONLY your
+    ticket's section, keep edits minimal + additive, and expect a later merge reconcile.
+⛔ FORBIDDEN TICKETS (the attended cluster): RB-9 (a/b/c — scout-as-bridge + roster board + farm archetype),
+  RB-11 (scout-privacy UI), RB-13 (format-picker — touches LeagueBuilderTeams), RB-14 (prospect POSITION_POOL),
+  RB-16 (sim-tune — depends on chemistry/trait magnitudes). RB-12 (guided UX) touches the auction pages → also SKIP.
 
-DONE this session (all branch-only on codex/mode1-v1, zero-new-reds each; docs on codex/franchise-v1-next):
-- 🔬 RB-9 GROUNDED (6-agent recon wftp6qozm + Captain personal re-reads) + SPLIT 9a/9b/9c.
-- ✅ RB-9a `2c67bcbf` (WAVE 73) — `+ 'draft_prep'` on `RosterAnalyzerSurface` (additive enum; surface is a passthrough LABEL, behavior comes from INPUT) + NEW pure `src/utils/rosterAnalyzerDraftAdapter.ts` (`buildDraftAnalyzerInput`/`analyzeDraftRoster`, minimal self-contained `DraftAnalyzerMlbEntry`/`FarmEntry` DTOs) mapping the GM's in-progress won MLB+farm roster → the EXISTING `analyzeRoster` (REUSE, NOT a parallel hole-detector). MLB ratings VISIBLE, farm ratings OBSCURED + scout signal on `optionState`. salary DISABLED in the `draft_prep_read_only_v1` preset. Build-DARK (no UI consumer yet — that's RB-9c).
-- ✅ RB-9b `475fed15` (WAVE 74) — additive `farmCapIdentity?: TeamCapIdentity` on the leagueBuilder `Team` (DUAL identity, peer to MLB `capIdentity`; `kbl-league-builder` v8 record field, NO version bump, V6-migration round-trip test green) + NEW pure `src/engines/farmArchetypeProfile.ts` (`bandPrioritiesToTargetProfile` band-priorities → `Smb4TeamProfileLevels` target; the bridge `composeIdentity` lacks; Power/Contact/Speed/Rotation/Bullpen mapped, Defense DROPPED — no smb4 category; `FARM_ARCHETYPE_TARGET_TUNING {baseLevel:3,spread:3}` sim-tunable). Build-DARK.
+ELIGIBLE TICKETS (independent — safe for this lane), per AUCTION_REBUILD_PLAN.md:
+- RB-17 (cleanup): deprecate the DEAD `playerMorale.ts` — retire PERSONALITY_BASELINES/getBaselineMorale/
+  getPlaceholderMorale; PRESERVE + PORT the 4 display helpers (toSuperscript/getMoraleColor/getMoraleState/
+  getMoraleDisplay) to a `src_figma` UI util; then delete the dead file + `src/components/GameTracker/PlayerNameWithMorale.tsx`
+  + its test. Sole importer is the UNROUTED PlayerNameWithMorale (grounded 2026-06-21). ZERO cluster overlap.
+- RB-15 (persistence, small): switch farm resume from regenerate-on-seed to persist the DTOs+storylines (additive, no DB bump).
+  ⚠ touches farm session persistence — GROUND it does NOT require editing LeagueBuilderFarmAuctionDraft.tsx (owned); if it does, SKIP.
+- RB-10 (rework): separate pure-pressure CPU shills (dissolve-to-pool / exclude-from-league) from opt-in CPU-controlled
+  franchise teams (§5). Touches cpuShillBidding.ts + team-control — NOT the owned files; OK.
 
-RB-9c GROUNDING ALREADY DONE (ground at SOURCE in kbl-mode1 to confirm, but this is verified — Captain personal reads + recon wftp6qozm):
-- **The §9 board is NEW UI.** The existing analyzer panels — `FranchiseRosterAnalyzerPanel` (inline `src/src_figma/app/components/TeamHubContent.tsx:6624-6697`) + `BuilderRosterAnalyzerPanel` (inline `src/src_figma/app/pages/LeagueBuilderRosters.tsx:573-624`) — render the report as advisory TEXT CHIPS (MLB/FARM/TRUST + top-3 findings), NOT a per-position roster grid. They are a STYLE reference (the read-only-analyzer aesthetic), not a reusable board. The §9 "glanceable MLB+farm rosters with gaps highlighted" board must be authored (a new component); both panels are inline-local (not exported) — extract or write fresh.
-- **Reuse the ENGINE, render the report:** RB-9c calls `analyzeDraftRoster(input)` (RB-9a, `src/utils/rosterAnalyzerDraftAdapter.ts`) → the position_coverage/rotation/bullpen/farm_options findings ARE the gap data (highlight slots from `report.findings[kind==='position_coverage']`). Do NOT re-derive holes.
-- **The §3.5 TILT (design-laden — AUTH-4 documented default):** weight the holes by the GM's farm archetype. Reuse RB-9b `bandPrioritiesToTargetProfile(farmCapIdentity.bandPriorities)` → target levels; `calculateTeamProfile(wonPlayers)` (smb4TeamProfileEngine.ts:176) → current; `compareTeamProfiles(current, target)` (:237) → negative `byCategory[c].levelDelta` = the archetype-priority gaps ("your power is below your power-identity target"). Present holes ORDERED/colored by archetype priority. The position→category mapping for batting holes (C/1B/SS/OF → power/contact/speed) is the ambiguous bit — take a documented conservative default (e.g. surface the category-level archetype gaps alongside the position holes; order position holes by severity then archetype lean) + flag for JK. Defense band has no smb4 category (RB-9b D-9b-2) — defensive holes ride position_coverage only.
-- **In-progress roster (the adapter's input source):** `session.teams.find(t => t.teamId===gmTeamId).roster` (`AuctionRosterAssignment[]` {playerId,salary}) on the `CpuShillAuctionSession` returned by `useAuctionDraft` (MLB) / `useFarmAuctionDraft` (farm; also `.pool`). NO `gmTeamId` helper exists — derive `Team.controlledBy==='human'` (leagueBuilderStorage.ts:132). id→record: MLB via `playerById` from `leagueData.players`; FARM via `prospectById` from `auction.pool.prospects` (DIFFERENT lookups — branch). Map each won {playerId,salary} → a `DraftAnalyzerMlbEntry`/`FarmEntry` (RB-9a DTOs) and call `analyzeDraftRoster`.
-- **Mount points:** `src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx` (MLB; grid-cols-[360px_1fr]; mount a persistent board as a new full-width <section> after the LOT LOG ~line 614, OR a 3rd column) + `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx` (farm; after LOT LOG ~line 731). NO persistent roster board exists today.
-- **Scout-JOIN (§3.5 "the scout values the fillers"):** the farm page ALREADY shows the scout range per prospect via `scoutRangeForProspect` (RB-1 pattern, `LeagueBuilderFarmAuctionDraft.tsx:74-95` → `scoutPriceOpinion(...)×chemFit` then `perceivedValueRange(...)`). The JOIN is PRESENTATION: surface the analyzer-identified holes ALONGSIDE the scout-valued surfaced prospect (mark "fills your [position] hole, priority high"). Do NOT add a new valuator.
-- **Farm-archetype SETUP PICKER:** mirror the MLB `capIdentity` picker — the ONLY place capIdentity is collected is `src/src_figma/app/pages/LeagueBuilderTeams.tsx` (per-team: import composeIdentity :43, TeamCapIdentity :48, capIdentity field :123, composeIdentity call :721). Add a peer "farm archetype" band-priority picker writing `Team.farmCapIdentity` (RB-9b's field). Watch the franchise-copy-is-test-characterized gotcha — grep LeagueBuilderTeams test files before editing copy.
+ORIENT FIRST (read, do NOT trust summaries): AUTONOMOUS_RUN_LOG.md WAVE 73–74 (RB-9 arc) + the latest waves;
+CURRENT_STATE live header; AUTONOMOUS_RUN_PROTOCOL.md (AUTH-4 + the 4 safety walls); SESSION_RULES.md (incl. the
+pending-pen lesson: EMBED spec text INLINE in contracts + scope STOP-IF to `src/…` anchors — the V2 specs are NOT in
+the worktree). AUCTION_REBUILD_PLAN.md (your eligible ticket rows). Restate phase/last/next, then PROCEED (AUTH-4 = standing go).
 
-SUITE BASELINE (kbl-mode1, codex/mode1-v1 @ 475fed15): FULL suite = 496 files (495 pass / 1 fail), 8059 tests (8058 pass / 1 fail). The ONLY characterized hard fail = `wpaRuntimeBoundary.test.ts`. `GameTrackerLaunchState.test.tsx` + `AwardsWatchlist.test.tsx` are documented INTERMITTENT ORDER-FLAKES (pass SOLO) — if either appears, verify solo, don't count it. ZERO-NEW-REDS = after your ticket the only hard failed file is wpaRuntimeBoundary.
-
-PER-TICKET LOOP: GROUND ANCHORS AT SOURCE first (re-read every file:line). CONTRACT → PROMPT_CONTRACTS.md wrapped in `<!-- ===== CONTRACT: RB-9c... ===== -->` markers (ROUTE/ROLE/GOAL/SOURCE-OF-TRUTH/grounded anchors/MAKE-OR-BREAK/CONSTRAINTS [exact files; frozen oracle read-only; branch-only]/EXPECTED/VERIFICATION/FORMAT/STOP-IF + "Use xhigh reasoning effort").
-⚠ TWO-WORKTREE CONTRACT-GROUNDING LESSON (captured this session, SESSION_RULES pending pen, commit 6b4b42e9): the V2 specs (AUCTION_DRAFT_SPEC_V2.md, AUCTION_REBUILD_PLAN.md) live on codex/franchise-v1-next and are ABSENT from the kbl-mode1 worktree. EMBED the operative spec text INLINE in the contract + scope any "STOP-IF anchor mismatch" to `src/…` CODE anchors only — else Codex correctly trips its anchor STOP-IF and burns a dispatch with zero file changes (this happened on RB-9a dispatch #1; fix1 embedded §3.5 inline).
-Commit the contract on codex/franchise-v1-next BEFORE dispatch (Contract Readiness Rule). DISPATCH Codex (run_in_background + dangerouslyDisableSandbox), worktree = /Users/johnkruse/Projects/kbl-mode1:
+PER-TICKET LOOP (same as the main loop, on YOUR branch): GROUND at source → CONTRACT to PROMPT_CONTRACTS.md
+(markers `<!-- ===== CONTRACT: <ID> ===== -->`, embed spec inline, STOP-IF scoped to src/ anchors, "Use xhigh") →
+commit the contract → DISPATCH Codex (run_in_background + dangerouslyDisableSandbox), worktree = /Users/johnkruse/Projects/kbl-mode1-b:
   export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH"
-  { sed -n '/<!-- ===== CONTRACT: RB-9c /,/<!-- ===== END CONTRACT: RB-9c /p' \
+  { sed -n '/<!-- ===== CONTRACT: <ID> /,/<!-- ===== END CONTRACT: <ID> /p' \
       /Users/johnkruse/Projects/kbl-tracker/spec-docs/PROMPT_CONTRACTS.md \
-    | NODE_ENV= ~/.local/bin/codex exec -C /Users/johnkruse/Projects/kbl-mode1 --skip-git-repo-check \
-      -s workspace-write -c model_reasoning_effort=xhigh -o /tmp/codex-rb9c.out - ; echo "CODEX_EXIT=$?" ; } \
-    > /tmp/codex-rb9c.log 2>&1
-  (xhigh — NOT very-high [invalid 400 → zero file changes]. macOS has no `timeout`; rely on run_in_background. Ignore the benign "failed to load skill .../mode2-pilot" startup ERROR line. Scan the log for ACTUAL 400/error, not the echoed contract "STOP-IF".)
-AUDIT the real diff (git -C /Users/johnkruse/Projects/kbl-mode1 --no-pager diff + cat new files; builder≠auditor — never trust the Codex paste); only contracted files; frozen IV oracle (spec-docs/reference/iv_oracle.json) untouched. GATE — UI ticket touching pages/hooks ⇒ run the FULL Mode-1 suite (transitive-import-mock risk):
-  cd /Users/johnkruse/Projects/kbl-mode1 && export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" \
-    && NODE_ENV= npx tsc -b ; echo "TSC=$?" ; NODE_ENV= npx vitest run > /tmp/rb9c-suite.log 2>&1
-  then read /tmp/rb9c-suite.log (grep "Test Files"/"Tests "/"FAIL "); READ THE FAILED-FILE LIST not the RC (the characterized wpaRuntimeBoundary fail makes the RC nonzero). COMMIT branch-only (NEVER push), co-author trailer "Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>". LOG a WAVE bullet (WAVE 75…) in AUTONOMOUS_RUN_LOG.md + repoint CURRENT_STATE + commit docs on codex/franchise-v1-next (stage BY PATH — leave pre-existing HANDOFF_DONE_* / stray spec-docs untouched).
+    | NODE_ENV= ~/.local/bin/codex exec -C /Users/johnkruse/Projects/kbl-mode1-b --skip-git-repo-check \
+      -s workspace-write -c model_reasoning_effort=xhigh -o /tmp/codex-<id>.out - ; echo "CODEX_EXIT=$?" ; } \
+    > /tmp/codex-<id>.log 2>&1
+  (xhigh — NOT very-high. macOS has no `timeout`; rely on run_in_background. Ignore the benign mode2-pilot skill-load
+   ERROR line. Scan for ACTUAL 400/error, not the echoed STOP-IF.)
+AUDIT the real diff (git -C /Users/johnkruse/Projects/kbl-mode1-b --no-pager diff; builder≠auditor — never trust the paste);
+only contracted files; frozen IV oracle (spec-docs/reference/iv_oracle.json) untouched; NONE of the OWNED files above changed.
+GATE: cd /Users/johnkruse/Projects/kbl-mode1-b && export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" \
+  && NODE_ENV= npx tsc -b ; echo "TSC=$?" ; NODE_ENV= npx vitest run > /tmp/<id>-suite.log 2>&1
+  then read the FAILED-FILE LIST (not the RC). COMMIT branch-only to codex/mode1-v1-b (NEVER push), co-author trailer
+  "Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>". LOG a WAVE bullet (see docs-branch note above).
 
-RB-9a/9b OPEN-DECISIONS to put in front of JK (documented defaults TAKEN; rework cheap):
-- D-9a-1 draft analyzer salary DISABLED (holes-focused; the auction page owns wallet/tax). D-9a-2 minimal self-contained adapter DTOs.
-- D-9b-1 farm-archetype home = leagueBuilder `Team.farmCapIdentity?` (NOT franchise config — the draft runs pre-franchise-init; no DB bump). D-9b-2 Defense band DROPPED from the profile-gap (no smb4 category; defensive holes ride position_coverage). D-9b-3 priority→target-level curve normalized by max mapped priority (sim-tunable).
-- RB-9c will SURFACE its own design defaults (the tilt's position→category mapping + the board layout) — document + flag, don't block.
-JK BROWSER-VERIFY (batched, BV-3 family): the whole auction surface now incl. the draft roster board + archetype-weighted hole guidance + the farm-archetype setup picker (RB-9c). Engine pieces 9a/9b are build-dark (no browser surface yet).
+SUITE BASELINE (codex/mode1-v1 @ 956fd15d, your fork point): FULL suite ~496 files (494 pass / 1 hard fail), 8059 tests.
+The ONLY characterized hard fail = `wpaRuntimeBoundary.test.ts`. `GameTrackerLaunchState.test.tsx` + `AwardsWatchlist.test.tsx`
+are INTERMITTENT ORDER-FLAKES (pass SOLO) — verify solo, don't count. ZERO-NEW-REDS = only wpaRuntimeBoundary hard-fails after your ticket.
 
-caffeinate: PID 84474 (caffeinate -s -i) + a second from the prior session keep the Mac awake (both hold; harmless).
-node at ~/.nvm/versions/node/v20.20.0/bin (prefix NODE_ENV=). codex at ~/.local/bin/codex (xhigh).
+caffeinate: held by the attended session (harmless if doubled). node ~/.nvm/versions/node/v20.20.0/bin (prefix NODE_ENV=).
+codex ~/.local/bin/codex (xhigh).
 
-SOLO-WORKER: claim THIS baton FIRST —
-  mv HANDOFF_NEEDED HANDOFF_DONE_$(date -u +%Y%m%dT%H%M%SZ)
-then confirm sole worker (pgrep -lf "codex exec"; check other claude procs). One worker per branch. A second worker that finds no HANDOFF_NEEDED stands down. (Several stray claude procs are expected — the atomic baton mv is the deconfliction; first to mv owns RB-9c.)
+SOLO-WORKER FOR THIS LANE: claim THIS baton FIRST — `mv HANDOFF_NEEDED HANDOFF_DONE_$(date -u +%Y%m%dT%H%M%SZ)_parallel`
+then confirm you are the only worker ON codex/mode1-v1-b (`git -C /Users/johnkruse/Projects/kbl-mode1-b branch --show-current`;
+`pgrep -lf "codex exec"`). The ATTENDED thread on codex/mode1-v1 is EXPECTED + fine (different branch). One worker per branch:
+you own codex/mode1-v1-b; the attended thread owns codex/mode1-v1. Never build on codex/mode1-v1.
