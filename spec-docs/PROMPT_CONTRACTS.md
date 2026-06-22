@@ -17391,3 +17391,56 @@ Use xhigh reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-9c-1 ===== -->
+
+<!-- ===== CONTRACT: RB-9c-2 ===== -->
+## CONTRACT: RB-9c-2 — the §9 roster-visibility board (position-slot grid) on both auction pages
+
+**ROUTE:** Codex build in the Mode-1 worktree `/Users/johnkruse/Projects/kbl-mode1-b` on branch `codex/mode1-v1-b` (the single active Mode-1 code lane). Branch-only; do NOT commit, do NOT push (the Captain commits after audit).
+
+**ROLE:** You are the builder (Codex). Opus is the auditor (builder ≠ auditor). Build EXACTLY this contract — no extra scope.
+
+**GOAL:** The §9 "roster visibility board (hard requirement, A4)" — a persistent, glanceable view of the GM's MLB + farm roster during the draft, gaps highlighted, so a GM never paper-tracks. **JK RULED 2026-06-22: a POSITION-SLOT GRID** — a depth-chart of roster slots; FILLED slots show the won player (name + position [+ salary]); EMPTY required slots are visually highlighted as GAPS; a header strip shows slots filled / target, running payroll, and wallet remaining. Build it as ONE shared, pure, props-driven component reused on BOTH auction pages (mounted after the LOT LOG). **THIS TICKET = pure VISUALIZATION of the roster** (render filled vs empty slots from the team's won roster + a documented slot template). It does NOT call the Roster Analyzer and does NOT compute hole intelligence — the analyzer-driven gap PRIORITIZATION (tilt ordering) + the salary-vs-wallet-cap warning are **RB-9c-3** (per §9/§3.5 "reuse the analyzer, don't rebuild a parallel hole-detector" — so we do NOT build any detection here).
+
+**SOURCE OF TRUTH:** ⚠ `AUCTION_DRAFT_SPEC_V2.md` + the DECISIONS_LOG live on the **docs branch**, NOT in your worktree — do NOT open them or treat their absence as a stop. The operative requirements (the §9 board hard-requirement + JK's position-slot-grid ruling 2026-06-22) are embedded above. Verify only the `src/…` CODE anchors below.
+
+**GROUNDED ANCHORS (re-read each at source before editing; CODE anchors only — STOP if any `src/…` anchor mismatches):**
+- **Won roster shape** — `src/engines/auctionStateMachine.ts`: `AuctionRosterAssignment = { playerId: string; salary: number }`; `AuctionTeamState = { teamId; budgetRemaining; rosterSlotsRemaining; minSalary; projectedTax; roster: readonly AuctionRosterAssignment[] }`.
+- **MLB page** `src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx`: `teamById` (`:117`), `playerById` (`:118`, `Player` has `primaryPosition`/`secondaryPosition`/`firstName`/`lastName`), `teamStateById` (`:119`, from `session.teams`), `currentBidderTeamState` (`:~127`, has `.budgetRemaining`/`.roster`). The existing `rosterPositionTally` (`:68-78`) shows the won-roster→position pattern. Mount point: AFTER the LOT LOG `</section>` (the `{session && (<section …>LOT LOG…</section>)}` block ending ~`:613-614`), before the container close.
+- **Farm page** `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx`: `teamById` (`:211`), `prospectById` (`:212`, from `auction.pool?.prospects`; `LeagueBuilderProspectPlayerDto` has `primaryPosition`/`secondaryPosition`/`firstName`/`lastName`), `teamStateById` (`:~216`), `currentBidderTeamState` (`:~243`). `rosterPositionTally` (`:121-131`). Mount point: AFTER the LOT LOG `</section>` (~`:730`). **⚠ FARM IS OBSCURED — positions are VISIBLE but ratings/IV are HIDDEN; the board must render ONLY name + position (+ won salary), NEVER any rating (POW/CON/SPD/FLD/ARM/VEL/JNK/ACC). A characterized test asserts no rating tokens appear on the farm page — keep it green.**
+- **GM/board team derivation** — derive the team whose roster to show as: the existing `currentBidderTeamState` (the team already in focus for budget/tally) when present, else `leagueData.teams.find(t => t.controlledBy === 'human')` mapped through `teamStateById`. (Mirror however the page already picks `currentBidderTeamState`.)
+- **Roster targets** — `src/engines/rosterAnalyzerEngine.ts` default `rosterTargets`: `activeMlb: 22`, `farm: 10` (use these as the header "target" denominators; do NOT import the analyzer engine just for this — hardcode the two documented numbers as named consts in the component, sim/JK-tunable).
+- **Styling** (match exactly — these pages use Tailwind arbitrary values): section `bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]`; card `bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4`; position badge `bg-[#3B7DD8] px-2 py-0.5 text-xs font-bold`; muted label `text-xs text-[#E8E8D8]/60`. `formatMoney(...)` helper exists on each page for money.
+- **Test convention** — page tests in `src/src_figma/__tests__/pages/`; component tests should sit in `src/src_figma/__tests__/components/` (match the nearest existing convention; if none, co-locate under `__tests__/components/`).
+
+**SLOT TEMPLATE (documented v1 default — JK-tunable; put as named consts in the component):**
+- **MLB grid (`MLB_BOARD_SLOTS`):** field positions, ONE slot each, in this order: `C, 1B, 2B, 3B, SS, LF, CF, RF, DH`; rotation `SP ×5`; bullpen `RP ×6`, `CP ×1`. Plus a **"DEPTH / BENCH"** catch-all row for any won player who doesn't fit an open templated slot (overflow at a position, or a position with no slot). Header denominator = **22**.
+- **FARM grid (`FARM_BOARD_SLOTS`):** the farm is a development pool, not a strict positional lineup — render the won prospects GROUPED by primary position (whatever positions appear), plus generic OPEN slots filling the remainder up to **10** (so "6 of 10 farm slots" with 4 highlighted open slots). Header denominator = **10**.
+- **Slot fill:** greedy by `primaryPosition` into the first matching open slot (OF tokens LF/CF/RF/OF fill the OF field slots; pitcher tokens SP/`SP/RP`/RP/CP/`TWO-WAY` into rotation/bullpen by the `STARTER_POSITIONS`/`BULLPEN_POSITIONS` spirit — SP-capable → SP slots first, else bullpen). Unfilled templated slots render as highlighted GAPS (dashed/distinct styling + an "OPEN" label). Overflow → the DEPTH/BENCH row.
+
+**MAKE-OR-BREAK:**
+1. A pure `DraftRosterBoard` component renders a position-slot grid: given a roster of entries, FILLED slots show the player's name + position; UNFILLED templated slots render as visually-distinct highlighted GAPS; the header shows `{filled}/{target} slots`, running payroll (= Σ entry salaries), and wallet remaining. (Component test asserts: a roster missing SS + an OF shows an SS gap + an OF gap; a filled C slot shows the player name; the header count is correct.)
+2. The board is mounted on BOTH auction pages after the LOT LOG, fed by the GM/board team's won roster, and ALL existing page tests stay green — INCLUDING the farm page's "no rating tokens visible" assertion (the farm board shows position + name + salary only, NEVER a rating).
+3. Pure VISUALIZATION — the component imports NO analyzer/tilt engine and computes NO hole intelligence (RB-9c-3 adds that). It takes self-contained DTO props (no domain/session types) so it is unit-testable.
+
+**CONSTRAINTS — exact files (touch ONLY these four):**
+1. NEW `src/src_figma/app/components/DraftRosterBoard.tsx` — the pure component. Props: `{ tier: 'mlb' | 'farm'; entries: DraftBoardEntry[]; target: number; payroll: number; walletRemaining: number | null }` where `DraftBoardEntry = { id: string; name: string; primaryPosition: string; secondaryPosition?: string; salary: number }`. Exports the component + the slot-template consts. NO imports of engines/storage/session types — pure presentational (React + the entries DTO only).
+2. NEW component test (`src/src_figma/__tests__/components/DraftRosterBoard.test.tsx`).
+3. EDIT `src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx` — derive the board team + map its `roster` → `DraftBoardEntry[]` via `playerById` (name from first+last, primary/secondary position, salary from the assignment), compute payroll (Σ salaries) + walletRemaining (`budgetRemaining`), mount `<DraftRosterBoard tier="mlb" … />` after the LOT LOG section. ADDITIVE only (do not alter existing LOT LOG / bidding / tally markup).
+4. EDIT `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx` — same, via `prospectById`, `<DraftRosterBoard tier="farm" … />` after LOT LOG. Map ONLY name/position/salary (NO ratings).
+- Do NOT touch storage/engines/the analyzer/`farmArchetypeTilt.ts`/the frozen oracle/any other file. Do NOT call `analyzeDraftRoster`/`tiltAnalyzerFindings` (that is RB-9c-3).
+
+**VERIFICATION (you run, report the real output):**
+- `cd /Users/johnkruse/Projects/kbl-mode1-b && export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" && NODE_ENV= npx tsc -b` → exit 0 (paste tail).
+- `NODE_ENV= npx vitest run src/src_figma/__tests__/components/DraftRosterBoard.test.tsx src/src_figma/__tests__/pages/LeagueBuilderAuctionDraft.test.tsx src/src_figma/__tests__/pages/LeagueBuilderFarmAuctionDraft.test.tsx` → all pass (paste summary). (The Captain runs the FULL suite gate.)
+- Report `git status --short` (exactly: 2 new files, 2 modified files).
+
+**FORMAT (report back):** the diff summary (files + line counts), the `DraftRosterBoard` props signature + the slot-template consts, the tsc result, the focused test results (incl. the farm "no ratings" test green), and `git status --short`.
+
+**FAILURE PROTOCOL / STOP-IF:**
+- If the won-roster / `currentBidderTeamState` / `playerById` / `prospectById` anchors do not match the actual source → STOP and quote.
+- If mounting the board cannot be done ADDITIVELY (would force changing existing LOT LOG/bidding/tally markup) → STOP and explain.
+- If a contracted **CODE anchor (`src/…` file:line)** does not match → STOP and quote. (The V2/DECISIONS spec files are intentionally NOT in this worktree — their absence is EXPECTED, NOT a stop. Only `src/…` mismatches stop you.)
+- Never touch the frozen oracle or any file outside the four listed. Never commit/push. Branch-only.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-9c-2 ===== -->
