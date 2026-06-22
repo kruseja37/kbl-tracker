@@ -36,6 +36,7 @@ import {
   updateFranchiseMetadata,
   setActiveFranchise,
 } from './franchiseManager';
+import { buildGmProfile } from './gmIdentity';
 import {
   createFarmAuctionSessionId,
   getAuctionSession,
@@ -611,6 +612,11 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
     const controlledTeamId = teamControlSnapshot.controlledTeams[0]?.teamId || teams[0].teamId;
     const controlledTeam = teams.find(t => t.teamId === controlledTeamId);
     const controlledTeamName = controlledTeam?.teamName || 'Unknown Team';
+    const gmProfile = buildGmProfile({
+      franchiseId,
+      controlledTeamId,
+      gmName: config.gmName,
+    });
 
     // 5. Update franchise metadata with enhanced fields
     await updateFranchiseMetadata(franchiseId, {
@@ -618,6 +624,7 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
       leagueId: config.league,
       controlledTeamId,
       controlledTeamName,
+      gmName: gmProfile.displayName,
       currentSeason: 1,
     });
 
@@ -646,6 +653,7 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
     const storedConfig: StoredFranchiseConfig = {
       ...config,
       franchiseType: teamControlSnapshot.franchiseType,
+      gm: gmProfile,
       teamControl: teamControlSnapshot.teamControl,
       controlledTeams: teamControlSnapshot.controlledTeams,
       rulesSnapshot,

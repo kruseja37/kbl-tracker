@@ -130,6 +130,21 @@ export interface FranchiseStartupProspectDraftConfig {
   bridgeRepairApplied?: boolean;
 }
 
+export interface GmTenureRecord {
+  teamId: string;
+  startDate?: string;
+  endDate?: string;
+  endReason?: 'replaced' | 'relocated';
+}
+
+export interface GmProfile {
+  gmId: string;
+  displayName: string;
+  createdByUser: boolean;
+  teamId?: string;
+  tenureRecords?: GmTenureRecord[];
+}
+
 export interface FranchiseConfig {
   league: string | null;
   leagueDetails: {
@@ -177,6 +192,7 @@ export interface FranchiseConfig {
   franchiseName: string;
   franchiseType?: FranchiseType;
   aiScoreEntry?: boolean;
+  gmName?: string;
 }
 
 /**
@@ -186,6 +202,7 @@ export interface StoredFranchiseConfig extends FranchiseConfig {
   franchiseId: string;
   createdAt: number;
   franchiseType: FranchiseType;
+  gm?: GmProfile;
   teamControl: Record<string, FranchiseTeamControl>;
   controlledTeams: FranchiseControlledTeamMetadata[];
   rulesSnapshot: FranchiseRulesSnapshot;
