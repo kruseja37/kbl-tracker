@@ -89,4 +89,34 @@ describe('buildFarmAuctionSession AUC-5.1d-1', () => {
     expect(session.config.cpuShillCount).toBe(2);
     expect(session.config.bidIncrement).toBe(250);
   });
+
+  test('threads per-team MLB carryover into the initialized farm auction wallets', () => {
+    const { session, farmTierCap } = buildFarmAuctionSession({
+      ...BASE_INPUT,
+      teams: [
+        {
+          ...TEAMS[0],
+          farmRosterPlayerIds: ['a-farm-existing'],
+          committedFarmSalaries: 7_500,
+          mlbBudgetCarryover: 12_500,
+        },
+        {
+          ...TEAMS[1],
+          committedFarmSalaries: 0,
+          mlbBudgetCarryover: 25_000,
+        },
+        {
+          ...TEAMS[2],
+          committedFarmSalaries: 15_000,
+        },
+      ],
+    });
+
+    expect(session.teams.find((team) => team.teamId === TEAMS[0].teamId)?.budgetRemaining)
+      .toBe(farmTierCap - 7_500 + 12_500);
+    expect(session.teams.find((team) => team.teamId === TEAMS[1].teamId)?.budgetRemaining)
+      .toBe(farmTierCap + 25_000);
+    expect(session.teams.find((team) => team.teamId === TEAMS[2].teamId)?.budgetRemaining)
+      .toBe(farmTierCap - 15_000);
+  });
 });

@@ -170,6 +170,40 @@ function buildMlbSession(seed: string): CpuShillAuctionSession {
   }) as CpuShillAuctionSession;
 }
 
+function buildMlbSessionWithBudgets(
+  seed: string,
+  teamBudgets: Record<string, number>,
+  state: CpuShillAuctionSession["state"] = "AUCTION_COMPLETE",
+): CpuShillAuctionSession {
+  const teamIds = Object.keys(teamBudgets);
+  const session = initAuctionSession({
+    teams: teamIds.map((teamId) => ({
+      teamId,
+      budgetRemaining: 1_000_000,
+      rosterSlotsRemaining: 1,
+      minSalary: LEAGUE_MINIMUM_SALARY,
+    })),
+    players: [{ playerId: `${seed}-mlb-player`, iv: 100_000, ivPercentile: 100 }],
+    nominationOrder: teamIds,
+    config: {
+      nominationOrderSeed: seed,
+      bidIncrement: 1_000,
+      cpuShillCount: 0,
+      turnTimerSeconds: null,
+      excludeFromLeague: true,
+    },
+  }) as CpuShillAuctionSession;
+
+  return {
+    ...session,
+    state,
+    teams: session.teams.map((team) => ({
+      ...team,
+      budgetRemaining: teamBudgets[team.teamId] ?? team.budgetRemaining,
+    })),
+  };
+}
+
 function sessionAuctionPlayers(session: CpuShillAuctionSession) {
   return session.playerOrder.map((playerId) => session.players[playerId]);
 }
@@ -247,6 +281,105 @@ describe("useFarmAuctionDraft", () => {
     expect(persisted?.session.state).toBe("OPEN_BIDDING");
     expect(persisted?.session.currentLot?.openingAsk).toBe(LEAGUE_MINIMUM_SALARY);
     await expect(getAuctionSession("farm-init")).resolves.toBeNull();
+  });
+
+  test("seeds farm wallets with each team's own completed MLB unspent budget carryover", async () => {
+    const teamIds = ["human", "cpu"];
+    const leagueId = "farm-carryover-complete";
+    const seed = seedWithOrder(teamIds, ["human", "cpu"]);
+    mockLeagueData({
+      leagues: [makeLeague(leagueId, teamIds)],
+      teams: [makeTeam("human"), makeTeam("cpu", "ai")],
+    });
+    await saveAuctionSession({
+      id: createAuctionSessionId(leagueId),
+      leagueId,
+      seasonNumber: 1,
+      seed: "mlb-complete-carryover",
+      session: buildMlbSessionWithBudgets("mlb-complete-carryover", {
+        human: 120_000,
+        cpu: 40_000,
+      }),
+    });
+
+    const { result } = renderHook(() => useFarmAuctionDraft());
+
+    await act(async () => {
+      await result.current.initFarmAuction(leagueId, {
+        nominationOrderSeed: seed,
+        cpuShillCount: 0,
+        bidIncrement: 1_000,
+      });
+    });
+
+    const farmTierCap = result.current.farmTierCap!;
+    const humanBudget = result.current.session?.teams.find((team) => team.teamId === "human")?.budgetRemaining;
+    const cpuBudget = result.current.session?.teams.find((team) => team.teamId === "cpu")?.budgetRemaining;
+
+    expect(humanBudget).toBe(farmTierCap + 60_000);
+    expect(cpuBudget).toBe(farmTierCap + 20_000);
+    expect((humanBudget ?? 0) - (cpuBudget ?? 0)).toBe(40_000);
+
+    const persisted = await getAuctionSessionById(createFarmAuctionSessionId(leagueId));
+    expect(persisted?.session.teams.find((team) => team.teamId === "human")?.budgetRemaining)
+      .toBe(farmTierCap + 60_000);
+    expect(persisted?.session.teams.find((team) => team.teamId === "cpu")?.budgetRemaining)
+      .toBe(farmTierCap + 20_000);
+  });
+
+  test("does not carry MLB leftovers when the MLB auction row is missing or incomplete", async () => {
+    const teamIds = ["human", "cpu"];
+    const seed = seedWithOrder(teamIds, ["human", "cpu"]);
+    const missingLeagueId = "farm-carryover-missing";
+    const incompleteLeagueId = "farm-carryover-incomplete";
+    mockLeagueData({
+      leagues: [
+        makeLeague(missingLeagueId, teamIds),
+        makeLeague(incompleteLeagueId, teamIds),
+      ],
+      teams: [makeTeam("human"), makeTeam("cpu", "ai")],
+    });
+
+    const { result } = renderHook(() => useFarmAuctionDraft());
+
+    await act(async () => {
+      await result.current.initFarmAuction(missingLeagueId, {
+        nominationOrderSeed: seed,
+        cpuShillCount: 0,
+        bidIncrement: 1_000,
+      });
+    });
+
+    const missingFarmTierCap = result.current.farmTierCap!;
+    expect(result.current.session?.teams.map((team) => team.budgetRemaining)).toEqual([
+      missingFarmTierCap,
+      missingFarmTierCap,
+    ]);
+
+    await saveAuctionSession({
+      id: createAuctionSessionId(incompleteLeagueId),
+      leagueId: incompleteLeagueId,
+      seasonNumber: 1,
+      seed: "mlb-incomplete-carryover",
+      session: buildMlbSessionWithBudgets("mlb-incomplete-carryover", {
+        human: 120_000,
+        cpu: 40_000,
+      }, "NOMINATION"),
+    });
+
+    await act(async () => {
+      await result.current.initFarmAuction(incompleteLeagueId, {
+        nominationOrderSeed: seed,
+        cpuShillCount: 0,
+        bidIncrement: 1_000,
+      });
+    });
+
+    const incompleteFarmTierCap = result.current.farmTierCap!;
+    expect(result.current.session?.teams.map((team) => team.budgetRemaining)).toEqual([
+      incompleteFarmTierCap,
+      incompleteFarmTierCap,
+    ]);
   });
 
   test("exposes derived MLB roster chemistry counts without persisting them into the farm auction session", async () => {

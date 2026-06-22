@@ -21,8 +21,10 @@ import { normalizeToChemistryCode, type ChemistryCode } from "../../../data/chem
 import { LEAGUE_MINIMUM_SALARY } from "../../../data/rosterEngineConstants";
 import { buildFarmAuctionSession } from "../../../utils/farmAuctionSession";
 import type { FarmAuctionPool } from "../../../utils/farmAuctionPool";
+import { computeMlbToFarmCarryover } from "../../../utils/farmAuctionWallet";
 import {
   createFarmAuctionSessionId,
+  getAuctionSession,
   getAuctionSessionById,
   getScoutProfilesForLeague,
   saveAuctionSessionById,
@@ -149,6 +151,7 @@ async function loadOptionalFarmScouts(
 }
 
 async function buildFarmAuctionTeams(input: {
+  leagueId: string;
   leagueTeams: readonly Team[];
   getRoster: UseLeagueBuilderDataReturn["getRoster"];
   leaguePlayers: readonly Player[];
@@ -158,6 +161,7 @@ async function buildFarmAuctionTeams(input: {
     teamName: string;
     farmRosterPlayerIds: readonly string[];
     committedFarmSalaries: number;
+    mlbBudgetCarryover: number;
   }>;
   mlbRosterChemistryByTeamId: Record<string, Partial<Record<ChemistryCode, number>>>;
 }> {
@@ -165,6 +169,11 @@ async function buildFarmAuctionTeams(input: {
     input.leaguePlayers.map((player) => [player.id, normalizeToChemistryCode(player.chemistry)]),
   );
   const mlbRosterChemistryByTeamId: Record<string, Partial<Record<ChemistryCode, number>>> = {};
+  const mlbSession = await getAuctionSession(input.leagueId);
+  const mlbUnspentByTeamId = new Map(
+    (mlbSession?.session.state === "AUCTION_COMPLETE" ? mlbSession.session.teams : [])
+      .map((team) => [team.teamId, team.budgetRemaining]),
+  );
   const teams = await Promise.all(
     input.leagueTeams.map(async (team) => {
       const roster: TeamRoster | null = await input.getRoster(team.id);
@@ -181,6 +190,7 @@ async function buildFarmAuctionTeams(input: {
         teamName: teamDisplayName(team),
         farmRosterPlayerIds: roster?.farmRoster ?? [],
         committedFarmSalaries: 0,
+        mlbBudgetCarryover: computeMlbToFarmCarryover(mlbUnspentByTeamId.get(team.id) ?? 0),
       };
     }),
   );
@@ -345,6 +355,7 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
       return null;
     }
     const { teams, mlbRosterChemistryByTeamId: nextMlbRosterChemistryByTeamId } = await buildFarmAuctionTeams({
+      leagueId,
       leagueTeams: nextLeagueTeams,
       getRoster: leagueData.getRoster,
       leaguePlayers: leagueData.players,
@@ -390,6 +401,7 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
     if (nextLeagueTeams.length === 0) throw new Error("Selected league has no teams.");
 
     const { teams, mlbRosterChemistryByTeamId: nextMlbRosterChemistryByTeamId } = await buildFarmAuctionTeams({
+      leagueId,
       leagueTeams: nextLeagueTeams,
       getRoster: leagueData.getRoster,
       leaguePlayers: leagueData.players,

@@ -6,6 +6,8 @@ import { FARM_AUCTION_ROSTER_SLOTS_PER_TEAM } from '../farmAuctionPool';
 import {
   buildFarmAuctionTeamInputs,
   computeFarmTierCap,
+  computeMlbToFarmCarryover,
+  MLB_TO_FARM_CARRYOVER_PCT,
 } from '../farmAuctionWallet';
 
 describe('computeFarmTierCap AUC-5.1c', () => {
@@ -64,6 +66,25 @@ describe('computeFarmTierCap AUC-5.1c', () => {
   });
 });
 
+describe('computeMlbToFarmCarryover RB-4', () => {
+  test('carries half of finite positive unspent MLB budget by default', () => {
+    expect(MLB_TO_FARM_CARRYOVER_PCT).toBe(0.5);
+    expect(computeMlbToFarmCarryover(80_000)).toBe(40_000);
+  });
+
+  test('treats zero, negative, NaN, and infinite unspent MLB budgets as zero', () => {
+    expect(computeMlbToFarmCarryover(0)).toBe(0);
+    expect(computeMlbToFarmCarryover(-25_000)).toBe(0);
+    expect(computeMlbToFarmCarryover(Number.NaN)).toBe(0);
+    expect(computeMlbToFarmCarryover(Number.POSITIVE_INFINITY)).toBe(0);
+  });
+
+  test('supports a custom carryover percentage for §11 sim sweeps', () => {
+    expect(computeMlbToFarmCarryover(100_000, 0.3)).toBe(30_000);
+    expect(computeMlbToFarmCarryover(100_000, 0.7)).toBe(70_000);
+  });
+});
+
 describe('buildFarmAuctionTeamInputs AUC-5.1c', () => {
   test('mirrors the MLB auction adapter on farm wallet budget, farm slots, minimum salary, and tax', () => {
     const teams = buildFarmAuctionTeamInputs({
@@ -111,6 +132,40 @@ describe('buildFarmAuctionTeamInputs AUC-5.1c', () => {
         projectedTax: 0,
         roster: [],
       },
+    ]);
+  });
+
+  test('adds per-team MLB carryover onto the farm tier wallet without pooling', () => {
+    const teams = buildFarmAuctionTeamInputs({
+      farmTierCap: 50_000,
+      teams: [
+        {
+          teamId: 'team-a',
+          farmRosterPlayerIds: [],
+          committedFarmSalaries: 10_000,
+          mlbBudgetCarryover: 25_000,
+        },
+        {
+          teamId: 'team-b',
+          farmRosterPlayerIds: [],
+          committedFarmSalaries: 60_000,
+          mlbBudgetCarryover: 8_000,
+        },
+        {
+          teamId: 'team-c',
+          farmRosterPlayerIds: [],
+          committedFarmSalaries: 5_000,
+        },
+      ],
+    });
+
+    expect(teams.map((team) => ({
+      teamId: team.teamId,
+      budgetRemaining: team.budgetRemaining,
+    }))).toEqual([
+      { teamId: 'team-a', budgetRemaining: 65_000 },
+      { teamId: 'team-b', budgetRemaining: 8_000 },
+      { teamId: 'team-c', budgetRemaining: 45_000 },
     ]);
   });
 

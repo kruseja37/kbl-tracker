@@ -22,6 +22,7 @@ export interface BuildFarmAuctionSessionInput {
     teamName?: string;
     farmRosterPlayerIds?: readonly string[];
     committedFarmSalaries?: number;
+    mlbBudgetCarryover?: number;
   }[];
   scoutsByTeamId?: Record<string, ProspectScoutDescriptor | undefined>;
   seed: string;
@@ -55,6 +56,7 @@ export function buildFarmAuctionSession(
       teamId: team.teamId,
       farmRosterPlayerIds: team.farmRosterPlayerIds ?? [],
       committedFarmSalaries: team.committedFarmSalaries,
+      mlbBudgetCarryover: team.mlbBudgetCarryover,
     })),
     farmTierCap,
   });
