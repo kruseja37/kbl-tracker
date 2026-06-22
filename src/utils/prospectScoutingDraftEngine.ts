@@ -273,17 +273,19 @@ const STANDARD_GRADE_WEIGHTS: Array<[Grade, number]> = [
   ['D', 8],
   ['A+', 0],
 ];
-const POSITION_POOL: DraftPosition[] = [
-  'SP', 'SP', 'SP', 'SP',
-  'RP', 'RP', 'CP',
-  'C',
-  '1B',
-  '2B',
-  'SS',
-  '3B',
-  'LF',
-  'CF', 'CF',
-  'RF',
+const POSITION_PRIMARY_WEIGHTS: Array<[DraftPosition, number]> = [
+  ['SP', 18],
+  ['SP/RP', 6],
+  ['RP', 13],
+  ['CP', 4],
+  ['C', 9],
+  ['1B', 7],
+  ['2B', 8],
+  ['SS', 7],
+  ['3B', 6],
+  ['LF', 8],
+  ['CF', 7],
+  ['RF', 7],
 ];
 const CHEMISTRY_POOL = ['Competitive', 'Crafty', 'Disciplined', 'Spirited', 'Scholarly'];
 export const PERSONALITY_POOL = ['Competitive', 'Relaxed', 'Droopy', 'Jolly', 'Tough', 'Timid', 'Egotistical'];
@@ -999,7 +1001,7 @@ export function generateHiddenPersonalityModifiers(seed: string): HiddenPersonal
 
 function buildCandidate(input: ProspectScoutingDraftInput, index: number): GeneratedProspectCandidate {
   const seed = `${input.seed}:candidate:${index}`;
-  const position = pick(`${seed}:position`, POSITION_POOL);
+  const position = pickWeightedValue(`${seed}:position`, POSITION_PRIMARY_WEIGHTS);
   const secondaryPosition = chooseSecondary(position, seed);
   const targetGrade = pickWeighted(`${seed}:grade`, STANDARD_GRADE_WEIGHTS);
   const bats = drawProspectBats(seed);

@@ -124,6 +124,35 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     expect(output.visibleReports.every((report) => report.position !== 'DH')).toBe(true);
   });
 
+  test('RB-14 primary positions follow the §3.3 weighted distribution', () => {
+    const output = generateProspectScoutingDraft({
+      ...BASE_INPUT,
+      rounds: 250,
+      candidatePoolMultiplier: 1,
+      seed: 'rb14-section-3-3-primary-position-distribution-seed',
+    });
+    const positionCounts = new Map<string, number>();
+    const count = (position: string) => positionCounts.get(position) ?? 0;
+
+    for (const player of output.generatedPlayers) {
+      positionCounts.set(player.primaryPosition, count(player.primaryPosition) + 1);
+      expect(player.primaryPosition).not.toBe('DH');
+      expect(player.secondaryPosition).not.toBe('DH');
+    }
+
+    const pitcherCount = [...PITCHER_POSITIONS].reduce((sum, position) => sum + count(position), 0);
+    const pitcherShare = pitcherCount / output.generatedPlayers.length;
+
+    expect(output.generatedPlayers).toHaveLength(500);
+    expect(count('SP/RP')).toBeGreaterThan(0);
+    expect(count('DH')).toBe(0);
+    expect(count('SP')).toBeGreaterThan(count('RP'));
+    expect(count('SP')).toBeGreaterThan(count('SP/RP'));
+    expect(count('SP')).toBeGreaterThan(count('CP'));
+    expect(pitcherShare).toBeGreaterThanOrEqual(0.30);
+    expect(pitcherShare).toBeLessThanOrEqual(0.52);
+  });
+
   test('generated secondary positions follow §6 map and pitchers carry none', () => {
     const output = generateProspectScoutingDraft({
       ...BASE_INPUT,
@@ -613,7 +642,7 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     expect(fielderCount).toBeGreaterThan(0);
     expect(fielderShare).toBeGreaterThanOrEqual(SECTION_13_POSITION_PLAYER_MIN_SHARE);
     expect(fielderShare).toBeLessThanOrEqual(SECTION_13_POSITION_PLAYER_MAX_SHARE);
-    for (const position of ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'SP', 'RP', 'CP']) {
+    for (const position of ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'SP', 'SP/RP', 'RP', 'CP']) {
       expect(positionCounts.get(position)).toBeGreaterThan(0);
     }
   }, 120_000);
