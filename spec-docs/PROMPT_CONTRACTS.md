@@ -17155,3 +17155,60 @@ Use xhigh reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-9b ===== -->
+
+<!-- ===== CONTRACT: RB-17 ===== -->
+## CONTRACT: RB-17 — Deprecate dead `playerMorale.ts` (port 4 display helpers; retire non-canonical baselines; delete dead module + dead component + test)
+
+**ROUTE:** Codex builder, worktree `/Users/johnkruse/Projects/kbl-mode1-b` (branch `codex/mode1-v1-b`). Branch-only — do NOT commit, do NOT push (the Captain commits after audit).
+**ROLE:** Builder (cross-model). The Captain (Opus) audits your diff; builder ≠ auditor.
+
+**GOAL:** `src/utils/playerMorale.ts` is DEAD in the live app. Its sole real importer is the UNROUTED `src/components/GameTracker/PlayerNameWithMorale.tsx` (not rendered by its own `index.tsx`; only a mocked test exercises it). Cleanly retire it:
+1. PORT the 4 PURE display helpers + their interface to a NEW `src_figma` UI util.
+2. RETIRE the non-canonical personality-baseline layer (do NOT port it).
+3. DELETE the dead module + the dead unrouted component + its test.
+
+**SOURCE OF TRUTH (embedded — the V2/plan docs are NOT in this worktree; their absence is EXPECTED, not a stop):**
+- AUCTION_REBUILD_PLAN.md RB-17 (verbatim intent): "Retire the dead `PERSONALITY_BASELINES` (private, non-canonical) + `getBaselineMorale` + `getPlaceholderMorale` (superseded by `masterMoraleMatrix` `LEGACY_PERSONALITY_RECONCILIATION`). PRESERVE the 4 display helpers `toSuperscript`/`getMoraleColor`/`getMoraleState`/`getMoraleDisplay` — they are the morale render layer (no `masterMoraleMatrix` equivalent). Port the 4 helpers to a `src_figma` UI util, THEN delete the dead file + `PlayerNameWithMorale.tsx` + its test."
+- WHY the baselines are retired (not ported): `PERSONALITY_BASELINES` is keyed on a NON-CANONICAL personality taxonomy (JOLLY/TOUGH/ECCENTRIC/NORMAL/GRUMPY/FIERY/DISCIPLINED/SPIRITED/CRAFTY/GRITTY) that does NOT match the canonical 7 (COMPETITIVE/RELAXED/DROOPY/JOLLY/TOUGH/TIMID/EGOTISTICAL). `masterMoraleMatrix` is the canonical morale source; the baseline helpers are dead legacy.
+
+**GROUNDED SOURCE FACTS (verified by the Captain at source in this worktree — re-confirm before editing):**
+- `src/utils/playerMorale.ts` exports: `toSuperscript(num)`, `getMoraleColor(morale)`, `getMoraleState(morale)`, `getMoraleDisplay(morale)`, the `MoraleDisplay` interface, `getBaselineMorale(personality?)`, `getPlaceholderMorale(personality?)`. `PERSONALITY_BASELINES` is a PRIVATE const.
+- The ONLY module importers of `'../../utils/playerMorale'` / `'../../../utils/playerMorale'` are: (a) `src/components/GameTracker/PlayerNameWithMorale.tsx:10` `import { getMoraleDisplay, getPlaceholderMorale }`; (b) the test `src/src_figma/__tests__/gameTracker/PlayerNameWithMorale.test.tsx:16` `vi.mock('../../../utils/playerMorale', …)`. EVERY OTHER `playerMorale` grep hit is an unrelated local FIELD/PROPERTY named `playerMorale` (e.g. `input.playerMorale`, `player.morale → playerMorale`) in `ratingsDevelopment.ts` / `franchiseL10EventEngine.ts` / `tradeRequestGeneration.ts` / `franchiseCheckpointSweepCompute.ts` — NOT imports of this module. Do NOT touch those.
+- `PlayerNameWithMorale` (the component) is referenced ONLY by its own file + the test (NOT barrel-exported by `src/components/GameTracker/index.tsx` — grep-confirmed zero refs there).
+- `src/components/FanMoralePanel.tsx` has a LOCAL `const getMoraleState` (a different inline function) — unrelated, do NOT touch.
+
+**EXPECTED OUTPUT (exactly these paths — nothing else):**
+1. **NEW** `src/src_figma/app/utils/moraleDisplay.ts` — port VERBATIM (preserve exact values/thresholds):
+   - `toSuperscript(num: number): string` (the `SUPERSCRIPT_DIGITS` map + `Math.round` logic).
+   - `getMoraleColor(morale: number): string` — EXACT thresholds/hex: `>=80 '#22c55e'`, `>=60 '#4ade80'`, `>=40 '#9ca3af'`, `>=20 '#f97316'`, else `'#ef4444'`.
+   - `getMoraleState(morale: number): string` — EXACT: `>=80 'Ecstatic'`, `>=60 'Happy'`, `>=40 'Content'`, `>=20 'Unhappy'`, else `'Miserable'`.
+   - `MoraleDisplay` interface `{ superscript: string; color: string; value: number; state: string }`.
+   - `getMoraleDisplay(morale: number): MoraleDisplay` — clamps to 0–99 (`Math.max(0, Math.min(99, morale))`) then composes from the 3 helpers.
+   - Do NOT include `PERSONALITY_BASELINES`, `getBaselineMorale`, or `getPlaceholderMorale`. PURE module — no React, no storage, no engine imports.
+   - Match the neighbor-file style in `src/src_figma/app/utils/` (2-space indent, double-quoted strings) but KEEP the exact numeric/hex/string VALUES above.
+2. **NEW** `src/src_figma/__tests__/gameTracker/moraleDisplay.test.ts` — characterize all 4 ported helpers: `toSuperscript(78)==='⁷⁸'`; the 5 `getMoraleColor` bands at boundary values (80→#22c55e, 60→#4ade80, 40→#9ca3af, 20→#f97316, 19→#ef4444); the 5 `getMoraleState` bands; `getMoraleDisplay` clamps (150→value 99, -10→value 0) and composes superscript/color/state correctly.
+3. **DELETE** `src/utils/playerMorale.ts`.
+4. **DELETE** `src/components/GameTracker/PlayerNameWithMorale.tsx`.
+5. **DELETE** `src/src_figma/__tests__/gameTracker/PlayerNameWithMorale.test.tsx`.
+
+**CONSTRAINTS:**
+- Touch ONLY the 5 paths above. Do NOT create a replacement for `getPlaceholderMorale`/`getBaselineMorale` anywhere (RB-18 will source its placeholder separately — out of scope here).
+- Do NOT edit any of these OWNED files (another lane owns them): `src/data/rosterEngineConstants.ts`, `src/data/traitPricing.ts`, `src/data/chemistryCanonical.ts`, `src/engines/ivEngine.ts`, `src/engines/effectiveRatings.ts`, `src/engines/chemistryFitValue.ts`, `src/engines/farmArchetypeProfile.ts`, `src/engines/scoutValueRange.ts`, `src/engines/scoutPriceOpinion.ts`, `src/engines/smb4PlayerGenerator.ts`, `src/engines/smb4TeamProfileEngine.ts`, `src/utils/prospectScoutingDraftEngine.ts`, `src/utils/rosterAnalyzerDraftAdapter.ts`, `src/engines/rosterAnalyzerEngine.ts`, `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx`, `LeagueBuilderAuctionDraft.tsx`, `LeagueBuilderTeams.tsx`, `src/utils/leagueBuilderStorage.ts`.
+- The frozen IV oracle `spec-docs/reference/iv_oracle.json` is read-only — never touch.
+- No new dependency, no new store, no trackerDb change.
+
+**VERIFICATION (run yourself, report the output):**
+- `export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH"` then `cd /Users/johnkruse/Projects/kbl-mode1-b && NODE_ENV= npx tsc -b ; echo "TSC=$?"` — must be 0 (proves no dangling import after the deletes).
+- `NODE_ENV= npx vitest run src/src_figma/__tests__/gameTracker/moraleDisplay.test.ts` — the new test passes.
+- Report `git status --porcelain` (must show exactly: 2 added, 3 deleted) and `git --no-pager diff --stat`.
+
+**FORMAT:** Report changed paths (git status), the new util body, the tsc result, and the new-test result.
+
+**FAILURE PROTOCOL / STOP-IF (stop, change nothing, quote the discrepancy):**
+- If ANY live `src/…` file OTHER than the 3 deletion targets actually IMPORTS from `'…/utils/playerMorale'` (a real `import … from` of the MODULE, not a field named `playerMorale`) → STOP and quote it (grounding would be wrong).
+- If `PlayerNameWithMorale` (the component) is referenced/imported by any file besides its own `.tsx` + the test → STOP and quote it.
+- If a contracted `src/…` anchor does not match the actual source → STOP and quote it. (The V2/plan spec files are intentionally NOT in this worktree — their absence is EXPECTED, not a stop. Only `src/…` mismatches stop you.)
+- Never touch the frozen oracle or any OWNED file. Never commit/push. Branch-only.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-17 ===== -->
