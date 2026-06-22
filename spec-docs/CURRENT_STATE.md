@@ -93,10 +93,16 @@
 > build-DARK L11 manager-change adapter (`franchiseL11ManagerChangeNewsAdapter` — still NO production caller) `facts`, so the reporter names the GM as the firing
 > actor when its emission seam goes live post-D13; the `reason:'user'` manager-firing already models GM-owned fire-authority. FULL suite **494 files / 8050 tests,
 > 1 fail (wpaRuntimeBoundary).** Closes the plan's "RB-8 GM↔manager fire-authority path" item. **NO trackerDb/kbl-app-meta version bump anywhere in RB-8.**
-> **➡ RB-9 (NEXT) = scout-as-bridge + roster board (§3.5/§9, MOSTLY REUSE):** hole-detection = the already-built+wired `rosterAnalyzerEngine.ts` (live in TeamHub +
-> LeagueBuilderRosters; scout-aware) — add a `draft_prep` surface + a thin draft adapter feeding the GM's in-progress MLB+farm roster, weight holes by the
-> farm-archetype team profile (`smb4TeamProfileEngine`), the scout layer values the fillers (the JOIN), the roster board renders the findings. Spec
-> `ROSTER_ANALYZER_RECOMMENDATION_ENGINE_SPEC.md`. Do NOT build a parallel hole-detector. Folds in the RB-3-deferred farm-archetype DUAL identity. Then RB-10 … RB-18.
+> **✅ RB-9a COMPLETE (WAVE 73, `2c67bcbf`, `codex/mode1-v1`, branch-only, ZERO-NEW-REDS) — the scout-as-bridge hole-detection FOUNDATION (build-DARK).** `+ 'draft_prep'`
+> on `RosterAnalyzerSurface` (additive enum; surface is a passthrough label, behavior comes from INPUT) + NEW pure `src/utils/rosterAnalyzerDraftAdapter.ts`
+> (`buildDraftAnalyzerInput`/`analyzeDraftRoster`) mapping the GM's in-progress won MLB+farm roster → the EXISTING `analyzeRoster` (REUSE, not a parallel hole-detector).
+> MLB ratings VISIBLE (public §3.6), farm ratings OBSCURED + scout signal on `optionState` (§3.2). Make-or-break proven: incomplete MLB roster → `position_coverage`
+> holes; farm prospects → `farm_options`/`call_up_advice` (read_only) — all from the existing engine. NO UI consumer yet (RB-9c). FULL suite **495 files / 8054 tests,
+> 1 fail (wpaRuntimeBoundary).** **RB-9 SPLIT:** 9a (done) / **RB-9b (NEXT) = farm-archetype DUAL identity** (additive `farmCapIdentity?` on the leagueBuilder `Team`
+> — NOT the franchise config, because the draft runs pre-franchise-init — + BandPriorities→Smb4TeamProfileLevels mapping [resolve the Defense band] + the §3.5
+> hole-weighting tilt; likely sub-splits) / **RB-9c = the §9 roster board UI** (both auction pages, gaps highlighted, reuse the analyzer report + panel pattern + scout-JOIN).
+> **RB-9a OPEN-DECISIONS (defaults taken):** D-9a-1 (draft analyzer salary disabled — holes-focused) · D-9a-2 (minimal self-contained adapter DTOs) · D-9b-PREVIEW (farm-archetype
+> home = leagueBuilder Team, no trackerDb bump — grounded correction of the recon's franchise-config rec). Then RB-10 … RB-18.
 > **OPEN (verify at RB-16):** the §2.3 surplus pool-sizing (pool ≥ total slots) lives upstream in the pool builder; the RB-2b-1 forced-filler
 > guarantee assumes it. **JK-BROWSER-VERIFY BATCHED
 > (persistence-prioritized):** RB-0b-1 — a real draft stamps all 3 axes onto league players + they carry into the franchise (7-type personality
