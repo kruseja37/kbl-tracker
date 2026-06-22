@@ -7,6 +7,17 @@
 
 ## June 2026
 
+### 2026-06-22 (attended): Trait POSITION-MISMATCH — protect + flag, don't prevent — RULED
+
+**Context:** JK flagged that a player could lose a trait at a position whose stats can't defend it (catcher with Cannon Arm). Analysis `wfzg5s1tu` CONFIRMED it (build-dark, latent): the arm signal is OF-assists-only (catcher CS isn't tracked → credited to pitcher; IF throws log as assist/DP), so a regular catcher/IF reads "artificial weak arm" → unfair loss + can't re-earn. Blast radius is NARROW — only the arm family (Cannon Arm/Noodle Arm); all batting/pitching/baserunning signals are universal-by-role. → `TRAIT_GAIN_LOSS_THRESHOLD_SPEC.md §8C`.
+
+**RULING (JK):** protect strongly + make it transparent; do NOT build the schema-level cure.
+- Canonical `POSITION_MISMATCH_UNREGAINABLE` (trait × position) map (v1: arm family at C/1B/2B/3B/SS/DH).
+- Held mismatch traits = **much harder to lose, NOT impossible**: suppress the artificial-zero-signal self-loss (treat as no-signal), + a strong keepScore boost / much-higher displacement bar (a far-stronger trait can still rarely bump it).
+- Accept un-regainable (no valid signal at that position) — do NOT build the catcher-CS-event / per-position-cohort cure (avoids a trackerDb bump).
+- **Scout draft flag:** "this player has a unique trait that could be lost and not regained — heads up." **Roster Analyzer:** must NOT undervalue un-regainable-trait players; surface the flag.
+- Generation NOT restricted (a catcher with Cannon Arm is a valuable flagged feature). DELETE the spec-cut Noodle Arm from BUILDABLE_TRAITS (separate cleanup).
+
 ### 2026-06-22 (attended): RATINGS adjustment — consolidate to one engine, absolute signal, age curve, diminishing returns — RULED
 
 **Context:** Applied the trait-design treatment to ratings. Research `wy351xzbq` found **FOUR divergent rating-mutation models, none implementing the spec, and NO canonical age curve**: (A) in-season dev-math `ratingsDevelopment.ts` (own-TV×morale, ±6 cap, dead-band 0.75 — built but triple-dark); (B) EOS `computeNetChange` war×1.5+crude-age (built+WIRED+persisted, ignores spec); (C) `agingEngine.ts` phase random-walk (orphaned/display); (D) the spec's peer-median×grade-asymmetry math (implemented by nobody). Full RATINGS spec to be authored.
