@@ -5,7 +5,7 @@
 > design** → **`AUCTION_DRAFT_SPEC_V2.md`** (authoritative; V1 spec bannered superseded) + the execution sequence **`AUCTION_REBUILD_PLAN.md`**.
 > **Single-Captain (Shape A):** Opus owns `codex/franchise-v1-next` (docs) + dispatches Codex for Mode-1 in `/Users/johnkruse/Projects/kbl-mode1`
 > [`codex/mode1-v1`]. Codex builds, Opus audits, branch-only, never push.
-> **LIVE LEDGER = `AUTONOMOUS_RUN_LOG.md` (WAVE 1–60) — read top-to-bottom on return; supersedes everything below.**
+> **LIVE LEDGER = `AUTONOMOUS_RUN_LOG.md` (WAVE 1–61) — read top-to-bottom on return; supersedes everything below.**
 > **V1 BUILT (build-dark, branch-only, zero-new-reds — SHELLS SURVIVE the rebuild):** MLB AUC-1.1..4.1b + FARM 5.1a..e/d-1/d-2/d-3. The
 > §2 bidding/CPU/wallet/persistence/hot-seat-UI + page shells are REUSED; the **value layer** (per-prospect-IV → scout price-range+20–80 grade)
 > and **nomination/resolve** (GM-nomination → engine weighted-random + one-chance) are REWRITTEN, + new systems (dual archetype tax, MLB→farm
@@ -48,12 +48,18 @@
 > `193a9270` · RB-2b-2 `456bd195` + 59-FIX `bacff8f2` (one-chance went LIVE) · RB-2b-3 `cb3e0edd` (orphaned machinery stripped — independent grep
 > ZERO retired-API hits). The auction is now engine-nominated (seeded weighted reveal ∝ pctile^k, MLB k2 / farm k3) + one-chance (no-bid → permanently
 > out + hard roster-fill forced-filler) + farm flat reserve, new leagues default to auction. Suite **487 files / 8000 tests, sole fail `wpaRuntimeBoundary`.**
-> **➡ NEXT (AUTH-4): `/kbl-captain` → RB-3 (dual archetypes + MLB luxury tax, V2 §4.2)** — (a) WIRE the RATIFIED soft luxury tax into the auction
-> (un-stub `projectedTax:0`; per-bid marginal tax like the snake's `pickMarginalTax`; cap/42-mod data = `T3_POOL_ANALYSIS §R4` / `tierParams.ts`
-> `LUXURY_CAP_TABLES`/`CAP_MODIFICATION_FRACTIONS`) — do NOT redesign it; (b) ADD the NET-NEW dual identity (MLB archetype → the tax, farm archetype →
-> §3.5 scout-priority tilt; `composeIdentity` = IV_ENGINE §6.3 + DECISIONS_LOG §520). **Acceptance gate = §5.3 EV-flatness (`EV_FLATNESS_TOLERANCE`
-> 0.10).** Ground at source: the `projectedTax` consumer (`auctionMaxBid`/`getTeamAuctionMaxBid` — tax already threaded into solvency, just stubbed 0),
-> `pickMarginalTax`, `composeIdentity`/`tierParams`, the EV-flatness harness. Then RB-4 (MLB→farm carryover) → … RB-18.
+> **✅ RB-3a COMPLETE (WAVE 61, `671eb8b7`, branch-only, ZERO-NEW-REDS) — the PURE auction luxury-tax helper (`auctionLuxuryTax.ts`, build-dark):**
+> `computeAuctionTeamProjectedTax` reuses the ratified `shiftLuxuryCaps`+`luxuryTax`('taxed') with the existing `capIdentity` (no reimplemented math);
+> archetype-fit discrimination proven (on-archetype taxed < off-archetype). Suite **488 files / 8004 tests, sole fail `wpaRuntimeBoundary`.**
+> **CAPTAIN SCOPE CALLS (AUTH-4 defaults, flagged for JK):** (1) RB-3 = **MLB luxury tax ONLY** — the existing single `Team.capIdentity` (already
+> chosen/persisted/snake-consumed) is the MLB archetype; the auction just ignores it. (2) Farm-archetype **DUAL identity → DEFERRED to RB-9** (its
+> §3.5 scout-tilt consumer; farm wallet stays tax-neutral). (3) Full **§5.3 EV-flatness harness → DEFERRED to RB-16** (sim-validation; T3 already
+> verified it at tierCap) — RB-3a ships a fit-discrimination sanity test instead of a heavy best-roster optimizer.
+> **➡ NEXT (AUTH-4): `/kbl-captain` → RB-3b (WIRE the MLB luxury tax into the auction hook)** — in `useAuctionDraft` (MLB only; farm stays
+> `projectedTax:0`), on each lot surface recompute every eligible team's `projectedTax = computeAuctionTeamProjectedTax(roster→ConstructionPlayers via
+> `toConstructionPlayer` from the pool, the surfaced candidate, `team.capIdentity`, tier)` + inject into the session so the existing `auctionMaxBid`
+> taxes off-archetype bids. Ground at source: the pool roster-ratings access + the tier source (`RegisteredPool.tier`?) + the injection point in
+> `autoAdvanceCpu` + the MLB hook test. Then RB-4 (MLB→farm carryover) → … RB-18.
 > **OPEN (verify at RB-16):** the §2.3 surplus pool-sizing (pool ≥ total slots) lives upstream in the pool builder; the RB-2b-1 forced-filler
 > guarantee assumes it. **JK-BROWSER-VERIFY BATCHED
 > (persistence-prioritized):** RB-0b-1 — a real draft stamps all 3 axes onto league players + they carry into the franchise (7-type personality
