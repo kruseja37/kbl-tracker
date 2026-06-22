@@ -4,6 +4,8 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { reservePriceCurve } from "../../../data/rosterEngineConstants";
+import { normalizeToChemistryCode } from "../../../data/chemistryCanonical";
+import { chemistryFitPriceMultiplier } from "../../../engines/chemistryFitValue";
 import { gradeToTwentyEighty, scoutPriceOpinion } from "../../../engines/scoutPriceOpinion";
 import { perceivedValueRange } from "../../../engines/scoutValueRange";
 import { seededNominationOrder } from "../../../engines/auctionStateMachine";
@@ -222,7 +224,7 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
   });
 
   test("renders the obscured farm auction flow with positions and scout ranges only", async () => {
-    const { teams } = mockLeagueData();
+    const { leagueData, teams } = mockLeagueData();
     const seed = seedWithFirst(TEAM_IDS, "team-a");
     const expected = buildFarmAuctionSession({
       leagueId: LEAGUE_ID,
@@ -242,7 +244,7 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
       },
     });
     const prospectById = new Map(expected.pool.prospects.map((prospect) => [prospect.id, prospect]));
-    const sortedCandidates = expected.session.availablePlayerIds
+    const baseCandidates = expected.session.availablePlayerIds
       .map((playerId) => expected.session.players[playerId])
       .map((candidate) => {
         const prospect = prospectById.get(candidate.playerId)!;
@@ -254,19 +256,43 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
           candidateId: candidate.playerId,
           seed: `${seed}:team-a`,
         });
-        const range = perceivedValueRange(priceOpinion, accuracy, `${seed}:team-a:${candidate.playerId}`);
-        return { candidate, prospect, range, priceOpinion };
+        return { candidate, prospect, accuracy, priceOpinion };
+      });
+    const boostedChemistry = normalizeToChemistryCode(baseCandidates[0].prospect.chemistry);
+    const rosterChemistryCounts = { [boostedChemistry]: 3 };
+    const mlbRosterPlayerIds = ["mlb-chem-1", "mlb-chem-2", "mlb-chem-3"];
+    leagueData.players = mlbRosterPlayerIds.map((id) => ({
+      id,
+      chemistry: baseCandidates[0].prospect.chemistry,
+    })) as unknown as UseLeagueBuilderDataReturn["players"];
+    leagueData.getRoster = vi.fn(async (teamId: string) => ({
+      ...emptyRoster(teamId),
+      mlbRoster: teamId === "team-a" ? mlbRosterPlayerIds : [],
+    }));
+    const sortedCandidates = baseCandidates
+      .map((candidate) => {
+        const chemFit = chemistryFitPriceMultiplier(candidate.prospect.chemistry, rosterChemistryCounts);
+        const range = perceivedValueRange(
+          candidate.priceOpinion * chemFit,
+          candidate.accuracy,
+          `${seed}:team-a:${candidate.candidate.playerId}`,
+        );
+        return { ...candidate, range, chemFit };
       })
       .sort((left, right) =>
         right.range.displayedEstimate - left.range.displayedEstimate ||
         prospectDisplayName(left.prospect).localeCompare(prospectDisplayName(right.prospect)),
       );
-    const target = sortedCandidates[0];
+    const target = sortedCandidates.find((candidate) => candidate.chemFit > 1);
+    if (!target) throw new Error("Expected at least one chemistry-fit farm auction target.");
+    const neutralTarget = sortedCandidates.find((candidate) => candidate.chemFit === 1);
+    if (!neutralTarget) throw new Error("Expected at least one neutral chemistry-fit farm auction target.");
     const targetName = prospectDisplayName(target.prospect);
     const targetRangeText = formatScoutRange(target.range);
     const targetGradeText = `Scout grade ${target.prospect.prospectProfile.scoutedGrade} (${gradeToTwentyEighty(target.prospect.prospectProfile.scoutedGrade)})`;
     const targetRangeMidpoint = (target.range.low + target.range.high) / 2;
     const expectedSalePrice = formatMoney(Math.ceil(reservePriceCurve(target.candidate.ivPercentile) * target.candidate.iv));
+    const neutralRangeMidpoint = (neutralTarget.range.low + neutralTarget.range.high) / 2;
 
     render(<LeagueBuilderFarmAuctionDraft />);
 
@@ -288,11 +314,15 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     expect(targetButton).toHaveTextContent(targetGradeText);
     expect(targetButton).toHaveTextContent(`Scout value ${targetRangeText}`);
     expect(target.range.low).not.toBe(target.range.high);
-    expect(targetRangeMidpoint).toBeCloseTo(target.priceOpinion, 10);
+    expect(target.chemFit).toBeCloseTo(1.08, 10);
+    expect(targetRangeMidpoint).toBeCloseTo(target.priceOpinion * target.chemFit, 10);
     expect(targetRangeMidpoint).not.toBe(target.candidate.iv);
     expect(targetButton).not.toHaveTextContent(formatMoney(target.candidate.iv));
     expect(targetButton).not.toHaveTextContent(/\b(POW|CON|SPD|FLD|ARM|VEL|JNK|ACC)\b/);
     expect(targetButton).not.toHaveTextContent(/Overall|True grade|Ratings/i);
+    const neutralButton = screen.getByRole("button", { name: new RegExp(escapeRegExp(prospectDisplayName(neutralTarget.prospect))) });
+    expect(neutralButton).toHaveTextContent(`Scout value ${formatScoutRange(neutralTarget.range)}`);
+    expect(neutralRangeMidpoint).toBeCloseTo(neutralTarget.priceOpinion, 10);
 
     fireEvent.click(targetButton);
 

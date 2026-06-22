@@ -3,12 +3,14 @@ import { useNavigate } from "react-router";
 import { ArrowLeft, CheckCircle2, Gavel, RefreshCw, ShieldAlert, UserCheck } from "lucide-react";
 
 import { useFarmAuctionDraft } from "../hooks/useFarmAuctionDraft";
+import { normalizeToChemistryCode, type ChemistryCode } from "../../../data/chemistryCanonical";
 import {
   getTeamAuctionMaxBid,
   type AuctionPlayer,
   type AuctionResult,
   type AuctionSession,
 } from "../../../engines/auctionStateMachine";
+import { chemistryFitPriceMultiplier } from "../../../engines/chemistryFitValue";
 import { gradeToTwentyEighty, scoutPriceOpinion } from "../../../engines/scoutPriceOpinion";
 import { perceivedValueRange, type ScoutValueRange } from "../../../engines/scoutValueRange";
 import {
@@ -83,9 +85,10 @@ function scoutRangeForProspect(input: {
   auctionPlayer: AuctionPlayer | null | undefined;
   teamId: string | null | undefined;
   scoutsByTeamId: Record<string, ProspectScoutDescriptor | undefined> | null;
+  rosterChemistryCounts: Partial<Record<ChemistryCode, number>>;
   seed: string;
 }): ScoutValueRange | null {
-  const { prospect, auctionPlayer, teamId, scoutsByTeamId, seed } = input;
+  const { prospect, auctionPlayer, teamId, scoutsByTeamId, rosterChemistryCounts, seed } = input;
   if (!prospect || !auctionPlayer || !teamId) return null;
   const scout = scoutsByTeamId?.[teamId];
   const accuracy = scoutAccuracy(prospect.primaryPosition as DraftPosition, scout);
@@ -96,7 +99,8 @@ function scoutRangeForProspect(input: {
     candidateId: auctionPlayer.playerId,
     seed: `${seed}:${teamId}`,
   });
-  return perceivedValueRange(priceOpinion, accuracy, `${seed}:${teamId}:${auctionPlayer.playerId}`);
+  const chemFit = chemistryFitPriceMultiplier(prospect.chemistry, rosterChemistryCounts);
+  return perceivedValueRange(priceOpinion * chemFit, accuracy, `${seed}:${teamId}:${auctionPlayer.playerId}`);
 }
 
 function formatScoutRange(range: ScoutValueRange | null): string {
@@ -133,6 +137,47 @@ function rosterPositionTally(
     tally.set(position, (tally.get(position) ?? 0) + 1);
   }
   return [...tally.entries()].sort((left, right) => left[0].localeCompare(right[0]));
+}
+
+function rosterChemistryTally(
+  team: AuctionSession["teams"][number] | null | undefined,
+  prospectById: Map<string, LeagueBuilderProspectPlayerDto>,
+): Partial<Record<ChemistryCode, number>> {
+  const tally: Partial<Record<ChemistryCode, number>> = {};
+  for (const assignment of team?.roster ?? []) {
+    const prospect = prospectById.get(assignment.playerId);
+    if (!prospect) continue;
+    const chemistry = normalizeToChemistryCode(prospect.chemistry);
+    tally[chemistry] = (tally[chemistry] ?? 0) + 1;
+  }
+  return tally;
+}
+
+function mergeChemistryTallies(
+  ...tallies: Array<Partial<Record<ChemistryCode, number>> | null | undefined>
+): Partial<Record<ChemistryCode, number>> {
+  const merged: Partial<Record<ChemistryCode, number>> = {};
+  for (const tally of tallies) {
+    for (const [chemistry, count] of Object.entries(tally ?? {}) as Array<[ChemistryCode, number]>) {
+      if (!Number.isFinite(count) || count <= 0) continue;
+      merged[chemistry] = (merged[chemistry] ?? 0) + count;
+    }
+  }
+  return merged;
+}
+
+function rosterChemistryCountsForTeamId(
+  teamId: string | null | undefined,
+  session: AuctionSession | null | undefined,
+  mlbRosterChemistryByTeamId: Record<string, Partial<Record<ChemistryCode, number>>>,
+  prospectById: Map<string, LeagueBuilderProspectPlayerDto>,
+): Partial<Record<ChemistryCode, number>> {
+  if (!teamId) return {};
+  const team = session?.teams.find((candidate) => candidate.teamId === teamId);
+  return mergeChemistryTallies(
+    mlbRosterChemistryByTeamId[teamId],
+    rosterChemistryTally(team, prospectById),
+  );
 }
 
 function findNextHumanNominatorTeamId(
@@ -201,11 +246,22 @@ export function LeagueBuilderFarmAuctionDraft() {
   const lotAuctionPlayer = lot ? session?.players[lot.playerId] ?? null : null;
   const currentLotProspect = lot ? prospectById.get(lot.playerId) ?? null : null;
   const activeSeed = session?.config.nominationOrderSeed ?? seed;
+  const currentLotScoutTeamId = auction.currentBidderTeamId ?? session?.pendingClaim?.teamId ?? auction.currentNominatorTeamId;
+  const currentLotRosterChemistryCounts = useMemo(
+    () => rosterChemistryCountsForTeamId(
+      currentLotScoutTeamId,
+      session,
+      auction.mlbRosterChemistryByTeamId,
+      prospectById,
+    ),
+    [auction.mlbRosterChemistryByTeamId, currentLotScoutTeamId, prospectById, session],
+  );
   const currentLotRange = scoutRangeForProspect({
     prospect: currentLotProspect,
     auctionPlayer: lotAuctionPlayer,
-    teamId: auction.currentBidderTeamId ?? session?.pendingClaim?.teamId ?? auction.currentNominatorTeamId,
+    teamId: currentLotScoutTeamId,
     scoutsByTeamId: auction.scoutsByTeamId,
+    rosterChemistryCounts: currentLotRosterChemistryCounts,
     seed: activeSeed,
   });
   const minBid = session ? minimumBid(session) : null;
@@ -219,6 +275,15 @@ export function LeagueBuilderFarmAuctionDraft() {
   const currentRosterTally = useMemo(
     () => rosterPositionTally(currentBidderTeamState, prospectById),
     [currentBidderTeamState, prospectById],
+  );
+  const currentNominatorRosterChemistryCounts = useMemo(
+    () => rosterChemistryCountsForTeamId(
+      auction.currentNominatorTeamId,
+      session,
+      auction.mlbRosterChemistryByTeamId,
+      prospectById,
+    ),
+    [auction.currentNominatorTeamId, auction.mlbRosterChemistryByTeamId, prospectById, session],
   );
   const nextHumanNominatorTeamId = findNextHumanNominatorTeamId(session, auction.isCpuTeam);
   const nextHumanNominator = nextHumanNominatorTeamId ? teamById.get(nextHumanNominatorTeamId) : null;
@@ -316,6 +381,7 @@ export function LeagueBuilderFarmAuctionDraft() {
             auctionPlayer: candidate,
             teamId: auction.currentNominatorTeamId,
             scoutsByTeamId: auction.scoutsByTeamId,
+            rosterChemistryCounts: currentNominatorRosterChemistryCounts,
             seed: activeSeed,
           }),
         };
@@ -338,6 +404,7 @@ export function LeagueBuilderFarmAuctionDraft() {
     auction.currentNominatorTeamId,
     auction.scoutsByTeamId,
     availablePoolCandidates,
+    currentNominatorRosterChemistryCounts,
     positionFilter,
     prospectById,
     scoutSortDirection,

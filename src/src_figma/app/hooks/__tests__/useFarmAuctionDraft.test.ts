@@ -116,6 +116,13 @@ function makeRoster(teamId: string, farmRoster: string[] = []): TeamRoster {
   };
 }
 
+function makeRosterWithMlb(teamId: string, mlbRoster: string[], farmRoster: string[] = []): TeamRoster {
+  return {
+    ...makeRoster(teamId, farmRoster),
+    mlbRoster,
+  };
+}
+
 function seedWithOrder(teamIds: string[], expectedOrder: string[]): string {
   const seed = Array.from({ length: 5_000 }, (_, index) => `farm-auction-seed-${index}`).find(
     (candidate) => {
@@ -131,11 +138,12 @@ function mockLeagueData(input: {
   leagues: LeagueTemplate[];
   teams: Team[];
   rosters?: Record<string, TeamRoster>;
+  players?: UseLeagueBuilderDataReturn["players"];
 }) {
   const leagueData = {
     leagues: input.leagues,
     teams: input.teams,
-    players: [],
+    players: input.players ?? [],
     rulesPresets: [],
     isLoading: false,
     error: null,
@@ -233,6 +241,49 @@ describe("useFarmAuctionDraft", () => {
     const persisted = await getAuctionSessionById(createFarmAuctionSessionId("farm-init"));
     expect(persisted?.session.state).toBe("NOMINATION");
     await expect(getAuctionSession("farm-init")).resolves.toBeNull();
+  });
+
+  test("exposes derived MLB roster chemistry counts without persisting them into the farm auction session", async () => {
+    const teamIds = ["human", "cpu"];
+    const seed = seedWithOrder(teamIds, ["human", "cpu"]);
+    mockLeagueData({
+      leagues: [makeLeague("farm-chemistry", teamIds)],
+      teams: [makeTeam("human"), makeTeam("cpu", "ai")],
+      rosters: {
+        human: makeRosterWithMlb("human", ["mlb-spi-1", "mlb-spi-2", "mlb-dis", "missing-player"], ["farm-cra"]),
+        cpu: makeRosterWithMlb("cpu", ["mlb-legacy-fiery"]),
+      },
+      players: [
+        { id: "mlb-spi-1", chemistry: "Spirited" },
+        { id: "mlb-spi-2", chemistry: "SPI" },
+        { id: "mlb-dis", chemistry: "Disciplined" },
+        { id: "farm-cra", chemistry: "Crafty" },
+        { id: "mlb-legacy-fiery", chemistry: "FIERY" },
+      ] as unknown as UseLeagueBuilderDataReturn["players"],
+    });
+
+    const { result } = renderHook(() => useFarmAuctionDraft());
+
+    await act(async () => {
+      await result.current.initFarmAuction("farm-chemistry", {
+        nominationOrderSeed: seed,
+        cpuShillCount: 0,
+        bidIncrement: 1_000,
+      });
+    });
+
+    expect(result.current.mlbRosterChemistryByTeamId).toEqual({
+      human: { SPI: 2, DIS: 1 },
+      cpu: { CMP: 1 },
+    });
+
+    const persisted = await getAuctionSessionById(createFarmAuctionSessionId("farm-chemistry"));
+    expect(persisted?.session.teams.find((team) => team.teamId === "human")).not.toHaveProperty(
+      "mlbRosterChemistry",
+    );
+    expect(persisted?.session.teams.find((team) => team.teamId === "cpu")).not.toHaveProperty(
+      "mlbRosterChemistry",
+    );
   });
 
   test("drives nominate to bids to SOLD while a CPU farm team auto-acts", async () => {

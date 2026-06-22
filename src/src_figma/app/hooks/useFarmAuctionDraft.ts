@@ -19,6 +19,7 @@ import {
   type CpuShillAuctionSession,
 } from "../../../engines/cpuShillBidding";
 import { DEFAULT_AUCTION_SETUP_CONFIG, type AuctionSetupConfig } from "../../../data/auctionEngineConstants";
+import { normalizeToChemistryCode, type ChemistryCode } from "../../../data/chemistryCanonical";
 import { buildFarmAuctionSession } from "../../../utils/farmAuctionSession";
 import type { FarmAuctionPool } from "../../../utils/farmAuctionPool";
 import {
@@ -31,6 +32,7 @@ import {
 import type { ProspectScoutDescriptor } from "../../../utils/prospectScoutingDraftEngine";
 import {
   useLeagueBuilderData,
+  type Player,
   type Team,
   type TeamRoster,
   type UseLeagueBuilderDataReturn,
@@ -56,6 +58,7 @@ export interface UseFarmAuctionDraftReturn {
   session: CpuShillAuctionSession | null;
   pool: FarmAuctionPool | null;
   scoutsByTeamId: Record<string, ProspectScoutDescriptor | undefined> | null;
+  mlbRosterChemistryByTeamId: Record<string, Partial<Record<ChemistryCode, number>>>;
   farmTierCap: number | null;
   seed: string;
   isWorking: boolean;
@@ -151,15 +154,30 @@ async function loadOptionalFarmScouts(
 async function buildFarmAuctionTeams(input: {
   leagueTeams: readonly Team[];
   getRoster: UseLeagueBuilderDataReturn["getRoster"];
-}): Promise<Array<{
-  teamId: string;
-  teamName: string;
-  farmRosterPlayerIds: readonly string[];
-  committedFarmSalaries: number;
-}>> {
-  return Promise.all(
+  leaguePlayers: readonly Player[];
+}): Promise<{
+  teams: Array<{
+    teamId: string;
+    teamName: string;
+    farmRosterPlayerIds: readonly string[];
+    committedFarmSalaries: number;
+  }>;
+  mlbRosterChemistryByTeamId: Record<string, Partial<Record<ChemistryCode, number>>>;
+}> {
+  const chemistryByPlayerId = new Map(
+    input.leaguePlayers.map((player) => [player.id, normalizeToChemistryCode(player.chemistry)]),
+  );
+  const mlbRosterChemistryByTeamId: Record<string, Partial<Record<ChemistryCode, number>>> = {};
+  const teams = await Promise.all(
     input.leagueTeams.map(async (team) => {
       const roster: TeamRoster | null = await input.getRoster(team.id);
+      const chemistryCounts: Partial<Record<ChemistryCode, number>> = {};
+      for (const playerId of roster?.mlbRoster ?? []) {
+        const chemistry = chemistryByPlayerId.get(playerId);
+        if (!chemistry) continue;
+        chemistryCounts[chemistry] = (chemistryCounts[chemistry] ?? 0) + 1;
+      }
+      mlbRosterChemistryByTeamId[team.id] = chemistryCounts;
 
       return {
         teamId: team.id,
@@ -169,6 +187,8 @@ async function buildFarmAuctionTeams(input: {
       };
     }),
   );
+
+  return { teams, mlbRosterChemistryByTeamId };
 }
 
 // Mirrors useAuctionDraft; duplicated intentionally until a shared hot-seat core is extracted.
@@ -201,6 +221,9 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
   const [session, setSession] = useState<CpuShillAuctionSession | null>(null);
   const [pool, setPool] = useState<FarmAuctionPool | null>(null);
   const [scoutsByTeamId, setScoutsByTeamId] = useState<Record<string, ProspectScoutDescriptor | undefined> | null>(null);
+  const [mlbRosterChemistryByTeamId, setMlbRosterChemistryByTeamId] = useState<
+    Record<string, Partial<Record<ChemistryCode, number>>>
+  >({});
   const [farmTierCap, setFarmTierCap] = useState<number | null>(null);
   const [context, setContext] = useState<FarmAuctionDraftContext | null>(null);
   const [isWorking, setIsWorking] = useState(false);
@@ -328,12 +351,14 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
     if (!row) {
       setPool(null);
       setScoutsByTeamId(null);
+      setMlbRosterChemistryByTeamId({});
       setFarmTierCap(null);
       return null;
     }
-    const teams = await buildFarmAuctionTeams({
+    const { teams, mlbRosterChemistryByTeamId: nextMlbRosterChemistryByTeamId } = await buildFarmAuctionTeams({
       leagueTeams: nextLeagueTeams,
       getRoster: leagueData.getRoster,
+      leaguePlayers: leagueData.players,
     });
     const nextScoutsByTeamId = await loadOptionalFarmScouts(leagueId);
     const regen = buildFarmAuctionSession({
@@ -359,9 +384,10 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
     const resumed = await autoAdvanceCpu(row.session, nextContext, nextLeagueTeams);
     setPool(regen.pool);
     setScoutsByTeamId(nextScoutsByTeamId ?? null);
+    setMlbRosterChemistryByTeamId(nextMlbRosterChemistryByTeamId);
     setFarmTierCap(regen.farmTierCap);
     return resumed;
-  }), [autoAdvanceCpu, leagueData.getRoster, leagueData.leagues, leagueData.teams, runAction]);
+  }), [autoAdvanceCpu, leagueData.getRoster, leagueData.leagues, leagueData.players, leagueData.teams, runAction]);
 
   const initFarmAuction = useCallback(async (
     leagueId: string,
@@ -374,9 +400,10 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
       .filter((team): team is Team => Boolean(team));
     if (nextLeagueTeams.length === 0) throw new Error("Selected league has no teams.");
 
-    const teams = await buildFarmAuctionTeams({
+    const { teams, mlbRosterChemistryByTeamId: nextMlbRosterChemistryByTeamId } = await buildFarmAuctionTeams({
       leagueTeams: nextLeagueTeams,
       getRoster: leagueData.getRoster,
+      leaguePlayers: leagueData.players,
     });
     const seed = partialConfig.nominationOrderSeed || DEFAULT_AUCTION_SETUP_CONFIG.nominationOrderSeed;
     const config: AuctionSetupConfig = {
@@ -404,6 +431,7 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
     const initialized = await autoAdvanceCpu(result.session, nextContext, nextLeagueTeams);
     setPool(result.pool);
     setScoutsByTeamId(nextScoutsByTeamId ?? null);
+    setMlbRosterChemistryByTeamId(nextMlbRosterChemistryByTeamId);
     setFarmTierCap(result.farmTierCap);
     return initialized;
   }), [autoAdvanceCpu, leagueData, persist, runAction]);
@@ -433,6 +461,7 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
     session,
     pool,
     scoutsByTeamId,
+    mlbRosterChemistryByTeamId,
     farmTierCap,
     seed: session?.config.nominationOrderSeed ?? DEFAULT_AUCTION_SETUP_CONFIG.nominationOrderSeed,
     isWorking,
