@@ -17093,3 +17093,65 @@ Use xhigh reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-9a ===== -->
+
+<!-- ===== CONTRACT: RB-9b ===== -->
+## CONTRACT: RB-9b — farm-archetype field (saved-shape) + the archetype→profile-target bridge (pure, build-DARK)
+
+**ROUTE:** Codex build in the Mode-1 worktree `/Users/johnkruse/Projects/kbl-mode1` on branch `codex/mode1-v1`. Branch-only; do NOT commit, do NOT push (the Captain commits after audit).
+
+**ROLE:** You are the builder (Codex). Opus is the auditor (builder ≠ auditor). Build EXACTLY this contract — no extra scope.
+
+**GOAL:** Two cohesive pieces of the §3.5/§4.2 "farm archetype → scout-priority tilt" foundation: (1) an ADDITIVE, optional `farmCapIdentity?: TeamCapIdentity` field on the leagueBuilder `Team` (the GM's farm archetype, the DUAL identity RB-3 deferred — independent of the MLB `capIdentity`), proven to round-trip with NO DB-version bump; (2) a NEW pure mapping `bandPrioritiesToTargetProfile` that converts an archetype's band priorities into an `Smb4TeamProfileLevels` target (the bridge the codebase lacks — `composeIdentity` emits cap-modification names, NOT profile levels). **Build-DARK: NO UI, NO setup collection, NO consumer wiring** (RB-9c collects the archetype + applies the hole-weighting tilt + the board). The deliverable is the saved-shape field + the pure bridge + tests.
+
+**SOURCE OF TRUTH:** ⚠ The ratified `AUCTION_DRAFT_SPEC_V2.md` + `AUCTION_REBUILD_PLAN.md` live on the **docs branch** and are **NOT present in your `codex/mode1-v1` worktree** — do NOT attempt to open them or treat their absence as a stop condition; the operative requirements are EMBEDDED below (the Captain grounded them at source). The anchors you VERIFY are the CODE anchors below — all in `src/`, present in your worktree.
+
+**EMBEDDED SPEC (AUCTION_DRAFT_SPEC_V2 §4.2 + §3.5, intent verbatim):** "A GM chooses an MLB archetype and a farm archetype at setup — independently. … Farm archetype → scout priorities (NOT a luxury tax): the farm uses scout-perceived value, not band salaries, so the farm archetype instead tilts the scout's hole-prioritization + valuation (§3.5) — it raises the priority/recommended-pay for prospects matching your farm identity. The farm wallet itself stays archetype-neutral." §3.5: "weights [holes] by the GM's farm archetype — a power-identity team's unfilled power slot 'screams louder'." NET-NEW in V2 = the DUAL identity (the machinery `composeIdentity`/`TeamCapIdentity` is reused twice; RB-3 already wired the MLB archetype → luxury tax, and DEFERRED the farm archetype to RB-9). **Saved-shape ruling (Captain, grounded):** the farm archetype lives on the leagueBuilder `Team` next to `capIdentity` (NOT the franchise config) because the auction draft — its consumer — runs BEFORE franchise-init (which only reads the completed sessions). It is an additive optional field on the existing `Team` record in the SEPARATE `kbl-league-builder` DB (schemaless) ⇒ NO DB-version bump, NO new store.
+
+**GROUNDED ANCHORS (re-read each at source before editing; CODE anchors only — verify these):**
+- `src/utils/leagueBuilderStorage.ts:40-41` — `const DB_NAME = 'kbl-league-builder'; const DB_VERSION = 8;` (a SEPARATE DB, NOT trackerDb). `:146` — `capIdentity?: TeamCapIdentity;` on the `Team` interface (the MLB archetype; `TeamCapIdentity` is ALREADY imported here — reuse the same import). `saveTeam`/`getTeam` are spread-and-put (persist arbitrary additive Team fields; the capIdentity round-trip test proves it).
+- `src/engines/leagueConstruction.ts:17-20` — `type Band = 'Power' | 'Contact' | 'Speed' | 'Defense' | 'Rotation' | 'Bullpen'`; `type BandPriorities = Record<Band, number>`; `type TeamCapIdentity = { bandPriorities?: BandPriorities; increase: string[]; decrease: string[] }`. `composeIdentity(priorities)` (`:156`) emits cap-mod NAMES, NOT profile levels — that is WHY the bridge is net-new.
+- `src/engines/smb4TeamProfileEngine.ts:3-13` — `SMB4_TEAM_PROFILE_CATEGORIES = ['power','contact','speed','rotation','bullpen']` (FIVE; NO 'defense'); `interface Smb4TeamProfileLevels { power; contact; speed; rotation; bullpen }` (each a 0-6 level). `:53-59` — `SMB4_STANDARD_TEAM_PROFILE_CALIBRATION` (per-category min/max/average). `:269` — `targetLevelsToTeamProfile(levels, teamName?)` (builds a synthetic target profile from levels — exists; RB-9c will use it). `:237` — `compareTeamProfiles(actual, target)` (the hole-detector; RB-9c will use it).
+- **Migration-test template** — `src/utils/tests/leagueBuilderStorageV6Migration.test.ts:433-475` — the EXACT "capIdentity is an additive Team field that round-trips when present and stays undefined when absent" test (saveTeam without → `expect.not.objectContaining`; saveTeam with → `expect.objectContaining`). `:277/285/319/350` pin `db.version === 8`; `:33/:278` pin `expectedStores` (exact store list). Your change must keep ALL of these green.
+
+**MAKE-OR-BREAK:**
+1. `farmCapIdentity?: TeamCapIdentity` round-trips through `saveTeam`/`getTeam` (present → returned; absent → undefined) AND the V6-migration test still asserts `db.version === 8` + the unchanged `expectedStores` list (NO DB bump, NO new store).
+2. `bandPrioritiesToTargetProfile({ Power: 6, Contact: 0, Speed: 0, Defense: 0, Rotation: 0, Bullpen: 0 })` returns an `Smb4TeamProfileLevels` whose `power` is the STRICT max category level (the "power identity → power target screams loudest" property), and the Defense band is correctly DROPPED (it has no smb4 category and must not throw / must not leak into any of the 5 outputs). All-zero priorities → all categories at the neutral base level.
+
+**CONSTRAINTS — exact files (touch ONLY these):**
+1. `src/utils/leagueBuilderStorage.ts` — ADD `farmCapIdentity?: TeamCapIdentity;` to the `Team` interface (next to `capIdentity` at `:146`). This is the ONLY change to this file. No storage-logic change (the spread-and-put already persists it). Do NOT bump `DB_VERSION`, do NOT add a store.
+2. NEW FILE `src/engines/farmArchetypeProfile.ts` — the pure bridge (details below).
+3. NEW FILE `src/engines/__tests__/farmArchetypeProfile.test.ts` — the bridge unit test.
+4. EDIT `src/utils/tests/leagueBuilderStorageV6Migration.test.ts` — ADD ONE new test "farmCapIdentity is an additive Team field that round-trips when present and stays undefined when absent" mirroring the capIdentity test at `:433-475` (do NOT modify any existing test).
+- FROZEN oracle `spec-docs/reference/iv_oracle.json` is READ-ONLY — never touch.
+- Do NOT touch the franchise config/types, `composeIdentity`, `smb4TeamProfileEngine`, the draft adapter (RB-9a), any UI/page/hook, or any other store. Do NOT wire `bandPrioritiesToTargetProfile` into any consumer (build-DARK).
+
+**BRIDGE DESIGN (`src/engines/farmArchetypeProfile.ts`) — pure, deterministic, no React/storage/Date/random:**
+- Import `type Band, type BandPriorities` from `./leagueConstruction` and `type Smb4TeamProfileLevels, SMB4_TEAM_PROFILE_CATEGORIES` from `./smb4TeamProfileEngine`.
+- Export a tuning constant: `export const FARM_ARCHETYPE_TARGET_TUNING = { baseLevel: 3, spread: 3 } as const;` (sim-tunable §11; doc-comment it).
+- Export `BAND_TO_PROFILE_CATEGORY: Partial<Record<Band, keyof Smb4TeamProfileLevels>>` mapping Power→'power', Contact→'contact', Speed→'speed', Rotation→'rotation', Bullpen→'bullpen' (Defense intentionally ABSENT — documented: SMB4's team profile has no defense category, so the farm archetype's Defense priority does not tilt the profile-gap signal; defensive completeness is still surfaced by the analyzer's position_coverage).
+- Export `function bandPrioritiesToTargetProfile(priorities: BandPriorities): Smb4TeamProfileLevels`:
+  - Consider ONLY the 5 mapped bands. `maxMapped = Math.max(0, ...mappedPriorities)`.
+  - For each of the 5 categories: `share = maxMapped > 0 ? priorities[band] / maxMapped : 0`; `level = clamp(Math.round(baseLevel + share * spread), 0, 6)`. (So the top-priority band → level 6; a zero-priority band → baseLevel 3; all-zero → all baseLevel.) Guard non-finite/negative priorities → treat as 0.
+  - Return the 5-key `Smb4TeamProfileLevels`.
+- Top-of-file comment: build-DARK (RB-9c consumes it), the Defense-drop rationale, and that the priority→level curve is sim-tunable.
+
+**TEST (`src/engines/__tests__/farmArchetypeProfile.test.ts`) — non-vacuous:**
+1. A power-heavy archetype (`Power:6`, rest 0) → `power` is the strict max level (6) and all others are baseLevel (3); the result has exactly the 5 keys, NO `defense` key.
+2. A balanced/multi-priority archetype (e.g. Power:5, Contact:1, Speed:0, Defense:3, Rotation:4, Bullpen:2) → levels are monotonic in priority among the mapped bands (Power ≥ Rotation ≥ Bullpen ≥ Contact ≥ Speed), and the Defense priority does NOT appear/leak.
+3. All-zero priorities → every category equals `FARM_ARCHETYPE_TARGET_TUNING.baseLevel`.
+4. Negative/NaN priority is treated as 0 (no throw, no negative level).
+
+**VERIFICATION (you run, report the real output):**
+- `cd /Users/johnkruse/Projects/kbl-mode1 && export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" && NODE_ENV= npx tsc -b` → exit 0 (paste the tail).
+- `NODE_ENV= npx vitest run src/engines/__tests__/farmArchetypeProfile.test.ts src/utils/tests/leagueBuilderStorageV6Migration.test.ts` → all pass, incl. the new farmCapIdentity round-trip + the unchanged `db.version===8`/`expectedStores` pins (paste the summary). (The Captain runs the FULL suite gate.)
+- Report `git status --short` (exactly: 2 modified [leagueBuilderStorage.ts + the migration test], 2 new files).
+
+**FORMAT (report back):** the diff summary (files + line counts), the verbatim signature of `bandPrioritiesToTargetProfile` + the `BAND_TO_PROFILE_CATEGORY` map, the tsc result, the focused test results (incl. the version/store pins green), and `git status --short`.
+
+**FAILURE PROTOCOL / STOP-IF:**
+- If adding `farmCapIdentity?` requires ANY change to `saveTeam`/`getTeam` logic or a `DB_VERSION` bump or a new store to round-trip → STOP and explain (the additive-field assumption is wrong; quote the storage code).
+- If a contracted **CODE anchor (a `src/…` file:line)** does not match the actual source → STOP and quote the discrepancy. (The V2 spec files are intentionally NOT in this worktree — their absence is EXPECTED, NOT a stop condition; the requirements are embedded above. Only `src/…` anchor mismatches stop you.)
+- Never touch the frozen oracle. Never commit/push. Branch-only.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-9b ===== -->
