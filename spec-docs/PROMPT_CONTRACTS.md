@@ -16577,3 +16577,132 @@ STOP. If the frozen oracle would change → STOP.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-6 ===== -->
+
+<!-- ===== CONTRACT: RB-7a ===== -->
+## CONTRACT: RB-7a — pure draft-FREEZE compute engine (build-dark, isolated)
+
+**ROUTE:** Codex (builder) — worktree `/Users/johnkruse/Projects/kbl-mode1` [`codex/mode1-v1`]. Opus audits (builder≠auditor).
+**ROLE:** Builder. Implement EXACTLY this contract; if a STOP-IF triggers, STOP and report (do not improvise).
+
+**GOAL:** Add ONE new **pure, build-dark** engine `src/engines/draftFreeze.ts` (+ its test) that assembles the
+§10 freeze morale numbers for a finished draft. Given the SOLD/rostered draftees (already resolved by the
+caller — RB-7b will load them from the persisted auction sessions), it computes, deterministically:
+- per **player**: starting PLAYER morale (via the EXISTING RB-5 `computeDraftMoraleFromRaw`) + a passthrough of `settledSalary`,
+- per **team**: starting FAN morale (via the EXISTING RB-6 `computeDraftFanMorale`).
+It is PURE: no IO, no persistence, no auction/scout/store imports, no `Date.now`/`Math.random`/async. It REUSES the
+RB-5 + RB-6 engines verbatim — it must NOT reimplement any morale or fan-morale math.
+
+**SOURCE OF TRUTH (spec, VERBATIM — do not infer beyond it):**
+- `AUCTION_DRAFT_SPEC_V2.md` §10 (THE FREEZE → MODE 2 — the four-number bridge; #3 starting PLAYER morale, #4 starting FAN morale).
+- §6 (PLAYER MORALE FROM THE DRAFT — slot signal "WHEN he surfaced/was won" early/middle/late; pay signal vs scout range; early dominates).
+- §7 (FAN MORALE FROM PAYROLL — payroll RANK vs median; exponential past thresholds; high side 2×).
+- The morale MAGNITUDES + curve are OWNED by the RB-5/RB-6 engines (DRAFT_MORALE_TUNING / DRAFT_FAN_MORALE_TUNING); this ticket does NOT re-tune them.
+
+**GROUNDED ANCHORS (re-read at source in kbl-mode1; do not trust this contract's line refs blindly):**
+- `src/engines/draftMorale.ts:80-94` — `computeDraftMoraleFromRaw(orderIndex: number, totalWon: number, winningBid: number, range: {low:number;high:number}, personality: string|undefined, modifiers: HiddenModifiers): DraftMoraleResult` where `DraftMoraleResult = {startingMorale, slotBase, payBase, totalDelta}` (`:17-22`). `classifyDraftSlot(orderIndex,totalWon)` buckets into early/middle/late TERCILES of `[0,totalWon)`.
+- `src/engines/draftFanMorale.ts:35-70` — `computeDraftFanMorale(teamPayrolls: readonly {teamId:string;payroll:number}[], tuning?): DraftFanMoraleResult[]` where each result = `{teamId, startingFanMorale, normalizedRank, penalty}` (`:6-11`); input item type is `DraftFanMoraleTeamPayroll` (`:1-4`).
+- `src/types/game.ts:124-129` — `HiddenModifiers = {loyalty:number; ambition:number; resilience:number; charisma:number}` (0-100). (`computeDraftMoraleFromRaw` takes this exact type.)
+- Personality on the player is a display string (e.g. `'Competitive'|'Relaxed'|...`); the morale engine normalizes it internally. Pass it through as `string | undefined`.
+
+**EXACT API TO BUILD (`src/engines/draftFreeze.ts`):**
+```ts
+import type { HiddenModifiers } from '../types/game';
+import { computeDraftMoraleFromRaw, type DraftMoraleResult, type DraftSlotClass } from './draftMorale';
+import { computeDraftFanMorale, type DraftFanMoraleResult } from './draftFanMorale';
+
+export type DraftFreezeTier = 'MLB' | 'FARM';
+
+/** One SOLD/rostered draftee, already resolved by the caller (RB-7b) from the persisted auction session.
+ *  The array passed to computeDraftFreeze MUST be in WON ORDER (results-array order) — the engine derives
+ *  each player's within-tier won index + the tier's total-won from that ordering. */
+export interface DraftFreezePlayerInput {
+  playerId: string;
+  teamId: string;
+  tier: DraftFreezeTier;
+  settledSalary: number;            // the auction WINNING BID (AuctionResult.salary)
+  scoutRange: { low: number; high: number };
+  personality: string | undefined;
+  modifiers: HiddenModifiers;
+}
+
+export interface DraftFreezePlayerResult {
+  playerId: string;
+  teamId: string;
+  tier: DraftFreezeTier;
+  settledSalary: number;
+  wonOrderIndex: number;            // 0-based index within the player's TIER, in won order
+  totalWonInTier: number;
+  slotClass: DraftSlotClass;
+  startingMorale: number;           // = computeDraftMoraleFromRaw(...).startingMorale
+  morale: DraftMoraleResult;        // full result (slotBase/payBase/totalDelta) for audit/tests
+}
+
+export interface DraftFreezeTeamResult {
+  teamId: string;
+  payroll: number;
+  startingFanMorale: number;
+  fanMorale: DraftFanMoraleResult;  // full result for audit/tests
+}
+
+export interface DraftFreezeOptions {
+  /** which tiers' winning bids count toward the per-team payroll fed to fan morale.
+   *  DEFAULT 'mlb' (§7 win-now/relocation-risk intent = the MLB competitive spend). */
+  fanMoralePayrollScope?: 'mlb' | 'mlb+farm';
+}
+
+export interface DraftFreezeResult {
+  players: DraftFreezePlayerResult[];
+  teams: DraftFreezeTeamResult[];
+}
+
+export function computeDraftFreeze(
+  wonPlayersInOrder: readonly DraftFreezePlayerInput[],
+  options?: DraftFreezeOptions,
+): DraftFreezeResult;
+```
+
+**ALGORITHM (deterministic, pure):**
+1. **Within-tier won order:** preserve the input ARRAY ORDER (it IS won order). For each tier ('MLB','FARM'),
+   `totalWonInTier` = count of inputs with that tier; each player's `wonOrderIndex` = its running position among
+   same-tier inputs (0-based, in input order). (Two passes, or one pass with per-tier counters then fill totals.)
+2. **Player morale:** for each player `startingMorale/morale = computeDraftMoraleFromRaw(wonOrderIndex, totalWonInTier, settledSalary, scoutRange, personality, modifiers)`; `slotClass = morale`'s slot bucket — derive it via the engine's `classifyDraftSlot(wonOrderIndex,totalWonInTier)` (import it) so the result row reports the same bucket the morale used.
+3. **Team payroll:** group by `teamId`; `payroll` = Σ `settledSalary` over that team's players whose tier is included by `fanMoralePayrollScope` (default 'mlb' → MLB-tier bids only; 'mlb+farm' → all). A team with zero in-scope players → payroll 0 (still include it so fan morale ranks it).
+4. **Fan morale:** build `{teamId,payroll}[]` for ALL teams that appear in the input, in a STABLE order (first-seen), call `computeDraftFanMorale(teamPayrolls)`, map results back per team.
+5. Return `{players, teams}`. Empty input → `{players:[], teams:[]}` (no throw).
+
+**MEASUREMENT DEFAULTS (Captain's documented conservative reading — STATE them in a top-of-file comment):**
+- (D-7a-1) **Slot order is GLOBAL-WITHIN-TIER won order** (a player's index among ALL his tier's SOLD results),
+  NOT per-team — most faithful to §6 "WHEN he surfaced/was won" (the engine surfaces talent early, so early-won = a real commitment to talent). [JK OPEN-DECISION: per-team won-order is the alternative.]
+- (D-7a-2) **Fan-morale payroll = MLB winning bids only** by default (§7 win-now/relocation-risk = the MLB spend; farm is cheap futures). [JK OPEN-DECISION: include farm.]
+
+**CONSTRAINTS:**
+- Create ONLY two NEW files: `src/engines/draftFreeze.ts` + `src/engines/__tests__/draftFreeze.test.ts` (match the
+  existing test location convention used by `draftMorale.test.ts` / `draftFanMorale.test.ts` — put the test next to them).
+- Do **NOT edit ANY existing file** (no franchiseInitializer, no morale state, no draftMorale/draftFanMorale, no barrels/index re-exports).
+- Imports allowed ONLY: `../types/game` (HiddenModifiers), `./draftMorale`, `./draftFanMorale`. NOTHING else (no store/auction/scout/Date/random/async).
+- FROZEN oracle `spec-docs/reference/iv_oracle.json` is READ-ONLY (do not touch). Branch-only — do NOT commit, do NOT push.
+
+**TESTS (`draftFreeze.test.ts`) — assert at least:**
+- per-tier won-index + totalWonInTier are computed correctly when MLB + FARM players are interleaved in the input.
+- a player won EARLY in his tier gets a higher startingMorale than the same player (same pay/personality/modifiers) won LATE (early dominates).
+- settledSalary passes through unchanged.
+- fan morale: a high-payroll team gets a LOWER startingFanMorale than a median team; default scope counts MLB bids only (a team's FARM bids do NOT change its payroll under default); 'mlb+farm' scope DOES include them.
+- the player startingMorale EQUALS `computeDraftMoraleFromRaw(...)` called directly with the same args (proves no reimplementation/drift).
+- empty input → `{players:[],teams:[]}`.
+
+**VERIFICATION (report the actual output):**
+- `cd /Users/johnkruse/Projects/kbl-mode1 && export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" && NODE_ENV= npx tsc -b` → exit 0.
+- `NODE_ENV= npx vitest run src/engines/__tests__/draftFreeze.test.ts` → all green.
+- `git -C /Users/johnkruse/Projects/kbl-mode1 status --short` → EXACTLY 2 new files (`??`), ZERO modified existing files.
+
+**FORMAT:** report every changed path (git status), the tsc result, the vitest summary, and the measurement defaults you encoded.
+
+**STOP-IF (a CORRECT stop is GOOD — report it, do not improvise around it):**
+- If building this requires editing ANY existing file → STOP.
+- If it requires reimplementing morale or fan-morale math instead of calling `computeDraftMoraleFromRaw` / `computeDraftFanMorale` → STOP.
+- If it requires importing any store/auction/scout module, or `Date`/`Math.random`/async → STOP.
+- If the RB-5/RB-6 signatures at source differ from those quoted above → STOP and report the real signature.
+- If the frozen oracle would change → STOP.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-7a ===== -->
