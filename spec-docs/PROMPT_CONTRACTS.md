@@ -17272,7 +17272,9 @@ Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== CONTRACT: RB-9b-2 ===== -->
 ## CONTRACT: RB-9b-2 — Defense-inclusive 6-band farm-archetype hole-weighting TILT (pure, build-DARK; retires the rejected 5-category bridge)
 
-**ROUTE:** Codex build in the Mode-1 worktree `/Users/johnkruse/Projects/kbl-mode1` on branch `codex/mode1-v1`. Branch-only; do NOT commit, do NOT push (the Captain commits after audit).
+> ⚠ **ROUTE CORRECTION (JK 2026-06-22):** Mode-1 code commits land on **`codex/mode1-v1-b`** (worktree `/Users/johnkruse/Projects/kbl-mode1-b`), the single active code lane — NOT `codex/mode1-v1`. This contract was dispatched in the `kbl-mode1` worktree, then the (uncommitted) output was re-homed byte-identical to `codex/mode1-v1-b` and committed there (`02e90f0d`). Future builds: dispatch in `/Users/johnkruse/Projects/kbl-mode1-b`.
+
+**ROUTE:** Codex build in the Mode-1 worktree `/Users/johnkruse/Projects/kbl-mode1-b` on branch `codex/mode1-v1-b`. Branch-only; do NOT commit, do NOT push (the Captain commits after audit).
 
 **ROLE:** You are the builder (Codex). Opus is the auditor (builder ≠ auditor). Build EXACTLY this contract — no extra scope.
 
