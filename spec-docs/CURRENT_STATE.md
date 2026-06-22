@@ -71,11 +71,15 @@
 > `src/engines/draftFanMorale.ts` (zero imports): §7 starting fan morale off neutral 50 from payroll RANK vs the median (rank-normalized `i/(N−1)`),
 > exponential penalty past the 75th/25th percentile, HIGH side 2× (30 vs 15), in-band=exactly 50, clamp [0,100], degenerate→neutral. Provably-isolated
 > new-file ticket → gated `tsc -b` 0 + the new test 8/8 (the payroll-sum data path = RB-7).
-> **➡ NEXT (AUTH-4): `/kbl-captain` → RB-7 — THE FREEZE → Mode-2, the §10 FOUR-number bridge (careful SAVED-SHAPE / franchise-bridge, the HARDEST
-> remaining RB).** checkpoint-0 stamps per rostered player + team: trueValue (exists) + **settledSalary** (winning bid) + **starting PLAYER morale** (RB-5
-> `computeDraftMoraleFromRaw`) + **starting FAN morale** (RB-6 `computeDraftFanMorale`); franchise-init **seeds Mode-2 morale from the freeze, OVERRIDING
-> defaults**. Needs deep grounding of the freeze/checkpoint-0 path + `franchiseInitializer` + the trackerDb shape (verify NO bump + version-pin +
-> migration-survival; additive fields ride existing stores). Surface the payroll-composition + slot/pay data-join OPEN-DECISIONS. Then RB-8 … RB-18.
+> **➡ NEXT (AUTH-4): `/kbl-captain` → RB-7b — the §10 freeze WIRING/PAYOFF (careful SAVED-SHAPE / franchise-bridge).** RB-7 SPLIT (WAVE 66–67):
+> ✅ **RB-7a DONE** (`103ac42a`, `codex/mode1-v1`) = the pure `src/engines/draftFreeze.ts` compute layer (per-player morale via RB-5 + per-team fan
+> morale via RB-6 + settledSalary passthrough; build-DARK, zero existing-file edits). **RB-7b** = the wiring: add an exported `seedFranchiseMoraleBaseline`
+> to `franchiseMoraleState.ts` (baseline=draftValue, not a delta off 50; new sourceKind; idempotent), stamp **settledSalary** (home = D-7b-1), and wire
+> `franchiseInitializer.ts` step 8.5 (between :661 `assignTeamFanHopefuls` and :663) — load the MLB+farm auction sessions, build `DraftFreezePlayerInput[]`
+> from SOLD results, call `computeDraftFreeze`, **SEED `kbl-franchise-morale` player + team-fan baselines OVERRIDING the default 50.** WAVE 66 grounding
+> CONFIRMED **no trackerDb bump** (settledSalary = optional field; morale rides the existing `kbl-franchise-morale` v1 DB); TRACKER_DB_VERSION stays 25.
+> **GATE = FULL Mode-1 suite** (transitive-import-mock risk on franchiseInitializer) + version-pin 25 + migration/round-trip survival. OPEN-DECISIONS
+> D-7b-1 (settledSalary home) + D-7b-2 (scoutRange source: persisted in-draft vs recompute) to ground at 7b. Then RB-8 … RB-18.
 > **OPEN (verify at RB-16):** the §2.3 surplus pool-sizing (pool ≥ total slots) lives upstream in the pool builder; the RB-2b-1 forced-filler
 > guarantee assumes it. **JK-BROWSER-VERIFY BATCHED
 > (persistence-prioritized):** RB-0b-1 — a real draft stamps all 3 axes onto league players + they carry into the franchise (7-type personality
