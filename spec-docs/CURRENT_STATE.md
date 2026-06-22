@@ -71,7 +71,7 @@
 > `src/engines/draftFanMorale.ts` (zero imports): §7 starting fan morale off neutral 50 from payroll RANK vs the median (rank-normalized `i/(N−1)`),
 > exponential penalty past the 75th/25th percentile, HIGH side 2× (30 vs 15), in-band=exactly 50, clamp [0,100], degenerate→neutral. Provably-isolated
 > new-file ticket → gated `tsc -b` 0 + the new test 8/8 (the payroll-sum data path = RB-7).
-> **➡ NEXT (AUTH-4): `/kbl-captain` → RB-8b — FranchiseSetup GM-name input UI (V2 §8/§9).** 🎉 **RB-7 COMPLETE** (the whole §10 four-number freeze → Mode-2 bridge):
+> **➡ NEXT (AUTH-4): `/kbl-captain` → RB-8c — fire-authority + reporter GM voicing (the last RB-8 piece, build-DARK).** 🎉 **RB-7 COMPLETE** (the whole §10 four-number freeze → Mode-2 bridge):
 > ✅ RB-7a `103ac42a` (pure `draftFreeze.ts` engine) · ✅ RB-7b `bba6e1a8` (the PAYOFF LIVE — `franchiseInitializer` step 8.5 seeds Mode-2 player + team-fan
 > starting morale from the draft, overriding the neutral-50 default) · ✅ RB-7c `1bd042e5` (additive `Player.settledSalary` stamp). All four §10 numbers
 > stamped at franchise-init checkpoint-0; **NO trackerDb bump anywhere** (TRACKER_DB_VERSION stays 25); FULL suite 493 files / 1 fail (wpaRuntimeBoundary)
@@ -86,6 +86,12 @@
 > generated default) / 8c (fire-authority + reporter L11 gmName threading — roster/draft GM-voice adapters are DARK, only the live L11 manager-change site gets
 > the GM voice). **RB-8a OPEN-DECISIONS (defaults taken):** D-8a-1 (GM home = franchise-config additive, not a new DB) · D-8a-2 (blank default = generated SMB4
 > name) · D-8a-3 (single user-GM per franchise) · D-8a-4 (the 8a/8b/8c split). Then RB-9 … RB-18.
+> **✅ RB-8b COMPLETE (WAVE 71, `7642ccb6`, `codex/mode1-v1`, branch-only, ZERO-NEW-REDS):** the GM naming flow — a "GM NAME" input on FranchiseSetup Step-6
+> (peer to FRANCHISE NAME) binds `config.gmName` → flows through `initializeFranchise` into RB-8a's `buildGmProfile` (typed name overrides the generated default;
+> blank keeps it). Optional (no required gate); franchise-copy characterized tests untouched. FULL suite **494 files / 8049 tests, 1 fail (wpaRuntimeBoundary).**
+> **➡ RB-8c (NEXT) = fire-authority + reporter GM voicing (build-DARK):** thread additive `gmId?`/`gmName?` through the PURE dark L11 manager-change adapter
+> (`franchiseL11ManagerChangeNewsAdapter` — NO production caller) `facts`, so the reporter names the GM as the firing actor when its emission seam goes live
+> post-D13; the `reason:'user'` manager-firing already models GM-owned fire-authority. Closes the plan's "RB-8 GM↔manager fire-authority path" item. Then RB-9 … RB-18.
 > **OPEN (verify at RB-16):** the §2.3 surplus pool-sizing (pool ≥ total slots) lives upstream in the pool builder; the RB-2b-1 forced-filler
 > guarantee assumes it. **JK-BROWSER-VERIFY BATCHED
 > (persistence-prioritized):** RB-0b-1 — a real draft stamps all 3 axes onto league players + they carry into the franchise (7-type personality

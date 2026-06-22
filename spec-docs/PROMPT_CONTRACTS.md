@@ -16978,3 +16978,49 @@ Use xhigh reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-8b ===== -->
+
+<!-- ===== CONTRACT: RB-8c ===== -->
+# CONTRACT RB-8c — reporter GM-voice on the manager-change (fire-authority); build-DARK adapter prep
+
+**ROUTE:** Codex 5.5 | xhigh reasoning effort. Worktree `/Users/johnkruse/Projects/kbl-mode1` [`codex/mode1-v1`]. Branch-only — do NOT commit/push.
+
+**ROLE:** You are the Mode-1 builder. Thread the GM's identity (`gmId`/`gmName`) into the PURE, build-DARK L11 manager-change reporter adapter, so that when its emission seam goes live (post-D13) the reporter names the **GM** as the actor who fired/replaced the manager. This is the LAST of three RB-8 sub-tickets (8a entity + 8b naming UI done) and closes the plan's "RB-8 GM↔manager fire-authority path" open-verification item. ADDITIVE + PURE only.
+
+**GOAL (one sentence):** Add optional `gmId?`/`gmName?` to `FranchiseManagerChangeNewsInput` and carry them verbatim into the produced `facts` dict, with a focused test — so the GM voices the front-office move (manager firing) per §8, ready for the dark adapter's eventual live caller.
+
+**SOURCE OF TRUTH:** `AUCTION_DRAFT_SPEC_V2.md` §8: "the reporter refers to the **GM by name** on roster/draft/team-building moves … and the **manager by name** on in-game decisions — two distinct voices." A manager firing is a front-office / team-building move ⇒ it is the GM's voice (the GM fires the manager). §13 item 7 (GM has fire-manager authority).
+
+**GROUNDED ANCHORS (re-verified at source by the Captain — trust these):**
+- `src/src_figma/app/engines/reporter/franchiseL11ManagerChangeNewsAdapter.ts` — PURE + build-DARK (its own header says "NO production caller yet"; grep-confirmed: ZERO non-test callers). `FranchiseManagerChangeNewsInput` interface at `:45-58` (franchiseId, seasonId, seasonNumber, teamId, teamName, firedManagerId, firedManagerName?, successorManagerId?, successorManagerName?, reason, endDate, teamFanMoraleAtFiring?). `buildFranchiseManagerChangeSeasonNewsEvent(input)` at `:69` returns a `SeasonNewsEvent` whose `facts` dict is at `:98-109` (carries firedManagerName/successorManagerName etc. — NO gmName today). The fn is pure/deterministic (no LLM/IO/Date/random).
+- Adapter test = `src/src_figma/__tests__/reporter/franchiseL11ManagerChangeNewsAdapter.test.ts` (exists; extend it).
+- Fire-authority context (for understanding only — do NOT edit it): `src/utils/franchiseManagerFiring.ts:~120 fireManager` fires with `reason: ManagerFiredReason = 'user'|'auto-backstop'|'rebrand'`; a `'user'` firing is the GM-initiated one. The GM name at emit time will come from `getGmProfile(franchiseId)` (RB-8a) when the live caller is built post-D13 — NOT in this ticket.
+
+**MAKE-OR-BREAK:**
+1. `gmId`/`gmName` are OPTIONAL additive fields — every existing call/test that omits them still produces a byte-identical event except for the two new (undefined) facts keys, and the adapter stays PURE (no new IO/Date/random/LLM). The existing adapter tests stay green.
+2. When provided, `facts.gmName === input.gmName` and `facts.gmId === input.gmId` (carried verbatim, never fabricated).
+
+**EXPECTED OUTPUT (exact edits):**
+1. **`src/src_figma/app/engines/reporter/franchiseL11ManagerChangeNewsAdapter.ts`:**
+   - Add `gmId?: string;` and `gmName?: string;` to `FranchiseManagerChangeNewsInput` (`:45`). Add a one-line doc comment that these name the GM as the front-office actor (§8) — supplied by the live caller via `getGmProfile` post-D13.
+   - In the returned `facts` object (`:98-109`), add `gmId: input.gmId,` and `gmName: input.gmName,` (carry verbatim). Change NOTHING else — not the eventType, subjectIds, dramaticWeight, valence, or magnitude logic.
+2. **`src/src_figma/__tests__/reporter/franchiseL11ManagerChangeNewsAdapter.test.ts`:**
+   - Add ONE non-vacuous test (do NOT weaken existing ones): build an event from an input that includes `gmId: 'fr-1-gm'`, `gmName: 'Casey Ledger'` and assert `event.facts.gmName === 'Casey Ledger'` and `event.facts.gmId === 'fr-1-gm'`; and assert that an input WITHOUT gm fields yields `event.facts.gmName === undefined` (additive-optional, no default). Reuse the existing test's input fixture/builder style.
+
+**CONSTRAINTS:** edit ONLY those 2 paths. Do NOT touch `franchiseManagerFiring.ts`, `gmIdentity.ts`, `seasonNewsGenerator.ts`, `reporterIntensity.ts`, any store/type/init, or the frozen IV oracle (READ-ONLY). Do NOT add a production caller / wire the adapter into any emission path (it stays build-DARK in v1). Keep the adapter pure (no Date/random/IO/LLM).
+
+**VERIFICATION (report ACTUAL output):**
+- `cd /Users/johnkruse/Projects/kbl-mode1 && export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" && NODE_ENV= npx tsc -b` → exit 0.
+- Focused: `NODE_ENV= npx vitest run src/src_figma/__tests__/reporter/franchiseL11ManagerChangeNewsAdapter.test.ts` — report pass count (all green incl. the new test).
+- `git -C /Users/johnkruse/Projects/kbl-mode1 status --short` → only the 2 contracted paths.
+
+**FORMAT:** (1) changed paths + count; (2) each change w/ the §8/anchor ref; (3) tsc; (4) the adapter test pass count; (5) "RB-8c complete" OR "BLOCKED: <exact reason>".
+
+**FAILURE PROTOCOL / STOP-IF:**
+- If the adapter has a production caller (it should NOT — grep first) → STOP and report (the wiring would change scope/risk).
+- If adding the fields forces any non-additive change (logic/valence/weight) → STOP and report.
+- If an existing adapter test breaks → STOP and report which (do NOT weaken it).
+- If the anchors don't match the actual source → STOP and quote the discrepancy.
+- Never touch the frozen oracle. Never commit/push.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-8c ===== -->
