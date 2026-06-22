@@ -17916,3 +17916,103 @@ field separately, or cover the whole ENGINE-NOMINATED card except name/positions
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-11 ===== -->
+
+<!-- ===== CONTRACT: RB-12 ===== -->
+# CONTRACT RB-12 — Guided first-person UX: a LIGHT reporter "coach" line at each auction phase transition (§9)
+
+**ROUTE:** Codex 5.5 (gpt-5.5) | xhigh reasoning effort
+**ROLE:** Builder (Codex). Opus 4.8 audits the real diff (builder≠auditor). Worktree
+`/Users/johnkruse/Projects/kbl-mode1-b`, branch `codex/mode1-v1-b`. Branch-only — NEVER commit/push.
+
+**GOAL (one sentence):** Add a LIGHT contextual "coach" banner that drops a short reporter-voiced line at
+each auction phase transition (so a first-time GM is walked through the draft), rendered on BOTH the MLB
+and farm auction pages — driven by the auction `state`. Start light (one line per phase); deepen later.
+
+**SOURCE OF TRUTH — V2 §9 (embedded verbatim; spec is on the docs branch, ABSENT here):**
+> §9 Guided first-person experience (N4): the reporter/"machine" walks the GM through setup → scouting →
+> MLB auction → farm auction → freeze. Start LIGHT — a contextual "coach" that drops a line at each phase
+> transition — and deepen toward a fuller tutorial only if it earns its keep.
+
+SCOPE for RB-12 = the two AUCTION pages' phase transitions (the bulk of the draft interaction). The
+standalone scouting-page and freeze-page coach lines are a documented "deepen-later" follow-up (no such
+pages exist as separate coach surfaces today).
+
+**GROUNDED ANCHORS (Captain read these at source; RE-READ before building):**
+- Auction state union — `src/engines/auctionStateMachine.ts:12-19`:
+  `type AuctionState = 'SETUP' | 'NOMINATION' | 'OPEN_BIDDING' | 'RESOLVE' | 'SOLD' | 'PASSED' | 'AUCTION_COMPLETE';`
+- MLB render anchor — `src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx` ~line 459:
+  `<h2 className="font-bold text-lg">STATE: {session?.state ?? "SETUP"}</h2>` (inside the main state
+  `<section>`). Render the coach banner immediately AFTER the `<div>` that wraps that `<h2>`.
+- Farm render anchor — `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx:611`:
+  `<h2 className="font-bold text-lg">STATE: {session?.state ?? "SETUP"}</h2>` — same placement.
+- No existing coach/guidance infra (grep `coachLine|guidedCoach|AuctionCoach` = 0). The page-level
+  `handoffPrompt` memo (MLB ~254-270) is the HOT-SEAT device prompt — a DIFFERENT thing; do NOT touch it.
+- The GM entity (`src/utils/gmIdentity.ts`, RB-8) exists but RB-12 is LIGHT — use SECOND-PERSON "you"
+  voice; do NOT plumb the GM name into the auction pages (documented default D-12-2).
+
+**CONSTRAINTS:**
+- CREATE: `src/src_figma/app/components/AuctionCoachBanner.tsx` + `src/src_figma/__tests__/app/AuctionCoachBanner.test.tsx`.
+- EDIT (purely additive — insert one banner element after the STATE header, move NOTHING):
+  `src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx` + `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx`.
+- Do NOT touch: the state machine, hooks, engines/storage, the `handoffPrompt` memo, the frozen oracle,
+  any existing page markup other than inserting the banner.
+- Pure UI; React-only. NO new deps.
+
+**EXPECTED OUTPUT:**
+1. `AuctionCoachBanner.tsx`:
+   - `export type AuctionCoachTier = 'mlb' | 'farm';`
+   - `export function auctionCoachLine(args: { tier: AuctionCoachTier; state: AuctionState }): string` —
+     import `AuctionState` (type) from `../../../engines/auctionStateMachine`. Return EXACTLY these v1
+     lines (Captain-authored; tunable placeholders — do NOT reword):
+     - `SETUP` + mlb → `"Welcome, GM. Lock in your league and team identities, then begin the auction when you're ready."`
+     - `SETUP` + farm → `"Now stock your farm system. Set your farm identity, then begin the farm auction."`
+     - `NOMINATION` (both) → `"The draft engine is surfacing the next player. No nominations to make — just get ready to bid."`
+     - `OPEN_BIDDING` + mlb → `"He's on the block. Raise or pass — and remember, pass and he's gone for good."`
+     - `OPEN_BIDDING` + farm → `"Prospect's up. Hold the scout card to check your read, then raise or pass — one chance only."`
+     - `RESOLVE` (both) → `"You're the last bidder standing. Claim him at the reserve price, or pass and send him back to the pool."`
+     - `SOLD` (both) → `"Lot settled. On to the next one."`
+     - `PASSED` (both) → `"No takers — he's out of the draft. Next player coming up."`
+     - `AUCTION_COMPLETE` + mlb → `"Your MLB roster is set. Head to the farm auction to stock your prospects."`
+     - `AUCTION_COMPLETE` + farm → `"Your draft is complete. Start the franchise to lock everything in."`
+     Use an exhaustive `switch (state)` (so a future AuctionState addition is a compile error); only `SETUP`,
+     `OPEN_BIDDING`, `AUCTION_COMPLETE` branch on tier.
+   - `export function AuctionCoachBanner({ tier, state }: { tier: AuctionCoachTier; state: AuctionState })` —
+     renders a small distinct banner: a `COACH` label chip + the line text. Style it to match the page
+     palette (dark green `#4A6844`/`#556B55` family, border, `text-[#E8E8D8]`). Keep it visually a hint, not
+     a modal.
+2. Both auction pages: insert `<AuctionCoachBanner tier="mlb" state={session?.state ?? "SETUP"} />`
+   (MLB) / `tier="farm"` (farm) immediately after the STATE-header `<div>`. Import with the page's existing
+   component-import path style.
+3. `AuctionCoachBanner.test.tsx`: assert `auctionCoachLine` returns the exact expected line for EACH state
+   (both tiers) — including the tier divergence on SETUP / OPEN_BIDDING / AUCTION_COMPLETE; and a render
+   test that `<AuctionCoachBanner tier="mlb" state="OPEN_BIDDING" />` shows the COACH label + the mlb
+   OPEN_BIDDING line.
+
+**VERIFICATION (run in the worktree; paste output):**
+- `cd /Users/johnkruse/Projects/kbl-mode1-b && export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" && NODE_ENV= npx tsc -b` → exit 0 (paste tail).
+- `NODE_ENV= npx vitest run src/src_figma/__tests__/app/AuctionCoachBanner.test.tsx src/src_figma/__tests__/pages/LeagueBuilderAuctionDraft.test.tsx src/src_figma/__tests__/pages/LeagueBuilderFarmAuctionDraft.test.tsx` → all pass (paste summary). (The Captain runs the FULL Mode-1 suite at the gate.)
+- `git status --short` (expect 2 new + 2 edited files).
+
+**FORMAT:** 1) files changed (paths + line counts); 2) the full `AuctionCoachBanner.tsx`; 3) the two page
+insertion diffs; 4) the test list; 5) tsc result; 6) focused test results; 7) `git status --short`.
+
+**FAILURE PROTOCOL / STOP-IF:**
+- If the STATE-header anchor in either page does NOT match → STOP and quote the real markup.
+- If inserting the banner forces moving/altering any existing element (i.e. it can't be purely additive) →
+  STOP and quote.
+- If any coach line you must render EXACTLY equals a string an existing page test asserts via `getByText`
+  (which would break `getByText` uniqueness) → STOP and quote the collision (we'll reword the banner label,
+  not the asserted text).
+- If a contracted **CODE anchor (`src/…` file:line)** mismatches → STOP and quote it. (V2/DECISIONS docs
+  ABSENT is EXPECTED, NOT a stop.)
+- Never touch the state machine / hooks / engines / `handoffPrompt` / frozen oracle. Never commit/push. Branch-only.
+
+**OPEN-DECISIONS (documented defaults; flag for JK — narrative is an SMB4 asset):**
+- **(D-12-1)** the 10 coach lines above are Captain-authored v1 placeholders — tunable; JK owns the final voice.
+- **(D-12-2)** second-person "you" voice, NO GM-name personalization in v1 (keeps it light; no GM-profile
+  plumbing into the auction pages). Alt = personalize with the `gmIdentity` name.
+- **(D-12-3)** scope = the two auction pages' phase transitions; the standalone scouting/freeze-page coach is
+  a deepen-later follow-up.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-12 ===== -->
