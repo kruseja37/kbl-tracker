@@ -36,7 +36,15 @@ import {
   updateFranchiseMetadata,
   setActiveFranchise,
 } from './franchiseManager';
-import { getLeagueTemplate, getTeam, type LeagueTemplate } from './leagueBuilderStorage';
+import {
+  createFarmAuctionSessionId,
+  getAuctionSession,
+  getAuctionSessionById,
+  getLeagueTemplate,
+  getTeam,
+  type LeagueTemplate,
+} from './leagueBuilderStorage';
+import { computeDraftFreeze } from '../engines/draftFreeze';
 import { FRANCHISE_PROFILE_GRADES } from './franchisePlayerProfileEdit';
 import type { ScheduleTeam } from './scheduleGenerator';
 import {
@@ -67,11 +75,13 @@ import {
   getFranchiseSeasonId,
   getFranchiseSeasonName,
 } from './franchisePersistenceContract';
+import { buildDraftFreezeInputs } from './draftFreezeInputs';
 import {
   carryOverFranchiseFarmRecordsToSeason,
   deleteFranchiseFarmRecordsForSeason,
   getFranchiseFarmRoster,
 } from './franchiseFarmStorage';
+import { seedFranchiseMoraleBaseline } from './franchiseMoraleState';
 
 interface FranchiseLeagueTeams {
   leagueTemplate: LeagueTemplate;
@@ -659,6 +669,54 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
     const initialSeasonId = getFranchiseSeasonId(franchiseId, 1);
     await assignTeamCaptains(franchiseId, undefined, hiddenModifierBackfill.players);
     await assignTeamFanHopefuls(franchiseId, initialSeasonId, undefined, hiddenModifierBackfill.players);
+
+    // RB-7b §10 payoff: draft-derived morale baselines override neutral-50 defaults.
+    const mlbSession = await getAuctionSession(config.league, 1);
+    if (mlbSession?.session) {
+      const farmSession = await getAuctionSessionById(createFarmAuctionSessionId(config.league, 1));
+      const neutralModifiers = {
+        loyalty: 50,
+        ambition: 50,
+        resilience: 50,
+        charisma: 50,
+      };
+      const metaByPlayerId = new Map(hiddenModifierBackfill.players.map((player) => [
+        player.id,
+        {
+          personality: player.personality,
+          modifiers: player.hiddenPersonalityModifiers ?? neutralModifiers,
+        },
+      ]));
+      const inputs = buildDraftFreezeInputs({
+        mlbSession: mlbSession.session,
+        farmSession: farmSession?.session ?? null,
+        metaByPlayerId,
+      });
+      const freeze = computeDraftFreeze(inputs);
+      const scope = {
+        franchiseId,
+        seasonId: initialSeasonId,
+        statsScopeId: initialSeasonId,
+        seasonNumber: 1,
+      };
+
+      for (const player of freeze.players) {
+        await seedFranchiseMoraleBaseline({
+          ...scope,
+          targetType: 'player',
+          playerId: player.playerId,
+          value: player.startingMorale,
+        });
+      }
+      for (const team of freeze.teams) {
+        await seedFranchiseMoraleBaseline({
+          ...scope,
+          targetType: 'team-fan',
+          teamId: team.teamId,
+          value: team.startingFanMorale,
+        });
+      }
+    }
 
     // 9. Create the season metadata record franchise mode reads later.
     await createFranchiseSeasonMetadata(

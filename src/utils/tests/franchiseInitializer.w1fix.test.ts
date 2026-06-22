@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => ({
   setActiveFranchise: vi.fn(),
   getLeagueTemplate: vi.fn(),
   getTeam: vi.fn(),
+  getAuctionSession: vi.fn(),
+  getAuctionSessionById: vi.fn(),
+  createFarmAuctionSessionId: vi.fn(),
   getAllGamesByFranchise: vi.fn(),
   initScheduleDatabase: vi.fn(),
   deepCopyLeagueToFranchise: vi.fn(),
@@ -38,6 +41,9 @@ vi.mock('../franchiseManager', () => ({
 vi.mock('../leagueBuilderStorage', () => ({
   getLeagueTemplate: mocks.getLeagueTemplate,
   getTeam: mocks.getTeam,
+  getAuctionSession: mocks.getAuctionSession,
+  getAuctionSessionById: mocks.getAuctionSessionById,
+  createFarmAuctionSessionId: mocks.createFarmAuctionSessionId,
 }));
 
 vi.mock('../scheduleStorage', () => ({
@@ -110,6 +116,11 @@ describe('W1-FIX franchise season metadata gamesPerTeam fuel line', () => {
       id: teamId,
       name: teamId === 'team-a' ? 'Team A' : 'Team B',
     }));
+    mocks.getAuctionSession.mockResolvedValue(null);
+    mocks.getAuctionSessionById.mockResolvedValue(null);
+    mocks.createFarmAuctionSessionId.mockImplementation((leagueId: string, seasonNumber = 1) =>
+      `${leagueId}::startup-farm-auction-draft::${seasonNumber}`,
+    );
     mocks.deepCopyLeagueToFranchise.mockResolvedValue({
       rosterRequirements: {},
       stadiums: [],

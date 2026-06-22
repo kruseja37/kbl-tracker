@@ -6,6 +6,7 @@ export const FRANCHISE_MORALE_STATE_CONTRACT_VERSION = 'franchise-morale-state-v
 
 export type FranchiseMoraleTargetType = 'team-fan' | 'player';
 export type FranchiseMoraleSourceKind =
+  | 'draft-seed'
   | 'random-event-confirmation'
   | 'manual-override'
   | 'matrix-auto'
@@ -50,6 +51,16 @@ export interface ApplyFranchiseMoraleEffectInput extends FranchiseMoraleScope {
   reason: string;
   sourceEventId: string;
   sourceKind?: FranchiseMoraleSourceKind;
+  actorDisplayName?: string;
+  timestamp?: string;
+}
+
+export interface SeedFranchiseMoraleBaselineInput extends FranchiseMoraleScope {
+  targetType: FranchiseMoraleTargetType;
+  teamId?: string;
+  playerId?: string;
+  value: number;
+  reason?: string;
   actorDisplayName?: string;
   timestamp?: string;
 }
@@ -120,7 +131,12 @@ export function getFranchiseMoraleSnapshotId(
   return `${scope.franchiseId}:${scope.seasonId}:${scope.statsScopeId}:morale:${targetType}:${targetId}`;
 }
 
-function targetId(input: Pick<ApplyFranchiseMoraleEffectInput, 'targetType' | 'teamId' | 'playerId'>): string | null {
+type FranchiseMoraleTargetIdentity = Pick<
+  ApplyFranchiseMoraleEffectInput,
+  'targetType' | 'teamId' | 'playerId'
+>;
+
+function targetId(input: FranchiseMoraleTargetIdentity): string | null {
   if (input.targetType === 'team-fan') return input.teamId ?? null;
   return input.playerId ?? null;
 }
@@ -249,6 +265,92 @@ async function saveSnapshot(snapshot: FranchiseMoraleSnapshot): Promise<Franchis
   }
 
   return snapshot;
+}
+
+export async function seedFranchiseMoraleBaseline(
+  input: SeedFranchiseMoraleBaselineInput,
+): Promise<ApplyFranchiseMoraleEffectResult> {
+  const blockers: string[] = [];
+  const idTarget = targetId(input);
+  if (!input.franchiseId || !input.seasonId || !input.statsScopeId) {
+    blockers.push('Franchise, season, and stats scope identity are required.');
+  }
+  if (!Number.isInteger(input.seasonNumber) || input.seasonNumber <= 0) {
+    blockers.push('Positive season number is required.');
+  }
+  if (!idTarget) {
+    blockers.push(input.targetType === 'team-fan' ? 'Team id is required for fan morale.' : 'Player id is required for player morale.');
+  }
+
+  if (blockers.length > 0 || !idTarget) {
+    return {
+      status: 'failed',
+      snapshot: null,
+      previousValue: null,
+      currentValue: null,
+      delta: 0,
+      reason: blockers.join(' '),
+      blockers,
+    };
+  }
+
+  const timestamp = input.timestamp ?? nowISO();
+  const existing = await getFranchiseMoraleSnapshot(input, input.targetType, idTarget);
+  const existingDraftSeed = existing?.history.find((entry) => entry.sourceKind === 'draft-seed');
+  if (existingDraftSeed) {
+    return {
+      status: 'skipped',
+      snapshot: existing,
+      previousValue: existingDraftSeed.previousValue,
+      currentValue: existingDraftSeed.currentValue,
+      delta: 0,
+      reason: 'Draft-derived starting morale already seeded.',
+      blockers: [],
+    };
+  }
+
+  const clamped = clampFranchiseMorale(input.value);
+  const sourceEventId = `draft-seed:${input.targetType}:${idTarget}`;
+  const reason = input.reason ?? 'Draft-derived starting morale (§10 freeze)';
+  const snapshot = createSnapshot({
+    franchiseId: input.franchiseId,
+    seasonId: input.seasonId,
+    statsScopeId: input.statsScopeId,
+    seasonNumber: input.seasonNumber,
+    targetType: input.targetType,
+    teamId: input.targetType === 'team-fan' ? idTarget : undefined,
+    playerId: input.targetType === 'player' ? idTarget : undefined,
+    timestamp,
+  });
+  const historyEntry: FranchiseMoraleHistoryEntry = {
+    id: `${snapshot.id}:history:${sourceEventId}`,
+    sourceEventId,
+    sourceKind: 'draft-seed',
+    previousValue: 50,
+    currentValue: clamped,
+    delta: clamped - 50,
+    reason,
+    actorDisplayName: input.actorDisplayName ?? 'System',
+    timestamp,
+  };
+
+  const saved = await saveSnapshot({
+    ...snapshot,
+    baselineValue: clamped,
+    currentValue: clamped,
+    lastModified: timestamp,
+    history: [historyEntry],
+  });
+
+  return {
+    status: 'applied',
+    snapshot: saved,
+    previousValue: 50,
+    currentValue: clamped,
+    delta: clamped - 50,
+    reason,
+    blockers: [],
+  };
 }
 
 export async function applyFranchiseMoraleEffect(

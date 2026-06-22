@@ -10,6 +10,9 @@ const mocks = vi.hoisted(() => ({
   deleteFranchise: vi.fn(),
   getLeagueTemplate: vi.fn(),
   getTeam: vi.fn(),
+  getAuctionSession: vi.fn(),
+  getAuctionSessionById: vi.fn(),
+  createFarmAuctionSessionId: vi.fn(),
   generateSchedule: vi.fn(),
   initScheduleDatabase: vi.fn(),
   getAllGamesByFranchise: vi.fn(),
@@ -39,6 +42,9 @@ vi.mock('../../../utils/franchiseManager', () => ({
 vi.mock('../../../utils/leagueBuilderStorage', () => ({
   getLeagueTemplate: mocks.getLeagueTemplate,
   getTeam: mocks.getTeam,
+  getAuctionSession: mocks.getAuctionSession,
+  getAuctionSessionById: mocks.getAuctionSessionById,
+  createFarmAuctionSessionId: mocks.createFarmAuctionSessionId,
 }));
 
 vi.mock('../../../utils/scheduleGenerator', () => ({
@@ -174,6 +180,11 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
         id: teamId,
         name: teamId === 'team-away' ? 'Away Club' : 'Home Club',
       }),
+    );
+    mocks.getAuctionSession.mockResolvedValue(null);
+    mocks.getAuctionSessionById.mockResolvedValue(null);
+    mocks.createFarmAuctionSessionId.mockImplementation((leagueId: string, seasonNumber = 1) =>
+      `${leagueId}::startup-farm-auction-draft::${seasonNumber}`,
     );
     mocks.generateSchedule.mockReturnValue([
       {
