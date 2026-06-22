@@ -71,15 +71,21 @@
 > `src/engines/draftFanMorale.ts` (zero imports): §7 starting fan morale off neutral 50 from payroll RANK vs the median (rank-normalized `i/(N−1)`),
 > exponential penalty past the 75th/25th percentile, HIGH side 2× (30 vs 15), in-band=exactly 50, clamp [0,100], degenerate→neutral. Provably-isolated
 > new-file ticket → gated `tsc -b` 0 + the new test 8/8 (the payroll-sum data path = RB-7).
-> **➡ NEXT (AUTH-4): `/kbl-captain` → RB-8 — GM identity entity (V2 §8).** 🎉 **RB-7 COMPLETE** (the whole §10 four-number freeze → Mode-2 bridge):
+> **➡ NEXT (AUTH-4): `/kbl-captain` → RB-8b — FranchiseSetup GM-name input UI (V2 §8/§9).** 🎉 **RB-7 COMPLETE** (the whole §10 four-number freeze → Mode-2 bridge):
 > ✅ RB-7a `103ac42a` (pure `draftFreeze.ts` engine) · ✅ RB-7b `bba6e1a8` (the PAYOFF LIVE — `franchiseInitializer` step 8.5 seeds Mode-2 player + team-fan
 > starting morale from the draft, overriding the neutral-50 default) · ✅ RB-7c `1bd042e5` (additive `Player.settledSalary` stamp). All four §10 numbers
 > stamped at franchise-init checkpoint-0; **NO trackerDb bump anywhere** (TRACKER_DB_VERSION stays 25); FULL suite 493 files / 1 fail (wpaRuntimeBoundary)
 > = zero new reds. **JK OPEN-DECISIONS to review:** D-7a-1 (slot order global-within-tier) · D-7a-2 (fan payroll MLB-only) · D-7b-2 (iv-centered freeze
 > range @ default accuracy 70) · D-7c-1 (farm settledSalary deferred) · **D-7c-2 (winning bid does NOT carry into Mode-2 cap/payroll — should it?).**
-> **RB-8** = a NEW GM entity parallel to the manager profile but ABOVE it (owns roster/draft, can fire the manager); user IS the GM (named, first-person);
-> reporter names GM on roster/draft + manager on in-game. Needs grounding: the managerProfiles structure (+ tenureRecords), GM-entity home (new store vs
-> rides franchise config — saved-shape), reporter integration. Then RB-9 … RB-18.
+> **✅ RB-8a COMPLETE (WAVE 70, `f5f20e93`, `codex/mode1-v1`, branch-only, ZERO-NEW-REDS):** the GM identity ENTITY + additive persistence. NEW `GmProfile`
+> (parallel to `ManagerProfile`) + pure `src/utils/gmIdentity.ts` (`buildGmProfile`/`getGmProfile`); every franchise gets a named GM at init (user gmName OR a
+> deterministic SMB4 default seeded on franchiseId), persisted additively on the franchise config + metadata (kbl-app-meta). **CAPTAIN SAVED-SHAPE RULING:** GM
+> rides the franchise config — NO new DB/store, NO version bump (META_DB_VERSION 3 + TRACKER_DB_VERSION 25 untouched; version-pin green) — because the GM is
+> franchise-scoped (the user IS the GM) so it lacks the cross-instance requirement that justified the manager's separate identity DB. FULL suite **494 files /
+> 8048 tests, 1 fail (wpaRuntimeBoundary).** **RB-8 SPLIT:** 8a (done) / **RB-8b (NEXT) = FranchiseSetup GM-name input UI** (binds `config.gmName` → overrides the
+> generated default) / 8c (fire-authority + reporter L11 gmName threading — roster/draft GM-voice adapters are DARK, only the live L11 manager-change site gets
+> the GM voice). **RB-8a OPEN-DECISIONS (defaults taken):** D-8a-1 (GM home = franchise-config additive, not a new DB) · D-8a-2 (blank default = generated SMB4
+> name) · D-8a-3 (single user-GM per franchise) · D-8a-4 (the 8a/8b/8c split). Then RB-9 … RB-18.
 > **OPEN (verify at RB-16):** the §2.3 surplus pool-sizing (pool ≥ total slots) lives upstream in the pool builder; the RB-2b-1 forced-filler
 > guarantee assumes it. **JK-BROWSER-VERIFY BATCHED
 > (persistence-prioritized):** RB-0b-1 — a real draft stamps all 3 axes onto league players + they carry into the franchise (7-type personality
