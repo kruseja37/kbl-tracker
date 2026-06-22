@@ -17492,3 +17492,49 @@ Use xhigh reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-9c-3a ===== -->
+
+<!-- ===== CONTRACT: RB-9c-3b ===== -->
+## CONTRACT: RB-9c-3b — the §3.5 scout-as-bridge on the FARM board (MLB-roster holes tilted by the farm archetype)
+
+**ROUTE:** Codex build in the Mode-1 worktree `/Users/johnkruse/Projects/kbl-mode1-b` on branch `codex/mode1-v1-b` (the single active Mode-1 code lane). Branch-only; do NOT commit, do NOT push (the Captain commits after audit).
+
+**ROLE:** You are the builder (Codex). Opus is the auditor (builder ≠ auditor). Build EXACTLY this contract — no extra scope.
+
+**GOAL:** Complete the §3.5 "scout as the bridge between rosters" on the FARM auction board: the scout reads the GM's **completed MLB roster**, finds its positional/role holes, **weights them by the GM's FARM archetype** (`farmCapIdentity`) — "a defense-farm's unfilled defensive MLB slot screams loudest" — and surfaces them as the farm board's PRIORITY GAPS ("fill these in the farm"). This REUSES the RB-9c-3a board props (`priorityGaps`/`budgetWarning`) + the `analyzeDraftRoster`/`tiltAnalyzerFindings`/`sortByTiltedPriority` pipeline; the ONLY net-new wiring is (a) exposing the completed MLB roster from `useFarmAuctionDraft` and (b) tilting by `farmCapIdentity` (vs RB-9c-3a's `undefined`).
+
+**SOURCE OF TRUTH:** ⚠ `AUCTION_DRAFT_SPEC_V2.md` + the DECISIONS_LOG live on the **docs branch**, NOT in your worktree — do NOT open them / their absence is NOT a stop. Operative: §3.5 (scout reads the filled MLB roster → weights holes by the farm archetype → "fill these in the farm"); JK D-9b-2 (Defense is first-class in the farm tilt). Verify only the `src/…` CODE anchors below.
+
+**GROUNDED ANCHORS (re-read each at source; CODE anchors only — STOP if any `src/…` mismatches):**
+- **Hook MLB-roster site** `src/src_figma/app/hooks/useFarmAuctionDraft.ts`: `buildFarmAuctionTeams` (`:~155-199`) loads `mlbSession = await getAuctionSession(input.leagueId)` (`:172`) and, per team, reads `const roster = await input.getRoster(team.id)` (`:179`, a `TeamRoster`) then iterates `roster?.mlbRoster ?? []` (`:181`, the COMPLETED MLB roster playerIds) to build `mlbRosterChemistryByTeamId` (`:171,186,198`). It returns `{ teams, mlbRosterChemistryByTeamId }`. The hook threads `mlbRosterChemistryByTeamId` through a `useState` (`:230`) and exposes it in the return (`:493`). `input.leaguePlayers` = the MLB pool (positions). **MIRROR this exact pattern** to also expose the per-team MLB roster playerIds.
+- **Farm page** `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx`: destructures `leagueData` from the hook (so `leagueData.players` — the MLB pool with `primaryPosition`/`secondaryPosition`/`firstName`/`lastName` — is available); has `teamById` (`:211`), `rosterBoardTeamState` (`:~258`, an `AuctionTeamState` with `roster`/`budgetRemaining`/`rosterSlotsRemaining`/`minSalary`/`teamId`), `rosterBoardEntries` (the farm picks, `:~263`), `rosterBoardPayroll`, the `<DraftRosterBoard tier="farm" … />` mount (`:~760`). `prospectDisplayName`/`playerDisplayName`-style helpers exist.
+- **RB-9c-3a board props** `src/src_figma/app/components/DraftRosterBoard.tsx`: `priorityGaps?: BoardPriorityGap[]` (`BoardPriorityGap = { id; severity; label }`) + `budgetWarning?: string | null` (already built — REUSE; do NOT modify the component).
+- **Adapter / tilt** `analyzeDraftRoster(input)` accepts `mlbWonPlayers: DraftAnalyzerMlbEntry[]` + `farmWonPlayers: DraftAnalyzerFarmEntry[]` + optional `walletCap?`; `tiltAnalyzerFindings(findings, identity, tuning?)` + `sortByTiltedPriority(tilted)`. `Team.farmCapIdentity?: TeamCapIdentity` (`leagueBuilderStorage.ts:148`).
+- **Pattern to mirror** = the RB-9c-3a MLB-page derivation (`rosterBoardReport`/`rosterBoardPriorityGaps`/`rosterBoardBudgetWarning` in `LeagueBuilderAuctionDraft.tsx`) — build the farm version the SAME way, swapping `undefined` → `farmCapIdentity` and feeding the MLB roster as `mlbWonPlayers`.
+
+**MAKE-OR-BREAK:**
+1. `useFarmAuctionDraft` exposes the per-team completed MLB roster as `mlbRosterPlayerIdsByTeamId: Record<string, readonly string[]>` (or per-team `mlbRosterPlayerIds`) — built in `buildFarmAuctionTeams` from the SAME `roster?.mlbRoster ?? []` it already iterates for chemistry, threaded through state, exposed in the return — ADDITIVE, mirroring `mlbRosterChemistryByTeamId` exactly (no behavior change to the chemistry map or anything else).
+2. The FARM board's PRIORITY GAPS come from `analyzeDraftRoster` over the GM/board team's **completed MLB roster** (mapped from `leagueData.players` → `DraftAnalyzerMlbEntry` with positions; **MLB entry `salary: 0`** so they don't count against the farm walletCap) as `mlbWonPlayers`, with `farmWonPlayers` = the farm picks so far, then `tiltAnalyzerFindings(gapFindings, boardTeam.farmCapIdentity)` → `sortByTiltedPriority` → top-5. The tilt is BY `farmCapIdentity` (NOT `undefined`) — so for a Defense-leaning `farmCapIdentity`, a `position_coverage` MLB hole outranks an equal-severity `rotation` hole (the Defense-first-class behavior RB-9b-2 proved). + the farm `budgetWarning` (forward-looking solvency on the FARM budget: `budgetRemaining < rosterSlotsRemaining * minSalary`).
+3. The farm board's existing render is unchanged when no MLB roster / no farmCapIdentity (graceful: empty priorityGaps, null warning). The characterized farm-page "obscured flow / no ratings" test stays green (priority-gap labels are finding TITLES like "Shortstop coverage below target" — no rating tokens).
+
+**CONSTRAINTS — exact files (touch ONLY these; tests as needed):**
+1. `src/src_figma/app/hooks/useFarmAuctionDraft.ts` — expose `mlbRosterPlayerIdsByTeamId` (build in `buildFarmAuctionTeams` alongside the chemistry map; add the return field; add a `useState` mirroring `mlbRosterChemistryByTeamId`; set it everywhere the chemistry map is set [init + load, `:360/:429`]; expose in the hook return). ADDITIVE only.
+2. `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx` — build `playerById` from `leagueData.players`; derive the board team's `mlbWonPlayers` (map `mlbRosterPlayerIdsByTeamId[boardTeamId]` → `leagueData.players` → `{id,name,primaryPosition,secondaryPosition,salary:0}`, skipping unknown ids); `farmWonPlayers` from `rosterBoardEntries`; `walletCap = budgetRemaining + rosterBoardPayroll`; `report = session ? analyzeDraftRoster({...}) : null`; `priorityGaps = sortByTiltedPriority(tiltAnalyzerFindings(report.findings.filter(gap-kinds & severity!=='info'), boardTeam?.farmCapIdentity)).slice(0,5).map(→ BoardPriorityGap)`; `budgetWarning` = the farm solvency string or null. Pass `priorityGaps` + `budgetWarning` to the existing `<DraftRosterBoard tier="farm" … />`. Reuse `rosterBoardTeamState`/`rosterBoardEntries`/`rosterBoardPayroll`.
+3. Tests: extend the farm-page test (or add a focused one) asserting a priority-gap appears given a board team with an MLB hole + a `farmCapIdentity` (and the no-ratings assertion stays green); a hook test for the new exposure if the existing hook test makes it cheap.
+- Do NOT modify `DraftRosterBoard.tsx`, the adapter, `farmArchetypeTilt.ts`, `rosterAnalyzerEngine.ts`, storage, the MLB page, the frozen oracle, or any other file. Reuse, don't rebuild.
+
+**VERIFICATION (you run, report real output):**
+- `cd /Users/johnkruse/Projects/kbl-mode1-b && export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" && NODE_ENV= npx tsc -b` → exit 0 (paste tail).
+- `NODE_ENV= npx vitest run src/src_figma/__tests__/pages/LeagueBuilderFarmAuctionDraft.test.tsx` (+ any hook test you touch) → all pass (paste summary). (Captain runs the FULL suite.)
+- Report `git status --short`.
+
+**FORMAT:** diff summary (files + line counts), the hook exposure snippet, the farm-page priorityGaps/budgetWarning derivation (showing the `farmCapIdentity` tilt), tsc result, focused test results, `git status --short`.
+
+**FAILURE PROTOCOL / STOP-IF:**
+- If `leagueData.players` is NOT reachable on the farm page (can't resolve MLB positions) → STOP and quote (then we'd expose pre-mapped entries from the hook instead).
+- If `roster.mlbRoster` / `getRoster` / `mlbRosterChemistryByTeamId` don't match the documented site → STOP and quote.
+- If reusing the RB-9c-3a board props or the analyzer/tilt APIs doesn't fit → STOP and quote.
+- If a contracted **CODE anchor (`src/…` file:line)** mismatches → STOP and quote. (V2/DECISIONS specs absent is EXPECTED, NOT a stop.)
+- Never touch the frozen oracle or files outside those listed. Never commit/push. Branch-only.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-9c-3b ===== -->
