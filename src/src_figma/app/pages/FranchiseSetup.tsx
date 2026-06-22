@@ -1315,6 +1315,25 @@ function Step6Confirm({
         />
       </div>
 
+      {/* GM Name — the user IS the GM (§8) */}
+      <div className="mb-6">
+        <p className="text-xs text-[#E8E8D8] font-bold mb-3 tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>GM NAME</p>
+        <input
+          type="text"
+          value={config.gmName ?? ''}
+          onChange={(e) =>
+            setConfig({
+              ...config,
+              gmName: e.target.value,
+            })
+          }
+          className="w-full px-4 py-3 bg-[#2A4A22] border-4 border-[#E8E8D8] text-[#E8E8D8] text-sm"
+          style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
+          placeholder="Enter your GM name (or leave blank for a generated one)..."
+        />
+        <p className="text-xs text-[#E8E8D8]/60 mt-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>You are the GM — your name appears on roster &amp; draft moves.</p>
+      </div>
+
       {/* Settings Summary */}
       <div className="bg-[#3A5A32] border-4 border-[#E8E8D8] p-5">
         <p className="text-xs text-[#E8E8D8] font-bold mb-4 tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>SETTINGS SUMMARY</p>

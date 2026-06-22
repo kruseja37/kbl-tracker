@@ -302,6 +302,24 @@ describe('FranchiseSetup Component', () => {
       expect(screen.queryByText(/CREATING FRANCHISE/i)).not.toBeInTheDocument();
     });
 
+    test('passes typed GM name to franchise initialization config', async () => {
+      render(<FranchiseSetup />);
+      selectLeagueAndAdvance(3);
+      fireEvent.click(screen.getAllByRole('button', { name: /Team 1/i })[0]);
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+      fireEvent.change(screen.getByPlaceholderText(/Enter your GM name/i), {
+        target: { value: 'Casey Ledger' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /START FRANCHISE/i }));
+
+      await waitFor(() => {
+        expect(mockInitializeFranchise).toHaveBeenCalledWith(
+          expect.objectContaining({ gmName: 'Casey Ledger' })
+        );
+      });
+    });
+
     test('blocks franchise initialization when farms are incomplete instead of running a setup bridge', async () => {
       const incompleteReport = {
         validationVersion: 'league-builder-farm-scouting-v1',
