@@ -67,10 +67,15 @@
 > via a behavior-preserving extract (`applyPersonalityToSelfMoraleDelta`) from the already-built `masterMoraleMatrix` → "early dominates" holds for ALL 7
 > personalities (a correct Codex BLOCK on DROOPY under the rejected tilt-each model drove the sum-then-tilt fix; logged as a JK OPEN-DECISION). Part (c) —
 > seeding this into Mode-2 starting morale at the §10 freeze — is RB-7. Suite **489 files / 8021 tests, sole hard fail `wpaRuntimeBoundary`.**
-> **➡ NEXT (AUTH-4): `/kbl-captain` → RB-6 (fan morale from payroll, V2 §7) — NEW engine.** One-time at draft-end; payroll RANK vs the median; median =
-> neutral 50; deviation HURTS, EXPONENTIAL past the 75th/25th payroll percentile, HIGH side 2× (anti-all-in relocation-risk + anti-tank). Reuse
-> `percentile.ts getPercentile` + the `fanMoraleEngine` 50-neutral scale; PURE engine taking per-team payrolls (the payroll-sum data path = RB-7). Careful
-> SOUL-LAYER measurement (exp-curve params = §11/§13 sim-tune; surface ambiguity). Then RB-7 (freeze bridge) … RB-18.
+> **🎉 RB-6 (fan morale from payroll) COMPUTATION COMPLETE (WAVE 65, `d90cc5d8`, `codex/mode1-v1`, branch-only, ZERO-NEW-REDS).** Pure standalone
+> `src/engines/draftFanMorale.ts` (zero imports): §7 starting fan morale off neutral 50 from payroll RANK vs the median (rank-normalized `i/(N−1)`),
+> exponential penalty past the 75th/25th percentile, HIGH side 2× (30 vs 15), in-band=exactly 50, clamp [0,100], degenerate→neutral. Provably-isolated
+> new-file ticket → gated `tsc -b` 0 + the new test 8/8 (the payroll-sum data path = RB-7).
+> **➡ NEXT (AUTH-4): `/kbl-captain` → RB-7 — THE FREEZE → Mode-2, the §10 FOUR-number bridge (careful SAVED-SHAPE / franchise-bridge, the HARDEST
+> remaining RB).** checkpoint-0 stamps per rostered player + team: trueValue (exists) + **settledSalary** (winning bid) + **starting PLAYER morale** (RB-5
+> `computeDraftMoraleFromRaw`) + **starting FAN morale** (RB-6 `computeDraftFanMorale`); franchise-init **seeds Mode-2 morale from the freeze, OVERRIDING
+> defaults**. Needs deep grounding of the freeze/checkpoint-0 path + `franchiseInitializer` + the trackerDb shape (verify NO bump + version-pin +
+> migration-survival; additive fields ride existing stores). Surface the payroll-composition + slot/pay data-join OPEN-DECISIONS. Then RB-8 … RB-18.
 > **OPEN (verify at RB-16):** the §2.3 surplus pool-sizing (pool ≥ total slots) lives upstream in the pool builder; the RB-2b-1 forced-filler
 > guarantee assumes it. **JK-BROWSER-VERIFY BATCHED
 > (persistence-prioritized):** RB-0b-1 — a real draft stamps all 3 axes onto league players + they carry into the franchise (7-type personality
