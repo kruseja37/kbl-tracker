@@ -18184,14 +18184,40 @@ off-oracle weights. Fix: drive position selection from the §3.3 weight table vi
 **FAILURE PROTOCOL / STOP-IF:**
 - If line 1002 / the `POSITION_POOL` def / `pickWeightedValue` signature do NOT match the anchors → STOP and
   quote the real code.
-- If an EXISTING test pins the OLD position distribution (a specific seed → a specific primaryPosition, or
-  "no SP/RP") such that the weighted change breaks it → STOP and quote it (we'll decide whether to update that
-  characterized assertion).
 - If changing `pick`→`pickWeightedValue` at 1002 requires touching the secondary-position or any other
   generation step → STOP and quote (scope is ONLY the primary-position draw).
 - If a contracted **CODE anchor (`src/…` file:line)** mismatches → STOP and quote it. (PROSPECT_GENERATION_SPEC
   being ABSENT from this worktree is EXPECTED, NOT a stop.)
-- Never touch the grade model / oracle / other files. Never commit/push. Branch-only.
+- Never touch the grade model / oracle (`iv_oracle.json`) / other files. Never commit/push. Branch-only.
+
+---
+**AMENDMENT 1 (fix-iter 1, Captain — resolves the correct STOP-IF/BLOCK on the first dispatch):**
+The first RB-14 dispatch correctly BLOCKED: the change breaks the CHARACTERIZATION golden
+`PRE_REBALANCE_NON_CHEMISTRY_GOLDEN` (`src/utils/tests/prospectChemistryRebalance.test.ts:49`, asserted at
+:215 in the test "chemistry post-pass does not perturb non-chemistry candidate draws"). That golden is a
+self-captured snapshot of the generator's non-chemistry output (`nonChemistrySnapshot` captures `position`,
+`secondaryPosition`, ratings, arsenal, traits, …) — it is NOT the frozen IV oracle. RB-14 INTENTIONALLY
+changes generated positions (the ruled §3.3 fix), so this golden MUST be regenerated. THIS IS NOW IN SCOPE.
+
+Add `src/utils/tests/prospectChemistryRebalance.test.ts` to the EDIT set, with these guards:
+1. REGENERATE `PRE_REBALANCE_NON_CHEMISTRY_GOLDEN` to the new generator output (the snapshot is deterministic
+   — seeded). Do NOT change any test LOGIC, only the golden constant's values.
+2. CRITICAL invariant — only the candidates whose PRIMARY POSITION changed may differ in the golden, and ONLY
+   in their position-conditional fields (`position`/`secondaryPosition`/`ratings`/`arsenal`/`trait1`/`trait2`):
+   `pick(seed,arr)` and `pickWeightedValue(seed,weights)` both consume exactly ONE `randomUnit('${seed}:position')`
+   (same seed string) → NO downstream RNG stream shift; a candidate whose position is UNCHANGED must have a
+   BYTE-IDENTICAL golden row. In your report, LIST which candidate indices changed and confirm the rest are
+   identical.
+3. The CHEMISTRY tests in that file MUST stay GREEN with NO logic change — the distribution-tolerance test
+   (:191), the same-seed determinism test (:203), the dynamic non-perturbation invariant (:218/:227), and the
+   small-batch exact-quota test (:230/:238). If ANY chemistry assertion changes/breaks → STOP and quote (that
+   would mean the position change perturbed chemistry, which it must NOT — chemistry is a separate seed
+   namespace; investigate, do not paper over).
+4. Run `NODE_ENV= npx vitest run src/utils/tests/prospectChemistryRebalance.test.ts src/utils/tests/prospectScoutingDraftEngine.test.ts`
+   → all pass; in the report, show the chemistry tests passing AND the new RB-14 distribution test passing.
+
+`git status --short` now expects 3 edited files (engine + the engine test + the chemistry-rebalance test).
+Everything else in the contract above stands. Use xhigh reasoning effort.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-14 ===== -->
