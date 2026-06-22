@@ -7,6 +7,18 @@
 
 ## June 2026
 
+### 2026-06-22 (attended): RATINGS adjustment — consolidate to one engine, absolute signal, age curve, diminishing returns — RULED
+
+**Context:** Applied the trait-design treatment to ratings. Research `wy351xzbq` found **FOUR divergent rating-mutation models, none implementing the spec, and NO canonical age curve**: (A) in-season dev-math `ratingsDevelopment.ts` (own-TV×morale, ±6 cap, dead-band 0.75 — built but triple-dark); (B) EOS `computeNetChange` war×1.5+crude-age (built+WIRED+persisted, ignores spec); (C) `agingEngine.ts` phase random-walk (orphaned/display); (D) the spec's peer-median×grade-asymmetry math (implemented by nobody). Full RATINGS spec to be authored.
+
+**FOUNDATIONAL RULINGS:**
+- **Consolidate onto ONE adaptive engine** — in-season checkpoints + EOS as the final checkpoint (mirrors the trait EOS ruling). Retire B (war×1.5) + C (random aging walk) as live paths; deprecate award-luck. Everything else builds on this.
+- **Absolute own-performance signal, NOT peer-percentile** (the deliberate must-differ from traits). A rating moves on whether the player out/under-performed HIS expected value (True Value delta), because a rating is an absolute attribute — avoids weak-league rating inflation. (Only role split = which rating keys are eligible.)
+- **Adopt a canonical age curve** (greenfield — none existed): develop <25, peak 25–32, decline 33+ (steepening); age + performance COMBINE (a 35yo who plays great can net positive); speed/fielding/arm erode faster than power/contact; deterministic, folded into the one engine. Numbers = sim-tune placeholders.
+- **Per-attribute diminishing returns** (harder to raise a 90 than a 50; high ratings sticky on decline) = the trait "valuable=hard+sticky" principle applied to ratings. **DROP** the spec's separate whole-player grade/salary asymmetry (avoid double-counting).
+
+**TRANSFER-DEFAULTS taken (recommended; transfer from the trait engine — flagged for JK confirm):** R2 asymmetric hysteresis dead-band (vs symmetric 0.75); R3 seeded-probabilistic firing near the dead-band (parity with traits); R4 season-aggregate base + moderate trend tilt (neutral at CP1); R9 rookie/drafted downside shield (reduced early-career downside cap); R10 per-position relevance weighting DEFERRED to v2.
+
 ### 2026-06-22 (attended): Trait MEASUREMENT — window, trend factor, peer cohorts — RULED
 
 **Context:** JK validated the stickiness/early-loss balance + asked about the measurement basis. → `TRAIT_GAIN_LOSS_THRESHOLD_SPEC.md §4A`.
