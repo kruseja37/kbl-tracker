@@ -17212,3 +17212,59 @@ Use xhigh reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-17 ===== -->
+
+<!-- ===== CONTRACT: RB-15 ===== -->
+## CONTRACT: RB-15 — Farm-auction resume = persist the pool DTOs (instead of regenerate-on-seed); additive, no DB bump
+
+**ROUTE:** Codex builder, worktree `/Users/johnkruse/Projects/kbl-mode1-b` (branch `codex/mode1-v1-b`). Branch-only — do NOT commit, do NOT push (the Captain commits after audit).
+**ROLE:** Builder (cross-model). The Captain (Opus) audits your diff; builder ≠ auditor.
+
+**GOAL (AUCTION_REBUILD_PLAN §12 / RB-15):** Today the FARM AUCTION resume REGENERATES the entire prospect pool from the stored seed; the persisted session row holds only the thin auction state (`AuctionPlayer = {playerId, iv, ivPercentile}` + `playerOrder`) — NOT the rich prospect DTOs. Make resume **bulletproof**: PERSIST the `FarmAuctionPool` on the session record and LOAD it on resume, falling back to regenerate only for legacy rows that lack it. This immunizes a saved farm draft against prospect-generator drift (the generator is being actively reworked on the other branch → regenerate-on-resume will silently diverge).
+
+**SOURCE OF TRUTH (embedded — the V2/plan docs are NOT in this worktree; their absence is EXPECTED, not a stop):**
+- RB-15 verbatim intent: "switch farm resume from regenerate-on-seed to persist the DTOs+storylines (additive, no DB bump; bulletproof resume)."
+- "DTOs+storylines" clarified by grounding: the farm auction has NO separate "storyline" artifact in code (FarmStoryline is unimplemented Mode-2 spec). The prospect narrative rides ON the DTO (`LeagueBuilderProspectPlayerDto.prospectProfile` + `hiddenPersonalityModifiers`). Persisting the pool persists them. So "persist DTOs+storylines" == persist the `FarmAuctionPool`.
+
+**GROUNDED SOURCE FACTS (Captain direct reads + independent 4-dimension recon, this worktree — re-confirm before editing):**
+- The persisted farm-session record type is `LeagueBuilderAuctionSession` (`src/utils/leagueBuilderStorage.ts:231-239`): `{ id; leagueId; seasonNumber; seed; session: CpuShillAuctionSession; createdDate; lastModified }` — NO pool field. Stored in the existing `AUCTION_SESSIONS` ('auctionSessions') object store; `DB_VERSION = 8` (`leagueBuilderStorage.ts:41`).
+- `saveAuctionSessionById` (`leagueBuilderStorage.ts:1700-1728`) is SPREAD-AND-PUT (`const fullSession = {...session, seed, createdDate, lastModified}; store.put(fullSession)`) → it persists arbitrary additive fields with NO change. `getAuctionSessionById` (`:1679-1689`) returns the raw stored object → reads any additive field automatically.
+- `FarmAuctionPool` (`src/utils/farmAuctionPool.ts:26-29`) = `{ prospects: LeagueBuilderProspectPlayerDto[]; auctionPlayers: AuctionPlayer[] }`. `LeagueBuilderProspectPlayerDto` (`src/utils/prospectScoutingDraftEngine.ts:173-215`) is FULLY plain/serializable (primitives + arrays + nested plain objects: `prospectProfile`, `hiddenPersonalityModifiers`, `leagueAssignments`, `hometown`) — structured-clone safe for IndexedDB. `AuctionPlayer` (`auctionStateMachine.ts:21-25`) = `{playerId, iv, ivPercentile}` (plain).
+- `farmAuctionPool.ts` does NOT import `leagueBuilderStorage.ts` → adding `import type { FarmAuctionPool } from './farmAuctionPool'` to `leagueBuilderStorage.ts` is cycle-free (use `import type` regardless).
+- `computeFarmTierCap` is exported from `src/utils/farmAuctionWallet.ts:39` (NOT owned) — `computeFarmTierCap(pool.auctionPlayers.map(p => p.iv))` is exactly how `buildFarmAuctionSession` derives it (`farmAuctionSession.ts:53`).
+- The hook `src/src_figma/app/hooks/useFarmAuctionDraft.ts`: `persist` (`:254-263`) saves `{id, leagueId, seasonNumber, seed, session}`; `loadFarmAuction` (`:342-390`) calls `buildFarmAuctionSession({seed: row.session.config.nominationOrderSeed, …})` (`:364-371`), compares `regen.pool` order vs `row.session.playerOrder` and `console.warn`s on mismatch (`:372-383`), then `setPool(regen.pool)` + `setFarmTierCap(regen.farmTierCap)` (`:385,388`); `initFarmAuction` (`:392-440`) builds via `buildFarmAuctionSession`, `persist`s (`:433`), then `setPool(result.pool)` (`:435`).
+- The OWNED page `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx` consumes `auction.pool?.prospects` READ-ONLY (`:213`) and only triggers `loadFarmAuction`/`initFarmAuction` (no seed for load). It owns NO seed/regenerate logic → it needs NO edit, and its output shape (`pool`) is unchanged by this ticket.
+- The hook test `src/src_figma/app/hooks/__tests__/useFarmAuctionDraft.test.ts` uses `fake-indexeddb/auto` (REAL IndexedDB round-trips through the actual storage functions) — the place to prove persist→resume.
+
+**EXPECTED OUTPUT (exactly these paths):**
+1. **`src/utils/leagueBuilderStorage.ts`** (SHARED — minimal additive farm-section edit ONLY): add ONE additive optional field `pool?: FarmAuctionPool;` to the `LeagueBuilderAuctionSession` interface (`:231-239`) + `import type { FarmAuctionPool } from './farmAuctionPool';`. Do NOT change `saveAuctionSessionById`/`getAuctionSessionById` bodies (spread-put already persists it). Do NOT add a store, do NOT change `DB_VERSION`, do NOT touch any other section.
+2. **`src/src_figma/app/hooks/useFarmAuctionDraft.ts`** (NOT owned):
+   - Add a `poolRef = useRef<FarmAuctionPool | null>(null)` so `persist` can include the current pool on every save with NO extra DB read.
+   - `persist` (`:254-263`): include `pool: poolRef.current ?? undefined` in the `saveAuctionSessionById({...})` payload.
+   - `initFarmAuction`: set `poolRef.current = result.pool` BEFORE the first `persist(result.session, nextContext)` (`:433`) so the initial save carries the pool. (Keep `setPool(result.pool)`.)
+   - `loadFarmAuction`: if `row.pool` is present → `poolRef.current = row.pool; setPool(row.pool); setFarmTierCap(computeFarmTierCap(row.pool.auctionPlayers.map(p => p.iv)))` and DO NOT call `buildFarmAuctionSession` for the display pool (skip the regenerate). Keep a lightweight integrity `console.warn` if `row.pool.auctionPlayers` order ≠ `row.session.playerOrder` (telemetry only, non-fatal). If `row.pool` is ABSENT (legacy row) → fall back to the EXISTING regenerate-on-seed path UNCHANGED (and set `poolRef.current = regen.pool`). Keep the existing scout/chemistry/team recompute (`buildFarmAuctionTeams`, `loadOptionalFarmScouts`, `setScoutsByTeamId`, `setMlbRosterChemistryByTeamId`) in BOTH paths — those are team-state, not pool DTOs.
+   - Import `computeFarmTierCap` from `../../../utils/farmAuctionWallet` (add to the existing `computeMlbToFarmCarryover` import line).
+3. **`src/src_figma/app/hooks/__tests__/useFarmAuctionDraft.test.ts`** (extend, real fake-indexeddb): add tests proving (a) after `initFarmAuction`, `getAuctionSessionById(createFarmAuctionSessionId(...))` returns a row whose `pool.prospects` is non-empty and deep-equals the in-hook pool; (b) `loadFarmAuction` on that persisted row sets `result.pool` deep-equal to the persisted `pool` (resume LOADS, not regenerates) — assert e.g. the loaded `pool.prospects` deep-equals the saved `pool.prospects`; (c) a LEGACY row saved via `saveAuctionSession({... no pool ...})` resumes via the regenerate fallback (pool is non-null, derived from the seed). Mirror the existing test harness (the league/team/roster fixtures + mocked `useLeagueBuilderData`).
+
+**CONSTRAINTS:**
+- Do NOT edit any OWNED file: `src/data/rosterEngineConstants.ts`, `src/data/traitPricing.ts`, `src/data/chemistryCanonical.ts`, `src/engines/ivEngine.ts`, `src/engines/effectiveRatings.ts`, `src/engines/chemistryFitValue.ts`, `src/engines/farmArchetypeProfile.ts`, `src/engines/scoutValueRange.ts`, `src/engines/scoutPriceOpinion.ts`, `src/engines/smb4PlayerGenerator.ts`, `src/engines/smb4TeamProfileEngine.ts`, `src/engines/cpuShillBidding.ts`, `src/utils/prospectScoutingDraftEngine.ts`, `src/utils/rosterAnalyzerDraftAdapter.ts`, `src/engines/rosterAnalyzerEngine.ts`, `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx`, `src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx`, `src/src_figma/app/pages/LeagueBuilderTeams.tsx`.
+- `src/utils/leagueBuilderStorage.ts` is SHARED: ONLY the one additive field + the type-import. NO new store, NO `DB_VERSION` change, NO edit outside the `LeagueBuilderAuctionSession` interface + import block.
+- Do NOT change the hook's PUBLIC return shape (`UseFarmAuctionDraftReturn`) — `pool` stays `FarmAuctionPool | null`. The OWNED page must keep working unchanged.
+- Frozen IV oracle `spec-docs/reference/iv_oracle.json` is read-only. No new dependency.
+
+**VERIFICATION (run yourself, report output):**
+- `export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH"` then `cd /Users/johnkruse/Projects/kbl-mode1-b && NODE_ENV= npx tsc -b ; echo "TSC=$?"` — must be 0.
+- `NODE_ENV= npx vitest run src/src_figma/app/hooks/__tests__/useFarmAuctionDraft.test.ts src/utils/tests/farmAuctionSession.test.ts src/utils/tests/leagueBuilderStorageV6Migration.test.ts` — all pass (the migration test proves `db.version===8` + store list UNCHANGED).
+- Report `git status --porcelain` (must be exactly the 3 paths above, all modified) + `git --no-pager diff --stat`.
+
+**FORMAT:** Report changed paths, the leagueBuilderStorage diff (prove only the additive field), the hook diff (persist + load + init), the new tests, tsc + test results.
+
+**FAILURE PROTOCOL / STOP-IF (stop, change nothing, quote the discrepancy):**
+- If persisting the pool would require a NEW STORE or a `DB_VERSION` bump → STOP (it must be additive to the existing record).
+- If `FarmAuctionPool` / `LeagueBuilderProspectPlayerDto` is NOT structured-clone serializable (a function/class instance on the DTO) → STOP and quote the offending field.
+- If the change forces an edit to the OWNED `LeagueBuilderFarmAuctionDraft.tsx` or any OWNED engine/data file → STOP and quote why.
+- If adding `import type { FarmAuctionPool }` to `leagueBuilderStorage.ts` creates a real (runtime) import cycle that tsc flags → STOP and quote it.
+- If a contracted `src/…` anchor does not match the actual source → STOP and quote it. (The V2/plan spec files are intentionally NOT in this worktree — their absence is EXPECTED, not a stop. Only `src/…` mismatches stop you.)
+- Never touch the frozen oracle or any OWNED file. Never commit/push. Branch-only.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-15 ===== -->
