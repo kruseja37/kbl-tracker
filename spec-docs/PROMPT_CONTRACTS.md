@@ -15640,3 +15640,70 @@ are not exported from `chemistryCanonical.ts` → STOP and quote. If `PotencyTie
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-1b-1 ===== -->
+
+<!-- ===== CONTRACT: RB-1b-2 (MLB+farm chemistry feed + scout-price wire) ===== -->
+## CONTRACT — RB-1b-2 (Mode-1 auction REBUILD: chemistry-fit feed + wire) — 2026-06-21 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5) | xhigh reasoning effort. **WORKTREE:** `/Users/johnkruse/Projects/kbl-mode1` [branch
+`codex/mode1-v1`] ONLY. **Builder = Codex; Auditor = Opus 4.8 (builder≠auditor). Do NOT commit; do NOT push.**
+**DEPENDS ON RB-1b-1** (the pure `src/engines/chemistryFitValue.ts` engine) being committed first.
+
+**ROLE:** Precise TypeScript builder wiring the RB-1b-1 chemistry-fit engine into the farm auction's scout price opinion, plus
+the roster-chemistry feed it needs. Perception-layer only — no IV/oracle/salary touch.
+
+**GOAL:** Feed the GM's **MLB roster + farm picks-so-far** chemistry counts to the farm auction page and multiply the scout's
+price opinion by `chemistryFitPriceMultiplier(prospect.chemistry, rosterChemistryCounts)` so a prospect whose chemistry would
+level-up or buffer the GM's roster reads as worth more — true IV / canonical pricing untouched.
+
+**SOURCE OF TRUTH:** `AUCTION_DRAFT_SPEC_V2.md` §3.5/§3.7/§7.3; DECISIONS_LOG 2026-06-21 "RB-1b chemistry-fit REFINED" (roster
+scope = MLB + farm picks, JK).
+
+**GROUNDED ANCHORS (re-read at source first):**
+- `src/engines/chemistryFitValue.ts` (RB-1b-1) — `chemistryFitPriceMultiplier(prospectChemistry: string, rosterChemistryCounts:
+  Partial<Record<ChemistryCode, number>>): number` (returns [1.0, 1.08]). Reuse; do NOT modify.
+- `src/src_figma/app/hooks/useFarmAuctionDraft.ts:151-172` — `buildFarmAuctionTeams` already `await getRoster(team.id)` per team
+  but uses ONLY `roster?.farmRoster`, **discarding `roster?.mlbRoster`**. The hook holds `leagueData` (`:198-200`); `leagueData.players`
+  (`useLeagueBuilderData.ts:90`) is the full league `Player[]` each with `chemistry`.
+- `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx` — `scoutRangeForProspect` (`:87`) builds `scoutPriceOpinion(...)` →
+  `perceivedValueRange(...)`; `rosterPositionTally` (`:126-136`) is the proven pattern for tallying `session.teams[].roster`
+  assignment playerIds → `prospectById.get(playerId)` fields; the two call sites pass the current bidder/nominator `teamId`.
+- `src/data/chemistryCanonical.ts` — `normalizeToChemistryCode`, `ChemistryCode`, `CHEMISTRY_CODES`.
+
+**DESIGN CALLS (ratified — implement exactly):**
+1. **MLB chemistry feed in the hook:** extend `buildFarmAuctionTeams` (and thread through to the hook return + context) to compute,
+   per team, an MLB-roster chemistry tally `Record<ChemistryCode, number>` = count `roster?.mlbRoster` ids joined to
+   `leagueData.players` by id, each player's `chemistry` passed through `normalizeToChemistryCode`. Expose
+   `mlbRosterChemistryByTeamId: Record<string, Partial<Record<ChemistryCode, number>>>` from the hook (additive return field).
+   This is DERIVED state (computed from data already loaded) — **NO new store, NO session-shape change, NO DB bump**; do NOT widen
+   `AuctionTeamState`/`BuildFarmAuctionSessionInput`/persistence.
+2. **Combine with farm picks on the page:** add a `rosterChemistryTally(team, prospectById)` (mirror `rosterPositionTally`) that
+   tallies the team's farm picks-so-far by `normalizeToChemistryCode(prospectById.get(playerId)?.chemistry)`. The full counts for a
+   bidder = merge that team's `mlbRosterChemistryByTeamId[teamId]` (from the hook) + its farm-pick tally.
+3. **Wire into the opinion:** in `scoutRangeForProspect`, after computing `priceOpinion = scoutPriceOpinion(...)`, multiply:
+   `const chemFit = chemistryFitPriceMultiplier(prospect.chemistry, rosterChemistryCountsForBidder);` then
+   `perceivedValueRange(priceOpinion * chemFit, accuracy, seed)` (seed UNCHANGED). Thread the bidder's counts into both
+   `scoutRangeForProspect` call sites (current-lot bidder + visible-pool nominator), matching the `teamId` each already uses.
+4. Tests: extend `src/src_figma/__tests__/pages/LeagueBuilderFarmAuctionDraft.test.tsx` — assert the rendered band reflects
+   `priceOpinion * chemFit` (recompute expected the same way), AND keep every existing no-true-IV / no-ratings-leak assertion.
+   Add a hook/feed unit assertion if a clean seam exists (else cover via the page test).
+
+**CONSTRAINTS — do NOT touch:** `chemistryFitValue.ts` (RB-1b-1, import only); `scoutPriceOpinion.ts`/`scoutValueRange.ts`
+(compose, don't edit); `ivEngine`/`computeIV`/salary/oracle; the auction reserve/opening/bidding path + `AuctionTeamState`/session
+persistence (counts are derived, NOT persisted — NO DB/store/version change); the MLB auction page. Branch `codex/mode1-v1` only;
+do NOT commit, do NOT push.
+
+**EXPECTED OUTPUT:** the farm scout band for a prospect whose chemistry would level-up the bidder's roster reads ~8% higher; a
+neutral-fit prospect is unchanged; no true IV / ratings leak; no persistence/oracle change.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` exit 0; `NODE_ENV= npx vitest run src/src_figma/__tests__/pages/LeagueBuilderFarmAuctionDraft.test.tsx`
+green. Paste ACTUAL output. (Opus re-runs the FULL Mode-1 suite + confirms zero-new-reds + no store/oracle change.)
+
+**FORMAT:** 1) every changed/new path + total; 2) the hook feed + the page tally + the wire + the test update, and confirm no
+session/persistence/oracle touch; 3) ACTUAL tsc + test output; 4) "RB-1b-2 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL (STOP-IF):** if exposing the MLB chemistry feed requires widening the persisted session / `AuctionTeamState` /
+a DB bump → STOP and report (it must be derived hook state). If `leagueData.players` or `getRoster().mlbRoster` is not reachable in
+the hook → STOP and quote. If wiring the multiplier forces a change to `scoutPriceOpinion.ts` or the reserve/bidding path → STOP.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-1b-2 ===== -->
