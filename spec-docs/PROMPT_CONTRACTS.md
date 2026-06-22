@@ -15925,3 +15925,91 @@ touching the OLD `nominatePlayer` or any consumer → STOP and report.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-2b-1 ===== -->
+
+<!-- ===== CONTRACT: RB-2b-2 (WIRE the one-chance engine into hooks + pages + cpuShill) ===== -->
+**ROUTE:** Codex (gpt-5.5) CLI | xhigh reasoning effort
+**ROLE:** Mode-1 auction integration builder. Switch ALL consumers from the OLD GM-nomination API to the NEW
+engine-driven one-chance API (already built in auctionStateMachine.ts: `surfaceNextPlayer`, `resolveLot`,
+`passLoneSurvivorOut`, `advanceLot`, `selectNextNominee`, config `nominationWeightExponent` + `flatReserveFloor`).
+DO NOT delete the old engine functions in THIS ticket (RB-2b-3 does that) — just stop calling them. After this
+ticket the old fns are orphaned-but-present; the build stays green.
+
+**GOAL:** make the auction engine-nominated + one-chance END-TO-END for both tiers: the engine surfaces players (no
+human/CPU nomination pick), one bidding round, no-bid → permanently out (with the RB-2b-1 forced-filler safety),
+applying JK rulings Q1 (farm flat reserve) / Q3 (k per tier) / Q4 (auction default).
+
+**SOURCE OF TRUTH:** AUCTION_DRAFT_SPEC_V2 §2 (engine nomination + one-chance + the §2.4 hot-seat UX — only WHO
+picks the next player changed; bidding/round-robin/CPU/wallet SURVIVE). DECISIONS_LOG 2026-06-21 RB-2-Q1/Q3/Q4.
+
+**GROUNDED ANCHORS (re-read at SOURCE in /Users/johnkruse/Projects/kbl-mode1 — these line refs are from a grounding
+sweep, RE-VERIFY each before editing):**
+- `src/src_figma/app/hooks/useAuctionDraft.ts` (MLB hook): imports of `nominatePlayer`/`rotateNomination`/
+  `getCurrentNominator` (~:7-13) → import `surfaceNextPlayer`/`advanceLot` instead. `autoAdvanceCpu` NOMINATION
+  branch (~:252-260: `getCurrentNominator`→CPU-check→`resolveCpuNomination`→`nominatePlayer`) → REPLACE with an
+  UNCONDITIONAL `next = transitionOrThrow(surfaceNextPlayer(next)); await persist(...)` (engine surfaces for
+  everyone; the human is stopped only in the OPEN_BIDDING/RESOLVE branches, unchanged). `currentNominatorTeamId`
+  (~:226 via getCurrentNominator) → remove from the hook return. `stateProgressKey` (~:181-202) → remove the
+  `setAside: session.setAsidePlayerIds.length` line. `nominate` callback (~:383) → REMOVE from the return.
+  `rotate` callback (~:393, → rotateNomination) → rename to `advance` wired to `advanceLot`. In `initAuction`'s
+  config build (~:357-365) set `nominationWeightExponent: 2`. Update `UseAuctionDraftReturn` accordingly.
+- `src/src_figma/app/hooks/useFarmAuctionDraft.ts` (farm hook): SAME changes (NOMINATION branch ~:274-280,
+  stateProgressKey setAside ~:202, `nominate` ~:448, `rotate`→`advance` ~:458) PLUS in its config build (~:409-417)
+  set BOTH `nominationWeightExponent: 3` AND `flatReserveFloor: LEAGUE_MINIMUM_SALARY` (import from
+  `../../../data/rosterEngineConstants`). The farm opening ask + minimumBid then read `lot.openingAsk` (the flat
+  floor) automatically.
+- `src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx` (MLB page): the NOMINATION-state UI block (~:437-497) —
+  REMOVE the player-picker loop (~:470-489, each `onClick={() => void auction.nominate(candidate.playerId)}`) and
+  replace with a PASSIVE display ("Engine nominated: [current lot player name]" once OPEN_BIDDING, or a brief
+  "surfacing…" placeholder). Keep the position-filter/sort visual chrome if trivial, else drop it (it drove the
+  picker). The "Next Lot" button (~:685 `auction.rotate()`) → `auction.advance()`. Remove `currentNominatorTeamId`/
+  `currentNominator` reads (~:140,:151) → the banner uses `currentBidderTeamId` (the now-active actor) instead.
+  PRESERVE all OPEN_BIDDING/RESOLVE/SOLD/PASSED bid/raise/pass/claim UI (~:499-676). Leave the SET_ASIDE display
+  branches (~:61,:67) as-is (dead-but-harmless under one-chance; RB-2b-3 owns the disposition type).
+- `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx` (farm page): SAME — picker loop (~:634-649) → passive
+  display; "Next Lot" (~:845) → `advance`; `currentNominatorTeamId` (~:243,:273,:281) → `currentBidderTeamId`
+  (IMPORTANT: the per-bidder scout-range useMemo at ~:281 must key on the current BIDDER, not a nominator, so the
+  RB-1a/RB-1b scout range shows for the team actually deciding). Opening-ask display (~:671) + minimumBid (~:37-38)
+  read `lot.openingAsk` — unchanged (now the flat floor). PRESERVE the bidding UI (~:659-861).
+- `src/engines/cpuShillBidding.ts`: DELETE `resolveCpuNomination` (~:376-449) + its `CpuNominationDecision` type if
+  unused elsewhere (grep first). Its only callers are the two hooks' NOMINATION branches (removed above). `cpuBidOnLot`,
+  `cpuDecideLoneSurvivor`, `CpuShillAuctionSession`, the bid/claim shill logic ALL SURVIVE. The now-unused
+  `getCurrentNominator`/`nominatePlayer` imports in cpuShillBidding (~:11-12) → remove.
+- NEW-LEAGUE draftFormat default (Q4/O-1): grep for the `draftFormat` default in league-setup (AUC-5.1d-3 added it,
+  default currently `snake`). Flip the DEFAULT to `auction`. RE-VERIFY the exact location at source; if it's not a
+  trivial 1-line default flip, STOP and report rather than guessing.
+
+**MAKE-OR-BREAK (the audit will try hardest to break):** a full auction (both tiers) runs END-TO-END with engine
+nomination + one-chance and NO nomination-pick input — init auto-surfaces the first player; each lot: bid/pass round
+→ resolve → SOLD/PASSED → "Next Lot"(advance) auto-surfaces the next → … → AUCTION_COMPLETE with every roster
+filled. No call to `nominatePlayer`/`rotateNomination`/`getCurrentNominator`/`resolveCpuNomination` anywhere in the
+hooks/pages/cpuShill. The persisted-then-resumed (mid-draft) session reproduces the surface order (seeded).
+
+**CONSTRAINTS:**
+- Edit ONLY: the 2 hooks, the 2 pages, `cpuShillBidding.ts`, the new-league draftFormat default file, and the
+  corresponding TEST files (the 2 hook tests + any page tests that assert nomination-pick behavior — update them to
+  the engine-nomination flow). DO NOT touch `auctionStateMachine.ts` (the engine), persistence
+  (`leagueBuilderStorage`/`farmAuctionSession`), the frozen oracle, or `auctionStateMachine.test.ts` /
+  `auctionStateMachineOneChance.test.ts`.
+- Do NOT delete any export from `auctionStateMachine.ts` (RB-2b-3 does the deletion). Orphaned-but-present is fine.
+- Branch-only on `codex/mode1-v1`; do NOT commit/push.
+
+**EXPECTED OUTPUT:** both tiers nominate via the engine + resolve one-chance; the farm opens every prospect at the
+flat floor; k=2 MLB / 3 farm; new leagues default to auction; cpuShill no longer nominates; hook/page tests updated
++ green.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` exit 0; `NODE_ENV= npx vitest run` (the affected hook/page test files at
+minimum — paste ACTUAL output). (Opus re-runs the FULL Mode-1 suite + confirms zero-new-reds vs wpaRuntimeBoundary.)
+
+**FORMAT:** 1) every changed path + total; 2) per file: the OLD→NEW wiring change + confirm the engine/persistence/
+oracle/engine-test files are untouched + that NO consumer still calls the old nomination API (paste a grep of
+`nominatePlayer|rotateNomination|getCurrentNominator|resolveCpuNomination` over src showing only the engine + its
+own test remain); 3) ACTUAL tsc + vitest output; 4) "RB-2b-2 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL (STOP-IF):** if the autoAdvance loop can infinite-loop or fail its no-progress guard with the
+unconditional surface (e.g. surfaceNextPlayer→AUCTION_COMPLETE not handled) → STOP and report. If removing the
+nomination picker breaks a page test in a way that needs a product decision (not a mechanical update) → STOP and
+quote it. If the `draftFormat` default is NOT a trivial localized change → STOP and report. If wiring forces an edit
+to `auctionStateMachine.ts` or persistence → STOP and report.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-2b-2 ===== -->
