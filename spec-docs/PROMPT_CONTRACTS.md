@@ -16909,3 +16909,72 @@ Use xhigh reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-8a ===== -->
+
+<!-- ===== CONTRACT: RB-8b ===== -->
+# CONTRACT RB-8b — FranchiseSetup "GM Name" input (the naming flow; the user names their GM at setup)
+
+**ROUTE:** Codex 5.5 | xhigh reasoning effort. Worktree `/Users/johnkruse/Projects/kbl-mode1` [`codex/mode1-v1`]. Branch-only — do NOT commit/push.
+
+**ROLE:** You are the Mode-1 UI builder. Add a **"GM NAME" text input** to the FranchiseSetup wizard's Step-6 (Confirm & Start), so the user names their GM (the user IS the GM). The entity + persistence already exist (RB-8a); this ticket only adds the input that populates `config.gmName`. Sub-ticket 2 of 3 (8a done; 8c = fire-authority + reporter — NOT in scope).
+
+**GOAL (one sentence):** Add a controlled "GM NAME" text input on Step-6 of FranchiseSetup, bound to `config.gmName`, peer to the existing FRANCHISE NAME input — so a name the user types flows through `initializeFranchise(config)` into RB-8a's `buildGmProfile` (overriding the generated default); leaving it blank keeps the deterministic generated default.
+
+**SOURCE OF TRUTH:** `AUCTION_DRAFT_SPEC_V2.md` §8: "the **user IS the GM** (first-person) — exists in the ecosystem with a **name** (their own or chosen)." §9 (UX): franchise setup is where the GM is configured.
+
+**GROUNDED ANCHORS (re-verified at source by the Captain — trust these):**
+- `src/src_figma/app/pages/FranchiseSetup.tsx` — the FRANCHISE NAME input block to MIRROR is at `:1300-1316` (inside the Step-6 "CONFIRM & START" render, `:1295+`):
+  ```
+  {/* Franchise Name */}
+  <div className="mb-6">
+    <p className="text-xs text-[#E8E8D8] font-bold mb-3 tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>FRANCHISE NAME</p>
+    <input type="text" value={config.franchiseName}
+      onChange={(e) => setConfig({ ...config, franchiseName: e.target.value })}
+      className="w-full px-4 py-3 bg-[#2A4A22] border-4 border-[#E8E8D8] text-[#E8E8D8] text-sm"
+      style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
+      placeholder="Enter franchise name..." />
+  </div>
+  ```
+  `config` + `setConfig` are already in scope at that exact location (the franchiseName input uses them).
+- `config.gmName?: string` ALREADY EXISTS on `FranchiseConfig` (`src/types/franchise.ts`, added by RB-8a). The default INITIAL_CONFIG (`:12`/`franchiseName` at `:48`) does NOT set gmName ⇒ it starts `undefined`; bind the input value as `config.gmName ?? ''`.
+- The config flows to init at `FranchiseSetup.tsx:171 await initializeFranchise(config)` — which calls `buildGmProfile({ franchiseId, controlledTeamId, gmName: config.gmName })` (RB-8a). So an entered gmName carries end-to-end with NO other wiring.
+- Test file (characterized) = `src/src_figma/__tests__/franchiseMode/FranchiseSetup.test.tsx`. Verified: NO existing test asserts on the FRANCHISE NAME input, counts Step-6 inputs, or asserts the exact `initializeFranchise` args (the START test `:283` only checks `toHaveBeenCalled()`). ⇒ adding a GM-NAME input does NOT break any characterized test.
+
+**MAKE-OR-BREAK:**
+1. A user-typed GM name reaches `initializeFranchise` as `config.gmName` (proven by a new test asserting `mockInitializeFranchise` is called with an object containing the typed `gmName`).
+2. The input is OPTIONAL — leaving it blank must NOT block START (no required-field gate); blank → RB-8a generates the default. The existing START tests stay green.
+3. NO existing characterized test in `FranchiseSetup.test.tsx` breaks.
+
+**EXPECTED OUTPUT (exact edits):**
+1. **`src/src_figma/app/pages/FranchiseSetup.tsx`** — directly AFTER the FRANCHISE NAME block (`:1316`, before the SETTINGS SUMMARY `<div>`), add a mirrored GM NAME block:
+   ```
+   {/* GM Name — the user IS the GM (§8) */}
+   <div className="mb-6">
+     <p className="text-xs text-[#E8E8D8] font-bold mb-3 tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>GM NAME</p>
+     <input type="text" value={config.gmName ?? ''}
+       onChange={(e) => setConfig({ ...config, gmName: e.target.value })}
+       className="w-full px-4 py-3 bg-[#2A4A22] border-4 border-[#E8E8D8] text-[#E8E8D8] text-sm"
+       style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
+       placeholder="Enter your GM name (or leave blank for a generated one)..." />
+     <p className="text-xs text-[#E8E8D8]/60 mt-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>You are the GM — your name appears on roster &amp; draft moves.</p>
+   </div>
+   ```
+   Mirror the existing styling EXACTLY (do not invent new colors/classes; reuse the FRANCHISE NAME block's). Do NOT make it required; do NOT change INITIAL_CONFIG; do NOT touch any other step or the START handler.
+2. **`src/src_figma/__tests__/franchiseMode/FranchiseSetup.test.tsx`** — ADD one non-vacuous test (do NOT modify existing tests): reach Step 6 (the same path as the `:283` START test — `selectLeagueAndAdvance(3)` → select Team 1 → NEXT → NEXT), then `fireEvent.change(screen.getByPlaceholderText(/Enter your GM name/i), { target: { value: 'Casey Ledger' } })`, click START FRANCHISE, and assert `mockInitializeFranchise` was called with `expect.objectContaining({ gmName: 'Casey Ledger' })` (use `mockInitializeFranchise.mock.calls` or `toHaveBeenCalledWith(expect.objectContaining({ gmName: 'Casey Ledger' }))`). Keep the existing `mockInitializeFranchise.mockResolvedValue('franchise-1')` beforeEach.
+
+**CONSTRAINTS:** edit ONLY `src/src_figma/app/pages/FranchiseSetup.tsx` + `src/src_figma/__tests__/franchiseMode/FranchiseSetup.test.tsx`. Do NOT touch `franchiseInitializer`, `gmIdentity`, types, any store, the reporter, or the frozen IV oracle (READ-ONLY). Do NOT add a required-field validation. Do NOT reword any existing copy (the franchise hub copy is test-characterized — only ADD the new GM block).
+
+**VERIFICATION (report ACTUAL output):**
+- `cd /Users/johnkruse/Projects/kbl-mode1 && export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" && NODE_ENV= npx tsc -b` → exit 0.
+- Focused: `NODE_ENV= npx vitest run src/src_figma/__tests__/franchiseMode/FranchiseSetup.test.tsx` — report pass/fail counts (all green, incl. the new test).
+- `git -C /Users/johnkruse/Projects/kbl-mode1 status --short` → only the 2 contracted paths.
+
+**FORMAT:** (1) changed paths + count; (2) each change w/ the §8/anchor ref; (3) tsc result; (4) the FranchiseSetup test-file pass count; (5) "RB-8b complete" OR "BLOCKED: <exact reason>".
+
+**FAILURE PROTOCOL / STOP-IF:**
+- If `config.gmName` does NOT exist on `FranchiseConfig` (RB-8a not present) → STOP and report (do not add the type here).
+- If the FRANCHISE NAME block is not at the cited location / the markup differs materially → STOP and quote what you found.
+- If adding the GM input breaks an existing characterized test → STOP and report which (do NOT delete/weaken an existing assertion).
+- Never touch the frozen oracle. Never commit/push.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-8b ===== -->
