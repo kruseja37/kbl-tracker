@@ -16491,3 +16491,89 @@ wants DROOPY to be crushable even on early+underpaid.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-5 ===== -->
+
+<!-- ===== CONTRACT: RB-6 (fan morale from payroll — pure engine, build-dark) ===== -->
+**ROUTE:** Codex (gpt-5.5) CLI | xhigh reasoning effort
+**ROLE:** Mode-1 SOUL-LAYER builder. Build the §7 "fan morale from payroll" COMPUTATION as a NEW standalone pure engine.
+PURE / build-DARK — NO live caller, NO store, NO DB, NO persistence, NO oracle. (The seed that STAMPS this onto Mode-2
+starting fan morale at the §10 freeze is RB-7, NOT this ticket.)
+
+**GOAL:** at draft-end, set each team's STARTING FAN morale off neutral 50 from its PAYROLL RANK vs the league median:
+median = neutral; deviation HURTS, ramping EXPONENTIALLY once a team passes a high (top-quartile) or low (bottom-quartile)
+threshold — punishing all-in spend (win-now/relocation pressure, **HIGH side 2×**) AND tanking (anti-tank). One starting
+line, overcome/lost by in-season play later.
+
+**SOURCE OF TRUTH (extract VERBATIM — soul-layer no-inference):** AUCTION_DRAFT_SPEC_V2 §7 (lines 372-383):
+- One-time at draft-end; overcome/lost by in-season performance (a starting line, not a verdict).
+- **Payroll RANK vs the median:** rank teams by total payroll at draft conclusion. **Median = neutral. Deviation from
+  the median HURTS.**
+- **Exponential past thresholds, BOTH ends:** the penalty ramps EXPONENTIALLY once a team passes a threshold off the
+  median — high payroll (all-in → win-now/relocation risk, **the HIGH side gets 2×**) AND low payroll (anti-tank).
+- **Thresholds = percentiles off the median** (ramp begins past the **75th / 25th** payroll percentile); curve steepness
+  = sim-tunable (§11/§13). §11 dial: "Fan-morale payroll curve | exp past 75th/25th pctile, high-side 2×".
+
+**GROUNDED ANCHORS (re-read at source in /Users/johnkruse/Projects/kbl-mode1):**
+- §7 says "payroll RANK vs the median" ⇒ use a **RANK-normalized position**, NOT `percentile.ts getPercentile` (that's a
+  `≤`-fraction, asymmetric for the lowest team + not median-centered). Sort teams ascending by payroll; a team's
+  `normalizedRank = N > 1 ? rankIndex / (N − 1) : 0.5` (lowest = 0, highest = 1, **median = 0.5**); TIES → average rank
+  (so all-equal payroll → everyone at 0.5 → neutral).
+- Fan morale scale is **0-100, neutral 50** (`fanMoraleEngine.initializeFanMorale` default 50). Clamp the result to [0,100].
+- The per-team "total payroll" SUM at draft-end (which the engine RECEIVES — NOT this ticket's job to compute; that's
+  RB-7's data path: MLB committed = `tierCap − budgetRemaining`, composition MLB-only vs MLB+farm = an RB-7 OPEN-DECISION).
+
+**MAKE-OR-BREAK:**
+1. **Median/in-band = neutral:** any team with `normalizedRank ∈ [0.25, 0.75]` → `startingFanMorale` EXACTLY 50 (the
+   "ramp begins PAST the threshold" reading — zero penalty inside the band).
+2. **Exponential ramp past the thresholds, BOTH ends, monotonic:** past 0.75 (high) the penalty grows convexly as rank
+   → 1.0; below 0.25 (low) it grows convexly as rank → 0.0. Higher payroll-rank → lower morale (high side); lower
+   payroll-rank → lower morale (low side).
+3. **HIGH side 2× LOW side:** at symmetric excess (e.g. rank 1.0 vs rank 0.0, same steepness) the high-side penalty =
+   2 × the low-side penalty.
+4. **Clamp [0,100]; degenerate league → neutral:** `N ≤ 1` or all payrolls equal → every team 50.
+5. **PURE / build-DARK / STANDALONE:** no IndexedDB/store/flag/`Date`/`Math.random`/async, no live caller, no
+   DB/persistence/oracle change; NO import of the auction/scout/matrix/fanMoraleEngine modules (self-contained — inline
+   the rank + clamp). trackerDb untouched.
+
+**WHAT TO BUILD:**
+1. `src/engines/draftFanMorale.ts` (NEW, pure):
+   - `DRAFT_FAN_MORALE_TUNING` = `{ neutralMorale: 50, highThreshold: 0.75, lowThreshold: 0.25, curveSteepness: 2,
+     lowSideMaxPenalty: 15, highSideMaxPenalty: 30, moraleMin: 0, moraleMax: 100 }` (each magnitude marked
+     `// RB-16 sim-tune §11/§13`; `highSideMaxPenalty = 2 × lowSideMaxPenalty` encodes the §7 "high side 2×").
+   - `computeDraftFanMorale(teamPayrolls: readonly { teamId: string; payroll: number }[]):
+     Array<{ teamId: string; startingFanMorale: number; normalizedRank: number; penalty: number }>`:
+     - degenerate guard (N ≤ 1 OR max == min) → every team `{ startingFanMorale: 50, normalizedRank: 0.5, penalty: 0 }`.
+     - else: sort ascending by payroll; `normalizedRank = avgRankIndex / (N − 1)` (tie-average).
+     - `highExcess = max(0, (normalizedRank − highThreshold) / (1 − highThreshold))` (0 at 0.75 → 1 at 1.0);
+       `lowExcess  = max(0, (lowThreshold − normalizedRank) / lowThreshold)` (0 at 0.25 → 1 at 0.0).
+     - normalized-exp ramp so the max is bounded: `ramp(excess, maxPenalty) = excess <= 0 ? 0 : maxPenalty ×
+       (exp(curveSteepness × excess) − 1) / (exp(curveSteepness) − 1)` (excess 1 → maxPenalty, convex).
+     - `penalty = ramp(highExcess, highSideMaxPenalty) + ramp(lowExcess, lowSideMaxPenalty)` (only one side is nonzero).
+     - `startingFanMorale = clamp(neutralMorale − penalty, moraleMin, moraleMax)`.
+   - (No `computeDraftFanMoraleFromRaw` needed — RB-7 sums payrolls then calls this.)
+2. `src/engines/__tests__/draftFanMorale.test.ts` (NEW): median/in-band teams = exactly 50; the top-payroll team is the
+   lowest morale + below 50; the bottom-payroll team is below 50; **high side = 2× low side** at symmetric extremes;
+   monotonic (higher rank past 0.75 → strictly lower morale; convexity check — the jump from 0.875→1.0 rank exceeds
+   0.75→0.875); all-equal payroll → all 50; N=1 → 50; clamp holds ([0,100], even with extreme tuning).
+
+**CONSTRAINTS:**
+- Edit ONLY: `src/engines/draftFanMorale.ts` (new), `src/engines/__tests__/draftFanMorale.test.ts` (new). Do NOT touch
+  any existing engine/auction/scout/persistence/trackerDb file or the frozen oracle. Branch-only; no commit/push.
+- Use RANK-normalized position (NOT `getPercentile`). Self-contained (inline rank + clamp; no cross-engine import).
+
+**EXPECTED OUTPUT:** a pure `draftFanMorale` engine: median → 50, exponential penalty past the 75th/25th payroll
+percentile (high side 2×), clamped [0,100], degenerate → neutral.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` exit 0; `NODE_ENV= npx vitest run src/engines/__tests__/draftFanMorale.test.ts`
+green. Paste ACTUAL output. (Opus re-runs the FULL Mode-1 suite + confirms zero-new-reds.)
+
+**FORMAT:** 1) changed paths + total; 2) confirm rank-normalized (not getPercentile) + median=50 + exp ramp past
+75/25 + high-side 2× + clamp + degenerate→neutral + pure/standalone + oracle untouched; 3) ACTUAL tsc + vitest output;
+4) "RB-6 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL (STOP-IF):** if §7's "high side 2×" cannot be expressed cleanly as `highSideMaxPenalty = 2 ×
+lowSideMaxPenalty` over the same ramp → STOP and quote §7. If a team with `normalizedRank ∈ [0.25, 0.75]` cannot be made
+exactly-50 → STOP. If building this needs to import any auction/scout/store/matrix module (it must be standalone) →
+STOP. If the frozen oracle would change → STOP.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-6 ===== -->
