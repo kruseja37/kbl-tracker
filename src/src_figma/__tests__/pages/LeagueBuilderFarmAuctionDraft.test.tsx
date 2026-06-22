@@ -323,9 +323,17 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     for (const position of prospectPositions(target.prospect)) {
       expect(screen.getAllByText(position).length).toBeGreaterThan(0);
     }
+    const scoutReportControl = screen.getByRole("button", { name: "Hold to reveal scout report" });
+    expect(scoutReportControl).toBeInTheDocument();
+    expect(screen.queryByText(`Scout value ${targetRangeText}`)).not.toBeInTheDocument();
+    expect(screen.queryByText(targetGradeText)).not.toBeInTheDocument();
+    expect(screen.getByText(`Opening ${expectedOpeningPrice}`)).toBeInTheDocument();
+    fireEvent.pointerDown(scoutReportControl);
     expect(screen.getByText(`Scout value ${targetRangeText}`)).toBeInTheDocument();
     expect(screen.getByText(targetGradeText)).toBeInTheDocument();
-    expect(screen.getByText(`Opening ${expectedOpeningPrice}`)).toBeInTheDocument();
+    fireEvent.pointerUp(scoutReportControl);
+    expect(screen.queryByText(`Scout value ${targetRangeText}`)).not.toBeInTheDocument();
+    expect(screen.queryByText(targetGradeText)).not.toBeInTheDocument();
     expect(targetRange.low).not.toBe(targetRange.high);
     expect(targetRangeMidpoint).toBeCloseTo(target.priceOpinion * targetChemFit, 10);
     expect(targetRangeMidpoint).not.toBe(target.candidate.iv);

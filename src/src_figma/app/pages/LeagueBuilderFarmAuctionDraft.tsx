@@ -8,6 +8,7 @@ import {
   type BoardPriorityGap,
   type DraftBoardEntry,
 } from "../components/DraftRosterBoard";
+import { LongPressReveal } from "../components/LongPressReveal";
 import { useFarmAuctionDraft } from "../hooks/useFarmAuctionDraft";
 import { normalizeToChemistryCode, type ChemistryCode } from "../../../data/chemistryCanonical";
 import {
@@ -637,8 +638,15 @@ export function LeagueBuilderFarmAuctionDraft() {
                       {positionBadges(currentLotProspect)}
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-[#E8E8D8]/75">
-                      <div>Scout value {formatScoutRange(currentLotRange)}</div>
-                      <div>Scout grade {scoutGradeDisplay(currentLotProspect)}</div>
+                      <LongPressReveal
+                        label="Hold to reveal scout report"
+                        className="sm:col-span-2 text-left bg-transparent border-0 p-0 text-[#E8E8D8]/75 cursor-pointer hover:text-[#E8E8D8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E8E8D8]"
+                      >
+                        <span className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <span>Scout value {formatScoutRange(currentLotRange)}</span>
+                          <span>Scout grade {scoutGradeDisplay(currentLotProspect)}</span>
+                        </span>
+                      </LongPressReveal>
                       <div>Opening {formatMoney(lot.openingAsk)}</div>
                     </div>
                   </div>
