@@ -78,6 +78,8 @@ import {
   getFranchiseSeasonName,
 } from './franchisePersistenceContract';
 import { buildDraftFreezeInputs } from './draftFreezeInputs';
+import { deriveShillTeamIds } from '../engines/cpuTeamRoles';
+import type { CpuShillAuctionSession } from '../engines/cpuShillBidding';
 import {
   carryOverFranchiseFarmRecordsToSeason,
   deleteFranchiseFarmRecordsForSeason,
@@ -696,10 +698,28 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
           modifiers: player.hiddenPersonalityModifiers ?? neutralModifiers,
         },
       ]));
+      const auctionLeagueTemplate = await getLeagueTemplate(config.league);
+      const leagueTeams: { id: string; controlledBy?: 'human' | 'ai' }[] = [];
+      for (const teamId of auctionLeagueTemplate?.teamIds ?? []) {
+        const team = await getTeam(teamId);
+        if (team) {
+          leagueTeams.push({ id: team.id, controlledBy: team.controlledBy });
+        }
+      }
+      const mlbShillIds = new Set(deriveShillTeamIds(
+        mlbSession.session as CpuShillAuctionSession,
+        leagueTeams,
+      ));
+      const farmShillIds = new Set(deriveShillTeamIds(
+        (farmSession?.session ?? null) as CpuShillAuctionSession | null,
+        leagueTeams,
+      ));
       const inputs = buildDraftFreezeInputs({
         mlbSession: mlbSession.session,
         farmSession: farmSession?.session ?? null,
         metaByPlayerId,
+        mlbExcludedTeamIds: mlbShillIds,
+        farmExcludedTeamIds: farmShillIds,
       });
       const freeze = computeDraftFreeze(inputs);
       const scope = {

@@ -24,12 +24,26 @@ export function buildDraftFreezeInputs(args: {
   farmSession: AuctionSession | null;
   metaByPlayerId: ReadonlyMap<string, DraftFreezePlayerMeta>;
   defaultScoutAccuracy?: number;
+  mlbExcludedTeamIds?: ReadonlySet<string>;
+  farmExcludedTeamIds?: ReadonlySet<string>;
 }): DraftFreezePlayerInput[] {
   const defaultScoutAccuracy = args.defaultScoutAccuracy ?? DEFAULT_FREEZE_SCOUT_ACCURACY;
 
   return [
-    ...buildSessionInputs(args.mlbSession, 'MLB', args.metaByPlayerId, defaultScoutAccuracy),
-    ...buildSessionInputs(args.farmSession, 'FARM', args.metaByPlayerId, defaultScoutAccuracy),
+    ...buildSessionInputs(
+      args.mlbSession,
+      'MLB',
+      args.metaByPlayerId,
+      defaultScoutAccuracy,
+      args.mlbExcludedTeamIds,
+    ),
+    ...buildSessionInputs(
+      args.farmSession,
+      'FARM',
+      args.metaByPlayerId,
+      defaultScoutAccuracy,
+      args.farmExcludedTeamIds,
+    ),
   ];
 }
 
@@ -38,6 +52,7 @@ function buildSessionInputs(
   tier: DraftFreezeTier,
   metaByPlayerId: ReadonlyMap<string, DraftFreezePlayerMeta>,
   defaultScoutAccuracy: number,
+  excludedTeamIds?: ReadonlySet<string>,
 ): DraftFreezePlayerInput[] {
   if (!session) return [];
 
@@ -49,6 +64,10 @@ function buildSessionInputs(
       result.salary === null ||
       !Number.isFinite(result.salary)
     ) {
+      continue;
+    }
+
+    if (excludedTeamIds?.has(result.winnerTeamId)) {
       continue;
     }
 

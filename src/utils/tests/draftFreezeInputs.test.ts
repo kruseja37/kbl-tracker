@@ -183,6 +183,39 @@ describe('buildDraftFreezeInputs RB-7b adapter', () => {
     expect(input.scoutRange.high).toBeCloseTo(expected.high, 10);
   });
 
+  test('excludes caller-specified shill winners while preserving default freeze inputs', () => {
+    const mlbSession = session({
+      players: {
+        'shill-win': auctionPlayer('shill-win', 90_000),
+        'real-win': auctionPlayer('real-win', 95_000),
+      },
+      results: [
+        sold('shill-win', 'shill-team', 91_000),
+        sold('real-win', 'real-team', 96_000),
+      ],
+    });
+
+    const defaultInputs = buildDraftFreezeInputs({
+      mlbSession,
+      farmSession: null,
+      metaByPlayerId: new Map(),
+    });
+    const filteredInputs = buildDraftFreezeInputs({
+      mlbSession,
+      farmSession: null,
+      metaByPlayerId: new Map(),
+      mlbExcludedTeamIds: new Set(['shill-team']),
+    });
+
+    expect(defaultInputs.map((input) => [input.playerId, input.teamId])).toEqual([
+      ['shill-win', 'shill-team'],
+      ['real-win', 'real-team'],
+    ]);
+    expect(filteredInputs.map((input) => [input.playerId, input.teamId])).toEqual([
+      ['real-win', 'real-team'],
+    ]);
+  });
+
   test('allows a caller-supplied scout accuracy without touching displayed estimate randomness', () => {
     const mlbSession = session({
       players: {
