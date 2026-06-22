@@ -19,12 +19,18 @@
 > personality + 4 hidden modifiers + target-balanced chemistry at `initAuction`, persisted via `savePlayer`, flowing into Mode-2; franchise-init
 > backfill demoted to a no-op safety net; NO trackerDb/store change). **Pre-RB-0 suite baseline pinned = 481 files / 1 fail `wpaRuntimeBoundary`;
 > after RB-0 = 484 files / 1 fail (same), 7991 tests.**
-> **➡ NEXT (fresh thread, AUTH-4): `/kbl-captain` on `AUCTION_REBUILD_PLAN.md` → RB-1 (scout value, §3, REWRITES AUC-5.1a/5.1b: scout = price
-> range + 20–80 grade, true IV hidden; reuse `perceivedValueRange` anchored on the scout price; class-strength budget scale; scout price factors
-> chemistry-fit → trait potency — VERIFY/BUILD the chemistry-MIX→potency-TIER rule, the genuine net-new piece). Needs fresh grounding (AUC-5.1a/5.1b
-> pool-pricing + anchor + `ivEngine` PotencyTier + `perceivedValueRange`).** → RB-2 (nomination/one-chance) → … RB-18. Read
+> **✅ RB-1 SPLIT + RB-1a DONE (WAVE 54, `22095d09`, `codex/mode1-v1`, branch-only, ZERO-NEW-REDS):** JK ruled the 2 RB-1 forks (attended) →
+> RB-1a (scout value re-anchor) BUILT: farm scout band now centers on the scout's biased price opinion (`scoutPriceOpinion = trueIV×(1+bias)`,
+> per-(scout,prospect) seeded, floored so NEVER exactly true IV) instead of exact `auctionPlayer.iv` — the V1 midpoint-leak is CLOSED — + a 20–80
+> numeric grade. Canonical IV/salary/oracle/`scoutValueRange`/reserve/MLB-tier untouched. Suite **485 files / 7996 tests, sole fail `wpaRuntimeBoundary`.**
+> **RB-1b model RULED (DECISIONS_LOG 2026-06-21): per-trait COUNT · 3-tier L1/L2/L3 · PERCEPTION-LAYER** (EOS + IV_ENGINE §7.3; resolves CAR-003;
+> canonical IV stays L2-neutral; count→tier thresholds = Captain default + RB-16 sim-tune).
+> **➡ NEXT (AUTH-4): `/kbl-captain` → RB-1b** (chemistry-fit → potency-tier scout price BUMP — the net-new soul piece; per-trait count / 3-tier /
+> perception-layer per the ruling; needs fresh grounding of the in-progress-roster chemistry-count plumbing + invoking trait pricing at a non-L2
+> tier WITHOUT touching the canonical IV path + the documented count→tier threshold default) → RB-2 (engine nomination + one-chance) → … RB-18. Read
 > `AUCTION_DRAFT_SPEC_V2.md` + `AUCTION_REBUILD_PLAN.md` FIRST. **JK-BROWSER-VERIFY BATCHED (persistence-prioritized):** RB-0b-1 — a real draft
-> stamps all 3 axes onto league players + they carry into the franchise (a 7-type personality spread, no longer 100% 'Competitive').
+> stamps all 3 axes onto league players + they carry into the franchise (a 7-type personality spread, no longer 100% 'Competitive'); BV-3 now also
+> covers the RB-1a scout price-range + 20–80 grade display (true IV no longer reverse-engineerable from the band midpoint).
 > **2026-06-21 ATTENDED GROUNDING (WAVE 50, this session — all committed, NO code):** added §3.7 **3-axis personality model** (primary
 > personality 7 / hidden modifiers 4 / chemistry 5) + **RB-0**; CORRECTED the morale model at source — the engine
 > (`masterMoraleMatrix.composeMoraleConsequence`) is ALREADY BUILT (per-personality reactivity + ambition/resilience/charisma/loyalty roles +
