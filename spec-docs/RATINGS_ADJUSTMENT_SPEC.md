@@ -70,13 +70,12 @@ else:  Δ = sign(r) · baseScale · ((|r| − startBar)/(1 − startBar))^γ ,  
 
 **Tunables (all §16 sim-gate placeholders):** `startBar`, `γ` (convexity), `baseScale`, per-checkpoint cap, `δ` (edge), the seasonal soft-damping curve + grade-level backstop, `reversalBar`. **Calibrate the grade-level backstop against the `smb4GradeEmulator` band width** so a sustained-elite season ≈ one grade-level jump on the player's key attributes. Sim-tuning owns the final numbers.
 
-## 6B. Trade / "change of scenery" effect — PROPOSED (pending JK)
-JK's open question: should a trade reset a player's in-season ratings trajectory? **A full rating reset is rejected** (gives the acquiring team a major unearned advantage; exploitable). Recommended middle path:
-- **On trade, reset only the SEASONAL CUMULATIVE-MOVEMENT ACCUMULATOR** (the §6A(c) soft-damping counter) — the player keeps his current (nerfed or boosted) ratings but regains full "room to move." A slumping ex-star who'd been fighting accumulated downward damping can now **recover faster IF he earns it** (the relative-percentile gate still applies — no free recovery). Symmetric: a hot player's accumulator also resets.
-- **Optional dial:** a small *temporary* recovery-rate multiplier if the accumulator reset alone feels too weak (sim-tunable; default off).
-- **Result = the win-win deadline trade JK wants:** the albatross team offloads a bad contract; the acquirer bets on a bounce-back. Not a free win — contingent on post-trade performance + acquisition cost.
-- **Exploit watch:** flag for the sim gate — confirm a human GM can't farm cheap slumping stars for guaranteed rebounds (performance-gating + cost should prevent it).
-> Status: PROPOSED. JK to confirm: (i) build the change-of-scenery effect at all, and (ii) accumulator-reset-only vs add the temporary recovery boost.
+## 6B. Trade / "change of scenery" effect — accumulator reset only (RULED)
+**RULED (JK): on a trade, reset ONLY the seasonal cumulative-movement accumulator** (the §6A(c) soft-damping counter). A full rating reset is **rejected** (unearned advantage, exploitable); a temporary recovery-rate boost is **NOT built in v1** (the reset alone is the effect; revisit post-v1 only if sim-tuning shows it's too weak).
+- The player **keeps his current (nerfed or boosted) ratings** but regains full "room to move." A slumping ex-star who'd been fighting accumulated downward damping can now **recover faster IF he earns it** — the relative-percentile gate still applies, so there is **no free recovery**. Symmetric: a hot player's accumulator also resets (continued climb is un-damped, but he was already rewarded).
+- **The win-win deadline trade JK wants:** the albatross team offloads a bad contract; the acquirer bets on a bounce-back. Never a free win — contingent on post-trade performance + acquisition cost.
+- **Exploit watch (sim gate):** confirm a human GM can't farm cheap slumping stars for guaranteed rebounds (performance-gating + acquisition cost should prevent it). If abuse appears, tighten the gate before adding any boost.
+- **Wiring note:** the accumulator is the §6A(c) per-player season-movement counter; the trade/roster-movement path (`franchiseRosterMovement.ts` call-up/trade) zeroes it on team change. No new store (per-franchise Player DB is schema-free).
 
 ## 7. Cadence — user-settable, default 2× traits, overlap OK (RULED)
 - **User-settable** ratings cadence: **default every 10% of the season; option every 20%** (mirrors the trait cadence; defaults to twice as often). Sim-tunable.

@@ -19,7 +19,7 @@
 - **Anti-ping-pong:** directional hysteresis (reversal needs a higher bar than continuation) + slow aggregate-base signal + asymmetric dead-band.
 - All numbers = §16 sim-tune placeholders; calibrate the grade-level backstop against the `smb4GradeEmulator` band width.
 
-**OPEN (PROPOSED, §6B) — trade / "change of scenery":** JK mused whether a trade resets ratings. Reject full rating reset (unearned advantage). Recommend: reset ONLY the seasonal cumulative-movement accumulator on trade (keeps current ratings, regains room-to-move → faster recovery IF earned), optional small temp recovery boost as a dial. Win-win deadline-trade incentive; performance-gated so not a free win. **JK to confirm whether to build it + how strong.**
+**TRADE / "change of scenery" (RULED §6B): accumulator reset ONLY.** On a trade, reset only the seasonal cumulative-movement accumulator (keeps current ratings, regains room-to-move → faster recovery IF earned via the relative gate). Full rating reset rejected; temp recovery boost NOT built in v1 (revisit post-v1 only if sim shows it's too weak). Win-win deadline-trade incentive; performance-gated so not a free win. Wiring: trade/roster-movement path zeroes the §6A(c) counter; no new store.
 
 ### 2026-06-22 (attended): PROSPECT AGE — generate real age (skew-young, full-range, revealed) — RULED (REVERSES prior removal) → `PROSPECT_GENERATION_SPEC.md §10`
 
