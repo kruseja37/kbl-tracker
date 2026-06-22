@@ -559,7 +559,57 @@ describe("useFarmAuctionDraft", () => {
     expect(result.current.session?.players).toEqual(firstPlayers);
   });
 
-  test("exposes the generated farm pool and deterministically regenerates it on resume", async () => {
+  test("falls back to regenerating the farm pool for legacy saved rows without a pool", async () => {
+    const teamIds = ["human", "other"];
+    const leagueId = "farm-legacy-resume-pool";
+    const seed = seedWithOrder(teamIds, ["human", "other"]);
+    mockLeagueData({
+      leagues: [makeLeague(leagueId, teamIds)],
+      teams: [makeTeam("human"), makeTeam("other")],
+    });
+
+    const { result, unmount } = renderHook(() => useFarmAuctionDraft());
+
+    await act(async () => {
+      await result.current.initFarmAuction(leagueId, {
+        nominationOrderSeed: seed,
+        cpuShillCount: 0,
+        bidIncrement: 1_000,
+      });
+    });
+
+    const initializedPool = result.current.pool;
+    const expectedFarmTierCap = result.current.farmTierCap;
+    expect(initializedPool?.prospects.length).toBeGreaterThan(0);
+
+    const farmRow = await getAuctionSessionById(createFarmAuctionSessionId(leagueId));
+    expect(farmRow?.pool).toBeDefined();
+    await saveAuctionSession({
+      id: createFarmAuctionSessionId(leagueId),
+      leagueId,
+      seasonNumber: 1,
+      seed: farmRow!.seed,
+      session: farmRow!.session,
+    });
+    unmount();
+    const legacyRow = await getAuctionSessionById(createFarmAuctionSessionId(leagueId));
+    expect(legacyRow?.pool).toBeUndefined();
+
+    const { result: resumed, unmount: unmountResumed } = renderHook(() => useFarmAuctionDraft());
+    await act(async () => {
+      await resumed.current.loadFarmAuction(leagueId);
+    });
+
+    expect(resumed.current.pool).not.toBeNull();
+    expect(resumed.current.pool?.prospects.length).toBeGreaterThan(0);
+    expect(resumed.current.pool?.prospects).toEqual(initializedPool?.prospects);
+    expect(resumed.current.pool?.auctionPlayers).toEqual(sessionAuctionPlayers(resumed.current.session!));
+    expect(resumed.current.pool?.auctionPlayers.map((player) => player.playerId)).toEqual(legacyRow?.session.playerOrder);
+    expect(resumed.current.farmTierCap).toBe(expectedFarmTierCap);
+    unmountResumed();
+  });
+
+  test("persists the generated farm pool and loads the saved DTO pool on resume", async () => {
     const teamIds = ["human", "other"];
     const leagueId = "farm-resume-pool";
     const seed = seedWithOrder(teamIds, ["human", "other"]);
@@ -569,7 +619,7 @@ describe("useFarmAuctionDraft", () => {
     });
     await Promise.all(teamIds.map((teamId) => seedScoutProfile(leagueId, teamId)));
 
-    const { result } = renderHook(() => useFarmAuctionDraft());
+    const { result, unmount } = renderHook(() => useFarmAuctionDraft());
 
     await act(async () => {
       await result.current.initFarmAuction(leagueId, {
@@ -590,6 +640,8 @@ describe("useFarmAuctionDraft", () => {
     expect(result.current.farmTierCap).toEqual(expect.any(Number));
     expect(result.current.farmTierCap).toBeGreaterThan(0);
     expect(initializedPool?.auctionPlayers).toEqual(sessionAuctionPlayers(initializedSession!));
+    const expectedScoutsByTeamId = result.current.scoutsByTeamId;
+    const expectedFarmTierCap = result.current.farmTierCap;
 
     const originalAuctionPlayers = initializedPool!.auctionPlayers.map((player) => ({ ...player }));
     expect(initializedPool!.prospects).toHaveLength(originalAuctionPlayers.length);
@@ -610,16 +662,45 @@ describe("useFarmAuctionDraft", () => {
     const persisted = await getAuctionSessionById(createFarmAuctionSessionId(leagueId));
     expect(persisted?.session.playerOrder).toEqual(originalAuctionPlayers.map((player) => player.playerId));
     expect(sessionAuctionPlayers(persisted!.session)).toEqual(originalAuctionPlayers);
+    expect(persisted?.pool?.prospects.length).toBeGreaterThan(0);
+    expect(persisted?.pool).toEqual(initializedPool);
+    unmount();
 
-    const { result: resumed } = renderHook(() => useFarmAuctionDraft());
+    const savedPool = persisted!.pool!;
+    const sentinelPool = {
+      ...savedPool,
+      prospects: savedPool.prospects.map((prospect, index) => index === 0
+        ? {
+            ...prospect,
+            prospectProfile: {
+              ...prospect.prospectProfile,
+              scoutName: "Persisted Sentinel Scout",
+            },
+          }
+        : prospect),
+    };
+    await saveAuctionSession({
+      id: createFarmAuctionSessionId(leagueId),
+      leagueId,
+      seasonNumber: 1,
+      seed: persisted!.seed,
+      session: persisted!.session,
+      pool: sentinelPool,
+    });
+    const persistedWithSentinel = await getAuctionSessionById(createFarmAuctionSessionId(leagueId));
+    expect(persistedWithSentinel?.pool?.prospects[0].prospectProfile.scoutName).toBe("Persisted Sentinel Scout");
+
+    const { result: resumed, unmount: unmountResumed } = renderHook(() => useFarmAuctionDraft());
     await act(async () => {
       await resumed.current.loadFarmAuction(leagueId);
     });
 
-    expect(resumed.current.pool?.auctionPlayers).toEqual(originalAuctionPlayers);
+    expect(resumed.current.pool?.prospects).toEqual(persistedWithSentinel?.pool?.prospects);
+    expect(resumed.current.pool?.auctionPlayers).toEqual(persistedWithSentinel?.pool?.auctionPlayers);
     expect(resumed.current.pool?.auctionPlayers).toEqual(sessionAuctionPlayers(resumed.current.session!));
     expect(resumed.current.session?.playerOrder).toEqual(originalAuctionPlayers.map((player) => player.playerId));
-    expect(resumed.current.scoutsByTeamId).toEqual(result.current.scoutsByTeamId);
-    expect(resumed.current.farmTierCap).toBe(result.current.farmTierCap);
+    expect(resumed.current.scoutsByTeamId).toEqual(expectedScoutsByTeamId);
+    expect(resumed.current.farmTierCap).toBe(expectedFarmTierCap);
+    unmountResumed();
   });
 });

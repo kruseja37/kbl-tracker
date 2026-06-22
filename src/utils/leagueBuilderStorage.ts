@@ -26,6 +26,7 @@ import type { OptimalLineupSnapshot } from '../types/managerWpa';
 import type { ParkFactors } from '../types/war';
 import type { EraFlavor, FameTier, PlayerArchetype } from '../types/reporter';
 import { trackFieldChanges, type EditHistoryEntry } from './editHistoryTracker';
+import type { FarmAuctionPool } from './farmAuctionPool';
 import type { HiddenPersonalityModifiers } from './prospectScoutingDraftEngine';
 import {
   markOptimalLineupSnapshotsStaleForChange,
@@ -234,6 +235,7 @@ export interface LeagueBuilderAuctionSession {
   seasonNumber: number;
   seed: string;
   session: CpuShillAuctionSession;
+  pool?: FarmAuctionPool;
   createdDate: string;
   lastModified: string;
 }

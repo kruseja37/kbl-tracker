@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import {
   claimLoneSurvivor,
@@ -21,7 +21,7 @@ import { normalizeToChemistryCode, type ChemistryCode } from "../../../data/chem
 import { LEAGUE_MINIMUM_SALARY } from "../../../data/rosterEngineConstants";
 import { buildFarmAuctionSession } from "../../../utils/farmAuctionSession";
 import type { FarmAuctionPool } from "../../../utils/farmAuctionPool";
-import { computeMlbToFarmCarryover } from "../../../utils/farmAuctionWallet";
+import { computeFarmTierCap, computeMlbToFarmCarryover } from "../../../utils/farmAuctionWallet";
 import {
   createFarmAuctionSessionId,
   getAuctionSession,
@@ -234,6 +234,7 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
   const [context, setContext] = useState<FarmAuctionDraftContext | null>(null);
   const [isWorking, setIsWorking] = useState(false);
   const [error, setError] = useState<FarmAuctionDraftError>(null);
+  const poolRef = useRef<FarmAuctionPool | null>(null);
 
   const activeLeague = useMemo(
     () => leagueData.leagues.find((league) => league.id === context?.leagueId) ?? null,
@@ -258,6 +259,7 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
       seasonNumber: nextContext.seasonNumber,
       seed: nextSession.config.nominationOrderSeed,
       session: nextSession,
+      pool: poolRef.current ?? undefined,
     });
     return nextSession;
   }, []);
@@ -348,6 +350,7 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
       .filter((team): team is Team => Boolean(team)) ?? [];
     setContext(nextContext);
     if (!row) {
+      poolRef.current = null;
       setPool(null);
       setScoutsByTeamId(null);
       setMlbRosterChemistryByTeamId({});
@@ -361,6 +364,28 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
       leaguePlayers: leagueData.players,
     });
     const nextScoutsByTeamId = await loadOptionalFarmScouts(leagueId);
+    if (row.pool) {
+      const persistedPoolOrder = row.pool.auctionPlayers.map((player) => player.playerId);
+      const persistedOrder = row.session.playerOrder;
+      const matchesPersistedOrder = persistedPoolOrder.length === persistedOrder.length
+        && persistedPoolOrder.every((playerId, index) => playerId === persistedOrder[index]);
+      if (!matchesPersistedOrder) {
+        console.warn("Farm auction persisted pool order mismatch; resuming persisted session with saved display pool.", {
+          leagueId,
+          seasonNumber,
+          persistedOrder,
+          persistedPoolOrder,
+        });
+      }
+      poolRef.current = row.pool;
+      const resumed = await autoAdvanceCpu(row.session, nextContext, nextLeagueTeams);
+      setPool(row.pool);
+      setScoutsByTeamId(nextScoutsByTeamId ?? null);
+      setMlbRosterChemistryByTeamId(nextMlbRosterChemistryByTeamId);
+      setFarmTierCap(computeFarmTierCap(row.pool.auctionPlayers.map((player) => player.iv)));
+      return resumed;
+    }
+
     const regen = buildFarmAuctionSession({
       leagueId,
       seasonNumber,
@@ -381,6 +406,7 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
         regeneratedOrder,
       });
     }
+    poolRef.current = regen.pool;
     const resumed = await autoAdvanceCpu(row.session, nextContext, nextLeagueTeams);
     setPool(regen.pool);
     setScoutsByTeamId(nextScoutsByTeamId ?? null);
@@ -430,6 +456,7 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
     });
 
     setContext(nextContext);
+    poolRef.current = result.pool;
     await persist(result.session, nextContext);
     const initialized = await autoAdvanceCpu(result.session, nextContext, nextLeagueTeams);
     setPool(result.pool);
