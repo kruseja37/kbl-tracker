@@ -17024,3 +17024,70 @@ Use xhigh reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-8c ===== -->
+
+<!-- ===== CONTRACT: RB-9a ===== -->
+## CONTRACT: RB-9a — `draft_prep` analyzer surface + pure draft adapter (scout-as-bridge foundation, build-DARK, isolated)
+
+**ROUTE:** Codex build in the Mode-1 worktree `/Users/johnkruse/Projects/kbl-mode1` on branch `codex/mode1-v1`. Branch-only; do NOT commit, do NOT push (the Captain commits after audit).
+
+**ROLE:** You are the builder (Codex). Opus is the auditor (builder ≠ auditor). Build EXACTLY this contract — no extra scope.
+
+**GOAL:** Add a new `'draft_prep'` surface to the Roster Analyzer + a NEW pure adapter that maps the GM's IN-PROGRESS (mid-draft) won MLB + farm roster into a `RosterAnalyzerInput` and runs the EXISTING `analyzeRoster` engine. This is the §3.5 "scout-as-bridge" hole-detection FOUNDATION — it REUSES the already-built+tested analyzer, it does NOT build a parallel hole-detector. **Build-DARK: NO UI consumer is added in this ticket** (RB-9c wires the board). The deliverable is a pure, unit-tested adapter + the surface enum value.
+
+**SOURCE OF TRUTH:** `spec-docs/AUCTION_DRAFT_SPEC_V2.md` §3.5 (lines 129–147: "Scout as the bridge between rosters" — REUSE the Roster Analyzer Engine, add a `draft_prep` surface + a thin draft adapter feeding the GM's in-progress MLB+farm roster) + §3.2/§3.4/§3.6 (prospect true ratings HIDDEN; positions VISIBLE; MLB players public, farm scout-obscured). `spec-docs/ROSTER_ANALYZER_RECOMMENDATION_ENGINE_SPEC.md` (the analyzer is read-only + advisory). `spec-docs/AUCTION_REBUILD_PLAN.md` RB-9 row.
+
+**GROUNDED ANCHORS (re-read before editing; do NOT trust these blindly — verify each at source):**
+- `src/engines/rosterAnalyzerEngine.ts:5-11` — `export type RosterAnalyzerSurface = 'builder_team' | 'builder_league' | 'franchise_team_hub' | 'franchise_home' | 'game_prep' | 'offseason_roster_lock_preview';` (NO `draft_prep` yet). The union auto-re-exports via `src/engines/index.ts:230`.
+- `src/engines/rosterAnalyzerEngine.ts:682` — `export function analyzeRoster(input: RosterAnalyzerInput): RosterAnalyzerReport` (the ONLY analyze entry; pure, no React/storage). Surface is metadata-only (echoed into `report.identity`, never branched) — so `draft_prep` behavior comes from the INPUT, not from surface-branching. DO NOT add surface-branching inside the engine.
+- `src/engines/rosterAnalyzerEngine.ts:195-202` — `RosterAnalyzerInput { identity: AnalyzerIdentity; teamName?; players: AnalyzerPlayer[]; roster: AnalyzerRosterState; leagueTeams?; config?: Partial<RosterAnalyzerConfig> }`.
+- `src/engines/rosterAnalyzerEngine.ts:18-28` (`AnalyzerIdentity` — mode/surface/teamId/leagueId/...), `:54-90` (`AnalyzerPlayer`), `:92-101` (`AnalyzerRosterState` — only `activePlayerIds` required; `farmPlayerIds` optional), `:30-39` (`AnalyzerFarmOptionState` — scoutedGrade/scoutConfidence/ratingRevealState), `:346` (`createDefaultRosterAnalyzerConfig(overrides)`). Default `rosterTargets`: activeMlb 22 / farm 10 / total 32; `DEFAULT_POSITION_MINIMUMS` (`:315-322`) C/1B/2B/3B/SS:1, OF:3.
+- **THE TEMPLATE TO MIRROR** — `src/utils/rosterAnalyzerFranchiseAdapter.ts`: `mapFranchisePlayer` (`:203-272`) shows the AnalyzerPlayer mapping incl. the hidden-farm ratings gate `ratings: hiddenFarmPlayer ? {} : {...}` (`:227-238`) + the FARM `optionState` with `scoutedGrade`/`scoutConfidence` (`:248-258`); `buildFranchiseTeamAnalyzerInput` (`:284-345`) shows the full `RosterAnalyzerInput` assembly (identity + players + roster{activePlayerIds=MLB, farmPlayerIds=FARM} + `createDefaultRosterAnalyzerConfig({ presetId, salary, ...input.config })`); `analyzeFranchiseTeamRoster` (`:347-349`) is literally `return analyzeRoster(buildFranchiseTeamAnalyzerInput(input));`. Mirror this shape exactly.
+- Test template: `src/utils/tests/rosterAnalyzerFranchiseAdapter.test.ts` (build-input → assert-report shape).
+
+**MAKE-OR-BREAK:** A GM with an INCOMPLETE in-progress MLB roster (e.g. 5 won MLB players, missing SS + only 1 OF) run through `analyzeDraftRoster` MUST yield `position_coverage` findings naming the unfilled positions (the "what do I still need" signal), AND farm-won prospects fed as FARM candidates (with `optionState.scoutedGrade`/`scoutConfidence`, ratings obscured) MUST flow through the existing farm/scout block — WITHOUT the engine being modified beyond the one additive enum value. If you find yourself adding hole-detection logic, STOP — you are rebuilding what `analyzeRoster` already does.
+
+**CONSTRAINTS — exact files (touch ONLY these):**
+1. `src/engines/rosterAnalyzerEngine.ts` — ADD `| 'draft_prep'` to the `RosterAnalyzerSurface` union (line 5-11). This is the ONLY edit to the engine. No other line changes; no surface-branching; no logic change.
+2. NEW FILE `src/utils/rosterAnalyzerDraftAdapter.ts` — the pure adapter (details below).
+3. NEW FILE `src/utils/tests/rosterAnalyzerDraftAdapter.test.ts` — the unit test.
+- FROZEN oracle `spec-docs/reference/iv_oracle.json` is READ-ONLY — never touch.
+- Do NOT add/modify any IndexedDB store, type, hook, page, or UI component (build-DARK). Do NOT import React/storage into the adapter (it must stay pure, like the franchise adapter's pure `build*Input` half). Do NOT wire the adapter into any page/hook (RB-9c does that).
+- Do NOT touch `AuctionSession`/`AuctionResult`/`AuctionTeamState` or any auction engine/hook.
+
+**ADAPTER DESIGN (`src/utils/rosterAnalyzerDraftAdapter.ts`):**
+- Import the analyzer types + `analyzeRoster` + `createDefaultRosterAnalyzerConfig` from `../engines/rosterAnalyzerEngine` (mirror the franchise adapter import).
+- Define two minimal, self-contained input entry interfaces (so the adapter is decoupled from the auction/league domain types and unit-testable with synthetic data — the UI in RB-9c will map session+records into these):
+  - `DraftAnalyzerMlbEntry` = `{ id: string; name: string; primaryPosition: string; secondaryPosition?: string; bats?: 'L'|'R'|'S'; throws?: 'L'|'R'; ratings?: { power?; contact?; speed?; fielding?; arm?; velocity?; junk?; accuracy? }; arsenal?: string[]; traits?: string[]; chemistry?: string; personality?: string; salary?: number }` — MLB won players (public; ratings VISIBLE).
+  - `DraftAnalyzerFarmEntry` = `{ id: string; name: string; primaryPosition: string; secondaryPosition?: string; bats?: 'L'|'R'|'S'; throws?: 'L'|'R'; salary?: number; scoutedGrade?: string; scoutConfidence?: string }` — farm won prospects (scout-obscured; true ratings NOT passed → map to `ratings: {}`, mirroring the franchise hidden-farm gate; carry the scout signal in `optionState`).
+- `DraftAnalyzerAdapterInput` = `{ leagueId?: string; team: { id: string; name: string }; mlbWonPlayers: DraftAnalyzerMlbEntry[]; farmWonPlayers: DraftAnalyzerFarmEntry[]; generatedAt?: string; config?: Partial<RosterAnalyzerConfig> }`.
+- `export function buildDraftAnalyzerInput(input: DraftAnalyzerAdapterInput): RosterAnalyzerInput`:
+  - Map each MLB entry → `AnalyzerPlayer` with `rosterStatus:'MLB'`, `rosterLevel:'MLB'`, `isPitcher` from primaryPosition (reuse the same pitcher-position set the franchise adapter uses: SP/RP/CP/P/SP/RP/TWO-WAY), `secondaryPositions: secondaryPosition ? [secondaryPosition] : []`, ratings from the entry, `stats:{source:'unavailable',trust:'unavailable'}`, `sourceTrust:'high'`.
+  - Map each FARM entry → `AnalyzerPlayer` with `rosterStatus:'FARM'`, `rosterLevel:'FARM'`, `ratings: {}` (obscured), `optionState: { maxSeasonOptions: 3, ratingRevealState: 'hidden', eligibleForCallUp: true, eligibleForSendDown: false, scoutedGrade, scoutConfidence }`, `stats:{source:'unavailable',trust:'unavailable'}`, `sourceTrust:'high'`.
+  - `roster: { activePlayerIds: <MLB ids>, farmPlayerIds: <FARM ids> }` (lineup/rotation/bullpen left undefined — there is no set lineup mid-draft; the engine handles undefined gracefully).
+  - `identity: { mode: 'builder', surface: 'draft_prep', leagueId: input.leagueId, teamId: input.team.id, generatedAt: input.generatedAt }`.
+  - `teamName: input.team.name`.
+  - `config: createDefaultRosterAnalyzerConfig({ presetId: 'draft_prep_read_only_v1', salary: { enabled: false, unit: 'raw' }, ...(input.config ?? {}) })` — salary disabled (the auction page owns wallet/tax display; the board is holes-focused). Document this default in a top-of-file comment.
+- `export function analyzeDraftRoster(input: DraftAnalyzerAdapterInput): RosterAnalyzerReport` = `return analyzeRoster(buildDraftAnalyzerInput(input));`.
+- Top-of-file comment: state the build-DARK status (no UI consumer yet — RB-9c), the obscured-farm-ratings policy (§3.2/§3.6), and the salary-disabled default.
+
+**TEST (`src/utils/tests/rosterAnalyzerDraftAdapter.test.ts`) — non-vacuous:**
+1. `buildDraftAnalyzerInput` produces `identity.surface === 'draft_prep'`, `identity.mode === 'builder'`, correct `activePlayerIds`/`farmPlayerIds`, and farm entries mapped with empty `ratings` + populated `optionState.scoutedGrade/scoutConfidence`.
+2. `analyzeDraftRoster` on an INCOMPLETE MLB roster (e.g. won players covering C+1B only, no SS, <3 OF) returns `findings` containing `kind === 'position_coverage'` entries for the missing positions (assert via `expect.arrayContaining`/find — DO NOT pin exact ids/titles beyond the kind + the affected position in detail).
+3. `report.summary.readOnly === true` and every `recommendation.execution` ∈ {`'read_only'`,`'blocked_future_work'`} (the read-only invariant holds for the new surface).
+4. Empty input (`mlbWonPlayers: []`, `farmWonPlayers: []`) does not throw and yields under-target findings.
+
+**VERIFICATION (you run, report the real output):**
+- `cd /Users/johnkruse/Projects/kbl-mode1 && export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" && NODE_ENV= npx tsc -b` → exit 0 (paste the tail).
+- `NODE_ENV= npx vitest run src/utils/tests/rosterAnalyzerDraftAdapter.test.ts` → all pass (paste the summary). Also run `NODE_ENV= npx vitest run src/engines/__tests__/rosterAnalyzerEngine.test.ts src/utils/tests/rosterAnalyzerFranchiseAdapter.test.ts src/utils/tests/rosterAnalyzerBuilderAdapter.test.ts` to prove the surface-enum addition broke no sibling (paste the summary). (The Captain runs the FULL suite gate.)
+- Report `git status --short` (must be exactly the 1 modified engine file + 2 new files).
+
+**FORMAT (report back):** the diff summary (files + line counts), the verbatim signatures of `buildDraftAnalyzerInput`/`analyzeDraftRoster` + the two entry interfaces, the tsc result, the focused test results, and `git status --short`.
+
+**FAILURE PROTOCOL / STOP-IF:**
+- If adding `'draft_prep'` to the union surfaces a tsc exhaustiveness error (a `switch` on surface with no default) anywhere → STOP and quote the location (do NOT add a behavior branch to "fix" it without flagging).
+- If the make-or-break can't be met without modifying `analyzeRoster`'s logic (beyond the enum) → STOP and explain (it means the reuse assumption is wrong; quote the engine code).
+- If any contracted anchor (file:line) does not match the actual source → STOP and quote the discrepancy.
+- Never touch the frozen oracle. Never commit/push. Branch-only.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-9a ===== -->
