@@ -15827,3 +15827,101 @@ make the new path compile → STOP and report.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-2a ===== -->
+
+<!-- ===== CONTRACT: RB-2b-1 (engine rulings: farm flat reserve + hard roster-fill guarantee, additive build-dark) ===== -->
+**ROUTE:** Codex (gpt-5.5) CLI | xhigh reasoning effort
+**ROLE:** Mode-1 auction core-engine builder. ADD two JK-ruled mechanics to the NEW (build-dark, not-yet-wired)
+one-chance engine functions from RB-2a. PURE/ADDITIVE: the old GM-nomination path stays byte-untouched, and the
+new one-chance functions are still not called by any consumer (RB-2b-2 wires them), so this is build-dark.
+
+**GOAL:** (1) make the one-chance opening/reserve TIER-AWARE so the farm tier can use a FLAT floor (no hidden-rank
+leak); (2) add a HARD roster-fill guarantee so a no-bid player can never strand the league (softlock impossible by
+construction). Both per JK rulings DECISIONS_LOG 2026-06-21 RB-2-Q1 / RB-2-Q2.
+
+**SOURCE OF TRUTH:** AUCTION_DRAFT_SPEC_V2 §4.4 (MLB = percentile reserve curve; FARM = a FLAT low floor, same
+opening for every prospect, e.g. the farm minimum salary — a per-prospect % leaks the hidden rank) + §2.3 (the
+engine MUST never strand a GM; surface a cheap claimable filler if needed). JK rulings: Q1 = farm flat floor =
+`LEAGUE_MINIMUM_SALARY`; Q2 = HARD guarantee via forced fillers.
+
+**GROUNDED ANCHORS (re-read at source in /Users/johnkruse/Projects/kbl-mode1):**
+- `src/engines/auctionStateMachine.ts` — the RB-2a build-dark functions to MODIFY: `surfaceNextPlayer` (sets
+  `openingAsk = reservePriceCurve(player.ivPercentile) * player.iv` for BOTH tiers today), `resolveLot` (no-bid
+  terminal calls `finalizePassedLotPermanent`), `passLoneSurvivorOut` (calls `finalizePassedLotPermanent`),
+  `finalizeSoldLot` (REUSABLE — appends a SOLD result, decrements the winner's budget + rosterSlotsRemaining),
+  `auctionMaxBid` import (solvency), `nominationOrder` (for deterministic tiebreak). DO NOT touch the OLD path
+  (`nominatePlayer`/`evaluateResolve`/`finalizePassedLot`/`rotateNomination`/etc.).
+- `src/data/rosterEngineConstants.ts` — `LEAGUE_MINIMUM_SALARY` (1666.49), `reservePriceCurve`.
+- `src/data/auctionEngineConstants.ts` — `AuctionSetupConfig`.
+
+**MAKE-OR-BREAK (the property the audit will try hardest to break):** with a pool sized EXACTLY equal to total open
+roster slots, an ALL-PASS draft (no team ever bids) must still fill EVERY roster — zero teams left with open slots,
+zero players wasted to PASSED — because the forced-filler kicks in the moment letting a player out would make
+filling all rosters impossible. (Without the guard, all-pass would strand everyone.) And the farm flat floor must
+make every prospect open at the SAME price (no rank leak).
+
+**WHAT TO BUILD (all PURE/ADDITIVE; modify only the NEW one-chance functions + add the config field + add tests):**
+
+1. `src/data/auctionEngineConstants.ts`: add OPTIONAL `flatReserveFloor?: number;` to `AuctionSetupConfig`
+   (undefined → percentile curve; a number → that flat floor for every player). Leave `DEFAULT_AUCTION_SETUP_CONFIG`
+   byte-unchanged.
+
+2. `src/engines/auctionStateMachine.ts`:
+   - In `surfaceNextPlayer`, compute the opening ask tier-awarely:
+     `const openingAsk = session.config.flatReserveFloor != null ? session.config.flatReserveFloor : reservePriceCurve(player.ivPercentile) * player.iv;`
+     (MLB leaves flatReserveFloor undefined → percentile curve unchanged; RB-2b-2 sets the farm hook's config
+     `flatReserveFloor = LEAGUE_MINIMUM_SALARY`.)
+   - Add the HARD roster-fill guarantee. Add a pure helper, e.g.:
+     `function resolveNoBidLot(session): AuctionSession` — at a no-bid terminal:
+       • `const totalOpenSlots = session.teams.reduce((n, t) => n + Math.max(0, t.rosterSlotsRemaining), 0);`
+       • `const remainingPool = session.availablePlayerIds.length;` (the current lot's player is already removed at surface)
+       • if `remainingPool >= totalOpenSlots` → `return finalizePassedLotPermanent(session);` (safe to let out — one-chance pass).
+       • else (letting it out would strand the league) → FORCE-CLAIM: pick the NEEDIEST eligible team =
+         the team with the most `rosterSlotsRemaining` (>0) whose `auctionMaxBid(budget, slots, minSalary, projectedTax)
+         >= lot.openingAsk` (the solvency cap + a min-salary-level reserve guarantee at least one qualifies; farm floor =
+         min salary). Tiebreak: earliest index in `nominationOrder`, then teamId. `return finalizeSoldLot(session,
+         forcedTeamId, lot.openingAsk);` If somehow NO eligible team exists, fall back to `finalizePassedLotPermanent`.
+   - Route BOTH `resolveLot`'s no-bid terminal AND `passLoneSurvivorOut` through `resolveNoBidLot` (replace their direct
+     `finalizePassedLotPermanent` calls). `finalizeSoldLot` is safe to reuse (its `releaseEligiblePassedPlayers` is a
+     no-op on the always-empty one-chance tracker).
+   - INVARIANT this preserves: at every step `availablePlayerIds.length + (currentLot ? 1 : 0) >= totalOpenSlots`,
+     GIVEN the pool starts with `players >= total roster slots` (the upstream surplus — NOT this engine's job to size;
+     a pool smaller than total slots is a pool-builder bug, out of scope). State this in a code comment.
+
+3. `src/engines/__tests__/auctionStateMachineOneChance.test.ts` (ADD tests; keep the existing 8):
+   - **Farm flat floor:** with `config.flatReserveFloor = LEAGUE_MINIMUM_SALARY`, surfaceNextPlayer opens EVERY
+     surfaced player at exactly that floor regardless of ivPercentile (assert two players with very different
+     percentiles open at the identical openingAsk = the floor). With flatReserveFloor undefined, the openingAsk still
+     follows the percentile curve (unchanged).
+   - **MAKE-OR-BREAK forced-filler:** 2 teams each needing 1 slot (totalOpenSlots 2), pool = exactly 2 players, an
+     ALL-PASS run (every team passes every lot) → after draining: BOTH teams have rosterSlotsRemaining 0, ZERO results
+     have disposition 'PASSED' (both were force-claimed as SOLD), state AUCTION_COMPLETE. Also a NON-tight contrast:
+     pool = 3 players, totalOpenSlots 2, all-pass → the first no-bid lot (remainingPool 2 >= 2) DOES go PASSED (the
+     guard only fires when tight).
+   - **Lone-survivor force:** a tight scenario where the lone survivor passes via passLoneSurvivorOut but stranding
+     would result → it force-claims instead of PASSED.
+
+**CONSTRAINTS:**
+- Edit ONLY: `src/data/auctionEngineConstants.ts`, `src/engines/auctionStateMachine.ts`, `src/engines/__tests__/auctionStateMachineOneChance.test.ts`.
+- Modify ONLY the NEW one-chance functions (surfaceNextPlayer/resolveLot/passLoneSurvivorOut) + add the helper + the
+  config field + tests. DO NOT touch the OLD GM-nomination path or any other existing export/field. DO NOT touch
+  hooks/pages/cpuShill/persistence or the frozen IV oracle. Branch-only on `codex/mode1-v1`; do NOT commit/push.
+- Pure functions only (no IndexedDB/Date/Math.random/async); determinism via existing helpers only.
+
+**EXPECTED OUTPUT:** farm flat floor opens every prospect at the same price; the forced-filler makes an all-pass
+tight draft fill every roster with zero PASSED; old path + existing one-chance tests unchanged-green.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` exit 0; `NODE_ENV= npx vitest run src/engines/__tests__/auctionStateMachineOneChance.test.ts
+src/engines/__tests__/auctionStateMachine.test.ts src/data/tests/auctionEngineConstants.test.ts` green. Paste ACTUAL
+output. (Opus re-runs the FULL Mode-1 suite + confirms zero-new-reds vs wpaRuntimeBoundary.)
+
+**FORMAT:** 1) every changed/new path + total; 2) describe the flat-floor branch + the forced-filler helper + which
+functions route through it + confirm NO old-path/consumer/oracle touch; 3) ACTUAL tsc + vitest output; 4) "RB-2b-1
+complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL (STOP-IF):** if the forced-filler cannot guarantee fill without a team that can't afford the
+reserve → STOP and report (the solvency/reserve assumption is wrong). If reusing `finalizeSoldLot` for the forced
+claim mutates the one-chance tracker/availability incorrectly → STOP. If making the opening tier-aware requires
+touching the OLD `nominatePlayer` or any consumer → STOP and report.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-2b-1 ===== -->
