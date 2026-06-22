@@ -15564,3 +15564,79 @@ farm band midpoint to exact `auctionPlayer.iv` → report it (do not edit tests 
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-1a ===== -->
+
+<!-- ===== CONTRACT: RB-1b-1 (pure boundary-aware chemistry-fit value engine) ===== -->
+## CONTRACT — RB-1b-1 (Mode-1 auction REBUILD: chemistry-fit value engine, PURE) — 2026-06-21 (AUTH-4)
+
+**ROUTE:** Codex CLI (gpt-5.5) | xhigh reasoning effort. **WORKTREE:** `/Users/johnkruse/Projects/kbl-mode1` [branch
+`codex/mode1-v1`] ONLY. **Builder = Codex; Auditor = Opus 4.8 (builder≠auditor). Do NOT commit; do NOT push — Opus commits
+after the audit + full-suite gate.**
+
+**ROLE:** You are a precise TypeScript builder implementing ONE pure, self-contained engine module. No UI, no hook, no
+persistence, no IndexedDB, no IV/oracle touch.
+
+**GOAL (one sentence):** Add a pure, deterministic chemistry-fit value engine that computes (a) a boundary-aware MARGINAL
+chemistry value of adding/removing a player of a given chemistry category to a roster (level-up / buffer / neutral, BIDIRECTIONAL),
+and (b) a scout-price-opinion MULTIPLIER for a drafted prospect from that value — with canonical IV/salary/`computeIV`/the frozen
+oracle left completely untouched (this is a perception-layer engine).
+
+**SOURCE OF TRUTH:** `AUCTION_DRAFT_SPEC_V2.md` §3.7 + §7.3 (chemistry-fit → potency; "this Spirited pick takes you 2→3,
+upgrading N existing traits"); DECISIONS_LOG 2026-06-21 "RB-1b chemistry-fit model RULED" + "RB-1b chemistry-fit REFINED:
+boundary-aware MARGINAL value + bidirectional" (BINDING — read it). The 3-tier cut-points are the grounded default from
+`TRAIT_INTEGRATION_SPEC.md:159-173` (collapse its 4/8/12 4-tier boundaries to 3 by keeping 4 and 8).
+
+**GROUNDED ANCHORS (re-read at source first):**
+- `src/data/rosterEngineConstants.ts:11` — `export type PotencyTier = 'L1' | 'L2' | 'L3'`; `:41-48` `POTENCY_SCALE`
+  (L2 = 1.0 neutral). Import `PotencyTier` from here.
+- `src/data/chemistryCanonical.ts` — `ChemistryCode` ('SPI'|'DIS'|'CMP'|'SCH'|'CRA'), `CHEMISTRY_CODES`,
+  `normalizeToChemistryCode(value)` (absorbs 3-letter codes / Title-words / UPPER+legacy FIERY|GRITTY → ChemistryCode, default 'CMP'),
+  `CHEMISTRY_WORD_TO_CODE`. Import + reuse — do NOT re-derive a chemistry map.
+- `src/utils/prospectScoutingDraftEngine.ts:198` — a prospect DTO's own `chemistry: string` (a Title-case word).
+
+**DESIGN CALLS (ratified — implement exactly; all magnitudes are sim-tunable consts, comment them `// RB-16 sim-tune`):**
+NEW pure module `src/engines/chemistryFitValue.ts` exporting:
+1. **Constants:** `CHEMISTRY_FIT_L2_MIN = 4`, `CHEMISTRY_FIT_L3_MIN = 8` (the grounded tier floors); `CHEMISTRY_FIT_BUFFER_FRACTION = 0.4`
+   (buffer value as a fraction of a full level-up — "not as much as leveling up but still value"); `CHEMISTRY_FIT_BUMP_MAX = 0.08`
+   (the max scout-price multiplier swing).
+2. `chemistryFitTier(count: number): PotencyTier` — `count >= CHEMISTRY_FIT_L3_MIN ? 'L3' : count >= CHEMISTRY_FIT_L2_MIN ? 'L2' : 'L1'`
+   (guard non-finite/negative → treat as 0 → 'L1').
+3. `marginalChemistryValue(count: number, direction: 'add' | 'remove'): number` — the boundary-aware marginal value:
+   - `'add'`: if `chemistryFitTier(count + 1) > chemistryFitTier(count)` (a level-up: count 3→L2 or 7→L3) → return **1.0** (LEVEL_UP);
+     else if `count === CHEMISTRY_FIT_L2_MIN || count === CHEMISTRY_FIT_L3_MIN` (at a tier floor — one send-down from dropping) →
+     return **CHEMISTRY_FIT_BUFFER_FRACTION** (BUFFER, +); else return **0**. (Add value is always ≥ 0 — adding never hurts.)
+   - `'remove'`: if `chemistryFitTier(count - 1) < chemistryFitTier(count)` (a demotion: count 4→3=L1 or 8→7=L2) → return **−1.0**
+     (DROP cost); else return **0**. (This is the bidirectional half RB-9 will consume for send-down move costs.)
+   - Tier ordering: treat L1<L2<L3 (map to 1/2/3 for the comparison).
+4. `chemistryFitPriceMultiplier(prospectChemistry: string, rosterChemistryCounts: Partial<Record<ChemistryCode, number>>): number` —
+   `const code = normalizeToChemistryCode(prospectChemistry); const count = rosterChemistryCounts[code] ?? 0;
+   const addValue = marginalChemistryValue(count, 'add'); return 1 + addValue * CHEMISTRY_FIT_BUMP_MAX;` → a multiplier in
+   **[1.0, 1.08]** (reward-only for the draft ADD; the penalty/cost direction is REMOVE, consumed later by RB-9). Pure: no RNG,
+   no Date, no IO, no async.
+
+NEW test `src/engines/__tests__/chemistryFitValue.test.ts`: (a) `chemistryFitTier` boundaries (0,3→L1; 4,7→L2; 8,99→L3;
+non-finite→L1); (b) `marginalChemistryValue('add')`: count 3→1.0, 7→1.0, 4→0.4, 8→0.4, 5/6→0, 0/1/2→0, 9+→0; (c)
+`marginalChemistryValue('remove')`: count 4→−1.0, 8→−1.0, 3→0, 5→0, 0→0, 9→0; (d) `chemistryFitPriceMultiplier`: count 7→1.08,
+count 4→1.032, count 5→1.0, unknown/empty counts→1.0; (e) the `normalizeToChemistryCode` bridge — `'Spirited'` reads the `'SPI'`
+bucket (pass `{ SPI: 7 }` → 1.08).
+
+**CONSTRAINTS — do NOT touch:** `ivEngine.ts` / `computeIV` / `scaleDelta` / `scaledDeltas` / `salaryCalculator.ts` / the frozen
+IV oracle `spec-docs/reference/iv_oracle.json` (this engine NEVER prices via the IV curves — it is a pure multiplier); any UI /
+page / hook (that is RB-1b-2); `scoutPriceOpinion.ts` (RB-1a — RB-1b-2 composes with it, not this ticket); `chemistryCanonical.ts`
+(import only); no trackerDb/store/DB_VERSION change. Branch `codex/mode1-v1` only; do NOT commit, do NOT push.
+
+**EXPECTED OUTPUT:** one new pure engine module + one new test file; everything else byte-unchanged; the multiplier is 1.0 for a
+typical even-spread roster (no free bump) and rises only on a level-up (1.08) or buffer (1.032) opportunity.
+
+**VERIFICATION:** `NODE_ENV= npx tsc -b` exit 0; `NODE_ENV= npx vitest run src/engines/__tests__/chemistryFitValue.test.ts`
+green. Paste ACTUAL output. (Opus re-runs the FULL Mode-1 suite + confirms zero-new-reds vs `wpaRuntimeBoundary` + no oracle/IV change.)
+
+**FORMAT:** 1) the 2 new paths; 2) the engine's exports + that it is pure and touches no IV/oracle/UI; 3) ACTUAL tsc + test
+output; 4) "RB-1b-1 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL (STOP-IF):** if computing the fit requires reading the IV curves / `computeIV` / any rating → STOP (it must be
+a pure function of the count + the chemistry code only). If `normalizeToChemistryCode`/`ChemistryCode`/`CHEMISTRY_WORD_TO_CODE`
+are not exported from `chemistryCanonical.ts` → STOP and quote. If `PotencyTier` cannot be imported from `rosterEngineConstants.ts`
+→ STOP. Do NOT add any UI/hook/page edit in this ticket.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RB-1b-1 ===== -->

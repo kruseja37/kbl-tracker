@@ -2147,3 +2147,42 @@ forever; the frozen IV oracle is untouchable).
 - **Deferred from RB-1a (flagged in `MODE1_REBUILD_JK_BACKLOG.md`):** (a) the farm Opening/reserve still derives from true IV
   (`reservePriceCurve(ivPct)×iv`) — a secondary back-solvable leak → folded into **RB-2** (nomination/reserve rework, which
   already touches the state machine); (b) per-bidder scouted GRADE (§3.6 rival-disagreement) → folded into **RB-11** (scout privacy).
+
+### 2026-06-21 (later, JK attended → then AUTH-4) — RB-1b chemistry-fit REFINED: boundary-aware MARGINAL value + bidirectional
+
+JK chose **roster scope = MLB roster (22, set pre-farm-auction) + farm picks-so-far** (NOT farm-picks-only — that would be hollow
+early). AND added a model refinement that supersedes the flat "tier(count)" framing of DECISION 2 above (latest ruling wins):
+
+**The chemistry value is BOUNDARY-AWARE + BIDIRECTIONAL, because the roster is fixed-size (a call-up forces a send-down):**
+- **Level-up value (full):** adding a player of chemistry category C when the count is one below a tier boundary (count 3→L2, or
+  7→L3) raises the whole category a tier → upgrades every C-chemistry trait on the roster (§7.3 "this Spirited pick takes you 2→3").
+- **Buffer value (partial — "not as much as leveling up but still value", JK verbatim):** when a category sits at its tier FLOOR
+  (count = 4 [L2 floor] or 8 [L3 floor]), it is "one player from dropping down to a lower level" on the next send-down; adding a
+  player of that type INSURES against that demotion. Real value, smaller than a level-up.
+- **Neutral:** adding deep within a tier (no boundary proximity) = no chemistry value.
+- **BIDIRECTIONAL (JK directive, primarily for RB-9):** the same boundary logic must run the REMOVE direction — a send-down that
+  drops a category below a tier floor is a COST. The in-season **recommendation engine (RB-9) MUST consume this both ways** so it
+  doesn't only see "adding type X helps" but also "sending down type X here drops you a tier." → flagged for RB-9 in the backlog.
+
+**Implementation (Captain default under AUTH-4 — isolated, no frozen-oracle risk):** grounding (wf_bf11fd00-b60) showed exact
+per-trait $ pricing would need a NEW `ivEngine` export (the uniform-tier `computeIV` delta is **$0 for hitters** — raw layer is
+L2-pinned at ivEngine.ts:349). Touching the frozen-oracle engine for a perception nudge is rejected. Instead RB-1b is an
+**isolated per-category fit multiplier** on the scout price opinion (a NEW module; canonical IV/salary/`computeIV`/oracle byte-
+untouched): `multiplier = 1 + marginalChemistryAddValue(count of prospect's chemistry category on the MLB+farm roster) × CAP`,
+where `marginalChemistryAddValue` = LEVEL_UP (full) / BUFFER (~0.4× of level-up) / 0, computed via a **bidirectional pure primitive
+`marginalChemistryValue(count, direction:'add'|'remove')`** reused by RB-9. CAP (≈0.08), the buffer fraction (≈0.4), and the tier
+cut-points are sim-tunable (RB-16).
+
+**3-tier cut-points (grounded default, NOT invented):** collapse the only concrete table `TRAIT_INTEGRATION_SPEC.md:159-173`
+(4-tier at counts 4/8/12) to 3 by preserving its own 4 and 8 boundaries → **L1 = count ≤3, L2 = 4–7 (NEUTRAL default), L3 = ≥8**.
+Roster math: an even 22-man spread (~4–5 per chemistry of 5) lands at L2 by default (no free bump); reaching L3 needs deliberate
+~36%+ stacking. L2 = 1.0× neutral (POTENCY_SCALE) MUST remain the default so the bump is 0 for a typical roster.
+
+**Vocabulary bridge:** trait `ChemistryType` words ↔ player `ChemistryCode` (SPI/DIS/CMP/SCH/CRA) via `normalizeToChemistryCode`
+(handles 3-letter codes, Title-case words, UPPER+legacy FIERY/GRITTY). Count every roster player's chemistry through it.
+
+**DEFERRED (documented fast-follows, not dropped):** (i) per-trait amplification of the prospect's OWN traits by the roster (the
+literal DECISION-2 per-trait effect — second-order; v1 uses the prospect's chemistry-category marginal value, which §7.3 frames as
+the dominant "upgrades N existing traits" effect); (ii) weighting the level-up by N = existing roster traits of that category;
+(iii) RB-9's actual bidirectional consumption (its own ticket — requirement flagged now). RB-1b SPLIT: **RB-1b-1** pure engine
+(the boundary-aware primitive + the fit multiplier + tests) → **RB-1b-2** the MLB+farm roster-chemistry feed (hook) + page wire.
