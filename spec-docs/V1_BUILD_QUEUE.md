@@ -62,7 +62,7 @@ Run the soul-invariant L-SIM after A-W1 + A-W2 + A-W3 land (it now also exercise
 | Order | Ticket | What | Source |
 |---|---|---|---|
 | B0.1 | **DH types in** | merge/rebase the 4E Position-type commits from Branch A so both trees agree (generator/scouting already operate no-DH at data level). | (propagated from A0.1) |
-| B0.2 | **G1 freeze writer** | stamp the distinct draft-IV at AUCTION finalize → a `franchiseTrueValueSnapshots` checkpoint-0 row + additive settledSalary (GREEN seam, no DB bump). Independent of the generator. | `ROADMAP §L-ECON1/G1` · `MODE1_V1_VERIFICATION V12` |
+| B0.2 | ✅ **G1 freeze writer DONE** (`40f876d7`) | draft-baseline `franchiseTrueValueSnapshots` row per drafted player — MLB roster **+ farm prospects** (`statsScopeId:'draft-baseline'`, trueValue=iv, valueDelta=iv−settledSalary, warPercentile=0). NO trackerDb bump (version-pin green). Full suite zero-new-reds. **Closes launch-gap G1.** | `ROADMAP §L-ECON1/G1` · `MODE1_V1_VERIFICATION V12` |
 
 ### B-W1 — Lane 4B prospect (serialized on `prospectScoutingDraftEngine.ts`)
 | Order | Ticket | What | Note |
