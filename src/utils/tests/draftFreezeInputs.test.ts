@@ -131,6 +131,7 @@ describe('buildDraftFreezeInputs RB-7b adapter', () => {
     expect(inputs[0]).toMatchObject({
       playerId: 'mlb-a',
       teamId: 'team-a',
+      iv: 100,
       settledSalary: 75,
       personality: 'Competitive',
       modifiers,
@@ -138,6 +139,7 @@ describe('buildDraftFreezeInputs RB-7b adapter', () => {
     expect(inputs[1]).toMatchObject({
       playerId: 'mlb-b',
       teamId: 'team-b',
+      iv: 120,
       settledSalary: 130,
       personality: undefined,
       modifiers,
@@ -145,13 +147,16 @@ describe('buildDraftFreezeInputs RB-7b adapter', () => {
     expect(inputs[2]).toMatchObject({
       playerId: 'missing-meta',
       teamId: 'team-c',
+      iv: 90,
       settledSalary: 95,
       personality: undefined,
+      position: null,
       modifiers: neutralModifiers,
     });
     expect(inputs[3]).toMatchObject({
       playerId: 'farm-a',
       teamId: 'team-a',
+      iv: 80,
       settledSalary: 35,
       personality: 'Relaxed',
       modifiers,

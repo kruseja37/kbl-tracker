@@ -1,4 +1,5 @@
 import type { HiddenModifiers } from '../types/game';
+import type { PlayerPosition } from './salaryCalculator';
 import {
   classifyDraftSlot,
   computeDraftMoraleFromRaw,
@@ -20,7 +21,9 @@ export interface DraftFreezePlayerInput {
   playerId: string;
   teamId: string;
   tier: DraftFreezeTier;
+  iv: number;
   settledSalary: number;
+  position?: PlayerPosition | null;
   scoutRange: { low: number; high: number };
   personality: string | undefined;
   modifiers: HiddenModifiers;
@@ -30,7 +33,9 @@ export interface DraftFreezePlayerResult {
   playerId: string;
   teamId: string;
   tier: DraftFreezeTier;
+  iv: number;
   settledSalary: number;
+  position?: PlayerPosition | null;
   wonOrderIndex: number;
   totalWonInTier: number;
   slotClass: DraftSlotClass;
@@ -95,7 +100,9 @@ export function computeDraftFreeze(
       playerId: player.playerId,
       teamId: player.teamId,
       tier: player.tier,
+      iv: player.iv,
       settledSalary: player.settledSalary,
+      position: player.position ?? null,
       wonOrderIndex,
       totalWonInTier,
       slotClass: classifyDraftSlot(wonOrderIndex, totalWonInTier),

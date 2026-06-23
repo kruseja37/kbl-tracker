@@ -19,6 +19,7 @@ function player(
   overrides: Partial<DraftFreezePlayerInput> & Pick<DraftFreezePlayerInput, 'playerId' | 'teamId' | 'tier'>,
 ): DraftFreezePlayerInput {
   return {
+    iv: 110,
     settledSalary: 100,
     scoutRange: { low: 90, high: 110 },
     personality: 'Competitive',
@@ -98,16 +99,18 @@ describe('draftFreeze RB-7a pure freeze bridge', () => {
       .toBeGreaterThan(playerById(late, 'target').startingMorale);
   });
 
-  test('passes settledSalary through unchanged', () => {
+  test('passes IV and settledSalary through unchanged', () => {
     const result = computeDraftFreeze([
       player({
         playerId: 'salary-check',
         teamId: 'alpha',
         tier: 'MLB',
+        iv: 150.25,
         settledSalary: 123.45,
       }),
     ]);
 
+    expect(playerById(result, 'salary-check').iv).toBe(150.25);
     expect(playerById(result, 'salary-check').settledSalary).toBe(123.45);
   });
 

@@ -1,11 +1,13 @@
 import type { AuctionSession } from '../engines/auctionStateMachine';
 import type { DraftFreezePlayerInput, DraftFreezeTier } from '../engines/draftFreeze';
 import { perceivedValueRange } from '../engines/scoutValueRange';
+import type { PlayerPosition } from '../engines/salaryCalculator';
 import type { HiddenModifiers } from '../types/game';
 
 export interface DraftFreezePlayerMeta {
   personality: string | undefined;
   modifiers: HiddenModifiers;
+  position?: PlayerPosition | null;
 }
 
 // §11/§13 sim-tune (D-7b-2): post-hoc freeze uses an IV-centered range because
@@ -87,7 +89,9 @@ function buildSessionInputs(
       playerId: result.playerId,
       teamId: result.winnerTeamId,
       tier,
+      iv,
       settledSalary: result.salary,
+      position: meta?.position ?? null,
       scoutRange: { low: scoutRange.low, high: scoutRange.high },
       personality: meta?.personality,
       modifiers: meta?.modifiers ?? { ...NEUTRAL_FREEZE_MODIFIERS },

@@ -42,10 +42,16 @@ import {
   getAuctionSession,
   getAuctionSessionById,
   getLeagueTemplate,
+  getPlayer,
   getTeam,
   type LeagueTemplate,
 } from './leagueBuilderStorage';
 import { computeDraftFreeze } from '../engines/draftFreeze';
+import {
+  TRUE_VALUE_CALCULATION_VERSION,
+  normalizeTrueValuePosition,
+  type PlayerPosition,
+} from '../engines/salaryCalculator';
 import { FRANCHISE_PROFILE_GRADES } from './franchisePlayerProfileEdit';
 import type { ScheduleTeam } from './scheduleGenerator';
 import {
@@ -86,10 +92,25 @@ import {
   getFranchiseFarmRoster,
 } from './franchiseFarmStorage';
 import { seedFranchiseMoraleBaseline } from './franchiseMoraleState';
+import {
+  saveFranchiseTrueValueRows,
+  type FranchiseTrueValueRow,
+} from './franchiseTrueValueStorage';
 
 interface FranchiseLeagueTeams {
   leagueTemplate: LeagueTemplate;
   teams: ScheduleTeam[];
+}
+
+async function resolveDraftBaselinePosition(
+  playerId: string,
+  freezePosition: PlayerPosition | null | undefined,
+  metaPosition: PlayerPosition | null | undefined,
+): Promise<PlayerPosition | null> {
+  if (freezePosition) return freezePosition;
+  if (metaPosition) return metaPosition;
+  const draftedPlayer = await getPlayer(playerId);
+  return normalizeTrueValuePosition(draftedPlayer?.primaryPosition);
 }
 
 function normalizeSelectedTeamIds(config: FranchiseConfig, teams: ScheduleTeam[]): string[] {
@@ -696,6 +717,7 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
         {
           personality: player.personality,
           modifiers: player.hiddenPersonalityModifiers ?? neutralModifiers,
+          position: normalizeTrueValuePosition(player.primaryPosition),
         },
       ]));
       const auctionLeagueTemplate = await getLeagueTemplate(config.league);
@@ -752,6 +774,35 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
           value: team.startingFanMorale,
         });
       }
+
+      const computedAt = new Date().toISOString();
+      const draftBaselineRows: FranchiseTrueValueRow[] = [];
+      for (const player of freeze.players) {
+        const position = await resolveDraftBaselinePosition(
+          player.playerId,
+          player.position,
+          metaByPlayerId.get(player.playerId)?.position,
+        );
+        if (!position) {
+          throw new Error(`Missing draft-baseline position for drafted player ${player.playerId}`);
+        }
+
+        draftBaselineRows.push({
+          franchiseId,
+          seasonId: initialSeasonId,
+          statsScopeId: 'draft-baseline',
+          playerId: player.playerId,
+          trueValue: player.iv,
+          contractValue: player.settledSalary,
+          valueDelta: player.iv - player.settledSalary,
+          warPercentile: 0,
+          position,
+          peerPoolSize: 0,
+          calculationVersion: TRUE_VALUE_CALCULATION_VERSION,
+          computedAt,
+        });
+      }
+      await saveFranchiseTrueValueRows(draftBaselineRows);
     }
 
     // 9. Create the season metadata record franchise mode reads later.
