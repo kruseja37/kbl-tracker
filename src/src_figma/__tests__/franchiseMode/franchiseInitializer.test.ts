@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import type { FranchiseConfig } from '../../../types/franchise';
+import type { FranchiseConfig, StoredFranchiseConfig } from '../../../types/franchise';
+import { YANKEES_PLAYERS } from '../../../data/players/mlb/yankeesPlayers';
 
 const mocks = vi.hoisted(() => ({
   createFranchise: vi.fn(),
@@ -259,6 +260,7 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
           gamesPerTeam: 1,
           inningsPerGame: 9,
           scheduleType: 'balanced',
+          useDH: false,
         }),
         playoffSetupSnapshot: franchiseConfig.playoffs,
         seasonLength: {
@@ -284,6 +286,24 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
         }),
       }),
     );
+  });
+
+  test('franchise v1 no-DH seal overrides DH-on input and Ron Charles is LF', async () => {
+    await initializeFranchise({
+      ...franchiseConfig,
+      season: {
+        ...franchiseConfig.season,
+        useDH: true,
+      },
+    });
+
+    const savedConfig = mocks.saveFranchiseConfig.mock.calls.at(-1)?.[0] as StoredFranchiseConfig;
+    expect(savedConfig.season.useDH).toBe(false);
+    expect(savedConfig.rulesSnapshot?.useDH).toBe(false);
+    expect(savedConfig.handoffContract?.rulesSnapshot.useDH).toBe(false);
+    const ronCharles = YANKEES_PLAYERS.find((player) => player.id === 'nyy-charles');
+    expect(ronCharles?.primaryPosition).toBe('LF');
+    expect(ronCharles?.secondaryPosition).not.toBe('LF');
   });
 
   test('new season schedule initialization writes zero schedule rows by default', async () => {

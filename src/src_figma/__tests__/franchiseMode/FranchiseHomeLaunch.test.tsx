@@ -209,7 +209,7 @@ vi.mock('@/app/components/ScheduleContent', () => ({
   ScheduleContent: () => <div data-testid="schedule-content" />,
 }));
 
-import { FranchiseHome } from '../../app/pages/FranchiseHome';
+import { FranchiseHome, resolveFranchiseGameUseDH } from '../../app/pages/FranchiseHome';
 
 const snapshot = (
   snapshotId: string,
@@ -528,7 +528,7 @@ function makeUnconfirmedPlayoffData() {
       seasonId: 'franchise-1-season-1',
       franchiseId: 'franchise-1',
       status: 'NOT_STARTED',
-      useDH: true,
+      useDH: false,
       teamsQualifying: 4,
       teams: [
         { seed: 1, teamId: 'higher-seed', teamName: 'Higher Seed', league: 'Eastern' },
@@ -685,7 +685,7 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
-    mocks.mockUseFranchiseData.mockReturnValue(makeFranchiseData(true));
+    mocks.mockUseFranchiseData.mockReturnValue(makeFranchiseData(false));
     mocks.mockUseScheduleData.mockReturnValue(makeScheduleData());
     mocks.mockUsePlayoffData.mockReturnValue(makePlayoffData());
     mocks.mockUseOffseasonState.mockReturnValue(makeOffseasonState());
@@ -756,7 +756,7 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
     );
   });
 
-  test('regular-season launch with DH enabled passes DH snapshots selected by opposing starter hand', async () => {
+  test('regular-season launch uses no-DH snapshots selected by opposing starter hand', async () => {
     await startRegularSeasonGame();
 
     expect(mocks.mockUseScheduleData).toHaveBeenCalledWith(
@@ -766,11 +766,11 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
     expect(mocks.mockRepairFranchisePersistence).toHaveBeenCalledWith('franchise-1', 1);
     expect(mocks.mockBuildFranchiseGameTrackerRoster).toHaveBeenCalledWith(
       'away-team',
-      expect.objectContaining({ franchiseId: 'franchise-1', leagueId: 'league-1', useDH: true }),
+      expect.objectContaining({ franchiseId: 'franchise-1', leagueId: 'league-1', useDH: false }),
     );
     expect(mocks.mockBuildFranchiseGameTrackerRoster).toHaveBeenCalledWith(
       'home-team',
-      expect.objectContaining({ franchiseId: 'franchise-1', leagueId: 'league-1', useDH: true }),
+      expect.objectContaining({ franchiseId: 'franchise-1', leagueId: 'league-1', useDH: false }),
     );
     expect(mocks.mockGetFranchiseTeam).toHaveBeenCalledWith('franchise-1', 'away-team');
     expect(mocks.mockGetFranchiseTeam).toHaveBeenCalledWith('franchise-1', 'home-team');
@@ -779,7 +779,7 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
     await waitFor(() => expect(mocks.mockNavigate).toHaveBeenCalled());
     const state = mocks.mockNavigate.mock.calls.at(-1)?.[1]?.state;
 
-    expect(state.useDH).toBe(true);
+    expect(state.useDH).toBe(false);
     expect(state.scheduleGameId).toBe('game-7');
     expect(state.awayTeamColor).toBe('#aa0000');
     expect(state.awayTeamBorderColor).toBe('#00aa00');
@@ -793,8 +793,12 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
       competitionType: 'franchise',
       competitionId: 'franchise-1',
     });
-    expect(state.optimalLineupSnapshots.away).toBe(snapshotsByTeam['away-team'].dh.vsLHP);
-    expect(state.optimalLineupSnapshots.home).toBe(snapshotsByTeam['home-team'].dh.vsRHP);
+    expect(state.optimalLineupSnapshots.away).toBe(snapshotsByTeam['away-team'].noDh.vsLHP);
+    expect(state.optimalLineupSnapshots.home).toBe(snapshotsByTeam['home-team'].noDh.vsRHP);
+  });
+
+  test('resolveFranchiseGameUseDH reads the persisted no-DH franchise seal', () => {
+    expect(resolveFranchiseGameUseDH(makeFranchiseConfig(false) as never)).toBe(false);
   });
 
   test('playoff bracket creation is disabled until seeding review is confirmed', async () => {
@@ -841,7 +845,7 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
         seasonId: 'franchise-1-season-1',
         franchiseId: 'franchise-1',
         teamsQualifying: 4,
-        useDH: true,
+        useDH: false,
         confirmedSeedingReview: review,
       })),
     );
@@ -1083,8 +1087,8 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
     await screen.findByText('PRE-GAME LINEUP');
 
     expect(screen.getByText('LINEUP DELTA BENCHMARKS')).toBeTruthy();
-    expect(screen.getByText(/AWAY TEAM vs LHP \(DH\): not set/)).toBeTruthy();
-    expect(screen.getByText(/HOME TEAM vs RHP \(DH\): needs confirmation\/recalculation/)).toBeTruthy();
+    expect(screen.getByText(/AWAY TEAM vs LHP \(no DH\): not set/)).toBeTruthy();
+    expect(screen.getByText(/HOME TEAM vs RHP \(no DH\): needs confirmation\/recalculation/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'START GAME' })).not.toHaveAttribute('disabled');
 
     fireEvent.click(screen.getByRole('button', { name: 'START GAME' }));
@@ -1143,7 +1147,7 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
     expect(startButton).toHaveAttribute('disabled');
     fireEvent.click(startButton);
 
-    expect(screen.getByText(/HOME TEAM: needs 9 non-pitcher lineup slots for DH benchmark; found 1\./)).toBeTruthy();
+    expect(screen.getByText(/HOME TEAM: needs 8 non-pitcher lineup slots for no-DH benchmark; found 1\./)).toBeTruthy();
     expect(mocks.mockNavigate).not.toHaveBeenCalled();
   });
 
@@ -1300,9 +1304,9 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
     expect(state.optimalLineupSnapshots.home).toBe(snapshotsByTeam['home-team'].noDh.vsRHP);
   });
 
-  test('playoff launch with DH enabled passes DH snapshots selected by opposing starter hand', async () => {
+  test('playoff launch uses no-DH snapshots selected by opposing starter hand', async () => {
     mocks.mockUseFranchiseData.mockReturnValue(makeFranchiseData(false));
-    mocks.mockUsePlayoffData.mockReturnValue(makePlayoffData(true));
+    mocks.mockUsePlayoffData.mockReturnValue(makePlayoffData(false));
 
     render(<FranchiseHome />);
 
@@ -1314,11 +1318,11 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
 
     expect(mocks.mockBuildFranchiseGameTrackerRoster).toHaveBeenCalledWith(
       'lower-seed',
-      expect.objectContaining({ franchiseId: 'franchise-1', leagueId: 'league-1', useDH: true }),
+      expect.objectContaining({ franchiseId: 'franchise-1', leagueId: 'league-1', useDH: false }),
     );
     expect(mocks.mockBuildFranchiseGameTrackerRoster).toHaveBeenCalledWith(
       'higher-seed',
-      expect.objectContaining({ franchiseId: 'franchise-1', leagueId: 'league-1', useDH: true }),
+      expect.objectContaining({ franchiseId: 'franchise-1', leagueId: 'league-1', useDH: false }),
     );
     expect(mocks.mockGetFranchiseTeam).toHaveBeenCalledWith('franchise-1', 'lower-seed');
     expect(mocks.mockGetFranchiseTeam).toHaveBeenCalledWith('franchise-1', 'higher-seed');
@@ -1326,7 +1330,7 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
 
     const state = mocks.mockNavigate.mock.calls.at(-1)?.[1]?.state;
 
-    expect(state.useDH).toBe(true);
+    expect(state.useDH).toBe(false);
     expect(state.awayTeamName).toBe('LOWER-SEED COPIED TEAM');
     expect(state.homeTeamName).toBe('HIGHER-SEED COPIED TEAM');
     expect(state.awayTeamColor).toBe('#aa0000');
@@ -1343,8 +1347,8 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
       playoffSeriesId: 'series-1',
       playoffGameNumber: 1,
     });
-    expect(state.optimalLineupSnapshots.away).toBe(snapshotsByTeam['lower-seed'].dh.vsLHP);
-    expect(state.optimalLineupSnapshots.home).toBe(snapshotsByTeam['higher-seed'].dh.vsRHP);
+    expect(state.optimalLineupSnapshots.away).toBe(snapshotsByTeam['lower-seed'].noDh.vsLHP);
+    expect(state.optimalLineupSnapshots.home).toBe(snapshotsByTeam['higher-seed'].noDh.vsRHP);
     expect(state).toMatchObject({
       awayManagerId: 'lower-seed-assigned-manager',
       homeManagerId: 'higher-seed-assigned-manager',
@@ -1355,7 +1359,7 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
 
   test('playoff launch succeeds when Lineup Delta benchmark metadata is missing or stale', async () => {
     mocks.mockUseFranchiseData.mockReturnValue(makeFranchiseData(false));
-    mocks.mockUsePlayoffData.mockReturnValue(makePlayoffData(true));
+    mocks.mockUsePlayoffData.mockReturnValue(makePlayoffData(false));
     mocks.mockBuildFranchiseGameTrackerRoster.mockImplementation(
       (teamId: keyof typeof snapshotsByTeam, context?: { useDH?: boolean }) => {
         const roster = makeRoster(teamId, context?.useDH ?? false);
@@ -1416,7 +1420,7 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
   test('playoff launch blocks when away roster readiness is incomplete', async () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     mocks.mockUseFranchiseData.mockReturnValue(makeFranchiseData(false));
-    mocks.mockUsePlayoffData.mockReturnValue(makePlayoffData(true));
+    mocks.mockUsePlayoffData.mockReturnValue(makePlayoffData(false));
     mocks.mockBuildFranchiseGameTrackerRoster.mockImplementation(
       (teamId: keyof typeof snapshotsByTeam, context?: { useDH?: boolean }) => {
         const roster = makeRoster(teamId, context?.useDH ?? false);
@@ -1446,7 +1450,7 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
   test('playoff launch blocks when home starter readiness is incomplete', async () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     mocks.mockUseFranchiseData.mockReturnValue(makeFranchiseData(false));
-    mocks.mockUsePlayoffData.mockReturnValue(makePlayoffData(true));
+    mocks.mockUsePlayoffData.mockReturnValue(makePlayoffData(false));
     mocks.mockBuildFranchiseGameTrackerRoster.mockImplementation(
       (teamId: keyof typeof snapshotsByTeam, context?: { useDH?: boolean }) => {
         const roster = makeRoster(teamId, context?.useDH ?? false);

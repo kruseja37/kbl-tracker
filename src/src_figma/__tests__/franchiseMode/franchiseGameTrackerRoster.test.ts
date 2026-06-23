@@ -157,7 +157,7 @@ describe('franchise GameTracker roster identity', () => {
           players: [player(1, 'C')],
           pitchers: [pitcher],
           selectedStarterIdx: 0,
-          useDH: true,
+          useDH: false,
         },
       ],
     });
@@ -166,24 +166,27 @@ describe('franchise GameTracker roster identity', () => {
     expect(incomplete.issues).toEqual(
       expect.arrayContaining([
         'Away Team: needs 9 batting-order players for GameTracker start; found 1.',
-        'Away Team: needs 9 non-pitcher lineup slots for DH benchmark; found 1.',
+        'Away Team: needs 8 non-pitcher lineup slots for no-DH benchmark; found 1.',
       ]),
     );
 
-    const dhReady = buildFranchisePregameReadiness({
+    const activeNoDhReady = buildFranchisePregameReadiness({
       teams: [
         {
-          teamName: 'DH Team',
-          players: ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'].map((position, index) =>
-            player(index + 1, position),
-          ),
+          teamName: 'Active No DH Team',
+          players: [
+            ...['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'].map((position, index) =>
+              player(index + 1, position),
+            ),
+            { ...player(9, 'P'), playerId: 'sp-1', name: 'S. STARTER' },
+          ],
           pitchers: [pitcher],
           selectedStarterIdx: 0,
-          useDH: true,
+          useDH: false,
         },
       ],
     });
-    expect(dhReady.isReady).toBe(true);
+    expect(activeNoDhReady.isReady).toBe(true);
 
     const noDhReady = buildFranchisePregameReadiness({
       teams: [
@@ -204,7 +207,7 @@ describe('franchise GameTracker roster identity', () => {
     expect(noDhReady.isReady).toBe(true);
   });
 
-  test('loads franchise saved lineup and RHP/LHP optimal benchmarks for game launch', async () => {
+  test('loads franchise saved no-DH lineup and RHP/LHP optimal benchmarks for game launch', async () => {
     const franchisePlayers = [
       {
         id: 'c',
@@ -245,11 +248,11 @@ describe('franchise GameTracker roster identity', () => {
         leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'MLB' }],
       },
       {
-        id: 'dh',
+        id: 'lf',
         firstName: 'Dana',
         lastName: 'Hitter',
-        primaryPosition: '1B',
-        secondaryPosition: 'DH',
+        primaryPosition: 'LF',
+        secondaryPosition: 'OF',
         bats: 'S',
         throws: 'R',
         age: 31,
@@ -300,7 +303,7 @@ describe('franchise GameTracker roster identity', () => {
       mode: 'franchise',
       opposingPitcherHand: 'R',
       candidates,
-      dhEnabled: true,
+      dhEnabled: false,
       generatedAt: 100,
       generatedFrom: 'team_hub',
       sourceConfidence: 'engine_calculated',
@@ -310,7 +313,7 @@ describe('franchise GameTracker roster identity', () => {
       mode: 'franchise',
       opposingPitcherHand: 'L',
       candidates,
-      dhEnabled: true,
+      dhEnabled: false,
       generatedAt: 200,
       generatedFrom: 'team_hub',
       sourceConfidence: 'engine_calculated',
@@ -320,23 +323,23 @@ describe('franchise GameTracker roster identity', () => {
       id: 'team-1',
       leagueIds: ['league-1'],
       startingRotation: ['sp-l'],
-      lineupWithDH: [
+      lineupWithoutDH: [
         { battingOrder: 1, playerId: 'ss', fieldingPosition: 'SS' },
         { battingOrder: 2, playerId: 'c', fieldingPosition: 'C' },
-        { battingOrder: 3, playerId: 'dh', fieldingPosition: 'DH' },
+        { battingOrder: 3, playerId: 'lf', fieldingPosition: 'LF' },
       ],
-      optimalLineupVsRHPWithDH: rhpSnapshot,
-      optimalLineupVsLHPWithDH: lhpSnapshot,
+      optimalLineupVsRHPWithoutDH: rhpSnapshot,
+      optimalLineupVsLHPWithoutDH: lhpSnapshot,
     });
     mockGetAllFranchisePlayers.mockResolvedValue(franchisePlayers);
 
     const roster = await buildFranchiseGameTrackerRoster('team-1', {
       franchiseId: 'franchise-1',
       leagueId: 'league-1',
-      useDH: true,
+      useDH: false,
     });
 
-    expect(roster.players.slice(0, 3).map((player) => player.playerId)).toEqual(['ss', 'c', 'dh']);
+    expect(roster.players.slice(0, 3).map((player) => player.playerId)).toEqual(['ss', 'c', 'lf']);
     expect(roster.pitchers).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ playerId: 'sp-l', isStarter: true, throwingHand: 'L' }),
@@ -352,7 +355,7 @@ describe('franchise GameTracker roster identity', () => {
       firstName,
       lastName,
       primaryPosition,
-      secondaryPosition: 'DH',
+      secondaryPosition: 'OF',
       bats: 'R',
       throws: 'R',
       age: 27,
@@ -597,7 +600,7 @@ describe('franchise GameTracker roster identity', () => {
     const roster = await buildFranchiseGameTrackerRoster('team-1', {
       franchiseId: 'franchise-1',
       leagueId: 'league-1',
-      useDH: true,
+      useDH: false,
     });
 
     const launchedIds = new Set([
@@ -701,12 +704,12 @@ describe('franchise GameTracker roster identity', () => {
     const teamOneRoster = await buildFranchiseGameTrackerRoster('team-1', {
       franchiseId: 'franchise-1',
       leagueId: 'league-1',
-      useDH: true,
+      useDH: false,
     });
     const teamTwoRoster = await buildFranchiseGameTrackerRoster('team-2', {
       franchiseId: 'franchise-1',
       leagueId: 'league-1',
-      useDH: true,
+      useDH: false,
     });
 
     const teamOneIds = new Set([

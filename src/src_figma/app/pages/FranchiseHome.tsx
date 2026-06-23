@@ -934,7 +934,7 @@ export function FranchiseHome() {
     const awayTeamId = isHigherSeedHome ? series.lowerSeed.teamId : series.higherSeed.teamId;
     const awayTeamName = isHigherSeedHome ? series.lowerSeed.teamName : series.higherSeed.teamName;
     const homeTeamName = isHigherSeedHome ? series.higherSeed.teamName : series.lowerSeed.teamName;
-    const playoffUseDH = playoffData.playoff?.useDH ?? true;
+    const playoffUseDH = playoffData.playoff?.useDH ?? false;
 
     // T0-08: Load real rosters and franchise-owned team snapshots for both teams.
     // League Builder fallback is only for damaged legacy contexts with missing franchise teams.

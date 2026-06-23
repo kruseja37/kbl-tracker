@@ -316,11 +316,14 @@ describe('franchise setup-to-launch persistence integration', () => {
         inningsPerGame: 9,
         extraInningsRule: 'standard',
         scheduleType: 'balanced',
-        useDH: true,
+        useDH: false,
         allStarGame: false,
         tradeDeadline: false,
         mercyRule: false,
       },
+      season: expect.objectContaining({
+        useDH: false,
+      }),
       playoffSetupSnapshot: makeFranchiseConfig().playoffs,
       seasonLength: {
         gamesPerTeam: 1,
@@ -385,12 +388,12 @@ describe('franchise setup-to-launch persistence integration', () => {
       buildFranchiseGameTrackerRoster(AWAY_TEAM_ID, {
         franchiseId,
         leagueId: LEAGUE_ID,
-        useDH: true,
+        useDH: storedConfig?.season.useDH ?? false,
       }),
       buildFranchiseGameTrackerRoster(HOME_TEAM_ID, {
         franchiseId,
         leagueId: LEAGUE_ID,
-        useDH: true,
+        useDH: storedConfig?.season.useDH ?? false,
       }),
     ]);
 

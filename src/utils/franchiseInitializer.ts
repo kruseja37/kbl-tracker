@@ -575,25 +575,34 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
   if (!config.franchiseName.trim()) {
     throw new Error('Franchise name is required');
   }
+  const franchiseLeagueId = config.league;
+  const franchiseConfig: FranchiseConfig = {
+    ...config,
+    league: franchiseLeagueId,
+    season: {
+      ...config.season,
+      useDH: false,
+    },
+  };
 
   // 1. Create franchise metadata record in kbl-app-meta
-  const franchiseId = await createFranchise(config.franchiseName);
+  const franchiseId = await createFranchise(franchiseConfig.franchiseName);
 
   try {
     // 2. Load the league template and team data
     const { leagueTemplate, teams } = await loadScheduleTeamsForLeague(
-      config.league,
+      franchiseLeagueId,
       'Need at least 2 teams to create a franchise',
     );
 
-    const teamControlSnapshot = buildTeamControlSnapshot(config, teams);
+    const teamControlSnapshot = buildTeamControlSnapshot(franchiseConfig, teams);
 
     // 3. Seed the per-franchise roster/team database from the selected league.
-    const copyResult = await deepCopyLeagueToFranchise(franchiseId, config.league, {
+    const copyResult = await deepCopyLeagueToFranchise(franchiseId, franchiseLeagueId, {
       seasonId: getFranchiseSeasonId(franchiseId, 1),
       seasonNumber: 1,
       teamControl: teamControlSnapshot.teamControl,
-      farmScoutingBridgeRepairApplied: config.roster.startupProspectDraft?.bridgeRepairApplied,
+      farmScoutingBridgeRepairApplied: franchiseConfig.roster.startupProspectDraft?.bridgeRepairApplied,
     });
 
     // 4. Determine controlled team
@@ -603,17 +612,17 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
 
     // 5. Update franchise metadata with enhanced fields
     await updateFranchiseMetadata(franchiseId, {
-      leagueName: leagueTemplate.name || config.leagueDetails?.name || 'League',
-      leagueId: config.league,
+      leagueName: leagueTemplate.name || franchiseConfig.leagueDetails?.name || 'League',
+      leagueId: franchiseLeagueId,
       controlledTeamId,
       controlledTeamName,
       currentSeason: 1,
     });
 
     // 6. Save full FranchiseConfig for later retrieval
-    const rulesSnapshot = buildRulesSnapshot(config);
-    const playoffSetupSnapshot = buildPlayoffSetupSnapshot(config);
-    const seasonLength = buildSeasonLengthMetadata(config);
+    const rulesSnapshot = buildRulesSnapshot(franchiseConfig);
+    const playoffSetupSnapshot = buildPlayoffSetupSnapshot(franchiseConfig);
+    const seasonLength = buildSeasonLengthMetadata(franchiseConfig);
     const schedulePolicy = {
       policy: 'empty-manual-user-supplied' as const,
       generatedSchedulesAllowed: false as const,
@@ -633,7 +642,7 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
       salaryBaseline: copyResult.salaryBaseline,
     };
     const storedConfig: StoredFranchiseConfig = {
-      ...config,
+      ...franchiseConfig,
       franchiseType: teamControlSnapshot.franchiseType,
       teamControl: teamControlSnapshot.teamControl,
       controlledTeams: teamControlSnapshot.controlledTeams,
@@ -665,7 +674,7 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
       franchiseId,
       1,
       0,
-      config.season.gamesPerTeam,
+      franchiseConfig.season.gamesPerTeam,
       normalizeCheckpointCadence(leagueTemplate.checkpointCadence),
     );
 
