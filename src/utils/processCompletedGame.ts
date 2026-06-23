@@ -43,17 +43,22 @@ import {
   saveFranchiseTrueValueSnapshotRows,
   type FranchiseTrueValueSnapshotCheckpoint,
 } from './franchiseTrueValueSnapshotsStorage';
-import { calculateAndPersistProjectedFranchiseDesignationsForSeason } from './franchiseDesignationStorage';
+import {
+  calculateAndPersistProjectedFranchiseDesignationsForSeason,
+  getFranchiseDesignationRow,
+} from './franchiseDesignationStorage';
 import { getGame as getScheduledGame } from './scheduleStorage';
 import type { DesignationEvent, FranchiseDesignationType } from './franchiseDesignations';
 import {
   composeMoraleConsequence,
+  type ResolvedMoraleConsequence,
   type MasterMoraleEventType,
 } from '../engines/masterMoraleMatrix';
 import {
   applyFranchiseMoraleMatrixConsequence,
   getFranchiseMoraleSnapshot,
 } from './franchiseMoraleState';
+import { getFranchiseFameRecord } from './franchiseFameRecordsStorage';
 import {
   isFranchisePhase2FameEnabled,
   isFranchisePhase2CheckpointEnabled,
@@ -80,6 +85,18 @@ import { persistDarkL11AutoBackstopForCompletedGame } from './franchiseManagerAu
 import { recomputeFranchiseL12StandingsForCompletedGame } from './franchiseRaceStandingsCompute';
 import { persistFranchiseAllStarRosterForCompletedGame } from './franchiseAllStarRosterCompute';
 import type { HiddenModifiers } from '../types/game';
+import { FAME_TUNING } from '../engines/fameModel';
+import {
+  applyDesignationSwingTilt,
+  computeDesignationSteadyFanSentiment,
+  computeFameVolume,
+} from '../engines/designationFanMorale';
+import {
+  createGameMoraleEvent,
+  type GameDate,
+  type GameResult,
+} from '../engines/fanMoraleEngine';
+import { areRivals } from '../data/leagueStructure';
 
 export interface ProcessGameResult {
   aggregation: GameAggregationResult;
@@ -520,6 +537,326 @@ export async function persistFameMoraleConsequencesAfterFame(
   }
 }
 
+export type PersistDarkFanMoraleChannelResult = {
+  status: 'dark-noop' | 'written';
+  written: number;
+  reason?: string;
+};
+
+const STORE_BACKED_DESIGNATION_TYPES: FranchiseDesignationType[] = [
+  'TEAM_MVP',
+  'ACE',
+  'FAN_FAVORITE',
+  'ALBATROSS',
+];
+
+function completedGameTeamIds(gameState: PersistedGameState): string[] {
+  return Array.from(
+    new Set(
+      [gameState.homeTeamId, gameState.awayTeamId]
+        .map((teamId) => teamId?.trim())
+        .filter((teamId): teamId is string => Boolean(teamId)),
+    ),
+  );
+}
+
+async function resolveFanMoraleCheckpoint(
+  gameState: PersistedGameState,
+  archiveOptions?: CompletedGameArchiveOptions,
+): Promise<string> {
+  const scheduleGameId = archiveOptions?.context?.scheduleGameId ?? gameState.scheduleGameId;
+  if (scheduleGameId) {
+    try {
+      const scheduledGame = await getScheduledGame(scheduleGameId);
+      if (scheduledGame && Number.isInteger(scheduledGame.gameNumber) && scheduledGame.gameNumber > 0) {
+        return String(scheduledGame.gameNumber);
+      }
+    } catch {
+      // Non-fatal: fall back to the completed game id, matching the dark fame/flashpoint writers.
+    }
+  }
+  return gameState.gameId;
+}
+
+function fanMoraleTimestamp(
+  gameState: PersistedGameState,
+  checkpoint: string,
+): GameDate {
+  const gameNumber = Number(checkpoint);
+  return {
+    season: gameState.seasonNumber,
+    game: Number.isFinite(gameNumber) && gameNumber > 0 ? gameNumber : 0,
+    date: String(gameState.savedAt ?? gameState.gameId),
+  };
+}
+
+function deriveCompletedGameResultContext(
+  gameState: PersistedGameState,
+  leagueId: string | null,
+): Map<string, { result: GameResult; rivalName?: string }> {
+  const homeWon = gameState.homeScore > gameState.awayScore;
+  const homeRunDiff = gameState.homeScore - gameState.awayScore;
+  const isBlowout = Math.abs(homeRunDiff) >= 7;
+  const isRivalMatchup = Boolean(
+    leagueId && areRivals(leagueId, gameState.homeTeamId, gameState.awayTeamId),
+  );
+
+  let isNoHitter = false;
+  let isShutout = false;
+  for (const pStats of gameState.pitcherGameStats) {
+    if (pStats.isStarter && pStats.outsRecorded >= 27) {
+      if (pStats.hitsAllowed === 0 && pStats.runsAllowed === 0) {
+        isNoHitter = true;
+      }
+      if (pStats.runsAllowed === 0) {
+        isShutout = true;
+      }
+    }
+  }
+
+  const isWalkOff = homeWon && gameState.halfInning === 'BOTTOM';
+  const context = new Map<string, { result: GameResult; rivalName?: string }>();
+
+  context.set(gameState.homeTeamId, {
+    result: {
+      gameId: gameState.gameId,
+      won: homeWon,
+      isWalkOff,
+      isNoHitter: isNoHitter && homeWon,
+      isShutout: isShutout && homeWon,
+      isBlowout,
+      vsRival: isRivalMatchup,
+      runDifferential: homeRunDiff,
+      playerPerformances: [],
+    },
+    rivalName: isRivalMatchup ? gameState.awayTeamName : undefined,
+  });
+
+  context.set(gameState.awayTeamId, {
+    result: {
+      gameId: gameState.gameId,
+      won: !homeWon,
+      isWalkOff,
+      isNoHitter: isNoHitter && !homeWon,
+      isShutout: isShutout && !homeWon,
+      isBlowout,
+      vsRival: isRivalMatchup,
+      runDifferential: -homeRunDiff,
+      playerPerformances: [],
+    },
+    rivalName: isRivalMatchup ? gameState.homeTeamName : undefined,
+  });
+
+  return context;
+}
+
+function topWpaStandoutForTeam(
+  gameState: PersistedGameState,
+  teamId: string,
+): NonNullable<PersistedGameState['playerWpaTotals']>[number] | null {
+  let standout: NonNullable<PersistedGameState['playerWpaTotals']>[number] | null = null;
+  for (const total of gameState.playerWpaTotals ?? []) {
+    if (total.teamId !== teamId || !Number.isFinite(total.totalWpa)) continue;
+    if (
+      !standout ||
+      total.totalWpa > standout.totalWpa ||
+      (total.totalWpa === standout.totalWpa && total.playerId.localeCompare(standout.playerId) < 0)
+    ) {
+      standout = total;
+    }
+  }
+  return standout;
+}
+
+function isHeldDesignationRow(
+  row: Awaited<ReturnType<typeof getFranchiseDesignationRow>>,
+  playerId?: string,
+): row is NonNullable<Awaited<ReturnType<typeof getFranchiseDesignationRow>>> {
+  if (!row || !row.playerId) return false;
+  if (playerId && row.playerId !== playerId) return false;
+  return row.status === 'active' || row.status === 'locked';
+}
+
+async function heldDesignationTypeForPlayer(
+  scope: PersistedTrueValueScope,
+  teamId: string,
+  playerId: string,
+): Promise<FranchiseDesignationType | null> {
+  for (const type of STORE_BACKED_DESIGNATION_TYPES) {
+    const row = await getFranchiseDesignationRow({
+      franchiseId: scope.franchiseId,
+      seasonId: scope.seasonId,
+      statsScopeId: scope.statsScopeId,
+      teamId,
+      type,
+    });
+    if (isHeldDesignationRow(row, playerId)) {
+      return type;
+    }
+  }
+  return null;
+}
+
+async function fameVolumeForStandout(
+  scope: PersistedTrueValueScope,
+  playerId: string,
+): Promise<number> {
+  if (!isFranchisePhase2FameEnabled()) {
+    return computeFameVolume(FAME_TUNING.heat.neutral);
+  }
+
+  const fameRecord = await getFranchiseFameRecord(scope, playerId);
+  return computeFameVolume(fameRecord?.heat ?? FAME_TUNING.heat.neutral);
+}
+
+function clampProjectedMorale(value: number): number {
+  if (!Number.isFinite(value)) return 50;
+  return Math.max(0, Math.min(99, Math.round(value)));
+}
+
+function teamFanOnlyConsequence(
+  eventType: string,
+  teamFanMoraleDelta: number,
+  currentFanMorale: number,
+  reason: string,
+): ResolvedMoraleConsequence {
+  return {
+    eventType,
+    personality: 'RELAXED',
+    base: {
+      selfPlayerMoraleDelta: 0,
+      teamFanMoraleDelta,
+      otherTouched: [],
+      reason,
+    },
+    selfPlayerMoraleDelta: 0,
+    teamFanMoraleDelta,
+    fanMoraleToPlayerMoraleDelta: 0,
+    totalPlayerMoraleDelta: 0,
+    projectedPlayerMorale: 50,
+    projectedFanMorale: clampProjectedMorale(currentFanMorale + teamFanMoraleDelta),
+    otherTouched: [],
+    reason,
+    isNeutral: teamFanMoraleDelta === 0,
+  };
+}
+
+export async function persistDarkChannelAFanMoraleForCompletedGame(
+  gameState: PersistedGameState,
+  trueValueScope: PersistedTrueValueScope,
+  archiveOptions?: CompletedGameArchiveOptions,
+): Promise<PersistDarkFanMoraleChannelResult> {
+  if (!isFranchisePhase2MoraleEnabled()) {
+    return {
+      status: 'dark-noop',
+      written: 0,
+      reason: 'Phase-2 morale disabled; §20.6 Channel A fan-morale swing not written.',
+    };
+  }
+
+  const checkpoint = await resolveFanMoraleCheckpoint(gameState, archiveOptions);
+  const leagueId = archiveOptions?.context?.leagueId ?? resolveExhibitionLeagueId(gameState) ?? null;
+  const resultByTeam = deriveCompletedGameResultContext(gameState, leagueId);
+  const timestamp = fanMoraleTimestamp(gameState, checkpoint);
+  let written = 0;
+
+  for (const teamId of completedGameTeamIds(gameState)) {
+    const teamResult = resultByTeam.get(teamId);
+    const standout = topWpaStandoutForTeam(gameState, teamId);
+    if (!teamResult || !standout) continue;
+
+    const moraleEvent = createGameMoraleEvent(teamResult.result, timestamp, teamResult.rivalName);
+    const fameVolume = await fameVolumeForStandout(trueValueScope, standout.playerId);
+    const designationType = await heldDesignationTypeForPlayer(trueValueScope, teamId, standout.playerId);
+    const volumeSwing = moraleEvent.finalImpact * fameVolume;
+    const amplified = designationType
+      ? applyDesignationSwingTilt(designationType, volumeSwing)
+      : volumeSwing;
+    if (!Number.isFinite(amplified) || amplified === 0) continue;
+
+    const currentFanMorale = await currentMoraleValue(trueValueScope, 'team-fan', teamId, 50);
+    const consequence = teamFanOnlyConsequence(
+      'FAN_MORALE_CHANNEL_A_GAME_SWING',
+      amplified,
+      currentFanMorale,
+      `fan_morale.channel_a.${moraleEvent.type.toLowerCase()}`,
+    );
+    const result = await applyFranchiseMoraleMatrixConsequence({
+      franchiseId: trueValueScope.franchiseId,
+      seasonId: trueValueScope.seasonId,
+      statsScopeId: trueValueScope.statsScopeId,
+      seasonNumber: trueValueScope.seasonNumber,
+      playerId: standout.playerId,
+      teamId,
+      consequence,
+      sourceEventId: `channel-a-game-swing:${checkpoint}:${teamId}`,
+      actorDisplayName: standout.playerName,
+      timestamp: String(gameState.savedAt ?? gameState.gameId),
+    });
+    if (result.applied.length > 0) {
+      written += 1;
+    }
+  }
+
+  return { status: 'written', written };
+}
+
+export async function persistDarkChannelBSteadyFanMoraleForCompletedGame(
+  gameState: PersistedGameState,
+  trueValueScope: PersistedTrueValueScope,
+  archiveOptions?: CompletedGameArchiveOptions,
+): Promise<PersistDarkFanMoraleChannelResult> {
+  if (!isFranchisePhase2MoraleEnabled()) {
+    return {
+      status: 'dark-noop',
+      written: 0,
+      reason: 'Phase-2 morale disabled; §20.6 Channel B steady Fan Favorite warmth not written.',
+    };
+  }
+
+  const checkpoint = await resolveFanMoraleCheckpoint(gameState, archiveOptions);
+  let written = 0;
+
+  for (const teamId of completedGameTeamIds(gameState)) {
+    const row = await getFranchiseDesignationRow({
+      franchiseId: trueValueScope.franchiseId,
+      seasonId: trueValueScope.seasonId,
+      statsScopeId: trueValueScope.statsScopeId,
+      teamId,
+      type: 'FAN_FAVORITE',
+    });
+    if (!isHeldDesignationRow(row)) continue;
+
+    const sentiment = computeDesignationSteadyFanSentiment('FAN_FAVORITE').sentiment;
+    if (!Number.isFinite(sentiment) || sentiment === 0) continue;
+
+    const currentFanMorale = await currentMoraleValue(trueValueScope, 'team-fan', teamId, 50);
+    const consequence = teamFanOnlyConsequence(
+      'FAN_MORALE_CHANNEL_B_FAN_FAVORITE_STEADY',
+      sentiment,
+      currentFanMorale,
+      'fan_morale.channel_b.fan_favorite_steady',
+    );
+    const result = await applyFranchiseMoraleMatrixConsequence({
+      franchiseId: trueValueScope.franchiseId,
+      seasonId: trueValueScope.seasonId,
+      statsScopeId: trueValueScope.statsScopeId,
+      seasonNumber: trueValueScope.seasonNumber,
+      playerId: row.playerId,
+      teamId,
+      consequence,
+      sourceEventId: `designation-steady-fan:${checkpoint}:${teamId}:FAN_FAVORITE`,
+      actorDisplayName: row.playerName,
+      timestamp: String(gameState.savedAt ?? gameState.gameId),
+    });
+    if (result.applied.length > 0) {
+      written += 1;
+    }
+  }
+
+  return { status: 'written', written };
+}
+
 export function shouldAggregateToRegularSeasonStats(
   gameState: PersistedGameState,
   archiveOptions?: CompletedGameArchiveOptions,
@@ -727,6 +1064,16 @@ export async function processCompletedGame(
           } catch (e) {
             console.warn('[Flashpoint] dark flashpoint-decay compute skipped for completed game ' + gameState.gameId + ':', e);
           }
+        }
+        try {
+          await persistDarkChannelAFanMoraleForCompletedGame(gameState, trueValueScope, archiveOptions);
+        } catch (e) {
+          console.warn('[FanMorale] dark §20.6 Channel A game-swing write skipped for completed game ' + gameState.gameId + ':', e);
+        }
+        try {
+          await persistDarkChannelBSteadyFanMoraleForCompletedGame(gameState, trueValueScope, archiveOptions);
+        } catch (e) {
+          console.warn('[FanMorale] dark §20.6 Channel B steady Fan Favorite write skipped for completed game ' + gameState.gameId + ':', e);
         }
         if (isFranchisePhase2CheckpointEnabled()) {
           try {

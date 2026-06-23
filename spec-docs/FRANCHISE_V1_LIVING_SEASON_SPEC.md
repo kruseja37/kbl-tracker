@@ -413,6 +413,8 @@ v1: CHANGE-ONLY (net heatDelta = heat − prior heat); the chronic-low-fame stan
 - **Channel B — Designation adds a steady per-game sentiment** (Fan Favorite = ongoing warmth; Albatross = ongoing irritation, compounding via the decay-on-ignored-flashpoint, §13).
 - **Channel C — Designation -> fame is a one-time seed** (the +2/-1 naming nudge, §20.4).
 
+v1: A = per-team top-WPA standout × continuous both-ends fame-volume × designation tilt (double-dark fame); B = held-Fan-Favorite +0.5 steady (Albatross owned by §13); the per-game base swing is now persisted in the dark Phase-2 path (DECISIONS_LOG 2026-06-23).
+
 Magnitude from fame, steady lean + direction from designation, one-time bump from naming — the three channels stay distinct so they compose without compounding.
 
 ### 20.7 The nine-tier ladder

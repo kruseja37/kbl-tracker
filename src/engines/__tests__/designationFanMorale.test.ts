@@ -4,10 +4,12 @@ import {
   DESIGNATION_FAN_MORALE_TUNING,
   applyDesignationSwingTilt,
   computeDesignationSteadyFanSentiment,
+  computeFameVolume,
   computeDesignationSwingTilt,
   summarizeDesignationSteadyFanSentiment,
   type DesignationFanMoraleTuning,
 } from '../designationFanMorale';
+import { FAME_TUNING } from '../fameModel';
 import type { FranchiseDesignationType } from '../../utils/franchiseDesignations';
 
 const STORE_BACKED_DESIGNATION_TYPES: FranchiseDesignationType[] = [
@@ -171,6 +173,31 @@ describe('designationFanMorale L7c pure engine', () => {
     expect(fanFavoriteNegative).toBe(-2);
     expect(Math.sign(fanFavoriteNegative)).toBe(-1);
     expect(applyDesignationSwingTilt('ALBATROSS', 0)).toBe(0);
+  });
+
+  test('computeFameVolume floors at one and returns exactly one at neutral heat', () => {
+    expect(computeFameVolume(FAME_TUNING.heat.neutral)).toBe(1);
+    expect(computeFameVolume(Number.NaN)).toBe(1);
+    expect(computeFameVolume(FAME_TUNING.heat.max)).toBeGreaterThanOrEqual(1);
+    expect(computeFameVolume(FAME_TUNING.heat.min)).toBeGreaterThanOrEqual(1);
+  });
+
+  test('computeFameVolume amplifies both fame and infamy as notability', () => {
+    const positive = computeFameVolume(FAME_TUNING.heat.max);
+    const negative = computeFameVolume(FAME_TUNING.heat.min);
+
+    expect(positive).toBeGreaterThan(1);
+    expect(negative).toBeGreaterThan(1);
+  });
+
+  test('computeFameVolume is monotonic in distance from neutral', () => {
+    const nearPositive = computeFameVolume(FAME_TUNING.heat.neutral + 5);
+    const farPositive = computeFameVolume(FAME_TUNING.heat.neutral + 15);
+    const nearNegative = computeFameVolume(FAME_TUNING.heat.neutral - 5);
+    const farNegative = computeFameVolume(FAME_TUNING.heat.neutral - 15);
+
+    expect(farPositive).toBeGreaterThan(nearPositive);
+    expect(farNegative).toBeGreaterThan(nearNegative);
   });
 
   test('same input produces the same output', () => {

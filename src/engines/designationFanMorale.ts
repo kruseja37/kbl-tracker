@@ -1,4 +1,5 @@
 import type { FranchiseDesignationType } from '../utils/franchiseDesignations';
+import { FAME_TUNING } from './fameModel';
 
 /**
  * §20.6 Channel B + Channel A — designation -> fan-morale sentiment.
@@ -33,6 +34,11 @@ export interface DesignationSwingTiltTuning {
 export interface DesignationFanMoraleTuning {
   steadySentimentByType: Record<FranchiseDesignationType, number>;
   swingTiltByType: Record<FranchiseDesignationType, DesignationSwingTiltTuning>;
+  fameVolume: {
+    k: number;
+    cap: number;
+    scaleRef: number;
+  };
 }
 
 // §16 SIM-TUNE placeholders — shape locked, values owned by the Simulation Gate.
@@ -48,6 +54,11 @@ export const DESIGNATION_FAN_MORALE_TUNING: DesignationFanMoraleTuning = {
     ALBATROSS: { up: 1.0, down: 1.25 },
     TEAM_MVP: { up: 1.0, down: 1.0 },
     ACE: { up: 1.0, down: 1.0 },
+  },
+  fameVolume: {
+    k: 1,
+    cap: 1,
+    scaleRef: FAME_TUNING.heat.max,
   },
 };
 
@@ -125,6 +136,26 @@ export function applyDesignationSwingTilt(
   const tilt = config.swingTiltByType[type][swingDirection];
 
   return baseSwing * tilt;
+}
+
+export function computeFameVolume(
+  heat: number,
+  config: DesignationFanMoraleTuning = DESIGNATION_FAN_MORALE_TUNING,
+): number {
+  const finiteHeat = Number.isFinite(heat) ? heat : FAME_TUNING.heat.neutral;
+  const scaleRef = Math.max(1, Math.abs(config.fameVolume.scaleRef));
+  const notability = Math.abs(finiteHeat - FAME_TUNING.heat.neutral);
+  const cappedAmplifier = clamp(
+    (config.fameVolume.k * notability) / scaleRef,
+    0,
+    config.fameVolume.cap,
+  );
+
+  return 1 + cappedAmplifier;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
 
 function getSentimentSign(

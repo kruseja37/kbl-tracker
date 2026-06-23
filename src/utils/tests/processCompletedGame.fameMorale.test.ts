@@ -12,6 +12,12 @@ import {
   resetFranchiseFameRecordsForTests,
 } from '../franchiseFameRecordsStorage';
 import {
+  clearFranchiseDesignationDatabaseForTests,
+  resetFranchiseDesignationDatabaseForTests,
+  saveFranchiseDesignationRows,
+} from '../franchiseDesignationStorage';
+import type { FranchisePlayerDesignationRecord } from '../franchiseDesignations';
+import {
   clearFranchiseMoraleDatabaseForTests,
   getFranchiseMoraleSnapshot,
   resetFranchiseMoraleDatabaseForTests,
@@ -27,6 +33,10 @@ import {
 } from '../franchisePlayerStorage';
 import { getFranchiseDatabaseName } from '../franchisePersistenceContract';
 import { persistFameMoraleConsequencesAfterFame } from '../processCompletedGame';
+import {
+  persistDarkChannelAFanMoraleForCompletedGame,
+  persistDarkChannelBSteadyFanMoraleForCompletedGame,
+} from '../processCompletedGame';
 import { syncEngine } from '../syncEngine';
 
 function deleteDatabase(name: string): Promise<void> {
@@ -104,6 +114,35 @@ function playerTotal(playerId: string, totalWpa: number, teamId = 'team-a') {
   };
 }
 
+function designation(
+  overrides: Partial<FranchisePlayerDesignationRecord> = {},
+): FranchisePlayerDesignationRecord {
+  return {
+    franchiseId: scope.franchiseId,
+    seasonId: scope.seasonId,
+    statsScopeId: scope.statsScopeId,
+    seasonNumber: scope.seasonNumber,
+    teamId: 'team-a',
+    playerId: 'player-fame',
+    playerName: 'Fame Target',
+    type: 'FAN_FAVORITE',
+    status: 'active',
+    sourceInputs: {},
+    sourceEvidence: ['A1.2c test fixture'],
+    calculationVersion: 'a1.2c-test',
+    calculatedAt: '2026-06-23T00:00:00.000Z',
+    lockedAt: null,
+    carryover: {
+      carriesOver: false,
+      untilSeasonProgress: null,
+      previousSeasonId: null,
+      previousPlayerId: null,
+      note: null,
+    },
+    ...overrides,
+  };
+}
+
 function player(overrides: Partial<Player> & Pick<Player, 'id'>): Player {
   return {
     id: overrides.id,
@@ -152,6 +191,7 @@ function player(overrides: Partial<Player> & Pick<Player, 'id'>): Player {
 describe('processCompletedGame fame morale emitter', () => {
   beforeEach(async () => {
     resetFranchiseFameRecordsForTests();
+    resetFranchiseDesignationDatabaseForTests();
     resetFranchiseMoraleDatabaseForTests();
     await deleteDatabase('kbl-tracker');
     await deleteDatabase('kbl-franchise-morale');
@@ -164,8 +204,10 @@ describe('processCompletedGame fame morale emitter', () => {
     setFranchisePhase2FameEnabledForTests(null);
     setFranchisePhase2MoraleEnabledForTests(null);
     await clearFranchiseFameRecordsForTests();
+    await clearFranchiseDesignationDatabaseForTests();
     await clearFranchiseMoraleDatabaseForTests();
     resetFranchiseFameRecordsForTests();
+    resetFranchiseDesignationDatabaseForTests();
     resetFranchiseMoraleDatabaseForTests();
     await deleteFranchiseDatabase(scope.franchiseId).catch(() => undefined);
   });
@@ -229,5 +271,110 @@ describe('processCompletedGame fame morale emitter', () => {
       heat: 10,
       updatedAtCheckpoint: 'fame-morale-dedupe-game',
     });
+  });
+
+  test('Channel A and B are dark no-ops when morale flag is off', async () => {
+    setFranchisePhase2MoraleEnabledForTests(false);
+    const completedGame = gameState({
+      playerWpaTotals: [
+        playerTotal('player-home', 1, 'team-b'),
+        playerTotal('player-away', 1, 'team-a'),
+      ],
+    });
+    await saveFranchiseDesignationRows([
+      designation({
+        teamId: 'team-b',
+        playerId: 'player-home',
+        playerName: 'Home Star',
+        type: 'FAN_FAVORITE',
+      }),
+    ]);
+
+    await expect(persistDarkChannelAFanMoraleForCompletedGame(completedGame, scope))
+      .resolves.toMatchObject({ status: 'dark-noop', written: 0 });
+    await expect(persistDarkChannelBSteadyFanMoraleForCompletedGame(completedGame, scope))
+      .resolves.toMatchObject({ status: 'dark-noop', written: 0 });
+
+    await expect(getFranchiseMoraleSnapshot(scope, 'team-fan', 'team-a')).resolves.toBeNull();
+    await expect(getFranchiseMoraleSnapshot(scope, 'team-fan', 'team-b')).resolves.toBeNull();
+  });
+
+  test('Channel A writes one team-fan swing per team and dedupes by checkpoint sourceEventId', async () => {
+    setFranchisePhase2MoraleEnabledForTests(true);
+    setFranchisePhase2FameEnabledForTests(false);
+    const completedGame = gameState({
+      gameId: 'channel-a-game-7',
+      homeScore: 5,
+      awayScore: 2,
+      halfInning: 'BOTTOM',
+      playerWpaTotals: [
+        playerTotal('player-away-low', -0.2, 'team-a'),
+        playerTotal('player-away-top', 0.4, 'team-a'),
+        playerTotal('player-home-top', 1.1, 'team-b'),
+      ],
+    });
+    await saveFranchiseDesignationRows([
+      designation({
+        teamId: 'team-b',
+        playerId: 'player-home-top',
+        playerName: 'Home Star',
+        type: 'FAN_FAVORITE',
+      }),
+    ]);
+
+    await expect(persistDarkChannelAFanMoraleForCompletedGame(completedGame, scope))
+      .resolves.toEqual({ status: 'written', written: 2 });
+    await expect(persistDarkChannelAFanMoraleForCompletedGame(completedGame, scope))
+      .resolves.toEqual({ status: 'written', written: 0 });
+
+    const home = await getFranchiseMoraleSnapshot(scope, 'team-fan', 'team-b');
+    const away = await getFranchiseMoraleSnapshot(scope, 'team-fan', 'team-a');
+    expect(home?.history).toHaveLength(1);
+    expect(away?.history).toHaveLength(1);
+    expect(home?.history[0].sourceEventId).toBe('channel-a-game-swing:channel-a-game-7:team-b');
+    expect(away?.history[0].sourceEventId).toBe('channel-a-game-swing:channel-a-game-7:team-a');
+    expect(home?.history[0].reason).toContain('fan_morale.channel_a.walk_off_win');
+    expect(away?.history[0].reason).toContain('fan_morale.channel_a.walk_off_loss');
+  });
+
+  test('Channel B writes held Fan Favorite warmth once and never emits Albatross steady warmth', async () => {
+    setFranchisePhase2MoraleEnabledForTests(true);
+    const completedGame = gameState({
+      gameId: 'channel-b-game-3',
+      playerWpaTotals: [
+        playerTotal('player-away', 0.4, 'team-a'),
+        playerTotal('player-home', 0.7, 'team-b'),
+      ],
+    });
+    await saveFranchiseDesignationRows([
+      designation({
+        teamId: 'team-a',
+        playerId: 'player-fan-favorite',
+        playerName: 'Fan Favorite',
+        type: 'FAN_FAVORITE',
+        status: 'locked',
+      }),
+      designation({
+        teamId: 'team-b',
+        playerId: 'player-albatross',
+        playerName: 'Albatross',
+        type: 'ALBATROSS',
+        status: 'locked',
+      }),
+    ]);
+
+    await expect(persistDarkChannelBSteadyFanMoraleForCompletedGame(completedGame, scope))
+      .resolves.toEqual({ status: 'written', written: 1 });
+    await expect(persistDarkChannelBSteadyFanMoraleForCompletedGame(completedGame, scope))
+      .resolves.toEqual({ status: 'written', written: 0 });
+
+    const fanFavoriteTeam = await getFranchiseMoraleSnapshot(scope, 'team-fan', 'team-a');
+    const albatrossTeam = await getFranchiseMoraleSnapshot(scope, 'team-fan', 'team-b');
+    expect(fanFavoriteTeam?.history).toHaveLength(1);
+    expect(fanFavoriteTeam?.history[0].sourceEventId).toBe(
+      'designation-steady-fan:channel-b-game-3:team-a:FAN_FAVORITE',
+    );
+    expect(fanFavoriteTeam?.history[0].reason).toContain('fan_morale.channel_b.fan_favorite_steady');
+    expect(albatrossTeam).toBeNull();
   });
 });
