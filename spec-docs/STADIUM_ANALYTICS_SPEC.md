@@ -1,5 +1,7 @@
 # Stadium Analytics & Park Factors System
 
+> ⚠️ **SUPERSEDED (2026-06-23) by `STADIUM_ANALYTICS_SPEC_V2.md`** for everything except the statistical park-FACTOR / park-adjusted-WAR model (which V2 defers to V8 and leaves here). The v1 spray model (7 zones), the "optional if tracked" exit-velo/launch/distance fields, and the §6.1 "park-adjusted WAR now fully implemented" claim are STALE — see V2 for the corrected batted-ball convergence, the carry converter, the park-record→living-season system, and the per-stadium stat layer. **Build against V2.**
+
 > **Version**: 1.0
 > **Last Updated**: January 2026
 > **Status**: Draft; Mode 2 v1 stadium foundation is now active priority
