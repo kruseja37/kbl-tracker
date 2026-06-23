@@ -65,6 +65,29 @@ session per the loop (split further as the grounding warrants).
 
 ---
 
+## Phase 6 — INTEGRATION (the LANE-MERGE) — **#1 structural prerequisite, surfaced by the 2026-06-22 V1 delta audit**
+
+> **The problem:** the ENTIRE Mode-1 build (auction + prospect-gen + draft-freeze + draft-derived morale + GM entity + roster board) lives ONLY on `codex/mode1-v1-b`. The living-season branch `codex/franchise-v1-next` has **ZERO auction code** (grep-confirmed: `LeagueBuilderAuctionDraft`/`useAuctionDraft`/`cpuTeamRoles`/`useFarmAuctionDraft`/`auctionStateMachine` all absent). **No Mode-1 closure reaches Mode-2 until these lanes merge.** This gates **D12** (the iPad smoke needs both halves on one tree). Until the audit, no ticket owned this.
+
+| # | Ticket | What | Evidence / grounding |
+|---|---|---|---|
+| **RB-MERGE** | **Merge `codex/mode1-v1-b` → the integration line (`codex/franchise-v1-next`)** | bring the auction/prospect/freeze/morale build onto the branch that carries the L/D-stack living season, so D12 can smoke the full Mode-1 → Mode-2 path on one tree | **Mechanically tractable** (audited 2026-06-22): merge-base `549f9832` (2026-06-20 23:32); franchise-v1-next +170 / mode1-v1-b +63; **only 2 overlapping `src/` files** touched on BOTH sides → the rest of the auction lane lands as clean ADDITIONS |
+
+**Conflict surface (the only two-sided `src/` files — both additive, low-risk):**
+- `src/utils/leagueBuilderStorage.ts` — mode1-v1-b added `pool?: FarmAuctionPool` (RB-15, +2 lines) + draft fields; franchise-v1-next touched it too. Expect a trivial additive reconcile (already flagged in `PARALLEL_LANE_LOG.md` WAVE P2 merge-note).
+- `src/utils/franchiseMoraleState.ts` — the morale store, touched by L3 (franchise side) and RB-5/RB-7 morale-seed (mode1 side). Reconcile the seed/baseline writers.
+
+**Mandatory verification on the merged tree (NON-NEGOTIABLE):**
+1. `NODE_ENV= tsc -b` exit 0 on the merged tree.
+2. **trackerDb version reconcile** — confirm both lanes' `TRACKER_DB_VERSION` + store lists agree (neither side double-bumped); run the version-pin + migration-survival tests.
+3. **Frozen IV oracle byte-unchanged** (`iv_oracle.json`) — the merge must not perturb it.
+4. Full suite green = the UNION of both characterized baselines; **zero NEW reds** beyond each lane's known characterized fails (`wpaRuntimeBoundary` + the order-flakes).
+5. Re-run the L-SIM gate on the merged tree (it now sees both the L-stack AND the auction-derived freeze).
+
+**OPEN-FOR-JK:** (a) branch/strategy — merge mode1-v1-b INTO franchise-v1-next, or cut a fresh `codex/v1-integration` and merge both? (b) sequencing — before or after the remaining build tickets (RB-13b/16/18 + G1 + fame-wiring) land? (merging earlier shrinks future cross-lane drift; merging later means fewer re-merges). (c) ownership — who runs it. **This ticket is the gate to D12; it cannot be skipped.**
+
+---
+
 ## Discipline (every RB ticket)
 1. Ground anchors **at source** (never trust this plan's line refs blindly).
 2. Contract → `PROMPT_CONTRACTS.md` (markers); make-or-break + STOP-IF explicit; `xhigh`.

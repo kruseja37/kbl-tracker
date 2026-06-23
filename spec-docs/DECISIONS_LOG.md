@@ -7,6 +7,19 @@
 
 ## June 2026
 
+### 2026-06-22 (attended): PROSPECT GENERATOR uniqueness audit — ratings OK, traits/age are the sameness; add LARGE archetype layer — RULED → `PROSPECT_GENERATION_SPEC.md §5.5b/§5.6/§14`
+
+**Context:** JK worried prospects are too similar at a grade. Deep dive `we2bpqsw7` RAN the live generator (n=400).
+- **Ratings are NOT cookie-cutter (better than feared):** canonical kbl-mode1 uses generate-score-correct (independent per-tool σ=7 draw + a single uniform grade-hitting shift that PRESERVES shape). Empirical grade-B hitters: avg within-player tool SD 9.2; real archetypes emerge (power+arm corner POW76/ARM81/SPD47 vs contact+glove CON72/FLD77 vs balanced). B1/B9 BUILT. But variety is MODEST (σ=7 low end, symmetric, fixed position bias) → no deliberate specialists.
+- **The real sameness = TRAITS + AGE:** traits drawn FLAT uniform over the 29/17 pool with NO grade/scarcity link (an A as likely as a D to roll a rare trait) + 30% have 0 / 50% have 1 → thin AND interchangeable. AGE is a DEAD axis — ruled (§10) to be generated skew-young but code STILL hard-codes 18 (B8 unbuilt) → every prospect reads 18.
+- **Other axes GOOD:** handedness, secondary position, chemistry, personality (canonical-7 in mode1), arsenal all genuinely varied (several pinned to real-440).
+
+**RULINGS (JK):**
+- **Archetype layer (§5.6, B12):** add archetypes — but a **LARGE/parametric set** (recognizable families × randomized per-instance magnitudes → effectively non-repeating spreads; genuine specialists allowed; position-weighted not forced). Applied as an extra bias before the grade solve; SAFE because **grade is invariant to tool spread** (§5.3 — keeps §3.2/B9 green). σ=7 noise stays on top.
+- **Grade/scarcity-weight traits (§5.5b, B13 — biggest lever):** replace the flat uniform trait draw with grade+scarcity weighting (reuse the analyzer's per-trait impact coefficients + `genWeight=1−traitWeight`); optionally lift the count split for high grades.
+- **Build age (B8):** the §10 age ruling is unbuilt — implement the skew-young draw (currently dead at 18).
+- Hygiene: §14 build checklist is STALE re: which copy (kbl-mode1 already built B1–B9); retire/sync the stale kbl-tracker generator copy (non-canonical personality pool).
+
 ### 2026-06-22 (attended): Snake draft STAYS user-selectable in v1 — the §9.A-vs-§9:411 tension RESOLVED (RB-13 / RB-13b)
 
 **Context:** During the AUTH-4 RB-wrapper run, the Captain flagged a spec contradiction (D-13a-2): `auctionEngineConstants.ts`'s header comment says "auction is the v1 primary and ONLY format; snake = v1.1 fallback," while `AUCTION_DRAFT_SPEC_V2.md` §9:411 says "the league setup lets the GM choose auction (default) vs snake." RB-13a shipped the picker offering BOTH (default auction), leaving the question of whether snake should be selectable in v1.

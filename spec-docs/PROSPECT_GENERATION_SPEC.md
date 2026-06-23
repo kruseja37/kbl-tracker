@@ -175,6 +175,19 @@ Clamp generated ratings to **[20, 99]** (matches the live generator and the real
 
 Traits must be **position-appropriate** per `TRAIT_INTEGRATION_SPEC.md §5.2`: position players (non-DH) → Hitting/Baserunning/Fielding; DH → Hitting/Baserunning (no fielding traits); SP/RP → Pitching; CP → Pitching (closer-eligible); Two-Way → Hitting/Baserunning/Pitching. **Today `traitPools.ts` only encodes a binary `batter|pitcher|both` split (and is orphaned from the live path), and the live generator uses two hardcoded pools with no DH/closer carve-out** — see §14. Prospect trait pools are **positive/neutral only** (no negative traits at generation — `neg_count` would lower the grade unpredictably; negatives belong to the established-player layer).
 
+### 5.5b Traits must be GRADE/SCARCITY-WEIGHTED, not flat uniform — **RULED (audit `we2bpqsw7`)**
+**The biggest sameness culprit (audit finding):** the live generator draws `trait1`/`trait2` **uniformly** over the flat 29-trait (hitter) / 17-trait (pitcher) pool with **no link to grade or scarcity** — so an A prospect is exactly as likely to roll a rare, high-impact trait as a D, and stars share a 1/29 collision with filler. Combined with the §3.4 count split (30% zero / 50% one / 20% two), trait flavor is both thin AND interchangeable across quality tiers.
+- **RULED:** weight the trait draw so **higher-graded prospects are more likely to roll rarer/higher-impact traits.** Reuse the analyzer's existing per-trait **impact coefficients** as the impact weighting (`smb4GradeEmulator` already prices each trait, e.g. Fastball Hitter +2.45, Mind Gamer +1.50) and the **generation scarcity** `genWeight = 1 − traitWeight` from `TRAIT_GAIN_LOSS_THRESHOLD_SPEC §5` (rarer = less likely overall, but grade lifts the odds for the elite). Optionally bump the 30/50/20 count weights upward for A/A−/B+ so stars carry more flavor.
+- Net: an A prospect's traits feel distinct from a C's; rare/impactful traits cluster (probabilistically) on the better players. (Build task B13.)
+
+### 5.6 Player ARCHETYPES — large/parametric, for non-repeating tool spreads — **RULED (JK 2026-06-22; audit `we2bpqsw7`)**
+The audit confirmed the rating *algorithm* is sound (independent per-tool σ=7 + a uniform grade-hitting shift that preserves shape → real lumpy/balanced variety, NOT cookie-cutter), but variety is **modest/symmetric** — pure Gaussian noise + a fixed per-position bias produces no deliberate specialists and the spreads can feel repetitive at a grade. JK: add archetypes, **but a LARGE/parametric set so we don't see the same spreads over and over for similar grades.**
+- **Mechanism:** before `buildBaseRatings`, draw a **per-tool archetype bias vector** and apply it as an *additional* bias (reusing the existing `bias` arg that `POSITION_STAT_BIAS` already proves works); the §5.2 uniform shift then re-centers the biased profile to the target grade. **Grade is invariant to tool spread (§5.3)** → this is safe: any archetype still solves to the right grade and keeps the §3.2 distribution / B9 green.
+- **Large + non-repeating (the key requirement):** NOT a small fixed list of ~5 clichés. Use **archetype FAMILIES** (recognizable for scouting flavor — e.g. Slugger, Pure-Power, Power-Speed, Five-Tool, Speedster, Slap-Hitter, Contact-Glove, Defensive-Wizard, Cannon-Corner, Project/raw-tools, Balanced, …) **× randomized per-instance magnitudes** (jitter the bias size + which secondary tool is emphasized/de-emphasized), so the space of realized spreads is effectively continuous — every "slugger" is a *distinct* slugger. (Equivalent framing: parametrically draw a primary-strength tool + optional secondary-strength + a weakness, with random bias magnitudes — a near-infinite spread space with recognizable families.)
+- **Specialists allowed:** bias magnitudes large enough to produce genuine specialists (e.g. 80-power/45-speed corner masher) — that's the point.
+- **Position-weighted, not forced:** archetype odds lean position-appropriate (Sluggers → corners, Gloves → up-the-middle) but surprises are allowed (a slugging SS) for emergent variety. Position bias still applies underneath.
+- σ=7 per-tool noise stays ON TOP, so even two same-family same-magnitude prospects differ. (Build task B12.)
+
 ---
 
 ## 6. Secondary Positions — **NEW (pool-derived transition map, §9.E)**
@@ -284,7 +297,9 @@ NAIVE    total abs deviation from §3.2: 69.78 pp   ❌ shoved up ~2 grades
 
 ## 14. WHAT THE GENERATOR CODE MUST CHANGE (build-delta checklist — spec-only; do NOT change code here)
 
-Concrete deltas between the current live generator (`src/utils/prospectScoutingDraftEngine.ts`, the V9-diverging code) and this analyzer-anchored spec. Costed for the later build:
+> ⚠ **CHECKLIST IS STALE re: which copy (audit `we2bpqsw7`, 2026-06-22).** B1–B9 below were written against the OLD `kbl-tracker/src/utils/prospectScoutingDraftEngine.ts` copy. The **canonical kbl-mode1 copy has already BUILT most of them**: B1 (generate-score-correct via `scoreSmb4Player` + uniform shift — verified, with round-trip test), B2 (STANDARD weights), B3 (secondary map), B4 (handedness split + L/L correlation), B5 (canonical-7 personality — *mode1 only*; the tracker copy is still non-canonical), B7 (role/junk/trait arsenal), B9 (distribution test) are **DONE in kbl-mode1**. **Real remaining gaps:** **B8** (age — still hard-coded `18`, confirmed dead), **B12** (archetypes — new), **B13** (grade/scarcity-weighted traits — new, the biggest sameness lever), **B6** (DH/closer carve-out + retire `Workhorse`/orphan `traitPools.ts`), and **retire/sync the stale kbl-tracker copy** (its non-canonical personality pool must not leak).
+
+Concrete deltas between the live generator and this analyzer-anchored spec. Costed for the later build:
 
 | # | Delta | Where (current) | Scope |
 |---|---|---|---|
@@ -299,6 +314,8 @@ Concrete deltas between the current live generator (`src/utils/prospectScoutingD
 | **B9** | **Add a distribution-validation test** asserting the generated class's analyzer-grade histogram matches §3.2 within tolerance (≈±1.5pp), plus trait-split + position-spread checks (none exists today). | new test | **BUILD** (test) |
 | **B10** | **(Deferred, L-ECON3)** add `farmGradeMode` as a multiplicative skew over §3.2 weights for juiced/nerfed; wire the orphaned `FARM_NERF_SCALES`. **Not v1.** | new; `tierParams.ts:51-55` | **BUILD** (post-v1) |
 | **B11** | Retire/leave the orphaned `gradeEngine.generateFullProspect/generateProspectRatings` (test-only) — not part of the live path. | `gradeEngine.ts:303, 417` | none (note) |
+| **B12** | **Archetype layer (§5.6) — large/parametric.** Before `buildBaseRatings`, draw an archetype-family + randomized per-tool bias magnitudes (recognizable families × continuous magnitude → non-repeating spreads, genuine specialists allowed), position-weighted-not-forced; apply as an extra `bias` vector; the §5.2 uniform shift re-centers to grade (σ-invariant → B9 stays green). Keep σ=7 noise on top. | new (`bias` plumbing + `applyRatingShift`/`buildRatings` reused) `prospectScoutingDraftEngine.ts:597-636, 779-848` | **BUILD** |
+| **B13** | **Grade/scarcity-weight traits (§5.5b).** Replace the flat uniform `trait1`/`trait2` draw (`:1007-1012`) with a grade- and scarcity-weighted draw: reuse the analyzer per-trait impact coefficients (`smb4GradeEmulator`) + `genWeight = 1 − traitWeight` (`TRAIT_GAIN_LOSS_THRESHOLD_SPEC §5`); optionally lift the 30/50/20 count split for A/A−/B+. Rare/impactful traits cluster on better prospects. | `prospectScoutingDraftEngine.ts:1007-1012`; `smb4GradeEmulator` (coeffs) | **BUILD** (biggest sameness lever) |
 
 **Dependency order:** B5/B7/B8 are independent low-risk wirings (can land first). B3/B4 (features) must precede B1 (the solve consumes the features). B2 precedes B1. B9 validates the whole. B10 is post-v1.
 
