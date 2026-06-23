@@ -7,6 +7,14 @@
 
 ## June 2026
 
+### 2026-06-22 (attended): PROSPECT pitcher batting — varied + real-anchored, decoupled from grade shift (no uniform-worthless pitchers) — RULED → `PROSPECT_GENERATION_SPEC.md §5.7/B14`
+
+**Context:** JK flagged that pitchers must not be generated as uniform-worthless hitters (they bat/run/field in our no-DH franchise; good-hitting/two-way should emerge). Audit `wdsaa71bp` found a real gap:
+- The generator DOES draw pitcher batter ratings, but the grade solver's uniform shift moves **all 8 attributes together** → pitcher bat/run/field is **grade-coupled** (low-grade → floored ~20, high-grade → dragged up), predictable, no texture; centers ~2× too high (power/contact 35 vs real 15.8/16.3); **arm drawn ~55, should be 0**; σ=7 symmetric can't reproduce the real skew.
+- Real 205-pitcher anchor: power 15.8/σ15 (median 11, tail→77), contact 16.3/σ16 (→99), speed 26.5/σ21, fielding 56.3/σ22, **arm=0 ALL 205**, **3/205 two-way bats**.
+
+**RULED:** (1) decouple — grade shift applies to velocity/junk/accuracy ONLY for pitchers (bat/run/field/arm stay at independently-drawn base); (2) re-anchor the pitcher batter draw to the real skewed distribution (low-median/long-tail), arm forced 0; (3) regression test vs the anchor (means/σ, arm=0, ~1.5% two-way emergence). Generator-only, no DB change. Build task B14. (The 20/20/20 in the verified examples was analyzer-isolation, NOT the target.)
+
 ### 2026-06-22 (attended): PROSPECT GENERATOR uniqueness audit — ratings OK, traits/age are the sameness; add LARGE archetype layer — RULED → `PROSPECT_GENERATION_SPEC.md §5.5b/§5.6/§14`
 
 **Context:** JK worried prospects are too similar at a grade. Deep dive `we2bpqsw7` RAN the live generator (n=400).
