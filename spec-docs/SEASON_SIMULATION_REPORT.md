@@ -6,9 +6,9 @@ Generated: 2026-06-19
 
 | Leg | Seed | Games Simulated | Total Scheduled Games | Stopped Early | Final Digest |
 | --- | --- | ---: | ---: | --- | --- |
-| Baseline | lsim-h2-baseline | 60 | 60 | false | 8931876:4b218874 |
-| Determinism A | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8986467:13311171 |
-| Determinism B | lsim-h2-baseline-determinism | 60 | 60 | n/a | 8986467:13311171 |
+| Baseline | lsim-h2-baseline | 60 | 60 | false | 9859795:3f0be15e |
+| Determinism A | lsim-h2-baseline-determinism | 60 | 60 | n/a | 9903513:1c533f0d |
+| Determinism B | lsim-h2-baseline-determinism | 60 | 60 | n/a | 9903513:1c533f0d |
 
 Determinism same-seed byte-identical end-state: **PASS**
 
@@ -30,13 +30,13 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
   "recoveredGroups": 2,
   "recoveredGroupsNetZero": 2,
   "nonZeroRecoveredGroups": 0,
-  "hitDeltaTotal": 221,
-  "recoveryDeltaTotal": 10,
+  "hitDeltaTotal": 260,
+  "recoveryDeltaTotal": 11,
   "chargedDeltaTotal": 0,
   "chargedPositiveDeltas": 3,
   "chargedNegativeDeltas": 3,
   "recoveredGroupsNetDelta": 0,
-  "ratingsDevelopmentRows": 286,
+  "ratingsDevelopmentRows": 275,
   "moraleToWarLeaks": 0,
   "sampleSourceEventIds": [
     "relationship-charged:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-04-mlb-05-3B:lsim-team-05-mlb-05-3B:FEUD:game-43",
@@ -102,19 +102,19 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
 ```json
 {
   "fameTierDistribution": {
-    "IMMORTAL_LEGEND": 4,
-    "GLOBAL_SUPERSTAR": 0,
-    "NATIONAL_ICON": 4,
-    "REGIONAL_STAR": 3,
-    "LOCAL_HERO": 17,
-    "UNKNOWN": 0,
-    "POLARIZING": 17,
+    "IMMORTAL_LEGEND": 1,
+    "GLOBAL_SUPERSTAR": 3,
+    "NATIONAL_ICON": 1,
+    "REGIONAL_STAR": 6,
+    "LOCAL_HERO": 5,
+    "UNKNOWN": 11,
+    "POLARIZING": 18,
     "NOTORIOUS": 10,
     "DESPISED": 11
   },
   "fameHeatTransitions": {
-    "up": 499,
-    "down": 739
+    "up": 497,
+    "down": 740
   },
   "traitGrantLossCounts": {
     "gain": 1640,
@@ -279,17 +279,17 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
     "pitching": 9,
     "wildcard": 6,
     "cosmetic": 12,
-    "team": 2
+    "team": 1
   },
   "moraleRanges": {
     "player": {
       "min": 0,
       "max": 99,
-      "count": 41
+      "count": 85
     },
     "teamFan": {
-      "min": 6,
-      "max": 61,
+      "min": 7,
+      "max": 99,
       "count": 6
     },
     "autoBackstopFirings": 1,
