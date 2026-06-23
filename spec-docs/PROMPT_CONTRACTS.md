@@ -14382,3 +14382,146 @@ REPORT: 1) every changed git path + total; 2) the control-flow change described;
 
 Use high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: H3-HONOR-DECOUPLE ===== -->
+
+<!-- ===== START CONTRACT: S1-SCOUT-COUNT ===== -->
+ROUTE: Codex 5.5 | high reasoning effort
+
+GOAL:
+Scouting v2 build task **S1 (minimal, in-place)** — change the startup scout draft from **2 scouts/team to 1 scout/team**, and reconcile every hardcoded "two scouts" string + every test that asserts the old 2-scout count, so the suite stays green. NOTHING else. This is the count flip ONLY — NOT a re-sequencing of the draft and NOT the per-tool/specialty/band rework (those are S2–S7).
+
+SOURCE OF TRUTH (embedded inline — the ratified spec lives on the Branch-A docs branch and is NOT on this worktree; build to THIS text, do not look for a docs file):
+- SCOUTING_SYSTEM_SPEC §1A.3 (RULED JK 2026-06-22): "**ONE scout per team (not 2).**" and "SCOUT DRAFT (new phase): before the MLB player draft, each team drafts **one** scout from a pool of **3× the number of teams**."
+- SCOUTING_SYSTEM_SPEC §1A.4 S1: "1 scout/team from a 3×-teams pool … change `STARTUP_SCOUTS_PER_TEAM` 2→1."
+- JK ruling 2026-06-23 (this session): do the **minimal in-place 2→1 flip now**; the "scout draft must run before the MLB auction" RE-SEQUENCING is deferred to RB-13b (auction routing) and is OUT OF SCOPE here.
+- NOTE: the pool size is already `teamCount × STARTUP_SCOUTS_PER_TEAM × STARTUP_SCOUT_POOL_MULTIPLIER`. With the constant = 1 and the multiplier already 3, the pool becomes exactly `3 × teamCount` automatically — DO NOT change the multiplier or the pool formula.
+
+ALLOWED FILES (edit only these):
+- `src/utils/leagueBuilderStartupFarmDraft.ts`
+- `src/utils/leagueBuilderFarmScoutingHandoff.ts`
+- `src/src_figma/app/pages/LeagueBuilderDraft.tsx`
+- `src/src_figma/app/pages/FranchiseManualSmokeSetup.tsx`
+- `src/src_figma/app/pages/FranchiseSetup.tsx`
+- `src/utils/tests/leagueBuilderStartupFarmDraft.test.ts`
+- `src/src_figma/__tests__/leagueBuilder/LeagueBuilderDraft.test.tsx`
+- `src/src_figma/__tests__/franchiseMode/FranchiseSetup.test.tsx`
+- `src/src_figma/__tests__/app/FranchiseManualSmokeSetup.test.tsx`
+
+EXACT CHANGES (make precisely these; the line numbers are a guide — match on the text, and if a quoted string is not found verbatim, STOP and report rather than guessing):
+1. `leagueBuilderStartupFarmDraft.ts:51` — `export const STARTUP_SCOUTS_PER_TEAM = 2;` → `= 1;`. This is the ONLY logic change. Every constant-derived site (pool size `:790`, the round loop `:823`, the `=== STARTUP_SCOUTS_PER_TEAM` validations `:970/:1001/:1003/:1021/:1022/:1025/:1026`, the `>=` guard `:1292/:1293`) MUST stay as-is and will auto-adjust — DO NOT hand-edit them.
+2. Hardcoded copy → make SINGULAR (exact new wording):
+   - `leagueBuilderStartupFarmDraft.ts:1331` `'Every team must hire two scouts before the prospect draft begins.'` → `'Every team must hire one scout before the prospect draft begins.'`
+   - `leagueBuilderFarmScoutingHandoff.ts:145` `'Each team must hire two League Builder scouts before Franchise Setup can copy farm/scouting state.'` → `'Each team must hire one League Builder scout before Franchise Setup can copy farm/scouting state.'`
+   - `LeagueBuilderDraft.tsx:313` "each team has two hired scouts and 10 hidden-safe FARM prospects" → "each team has one hired scout and 10 hidden-safe FARM prospects"
+   - `LeagueBuilderDraft.tsx:429` "Hire two scouts for every team, then draft prospects one pick at a time." → "Hire one scout for every team, then draft prospects one pick at a time."
+   - `FranchiseManualSmokeSetup.tsx:35` "and two hired scouts per team." → "and one hired scout per team."
+   - `FranchiseSetup.tsx:1230` "Use League Builder Draft to hire two scouts for every team, then draft FARM prospects one pick at a time." → "Use League Builder Draft to hire one scout for every team, then draft FARM prospects one pick at a time."
+3. Tests asserting the OLD count/copy → update to the 1-scout reality:
+   - `leagueBuilderStartupFarmDraft.test.ts`: the test name `:257` "...persists two scouts per team" → "one scout per team"; `:298` `toHaveLength(4)` → `toHaveLength(2)` (2 teams × 1); `:299` TEAM_A `toHaveLength(2)` → `toHaveLength(1)`; `:300` TEAM_B `toHaveLength(2)` → `toHaveLength(1)`. The symbolic pool-length assert `:272` (`2 * STARTUP_SCOUTS_PER_TEAM * STARTUP_SCOUT_POOL_MULTIPLIER`) STAYS unchanged (it derives from the constant).
+   - `LeagueBuilderDraft.test.tsx:390` regex `/each team has two hired scouts and 10 hidden-safe FARM prospects/i` → "one hired scout".
+   - `FranchiseSetup.test.tsx:278` regex `/hire two scouts for every team/i` → "hire one scout for every team".
+   - `FranchiseManualSmokeSetup.test.tsx:73` regex `/6 teams · 132 MLB · 60 FARM · 12 scouts/i` → `12 scouts` becomes `6 scouts` (6 teams × 1).
+4. COMPLETENESS GREP (mandatory): after editing, run `grep -rniE "two (hired )?scouts?|hire two|2 scouts|12 scouts" src --include=*.ts --include=*.tsx | grep -v src/archived` and reconcile ANY remaining hit that encodes the 2-scout count (copy or test) using the same singular rule. Also re-check any other per-team scout-count assertion (e.g. another `toHaveLength` after a `while (!view.scoutDraftComplete)` loop in the test file) and fix it to 1/team. Report the final grep output (must be empty of 2-scout-count hits).
+
+DO NOT TOUCH (outside scope):
+- The scout-draft ENGINE LOGIC: `buildScoutPool`, `buildScoutPickOrder`, `draftLeagueBuilderScout`, `currentScoutPick`, the validation structure — only the constant value changes; their bodies stay byte-identical.
+- The prospect/farm draft, the MLB auction, the draft sequencing/routing (that is RB-13b), the specialty/weakness model + `accuracyByPosition` (that is S2), per-tool bands (S3/S4).
+- `STARTUP_SCOUT_POOL_MULTIPLIER` (stays 3), `STARTUP_FARM_TARGET_SIZE`, `STARTUP_MLB_REQUIRED_SIZE`.
+- `src/engines/ivEngine.ts` / `iv_oracle.json` (no oracle effect), `TRACKER_DB_VERSION` / any store list (NO DB bump — this change adds no store), `franchiseSeasonLedgerStorage.test.ts`.
+- Any file not in ALLOWED FILES.
+
+VERIFICATION (run and paste ACTUAL output):
+- `NODE_ENV= npx tsc -b` (expect 0).
+- Focused tests: `NODE_ENV= npx vitest run src/utils/tests/leagueBuilderStartupFarmDraft.test.ts src/src_figma/__tests__/leagueBuilder/LeagueBuilderDraft.test.tsx src/src_figma/__tests__/franchiseMode/FranchiseSetup.test.tsx src/src_figma/__tests__/app/FranchiseManualSmokeSetup.test.tsx` (expect ALL pass).
+- The completeness grep from step 4 (expect no 2-scout-count hits).
+
+STOP IF: any quoted string above is not found verbatim in its file; flipping the constant surfaces a compile/logic error that needs a structural change beyond these edits; a change would require touching a file outside ALLOWED FILES; the focused tests reveal a 2-scout assumption baked somewhere not listed (report it, do not improvise a fix outside the allowed files). → output "BLOCKED: <reason>".
+
+REPORT:
+1. Every changed git path + the total changed-path count.
+2. Each change with its source ref (S1 / the exact spec line).
+3. ACTUAL tsc + focused-vitest output + the completeness-grep output.
+4. "S1-SCOUT-COUNT complete" OR "BLOCKED: <reason>".
+
+Do not run the full suite or commit — the auditor runs the full gate and commits. Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: S1-SCOUT-COUNT ===== -->
+
+<!-- ===== START CONTRACT: S1-SCOUT-COUNT-V2 ===== -->
+ROUTE: Codex 5.5 | high reasoning effort
+
+SUPERSEDES `S1-SCOUT-COUNT` (v1) — v1 was INCOMPLETE; Codex correctly BLOCKED on a hardcoded `scoutCount !== 2` validator + 2 test files outside the allow-list. v2 is the COMPLETE surface (12 files), re-verified by an exhaustive grep. Build to v2.
+
+GOAL:
+Scouting v2 build task **S1 (minimal, in-place)** — change the startup scout draft from **2 scouts/team to 1 scout/team**, and reconcile EVERY hardcoded 2-scout reference (validators, copy, UI denominators, fixtures, and the tests that assert the old count/copy) so `tsc -b` is clean and the suite stays green. This is the COUNT FLIP ONLY — NOT a re-sequencing of the draft, NOT the specialty/per-tool/band rework (S2–S7).
+
+SOURCE OF TRUTH (embedded inline — the ratified spec lives on the Branch-A docs branch and is NOT on this worktree; build to THIS text):
+- SCOUTING_SYSTEM_SPEC §1A.3 (RULED JK 2026-06-22): "**ONE scout per team (not 2).**" + "each team drafts **one** scout from a pool of **3× the number of teams**."
+- §1A.4 S1: "change `STARTUP_SCOUTS_PER_TEAM` 2→1." JK ruling 2026-06-23: minimal in-place flip; the "before the MLB auction" re-sequencing is deferred to RB-13b (OUT OF SCOPE).
+- The pool is `teamCount × STARTUP_SCOUTS_PER_TEAM × STARTUP_SCOUT_POOL_MULTIPLIER`; with the constant=1 and the multiplier already 3, the pool auto-becomes `3 × teamCount`. DO NOT change the multiplier or the formula.
+
+ALLOWED FILES (edit only these 12):
+- `src/utils/leagueBuilderStartupFarmDraft.ts`
+- `src/utils/leagueBuilderFarmScoutingHandoff.ts`
+- `src/src_figma/app/pages/LeagueBuilderDraft.tsx`
+- `src/src_figma/app/pages/FranchiseManualSmokeSetup.tsx`
+- `src/src_figma/app/pages/FranchiseSetup.tsx`
+- `src/utils/tests/leagueBuilderStartupFarmDraft.test.ts`
+- `src/utils/tests/leagueBuilderFarmScoutingHandoff.test.ts`
+- `src/utils/tests/franchiseStartupProspectDraft.test.ts`
+- `src/utils/tests/franchiseManualSmokeFixture.test.ts`
+- `src/src_figma/__tests__/leagueBuilder/LeagueBuilderDraft.test.tsx`
+- `src/src_figma/__tests__/franchiseMode/FranchiseSetup.test.tsx`
+- `src/src_figma/__tests__/app/FranchiseManualSmokeSetup.test.tsx`
+
+EXACT CHANGES (match on text; if a quoted string is not found verbatim, STOP and report — do not guess):
+**Logic (1):**
+1. `leagueBuilderStartupFarmDraft.ts:51` `export const STARTUP_SCOUTS_PER_TEAM = 2;` → `= 1;`. This is the ONLY logic change. ALL constant-derived sites (pool `:790`, round loop `:823`, `=== STARTUP_SCOUTS_PER_TEAM` validations `:970/:1001/:1003/:1021–1026`, `>=` guard `:1292/:1293`, the `:1003` message `expected ${STARTUP_SCOUTS_PER_TEAM} hired scouts`) STAY as-is and auto-adjust. DO NOT hand-edit them.
+
+**The hardcoded validator (2) — this is what v1 missed:**
+2. `leagueBuilderFarmScoutingHandoff.ts:214` `if (scoutCount !== 2) {` → `if (scoutCount !== 1) {`
+3. `leagueBuilderFarmScoutingHandoff.ts:215` `expected 2 hired scouts` → `expected 1 hired scouts` (change ONLY the digit; keep "scouts" plural so it matches the constant-derived sibling message at `leagueBuilderStartupFarmDraft.ts:1003`, which resolves to "expected 1 hired scouts" too).
+
+**Hardcoded copy → singular (6):**
+4. `leagueBuilderStartupFarmDraft.ts:1331` `'Every team must hire two scouts before the prospect draft begins.'` → `'Every team must hire one scout before the prospect draft begins.'`
+5. `leagueBuilderFarmScoutingHandoff.ts:145` `'Each team must hire two League Builder scouts before Franchise Setup can copy farm/scouting state.'` → `'Each team must hire one League Builder scout before Franchise Setup can copy farm/scouting state.'`
+6. `LeagueBuilderDraft.tsx:313` "each team has two hired scouts and 10 hidden-safe FARM prospects" → "each team has one hired scout and 10 hidden-safe FARM prospects"
+7. `LeagueBuilderDraft.tsx:429` "Hire two scouts for every team, then draft prospects one pick at a time." → "Hire one scout for every team, then draft prospects one pick at a time."
+8. `FranchiseManualSmokeSetup.tsx:35` "and two hired scouts per team." → "and one hired scout per team."
+9. `FranchiseSetup.tsx:1230` "Use League Builder Draft to hire two scouts for every team, then draft FARM prospects one pick at a time." → "...hire one scout for every team..."
+
+**UI denominator (1):**
+10. `FranchiseManualSmokeSetup.tsx:88` `Scouts {team.hiredScouts}/2` → `Scouts {team.hiredScouts}/1`
+
+**Tests → update to the 1-scout reality (the rest):**
+11. `leagueBuilderStartupFarmDraft.test.ts`: `:254` and `:479` `/expected 2 hired scouts/i` → `/expected 1 hired scouts/i`; `:257` test NAME "...persists two scouts per team" → "one scout per team"; `:298` `toHaveLength(4)` → `toHaveLength(2)`; `:299` (TEAM_A) `toHaveLength(2)` → `(1)`; `:300` (TEAM_B) `toHaveLength(2)` → `(1)`. **The symbolic pool-length assert `:272` (`2 * STARTUP_SCOUTS_PER_TEAM * STARTUP_SCOUT_POOL_MULTIPLIER`) STAYS unchanged.**
+12. `leagueBuilderFarmScoutingHandoff.test.ts:250` `/expected 2 hired scouts/i` → `/expected 1 hired scouts/i`.
+13. `franchiseStartupProspectDraft.test.ts:311` `/expected 2 hired scouts/i` → `/expected 1 hired scouts/i`.
+14. `franchiseManualSmokeFixture.test.ts`: `:69` `toBe(12)` → `toBe(6)`; `:75` `team.hiredScouts === 2` → `=== 1`; `:88` `team.scouts === 2` → `=== 1`.
+15. `LeagueBuilderDraft.test.tsx`: `:382` and `:383` `scoutCount: 2` → `scoutCount: 1`; `:390` `/each team has two hired scouts and 10 hidden-safe FARM prospects/i` → "one hired scout".
+16. `FranchiseSetup.test.tsx:278` `/hire two scouts for every team/i` → "hire one scout for every team".
+17. `FranchiseManualSmokeSetup.test.tsx`: `:41` `scoutsPerTeam: 2` → `1`; `:44` `hiredScouts: 12` → `6`; `:55` (per-team) `hiredScouts: 2` → `1`; `:73` `/6 teams · 132 MLB · 60 FARM · 12 scouts/i` → `12 scouts` becomes `6 scouts`.
+
+**COMPLETENESS GREP (mandatory, zsh — note the QUOTED globs):**
+Run: `grep -rniE "two (hired )?scouts|hire two|expected 2 hired|12 scouts|!== 2|scoutCount: 2|scoutsPerTeam: 2|hiredScouts: 2|hiredScouts: 12|scouts === 2|hiredScouts === 2" src --include='*.ts' --include='*.tsx' | grep -v src/archived | grep -iE "scout"`
+It MUST return empty. Reconcile (within the allowed files) any remaining 2-scout-count hit before declaring complete; paste the final (empty) grep output.
+
+DO NOT TOUCH:
+- The scout-draft ENGINE LOGIC bodies (`buildScoutPool`, `buildScoutPickOrder`, `draftLeagueBuilderScout`, `currentScoutPick`, validation structure) — only the constant VALUE changes.
+- The prospect/farm draft, the MLB auction, the draft sequencing/routing (RB-13b), the specialty/weakness model + `accuracyByPosition` (S2), per-tool bands (S3/S4).
+- `STARTUP_SCOUT_POOL_MULTIPLIER` (stays 3), the MLB/FARM size constants.
+- `src/engines/ivEngine.ts` / `iv_oracle.json`, `TRACKER_DB_VERSION` / any store list (NO DB bump), `franchiseSeasonLedgerStorage.test.ts`. Any file not in ALLOWED FILES.
+
+VERIFICATION (run and paste ACTUAL output):
+- `NODE_ENV= npx tsc -b` (expect 0).
+- `NODE_ENV= npx vitest run src/utils/tests/leagueBuilderStartupFarmDraft.test.ts src/utils/tests/leagueBuilderFarmScoutingHandoff.test.ts src/utils/tests/franchiseStartupProspectDraft.test.ts src/utils/tests/franchiseManualSmokeFixture.test.ts src/src_figma/__tests__/leagueBuilder/LeagueBuilderDraft.test.tsx src/src_figma/__tests__/franchiseMode/FranchiseSetup.test.tsx src/src_figma/__tests__/app/FranchiseManualSmokeSetup.test.tsx` (expect ALL pass).
+- The completeness grep above (expect empty).
+
+STOP IF: any quoted string is not found verbatim; flipping the constant surfaces a compile/logic error needing a structural change beyond these edits; a change would require a file outside ALLOWED FILES; a 2-scout assumption appears somewhere not listed (report it). → "BLOCKED: <reason>".
+
+REPORT:
+1. Every changed git path + total changed-path count.
+2. Each change with its source ref.
+3. ACTUAL tsc + focused-vitest + completeness-grep output.
+4. "S1-SCOUT-COUNT-V2 complete" OR "BLOCKED: <reason>".
+
+Do not run the full suite or commit — the auditor runs the full gate and commits. Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: S1-SCOUT-COUNT-V2 ===== -->

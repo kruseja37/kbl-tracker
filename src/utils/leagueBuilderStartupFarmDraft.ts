@@ -48,7 +48,7 @@ export const LEAGUE_BUILDER_STARTUP_FARM_DRAFT_VERSION =
 
 export const STARTUP_FARM_TARGET_SIZE = 10;
 export const STARTUP_MLB_REQUIRED_SIZE = 22;
-export const STARTUP_SCOUTS_PER_TEAM = 2;
+export const STARTUP_SCOUTS_PER_TEAM = 1;
 export const STARTUP_SCOUT_POOL_MULTIPLIER = 3;
 
 export interface StartupFarmDraftTeamStatus {
@@ -1328,7 +1328,7 @@ export async function confirmLeagueBuilderProspectPick(input: {
   const seasonNumber = input.seasonNumber ?? 1;
   const session = await getStartupDraftSession(input.leagueId, seasonNumber);
   if (!session) throw new Error('Start a League Builder prospect draft session first.');
-  if (!allTeamsHaveScouts(session)) throw new Error('Every team must hire two scouts before the prospect draft begins.');
+  if (!allTeamsHaveScouts(session)) throw new Error('Every team must hire one scout before the prospect draft begins.');
   const durableScoutIssues = await validateSessionDurableScoutState(session);
   if (durableScoutIssues.length > 0) {
     throw new Error(`Startup prospect draft scout state changed: ${durableScoutIssues.join(' ')}`);

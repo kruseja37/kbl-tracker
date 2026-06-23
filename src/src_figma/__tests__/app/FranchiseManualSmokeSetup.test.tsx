@@ -38,10 +38,10 @@ describe('FranchiseManualSmokeSetup', () => {
       teamCount: 6,
       mlbPlayersPerTeam: 22,
       farmPlayersPerTeam: 10,
-      scoutsPerTeam: 2,
+      scoutsPerTeam: 1,
       createdMlbPlayers: 132,
       createdFarmPlayers: 60,
-      hiredScouts: 12,
+      hiredScouts: 6,
       prepared: true,
       blockers: [],
       warnings: [],
@@ -52,7 +52,7 @@ describe('FranchiseManualSmokeSetup', () => {
         stadium: 'Apple Field',
         mlbPlayers: 22,
         farmPlayers: 10,
-        hiredScouts: 2,
+        hiredScouts: 1,
         payroll: 31_500_000,
       }],
       nextSteps: [],
@@ -70,9 +70,9 @@ describe('FranchiseManualSmokeSetup', () => {
       expect(mockPrepareFranchiseManualSmokeFixture).toHaveBeenCalledWith({ forceReset: true });
     });
     expect(await screen.findByText('Prepared')).toBeInTheDocument();
-    expect(screen.getByText(/6 teams · 132 MLB · 60 FARM · 12 scouts/i)).toBeInTheDocument();
+    expect(screen.getByText(/6 teams · 132 MLB · 60 FARM · 6 scouts/i)).toBeInTheDocument();
     expect(screen.getByText('Manual Smoke 1')).toBeInTheDocument();
-    expect(screen.getByText(/MLB 22\/22 · FARM 10\/10 · Scouts 2\/2/i)).toBeInTheDocument();
+    expect(screen.getByText(/MLB 22\/22 · FARM 10\/10 · Scouts 1\/1/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /open franchise setup/i })).toHaveAttribute('href', '/franchise/setup');
     expect(screen.getByRole('link', { name: /inspect draft readiness/i })).toHaveAttribute('href', '/league-builder/draft');
   });

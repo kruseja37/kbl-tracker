@@ -171,7 +171,7 @@ describe('franchise roster movement boundary', () => {
         leagueAssignments: [{ leagueId, teamId, rosterStatus: 'MLB' }],
       }));
     }
-    for (let index = 1; index <= 2; index += 1) {
+    for (let index = 1; index <= 1; index += 1) {
       await leagueBuilderStorage.saveScoutProfile({
         id: nextId(`scout-handoff-${index}`),
         leagueId,

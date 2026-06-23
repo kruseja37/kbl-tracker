@@ -66,13 +66,13 @@ describe('franchise manual smoke fixture', () => {
     expect(report.teamCount).toBe(6);
     expect(report.createdMlbPlayers).toBe(132);
     expect(report.createdFarmPlayers).toBe(60);
-    expect(report.hiredScouts).toBe(12);
+    expect(report.hiredScouts).toBe(6);
     expect(report.blockers).toEqual([]);
     expect(report.teamSummaries).toHaveLength(6);
     expect(report.teamSummaries.every((team) =>
       team.mlbPlayers === 22 &&
       team.farmPlayers === 10 &&
-      team.hiredScouts === 2 &&
+      team.hiredScouts === 1 &&
       team.payroll > 0,
     )).toBe(true);
 
@@ -85,7 +85,7 @@ describe('franchise manual smoke fixture', () => {
       team.FARM === 10 &&
       team.hiddenFarm === 10 &&
       team.visibleSafeMetadata === 10 &&
-      team.scouts === 2,
+      team.scouts === 1,
     )).toBe(true);
 
     const players = await getAllPlayers();

@@ -32,7 +32,7 @@ export function FranchiseManualSmokeSetup() {
           <h1 className="text-lg uppercase">Mode 1/2 Manual Smoke Setup</h1>
           <p className="font-sans text-sm leading-6 text-[#C9D1D9]">
             Prepares a named League Builder smoke league with six teams, 22 MLB players per team,
-            10 hidden-safe FARM prospects per team, and two hired scouts per team. This is not product
+            10 hidden-safe FARM prospects per team, and one hired scout per team. This is not product
             auto-draft and is not part of normal Franchise gameplay.
           </p>
           <div className="font-sans text-xs text-[#E0E0CF]">
@@ -85,7 +85,7 @@ export function FranchiseManualSmokeSetup() {
                   <div className="text-[10px] uppercase text-[#F4F1DE]">{team.teamName}</div>
                   <div className="mt-2 font-sans text-xs leading-5 text-[#C9D1D9]">
                     <div>Stadium: {team.stadium}</div>
-                    <div>MLB {team.mlbPlayers}/22 · FARM {team.farmPlayers}/10 · Scouts {team.hiredScouts}/2</div>
+                    <div>MLB {team.mlbPlayers}/22 · FARM {team.farmPlayers}/10 · Scouts {team.hiredScouts}/1</div>
                     <div>Payroll baseline: ${(team.payroll / 1_000_000).toFixed(1)}M</div>
                   </div>
                 </div>

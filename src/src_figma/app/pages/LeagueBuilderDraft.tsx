@@ -310,7 +310,7 @@ export function LeagueBuilderDraft() {
 
             {prepared && (
               <div className="mt-5 bg-[#2F7D46] border-4 border-[#E8E8D8]/40 p-4 text-sm">
-                League Builder is prepared: each team has two hired scouts and 10 hidden-safe FARM prospects. Franchise Setup can validate and copy this state.
+                League Builder is prepared: each team has one hired scout and 10 hidden-safe FARM prospects. Franchise Setup can validate and copy this state.
               </div>
             )}
           </section>
@@ -426,7 +426,7 @@ export function LeagueBuilderDraft() {
             <div>
               <h4 className="font-bold text-sm mb-1">League Builder Startup Draft</h4>
               <p className="text-xs text-[#E8E8D8]/70">
-                Hire two scouts for every team, then draft prospects one pick at a time. Only the team on the clock sees its own scouts' reports. True ratings and hidden personality modifiers stay hidden until call-up.
+                Hire one scout for every team, then draft prospects one pick at a time. Only the team on the clock sees its own scouts' reports. True ratings and hidden personality modifiers stay hidden until call-up.
               </p>
             </div>
           </div>

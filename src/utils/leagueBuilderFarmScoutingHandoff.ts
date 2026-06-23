@@ -142,7 +142,7 @@ export function validateLeagueBuilderFarmScoutingHandoffState(input: {
   const blockers: string[] = [];
   const warnings: string[] = [];
   const limitations = [
-    'Each team must hire two League Builder scouts before Franchise Setup can copy farm/scouting state.',
+    'Each team must hire one League Builder scout before Franchise Setup can copy farm/scouting state.',
     'Scouting output remains imperfect and true ratings stay hidden until call-up/reveal.',
   ];
   const teams: LeagueBuilderFarmScoutingTeamReport[] = [];
@@ -211,8 +211,8 @@ export function validateLeagueBuilderFarmScoutingHandoffState(input: {
       blockers.push(`${team.name}: has ${farmPlayers.length}/${V1_FARM_PLAYERS_PER_TEAM} FARM players; run the League Builder startup prospect draft.`);
       bridgeAllowed = false;
     }
-    if (scoutCount !== 2) {
-      blockers.push(`${team.name}: expected 2 hired scouts; found ${scoutCount}.`);
+    if (scoutCount !== 1) {
+      blockers.push(`${team.name}: expected 1 hired scouts; found ${scoutCount}.`);
       bridgeAllowed = false;
     }
     const revealedFarm = farmPlayers.filter((player) => player.ratingRevealState === 'revealed');

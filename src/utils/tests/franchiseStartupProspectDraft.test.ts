@@ -308,7 +308,7 @@ describe('startup prospect draft', () => {
     expect(bridgeReport.bridgeRepairApplied).toBe(true);
     expect(validation.status).toBe('blocked');
     expect(validation.bridgeRequired).toBe(false);
-    expect(validation.blockers.join(' ')).toMatch(/expected 2 hired scouts/i);
+    expect(validation.blockers.join(' ')).toMatch(/expected 1 hired scouts/i);
     expect(validation.teams).toEqual(expect.arrayContaining([
       expect.objectContaining({
         teamId: TEAM_A,

@@ -275,7 +275,7 @@ describe('FranchiseSetup Component', () => {
       expect(screen.getByRole('button', { name: /Fantasy Draft.*Deferred/i })).toBeDisabled();
       expect(screen.getByText(/22 MLB \+ 10 FARM/i)).toBeInTheDocument();
       expect(screen.getByText(/Startup farm\/scouting belongs to League Builder/i)).toBeInTheDocument();
-      expect(screen.getByText(/hire two scouts for every team/i)).toBeInTheDocument();
+      expect(screen.getByText(/hire one scout for every team/i)).toBeInTheDocument();
       expect(screen.getByText(/Franchise Setup does not auto-fill farms/i)).toBeInTheDocument();
       expect(screen.queryByText(/Generate new fictional players/i)).not.toBeInTheDocument();
     });

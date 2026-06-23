@@ -1227,7 +1227,7 @@ function Step5RosterMode({
             <p className="text-xs text-[#C4A853] font-bold mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>STARTUP PROSPECT DRAFT</p>
             <div className="h-[1px] bg-[#E8E8D8]/30 mb-3" />
             <div className="space-y-2 text-xs text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
-              <p>Use League Builder Draft to hire two scouts for every team, then draft FARM prospects one pick at a time.</p>
+              <p>Use League Builder Draft to hire one scout for every team, then draft FARM prospects one pick at a time.</p>
               <p>Franchise Setup does not auto-fill farms. It only validates and copies prepared League Builder state.</p>
               <p>Drafted prospects keep true ratings and hidden personality modifiers hidden until call-up.</p>
               <p>No fantasy MLB draft, AI game simulation, or generated regular-season schedule is enabled.</p>
