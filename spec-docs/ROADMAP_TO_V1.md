@@ -1,10 +1,11 @@
 # ROADMAP TO FRANCHISE V1 (tracked)
 **Created:** 2026-06-18 (JK request). **Refreshed:** 2026-06-22 (V1 DELTA AUDIT full refresh — evidence in `V1_DELTA_AUDIT_FINDINGS.md`; supersedes the 2026-06-20 status). *(Prior: 2026-06-20 status re-run + auction scope-change + Mode-1/handoff blind-spot closed.)*
 > **🔄 2026-06-22 V1 DELTA REFRESH (boundary `84d0adf4`):** the 9-reader comb-through + Captain re-verification found the roadmap materially stale on two fronts — **Mode-1 AUCTION is BUILT-LIVE** (was "0 lines/UNBUILT") and **L14 is BUILT-DARK COMPLETE** (was "MISSING, largest unbuilt L-system"); **L13-6/L13-7** are built too. The genuinely-open v1 work is now gated by the **LANE-MERGE** (auction code lives ONLY on `codex/mode1-v1-b`; `codex/franchise-v1-next` has zero auction code — the #1 unowned structural gap). **G1 draft-IV freeze is NOT closed by RB-7** (settledSalary+morale frozen, but no distinct draft-IV). Full evidence + per-line re-status: `V1_DELTA_AUDIT_FINDINGS.md`.
+> **🔄 2026-06-22 (later) — the ratings/trait/chemistry/scouting redesign thread CLOSED** (commits through `dfe11ee2`). It is **NO LONGER set-aside** — its concrete v1 build items are now harvested into **§ LANE 4** below (RA ratings rebuild · B prospect-gen finish · S scouting v2 · T trait gain/loss · DH removal). This lane SPANS both worktrees and shares heavy files with Lanes 1–2, so it is sequenced, not free-parallel — see Lane 4's cross-couplings + the PARALLELIZATION guide.
 **Method:** evidence-grounded status read — every status backed by a commit hash or spec file:line; unconfirmable → flagged, not guessed. The 2026-06-20 refresh re-verified the L-stack against git + CURRENT_STATE.md, folded in the auction→v1 scope change (`MODE1_LEAGUE_BUILD_TO_DRAFT_VISION.md` §6), and added the Mode-1 → Mode-2 launch-readiness lane sourced from the on-disk audits.
 **Sources of truth:** `FRANCHISE_V1_LIVING_SEASON_DSTACK.md` (L-stack) · `FRANCHISE_PLAYABLE_V1_DEFINITION.md` (D-stack D1–D13) · `TRAIT_MEASUREMENT_SPEC.md` (L9b rebuild) · `DECISIONS_LOG.md` · **economy foundation:** `IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md` + the **T-stack (T1–T12)** (IV engine, tiers, luxury caps, all three drafts, auction logic §7.5/§7.6) · **Mode-1 launch lane:** `MODE1_TO_MODE2_V1_LAUNCH_READINESS.md`, `LEAGUE_BUILD_TO_DRAFT_AUDIT.md`, `MODE2_V1_COMPLETENESS.md`, `MODE1_LEAGUE_BUILD_TO_DRAFT_VISION.md`.
 
-**Status (2026-06-22):** L-stack built-dark through **L14** (L11/L12-1..5/L13-5/L13-6/L13-7/L14 all done) · **Mode-1 auction BUILT-LIVE** (RB-0..RB-15,RB-17; prospect-gen B1–B9 + AUC-5.1 complete; `tsc -b` clean) · **three outstanding lanes:** (1) living-season tail (L13-8 → fame→morale wiring → trade-req wiring → L12-6 → L4b → L-SIM final gate), (2) Mode-1 finish (RB-13b routing + RB-16 sim-tune + RB-18 lineup-morale UI + B8 age-reversal + launch-contract wirings incl. **G1 freeze writer**), and (3) the **LANE-MERGE** (bring mode1-v1-b into franchise-v1-next — unowned) · plus the net-new §8.5/§8.6 + DH-removal + rookie-flag scope · 1 unverified (post-D13 activation).
+**Status (2026-06-22):** L-stack built-dark through **L14** (L11/L12-1..5/L13-5/L13-6/L13-7/L14 all done) · **Mode-1 auction BUILT-LIVE** (RB-0..RB-15,RB-17; prospect-gen B1–B9 + AUC-5.1 complete; `tsc -b` clean) · **four outstanding lanes:** (1) living-season tail (L13-8 → fame→morale wiring → trade-req wiring → L12-6 → L4b → L-SIM final gate), (2) Mode-1 finish (RB-13b routing + RB-16 sim-tune + RB-18 lineup-morale UI + launch-contract wirings incl. **G1 freeze writer**), (3) the **LANE-MERGE** (bring mode1-v1-b into franchise-v1-next — unowned), and (4) the **RATINGS / TRAIT / SCOUTING / PROSPECT / DH lane** (§ LANE 4 — harvested from the now-closed redesign thread) · plus the net-new §8.5/§8.6 reporter/stats scope · 1 unverified (post-D13 activation).
 
 > **What v1 is:** ONE release = the Phase-1 **D-stack (D1–D13)** + the Phase-2 **L-stack (L1–L14 + L-SIM)** + the **economy track (L-ECON1–3 + the AUCTION draft)** (LSD-6 + the 2026-06-20 auction elevation) + the **Mode-1 → Mode-2 launch contract**. **D13 ('Playable-V1') is an INTERNAL checkpoint, NOT the ship** — the real v1 exit is the post-flag-flip **iPad playtest (F-141)**. All Phase-2 work is built **DARK** (flags OFF) and **activates only after D13**.
 
@@ -15,14 +16,16 @@
 ## CRITICAL PATH (two lanes, converging at the D12/D13 gate)
 
 **LANE 1 — Living-season tail (L-stack):** *(L11/L12-1..5/L13-5/L13-6/L13-7/L14 all BUILT-DARK as of 2026-06-22.)*
-**L13-8 (build HELD — contract authored)** → **fame→morale wiring (§20.5 + §20.6 A/B + WAR-legitimacy floor — 3 RULED-v1 orphan gaps)** ∥ **trade-request propensity wiring (cheap)** ∥ **L12-6 (race/award/All-Star UI surfacing + allStarSelections counter)** ∥ **L4b (matrix-sourced season takes)** → extend L-SIM with per-engine sub-checkpoints + the final hard gate. *(The L9b trait-reality REBUILD + L10-rework + the in-season ratings/trait checkpoint models are **SET-ASIDE — owned by the ratings/trait/chemistry redesign thread**, not this roadmap's critical path.)*
+**L13-8 (build HELD — contract authored)** → **fame→morale wiring (§20.5 + §20.6 A/B + WAR-legitimacy floor — 3 RULED-v1 orphan gaps)** ∥ **trade-request propensity wiring (cheap)** ∥ **L12-6 (race/award/All-Star UI surfacing + allStarSelections counter)** ∥ **L4b (matrix-sourced season takes)** → extend L-SIM with per-engine sub-checkpoints + the final hard gate. *(The ratings/trait/scouting/prospect/DH redesign — formerly set-aside — is now **§ LANE 4** below; the legacy L9b/L10 trait engines it supersedes stay built-dark until Lane 4's rebuild replaces them.)*
 
 **LANE 2 — Mode-1 / economy / handoff:** *(AUCTION is BUILT-LIVE on `codex/mode1-v1-b` — RB-0..RB-15,RB-17; prospect-gen B1–B9 + AUC-5.1 complete; `tsc -b` clean.)*
 Remaining build: **RB-13b (route draft flow by `draftFormat` — design-gated)** + **RB-16 (sim-tune sweep + draft-economy validation harness, Captain-run)** + **RB-18 (live lineup-morale UI)** + **B8 (§10 prospect-age reversal — generate skew-young revealed age)** → **Mode-1 launch-contract wirings:** **G1 draft-IV True-Value freeze writer** (build against auction finalize — a `franchiseTrueValueSnapshots` checkpoint-0 row + additive settledSalary, GREEN seam) · SMB4 names for reporters + bridge-scouts · SCHOLARLY personality reconcile · **manager entity** (text→entity) · true **league-lock** + frozen-at-lock instance · stadium picker-lock (R9). These must land **before/with the v1 franchise's draft/salary freeze**.
 
 **LANE 3 — THE LANE-MERGE (#1 structural prerequisite — UNOWNED):** bring the entire `codex/mode1-v1-b` build (auction + prospect-gen + draft-freeze + draft-derived morale) into `codex/franchise-v1-next`. `franchise-v1-next` has **zero** auction code today; no Mode-1 closure reaches Mode-2 until this lands. See the lane-merge ticket in `AUCTION_REBUILD_PLAN.md`.
 
-**NET-NEW v1 SCOPE since the boundary (specced-intent-only / unbuilt):** §8.5 pitcher game score (stats lane) · §8.6 beat-reporter standout Q&A + §8.1 pronoun prereq (reporter lane) · R6 auction hot-seat UX spec · DH-removal (pitchers always bat) · rookie≠Fan-Hopeful flags.
+**LANE 4 — RATINGS / TRAIT / SCOUTING / PROSPECT / DH (harvested from the now-closed redesign thread):** **4A** ratings-development rebuild (expected-stats engine keystone) → **4B** prospect-generator finish (B8 age / B12 archetypes / B13 grade-weighted traits / B14 pitcher batting) ∥ **4C** scouting v2 (S1–S7 per-tool bands + scout draft) → **4D** trait gain/loss (value/scarcity tiers + resolution layer) ∥ **4E** DH removal (cross-cutting, oracle-gated). See **§ LANE 4** for the full ticket index + the cross-couplings (B before S5; RA-11↔B14; catcher-CS RA-8 before trait §8C) + worktree mapping.
+
+**NET-NEW v1 SCOPE since the boundary (specced-intent-only / unbuilt):** §8.5 pitcher game score (stats lane) · §8.6 beat-reporter standout Q&A + §8.1 pronoun prereq (reporter lane) · R6 auction hot-seat UX spec. *(DH-removal + rookie flags fold into Lane 4.)*
 
 **CONVERGE →** D12 iPad smoke → D13 sign-off → Phase-2 flag-flip ACTIVATION (post-D13) → F-138 + offseason flag → **F-141 iPad playtest exit gate (ship)**.
 
@@ -191,6 +194,88 @@ Scan this and add anything still missing. Tags: **✅ VERIFIED-BUILT** · **🔨
 
 ---
 
+## LANE 4 — RATINGS / TRAIT / SCOUTING / PROSPECT / DH (harvested 2026-06-22; full detail in the cited specs)
+
+The redesign thread closed 2026-06-22 (commits through `dfe11ee2`); rulings committed. This is an INDEX — authoritative per-item detail lives in each spec's build-table (cited). **All magnitudes are §16 sim-tune placeholders.** The lane spans BOTH worktrees and shares heavy files with Lanes 1–2 → sequence per the cross-couplings (see the PARALLELIZATION guide below).
+
+### 4A — Ratings-development rebuild · `RATINGS_ADJUSTMENT_SPEC §10` · worktree: **franchise-v1-next**
+The over-expectation development model (supersedes the legacy L8/L9b checkpoint math). BUILT base = Model A `ratingsDevelopment.ts` + overlay plumbing (no live consumer). GREENFIELD (~30%, ~70% plumbing present):
+- **RA-1 expected-stats engine (§3A — the KEYSTONE):** ratings→expected-per-category curves. Everything else depends on it.
+- **RA-2** peer-calibrated actual-vs-expected signal — replaces the single TV-$ `valueDelta` scalar (`franchiseCheckpointSweepCompute.ts:184`).
+- **RA-3** per-category signal fan-out — replaces the single hash-picked `selectDevelopmentRatingKey` ("all relevant attributes move").
+- **RA-4** position-pool calibration (position-pure mean, robust SD for thin pools, §3B).
+- **RA-5** 5-band age modifier + age curve + both-end edge compression + equilibrium bound (no grade-cap).
+- **RA-6** season-scaled min-sample gate + confidence weighting (§3B — short-season requirement).
+- **RA-7** per-game park-adjusted production (§3B — net-new; factors exist, applied nowhere).
+- **RA-8** catcher CS/SB-allowed stored fields (additive `PlayerSeasonFielding`, no DB bump) — **also unblocks trait §8C catcher re-earnability**.
+- **RA-9** user-settable cadence + trend term.
+- **RA-10** bench-IF / bench-OF pool split (mostly built; split the single RESERVE key, `franchiseEffectivePosition.ts`).
+- **RA-11** pitcher non-pitching ratings §4A (4 over-expectation signals, no arm; key pitching pool by SP/RP) — **same texture as prospect B14**.
+- **RA-12** retire Model B (`computeNetChange`) + Model C (`agingEngine` random walk); deprecate award-luck (the "consolidate 4→1").
+- **RA-rookie** new `draftedAsFarmProspect` + `rookieStatus` fields + window-clear + ROOKIE badge (§13B; NOT a reuse of `rookieScaleActiveBySeason`; no DB bump; both worktrees).
+- DEFERRED post-D13: the pending→applied confirmation UI (`mergeRatingsOverlays` consumer).
+
+### 4B — Prospect-generator finish · `PROSPECT_GENERATION_SPEC §14` · worktree: **mode1-v1-b**
+B1–B5/B7/B9 DONE in kbl-mode1 (analyzer-anchored generate-score-correct + distribution test). Remaining:
+- **B8** real age (skew-young ~18–42, μ≈21; delete hardcoded `PROSPECT_DRAFT_AGE=18`; reveal age in the farm-auction UI) — small.
+- **B12** archetype layer (§5.6, large/parametric: families × randomized magnitudes → non-repeating spreads, specialists allowed; re-grade in-loop with `scoreSmb4Player`; convergence guard at extremes) — the uniqueness lever.
+- **B13** grade/scarcity-weighted traits (§5.5b: `genWeight = 1−traitWeight`, reuse analyzer impact coeffs) — biggest sameness lever; **shares `traitWeight` with 4D-T4**.
+- **B14** pitcher non-pitching ratings (decouple grade shift to VEL/JNK/ACC only; re-anchor batter draw to the real-205 distribution; **force arm=0**) — **same texture as RA-11**.
+- **B6** position-appropriate trait pools (DH/closer/two-way carve-outs; fix `Workhorse`; retire orphan `traitPools.ts`) — small.
+- **sync/retire the stale kbl-tracker generator copy** (its non-canonical personality pool must not leak; B5 canonical-7 is mode1-only today).
+
+### 4C — Scouting v2 (per-tool bands + scout draft) · `SCOUTING_SYSTEM_SPEC §1A.4` · worktree: **mode1-v1-b** (shares the generator/draft files with 4B)
+- **S1** scout-draft phase (1 scout/team from a 3×-pool, before the MLB draft; `STARTUP_SCOUTS_PER_TEAM` 2→1 + UI).
+- **S2** fixed specialty (2 HIGH / 2 LOW + MEDIUM; `accuracyByPosition`→3-tier; no DH).
+- **S3** per-tool 0–99 band engine (30/50/70 by tier, uniform-in-band, deterministic).
+- **S4** overall grade band (3/5/7 letter-steps; derive the auction price range from it).
+- **S5** reveal archetype (persist via **B12**) + secondary + age (**B8**); replace `trait1/trait2` names with `traitCount` (0/1/2), identities hidden until call-up.
+- **S6** draft-board UI (per-tool + overall bands; default-covered / long-press reveal).
+- **S7** ⚠ SUPERSEDE + cleanup (retire old Gaussian overall-grade jitter, single IV-range width, 20-80; breaking overall→per-tool schema change across `prospectScoutingDraftEngine.ts` + the two startup-draft files + UIs + tests).
+
+### 4D — Trait gain/loss · `TRAIT_GAIN_LOSS_THRESHOLD_SPEC` · worktree: **franchise-v1-next**
+Mostly EXTENDS already-built seams (`traitRealityScorer`/`traitCandidateBuilder`/`traitAcquisition`/`franchiseTraitGrantCompute`→`processCompletedGame.ts:643`).
+- **T-1 scale** 80%-value/20%-scarcity `traitWeight` (derived/recomputable) (§2).
+- **T-2 tiers** 4 positive + 3 negative, grouped+tunable, per-trait overrides (§3).
+- **T-3 measurement** trend factor (new term in `buildProposalBase`) + SP/RP cohort split with min-peer-pool fallback (§4A).
+- **T-4 generation** `genWeight = 1−traitWeight`, `NEGATIVE_TRAIT_FRACTION 0.27`, exclude Sign Stealer/Stimulated (§5; same `traitWeight` as B13).
+- **T-5 resolution** extend `reconcileGainProposals` with value tiers + incumbency β=1.25 + seeded margin-scaled likelihood (§8B; ~4 edits + ranking block + 2 constants).
+- **T-6 position-mismatch** trait→producing-positions map; suppress signal-driven loss + boost keepScore; **catcher arm re-earnable once RA-8 catcher-CS lands**; delete Noodle Arm from `BUILDABLE_TRAITS` (§8C).
+- **T-7 EOS** the threshold engine SUPERSEDES the EOS "Trait Wheel Spin" (award-luck DEPRECATED); EOS = one more checkpoint of the same engine; cadence = 5 in-season + 1 season-end. Mode-3 OUT of v1 (§8).
+
+### 4E — DH removal · `RATINGS_ADJUSTMENT_SPEC §13` · worktree: **CROSS-CUTTING both**
+One scoped ticket (contained but wide): full removal of the DH position AND the DH league-rule → pitchers always bat. ~9 `Position`/`LineupPosition`/`DraftPosition` type defs in lockstep + `ivEngine.ts:205` (the `=== 'DH'` line in the SAME diff) + the one DH record (`yankeesPlayers.ts:70`) + lineup/roster/sub plumbing + `leagueConfig.ts` DH-rule collapse + ~38 test pins. **Oracle SAFE — no re-bless** (zero DH in `iv_oracle.json`). **Gate:** ivEngine oracle test before+after + salary/fWAR/roster/lineup suites + **verify 100% pitcher `batterRatings` coverage** first.
+
+### Lane-4 cross-couplings (sequence these)
+1. **Scouting S5 reveal ⇐ prospect B12 (archetype persisted) + B8 (age)** → land B12/B8 before S5.
+2. **Prospect B14 ⇔ ratings RA-11 (§4A)** — same pitcher-batting texture; co-design the over-expectation signal once.
+3. **Trait §8C catcher re-earnability ⇐ RA-8 catcher-CS counting fields** → RA-8 before/with T-6.
+4. **Prospect B13 ⇔ trait T-4** share the `traitWeight` function → build it once.
+5. **4B + 4C both edit `prospectScoutingDraftEngine.ts`** (+ the two startup-draft files) → the Mode-1 generator is ONE serialized sub-lane (B then S7), not internally parallel.
+6. **4E DH removal touches Position types used by ratings cohorts + prospect-gen + scouting** → land it EARLY (before the others harden Position-typed code) or coordinate; always oracle-gate.
+
+---
+
+## PARALLELIZATION — concurrent build threads (guide for the autonomous build)
+
+**Yes — concurrent threads work on SEPARATE branches with DISJOINT file ownership, ONE committer per branch.** Proven by the existing topology: `mode1-v1-b` ran 63 commits in parallel to `franchise-v1-next`'s 170 with only **2 overlapping `src/` files**. The failure mode is the opposite — **two committers on the SAME branch** race each other's `git add`/`commit -a` (observed 2026-06-22: a concurrent `commit -a` swept another session's staged files under its own message).
+
+**Safe-to-parallelize (different branches, near-disjoint files):**
+- **Living-season branch** (`franchise-v1-next`): Lane 1 (L13-8, fame-wiring, trade-req, L12-6, L4b) + **Lane 4A (ratings)** + **Lane 4D (traits)** — they cluster on `processCompletedGame.ts` / `masterMoraleMatrix.ts` / `franchiseCheckpointSweepCompute.ts` / `traitAcquisition.ts` → ONE branch, internally sequenced.
+- **Mode-1 branch** (`mode1-v1-b`): Lane 2 (RB-13b/16/18 + G1) + **Lane 4B (prospect)** + **Lane 4C (scouting)** — they cluster on the auction hooks/pages + `prospectScoutingDraftEngine.ts` → ONE branch, internally sequenced (4B before 4C-S7).
+- **A 3rd disjoint branch** can take an isolated low-overlap item (e.g. §8.5 pitcher game-score calc, or authoring the R6 hot-seat UX spec).
+
+**Hard chokepoints — single-owner / coordinate, never parallel-bump:**
+- **`TRACKER_DB_VERSION` + store-list pins** — two branches both bumping = guaranteed conflict + the version-pin test breaks. One owner bumps; others rebase onto it. (Most v1 tickets are additive-no-bump by design — keep it that way.)
+- **The frozen IV oracle** (`iv_oracle.json`) — never touched in parallel; oracle-affecting tickets serialize.
+- **The `Position` type defs (4E DH removal)** — cross-cutting; do it alone, merge it, THEN build on the settled types.
+- **`prospectScoutingDraftEngine.ts`** — 4B + 4C + the RB tickets all edit it → keep on ONE branch.
+- The **lane-merge (Lane 3)** is the integration cost that buys the parallelism — budget it; integrate frequently so the 2-file overlap doesn't grow.
+
+**Recommended shape:** 2 primary AUTH-4 captain loops running concurrently (living-season branch + Mode-1 branch), ONE committer each, + optionally a 3rd for an isolated item. The lane-merge converges them before D12.
+
+---
+
 ## FULL PER-TICKET STATUS (evidence-backed)
 
 | Ticket | St | Title | Evidence / Outstanding |
@@ -250,3 +335,8 @@ Scan this and add anything still missing. Tags: **✅ VERIFIED-BUILT** · **🔨
 | D4 | ⬜ | Salary-live UI de-gate | JK presentation ruling needed |
 | F-138 | ⬜ | Offseason data-source ticket (flag-flip precondition) | OFFSEASON_EXECUTION_ENABLED stays FALSE until it lands |
 | v1-exit-playtest (F-141) | ⬜ | iPad playtest exit gate (THE SHIP) | after D13 + L-stack + L-SIM + auction + F-138/flag-flip |
+| Lane 4A (ratings) | ⬜ | Ratings-development rebuild (expected-stats engine) | `RATINGS_ADJUSTMENT_SPEC §10`; RA-1 keystone + RA-2..12 + rookie; franchise-v1-next; ~70% plumbing present |
+| Lane 4B (prospect) | 🔧 | Prospect-generator finish | `PROSPECT_GENERATION_SPEC §14`; B1–B5/B7/B9 done (mode1), remaining B8/B12/B13/B14/B6 + tracker-copy sync; mode1-v1-b |
+| Lane 4C (scouting) | ⬜ | Scouting v2 (per-tool bands + scout draft) | `SCOUTING_SYSTEM_SPEC §1A.4`; S1–S7; mode1-v1-b; S5 ⇐ B12/B8; S7 breaking schema change |
+| Lane 4D (traits) | ⬜ | Trait gain/loss thresholds | `TRAIT_GAIN_LOSS_THRESHOLD_SPEC`; T-1..7 extend built seams; franchise-v1-next; T-6 ⇐ RA-8 |
+| Lane 4E (DH removal) | ⬜ | Full DH removal (cross-cutting) | `RATINGS_ADJUSTMENT_SPEC §13`; ~9 Position defs + ivEngine.ts:205 + plumbing; oracle-gated; both worktrees |
