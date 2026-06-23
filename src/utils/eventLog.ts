@@ -2170,14 +2170,20 @@ export async function generateBoxScore(gameId: string): Promise<BoxScore | null>
     const isAB = !['BB', 'IBB', 'HBP', 'SF', 'SAC'].includes(event.result);
     if (isAB) batter.ab++;
 
-    // Count hit
-    const isHit = ['1B', '2B', '3B', 'HR'].includes(event.result);
+    // Count hit — ITPHR (inside-the-park HR, UX-049) and GRD (ground-rule double,
+    // GAP-GT-6-D) are hits. Mirrors canonical HIT_RESULTS (gameReplayAudit.ts) and
+    // isHit() in useGameState.ts. Both already count as AB above (not in the non-AB list).
+    const isHit = ['1B', '2B', '3B', 'HR', 'ITPHR', 'GRD'].includes(event.result);
     if (isHit) batter.hits++;
 
     // Other stats
     batter.rbi += event.rbiCount;
     if (event.result === 'BB' || event.result === 'IBB') batter.walks++;
-    if (event.result === 'K' || event.result === 'Kc') batter.strikeouts++;
+    // Strikeouts: K/Kc plus the 'Ꝁ' glyph (UX-048 called-K button; live play collapses
+    // it to 'Kc' at GameTracker.tsx, so a raw 'Ꝁ' is latent today but handled defensively
+    // to match the rest of the codebase) and the dropped-third-strike family (D3K/WP_K/PB_K,
+    // which are batter strikeouts even though he reaches). Mirrors canonical STRIKEOUT_RESULTS.
+    if (['K', 'Kc', 'Ꝁ', 'D3K', 'WP_K', 'PB_K'].includes(event.result)) batter.strikeouts++;
 
     // Line score tracking
     if (event.inning > currentInning) {
