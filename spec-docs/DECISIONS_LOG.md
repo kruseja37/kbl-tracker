@@ -7,6 +7,19 @@
 
 ## June 2026
 
+### 2026-06-22 (attended): SCOUTING v2 — per-tool confidence bands + scout draft (SUPERSEDES the overall-grade model) — RULED → `SCOUTING_SYSTEM_SPEC.md §1A`
+
+**Context:** JK redesigned scouting accuracy. Audit `wzhrggi4m`: current model is a single OVERALL-grade Gaussian fuzz + one IV-range width + a 20-80 overall — NOT per-tool, gameable (jitter centered on truth, 2 scouts average toward it). Scout ENTITY already exists with `accuracyByPosition` (the hook).
+
+**RULED (JK):**
+- **Reveal ACCURATELY:** name, age, primary + secondary position, **archetype** (the §5.6 family — gives shape; requires B12 to persist it on the prospect).
+- **OVERALL grade = a LETTER-GRADE band**, width by confidence: HIGH 3 / MEDIUM 5 / LOW 7 grade-bands; true grade uniform-random in the band.
+- **Each TOOL = a 0–99 numeric band in groups of 10**, width by confidence: HIGH 30 / MEDIUM 50 / LOW 70 pts; true value uniform-random in the band. 5 hitter tools (POW/CON/SPD/FLD/ARM), **7 pitcher (VEL/JNK/ACC + POW/CON/SPD/FLD, no arm)**.
+- **Un-gameable:** uniform-in-band placement (`L ∈ [max(0,true−W), min(true,99−W)]`), deterministic seed; NOT always mid/top/bottom.
+- **Derived overall + auction price** from the banded overall (off the scouted, never true, grade).
+- **ONE scout per team via a SCOUT DRAFT** (pool = 3× teams) BEFORE the MLB draft. Each scout = exactly **2 specialty (HIGH) + 2 blind-spot (LOW) positions, rest MEDIUM**; confidence for a prospect = the scout's tier for that prospect's primary position. Strategic risk: commit the scout pre-MLB-draft; straying from his specialties makes him less useful by farm-draft (intentional fun). One scout ⇒ no triangulation.
+- **⚠ SUPERSEDES** SCOUTING_SYSTEM_SPEC §2.1/§3/§4 + IV §7.4 + AUCTION_DRAFT_SPEC_V2 §3.1/§3.4. **Build must REPLACE the old overall-grade fuzz / single IV-range / 20-80-off-letter, not add alongside** — explicit dead-code cleanup so the old model can't leak (JK directive). Build = S1–S7 (§1A.4); reusable scaffolding = scout entity + accuracyByPosition, seeded RNG, GRADES ladder, PlayerArchetype type, reveal ceremony, secondaryPosition.
+
 ### 2026-06-22 (attended): PROSPECT pitcher batting — varied + real-anchored, decoupled from grade shift (no uniform-worthless pitchers) — RULED → `PROSPECT_GENERATION_SPEC.md §5.7/B14`
 
 **Context:** JK flagged that pitchers must not be generated as uniform-worthless hitters (they bat/run/field in our no-DH franchise; good-hitting/two-way should emerge). Audit `wdsaa71bp` found a real gap:

@@ -1,8 +1,8 @@
 # KBL Scouting System Specification
 
-**Version**: 1.0
-**Status**: Draft
-**Last Updated**: February 2026
+**Version**: 2.0 (per-tool confidence bands + scout draft — see §1A; v1 overall-grade model in §2-§4 SUPERSEDED)
+**Status**: v2 RULED 2026-06-22 (design); build = S-series in §1A.4
+**Last Updated**: 2026-06-22
 
 ---
 
@@ -14,7 +14,43 @@ The scouting system governs how farm and draft prospects are evaluated before th
 
 ---
 
+## 1A. SCOUTING v2 — per-tool confidence bands + scout draft (AUTHORITATIVE; RULED JK 2026-06-22)
+
+> ⚠ **SUPERSEDES the v1 overall-grade model:** this section replaces §2.1, §3 (overall-grade Gaussian fuzz), §4.1-4.2, `IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC §7.4` (single IV-range width), and `AUCTION_DRAFT_SPEC_V2 §3.1/§3.4` (single scouted letter + one 20-80). Those describe a single OVERALL-grade fuzz; v2 is PER-TOOL bands + a derived overall. **Build must REPLACE, not add alongside** — retire the old `scoutProspect` Gaussian overall-grade jitter, the single IV-range-width, and the 20-80-off-the-scouted-letter, so no dead/old-model code leaks or is half-used (JK directive). See the build tasks + cleanup at the end of this section.
+
+**The idea:** a scout reveals a prospect's identity accurately but estimates his skill as **confidence bands** — wide or narrow depending on whether the scout specializes in that prospect's position — with the true value placed **uniformly at random inside each band** so a GM can't learn "it's always the midpoint/top/bottom."
+
+### 1A.1 Revealed ACCURATELY (no estimation)
+Name · age · **primary + secondary position** · **archetype** (the §5.6 generation family — Slugger, Speedster, Defensive-Wizard, …). Archetype gives the GM the *shape* of the skillset; the bands give the *magnitude*. (Requires the B12 archetype layer to PERSIST the chosen family on the prospect so it can be revealed — couples scouting ↔ B12. Secondary position + age already generated; age also needs B8.)
+
+### 1A.2 Estimated as CONFIDENCE BANDS (two scales)
+- **OVERALL grade → a LETTER-GRADE band** on the grade ladder, width by the scout's confidence tier for the prospect's PRIMARY position: **HIGH = 3 grade-bands** (e.g. A→B+), **MEDIUM = 5** (A→B−), **LOW = 7** (A→C). The true overall grade (`scoreSmb4Player` of the true profile) sits **uniform-random** inside the band, clamped to the ladder ends.
+- **Each TOOL → a 0–99 NUMERIC band in groups of 10**, width by the same tier: **HIGH = 30 pts**, **MEDIUM = 50 pts**, **LOW = 70 pts**. Tools: 5 for hitters (POW/CON/SPD/FLD/ARM); **7 for pitchers (VEL/JNK/ACC + POW/CON/SPD/FLD — no arm)**. The true tool value sits **uniform-random** inside the band.
+- **Uniform-in-band placement (un-gameable):** band `[L, L+W]` with `L` drawn uniformly from `[max(0, true−W), min(true, 99−W)]` — guarantees the band contains the true value, stays in [0,99], and the true value's offset is uniform (NOT always centered/top/bottom). Near the 0/99 extremes the feasible offset narrows (unavoidable, acceptable). Same logic on the grade ladder for the overall band. Deterministic (seeded per scout×prospect).
+- **DERIVED overall + auction price:** the overall grade band drives the auction PRICE RANGE (reuse `scoutPriceOpinion`/20-80, now off the BANDED overall, never the true `scoreSmb4Player` numeric). So the auction keeps its value anchor.
+
+### 1A.3 The scout + the SCOUT DRAFT
+- **ONE scout per team** (not 2). Each scout has **exactly 2 specialty positions → HIGH confidence**, **2 blind-spot positions → LOW confidence**, and **every other position → MEDIUM confidence** (the fixed tiering replaces the free-form ±18 specialty/weakness lists). Confidence for a given prospect = the scout's tier for that prospect's **primary position**, applied to all his tool bands + the overall band.
+- **SCOUT DRAFT (new phase):** before the MLB player draft, each team drafts **one** scout from a pool of **3× the number of teams** — enough that a team can find a scout matching an anticipated need. Basic UI TBD.
+- **The strategic risk (the fun):** scouts are committed *before* the MLB draft (and well before the farm draft). If a GM's roster strategy strays from his scout's two specialties, the scout is less useful at farm-draft time — a real pre-commitment gamble.
+- **One scout/team ⇒ no triangulation:** a single read per prospect, so the band widths hold exactly and stay un-gameable (no intersecting multiple reports toward truth).
+
+### 1A.4 Build tasks (S-series) + supersede/cleanup
+- **S1** SCOUT DRAFT phase: 1 scout/team from a 3×-teams pool, before the MLB draft (basic UI). (Scout-hiring persistence reuses `LeagueBuilderScoutProfile`; change `STARTUP_SCOUTS_PER_TEAM` 2→1 + add the draft.)
+- **S2** Fixed specialty structure: exactly 2 HIGH / 2 LOW positions + MEDIUM default (replace free-form `specialties[]`/`weaknesses[]`; the `accuracyByPosition` map becomes a 3-tier map). No DH (position removed).
+- **S3** Per-tool band engine: 0–99 bands 30/50/70 by tier, uniform-in-band (clamp [0,99]), 10-pt groups, deterministic. Per-tool, not overall.
+- **S4** Overall grade band: 3/5/7 letter-steps by tier, uniform-in-band, + derive the auction price range from the banded overall.
+- **S5** Reveal archetype (persist via B12) + secondary position + age into the visible report.
+- **S6** Draft-board UI: per-tool 0–99 bands + overall grade band; **default-covered / long-press-to-reveal** scout report (JK ruling 2026-06-20, never built).
+- **S7 ⚠ SUPERSEDE + DEAD-CODE CLEANUP:** retire the old `scoutProspect` Gaussian overall-grade jitter, the single IV-range width (`IV §7.4`), and the 20-80-off-scouted-letter; re-derive everything from the v2 bands. Mark `SCOUTING_SYSTEM_SPEC §2.1/§3/§4`, `IV §7.4`, `AUCTION_DRAFT_SPEC_V2 §3.1/§3.4` superseded. Breaking schema change (overall→per-tool) across `prospectScoutingDraftEngine.ts`, `leagueBuilderStartupFarmDraft.ts`, `franchiseStartupProspectDraft.ts`, the draft UIs, and tests — audit each for old-model leakage.
+
+**Reusable scaffolding (audit `wzhrggi4m`):** the scout entity + `accuracyByPosition` map, `scoutAccuracy`/`specialtyMatches`, seeded RNG (`hashString`/`randomUnit`/`normal`/`pick`), the `GRADES` ladder + `adjustGrade`/`gradeDistance`, the `PlayerArchetype` type (12 labels), the call-up reveal ceremony + leak-discipline, generated `secondaryPosition`.
+
+---
+
 ## 2. Rating Visibility
+
+> ⚠ **SUPERSEDED by §1A** (v2 per-tool bands). Retained for history only.
 
 ### 2.1 Farm Prospects (Pre-Call-Up)
 
@@ -44,6 +80,8 @@ function callUpProspect(prospect: FarmPlayer): MLBPlayer {
 ---
 
 ## 3. Scout Accuracy
+
+> ⚠ **SUPERSEDED by §1A** — the single overall-grade Gaussian fuzz (`σ=(100−accuracy)/22`, ±4 letter steps) is replaced by per-tool 0–99 bands + an overall letter-grade band, with a fixed 2-high/2-low/medium specialty tiering. The per-position `accuracyByPosition` substrate is reused; this §3 math is retired.
 
 ### 3.1 Accuracy by Position
 
