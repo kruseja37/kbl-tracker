@@ -67,12 +67,26 @@ describe('fameModel L6a pure engine', () => {
     expect(reset.wasNegative).toBe(false);
   });
 
-  test('WAR legitimacy floor gravity pulls Heat toward the WAR level', () => {
+  test('WAR legitimacy floor gravity lifts Heat toward the floor but never lowers it', () => {
     const quietStarHeat = applyWarLegitimacyGravity(0, 'elite');
     const overexposedLowMeritHeat = applyWarLegitimacyGravity(20, 'low');
 
     expect(quietStarHeat).toBeGreaterThan(0);
-    expect(overexposedLowMeritHeat).toBeLessThan(20);
+    expect(overexposedLowMeritHeat).toBe(20);
+  });
+
+  test('WAR legitimacy gravity never decreases Heat across merit and raw floor inputs', () => {
+    const lowMeritAtOrAboveFloor = applyWarLegitimacyGravity(20, 'low');
+    const eliteMeritBelowFloor = applyWarLegitimacyGravity(0, 'elite');
+    const rawFloorBelowCurrent = applyWarLegitimacyGravity(15, 5);
+    const rawFloorAboveCurrent = applyWarLegitimacyGravity(5, 15);
+
+    expect(lowMeritAtOrAboveFloor).toBe(20);
+    expect(eliteMeritBelowFloor).toBeGreaterThan(0);
+    expect(eliteMeritBelowFloor).toBeLessThanOrEqual(FAME_TUNING.warGravity.meritHeatTarget.elite);
+    expect(rawFloorBelowCurrent).toBe(15);
+    expect(rawFloorAboveCurrent).toBeGreaterThan(5);
+    expect(rawFloorAboveCurrent).toBeLessThanOrEqual(15);
   });
 
   test('fame-vs-merit classifies snub and bust', () => {

@@ -168,7 +168,7 @@ export function applyWarLegitimacyGravity(
     : config.warGravity.meritHeatTarget[warJustifiedHeatOrMerit];
 
   return clampAndRoundHeat(
-    currentHeat + ((targetHeat - currentHeat) * config.warGravity.strength),
+    currentHeat + Math.max(0, (targetHeat - currentHeat) * config.warGravity.strength),
     config,
   );
 }
