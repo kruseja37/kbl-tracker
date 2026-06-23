@@ -18321,3 +18321,34 @@ FORMAT: (1) every changed file + total count; (2) each change referencing V12 / 
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: B0.2-G1-FREEZE-WRITER ===== -->
+
+<!-- ===== START CONTRACT: A0.1-DH-FRANCHISE-SEAL ===== -->
+## CONTRACT A0.1 — DH FRANCHISE-SEAL (Branch A / `codex/franchise-v1-next` / worktree `/Users/johnkruse/Projects/kbl-tracker`)
+ROUTE: Codex gpt-5.5 | xhigh reasoning effort.
+
+You are a precise TypeScript builder. Work ONLY in `/Users/johnkruse/Projects/kbl-tracker` (branch `codex/franchise-v1-next`).
+
+GOAL:
+Guarantee **no DH ever appears in a Franchise (Mode 1/2) game** — regular season OR playoffs — WITHOUT removing the `'DH'` type (full type removal is deferred post-v1). Exhibition + Elimination keep DH (they are isolated side-modes — DO NOT touch their DH). This is a leak-seal, not a type purge.
+
+SOURCE OF TRUTH (JK ruling 2026-06-22: "DH removal only needs to apply to Franchise Mode 1/2, as long as nothing leaks into the franchise" + the Captain leak audit, embedded): the franchise DH funnels through exactly (1) one DH player and (2) the `season.useDH` config value that every franchise game-launch reader consults.
+
+CONSTRAINTS — edit ONLY (verify each at source; line numbers may drift):
+- `src/data/players/mlb/yankeesPlayers.ts` (~:70, Ron Charles `nyy-charles`): `primaryPosition: 'DH' → 'LF'` (the ONLY stock DH player). His `secondaryPosition` is already `'LF'` → drop/replace the now-duplicate secondary.
+- `src/utils/franchiseInitializer.ts`: where the franchise config is persisted (`saveFranchiseConfig(storedConfig)` ~:651) and where the rules snapshot is built (`useDH: config.season.useDH` ~:143), **force the persisted franchise config's `season.useDH = false` for v1** (override the input). This is the single source — `resolveFranchiseGameUseDH` (`FranchiseHome.tsx:261`, reads `season.useDH ?? false`), the rules snapshot, `FranchiseHome.tsx:675`, and `usePlayoffData.ts:495` all read `season.useDH`, so forcing it false at persist seals every franchise game path.
+- `src/src_figma/app/pages/FranchiseHome.tsx` (~:937): `const playoffUseDH = playoffData.playoff?.useDH ?? true` → `?? false` (a REAL latent bug — franchise playoffs default DH ON; fix the default so a missing playoff flag can't re-introduce DH).
+- A test (extend the franchise-init/season test surface): a franchise created with `season.useDH = true` in the input → persisted `season.useDH` is `false` AND `resolveFranchiseGameUseDH` returns `false`; assert Ron Charles' `primaryPosition === 'LF'`.
+- Any EXISTING franchise/playoff test that asserts a franchise USES DH (lineup-with-DH) → update to the new no-DH expectation.
+
+DO NOT TOUCH: the `'DH'` member of any `Position`/`LineupPosition`/`DraftPosition` type union (LEAVE it inert — full type removal is post-v1); `src/engines/ivEngine.ts`, `salaryCalculator.ts`, `fwarCalculator.ts` DH constants; the frozen oracle `spec-docs/reference/iv_oracle.json`; `src/src_figma/app/pages/ExhibitionGame.tsx` + `EliminationSetup.tsx`/`EliminationHome.tsx` + `eliminationManager`/`eliminationRosterStorage` (isolated side-modes — KEEP their DH); the `/Users/johnkruse/Projects/kbl-mode1-b` worktree; any `TRACKER_DB_VERSION`/store pin (no DB change).
+
+MAKE-OR-BREAK: a franchise created with a DH-on input ends up DH-OFF everywhere it matters — persisted `season.useDH===false`, `resolveFranchiseGameUseDH()===false`, no franchise OR playoff game builds a `lineupWithDH`; Ron Charles is `LF`; exhibition + elimination DH behavior is byte-unchanged.
+
+STOP-IF (escalate, don't paper over): (a) forcing `season.useDH=false` surfaces a FRANCHISE consumer that genuinely needs DH=true at runtime (a real franchise DH code path); (b) the test fallout exceeds ~10 files (a surprisingly wide DH-in-play assumption — quote it); (c) any edit would touch a `'DH'` type union, the oracle, or require a trackerDb bump.
+
+GATE: `NODE_ENV= npx tsc -b` exit 0 + the FULL suite (`NODE_ENV= npx vitest run`) ZERO NEW REDS (characterized: `wpaRuntimeBoundary` + `GameTrackerLaunchState` solo-passing order-flake) + the new franchise-no-DH test. Branch-only commit, NEVER push.
+
+FORMAT: (1) every changed file + total count; (2) each change referencing the ruling/seal; (3) gate output pasted (tsc + suite counts + the seal test); (4) "A0.1 DH franchise-seal complete" OR "BLOCKED: <exact reason>".
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: A0.1-DH-FRANCHISE-SEAL ===== -->
