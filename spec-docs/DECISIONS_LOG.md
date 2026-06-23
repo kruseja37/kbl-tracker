@@ -7,6 +7,17 @@
 
 ## June 2026
 
+### 2026-06-23 (attended): FAME→MORALE taps (A1.2 legs) — §20.5 = CHANGE-ONLY, §20.6 = CHANNELS A+B — RULED
+
+**Context:** A1.2 (the fame→morale wiring, an L-SIM blocker) was SPLIT after grounding (workflow `wf_023e81ed-68a`): **leg-a** = the fame WAR-floor gravity patch (fork-free, ratified continuous/upward-only — DONE, commit `bc24dff4`); **leg-b** = the §20.5 fame→player-morale tap; **leg-c** = the §20.6 fame→fan-morale producers. The two later legs each carried a soul-layer fork the grounding surfaced; JK ruled both (attended).
+
+**RULED (JK):**
+- **§20.5 fame→player-morale signal = CHANGE ONLY (per-game `heatDelta`), NOT level+change.** The tap reacts to fame RISING/FALLING (a rising unknown gets a boost; a fading star takes a hit), scaled by the existing personality + hidden-modifier multipliers (`composeMoraleConsequence` applies the tilt for free). JK chose the leaner model over the spec-faithful "level + change" recommendation. ⚠ This INTENTIONALLY DROPS, for v1, the §20.5 prose "chronic low fame is a standing morale drag for an Egotistical player" (a fame-LEVEL standing term) → **deferred to v1.1.** **SPEC FOLLOW-UP OWED (purge-on-supersede):** annotate `FRANCHISE_V1_LIVING_SEASON_SPEC.md §20.5` "v1 = change-only; standing-level drag deferred" when leg-b is authored. Producer placement = inside `persistDarkFameRecordsForCompletedGame` (heatDelta cheaply available there). Plumbing default taken: extend the `MoraleMatrixEvent` `kind:'fame'` variant with a typed `heatDelta` field (cheap, in-pattern — mirrors relationship's `chargedMatchupResult`).
+- **§20.6 fame→fan-morale scope = CHANNELS A + B (both).** **Channel A** = fame-as-VOLUME amplifies the existing per-GAME crowd swing (`createGameMoraleEvent` finalImpact — there is no per-play fan-morale pipeline in v1), attributed to the game's STANDOUT (hero/goat), × the already-built designation tilt (`applyDesignationSwingTilt`: Fan-Favorite ups hit harder, Albatross downs hit harder). **Channel B** = a steady per-game warmth drip for a team's HELD Fan-Favorite (`computeDesignationSteadyFanSentiment`, engine exists but orphaned), gated `isFranchisePhase2MoraleEnabled`, idempotent via a game-keyed sourceEventId; Albatross steady stays 0 (the §13 flashpoint system owns that irritation — double-count guard). Channel C (designation→fame +2/−1 naming seed, §20.4) already built (L7b), OUT of A1.2.
+- **All §20.5/§20.6 magnitudes** (gravity strength, channel weights, the fame-volume curve, decay) stay §16 sim-tune placeholders — L-SIM owns them.
+
+**Build:** A1.2-leg-a DONE (`bc24dff4`, upward-only gravity, full-suite zero-new-reds). **leg-b** (§20.5 change-only morale tap) + **leg-c** (§20.6 A+B fan producers) = the next fame tickets, build-DARK behind the Phase-2 morale/fame flags. Grounding open sub-items for the leg-b/leg-c contracts: §20.5 needs new `kind:'fame'` event plumbing + a builder/caller; §20.6 Channel A needs the fame-volume multiplier defined (new) + the standout-attribution wired onto the per-game producer.
+
 ### 2026-06-22 (attended): SCOUTING v2 — per-tool confidence bands + scout draft (SUPERSEDES the overall-grade model) — RULED → `SCOUTING_SYSTEM_SPEC.md §1A`
 
 **Context:** JK redesigned scouting accuracy. Audit `wzhrggi4m`: current model is a single OVERALL-grade Gaussian fuzz + one IV-range width + a 20-80 overall — NOT per-tool, gameable (jitter centered on truth, 2 scouts average toward it). Scout ENTITY already exists with `accuracyByPosition` (the hook).
