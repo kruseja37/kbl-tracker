@@ -107,9 +107,31 @@ Gaussian `scoutProspect` (S7). Consumer arrives at S5.
 **Gate (independent):** `NODE_ENV= tsc -b` → 0 · full suite **8078 pass / 1 fail (500 files)** = sole `wpaRuntimeBoundary`
 = **ZERO NEW REDS** (+3 tests). No `trackerDb` bump; no oracle change.
 
-**Next:** **S4** — overall grade BAND (HIGH=3 / MEDIUM=5 / LOW=7 letter-steps on the grade ladder, uniform-in-band) +
-DERIVE the auction price range from the banded overall (reuse `scoutPriceOpinion`/20-80 off the BANDED overall, never the
-true `scoreSmb4Player`). ⚠ S4 starts replacing the old Gaussian `scoutedGrade` → likely a real fork (where the banded
-overall lives + the price-range rewire) — ground + surface before building. Then S5 (reveal archetype/age/traitCount into
-the report DTO — saved-shape) → S6 (draft-board UI, default-covered/long-press) → S7 (supersede + cleanup, LAST). All
-serialize on the generator/scout files. (RB-13b + RB-18 also remain on the Branch-B backlog.)
+### ✅ S4 PART 1 — overall grade-band engine (pure, build-dark) — COMPLETE (`c10139c5`, branch-only, ZERO NEW REDS)
+
+**JK ruling 2026-06-23:** "band engine now, decide price later" — S4 SPLIT into part 1 (band engine, built) + part 2
+(auction price re-anchor, DEFERRED, see the open decision below).
+
+**Built (Codex `S4-OVERALL-BAND` → Opus-audited):** `scoutOverallGradeBand(trueGrade, tier, seed) → { best, worst }` on the
+10-grade prospect ladder (A..D), width by the scout's fixed tier (HIGH=3 / MEDIUM=5 / LOW=7 grade positions, §16-tunable),
+uniform-in-band, clamped to ladder ends. Auditor-verified containment `best ≤ true ≤ worst` by case analysis (incl.
+A/D extremes; `A`/high → `A..B+` matches the spec example). Build-DARK; consumer at S5. 2 files, pure-additive.
+
+**Gate (independent):** `NODE_ENV= tsc -b` → 0 · full suite **8081 pass / 1 fail (500 files)** = sole `wpaRuntimeBoundary`
+= **ZERO NEW REDS** (+3 tests). No `trackerDb` bump; no oracle change.
+
+### ⚠ OPEN DECISION — S4 PART 2: the auction price anchor (DEFERRED by JK 2026-06-23)
+**The conflict:** §1A.2 says "the overall grade BAND drives the auction PRICE RANGE." But the **shipped RB model** prices
+off the prospect's TRUE IV blurred by scout accuracy + the RB-1b chemistry-fit multiplier —
+`scoutRangeForProspect` (`LeagueBuilderFarmAuctionDraft.tsx:114-123`) = `perceivedValueRange(scoutPriceOpinion({trueIV},
+accuracy) × chemFit, accuracy)`. The scouted GRADE is shown (`scoutGradeDisplay`) but does NOT drive the price. Re-anchoring
+the price to the banded grade reworks reviewed RB value/chemistry code AND feeds prospect SALARY (`franchiseSalary.ts:108`
+`safeRoundFromScoutedGrade`) + the persisted `scoutedGrade` (`franchisePlayerProfile`). **Needs a JK price-anchor design
+ruling before any build** — how band-grade pricing reconciles with the trueIV+chemFit model, and what happens to salary.
+(Surfaced + deferred this session; JK chose to build the band engine first.)
+
+**Next:** **S5** — reveal: wire the S3 tool bands + the S4 overall band + archetype (B12) + age (B8) + a `traitCount` (0/1/2,
+identities hidden) into the visible report DTO (`VisibleSafeProspectReport` — SAVED-SHAPE; replaces `trait1`/`trait2` names).
+This is where the build-dark band engines get their first consumer — likely a real saved-shape fork to surface. Then S6
+(draft-board UI, default-covered/long-press) → S7 (supersede + cleanup + the S4-part-2 price re-anchor, LAST). All serialize
+on the generator/scout files. (RB-13b + RB-18 also remain on the Branch-B backlog.)
