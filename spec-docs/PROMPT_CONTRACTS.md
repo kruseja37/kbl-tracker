@@ -18704,6 +18704,65 @@ FORMAT: (1) every changed file + line counts (enumerate ALL — incl. the test/i
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: A1.5a-FAME-FLUCTUATION-FIX ===== -->
 
+<!-- ===== START CONTRACT: A1.5b-CARRY-CONVERTER ===== -->
+## CONTRACT A1.5b — DETERMINISTIC CARRY CONVERTER (pure engine, build-dark) (Branch A / `codex/franchise-v1-next` / worktree `/Users/johnkruse/Projects/kbl-tracker`)
+ROUTE: Codex gpt-5.5 | xhigh reasoning effort.
+> **CAPTAIN-GROUNDED 2026-06-23 (workflow `wf_d15a19b4`, 6 source-readers + adversarial synthesis).** Every anchor re-read from source. KEY FINDING: the replace-target trio is fully ORPHANED (only `zoneCQSpray.test.ts` references it). The coordinate space is ANISOTROPIC (`svgToNormalizedPoint = svgX/2, svgY/1.2`) — a naive `atan2` on normalized coords is WRONG. The drawn SVG field markers currently DRIFT from the polar model (drawn CF fence → r≈0.909 not 1.0; drawn foul corners 221°/319° vs model 228°/312°; drawn IF diamond r≈0.37–0.50 not 0.45). **SCOPE RULING (Captain, AUTH-4): A1.5b is the PURE build-dark ENGINE only, calibrated to the MODEL canon; the SVG-marker re-derivation that the field-leak gate requires (a live `EnrichmentPanel.tsx` UI change needing browser sign-off) is DEFERRED to A1.5b-2 and is a PRECONDITION before this converter is wired live (A1.5d/RA-2).**
+
+You are a precise TypeScript builder. Work ONLY in `/Users/johnkruse/Projects/kbl-tracker` (branch `codex/franchise-v1-next`). This ticket adds a PURE, deterministic, storage-free engine with NO live consumer (build-dark). Anchor every claim on source you re-read; do not infer.
+
+GOAL:
+Add a deterministic engine that converts a batted ball's normalized landing point + the park's wall distances into a park-adjusted CARRY in feet, for AIR BALLS ONLY. It replaces the random schematic `estimateDistance` (the orphaned `fieldZones.ts` trio uses `Math.random`). HR distance is USER-ENTERED and must NEVER be inferred by this engine.
+
+SOURCE OF TRUTH (read first): `spec-docs/STADIUM_ANALYTICS_SPEC_V2.md §2` ("the shared carry converter", ~lines 31-40) + `spec-docs/RATINGS_MEASUREMENT_WORKSHEET.md §2/§9` (carry × exit-velo → Power, air-balls only) + `DECISIONS_LOG.md` fork #6 (the polar model + the field-leak gate). Re-read these + the anchors below before building.
+
+GROUNDED ANCHORS (re-read to confirm, then build):
+- `src/data/fieldZones.ts:735-809` — the REPLACE-TARGET trio `estimateDistance`/`estimateAngle`/`createStadiumBattedBallEvent` (random/schematic). ORPHANED: zero production callers; only `src/src_figma/__tests__/engines/zoneCQSpray.test.ts` references them. **Do NOT delete or edit `fieldZones.ts` in this ticket** (deleting it would break `zoneCQSpray.test.ts`; that cleanup is deferred to A1.5d when the real wiring lands). A1.5b is PURELY ADDITIVE.
+- `src/data/parkLookup.ts:5-14` — `interface ParkDimensions { name; lf; lfWall; cf; cfWall; rf; rfWall }` (only 3 fence distances lf/cf/rf + categorical `WallHeight`; NO per-angle fence). `getParkByName` / `getMinFenceDistance(park, dir)` at `:34/:48` are LIVE in 6+ call sites — do NOT change their signatures; the converter is an ADDITIVE new reader.
+- `src/src_figma/app/components/EnrichmentPanel.tsx` — the polar model + transform (READ-ONLY here; the converter must NOT import from this `.tsx` UI file — replicate the constants as pure engine constants): `CX=100, CY=115, MAX_R=110` (~:253-255); `svgToNormalizedPoint = (svgX/2, svgY/1.2)` rounded+clamped[0,100] (~:302-307); polar markers r=0 plate / r=0.45 IF-OF / r=1.0 fence (~:227); fair fan `FAN_START=228°, FAN_END=312°` (~:259-260), `getFairDirectionFromAngle` buckets that span into Left/Left-Center/Center/Right-Center/Right (~:437-450); 270° = CF.
+- `src/utils/eventLog.ts:407-408` (`enrichment.fieldLocation?: {x;y;zone?}`) + `:436` (`enrichment.hrDistance?: number`) — the converter's inputs are ALREADY persisted on `AtBatEvent.enrichment`; A1.5b captures/persists NOTHING new.
+
+EXACT ENGINE DESIGN (implement in a NEW file `src/engines/carryConverter.ts`):
+Pure signature (no `Math.random`, no IndexedDB, no Date, no store, no React):
+```
+computeBattedBallCarry(input: {
+  ballLocation: { x: number; y: number };  // the PERSISTED normalized fieldLocation (svgToNormalizedPoint space, ~0..100, ANISOTROPIC)
+  park: ParkDimensions;
+  outcome: string;            // result code: 'HR' | '1B' | '2B' | '3B' | out, etc.
+  outCode?: string;           // when an out: 'GO'|'LO'|'FO'|'PO'|'FLO'
+  hrDistance?: number | null; // user-entered; used ONLY for HR, never computed
+}): { carryFeet: number | null; eligible: boolean; source: 'computed'|'user-entered'|'none'; r: number; direction: 'Left'|'Left-Center'|'Center'|'Right-Center'|'Right'|'Foul'; reason: string }
+```
+1. **Anisotropic inversion (LOAD-BEARING — the #1 silent-corruption trap):** home plate in normalized space = `(CX/2, CY/1.2) = (50, 95.8333…)`. `dx = (x - 50) * 2`; `dy = (y - 95.8333) * 1.2` (use `CY/1.2` exactly, not 96); `radiusPx = Math.hypot(dx, dy)`; **`r = radiusPx / MAX_R`** (MAX_R=110; r=0 plate, 0.45 IF/OF, 1.0 fence — MODEL canon). Define a NAMED constant for the fence reference (`FENCE_REFERENCE_RADIUS_PX = MAX_R = 110`) so the calibration is explicit + tunable. Fair balls have `dy < 0`.
+2. **Angle → UI degrees:** `uiDeg = (Math.atan2(dy, dx) * 180/Math.PI + 360) % 360` → fair balls land in ≈[225,315], matching `FAN_START/END = 228/312` (straight-up = 270 = CF). **FOUL = `uiDeg` outside [228, 312]** → `{eligible:false, direction:'Foul', source:'none', carryFeet:null}`.
+3. **Direction bucket** (replicate `getFairDirectionFromAngle`'s 5 even buckets across [228,312]): Left / Left-Center / Center / Right-Center / Right.
+4. **theta → fence distance (Fork #1 default = LINEAR by angle across 3 anchors):** anchors `lf @ 228°`, `cf @ 270°`, `rf @ 312°`; for `uiDeg∈[228,270]` lerp lf→cf by `(uiDeg-228)/42`, for `[270,312]` lerp cf→rf by `(uiDeg-270)/42`.
+5. **Classification + carry:**
+   - `outcome === 'HR'` → `{ carryFeet: hrDistance ?? null, eligible: hrDistance != null, source:'user-entered', reason:'hr-user-entered' }`. **NEVER compute HR distance.**
+   - GROUND (`outCode==='GO'`) or POP (`outCode==='PO'`) or foul (`outCode==='FLO'` or out-of-fan) or **IF-landing `r < 0.45`** → `{ carryFeet: null, eligible:false, source:'none' }` (grounder-carry = 0; r<0.45 IF/OF split).
+   - AIR BALL otherwise (out `outCode∈{'LO','FO'}`, OR a hit landing at `r ≥ 0.45` in fair bounds) → `carryFeet = Math.min(r, 1.0) * fenceDistanceAtAngle` (Fork #5 cap: a non-HR air ball cannot carry past the wall), `source:'computed', eligible:true`.
+   Take air/ground from the EXPLICIT `outCode`/`outcome` (Fork #6) — do NOT infer air vs ground from `r` alone; `r<0.45` is only the IF/OF tiebreaker for hits.
+Return a small result object (carryFeet/eligible/source/r/direction/reason) — NOT the old 11-field `StadiumBattedBallEvent` (orphaned; do not preserve it).
+
+FIELD-LEAK GATE — encode as LANDMARK UNIT TESTS in `src/engines/__tests__/carryConverter.test.ts` (this IS the gate; JK's historical correctness problem). Construct known points by INVERTING the model (place a point at a chosen pixel radius/angle, run it through the engine, assert r/direction/carry):
+- model fence straight-up (radiusPx = MAX_R = 110, uiDeg=270) → `r ≈ 1.0`, direction `Center`, computed carry ≈ `park.cf`.
+- IF boundary (radiusPx = 0.45·MAX_R) → `r ≈ 0.45`; a hit there → `eligible:false` (IF-landing).
+- LF / RF foul lines (uiDeg = 228 / 312 exactly = fair edge) classify as the edge fair direction; just-outside (227 / 313) → `Foul`, ineligible.
+- HR with `hrDistance=445` → `carryFeet=445, source:'user-entered'`; HR with `hrDistance=null` → `eligible:false`. Confirm NO code path computes a HR distance.
+- **DOCUMENTED-DRIFT test (pins the current art mismatch so it's tracked, NOT hidden):** invert the *drawn* CF-fence apex pixel `(svg 100,15)` → assert `r ≈ 0.909` (NOT 1.0), with a comment: "field-leak: drawn fence ≠ model fence; A1.5b-2 (deferred UI re-derivation) fixes the drawn markers; until then this converter is build-dark and unwired."
+- a round-trip/anisotropy test: a point pure-left vs pure-up gives different uiDeg buckets (proves the `*2`/`*1.2` correction is applied).
+
+STOP-IF: the work seems to require editing `EnrichmentPanel.tsx` (the SVG markers — that is the DEFERRED A1.5b-2, out of scope), `fieldZones.ts` (orphan deletion deferred), `parkLookup.ts` signatures, any store/`FranchiseSprayChartRow`/`TRACKER_DB_VERSION`, or wiring the converter into any consumer (none exists yet). A correct STOP-and-report is GOOD.
+
+CONSTRAINTS — create/edit ONLY: NEW `src/engines/carryConverter.ts` + NEW `src/engines/__tests__/carryConverter.test.ts`. Import `ParkDimensions` as a TYPE from `../data/parkLookup` (or reuse `getMinFenceDistance` if it cleanly gives a per-direction distance — but prefer the explicit lf/cf/rf lerp). Do NOT import from any `.tsx`. NO `TRACKER_DB_VERSION` bump, NO saved-shape change, NO wiring, NO UI touch. The frozen `iv_oracle.json` is READ-ONLY. Branch-only — do NOT commit or push (the Captain commits).
+
+GATE (run yourself, report output): `NODE_ENV= npx tsc -b` exit 0 + `NODE_ENV= npx vitest run src/engines/__tests__/carryConverter.test.ts` all green + `NODE_ENV= npx vitest run src/src_figma/__tests__/engines/zoneCQSpray.test.ts` STILL green (proves A1.5b didn't touch the orphan trio) + `git diff --stat spec-docs/reference/iv_oracle.json` empty. (Pure isolated new file → no full-suite/transitive-mock risk; the Captain re-runs tsc + the new test independently.)
+
+FORMAT: (1) the 2 new files + line counts; (2) the engine design as built, referencing STADIUM_V2 §2 / RATINGS §9 / the forks' defaults; (3) the field-leak gate landmark tests + the documented-drift test; (4) gate output pasted; (5) "A1.5b carry converter complete" OR "BLOCKED: <reason>".
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: A1.5b-CARRY-CONVERTER ===== -->
+
 <!-- ===== CONTRACT SKELETONS (Captain authors fully at dispatch from the cited specs — decision-complete, all forks resolved) ===== -->
 <!-- A1.5b-CARRY-CONVERTER: src/engines/ deterministic ballLocation{x,y}+ParkDimensions→park-adjusted carry feet, air-balls-only. HR distance USER-ENTERED never inferred. The spray ALREADY uses a marker-anchored POLAR model (EnrichmentPanel.tsx:227 + SPRAY_ZONE_LAYOUTS): r=0 home plate, r=0.45 IF/OF boundary, r=1.0 fence, foul lines = angular fair-bounds. So: IF/OF split = r<0.45 vs >0.45 (NOT a guessed radius); carry ≈ r × the park's fence distance in that direction (LF/CF/RF from ParkDimensions); grounder/IF-landing carry=0; foul = outside the fair angular bounds. REPLACE random estimateDistance/estimateAngle/createStadiumBattedBallEvent (fieldZones.ts:735-809). **FIELD-LEAK GATE (JK — historical problem): VERIFY the drawn field image's markers (rendered IF arc, fence, foul lines) ALIGN with the polar model + the svgToNormalizedPoint/viewBox transform (a tap "at the fence" must map to r≈1.0) BEFORE trusting any distance — confirm marker→coordinate fidelity, no drift across viewBox scaling.** Source: RATINGS_MEASUREMENT_WORKSHEET §2/§9 + STADIUM_V2 §2 + DECISIONS_LOG fork #6. Build-dark, no DB bump. -->
 <!-- A1.5c FIELD-LEAK WATCH: the *ByPosition fielding-range aggregator credits the play to the SPRAY-INFERRED fielder — guard the documented historical misattribution-through-substitution/position-change bug (GAMETRACKER_INVARIANTS_FAILURE_MODES_AUDIT.md:127): resolve the fielder from the play's logged position-context at event time, not a late re-map after subs. -->
