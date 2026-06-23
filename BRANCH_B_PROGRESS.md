@@ -5,8 +5,9 @@
 > At session end, JK relays the completion summary (tickets + SHAs + suite counts) to the
 > Branch-A captain for central logging + the eventual lane-merge.
 
-**Branch baseline:** sole characterized fail = `wpaRuntimeBoundary` (the suite has order-flakes;
-re-run any suspected new red SOLO before judging it real). Pre-thread HEAD = `7d817965` (B12).
+**Branch baseline:** characterized hard fail = `wpaRuntimeBoundary`; **order-flakes** (solo-passing, fail only in
+full-suite order — NOT regressions): `AwardsWatchlist` (confirmed solo 2/2 at S5), and per CURRENT_STATE
+`GameTrackerLaunchState`. Re-run any suspected new red SOLO before judging it real. Pre-thread HEAD = `7d817965` (B12).
 
 ---
 
@@ -130,8 +131,31 @@ the price to the banded grade reworks reviewed RB value/chemistry code AND feeds
 ruling before any build** — how band-grade pricing reconciles with the trueIV+chemFit model, and what happens to salary.
 (Surfaced + deferred this session; JK chose to build the band engine first.)
 
-**Next:** **S5** — reveal: wire the S3 tool bands + the S4 overall band + archetype (B12) + age (B8) + a `traitCount` (0/1/2,
-identities hidden) into the visible report DTO (`VisibleSafeProspectReport` — SAVED-SHAPE; replaces `trait1`/`trait2` names).
-This is where the build-dark band engines get their first consumer — likely a real saved-shape fork to surface. Then S6
-(draft-board UI, default-covered/long-press) → S7 (supersede + cleanup + the S4-part-2 price re-anchor, LAST). All serialize
-on the generator/scout files. (RB-13b + RB-18 also remain on the Branch-B backlog.)
+### ✅ S5 — reveal archetype/secondary/traitCount, hide trait names — COMPLETE (`7eceaa5d`, branch-only, ZERO NEW REDS)
+
+**JK ruling 2026-06-23:** "reveal-fields only" (the bands stay build-dark for S6). **Finding:** the report turned out
+CONTAINED — `VisibleSafeProspectReport` is COMPUTED (the recomputed board), not persisted with traits; the persisted
+franchise `prospectReport` stores NO traits, and the live `trait1`/`trait2` consumers (roster/lineup/GameTracker/
+`playerDatabase`) read the PLAYER's real traits (revealed at call-up) — all untouched. So §1A.1b was a contained LIVE
+DTO+UI change, no migration.
+
+**Built (Codex `S5-REVEAL-FIELDS-V2` → Opus-audited):** on `VisibleSafeProspectReport` (+ the 2 board types that extend it)
+— replaced the leaked `trait1`/`trait2` NAMES with `traitCount` (0/1/2), added `archetypeFamily` + `secondaryPosition`.
+Sites: the DTO + `visibleReportFromPlayer` + `buildBoardForSession`'s 2 board literals + the `LeagueBuilderDraft` prospect
+card (Traits <count> / Archetype / Secondary). 6 files.
+
+**Iteration trail (triangle working — 3rd productive Codex BLOCK this session):** V1 BLOCKED — its grep found the 2 board
+literals in `buildBoardForSession` (extending the DTO) my grounding missed; V2 = the complete 6-file surface. Reinforces
+[[kbl-count-copy-reconciliation-full-surface]]: sweep EVERY object-literal construction of a DTO-extending type, not just
+the named constructor.
+
+**Gate (independent):** `NODE_ENV= tsc -b` → 0 (the safety net — fails if any consumer still read the removed report
+fields) · full suite **8080 pass / 2 fail** = `wpaRuntimeBoundary` (characterized) + `AwardsWatchlist` (order-flake,
+confirmed solo-passing 2/2) = **ZERO NEW REDS**. No `trackerDb` bump; no oracle change.
+
+**Next:** **S6** — draft-board UI: render the S3 per-tool 0–99 bands + the S4 overall grade band on the prospect card,
+**default-COVERED / long-press-to-reveal** (reuse the existing `LongPressReveal` from RB-11). This is where the build-dark
+S3/S4 band engines get their FIRST consumer (wire `scoutToolBands` + `scoutOverallGradeBand` into the board, gated by the
+scout's tier). Then S7 (supersede + dead-code cleanup + the S4-part-2 price re-anchor, LAST — needs the parked price
+decision). All serialize on the generator/scout files. (RB-13b + RB-18 also remain on the Branch-B backlog; the S4-part-2
+price-anchor open decision above is still pending JK.)
