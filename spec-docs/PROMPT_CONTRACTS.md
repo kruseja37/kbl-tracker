@@ -18253,3 +18253,36 @@ FORMAT: (1) every changed file path (incl. each test) + the total changed-file c
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: A0.1-DH-REMOVAL ===== -->
+
+<!-- ===== START CONTRACT: B1.1-B8-AGE ===== -->
+## CONTRACT B1.1 — B8 PROSPECT AGE (Branch B / `codex/mode1-v1-b` / worktree `/Users/johnkruse/Projects/kbl-mode1-b`)
+ROUTE: Codex gpt-5.5 | xhigh reasoning effort.
+
+You are a precise TypeScript builder. Work ONLY in `/Users/johnkruse/Projects/kbl-mode1-b` (branch `codex/mode1-v1-b`). ⚠ The spec docs in THIS worktree are STALE — the authoritative §10 ruling is embedded inline below; ground only the CODE anchors at source here.
+
+GOAL:
+Replace the hard-coded prospect age (`PROSPECT_DRAFT_AGE = 18`) with a real seeded, band-weighted, skew-young age draw, and reveal age in the farm-auction draft UI. RNG-SAFE: must NOT perturb any existing ratings/traits/chemistry/position draw.
+
+SOURCE OF TRUTH (PROSPECT_GENERATION_SPEC §10, RULED JK 2026-06-22, REVERSES the prior "drop age" default — embedded verbatim):
+- Generate a real age, WIDE band, skew young. Draw over the 5 age bands **18–21 ≈ 40% · 22–24 ≈ 30% · 25–31 ≈ 18% · 32–35 ≈ 8% · 36+ ≈ 4%** (uniform WITHIN a band; full envelope ~18–42). So ~70% ≤24 yet ~12% are 32+. **Deterministic/seeded. Band-weighted, NOT a clamped normal** (avoid piling everyone at 18). Band weights are §16 sim-tune placeholders (define as ONE tunable const block).
+- Age is **INDEPENDENT of ratings/traits/grade** — NO age term anywhere in generation; stars AND busts at any age band. Do NOT correlate age with grade.
+- `yearsInMinors` stays dropped.
+
+CONSTRAINTS — edit ONLY (verify each at source in this worktree; line numbers may drift):
+- `src/utils/prospectScoutingDraftEngine.ts`: replace the `const PROSPECT_DRAFT_AGE = 18` (~:416) + its stale gate comment (~:415) with the seeded band-weighted draw; replace the consumer `age: PROSPECT_DRAFT_AGE` (~:1118) with the drawn age. The `age` field already exists on the DTOs (`VisibleSafeProspectReport` ~:160, `LeagueBuilderProspectPlayerDto` ~:179) and `age: player.age` (~:1085) — no type change.
+- `src/src_figma/app/components/DraftFlow.tsx`: fix the dummy ages (`age: randBetween(19, 22)` ~:490, and the sibling ~:517) to the real draw / a sane value consistent with §10.
+- `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx`: REVEAL age — add an Age line/column to the visible prospect report (age is always-visible per §9 R3, like position; NOT behind the scout-privacy long-press).
+- A distribution test (extend the existing prospect-gen test file) asserting the generated class's age histogram tracks the band weights (~±tolerance) + full envelope 18–42 + NO age↔grade correlation.
+
+DO NOT TOUCH: the frozen IV oracle `spec-docs/reference/iv_oracle.json`; the ratings/traits/chemistry/position generation draws (age must NOT shift them); any `TRACKER_DB_VERSION`/store pin (no DB change).
+
+MAKE-OR-BREAK (RNG isolation): draw age from its OWN seed namespace (e.g. `randomUnit(\`${seed}:age\`)` / a dedicated FNV-1a key), placed so it consumes ZERO of the existing rating/trait/chemistry/position seed stream. PROVE it: the existing `prospectScoutingDraftEngine` distribution test (B9 §13) + the `prospectChemistryRebalance` golden + every non-age field of every generated prospect must be BYTE-UNCHANGED — only the `age` field changes. If any non-age generated value moves → STOP (age leaked into the shared stream; isolate it).
+
+STOP-IF (escalate, don't paper over): (a) any non-age generated field changes (RNG leak); (b) revealing age would require a saved-shape/DTO/DB change (it should not — `age` already exists); (c) the §13 distribution golden can't be reconciled without touching non-age values.
+
+GATE: `NODE_ENV= npx tsc -b` exit 0 + the FULL Mode-1 suite (`NODE_ENV= npx vitest run`) ZERO NEW REDS (characterized: `wpaRuntimeBoundary`; `GameTrackerLaunchState`/`AwardsWatchlist` solo-passing order-flakes) + the new age-distribution test passes + show the B9/chemistry goldens still green. Branch-only commit, NEVER push.
+
+FORMAT: (1) every changed file + total count; (2) each change referencing §10; (3) gate output pasted (tsc + suite counts + the age-distribution result + the unchanged-goldens proof); (4) "B1.1 B8 age complete" OR "BLOCKED: <exact reason>".
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: B1.1-B8-AGE ===== -->
