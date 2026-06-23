@@ -121,15 +121,26 @@ A/D extremes; `A`/high → `A..B+` matches the spec example). Build-DARK; consum
 **Gate (independent):** `NODE_ENV= tsc -b` → 0 · full suite **8081 pass / 1 fail (500 files)** = sole `wpaRuntimeBoundary`
 = **ZERO NEW REDS** (+3 tests). No `trackerDb` bump; no oracle change.
 
-### ⚠ OPEN DECISION — S4 PART 2: the auction price anchor (DEFERRED by JK 2026-06-23)
-**The conflict:** §1A.2 says "the overall grade BAND drives the auction PRICE RANGE." But the **shipped RB model** prices
-off the prospect's TRUE IV blurred by scout accuracy + the RB-1b chemistry-fit multiplier —
-`scoutRangeForProspect` (`LeagueBuilderFarmAuctionDraft.tsx:114-123`) = `perceivedValueRange(scoutPriceOpinion({trueIV},
-accuracy) × chemFit, accuracy)`. The scouted GRADE is shown (`scoutGradeDisplay`) but does NOT drive the price. Re-anchoring
-the price to the banded grade reworks reviewed RB value/chemistry code AND feeds prospect SALARY (`franchiseSalary.ts:108`
-`safeRoundFromScoutedGrade`) + the persisted `scoutedGrade` (`franchisePlayerProfile`). **Needs a JK price-anchor design
-ruling before any build** — how band-grade pricing reconciles with the trueIV+chemFit model, and what happens to salary.
-(Surfaced + deferred this session; JK chose to build the band engine first.)
+### ✅ RULED — S4 PART 2: price range + salary (JK ruling 2026-06-23, corrects the earlier framing)
+**NOT two competing pricing models — two SEPARATE numbers:**
+1. **Bidding GUIDANCE (pre-bid) = the scout's GRADE BAND → a price range.** The spec (§1A.2) is correct: convert the
+   scout's banded overall grade (S4-pt1 `scoutOverallGradeBand`) into the price range the GM bids against. This REPLACES
+   the shipped `scoutRangeForProspect` true-IV model (`LeagueBuilderFarmAuctionDraft.tsx:114-123` =
+   `perceivedValueRange(scoutPriceOpinion({trueIV}, accuracy) × chemFit, accuracy)`) as the SOURCE of the guidance range —
+   guidance comes from the grade band, NOT the true value.
+2. **Stamped SALARY (post-win) = the actual WINNING BID (price paid).** Whatever the GM pays becomes the prospect's salary
+   going into the season — derived from neither the grade nor the true value. **THIS IS THE MISSING PIECE:** today the
+   prospect salary is round/grade-based (`buildPlayerDto` `salary = prospectSalaryForDraftRound(draftPick.round)`;
+   `franchiseSalary.ts:108` `prospectSalaryForDraftRound(safeRoundFromScoutedGrade(scoutedGrade))`), so the realized
+   winning bid never flows into salary. Build task: stamp the won bid as the going-into-season salary.
+
+**Flow:** grade band → price range (guide) → GM bids → price PAID → stamped salary.
+
+**OPEN sub-detail to settle at build (S4-pt2 / S7):** does the RB-1b chemistry-fit nudge still apply to the bidding
+GUIDANCE, or is the guidance purely the grade band? (JK said "the scout's grade range, not true value" — implies
+grade-band-only; chemFit was not mentioned.) Plus verify the exact current wiring: where the farm auction captures the
+winning bid, and whether `Player.settledSalary` (RB-7) already carries it for MLB but not for FARM prospects.
+**Scope:** this lands with S4-pt2 / S7 (the price re-anchor + the old-Gaussian cleanup), not before S6.
 
 ### ✅ S5 — reveal archetype/secondary/traitCount, hide trait names — COMPLETE (`7eceaa5d`, branch-only, ZERO NEW REDS)
 
