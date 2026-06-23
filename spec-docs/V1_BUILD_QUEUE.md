@@ -33,7 +33,7 @@
 ### A-W2 — Lane 4A ratings (RA-1 keystone gates the rest)
 | Order | Ticket | What | Note |
 |---|---|---|---|
-| A2.1 | **RA-1 expected-stats engine (KEYSTONE)** | ratings→expected-per-category curves (`§3A`) | everything in 4A depends on it |
+| A2.1 | ✅ **RA-1 expected-stats engine DONE** (`81c9fe25`) | pure build-dark `src/engines/expectedStatsEngine.ts` — multiplicative (JK-confirmed) `poolMean × curve-ratio` + peer-SD z-score + min-sample gating; no consumer; full suite zero-new-reds. **RA-2 must add a sim-tune curvature check before wiring live.** | everything in 4A depends on it |
 | A2.2 | **RA-8 catcher CS/SB fields** | additive `PlayerSeasonFielding` (no DB bump) | **early — unblocks Branch A T-6** |
 | A2.3 | **RA-rookie** | `draftedAsFarmProspect` + `rookieStatus` + window-clear + ROOKIE badge (`§13B`) | additive; gates RA-5's rookie modifier; both worktrees |
 | A2.4 | RA-2 / RA-3 / RA-4 | peer-calibrated signal (replaces `valueDelta` `franchiseCheckpointSweepCompute.ts:184`) · per-category fan-out · position-pool calibration | after RA-1; RA-4 after A0.1 (DH) |

@@ -3,6 +3,13 @@
 **Created:** 2026-06-22 (Captain). **Status:** ✅ **RATIFIED by JK 2026-06-22 (attended)** — all recommendations approved as written ("Ratify all — fold in + build"). This doc is now the PINNED soul-layer measurement model for RA-1 + the fame WAR-floor; it is the authoritative source (referenced from `RATINGS_ADJUSTMENT_SPEC §3A` and the fame spec rather than duplicated). Sim-tune knobs remain §16 placeholders for L-SIM. Unblocks the RA-1 + A1.2(leg-a) builds.
 **Why this exists:** §3A/§20 say WHAT to measure but leave four/two HOW-choices unpinned. Per the soul-layer rule I won't infer-and-build; here are proposed resolutions, each with the spec grounding + the alternative + my recommendation. All magnitudes remain §16 sim-tune placeholders.
 
+> ⚠ **AUDIT CORRECTIONS (2026-06-23 — post-ratification adversarial audit + JK rulings; these SUPERSEDE the Choices below where they conflict):**
+> 1. **RA-1 (Part 1) — CONFIRMED.** JK ruled **MULTIPLICATIVE** expected (`poolMean × curve-ratio`) + **peer-SD** denominator as the v1 defaults (the per-category normalization SCALE stays §16 sim-tune). ✅ BUILT + verified (`81c9fe25`, build-dark). **Required before RA-2 wires it live:** a sim-tune/L-SIM curvature check that `expected@pool-mean-rating ≈ pool-mean-production` per category (the IV dollar-curve shape is reused to predict STATS — validate the borrowed curvature).
+> 2. **Fame floor shape (Part 2, Choice B) — CHANGED to CONTINUOUS (JK ruled).** The floor level is a **continuous** function of the player's position-percentile season WAR, lifted by a **continuous** soft gravity (the spec's literal §20.1 "soft gravity, strength 0.2"). **NOT 4 discrete `FameMeritLevel` buckets** (which have a quantization edge — a player one rank above a cutoff getting zero lift). The 4-bucket Choice B below is superseded.
+> 3. **Fame CODE DEFECT (must fix in the A1.2 build).** `applyWarLegitimacyGravity` (`fameModel.ts:161-174`) currently computes `currentHeat + (target−currentHeat)×strength` — **BIDIRECTIONAL** (drags Heat DOWN above target). The A1.2 build MUST patch it to the upward-only form `Heat += max(0, strength × (floor − Heat))` + add a unit test / soul-invariant asserting gravity **never decreases Heat**. (The doc was corrected; the CODE still has the original bidirectional bug.)
+> 4. **Channel A is already built** (`designationFanMorale.ts` L7c — the asymmetric multiplicative tilt). "Build Channel A" = wire **fame-as-volume** only, NOT a rebuild.
+> 5. **G1 follow-up (separate):** add an assertion that no fame/designation/award reader ever consumes a `'draft-baseline'` snapshot row (the `warPercentile=0` sentinel must not read as a sub-0.25 low-WAR player).
+
 ---
 
 ## PART 1 — RA-1: the expected-stats engine (the ratings keystone)
