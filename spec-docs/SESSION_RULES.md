@@ -499,6 +499,8 @@ agent edits the ratified rules without JK. (JK ruling 2026-06-14.)
   before the next ticket. Build the grep from the full delete-list, and prefer enumerating retired functions in the
   contract's STOP-IF.)
 
+- **v1 status reads = current code vs `ROADMAP_TO_V1.md` + recent breadcrumbs ONLY; never feed pre-June-10 docs (JK correction 2026-06-22):** When assessing "what's done / what's left to v1," always anchor on `spec-docs/ROADMAP_TO_V1.md` (the evidence-backed, commit/file:line-grounded roadmap) compared against CURRENT code, then follow breadcrumbs to features added in the last few days (recent commits + the live ledgers `PARALLEL_LANE_LOG.md` / `AUTONOMOUS_RUN_LOG.md` + recently-touched specs). Do NOT pull pre-~June-10 docs (gap-analyses, audit syntheses, completion-roadmap predecessors, UX-redesign gap docs) into a v1 status read — they describe SUPERSEDED or ABANDONED targets and inject large amounts of noise (e.g. measuring code against an un-adopted GameTracker redesign spec → a phantom "83% gaps"). Because the freshest evidence-backed roadmap already folds the durable history, and stale docs cause false blockers + waste JK's review time. (Origin: a v1 breakdown that went back to 2026-03-15 / 05-27 / 06-09 docs and reported GameTracker as the "weakest pillar, ~83% gaps" — when Elimination Mode + the GameTracker UI are in fact fully built; the gap doc was code-vs-a-proposed-redesign, never adopted.)
+
 ### Pending cleanup (not a rule — a tracked repo action)
 - **spec-assembler duplicate:** two divergent copies exist —
   `.claude/skills/spec-assembler/SKILL.md` (511 lines, CANONICAL per JK
