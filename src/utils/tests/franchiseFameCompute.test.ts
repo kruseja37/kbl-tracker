@@ -143,6 +143,7 @@ describe('franchise dark fame compute', () => {
     expect(result).toEqual({
       status: 'dark-noop',
       written: 0,
+      playerHeatDeltas: [],
       reason: 'Phase-2 fame disabled; per-game fame compute not written.',
     });
     await expect(getFranchiseFameRecord(scope, 'player-wpa-only')).resolves.toBeNull();
@@ -166,7 +167,11 @@ describe('franchise dark fame compute', () => {
     const firstResult = await persistDarkFameRecordsForCompletedGame(firstGame, scope);
     const firstRow = await getFranchiseFameRecord(scope, 'player-1');
 
-    expect(firstResult).toEqual({ status: 'written', written: 1 });
+    expect(firstResult).toEqual({
+      status: 'written',
+      written: 1,
+      playerHeatDeltas: [{ playerId: 'player-1', heatDelta: 10 }],
+    });
     expect(firstRow).toMatchObject({
       heat: 10,
       reachFloor: 2,
@@ -185,7 +190,11 @@ describe('franchise dark fame compute', () => {
     const secondResult = await persistDarkFameRecordsForCompletedGame(secondGame, scope);
     const secondRow = await getFranchiseFameRecord(scope, 'player-1');
 
-    expect(secondResult).toEqual({ status: 'written', written: 1 });
+    expect(secondResult).toEqual({
+      status: 'written',
+      written: 1,
+      playerHeatDeltas: [{ playerId: 'player-1', heatDelta: -13.5 }],
+    });
     expect(secondRow).toMatchObject({
       heat: -3.5,
       reachFloor: 2,
@@ -200,7 +209,7 @@ describe('franchise dark fame compute', () => {
     const duplicateResult = await persistDarkFameRecordsForCompletedGame(secondGame, scope);
     const duplicateRow = await getFranchiseFameRecord(scope, 'player-1');
 
-    expect(duplicateResult).toEqual({ status: 'written', written: 0 });
+    expect(duplicateResult).toEqual({ status: 'written', written: 0, playerHeatDeltas: [] });
     expect(duplicateRow).toEqual(secondRow);
   });
 

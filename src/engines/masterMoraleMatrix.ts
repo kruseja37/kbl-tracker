@@ -88,6 +88,7 @@ export type MoraleMatrixEvent =
       relationshipRole?: 'player1' | 'player2';
       chargedMatchupResult?: 'win' | 'loss';
       exactSelfPlayerMoraleDelta?: number;
+      heatDelta?: number;
     };
 
 type PersonalityTuning = {
@@ -188,6 +189,7 @@ export const MORALE_TUNING = {
     resilienceDownSwing: 0.35,
     charismaOtherTouchedSwing: 0.5,
     loyaltyFanLinkSwing: 0.35,
+    fameHeatDeltaMoraleScale: 0.25,
   },
   fanMoraleLink: {
     maxPlayerDelta: 2,
@@ -422,8 +424,22 @@ export const MASTER_MORALE_BASE_TABLE: Readonly<Record<MasterMoraleEventType, Ba
 
 export type MoraleTapResolver = (event: MoraleMatrixEvent) => BaseMoraleConsequence;
 
+function resolveFameTap(event: MoraleMatrixEvent): BaseMoraleConsequence {
+  const heatDelta =
+    event.kind === 'fame' && typeof event.heatDelta === 'number' && Number.isFinite(event.heatDelta)
+      ? event.heatDelta
+      : 0;
+  if (heatDelta === 0) return NEUTRAL_BASE_CONSEQUENCE; // zero/undefined → frozen neutral SINGLETON (isNeutral is `base === NEUTRAL_BASE_CONSEQUENCE`)
+  return {
+    selfPlayerMoraleDelta: heatDelta * MORALE_TUNING.modifierMultipliers.fameHeatDeltaMoraleScale, // un-rounded; compose rounds + applies personality/ambition tilt downstream
+    teamFanMoraleDelta: 0, // never push §20.6 fan morale
+    otherTouched: [],
+    reason: `fame.${String(event.type).toLowerCase()}`,
+  };
+}
+
 export const MORALE_TAP_REGISTRY: Readonly<Record<MoraleMatrixTapKind, MoraleTapResolver>> = {
-  fame: () => NEUTRAL_BASE_CONSEQUENCE,
+  fame: resolveFameTap,
   designation: () => NEUTRAL_BASE_CONSEQUENCE,
   race: (event) => ({
     selfPlayerMoraleDelta: EVENT_DELTA.raceSnubSelf,

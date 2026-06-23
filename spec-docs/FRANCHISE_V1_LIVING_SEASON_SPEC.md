@@ -405,6 +405,8 @@ All magnitudes above are **starting guesses to be settled by the Simulation Gate
 
 Fame is an **input** to the master morale matrix (§5), scaled by the same personality + hidden-modifier multipliers used everywhere else. Both fame **level** and fame **change (direction)** are felt: a fading famous player takes a morale hit; an unknown on the rise gets a boost. Personality governs sensitivity — chronic low fame is a standing morale drag for an **Egotistical** player (he craves the spotlight) and a non-event for a **Relaxed** one, with **Ambition** multiplying the sensitivity. No new mechanism — fame plugs into the matrix as another event input.
 
+v1: CHANGE-ONLY (net heatDelta = heat − prior heat); the chronic-low-fame standing-LEVEL drag is deferred to v1.1 (DECISIONS_LOG 2026-06-23).
+
 ### 20.6 Fame -> fan morale (amplifier + designation; three distinct channels, no double-count)
 
 - **Channel A — Fame amplifies & colors per-play swings.** A player's per-event impact on fan morale = base swing × **fame** (volume) × **designation-tilt** (lean). Fame is the volume knob (an Immortal Legend's heroics thrill the crowd; a Despised player's gaffe enrages it); the designation makes the amplifier **asymmetric** toward the fan relationship (a Fan Favorite's *ups* hit harder; an Albatross's *downs* hit harder).

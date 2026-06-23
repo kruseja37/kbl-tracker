@@ -104,6 +104,64 @@ describe('masterMoraleMatrix L3a pure engine', () => {
     expect(resolved.projectedFanMorale).toBe(90);
   });
 
+  test('fame tap turns positive heatDelta into player morale without fan morale', () => {
+    const resolved = composeMoraleConsequence(
+      { kind: 'fame', type: 'FAME_HEAT_CHANGED', heatDelta: 8 },
+      'RELAXED',
+      neutralModifiers,
+      50,
+      50,
+    );
+
+    expect(resolved.isNeutral).toBe(false);
+    expect(resolved.selfPlayerMoraleDelta).toBeGreaterThan(0);
+    expect(resolved.teamFanMoraleDelta).toBe(0);
+    expect(resolved.totalPlayerMoraleDelta).toBeGreaterThan(0);
+    expect(resolved.base.reason).toBe('fame.fame_heat_changed');
+  });
+
+  test('fame tap turns negative heatDelta into player morale loss without fan morale', () => {
+    const resolved = composeMoraleConsequence(
+      { kind: 'fame', type: 'FAME_HEAT_CHANGED', heatDelta: -6 },
+      'RELAXED',
+      neutralModifiers,
+      50,
+      50,
+    );
+
+    expect(resolved.isNeutral).toBe(false);
+    expect(resolved.selfPlayerMoraleDelta).toBeLessThan(0);
+    expect(resolved.teamFanMoraleDelta).toBe(0);
+    expect(resolved.totalPlayerMoraleDelta).toBeLessThan(0);
+  });
+
+  test('fame heatDelta base scale comes only from the §16 fame heat-delta constant', () => {
+    const heatDelta = 12;
+    const base = getBaseMoraleConsequence({ kind: 'fame', type: 'FAME_HEAT_CHANGED', heatDelta });
+
+    expect(base.selfPlayerMoraleDelta).toBe(
+      heatDelta * MORALE_TUNING.modifierMultipliers.fameHeatDeltaMoraleScale,
+    );
+    expect(base.teamFanMoraleDelta).toBe(0);
+    expect(base.otherTouched).toEqual([]);
+  });
+
+  test('off-kind heatDelta does not alter that tap kind base consequence', () => {
+    const withStrayHeatDelta = getBaseMoraleConsequence({
+      kind: 'race',
+      type: 'ALL_STAR_SNUB',
+      heatDelta: 99,
+    });
+    const withoutHeatDelta = getBaseMoraleConsequence({
+      kind: 'race',
+      type: 'ALL_STAR_SNUB',
+    });
+
+    expect(withStrayHeatDelta).toEqual(withoutHeatDelta);
+    expect(withStrayHeatDelta.selfPlayerMoraleDelta).toBe(MORALE_TUNING.eventDelta.raceSnubSelf);
+    expect(withStrayHeatDelta.teamFanMoraleDelta).toBe(0);
+  });
+
   test('relationship tap requires kind routing and returns a fresh non-neutral consequence', () => {
     const typeOnly = composeMoraleConsequence(
       { type: 'feud' },

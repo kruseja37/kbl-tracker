@@ -32,6 +32,7 @@ export type PersistedTrueValueResult = FranchiseFameRecordsScopeInput & {
 export type PersistDarkFameRecordsResult = {
   status: 'dark-noop' | 'written';
   written: number;
+  playerHeatDeltas: Array<{ playerId: string; heatDelta: number }>;
   reason?: string;
 };
 
@@ -76,7 +77,12 @@ export async function persistDarkFameRecordsForCompletedGame(
   archiveOptions?: CompletedGameArchiveOptions,
 ): Promise<PersistDarkFameRecordsResult> {
   if (!isFranchisePhase2FameEnabled()) {
-    return { status: 'dark-noop', written: 0, reason: 'Phase-2 fame disabled; per-game fame compute not written.' };
+    return {
+      status: 'dark-noop',
+      written: 0,
+      playerHeatDeltas: [],
+      reason: 'Phase-2 fame disabled; per-game fame compute not written.',
+    };
   }
 
   const checkpoint = await resolveFameCheckpoint(gameState, archiveOptions);
@@ -84,6 +90,7 @@ export async function persistDarkFameRecordsForCompletedGame(
   const fameEvents = gameState.fameEvents ?? [];
   const playerIds = activeFamePlayerIds(playerTotals, fameEvents);
   const rows: FranchiseFameRecordRow[] = [];
+  const playerHeatDeltas: Array<{ playerId: string; heatDelta: number }> = [];
 
   for (const playerId of playerIds) {
     const storedRow = await getFranchiseFameRecord(fameScope, playerId);
@@ -100,7 +107,9 @@ export async function persistDarkFameRecordsForCompletedGame(
     const stored = storedRow ?? { heat: 0, reachFloor: 0, wasNegative: false };
     const heat = applyHeatUpdate(stored.heat, breakdown.total);
     const reachFloor = updateReachFloor(stored.reachFloor, heat);
+    const heatDelta = heat - stored.heat;
     const wasNegative = stored.wasNegative || heat < FAME_TUNING.heat.neutral;
+    playerHeatDeltas.push({ playerId, heatDelta });
 
     rows.push({
       franchiseId: fameScope.franchiseId,
@@ -119,7 +128,7 @@ export async function persistDarkFameRecordsForCompletedGame(
   }
 
   await saveFranchiseFameRecordRows(rows);
-  return { status: 'written', written: rows.length };
+  return { status: 'written', written: rows.length, playerHeatDeltas };
 }
 
 async function resolveFameCheckpoint(

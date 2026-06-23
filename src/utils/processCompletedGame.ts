@@ -65,7 +65,10 @@ import {
   isFranchisePhase2L12Enabled,
   isFranchisePhase2L13Enabled,
 } from './franchisePhase2Flags';
-import { persistDarkFameRecordsForCompletedGame } from './franchiseFameCompute';
+import {
+  persistDarkFameRecordsForCompletedGame,
+  type PersistDarkFameRecordsResult,
+} from './franchiseFameCompute';
 import { persistDarkFlashpointDecayForCompletedGame } from './franchiseFlashpointDecayCompute';
 import { persistDarkCheckpointSweepForCompletedGame } from './franchiseCheckpointSweepCompute';
 import { persistDarkTraitGrantForCompletedGame } from './franchiseTraitGrantCompute';
@@ -429,6 +432,94 @@ async function persistDesignationMoraleConsequencesAfterTrueValue(
   }
 }
 
+type FameMoraleHeatDelta = PersistDarkFameRecordsResult['playerHeatDeltas'][number];
+
+function sourceTeamIdForFameMorale(
+  gameState: PersistedGameState,
+  playerId: string,
+  player: { leagueAssignments?: Array<{ teamId?: string; rosterStatus?: string }> } | null | undefined,
+): string | null {
+  return (
+    gameState.playerWpaTotals?.find((total) => total.playerId === playerId)?.teamId ??
+    gameState.fameEvents?.find((event) => event.playerId === playerId && event.teamId)?.teamId ??
+    gameState.playerStats[playerId]?.teamId ??
+    gameState.pitcherGameStats.find((stats) => stats.pitcherId === playerId)?.teamId ??
+    player?.leagueAssignments?.find((assignment) =>
+      assignment.rosterStatus !== 'FREE_AGENT' && Boolean(assignment.teamId),
+    )?.teamId ??
+    player?.leagueAssignments?.find((assignment) => Boolean(assignment.teamId))?.teamId ??
+    null
+  );
+}
+
+function fameMoraleSourceCheckpoint(
+  gameState: PersistedGameState,
+  archiveOptions?: CompletedGameArchiveOptions,
+): string {
+  return archiveOptions?.context?.scheduleGameId ?? gameState.scheduleGameId ?? gameState.gameId;
+}
+
+function fameMoraleSourceEventId(
+  gameState: PersistedGameState,
+  trueValueScope: PersistedTrueValueScope,
+  playerId: string,
+  archiveOptions?: CompletedGameArchiveOptions,
+): string {
+  return [
+    'fame',
+    trueValueScope.franchiseId,
+    trueValueScope.seasonId,
+    trueValueScope.statsScopeId,
+    fameMoraleSourceCheckpoint(gameState, archiveOptions),
+    playerId,
+    'heat-delta',
+  ].join(':');
+}
+
+export async function persistFameMoraleConsequencesAfterFame(
+  gameState: PersistedGameState,
+  trueValueScope: PersistedTrueValueScope,
+  playerHeatDeltas: FameMoraleHeatDelta[],
+  archiveOptions?: CompletedGameArchiveOptions,
+): Promise<void> {
+  for (const { playerId, heatDelta } of playerHeatDeltas) {
+    if (heatDelta === 0) continue;
+
+    try {
+      const player = await getFranchisePlayer(trueValueScope.franchiseId, playerId);
+      const teamId = sourceTeamIdForFameMorale(gameState, playerId, player);
+      if (!teamId) {
+        console.warn('[MoraleMatrix] fame event skipped: missing team id for player ' + playerId);
+        continue;
+      }
+
+      const currentPlayerMorale = await currentMoraleValue(trueValueScope, 'player', playerId, player?.morale ?? 50);
+      const currentFanMorale = await currentMoraleValue(trueValueScope, 'team-fan', teamId, 50);
+      const consequence = composeMoraleConsequence(
+        { kind: 'fame', type: 'FAME_HEAT_CHANGED', heatDelta },
+        player?.personality,
+        resolveHiddenModifiers(player?.hiddenPersonalityModifiers),
+        currentPlayerMorale,
+        currentFanMorale,
+      );
+
+      await applyFranchiseMoraleMatrixConsequence({
+        franchiseId: trueValueScope.franchiseId,
+        seasonId: trueValueScope.seasonId,
+        statsScopeId: trueValueScope.statsScopeId,
+        seasonNumber: trueValueScope.seasonNumber,
+        playerId,
+        teamId,
+        consequence,
+        sourceEventId: fameMoraleSourceEventId(gameState, trueValueScope, playerId, archiveOptions),
+        timestamp: String(gameState.savedAt ?? gameState.gameId),
+      });
+    } catch (error) {
+      console.warn('[MoraleMatrix] fame event skipped:', error);
+    }
+  }
+}
+
 export function shouldAggregateToRegularSeasonStats(
   gameState: PersistedGameState,
   archiveOptions?: CompletedGameArchiveOptions,
@@ -619,7 +710,13 @@ export async function processCompletedGame(
         }
         if (isFranchisePhase2FameEnabled()) {
           try {
-            await persistDarkFameRecordsForCompletedGame(gameState, trueValueScope, archiveOptions);
+            const fameResult = await persistDarkFameRecordsForCompletedGame(gameState, trueValueScope, archiveOptions);
+            await persistFameMoraleConsequencesAfterFame(
+              gameState,
+              trueValueScope,
+              fameResult.playerHeatDeltas,
+              archiveOptions,
+            );
           } catch (e) {
             console.warn('[Fame] dark fame compute skipped for completed game ' + gameState.gameId + ':', e);
           }
