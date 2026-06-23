@@ -195,6 +195,16 @@ Five full-season arcs under the new **over-expectation** model, to validate the 
 | 4 | **Hot start, cools** | 2B, 26, avg; Contact 72; hits like ~86 early (muted by low early confidence), then to his expectation | 72→77 → holds | B → B+ | convex reward + confidence-muted early + gap-closure + hysteresis = no give-back |
 | 5 | **Aging gamble** | 1B, 38, drafted at star ratings (Power 90, age-independent); hits ~85 | Power 90→83; Speed 45→36, Field 55→46, Arm 50→41 | A → B | age-independent generation + age gravity + per-attribute realism |
 
-**The point of the recalibration:** the phenom now jumps **+24** (58→82, ≈3 seasons compressed) because overperforming weak tools is both improbable *and* cheap to reward down low — exactly JK's "reward for doing so, which enables them to sustain success." The ace still moves ~nothing (expensive points + only meeting expectation). The aggression is concentrated where it's earned and where there's room.
+**The point of the recalibration:** the phenom jumps **~+22 in 80 games** (58→80, ≈3 seasons compressed) because overperforming weak tools is both improbable *and* cheap to reward down low — exactly JK's "reward for doing so, which enables them to sustain success." The ace moves ~nothing (expensive points + only meeting expectation). Aggression is concentrated where it's earned and where there's room.
 
-**Realism anchor:** the *median* player produces ≈ his expectation → inside the dead-band → drifts ±0–2 over a season. Only genuine over/under-performers get arcs — the league stays stable while a handful of stories carry the season (beat-reporter fodder).
+**Regression — the same machinery in reverse (downside examples, 80-game season):**
+| # | Archetype | Setup | Season arc | Net (80g) | Mechanism |
+|---|-----------|-------|------------|-----------|-----------|
+| R1 | **Crash & burn** | C, 28; Contact 82 (B+); produces like ~66 all year (big negative gap) | 82→69 (gentle early, steep mid, decelerates to meet production) | B+ → C+ | convex collapse + confidence ramp + equilibrium catch-down → demotion/trade-bait |
+| R2 | **Steady aging slide** | 34; Power 78; slightly under-expectation + 32–35 age band | 78→70 (smooth, relentless, no rebound) | B → C+ | age gravity + mild under-perf compounding |
+| R3 | **Overrated correction** | rated 80, true ~70 (prior fluke); produces like 70 | 80→72 then **halts** | B → B− | equilibrium pulls down then STOPS (no death spiral) |
+| R4 | **Floor resistance** | Speed 32; runs poorly | 32→29 (barely moves) | — | edge compression near 0 → a bad player can't crater to zero |
+
+**Two downside safety properties:** regression **self-stops at equilibrium** (an overrated player corrects to his real level, doesn't vanish) and **resists the floor** (no 0-ratings). A crash is real but must be *earned* by sustained bad production, and it bottoms out where the player actually performs. (An aging player who plays *well* holds — the slide is under-performance + age *together*, not automatic.)
+
+**Realism anchor:** the *median* player produces ≈ his expectation → inside the dead-band → drifts ±0–2 over a season. Only genuine over/under-performers get arcs — the league stays stable while a handful of stories (up AND down) carry the season (beat-reporter fodder). **Variance scales with games played:** short seasons = less movement/variance, long seasons = more (RULED).
