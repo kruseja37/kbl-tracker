@@ -18593,3 +18593,74 @@ FORMAT: (1) every changed file + count; (2) `computeFameVolume` + the two writer
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: A1.2c-FAN-MORALE-CHANNELS-AB ===== -->
+
+<!-- ===== START CONTRACT: A2.4a-RA2-CATEGORY-RATES ===== -->
+## CONTRACT A2.4a — RA-2 LEG-A: season-row → per-category-rate adapter (pure, build-dark) (Branch A / `codex/franchise-v1-next` / worktree `/Users/johnkruse/Projects/kbl-tracker`)
+ROUTE: Codex gpt-5.5 | xhigh reasoning effort.
+
+You are a precise TypeScript builder. Work ONLY in `/Users/johnkruse/Projects/kbl-tracker` (branch `codex/franchise-v1-next`). This is **RA-2 LEG-A of a/b/c** — a PURE, build-DARK, CONSUMER-LESS adapter. Do NOT touch the checkpoint sweep, the pool aggregator (leg-b), or any wiring (leg-c).
+
+GOAL:
+Add ONE pure build-dark module `src/engines/expectedStatsCategoryRates.ts` that maps a player's season counting rows (batting/pitching/fielding) → the per-category ACTUAL RATE map + the per-category SAMPLE-SIZE map that RA-1's `expectedAndSignal` consumes (`actualByCat` / `sampleSizeByCat`, keyed by `ExpectedStatsCategory`). + a colocated unit test. NO production consumer (leg-b imports it later), NO DB/store, oracle untouched.
+
+SOURCE OF TRUTH (read first):
+- `spec-docs/RATINGS_ADJUSTMENT_SPEC.md` §3B "Per-attribute production metric" table (lines 44-61) — the rating→production-rate mapping.
+- `spec-docs/DECISIONS_LOG.md` 2026-06-23 "RA-2 … 4 forks RULED" — the live/dormant category boundary (arm dormant until RA-8; pitcher non-pitching excluded; age/rookie/park deferred to A2.5).
+- The category KEYS + which rating each maps to are FROZEN in `src/engines/expectedStatsEngine.ts:43-72` (`EXPECTED_STATS_CATEGORY_META`) — emit EXACTLY those key strings; never invent a category.
+
+API (exact):
+```ts
+export interface CategoryRateInput {
+  role: 'hitter' | 'pitcher';
+  batting?: PlayerSeasonBatting;
+  pitching?: PlayerSeasonPitching;
+  fielding?: PlayerSeasonFielding;
+}
+export interface CategoryRateResult {
+  actualByCat: Partial<Record<ExpectedStatsCategory, number>>;
+  sampleSizeByCat: Partial<Record<ExpectedStatsCategory, number>>;
+}
+export function toExpectedStatsCategoryRates(input: CategoryRateInput): CategoryRateResult;
+```
+Import `PlayerSeasonBatting`/`PlayerSeasonPitching`/`PlayerSeasonFielding` + `calcBattingAvg`/`calcOBP`/`calcSLG` from `../utils/seasonStorage` (by IMPORT — do NOT edit it); `ExpectedStatsCategory` from `./expectedStatsEngine`.
+
+LIVE CATEGORIES — emit a rate ONLY when its denominator > 0 (else OMIT the key, so the engine null-gates it); ALWAYS emit the matching `sampleSizeByCat` (even 0 — the engine's min-sample gate is the authority; NEVER emit a 0 actual rate for a no-data player). Use these STANDARD definitions verbatim (`b`=batting, `f`=fielding, `p`=pitching):
+HITTER (`role==='hitter'`):
+- `powerIso` = `calcSLG(b) − calcBattingAvg(b)`; sample `b.pa`  (guard `b.ab>0`)
+- `powerSlugging` = `calcSLG(b)`; sample `b.pa`  (guard `b.ab>0`)
+- `powerHomeRunRate` = `b.homeRuns / b.pa`; sample `b.pa`  (guard `b.pa>0`)
+- `contactAverage` = `calcBattingAvg(b)`; sample `b.pa`  (guard `b.ab>0`)
+- `contactOnBase` = `calcOBP(b)`; sample `b.pa`  (guard OBP denom `b.ab+b.walks+b.hitByPitch+b.sacFlies>0`)
+- `contactAvoidStrikeoutRate` = `1 − b.strikeouts / b.pa`; sample `b.pa`  (guard `b.pa>0`)
+- `speedStealTripleRate` = `(b.stolenBases + b.triples) / b.pa`; sample `b.pa`  (guard `b.pa>0`)
+- `fieldingFieldingPct` = `(f.putouts + f.assists) / chances` where `chances = f.putouts + f.assists + f.errors`; sample `chances`  (guard `chances>0`)
+- `fieldingRangeRate` = `(f.putouts + f.assists) / f.games`; sample `chances`  (guard `f.games>0`)
+PITCHER (`role==='pitcher'`), let `bf = p.outsRecorded + p.hitsAllowed + p.walksAllowed + p.hitBatters` (a no-extra-field batters-faced / PA-against proxy) and `ip = p.outsRecorded / 3`:
+- `pitchingStrikeoutRate` = `p.strikeouts / bf`; sample `bf`  (guard `bf>0`)
+- `pitchingWalkAvoidanceRate` = `1 − p.walksAllowed / bf`; sample `bf`  (guard `bf>0`)
+- `pitchingHomeRunSuppressionRate` = `1 − p.homeRunsAllowed / bf`; sample `bf`  (guard `bf>0`)
+- `pitchingFipPrevention` = `1 / FIP`; sample `p.outsRecorded`  (guard `ip>0` AND `FIP>0`). FIP = `(13·p.homeRunsAllowed + 3·(p.walksAllowed + p.hitBatters) − 2·p.strikeouts) / ip + FIP_CONSTANT`. **REUSE an existing FIP helper/constant if one exists (grep `calcFIP`/`computeFIP`/`FIP_CONSTANT`); else import `FIP_CONSTANT` from the shared constants (it exists ≈ 3.28 — `src/types/war.ts` / `rosterEngineConstants` per `kbl-gotchas.md`), NEVER a literal.** Matches `SMB4_EXPECTED_STATS_BASELINES.pitchingFipPrevention = 1/leagueFIP`.
+
+DORMANT — DO NOT emit (documented null-gates, NOT guessed; add a top-of-file comment block listing each + the one-line reason):
+- `armThrowingRate` — RA-8 catcher caught-stealing season fields not yet stored (a clean null-gate; RA-8 turns it on).
+- `pitchingWeakContactRate` — no weak-contact season field exists; junk moves on HR-suppression only in v1 (RA-11/B14 may add it).
+- ALL pitcher non-pitching (`power*`/`contact*`/`speed*`/`fielding*` for `role==='pitcher'`) — RA-11/B14 co-design (queue cross-pin #2).
+- `speedBaserunningRate` — no clean per-PA baserunning rate stat exists (only SB/CS/3B, already in `speedStealTripleRate`).
+- `fieldingAvoidErrorRate` — collinear with `fieldingFieldingPct` (both ≈ (PO+A)/chances) → folded for v1 to avoid double-count under the weighted blend; kept a distinct dial for v2.
+
+MAKE-OR-BREAK: PURE + CONSUMER-LESS (no production file imports the new symbol — leg-b does). Every emitted key is a real `ExpectedStatsCategory` (compile-checked by the `Partial<Record<…>>`). Zero/negative denominator → OMIT the rate (never emit 0). STANDARD rate definitions ONLY — if any LIVE category cannot be computed from existing fields with a standard definition, leave it DORMANT + FLAG (do NOT invent). `role` gates the set: a hitter input emits no pitching categories and a pitcher input emits no hitter categories.
+
+STOP-IF (escalate, don't paper over): a LIVE category can't be computed from existing season-row fields with a standard definition (→ propose dormant + flag); no shared `FIP_CONSTANT`/FIP helper exists to reuse (→ flag before hardcoding); a production module must import the new symbol to compile (no longer build-dark); a trackerDb/store/`iv_oracle.json` change is needed.
+
+CONSTRAINTS — edit/create ONLY:
+- `src/engines/expectedStatsCategoryRates.ts` (NEW)
+- `src/engines/__tests__/expectedStatsCategoryRates.test.ts` (NEW) — hand-worked: a full hitter row → exact ISO/SLG/HR-rate/AVG/OBP/K%-avoid/SB+3B/fielding%/range + samples; a full pitcher row → K%/BB%-avoid/HR-suppress/FIP-prevention + samples; a zero-PA hitter → ALL rates OMITTED, samples 0; the DORMANT keys NEVER present in either output; role gating (hitter input yields no pitching cats & vice-versa).
+
+DO NOT TOUCH: `franchiseCheckpointSweepCompute.ts`; `expectedStatsEngine.ts` + `seasonStorage.ts` (import only); the frozen oracle; any `TRACKER_DB_VERSION`/store.
+
+GATE: `NODE_ENV= npx tsc -b` exit 0 + the FULL suite `NODE_ENV= npx vitest run` ZERO NEW REDS (characterized: `wpaRuntimeBoundary` hard-fail + `franchiseManualSmokeFixture` solo-passing order-flake — re-run any suspected new red SOLO before judging) + `iv_oracle.json` byte-unchanged + NO trackerDb bump. Commit ONLY the two new files by explicit path (`git add src/engines/expectedStatsCategoryRates.ts src/engines/__tests__/expectedStatsCategoryRates.test.ts`) — NOT `git add -A`/`.` (untracked markers present). Branch-only, NEVER push.
+
+FORMAT: (1) every new file + count; (2) the rate formulas + the dormant list, referencing §3B; (3) gate output pasted (tsc + full-suite counts + the new unit test); (4) "RA-2a category-rate adapter complete" OR "BLOCKED: <exact reason>".
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: A2.4a-RA2-CATEGORY-RATES ===== -->
