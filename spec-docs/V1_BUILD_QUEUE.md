@@ -19,7 +19,7 @@
 ### A-W0 — foundation (do first)
 | Order | Ticket | What | Source |
 |---|---|---|---|
-| A0.1 | **4E DH removal (master)** | full DH position + league-rule removal; ~9 `Position` defs in lockstep + `ivEngine.ts:205` (same diff) + `yankeesPlayers.ts:70` + lineup/roster/sub + `leagueConfig.ts`. **Oracle-gate** (ivEngine test before+after; zero value moved). Settle Position types BEFORE 4A position-pool hardens. Propagate the type-def commits to Branch B. | `RATINGS_ADJUSTMENT_SPEC §13` |
+| A0.1 | **4E DH — LIGHT for v1 (RULED JK 2026-06-22)** | ⚠ Full removal is **~108 files** (58 code incl. `useGameState`/Elimination/playoffs/~10 UI + 50 tests) — Codex correctly BLOCKED the narrow-allowlist attempt. **v1 = LIGHT:** hard-force `usesDesignatedHitter=false` + collapse `dhEnabled`/`hasDH`/`teamUsesDh` to pitcher-bats + HIDE every DH option from the UI (`LeagueBuilderRosters`/`Players`, `ExhibitionGame`, `EliminationSetup`, `TeamHubContent`, league setup) — players never see/use a DH; LEAVE the inert `'DH'` type member (no lockstep type surgery, no oracle/ivEngine touch). ~25-30 files. Full type cleanup = post-v1. **Non-blocking** (nothing needs the type gone). | `RATINGS_ADJUSTMENT_SPEC §13` + JK 2026-06-22 |
 
 ### A-W1 — Lane 1 tail (the L-SIM blockers first)
 | Order | Ticket | What | Blocker it clears |
@@ -67,7 +67,7 @@ Run the soul-invariant L-SIM after A-W1 + A-W2 + A-W3 land (it now also exercise
 ### B-W1 — Lane 4B prospect (serialized on `prospectScoutingDraftEngine.ts`)
 | Order | Ticket | What | Note |
 |---|---|---|---|
-| B1.1 | **B8 age** | seeded skew-young draw (~18–42, μ≈21); delete `PROSPECT_DRAFT_AGE=18`; reveal age in the farm-auction UI | **unblocks 4C S5** |
+| B1.1 | ✅ **B8 age DONE** (`30359ae4`) | seeded band-weighted draw (`PROSPECT_AGE_BANDS` .40/.30/.18/.08/.04, own seed namespace `:age:band`/`:age:within` — RNG-isolated, B9+chemistry goldens unchanged); reveal in farm-auction UI. Focused gate PASS (histogram on-spec, age-grade corr 0.0037); full suite confirming | **unblocks 4C S5** |
 | B1.2 | B6 | position-appropriate trait pools (DH/closer/two-way carve-outs); fix `Workhorse`; retire orphan `traitPools.ts` | small |
 | B1.3 | **B12 archetype layer** | §5.6 large/parametric: families × randomized magnitudes → non-repeating spreads; re-grade in-loop w/ `scoreSmb4Player`; convergence guard | **unblocks 4C S5**; the uniqueness lever |
 | B1.4 | **B13 grade/scarcity traits** | §5.5b weighted draw, reuse analyzer impact coeffs | **B13 ⇔ Branch-A T-4: shared `traitWeight`** |
