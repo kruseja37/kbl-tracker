@@ -18286,3 +18286,38 @@ FORMAT: (1) every changed file + total count; (2) each change referencing §10; 
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: B1.1-B8-AGE ===== -->
+
+<!-- ===== START CONTRACT: B0.2-G1-FREEZE-WRITER ===== -->
+## CONTRACT B0.2 — G1 DRAFT-IV FREEZE WRITER (Branch B / `codex/mode1-v1-b` / worktree `/Users/johnkruse/Projects/kbl-mode1-b`)
+ROUTE: Codex gpt-5.5 | xhigh reasoning effort.
+
+You are a precise TypeScript builder. Work ONLY in `/Users/johnkruse/Projects/kbl-mode1-b` (branch `codex/mode1-v1-b`). The spec docs here may be stale — the authoritative ruling is embedded inline; ground CODE anchors at source.
+
+GOAL:
+At franchise creation, stamp a **draft-IV baseline ("checkpoint-0") row** in the EXISTING `franchiseTrueValueSnapshots` store for EVERY drafted player — **MLB roster AND farm prospects** — recording the auction price as the player's locked-in talent value. Additive, **NO trackerDb bump**. This closes launch-gap G1 (RB-7 froze settledSalary+morale but NOT a distinct draft-IV).
+
+SOURCE OF TRUTH (`MODE1_V1_VERIFICATION.md V12` + JK rulings 2026-06-22, embedded):
+- Per drafted player the checkpoint-0 row holds: **trueValue = the auction settled IV** (the per-player `iv`); **valueDelta = iv − settledSalary** (parallel to the in-season `trueValue − salary`); **warPercentile = 0** (sentinel — no games played yet); **contractValue = settledSalary**.
+- **INCLUDE FARM PROSPECTS** (JK ruled): write a row for farm-tier drafted players too, NOT just the MLB roster.
+- The draft baseline is a distinct scope from in-season checkpoints → use a sentinel **`statsScopeId = 'draft-baseline'`** (do NOT reuse the in-season `statsScopeId = seasonId`, which would collide with checkpoint-1).
+
+CONSTRAINTS — edit ONLY (verify each at source; line numbers may drift):
+- `src/utils/draftFreezeInputs.ts`: the auction IV is ALREADY extracted (`const iv = session.players[result.playerId]?.iv`, ~:74, with a finite/>0 guard). Carry it onto the per-player result object.
+- `src/utils/draftFreeze.ts`: add an `iv` (draft-IV) number field to `DraftFreezePlayerResult`; populate it from the input. Keep it additive (existing fields/consumers unchanged).
+- `src/utils/franchiseInitializer.ts` (step 8.5, ~:717-754): AFTER the existing `settledSalary` loop + the morale-seed loops, add a NEW snapshot-write loop over **all `freeze.players`** (MLB + farm — do NOT skip on a missing franchise-player record; the snapshot store is keyed by `playerId` and needs no franchise-player record, unlike the settledSalary loop). Build a `FranchiseTrueValueRow` per player and persist via `saveFranchiseTrueValueRows` (`franchiseTrueValueStorage.ts:421`). Idempotent on re-init (overwrite/skip-if-equal).
+- A test (extend the freeze/initializer test surface): the draft-baseline rows exist for BOTH an MLB roster player AND a farm prospect, with `trueValue=iv`, `valueDelta=iv−settledSalary`, `warPercentile=0`, `statsScopeId='draft-baseline'`; and `TRACKER_DB_VERSION` stays 25 (version-pin green).
+
+REQUIRED ROW FIELDS — `FranchiseTrueValueRow` (`franchiseTrueValueStorage.ts:38-54`) requires more than the 3 values; populate the draft-baseline row as: `{ franchiseId, seasonId: initialSeasonId, statsScopeId:'draft-baseline', playerId, trueValue: iv, contractValue: settledSalary, valueDelta: iv − settledSalary, warPercentile: 0, position: <the player's position from the freeze/meta>, peerPoolSize: 0 (no peer pool at draft), calculationVersion: TRUE_VALUE_CALCULATION_VERSION, computedAt: new Date().toISOString() }`. Omit the optional fields (effectivePosition/poolPosition/valuationMode/trueValueComponents). If `position` is not available on the freeze result, source it from `metaByPlayerId` or the drafted player record.
+
+DO NOT TOUCH: the frozen IV oracle `spec-docs/reference/iv_oracle.json`; `salaryCalculator.ts` (the in-season `valueDelta` at :1019 stays); `cpuShillBidding.ts`; `draftFreeze.ts` existing morale/settledSalary outputs; any `TRACKER_DB_VERSION`/store keyPath/store-list pin (NO bump — the row shape is unchanged; you only WRITE rows with a new `statsScopeId`).
+
+MAKE-OR-BREAK: (1) `TRACKER_DB_VERSION` stays 25 and the version-pin + migration tests stay green (additive rows to an existing store, no schema change); (2) a draft-baseline row is written for a FARM prospect as well as an MLB player (prove in the test — the farm prospect has NO franchise-player record yet still gets a snapshot row); (3) the existing settledSalary stamp + morale seeding are byte-unchanged.
+
+STOP-IF (escalate, don't paper over): (a) writing the row would require a trackerDb version bump or a store keyPath change; (b) a required `FranchiseTrueValueRow` field genuinely cannot be sensibly populated for a pre-game row (quote it); (c) the per-player `iv` is not available for a drafted player at this point.
+
+GATE: `NODE_ENV= npx tsc -b` exit 0 + the FULL Mode-1 suite (`NODE_ENV= npx vitest run`) ZERO NEW REDS (characterized: `wpaRuntimeBoundary`; `GameTrackerLaunchState`/`AwardsWatchlist` solo-passing order-flakes) + the new draft-baseline test + the version-pin/migration test green. Branch-only commit, NEVER push.
+
+FORMAT: (1) every changed file + total count; (2) each change referencing V12 / the ruling; (3) gate output pasted (tsc + suite counts + the draft-baseline test + the version-pin proof); (4) "B0.2 G1 freeze writer complete" OR "BLOCKED: <exact reason>".
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: B0.2-G1-FREEZE-WRITER ===== -->
