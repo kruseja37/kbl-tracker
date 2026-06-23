@@ -29,7 +29,7 @@ Remaining build: **RB-13b (route draft flow by `draftFormat` — design-gated)**
 
 **CONVERGE →** D12 iPad smoke → D13 sign-off → Phase-2 flag-flip ACTIVATION (post-D13) → F-138 + offseason flag → **F-141 iPad playtest exit gate (ship)**.
 
-**➡ IMMEDIATE NEXT:** (Lane 1) L13-8 (un-hold) + the 3 fame-wiring orphan taps (the explicit L-SIM blockers). (Lane 2) RB-13b/RB-16/RB-18 + the G1 freeze writer. (Lane 3) scope + own the lane-merge — it gates D12.
+**➡ IMMEDIATE NEXT:** the **dependency-ordered execution backlog is `V1_BUILD_QUEUE.md`** (two concurrent branches, per-wave order, chokepoint/merge sequencing, cross-couplings). Start-here: Branch A = `A0.1` DH-removal → `A1.1` L13-8 + `A1.2` fame-wiring (L-SIM blockers) → `A2.1` RA-1 keystone; Branch B = `B0.2` G1 freeze writer ∥ `B1.1` B8 age + `B1.3` B12 archetype. The lane-merge converges them before D12.
 
 > Long poles: Lane 1 = fame-wiring + L13-8 (the last L-SIM blockers); Lane 2 = RB-16 sim-tune + the G1 freeze writer; **Lane 3 = the lane-merge (the structural gate to D12)**. L-SIM gates last. Nothing Phase-2 goes live until after D13.
 
