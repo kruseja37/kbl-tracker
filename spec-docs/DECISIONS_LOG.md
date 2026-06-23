@@ -13,6 +13,7 @@
 
 **RULED (JK):**
 - **Reveal ACCURATELY:** name, age, primary + secondary position, **archetype** (the §5.6 family — gives shape; requires B12 to persist it on the prospect).
+- **Traits = COUNT only (0/1/2), identities + pos/neg HIDDEN** until call-up (part of the hidden profile). ⚠ Change from current build (which reveals trait1/trait2 names) → replace with `traitCount`. The trait effect is already in the true grade, so the grade-band reflects it without naming them.
 - **OVERALL grade = a LETTER-GRADE band**, width by confidence: HIGH 3 / MEDIUM 5 / LOW 7 grade-bands; true grade uniform-random in the band.
 - **Each TOOL = a 0–99 numeric band in groups of 10**, width by confidence: HIGH 30 / MEDIUM 50 / LOW 70 pts; true value uniform-random in the band. 5 hitter tools (POW/CON/SPD/FLD/ARM), **7 pitcher (VEL/JNK/ACC + POW/CON/SPD/FLD, no arm)**.
 - **Un-gameable:** uniform-in-band placement (`L ∈ [max(0,true−W), min(true,99−W)]`), deterministic seed; NOT always mid/top/bottom.

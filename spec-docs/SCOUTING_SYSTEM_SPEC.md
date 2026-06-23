@@ -23,6 +23,9 @@ The scouting system governs how farm and draft prospects are evaluated before th
 ### 1A.1 Revealed ACCURATELY (no estimation)
 Name · age · **primary + secondary position** · **archetype** (the §5.6 generation family — Slugger, Speedster, Defensive-Wizard, …). Archetype gives the GM the *shape* of the skillset; the bands give the *magnitude*. (Requires the B12 archetype layer to PERSIST the chosen family on the prospect so it can be revealed — couples scouting ↔ B12. Secondary position + age already generated; age also needs B8.)
 
+### 1A.1b Traits — COUNT only, identities HIDDEN (RULED)
+Traits are part of the **hidden** profile (revealed at call-up, like ratings). The scout report shows only the **trait COUNT: 0, 1, or 2** — **never** which traits they are, and **never** whether they're positive or negative. So a GM sees "2 traits" and gambles on whether that's two gems or two duds. (The trait *effect* is already baked into the true grade, so the overall grade-band reflects it without naming them — the GM can't decompose grade vs traits.) **⚠ Change from current build:** today `VisibleSafeProspectReport` reveals `trait1`/`trait2` *names* — v2 replaces those with a `traitCount` (0/1/2) and hides names until call-up.
+
 ### 1A.2 Estimated as CONFIDENCE BANDS (two scales)
 - **OVERALL grade → a LETTER-GRADE band** on the grade ladder, width by the scout's confidence tier for the prospect's PRIMARY position: **HIGH = 3 grade-bands** (e.g. A→B+), **MEDIUM = 5** (A→B−), **LOW = 7** (A→C). The true overall grade (`scoreSmb4Player` of the true profile) sits **uniform-random** inside the band, clamped to the ladder ends.
 - **Each TOOL → a 0–99 NUMERIC band in groups of 10**, width by the same tier: **HIGH = 30 pts**, **MEDIUM = 50 pts**, **LOW = 70 pts**. Tools: 5 for hitters (POW/CON/SPD/FLD/ARM); **7 for pitchers (VEL/JNK/ACC + POW/CON/SPD/FLD — no arm)**. The true tool value sits **uniform-random** inside the band.
@@ -40,7 +43,7 @@ Name · age · **primary + secondary position** · **archetype** (the §5.6 gene
 - **S2** Fixed specialty structure: exactly 2 HIGH / 2 LOW positions + MEDIUM default (replace free-form `specialties[]`/`weaknesses[]`; the `accuracyByPosition` map becomes a 3-tier map). No DH (position removed).
 - **S3** Per-tool band engine: 0–99 bands 30/50/70 by tier, uniform-in-band (clamp [0,99]), 10-pt groups, deterministic. Per-tool, not overall.
 - **S4** Overall grade band: 3/5/7 letter-steps by tier, uniform-in-band, + derive the auction price range from the banded overall.
-- **S5** Reveal archetype (persist via B12) + secondary position + age into the visible report.
+- **S5** Reveal archetype (persist via B12) + secondary position + age into the visible report; **replace `trait1`/`trait2` names with a `traitCount` (0/1/2)** — hide trait identities + pos/neg until call-up (§1A.1b).
 - **S6** Draft-board UI: per-tool 0–99 bands + overall grade band; **default-covered / long-press-to-reveal** scout report (JK ruling 2026-06-20, never built).
 - **S7 ⚠ SUPERSEDE + DEAD-CODE CLEANUP:** retire the old `scoutProspect` Gaussian overall-grade jitter, the single IV-range width (`IV §7.4`), and the 20-80-off-scouted-letter; re-derive everything from the v2 bands. Mark `SCOUTING_SYSTEM_SPEC §2.1/§3/§4`, `IV §7.4`, `AUCTION_DRAFT_SPEC_V2 §3.1/§3.4` superseded. Breaking schema change (overall→per-tool) across `prospectScoutingDraftEngine.ts`, `leagueBuilderStartupFarmDraft.ts`, `franchiseStartupProspectDraft.ts`, the draft UIs, and tests — audit each for old-model leakage.
 
