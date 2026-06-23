@@ -18539,3 +18539,57 @@ FORMAT: (1) every changed file + count; (2) the `resolveFameTap` + the producer/
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: A1.2b-FAME-PLAYER-MORALE-TAP ===== -->
+
+<!-- ===== START CONTRACT: A1.2c-FAN-MORALE-CHANNELS-AB ===== -->
+## CONTRACT A1.2c — §20.6 FAN-MORALE CHANNELS A+B (build-dark) (Branch A / `codex/franchise-v1-next` / worktree `/Users/johnkruse/Projects/kbl-tracker`)
+ROUTE: Codex gpt-5.5 | xhigh reasoning effort.
+
+You are a precise TypeScript builder. Work ONLY in `/Users/johnkruse/Projects/kbl-tracker` (branch `codex/franchise-v1-next`). This is **A1.2 LEG-C**. Build-DARK behind `isFranchisePhase2MoraleEnabled` (default OFF); flags-off ⇒ ZERO behavior change.
+
+GOAL:
+Build §20.6 fame→fan-morale **Channels A + B** as TWO new dark per-game writers in `processCompletedGame`, gated `isFranchisePhase2MoraleEnabled`.
+- **Channel A** = the per-game crowd base swing × **fame-volume(standout)** × the already-built **designation tilt**, attributed PER-TEAM to that team's top-WPA standout.
+- **Channel B** = a steady **+0.5** warmth for a team's HELD Fan-Favorite (Albatross excluded — the §13 flashpoint owns Albatross irritation; double-count guard).
+
+SOURCE OF TRUTH (read first):
+- `DECISIONS_LOG.md` 2026-06-23 "FAME→MORALE taps" — §20.6 = A+B; **STANDOUT = per-team top `totalWpa`** (`gameState.playerWpaTotals` / POG `overall`); **VOLUME = BOTH fame AND infamy amplify** (volume = NOTABILITY off |fame|, U-shaped, min 1.0 at neutral; the designation tilt supplies direction); defaults: CONTINUOUS curve, DOUBLE-DARK fame read, matrix-wrapper apply.
+- `FRANCHISE_V1_LIVING_SEASON_SPEC.md` §20.6 (three channels; A = base swing × fame(volume) × designation-tilt; B = steady FF warmth; C is the naming seed, already built/out of scope).
+- Grounding `wf_5d8a9786` (the verified plan + anchors). Anchors below may have drifted ±a few lines — re-read at point of use and MIRROR the cited pattern.
+
+CONSTRAINTS — edit ONLY these files:
+**(A) `src/engines/designationFanMorale.ts`** — ADD `computeFameVolume(heat: number, config = DESIGNATION_FAN_MORALE_TUNING): number`:
+- An AMPLIFIER ≥ 1, off NOTABILITY = the DISTANCE of heat from neutral in EITHER direction (`notability = Math.abs(heat - FAME_TUNING.heat.neutral)` — both a beloved Legend AND a hated/Despised star amplify; an unknown at neutral → 1.0). **U-shaped, NOT positive-only.** CONTINUOUS (not tier-stepped): `volume = 1 + clamp(k * notability / scaleRef, 0, cap)`.
+- Add a `fameVolume: { k, cap, scaleRef }` block to `DESIGNATION_FAN_MORALE_TUNING` (~:39) as §16 SIM-TUNE placeholders (shape LOCKED, magnitudes deferred to the Simulation Gate — match the existing `// §16 SIM-TUNE` comment style). `scaleRef` e.g. `FAME_TUNING.heat.max`.
+- REUSE `applyDesignationSwingTilt` (direction) + `computeDesignationSteadyFanSentiment` (B) — do NOT rebuild them. `computeFameVolume` is the ONLY new engine fn.
+
+**(B) `src/utils/processCompletedGame.ts`** — add TWO new dark writers into the dark-writer block (alongside the fame/flashpoint/L13 writers ~:614-720), EACH guarded by `if (!isFranchisePhase2MoraleEnabled()) return;` (early dark-noop):
+- `persistDarkChannelAFanMoraleForCompletedGame(gameState, trueValueScope, archiveOptions)`: per team (dedup home/away exactly like `resolveTurnedOnPlayers`): (1) RE-DERIVE a `GameResult` from `gameState` (won/score, isWalkOff, isNoHitter, isShutout, isBlowout, vsRival) — MIRROR the figma derivation at `GameTracker.tsx:~11534-11573` (the persist path has `playerPerformances:[]`, so do NOT depend on it); `baseSwing = createGameMoraleEvent(gameResult, timestamp, vsRivalName).finalImpact` (REUSE `createGameMoraleEvent`, do NOT modify it). (2) `standout` = that team's max-`totalWpa` row in `gameState.playerWpaTotals` (none → skip the team OR treat volume 1.0/no-designation = plain base swing). (3) `fameVolume = computeFameVolume(getFranchiseFameRecord(trueValueScope, standout.playerId)?.heat ?? FAME_TUNING.heat.neutral)` — **double-dark:** fame flag off ⇒ no record ⇒ neutral ⇒ volume 1.0. (4) `designationType` = the standout's HELD designation via `getFranchiseDesignationRow({…scope, teamId, type})` (FAN_FAVORITE/ALBATROSS/…; none → neutral tilt). (5) `amplified = applyDesignationSwingTilt(designationType, baseSwing * fameVolume)`. (6) apply as a TEAM-FAN delta, `sourceEventId = `channel-a-game-swing:<checkpoint>:<teamId>`` (one per team per game).
+- `persistDarkChannelBSteadyFanMoraleForCompletedGame(gameState, trueValueScope, archiveOptions)`: per team: held FAN_FAVORITE via `getFranchiseDesignationRow({…scope, teamId, type:'FAN_FAVORITE'})` (status `'active'|'locked'` && playerId); `sentiment = computeDesignationSteadyFanSentiment('FAN_FAVORITE').sentiment` (+0.5); apply as a TEAM-FAN delta, `sourceEventId = `designation-steady-fan:<checkpoint>:<teamId>:FAN_FAVORITE``. EXPLICITLY do NOT read/emit ALBATROSS (§13 owns it).
+- `<checkpoint>` = the scheduled gameNumber (fallback `gameId`) — reuse the `resolveFlashpointCheckpoint`/`resolveFameCheckpoint` pattern (checkpoint-stable, NOT wall-clock).
+- Invoke both writers inside the dark-writer block, each in its own `try/catch` (warn + continue), under the existing True Value scope.
+- **APPLY PATH:** prefer `applyFranchiseMoraleMatrixConsequence` with a TEAM-FAN-ONLY consequence (player delta 0, `teamFanMoraleDelta` = the amplified swing / +0.5; pass the standout/FF-holder `playerId` + `teamId` + the `sourceEventId`) — it gives the flag-gate + per-`sourceEventId` idempotency for free. **STOP-IF** the matrix wrapper cannot cleanly express a player-0 / team-fan-only write → use the bare `applyFranchiseMoraleEffect({ targetType:'team-fan', … })` and keep the explicit `isFranchisePhase2MoraleEnabled` gate + a manual `sourceEventId` dedupe.
+
+**(C) tests:**
+- `src/engines/__tests__/designationFanMorale.test.ts`: `computeFameVolume` — floor ≥ 1; neutral heat → exactly 1.0; **BOTH ends amplify** (a high POSITIVE heat AND a high NEGATIVE heat each return > 1.0); monotonic in |notability|; un-orphans the engine.
+- a Channel-A/B dark-writer test (`src/utils/tests/…`): flag-off ⇒ dark-noop (no morale write); flag-on ⇒ a per-team team-fan write; idempotent re-entry (same checkpoint ⇒ second run no-op via `sourceEventId`); a held ALBATROSS gets NO Channel-B steady warmth.
+
+**(D) `spec-docs/FRANCHISE_V1_LIVING_SEASON_SPEC.md` §20.6** — append a one-line v1 annotation: *"v1: A = per-team top-WPA standout × continuous both-ends fame-volume × designation tilt (double-dark fame); B = held-Fan-Favorite +0.5 steady (Albatross owned by §13); the per-game base swing is now persisted in the dark Phase-2 path (DECISIONS_LOG 2026-06-23)."*
+
+DO NOT TOUCH: `fanMoraleEngine.ts` (REUSE `createGameMoraleEvent` — do NOT modify it); the figma `useFanMorale` path; `iv_oracle.json`; any `TRACKER_DB_VERSION` / store; §20.5 / the fame→player-morale tap (leg-b, DONE); the flashpoint / §13 path. NO new flag.
+
+MAKE-OR-BREAK:
+- BOTH fame+infamy amplify (`computeFameVolume` off `|heat − neutral|`, U-shaped, ≥1, neutral→1.0) — NOT positive-only.
+- REUSE `applyDesignationSwingTilt` + `computeDesignationSteadyFanSentiment`; the ONLY new engine fn is `computeFameVolume`. Do NOT modify `createGameMoraleEvent`.
+- Channel B = FAN_FAVORITE ONLY; Albatross steady stays 0 (the §13 flashpoint owns Albatross irritation — double-count guard).
+- BUILD-DARK: both writers gated `isFranchisePhase2MoraleEnabled` (default off) ⇒ flags-off zero behavior. DOUBLE-DARK fame: fame flag off ⇒ `getFranchiseFameRecord` heat absent ⇒ volume 1.0 ⇒ Channel A = base×tilt. Flip NO flag.
+- `sourceEventId` checkpoint-stable ⇒ idempotent re-run. ONE Channel-A write per team per game; ONE Channel-B per held-FF per game.
+- RE-DERIVE `GameResult` from `gameState` at the persist point (standout from `playerWpaTotals`, NOT `GameResult.playerPerformances`).
+
+STOP-IF (escalate, don't paper over): `createGameMoraleEvent` would need modification to be called from the persist path (it must stay pure); the matrix-wrapper can't express a team-fan-only write; `GameResult` can't be cleanly re-derived from `gameState` (a needed field is missing); a trackerDb/store change is required; OR a partial-mock module-load break (MEMORY L12-3b/4d → run the FULL host suite, fix with a test-only stub).
+
+GATE: `NODE_ENV= npx tsc -b` exit 0 + the FULL suite `NODE_ENV= npx vitest run` ZERO NEW REDS (characterized: `wpaRuntimeBoundary` + `franchiseManualSmokeFixture` solo-flake + `GameTrackerLaunchState` solo-flake — re-run any suspected new red SOLO) + `iv_oracle.json` byte-unchanged + NO trackerDb bump. Commit ONLY the changed files by explicit path (`git add <each>`) — NOT `git add -A`/`.` (untracked markers present). Branch-only, NEVER push.
+
+FORMAT: (1) every changed file + count; (2) `computeFameVolume` + the two writers, referencing §20.6 + the 2026-06-23 rulings; (3) gate output pasted (tsc + full-suite counts + the new tests); (4) "A1.2c fan-morale A+B complete" OR "BLOCKED: <exact reason>".
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: A1.2c-FAN-MORALE-CHANNELS-AB ===== -->
