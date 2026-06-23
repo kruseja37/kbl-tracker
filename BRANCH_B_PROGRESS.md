@@ -66,7 +66,27 @@ count/copy test assertions + the one-scout/one-read prospect-report model (§1A.
 **Gate (independent):** `NODE_ENV= tsc -b` → 0 · full suite **8074 pass / 1 fail (500 files)** = sole `wpaRuntimeBoundary`
 = **ZERO NEW REDS**, byte-identical to the pre-S1 baseline. No `trackerDb` bump; no oracle change.
 
-**Next:** Scouting v2 lane continues — **S2** (fixed 2-HIGH / 2-LOW / MEDIUM-default specialty tiering, replace free-form
-`specialties[]`/`weaknesses[]`; no DH) → S3 (per-tool 0–99 bands) → S4 (overall grade band) → S5 (reveal archetype/age/
-traitCount) → S6 (draft-board UI) → S7 (supersede + cleanup, LAST). All serialize on the generator/scout files; real logic
-→ Codex-built / Opus-audited. (RB-13b + RB-18 also remain on the Branch-B backlog.)
+### ✅ S2 — fixed 2-HIGH / 2-LOW / MEDIUM scout specialty tiering — COMPLETE (`f5a93b46`, branch-only, ZERO NEW REDS)
+
+**JK ruling 2026-06-23:** SMALL / generation-only (the spec's "accuracyByPosition becomes a 3-tier map" was ambiguous —
+saved-shape question; JK chose: change ONLY generation, keep the saved map numeric, defer the literal tier-label storage +
+per-tool bands + Gaussian retirement to S3/S4/S7).
+
+**Built (Codex `S2-SCOUT-TIERING` → Opus-audited):** `buildScoutPool` now draws exactly 2 distinct HIGH + 2 distinct LOW
+positions from `DRAFT_POSITIONS` (no DH) into `specialties[]`/`weaknesses[]`, replacing the free-form mixed-category draw;
+the orphaned `SCOUT_SPECIALTY_POOL` is retired. New exported `scoutTierForPosition` (position-exact membership →
+high/medium/low) = the fixed-tier source of truth for S3. `accuracyByPosition` stays `Record<string,number>` (NO saved-shape
+change), now tier-derived via the unchanged `scoutAccuracy`. The old Gaussian scoring (`scoutProspect`/`specialtyMatches`/
+`confidenceFromAccuracy`) is untouched (S7). 4 files.
+
+**Grounding paid off:** applied the S1 lesson up front — confirmed the category-specialty fixtures in other test files are
+INPUT data (not generator-output assertions), so the change is isolated. The full suite was **clean on the first run** (vs.
+S1's integration-fixture surprise).
+
+**Gate (independent):** `NODE_ENV= tsc -b` → 0 · full suite **8075 pass / 1 fail (500 files)** = sole `wpaRuntimeBoundary`
+= **ZERO NEW REDS** (+1 test). No `trackerDb` bump; no oracle change.
+
+**Next:** **S3** — per-tool 0–99 confidence bands (HIGH=30 / MEDIUM=50 / LOW=70 pts, 10-pt groups, uniform-in-band,
+deterministic), consuming `scoutTierForPosition`. Then S4 (overall grade band 3/5/7 + auction price) → S5 (reveal
+archetype/age/traitCount) → S6 (draft-board UI) → S7 (supersede + cleanup, LAST). All serialize on the generator/scout
+files; real logic → Codex-built / Opus-audited. (RB-13b + RB-18 also remain on the Branch-B backlog.)
