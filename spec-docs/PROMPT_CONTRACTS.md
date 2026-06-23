@@ -18352,3 +18352,66 @@ FORMAT: (1) every changed file + total count; (2) each change referencing the ru
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: A0.1-DH-FRANCHISE-SEAL ===== -->
+
+<!-- ===== START CONTRACT: A2.1-RA1-EXPECTED-STATS ===== -->
+## CONTRACT A2.1 — RA-1 EXPECTED-STATS ENGINE / ratings keystone (Branch A / `codex/franchise-v1-next` / worktree `/Users/johnkruse/Projects/kbl-tracker`)
+ROUTE: Codex gpt-5.5 | xhigh reasoning effort.
+
+You are a precise TypeScript builder. Work ONLY in `/Users/johnkruse/Projects/kbl-tracker` (branch `codex/franchise-v1-next`).
+
+GOAL:
+Add ONE pure, build-DARK engine `src/engines/expectedStatsEngine.ts` exporting a pure function (e.g. `expectedAndSignal`) that, given a player's ratings, his actual per-category rate stats, a position-pool per-category mean + SD, the pool's mean rating, an age band, and a config, returns `{ expectedByCat, rByCat }`. NO consumer, NO DB, NO store, oracle untouched. RA-2 wires it live later. + a colocated unit test.
+
+SOURCE OF TRUTH — the model is RATIFIED in `spec-docs/RA1_FAME_MODEL_PROPOSAL.md PART 1` (read it). The pinned math:
+- `expected_cat = poolMeanProd_cat × twoSegment(playerRating) / twoSegment(poolMeanRating)` (multiplicative — the equilibrium valve, anchored at the pool mean so a higher rating raises its OWN expectation; guard `twoSegment(poolMeanRating)=0`).
+- `r_cat = clamp((actual_cat − expected_cat) / peerSD_cat, −1, +1)` (peer-SD z-score).
+- Below the season-scaled min-sample floor → emit NO signal for that category (null r, mirroring `traitRealityScorer`'s `thin_sample`).
+- League/pool mean is an INPUT PARAM defaulting to `SMB4_BASELINES` (RA-1 never reads the live league — that's RA-2).
+- Pitchers emit NO arm signal (§4A — every pitcher arm is structurally 0); accept the full hitter + pitcher hit/run/field category set (§3B table).
+
+CONSTRAINTS — edit/create ONLY:
+- `src/engines/expectedStatsEngine.ts` (NEW) — import `twoSegment`/curve from `ivEngine`/`ivCurves` (by IMPORT, do not edit them), `getPercentile` from `percentile.ts`, `scaledThreshold`/`AdaptiveThresholdBasis`/`DEFAULT_ADAPTIVE_STANDARDS_CONFIG` from `franchiseAdaptiveStandards`, `SMB4_BASELINES` from `../types/war`.
+- `src/engines/__tests__/expectedStatsEngine.test.ts` (NEW) — hand-worked cases: (a) anchor identity r=0 when actual=expected; (b) curve-ratio monotonicity (higher rating → higher expected); (c) z-score clamp at ±1; (d) min-sample gate → no-signal below floor; (e) `SMB4_BASELINES` default path; (f) pitcher-no-arm. Mirror `traitRealityScorer.test.ts` structure.
+- Tuning: an `ExpectedStatsTuning` interface with §16 placeholders — min-sample floors seeded from `traitRealityScorer` defaults (`minSampleSeason 50`/`minSampleCombined 20`/`minSampleRate 10`/`minPeerPool 3`, season-scaled via `scaledThreshold`) + per-category normalization scale knobs. All marked §16 sim-tune.
+
+DO NOT TOUCH: `franchiseCheckpointSweepCompute.ts` (the `valueDelta` site — RA-2's job); `ivEngine.ts`/`ivCurves.ts` (import only); `salaryCalculator.ts` (RA-2); `src/types/war.ts` (import only); the frozen oracle; any `TRACKER_DB_VERSION`/store (RA-1 is storeless — NO bump, NO new store).
+
+MAKE-OR-BREAK: a PURE, storeless, **consumer-LESS** module — NO production file imports the new symbol (that would mean it stopped being build-dark; RA-1 has no consumer yet). The equilibrium valve (multiplicative curve-ratio anchored at pool mean) + the peer-SD z-score + season-scaled min-sample gating are the load-bearing math, reusing the EXPORTED `twoSegment` (not a re-implemented curve).
+
+STOP-IF (escalate, don't paper over): a production module must import the new symbol to compile (no longer build-dark); a trackerDb bump / new store is needed; `iv_oracle.json` shows any byte change; OR a genuinely-new measurement fork surfaces that the ratified Part-1 model does NOT resolve (default multiplicative per the ratification; FLAG rather than guess if a category seems to need additive).
+
+GATE: `NODE_ENV= npx tsc -b` exit 0 + the FULL suite (`NODE_ENV= npx vitest run`) ZERO NEW REDS (characterized: `wpaRuntimeBoundary` hard-fail + `franchiseManualSmokeFixture` solo-passing order-flake — re-run any suspected new red SOLO before judging) + `iv_oracle.json` byte-unchanged. Branch-only commit, NEVER push.
+
+FORMAT: (1) every changed/new file + count; (2) the math, referencing RA1_FAME_MODEL_PROPOSAL Part 1 §3A; (3) gate output pasted (tsc + suite counts + the new unit tests); (4) "A2.1 RA-1 expected-stats engine complete" OR "BLOCKED: <exact reason>".
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: A2.1-RA1-EXPECTED-STATS ===== -->
+
+<!-- ===== START CONTRACT: B1.3-B12-ARCHETYPE ===== -->
+## CONTRACT B1.3 — B12 PROSPECT ARCHETYPE LAYER (Branch B / `codex/mode1-v1-b` / worktree `/Users/johnkruse/Projects/kbl-mode1-b`)
+ROUTE: Codex gpt-5.5 | xhigh reasoning effort.
+
+You are a precise TypeScript builder. Work ONLY in `/Users/johnkruse/Projects/kbl-mode1-b` (branch `codex/mode1-v1-b`). The spec here is STALE — operative §5.6 is embedded inline.
+
+GOAL:
+Add a large/parametric archetype-bias layer to farm-prospect generation so prospects of the SAME grade show genuinely varied, non-repeating tool spreads (deliberate specialists — sluggers, speedsters, defensive wizards, power aces — each instance distinct), WITHOUT changing the grade distribution or breaking the analyzer round-trip.
+
+SOURCE OF TRUTH (PROSPECT_GENERATION_SPEC §5.6, embedded): "Before `buildBaseRatings`, draw a per-tool archetype bias vector + apply it as an ADDITIONAL bias (reuse the `bias` arg `POSITION_STAT_BIAS` already proves works); the §5.2 generate-score-correct loop then re-scores the biased profile with the real `scoreSmb4Player` analyzer and adjusts the overall level until the analyzer returns the target grade. Use archetype FAMILIES (Slugger, Pure-Power, Power-Speed, Five-Tool, Speedster, Slap-Hitter, Contact-Glove, Defensive-Wizard, Cannon-Corner, Project, Balanced, …) × randomized per-instance magnitudes (jitter bias size + which secondary tool is emphasized/de-emphasized) so the realized-spread space is effectively continuous. Position-weighted, NOT forced (Sluggers→corners, Gloves→up-the-middle; surprises allowed). σ=7 per-tool noise stays ON TOP. Convergence guard: an extreme archetype near a grade extreme can hit the [20,99] clamp before level-adjustment reaches target → detect non-convergence and re-draw or scale the archetype down; taper bias magnitude toward A/D."
+
+CONSTRAINTS — edit ONLY:
+- `src/utils/prospectScoutingDraftEngine.ts`: (1) `ARCHETYPE_FAMILIES` table (family = per-tool bias template + position-affinity weights); (2) in `buildCandidate` (~:1038, BEFORE `buildBaseRatings`) draw the family via `pickWeightedValue(\`${seed}:archetype:family\`, position-weighted list)` + per-instance magnitudes via `randomUnit(\`${seed}:archetype:mag\`)`/`(\`${seed}:archetype:jitter\`)` — OWN namespace; taper magnitude toward A/D by targetGrade; (3) thread `archetypeBias` into `buildBaseRatings` (extend signature to accept an optional bias vector that ADDS to `POSITION_STAT_BIAS` at :650-656 / pitcher block :638-646); (4) `buildRatings`/`applyRatingShift` UNCHANGED (the solver re-anchors grade); (5) on solver throw (non-convergence ~:859) catch in `buildCandidate` + re-draw/scale (e.g. halve magnitudes, derived seed) until convergence — NEVER propagate the throw; (6) PERSIST `archetypeFamily` onto `GeneratedProspectCandidate` (interface ~:122-139, stamp ~:1057-1074) so scouting S5 can reveal it later.
+- `src/utils/tests/prospectScoutingDraftEngine.test.ts`: a variety/spread test (same-grade prospects show distinct tool shapes) + assert B9 round-trip + §13 distribution still green.
+- DEFAULTS (the 3 minor open items — take these, they're §16 sim-tune): persist the family (yes); magnitudes = reasonable placeholders (primary tool +12..+22, secondary +6..+12, weakness −8..−15, tapered near A/D); position lean = LIGHT (surprises allowed) per "not forced".
+
+DO NOT TOUCH: the frozen oracle `iv_oracle.json`; `src/engines/gradeEngine.ts` (`POSITION_STAT_BIAS` — read-only) + `smb4GradeEmulator.ts` (the grade oracle — read-only); `trackerDb.ts`/any store (NO DB bump); `franchiseStartupProspectDraft.test.ts`/`leagueBuilderStartupFarmDraft.test.ts`/`farmAuctionPool.test.ts` (their power:60/72 are INPUT fixtures — leave).
+
+MAKE-OR-BREAK — **RNG-SAFETY IS THE WHOLE TICKET**: the archetype draw MUST use its own `${seed}:archetype:*` namespace (like B8's `:age:band`/`:age:within`) + only ADD a bias term (NOT a new `normal()` draw inside `baseRating`) so the existing per-tool seeds (`${seed}:power` etc.) keep their exact strings → the B9 round-trip + §13 distribution stay green BECAUSE the §5.2 solver re-grades every biased profile to its `targetGrade` (grade is invariant to tool SHAPE). Verify `scoreSmb4Player(prospect).grade === trueGrade` for the whole class (B9) + grade-share within `SECTION_13_GRADE_TOLERANCE`. The convergence guard MUST be real (an A-aimed extreme can need power>99 → solver throws → re-draw/scale, never propagate).
+
+STOP-IF (escalate): (a) visible spread variety forces relaxing the band-center target or σ=7 (would alter §13); (b) the re-draw can loop unbounded for some family/grade combo (needs a taper/exclusion ruling); (c) it turns out a scouting-S5 reveal CONTRACT is required for v1 (would expand scope into the DTO + a reveal test); (d) any test outside the 2 named files goes RED.
+
+GATE: `NODE_ENV= npx tsc -b` exit 0 + full `NODE_ENV= npx vitest run` ZERO NEW REDS (B9 round-trip + §13 distribution MUST be green; characterized fail = `wpaRuntimeBoundary`) + `iv_oracle.json` byte-unchanged + no trackerDb bump. Branch-only commit, NEVER push.
+
+FORMAT: (1) every changed file + count; (2) the archetype design, referencing §5.6; (3) gate output pasted (tsc + suite counts + B9/§13 green + the variety test); (4) "B1.3 B12 archetype complete" OR "BLOCKED: <exact reason>".
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: B1.3-B12-ARCHETYPE ===== -->
