@@ -43,5 +43,30 @@ re-run any suspected new red SOLO before judging it real). Pre-thread HEAD = `7d
 
 **JK decision:** approved "delete the dead file" (attended, 2026-06-23). B6 closed.
 
-**Next:** Scouting v2 lane (Queue B-W2) — **S1/S2** scout-draft phase + specialties — the next substantive
-Branch-B item (serializes on `prospectScoutingDraftEngine.ts`; real logic → Codex-built / Opus-audited).
+### ✅ S1 — one scout per team at startup draft (2→1) — COMPLETE (`0c089460`, branch-only, ZERO NEW REDS)
+
+**Finding:** S1 was ~half-built — a scout-draft phase already existed (pool `6N`, snake order, `draftLeagueBuilderScout`,
+persistence, "HIRE SCOUT" UI in `LeagueBuilderDraft.tsx`) but drafted **2 scouts/team** and is bundled with the farm draft.
+**JK ruling 2026-06-23:** minimal in-place flip now; the spec's "scout draft before the MLB auction" RE-SEQUENCING is
+**deferred to RB-13b** (the MLB auction isn't routed into the startup flow yet — S1 ↔ RB-13b coupling).
+
+**Built (Codex `S1-SCOUT-COUNT-V2` → Opus-audited):** `STARTUP_SCOUTS_PER_TEAM` 2→1 (pool auto-becomes `3N`, multiplier
+unchanged, engine bodies byte-identical). Reconciled the full 2-scout surface: the hardcoded
+`leagueBuilderFarmScoutingHandoff` `!== 2` validator + 6 copy strings (singular) + 2 UI `/2` denominators + the
+count/copy test assertions + the one-scout/one-read prospect-report model (§1A.3, no triangulation). 14 src files.
+
+**Iteration trail (the triangle working — cross-model decorrelation paid off twice):**
+- Codex correctly **BLOCKED V1** — its independent broad grep found the hardcoded handoff validator + 2 test files my
+  grounding greps missed (narrow constant+"two scouts" greps). V2 = the complete 12-file surface.
+- The **full suite** then caught 2 more 2-scout SEED LOOPS in franchise-init integration fixtures
+  (`franchiseSetupLaunch.integration` + `franchiseRosterMovement`, `for index<=2` — lines with no "scout" token, so
+  missed by both greps); auditor-fixed mechanically to `<=1`. **Lesson:** count/copy reconciliations need a full-surface
+  grep (bare literals, loop bounds, denominators, mock values) + the FULL suite, not a focused run.
+
+**Gate (independent):** `NODE_ENV= tsc -b` → 0 · full suite **8074 pass / 1 fail (500 files)** = sole `wpaRuntimeBoundary`
+= **ZERO NEW REDS**, byte-identical to the pre-S1 baseline. No `trackerDb` bump; no oracle change.
+
+**Next:** Scouting v2 lane continues — **S2** (fixed 2-HIGH / 2-LOW / MEDIUM-default specialty tiering, replace free-form
+`specialties[]`/`weaknesses[]`; no DH) → S3 (per-tool 0–99 bands) → S4 (overall grade band) → S5 (reveal archetype/age/
+traitCount) → S6 (draft-board UI) → S7 (supersede + cleanup, LAST). All serialize on the generator/scout files; real logic
+→ Codex-built / Opus-audited. (RB-13b + RB-18 also remain on the Branch-B backlog.)
