@@ -640,7 +640,8 @@ export function LeagueBuilderFarmAuctionDraft() {
                       <div className="text-xl font-bold">{prospectDisplayName(currentLotProspect)}</div>
                       {positionBadges(currentLotProspect)}
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-[#E8E8D8]/75">
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-sm text-[#E8E8D8]/75">
+                      <div>Age {currentLotProspect?.age ?? "N/A"}</div>
                       <LongPressReveal
                         label="Hold to reveal scout report"
                         className="sm:col-span-2 text-left bg-transparent border-0 p-0 text-[#E8E8D8]/75 cursor-pointer hover:text-[#E8E8D8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E8E8D8]"

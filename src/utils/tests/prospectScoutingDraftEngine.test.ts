@@ -5,8 +5,11 @@ import { TRAIT_PRICING } from '../../data/traitPricing';
 import { countTraitPolarity, normalizeTrait, scoreSmb4Player } from '../../engines/smb4GradeEmulator';
 import {
   buildProspectPlayerForPick,
+  drawProspectAge,
+  generateProspectPool,
   generateProspectScoutingDraft,
   gradeDistance,
+  PROSPECT_AGE_BANDS,
   PROSPECT_HITTER_TRAIT_POOL,
   PROSPECT_PITCHER_TRAIT_POOL,
   prospectTraitsConflict,
@@ -62,6 +65,52 @@ const SECTION_13_GRADE_TOLERANCE = 0.015;
 const SECTION_13_TRAIT_TOLERANCE = 0.03;
 const SECTION_13_POSITION_PLAYER_MIN_SHARE = 0.50;
 const SECTION_13_POSITION_PLAYER_MAX_SHARE = 0.70;
+const SECTION_10_AGE_SAMPLE_SIZE = 20_000;
+const SECTION_10_AGE_TOLERANCE = 0.015;
+const SECTION_10_GRADE_CORRELATION_TOLERANCE = 0.05;
+const B11_B8_NON_AGE_RNG_PROOF = {
+  length: 28370,
+  hash: '97181b06',
+} as const;
+
+const B11_B8_RNG_PROOF_INPUT: ProspectScoutingDraftInput = {
+  leagueId: 'b11-b8-age-rng-proof',
+  seasonNumber: 1,
+  teamDraftOrder: [
+    { teamId: 'team-a', teamName: 'Alpha' },
+    { teamId: 'team-b', teamName: 'Beta' },
+  ],
+  rounds: 3,
+  seed: 'b11-b8-age-rng-proof-seed',
+  existingPlayerIds: [],
+  existingTeamIds: ['team-a', 'team-b'],
+  scoutsByTeamId: {
+    'team-a': {
+      scoutId: 'scout-a',
+      scoutName: 'Scout Alpha',
+      specialties: ['CF', 'outfield'],
+      weaknesses: ['CP'],
+    },
+    'team-b': {
+      scoutId: 'scout-b',
+      scoutName: 'Scout Beta',
+      specialties: ['pitching'],
+      weaknesses: ['CF'],
+    },
+  },
+  candidatePoolMultiplier: 2,
+};
+const SECTION_10_GRADE_SCORE: Record<string, number> = {
+  A: 8,
+  'A-': 7,
+  'B+': 6,
+  B: 5,
+  'B-': 4,
+  'C+': 3,
+  C: 2,
+  'C-': 1,
+  D: 0,
+};
 
 type Section32Grade = keyof typeof SECTION_3_2_GRADE_TARGETS;
 
@@ -87,6 +136,39 @@ function compact(output: ReturnType<typeof generateProspectScoutingDraft>) {
     })),
     visibleReports: output.visibleReports,
   };
+}
+
+function stripAge(value: unknown): unknown {
+  return JSON.parse(JSON.stringify(value, (key, nestedValue) => key === 'age' ? undefined : nestedValue));
+}
+
+function fnv1aHex(text: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function pearsonCorrelation(left: readonly number[], right: readonly number[]): number {
+  const count = Math.min(left.length, right.length);
+  const leftAverage = left.reduce((sum, value) => sum + value, 0) / count;
+  const rightAverage = right.reduce((sum, value) => sum + value, 0) / count;
+  let covariance = 0;
+  let leftVariance = 0;
+  let rightVariance = 0;
+
+  for (let index = 0; index < count; index += 1) {
+    const leftDelta = left[index] - leftAverage;
+    const rightDelta = right[index] - rightAverage;
+    covariance += leftDelta * rightDelta;
+    leftVariance += leftDelta * leftDelta;
+    rightVariance += rightDelta * rightDelta;
+  }
+
+  if (leftVariance === 0 || rightVariance === 0) return 0;
+  return covariance / Math.sqrt(leftVariance * rightVariance);
 }
 
 describe('shared deterministic prospect/scouting draft engine', () => {
@@ -646,6 +728,73 @@ describe('shared deterministic prospect/scouting draft engine', () => {
       expect(positionCounts.get(position)).toBeGreaterThan(0);
     }
   }, 120_000);
+
+  test('§10 prospect ages use the seeded wide band-weighted young-skewed draw independent of grade', () => {
+    const prospects = generateProspectPool({
+      leagueId: 'section-10-age-distribution',
+      seasonNumber: 1,
+      seed: 'section-10-age-distribution-seed',
+      teamDraftOrder: BASE_INPUT.teamDraftOrder,
+    }, SECTION_10_AGE_SAMPLE_SIZE);
+    const bandCounts = PROSPECT_AGE_BANDS.map(() => 0);
+    const ageCounts = new Map<number, number>();
+    const ages: number[] = [];
+    const gradeScores: number[] = [];
+
+    for (const prospect of prospects) {
+      const bandIndex = PROSPECT_AGE_BANDS.findIndex((band) =>
+        prospect.age >= band.min && prospect.age <= band.max,
+      );
+
+      expect(Number.isInteger(prospect.age)).toBe(true);
+      expect(prospect.age).toBeGreaterThanOrEqual(18);
+      expect(prospect.age).toBeLessThanOrEqual(42);
+      expect(bandIndex).toBeGreaterThanOrEqual(0);
+
+      bandCounts[bandIndex] += 1;
+      ageCounts.set(prospect.age, (ageCounts.get(prospect.age) ?? 0) + 1);
+      ages.push(prospect.age);
+      gradeScores.push(SECTION_10_GRADE_SCORE[prospect.overallGrade]);
+    }
+
+    const histogram = Object.fromEntries(
+      PROSPECT_AGE_BANDS.map((band, index) => [
+        `${band.min}-${band.max}`,
+        Number((bandCounts[index] / prospects.length).toFixed(4)),
+      ]),
+    );
+    const youngShare = (bandCounts[0] + bandCounts[1]) / prospects.length;
+    const olderShare = (bandCounts[3] + bandCounts[4]) / prospects.length;
+    const ageGradeCorrelation = pearsonCorrelation(ages, gradeScores);
+
+    console.info('§10 age histogram', histogram);
+    console.info('§10 age-grade correlation', Number(ageGradeCorrelation.toFixed(4)));
+
+    expect(prospects).toHaveLength(SECTION_10_AGE_SAMPLE_SIZE);
+    expect(Math.min(...ages)).toBe(18);
+    expect(Math.max(...ages)).toBe(42);
+    for (const [index, band] of PROSPECT_AGE_BANDS.entries()) {
+      const realized = bandCounts[index] / prospects.length;
+      expect(Math.abs(realized - band.weight)).toBeLessThanOrEqual(SECTION_10_AGE_TOLERANCE);
+    }
+    expect(youngShare).toBeGreaterThanOrEqual(0.68);
+    expect(youngShare).toBeLessThanOrEqual(0.72);
+    expect(olderShare).toBeGreaterThanOrEqual(0.10);
+    expect(olderShare).toBeLessThanOrEqual(0.14);
+    expect((ageCounts.get(18) ?? 0) / prospects.length).toBeLessThan(0.13);
+    expect(Math.abs(ageGradeCorrelation)).toBeLessThanOrEqual(SECTION_10_GRADE_CORRELATION_TOLERANCE);
+    expect(drawProspectAge('section-10-determinism')).toBe(drawProspectAge('section-10-determinism'));
+  }, 120_000);
+
+  test('§10 age draw is isolated from all non-age generated prospect output', () => {
+    const output = generateProspectScoutingDraft(B11_B8_RNG_PROOF_INPUT);
+    const nonAgeJson = JSON.stringify(stripAge(output));
+
+    expect({
+      length: nonAgeJson.length,
+      hash: fnv1aHex(nonAgeJson),
+    }).toEqual(B11_B8_NON_AGE_RNG_PROOF);
+  });
 
   test('generated prospect names come from the SMB4 database with deterministic variety', () => {
     const output = generateProspectScoutingDraft({

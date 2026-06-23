@@ -299,6 +299,7 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     const targetName = prospectDisplayName(target.prospect);
     const targetRangeText = formatScoutRange(targetRange);
     const targetGradeText = `Scout grade ${target.prospect.prospectProfile.scoutedGrade} (${gradeToTwentyEighty(target.prospect.prospectProfile.scoutedGrade)})`;
+    const targetAgeText = `Age ${target.prospect.age}`;
     const targetRangeMidpoint = (targetRange.low + targetRange.high) / 2;
     const expectedOpeningPrice = formatMoney(LEAGUE_MINIMUM_SALARY);
     const expectedBidAmount = Math.ceil(LEAGUE_MINIMUM_SALARY);
@@ -323,6 +324,7 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     for (const position of prospectPositions(target.prospect)) {
       expect(screen.getAllByText(position).length).toBeGreaterThan(0);
     }
+    expect(screen.getByText(targetAgeText)).toBeInTheDocument();
     const scoutReportControl = screen.getByRole("button", { name: "Hold to reveal scout report" });
     expect(scoutReportControl).toBeInTheDocument();
     expect(screen.queryByText(`Scout value ${targetRangeText}`)).not.toBeInTheDocument();

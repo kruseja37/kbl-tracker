@@ -412,8 +412,13 @@ const PROSPECT_ANALYZER_TARGET_SCORES: Partial<Record<Grade, number>> = {
   'C-': (calibratedThreshold('C', 'C-') + calibratedThreshold('C-', 'D+')) / 2,
   D: 46,
 };
-// fixed draft age — no age-based dev/variability at generation (PROSPECT §10; Captain 2026-06-21)
-const PROSPECT_DRAFT_AGE = 18;
+export const PROSPECT_AGE_BANDS = [
+  { min: 18, max: 21, weight: 0.40 },
+  { min: 22, max: 24, weight: 0.30 },
+  { min: 25, max: 31, weight: 0.18 },
+  { min: 32, max: 35, weight: 0.08 },
+  { min: 36, max: 42, weight: 0.04 },
+] as const;
 const CITIES = [
   { city: 'Denver', state: 'CO' },
   { city: 'Portland', state: 'OR' },
@@ -436,6 +441,24 @@ function hashString(input: string): number {
 
 export function randomUnit(seed: string): number {
   return hashString(seed) / 0xffffffff;
+}
+
+export function drawProspectAge(seed: string): number {
+  const totalWeight = PROSPECT_AGE_BANDS.reduce((sum, band) => sum + band.weight, 0);
+  let roll = randomUnit(`${seed}:age:band`) * totalWeight;
+  let selectedBand = PROSPECT_AGE_BANDS[PROSPECT_AGE_BANDS.length - 1];
+
+  for (const band of PROSPECT_AGE_BANDS) {
+    roll -= band.weight;
+    if (roll <= 0) {
+      selectedBand = band;
+      break;
+    }
+  }
+
+  const ageCount = selectedBand.max - selectedBand.min + 1;
+  const ageOffset = Math.min(ageCount - 1, Math.floor(randomUnit(`${seed}:age:within`) * ageCount));
+  return selectedBand.min + ageOffset;
 }
 
 function normal(seed: string): number {
@@ -1115,7 +1138,7 @@ function buildPlayerDto(input: {
     lastName: candidate.lastName,
     gender: randomUnit(`${seed}:gender`) < 0.18 ? 'F' : 'M',
     jerseyNumber: 60 + ((draftPick.pickNumber - 1) % 40),
-    age: PROSPECT_DRAFT_AGE,
+    age: drawProspectAge(seed),
     bats,
     throws,
     armSlot: null,

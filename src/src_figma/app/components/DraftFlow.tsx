@@ -14,6 +14,7 @@ import {
   runFranchiseDraftDryRun,
   type FranchiseDraftAdapterData,
 } from "../../../utils/franchiseDraftAdapter";
+import { drawProspectAge } from "../../../utils/prospectScoutingDraftEngine";
 import type { FranchiseOffseasonAdapterIssue } from "../../../utils/franchiseOffseasonAdapters";
 
 // Empty teams fallback — populated from IndexedDB when available
@@ -487,7 +488,7 @@ function PrototypeDraftFlow({ seasonId, seasonNumber = 1, franchiseId, onComplet
         name,
         position,
         grade,
-        age: randBetween(19, 22),
+        age: drawProspectAge(`draft-flow:${seasonId}:ai:${i}`),
         potentialCeiling: ceiling,
         personality: pick(PERSONALITIES),
       };
@@ -514,7 +515,7 @@ function PrototypeDraftFlow({ seasonId, seasonNumber = 1, franchiseId, onComplet
         name: player.name,
         position: player.position,
         grade: player.grade,
-        age: 22,
+        age: drawProspectAge(`draft-flow:${seasonId}:inactive:${id}`),
         potentialCeiling: "N/A" as const,
         power: 70,
         contact: 75,
