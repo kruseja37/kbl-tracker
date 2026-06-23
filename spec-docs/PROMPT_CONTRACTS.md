@@ -18414,4 +18414,11 @@ GATE: `NODE_ENV= npx tsc -b` exit 0 + full `NODE_ENV= npx vitest run` ZERO NEW R
 FORMAT: (1) every changed file + count; (2) the archetype design, referencing §5.6; (3) gate output pasted (tsc + suite counts + B9/§13 green + the variety test); (4) "B1.3 B12 archetype complete" OR "BLOCKED: <exact reason>".
 
 Use xhigh reasoning effort. Think step-by-step.
+
+## AMENDMENT 1 (B12 BLOCK→fix, authorized 2026-06-23) — allow regenerating the prospectChemistryRebalance non-chemistry golden
+Your §5.6 implementation is DONE (WIP already in the working tree) and its own gate passed (tsc 0; `prospectScoutingDraftEngine.test.ts` 26/26 — B9 round-trip + §13 distribution + the new variety test all green; own `${seed}:archetype:*` namespace confirmed). The ONLY failure is `src/utils/tests/prospectChemistryRebalance.test.ts` > "chemistry post-pass does not perturb non-chemistry candidate draws" — its hardcoded `PRE_REBALANCE_NON_CHEMISTRY_GOLDEN` (a snapshot of generated NON-chemistry ratings) legitimately changed because archetype-biased ratings differ. This is EXACTLY the RB-14 precedent.
+AUTHORIZED: edit `src/utils/tests/prospectChemistryRebalance.test.ts` to **regenerate the `PRE_REBALANCE_NON_CHEMISTRY_GOLDEN`** to the new archetype-biased values.
+MAKE-OR-BREAK (the guard): the FOUR chemistry invariants in that file MUST stay green UNCHANGED — (1) "large generated farm prospect batch matches the canonical chemistry target distribution", (2) "same seed produces identical per-prospect chemistry assignment", (3) "rebalance helper returns a new batch without mutating input candidates", (4) "small generated batch keeps quota integrity and exact total count". If editing the golden requires touching ANY chemistry assertion or ANY of those 4 break → STOP and quote (it would mean archetype perturbed chemistry via a shared seed — it must NOT; the `:archetype:*` namespace is separate). Then run the FULL Mode-1 suite `NODE_ENV= npx vitest run` ZERO NEW REDS (characterized: `wpaRuntimeBoundary`) + tsc -b 0, and COMMIT (branch-only). The expected changed-file set is the 2 original B12 files + `prospectChemistryRebalance.test.ts` (golden only).
+
+Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: B1.3-B12-ARCHETYPE ===== -->
