@@ -43,7 +43,12 @@
 
 ## PART 2 — Fame WAR-legitimacy floor: the WAR→merit bucketing
 
-**Plain version:** fame should be tethered to what a player is actually *worth* (his WAR), so a hyped-but-mediocre player's fame (Heat) gets pulled back toward reality, and a quietly-great player's fame gets pulled up. The gravity function (`applyWarLegitimacyGravity`, `fameModel.ts:161`) already exists and is orphaned; it needs two things defined to wire it into `franchiseFameCompute`:
+> ⚠ **CORRECTED 2026-06-22 (JK) — UPWARD-ONLY.** An earlier draft of this section described the floor as a *bidirectional* "pull fame toward WAR-worth," which would drag a media darling DOWN. That is **the inverse of the design** — `FRANCHISE_V1_LIVING_SEASON_SPEC §20.2` + `H3_KICKOFF` rule that **High-fame/Low-WAR ("darling/overrated") is a BLESSED ARCHETYPE** and the hard downward cap is RETIRED. The floor is **upward soft gravity ONLY**.
+
+**Plain version:** the WAR floor is a slow **one-directional** lift — it RAISES a quietly-excellent player's fame toward a WAR-justified floor (good stats but no flashy moments → slowly accrues "legitimacy" fame), and it does **NOTHING** when fame is already at or above that floor. A **media darling** (lots of fame, low WAR) is **never pulled down** — that's an intended archetype. The gravity function (`applyWarLegitimacyGravity`, `fameModel.ts:161`) is orphaned; wiring it into `franchiseFameCompute` needs the floor level defined + the one-sided application:
+
+### Choice 0 — Direction (RULED): UPWARD-ONLY
+- The per-game pull is `Heat += max(0, gravity × (warJustifiedFloor − Heat))` — i.e. lift toward the floor only while `Heat < warJustifiedFloor`; **zero** effect when `Heat ≥ floor`. NEVER a downward term. (The `meritHeatTarget` per bucket below is the FLOOR level, not a two-way target.)
 
 ### Choice A — Which WAR feeds the bucketing?
 - **PROPOSED:** the **season WAR already on the player's `FranchiseTrueValueRow`** (`franchiseTrueValueStorage.ts:62`) — no new computation, same WAR the rest of the system trusts.
