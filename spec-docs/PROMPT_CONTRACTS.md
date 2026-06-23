@@ -18475,3 +18475,67 @@ FORMAT: (1) every changed file + count; (2) the before/after of the gravity line
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: A1.2a-FAME-WARFLOOR-GRAVITY ===== -->
+
+<!-- ===== START CONTRACT: A1.2b-FAME-PLAYER-MORALE-TAP ===== -->
+## CONTRACT A1.2b — §20.5 FAME→PLAYER-MORALE TAP (change-only / net heatDelta, build-dark) (Branch A / `codex/franchise-v1-next` / worktree `/Users/johnkruse/Projects/kbl-tracker`)
+ROUTE: Codex gpt-5.5 | xhigh reasoning effort.
+
+You are a precise TypeScript builder. Work ONLY in `/Users/johnkruse/Projects/kbl-tracker` (branch `codex/franchise-v1-next`). This is **A1.2 LEG-B**. Build-DARK behind the EXISTING Phase-2 flags; flags-off ⇒ ZERO behavior change. Do NOT touch leg-c (§20.6 fan morale).
+
+GOAL:
+Build the §20.5 fame→player-morale tap: a player's per-game fame CHANGE feeds the master morale matrix, scaled by the existing personality + hidden-modifier tilt. RULED CHANGE-ONLY via NET heat movement (`heatDelta = new heat − prior heat`); NO fame-LEVEL / standing-drag term (deferred v1.1). Three wiring points: (A) the morale-matrix resolver + event field + §16 constant; (B) the fame compute returns per-player heatDelta; (C) a new emitter after the fame compute that reuses the PROVEN designation-morale plumbing.
+
+SOURCE OF TRUTH (read first):
+- `DECISIONS_LOG.md` 2026-06-23 "FAME→MORALE taps (A1.2 legs)": §20.5 = **CHANGE-ONLY**; and the 2026-06-23 scalar ruling **NET fame movement (`heat − prior heat`)**, NOT raw fame earned.
+- `FRANCHISE_V1_LIVING_SEASON_SPEC.md` §20.5 (fame is an input to the master morale matrix; both rise + fade are felt; personality governs sensitivity; Ambition multiplies). v1 implements the CHANGE half ONLY.
+- Grounding `wf_412eeded` (the verified plan + anchors). Anchors below may have drifted ±a few lines — re-read at point of use and MIRROR the cited pattern.
+
+CONSTRAINTS — edit ONLY these files:
+**(A) `src/engines/masterMoraleMatrix.ts`:**
+- (a) Extend the kind-bearing `MoraleMatrixEvent` union member (~:85-91) with `heatDelta?: number;` alongside `chargedMatchupResult?` / `exactSelfPlayerMoraleDelta?` (OPTIONAL → non-breaking; the 3 external literal builders ignore it).
+- (b) Add `resolveFameTap(event)` above `MORALE_TAP_REGISTRY` (model: `resolveRelationshipTap` ~:580). PASTE EXACTLY:
+```ts
+function resolveFameTap(event: MoraleMatrixEvent): BaseMoraleConsequence {
+  const heatDelta =
+    event.kind === 'fame' && typeof event.heatDelta === 'number' && Number.isFinite(event.heatDelta)
+      ? event.heatDelta
+      : 0;
+  if (heatDelta === 0) return NEUTRAL_BASE_CONSEQUENCE; // zero/undefined → frozen neutral SINGLETON (isNeutral is `base === NEUTRAL_BASE_CONSEQUENCE`)
+  return {
+    selfPlayerMoraleDelta: heatDelta * MORALE_TUNING.modifierMultipliers.fameHeatDeltaMoraleScale, // un-rounded; compose rounds + applies personality/ambition tilt downstream
+    teamFanMoraleDelta: 0, // never push §20.6 fan morale
+    otherTouched: [],
+    reason: `fame.${String(event.type).toLowerCase()}`,
+  };
+}
+```
+- (c) Replace the registry stub (~:426) `fame: () => NEUTRAL_BASE_CONSEQUENCE,` with `fame: resolveFameTap,`.
+- (d) Add ONE §16 sim-tune constant `fameHeatDeltaMoraleScale` to `MORALE_TUNING.modifierMultipliers` (~:186-191), a SMALL placeholder (e.g. `0.25`), under the §16 placeholder note (~:174). `resolveFameTap` reads it via `MORALE_TUNING.modifierMultipliers.fameHeatDeltaMoraleScale` — NEVER a literal.
+
+**(B) `src/utils/franchiseFameCompute.ts`:** in `persistDarkFameRecordsForCompletedGame`'s per-player loop, compute `const heatDelta = heat - stored.heat;` (after the `reachFloor` line ~:102, before `rows.push` ~:105) and collect `{ playerId, heatDelta }` for each player actually processed (the loop already skips checkpoint-duplicates). Extend the return type `PersistDarkFameRecordsResult` with `playerHeatDeltas: Array<{ playerId: string; heatDelta: number }>` (the dark-noop early-return ~:78-80 returns `playerHeatDeltas: []`). **Add NO morale import here — fame stays morale-free.**
+
+**(C) `src/utils/processCompletedGame.ts`:** add a NEW emitter (e.g. `persistFameMoraleConsequencesAfterFame`) invoked INSIDE the existing `if (isFranchisePhase2FameEnabled()) { … }` branch (~:620-626), right AFTER the `persistDarkFameRecordsForCompletedGame` call, consuming its returned `playerHeatDeltas`. For each `{ playerId, heatDelta }` with `heatDelta !== 0`: source `teamId` + `personality` + `hiddenPersonalityModifiers` + current player morale + current fan morale by MIRRORING the designation-morale emitter `persistDesignationMoraleConsequencesAfterTrueValue` (~:382-430: `resolveHiddenModifiers` ~:363, `currentMoraleValue` ~:372, `getFranchisePlayer` ~:393); build `{ kind: 'fame', type: 'FAME_HEAT_CHANGED', heatDelta }`; `composeMoraleConsequence(...)`; `applyFranchiseMoraleMatrixConsequence({ …scope, playerId, teamId, consequence, sourceEventId, timestamp })`. `sourceEventId` MUST be checkpoint-stable (derive from the fame checkpoint / `scheduleGameId`, NOT a wall-clock) so a game re-run dedupes to a no-op. Do NOT add a second `isFranchisePhase2MoraleEnabled()` gate — `applyFranchiseMoraleMatrixConsequence` SELF-GATES (L12-5c precedent).
+
+**(D) `spec-docs/FRANCHISE_V1_LIVING_SEASON_SPEC.md` §20.5:** append a one-line v1 annotation (purge-on-supersede): *"v1: CHANGE-ONLY (net heatDelta = heat − prior heat); the chronic-low-fame standing-LEVEL drag is deferred to v1.1 (DECISIONS_LOG 2026-06-23)."*
+
+**(E) `src/engines/__tests__/masterMoraleMatrix.test.ts`:** `resolveFameTap` unit cases — positive heatDelta ⇒ selfPlayerMoraleDelta>0 & teamFanMoraleDelta===0 & not-neutral; negative ⇒ <0 & 0; **the EXISTING `FAME_HEAT_CHANGED` no-heatDelta→neutral test (~:90-105) MUST stay green** (singleton identity); scale == heatDelta × the §16 constant under NEUTRAL personality+modifiers (proves the constant is the only magnitude source); an off-kind event (kind:'race') carrying a stray heatDelta returns its own base unchanged.
+
+**(F) `src/utils/tests/…`:** a producer/emitter test — FAME flag ON + MORALE flag OFF ⇒ fame rows written AND ZERO morale-store mutation (apply dark-noop); same game twice (same checkpoint) ⇒ morale no-op (sourceEventId dedup) + fame loop checkpoint-skip.
+
+DO NOT TOUCH: `fameModel.ts` / `applyHeatUpdate` (fame math); the `FranchiseFameRecordRow` storage shape; any `TRACKER_DB_VERSION` / store / `iv_oracle.json`; the designation-morale emitter; §20.6 / `designationFanMorale.ts` / `fanMoraleEngine.ts` (that is leg-c). NO new flag.
+
+MAKE-OR-BREAK:
+- CHANGE-ONLY: `resolveFameTap` reads ONLY `heatDelta`; no fame-level/standing term. heatDelta 0/undefined ⇒ return the `NEUTRAL_BASE_CONSEQUENCE` SINGLETON **by reference** (a fresh equal object breaks `isNeutral` ~:456 `base === NEUTRAL_BASE_CONSEQUENCE` + the existing FAME_HEAT_CHANGED test + the neutral early-return).
+- `teamFanMoraleDelta: 0` ALWAYS (fame→player morale must not push fan morale; §20.6 owns that).
+- scalar = `heat − stored.heat` (NET movement, INCLUDES the decay haircut — the RULED reading), NOT `breakdown.total`.
+- BUILD-DARK: FAME flag OFF ⇒ producer never runs; FAME ON + MORALE OFF ⇒ apply self-returns dark-noop ⇒ zero morale write. Flags-off ⇒ zero behavior change.
+- `sourceEventId` checkpoint-stable ⇒ idempotent re-run.
+
+STOP-IF (escalate, don't paper over): the `MoraleMatrixEvent` extension forces a change to any existing tap consumer; the emitter cannot get a clean per-player `heatDelta`/`teamId` without a trackerDb/store change; OR a genuinely-new measurement fork the rulings don't resolve. **Mock-break watch (MEMORY L12-3b/4d):** wiring a new module into `processCompletedGame`'s import graph can break partial-mock test files at module-load — run the FULL host suite and fix with a test-only mock stub (do NOT change production to satisfy a mock).
+
+GATE: `NODE_ENV= npx tsc -b` exit 0 + the FULL suite `NODE_ENV= npx vitest run` ZERO NEW REDS (characterized: `wpaRuntimeBoundary` hard-fail + `franchiseManualSmokeFixture` solo-passing order-flake — re-run any suspected new red SOLO) + `iv_oracle.json` byte-unchanged + NO trackerDb bump. Commit ONLY the changed files by explicit path (`git add <each path>`) — NOT `git add -A`/`.` (untracked markers present). Branch-only, NEVER push.
+
+FORMAT: (1) every changed file + count; (2) the `resolveFameTap` + the producer/emitter wiring, referencing §20.5 + the 2026-06-23 rulings; (3) gate output pasted (tsc + full-suite counts + the new tests); (4) "A1.2b fame→player-morale tap complete" OR "BLOCKED: <exact reason>".
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: A1.2b-FAME-PLAYER-MORALE-TAP ===== -->
