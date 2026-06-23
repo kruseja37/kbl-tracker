@@ -86,7 +86,30 @@ S1's integration-fixture surprise).
 **Gate (independent):** `NODE_ENV= tsc -b` → 0 · full suite **8075 pass / 1 fail (500 files)** = sole `wpaRuntimeBoundary`
 = **ZERO NEW REDS** (+1 test). No `trackerDb` bump; no oracle change.
 
-**Next:** **S3** — per-tool 0–99 confidence bands (HIGH=30 / MEDIUM=50 / LOW=70 pts, 10-pt groups, uniform-in-band,
-deterministic), consuming `scoutTierForPosition`. Then S4 (overall grade band 3/5/7 + auction price) → S5 (reveal
-archetype/age/traitCount) → S6 (draft-board UI) → S7 (supersede + cleanup, LAST). All serialize on the generator/scout
-files; real logic → Codex-built / Opus-audited. (RB-13b + RB-18 also remain on the Branch-B backlog.)
+### ✅ S3 — per-tool confidence band engine (pure, build-dark) — COMPLETE (`82d9f3fb`, branch-only, ZERO NEW REDS)
+
+**Finding:** contrary to the pre-grounding guess, S3 is NOT a saved-shape fork — the prospect board is RECOMPUTED
+(`buildBoardForSession`), so a pure band engine has zero saved-shape/UI impact. Clean build-dark like S2.
+
+**Built (Codex `S3-TOOL-BANDS` → Opus-audited):** `prospectScoutingDraftEngine.ts` gains `SCOUT_TOOL_BAND_WIDTHS`
+(high 30 / med 50 / low 70, §16-tunable), `HITTER_SCOUT_TOOLS` (5) / `PITCHER_SCOUT_TOOLS` (7, no arm), `scoutToolBand`
+(uniform-in-band placement) and `scoutToolBands` (per-prospect map consuming S2's `scoutTierForPosition`). Un-gameable:
+`L ~ U[max(0,true−W), min(true,99−W)]`, band `[L, L+W]` — **provably** `lower ≤ true ≤ upper` and `0 ≤ lower, upper ≤ 99`
+(auditor verified by case analysis incl. the 0/99 extremes). 2 files, pure-additive.
+
+**Captain default (flagged §16 sim-tune for JK):** "bands in groups of 10" read as the tier widths; the exact continuous
+formula is implemented WITHOUT snapping band edges to multiples of 10 — snapping would break the containment guarantee
+near the extremes.
+
+**Build-DARK:** exported functions + tests only; NO report DTO/board/UI wiring (S5 reveal / S6 UI), NO change to the old
+Gaussian `scoutProspect` (S7). Consumer arrives at S5.
+
+**Gate (independent):** `NODE_ENV= tsc -b` → 0 · full suite **8078 pass / 1 fail (500 files)** = sole `wpaRuntimeBoundary`
+= **ZERO NEW REDS** (+3 tests). No `trackerDb` bump; no oracle change.
+
+**Next:** **S4** — overall grade BAND (HIGH=3 / MEDIUM=5 / LOW=7 letter-steps on the grade ladder, uniform-in-band) +
+DERIVE the auction price range from the banded overall (reuse `scoutPriceOpinion`/20-80 off the BANDED overall, never the
+true `scoreSmb4Player`). ⚠ S4 starts replacing the old Gaussian `scoutedGrade` → likely a real fork (where the banded
+overall lives + the price-range rewire) — ground + surface before building. Then S5 (reveal archetype/age/traitCount into
+the report DTO — saved-shape) → S6 (draft-board UI, default-covered/long-press) → S7 (supersede + cleanup, LAST). All
+serialize on the generator/scout files. (RB-13b + RB-18 also remain on the Branch-B backlog.)
