@@ -182,11 +182,28 @@ Traits must be **position-appropriate** per `TRAIT_INTEGRATION_SPEC.md §5.2`: p
 
 ### 5.6 Player ARCHETYPES — large/parametric, for non-repeating tool spreads — **RULED (JK 2026-06-22; audit `we2bpqsw7`)**
 The audit confirmed the rating *algorithm* is sound (independent per-tool σ=7 + a uniform grade-hitting shift that preserves shape → real lumpy/balanced variety, NOT cookie-cutter), but variety is **modest/symmetric** — pure Gaussian noise + a fixed per-position bias produces no deliberate specialists and the spreads can feel repetitive at a grade. JK: add archetypes, **but a LARGE/parametric set so we don't see the same spreads over and over for similar grades.**
-- **Mechanism:** before `buildBaseRatings`, draw a **per-tool archetype bias vector** and apply it as an *additional* bias (reusing the existing `bias` arg that `POSITION_STAT_BIAS` already proves works); the §5.2 uniform shift then re-centers the biased profile to the target grade. **Grade is invariant to tool spread (§5.3)** → this is safe: any archetype still solves to the right grade and keeps the §3.2 distribution / B9 green.
+- **Mechanism:** before `buildBaseRatings`, draw a **per-tool archetype bias vector** and apply it as an *additional* bias (reusing the existing `bias` arg that `POSITION_STAT_BIAS` already proves works); the §5.2 generate-score-correct loop then **re-scores the biased profile with the real `scoreSmb4Player` analyzer and adjusts the overall level (the uniform shift + fine scan) until the analyzer returns the target grade.**
+- **Why it can't mis-grade (corrected — NOT "grade ignores shape"):** the grade is NOT invariant to tool spread — `scoreSmb4Player` weights attributes by position and nonlinearly, so a glove-heavy SS and a bat-heavy 1B with identical raw numbers grade differently. What makes archetypes SAFE is that the generator is **tied to the analyzer in the loop**: it lets the analyzer grade the *finished* profile and corrects until it matches. B9 asserts `scoreSmb4Player(prospect).grade === targetGrade` for the whole class, so no archetype can silently mis-grade.
+- **⚠ Convergence guard (RULED):** an EXTREME archetype near a grade extreme can hit the [20,99] clamp before the level-adjustment reaches the target (e.g. a max-power slugger aimed at A needs power past 99). The build MUST detect non-convergence and **re-draw or scale the archetype down** (and B9 catches any that slip through). Archetype bias magnitude should taper as the target grade approaches the A / D extremes.
 - **Large + non-repeating (the key requirement):** NOT a small fixed list of ~5 clichés. Use **archetype FAMILIES** (recognizable for scouting flavor — e.g. Slugger, Pure-Power, Power-Speed, Five-Tool, Speedster, Slap-Hitter, Contact-Glove, Defensive-Wizard, Cannon-Corner, Project/raw-tools, Balanced, …) **× randomized per-instance magnitudes** (jitter the bias size + which secondary tool is emphasized/de-emphasized), so the space of realized spreads is effectively continuous — every "slugger" is a *distinct* slugger. (Equivalent framing: parametrically draw a primary-strength tool + optional secondary-strength + a weakness, with random bias magnitudes — a near-infinite spread space with recognizable families.)
 - **Specialists allowed:** bias magnitudes large enough to produce genuine specialists (e.g. 80-power/45-speed corner masher) — that's the point.
 - **Position-weighted, not forced:** archetype odds lean position-appropriate (Sluggers → corners, Gloves → up-the-middle) but surprises are allowed (a slugging SS) for emergent variety. Position bias still applies underneath.
 - σ=7 per-tool noise stays ON TOP, so even two same-family same-magnitude prospects differ. (Build task B12.)
+
+**Illustrative examples (shapes only — the §5.2 loop sets the exact level so the analyzer confirms the grade):**
+| Family | Pos | Grade | POW | CON | SPD | FLD | ARM |
+|--------|-----|-------|-----|-----|-----|-----|-----|
+| Slugger | 1B | B | 84 | 55 | 38 | 52 | 70 |
+| Slugger | RF | A− | 88 | 64 | 52 | 60 | 82 |
+| Slugger | 3B | B+ | 80 | 70 | 45 | 66 | 78 |
+| Speedster | CF | B | 42 | 68 | 90 | 70 | 55 |
+| Speedster | 2B | C+ | 38 | 62 | 82 | 64 | 50 |
+| Speedster | LF | B+ | 55 | 74 | 85 | 62 | 48 |
+| Defensive Wizard | SS | B | 40 | 58 | 68 | 88 | 84 |
+| Defensive Wizard | C | B− | 48 | 55 | 35 | 82 | 86 |
+| Defensive Wizard | CF | B+ | 52 | 66 | 80 | 86 | 70 |
+
+Within a family the through-line tool is constant but position/grade/secondary/magnitude vary (no repeated spreads); across families the *same* grade yields very different players (the B 1B-slugger vs B CF-speedster vs B SS-wizard).
 
 ---
 
@@ -314,7 +331,7 @@ Concrete deltas between the live generator and this analyzer-anchored spec. Cost
 | **B9** | **Add a distribution-validation test** asserting the generated class's analyzer-grade histogram matches §3.2 within tolerance (≈±1.5pp), plus trait-split + position-spread checks (none exists today). | new test | **BUILD** (test) |
 | **B10** | **(Deferred, L-ECON3)** add `farmGradeMode` as a multiplicative skew over §3.2 weights for juiced/nerfed; wire the orphaned `FARM_NERF_SCALES`. **Not v1.** | new; `tierParams.ts:51-55` | **BUILD** (post-v1) |
 | **B11** | Retire/leave the orphaned `gradeEngine.generateFullProspect/generateProspectRatings` (test-only) — not part of the live path. | `gradeEngine.ts:303, 417` | none (note) |
-| **B12** | **Archetype layer (§5.6) — large/parametric.** Before `buildBaseRatings`, draw an archetype-family + randomized per-tool bias magnitudes (recognizable families × continuous magnitude → non-repeating spreads, genuine specialists allowed), position-weighted-not-forced; apply as an extra `bias` vector; the §5.2 uniform shift re-centers to grade (σ-invariant → B9 stays green). Keep σ=7 noise on top. | new (`bias` plumbing + `applyRatingShift`/`buildRatings` reused) `prospectScoutingDraftEngine.ts:597-636, 779-848` | **BUILD** |
+| **B12** | **Archetype layer (§5.6) — large/parametric.** Before `buildBaseRatings`, draw an archetype-family + randomized per-tool bias magnitudes (recognizable families × continuous magnitude → non-repeating spreads, genuine specialists allowed), position-weighted-not-forced; apply as an extra `bias` vector; the §5.2 loop **re-grades the finished profile with `scoreSmb4Player` and adjusts the level until it matches** (NOT "grade ignores shape" — the analyzer is the in-loop oracle; B9 verifies). **Guard non-convergence at grade extremes** (clamp-bound → re-draw/scale the archetype; taper bias magnitude near A/D). Keep σ=7 noise on top. | new (`bias` plumbing + `applyRatingShift`/`buildRatings` reused) `prospectScoutingDraftEngine.ts:597-636, 779-848` | **BUILD** |
 | **B13** | **Grade/scarcity-weight traits (§5.5b).** Replace the flat uniform `trait1`/`trait2` draw (`:1007-1012`) with a grade- and scarcity-weighted draw: reuse the analyzer per-trait impact coefficients (`smb4GradeEmulator`) + `genWeight = 1 − traitWeight` (`TRAIT_GAIN_LOSS_THRESHOLD_SPEC §5`); optionally lift the 30/50/20 count split for A/A−/B+. Rare/impactful traits cluster on better prospects. | `prospectScoutingDraftEngine.ts:1007-1012`; `smb4GradeEmulator` (coeffs) | **BUILD** (biggest sameness lever) |
 
 **Dependency order:** B5/B7/B8 are independent low-risk wirings (can land first). B3/B4 (features) must precede B1 (the solve consumes the features). B2 precedes B1. B9 validates the whole. B10 is post-v1.
