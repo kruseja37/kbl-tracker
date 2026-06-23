@@ -140,7 +140,7 @@ Continuous is preferred (carry × exit-velo), but the discrete tiers are the fal
 
 ## 7. Open build-confirms & §16 thresholds
 1. **FIRST-LANDING semantic (load-bearing):** the spec says "tap where the ball landed *or was fielded*" — must tighten the tap instruction to *"where it first hit the ground/wall,"* else a grounder fielded in the OF masquerades as a liner and corrupts trajectory + distance. Wording change, no new capture.
-2. **Confirm the live spray UI populates x/y** (vs only a coarse zone) — the model assumes precise coords.
+2. **Confirm the live spray UI populates x/y** (vs only a coarse zone) — the model assumes precise coords. The spray is a **marker-anchored POLAR model** (`EnrichmentPanel.tsx:227`: r=0 home plate · **r=0.45 IF/OF boundary** · r=1.0 fence · foul lines = angular bounds) → IF/OF split = `r<0.45`, carry ≈ `r × park fence-distance(direction)`. **FIELD-LEAK GATE (JK, historical problem): verify the DRAWN field image's markers (IF arc/fence/foul lines) ALIGN with this polar model + the viewBox transform (a tap "at the fence" → r≈1.0) before trusting any distance.**
 3. **Barrel/carry threshold** — what park-adjusted feet = barrel; does a hard liner need distance or is hard-on-the-barrel enough.
 4. **`Kc` split weight** between Junk and Accuracy.
 5. **IF-arm BR/BT coverage** — do BEAT_RUNNER/BEAT_THROW clear a coverage bar + is the fielder tagged on the BR play.
