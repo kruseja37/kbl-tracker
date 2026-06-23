@@ -14,8 +14,13 @@ import {
   PROSPECT_PITCHER_TRAIT_POOL,
   prospectTraitsConflict,
   prospectSalaryForDraftRound,
+  HITTER_SCOUT_TOOLS,
+  PITCHER_SCOUT_TOOLS,
+  SCOUT_TOOL_BAND_WIDTHS,
   scoutProspect,
   scoutTierForPosition,
+  scoutToolBand,
+  scoutToolBands,
   type GeneratedProspectCandidate,
   type ProspectScoutingDraftInput,
   type ProspectScoutingReport,
@@ -991,6 +996,81 @@ describe('shared deterministic prospect/scouting draft engine', () => {
       specialties: ['outfield'],
       weaknesses: ['pitching'],
     })).toBe('medium');
+  });
+
+  test('S3 scout tool bands contain the true value with tier-width deterministic ranges', () => {
+    const tiers = ['high', 'medium', 'low'] as const;
+    const trueValues = [20, 50, 99] as const;
+
+    for (const tier of tiers) {
+      for (const trueValue of trueValues) {
+        const first = scoutToolBand(trueValue, tier, `s3-band:${tier}:${trueValue}`);
+        const second = scoutToolBand(trueValue, tier, `s3-band:${tier}:${trueValue}`);
+
+        expect(first.lower).toBeLessThanOrEqual(trueValue);
+        expect(first.upper).toBeGreaterThanOrEqual(trueValue);
+        expect(first.lower).toBeGreaterThanOrEqual(0);
+        expect(first.upper).toBeLessThanOrEqual(99);
+        expect(first.upper - first.lower).toBe(SCOUT_TOOL_BAND_WIDTHS[tier]);
+        expect(second).toEqual(first);
+      }
+    }
+  });
+
+  test('S3 scout tool band seed controls the in-band offset when the feasible span is open', () => {
+    for (const tier of ['high', 'medium', 'low'] as const) {
+      const first = scoutToolBand(50, tier, 's3-seed-a');
+      const second = scoutToolBand(50, tier, 's3-seed-b');
+
+      expect(second.lower).not.toBe(first.lower);
+    }
+  });
+
+  test('S3 scout tool band maps expose hitter and pitcher tool sets using S2 position tiers', () => {
+    const ratings = {
+      power: 58,
+      contact: 61,
+      speed: 64,
+      fielding: 67,
+      arm: 70,
+      velocity: 73,
+      junk: 76,
+      accuracy: 79,
+    };
+    const hitterBands = scoutToolBands({
+      ratings,
+      position: 'CF',
+      scout: { specialties: ['CF'] },
+      seed: 's3-hitter-tools',
+    });
+    const pitcherBands = scoutToolBands({
+      ratings,
+      position: 'SP',
+      scout: { weaknesses: ['SP'] },
+      seed: 's3-pitcher-tools',
+    });
+    const mediumBands = scoutToolBands({
+      ratings,
+      position: 'CF',
+      scout: { specialties: ['SS'] },
+      seed: 's3-medium-tools',
+    });
+
+    expect(Object.keys(hitterBands).sort()).toEqual([...HITTER_SCOUT_TOOLS].sort());
+    expect(hitterBands).not.toHaveProperty('velocity');
+    expect(hitterBands).not.toHaveProperty('junk');
+    expect(hitterBands).not.toHaveProperty('accuracy');
+    expect(Object.keys(pitcherBands).sort()).toEqual([...PITCHER_SCOUT_TOOLS].sort());
+    expect(pitcherBands).not.toHaveProperty('arm');
+    expect(Object.values(hitterBands).every((band) =>
+      band.upper - band.lower === SCOUT_TOOL_BAND_WIDTHS.high,
+    )).toBe(true);
+    expect(Object.values(mediumBands).every((band) =>
+      band.upper - band.lower === SCOUT_TOOL_BAND_WIDTHS.medium,
+    )).toBe(true);
+    expect(Object.values(pitcherBands).every((band) =>
+      band.upper - band.lower === SCOUT_TOOL_BAND_WIDTHS.low,
+    )).toBe(true);
   });
 
   test('scout weakness can worsen matching-position scouted-grade accuracy', () => {

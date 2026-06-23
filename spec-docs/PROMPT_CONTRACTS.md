@@ -14593,3 +14593,72 @@ REPORT:
 
 Do not run the full suite or commit — the auditor runs the full gate and commits. Use high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: S2-SCOUT-TIERING ===== -->
+
+<!-- ===== START CONTRACT: S3-TOOL-BANDS ===== -->
+ROUTE: Codex 5.5 | high reasoning effort
+
+GOAL:
+Scouting v2 **S3 — per-tool confidence band engine (PURE, build-DARK)**. Add a deterministic engine that converts a prospect's TRUE per-tool ratings into 0–99 confidence BANDS whose WIDTH is set by the scout's fixed tier (from S2's `scoutTierForPosition`), with the true value placed uniform-random inside the band so it is un-gameable. **Build-DARK: pure functions + tests only — NO wiring into the report DTO/board/UI** (that is S5 reveal / S6 UI) and NO change to the old Gaussian scoring (S7).
+
+SOURCE OF TRUTH (embedded inline — ratified spec lives on the Branch-A docs branch, not this worktree):
+- SCOUTING_SYSTEM_SPEC §1A.2: "Each TOOL → a 0–99 NUMERIC band, width by the scout's tier: **HIGH = 30 pts, MEDIUM = 50 pts, LOW = 70 pts**. Tools: **5 for hitters (power/contact/speed/fielding/arm); 7 for pitchers (velocity/junk/accuracy + power/contact/speed/fielding — NO arm)**. The true tool value sits uniform-random inside the band."
+- §1A.2 Uniform-in-band placement (un-gameable): "band [L, L+W] with **L drawn uniformly from [max(0, true−W), min(true, 99−W)]** — guarantees the band contains the true value, stays in [0,99], and the true value's offset is uniform (NOT always centered/top/bottom). Near the 0/99 extremes the feasible offset narrows (acceptable). Deterministic (seeded per scout×prospect)."
+- §1A.4 S3: "Per-tool band engine: 0–99 bands 30/50/70 by tier, uniform-in-band (clamp [0,99]), deterministic. Per-tool, not overall."
+- CAPTAIN DEFAULT (documented, §16 sim-tune, flagged for JK): the band WIDTHS (30/50/70) are the "groups of 10"; implement the spec's EXACT continuous placement formula above with integer rounding — do NOT additionally snap band edges to multiples of 10 (that would break the "band always contains the true value" guarantee near the extremes).
+
+ALLOWED FILES (edit only these 2):
+- `src/utils/prospectScoutingDraftEngine.ts`
+- `src/utils/tests/prospectScoutingDraftEngine.test.ts`
+
+EXACT CHANGES (add near `scoutTierForPosition`; reuse the existing `clamp`, `randomUnit`, `isPitcher`, `DraftPosition`, `scoutTierForPosition` already in the file):
+1. `export const SCOUT_TOOL_BAND_WIDTHS: Record<'high' | 'medium' | 'low', number> = { high: 30, medium: 50, low: 70 };` // §16 sim-tune
+2. `export const HITTER_SCOUT_TOOLS = ['power', 'contact', 'speed', 'fielding', 'arm'] as const;`
+   `export const PITCHER_SCOUT_TOOLS = ['velocity', 'junk', 'accuracy', 'power', 'contact', 'speed', 'fielding'] as const;` // NO arm
+3. The placement function:
+   ```
+   export function scoutToolBand(trueValue: number, tier: 'high' | 'medium' | 'low', seed: string): { lower: number; upper: number } {
+     const width = SCOUT_TOOL_BAND_WIDTHS[tier];
+     const trueClamped = clamp(trueValue, 0, 99);
+     const loBound = Math.max(0, trueClamped - width);
+     const hiBound = Math.min(trueClamped, 99 - width);
+     const span = Math.max(0, hiBound - loBound);
+     const lower = Math.round(loBound + randomUnit(seed) * span);
+     return { lower, upper: lower + width };
+   }
+   ```
+   (Confirm `clamp` rounds to an integer and signature is `clamp(value, min, max)`; if not, adapt so `trueClamped` is an integer in [0,99]. The math must GUARANTEE `lower <= trueClamped <= upper` and `0 <= lower`, `upper <= 99`.)
+4. The per-prospect map (consumes S2's tier):
+   ```
+   export function scoutToolBands(input: {
+     ratings: Record<string, number>;
+     position: DraftPosition;
+     scout?: { specialties?: string[]; weaknesses?: string[] };
+     seed: string;
+   }): Record<string, { lower: number; upper: number }> {
+     const tier = scoutTierForPosition(input.position, input.scout);
+     const tools = isPitcher(input.position) ? PITCHER_SCOUT_TOOLS : HITTER_SCOUT_TOOLS;
+     const bands: Record<string, { lower: number; upper: number }> = {};
+     for (const tool of tools) {
+       bands[tool] = scoutToolBand(input.ratings[tool] ?? 0, tier, `${input.seed}:${tool}`);
+     }
+     return bands;
+   }
+   ```
+5. Tests in `prospectScoutingDraftEngine.test.ts` (import the new exports): for a spread of true values (incl. 20, 50, 99) × each tier — assert (a) `lower <= true <= upper`, (b) `lower >= 0 && upper <= 99`, (c) `upper - lower === SCOUT_TOOL_BAND_WIDTHS[tier]`, (d) determinism (same seed → identical band), (e) different seeds yield different `lower` (offset is not fixed/centered). For `scoutToolBands`: a hitter position yields exactly the 5 hitter tools (no velocity/junk/accuracy), a pitcher position yields the 7 pitcher tools (NO arm), and a HIGH-tier specialty position gives width-30 bands while a non-listed (MEDIUM) position gives width-50.
+
+DO NOT TOUCH: `scoutProspect` / `scoutAccuracy` / `specialtyMatches` / `confidenceFromAccuracy` / `baseAccuracy` (the Gaussian model — S7); `scoutTierForPosition` (S2, just call it); any report/board DTO (`VisibleSafeProspectReport`, `StartupProspectBoard*`) or UI — S3 is build-DARK with NO consumer yet (S5 wires it); `accuracyByPosition`; saved-shape types; `TRACKER_DB_VERSION` / stores (NO DB bump); `iv_oracle.json`. Any file outside ALLOWED FILES.
+
+VERIFICATION (paste ACTUAL output):
+- `NODE_ENV= npx tsc -b` (expect 0).
+- `NODE_ENV= npx vitest run src/utils/tests/prospectScoutingDraftEngine.test.ts` (expect all pass).
+
+STOP IF: `clamp`/`randomUnit`/`isPitcher`/`scoutTierForPosition` are not available in the file as assumed; the containment math can't be guaranteed integer-safe; a change would require a file outside ALLOWED FILES. → "BLOCKED: <reason>".
+
+REPORT:
+1. Every changed git path + total.
+2. Each change with source ref.
+3. ACTUAL tsc + focused-vitest output.
+4. "S3-TOOL-BANDS complete" OR "BLOCKED: <reason>".
+
+Do not run the full suite or commit — the auditor runs the full gate and commits. Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: S3-TOOL-BANDS ===== -->

@@ -1224,6 +1224,52 @@ export function scoutTierForPosition(
   return 'medium';
 }
 
+export const SCOUT_TOOL_BAND_WIDTHS: Record<'high' | 'medium' | 'low', number> = {
+  high: 30,
+  medium: 50,
+  low: 70,
+};
+
+export const HITTER_SCOUT_TOOLS = ['power', 'contact', 'speed', 'fielding', 'arm'] as const;
+export const PITCHER_SCOUT_TOOLS = [
+  'velocity',
+  'junk',
+  'accuracy',
+  'power',
+  'contact',
+  'speed',
+  'fielding',
+] as const;
+
+export function scoutToolBand(
+  trueValue: number,
+  tier: 'high' | 'medium' | 'low',
+  seed: string,
+): { lower: number; upper: number } {
+  const width = SCOUT_TOOL_BAND_WIDTHS[tier];
+  const trueClamped = clamp(trueValue, 0, 99);
+  const loBound = Math.max(0, trueClamped - width);
+  const hiBound = Math.min(trueClamped, 99 - width);
+  const span = Math.max(0, hiBound - loBound);
+  const lower = Math.round(loBound + randomUnit(seed) * span);
+  return { lower, upper: lower + width };
+}
+
+export function scoutToolBands(input: {
+  ratings: Record<string, number>;
+  position: DraftPosition;
+  scout?: { specialties?: string[]; weaknesses?: string[] };
+  seed: string;
+}): Record<string, { lower: number; upper: number }> {
+  const tier = scoutTierForPosition(input.position, input.scout);
+  const tools = isPitcher(input.position) ? PITCHER_SCOUT_TOOLS : HITTER_SCOUT_TOOLS;
+  const bands: Record<string, { lower: number; upper: number }> = {};
+  for (const tool of tools) {
+    bands[tool] = scoutToolBand(input.ratings[tool] ?? 0, tier, `${input.seed}:${tool}`);
+  }
+  return bands;
+}
+
 function confidenceFromAccuracy(accuracy: number): 'low' | 'medium' | 'high' {
   if (accuracy >= 82) return 'high';
   if (accuracy >= 68) return 'medium';
