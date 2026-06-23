@@ -190,18 +190,23 @@ The audit confirmed the rating *algorithm* is sound (independent per-tool σ=7 +
 - **Position-weighted, not forced:** archetype odds lean position-appropriate (Sluggers → corners, Gloves → up-the-middle) but surprises are allowed (a slugging SS) for emergent variety. Position bias still applies underneath.
 - σ=7 per-tool noise stays ON TOP, so even two same-family same-magnitude prospects differ. (Build task B12.)
 
-**Illustrative examples (shapes only — the §5.2 loop sets the exact level so the analyzer confirms the grade):**
-| Family | Pos | Grade | POW | CON | SPD | FLD | ARM |
-|--------|-----|-------|-----|-----|-----|-----|-----|
-| Slugger | 1B | B | 84 | 55 | 38 | 52 | 70 |
-| Slugger | RF | A− | 88 | 64 | 52 | 60 | 82 |
-| Slugger | 3B | B+ | 80 | 70 | 45 | 66 | 78 |
-| Speedster | CF | B | 42 | 68 | 90 | 70 | 55 |
-| Speedster | 2B | C+ | 38 | 62 | 82 | 64 | 50 |
-| Speedster | LF | B+ | 55 | 74 | 85 | 62 | 48 |
-| Defensive Wizard | SS | B | 40 | 58 | 68 | 88 | 84 |
-| Defensive Wizard | C | B− | 48 | 55 | 35 | 82 | 86 |
-| Defensive Wizard | CF | B+ | 52 | 66 | 80 | 86 | 70 |
+**ANALYZER-VERIFIED examples (full profiles; grades are actual `scoreSmb4Player` output, run `wtms0nucj`, round-trip re-scored).** Hitters = POW/CON/SPD/FLD/ARM; pitchers = VEL/JNK/ACC + arsenal (pitchers also carry batter ratings POW/CON/SPD = 20).
+| Family | Pos (2nd) | B/T | Ratings | Traits | Score → Grade |
+|--------|-----------|-----|---------|--------|---------------|
+| Slugger | 1B (LF) | R/R | 76/58/42/58/64 | Big Hack, RBI Hero | 70.1 → B |
+| Slugger | RF (1B) | L/L | 80/66/62/62/80 | Big Hack, Cannon Arm | 80.2 → A− |
+| Slugger | 3B (1B) | R/R | 73/73/49/69/69 | Big Hack, Bad Ball Hitter | 74.3 → B+ |
+| Speedster | CF (LF) | L/L | 41/63/75/63/57 | Sprinter, Stealer | 70.4 → B |
+| Speedster | 2B (SS) | S/R | 30/46/64/46/46 | Stealer | 60.5 → C+ |
+| Speedster | LF (CF) | L/L | 57/75/75/57/41 | Sprinter, Bad Ball Hitter | 74.4 → B+ |
+| Def. Wizard | SS (2B) | R/R | 45/61/67/79/79 | Magic Hands, Cannon Arm | 69.9 → B |
+| Def. Wizard | C (—) | R/R | 54/54/38/72/72 | Magic Hands, Cannon Arm | 65.3 → B− |
+| Def. Wizard | CF (RF) | L/L | 58/58/76/76/64 | Magic Hands, Dive Wizard | 74.6 → B+ |
+| Power Ace | SP | R/R | VEL76/JNK62/ACC62 · 4F,CH,SL,CB | K Collector, Workhorse | 79.6 → A− |
+| Crafty | SP | R/L | VEL26/JNK62/ACC62 · 2F,CH,CB,SL,CF | Specialist, Gets Ahead | 70.4 → B |
+| Flamethrower | CP | R/R | VEL83/JNK59/ACC55 · 4F,SL | K Collector | 74.9 → B+ |
+
+**Analyzer input contract (for the B12/B13 builder — `smb4GradeEmulator.ts`):** input = a single `Smb4PlayerInput`; **traits are scalar `trait1`/`trait2` (NOT an array)**; handedness = `bats`/`throws` (`R` baseline, `L`/`S` add terms); `primaryPosition`+`secondaryPosition` (1B/DH are the zero-baseline hitter positions); pitcher role is INFERRED from `primaryPosition ∈ {SP,RP,CP,SP/RP}` (CP has no position term); `arsenal` = string[] of {2F,4F,CB,CF,CH,FK,SB,SL}; **pitchers must pass low `power/contact/speed` batter ratings**; default mapping = the **calibrated** grade thresholds (no options). The generate-score-correct solve (§5.2) must score with THIS contract.
 
 Within a family the through-line tool is constant but position/grade/secondary/magnitude vary (no repeated spreads); across families the *same* grade yields very different players (the B 1B-slugger vs B CF-speedster vs B SS-wizard).
 
