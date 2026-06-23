@@ -117,6 +117,7 @@ export interface ProspectProfile {
   scoutGradeError: number;
   scoutSpecialtiesVisible: ScoutSpecialty[];
   scoutWeaknessesVisible: ScoutSpecialty[];
+  archetypeFamily?: ProspectArchetypeFamily;
 }
 
 export interface GeneratedProspectCandidate {
@@ -129,6 +130,7 @@ export interface GeneratedProspectCandidate {
   throws?: 'L' | 'R';
   trueGrade: Grade;
   potentialGrade: Grade;
+  archetypeFamily: ProspectArchetypeFamily;
   ratings: PositionPlayerRatings & PitcherRatings;
   arsenal: string[];
   trait1?: string;
@@ -297,6 +299,7 @@ const PROSPECT_SOLVE_MIN_SHIFT = -80;
 const PROSPECT_SOLVE_MAX_SHIFT = 80;
 const PROSPECT_SOLVE_ITERATIONS = 28;
 const PROSPECT_CORRECTION_STEP = 0.25;
+const PROSPECT_ARCHETYPE_ATTEMPT_SCALES = [1, 0.65, 0.4, 0.2, 0] as const;
 export const PROSPECT_HITTER_TRAIT_POOL = [
   'Ace Exterminator',
   'Bad Ball Hitter',
@@ -391,6 +394,140 @@ const SECONDARY_POSITION_WEIGHTS: Record<FieldingDraftPosition, Array<[Position 
   CF: [['OF', 23], ['1B/OF', 6], [undefined, 1]],
   RF: [['OF', 10], ['C', 10], ['LF', 7], ['1B/OF', 2], [undefined, 2]],
 };
+type RatingTool = keyof PositionPlayerRatings | keyof PitcherRatings;
+type ArchetypeBiasVector = Partial<Record<RatingTool, number>>;
+type ArchetypeRole = 'hitter' | 'pitcher' | 'both';
+
+interface ArchetypeFamilyDefinition {
+  family: string;
+  role: ArchetypeRole;
+  template: ArchetypeBiasVector;
+  positionAffinity: Partial<Record<DraftPosition, number>>;
+  baseWeight?: number;
+}
+
+const ARCHETYPE_FAMILIES = [
+  {
+    family: 'Slugger',
+    role: 'hitter',
+    template: { power: 1, arm: 0.3, contact: -0.35, speed: -0.55, fielding: -0.25 },
+    positionAffinity: { '1B': 1.55, LF: 1.35, RF: 1.3, '3B': 1.2, C: 0.9, CF: 0.75, SS: 0.7, '2B': 0.75 },
+    baseWeight: 1.1,
+  },
+  {
+    family: 'Pure-Power',
+    role: 'hitter',
+    template: { power: 1, contact: -0.6, speed: -0.45, fielding: -0.3, arm: 0.2 },
+    positionAffinity: { '1B': 1.65, LF: 1.45, RF: 1.35, '3B': 1.25, C: 0.8, CF: 0.65, SS: 0.6, '2B': 0.65 },
+  },
+  {
+    family: 'Power-Speed',
+    role: 'hitter',
+    template: { power: 0.9, speed: 1, arm: 0.25, contact: -0.25, fielding: -0.2 },
+    positionAffinity: { CF: 1.35, LF: 1.25, RF: 1.25, SS: 1.05, '2B': 1.0, '3B': 0.95, '1B': 0.75, C: 0.65 },
+  },
+  {
+    family: 'Five-Tool',
+    role: 'hitter',
+    template: { power: 0.65, contact: 0.65, speed: 0.65, fielding: 0.55, arm: 0.55 },
+    positionAffinity: { CF: 1.35, SS: 1.2, RF: 1.1, '2B': 1.0, '3B': 1.0, LF: 0.95, C: 0.85, '1B': 0.75 },
+    baseWeight: 0.9,
+  },
+  {
+    family: 'Speedster',
+    role: 'hitter',
+    template: { speed: 1, contact: 0.35, fielding: 0.25, power: -0.65, arm: -0.2 },
+    positionAffinity: { CF: 1.6, '2B': 1.3, SS: 1.25, LF: 1.15, RF: 1.0, '3B': 0.75, C: 0.65, '1B': 0.55 },
+  },
+  {
+    family: 'Slap-Hitter',
+    role: 'hitter',
+    template: { contact: 1, speed: 0.55, fielding: 0.2, power: -0.75, arm: -0.25 },
+    positionAffinity: { '2B': 1.45, CF: 1.35, SS: 1.25, LF: 1.1, RF: 0.95, C: 0.8, '3B': 0.75, '1B': 0.65 },
+  },
+  {
+    family: 'Contact-Glove',
+    role: 'hitter',
+    template: { contact: 1, fielding: 0.75, speed: 0.25, power: -0.55, arm: -0.1 },
+    positionAffinity: { '2B': 1.45, SS: 1.35, CF: 1.2, C: 1.05, '3B': 0.95, LF: 0.85, RF: 0.85, '1B': 0.75 },
+  },
+  {
+    family: 'Defensive-Wizard',
+    role: 'hitter',
+    template: { fielding: 1, arm: 0.75, speed: 0.35, power: -0.65, contact: -0.25 },
+    positionAffinity: { C: 1.45, SS: 1.45, CF: 1.35, '2B': 1.25, '3B': 1.1, RF: 1.0, LF: 0.75, '1B': 0.65 },
+  },
+  {
+    family: 'Cannon-Corner',
+    role: 'hitter',
+    template: { arm: 1, power: 0.65, fielding: 0.25, speed: -0.55, contact: -0.25 },
+    positionAffinity: { RF: 1.55, '3B': 1.45, C: 1.25, LF: 1.0, '1B': 0.9, SS: 0.85, CF: 0.8, '2B': 0.75 },
+  },
+  {
+    family: 'Project',
+    role: 'hitter',
+    template: { power: 0.75, speed: 0.6, arm: 0.45, contact: -0.55, fielding: -0.45 },
+    positionAffinity: { '1B': 1.15, LF: 1.1, RF: 1.1, CF: 1.0, '3B': 1.0, C: 0.95, SS: 0.95, '2B': 0.95 },
+    baseWeight: 0.85,
+  },
+  {
+    family: 'Balanced',
+    role: 'both',
+    template: {
+      power: 0.35,
+      contact: 0.35,
+      speed: 0.25,
+      fielding: 0.25,
+      arm: 0.25,
+      velocity: 0.35,
+      junk: 0.35,
+      accuracy: 0.35,
+    },
+    positionAffinity: {},
+    baseWeight: 1.15,
+  },
+  {
+    family: 'Power-Ace',
+    role: 'pitcher',
+    template: { velocity: 1, junk: 0.55, accuracy: -0.5, power: 0.2, speed: -0.25 },
+    positionAffinity: { SP: 1.35, 'SP/RP': 1.25, RP: 1.2, CP: 1.45 },
+    baseWeight: 1.1,
+  },
+  {
+    family: 'Power-Reliever',
+    role: 'pitcher',
+    template: { velocity: 1, junk: 0.75, accuracy: -0.65, fielding: -0.2 },
+    positionAffinity: { CP: 1.65, RP: 1.45, 'SP/RP': 1.05, SP: 0.75 },
+  },
+  {
+    family: 'Crafty-Ace',
+    role: 'pitcher',
+    template: { junk: 1, accuracy: 0.55, velocity: -0.55, fielding: 0.2 },
+    positionAffinity: { SP: 1.3, 'SP/RP': 1.25, RP: 1.1, CP: 0.9 },
+  },
+  {
+    family: 'Command-Artist',
+    role: 'pitcher',
+    template: { accuracy: 1, junk: 0.55, velocity: -0.45, contact: 0.2 },
+    positionAffinity: { SP: 1.35, 'SP/RP': 1.25, RP: 1.0, CP: 0.95 },
+  },
+  {
+    family: 'Pitchability',
+    role: 'pitcher',
+    template: { accuracy: 0.85, junk: 0.85, velocity: -0.35, fielding: 0.25 },
+    positionAffinity: { SP: 1.25, 'SP/RP': 1.25, RP: 1.05, CP: 0.9 },
+  },
+  {
+    family: 'Pitching-Project',
+    role: 'pitcher',
+    template: { velocity: 0.85, junk: 0.65, accuracy: -0.85, fielding: -0.25 },
+    positionAffinity: { SP: 1.1, 'SP/RP': 1.25, RP: 1.2, CP: 1.15 },
+    baseWeight: 0.85,
+  },
+] as const satisfies readonly ArchetypeFamilyDefinition[];
+
+export type ProspectArchetypeFamily = typeof ARCHETYPE_FAMILIES[number]['family'];
+
 function calibratedThreshold(higherGrade: Smb4Grade, lowerGrade: Smb4Grade): number {
   const threshold = SMB4_CALIBRATED_GRADE_THRESHOLDS.find((entry) =>
     entry.higherGrade === higherGrade && entry.lowerGrade === lowerGrade,
@@ -586,6 +723,118 @@ function isPitcher(position: DraftPosition): position is PitcherDraftPosition {
   return position === 'SP' || position === 'SP/RP' || position === 'RP' || position === 'CP';
 }
 
+function activeArchetypeRole(position: DraftPosition): Exclude<ArchetypeRole, 'both'> {
+  return isPitcher(position) ? 'pitcher' : 'hitter';
+}
+
+function archetypeWeightsForPosition(
+  position: DraftPosition,
+): Array<[ArchetypeFamilyDefinition, number]> {
+  const role = activeArchetypeRole(position);
+  return (ARCHETYPE_FAMILIES as readonly ArchetypeFamilyDefinition[])
+    .filter((family) => family.role === 'both' || family.role === role)
+    .map((family) => [
+      family,
+      (family.baseWeight ?? 1) * (family.positionAffinity[position] ?? 1),
+    ]);
+}
+
+function gradeArchetypeTaper(targetGrade: Grade): number {
+  switch (targetGrade) {
+    case 'S':
+    case 'A+':
+      return 0.55;
+    case 'A':
+    case 'D':
+      return 0.68;
+    case 'A-':
+    case 'D+':
+    case 'C-':
+      return 0.82;
+    case 'B+':
+    case 'B':
+    case 'B-':
+    case 'C+':
+      return 1;
+    case 'C':
+      return 0.92;
+    default:
+      return 0.85;
+  }
+}
+
+function addBias(
+  bias: ArchetypeBiasVector,
+  tool: RatingTool,
+  amount: number,
+): void {
+  bias[tool] = (bias[tool] ?? 0) + amount;
+}
+
+function activeTemplateEntries(
+  family: ArchetypeFamilyDefinition,
+  position: DraftPosition,
+): Array<[RatingTool, number]> {
+  const ignoredTools = isPitcher(position)
+    ? new Set<RatingTool>()
+    : new Set<RatingTool>(['velocity', 'junk', 'accuracy']);
+  return (Object.entries(family.template) as Array<[RatingTool, number]>)
+    .filter(([tool]) => !ignoredTools.has(tool));
+}
+
+function drawArchetypeBias(input: {
+  seed: string;
+  position: DraftPosition;
+  targetGrade: Grade;
+  attempt: number;
+  scale: number;
+}): { family: ProspectArchetypeFamily; bias: ArchetypeBiasVector } {
+  const seedPrefix = input.attempt === 0
+    ? `${input.seed}:archetype`
+    : `${input.seed}:archetype:retry:${input.attempt}`;
+  const family = pickWeightedValue(`${seedPrefix}:family`, archetypeWeightsForPosition(input.position));
+  const entries = activeTemplateEntries(family, input.position);
+  const positives = entries.filter(([, value]) => value > 0);
+  const negatives = entries.filter(([, value]) => value < 0);
+  const strongestPositive = positives.reduce((max, [, value]) => Math.max(max, value), 0);
+  const primaryTools = positives.filter(([, value]) => value >= strongestPositive * 0.9);
+  const secondaryTools = positives.filter(([, value]) => value < strongestPositive * 0.9);
+  const primaryTool = primaryTools.length > 0
+    ? pick(`${seedPrefix}:primary`, primaryTools.map(([tool]) => tool))
+    : undefined;
+  const secondaryToolPool = (secondaryTools.length > 0 ? secondaryTools : positives)
+    .map(([tool]) => tool)
+    .filter((tool) => tool !== primaryTool);
+  const secondaryTool = secondaryToolPool.length > 0
+    ? pick(`${seedPrefix}:secondary`, secondaryToolPool)
+    : undefined;
+  const weaknessTool = negatives.length > 0
+    ? pick(`${seedPrefix}:weakness`, negatives.map(([tool]) => tool))
+    : undefined;
+  const taper = gradeArchetypeTaper(input.targetGrade) * input.scale;
+  const primaryMagnitude = (12 + randomUnit(`${seedPrefix}:mag`) * 10) * taper;
+  const secondaryMagnitude = (6 + randomUnit(`${seedPrefix}:jitter`) * 6) * taper;
+  const weaknessMagnitude = (8 + randomUnit(`${seedPrefix}:weakness-mag`) * 7) * taper;
+  const bias: ArchetypeBiasVector = {};
+
+  for (const [tool, value] of entries) {
+    const toolJitter = 0.85 + randomUnit(`${seedPrefix}:jitter:${tool}`) * 0.3;
+    if (value > 0) {
+      const magnitude = tool === primaryTool
+        ? primaryMagnitude
+        : tool === secondaryTool
+          ? secondaryMagnitude
+          : secondaryMagnitude * 0.45;
+      addBias(bias, tool, value * magnitude * toolJitter);
+    } else if (value < 0) {
+      const magnitude = tool === weaknessTool ? weaknessMagnitude : weaknessMagnitude * 0.5;
+      addBias(bias, tool, value * magnitude * toolJitter);
+    }
+  }
+
+  return { family: family.family as ProspectArchetypeFamily, bias };
+}
+
 function chooseSecondary(primary: DraftPosition, seed: string): Position | undefined {
   if (isPitcher(primary)) return undefined;
   if (primary === 'DH') return undefined;
@@ -627,7 +876,11 @@ function clampRating(value: number): number {
   return clamp(value, PROSPECT_MIN_RATING, PROSPECT_MAX_RATING);
 }
 
-function buildBaseRatings(seed: string, position: DraftPosition): PositionPlayerRatings & PitcherRatings {
+function buildBaseRatings(
+  seed: string,
+  position: DraftPosition,
+  archetypeBias: ArchetypeBiasVector = {},
+): PositionPlayerRatings & PitcherRatings {
   if (isPitcher(position)) {
     const roleBias =
       position === 'SP' || position === 'SP/RP'
@@ -636,24 +889,24 @@ function buildBaseRatings(seed: string, position: DraftPosition): PositionPlayer
           ? { velocity: 8, junk: 5, accuracy: -8 }
           : { velocity: 3, junk: 2, accuracy: -2 };
     return {
-      power: baseRating(`${seed}:power`, 35),
-      contact: baseRating(`${seed}:contact`, 35),
-      speed: baseRating(`${seed}:speed`, 45),
-      fielding: baseRating(`${seed}:fielding`, PROSPECT_BASE_RATING_CENTER, -8),
-      arm: baseRating(`${seed}:arm`, PROSPECT_BASE_RATING_CENTER, -5),
-      velocity: baseRating(`${seed}:velocity`, PROSPECT_BASE_RATING_CENTER, roleBias.velocity),
-      junk: baseRating(`${seed}:junk`, PROSPECT_BASE_RATING_CENTER, roleBias.junk),
-      accuracy: baseRating(`${seed}:accuracy`, PROSPECT_BASE_RATING_CENTER, roleBias.accuracy),
+      power: baseRating(`${seed}:power`, 35, archetypeBias.power ?? 0),
+      contact: baseRating(`${seed}:contact`, 35, archetypeBias.contact ?? 0),
+      speed: baseRating(`${seed}:speed`, 45, archetypeBias.speed ?? 0),
+      fielding: baseRating(`${seed}:fielding`, PROSPECT_BASE_RATING_CENTER, -8 + (archetypeBias.fielding ?? 0)),
+      arm: baseRating(`${seed}:arm`, PROSPECT_BASE_RATING_CENTER, -5 + (archetypeBias.arm ?? 0)),
+      velocity: baseRating(`${seed}:velocity`, PROSPECT_BASE_RATING_CENTER, roleBias.velocity + (archetypeBias.velocity ?? 0)),
+      junk: baseRating(`${seed}:junk`, PROSPECT_BASE_RATING_CENTER, roleBias.junk + (archetypeBias.junk ?? 0)),
+      accuracy: baseRating(`${seed}:accuracy`, PROSPECT_BASE_RATING_CENTER, roleBias.accuracy + (archetypeBias.accuracy ?? 0)),
     };
   }
 
   const bias = POSITION_STAT_BIAS[position] ?? {};
   return {
-    power: baseRating(`${seed}:power`, PROSPECT_BASE_RATING_CENTER, bias.power ?? 0),
-    contact: baseRating(`${seed}:contact`, PROSPECT_BASE_RATING_CENTER, bias.contact ?? 0),
-    speed: baseRating(`${seed}:speed`, PROSPECT_BASE_RATING_CENTER, bias.speed ?? 0),
-    fielding: baseRating(`${seed}:fielding`, PROSPECT_BASE_RATING_CENTER, bias.fielding ?? 0),
-    arm: baseRating(`${seed}:arm`, PROSPECT_BASE_RATING_CENTER, bias.arm ?? 0),
+    power: baseRating(`${seed}:power`, PROSPECT_BASE_RATING_CENTER, (bias.power ?? 0) + (archetypeBias.power ?? 0)),
+    contact: baseRating(`${seed}:contact`, PROSPECT_BASE_RATING_CENTER, (bias.contact ?? 0) + (archetypeBias.contact ?? 0)),
+    speed: baseRating(`${seed}:speed`, PROSPECT_BASE_RATING_CENTER, (bias.speed ?? 0) + (archetypeBias.speed ?? 0)),
+    fielding: baseRating(`${seed}:fielding`, PROSPECT_BASE_RATING_CENTER, (bias.fielding ?? 0) + (archetypeBias.fielding ?? 0)),
+    arm: baseRating(`${seed}:arm`, PROSPECT_BASE_RATING_CENTER, (bias.arm ?? 0) + (archetypeBias.arm ?? 0)),
     velocity: 0,
     junk: 0,
     accuracy: 0,
@@ -1035,24 +1288,61 @@ function buildCandidate(input: ProspectScoutingDraftInput, index: number): Gener
   const trait2 = traitCount >= 2 && trait1
     ? pickSecondProspectTrait(seed, traitPool, trait1)
     : undefined;
-  const baseRatings = buildBaseRatings(seed, position);
-  const arsenal = buildArsenal(
-    seed,
-    position,
-    baseRatings.junk,
-    [trait1, trait2].filter((trait): trait is string => Boolean(trait)),
-  );
-  const solved = buildRatings({
-    targetGrade,
-    position,
-    secondaryPosition,
-    bats,
-    throws,
-    baseRatings,
-    arsenal,
-    trait1,
-    trait2,
-  });
+  const traits = [trait1, trait2].filter((trait): trait is string => Boolean(trait));
+  let solved: ReturnType<typeof buildRatings> | undefined;
+  let solvedArsenal: string[] = [];
+  let archetypeFamily: ProspectArchetypeFamily = 'Balanced';
+
+  for (let attempt = 0; attempt < PROSPECT_ARCHETYPE_ATTEMPT_SCALES.length; attempt += 1) {
+    const archetype = drawArchetypeBias({
+      seed,
+      position,
+      targetGrade,
+      attempt,
+      scale: PROSPECT_ARCHETYPE_ATTEMPT_SCALES[attempt],
+    });
+    const baseRatings = buildBaseRatings(seed, position, archetype.bias);
+    const arsenal = buildArsenal(seed, position, baseRatings.junk, traits);
+
+    try {
+      solved = buildRatings({
+        targetGrade,
+        position,
+        secondaryPosition,
+        bats,
+        throws,
+        baseRatings,
+        arsenal,
+        trait1,
+        trait2,
+      });
+      solvedArsenal = arsenal;
+      archetypeFamily = archetype.family;
+      break;
+    } catch {
+      // PROSPECT_GENERATION_SPEC §5.6: extreme archetypes can clamp out;
+      // re-draw/scale instead of letting solver non-convergence escape.
+    }
+  }
+
+  if (!solved) {
+    const baseRatings = buildBaseRatings(seed, position);
+    const arsenal = buildArsenal(seed, position, baseRatings.junk, traits);
+    solved = buildRatings({
+      targetGrade,
+      position,
+      secondaryPosition,
+      bats,
+      throws,
+      baseRatings,
+      arsenal,
+      trait1,
+      trait2,
+    });
+    solvedArsenal = arsenal;
+    archetypeFamily = 'Balanced';
+  }
+
   const trueGrade = solved.realizedGrade;
   return {
     candidateId: `candidate-${input.leagueId}-${input.seasonNumber}-${index + 1}`,
@@ -1064,8 +1354,9 @@ function buildCandidate(input: ProspectScoutingDraftInput, index: number): Gener
     throws,
     trueGrade,
     potentialGrade: potentialGrade(`${seed}:potential`, trueGrade),
+    archetypeFamily,
     ratings: solved.ratings,
-    arsenal,
+    arsenal: solvedArsenal,
     trait1,
     trait2,
     personality: pick(`${seed}:personality`, PERSONALITY_POOL),
@@ -1189,6 +1480,7 @@ function buildPlayerDto(input: {
       scoutGradeError: report.gradeError,
       scoutSpecialtiesVisible: report.scout.specialties,
       scoutWeaknessesVisible: report.scout.weaknesses,
+      archetypeFamily: candidate.archetypeFamily,
     },
     hiddenPersonalityModifiers: candidate.hiddenPersonalityModifiers,
   };

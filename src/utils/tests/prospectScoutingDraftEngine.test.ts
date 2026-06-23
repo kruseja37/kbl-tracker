@@ -69,8 +69,8 @@ const SECTION_10_AGE_SAMPLE_SIZE = 20_000;
 const SECTION_10_AGE_TOLERANCE = 0.015;
 const SECTION_10_GRADE_CORRELATION_TOLERANCE = 0.05;
 const B11_B8_NON_AGE_RNG_PROOF = {
-  length: 28370,
-  hash: '97181b06',
+  length: 29134,
+  hash: '1babf224',
 } as const;
 
 const B11_B8_RNG_PROOF_INPUT: ProspectScoutingDraftInput = {
@@ -169,6 +169,50 @@ function pearsonCorrelation(left: readonly number[], right: readonly number[]): 
 
   if (leftVariance === 0 || rightVariance === 0) return 0;
   return covariance / Math.sqrt(leftVariance * rightVariance);
+}
+
+function scoreCandidate(candidate: GeneratedProspectCandidate): string {
+  return scoreSmb4Player({
+    primaryPosition: candidate.position,
+    secondaryPosition: candidate.secondaryPosition,
+    bats: candidate.bats,
+    throws: candidate.throws,
+    power: candidate.ratings.power,
+    contact: candidate.ratings.contact,
+    speed: candidate.ratings.speed,
+    fielding: candidate.ratings.fielding,
+    arm: candidate.ratings.arm,
+    velocity: candidate.ratings.velocity,
+    junk: candidate.ratings.junk,
+    accuracy: candidate.ratings.accuracy,
+    arsenal: candidate.arsenal,
+    trait1: candidate.trait1,
+    trait2: candidate.trait2,
+  }).grade;
+}
+
+function hitterShapeSignature(candidate: GeneratedProspectCandidate): string {
+  const tools = [
+    ['power', candidate.ratings.power],
+    ['contact', candidate.ratings.contact],
+    ['speed', candidate.ratings.speed],
+    ['fielding', candidate.ratings.fielding],
+    ['arm', candidate.ratings.arm],
+  ] as const;
+  const sorted = [...tools].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
+  const spread = sorted[0][1] - sorted[sorted.length - 1][1];
+  return `${sorted[0][0]}>${sorted[sorted.length - 1][0]}:${Math.floor(spread / 5)}`;
+}
+
+function pitcherShapeSignature(candidate: GeneratedProspectCandidate): string {
+  const tools = [
+    ['velocity', candidate.ratings.velocity],
+    ['junk', candidate.ratings.junk],
+    ['accuracy', candidate.ratings.accuracy],
+  ] as const;
+  const sorted = [...tools].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
+  const spread = sorted[0][1] - sorted[sorted.length - 1][1];
+  return `${sorted[0][0]}>${sorted[sorted.length - 1][0]}:${Math.floor(spread / 5)}`;
 }
 
 describe('shared deterministic prospect/scouting draft engine', () => {
@@ -382,6 +426,7 @@ describe('shared deterministic prospect/scouting draft engine', () => {
       position: 'CF',
       trueGrade: 'B',
       potentialGrade: 'B+',
+      archetypeFamily: 'Balanced',
       ratings: {
         power: 60,
         contact: 60,
@@ -617,6 +662,56 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     expect(seenGrades).toEqual(targetGrades);
   });
 
+  test('§5.6 archetype bias creates same-grade non-repeating tool spreads without analyzer drift', () => {
+    const output = generateProspectScoutingDraft({
+      ...BASE_INPUT,
+      rounds: 120,
+      candidatePoolMultiplier: 5,
+      seed: 'section-5-6-archetype-variety-seed',
+    });
+    const hitterGroups = new Map<string, GeneratedProspectCandidate[]>();
+    const pitcherGroups = new Map<string, GeneratedProspectCandidate[]>();
+
+    for (const candidate of output.draftClass) {
+      expect(candidate.archetypeFamily).toEqual(expect.any(String));
+      expect(scoreCandidate(candidate)).toBe(candidate.trueGrade);
+      const group = PITCHER_POSITIONS.has(candidate.position) ? pitcherGroups : hitterGroups;
+      group.set(candidate.trueGrade, [...(group.get(candidate.trueGrade) ?? []), candidate]);
+    }
+
+    const sameGradeHitters = [...hitterGroups.values()].sort((left, right) => right.length - left.length)[0] ?? [];
+    const sameGradePitchers = [...pitcherGroups.values()].sort((left, right) => right.length - left.length)[0] ?? [];
+    const hitterFamilies = new Set(sameGradeHitters.map((candidate) => candidate.archetypeFamily));
+    const hitterShapes = new Set(sameGradeHitters.map(hitterShapeSignature));
+    const hitterSpreads = sameGradeHitters.map((candidate) =>
+      Math.max(
+        candidate.ratings.power,
+        candidate.ratings.contact,
+        candidate.ratings.speed,
+        candidate.ratings.fielding,
+        candidate.ratings.arm,
+      ) -
+      Math.min(
+        candidate.ratings.power,
+        candidate.ratings.contact,
+        candidate.ratings.speed,
+        candidate.ratings.fielding,
+        candidate.ratings.arm,
+      ),
+    );
+    const pitcherShapes = new Set(sameGradePitchers.map(pitcherShapeSignature));
+
+    expect(new Set(output.draftClass.map((candidate) => candidate.archetypeFamily)).size).toBeGreaterThanOrEqual(12);
+    expect(output.generatedPlayers.every((player) => player.prospectProfile.archetypeFamily)).toBe(true);
+    expect(output.visibleReports.every((report) => !('archetypeFamily' in report))).toBe(true);
+    expect(sameGradeHitters.length).toBeGreaterThanOrEqual(40);
+    expect(hitterFamilies.size).toBeGreaterThanOrEqual(7);
+    expect(hitterShapes.size).toBeGreaterThanOrEqual(12);
+    expect(Math.max(...hitterSpreads)).toBeGreaterThanOrEqual(30);
+    expect(sameGradePitchers.length).toBeGreaterThanOrEqual(20);
+    expect(pitcherShapes.size).toBeGreaterThanOrEqual(5);
+  });
+
   test('§13 generated draft class reproduces §3.2 analyzer-grade distribution and §3.4 trait sanity', () => {
     const output = generateProspectScoutingDraft({
       ...BASE_INPUT,
@@ -843,6 +938,7 @@ describe('shared deterministic prospect/scouting draft engine', () => {
       position: 'CF',
       trueGrade: 'B',
       potentialGrade: 'B+',
+      archetypeFamily: 'Balanced',
       ratings: {
         power: 60,
         contact: 60,
@@ -889,6 +985,7 @@ describe('shared deterministic prospect/scouting draft engine', () => {
       position: 'CP',
       trueGrade: 'B',
       potentialGrade: 'B+',
+      archetypeFamily: 'Balanced',
       ratings: {
         power: 30,
         contact: 30,
