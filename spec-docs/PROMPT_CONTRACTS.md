@@ -14721,3 +14721,107 @@ REPORT:
 
 Do not run the full suite or commit — the auditor runs the full gate and commits. Use high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: S4-OVERALL-BAND ===== -->
+
+<!-- ===== START CONTRACT: S5-REVEAL-FIELDS ===== -->
+ROUTE: Codex 5.5 | high reasoning effort
+
+GOAL:
+Scouting v2 **S5 (reveal-fields, JK-ruled 2026-06-23)** — on the scout-facing `VisibleSafeProspectReport`: **replace the leaked `trait1`/`trait2` NAMES with a `traitCount` (0/1/2)**, and **reveal `archetypeFamily` + `secondaryPosition`** accurately. This is a contained LIVE change to the COMPUTED draft-board report (NOT persisted with traits → no migration). Do NOT wire the S3/S4 bands (that is S6), do NOT touch the player's real traits or the Gaussian `scoutedGrade` (S7).
+
+SOURCE OF TRUTH (embedded inline — ratified spec lives on the Branch-A docs branch, not this worktree):
+- §1A.1: "Revealed ACCURATELY: Name · age · primary + secondary position · **archetype** (the §5.6 generation family)."
+- §1A.1b (RULED): "Traits — COUNT only, identities HIDDEN. The scout report shows only the trait COUNT: 0, 1, or 2 — never which traits, never pos/neg. ⚠ today `VisibleSafeProspectReport` reveals `trait1`/`trait2` names — v2 replaces those with a `traitCount` (0/1/2) and hides names until call-up."
+- §1A.4 S5 + JK 2026-06-23: reveal archetype + secondary + traitCount; bands stay build-dark for S6.
+
+ALLOWED FILES (edit only these; the last is only if a test there asserts the old trait display):
+- `src/utils/prospectScoutingDraftEngine.ts`
+- `src/src_figma/app/pages/LeagueBuilderDraft.tsx`
+- `src/utils/tests/prospectScoutingDraftEngine.test.ts`
+- `src/src_figma/__tests__/leagueBuilder/LeagueBuilderDraft.test.tsx`
+
+EXACT CHANGES:
+1. DTO `VisibleSafeProspectReport` (`prospectScoutingDraftEngine.ts:157-173`): REMOVE `trait1?: string;` and `trait2?: string;`. ADD `traitCount: 0 | 1 | 2;`, `archetypeFamily: ProspectArchetypeFamily;`, `secondaryPosition?: Position;`. (`ProspectArchetypeFamily` is declared in-file `:529`; `Position` is imported `:20`.)
+2. Constructor `visibleReportFromPlayer` (`:1473-1489`): REMOVE `trait1: player.trait1,` and `trait2: player.trait2,`. ADD:
+   - `traitCount: ([player.trait1, player.trait2].filter(Boolean).length) as 0 | 1 | 2,`
+   - `archetypeFamily: candidate.archetypeFamily,`
+   - `secondaryPosition: player.secondaryPosition,`
+   (This is the ONLY `VisibleSafeProspectReport` constructor; `visibleReportForProspectPlayer` `:1642` delegates to it; the franchise `visibleReportFromPick` spreads `pick.visibleReport` and does not reference traits → auto-carries the new fields.)
+3. UI `LeagueBuilderDraft.tsx:376`: replace `<div>Traits {[candidate.trait1, candidate.trait2].filter(Boolean).join(", ") || "None"}</div>` with a trait-COUNT display, e.g. `<div>Traits {candidate.traitCount}</div>`, AND add an archetype line `<div>Archetype {candidate.archetypeFamily}</div>` and, when present, a secondary line `{candidate.secondaryPosition ? <div>Secondary {candidate.secondaryPosition}</div> : null}`. (tsc will force this change since `candidate.trait1/trait2` no longer exist.)
+4. Tests in `prospectScoutingDraftEngine.test.ts`:
+   - `:721` currently asserts `output.visibleReports.every((report) => !('archetypeFamily' in report))` — **INVERT** it: assert every visible report now HAS `archetypeFamily` (a non-empty string / a valid family), i.e. `('archetypeFamily' in report)` is true.
+   - Add positive assertions: every visible report has a numeric `traitCount` in `{0,1,2}`, does NOT have `trait1`/`trait2` (`!('trait1' in report) && !('trait2' in report)`), and reveals `archetypeFamily`; and that the report's `traitCount` equals the matching generated player's actual `[trait1,trait2].filter(Boolean).length`.
+   - Verify the existing `:1177` "hidden true ratings stay out of visible-safe reports" test still passes (it asserts no `power`/`contact`/`trueGrade`; archetype/secondary/traitCount are revealed-accurately fields, not hidden true data — it should be unaffected).
+5. `LeagueBuilderDraft.test.tsx`: ONLY if a test there asserts the OLD "Traits <names>" display, update it to the new count/archetype display; otherwise leave untouched.
+6. COMPLETENESS GREP (mandatory): `grep -rnE "\.trait1|\.trait2" src --include='*.ts' --include='*.tsx' | grep -v src/archived | grep -iE "report|candidate|visible"` — confirm NO remaining reader of a VISIBLE-REPORT `trait1`/`trait2` (the `player.trait1/trait2`, `input.trait1/trait2`, and grade-solver sites are the PLAYER's real traits and MUST stay). Report the output.
+
+DO NOT TOUCH: the player's real traits — `buildPlayerDto` `:1527-1528` (`player.trait1/trait2`), the grade-solver trait inputs `:983/:1015/:1071`, and the live roster/lineup/GameTracker `player.trait1/trait2` consumers (those are revealed at call-up, correct). The S3/S4 BANDS (S6). The Gaussian `scoutProspect`/`scoutedGrade` (S7). The persisted `franchisePlayerProfile` prospectReport (it has no traits). `TRACKER_DB_VERSION`/stores (NO DB bump). `iv_oracle.json`. Any file outside ALLOWED FILES.
+
+VERIFICATION (paste ACTUAL output):
+- `NODE_ENV= npx tsc -b` (expect 0 — and tsc will FAIL loudly if any consumer still reads the removed report `trait1`/`trait2`, which is the safety net).
+- `NODE_ENV= npx vitest run src/utils/tests/prospectScoutingDraftEngine.test.ts src/utils/tests/franchiseStartupProspectDraft.test.ts src/src_figma/__tests__/leagueBuilder/LeagueBuilderDraft.test.tsx` (expect all pass).
+- The completeness grep (no visible-report trait reader remains).
+
+STOP IF: a removed report field is read somewhere not in ALLOWED FILES (report the file:line — do NOT edit outside the list); `ProspectArchetypeFamily`/`Position` are not available as assumed; a change would require a file outside ALLOWED FILES. → "BLOCKED: <reason>".
+
+REPORT:
+1. Every changed git path + total.
+2. Each change with source ref.
+3. ACTUAL tsc + focused-vitest + completeness-grep output.
+4. "S5-REVEAL-FIELDS complete" OR "BLOCKED: <reason>".
+
+Do not run the full suite or commit — the auditor runs the full gate and commits. Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: S5-REVEAL-FIELDS ===== -->
+
+<!-- ===== START CONTRACT: S5-REVEAL-FIELDS-V2 ===== -->
+ROUTE: Codex 5.5 | high reasoning effort
+
+SUPERSEDES `S5-REVEAL-FIELDS` (v1) — v1 was INCOMPLETE; Codex correctly BLOCKED: `leagueBuilderStartupFarmDraft.ts`'s `buildBoardForSession` ALSO constructs `StartupProspectBoardReport`/`StartupProspectBoardCandidate` (which extend `VisibleSafeProspectReport`) with `trait1`/`trait2`, so removing the DTO fields breaks tsc there. v2 adds that file + its 2 board sites. The full surface (verified by a comprehensive `trait1:/trait2:` sweep): the ONLY scout-report constructors are `prospectScoutingDraftEngine.ts:1486-1487` + `leagueBuilderStartupFarmDraft.ts:1088-1089` (board report) + `:1118-1119` (board candidate). Everything else (`playerDatabase.ts`, roster/lineup/GameTracker, the grade-solver, `buildPlayerDto`) is the PLAYER's real traits — leave untouched.
+
+GOAL:
+Scouting v2 **S5 (reveal-fields, JK-ruled 2026-06-23)** — on the scout-facing `VisibleSafeProspectReport` (and the 2 board types that extend it): **replace `trait1`/`trait2` NAMES with a `traitCount` (0/1/2)**, and **reveal `archetypeFamily` + `secondaryPosition`** accurately. Contained LIVE change to the COMPUTED draft-board report (no migration). Do NOT wire the S3/S4 bands (S6), do NOT touch the player's real traits or the Gaussian `scoutedGrade` (S7).
+
+SOURCE OF TRUTH (embedded inline):
+- §1A.1: "Revealed ACCURATELY: Name · age · primary + secondary position · archetype."
+- §1A.1b (RULED): "Traits — COUNT only, identities HIDDEN: the report shows only the trait COUNT 0/1/2, never which traits, never pos/neg. v2 replaces `trait1`/`trait2` with a `traitCount`."
+- §1A.4 S5 + JK 2026-06-23: reveal archetype + secondary + traitCount; bands stay build-dark for S6.
+
+ALLOWED FILES (edit only these; the two test files only if they assert the old trait display):
+- `src/utils/prospectScoutingDraftEngine.ts`
+- `src/utils/leagueBuilderStartupFarmDraft.ts`
+- `src/src_figma/app/pages/LeagueBuilderDraft.tsx`
+- `src/utils/tests/prospectScoutingDraftEngine.test.ts`
+- `src/utils/tests/leagueBuilderStartupFarmDraft.test.ts`
+- `src/src_figma/__tests__/leagueBuilder/LeagueBuilderDraft.test.tsx`
+
+EXACT CHANGES:
+1. DTO `VisibleSafeProspectReport` (`prospectScoutingDraftEngine.ts:157-173`): REMOVE `trait1?: string;` + `trait2?: string;`. ADD `traitCount: 0 | 1 | 2;`, `archetypeFamily: ProspectArchetypeFamily;`, `secondaryPosition?: Position;`. (`ProspectArchetypeFamily` declared in-file `:529`; `Position` imported `:20`.)
+2. Constructor `visibleReportFromPlayer` (`:1486-1487`): REMOVE `trait1: player.trait1,` + `trait2: player.trait2,`. ADD `traitCount: ([player.trait1, player.trait2].filter(Boolean).length) as 0 | 1 | 2,`, `archetypeFamily: candidate.archetypeFamily,`, `secondaryPosition: player.secondaryPosition,`.
+3. `leagueBuilderStartupFarmDraft.ts` `buildBoardForSession` — TWO object literals build from a `candidate: GeneratedProspectCandidate` (which has `trait1`/`trait2`, required `archetypeFamily`, optional `secondaryPosition`):
+   - the `... satisfies StartupProspectBoardReport` literal (`:1088-1089`): REMOVE `trait1: candidate.trait1,` + `trait2: candidate.trait2,`; ADD `traitCount: ([candidate.trait1, candidate.trait2].filter(Boolean).length) as 0 | 1 | 2,`, `archetypeFamily: candidate.archetypeFamily,`, `secondaryPosition: candidate.secondaryPosition,`.
+   - the `... satisfies StartupProspectBoardCandidate` literal (`:1118-1119`): the SAME replacement.
+   (Leave the hardcoded `age: 18`/`bats: 'R'`/`throws: 'R'` board placeholders as-is — out of scope.)
+4. UI `LeagueBuilderDraft.tsx:376`: replace `<div>Traits {[candidate.trait1, candidate.trait2].filter(Boolean).join(", ") || "None"}</div>` with a trait-COUNT display `<div>Traits {candidate.traitCount}</div>`, plus `<div>Archetype {candidate.archetypeFamily}</div>` and, when present, `{candidate.secondaryPosition ? <div>Secondary {candidate.secondaryPosition}</div> : null}`.
+5. Tests in `prospectScoutingDraftEngine.test.ts`:
+   - `:721` asserts `output.visibleReports.every((report) => !('archetypeFamily' in report))` — **INVERT**: assert every visible report now HAS `archetypeFamily`.
+   - ADD: every visible report has numeric `traitCount` ∈ {0,1,2}, NO `trait1`/`trait2`, reveals `archetypeFamily`; and `traitCount` equals the matching generated player's `[trait1,trait2].filter(Boolean).length`.
+   - Verify `:1177` ("hidden true ratings stay out") still passes (it asserts no `power`/`contact`/`trueGrade`; unaffected).
+6. The two `.test.*` files (`leagueBuilderStartupFarmDraft.test.ts`, `LeagueBuilderDraft.test.tsx`): ONLY if a test asserts the OLD "Traits <names>" board display, update it to the count/archetype display; otherwise leave untouched.
+7. COMPLETENESS GREP (mandatory): `grep -rnE "\.trait1|\.trait2" src --include='*.ts' --include='*.tsx' | grep -v src/archived | grep -iE "report|candidate|visible"` — confirm NO remaining reader of a VISIBLE-REPORT/board `trait1`/`trait2` (the `player.trait1/trait2`, `input.trait1/trait2`, grade-solver sites are the PLAYER's real traits and MUST stay). Paste the output.
+
+DO NOT TOUCH: the player's real traits — `buildPlayerDto` `:1527-1528`, the grade-solver inputs `:983/:1015/:1071`, and all the live roster/lineup/GameTracker/`playerDatabase` `trait1/trait2` (revealed at call-up, correct). The S3/S4 BANDS (S6). The Gaussian `scoutProspect`/`scoutedGrade` (S7). The persisted `franchisePlayerProfile` prospectReport (no traits). The board `age/bats/throws` placeholders. `TRACKER_DB_VERSION`/stores (NO DB bump). `iv_oracle.json`. Any file outside ALLOWED FILES.
+
+VERIFICATION (paste ACTUAL output):
+- `NODE_ENV= npx tsc -b` (expect 0 — fails loudly if any consumer still reads the removed report `trait1`/`trait2`).
+- `NODE_ENV= npx vitest run src/utils/tests/prospectScoutingDraftEngine.test.ts src/utils/tests/leagueBuilderStartupFarmDraft.test.ts src/utils/tests/franchiseStartupProspectDraft.test.ts src/src_figma/__tests__/leagueBuilder/LeagueBuilderDraft.test.tsx` (expect all pass).
+- The completeness grep (no visible-report/board trait reader remains).
+
+STOP IF: a removed report field is read somewhere not in ALLOWED FILES (report the file:line, do NOT edit outside the list); `ProspectArchetypeFamily`/`Position`/`candidate.archetypeFamily`/`candidate.secondaryPosition` not available as assumed; a change would require a file outside ALLOWED FILES. → "BLOCKED: <reason>".
+
+REPORT:
+1. Every changed git path + total.
+2. Each change with source ref.
+3. ACTUAL tsc + focused-vitest + completeness-grep output.
+4. "S5-REVEAL-FIELDS-V2 complete" OR "BLOCKED: <reason>".
+
+Do not run the full suite or commit — the auditor runs the full gate and commits. Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: S5-REVEAL-FIELDS-V2 ===== -->

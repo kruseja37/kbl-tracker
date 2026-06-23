@@ -77,8 +77,8 @@ const SECTION_10_AGE_SAMPLE_SIZE = 20_000;
 const SECTION_10_AGE_TOLERANCE = 0.015;
 const SECTION_10_GRADE_CORRELATION_TOLERANCE = 0.05;
 const B11_B8_NON_AGE_RNG_PROOF = {
-  length: 29134,
-  hash: '1babf224',
+  length: 29668,
+  hash: '333c18a6',
 } as const;
 
 const B11_B8_RNG_PROOF_INPUT: ProspectScoutingDraftInput = {
@@ -718,7 +718,20 @@ describe('shared deterministic prospect/scouting draft engine', () => {
 
     expect(new Set(output.draftClass.map((candidate) => candidate.archetypeFamily)).size).toBeGreaterThanOrEqual(12);
     expect(output.generatedPlayers.every((player) => player.prospectProfile.archetypeFamily)).toBe(true);
-    expect(output.visibleReports.every((report) => !('archetypeFamily' in report))).toBe(true);
+    expect(output.visibleReports.every((report) => 'archetypeFamily' in report)).toBe(true);
+    for (const report of output.visibleReports) {
+      const player = output.generatedPlayers.find((generatedPlayer) => generatedPlayer.id === report.playerId);
+
+      expect(player).toBeDefined();
+      expect(report.traitCount).toEqual(expect.any(Number));
+      expect([0, 1, 2]).toContain(report.traitCount);
+      expect(report).not.toHaveProperty('trait1');
+      expect(report).not.toHaveProperty('trait2');
+      expect(report.archetypeFamily).toEqual(expect.any(String));
+      expect(report.archetypeFamily).toBe(player?.prospectProfile.archetypeFamily);
+      expect(report.secondaryPosition).toBe(player?.secondaryPosition);
+      expect(report.traitCount).toBe([player?.trait1, player?.trait2].filter(Boolean).length);
+    }
     expect(sameGradeHitters.length).toBeGreaterThanOrEqual(40);
     expect(hitterFamilies.size).toBeGreaterThanOrEqual(7);
     expect(hitterShapes.size).toBeGreaterThanOrEqual(12);

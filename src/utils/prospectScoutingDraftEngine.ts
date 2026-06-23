@@ -167,8 +167,9 @@ export interface VisibleSafeProspectReport {
   scoutConfidence: 'low' | 'medium' | 'high';
   chemistry: string;
   personality: string;
-  trait1?: string;
-  trait2?: string;
+  traitCount: 0 | 1 | 2;
+  archetypeFamily: ProspectArchetypeFamily;
+  secondaryPosition?: Position;
   salary: number;
 }
 
@@ -1483,8 +1484,9 @@ function visibleReportFromPlayer(
     scoutConfidence: report.scoutConfidence,
     chemistry: player.chemistry,
     personality: player.personality,
-    trait1: player.trait1,
-    trait2: player.trait2,
+    traitCount: ([player.trait1, player.trait2].filter(Boolean).length) as 0 | 1 | 2,
+    archetypeFamily: candidate.archetypeFamily,
+    secondaryPosition: player.secondaryPosition,
     salary: player.salary,
   };
 }

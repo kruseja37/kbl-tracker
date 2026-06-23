@@ -407,7 +407,18 @@ describe('League Builder startup farm draft persistence', () => {
     expect(candidate.reports.every((report) =>
       report.scoutId === view.session?.hiredScoutIdsByTeamId[TEAM_A][0],
     )).toBe(true);
-    expect(JSON.stringify(candidate)).not.toMatch(/hiddenPersonalityModifiers|trueGrade|power|contact|velocity/i);
+    expect(candidate).not.toHaveProperty('hiddenPersonalityModifiers');
+    expect(candidate).not.toHaveProperty('trueGrade');
+    expect(candidate).not.toHaveProperty('power');
+    expect(candidate).not.toHaveProperty('contact');
+    expect(candidate).not.toHaveProperty('velocity');
+    expect(candidate.reports.every((report) => (
+      !('hiddenPersonalityModifiers' in report) &&
+      !('trueGrade' in report) &&
+      !('power' in report) &&
+      !('contact' in report) &&
+      !('velocity' in report)
+    ))).toBe(true);
 
     view = await confirmLeagueBuilderProspectPick({
       leagueId: LEAGUE_ID,

@@ -182,8 +182,9 @@ function prospectDraftView(overrides: Record<string, unknown> = {}) {
         scoutConfidence: 'high',
         chemistry: 'Crafty',
         personality: 'Competitive',
-        trait1: 'RBI Man',
-        trait2: 'First Pitch Slayer',
+        traitCount: 2,
+        archetypeFamily: 'Balanced',
+        secondaryPosition: 'LF',
         salary: 2.0,
         reports: [
           {
@@ -198,8 +199,9 @@ function prospectDraftView(overrides: Record<string, unknown> = {}) {
             scoutConfidence: 'high',
             chemistry: 'Crafty',
             personality: 'Competitive',
-            trait1: 'RBI Man',
-            trait2: 'First Pitch Slayer',
+            traitCount: 2,
+            archetypeFamily: 'Balanced',
+            secondaryPosition: 'LF',
             salary: 2.0,
             scoutId: 'scout-1',
             scoutName: 'Riley Kline',
@@ -219,8 +221,9 @@ function prospectDraftView(overrides: Record<string, unknown> = {}) {
             scoutConfidence: 'medium',
             chemistry: 'Crafty',
             personality: 'Competitive',
-            trait1: 'RBI Man',
-            trait2: 'First Pitch Slayer',
+            traitCount: 2,
+            archetypeFamily: 'Balanced',
+            secondaryPosition: 'LF',
             salary: 2.0,
             scoutId: 'scout-2',
             scoutName: 'Morgan Vale',
@@ -352,6 +355,9 @@ describe('LeagueBuilderDraft scout and prospect draft UI', () => {
     expect(screen.getByText('ON THE CLOCK: Boston Sox')).toBeInTheDocument();
     expect(screen.getByText('Ari Banks')).toBeInTheDocument();
     expect(screen.getByText('Salary $2.0M')).toBeInTheDocument();
+    expect(screen.getByText('Traits 2')).toBeInTheDocument();
+    expect(screen.getByText('Archetype Balanced')).toBeInTheDocument();
+    expect(screen.getByText('Secondary LF')).toBeInTheDocument();
     expect(screen.getByText('Riley Kline')).toBeInTheDocument();
     expect(screen.getByText('Morgan Vale')).toBeInTheDocument();
     expect(screen.getByText(/Scouted B\+/i)).toBeInTheDocument();

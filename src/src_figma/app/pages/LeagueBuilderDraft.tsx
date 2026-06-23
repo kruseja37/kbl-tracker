@@ -373,7 +373,9 @@ export function LeagueBuilderDraft() {
                       <div>Chemistry {candidate.chemistry}</div>
                       <div>Personality {candidate.personality}</div>
                       <div>Salary ${candidate.salary.toFixed(1)}M</div>
-                      <div>Traits {[candidate.trait1, candidate.trait2].filter(Boolean).join(", ") || "None"}</div>
+                      <div>Traits {candidate.traitCount}</div>
+                      <div>Archetype {candidate.archetypeFamily}</div>
+                      {candidate.secondaryPosition ? <div>Secondary {candidate.secondaryPosition}</div> : null}
                     </div>
                     <div className="space-y-2 mb-3">
                       {candidate.reports.map((report) => (
