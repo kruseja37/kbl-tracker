@@ -1215,6 +1215,15 @@ export function scoutAccuracy(position: DraftPosition, scout?: ProspectScoutDesc
   return clamp(baseAccuracy(position) + (scout?.accuracyModifier ?? 0) + specialtyBonus - weaknessPenalty, 45, 92);
 }
 
+export function scoutTierForPosition(
+  position: DraftPosition,
+  scout?: { specialties?: string[]; weaknesses?: string[] },
+): 'high' | 'medium' | 'low' {
+  if (scout?.specialties?.includes(position)) return 'high';
+  if (scout?.weaknesses?.includes(position)) return 'low';
+  return 'medium';
+}
+
 function confidenceFromAccuracy(accuracy: number): 'low' | 'medium' | 'high' {
   if (accuracy >= 82) return 'high';
   if (accuracy >= 68) return 'medium';

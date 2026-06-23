@@ -748,7 +748,6 @@ export async function applyLeagueBuilderStartupFarmDraft(
 }
 
 const DRAFT_POSITIONS: DraftPosition[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'SP', 'RP', 'CP'];
-const SCOUT_SPECIALTY_POOL: ScoutSpecialty[] = ['pitching', 'outfield', 'infield', 'catching', 'power', 'contact', 'defense', 'speed', 'SP', 'RP', 'CF', 'SS', 'CP', '1B'];
 
 function hashString(input: string): number {
   let hash = 2166136261;
@@ -790,16 +789,18 @@ function buildScoutPool(leagueId: string, seed: string, teamCount: number): Leag
   const poolSize = teamCount * STARTUP_SCOUTS_PER_TEAM * STARTUP_SCOUT_POOL_MULTIPLIER;
   return Array.from({ length: poolSize }, (_, index) => {
     const scoutSeed = `${seed}:scout:${index + 1}`;
-    const specialty = pick(`${scoutSeed}:specialty`, SCOUT_SPECIALTY_POOL);
-    let weakness = pick(`${scoutSeed}:weakness`, SCOUT_SPECIALTY_POOL);
-    if (weakness === specialty) {
-      weakness = pick(`${scoutSeed}:weakness-alt`, SCOUT_SPECIALTY_POOL.filter((item) => item !== specialty));
-    }
+    const high1 = pick(`${scoutSeed}:high:1`, DRAFT_POSITIONS);
+    const afterHigh1 = DRAFT_POSITIONS.filter((p) => p !== high1);
+    const high2 = pick(`${scoutSeed}:high:2`, afterHigh1);
+    const afterHigh2 = afterHigh1.filter((p) => p !== high2);
+    const low1 = pick(`${scoutSeed}:low:1`, afterHigh2);
+    const afterLow1 = afterHigh2.filter((p) => p !== low1);
+    const low2 = pick(`${scoutSeed}:low:2`, afterLow1);
     const descriptor: ProspectScoutDescriptor = {
       scoutId: `scout-${leagueId}-${index + 1}`,
       scoutName: `${pick(`${scoutSeed}:first`, SMB4_FIRST_NAMES)} ${pick(`${scoutSeed}:last`, SMB4_LAST_NAMES)}`,
-      specialties: [specialty],
-      weaknesses: [weakness],
+      specialties: [high1, high2],
+      weaknesses: [low1, low2],
     };
     return {
       id: descriptor.scoutId,

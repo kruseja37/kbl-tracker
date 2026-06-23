@@ -15,6 +15,7 @@ import {
   prospectTraitsConflict,
   prospectSalaryForDraftRound,
   scoutProspect,
+  scoutTierForPosition,
   type GeneratedProspectCandidate,
   type ProspectScoutingDraftInput,
   type ProspectScoutingReport,
@@ -975,6 +976,21 @@ describe('shared deterministic prospect/scouting draft engine', () => {
       values.reduce((sum, value) => sum + value, 0) / values.length;
     expect(average(specialistErrors)).toBeLessThan(average(neutralErrors));
     expect(neutralErrors.some((error) => error > 0)).toBe(true);
+  });
+
+  test('scout tier uses exact position membership', () => {
+    expect(scoutTierForPosition('CF', {
+      specialties: ['CF', 'outfield'],
+      weaknesses: ['CP', 'pitching'],
+    })).toBe('high');
+    expect(scoutTierForPosition('CP', {
+      specialties: ['CF', 'outfield'],
+      weaknesses: ['CP', 'pitching'],
+    })).toBe('low');
+    expect(scoutTierForPosition('LF', {
+      specialties: ['outfield'],
+      weaknesses: ['pitching'],
+    })).toBe('medium');
   });
 
   test('scout weakness can worsen matching-position scouted-grade accuracy', () => {

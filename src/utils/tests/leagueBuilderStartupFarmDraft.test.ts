@@ -279,6 +279,14 @@ describe('League Builder startup farm draft persistence', () => {
       !scout.weaknesses.includes('DH') &&
       !Object.keys(scout.accuracyByPosition).includes('DH'),
     )).toBe(true);
+    const draftPositions = new Set<string>(['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'SP', 'RP', 'CP']);
+    expect(view.session?.scoutPool.every((scout) => {
+      const tierPositions = [...scout.specialties, ...scout.weaknesses];
+      return scout.specialties.length === 2 &&
+        scout.weaknesses.length === 2 &&
+        new Set(tierPositions).size === 4 &&
+        tierPositions.every((position) => draftPositions.has(position) && position !== 'DH');
+    })).toBe(true);
     expect(view.session?.scoutPool.every((scout) => {
       const [firstName, ...lastNameParts] = scout.name.split(' ');
       return SMB4_FIRST_NAMES.includes(firstName) &&

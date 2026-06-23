@@ -14525,3 +14525,71 @@ REPORT:
 
 Do not run the full suite or commit — the auditor runs the full gate and commits. Use high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: S1-SCOUT-COUNT-V2 ===== -->
+
+<!-- ===== START CONTRACT: S2-SCOUT-TIERING ===== -->
+ROUTE: Codex 5.5 | high reasoning effort
+
+GOAL:
+Scouting v2 **S2 (SMALL / generation-only, JK-ruled 2026-06-23)** — replace the free-form scout specialty/weakness GENERATION with a fixed tiering: each generated scout gets **exactly 2 distinct HIGH positions + 2 distinct LOW positions (no DH), every other position MEDIUM**. Add an exported `scoutTierForPosition` accessor (the fixed-tier source of truth for the later band tickets S3/S4). KEEP the saved `accuracyByPosition` a numeric `Record<string, number>` (NO saved-shape/type change) and DO NOT touch the old Gaussian scoring — that is S7.
+
+SOURCE OF TRUTH (embedded inline — ratified spec lives on the Branch-A docs branch, not this worktree):
+- SCOUTING_SYSTEM_SPEC §1A.3: "Each scout has exactly **2 specialty positions → HIGH**, **2 blind-spot positions → LOW**, and **every other position → MEDIUM** (the fixed tiering replaces the free-form ±18 specialty/weakness lists). Confidence for a given prospect = the scout's tier for that prospect's **primary position**."
+- §1A.4 S2: "Fixed specialty structure: exactly 2 HIGH / 2 LOW positions + MEDIUM default (replace free-form `specialties[]`/`weaknesses[]`). No DH."
+- JK ruling 2026-06-23: **SMALL / generation-only** — change ONLY generation; `accuracyByPosition` stays numeric/tier-derived (NO type change); the literal tier-label storage + per-tool bands + retiring the Gaussian model = S3/S4/S7.
+
+ALLOWED FILES (edit only these 4):
+- `src/utils/leagueBuilderStartupFarmDraft.ts`
+- `src/utils/prospectScoutingDraftEngine.ts`
+- `src/utils/tests/leagueBuilderStartupFarmDraft.test.ts`
+- `src/utils/tests/prospectScoutingDraftEngine.test.ts`
+
+EXACT CHANGES:
+1. `leagueBuilderStartupFarmDraft.ts` `buildScoutPool` (the draw at lines ~793–797 + the descriptor at ~798–803): replace the 1-specialty/1-weakness draw with a **4-distinct-position draw from `DRAFT_POSITIONS`** (the 11 positions C/1B/2B/3B/SS/LF/CF/RF/SP/RP/CP — no DH). Exact algorithm:
+   ```
+   const high1 = pick(`${scoutSeed}:high:1`, DRAFT_POSITIONS);
+   const afterHigh1 = DRAFT_POSITIONS.filter((p) => p !== high1);
+   const high2 = pick(`${scoutSeed}:high:2`, afterHigh1);
+   const afterHigh2 = afterHigh1.filter((p) => p !== high2);
+   const low1 = pick(`${scoutSeed}:low:1`, afterHigh2);
+   const afterLow1 = afterHigh2.filter((p) => p !== low1);
+   const low2 = pick(`${scoutSeed}:low:2`, afterLow1);
+   ```
+   Then set `descriptor.specialties = [high1, high2]` and `descriptor.weaknesses = [low1, low2]`. Keep the NAME draw (`${scoutSeed}:first`/`:last`) and EVERYTHING else byte-identical. **The `accuracyByPosition` computation (`DRAFT_POSITIONS.map((position) => [position, scoutAccuracy(position, descriptor)])`) STAYS unchanged** — with exact-position specialties it now yields base+18 (HIGH) / base (MEDIUM) / base−18 (LOW), i.e. tier-derived. Do NOT change `scoutAccuracy`.
+2. **Retire the now-orphaned `SCOUT_SPECIALTY_POOL`** (the `const SCOUT_SPECIALTY_POOL: ScoutSpecialty[] = [...]` line) — DELETE it. (After the draw change its only consumers are gone; CONFIRM via grep.)
+3. `prospectScoutingDraftEngine.ts`: add + export, near `scoutAccuracy`:
+   ```
+   export function scoutTierForPosition(
+     position: DraftPosition,
+     scout?: { specialties?: string[]; weaknesses?: string[] },
+   ): 'high' | 'medium' | 'low' {
+     if (scout?.specialties?.includes(position)) return 'high';
+     if (scout?.weaknesses?.includes(position)) return 'low';
+     return 'medium';
+   }
+   ```
+   Position-EXACT membership ONLY (NOT `specialtyMatches` category logic) — the fixed tier is position-exact per §1A.3.
+4. Tests:
+   - `leagueBuilderStartupFarmDraft.test.ts`: in the EXISTING generated-pool test (`'session scout draft creates deterministic scout pool ...'`), add assertions that EVERY generated `scoutPool` scout has `specialties.length === 2` AND `weaknesses.length === 2`, all 4 entries DISTINCT, every entry ∈ `DRAFT_POSITIONS`, and none === `'DH'`. (Keep the existing generic assertions.)
+   - `prospectScoutingDraftEngine.test.ts`: add a focused unit test importing `scoutTierForPosition` — high for a specialty position, low for a weakness position, medium otherwise.
+
+DO NOT TOUCH:
+- `scoutAccuracy` / `specialtyMatches` / `baseAccuracy` / `confidenceFromAccuracy` / `scoutProspect` (the old Gaussian overall-grade model — retired in S7).
+- The `accuracyByPosition` formula or its `Record<string, number>` type (SAVED SHAPE — no type change), the `ScoutSpecialty` type, `LeagueBuilderScoutProfile` / `types/franchise.ts` types.
+- The highlights UI `formatAccuracy` (that's S6); the draft sequencing; the MANUAL scout fixtures in OTHER test files (they are INPUT data using the old category format and must stay).
+- `TRACKER_DB_VERSION` / any store (NO DB bump); `iv_oracle.json` (scout gen is NOT in the oracle). Any file outside ALLOWED FILES.
+
+VERIFICATION (paste ACTUAL output):
+- `NODE_ENV= npx tsc -b` (expect 0).
+- `NODE_ENV= npx vitest run src/utils/tests/leagueBuilderStartupFarmDraft.test.ts src/utils/tests/prospectScoutingDraftEngine.test.ts` (expect all pass).
+- `grep -n "SCOUT_SPECIALTY_POOL" src/utils/leagueBuilderStartupFarmDraft.ts` (expect EMPTY — retired).
+
+STOP IF: `SCOUT_SPECIALTY_POOL` has a consumer other than the `buildScoutPool` draw (report it); the draw rewrite needs a structural change beyond the algorithm above; a change would require a file outside ALLOWED FILES; an existing test asserts the OLD generator specialty format (report it). → "BLOCKED: <reason>".
+
+REPORT:
+1. Every changed git path + total changed-path count.
+2. Each change with source ref.
+3. ACTUAL tsc + focused-vitest + grep output.
+4. "S2-SCOUT-TIERING complete" OR "BLOCKED: <reason>".
+
+Do not run the full suite or commit — the auditor runs the full gate and commits. Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: S2-SCOUT-TIERING ===== -->
