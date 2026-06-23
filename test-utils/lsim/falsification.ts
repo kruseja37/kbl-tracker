@@ -87,7 +87,11 @@ const CASES: Array<{ name: string; mutate: (s: LsimStateSnapshot) => void }> = [
     mutate: (s) => { s.fameRows = [{ playerId: 'p', heat: Number.NaN, reachFloor: 0, channelByChannel: { ...FINITE_CHANNELS } } as never]; } },
   { name: 'soul.fame-reach-monotonic',
     mutate: (s) => {
-      s.previous = { ...base(), fameRows: [{ playerId: 'p', reachFloor: 3, heat: 0 } as never] };
+      s.allStarRosters = [{
+        locked: true,
+        lockedAtGameNumber: Math.round(s.totalScheduledGames * 0.6),
+        selections: [{ playerId: 'p', teamId: 't1', position: 'C', role: 'starter' }],
+      } as never];
       s.fameRows = [{ playerId: 'p', reachFloor: 1, heat: 0, channelByChannel: { ...FINITE_CHANNELS } } as never];
     } },
   { name: 'soul.fame-heat-fickle',

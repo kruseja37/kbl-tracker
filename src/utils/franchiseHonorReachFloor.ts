@@ -1,4 +1,4 @@
-import { FAME_TUNING, applyHonorHeatBump, updateReachFloor } from '../engines/fameModel';
+import { FAME_TIER_RANK, FAME_TUNING, applyHonorHeatBump } from '../engines/fameModel';
 import { getFranchiseFameRecord, saveFranchiseFameRecordRows } from './franchiseFameRecordsStorage';
 import { isFranchisePhase2FameEnabled, isFranchisePhase2L12Enabled } from './franchisePhase2Flags';
 
@@ -31,7 +31,7 @@ export async function applyFranchiseHonorReachFloor(params: {
     if (!row) continue;
 
     const newHeat = applyHonorHeatBump(row.heat, FAME_TUNING.honorHeatBump[honoree.honorTier]);
-    const newReachFloor = updateReachFloor(row.reachFloor, newHeat);
+    const newReachFloor = Math.max(row.reachFloor, FAME_TIER_RANK.REGIONAL_STAR);
     await franchiseHonorReachFloorSeam.saveRecords([
       {
         ...row,

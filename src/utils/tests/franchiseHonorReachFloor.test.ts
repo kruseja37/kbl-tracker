@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import {
+  FAME_TIER_RANK,
   FAME_TUNING,
   applyHeatUpdate,
   applyHonorHeatBump,
-  updateReachFloor,
 } from '../../engines/fameModel';
 import {
   applyFranchiseHonorReachFloor,
@@ -141,14 +141,14 @@ describe('franchise honor reach-floor ratchet', () => {
     expect(saveRecords).not.toHaveBeenCalled();
   });
 
-  test('found honoree is heat-bumped, floor-ratcheted, and saved with the checkpoint sentinel', async () => {
+  test('found honoree is heat-bumped, floor-pinned, and saved with the checkpoint sentinel', async () => {
     setFranchisePhase2L12EnabledForTests(true);
     setFranchisePhase2FameEnabledForTests(true);
     const oldRow = fameRow('winner', { heat: 4, reachFloor: 1 });
     const { getRecord, saveRecords } = mockSeam({ winner: oldRow });
     const sentinel = 'season-end-honor';
     const newHeat = applyHonorHeatBump(oldRow.heat, FAME_TUNING.honorHeatBump.mvp);
-    const newReachFloor = updateReachFloor(oldRow.reachFloor, newHeat);
+    const newReachFloor = Math.max(oldRow.reachFloor, FAME_TIER_RANK.REGIONAL_STAR);
 
     const result = await applyFranchiseHonorReachFloor({
       honorees: [{ playerId: 'winner', honorTier: 'mvp' }],
@@ -168,8 +168,9 @@ describe('franchise honor reach-floor ratchet', () => {
     ]);
   });
 
-  test('All-Star starter bump is larger than reserve bump for the same starting heat', () => {
+  test('All-Star starter bump is larger than reserve bump while both floors flat-pin to regional-star', () => {
     const startingHeat = 2;
+    const startingFloor = 0;
     const starterHeat = applyHonorHeatBump(
       startingHeat,
       FAME_TUNING.honorHeatBump.allStarStarter,
@@ -178,9 +179,13 @@ describe('franchise honor reach-floor ratchet', () => {
       startingHeat,
       FAME_TUNING.honorHeatBump.allStarReserve,
     );
+    const starterFloor = Math.max(startingFloor, FAME_TIER_RANK.REGIONAL_STAR);
+    const reserveFloor = Math.max(startingFloor, FAME_TIER_RANK.REGIONAL_STAR);
 
     expect(starterHeat).toBeGreaterThan(reserveHeat);
-    expect(updateReachFloor(0, starterHeat)).toBeGreaterThan(updateReachFloor(0, reserveHeat));
+    expect(starterFloor).toBe(FAME_TIER_RANK.REGIONAL_STAR);
+    expect(reserveFloor).toBe(FAME_TIER_RANK.REGIONAL_STAR);
+    expect(starterFloor).toBe(reserveFloor);
   });
 
   test('ratchetedCount counts only honorees with existing fame rows', async () => {
@@ -206,10 +211,7 @@ describe('franchise honor reach-floor ratchet', () => {
     expect(saveRecords.mock.calls[0][0][0]).toMatchObject({
       playerId: 'found',
       heat: applyHonorHeatBump(found.heat, FAME_TUNING.honorHeatBump.allStarStarter),
-      reachFloor: updateReachFloor(
-        found.reachFloor,
-        applyHonorHeatBump(found.heat, FAME_TUNING.honorHeatBump.allStarStarter),
-      ),
+      reachFloor: Math.max(found.reachFloor, FAME_TIER_RANK.REGIONAL_STAR),
       updatedAtCheckpoint: 'all-star-lock',
     });
   });

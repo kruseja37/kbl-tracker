@@ -62,6 +62,7 @@ const RELATIONSHIP_HIT_SOURCE_PREFIX = 'relationship-hit:';
 const RELATIONSHIP_RECOVERY_SOURCE_PREFIX = 'relationship-recovery:';
 const RELATIONSHIP_CHARGED_SOURCE_PREFIX = 'relationship-charged:';
 const RELATIONSHIP_FAN_NUDGE_SOURCE_PREFIX = 'relationship-visible-fan-nudge:';
+const MAJOR_FAME_HONOR_CATEGORIES = new Set(['MVP', 'CY_YOUNG']);
 
 export interface LsimRelationshipMoraleDeltaSummary {
   relationshipHits: number;
@@ -139,19 +140,46 @@ function fameComponentsFinite(snapshot: LsimStateSnapshot): LsimInvariantResult 
   );
 }
 
-function fameReachMonotonic(snapshot: LsimStateSnapshot): LsimInvariantResult {
-  if (!snapshot.previous) {
-    return invariantResult('soul.fame-reach-monotonic', CRITICAL, true, 'first snapshot');
+function collectLockedAllStarHonoreeIds(snapshot: LsimStateSnapshot): Set<string> {
+  const ids = new Set<string>();
+  for (const roster of snapshot.allStarRosters) {
+    if (roster.locked !== true) continue;
+    for (const selection of roster.selections) {
+      if (selection.playerId) ids.add(selection.playerId);
+    }
   }
-  const prior = new Map(snapshot.previous.fameRows.map((row) => [row.playerId, row.reachFloor]));
-  const regressions = snapshot.fameRows
-    .filter((row) => isFiniteNumber(prior.get(row.playerId)) && row.reachFloor < (prior.get(row.playerId) ?? 0))
-    .map((row) => `${row.playerId}:${prior.get(row.playerId)}->${row.reachFloor}`);
+  return ids;
+}
+
+function collectFinalizedMajorAwardHonoreeIds(snapshot: LsimStateSnapshot): Set<string> {
+  const ids = new Set<string>();
+  for (const row of snapshot.awardRows) {
+    if (!row.finalized || !row.winnerPlayerId) continue;
+    if (MAJOR_FAME_HONOR_CATEGORIES.has(row.category)) ids.add(row.winnerPlayerId);
+  }
+  return ids;
+}
+
+function collectFameFloorHonoreeIds(snapshot: LsimStateSnapshot): Set<string> {
+  return new Set([
+    ...collectLockedAllStarHonoreeIds(snapshot),
+    ...collectFinalizedMajorAwardHonoreeIds(snapshot),
+  ]);
+}
+
+function fameReachMonotonic(snapshot: LsimStateSnapshot): LsimInvariantResult {
+  const honored = collectFameFloorHonoreeIds(snapshot);
+  const underFloor = snapshot.fameRows
+    .filter((row) => honored.has(row.playerId) && row.reachFloor < FAME_TIER_RANK.REGIONAL_STAR)
+    .map((row) => `${row.playerId}:${row.reachFloor}`);
+  const nonHonoredCount = snapshot.fameRows.filter((row) => !honored.has(row.playerId)).length;
   return invariantResult(
     'soul.fame-reach-monotonic',
     CRITICAL,
-    regressions.length === 0,
-    regressions.length === 0 ? 'reachFloor never regressed from previous snapshot' : regressions.slice(0, 8).join(','),
+    underFloor.length === 0,
+    underFloor.length === 0
+      ? `honored=${honored.size} keep reachFloor>=REGIONAL_STAR; nonHonored=${nonHonoredCount} may fluctuate down`
+      : `honoredBelowRegionalStar=${underFloor.slice(0, 8).join(',')}`,
   );
 }
 
@@ -1034,9 +1062,9 @@ function allStarSixtyPercentLock(snapshot: LsimStateSnapshot): LsimInvariantResu
 }
 
 function reachFloorRatchetFromHonors(snapshot: LsimStateSnapshot): LsimInvariantResult {
-  // §5.3 honor → reach-floor ratchet. At the All-Star lock, the honor payout (applyFranchiseHonorReachFloor, gated
+  // §5.3 honor → reach-floor protection. At the All-Star lock, the honor payout (applyFranchiseHonorReachFloor, gated
   // on L12+Fame) bumps each SELECTED player's fame HEAT by the role-tiered honorHeatBump (starter/wildcard 6 >
-  // reserve 3), ratchets reachFloor, and stamps the fame record updatedAtCheckpoint='all-star-lock'.
+  // reserve 3), pins reachFloor to REGIONAL_STAR, and stamps the fame record updatedAtCheckpoint='all-star-lock'.
   // NOTE: the `allStarSelections` career counter is part of §5.3 but is greenfield/UNWIRED (no production path
   // increments it) — so per the "no invariant before the data exists" rule it is NOT asserted; see COVERAGE_GAPS.
   const negative = snapshot.fameRows.filter((row) => row.reachFloor < 0).map((row) => row.playerId);
@@ -1047,7 +1075,7 @@ function reachFloorRatchetFromHonors(snapshot: LsimStateSnapshot): LsimInvariant
       CRITICAL,
       negative.length === 0,
       negative.length === 0
-        ? `reachFloor>=0 (honor ratchet tested at lockGame=${lockGame}; permanence covered by reach-monotonic)`
+        ? `reachFloor>=0 (honor pin tested at lockGame=${lockGame}; permanence covered by fame-reach-monotonic)`
         : `negativeReach=${negative.slice(0, 8).join(',')}`,
     );
   }
@@ -1062,17 +1090,20 @@ function reachFloorRatchetFromHonors(snapshot: LsimStateSnapshot): LsimInvariant
   const notStamped = selectedWithRecord.filter(
     (sel) => (fameById.get(sel.playerId) as { updatedAtCheckpoint?: string }).updatedAtCheckpoint !== SENTINEL,
   );
+  const selectedUnderFloor = selectedWithRecord.filter(
+    (sel) => (fameById.get(sel.playerId)?.reachFloor ?? 0) < FAME_TIER_RANK.REGIONAL_STAR,
+  );
   const starterBump = FAME_TUNING.honorHeatBump.allStarStarter;
   const reserveBump = FAME_TUNING.honorHeatBump.allStarReserve;
   const tieredCorrectly = starterBump > reserveBump;
-  const pass = negative.length === 0 && notStamped.length === 0 && tieredCorrectly;
+  const pass = negative.length === 0 && notStamped.length === 0 && selectedUnderFloor.length === 0 && tieredCorrectly;
   return invariantResult(
     'soul.reach-floor-ratchet',
     CRITICAL,
     pass,
     pass
-      ? `lockGame=${lockGame}; selected=${roster.selections.length}; withFameRecord=${selectedWithRecord.length} all stamped '${SENTINEL}'; starterBump ${starterBump}>${reserveBump}`
-      : `negativeReach=${negative.slice(0, 4).join(',') || 'none'}; notStamped=${notStamped.slice(0, 6).map((s) => s.playerId).join(',') || 'none'}; tiered=${tieredCorrectly}; withFameRecord=${selectedWithRecord.length}/${roster.selections.length}`,
+      ? `lockGame=${lockGame}; selected=${roster.selections.length}; withFameRecord=${selectedWithRecord.length} all stamped '${SENTINEL}' and reachFloor>=REGIONAL_STAR; starterBump ${starterBump}>${reserveBump}`
+      : `negativeReach=${negative.slice(0, 4).join(',') || 'none'}; notStamped=${notStamped.slice(0, 6).map((s) => s.playerId).join(',') || 'none'}; underFloor=${selectedUnderFloor.slice(0, 6).map((s) => s.playerId).join(',') || 'none'}; tiered=${tieredCorrectly}; withFameRecord=${selectedWithRecord.length}/${roster.selections.length}`,
   );
 }
 

@@ -4,7 +4,6 @@ import {
   aggregateRolePlayerFame,
   applyHeatUpdate,
   FAME_TUNING,
-  updateReachFloor,
   type ChannelTaggedFameInput,
   type FameAttributionChannel,
 } from '../engines/fameModel';
@@ -106,7 +105,7 @@ export async function persistDarkFameRecordsForCompletedGame(
     const breakdown = aggregateChannelFame(inputs);
     const stored = storedRow ?? { heat: 0, reachFloor: 0, wasNegative: false };
     const heat = applyHeatUpdate(stored.heat, breakdown.total);
-    const reachFloor = updateReachFloor(stored.reachFloor, heat);
+    const reachFloor = stored.reachFloor;
     const heatDelta = heat - stored.heat;
     const wasNegative = stored.wasNegative || heat < FAME_TUNING.heat.neutral;
     playerHeatDeltas.push({ playerId, heatDelta });
