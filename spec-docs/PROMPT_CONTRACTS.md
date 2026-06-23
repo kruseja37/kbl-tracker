@@ -18422,3 +18422,56 @@ MAKE-OR-BREAK (the guard): the FOUR chemistry invariants in that file MUST stay 
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: B1.3-B12-ARCHETYPE ===== -->
+
+<!-- ===== START CONTRACT: A1.2a-FAME-WARFLOOR-GRAVITY ===== -->
+## CONTRACT A1.2a — FAME WAR-FLOOR GRAVITY: bidirectional → upward-only (Branch A / `codex/franchise-v1-next` / worktree `/Users/johnkruse/Projects/kbl-tracker`)
+ROUTE: Codex gpt-5.5 | xhigh reasoning effort.
+
+You are a precise TypeScript builder. Work ONLY in `/Users/johnkruse/Projects/kbl-tracker` (branch `codex/franchise-v1-next`). This is **A1.2 LEG-A ONLY** — the gravity-direction fix. Do NOT build the §20.5 morale tap or the §20.6 fan-morale producers (separate later legs, still fork-pending).
+
+GOAL:
+Patch the orphaned fame-gravity primitive `applyWarLegitimacyGravity` (`src/engines/fameModel.ts:161-174`) from BIDIRECTIONAL to UPWARD-ONLY soft gravity, and lock the new behavior with tests. The function must NEVER lower Heat via gravity.
+
+SOURCE OF TRUTH (read before coding):
+- `spec-docs/RA1_FAME_MODEL_PROPOSAL.md` — AUDIT CORRECTIONS #2/#3 (lines 8-9), Part-2 "CORRECTED — UPWARD-ONLY" (line 53), and "Choice 0 — Direction (RULED): UPWARD-ONLY" (line 58). RULED formula: `Heat += max(0, strength × (floor − Heat))` — lift toward the floor ONLY while Heat < floor; ZERO effect when Heat ≥ floor; NEVER a downward term.
+- `spec-docs/H3_KICKOFF.md:59-64` — the floor is upward soft gravity (§20.1); High-fame/Low-WAR ("darling/overrated") is a BLESSED ARCHETYPE (§20.2); the hard downward cap is the INVERSE of the design and is RETIRED. (RA1 and H3 agree verbatim — there is no direction fork; do NOT re-litigate.)
+
+EXACT CHANGE — `src/engines/fameModel.ts`, function `applyWarLegitimacyGravity`, the return at lines 170-173:
+BEFORE:
+```
+  return clampAndRoundHeat(
+    currentHeat + ((targetHeat - currentHeat) * config.warGravity.strength),
+    config,
+  );
+```
+AFTER:
+```
+  return clampAndRoundHeat(
+    currentHeat + Math.max(0, (targetHeat - currentHeat) * config.warGravity.strength),
+    config,
+  );
+```
+- `targetHeat` (resolved at :166-168 from a raw number OR a `FameMeritLevel` via `config.warGravity.meritHeatTarget`) IS the spec `floor`. The gravity DELTA `(targetHeat - currentHeat) * config.warGravity.strength` is exactly `strength × (floor − Heat)`; wrapping it in `Math.max(0, …)` makes it non-negative ⇒ exactly `Heat += max(0, strength × (floor − Heat))`.
+- PRESERVE EXACTLY: the variable names, the polymorphic merit-level resolution branch (:166-168), `config.warGravity.strength`, and `clampAndRoundHeat`. The ONLY production change is the `Math.max(0, …)` wrap. Do NOT change `strength` (0.2), `meritHeatTarget` (low 0 / average 4 / high 12 / elite 24), or any other §16 sim-tune magnitude — only the DIRECTION.
+
+CONSTRAINTS — edit ONLY these two files:
+- `src/engines/fameModel.ts` — the one-expression gravity-delta change above. Nothing else in the file.
+- `src/engines/__tests__/fameModel.test.ts`:
+  (a) UPDATE the existing characterized test at lines 70-76. Line 75 `expect(overexposedLowMeritHeat).toBeLessThan(20)` LOCKS the OLD downward pull (`applyWarLegitimacyGravity(20,'low')` was 16). After the patch the result is 20 (unchanged). Replace that assertion with `expect(overexposedLowMeritHeat).toBe(20)` and retitle the test to reflect upward-only (e.g. "WAR legitimacy floor gravity lifts Heat toward the floor but never lowers it"). Keep the upward assertion (`quietStarHeat` from `(0,'elite')` is still > 0).
+  (b) ADD a new test asserting gravity NEVER decreases Heat, covering BOTH polymorphic branches:
+      • merit-level branch: `applyWarLegitimacyGravity(20,'low') === 20` (at/above floor → unchanged); `applyWarLegitimacyGravity(0,'elite') > 0` (below floor → rises).
+      • raw-number branch: a numeric floor BELOW currentHeat (e.g. `applyWarLegitimacyGravity(15, 5)`) → Heat unchanged (15); a numeric floor ABOVE currentHeat (e.g. `applyWarLegitimacyGravity(5, 15)`) → Heat strictly rises and never exceeds the floor.
+      Use currentHeat values within `[config.heat.min, config.heat.max]` (the only legal domain, where never-lowers-Heat is unconditional).
+
+DO NOT TOUCH: any other file. NO new production caller — the function STAYS orphaned/build-dark (live wiring is RA-2-era, a separate ticket); a production import would mean it stopped being build-dark. Specifically do NOT edit `masterMoraleMatrix.ts`, `designationFanMorale.ts`, `fanMoraleEngine.ts`, `processCompletedGame.ts`, `franchiseFameCompute.ts`. NO `TRACKER_DB_VERSION` / store / `iv_oracle.json` change.
+
+MAKE-OR-BREAK: the gravity DELTA must be provably non-negative so the function can never lower Heat via gravity. At/above the floor the delta is 0; below the floor it is a positive lift. The clamp `clampAndRoundHeat` (`:354-356`, min/max) is a SEPARATE pre-existing invariant — do NOT alter it; the never-lowers-Heat tests operate within `[heat.min, heat.max]` where the guarantee holds unconditionally.
+
+STOP-IF (escalate, do NOT paper over): the patch requires touching any file beyond the two listed; a production module must import/call the function to compile (it must stay orphaned); the characterized test breaks in a way NOT explained by the bidirectional→upward-only change; OR a genuinely-new measurement fork surfaces that RA1 #2/#3/Choice-0 does NOT resolve.
+
+GATE: `NODE_ENV= npx tsc -b` exit 0 + the FULL suite (`NODE_ENV= npx vitest run`) ZERO NEW REDS (characterized fails on this branch: `wpaRuntimeBoundary` hard-fail + `franchiseManualSmokeFixture` solo-passing order-flake — re-run any suspected new red SOLO before judging) + `iv_oracle.json` byte-unchanged. Commit ONLY the two changed files by explicit path (`git add src/engines/fameModel.ts src/engines/__tests__/fameModel.test.ts`) — do NOT `git add -A` / `git add .` (the working tree carries unrelated untracked markers that must NOT be swept into the commit). Branch-only commit, NEVER push.
+
+FORMAT: (1) every changed file + count; (2) the before/after of the gravity line + the test changes, referencing RA1 Choice 0; (3) gate output pasted (tsc + full-suite counts + the fameModel tests); (4) "A1.2a fame WAR-floor gravity complete" OR "BLOCKED: <exact reason>".
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: A1.2a-FAME-WARFLOOR-GRAVITY ===== -->
