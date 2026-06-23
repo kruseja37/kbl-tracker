@@ -144,7 +144,7 @@ DTO+UI change, no migration.
 Sites: the DTO + `visibleReportFromPlayer` + `buildBoardForSession`'s 2 board literals + the `LeagueBuilderDraft` prospect
 card (Traits <count> / Archetype / Secondary). 6 files.
 
-**Iteration trail (triangle working — 3rd productive Codex BLOCK this session):** V1 BLOCKED — its grep found the 2 board
+**Iteration trail (triangle working — 2nd productive Codex BLOCK this session, after S1 V1):** V1 BLOCKED — its grep found the 2 board
 literals in `buildBoardForSession` (extending the DTO) my grounding missed; V2 = the complete 6-file surface. Reinforces
 [[kbl-count-copy-reconciliation-full-surface]]: sweep EVERY object-literal construction of a DTO-extending type, not just
 the named constructor.
