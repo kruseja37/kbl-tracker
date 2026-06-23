@@ -14662,3 +14662,62 @@ REPORT:
 
 Do not run the full suite or commit — the auditor runs the full gate and commits. Use high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: S3-TOOL-BANDS ===== -->
+
+<!-- ===== START CONTRACT: S4-OVERALL-BAND ===== -->
+ROUTE: Codex 5.5 | high reasoning effort
+
+GOAL:
+Scouting v2 **S4 (PART 1 ONLY — overall grade-BAND engine, PURE, build-DARK)**. Add a deterministic engine that converts a prospect's TRUE overall grade into a letter-grade BAND whose width is set by the scout's fixed tier, with the true grade placed uniform-random inside the band, clamped to the ladder ends. **JK ruling 2026-06-23: build the band ENGINE only; do NOT touch the auction price / salary / the saved `scoutedGrade`** — the spec's "derive the auction price from the banded overall" collides with the shipped RB true-IV price model and is a SEPARATE flagged decision. So this is build-DARK like S3: pure function + tests, NO consumer wiring.
+
+SOURCE OF TRUTH (embedded inline — ratified spec lives on the Branch-A docs branch, not this worktree):
+- SCOUTING_SYSTEM_SPEC §1A.2: "OVERALL grade → a LETTER-GRADE band on the grade ladder, width by the scout's tier: **HIGH = 3 grade-bands (e.g. A→B+), MEDIUM = 5 (A→B−), LOW = 7 (A→C)**. The true overall grade sits **uniform-random inside the band, clamped to the ladder ends**." (Same un-gameable placement logic as the S3 tool bands, on the discrete grade ladder; deterministic, seeded per scout×prospect.)
+- §1A.4 S4 (this ticket = the band only): "Overall grade band: 3/5/7 letter-steps by tier, uniform-in-band." The "+ derive the auction price range" half is DEFERRED (JK 2026-06-23 — separate price-anchor decision).
+- Grade ladder = the existing prospect ladder `GRADES` in `prospectScoutingDraftEngine.ts` (`['A','A-','B+','B','B-','C+','C','C-','D+','D']`, best→worst, NO S/A+). Widths are GRADE POSITIONS covered: HIGH=3, MEDIUM=5, LOW=7.
+
+ALLOWED FILES (edit only these 2):
+- `src/utils/prospectScoutingDraftEngine.ts`
+- `src/utils/tests/prospectScoutingDraftEngine.test.ts`
+
+EXACT CHANGES (add near `scoutToolBand`; reuse the existing `GRADES`, `Grade`, `randomUnit` already in the file):
+1. `export const SCOUT_OVERALL_BAND_WIDTHS: Record<'high' | 'medium' | 'low', number> = { high: 3, medium: 5, low: 7 };` // grade positions covered; §16 sim-tune
+2. The placement function (mirror `scoutToolBand`, on the discrete `GRADES` ladder; `best` = the better-quality end [lower index], `worst` = the lower-quality end [higher index]):
+   ```
+   export function scoutOverallGradeBand(
+     trueGrade: Grade,
+     tier: 'high' | 'medium' | 'low',
+     seed: string,
+   ): { best: Grade; worst: Grade } {
+     const width = SCOUT_OVERALL_BAND_WIDTHS[tier];      // grades covered
+     const span = width - 1;                             // index span
+     const lastIndex = GRADES.length - 1;
+     const trueIdxRaw = GRADES.indexOf(trueGrade);
+     const trueIdx = trueIdxRaw < 0 ? 0 : trueIdxRaw;
+     const loBound = Math.max(0, trueIdx - span);
+     const hiBound = Math.min(trueIdx, lastIndex - span);
+     const range = Math.max(0, hiBound - loBound);
+     const bestIndex = Math.round(loBound + randomUnit(seed) * range);
+     const worstIndex = Math.min(lastIndex, bestIndex + span);
+     return { best: GRADES[bestIndex], worst: GRADES[worstIndex] };
+   }
+   ```
+   The math MUST GUARANTEE: `bestIndex <= trueIdx <= worstIndex` (the band contains the true grade), `0 <= bestIndex`, `worstIndex <= lastIndex`. (Same structure as the S3 `scoutToolBand` containment proof.)
+3. Tests in `prospectScoutingDraftEngine.test.ts`: using a LOCAL copy of the ladder `['A','A-','B+','B','B-','C+','C','C-','D+','D']` to compute indices — for a spread of true grades (incl. `'A'`, a mid grade like `'B'`, and `'D'`) × each tier, assert: (a) `idx(best) <= idx(true) <= idx(worst)` (band contains the true grade); (b) `best`/`worst` are valid ladder grades and `idx(best) >= 0`, `idx(worst) <= 9`; (c) the covered count `idx(worst) - idx(best) + 1` equals `SCOUT_OVERALL_BAND_WIDTHS[tier]` EXCEPT where clamped at a ladder end (then it may be smaller — assert `<=` the width there); (d) determinism (same seed → identical band); (e) different seeds yield different `best` for a mid grade with open span. Also assert the spec extreme: `scoutOverallGradeBand('A', 'high', seed)` → `best === 'A'` and `worst === 'B+'`.
+
+DO NOT TOUCH (deferred / out of scope — JK 2026-06-23):
+- The auction price (`scoutPriceOpinion`, `perceivedValueRange`, `scoutValueRange.ts`, `chemistryFitPriceMultiplier`, `scoutRangeForProspect`), the prospect SALARY path (`franchiseSalary.ts`, `safeRoundFromScoutedGrade`), the saved `scoutedGrade` field / `franchisePlayerProfile`, the old Gaussian `scoutProspect` / `scoutAccuracy` / `confidenceFromAccuracy` (S7), the `gradeToTwentyEighty` / 12-grade `GRADE_LADDER`.
+- Any report/board DTO or UI (S4 is build-DARK, no consumer yet — S5 wires it). `TRACKER_DB_VERSION` / stores (NO DB bump). `iv_oracle.json`. Any file outside ALLOWED FILES.
+
+VERIFICATION (paste ACTUAL output):
+- `NODE_ENV= npx tsc -b` (expect 0).
+- `NODE_ENV= npx vitest run src/utils/tests/prospectScoutingDraftEngine.test.ts` (expect all pass).
+
+STOP IF: `GRADES`/`Grade`/`randomUnit` are not available in the file as assumed; the containment math can't be guaranteed; a change would require a file outside ALLOWED FILES. → "BLOCKED: <reason>".
+
+REPORT:
+1. Every changed git path + total.
+2. Each change with source ref.
+3. ACTUAL tsc + focused-vitest output.
+4. "S4-OVERALL-BAND complete" OR "BLOCKED: <reason>".
+
+Do not run the full suite or commit — the auditor runs the full gate and commits. Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: S4-OVERALL-BAND ===== -->

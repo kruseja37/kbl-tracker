@@ -1230,6 +1230,12 @@ export const SCOUT_TOOL_BAND_WIDTHS: Record<'high' | 'medium' | 'low', number> =
   low: 70,
 };
 
+export const SCOUT_OVERALL_BAND_WIDTHS: Record<'high' | 'medium' | 'low', number> = {
+  high: 3,
+  medium: 5,
+  low: 7,
+};
+
 export const HITTER_SCOUT_TOOLS = ['power', 'contact', 'speed', 'fielding', 'arm'] as const;
 export const PITCHER_SCOUT_TOOLS = [
   'velocity',
@@ -1253,6 +1259,24 @@ export function scoutToolBand(
   const span = Math.max(0, hiBound - loBound);
   const lower = Math.round(loBound + randomUnit(seed) * span);
   return { lower, upper: lower + width };
+}
+
+export function scoutOverallGradeBand(
+  trueGrade: Grade,
+  tier: 'high' | 'medium' | 'low',
+  seed: string,
+): { best: Grade; worst: Grade } {
+  const width = SCOUT_OVERALL_BAND_WIDTHS[tier];
+  const span = width - 1;
+  const lastIndex = GRADES.length - 1;
+  const trueIdxRaw = GRADES.indexOf(trueGrade);
+  const trueIdx = trueIdxRaw < 0 ? 0 : trueIdxRaw;
+  const loBound = Math.max(0, trueIdx - span);
+  const hiBound = Math.min(trueIdx, lastIndex - span);
+  const range = Math.max(0, hiBound - loBound);
+  const bestIndex = Math.round(loBound + randomUnit(seed) * range);
+  const worstIndex = Math.min(lastIndex, bestIndex + span);
+  return { best: GRADES[bestIndex], worst: GRADES[worstIndex] };
 }
 
 export function scoutToolBands(input: {

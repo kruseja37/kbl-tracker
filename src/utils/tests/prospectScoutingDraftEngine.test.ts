@@ -16,8 +16,10 @@ import {
   prospectSalaryForDraftRound,
   HITTER_SCOUT_TOOLS,
   PITCHER_SCOUT_TOOLS,
+  SCOUT_OVERALL_BAND_WIDTHS,
   SCOUT_TOOL_BAND_WIDTHS,
   scoutProspect,
+  scoutOverallGradeBand,
   scoutTierForPosition,
   scoutToolBand,
   scoutToolBands,
@@ -117,6 +119,13 @@ const SECTION_10_GRADE_SCORE: Record<string, number> = {
   'C-': 1,
   D: 0,
 };
+const LOCAL_OVERALL_GRADES = ['A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D'] as const;
+
+type LocalOverallGrade = typeof LOCAL_OVERALL_GRADES[number];
+
+function overallGradeIndex(grade: string): number {
+  return LOCAL_OVERALL_GRADES.indexOf(grade as LocalOverallGrade);
+}
 
 type Section32Grade = keyof typeof SECTION_3_2_GRADE_TARGETS;
 
@@ -1024,6 +1033,52 @@ describe('shared deterministic prospect/scouting draft engine', () => {
 
       expect(second.lower).not.toBe(first.lower);
     }
+  });
+
+  test('S4 scout overall grade bands contain the true grade with tier-width deterministic ranges', () => {
+    const tiers = ['high', 'medium', 'low'] as const;
+    const trueGrades = ['A', 'B', 'D'] as const;
+    const lastIndex = LOCAL_OVERALL_GRADES.length - 1;
+
+    for (const tier of tiers) {
+      for (const trueGrade of trueGrades) {
+        const first = scoutOverallGradeBand(trueGrade, tier, `s4-band:${tier}:${trueGrade}`);
+        const second = scoutOverallGradeBand(trueGrade, tier, `s4-band:${tier}:${trueGrade}`);
+        const trueIndex = overallGradeIndex(trueGrade);
+        const bestIndex = overallGradeIndex(first.best);
+        const worstIndex = overallGradeIndex(first.worst);
+        const coveredCount = worstIndex - bestIndex + 1;
+        const expectedWidth = SCOUT_OVERALL_BAND_WIDTHS[tier];
+        const touchesLadderEnd = bestIndex === 0 || worstIndex === lastIndex;
+
+        expect(bestIndex).toBeGreaterThanOrEqual(0);
+        expect(worstIndex).toBeLessThanOrEqual(lastIndex);
+        expect(bestIndex).toBeLessThanOrEqual(trueIndex);
+        expect(worstIndex).toBeGreaterThanOrEqual(trueIndex);
+        expect(LOCAL_OVERALL_GRADES).toContain(first.best);
+        expect(LOCAL_OVERALL_GRADES).toContain(first.worst);
+        if (touchesLadderEnd) {
+          expect(coveredCount).toBeLessThanOrEqual(expectedWidth);
+        } else {
+          expect(coveredCount).toBe(expectedWidth);
+        }
+        expect(second).toEqual(first);
+      }
+    }
+  });
+
+  test('S4 scout overall grade band seed controls the in-band placement for a mid-grade open span', () => {
+    const first = scoutOverallGradeBand('B', 'medium', 's4-open-0');
+    const second = scoutOverallGradeBand('B', 'medium', 's4-open-10');
+
+    expect(second.best).not.toBe(first.best);
+  });
+
+  test('S4 scout overall grade band clamps an A high-tier band to A through B+', () => {
+    expect(scoutOverallGradeBand('A', 'high', 's4-extreme-a-high')).toEqual({
+      best: 'A',
+      worst: 'B+',
+    });
   });
 
   test('S3 scout tool band maps expose hitter and pitcher tool sets using S2 position tiers', () => {
