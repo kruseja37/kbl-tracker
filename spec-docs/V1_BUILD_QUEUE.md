@@ -24,7 +24,7 @@
 ### A-W1 — Lane 1 tail (the L-SIM blockers first)
 | Order | Ticket | What | Blocker it clears |
 |---|---|---|---|
-| A1.1 | **L13-8** | un-hold the authored contract; flag-gated `processCompletedGame` wiring → L13 fully built-dark | L-SIM blocker |
+| A1.1 | ✅ **L13-8 CLOSED** (JK 2026-06-23) | wiring already SUBSUMED by L13-3a..6 (`processCompletedGame.ts:648-664` gates formation[checkpoint]/intensity/morale+charged behind the L13 flag; added by `f737c67e`; orphan-checked all 3 wired). Standalone proof-test WAIVED — L-SIM (flags-on) + per-compute tests + the L-SIM final gate are the proof. | L-SIM blocker CLEARED |
 | A1.2 | **fame→morale wiring** | 3 RULED-v1 taps: wire `applyWarLegitimacyGravity` (`fameModel.ts:161`); add the §20.5 fame→player-morale term to `masterMoraleMatrix.ts:426`; build §20.6 Channel A/B fan-morale producers | L-SIM blocker |
 | A1.3 | trade-request propensity wiring | wire `tradeRequestGeneration.ts:77` into L10 `trade_demand` (`franchiseL10EventEngine.ts:~334`); cheap | — |
 | A1.4 | L12-6 | race/award/All-Star UI surfacing + `allStarSelections` career counter | — (interleavable) |

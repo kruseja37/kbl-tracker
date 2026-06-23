@@ -14067,7 +14067,7 @@ it. The auditor must run the FULL host suite; fix is a test-only mock stub. Form
 the checkpoint boundary (don't run the pairwise scan every game).
 **VERIFICATION:** tsc/build 0; the FULL host suite (the auditor) — surface any partial-mock break; a wiring test (flag off
 → no L13 writes; flag on + checkpoint → formation runs; flag on + non-checkpoint → only decay/charged-matchup).
-**FORMAT** house. **Status:** ⏸ AUTHORED — build HELD. **⇒ completing L13-8 = L13 fully built (dark), pending post-D13 activation.**
+**FORMAT** house. **Status:** ✅ DONE — wiring SUBSUMED by L13-3a..6 (the `processCompletedGame.ts:648-664` branch gates formation[checkpoint-self-gated]/intensity/morale+charged behind `isFranchisePhase2L13Enabled`; orphan-checked — exactly 3 relationship computes, all wired; branch added by `f737c67e`/L13-3a = the "was §3's L13-8 wiring" breadcrumb). Standalone proof-test **WAIVED (JK ruling 2026-06-23):** a faithful one needs to drive `processCompletedGame` through the full gate-chain + per-store DB inspection = L-SIM-harness work; the L-SIM (flags-on) + per-compute tests + the L-SIM final gate are the proof. **⇒ L13 fully built (dark), L-SIM blocker CLEARED, pending post-D13 activation.**
 
 ---
 

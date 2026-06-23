@@ -7,6 +7,12 @@
 
 ## June 2026
 
+### 2026-06-23 (attended): L13-8 CLOSED — relationship wiring already subsumed by L13-3a..6; standalone proof-test WAIVED (L-SIM is the proof) — RULED
+
+**Context:** Resuming A1.1/L13-8 ("flag-gated `processCompletedGame` wiring → L13 fully built-dark; L-SIM blocker"), the dagger anchor re-verify (the contract's `processCompletedGame.ts:616-680` + `franchiseCheckpointSweepCompute.ts` anchors had drifted) found the wiring **ALREADY EXISTS**: `processCompletedGame.ts:648-664` gates all 3 relationship dark computes — `persistDarkRelationshipFormationForCompletedGame` (self-gates on `isCheckpointBoundary`, `franchiseRelationshipFormationCompute.ts:123`), `...Intensity...` (per-game decay), `...Morale...` (per-game, incl. the L13-6 charged-matchup) — behind `isFranchisePhase2L13Enabled()`. Branch added by `f737c67e` (L13-3a — the "was §3's L13-8 wiring" breadcrumb). Orphan-checked: exactly 3 computes, **all wired**. ⇒ the L-SIM blocker was already cleared. The only remaining L13-8 deliverable was a flag-gating proof-test — but a faithful one (flag-off→no writes / flag-on+checkpoint→formation / flag-on+non-checkpoint→only decay+charged) needs to drive `processCompletedGame` through the full gate-chain with per-store DB inspection = **L-SIM-harness work**, not the billed "small" unit test.
+
+**RULED (JK):** Close L13-8 — wiring DONE; the standalone proof-test is **WAIVED**. The L-SIM (flags-on, which exercises the L13 branch) + the per-compute tests + the L-SIM final gate on the merged tree are the proof. (Scope surfaced before adjusting, per scope discipline — not silently reduced.)
+
 ### 2026-06-23 (attended): FAME→MORALE taps (A1.2 legs) — §20.5 = CHANGE-ONLY, §20.6 = CHANNELS A+B — RULED
 
 **Context:** A1.2 (the fame→morale wiring, an L-SIM blocker) was SPLIT after grounding (workflow `wf_023e81ed-68a`): **leg-a** = the fame WAR-floor gravity patch (fork-free, ratified continuous/upward-only — DONE, commit `bc24dff4`); **leg-b** = the §20.5 fame→player-morale tap; **leg-c** = the §20.6 fame→fan-morale producers. The two later legs each carried a soul-layer fork the grounding surfaced; JK ruled both (attended).
