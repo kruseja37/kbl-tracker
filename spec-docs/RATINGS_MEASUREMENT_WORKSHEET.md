@@ -76,8 +76,24 @@ Every ball in play is characterized in 3 dimensions from data we already capture
 ### SPEED — needs the UBR aggregator (zero new capture)
 **SB% = SB/(SB+CS)** (gated ≥~5 att) + **extra-base take-rate** via `calculateUBR` (built+tested but **never called** → UBR=0 today; only the RunnerSubEntry→AdvancementStats aggregator is missing) + **BEAT_THROW** (beat-out infield hit = out-of-box speed vs the IF arm). 3B/ITPHR legs route here. Drops raw SB-count / 3B-as-power. **Confound (disclose):** SB% saturates near 100% (user-as-manager rarely sends slow runners → measures send-discipline) → lean on UBR.
 
-### FIELDING — needs the *ByPosition aggregator (zero new capture)
-**Zone+difficulty RangeScore** = Σ over the fielder's zone of (made ? +difficultyWeight : −difficultyWeight) ÷ innings-at-position, from spray-inferred fielder + made/missed + the 5-level difficulty enrichment. + **GemScore** (robberies/web-gems/diving) as a ceiling overlay. Drops fielding% (saturated) + (PO+A)/games (volume artifact). **Mitigation:** a fielder-confirm prompt ONLY on high-difficulty plays (not a confidence pipeline). Stranded behind the unbuilt season rollup today.
+### FIELDING — difficulty is MEASURED, not inferred (deep play-type data; needs the *ByPosition aggregator)
+**Difficulty-weighted conversion rate** = Σ over the fielder's plays of `(made ? +w : −0 [non-conversion])` ÷ opportunities, where **`w` = the EXPLICIT play-type ladder** (user-tagged per play, `eventLog.ts:415-423` `FieldingPlayType`), NOT an inferred/subjective difficulty. This obsoletes the old confirm-prompt — **the enrichment IS the difficulty signal.** The play type tells us *how hard*; the precise **x/y + spray-inferred fielder** adds *how much ground he covered* (range) — together a fuller picture than either alone.
+
+**Play-type difficulty ladder (RULED JK — §16 magnitudes):**
+| Tier | Play types | weight |
+|---|---|---|
+| MAX | `robbed_hr` | max (the HR-saving ceiling) |
+| HIGH | `diving`, `sliding` | high |
+| MID | `leaping` (jumping) | mid |
+| LOW | `over_shoulder`, `running` | low |
+| routine | `charging`, default, **everything else** | 0 |
+> **`wall` is REMOVED** (JK) — a wall catch that isn't a robbery is usually a warning-track *leap*, so a separate `wall` weight double-counts `leaping`. `failed_robbery` / `missed_dive` / `missed_leap` = **non-conversions** at their attempted tier (no positive credit; the ball was hard — no extra penalty).
+
+- **Made/missed is explicit** (`fieldingAttemptOutcome`), incl. the miss variants → a fielder who *converts* hard plays at a high rate is elite.
+- **First-base SCOOP** (`rescuedThrow`, `gameTrackerPlayLog.ts:461`) = a **1B-only RECEIVING** signal — scooping a bad throw converts an error into an out. **v1: +1B fielding credit; the thrower is neutral** (a "throws-that-needed-rescuing" thrower-accuracy ding = v2).
+- **Bases-saved** flag = fielder credit for holding runners even when it's not an out.
+- **Drops:** fielding% (saturated — only flags rare butterfingers) + (PO+A)/games (position/volume artifact).
+- **Coverage:** the play-type tags are optional enrichment → rich signal for diligent enrichers, null-gates to the basic put-out/assist conversion for casual users (same spine/refinement shape as contact-quality). Stranded behind the unbuilt season rollup (*ByPosition aggregator) today.
 
 ### ARM
 - **OF (live):** (assists + held) / (assists + held + extra-bases-allowed); extra-bases-allowed needs an aggregator. Drops raw assist count (selection paradox — a feared arm gets fewer challenges).
