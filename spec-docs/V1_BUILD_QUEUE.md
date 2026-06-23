@@ -69,7 +69,7 @@ Run the soul-invariant L-SIM after A-W1 + A-W2 + A-W3 land (it now also exercise
 |---|---|---|---|
 | B1.1 | ✅ **B8 age DONE** (`30359ae4`) | seeded band-weighted draw (`PROSPECT_AGE_BANDS` .40/.30/.18/.08/.04, own seed namespace `:age:band`/`:age:within` — RNG-isolated, B9+chemistry goldens unchanged); reveal in farm-auction UI. Focused gate PASS (histogram on-spec, age-grade corr 0.0037); full suite confirming | **unblocks 4C S5** |
 | B1.2 | B6 | position-appropriate trait pools (DH/closer/two-way carve-outs); fix `Workhorse`; retire orphan `traitPools.ts` | small |
-| B1.3 | **B12 archetype layer** | §5.6 large/parametric: families × randomized magnitudes → non-repeating spreads; re-grade in-loop w/ `scoreSmb4Player`; convergence guard | **unblocks 4C S5**; the uniqueness lever |
+| B1.3 | ✅ **B12 archetype layer DONE** (`7d817965`) | §5.6 archetype-bias families × randomized magnitudes, own `:archetype:*` seed (RNG-isolated → B9 round-trip + §13 distribution + chemistry invariants all green); solver re-grades; convergence-guard re-draw; `archetypeFamily` persisted. Full suite zero-new-reds. *(1-iter BLOCK→fix golden regen, RB-14 pattern)* | **unblocks 4C S5**; the uniqueness lever |
 | B1.4 | **B13 grade/scarcity traits** | §5.5b weighted draw, reuse analyzer impact coeffs | **B13 ⇔ Branch-A T-4: shared `traitWeight`** |
 | B1.5 | **B14 pitcher non-pitching** | decouple grade shift (VEL/JNK/ACC only); re-anchor batter draw; force arm=0 | **B14 ⇔ Branch-A RA-11: shared signal** |
 | B1.6 | tracker-copy sync | retire/sync the stale `kbl-tracker` generator copy (non-canonical personality must not leak) | before the lane-merge |
