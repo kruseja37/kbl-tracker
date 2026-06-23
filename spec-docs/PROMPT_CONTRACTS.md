@@ -18221,3 +18221,35 @@ Everything else in the contract above stands. Use xhigh reasoning effort.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RB-14 ===== -->
+
+<!-- ===== START CONTRACT: A0.1-DH-REMOVAL ===== -->
+## CONTRACT A0.1 — DH REMOVAL (Branch A / `codex/franchise-v1-next` / worktree `/Users/johnkruse/Projects/kbl-tracker`)
+ROUTE: Codex gpt-5.5 | xhigh reasoning effort.
+
+You are a precise TypeScript builder. Work ONLY in `/Users/johnkruse/Projects/kbl-tracker` (branch `codex/franchise-v1-next`).
+
+GOAL:
+Remove the DH concept ENTIRELY (no DH position AND no DH league rule → pitchers always bat, the pitcher fills the 9th lineup slot), in ONE atomic diff, oracle byte-unchanged.
+
+SOURCE OF TRUTH: `spec-docs/RATINGS_ADJUSTMENT_SPEC.md §13` (FULL removal, RULED 2026-06-22) + §13's blast-radius list (`:180`), frozen-adjacent exclusion (`:181`), DH-rule collapse (`:182`), data-dependency (`:183`). JK RULINGS folded in: (1) reassign the lone DH player Ron Charles `primaryPosition:'DH'→'LF'` (his existing `secondaryPosition:'LF'` becomes redundant — set primary to LF and drop/blank the duplicate secondary); (2) the DH LEAGUE RULE = **hard-force `usesDesignatedHitter=false` everywhere (do NOT delete the field)**; no UI may offer a DH option. Pitcher `batterRatings` coverage is PRE-VERIFIED 240/240 (STOP-IF b satisfied).
+
+CONSTRAINTS — edit ONLY these (verify each at source; line numbers may drift):
+- Type unions (drop `'DH'`): `src/types/game.ts:9`, `src/types/index.ts:4`, `src/engines/fwarCalculator.ts:118`, `src/engines/effectiveRatings.ts:25`, `src/utils/leagueBuilderStorage.ts:61`, `src/engines/ratingsAdjustmentEngine.ts:26` (DetectedPosition), `src/src_figma/app/components/RatingsAdjustmentFlow.tsx:22`, `src/src_figma/app/components/AwardsCeremonyFlow.tsx:11`, `src/src_figma/app/types/game.ts:9`, `src/engines/rosterAnalyzer.ts:28` (LineupPosition), `src/utils/prospectScoutingDraftEngine.ts:15` (DraftPosition — verify it has no DH member; if not, no change).
+- KEYSTONE (SAME diff): `src/engines/ivEngine.ts:205` — replace `input.primaryPosition === 'DH' ? '1B' : input.primaryPosition` with plain `input.primaryPosition` (value-neutral: oracle has 0 DH inputs, the branch never fired on the frozen pool).
+- Player record: `src/data/players/mlb/yankeesPlayers.ts` (Ron Charles `nyy-charles`) → primary `LF`.
+- DH-rule collapse: `src/utils/leagueConfig.ts` (`usesDesignatedHitter`/`dhPercentage` → permanent no-DH; hard-force false), `src/utils/optimalLineup.ts` (`dhEnabled` branches → pitcher bats), `src/src_figma/app/types/substitution.ts` (`hasDH`/'DH not allowed'), `src/engines/rosterAnalyzer.ts` (DH placement branches), `src/src_figma/app/pages/GameTracker.tsx` (`teamUsesDh`/`inferTeamUsesDh` + `p.position || 'DH'` fallbacks → pitcher fills 9th slot).
+- Constants: `src/engines/salaryCalculator.ts:60,256` (Position union + DH:1.00 multiplier — touch ONLY these), `src/engines/fwarCalculator.ts:66,70,75,110` (DH fWAR constants).
+- The ~31 DH-pinned test files (drop DH cases / rewrite to no-DH expectations) — enumerate them ALL in the report.
+
+DO NOT TOUCH: `spec-docs/reference/iv_oracle.json` (FROZEN, 591,827 bytes, 0 DH — must stay byte-identical); `scripts/t5-denomination-bridge.ts` (frozen-adjacent, §13:181); `src/engines/__tests__/ivEngine.test.ts` (the oracle GATE — run before+after to prove no value moved; do NOT edit to pass); the `/Users/johnkruse/Projects/kbl-mode1-b` worktree (Position-type change propagates via merge, not a cross-worktree edit); any non-DH salary/fWAR weight; any `TRACKER_DB_VERSION`/store pin (this needs NO bump — escalate if it would).
+
+MAKE-OR-BREAK: `iv_oracle.json` byte-identical AND `ivEngine.test.ts` G3/anchor parity (all 440 players + 21 anchors) passes UNCHANGED before and after.
+
+STOP-IF (escalate to JK, do not paper over): (a) the oracle test reds OR `iv_oracle.json` changes by even one byte; (b) removing `'DH'` from a union surfaces a consumer that genuinely NEEDS a runtime DH value (a real code path, not dead plumbing); (c) any edit would require a `trackerDb` version bump.
+
+GATE: `NODE_ENV= npx tsc -b` exit 0 + the FULL suite (`NODE_ENV= npx vitest run`) ZERO NEW REDS (characterized: `wpaRuntimeBoundary` hard-fail + `GameTrackerLaunchState` solo-passing order-flake) + run `src/engines/__tests__/ivEngine.test.ts` BEFORE and AFTER (identical pass) + `git diff --stat spec-docs/reference/iv_oracle.json` shows 0 bytes. Branch-only commit, NEVER push.
+
+FORMAT: (1) every changed file path (incl. each test) + the total changed-file count; (2) each change described, referencing §13 / the ruling; (3) the gate output pasted (tsc + suite pass/fail counts + the oracle before/after); (4) "A0.1 DH removal complete" OR "BLOCKED: <exact reason>".
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: A0.1-DH-REMOVAL ===== -->

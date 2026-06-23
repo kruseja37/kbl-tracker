@@ -28,6 +28,7 @@ Today there are FOUR divergent rating-mutation paths, none implementing the spec
 **Deterministic** (not seeded-probabilistic) — the magnitude of the gap is the gradation, no roll needed. Reproducible.
 
 ## 3A. The expected-stats engine — the keystone (feasibility: greenfield engine, ~70% plumbing present)
+> ✅ **PINNED MODEL (RATIFIED JK 2026-06-22):** the concrete measurement model — anchor (pool-mean), curve (reuse ivEngine two-segment, output stats), normalization (peer-SD z-score → `r∈[−1,+1]`), expected = peer-mean × curve-ratio (the equilibrium valve), min-sample floors, RA-1 ships build-dark engine+tests with league-mean as an input param — is in **`RA1_FAME_MODEL_PROPOSAL.md` (Part 1)**. That doc is authoritative for the build; the prose below is the design intent it pins.
 The one genuinely new engine: **ratings → expected per-category production**, compared to actual, peer-calibrated.
 - **Per-category expectation:** each rating predicts expected stats in its OWN categories — power → ISO/SLG/HR-rate; contact → AVG/OBP/K%; speed → SB/3B/range; fielding → fielding%/error-rate/range; arm → assist-rate (pitchers: velocity → K%, junk → weak-contact/HR-suppression, accuracy → BB%). Per-category → per-attribute signals (this is what makes "all relevant attributes move," §6, real).
 - **Peer-calibrated + position-aware:** the expectation is anchored to the CURRENT league's per-category means within the position pool → the anti-inflation valve (a juiced environment raises everyone's expected bar too).
