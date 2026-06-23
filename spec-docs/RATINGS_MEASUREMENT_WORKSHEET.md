@@ -43,7 +43,7 @@ Every ball in play is characterized in 3 dimensions from data we already capture
 | **LO** | line | **CONTACT high + POWER by carry — a hard line-OUT is a robbed near-barrel; don't let the out hide elite contact** |
 | FO / SF | fly | POWER by carry × hardness; weak/short = low (SF "productive" = situational) |
 | PO | pop (IF) | CONTACT negative (got under it); 0 power |
-| FLO (foul-out) | weak default | CONTACT negative (contactType can refine, but cap — couldn't keep it fair) |
+| FLO (foul-out) | **graded by contactType, NOT capped** (JK) | CONTACT by hardness — a hard foul liner ≠ a sky-high foul pop; hard FLO = good contact, weak FLO = weak. No reliable launch/landing (foul) → **no power.** |
 
 **Ground balls** (launch fixed = ground → **contactType IS the discriminator**; 0 power):
 | Button | Batter feeds |
@@ -109,8 +109,8 @@ Every ball in play is characterized in 3 dimensions from data we already capture
 ### ACCURACY (pitcher)
 **Walk-avoidance** (`BB` only; `IBB`/`HBP` carved out by distinct codes) + `Kc` *(corner-painting, shared partial)* + **per-batter pitch economy** (`pitchCount`/BF, MADDUX anchor). `Kc` feeds BOTH Junk and Accuracy at partial weight (a backwards K *requires* command + movement — the junkballer; they correlate realistically without collapsing). The fine strike-zone grid would later sharpen this (corner location). Drops FIP-as-command.
 
-### PITCHER NON-PITCHING — full 5-tool parity (JK correction)
-Pitchers' **Power/Contact/Speed/Fielding measured the SAME way as position players**, just vs the **pitcher pool**. NOT a "light build" — the same engine; the **sample gate simply fires more often** (few PA/chances → many null-gate). Open: does SMB4 give pitchers a non-zero **arm** rating to develop (their comebacker→throw BR/BT plays)? If structurally 0, arm stays out for them.
+### PITCHER NON-PITCHING — 4-tool parity (JK correction)
+Pitchers' **Power / Contact / Speed / Fielding measured the SAME way as position players**, just vs the **pitcher pool**. NOT a "light build" — the same engine; the **sample gate simply fires more often** (few PA/chances → many null-gate). **ARM is EXCLUDED for pitchers (RULED JK 2026-06-23):** SMB4 gives pitchers only **7 rating categories** (VEL/JNK/ACC + POW/CON/SPD/FLD) — pitchers have **no arm rating at all**, so there is nothing to develop. RA-1 already null-gates pitcher arm (`expectedStatsEngine.ts:183,217`) — leave as-is.
 
 ---
 

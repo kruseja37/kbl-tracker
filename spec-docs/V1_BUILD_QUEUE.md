@@ -30,13 +30,22 @@
 | A1.4 | L12-6 | race/award/All-Star UI surfacing + `allStarSelections` career counter | — (interleavable) |
 | A1.5 | L4b | matrix-sourced season takes over the L4a bus (deps L3+L4a met) | — |
 
+### A-W1.5 — SMB4-native ratings infra + fame-fix + stadium records (NEW, 2026-06-23 — hard dependency order)
+**Source:** `RATINGS_MEASUREMENT_WORKSHEET.md` (§9) + `STADIUM_ANALYTICS_SPEC_V2.md` (§1/§2/§4-10) + `DECISIONS_LOG` 2026-06-23 (the model rulings + the 11-fork sweep). All build-dark, no `TRACKER_DB_VERSION` bump. **Author the 4 contracts in `PROMPT_CONTRACTS.md` before dispatch.**
+| Order | Ticket | What | Hard gate |
+|---|---|---|---|
+| A1.5a | **FAME-FLUCTUATION FIX** (do FIRST) | remove the per-game `updateReachFloor` ratchet (`franchiseFameCompute.ts:109`); flat-pin the honor floor `= max(existing, REGIONAL_STAR)` (`franchiseHonorReachFloor.ts:33`); **UPDATE the L-SIM fame soul-invariants in the SAME diff** (retire "upward-only-for-everyone", add "non-honored tier can fall") + re-run L-SIM. Confirm trade→neutral nudge. | gates stadium records + the final L-SIM |
+| A1.5b | **CARRY CONVERTER** (shared) | `src/engines/` deterministic `ballLocation{x,y} + ParkDimensions → park-adjusted carry feet`, air-balls-only; **HR distance is user-entered, NEVER inferred**; **one infield-dirt radius CALIBRATED to the SVG field image** (IF/OF split + grounder-carry=0); REPLACE the random `estimateDistance` (`fieldZones.ts:735-809`). | feeds ratings Power AND stadium distance records |
+| A1.5c | **4 SEASON AGGREGATORS** (zero new capture) | UBR (RunnerSubEntry→AdvancementStats; `calculateUBR` unfed at `rwarCalculator.ts:458`) · *ByPosition difficulty-weighted fielding (RULED play-type ladder, `eventLog.ts:413-427`) · extraBasesAllowed (OF arm) · catcher-CS-with-discount (reconcile w/ RA-8). | light Speed/Fielding/Arm signals; alongside RA-2b |
+| A1.5d | **STADIUM RECORDS** (LAST) | the §4 catalog + the 6 living-season hops (changes[] upsert → fame-swap polarity → fan-morale + home-park-rival 2× → reporter → Almanac → HISTORY rivalry edge) + the §8 stat-display layer (parallelizable). New `isFranchisePhase2StadiumRecordsEnabled` (default false). | needs A1.5a + A1.5b + WPA archive (own db, no DB bump) |
+
 ### A-W2 — Lane 4A ratings (RA-1 keystone gates the rest)
 | Order | Ticket | What | Note |
 |---|---|---|---|
 | A2.1 | ✅ **RA-1 expected-stats engine DONE** (`81c9fe25`) | pure build-dark `src/engines/expectedStatsEngine.ts` — multiplicative (JK-confirmed) `poolMean × curve-ratio` + peer-SD z-score + min-sample gating; no consumer; full suite zero-new-reds. **RA-2 must add a sim-tune curvature check before wiring live.** | everything in 4A depends on it |
 | A2.2 | **RA-8 catcher CS/SB fields** | additive `PlayerSeasonFielding` (no DB bump) | **early — unblocks Branch A T-6** |
 | A2.3 | **RA-rookie** | `draftedAsFarmProspect` + `rookieStatus` + window-clear + ROOKIE badge (`§13B`) | additive; gates RA-5's rookie modifier; both worktrees |
-| A2.4 | RA-2 / RA-3 / RA-4 | peer-calibrated signal (replaces `valueDelta` `franchiseCheckpointSweepCompute.ts:184`) · per-category fan-out · position-pool calibration | after RA-1; RA-4 after A0.1 (DH) |
+| A2.4 | RA-2 / RA-3 / RA-4 | peer-calibrated signal (replaces `valueDelta` `franchiseCheckpointSweepCompute.ts:184`) · per-category fan-out · position-pool calibration. **GROUNDED + 4 forks RULED 2026-06-23** (DECISIONS_LOG; `wf_1598c5dc`) → SPLIT: **RA-2a ✅** (`64addf71` category-rate adapter) → **contact-quality data+signal layer** (JK ruled INTO v1; `wf_99285199`) → **RA-2b** (pure pool aggregator, §4 ~55% sticky grouping + winsorized SD + ladder) → **RA-2c** (live wiring + weighted fan-out, in-place/no-flag/no-DB-bump). RULED: signal→existing linear move now (dark), §6A=A2.5 blocking-before-flag-flip, weighted-blend (§16 default-equal), TV 0.40 decoupled-stays. | after RA-1; RA-4 after A0.1 (DH) |
 | A2.5 | RA-5 / RA-6 / RA-7 | age/edge/equilibrium · season-scaled min-sample+confidence · per-game park-adjust | after RA-1/RA-2 |
 | A2.6 | RA-9 / RA-10 / **RA-11** | cadence+trend · bench-IF/OF split · pitcher non-pitching §4A | **RA-11 ⇔ Branch-B B14: spec-pin the shared over-expectation signal** |
 | A2.7 | RA-12 | retire Model B/C + award-luck (the "consolidate 4→1") | last in 4A |

@@ -7,6 +7,23 @@
 
 ## June 2026
 
+### 2026-06-23 (attended): V1 BUILD-SURFACE FORK SWEEP — 11 pre-AUTH-4 decisions RULED (minimize unattended defaults)
+
+**Context:** before an unattended AUTH-4 run, JK pre-answered every genuine STRUCTURAL/scope fork the audit (`wf_b0b25400`) surfaced — so the overnight loop guesses on nothing that matters. §16 magnitudes + build-confirms stay Captain-defaulted (designed-to-be-swept). Rulings:
+1. **A1.3 trade-request:** build only the contained **A1.3a propensity filter**; **DEFER A1.3b to an attended session** (it risks a `TRACKER_DB_VERSION` bump + a golden-tested morale-matrix collision — never unattended).
+2. **Contact-quality partition:** a **hard contactType-tag OVERRIDES the pop-out penalty** (a genuinely hard PO → neutral, not negative). **FLO is NOT capped** — foul-outs grade on contactType (hard/normal/weak): a hard foul liner ≠ a sky-high foul pop. (FLO → CONTACT by hardness, no power.) Worksheet updated.
+3. **Pitcher arm:** SMB4 pitchers have **NO arm rating** (only 7 categories: VEL/JNK/ACC + POW/CON/SPD/FLD). Pitcher non-pitching = **4-tool parity, arm excluded** (RA-1 already null-gates it).
+4. **RA-2a:** scoped **REBUILD** to the batted-ball model — power/contact/fielding/speed become categories-of-record; the box-score formulas **retired but left DORMANT in the META schema** (not deleted — reversible).
+5. **Fame honor-floor:** fame **fluctuates across tiers** (incl. down; trades nudge one tier toward neutral, `reachFloorAfterTrade:0` already resets the floor); an **all-star/major award flat-pins `reachFloor = max(existing, REGIONAL_STAR)`** — never below regional-star after, live heat still floats higher. JK confirmed it's encodable + not risky; the ONE risk = it inverts a shipped L-SIM "upward-only" soul-invariant → the contract **MANDATES updating that invariant in the same diff + re-running L-SIM.**
+6. **First-landing:** tap copy → *"Tap where the ball FIRST hit the ground or wall"*; **one infield-dirt radius CALIBRATED to the rendered SVG field image's dirt/grass arc** (JK flagged: must match the image, not a guessed number) drives both the IF/OF split and grounder-carry=0. Grep the enrichment-copy tests before the string edit.
+7. **Stadium overtake rivalry:** use the **HISTORY** edge slot (narrative/Almanac, **morale-inert**) — NOT RIVALRY (which would double-count the morale the fame-swap already moves). Conditional on the logic/display working.
+8. **Swing-record play context:** `{inning, half, outs, base-state, score before→after, batter, pitcher, outcome, wpaSwing}` — reporter composes the sentence, no stored prose.
+9. **Lane-merge:** merge Branch B → Branch A, after A-W2 + B-W2, before RB-16/final-L-SIM, **loop pre-assigned as owner.** **+ AUDIT all open branches with unmerged commits before merging** (JK — there are ~28 stray `codex/*` branches with commits; see CURRENT_STATE).
+10. **RB-13b:** engineering routing fix (no design call) — route the draft by the selected league's persisted `draftFormat` + a minimal explicit active-league id (not `leagues[0]`); land before the lane-merge.
+11. **APPROVED the new A-W1.5 wave** (fame-fix → carry converter → 4 aggregators → stadium records) + the 4 new contracts authored before the run.
+
+**Captain-defaults (NOT asked):** all §16 magnitudes (fielding-ladder weights, fame deltas, 2× rivalry, carry/barrel thresholds, Kc split, blend weights — tier STRUCTURE is ruled, numbers swept in RB-16); build-confirms (x/y populated, per-play WPA, BR/BT coverage, policy-block test-characterization, SVG IF/OF arc); mechanical (build-dark flags, additive no-DB-bump, clone targets, builder≠auditor gate). **No A-W1.5 work bumps `TRACKER_DB_VERSION`** — the only bump risk is the DEFERRED A1.3b.
+
 ### 2026-06-23 (attended): STADIUM ANALYTICS V2 — park records as living-season participants + the fame-fluctuation fix — RULED → `STADIUM_ANALYTICS_SPEC_V2.md`
 
 **Context:** JK directed turning ballparks into a first-class living-season system (records/milestones/contextual data tied to parks + players-across-parks, all feeding fame/morale/fan-morale/reporters/relationships/Almanac), and creating a clean v2 spec with NO build-time questions (v1 `STADIUM_ANALYTICS_SPEC.md` is Jan/Feb-2026 stale). Two deep-dives: `wf_c018fc5d` (stadium code reality vs spec + the ratings convergence) + `wf_7e1f0783` (the living-season engine seams = the freebies). Verdict: ~90% freebies. **Full decision-complete spec = `spec-docs/STADIUM_ANALYTICS_SPEC_V2.md`.** Rulings:

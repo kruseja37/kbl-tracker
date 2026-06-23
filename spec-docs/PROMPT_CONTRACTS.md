@@ -18664,3 +18664,36 @@ FORMAT: (1) every new file + count; (2) the rate formulas + the dormant list, re
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: A2.4a-RA2-CATEGORY-RATES ===== -->
+
+<!-- ===== START CONTRACT: A1.5a-FAME-FLUCTUATION-FIX ===== -->
+## CONTRACT A1.5a — FAME-FLUCTUATION FIX (fame fluctuates; only honors lock the regional-star floor) (Branch A / `codex/franchise-v1-next` / worktree `/Users/johnkruse/Projects/kbl-tracker`)
+ROUTE: Codex gpt-5.5 | xhigh reasoning effort.
+
+You are a precise TypeScript builder. Work ONLY in `/Users/johnkruse/Projects/kbl-tracker` (branch `codex/franchise-v1-next`). This is the FIRST ticket of the A-W1.5 wave and a PREREQUISITE for the stadium-records fame swap.
+
+GOAL:
+Make player fame FLUCTUATE freely up AND down across tiers, and make an all-star-team / major-award the ONLY thing that locks a downward protection floor (pinned at `REGIONAL_STAR`). Today the per-game writer ratchets the floor on every heat peak, so fame is effectively upward-only for everyone.
+
+SOURCE OF TRUTH (read first): `spec-docs/STADIUM_ANALYTICS_SPEC_V2.md §1` + `spec-docs/DECISIONS_LOG.md` 2026-06-23 fork #5. The model: fame heat fluctuates; an honor sets `reachFloor = max(existing, REGIONAL_STAR)`; live heat still floats higher; trades nudge toward neutral (`reachFloorAfterTrade:0` already resets the floor).
+
+EXACT CHANGES:
+1. **`src/utils/franchiseFameCompute.ts:109`** — REMOVE the per-game ratchet `const reachFloor = updateReachFloor(stored.reachFloor, heat);`. The per-game write must NOT raise `reachFloor`; carry `reachFloor: stored.reachFloor` through unchanged (only honors move it).
+2. **`src/utils/franchiseHonorReachFloor.ts:33`** — replace `updateReachFloor(row.reachFloor, newHeat)` with a FLAT pin: `reachFloor = Math.max(row.reachFloor, FAME_TIER_RANK.REGIONAL_STAR)` (=2, `fameModel.ts:70`). The honor protects at regional-star only; it does NOT derive a higher floor from a hot honoree's heat. (The EFFECTIVE displayed tier can still float higher via `resolveFameTier`'s `Math.max` on live heat — only the PROTECTED floor caps at 2.)
+3. Confirm the trade path nudges heat one tier toward neutral (the floor reset via `reachFloorAfterTrade:0` exists; verify/encode the heat nudge if absent — flag if it requires more than the existing reset).
+
+MAKE-OR-BREAK + STOP-IF: this INVERTS a shipped L-SIM "upward-only" soul-invariant. You MUST, IN THE SAME DIFF: (a) update the L-SIM fame `soul.*` invariants (`test-utils/lsim/invariants/soul.ts` — retire any "fame floor never falls for everyone / upward-only-for-everyone" assertion; ADD an assertion that a NON-honored player's effective tier CAN fall, and that an honored player never drops below REGIONAL_STAR); (b) re-run the L-SIM scenario and read the SUMMARY JSON for new findings (the scenario test does NOT gate on findings — do not trust only the vitest RC). Per MEMORY (soul-layer-direction-disambiguation), grep the `soul.*` fame invariants + the `H3_KICKOFF` disambiguation BEFORE changing direction. Do NOT silently leave a stale upward-only invariant. STOP-IF the change requires touching the WAR-floor *gravity* (`applyWarLegitimacyGravity` — that is SEPARATELY upward-only by design, do NOT alter) or any `TRACKER_DB_VERSION`/store.
+
+CONSTRAINTS — edit ONLY: `franchiseFameCompute.ts`, `franchiseHonorReachFloor.ts`, the fame test(s) + the L-SIM soul-invariant file. Build-dark posture preserved (this rides the existing fame flag). NO trackerDb bump.
+
+GATE: `NODE_ENV= npx tsc -b` exit 0 + the FULL suite ZERO NEW REDS (characterized: `wpaRuntimeBoundary` + `franchiseManualSmokeFixture` solo-flake — re-run any suspected new red SOLO) + the L-SIM scenario re-run with the updated invariants GREEN + `iv_oracle.json` byte-unchanged. Commit by explicit path, branch-only, NEVER push.
+
+FORMAT: (1) every changed file + count; (2) the two code changes + the invariant update, referencing STADIUM_V2 §1 + DECISIONS_LOG fork #5; (3) gate output pasted (tsc + suite + L-SIM summary); (4) "A1.5a fame-fluctuation fix complete" OR "BLOCKED: <reason>".
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: A1.5a-FAME-FLUCTUATION-FIX ===== -->
+
+<!-- ===== CONTRACT SKELETONS (Captain authors fully at dispatch from the cited specs — decision-complete, all forks resolved) ===== -->
+<!-- A1.5b-CARRY-CONVERTER: src/engines/ deterministic ballLocation{x,y}+ParkDimensions→park-adjusted carry feet, air-balls-only. HR distance USER-ENTERED never inferred. ONE infield-dirt radius CALIBRATED to the SVG field image (read EnrichmentPanel svg / the field component for the dirt/grass arc) → drives IF/OF split + grounder-carry=0. REPLACE random estimateDistance/estimateAngle/createStadiumBattedBallEvent (fieldZones.ts:735-809). Source: RATINGS_MEASUREMENT_WORKSHEET §2/§9 + STADIUM_V2 §2 + DECISIONS_LOG fork #6. Build-dark, no DB bump. -->
+<!-- A1.5c-AGGREGATORS: 4 season aggregators, zero new capture. UBR (RunnerSubEntry→AdvancementStats, calculateUBR unfed rwarCalculator.ts:458) · *ByPosition difficulty-weighted fielding (RULED play-type ladder eventLog.ts:413-427; weights §16-default) · extraBasesAllowed (OF arm) · catcher-CS-with-discount (reconcile w/ RA-8). Source: RATINGS_MEASUREMENT_WORKSHEET §9 (Speed/Fielding/Arm). Build-dark, no DB bump. -->
+<!-- A1.5d-STADIUM-RECORDS: the §4 catalog + 6 hops (changes[] upsert §5.1 → fame-swap polarity §6 → fan-morale §7 + home-park-rival 2× → reporter §5.4 → Almanac §5.5 → HISTORY rivalry edge §5.6) + §8 stat-display layer. New isFranchisePhase2StadiumRecordsEnabled (default false). Prereq: A1.5a + A1.5b + WPA archive. Own db kbl-franchise-stadium-records — NO trackerDb bump. Policy-block flip is flag-conditional + test-characterized (grep tests first). Source: STADIUM_ANALYTICS_SPEC_V2 §4-§10 + DECISIONS_LOG forks #2,#5,#7,#8. -->
+<!-- ===== END SKELETONS ===== -->
