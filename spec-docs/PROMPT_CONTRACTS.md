@@ -18954,3 +18954,53 @@ Use xhigh reasoning effort. Think step-by-step.
 <!-- A1.5c-AGGREGATORS: 4 season aggregators, zero new capture. UBR (RunnerSubEntry→AdvancementStats, calculateUBR unfed rwarCalculator.ts:458) · *ByPosition difficulty-weighted fielding (RULED play-type ladder eventLog.ts:413-427; weights §16-default) · extraBasesAllowed (OF arm) · catcher-CS-with-discount (reconcile w/ RA-8). Source: RATINGS_MEASUREMENT_WORKSHEET §9 (Speed/Fielding/Arm). Build-dark, no DB bump. -->
 <!-- A1.5d-STADIUM-RECORDS: the §4 catalog + 6 hops (changes[] upsert §5.1 → fame-swap polarity §6 → fan-morale §7 + home-park-rival 2× → reporter §5.4 → Almanac §5.5 → HISTORY rivalry edge §5.6) + §8 stat-display layer. New isFranchisePhase2StadiumRecordsEnabled (default false). Prereq: A1.5a + A1.5b + WPA archive. Own db kbl-franchise-stadium-records — NO trackerDb bump. Policy-block flip is flag-conditional + test-characterized (grep tests first). Source: STADIUM_ANALYTICS_SPEC_V2 §4-§10 + DECISIONS_LOG forks #2,#5,#7,#8. -->
 <!-- ===== END SKELETONS ===== -->
+
+<!-- ===== CONTRACT: RA-8 ===== -->
+## CONTRACT: RA-8 (A2.2) — catcher CS/SB-allowed fields on PlayerSeasonFielding (build-dark, additive)
+
+ROUTE: Codex (gpt-5.5) | high reasoning effort
+ROLE: You are the KBL builder. Make a minimal, additive, BUILD-DARK saved-shape change. Builder only — do NOT audit, do NOT commit, do NOT push.
+
+GOAL:
+Add two additive OPTIONAL counting fields to the season-level fielding record so a later consumer (A1.5c-4 catcher-CS rate; T-6) can READ them. DECLARE + SEED ONLY — do NOT wire any per-game writer/aggregator. This is intentionally build-dark.
+
+SOURCE OF TRUTH:
+- spec-docs/V1_BUILD_QUEUE.md A2.2: "RA-8 catcher CS/SB fields — additive PlayerSeasonFielding (no DB bump)".
+- spec-docs/AUTONOMOUS_RUN_LOG.md A1.5c-4 OWNERSHIP note: "RA-8 owns ADDING caughtStealingAgainst+stolenBasesAllowed to PlayerSeasonFielding (additive, no DB bump); A1.5c-4 only READS them to produce the discounted rate."
+- CANONICAL field names = `caughtStealingAgainst` + `stolenBasesAllowed` (the A1.5c-4 reader contract). DO NOT rename to `caughtStealing`: the local interface in src/src_figma/__tests__/persistence/seasonStorage.test.ts:82 is a DECOUPLED phantom (nested-positions shape, does NOT import the prod type) — ignore it; it stays green untouched.
+
+CONSTRAINTS:
+- Edit ONLY: src/utils/seasonStorage.ts
+- Do NOT touch: src/utils/seasonAggregator.ts (NO writer — build-dark), src/utils/careerStorage.ts (career parity DEFERRED, season-only), ANY test file, src/utils/trackerDb.ts / any DB version / any store-name list, src/reference/iv_oracle.json (FROZEN, read-only).
+- NO TRACKER_DB_VERSION bump (additive optional fields on a schemaless IndexedDB store — no migration, no onupgradeneeded change).
+- Branch-only (codex/franchise-v1-next). Do NOT commit. Do NOT push. Leave the change unstaged (the Captain stages + commits).
+
+EXPECTED OUTPUT (exact, ~4 inserted lines, ONE file):
+1. In `interface PlayerSeasonFielding` (src/utils/seasonStorage.ts), immediately AFTER the line `  baserunnersHeld?: number;` and BEFORE the blank line preceding `  // By position (games at each position)`, insert:
+     caughtStealingAgainst?: number; // catcher: runners thrown out stealing (populated by a later writer ticket; A1.5c-4 reads)
+     stolenBasesAllowed?: number;    // catcher: SB allowed (populated by a later writer ticket; A1.5c-4 reads)
+2. In `createInitialFieldingStats(...)`, immediately AFTER the line `    baserunnersHeld: 0,` and BEFORE `    gamesByPosition: {},`, insert:
+     caughtStealingAgainst: 0,
+     stolenBasesAllowed: 0,
+   (seed both to 0 for intra-interface consistency with the 5 existing optional fielding siblings.)
+NO other changes anywhere.
+
+VERIFICATION (run, paste actual output):
+- NODE_ENV= npm run build  → exit 0
+- NODE_ENV= npx vitest run src/src_figma/__tests__/persistence/seasonStorage.test.ts src/engines/__tests__/expectedStatsCategoryRates.test.ts  → all pass (the only PlayerSeasonFielding-referencing tests; optional adds are non-breaking under TS structural typing)
+- git --no-pager diff --stat  → exactly 1 file changed (src/utils/seasonStorage.ts)
+
+FORMAT:
+1. Files changed (exact paths)
+2. The exact diff (both hunks)
+3. Verification output (pasted verbatim)
+4. "RA-8 complete" OR "BLOCKED: <reason>"
+
+FAILURE PROTOCOL (STOP-IF):
+- STOP-IF the additive fields require touching seasonAggregator.ts, careerStorage.ts, any test, or any DB version/store-name list — report it, do NOT proceed.
+- STOP-IF the interface already contains caughtStealingAgainst/stolenBasesAllowed — report it.
+- STOP-IF `npm run build` fails for a reason traceable to these additive optional fields (e.g. a consumer does exhaustive destructuring or an exact-shape assertion) — report the consumer file:line; do NOT "fix" it by renaming the fields or editing another file.
+- Do NOT rename the fields to match any test mirror. Do NOT add a per-game writer. Do NOT commit/push.
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RA-8 ===== -->
